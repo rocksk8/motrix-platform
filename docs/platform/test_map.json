@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1165,
+  "tests": 1175,
   "unmapped": 13,
   "kinds": {
-   "api": 629,
-   "e2e": 288,
-   "audit": 140,
-   "unit": 108
+   "api": 634,
+   "e2e": 289,
+   "audit": 143,
+   "unit": 109
   },
-  "routes": 771
+  "routes": 773
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -5709,6 +5709,45 @@
    "login_fixture": true,
    "module": "case"
   },
+  "backend/modules/case/tests/test_cashier_planned_pay_date_t45.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_fake_gcal.py",
+    "file:backend/tests/_requires.py",
+    "mod:arap/api/cashier",
+    "mod:case/__init__",
+    "mod:case/payable_calendar",
+    "page:pages/payment-request.html",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/payable_calendar.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_fake_gcal.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py"
+    ],
+    "page": [
+     "frontend/pages/payment-request.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
   "backend/modules/case/tests/test_e2e_approval_queue_attachment_p0_2026_09_30.py": {
    "kind": "e2e",
    "units": [
@@ -6641,6 +6680,30 @@
    "login_fixture": true,
    "module": "case"
   },
+  "backend/modules/case/tests/test_mat_autolink_2026_10_07.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/case/",
+    "dir:frontend/js/",
+    "js:js/case-management-exec.js",
+    "js:js/case-management-mlink.js"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/js/case-management-exec.js",
+     "frontend/js/case-management-mlink.js"
+    ],
+    "path": [
+     "frontend/js/",
+     "frontend/js/case-management-exec.js",
+     "frontend/js/case-management-mlink.js"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
   "backend/modules/case/tests/test_material_approval_api_2026_10_02.py": {
    "kind": "api",
    "units": [
@@ -7268,6 +7331,31 @@
      "backend/modules/case/"
     ]
    },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_material_payment_planned_t45.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/tests/_requires.py",
+    "mod:arap/api/cashier",
+    "mod:case/api/material_payments"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/material_payments.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
    "module": "case"
   },
   "backend/modules/case/tests/test_material_payment_reports_2026_10_02.py": {
@@ -10890,6 +10978,28 @@
    "login_fixture": true,
    "module": "payroll"
   },
+  "backend/modules/payroll/tests/test_payslip_status_not_client_controlled_2026_10_07.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/payslips",
+    "mod:payroll/tests/test_payslip_edit_guard_2026_08_28"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/tests/test_payslip_edit_guard_2026_08_28.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslips.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
   "backend/modules/payroll/tests/test_payslip_template_p2_2026_09_26.py": {
    "kind": "e2e",
    "units": [
@@ -12857,6 +12967,33 @@
     "path": [
      "backend/modules/accounting/",
      "backend/modules/arap/"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_voucher_planned_pay_date_t45.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
+    "mod:arap/api/cashier",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ],
     "module_dir": [
      "backend/modules/subcontract/"
@@ -15932,6 +16069,37 @@
      "docs/platform/THIRD-PARTY-LICENSES.md",
      "frontend/fonts/",
      "frontend/fonts/OFL.txt"
+    ]
+   }
+  },
+  "backend/tests/platform/test_gate_slices_2026_10_07.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/",
+    "dir:backend/tests/platform/",
+    "dir:tools/platform/",
+    "file:backend/tests/test_alpine_double_init_2026_09_23.py",
+    "file:backend/tests/test_company_setup_output_points_2026_09_28.py",
+    "file:backend/tests/test_module_keys_consistency_2026_09_13.py",
+    "file:backend/tests/test_no_credentials_in_query_2026_09_22.py",
+    "file:backend/tests/test_page_shell_scripts_2026_09_30.py",
+    "file:backend/tests/test_spec_coverage_2026_09_21.py",
+    "file:backend/tests/test_system_audit_2026_09_14.py",
+    "file:backend/tests/test_wording_guards_2026_09_23.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/modules/",
+     "backend/tests/platform/",
+     "backend/tests/test_alpine_double_init_2026_09_23.py",
+     "backend/tests/test_company_setup_output_points_2026_09_28.py",
+     "backend/tests/test_module_keys_consistency_2026_09_13.py",
+     "backend/tests/test_no_credentials_in_query_2026_09_22.py",
+     "backend/tests/test_page_shell_scripts_2026_09_30.py",
+     "backend/tests/test_spec_coverage_2026_09_21.py",
+     "backend/tests/test_system_audit_2026_09_14.py",
+     "backend/tests/test_wording_guards_2026_09_23.py",
+     "tools/platform/"
     ]
    }
   },
@@ -25230,6 +25398,25 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_e2e_planned_pay_mine_t45.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "page:pages/payment-request.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "page": [
+     "frontend/pages/payment-request.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_playwright_2026_09_07.py": {
    "kind": "e2e",
    "units": [
@@ -27418,6 +27605,48 @@
    "evidence": {
     "import": [
      "backend/archive.py"
+    ]
+   }
+  },
+  "backend/tests/test_login_return_to_2026_10_07.py": {
+   "kind": "audit",
+   "units": [
+    "dir:frontend/static/",
+    "js:static/auth-guard.js",
+    "page:index.html",
+    "page:pages/bonus.html",
+    "page:pages/case-management.html",
+    "page:pages/custom-records.html",
+    "page:pages/login-qr-approve.html",
+    "page:pages/login.html",
+    "page:pages/quotation-form.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "page": [
+     "frontend/index.html",
+     "frontend/pages/bonus.html",
+     "frontend/pages/case-management.html",
+     "frontend/pages/custom-records.html",
+     "frontend/pages/login-qr-approve.html",
+     "frontend/pages/login.html",
+     "frontend/pages/quotation-form.html",
+     "frontend/static/auth-guard.js"
+    ],
+    "path": [
+     "frontend/index.html",
+     "frontend/pages/bonus.html",
+     "frontend/pages/custom-records.html",
+     "frontend/pages/login-qr-approve.html",
+     "frontend/pages/login.html",
+     "frontend/pages/quotation-form.html",
+     "frontend/static/",
+     "frontend/static/auth-guard.js"
     ]
    }
   },
@@ -29707,6 +29936,56 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_r2_step1_2026_10_07.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tools/duty_roles_equivalence.py",
+    "file:backend/tools/duty_roles_rollback.py",
+    "helper:audit",
+    "helper:auth",
+    "helper:custom_files",
+    "helper:custom_modules",
+    "helper:duty_roles",
+    "helper:financial_mask",
+    "helper:module_registry",
+    "mod:analytics/api/dashboard",
+    "mod:case/api/case_action_items",
+    "mod:crm/api",
+    "router:custom_records",
+    "router:mail_settings",
+    "router:map_points",
+    "router:search"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/audit.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/duty_roles.py",
+     "backend/helpers/financial_mask.py",
+     "backend/helpers/module_registry.py"
+    ],
+    "path": [
+     "backend/helpers/auth.py",
+     "backend/helpers/custom_files.py",
+     "backend/helpers/custom_modules.py",
+     "backend/helpers/duty_roles.py",
+     "backend/helpers/financial_mask.py",
+     "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/case/api/case_action_items.py",
+     "backend/modules/crm/api.py",
+     "backend/routers/custom_records.py",
+     "backend/routers/mail_settings.py",
+     "backend/routers/map_points.py",
+     "backend/routers/search.py",
+     "backend/tools/duty_roles_equivalence.py",
+     "backend/tools/duty_roles_rollback.py"
+    ]
+   }
+  },
   "backend/tests/test_received_installment_lock_2026_09_24.py": {
    "kind": "api",
    "units": [
@@ -30864,6 +31143,21 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_version_manifest_no_future_stamps_2026_10_07.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/tests/_prod_baseline.py",
+    "file:backend/version_manifest.json"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_prod_baseline.py"
+    ],
+    "path": [
+     "backend/version_manifest.json"
+    ]
+   }
   },
   "backend/tests/test_version_manifest_shipped_is_immutable_2026_09_25.py": {
    "kind": "audit",

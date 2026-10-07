@@ -526,6 +526,7 @@
    "dynamic_sql": false,
    "imports": [
     "core:db",
+    "helper:audit",
     "helper:duty_roles",
     "helper:module_registry",
     "plat:paths"
@@ -535,7 +536,11 @@
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [
+    "duty_roles",
     "sessions",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": []
@@ -1936,6 +1941,7 @@
     "/api/cashier/execution-history",
     "/api/cashier/export",
     "/api/cashier/payable-queue",
+    "/api/cashier/payable-queue/",
     "/api/cashier/payslip-queue",
     "/api/cashier/pending-payables",
     "/api/cashier/pending-payables/",
@@ -1948,7 +1954,6 @@
     "/api/contractor-vouchers/{}/personnel-link",
     "/api/contractor-vouchers/{}/personnel-links",
     "/api/payslips/",
-    "/api/quotations/",
     "/api/quotations/last-received-bank-account",
     "/api/quotations/{}/payment/{}",
     "/api/reports/bank-reconcile",
@@ -1975,18 +1980,7 @@
    "routers_called": [
     "mod:accounting/api/accounting_export",
     "mod:arap/api/cashier",
-    "mod:case/api/case_action_items",
-    "mod:case/api/case_extra_expenses",
-    "mod:case/api/expense_form_pdf",
-    "mod:case/api/material_approvals",
-    "mod:case/api/material_changes",
-    "mod:case/api/material_links",
-    "mod:case/api/material_orders",
-    "mod:case/api/material_payments",
     "mod:case/api/quotations",
-    "mod:case/api/settlement_actuals",
-    "mod:case/api/settlement_api",
-    "mod:netplan/api",
     "mod:payroll/api/bonus",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers"
@@ -2975,10 +2969,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -3090,10 +3088,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -3172,11 +3174,15 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "gl_source_events",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -3262,11 +3268,15 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "gl_account_meta",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -3380,6 +3390,7 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "gl_account_meta",
     "gl_fiscal_years",
     "gl_fs_lines",
@@ -3389,6 +3400,9 @@
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "voucher_lines",
     "vouchers_all"
@@ -3522,6 +3536,7 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "gl_account_meta",
     "gl_engine_runs",
     "gl_source_annotations",
@@ -3530,6 +3545,9 @@
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "voucher_attachments",
     "voucher_lines",
@@ -3690,12 +3708,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "gl_fiscal_years",
     "gl_periods",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "voucher_attachments",
     "voucher_lines",
@@ -3808,6 +3830,7 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "gl_account_meta",
     "gl_fiscal_years",
     "gl_fs_lines",
@@ -3816,6 +3839,9 @@
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "voucher_lines",
     "vouchers_all"
@@ -3931,6 +3957,7 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "gl_account_meta",
     "gl_action_requests",
     "gl_fiscal_years",
@@ -3941,6 +3968,9 @@
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "voucher_attachments",
     "voucher_lines",
@@ -4046,11 +4076,15 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "gl_account_meta",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -4076,9 +4110,12 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:audit",
     "helper:auth",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:settings",
+    "helper:tiered_approval",
     "mod:accounting/ledger/cashflow",
     "mod:accounting/ledger/equity",
     "mod:accounting/ledger/fs_lines",
@@ -4136,17 +4173,30 @@
    "tables_r": [],
    "tables_r_transitive": [
     "account_items",
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
     "gl_account_meta",
     "gl_fiscal_years",
     "gl_fs_lines",
     "gl_opening_batches",
+    "projects",
+    "quotations",
     "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "voucher_lines",
     "vouchers_all"
    ],
    "tables_w": [],
    "tables_w_transitive": [
+    "audit_log",
     "duty_roles",
     "gl_account_meta",
     "gl_account_roles",
@@ -4155,7 +4205,9 @@
     "gl_period_log",
     "gl_periods",
     "gl_settings",
+    "notifications",
     "permission_changes",
+    "system_settings",
     "user_duty_roles",
     "user_perm_subtracts"
    ]
@@ -4274,6 +4326,7 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "gl_account_meta",
     "gl_fiscal_years",
     "gl_fs_lines",
@@ -4286,6 +4339,9 @@
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "voucher_attachments",
     "voucher_lines",
@@ -4613,10 +4669,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "voucher_attachments",
     "voucher_edit_log",
@@ -5288,6 +5348,7 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:audit",
     "helper:auth",
     "helper:dates",
     "helper:duty_roles",
@@ -5295,7 +5356,8 @@
     "helper:module_registry",
     "helper:row_access",
     "helper:settings",
-    "helper:tax_calc"
+    "helper:tax_calc",
+    "helper:tiered_approval"
    ],
    "imports": [
     "core:db",
@@ -5378,22 +5440,32 @@
     "work_logs"
    ],
    "tables_r_transitive": [
+    "approval_delegates",
     "audit_log",
     "case_updates",
     "customers",
+    "daily_tasks",
+    "departments",
     "dev_cases",
     "dev_logs",
+    "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
     "stock_items",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "work_logs"
    ],
    "tables_w": [],
    "tables_w_transitive": [
+    "audit_log",
     "duty_roles",
+    "notifications",
     "permission_changes",
     "system_settings",
     "user_duty_roles",
@@ -5406,11 +5478,14 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:audit",
     "helper:auth",
     "helper:duty_roles",
     "helper:financial_mask",
     "helper:module_registry",
-    "helper:recognition_basis"
+    "helper:recognition_basis",
+    "helper:settings",
+    "helper:tiered_approval"
    ],
    "imports": [
     "helper:auth",
@@ -5436,13 +5511,28 @@
    "tables_named": [],
    "tables_r": [],
    "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
     "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
    "tables_w_transitive": [
+    "audit_log",
     "duty_roles",
+    "notifications",
     "permission_changes",
+    "system_settings",
     "user_duty_roles",
     "user_perm_subtracts"
    ]
@@ -5605,13 +5695,17 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "parts",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
     "stock_items",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "vendor_contractors"
    ],
@@ -5670,6 +5764,7 @@
     "helper:auth",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:dates",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:google_calendar",
@@ -5688,6 +5783,7 @@
     "core:db",
     "helper:audit",
     "helper:auth",
+    "helper:dates",
     "helper:email_notify",
     "helper:google_calendar",
     "helper:legal_params",
@@ -5727,56 +5823,68 @@
      "path": "/api/cashier/pending-payables/{source}/{key}/pay"
     },
     {
+     "func": "set_pending_payable_planned_pay_date",
+     "line": 214,
+     "method": "PATCH",
+     "path": "/api/cashier/pending-payables/{source}/{key}/planned-pay-date"
+    },
+    {
+     "func": "set_payable_queue_planned_pay_date",
+     "line": 250,
+     "method": "PATCH",
+     "path": "/api/cashier/payable-queue/{voucher_no}/planned-pay-date"
+    },
+    {
      "func": "get_remit_reviews",
-     "line": 234,
+     "line": 316,
      "method": "GET",
      "path": "/api/cashier/remit-reviews"
     },
     {
      "func": "decide_remit_review",
-     "line": 253,
+     "line": 335,
      "method": "POST",
      "path": "/api/cashier/remit-reviews/{source}/{key}/decision"
     },
     {
      "func": "get_payable_queue",
-     "line": 368,
+     "line": 450,
      "method": "GET",
      "path": "/api/cashier/payable-queue"
     },
     {
      "func": "get_receivable_queue",
-     "line": 379,
+     "line": 461,
      "method": "GET",
      "path": "/api/cashier/receivable-queue"
     },
     {
      "func": "get_payslip_queue",
-     "line": 401,
+     "line": 483,
      "method": "GET",
      "path": "/api/cashier/payslip-queue"
     },
     {
      "func": "get_bonus_queue",
-     "line": 421,
+     "line": 503,
      "method": "GET",
      "path": "/api/cashier/bonus-queue"
     },
     {
      "func": "get_execution_history",
-     "line": 480,
+     "line": 562,
      "method": "GET",
      "path": "/api/cashier/execution-history"
     },
     {
      "func": "export_execution_history",
-     "line": 495,
+     "line": 577,
      "method": "GET",
      "path": "/api/cashier/export"
     },
     {
      "func": "bank_reconcile",
-     "line": 704,
+     "line": 786,
      "method": "POST",
      "path": "/api/reports/bank-reconcile"
     }
@@ -5795,12 +5903,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "invoice_vouchers",
     "payment_requests",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -5955,12 +6067,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "invoice_vouchers",
     "payment_requests",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -6108,12 +6224,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "invoice_vouchers",
     "payment_requests",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -6309,10 +6429,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -6557,6 +6681,7 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "invoice_vouchers",
     "payment_requests",
     "projects",
@@ -6564,7 +6689,10 @@
     "sessions",
     "shipping_notes",
     "suppliers",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "vendor_contractors"
    ],
@@ -6768,11 +6896,15 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -6876,12 +7008,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "expense_categories",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -7010,12 +7146,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
     "suppliers",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "vendor_contractors"
    ],
@@ -7151,12 +7291,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
     "suppliers",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "vendor_contractors"
    ],
@@ -7283,12 +7427,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
     "suppliers",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "vendor_contractors"
    ],
@@ -7421,12 +7569,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
     "suppliers",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "vendor_contractors"
    ],
@@ -7527,67 +7679,67 @@
    "routes": [
     {
      "func": "get_payee_privacy_ack",
-     "line": 123,
+     "line": 124,
      "method": "GET",
      "path": "/api/material-payments/{pid}/privacy-notice"
     },
     {
      "func": "ack_payee_privacy_notice",
-     "line": 137,
+     "line": 138,
      "method": "POST",
      "path": "/api/material-payments/{pid}/privacy-notice/ack"
     },
     {
      "func": "list_payments",
-     "line": 158,
+     "line": 159,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-payments"
     },
     {
      "func": "supplier_picker",
-     "line": 177,
+     "line": 178,
      "method": "GET",
      "path": "/api/material-suppliers"
     },
     {
      "func": "create_payment",
-     "line": 215,
+     "line": 216,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/material-orders/{item_id}/payments"
     },
     {
      "func": "update_payment",
-     "line": 262,
+     "line": 263,
      "method": "PATCH",
      "path": "/api/material-payments/{pid}"
     },
     {
      "func": "submit_payment",
-     "line": 285,
+     "line": 286,
      "method": "POST",
      "path": "/api/material-payments/{pid}/submit"
     },
     {
      "func": "approve_payment",
-     "line": 327,
+     "line": 328,
      "method": "POST",
      "path": "/api/material-payments/{pid}/approve"
     },
     {
      "func": "reject_payment",
-     "line": 351,
+     "line": 352,
      "method": "POST",
      "path": "/api/material-payments/{pid}/reject"
     },
     {
      "func": "withdraw_payment",
-     "line": 373,
+     "line": 374,
      "method": "POST",
      "path": "/api/material-payments/{pid}/withdraw"
     },
     {
      "func": "void_payment",
-     "line": 392,
+     "line": 393,
      "method": "POST",
      "path": "/api/material-payments/{pid}/void"
     }
@@ -7615,12 +7767,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
     "suppliers",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "vendor_contractors"
    ],
@@ -8204,6 +8360,7 @@
     "dev_cases",
     "dev_logs",
     "divisions",
+    "duty_roles",
     "invoice_vouchers",
     "payment_requests",
     "projects",
@@ -8211,7 +8368,10 @@
     "sessions",
     "shipping_notes",
     "suppliers",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "vendor_contractors",
     "work_logs"
@@ -8343,12 +8503,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
     "suppliers",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "vendor_contractors"
    ],
@@ -8475,12 +8639,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
     "suppliers",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "vendor_contractors"
    ],
@@ -8844,10 +9012,11 @@
    "tables_named": [],
    "tables_r": [
     "case_material_payment_lines",
-    "case_material_payments",
     "quotations"
    ],
-   "tables_w": []
+   "tables_w": [
+    "case_material_payments"
+   ]
   },
   "mod:case/material_shippable": {
    "api_prefixes": [],
@@ -9281,12 +9450,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "invoice_vouchers",
     "payment_requests",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -9455,12 +9628,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "invoice_vouchers",
     "payment_requests",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -9543,10 +9720,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -9628,10 +9809,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -9754,12 +9939,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "lodging_catalog",
     "lodging_quotes",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -10000,10 +10189,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -10160,11 +10353,15 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
     "user_bank_accounts",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -10485,11 +10682,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -10643,11 +10843,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -10833,10 +11036,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -11216,133 +11423,133 @@
    "routes": [
     {
      "func": "get_remit_fee_total",
-     "line": 229,
+     "line": 249,
      "method": "GET",
      "path": "/api/contractor-vouchers/remit-fee-total"
     },
     {
      "func": "get_last_paid_bank_account",
-     "line": 244,
+     "line": 264,
      "method": "GET",
      "path": "/api/contractor-vouchers/last-paid-bank-account"
     },
     {
      "func": "list_contractor_vouchers",
-     "line": 267,
+     "line": 287,
      "method": "GET",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "get_contractor_voucher",
-     "line": 293,
+     "line": 313,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "create_contractor_voucher",
-     "line": 306,
+     "line": 326,
      "method": "POST",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "preview_contractor_voucher",
-     "line": 456,
+     "line": 483,
      "method": "POST",
      "path": "/api/contractor-vouchers/preview"
     },
     {
      "func": "delete_contractor_voucher",
-     "line": 480,
+     "line": 507,
      "method": "DELETE",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "set_voucher_invoice",
-     "line": 509,
+     "line": 536,
      "method": "PATCH",
      "path": "/api/contractor-vouchers/{voucher_no}/invoice"
     },
     {
      "func": "void_contractor_voucher",
-     "line": 545,
+     "line": 572,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/void"
     },
     {
      "func": "submit_contractor_voucher",
-     "line": 579,
+     "line": 606,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/submit"
     },
     {
      "func": "approve_contractor_voucher",
-     "line": 641,
+     "line": 668,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/approve"
     },
     {
      "func": "revoke_contractor_voucher_approval",
-     "line": 750,
+     "line": 777,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/revoke-approval"
     },
     {
      "func": "reject_contractor_voucher",
-     "line": 794,
+     "line": 821,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_contractor_voucher_pdf",
-     "line": 842,
+     "line": 869,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_contractor_voucher_export",
-     "line": 874,
+     "line": 901,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/export"
     },
     {
      "func": "get_remit_require_payslip",
-     "line": 942,
+     "line": 969,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "set_remit_require_payslip",
-     "line": 950,
+     "line": 977,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "get_personnel_links",
-     "line": 963,
+     "line": 990,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-links"
     },
     {
      "func": "link_personnel_payslip",
-     "line": 997,
+     "line": 1024,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-link"
     },
     {
      "func": "toggle_paid",
-     "line": 1052,
+     "line": 1079,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/paid-toggle"
     },
     {
      "func": "get_contractor_voucher_approval_flow",
-     "line": 1174,
+     "line": 1201,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     },
     {
      "func": "set_contractor_voucher_approval_flow",
-     "line": 1191,
+     "line": 1218,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     }
@@ -11365,13 +11572,17 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "invoice_vouchers",
     "payment_requests",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "vendor_contractors"
    ],
@@ -11510,10 +11721,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -11628,10 +11843,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "vendor_contractors"
    ],
@@ -11655,9 +11874,12 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:audit",
     "helper:auth",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:settings",
+    "helper:tiered_approval",
     "mod:subcontract/remit_kinds"
    ],
    "imports": [
@@ -11688,15 +11910,30 @@
    "tables_named": [],
    "tables_r": [],
    "tables_r_transitive": [
+    "approval_delegates",
     "contractor_payment_vouchers",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
     "sessions",
+    "shipping_notes",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
    "tables_w_transitive": [
+    "audit_log",
     "duty_roles",
+    "notifications",
     "permission_changes",
+    "system_settings",
     "user_duty_roles",
     "user_perm_subtracts"
    ]
@@ -11928,10 +12165,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -12249,12 +12490,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "parts",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
     "suppliers",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -12451,12 +12696,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "invoice_vouchers",
     "payment_requests",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -12565,10 +12814,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -12781,12 +13034,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
     "tender_watches",
     "tenders",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -13462,18 +13719,7 @@
    "routers_called_effective": [
     "mod:accounting/api/accounting_export",
     "mod:arap/api/cashier",
-    "mod:case/api/case_action_items",
-    "mod:case/api/case_extra_expenses",
-    "mod:case/api/expense_form_pdf",
-    "mod:case/api/material_approvals",
-    "mod:case/api/material_changes",
-    "mod:case/api/material_links",
-    "mod:case/api/material_orders",
-    "mod:case/api/material_payments",
     "mod:case/api/quotations",
-    "mod:case/api/settlement_actuals",
-    "mod:case/api/settlement_api",
-    "mod:netplan/api",
     "mod:payroll/api/bonus",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
@@ -16046,10 +16292,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -16132,10 +16382,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -16191,10 +16445,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -16492,10 +16750,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -16527,10 +16789,12 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:audit",
     "helper:auth",
     "helper:duty_roles",
     "helper:module_registry",
-    "helper:settings"
+    "helper:settings",
+    "helper:tiered_approval"
    ],
    "imports": [
     "helper:auth",
@@ -16563,12 +16827,26 @@
    "tables_named": [],
    "tables_r": [],
    "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
     "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
    "tables_w_transitive": [
+    "audit_log",
     "duty_roles",
+    "notifications",
     "permission_changes",
     "system_settings",
     "user_duty_roles",
@@ -16817,11 +17095,15 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -16935,10 +17217,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -17133,11 +17419,15 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -17252,10 +17542,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -17275,10 +17569,13 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:audit",
     "helper:auth",
     "helper:duty_roles",
     "helper:module_registry",
-    "helper:row_access"
+    "helper:row_access",
+    "helper:settings",
+    "helper:tiered_approval"
    ],
    "imports": [
     "core:db",
@@ -17334,14 +17631,23 @@
     "work_logs"
    ],
    "tables_r_transitive": [
+    "approval_delegates",
     "audit_log",
     "case_updates",
     "daily_task_completions",
     "daily_tasks",
+    "departments",
     "dev_cases",
     "dev_logs",
+    "divisions",
+    "duty_roles",
+    "projects",
     "quotations",
     "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "work_logs"
    ],
@@ -17349,9 +17655,12 @@
     "item_reads"
    ],
    "tables_w_transitive": [
+    "audit_log",
     "duty_roles",
     "item_reads",
+    "notifications",
     "permission_changes",
+    "system_settings",
     "user_duty_roles",
     "user_perm_subtracts"
    ]
@@ -17429,10 +17738,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -17452,10 +17765,13 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:audit",
     "helper:auth",
     "helper:duty_roles",
     "helper:licensing",
-    "helper:module_registry"
+    "helper:module_registry",
+    "helper:settings",
+    "helper:tiered_approval"
    ],
    "imports": [
     "helper:auth",
@@ -17476,13 +17792,28 @@
    "tables_named": [],
    "tables_r": [],
    "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
     "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
    "tables_w_transitive": [
+    "audit_log",
     "duty_roles",
+    "notifications",
     "permission_changes",
+    "system_settings",
     "user_duty_roles",
     "user_perm_subtracts"
    ]
@@ -17493,9 +17824,12 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:audit",
     "helper:auth",
     "helper:duty_roles",
-    "helper:module_registry"
+    "helper:module_registry",
+    "helper:settings",
+    "helper:tiered_approval"
    ],
    "imports": [
     "core:db",
@@ -17522,15 +17856,30 @@
    "tables_named": [],
    "tables_r": [],
    "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
     "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
     "user_list_prefs"
    ],
    "tables_w_transitive": [
+    "audit_log",
     "duty_roles",
+    "notifications",
     "permission_changes",
+    "system_settings",
     "user_duty_roles",
     "user_list_prefs",
     "user_perm_subtracts"
@@ -17602,12 +17951,16 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "invoice_vouchers",
     "payment_requests",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -17627,6 +17980,7 @@
    ],
    "dynamic_sql": true,
    "helpers_transitive": [
+    "helper:audit",
     "helper:auth",
     "helper:case_access",
     "helper:duty_roles",
@@ -17691,12 +18045,20 @@
    ],
    "tables_r_transitive": [
     "approval_delegates",
+    "daily_tasks",
     "departments",
+    "dev_cases",
     "divisions",
+    "duty_roles",
     "geocode_cache",
+    "projects",
     "quotations",
     "sessions",
+    "shipping_notes",
+    "system_settings",
     "tenders",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -17705,6 +18067,7 @@
     "duty_roles",
     "geocode_cache",
     "geocode_usage",
+    "notifications",
     "permission_changes",
     "system_settings",
     "user_duty_roles",
@@ -17768,10 +18131,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -17797,9 +18164,12 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:audit",
     "helper:auth",
     "helper:duty_roles",
-    "helper:module_registry"
+    "helper:module_registry",
+    "helper:settings",
+    "helper:tiered_approval"
    ],
    "imports": [
     "helper:auth",
@@ -17820,13 +18190,28 @@
    "tables_named": [],
    "tables_r": [],
    "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
     "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
    "tables_w_transitive": [
+    "audit_log",
     "duty_roles",
+    "notifications",
     "permission_changes",
+    "system_settings",
     "user_duty_roles",
     "user_perm_subtracts"
    ]
@@ -17907,10 +18292,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -18002,11 +18391,15 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
     "stock_items",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [
@@ -18029,6 +18422,7 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:audit",
     "helper:auth",
     "helper:company_identity",
     "helper:company_setup",
@@ -18073,16 +18467,25 @@
     "approval_delegates",
     "custom_record_values",
     "custom_records",
+    "daily_tasks",
     "departments",
+    "dev_cases",
     "divisions",
+    "duty_roles",
+    "projects",
     "quotations",
     "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
     "duty_roles",
+    "notifications",
     "permission_changes",
     "system_settings",
     "user_duty_roles",
@@ -18168,11 +18571,15 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -18200,10 +18607,13 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:audit",
     "helper:auth",
     "helper:duty_roles",
     "helper:module_registry",
-    "helper:row_access"
+    "helper:row_access",
+    "helper:settings",
+    "helper:tiered_approval"
    ],
    "imports": [
     "core:db",
@@ -18236,18 +18646,31 @@
     "suppliers"
    ],
    "tables_r_transitive": [
+    "approval_delegates",
     "customers",
+    "daily_tasks",
+    "departments",
     "dev_cases",
+    "divisions",
+    "duty_roles",
     "parts",
+    "projects",
     "quotations",
     "sessions",
+    "shipping_notes",
     "suppliers",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
    "tables_w_transitive": [
+    "audit_log",
     "duty_roles",
+    "notifications",
     "permission_changes",
+    "system_settings",
     "user_duty_roles",
     "user_perm_subtracts"
    ]
@@ -18827,6 +19250,7 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "invoice_vouchers",
     "payment_requests",
     "projects",
@@ -18834,7 +19258,10 @@
     "schema_version",
     "sessions",
     "shipping_notes",
+    "system_settings",
     "user_activity_daily",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "user_request_log",
     "users",
     "webauthn_credentials"
@@ -18918,10 +19345,14 @@
     "departments",
     "dev_cases",
     "divisions",
+    "duty_roles",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ],
    "tables_w": [],
@@ -19495,14 +19926,13 @@
     "core:archive"
    ],
    "path": "backend/modules/case/migrations/0005_material_payments.py:11",
-   "readers": [
-    "mod:case/material_payment_cashier"
-   ],
+   "readers": [],
    "tables_r": [],
    "tables_w": [],
    "writers": [
     "mod:case/api/material_payments",
-    "mod:case/material_payment"
+    "mod:case/material_payment",
+    "mod:case/material_payment_cashier"
    ]
   },
   "table:case_stage_visits": {
@@ -20025,7 +20455,8 @@
    ],
    "path": "backend/core/migrations.py:433",
    "readers": [
-    "core:archive"
+    "core:archive",
+    "helper:auth"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -21404,6 +21835,7 @@
    "path": "backend/db.py:594",
    "readers": [
     "core:archive",
+    "helper:auth",
     "mod:payroll/bonus_correction",
     "mod:payroll/bonus_deductions",
     "mod:payroll/bonus_vouchers"
@@ -21575,7 +22007,8 @@
    ],
    "path": "backend/core/migrations.py:445",
    "readers": [
-    "core:archive"
+    "core:archive",
+    "helper:auth"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -21607,7 +22040,8 @@
    ],
    "path": "backend/core/migrations.py:453",
    "readers": [
-    "core:archive"
+    "core:archive",
+    "helper:auth"
    ],
    "tables_r": [],
    "tables_w": [],

@@ -35,8 +35,8 @@
 | `core:trail` | L1 | 操作軌跡（`user_request_log`）的共用設定，以及把路徑翻成人話的對照表。（無單位卡） | 23 | 2 | — |
 | `helper:approval_queue` | L1 | 「待我簽核」佇列與轉簽的共用形狀（L1；M01-PLAN §3-7，2026-09-26）。（無單位卡） | 11 | 17 | — |
 | `helper:attachment_search` | L1 | 附件目錄的搜尋共用件（`attachments.catalog` 契約 v1 的 `search`／`count`；附件目錄 P3， | 10 | 9 | `tests/test_filehub_search_2026_09_30.py` |
-| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 11 | 69 | — |
-| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 24 | 95 | — |
+| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 11 | 70 | — |
+| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 95 | — |
 | `helper:branding` | L1 | 品牌圖檔（主 LOGO／深色底 LOGO／favicon）：上傳驗證、存放、讀取時回預設。 | 16 | 2 | `tests/test_branding_2026_09_27.py` |
 | `helper:build_info` | L1 | 這個**行程**載入的是哪一份程式碼（`BR1`）。（無單位卡） | 3 | 2 | — |
 | `helper:business_days` | L1 | L1 工作日／假日判斷（第44班：自 M11 標案雷達 `calendar_tw.py` 提升為 L1 共用，供任何模組用——例如 M01 預定付款日提醒、M11 不寄信日）。**純函式，不連網、不讀時鐘（日期由呼叫端給）。**（無單位卡） | 9 | 2 | — |
@@ -54,7 +54,7 @@
 | `helper:custom_module_delete` | L1 | 刪除自訂模組（建構器首頁「刪除模組」）。（無單位卡） | 3 | 1 | — |
 | `helper:custom_modules` | L1 | 自訂模組引擎（P8，CUSTOMIZATION-SPEC §1／§3.1／§8.1）：定義是資料，不是程式。（無單位卡） | 55 | 7 | — |
 | `helper:daily_checks` | L1 | L1 每日 08:00 檢查執行器（2026-09-26；取代 routers/daily_tasks.py::schedule_overdue_check）。（無單位卡） | 3 | 1 | — |
-| `helper:dates` | L1 | Date arithmetic utilities.（無單位卡） | 5 | 14 | — |
+| `helper:dates` | L1 | Date arithmetic utilities.（無單位卡） | 5 | 15 | — |
 | `helper:doc_render` | L1 | L1 單據輸出的公開入口 `render_document`（A2-0 #7）：版型＋單據視圖 ⇒ 完整 HTML（交給 `html_to_pdf_bytes` 轉 PDF）。 | 1 | 2 | `tests/platform/test_doc_render_2026_10_01.py` |
 | `helper:doc_template` | L1 | L1 輸出引擎：版型定義（資料）＋單據視圖（資料）⇒ HTML（P2，CUSTOMIZATION-SPEC §3.4）。（無單位卡） | 20 | 8 | — |
 | `helper:duty_roles` | L1 | 職責角色化 R1（設計：docs/platform/plans/DUTY-ROLES-DESIGN.md；使用者 2026-10-06 裁示 Q1–Q12、N1–N4）。 | 17 | 2 | `tests/test_duty_roles_r1_2026_10_06.py`、`tests/test_duty_roles_equivalence_2026_10_06.py` |
