@@ -206,8 +206,38 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 - **IP-100 提供者 `payroll_payslip`**（M07 → M05）：已核准／已匯出／已簽回且未付款的勞報單進出納「待付款申請」（已核准即可付款，簽回檔選填）；加法：項目欄位 `needsVoucherNo`／`signedBack`／`payslipStatus`／`extra`，`mark_paid` 的 `remit.voucherNo`（傳票單號必填），可選方法 `set_planned_pay_date`、`after_paid`（付款 commit 之後）、`payee_info`，屬性 `NO_CALENDAR`（勞報單不進行事曆）、`FULL_ACCOUNT_STRICT`。IP-103 `payslip.payables` 與 `GET /api/cashier/payslip-queue` 保留一班（相容／回滾；出納頁籤已隱藏），下一班刪除。
 - **`approval.queue_items`／`payroll_payslip`**（IP-10）：待審核的勞報單進「待我簽核」（不含金額、受領人、身分資料）。
-- **`payslip.dispatch_links`**（暫定號，M07 → M04）：`links_for_dispatch／links_for_payslip／link／unlink`，只回單號、狀態、受領人姓名、開單日期、已作廢旗標（**無金額**）；M07 不在 ⇒ 派發頁明說「薪資獎金模組未安裝」。**`dispatch.brief`**（M04 → M07）：派發簡要識別（編號、單號、案件、狀態、廠商名；無金額）；M04 不在 ⇒ 勞報單頁明說並不能新增關聯。
+- **`payslip.dispatch_links`**（M07 → M04）與 **`dispatch.brief`**（M04 → M07）：派發 ⇄ 勞報單雙向連結，詳見下方 IP-112、IP-113（暫定號，列車定號；皆不含金額）。
 - **IP-105 `payslip.remit`**：勞報單狀態由「須已簽回」放寬為已核准／已匯出／已簽回（Q13）；取消匯款退回付款前最近的狀態。
+
+## IP-112　`payslip.dispatch_links`：派發 ⇄ 勞報單連結（M07 薪資獎金 → M04 外包工班派發頁；暫定號，列車定號；2026-10-08，第46班 P3）
+
+派發頁要顯示並維護「這張派發對應哪些勞報單」；外包工班不 import 薪資獎金，改經 registry 取用。連結表 `payslip_dispatch_links` 屬 payroll migration 4。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M07 薪資獎金：`modules/payroll/payslip_links.py::_Links`（`links_for_dispatch`／`links_for_payslip`／`link`／`unlink`） |
+| 使用方 | M04 外包工班：`modules/subcontract/api/dispatch_payslip_links.py`（`GET/POST/DELETE /api/contractor-dispatches/{id}/payslip-links`） |
+| 形式 | provider，單一提供者（名稱 `payroll`） |
+| 語法 | 提供：`("payslip.dispatch_links", "payroll"): payslip_links._Links`；取用：`registry.single_provider("payslip.dispatch_links")` |
+| 回傳 | 只回單號、狀態、受領人姓名、開單日期、已作廢旗標；**不含金額、身分證、銀行資料**；連結／解除僅最高管理者（權限判斷在 M04 端點） |
+| 對方不在時 | 提供者不在 ⇒ 派發頁明說「薪資獎金模組未安裝」，其餘照常 |
+| 契約版本 | 1（2026-10-08） |
+| 守門 | `backend/modules/payroll/tests/test_payslip_links_t46.py` |
+
+## IP-113　`dispatch.brief`：派發簡要識別（M04 外包工班 → M07 薪資獎金勞報單頁；暫定號，列車定號；2026-10-08，第46班 P3）
+
+勞報單頁要顯示連結到的派發是哪一張；薪資獎金不 import 外包工班，改經 registry 取用。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M04 外包工班：`modules/subcontract/api/dispatch_payslip_links.py::dispatch_brief` |
+| 使用方 | M07 薪資獎金：`modules/payroll/api/payslip_links.py`、`modules/payroll/api/payslips.py`（建立勞報單時驗證來源派發） |
+| 形式 | provider，單一提供者（名稱 `subcontract`） |
+| 語法 | 提供：`("dispatch.brief", "subcontract"): dispatch_payslip_links.dispatch_brief`；取用：`registry.single_provider("dispatch.brief")` ⇒ `fn(conn, dispatch_id)` |
+| 回傳 | `{id, docCode, quoteNo, status, vendorName}` 或 `None`（查無）；**不含金額** |
+| 對方不在時 | 提供者不在 ⇒ 勞報單頁明說「外包工班模組未安裝」並不能新增關聯；既有連結仍可讀（派發欄位空白） |
+| 契約版本 | 1（2026-10-08） |
+| 守門 | `backend/modules/payroll/tests/test_payslip_links_t46.py` |
 
 ## IP-103　`payslip.payables`：勞報單待付款（M07 → M05 出納）
 
