@@ -73,6 +73,8 @@ class _Payables:
         if MP.remaining_of(conn, pay) <= 0:
             raise ValueError("這張匯款申請已結清，預定付款日保留為歷史紀錄，不能再修改")
         old = (pay.get("planned_pay_date") or "")[:10]
+        if old == value:                                                # 稽核 S3：沒變 ⇒ 不寫、不稽核、不通知（端點看 unchanged）
+            return {"plannedPayDate": value, "old": old, "unchanged": True}
         conn.execute("UPDATE case_material_payments SET planned_pay_date=?, updated_at=? WHERE id=?", (value, MP._now(), pay["id"]))
         return {"plannedPayDate": value, "old": old, "quoteNo": pay["quote_no"] or "", "applicant": pay["created_by"] or "",
                 "docCode": pay["doc_code"] or "#%s" % pay["id"], "link": "case-management.html"}

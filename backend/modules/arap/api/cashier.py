@@ -237,6 +237,8 @@ def set_pending_payable_planned_pay_date(source: str, key: str, body: dict = Bod
         conn.commit()
     finally:
         conn.close()
+    if res.get("unchanged"):                                            # 稽核 S3：日期沒變 ⇒ 不稽核、不通知、不動行事曆
+        return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value), "unchanged": True}
     hook = getattr(p, "planned_changed", None)
     if hook is not None:
         hook(key)                                                       # commit 之後（寫鎖已放）；提供者自己 spawn 背景執行緒
@@ -271,6 +273,8 @@ def set_payable_queue_planned_pay_date(voucher_no: str, body: dict = Body(defaul
         conn.commit()
     finally:
         conn.close()
+    if res.get("unchanged"):                                            # 稽核 S3：日期沒變 ⇒ 不稽核、不通知
+        return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value), "unchanged": True}
     _audit(_tok(authorization), "cashier.planned_pay_date", "subcontract_voucher", voucher_no,
            "出納設定承攬商匯款預定付款日：%s（%s）%s → %s" % (voucher_no, res.get("quoteNo") or "", res.get("old") or "（無）", value or "（清除）"))
     _notify_applicant_planned(user, "subcontract_voucher", voucher_no, res, value)

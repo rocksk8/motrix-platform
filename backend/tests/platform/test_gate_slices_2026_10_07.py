@@ -618,3 +618,22 @@ def test_moved_files_are_tooling_self_tests_and_no_guard_moved():
     for guard in ("test_generated_maps", "test_unit_cards", "test_route_ownership", "test_module_boundaries", "test_integration_points",
                   "test_module_changelog", "test_version_slots", "test_train_number", "test_scope_gate", "test_e2e_classification"):
         assert not any(guard in n for n in ex), guard
+
+
+# ── 第 45 班稽核 S1：切了片卻沒對帳要看得出來 ──────────────────────────────────────
+
+def test_slice_verification_states():
+    assert MT.slice_verification(None, False) == (None, "")                                   # 沒切片 ⇒ 不加欄位
+    vf, warn = MT.slice_verification(None, True)                                              # 切了片、沒對帳（VERIFY=0）⇒ 警告＋verified=False
+    assert vf == {"verified": False} and "沒有預先 collect-only 對帳" in warn
+    assert MT.slice_verification({"ok": True}, True) == ({"verified": True}, "")
+    assert MT.slice_verification({"ok": False}, True)[0] == {"verified": False}
+
+
+def test_full_gate_with_verify_off_is_marked_unverified_and_warns(monkeypatch, capsys):
+    saved = []
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: saved.append(r) or Path("x"))
+    cap = []
+    assert _run(monkeypatch, {}, cap) == 0                                                    # autouse 已設 MOTRIX_GATE_VERIFY=0
+    assert saved and saved[-1]["slices"]["verified"] is False
+    assert "沒有預先 collect-only 對帳" in capsys.readouterr().out

@@ -253,6 +253,7 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     month = datetime.now().strftime("%Y%m")
     d     = body.data
     d.pop("recalcTaxRules", None)
+    d.pop("status", None)                  # 稽核 S5：狀態不採用前端送來的值，data_json 也不留（避免 data.status 顯示被偽造的值）
     rules = _rules_for_slip(d)            # R1：依開單（給付）日期挑版本；沒有適用版本 ⇒ 400
 
     conn = get_db()
@@ -350,6 +351,7 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
     now    = datetime.now().isoformat()
     d      = body.data
     recalc = d.pop("recalcTaxRules", False) is True
+    d.pop("status", None)                  # 稽核 S5：同建立——data_json 不留前端送來的 status
     # 稽核 D-2（2026-09-26）：讀舊單 → 合併（已告知紀錄、快照）→ 整包寫回，全部在同一個寫交易裡。
     # 原本在交易外讀：兩人同時修改時，後寫的一方用「讀的當下」的舊單整包蓋回，
     # 別人剛記下的「已告知」紀錄被清掉（CUSTOMIZATION-SPEC §9.3「已記錄的不能被覆蓋或清除」）。

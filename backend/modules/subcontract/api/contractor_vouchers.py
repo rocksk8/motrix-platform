@@ -171,6 +171,8 @@ def set_planned_pay_date(conn, voucher_no, value, user) -> dict:
         raise LookupError("找不到這張匯款申請")
     if r["is_paid"]:
         raise ValueError("這張匯款申請已匯款，預定付款日保留為歷史紀錄，不能再修改")
+    if (r["planned_pay_date"] or "")[:10] == value:                      # 稽核 S3：沒變 ⇒ 不寫、不稽核、不通知（端點看 unchanged）
+        return {"plannedPayDate": value, "old": value, "unchanged": True}
     cur = conn.execute("UPDATE contractor_payment_vouchers SET planned_pay_date=?, updated_at=? WHERE voucher_no=? AND is_paid=0",
                        (value, datetime.now().isoformat(timespec="seconds"), voucher_no))
     if cur.rowcount == 0:                                   # 兩位出納同時操作：後到的看到已匯款
