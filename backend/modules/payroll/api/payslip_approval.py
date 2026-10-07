@@ -120,7 +120,7 @@ def _finance_users(conn):
 @router.post("/api/payslips/{slip_no}/submit")
 def submit_payslip(slip_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
     """草稿 → 待審核（沒設簽核層 ⇒ 直接已核准）。可選填預定付款日（`plannedPayDate`；核准後出納也能改）。"""
-    user = _require_user(authorization, require_superadmin=True, module="payslip")
+    user = _require_user(authorization, require_superadmin=True)
     planned = None
     if "plannedPayDate" in (body or {}):
         planned = normalize_date((body or {}).get("plannedPayDate"), "預定付款日")

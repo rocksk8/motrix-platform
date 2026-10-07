@@ -16,6 +16,7 @@
 - **簽核佇列詳情（使用者 2026-10-07 裁示：詳情顯示完整內容含身分證字號與收款帳號）**：新提供者 `approval.detail`／`payslip`；身分證與帳號**不在提供者內容、清單、角標、信件、站內通知裡**，詳情由使用者**點欄位旁的「顯示」才取該欄位**：`GET /api/payslips/{no}/approval-reveal?field=idNumber|bank|bankAccountNumber`（真正的最高管理者＋`can_see_full`＋能開該詳情；只限待審核；**稽核先寫、寫不進去 ⇒ 500 不回值**；每次點擊一筆稽核 `payslip.approval_reveal`，不含值；每人每分鐘 30 次；`Cache-Control: no-store`；關閉抽屜即清除）取值。**複核 H1**：`_require_user(module=…)` 會放行持有勞報單模組的非最高管理者，reveal 與簽核／退回改為明確要求 `role==superadmin`；詳情存取＝簽核鏈上的人、送審人、最高管理者（`caseless`）。
 - **總帳（使用者裁示 B）**：認列時點維持已簽回／已付款（不改程式）；取消付款允許，已過帳應計會產生沖回草稿，由會計審。
 - **既有草稿**：上線時已存在的草稿也走新流程（送審 → 核准後才能匯出）。
+- **權限（使用者裁示）**：`POST /api/payslips/{no}/submit` 只准真正的最高管理者；持有勞報單模組的非最高管理者送審一律 403（建立／匯出等既有端點不變）。代理人規則不變。測試：`test_module_holder_cannot_submit_approve_or_reject_only_true_superadmin`。
 - 複核修正：送審即核准只在送審人是最高管理者且沒設簽核層時成立（否則待審核，無層簽核路徑不可自核）；簽核當下再確認操作者是最高管理者；刪除草稿時一併刪派發連結。總帳（E06）影響的選項與建議見 `docs/platform/plans/PAYSLIP-LEDGER-OPTIONS-T46.md`（**待裁示，程式未改**；現況由 `test_ledger_payslip_approval_pin_t46` 釘住）。
 - **P3 派發 ⇄ 勞報單雙向連結**：新表 `payslip_dispatch_links`（一派發對多勞報單、一勞報單對多派發）；勞報單頁「來源派發」區塊（`GET/POST/DELETE /api/payslips/{no}/dispatch-links`，建立勞報單時可選填 `dispatchId` 與勞報單同一交易）；提供者 `payslip.dispatch_links`（派發頁用，**只回單號、狀態、受領人姓名、開單日期，無金額**）；已付款（含經匯款單付款）不可解除；作廢保留並標已作廢。
 - **Q13**：`remit_link`（匯款單關聯勞報單）由「須已簽回」放寬為已核准／已匯出／已簽回；取消匯款退回付款前最近的狀態。

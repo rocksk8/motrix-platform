@@ -383,19 +383,25 @@ def test_reveal_refuses_a_payslip_module_holder_who_is_not_superadmin(client, ma
     assert not _q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'"), "被擋的不留檢視稽核"
 
 
-def test_module_holder_can_submit_but_never_approve_or_reject(client, make_user):
-    """報告用：payslip 模組持有者（非最高管理者）本來就能建立／匯出勞報單（既有行為）；送審後必須由最高管理者核准——模組持有者核准／退回一律 403。"""
+def test_module_holder_cannot_submit_approve_or_reject_only_true_superadmin(client, make_user):
+    """使用者裁示（第 46 班）：送審也限真正的最高管理者；持有勞報單模組的非最高管理者送審／核准／退回一律 403，單據維持原狀。
+    （建立／匯出等既有端點不受影響。）"""
     ua, ha = _su(client, make_user, "ps46_sup")
     u, p = make_user(username="ps46_modstaff", role="user", modules=["payslip"], legacy_finance_flag=False)
     hs = _auth(_login(client, u, p))
     _clear_flow()
     _insert_payslip("PS-203101-053")
-    r = client.post("/api/payslips/PS-203101-053/submit", headers=hs)
-    assert r.status_code == 200 and r.json()["status"] == "待審核", "非最高管理者送審 ⇒ 待審核（不自動核准）"
-    assert client.post("/api/payslips/PS-203101-053/approve", headers=hs).status_code == 403
-    assert client.post("/api/payslips/PS-203101-053/reject", headers=hs, json={"reason": "x"}).status_code == 403
-    assert _status("PS-203101-053") == "待審核"
-    assert client.post("/api/payslips/PS-203101-053/approve", headers=ha).status_code == 200
+    assert client.post("/api/payslips/PS-203101-053/submit", headers=hs).status_code == 403
+    assert _status("PS-203101-053") == "草稿"
+    r = client.post("/api/payslips/PS-203101-053/submit", headers=ha)
+    assert r.status_code == 200, r.text
+    _insert_payslip("PS-203101-055")
+    _flow(["ps46_sup"])
+    assert client.post("/api/payslips/PS-203101-055/submit", headers=ha).json()["status"] == "待審核"
+    assert client.post("/api/payslips/PS-203101-055/approve", headers=hs).status_code == 403
+    assert client.post("/api/payslips/PS-203101-055/reject", headers=hs, json={"reason": "x"}).status_code == 403
+    assert _status("PS-203101-055") == "待審核"
+    _clear_flow()
 
 
 def test_reveal_writes_audit_first_and_fails_closed_and_is_rate_limited(client, make_user, monkeypatch):
