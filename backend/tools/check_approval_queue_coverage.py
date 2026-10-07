@@ -69,6 +69,7 @@ _QUEUE_TYPE_FOR_DOC_TYPE = {
     "completion":         ("completion_note",    "completion_notes"),
     "voucher":            ("voucher",            "vouchers_all"),
     "bonus":              ("bonus_award",        "bonus_awards"),
+    "payslip":            ("payslip",            "payslips"),                      # 第46班：勞報單送審（M07；佇列提供者 `approval.queue_items`／payroll_payslip）
     # 31-A：派發審核與完工審核共用這一個送審類型；佇列 type 是 contractor_dispatch（完工段 contractor_dispatch_completion 是同表的第二段）
     "contractor_dispatch": ("contractor_dispatch", "contractor_dispatches"),
     # 31-C：叫料審核與叫料匯款申請（疊加表／申請表；佇列提供者 `approval.queue_items`／case_material、case_material_payment）
@@ -86,6 +87,7 @@ _OWNER_MODULE = {
     "invoice_voucher":    "arap",
     "payment_request":    "arap",
     "bonus":              "payroll",
+    "payslip":            "payroll",
     "shipping":           "supply",
     # M01 自己的單據（M01 ② 起在 modules/case）：案件模組不在 ⇒ 不適用
     "quotation":          "case",

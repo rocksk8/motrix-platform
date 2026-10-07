@@ -9,7 +9,7 @@
   "tables": ["payslips", "payslip_seq", "bonus_items", "bonus_item_people", "bonus_groups", "bonus_group_members",
              "bonus_awards", "bonus_award_lines", "bonus_award_edit_log",
              "bonus_case_awards", "bonus_case_award_lines", "bonus_case_award_edit_log",
-             "bonus_corrections", "bonus_correction_log", "user_bank_accounts"],
+             "bonus_corrections", "bonus_correction_log", "user_bank_accounts", "payslip_dispatch_links"],
   "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；payslips 的作廢／簽回／付款 10 欄由本模組自己的 migration（migrations/0001_payslip_void_signed_paid.py）新增；獎金更正單兩張表由 migrations/0002_bonus_corrections.py 建。勞報單的身分證號、地址等個資欄位由 archive._F2_FIELDS 分流；簽回檔實體檔放勞報單存檔目錄（F2）",
   "data": {
     "tables": [
@@ -21,7 +21,8 @@
       {"name": "bonus_case_awards", "class": "T1"}, {"name": "bonus_case_award_lines", "class": "T1"},
       {"name": "bonus_case_award_edit_log", "class": "T1"},
       {"name": "bonus_corrections", "class": "T1"}, {"name": "bonus_correction_log", "class": "T1"},
-      {"name": "user_bank_accounts", "class": "T1"}
+      {"name": "user_bank_accounts", "class": "T1"},
+      {"name": "payslip_dispatch_links", "class": "T1"}
     ],
     "files": [{"key": "payslip_archive", "class": "F2", "setting": "payslip_archive_path"}]
   },

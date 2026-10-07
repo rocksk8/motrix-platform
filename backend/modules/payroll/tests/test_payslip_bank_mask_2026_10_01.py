@@ -170,6 +170,7 @@ def test_pdf_mutation_mask_false_for_staff_turns_the_assertion_red(client, world
 
 def test_export_archive_stays_full_but_staff_reads_a_masked_regeneration(client, world):
     no = _create(client, world["pb_su"], world["cid"], FULL)
+    assert client.post("/api/payslips/%s/submit" % no, headers=world["pb_su"]).status_code == 200      # 第46班：匯出只准核准之後（沒設簽核層＝送審即核准）
     assert client.post("/api/payslips/%s/export" % no, headers=world["pb_staff"]).status_code == 200      # 員工按匯出
     log = json.loads(_db("SELECT export_log FROM payslips WHERE slip_no=?", (no,))[0]["export_log"])
     assert log[-1]["archived"] is True

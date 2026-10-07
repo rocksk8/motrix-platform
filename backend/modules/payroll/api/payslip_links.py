@@ -1,0 +1,74 @@
+# -*- coding: utf-8 -*-
+"""勞報單頁的「來源派發」連結端點（第 46 班 P3；設計 PAYSLIP-APPROVAL-T45.md §6）。全部 superadmin＋`payslip` 模組（同勞報單其他端點）。
+派發資料在 M04：經提供者 `dispatch.brief` 取（M04 不在 ⇒ 連結仍可讀，派發欄位空白並說明；不能新增連結）。"""
+from fastapi import APIRouter, Body, Header, HTTPException
+
+from core import registry
+from db import get_db
+from helpers import _audit, _require_user, _tok
+from modules.payroll import payslip_links as PL
+
+router = APIRouter()
+DISPATCH_MISSING = "外包工班模組未安裝：看不到派發資料，也不能新增派發關聯"
+
+
+def _brief(conn, dispatch_id):
+    fn = registry.single_provider("dispatch.brief")
+    return fn(conn, dispatch_id) if fn is not None else None
+
+
+@router.get("/api/payslips/{slip_no}/dispatch-links")
+def list_links(slip_no: str, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True, module="payslip")
+    conn = get_db()
+    try:
+        if conn.execute("SELECT 1 FROM payslips WHERE slip_no=?", (slip_no,)).fetchone() is None:
+            raise HTTPException(404, "找不到此勞報單")
+        items = PL.links_for_payslip(conn, slip_no)
+        have = registry.single_provider("dispatch.brief") is not None
+        for it in items:
+            b = _brief(conn, it["dispatchId"]) if have else None
+            it["dispatch"] = b or {"id": it["dispatchId"], "docCode": "", "quoteNo": "", "status": "", "vendorName": ""}
+    finally:
+        conn.close()
+    return {"items": items, "notice": "" if have else DISPATCH_MISSING}
+
+
+@router.post("/api/payslips/{slip_no}/dispatch-links", status_code=201)
+def add_link(slip_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    user = _require_user(authorization, require_superadmin=True, module="payslip")
+    try:
+        did = int((body or {}).get("dispatchId"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "請帶 dispatchId（派發編號）")
+    conn = get_db()
+    try:
+        if registry.single_provider("dispatch.brief") is None:
+            raise HTTPException(409, DISPATCH_MISSING)
+        if _brief(conn, did) is None:
+            raise HTTPException(404, "查無此派發")
+        try:
+            res = PL.link(conn, slip_no, did, user, (body or {}).get("note") or "")
+        except PL.LinkError as e:
+            raise HTTPException(e.status, str(e))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "payslip.dispatch_link", "payslip", slip_no, "%s 關聯派發 #%s" % (slip_no, did))
+    return {"ok": True, **res}
+
+
+@router.delete("/api/payslips/{slip_no}/dispatch-links/{dispatch_id}")
+def remove_link(slip_no: str, dispatch_id: int, authorization: str = Header(None)):
+    user = _require_user(authorization, require_superadmin=True, module="payslip")
+    conn = get_db()
+    try:
+        try:
+            res = PL.unlink(conn, slip_no, dispatch_id, user)
+        except PL.LinkError as e:
+            raise HTTPException(e.status, str(e))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "payslip.dispatch_unlink", "payslip", slip_no, "%s 解除與派發 #%s 的關聯" % (slip_no, dispatch_id))
+    return {"ok": True, **res}

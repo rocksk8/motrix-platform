@@ -1,0 +1,419 @@
+# -*- coding: utf-8 -*-
+"""第 46 班 P1：勞報單送審／簽核狀態機（設計 PAYSLIP-APPROVAL-T45.md §2、§3、§5、§9）。
+草稿 ─送審→ 待審核 ─簽核→ 已核准（沒設簽核層＝送審即核准）；退回＝回草稿；匯出只准核准之後且**不需要付款日**；通知不含金額。"""
+import json
+
+import pytest
+
+from modules.payroll.api import payslips as payslips_api
+from modules.payroll.tests.test_payslip_edit_guard_2026_08_28 import _auth, _insert_payslip, _login, _payload
+
+_MAKE_USER_DEFAULT_ROLE = "superadmin"
+
+
+@pytest.fixture(autouse=True)
+def _archive_tmp(tmp_path, monkeypatch):
+    monkeypatch.setattr(payslips_api, "_archive_dir", lambda: str(tmp_path / "payslip_archive"))
+
+
+def _q(sql, args=()):
+    import db
+    c = db.get_db()
+    try:
+        return [dict(r) for r in c.execute(sql, args).fetchall()]
+    finally:
+        c.close()
+
+
+def _x(sql, args=()):
+    import db
+    c = db.get_db()
+    try:
+        c.execute(sql, args)
+        c.commit()
+    finally:
+        c.close()
+
+
+def _flow(*tiers):
+    """勞報單簽核流程（獨立一條 `payslip_approval_flow`）；`tiers`＝每層的帳號清單；不給 ⇒ 沒設層。"""
+    val = {"includeSubmitterManagerTier": False, "tiers": [{"order": i, "approvers": [{"username": u, "display_name": u} for u in t]} for i, t in enumerate(tiers)]}
+    _x("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
+       ("payslip_approval_flow", json.dumps(val), "2031-01-01T00:00:00"))
+
+
+def _clear_flow():
+    _x("DELETE FROM system_settings WHERE key='payslip_approval_flow'")
+
+
+def _su(client, make_user, name):
+    u, p = make_user(username=name, role="superadmin")
+    return u, _auth(_login(client, u, p))
+
+
+def _status(no):
+    return _q("SELECT status FROM payslips WHERE slip_no=?", (no,))[0]["status"]
+
+
+def test_migration_registered_and_columns_and_link_table(client):
+    import importlib
+    import sqlite3
+    m = importlib.import_module("modules.payroll.migrations.0004_payslip_approval")
+    c = sqlite3.connect(":memory:")
+    assert "不存在" in m.up(c)
+    c.execute("CREATE TABLE payslips (id INTEGER PRIMARY KEY, slip_no TEXT, status TEXT)")
+    c.execute("INSERT INTO payslips (slip_no, status) VALUES ('舊', '已付款')")
+    assert m.up(c) is None and m.up(c) is None                                        # 冪等
+    row = c.execute("SELECT status, approval_json, planned_pay_date, approved_at, approved_by FROM payslips").fetchone()
+    assert row == ("已付款", "", "", "", ""), "舊列不變、新欄預設空"
+    assert c.execute("SELECT COUNT(*) FROM payslip_dispatch_links").fetchone()[0] == 0
+    cols = {r["name"] for r in _q("PRAGMA table_info(payslips)")}
+    assert {"approval_json", "planned_pay_date", "approved_at", "approved_by"} <= cols
+    assert _q("SELECT name FROM sqlite_master WHERE name='payslip_dispatch_links'")
+
+
+def test_draft_cannot_be_exported_and_no_payment_date_is_ever_needed(client, make_user):
+    _clear_flow()
+    _, h = _su(client, make_user, "ps46_a")
+    _insert_payslip("PS-203101-001")
+    assert client.post("/api/payslips/PS-203101-001/export", headers=h).status_code == 409
+    r = client.post("/api/payslips/PS-203101-001/submit", headers=h)
+    assert r.status_code == 200 and r.json()["status"] == "已核准", "沒設簽核層 ⇒ 送審即核准"
+    r = client.post("/api/payslips/PS-203101-001/export", headers=h)                    # 不帶任何日期
+    assert r.status_code == 200, r.text
+    assert _status("PS-203101-001") == "已匯出"
+    row = _q("SELECT payment_date, approved_by, approved_at FROM payslips WHERE slip_no='PS-203101-001'")[0]
+    assert row["payment_date"] == "" and row["approved_by"] and row["approved_at"]
+
+
+def test_multi_tier_flow_review_approve_and_edit_locks(client, make_user):
+    ua, ha = _su(client, make_user, "ps46_req")
+    ub, hb = _su(client, make_user, "ps46_t1")
+    uc, hc = _su(client, make_user, "ps46_t2")
+    _flow([ub], [uc])
+    _insert_payslip("PS-203101-002")
+    assert client.post("/api/payslips/PS-203101-002/submit", headers=ha).json() == {"ok": True, "status": "待審核", "tierCount": 2}
+    assert client.put("/api/payslips/PS-203101-002", json=_payload(), headers=ha).status_code == 409           # 待審核鎖定
+    assert client.delete("/api/payslips/PS-203101-002", headers=ha).status_code == 400
+    assert client.post("/api/payslips/PS-203101-002/export", headers=ha).status_code == 409                     # 未核准不可匯出
+    assert client.post("/api/payslips/PS-203101-002/approve", headers=hc).status_code in (400, 403, 409), "第 2 層不能搶先簽"
+    r = client.post("/api/payslips/PS-203101-002/approve", headers=hb)
+    assert r.status_code == 200 and r.json()["status"] == "待審核"
+    r = client.post("/api/payslips/PS-203101-002/approve", headers=hc)
+    assert r.status_code == 200 and r.json()["status"] == "已核准"
+    assert client.put("/api/payslips/PS-203101-002", json=_payload(), headers=ha).status_code == 409           # 核准後鎖定
+    hist = json.loads(_q("SELECT approval_json FROM payslips WHERE slip_no='PS-203101-002'")[0]["approval_json"])["history"]
+    assert [x["action"] for x in hist] == ["submit", "approve", "approve"]
+    assert client.post("/api/payslips/PS-203101-002/approve", headers=hc).status_code == 409                    # 已核准不可再簽
+
+
+def test_reject_needs_reason_returns_to_draft_keeps_history_and_resubmit(client, make_user):
+    ua, ha = _su(client, make_user, "ps46_req2")
+    ub, hb = _su(client, make_user, "ps46_t1b")
+    _flow([ub])
+    _insert_payslip("PS-203101-003")
+    client.post("/api/payslips/PS-203101-003/submit", headers=ha)
+    assert client.post("/api/payslips/PS-203101-003/reject", headers=hb, json={}).status_code == 400
+    r = client.post("/api/payslips/PS-203101-003/reject", headers=hb, json={"reason": "金額不對"})
+    assert r.status_code == 200 and r.json()["status"] == "草稿"
+    assert client.put("/api/payslips/PS-203101-003", json=_payload(41000), headers=ha).status_code == 200      # 回草稿可改
+    hist = json.loads(_q("SELECT approval_json FROM payslips WHERE slip_no='PS-203101-003'")[0]["approval_json"])["history"]
+    assert [x["action"] for x in hist] == ["submit", "reject"] and hist[-1]["comment"] == "金額不對"
+    assert client.post("/api/payslips/PS-203101-003/submit", headers=ha).json()["status"] == "待審核", "重送"
+
+
+def test_chain_with_non_superadmin_is_400_and_status_unchanged(client, make_user):
+    ua, ha = _su(client, make_user, "ps46_req3")
+    make_user(username="ps46_plain", role="user")
+    _flow(["ps46_plain"])
+    _insert_payslip("PS-203101-004")
+    r = client.post("/api/payslips/PS-203101-004/submit", headers=ha)
+    assert r.status_code == 400 and "最高管理者" in r.text and _status("PS-203101-004") == "草稿"
+
+
+def test_non_superadmin_cannot_submit_approve_reject(client, make_user):
+    _clear_flow()
+    _insert_payslip("PS-203101-005")
+    u, p = make_user(username="ps46_user", role="user")
+    h = _auth(_login(client, u, p))
+    for path, body in (("submit", {}), ("approve", {}), ("reject", {"reason": "x"})):
+        assert client.post("/api/payslips/PS-203101-005/%s" % path, headers=h, json=body).status_code in (401, 403), path
+    assert _status("PS-203101-005") == "草稿"
+
+
+def test_put_and_create_cannot_set_status(client, make_user):
+    """原本 PUT／POST 會採用前端送來的 data.status（可把單據直接寫成已付款）；第 46 班起狀態只由專用端點改。"""
+    _clear_flow()
+    _, h = _su(client, make_user, "ps46_b")
+    _insert_payslip("PS-203101-006")
+    body = _payload()
+    body["data"]["status"] = "已付款"
+    assert client.put("/api/payslips/PS-203101-006", json=body, headers=h).status_code == 200
+    assert _status("PS-203101-006") == "草稿"
+    r = client.post("/api/payslips", json=dict(body, contractor_id=None), headers=h)
+    if r.status_code == 201:
+        assert _status(r.json()["slip_no"]) == "草稿"
+
+
+def test_approved_can_be_voided_with_reason_but_draft_and_review_cannot(client, make_user):
+    ua, ha = _su(client, make_user, "ps46_req4")
+    ub, hb = _su(client, make_user, "ps46_t1c")
+    _clear_flow()
+    _insert_payslip("PS-203101-007")
+    assert client.post("/api/payslips/PS-203101-007/void", headers=ha, json={"reason": "x"}).status_code == 409        # 草稿不可作廢
+    client.post("/api/payslips/PS-203101-007/submit", headers=ha)
+    assert client.post("/api/payslips/PS-203101-007/void", headers=ha, json={}).status_code == 400                     # 原因必填
+    assert client.post("/api/payslips/PS-203101-007/void", headers=ha, json={"reason": "重開"}).status_code == 200
+    assert _status("PS-203101-007") == "已作廢"
+    _flow([ub])
+    _insert_payslip("PS-203101-008")
+    client.post("/api/payslips/PS-203101-008/submit", headers=ha)
+    assert client.post("/api/payslips/PS-203101-008/void", headers=ha, json={"reason": "x"}).status_code == 409        # 待審核要先退回
+
+
+def test_queue_provider_lists_review_items_without_money_or_person(client, make_user):
+    from modules.payroll.api import payslip_approval as PA
+    ua, ha = _su(client, make_user, "ps46_req5")
+    ub, hb = _su(client, make_user, "ps46_t1d")
+    _flow([ub])
+    _insert_payslip("PS-203101-009", gross=87654)
+    client.post("/api/payslips/PS-203101-009/submit", headers=ha)
+    import db
+    c = db.get_db()
+    try:
+        items = PA.queue_items(c)
+    finally:
+        c.close()
+    mine = [i for i in items if i["quoteNo"] == "PS-203101-009"]
+    assert len(mine) == 1 and mine[0]["type"] == "payslip" and mine[0]["approveUrl"].endswith("/approve")
+    blob = json.dumps(mine[0], ensure_ascii=False)
+    assert "87654" not in blob and "87,654" not in blob and "測試承攬人" not in blob
+    r = client.get("/api/approval-queue", headers=hb)
+    assert r.status_code == 200, r.text
+    its = [it for g in r.json()["queue"] for it in g["items"]]
+    assert any(i.get("quoteNo") == "PS-203101-009" for i in its), "簽核人的待我簽核佇列看得到"
+    cnt = client.get("/api/approval-queue/count", headers=hb).json()
+    assert any(i.get("quoteNo") == "PS-203101-009" for i in cnt["items"]), "角標也算進去"
+
+
+def test_notifications_result_words_no_money_no_self_notice(client, make_user, monkeypatch):
+    from helpers import email_notify as en
+    sent = []
+
+    class _S:
+        outcome = en.SEND_SENT
+
+        def wait(self, timeout=None):
+            return self.outcome
+
+    monkeypatch.setattr(en, "_async_send", lambda to, subject, html: sent.append((sorted(to), subject, html)) or _S())
+    ua, ha = _su(client, make_user, "ps46_req6")
+    ub, hb = _su(client, make_user, "ps46_t1e")
+    _x("UPDATE users SET email=? WHERE username=?", ("ps46_t1e@example.com", ub))
+    _x("UPDATE users SET email=? WHERE username=?", ("ps46_req6@example.com", ua))
+    _flow([ub])
+    _insert_payslip("PS-203101-010", gross=76543)
+    client.post("/api/payslips/PS-203101-010/submit", headers=ha)
+    assert any("待審核" in s[1] and "PS-203101-010" in s[1] for s in sent), [s[1] for s in sent]
+    client.post("/api/payslips/PS-203101-010/approve", headers=hb)
+    assert any("已核准" in s[1] and "PS-203101-010" in s[1] for s in sent if s[0] == ["ps46_req6@example.com"]), "送審人收到結果"
+    for to, subj, html in sent:
+        assert "76543" not in html and "76,543" not in html and "NT$" not in html and "測試承攬人" not in html
+    notes = _q("SELECT type, message, link FROM notifications WHERE message LIKE '%PS-203101-010%'")
+    assert {n["type"] for n in notes} >= {"payslip_submitted", "payslip_approved"}
+    assert all(n["link"].startswith("payslips.html?q=PS-203101-010") or n["link"].startswith("cashier.html") for n in notes)
+    # 自核：唯一簽核人＝送審人本人 ⇒ 不寄給自己
+    sent.clear()
+    _flow([ua])
+    _insert_payslip("PS-203101-011")
+    client.post("/api/payslips/PS-203101-011/submit", headers=ha)
+    r = client.post("/api/payslips/PS-203101-011/approve", headers=ha)
+    assert r.status_code in (200, 403)
+    assert not any(s[0] == ["ps46_req6@example.com"] and "已核准" in s[1] and "PS-203101-011" in s[1] for s in sent), "送審人＝簽核人不寄給自己"
+
+
+def test_payslip_export_needs_no_payment_date_and_pdf_has_no_payment_date_label(client, make_user):
+    """設計 §1（Q0 守門）：匯出 API 不帶任何日期、勞報單 PDF 版面沒有「付款日／匯款日期」欄——避免以後被加回去。
+    突變：在 record_export 加回付款日檢查 ⇒ 第一段要紅；在版型加「付款日」⇒ 第二段要紅。"""
+    from pdf_gen import _build_payslip_html
+    _clear_flow()
+    _, h = _su(client, make_user, "ps46_pd")
+    _insert_payslip("PS-203101-020")
+    assert client.post("/api/payslips/PS-203101-020/submit", headers=h).status_code == 200
+    r = client.post("/api/payslips/PS-203101-020/export", headers=h)          # 不帶 body、不帶任何日期
+    assert r.status_code == 200, r.text
+    html = _build_payslip_html({"slipNo": "PS-203101-020", "contractorName": "測試承攬人", "incomeType": "9A", "grossAmount": 30000,
+                                "slipDate": "2031-01-01", "calc": {"taxWithheld": 0, "nhiSupplement": 0, "netAmount": 30000}})
+    for label in ("付款日", "匯款日期", "付款日期"):
+        assert label not in html, label
+
+
+def test_no_tier_review_path_needs_another_superadmin_not_self(client, make_user):
+    """複核 M2：沒有簽核層的待審核（例如送審人不是最高管理者的路徑）走無層簽核——送審人不能自核（有其他最高管理者時），別的最高管理者可核。"""
+    ua, ha = _su(client, make_user, "ps46_na")
+    ub, hb = _su(client, make_user, "ps46_nb")
+    _clear_flow()
+    _insert_payslip("PS-203101-030", status="待審核")
+    _x("UPDATE payslips SET approval_json=? WHERE slip_no='PS-203101-030'", (json.dumps({"tiers": [], "currentTier": 0, "requestedBy": ua, "history": []}),))
+    r = client.post("/api/payslips/PS-203101-030/approve", headers=ha)
+    assert r.status_code == 403 and _status("PS-203101-030") == "待審核", r.text
+    assert client.post("/api/payslips/PS-203101-030/approve", headers=hb).status_code == 200 and _status("PS-203101-030") == "已核准"
+
+
+def test_approve_rechecks_superadmin_of_the_acting_user(client, make_user):
+    """複核 M2：簽核當下再確認操作者是最高管理者（被降級或代理人不是最高管理者 ⇒ 拒絕）。"""
+    ua, ha = _su(client, make_user, "ps46_da")
+    ub, hb = _su(client, make_user, "ps46_db")
+    _flow([ub])
+    _insert_payslip("PS-203101-031")
+    client.post("/api/payslips/PS-203101-031/submit", headers=ha)
+    _x("UPDATE users SET role='admin' WHERE username=?", (ub,))                       # 簽核人在送審後被降級
+    assert client.post("/api/payslips/PS-203101-031/approve", headers=hb).status_code in (401, 403)
+    assert _status("PS-203101-031") == "待審核"
+
+
+def test_deleting_a_draft_payslip_removes_its_dispatch_links(client, make_user):
+    ua, ha = _su(client, make_user, "ps46_dl")
+    _insert_payslip("PS-203101-032")
+    _x("INSERT INTO payslip_dispatch_links (slip_no, dispatch_id, created_by, created_at) VALUES ('PS-203101-032', 5, 't', '2031-01-01')")
+    assert client.delete("/api/payslips/PS-203101-032", headers=ha).status_code == 204
+    assert _q("SELECT * FROM payslip_dispatch_links WHERE slip_no='PS-203101-032'") == []
+
+
+def test_remit_link_and_voucher_link_check_refuse_review_and_void(client, make_user):
+    """複核 L4：匯款單關聯勞報單放寬（Q13）後，待審核／草稿／已作廢仍被拒。"""
+    import db
+    from modules.payroll import remit_link as RL
+    from modules.subcontract.api import contractor_vouchers as CV
+    c = db.get_db()
+    try:
+        cid = c.execute("INSERT INTO contractors(name, id_number) VALUES (?,?)", ("受領乙", "B234567890")).lastrowid
+        c.commit()
+    finally:
+        c.close()
+    for no, st in (("PS-203101-040", "待審核"), ("PS-203101-041", "已作廢"), ("PS-203101-042", "草稿"), ("PS-203101-043", "已核准")):
+        _insert_payslip(no, status=st)
+        _x("UPDATE payslips SET contractor_id=?, net_amount=1000 WHERE slip_no=?", (cid, no))
+    c = db.get_db()
+    try:
+        assert [x["slipNo"] for x in RL.candidates(c, cid)] == ["PS-203101-043"]
+        assert RL.mark_paid(c, ["PS-203101-040", "PS-203101-041", "PS-203101-042"], "PV-X", "2031-02-01", "t") == 0
+        c.commit()
+        snap = json.dumps({"personnel": [{"name": "受領乙", "id": cid, "amount": 1000, "payslipNo": no} for no in ("PS-203101-040", "PS-203101-041")]})
+        errs, ok = CV._personnel_link_errors(c, snap, False)
+        assert len(errs) == 2 and ok == [] and all("須為已核准" in e for e in errs), errs
+        snap2 = json.dumps({"personnel": [{"name": "受領乙", "id": cid, "amount": 1000, "payslipNo": "PS-203101-043"}]})
+        errs2, ok2 = CV._personnel_link_errors(c, snap2, False)
+        assert errs2 == [] and ok2 == ["PS-203101-043"]
+    finally:
+        c.close()
+    assert [r["status"] for r in _q("SELECT status FROM payslips WHERE slip_no IN ('PS-203101-040','PS-203101-041','PS-203101-042') ORDER BY slip_no")] == ["待審核", "已作廢", "草稿"]
+
+
+ID_NO, ACCT = "A123456789", "28881234567890"
+
+
+def _slip_with_pii(no):
+    _insert_payslip(no)
+    _x("UPDATE payslips SET data_json=? WHERE slip_no=?", (json.dumps({"slipNo": no, "contractorName": "測試承攬人", "contractorIdNumber": ID_NO, "bankAccountNumber": ACCT,
+                                                                       "bankCode": "812", "bankName": "台新", "serviceContent": "施工"}, ensure_ascii=False), no))
+
+
+def _reveal(client, h, no, field):
+    return client.get("/api/payslips/%s/approval-reveal" % no, params={"field": field}, headers=h)
+
+
+def test_queue_detail_for_approver_has_no_pii_values_only_audited_click_to_reveal(client, make_user):
+    """使用者 2026-10-07 裁示：簽核佇列詳情可看完整身分證／帳號——值只經稽核的 reveal 端點、**點哪個欄位才取哪個欄位**；詳情／清單／角標內容都不含值。"""
+    ua, ha = _su(client, make_user, "ps46_qa")
+    ub, hb = _su(client, make_user, "ps46_qb")
+    _flow([ub])
+    _slip_with_pii("PS-203101-050")
+    client.post("/api/payslips/PS-203101-050/submit", headers=ha)
+    d = client.get("/api/approval-queue/detail", params={"type": "payslip", "id": "PS-203101-050"}, headers=hb)
+    assert d.status_code == 200, d.text
+    assert ID_NO not in d.text and ACCT not in d.text and "28881234" not in d.text, "詳情內容本身不含身分證／帳號值"
+    revs = {f["revealKey"]: f for f in d.json()["fields"] if f.get("revealUrl")}
+    assert set(revs) == {"idNumber", "bank", "bankAccountNumber"}
+    for r in (client.get("/api/approval-queue", headers=hb), client.get("/api/approval-queue/count", headers=hb)):
+        assert ID_NO not in r.text and ACCT not in r.text
+    n0 = len(_q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'"))
+    r = _reveal(client, hb, "PS-203101-050", "idNumber")
+    assert r.status_code == 200 and r.json() == {"field": "idNumber", "value": ID_NO}
+    assert ACCT not in r.text, "一次只給被點的那個欄位"
+    assert r.headers["cache-control"] == "no-store" and r.headers["pragma"] == "no-cache"
+    assert _reveal(client, hb, "PS-203101-050", "bankAccountNumber").json()["value"] == ACCT
+    assert _reveal(client, hb, "PS-203101-050", "bank").json()["value"] == "812 台新"
+    rows = _q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'")
+    assert len(rows) == n0 + 3, "每次點擊一筆稽核"
+    text = json.dumps(rows[-3:], ensure_ascii=False)
+    assert ID_NO not in text and ACCT not in text, "稽核不含值"
+    assert _reveal(client, hb, "PS-203101-050", "contractorName").status_code == 400, "只認三個欄位"
+
+
+def test_queue_detail_and_reveal_refused_for_non_approver_and_wrong_state(client, make_user):
+    ua, ha = _su(client, make_user, "ps46_qc")
+    ub, hb = _su(client, make_user, "ps46_qd")
+    _flow([ub])
+    _slip_with_pii("PS-203101-051")
+    u, p = make_user(username="ps46_qplain", role="user", modules=["case_manage"], legacy_finance_flag=False)
+    plain = _auth(_login(client, u, p))
+    assert _reveal(client, hb, "PS-203101-051", "idNumber").status_code == 409, "草稿不給（只限待審核）"
+    client.post("/api/payslips/PS-203101-051/submit", headers=ha)
+    d = client.get("/api/approval-queue/detail", params={"type": "payslip", "id": "PS-203101-051"}, headers=plain)
+    assert d.status_code == 404, "非簽核鏈、非送審人、非最高管理者看不到詳情"
+    n_before = len(_q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'"))
+    assert _reveal(client, plain, "PS-203101-051", "idNumber").status_code in (401, 403)
+    assert len(_q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'")) == n_before, "被擋的不寫檢視稽核"
+    client.post("/api/payslips/PS-203101-051/approve", headers=hb)
+    assert _reveal(client, hb, "PS-203101-051", "idNumber").status_code == 409, "核准後不再由佇列檢視"
+
+
+def test_reveal_refuses_a_payslip_module_holder_who_is_not_superadmin(client, make_user):
+    """複核 H1：`_require_user(module=…)` 會放行持有勞報單模組的非最高管理者；reveal 必須是真正的最高管理者（F1 遮蔽不可被繞過）。"""
+    ua, ha = _su(client, make_user, "ps46_ha")
+    _clear_flow()
+    _slip_with_pii("PS-203101-052")
+    _x("UPDATE payslips SET status='待審核', approval_json=? WHERE slip_no='PS-203101-052'", (json.dumps({"tiers": [], "requestedBy": ua, "history": []}),))
+    for role in ("user", "admin", "finance"):
+        u, p = make_user(username="ps46_mod_%s" % role, role=role, modules=["payslip"], legacy_finance_flag=False)
+        h = _auth(_login(client, u, p))
+        r = _reveal(client, h, "PS-203101-052", "idNumber")
+        assert r.status_code == 403 and ID_NO not in r.text, role
+    assert not _q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'"), "被擋的不留檢視稽核"
+
+
+def test_module_holder_can_submit_but_never_approve_or_reject(client, make_user):
+    """報告用：payslip 模組持有者（非最高管理者）本來就能建立／匯出勞報單（既有行為）；送審後必須由最高管理者核准——模組持有者核准／退回一律 403。"""
+    ua, ha = _su(client, make_user, "ps46_sup")
+    u, p = make_user(username="ps46_modstaff", role="user", modules=["payslip"], legacy_finance_flag=False)
+    hs = _auth(_login(client, u, p))
+    _clear_flow()
+    _insert_payslip("PS-203101-053")
+    r = client.post("/api/payslips/PS-203101-053/submit", headers=hs)
+    assert r.status_code == 200 and r.json()["status"] == "待審核", "非最高管理者送審 ⇒ 待審核（不自動核准）"
+    assert client.post("/api/payslips/PS-203101-053/approve", headers=hs).status_code == 403
+    assert client.post("/api/payslips/PS-203101-053/reject", headers=hs, json={"reason": "x"}).status_code == 403
+    assert _status("PS-203101-053") == "待審核"
+    assert client.post("/api/payslips/PS-203101-053/approve", headers=ha).status_code == 200
+
+
+def test_reveal_writes_audit_first_and_fails_closed_and_is_rate_limited(client, make_user, monkeypatch):
+    from modules.payroll.api import payslip_approval as PA
+    ua, ha = _su(client, make_user, "ps46_ra")
+    ub, hb = _su(client, make_user, "ps46_rb")
+    _flow([ub])
+    _slip_with_pii("PS-203101-054")
+    client.post("/api/payslips/PS-203101-054/submit", headers=ha)
+
+    def boom(*a, **k):
+        raise RuntimeError("audit down")
+    real_audit = PA._audit_raising
+    monkeypatch.setattr(PA, "_audit_raising", boom)
+    from fastapi.testclient import TestClient
+    r = TestClient(client.app, raise_server_exceptions=False).get("/api/payslips/PS-203101-054/approval-reveal", params={"field": "idNumber"}, headers=hb)
+    assert r.status_code == 500 and ID_NO not in r.text, "稽核寫不進去 ⇒ 500、不回值"
+    monkeypatch.setattr(PA, "_audit_raising", real_audit)
+    monkeypatch.setattr(PA, "_REVEAL_LIMIT", 2)
+    PA._REVEAL_LOG.clear()
+    assert [_reveal(client, hb, "PS-203101-054", "idNumber").status_code for _ in range(3)] == [200, 200, 429]

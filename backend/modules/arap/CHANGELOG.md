@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## (next) — 2026-10-08（wip/t46-payslip-impl）：勞報單進出納待付款（IP-100 payroll_payslip）
+- 第46班：IP-100 提供者可選方法 `after_paid`（付款 commit 之後）與屬性 `NO_CALENDAR`（勞報單不進行事曆：不建「支出付款」事件、不收「付款待辦」）；出納頁待付款表對勞報單顯示「傳票單號」欄與已簽回／未簽回小標（不影響付款），舊「勞報單待付款」頁籤隱藏一班；`/api/cashier/payslip-queue` 可見範圍改為財務角色＋最高管理者（**權限變更**）。
+
 ## 1.0.41 — 2026-10-07（wip/t45-paydate-impl）：出納預定付款日端點（來源無關、承攬商匯款）與通知申請人（含出納頁提示色改語意 token）
 - `api/cashier.py`：新增 `PATCH /api/cashier/pending-payables/{source}/{key}/planned-pay-date`（財務角色／superadmin；經提供者 `set_planned_pay_date`，不經案件守門；已付款 409；提供者不支援 409；commit 之後才對齊行事曆；稽核 `cashier.planned_pay_date`，不含金額）。出納頁 `savePlannedPayDate` 改打此端點。
 - 新增 `PATCH /api/cashier/payable-queue/{voucher_no}/planned-pay-date`（承攬商匯款；經 IP-14 `contractor_voucher.set_planned`；M04 不在 ⇒ 404＋既有「外包工班模組未安裝」訊息）。出納頁待付款表新增「預定付款日」欄（可改、已逾／3 天內標示），原欄改名「應付款日（合約）」。

@@ -3002,6 +3002,27 @@
                         </tbody>
                       </table>
                     </div>
+                    <!-- 勞報單（第46班 P3）：派發 ⇄ 勞報單雙向連結；只顯示單號、狀態、受領人，沒有金額；最高管理者可新增／解除，其餘只看 -->
+                    <div style="padding:8px 16px;border-top:1px solid var(--border-light);font-size:11px;font-family:var(--font-zh)" x-init="dpSlipLoad(d)" :data-testid="'dispatch-slips-' + d.id">
+                      <span style="font-weight:600;color:var(--text-dim);letter-spacing:.04em">勞報單</span>
+                      <span x-show="(dpSlips[d.id] || {}).notice" style="margin-left:8px;color:var(--warning)" x-text="(dpSlips[d.id] || {}).notice"></span>
+                      <template x-for="s in ((dpSlips[d.id] || {}).items || [])" :key="s.slipNo">
+                        <span style="margin-left:10px;white-space:nowrap">
+                          <template x-if="(dpSlips[d.id] || {}).canOpen"><a :href="'payslips.html?q=' + encodeURIComponent(s.slipNo)" :data-testid="'dispatch-slip-link-' + s.slipNo" x-text="s.slipNo"></a></template>
+                          <template x-if="!(dpSlips[d.id] || {}).canOpen"><span :data-testid="'dispatch-slip-text-' + s.slipNo" x-text="s.slipNo"></span></template>
+                          <span :style="s.voided ? 'text-decoration:line-through;color:var(--text-dim)' : 'color:var(--text-dim)'" x-text="'（' + s.status + '・' + s.contractorName + '）'"></span>
+                          <button type="button" x-show="(dpSlips[d.id] || {}).canEdit && s.status !== '已付款'" @click="dpSlipRemove(d, s.slipNo)" :data-testid="'dispatch-slip-unlink-' + s.slipNo"
+                                  style="border:none;background:none;color:var(--danger);cursor:pointer">×</button>
+                        </span>
+                      </template>
+                      <span x-show="(dpSlips[d.id] || {}).loaded && !((dpSlips[d.id] || {}).items || []).length && !(dpSlips[d.id] || {}).notice" style="margin-left:8px;color:var(--text-dim)">尚未關聯勞報單</span>
+                      <span x-show="(dpSlips[d.id] || {}).canEdit" style="margin-left:10px">
+                        <input type="text" placeholder="勞報單單號 PS-…" x-model="(dpSlips[d.id] || {}).input" :data-testid="'dispatch-slip-input-' + d.id" style="width:130px;font-size:11px">
+                        <button type="button" @click="dpSlipAdd(d)" :data-testid="'dispatch-slip-add-' + d.id" style="font-size:11px;padding:1px 8px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer">關聯既有勞報單</button>
+                        <a :href="'payslip-form.html?dispatchId=' + d.id" :data-testid="'dispatch-slip-new-' + d.id" style="margin-left:6px">新增勞報單</a>
+                      </span>
+                      <span x-show="(dpSlips[d.id] || {}).err" style="margin-left:8px;color:var(--danger)" x-text="(dpSlips[d.id] || {}).err"></span>
+                    </div>
                     <!-- Tax summary -->
                     <div style="display:flex;justify-content:flex-end;gap:14px;padding:5px 16px 6px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary);background:var(--surface-muted);border-top:1px solid var(--border-light)">
                       <span x-show="d.items && d.items.length > 0">小計 NT$ <span x-text="(d.totalAmount||0).toLocaleString()"></span></span>

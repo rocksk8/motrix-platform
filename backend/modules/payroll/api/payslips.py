@@ -174,7 +174,8 @@ class PayslipIn(BaseModel):
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 # 匯出之後的單向終結／下游狀態：不可修改、不可刪除
-_LOCKED_STATUSES = ("已匯出", "已簽回", "已付款", "已作廢")
+#: 第46班：`待審核`（送審中，要改請先退回）與 `已核准`（核准後鎖定，要改＝作廢重開）也鎖定。
+_LOCKED_STATUSES = ("待審核", "已核准", "已匯出", "已簽回", "已付款", "已作廢")
 
 _SIGNED_EXTS = {".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
 _SIGNED_MAX_BYTES = 20 * 1024 * 1024   # 單檔 20MB
@@ -224,7 +225,8 @@ def list_payslips(month: Optional[str] = None, contractor_id: Optional[int] = No
            "payment_method, slip_date, status, tax_rules_version, "
            "export_count, created_by, created_at, updated_at, "
            "voided_at, voided_by, void_reason, signed_at, signed_by, "
-           "payment_date, voucher_no, paid_by, paid_at, signed_files_json "
+           "payment_date, voucher_no, paid_by, paid_at, signed_files_json, "
+           "planned_pay_date, approved_at, approved_by "
            "FROM payslips WHERE 1=1")
     params = []
     if month:
@@ -253,7 +255,22 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     month = datetime.now().strftime("%Y%m")
     d     = body.data
     d.pop("recalcTaxRules", None)
+    dispatch_id = d.pop("dispatchId", None)                        # 第46班 P3（Q8）：建立時可選填來源派發（不存進單據 data）
     rules = _rules_for_slip(d)            # R1：依開單（給付）日期挑版本；沒有適用版本 ⇒ 400
+    if dispatch_id not in (None, ""):
+        try:
+            dispatch_id = int(dispatch_id)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "來源派發編號格式不正確")
+        _brief = registry.single_provider("dispatch.brief")
+        _c = get_db()
+        try:
+            if _brief is None or _brief(_c, dispatch_id) is None:
+                raise HTTPException(400, "查無來源派發 #%s（或外包工班模組未安裝）" % dispatch_id)
+        finally:
+            _c.close()
+    else:
+        dispatch_id = None
 
     conn = get_db()
     conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
@@ -320,6 +337,14 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
         conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, ?) "
                      "ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)",
                      (month, seq_no))
+    if dispatch_id is not None:                                     # 與勞報單同一個交易：連結失敗就整張不建
+        from modules.payroll import payslip_links as _pl
+        try:
+            _pl.link(conn, slip_no, dispatch_id, user)
+        except _pl.LinkError as e:
+            conn.rollback()
+            conn.close()
+            raise HTTPException(e.status, str(e))
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'payslip.create', 'payslip', slip_no,
@@ -432,6 +457,7 @@ def delete_payslip(slip_no: str, authorization: str = Header(None)):
     if row["status"] in _LOCKED_STATUSES:
         conn.close()
         raise HTTPException(400, f"{row['status']}的勞報單須保留備查，不可刪除")
+    conn.execute("DELETE FROM payslip_dispatch_links WHERE slip_no=?", (slip_no,))       # 第46班：派發連結隨草稿一併刪除（同一個交易，不留孤列）
     conn.execute("DELETE FROM payslips WHERE slip_no=?", (slip_no,))
     conn.commit()
     conn.close()
@@ -452,6 +478,9 @@ def record_export(slip_no: str, authorization: str = Header(None)):
     if row["status"] == "已作廢":
         conn.close()
         raise HTTPException(409, "已作廢的勞報單不可再匯出")
+    if row["status"] in ("草稿", "待審核"):                          # 第46班：匯出只准核准之後（**不需要付款日**；付款日只在出納登錄付款時填）
+        conn.close()
+        raise HTTPException(409, "請先送審並核准後再匯出（目前「%s」）" % row["status"])
     log = json.loads(row["export_log"] or "[]")
     now = datetime.now().isoformat()
     new_count = (row["export_count"] or 0) + 1
@@ -474,7 +503,7 @@ def record_export(slip_no: str, authorization: str = Header(None)):
         "archived": archived,
     })
     conn.execute("UPDATE payslips SET export_count=?, export_log=?, updated_at=?, "
-                 "status=CASE WHEN status IN ('草稿','已匯出') THEN '已匯出' ELSE status END "
+                 "status=CASE WHEN status IN ('已核准','已匯出') THEN '已匯出' ELSE status END "
                  "WHERE slip_no=?",
                  (new_count, json.dumps(log, ensure_ascii=False), now, slip_no))
     conn.commit()
@@ -574,10 +603,11 @@ def pdf_download(slip_no: str, authorization: str = Header(None)):
 
 
 def _require_payer(authorization):
-    """出納付款動作：最高管理者，或具 cashier 模組（同獎金分潤 mark-paid 的權限）。"""
+    """出納付款動作：財務角色或最高管理者（使用者 2026-10-07 Q1；與出納 IP-100 同一條 `has_cashier_access`，不再認 `cashier` 模組勾選）。"""
+    from helpers.auth import has_cashier_access
     user = _require_user(authorization)
-    if user["role"] != "superadmin" and not user_has_module(user, "cashier"):
-        raise HTTPException(403, "僅最高管理者或出納可執行")
+    if not has_cashier_access(user):
+        raise HTTPException(403, "僅財務角色或最高管理者可執行")
     return user
 
 
@@ -600,15 +630,15 @@ def void_payslip(slip_no: str, body: VoidIn, authorization: str = Header(None)):
     if row["status"] == "已作廢":
         conn.close()
         raise HTTPException(409, "此勞報單已作廢")
-    if row["status"] != "已匯出":
+    if row["status"] not in ("已匯出", "已核准"):                    # 第46班 Q5 預設：已核准（尚未匯出）也可作廢（原因必填，同已匯出）
         conn.close()
         raise HTTPException(409, "已簽回／已付款的勞報單不可直接作廢，請先退回簽回"
                             if row["status"] in ("已簽回", "已付款")
-                            else "只有已匯出的勞報單可以作廢（草稿請直接刪除）")
+                            else "只有已核准或已匯出的勞報單可以作廢（草稿請直接刪除、待審核請先退回）")
     now = datetime.now().isoformat()
     who = user.get("display_name") or user["username"]
     conn.execute("UPDATE payslips SET status='已作廢', voided_at=?, voided_by=?, void_reason=?, "
-                 "updated_at=? WHERE slip_no=? AND status='已匯出'",
+                 "updated_at=? WHERE slip_no=? AND status IN ('已匯出','已核准')",
                  (now, who, reason, now, slip_no))
     conn.commit()
     conn.close()
@@ -681,9 +711,10 @@ async def upload_signed_files(slip_no: str, files: List[UploadFile] = File(...),
 @router.get("/api/payslips/{slip_no}/signed-files/{file_id}")
 def get_signed_file(slip_no: str, file_id: str, authorization: str = Header(None)):
     """讀簽回檔：最高管理者（勞報單模組），或出納（付款時要看簽回檔）。"""
+    from helpers.auth import has_finance_access
     user = _require_user(authorization)
-    if user["role"] != "superadmin" and not user_has_module(user, "cashier"):
-        raise HTTPException(403, "僅最高管理者或出納可檢視")
+    if not has_finance_access(user):
+        raise HTTPException(403, "僅財務角色或最高管理者可檢視")
     conn = get_db()
     try:
         row = conn.execute("SELECT signed_files_json FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
@@ -762,7 +793,7 @@ class PayIn(BaseModel):
 
 @router.post("/api/payslips/{slip_no}/mark-paid")
 def payslip_mark_paid(slip_no: str, body: PayIn, authorization: str = Header(None)):
-    """出納填付款日期＋既有傳票單號：已簽回 → 已付款。付款日期是營運報表成本（IP-9）的歸月依據。"""
+    """出納填付款日期＋既有傳票單號：已核准／已匯出／已簽回 → 已付款（Q4：不需已簽回）。付款日期是營運報表成本（IP-9）的歸月依據。"""
     user = _require_payer(authorization)
     try:
         pd = datetime.strptime((body.payment_date or "").strip(), "%Y-%m-%d").strftime("%Y-%m-%d")
@@ -772,42 +803,30 @@ def payslip_mark_paid(slip_no: str, body: PayIn, authorization: str = Header(Non
     if not vno:
         raise HTTPException(400, "請填寫傳票單號")
     who = user.get("display_name") or user["username"]
+    from modules.payroll import payslip_payables as _pp
     conn = get_db()
     try:
-        row = conn.execute("SELECT status FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
-        if not row:
-            raise HTTPException(404, "找不到此勞報單")
-        if row["status"] != "已簽回":
-            raise HTTPException(409, "只有已簽回的勞報單可以標記付款")
-        # 傳票單號必須是系統裡真實存在且未作廢的傳票：經 M06 的 `voucher.by_no`（IP-4 追加），不直接讀會計的傳票表。
-        # 會計模組不在 ⇒ 無法驗證 ⇒ 拒絕並說明（不猜、不放行）。
-        lookup = registry.single_provider("voucher.by_no")
-        if lookup is None:
-            raise HTTPException(409, "會計模組未安裝，無法驗證傳票單號，暫不能標記付款")
-        v = lookup(conn, vno)
-        if v is None:
-            raise HTTPException(400, f"查無傳票單號 {vno}，請確認後再填")
-        if v["voided"]:
-            raise HTTPException(400, f"傳票 {vno} 已作廢，請改填有效傳票")
-        now = datetime.now().isoformat()
-        conn.execute("UPDATE payslips SET status='已付款', payment_date=?, voucher_no=?, paid_by=?, "
-                     "paid_at=?, updated_at=? WHERE slip_no=? AND status='已簽回'",
-                     (pd, vno, who, now, now, slip_no))
+        try:
+            res = _pp.mark_payslip_paid(conn, slip_no, pd, vno, who)             # 第46班：付款唯一實作（與出納 IP-100 共用）；已核准即可付款（Q4）
+        except _pp.PayError as e:
+            raise HTTPException(e.status, str(e))
         conn.commit()
     finally:
         conn.close()
     _audit(_tok(authorization), 'payslip.paid', 'payslip', slip_no, slip_no,
            {'paymentDate': pd, 'voucherNo': vno})
-    return {"status": "已付款", "payment_date": pd, "voucher_no": vno, "paid_by": who}
+    _pp._Payables.after_paid(slip_no)                                        # commit 之後：通知送審人已付款（不含金額）
+    return res
 
 
 @router.post("/api/payslips/{slip_no}/unpay")
 def payslip_unpay(slip_no: str, authorization: str = Header(None)):
-    """付款填錯時退回：已付款 → 已簽回（清付款日期與傳票單號）。"""
+    """付款填錯時退回：已付款 → 付款前最近的狀態（有簽回檔＝已簽回；匯出過＝已匯出；否則已核准；由資料推得），清付款日期與傳票單號。"""
     _require_payer(authorization)
+    from modules.payroll import payslip_payables as _pp
     conn = get_db()
     try:
-        row = conn.execute("SELECT status FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+        row = conn.execute("SELECT status, signed_files_json, export_count FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
         if not row:
             raise HTTPException(404, "找不到此勞報單")
         if row["status"] != "已付款":
@@ -819,11 +838,12 @@ def payslip_unpay(slip_no: str, authorization: str = Header(None)):
             via = ""
         if via:
             raise HTTPException(409, "此勞報單由承攬商匯款單 %s 付款，請到該匯款單取消已匯款" % via)
-        conn.execute("UPDATE payslips SET status='已簽回', payment_date='', voucher_no='', "
+        back = _pp.unpay_status(row)
+        conn.execute("UPDATE payslips SET status=?, payment_date='', voucher_no='', "
                      "paid_by='', paid_at='', updated_at=? WHERE slip_no=?",
-                     (datetime.now().isoformat(), slip_no))
+                     (back, datetime.now().isoformat(), slip_no))
         conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), 'payslip.unpay', 'payslip', slip_no, slip_no)
-    return {"status": "已簽回"}
+    _audit(_tok(authorization), 'payslip.unpay', 'payslip', slip_no, slip_no, {'backTo': back})
+    return {"status": back}
