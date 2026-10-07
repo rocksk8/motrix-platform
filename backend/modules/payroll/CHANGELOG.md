@@ -1,13 +1,6 @@
 # 薪資獎金 更新紀錄
 
-## 1.2.2 — 2026-10-08（fix/t45-audit-followups）：勞報單 data_json 不留前端送來的 status（第 45 班稽核 S5）
-- 建立與修改都把請求 `data.status` 移除後才存 `data_json`；狀態欄位本來就只由專用端點改，這裡讓 `GET` 的 `data.status` 也不會顯示被偽造的值。
-
-## 1.2.1 — 2026-10-07（wip/t45-payslip-status-fix）：勞報單狀態不再由前端指定（快修）
-- `POST /api/payslips` 一律建成草稿；`PUT /api/payslips/{no}` 不採用請求裡的 `data.status`（沿用資料庫現值）。原本最高管理者可在請求中直接把狀態寫成已簽回／已付款，繞過匯出→簽回→出納付款的流程（已簽回的單據會進出納待付款與總帳應付分錄）。狀態只由匯出／簽回／付款／作廢等專用端點改變。
-- 測試：`modules/payroll/tests/test_payslip_status_not_client_controlled_2026_10_07.py`（含反向控制：還原修正即紅）。
-
-## (next) — 2026-10-07（wip/t46-payslip-impl）：勞報單送審流程（P1）＋出納整合（P2）＋派發連結（P3）（含 Q0 守門、複核修正、簽核佇列詳情、reveal 加固）
+## 1.2.3 — 2026-10-07（wip/t46-payslip-impl）：勞報單送審流程（P1）＋出納整合（P2）＋派發連結（P3）（含 Q0 守門、複核修正、簽核佇列詳情、reveal 加固）
 - 狀態新增 `待審核`、`已核准`：草稿 → 送審 → 簽核（獨立流程 `payslip_approval_flow`，簽核人只能是最高管理者）→ 已核准；退回（原因必填）回草稿；**沒設簽核層＝送審即核准**。匯出只准核准之後（草稿／待審核 409），**匯出不需要付款日**；`待審核`、`已核准` 鎖定（不可改、不可刪）；已核准（未匯出）也可作廢（原因必填）。
 - 新端點 `POST /api/payslips/{no}/submit｜approve｜reject`（`api/payslip_approval.py`）；新提供者 `approval.queue_items`／`payroll_payslip`（待我簽核佇列，不含金額、受領人、身分資料）；單據類型 `payslip` 登記（簽核設定頁多一列，不併統一流程）。
 - 通知（`payslip_notify.py`，6 種信件類型、站內通知帶連結）：待審核／輪到您審核／已核准（送審人）／已退回／已核准待付款（財務，站內＋群組信）／已付款；主旨寫結果；**不含金額與受領人姓名**；自核不寄給自己。
@@ -23,6 +16,13 @@
 - 複核修正：送審即核准只在送審人是最高管理者且沒設簽核層時成立（否則待審核，無層簽核路徑不可自核）；簽核當下再確認操作者是最高管理者；刪除草稿時一併刪派發連結。總帳（E06）影響的選項與建議見 `docs/platform/plans/PAYSLIP-LEDGER-OPTIONS-T46.md`（**待裁示，程式未改**；現況由 `test_ledger_payslip_approval_pin_t46` 釘住）。
 - **P3 派發 ⇄ 勞報單雙向連結**：新表 `payslip_dispatch_links`（一派發對多勞報單、一勞報單對多派發）；勞報單頁「來源派發」區塊（`GET/POST/DELETE /api/payslips/{no}/dispatch-links`，建立勞報單時可選填 `dispatchId` 與勞報單同一交易）；提供者 `payslip.dispatch_links`（派發頁用，**只回單號、狀態、受領人姓名、開單日期，無金額**）；已付款（含經匯款單付款）不可解除；作廢保留並標已作廢。
 - **Q13**：`remit_link`（匯款單關聯勞報單）由「須已簽回」放寬為已核准／已匯出／已簽回；取消匯款退回付款前最近的狀態。
+
+## 1.2.2 — 2026-10-08（fix/t45-audit-followups）：勞報單 data_json 不留前端送來的 status（第 45 班稽核 S5）
+- 建立與修改都把請求 `data.status` 移除後才存 `data_json`；狀態欄位本來就只由專用端點改，這裡讓 `GET` 的 `data.status` 也不會顯示被偽造的值。
+
+## 1.2.1 — 2026-10-07（wip/t45-payslip-status-fix）：勞報單狀態不再由前端指定（快修）
+- `POST /api/payslips` 一律建成草稿；`PUT /api/payslips/{no}` 不採用請求裡的 `data.status`（沿用資料庫現值）。原本最高管理者可在請求中直接把狀態寫成已簽回／已付款，繞過匯出→簽回→出納付款的流程（已簽回的單據會進出納待付款與總帳應付分錄）。狀態只由匯出／簽回／付款／作廢等專用端點改變。
+- 測試：`modules/payroll/tests/test_payslip_status_not_client_controlled_2026_10_07.py`（含反向控制：還原修正即紅）。
 
 ## 1.2.0 — 2026-10-06（wip/t44-bonus-mail）：獎金分潤核准／退回通知送審人（信＋站內）
 - 新 `bonus_notify.py`：信件類型 `bonus_approved`（「獎金分潤核准（送審人）」，簽核類、owner＝payroll，自動併入個人通知偏好）；簽核完成進入「待發放」時寄給送審人（`approval_json.requestedBy`），主旨與事由同一句「獎金分潤 {單號} 已核准」。**信內不放金額**（只有單號與客戶）。送審人就是簽核的人（唯一最高管理者自簽）⇒ 不寄給自己；寄信例外只記 log，不影響簽核。
