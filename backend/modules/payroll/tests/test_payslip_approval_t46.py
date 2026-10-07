@@ -230,3 +230,19 @@ def test_notifications_result_words_no_money_no_self_notice(client, make_user, m
     r = client.post("/api/payslips/PS-203101-011/approve", headers=ha)
     assert r.status_code in (200, 403)
     assert not any(s[0] == ["ps46_req6@example.com"] and "已核准" in s[1] and "PS-203101-011" in s[1] for s in sent), "送審人＝簽核人不寄給自己"
+
+
+def test_payslip_export_needs_no_payment_date_and_pdf_has_no_payment_date_label(client, make_user):
+    """設計 §1（Q0 守門）：匯出 API 不帶任何日期、勞報單 PDF 版面沒有「付款日／匯款日期」欄——避免以後被加回去。
+    突變：在 record_export 加回付款日檢查 ⇒ 第一段要紅；在版型加「付款日」⇒ 第二段要紅。"""
+    from pdf_gen import _build_payslip_html
+    _clear_flow()
+    _, h = _su(client, make_user, "ps46_pd")
+    _insert_payslip("PS-203101-020")
+    assert client.post("/api/payslips/PS-203101-020/submit", headers=h).status_code == 200
+    r = client.post("/api/payslips/PS-203101-020/export", headers=h)          # 不帶 body、不帶任何日期
+    assert r.status_code == 200, r.text
+    html = _build_payslip_html({"slipNo": "PS-203101-020", "contractorName": "測試承攬人", "incomeType": "9A", "grossAmount": 30000,
+                                "slipDate": "2031-01-01", "calc": {"taxWithheld": 0, "nhiSupplement": 0, "netAmount": 30000}})
+    for label in ("付款日", "匯款日期", "付款日期"):
+        assert label not in html, label
