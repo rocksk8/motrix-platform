@@ -127,6 +127,38 @@ class _Payables:
                 "payeeUsername": _payee_username(r), "bank": _col(r, "payee_bank") or "", "account": _col(r, "payee_account") or ""}
 
     @staticmethod
+    def set_planned_pay_date(conn, key, value, user) -> dict:
+        """出納端點改預定付款日（t45；`value` 已由端點正規化：''＝清除）。只認「還在出納待付款清單上」的那一筆（已核准、可付款類型）。
+        查無／不在清單 ⇒ LookupError（404）；已登錄付款 ⇒ ValueError（409，預定日保留為歷史）。不 commit、不碰行事曆（呼叫端 commit 之後呼叫 `planned_changed`）。"""
+        try:
+            exp_id = int(key)
+        except (TypeError, ValueError):
+            raise LookupError("找不到這筆申請")
+        r = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
+        if not r or r["status"] != "已核准" or not _EF.is_payable_kind(r["kind"] or ""):
+            raise LookupError("找不到這筆申請")
+        paid = (_col(r, "paid_date") or "").strip()
+        if paid:
+            raise ValueError("這筆已登錄付款（%s），預定付款日保留為歷史紀錄，不能再修改" % paid[:10])
+        old = (_col(r, "planned_pay_date") or "")[:10]
+        now = datetime.now().isoformat(timespec="seconds")
+        conn.execute("UPDATE case_extra_expenses SET planned_pay_date=?, updated_at=?, updated_by_name=?"
+                     " WHERE id=? AND COALESCE(paid_date, '')=''",
+                     (value, now, user.get("display_name") or user.get("username") or "", exp_id))
+        try:
+            applicant = (json.loads(_col(r, "approval_json") or "{}") or {}).get("requestedBy") or r["created_by"] or ""
+        except (TypeError, ValueError):
+            applicant = r["created_by"] or ""
+        return {"plannedPayDate": value, "old": old, "quoteNo": r["quote_no"] or "", "applicant": applicant,
+                "docCode": (_col(r, "doc_code") or "").strip() or "#%s" % exp_id, "link": "payment-request.html?tab=mine"}
+
+    @staticmethod
+    def planned_changed(key) -> None:
+        """commit 之後呼叫：對齊行事曆「付款待辦」（背景執行緒；事件種類關閉時 L1 不碰 Google）。"""
+        from modules.case import payable_calendar as PC
+        PC.fire(int(key))
+
+    @staticmethod
     def file_open(conn, key, file_id):
         """出納開待付款申請的附件（唯讀）：只認「還在出納待付款清單上」的那一筆（已核准、未登錄付款、可付款類型），檔案 id 必須在那一筆
         自己的 files_json、路徑必須屬於這張單據的資料夾（與附件目錄 `open()` 同一道綁定）。回 `OpenedFile`；任一不符 ⇒ LookupError。"""

@@ -96,6 +96,8 @@ def _visible_rows(rows, user, conn):
 class VoucherCreateIn(BaseModel):
     dispatch_id: int
     payable_date: Optional[str] = None
+    #: 預定付款日（t45；選填；出納之後也能改）。與 payable_date（合約應付款日）是兩件事，不互相預填
+    planned_pay_date: Optional[str] = None
     #: 31-B：分期（款別）申請。`kind` 不給＝舊式整筆申請（行為不變）；給了就要擇一填 `ratio_percent`（例 30＝30%）或 `amount`（本期稅前整數元）
     kind: Optional[str] = None
     ratio_percent: Optional[float] = None
@@ -160,6 +162,23 @@ def _paid_between(start: str, end: str) -> list:
         conn.close()
 
 
+def set_planned_pay_date(conn, voucher_no, value, user) -> dict:
+    """IP-14 `contractor_voucher.set_planned`（t45）：出納端點改預定付款日（`value` 已正規化；''＝清除）。不 commit。
+    只認「還在出納待付款清單上」的那一張（已核准、未付款、未作廢）；查無／不在清單 ⇒ LookupError；已匯款 ⇒ ValueError（409，預定日保留為歷史）。"""
+    r = conn.execute("SELECT voucher_no, quote_no, status, is_paid, voided_at, planned_pay_date, created_by FROM contractor_payment_vouchers WHERE voucher_no=?",
+                     (voucher_no,)).fetchone()
+    if r is None or r["status"] != "已核准" or (r["voided_at"] or ""):
+        raise LookupError("找不到這張匯款申請")
+    if r["is_paid"]:
+        raise ValueError("這張匯款申請已匯款，預定付款日保留為歷史紀錄，不能再修改")
+    cur = conn.execute("UPDATE contractor_payment_vouchers SET planned_pay_date=?, updated_at=? WHERE voucher_no=? AND is_paid=0",
+                       (value, datetime.now().isoformat(timespec="seconds"), voucher_no))
+    if cur.rowcount == 0:                                   # 兩位出納同時操作：後到的看到已匯款
+        raise ValueError("這張匯款申請已匯款，預定付款日保留為歷史紀錄，不能再修改")
+    return {"plannedPayDate": value, "old": (r["planned_pay_date"] or "")[:10], "quoteNo": r["quote_no"] or "",
+            "applicant": r["created_by"] or "", "docCode": voucher_no, "link": "case-management.html"}
+
+
 def _voucher_public(row, include_snapshot: bool = True, viewer=None) -> dict:
     """一張承攬商匯款申請的對外形狀。IP-14 `contractor_voucher.public`（M05 出納、M06 會計匯出）也用這一支。"""
     d = dict(row)
@@ -185,6 +204,7 @@ def _voucher_public(row, include_snapshot: bool = True, viewer=None) -> dict:
         "voidedAt":      d.get("voided_at") or "",
         "voidReason":    d.get("void_reason") or "",
         "payableDate":   snap.get("payableDate", ""),
+        "plannedPayDate": (d.get("planned_pay_date") or "")[:10],     # 預定付款日（t45；可編輯；''＝沒填）
         "bankAccountName":   snap.get("bankAccountName", ""),
         "bankAccountNumber": snap.get("bankAccountNumber", ""),
         "bankPassbookImage": snap.get("bankPassbookImage", ""),
@@ -356,6 +376,12 @@ def create_contractor_voucher(body: VoucherCreateIn, authorization: str = Header
                 "UPDATE contractor_dispatches SET payable_date=? WHERE id=?", (payable_date, body.dispatch_id)
             )
 
+        try:                                                    # 預定付款日（t45，選填）：與上面的合約應付款日分開，不預填、不寫回派發
+            planned_pay_date = normalize_date(body.planned_pay_date, "預定付款日")
+        except HTTPException:
+            conn.close()
+            raise
+
         keys = dispatch.keys()
         items = json.loads(dispatch["items_json"] or "[]")
         personnel = json.loads(dispatch["personnel_json"] or "[]") if "personnel_json" in keys else []
@@ -424,9 +450,9 @@ def create_contractor_voucher(body: VoucherCreateIn, authorization: str = Header
             conn.execute(
                 "INSERT INTO contractor_payment_vouchers "
                 "(voucher_no, dispatch_id, quote_no, vendor_id, status, snapshot_json, data_json, "
-                "created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "created_by, created_at, updated_at, planned_pay_date) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (voucher_no, body.dispatch_id, dispatch["quote_no"], dispatch["vendor_id"], "草稿",
-                 json.dumps(snapshot, ensure_ascii=False), "{}", user["username"], now, now)
+                 json.dumps(snapshot, ensure_ascii=False), "{}", user["username"], now, now, planned_pay_date)
             )
             label = ""
         else:
@@ -434,10 +460,11 @@ def create_contractor_voucher(body: VoucherCreateIn, authorization: str = Header
             conn.execute(
                 "INSERT INTO contractor_payment_vouchers "
                 "(voucher_no, dispatch_id, quote_no, vendor_id, status, snapshot_json, data_json, created_by, created_at, updated_at, "
-                "kind, kind_name, kinds_version, seq, ratio, pretax_amount) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "kind, kind_name, kinds_version, seq, ratio, pretax_amount, planned_pay_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (voucher_no, body.dispatch_id, dispatch["quote_no"], dispatch["vendor_id"], "草稿",
                  json.dumps(snapshot, ensure_ascii=False), "{}", user["username"], now, now,
-                 kctx["kind"]["code"], kctx["kind"]["name"], kctx["kinds_version"], kctx["seq"], kctx["ratio"], kctx["plan"]["pretax"])
+                 kctx["kind"]["code"], kctx["kind"]["name"], kctx["kinds_version"], kctx["seq"], kctx["ratio"], kctx["plan"]["pretax"],
+                 planned_pay_date)
             )
             label = "　%s 第 %d 期 稅前 %d" % (kctx["kind"]["name"], kctx["seq"], kctx["plan"]["pretax"])
         conn.commit()

@@ -55,18 +55,13 @@ def eligible(row) -> bool:
 
 
 def compose(row, customer="", project=""):
-    """⇒ (標題, 說明, 日期)。標題與說明都不放金額。"""
+    """⇒ (標題, 說明, 日期)。只放單號、名目、關聯案件、預定日；不放金額、受款人、付款條件（使用者 2026-10-07 Q4）。"""
     ident = (row["doc_code"] or "").strip() or "#%s" % row["id"]
     what = (row["description"] or row["category"] or "請款").strip()
     title = "付款待辦 — %s｜%s" % (ident, what)
     lines = ["預定付款日：" + planned_date(row), "單號：" + ident, "名目：" + what]
     if row["quote_no"]:
         lines.append("關聯案件：%s（%s%s%s）" % (row["quote_no"], customer, "／" if customer and project else "", project))
-    payee = (row["payee_name"] or row["payer_name"] or "").strip()
-    if payee:
-        lines.append("受款人：" + payee)
-    if (row["pay_terms"] or "").strip():
-        lines.append("付款條件：" + row["pay_terms"].strip())
     return title, "\n".join(lines), planned_date(row)
 
 

@@ -259,6 +259,19 @@ def _has_valid_po_link(conn, quote_no: str, order: dict) -> bool:
     return PI._link_check(order, [r for r in rows if (r["kind"] or "") == PI.ORD])[0]
 
 
+def _planned(body) -> str:
+    """body 的 plannedPayDate（選填）⇒ 正規化後的 YYYY-MM-DD 或 ''；格式不對 ⇒ 400。"""
+    raw = (body or {}).get("plannedPayDate")
+    if raw is None or raw == "":
+        return ""
+    from fastapi import HTTPException
+    from helpers.dates import normalize_date
+    try:
+        return normalize_date(raw, "預定付款日")
+    except HTTPException as e:
+        raise MaterialPaymentError(400, str(e.detail))
+
+
 def create(conn, quote_no: str, order: dict, user: dict, body: dict) -> dict:
     """開一張匯款申請（草稿）。`body`＝{amount?, supplierId?, bankCode, bankName, bankAccountName, bankAccountNumber, overCapReason?}；
     金額不帶＝叫料單剩餘額度。供應商：叫料單上的 `supplierId`，沒有（舊單）就要在 body 給。"""
@@ -278,6 +291,7 @@ def create(conn, quote_no: str, order: dict, user: dict, body: dict) -> dict:
     if amount <= 0:
         raise MaterialPaymentError(409, "這張材料申請已沒有可申請的額度")
     over = _check_cap(conn, quote_no, order, amount, None, user, (body or {}).get("overCapReason"))
+    planned = _planned(body)
     now = _now()
     seq = int(conn.execute("SELECT COALESCE(MAX(seq),0) FROM case_material_payments WHERE quote_no=? AND item_id=?", (quote_no, item_id)).fetchone()[0]) + 1
     leg_amt, leg_date = legacy_paid(conn, quote_no, item_id, order)
@@ -288,9 +302,9 @@ def create(conn, quote_no: str, order: dict, user: dict, body: dict) -> dict:
     code = next_doc_code(conn)
     cur = conn.execute(
         "INSERT INTO case_material_payments (doc_code, quote_no, item_id, seq, supplier_id, amount_approved, over_cap_reason, snapshot_json, status,"
-        " approval_json, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " approval_json, created_by, created_at, updated_at, planned_pay_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (code, quote_no, item_id, seq, sup["id"], amount, over, json.dumps(snap, ensure_ascii=False), S_DRAFT,
-         json.dumps(appr, ensure_ascii=False), user["username"], now, now))
+         json.dumps(appr, ensure_ascii=False), user["username"], now, now, planned))
     return get(conn, cur.lastrowid)
 
 
@@ -319,9 +333,10 @@ def update_draft(conn, pid, order: dict, user: dict, body: dict) -> dict:
     if "amount" in (body or {}) and body["amount"] not in (None, ""):
         amount = _amount(body["amount"])
         over = _check_cap(conn, row["quote_no"], order, amount, row["id"], user, (body or {}).get("overCapReason"))
+    planned = _planned(body) if "plannedPayDate" in (body or {}) else (row.get("planned_pay_date") or "")      # 沒帶 ⇒ 保留原值（舊前端不會洗掉）
     now = _now()
-    conn.execute("UPDATE case_material_payments SET supplier_id=?, amount_approved=?, over_cap_reason=?, snapshot_json=?, updated_at=? WHERE id=?",
-                 (sup["id"], amount, over, json.dumps(snap, ensure_ascii=False), now, row["id"]))
+    conn.execute("UPDATE case_material_payments SET supplier_id=?, amount_approved=?, over_cap_reason=?, snapshot_json=?, updated_at=?, planned_pay_date=? WHERE id=?",
+                 (sup["id"], amount, over, json.dumps(snap, ensure_ascii=False), now, planned, row["id"]))
     return get(conn, row["id"])
 
 

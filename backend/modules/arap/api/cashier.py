@@ -210,6 +210,88 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
     return {"ok": True, **res}
 
 
+@router.patch("/api/cashier/pending-payables/{source}/{key}/planned-pay-date")
+def set_pending_payable_planned_pay_date(source: str, key: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """出納補登／改期／清除預定付款日（t45；來源無關，經提供者 `set_planned_pay_date`，不經案件守門）。
+    權限＝財務角色／superadmin（與登錄付款同一條 `_can_pay`）。已付款 ⇒ 409；提供者不支援 ⇒ 409；commit 之後才對齊行事曆。"""
+    from helpers.dates import normalize_date
+    user = _require_user(authorization)
+    if not _can_pay(user):
+        raise HTTPException(403, "只有財務角色可以設定預定付款日")
+    p = registry.providers("payables.pending").get(source)
+    if p is None:
+        raise HTTPException(404, "找不到申請來源「%s」（對應的模組未安裝）" % source)
+    if "plannedPayDate" not in (body or {}):
+        raise HTTPException(400, "請帶 plannedPayDate（YYYY-MM-DD；空字串＝清除）")
+    value = normalize_date((body or {}).get("plannedPayDate"), "預定付款日")
+    if not hasattr(p, "set_planned_pay_date"):
+        raise HTTPException(409, "此來源不支援預定付款日")
+    conn = get_db()
+    try:
+        try:
+            res = p.set_planned_pay_date(conn, key, value, user)
+        except LookupError as e:
+            raise HTTPException(404, str(e))
+        except ValueError as e:
+            raise HTTPException(getattr(e, "status", 409), str(e))
+        conn.commit()
+    finally:
+        conn.close()
+    hook = getattr(p, "planned_changed", None)
+    if hook is not None:
+        hook(key)                                                       # commit 之後（寫鎖已放）；提供者自己 spawn 背景執行緒
+    _audit(_tok(authorization), "cashier.planned_pay_date", source, key,
+           "出納設定預定付款日：%s #%s（%s）%s → %s" % (source, key, res.get("quoteNo") or "", res.get("old") or "（無）", value or "（清除）"))
+    _notify_applicant_planned(user, source, key, res, value)
+    return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value)}
+
+
+@router.patch("/api/cashier/payable-queue/{voucher_no}/planned-pay-date")
+def set_payable_queue_planned_pay_date(voucher_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """出納補登／改期／清除承攬商匯款的預定付款日（t45；IP-14 `contractor_voucher.set_planned`）。權限與登錄付款同一條（財務角色／superadmin）。
+    M04 不在 ⇒ 404＋`CONTRACTOR_MISSING`（同待付款清單）；已匯款 ⇒ 409；commit 之後才對齊行事曆；稽核不含金額。"""
+    from helpers.dates import normalize_date
+    user = _require_user(authorization)
+    if not _can_pay(user):
+        raise HTTPException(403, "只有財務角色可以設定預定付款日")
+    fn = registry.single_provider("contractor_voucher.set_planned")
+    if fn is None:
+        raise HTTPException(404, CONTRACTOR_MISSING)
+    if "plannedPayDate" not in (body or {}):
+        raise HTTPException(400, "請帶 plannedPayDate（YYYY-MM-DD；空字串＝清除）")
+    value = normalize_date((body or {}).get("plannedPayDate"), "預定付款日")
+    conn = get_db()
+    try:
+        try:
+            res = fn(conn, voucher_no, value, user)
+        except LookupError as e:
+            raise HTTPException(404, str(e))
+        except ValueError as e:
+            raise HTTPException(getattr(e, "status", 409), str(e))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "cashier.planned_pay_date", "subcontract_voucher", voucher_no,
+           "出納設定承攬商匯款預定付款日：%s（%s）%s → %s" % (voucher_no, res.get("quoteNo") or "", res.get("old") or "（無）", value or "（清除）"))
+    _notify_applicant_planned(user, "subcontract_voucher", voucher_no, res, value)
+    return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value)}
+
+
+def _notify_applicant_planned(user, source, key, res, value):
+    """Q7（使用者 2026-10-07）：財務設定／改期／清除預定付款日 ⇒ 站內通知申請人（不含金額；申請人本人改的不通知自己）。失敗只記 log。"""
+    try:
+        applicant = (res.get("applicant") or "").strip()
+        if not applicant or applicant == (user.get("username") or ""):
+            return
+        from helpers import _notify
+        code = res.get("docCode") or "%s #%s" % (source, key)
+        msg = ("您的請款 %s 預定 %s 付款" % (code, value)) if value else ("您的請款 %s 的預定付款日已清除" % code)
+        _notify(applicant, "planned_pay_date", "%s:%s:%s" % (source, key, value or "cleared"), code, msg, res.get("link") or None)
+    except Exception as exc:                                              # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning("通知申請人預定付款日失敗：%s", exc)
+
+
 def _expense_calendar_args(source, key, paid, res, user):
     """行事曆「支出付款」事件的內容（push_event_for_module 的參數）；名目／金額取提供者回傳（出納不讀別的模組的表）。"""
     title = res.get("title") or "%s #%s" % (source, key)

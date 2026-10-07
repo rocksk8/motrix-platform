@@ -357,11 +357,11 @@ function cashierApp() {
       return diff < 0 ? 'overdue' : (diff <= 3 ? 'soon' : '')
     },
 
-    // 出納在待付款清單直接補登／改期預定付款日：PATCH .../extra-expenses/{id}/dates {plannedPayDate}（'' ＝清除）；來源目前只有案件額外支出
+    // 出納在待付款清單直接補登／改期預定付款日：PATCH /api/cashier/pending-payables/{來源}/{key}/planned-pay-date {plannedPayDate}（'' ＝清除；各來源共用，不經案件守門）
     async savePlannedPayDate(it, value) {
       this.payreqNotice = ''
       try {
-        const r = await fetch('/api/quotations/' + encodeURIComponent(it.quoteNo || '-') + '/extra-expenses/' + encodeURIComponent(it.key) + '/dates', {
+        const r = await fetch('/api/cashier/pending-payables/' + encodeURIComponent(it.source) + '/' + encodeURIComponent(it.key) + '/planned-pay-date', {
           method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
           body: JSON.stringify({ plannedPayDate: value || '' }),
         })
@@ -370,6 +370,21 @@ function cashierApp() {
         it.plannedPayDate = value || ''
         this.payreqNotice = '已更新預定付款日：' + (it.title || '') + '　' + (value || '（清除）')
       } catch (e) { this.payreqNotice = '更新預定付款日失敗：' + e.message }
+    },
+
+    // 承攬商匯款的預定付款日（t45）：PATCH /api/cashier/payable-queue/{voucherNo}/planned-pay-date（'' ＝清除）
+    async saveVoucherPlannedPayDate(v, value) {
+      this.payableNotice = ''
+      try {
+        const r = await fetch('/api/cashier/payable-queue/' + encodeURIComponent(v.voucherNo) + '/planned-pay-date', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ plannedPayDate: value || '' }),
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this.payableNotice = d.detail || ('更新預定付款日失敗（HTTP ' + r.status + '）'); await this.loadPayable(); return }
+        v.plannedPayDate = value || ''
+        this.payableNotice = '已更新預定付款日：' + v.voucherNo + '　' + (value || '（清除）')
+      } catch (e) { this.payableNotice = '更新預定付款日失敗：' + e.message }
     },
 
     // 登錄付款：POST /api/cashier/pending-payables/{來源}/{key}/pay（提供者寫回付款日）

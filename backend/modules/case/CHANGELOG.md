@@ -3,6 +3,12 @@
 ## (next) — 2026-10-07（wip/t45-mat-autolink）：材料卡片自動連結已有採購單的材料申請
 - 前端：案件管理「對應材料申請」原本須手選；材料品名（去空白）與**恰好一筆**已核准且有採購單的材料申請相同、且該申請未被別張卡連走時，載入後自動帶入連結。零筆／多筆維持手選；不動「已申購／已到料」勾選；後端閘不變。
 
+## (next) — 2026-10-07（wip/t45-paydate-impl）：預定付款日 S1–S3、S6——出納端點改打來源無關路徑、行事曆事件不放受款人與付款條件、我的申請欄位、叫料匯款預定日
+- `payables.py`：IP-100 提供者新增可選方法 `set_planned_pay_date`（只認出納待付款清單上的申請；已付款 ⇒ 409）與 `planned_changed`（commit 之後對齊行事曆）。
+- `payable_calendar.compose`：事件說明只放單號、名目、關聯案件、預定日；**移除「受款人」「付款條件」行**（使用者 2026-10-07 Q4；金額原本就不放）。
+- S2 `payment-request.html`「我的申請」新增「預定付款日」欄（付款前本人可補填／改期／清除，打既有 `…/dates`；已付款唯讀顯示歷史值、已作廢唯讀；testid `pr-mine-planned-<id>`、`pr-mine-planned-save-<id>`）。後端不變。
+- S3 叫料匯款預定付款日：migration v8（`case_material_payments.planned_pay_date`，每張申請一個、不回填）；建立／草稿與已退回期間可填可改（核准後只有出納端點能改）；`pending()` 帶 `plannedPayDate`；提供者 `set_planned_pay_date`（已核准且有剩餘才可改；結清 409；分次付款可改下一次預定日）；案件頁匯款申請表單加「預定付款日（選填）」與列上顯示。
+
 ## 1.0.154 — 2026-10-06（wip/t44-inapp-bell）：報價單核准時寫一則站內通知給申請人
 - `api/quotations.py`：報價單最後一層核准後，commit 之後對申請人寫 `quotation_approved` 站內通知（點了開 `quotation-form.html?id=<單號>`；文字不含金額；同一報價單只留一列）。
 - 其他單據的核准通知文字與連結由 wip/t44-applicant-notify 負責。

@@ -293,7 +293,7 @@
         <div class="pr-card">
           <div class="pr-hint" x-show="mineLoaded && !mine.length">還沒有申請</div>
           <table class="pr-table" x-show="mine.length">
-            <thead><tr><th>單號</th><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>付款日</th><th>單據</th><th>附件</th><th></th></tr></thead>
+            <thead><tr><th>單號</th><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>預定付款日</th><th>付款日</th><th>單據</th><th>附件</th><th></th></tr></thead>
             <tbody>
               <template x-for="e in mine" :key="e.id">
                 <tr :data-payreq-row="e.id" :data-status="e.status">
@@ -304,6 +304,17 @@
                   <td><span class="pr-st" x-text="e.status"></span></td>
                   <td>
                     <div x-text="(e.invoiceNo || '—') + '（' + invoiceCount(e) + ' 檔）'" :data-invoice-count="invoiceCount(e)"></div>
+                  </td>
+                  <td :data-planned-cell="e.id" style="min-width:150px;font-size:12px">
+                    <template x-if="canEditPlanned(e)">
+                      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+                        <input type="date" :value="plannedDraft[e.id] !== undefined ? plannedDraft[e.id] : (e.plannedPayDate || '')"
+                               @input="plannedDraft[e.id] = $event.target.value" :data-testid="'pr-mine-planned-' + e.id" style="font-size:12px">
+                        <button class="btn btn-secondary btn-sm" :data-testid="'pr-mine-planned-save-' + e.id"
+                                :disabled="busy || plannedDraft[e.id] === undefined" @click="savePlanned(e)">儲存</button>
+                      </div>
+                    </template>
+                    <template x-if="!canEditPlanned(e)"><span :data-testid="'pr-mine-planned-ro-' + e.id" x-text="e.plannedPayDate || '—'"></span></template>
                   </td>
                   <td :data-paid-date="e.paidDate" x-text="e.paidDate || '未付款'"></td>
                   <td>
@@ -371,7 +382,7 @@
         prReqs: [], prrSel: {}, prrQty: {}, prrErr: '',                         // 第 44 班：採購單「從請購單帶入」（多選；部分數量）
         form: blank(),
         pkOther: null, pkInv: null, _simple: null,        // 附件挑選器（累加、可移除；第44班）：附件／發票兩個框，數量與合計大小一起算
-        mine: [], mineP: {}, mineLoaded: false, mineErr: '', mineMsg: '', invoiceDraft: {}, invoiceNoDraft: {},
+        mine: [], mineP: {}, mineLoaded: false, mineErr: '', mineMsg: '', invoiceDraft: {}, invoiceNoDraft: {}, plannedDraft: {},
 
         init() {
           var self = this
@@ -668,6 +679,23 @@
           this.mineLoaded = true
         },
         // 申請人可增刪附件的狀態（與後端 FILES_MUTABLE_STATUSES 同；核准後只剩「補發票」、作廢不可動）
+        // 預定付款日（t45 S2）：申請人在付款前可補填／改期；已付款（歷史）與已作廢唯讀；PATCH …/dates 本人／財務可，錯誤直接顯示後端 detail
+        canEditPlanned(e) { return e.status !== '已作廢' && !e.paidDate },
+        async savePlanned(e) {
+          this.mineErr = ''; this.mineMsg = ''
+          var v = this.plannedDraft[e.id]
+          if (v === undefined) return
+          this.busy = true
+          try {
+            var r = await fetch('/api/quotations/' + encodeURIComponent(e.quoteNo || '-') + '/extra-expenses/' + e.id + '/dates',
+                                { method: 'PATCH', headers: this._h(true), body: JSON.stringify({ plannedPayDate: v || '' }) })
+            if (!r.ok) throw new Error((await this._json(r)).detail || '預定付款日儲存失敗')
+            this.mineMsg = '已儲存預定付款日：' + (e.docCode || (e.quoteNo + ' #' + e.id)) + '　' + (v || '（清除）')
+            delete this.plannedDraft[e.id]
+            await this.loadMine()
+          } catch (x) { this.mineErr = x.message }
+          finally { this.busy = false }
+        },
         canEditFiles(e) { return ['草稿', '待審核', '簽核中', '已駁回'].indexOf(e.status) >= 0 },
         // 附件要 Bearer ⇒ fetch → blob → 下載（HEIC 瀏覽器多半不能預覽，一律當下載；其餘檔案同樣下載，不開新分頁）
         async downloadFile(f) {

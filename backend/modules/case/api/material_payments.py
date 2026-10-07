@@ -81,6 +81,7 @@ def _public(conn, row) -> dict:
             "supplierId": row["supplier_id"], "supplierName": sn.get("supplierName") or "", "supplierCode": sn.get("supplierCode") or "",
             "payee": {"bankCode": sn.get("bankCode") or "", "bankName": sn.get("bankName") or "", "bankAccountName": sn.get("bankAccountName") or "",
                       "bankAccountNumber": _mask(sn.get("bankAccountNumber"))},
+            "plannedPayDate": (row.get("planned_pay_date") or "")[:10],
             "overCapReason": row["over_cap_reason"] or "", "createdBy": row["created_by"], "createdAt": row["created_at"], "approvedAt": row["approved_at"],
             "requestedBy": appr.get("requestedByDisplay") or appr.get("requestedBy") or "", "tierCount": len(tiers), "currentTier": ct, "currentApprovers": cur,
             "rejectReason": appr.get("rejectReason") if row["status"] == MP.S_RETURNED else "", "voidReason": row["void_reason"] if row["status"] == MP.S_VOID else "",
