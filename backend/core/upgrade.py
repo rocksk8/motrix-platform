@@ -801,8 +801,8 @@ def _rewritten_tables(db_path: str, pre_digests: dict, counts_after: dict) -> li
     now = table_digests(db_path, cols)
     out = []
     for t, d in pre_digests.items():
-        if t == "system_settings" or t not in now:
-            continue
+        if t in ("system_settings", "schema_version") or t not in now:
+            continue                                  # schema_version：轉換本來就把版本補到基準，另有「轉換後版本＝基準」的檢查
         if counts_after.get(t) != d["rows"]:
             continue                                  # 列數改變另有訊息
         if now[t]["sha256"] != d["sha256"]:
@@ -826,6 +826,13 @@ def verify_conversion(root: str, manifest: dict, warnings: list = None) -> list:
     rewritten = _rewritten_tables(main, manifest["pre"].get("digests"), after)
     if rewritten:
         problems.append("既有資料被改寫（列數相同、內容不同）：%s" % rewritten)
+    try:                                              # 第 46 班：schema_version 不再被當成「被改寫」，改成正向檢查
+        ver = schema_version(main)
+    except Exception as e:                            # noqa: BLE001
+        problems.append("讀不到轉換後的 schema_version：%s" % e)
+    else:
+        if ver != V9_BASELINE:
+            problems.append("轉換後 schema_version=v%s，應等於新版的 V9 基準 v%d（migration 沒有跑完或版本被寫錯）" % (ver, V9_BASELINE))
     s_after = settings_rows(main)
     for k in settings_changes(manifest["pre"]["settings"], s_after):
         problems.append("既有設定被改寫或刪除：%s" % k)

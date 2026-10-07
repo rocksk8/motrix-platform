@@ -16,7 +16,7 @@ from core import upgrade as U
 
 # ── 合成安裝目錄 ──────────────────────────────────────────────────────────
 
-def _make_db(path, version=116, settings=None):
+def _make_db(path, version=118, settings=None):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     c = sqlite3.connect(path)
     c.executescript("""
@@ -120,7 +120,7 @@ def test_add_missing_settings_never_touches_existing_values(tmp_path):
 def test_preflight_passes_on_healthy_install(inst):
     r = U.preflight(inst, v9_port_open=False)
     assert r["ok"], r["problems"]
-    assert r["facts"]["schema_version"] == 116
+    assert r["facts"]["schema_version"] == 118
 
 
 @pytest.mark.parametrize("break_it,needle", [
@@ -909,3 +909,27 @@ def test_name_fragment_alone_does_not_count_as_our_install(tmp_path):
     assert _profile(db) == {"name": name, "tax_id": "12345675"}
     # 正對照：統編相同（含分隔符）⇒ 認得
     assert U._is_our_install({"taxId": U.V9_COMPANY_DEFAULTS["tax_id"][:4] + "-" + U.V9_COMPANY_DEFAULTS["tax_id"][4:]})
+
+
+def _set_schema(inst, v):
+    c = sqlite3.connect(os.path.join(inst, "backend", "motrix_erp.db"))
+    c.execute("UPDATE schema_version SET version=?", (v,))
+    c.commit()
+    c.close()
+
+
+def test_t46_conversion_must_end_at_the_baseline_version(inst, new_src, tmp_path):
+    """第 46 班：schema_version 不再被當成『被改寫』，改成正向檢查——轉換後必須等於 V9 基準。"""
+    m = _convert(inst, new_src, str(tmp_path / "bk"))
+    _set_schema(inst, U.V9_BASELINE - 2)                      # 轉換後版本落後 ⇒ migration 沒跑完
+    assert any("V9 基準" in p for p in U.verify_conversion(inst, m))
+    _set_schema(inst, U.V9_BASELINE)
+    assert U.verify_conversion(inst, m) == []
+
+
+def test_t46_older_v9_db_converted_up_to_baseline_is_not_a_rewrite(inst, new_src, tmp_path):
+    """V9 庫停在舊版本（例 v110）⇒ 轉換補到基準是正常的，不可被判『既有資料被改寫』。"""
+    _set_schema(inst, U.V9_BASELINE - 8)
+    m = _convert(inst, new_src, str(tmp_path / "bk"))
+    _set_schema(inst, U.V9_BASELINE)
+    assert U.verify_conversion(inst, m) == []
