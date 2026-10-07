@@ -357,11 +357,11 @@ function cashierApp() {
       return diff < 0 ? 'overdue' : (diff <= 3 ? 'soon' : '')
     },
 
-    // 出納在待付款清單直接補登／改期預定付款日：PATCH .../extra-expenses/{id}/dates {plannedPayDate}（'' ＝清除）；來源目前只有案件額外支出
+    // 出納在待付款清單直接補登／改期預定付款日：PATCH /api/cashier/pending-payables/{來源}/{key}/planned-pay-date {plannedPayDate}（'' ＝清除；各來源共用，不經案件守門）
     async savePlannedPayDate(it, value) {
       this.payreqNotice = ''
       try {
-        const r = await fetch('/api/quotations/' + encodeURIComponent(it.quoteNo || '-') + '/extra-expenses/' + encodeURIComponent(it.key) + '/dates', {
+        const r = await fetch('/api/cashier/pending-payables/' + encodeURIComponent(it.source) + '/' + encodeURIComponent(it.key) + '/planned-pay-date', {
           method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
           body: JSON.stringify({ plannedPayDate: value || '' }),
         })

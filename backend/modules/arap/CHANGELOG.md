@@ -1,5 +1,9 @@
 # 應收應付 更新紀錄
 
+## (next) — 2026-10-07（wip/t45-paydate-impl）：出納預定付款日端點（來源無關）
+- `api/cashier.py`：新增 `PATCH /api/cashier/pending-payables/{source}/{key}/planned-pay-date`（財務角色／superadmin；經提供者 `set_planned_pay_date`，不經案件守門；已付款 409；提供者不支援 409；commit 之後才對齊行事曆；稽核 `cashier.planned_pay_date`，不含金額）。出納頁 `savePlannedPayDate` 改打此端點。
+- **權限**：與登錄付款同一條（財務角色／superadmin）；未新增任何角色的可視範圍。
+
 ## 1.0.40 — 2026-10-06（wip/t44-attach-views）：出納唯讀看待付款申請附件（頁面改行內錯誤訊息）
 - `api/cashier.py`：新增 `GET /api/cashier/pending-payables/{source}/{key}/files/{file_id}`（與待付款清單同權限＝財務角色／superadmin；檔案由提供者 `file_open` 認領，其餘一律同一句 404；回 octet-stream＋inline；每次開檔留稽核 `cashier.payable_file_view`，不記內容）。前端 `cashier.js`／`cashier.html` 顯示附件清單（只讀）。
 

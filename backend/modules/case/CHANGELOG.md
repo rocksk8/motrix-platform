@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-07（wip/t45-paydate-impl）：預定付款日——出納端點改打來源無關路徑、行事曆事件不放受款人與付款條件
+- `payables.py`：IP-100 提供者新增可選方法 `set_planned_pay_date`（只認出納待付款清單上的申請；已付款 ⇒ 409）與 `planned_changed`（commit 之後對齊行事曆）。
+- `payable_calendar.compose`：事件說明只放單號、名目、關聯案件、預定日；**移除「受款人」「付款條件」行**（使用者 2026-10-07 Q4；金額原本就不放）。
+
 ## 1.0.154 — 2026-10-06（wip/t44-inapp-bell）：報價單核准時寫一則站內通知給申請人
 - `api/quotations.py`：報價單最後一層核准後，commit 之後對申請人寫 `quotation_approved` 站內通知（點了開 `quotation-form.html?id=<單號>`；文字不含金額；同一報價單只留一列）。
 - 其他單據的核准通知文字與連結由 wip/t44-applicant-notify 負責。
