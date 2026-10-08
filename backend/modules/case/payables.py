@@ -39,6 +39,15 @@ def po_bank_block_since() -> str:
     return v.strip() if isinstance(v, str) else ""
 
 
+def po_bank_block_sql(since: str):
+    """`_po_bank_missing` 的 SQL 版（接在寫入 UPDATE 的 WHERE 後面：讀→寫之間若剛好有變更申請把收款資料清空，寫入本身仍擋得住）。
+    回傳 `(片段, 參數)`；開關沒開 ⇒ `('', [])`。"""
+    if not since:
+        return "", []
+    return (" AND NOT (kind='purchase_order' AND created_at >= ? AND COALESCE(payee_type, '') IN ('', 'vendor')"
+            " AND (TRIM(COALESCE(payee_bank, '')) = '' OR TRIM(COALESCE(payee_account, '')) = ''))"), [since]
+
+
 def _po_bank_missing(r, since: str) -> bool:
     """這張單要不要因為缺廠商收款帳戶被擋：開關已開 ∧ 採購單 ∧ 切換時間點之後建立 ∧ 廠商收款人 ∧ 銀行名稱或帳號任一為空。"""
     if not since or (_col(r, "kind") or "") != "purchase_order":
@@ -307,19 +316,23 @@ class _Payables:
             raise PoBankMissing(PO_BANK_BLOCK_MSG)
         rm = parse_remit(remit, row["total_cost"])
         pay = _EF.parse_payout(row["kind"] or "", row["pay_terms"], row["remit_date"], remit, paid_date)   # 採購單：匯款日＋付款條件必填
+        _blk_sql, _blk_args = po_bank_block_sql(po_bank_block_since())
         cur = conn.execute(
             "UPDATE case_extra_expenses SET paid_date=?, updated_at=?, updated_by_name=?,"
             " remit_actual=?, remit_fee=?, remit_review=?, remit_review_by='', remit_review_at='', remit_review_note='',"
             " pay_method=?, pay_account_code=?, pay_terms=?, remit_date=?, paid_by=?"
-            " WHERE id=? AND status='已核准' AND COALESCE(paid_date, '')=''",
+            " WHERE id=? AND status='已核准' AND COALESCE(paid_date, '')=''" + _blk_sql,
             (paid_date, datetime.now().isoformat(timespec="seconds"),
              user.get("display_name") or user.get("username") or "", rm["actual"], rm["fee"], rm["review"],
-             pay["pay_method"], pay["pay_account_code"], pay["pay_terms"], pay["remit_date"], user.get("username") or "", exp_id))
+             pay["pay_method"], pay["pay_account_code"], pay["pay_terms"], pay["remit_date"], user.get("username") or "", exp_id, *_blk_args))
         r = conn.execute("SELECT id, quote_no, status, paid_date, total_cost, category, description, payer_name"
                          " FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
         if cur.rowcount == 0:
             if not r:
                 raise LookupError("找不到這筆申請")
+            _again = conn.execute("SELECT kind, created_at, payee_type, payee_bank, payee_account FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
+            if _again is not None and not (r["paid_date"] or "") and _po_bank_missing(_again, po_bank_block_since()):     # 讀→寫之間被清空收款資料
+                raise PoBankMissing(PO_BANK_BLOCK_MSG)
             if r["status"] != "已核准":
                 raise ValueError("這筆申請還沒核准，不能登錄付款")
             raise ValueError("這筆申請已被登錄付款日 %s（可能是另一位出納剛登錄）" % (r["paid_date"] or ""))

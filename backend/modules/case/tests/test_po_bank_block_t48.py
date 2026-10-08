@@ -138,3 +138,46 @@ def test_switch_endpoint_authz_validation_status_and_audit(client, world, make_u
     finally:
         c.close()
     assert len(rows) == 2 and json.loads(rows[0]["detail"])["old"] == "" and json.loads(rows[1]["detail"])["new"] == ""
+
+
+# ── 稽核 #5 ────────────────────────────────────────────────────────────────────────
+def _dates(client, w, eid, **body):
+    return client.patch("/api/quotations/-/extra-expenses/%d/dates" % eid, headers=w["h"], json=body)
+
+
+def test_setting_paid_date_through_the_dates_endpoint_is_blocked_too(client, world):
+    """繞道：PATCH …/dates 直接設 paidDate（IP-100 把付款日當已付款）要和出納登錄付款同一道擋。"""
+    new, old = _po(client, world), _po(client, world)
+    _sql("UPDATE case_extra_expenses SET created_at='2020-01-01T00:00:00' WHERE id=?", (old,))
+    _enable(client, world, since=date.today().isoformat())
+    r = _dates(client, world, new, paidDate="2026-10-09")
+    assert r.status_code == 409 and "缺廠商收款帳戶" in r.json()["detail"] and _paid(new) == "", "新單缺資料：不能用日期端點設付款日"
+    assert _dates(client, world, old, paidDate="2026-10-09").status_code == 200 and _paid(old) == "2026-10-09", "舊單照常"
+    assert _dates(client, world, new, invoiceDate="2026-10-09").status_code == 200, "其他日期欄位不受影響"
+    _sql("UPDATE case_extra_expenses SET payee_type='vendor', payee_name='甲', payee_bank='玉山銀行', payee_account='123456789' WHERE id=?", (new,))
+    assert _dates(client, world, new, paidDate="2026-10-09").status_code == 200 and _paid(new) == "2026-10-09", "補齊後可設"
+    assert _dates(client, world, new, paidDate="").status_code == 200 and _paid(new) == "", "清除付款日不受擋"
+
+
+def test_flag_off_the_dates_endpoint_is_unchanged(client, world):
+    eid = _po(client, world)
+    assert _dates(client, world, eid, paidDate="2026-10-09").status_code == 200 and _paid(eid) == "2026-10-09"
+
+
+def test_write_itself_refuses_even_if_the_pre_read_was_stale(client, world, monkeypatch):
+    """讀→寫之間收款資料被清空的縫：述詞也在 UPDATE 的 WHERE 裡。這裡讓前置檢查說謊（回 False），寫入本身仍然擋住、什麼都沒寫。"""
+    from modules.case import payables as PB
+    _enable(client, world, since=date.today().isoformat())
+    eid = _po(client, world)
+    monkeypatch.setattr(PB, "_po_bank_missing", lambda *a, **k: False)
+    assert _pay(client, world, eid).status_code == 409 and _paid(eid) == ""
+    r = _dates(client, world, eid, paidDate="2026-10-09")
+    assert r.status_code == 409 and _paid(eid) == ""
+
+
+def test_documented_employee_payee_type_is_not_blocked(client, world):
+    """已知取捨（設計備忘）：收款人類型被改成 employee 的採購單不套這條規則（員工收款走員工帳戶規則）；畫面永遠送 vendor。"""
+    _enable(client, world, since=date.today().isoformat())
+    eid = _po(client, world)
+    _sql("UPDATE case_extra_expenses SET payee_type='employee' WHERE id=?", (eid,))
+    assert _pending(client, world["h"])[str(eid)]["blocked"] is False

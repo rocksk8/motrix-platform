@@ -781,6 +781,10 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
                 raise HTTPException(403, "付款日只有財務角色可以登錄（申請人登錄會繞過出納待付款）")
             if changes["paid_date"] and row["status"] != "已核准":    # AB-S8（使用者裁示）：出納、admin 都一樣
                 raise HTTPException(409, "這筆申請還沒核准（目前「%s」），不能登錄付款日；核准後再登錄" % row["status"])
+            if changes["paid_date"] and not old_paid:                     # 第 48 班：設付款日＝標成已付款 ⇒ 與出納登錄付款同一道『缺廠商收款帳戶』擋（不能繞過 mark_paid）
+                from modules.case import payables as _PB
+                if _PB._po_bank_missing(row, _PB.po_bank_block_since()):
+                    raise HTTPException(409, _PB.PO_BANK_BLOCK_MSG)
             if old_paid and changes["paid_date"] != old_paid:
                 if user.get("role") != "superadmin":                     # 使用者 2026-10-01：推翻／覆寫已付款狀態一律最高管理員（admin 只是主管等級）
                     raise HTTPException(403, "這筆已登錄付款日 %s，清除或更改只限最高管理員" % old_paid)
@@ -789,9 +793,16 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
         sets = ", ".join("%s=?" % k for k in changes)
         if "paid_date" in changes and not changes["paid_date"]:      # W1：付款日清除 ⇒ 重回待付款，實付／手續費／審核一併清掉
             sets += ", " + _CLEAR_REMIT
-        conn.execute("UPDATE case_extra_expenses SET " + sets + ", updated_at=?, updated_by_name=?"
-                     " WHERE id=? AND quote_no=?",
-                     list(changes.values()) + [now, user.get("display_name") or user["username"], exp_id, quote_no])
+        _blk_sql, _blk_args = ("", [])
+        if changes.get("paid_date") and not old_paid:                    # 同一道擋寫進 WHERE（讀→寫之間收款資料被清空也擋得住）
+            from modules.case import payables as _PB
+            _blk_sql, _blk_args = _PB.po_bank_block_sql(_PB.po_bank_block_since())
+        cur = conn.execute("UPDATE case_extra_expenses SET " + sets + ", updated_at=?, updated_by_name=?"
+                           " WHERE id=? AND quote_no=?" + _blk_sql,
+                           list(changes.values()) + [now, user.get("display_name") or user["username"], exp_id, quote_no, *_blk_args])
+        if cur.rowcount == 0 and _blk_sql:
+            conn.rollback()
+            raise HTTPException(409, _PB.PO_BANK_BLOCK_MSG)
         conn.commit()
     finally:
         conn.close()

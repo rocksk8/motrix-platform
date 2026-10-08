@@ -1,9 +1,10 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-09（wip/t48-po-bank-block）：新採購單缺廠商收款帳戶 ⇒ 擋出納登錄付款（預設關）
+## (next) — 2026-10-09（wip/t48-po-bank-block）：新採購單缺廠商收款帳戶 ⇒ 擋出納登錄付款（預設關；含日期端點繞道）
 - 使用者 Q2：只對『切換時間點之後建立』的採購單（收款人是廠商、銀行名稱或帳號任一為空）擋付款；舊單、其他單據類型、員工收款人完全不受影響。開關 `system_settings.po_bank_block_since`（缺／空＝關閉，預設）。
 - `payables._Payables.mark_paid`：符合規則 ⇒ 409「缺廠商收款帳戶…」（沒寫任何東西）；`pending` 每列新增 `blocked`／`blockReason`（原有 `payeeNote` 警示照舊）；`cashier.html` 顯示紅字原因並停用『登錄付款』。
 - 新增 `GET /api/extra-expenses/po-bank-block`（財務角色／最高管理者：開關、切換時間點、目前被擋張數）與 `PUT`（只有最高管理者：`{"enabled": true[, "since": "本地時間"]}`／`{"enabled": false}`；每次變更稽核 `settings.po_bank_block.update`）。補資料走第 47 班既有的變更申請；沒有新增任何權限或編輯入口。自然人廠商只提示（Q3）。設計：`docs/platform/plans/PO-BANK-BLOCK-T48.md`。
+- **稽核 #5**：`PATCH …/extra-expenses/{id}/dates` 設付款日也套同一道擋（原本可繞過出納登錄）；`paid_date` 的寫入路徑全盤點只有 `mark_paid` 與日期端點；述詞同時放進兩處 UPDATE 的 WHERE（讀→寫之間收款資料被清空也擋得住）。收款人類型 `employee` 的採購單不套用（已知取捨，見設計備忘）。
 - 測試：`modules/case/tests/test_po_bank_block_t48.py`。
 
 ## 1.0.163 — 2026-10-08（第 47 班整合）：報價單表單版本 V3.18
