@@ -10,6 +10,7 @@ import json
 import logging
 
 from core import registry
+from helpers import profit_rules
 from helpers.legal_params import round_half_up
 from modules.case import purchase_items as PI
 from modules.case import recognition as R
@@ -499,10 +500,8 @@ def _expected_downstream(conn, quote_no, d, tol_item):
     t = d["totals"]
     tol_total = tol_item + 3                         # 總成本由多塊加總，每塊各自進位
     total = t["totalActualCost"]
-    gross = pretax - total
-    admin = round_half_up(pretax, 0.10)
-    charity = max(0, round_half_up(gross, 0.01))       # 第 39 班：毛利為負時公益金為 0（不算出負的公益金）
-    net = gross - admin - charity
+    pr = profit_rules.settlement_profit(pretax, total)         # 第 48 班 S1：算式的唯一來源（管銷／公益金／營業利益）；口徑由 profit_rules.ACTIVE_VER 決定
+    gross, admin, charity, net = pr["grossProfit"], pr["adminCost"], pr["charityDonation"], pr["netProfit"]   # 第 39 班：毛利為負時公益金為 0
     pct_tol = 0.1 + (100.0 * tol_total / pretax if pretax > 0 else 0.0)
     return {"_pretax": pretax,
             "dispatchTotal": (t["dispatchTotal"], 1), "remitFeeTotal": (t["remitFeeTotal"], 1), "customExpenseTotal": (t["customExpenseTotal"], 1),
@@ -564,10 +563,10 @@ def original_side(conn, quote_no, summ) -> dict:
     orig_cost = sum(_num(i.get("qty")) * _num(i.get("cost")) for i in data.get("items") or [] if isinstance(i, dict) and i.get("type") != "header")
     direct = _num(tot["directProfit"]) if tot.get("directProfit") is not None else pretax - orig_cost
     margin = _num(tot["directMarginPct"]) if tot.get("directMarginPct") is not None else (direct / pretax * 100 if pretax > 0 else 0.0)
-    admin = _num(tot["adminCost"]) if tot.get("adminCost") is not None else round_half_up(pretax, 0.10)
+    admin = _num(tot["adminCost"]) if tot.get("adminCost") is not None else profit_rules.admin_cost(pretax, direct)
     # 第 39 班後的稽核 S-2：舊報價（虧損案）存的 charityDonation 可能是負的（當時沒有下限）；頁面已改成下限 0，伺服器這裡也一律下限 0，
     # 預留（totalIndirect − 管銷 − 公益）隨之重算——原始淨利（tot.netProfit）不變，對帳式仍成立。已凍結的舊 summary 不改寫。
-    charity = max(0, _num(tot["charityDonation"])) if tot.get("charityDonation") is not None else max(0, round_half_up(direct, 0.01))
+    charity = max(0, _num(tot["charityDonation"])) if tot.get("charityDonation") is not None else profit_rules.charity(direct)
     net = _num(tot["netProfit"]) if tot.get("netProfit") is not None else direct - admin - charity
     net_pct = _num(tot["netMarginPct"]) if tot.get("netMarginPct") is not None else (net / pretax * 100 if pretax > 0 else 0.0)
     # 第 39 班：報價預留的間接成本（運費／安裝／差旅／保固／其他五項；`tot.totalIndirect` 含管理費與公益金，扣掉這兩項後的餘額）——原始淨利已扣掉它、
