@@ -186,12 +186,14 @@ def _write_audit(conn, actor, audit):
     路由不再另寫一筆（否則同一個動作兩列）；`permission_changes` 有 DB 觸發器擋 UPDATE，所以 audit_id 必須在 INSERT 時就帶進去。"""
     if not audit:
         return None
+    from helpers.audit import _derive_fields           # 與 `_audit` 同一個推導（module／case_no／ref_no），稽核頁的模組篩選與搜尋把 duty_roles.* 當成和其他動作一樣的列
     action, target_type, target_id, label = audit
+    d = _derive_fields(action, target_type, str(target_id), label or "", None)
     cur = conn.execute(
         "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code)"
         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
         (datetime.now().isoformat(), (actor or {}).get("id"), (actor or {}).get("username") or "", (actor or {}).get("display_name") or "",
-         action, target_type, str(target_id), label or "", "{}", (action or "").split(".", 1)[0], "", ""))
+         action, target_type, str(target_id), label or "", "{}", d["module"], d["case_no"], d["ref_no"]))
     return cur.lastrowid
 
 

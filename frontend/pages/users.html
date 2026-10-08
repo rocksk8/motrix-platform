@@ -1309,7 +1309,7 @@
         }
         if (!res.ok) {
           const err = await res.json().catch(() => ({}))
-          this.formError = err.detail || '操作失敗'; return
+          this.formError = (err.detail || '操作失敗') + ((this.duty && this.duty.doneBeforePut && this.duty.doneBeforePut.length) ? '（注意：已先完成「' + this.duty.doneBeforePut.join('、') + '」並已生效，基本資料／勾選尚未儲存）' : ''); return
         }
         if (this.editingId && this.dutyAfter && !(await this.dutyAfter())) return        // 角色綁定／新增扣項；失敗就停在視窗內並明講已完成／未完成
         const targetId = this.editingId || (await res.json().catch(() => ({}))).id

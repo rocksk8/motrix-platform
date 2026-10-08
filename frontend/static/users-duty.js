@@ -134,12 +134,14 @@
         const x = this.dutyDiff()
         const reason = (d.reason || '').trim()
         const done = []
+        d.doneBeforePut = []
         for (const k of x.subRemove) {
           const err = await this._dutyPost('/subtracts/remove', { userId: d._userId, key: k, reason })
           if (err) { this.formError = '解除扣項「' + this.dutyKeyLabel(k) + '」失敗：' + err + (done.length ? '（已完成：' + done.join('、') + '）' : '') + '；基本資料尚未儲存'; return false }
           done.push('解除扣項 ' + this.dutyKeyLabel(k))
           d.origSubs = d.origSubs.filter(i => i !== k)
         }
+        d.doneBeforePut = done      // 之後 PUT 若失敗，這些已經生效（沒有跨 API 交易）：saveUser 的錯誤訊息要明講
         return true
       },
       // PUT 成功之後：角色綁定（解除→新增）→ 新增扣項

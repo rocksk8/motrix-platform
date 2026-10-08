@@ -194,8 +194,9 @@ def test_every_permission_change_links_to_exactly_one_audit_log_row(W, client): 
         rows = conn.execute("SELECT id, kind, audit_id FROM permission_changes ORDER BY id").fetchall()
         assert rows and all(r["audit_id"] for r in rows), [dict(r) for r in rows]
         for r in rows:
-            a = conn.execute("SELECT action FROM audit_log WHERE id=?", (r["audit_id"],)).fetchone()
+            a = conn.execute("SELECT action, module FROM audit_log WHERE id=?", (r["audit_id"],)).fetchone()
             assert a and a[0].startswith("duty_roles."), (dict(r), a)
+            assert a[1] == "duty_roles", "module 欄與 helpers.audit._derive_fields 一致（稽核頁的模組篩選）"
         # 沒有重複：每個 audit_id 只被一筆變更引用；duty_roles.* 的 audit_log 列數＝變更數
         assert len({r["audit_id"] for r in rows}) == len(rows)
         n_audit = conn.execute("SELECT COUNT(*) FROM audit_log WHERE action LIKE 'duty_roles.%'").fetchone()[0]
