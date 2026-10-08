@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-09（wip/t48-payslip-person-link）：派發分頁顯示同一人員的勞報單
+- `case-management.html` 派發卡片的「勞報單」區塊下新增「同一人員的勞報單」（單號、狀態、受領人；無金額；最高管理者可點進、一般人員純文字）。
+
 ## 1.0.163 — 2026-10-08（第 47 班整合）：報價單表單版本 V3.18
 - `frontend/pages/quotation-form.html`：`FORM_VERSION` V3.17 → V3.18（報價人聯絡資料改由 `GET /api/users/sales-contact` 帶入；守門 `test_form_version_bumped` 要求內容變動必須升版，並登記 LEDGER）；行為不變。
 

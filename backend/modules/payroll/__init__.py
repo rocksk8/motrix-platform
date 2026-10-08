@@ -16,11 +16,12 @@ _m0001 = importlib.import_module("modules.payroll.migrations.0001_payslip_void_s
 _m0002 = importlib.import_module("modules.payroll.migrations.0002_bonus_corrections")
 _m0003 = importlib.import_module("modules.payroll.migrations.0003_user_bank_accounts")
 _m0004 = importlib.import_module("modules.payroll.migrations.0004_payslip_approval")
+_m0005 = importlib.import_module("modules.payroll.migrations.0005_payslip_person_link")
 
 MODULE = ModuleSpec(
     key="payroll",
     routers=[payslips_api.router, payslip_approval_api.router, payslip_links_api.router, bonus_correction_api.router, bonus_api.router, bank_account_api.router],
-    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up)],
+    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up)],
     providers={
         # IP-8：出納頁的獎金待發放與發放紀錄（M05）
         ("bonus.payouts", "payroll"): bonus_payouts._Payouts,

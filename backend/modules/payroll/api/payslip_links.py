@@ -72,3 +72,48 @@ def remove_link(slip_no: str, dispatch_id: int, authorization: str = Header(None
         conn.close()
     _audit(_tok(authorization), "payslip.dispatch_unlink", "payslip", slip_no, "%s 解除與派發 #%s 的關聯" % (slip_no, dispatch_id))
     return {"ok": True, **res}
+
+
+@router.get("/api/payslip-person-dispatches")
+def person_dispatches(contractor_id: int, authorization: str = Header(None)):
+    """第 48 班：這位外包名冊人員被排進哪些派發（勞報單表單勾選用）。最高管理者＋勞報單模組；**不含金額**。"""
+    _require_user(authorization, require_superadmin=True, module="payslip")
+    fn = registry.single_provider("dispatch.by_person")
+    if fn is None:
+        return {"items": [], "notice": DISPATCH_MISSING}
+    conn = get_db()
+    try:
+        items = fn(conn, contractor_id)
+    finally:
+        conn.close()
+    return {"items": items, "notice": ""}
+
+
+@router.post("/api/payslips/{slip_no}/confirm-contractor")
+def confirm_contractor(slip_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """第 48 班：確認舊勞報單「靠名稱推測」的外包名冊對應（`contractor_match` 清成 ''）；可附 `contractorId` 改對人。只有最高管理者＋勞報單模組。"""
+    user = _require_user(authorization, require_superadmin=True, module="payslip")
+    new_id = (body or {}).get("contractorId")
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT contractor_id, contractor_match FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "找不到此勞報單")
+        if (row["contractor_match"] or "") != "unconfirmed":
+            raise HTTPException(409, "這張勞報單的對應已經是確認過的")
+        cid = row["contractor_id"]
+        if new_id not in (None, ""):
+            try:
+                cid = int(new_id)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "contractorId 格式不正確")
+            if conn.execute("SELECT 1 FROM contractors WHERE id=?", (cid,)).fetchone() is None:
+                raise HTTPException(404, "外包名冊沒有這位人員")
+        cur = conn.execute("UPDATE payslips SET contractor_id=?, contractor_match='' WHERE slip_no=? AND contractor_match='unconfirmed'", (cid, slip_no))
+        if cur.rowcount != 1:
+            raise HTTPException(409, "勞報單剛被改變，請重新整理後再試")
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "payslip.confirm_contractor", "payslip", slip_no, "%s 確認受領人對應（名冊 #%s）" % (slip_no, cid))
+    return {"ok": True, "contractorId": cid}

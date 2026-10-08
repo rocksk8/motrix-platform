@@ -26,6 +26,7 @@ MODULE = ModuleSpec(
         ("dispatch.row", "subcontract"): vendor_contractors._dispatch_row,
         # 第46班 P3：派發簡要識別（M07 勞報單頁顯示「來源派發」；不含金額）
         ("dispatch.brief", "subcontract"): dispatch_payslip_links.dispatch_brief,
+        ("dispatch.by_person", "subcontract"): dispatch_payslip_links.dispatches_for_person,        # 第 48 班 IP-115（暫定）：外包名冊人員 → 他的派發（無金額）
         # IP-15：M01 案件整包的承攬派工段
         ("dispatch.list_for_case", "subcontract"): vendor_contractors.list_dispatches_for_case,
         # IP-15 追加：成本檢視（M06 傳票；只回金額、日期、案件、廠商、品項描述、外包人數，不回姓名）

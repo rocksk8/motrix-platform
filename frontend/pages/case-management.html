@@ -3022,6 +3022,18 @@
                         <a :href="'payslip-form.html?dispatchId=' + d.id" :data-testid="'dispatch-slip-new-' + d.id" style="margin-left:6px">新增勞報單</a>
                       </span>
                       <span x-show="(dpSlips[d.id] || {}).err" style="margin-left:8px;color:var(--danger)" x-text="(dpSlips[d.id] || {}).err"></span>
+                      <!-- 第 48 班：依「人」自動顯示——這張派發人員名單內人員的（已確認對應的）勞報單；同樣沒有金額 -->
+                      <div x-show="((dpSlips[d.id] || {}).byPerson || []).length || ((dpSlips[d.id] || {}).canOpen && (dpSlips[d.id] || {}).unconfirmedCount)" :data-testid="'dispatch-slips-person-' + d.id" style="margin-top:4px">
+                        <span style="font-weight:600;color:var(--text-dim);letter-spacing:.04em">同一人員的勞報單</span>
+                        <template x-for="s in ((dpSlips[d.id] || {}).byPerson || [])" :key="'bp-' + s.slipNo">
+                          <span style="margin-left:10px;white-space:nowrap">
+                            <template x-if="(dpSlips[d.id] || {}).canOpen"><a :href="'payslips.html?q=' + encodeURIComponent(s.slipNo)" :data-testid="'dispatch-person-slip-link-' + s.slipNo" x-text="s.slipNo"></a></template>
+                            <template x-if="!(dpSlips[d.id] || {}).canOpen"><span :data-testid="'dispatch-person-slip-text-' + s.slipNo" x-text="s.slipNo"></span></template>
+                            <span :style="s.voided ? 'text-decoration:line-through;color:var(--text-dim)' : 'color:var(--text-dim)'" x-text="'（' + s.status + '・' + s.contractorName + '）'"></span>
+                          </span>
+                        </template>
+                        <span x-show="(dpSlips[d.id] || {}).canOpen && (dpSlips[d.id] || {}).unconfirmedCount" style="margin-left:10px;color:var(--warning)" x-text="'另有 ' + (dpSlips[d.id] || {}).unconfirmedCount + ' 張舊單的人員對應待確認（勞報單頁）'"></span>
+                      </div>
                     </div>
                     <!-- Tax summary -->
                     <div style="display:flex;justify-content:flex-end;gap:14px;padding:5px 16px 6px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary);background:var(--surface-muted);border-top:1px solid var(--border-light)">

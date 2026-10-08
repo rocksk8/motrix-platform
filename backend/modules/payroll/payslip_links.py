@@ -40,6 +40,21 @@ def links_for_payslip(conn, slip_no) -> list:
     return [_public(r) for r in conn.execute(_SELECT + " WHERE l.slip_no=? ORDER BY l.id", (str(slip_no),)).fetchall()]
 
 
+def payslips_for_contractors(conn, contractor_ids) -> dict:
+    """第 48 班：這些外包名冊人員的勞報單（**只含已確認的對應**；舊單靠名稱推測的 `contractor_match='unconfirmed'` 不列、只回張數）。
+    欄位同 links：單號、狀態、受領人、開單日、已作廢旗標——**不含金額、扣繳、身分、銀行**。"""
+    ids = [int(x) for x in contractor_ids if str(x).lstrip("-").isdigit()][:200]
+    if not ids:
+        return {"items": [], "unconfirmedCount": 0}
+    q = ",".join("?" * len(ids))
+    rows = conn.execute("SELECT slip_no, status, contractor_name, slip_date, contractor_match FROM payslips WHERE contractor_id IN (%s)"
+                        " ORDER BY id DESC" % q, ids).fetchall()
+    items = [{"slipNo": r["slip_no"], "status": r["status"] or "", "contractorName": r["contractor_name"] or "",
+              "slipDate": (r["slip_date"] or "")[:10], "voided": (r["status"] or "") == "已作廢"}
+             for r in rows if (r["contractor_match"] or "") == ""]
+    return {"items": items, "unconfirmedCount": sum(1 for r in rows if (r["contractor_match"] or "") != "")}
+
+
 def link(conn, slip_no, dispatch_id, user, note="") -> dict:
     """建立連結（已存在 ⇒ 409）。勞報單不存在 ⇒ 404；已作廢 ⇒ 409（不能把作廢單接到派發）。不 commit。"""
     slip_no = str(slip_no or "").strip()
@@ -80,5 +95,6 @@ class _Links:
     """提供者 `payslip.dispatch_links`（M07 → M04 派發頁）。"""
     links_for_dispatch = staticmethod(links_for_dispatch)
     links_for_payslip = staticmethod(links_for_payslip)
+    payslips_for_contractors = staticmethod(payslips_for_contractors)
     link = staticmethod(link)
     unlink = staticmethod(unlink)

@@ -1,5 +1,11 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-10-09（wip/t48-payslip-person-link）：勞報單人員 ⇄ 派工連動
+- 依「人」連動（設計 `docs/platform/plans/PAYSLIP-PERSON-LINK-T48.md`）：建立勞報單可帶 `dispatchIds`（需 `contractor_id`＝外包名冊人員；每張派發的人員名單必須含此人，否則 400 且整張不建），與勞報單同一個交易連結；手動新增／解除仍只有最高管理者。
+- payroll migration 5：`payslips.contractor_match`（''＝已確認；`unconfirmed`＝舊單靠姓名推測）。回填只對「姓名恰好對到一位名冊人員」的舊單寫 `contractor_id`＋`unconfirmed`；同名多位或對不到不動；**不建任何連結**；冪等。回滾：`UPDATE payslips SET contractor_id=NULL, contractor_match='' WHERE contractor_match='unconfirmed'`。
+- 新端點：`GET /api/payslip-person-dispatches?contractor_id=`（勞報單表單勾選用，無金額）、`POST /api/payslips/{slip_no}/confirm-contractor`（最高管理者確認舊單對應）；`PUT` 不會洗掉舊單的推測對應、人工改選視為確認；清單多回 `contractor_match`。
+- 提供者 `payslip.dispatch_links` 加 `payslips_for_contractors`（只回已確認對應，無金額）。頁面：`payslip-form.html` 勾選派發、`payslips.html`「身分待確認」標籤＋確認鈕。
+
 ## 1.2.5 — 2026-10-08（wip/t47-audit-fixes）：勞報單政策收緊（Q-S6 自核、Q-S9 作廢已核准；Q-S7 維持現狀）與並發防護補強（S1／S2／S3 本體已在 1.2.4）
 - **Q-S6（A）**：有簽核層時，送審人也不得自行核准自己送的勞報單（`check_no_tier_self_approval`，與沒有簽核層的路徑一致）；**例外**：全公司只有這一位在職最高管理者。簽核層裡只列了送審人自己、且還有別的在職最高管理者時，這張單無法被簽過——送審人可以退回（回草稿）再改由他人簽。
 - **Q-S9（A）**：作廢「已核准」的勞報單需要真正的最高管理者（持有勞報單模組但不是最高管理者者 403）；作廢「已匯出」維持原規則（模組持有者可作廢）。

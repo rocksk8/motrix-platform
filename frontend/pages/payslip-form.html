@@ -156,6 +156,20 @@
           </div>
         </div>
 
+        <div x-show="isNew" data-testid="ps-person-dispatch-box" style="margin-bottom:10px">
+          <div x-show="q.contractorId && personDispatches.length" style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;background:var(--bg-sub,#F9FAFB)">
+            <div style="font-size:12px;font-weight:600;margin-bottom:4px">這位人員的派工（勾選後，建立勞報單時一併關聯）</div>
+            <template x-for="d in personDispatches" :key="d.id">
+              <label style="display:flex;gap:6px;align-items:center;font-size:12px;padding:2px 0;cursor:pointer">
+                <input type="checkbox" :value="d.id" x-model.number="pickedDispatchIds" :data-testid="'ps-pick-dispatch-' + d.id" style="width:auto" @change="dirty()">
+                <span x-text="'#' + d.id + (d.docCode ? '　' + d.docCode : '') + '　' + (d.quoteNo || '') + '　' + (d.vendorName || '') + '　' + (d.dispatchDate || '') + '　' + (d.status || '')"></span>
+              </label>
+            </template>
+          </div>
+          <div x-show="q.contractorId && !personDispatches.length && !personDispatchNotice" style="font-size:12px;color:var(--text-dim)">這位人員目前沒有被排進任何派工。</div>
+          <div x-show="personDispatchNotice" style="font-size:12px;color:var(--danger)" x-text="personDispatchNotice"></div>
+          <div x-show="!q.contractorId && q.contractorName.trim()" data-testid="ps-no-roster-hint" style="font-size:12px;color:#B45309">未從外包名冊選取受領人：這張勞報單不會連到任何派工（請用上方搜尋框選人）。</div>
+        </div>
         <div class="form-row">
           <div class="form-group">
             <label>姓名 <span style="color:var(--danger)">*</span></label>
@@ -540,6 +554,9 @@ function payslipForm() {
     privacyNoticeAcked: false,
     contractorIdCardFront: '',
     contractorIdCardBack: '',
+    personDispatches: [],          // 第48班：選了名冊人員後，該人被排進的派發（勾選後建立時一併連結；不含金額）
+    pickedDispatchIds: [],
+    personDispatchNotice: '',
     loadingIdCard: false,
     previewModal: false,
     previewBlobUrl: '',
@@ -677,6 +694,16 @@ function payslipForm() {
       this.showConDrop = true
     },
 
+    async loadPersonDispatches(cid) {
+      this.personDispatches = []; this.pickedDispatchIds = []; this.personDispatchNotice = ''
+      if (!this.isNew || !cid) return
+      try {
+        const r = await fetch(`${API}/payslip-person-dispatches?contractor_id=${cid}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const b = await r.json(); this.personDispatches = b.items || []; this.personDispatchNotice = b.notice || '' }
+        else this.personDispatchNotice = '無法讀取這位人員的派工（HTTP ' + r.status + '）'
+      } catch (e) { this.personDispatchNotice = '無法讀取這位人員的派工' }
+    },
+
     async selectCon(c) {
       this.q.contractorId               = c.id || null
       this.q.contractorName             = c.name
@@ -697,6 +724,7 @@ function payslipForm() {
       this.showConDrop = false
       this.calc()
       this.dirty()
+      this.loadPersonDispatches(c.id)
       // Fetch ID card preview
       if (c.id) {
         this.loadingIdCard = true
@@ -812,6 +840,7 @@ function payslipForm() {
           contractor_id: this.q.contractorId || null,
           data: { ...this.q, calc: this.result,
                   ...(this.isNew && new URLSearchParams(window.location.search).get('dispatchId') ? { dispatchId: parseInt(new URLSearchParams(window.location.search).get('dispatchId'), 10) } : {}),   // 第46班 P3：從派發頁「新增勞報單」進來 ⇒ 建立時一併關聯來源派發
+                  ...(this.isNew && this.q.contractorId && this.pickedDispatchIds.length ? { dispatchIds: this.pickedDispatchIds.map(Number) } : {}),   // 第48班：依人勾選的派發，伺服器同一交易連結
                   recalcTaxRules: this.recalcTaxRules,          // R1：明確選擇重算才依日期重挑
                   privacyNoticeAcked: this.privacyNoticeAcked } // R3：時間與人員由伺服器記錄
         }
