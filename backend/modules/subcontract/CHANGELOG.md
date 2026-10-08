@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-08（wip/t47-audit-fixes）：承攬商匯款預定付款日提供者先拿寫鎖（第 46 班稽核 S4）
+- `set_planned_pay_date`：讀取前先 `begin_write`（與案件／叫料匯款提供者一致），「沒變」的比較與寫入在同一個寫交易；兩位出納並發時後到的不會得到過期的 `unchanged`。
+
 ## 1.1.24 — 2026-10-08（fix/t45-audit-followups）：承攬商匯款預定付款日沒變就不動（第 45 班稽核 S3）
 - `set_planned_pay_date`：日期與現值相同 ⇒ 回 `unchanged`，出納端點不稽核、不通知。
 

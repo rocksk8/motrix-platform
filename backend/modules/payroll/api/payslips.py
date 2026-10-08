@@ -48,7 +48,7 @@ def _archive_dir() -> str:
 # _archive_path() 直接用 slip_no 拼檔案路徑，slip_no 若可被前端任意指定
 # （create_payslip 曾允許 body.slip_no 覆蓋自動產生的序號，完全沒驗證格式）
 # 就能組出 "..\..\..\x" 這種跳出 export_archive/ 目錄的路徑。
-_SLIP_NO_RE = re.compile(r"^PS-\d{6}-\d{3}$")
+_SLIP_NO_RE = re.compile(r"^PS-\d{6}-\d{3}\Z")
 
 def _archive_path(slip_no: str, idx: int) -> str:
     if not _SLIP_NO_RE.match(slip_no):
@@ -256,6 +256,7 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     d     = body.data
     d.pop("recalcTaxRules", None)
     d.pop("status", None)                  # 稽核 S5：狀態不採用前端送來的值，data_json 也不留（避免 data.status 顯示被偽造的值）
+    d.pop("paid_via_remit", None)          # 第47班稽核：只有匯款連結（remit_link）能寫；前端送來的會讓草稿從出納歷史消失、假裝已由匯款付款
     dispatch_id = d.pop("dispatchId", None)                        # 第46班 P3（Q8）：建立時可選填來源派發（不存進單據 data）
     rules = _rules_for_slip(d)            # R1：依開單（給付）日期挑版本；沒有適用版本 ⇒ 400
     if dispatch_id not in (None, ""):
@@ -377,6 +378,7 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
     d      = body.data
     recalc = d.pop("recalcTaxRules", False) is True
     d.pop("status", None)                  # 稽核 S5：同建立——data_json 不留前端送來的 status
+    d.pop("paid_via_remit", None)          # 第47班稽核：同建立
     # 稽核 D-2（2026-09-26）：讀舊單 → 合併（已告知紀錄、快照）→ 整包寫回，全部在同一個寫交易裡。
     # 原本在交易外讀：兩人同時修改時，後寫的一方用「讀的當下」的舊單整包蓋回，
     # 別人剛記下的「已告知」紀錄被清掉（CUSTOMIZATION-SPEC §9.3「已記錄的不能被覆蓋或清除」）。
@@ -452,17 +454,22 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
 def delete_payslip(slip_no: str, authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)
     conn = get_db()
-    row = conn.execute("SELECT status FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
-    if not row:
+    try:
+        conn.execute("BEGIN IMMEDIATE")                                  # 第47班稽核 S3：讀狀態→刪除在同一個寫交易（否則並發的送審／核准之後仍會被刪）
+        row = conn.execute("SELECT status FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+        if not row:
+            raise HTTPException(404, "找不到此勞報單")
+        if row["status"] in _LOCKED_STATUSES:
+            raise HTTPException(400, f"{row['status']}的勞報單須保留備查，不可刪除")
+        conn.execute("DELETE FROM payslip_dispatch_links WHERE slip_no=?", (slip_no,))       # 第46班：派發連結隨草稿一併刪除（同一個交易，不留孤列）
+        placeholders = ",".join("?" * len(_LOCKED_STATUSES))
+        cur = conn.execute("DELETE FROM payslips WHERE slip_no=? AND status NOT IN (%s)" % placeholders, (slip_no, *_LOCKED_STATUSES))
+        if cur.rowcount != 1:                                            # 防禦：條件沒中 ⇒ 連結的刪除一併還原
+            conn.rollback()
+            raise HTTPException(409, "勞報單狀態剛被改變，請重新整理後再試")
+        conn.commit()
+    finally:
         conn.close()
-        raise HTTPException(404, "找不到此勞報單")
-    if row["status"] in _LOCKED_STATUSES:
-        conn.close()
-        raise HTTPException(400, f"{row['status']}的勞報單須保留備查，不可刪除")
-    conn.execute("DELETE FROM payslip_dispatch_links WHERE slip_no=?", (slip_no,))       # 第46班：派發連結隨草稿一併刪除（同一個交易，不留孤列）
-    conn.execute("DELETE FROM payslips WHERE slip_no=?", (slip_no,))
-    conn.commit()
-    conn.close()
     _audit(_tok(authorization), 'payslip.delete', 'payslip', slip_no, slip_no)
     notify_module_activity("勞報單", "刪除", user.get("display_name") or user["username"],
                             slip_no, "payslips.html")
@@ -639,9 +646,12 @@ def void_payslip(slip_no: str, body: VoidIn, authorization: str = Header(None)):
                             else "只有已核准或已匯出的勞報單可以作廢（草稿請直接刪除、待審核請先退回）")
     now = datetime.now().isoformat()
     who = user.get("display_name") or user["username"]
-    conn.execute("UPDATE payslips SET status='已作廢', voided_at=?, voided_by=?, void_reason=?, "
-                 "updated_at=? WHERE slip_no=? AND status IN ('已匯出','已核准')",
-                 (now, who, reason, now, slip_no))
+    cur = conn.execute("UPDATE payslips SET status='已作廢', voided_at=?, voided_by=?, void_reason=?, "
+                       "updated_at=? WHERE slip_no=? AND status IN ('已匯出','已核准')",
+                       (now, who, reason, now, slip_no))
+    if cur.rowcount != 1:                                              # 第47班稽核：並發的簽回／付款讓條件沒中 ⇒ 不可回「已作廢」
+        conn.close()
+        raise HTTPException(409, "勞報單狀態剛被改變，請重新整理後再試")
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'payslip.void', 'payslip', slip_no, slip_no, {'reason': reason})
@@ -696,11 +706,13 @@ async def upload_signed_files(slip_no: str, files: List[UploadFile] = File(...),
             new_files.append({"id": fid, "filename": name, "ext": ext, "size": len(raw),
                               "uploadedBy": who, "uploadedAt": now})
         existing = json.loads(row["signed_files_json"] or "[]")
-        conn.execute("UPDATE payslips SET signed_files_json=?, updated_at=?, status='已簽回', "
-                     "signed_at=CASE WHEN signed_at='' THEN ? ELSE signed_at END, "
-                     "signed_by=CASE WHEN signed_by='' THEN ? ELSE signed_by END "
-                     "WHERE slip_no=?",
-                     (json.dumps(existing + new_files, ensure_ascii=False), now, now, who, slip_no))
+        cur = conn.execute("UPDATE payslips SET signed_files_json=?, updated_at=?, status='已簽回', "
+                           "signed_at=CASE WHEN signed_at='' THEN ? ELSE signed_at END, "
+                           "signed_by=CASE WHEN signed_by='' THEN ? ELSE signed_by END "
+                           "WHERE slip_no=? AND status IN ('已匯出','已簽回') AND signed_files_json=?",
+                           (json.dumps(existing + new_files, ensure_ascii=False), now, now, who, slip_no, row["signed_files_json"]))
+        if cur.rowcount != 1:                                          # 第47班稽核 S1：讀完之後狀態或檔案清單被別人改了（例如剛被付款）⇒ 不蓋回去（已寫的實體檔保留備查）
+            raise HTTPException(409, "勞報單狀態或簽回檔剛被改變，請重新整理後再試")
         conn.commit()
     finally:
         conn.close()
@@ -756,11 +768,14 @@ def delete_signed_file(slip_no: str, file_id: str, authorization: str = Header(N
             raise HTTPException(404, "找不到指定的檔案")
         remaining = [f for f in files if f.get("id") != file_id]
         if remaining:
-            conn.execute("UPDATE payslips SET signed_files_json=?, updated_at=? WHERE slip_no=?",
-                         (json.dumps(remaining, ensure_ascii=False), datetime.now().isoformat(), slip_no))
+            cur = conn.execute("UPDATE payslips SET signed_files_json=?, updated_at=? WHERE slip_no=? AND status='已簽回' AND signed_files_json=?",
+                               (json.dumps(remaining, ensure_ascii=False), datetime.now().isoformat(), slip_no, row["signed_files_json"]))
         else:
-            conn.execute("UPDATE payslips SET signed_files_json='[]', status='已匯出', signed_at='', "
-                         "signed_by='', updated_at=? WHERE slip_no=?", (datetime.now().isoformat(), slip_no))
+            cur = conn.execute("UPDATE payslips SET signed_files_json='[]', status='已匯出', signed_at='', "
+                               "signed_by='', updated_at=? WHERE slip_no=? AND status='已簽回' AND signed_files_json=?",
+                               (datetime.now().isoformat(), slip_no, row["signed_files_json"]))
+        if cur.rowcount != 1:                                          # 第47班稽核 S1：同上傳——讀到寫之間被改 ⇒ 409，不覆蓋
+            raise HTTPException(409, "勞報單狀態或簽回檔剛被改變，請重新整理後再試")
         conn.commit()
     finally:
         conn.close()
@@ -779,8 +794,10 @@ def unsign_payslip(slip_no: str, authorization: str = Header(None)):
             raise HTTPException(404, "找不到此勞報單")
         if row["status"] != "已簽回":
             raise HTTPException(409, "只有已簽回（尚未付款）的勞報單可以退回簽回；已付款請先由出納退回")
-        conn.execute("UPDATE payslips SET status='已匯出', signed_at='', signed_by='', updated_at=? "
-                     "WHERE slip_no=?", (datetime.now().isoformat(), slip_no))
+        cur = conn.execute("UPDATE payslips SET status='已匯出', signed_at='', signed_by='', updated_at=? "
+                           "WHERE slip_no=? AND status='已簽回'", (datetime.now().isoformat(), slip_no))
+        if cur.rowcount != 1:                                          # 第47班稽核 S1：剛被付款 ⇒ 不可把已付款的單退成已匯出
+            raise HTTPException(409, "勞報單狀態剛被改變，請重新整理後再試")
         conn.commit()
     finally:
         conn.close()
@@ -828,7 +845,7 @@ def payslip_unpay(slip_no: str, authorization: str = Header(None)):
     from modules.payroll import payslip_payables as _pp
     conn = get_db()
     try:
-        row = conn.execute("SELECT status, signed_files_json, export_count FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+        row = conn.execute("SELECT status, signed_files_json, export_count, voucher_no, paid_at FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
         if not row:
             raise HTTPException(404, "找不到此勞報單")
         if row["status"] != "已付款":
@@ -841,9 +858,11 @@ def payslip_unpay(slip_no: str, authorization: str = Header(None)):
         if via:
             raise HTTPException(409, "此勞報單由承攬商匯款單 %s 付款，請到該匯款單取消已匯款" % via)
         back = _pp.unpay_status(row)
-        conn.execute("UPDATE payslips SET status=?, payment_date='', voucher_no='', "
-                     "paid_by='', paid_at='', updated_at=? WHERE slip_no=?",
-                     (back, datetime.now().isoformat(), slip_no))
+        cur = conn.execute("UPDATE payslips SET status=?, payment_date='', voucher_no='', "
+                           "paid_by='', paid_at='', updated_at=? WHERE slip_no=? AND status='已付款' AND voucher_no=? AND paid_at=?",
+                           (back, datetime.now().isoformat(), slip_no, row["voucher_no"], row["paid_at"]))
+        if cur.rowcount != 1:                                          # 第47班稽核 S2：兩次退回之間插了一次重新付款 ⇒ 後到的不可洗掉新的付款欄位
+            raise HTTPException(409, "勞報單狀態剛被改變，請重新整理後再試")
         conn.commit()
     finally:
         conn.close()
