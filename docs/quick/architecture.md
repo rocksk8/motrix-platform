@@ -139,7 +139,7 @@ MOTRIX-ERP/
 ├── MOTRIX-ERP-ARCHITECTURE-MAP.md   ← 架構地圖＋建議＋踩坑索引（2026-09-01 新增，互補本文件）
 ├── CHANGELOG.md                     ← §12 的精簡版本，按版本倒序
 ├── DR-SOP.md · GITFLOW.md · APPLY-UPDATE-CHECKLIST.md · HTTPS-DEPLOY-CHECKLIST.md
-├── NETWORK-PLAN-MODULE-DESIGN.md · MULTI-BRANCH-AUTO-UPDATE-DESIGN.md（規劃中，未列入排程）
+├── NETWORK-PLAN-MODULE-DESIGN.md · docs/platform/archive/MULTI-BRANCH-AUTO-UPDATE-DESIGN.md（規劃中，未列入排程）
 ├── SELECTION-DB-INDEX.md · {ENV,NETARCH,SWITCH,MONITOR,ACCESS,GATEWAY}-GUIDE-CONTENT.md · SWITCH-BRAND-REFERENCE.md
 ├── .gitignore
 ├── backup_alerts/                   ← 備份警示（執行期產生）

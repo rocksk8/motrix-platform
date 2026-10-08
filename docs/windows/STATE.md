@@ -28307,7 +28307,7 @@ docs/windows/SPEC-VOUCHER-HISTORY.md   584 行  修訂紀錄，☠️ DDL 是被
 ③ **ASK-ACCOUNTANT.md 在 A-2 的 scratchpad**     => **那是要給使用者轉出去的東西**
 ```
 ☠️ 而 ③ 最容易被漏掉，因為**它不擋任何人的工作** —— 只是使用者永遠拿不到。
-⇒ 已落 `docs/ASK-ACCOUNTANT.md`（73 行）。自檢：四題在、舊句 0、**內部術語 0**。
+⇒ 已落 `docs/platform/archive/docs/ASK-ACCOUNTANT.md`（73 行）。自檢：四題在、舊句 0、**內部術語 0**。
 🔑 ⇒ `§6`：**A-2 的產出只有 A 落 repo 才算存在。A-2 交件時要同句寫「這要落到哪個路徑」。**
    （不是叫 A-2 去寫 repo 檔 —— 分工不變，是**交件格式**要帶落點。）
 
@@ -41637,7 +41637,7 @@ docs/windows/tools/px1_scan.py（兩層深）  **unspecified**
 backend/tests/conftest.py   export-ignore: **unspecified**
 --- 對照 ---
 MULTIWIN-PROTOCOL.md        export-ignore: **set** ✅（單檔規則正常）
-docs/UI-BACKLOG.md          export-ignore: **set** ✅
+docs/platform/archive/docs/UI-BACKLOG.md          export-ignore: **set** ✅
 DEPLOY.md ／ backend/main.py  unspecified ✅（負對照乾淨，沒有誤排除）
 ```
 ```

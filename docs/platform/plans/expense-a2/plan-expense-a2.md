@@ -123,7 +123,7 @@
 
 > **規則**：L0／L1 只在第 29 班這一個「預留切片」碰一次（全量班）；之後 A2-x／總帳 G-x／建構器／去識別化／檔案中心 P3 **只動模組**（局部班）。
 > 預留＝**資料驅動的擴充點**（登記表／提供者／約定發現），不是寫死的分支。只預留 A2＋總帳＋建構器＋deid＋filehub 已具體需要的。
-> 彙整自：W1（本人）＋ W2 `w2-expense-slices-design.md` §7 ＋ W4 `GL-BASE-HOOKS.md`（A1～A7、D）。
+> 彙整自：W1（本人）＋ W2 `docs/platform/archive/docs/platform/plans/expense-a2/w2-expense-slices-design.md` §7 ＋ W4 `GL-BASE-HOOKS.md`（A1～A7、D）。
 
 | # | 觸點（現況：哪裡寫死） | 層 | 預留的鉤子（資料驅動） | 之後誰插入（不再碰底層） | 來源 |
 |---|---|---|---|---|---|

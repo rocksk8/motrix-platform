@@ -1,7 +1,7 @@
 # MOTRIX ERP 介面轉換計畫書 — 套用官網 v4 設計語彙
 
 > 建立：2026-09-14 ｜ 開發機（`C:\Users\hichan\Desktop\MOTRIX-ERP`）
-> 參考稿：[`system-home-mockup.html`](system-home-mockup.html) ／ Artifact `819fa4c4-c209-4a82-8c6e-d7d3368a9e78`
+> 參考稿：[`system-home-mockup.html`](platform/archive/docs/system-home-mockup.html) ／ Artifact `819fa4c4-c209-4a82-8c6e-d7d3368a9e78`
 > 設計來源：`C:\Users\hichan\Desktop\MIAC官網(最終)\v4`（`css/v4.css`）
 
 ---
