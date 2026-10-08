@@ -75,7 +75,7 @@ def _set_flag(value):
 
 
 # ── 2c ───────────────────────────────────────────────────────────────────────────────────────────
-def test_put_with_a_subtracted_key_is_rejected_and_nothing_changes(W):
+def test_put_with_a_subtracted_key_is_rejected_and_nothing_changes(W, client):   # client 明列（W 夾具已含；b5 預檢 A8 的靜態檢查不追夾具鏈）
     uid = W["ids"]["r2s2_eng"]
     k1, k2 = _free_keys(2)
     assert _put(W, uid, ["dashboard", k1]).status_code == 200
@@ -118,7 +118,7 @@ def test_flag_default_is_on_and_users_without_subtracts_are_unaffected(W):
 
 
 # ── 預覽＝真實生效路徑（2a）────────────────────────────────────────────────────────────────────
-def test_preview_equals_the_real_effective_modules_for_every_combination(W):
+def test_preview_equals_the_real_effective_modules_for_every_combination(W, client):   # client 明列（W 夾具已含；b5 預檢 A8 的靜態檢查不追夾具鏈）
     conn = db.get_db()
     try:
         role_ids = [W["roles"][k] for k in sorted(W["roles"])[:3]]
@@ -164,7 +164,7 @@ def test_preview_endpoint_is_read_only_and_superadmin_only(W, make_user):
     assert W["client"].post("/api/duty-roles/preview", json=body, headers=h).status_code == 403
 
 
-def test_superadmin_invariant_roles_and_subtracts_still_refused(W):
+def test_superadmin_invariant_roles_and_subtracts_still_refused(W, client):   # client 明列（W 夾具已含；b5 預檢 A8 的靜態檢查不追夾具鏈）
     sid = W["ids"]["r2s2_sa"]
     r = W["client"].post("/api/duty-roles/bindings", json={"userId": sid, "roleId": W["roles"]["procurement"]}, headers=W["sa"])
     assert r.status_code == 400, r.text
@@ -175,7 +175,7 @@ def test_superadmin_invariant_roles_and_subtracts_still_refused(W):
 
 
 # ── 8a：audit_id 填值，且每個動作只有一筆 audit_log ─────────────────────────────────────────────
-def test_every_permission_change_links_to_exactly_one_audit_log_row(W):
+def test_every_permission_change_links_to_exactly_one_audit_log_row(W, client):   # client 明列（W 夾具已含；b5 預檢 A8 的靜態檢查不追夾具鏈）
     c, uid = W["client"], W["ids"]["r2s2_eng"]
     rid = W["roles"]["procurement"]
     k = _free_keys(2)[1]
@@ -204,7 +204,7 @@ def test_every_permission_change_links_to_exactly_one_audit_log_row(W):
         conn.close()
 
 
-def test_noop_role_update_still_leaves_one_audit_row_and_no_permission_change(W):
+def test_noop_role_update_still_leaves_one_audit_row_and_no_permission_change(W, client):   # client 明列（W 夾具已含；b5 預檢 A8 的靜態檢查不追夾具鏈）
     c = W["client"]
     r = c.post("/api/duty-roles", json={"key": "r2s2_noop", "name": "不變", "description": "", "permissions": [_free_keys(1)[0]], "reason": ""}, headers=W["sa"])
     rid = r.json()["id"]
@@ -252,7 +252,7 @@ def test_no_source_file_writes_permission_changes_with_replace():
 
 
 # ── 2d：唯讀報表讀生效權限，--raw 舊口徑 ────────────────────────────────────────────────────────
-def test_audit_tool_reads_effective_permissions_by_default_and_raw_on_request(W):
+def test_audit_tool_reads_effective_permissions_by_default_and_raw_on_request(W, client):   # client 明列（W 夾具已含；b5 預檢 A8 的靜態檢查不追夾具鏈）
     import audit_account_permissions as T
     aid = W["ids"]["r2s2_adm"]
     key = _free_keys(3)[2]
@@ -271,7 +271,7 @@ def test_audit_tool_reads_effective_permissions_by_default_and_raw_on_request(W)
     assert key not in raw["modules"] and raw["basis"] == "raw"
 
 
-def test_finance_report_applies_duty_roles_but_not_the_finance_rule(W):
+def test_finance_report_applies_duty_roles_but_not_the_finance_rule(W, client):   # client 明列（W 夾具已含；b5 預檢 A8 的靜態檢查不追夾具鏈）
     import finance_role_impact_report as T
     eid = W["ids"]["r2s2_eng"]
     conn = db.get_db()
