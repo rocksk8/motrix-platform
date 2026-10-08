@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-09（wip/t48-payslip-person-link）：派發 ⇄ 勞報單依人連動
+## (next) — 2026-10-09（wip/t48-payslip-person-link）：派發 ⇄ 勞報單依人連動；獨立稽核#3 修補（byPerson 限同案）
 - 新提供者 `dispatch.by_person`（IP-115 暫定）：外包名冊人員 → 他被排進的派發（無金額）；`dispatch.brief` 加 `personnelIds`、`dispatchDate`（加法）。
 - `GET /api/contractor-dispatches/{id}/payslip-links` 多回 `byPerson`（派發人員名單內人員、**且連到同一案件派發**的已確認勞報單，扣掉已手動連結的；無金額；不跨案揭露）與 `unconfirmedCount`（待確認張數，API 層只給最高管理者，其他人為 0）。
 

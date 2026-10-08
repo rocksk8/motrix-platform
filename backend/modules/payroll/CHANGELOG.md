@@ -1,6 +1,6 @@
 # 薪資獎金 更新紀錄
 
-## (next) — 2026-10-09（wip/t48-payslip-person-link）：勞報單人員 ⇄ 派工連動
+## (next) — 2026-10-09（wip/t48-payslip-person-link）：勞報單人員 ⇄ 派工連動；獨立稽核#3 修補（推測另存 contractor_guess_id）
 - 依「人」連動（設計 `docs/platform/plans/PAYSLIP-PERSON-LINK-T48.md`）：建立勞報單可帶 `dispatchIds`（需 `contractor_id`＝外包名冊人員；每張派發的人員名單必須含此人，否則 400 且整張不建），與勞報單同一個交易連結；手動新增／解除仍只有最高管理者。
 - payroll migration 5：`payslips.contractor_guess_id`（舊單靠姓名**推測**的名冊對應，**與權威的 `contractor_id` 分開存**；金流／總帳 `gl_events`、`remit_link`、匯款受款人檢查只看 `contractor_id`，永遠讀不到推測）。回填只對「姓名恰好對到一位名冊人員、尚無 `contractor_id`、非已作廢」的舊單寫 guess；同名多位或對不到不動；**不碰 `contractor_id`、不建任何連結**；冪等；名冊表不在回 None。回滾（先做 DB 備份）：`UPDATE payslips SET contractor_guess_id=NULL`（確認過的 `contractor_id` 是人工決定，不還原）。
 - 新端點：`GET /api/payslip-person-dispatches?contractor_id=`（勞報單表單勾選用，無金額）、`POST /api/payslips/{slip_no}/confirm-contractor`（最高管理者把 guess 升格成 `contractor_id`；已簽回／已付款／已作廢的單不給確認，單一條件式 UPDATE＋稽核）；`PUT`：同名重存保留推測、改受領人姓名或人工選名冊（＝確認）即清除推測；單一 `?dispatchId=` 建立路徑與 `dispatchIds` 同樣檢查人員名單；清單多回 `contractor_guess_id`。
