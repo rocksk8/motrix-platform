@@ -3106,6 +3106,8 @@
                           <span x-show="v.kind" data-testid="cv-kind-label" style="font-size:11px;font-weight:600;color:var(--text-secondary)" x-text="_cvKindLabel(v) + (v.pretaxAmount != null ? '　稅前 ' + Number(v.pretaxAmount).toLocaleString() : '')"></span>
                           <span :class="'badge ' + _cvStatusClass(v.status)" x-text="_cvStatusLabel(v.status)"
                                 style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
+                          <span x-show="v.plannedPayDate && !v.voidedAt" :data-testid="'cv-planned-' + v.voucherNo" style="font-size:11px;color:var(--text-dim)"
+                                x-text="'預定付款日 ' + v.plannedPayDate"></span>
                           <span x-show="v.isPaid" style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--tone-success-bg-strong);color:var(--tone-success-fg)">
                             ✓ 已匯款<span x-show="v.paidAt" x-text="'（' + v.paidAt.slice(0,10) + '）'"></span><span x-show="v.remitReview==='pending'" style="color:var(--tone-warning-fg)"> ⚠ 差額待審核</span><span x-show="v.remitFee" x-text="' 手續費 ' + v.remitFee"></span>
                           </span>
@@ -4452,6 +4454,12 @@
              style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
       <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);margin-top:6px">
         會一併寫回派發紀錄，之後在派發清單也看得到；不填就沿用派發原本設定的應付款日期（若有）。
+      </div>
+      <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin:12px 0 4px">預定付款日（選填）</label>
+      <input type="date" x-model="createVoucherPlannedDate" data-testid="cv-planned-pay-date"
+             style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+      <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);margin-top:6px">
+        財務預計哪一天匯款（核准後出納也能改）；<b>不是</b>上面的合約應付款日，兩者不會互相帶入。不填也可以。
       </div>
     </div>
     <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
