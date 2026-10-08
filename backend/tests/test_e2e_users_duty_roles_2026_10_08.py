@@ -123,3 +123,31 @@ def test_existing_user_with_empty_modules_is_not_prefilled_but_new_user_is(live_
     # 新增使用者仍預填樣板
     page.evaluate(f"() => {DATA}.openCreate()")
     assert len(page.evaluate(f"() => {DATA}.form.modules")) > 0
+
+
+@pytest.mark.e2e
+def test_edit_modal_with_non_empty_duty_roles_has_no_page_errors_and_role_titles_list_the_labels(live_server, make_user, e2e_browser):
+    """回歸：users.html 的角色標籤 `:title` 曾寫成 `.map(dutyKeyLabel)`（方法脫離 this 傳進去）⇒ 只要角色有權限鍵，Alpine 就丟
+    『Cannot read properties of undefined (reading 'keys')』（編輯視窗開了但每個角色標籤都壞掉；module-builder e2e 因頁面錯誤失敗）。
+    這題用種子角色（都有權限鍵）開編輯視窗，要求：頁面沒有任何 JS 錯誤、每個有權限的角色標籤 title 是權限鍵的中文名稱以『、』串起來。"""
+    sa = make_user(username="r2e_sa4", role="superadmin")
+    make_user(username="r2e_eng4", role="engineer", modules=["dashboard"], legacy_finance_flag=False)
+    uid = _q("SELECT id FROM users WHERE username='r2e_eng4'")[0]["id"]
+    assert any(r["permissions"] not in ("[]", "") for r in _q("SELECT permissions FROM duty_roles WHERE active=1")), "前提：有帶權限鍵的啟用角色"
+    page = e2e_browser.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    inject_login(page, live_server, *sa)
+    _open_edit(page, live_server, uid)
+    page.locator('[data-testid="duty-section"]').wait_for(state="visible", timeout=10000)
+    got = page.evaluate(f"""() => {{
+        const d = {DATA}
+        return d.duty.roles.filter(r => (r.permissions || []).length).map(r => ({{
+          key: r.key,
+          title: document.querySelector('[data-testid="duty-role-' + r.key + '"]').getAttribute('title'),
+          expect: r.permissions.map(k => d.dutyKeyLabel(k)).join('、') }}))
+    }}""")
+    assert got and all(g["title"] == g["expect"] and g["title"] for g in got), got
+    bad = [e for e in errors if "reading" in e or "undefined" in e or "is not a function" in e]
+    assert not bad, bad
