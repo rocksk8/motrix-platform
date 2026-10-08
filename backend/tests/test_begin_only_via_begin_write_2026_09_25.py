@@ -23,6 +23,7 @@ ALLOWED = {
     ("modules/payroll/api/payslip_approval.py", "submit_payslip"): "勞報單送審；先拿寫鎖再讀（BEGIN IMMEDIATE）、try/finally 關連線（錯誤時未 commit 的交易隨 close 丟棄）；與獎金 approve/submit/reject 同型；這類短處理不需要 write-txn watcher",
     ("modules/payroll/api/payslip_approval.py", "approve_payslip"): "勞報單核准；同上",
     ("modules/payroll/api/payslip_approval.py", "reject_payslip"): "勞報單駁回；同上",
+    ("modules/payroll/api/payslips.py", "delete_payslip"): "勞報單刪除（第46班稽核 S3）；BEGIN IMMEDIATE 先拿寫鎖再讀狀態、結尾一次 commit、狀態剛被改變時明寫 rollback、try/finally 關連線（其餘錯誤未 commit 的交易隨 close 丟棄）；與 payslip_approval 的三個處理函式同型",
     ("modules/payroll/api/bonus.py", "mark_case_bonus_paid"): "同上",
     ("modules/case/api/quotations.py", "case_batch_assign"): "批次指派；讀前已拿鎖、try/finally 關連線（lost update C 組判讀）",
     ("archive.py", "_db_content_fingerprint"): ("每日備份「同上一份」的內容指紋（2026-09-30）：**唯讀** `BEGIN DEFERRED`（不拿寫鎖）——跨所有表雜湊需要同一時間點的一致讀取快照；"

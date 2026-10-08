@@ -19766,6 +19766,7 @@
     "mod:case/api/quotations",
     "mod:payroll/api/bonus",
     "mod:payroll/api/payslip_approval",
+    "mod:payroll/api/payslips",
     "plat:__init__",
     "plat:source_tree",
     "plat:txn"
@@ -19779,7 +19780,8 @@
      "backend/core/txn.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/payroll/api/bonus.py",
-     "backend/modules/payroll/api/payslip_approval.py"
+     "backend/modules/payroll/api/payslip_approval.py",
+     "backend/modules/payroll/api/payslips.py"
     ]
    }
   },
