@@ -143,7 +143,7 @@ def _sel_repo(root):
 def test_select_cheap_rules(tmp_path):
     _sel_repo(tmp_path)
     secs = {"backend/tests/test_fast.py": 2.0, "backend/tests/test_slow.py": 60.0, "backend/tests/test_scan.py": 70.0}
-    files, why = TP.select_cheap(tmp_path, secs)
+    files, why = TP.select_cheap(tmp_path, secs, full=True)
     assert "tests/platform/test_p.py" in files                      # tests/platform 入選
     assert "tests/platform/test_slow_tool.py" not in files           # gate_slices exclude 的慢題不入選
     assert "tests/test_fast.py" in files and why["tests/test_fast.py"].startswith("實測")
@@ -152,18 +152,18 @@ def test_select_cheap_rules(tmp_path):
     assert "tests/test_scan.py" not in files                         # 掃描特徵但已知 >3 倍門檻 ⇒ 不選
     assert "tests/test_e2e_page.py" not in files                     # e2e 檔不選
     secs["backend/tests/test_scan.py"] = 5.0
-    assert "tests/test_scan.py" in TP.select_cheap(tmp_path, secs)[0]
-    assert "tests/test_scan.py" in TP.select_cheap(tmp_path, {})[0]  # 沒量過但有掃描特徵 ⇒ 入選
+    assert "tests/test_scan.py" in TP.select_cheap(tmp_path, secs, full=True)[0]
+    assert "tests/test_scan.py" in TP.select_cheap(tmp_path, {}, full=True)[0]  # 沒量過但有掃描特徵 ⇒ 入選
 
 
 def test_targets_dedupe_impacted_dirs(tmp_path):
     _sel_repo(tmp_path)
     plan = TP.build_targets(tmp_path, ["backend/modules/pay/api/x.py", "backend/modules/nodir/api/y.py"], True,
-                            {"backend/modules/pay/tests/test_m.py": 1.0})
+                            {"backend/modules/pay/tests/test_m.py": 1.0}, full=True)
     assert plan["impacted_keys"] == ["pay", "nodir"] and plan["no_test_dir"] == ["nodir"]
     assert "modules/pay/tests/test_m.py" in plan["cheap"]
     assert "modules/pay/tests" not in plan["targets"]                # 已被便宜清單涵蓋的目錄不重複加
-    plan2 = TP.build_targets(tmp_path, ["backend/modules/pay/api/x.py"], True, {})
+    plan2 = TP.build_targets(tmp_path, ["backend/modules/pay/api/x.py"], True, {}, full=True)
     assert "modules/pay/tests" in plan2["targets"]
     assert "modules/pay/tests" not in TP.build_targets(tmp_path, ["backend/modules/pay/api/x.py"], False, {})["targets"]
 
@@ -277,3 +277,50 @@ def test_always_files_are_selected_even_without_timing_data(tmp_path):
     _w(tmp_path, "tools/platform/gate_slices.json", json.dumps({"slice0": {"paths": [{"label": "p", "path": "tests/platform"}], "exclude": []}}))
     files, why = TP.select_cheap(tmp_path, {})
     assert "tests/test_version_manifest_2026_09_22.py" in files and why["tests/test_version_manifest_2026_09_22.py"] == "固定清單"
+
+
+# ── 窄版預設與時間預算 ───────────────────────────────────────────────────
+
+def test_default_selection_is_narrow_and_full_cheap_is_opt_in(tmp_path):
+    _sel_repo(tmp_path)
+    _w(tmp_path, "backend/tests/platform/test_scanner.py", "def test_a():\n    list(p.rglob('*.py'))\n")
+    _w(tmp_path, "backend/tests/test_version_manifest_2026_09_22.py", "def test_a():\n    pass\n")
+    _w(tmp_path, "backend/tests/test_globalish.py", "def test_a():\n    q = 'sqlite_master'\n")
+    _w(tmp_path, "tools/platform/scope_gate_dummy.txt", "x")
+    secs = {"backend/tests/test_fast.py": 1.0}
+    narrow, why = TP.select_cheap(tmp_path, secs)
+    assert "tests/platform/test_scanner.py" in narrow and why["tests/platform/test_scanner.py"] == "tests/platform 掃描特徵"
+    assert "tests/test_version_manifest_2026_09_22.py" in narrow                       # 固定清單
+    assert "tests/platform/test_p.py" not in narrow                                    # 沒有掃描特徵的 platform 檔：窄版不選
+    assert "tests/test_fast.py" not in narrow and "tests/test_scan.py" not in narrow    # 量過的小檔、其他掃描型：只在 --full-cheap
+    full, _ = TP.select_cheap(tmp_path, secs, full=True)
+    assert set(narrow) < set(full) and "tests/platform/test_p.py" in full and "tests/test_fast.py" in full
+
+
+def test_run_pytest_budget_timeout_returns_incomplete_with_partial_output(tmp_path, monkeypatch):
+    import subprocess
+
+    def boom(cmd, **kw):
+        assert kw.get("timeout") == 60
+        raise subprocess.TimeoutExpired(cmd, 60, output="FAILED tests/platform/test_x.py::t - boom\n")
+    monkeypatch.setattr(TP.subprocess, "run", boom)
+    rc, out, secs = TP.run_pytest(tmp_path, ["tests/x.py"], tag="pf_unit", timeout=60)
+    assert rc == TP.INCOMPLETE_RC and "FAILED tests/platform/test_x.py" in out
+
+
+def test_preflight_over_budget_is_incomplete_exit_3_never_green(tmp_path, monkeypatch):
+    _sel_repo(tmp_path)
+    monkeypatch.setattr(TP, "static_checks", lambda repo, changed, base="x": [])
+    monkeypatch.setattr(TP, "changed_files", lambda repo, base: [])
+    code, text, data = TP.preflight(tmp_path, runner=lambda repo, targets: (TP.INCOMPLETE_RC, "FAILED tests/platform/test_p.py::t - x\n", 61.0))
+    assert code == 3 and "未完成" in text and "不能當作綠" in text and "全綠" not in text
+
+
+def test_budget_min_is_passed_to_run_pytest_as_seconds(tmp_path, monkeypatch):
+    _sel_repo(tmp_path)
+    monkeypatch.setattr(TP, "static_checks", lambda repo, changed, base="x": [])
+    monkeypatch.setattr(TP, "changed_files", lambda repo, base: [])
+    seen = {}
+    monkeypatch.setattr(TP, "run_pytest", lambda repo, targets, **kw: seen.update(kw) or (0, "1 passed\n", 1.0))
+    TP.preflight(tmp_path, budget_min=2.5)
+    assert seen["timeout"] == 150

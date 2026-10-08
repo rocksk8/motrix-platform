@@ -43,3 +43,9 @@ B、C 合成**一次** pytest（`MOTRIX_TRAIN=1`、`-m "not e2e"`、`-rf`、`--b
 
 ## A6 誤報處理（第 47 班，實測）
 golden 分兩種：**內容 golden**（錄頁面文字／API 請求）與**樣式 golden**（錄被選元素的 computed style，e2e 檔含 `getComputedStyle`）。樣式 golden 只有在動到 CSS 檔、`<style>`，或 diff 的增刪行含該 golden 所選的 class 名時才旗標；只加內容區塊（行內 style）不旗標。實例：第 46 班 `case-management` 派發區塊 P3 → `golden_case_page_theme` 曾被誤報，全 e2e（950 過）證實該 golden 未受影響。
+
+## 窄版預設與時間預算（第 47 班補）
+實測 B 層完整集合（333 檔）單行程 25 分鐘跑不完（量過耗時前，掃描特徵與 tests/platform 全部都進來）。因此：
+- **預設 B 層＝窄版**（約 150 檔）：固定清單 `ALWAYS_FILES` ＋ 全域訊號測試（`scope_gate.global_test_candidates`）＋ `tests/platform` 裡**有掃描特徵**的檔。slice0 守門、`tests/platform` 其餘檔、其他掃描型檔、實測 < 10 秒的檔，一律改成 **`--full-cheap` 才加**（等 `measure` 有耗時資料後再重新評估預設）。
+- **`--budget-min N`**：B/C 的 pytest 超過 N 分鐘就停掉子行程，報告寫「**未完成（incomplete）**，不能當作綠」，並印停掉前已出現的紅燈；結束碼 **3**（0 綠／1 有紅／2 工具出錯／3 未完成）。靜態層（A）不受預算影響，永遠先跑完。
+- 建議用法（列車整合後）：`python tools/platform/train_preflight.py --budget-min 10`；要完整集合再加 `--full-cheap`（先 `measure`）。

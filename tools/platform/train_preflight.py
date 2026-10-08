@@ -7,7 +7,8 @@
 [單位] tools:train_preflight   [層] 工具   [穩定度] 內部
 用法：python tools/platform/train_preflight.py [--base origin/platform] [--static-only] [--no-impacted] [--dry-run] [--json-out F]
       python tools/platform/train_preflight.py measure     （閒置時更新各測試檔耗時；寫 full_results/preflight_seconds.json）
-結束碼：0 全綠；1 有紅（靜態發現或測試紅）；2 工具本身出錯。
+結束碼：0 全綠；1 有紅（靜態發現或測試紅）；2 工具本身出錯；3 未完成（超過 --budget-min）。
+      --full-cheap：B 層改用完整便宜集合（預設是窄版：固定清單＋全域訊號測試＋tests/platform 掃描型）。
 """
 import argparse
 import ast
@@ -383,8 +384,10 @@ def _all_test_files(backend):
     return sorted(files)
 
 
-def select_cheap(repo, seconds=None, threshold=CHEAP_SECONDS):
-    """⇒ (檔清單（相對 backend/）, 說明 {檔: 入選理由})。e2e 檔不選（-m "not e2e" 本來就跳，且慢）。"""
+def select_cheap(repo, seconds=None, threshold=CHEAP_SECONDS, full=False):
+    """⇒ (檔清單（相對 backend/）, 說明 {檔: 入選理由})。e2e 檔不選（-m "not e2e" 本來就跳，且慢）。
+    預設（窄版）＝固定清單 ALWAYS_FILES ＋ 全域訊號測試（scope_gate）＋ tests/platform 裡有掃描特徵的檔；
+    full=True（--full-cheap）＝再加 slice0 守門、tests/platform 全部、其餘有掃描特徵的檔、實測 < 門檻的檔（量過耗時前集合很大，單行程跑不完）。"""
     repo = Path(repo)
     backend = repo / "backend"
     seconds = load_seconds(repo) if seconds is None else seconds
@@ -394,7 +397,7 @@ def select_cheap(repo, seconds=None, threshold=CHEAP_SECONDS):
         import gate_slices
         data = gate_slices.load(repo / "tools" / "platform" / "gate_slices.json") or {}
         slow_excl = set((data.get("slice0") or {}).get("exclude") or [])
-        for _label, pat in gate_slices.guards(data):
+        for _label, pat in (gate_slices.guards(data) if full else []):
             fp = pat.partition("::")[0]
             for h in sorted(backend.glob(fp)):
                 if h.is_file():
@@ -403,8 +406,16 @@ def select_cheap(repo, seconds=None, threshold=CHEAP_SECONDS):
         pass
     for p in sorted((backend / "tests" / "platform").glob("test_*.py")):
         rel = p.relative_to(backend).as_posix()
-        if rel not in slow_excl:
+        if rel in slow_excl:
+            continue
+        if full:
             why.setdefault(rel, "tests/platform")
+        else:
+            try:
+                if SCAN_HINT.search(p.read_text(encoding="utf-8", errors="replace")):
+                    why.setdefault(rel, "tests/platform 掃描特徵")
+            except OSError:
+                pass
     try:
         import scope_gate
         for rel in scope_gate.global_test_candidates(repo):
@@ -414,7 +425,7 @@ def select_cheap(repo, seconds=None, threshold=CHEAP_SECONDS):
     for rel in ALWAYS_FILES:
         if (backend / rel).is_file():
             why.setdefault(rel, "固定清單")
-    for rel in _all_test_files(backend):
+    for rel in (_all_test_files(backend) if full else []):
         if rel in why or "e2e" in Path(rel).name:
             continue
         key = "backend/" + rel
@@ -437,8 +448,8 @@ def impacted_dirs(repo, changed):
     return dirs, none, keys
 
 
-def build_targets(repo, changed, include_impacted=True, seconds=None):
-    cheap, why = select_cheap(repo, seconds)
+def build_targets(repo, changed, include_impacted=True, seconds=None, full=False):
+    cheap, why = select_cheap(repo, seconds, full=full)
     targets = list(cheap)
     dirs, none, keys = ([], [], [])
     if include_impacted:
@@ -455,14 +466,22 @@ def python_exe():
     return str(cand) if cand.exists() else sys.executable
 
 
-def run_pytest(repo, targets, tag="preflight", extra=None):
+INCOMPLETE_RC = -999                                                          # 超過 --budget-min 被停掉
+
+
+def run_pytest(repo, targets, tag="preflight", extra=None, timeout=None):
     basetemp = os.path.join(tempfile.gettempdir(), "pt_%s_%d" % (tag, os.getpid()))
     env = dict(os.environ, MOTRIX_TRAIN="1", PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
     cmd = [python_exe(), "-m", "pytest", *targets, "-q", "-rfE", "--tb=short", "-m", "not e2e", "-p", "no:xdist", "-p", "no:cacheprovider",
            "--basetemp=%s" % basetemp, *(extra or [])]
     t0 = time.time()
     try:
-        r = subprocess.run(cmd, cwd=str(Path(repo) / "backend"), env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        try:
+            r = subprocess.run(cmd, cwd=str(Path(repo) / "backend"), env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               timeout=timeout)
+        except subprocess.TimeoutExpired as e:                               # subprocess.run 逾時會先殺子行程；留下已收到的輸出
+            part = e.stdout if isinstance(e.stdout, str) else (e.stdout or b"").decode("utf-8", "replace")
+            return INCOMPLETE_RC, part, time.time() - t0
         return r.returncode, r.stdout + r.stderr, time.time() - t0
     finally:
         shutil.rmtree(basetemp, ignore_errors=True)
@@ -480,7 +499,9 @@ def format_report(findings, test_groups, plan, rc, secs, passed_line):
     if plan is not None:
         L.append("B/C 測試：選 %d 個檔（便宜 %d＋受影響目錄 %d）%s" % (len(plan["targets"]), len(plan["cheap"]), len(plan["impacted_dirs"]),
                                                                       ("；動到但沒有 tests/ 的模組：%s" % "、".join(plan["no_test_dir"])) if plan["no_test_dir"] else ""))
-    if rc is not None:
+    if rc == INCOMPLETE_RC:
+        L.append("⚠ 未完成：超過時間預算（%.0f 秒）被停掉；以下只含停掉前已出現的紅燈，**不能當作綠**" % secs)
+    elif rc is not None:
         L.append("pytest：%s（%.0f 秒，exit %s）" % (passed_line or "-", secs, rc))
         for g in test_groups:
             L.append("  歸屬 %s：%d 題紅" % (g["owner"], g["count"]))
@@ -488,11 +509,12 @@ def format_report(findings, test_groups, plan, rc, secs, passed_line):
                 for x in fs:
                     L.append("    - [%s] %s" % (kind, x["nodeid"]))
     ok = not real and not un and (rc in (None, 0))
-    L.append("結果：%s" % ("全綠（預檢綠 ≠ 閘門綠）" if ok else "有紅／未能檢查"))
+    L.append("結果：%s" % ("未完成（incomplete，超過時間預算）" if rc == INCOMPLETE_RC else "全綠（預檢綠 ≠ 閘門綠）" if ok else "有紅／未能檢查"))
     return "\n".join(L)
 
 
-def preflight(repo=REPO, base="origin/platform", static_only=False, impacted=True, dry_run=False, runner=None, seconds=None):
+def preflight(repo=REPO, base="origin/platform", static_only=False, impacted=True, dry_run=False, runner=None, seconds=None, full=False,
+              budget_min=None):
     """⇒ (exit_code, report_text, data)。runner 供測試注入：runner(repo, targets) ⇒ (rc, out, secs)。"""
     repo = Path(repo)
     changed = changed_files(repo, base)
@@ -501,17 +523,20 @@ def preflight(repo=REPO, base="origin/platform", static_only=False, impacted=Tru
     rc = secs = None
     groups, passed_line = [], ""
     if not static_only:
-        plan = build_targets(repo, changed, impacted, seconds)
+        plan = build_targets(repo, changed, impacted, seconds, full=full)
         if not dry_run:
             import pre_train_check as PT
-            rc, out, secs = (runner or run_pytest)(repo, plan["targets"])
+            if runner is not None:
+                rc, out, secs = runner(repo, plan["targets"])
+            else:
+                rc, out, secs = run_pytest(repo, plan["targets"], timeout=(budget_min * 60 if budget_min else None))
             fails = PT.parse_failures(out)
             groups = PT.group_reds(fails, changed)
             m = re.findall(r"^.*\d+ (?:passed|failed).*$", out, re.M)
             passed_line = m[-1].strip() if m else ""
     text = format_report(findings, groups, plan, rc, secs, passed_line)
     bad = any(not isinstance(f, Unchecked) for f in findings) or bool(findings) or (rc not in (None, 0))
-    return (1 if bad else 0), text, {"findings": [f.as_dict() for f in findings], "plan": plan, "rc": rc}
+    return (3 if rc == INCOMPLETE_RC else 1 if bad else 0), text, {"findings": [f.as_dict() for f in findings], "plan": plan, "rc": rc}
 
 
 def measure(repo=REPO):
@@ -536,6 +561,8 @@ def main(argv=None):
     ap.add_argument("--static-only", action="store_true")
     ap.add_argument("--no-impacted", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--full-cheap", action="store_true", help="B 層用完整的便宜集合（量過耗時前很大，單行程跑不完；預設是窄版）")
+    ap.add_argument("--budget-min", type=float, default=None, help="B/C 測試的時間預算（分鐘）；超過就停並回報 incomplete（exit 3）")
     ap.add_argument("--json-out")
     a = ap.parse_args(argv)
     try:
@@ -543,7 +570,7 @@ def main(argv=None):
             n, secs = measure()
             print("已量測 %d 個測試檔（%.0f 秒）" % (n, secs))
             return 0
-        code, text, data = preflight(REPO, a.base, a.static_only, not a.no_impacted, a.dry_run)
+        code, text, data = preflight(REPO, a.base, a.static_only, not a.no_impacted, a.dry_run, full=a.full_cheap, budget_min=a.budget_min)
     except Exception as e:                                                   # noqa: BLE001
         print("預檢工具出錯：%s" % e, file=sys.stderr)
         return 2
