@@ -93,3 +93,53 @@ def test_threshold_stays_12_in_quotation_form():
     s = open(os.path.join(ROOT, "frontend", "pages", "quotation-form.html"), encoding="utf-8").read()
     assert "netMarginPct < 12" in s and "12%" in s
     assert TABLE["threshold_pct"] == 12
+
+
+#: 「管銷分攤（10%」寫死的字面只能出現在還沒改的檔（S3：報價單／精算頁）；其餘一律走口徑感知的標籤函式（admin_cost_label／*AdminLabel）
+LITERAL = "管銷分攤（10%"
+PENDING_LITERAL = {
+    "frontend/pages/settlement.html": "S3（精算頁）",
+    "frontend/pages/quotation-form.html": "S3（報價單）",
+    "backend/modules/payroll/bonus.py": "S6 分支已改（s4 單獨看時仍是舊字面；合併 s6 後移除）",
+}
+
+
+def _literal_hits(extra_excluded=()):
+    out = {}
+    for base, exts in (("frontend", (".html", ".js")), ("backend", (".py",))):
+        for d, dirs, files in os.walk(os.path.join(ROOT, base)):
+            dirs[:] = [x for x in dirs if x not in ("node_modules", "__pycache__", "tests", "migrations_frozen", ".git")]
+            for fn in files:
+                if not fn.endswith(exts) or fn.startswith("test_"):
+                    continue
+                p = os.path.join(d, fn)
+                try:
+                    n = open(p, encoding="utf-8").read().count(LITERAL)
+                except (UnicodeDecodeError, OSError):
+                    continue
+                if n:
+                    out[os.path.relpath(p, ROOT).replace(os.sep, "/")] = n
+    return out
+
+
+def test_no_hardcoded_10pct_admin_label_outside_pending():
+    stray = {k: v for k, v in _literal_hits().items() if k not in PENDING_LITERAL}
+    assert not stray, "寫死的「管銷分攤（10%%…」會在新口徑案件上說錯話，請改用 admin_cost_label／*AdminLabel：%s" % stray
+
+
+def test_literal_pending_entries_are_not_stale():
+    hits = _literal_hits()
+    assert [k for k in PENDING_LITERAL if k not in hits] == [], "已改掉的檔請從 PENDING_LITERAL 移除"
+
+
+def test_literal_scanner_positive_control(tmp_path):
+    """掃描器真的抓得到：對一個含字面的樣本檔計數（含 pdf_gen 新標籤函式的兩種輸出不含該字面）。"""
+    sample = tmp_path / "x.py"
+    sample.write_text("<td>管銷分攤（10%）</td>", encoding="utf-8")
+    assert sample.read_text(encoding="utf-8").count(LITERAL) == 1
+    import pdf_gen
+    assert LITERAL not in pdf_gen.admin_cost_label({}) and LITERAL not in pdf_gen.admin_cost_label({"formulaVer": 2, "overheadPct": 25})
+    assert pdf_gen.admin_cost_label({}) == "管銷分攤（報價稅前 10%）"
+    assert pdf_gen.admin_cost_label({"formulaVer": 2, "overheadPct": 25}) == "管銷分攤（直接毛利 25%）"
+    assert pdf_gen.admin_cost_label({"formulaVer": 2, "overheadPct": 7.5}) == "管銷分攤（直接毛利 7.5%）"
+    assert pdf_gen.admin_cost_label({"formulaVer": 2, "origFormulaVer": 1}, True) == "管銷分攤（報價稅前 10%）"

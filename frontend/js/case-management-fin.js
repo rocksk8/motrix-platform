@@ -54,6 +54,13 @@ window.CM_PARTS.push(() => ({
       return v2 ? (t !== null && t !== undefined && t !== '') : ((+t || 0) > 0)
     },
     // 公益金顯示：≥0（含 0；有下限後的資料）照舊以「− 金額」表示扣除；舊的已凍結負值（會加回營業利益）直接顯示帶號金額，不再出現「− −50」
+    caseSettleAdminLabel(sm, orig) {   // 第 48 班：管銷列標籤依口徑戳記（同式 pdf_gen.admin_cost_label）
+      sm = sm || {}
+      let ver = sm.formulaVer, pct = sm.overheadPct
+      if (orig && sm.origFormulaVer != null) { ver = sm.origFormulaVer; pct = sm.origOverheadPct != null ? sm.origOverheadPct : pct }
+      if (!(Number(ver) >= 2)) return '管銷分攤（報價稅前 10%）'
+      return pct == null ? '管銷分攤（直接毛利）' : '管銷分攤（直接毛利 ' + Number(pct) + '%）'
+    },
     caseSettleCharityText(n) { n = +n || 0; return n >= 0 ? '− ' + this.caseSettleFmt(n) : this.caseSettleFmt(n) },
     caseSettleItemCost(item) { return this.caseSettleItemFilled(item) ? this.caseSettleFmt(item.actualTotalCost) : '未填寫' },
     caseSettleExtras()  { return this.caseSettlement()?.extraItems || [] },

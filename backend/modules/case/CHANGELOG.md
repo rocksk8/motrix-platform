@@ -1,7 +1,8 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-09（wip/t48-oh25-s4）：利潤名詞改名
+## (next) — 2026-10-09（wip/t48-oh25-s4）：利潤名詞改名；管銷分攤列標籤依口徑
 - 精算頁、案件頁、結案 PDF、報價單修改紀錄的「淨利／淨利率／未扣費用淨利」改稱「營業利益／營業利益率／扣費用前（直接毛利）」；修改紀錄欄位名稱新舊並列（舊紀錄仍存「淨利率」，`financial_mask.HISTORY_MONEY_FIELDS` 兩者都遮罩）。內部鍵不變。守門 `tests/test_profit_labels_t48.py`。
+- 結案 PDF／案件頁／營運報表的「管銷分攤」列標籤改為口徑感知：口徑 2＝「（直接毛利 N%）」，舊／無戳記＝「（報價稅前 10%）」（`pdf_gen.admin_cost_label`、前端 `stlAdminLabel`／`caseSettleAdminLabel`）；守門禁止寫死「管銷分攤（10%」。
 
 ## 1.0.163 — 2026-10-08（第 47 班整合）：報價單表單版本 V3.18
 - `frontend/pages/quotation-form.html`：`FORM_VERSION` V3.17 → V3.18（報價人聯絡資料改由 `GET /api/users/sales-contact` 帶入；守門 `test_form_version_bumped` 要求內容變動必須升版，並登記 LEDGER）；行為不變。

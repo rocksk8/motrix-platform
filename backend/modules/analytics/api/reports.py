@@ -77,6 +77,7 @@ def quote_won_month_map(conn) -> dict:
 _log = logging.getLogger(__name__)
 
 from helpers.case_roles import role_username, role_display
+from pdf_gen import admin_cost_label                          # 第 48 班：管銷分攤列標籤依口徑戳記（與結案 PDF 同一個函式）
 router = APIRouter()
 
 
@@ -2154,7 +2155,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         <tr><td>原始成本（料件）</td><td class="r">{_fn(ss.get("origTotalCost"))}</td></tr>
         <tr><td class="bold">原始直接毛利</td><td class="r bold">{_fn(ss.get("origDirectProfit"))}</td></tr>
         <tr><td>原始毛利率</td><td class="r">{float(ss.get("origMarginPct") or 0):.1f}%</td></tr>
-        <tr class="sub"><td>管銷分攤（10%）</td><td class="r red">− {_fn(ss.get("origAdminCost"))}</td></tr>
+        <tr class="sub"><td>{admin_cost_label(ss, True)}</td><td class="r red">− {_fn(ss.get("origAdminCost"))}</td></tr>
         <tr class="sub"><td>公益捐款（1%）</td><td class="r red">− {_fn(ss.get("origCharity"))}</td></tr>
         <tr class="bold-row"><td>原始預估營業利益</td><td class="r">{_fn(ss.get("origNetProfit"))}</td></tr>
         <tr><td>原始預估營業利益率</td><td class="r">{float(ss.get("origNetMarginPct") or 0):.1f}%</td></tr>
@@ -2174,7 +2175,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{_fn(ss.get("totalActualCost"))}</td></tr>
         <tr><td>真實毛利</td><td class="r {'green' if int(ss.get('grossProfit',0) or 0)>=0 else 'red'}">{_fn(ss.get("grossProfit"))}</td></tr>
         <tr><td>真實毛利率</td><td class="r">{float(ss.get("grossMarginPct") or 0):.1f}%</td></tr>
-        <tr class="sub"><td>管銷分攤（10%）</td><td class="r red">− {_fn(ss.get("adminCost"))}</td></tr>
+        <tr class="sub"><td>{admin_cost_label(ss)}</td><td class="r red">− {_fn(ss.get("adminCost"))}</td></tr>
         <tr class="sub"><td>公益捐款（1%）</td><td class="r red">− {_fn(ss.get("charityDonation"))}</td></tr>
         <tr class="bold-row"><td>真實營業利益</td><td class="r {'green' if int(ss.get('netProfit',0) or 0)>=0 else 'red'}">{_fn(ss.get("netProfit"))}</td></tr>
         <tr><td>真實營業利益率</td><td class="r" style="color:{'#15803D' if float(ss.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(ss.get('netMarginPct',0) or 0)>=0 else '#DC2626'};font-weight:700">{float(ss.get("netMarginPct") or 0):.1f}%</td></tr>
