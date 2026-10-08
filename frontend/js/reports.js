@@ -600,6 +600,13 @@ function reportsApp() {
     },
 
     // helpers for settlement modal
+    stlAdminLabel(sm, orig) {   // 第 48 班：管銷列標籤依口徑戳記（同式 pdf_gen.admin_cost_label）
+      sm = sm || {}
+      let ver = sm.formulaVer, pct = sm.overheadPct
+      if (orig && sm.origFormulaVer != null) { ver = sm.origFormulaVer; pct = sm.origOverheadPct != null ? sm.origOverheadPct : pct }
+      if (!(Number(ver) >= 2)) return '管銷分攤（報價稅前 10%）'
+      return pct == null ? '管銷分攤（直接毛利）' : '管銷分攤（直接毛利 ' + Number(pct) + '%）'
+    },
     stlFmt(n) { return 'NT$ ' + (Math.round(n || 0)).toLocaleString() },
     stlSummary() { return (this.settlement && this.settlement.settlement && this.settlement.settlement.summary) || {} },
     stlItems()   { return (this.settlement && this.settlement.settlement && this.settlement.settlement.items)   || [] },

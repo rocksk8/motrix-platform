@@ -2737,7 +2737,7 @@
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"
                                     x-text="((caseSettleSummary().origMarginPct)||0).toFixed(1)+'%'"></td></tr>
                             <tr style="border-top:1px solid var(--line)">
-                                <td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)" x-text="MotrixProfitRules.adminLabel(caseSettleSummary().origFormulaVer || 1, caseSettleSummary().origOverheadPct)"></td>
+                                <td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)" x-text="caseSettleAdminLabel(caseSettleSummary(), true)"></td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-danger-fg)"
                                     x-text="'− '+caseSettleFmt(caseSettleSummary().origAdminCost)"></td></tr>
                             <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">公益捐款（1%）</td>
@@ -2778,7 +2778,7 @@
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"
                                     x-text="((caseSettleSummary().grossMarginPct)||0).toFixed(1)+'%'"></td></tr>
                             <tr style="border-top:1px solid var(--tone-warning-border)">
-                                <td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)" x-text="MotrixProfitRules.adminLabel(caseSettleSummary().formulaVer || 1, caseSettleSummary().overheadPct)"></td>
+                                <td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)" x-text="caseSettleAdminLabel(caseSettleSummary())"></td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-danger-fg)"
                                     x-text="'− '+caseSettleFmt(caseSettleSummary().adminCost)"></td></tr>
                             <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">公益捐款（1%）</td>

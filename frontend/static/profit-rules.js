@@ -53,14 +53,8 @@
              netProfit: net, netMarginPct: netPct }
   }
 
-  // 報表／PDF／畫面上管銷分攤那一列的標籤：舊口徑『管銷分攤（10%）』；新口徑『管銷分攤（毛利 N%）』
-  function adminLabel(ver, pct) {
-    if (ver !== FORMULA_VER) return '管銷分攤（10%）'
-    return '管銷分攤（毛利 ' + String(pct == null ? DEFAULT_OVERHEAD_PCT : pct) + '%）'
-  }
-
   var api = { LEGACY_VER: LEGACY_VER, FORMULA_VER: FORMULA_VER, ACTIVE_VER: ACTIVE_VER, DEFAULT_OVERHEAD_PCT: DEFAULT_OVERHEAD_PCT,
-              TARGET_MARGIN_PCT: TARGET_MARGIN_PCT, pctRate: pctRate, adminLabel: adminLabel, adminCost: adminCost, charity: charity, quote: quote, settlement: settlement }
+              TARGET_MARGIN_PCT: TARGET_MARGIN_PCT, pctRate: pctRate, adminCost: adminCost, charity: charity, quote: quote, settlement: settlement }
   if (typeof window !== 'undefined') window.MotrixProfitRules = api
   if (typeof module !== 'undefined' && module.exports) module.exports = api
 })()

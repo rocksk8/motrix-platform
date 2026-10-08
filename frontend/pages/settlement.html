@@ -1407,7 +1407,7 @@ function settlementPage() {
           R('b1-pre', '扣費用前（直接毛利）', '＝毛利（尚未扣管理費、公益）', sm.origDirectProfit, sm.grossProfit, 'good', { neg: true }),
         ] },
         { key: 'after', title: '② 扣管理費／公益後', rows: [
-          R('b2-admin', MotrixProfitRules.adminLabel(sm.formulaVer || 1, sm.overheadPct), this.adminHow(sm), sm.origAdminCost, sm.adminCost, 'cost'),
+          R('b2-admin', this.adminLbl(sm), this.adminHow(sm), sm.origAdminCost, sm.adminCost, 'cost'),
           R('b2-ch', '公益捐款（1%）', '公益捐贈＝毛利 × 1%（毛利為負時以 0 計）', sm.origCharity, sm.charityDonation, 'cost'),
           ...(sm.origIndirectReserve > 0 ? [R('b2-reserve', '報價預留間接成本', '報價單營業利益已扣的間接成本預算＝間接合計 − 管銷 − 公益（原始端資訊）', sm.origIndirectReserve, null, 'cost', { info: true })] : []),
           R('b2-net', '真實營業利益', '最終營業利益＝毛利 − 管理費 − 公益捐贈（＝獎金分潤基數）', sm.origNetProfit, sm.netProfit, 'good', { strong: true, neg: true, diffNote: sm.origIndirectReserve > 0 ? '其中報價預留間接成本 ' + this.fmt(sm.origIndirectReserve) + '（原始預估已扣、實際只計單據）' : '' }),
@@ -1944,6 +1944,10 @@ function settlementPage() {
     // 第 48 班 S3：管銷分攤的說明文字依 summary 的口徑（舊口徑：報價稅前×10%；新口徑：實際毛利×比率）
     adminHow(sm) {
       return (sm && sm.formulaVer === 2) ? ('管銷＝真實毛利 × ' + sm.overheadPct + '%（毛利為負時以 0 計）') : '管理費＝報價稅前收入 × 10%'
+    },
+    adminLbl(sm) {                                   // 同式 pdf_gen.admin_cost_label／reports.js stlAdminLabel
+      if (!(sm && sm.formulaVer >= 2)) return '管銷分攤（報價稅前 10%）'
+      return sm.overheadPct == null ? '管銷分攤（直接毛利）' : '管銷分攤（直接毛利 ' + sm.overheadPct + '%）'
     },
     adminShort(sm) {
       return (sm && sm.formulaVer === 2) ? ('管銷（' + sm.overheadPct + '%）') : '管銷（10%）'

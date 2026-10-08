@@ -4,7 +4,6 @@
 
 ## (next) — 2026-10-09（wip/t48-oh25-s1：利潤規則單一來源，L1 新增 helpers/profit_rules）
 - L1（新增，向下相容）：新單位 `helpers/profit_rules.py`——報價單／精算的管銷分攤、公益捐款、間接成本合計、營業利益（舊稱淨利）、營業利益率的**唯一算式**（`admin_cost`／`charity`／`quote_profit`／`settlement_profit`／`pct_rate`；口徑 `LEGACY_VER=1` 稅前×10%、`FORMULA_VER=2` 直接毛利×pct%）。前端同一套：`static/profit-rules.js`（`MotrixProfitRules`）。`ACTIVE_VER` 仍是 1，**S1 零行為變更**；設計 `docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
-- `admin_label(ver, pct, default)`（第 48 班 S3）：管銷分攤那一列的標籤（舊口徑「管銷分攤（10%）」；新口徑「管銷分攤（毛利 N%）」，等於全域預設且給了 `default` 時不印百分比）。前端同名 `MotrixProfitRules.adminLabel`。
 - 守門與測試：`tests/test_profit_rules_t48.py`（黃金向量 Python／node 等值、舊內嵌算式對拍、ver 2 獨立 Decimal 對拍）、`tests/platform/test_profit_rule_single_source.py`（管銷算式只准寫在規則檔；前端過渡登記 S3 清空）。
 
 ## 1.119 — 2026-10-08（wip/t47-paydate-l1：預定付款日共用提醒庫；wip/t47-users-list-privacy：使用者清單收緊敏感欄位，L0 行為、介面不變）

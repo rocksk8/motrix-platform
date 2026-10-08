@@ -29,8 +29,6 @@ def _run(c):
         return P.admin_cost(a[0], a[1], pct, ver)
     if fn == "charity":
         return P.charity(a[0])
-    if fn == "adminLabel":
-        return P.admin_label(a[0], a[1])
     return P.pct_rate(a[0])
 
 
@@ -103,7 +101,6 @@ const out = cases.map(c => {
   if (c.fn === 'settlement') return P.settlement(a[0], a[1], c.pct, c.ver, a[2])
   if (c.fn === 'adminCost') return P.adminCost(a[0], a[1], c.pct, c.ver)
   if (c.fn === 'charity') return P.charity(a[0])
-  if (c.fn === 'adminLabel') return P.adminLabel(a[0], a[1])
   return P.pctRate(a[0])
 })
 process.stdout.write(JSON.stringify(out))
@@ -122,10 +119,3 @@ def test_frontend_js_equals_python_vectors(tmp_path):
     bad = [(c, g) for c, g in zip(VECTORS, got) if g != c["expect"]]
     assert len(got) == len(VECTORS) and not bad, bad[:3]
 
-
-def test_admin_label_legacy_new_and_default_omission():
-    assert P.admin_label(1) == "管銷分攤（10%）" and P.admin_label(None, 40) == "管銷分攤（10%）"
-    assert P.admin_label(2, 30) == "管銷分攤（毛利 30%）" and P.admin_label(2, 12.5) == "管銷分攤（毛利 12.5%）"
-    assert P.admin_label(2, 25, default=25) == "管銷分攤（毛利）", "等於全域預設 ⇒ PDF 不印百分比（Q7）"
-    assert P.admin_label(2, 30, default=25) == "管銷分攤（毛利 30%）"
-    assert P.admin_label(1, 25, default=25) == "管銷分攤（10%）", "舊口徑永遠印 10%"

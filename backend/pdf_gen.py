@@ -28,18 +28,32 @@ from db import (
 from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_case_closing_report, run_edge_pdf
 from helpers import receipt_amounts as _receipt_amounts
 from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr
-from helpers import profit_rules as _profit_rules
-
-
-def _admin_lbl(ver, pct):
-    """管銷分攤那一列的標籤（第 48 班）：舊口徑『管銷分攤（10%）』；新口徑只在偏離全域預設時印百分比（使用者 Q7）。"""
-    return _profit_rules.admin_label(ver or 1, pct, _get_setting("overhead_default_pct", _profit_rules.DEFAULT_OVERHEAD_PCT))
 
 # 未核可紅色警示（使用者 2026-09-30）：各單據 builder 共用同一個元件與同一個字樣
 from helpers.doc_template import unapproved_banner as _unapproved_banner, inject_unapproved as _inject_unapproved
 
 from core import paths as _paths
 
+
+
+def admin_cost_label(summary, orig=False) -> str:
+    """管銷分攤列標籤（第 48 班）：口徑 2（summary.formulaVer>=2）＝「管銷分攤（直接毛利 N%）」，無戳記／1＝「管銷分攤（報價稅前 10%）」。
+    N 是該案存值（summary.overheadPct，每案可調）。原始側（orig=True）優先看 origFormulaVer／origOverheadPct，沒有就跟實際側同一口徑。
+    前端同式：frontend/js/reports.js stlAdminLabel、case-management-fin.js caseSettleAdminLabel；守門 tests/test_profit_labels_t48.py。"""
+    s = summary or {}
+    ver, pct = s.get("formulaVer"), s.get("overheadPct")
+    if orig and s.get("origFormulaVer") is not None:
+        ver, pct = s.get("origFormulaVer"), s.get("origOverheadPct", pct)
+    try:
+        v2 = int(ver or 1) >= 2
+    except (TypeError, ValueError):
+        v2 = False
+    if not v2:
+        return "管銷分攤（報價稅前 10%）"
+    if pct is None:
+        return "管銷分攤（直接毛利）"
+    p = float(pct)
+    return "管銷分攤（直接毛利 %s%%）" % (int(p) if p == int(p) else p)
 
 
 def _orig_reserve_row(summary, money=None):
@@ -2637,7 +2651,7 @@ def _build_case_closing_html(data: dict) -> str:
       <tr><td>原始成本（料件）</td><td class="r">{money(summary.get("origTotalCost"))}</td></tr>
       <tr><td class="bold">原始直接毛利</td><td class="r bold">{money(summary.get("origDirectProfit"))}</td></tr>
       <tr><td>原始毛利率</td><td class="r">{float(summary.get("origMarginPct") or 0):.1f}%</td></tr>
-      <tr><td>{_admin_lbl(summary.get("origFormulaVer"), summary.get("origOverheadPct"))}</td><td class="r red">− {money(summary.get("origAdminCost"))}</td></tr>
+      <tr><td>{admin_cost_label(summary, True)}</td><td class="r red">− {money(summary.get("origAdminCost"))}</td></tr>
       <tr><td>公益捐款（1%）</td><td class="r red">− {money(summary.get("origCharity"))}</td></tr>{_orig_reserve_row(summary, money)}
       <tr class="bold-row"><td>原始預估營業利益</td><td class="r">{money(summary.get("origNetProfit"))}</td></tr>
       <tr><td>原始預估營業利益率</td><td class="r">{float(summary.get("origNetMarginPct") or 0):.1f}%</td></tr>
@@ -2654,7 +2668,7 @@ def _build_case_closing_html(data: dict) -> str:
       <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{money(summary.get("totalActualCost"))}</td></tr>
       <tr><td>真實毛利</td><td class="r {'green' if int(summary.get('grossProfit',0) or 0)>=0 else 'red'}">{money(summary.get("grossProfit"))}</td></tr>
       <tr><td>真實毛利率</td><td class="r">{float(summary.get("grossMarginPct") or 0):.1f}%</td></tr>
-      <tr><td>{_admin_lbl(summary.get("formulaVer"), summary.get("overheadPct"))}</td><td class="r red">− {money(summary.get("adminCost"))}</td></tr>
+      <tr><td>{admin_cost_label(summary)}</td><td class="r red">− {money(summary.get("adminCost"))}</td></tr>
       <tr><td>公益捐款（1%）</td><td class="r red">− {money(summary.get("charityDonation"))}</td></tr>
       <tr class="bold-row"><td>真實營業利益</td><td class="r {'green' if int(summary.get('netProfit',0) or 0)>=0 else 'red'}">{money(summary.get("netProfit"))}</td></tr>
       <tr><td>真實營業利益率</td><td class="r bold" style="color:{'#15803D' if float(summary.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(summary.get('netMarginPct',0) or 0)>=0 else '#DC2626'}">{float(summary.get("netMarginPct") or 0):.1f}%</td></tr>
