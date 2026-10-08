@@ -20,6 +20,35 @@ from modules.case.recognition import _approved_at
 
 SOURCE_LABEL = "案件支出申請"
 
+#: 採購單缺廠商收款帳戶擋付款（第 48 班，使用者 Q2）：`system_settings.po_bank_block_since`＝切換時間點（本地 isoformat 秒）；缺鍵／空＝關閉（預設）。
+#: 只擋切換時間點之後建立的採購單；舊單與其他單據類型完全不受影響。設計：docs/platform/plans/PO-BANK-BLOCK-T48.md
+PO_BANK_BLOCK_KEY = "po_bank_block_since"
+PO_BANK_BLOCK_MSG = ("缺廠商收款帳戶：這張採購單建立在『缺資料擋付款』啟用之後，必須先補齊廠商銀行名稱與帳號（請申請人走『變更申請』補資料並核准）"
+                     "才能登錄付款。廠商若為自然人，請確認已告知收款人。")
+
+
+class PoBankMissing(ValueError):
+    """採購單缺廠商收款帳戶（出納端點轉 409）。"""
+    status = 409
+
+
+def po_bank_block_since() -> str:
+    """目前的切換時間點（本地 isoformat 秒）；沒開 ⇒ ''。"""
+    from helpers.settings import _get_setting
+    v = _get_setting(PO_BANK_BLOCK_KEY, "")
+    return v.strip() if isinstance(v, str) else ""
+
+
+def _po_bank_missing(r, since: str) -> bool:
+    """這張單要不要因為缺廠商收款帳戶被擋：開關已開 ∧ 採購單 ∧ 切換時間點之後建立 ∧ 廠商收款人 ∧ 銀行名稱或帳號任一為空。"""
+    if not since or (_col(r, "kind") or "") != "purchase_order":
+        return False
+    if (_col(r, "created_at") or "") < since:
+        return False
+    if (_col(r, "payee_type") or "") not in ("", "vendor"):
+        return False
+    return not ((_col(r, "payee_bank") or "").strip() and (_col(r, "payee_account") or "").strip())
+
 
 def _col(r, name, default=""):
     try:
@@ -77,8 +106,9 @@ def _form_payee(r) -> bool:
         (_col(r, "payee_bank") or "").strip() or (_col(r, "payee_account") or "").strip())
 
 
-def _item(r):
+def _item(r, since: str = ""):
     files = _files(r["files_json"])
+    blocked = _po_bank_missing(r, since)
     return {
         "key": str(r["id"]), "sourceLabel": SOURCE_LABEL,
         "quoteNo": r["quote_no"] or "", "customerName": _col(r, "customer_name") or "", "projectName": _col(r, "project_name") or "",
@@ -88,6 +118,7 @@ def _item(r):
         # 費用單據（A2）：類型、單號、收款人類型、付款條件／匯款日（採購單由出納核准後填）；舊列＝kind ''
         "kind": _col(r, "kind") or "", "docCode": _col(r, "doc_code") or "", "payeeType": _col(r, "payee_type") or "",
         "payeeUsername": "" if _form_payee(r) else _payee_username(r),               # 表單收款對象（廠商）不是員工：不去查申請人的員工帳戶
+        "blocked": blocked, "blockReason": PO_BANK_BLOCK_MSG if blocked else "",        # 第 48 班：缺廠商收款帳戶擋付款（開關關＝恆 False／空）
         "payeeNote": PAYEE_NOTE if _form_payee(r) else "", "payeeBank": _mask_bank(_col(r, "payee_bank"), _col(r, "payee_account")),
         "payTerms": _col(r, "pay_terms") or "", "remitDate": _col(r, "remit_date") or "",
         "plannedPayDate": _col(r, "planned_pay_date") or "",           # 預定付款日（2026-10-05；''＝沒填；提醒信／行事曆依它）
@@ -240,7 +271,8 @@ class _Payables:
             "SELECT e.*, q.customer_name, q.project_name FROM case_extra_expenses e"
             " LEFT JOIN quotations q ON q.quote_no = e.quote_no"
             " WHERE e.status = '已核准' AND COALESCE(e.paid_date, '') = '' AND " + _EF.payable_sql("e") + " ORDER BY e.id").fetchall()
-        return [_item(r) for r in rows]
+        since = po_bank_block_since()
+        return [_item(r, since) for r in rows]
 
     @staticmethod
     def paid(conn, start, end) -> list:
@@ -265,11 +297,14 @@ class _Payables:
             exp_id = int(key)
         except (TypeError, ValueError):
             raise LookupError("找不到這筆申請")
-        row = conn.execute("SELECT total_cost, kind, pay_terms, remit_date FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
+        row = conn.execute("SELECT total_cost, kind, pay_terms, remit_date, created_at, payee_type, payee_bank, payee_account"
+                           " FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
         if not row:
             raise LookupError("找不到這筆申請")
         if not _EF.is_payable_kind(row["kind"] or ""):
             raise ValueError("這類單據（請購單）只是核准文件，不進出納付款")
+        if _po_bank_missing(row, po_bank_block_since()):                  # 第 48 班：新採購單缺廠商收款帳戶 ⇒ 409，什麼都不寫
+            raise PoBankMissing(PO_BANK_BLOCK_MSG)
         rm = parse_remit(remit, row["total_cost"])
         pay = _EF.parse_payout(row["kind"] or "", row["pay_terms"], row["remit_date"], remit, paid_date)   # 採購單：匯款日＋付款條件必填
         cur = conn.execute(

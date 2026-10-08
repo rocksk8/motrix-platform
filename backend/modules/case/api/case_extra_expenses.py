@@ -663,6 +663,53 @@ def payreq_cases(q: str = Query(""), authorization: str = Header(None)):
         conn.close()
 
 
+@router.get("/api/extra-expenses/po-bank-block")
+def po_bank_block_status(authorization: str = Header(None)):
+    """採購單缺廠商收款帳戶擋付款的開關狀態（財務角色／最高管理者）：切換時間點（空＝關閉）與目前被擋的待付款張數。"""
+    user = _require_user(authorization)
+    if not has_finance_access(user):
+        raise HTTPException(403, "只有財務角色或最高管理者可以查看")
+    from modules.case import payables as _PB
+    conn = get_db()
+    try:
+        items = _PB._Payables.pending(conn)
+    finally:
+        conn.close()
+    return {"enabled": bool(_PB.po_bank_block_since()), "since": _PB.po_bank_block_since(), "blockedPending": sum(1 for i in items if i.get("blocked"))}
+
+
+@router.put("/api/extra-expenses/po-bank-block")
+def po_bank_block_set(body: dict = Body(...), authorization: str = Header(None)):
+    """開／關採購單缺廠商收款帳戶擋付款。只有最高管理者；`{"enabled": true}`＝切換時間點設為現在（可選 `since`：本地時間 YYYY-MM-DD[THH:MM:SS]，不得是未來）；
+    `{"enabled": false}`＝關閉。每次變更寫稽核。只影響切換時間點之後建立的採購單。"""
+    _require_user(authorization, require_superadmin=True)
+    from modules.case import payables as _PB
+    from helpers.settings import _set_setting
+    if not isinstance(body.get("enabled"), bool):
+        raise HTTPException(422, "enabled 必須是 true 或 false")
+    old = _PB.po_bank_block_since()
+    now = datetime.now().replace(microsecond=0)
+    if body["enabled"]:
+        raw = body.get("since")
+        if raw in (None, ""):
+            new = now.isoformat(timespec="seconds")
+        else:
+            try:
+                dt = datetime.fromisoformat(str(raw).strip()) if len(str(raw).strip()) > 10 else datetime.fromisoformat(str(raw).strip() + "T00:00:00")
+            except ValueError:
+                raise HTTPException(422, "since 必須是 YYYY-MM-DD 或 YYYY-MM-DDTHH:MM:SS")
+            if dt.tzinfo is not None or dt > now:
+                raise HTTPException(422, "since 必須是本地時間，且不得是未來")
+            new = dt.replace(microsecond=0).isoformat(timespec="seconds")
+    else:
+        new = ""
+    if new != old:
+        _set_setting(_PB.PO_BANK_BLOCK_KEY, new)
+        _audit(_tok(authorization), "settings.po_bank_block.update", "settings", _PB.PO_BANK_BLOCK_KEY,
+               "採購單缺廠商收款帳戶擋付款：%s → %s" % (old or "關閉", new or "關閉"), {"old": old, "new": new})
+    return {"ok": True, "enabled": bool(new), "since": new}
+
+
 @router.get("/api/extra-expenses/mine")
 def payreq_mine(authorization: str = Header(None)):
     """我的申請：自己填的額外支出（最新 100 筆），帶案件名稱；案件已看不到的不列。"""
