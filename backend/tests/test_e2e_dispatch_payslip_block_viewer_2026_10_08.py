@@ -44,6 +44,13 @@ def world(client, make_user):
     did = _seed()
     sa = make_user(username="dslip_sa", role="superadmin")
     staff = make_user(username="dslip_staff", role="user", modules=["case_manage", "procurement", "contractor_list"], legacy_finance_flag=False)
+    import db
+    c = db.get_db()
+    try:
+        c.execute("UPDATE quotations SET sales_person=? WHERE quote_no=?", (staff[0], NO))        # 案件列表只列「自己的案件」：把案件歸給一般人員
+        c.commit()
+    finally:
+        c.close()
     r = client.post("/api/auth/login", json={"username": sa[0], "password": sa[1]})
     h = {"Authorization": "Bearer " + r.json()["token"]}
     ok = client.post("/api/contractor-dispatches/%s/payslip-links" % did, headers=h, json={"slipNo": SLIP})
@@ -68,7 +75,8 @@ def test_staff_sees_slip_text_only_no_controls_no_money(live_server, world, new_
     _open_dispatch_tab(page, live_server, staff, did)
     blk = page.locator("[data-testid=dispatch-slips-%s]" % did)
     page.wait_for_selector("[data-testid=dispatch-slip-text-%s]" % SLIP, state="visible", timeout=15000)
-    assert blk.locator("a").count() == 0, "非最高管理者：單號不是連結"
+    assert page.locator("[data-testid=dispatch-slip-link-%s]" % SLIP).count() == 0, "非最高管理者：單號不是連結（沒有指向勞報單頁的 a）"
+    assert not [h for h in blk.locator("a").evaluate_all("els => els.map(e => e.getAttribute('href') || '')") if "payslips.html" in h]
     assert page.locator("[data-testid=dispatch-slip-unlink-%s]:visible" % SLIP).count() == 0
     assert page.locator("[data-testid=dispatch-slip-input-%s]:visible" % did).count() == 0
     txt = blk.inner_text()
