@@ -43,11 +43,13 @@ def main(argv=None):
         print("--apply 一律用目前設定的資料庫與行事曆設定，不接受 --db（避免對著一份複本去改真正的行事曆）")
         return 2
     try:
+        import _dbbind                                      # 資料庫檔不存在 ⇒ SystemExit(2)，不建空庫（暫存包上跑不會多出空的 motrix_erp.db）
         if a.db:
-            conn = sqlite3.connect("file:%s?mode=ro" % a.db.replace("\\", "/"), uri=True)
+            conn = sqlite3.connect("file:%s?mode=ro" % _dbbind.require_file(a.db).replace("\\", "/"), uri=True)
             conn.row_factory = sqlite3.Row
         else:
             import db
+            _dbbind.bind()
             conn = db.get_db()
     except Exception as e:                                  # noqa: BLE001
         print("讀不到資料庫：%s" % e)

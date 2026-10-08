@@ -5922,7 +5922,7 @@ def _lines_of_row(r) -> list:
 _TYPED_DETAIL_TYPES = ("text", "textarea", "select", "radio", "date", "daterange", "ref")
 _TYPED_DETAIL_MAX = 500
 _MONEY_FIELD_LABELS = {"金額", "單價", "小計", "總金額", "存簿封面"}          # 同 L1 `routers.approval_queue._MONEY_LABELS`
-_MONEY_LABEL_WORDS = ("金額", "價", "預算", "費用")
+_MONEY_LABEL_WORDS = ("金額", "價", "預算")                                   # 不含「費用」：真實定義有「費用歸屬單位」（參照欄，非金額）
 
 
 def _typed_ref_name(conn, target, v) -> str:

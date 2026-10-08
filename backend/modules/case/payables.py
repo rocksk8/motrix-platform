@@ -135,7 +135,7 @@ def _pick(files, file_id):
 
 def _payee_username(r) -> str:
     """員工收款人的帳號（查銀行資料表用）：單據 data.applicant → 支出人帳號 → 建立者；廠商／無 ⇒ ''。"""
-    if (_col(r, "payee_type") or "") == "vendor":
+    if (_col(r, "payee_type") or "") == "vendor" or (_col(r, "kind") or "") in _FORM_PAYEE_KEYS:     # 採購單／零用金的收款對象在表單上，不是申請人：不去查申請人的員工帳戶
         return ""
     try:
         d = json.loads(_col(r, "data_json") or "{}")
