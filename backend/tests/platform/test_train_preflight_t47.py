@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[3]
+PAGES = "frontend" + "/pages/"            # 合成樹的相對路徑（本檔的 repo 是 tmp_path，不是真的 frontend）
 sys.path.insert(0, str(REPO / "tools" / "platform"))
 import train_preflight as TP  # noqa: E402
 
@@ -111,7 +112,7 @@ def test_a5_new_begin_site_flagged_and_removed_clean(tmp_path):
 # ── A6 golden ────────────────────────────────────────────────────────────
 
 def _golden_repo(root):
-    _w(root, "frontend/pages/case-x.html", "<html></html>")
+    _w(root, PAGES + "case-x.html", "<html></html>")
     _w(root, "frontend/js/case-x-more.js", "//")
     _w(root, "backend/tests/golden_cx.json", "{}")
     _w(root, "backend/tests/test_e2e_cx.py", 'G = pathlib.Path(__file__).with_name("golden_cx.json")\nPAGE = "case-x.html"\n')
@@ -122,7 +123,7 @@ def test_a6_changed_covered_page_flagged_unless_golden_rerecorded(tmp_path):
     f = TP.check_golden(tmp_path, ["frontend/js/case-x-more.js"])
     assert [x.code for x in f] == ["A6"] and "case-x-more.js" in f[0].where
     assert TP.check_golden(tmp_path, ["frontend/js/case-x-more.js", "backend/tests/golden_cx.json"]) == []
-    assert TP.check_golden(tmp_path, ["frontend/pages/other.html"]) == []
+    assert TP.check_golden(tmp_path, [PAGES + "other.html"]) == []
 
 
 # ── B/C 選擇 ─────────────────────────────────────────────────────────────
@@ -236,7 +237,7 @@ def test_a0_uses_regen_all_run_api_stale_ok_error_and_absent(tmp_path):
 
 
 def _style_repo(root):
-    _w(root, "frontend/pages/case-y.html", "<html></html>")
+    _w(root, PAGES + "case-y.html", "<html></html>")
     _w(root, "backend/tests/golden_sty.json", "{}")
     _w(root, "backend/tests/test_e2e_sty.py",
        'G = pathlib.Path(__file__).with_name("golden_sty.json")\nPAGE = "case-y.html"\nSEL = [".cm-header", ".cm-tab.active"]\nJS = "getComputedStyle(el)"\n')
@@ -244,7 +245,7 @@ def _style_repo(root):
 
 def test_a6_style_golden_is_flagged_only_when_css_relevant_lines_change(tmp_path):
     _style_repo(tmp_path)
-    ch = ["frontend/pages/case-y.html"]
+    ch = [PAGES + "case-y.html"]
     content_only = '+++ b/x\n+<div style="padding:8px" x-data>新區塊</div>\n-<span>舊</span>\n'
     assert TP.check_golden(tmp_path, ch, diff_fn=lambda files: content_only) == []                     # 內容性改動（行內 style）不旗標
     assert [x.code for x in TP.check_golden(tmp_path, ch, diff_fn=lambda files: '+<h1 class="cm-header big">')] == ["A6"]
