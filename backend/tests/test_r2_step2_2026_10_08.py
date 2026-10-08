@@ -171,7 +171,7 @@ def test_superadmin_invariant_roles_and_subtracts_still_refused(W, client):   # 
     r = W["client"].post("/api/duty-roles/subtracts", json={"userId": sid, "key": _free_keys(1)[0]}, headers=W["sa"])
     assert r.status_code == 400, r.text
     prev = DR.preview_whatif(db.get_db(), sid, ["dashboard"], [W["roles"]["procurement"]], _free_keys(1))
-    assert "procurement" not in prev["effective"] or "procurement" in A.effective_modules("superadmin", ["dashboard"]), "superadmin 預覽不套角色／扣項"
+    assert prev["effective"] == sorted(DR.known_keys()), "superadmin 預覽＝全部鍵（真實判斷 user_has_module 對最高管理者恆為 True；不套角色／扣項；稽核 #2）"
 
 
 # ── 8a：audit_id 填值，且每個動作只有一筆 audit_log ─────────────────────────────────────────────

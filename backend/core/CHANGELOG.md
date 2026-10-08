@@ -10,6 +10,7 @@
 - 唯讀報表（2d）：`audit_account_permissions.py` 預設讀**生效權限**（職責角色＋個人扣項＋財務規則）；`finance_role_impact_report.py` 預設把職責角色與扣項套到勾選上（**刻意不套財務規則**，那正是這份報表要預告的變化）；兩支都新增 `--raw`（舊口徑），輸出標明口徑。
 - 前端（`users.html`＋`static/users-duty.js`）：編輯既有、非最高管理者時顯示「職責角色／個人扣項／生效權限預覽／變更原因」；畫面只送**原始勾選**（預覽唯讀、不寫回）；存檔順序＝解除扣項 → PUT → 解除／新增角色 → 新增扣項，失敗即停並明講已完成／未完成。**使用者可見的行為變更（Q3）**：編輯既有使用者且個人勾選為空時，不再用基礎類別樣板預填（只有「新增使用者」預填）。
 - 不放寬任何權限；只新增拒絕（2c）；沒有 migration、沒有新表。回滾：2c 設旗標 `0`；其餘純程式（L1）回退即還原，無資料動作。
+- **稽核 #2 跟進（wip/t48-r2-step2）**：①`users-duty.js`：被勾選的模組若同時在個人扣項裡仍列在候選（可在畫面解除），存檔前自動解除該扣項，避免舊 PUT 400；②`preview_whatif` 對 superadmin 回全部模組鍵（與 `user_has_module` 對最高管理者恆為 True 一致）；③`audit_account_permissions` 讀不出生效清單而退回原始勾選的那一列，`basis` 如實標 `raw`；`dutyOpen` 重設 `doneBeforePut`。測試：`tests/test_r2_step2_audit2_fixes_2026_10_09.py`。
 
 ## 1.118 — 2026-10-07（wip/t45-r2-step1-impl：R2 第1步——D4 superadmin 全部鍵、D5 財務判斷影子模式）
 - L1（新增，向下相容）：`helpers.auth` 新增 `FINANCE_FLAG_KEY`、`finance_effective_keys(user, cache=False)`、`finance_duty_person(user)`、`reset_finance_mode_cache()`。

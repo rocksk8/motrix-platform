@@ -58,7 +58,7 @@ def _audit(raw: bool = False) -> list:
                 try:
                     eff[r["id"]] = effective_modules(r["role"], r["modules"], user_id=r["id"], conn=conn)
                 except Exception:                                    # noqa: BLE001 — 讀不出生效清單 ⇒ 退回原始勾選（報表不可因此整份失敗）
-                    eff[r["id"]] = None
+                    eff[r["id"]] = None                              # 該列的 basis 會標成 raw（如實標示，不假裝是生效權限）
     finally:
         conn.close()
 
@@ -68,8 +68,10 @@ def _audit(raw: bool = False) -> list:
             mods = json.loads(r["modules"] or "[]")
         except Exception:
             mods = []
+        row_basis = "raw"
         if not raw and eff.get(r["id"]) is not None:
             mods = eff[r["id"]]
+            row_basis = "effective"
         is_known_automation_name = r["username"].lower() in _KNOWN_AUTOMATION_USERNAMES
         is_sparse = len(mods) <= _SPARSE_MODULE_THRESHOLD
         out.append({
@@ -78,7 +80,7 @@ def _audit(raw: bool = False) -> list:
             "role":          r["role"],
             "moduleCount":   len(mods),
             "modules":       mods,
-            "basis":         "raw" if raw else "effective",
+            "basis":         row_basis,
             "createdAt":     r["created_at"] or "",
             "flagAutomationName": is_known_automation_name,
             "flagSparseModules":  is_sparse,

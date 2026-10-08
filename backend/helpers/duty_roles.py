@@ -143,7 +143,7 @@ def preview_whatif(conn, user_id, raw_modules, role_ids, subtracts, role=None) -
     raw = [k for k in (raw_modules or []) if isinstance(k, str)]
     ignored = []
     if base == "superadmin":
-        eff = effective_modules(base, raw)
+        eff = sorted(known_keys())          # 最高管理者不經過角色與扣項：真實判斷（user_has_module）對任何鍵都是 True ⇒ 預覽＝全部鍵（稽核 #2 SHOULD-FIX 2）
     else:
         try:
             ids = sorted({int(i) for i in (role_ids or [])})
