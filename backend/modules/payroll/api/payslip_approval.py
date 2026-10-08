@@ -181,6 +181,9 @@ def approve_payslip(slip_no: str, body: dict = Body(default={}), authorization: 
         appr = _appr_of(row["approval_json"])
         tiers = appr.get("tiers") or []
         if tiers:
+            err = check_no_tier_self_approval(conn, appr, user)          # 第47班 Q-S6（使用者裁示 A）：有簽核層時送審人也不得自核；全公司只有這一位在職最高管理者時例外
+            if err:
+                raise HTTPException(403, err)
             ct = int(appr.get("currentTier") or 0)
             ok, code, msg = check_approve_permission(tiers, ct, user["username"], conn)
             if not ok:
