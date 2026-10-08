@@ -31,6 +31,7 @@
 之類的函式，額外支出要不要走到那個程度可以之後看實際使用頻率再決定。
 """
 import json
+import re
 from datetime import datetime
 from typing import Any, List, Optional
 
@@ -324,6 +325,23 @@ def _require_desc(body: ExtraExpenseIn):
         raise HTTPException(400, "請填寫品項說明")
 
 
+PAYEE_NAME_MAX, PAYEE_BANK_MAX = 60, 60
+PAYEE_ACCOUNT_RE = re.compile(r"^[0-9]{5,20}$")                         # 只認半形數字（\d 會放行全形數字）
+
+
+def _check_payee_bank(body: ExtraExpenseIn) -> None:
+    """收款人銀行資料（採購單廠商收款帳戶，第 47 班）：帳號去掉空白與連字號後只能是 5～20 碼數字（就地改成乾淨值）；
+    戶名／銀行名稱 60 字內；採購單填了帳號就必須有銀行名稱（只有帳號出納無從匯款）。其他單據種類只做格式檢查，不新增必填。"""
+    acct = re.sub(r"[\s\-－]", "", body.payeeAccount or "")
+    if acct and not PAYEE_ACCOUNT_RE.match(acct):
+        raise HTTPException(400, "收款帳號只能是數字（5～20 碼；空白與連字號會自動去掉）")
+    body.payeeAccount = acct
+    if len((body.payeeName or "").strip()) > PAYEE_NAME_MAX or len((body.payeeBank or "").strip()) > PAYEE_BANK_MAX:
+        raise HTTPException(400, "收款人／銀行名稱太長（上限 %d 字）" % PAYEE_NAME_MAX)
+    if body.kind == "purchase_order" and acct and not (body.payeeBank or "").strip():
+        raise HTTPException(400, "填了收款帳號請一併填銀行名稱")
+
+
 def _validate(body: ExtraExpenseIn):
     if body.category and body.category not in CATEGORIES:
         raise HTTPException(400, f"類別必須是：{'／'.join(CATEGORIES)}")
@@ -335,6 +353,7 @@ def _validate(body: ExtraExpenseIn):
     for _k in ("payeeName", "payeeBank", "payeeAccount"):
         if len(getattr(body, _k) or "") > EF.MAX_TEXT:
             raise HTTPException(400, "%s 太長（上限 %d 字）" % (_k, EF.MAX_TEXT))
+    _check_payee_bank(body)
     if body.plannedPayDate is not None:
         normalize_date(body.plannedPayDate, "預定付款日")
 
