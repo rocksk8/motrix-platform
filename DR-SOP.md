@@ -135,7 +135,7 @@
 
 ### Step 4 — 環境設定
 
-1. 依 [`AUTOLOGON-FIX.md`](AUTOLOGON-FIX.md) 設定 `AutoAdminLogon`（若要延用開機自動登入這個機制）
+1. 依 [`AUTOLOGON-FIX.md`](docs/platform/archive/AUTOLOGON-FIX.md) 設定 `AutoAdminLogon`（若要延用開機自動登入這個機制）
 2. 註冊三個排程工作：
    - `MOTRIX ERP Server Autostart`：目前缺對應腳本，見 §3 第 1 點——這一步在缺口補上前無法照抄，需要人工依 QUICK §1.1 描述的行為重寫
    - `MOTRIX ERP Daily Backup`：執行 `backend\setup_backup_task.ps1`（已修正為動態偵測 Python 路徑，兩台機器都能直接用）

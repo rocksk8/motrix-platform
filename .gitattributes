@@ -111,27 +111,20 @@ backend/db_migration_plan.md export-ignore
 # docs/ 下的內部規劃文件與 UI mockup（不是客戶操作文件；DEPLOY.md／DR-SOP.md／
 # HTTPS-DEPLOY-CHECKLIST.md 是客戶自架文件，明確保留，不在這裡）
 docs/MOTRIX_ERP_System_Plan.md export-ignore
-docs/UI-BACKLOG.md export-ignore
 docs/UI-REDESIGN-PLAN.md export-ignore
 docs/module-viz-mockup.html export-ignore
-docs/system-home-mockup.html export-ignore
 # docs/quick/：MOTRIX-ERP-QUICK.md 於 2026-09-23 依模組拆出的章節，與 QUICK.md 同屬內部文件
 docs/quick/** export-ignore
 docs/quick export-ignore
-docs/PLATFORM-CUSTOMIZATION-INVENTORY.md export-ignore
-docs/PLATFORM-FOUNDATION.md export-ignore
 
 # 根目錄：內部協作／規劃文件
 /AGENT-HANDOFF-TEMPLATE.md export-ignore
-/AUTOLOGON-FIX.md export-ignore
 /GITFLOW.md export-ignore
 /MODULE-AUDIT-2026-09-13.md export-ignore
 /MOTRIX-ERP-ARCHITECTURE-MAP.md export-ignore
 /MOTRIX-ERP-QUICK.md export-ignore
-/MULTI-BRANCH-AUTO-UPDATE-DESIGN.md export-ignore
 /MULTIWIN-PROTOCOL.md export-ignore
 /NETWORK-PLAN-MODULE-DESIGN.md export-ignore
-/NEXT-SESSION.md export-ignore
 /SELLABLE-AND-MOBILE-SPEC.md export-ignore
 /WEEKLY-AUDIT-2026-09-07_2026-09-10.md export-ignore
 /LETSENCRYPT-PUBLIC-CERT-PLAN.md export-ignore
@@ -150,8 +143,10 @@ docs/PLATFORM-FOUNDATION.md export-ignore
 docs/reference/** export-ignore
 docs/reference export-ignore
 
-# 內部諮詢草稿，不是客戶文件
-docs/ASK-ACCOUNTANT.md export-ignore
+# docs/platform/archive/：第 48 班後清理——已出貨工作的規劃稿／報告／交接類文件（歷史保留，不進客戶包）。
+# 原本各自有逐檔 export-ignore 的檔案搬進來後由這兩行統一涵蓋。
+docs/platform/archive/** export-ignore
+docs/platform/archive export-ignore
 
 # backend/tools/ 逐檔分類（SCOPE.md「backend/tools/ 逐檔分類」節，D 判、17 個
 # 排除／6 個保留／4 個需人裁決／1 個未歸類，17+6+4+1=28=git ls-files backend/tools/

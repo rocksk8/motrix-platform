@@ -1284,7 +1284,7 @@ SCOPE 的排除清單寫 docs/windows/ **12 檔**
 ```
 ⇒ 不另發編號（同一個機制、同一個修法），**而 `PK1` 的嚴重度描述要改**：
   **不只是「我們的工程文件」，是「一張真實會計單據隨產品出貨給每一個客戶」。**
-⚠️ 而 `docs/ASK-ACCOUNTANT.md` 與 `docs/reference/` **原本兩張清單都沒有** ——
+⚠️ 而 `docs/platform/archive/docs/ASK-ACCOUNTANT.md` 與 `docs/reference/` **原本兩張清單都沒有** ——
   📌 **我們一直在盤點 `.md` 與程式碼，沒有人想到 `docs/` 底下會有 PDF。**
 
 ---
@@ -1316,7 +1316,7 @@ db.py:708                    _seed_setting      <= **全新安裝的出廠值**
 ⚙️ git check-attr export-ignore（D 量、A 複驗）
 docs/windows/STATE.md ／ SCOPE.md ／ tools/px1_scan.py ／ backend/tests/conftest.py
    => 全部 **unspecified**（應該 set）
-MULTIWIN-PROTOCOL.md ／ docs/UI-BACKLOG.md  => **set** ✅（單檔規則正常）
+MULTIWIN-PROTOCOL.md ／ docs/platform/archive/docs/UI-BACKLOG.md  => **set** ✅（單檔規則正常）
 DEPLOY.md ／ backend/main.py                => unspecified ✅（負對照乾淨）
 ```
 ```
