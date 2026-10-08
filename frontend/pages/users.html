@@ -8,6 +8,7 @@
   <title>使用者管理 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/privacy-notice.js"></script>
+  <script src="../static/users-duty.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -559,7 +560,7 @@
         <!-- 角色層級 -->
         <div class="form-group">
           <label class="form-label">角色層級（系統功能基礎）</label>
-          <select class="form-select" x-model="form.role" style="font-size:12px">
+          <select class="form-select" x-model="form.role" style="font-size:12px" @change="dutySchedule && dutySchedule()">
             <option value="superadmin" x-text="(roleLabels.superadmin||'超級管理員') + '（所有系統功能）'"></option>
             <option value="admin" x-text="(roleLabels.admin||'管理員') + '（不含系統設定）'"></option>
             <option value="sales" x-text="roleLabels.sales||'業務'"></option>
@@ -601,6 +602,60 @@
                 </div>
               </div>
             </template>
+          </div>
+        </div>
+        <!-- 職責角色／個人扣項／生效權限預覽（R2 第 2 步）：只有編輯既有、非最高管理者；勾選仍只存「原始勾選」，預覽由伺服器算 -->
+        <div class="form-group" x-show="editingId && duty.visible" x-cloak data-testid="duty-section">
+          <label class="form-label">職責角色與個人扣項
+            <span style="color:var(--text-dim);font-size:9px">（角色給的權限加在上面的勾選之外；扣項只能扣角色給的權限；預覽由伺服器計算）</span></label>
+          <div x-show="duty.loading" style="font-size:12px;color:var(--text-dim)">讀取中…</div>
+          <div x-show="duty.error" style="font-size:12px;color:var(--danger)" data-testid="duty-error" x-text="duty.error"></div>
+          <div x-show="duty.loaded">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+              <template x-for="r in duty.roles" :key="r.id">
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:6px"
+                       :data-testid="'duty-role-' + r.key"
+                       :style="duty.roleIds.includes(r.id) ? 'border-color:var(--accent,#2563eb);background:var(--accent-light,#eff6ff)' : ''"
+                       :title="(r.permissions || []).map(dutyKeyLabel).join('、')">
+                  <input type="checkbox" style="display:none" :checked="duty.roleIds.includes(r.id)" @change="dutyToggleRole(r.id)">
+                  <span x-text="duty.roleIds.includes(r.id) ? '✓ ' : ''"></span>
+                  <span x-text="r.name"></span>
+                  <span x-show="(r.highSensitive || []).length" style="font-size:10px;color:var(--danger)" title="含高敏感權限">★</span>
+                </label>
+              </template>
+              <span x-show="!duty.roles.length" style="font-size:12px;color:var(--text-dim)">尚未建立任何職責角色（到「職責角色」頁建立）</span>
+            </div>
+            <div style="margin-top:8px;font-size:11px;color:var(--text-dim)">個人扣項（扣掉角色給的權限；財務三鍵由「財務」角色決定，不開放扣項）：</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+              <template x-for="k in dutySubCandidates()" :key="k">
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:6px"
+                       :data-testid="'duty-sub-' + k"
+                       :style="duty.subs.includes(k) ? 'border-color:var(--danger,#dc2626);background:#fef2f2;text-decoration:line-through' : ''">
+                  <input type="checkbox" style="display:none" :checked="duty.subs.includes(k)" @change="dutyToggleSub(k)">
+                  <span x-text="duty.subs.includes(k) ? '－ ' : ''"></span>
+                  <span x-text="dutyKeyLabel(k)"></span>
+                  <span x-show="dutyIsHi(k)" style="font-size:10px;color:var(--danger)">★</span>
+                </label>
+              </template>
+              <span x-show="!dutySubCandidates().length" style="font-size:12px;color:var(--text-dim)">（沒有可扣的角色權限）</span>
+            </div>
+            <div style="margin-top:8px;font-size:12px" data-testid="duty-effective">
+              <b>生效權限預覽</b>
+              <span x-show="duty.previewBusy" style="color:var(--text-dim)">（計算中…）</span>
+              <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap" x-show="duty.preview">
+                <template x-for="k in ((duty.preview || {}).effective || [])" :key="k">
+                  <span style="font-size:11px;padding:2px 8px;border:1px solid var(--border-light);border-radius:10px"
+                        :style="dutyIsHi(k) ? 'border-color:var(--danger,#dc2626);color:var(--danger,#dc2626)' : ''" x-text="dutyKeyLabel(k)"></span>
+                </template>
+              </div>
+            </div>
+            <div x-show="dutyHasDiff()" style="margin-top:8px" data-testid="duty-diff">
+              <div style="font-size:12px" data-testid="duty-diff-summary" x-text="dutySummary().join('；')"></div>
+              <label class="form-label" style="margin-top:6px">變更原因
+                <span x-show="dutyNeedsReason()" style="color:var(--danger)" data-testid="duty-reason-required"> * 涉及高敏感權限，必填</span></label>
+              <input class="form-input" type="text" maxlength="200" x-model="duty.reason" data-testid="duty-reason" placeholder="例如：接手出納業務">
+            </div>
+            <div x-show="duty.progress" style="margin-top:6px;font-size:11px;color:var(--text-dim)" x-text="'已完成：' + duty.progress"></div>
           </div>
         </div>
         <div class="form-group">
@@ -824,6 +879,7 @@
 
   function usersPage() {
     return {
+      ...(window.usersDutyMixin ? window.usersDutyMixin() : {}),     // R2 第 2 步：職責角色／個人扣項／生效權限預覽（static/users-duty.js）
       session:   {},
       users:     [],
       orgTree:   [],
@@ -1046,6 +1102,7 @@
         const idx = this.form.modules.indexOf(key)
         if (idx >= 0) this.form.modules.splice(idx, 1)
         else           this.form.modules.push(key)
+        if (this.dutySchedule) this.dutySchedule()          // 預覽跟著原始勾選更新（伺服器算）
       },
 
       toggleModGroup(group) {
@@ -1171,7 +1228,7 @@
           role:                   user.role,
           password:               '',
           confirmPassword:        '',
-          modules:                [...((user.modules && user.modules.length > 0) ? user.modules : (ROLE_MODULES[user.role] || []))],
+          modules:                [...(user.modules || [])],     // R2 第 2 步 Q3：既有使用者的原始勾選照實顯示（空就是空）；不再用基礎類別樣板預填，否則一按儲存就把整套樣板寫成個人勾選
           notificationMuted:      [...(user.notificationMuted || [])],
           unlockPassword:         '',
           confirmUnlockPassword:  '',
@@ -1185,6 +1242,7 @@
         this._notifyGroupOpen = {}
         this.privacyAck = null; this.privacyAckRequested = false
         this.showModal = true
+        if (this.dutyOpen) this.dutyOpen(user)
         this.loadNotifyTypes(user.id).then(() => {
           for (const { group, items } of this.notifyGroups) {
             this._notifyGroupOpen[group] = items.some(it => this.form.notificationMuted.includes(it.key))
@@ -1199,6 +1257,7 @@
 
       closeModal() {
         this.showModal = false; this.editingId = null; this.formError = ''
+        if (this.dutyClose) this.dutyClose()
       },
 
       async saveUser() {
@@ -1234,6 +1293,9 @@
         }
         if (this.form.password) payload.password = this.form.password
 
+        if (this.editingId && this.dutyPrecheck && !this.dutyPrecheck()) return
+        if (this.editingId && this.dutyBefore && !(await this.dutyBefore())) return      // 解除扣項要在 PUT 之前（要勾回的鍵不能還被扣著）
+
         let res
         if (this.editingId) {
           res = await fetch(`/api/users/${this.editingId}`, {
@@ -1249,6 +1311,7 @@
           const err = await res.json().catch(() => ({}))
           this.formError = err.detail || '操作失敗'; return
         }
+        if (this.editingId && this.dutyAfter && !(await this.dutyAfter())) return        // 角色綁定／新增扣項；失敗就停在視窗內並明講已完成／未完成
         const targetId = this.editingId || (await res.json().catch(() => ({}))).id
         if (this.editingId && this.form.unlockPassword) {
           const ur = await fetch(`/api/users/${this.editingId}/unlock-password`, {
