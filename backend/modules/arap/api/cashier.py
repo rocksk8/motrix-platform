@@ -223,9 +223,15 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
     # 行事曆「支出付款」（2026-09-30，預設關；開關在 L1 判斷）：以付款日建立。勞報單付款走自己的端點，不在此列
     if not getattr(p, "NO_CALENDAR", False):                          # 勞報單不進行事曆（第46班 Q7）
         spawn_bg_thread(push_event_for_module, args=_expense_calendar_args(source, key, paid, res, user))
-    # 行事曆「付款待辦」（IP-100 的（來源, key）就是事件識別）：已付款 ⇒ 收回；事件種類關閉時 L1 不碰 Google
+    # 行事曆「付款待辦」（IP-100 的（來源, key）就是事件識別）：依現況對齊——結清 ⇒ 收回；叫料分次付款仍有餘額 ⇒ 保留；事件種類關閉時 L1 不碰 Google。
+    # 提供者有 `planned_changed`（commit 之後）就用它；沒有的來源（例如勞報單）只收回（來源不在行事曆名單 ⇒ L1 零呼叫）
     if not getattr(p, "NO_CALENDAR", False):
-        spawn_bg_thread(push_event_delete_for_module, args=("payable_due", "%s:%s" % (source, key)))
+        hook = getattr(p, "planned_changed", None)
+        if hook is not None:
+            hook(key)
+        else:
+            from helpers import payable_due_core as _pdc
+            spawn_bg_thread(_pdc.sync_event, args=(source, key))
     after = getattr(p, "after_paid", None)                            # 提供者的付款後動作（commit 之後；例如勞報單通知送審人已付款）
     if after is not None:
         after(key)
@@ -299,6 +305,9 @@ def set_payable_queue_planned_pay_date(voucher_no: str, body: dict = Body(defaul
         return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value), "unchanged": True}
     _audit(_tok(authorization), "cashier.planned_pay_date", "subcontract_voucher", voucher_no,
            "出納設定承攬商匯款預定付款日：%s（%s）%s → %s" % (voucher_no, res.get("quoteNo") or "", res.get("old") or "（無）", value or "（清除）"))
+    hook = registry.single_provider("contractor_voucher.planned_changed")
+    if hook is not None:
+        hook(voucher_no)                                                # commit 之後；提供者自己 spawn 背景執行緒
     _notify_applicant_planned(user, "subcontract_voucher", voucher_no, res, value)
     return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value)}
 

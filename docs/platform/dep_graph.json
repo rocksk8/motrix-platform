@@ -1217,6 +1217,27 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:payable_due_core": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:email_notify",
+    "helper:google_calendar",
+    "helper:settings"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/payable_due_core.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "users"
+   ],
+   "tables_w": [
+    "system_settings"
+   ]
+  },
   "helper:prefill_sources": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -5781,6 +5802,7 @@
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:notify_matrix",
+    "helper:payable_due_core",
     "helper:settings",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -5795,6 +5817,7 @@
     "helper:email_notify",
     "helper:google_calendar",
     "helper:legal_params",
+    "helper:payable_due_core",
     "helper:tax_calc",
     "helper:xlsx_out",
     "mod:arap/receivables",
@@ -5820,79 +5843,79 @@
     },
     {
      "func": "get_pending_payable_file",
-     "line": 140,
+     "line": 157,
      "method": "GET",
      "path": "/api/cashier/pending-payables/{source}/{key}/files/{file_id}"
     },
     {
      "func": "pay_pending_payable",
-     "line": 163,
+     "line": 180,
      "method": "POST",
      "path": "/api/cashier/pending-payables/{source}/{key}/pay"
     },
     {
      "func": "set_pending_payable_planned_pay_date",
-     "line": 219,
+     "line": 242,
      "method": "PATCH",
      "path": "/api/cashier/pending-payables/{source}/{key}/planned-pay-date"
     },
     {
      "func": "set_payable_queue_planned_pay_date",
-     "line": 257,
+     "line": 280,
      "method": "PATCH",
      "path": "/api/cashier/payable-queue/{voucher_no}/planned-pay-date"
     },
     {
      "func": "get_remit_reviews",
-     "line": 325,
+     "line": 351,
      "method": "GET",
      "path": "/api/cashier/remit-reviews"
     },
     {
      "func": "decide_remit_review",
-     "line": 344,
+     "line": 370,
      "method": "POST",
      "path": "/api/cashier/remit-reviews/{source}/{key}/decision"
     },
     {
      "func": "get_payable_queue",
-     "line": 459,
+     "line": 485,
      "method": "GET",
      "path": "/api/cashier/payable-queue"
     },
     {
      "func": "get_receivable_queue",
-     "line": 470,
+     "line": 496,
      "method": "GET",
      "path": "/api/cashier/receivable-queue"
     },
     {
      "func": "get_payslip_queue",
-     "line": 492,
+     "line": 518,
      "method": "GET",
      "path": "/api/cashier/payslip-queue"
     },
     {
      "func": "get_bonus_queue",
-     "line": 512,
+     "line": 538,
      "method": "GET",
      "path": "/api/cashier/bonus-queue"
     },
     {
      "func": "get_execution_history",
-     "line": 571,
+     "line": 597,
      "method": "GET",
      "path": "/api/cashier/execution-history"
     },
     {
      "func": "export_execution_history",
-     "line": 586,
+     "line": 612,
      "method": "GET",
      "path": "/api/cashier/export"
     },
     {
      "func": "bank_reconcile",
-     "line": 795,
+     "line": 821,
      "method": "POST",
      "path": "/api/reports/bank-reconcile"
     }
@@ -5923,7 +5946,9 @@
     "user_perm_subtracts",
     "users"
    ],
-   "tables_w": [],
+   "tables_w": [
+    "audit_log"
+   ],
    "tables_w_transitive": [
     "audit_log",
     "duty_roles",
@@ -6494,6 +6519,7 @@
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:notify_matrix",
+    "helper:payable_due_core",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:row_access",
@@ -6538,133 +6564,133 @@
    "routes": [
     {
      "func": "list_extra_expenses",
-     "line": 343,
+     "line": 362,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/extra-expenses"
     },
     {
      "func": "list_purchase_items",
-     "line": 416,
+     "line": 435,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/purchase-items"
     },
     {
      "func": "list_purchase_request_lines",
-     "line": 440,
+     "line": 459,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/purchase-requests/lines"
     },
     {
      "func": "create_extra_expense",
-     "line": 457,
+     "line": 476,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses"
     },
     {
      "func": "update_extra_expense",
-     "line": 523,
+     "line": 542,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "payreq_cases",
-     "line": 601,
+     "line": 620,
      "method": "GET",
      "path": "/api/extra-expenses/cases"
     },
     {
      "func": "payreq_mine",
-     "line": 627,
+     "line": 646,
      "method": "GET",
      "path": "/api/extra-expenses/mine"
     },
     {
      "func": "set_extra_expense_dates",
-     "line": 649,
+     "line": 668,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/dates"
     },
     {
      "func": "delete_extra_expense",
-     "line": 725,
+     "line": 744,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "void_extra_expense",
-     "line": 750,
+     "line": 769,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/void"
     },
     {
      "func": "submit_extra_expense",
-     "line": 809,
+     "line": 828,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/submit"
     },
     {
      "func": "approve_extra_expense",
-     "line": 897,
+     "line": 916,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/approve"
     },
     {
      "func": "reject_extra_expense",
-     "line": 984,
+     "line": 1003,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/reject"
     },
     {
      "func": "upload_extra_expense_files",
-     "line": 1099,
+     "line": 1118,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files"
     },
     {
      "func": "delete_extra_expense_file",
-     "line": 1154,
+     "line": 1173,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}"
     },
     {
      "func": "upsert_change_request",
-     "line": 1330,
+     "line": 1349,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "cancel_change_request",
-     "line": 1371,
+     "line": 1390,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "upload_change_request_files",
-     "line": 1397,
+     "line": 1416,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files"
     },
     {
      "func": "delete_change_request_file",
-     "line": 1440,
+     "line": 1459,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}"
     },
     {
      "func": "submit_change_request",
-     "line": 1467,
+     "line": 1486,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/submit"
     },
     {
      "func": "approve_change_request",
-     "line": 1538,
+     "line": 1557,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/approve"
     },
     {
      "func": "reject_change_request",
-     "line": 1627,
+     "line": 1646,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/reject"
     }
@@ -7646,11 +7672,13 @@
     "helper:expense_types",
     "helper:financial_mask",
     "helper:formula",
+    "helper:google_calendar",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:notify_matrix",
+    "helper:payable_due_core",
     "helper:prefill_sources",
     "helper:privacy_notice",
     "helper:recognition_basis",
@@ -7664,7 +7692,9 @@
     "mod:case/material_coverage",
     "mod:case/material_guard",
     "mod:case/material_notify",
+    "mod:case/material_payable_event",
     "mod:case/material_payment",
+    "mod:case/payable_calendar",
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
@@ -7681,6 +7711,7 @@
     "mod:case/material_approval",
     "mod:case/material_guard",
     "mod:case/material_notify",
+    "mod:case/material_payable_event",
     "mod:case/material_payment",
     "plat:txn"
    ],
@@ -7692,67 +7723,67 @@
    "routes": [
     {
      "func": "get_payee_privacy_ack",
-     "line": 124,
+     "line": 125,
      "method": "GET",
      "path": "/api/material-payments/{pid}/privacy-notice"
     },
     {
      "func": "ack_payee_privacy_notice",
-     "line": 138,
+     "line": 139,
      "method": "POST",
      "path": "/api/material-payments/{pid}/privacy-notice/ack"
     },
     {
      "func": "list_payments",
-     "line": 159,
+     "line": 160,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-payments"
     },
     {
      "func": "supplier_picker",
-     "line": 178,
+     "line": 179,
      "method": "GET",
      "path": "/api/material-suppliers"
     },
     {
      "func": "create_payment",
-     "line": 216,
+     "line": 217,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/material-orders/{item_id}/payments"
     },
     {
      "func": "update_payment",
-     "line": 263,
+     "line": 264,
      "method": "PATCH",
      "path": "/api/material-payments/{pid}"
     },
     {
      "func": "submit_payment",
-     "line": 286,
+     "line": 287,
      "method": "POST",
      "path": "/api/material-payments/{pid}/submit"
     },
     {
      "func": "approve_payment",
-     "line": 328,
+     "line": 330,
      "method": "POST",
      "path": "/api/material-payments/{pid}/approve"
     },
     {
      "func": "reject_payment",
-     "line": 352,
+     "line": 355,
      "method": "POST",
      "path": "/api/material-payments/{pid}/reject"
     },
     {
      "func": "withdraw_payment",
-     "line": 374,
+     "line": 378,
      "method": "POST",
      "path": "/api/material-payments/{pid}/withdraw"
     },
     {
      "func": "void_payment",
-     "line": 393,
+     "line": 398,
      "method": "POST",
      "path": "/api/material-payments/{pid}/void"
     }
@@ -7782,6 +7813,8 @@
     "divisions",
     "duty_roles",
     "expense_categories",
+    "invoice_vouchers",
+    "payment_requests",
     "projects",
     "quotations",
     "sessions",
@@ -7861,6 +7894,7 @@
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:notify_matrix",
+    "helper:payable_due_core",
     "helper:prefill_sources",
     "helper:privacy_notice",
     "helper:recognition_basis",
@@ -8366,6 +8400,7 @@
     "audit_log",
     "case_extra_expenses",
     "case_material_approvals",
+    "case_material_payments",
     "case_stages",
     "completion_notes",
     "contractor_dispatches",
@@ -8994,6 +9029,26 @@
    "tables_r": [],
    "tables_w": []
   },
+  "mod:case/material_payable_event": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:payable_due_core",
+    "mod:case/material_payment",
+    "mod:case/payable_calendar"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/material_payable_event.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "quotations"
+   ],
+   "tables_w": []
+  },
   "mod:case/material_payment": {
    "api_prefixes": [],
    "dynamic_sql": true,
@@ -9023,6 +9078,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "mod:case/material_payable_event",
     "mod:case/material_payment",
     "mod:case/recognition",
     "plat:txn"
@@ -9080,7 +9136,7 @@
    "dynamic_sql": false,
    "imports": [
     "core:db",
-    "helper:google_calendar",
+    "helper:payable_due_core",
     "mod:case/expense_forms"
    ],
    "kind": "mod",
@@ -9103,7 +9159,8 @@
     "helper:business_days",
     "helper:email_notify",
     "helper:mail_types",
-    "helper:settings",
+    "helper:payable_due_core",
+    "mod:case/material_payment",
     "mod:case/payable_calendar"
    ],
    "kind": "mod",
@@ -9114,11 +9171,10 @@
    "tables_named": [],
    "tables_r": [
     "case_extra_expenses",
+    "case_material_payments",
     "quotations"
    ],
-   "tables_w": [
-    "system_settings"
-   ]
+   "tables_w": []
   },
   "mod:case/payables": {
    "api_prefixes": [],
@@ -10950,13 +11006,13 @@
     },
     {
      "func": "reject_payslip",
-     "line": 222,
+     "line": 225,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/reject"
     },
     {
      "func": "approval_reveal",
-     "line": 335,
+     "line": 338,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/approval-reveal"
     }
@@ -11206,37 +11262,37 @@
     },
     {
      "func": "upload_signed_files",
-     "line": 670,
+     "line": 676,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/signed-files"
     },
     {
      "func": "get_signed_file",
-     "line": 723,
+     "line": 729,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "delete_signed_file",
-     "line": 752,
+     "line": 758,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "unsign_payslip",
-     "line": 784,
+     "line": 790,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unsign"
     },
     {
      "func": "payslip_mark_paid",
-     "line": 811,
+     "line": 817,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/mark-paid"
     },
     {
      "func": "payslip_unpay",
-     "line": 839,
+     "line": 845,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unpay"
     }
@@ -11625,6 +11681,7 @@
     "mod:subcontract/attachments",
     "mod:subcontract/dispatch_notify",
     "mod:subcontract/gl_events",
+    "mod:subcontract/payable_due",
     "mod:subcontract/remit",
     "mod:subcontract/remit_kinds",
     "plat:registry"
@@ -11647,6 +11704,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:business_days",
     "helper:case_access",
     "helper:dates",
     "helper:duty_roles",
@@ -11659,10 +11717,12 @@
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:notify_matrix",
+    "helper:payable_due_core",
     "helper:row_access",
     "helper:settings",
     "helper:tiered_approval",
     "mod:subcontract/bank_mask",
+    "mod:subcontract/payable_due",
     "mod:subcontract/remit",
     "mod:subcontract/remit_create",
     "mod:subcontract/remit_kinds",
@@ -11684,6 +11744,7 @@
     "helper:settings",
     "helper:tiered_approval",
     "mod:subcontract/bank_mask",
+    "mod:subcontract/payable_due",
     "mod:subcontract/remit",
     "mod:subcontract/remit_create",
     "plat:registry",
@@ -11697,133 +11758,133 @@
    "routes": [
     {
      "func": "get_remit_fee_total",
-     "line": 251,
+     "line": 253,
      "method": "GET",
      "path": "/api/contractor-vouchers/remit-fee-total"
     },
     {
      "func": "get_last_paid_bank_account",
-     "line": 266,
+     "line": 268,
      "method": "GET",
      "path": "/api/contractor-vouchers/last-paid-bank-account"
     },
     {
      "func": "list_contractor_vouchers",
-     "line": 289,
+     "line": 291,
      "method": "GET",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "get_contractor_voucher",
-     "line": 315,
+     "line": 317,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "create_contractor_voucher",
-     "line": 328,
+     "line": 330,
      "method": "POST",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "preview_contractor_voucher",
-     "line": 485,
+     "line": 487,
      "method": "POST",
      "path": "/api/contractor-vouchers/preview"
     },
     {
      "func": "delete_contractor_voucher",
-     "line": 509,
+     "line": 511,
      "method": "DELETE",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "set_voucher_invoice",
-     "line": 538,
+     "line": 540,
      "method": "PATCH",
      "path": "/api/contractor-vouchers/{voucher_no}/invoice"
     },
     {
      "func": "void_contractor_voucher",
-     "line": 574,
+     "line": 576,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/void"
     },
     {
      "func": "submit_contractor_voucher",
-     "line": 608,
+     "line": 611,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/submit"
     },
     {
      "func": "approve_contractor_voucher",
-     "line": 670,
+     "line": 673,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/approve"
     },
     {
      "func": "revoke_contractor_voucher_approval",
-     "line": 779,
+     "line": 783,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/revoke-approval"
     },
     {
      "func": "reject_contractor_voucher",
-     "line": 823,
+     "line": 828,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_contractor_voucher_pdf",
-     "line": 871,
+     "line": 877,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_contractor_voucher_export",
-     "line": 903,
+     "line": 909,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/export"
     },
     {
      "func": "get_remit_require_payslip",
-     "line": 971,
+     "line": 977,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "set_remit_require_payslip",
-     "line": 979,
+     "line": 985,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "get_personnel_links",
-     "line": 992,
+     "line": 998,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-links"
     },
     {
      "func": "link_personnel_payslip",
-     "line": 1026,
+     "line": 1032,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-link"
     },
     {
      "func": "toggle_paid",
-     "line": 1081,
+     "line": 1087,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/paid-toggle"
     },
     {
      "func": "get_contractor_voucher_approval_flow",
-     "line": 1203,
+     "line": 1210,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     },
     {
      "func": "set_contractor_voucher_approval_flow",
-     "line": 1220,
+     "line": 1227,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     }
@@ -12638,10 +12699,32 @@
    ],
    "tables_w": []
   },
+  "mod:subcontract/payable_due": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:business_days",
+    "helper:email_notify",
+    "helper:payable_due_core"
+   ],
+   "kind": "mod",
+   "module_key": "subcontract",
+   "path": "backend/modules/subcontract/payable_due.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "contractor_payment_vouchers"
+   ],
+   "tables_w": []
+  },
   "mod:subcontract/remit": {
    "api_prefixes": [],
    "dynamic_sql": false,
-   "imports": [],
+   "imports": [
+    "mod:subcontract/payable_due"
+   ],
    "kind": "mod",
    "module_key": "subcontract",
    "path": "backend/modules/subcontract/remit.py",
@@ -19867,6 +19950,7 @@
     "helper:company_setup",
     "helper:geo",
     "helper:startup",
+    "mod:arap/api/cashier",
     "mod:case/material_approval",
     "mod:case/material_change",
     "mod:crm/api",
@@ -20301,7 +20385,9 @@
     "core:archive"
    ],
    "path": "backend/modules/case/migrations/0005_material_payments.py:11",
-   "readers": [],
+   "readers": [
+    "mod:case/payable_reminders"
+   ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
@@ -20443,6 +20529,7 @@
     "mod:subcontract/api/vendor_contractors",
     "mod:subcontract/dispatch_flow",
     "mod:subcontract/gl_events",
+    "mod:subcontract/payable_due",
     "mod:subcontract/remit_create",
     "mod:subcontract/remit_kinds"
    ],
@@ -21992,6 +22079,7 @@
     "mod:case/item_shipped",
     "mod:case/material_approval",
     "mod:case/material_guard",
+    "mod:case/material_payable_event",
     "mod:case/material_payment_cashier",
     "mod:case/material_shippable",
     "mod:case/payable_calendar",
@@ -22244,12 +22332,12 @@
     "core:db",
     "helper:company_setup",
     "helper:module_switches",
+    "helper:payable_due_core",
     "helper:privacy_notice",
     "helper:settings",
     "helper:storage_locations",
     "helper:system_checks",
     "mod:case/case_deadlines",
-    "mod:case/payable_reminders",
     "mod:tender_radar/source",
     "plat:upgrade"
    ]
@@ -22497,6 +22585,7 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:google_calendar",
+    "helper:payable_due_core",
     "helper:prefill_sources",
     "helper:system_checks",
     "helper:tiered_approval",

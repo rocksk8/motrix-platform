@@ -293,7 +293,7 @@ def test_not_on_other_days_and_no_date_and_paid_voided_unapproved_are_skipped(cl
     _finance(make_user, "fin_a")
     _seed_exp(planned=(TODAY + timedelta(days=2)).isoformat())          # 2 天前不發（只有 3 天前與當天）
     _seed_exp(planned=(TODAY + timedelta(days=4)).isoformat())
-    _seed_exp(planned=(TODAY - timedelta(days=1)).isoformat())          # 已過不補發
+    _seed_exp(planned=(TODAY - timedelta(days=5)).isoformat())          # 已過很久不補（逾期只在「預定日後第 1 個工作日」寄一封，第 45 班 Q2）發
     _seed_exp(planned="")                                               # 沒填 ⇒ 不提醒
     _seed_exp(planned=TODAY.isoformat(), paid="2031-06-09")             # 已付款
     _seed_exp(planned=TODAY.isoformat(), status="已作廢")
@@ -303,7 +303,7 @@ def test_not_on_other_days_and_no_date_and_paid_voided_unapproved_are_skipped(cl
 
 
 def _subjects_kind(mails):
-    return ["today" if "今日到期" in m[2] else "soon" for m in mails]
+    return ["today" if "今日到期" in m[2] else ("overdue" if "已逾期" in m[2] else "soon") for m in mails]
 
 
 def test_calendar_assumptions():
@@ -350,7 +350,9 @@ def test_collapse_to_one_mail_when_both_land_on_the_same_send_day(client, make_u
     assert R.due_kind(holiday.isoformat(), fri)[0] == "today"
     assert _run(fri) == 1 and _subjects_kind(mails) == ["today"], "兩封折成一封"
     assert _run(fri) == 0 and len(mails) == 1
-    assert _run(holiday) == 0 and _run(date(2031, 6, 17)) == 0, "之後不再補寄"
+    assert _run(holiday) == 0, "假日當天不寄"
+    assert _run(date(2031, 6, 17)) == 1 and _subjects_kind(mails) == ["today", "overdue"], "預定日後第 1 個工作日＝逾期那一封（第 45 班 Q2）"
+    assert _run(date(2031, 6, 17)) == 0 and _run(date(2031, 6, 18)) == 0, "逾期只一封，不週提、不再補寄當天／3 天前"
 
 
 def test_holiday_seam_is_one_function(client, make_user, monkeypatch, mails):

@@ -239,6 +239,21 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 契約版本 | 1（2026-10-08） |
 | 守門 | `backend/modules/payroll/tests/test_payslip_links_t46.py` |
 
+## IP-114　`contractor_voucher.planned_changed`：承攬商匯款預定付款日變動後對齊行事曆（M04 外包工班 → M05 出納；暫定號，列車定號；2026-10-08，第47班 paydate-l1）
+
+出納改承攬商匯款的預定付款日（`PATCH /api/cashier/payable-queue/{voucher_no}/planned-pay-date`）commit 之後，要依現況對齊行事曆「付款待辦」事件；出納不 import 外包工班，改經 registry 取用。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M04 外包工班：`modules/subcontract/payable_due.py::fire` |
+| 使用方 | M05 出納：`modules/arap/api/cashier.py`（承攬商匯款預定付款日端點，commit 之後呼叫） |
+| 形式 | provider，單一提供者（名稱 `subcontract`） |
+| 語法 | 提供：`("contractor_voucher.planned_changed", "subcontract"): payable_due.fire`；取用：`registry.single_provider("contractor_voucher.planned_changed")` ⇒ `fn(voucher_no)` |
+| 回傳 | 無（提供者自己 spawn 背景執行緒呼叫 L1 `payable_due_core`；事件種類關閉時 L1 不碰 Google）；不含金額 |
+| 對方不在時 | 提供者不在 ⇒ 預定日照存、只是這一次行事曆事件沒有即時更新；不影響出納操作 |
+| 契約版本 | 1（2026-10-08） |
+| 守門 | `backend/modules/subcontract/tests/test_voucher_payable_due_t45.py` |
+
 ## IP-103　`payslip.payables`：勞報單待付款（M07 → M05 出納）
 
 對應使用者 2026-09-29 裁示：勞報單匯出、對方簽回上傳後，要能與出納、營運報表成本聯動（成本取應付總額、歸月依付款日期、出納回填既有傳票單號）。
