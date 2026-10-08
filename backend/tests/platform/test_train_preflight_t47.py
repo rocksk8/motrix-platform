@@ -172,7 +172,7 @@ def test_targets_dedupe_impacted_dirs(tmp_path):
 
 def test_preflight_dry_run_never_calls_the_runner(tmp_path, monkeypatch):
     _sel_repo(tmp_path)
-    monkeypatch.setattr(TP, "static_checks", lambda repo, changed: [])
+    monkeypatch.setattr(TP, "static_checks", lambda repo, changed, base="x": [])
     monkeypatch.setattr(TP, "changed_files", lambda repo, base: [])
     called = []
     code, text, data = TP.preflight(tmp_path, dry_run=True, runner=lambda *a: called.append(a))
@@ -181,7 +181,7 @@ def test_preflight_dry_run_never_calls_the_runner(tmp_path, monkeypatch):
 
 def test_preflight_reports_all_reds_in_one_pass_and_exit_1(tmp_path, monkeypatch):
     _sel_repo(tmp_path)
-    monkeypatch.setattr(TP, "static_checks", lambda repo, changed: [TP.Finding("A5", "x.py:3", "新的 BEGIN", "改用 begin_write")])
+    monkeypatch.setattr(TP, "static_checks", lambda repo, changed, base="x": [TP.Finding("A5", "x.py:3", "新的 BEGIN", "改用 begin_write")])
     monkeypatch.setattr(TP, "changed_files", lambda repo, base: ["backend/modules/pay/api/x.py"])
     out = ("FAILED tests/platform/test_p.py::test_a - AssertionError: x\nFAILED modules/pay/tests/test_m.py::test_a - boom\n"
            "2 failed, 10 passed in 3.00s\n")
@@ -192,7 +192,7 @@ def test_preflight_reports_all_reds_in_one_pass_and_exit_1(tmp_path, monkeypatch
 
 def test_preflight_all_green_exit_0(tmp_path, monkeypatch):
     _sel_repo(tmp_path)
-    monkeypatch.setattr(TP, "static_checks", lambda repo, changed: [])
+    monkeypatch.setattr(TP, "static_checks", lambda repo, changed, base="x": [])
     monkeypatch.setattr(TP, "changed_files", lambda repo, base: [])
     code, text, _ = TP.preflight(tmp_path, runner=lambda repo, targets: (0, "5 passed in 1s\n", 1.0))
     assert code == 0 and "全綠" in text
@@ -200,7 +200,7 @@ def test_preflight_all_green_exit_0(tmp_path, monkeypatch):
 
 def test_unchecked_scanner_makes_the_run_not_green(tmp_path, monkeypatch):
     _sel_repo(tmp_path)
-    monkeypatch.setattr(TP, "static_checks", lambda repo, changed: [TP.Unchecked("A2", "匯入失敗")])
+    monkeypatch.setattr(TP, "static_checks", lambda repo, changed, base="x": [TP.Unchecked("A2", "匯入失敗")])
     monkeypatch.setattr(TP, "changed_files", lambda repo, base: [])
     code, text, _ = TP.preflight(tmp_path, static_only=True)
     assert code == 1 and "未能檢查" in text
@@ -216,13 +216,41 @@ def test_real_tree_a1_a3_a4_a5_have_no_false_positives():
 
 # ── A0 / A7 / A8 / 固定清單 ─────────────────────────────────────────────
 
-def test_a0_regen_all_check_exit_1_is_flagged_and_absent_tool_is_skipped(tmp_path):
+def _fake_regen(root, body):
+    _w(root, "tools/platform/regen_all.py", body)
+
+
+def test_a0_uses_regen_all_run_api_stale_ok_error_and_absent(tmp_path):
     assert TP.check_generated(tmp_path) == []                       # 工具還沒進樹 ⇒ 略過（B 層的 test_generated_maps 仍會抓）
-    _w(tmp_path, "tools/platform/regen_all.py", "import sys\nprint('docs/platform/test_map.json')\nsys.exit(1)\n")
+    _fake_regen(tmp_path, "def run(repo, check_only=False, py=None, **k):\n    assert check_only\n"
+                          "    return {'ok': False, 'stale': ['test_map.json', 'dep_graph.json'], 'error': None}\n")
     f = TP.check_generated(tmp_path)
-    assert [x.code for x in f] == ["A0"] and "test_map.json" in f[0].msg
-    _w(tmp_path, "tools/platform/regen_all.py", "import sys\nsys.exit(0)\n")
+    assert [x.code for x in f] == ["A0"] and "test_map.json" in f[0].msg and "dep_graph.json" in f[0].msg
+    _fake_regen(tmp_path, "def run(repo, check_only=False, py=None, **k):\n    return {'ok': True, 'stale': [], 'error': None}\n")
     assert TP.check_generated(tmp_path) == []
+    _fake_regen(tmp_path, "def run(repo, check_only=False, py=None, **k):\n    return {'ok': False, 'stale': [], 'error': 'dep_scan 失敗'}\n")
+    f = TP.check_generated(tmp_path)
+    assert len(f) == 1 and isinstance(f[0], TP.Unchecked) and "dep_scan" in f[0].msg
+    _fake_regen(tmp_path, "def run(*a, **k):\n    raise RuntimeError('boom')\n")
+    assert isinstance(TP.check_generated(tmp_path)[0], TP.Unchecked)
+
+
+def _style_repo(root):
+    _w(root, "frontend/pages/case-y.html", "<html></html>")
+    _w(root, "backend/tests/golden_sty.json", "{}")
+    _w(root, "backend/tests/test_e2e_sty.py",
+       'G = pathlib.Path(__file__).with_name("golden_sty.json")\nPAGE = "case-y.html"\nSEL = [".cm-header", ".cm-tab.active"]\nJS = "getComputedStyle(el)"\n')
+
+
+def test_a6_style_golden_is_flagged_only_when_css_relevant_lines_change(tmp_path):
+    _style_repo(tmp_path)
+    ch = ["frontend/pages/case-y.html"]
+    content_only = '+++ b/x\n+<div style="padding:8px" x-data>新區塊</div>\n-<span>舊</span>\n'
+    assert TP.check_golden(tmp_path, ch, diff_fn=lambda files: content_only) == []                     # 內容性改動（行內 style）不旗標
+    assert [x.code for x in TP.check_golden(tmp_path, ch, diff_fn=lambda files: '+<h1 class="cm-header big">')] == ["A6"]
+    assert [x.code for x in TP.check_golden(tmp_path, ch, diff_fn=lambda files: "+<style>.a{}</style>")] == ["A6"]
+    assert TP.check_golden(tmp_path, ["frontend/css/site.css"], diff_fn=lambda files: "")[0].code == "A6"   # 動到 CSS 檔
+    assert TP.check_golden(tmp_path, ch + ["backend/tests/golden_sty.json"], diff_fn=lambda files: "+cm-header") == []
 
 
 def test_a7_hardcoded_db_version_flagged_unless_file_defines_its_own_fake_db(tmp_path):

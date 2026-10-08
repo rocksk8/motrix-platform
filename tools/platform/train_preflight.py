@@ -213,8 +213,11 @@ def golden_map(repo):
     for p in sorted(tdir.glob("test_*.py")):
         src = p.read_text(encoding="utf-8", errors="replace")
         for g in _GOLDEN_REF.findall(src):
-            ent = out.setdefault(g, {"pages": set(), "js": set(), "tests": []})
+            ent = out.setdefault(g, {"pages": set(), "js": set(), "tests": [], "style": False, "classes": set()})
             ent["tests"].append(p.relative_to(repo).as_posix())
+            if "getComputedStyle" in src or "computed style" in src:       # 樣式 golden：錄的是被選元素的 computed style，不是內容
+                ent["style"] = True
+                ent["classes"].update(c for sel in re.findall(r"[\"'](\.[A-Za-z_][\w.:\-]*)", src) for c in re.findall(r"[A-Za-z_][\w\-]*", sel))
             for pg in _PAGE_REF.findall(src):
                 if (Path(repo) / "frontend" / "pages" / pg).exists():
                     ent["pages"].add(pg)
@@ -225,17 +228,34 @@ def golden_map(repo):
     return out
 
 
-def check_golden(repo, changed):
+def _style_relevant(diff_text, classes):
+    """樣式 golden 只在『動到 CSS』時才可能變：diff 的增刪行含 <style>／.css／golden 選到的 class 名。內容性改動（新區塊只用行內 style）不算。"""
+    for line in (diff_text or "").splitlines():
+        if not line or line[0] not in "+-" or line.startswith(("+++", "---")):
+            continue
+        body = line[1:]
+        if "<style" in body or ".css" in body or any(re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(c), body) for c in classes if len(c) > 2):
+            return True
+    return False
+
+
+def check_golden(repo, changed, base="origin/platform", diff_fn=None):
     out = []
     try:
         gm = golden_map(repo)
     except Exception as e:                                                   # noqa: BLE001
         return [Unchecked("A6", "golden 對照失敗：%s" % e)]
     ch = set(changed)
+    diff_fn = diff_fn or (lambda files: _git(repo, "diff", "%s...HEAD" % base, "--", *files))
     for g, ent in sorted(gm.items()):
         if "backend/tests/" + g in ch:                       # golden 檔本身也在這次變動裡 ⇒ 已重錄，不再旗標
             continue
         hit = sorted([("frontend/pages/" + pg) for pg in ent["pages"] if "frontend/pages/" + pg in ch] + [j for j in ent["js"] if j in ch])
+        css = sorted(c for c in ch if c.startswith("frontend/") and c.endswith(".css"))
+        if ent.get("style"):
+            if not (css or (hit and _style_relevant(diff_fn(hit), ent["classes"]))):
+                continue                                    # 樣式 golden 且沒動到 CSS／被選 class ⇒ 不旗標（已知誤報來源）
+            hit = hit + css
         if hit:
             out.append(Finding("A6", ", ".join(hit), "這支改動的頁面／JS 被 golden `%s` 涵蓋（%s），golden 檔本身沒在這次變動裡" % (g, "、".join(ent["tests"])),
                                "跑該 e2e；若紅，以該 e2e 的角色重錄 golden（差異應只有預期的那幾行，附在提交說明）；沒紅則可忽略"))
@@ -307,22 +327,28 @@ def check_bare_get_db(repo, changed):
 
 
 def check_generated(repo):
-    """A0：產生檔（dep_graph／test_map／UNIT-INDEX…）是否過期。重用 tools/platform/regen_all.py --check（ab 的 wip/t47-build-optimization；
-    還沒進樹 ⇒ 略過，B 層的 test_generated_maps 仍會抓到）。"""
+    """A0：產生檔過期。呼叫 tools/platform/regen_all.run(repo, check_only=True)（ab：wip/t47-build-optimization）；檔不在 ⇒ 略過
+    （B 層的 test_generated_maps 仍會抓）；工具出錯 ⇒ 未能檢查。"""
     exe = Path(repo) / "tools" / "platform" / "regen_all.py"
     if not exe.is_file():
         return []
-    r = subprocess.run([python_exe(), str(exe), "--check"], cwd=str(repo), capture_output=True, text=True, encoding="utf-8", errors="replace")
-    if r.returncode == 0:
+    try:
+        mod = _load_module(exe, "_pf_regen_all")
+        res = mod.run(repo, check_only=True, py=python_exe())
+    except Exception as e:                                                   # noqa: BLE001
+        return [Unchecked("A0", "regen_all 執行失敗：%s" % e)]
+    if res.get("error"):
+        return [Unchecked("A0", "regen_all：%s" % res["error"])]
+    if res.get("ok"):
         return []
-    stale = [l.strip() for l in (r.stdout or "").splitlines() if l.strip()] or ["（regen_all --check 回 %s）" % r.returncode]
-    return [Finding("A0", "產生檔", "過期：%s" % "；".join(stale[:8]), "python tools/platform/regen_all.py 後提交（順序：取號→dep_scan→test_map→unit_index）")]
+    return [Finding("A0", "產生檔", "過期：%s" % "、".join(res.get("stale") or ["（未列出）"]),
+                    "python tools/platform/regen_all.py 後提交（順序：取號→dep_scan→unit_index→test_map）")]
 
 
-def static_checks(repo, changed):
+def static_checks(repo, changed, base="origin/platform"):
     f = []
     for fn in (lambda: check_generated(repo), lambda: check_changelogs(repo), lambda: check_ip_registry(repo), lambda: check_global_tests(repo), lambda: check_doc_types(repo),
-               lambda: check_begin_sites(repo), lambda: check_golden(repo, changed), lambda: check_db_version_literals(repo),
+               lambda: check_begin_sites(repo), lambda: check_golden(repo, changed, base), lambda: check_db_version_literals(repo),
                lambda: check_bare_get_db(repo, changed)):
         try:
             f += fn()
@@ -470,7 +496,7 @@ def preflight(repo=REPO, base="origin/platform", static_only=False, impacted=Tru
     """⇒ (exit_code, report_text, data)。runner 供測試注入：runner(repo, targets) ⇒ (rc, out, secs)。"""
     repo = Path(repo)
     changed = changed_files(repo, base)
-    findings = static_checks(repo, changed)
+    findings = static_checks(repo, changed, base)
     plan = None
     rc = secs = None
     groups, passed_line = [], ""
