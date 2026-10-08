@@ -40,6 +40,21 @@ AUDIT_WRAPPERS = {
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
 EXEMPT = {
+    # ── 職責角色（R2 第2步 8a）：稽核改在 helper 的同一交易內寫入 ──────────
+    ("duty_roles.py", "POST", "/api/duty-roles"):
+        "稽核在同一個交易內由 helpers/duty_roles._record→_write_audit 寫入（R2 第2步 8a：audit_log 與 permission_changes 同交易、audit_id 回填），端點本身不再另呼叫 _audit；失敗整筆回滾",
+    ("duty_roles.py", "PUT", "/api/duty-roles/{role_id}"):
+        "稽核在同一個交易內由 helpers/duty_roles._record→_write_audit 寫入（R2 第2步 8a：audit_log 與 permission_changes 同交易、audit_id 回填），端點本身不再另呼叫 _audit；失敗整筆回滾",
+    ("duty_roles.py", "POST", "/api/duty-roles/bindings"):
+        "稽核在同一個交易內由 helpers/duty_roles._record→_write_audit 寫入（R2 第2步 8a：audit_log 與 permission_changes 同交易、audit_id 回填），端點本身不再另呼叫 _audit；失敗整筆回滾",
+    ("duty_roles.py", "POST", "/api/duty-roles/bindings/remove"):
+        "稽核在同一個交易內由 helpers/duty_roles._record→_write_audit 寫入（R2 第2步 8a：audit_log 與 permission_changes 同交易、audit_id 回填），端點本身不再另呼叫 _audit；失敗整筆回滾",
+    ("duty_roles.py", "POST", "/api/duty-roles/subtracts"):
+        "稽核在同一個交易內由 helpers/duty_roles._record→_write_audit 寫入（R2 第2步 8a：audit_log 與 permission_changes 同交易、audit_id 回填），端點本身不再另呼叫 _audit；失敗整筆回滾",
+    ("duty_roles.py", "POST", "/api/duty-roles/subtracts/remove"):
+        "稽核在同一個交易內由 helpers/duty_roles._record→_write_audit 寫入（R2 第2步 8a：audit_log 與 permission_changes 同交易、audit_id 回填），端點本身不再另呼叫 _audit；失敗整筆回滾",
+    ("duty_roles.py", "POST", "/api/duty-roles/preview"):
+        "純試算：生效權限預覽（唯讀、superadmin），不寫任何資料表",
     ("modules/accounting/api/ledger_periods.py", "POST", "/opening/preview"):
         "純試算：期初餘額匯入前的預覽（逐列檢查借貸與科目），不寫任何資料表；建立批次的 POST /opening 有稽核",
     # ── 用 POST 的純查詢／試算（不改任何資料）────────────────────────────
