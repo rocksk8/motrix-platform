@@ -155,6 +155,10 @@ def _mask_bank(bank, account) -> str:
 class _Payables:
     """IP-100 提供者（多提供者，名稱 `case`）。"""
 
+    #: 出納端點 `payee-bank`：完整帳號只給最高管理者與出納（財務角色）；一般管理員只看末 4 碼（使用者 2026-10-08 裁示，與叫料匯款同規則）。
+    #: 嚴格提供者另有：先稽核才給值（寫不進稽核 ⇒ 500）、回應 no-store。⚠️ 連帶：員工收款帳號（差旅等，來源 profile）對無出納權限的管理員也改成遮罩。
+    FULL_ACCOUNT_STRICT = True
+
     @staticmethod
     def payee_info(conn, key) -> dict:
         """出納付款前看「收款人資料」：單據上手填的收款人／銀行／帳號（完整，只給出納端點）與員工帳號。查無 ⇒ LookupError。"""

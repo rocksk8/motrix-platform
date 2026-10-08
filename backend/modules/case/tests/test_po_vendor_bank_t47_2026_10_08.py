@@ -111,3 +111,50 @@ def test_non_money_viewer_gets_no_payee_data_in_the_case_list_or_payee_bank(clie
     assert lst.status_code == 200, lst.text
     assert "123456789" not in lst.text and "玉山銀行" not in lst.text, "非金額角色看不到收款帳戶"
     assert client.get("/api/cashier/pending-payables/case/%d/payee-bank" % eid, headers=h).status_code in (401, 403)
+
+
+# ── 使用者裁示 2026-10-08：完整帳號只給財務角色＋最高管理者（FULL_ACCOUNT_STRICT，與叫料匯款同規則）────────────────
+# 讀碼實測：payee-bank 端點本來就以 `_can_pay`（＝has_cashier_access：財務角色＋superadmin）把關，無出納權限的管理員直接 403，
+# 所以『管理員看到完整帳號』的疑慮並不存在；嚴格旗標補上的是『先稽核才給值（寫不進稽核 ⇒ 不回帳號）』與 no-store，並與叫料匯款一致。
+
+def _login(client, u, p):
+    return {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
+
+
+def _audits(eid):
+    c = _db()
+    try:
+        return [dict(r) for r in c.execute("SELECT username, target_label FROM audit_log WHERE action='cashier.payee_bank_view' AND target_id=? ORDER BY id", (str(eid),)).fetchall()]
+    finally:
+        c.close()
+
+
+def test_full_account_only_for_finance_and_superadmin_admin_without_cashier_gets_403(client, world, make_user):
+    eid = _post(client, world, payeeType="vendor", payeeName="甲廠商", payeeBank="玉山銀行", payeeAccount="123456789012").json()["id"]
+    _approve_row(eid)
+    url = "/api/cashier/pending-payables/case/%d/payee-bank" % eid
+    adm = _login(client, *make_user(username="fas_admin", role="admin", legacy_finance_flag=False))
+    fin = _login(client, *make_user(username="fas_fin", role="finance"))
+    r = client.get(url, headers=adm)
+    assert r.status_code == 403 and "123456789012" not in r.text
+    for h in (fin, world["h"]):
+        rr = client.get(url, headers=h)
+        assert rr.status_code == 200 and rr.json()["account"] == "123456789012" and rr.json()["bank"] == "玉山銀行"
+        assert rr.headers.get("cache-control") == "no-store", "嚴格提供者：回應不可被快取"
+    log = _audits(eid)
+    assert [a["username"] for a in log] == ["fas_fin", world["user"]], "每次查看都留稽核（被擋的 403 不算查看）"
+    lst = client.get("/api/cashier/pending-payables", headers=world["h"]).json()["items"]
+    mine = next(i for i in lst if i["source"] == "case" and i["key"] == str(eid))
+    assert "123456789012" not in json.dumps(mine, ensure_ascii=False) and mine["payeeBank"].endswith("9012"), "清單永遠只給末四碼"
+
+
+def test_audit_failure_means_no_account_is_returned(client, world, monkeypatch):
+    eid = _post(client, world, payeeType="vendor", payeeName="甲", payeeBank="玉山銀行", payeeAccount="123456789012").json()["id"]
+    _approve_row(eid)
+    from modules.arap.api import cashier as C
+
+    def boom(*a, **k):
+        raise RuntimeError("audit down")
+    monkeypatch.setattr(C, "_audit_raising", boom)
+    with pytest.raises(RuntimeError):                                  # 例外往外傳（正式機＝500）：沒有任何回應內容帶出帳號
+        client.get("/api/cashier/pending-payables/case/%d/payee-bank" % eid, headers=world["h"])
