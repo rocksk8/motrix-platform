@@ -14,6 +14,8 @@
   已精算／結案不動；冪等（formulaVer>=2 跳過）；每張單用自己存的百分比；不改價格；不碰草稿精算 summary；
   --db 必填且檔案必須存在（_dbbind，不建空庫）；建議在系統停用期間執行（交易內已重檢查，但仍以停機為準）。
   新口徑遷移後若模式仍是 legacy，舊式表單重存會悄悄把單退回 10% 基準 ⇒ recalc --apply 在模式不是 v2 時拒絕，除非加 --set-mode-v2。
+完成標記：recalc --apply 在同一交易寫 system_settings.overhead_migration_done = {doneAt, by, recalculated, skipped}；伺服器沒有它就一律當 legacy，
+  獨立 `mode v2 --apply` 沒有標記時拒絕；rollback --apply 成功還原後把模式設回 legacy 並刪除標記。
 結束碼：0 完成；2 錯誤／參數。
 """
 import argparse
@@ -32,6 +34,7 @@ import _dbbind                                                    # noqa: E402
 from migrations_frozen.t48_overhead25 import recalc as R          # noqa: E402
 
 MODE_KEY, PCT_KEY, LOG_KEY, SNAP_KEY = "overhead_rule_mode", "overhead_default_pct", "overhead_recalc_log", R.SNAPSHOT_KEY
+DONE_KEY = "overhead_migration_done"          # 伺服器（profit_guard.rule_mode）只在這個標記存在時才認 v2；形狀 {doneAt, by, recalculated, skipped}
 
 
 def _get(conn, key, default=None):
@@ -147,7 +150,14 @@ def main(argv=None):
             print("overhead_rule_mode: %s → %s%s" % (cur, a.value, "" if a.apply else "（dry-run，加 --apply 才寫）"))
             if a.apply:
                 conn.execute("BEGIN IMMEDIATE")
+                if a.value == "v2" and _get(conn, DONE_KEY) is None:
+                    conn.execute("ROLLBACK")
+                    print("拒絕：還沒有遷移完成標記（%s）。伺服器在標記不存在時一律當 legacy；請用 recalc --apply --set-mode-v2（同交易寫標記與模式）。" % DONE_KEY,
+                          file=sys.stderr)
+                    return 2
                 _put(conn, MODE_KEY, a.value, now)
+                if a.value == "legacy":
+                    pass                                            # 退回 legacy 不動標記（標記＝資料已重算過；回滾工具才會移除）
                 conn.execute("COMMIT")
             return 0
         default_pct = a.pct or str(_get(conn, PCT_KEY, R.DEFAULT_PCT))
@@ -174,6 +184,9 @@ def main(argv=None):
                 items = R.plan_rollback(conn, snap)                      # 交易內重新規劃
                 n = R.apply_rollback(conn, items, snap)
                 _put(conn, SNAP_KEY, snap, now)
+                if n:
+                    _put(conn, MODE_KEY, "legacy", now)               # 回到 legacy 並移除完成標記（伺服器隨即只認 legacy）
+                    conn.execute("DELETE FROM system_settings WHERE key=?", (DONE_KEY,))
                 _put(conn, LOG_KEY, (_get(conn, LOG_KEY, []) or [])[-19:] + [{"at": stamp, "op": "rollback", "n": n}], now)
                 conn.execute("COMMIT")
                 print("已還原 %d 張" % n)
@@ -200,6 +213,8 @@ def main(argv=None):
             snap = _get(conn, SNAP_KEY, {}) or {}
             n, skipped = R.apply_plan(conn, items, default_pct, stamp, snap)
             _put(conn, SNAP_KEY, snap, now)
+            _put(conn, DONE_KEY, {"doneAt": datetime.now().isoformat(), "by": os.environ.get("USERNAME") or "overhead_migrate",
+                                  "recalculated": n, "skipped": skipped + sum(1 for i in items if i["action"].startswith("skip_"))}, now)
             if a.set_mode_v2:
                 _put(conn, MODE_KEY, "v2", now)
             _cnt, _n, old, new = _summary(items)
