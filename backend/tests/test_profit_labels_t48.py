@@ -20,15 +20,10 @@ TABLE = json.load(open(os.path.join(BACKEND, "data", "profit_labels_t48.json"), 
 PENDING = {
     "frontend/pages/quotation-form.html": "ab（報價單）",
     "backend/modules/case/settlement_actuals.py": "ab（精算伺服器重算；_DOWNSTREAM_NAMES 是 409 訊息的字樣）",
-    "backend/modules/payroll/bonus.py": "S6（SETTLEMENT_ROWS）",
-    "backend/modules/payroll/bonus_case.py": "S6",
-    "backend/modules/payroll/bonus_pdf.py": "S6",
-    "backend/modules/payroll/api/bonus.py": "S6",
-    "frontend/pages/bonus.html": "S6",
-    "frontend/js/bonus.js": "S6",
 }
 #: 只剩歷史說明性註解／DDL 註解，不是畫面字樣
 HISTORICAL_COMMENTS = {
+    "backend/helpers/profit_rules.py": "ab：docstring「營業利益（舊稱淨利）」",
     "backend/db.py": "bonus_case_awards DDL 註解（凍住的歷史）",
     "backend/routers/system.py": "舊設計說明註解",
     "backend/helpers/financial_mask.py": "修改紀錄欄位名稱：舊紀錄存「淨利率」，新舊並列（test_history_labels_keep_old_and_new）",

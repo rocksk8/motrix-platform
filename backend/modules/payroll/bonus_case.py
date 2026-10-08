@@ -3,7 +3,7 @@
 純函式，不碰資料庫——算式要能單獨驗。
 
 ```
-獎金池 = floor(淨利 × 比率)                          比率預設 10%（1000 基點）
+獎金池 = floor(營業利益 × 比率)                          比率預設 10%（1000 基點）
 三類   = 業務／專案／後勤（預設 5000／3000／2000 基點，合計須 10000）
 類金額 = floor(獎金池 × 類比例)
 類內   = 預設平均：每人 floor(類金額／人數)，零頭留公司（§11.7，使用者「每人一樣多，零頭留公司」）
@@ -12,7 +12,7 @@
 尾差   = 獎金池 − 全部個人金額合計（留公司）
 ```
 ⚠️ 這裡的 10% 是**獎金比率**，與 settlement.html 的管理費 10%／公益 1% 無關（§11.2），不共用常數。
-⚠️ 淨利用精算已存的 `settlement.summary.netProfit`，不自己重算、也不退回 grossProfit（§二禁令）。
+⚠️ 營業利益用精算已存的 `settlement.summary.netProfit`，不自己重算、也不退回 grossProfit（§二禁令）。
 """
 from decimal import Decimal, ROUND_FLOOR, InvalidOperation
 
@@ -29,13 +29,13 @@ class BonusCalcError(ValueError):
 
 def _to_decimal(v) -> Decimal:
     if isinstance(v, bool):
-        raise BonusCalcError("淨利必須是數字")
+        raise BonusCalcError("營業利益必須是數字")
     try:
         d = Decimal(str(v))
     except (InvalidOperation, ValueError):
-        raise BonusCalcError("淨利必須是數字")
+        raise BonusCalcError("營業利益必須是數字")
     if not d.is_finite():
-        raise BonusCalcError("淨利必須是數字")
+        raise BonusCalcError("營業利益必須是數字")
     return d
 
 
@@ -46,10 +46,10 @@ def _bp(v, what: str) -> int:
 
 
 def pool_amount(net_profit, rate_bp: int) -> int:
-    """獎金池。淨利 ≤ 0 ⇒ 不能建立（§11.1「無獎金」）。"""
+    """獎金池。營業利益 ≤ 0 ⇒ 不能建立（§11.1「無獎金」）。"""
     net = _to_decimal(net_profit)
     if net <= 0:
-        raise BonusCalcError("這個案件的精算淨利不大於 0，沒有獎金可以分配")
+        raise BonusCalcError("這個案件的精算營業利益不大於 0，沒有獎金可以分配")
     rate = _bp(rate_bp, "獎金比率")
     if rate == 0:
         raise BonusCalcError("獎金比率不可以是 0")
