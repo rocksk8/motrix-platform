@@ -24,7 +24,7 @@ import csv
 from typing import Optional
 
 from fastapi import APIRouter, Body, Header, HTTPException, Query, UploadFile, File
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 import io
 from urllib.parse import quote as _url_quote
 
@@ -132,8 +132,25 @@ def get_payee_bank(source: str, key: str, authorization: str = Header(None)):
         out["account"] = "****" + acct[-4:] if len(acct) > 4 else "****"
         out["notice"] = "完整帳號僅限最高管理者與出納；管理員只看到遮罩"
         masked = True
-    _audit(_tok(authorization), "cashier.payee_bank_view", source, key, "出納查看收款人銀行資料（來源：%s%s）" % (out["source"], "；遮罩" if masked else ""))
+    _label = "出納查看收款人銀行資料（來源：%s%s）" % (out["source"], "；遮罩" if masked else "")
+    if getattr(p, "FULL_ACCOUNT_STRICT", False):                       # 第47班稽核 S8：嚴格提供者（勞報單）＝先稽核才給值；稽核寫不進去 ⇒ 500、不回帳號；回應不快取
+        _audit_raising(user, "cashier.payee_bank_view", source, key, _label)
+        return JSONResponse(out, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
+    _audit(_tok(authorization), "cashier.payee_bank_view", source, key, _label)
     return out
+
+
+def _audit_raising(user, action, target_type, target_id, label):
+    """稽核先寫、寫不進去就丟例外（⇒ 500，不回傳任何值）；一般 `_audit` 會吞例外，不適合「先稽核才給值」（同 payslip_approval._audit_raising）。"""
+    from datetime import datetime
+    conn = get_db()
+    try:
+        conn.execute("INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail) VALUES (?,?,?,?,?,?,?,?,?)",
+                     (datetime.now().isoformat(), user.get("id"), user.get("username") or "", user.get("display_name") or "", action,
+                      target_type, str(target_id), label, "{}"))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 @router.get("/api/cashier/pending-payables/{source}/{key}/files/{file_id}")
@@ -242,11 +259,11 @@ def set_pending_payable_planned_pay_date(source: str, key: str, body: dict = Bod
         conn.commit()
     finally:
         conn.close()
-    if res.get("unchanged"):                                            # 稽核 S3：日期沒變 ⇒ 不稽核、不通知、不動行事曆
-        return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value), "unchanged": True}
     hook = getattr(p, "planned_changed", None)
     if hook is not None:
-        hook(key)                                                       # commit 之後（寫鎖已放）；提供者自己 spawn 背景執行緒
+        hook(key)                                                       # commit 之後（寫鎖已放）；提供者自己 spawn 背景執行緒。第47班稽核 S5：沒變也照做（冪等），上次背景推送失敗時重按一次能修復
+    if res.get("unchanged"):                                            # 稽核 S3：日期沒變 ⇒ 不稽核、不通知
+        return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value), "unchanged": True}
     _audit(_tok(authorization), "cashier.planned_pay_date", source, key,
            "出納設定預定付款日：%s #%s（%s）%s → %s" % (source, key, res.get("quoteNo") or "", res.get("old") or "（無）", value or "（清除）"))
     _notify_applicant_planned(user, source, key, res, value)
