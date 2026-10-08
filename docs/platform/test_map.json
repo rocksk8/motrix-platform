@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1196,
+  "tests": 1200,
   "unmapped": 12,
   "kinds": {
-   "api": 650,
-   "e2e": 292,
+   "api": 653,
+   "e2e": 293,
    "audit": 145,
    "unit": 109
   },
-  "routes": 783
+  "routes": 784
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -7823,6 +7823,29 @@
    "login_fixture": true,
    "module": "case"
   },
+  "backend/modules/case/tests/test_po_account_masking_t47_2026_10_08.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/case/",
+    "file:backend/tests/_requires.py",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/tests/test_queue_detail_real_forms_2026_10_07"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/case/tests/test_queue_detail_real_forms_2026_10_07.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_extra_expenses.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
   "backend/modules/case/tests/test_po_vendor_bank_t47_2026_10_08.py": {
    "kind": "api",
    "units": [
@@ -12947,6 +12970,49 @@
     ]
    },
    "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_payable_due_review_t47.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_fake_gcal.py",
+    "file:backend/tests/_requires.py",
+    "helper:payable_due_core",
+    "mod:arap/api/cashier",
+    "mod:subcontract/__init__",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/payable_due",
+    "mod:subcontract/tests/test_voucher_payable_due_t45",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/payable_due_core.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/payable_due.py",
+     "backend/modules/subcontract/tests/test_voucher_payable_due_t45.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_fake_gcal.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
    "module": "subcontract"
   },
   "backend/modules/subcontract/tests/test_payout_calendar_2026_09_30.py": {
@@ -26843,6 +26909,41 @@
     ]
    }
   },
+  "backend/tests/test_e2e_users_list_privacy_pages_t47_2026_10_08.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/approval-queue.html",
+    "page:pages/bonus.html",
+    "page:pages/customer-log.html",
+    "page:pages/customers.html",
+    "page:pages/daily-tasks.html",
+    "page:pages/dev-crm.html",
+    "page:pages/quotation-form.html",
+    "page:pages/supplier-log.html",
+    "router:auth"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/routers/auth.py"
+    ],
+    "page": [
+     "frontend/pages/approval-queue.html",
+     "frontend/pages/bonus.html",
+     "frontend/pages/customer-log.html",
+     "frontend/pages/customers.html",
+     "frontend/pages/daily-tasks.html",
+     "frontend/pages/dev-crm.html",
+     "frontend/pages/quotation-form.html",
+     "frontend/pages/supplier-log.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_view_filters_not_dirty_2026_09_25.py": {
    "kind": "e2e",
    "units": [
@@ -31765,6 +31866,21 @@
    "evidence": {
     "import": [
      "backend/helpers/uploads.py"
+    ]
+   }
+  },
+  "backend/tests/test_users_list_privacy_t47_2026_10_08.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "router:auth"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/routers/auth.py"
     ]
    }
   },
