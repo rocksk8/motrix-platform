@@ -16,6 +16,7 @@
 - 複核修正：送審即核准只在送審人是最高管理者且沒設簽核層時成立（否則待審核，無層簽核路徑不可自核）；簽核當下再確認操作者是最高管理者；刪除草稿時一併刪派發連結。總帳（E06）影響的選項與建議見 `docs/platform/plans/PAYSLIP-LEDGER-OPTIONS-T46.md`（**待裁示，程式未改**；現況由 `test_ledger_payslip_approval_pin_t46` 釘住）。
 - **P3 派發 ⇄ 勞報單雙向連結**：新表 `payslip_dispatch_links`（一派發對多勞報單、一勞報單對多派發）；勞報單頁「來源派發」區塊（`GET/POST/DELETE /api/payslips/{no}/dispatch-links`，建立勞報單時可選填 `dispatchId` 與勞報單同一交易）；提供者 `payslip.dispatch_links`（派發頁用，**只回單號、狀態、受領人姓名、開單日期，無金額**）；已付款（含經匯款單付款）不可解除；作廢保留並標已作廢。
 - **Q13**：`remit_link`（匯款單關聯勞報單）由「須已簽回」放寬為已核准／已匯出／已簽回；取消匯款退回付款前最近的狀態。
+- **並發防護（獨立稽核 S1／S2／S3）**：上傳簽回檔、刪簽回檔、退回簽回、退回付款的 UPDATE 都帶「讀到的狀態」條件（上傳／刪檔再帶讀到的簽回檔清單），rowcount≠1 ⇒ 409，不再把剛被付款的單蓋回已簽回／已匯出、不洗掉重新付款後的付款欄位；刪除草稿先 `BEGIN IMMEDIATE` 再讀狀態且 DELETE 帶狀態條件；建立／修改剔除前端送來的 `data.paid_via_remit`（只准匯款連結寫入）。
 
 ## 1.2.2 — 2026-10-08（fix/t45-audit-followups）：勞報單 data_json 不留前端送來的 status（第 45 班稽核 S5）
 - 建立與修改都把請求 `data.status` 移除後才存 `data_json`；狀態欄位本來就只由專用端點改，這裡讓 `GET` 的 `data.status` 也不會顯示被偽造的值。
