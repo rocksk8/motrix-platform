@@ -34,13 +34,22 @@ def _mods(raw):
         return []
 
 
-def build_report(conn) -> dict:
+def build_report(conn, raw: bool = False) -> dict:
+    """raw=False（預設，R2 第 2 步 2d）：先把職責角色與個人扣項套到原始勾選上（`duty_roles.resolve_raw_modules`），再看財務三鍵；
+    **刻意不套財務規則**（`effective_modules` 會把非財務角色的三鍵一律拿掉——那正是這份報表要預告的變化，套了就永遠看不到誰會失去）。
+    raw=True：資料庫原始勾選（舊口徑）。"""
+    from helpers import duty_roles as _dr
     rows = conn.execute(
         "SELECT id, username, display_name, role, modules, email FROM users WHERE active = 1 ORDER BY role, username"
     ).fetchall()
     lose, keep_super, keep_finance = [], [], []
     for r in rows:
         mods = _mods(r["modules"])
+        if not raw and r["role"] != "superadmin":
+            try:
+                mods = list(_dr.resolve_raw_modules(conn, r["id"], mods) or [])
+            except Exception:                                        # noqa: BLE001 — 讀不出角色資料 ⇒ 原始勾選
+                pass
         flags = [k for k in FINANCE_KEYS if k in mods]
         item = {"username": r["username"], "displayName": r["display_name"] or "", "role": r["role"],
                 "heldFlags": flags, "legacyRolePassthrough": r["role"] in LEGACY_PASSTHROUGH_ROLES,
@@ -65,7 +74,7 @@ def build_report(conn) -> dict:
                                                      "請先到使用者管理把負責人的角色改為「財務」"})
     elif not any(i["hasEmail"] for i in keep_finance + keep_super):
         problems.append({"level": "warn", "message": "財務角色與 superadmin 都沒有設定 Email：付款／匯款通知會寄不出去"})
-    return {"loseAccess": lose, "keepSuperadmin": keep_super, "keepFinance": keep_finance, "problems": problems}
+    return {"basis": "raw" if raw else "duty_roles_applied", "loseAccess": lose, "keepSuperadmin": keep_super, "keepFinance": keep_finance, "problems": problems}
 
 
 def exit_code(rep: dict) -> int:
@@ -75,7 +84,7 @@ def exit_code(rep: dict) -> int:
 
 
 def format_text(rep: dict) -> str:
-    out = ["# 財務角色上線影響報表（唯讀）", ""]
+    out = ["# 財務角色上線影響報表（唯讀）", "", "口徑：%s" % ("資料庫原始勾選（--raw）" if rep.get("basis") == "raw" else "原始勾選＋職責角色＋個人扣項（不含財務規則；--raw 看原始勾選）"), ""]
     out.append("## 會失去財務／出納能力的帳號（%d）" % len(rep["loseAccess"]))
     for i in rep["loseAccess"]:
         out.append("- %s（%s，%s）：%s" % (i["username"], i["displayName"] or "—", i["role"], "；".join(i["loses"])))
@@ -93,6 +102,7 @@ def format_text(rep: dict) -> str:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--raw", action="store_true", help="讀資料庫原始勾選（舊口徑）；預設先套職責角色與個人扣項")
     ap.add_argument("--db", help="要讀的 sqlite 檔（預設 db.DB_PATH；檔案不存在就拒絕，不建空庫）")
     args = ap.parse_args()
     import _dbbind
@@ -101,7 +111,7 @@ def main():
     import db
     conn = db.get_db()
     try:
-        rep = build_report(conn)
+        rep = build_report(conn, raw=args.raw)
     finally:
         conn.close()
     print(json.dumps(rep, ensure_ascii=False, indent=2) if args.json else format_text(rep))

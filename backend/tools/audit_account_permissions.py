@@ -40,7 +40,10 @@ _SPARSE_MODULE_THRESHOLD = 3
 _KNOWN_AUTOMATION_USERNAMES = {"claude", "automation", "bot", "api", "system"}
 
 
-def _audit() -> list:
+def _audit(raw: bool = False) -> list:
+    """raw=False（預設，R2 第 2 步 2d）：每個人的模組清單＝**生效權限**（`helpers.auth.effective_modules`：職責角色、個人扣項、財務規則）；
+    raw=True：資料庫原始勾選（舊口徑）。仍是唯讀。"""
+    from helpers.auth import effective_modules
     conn = db.get_db()
     try:
         rows = conn.execute("""
@@ -49,6 +52,13 @@ def _audit() -> list:
             WHERE role IN ('superadmin', 'admin') AND active = 1
             ORDER BY role, username
         """).fetchall()
+        eff = {}
+        if not raw:
+            for r in rows:
+                try:
+                    eff[r["id"]] = effective_modules(r["role"], r["modules"], user_id=r["id"], conn=conn)
+                except Exception:                                    # noqa: BLE001 — 讀不出生效清單 ⇒ 退回原始勾選（報表不可因此整份失敗）
+                    eff[r["id"]] = None
     finally:
         conn.close()
 
@@ -58,6 +68,8 @@ def _audit() -> list:
             mods = json.loads(r["modules"] or "[]")
         except Exception:
             mods = []
+        if not raw and eff.get(r["id"]) is not None:
+            mods = eff[r["id"]]
         is_known_automation_name = r["username"].lower() in _KNOWN_AUTOMATION_USERNAMES
         is_sparse = len(mods) <= _SPARSE_MODULE_THRESHOLD
         out.append({
@@ -66,6 +78,7 @@ def _audit() -> list:
             "role":          r["role"],
             "moduleCount":   len(mods),
             "modules":       mods,
+            "basis":         "raw" if raw else "effective",
             "createdAt":     r["created_at"] or "",
             "flagAutomationName": is_known_automation_name,
             "flagSparseModules":  is_sparse,
@@ -81,11 +94,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", action="store_true", help="輸出 JSON 而非文字報告")
     ap.add_argument("--db", help="要讀的 sqlite 檔（預設 db.DB_PATH；檔案不存在就拒絕，不建空庫）")
+    ap.add_argument("--raw", action="store_true", help="讀資料庫原始勾選（舊口徑）；預設讀生效權限（含職責角色與個人扣項）")
     args = ap.parse_args()
     import _dbbind
     _dbbind.bind(args.db)
 
-    results = _audit()
+    results = _audit(raw=args.raw)
 
     if args.json:
         print(json.dumps(results, ensure_ascii=False, indent=2))
@@ -93,6 +107,7 @@ def main():
 
     print("=" * 70)
     print("高權限帳號（admin/superadmin）稽查報告")
+    print("口徑：%s" % ("資料庫原始勾選（--raw）" if args.raw else "生效權限（職責角色＋個人扣項＋財務規則；--raw 看原始勾選）"))
     print(f"門檻：modules <= {_SPARSE_MODULE_THRESHOLD} 個視為「範圍很窄」")
     print("=" * 70)
 
