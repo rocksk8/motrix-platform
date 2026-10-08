@@ -624,8 +624,12 @@ def fill_downstream(conn, quote_no, settlement):
         summ.pop("formulaVer", None)
         summ.pop("overheadPct", None)
     put("taxExpense", d["totals"]["taxExpense"])                  # 稅額（含在成本內）：伺服器重算值，隨 summary 凍結
-    for k, v in original_side(conn, quote_no, summ).items():       # 38（稽核 S-1）：「原始側」欄位也由伺服器依報價單重算，不凍結用戶端偽造的值
+    _orig = original_side(conn, quote_no, summ)
+    for k, v in _orig.items():                                     # 38（稽核 S-1）：「原始側」欄位也由伺服器依報價單重算，不凍結用戶端偽造的值
         put(k, v)
+    for k in ("origFormulaVer", "origOverheadPct"):                # 第 48 班：原始側口徑戳記只由伺服器依報價單蓋（報價是舊口徑 ⇒ 不帶）
+        if k not in _orig:
+            summ.pop(k, None)
     for k in ("dispatchAssignedTotal", "dispatchUnassignedTotal", "dispatchAbsorbedTotal"):          # 36／38：派發對應拆分隨 summary 凍結
         put(k, d["totals"][k])
     return filled

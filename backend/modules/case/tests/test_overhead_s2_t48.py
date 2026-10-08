@@ -54,8 +54,20 @@ def _audits(action):
         cn.close()
 
 
+def _migrated():
+    cn = db.get_db()
+    try:
+        cn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES ('overhead_migration_done', ?, '2031-01-01T00:00:00') "
+                   "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json", (json.dumps({"doneAt": "2026-10-09T00:00:00", "by": "test"}),))
+        cn.commit()
+    finally:
+        cn.close()
+
+
 def _mode(client, su, mode):
-    r = client.put("/api/overhead/settings", json={"ruleMode": mode}, headers=su)
+    if mode == "v2":
+        _migrated()                                      # 伺服器要求遷移完成標記＋明確確認才准切到新口徑
+    r = client.put("/api/overhead/settings", json={"ruleMode": mode, "confirm": True}, headers=su)
     assert r.status_code == 200, r.text
 
 
@@ -67,7 +79,7 @@ def test_legacy_mode_keeps_numbers_and_stamps_default_pct_on_create(client, who)
     r = _post(client, ad, forged)
     assert r.status_code == 201, r.text
     data, nm, _ = _row(r.json()["quote_no"])
-    assert data["overheadPct"] == 25 and "formulaVer" not in data["tot"]
+    assert "overheadPct" not in data and "formulaVer" not in data["tot"], "legacy 新單不憑空長出比率欄位"
     assert data["tot"]["adminCost"] == 10000 and data["tot"]["netMarginPct"] == 99.9 and nm == 99.9
 
 
@@ -76,7 +88,7 @@ def test_legacy_existing_quote_without_pct_does_not_grow_the_key(client, who):
     qno = _post(client, ad, _q()).json()["quote_no"]
     cn = db.get_db()                                           # 模擬舊單：沒有 overheadPct
     d = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (qno,)).fetchone()["data_json"])
-    d.pop("overheadPct")
+    d.pop("overheadPct", None)
     cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), qno))
     cn.commit()
     cn.close()
@@ -130,14 +142,16 @@ def test_settled_quote_pct_and_numbers_are_frozen(client, who):
 # ── 設定端點 ──────────────────────────────────────────────────────────────────────
 def test_settings_endpoint_authz_audit_and_default_applies_to_new_quotes(client, who):
     su, ad = who
-    assert client.get("/api/overhead/settings", headers=ad).json() == {"ruleMode": "legacy", "defaultPct": 25, "ver": 1}
+    assert client.get("/api/overhead/settings", headers=ad).json() == {"ruleMode": "legacy", "defaultPct": 25, "ver": 1, "migrationDone": False}
     assert client.put("/api/overhead/settings", json={"defaultPct": 20}, headers=ad).status_code == 403
     assert client.put("/api/overhead/settings", json={"defaultPct": 120}, headers=su).status_code == 422
     assert client.put("/api/overhead/settings", json={"ruleMode": "x"}, headers=su).status_code == 422
     assert client.put("/api/overhead/settings", json={"defaultPct": 20}, headers=su).status_code == 200
     assert _audits("settings.overhead.update") and "20" in _audits("settings.overhead.update")[0]["target_label"]
+    _mode(client, su, "v2")
     qno = _post(client, ad, _q()).json()["quote_no"]
-    assert _row(qno)[0]["overheadPct"] == 20, "新建沿用全域預設"
+    assert _row(qno)[0]["overheadPct"] == 20, "新建沿用全域預設（v2 模式蓋章）"
+    _mode(client, su, "legacy")
     assert _post(client, ad, _q(overheadPct=25)).status_code == 403, "預設改成 20 之後 25 就是『偏離』"
     client.put("/api/overhead/settings", json={"defaultPct": 25}, headers=su)
 
@@ -194,3 +208,97 @@ def test_migration_recalc_equals_the_server_recompute():
         srv = PG.server_profit(q, pct, 2)
         assert {k: mig[k] for k in ("adminCost", "totalIndirect", "netProfit", "netMarginPct", "charityDonation")} == \
                {k: srv[k] for k in ("adminCost", "totalIndirect", "netProfit", "netMarginPct", "charityDonation")}, (pretax, cost, pct)
+
+
+# ── 稽核 1d 的修正 ────────────────────────────────────────────────────────────────
+def test_client_supplied_stamps_are_never_trusted_in_either_mode(client, who):
+    su, ad = who
+    forged = _q()
+    forged["tot"].update(formulaVer=2, overheadPct=40, _legacy={"x": 1}, _recalc={"y": 1})
+    t = _row(_post(client, ad, forged).json()["quote_no"])[0]["tot"]
+    assert "formulaVer" not in t and "overheadPct" not in t and "_legacy" not in t and "_recalc" not in t, "legacy：偽造的戳記一律丟掉"
+    _mode(client, su, "v2")
+    forged = _q()
+    forged["tot"].update(formulaVer=1, overheadPct=40, _legacy={"x": 1})
+    t = _row(_post(client, ad, forged).json()["quote_no"])[0]["tot"]
+    assert t["formulaVer"] == 2 and t["overheadPct"] == 25 and "_legacy" not in t, "v2：戳記只由伺服器蓋"
+    _mode(client, su, "legacy")
+
+
+def test_migration_rollback_basis_survives_form_saves_and_settled_stamps_are_frozen(client, who):
+    su, ad = who
+    qno = _post(client, ad, _q()).json()["quote_no"]
+    cn = db.get_db()
+    d = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (qno,)).fetchone()["data_json"])
+    d["tot"]["_legacy"] = {"adminCost": 10000, "formulaVer": 1}
+    d["tot"]["_recalc"] = {"at": "2026-10-09"}
+    cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), qno))
+    cn.commit()
+    cn.close()
+    forged = _q(customerName="改名")
+    forged["tot"]["_legacy"] = {"adminCost": 1}                     # 表單重建的 tot 沒有（或偽造）_legacy
+    assert client.put("/api/quotations/%s" % qno, json={"status": "草稿", "data": forged}, headers=ad).status_code == 200
+    t = _row(qno)[0]["tot"]
+    assert t["_legacy"] == {"adminCost": 10000, "formulaVer": 1} and t["_recalc"] == {"at": "2026-10-09"}, "沿用資料庫現值"
+    cn = db.get_db()                                                # 已結案：所有戳記沿用現值
+    cn.execute("UPDATE quotations SET deal_tag='已結案' WHERE quote_no=?", (qno,))
+    cn.commit()
+    cn.close()
+    forged = _q()
+    forged["tot"].update(formulaVer=2, overheadPct=40)
+    client.put("/api/quotations/%s" % qno, json={"status": "草稿", "data": forged}, headers=su)
+    t = _row(qno)[0]["tot"]
+    assert "formulaVer" not in t and "overheadPct" not in t
+
+
+def test_mode_flip_needs_confirmation_and_the_migration_marker(client, who):
+    su, ad = who
+    r = client.put("/api/overhead/settings", json={"ruleMode": "v2"}, headers=su)
+    assert r.status_code == 422 and "confirm" in r.text
+    r = client.put("/api/overhead/settings", json={"ruleMode": "v2", "confirm": True}, headers=su)
+    assert r.status_code == 409 and "遷移" in r.text, "沒有遷移完成標記不准切"
+    assert client.get("/api/overhead/settings", headers=ad).json()["ruleMode"] == "legacy"
+    assert client.put("/api/overhead/settings", json={"ruleMode": "v2", "confirm": True}, headers=ad).status_code == 403
+    _mode(client, su, "v2")
+    assert client.get("/api/overhead/settings", headers=ad).json()["migrationDone"] is True
+    assert client.put("/api/overhead/settings", json={"ruleMode": "legacy"}, headers=su).status_code == 200, "退回舊口徑（回滾）不需確認"
+    assert any("口徑" in a["target_label"] for a in _audits("settings.overhead.update"))
+
+
+def test_v2_recomputes_pretax_tax_and_total_from_items(client, who):
+    su, ad = who
+    _mode(client, su, "v2")
+    forged = _q()
+    forged["tot"].update(pretax=999999, total=1, tax=0, subtotal=5)
+    t = _row(_post(client, ad, forged).json()["quote_no"])[0]["tot"]
+    assert (t["subtotal"], t["pretax"], t["tax"], t["total"]) == (100000, 100000, 5000, 105000)
+    assert t["adminCost"] == 9250, "利潤欄位用重算後的稅前"
+    _mode(client, su, "legacy")
+
+
+def test_rejected_pct_change_happens_before_any_write_or_notification(client, who):
+    su, ad = who
+    qno = _post(client, su, _q(overheadPct=30)).json()["quote_no"]
+    cn = db.get_db()
+    n0 = cn.execute("SELECT COUNT(*) FROM notifications").fetchone()[0]
+    cn.close()
+    r = client.put("/api/quotations/%s" % qno, json={"status": "待審核", "data": _q(overheadPct=40)}, headers=ad)
+    assert r.status_code == 403
+    cn = db.get_db()
+    assert cn.execute("SELECT COUNT(*) FROM notifications").fetchone()[0] == n0, "被擋下的請求不可寄出簽核通知"
+    assert cn.execute("SELECT status FROM quotations WHERE quote_no=?", (qno,)).fetchone()["status"] == "草稿"
+    cn.close()
+
+
+def test_unstamped_quote_is_not_a_false_403_after_the_default_changes(client, who):
+    su, ad = who
+    qno = _post(client, ad, _q()).json()["quote_no"]               # legacy：沒有比率欄位
+    assert client.put("/api/overhead/settings", json={"defaultPct": 20}, headers=su).status_code == 200
+    r = client.put("/api/quotations/%s" % qno, json={"status": "草稿", "data": _q(customerName="改名")}, headers=ad)
+    assert r.status_code == 200, r.text
+    client.put("/api/overhead/settings", json={"defaultPct": 25}, headers=su)
+
+
+def test_overhead_pct_is_hidden_from_roles_without_money_visibility():
+    from helpers import financial_mask
+    assert "overheadPct" in financial_mask.QUOTE_MONEY_KEYS

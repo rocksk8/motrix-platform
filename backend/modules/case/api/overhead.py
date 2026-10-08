@@ -12,7 +12,7 @@ router = APIRouter()
 @router.get("/api/overhead/settings")
 def get_overhead_settings(authorization: str = Header(None)):
     _require_user(authorization)
-    return {"ruleMode": PG.rule_mode(), "defaultPct": PG.default_pct(), "ver": PG.current_ver()}
+    return {"ruleMode": PG.rule_mode(), "defaultPct": PG.default_pct(), "ver": PG.current_ver(), "migrationDone": PG.migration_done()}
 
 
 @router.put("/api/overhead/settings")
@@ -34,6 +34,11 @@ def put_overhead_settings(body: dict = Body(...), authorization: str = Header(No
         if body["ruleMode"] not in PG.MODES:
             raise HTTPException(422, "ruleMode 只能是 legacy 或 v2")
         old = PG.rule_mode()
+        if body["ruleMode"] == "v2" and old != "v2":                 # 切到新口徑：要明確確認，且既有報價單的遷移必須已完成（防止新舊口徑的單混在一起）
+            if body.get("confirm") is not True:
+                raise HTTPException(422, "切換到新口徑會改變所有未精算報價單的營業利益與獎金基數，請帶 confirm=true 明確確認")
+            if not PG.migration_done():
+                raise HTTPException(409, "既有報價單尚未完成遷移（tools/overhead_migrate.py recalc --apply 會寫入完成標記），不能切換到新口徑")
         if body["ruleMode"] != old:
             _set_setting(PG.MODE_KEY, body["ruleMode"])
             detail["ruleMode"] = {"old": old, "new": body["ruleMode"]}

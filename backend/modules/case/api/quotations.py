@@ -1699,6 +1699,14 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     is_unlock_edit = bool(q.pop("_isUnlockEdit", False))
     expected_updated_at = q.pop("_expectedUpdatedAt", None)
     validate_quote_tax(q)   # AC1：只能存法定稅別；舊 1～4% 單要改選
+    # 第 48 班 S2：管銷分攤比率驗證／權限／戳記——放在最前面：開寫入連線與寄簽核通知『之前』就拒絕（422／403），不留連線也不寄信；
+    # 已精算／結案不動；v2 口徑時伺服器重算利潤欄位。用自己的短連線讀現值。
+    _oh_conn = get_db()
+    try:
+        _oh_row = _oh_conn.execute("SELECT deal_tag, settle_status, data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    finally:
+        _oh_conn.close()
+    _oh_change = _PG.prepare(q, user, _oh_row, quote_no) if _oh_row else None
     # 款項日期一律存 YYYY-MM-DD（「2026/09/01」等寫法否則會被報表歸月靜默漏掉）
     for _pi in (((q.get("caseRecord") or {}).get("payment") or {}).get("items") or []):
         if isinstance(_pi, dict):
@@ -1847,7 +1855,6 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     elif "settlement" in q:
         q.pop("settlement")
 
-    _oh_change = _PG.prepare(q, user, existing, quote_no)      # 第 48 班 S2：管銷分攤比率驗證／權限；已精算／結案不動；v2 口徑時伺服器重算
     tot = q.get("tot", {})
     # 一般編輯的編輯紀錄（2026-09-14）——解鎖編輯那條路徑上面已經記過了，
     # 這裡只補「不是解鎖編輯」的一般存檔。

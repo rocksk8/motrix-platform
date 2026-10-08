@@ -149,3 +149,30 @@ def test_bonus_row_label_follows_the_stamp_written_at_finalize(W):
     assert c.put(URL, json={"settlement": _v2_payload(c, h, 30), "reason": "新口徑"}, headers=h).status_code == 200
     new = bonus.row_label("adminCost", "管銷分攤", _saved_summary())
     assert "30%" in new and "直接毛利" in new and "報價稅前" not in new, new
+
+
+def test_original_side_stamp_comes_only_from_the_quotation(W):
+    """完結時 summary 同時蓋 formulaVer／overheadPct 與原始側 origFormulaVer／origOverheadPct（報價是新口徑才有）；用戶端偽造的原始側戳記丟掉。"""
+    c, h = W
+    _set_tot()
+    _mode("v2", pct=20)
+    cn = db.get_db()
+    d = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+    d["tot"]["formulaVer"] = 2
+    cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+    cn.commit()
+    cn.close()
+    assert c.put(URL, json={"settlement": _v2_payload(c, h, 20)}, headers=h).status_code == 200
+    s = _saved_summary()
+    assert (s["formulaVer"], s["overheadPct"], s["origFormulaVer"], s["origOverheadPct"]) == (2, 20, 2, 20)
+    # 舊口徑報價（沒有 formulaVer）＋用戶端偽造原始側戳記 ⇒ 伺服器拿掉
+    cn = db.get_db()
+    d["tot"].pop("formulaVer")
+    cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+    cn.commit()
+    cn.close()
+    p = _v2_payload(c, h, 20)
+    p["summary"].update(origFormulaVer=2, origOverheadPct=99)
+    assert c.put(URL, json={"settlement": p, "reason": "x"}, headers=h).status_code == 200
+    s = _saved_summary()
+    assert "origFormulaVer" not in s and "origOverheadPct" not in s
