@@ -348,6 +348,7 @@
     "/api/material-payments",
     "/api/material-suppliers",
     "/api/next-quote-no",
+    "/api/overhead",
     "/api/quotations",
     "/api/sales-orders"
    ]
