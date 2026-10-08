@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-09（wip/t48-oh25-s1／s2）：利潤規則單一來源（S1，零行為變更）＋管銷分攤比率與伺服器把關（S2，新行為預設關；`/api/overhead` 前綴登記於 module.json）
+## (next) — 2026-10-09（wip/t48-oh25-s1／s2／s3）：利潤規則單一來源（S1，零行為變更）＋管銷分攤比率與伺服器把關（S2，新行為預設關）＋畫面與精算接上規則（S3；`/api/overhead` 前綴登記於 module.json）
 - `settlement_actuals`：完結比對的管銷分攤、公益金、營業利益、報價原始側後備改呼叫 `helpers.profit_rules`（口徑仍是第 47 班的 10%）。前端 `static/profit-rules.js` 與黃金向量等值測試已備，頁面第 3 步（S3）才改接。設計：`docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
 
 - **S2（wip/t48-oh25-s2）管銷分攤比率與伺服器把關（新行為預設關）**：新增 `profit_guard.py`＋`GET/PUT /api/overhead/settings`（全域預設比率 `overhead_default_pct`、口徑開關 `overhead_rule_mode`＝legacy｜v2；只有最高管理者能改，每次稽核 `settings.overhead.update`）。報價單 `data_json.overheadPct`（新建＝全域預設；與存值不同只有最高管理者可改，否則 403；非法值 422；稽核 `quotation.overhead_pct_change`；已精算／結案不動）。`v2` 時存檔由伺服器用 `profit_rules` 重算 `tot` 利潤欄位與 `net_margin_pct`（不信前端）；`legacy`（預設）數字完全不變，只做影子比對（不一致記 warning）。歷程欄位新增「管銷分攤比率」（金額遮罩白名單同步）。
