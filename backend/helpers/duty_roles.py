@@ -2,7 +2,7 @@
 """職責角色化 R1（設計：docs/platform/plans/DUTY-ROLES-DESIGN.md；使用者 2026-10-06 裁示 Q1–Q12、N1–N4）。
 
 [單位] helper:duty_roles    [層] L1    [穩定度] 實作（R1；R2＝盤點／離職回收／職務分離／通知，尚未做）
-[公開介面] DutyError, FINANCE_KEYS, HIGH_SENSITIVITY_KEYS, REASON_MAX, REASON_MIN, bind_role, create_role, effective_preview, has_duty_data, known_keys, list_changes, list_roles, resolve_raw_modules, set_subtract, unbind_role, unset_subtract, update_role
+[公開介面] DutyError, FINANCE_KEYS, apply_duty, preview_whatif, HIGH_SENSITIVITY_KEYS, REASON_MAX, REASON_MIN, bind_role, create_role, effective_preview, has_duty_data, known_keys, list_changes, list_roles, resolve_raw_modules, set_subtract, unbind_role, unset_subtract, update_role
 [契約題] tests/test_duty_roles_r1_2026_10_06.py、tests/test_duty_roles_equivalence_2026_10_06.py
 
 ## 權限算法（單一縫＝`helpers.auth.effective_modules`；本檔只提供「角色／扣項怎麼套到原始勾選上」）
@@ -77,6 +77,22 @@ def has_duty_data(conn, user_id) -> bool:
         return False
 
 
+def apply_duty(raw_modules, role_permission_lists, subtracts, bound_any):
+    """純函式（R2 第 2 步 2a：真實生效路徑與畫面預覽**共用這一個實作**，預覽不自己算）：把角色權限清單與扣項套到「原始勾選」上。
+    沒有任何角色權限、扣項、綁定 ⇒ **原樣回傳傳入的物件**（零行為變更的證明點）。其餘回傳 list（保持原順序，再依角色順序附加新鍵）。"""
+    subs = set(subtracts or ())
+    if not role_permission_lists and not subs and not bound_any:
+        return raw_modules
+    out = list(raw_modules or [])
+    seen = set(out)
+    for perms in role_permission_lists:
+        for k in perms:
+            if isinstance(k, str) and k not in seen:
+                seen.add(k)
+                out.append(k)
+    return [k for k in out if k not in subs]
+
+
 def resolve_raw_modules(conn, user_id, raw_modules):
     """把角色與扣項套到「原始勾選」上；沒有綁定也沒有扣項 ⇒ **原樣回傳傳入的物件**（零行為變更的證明點）。
     回傳 list（保持原順序，再依角色順序附加新鍵）。"""
@@ -90,16 +106,7 @@ def resolve_raw_modules(conn, user_id, raw_modules):
         bound_any = conn.execute("SELECT 1 FROM user_duty_roles WHERE user_id=? LIMIT 1", (user_id,)).fetchone()
     except sqlite3.OperationalError:
         return raw_modules
-    if not roles and not subs and not bound_any:
-        return raw_modules
-    out = list(raw_modules or [])
-    seen = set(out)
-    for (perms,) in roles:
-        for k in _loads(perms, []):
-            if isinstance(k, str) and k not in seen:
-                seen.add(k)
-                out.append(k)
-    return [k for k in out if k not in subs]
+    return apply_duty(raw_modules, [_loads(perms, []) for (perms,) in roles], subs, bool(bound_any))
 
 
 def _raw_of(conn, user_id):
@@ -126,6 +133,34 @@ def effective_preview(conn, user) -> dict:
             "highSensitive": [k for k in eff if k in HIGH_SENSITIVITY_KEYS]}
 
 
+def preview_whatif(conn, user_id, raw_modules, role_ids, subtracts, role=None) -> dict:
+    """畫面預覽（唯讀、不寫任何東西）：假設這個人的原始勾選＝`raw_modules`、綁定的角色＝`role_ids`、個人扣項＝`subtracts`、基礎類別＝`role`
+    （省略＝目前），算出生效清單。**與真實路徑同一條**：`apply_duty` ＋ `helpers.auth.effective_modules` 的財務規則。
+    superadmin 不經過角色與扣項（維持全功能）。回 {effective, highSensitive, ignoredSubtracts}。"""
+    from helpers.auth import effective_modules
+    u = _user_row(conn, user_id)
+    base = role or u["role"]
+    raw = [k for k in (raw_modules or []) if isinstance(k, str)]
+    ignored = []
+    if base == "superadmin":
+        eff = effective_modules(base, raw)
+    else:
+        try:
+            ids = sorted({int(i) for i in (role_ids or [])})
+        except (TypeError, ValueError):
+            raise DutyError("roleIds 必須是整數清單")
+        perms = []
+        if ids:
+            marks = ",".join("?" * len(ids))
+            for r in conn.execute("SELECT permissions FROM duty_roles WHERE id IN (%s) AND active=1 ORDER BY id" % marks, ids).fetchall():
+                perms.append(_loads(r[0], []))
+        subs = {k for k in (subtracts or []) if isinstance(k, str)}
+        ignored = sorted(k for k in subs if k in FINANCE_KEYS or k in raw)       # 與 set_subtract 的規則一致：財務三鍵不開放扣項、勾選中的鍵不可同時扣
+        subs -= set(ignored)
+        eff = effective_modules(base, apply_duty(raw, perms, subs, bool(ids)))
+    return {"effective": eff, "highSensitive": [k for k in eff if k in HIGH_SENSITIVITY_KEYS], "ignoredSubtracts": ignored}
+
+
 # ── 寫：服務層（每個動作＝一筆 permission_changes）──────────────────────────────
 
 def _clean_reason(reason) -> str:
@@ -145,13 +180,31 @@ def _require_reason_if_sensitive(sensitive: bool, reason: str) -> None:
         raise DutyError("這項變更涉及高敏感權限（%s），請填寫原因（至少 %d 個不同的字，不可只有標點或重複同一個字）" % ("、".join(HIGH_SENSITIVITY_KEYS), REASON_MIN))
 
 
-def _record(conn, actor, kind, target_type, target_id, label, added, removed, before, after, sensitive, reason, ip):
+def _write_audit(conn, actor, audit):
+    """R2 第 2 步 8a：在**同一個交易**寫一筆 `audit_log`（動作名稱沿用原本路由寫的 `duty_roles.*`），回它的 id。
+    `audit`＝(action, target_type, target_id, target_label)；沒給 ⇒ None（不寫、audit_id 留空，舊呼叫端行為不變）。
+    路由不再另寫一筆（否則同一個動作兩列）；`permission_changes` 有 DB 觸發器擋 UPDATE，所以 audit_id 必須在 INSERT 時就帶進去。"""
+    if not audit:
+        return None
+    from helpers.audit import _derive_fields           # 與 `_audit` 同一個推導（module／case_no／ref_no），稽核頁的模組篩選與搜尋把 duty_roles.* 當成和其他動作一樣的列
+    action, target_type, target_id, label = audit
+    d = _derive_fields(action, target_type, str(target_id), label or "", None)
+    cur = conn.execute(
+        "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
+        (datetime.now().isoformat(), (actor or {}).get("id"), (actor or {}).get("username") or "", (actor or {}).get("display_name") or "",
+         action, target_type, str(target_id), label or "", "{}", d["module"], d["case_no"], d["ref_no"]))
+    return cur.lastrowid
+
+
+def _record(conn, actor, kind, target_type, target_id, label, added, removed, before, after, sensitive, reason, ip, audit=None):
+    audit_id = _write_audit(conn, actor, audit)
     conn.execute(
         "INSERT INTO permission_changes (ts, actor_id, actor_username, actor_display, kind, target_type, target_id, target_label,"
-        " added, removed, before_json, after_json, high_sensitivity, reason, ip) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " added, removed, before_json, after_json, high_sensitivity, reason, ip, audit_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (_now(), (actor or {}).get("id"), (actor or {}).get("username") or "", (actor or {}).get("display_name") or "", kind,
          target_type, int(target_id), label or "", json.dumps(sorted(added), ensure_ascii=False), json.dumps(sorted(removed), ensure_ascii=False),
-         json.dumps(before, ensure_ascii=False), json.dumps(after, ensure_ascii=False), 1 if sensitive else 0, reason, ip or ""))
+         json.dumps(before, ensure_ascii=False), json.dumps(after, ensure_ascii=False), 1 if sensitive else 0, reason, ip or "", audit_id))
 
 
 def _check_perm_keys(keys):
@@ -214,7 +267,8 @@ def create_role(conn, actor, key, name, description, permissions, reason, ip="")
     now = _now()
     cur = conn.execute("INSERT INTO duty_roles (key, name, description, permissions, is_system, active, version, created_at, updated_at)"
                        " VALUES (?,?,?,?,0,1,1,?,?)", (key, name, (description or "").strip(), json.dumps(perms), now, now))
-    _record(conn, actor, "role_def", "role", cur.lastrowid, name, perms, [], {}, {"permissions": perms, "active": True}, sensitive, reason, ip)
+    _record(conn, actor, "role_def", "role", cur.lastrowid, name, perms, [], {}, {"permissions": perms, "active": True}, sensitive, reason, ip,
+            audit=("duty_roles.role_create", "duty_role", cur.lastrowid, name))
     conn.commit()
     return cur.lastrowid
 
@@ -238,6 +292,8 @@ def update_role(conn, actor, role_id, *, name=None, description=None, permission
         raise DutyError("名稱不可空白")
     new_desc = (description if description is not None else r["description"]).strip()
     if (new_name, new_desc, new_active) == (r["name"], r["description"], r["active"]) and not (added or removed):
+        _write_audit(conn, actor, ("duty_roles.role_update", "duty_role", role_id, new_name))      # 與舊路由一致：沒有實質變更也留一筆 audit_log（不寫 permission_changes）
+        conn.commit()
         return r["version"]
     version = r["version"] + (1 if (added or removed or new_active != r["active"]) else 0)
     conn.execute("UPDATE duty_roles SET name=?, description=?, permissions=?, active=?, version=?, updated_at=? WHERE id=?",
@@ -245,7 +301,7 @@ def update_role(conn, actor, role_id, *, name=None, description=None, permission
     members = conn.execute("SELECT COUNT(*) FROM user_duty_roles WHERE role_id=?", (role_id,)).fetchone()[0]
     _record(conn, actor, "role_def", "role", role_id, new_name, added, removed,
             {"permissions": old, "active": bool(r["active"])}, {"permissions": new, "active": bool(new_active), "members": members},
-            sensitive, reason, ip)
+            sensitive, reason, ip, audit=("duty_roles.role_update", "duty_role", role_id, new_name))
     conn.commit()
     return version
 
@@ -276,7 +332,7 @@ def bind_role(conn, actor, user_id, role_id, reason="", ip=""):
                  (user_id, role_id, (actor or {}).get("id"), _now(), reason))
     after = set(_effective_of(conn, user_id, u["role"]))
     _record(conn, actor, "bind", "user", user_id, u["display_name"] or u["username"], after - before, before - after,
-            {"role": r["key"]}, {"role": r["key"], "bound": True}, sensitive, reason, ip)
+            {"role": r["key"]}, {"role": r["key"], "bound": True}, sensitive, reason, ip, audit=("duty_roles.bind", "user", user_id, "role#%s" % role_id))
     conn.commit()
 
 
@@ -293,7 +349,7 @@ def unbind_role(conn, actor, user_id, role_id, reason="", ip=""):
     conn.execute("DELETE FROM user_duty_roles WHERE user_id=? AND role_id=?", (user_id, role_id))
     after = set(_effective_of(conn, user_id, u["role"]))
     _record(conn, actor, "unbind", "user", user_id, u["display_name"] or u["username"], after - before, before - after,
-            {"role": r["key"], "bound": True}, {"role": r["key"]}, sensitive, reason, ip)
+            {"role": r["key"], "bound": True}, {"role": r["key"]}, sensitive, reason, ip, audit=("duty_roles.unbind", "user", user_id, "role#%s" % role_id))
     conn.commit()
 
 
@@ -315,7 +371,7 @@ def set_subtract(conn, actor, user_id, key, reason="", ip=""):
                  (user_id, key, (actor or {}).get("id"), _now(), reason))
     after = set(_effective_of(conn, user_id, u["role"]))
     _record(conn, actor, "subtract", "user", user_id, u["display_name"] or u["username"], after - before, before - after,
-            {}, {"subtract": key}, sensitive, reason, ip)
+            {}, {"subtract": key}, sensitive, reason, ip, audit=("duty_roles.subtract", "user", user_id, key))
     conn.commit()
 
 
@@ -331,7 +387,7 @@ def unset_subtract(conn, actor, user_id, key, reason="", ip=""):
     conn.execute("DELETE FROM user_perm_subtracts WHERE user_id=? AND perm_key=?", (user_id, key))
     after = set(_effective_of(conn, user_id, u["role"]))
     _record(conn, actor, "unsubtract", "user", user_id, u["display_name"] or u["username"], after - before, before - after,
-            {"subtract": key}, {}, sensitive, reason, ip)
+            {"subtract": key}, {}, sensitive, reason, ip, audit=("duty_roles.unsubtract", "user", user_id, key))
     conn.commit()
 
 

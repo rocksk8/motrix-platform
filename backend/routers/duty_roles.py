@@ -9,13 +9,14 @@
 - `POST /api/duty-roles/bindings/remove` 解除綁定 {userId, roleId, reason}
 - `POST /api/duty-roles/subtracts`       設個人扣項 {userId, key, reason}
 - `POST /api/duty-roles/subtracts/remove` 解除扣項 {userId, key, reason}
+- `POST /api/duty-roles/preview`        生效權限預覽（唯讀）{userId, modules[], roleIds[], subtracts[], role?}
 - `GET  /api/duty-roles/changes`         權限變更紀錄（只讀；沒有任何更新／刪除端點）
 原因：只有高敏感變更必填（≥4 字，見 helpers/duty_roles.py）。
 """
 from fastapi import APIRouter, Body, Header, HTTPException, Request
 
 from db import get_db
-from helpers import _audit, _require_user, _tok
+from helpers import _require_user
 from helpers import duty_roles as dr
 
 router = APIRouter()
@@ -66,7 +67,6 @@ def create_role(request: Request, body: dict = Body(...), authorization: str = H
     actor = _require_user(authorization, require_superadmin=True)
     rid = _run(lambda c: dr.create_role(c, actor, body.get("key"), body.get("name"), body.get("description"), body.get("permissions"),
                                         body.get("reason"), _ip(request)))
-    _audit(_tok(authorization), "duty_roles.role_create", "duty_role", str(rid), str(body.get("name") or ""))
     return {"id": rid}
 
 
@@ -75,7 +75,6 @@ def update_role(role_id: int, request: Request, body: dict = Body(...), authoriz
     actor = _require_user(authorization, require_superadmin=True)
     ver = _run(lambda c: dr.update_role(c, actor, role_id, name=body.get("name"), description=body.get("description"),
                                         permissions=body.get("permissions"), active=body.get("active"), reason=body.get("reason"), ip=_ip(request)))
-    _audit(_tok(authorization), "duty_roles.role_update", "duty_role", str(role_id), str(body.get("name") or ""))
     return {"ok": True, "version": ver}
 
 
@@ -94,6 +93,15 @@ def get_users(authorization: str = Header(None)):
         conn.close()
 
 
+@router.post("/api/duty-roles/preview")
+def preview(body: dict = Body(...), authorization: str = Header(None)):
+    """生效權限預覽（唯讀；`users.html` 編輯視窗用）：{userId, modules[], roleIds[], subtracts[], role?} ⇒ 伺服器算出的生效清單。不寫任何東西。"""
+    _require_user(authorization, require_superadmin=True)
+    uid = _int(body.get("userId"), "userId")
+    return _run(lambda c: dr.preview_whatif(c, uid, body.get("modules") or [], body.get("roleIds") or [], body.get("subtracts") or [],
+                                            role=body.get("role") or None))
+
+
 def _body_ids(body):
     return _int(body.get("userId"), "userId")
 
@@ -103,7 +111,6 @@ def bind(request: Request, body: dict = Body(...), authorization: str = Header(N
     actor = _require_user(authorization, require_superadmin=True)
     uid, rid = _body_ids(body), _int(body.get("roleId"), "roleId")
     _run(lambda c: dr.bind_role(c, actor, uid, rid, body.get("reason"), _ip(request)))
-    _audit(_tok(authorization), "duty_roles.bind", "user", str(uid), "role#%s" % rid)
     return {"ok": True}
 
 
@@ -112,7 +119,6 @@ def unbind(request: Request, body: dict = Body(...), authorization: str = Header
     actor = _require_user(authorization, require_superadmin=True)
     uid, rid = _body_ids(body), _int(body.get("roleId"), "roleId")
     _run(lambda c: dr.unbind_role(c, actor, uid, rid, body.get("reason"), _ip(request)))
-    _audit(_tok(authorization), "duty_roles.unbind", "user", str(uid), "role#%s" % rid)
     return {"ok": True}
 
 
@@ -121,7 +127,6 @@ def subtract(request: Request, body: dict = Body(...), authorization: str = Head
     actor = _require_user(authorization, require_superadmin=True)
     uid, key = _body_ids(body), str(body.get("key") or "")
     _run(lambda c: dr.set_subtract(c, actor, uid, key, body.get("reason"), _ip(request)))
-    _audit(_tok(authorization), "duty_roles.subtract", "user", str(uid), key)
     return {"ok": True}
 
 
@@ -130,7 +135,6 @@ def unsubtract(request: Request, body: dict = Body(...), authorization: str = He
     actor = _require_user(authorization, require_superadmin=True)
     uid, key = _body_ids(body), str(body.get("key") or "")
     _run(lambda c: dr.unset_subtract(c, actor, uid, key, body.get("reason"), _ip(request)))
-    _audit(_tok(authorization), "duty_roles.unsubtract", "user", str(uid), key)
     return {"ok": True}
 
 

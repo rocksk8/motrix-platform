@@ -1,5 +1,5 @@
 {
- "core_version": "1.119",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -566,6 +566,7 @@
    "HIGH_SENSITIVITY_KEYS": "const",
    "REASON_MAX": "const",
    "REASON_MIN": "const",
+   "apply_duty": "def(raw_modules, role_permission_lists, subtracts, bound_any)",
    "bind_role": "def(conn, actor, user_id, role_id, reason=…, ip=…)",
    "create_role": "def(conn, actor, key, name, description, permissions, reason, ip=…)",
    "effective_preview": "def(conn, user)",
@@ -573,6 +574,7 @@
    "known_keys": "def()",
    "list_changes": "def(conn, target_type=…, target_id=…, limit=…)",
    "list_roles": "def(conn)",
+   "preview_whatif": "def(conn, user_id, raw_modules, role_ids, subtracts, role=…)",
    "resolve_raw_modules": "def(conn, user_id, raw_modules)",
    "set_subtract": "def(conn, actor, user_id, key, reason=…, ip=…)",
    "unbind_role": "def(conn, actor, user_id, role_id, reason=…, ip=…)",

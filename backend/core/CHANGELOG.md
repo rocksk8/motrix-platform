@@ -15,6 +15,15 @@
 - 新增 `GET /api/users/sales-contact?username=`（`routers/auth.py`）：報價單『報價人』改選他人（代理）時帶入對方電話／Email 用——一次查一個人、只回 `{id, displayName, phone, email}`；需要模組 `quotation`（最高管理者直通）；對象必須是在職使用者，否則 404。取代原本從使用者清單拿別人聯絡方式的做法（清單已收緊），代理報價不會變成空白電話／Email。
 - 測試：`tests/test_users_list_privacy_t47_2026_10_08.py`（API：業務／工程師／檢視者／admin／superadmin，含自己那一列）、`tests/test_e2e_users_list_privacy_pages_t47_2026_10_08.py`（8 個頁面 × 業務／工程師）。
 
+## (next) — 2026-10-08（wip/t48-r2-step2：R2 第2步——users.html 整合、舊 PUT 與扣項衝突、唯讀報表讀生效權限、8a）
+- L1（新增，向下相容）：`helpers.duty_roles` 新增 `apply_duty`（純函式：把角色權限清單與扣項套到原始勾選；`resolve_raw_modules` 改呼叫它，行為逐字不變）與 `preview_whatif`（唯讀「假設」預覽，與真實生效路徑共用 `apply_duty` ＋ `effective_modules` 的財務規則）。
+- `permission_changes.audit_id` 開始填值（8a）：`duty_roles._record` 在**同一個交易**先寫一筆 `audit_log`（動作名稱沿用 `duty_roles.bind／unbind／subtract／unsubtract／role_create／role_update`），再把它的 id 帶進 INSERT（表有 UPDATE 觸發器，只能在 INSERT 時填）；`routers/duty_roles.py` 不再另寫一筆（否則同一個動作兩列）。沒有實質變更的角色更新仍留一筆 audit_log（不寫 permission_changes），與舊路由一致。
+- 新端點 `POST /api/duty-roles/preview`（superadmin、唯讀）：{userId, modules[], roleIds[], subtracts[], role?} ⇒ 伺服器算出的生效清單，供 `users.html` 編輯視窗預覽。
+- `PUT /api/users/{id}`（2c，使用者裁示 Q1）：`modules` 含「目前被個人扣項扣掉的鍵」⇒ 400（訊息列出鍵與「請先解除扣項」），並寫稽核 `user.put_rejected_subtract`。**秒級退場旗標** `system_settings.users_put_reject_subtracted`（預設開；設 `0`／`"off"`／`false` ⇒ 回舊行為）。
+- 唯讀報表（2d）：`audit_account_permissions.py` 預設讀**生效權限**（職責角色＋個人扣項＋財務規則）；`finance_role_impact_report.py` 預設把職責角色與扣項套到勾選上（**刻意不套財務規則**，那正是這份報表要預告的變化）；兩支都新增 `--raw`（舊口徑），輸出標明口徑。
+- 前端（`users.html`＋`static/users-duty.js`）：編輯既有、非最高管理者時顯示「職責角色／個人扣項／生效權限預覽／變更原因」；畫面只送**原始勾選**（預覽唯讀、不寫回）；存檔順序＝解除扣項 → PUT → 解除／新增角色 → 新增扣項，失敗即停並明講已完成／未完成。**使用者可見的行為變更（Q3）**：編輯既有使用者且個人勾選為空時，不再用基礎類別樣板預填（只有「新增使用者」預填）。
+- 不放寬任何權限；只新增拒絕（2c）；沒有 migration、沒有新表。回滾：2c 設旗標 `0`；其餘純程式（L1）回退即還原，無資料動作。
+
 ## 1.118 — 2026-10-07（wip/t45-r2-step1-impl：R2 第1步——D4 superadmin 全部鍵、D5 財務判斷影子模式）
 - L1（新增，向下相容）：`helpers.auth` 新增 `FINANCE_FLAG_KEY`、`finance_effective_keys(user, cache=False)`、`finance_duty_person(user)`、`reset_finance_mode_cache()`。
   財務三鍵判斷（`has_finance_access`／`has_cashier_access`／`can_see_financial`／`user_has_module(財務三鍵)`）改走單一縫：`system_settings.finance_via_effective`＝缺／`off`（預設，舊規則逐字不變）、`shadow`（回傳舊規則，新舊不同時對該人該鍵每小時至多寫一筆 `audit_log` `permission.finance_shadow_diff`；算不出新規則退回舊規則）、`on`（回傳新規則＝（基礎類別 finance ∪ 啟用角色的財務鍵）−個人扣項；原始勾選不計；**本班不開，需使用者核准**）。

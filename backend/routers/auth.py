@@ -1559,6 +1559,24 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     return {"id": user_id, "created_at": now, "mustChangePassword": True}
 
 
+#: 秒級退場旗標（R2 第 2 步 2c）：`system_settings.users_put_reject_subtracted`；預設開（拒絕）；設 0／"0"／false／"off" ⇒ 回舊行為（不檢查）
+PUT_REJECT_SUBTRACTED_KEY = "users_put_reject_subtracted"
+
+
+def _subtracted_clash(conn, user_id, modules) -> list:
+    """`modules`（舊 PUT 要寫進 `users.modules` 的原始勾選）與這個人目前的個人扣項重疊的鍵（排序）；旗標關／表不存在／沒有重疊 ⇒ []。
+    只讀；失敗一律當沒有（不可因為這道新規則讓存檔多出新的失敗模式）。"""
+    try:
+        row = conn.execute("SELECT value_json FROM system_settings WHERE key=?", (PUT_REJECT_SUBTRACTED_KEY,)).fetchone()
+        flag = json.loads(row[0]) if row else True
+        if flag in (0, "0", False, "off", "false", "False"):
+            return []
+        subs = {r[0] for r in conn.execute("SELECT perm_key FROM user_perm_subtracts WHERE user_id=?", (user_id,)).fetchall()}
+    except Exception:                                                    # noqa: BLE001 — 表還沒建（migration 未跑）或設定壞掉
+        return []
+    return sorted(subs & {k for k in (modules or []) if isinstance(k, str)})
+
+
 @router.put("/api/users/{user_id}")
 def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
@@ -1577,6 +1595,11 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
         except HTTPException:
             conn.close()
             raise
+        _clash = _subtracted_clash(conn, user_id, body.modules)
+        if _clash:                                                       # R2 第 2 步 2c（使用者裁示 Q1＝拒絕）：勾到「個人扣項」扣掉的鍵＝勾了卻沒權限的假象，直接擋下並留稽核
+            conn.close()
+            _audit(_tok(authorization), "user.put_rejected_subtract", "user", str(user_id), str(user_id), {"keys": _clash})
+            raise HTTPException(400, "下列權限目前被「個人扣項」扣掉，勾選不會生效：%s。請先到「職責角色」頁解除扣項再勾選。" % "、".join(_clash))
     sets, params = [], []
     if body.display_name is not None: sets.append("display_name=?"); params.append(body.display_name)
     if body.role         is not None: sets.append("role=?");         params.append(body.role)
