@@ -102,6 +102,7 @@
    "js:static/privacy-notice.js",
    "js:static/record-link.js",
    "js:static/sidebar.js",
+   "js:static/users-duty.js",
    "js:static/ui.js",
    "page:index.html",
    "page:pages/approval-delegates.html",

@@ -2,7 +2,7 @@
 """職責角色化 R1（設計：docs/platform/plans/DUTY-ROLES-DESIGN.md；使用者 2026-10-06 裁示 Q1–Q12、N1–N4）。
 
 [單位] helper:duty_roles    [層] L1    [穩定度] 實作（R1；R2＝盤點／離職回收／職務分離／通知，尚未做）
-[公開介面] DutyError, FINANCE_KEYS, HIGH_SENSITIVITY_KEYS, REASON_MAX, REASON_MIN, bind_role, create_role, effective_preview, has_duty_data, known_keys, list_changes, list_roles, resolve_raw_modules, set_subtract, unbind_role, unset_subtract, update_role
+[公開介面] DutyError, FINANCE_KEYS, apply_duty, preview_whatif, HIGH_SENSITIVITY_KEYS, REASON_MAX, REASON_MIN, bind_role, create_role, effective_preview, has_duty_data, known_keys, list_changes, list_roles, resolve_raw_modules, set_subtract, unbind_role, unset_subtract, update_role
 [契約題] tests/test_duty_roles_r1_2026_10_06.py、tests/test_duty_roles_equivalence_2026_10_06.py
 
 ## 權限算法（單一縫＝`helpers.auth.effective_modules`；本檔只提供「角色／扣項怎麼套到原始勾選上」）
