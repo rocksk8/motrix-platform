@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-09（wip/t48-oh25-s1）：利潤規則單一來源（管銷／公益金／營業利益算式抽成 `helpers/profit_rules.py`，零行為變更）
+- `settlement_actuals`：完結比對的管銷分攤、公益金、營業利益、報價原始側後備改呼叫 `helpers.profit_rules`（口徑仍是第 47 班的 10%）。前端 `static/profit-rules.js` 與黃金向量等值測試已備，頁面第 3 步（S3）才改接。設計：`docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
+
 ## 1.0.163 — 2026-10-08（第 47 班整合）：報價單表單版本 V3.18
 - `frontend/pages/quotation-form.html`：`FORM_VERSION` V3.17 → V3.18（報價人聯絡資料改由 `GET /api/users/sales-contact` 帶入；守門 `test_form_version_bumped` 要求內容變動必須升版，並登記 LEDGER）；行為不變。
 

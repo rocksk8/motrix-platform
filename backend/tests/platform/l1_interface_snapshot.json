@@ -1017,6 +1017,20 @@
    "today": "def()",
    "validate_transition": "def(current, target)"
   },
+  "helper:profit_rules": {
+   "ACTIVE_VER": "const",
+   "CHARITY_RATE": "const",
+   "DEFAULT_OVERHEAD_PCT": "const",
+   "FORMULA_VER": "const",
+   "LEGACY_ADMIN_RATE": "const",
+   "LEGACY_VER": "const",
+   "TARGET_MARGIN_PCT": "const",
+   "admin_cost": "def(pretax, direct_profit, pct=…, ver=…)",
+   "charity": "def(direct_profit)",
+   "pct_rate": "def(pct)",
+   "quote_profit": "def(pretax, total_cost, input_vat, indirect_items, pct=…, ver=…)",
+   "settlement_profit": "def(pretax, actual_cost, pct=…, ver=…, frozen_charity=…)"
+  },
   "helper:receivables": {
    "RECEIVABLES_MISSING": "const",
    "collect_income_items": "def(d0, d1, department_id=…)",

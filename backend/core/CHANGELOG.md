@@ -2,6 +2,10 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-09（wip/t48-oh25-s1：利潤規則單一來源，L1 新增 helpers/profit_rules）
+- L1（新增，向下相容）：新單位 `helpers/profit_rules.py`——報價單／精算的管銷分攤、公益捐款、間接成本合計、營業利益（舊稱淨利）、營業利益率的**唯一算式**（`admin_cost`／`charity`／`quote_profit`／`settlement_profit`／`pct_rate`；口徑 `LEGACY_VER=1` 稅前×10%、`FORMULA_VER=2` 直接毛利×pct%）。前端同一套：`static/profit-rules.js`（`MotrixProfitRules`）。`ACTIVE_VER` 仍是 1，**S1 零行為變更**；設計 `docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
+- 守門與測試：`tests/test_profit_rules_t48.py`（黃金向量 Python／node 等值、舊內嵌算式對拍、ver 2 獨立 Decimal 對拍）、`tests/platform/test_profit_rule_single_source.py`（管銷算式只准寫在規則檔；前端過渡登記 S3 清空）。
+
 ## 1.119 — 2026-10-08（wip/t47-paydate-l1：預定付款日共用提醒庫；wip/t47-users-list-privacy：使用者清單收緊敏感欄位，L0 行為、介面不變）
 - L1（新增，向下相容）：新單位 `helpers/payable_due_core.py`（使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）——`due_kind`／`effective_send_day`／`next_working_day`／`candidate_planned_dates`（3 天前、當天、逾期＝預定日後第 1 個工作日；規則自 M01 `payable_reminders` 搬入）、`notify_finance`（財務站內通知，不含金額；寄信函式由呼叫端傳入 `run_scan(send=…)`，因為寄信必須用字面 key 呼叫 `send_registered`，守門 `test_mail_registry` 逐一核對）、`prune_guards`／`run_scan`（guard、寄送迴圈、等待上限）、`sync_event`／`CALENDAR_SOURCES`（行事曆「付款待辦」來源開關：案件額外支出、承攬商匯款、叫料匯款；**勞報單不在名單 ⇒ 零呼叫**）。純函式、不讀時鐘（日期與工作日判斷由呼叫端傳入）。
 - 信件類型 `payable_due_overdue`（預定付款日已逾期，財務群組）由 M01 登記，與 `payable_due_soon`／`payable_due_today` 同；M01 不在 ⇒ 類型未登記 ⇒ 寄信 fail-closed（只給超級管理員），已知取捨（承攬商匯款綁案件）。
