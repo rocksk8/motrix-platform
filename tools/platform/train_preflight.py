@@ -35,13 +35,16 @@ ALWAYS_FILES = (
     "tests/platform/test_product_drill_probes.py", "tests/platform/test_integration_points_registered.py", "tests/platform/test_changelog_sections.py",
     "tests/test_begin_only_via_begin_write_2026_09_25.py", "tests/test_approval_flow_scope.py", "tests/test_approval_queue_covers_every_doc_type_2026_09_24.py",
 )
+_NOWIN = getattr(subprocess, "CREATE_NO_WINDOW", 0)                  # 背景執行不彈主控台視窗（test_no_window_guard）
+_FE = "frontend"                                                      # 本工具對任意 repo 根目錄運作，不能用 core.source_tree（它只認執行中的這棵樹）
+_PAGES = _FE + "/pages/"                                              # 變動檔清單用的相對路徑前綴
 SCAN_HINT = re.compile(r"rglob\(|\.glob\(|glob\.glob\(|ast\.parse\(|source_tree\.|product_files\(|os\.walk\(")
 
 sys.path.insert(0, str(HERE))
 
 
 def _git(repo, *args):
-    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=_NOWIN)
     return r.stdout if r.returncode == 0 else ""
 
 
@@ -221,7 +224,7 @@ def golden_map(repo):
                 ent["style"] = True
                 ent["classes"].update(c for sel in re.findall(r"[\"'](\.[A-Za-z_][\w.:\-]*)", src) for c in re.findall(r"[A-Za-z_][\w\-]*", sel))
             for pg in _PAGE_REF.findall(src):
-                if (Path(repo) / "frontend" / "pages" / pg).exists():
+                if (Path(repo) / _PAGES / pg).exists():
                     ent["pages"].add(pg)
     for ent in out.values():
         for pg in list(ent["pages"]):
@@ -252,7 +255,7 @@ def check_golden(repo, changed, base="origin/platform", diff_fn=None):
     for g, ent in sorted(gm.items()):
         if "backend/tests/" + g in ch:                       # golden 檔本身也在這次變動裡 ⇒ 已重錄，不再旗標
             continue
-        hit = sorted([("frontend/pages/" + pg) for pg in ent["pages"] if "frontend/pages/" + pg in ch] + [j for j in ent["js"] if j in ch])
+        hit = sorted([(_PAGES + pg) for pg in ent["pages"] if _PAGES + pg in ch] + [j for j in ent["js"] if j in ch])
         css = sorted(c for c in ch if c.startswith("frontend/") and c.endswith(".css"))
         if ent.get("style"):
             if not (css or (hit and _style_relevant(diff_fn(hit), ent["classes"]))):
@@ -485,7 +488,7 @@ def run_pytest(repo, targets, tag="preflight", extra=None, timeout=None, workers
     try:
         try:
             r = subprocess.run(cmd, cwd=str(Path(repo) / "backend"), env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                               timeout=timeout)
+                               timeout=timeout, creationflags=_NOWIN)
         except subprocess.TimeoutExpired as e:                               # subprocess.run 逾時會先殺子行程；留下已收到的輸出
             part = e.stdout if isinstance(e.stdout, str) else (e.stdout or b"").decode("utf-8", "replace")
             return INCOMPLETE_RC, part, time.time() - t0
