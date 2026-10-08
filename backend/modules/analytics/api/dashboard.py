@@ -189,7 +189,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
             if st.get("status") != "finalized":
                 continue
             s = st.get("summary") or {}
-            # 與報價單 net_margin_pct 同口徑＝淨利。有 netProfit 鍵就用淨利（含 0／負數）；
+            # 與報價單 net_margin_pct 同口徑＝營業利益。有 netProfit 鍵就用營業利益（含 0／負數）；
             # 沒有鍵的舊精算才退回毛利（同 reports._settle_actual_profit_margin）。
             if s.get("netProfit") is not None:
                 actual_pct, actual_profit = s.get("netMarginPct"), s.get("netProfit")

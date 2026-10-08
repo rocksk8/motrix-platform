@@ -293,16 +293,16 @@ def _case_ship_summaries(quote_nos) -> dict:
 def _orig_indirect_reserve(summary: dict) -> int:
     """報價預留的間接成本（運費／安裝／差旅／保固／其他）＝精算摘要 `origIndirectReserve`（M01 完結時凍結）。
 
-    原始淨利已扣掉它，實際側只有單據 ⇒ 沒有單據時淨利會比原始多出這一塊（預留沒發生，不是省下）。
+    原始營業利益已扣掉它，實際側只有單據 ⇒ 沒有單據時營業利益會比原始多出這一塊（預留沒發生，不是省下）。
     純資訊與差額拆解，不改任何金額、不影響獎金基數。舊精算沒有這個鍵 ⇒ 0。
     """
     return int((summary or {}).get("origIndirectReserve") or 0)
 
 
 def _reserve_uncovered(summary: dict) -> int:
-    """報價預留間接成本裡「沒有被實際成本抵用」的部分＝真正墊高「真實淨利 − 原始預估淨利」的那一塊。
+    """報價預留間接成本裡「沒有被實際成本抵用」的部分＝真正墊高「真實營業利益 − 原始預估營業利益」的那一塊。
 
-    原始淨利已扣預留 R；實際側只有單據。實際直接成本比原始多出 C ＝ 原始直接毛利 − 真實毛利（運費單據、品項超支…都在裡面）。
+    原始營業利益已扣預留 R；實際側只有單據。實際直接成本比原始多出 C ＝ 原始直接毛利 − 真實毛利（運費單據、品項超支…都在裡面）。
     C 先抵用 R：未被抵用的預留 Y ＝ clamp(R − max(C, 0), 0, R)。
       - 沒有單據：C = 0 ⇒ Y = R（差額多出 R，是預留沒發生，不是省下）；
       - 單據剛好等於預留：C = R ⇒ Y = 0（差額只剩公益金等小項）；
@@ -337,9 +337,9 @@ def _dispatch_split(summary: dict):
 
 
 def _settle_actual_profit_margin(settle: dict):
-    """`(實際利潤, 實際利潤率%)`。有 `netProfit` 鍵 ⇒ 用淨利（含 0 與負數）；沒有 ⇒ 舊精算，退回毛利。
+    """`(實際利潤, 實際利潤率%)`。有 `netProfit` 鍵 ⇒ 用營業利益（含 0 與負數）；沒有 ⇒ 舊精算，退回毛利。
 
-    ☠️ 不可寫 `settle.get("netProfit") or settle.get("grossProfit")`：淨利剛好 0 會被當成舊格式而顯示毛利。
+    ☠️ 不可寫 `settle.get("netProfit") or settle.get("grossProfit")`：營業利益剛好 0 會被當成舊格式而顯示毛利。
     金額用 round() 不用 int()（截斷會讓 1234.6 變 1234）。
     """
     if settle.get("netProfit") is not None:
@@ -482,10 +482,10 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             "receivedAmount": recv_amt,
             "collectionRate": round(recv_amt / total * 100, 1) if total > 0 else 0,
             "settleStatus":   row["settle_status"] or "",
-            # 與報價單 net_margin_pct 同為淨利口徑，但「可比」只在實際單據已涵蓋報價預留的間接成本時才成立：
-            # 報價淨利扣了預留、實際側只有單據，沒單據時預估淨利率被壓低（見 _orig_indirect_reserve）。
+            # 與報價單 net_margin_pct 同為營業利益口徑，但「可比」只在實際單據已涵蓋報價預留的間接成本時才成立：
+            # 報價營業利益扣了預留、實際側只有單據，沒單據時預估營業利益率被壓低（見 _orig_indirect_reserve）。
             # 只有「沒有 netProfit 這個鍵」的舊精算才退回毛利；
-            # 淨利剛好 0 是真的 0，不是舊格式（見 _settle_actual_profit_margin；payroll/bonus.py base_amount_for 同型）。
+            # 營業利益剛好 0 是真的 0，不是舊格式（見 _settle_actual_profit_margin；payroll/bonus.py base_amount_for 同型）。
             "actualMarginPct": _settle_actual_profit_margin(settle)[1] if settle else None,
             "grossProfit":     _settle_actual_profit_margin(settle)[0] if settle else None,
             "actualIsGross":   bool(settle) and settle.get("netProfit") is None,
@@ -616,7 +616,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     backlog = sum(c["total"] - c["receivedAmount"] for c in cases_all if c["dealTag"] == "已成案")
 
     # 精算快照過期：finalized 案件的 dispatchTotal 快照 vs 目前即時計算值不一致，
-    # 代表承攬商成本在精算完結後又異動過，這份報表用到的淨利/業務員績效/部門
+    # 代表承攬商成本在精算完結後又異動過，這份報表用到的營業利益/業務員績效/部門
     # 績效數字可能已經跟實際不符（同一份快照，settlement.html／案件管理財務Tab
     # 各自有逐案件的即時比對banner，這裡只給總數當全域警訊，不逐案列出——
     # 要看是哪幾筆，去對應案件本身的頁面會有詳細比較）。
@@ -912,7 +912,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         ("手續費合計",       _fmt(s["totalFee"]),                 C_ORANGE, None),
         ("實收淨額",         _fmt(s["netCollected"]),             C_GREEN,  None),
         ("本期收款",         _fmt(s["periodReceived"]),           C_BLUE,   f"本期淨 {_fmt(s['periodNet'])}"),
-        ("精算實際淨利合計", _fmt(s["totalActualGrossProfit"]),   "7C3AED", f"已精算 {s['settledCases']} 件"),
+        ("精算實際營業利益合計", _fmt(s["totalActualGrossProfit"]),   "7C3AED", f"已精算 {s['settledCases']} 件"),
         ("精算覆蓋率",       f"{s['settleCoverage']}%",          "7C3AED", f"已結案 {s['closedCases']} 件中 {s['settledCases']} 件完成"),
     ]
     r = 5
@@ -1045,8 +1045,8 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         _acv_xl_row(ws_acv, ri+1, "年度新成案數", _xl_c, cas_d.get("actual",0),  cas_d.get("target",0),  cas_d.get("rate"),  cas_d.get("prorata"))
         _acv_xl_row(ws_acv, ri+2, "年度收款金額", _xl_m, colA_d.get("actual",0), colA_d.get("target",0), colA_d.get("rate"), colA_d.get("prorata"))
         _acv_xl_row(ws_acv, ri+3, "收款率",       _xl_p, colR_d.get("actual",0), colR_d.get("target",0), colR_d.get("rate"), None)
-        _acv_xl_row(ws_acv, ri+4, "平均淨利率", _xl_p, mgn_d.get("actual",0),  mgn_d.get("target",0),  mgn_d.get("rate"),  None)
-        _acv_xl_row(ws_acv, ri+5, "年度實際淨利", _xl_m, gp_d.get("actual",0),   gp_d.get("target",0),   gp_d.get("rate"),   gp_d.get("prorata"))
+        _acv_xl_row(ws_acv, ri+4, "平均營業利益率", _xl_p, mgn_d.get("actual",0),  mgn_d.get("target",0),  mgn_d.get("rate"),  None)
+        _acv_xl_row(ws_acv, ri+5, "年度實際營業利益", _xl_m, gp_d.get("actual",0),   gp_d.get("target",0),   gp_d.get("rate"),   gp_d.get("prorata"))
         ri += 7
 
         sp_acv = acv.get("salesperson") or []
@@ -1396,7 +1396,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     ws4.sheet_view.showGridLines = False
 
     hdrs4 = ["案件號","客戶","專案名稱","業務員","報價日期","案件進度",
-             "合約含稅","合約未稅","預估淨利率","已收款","收款率(%)","精算狀態","實際淨利率","實際淨利"]
+             "合約含稅","合約未稅","預估營業利益率","已收款","收款率(%)","精算狀態","實際營業利益率","實際營業利益"]
     cols4 = [13,18,18,10,11,9,13,13,11,13,10,9,11,13]
     for i, (h, w) in enumerate(zip(hdrs4, cols4), 1):
         ws4.column_dimensions[get_column_letter(i)].width = w
@@ -1470,7 +1470,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     # ── Sheet 6: 業務員績效 ──────────────────────────────────────────────────
     ws5 = wb.create_sheet("業務員績效")
     ws5.sheet_view.showGridLines = False
-    hdrs5 = ["業務員","案件數","合約總額","已收款","收款率(%)","預估淨利率","實際淨利率","精算件數"]
+    hdrs5 = ["業務員","案件數","合約總額","已收款","收款率(%)","預估營業利益率","實際營業利益率","精算件數"]
     cols5 = [16, 9, 16, 16, 11, 14, 14, 9]
     for i, (h, w) in enumerate(zip(hdrs5, cols5), 1):
         ws5.column_dimensions[get_column_letter(i)].width = w
@@ -1534,9 +1534,9 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     hdrs6 = [
         "案件號","客戶","專案名稱","業務員","案件進度","報價稅前",
         # 原始預估
-        "原始成本","原始毛利率","原始淨利率","原始預估淨利",
+        "原始成本","原始毛利率","原始營業利益率","原始預估營業利益",
         # 實際精算
-        "品項成本","額外支出","實際總成本","真實毛利率","真實淨利率","真實淨利",
+        "品項成本","額外支出","實際總成本","真實毛利率","真實營業利益率","真實營業利益",
         # 差異
         "差異(pp)","差異金額",
         # 精算資訊
@@ -2138,7 +2138,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         def _fn(v): return f"NT$ {int(v or 0):,}"
         reserve = _orig_indirect_reserve(ss)
         uncovered = _reserve_uncovered(ss)
-        # 原始淨利已扣報價預留的間接成本、實際側只有單據 ⇒ 差額裡有一塊是「預留未發生」，不是真的省下
+        # 原始營業利益已扣報價預留的間接成本、實際側只有單據 ⇒ 差額裡有一塊是「預留未發生」，不是真的省下
         reserve_split = (f"　原始預估已扣報價預留間接成本 {_fn(reserve)}（實際只計單據）；其中未被實際成本抵用 {_fn(uncovered)}；其他 {_fn(prof_diff - uncovered)}") if reserve > 0 else ""
         mg_detail_blocks += f"""
 <div style="page-break-inside:avoid;margin-bottom:20px;border:1px solid #E5E7EB;border-radius:6px;overflow:hidden">
@@ -2156,9 +2156,9 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         <tr><td>原始毛利率</td><td class="r">{float(ss.get("origMarginPct") or 0):.1f}%</td></tr>
         <tr class="sub"><td>管銷分攤（10%）</td><td class="r red">− {_fn(ss.get("origAdminCost"))}</td></tr>
         <tr class="sub"><td>公益捐款（1%）</td><td class="r red">− {_fn(ss.get("origCharity"))}</td></tr>
-        <tr class="bold-row"><td>原始預估淨利</td><td class="r">{_fn(ss.get("origNetProfit"))}</td></tr>
-        <tr><td>原始預估淨利率</td><td class="r">{float(ss.get("origNetMarginPct") or 0):.1f}%</td></tr>
-        {('<tr class="sub"><td>報價預留間接成本（運費／安裝／差旅／保固／其他，已含於上列淨利）</td><td class="r">' + _fn(reserve) + '</td></tr>') if reserve > 0 else ''}
+        <tr class="bold-row"><td>原始預估營業利益</td><td class="r">{_fn(ss.get("origNetProfit"))}</td></tr>
+        <tr><td>原始預估營業利益率</td><td class="r">{float(ss.get("origNetMarginPct") or 0):.1f}%</td></tr>
+        {('<tr class="sub"><td>報價預留間接成本（運費／安裝／差旅／保固／其他，已含於上列營業利益）</td><td class="r">' + _fn(reserve) + '</td></tr>') if reserve > 0 else ''}
       </tbody>
     </table>
     <table style="width:100%">
@@ -2176,13 +2176,13 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         <tr><td>真實毛利率</td><td class="r">{float(ss.get("grossMarginPct") or 0):.1f}%</td></tr>
         <tr class="sub"><td>管銷分攤（10%）</td><td class="r red">− {_fn(ss.get("adminCost"))}</td></tr>
         <tr class="sub"><td>公益捐款（1%）</td><td class="r red">− {_fn(ss.get("charityDonation"))}</td></tr>
-        <tr class="bold-row"><td>真實淨利</td><td class="r {'green' if int(ss.get('netProfit',0) or 0)>=0 else 'red'}">{_fn(ss.get("netProfit"))}</td></tr>
-        <tr><td>真實淨利率</td><td class="r" style="color:{'#15803D' if float(ss.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(ss.get('netMarginPct',0) or 0)>=0 else '#DC2626'};font-weight:700">{float(ss.get("netMarginPct") or 0):.1f}%</td></tr>
+        <tr class="bold-row"><td>真實營業利益</td><td class="r {'green' if int(ss.get('netProfit',0) or 0)>=0 else 'red'}">{_fn(ss.get("netProfit"))}</td></tr>
+        <tr><td>真實營業利益率</td><td class="r" style="color:{'#15803D' if float(ss.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(ss.get('netMarginPct',0) or 0)>=0 else '#DC2626'};font-weight:700">{float(ss.get("netMarginPct") or 0):.1f}%</td></tr>
       </tbody>
     </table>
   </div>
   <div style="background:{'#F0FDF4' if prof_diff>=0 else '#FFF1F2'};border-top:1px solid {'#86EFAC' if prof_diff>=0 else '#FECACA'};padding:6px 12px;font-size:9pt;color:{diff_clr};font-weight:600">
-    {'真實淨利比原始預估高' if prof_diff>=0 else '真實淨利比原始預估低'} NT$ {abs(prof_diff):,}（{'+' if diff_ppts>=0 else ''}{diff_ppts:.1f} ppts）{reserve_split}
+    {'真實營業利益比原始預估高' if prof_diff>=0 else '真實營業利益比原始預估低'} NT$ {abs(prof_diff):,}（{'+' if diff_ppts>=0 else ''}{diff_ppts:.1f} ppts）{reserve_split}
   </div>
 </div>"""
 
@@ -2239,8 +2239,8 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
           + _pdf_acv_card("年度新成案數",  f"{_cas_d.get('actual',0)} 件",  f"{_cas_d.get('target',0)} 件",  _cas_d.get("rate"), f"{_cas_d.get('prorata',0)} 件" if _cas_d.get("prorata") else None)
           + _pdf_acv_card("年度收款金額",  fmt(_colA_d.get("actual",0)), fmt(_colA_d.get("target",0)), _colA_d.get("rate"), fmt(_colA_d.get("prorata",0)) if _colA_d.get("prorata") else None)
           + _pdf_acv_card("收款率目標",    f"{_colR_d.get('actual',0):.1f}%", f"{_colR_d.get('target',0):.0f}%", _colR_d.get("rate"))
-          + _pdf_acv_card("平均淨利率",  f"{_mgn_d.get('actual',0):.1f}%",  f"{_mgn_d.get('target',0):.0f}%",  _mgn_d.get("rate"))
-          + _pdf_acv_card("年度實際淨利",  fmt(_gp_d.get("actual",0)),   fmt(_gp_d.get("target",0)),   _gp_d.get("rate"),   fmt(_gp_d.get("prorata",0)) if _gp_d.get("prorata") else None)
+          + _pdf_acv_card("平均營業利益率",  f"{_mgn_d.get('actual',0):.1f}%",  f"{_mgn_d.get('target',0):.0f}%",  _mgn_d.get("rate"))
+          + _pdf_acv_card("年度實際營業利益",  fmt(_gp_d.get("actual",0)),   fmt(_gp_d.get("target",0)),   _gp_d.get("rate"),   fmt(_gp_d.get("prorata",0)) if _gp_d.get("prorata") else None)
         )
 
         _sp_rows_html = ""
@@ -2324,7 +2324,7 @@ tr.in-period{{background:#EFF6FF}}
   <div class="kpi"><div class="kpi-label">合約總案數</div><div class="kpi-val">{s["totalCases"]}</div><div class="kpi-sub">進行中 {s["activeCases"]}　已結案 {s["closedCases"]}</div></div>
   <div class="kpi"><div class="kpi-label">本期新成案</div><div class="kpi-val blue">{s["periodCases"]}</div></div>
   <div class="kpi"><div class="kpi-label">保固到期預警</div><div class="kpi-val orange">{s["warrantyAlerts"]}</div><div class="kpi-sub">90 天內到期</div></div>
-  <div class="kpi"><div class="kpi-label">精算實際淨利合計</div><div class="kpi-val" style="color:#7C3AED">{fmt(s["totalActualGrossProfit"])}</div><div class="kpi-sub">已精算 {s["settledCases"]} 件</div></div>
+  <div class="kpi"><div class="kpi-label">精算實際營業利益合計</div><div class="kpi-val" style="color:#7C3AED">{fmt(s["totalActualGrossProfit"])}</div><div class="kpi-sub">已精算 {s["settledCases"]} 件</div></div>
   <div class="kpi"><div class="kpi-label">精算覆蓋率</div><div class="kpi-val" style="color:#7C3AED">{s["settleCoverage"]}%</div><div class="kpi-sub">已結案 {s["closedCases"]} 件中 {s["settledCases"]} 件完成精算</div></div>
   <div class="kpi"><div class="kpi-label">在製訂單 (Backlog)</div><div class="kpi-val blue">{fmt(s["backlog"])}</div><div class="kpi-sub">進行中案件未收款合計</div></div>
   {'<div class="kpi"><div class="kpi-label">已結案未精算</div><div class="kpi-val red">' + str(s["settleOverdueCount"]) + ' 件</div><div class="kpi-sub">待補精算</div></div>' if s["settleOverdueCount"] > 0 else ""}
@@ -2412,21 +2412,21 @@ tr.in-period{{background:#EFF6FF}}
 <div class="page-break"></div>
 <div class="section-title" style="background:#1F2937">案件清單（本期新成案以藍色標示，依月份區分）</div>
 <table>
-<thead>{tbl_hdr("案件號","客戶","專案","業務員","報價日","進度","合約金額","預估淨利率","收款率","實際淨利率(▲▼)")}</thead>
+<thead>{tbl_hdr("案件號","客戶","專案","業務員","報價日","進度","合約金額","預估營業利益率","收款率","實際營業利益率(▲▼)")}</thead>
 <tbody>{case_rows}</tbody>
 </table>
 
 <!-- 業務員績效 -->
 <div class="section-title" style="background:#2563EB">業務員績效</div>
 <table>
-<thead>{tbl_hdr("業務員","案件數","合約總額","已收款","收款率","預估淨利率(加權)","實際淨利率(精算)","精算件數")}</thead>
+<thead>{tbl_hdr("業務員","案件數","合約總額","已收款","收款率","預估營業利益率(加權)","實際營業利益率(精算)","精算件數")}</thead>
 <tbody>{sp_rows}</tbody>
 </table>
 
 <!-- 毛利分析 -->
 <div class="page-break"></div>
 <div class="section-title" style="background:#7C3AED">利潤分析（已精算案件，共 {len(data["marginCases"])} 件）</div>
-{'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員","進度","預估淨利率","預估淨利","實際淨利率","實際淨利","差異(pp)","差異金額","精算狀態") + '</thead><tbody>' + mg_rows + '</tbody></table><h3 style="margin:20px 0 10px;font-size:10pt;color:#6D28D9;border-bottom:1px solid #DDD6FE;padding-bottom:4px">各案件利潤分析明細</h3>' + mg_detail_blocks if data["marginCases"] else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">目前尚無已完成精算之案件。</p>'}
+{'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員","進度","預估營業利益率","預估營業利益","實際營業利益率","實際營業利益","差異(pp)","差異金額","精算狀態") + '</thead><tbody>' + mg_rows + '</tbody></table><h3 style="margin:20px 0 10px;font-size:10pt;color:#6D28D9;border-bottom:1px solid #DDD6FE;padding-bottom:4px">各案件利潤分析明細</h3>' + mg_detail_blocks if data["marginCases"] else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">目前尚無已完成精算之案件。</p>'}
 
 <!-- 保固預警 -->
 <div class="page-break"></div>
@@ -3093,7 +3093,7 @@ def schedule_monthly_report() -> None:
 
 @router.get("/api/reports/monthly-trend")
 def monthly_trend(months: int = 12, authorization: str = Header(None)):
-    """近 N 月 MoM 趨勢：新成案件數、合約金額、實收金額、收入加權平均淨利率。"""
+    """近 N 月 MoM 趨勢：新成案件數、合約金額、實收金額、收入加權平均營業利益率。"""
     u = _require_user(authorization)
     _require_reports_access(u)
 

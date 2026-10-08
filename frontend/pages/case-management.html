@@ -2712,7 +2712,7 @@
                       </div>
                       <div class="cm-kpi__pill" :class="(caseSettleSummary().netMarginPct||0) >= 0 ? 'success' : 'danger'">
                         <span class="cm-kpi__val" x-text="((caseSettleSummary().netMarginPct)||0).toFixed(1) + '%'"></span>
-                        <span class="cm-kpi__lbl">淨利率（淨利 <span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="caseSettleFmt(caseSettleSummary().netProfit)"></span>）</span>
+                        <span class="cm-kpi__lbl">營業利益率（營業利益 <span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="caseSettleFmt(caseSettleSummary().netProfit)"></span>）</span>
                       </div>
                     </div>
 
@@ -2743,11 +2743,11 @@
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-danger-fg)"
                                     x-text="'− '+caseSettleFmt(caseSettleSummary().origCharity)"></td></tr>
                             <tr style="border-top:1.5px solid var(--line)">
-                                <td style="padding:4px 0;font-weight:700;font-family:var(--font-zh)">原始預估淨利</td>
+                                <td style="padding:4px 0;font-weight:700;font-family:var(--font-zh)">原始預估營業利益</td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"
                                     :style="(caseSettleSummary().origNetProfit||0)>=0?'color:var(--tone-success-fg)':'color:var(--tone-danger-fg)'"
                                     x-text="caseSettleFmt(caseSettleSummary().origNetProfit)"></td></tr>
-                            <tr><td style="padding:4px 0;font-weight:600;color:var(--text-dim);font-family:var(--font-zh)">原始預估淨利率</td>
+                            <tr><td style="padding:4px 0;font-weight:600;color:var(--text-dim);font-family:var(--font-zh)">原始預估營業利益率</td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600"
                                     :style="(caseSettleSummary().origNetMarginPct||0)>=20?'color:var(--tone-success-fg)':(caseSettleSummary().origNetMarginPct||0)>=0?'color:var(--tone-warning-fg)':'color:var(--tone-danger-fg)'"
                                     x-text="((caseSettleSummary().origNetMarginPct)||0).toFixed(1)+'%'"></td></tr>
@@ -2784,11 +2784,11 @@
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-danger-fg)"
                                     x-text="caseSettleCharityText(caseSettleSummary().charityDonation)" data-testid="cm-settle-charity"></td></tr>
                             <tr style="border-top:1.5px solid var(--tone-warning-border)">
-                                <td style="padding:4px 0;font-weight:700;font-family:var(--font-zh)">真實淨利</td>
+                                <td style="padding:4px 0;font-weight:700;font-family:var(--font-zh)">真實營業利益</td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"
                                     :style="(caseSettleSummary().netProfit||0)>=0?'color:var(--tone-success-fg)':'color:var(--tone-danger-fg)'"
                                     x-text="caseSettleFmt(caseSettleSummary().netProfit)"></td></tr>
-                            <tr><td style="padding:4px 0;font-weight:600;color:var(--text-dim);font-family:var(--font-zh)">真實淨利率</td>
+                            <tr><td style="padding:4px 0;font-weight:600;color:var(--text-dim);font-family:var(--font-zh)">真實營業利益率</td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"
                                     :style="(caseSettleSummary().netMarginPct||0)>=20?'color:var(--tone-success-fg)':(caseSettleSummary().netMarginPct||0)>=0?'color:var(--tone-warning-fg)':'color:var(--tone-danger-fg)'"
                                     x-text="((caseSettleSummary().netMarginPct)||0).toFixed(1)+'%'"></td></tr>
@@ -2801,8 +2801,8 @@
                              ? 'background:var(--tone-success-bg);border:1px solid var(--tone-success-border);color:var(--tone-success-fg)'
                              : 'background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);color:var(--tone-danger-fg)'">
                         <span x-text="(caseSettleSummary().profitDiff||0)>=0
-                          ? '真實淨利比原始預估高 NT$ '+Math.abs(Math.round(caseSettleSummary().profitDiff||0)).toLocaleString()+'（+'+(((caseSettleSummary().netMarginPct||0)-(caseSettleSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'
-                          : '真實淨利比原始預估低 NT$ '+Math.abs(Math.round(caseSettleSummary().profitDiff||0)).toLocaleString()+'（'+(((caseSettleSummary().netMarginPct||0)-(caseSettleSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'">
+                          ? '真實營業利益比原始預估高 NT$ '+Math.abs(Math.round(caseSettleSummary().profitDiff||0)).toLocaleString()+'（+'+(((caseSettleSummary().netMarginPct||0)-(caseSettleSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'
+                          : '真實營業利益比原始預估低 NT$ '+Math.abs(Math.round(caseSettleSummary().profitDiff||0)).toLocaleString()+'（'+(((caseSettleSummary().netMarginPct||0)-(caseSettleSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'">
                         </span>
                       </div>
                     </div>
