@@ -1,11 +1,13 @@
 # 應收應付 更新紀錄
 
-## 1.0.45 — 2026-10-08（wip/t47-audit-fixes）：出納端點跟進第 46 班稽核（S5／S8）；併 wip/t47-paydate-l1；整合期 hook 標籤微調
+## 1.0.46 — 2026-10-08（第 47 班整合）：出納 hook 記錄標籤微調
+- `api/cashier.py`：承攬商匯款改預定日後呼叫提供者的記錄標籤由 `contractor_voucher.planned_changed` 改為「承攬商匯款 planned_changed」（原標籤與串接能力名同字串，被船運分級守門判成未解析取用）；行為不變。
+
+## 1.0.45 — 2026-10-08（wip/t47-audit-fixes）：出納端點跟進第 46 班稽核（S5／S8）；併 wip/t47-paydate-l1
 - `PATCH …/pending-payables/{source}/{key}/planned-pay-date`：日期沒變時仍呼叫提供者的（冪等）`planned_changed`，上次背景行事曆推送失敗時重按一次能修復；稽核與通知照樣略過。
 - `GET …/payee-bank`：嚴格提供者（`FULL_ACCOUNT_STRICT`，勞報單）先寫稽核、寫不進去 ⇒ 500 且不回帳號；回應加 `Cache-Control: no-store`。
 - `api/cashier.py`：付款後的行事曆「付款待辦」收回／保留改為提供者 `planned_changed`（commit 之後）優先，沒有的來源走 L1 `payable_due_core.sync_event`；`NO_CALENDAR` 的來源（勞報單）仍完全不進行事曆（第 46 班 Q7，行為不變）。叫料分次付款仍有餘額時事件保留。
 - **獨立稽核跟進（ab）**：出納付款／改預定日端點在 commit 之後呼叫的串接點（`planned_changed`、`contractor_voucher.planned_changed`）出錯只記 log，不讓已完成的操作回 500。
-- 整合期微調：承攬商匯款改預定日後呼叫提供者的記錄標籤改為「承攬商匯款 planned_changed」（原標籤與串接能力名同字串，被船運分級守門判成未解析取用；行為不變）。
 
 ## 1.0.44 — 2026-10-08（fix/t45-audit-followups）：出納預定付款日端點遇到「沒變」直接回（第 45 班稽核 S3）
 - `PATCH …/planned-pay-date`（兩條）：提供者回 `unchanged` ⇒ 回 200＋`unchanged: true`，不寫稽核、不通知申請人、不動行事曆。
