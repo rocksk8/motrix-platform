@@ -102,8 +102,8 @@ def test_dry_run_writes_nothing(db):
 
 def test_apply_touches_only_unsettled_is_idempotent_and_rolls_back_bitwise(db, tmp_path):
     before = _rows(db)
-    rc, out = _run("--db", db, "recalc", "--apply")
-    assert rc == 0 and "已重算 3 張" in out, out
+    rc, out = _run("--db", db, "recalc", "--apply", "--set-mode-v2")
+    assert rc == 0 and "已重算 3 張" in out and "模式已設 v2" in out, out
     assert [f for f in os.listdir(tmp_path) if ".pre_overhead_" in f], "沒有備份檔"
     after = _rows(db)
     for no in ("F1", "C1"):                                     # 已完結／已結案不動
@@ -120,7 +120,7 @@ def test_apply_touches_only_unsettled_is_idempotent_and_rolls_back_bitwise(db, t
         assert after[no][1] == t["netMarginPct"]
     assert json.loads(after["U2"][0])["tot"]["adminCost"] == 0                              # 直毛為負 ⇒ 管銷 0
     snap = _rows(db)
-    rc, out = _run("--db", db, "recalc", "--apply")                                         # 冪等
+    rc, out = _run("--db", db, "recalc", "--apply", "--set-mode-v2")                                         # 冪等
     assert rc == 0 and "已重算 0 張" in out and _rows(db) == snap
     rc, out = _run("--db", db, "rollback", "--apply")
     assert rc == 0 and "已還原 3 張" in out, out
@@ -128,13 +128,13 @@ def test_apply_touches_only_unsettled_is_idempotent_and_rolls_back_bitwise(db, t
 
 
 def test_rollback_skips_cases_finalized_after_migration(db):
-    _run("--db", db, "recalc", "--apply")
+    _run("--db", db, "recalc", "--apply", "--set-mode-v2")
     c = sqlite3.connect(db)
     c.execute("UPDATE quotations SET settle_status='finalized' WHERE quote_no='U1'")
     c.commit()
     c.close()
     rc, out = _run("--db", db, "rollback", "--apply")
-    assert "略過（遷移後已完結／結案）1 張" in out, out
+    assert '"skip_settled_since": 1' in out, out
     assert json.loads(_rows(db)["U1"][0])["tot"]["formulaVer"] == 2
 
 
@@ -153,3 +153,114 @@ def test_missing_db_refused_without_creating_file(tmp_path):
     p = str(tmp_path / "nope.db")
     rc, out = _run("--db", p, "report")
     assert rc == 2 and not os.path.exists(p)
+
+
+# ── 獨立稽核 #1 的修補（第 48 班）──────────────────────────────────────────────
+
+def _set_root_pct(path, quote_no, pct):
+    c = sqlite3.connect(path)
+    d = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()[0])
+    d["overheadPct"] = pct
+    c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), quote_no))
+    c.commit()
+    c.close()
+
+
+def test_per_quote_custom_pct_is_kept_not_reset_to_default(db):
+    _set_root_pct(db, "U1", 30)
+    rc, out = _run("--db", db, "recalc", "--apply", "--set-mode-v2")
+    assert rc == 0, out
+    d = json.loads(_rows(db)["U1"][0])
+    assert d["overheadPct"] == 30 and d["tot"]["overheadPct"] == 30
+    exp = P.quote_profit(1000000, 600000, 30000, [1000, 0, 500, 0, 250], 30, 2)
+    assert d["tot"]["adminCost"] == exp["adminCost"] == 111000         # 直毛 370000×30%
+    assert json.loads(_rows(db)["U2"][0])["tot"]["overheadPct"] == 25   # 沒自己的百分比 ⇒ 預設
+    _run("--db", db, "rollback", "--apply")
+    assert json.loads(_rows(db)["U1"][0]).get("overheadPct") == 30       # 回滾後自己的百分比仍在
+
+
+def test_recalc_refused_unless_mode_v2_or_set_in_same_txn(db):
+    h = _sha(db)
+    rc, out = _run("--db", db, "recalc", "--apply")
+    assert rc == 2 and "拒絕" in out and _sha(db) == h
+    _run("--db", db, "mode", "v2", "--apply")
+    rc, out = _run("--db", db, "recalc", "--apply")
+    assert rc == 0 and "已重算 3 張" in out
+
+
+@pytest.mark.parametrize("bad", ["abc", "250", "-5", "7.25", "1e2", ""])
+def test_pct_is_validated(db, bad):
+    if bad == "":
+        pytest.skip("空字串＝未給")
+    h = _sha(db)
+    rc, out = _run("--db", db, "recalc", "--pct", bad, "--apply", "--set-mode-v2")
+    assert rc == 2 and _sha(db) == h, out
+
+
+def test_stale_plan_never_overwrites_a_row_finalized_after_planning(db):
+    """計畫在交易外算好 ⇒ U1 被別人完結 ⇒ 套用時不可寫 U1（重檢查已精算），其餘照寫且用當下的值。"""
+    c = sqlite3.connect(db)
+    c.row_factory = sqlite3.Row
+    stale = R.plan(c, "25")
+    other = sqlite3.connect(db)
+    other.execute("UPDATE quotations SET settle_status='finalized' WHERE quote_no='U1'")
+    d = json.loads(other.execute("SELECT data_json FROM quotations WHERE quote_no='U2'").fetchone()[0])
+    d["tot"]["totalIndirect"] = d["tot"]["totalIndirect"] + 777              # 計畫之後 U2 又被存檔：五項間接成本變了
+    other.execute("UPDATE quotations SET data_json=? WHERE quote_no='U2'", (json.dumps(d, ensure_ascii=False),))
+    other.commit()
+    other.close()
+    before_u1 = _rows(db)["U1"]
+    c.isolation_level = None
+    c.execute("BEGIN IMMEDIATE")
+    n, skipped = R.apply_plan(c, stale, "25", "t", {})
+    c.execute("COMMIT")
+    c.close()
+    assert skipped == 1 and n == 2
+    assert _rows(db)["U1"] == before_u1                                      # 已完結的沒被碰
+    u2 = json.loads(_rows(db)["U2"][0])["tot"]
+    exp = R.new_tot_fields(dict(json.loads(_rows(db)["U2"][0])["tot"], **u2["_legacy"]), "25")
+    assert u2["totalIndirect"] == exp["totalIndirect"] and u2["_legacy"]["totalIndirect"] == d["tot"]["totalIndirect"]   # 用的是『當下』的值
+
+
+def test_rollback_survives_a_form_resave_that_drops_tot_legacy(db):
+    """表單重存會重建 tot（丟掉 _legacy／_recalc）⇒ 回滾改用伺服器端快照；值沒變就能還原。"""
+    before = _rows(db)
+    _run("--db", db, "recalc", "--apply", "--set-mode-v2")
+    c = sqlite3.connect(db)
+    d = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no='U1'").fetchone()[0])
+    d["tot"].pop("_legacy"), d["tot"].pop("_recalc")
+    c.execute("UPDATE quotations SET data_json=? WHERE quote_no='U1'", (json.dumps(d, ensure_ascii=False),))
+    c.commit()
+    c.close()
+    rc, out = _run("--db", db, "rollback", "--apply")
+    assert "已還原 3 張" in out, out
+    assert json.loads(_rows(db)["U1"][0])["tot"]["adminCost"] == json.loads(before["U1"][0])["tot"]["adminCost"]
+
+
+def test_rollback_reports_edited_since_and_not_v2(db):
+    _run("--db", db, "recalc", "--apply", "--set-mode-v2")
+    c = sqlite3.connect(db)
+    d = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no='U1'").fetchone()[0])
+    d["tot"]["netProfit"] += 1                                               # 遷移後有人改了
+    c.execute("UPDATE quotations SET data_json=? WHERE quote_no='U1'", (json.dumps(d, ensure_ascii=False),))
+    d = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no='U2'").fetchone()[0])
+    d["tot"].pop("formulaVer")                                               # 舊式表單重存退回舊基準
+    c.execute("UPDATE quotations SET data_json=? WHERE quote_no='U2'", (json.dumps(d, ensure_ascii=False),))
+    c.commit()
+    c.close()
+    rc, out = _run("--db", db, "rollback")
+    assert "skip_edited_since" in out and "skip_not_v2" in out and '"restore": 1' in out, out
+
+
+def test_inconsistent_tot_with_negative_other_indirect_is_skipped_not_written(tmp_path):
+    p = str(tmp_path / "n.db")
+    bad = _legacy_tot(1000000, 600000, [0] * 5)
+    bad["totalIndirect"] = bad["adminCost"] + bad["charityDonation"] - 500       # 五項為負：不一致
+    _mk(p, [("B1", bad, "", "", None)])
+    h = _sha(p)
+    rc, out = _run("--db", p, "recalc", "--apply", "--set-mode-v2")
+    assert rc == 0 and "已重算 0 張" in out and "資料不足" in out
+    c = sqlite3.connect(p)
+    assert c.execute("SELECT value_json FROM system_settings WHERE key='overhead_rule_mode'").fetchone()[0] == '"v2"'   # 模式仍在同交易設定
+    c.close()
+    assert json.loads(_rows(p)["B1"][0])["tot"] == bad
