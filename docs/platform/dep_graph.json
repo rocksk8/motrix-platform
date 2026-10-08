@@ -904,6 +904,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:audit",
     "helper:auth",
     "helper:module_registry"
    ],
@@ -911,13 +912,13 @@
    "path": "backend/helpers/duty_roles.py",
    "tables_ddl": [],
    "tables_named": [
-    "audit_log",
     "module_versions"
    ],
    "tables_r": [
     "users"
    ],
    "tables_w": [
+    "audit_log",
     "duty_roles",
     "permission_changes",
     "user_duty_roles",
@@ -1284,6 +1285,19 @@
    "imports": [],
    "kind": "helper",
    "path": "backend/helpers/procurement.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "helper:profit_rules": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:legal_params"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/profit_rules.py",
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [],
@@ -2782,6 +2796,7 @@
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
+    "mod:case/api/overhead",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -2855,6 +2870,17 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:static/profit-rules.js": {
+   "api_calls": [],
+   "api_prefixes": [],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/profit-rules.js",
+   "routers_called": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:static/record-link.js": {
    "api_calls": [],
    "api_prefixes": [],
@@ -2909,6 +2935,25 @@
    "kind": "js",
    "path": "frontend/static/ui.js",
    "routers_called": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "js:static/users-duty.js": {
+   "api_calls": [
+    "/api/duty-roles",
+    "/api/duty-roles/preview",
+    "/api/duty-roles/users"
+   ],
+   "api_prefixes": [
+    "/api/duty-roles"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/users-duty.js",
+   "routers_called": [
+    "router:duty_roles"
+   ],
    "tables_r": [],
    "tables_w": []
   },
@@ -6356,6 +6401,7 @@
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
+    "mod:case/api/overhead",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -7852,6 +7898,77 @@
     "user_perm_subtracts"
    ]
   },
+  "mod:case/api/overhead": {
+   "api_prefixes": [
+    "/api/overhead"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:duty_roles",
+    "helper:legal_params",
+    "helper:module_registry",
+    "helper:profit_rules",
+    "helper:settings",
+    "helper:tiered_approval",
+    "mod:case/profit_guard"
+   ],
+   "imports": [
+    "helper:audit",
+    "helper:auth",
+    "helper:settings",
+    "mod:case/profit_guard"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/api/overhead.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "get_overhead_settings",
+     "line": 13,
+     "method": "GET",
+     "path": "/api/overhead/settings"
+    },
+    {
+     "func": "put_overhead_settings",
+     "line": 19,
+     "method": "PUT",
+     "path": "/api/overhead/settings"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "duty_roles",
+    "notifications",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
+  },
   "mod:case/api/quotations": {
    "api_prefixes": [
     "/api/approval-history",
@@ -7897,6 +8014,7 @@
     "helper:payable_due_core",
     "helper:prefill_sources",
     "helper:privacy_notice",
+    "helper:profit_rules",
     "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
@@ -7913,6 +8031,7 @@
     "mod:case/material_payment",
     "mod:case/payable_calendar",
     "mod:case/payable_reminders",
+    "mod:case/profit_guard",
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
@@ -7949,6 +8068,7 @@
     "mod:case/case_deadlines",
     "mod:case/case_stage_tasks",
     "mod:case/material_guard",
+    "mod:case/profit_guard",
     "mod:case/quotations",
     "mod:case/quote_terms",
     "mod:case/receipt_calendar",
@@ -7965,403 +8085,403 @@
    "routes": [
     {
      "func": "next_quote_no",
-     "line": 733,
+     "line": 735,
      "method": "GET",
      "path": "/api/next-quote-no"
     },
     {
      "func": "list_quotations",
-     "line": 794,
+     "line": 796,
      "method": "GET",
      "path": "/api/quotations"
     },
     {
      "func": "stage_board",
-     "line": 977,
+     "line": 979,
      "method": "GET",
      "path": "/api/quotations/stage-board"
     },
     {
      "func": "case_activity",
-     "line": 1082,
+     "line": 1084,
      "method": "POST",
      "path": "/api/quotations/case-activity"
     },
     {
      "func": "get_last_received_bank_account",
-     "line": 1123,
+     "line": 1125,
      "method": "GET",
      "path": "/api/quotations/last-received-bank-account"
     },
     {
      "func": "gate_matrix",
-     "line": 1171,
+     "line": 1173,
      "method": "GET",
      "path": "/api/quotations/gate-matrix"
     },
     {
      "func": "get_quotation",
-     "line": 1264,
+     "line": 1266,
      "method": "GET",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_case_assigned_users",
-     "line": 1297,
+     "line": 1299,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/assigned-users"
     },
     {
      "func": "toggle_quotation_signed",
-     "line": 1320,
+     "line": 1322,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/signed-toggle"
     },
     {
      "func": "upload_quotation_signed_files",
-     "line": 1401,
+     "line": 1403,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/signed-files"
     },
     {
      "func": "delete_quotation_signed_file",
-     "line": 1426,
+     "line": 1428,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/signed-files/{file_id}"
     },
     {
      "func": "create_quotation",
-     "line": 1478,
+     "line": 1480,
      "method": "POST",
      "path": "/api/quotations"
     },
     {
      "func": "update_quotation",
-     "line": 1684,
+     "line": 1689,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_status",
-     "line": 1933,
+     "line": 1942,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/status"
     },
     {
      "func": "recall_quotation",
-     "line": 2011,
+     "line": 2020,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/recall"
     },
     {
      "func": "case_bundle",
-     "line": 2293,
+     "line": 2302,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/case-bundle"
     },
     {
      "func": "case_close_gates",
-     "line": 2348,
+     "line": 2357,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/close-gates"
     },
     {
      "func": "update_deal_tag",
-     "line": 2387,
+     "line": 2396,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/deal-tag"
     },
     {
      "func": "delete_quotation",
-     "line": 2466,
+     "line": 2475,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "unlock_case",
-     "line": 2565,
+     "line": 2574,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-unlock"
     },
     {
      "func": "lock_case",
-     "line": 2614,
+     "line": 2623,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-lock"
     },
     {
      "func": "update_case_record",
-     "line": 2795,
+     "line": 2804,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/case-record"
     },
     {
      "func": "get_case_change_request",
-     "line": 3166,
+     "line": 3175,
      "method": "GET",
      "path": "/api/case-changes/{change_id}"
     },
     {
      "func": "approve_case_change",
-     "line": 3189,
+     "line": 3198,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/approve"
     },
     {
      "func": "reject_case_change",
-     "line": 3240,
+     "line": 3249,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/reject"
     },
     {
      "func": "list_case_stages_normalized",
-     "line": 3474,
+     "line": 3483,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "create_case_stage",
-     "line": 3492,
+     "line": 3501,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "update_case_stage",
-     "line": 3521,
+     "line": 3530,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "delete_case_stage",
-     "line": 3575,
+     "line": 3584,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "reorder_case_stages",
-     "line": 3616,
+     "line": 3625,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/stages/reorder"
     },
     {
      "func": "add_stage_assignee",
-     "line": 3640,
+     "line": 3649,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees"
     },
     {
      "func": "remove_stage_assignee",
-     "line": 3668,
+     "line": 3677,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}"
     },
     {
      "func": "toggle_stage_dependency",
-     "line": 3691,
+     "line": 3700,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}"
     },
     {
      "func": "add_stage_visit",
-     "line": 3724,
+     "line": 3733,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits"
     },
     {
      "func": "update_stage_visit",
-     "line": 3750,
+     "line": 3759,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "delete_stage_visit",
-     "line": 3781,
+     "line": 3790,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "record_export",
-     "line": 3804,
+     "line": 3813,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/export"
     },
     {
      "func": "mark_payment",
-     "line": 3893,
+     "line": 3902,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 4025,
+     "line": 4034,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 4068,
+     "line": 4077,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 4108,
+     "line": 4117,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 4147,
+     "line": 4156,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 4172,
+     "line": 4181,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 4213,
+     "line": 4222,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 4238,
+     "line": 4247,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 4270,
+     "line": 4279,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 4299,
+     "line": 4308,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_finance_summary",
-     "line": 4343,
+     "line": 4352,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "approve_quotation",
-     "line": 4799,
+     "line": 4808,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 4924,
+     "line": 4933,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 5010,
+     "line": 5019,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5076,
+     "line": 5085,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5222,
+     "line": 5231,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5308,
+     "line": 5317,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5339,
+     "line": 5348,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5370,
+     "line": 5379,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5411,
+     "line": 5420,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5471,
+     "line": 5480,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5538,
+     "line": 5547,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5579,
+     "line": 5588,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5617,
+     "line": 5626,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 6210,
+     "line": 6219,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6330,
+     "line": 6339,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6398,
+     "line": 6407,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6552,
+     "line": 6561,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6566,
+     "line": 6575,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6597,
+     "line": 6606,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -8498,6 +8618,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:prefill_sources",
+    "helper:profit_rules",
     "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
@@ -8627,6 +8748,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:prefill_sources",
+    "helper:profit_rules",
     "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
@@ -9202,6 +9324,23 @@
     "case_extra_expenses"
    ]
   },
+  "mod:case/profit_guard": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:legal_params",
+    "helper:profit_rules",
+    "helper:settings"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/profit_guard.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "mod:case/purchase_items": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -9323,6 +9462,7 @@
    "imports": [
     "helper:custom_finance",
     "helper:legal_params",
+    "helper:profit_rules",
     "mod:case/purchase_items",
     "mod:case/recognition",
     "plat:registry"
@@ -16335,7 +16475,8 @@
     "js:static/auth-guard.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
-    "js:static/sidebar.js"
+    "js:static/sidebar.js",
+    "js:static/users-duty.js"
    ],
    "kind": "page",
    "path": "frontend/pages/users.html",
@@ -17135,67 +17276,67 @@
     },
     {
      "func": "update_user",
-     "line": 1563,
+     "line": 1581,
      "method": "PUT",
      "path": "/api/users/{user_id}"
     },
     {
      "func": "get_user_privacy_ack",
-     "line": 1641,
+     "line": 1664,
      "method": "GET",
      "path": "/api/users/{user_id}/privacy-notice"
     },
     {
      "func": "ack_user_privacy_notice",
-     "line": 1648,
+     "line": 1671,
      "method": "POST",
      "path": "/api/users/{user_id}/privacy-notice/ack"
     },
     {
      "func": "delete_user",
-     "line": 1665,
+     "line": 1688,
      "method": "DELETE",
      "path": "/api/users/{user_id}"
     },
     {
      "func": "toggle_user_active",
-     "line": 1700,
+     "line": 1723,
      "method": "PATCH",
      "path": "/api/users/{user_id}/active"
     },
     {
      "func": "users_sales_contact",
-     "line": 1724,
+     "line": 1747,
      "method": "GET",
      "path": "/api/users/sales-contact"
     },
     {
      "func": "users_selectable",
-     "line": 1741,
+     "line": 1764,
      "method": "GET",
      "path": "/api/users/selectable"
     },
     {
      "func": "verify_unlock",
-     "line": 1754,
+     "line": 1777,
      "method": "POST",
      "path": "/api/auth/verify-unlock"
     },
     {
      "func": "set_unlock_password",
-     "line": 1774,
+     "line": 1797,
      "method": "PATCH",
      "path": "/api/users/{user_id}/unlock-password"
     },
     {
      "func": "verify_daily_task_unlock",
-     "line": 1803,
+     "line": 1826,
      "method": "POST",
      "path": "/api/auth/verify-daily-task-unlock"
     },
     {
      "func": "set_daily_task_password",
-     "line": 1822,
+     "line": 1845,
      "method": "PATCH",
      "path": "/api/users/{user_id}/daily-task-password"
     }
@@ -17204,7 +17345,9 @@
    "tables_named": [],
    "tables_r": [
     "departments",
-    "divisions"
+    "divisions",
+    "system_settings",
+    "user_perm_subtracts"
    ],
    "tables_r_transitive": [
     "approval_delegates",
@@ -17927,7 +18070,6 @@
    ],
    "imports": [
     "core:db",
-    "helper:audit",
     "helper:auth",
     "helper:duty_roles",
     "helper:module_registry"
@@ -17938,13 +18080,13 @@
    "routes": [
     {
      "func": "get_roles",
-     "line": 51,
+     "line": 52,
      "method": "GET",
      "path": "/api/duty-roles"
     },
     {
      "func": "create_role",
-     "line": 65,
+     "line": 66,
      "method": "POST",
      "path": "/api/duty-roles"
     },
@@ -17956,37 +18098,43 @@
     },
     {
      "func": "get_users",
-     "line": 83,
+     "line": 82,
      "method": "GET",
      "path": "/api/duty-roles/users"
     },
     {
+     "func": "preview",
+     "line": 97,
+     "method": "POST",
+     "path": "/api/duty-roles/preview"
+    },
+    {
      "func": "bind",
-     "line": 102,
+     "line": 110,
      "method": "POST",
      "path": "/api/duty-roles/bindings"
     },
     {
      "func": "unbind",
-     "line": 111,
+     "line": 118,
      "method": "POST",
      "path": "/api/duty-roles/bindings/remove"
     },
     {
      "func": "subtract",
-     "line": 120,
+     "line": 126,
      "method": "POST",
      "path": "/api/duty-roles/subtracts"
     },
     {
      "func": "unsubtract",
-     "line": 129,
+     "line": 134,
      "method": "POST",
      "path": "/api/duty-roles/subtracts/remove"
     },
     {
      "func": "get_changes",
-     "line": 138,
+     "line": 142,
      "method": "GET",
      "path": "/api/duty-roles/changes"
     }
@@ -19932,7 +20080,6 @@
    "imports": [],
    "kind": "table",
    "named_by": [
-    "helper:duty_roles",
     "helper:module_registry",
     "router:system"
    ],
@@ -19954,6 +20101,7 @@
     "helper:audit",
     "helper:case_access",
     "helper:company_setup",
+    "helper:duty_roles",
     "helper:geo",
     "helper:startup",
     "mod:arap/api/cashier",
@@ -22330,7 +22478,8 @@
     "helper:auth",
     "mod:payroll/bonus_correction",
     "mod:payroll/bonus_deductions",
-    "mod:payroll/bonus_vouchers"
+    "mod:payroll/bonus_vouchers",
+    "router:auth"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -22533,7 +22682,8 @@
    "path": "backend/core/migrations.py:453",
    "readers": [
     "core:archive",
-    "helper:auth"
+    "helper:auth",
+    "router:auth"
    ],
    "tables_r": [],
    "tables_w": [],

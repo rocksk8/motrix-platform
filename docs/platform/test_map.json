@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1202,
+  "tests": 1209,
   "unmapped": 13,
   "kinds": {
-   "api": 654,
-   "e2e": 294,
-   "audit": 145,
+   "api": 656,
+   "e2e": 296,
+   "audit": 148,
    "unit": 109
   },
-  "routes": 784
+  "routes": 787
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -7658,6 +7658,29 @@
      "backend/tests/_requires.py"
     ],
     "api": [
+     "backend/modules/case/api/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_overhead_s2_t48.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/api/overhead",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/case/api/overhead.py",
      "backend/modules/case/api/quotations.py"
     ],
     "module_dir": [
@@ -18400,6 +18423,34 @@
     ]
    }
   },
+  "backend/tests/platform/test_profit_rule_single_source.py": {
+   "kind": "audit",
+   "units": [
+    "helper:profit_rules",
+    "js:static/profit-rules.js",
+    "page:pages/quotation-form.html",
+    "page:pages/settlement.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html",
+     "frontend/pages/settlement.html",
+     "frontend/static/profit-rules.js"
+    ],
+    "path": [
+     "backend/helpers/profit_rules.py",
+     "frontend/pages/quotation-form.html",
+     "frontend/pages/settlement.html",
+     "frontend/static/profit-rules.js"
+    ]
+   }
+  },
   "backend/tests/platform/test_queue_items_malformed_json.py": {
    "kind": "api",
    "units": [
@@ -26034,6 +26085,35 @@
     ]
    }
   },
+  "backend/tests/test_e2e_paydate_gap_t48.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "mod:subcontract/api/vendor_contractors",
+    "page:pages/case-management.html",
+    "page:pages/cashier.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "frontend/pages/cashier.html"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_e2e_payreq_2026_09_27.py": {
    "kind": "e2e",
    "units": [
@@ -26929,6 +27009,26 @@
      "frontend/index.html",
      "frontend/pages/case-management.html",
      "frontend/pages/dev-crm.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_users_duty_roles_2026_10_08.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/users.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/users.html"
+    ],
+    "path": [
+     "frontend/pages/users.html"
     ]
    }
   },
@@ -29894,6 +29994,27 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_overhead_recalc_t48.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/migrations_frozen/t48_overhead25/__init__.py",
+    "file:backend/migrations_frozen/t48_overhead25/recalc.py",
+    "file:backend/tools/overhead_migrate.py",
+    "helper:profit_rules"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/profit_rules.py",
+     "backend/migrations_frozen/t48_overhead25/__init__.py",
+     "backend/migrations_frozen/t48_overhead25/recalc.py"
+    ],
+    "path": [
+     "backend/tools/overhead_migrate.py"
+    ]
+   }
+  },
   "backend/tests/test_package_prune_by_age_2026_09_25.py": {
    "kind": "audit",
    "units": [
@@ -30217,6 +30338,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
     "mod:case/api/material_payments",
+    "mod:case/api/overhead",
     "mod:case/api/quotations",
     "mod:crm/api",
     "mod:daily_tasks/api",
@@ -30293,6 +30415,7 @@
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/completion_notes.py",
      "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/overhead.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
@@ -30387,6 +30510,33 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_profit_rules_t48.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/data/profit_rules_vectors.json",
+    "helper:profit_rules",
+    "js:static/legal-round.js",
+    "js:static/profit-rules.js",
+    "page:pages/quotation-form.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/profit_rules.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html",
+     "frontend/static/legal-round.js",
+     "frontend/static/profit-rules.js"
+    ],
+    "path": [
+     "backend/tests/data/profit_rules_vectors.json",
+     "frontend/static/legal-round.js",
+     "frontend/static/profit-rules.js"
+    ]
+   }
   },
   "backend/tests/test_px1_permission_message_matches_guard_2026_09_24.py": {
    "kind": "audit",
@@ -30848,6 +30998,93 @@
      "backend/routers/search.py",
      "backend/tools/duty_roles_equivalence.py",
      "backend/tools/duty_roles_rollback.py"
+    ]
+   }
+  },
+  "backend/tests/test_r2_step2_2026_10_08.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "helper:duty_roles",
+    "mod:accounting/api/account_items",
+    "mod:accounting/api/vouchers",
+    "mod:analytics/api/dashboard",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
+    "mod:case/api/completion_notes",
+    "mod:case/api/material_payments",
+    "mod:case/api/quotations",
+    "mod:crm/api",
+    "mod:daily_tasks/api",
+    "mod:netplan/api",
+    "mod:payroll/api/bank_account",
+    "mod:payroll/api/payslips",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/contractors",
+    "mod:subcontract/api/remit_kinds",
+    "mod:subcontract/api/vendor_contractors",
+    "mod:supply/api/shipping_notes",
+    "mod:supply/api/suppliers",
+    "router:approval_delegates",
+    "router:approval_queue",
+    "router:auth",
+    "router:company_lookup",
+    "router:custom_records",
+    "router:customers",
+    "router:definitions",
+    "router:duty_roles",
+    "router:item_reads",
+    "router:mail_settings",
+    "router:module_versions",
+    "router:parts",
+    "router:search",
+    "router:system",
+    "router:uploads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/duty_roles.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/account_items.py",
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/crm/api.py",
+     "backend/modules/daily_tasks/api.py",
+     "backend/modules/netplan/api.py",
+     "backend/modules/payroll/api/bank_account.py",
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/subcontract/api/remit_kinds.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/modules/supply/api/shipping_notes.py",
+     "backend/modules/supply/api/suppliers.py",
+     "backend/routers/approval_delegates.py",
+     "backend/routers/approval_queue.py",
+     "backend/routers/auth.py",
+     "backend/routers/company_lookup.py",
+     "backend/routers/custom_records.py",
+     "backend/routers/customers.py",
+     "backend/routers/definitions.py",
+     "backend/routers/duty_roles.py",
+     "backend/routers/item_reads.py",
+     "backend/routers/mail_settings.py",
+     "backend/routers/module_versions.py",
+     "backend/routers/parts.py",
+     "backend/routers/search.py",
+     "backend/routers/system.py",
+     "backend/routers/uploads.py"
     ]
    }
   },
