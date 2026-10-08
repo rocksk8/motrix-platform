@@ -62,6 +62,7 @@ from helpers import (
 from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E402  CA-O4：L1
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
 from modules.case import material_guard as MG  # 叫料審核的寫入閘（31-C）
+from modules.case import profit_guard as _PG  # 第 48 班 S2：管銷分攤比率權限／伺服器重算
 from modules.case import receipt_calendar as _RC  # 行事曆「收款登錄／應收到期提醒」（2026-10-05，預設關）
 from modules.case.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
 from modules.case.case_stage_tasks import daily_task_notice, delete_daily_task_for_case_stage, sync_daily_task_for_case_stage  # noqa: E402
@@ -114,6 +115,7 @@ _TRACKED_QUOTE_FIELDS = [
     ("tot.pretax",        "未稅金額"),
     ("tot.directMarginPct", "直接毛利率"),
     ("tot.netMarginPct",  "淨利率"),
+    ("overheadPct",       "管銷分攤比率"),
     ("notes",             "備註"),
     ("contract.deliveryAddress", "交貨地址"),
     ("contract.deliveryTerms",   "交貨條件"),
@@ -1491,6 +1493,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
         _apply_server_submit_reasons(q, user)
     now = datetime.now().isoformat()
     month = datetime.now().strftime("%Y%m")
+    _oh_change = _PG.prepare(q, user)       # 第 48 班 S2：管銷分攤比率驗證／權限（非最高管理者改比率 ⇒ 403）；v2 口徑時伺服器重算利潤欄位
     tot  = q.get("tot", {})
     # 38（稽核 H-1）：新建的報價單不可能已成案／已完結——精算本文與成案狀態只能走各自的專用端點（PATCH /deal-tag、PUT /settlement）。
     # 客戶端帶來的一律丟掉（原本直接採用：探針建出 deal_tag=已結案、settle_status=finalized、淨利 99,999,999 的報價單）。
@@ -1675,6 +1678,8 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     spawn_bg_thread(_generate_quotation_pdf,
                     args=(qno, user.get("display_name") or user["username"], '建立'))
     _audit(_tok(authorization), 'quotation.create', 'quotation', qno, f"{qno}（{q.get('customerName','')}）")
+    if _oh_change:
+        _audit(_tok(authorization), 'quotation.overhead_pct_change', 'quotation', qno, f"{qno} 管銷分攤比率 {_oh_change['old']}% → {_oh_change['new']}%（預設 {_oh_change['default']}%）", _oh_change)
     notify_module_activity("報價單", "建立", user.get("display_name") or user["username"],
                             f"{qno}（{q.get('customerName','')}）", "quotations.html")
     return {"quote_no": qno, "created_at": now}
@@ -1842,6 +1847,8 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     elif "settlement" in q:
         q.pop("settlement")
 
+    _oh_change = _PG.prepare(q, user, existing, quote_no)      # 第 48 班 S2：管銷分攤比率驗證／權限；已精算／結案不動；v2 口徑時伺服器重算
+    tot = q.get("tot", {})
     # 一般編輯的編輯紀錄（2026-09-14）——解鎖編輯那條路徑上面已經記過了，
     # 這裡只補「不是解鎖編輯」的一般存檔。
     # **沒有任何可辨識變更時不寫**：這支端點同時被自動存檔（autoSave）與手動
@@ -1924,6 +1931,8 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             extra["delegateNote"] = appr["delegateNote"]
         _audit(_tok(authorization), 'quotation.update', 'quotation', quote_no,
                f"{quote_no}（{q.get('customerName','')}）", extra or None)
+    if _oh_change:
+        _audit(_tok(authorization), 'quotation.overhead_pct_change', 'quotation', quote_no, f"{quote_no} 管銷分攤比率 {_oh_change['old']}% → {_oh_change['new']}%（預設 {_oh_change['default']}%）", _oh_change)
     return {"quote_no": quote_no, "updated_at": now, "status": new_status}
 
 
