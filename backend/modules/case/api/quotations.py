@@ -5922,7 +5922,7 @@ def _lines_of_row(r) -> list:
 _TYPED_DETAIL_TYPES = ("text", "textarea", "select", "radio", "date", "daterange", "ref")
 _TYPED_DETAIL_MAX = 500
 _MONEY_FIELD_LABELS = {"金額", "單價", "小計", "總金額", "存簿封面"}          # 同 L1 `routers.approval_queue._MONEY_LABELS`
-_MONEY_LABEL_WORDS = ("金額", "價", "預算")                                   # 不含「費用」：真實定義有「費用歸屬單位」（參照欄，非金額）
+_MONEY_LABEL_WORDS = ("金額", "價", "預算", "費用")
 
 
 def _typed_ref_name(conn, target, v) -> str:
@@ -5964,7 +5964,7 @@ def _typed_detail_fields(conn, r, taken=()) -> list:
         if f.get("dataClass") != "T1" or f.get("cashier") or f.get("key") not in data:       # 沒宣告資料分類 ⇒ 不顯示（只認明確的 T1）
             continue
         _lab = str(f.get("label") or f["key"])
-        if _lab in _MONEY_FIELD_LABELS or any(w in _lab for w in _MONEY_LABEL_WORDS):        # 金額類欄位（標籤命中金額遮蔽表或含 金額／價／預算／費用）：不顯示——提供者沒有檢視者身分，遮蔽表只管固定標籤，改名顯示會繞過
+        if _lab in _MONEY_FIELD_LABELS or (f.get("type") != "ref" and any(w in _lab for w in _MONEY_LABEL_WORDS)):   # 參照欄（例：費用歸屬單位＝部門名稱）不可能是金額，不套字樣過濾；金額類欄位（標籤命中金額遮蔽表或含 金額／價／預算／費用）：不顯示——提供者沒有檢視者身分，遮蔽表只管固定標籤，改名顯示會繞過
             continue
         v = data.get(f["key"])
         if f.get("type") == "ref":                                   # 參照：使用者 ⇒ 顯示名稱、部門 ⇒ 部門名稱；查不到 ⇒ 略過（不顯示 id）

@@ -24,7 +24,7 @@ def test_money_like_labels_are_still_hidden(client, world):
     from modules.case.api import quotations as Q
     for lab in ("金額", "單價", "預算上限", "報價單價", "小計"):
         assert lab in Q._MONEY_FIELD_LABELS or any(w in lab for w in Q._MONEY_LABEL_WORDS), lab
-    assert not any(w in "費用歸屬單位" for w in Q._MONEY_LABEL_WORDS)
+    assert "費用" in Q._MONEY_LABEL_WORDS, "文字欄「其他費用說明」之類仍過濾；只有 ref 型欄位（費用歸屬單位）免過濾（見 test_cost_dept_ref_field_is_shown…）"
 
 
 def _set_payee(eid, **cols):
