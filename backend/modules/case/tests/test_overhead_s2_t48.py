@@ -302,3 +302,22 @@ def test_unstamped_quote_is_not_a_false_403_after_the_default_changes(client, wh
 def test_overhead_pct_is_hidden_from_roles_without_money_visibility():
     from helpers import financial_mask
     assert "overheadPct" in financial_mask.QUOTE_MONEY_KEYS
+
+
+def test_v2_without_the_migration_marker_is_treated_as_legacy(client, who):
+    """失效安全：有人（含離線工具）把 overhead_rule_mode 直接寫成 v2 但沒有遷移完成標記 ⇒ 伺服器照 legacy 算。"""
+    su, ad = who
+    cn = db.get_db()
+    cn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES ('overhead_rule_mode', '\"v2\"', '2031-01-01T00:00:00') "
+               "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json")
+    cn.commit()
+    cn.close()
+    assert client.get("/api/overhead/settings", headers=ad).json()["ruleMode"] == "legacy"
+    t = _row(_post(client, ad, _q()).json()["quote_no"])[0]["tot"]
+    assert t["adminCost"] == 10000 and "formulaVer" not in t
+    _migrated()
+    assert client.get("/api/overhead/settings", headers=ad).json()["ruleMode"] == "v2"
+    cn = db.get_db()
+    cn.execute("DELETE FROM system_settings WHERE key IN ('overhead_rule_mode', 'overhead_migration_done')")
+    cn.commit()
+    cn.close()

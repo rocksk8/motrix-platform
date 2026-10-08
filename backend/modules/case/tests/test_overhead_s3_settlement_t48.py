@@ -20,7 +20,7 @@ def _reset_mode():
     yield
     cn = db.get_db()
     try:
-        cn.execute("DELETE FROM system_settings WHERE key='overhead_rule_mode'")
+        cn.execute("DELETE FROM system_settings WHERE key IN ('overhead_rule_mode', 'overhead_migration_done')")
         cn.commit()
     finally:
         cn.close()
@@ -29,6 +29,8 @@ def _reset_mode():
 def _mode(mode, pct=None):
     cn = db.get_db()
     try:
+        cn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES ('overhead_migration_done', ?, '2031-01-01T00:00:00') "
+                   "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json", (json.dumps({"doneAt": "2026-10-09T00:00:00"}),))
         cn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES ('overhead_rule_mode', ?, '2031-01-01T00:00:00') "
                    "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json", (json.dumps(mode),))
         d = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])

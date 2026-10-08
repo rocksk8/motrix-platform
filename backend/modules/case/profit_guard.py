@@ -47,6 +47,9 @@ def parse_pct(v):
 def rule_mode() -> str:
     from helpers.settings import _get_setting
     m = _get_setting(MODE_KEY, "legacy")
+    if m == "v2" and not migration_done():                        # 失效安全：沒有遷移完成標記就算 legacy（防止新舊口徑的單混在一起）
+        _log.warning("overhead_rule_mode=v2 但沒有 %s 標記 ⇒ 視為 legacy", MIGRATION_KEY)
+        return "legacy"
     return m if m in MODES else "legacy"
 
 
