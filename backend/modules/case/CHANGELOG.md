@@ -1,12 +1,13 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-09（wip/t48-oh25-s1）：利潤規則單一來源（管銷／公益金／營業利益算式抽成 `helpers/profit_rules.py`，零行為變更）
-- `settlement_actuals`：完結比對的管銷分攤、公益金、營業利益、報價原始側後備改呼叫 `helpers.profit_rules`（口徑仍是第 47 班的 10%）。前端 `static/profit-rules.js` 與黃金向量等值測試已備，頁面第 3 步（S3）才改接。設計：`docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
-
 ## (next) — 2026-10-09（wip/t48-oh25-s1／s2）：利潤規則單一來源（S1，零行為變更）＋管銷分攤比率與伺服器把關（S2，新行為預設關；`/api/overhead` 前綴登記於 module.json）
 - `settlement_actuals`：完結比對的管銷分攤、公益金、營業利益、報價原始側後備改呼叫 `helpers.profit_rules`（口徑仍是第 47 班的 10%）。前端 `static/profit-rules.js` 與黃金向量等值測試已備，頁面第 3 步（S3）才改接。設計：`docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
 
 - **S2（wip/t48-oh25-s2）管銷分攤比率與伺服器把關（新行為預設關）**：新增 `profit_guard.py`＋`GET/PUT /api/overhead/settings`（全域預設比率 `overhead_default_pct`、口徑開關 `overhead_rule_mode`＝legacy｜v2；只有最高管理者能改，每次稽核 `settings.overhead.update`）。報價單 `data_json.overheadPct`（新建＝全域預設；與存值不同只有最高管理者可改，否則 403；非法值 422；稽核 `quotation.overhead_pct_change`；已精算／結案不動）。`v2` 時存檔由伺服器用 `profit_rules` 重算 `tot` 利潤欄位與 `net_margin_pct`（不信前端）；`legacy`（預設）數字完全不變，只做影子比對（不一致記 warning）。歷程欄位新增「管銷分攤比率」（金額遮罩白名單同步）。
+- **（併入）(next) — 2026-10-08（wip/t48-paydate-gap）：承攬商匯款建立視窗可填預定付款日、派發卡片顯示（預定付款日缺口 G1／G2）**
+- 「產生匯款申請」視窗新增「預定付款日（選填）」：送 `planned_pay_date`（後端 `normalize_date` 驗格式，格式錯 ⇒ 400）；與下面的「應付款日期」（合約應付款日，寫回派發）是兩件事，**不互相預填**。不填也可以（出納核准後仍能改）。
+- 承攬商匯款卡片（派發頁）有預定付款日時顯示「預定付款日 YYYY-MM-DD」（作廢的不顯示）；可見範圍與卡片本身相同（財務角色／最高管理者）。
+- 純前端（`case-management.html`、`case-management-dispatch.js`）：沒有 migration、沒有後端與權限變更；回滾＝程式回退。e2e：`tests/test_e2e_paydate_gap_t48.py`。
 
 ## 1.0.163 — 2026-10-08（第 47 班整合）：報價單表單版本 V3.18
 - `frontend/pages/quotation-form.html`：`FORM_VERSION` V3.17 → V3.18（報價人聯絡資料改由 `GET /api/users/sales-contact` 帶入；守門 `test_form_version_bumped` 要求內容變動必須升版，並登記 LEDGER）；行為不變。
@@ -20,11 +21,6 @@
 - **獨立稽核跟進（ab）**：叫料匯款差額審核決定（核可／退回）的回應**新增 `paymentId`**（加法，既有欄位不變）；案件額外支出與叫料匯款的行事曆對齊讀現況與寫事件同一把鎖（`payable_due_core.sync_lock`）。
 - `quotation-form.html`：『報價人』改選他人時，電話／Email 改由 `GET /api/users/sales-contact` 帶入（使用者清單對一般人員不再含別人的聯絡方式，第 47 班）；管理員與自己那一列清單裡有欄位時不多打一次請求。
 - **收款帳號不外洩（獨立審查 ab）**：額外支出清單／我的申請／變更申請提議裡的 `payeeAccount` 只給末四碼（`****9012`），只有財務角色與最高管理者（`has_finance_access`）拿到完整值；完整帳號仍以出納『查看收款人銀行資料』為主（每次留稽核）。申請人本人、簽核人、案件成員都只看末四碼。**保留而非洗掉**：草稿重存與變更申請若沒帶收款人欄位（`payeeType／payeeName／payeeBank／payeeAccount`）＝保留原值，明確送空字串才是清除（採購單表單沒填收款帳戶時會明確送空值）；銀行名稱＋分行的後端上限放寬到 110 字（前端 60＋空白＋40）；把遮罩值（`****9012`）原樣送回會被 400 擋下。測試：`test_po_account_masking_t47_2026_10_08.py`。
-
-## (next) — 2026-10-08（wip/t48-paydate-gap）：承攬商匯款建立視窗可填預定付款日、派發卡片顯示（預定付款日缺口 G1／G2）
-- 「產生匯款申請」視窗新增「預定付款日（選填）」：送 `planned_pay_date`（後端 `normalize_date` 驗格式，格式錯 ⇒ 400）；與下面的「應付款日期」（合約應付款日，寫回派發）是兩件事，**不互相預填**。不填也可以（出納核准後仍能改）。
-- 承攬商匯款卡片（派發頁）有預定付款日時顯示「預定付款日 YYYY-MM-DD」（作廢的不顯示）；可見範圍與卡片本身相同（財務角色／最高管理者）。
-- 純前端（`case-management.html`、`case-management-dispatch.js`）：沒有 migration、沒有後端與權限變更；回滾＝程式回退。e2e：`tests/test_e2e_paydate_gap_t48.py`。
 
 ## 1.0.161 — 2026-10-08（wip/t46-fix-pr-remark）：第 46 班第二輪修正（獨立稽核 S1／S2／S6）
 - **第二輪修正（獨立稽核 S1／S2）**：① 詳情的金額類欄位字樣過濾（金額／價／預算／費用）改為不套用在**參照型欄位**——真實差旅／零用金定義的「費用歸屬單位」（參照部門，非金額）不再被藏掉；文字欄「其他費用說明」之類照舊過濾。② 採購單／零用金的收款對象在表單上：不論 `payee_type` 是什麼、有沒有填收款人名稱，出納檢視都不再退回「申請人」的員工收款帳戶（`payables._payee_username` 對這兩種單據一律回空）。測試：`test_t46_fix_pr_remark_round2_2026_10_08.py`。

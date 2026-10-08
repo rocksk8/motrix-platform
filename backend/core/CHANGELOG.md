@@ -5,6 +5,14 @@
 ## (next) — 2026-10-09（wip/t48-oh25-s1：利潤規則單一來源，L1 新增 helpers/profit_rules）
 - L1（新增，向下相容）：新單位 `helpers/profit_rules.py`——報價單／精算的管銷分攤、公益捐款、間接成本合計、營業利益（舊稱淨利）、營業利益率的**唯一算式**（`admin_cost`／`charity`／`quote_profit`／`settlement_profit`／`pct_rate`；口徑 `LEGACY_VER=1` 稅前×10%、`FORMULA_VER=2` 直接毛利×pct%）。前端同一套：`static/profit-rules.js`（`MotrixProfitRules`）。`ACTIVE_VER` 仍是 1，**S1 零行為變更**；設計 `docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
 - 守門與測試：`tests/test_profit_rules_t48.py`（黃金向量 Python／node 等值、舊內嵌算式對拍、ver 2 獨立 Decimal 對拍）、`tests/platform/test_profit_rule_single_source.py`（管銷算式只准寫在規則檔；前端過渡登記 S3 清空）。
+- **（併入）(next) — 2026-10-08（wip/t48-r2-step2：R2 第2步——users.html 整合、舊 PUT 與扣項衝突、唯讀報表讀生效權限、8a）**
+- L1（新增，向下相容）：`helpers.duty_roles` 新增 `apply_duty`（純函式：把角色權限清單與扣項套到原始勾選；`resolve_raw_modules` 改呼叫它，行為逐字不變）與 `preview_whatif`（唯讀「假設」預覽，與真實生效路徑共用 `apply_duty` ＋ `effective_modules` 的財務規則）。
+- `permission_changes.audit_id` 開始填值（8a）：`duty_roles._record` 在**同一個交易**先寫一筆 `audit_log`（動作名稱沿用 `duty_roles.bind／unbind／subtract／unsubtract／role_create／role_update`），再把它的 id 帶進 INSERT（表有 UPDATE 觸發器，只能在 INSERT 時填）；`routers/duty_roles.py` 不再另寫一筆（否則同一個動作兩列）。沒有實質變更的角色更新仍留一筆 audit_log（不寫 permission_changes），與舊路由一致。
+- 新端點 `POST /api/duty-roles/preview`（superadmin、唯讀）：{userId, modules[], roleIds[], subtracts[], role?} ⇒ 伺服器算出的生效清單，供 `users.html` 編輯視窗預覽。
+- `PUT /api/users/{id}`（2c，使用者裁示 Q1）：`modules` 含「目前被個人扣項扣掉的鍵」⇒ 400（訊息列出鍵與「請先解除扣項」），並寫稽核 `user.put_rejected_subtract`。**秒級退場旗標** `system_settings.users_put_reject_subtracted`（預設開；設 `0`／`"off"`／`false` ⇒ 回舊行為）。
+- 唯讀報表（2d）：`audit_account_permissions.py` 預設讀**生效權限**（職責角色＋個人扣項＋財務規則）；`finance_role_impact_report.py` 預設把職責角色與扣項套到勾選上（**刻意不套財務規則**，那正是這份報表要預告的變化）；兩支都新增 `--raw`（舊口徑），輸出標明口徑。
+- 前端（`users.html`＋`static/users-duty.js`）：編輯既有、非最高管理者時顯示「職責角色／個人扣項／生效權限預覽／變更原因」；畫面只送**原始勾選**（預覽唯讀、不寫回）；存檔順序＝解除扣項 → PUT → 解除／新增角色 → 新增扣項，失敗即停並明講已完成／未完成。**使用者可見的行為變更（Q3）**：編輯既有使用者且個人勾選為空時，不再用基礎類別樣板預填（只有「新增使用者」預填）。
+- 不放寬任何權限；只新增拒絕（2c）；沒有 migration、沒有新表。回滾：2c 設旗標 `0`；其餘純程式（L1）回退即還原，無資料動作。
 
 ## 1.119 — 2026-10-08（wip/t47-paydate-l1：預定付款日共用提醒庫；wip/t47-users-list-privacy：使用者清單收緊敏感欄位，L0 行為、介面不變）
 - L1（新增，向下相容）：新單位 `helpers/payable_due_core.py`（使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）——`due_kind`／`effective_send_day`／`next_working_day`／`candidate_planned_dates`（3 天前、當天、逾期＝預定日後第 1 個工作日；規則自 M01 `payable_reminders` 搬入）、`notify_finance`（財務站內通知，不含金額；寄信函式由呼叫端傳入 `run_scan(send=…)`，因為寄信必須用字面 key 呼叫 `send_registered`，守門 `test_mail_registry` 逐一核對）、`prune_guards`／`run_scan`（guard、寄送迴圈、等待上限）、`sync_event`／`CALENDAR_SOURCES`（行事曆「付款待辦」來源開關：案件額外支出、承攬商匯款、叫料匯款；**勞報單不在名單 ⇒ 零呼叫**）。純函式、不讀時鐘（日期與工作日判斷由呼叫端傳入）。
@@ -18,15 +26,6 @@
 - ⚠ **可見度收緊（使用者 2026-10-08 裁示）**：`GET /api/users` 對一般人員（角色不是 admin／superadmin）不再回**別人**的 `email`、`phone`、`modules`（原始權限勾選）、`notificationMuted`（信件退訂）；其餘欄位（id、帳號、顯示名稱、角色、在職、部門／處、`builtinAdmin`、`createdAt`）照舊，所以各頁面的人員下拉照常。**自己那一列照舊完整**（個人設定與報價單帶入業務員資料要用）；admin／superadmin 拿到完整列，使用者管理、信件設定、組織架構頁不受影響。`/api/users/selectable` 不變。
 - 新增 `GET /api/users/sales-contact?username=`（`routers/auth.py`）：報價單『報價人』改選他人（代理）時帶入對方電話／Email 用——一次查一個人、只回 `{id, displayName, phone, email}`；需要模組 `quotation`（最高管理者直通）；對象必須是在職使用者，否則 404。取代原本從使用者清單拿別人聯絡方式的做法（清單已收緊），代理報價不會變成空白電話／Email。
 - 測試：`tests/test_users_list_privacy_t47_2026_10_08.py`（API：業務／工程師／檢視者／admin／superadmin，含自己那一列）、`tests/test_e2e_users_list_privacy_pages_t47_2026_10_08.py`（8 個頁面 × 業務／工程師）。
-
-## (next) — 2026-10-08（wip/t48-r2-step2：R2 第2步——users.html 整合、舊 PUT 與扣項衝突、唯讀報表讀生效權限、8a）
-- L1（新增，向下相容）：`helpers.duty_roles` 新增 `apply_duty`（純函式：把角色權限清單與扣項套到原始勾選；`resolve_raw_modules` 改呼叫它，行為逐字不變）與 `preview_whatif`（唯讀「假設」預覽，與真實生效路徑共用 `apply_duty` ＋ `effective_modules` 的財務規則）。
-- `permission_changes.audit_id` 開始填值（8a）：`duty_roles._record` 在**同一個交易**先寫一筆 `audit_log`（動作名稱沿用 `duty_roles.bind／unbind／subtract／unsubtract／role_create／role_update`），再把它的 id 帶進 INSERT（表有 UPDATE 觸發器，只能在 INSERT 時填）；`routers/duty_roles.py` 不再另寫一筆（否則同一個動作兩列）。沒有實質變更的角色更新仍留一筆 audit_log（不寫 permission_changes），與舊路由一致。
-- 新端點 `POST /api/duty-roles/preview`（superadmin、唯讀）：{userId, modules[], roleIds[], subtracts[], role?} ⇒ 伺服器算出的生效清單，供 `users.html` 編輯視窗預覽。
-- `PUT /api/users/{id}`（2c，使用者裁示 Q1）：`modules` 含「目前被個人扣項扣掉的鍵」⇒ 400（訊息列出鍵與「請先解除扣項」），並寫稽核 `user.put_rejected_subtract`。**秒級退場旗標** `system_settings.users_put_reject_subtracted`（預設開；設 `0`／`"off"`／`false` ⇒ 回舊行為）。
-- 唯讀報表（2d）：`audit_account_permissions.py` 預設讀**生效權限**（職責角色＋個人扣項＋財務規則）；`finance_role_impact_report.py` 預設把職責角色與扣項套到勾選上（**刻意不套財務規則**，那正是這份報表要預告的變化）；兩支都新增 `--raw`（舊口徑），輸出標明口徑。
-- 前端（`users.html`＋`static/users-duty.js`）：編輯既有、非最高管理者時顯示「職責角色／個人扣項／生效權限預覽／變更原因」；畫面只送**原始勾選**（預覽唯讀、不寫回）；存檔順序＝解除扣項 → PUT → 解除／新增角色 → 新增扣項，失敗即停並明講已完成／未完成。**使用者可見的行為變更（Q3）**：編輯既有使用者且個人勾選為空時，不再用基礎類別樣板預填（只有「新增使用者」預填）。
-- 不放寬任何權限；只新增拒絕（2c）；沒有 migration、沒有新表。回滾：2c 設旗標 `0`；其餘純程式（L1）回退即還原，無資料動作。
 
 ## 1.118 — 2026-10-07（wip/t45-r2-step1-impl：R2 第1步——D4 superadmin 全部鍵、D5 財務判斷影子模式）
 - L1（新增，向下相容）：`helpers.auth` 新增 `FINANCE_FLAG_KEY`、`finance_effective_keys(user, cache=False)`、`finance_duty_person(user)`、`reset_finance_mode_cache()`。
