@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1183,
+  "tests": 1185,
   "unmapped": 12,
   "kinds": {
-   "api": 642,
+   "api": 644,
    "e2e": 290,
    "audit": 144,
    "unit": 107
@@ -8664,6 +8664,36 @@
    },
    "module": "case"
   },
+  "backend/modules/case/tests/test_t46_fix_pr_remark_round2_2026_10_08.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/tests/_requires.py",
+    "mod:arap/api/cashier",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
+    "mod:case/payables",
+    "mod:case/tests/test_queue_detail_real_forms_2026_10_07"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/payables.py",
+     "backend/modules/case/tests/test_queue_detail_real_forms_2026_10_07.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
   "backend/modules/case/tests/test_upload_access_p0_2026_09_30.py": {
    "kind": "api",
    "units": [
@@ -11250,6 +11280,41 @@
     ],
     "path": [
      "backend/modules/subcontract/"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_payslip_races_t46.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/__init__",
+    "mod:payroll/api/payslips",
+    "mod:payroll/tests/test_payslip_cashier_t46",
+    "mod:payroll/tests/test_payslip_edit_guard_2026_08_28",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/payroll/api/__init__.py",
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/payroll/tests/test_payslip_cashier_t46.py",
+     "backend/modules/payroll/tests/test_payslip_edit_guard_2026_08_28.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslips.py"
+    ],
+    "path": [
+     "backend/modules/arap/"
     ],
     "module_dir": [
      "backend/modules/payroll/"
