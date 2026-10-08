@@ -5964,7 +5964,7 @@ def _typed_detail_fields(conn, r, taken=()) -> list:
         if f.get("dataClass") != "T1" or f.get("cashier") or f.get("key") not in data:       # 沒宣告資料分類 ⇒ 不顯示（只認明確的 T1）
             continue
         _lab = str(f.get("label") or f["key"])
-        if _lab in _MONEY_FIELD_LABELS or any(w in _lab for w in _MONEY_LABEL_WORDS):        # 金額類欄位（標籤命中金額遮蔽表或含 金額／價／預算／費用）：不顯示——提供者沒有檢視者身分，遮蔽表只管固定標籤，改名顯示會繞過
+        if _lab in _MONEY_FIELD_LABELS or (f.get("type") != "ref" and any(w in _lab for w in _MONEY_LABEL_WORDS)):   # 參照欄（例：費用歸屬單位＝部門名稱）不可能是金額，不套字樣過濾；金額類欄位（標籤命中金額遮蔽表或含 金額／價／預算／費用）：不顯示——提供者沒有檢視者身分，遮蔽表只管固定標籤，改名顯示會繞過
             continue
         v = data.get(f["key"])
         if f.get("type") == "ref":                                   # 參照：使用者 ⇒ 顯示名稱、部門 ⇒ 部門名稱；查不到 ⇒ 略過（不顯示 id）

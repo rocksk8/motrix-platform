@@ -74,6 +74,7 @@
 - ⚠ 影響權限判斷：最高管理者（superadmin）現在對 `user_has_module` 任何鍵都通過（D4，使用者裁示選項 B）；兩個既有斷言因此更新（`test_finance_role::test_non_finance_keys_still_follow_the_modules_json`、`test_duty_roles_equivalence::test_require_user_modules_string_is_byte_identical…`）。其他角色結果不變。
 
 ## 2026-10-07 簽核佇列詳情顯示費用單據的表單欄位（fix/pr-remark-in-queue）
+- 第二輪修正：差旅／零用金的「費用歸屬單位」在佇列詳情照常顯示；採購單／零用金出納檢視不再退回申請人的個人收款帳戶；一次性行事曆對齊工具在資料庫不存在時不再建空庫。
 
 - 出納待付款：採購單、零用金單據若沒有另存廠商收款資料，付款鈕旁會提示「廠商收款帳戶資料未收集，請向申請人確認後再付款」，且銀行資料檢視不再帶出申請人的員工帳戶。
 - 請購／採購／差旅／零用金單據的「類別」改取明細裡金額最大的費用類別（不再一律「其他」）；營運報表與總帳原本就依明細類別逐列計算，金額不變。
