@@ -1024,7 +1024,7 @@ function reportsApp() {
       var sp = this.salesPerf.slice(0, 8)
       var self2 = this
       this.chartTables.sales = {
-        cols:   ['件數', '合約總額', '已收款', '收款率', '平均淨利率'],
+        cols:   ['件數', '合約總額', '已收款', '收款率', '平均營業利益率'],
         colors: ['', '#2563EB', '#15803D', '', ''],
         rows:   sp.map(function(x) {
           return { label: x.salesPerson, values: [
@@ -1091,7 +1091,7 @@ function reportsApp() {
       var el = document.getElementById('rpt-chart-target')
       if (!el) return
       var ann  = ((this.achievement || {}).annual) || {}
-      var LBLS = ['年度合約總額', '新成案數', '年度收款金額', '收款率', '平均淨利率', '年度實際淨利']
+      var LBLS = ['年度合約總額', '新成案數', '年度收款金額', '收款率', '平均營業利益率', '年度實際營業利益']
       var KEYS = ['revenue', 'newCases', 'collectionAmt', 'collectionRate', 'avgMarginPct', 'grossProfit']
       var rates  = KEYS.map(function(k) { return (ann[k] && ann[k].rate != null) ? ann[k].rate : 0 })
       var colors = rates.map(function(r) {
@@ -1186,7 +1186,7 @@ function reportsApp() {
       })
       var self4 = this
       this.chartTables.margin = {
-        cols:   ['預估淨利率', '實際淨利率', '差異'],
+        cols:   ['預估營業利益率', '實際營業利益率', '差異'],
         colors: ['#2563EB', '#15803D', ''],
         rows:   labels.map(function(lb, i) {
           var e = estimated[i], a = actual[i]
@@ -1203,8 +1203,8 @@ function reportsApp() {
         data: {
           labels: labels,
           datasets: [
-            { label: '預估淨利率',       data: estimated, backgroundColor: 'rgba(37,99,235,0.6)',  borderRadius: 4 },
-            { label: '實際淨利率（精算）', data: actual,    backgroundColor: 'rgba(21,128,61,0.75)', borderRadius: 4 }
+            { label: '預估營業利益率',       data: estimated, backgroundColor: 'rgba(37,99,235,0.6)',  borderRadius: 4 },
+            { label: '實際營業利益率（精算）', data: actual,    backgroundColor: 'rgba(21,128,61,0.75)', borderRadius: 4 }
           ]
         },
         options: {

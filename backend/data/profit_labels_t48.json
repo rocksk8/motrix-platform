@@ -1,0 +1,36 @@
+{
+  "_說明": "第 48 班（使用者 2026-10-09 裁示）：管銷分攤改為 直接毛利×25%，利潤名詞改名。內部鍵（netProfit／netMarginPct／net_margin_pct／net_profit／adminCost…）一律不改，只改畫面／PDF／Excel 的字樣。本表是改名的唯一清單；tests/test_profit_labels_t48.py 逐項守門。",
+  "renames": [
+    [
+      "未扣費用淨利",
+      "扣費用前（直接毛利）"
+    ],
+    [
+      "稅後淨利",
+      "營業利益"
+    ],
+    [
+      "淨利率",
+      "營業利益率"
+    ],
+    [
+      "淨利",
+      "營業利益"
+    ]
+  ],
+  "threshold_pct": 12,
+  "history_labels_old_and_new": [
+    [
+      "淨利率",
+      "營業利益率"
+    ]
+  ],
+  "excluded": {
+    "backend/modules/accounting/": "會計報表（損益表等）的「稅後淨利」是會計科目，不改名",
+    "backend/data/account_items_112.json": "會計科目表（稅後淨利）",
+    "frontend/js/ledger-settings.js": "科目歸屬頁（本期稅後淨利彙總列）",
+    "frontend/pages/ledger-": "會計帳頁（損益表／期間／設定）的稅後淨利是會計科目",
+    "frontend/js/ledger-": "同上",
+    "backend/data/profit_labels_t48.json": "本表自己（含舊字樣）"
+  }
+}

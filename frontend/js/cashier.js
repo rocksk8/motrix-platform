@@ -500,7 +500,7 @@ function cashierApp() {
       } catch (e) { console.error(e) }
     },
 
-    // 明細（每人金額、扣繳試算、可選的付款銀行）走獎金那一支：出納（C1）看得到整張、看不到淨利
+    // 明細（每人金額、扣繳試算、可選的付款銀行）走獎金那一支：出納（C1）看得到整張、看不到營業利益
     async openBonusPayModal(b) {
       this.bonusPay = { show: true, quoteNo: b.quoteNo, detail: null, bank: '', saving: false, error: '' }
       try {

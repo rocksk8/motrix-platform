@@ -113,7 +113,7 @@ _TRACKED_QUOTE_FIELDS = [
     ("tot.total",         "含稅總額"),
     ("tot.pretax",        "未稅金額"),
     ("tot.directMarginPct", "直接毛利率"),
-    ("tot.netMarginPct",  "淨利率"),
+    ("tot.netMarginPct",  "營業利益率"),   # 第 48 班改名（舊紀錄存的是「淨利率」；financial_mask.HISTORY_MONEY_FIELDS 新舊並列）
     ("notes",             "備註"),
     ("contract.deliveryAddress", "交貨地址"),
     ("contract.deliveryTerms",   "交貨條件"),
