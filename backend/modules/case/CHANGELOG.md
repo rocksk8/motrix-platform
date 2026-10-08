@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-09（wip/t48-oh25-s1／s2／s3）：利潤規則單一來源（S1，零行為變更）＋管銷分攤比率與伺服器把關（S2，新行為預設關）＋畫面與精算接上規則（S3；`/api/overhead` 前綴登記於 module.json）
+## (next) — 2026-10-09（wip/t48-oh25-s1／s2／s3＋s4／s5／s6 合併）：利潤規則單一來源（S1，零行為變更）＋管銷分攤比率與伺服器把關（S2，新行為預設關）＋畫面與精算接上規則（S3；`/api/overhead` 前綴登記於 module.json）
 - `settlement_actuals`：完結比對的管銷分攤、公益金、營業利益、報價原始側後備改呼叫 `helpers.profit_rules`（口徑仍是第 47 班的 10%）。前端 `static/profit-rules.js` 與黃金向量等值測試已備，頁面第 3 步（S3）才改接。設計：`docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
 - 利潤名詞改名（wip/t48-oh25-s4）：
   - 精算頁、案件頁、結案 PDF、報價單修改紀錄的「淨利／淨利率／未扣費用淨利」改稱「營業利益／營業利益率／扣費用前（直接毛利）」；修改紀錄欄位名稱新舊並列（舊紀錄仍存「淨利率」，`financial_mask.HISTORY_MONEY_FIELDS` 兩者都遮罩）。內部鍵不變。守門 `tests/test_profit_labels_t48.py`。
