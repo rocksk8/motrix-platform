@@ -25,6 +25,7 @@
 📌 2026-10-08 02:04：正式機已更新到 dc4e2e42（第四十五班：預定付款日（出納改期端點／我的申請欄位／匯款可填／申請人站內通知）／登入後回原頁／材料卡片自動連結採購單／勞報單狀態快修／職責角色 R2 第1步（D4 superadmin 守門層全部鍵、D5 財務判斷影子模式預設關、等價與回滾工具）；含 case migration 8、subcontract migration 6，無 core migration；正式機 Claude 依主持「可以套用」執行 apply_update，成功、無回滾，步驟 3 全過）⇒ 基準改 dc4e2e42。
 📌 2026-10-08 16:35：正式機已更新到 e6a2e6b6（第四十六班：勞報單送審／簽核／出納整合／派發連結（含 payroll migration 4、db schema 116→118）、簽核佇列詳情欄位對應與出納標題、登入回原頁加固、第 45 班稽核跟進與第二輪並發防護；正式機 Claude 依步驟檔「自動套用」（使用者已同意）執行 apply_update，15 秒成功、無回滾，步驟 3 十五項全過（#9 的文件檢查子項不符＝apply_update 不部署 docs\platform，已接受）、職責角色等值關卡 PASS 0 差異）⇒ 基準改 e6a2e6b6。
 📌 2026-10-09 02:36：正式機已更新到 c107fd8f（第四十七班：預定付款日提醒 L1（站內通知＋行事曆「付款待辦」，承攬商匯款／叫料匯款）、採購單廠商收款帳戶（銀行／分行／帳號／戶名；完整帳號只給財務加超管、其餘末四碼、稽核先寫＋no-store）、勞報單送審限真超管（S6 禁自核／S9 作廢已核准限超管）與並發防護、GET /api/users 對非管理員不再給他人 email／phone／modules／notificationMuted（報價人聯絡資料改走 sales-contact）、派發頁勞報單區塊 403 UX、列車預檢與 regen_all 工具；無 migration（schema 維持 118）；正式機 Claude 依步驟檔「自動套用」（使用者已同意）執行 apply_update，28 秒成功、無回滾，步驟 3 十六項全過、職責角色等值關卡 PASS 0 差異）⇒ 基準改 c107fd8f。
+📌 2026-10-09 07:31：正式機已更新到 e526a2ef（第四十八班 48a：使用者管理整合職責角色（R2 第2步：角色／個人扣項／生效權限預覽、舊 PUT 勾到被扣的鍵改回 400、既有使用者權限為空不再預填模板、permission_changes.audit_id 填值）、承攬商匯款建立視窗預定付款日、營業利益規則底座（profit_rules 單一來源＋/api/overhead/settings＋離線重算工具；overhead_rule_mode 預設 legacy＝新行為關、不改任何數字）、供應商紀錄頁防呆、跨午夜日期測試修正；無 migration（schema 維持 118）；正式機 Claude 依步驟檔「自動套用」（使用者已同意）執行 apply_update，13 秒成功、無回滾，步驟 3 十七項全過、職責角色等值關卡 PASS 0 差異）⇒ 基準改 e526a2ef。
 """
 import json
 import subprocess
@@ -33,7 +34,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "c107fd8f"
+BASELINE = "e526a2ef"
 
 
 def baseline_manifest():
