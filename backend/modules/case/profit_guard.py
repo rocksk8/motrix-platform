@@ -126,6 +126,8 @@ def prepare(q: dict, user: dict, existing_row=None, quote_no: str = ""):
     if not isinstance(q.get("tot"), dict):
         q["tot"] = {}
     tot = q["tot"]
+    if "overheadPct" in q:
+        tot["overheadPct"] = q["overheadPct"]                    # 精算頁／伺服器重算都從 tot 讀比率（單一讀法）
     if mode == "v2":
         tot.update(server_profit(q, new, PR.FORMULA_VER))
         tot["overheadPct"], tot["formulaVer"] = new, PR.FORMULA_VER

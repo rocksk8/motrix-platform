@@ -70,3 +70,14 @@ def settlement_profit(pretax, actual_cost, pct=None, ver=None, frozen_charity=No
     net_pct = net / pretax * 100 if pretax > 0 else 0
     return {"grossProfit": gross, "grossMarginPct": gross_pct, "adminCost": admin, "charityDonation": ch,
             "netProfit": net, "netMarginPct": net_pct}
+
+
+def admin_label(ver, pct=None, default=None) -> str:
+    """報表／PDF／畫面上管銷分攤那一列的標籤：舊口徑『管銷分攤（10%）』；新口徑『管銷分攤（毛利 N%）』。
+    `default`（全域預設比率）有給、且比率等於它 ⇒ 不印百分比（使用者 Q7：PDF 只在偏離預設時印）。"""
+    if ver != FORMULA_VER:
+        return "管銷分攤（10%）"
+    p = DEFAULT_OVERHEAD_PCT if pct is None else pct
+    if default is not None and Decimal(str(p)) == Decimal(str(default)):
+        return "管銷分攤（毛利）"
+    return "管銷分攤（毛利 %s%%）" % format(Decimal(str(p).strip()).normalize(), "f")

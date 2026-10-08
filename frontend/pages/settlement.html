@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>成本精算 — MOTRIX 專案管理系統</title>
   <script src="../static/legal-round.js"></script>
+  <script src="../static/profit-rules.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -965,7 +966,7 @@
           <div><div style="color:var(--text-secondary)">資料截至</div><b x-text="_loadedAt.toLocaleString('zh-TW', { hour12: false })"></b></div>
           <div><div style="color:var(--text-secondary)">精算日期</div>
             <input type="date" class="stl-input" x-model="settlement.settlementDate" :disabled="settlement.status === 'finalized'" style="max-width:160px"></div>
-          <div><div style="color:var(--text-secondary)">管理費／公益</div><b>管理費＝報價×10%；公益＝毛利×1%（毛利為負時以 0 計；淨利只在總結區顯示）</b></div>
+          <div><div style="color:var(--text-secondary)">管理費／公益</div><b x-text="adminHow(summary) + '；公益＝毛利×1%（毛利為負時以 0 計；淨利只在總結區顯示）'"></b></div>
         </div>
       </div>
 
@@ -1003,7 +1004,7 @@
       真實毛利：NT$ <span x-text="fmt(summary.grossProfit)"
                           :style="summary.grossProfit >= 0 ? 'color:#15803D;font-weight:600' : 'color:#DC2626;font-weight:600'"></span>
       （<span x-text="summary.grossMarginPct.toFixed(1) + '%'"></span>）<br>
-      管銷（10%）+ 公益（1%）：NT$ <span x-text="fmt(summary.adminCost + summary.charityDonation)"></span><br>
+      <span x-text="adminShort(summary)"></span> + 公益（1%）：NT$ <span x-text="fmt(summary.adminCost + summary.charityDonation)"></span><br>
       <b>真實淨利：NT$ <span x-text="fmt(summary.netProfit)"
                           :style="summary.netProfit >= 0 ? 'color:#15803D' : 'color:#DC2626'"></span>
       （<span x-text="summary.netMarginPct.toFixed(1) + '%'"
@@ -1147,6 +1148,7 @@ function settlementPage() {
     dispatches: [],  // 承攬商派發（唯讀，即時從 /api/contractor-dispatches 讀取，不隨精算存檔凍結）
     _finalizing: false,   // 完結送出中：此刻狀態已是 finalized 但 _frozenSummary 還沒有——新完結一律是新口徑（未稅），不可誤判成舊口徑
     _frozenSummary: null,  // 精算完結當下寫入 data_json 的 summary 快照，供比對是否已過期
+    oh: { mode: 'legacy', defaultPct: 25 },   // 第 48 班 S3：管銷口徑開關與全域預設（init 時由 GET /api/overhead/settings 填入）
 
     summary: {
       quotedPretax:    0,
@@ -1189,6 +1191,10 @@ function settlementPage() {
       if (!raw) { location.href = 'login.html'; return }
       this.session = JSON.parse(raw)
       if (!this.session?.token) { location.href = 'login.html'; return }
+      try {                                   // 第 48 班 S3：管銷口徑與全域預設（取不到＝legacy）
+        const r = await fetch(`${API}/overhead/settings`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const d = await r.json(); this.oh = { mode: d.ruleMode === 'v2' ? 'v2' : 'legacy', defaultPct: d.defaultPct } }
+      } catch (e) { /* 維持 legacy */ }
 
       const params = new URLSearchParams(location.search)
       this.quoteNo = params.get('no') || ''
@@ -1401,7 +1407,7 @@ function settlementPage() {
           R('b1-pre', '未扣費用淨利', '＝毛利（尚未扣管理費、公益）', sm.origDirectProfit, sm.grossProfit, 'good', { neg: true }),
         ] },
         { key: 'after', title: '② 扣管理費／公益後', rows: [
-          R('b2-admin', '管銷分攤（10%）', '管理費＝報價稅前收入 × 10%', sm.origAdminCost, sm.adminCost, 'cost'),
+          R('b2-admin', MotrixProfitRules.adminLabel(sm.formulaVer || 1, sm.overheadPct), this.adminHow(sm), sm.origAdminCost, sm.adminCost, 'cost'),
           R('b2-ch', '公益捐款（1%）', '公益捐贈＝毛利 × 1%（毛利為負時以 0 計）', sm.origCharity, sm.charityDonation, 'cost'),
           ...(sm.origIndirectReserve > 0 ? [R('b2-reserve', '報價預留間接成本', '報價單淨利已扣的間接成本預算＝間接合計 − 管銷 − 公益（原始端資訊）', sm.origIndirectReserve, null, 'cost', { info: true })] : []),
           R('b2-net', '真實淨利', '最終淨利＝毛利 − 管理費 − 公益捐贈（＝獎金分潤基數）', sm.origNetProfit, sm.netProfit, 'good', { strong: true, neg: true, diffNote: sm.origIndirectReserve > 0 ? '其中報價預留間接成本 ' + this.fmt(sm.origIndirectReserve) + '（原始預估已扣、實際只計單據）' : '' }),
@@ -1883,17 +1889,20 @@ function settlementPage() {
       const totalActualCost = itemActualTotal + itemPoUnadopted + extraTotal + dispatchTotal - dispatchAbsorbed
       const grossProfit     = quotedPretax - totalActualCost
       const grossMarginPct  = quotedPretax > 0 ? grossProfit / quotedPretax * 100 : 0
-      const adminCost       = MotrixLegalRound.halfUp(quotedPretax, 0.10)
       // 第 39 班：公益金不為負——虧損案（毛利＜0）公益金以 0 計；已完結的精算照存檔值顯示（不因規則改變而回頭改寫）
       const frz = (this.settlement.status === 'finalized' && !this._finalizing && this._frozenSummary) || null
-      const charityDonation = frz && typeof frz.charityDonation === 'number' ? frz.charityDonation : Math.max(0, MotrixLegalRound.halfUp(grossProfit, 0.01))
+      // 第 48 班 S3：管銷分攤走單一來源（static/profit-rules.js）。口徑：已完結＝存檔的口徑；未完結／重新完結＝目前開關（legacy＝稅前×10%；v2＝實際毛利×比率，比率取報價單存值）
+      const ohVer = frz ? (frz.formulaVer || 1) : (this.oh.mode === 'v2' ? 2 : 1)
+      const ohPct = frz && frz.overheadPct != null ? frz.overheadPct : (this._origTot.overheadPct != null ? this._origTot.overheadPct : this.oh.defaultPct)
+      const adminCost       = MotrixProfitRules.adminCost(quotedPretax, grossProfit, ohPct, ohVer)
+      const charityDonation = frz && typeof frz.charityDonation === 'number' ? frz.charityDonation : MotrixProfitRules.charity(grossProfit)
       const netProfit       = grossProfit - adminCost - charityDonation
       const netMarginPct    = quotedPretax > 0 ? netProfit / quotedPretax * 100 : 0
 
-      const origAdminCost   = tot.adminCost != null ? tot.adminCost : MotrixLegalRound.halfUp(quotedPretax, 0.10)
+      const origAdminCost   = tot.adminCost != null ? tot.adminCost : MotrixProfitRules.adminCost(quotedPretax, origDirectProfit, tot.overheadPct, tot.formulaVer || 1)
       // 原始側同規則：報價單原始毛利＜0 ⇒ 公益金 0、原始淨利＝毛利 − 管銷（報價單存的舊值可能帶負的公益金，不沿用）
       const origFloor       = origDirectProfit < 0
-      const origCharity     = origFloor ? 0 : (tot.charityDonation != null ? tot.charityDonation : Math.max(0, MotrixLegalRound.halfUp(origDirectProfit, 0.01)))
+      const origCharity     = origFloor ? 0 : (tot.charityDonation != null ? tot.charityDonation : MotrixProfitRules.charity(origDirectProfit))
       // 報價預留間接成本（原始端資訊）：報價單淨利早已扣掉；實際端以單據為準、不另算。開著的草稿用報價單數字算；已完結讀存檔 summary（舊案沒有 ⇒ 0＝不顯示）
       const origIndirectReserve = frz ? (typeof frz.origIndirectReserve === 'number' ? frz.origIndirectReserve : 0)
         : (typeof tot.totalIndirect === 'number' ? Math.max(0, tot.totalIndirect - origAdminCost - origCharity) : 0)
@@ -1909,6 +1918,7 @@ function settlementPage() {
         origItemTotal, origTotalCost, origDirectProfit,
         origMarginPct:    MotrixLegalRound.halfUp(origMarginPct, 10) / 10,
         origAdminCost, origCharity, origIndirectReserve,
+        ...(tot.formulaVer === 2 ? { origFormulaVer: 2, origOverheadPct: tot.overheadPct } : {}),
         origNetProfit:    MotrixLegalRound.halfUp(origNetProfit),
         origNetMarginPct: MotrixLegalRound.halfUp(origNetMarginPct, 10) / 10,
         itemActualTotal, itemPoUnadopted, extraTotal, dispatchTotal, dispatchAbsorbed, totalActualCost, remitFeeTotal: this.remitFeeTotal, customExpenseTotal: this.customExpenseTotal,
@@ -1918,6 +1928,7 @@ function settlementPage() {
         grossProfit:     MotrixLegalRound.halfUp(grossProfit),
         grossMarginPct:  MotrixLegalRound.halfUp(grossMarginPct, 10) / 10,
         adminCost, charityDonation,
+        ...(ohVer === 2 ? { overheadPct: ohPct, formulaVer: 2 } : {}),        // 第 48 班：新口徑的比率與版本戳記隨 summary 凍結（舊口徑不帶＝舊算法）
         netProfit:       MotrixLegalRound.halfUp(netProfit),
         netMarginPct:    MotrixLegalRound.halfUp(netMarginPct, 10) / 10,
         profitDiff:      MotrixLegalRound.halfUp(profitDiff),
@@ -1929,6 +1940,14 @@ function settlementPage() {
     // 「額外支出」分頁與 case_extra_expenses 表（DB v75），這一頁不再有編輯入口，
     // 這四個函式的呼叫者（那張可編輯的表）已經一併拿掉。附件端點改用資料列 id
     // 定位，見 routers/case_extra_expenses.py。
+
+    // 第 48 班 S3：管銷分攤的說明文字依 summary 的口徑（舊口徑：報價稅前×10%；新口徑：實際毛利×比率）
+    adminHow(sm) {
+      return (sm && sm.formulaVer === 2) ? ('管銷＝真實毛利 × ' + sm.overheadPct + '%（毛利為負時以 0 計）') : '管理費＝報價稅前收入 × 10%'
+    },
+    adminShort(sm) {
+      return (sm && sm.formulaVer === 2) ? ('管銷（' + sm.overheadPct + '%）') : '管銷（10%）'
+    },
 
     async previewAttachmentFile(file) {
       // 共用預覽元件（static/file-preview.js）：頁內預覽窗

@@ -1024,6 +1024,7 @@
    "LEGACY_VER": "const",
    "TARGET_MARGIN_PCT": "const",
    "admin_cost": "def(pretax, direct_profit, pct=…, ver=…)",
+   "admin_label": "def(ver, pct=…, default=…)",
    "charity": "def(direct_profit)",
    "pct_rate": "def(pct)",
    "quote_profit": "def(pretax, total_cost, input_vat, indirect_items, pct=…, ver=…)",

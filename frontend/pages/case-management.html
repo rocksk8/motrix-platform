@@ -9,6 +9,7 @@
   <!-- CM12：案件管理頁分檔（core 先載：定義 app() 與 CM_PARTS），其餘順序不影響（成員名不重複） -->
   <script src="../static/ui.js"></script>
   <script src="../static/legal-round.js"></script>
+  <script src="../static/profit-rules.js"></script>
   <script src="../js/case-management-core.js"></script>
   <script src="../js/case-management-list.js"></script>
   <script src="../js/case-management-close.js"></script>
@@ -2736,7 +2737,7 @@
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"
                                     x-text="((caseSettleSummary().origMarginPct)||0).toFixed(1)+'%'"></td></tr>
                             <tr style="border-top:1px solid var(--line)">
-                                <td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">管銷分攤（10%）</td>
+                                <td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)" x-text="MotrixProfitRules.adminLabel(caseSettleSummary().origFormulaVer || 1, caseSettleSummary().origOverheadPct)"></td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-danger-fg)"
                                     x-text="'− '+caseSettleFmt(caseSettleSummary().origAdminCost)"></td></tr>
                             <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">公益捐款（1%）</td>
@@ -2777,7 +2778,7 @@
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"
                                     x-text="((caseSettleSummary().grossMarginPct)||0).toFixed(1)+'%'"></td></tr>
                             <tr style="border-top:1px solid var(--tone-warning-border)">
-                                <td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">管銷分攤（10%）</td>
+                                <td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)" x-text="MotrixProfitRules.adminLabel(caseSettleSummary().formulaVer || 1, caseSettleSummary().overheadPct)"></td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-danger-fg)"
                                     x-text="'− '+caseSettleFmt(caseSettleSummary().adminCost)"></td></tr>
                             <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">公益捐款（1%）</td>

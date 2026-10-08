@@ -5,6 +5,8 @@
 
 - **S2（wip/t48-oh25-s2）管銷分攤比率與伺服器把關（新行為預設關）**：新增 `profit_guard.py`＋`GET/PUT /api/overhead/settings`（全域預設比率 `overhead_default_pct`、口徑開關 `overhead_rule_mode`＝legacy｜v2；只有最高管理者能改，每次稽核 `settings.overhead.update`）。報價單 `data_json.overheadPct`（新建＝全域預設；與存值不同只有最高管理者可改，否則 403；非法值 422；稽核 `quotation.overhead_pct_change`；已精算／結案不動）。`v2` 時存檔由伺服器用 `profit_rules` 重算 `tot` 利潤欄位與 `net_margin_pct`（不信前端）；`legacy`（預設）數字完全不變，只做影子比對（不一致記 warning）。歷程欄位新增「管銷分攤比率」（金額遮罩白名單同步）。
 
+- **S3（wip/t48-oh25-s2）畫面與精算接上單一規則（口徑開關預設 legacy，畫面與數字不變）**：`quotation-form.html` V3.19——`calcTotals` 改呼叫 `MotrixProfitRules`；`overhead_rule_mode=v2` 時顯示「管銷分攤（直接毛利 N%）」，最高管理者可改比率（偏離預設 ⇒ 橘色警示＋『還原預設』＋存檔二次確認），其他人唯讀；已精算／結案單不重算；複製為新單比率回全域預設（Q8）。`settlement.html`／`settlement_actuals`：管銷依口徑算（v2＝實際毛利×報價單比率、負毛利 0），完結時 summary 蓋 `formulaVer=2`／`overheadPct`（舊口徑不帶）；報價原始側新口徑時帶 `origFormulaVer`／`origOverheadPct`。案件管理頁、結案 PDF（`pdf_gen`）、營運報表 PDF 的「管銷分攤」標籤依口徑顯示（PDF 只在偏離全域預設時印百分比，Q7）。測試：`test_overhead_s3_form_t48.py`（node）、`test_overhead_s3_settlement_t48.py`。
+
 ## 1.0.163 — 2026-10-08（第 47 班整合）：報價單表單版本 V3.18
 - `frontend/pages/quotation-form.html`：`FORM_VERSION` V3.17 → V3.18（報價人聯絡資料改由 `GET /api/users/sales-contact` 帶入；守門 `test_form_version_bumped` 要求內容變動必須升版，並登記 LEDGER）；行為不變。
 

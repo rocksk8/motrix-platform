@@ -488,6 +488,18 @@ _DOWNSTREAM_NAMES = {"dispatchTotal": "承攬商派發成本（含稅＋外包�
                      "grossMarginPct": "毛利率(%)", "netMarginPct": "淨利率(%)"}
 
 
+def _profit_basis(tot):
+    """精算的利潤口徑：`(ver, 比率)`。legacy 模式 ⇒ (1, None)；v2 ⇒ (2, 報價單 tot.overheadPct，沒有就用全域預設)——與精算頁同一規則。"""
+    from modules.case import profit_guard as PG
+    ver = PG.current_ver()
+    if ver != profit_rules.FORMULA_VER:
+        return ver, None
+    try:
+        return ver, PG.parse_pct((tot or {}).get("overheadPct"))
+    except ValueError:
+        return ver, PG.default_pct()
+
+
 def _expected_downstream(conn, quote_no, d, tol_item):
     """後端重算的「下游欄位」期望值與容差：{鍵: (期望值, 容差)}，另附 `_pretax`。報價稅前收入取伺服器上報價單的 `tot.pretax`（與精算頁
     `_origTot.pretax` 同源）；管理費＝round_half_up(稅前×10%)、公益金＝round_half_up(毛利×1%)、淨利＝毛利−管理費−公益金（與頁面 calcSummary 同式）。"""
@@ -500,7 +512,8 @@ def _expected_downstream(conn, quote_no, d, tol_item):
     t = d["totals"]
     tol_total = tol_item + 3                         # 總成本由多塊加總，每塊各自進位
     total = t["totalActualCost"]
-    pr = profit_rules.settlement_profit(pretax, total)         # 第 48 班 S1：算式的唯一來源（管銷／公益金／營業利益）；口徑由 profit_rules.ACTIVE_VER 決定
+    ver, ohpct = _profit_basis(tot)
+    pr = profit_rules.settlement_profit(pretax, total, ohpct, ver)   # 第 48 班：算式的唯一來源（管銷／公益金／營業利益）；口徑由 overhead_rule_mode 決定（legacy＝稅前×10%；v2＝實際毛利×報價單比率）
     gross, admin, charity, net = pr["grossProfit"], pr["adminCost"], pr["charityDonation"], pr["netProfit"]   # 第 39 班：毛利為負時公益金為 0
     pct_tol = 0.1 + (100.0 * tol_total / pretax if pretax > 0 else 0.0)
     return {"_pretax": pretax,
@@ -572,9 +585,12 @@ def original_side(conn, quote_no, summ) -> dict:
     # 第 39 班：報價預留的間接成本（運費／安裝／差旅／保固／其他五項；`tot.totalIndirect` 含管理費與公益金，扣掉這兩項後的餘額）——原始淨利已扣掉它、
     # 精算「實際」側只認單據，兩邊才看起來差一塊。只是資訊列，不改任何淨利／獎金基數；報價沒有 totalIndirect（早期資料）⇒ 0。
     reserve = _num(tot["totalIndirect"]) - admin - charity if tot.get("totalIndirect") is not None else 0.0
-    return {"quotedTotal": _num(tot.get("total")), "origTotalCost": orig_cost, "origIndirectReserve": reserve, "origDirectProfit": direct, "origMarginPct": margin,
-            "origAdminCost": admin, "origCharity": charity, "origNetProfit": net, "origNetMarginPct": net_pct,
-            "profitDiff": _num(summ.get("netProfit")) - net}
+    out = {"quotedTotal": _num(tot.get("total")), "origTotalCost": orig_cost, "origIndirectReserve": reserve, "origDirectProfit": direct, "origMarginPct": margin,
+           "origAdminCost": admin, "origCharity": charity, "origNetProfit": net, "origNetMarginPct": net_pct,
+           "profitDiff": _num(summ.get("netProfit")) - net}
+    if tot.get("formulaVer") == profit_rules.FORMULA_VER:          # 第 48 班：報價是新口徑時，原始側也標出版本與比率（標籤用）
+        out["origFormulaVer"], out["origOverheadPct"] = profit_rules.FORMULA_VER, tot.get("overheadPct")
+    return out
 
 
 def fill_downstream(conn, quote_no, settlement):
@@ -596,6 +612,17 @@ def fill_downstream(conn, quote_no, settlement):
         put(k, v)
     put("quotedPretax", pretax)
     summ["dispatchBasis"] = DISPATCH_BASIS
+    q = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    try:
+        _tot = (json.loads((q["data_json"] if q else "") or "{}").get("tot") or {})
+    except (TypeError, ValueError):
+        _tot = {}
+    _ver, _pct = _profit_basis(_tot)
+    if _ver == profit_rules.FORMULA_VER:                            # 第 48 班：新口徑的版本與比率隨 summary 凍結（舊口徑不帶＝舊算法）
+        summ["formulaVer"], summ["overheadPct"] = _ver, _pct
+    else:
+        summ.pop("formulaVer", None)
+        summ.pop("overheadPct", None)
     put("taxExpense", d["totals"]["taxExpense"])                  # 稅額（含在成本內）：伺服器重算值，隨 summary 凍結
     for k, v in original_side(conn, quote_no, summ).items():       # 38（稽核 S-1）：「原始側」欄位也由伺服器依報價單重算，不凍結用戶端偽造的值
         put(k, v)

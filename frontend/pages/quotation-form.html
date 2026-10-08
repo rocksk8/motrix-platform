@@ -8,6 +8,7 @@
   <title>報價單 - MOTRIX 專案管理系統</title>
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
   <script src="../static/legal-round.js"></script>
+  <script src="../static/profit-rules.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script src="../static/privacy-notice.js"></script>
@@ -1853,9 +1854,29 @@
         <hr class="cost-divider">
         <div style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#555;margin-bottom:8px">間接成本</div>
 
-        <div class="cost-row">
+        <div class="cost-row" x-show="oh.mode !== 'v2'">
           <span class="cost-row__label">管銷分攤（10%，固定）</span>
           <span class="cost-row__val warning" x-text="'NT$ ' + tot.adminCost.toLocaleString()"></span>
+        </div>
+        <!-- 第 48 班 S3：管銷分攤＝直接毛利 × 比率（每張可調，預設取全域設定；只有最高管理者能改，偏離預設要警示）。口徑開關 off（legacy）時整塊不顯示 -->
+        <div class="cost-row" x-show="oh.mode === 'v2'" x-cloak style="flex-wrap:wrap" data-testid="qf-overhead-row">
+          <span class="cost-row__label" style="display:flex;align-items:center;gap:6px">
+            管銷分攤（直接毛利
+            <template x-if="session.role === 'superadmin' && !ohSettled()">
+              <input class="cost-input" type="text" inputmode="decimal" style="width:56px" data-testid="qf-overhead-pct"
+                     :value="ohPct()" @change="setOhPct($event.target.value, $el)">
+            </template>
+            <template x-if="!(session.role === 'superadmin' && !ohSettled())">
+              <span data-testid="qf-overhead-pct-text" x-text="ohPct()"></span>
+            </template>
+            %）
+          </span>
+          <span class="cost-row__val warning" x-text="'NT$ ' + tot.adminCost.toLocaleString()"></span>
+          <span x-show="ohDeviates()" x-cloak data-testid="qf-overhead-warning" style="flex-basis:100%;font-size:11px;color:var(--warning)">
+            ⚠ 管銷比率已調整為 <span x-text="ohPct()"></span>%（預設 <span x-text="oh.defaultPct"></span>%）——將影響營業利益與獎金基數
+            <button type="button" class="btn btn-ghost btn-sm" style="margin-left:6px" @click="resetOhPct()" data-testid="qf-overhead-reset">還原預設</button>
+          </span>
+          <span x-show="tot.directProfit < 0" x-cloak style="flex-basis:100%;font-size:11px;color:var(--warning)">直接毛利為負，管銷分攤以 0 計</span>
         </div>
         <div class="cost-row" style="flex-wrap:wrap">
           <span class="cost-row__label" style="display:flex;align-items:center;gap:6px">
@@ -2188,7 +2209,8 @@
   // V3.10（2026-09-26，個資蒐集告知；列車上改號，V3.9 已被 X-VAT 使用）：聯絡人下方加告知區塊（列印告知書、已告知紀錄）
   // V3.11（2026-09-28，H10 品牌設定；第十四班列車補號）：分頁圖示改讀 /api/system/branding/favicon
   // V3.14（2026-10-01，本地日期）：報價日期預設值與送審時間改用本地日期（static/motrix-date.js；台灣 00:00–08:00 不再得到前一天）
-  const FORM_VERSION = 'V3.18'
+  // V3.19（2026-10-09，第 48 班 S3）：利潤算式改呼叫 static/profit-rules.js；管銷分攤比率（直接毛利×%，最高管理者可調、偏離預設警示）——口徑開關預設 legacy，畫面與數字不變。
+  const FORM_VERSION = 'V3.19'
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
   // 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：內容在
@@ -2331,6 +2353,7 @@
       // 會被存檔流程整包送回後端，混進 q 會讓每次存檔都把它再寫一遍。
       docVersions: [],
 
+      oh: { mode: 'legacy', defaultPct: 25 },   // 第 48 班 S3：管銷口徑開關與全域預設（init 時由 GET /api/overhead/settings 填入）
       tot: {
         subtotal:0, pretax:0, tax:0, total:0,
         totalCost:0, inputVat:0, directProfit:0,
@@ -2466,16 +2489,13 @@
         // X-VAT（2026-09-26）：與後端 legal_params.round_half_up 同一套四捨五入（static/legal-round.js）
         const tax        = MotrixLegalRound.halfUp(pretax, salesTaxRate)
         const total      = pretax + tax
-        const directProfit    = pretax - totalCost - inputVat
-        const directMarginPct = pretax > 0 ? directProfit / pretax * 100 : 0
-        const adminCost       = MotrixLegalRound.halfUp(pretax, 0.10)
-        const charityDonation = Math.max(0, MotrixLegalRound.halfUp(directProfit, 0.01))      // 第 39 班：公益金不為負——虧損案（直接毛利＜0）以 0 計
-        const totalIndirect   = adminCost + charityDonation +
-          (this.q.indirectLogistics||0) + (this.q.indirectInstallation||0) +
-          (this.q.indirectTravel||0)    + (this.q.indirectWarranty||0)    +
-          (this.q.indirectOther||0)
-        const netProfit    = directProfit - totalIndirect
-        const netMarginPct = pretax > 0 ? netProfit / pretax * 100 : 0
+        // 第 48 班 S3：利潤算式單一來源（static/profit-rules.js；與後端 helpers/profit_rules.py 同一份黃金向量）。口徑由 ohVer() 決定：
+        // 1＝舊（管銷＝稅前×10%，legacy 模式與已精算／結案的舊單）；2＝管銷＝直接毛利×比率%。
+        const ver = this.ohVer()
+        const pr = MotrixProfitRules.quote(pretax, totalCost, inputVat,
+          [this.q.indirectLogistics, this.q.indirectInstallation, this.q.indirectTravel, this.q.indirectWarranty, this.q.indirectOther],
+          this.ohPct(), ver)
+        const { directProfit, directMarginPct, adminCost, charityDonation, totalIndirect, netProfit, netMarginPct } = pr
 
         this.tot = { subtotal, pretax, tax, total,
           totalCost, inputVat, directProfit,
@@ -2483,7 +2503,40 @@
           adminCost, charityDonation, totalIndirect,
           netProfit: MotrixLegalRound.halfUp(netProfit),
           netMarginPct: MotrixLegalRound.halfUp(netMarginPct, 10)/10,
+          ...(ver === 2 ? { overheadPct: this.ohPct(), formulaVer: 2 } : {}),
         }
+      },
+
+      /* ── 管銷分攤比率（第 48 班 S3）── */
+      ohSettled() {                                   // 已精算／結案：歷史不動（後端同樣不重算、不改比率）
+        return this.q.dealTag === '已結案' || (this.q.settlement && this.q.settlement.status === 'finalized')
+      },
+      ohVer() {
+        if (this.ohSettled()) return (this.q.tot && this.q.tot.formulaVer) || 1
+        return this.oh.mode === 'v2' ? 2 : 1
+      },
+      ohPct() {
+        const v = this.q.overheadPct
+        return (v === undefined || v === null || v === '') ? this.oh.defaultPct : v
+      },
+      ohDeviates() { return this.oh.mode === 'v2' && Number(this.ohPct()) !== Number(this.oh.defaultPct) },
+      setOhPct(raw, el) {
+        const s = String(raw == null ? '' : raw).trim()
+        const n = Number(s)
+        if (s === '' || !isFinite(n) || n < 0 || n > 100 || Math.abs(n - Number(n.toFixed(1))) > 1e-9) {
+          alert('管銷分攤比率必須是 0～100 的數字（最多 1 位小數）')
+          if (el) el.value = this.ohPct()
+          return
+        }
+        this.q.overheadPct = Number(n.toFixed(1))
+        this.calcTotals(); this.setDirty()
+      },
+      resetOhPct() { this.q.overheadPct = this.oh.defaultPct; this.calcTotals(); this.setDirty() },
+      async loadOverheadSettings() {
+        try {
+          const r = await fetch(`${this.API}/overhead/settings`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (r.ok) { const d = await r.json(); this.oh = { mode: d.ruleMode === 'v2' ? 'v2' : 'legacy', defaultPct: d.defaultPct } }
+        } catch (e) { /* 取不到 ⇒ 維持舊口徑（legacy），與後端預設一致 */ }
       },
 
       genId() {
@@ -3079,6 +3132,10 @@
         // 存檔回應再把真正的號碼回填。前端不再自己猜號。
         if (!new URLSearchParams(window.location.search).has('id') && this.q.quoteNo) {
           history.replaceState(null, '', '?id=' + this.q.quoteNo)
+        }
+        if (this.ohDeviates() && this.session.role === 'superadmin' && !this.ohSettled() && this._ohConfirmed !== this.ohPct()) {
+          if (!confirm('管銷分攤比率為 ' + this.ohPct() + '%（預設 ' + this.oh.defaultPct + '%）。\n這會改變這張報價單的營業利益與獎金基數，確定要儲存嗎？')) return
+          this._ohConfirmed = this.ohPct()
         }
         const wasNew = this.isNewRecord
         this.isNewRecord = false
@@ -3713,6 +3770,7 @@
           caseRecord: null,
           settlement: null,
           editHistory: [],
+          overheadPct: null,                     // 第 48 班（Q8）：複製為新單用全域預設比率，不繼承來源單的特例
         }
         template.items = (this.q.items || []).map(it => ({...it, id: this.genId()}))
         sessionStorage.setItem('motrix_copy_template', JSON.stringify(template))
@@ -3863,6 +3921,7 @@
         // 當預設值，而那要在既有單的資料載入**之前**決定 —— 否則會覆蓋掉
         // 既有單自己的 locationId。
         await this.loadLocations()
+        await this.loadOverheadSettings()      // 第 48 班 S3：管銷口徑與全域預設（取不到＝legacy）
 
         // ── 帶入業務員資料（從後端 API 取最新顯示名稱），同時以回應結果判斷後端是否在線 ──
         try {

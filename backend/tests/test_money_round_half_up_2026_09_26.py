@@ -233,6 +233,9 @@ vm.runInContext('var MotrixLegalRound = window.MotrixLegalRound;', ctx)
 // 這個沙盒要先載入它（與 MotrixLegalRound 同一種做法；legal-round.js 與 motrix-date.js 在同一個目錄）
 vm.runInContext(fs.readFileSync(lr.replace(/legal-round\.js$/, 'motrix-date.js'), 'utf8'), ctx)
 vm.runInContext('var MotrixDate = window.MotrixDate;', ctx)
+// 第 48 班：利潤算式單一來源（static/profit-rules.js → window.MotrixProfitRules；頁面直接引用全域）
+vm.runInContext(fs.readFileSync(lr.replace(/legal-round\.js$/, 'profit-rules.js'), 'utf8'), ctx)
+vm.runInContext('var MotrixProfitRules = window.MotrixProfitRules;', ctx)
 let o
 if (kind === 'js') {
   vm.runInContext(fs.readFileSync(target, 'utf8'), ctx, { filename: target })
