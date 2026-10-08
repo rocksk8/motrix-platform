@@ -616,7 +616,7 @@
                 <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:6px"
                        :data-testid="'duty-role-' + r.key"
                        :style="duty.roleIds.includes(r.id) ? 'border-color:var(--accent,#2563eb);background:var(--accent-light,#eff6ff)' : ''"
-                       :title="(r.permissions || []).map(dutyKeyLabel).join('、')">
+                       :title="(r.permissions || []).map(function (k) { return dutyKeyLabel(k) }).join('、')">
                   <input type="checkbox" style="display:none" :checked="duty.roleIds.includes(r.id)" @change="dutyToggleRole(r.id)">
                   <span x-text="duty.roleIds.includes(r.id) ? '✓ ' : ''"></span>
                   <span x-text="r.name"></span>
