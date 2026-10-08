@@ -15,7 +15,8 @@ pytest.importorskip("playwright.sync_api")
 
 from tests._e2e_login import inject_login  # noqa: E402
 
-Y = date.today().year
+def _year():
+    return date.today().year   # 呼叫時才取，避免跨年夜與伺服器日期不一致
 _SEQ = [0]
 _LINKED = []          # 個人外包（已關聯勞報單）金額替身；預設空 ⇒ 其餘題不受影響
 
@@ -49,10 +50,10 @@ def _seed_gl():
     try:
         ROLES.ensure_meta(c)
         c.commit()
-        _v(c, "%d-02-05" % Y, [("1113", 1050, 0), ("4111", 0, 1000), ("2204", 0, 50)])
-        _v(c, "%d-02-06" % Y, [("5811", 500, 0), ("1268", 25, 0), ("2171", 0, 525)], origin="gl:E04", kind="auto")
-        _v(c, "%d-02-07" % Y, [("1191", 200, 0), ("4111", 0, 200)], status="草稿", origin="gl:E03", kind="auto")
-        _v(c, "%d-02-08" % Y, [("6112", 100, 0), ("1113", 0, 100)])
+        _v(c, "%d-02-05" % _year(), [("1113", 1050, 0), ("4111", 0, 1000), ("2204", 0, 50)])
+        _v(c, "%d-02-06" % _year(), [("5811", 500, 0), ("1268", 25, 0), ("2171", 0, 525)], origin="gl:E04", kind="auto")
+        _v(c, "%d-02-07" % _year(), [("1191", 200, 0), ("4111", 0, 200)], status="草稿", origin="gl:E03", kind="auto")
+        _v(c, "%d-02-08" % _year(), [("6112", 100, 0), ("1113", 0, 100)])
     finally:
         c.close()
 
@@ -64,16 +65,16 @@ def _patch_report(monkeypatch):
     from modules.analytics.api import ledger_diff as LD
 
     def _income(a, b, d=None):
-        return [{"amount": 1250}] if a[:7] == "%d-02" % Y else []
+        return [{"amount": 1250}] if a[:7] == "%d-02" % _year() else []
 
     def _expenses(year, dept=None, basis="cash", conn=None):
         return {"monthly": [dict({"month": "%d-%02d" % (year, m), "contractor": 0, "equipment": 0, "material": 0, "other": 0},
-                                 **({"contractor": 525, "other": 140} if (year, m) == (Y, 2) else {})) for m in range(1, 13)]}
+                                 **({"contractor": 525, "other": 140} if (year, m) == (_year(), 2) else {})) for m in range(1, 13)]}
 
     class _Rec:
         @staticmethod
         def accrual_income_items(c, a, b, d):
-            return [{"amount": 1000}] if a[:7] == "%d-02" % Y else []
+            return [{"amount": 1000}] if a[:7] == "%d-02" % _year() else []
 
         @staticmethod
         def individual_linked_entries(c, basis):
@@ -97,7 +98,7 @@ def _num(text):
 
 
 def _feb(page, year=None):
-    row = page.locator('[data-testid="gldiff-table"] tr[data-month="%d-02"]' % (year or Y))
+    row = page.locator('[data-testid="gldiff-table"] tr[data-month="%d-02"]' % (year or _year()))
     row.wait_for(timeout=15000)
     return [_num(x) for x in row.locator("td").all_inner_texts()[1:]]      # 收入 報表/總帳/差額、支出 報表/總帳/差額、待處理
 
@@ -130,9 +131,9 @@ def test_tab_year_and_basis_controls_show_the_computed_numbers(live_server, make
     page.locator('[data-testid="tab-gldiff"]').click()
     page.locator('[data-testid="gldiff-panel"]').wait_for(state="visible", timeout=10000)
     assert _feb(page) == [1250, 1000, 250, 665, 600, 65, 0]
-    assert any("basis=cash" in r and ("year=%d" % Y) in r for r in reqs), reqs
+    assert any("basis=cash" in r and ("year=%d" % _year()) in r for r in reqs), reqs
     # 差額原因：收入有未過帳草稿 200、手工 −1000；支出稅額 25
-    bk = page.locator('[data-buckets="%d-02"]' % Y).inner_text()
+    bk = page.locator('[data-buckets="%d-02"]' % _year()).inner_text()
     assert "總帳未過帳草稿" in bk and "200" in bk and "稅額" in bk and "25" in bk
     tot = page.locator('[data-testid="gldiff-total"] td').all_inner_texts()
     assert [_num(x) for x in tot[1:4]] == [1250, 1000, 250]
@@ -140,21 +141,21 @@ def test_tab_year_and_basis_controls_show_the_computed_numbers(live_server, make
     # 權責（未稅）切換：收入報表改 1000 ⇒ 差額 0
     page.locator('[data-testid="gldiff-basis-accrual"]').click()
     page.wait_for_function("() => document.querySelector('[data-testid=gldiff-basis-accrual]').classList.contains('on')", timeout=10000)
-    page.wait_for_function("(y) => { const r = document.querySelector('[data-testid=gldiff-table] tr[data-month=\"' + y + '-02\"]'); return r && r.children[1].innerText.replace(/[^0-9]/g,'') === '1000' }", arg=Y, timeout=10000)
+    page.wait_for_function("(y) => { const r = document.querySelector('[data-testid=gldiff-table] tr[data-month=\"' + y + '-02\"]'); return r && r.children[1].innerText.replace(/[^0-9]/g,'') === '1000' }", arg=_year(), timeout=10000)
     assert any("basis=accrual" in r for r in reqs[-2:]), reqs
     assert _feb(page)[:3] == [1000, 1000, 0]
     _shot(page, "02-accrual")
     # 回現金
     page.locator('[data-testid="gldiff-basis-cash"]').click()
-    page.wait_for_function("(y) => { const r = document.querySelector('[data-testid=gldiff-table] tr[data-month=\"' + y + '-02\"]'); return r && r.children[1].innerText.replace(/[^0-9]/g,'') === '1250' }", arg=Y, timeout=10000)
+    page.wait_for_function("(y) => { const r = document.querySelector('[data-testid=gldiff-table] tr[data-month=\"' + y + '-02\"]'); return r && r.children[1].innerText.replace(/[^0-9]/g,'') === '1250' }", arg=_year(), timeout=10000)
     # 年度下拉：去年 ⇒ 請求帶 year=去年、表格重載（二月沒資料）
-    page.select_option('[data-testid="gldiff-year"]', str(Y - 1))
+    page.select_option('[data-testid="gldiff-year"]', str(_year() - 1))
     page.wait_for_function("() => true")
     page.wait_for_timeout(800)
-    assert any(("year=%d" % (Y - 1)) in r for r in reqs[-2:]), reqs
-    assert _feb(page, Y - 1)[:6] == [0, 0, 0, 0, 0, 0]                          # 去年二月沒有任何資料
+    assert any(("year=%d" % (_year() - 1)) in r for r in reqs[-2:]), reqs
+    assert _feb(page, _year() - 1)[:6] == [0, 0, 0, 0, 0, 0]                          # 去年二月沒有任何資料
     _shot(page, "03-previous-year")
-    page.select_option('[data-testid="gldiff-year"]', str(Y))
+    page.select_option('[data-testid="gldiff-year"]', str(_year()))
     page.wait_for_timeout(800)
     assert _feb(page) == [1250, 1000, 250, 665, 600, 65, 0]
     assert not errors, errors
@@ -172,7 +173,7 @@ def test_gl_module_absent_shows_notice_not_zero(live_server, make_user, e2e_brow
     page.locator('[data-testid="tab-gldiff"]').click()
     page.locator('[data-testid="gldiff-unavailable"]').wait_for(timeout=15000)
     assert "總帳不可用" in page.inner_text('[data-testid="gldiff-unavailable"]')
-    row = page.locator('[data-testid="gldiff-table"] tr[data-month="%d-02"]' % Y)
+    row = page.locator('[data-testid="gldiff-table"] tr[data-month="%d-02"]' % _year())
     row.wait_for(timeout=10000)
     assert _num(row.locator("td").nth(1).inner_text()) == 1250                # 報表欄照常
     _shot(page, "04-gl-absent")
@@ -204,7 +205,7 @@ def test_category_level_buckets_are_shown_with_the_computed_numbers(live_server,
     _seed_gl()
     _patch_report(monkeypatch)
     import sys
-    monkeypatch.setattr(sys.modules[__name__], "_LINKED", [{"date": "%d-02-10" % Y, "dispatchId": 1, "amount": 40}])
+    monkeypatch.setattr(sys.modules[__name__], "_LINKED", [{"date": "%d-02-10" % _year(), "dispatchId": 1, "amount": 40}])
     u = make_user(username="e2ld_sa4", role="superadmin", modules=[])
     page = e2e_browser.new_context().new_page()
     errors = []
@@ -212,7 +213,7 @@ def test_category_level_buckets_are_shown_with_the_computed_numbers(live_server,
     inject_login(page, live_server, u[0], u[1])
     _open(page, live_server)
     page.locator('[data-testid="tab-gldiff"]').click()
-    block = page.locator('[data-cat-buckets="%d-02"]' % Y)
+    block = page.locator('[data-cat-buckets="%d-02"]' % _year())
     block.wait_for(timeout=15000)
     ctr = block.locator('[data-cat="contractor"]')
     oth = block.locator('[data-cat="other"]')

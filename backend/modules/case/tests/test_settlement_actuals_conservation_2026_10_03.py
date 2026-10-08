@@ -15,7 +15,8 @@ from modules.case.tests.test_material_link_booking_2026_10_02 import _approved_p
 from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W, _ln, _mk, _set_tiers, _submit  # noqa: F401
 from modules.case.tests.test_settlement_actuals_2026_10_03 import _get, _put_settlement
 
-TODAY = date.today().isoformat()
+def _today():
+    return date.today().isoformat()   # 呼叫時才取，避免跨午夜與伺服器日期不一致
 
 
 def _report(basis="accrual"):
@@ -128,7 +129,7 @@ def test_cash_basis_report_equals_gl_for_materials_and_adopt_toggle_never_change
     c, h = W
     po = _approved_po(c, h, [_ln("a", 3, unitCost=1000)])
     _put_materials([_order("K", 3, 3000, quoteItemId="a", poDocCode=po["docCode"]),
-                    _order("N", 2, 800, paidStatus="paid", paidAmount=800, paidDate=TODAY)], {"K": "已核准", "N": "已核准"})
+                    _order("N", 2, 800, paidStatus="paid", paidAmount=800, paidDate=_today())], {"K": "已核准", "N": "已核准"})
     cn = db.get_db()
     try:
         cash = sum(e["amount"] for e in R.material_entries(cn, "cash") if e["quoteNo"] == NO)

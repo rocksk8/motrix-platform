@@ -30,8 +30,10 @@ from tests._e2e_login import inject_login  # noqa: E402
 pytestmark = [pytest.mark.e2e, requires_module("case", "費用單據端點")]
 
 SENT = "/api/quotations/-/extra-expenses"
-TODAY = date.today().isoformat()
-MONTH0 = TODAY[:8] + "01"
+def _today():
+    return date.today().isoformat()   # 呼叫時才取，避免跨午夜與伺服器日期不一致
+def _month0():
+    return _today()[:8] + "01"
 
 
 def _shot(page, name):
@@ -177,18 +179,18 @@ def test_four_types_end_to_end(world, live_server, e2e_browser):
     def pay(k):
         cash.locator('[data-testid="cashier-payreq-pay-case-%d"]' % ids[k]).click()
         cash.wait_for_function("(id) => !document.querySelector('[data-testid=\"cashier-payreq-row-case-' + id + '\"]')", arg=ids[k], timeout=15000)
-    cash.fill('[data-testid="cashier-payreq-date-case-%d"]' % ids["PO"], TODAY)
-    cash.fill('[data-testid="cashier-payreq-remitdate-case-%d"]' % ids["PO"], TODAY)
+    cash.fill('[data-testid="cashier-payreq-date-case-%d"]' % ids["PO"], _today())
+    cash.fill('[data-testid="cashier-payreq-remitdate-case-%d"]' % ids["PO"], _today())
     cash.fill('[data-testid="cashier-payreq-terms-case-%d"]' % ids["PO"], "月結 30 天")
     pay("PO")
-    cash.fill('[data-testid="cashier-payreq-date-case-%d"]' % ids["TE"], TODAY)
+    cash.fill('[data-testid="cashier-payreq-date-case-%d"]' % ids["TE"], _today())
     pay("TE")
-    cash.fill('[data-testid="cashier-payreq-date-case-%d"]' % ids["PC"], TODAY)
+    cash.fill('[data-testid="cashier-payreq-date-case-%d"]' % ids["PC"], _today())
     cash.select_option('[data-testid="cashier-payreq-method-case-%d"]' % ids["PC"], "petty_cash")
     pay("PC")
     _shot(cash, "33-cashier-all-paid")
     paid = {r["id"]: r for r in _q("SELECT id, paid_date, pay_method, pay_terms, remit_date FROM case_extra_expenses WHERE id IN (?,?,?,?)", tuple(ids.values()))}
-    assert [paid[ids[k]]["paid_date"] for k in ("PO", "TE", "PC")] == [TODAY] * 3 and paid[ids["PR"]]["paid_date"] == ""
+    assert [paid[ids[k]]["paid_date"] for k in ("PO", "TE", "PC")] == [_today()] * 3 and paid[ids["PR"]]["paid_date"] == ""
     assert paid[ids["PO"]]["pay_terms"] == "月結 30 天" and paid[ids["PC"]]["pay_method"] == "petty_cash" and paid[ids["TE"]]["pay_method"] == "transfer"
 
     # ── 總帳：在「總帳作業」按「產生分錄草稿」──────────────────────────────────────
@@ -196,8 +198,8 @@ def test_four_types_end_to_end(world, live_server, e2e_browser):
     inject_login(gl, live_server, *users["ch_sa"])
     gl.goto(live_server + "/pages/ledger-hub.html")
     gl.locator('[data-testid="hb-tab-engine_drafts"]').click()
-    gl.fill('[data-testid="hb-eng-start"]', MONTH0)
-    gl.fill('[data-testid="hb-eng-end"]', TODAY)
+    gl.fill('[data-testid="hb-eng-start"]', _month0())
+    gl.fill('[data-testid="hb-eng-end"]', _today())
     gl.locator('[data-testid="hb-eng-run"]').click()
     _wait(lambda: len(_q("SELECT 1 FROM gl_source_events WHERE source_type LIKE 'case_extra_expense%'")) >= 6, what="分錄事件（PO／TE／PC 各 E11＋E11b）")
     gl.wait_for_selector('[data-testid="hb-eng-table"] tbody tr', timeout=15000)
@@ -236,7 +238,7 @@ def test_four_types_end_to_end(world, live_server, e2e_browser):
     assert code["PO"] in text and code["TE"] in text and code["PC"] in text and code["PR"] not in text        # 請購單不在營運報表
     _shot(rp, "35-ops-report-month-expenses")
     for basis in ("accrual", "cash"):
-        st, rep = api["ch_sa"].call("get", "/api/reports/expenses-monthly?year=%s&month=%s&basis=%s" % (TODAY[:4], TODAY[:7], basis))
+        st, rep = api["ch_sa"].call("get", "/api/reports/expenses-monthly?year=%s&month=%s&basis=%s" % (_today()[:4], _today()[:7], basis))
         assert st == 200
         mine = [i for i in rep["monthExpenseItems"] if any(c in i["desc"] for c in code.values())]
         assert not [i for i in mine if code["PR"] in i["desc"]], basis
@@ -275,8 +277,8 @@ def test_no_categories_defined_still_submits_and_posts_with_the_default_account(
     eid = d["id"]
     st, d = api["nc_form"].call("post", "%s/%d/submit" % (SENT, eid))
     assert st == 200 and d["status"] == "已核准", d                                                  # 沒設類別 ⇒ 不擋（無簽核層 ⇒ 直接核准）
-    assert api["nc_cash"].call("post", "/api/cashier/pending-payables/case/%d/pay" % eid, {"paidDate": TODAY})[0] == 200
-    st, run = api["nc_sa"].call("post", "/api/ledger/engine/run", {"start": MONTH0, "end": TODAY})
+    assert api["nc_cash"].call("post", "/api/cashier/pending-payables/case/%d/pay" % eid, {"paidDate": _today()})[0] == 200
+    st, run = api["nc_sa"].call("post", "/api/ledger/engine/run", {"start": _month0(), "end": _today()})
     assert st == 200 and run["stats"]["created"] >= 2, run
     evs = _q("SELECT event_code, voucher_id FROM gl_source_events WHERE source_type LIKE 'case_extra_expense%' AND source_key=?", (str(eid),))
     assert sorted(e["event_code"] for e in evs) == ["E11", "E11b"]

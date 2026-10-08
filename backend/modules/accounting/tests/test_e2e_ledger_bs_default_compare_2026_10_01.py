@@ -10,14 +10,16 @@ pytest.importorskip("playwright.sync_api")
 
 from modules.accounting.tests.test_e2e_ledger_p1_pages_2026_09_30 import _open, _seed  # noqa: E402
 
-Y = date.today().year
-PRIOR_END = "%d-12-31" % (Y - 1)
+def _year():
+    return date.today().year   # 呼叫時才取，避免跨年夜與伺服器日期不一致
+def _prior_end():
+    return "%d-12-31" % (_year() - 1)
 TOT = "[data-testid=st-bs-total-assets] td.num"
 
 
 def _book():
-    _seed("%d-06-01" % (Y - 1), [("1191", 10500, 0), ("4111", 0, 10000), ("2204", 0, 500)])      # 去年：資產 10,500
-    _seed("%d-01-01" % Y, [("1113", 5000, 0), ("4111", 0, 5000)])                                  # 今年：再 +5,000 ⇒ 今天資產 15,500
+    _seed("%d-06-01" % (_year() - 1), [("1191", 10500, 0), ("4111", 0, 10000), ("2204", 0, 500)])      # 去年：資產 10,500
+    _seed("%d-01-01" % _year(), [("1113", 5000, 0), ("4111", 0, 5000)])                                  # 今年：再 +5,000 ⇒ 今天資產 15,500
 
 
 def _enter(e2e_browser, live_server, user, pw):
@@ -36,7 +38,7 @@ def test_entry_shows_both_columns_with_totals_compare_without_any_click(live_ser
     user, pw = make_user(username="bsd_entry", role="superadmin")
     _book()
     page = _enter(e2e_browser, live_server, user, pw)
-    assert page.input_value("[data-testid=st-compare-as-of]") == PRIOR_END                 # 比較欄位預設＝上一年度期末
+    assert page.input_value("[data-testid=st-compare-as-of]") == _prior_end()                 # 比較欄位預設＝上一年度期末
     page.wait_for_function("() => { const c = Array.from(document.querySelectorAll('[data-testid=st-bs-total-assets] td.num')).filter(e => e.offsetParent !== null).map(e => e.textContent.trim()); return c.length === 2 && c[0] === '15,500' && c[1] === '10,500' }")
     assert _cells(page) == ["15,500", "10,500"]                                              # 總計列：本期與比較期都有數字（修正前比較欄是空白）
     for tid in ("st-bs-total-liab", "st-bs-total-eq", "st-bs-total-le"):
@@ -68,22 +70,22 @@ def test_user_edited_comparison_survives_requery(live_server, make_user, e2e_bro
     _book()
     page = _enter(e2e_browser, live_server, user, pw)
     page.wait_for_function("() => Array.from(document.querySelectorAll('[data-testid=st-bs-total-assets] td.num')).filter(e => e.offsetParent !== null).length === 2")
-    page.fill("[data-testid=st-compare-as-of]", "%d-07-31" % (Y - 1))
+    page.fill("[data-testid=st-compare-as-of]", "%d-07-31" % (_year() - 1))
     page.click("[data-testid=st-run]")
     page.wait_for_function("() => { const c = Array.from(document.querySelectorAll('[data-testid=st-bs-total-assets] td.num')).filter(e => e.offsetParent !== null).map(e => e.textContent.trim()); return c.length === 2 && c[1] === '10,500' }")
     page.check("[data-testid=st-drafts]")
     page.click("[data-testid=st-run]")
     page.wait_for_selector("[data-testid=st-drafts-warn]", state="visible")
     page.wait_for_timeout(600)
-    assert page.input_value("[data-testid=st-compare-as-of]") == "%d-07-31" % (Y - 1)
-    assert page.locator("[data-testid=st-bs-sec-assets] td.num").nth(1).inner_text().strip() == "%d-07-31" % (Y - 1)      # 比較欄標頭＝使用者改的日期
+    assert page.input_value("[data-testid=st-compare-as-of]") == "%d-07-31" % (_year() - 1)
+    assert page.locator("[data-testid=st-bs-sec-assets] td.num").nth(1).inner_text().strip() == "%d-07-31" % (_year() - 1)      # 比較欄標頭＝使用者改的日期
 
 
 @pytest.mark.e2e
 def test_income_statement_defaults_to_same_period_last_year(live_server, make_user, e2e_browser):
     user, pw = make_user(username="bsd_is", role="superadmin")
-    _seed("%d-03-10" % (Y - 1), [("1113", 8000, 0), ("4111", 0, 8000)])
-    _seed("%d-03-10" % Y, [("1113", 3000, 0), ("4111", 0, 3000)])
+    _seed("%d-03-10" % (_year() - 1), [("1113", 8000, 0), ("4111", 0, 8000)])
+    _seed("%d-03-10" % _year(), [("1113", 3000, 0), ("4111", 0, 3000)])
     page = _enter(e2e_browser, live_server, user, pw)
     page.click("[data-testid=st-tab-is]")
     page.wait_for_selector("[data-testid=st-is-table]")

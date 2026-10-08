@@ -8,7 +8,8 @@ from datetime import date
 import pytest
 
 SENT = "/api/quotations/-/extra-expenses"
-TODAY = date.today().isoformat()
+def _today():
+    return date.today().isoformat()   # 呼叫時才取，避免跨午夜與伺服器日期不一致
 
 
 _MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
@@ -91,7 +92,7 @@ def test_only_approved_unpaid_rows_can_be_voided(client, H):
     draft = client.post(SENT, headers=H["vd_form"], json={"kind": "travel", "lines": [{"category": "交通費", "summary": "x", "amount": 10}]}).json()["id"]
     assert _void(client, H["vd_sa"], draft).status_code == 409                       # 草稿請直接刪除
     eid = _approved(client, H)
-    assert client.post("/api/cashier/pending-payables/case/%d/pay" % eid, headers=H["vd_cash"], json={"paidDate": TODAY, "payMethod": "transfer"}).status_code == 200
+    assert client.post("/api/cashier/pending-payables/case/%d/pay" % eid, headers=H["vd_cash"], json={"paidDate": _today(), "payMethod": "transfer"}).status_code == 200
     r = _void(client, H["vd_sa"], eid)
     assert r.status_code == 409 and "更正付款日" in r.text                              # 已付款不可直接作廢（前置檢查的訊息，不是搶先付款的那句）
     assert _q("SELECT status FROM case_extra_expenses WHERE id=?", (eid,))[0]["status"] == "已核准"
@@ -105,7 +106,7 @@ def test_only_approved_unpaid_rows_can_be_voided(client, H):
 def test_void_loses_the_race_against_a_payment_that_lands_after_the_precheck(client, H, monkeypatch):
     """前置檢查讀到的是舊資料（付款在檢查之後才寫入）⇒ 帶條件的 UPDATE 擋下（rowcount 0 ⇒ 409），付款日與狀態不被蓋掉。"""
     eid = _approved(client, H)
-    assert client.post("/api/cashier/pending-payables/case/%d/pay" % eid, headers=H["vd_cash"], json={"paidDate": TODAY}).status_code == 200
+    assert client.post("/api/cashier/pending-payables/case/%d/pay" % eid, headers=H["vd_cash"], json={"paidDate": _today()}).status_code == 200
     from modules.case.api import case_extra_expenses as X
     real = X._load
 
@@ -117,7 +118,7 @@ def test_void_loses_the_race_against_a_payment_that_lands_after_the_precheck(cli
     r = _void(client, H["vd_sa"], eid)
     assert r.status_code == 409, r.text
     row = _q("SELECT status, paid_date, void_reason FROM case_extra_expenses WHERE id=?", (eid,))[0]
-    assert row["status"] == "已核准" and row["paid_date"] == TODAY and row["void_reason"] == ""
+    assert row["status"] == "已核准" and row["paid_date"] == _today() and row["void_reason"] == ""
 
 
 def test_void_not_found_and_caseless_visibility(client, H):
@@ -135,7 +136,7 @@ def test_voided_row_leaves_cashier_recognition_gl_and_totals_but_stays_in_owner_
     # 出納待付款：只剩 keep；對已作廢的列付款 ⇒ 不可
     pend = {i["key"] for i in client.get("/api/cashier/pending-payables", headers=H["vd_cash"]).json()["items"]}
     assert str(keep) in pend and str(gone) not in pend
-    pr = client.post("/api/cashier/pending-payables/case/%d/pay" % gone, headers=H["vd_cash"], json={"paidDate": TODAY, "payMethod": "transfer"})
+    pr = client.post("/api/cashier/pending-payables/case/%d/pay" % gone, headers=H["vd_cash"], json={"paidDate": _today(), "payMethod": "transfer"})
     assert pr.status_code == 409
     assert _q("SELECT paid_date FROM case_extra_expenses WHERE id=?", (gone,))[0]["paid_date"] == ""
     # 營運報表認列（權責／現金）與總帳來源
@@ -186,7 +187,7 @@ def test_voided_row_is_frozen(client, H):
     assert client.post("%s/%d/submit" % (SENT, eid), headers=H["vd_form"]).status_code == 409
     assert client.put("%s/%d/change-request" % (SENT, eid), headers=H["vd_form"], json={"description": "x"}).status_code == 409
     assert client.patch("%s/%d/dates" % (SENT, eid), headers=H["vd_sa"], json={"invoiceNo": "AB12345678"}).status_code == 409          # 第42班：admin 看不到別人的無案件額外支出；改用 superadmin 驗「作廢列凍結」
-    assert client.patch("%s/%d/dates" % (SENT, eid), headers=H["vd_cash"], json={"paidDate": TODAY}).status_code == 409
+    assert client.patch("%s/%d/dates" % (SENT, eid), headers=H["vd_cash"], json={"paidDate": _today()}).status_code == 409
     up = client.post("%s/%d/files" % (SENT, eid), headers=H["vd_form"], files={"files": ("a.txt", b"hello", "text/plain")}, data={"kind": "invoice"})
     assert up.status_code == 409, up.text
 

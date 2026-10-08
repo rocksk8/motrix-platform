@@ -23,11 +23,12 @@ from helpers import calendar_sync as cs
 from helpers.settings import _get_setting, _set_setting
 
 NEW = {"warranty_expiry": "warranty_expiry", "range_task_due": "range_task_deadline", "project_end": "case_project_overdue"}
-TODAY = date.today()
+def _today():
+    return date.today()   # 呼叫時才取，避免跨午夜與伺服器日期不一致
 
 
 def _d(n):
-    return (TODAY + timedelta(days=n)).isoformat()
+    return (_today() + timedelta(days=n)).isoformat()
 
 
 @pytest.fixture(autouse=True)
@@ -265,8 +266,8 @@ def _ups(calls, code):
 
 def test_warranty_source_only_won_cases_future_expiry_and_no_money(calls):
     from modules.case import case_deadlines as cd
-    start = (TODAY - timedelta(days=330)).isoformat()                          # 12 個月 ⇒ 約 35 天後到期
-    old = (TODAY - timedelta(days=900)).isoformat()                            # 早已過期
+    start = (_today() - timedelta(days=330)).isoformat()                          # 12 個月 ⇒ 約 35 天後到期
+    old = (_today() - timedelta(days=900)).isoformat()                            # 早已過期
     _quote("Q-W1", "已成案", {"devices": [{"name": "攝影機", "sn": "SN1", "warrantyStart": start, "warrantyMonths": 12},
                                           {"name": "舊設備", "sn": "SN2", "warrantyStart": old, "warrantyMonths": 12},
                                           {"name": "無保固", "sn": "SN3"}]})
@@ -460,7 +461,7 @@ def test_master_switch_off_short_circuits_before_the_source_query(monkeypatch):
 
 def test_warranty_devices_sharing_a_serial_get_distinct_keys(calls):
     from modules.case import case_deadlines as cd
-    start = (TODAY - timedelta(days=330)).isoformat()
+    start = (_today() - timedelta(days=330)).isoformat()
     _quote("Q-W3", "已成案", {"devices": [
         {"id": 111, "name": "甲", "sn": "SAME", "warrantyStart": start, "warrantyMonths": 12},
         {"id": 222, "name": "乙", "sn": "SAME", "warrantyStart": start, "warrantyMonths": 12},
@@ -538,7 +539,7 @@ def test_consecutive_failure_counter_resets_on_success(monkeypatch):
 
 def test_warranty_devices_sharing_the_same_id_get_suffixed_keys(calls):
     from modules.case import case_deadlines as cd
-    start = (TODAY - timedelta(days=330)).isoformat()
+    start = (_today() - timedelta(days=330)).isoformat()
     _quote("Q-W4", "已成案", {"devices": [
         {"id": 5, "name": "甲", "warrantyStart": start, "warrantyMonths": 12},
         {"id": 5, "name": "乙", "warrantyStart": start, "warrantyMonths": 12}]})
