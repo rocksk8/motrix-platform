@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-08（wip/t47-users-list-privacy）：使用者清單收緊敏感欄位（L0 行為，介面不變）
+- ⚠ **可見度收緊（使用者 2026-10-08 裁示）**：`GET /api/users` 對一般人員（角色不是 admin／superadmin）不再回**別人**的 `email`、`phone`、`modules`（原始權限勾選）、`notificationMuted`（信件退訂）；其餘欄位（id、帳號、顯示名稱、角色、在職、部門／處、`builtinAdmin`、`createdAt`）照舊，所以各頁面的人員下拉照常。**自己那一列照舊完整**（個人設定與報價單帶入業務員資料要用）；admin／superadmin 拿到完整列，使用者管理、信件設定、組織架構頁不受影響。`/api/users/selectable` 不變。
+- 已知連帶影響：報價單表單『報價人』改選他人（代理）時，一般人員帶不到對方的電話／Email（欄位留空，需手動補）。
+- 測試：`tests/test_users_list_privacy_t47_2026_10_08.py`（API：業務／工程師／檢視者／admin／superadmin，含自己那一列）、`tests/test_e2e_users_list_privacy_pages_t47_2026_10_08.py`（8 個頁面 × 業務／工程師）。
+
 ## 1.118 — 2026-10-07（wip/t45-r2-step1-impl：R2 第1步——D4 superadmin 全部鍵、D5 財務判斷影子模式）
 - L1（新增，向下相容）：`helpers.auth` 新增 `FINANCE_FLAG_KEY`、`finance_effective_keys(user, cache=False)`、`finance_duty_person(user)`、`reset_finance_mode_cache()`。
   財務三鍵判斷（`has_finance_access`／`has_cashier_access`／`can_see_financial`／`user_has_module(財務三鍵)`）改走單一縫：`system_settings.finance_via_effective`＝缺／`off`（預設，舊規則逐字不變）、`shadow`（回傳舊規則，新舊不同時對該人該鍵每小時至多寫一筆 `audit_log` `permission.finance_shadow_diff`；算不出新規則退回舊規則）、`on`（回傳新規則＝（基礎類別 finance ∪ 啟用角色的財務鍵）−個人扣項；原始勾選不計；**本班不開，需使用者核准**）。

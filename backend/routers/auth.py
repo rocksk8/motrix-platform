@@ -1476,7 +1476,8 @@ def change_password(body: ChangePasswordIn, authorization: str = Header(None)):
 
 @router.get("/api/users")
 def list_users(authorization: str = Header(None)):
-    _require_user(authorization)
+    caller = _require_user(authorization)
+    full_view = caller["role"] in ("superadmin", "admin")             # 第 47 班（使用者裁示）：只有管理員以上看得到全部人的聯絡方式／權限勾選／信件退訂
     conn = get_db()
     rows = conn.execute("""
         SELECT u.id, u.username, u.display_name, u.role, u.email, u.phone, u.modules,
@@ -1503,6 +1504,9 @@ def list_users(authorization: str = Header(None)):
         d["departmentName"]      = d.pop("department_name")
         d["divisionId"]          = d.pop("division_id")
         d["divisionName"]        = d.pop("division_name")
+        if not full_view and d["username"] != caller["username"]:        # 一般人員：別人的 Email／電話／權限勾選／信件退訂不給（自己的那一列照舊，個人設定頁與報價單帶入業務員資料要用）
+            for _k in ("email", "phone", "modules", "notificationMuted"):
+                d.pop(_k, None)
         result.append(d)
     return result
 
