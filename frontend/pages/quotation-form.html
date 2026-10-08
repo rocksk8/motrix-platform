@@ -3808,12 +3808,23 @@
         return this.q.salesPersonUsername !== this.session.username
       },
 
-      onSalesPersonChange() {
-        const u = this.allUsers.find(u => u.username === this.q.salesPersonUsername)
+      async onSalesPersonChange() {
+        const uname = this.q.salesPersonUsername
+        const u = this.allUsers.find(u => u.username === uname)
         if (u) {
           this.q.salesPerson = u.displayName || u.username
-          this.q.salesPhone  = u.phone  || ''
-          this.q.salesEmail  = u.email  || ''
+          let phone = u.phone, email = u.email
+          if (phone === undefined && email === undefined) {      // 使用者清單對一般人員不含別人的聯絡方式（第 47 班）⇒ 改查『報價人聯絡資料』（一次一人，只回電話與 Email）
+            phone = ''; email = ''
+            try {
+              const r = await fetch(`${this.API}/users/sales-contact?username=${encodeURIComponent(uname)}`, { headers: { 'Authorization': `Bearer ${this.session.token}` } })
+              if (r.ok) { const c = await r.json(); phone = c.phone || ''; email = c.email || '' }
+            } catch (e) { /* 查不到就留空，使用者可手動補 */ }
+          }
+          if (this.q.salesPersonUsername === uname) {            // 等待期間使用者又換人 ⇒ 不用過期的結果覆蓋
+            this.q.salesPhone = phone || ''
+            this.q.salesEmail = email || ''
+          }
         }
         this.setDirty()
       },

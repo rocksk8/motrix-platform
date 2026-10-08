@@ -77,3 +77,38 @@ def test_the_selectable_endpoint_is_unchanged(client, people):
     r = client.get("/api/users/selectable", headers={"Authorization": "Bearer " + tok})
     assert r.status_code == 200 and {"id", "username", "display_name", "role"} <= set(r.json()[0])
     assert not any(k in r.json()[0] for k in SENSITIVE)
+
+
+# ── 報價人聯絡資料（GET /api/users/sales-contact）：改選『報價人』時帶入電話／Email，不經過收緊後的使用者清單 ──────────
+
+def _tok(client, creds):
+    return {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": creds[0], "password": creds[1]}).json()["token"]}
+
+
+def test_sales_contact_returns_exactly_four_fields_for_a_quotation_editor(client, people):
+    h = _tok(client, people["pl_sales"])
+    r = client.get("/api/users/sales-contact", params={"username": "pl_admin"}, headers=h)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert set(body) == {"id", "displayName", "phone", "email"} and body["email"] == "pl_admin@example.test" and body["phone"].startswith("09")
+    assert client.get("/api/users/sales-contact", params={"username": "pl_super"}, headers=_tok(client, people["pl_super"])).status_code == 200
+
+
+def test_sales_contact_needs_the_quotation_module(client, make_user, people):
+    u, p = make_user(username="pl_nomod", role="viewer", modules=["dashboard"], legacy_finance_flag=False)
+    r = client.get("/api/users/sales-contact", params={"username": "pl_admin"}, headers=_tok(client, (u, p)))
+    assert r.status_code == 403 and "pl_admin@example.test" not in r.text
+    assert client.get("/api/users/sales-contact", params={"username": "pl_admin"}).status_code in (401, 403)
+
+
+def test_sales_contact_only_for_active_existing_users(client, people):
+    c = _db()
+    try:
+        c.execute("UPDATE users SET active=0 WHERE username='pl_eng'")
+        c.commit()
+    finally:
+        c.close()
+    h = _tok(client, people["pl_sales"])
+    assert client.get("/api/users/sales-contact", params={"username": "pl_eng"}, headers=h).status_code == 404
+    assert client.get("/api/users/sales-contact", params={"username": "nobody_here"}, headers=h).status_code == 404
+    assert client.get("/api/users/sales-contact", headers=h).status_code == 422

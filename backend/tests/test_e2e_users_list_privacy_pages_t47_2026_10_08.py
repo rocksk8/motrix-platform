@@ -61,3 +61,38 @@ def test_pages_that_load_the_user_list_still_work_for_plain_roles(live_server, s
             for k in SENSITIVE:
                 assert k not in row, (page, role, row["username"], k)
     assert "pe_boss" not in json.dumps(errors), errors
+
+
+@pytest.mark.e2e
+def test_sales_picking_another_quoter_gets_phone_and_email_without_the_sensitive_list_fields(live_server, staff, new_context):
+    """報價人改選他人（代理）：電話／Email 改由 /api/users/sales-contact 帶入；/api/users 對一般人員不含別人的聯絡方式。"""
+    pg = new_context(viewport={"width": 1366, "height": 900}).new_page()
+    errors, lists, contacts = [], [], []
+    pg.on("pageerror", lambda e: errors.append(str(e)))
+
+    def on_resp(r):
+        url = r.url
+        try:
+            if url.rstrip("/").endswith("/api/users"):
+                lists.append(r.json())
+            elif "/api/users/sales-contact" in url:
+                contacts.append((r.status, r.json()))
+        except Exception:                                                # noqa: BLE001
+            pass
+    pg.on("response", on_resp)
+    u = staff["sales"]
+    inject_login(pg, live_server, u[0], u[1])
+    pg.goto("%s/pages/quotation-form.html" % live_server)
+    sel = pg.locator('select[x-model="q.salesPersonUsername"]')
+    sel.wait_for(state="visible", timeout=20000)
+    sel.select_option("pe_boss")
+    pg.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]')); return d && d.q && d.q.salesEmail === 'boss@example.test' }", timeout=10000)
+    data = pg.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]')); return { phone: d.q.salesPhone, email: d.q.salesEmail, who: d.q.salesPerson } }")
+    assert data["phone"] == "0911222333" and data["email"] == "boss@example.test"
+    assert contacts and contacts[-1][0] == 200 and set(contacts[-1][1]) == {"id", "displayName", "phone", "email"}
+    for body in lists:
+        for row in body:
+            if row["username"] != u[0]:
+                for k in SENSITIVE:
+                    assert k not in row
+    assert not errors, errors
