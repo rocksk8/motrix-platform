@@ -25,6 +25,10 @@
 
 ## 步驟 3：套用後檢查（逐項、可機械判定）
 
+> 🔴 **「新功能靜態存在」這一列（慣例編號 #9）只准檢查『實際會被部署的程式檔』**：`<ROOT>\backend\**`（含 `backend\tools\*.py`、`backend\modules\*\migrations\*.py`）、`<ROOT>\frontend\**`，用「檔案存在」或 `Select-String <檔> -Pattern '<該班新增的字面值>'`（≥1）。
+> **不可以**檢查 `<ROOT>\docs\platform\*.md` 的存在或內容：`apply_update.ps1` 不部署 `docs\platform`（只還原／備份根目錄的說明檔），正式機上那些檔不是舊的就是不存在，檢查會永遠紅、或對到過期內容而誤綠（第 46 班踩到）。
+> 文件類的交付是否到位，改看包內 `deploy_manifest.json`／套用輸出的 `plan.txt`，不要看正式機的 `docs\`。
+
 ## 步驟 4：只回程式的回滾（僅在「apply 顯示 success 但步驟 3 不過」時）
 
 ## 步驟 5：回報
