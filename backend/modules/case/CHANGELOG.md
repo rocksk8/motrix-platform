@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-08（wip/t47-po-vendor-bank）：採購單廠商收款帳戶（PO-VENDOR-BANK-GAP-T47 選項 A）
+## (next) — 2026-10-08（wip/t47-po-vendor-bank）：採購單廠商收款帳戶（PO-VENDOR-BANK-GAP-T47 選項 A）；報價人聯絡資料查詢（wip/t47-users-list-privacy）
 - `payment-request.html`：採購單表單多一塊「廠商收款帳戶」（銀行名稱、分行、帳號、戶名；選填、建議填）。送出時帶 `payeeType=vendor`、`payeeName`＝戶名（沒填用廠商名稱）、`payeeBank`＝銀行＋分行、`payeeAccount`＝只留數字；只在採購單顯示。有填就存進單據，出納「查看收款人銀行資料」看到的是這份快照（清單仍只給末四碼、完整帳號查看照舊留稽核）；沒填 ⇒ 出納照舊看到『廠商收款帳戶資料未收集』警示（本班**不擋付款**）。廠商可能是自然人：畫面只放提醒（請確認已告知對方資料將用於付款），不強制勾選。
 - `api/case_extra_expenses.py::_check_payee_bank`（建立／編輯草稿／變更申請共用）：帳號去掉空白與連字號後必須是 5～20 碼半形數字（否則 400）、戶名／銀行名稱各 60 字內、**採購單**填了帳號就必須有銀行名稱；其他單據種類只做格式檢查、不新增必填。權限與遮蔽規則不變（非金額角色的案件列表逐列遮蔽，不含收款人欄）。
 - 測試：`test_po_vendor_bank_t47_2026_10_08.py`（API）、`tests/test_e2e_po_vendor_bank_t47_2026_10_08.py`（瀏覽器，含業務角色）。
