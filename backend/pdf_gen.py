@@ -36,7 +36,16 @@ from core import paths as _paths
 
 
 
-def admin_cost_label(summary, orig=False) -> str:
+def default_overhead_pct():
+    """全域預設管銷百分比（system_settings.overhead_default_pct；缺或壞值＝25）。PDF／Excel 只在『和預設不同』時才印百分比（使用者 Q7 裁示）。"""
+    try:
+        from helpers.settings import _get_setting
+        return float(_get_setting("overhead_default_pct", 25))
+    except Exception:                                             # noqa: BLE001
+        return 25.0
+
+
+def admin_cost_label(summary, orig=False, hide_default=False) -> str:
     """管銷分攤列標籤（第 48 班）：口徑 2（summary.formulaVer>=2）＝「管銷分攤（直接毛利 N%）」，無戳記／1＝「管銷分攤（報價稅前 10%）」。
     N 是該案存值（summary.overheadPct，每案可調）。原始側（orig=True）優先看 origFormulaVer／origOverheadPct，沒有就跟實際側同一口徑。
     前端同式：frontend/js/reports.js stlAdminLabel、case-management-fin.js caseSettleAdminLabel；守門 tests/test_profit_labels_t48.py。"""
@@ -53,6 +62,8 @@ def admin_cost_label(summary, orig=False) -> str:
     if pct is None:
         return "管銷分攤（直接毛利）"
     p = float(pct)
+    if hide_default and abs(p - default_overhead_pct()) < 1e-9:   # PDF／Excel：等於預設就不印百分比（畫面上的標籤仍一律顯示）
+        return "管銷分攤（直接毛利）"
     return "管銷分攤（直接毛利 %s%%）" % (int(p) if p == int(p) else p)
 
 
@@ -2651,7 +2662,7 @@ def _build_case_closing_html(data: dict) -> str:
       <tr><td>原始成本（料件）</td><td class="r">{money(summary.get("origTotalCost"))}</td></tr>
       <tr><td class="bold">原始直接毛利</td><td class="r bold">{money(summary.get("origDirectProfit"))}</td></tr>
       <tr><td>原始毛利率</td><td class="r">{float(summary.get("origMarginPct") or 0):.1f}%</td></tr>
-      <tr><td>{admin_cost_label(summary, True)}</td><td class="r red">− {money(summary.get("origAdminCost"))}</td></tr>
+      <tr><td>{admin_cost_label(summary, True, hide_default=True)}</td><td class="r red">− {money(summary.get("origAdminCost"))}</td></tr>
       <tr><td>公益捐款（1%）</td><td class="r red">− {money(summary.get("origCharity"))}</td></tr>{_orig_reserve_row(summary, money)}
       <tr class="bold-row"><td>原始預估營業利益</td><td class="r">{money(summary.get("origNetProfit"))}</td></tr>
       <tr><td>原始預估營業利益率</td><td class="r">{float(summary.get("origNetMarginPct") or 0):.1f}%</td></tr>
@@ -2668,7 +2679,7 @@ def _build_case_closing_html(data: dict) -> str:
       <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{money(summary.get("totalActualCost"))}</td></tr>
       <tr><td>真實毛利</td><td class="r {'green' if int(summary.get('grossProfit',0) or 0)>=0 else 'red'}">{money(summary.get("grossProfit"))}</td></tr>
       <tr><td>真實毛利率</td><td class="r">{float(summary.get("grossMarginPct") or 0):.1f}%</td></tr>
-      <tr><td>{admin_cost_label(summary)}</td><td class="r red">− {money(summary.get("adminCost"))}</td></tr>
+      <tr><td>{admin_cost_label(summary, hide_default=True)}</td><td class="r red">− {money(summary.get("adminCost"))}</td></tr>
       <tr><td>公益捐款（1%）</td><td class="r red">− {money(summary.get("charityDonation"))}</td></tr>
       <tr class="bold-row"><td>真實營業利益</td><td class="r {'green' if int(summary.get('netProfit',0) or 0)>=0 else 'red'}">{money(summary.get("netProfit"))}</td></tr>
       <tr><td>真實營業利益率</td><td class="r bold" style="color:{'#15803D' if float(summary.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(summary.get('netMarginPct',0) or 0)>=0 else '#DC2626'}">{float(summary.get("netMarginPct") or 0):.1f}%</td></tr>

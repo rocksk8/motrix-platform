@@ -300,6 +300,21 @@ def _orig_indirect_reserve(summary: dict) -> int:
     return int((summary or {}).get("origIndirectReserve") or 0)
 
 
+def _admin_rate_text(s) -> str:
+    """Excel「管銷比率」欄：口徑 2（summary.formulaVer>=2）＝該案百分比（例 25%）；舊口徑／無戳記＝「稅前 10%」。"""
+    try:
+        v2 = int((s or {}).get("formulaVer") or 1) >= 2
+    except (TypeError, ValueError):
+        v2 = False
+    if not v2:
+        return "稅前 10%"
+    p = (s or {}).get("overheadPct")
+    if p is None:
+        return "直接毛利"
+    p = float(p)
+    return "%s%%" % (int(p) if p == int(p) else p)
+
+
 def _reserve_uncovered(summary: dict) -> int:
     """報價預留間接成本裡「沒有被實際成本抵用」的部分＝真正墊高「真實營業利益 − 原始預估營業利益」的那一塊。
 
@@ -1546,8 +1561,10 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         "報價預留間接成本","其中：預留未被實際成本抵用","其中：其他",
         # 第 43 班：報價品項數量小計（只有數量；只經 case.shipped_summary 提供者，模組不在＝空白）
         "已出貨數量合計","報價品項數量合計",
+        # 第 48 班：管銷比率（附在最右，既有欄號不動）。v2＝該案存的百分比；舊口徑＝「稅前 10%」
+        "管銷比率",
     ]
-    cols6 = [13,18,18,10,9,13, 13,11,11,13, 13,11,13,11,11,13, 9,13, 9,11,10, 15,15,13, 13,13]
+    cols6 = [13,18,18,10,9,13, 13,11,11,13, 13,11,13,11,11,13, 9,13, 9,11,10, 15,15,13, 13,13, 12]
     for i, (h, w) in enumerate(zip(hdrs6, cols6), 1):
         ws6.column_dimensions[get_column_letter(i)].width = w
 
@@ -1563,7 +1580,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     grp_labels = [
         (1,6,"基本資訊","374151"), (7,10,"原始報價預估","475569"),
         (11,16,"實際成本精算","92400E"), (17,18,"差異","7C3AED"),
-        (19,21,"精算資訊","374151"), (22,24,"報價預留間接成本","6D28D9"), (25,26,"出貨數量","0F766E"),
+        (19,21,"精算資訊","374151"), (22,24,"報價預留間接成本","6D28D9"), (25,26,"出貨數量","0F766E"), (27,27,"管銷","7C2D12"),
     ]
     for sc, ec, lbl, clr in grp_labels:
         if sc == ec:
@@ -1615,7 +1632,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                   f"{'+' if diff >= 0 else ''}{diff:.1f}", gp_diff,
                   mc["settleStatus"] or "", mc.get("settleDate",""), mc.get("settleBy",""),
                   reserve, uncovered, gp_diff - uncovered,
-                  ship.get("shipped", ""), ship.get("ordered", "")],
+                  ship.get("shipped", ""), ship.get("ordered", ""), _admin_rate_text(s)],
                  font=mk(size=9), fill=fill(bg), border=BD,
                  aligns=[al("left"),al("left"),al("left"),al("left"),al("center"),
                          al("right"),al("right"),al("right"),al("right"),al("right"),
@@ -1623,7 +1640,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                          al("right"),al("right"),
                          al("center"),al("center"),al("left"),
                          al("right"),al("right"),al("right"),
-                         al("right"),al("right")],
+                         al("right"),al("right"),al("center")],
                  height=18)
         for col in [6,7,10,11,12,13,16,18,22,23,24]:
             ws6.cell(row=r_i, column=col).number_format = '#,##0'
@@ -1654,10 +1671,10 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                   "","","",
                   tot_reserve, tot_uncovered, tot_act - tot_est - tot_uncovered,
                   sum((ship_sum.get(mc["quoteNo"]) or {}).get("shipped", 0) for mc in data["marginCases"]) if ship_sum else "",
-                  sum((ship_sum.get(mc["quoteNo"]) or {}).get("ordered", 0) for mc in data["marginCases"]) if ship_sum else ""],
+                  sum((ship_sum.get(mc["quoteNo"]) or {}).get("ordered", 0) for mc in data["marginCases"]) if ship_sum else "", ""],
                  font=mk(bold=True, size=9, color=C_WHITE),
                  fill=fill("111827"), border=BD,
-                 aligns=[al("center")] + [al("right")] * 25,
+                 aligns=[al("center")] + [al("right")] * 26,
                  height=20)
         for col in [6,7,10,11,12,13,16,18,22,23,24]:
             ws6.cell(row=sr6, column=col).number_format = '#,##0'
@@ -2155,7 +2172,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         <tr><td>原始成本（料件）</td><td class="r">{_fn(ss.get("origTotalCost"))}</td></tr>
         <tr><td class="bold">原始直接毛利</td><td class="r bold">{_fn(ss.get("origDirectProfit"))}</td></tr>
         <tr><td>原始毛利率</td><td class="r">{float(ss.get("origMarginPct") or 0):.1f}%</td></tr>
-        <tr class="sub"><td>{admin_cost_label(ss, True)}</td><td class="r red">− {_fn(ss.get("origAdminCost"))}</td></tr>
+        <tr class="sub"><td>{admin_cost_label(ss, True, hide_default=True)}</td><td class="r red">− {_fn(ss.get("origAdminCost"))}</td></tr>
         <tr class="sub"><td>公益捐款（1%）</td><td class="r red">− {_fn(ss.get("origCharity"))}</td></tr>
         <tr class="bold-row"><td>原始預估營業利益</td><td class="r">{_fn(ss.get("origNetProfit"))}</td></tr>
         <tr><td>原始預估營業利益率</td><td class="r">{float(ss.get("origNetMarginPct") or 0):.1f}%</td></tr>
@@ -2175,7 +2192,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{_fn(ss.get("totalActualCost"))}</td></tr>
         <tr><td>真實毛利</td><td class="r {'green' if int(ss.get('grossProfit',0) or 0)>=0 else 'red'}">{_fn(ss.get("grossProfit"))}</td></tr>
         <tr><td>真實毛利率</td><td class="r">{float(ss.get("grossMarginPct") or 0):.1f}%</td></tr>
-        <tr class="sub"><td>{admin_cost_label(ss)}</td><td class="r red">− {_fn(ss.get("adminCost"))}</td></tr>
+        <tr class="sub"><td>{admin_cost_label(ss, hide_default=True)}</td><td class="r red">− {_fn(ss.get("adminCost"))}</td></tr>
         <tr class="sub"><td>公益捐款（1%）</td><td class="r red">− {_fn(ss.get("charityDonation"))}</td></tr>
         <tr class="bold-row"><td>真實營業利益</td><td class="r {'green' if int(ss.get('netProfit',0) or 0)>=0 else 'red'}">{_fn(ss.get("netProfit"))}</td></tr>
         <tr><td>真實營業利益率</td><td class="r" style="color:{'#15803D' if float(ss.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(ss.get('netMarginPct',0) or 0)>=0 else '#DC2626'};font-weight:700">{float(ss.get("netMarginPct") or 0):.1f}%</td></tr>
