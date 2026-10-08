@@ -13,6 +13,7 @@
 - 唯讀報表（2d）：`audit_account_permissions.py` 預設讀**生效權限**（職責角色＋個人扣項＋財務規則）；`finance_role_impact_report.py` 預設把職責角色與扣項套到勾選上（**刻意不套財務規則**，那正是這份報表要預告的變化）；兩支都新增 `--raw`（舊口徑），輸出標明口徑。
 - 前端（`users.html`＋`static/users-duty.js`）：編輯既有、非最高管理者時顯示「職責角色／個人扣項／生效權限預覽／變更原因」；畫面只送**原始勾選**（預覽唯讀、不寫回）；存檔順序＝解除扣項 → PUT → 解除／新增角色 → 新增扣項，失敗即停並明講已完成／未完成。**使用者可見的行為變更（Q3）**：編輯既有使用者且個人勾選為空時，不再用基礎類別樣板預填（只有「新增使用者」預填）。
 - 不放寬任何權限；只新增拒絕（2c）；沒有 migration、沒有新表。回滾：2c 設旗標 `0`；其餘純程式（L1）回退即還原，無資料動作。
+- **稽核 #2 跟進（wip/t48-r2-step2）**：①`users-duty.js`：被勾選的模組若同時在個人扣項裡仍列在候選（可在畫面解除），存檔前自動解除該扣項，避免舊 PUT 400；②`preview_whatif` 對 superadmin 回全部模組鍵（與 `user_has_module` 對最高管理者恆為 True 一致）；③`audit_account_permissions` 讀不出生效清單而退回原始勾選的那一列，`basis` 如實標 `raw`；`dutyOpen` 重設 `doneBeforePut`。測試：`tests/test_r2_step2_audit2_fixes_2026_10_09.py`。
 
 ## 1.119 — 2026-10-08（wip/t47-paydate-l1：預定付款日共用提醒庫；wip/t47-users-list-privacy：使用者清單收緊敏感欄位，L0 行為、介面不變）
 - L1（新增，向下相容）：新單位 `helpers/payable_due_core.py`（使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）——`due_kind`／`effective_send_day`／`next_working_day`／`candidate_planned_dates`（3 天前、當天、逾期＝預定日後第 1 個工作日；規則自 M01 `payable_reminders` 搬入）、`notify_finance`（財務站內通知，不含金額；寄信函式由呼叫端傳入 `run_scan(send=…)`，因為寄信必須用字面 key 呼叫 `send_registered`，守門 `test_mail_registry` 逐一核對）、`prune_guards`／`run_scan`（guard、寄送迴圈、等待上限）、`sync_event`／`CALENDAR_SOURCES`（行事曆「付款待辦」來源開關：案件額外支出、承攬商匯款、叫料匯款；**勞報單不在名單 ⇒ 零呼叫**）。純函式、不讀時鐘（日期與工作日判斷由呼叫端傳入）。

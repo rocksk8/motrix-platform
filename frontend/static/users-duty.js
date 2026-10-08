@@ -19,7 +19,7 @@
       async dutyOpen(user) {
         const d = this.duty
         Object.assign(d, { visible: false, loaded: false, roles: [], origRoleIds: [], origSubs: [], roleIds: [], subs: [], reason: '',
-                           preview: null, error: '', progress: '', _userId: user.id })
+                           preview: null, error: '', progress: '', doneBeforePut: [], _userId: user.id })
         if (!this.isSuperAdmin || !user || user.role === 'superadmin') return
         d.visible = true
         d.loading = true
@@ -51,7 +51,8 @@
         const set = new Set()
         for (const id of this.duty.roleIds) for (const k of this.dutyRoleKeys(id)) set.add(k)
         for (const k of this.duty.subs) set.add(k)
-        return [...set].filter(k => !FIN_KEYS.includes(k) && !(this.form.modules || []).includes(k)).sort()
+        // 已在個人扣項裡的鍵永遠列出（即使目前被勾選）：否則最高管理者無法在畫面上解除扣項，存檔時舊 PUT 會 400（稽核 #2 SHOULD-FIX 1）
+        return [...set].filter(k => !FIN_KEYS.includes(k) && (this.duty.subs.includes(k) || !(this.form.modules || []).includes(k))).sort()
       },
       dutyIsHi(k) { return this.duty.hi.includes(k) },
 
@@ -131,6 +132,8 @@
       async dutyBefore() {
         const d = this.duty
         if (!d.visible || !d.loaded) return true
+        // 勾選了某個模組、而它同時在個人扣項裡 ⇒ 自動解除該扣項（同一個鍵只能有一種個人狀態；舊 PUT 對被扣的鍵會 400）
+        d.subs = d.subs.filter(k => !(this.form.modules || []).includes(k))
         const x = this.dutyDiff()
         const reason = (d.reason || '').trim()
         const done = []
