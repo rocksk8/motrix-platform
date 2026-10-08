@@ -15,7 +15,8 @@
   --db 必填且檔案必須存在（_dbbind，不建空庫）；建議在系統停用期間執行（交易內已重檢查，但仍以停機為準）。
   新口徑遷移後若模式仍是 legacy，舊式表單重存會悄悄把單退回 10% 基準 ⇒ recalc --apply 在模式不是 v2 時拒絕，除非加 --set-mode-v2。
 完成標記：recalc --apply 在同一交易寫 system_settings.overhead_migration_done = {doneAt, by, recalculated, skipped}；伺服器沒有它就一律當 legacy，
-  獨立 `mode v2 --apply` 沒有標記時拒絕；rollback --apply 成功還原後把模式設回 legacy 並刪除標記。
+  獨立 `mode v2 --apply` 沒有標記時拒絕；`mode legacy --apply`（同伺服器 PUT /api/overhead/settings ruleMode=legacy）會刪除標記，
+  之後再切 v2 必須重新 recalc；rollback --apply 成功還原後把模式設回 legacy 並刪除標記。
 結束碼：0 完成；2 錯誤／參數。
 """
 import argparse
@@ -156,8 +157,8 @@ def main(argv=None):
                           file=sys.stderr)
                     return 2
                 _put(conn, MODE_KEY, a.value, now)
-                if a.value == "legacy":
-                    pass                                            # 退回 legacy 不動標記（標記＝資料已重算過；回滾工具才會移除）
+                if a.value == "legacy":                             # 與伺服器一致：退回 legacy 就刪完成標記 ⇒ 之後再切 v2 必須重新 recalc（防止新舊口徑的單混在一起）
+                    conn.execute("DELETE FROM system_settings WHERE key=?", (DONE_KEY,))
                 conn.execute("COMMIT")
             return 0
         default_pct = a.pct or str(_get(conn, PCT_KEY, R.DEFAULT_PCT))

@@ -285,3 +285,13 @@ def test_inconsistent_tot_with_negative_other_indirect_is_skipped_not_written(tm
     assert c.execute("SELECT value_json FROM system_settings WHERE key='overhead_rule_mode'").fetchone()[0] == '"v2"'   # 模式仍在同交易設定
     c.close()
     assert json.loads(_rows(p)["B1"][0])["tot"] == bad
+
+
+def test_mode_legacy_deletes_the_marker_so_a_later_v2_needs_a_fresh_recalc(db):
+    _run("--db", db, "recalc", "--apply", "--set-mode-v2")
+    assert _setting(db, "overhead_migration_done") is not None
+    assert _run("--db", db, "mode", "legacy", "--apply")[0] == 0
+    assert _setting(db, "overhead_migration_done") is None and _setting(db, "overhead_rule_mode") == "legacy"
+    assert _run("--db", db, "mode", "v2", "--apply")[0] == 2                   # 標記被刪 ⇒ 不能直接切回 v2
+    rc, out = _run("--db", db, "recalc", "--apply", "--set-mode-v2")           # 重新 recalc（冪等：已是新口徑的跳過）才能再切
+    assert rc == 0 and _setting(db, "overhead_rule_mode") == "v2" and _setting(db, "overhead_migration_done") is not None
