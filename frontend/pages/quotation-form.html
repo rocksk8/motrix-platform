@@ -2485,7 +2485,7 @@
         const totalCost  = items.reduce((s,i) => s + (i.qty||0)*(i.cost||0), 0)
         const inputVat   = MotrixLegalRound.halfUp(totalCost, 0.05)
         const pretax     = subtotal - (this.q.discount||0) + (this.q.freight||0)
-        const salesTaxRate = (this.q.taxRate !== undefined ? this.q.taxRate : 5) / 100
+        const salesTaxRate = ((this.q.taxRate === undefined || this.q.taxRate === null || this.q.taxRate === '') ? 5 : this.q.taxRate) / 100   // 缺／null／空字串 ⇒ 5（與後端 quote_tax_type、頁面 taxKind 同一條規則）
         // X-VAT（2026-09-26）：與後端 legal_params.round_half_up 同一套四捨五入（static/legal-round.js）
         const tax        = MotrixLegalRound.halfUp(pretax, salesTaxRate)
         const total      = pretax + tax

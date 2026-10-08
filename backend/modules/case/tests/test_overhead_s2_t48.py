@@ -321,3 +321,24 @@ def test_v2_without_the_migration_marker_is_treated_as_legacy(client, who):
     cn.execute("DELETE FROM system_settings WHERE key IN ('overhead_rule_mode', 'overhead_migration_done')")
     cn.commit()
     cn.close()
+
+
+def test_v2_recomputes_item_amounts_from_qty_times_unit_price(client, who):
+    su, ad = who
+    _mode(client, su, "v2")
+    forged = _q(items=[{"type": "header", "title": "標題", "amount": 777},
+                       {"type": "item", "qty": 2, "unitPrice": 50000, "amount": 1, "cost": 60000}])
+    d, _, _ = _row(_post(client, ad, forged).json()["quote_no"])
+    assert d["items"][1]["amount"] == 100000 and d["items"][0]["amount"] == 0, "品項金額由伺服器重算（標題列 0）"
+    assert (d["tot"]["subtotal"], d["tot"]["pretax"], d["tot"]["total"]) == (100000, 100000, 105000)
+    _mode(client, su, "legacy")
+
+
+def test_server_tax_rate_rule_matches_the_form(client):
+    from modules.case import profit_guard as PG
+    base = {"items": [{"type": "item", "qty": 1, "unitPrice": 10000, "cost": 0}]}
+    assert PG.server_totals(dict(base))["tax"] == 500
+    assert PG.server_totals(dict(base, taxRate=None))["tax"] == 500, "null ⇒ 5%（quote_tax_type 的規則）"
+    assert PG.server_totals(dict(base, taxRate=""))["tax"] == 500
+    assert PG.server_totals(dict(base, taxRate=0))["tax"] == 0
+    assert PG.server_totals(dict(base, taxRate=5))["tax"] == 500

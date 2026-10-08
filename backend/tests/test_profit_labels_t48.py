@@ -134,3 +134,26 @@ def test_literal_scanner_positive_control(tmp_path):
     assert pdf_gen.admin_cost_label({"formulaVer": 2, "overheadPct": 25}) == "管銷分攤（直接毛利 25%）"
     assert pdf_gen.admin_cost_label({"formulaVer": 2, "overheadPct": 7.5}) == "管銷分攤（直接毛利 7.5%）"
     assert pdf_gen.admin_cost_label({"formulaVer": 2, "origFormulaVer": 1}, True) == "管銷分攤（報價稅前 10%）"
+
+
+def test_no_old_admin_fee_wording_in_frontend_and_non_test_backend():
+    """稽核 #4：精算頁還留著「管理費」舊字樣（橋接圖標籤寫死『管理費（報價×10%）』）。管銷分攤相關畫面／輸出一律用『管銷分攤』（口徑感知標籤）。
+    例外：與管銷無關的『管理費』用語（目前沒有；有再登記）。"""
+    allowed = {"backend/helpers/legal_params.py"}                      # 稅法條文裡的『管理費』是別的概念
+    stray = []
+    for base, exts in (("frontend", (".html", ".js")), ("backend", (".py",))):
+        for d, dirs, files in os.walk(os.path.join(ROOT, base)):
+            dirs[:] = [x for x in dirs if x not in ("node_modules", "__pycache__", "tests", "migrations_frozen", ".git")]
+            for fn in files:
+                if not fn.endswith(exts) or fn.startswith("test_"):
+                    continue
+                p = os.path.join(d, fn)
+                rel = os.path.relpath(p, ROOT).replace(os.sep, "/")
+                if rel in allowed:
+                    continue
+                try:
+                    if "管理費" in open(p, encoding="utf-8").read():
+                        stray.append(rel)
+                except (UnicodeDecodeError, OSError):
+                    continue
+    assert not stray, "這些檔還有舊字樣「管理費」（請改『管銷分攤』／走口徑感知標籤）：%s" % stray

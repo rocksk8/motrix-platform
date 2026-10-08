@@ -557,7 +557,7 @@
                     </template>
                   </td>
 
-                  <!-- 毛利欄：每個品項賺多少（只算到毛利；管理費／公益／營業利益只在總結） -->
+                  <!-- 毛利欄：每個品項賺多少（只算到毛利；管銷分攤／公益／營業利益只在總結） -->
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :data-testid="'stl-profit-' + item.id">
                     <div style="font-size:18px;font-weight:800;line-height:1.2" :style="{ color: itemProfit(item) < 0 ? 'var(--danger)' : 'var(--success)' }"
                          x-text="(itemProfit(item) < 0 ? '−' : '') + 'NT$ ' + fmt(Math.abs(itemProfit(item)))"></div>
@@ -829,7 +829,7 @@
       <div class="stl-card" data-testid="stl-profit-card">
         <div class="stl-card__head">
           <div class="stl-card__title">四之一、每個品項的賺賠（毛利）</div>
-          <div style="font-size:11px;color:var(--text-dim)">品項只算到毛利；管理費、公益捐贈、營業利益只在下方「利潤分析」</div>
+          <div style="font-size:11px;color:var(--text-dim)">品項只算到毛利；管銷分攤、公益捐贈、營業利益只在下方「利潤分析」</div>
         </div>
         <div class="stl-pf noprint" data-testid="stl-pf">
           <b>篩選</b>
@@ -966,7 +966,7 @@
           <div><div style="color:var(--text-secondary)">資料截至</div><b x-text="_loadedAt.toLocaleString('zh-TW', { hour12: false })"></b></div>
           <div><div style="color:var(--text-secondary)">精算日期</div>
             <input type="date" class="stl-input" x-model="settlement.settlementDate" :disabled="settlement.status === 'finalized'" style="max-width:160px"></div>
-          <div><div style="color:var(--text-secondary)">管理費／公益</div><b x-text="adminHow(summary) + '；公益＝毛利×1%（毛利為負時以 0 計；營業利益只在總結區顯示）'"></b></div>
+          <div><div style="color:var(--text-secondary)">管銷分攤／公益</div><b x-text="adminHow(summary) + '；公益＝毛利×1%（毛利為負時以 0 計；營業利益只在總結區顯示）'"></b></div>
         </div>
       </div>
 
@@ -1069,7 +1069,7 @@ function stlRangeChart(rows, o) {
   const axis = `<line x1="${x(0).toFixed(1)}" y1="0" x2="${x(0).toFixed(1)}" y2="${H}" style="stroke:var(--text-primary);stroke-width:1"/>`
   return `<svg role="img" aria-label="${stlEsc(o.aria)}" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;height:auto;display:block" data-testid="${o.id}">${axis}${g}</svg>`
 }
-// ① 橋接圖：報價 → −各項成本 → 毛利 → −管理費 → −公益 → 最終營業利益
+// ① 橋接圖：報價 → −各項成本 → 毛利 → −管銷分攤 → −公益 → 最終營業利益
 function stlBridgeSvg(d, f) {
   const C = STL_CH, rows = [], tot = (id, label, v, fill) => ({ id, label, lo: Math.min(0, v), hi: Math.max(0, v), v, fill, text: f(v), tip: label + ' ' + f(v) })
   rows.push(tot('rev', '報價（稅前收入）', d.rev, C.dark))
@@ -1078,7 +1078,7 @@ function stlBridgeSvg(d, f) {
   d.costParts.forEach(p => dec('c-' + p.id, p.label, p.amt))
   rows.push(Object.assign(tot('gp', '毛利', d.gp, d.gp < 0 ? C.bad : C.good), { text: (d.gp < 0 ? '✖ ' : '＝ ') + f(d.gp) }))
   cur = d.gp
-  dec('admin', '管理費（報價×10%）', d.admin); dec('ch', '公益捐贈（毛利×1%）', d.ch)
+  dec('admin', d.adminLbl || '管銷分攤', d.admin); dec('ch', '公益捐贈（毛利×1%）', d.ch)
   rows.push(Object.assign(tot('net', '最終營業利益', d.net, d.net < 0 ? C.bad : C.good), { text: (d.net < 0 ? '✖ ' : '＝ ') + f(d.net) }))
   return stlRangeChart(rows, { id: 'stl-ch-bridge', aria: '報價到最終營業利益的橋接圖：報價 ' + f(d.rev) + '，總成本 ' + f(d.cost) + '，毛利 ' + f(d.gp) + '，最終營業利益 ' + f(d.net) })
 }
@@ -1399,18 +1399,18 @@ function settlementPage() {
       const pct = (v) => rev > 0 ? v / rev * 100 : null
       const R = (key, label, basis, o, a, kind, extra) => Object.assign({ key, label, basis, o, a, kind, pct: false, strong: false, neg: false }, extra || {})
       return [
-        { key: 'before', title: '① 扣管理費／公益前', rows: [
+        { key: 'before', title: '① 扣管銷分攤／公益前', rows: [
           R('b1-rev', '報價（稅前收入）', '報價單稅前收入；兩邊相同', rev, rev, 'good'),
           R('b1-cost', '實際總成本', '原始＝未稅 Σ(數量×成本)；精算後＝品項含稅(×1.05)＋承攬商含稅＋額外未分稅（後端同源）', sm.origTotalCost, sm.totalActualCost, 'cost'),
           R('b1-gp', '真實毛利', '報價 − 總成本（原始毛利另扣進項稅 5%）', sm.origDirectProfit, sm.grossProfit, 'good', { strong: true, neg: true }),
           R('b1-gpp', '真實毛利率', '毛利比＝毛利 ÷ 報價', pct(sm.origDirectProfit), pct(sm.grossProfit), 'good', { pct: true }),
-          R('b1-pre', '扣費用前（直接毛利）', '＝毛利（尚未扣管理費、公益）', sm.origDirectProfit, sm.grossProfit, 'good', { neg: true }),
+          R('b1-pre', '扣費用前（直接毛利）', '＝毛利（尚未扣管銷分攤、公益）', sm.origDirectProfit, sm.grossProfit, 'good', { neg: true }),
         ] },
-        { key: 'after', title: '② 扣管理費／公益後', rows: [
+        { key: 'after', title: '② 扣管銷分攤／公益後', rows: [
           R('b2-admin', this.adminLbl(sm), this.adminHow(sm), sm.origAdminCost, sm.adminCost, 'cost'),
           R('b2-ch', '公益捐款（1%）', '公益捐贈＝毛利 × 1%（毛利為負時以 0 計）', sm.origCharity, sm.charityDonation, 'cost'),
           ...(sm.origIndirectReserve > 0 ? [R('b2-reserve', '報價預留間接成本', '報價單營業利益已扣的間接成本預算＝間接合計 − 管銷 − 公益（原始端資訊）', sm.origIndirectReserve, null, 'cost', { info: true })] : []),
-          R('b2-net', '真實營業利益', '最終營業利益＝毛利 − 管理費 − 公益捐贈（＝獎金分潤基數）', sm.origNetProfit, sm.netProfit, 'good', { strong: true, neg: true, diffNote: sm.origIndirectReserve > 0 ? '其中報價預留間接成本 ' + this.fmt(sm.origIndirectReserve) + '（原始預估已扣、實際只計單據）' : '' }),
+          R('b2-net', '真實營業利益', '最終營業利益＝毛利 − 管銷分攤 − 公益捐贈（＝獎金分潤基數）', sm.origNetProfit, sm.netProfit, 'good', { strong: true, neg: true, diffNote: sm.origIndirectReserve > 0 ? '其中報價預留間接成本 ' + this.fmt(sm.origIndirectReserve) + '（原始預估已扣、實際只計單據）' : '' }),
           R('b2-netp', '真實營業利益率', '營業利益比＝最終營業利益 ÷ 報價', pct(sm.origNetProfit), pct(sm.netProfit), 'good', { pct: true }),
         ] },
       ]
@@ -1450,7 +1450,7 @@ function settlementPage() {
       const sm = this.summary
       const parts = [{ id: 'items', label: '品項實際成本', amt: sm.itemActualTotal }]
         .concat(this.unassignedCostRows.filter(r => r.amount).map(r => ({ id: r.key, label: r.label.replace('未對應項目：', '').replace('（含未對應材料申請）', '（含材料）').replace('（未被品項吸收）', '（未吸收）').replace('（品項尚未採用）', '（未採用）'), amt: r.amount })))
-      return stlBridgeSvg({ rev: sm.quotedPretax, costParts: parts, cost: sm.totalActualCost, gp: sm.grossProfit, admin: sm.adminCost, ch: sm.charityDonation, net: sm.netProfit }, n => this.fmt(n))
+      return stlBridgeSvg({ adminLbl: this.adminLbl(sm), rev: sm.quotedPretax, costParts: parts, cost: sm.totalActualCost, gp: sm.grossProfit, admin: sm.adminCost, ch: sm.charityDonation, net: sm.netProfit }, n => this.fmt(n))
     },
     get chartPair() {
       const sm = this.summary
@@ -1529,8 +1529,8 @@ function settlementPage() {
       return [
         { key: 'rev', label: '報價（稅前收入）', value: 'NT$ ' + this.fmt(rev), sub: '折扣／調整 ' + signed(this.quoteAdjust), status: '', cls: 'n', tip: '報價單稅前收入（未稅）；來源：報價單' },
         { key: 'cost', label: '總成本', value: 'NT$ ' + this.fmt(sm.totalActualCost), sub: '原始 ' + this.fmt(sm.origTotalCost), status: sm.totalActualCost > sm.origTotalCost ? '▲ 高於原始' : sm.totalActualCost < sm.origTotalCost ? '▼ 低於原始' : '＝原始', cls: sm.totalActualCost > sm.origTotalCost ? 'a' : 'g', tip: '總實際成本＝品項實際（估計含稅 ×1.05）＋未對應項目（派發未稅、額外未分稅）；與伺服器 totalActualCost 同源；原始總成本為未稅，兩者口徑不同' },
-        { key: 'gp', label: '毛利／毛利比', value: signed(sm.grossProfit), value2: this.pctTxt(rev > 0 ? sm.grossMarginPct : null), neg: sm.grossProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origMarginPct : null), status: gpCls === 'r' ? '✖ 虧損' : gpCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: gpCls, tip: '毛利＝報價 − 總成本；毛利比＝毛利 ÷ 報價（未扣管理費、公益）' },
-        { key: 'net', label: '最終營業利益／營業利益比', value: signed(sm.netProfit), value2: this.pctTxt(rev > 0 ? sm.netMarginPct : null), neg: sm.netProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origNetMarginPct : null), status: netCls === 'r' ? '✖ 虧損' : netCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: netCls, tip: '最終營業利益＝毛利 − 管理費（報價×10%）− 公益（毛利×1%）' },
+        { key: 'gp', label: '毛利／毛利比', value: signed(sm.grossProfit), value2: this.pctTxt(rev > 0 ? sm.grossMarginPct : null), neg: sm.grossProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origMarginPct : null), status: gpCls === 'r' ? '✖ 虧損' : gpCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: gpCls, tip: '毛利＝報價 − 總成本；毛利比＝毛利 ÷ 報價（未扣管銷分攤、公益）' },
+        { key: 'net', label: '最終營業利益／營業利益比', value: signed(sm.netProfit), value2: this.pctTxt(rev > 0 ? sm.netMarginPct : null), neg: sm.netProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origNetMarginPct : null), status: netCls === 'r' ? '✖ 虧損' : netCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: netCls, tip: '最終營業利益＝毛利 − 管銷分攤（報價×10%）− 公益（毛利×1%）' },
         { key: 'diff', label: '與原始差額（營業利益）', value: (d > 0 ? '+' : d < 0 ? '−' : '') + 'NT$ ' + f(d), neg: d < 0, sub: '原始 ' + this.fmt(sm.origNetProfit), status: d < 0 ? '▼ 少賺' : d > 0 ? '▲ 多賺' : '＝原始', cls: d < 0 ? 'r' : 'g', tip: '差額＝精算後最終營業利益 − 原始（報價單估計）最終營業利益' },
       ]
     },
@@ -1943,7 +1943,7 @@ function settlementPage() {
 
     // 第 48 班 S3：管銷分攤的說明文字依 summary 的口徑（舊口徑：報價稅前×10%；新口徑：實際毛利×比率）
     adminHow(sm) {
-      return (sm && sm.formulaVer === 2) ? ('管銷＝真實毛利 × ' + sm.overheadPct + '%（毛利為負時以 0 計）') : '管理費＝報價稅前收入 × 10%'
+      return (sm && sm.formulaVer === 2) ? ('管銷＝真實毛利 × ' + sm.overheadPct + '%（毛利為負時以 0 計）') : '管銷分攤＝報價稅前收入 × 10%'
     },
     adminLbl(sm) {                                   // 同式 pdf_gen.admin_cost_label／reports.js stlAdminLabel
       if (!(sm && sm.formulaVer >= 2)) return '管銷分攤（報價稅前 10%）'

@@ -11,7 +11,7 @@
 某類沒有人 ⇒ 該類不發（留公司）
 尾差   = 獎金池 − 全部個人金額合計（留公司）
 ```
-⚠️ 這裡的 10% 是**獎金比率**，與 settlement.html 的管理費 10%／公益 1% 無關（§11.2），不共用常數。
+⚠️ 這裡的 10% 是**獎金比率**，與 settlement.html 的管銷分攤／公益 1% 無關（§11.2），不共用常數。
 ⚠️ 營業利益用精算已存的 `settlement.summary.netProfit`，不自己重算、也不退回 grossProfit（§二禁令）。
 """
 from decimal import Decimal, ROUND_FLOOR, InvalidOperation
