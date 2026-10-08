@@ -175,3 +175,22 @@ def test_v2_custom_pct_by_superadmin_drives_the_amount(client, who):
     t = _row(_post(client, su, _q(overheadPct=10)).json()["quote_no"])[0]["tot"]
     assert t["adminCost"] == 3700 and t["overheadPct"] == 10
     _mode(client, su, "legacy")
+
+
+def test_migration_recalc_equals_the_server_recompute():
+    """S5 遷移（凍結算式，從存的 tot 推）與 S2 伺服器重算（從品項推）在一致的報價單上逐欄位相同——遷移後第一次存檔不會讓數字再跳。"""
+    from migrations_frozen.t48_overhead25 import recalc
+    from modules.case import profit_guard as PG
+    for pretax, cost, five, pct in [(100000, 60000, [1000, 2000, 500, 300, 200], 25), (100000, 60000, [0] * 5, 12.5),
+                                    (35000, 20001, [0, 0, 0, 0, 0], 25), (100000, 99000, [1000, 0, 0, 0, 500], 25), (50, 40, [0] * 5, 7.1)]:
+        vat = PG.round_half_up(cost, 0.05)
+        direct = pretax - cost - vat
+        admin_old = PG.round_half_up(pretax, 0.10)
+        charity = max(0, PG.round_half_up(direct, 0.01))
+        q = {"items": [{"type": "item", "qty": 1, "cost": cost}], "tot": {"pretax": pretax}, **dict(zip(PG.INDIRECT_KEYS, five))}
+        tot = {"pretax": pretax, "directProfit": direct, "adminCost": admin_old, "charityDonation": charity,
+               "totalIndirect": admin_old + charity + sum(five)}
+        mig = recalc.new_tot_fields(tot, pct)
+        srv = PG.server_profit(q, pct, 2)
+        assert {k: mig[k] for k in ("adminCost", "totalIndirect", "netProfit", "netMarginPct", "charityDonation")} == \
+               {k: srv[k] for k in ("adminCost", "totalIndirect", "netProfit", "netMarginPct", "charityDonation")}, (pretax, cost, pct)
