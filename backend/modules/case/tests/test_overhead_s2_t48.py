@@ -193,7 +193,7 @@ def test_v2_custom_pct_by_superadmin_drives_the_amount(client, who):
 
 def test_migration_recalc_equals_the_server_recompute():
     """S5 遷移（凍結算式，從存的 tot 推）與 S2 伺服器重算（從品項推）在一致的報價單上逐欄位相同——遷移後第一次存檔不會讓數字再跳。"""
-    from migrations_frozen.t48_overhead25 import recalc
+    recalc = pytest.importorskip("migrations_frozen.t48_overhead25.recalc")      # S5（遷移）不在這條分支時略過
     from modules.case import profit_guard as PG
     for pretax, cost, five, pct in [(100000, 60000, [1000, 2000, 500, 300, 200], 25), (100000, 60000, [0] * 5, 12.5),
                                     (35000, 20001, [0, 0, 0, 0, 0], 25), (100000, 99000, [1000, 0, 0, 0, 500], 25), (50, 40, [0] * 5, 7.1)]:

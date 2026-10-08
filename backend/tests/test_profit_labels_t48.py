@@ -91,7 +91,6 @@ def test_threshold_stays_12_in_quotation_form():
 #: 「管銷分攤（10%」寫死的字面只能出現在還沒改的檔（S3：報價單／精算頁）；其餘一律走口徑感知的標籤函式（admin_cost_label／*AdminLabel）
 LITERAL = "管銷分攤（10%"
 PENDING_LITERAL = {
-    "frontend/pages/settlement.html": "S3（精算頁）",
     "frontend/pages/quotation-form.html": "S3（報價單）",
 }
 
