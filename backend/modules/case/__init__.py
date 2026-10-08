@@ -16,7 +16,7 @@ from modules.case.api import (case_action_items as _api_action_items, case_extra
                               material_approvals as _api_material_approvals, material_changes as _api_material_changes, material_orders as _api_material_orders,
                               material_payments as _api_material_payments,
                               material_links as _api_material_links, settlement_actuals as _api_settlement_actuals,
-                              quotations as _api_quotations, settlement_api as _api_settlement_api)
+                              quotations as _api_quotations, settlement_api as _api_settlement_api, overhead as _api_overhead)
 from modules.case import expense_notify as _expense_notify     # noqa: F401 — 載入時登記費用單據的信件類型
 from modules.case import material_approval as _material_approval  # noqa: F401 — 載入時登記簽核單據類型 material_order（叫料）
 from modules.case import material_change as _material_change      # noqa: E402
@@ -42,7 +42,7 @@ MODULE = ModuleSpec(
     migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up), (6, _m0006.up), (7, _m0007.up), (8, _m0008.up)],
     # 與搬遷前 main.py 的掛載順序相同（路由比對順序不變）
     routers=[_api_quotations.router, _api_settlement_api.router, _api_material_orders.router, _api_material_approvals.router, _api_material_changes.router, _api_material_payments.router, _api_material_links.router, _api_settlement_actuals.router, _api_extra_expenses.router, _api_expense_form_pdf.router,
-             _api_completion_notes.router, _api_action_items.router],
+             _api_completion_notes.router, _api_action_items.router, _api_overhead.router],
     providers={
         # IP-12：逐案權限與摘要（也是「M01 在不在」的唯一訊號，helpers.case_access.CASE_PRESENT）
         ("case.access", "case"): quotations._CaseAccess,

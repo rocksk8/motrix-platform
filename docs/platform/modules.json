@@ -267,6 +267,8 @@
     "mod:case/receipt_calendar",
     "mod:case/material_payable_event",
     "mod:case/payable_calendar",
+    "mod:case/profit_guard",
+    "mod:case/api/overhead",
     "mod:case/payable_reminders",
     "mod:case/quotations",
     "mod:case/quote_terms",
@@ -347,6 +349,7 @@
     "/api/material-payments",
     "/api/material-suppliers",
     "/api/next-quote-no",
+    "/api/overhead",
     "/api/quotations",
     "/api/sales-orders"
    ]
