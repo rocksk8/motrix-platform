@@ -1,5 +1,9 @@
 # 採購・庫存・出貨 更新紀錄
 
+## (next) — 2026-10-09（wip/t48-small-fixes）：供應商頁初始化 JS 例外
+- `frontend/pages/suppliers.html`：聯絡人區塊的 `form.contacts.length` 在 `form` 尚為 `{}`（資料載入前）時丟 `Cannot read properties of undefined (reading 'length')`，與旁邊同型的判斷一樣加 `!form.contacts ||` 防呆。業務／工程師從供應商紀錄頁（`supplier-log.html`，找不到供應商會導回本頁）進來時最常撞到；行為不變。
+- 測試：`tests/test_e2e_supplier_log_plain_roles_2026_10_09.py`（業務／工程師開供應商紀錄頁，有無 `?id=` 皆無 pageerror）。
+
 
 ## 1.0.21 — 2026-10-06（wip/t43-shipped-qty）：報價品項「已出貨數量」（提供者 shipping.quote_item_shipped）；支援排除單號
 - 出貨單「從報價單匯入」的列加性欄位 `quoteItemId`（前端 `case-management-shipping.js`；舊單沒有 ⇒ 不歸屬）。新提供者 `shipping.quote_item_shipped`（IP-SH4，`material_link.quote_item_shipped`）：依報價品項加總已核准（shipped）與待審核／簽核中（reserved）；不計標題列、帶 `materialLink` 的列、庫存料號／序號列、非正數；草稿與已退回不計。**不改出貨單的送審、核准、庫存扣補**——只多一個唯讀提供者。

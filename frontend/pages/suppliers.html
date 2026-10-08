@@ -743,7 +743,7 @@
               </div>
             </div>
           </template>
-          <div x-show="form.contacts.length === 0"
+          <div x-show="!form.contacts || form.contacts.length === 0"
                style="text-align:center;padding:16px;border:1px dashed var(--border-light);border-radius:var(--radius);font-size:12px;color:var(--text-dim)">
             尚未新增聯絡人
           </div>

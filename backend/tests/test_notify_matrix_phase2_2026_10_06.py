@@ -23,11 +23,12 @@ from helpers import calendar_sync as cs
 from helpers.settings import _get_setting, _set_setting
 
 NEW = {"warranty_expiry": "warranty_expiry", "range_task_due": "range_task_deadline", "project_end": "case_project_overdue"}
-TODAY = date.today()
+def _today():
+    return date.today()   # 呼叫時才取，避免跨午夜與伺服器日期不一致
 
 
 def _d(n):
-    return (TODAY + timedelta(days=n)).isoformat()
+    return (_today() + timedelta(days=n)).isoformat()
 
 
 @pytest.fixture(autouse=True)
@@ -263,10 +264,10 @@ def _ups(calls, code):
     return {c[2]: c for c in calls if c[0] == "up" and c[1] == code}
 
 
-def test_warranty_source_only_won_cases_future_expiry_and_no_money(calls):
+def test_warranty_source_only_won_cases_future_expiry_and_no_money(calls, client):
     from modules.case import case_deadlines as cd
-    start = (TODAY - timedelta(days=330)).isoformat()                          # 12 個月 ⇒ 約 35 天後到期
-    old = (TODAY - timedelta(days=900)).isoformat()                            # 早已過期
+    start = (_today() - timedelta(days=330)).isoformat()                          # 12 個月 ⇒ 約 35 天後到期
+    old = (_today() - timedelta(days=900)).isoformat()                            # 早已過期
     _quote("Q-W1", "已成案", {"devices": [{"name": "攝影機", "sn": "SN1", "warrantyStart": start, "warrantyMonths": 12},
                                           {"name": "舊設備", "sn": "SN2", "warrantyStart": old, "warrantyMonths": 12},
                                           {"name": "無保固", "sn": "SN3"}]})
@@ -292,7 +293,7 @@ def test_warranty_source_only_won_cases_future_expiry_and_no_money(calls):
     assert calls == [("del", "warranty_expiry", "Q-W1#i0")]                    # 不再是已成案 ⇒ 刪
 
 
-def test_project_end_source_open_cases_only_and_follows_edits(calls):
+def test_project_end_source_open_cases_only_and_follows_edits(calls, client):
     from modules.case import case_deadlines as cd
     _quote("Q-P1", "已成案", {"projectTimeline": {"endDate": _d(10)}})
     _quote("Q-P2", "已結案", {"projectTimeline": {"endDate": _d(10)}})
@@ -314,7 +315,7 @@ def test_project_end_source_open_cases_only_and_follows_edits(calls):
     assert [(c[0], c[2], c[3]) for c in calls] == [("up", "Q-P1", _d(20))]
 
 
-def test_range_task_source_unfinished_only_without_assignee_names(calls):
+def test_range_task_source_unfinished_only_without_assignee_names(calls, client):
     from modules.daily_tasks import api as dt
     import db
     conn = db.get_db()
@@ -460,7 +461,7 @@ def test_master_switch_off_short_circuits_before_the_source_query(monkeypatch):
 
 def test_warranty_devices_sharing_a_serial_get_distinct_keys(calls):
     from modules.case import case_deadlines as cd
-    start = (TODAY - timedelta(days=330)).isoformat()
+    start = (_today() - timedelta(days=330)).isoformat()
     _quote("Q-W3", "已成案", {"devices": [
         {"id": 111, "name": "甲", "sn": "SAME", "warrantyStart": start, "warrantyMonths": 12},
         {"id": 222, "name": "乙", "sn": "SAME", "warrantyStart": start, "warrantyMonths": 12},
@@ -538,7 +539,7 @@ def test_consecutive_failure_counter_resets_on_success(monkeypatch):
 
 def test_warranty_devices_sharing_the_same_id_get_suffixed_keys(calls):
     from modules.case import case_deadlines as cd
-    start = (TODAY - timedelta(days=330)).isoformat()
+    start = (_today() - timedelta(days=330)).isoformat()
     _quote("Q-W4", "已成案", {"devices": [
         {"id": 5, "name": "甲", "warrantyStart": start, "warrantyMonths": 12},
         {"id": 5, "name": "乙", "warrantyStart": start, "warrantyMonths": 12}]})

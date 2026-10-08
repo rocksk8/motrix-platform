@@ -25,7 +25,8 @@ _spec = importlib.util.spec_from_file_location("_product_select_lic", REPO / "to
 PS = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(PS)
 
-TODAY = _dt.date.today()
+def _today():
+    return _dt.date.today()   # 呼叫時才取，避免跨午夜
 
 
 @pytest.fixture()
@@ -43,8 +44,8 @@ def sign(monkeypatch):
 
     def _sign(**overrides):
         payload = {"customer": "建包測試客戶", "tax_id": "12345678", "machine": "not-this-machine-0000",
-                   "modules": ["alpha"], "issued": TODAY.isoformat(),
-                   "expires": (TODAY + _dt.timedelta(days=400)).isoformat()}
+                   "modules": ["alpha"], "issued": _today().isoformat(),
+                   "expires": (_today() + _dt.timedelta(days=400)).isoformat()}
         payload.update(overrides)
         return L.sign_license(payload, priv_pem)
     return _sign
@@ -107,7 +108,7 @@ def test_bad_licenses_refuse_to_build(tmp_path, sign, case):
     elif case == "malformed":
         lic = _write(tmp_path, "這不是授權檔")
     elif case == "expired":
-        lic = _write(tmp_path, sign(expires=(TODAY - _dt.timedelta(days=1)).isoformat()))
+        lic = _write(tmp_path, sign(expires=(_today() - _dt.timedelta(days=1)).isoformat()))
     elif case == "unknown_key":
         lic = _write(tmp_path, sign(modules=["alpha", "no-such-sku"]))
     elif case == "star_mixed":
@@ -127,7 +128,7 @@ def test_perpetual_expired_and_other_machine_are_accepted(tmp_path, sign):
     """④：建包機不是客戶的機器（每一題都是 machine_mismatch）；永久授權過期過的是維護期，照建。"""
     pkg, _ = _three(tmp_path)
     lock = _apply_by_license(pkg, _write(tmp_path, sign(kind="perpetual",
-                                                        expires=(TODAY - _dt.timedelta(days=30)).isoformat())))
+                                                        expires=(_today() - _dt.timedelta(days=30)).isoformat())))
     assert sorted(lock["modules"]) == ["alpha"]
 
 
@@ -163,7 +164,7 @@ def test_an_unverified_status_is_refused_even_if_it_carries_modules(tmp_path, mo
     from helpers import licensing as L
     monkeypatch.setattr(L, "verify_license", lambda blob=None: {
         "valid": False, "reason": "bad_signature", "env": None, "customer": None, "modules": ["alpha"],
-        "expires": (TODAY + _dt.timedelta(days=30)).isoformat(), "days_left": 30, "kind": None})
+        "expires": (_today() + _dt.timedelta(days=30)).isoformat(), "days_left": 30, "kind": None})
     pkg, _ = _three(tmp_path)
     with pytest.raises(PS.SelectError, match="驗不過"):
         _apply_by_license(pkg, _write(tmp_path, "anything"))

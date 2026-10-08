@@ -12,7 +12,8 @@ from modules.case import recognition as R
 from modules.case.tests.test_material_link_2026_10_02 import _put_materials
 from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W, _ln, _mk, _status, _submit  # noqa: F401
 
-TODAY = date.today().isoformat()
+def _today():
+    return date.today().isoformat()   # 呼叫時才取，避免跨午夜與伺服器日期不一致
 
 
 def _approved_po(c, h, lines):
@@ -32,7 +33,7 @@ def _won_case(W):
 
 def _order(item_id, qty, total, **kw):
     d = {"itemId": item_id, "itemName": "品" + item_id, "quantity": qty, "unit": "台", "unitPrice": (total / qty) if qty else 0, "totalPrice": total,
-         "paidStatus": "pending", "paidAmount": 0, "paidDate": "", "invoiceDate": TODAY}
+         "paidStatus": "pending", "paidAmount": 0, "paidDate": "", "invoiceDate": _today()}
     d.update(kw)
     return d
 
@@ -76,13 +77,13 @@ def test_cash_basis_also_skips_linked_orders(W):
     c, h = W
     po = _approved_po(c, h, [_ln("a", 3, unitCost=1000)])
     _put_materials([_order("K", 3, 3000, quoteItemId="a", poDocCode=po["docCode"]),                       # 連結、沒付款紀錄 ⇒ 金額由採購單負責
-                    _order("N", 2, 800, paidStatus="paid", paidAmount=800, paidDate=TODAY)], {"K": "已核准", "N": "已核准"})
+                    _order("N", 2, 800, paidStatus="paid", paidAmount=800, paidDate=_today())], {"K": "已核准", "N": "已核准"})
     cash = _mat("cash")
     assert [(e["itemId"], e["amount"]) for e in cash] == [("N", 800.0)]
     assert [e["source_key"] for e in _gl() if e["event_code"] == "E12b"] == ["%s::N" % NO]
 
 
-def test_order_with_paid_history_is_never_treated_as_po_linked_so_paid_money_stays_in_cash(W):
+def test_order_with_paid_history_is_never_treated_as_po_linked_so_paid_money_stays_in_cash(W, client):
     """c7 預審：舊單有已付歷史（3000，2026-08-01），之後才連到有效採購單 ⇒ 不視為連結，已付的錢仍在現金口徑（不消失）。"""
     c, h = W
     po = _approved_po(c, h, [_ln("a", 3, unitCost=1000)])

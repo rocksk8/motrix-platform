@@ -13,7 +13,8 @@ from fastapi import HTTPException
 from modules.case import expense_forms as EF
 
 SENT = "/api/quotations/-/extra-expenses"
-TODAY = date.today().strftime("%Y%m%d")
+def _today():
+    return date.today().strftime("%Y%m%d")   # 呼叫時才取，避免跨午夜與伺服器日期不一致
 
 
 def _login(client, u, p):
@@ -91,7 +92,7 @@ def test_create_stores_everything_and_doc_code_is_sequential(client, H):
     a = _create(client, H["ef_form"])
     b = _create(client, H["ef_form"], kind="petty_cash")
     c = _create(client, H["ef_form"])
-    assert a["docCode"] == "TE-%s-0001" % TODAY and c["docCode"] == "TE-%s-0002" % TODAY and b["docCode"] == "PC-%s-0001" % TODAY
+    assert a["docCode"] == "TE-%s-0001" % _today() and c["docCode"] == "TE-%s-0002" % _today() and b["docCode"] == "PC-%s-0001" % _today()
     row = _q("SELECT * FROM case_extra_expenses WHERE id=?", (a["id"],))[0]
     assert row["kind"] == "travel" and row["total_cost"] == 3501 and row["department_id"] == 7 and row["quote_no"] == ""
     assert json.loads(row["lines_json"])[0]["customCol"] == "保留我" and json.loads(row["data_json"])["freeKey"] == "x"
