@@ -179,7 +179,7 @@
             <span class="tag" :class="statusCls(selectedSlip.status)"
                   x-text="selectedSlip.status"></span>
             <span class="itype" x-text="selectedSlip.income_type"></span>
-            <button x-show="selectedSlip.contractor_guess_id != null && p.contractor_id == null" data-testid="ps-confirm-contractor" @click.stop="confirmContractor(selectedSlip)"
+            <button x-show="selectedSlip.contractor_guess_id != null && selectedSlip.contractor_id == null && ['已簽回','已付款','已作廢'].indexOf(selectedSlip.status) < 0" data-testid="ps-confirm-contractor" @click.stop="confirmContractor(selectedSlip)"
                     style="font-size:11px;padding:2px 8px;border:1px solid #D97706;border-radius:6px;background:#FFFBEB;color:#92400E;cursor:pointer">確認受領人對應</button>
           </div>
         </div>

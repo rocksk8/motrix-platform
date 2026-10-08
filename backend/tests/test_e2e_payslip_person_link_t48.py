@@ -143,3 +143,29 @@ def test_dispatch_tab_plain_viewer_sees_text_only_no_money(live_server, world, n
     for secret in ("29876", "29,876", "30,000", "30000", "NT$", "7777", "A123456789"):
         assert secret not in txt, secret
     assert "待確認" not in txt, "未確認張數只給最高管理者"
+
+
+@pytest.mark.e2e
+def test_payslips_page_confirm_button_promotes_the_guess_and_badge_disappears(live_server, world, new_context):
+    pid, _a, _b, sa, _staff = world
+    page = new_context(viewport={"width": 1440, "height": 1000}).new_page()
+    inject_login(page, live_server, sa[0], sa[1])
+    page.goto(live_server + "/pages/payslips.html")
+    _ready(page, "%s.items && %s.items.length >= 2" % (ROOT, ROOT))
+    badge = page.locator("[data-testid=ps-unconfirmed-badge]:visible")
+    badge.first.wait_for(state="visible", timeout=15000)
+    assert badge.count() == 1, "只有 PS-202603-902 是推測對應"
+    page.locator("tr", has_text="PS-202603-902").click()
+    btn = page.locator("[data-testid=ps-confirm-contractor]")
+    btn.wait_for(state="visible", timeout=10000)
+    page.once("dialog", lambda d: d.accept())
+    btn.click()
+    page.wait_for_function("() => [...document.querySelectorAll('[data-testid=ps-unconfirmed-badge]')].every(e => e.offsetParent === null)", timeout=15000)
+    page.wait_for_function("() => [...document.querySelectorAll('[data-testid=ps-confirm-contractor]')].every(e => e.offsetParent === null)", timeout=15000)
+    import db
+    c = db.get_db()
+    try:
+        row = dict(c.execute("SELECT contractor_id, contractor_guess_id FROM payslips WHERE slip_no='PS-202603-902'").fetchone())
+    finally:
+        c.close()
+    assert row == {"contractor_id": pid, "contractor_guess_id": None}, row
