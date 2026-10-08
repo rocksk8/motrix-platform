@@ -1930,7 +1930,7 @@
         <div style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#555;margin-bottom:8px">損益彙總</div>
 
         <div class="cost-row">
-          <span class="cost-row__label">稅後淨利</span>
+          <span class="cost-row__label">營業利益</span>
           <span class="cost-row__val" :class="tot.netProfit < 0 ? 'danger' : 'success'"
                 x-text="'NT$ ' + tot.netProfit.toLocaleString()"></span>
         </div>
@@ -1940,7 +1940,7 @@
                :style="tot.netMarginPct < 12 ? 'color:#F87171' : tot.netMarginPct < 20 ? 'color:#FCD34D' : 'color:#4ADE80'"
                x-text="tot.netMarginPct.toFixed(1) + '%'"></div>
           <div class="net-profit__label">
-            淨利率
+            營業利益率
             <span :style="tot.netMarginPct < 12 ? 'color:#F87171' : 'color:#4ADE80'"
                   x-text="tot.netMarginPct < 12 ? '⚠ 低於目標 12%' : '✓ 達標'"></span>
           </div>

@@ -78,7 +78,7 @@ def test_v2_mode_refuses_the_old_10_percent_summary(W):
     _mode("v2", pct=25)
     p = page_payload(c, h)                                        # 舊口徑：管銷＝稅前×10%＝10000，與新口徑（毛利×25%）差很多
     r = c.put(URL, json={"settlement": p}, headers=h)
-    assert r.status_code == 409 and "管理費" in r.text, r.text
+    assert r.status_code == 409 and "管銷分攤" in r.text, r.text
 
 
 def test_legacy_mode_unchanged_and_no_stamp(W):
@@ -134,3 +134,18 @@ def test_server_stamps_even_when_the_page_omits_the_stamp(W):
     assert c.put(URL, json={"settlement": p}, headers=h).status_code == 200
     s = _saved_summary()
     assert s["formulaVer"] == 2 and s["overheadPct"] == 30
+
+
+def test_bonus_row_label_follows_the_stamp_written_at_finalize(W):
+    """獎金精算明細表的管銷列標籤（b5 的 bonus.row_label）讀完結時蓋的 formulaVer／overheadPct：legacy 無戳記＝報價稅前 10%；v2＝直接毛利 N%（每案比率）。"""
+    from modules.payroll import bonus
+    c, h = W
+    _set_tot()
+    _mode("legacy")
+    assert c.put(URL, json={"settlement": page_payload(c, h)}, headers=h).status_code == 200
+    legacy = bonus.row_label("adminCost", "管銷分攤", _saved_summary())
+    assert "10%" in legacy and "報價稅前" in legacy, legacy
+    _mode("v2", pct=30)
+    assert c.put(URL, json={"settlement": _v2_payload(c, h, 30), "reason": "新口徑"}, headers=h).status_code == 200
+    new = bonus.row_label("adminCost", "管銷分攤", _saved_summary())
+    assert "30%" in new and "直接毛利" in new and "報價稅前" not in new, new

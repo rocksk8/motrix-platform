@@ -484,8 +484,8 @@ def check_finalize(conn, quote_no, settlement):
 DOWNSTREAM_KEYS = ("dispatchTotal", "remitFeeTotal", "customExpenseTotal", "totalActualCost", "grossProfit", "adminCost", "charityDonation",
                    "netProfit", "grossMarginPct", "netMarginPct")
 _DOWNSTREAM_NAMES = {"dispatchTotal": "承攬商派發成本（含稅＋外包人員）", "remitFeeTotal": "匯款手續費", "customExpenseTotal": "自訂模組支出",
-                     "totalActualCost": "實際總成本", "grossProfit": "毛利", "adminCost": "管理費", "charityDonation": "公益金", "netProfit": "淨利",
-                     "grossMarginPct": "毛利率(%)", "netMarginPct": "淨利率(%)"}
+                     "totalActualCost": "實際總成本", "grossProfit": "毛利", "adminCost": "管銷分攤", "charityDonation": "公益金", "netProfit": "營業利益",
+                     "grossMarginPct": "毛利率(%)", "netMarginPct": "營業利益率(%)"}
 
 
 def _profit_basis(tot):
@@ -502,7 +502,7 @@ def _profit_basis(tot):
 
 def _expected_downstream(conn, quote_no, d, tol_item):
     """後端重算的「下游欄位」期望值與容差：{鍵: (期望值, 容差)}，另附 `_pretax`。報價稅前收入取伺服器上報價單的 `tot.pretax`（與精算頁
-    `_origTot.pretax` 同源）；管理費＝round_half_up(稅前×10%)、公益金＝round_half_up(毛利×1%)、淨利＝毛利−管理費−公益金（與頁面 calcSummary 同式）。"""
+    `_origTot.pretax` 同源）；管銷分攤＝profit_rules.admin_cost（legacy：稅前×10%；v2：實際毛利×報價單比率）、公益金＝round_half_up(毛利×1%)、營業利益＝毛利−管銷分攤−公益金（與頁面 calcSummary 同式）。"""
     q = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     try:
         tot = (json.loads((q["data_json"] if q else "") or "{}").get("tot") or {})
@@ -525,7 +525,7 @@ def _expected_downstream(conn, quote_no, d, tol_item):
 
 
 def _check_downstream(conn, quote_no, summ, d, tol_item):
-    """35c F1（AUDIT-0C S7；使用者裁示 D10：後端重算，超出進位誤差就拒絕完結）：承攬商、匯款手續費、自訂支出、總成本、毛利、管理費、公益金、淨利、利潤率
+    """35c F1（AUDIT-0C S7；使用者裁示 D10：後端重算，超出進位誤差就拒絕完結）：承攬商、匯款手續費、自訂支出、總成本、毛利、管銷分攤、公益金、營業利益、利潤率
     也用同一個 compute() 重算比對（原本只比品項／額外支出／採購類三塊，偽造 summary 可完結並凍結；報表毛利直接讀 netProfit）。
     頁面送了的欄位逐一比對；**沒送的欄位不拒絕**（那不是偽造），而是在存檔前由 `fill_downstream()` 用伺服器重算值補齊——所以省略欄位也繞不過。
     回傳差異說明清單；沒有差異回 []。"""
@@ -578,12 +578,12 @@ def original_side(conn, quote_no, summ) -> dict:
     margin = _num(tot["directMarginPct"]) if tot.get("directMarginPct") is not None else (direct / pretax * 100 if pretax > 0 else 0.0)
     admin = _num(tot["adminCost"]) if tot.get("adminCost") is not None else profit_rules.admin_cost(pretax, direct)
     # 第 39 班後的稽核 S-2：舊報價（虧損案）存的 charityDonation 可能是負的（當時沒有下限）；頁面已改成下限 0，伺服器這裡也一律下限 0，
-    # 預留（totalIndirect − 管銷 − 公益）隨之重算——原始淨利（tot.netProfit）不變，對帳式仍成立。已凍結的舊 summary 不改寫。
+    # 預留（totalIndirect − 管銷 − 公益）隨之重算——原始營業利益（tot.netProfit）不變，對帳式仍成立。已凍結的舊 summary 不改寫。
     charity = max(0, _num(tot["charityDonation"])) if tot.get("charityDonation") is not None else profit_rules.charity(direct)
     net = _num(tot["netProfit"]) if tot.get("netProfit") is not None else direct - admin - charity
     net_pct = _num(tot["netMarginPct"]) if tot.get("netMarginPct") is not None else (net / pretax * 100 if pretax > 0 else 0.0)
-    # 第 39 班：報價預留的間接成本（運費／安裝／差旅／保固／其他五項；`tot.totalIndirect` 含管理費與公益金，扣掉這兩項後的餘額）——原始淨利已扣掉它、
-    # 精算「實際」側只認單據，兩邊才看起來差一塊。只是資訊列，不改任何淨利／獎金基數；報價沒有 totalIndirect（早期資料）⇒ 0。
+    # 第 39 班：報價預留的間接成本（運費／安裝／差旅／保固／其他五項；`tot.totalIndirect` 含管銷分攤與公益金，扣掉這兩項後的餘額）——原始營業利益已扣掉它、
+    # 精算「實際」側只認單據，兩邊才看起來差一塊。只是資訊列，不改任何營業利益／獎金基數；報價沒有 totalIndirect（早期資料）⇒ 0。
     reserve = _num(tot["totalIndirect"]) - admin - charity if tot.get("totalIndirect") is not None else 0.0
     out = {"quotedTotal": _num(tot.get("total")), "origTotalCost": orig_cost, "origIndirectReserve": reserve, "origDirectProfit": direct, "origMarginPct": margin,
            "origAdminCost": admin, "origCharity": charity, "origNetProfit": net, "origNetMarginPct": net_pct,

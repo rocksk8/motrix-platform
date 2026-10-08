@@ -18,8 +18,6 @@ TABLE = json.load(open(os.path.join(BACKEND, "data", "profit_labels_t48.json"), 
 
 #: 還沒改的檔（原因）——所屬切片合併後必須從這裡移除
 PENDING = {
-    "frontend/pages/quotation-form.html": "ab（報價單）",
-    "backend/modules/case/settlement_actuals.py": "ab（精算伺服器重算；_DOWNSTREAM_NAMES 是 409 訊息的字樣）",
 }
 #: 只剩歷史說明性註解／DDL 註解，不是畫面字樣
 HISTORICAL_COMMENTS = {
