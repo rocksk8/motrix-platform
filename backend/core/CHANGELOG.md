@@ -2,19 +2,19 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-08（wip/t47-paydate-l1：預定付款日共用提醒庫）
+- L1（新增，向下相容）：新單位 `helpers/payable_due_core.py`（使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）——`due_kind`／`effective_send_day`／`next_working_day`／`candidate_planned_dates`（3 天前、當天、逾期＝預定日後第 1 個工作日；規則自 M01 `payable_reminders` 搬入）、`notify_finance`（財務站內通知，不含金額；寄信函式由呼叫端傳入 `run_scan(send=…)`，因為寄信必須用字面 key 呼叫 `send_registered`，守門 `test_mail_registry` 逐一核對）、`prune_guards`／`run_scan`（guard、寄送迴圈、等待上限）、`sync_event`／`CALENDAR_SOURCES`（行事曆「付款待辦」來源開關：案件額外支出、承攬商匯款、叫料匯款；**勞報單不在名單 ⇒ 零呼叫**）。純函式、不讀時鐘（日期與工作日判斷由呼叫端傳入）。
+- 信件類型 `payable_due_overdue`（預定付款日已逾期，財務群組）由 M01 登記，與 `payable_due_soon`／`payable_due_today` 同；M01 不在 ⇒ 類型未登記 ⇒ 寄信 fail-closed（只給超級管理員），已知取捨（承攬商匯款綁案件）。
+- 薄接線：M01（案件額外支出＋叫料匯款）、M04（承攬商匯款，`daily.check` 提供者 `subcontract_payable_due`）；M05 出納端點 `PATCH /api/cashier/pending-payables/{source}/{key}/planned-pay-date`、`PATCH /api/cashier/payable-queue/{voucher_no}/planned-pay-date`。
+- 站內通知有自己的一次性 guard（`payable_due_inapp.<id>.<kind>.<預定日>.<寄信日>`），**不依賴信件是否寄出**（沒有財務信箱、SMTP 關閉時站內提醒照樣出現一次）；`run_scan` 每筆各自隔離（一筆出錯只記 log、繼續）、清舊 guard 在 finally。
+- 測試：`modules/case/tests/test_payable_due_core_t45.py`、`modules/subcontract/tests/test_voucher_payable_due_t45.py`。
+
 ## 1.118 — 2026-10-07（wip/t45-r2-step1-impl：R2 第1步——D4 superadmin 全部鍵、D5 財務判斷影子模式）
 - L1（新增，向下相容）：`helpers.auth` 新增 `FINANCE_FLAG_KEY`、`finance_effective_keys(user, cache=False)`、`finance_duty_person(user)`、`reset_finance_mode_cache()`。
   財務三鍵判斷（`has_finance_access`／`has_cashier_access`／`can_see_financial`／`user_has_module(財務三鍵)`）改走單一縫：`system_settings.finance_via_effective`＝缺／`off`（預設，舊規則逐字不變）、`shadow`（回傳舊規則，新舊不同時對該人該鍵每小時至多寫一筆 `audit_log` `permission.finance_shadow_diff`；算不出新規則退回舊規則）、`on`（回傳新規則＝（基礎類別 finance ∪ 啟用角色的財務鍵）−個人扣項；原始勾選不計；**本班不開，需使用者核准**）。
 - ⚠ **切 `on` 的前置條件**：`on` 模式每次判斷都查 DB 且不快取（扣項要立即生效），一次請求會呼叫多次 ⇒ 切 `on` 之前必須先加「每請求備忘」或 ≤10 秒 TTL；旗標讀取失敗沿用最後一次的值（從沒讀到才是 off）；`on` 時新規則算不出來，取舊規則與基礎類別的較嚴者。影子稽核寫入在背景執行緒（不在權限判斷路徑內同步寫庫）。
 - D4（選項 B）：`user_has_module` 對 superadmin 回 True（守門層「全部鍵」）；`effective_modules`／選單／登入／`/api/me`／`user["modules"]` 不動。
 - 工具（`backend/tools`，隨完整包）：`duty_roles_equivalence.py` v2（`--schema 2`；`verify --plan/--finance-cutover`、`diff`、`catalog-check`、`scan-finance`；結束碼新增 3）；新增 `duty_roles_rollback.py`（L0）；`duty_roles_export_effective.py` dry-run 補列「綁定含高敏感鍵者」。
-
-## (next) — 2026-10-07（wip/t45-paydate-l1：預定付款日共用提醒庫）
-- L1（新增，向下相容）：新單位 `helpers/payable_due_core.py`（使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）——`due_kind`／`effective_send_day`／`next_working_day`／`candidate_planned_dates`（3 天前、當天、逾期＝預定日後第 1 個工作日；規則自 M01 `payable_reminders` 搬入）、`notify_finance`（財務站內通知，不含金額；寄信函式由呼叫端傳入 `run_scan(send=…)`，因為寄信必須用字面 key 呼叫 `send_registered`，守門 `test_mail_registry` 逐一核對）、`prune_guards`／`run_scan`（guard、寄送迴圈、等待上限）、`sync_event`／`CALENDAR_SOURCES`（行事曆「付款待辦」來源開關：案件額外支出、承攬商匯款、叫料匯款；**勞報單不在名單 ⇒ 零呼叫**）。純函式、不讀時鐘（日期與工作日判斷由呼叫端傳入）。
-- 信件類型 `payable_due_overdue`（預定付款日已逾期，財務群組）由 M01 登記，與 `payable_due_soon`／`payable_due_today` 同；M01 不在 ⇒ 類型未登記 ⇒ 寄信 fail-closed（只給超級管理員），已知取捨（承攬商匯款綁案件）。
-- 薄接線：M01（案件額外支出＋叫料匯款）、M04（承攬商匯款，`daily.check` 提供者 `subcontract_payable_due`）；M05 出納端點 `PATCH /api/cashier/pending-payables/{source}/{key}/planned-pay-date`、`PATCH /api/cashier/payable-queue/{voucher_no}/planned-pay-date`。
-- 站內通知有自己的一次性 guard（`payable_due_inapp.<id>.<kind>.<預定日>.<寄信日>`），**不依賴信件是否寄出**（沒有財務信箱、SMTP 關閉時站內提醒照樣出現一次）；`run_scan` 每筆各自隔離（一筆出錯只記 log、繼續）、清舊 guard 在 finally。
-- 測試：`modules/case/tests/test_payable_due_core_t45.py`、`modules/subcontract/tests/test_voucher_payable_due_t45.py`。
 
 ## 1.117 — 2026-10-06（wip/t44-inapp-bell：站內通知所有角色可見、點擊開單、90 天保留）
 - L1（新增，向下相容）：`notifications.link` 欄位與兩個索引（core 未取號 migration，冪等）；`helpers.audit._notify(username, type_, ref_id, ref_label, message, link=None)` 新增選填參數 `link`（只准「頁面檔名.html＋選填查詢字串」，不合格丟棄但通知照寫）；**核准類通知（type 以 `_approved` 結尾）同一 (type, ref_id, username) 只留一列**（單一 INSERT…WHERE NOT EXISTS，原子）；通知文字裡的金額（`NT$ …`、`… 元`）對沒有財務金額可視的收件人（財務角色／superadmin 以外）在伺服器端統一遮成「（金額略）」；新增 `helpers.audit.purge_old_notifications()`（保留 90 天，已讀未讀都清；分批、每次有上限、冪等），由每日檢查（`helpers/daily_checks.run_once`，每日 08:00／啟動補跑）呼叫；`GET /api/notifications/mine` 回傳多一個 `link` 鍵。
