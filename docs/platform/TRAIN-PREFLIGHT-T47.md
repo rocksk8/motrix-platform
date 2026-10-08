@@ -49,3 +49,7 @@ golden 分兩種：**內容 golden**（錄頁面文字／API 請求）與**樣�
 - **預設 B 層＝窄版**（約 150 檔）：固定清單 `ALWAYS_FILES` ＋ 全域訊號測試（`scope_gate.global_test_candidates`）＋ `tests/platform` 裡**有掃描特徵**的檔。slice0 守門、`tests/platform` 其餘檔、其他掃描型檔、實測 < 10 秒的檔，一律改成 **`--full-cheap` 才加**（等 `measure` 有耗時資料後再重新評估預設）。
 - **`--budget-min N`**：B/C 的 pytest 超過 N 分鐘就停掉子行程，報告寫「**未完成（incomplete）**，不能當作綠」，並印停掉前已出現的紅燈；結束碼 **3**（0 綠／1 有紅／2 工具出錯／3 未完成）。靜態層（A）不受預算影響，永遠先跑完。
 - 建議用法（列車整合後）：`python tools/platform/train_preflight.py --budget-min 10`；要完整集合再加 `--full-cheap`（先 `measure`）。
+
+## 實測耗時（measure，2026-10-08，機器閒置、-n 2）
+- 全部非 e2e 測試檔 921 個，worker-秒合計約 6920；**< 10 秒的 741 個檔（合計約 2117 worker-秒）**，≥ 10 秒的 180 個。資料進 git：`tools/platform/preflight_seconds.json`（會隨機器漂移，只用於粗分；重量用 `measure` 更新）。
+- 窄版預設再加一條：量過而且 ≥ 30 秒的檔不選（固定清單除外）⇒ 窄版約 136 個檔、約 618 worker-秒（單行程約 10 分鐘）。`--full-cheap`（含所有 < 10 秒的檔）約 800 個檔、約 3700 worker-秒，只在要完整預檢時用。

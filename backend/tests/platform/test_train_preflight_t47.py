@@ -324,3 +324,16 @@ def test_budget_min_is_passed_to_run_pytest_as_seconds(tmp_path, monkeypatch):
     monkeypatch.setattr(TP, "run_pytest", lambda repo, targets, **kw: seen.update(kw) or (0, "1 passed\n", 1.0))
     TP.preflight(tmp_path, budget_min=2.5)
     assert seen["timeout"] == 150
+
+
+def test_narrow_selection_drops_measured_slow_files_but_keeps_the_always_list(tmp_path):
+    _sel_repo(tmp_path)
+    _w(tmp_path, "backend/tests/platform/test_scan_slow.py", "def test_a():\n    list(p.rglob('*.py'))\n")
+    _w(tmp_path, "backend/tests/platform/test_scan_fast.py", "def test_a():\n    list(p.rglob('*.py'))\n")
+    _w(tmp_path, "backend/tests/platform/test_generated_maps.py", "def test_a():\n    list(p.rglob('*.py'))\n")
+    secs = {"backend/tests/platform/test_scan_slow.py": 31.0, "backend/tests/platform/test_scan_fast.py": 29.0,
+            "backend/tests/platform/test_generated_maps.py": 120.0}
+    files, _ = TP.select_cheap(tmp_path, secs)
+    assert "tests/platform/test_scan_slow.py" not in files and "tests/platform/test_scan_fast.py" in files
+    assert "tests/platform/test_generated_maps.py" in files                   # 固定清單不受慢檔門檻影響
+    assert "tests/platform/test_scan_slow.py" in TP.select_cheap(tmp_path, secs, full=True)[0]

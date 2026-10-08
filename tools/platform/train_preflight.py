@@ -27,6 +27,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 CHEAP_SECONDS = 10.0
+NARROW_SLOW_CUT = 30.0          # 窄版：量測 >= 這個秒數的檔不選（measure 資料 2026-10-08：窄版約 618 worker-秒）
 #: 不論耗時資料有沒有，一定跑的便宜守門（這個班次實際抓到過的紅燈；ab 2026-10-08 清單）。路徑相對 backend/；不存在的略過。
 ALWAYS_FILES = (
     "tests/platform/test_generated_maps.py", "tests/platform/test_module_changelog_follows_code.py", "tests/test_version_manifest_2026_09_22.py",
@@ -363,7 +364,8 @@ def static_checks(repo, changed, base="origin/platform"):
 def load_seconds(repo):
     """測試檔 ⇒ 秒。後者蓋前者：種子 gate_file_seconds.json → full_results/file_seconds.json → full_results/preflight_seconds.json。"""
     sec = {}
-    for rel, key in (("tools/platform/gate_file_seconds.json", "seconds"), ("tools/platform/full_results/file_seconds.json", None),
+    for rel, key in (("tools/platform/gate_file_seconds.json", "seconds"), ("tools/platform/preflight_seconds.json", "seconds"),
+                     ("tools/platform/full_results/file_seconds.json", None),
                      ("tools/platform/full_results/preflight_seconds.json", None)):
         p = Path(repo) / rel
         if not p.exists():
@@ -438,6 +440,11 @@ def select_cheap(repo, seconds=None, threshold=CHEAP_SECONDS, full=False):
             why[rel] = "掃描特徵"
         elif s is not None and s < threshold:
             why[rel] = "實測 %.1fs" % s
+    if not full:                                       # 窄版：量過而且 >= NARROW_SLOW_CUT 秒的檔不選（固定清單除外）——讓窄版單行程約 10 分鐘內跑完
+        for rel in [r for r in why if r not in ALWAYS_FILES]:
+            sec_f = seconds.get("backend/" + rel, seconds.get(rel))
+            if sec_f is not None and sec_f >= NARROW_SLOW_CUT:
+                del why[rel]
     return sorted(why), why
 
 
@@ -469,10 +476,10 @@ def python_exe():
 INCOMPLETE_RC = -999                                                          # 超過 --budget-min 被停掉
 
 
-def run_pytest(repo, targets, tag="preflight", extra=None, timeout=None):
+def run_pytest(repo, targets, tag="preflight", extra=None, timeout=None, workers=None):
     basetemp = os.path.join(tempfile.gettempdir(), "pt_%s_%d" % (tag, os.getpid()))
     env = dict(os.environ, MOTRIX_TRAIN="1", PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
-    cmd = [python_exe(), "-m", "pytest", *targets, "-q", "-rfE", "--tb=short", "-m", "not e2e", "-p", "no:xdist", "-p", "no:cacheprovider",
+    cmd = [python_exe(), "-m", "pytest", *targets, "-q", "-rfE", "--tb=short", "-m", "not e2e", *(["-n", str(workers)] if workers else ["-p", "no:xdist"]), "-p", "no:cacheprovider",
            "--basetemp=%s" % basetemp, *(extra or [])]
     t0 = time.time()
     try:
@@ -539,18 +546,23 @@ def preflight(repo=REPO, base="origin/platform", static_only=False, impacted=Tru
     return (3 if rc == INCOMPLETE_RC else 1 if bad else 0), text, {"findings": [f.as_dict() for f in findings], "plan": plan, "rc": rc}
 
 
-def measure(repo=REPO):
-    """閒置時更新耗時：對候選（便宜＋掃描特徵＋未量測的非 e2e 檔）單行程跑 --durations=0，累計每檔 call 秒數。"""
+def measure(repo=REPO, workers=2):
+    """閒置時更新耗時：對全部非 e2e 測試檔跑一次 --durations=0（預設 -n 2＝全機測試上限），累計每檔 setup＋call＋teardown 秒數（worker-秒）。
+    寫 tools/platform/preflight_seconds.json（進 git；之後 select_cheap 的『實測 < 10 秒』靠它）。"""
     repo = Path(repo)
     backend = repo / "backend"
     files = [f for f in _all_test_files(backend) if "e2e" not in Path(f).name]
-    rc, out, secs = run_pytest(repo, files, tag="pfmeasure", extra=["--durations=0", "--durations-min=0"])
+    # 1000+ 個檔名會超過 Windows 命令列長度上限（WinError 206）⇒ 傳目錄；-m "not e2e" 本來就跳過 e2e 題
+    rc, out, secs = run_pytest(repo, ["tests", "modules"], tag="pfmeasure", extra=["--durations=0", "--durations-min=0"], workers=workers)
     per = {}
     for m in re.finditer(r"^\s*([\d.]+)s (?:call|setup|teardown)\s+(\S+?)::", out, re.M):
-        per["backend/" + m.group(2).replace("\\", "/").lstrip("/").replace("backend/", "", 1)] = per.get("backend/" + m.group(2).replace("\\", "/").lstrip("/").replace("backend/", "", 1), 0.0) + float(m.group(1))
-    dest = repo / "tools" / "platform" / "full_results"
-    dest.mkdir(parents=True, exist_ok=True)
-    (dest / "preflight_seconds.json").write_text(json.dumps({"_about": "train_preflight measure（worker-秒；不進 git）", **per}, ensure_ascii=False, indent=1), encoding="utf-8")
+        rel = m.group(2).replace("\\", "/").lstrip("/")
+        rel = rel[len("backend/"):] if rel.startswith("backend/") else rel
+        per["backend/" + rel] = round(per.get("backend/" + rel, 0.0) + float(m.group(1)), 2)
+    dest = repo / "tools" / "platform" / "preflight_seconds.json"
+    dest.write_text(json.dumps({"_about": "train_preflight measure：測試檔 ⇒ 各題 setup+call+teardown 秒數合計（worker-秒；%s 個 worker、%d 個檔、pytest exit %s；"
+                                "機器閒置時量，數字會隨機器漂移，只用於『< 10 秒』的粗分）" % (workers or 1, len(per), rc),
+                                "seconds": dict(sorted(per.items()))}, ensure_ascii=False, indent=1), encoding="utf-8")
     return len(per), secs
 
 
@@ -563,11 +575,12 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--full-cheap", action="store_true", help="B 層用完整的便宜集合（量過耗時前很大，單行程跑不完；預設是窄版）")
     ap.add_argument("--budget-min", type=float, default=None, help="B/C 測試的時間預算（分鐘）；超過就停並回報 incomplete（exit 3）")
+    ap.add_argument("--workers", type=int, default=2, help="measure 用的 pytest worker 數（預設 2＝全機上限）")
     ap.add_argument("--json-out")
     a = ap.parse_args(argv)
     try:
         if a.cmd == "measure":
-            n, secs = measure()
+            n, secs = measure(REPO, a.workers)
             print("已量測 %d 個測試檔（%.0f 秒）" % (n, secs))
             return 0
         code, text, data = preflight(REPO, a.base, a.static_only, not a.no_impacted, a.dry_run, full=a.full_cheap, budget_min=a.budget_min)
