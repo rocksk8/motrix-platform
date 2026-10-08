@@ -143,7 +143,8 @@ def test_mode_defaults_to_legacy_and_needs_apply(db):
     assert "= legacy" in out
     rc, out = _run("--db", db, "mode", "v2")
     assert "dry-run" in out and "= legacy" in _run("--db", db, "mode")[1]
-    _run("--db", db, "mode", "v2", "--apply")
+    assert _run("--db", db, "mode", "v2", "--apply")[0] == 2               # 沒有標記 ⇒ 拒絕
+    _run("--db", db, "recalc", "--apply", "--set-mode-v2")
     assert "= v2" in _run("--db", db, "mode")[1]
     rc, out = _run("--db", db, "mode", "bogus")
     assert rc == 2
@@ -183,9 +184,29 @@ def test_recalc_refused_unless_mode_v2_or_set_in_same_txn(db):
     h = _sha(db)
     rc, out = _run("--db", db, "recalc", "--apply")
     assert rc == 2 and "拒絕" in out and _sha(db) == h
-    _run("--db", db, "mode", "v2", "--apply")
-    rc, out = _run("--db", db, "recalc", "--apply")
+    rc, out = _run("--db", db, "mode", "v2", "--apply")                  # 沒有完成標記 ⇒ 獨立切 v2 也拒絕
+    assert rc == 2 and "完成標記" in out and _sha(db) == h
+    rc, out = _run("--db", db, "recalc", "--apply", "--set-mode-v2")
     assert rc == 0 and "已重算 3 張" in out
+
+
+def _setting(path, key):
+    c = sqlite3.connect(path)
+    r = c.execute("SELECT value_json FROM system_settings WHERE key=?", (key,)).fetchone()
+    c.close()
+    return None if r is None else json.loads(r[0])
+
+
+def test_migration_done_marker_written_in_same_txn_and_removed_by_rollback(db):
+    assert _setting(db, "overhead_migration_done") is None
+    _run("--db", db, "recalc", "--apply", "--set-mode-v2")
+    m = _setting(db, "overhead_migration_done")
+    assert m["recalculated"] == 3 and m["skipped"] == 2 and m["doneAt"] and m["by"], m          # 形狀＝ab 的契約
+    assert _setting(db, "overhead_rule_mode") == "v2"
+    rc, out = _run("--db", db, "mode", "v2", "--apply")                   # 有標記 ⇒ 允許
+    assert rc == 0
+    _run("--db", db, "rollback", "--apply")
+    assert _setting(db, "overhead_migration_done") is None and _setting(db, "overhead_rule_mode") == "legacy"
 
 
 @pytest.mark.parametrize("bad", ["abc", "250", "-5", "7.25", "1e2", ""])
