@@ -27,6 +27,16 @@ python tools/platform/overhead_impact_report.py --db <正式庫複本> --csv <�
 | 獎金影響 | 情境 A（依需求，已完結沿用舊值）＝0；情境 B（重新開啟再完結）逐人舊→新；草稿／待審核獎金單在下次儲存才會重讀基數 |
 | 方向提醒 | 直接毛利率 <40% 的案件營業利益上升（獎金池變大）；>40% 下降 |
 
+**稅別前置計數（唯讀，切換前一定要看；舊報價單不可被悄悄改稅）**：新口徑伺服器重算的稅額規則＝免稅/零稅率一律 0；`taxRate` 有數字就照存值；整個 `taxRate` 鍵不存在＝5%；**鍵存在但值是 null／空字串（舊式報價單，舊算法當 0%）＝若已存的 `tot.tax` 為 0 就維持 0，否則套 5%**。下面這段在正式庫複本上跑（`sqlite3 <複本> < 檔` 或任何唯讀 SQL 工具），結果貼進報告：
+```
+SELECT CASE WHEN COALESCE(json_extract(data_json,'$.tot.tax'),0)=0 THEN 'tax=0（v2：維持 0%）' ELSE 'tax≠0（v2：套 5%）' END AS stored_tax, COUNT(*) AS n
+FROM quotations
+WHERE COALESCE(settle_status,'')!='finalized' AND COALESCE(deal_tag,'')!='已結案'
+  AND (json_type(data_json,'$.taxRate')='null' OR (json_type(data_json,'$.taxRate')='text' AND json_extract(data_json,'$.taxRate')=''))
+GROUP BY 1;
+```
+解讀：`tax≠0` 那一列＝舊式 taxRate 空值、但已存稅額非 0 的未精算單；這些單下次在新口徑被儲存時稅額會依 5% 重算（`recalc` 本身只重算管銷／營業利益，用存的 `tot`，**不重算稅**）。件數非 0 時請使用者先確認是否接受（或先由業務在舊口徑下補正 `taxRate`）。
+
 ## 3. 使用者核准閘門
 使用者看完第 2 節報告，**明確回覆「核准切換」**（含是否接受報告中的略過件與獎金方向）才進第 4 節。沒有核准 ⇒ 到此為止，系統維持 legacy，零影響。
 
@@ -47,6 +57,7 @@ python tools/overhead_migrate.py --db <正式庫> recalc --apply --set-mode-v2
 7. 獎金：任一已完結案建立獎金分潤單，基數＝該案凍結的舊值（無變動）。
 
 ## 6. 回滾
+- **只想暫時關掉新口徑**：`python tools/overhead_migrate.py --db <庫> mode legacy --apply`（或 API `PUT /api/overhead/settings ruleMode=legacy`）會同時**刪除完成標記**；之後再切回 v2 必須重新 `recalc --apply --set-mode-v2`（已是新口徑的單會被跳過，只補新增的未精算單）。注意：legacy 模式下舊式表單重存會把新口徑的單悄悄退回 10% 基準，所以這只適合短時間止血，要完整退回請用下一條。
 - **工具回滾（優先）**：`python tools/overhead_migrate.py --db <庫> rollback` 先看報告（可還原／因『遷移後已完結·已編輯·已退回舊口徑』而不還原的清單），確認後加 `--apply`：依伺服器端快照把未精算單還原成舊值，成功還原後自動把模式設回 `legacy` 並移除完成標記。遷移後才完結的單不自動還原（其完結值已是新口徑）。
 - **還原 DB 備份**：只在使用者決定時做（會一併丟掉切換後的所有新資料）；做法＝關服務、以第 1 節備份覆蓋 `motrix_erp.db`、啟動、確認 `mode`＝`legacy`。
 - 程式碼回滾（不還原 DB）：舊程式不認得 `formulaVer`/`overheadPct`，新口徑的單會被當舊口徑重算（悄悄退回 10% 基準）⇒ 程式回滾前必須先做工具回滾。
