@@ -2,21 +2,24 @@
 """預定付款日提醒的共用純函式庫（第 45 班；使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）。
 
 [單位] helper:payable_due_core    [層] L1    [穩定度] 實作
-[公開介面] due_kind、effective_send_day、next_working_day、candidate_planned_dates、notify_finance、prune_guards、run_scan、sync_event、CALENDAR_SOURCES
-[為什麼放 L1] 預定付款日有四個來源（案件額外支出、叫料匯款、承攬商匯款、勞報單），提醒的「日期規則、guard、寄送迴圈、站內通知」必須只有一份，
+[公開介面] CALENDAR_SOURCES、EVENT_CODE、GUARD_PREFIX、INAPP_PREFIX、MAIL_KEYS、MAX_WAIT_SECONDS_PER_RUN、SOON_DAYS、candidate_planned_dates、due_kind、effective_send_day、next_working_day、notify_finance、prune_guards、run_scan、sync_event
+[不變式] 提醒的日期規則、guard、寄送迴圈、站內通知只有這一份；各模組只查自己的待付款列、整理成 items 交進來；信件與通知內容不放金額、受款人、廠商名、付款條件，只放單號、名目、預定付款日、關聯案件；guard 先寄、結果確定才寫；每封與每次掃描都有等待上限。
+[契約題] tests/test_payable_due_core_t45.py
+[注意] 信件類型 payable_due_soon／payable_due_today／payable_due_overdue 由 M01 登記，M01 不在時寄信 fail-closed；站內通知有自己的一次性 guard（INAPP_PREFIX），不依賴信件是否寄出。
+
+為什麼放 L1：預定付款日有四個來源（案件額外支出、叫料匯款、承攬商匯款、勞報單），提醒的「日期規則、guard、寄送迴圈、站內通知」必須只有一份。
   各模組只負責「查自己的待付款列」＋整理成 `items` 交進來（薄接線）；模組之間不互相 import，也不必複製一整套（會各自演進）。
-[時機規則]（與 M01 第 42 班 `payable_reminders` 原樣相同，只是搬到這裡）
-  名義日：預定日 − 3 天 ⇒ `soon`；預定日當天 ⇒ `today`；**名義日不是工作日就提前到前一個工作日寄**；兩封折到同一天只寄當天那封（兩把 guard 都寫）。
+時機規則（與 M01 第 42 班 `payable_reminders` 原樣相同，只是搬到這裡）：
+  名義日：預定日 − 3 天 ⇒ `soon`；預定日當天 ⇒ `today`；**名義日不是工作日就提前到前一個工作日寄**；兩封折到同一天只寄當天那封。
   **逾期（Q2）**：預定日之後**第 1 個工作日**寄 1 封 `overdue`（名義日＝預定日 + 1，不是工作日就**往後**找第一個工作日）；不週提、每筆最多 1 封。
-  只有「寄信日＝今天」的候選才處理；寄信日已過的不補發（每日 08:00 與啟動補跑兩次機會）。工作日＝`helpers.business_days.is_working_day`（呼叫端傳入，測試可換）。
-[冪等] 先寄、結果確定才寫 guard（`SEND_SENT`／`SEND_UNKNOWN`／`SEND_PERMANENT_FAIL` 寫；`SEND_TRANSIENT_FAIL`／`SEND_SKIPPED`／沒有收件人不寫，之後重試）。
+  只有「寄信日＝今天」的候選才處理；寄信日已過的不補發（每日 08:00 與啟動補跑兩次機會）。工作日＝`helpers.business_days.is_working_day`（呼叫端傳入）。
+冪等：先寄、結果確定才寫 guard（`SEND_SENT`／`SEND_UNKNOWN`／`SEND_PERMANENT_FAIL` 寫；`SEND_TRANSIENT_FAIL`／`SEND_SKIPPED`／沒有收件人不寫，之後重試）。
   guard key＝`payable_due_notif.<guard_id>.<kind>.<預定日>.<寄信日>`（寫進 system_settings）；`guard_id` 由呼叫端決定：**案件額外支出沿用舊格式（純 id）**，
   其他來源用 `<來源>.<key>`，同一個 key 在不同來源互不擋；改了預定日 ⇒ key 變、重新計算；寄信日早於今天 7 天以上的 key 每次掃描順手清掉。
-[等待上限] 每封最多等 `SEND_WAIT_TIMEOUT_SECONDS`；一次掃描總共最多等 `MAX_WAIT_SECONDS_PER_RUN`；出現 `SEND_UNKNOWN` 立刻停止本次掃描。
-[收件人] 信件類型 `payable_due_soon`／`payable_due_today`／`payable_due_overdue` 由 M01 登記在「財務」群組（`to_group=True`，不另帶 usernames）；
-  站內通知寫給在職的財務角色＋superadmin，尊重個人對該信件類型的退訂（`notification_muted`）。M01 不在 ⇒ 類型未登記 ⇒ 寄信 fail-closed（只給超級管理員），
-  這是已知取捨：承攬商匯款本來就綁案件，沒有 M01 的安裝包不會有待付款可提醒。
-[內容] 不放金額、受款人、廠商名、付款條件（使用者 Q4）：只放單號、名目、預定付款日、關聯案件。
+等待上限：每封最多等 `SEND_WAIT_TIMEOUT_SECONDS`；一次掃描總共最多等 `MAX_WAIT_SECONDS_PER_RUN`；出現 `SEND_UNKNOWN` 立刻停止本次掃描。
+收件人：信件類型由 M01 登記在「財務」群組（`to_group=True`，不另帶 usernames）；站內通知寫給在職的財務角色＋superadmin，尊重個人對該信件類型的退訂（`notification_muted`）。
+  M01 不在 ⇒ 類型未登記 ⇒ 寄信 fail-closed（只給超級管理員）；這是已知取捨：承攬商匯款本來就綁案件，沒有 M01 的安裝包不會有待付款可提醒。
+內容：不放金額、受款人、廠商名、付款條件（使用者 Q4）：只放單號、名目、預定付款日、關聯案件。
 """
 import logging
 import time
