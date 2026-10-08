@@ -100,7 +100,12 @@ def test_cli_exit_codes_and_no_git(tmp_path, monkeypatch, capsys):
     repo = _repo(tmp_path)
     monkeypatch.setattr(R.subprocess, "run", Fake(repo, rc={"test_map": 1}, write={"dep_scan": "old\n"}))
     assert R.main(["--check", "--repo", str(repo)]) == 1
-    assert "test_map" in capsys.readouterr().out
+    cap = capsys.readouterr()
+    assert cap.out.splitlines() == ["docs/platform/test_map.json"]         # stdout＝只有過期檔路徑（train_preflight 約定）
+    assert "test_map" in cap.err
+    monkeypatch.setattr(R.subprocess, "run", Fake(repo, write={"dep_scan": "old\n"}))
+    assert R.main(["--check", "--repo", str(repo)]) == 0
+    assert capsys.readouterr().out == ""                                    # 都是最新 ⇒ stdout 空
     monkeypatch.setattr(R.subprocess, "run", Fake(repo, rc={"unit_index": 7}))
     assert R.main(["--check", "--repo", str(repo)]) == 2
     fake = Fake(repo)

@@ -11,6 +11,8 @@
 為什麼（第 46 班）：作者分支加了一個測試／模組檔就使 dep_graph.json、test_map.json 過期；全量閘門跑到第 12～44 分鐘才紅
 （本班 2 次），重產只要 1～2 分鐘。這支把「該重產哪幾份、什麼順序、怎麼確認已是最新」收成一個指令。
 
+`--check` 的 stdout 約定：過期檔路徑一行一個（沒有過期＝空）；人看的說明走 stderr。
+
 用法（在任何一棵 MOTRIX-PLATFORM 樹；Python 用 D:\\MOTRIX-PLATFORM\\.venv312\\Scripts\\python.exe）：
   python tools/platform/regen_all.py                      重產三份；印出有改動的檔（之後由列車／作者自己 add、commit）
   python tools/platform/regen_all.py --check              只檢查：有過期的 ⇒ exit 1 並列出重產指令；不寫檔
@@ -133,10 +135,12 @@ def main(argv=None):
     elif res["error"]:
         print("regen_all 失敗：" + res["error"], file=sys.stderr)
     elif a.check:
-        if res["stale"]:
-            print("過期的產生檔：%s\n⇒ %s" % ("、".join(res["stale"]), _fix_hint(sys.executable)))
-        else:
-            print("產生檔都是最新")
+        # 約定（train_preflight 讀這個）：stdout＝過期檔的路徑，一行一個；沒有過期 ⇒ stdout 空。說明一律走 stderr。
+        files = {st["name"]: st["file"] for st in res["steps"]}
+        for name in res["stale"]:
+            print(files.get(name) or name)
+        print(("過期的產生檔：%s ⇒ %s" % ("、".join(res["stale"]), _fix_hint(sys.executable))) if res["stale"]
+              else "產生檔都是最新", file=sys.stderr)
     else:
         print("已重產；有改動：%s" % ("、".join(res["changed"]) or "（沒有）"))
     if res["error"]:
