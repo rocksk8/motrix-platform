@@ -76,10 +76,16 @@ window.CM_PARTS.push(() => ({
     // 派發 ⇄ 勞報單連結（第46班 P3）：每張派發卡片一個區塊；只顯示單號、狀態、受領人，**沒有金額**；建立／解除只有最高管理者
     dpSlips: {},
     async dpSlipLoad(d) {
-      const cur = this.dpSlips[d.id] || { items: [], notice: '', canOpen: false, canEdit: false, input: '', err: '', loaded: false }
+      const cur = this.dpSlips[d.id] || { items: [], notice: '', canOpen: false, canEdit: false, input: '', err: '', loaded: false, hidden: false }
+      // 沒有 procurement／case_manage／contractor_list／quotation 任一模組的人（非最高管理者）後端一律 403：不送請求、整塊不顯示（不留紅字也不留 console 錯誤）
+      const mods = (this.session && this.session.modules) || []
+      if (!(this.session && this.session.role === 'superadmin') && !['procurement', 'case_manage', 'contractor_list', 'quotation'].some(k => mods.includes(k))) {
+        this.dpSlips = { ...this.dpSlips, [d.id]: { ...cur, loaded: true, hidden: true } }; return
+      }
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}/payslip-links`, { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (r.ok) { const b = await r.json(); this.dpSlips = { ...this.dpSlips, [d.id]: { ...cur, ...b, loaded: true, err: '' } } }
+        else if (r.status === 403 || r.status === 404) this.dpSlips = { ...this.dpSlips, [d.id]: { ...cur, loaded: true, hidden: true } }      // 無權限／看不到該案：安靜地不顯示
         else this.dpSlips = { ...this.dpSlips, [d.id]: { ...cur, loaded: true, err: '無法讀取勞報單關聯（HTTP ' + r.status + '）' } }
       } catch (e) { this.dpSlips = { ...this.dpSlips, [d.id]: { ...cur, loaded: true, err: '無法讀取勞報單關聯' } } }
     },

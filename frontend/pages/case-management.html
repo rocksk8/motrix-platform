@@ -3003,7 +3003,7 @@
                       </table>
                     </div>
                     <!-- 勞報單（第46班 P3）：派發 ⇄ 勞報單雙向連結；只顯示單號、狀態、受領人，沒有金額；最高管理者可新增／解除，其餘只看 -->
-                    <div style="padding:8px 16px;border-top:1px solid var(--border-light);font-size:11px;font-family:var(--font-zh)" x-init="dpSlipLoad(d)" :data-testid="'dispatch-slips-' + d.id">
+                    <div style="padding:8px 16px;border-top:1px solid var(--border-light);font-size:11px;font-family:var(--font-zh)" x-init="dpSlipLoad(d)" x-show="!(dpSlips[d.id] || {}).hidden" :data-testid="'dispatch-slips-' + d.id">
                       <span style="font-weight:600;color:var(--text-dim);letter-spacing:.04em">勞報單</span>
                       <span x-show="(dpSlips[d.id] || {}).notice" style="margin-left:8px;color:var(--warning)" x-text="(dpSlips[d.id] || {}).notice"></span>
                       <template x-for="s in ((dpSlips[d.id] || {}).items || [])" :key="s.slipNo">
