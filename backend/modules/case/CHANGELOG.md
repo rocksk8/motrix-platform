@@ -1,12 +1,14 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-09（wip/t48-oh25-s1／s2／s3＋s4／s5／s6 合併；獨立稽核 1d 修正 #1／#4；rule_mode 失效安全）：利潤規則單一來源（S1，零行為變更）＋管銷分攤比率與伺服器把關（S2，新行為預設關）＋畫面與精算接上規則（S3；`/api/overhead` 前綴登記於 module.json）
+## (next) — 2026-10-09（wip/t48-oh25-s1／s2／s3＋s4／s5／s6 合併；獨立稽核 1d 修正 #1／#4／#5；rule_mode 失效安全）：利潤規則單一來源（S1，零行為變更）＋管銷分攤比率與伺服器把關（S2，新行為預設關）＋畫面與精算接上規則（S3；`/api/overhead` 前綴登記於 module.json）
 - `settlement_actuals`：完結比對的管銷分攤、公益金、營業利益、報價原始側後備改呼叫 `helpers.profit_rules`（口徑仍是第 47 班的 10%）。前端 `static/profit-rules.js` 與黃金向量等值測試已備，頁面第 3 步（S3）才改接。設計：`docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
 - 利潤名詞改名（wip/t48-oh25-s4）：
   - 精算頁、案件頁、結案 PDF、報價單修改紀錄的「淨利／淨利率／未扣費用淨利」改稱「營業利益／營業利益率／扣費用前（直接毛利）」；修改紀錄欄位名稱新舊並列（舊紀錄仍存「淨利率」，`financial_mask.HISTORY_MONEY_FIELDS` 兩者都遮罩）。內部鍵不變。守門 `tests/test_profit_labels_t48.py`。
   - 結案 PDF／案件頁／營運報表的「管銷分攤」列標籤改為口徑感知：口徑 2＝「（直接毛利 N%）」，舊／無戳記＝「（報價稅前 10%）」（`pdf_gen.admin_cost_label`、前端 `stlAdminLabel`／`caseSettleAdminLabel`）；守門禁止寫死「管銷分攤（10%」。
 
 
+
+- **稽核 #5 跟進（wip/t48-oh25-s3，48b）**：①稅率語意不靜默改舊單——前端 `calcTotals` 還原（沒有 `taxRate` 鍵⇒5%；null／空字串⇒0%），後端 `profit_guard.effective_tax_rate`：零稅率／免稅恆 0、數字稅率照用、缺鍵（新單）5%、鍵存在但 null／空字串（舊儲存形狀）以資料庫存的 `tot.tax` 為準（0 ⇒ 0）；v2 第一次存檔不會憑空多 5% 稅；②`PUT /api/overhead/settings` 切回 `legacy` 時一併刪除 `overhead_migration_done`（稽核記 `migrationMarker: removed`）——再切 v2 必須重新 `recalc --apply`；工具端 `mode legacy --apply` 同規則（b5）。**上線前**：用唯讀 SQL 先數 `taxRate` 為 null／空字串的未精算報價單（b5 寫進 runbook）。
 - **稽核 #4 跟進（wip/t48-oh25-s3，48b）**：①組裝——s3 含 b5 的 S5 最新（`overhead_migration_done` 標記寫入者），新增完整切換流程測試（`test_overhead_cutover_t48.py`：report → `recalc --apply --set-mode-v2` → 標記存在 → 伺服器認 v2 → 新報價單用新口徑；反向：v2 沒標記 ⇒ legacy）；②`v2` 時品項金額由數量×單價在伺服器重算（不採用用戶端 `amount`），稅率缺／null／空字串＝5%（前端 `calcTotals` 對齊後端 `quote_tax_type`）；③精算頁殘留的「管理費」字樣（橋接圖標籤、說明文字）全改「管銷分攤」並依口徑顯示，標籤守門新增禁用「管理費」；④設計稿新增 §12（新舊口徑並存的報表註記、`skip_nodata` 單的原始／實際側基礎、重算範圍）。**上線備註（Q10）**：報表的合計／平均會混到新舊兩種口徑（歷史案件不回改，直毛率 40% 為打平點）。
 - **獨立稽核 1d 修正（wip/t48-oh25-s2／s3）**：①`tot.formulaVer`／`overheadPct`／`_legacy`／`_recalc` 戳記只由伺服器蓋（用戶端送的一律丟掉，已結案沿用現值；遷移的 `_legacy` 不因表單存檔遺失）；②切到新口徑只能經 `PUT /api/overhead/settings`，要 `confirm=true` 且 `overhead_migration_done` 標記存在（`overhead_migrate recalc --apply` 寫）；③`v2` 時稅前／稅額／含稅一併由伺服器依品項重算；④`PUT /api/quotations` 的比率驗證／權限檢查提前到開連線與寄簽核通知之前；⑤legacy 模式不憑空長出 `overheadPct`（只在有存值或最高管理者明確改過時才存）；⑥`overheadPct` 列入金額遮罩鍵。
 - **S2（wip/t48-oh25-s2）管銷分攤比率與伺服器把關（新行為預設關）**：新增 `profit_guard.py`＋`GET/PUT /api/overhead/settings`（全域預設比率 `overhead_default_pct`、口徑開關 `overhead_rule_mode`＝legacy｜v2；只有最高管理者能改，每次稽核 `settings.overhead.update`）。報價單 `data_json.overheadPct`（新建＝全域預設；與存值不同只有最高管理者可改，否則 403；非法值 422；稽核 `quotation.overhead_pct_change`；已精算／結案不動）。`v2` 時存檔由伺服器用 `profit_rules` 重算 `tot` 利潤欄位與 `net_margin_pct`（不信前端）；`legacy`（預設）數字完全不變，只做影子比對（不一致記 warning）。歷程欄位新增「管銷分攤比率」（金額遮罩白名單同步）。

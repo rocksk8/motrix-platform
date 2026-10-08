@@ -334,11 +334,45 @@ def test_v2_recomputes_item_amounts_from_qty_times_unit_price(client, who):
     _mode(client, su, "legacy")
 
 
-def test_server_tax_rate_rule_matches_the_form(client):
+def test_server_tax_rate_rule_keeps_the_old_semantics(client):
+    """稽核 #5：不靜默改舊單語意——缺鍵＝5%；鍵存在但 null／空字串＝舊 calcTotals 的 0%（以資料庫存的 tot.tax 為準）；零稅率／免稅恆 0。"""
     from modules.case import profit_guard as PG
     base = {"items": [{"type": "item", "qty": 1, "unitPrice": 10000, "cost": 0}]}
-    assert PG.server_totals(dict(base))["tax"] == 500
-    assert PG.server_totals(dict(base, taxRate=None))["tax"] == 500, "null ⇒ 5%（quote_tax_type 的規則）"
-    assert PG.server_totals(dict(base, taxRate=""))["tax"] == 500
-    assert PG.server_totals(dict(base, taxRate=0))["tax"] == 0
-    assert PG.server_totals(dict(base, taxRate=5))["tax"] == 500
+    tax = lambda q, st=None: PG.server_totals(q, st)["tax"]      # noqa: E731
+    assert tax(dict(base)) == 500, "新單（沒有 taxRate 鍵）＝5%"
+    assert tax(dict(base, taxRate=5)) == 500 and tax(dict(base, taxRate=0)) == 0
+    assert tax(dict(base, taxRate=None), {"tax": 0}) == 0 and tax(dict(base, taxRate=""), {"tax": 0}) == 0, "舊儲存形狀：存的稅額是 0 ⇒ 維持 0"
+    assert tax(dict(base, taxRate=None), {"tax": 500}) == 500 and tax(dict(base, taxRate=None)) == 500, "存的稅額不是 0／沒有存值 ⇒ 5%"
+    assert tax(dict(base, taxType="exempt", taxRate=0)) == 0 and tax(dict(base, taxType="zero")) == 0, "免稅／零稅率恆 0"
+    assert tax(dict(base, taxType="taxable")) == 500
+
+
+def test_switching_back_to_legacy_removes_the_migration_marker(client, who):
+    """退回舊口徑後標記一併移除：再切 v2 必須重新 recalc（legacy 期間存檔的單是舊口徑，不能被當成已遷移）。"""
+    su, ad = who
+    _mode(client, su, "v2")
+    assert client.get("/api/overhead/settings", headers=ad).json()["migrationDone"] is True
+    assert client.put("/api/overhead/settings", json={"ruleMode": "legacy"}, headers=su).status_code == 200
+    assert client.get("/api/overhead/settings", headers=ad).json()["migrationDone"] is False
+    r = client.put("/api/overhead/settings", json={"ruleMode": "v2", "confirm": True}, headers=su)
+    assert r.status_code == 409, "標記不見 ⇒ 不能直接再切回 v2"
+    assert any(json.loads(a["detail"]).get("migrationMarker") == "removed" for a in _audits("settings.overhead.update"))
+
+
+def test_v2_save_of_a_legacy_shaped_quote_keeps_zero_tax(client, who):
+    """舊儲存形狀（taxRate:null、稅額 0）在 v2 第一次存檔時不會憑空多 5% 稅；新單（沒有 taxRate 鍵）才是 5%。"""
+    su, ad = who
+    legacy = _q(taxRate=None)
+    legacy["tot"].update(tax=0, total=100000)
+    qno = _post(client, ad, legacy).json()["quote_no"]               # legacy 模式建立：伺服器不改
+    assert _row(qno)[0]["tot"]["tax"] == 0
+    _mode(client, su, "v2")
+    r = client.put("/api/quotations/%s" % qno, json={"status": "草稿", "data": dict(_q(taxRate=None, customerName="改名"), tot=dict(_q()["tot"], tax=0, total=100000))}, headers=ad)
+    assert r.status_code == 200, r.text
+    t = _row(qno)[0]["tot"]
+    assert (t["pretax"], t["tax"], t["total"]) == (100000, 0, 100000), "存的稅額是 0 ⇒ 維持 0%"
+    fresh = _q()
+    fresh.pop("taxRate", None)
+    t2 = _row(_post(client, ad, fresh).json()["quote_no"])[0]["tot"]
+    assert t2["tax"] == 5000, "新單（沒有 taxRate 鍵）＝5%"
+    _mode(client, su, "legacy")

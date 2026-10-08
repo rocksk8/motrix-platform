@@ -73,9 +73,9 @@ def test_legacy_mode_never_flags_deviation():
 
 
 @needs_node
-def test_form_tax_rate_null_or_blank_means_five_percent_like_the_server():
+def test_form_tax_rate_keeps_the_old_semantics_missing_is_five_null_or_blank_is_zero():
     got = _page("quotation-form.html", "quotationForm", _SETUP + """
         const out = {}
         for (const v of [undefined, null, '', 0, 5]) { o.q.taxRate = v; o.calcTotals(); out[String(v)] = o.tot.tax }
         return out""")
-    assert got == {"undefined": 5000, "null": 5000, "": 5000, "0": 0, "5": 5000}, got
+    assert got == {"undefined": 5000, "null": 0, "": 0, "0": 0, "5": 5000}, got        # 舊語意不動；後端 effective_tax_rate 對齊（見 test_overhead_s2_t48）
