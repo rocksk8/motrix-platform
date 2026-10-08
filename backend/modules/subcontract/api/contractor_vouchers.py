@@ -165,6 +165,7 @@ def _paid_between(start: str, end: str) -> list:
 def set_planned_pay_date(conn, voucher_no, value, user) -> dict:
     """IP-14 `contractor_voucher.set_planned`（t45）：出納端點改預定付款日（`value` 已正規化；''＝清除）。不 commit。
     只認「還在出納待付款清單上」的那一張（已核准、未付款、未作廢）；查無／不在清單 ⇒ LookupError；已匯款 ⇒ ValueError（409，預定日保留為歷史）。"""
+    begin_write(conn)                                                    # 第47班稽核 S4：讀→比較（unchanged）→寫在同一個寫交易（與案件／材料提供者一致）
     r = conn.execute("SELECT voucher_no, quote_no, status, is_paid, voided_at, planned_pay_date, created_by FROM contractor_payment_vouchers WHERE voucher_no=?",
                      (voucher_no,)).fetchone()
     if r is None or r["status"] != "已核准" or (r["voided_at"] or ""):

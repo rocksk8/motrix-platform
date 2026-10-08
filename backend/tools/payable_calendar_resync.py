@@ -45,7 +45,8 @@ def main(argv=None):
     try:
         import _dbbind                                      # 資料庫檔不存在 ⇒ SystemExit(2)，不建空庫（暫存包上跑不會多出空的 motrix_erp.db）
         if a.db:
-            conn = sqlite3.connect("file:%s?mode=ro" % _dbbind.require_file(a.db).replace("\\", "/"), uri=True)
+            from urllib.parse import quote
+            conn = sqlite3.connect("file:%s?mode=ro" % quote(_dbbind.require_file(a.db).replace("\\", "/"), safe="/:"), uri=True)      # 檔案不存在 ⇒ SystemExit(2)（b5）；路徑含 # % 空白也要能開（URI 引號）
             conn.row_factory = sqlite3.Row
         else:
             import db
@@ -69,12 +70,17 @@ def main(argv=None):
         print("（dry-run；加 --apply 才會呼叫行事曆）")
         return 0
     from modules.case import payable_calendar as PC
+    failed = []
     for n, i in enumerate(ids, 1):
-        PC.sync(i)
+        try:
+            PC.sync(i)
+        except Exception as e:                              # noqa: BLE001 — 第47班稽核：一筆失敗（例：Google 暫時錯誤）不中斷整批；冪等，可重跑
+            failed.append(i)
+            print("  #%s 對齊失敗：%s" % (i, e))
         if a.sleep > 0 and n < len(ids):
             time.sleep(a.sleep)
-    print("已對齊 %d 筆" % len(ids))
-    return 0
+    print("已對齊 %d 筆%s" % (len(ids) - len(failed), ("；失敗 %d 筆：%s（可重跑）" % (len(failed), "、".join(str(i) for i in failed))) if failed else ""))
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

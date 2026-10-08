@@ -48,7 +48,7 @@ def _archive_dir() -> str:
 # _archive_path() 直接用 slip_no 拼檔案路徑，slip_no 若可被前端任意指定
 # （create_payslip 曾允許 body.slip_no 覆蓋自動產生的序號，完全沒驗證格式）
 # 就能組出 "..\..\..\x" 這種跳出 export_archive/ 目錄的路徑。
-_SLIP_NO_RE = re.compile(r"^PS-\d{6}-\d{3}$")
+_SLIP_NO_RE = re.compile(r"^PS-\d{6}-\d{3}\Z")
 
 def _archive_path(slip_no: str, idx: int) -> str:
     if not _SLIP_NO_RE.match(slip_no):
@@ -646,9 +646,12 @@ def void_payslip(slip_no: str, body: VoidIn, authorization: str = Header(None)):
                             else "只有已核准或已匯出的勞報單可以作廢（草稿請直接刪除、待審核請先退回）")
     now = datetime.now().isoformat()
     who = user.get("display_name") or user["username"]
-    conn.execute("UPDATE payslips SET status='已作廢', voided_at=?, voided_by=?, void_reason=?, "
-                 "updated_at=? WHERE slip_no=? AND status IN ('已匯出','已核准')",
-                 (now, who, reason, now, slip_no))
+    cur = conn.execute("UPDATE payslips SET status='已作廢', voided_at=?, voided_by=?, void_reason=?, "
+                       "updated_at=? WHERE slip_no=? AND status IN ('已匯出','已核准')",
+                       (now, who, reason, now, slip_no))
+    if cur.rowcount != 1:                                              # 第47班稽核：並發的簽回／付款讓條件沒中 ⇒ 不可回「已作廢」
+        conn.close()
+        raise HTTPException(409, "勞報單狀態剛被改變，請重新整理後再試")
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'payslip.void', 'payslip', slip_no, slip_no, {'reason': reason})

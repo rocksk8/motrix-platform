@@ -113,7 +113,7 @@ def fire_returned(slip_no, slip_date, requester, *, approver="", reason="") -> b
         logger.exception("勞報單退回站內通知失敗（%s）", slip_no)
     try:
         return _en.send_registered("payslip_returned", title="勞報單已退回", reason="%s 已退回" % ident(slip_no), usernames=[req],
-                                   rows=[("單號", slip_no or "—"), ("開單日期", slip_date or "—"), ("退回原因", reason or "—")],
+                                   rows=[("單號", slip_no or "—"), ("開單日期", slip_date or "—"), ("退回原因", (reason[:100] + ("…" if len(reason) > 100 else "")) or "—")],   # 第47班稽核：信內與站內同樣截斷（自由文字不整段進信箱）
                                    badge_text="已退回", badge_color="#C0392B", link=_mail_link(slip_no), button_text="前往查看",
                                    note="您好，您送審的%s已被退回（回到草稿），請依原因修改後重新送審。" % ident(slip_no))
     except Exception:                                                # noqa: BLE001
