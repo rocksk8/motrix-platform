@@ -226,7 +226,7 @@ def list_payslips(month: Optional[str] = None, contractor_id: Optional[int] = No
            "export_count, created_by, created_at, updated_at, "
            "voided_at, voided_by, void_reason, signed_at, signed_by, "
            "payment_date, voucher_no, paid_by, paid_at, signed_files_json, "
-           "planned_pay_date, approved_at, approved_by, contractor_match "
+           "planned_pay_date, approved_at, approved_by, contractor_guess_id "
            "FROM payslips WHERE 1=1")
     params = []
     if month:
@@ -304,8 +304,11 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
         _brief = registry.single_provider("dispatch.brief")
         _c = get_db()
         try:
-            if _brief is None or _brief(_c, dispatch_id) is None:
+            _b = _brief(_c, dispatch_id) if _brief is not None else None
+            if _b is None:
                 raise HTTPException(400, "查無來源派發 #%s（或外包工班模組未安裝）" % dispatch_id)
+            if body.contractor_id and int(body.contractor_id) not in (_b.get("personnelIds") or []):      # 第48班：與 dispatchIds 同一條——選了名冊人員就必須在這張派發的人員名單內
+                raise HTTPException(400, "派發 #%s 的人員名單沒有這位受領人，不能連結" % dispatch_id)
         finally:
             _c.close()
     else:
@@ -465,20 +468,20 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
         d["calc"]            = calc
         _freeze_rules(d, rules)
 
-        _ex = conn.execute("SELECT contractor_id, contractor_match FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
-        _new_cid = body.contractor_id
-        if _new_cid is None and _ex is not None and (_ex["contractor_match"] or "") == "unconfirmed":
-            _new_cid = _ex["contractor_id"]                         # 舊單的名稱推測對應：表單沒帶 id 重存，不能把它洗掉
-        _match = (_ex["contractor_match"] or "") if (_ex is not None and _new_cid == _ex["contractor_id"]) else ""    # 人工改選 ⇒ 視為確認
+        _ex = conn.execute("SELECT contractor_guess_id, contractor_name FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+        _guess = _ex["contractor_guess_id"] if _ex is not None else None
+        if _guess is not None and (body.contractor_id is not None                                        # 人工選了名冊人員 ⇒ 視為確認，推測作廢
+                                   or (d.get("contractorName", "") or "").strip() != (_ex["contractor_name"] or "").strip()):   # 改了受領人姓名 ⇒ 推測不再適用
+            _guess = None
         conn.execute("""
             UPDATE payslips SET
-              contractor_match=?, contractor_id=?, contractor_name=?, income_type=?,
+              contractor_guess_id=?, contractor_id=?, contractor_name=?, income_type=?,
               gross_amount=?, tax_withheld=?, nhi_supplement=?, net_amount=?,
               payment_method=?, slip_date=?, status=?, tax_rules_version=?,
               data_json=?, updated_at=?
             WHERE slip_no=?
         """, (
-            _match, _new_cid, d.get("contractorName", ""),
+            _guess, body.contractor_id, d.get("contractorName", ""),
             income_type, gross,
             calc["taxWithheld"], calc["nhiSupplement"], calc["netAmount"],
             d.get("paymentMethod", "匯款"), d.get("slipDate", ""),

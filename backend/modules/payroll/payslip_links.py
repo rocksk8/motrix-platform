@@ -40,19 +40,25 @@ def links_for_payslip(conn, slip_no) -> list:
     return [_public(r) for r in conn.execute(_SELECT + " WHERE l.slip_no=? ORDER BY l.id", (str(slip_no),)).fetchall()]
 
 
-def payslips_for_contractors(conn, contractor_ids) -> dict:
-    """第 48 班：這些外包名冊人員的勞報單（**只含已確認的對應**；舊單靠名稱推測的 `contractor_match='unconfirmed'` 不列、只回張數）。
-    欄位同 links：單號、狀態、受領人、開單日、已作廢旗標——**不含金額、扣繳、身分、銀行**。"""
+def payslips_for_contractors(conn, contractor_ids, dispatch_ids=None) -> dict:
+    """第 48 班：這些外包名冊人員的勞報單，**只限連到 `dispatch_ids`（呼叫端傳「同一案件的派發」）的**——不跨案揭露某人的全部勞報單。
+    只看權威的 `contractor_id`（名稱推測存在 `contractor_guess_id`，不列、只回張數）。欄位：單號、狀態、受領人、開單日、已作廢旗標——
+    **不含金額、扣繳、身分、銀行**。"""
     ids = [int(x) for x in contractor_ids if str(x).lstrip("-").isdigit()][:200]
+    dids = [int(x) for x in (dispatch_ids or []) if str(x).lstrip("-").isdigit()][:500]
     if not ids:
         return {"items": [], "unconfirmedCount": 0}
     q = ",".join("?" * len(ids))
-    rows = conn.execute("SELECT slip_no, status, contractor_name, slip_date, contractor_match FROM payslips WHERE contractor_id IN (%s)"
-                        " ORDER BY id DESC" % q, ids).fetchall()
-    items = [{"slipNo": r["slip_no"], "status": r["status"] or "", "contractorName": r["contractor_name"] or "",
-              "slipDate": (r["slip_date"] or "")[:10], "voided": (r["status"] or "") == "已作廢"}
-             for r in rows if (r["contractor_match"] or "") == ""]
-    return {"items": items, "unconfirmedCount": sum(1 for r in rows if (r["contractor_match"] or "") != "")}
+    guess = conn.execute("SELECT COUNT(*) FROM payslips WHERE contractor_guess_id IN (%s) AND contractor_id IS NULL" % q, ids).fetchone()[0]
+    items = []
+    if dids:
+        qd = ",".join("?" * len(dids))
+        rows = conn.execute("SELECT DISTINCT p.id, p.slip_no, p.status, p.contractor_name, p.slip_date FROM payslips p"
+                            " JOIN payslip_dispatch_links l ON l.slip_no = p.slip_no"
+                            " WHERE p.contractor_id IN (%s) AND l.dispatch_id IN (%s) ORDER BY p.id DESC" % (q, qd), ids + dids).fetchall()
+        items = [{"slipNo": r["slip_no"], "status": r["status"] or "", "contractorName": r["contractor_name"] or "",
+                  "slipDate": (r["slip_date"] or "")[:10], "voided": (r["status"] or "") == "已作廢"} for r in rows]
+    return {"items": items, "unconfirmedCount": guess}
 
 
 def link(conn, slip_no, dispatch_id, user, note="") -> dict:

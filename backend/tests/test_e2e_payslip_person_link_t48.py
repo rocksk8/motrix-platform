@@ -36,13 +36,14 @@ def _seed():
         d_with = disp([{"id": pid, "name": "名冊甲", "amount": 7777, "note": ""}])
         d_without = disp([{"id": other, "name": "名冊乙", "amount": 1, "note": ""}])
 
-        def slip(no, name, cid, match):
+        def slip(no, name, cid, guess):
             conn.execute("INSERT INTO payslips (slip_no, contractor_id, contractor_name, income_type, gross_amount, tax_withheld, nhi_supplement, net_amount,"
-                         " payment_method, slip_date, status, tax_rules_version, data_json, created_at, updated_at, contractor_match)"
+                         " payment_method, slip_date, status, tax_rules_version, data_json, created_at, updated_at, contractor_guess_id)"
                          " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                         (no, cid, name, "9A", 30000, 0, 0, 29876, "匯款", "2026-03-10", "已核准", "2026", json.dumps({"slipNo": no, "contractorName": name}), T0, T0, match))
-        slip("PS-202603-901", "名冊甲", pid, "")
-        slip("PS-202603-902", "名冊甲", pid, "unconfirmed")
+                         (no, cid, name, "9A", 30000, 0, 0, 29876, "匯款", "2026-03-10", "已核准", "2026", json.dumps({"slipNo": no, "contractorName": name}), T0, T0, guess))
+        slip("PS-202603-901", "名冊甲", pid, None)            # 已確認、連到同案的另一張派發 ⇒ 在 d_with 的派發頁列出
+        slip("PS-202603-902", "名冊甲", None, pid)            # 名稱推測（contractor_id 為空）⇒ 不列
+        conn.execute("INSERT INTO payslip_dispatch_links (slip_no, dispatch_id, created_by, created_at) VALUES (?,?,?,?)", ("PS-202603-901", d_without, "t", T0))
         conn.commit()
     finally:
         conn.close()
@@ -86,11 +87,11 @@ def test_payslip_form_lists_the_persons_dispatches_and_links_the_ticked_one(live
     import db
     c = db.get_db()
     try:
-        rows = [dict(r) for r in c.execute("SELECT l.dispatch_id, p.contractor_id, p.contractor_match FROM payslip_dispatch_links l JOIN payslips p ON p.slip_no=l.slip_no"
+        rows = [dict(r) for r in c.execute("SELECT l.dispatch_id, p.contractor_id, p.contractor_guess_id FROM payslip_dispatch_links l JOIN payslips p ON p.slip_no=l.slip_no"
                                            " WHERE p.contractor_id=? AND p.slip_no NOT LIKE 'PS-202603-9%'", (pid,)).fetchall()]
     finally:
         c.close()
-    assert rows == [{"dispatch_id": d_with, "contractor_id": pid, "contractor_match": ""}], rows
+    assert rows == [{"dispatch_id": d_with, "contractor_id": pid, "contractor_guess_id": None}], rows
 
 
 @pytest.mark.e2e

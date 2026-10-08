@@ -44,9 +44,10 @@ def list_payslip_links(did: int, authorization: str = Header(None)):
         ids = _personnel_ids(conn.execute("SELECT personnel_json FROM contractor_dispatches WHERE id=?", (did,)).fetchone()["personnel_json"])
         if ids and hasattr(prov, "payslips_for_contractors"):                   # 第 48 班：依「人」顯示該派發人員的已確認勞報單（無金額；舊單名稱推測未確認的只給數字）
             linked = {i["slipNo"] for i in items}
-            res = prov.payslips_for_contractors(conn, ids)
+            same_case = [r["id"] for r in conn.execute("SELECT id FROM contractor_dispatches WHERE quote_no=?", (row["quote_no"],)).fetchall()]
+            res = prov.payslips_for_contractors(conn, ids, same_case)                  # 只限連到「同一案件的派發」的勞報單（不跨案揭露）
             by_person = [x for x in res["items"] if x["slipNo"] not in linked]
-            unconfirmed = res["unconfirmedCount"]
+            unconfirmed = res["unconfirmedCount"] if _can_open(user) else 0            # 待確認張數只給最高管理者（API 層強制）
     finally:
         conn.close()
     return {"available": True, "notice": "", "items": items, "byPerson": by_person, "unconfirmedCount": unconfirmed,

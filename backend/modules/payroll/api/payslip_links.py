@@ -91,17 +91,20 @@ def person_dispatches(contractor_id: int, authorization: str = Header(None)):
 
 @router.post("/api/payslips/{slip_no}/confirm-contractor")
 def confirm_contractor(slip_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
-    """第 48 班：確認舊勞報單「靠名稱推測」的外包名冊對應（`contractor_match` 清成 ''）；可附 `contractorId` 改對人。只有最高管理者＋勞報單模組。"""
+    """第 48 班：確認舊勞報單「靠姓名推測」的外包名冊對應——把 `contractor_guess_id`（或 body.contractorId 指定的人）升格成權威的 `contractor_id`。
+    只有最高管理者＋勞報單模組。已簽回／已付款／已作廢的單不給確認（升格會改變已入帳分錄的對象鍵）。單一條件式 UPDATE（競態安全）；稽核。"""
     user = _require_user(authorization, require_superadmin=True, module="payslip")
     new_id = (body or {}).get("contractorId")
     conn = get_db()
     try:
-        row = conn.execute("SELECT contractor_id, contractor_match FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+        row = conn.execute("SELECT contractor_id, contractor_guess_id, status FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
         if row is None:
             raise HTTPException(404, "找不到此勞報單")
-        if (row["contractor_match"] or "") != "unconfirmed":
-            raise HTTPException(409, "這張勞報單的對應已經是確認過的")
-        cid = row["contractor_id"]
+        if row["contractor_guess_id"] is None or row["contractor_id"] is not None:
+            raise HTTPException(409, "這張勞報單沒有待確認的受領人對應")
+        if (row["status"] or "") in ("已簽回", "已付款", "已作廢"):
+            raise HTTPException(409, "已簽回／已付款／已作廢的勞報單不能確認對應（會改變已入帳分錄的對象）")
+        cid = row["contractor_guess_id"]
         if new_id not in (None, ""):
             try:
                 cid = int(new_id)
@@ -109,7 +112,8 @@ def confirm_contractor(slip_no: str, body: dict = Body(default={}), authorizatio
                 raise HTTPException(400, "contractorId 格式不正確")
             if conn.execute("SELECT 1 FROM contractors WHERE id=?", (cid,)).fetchone() is None:
                 raise HTTPException(404, "外包名冊沒有這位人員")
-        cur = conn.execute("UPDATE payslips SET contractor_id=?, contractor_match='' WHERE slip_no=? AND contractor_match='unconfirmed'", (cid, slip_no))
+        cur = conn.execute("UPDATE payslips SET contractor_id=?, contractor_guess_id=NULL WHERE slip_no=? AND contractor_id IS NULL"
+                           " AND contractor_guess_id IS NOT NULL AND status NOT IN ('已簽回','已付款','已作廢')", (cid, slip_no))
         if cur.rowcount != 1:
             raise HTTPException(409, "勞報單剛被改變，請重新整理後再試")
         conn.commit()
