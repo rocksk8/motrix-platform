@@ -46,6 +46,7 @@ window.CM_PARTS.push(() => ({
     createVoucherModal: false,
     createVoucherDispatch: null,
     createVoucherPayableDate: '',
+    createVoucherPlannedDate: '',      // 預定付款日（選填；出納預計哪天匯款）。與 createVoucherPayableDate（合約應付款日）是兩件事，不互相預填
     createVoucherSaving: false,
     // 31-B S3：款別（分期）——款別清單來自 GET /api/remit-kinds；試算打 POST /api/contractor-vouchers/preview（與建立同一支後端規則，畫面不自己算）
     remitKinds: [],
@@ -450,6 +451,7 @@ window.CM_PARTS.push(() => ({
     createContractorVoucher(d) {
       this.createVoucherDispatch = d
       this.createVoucherPayableDate = d.payableDate || ''
+      this.createVoucherPlannedDate = ''
       const kinded = this._dispatchOpenVouchers(d).some(x => x.kind)
       const kinds = this._cvKindsFor(d)
       const wholeOk = d.status === 'completed' || d.status === 'accepted'
@@ -522,8 +524,8 @@ window.CM_PARTS.push(() => ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify(this.cvForm.mode === 'kind'
-            ? Object.assign(this._cvKindBody(d, this.cvForm), { payable_date: this.createVoucherPayableDate || null })
-            : { dispatch_id: d.id, payable_date: this.createVoucherPayableDate || null })
+            ? Object.assign(this._cvKindBody(d, this.cvForm), { payable_date: this.createVoucherPayableDate || null, planned_pay_date: this.createVoucherPlannedDate || null })
+            : { dispatch_id: d.id, payable_date: this.createVoucherPayableDate || null, planned_pay_date: this.createVoucherPlannedDate || null })
         })
         if (!r.ok) { MotrixUI.toast((await r.json()).detail || '建立失敗', {kind: 'error'}); this.createVoucherSaving = false; return }
         this.createVoucherModal = false
