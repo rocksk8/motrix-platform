@@ -301,3 +301,32 @@ def test_quote_validation(client, users, seeded, kw, code):
         kw = dict(kw, quotedOn=(date.today() + timedelta(days=1)).isoformat())
     assert client.post("/api/lodging/quotes", json=_quote(**kw), headers=users["a"]).status_code == code
     assert fx.rows("SELECT * FROM lodging_quotes") == []
+
+
+# ── W1c 稽核：建立紀錄／詢價要留稽核（不含地址、不含金額）──────────────────────────
+
+def _audit_rows(action):
+    return fx.rows("SELECT * FROM audit_log WHERE action=?", action)
+
+
+def test_record_create_writes_one_audit_row_without_address(client, users, seeded, monkeypatch):
+    _fake_locate(monkeypatch, source="nominatim")
+    r = client.post("/api/lodging/records", json={"center": {"kind": "address", "address": "測試市測試路一號"}, "note": "出差"}, headers=users["a"])
+    assert r.status_code == 200, r.text
+    rows = _audit_rows("lodging_record_create")
+    assert len(rows) == 1 and rows[0]["target_id"] == str(r.json()["id"]) and rows[0]["username"] == "lod_a"
+    assert "測試市" not in (rows[0]["detail"] or "") and "測試市" not in (rows[0]["target_label"] or ""), "中心點地址（可能指向自然人）不進稽核"
+    # 失敗（中心點找不到）不留稽核
+    n = len(_audit_rows("lodging_record_create"))
+    assert client.post("/api/lodging/records", json={"center": {"kind": "x"}}, headers=users["a"]).status_code == 422
+    assert len(_audit_rows("lodging_record_create")) == n
+
+
+def test_quote_create_writes_one_audit_row_without_price(client, users, seeded):
+    r = client.post("/api/lodging/quotes", json=_quote(price=2800), headers=users["a"])
+    assert r.status_code == 200, r.text
+    rows = _audit_rows("lodging_quote_create")
+    assert len(rows) == 1 and rows[0]["target_id"] == str(r.json()["id"])
+    assert "2800" not in (rows[0]["detail"] or "") and "2800" not in (rows[0]["target_label"] or "")
+    assert client.post("/api/lodging/quotes", json=_quote(price=0), headers=users["a"]).status_code == 422
+    assert len(_audit_rows("lodging_quote_create")) == 1, "驗證失敗不留稽核"

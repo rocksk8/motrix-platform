@@ -18,6 +18,7 @@
 import ast
 import glob
 import os
+import re
 
 from core import source_tree
 
@@ -66,6 +67,8 @@ EXEMPT = {
         "純查詢：回傳各案件最後動態時間，POST 只是為了帶一長串單號",
     ("modules/case/api/quotations.py", "POST", "/api/quotations/preview-html"):
         "純預覽：用表單內容組出 HTML 給預覽框，不存檔",
+    ("modules/lodging/api_records.py", "POST", "/api/lodging/search"):
+        "純查詢：只查本機旅宿快照回結果，不存（要存的是 POST /api/lodging/records，有稽核）",
     ("modules/netplan/api.py", "POST", "/api/network-plans/{plan_id}/topology-preview"):
         "純預覽：依送來的參數畫拓樸圖，不存檔",
     ("modules/netplan/api.py", "POST", "/api/network-plans-quick/preview"):
@@ -157,9 +160,18 @@ def _key(f):
     return r if r.startswith("modules/") else os.path.basename(f)
 
 
+def _extra_router_files():
+    """模組裡 `api.py`／`api/` 以外、卻定義端點的檔（例：lodging 的 api_records.py）——第一版只掃 router_files()，這些端點整個不在守門範圍（W1c 稽核）。"""
+    out = []
+    for p in source_tree.logic_files():
+        if source_tree.rel(p).startswith("modules/") and "@router." in open(p, encoding="utf-8").read():
+            out.append(p)
+    return out
+
+
 def _all():
     rows = []
-    for f in source_tree.router_files():
+    for f in list(source_tree.router_files()) + _extra_router_files():
         src = open(f, encoding="utf-8").read()
         for method, path, fn in write_endpoints(src):
             rows.append((_key(f), method, path, fn))
@@ -287,3 +299,20 @@ def test_totp_setup_is_audited_without_the_secret(client, make_user):
     rows = _audit_rows("auth.totp_setup")
     assert len(rows) == 1
     assert secret not in (rows[0]["detail"] + rows[0]["target_label"] + rows[0]["target_id"])
+
+
+def test_no_endpoint_file_escapes_the_scan():
+    """守門自己的守門（W1c）：任何產品檔只要有 `@router.<方法>(` 裝飾器，就必須在本守門掃描範圍內，
+    否則整個檔案的寫入端點都不受「必須寫稽核」管轄（lodging/api_records.py 曾是這樣漏掉的）。
+    已知例外：`helpers/xlsx_out.py`（匯出包裝器，端點由 export_logged 以稽核包裝）、`main.py`（只有 GET 的靜態頁面）。"""
+    scanned = {source_tree.rel(p) for p in list(source_tree.router_files()) + _extra_router_files()}
+    allowed = {"helpers/xlsx_out.py", "main.py"}
+    pat = re.compile(r"^@(?:router|app)\.(?:get|post|put|patch|delete|api_route)\(", re.M)
+    stray = []
+    for p in source_tree.product_files():
+        r = source_tree.rel(p)
+        if r in scanned or r in allowed:
+            continue
+        if pat.search(open(p, encoding="utf-8").read()):
+            stray.append(r)
+    assert not stray, "這些檔定義了端點卻不在稽核守門的掃描範圍：%s" % sorted(stray)
