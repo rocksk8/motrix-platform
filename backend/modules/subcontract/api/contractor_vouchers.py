@@ -756,6 +756,7 @@ def approve_contractor_voucher(voucher_no: str, body: dict = Body(default={}), a
             (json.dumps(d, ensure_ascii=False), now, voucher_no)
         )
         conn.commit()
+        _PD.fire(voucher_no)                                                          # 最後一層核准 ⇒ 建事件（commit 之後、通知之前：通知出錯也不漏事件）
         approver_name = appr.get("approvedByDisplay") or user["username"]
         spawn_bg_thread(_generate_contractor_voucher_pdf, args=(voucher_no, approver_name, '簽核'))
         requester = appr.get("requestedBy")
@@ -771,9 +772,9 @@ def approve_contractor_voucher(voucher_no: str, body: dict = Body(default={}), a
             (new_status, json.dumps(d, ensure_ascii=False), now, voucher_no)
         )
         conn.commit()
+        _PD.fire(voucher_no)                                                          # 中間層：現況判定、無作用（保持原行為）
 
     conn.close()
-    _PD.fire(voucher_no)                                                              # 最後一層核准 ⇒ 建事件（現況判定；中間層無作用）
     _audit(_tok(authorization), "contractor_voucher.approve", "contractor_payment_voucher", voucher_no,
            f"{voucher_no}（{vname}）", {"allDone": all_done})
     return {"ok": True, "allDone": all_done, "signedTiers": _signed_tier_nos}
@@ -813,12 +814,12 @@ def revoke_contractor_voucher_approval(voucher_no: str, body: dict = Body(defaul
     )
     conn.commit()
     conn.close()
+    _PD.fire(voucher_no)                                                              # 撤銷核准 ⇒ 收回事件（commit 之後、通知之前：通知出錯也不漏）
     _purge_notifications(voucher_no, ['contractor_voucher_approval_request', 'approval_reminder'])
     if requester:
         msg = f"承攬商匯款申請 {voucher_no}（{vname}）核准已被撤銷，請確認後重新送審" + (f"：{note}" if note else "")
         _notify(requester, "contractor_voucher_returned", voucher_no, voucher_no, msg)
         notify_contractor_voucher_returned(voucher_no, vname, note, requester)
-    _PD.fire(voucher_no)
     _audit(_tok(authorization), "contractor_voucher.revoke_approval", "contractor_payment_voucher", voucher_no,
            f"{voucher_no}（{vname}）", {"note": note})
     return {"ok": True}
@@ -860,12 +861,12 @@ def reject_contractor_voucher(voucher_no: str, body: dict = Body(default={}), au
     )
     conn.commit()
     conn.close()
+    _PD.fire(voucher_no)                                                              # 退回 ⇒ 收回事件（commit 之後、通知之前）
     _purge_notifications(voucher_no, ['contractor_voucher_approval_request', 'approval_reminder'])
     if requester:
         msg = f"承攬商匯款申請 {voucher_no}（{vname}）已退回，請確認後重新送審" + (f"：{note}" if note else "")
         _notify(requester, "contractor_voucher_returned", voucher_no, voucher_no, msg)
         notify_contractor_voucher_returned(voucher_no, vname, note, requester)
-    _PD.fire(voucher_no)
     _audit(_tok(authorization), "contractor_voucher.reject", "contractor_payment_voucher", voucher_no,
            f"{voucher_no}（{vname}）", {"note": note})
     return {"ok": True}

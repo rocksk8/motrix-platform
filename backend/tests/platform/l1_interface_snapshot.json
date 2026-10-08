@@ -964,7 +964,8 @@
    "notify_finance": "def(kind, source, key, ident, planned, link=…)",
    "prune_guards": "def(today)",
    "run_scan": "def(items, today, *, is_wd, send, monotonic=…, link=…, max_wait=…)",
-   "sync_event": "def(source, key, item=…)"
+   "sync_event": "def(source, key, item=…)",
+   "sync_lock": "def(source, key)"
   },
   "helper:prefill_sources": {
    "PREFILL_SOURCES": "const",

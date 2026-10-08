@@ -69,21 +69,22 @@ def sync(exp_id) -> None:
     """讀現況 ⇒ upsert 或 delete 該筆的「付款待辦」事件。任何失敗只記 log。"""
     try:
         from helpers import payable_due_core as _core
-        conn = get_db()
-        try:
-            row = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
-            cust = proj = ""
-            if row is not None and row["quote_no"]:
-                q = conn.execute("SELECT customer_name, project_name FROM quotations WHERE quote_no=?", (row["quote_no"],)).fetchone()
-                if q:
-                    cust, proj = q["customer_name"] or "", q["project_name"] or ""
-        finally:
-            conn.close()
-        key = event_key(exp_id)
-        if row is not None and eligible(row):
-            _core.sync_event(SOURCE, exp_id, compose(row, cust, proj))
-        else:
-            _core.sync_event(SOURCE, exp_id, None)
+        with _core.sync_lock(SOURCE, exp_id):                              # 讀現況與寫事件同一把鎖（稽核 S4）
+            conn = get_db()
+            try:
+                row = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
+                cust = proj = ""
+                if row is not None and row["quote_no"]:
+                    q = conn.execute("SELECT customer_name, project_name FROM quotations WHERE quote_no=?", (row["quote_no"],)).fetchone()
+                    if q:
+                        cust, proj = q["customer_name"] or "", q["project_name"] or ""
+            finally:
+                conn.close()
+            key = event_key(exp_id)
+            if row is not None and eligible(row):
+                _core.sync_event(SOURCE, exp_id, compose(row, cust, proj))
+            else:
+                _core.sync_event(SOURCE, exp_id, None)
     except Exception as exc:
         logger.warning("payable_calendar.sync(%s) failed: %s", exp_id, exc)
 

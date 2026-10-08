@@ -77,7 +77,7 @@
 | `helper:notification_prefs` | L1 | Per-user email notification opt-out list.（無單位卡） | 5 | 4 | — |
 | `helper:notify_matrix` | L1 | 通知矩陣（信件 × 行事曆）的對照登記（L1；MAIL-CAL 階段 1，設計 docs/platform/plans/MAIL-CAL-MERGE-DESIGN.md）。 | 10 | 2 | `tests/test_notify_matrix_2026_10_05.py` |
 | `helper:part_catalog` | L1 | 料件分類代碼表（L1；DEPENDENCY-MAP §3 #17）。（無單位卡） | 2 | 2 | — |
-| `helper:payable_due_core` | L1 | 預定付款日提醒的共用純函式庫（第 45 班；使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）。 | 15 | 5 | `tests/test_payable_due_core_t45.py` |
+| `helper:payable_due_core` | L1 | 預定付款日提醒的共用純函式庫（第 45 班；使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）。 | 16 | 5 | `tests/test_payable_due_core_t45.py` |
 | `helper:prefill_sources` | L1 | 表單「自動帶入」來源的唯一登記處（L1；表單設計器的下拉、定義驗證、伺服器端取值都讀這一份）。（無單位卡） | 8 | 3 | — |
 | `helper:privacy_notice` | L1 | L1 個資蒐集告知（R3；規格 CUSTOMIZATION-SPEC §9.3；個人資料保護法 §8 I）。（無單位卡） | 23 | 13 | — |
 | `helper:procurement` | L1 | 採購前置時間與採購建議狀態的判定（2026-09-21，第 3 輪）。（無單位卡） | 11 | 3 | — |

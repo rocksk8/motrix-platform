@@ -8,6 +8,8 @@
 - 薄接線：M01（案件額外支出＋叫料匯款）、M04（承攬商匯款，`daily.check` 提供者 `subcontract_payable_due`）；M05 出納端點 `PATCH /api/cashier/pending-payables/{source}/{key}/planned-pay-date`、`PATCH /api/cashier/payable-queue/{voucher_no}/planned-pay-date`。
 - 站內通知有自己的一次性 guard（`payable_due_inapp.<id>.<kind>.<預定日>.<寄信日>`），**不依賴信件是否寄出**（沒有財務信箱、SMTP 關閉時站內提醒照樣出現一次）；`run_scan` 每筆各自隔離（一筆出錯只記 log、繼續）、清舊 guard 在 finally。
 - 測試：`modules/case/tests/test_payable_due_core_t45.py`、`modules/subcontract/tests/test_voucher_payable_due_t45.py`。
+- **獨立稽核跟進（ab，第 47 班）**：① `run_scan` 遇到 SMTP 無回應（`SEND_UNKNOWN`）或達等待上限而停止寄信後，其餘筆**仍補寫站內通知**（只有「寄信日＝今天」的候選，錯過就永遠沒有）；信件語意不變（沒寄出就不寫信件 guard）。② 新增 `payable_due_core.sync_lock(來源, key)`：同一筆的「讀現況→寫行事曆事件」序列化（兩次很快的對齊不會讓事件停在舊狀態）。
+- **上線備註（第 47 班 L1）**：站內通知的收件人**不受「信件收件人覆寫」影響**（固定寫給在職的財務角色＋superadmin，尊重個人對該信件類型的退訂）；**第一次上線時，已寄過信的提醒會各補寫一則站內通知**（站內 guard 是新的 key，與舊信件 guard 分開）。
 
 ## 1.118 — 2026-10-07（wip/t45-r2-step1-impl：R2 第1步——D4 superadmin 全部鍵、D5 財務判斷影子模式）
 - L1（新增，向下相容）：`helpers.auth` 新增 `FINANCE_FLAG_KEY`、`finance_effective_keys(user, cache=False)`、`finance_duty_person(user)`、`reset_finance_mode_cache()`。

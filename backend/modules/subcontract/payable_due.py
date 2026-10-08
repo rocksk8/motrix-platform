@@ -67,13 +67,14 @@ def event_tuple(row):
 
 def sync(voucher_no) -> None:
     try:
-        conn = get_db()
-        try:
-            row = conn.execute("SELECT * FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
-        finally:
-            conn.close()
-        ev = event_tuple(row) if row is not None else None
-        _core.sync_event(SOURCE, voucher_no, None if ev is None else ev[1:4])
+        with _core.sync_lock(SOURCE, voucher_no):                          # 讀現況與寫事件同一把鎖（稽核 S4）
+            conn = get_db()
+            try:
+                row = conn.execute("SELECT * FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+            finally:
+                conn.close()
+            ev = event_tuple(row) if row is not None else None
+            _core.sync_event(SOURCE, voucher_no, None if ev is None else ev[1:4])
     except Exception as exc:                                              # noqa: BLE001
         logger.warning("subcontract.payable_due.sync(%s) failed: %s", voucher_no, exc)
 

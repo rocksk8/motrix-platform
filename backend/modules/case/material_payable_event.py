@@ -50,12 +50,13 @@ def event_tuple(conn, pid):
 
 def sync(pid) -> None:
     try:
-        conn = get_db()
-        try:
-            ev = event_tuple(conn, pid)
-        finally:
-            conn.close()
-        _core.sync_event(SOURCE, pid, None if ev is None else ev[1:4])
+        with _core.sync_lock(SOURCE, pid):                                 # 讀現況與寫事件同一把鎖（稽核 S4）
+            conn = get_db()
+            try:
+                ev = event_tuple(conn, pid)
+            finally:
+                conn.close()
+            _core.sync_event(SOURCE, pid, None if ev is None else ev[1:4])
     except Exception as exc:                                              # noqa: BLE001
         logger.warning("material_payable_event.sync(%s) failed: %s", pid, exc)
 

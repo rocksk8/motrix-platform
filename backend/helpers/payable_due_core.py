@@ -2,7 +2,7 @@
 """預定付款日提醒的共用純函式庫（第 45 班；使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）。
 
 [單位] helper:payable_due_core    [層] L1    [穩定度] 實作
-[公開介面] CALENDAR_SOURCES、EVENT_CODE、GUARD_PREFIX、INAPP_PREFIX、MAIL_KEYS、MAX_WAIT_SECONDS_PER_RUN、SOON_DAYS、candidate_planned_dates、due_kind、effective_send_day、next_working_day、notify_finance、prune_guards、run_scan、sync_event
+[公開介面] CALENDAR_SOURCES、EVENT_CODE、GUARD_PREFIX、INAPP_PREFIX、MAIL_KEYS、MAX_WAIT_SECONDS_PER_RUN、SOON_DAYS、candidate_planned_dates、due_kind、effective_send_day、next_working_day、notify_finance、prune_guards、run_scan、sync_event、sync_lock、sync_lock
 [不變式] 提醒的日期規則、guard、寄送迴圈、站內通知只有這一份；各模組只查自己的待付款列、整理成 items 交進來；信件與通知內容不放金額、受款人、廠商名、付款條件，只放單號、名目、預定付款日、關聯案件；guard 先寄、結果確定才寫；每封與每次掃描都有等待上限。
 [契約題] tests/test_payable_due_core_t45.py
 [注意] 信件類型 payable_due_soon／payable_due_today／payable_due_overdue 由 M01 登記，M01 不在時寄信 fail-closed；站內通知有自己的一次性 guard（INAPP_PREFIX），不依賴信件是否寄出。
@@ -123,6 +123,13 @@ CALENDAR_SOURCES = ("case", "subcontract_voucher", "case_material")
 EVENT_CODE = "payable_due"
 
 
+def sync_lock(source: str, key):
+    """同一筆（來源＋key）的「讀現況→upsert／delete」要序列化：兩個很快連續的 fire 各自開背景執行緒，後讀到的現況可能先寫、先讀到的後寫 ⇒ 事件停在舊狀態（稽核 S4）。
+    用法：`with sync_lock(來源, key): <讀現況>; sync_event(...)`（讀現況一定要在鎖內）。沿用 google_calendar 的 per-key 鎖表。"""
+    from helpers.google_calendar import _merge_lock
+    return _merge_lock("payable_due_sync:%s:%s" % (source, key))
+
+
 def sync_event(source: str, key, item=None) -> bool:
     """對齊一筆的「付款待辦」事件：`item`＝(標題, 說明, 預定日) ⇒ upsert；`None` ⇒ delete。事件識別＝(payable_due, `<來源>:<key>`)。
     來源不在 `CALENDAR_SOURCES`（例如勞報單）⇒ 一律零呼叫、回 False。**不放金額**由呼叫端組文字時保證。失敗只記 log。
@@ -159,8 +166,9 @@ def prune_guards(today: date) -> None:
         conn.close()
 
 
-def _scan_item(it, today, t0, *, is_wd, send, link) -> tuple:
-    """一筆的處理 ⇒ (寄出封數, 要不要停止本次掃描: None／'wait'／'unknown')。例外由呼叫端接。"""
+def _scan_item(it, today, t0, *, is_wd, send, link, app_only=False) -> tuple:
+    """一筆的處理 ⇒ (寄出封數, 要不要停止本次掃描: None／'wait'／'unknown')。例外由呼叫端接。
+    `app_only`＝本次掃描已因等待上限／SMTP 無回應而停止寄信：只補站內通知、不寄信、不寫信件 guard（信件語意不變：未寄出就不寫，下次重試）。"""
     kind, guards = due_kind(it["planned"], today, is_wd)
     if not kind:
         return 0, None
@@ -175,7 +183,7 @@ def _scan_item(it, today, t0, *, is_wd, send, link) -> tuple:
     if not app_done and notify_finance(kind, it.get("source") or "", it.get("key") or it["guard_id"], it["ident"], it["planned"]) >= 1:
         for k in app_keys:
             _set_setting(k, t0)
-    if mail_done:
+    if mail_done or app_only:
         return 0, None
     res = {}
     if send(kind, it["rows"], link, it["ident"], res):
@@ -202,9 +210,12 @@ def run_scan(items, today: date, *, is_wd, send, monotonic=time.monotonic, link=
         link = link or "%s/pages/cashier.html" % _en._base_url()
         t0 = today.isoformat()
         t_start = monotonic()
-        for it in items:
+        items = list(items)
+        rest = []                                               # 因等待上限／SMTP 無回應而沒輪到寄信的那些筆：仍要補站內通知（只有「寄信日＝今天」的候選，錯過就永遠沒有）
+        for pos, it in enumerate(items):
             if monotonic() - t_start >= max_wait:
-                logger.warning("payable_due_core: 本次掃描等待寄送已達 %s 秒上限，其餘提醒留待下次（不寫 guard）", max_wait)
+                logger.warning("payable_due_core: 本次掃描等待寄送已達 %s 秒上限，其餘提醒的信件留待下次（不寫信件 guard）；站內通知照補", max_wait)
+                rest = items[pos:]
                 break
             try:
                 n, stop = _scan_item(it, today, t0, is_wd=is_wd, send=send, link=link)
@@ -213,8 +224,14 @@ def run_scan(items, today: date, *, is_wd, send, monotonic=time.monotonic, link=
                 continue
             sent += n
             if stop == "unknown":
-                logger.error("payable_due_core: SMTP 沒有在時限內回應，停止本次掃描（避免每封都卡住）")
+                logger.error("payable_due_core: SMTP 沒有在時限內回應，停止本次寄信（避免每封都卡住）；其餘提醒的站內通知照補")
+                rest = items[pos + 1:]
                 break
+        for it in rest:                                         # 只補站內通知，不寄信
+            try:
+                _scan_item(it, today, t0, is_wd=is_wd, send=send, link=link, app_only=True)
+            except Exception as exc:                            # noqa: BLE001
+                logger.warning("payable_due_core: %s 站內通知補寫失敗（略過）：%s", it.get("guard_id"), exc)
     except Exception as exc:                                    # noqa: BLE001
         logger.warning("payable_due_core.run_scan failed: %s", exc)
     finally:

@@ -17,6 +17,7 @@ v2（2026-08-31 同日）：receivables.html（應收帳款）獨有的發票登
   這輪一開始定案的財務/出納分工原則。
 """
 import json
+import logging
 import re
 from datetime import date
 
@@ -36,6 +37,16 @@ from modules.arap.receivables import collect_income_items as _collect_income_ite
 from helpers.legal_params import round_half_up          # bank-reconcile（金額四捨五入唯一來源）
 from helpers import _audit, _tok                         # bank-reconcile 的稽核
 from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged, set_row, xl_style
+
+_log = logging.getLogger(__name__)
+
+
+def _call_hook(hook, arg, what):
+    """commit 之後的串接點呼叫（行事曆對齊等）：出任何錯只記 log，**絕不**讓已經完成的付款／改期回 500（稽核 S3）。"""
+    try:
+        hook(arg)
+    except Exception as exc:                                    # noqa: BLE001
+        _log.warning("cashier: %s 失敗（略過，不影響已完成的操作）：%s", what, exc)
 
 router = APIRouter()
 
@@ -228,7 +239,7 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
     if not getattr(p, "NO_CALENDAR", False):
         hook = getattr(p, "planned_changed", None)
         if hook is not None:
-            hook(key)
+            _call_hook(hook, key, "planned_changed（付款後）")
         else:
             from helpers import payable_due_core as _pdc
             spawn_bg_thread(_pdc.sync_event, args=(source, key))
@@ -267,7 +278,7 @@ def set_pending_payable_planned_pay_date(source: str, key: str, body: dict = Bod
         conn.close()
     hook = getattr(p, "planned_changed", None)
     if hook is not None:
-        hook(key)                                                       # commit 之後（寫鎖已放）；提供者自己 spawn 背景執行緒。第47班稽核 S5：沒變也照做（冪等），上次背景推送失敗時重按一次能修復
+        _call_hook(hook, key, "planned_changed（改預定日）")                 # commit 之後（寫鎖已放）；提供者自己 spawn 背景執行緒。第47班稽核 S5：沒變也照做（冪等），上次背景推送失敗時重按一次能修復
     if res.get("unchanged"):                                            # 稽核 S3：日期沒變 ⇒ 不稽核、不通知
         return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value), "unchanged": True}
     _audit(_tok(authorization), "cashier.planned_pay_date", source, key,
@@ -307,7 +318,7 @@ def set_payable_queue_planned_pay_date(voucher_no: str, body: dict = Body(defaul
            "出納設定承攬商匯款預定付款日：%s（%s）%s → %s" % (voucher_no, res.get("quoteNo") or "", res.get("old") or "（無）", value or "（清除）"))
     hook = registry.single_provider("contractor_voucher.planned_changed")
     if hook is not None:
-        hook(voucher_no)                                                # commit 之後；提供者自己 spawn 背景執行緒
+        _call_hook(hook, voucher_no, "contractor_voucher.planned_changed")    # commit 之後；提供者自己 spawn 背景執行緒
     _notify_applicant_planned(user, "subcontract_voucher", voucher_no, res, value)
     return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value)}
 
