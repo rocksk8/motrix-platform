@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""第 47 班政策題（使用者裁示，經 node-d8 轉述 2026-10-08）：Q-S6 有簽核層時送審人不得自核（唯一在職最高管理者例外）。"""
+"""第 47 班政策題（使用者裁示，經 node-d8 轉述 2026-10-08）：Q-S6 有簽核層時送審人不得自核（唯一在職最高管理者例外）；Q-S9 作廢「已核准」需真正的最高管理者。"""
 import json
 
 import pytest
@@ -59,3 +59,30 @@ def test_other_superadmin_in_the_chain_still_approves_normally(client, make_user
     r = client.post("/api/payslips/PS-203101-903/approve", headers=hb)
     assert r.status_code == 200 and r.json()["status"] == "已核准", r.text
     _clear_flow()
+
+
+# ── Q-S9 ─────────────────────────────────────────────────────────────────────────────────────────
+def _module_holder(client, make_user, name):
+    u, p = make_user(username=name, role="user", modules=["payslip"], legacy_finance_flag=False)
+    return _auth(_login(client, u, p))
+
+
+def test_module_holder_cannot_void_an_approved_payslip_but_a_superadmin_can(client, make_user):
+    _, ha = _su(client, make_user, "t47p_void_su")
+    hs = _module_holder(client, make_user, "t47p_void_mod")
+    _insert_payslip("PS-203101-904", status="已核准")
+    r = client.post("/api/payslips/PS-203101-904/void", headers=hs, json={"reason": "想作廢"})
+    assert r.status_code == 403 and "最高管理者" in r.text, r.text
+    assert _status("PS-203101-904") == "已核准", "被擋 ⇒ 狀態與作廢欄位原封不動"
+    row = _q("SELECT voided_at, voided_by, void_reason FROM payslips WHERE slip_no='PS-203101-904'")[0]
+    assert (row["voided_at"], row["voided_by"], row["void_reason"]) == ("", "", "")
+    r = client.post("/api/payslips/PS-203101-904/void", headers=ha, json={"reason": "金額開錯"})
+    assert r.status_code == 200 and _status("PS-203101-904") == "已作廢", r.text
+
+
+def test_module_holder_can_still_void_an_exported_payslip(client, make_user):
+    """已匯出維持原規則（模組持有者可作廢）——Q-S9 只收緊「已核准」。"""
+    hs = _module_holder(client, make_user, "t47p_void_mod2")
+    _insert_payslip("PS-203101-905", status="已匯出")
+    r = client.post("/api/payslips/PS-203101-905/void", headers=hs, json={"reason": "重開"})
+    assert r.status_code == 200 and _status("PS-203101-905") == "已作廢", r.text

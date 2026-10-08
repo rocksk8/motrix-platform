@@ -644,6 +644,9 @@ def void_payslip(slip_no: str, body: VoidIn, authorization: str = Header(None)):
         raise HTTPException(409, "已簽回／已付款的勞報單不可直接作廢，請先退回簽回"
                             if row["status"] in ("已簽回", "已付款")
                             else "只有已核准或已匯出的勞報單可以作廢（草稿請直接刪除、待審核請先退回）")
+    if row["status"] == "已核准" and user.get("role") != "superadmin":   # 第47班 Q-S9（使用者裁示 A）：核准是最高管理者的決定，只有最高管理者能推翻；已匯出維持原規則
+        conn.close()
+        raise HTTPException(403, "已核准的勞報單只有最高管理者可以作廢")
     now = datetime.now().isoformat()
     who = user.get("display_name") or user["username"]
     cur = conn.execute("UPDATE payslips SET status='已作廢', voided_at=?, voided_by=?, void_reason=?, "
