@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1209,
+  "tests": 1210,
   "unmapped": 13,
   "kinds": {
-   "api": 656,
+   "api": 657,
    "e2e": 296,
    "audit": 148,
    "unit": 109
@@ -7672,12 +7672,20 @@
    "units": [
     "core:db",
     "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "helper:financial_mask",
+    "mod:case/__init__",
     "mod:case/api/overhead",
-    "mod:case/api/quotations"
+    "mod:case/api/quotations",
+    "mod:case/profit_guard"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/financial_mask.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/profit_guard.py"
     ],
     "api": [
      "backend/modules/case/api/overhead.py",
@@ -20171,6 +20179,7 @@
   "backend/tests/test_begin_only_via_begin_write_2026_09_25.py": {
    "kind": "audit",
    "units": [
+    "file:backend/tools/overhead_migrate.py",
     "mod:case/api/quotations",
     "mod:payroll/api/bonus",
     "mod:payroll/api/payslip_approval",
@@ -20189,7 +20198,8 @@
      "backend/modules/case/api/quotations.py",
      "backend/modules/payroll/api/bonus.py",
      "backend/modules/payroll/api/payslip_approval.py",
-     "backend/modules/payroll/api/payslips.py"
+     "backend/modules/payroll/api/payslips.py",
+     "backend/tools/overhead_migrate.py"
     ]
    }
   },
@@ -31085,6 +31095,32 @@
      "backend/routers/search.py",
      "backend/routers/system.py",
      "backend/routers/uploads.py"
+    ]
+   }
+  },
+  "backend/tests/test_r2_step2_audit2_fixes_2026_10_09.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:frontend/static/",
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "helper:duty_roles",
+    "js:static/users-duty.js"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/duty_roles.py"
+    ],
+    "page": [
+     "frontend/static/users-duty.js"
+    ],
+    "path": [
+     "frontend/static/",
+     "frontend/static/users-duty.js"
     ]
    }
   },

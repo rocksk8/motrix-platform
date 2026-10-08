@@ -1,6 +1,6 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — 2026-10-09（wip/t48-small-fixes）：供應商頁初始化 JS 例外
+## 1.0.22 — 2026-10-09（wip/t48-small-fixes）：供應商頁初始化 JS 例外
 - `frontend/pages/suppliers.html`：聯絡人區塊的 `form.contacts.length` 在 `form` 尚為 `{}`（資料載入前）時丟 `Cannot read properties of undefined (reading 'length')`，與旁邊同型的判斷一樣加 `!form.contacts ||` 防呆。業務／工程師從供應商紀錄頁（`supplier-log.html`，找不到供應商會導回本頁）進來時最常撞到；行為不變。
 - 測試：`tests/test_e2e_supplier_log_plain_roles_2026_10_09.py`（業務／工程師開供應商紀錄頁，有無 `?id=` 皆無 pageerror）。
 
