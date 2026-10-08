@@ -4,7 +4,7 @@
 現金口徑報表是否仍看得到那筆已付的 3000（付出去的錢是事實）？不隨產品出貨。"""
 import db
 from modules.case.tests.test_material_link_booking_2026_10_02 import (  # noqa: F401
-    NO, TODAY, W, _approved_po, _extra, _gl, _ln, _mat, _order, _won_case, _put_materials)
+    NO, W, _approved_po, _extra, _gl, _ln, _mat, _order, _won_case, _put_materials)
 
 
 def test_cash_basis_keeps_the_money_already_paid_on_a_legacy_order_that_is_later_linked_to_a_po(W):

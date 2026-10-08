@@ -10,7 +10,7 @@ import db
 from modules.case import recognition as R
 from modules.case.recognition import _case_rows, _material_states  # noqa: F401  (參考實作用)
 from modules.case.tests.test_material_link_2026_10_02 import _put_materials
-from modules.case.tests.test_material_link_booking_2026_10_02 import NO, TODAY, W, _approved_po, _order, _won_case  # noqa: F401
+from modules.case.tests.test_material_link_booking_2026_10_02 import NO, W, _approved_po, _order, _won_case  # noqa: F401
 from modules.case.tests.test_purchase_item_lines_2026_10_02 import _ln
 
 # ── 參考實作：抽出前的 material_entries（逐字凍結；不要改） ─────────────────────────────
