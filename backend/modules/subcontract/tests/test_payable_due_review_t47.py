@@ -39,7 +39,7 @@ def _guards(prefix):
         c.close()
 
 
-def test_s1_in_app_notice_still_written_for_items_after_a_send_unknown(client, world, monkeypatch):
+def test_audit_s1_in_app_notice_still_written_for_items_after_a_send_unknown(client, world, monkeypatch):
     from helpers import payable_due_core as C
     items = [{"guard_id": "s1a", "planned": TODAY.isoformat(), "ident": "S1甲", "rows": [], "source": "x", "key": "s1a"},
              {"guard_id": "s1b", "planned": TODAY.isoformat(), "ident": "S1乙", "rows": [], "source": "x", "key": "s1b"},
@@ -60,7 +60,7 @@ def test_s1_in_app_notice_still_written_for_items_after_a_send_unknown(client, w
     assert len(_guards("payable_due_inapp.s1")) >= 3, "站內通知 guard 各寫一次"
 
 
-def test_s1_wait_limit_also_still_writes_in_app_notices(client, world):
+def test_audit_s1_wait_limit_also_still_writes_in_app_notices(client, world):
     from helpers import payable_due_core as C
     items = [{"guard_id": "s1w%d" % i, "planned": TODAY.isoformat(), "ident": "S1W%d" % i, "rows": [], "source": "x", "key": "s1w%d" % i}
              for i in range(3)]
@@ -75,7 +75,7 @@ def test_s1_wait_limit_also_still_writes_in_app_notices(client, world):
     assert all(("S1W%d" % i) in msgs for i in range(3)), "超過等待上限的筆也補站內通知"
 
 
-def test_s2_calendar_sync_fires_even_when_the_notification_raises(client, world, monkeypatch):
+def test_audit_s2_calendar_sync_fires_even_when_the_notification_raises(client, world, monkeypatch):
     import modules.subcontract.api.contractor_vouchers as CV
     fired = []
     monkeypatch.setattr(CV._PD, "fire", lambda no: fired.append(no))
@@ -104,7 +104,7 @@ def test_s3_hook_failure_after_commit_does_not_turn_a_done_change_into_500(clien
     assert r.status_code == 200 and r.json().get("plannedPayDate") == "2031-07-20", r.text
 
 
-def test_s4_two_quick_syncs_for_one_key_do_not_interleave_read_and_write(client, world, monkeypatch):
+def test_audit_s4_two_quick_syncs_for_one_key_do_not_interleave_read_and_write(client, world, monkeypatch):
     """同一筆的兩次對齊：「讀現況→寫事件」整段序列化。沒有鎖時第二個執行緒會在第一個還沒寫完時就讀現況，
     之後兩邊的寫入先後不定 ⇒ 事件可能停在舊狀態。這裡記下讀與寫完成的順序，要求：讀A、寫A完、讀B、寫B完。"""
     from helpers import payable_due_core as C

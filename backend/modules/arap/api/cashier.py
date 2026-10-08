@@ -318,7 +318,7 @@ def set_payable_queue_planned_pay_date(voucher_no: str, body: dict = Body(defaul
            "出納設定承攬商匯款預定付款日：%s（%s）%s → %s" % (voucher_no, res.get("quoteNo") or "", res.get("old") or "（無）", value or "（清除）"))
     hook = registry.single_provider("contractor_voucher.planned_changed")
     if hook is not None:
-        _call_hook(hook, voucher_no, "contractor_voucher.planned_changed")    # commit 之後；提供者自己 spawn 背景執行緒
+        _call_hook(hook, voucher_no, "承攬商匯款 planned_changed")    # commit 之後；提供者自己 spawn 背景執行緒
     _notify_applicant_planned(user, "subcontract_voucher", voucher_no, res, value)
     return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value)}
 
