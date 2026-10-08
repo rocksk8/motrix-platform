@@ -17,7 +17,7 @@ QUOTATION_MONEY_COLS = ("total", "pretax", "direct_margin_pct", "net_margin_pct"
 ITEM_MONEY_KEYS = ("cost", "margin", "unitPrice", "amount")
 #: 報價單頂層
 QUOTE_MONEY_KEYS = ("discount", "freight", "indirectLogistics", "indirectInstallation",
-                    "indirectTravel", "indirectWarranty", "indirectOther", "tot")
+                    "indirectTravel", "indirectWarranty", "indirectOther", "tot", "overheadPct")
 #: 款項期別（invoicePretax／invoiceTax：發票記載的未稅與稅額，AC1 由 hichan-bf 新增）
 PAYMENT_MONEY_KEYS = ("amount", "pct", "actualAmount", "feeAmount", "feeNote", "invoicePretax", "invoiceTax")
 #: 叫料品項
