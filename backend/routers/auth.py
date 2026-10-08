@@ -14,7 +14,7 @@ from typing import Optional, List
 
 import pyotp
 import qrcode
-from fastapi import APIRouter, HTTPException, Header, Request, Depends
+from fastapi import APIRouter, HTTPException, Header, Query, Request, Depends
 from pydantic import BaseModel
 from webauthn import (
     generate_registration_options,
@@ -26,7 +26,7 @@ from webauthn import (
 
 from db import get_db, get_demo_db, reset_demo_db, demo_reset_lock
 from helpers.module_registry import refuse_unknown_new_keys
-from helpers.auth import effective_modules, VALID_ROLES
+from helpers.auth import effective_modules, require_any_module, VALID_ROLES
 from helpers import (
     _hash_pw, _verify_pw, _require_user, _tok, _audit, is_weak_password, MIN_PASSWORD_LEN, DEMO_TOKEN_PREFIX,
     notify_module_activity)
@@ -1476,7 +1476,8 @@ def change_password(body: ChangePasswordIn, authorization: str = Header(None)):
 
 @router.get("/api/users")
 def list_users(authorization: str = Header(None)):
-    _require_user(authorization)
+    caller = _require_user(authorization)
+    full_view = caller["role"] in ("superadmin", "admin")             # 第 47 班（使用者裁示）：只有管理員以上看得到全部人的聯絡方式／權限勾選／信件退訂
     conn = get_db()
     rows = conn.execute("""
         SELECT u.id, u.username, u.display_name, u.role, u.email, u.phone, u.modules,
@@ -1503,6 +1504,9 @@ def list_users(authorization: str = Header(None)):
         d["departmentName"]      = d.pop("department_name")
         d["divisionId"]          = d.pop("division_id")
         d["divisionName"]        = d.pop("division_name")
+        if not full_view and d["username"] != caller["username"]:        # 一般人員：別人的 Email／電話／權限勾選／信件退訂不給（自己的那一列照舊，個人設定頁與報價單帶入業務員資料要用）
+            for _k in ("email", "phone", "modules", "notificationMuted"):
+                d.pop(_k, None)
         result.append(d)
     return result
 
@@ -1714,6 +1718,23 @@ def toggle_user_active(user_id: int, authorization: str = Header(None)):
     notify_module_activity("使用者管理", "啟用帳號" if new_active else "停用帳號",
                             actor.get("display_name") or actor["username"], ulabel, "users.html")
     return {"ok": True, "active": bool(new_active)}
+
+
+@router.get("/api/users/sales-contact")
+def users_sales_contact(username: str = Query(..., min_length=1, max_length=64), authorization: str = Header(None)):
+    """報價單『報價人』改選他人（代理）時帶入對方的電話與 Email（第 47 班）：`GET /api/users` 收緊後一般人員拿不到別人的聯絡方式，
+    改走這支——一次只查一個人、只回 {id, displayName, phone, email}（沒有角色、權限勾選、信件退訂）；只有能編報價單的人（模組 quotation，最高管理者直通）
+    能呼叫；對象必須是在職使用者（與『報價人』下拉同一個候選集合），否則 404（不洩漏停用／不存在的差別）。"""
+    user = _require_user(authorization)
+    require_any_module(user, ["quotation"], "報價單")
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id, display_name, username, phone, email FROM users WHERE username=? AND active=1", (username,)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        raise HTTPException(404, "找不到這位報價人")
+    return {"id": row["id"], "displayName": row["display_name"] or row["username"], "phone": row["phone"] or "", "email": row["email"] or ""}
 
 
 @router.get("/api/users/selectable")

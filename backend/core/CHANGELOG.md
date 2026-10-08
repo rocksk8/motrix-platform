@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## (next) — 2026-10-08（wip/t47-paydate-l1：預定付款日共用提醒庫）
+## (next) — 2026-10-08（wip/t47-paydate-l1：預定付款日共用提醒庫；wip/t47-users-list-privacy：使用者清單收緊敏感欄位，L0 行為、介面不變）
 - L1（新增，向下相容）：新單位 `helpers/payable_due_core.py`（使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）——`due_kind`／`effective_send_day`／`next_working_day`／`candidate_planned_dates`（3 天前、當天、逾期＝預定日後第 1 個工作日；規則自 M01 `payable_reminders` 搬入）、`notify_finance`（財務站內通知，不含金額；寄信函式由呼叫端傳入 `run_scan(send=…)`，因為寄信必須用字面 key 呼叫 `send_registered`，守門 `test_mail_registry` 逐一核對）、`prune_guards`／`run_scan`（guard、寄送迴圈、等待上限）、`sync_event`／`CALENDAR_SOURCES`（行事曆「付款待辦」來源開關：案件額外支出、承攬商匯款、叫料匯款；**勞報單不在名單 ⇒ 零呼叫**）。純函式、不讀時鐘（日期與工作日判斷由呼叫端傳入）。
 - 信件類型 `payable_due_overdue`（預定付款日已逾期，財務群組）由 M01 登記，與 `payable_due_soon`／`payable_due_today` 同；M01 不在 ⇒ 類型未登記 ⇒ 寄信 fail-closed（只給超級管理員），已知取捨（承攬商匯款綁案件）。
 - 薄接線：M01（案件額外支出＋叫料匯款）、M04（承攬商匯款，`daily.check` 提供者 `subcontract_payable_due`）；M05 出納端點 `PATCH /api/cashier/pending-payables/{source}/{key}/planned-pay-date`、`PATCH /api/cashier/payable-queue/{voucher_no}/planned-pay-date`。
@@ -10,6 +10,10 @@
 - 測試：`modules/case/tests/test_payable_due_core_t45.py`、`modules/subcontract/tests/test_voucher_payable_due_t45.py`。
 - **獨立稽核跟進（ab，第 47 班）**：① `run_scan` 遇到 SMTP 無回應（`SEND_UNKNOWN`）或達等待上限而停止寄信後，其餘筆**仍補寫站內通知**（只有「寄信日＝今天」的候選，錯過就永遠沒有）；信件語意不變（沒寄出就不寫信件 guard）。② 新增 `payable_due_core.sync_lock(來源, key)`：同一筆的「讀現況→寫行事曆事件」序列化（兩次很快的對齊不會讓事件停在舊狀態）。
 - **上線備註（第 47 班 L1）**：站內通知的收件人**不受「信件收件人覆寫」影響**（固定寫給在職的財務角色＋superadmin，尊重個人對該信件類型的退訂）；**第一次上線時，已寄過信的提醒會各補寫一則站內通知**（站內 guard 是新的 key，與舊信件 guard 分開）。
+- **（併入）使用者清單收緊（wip/t47-users-list-privacy）**
+- ⚠ **可見度收緊（使用者 2026-10-08 裁示）**：`GET /api/users` 對一般人員（角色不是 admin／superadmin）不再回**別人**的 `email`、`phone`、`modules`（原始權限勾選）、`notificationMuted`（信件退訂）；其餘欄位（id、帳號、顯示名稱、角色、在職、部門／處、`builtinAdmin`、`createdAt`）照舊，所以各頁面的人員下拉照常。**自己那一列照舊完整**（個人設定與報價單帶入業務員資料要用）；admin／superadmin 拿到完整列，使用者管理、信件設定、組織架構頁不受影響。`/api/users/selectable` 不變。
+- 新增 `GET /api/users/sales-contact?username=`（`routers/auth.py`）：報價單『報價人』改選他人（代理）時帶入對方電話／Email 用——一次查一個人、只回 `{id, displayName, phone, email}`；需要模組 `quotation`（最高管理者直通）；對象必須是在職使用者，否則 404。取代原本從使用者清單拿別人聯絡方式的做法（清單已收緊），代理報價不會變成空白電話／Email。
+- 測試：`tests/test_users_list_privacy_t47_2026_10_08.py`（API：業務／工程師／檢視者／admin／superadmin，含自己那一列）、`tests/test_e2e_users_list_privacy_pages_t47_2026_10_08.py`（8 個頁面 × 業務／工程師）。
 
 ## 1.118 — 2026-10-07（wip/t45-r2-step1-impl：R2 第1步——D4 superadmin 全部鍵、D5 財務判斷影子模式）
 - L1（新增，向下相容）：`helpers.auth` 新增 `FINANCE_FLAG_KEY`、`finance_effective_keys(user, cache=False)`、`finance_duty_person(user)`、`reset_finance_mode_cache()`。
