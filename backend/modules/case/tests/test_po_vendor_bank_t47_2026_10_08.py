@@ -66,7 +66,7 @@ def test_account_requires_a_bank_name_on_purchase_orders_and_lengths_are_limited
     r = _post(client, world, payeeType="vendor", payeeName="甲", payeeBank="", payeeAccount="123456789")
     assert r.status_code == 400 and "銀行" in r.json()["detail"]
     assert _post(client, world, payeeType="vendor", payeeName="甲" * 61, payeeBank="玉山銀行", payeeAccount="123456789").status_code == 400
-    assert _post(client, world, payeeType="vendor", payeeName="甲", payeeBank="銀" * 61, payeeAccount="123456789").status_code == 400
+    assert _post(client, world, payeeType="vendor", payeeName="甲", payeeBank="銀" * 111, payeeAccount="123456789").status_code == 400
 
 
 def test_patch_draft_updates_and_clears_the_snapshot(client, world):
@@ -78,7 +78,9 @@ def test_patch_draft_updates_and_clears_the_snapshot(client, world):
     assert (_row(eid)["payee_name"], _row(eid)["payee_bank"], _row(eid)["payee_account"]) == ("乙", "台新銀行", "222222")
     assert client.patch(SENT + "/%d" % eid, headers=world["h"], json={**base, "payeeAccount": "abc"}).status_code == 400
     assert client.patch(SENT + "/%d" % eid, headers=world["h"], json=base).status_code == 200
-    assert _row(eid)["payee_account"] == ""
+    assert _row(eid)["payee_account"] == "222222", "沒帶收款人欄位＝保留原值"
+    assert client.patch(SENT + "/%d" % eid, headers=world["h"], json={**base, "payeeType": "vendor", "payeeName": "", "payeeBank": "", "payeeAccount": ""}).status_code == 200
+    assert _row(eid)["payee_account"] == "", "明確送空字串＝清除"
 
 
 def test_other_kinds_only_get_the_format_check_no_new_required_fields(client, world):

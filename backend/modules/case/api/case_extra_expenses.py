@@ -118,7 +118,20 @@ class ExtraExpenseIn(BaseModel):
     plannedPayDate: Optional[str] = None
 
 
-def _row_to_dict(r) -> dict:
+def _mask_acct(v) -> str:
+    """帳號只留末四碼（使用者 2026-10-08 裁示：完整帳號只給財務角色＋最高管理者，且只經出納端點、每次留稽核）。"""
+    a = str(v or "").strip()
+    return ("****" + a[-4:]) if len(a) > 4 else ("****" if a else "")
+
+
+def _masked_change(ch) -> dict:
+    """變更申請提議內容裡的 payeeAccount 也遮罩（提議會被清單／我的申請原樣帶出）。"""
+    if isinstance(ch, dict) and ch.get("payeeAccount"):
+        ch = dict(ch, payeeAccount=_mask_acct(ch["payeeAccount"]))
+    return ch
+
+
+def _row_to_dict(r, full_account: bool = False) -> dict:
     try:
         files = json.loads(r["files_json"] or "[]")
     except Exception:
@@ -162,7 +175,7 @@ def _row_to_dict(r) -> dict:
         "approval":      approval,
         # 變更申請（DB v76）——已核准之後的編輯走這條，核准才生效，見本檔末段
         "changeStatus":   _col(r, "change_status", ""),
-        "change":         _jcol(r, "change_json"),
+        "change":         _jcol(r, "change_json") if full_account else _masked_change(_jcol(r, "change_json")),
         "changeApproval": _jcol(r, "change_approval_json"),
         # 費用單據（A2；migration 0003）。舊列＝kind ''、其餘空值
         "kind":          _col(r, "kind", "") or "",
@@ -174,7 +187,7 @@ def _row_to_dict(r) -> dict:
         "payeeType":     _col(r, "payee_type", "") or "",
         "payeeName":     _col(r, "payee_name", "") or "",
         "payeeBank":     _col(r, "payee_bank", "") or "",
-        "payeeAccount":  _col(r, "payee_account", "") or "",
+        "payeeAccount":  (_col(r, "payee_account", "") or "") if full_account else _mask_acct(_col(r, "payee_account", "")),
         "payTerms":      _col(r, "pay_terms", "") or "",
         "remitDate":     _col(r, "remit_date", "") or "",
         "plannedPayDate": _col(r, "planned_pay_date", "") or "",
@@ -325,7 +338,7 @@ def _require_desc(body: ExtraExpenseIn):
         raise HTTPException(400, "請填寫品項說明")
 
 
-PAYEE_NAME_MAX, PAYEE_BANK_MAX = 60, 60
+PAYEE_NAME_MAX, PAYEE_BANK_MAX = 60, 110                        # 銀行名稱 60＋空白＋分行 40
 PAYEE_ACCOUNT_RE = re.compile(r"^[0-9]{5,20}$")                         # 只認半形數字（\d 會放行全形數字）
 
 
@@ -335,11 +348,19 @@ def _check_payee_bank(body: ExtraExpenseIn) -> None:
     acct = re.sub(r"[\s\-－]", "", body.payeeAccount or "")
     if acct and not PAYEE_ACCOUNT_RE.match(acct):
         raise HTTPException(400, "收款帳號只能是數字（5～20 碼；空白與連字號會自動去掉）")
-    body.payeeAccount = acct
+    if "payeeAccount" in (getattr(body, "model_fields_set", None) or ()):      # 沒帶的欄位不可被這裡的賦值變成『有帶』（pydantic 賦值會加進 fields_set，草稿重存／變更申請就會把空值寫下去）
+        body.payeeAccount = acct
     if len((body.payeeName or "").strip()) > PAYEE_NAME_MAX or len((body.payeeBank or "").strip()) > PAYEE_BANK_MAX:
         raise HTTPException(400, "收款人／銀行名稱太長（上限 %d 字）" % PAYEE_NAME_MAX)
     if body.kind == "purchase_order" and acct and not (body.payeeBank or "").strip():
         raise HTTPException(400, "填了收款帳號請一併填銀行名稱")
+
+
+def _payee_val(body, field, row, col) -> str:
+    """收款人欄位：請求有帶（含空字串＝明確清除）就用請求的；沒帶就保留原值（否則省略這些欄位的用戶端會把已存的收款資料洗掉）。"""
+    if field in (getattr(body, "model_fields_set", None) or ()):
+        return (getattr(body, field) or "").strip()
+    return (_col(row, col, "") or "").strip() if row is not None else ""
 
 
 def _validate(body: ExtraExpenseIn):
@@ -391,7 +412,7 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
                     or is_document_approver(_col(r, "approval_json", ""), user, conn)]
         items = []
         for r in rows:
-            d = _row_to_dict(r)
+            d = _row_to_dict(r, full_account=has_finance_access(user))
             if (d["kind"] or "") and not _amount_viewer(conn, r, user):
                 d = _mask_row(d)
             items.append(d)
@@ -586,10 +607,10 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
              now, user.get("display_name") or user["username"],
              json.dumps(data, ensure_ascii=False), EF.dumps_lines(lines),
              EF.department_of(data, body.departmentId) if row_kind else _col(row, "department_id", None),
-             body.payeeType if row_kind else (_col(row, "payee_type", "") or ""),
-             (body.payeeName or "").strip() if row_kind else (_col(row, "payee_name", "") or ""),
-             (body.payeeBank or "").strip() if row_kind else (_col(row, "payee_bank", "") or ""),
-             (body.payeeAccount or "").strip() if row_kind else (_col(row, "payee_account", "") or ""),
+             _payee_val(body, "payeeType", row, "payee_type"),
+             _payee_val(body, "payeeName", row, "payee_name"),
+             _payee_val(body, "payeeBank", row, "payee_bank"),
+             _payee_val(body, "payeeAccount", row, "payee_account"),
              normalize_date(body.plannedPayDate, "預定付款日") if body.plannedPayDate is not None else (_col(row, "planned_pay_date", "") or ""),
              exp_id, quote_no),
         )
@@ -656,7 +677,7 @@ def payreq_mine(authorization: str = Header(None)):
         for r in rows:
             if r["quote_no"] and not case_owner_readable(conn, r["quote_no"], user):      # 無案件列＝自己建立的，照列
                 continue
-            d = _row_to_dict(r)
+            d = _row_to_dict(r, full_account=has_finance_access(user))
             d.update({"quoteNo": r["quote_no"], "customerName": r["_cust"] or "", "projectName": r["_proj"] or ""})
             out.append(d)
         return out
@@ -1235,8 +1256,8 @@ def _proposal_from(body: ExtraExpenseIn, keep_files: list, row=None) -> dict:
         lines, total = EF.normalize_lines(body.lines if body.lines is not None else _jlist(row, "lines_json"))
         data = EF.normalize_data(body.data, _jcol(row, "data_json"))
         extra = {"lines": lines, "data": data, "departmentId": EF.department_of(data, body.departmentId),
-                 "payeeType": body.payeeType, "payeeName": (body.payeeName or "").strip(),
-                 "payeeBank": (body.payeeBank or "").strip(), "payeeAccount": (body.payeeAccount or "").strip(),
+                 "payeeType": _payee_val(body, "payeeType", row, "payee_type"), "payeeName": _payee_val(body, "payeeName", row, "payee_name"),
+                 "payeeBank": _payee_val(body, "payeeBank", row, "payee_bank"), "payeeAccount": _payee_val(body, "payeeAccount", row, "payee_account"),
                  "totalFromLines": total}
     return {**extra,
         "category":      body.category or "其他",

@@ -632,7 +632,8 @@
             return r ? Object.assign({}, l, { overPlanReason: r }) : l
           })
           var payee = {}
-          if (this.typeCode === 'purchase_order') {                              // 採購單廠商收款帳戶（第 47 班）：前端先擋明顯錯誤，後端另有同一組檢查
+          if (this.typeCode === 'purchase_order') {                              // 沒填也明確送空值：草稿重存時才清得掉先前存的收款資料（後端『沒帶＝保留』）
+            payee = { payeeType: 'vendor', payeeName: '', payeeBank: '', payeeAccount: '' }                              // 採購單廠商收款帳戶（第 47 班）：前端先擋明顯錯誤，後端另有同一組檢查
             var bk = (this.form.poBank || '').trim(), br = (this.form.poBranch || '').trim()
             var ac = (this.form.poAccount || '').replace(/[\s\-－]/g, ''), an = (this.form.poAccountName || '').trim()
             if (ac && !/^\d{5,20}$/.test(ac)) { this.err = '收款帳號只能是數字（5～20 碼）'; return }
