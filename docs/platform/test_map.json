@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1210,
+  "tests": 1211,
   "unmapped": 13,
   "kinds": {
    "api": 657,
-   "e2e": 296,
+   "e2e": 297,
    "audit": 148,
    "unit": 109
   },
@@ -27021,6 +27021,29 @@
      "frontend/pages/dev-crm.html"
     ]
    }
+  },
+  "backend/tests/test_e2e_users_duty_role_chip_t48_2026_10_09.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/users.html",
+    "router:duty_roles"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/routers/duty_roles.py"
+    ],
+    "page": [
+     "frontend/pages/users.html"
+    ],
+    "path": [
+     "frontend/pages/users.html"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_users_duty_roles_2026_10_08.py": {
    "kind": "e2e",
