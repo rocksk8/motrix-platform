@@ -84,7 +84,7 @@
         <template x-if="isSuper && settingsOpen && settings">
         <div class="bn-card" data-testid="bn-settings">
           <div class="bn-sec">預設比例（新建草稿時帶入，每案可改）</div>
-          <div class="bn-row">獎金比率（淨利的 %）<input class="bn-in" x-model="settings.ratePct"> %</div>
+          <div class="bn-row">獎金比率（營業利益的 %）<input class="bn-in" x-model="settings.ratePct"> %</div>
           <template x-for="c in cats" :key="c">
             <div class="bn-row"><span x-text="catLabels[c] + '比例'"></span><input class="bn-in" x-model="settings.split[c]"> %</div>
           </template>
@@ -180,7 +180,7 @@
                   <template x-if="!detail.award">
                     <div>
                       <div class="bn-kv">
-                        <div>精算淨利<b x-text="detail.netProfit === null || detail.netProfit === undefined ? '—' : money(detail.netProfit)"></b></div>
+                        <div>精算營業利益<b x-text="detail.netProfit === null || detail.netProfit === undefined ? '—' : money(detail.netProfit)"></b></div>
                         <div>預設比率<b x-text="pct(detail.defaults.rate_bp) + '%'"></b></div>
                         <div>預設分配<b x-text="cats.map(c => catLabels[c] + ' ' + pct(detail.defaults.split_bp[c]) + '%').join('／')"></b></div>
                       </div>
@@ -205,7 +205,7 @@
                   <!-- 有單據：摘要（最高管理者／出納） -->
                   <template x-if="detail.award && detail.summary">
                     <div class="bn-kv">
-                      <div x-show="detail.scope === 'all'">精算淨利<b x-text="money(detail.award.net_profit)"></b></div>
+                      <div x-show="detail.scope === 'all'">精算營業利益<b x-text="money(detail.award.net_profit)"></b></div>
                       <div x-show="detail.scope === 'all'">獎金比率<b x-text="pct(detail.award.rate_bp) + '%'"></b></div>
                       <div x-show="detail.scope === 'all'">獎金池<b x-text="money(detail.summary.poolAmount)" data-testid="bn-pool"></b></div>
                       <div>發放合計<b x-text="money(detail.summary.paidTotal)" data-testid="bn-paid-total"></b></div>

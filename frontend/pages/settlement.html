@@ -387,7 +387,7 @@
         </div>
       </template>
 
-      <!-- ── (a) 高階摘要列：報價／總成本／毛利／最終淨利／與原始差額（sticky；顏色之外一律附圖示與文字）── -->
+      <!-- ── (a) 高階摘要列：報價／總成本／毛利／最終營業利益／與原始差額（sticky；顏色之外一律附圖示與文字）── -->
       <div class="stl-strip" data-testid="stl-strip">
         <div class="stl-kpis">
           <template x-for="k in stripKpis" :key="k.key">
@@ -557,7 +557,7 @@
                     </template>
                   </td>
 
-                  <!-- 毛利欄：每個品項賺多少（只算到毛利；管理費／公益／淨利只在總結） -->
+                  <!-- 毛利欄：每個品項賺多少（只算到毛利；管理費／公益／營業利益只在總結） -->
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :data-testid="'stl-profit-' + item.id">
                     <div style="font-size:18px;font-weight:800;line-height:1.2" :style="{ color: itemProfit(item) < 0 ? 'var(--danger)' : 'var(--success)' }"
                          x-text="(itemProfit(item) < 0 ? '−' : '') + 'NT$ ' + fmt(Math.abs(itemProfit(item)))"></div>
@@ -829,7 +829,7 @@
       <div class="stl-card" data-testid="stl-profit-card">
         <div class="stl-card__head">
           <div class="stl-card__title">四之一、每個品項的賺賠（毛利）</div>
-          <div style="font-size:11px;color:var(--text-dim)">品項只算到毛利；管理費、公益捐贈、淨利只在下方「利潤分析」</div>
+          <div style="font-size:11px;color:var(--text-dim)">品項只算到毛利；管理費、公益捐贈、營業利益只在下方「利潤分析」</div>
         </div>
         <div class="stl-pf noprint" data-testid="stl-pf">
           <b>篩選</b>
@@ -912,10 +912,10 @@
           </div>
         </div>
         <div class="stl-card__body">
-          <!-- 標題：精算後最終淨利（比原始報價多／少多少） -->
+          <!-- 標題：精算後最終營業利益（比原始報價多／少多少） -->
           <div data-testid="stl-headline" style="padding:12px 16px;border-radius:10px;border:2px solid;display:flex;flex-wrap:wrap;gap:4px 18px;align-items:baseline"
                :style="{ background: summary.profitDiff < 0 ? 'var(--danger-hover-bg)' : 'var(--success-light)', borderColor: summary.profitDiff < 0 ? 'var(--stl-bad-line)' : 'var(--stl-ok-line)' }">
-            <span style="font-size:13px;font-weight:700;color:var(--text-secondary)">精算後真實淨利（最終淨利）</span>
+            <span style="font-size:13px;font-weight:700;color:var(--text-secondary)">精算後真實營業利益（最終營業利益）</span>
             <span data-testid="stl-net" style="font-size:30px;font-weight:800;line-height:1.1;font-family:LINE Seed TW_OTF, sans-serif"
                   :style="{ color: summary.netProfit < 0 ? 'var(--danger)' : 'var(--success)' }" x-text="(summary.netProfit < 0 ? '−' : '') + 'NT$ ' + fmt(Math.abs(summary.netProfit))"></span>
             <span data-testid="stl-headline-diff" style="font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif"
@@ -948,7 +948,7 @@
           </div>
           <!-- 圖表（inline SVG；數字取自上方表格同一組 summary，不另算）-->
           <div class="stl-charts" data-testid="stl-charts">
-            <div class="stl-chcard stl-chcard--wide" role="group" aria-labelledby="stl-cht-br" aria-describedby="stl-chd-br"><div class="stl-chcard__t" id="stl-cht-br">① 從報價到最終淨利（橋接圖）</div><p class="stl-sr-only" id="stl-chd-br" x-text="chartDescBridge"></p><div x-html="chartBridge"></div><div class="stl-chcard__n">長條長度＝金額；紅＝扣減；數字一律標在長條右端。</div></div>
+            <div class="stl-chcard stl-chcard--wide" role="group" aria-labelledby="stl-cht-br" aria-describedby="stl-chd-br"><div class="stl-chcard__t" id="stl-cht-br">① 從報價到最終營業利益（橋接圖）</div><p class="stl-sr-only" id="stl-chd-br" x-text="chartDescBridge"></p><div x-html="chartBridge"></div><div class="stl-chcard__n">長條長度＝金額；紅＝扣減；數字一律標在長條右端。</div></div>
             <div class="stl-chcard" role="group" aria-labelledby="stl-cht-pr" aria-describedby="stl-chd-pr"><div class="stl-chcard__t" id="stl-cht-pr">② 原始 vs 精算後</div><p class="stl-sr-only" id="stl-chd-pr" x-text="chartDescPair"></p><div x-html="chartPair"></div><div class="stl-chcard__n">灰色虛線＝原始（估計）；彩色＝精算後；▲▼ 為與原始差額（成本類：高＝紅）。</div></div>
             <div class="stl-chcard" role="group" aria-labelledby="stl-cht-it" aria-describedby="stl-chd-it"><div class="stl-chcard__t" id="stl-cht-it">③ 各品項毛利（由高到低）</div><p class="stl-sr-only" id="stl-chd-it" x-text="chartDescItems"></p><div x-html="chartItems"></div><div class="stl-chcard__n">✖＝虧損；括號內為毛利比。</div></div>
           </div>
@@ -966,7 +966,7 @@
           <div><div style="color:var(--text-secondary)">資料截至</div><b x-text="_loadedAt.toLocaleString('zh-TW', { hour12: false })"></b></div>
           <div><div style="color:var(--text-secondary)">精算日期</div>
             <input type="date" class="stl-input" x-model="settlement.settlementDate" :disabled="settlement.status === 'finalized'" style="max-width:160px"></div>
-          <div><div style="color:var(--text-secondary)">管理費／公益</div><b x-text="adminHow(summary) + '；公益＝毛利×1%（毛利為負時以 0 計；淨利只在總結區顯示）'"></b></div>
+          <div><div style="color:var(--text-secondary)">管理費／公益</div><b x-text="adminHow(summary) + '；公益＝毛利×1%（毛利為負時以 0 計；營業利益只在總結區顯示）'"></b></div>
         </div>
       </div>
 
@@ -1005,7 +1005,7 @@
                           :style="summary.grossProfit >= 0 ? 'color:#15803D;font-weight:600' : 'color:#DC2626;font-weight:600'"></span>
       （<span x-text="summary.grossMarginPct.toFixed(1) + '%'"></span>）<br>
       <span x-text="adminShort(summary)"></span> + 公益（1%）：NT$ <span x-text="fmt(summary.adminCost + summary.charityDonation)"></span><br>
-      <b>真實淨利：NT$ <span x-text="fmt(summary.netProfit)"
+      <b>真實營業利益：NT$ <span x-text="fmt(summary.netProfit)"
                           :style="summary.netProfit >= 0 ? 'color:#15803D' : 'color:#DC2626'"></span>
       （<span x-text="summary.netMarginPct.toFixed(1) + '%'"
               :style="summary.netMarginPct >= 20 ? 'color:#15803D;font-weight:600' : 'color:#DC2626;font-weight:600'"></span>）</b>
@@ -1069,7 +1069,7 @@ function stlRangeChart(rows, o) {
   const axis = `<line x1="${x(0).toFixed(1)}" y1="0" x2="${x(0).toFixed(1)}" y2="${H}" style="stroke:var(--text-primary);stroke-width:1"/>`
   return `<svg role="img" aria-label="${stlEsc(o.aria)}" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;height:auto;display:block" data-testid="${o.id}">${axis}${g}</svg>`
 }
-// ① 橋接圖：報價 → −各項成本 → 毛利 → −管理費 → −公益 → 最終淨利
+// ① 橋接圖：報價 → −各項成本 → 毛利 → −管理費 → −公益 → 最終營業利益
 function stlBridgeSvg(d, f) {
   const C = STL_CH, rows = [], tot = (id, label, v, fill) => ({ id, label, lo: Math.min(0, v), hi: Math.max(0, v), v, fill, text: f(v), tip: label + ' ' + f(v) })
   rows.push(tot('rev', '報價（稅前收入）', d.rev, C.dark))
@@ -1079,10 +1079,10 @@ function stlBridgeSvg(d, f) {
   rows.push(Object.assign(tot('gp', '毛利', d.gp, d.gp < 0 ? C.bad : C.good), { text: (d.gp < 0 ? '✖ ' : '＝ ') + f(d.gp) }))
   cur = d.gp
   dec('admin', '管理費（報價×10%）', d.admin); dec('ch', '公益捐贈（毛利×1%）', d.ch)
-  rows.push(Object.assign(tot('net', '最終淨利', d.net, d.net < 0 ? C.bad : C.good), { text: (d.net < 0 ? '✖ ' : '＝ ') + f(d.net) }))
-  return stlRangeChart(rows, { id: 'stl-ch-bridge', aria: '報價到最終淨利的橋接圖：報價 ' + f(d.rev) + '，總成本 ' + f(d.cost) + '，毛利 ' + f(d.gp) + '，最終淨利 ' + f(d.net) })
+  rows.push(Object.assign(tot('net', '最終營業利益', d.net, d.net < 0 ? C.bad : C.good), { text: (d.net < 0 ? '✖ ' : '＝ ') + f(d.net) }))
+  return stlRangeChart(rows, { id: 'stl-ch-bridge', aria: '報價到最終營業利益的橋接圖：報價 ' + f(d.rev) + '，總成本 ' + f(d.cost) + '，毛利 ' + f(d.gp) + '，最終營業利益 ' + f(d.net) })
 }
-// ② 原始 vs 精算後：報價／總成本／毛利／最終淨利
+// ② 原始 vs 精算後：報價／總成本／毛利／最終營業利益
 function stlPairSvg(d, f) {
   const C = STL_CH, rows = []
   d.metrics.forEach(m => {
@@ -1090,7 +1090,7 @@ function stlPairSvg(d, f) {
     rows.push({ id: m.id + '-o', label: m.label + '｜原始', lo: Math.min(0, m.o), hi: Math.max(0, m.o), v: m.o, fill: C.origFill, stroke: C.origStroke, dash: true, text: f(m.o), tip: m.label + ' 原始 ' + f(m.o) })
     rows.push({ id: m.id + '-a', label: m.label + '｜精算後', lo: Math.min(0, m.a), hi: Math.max(0, m.a), v: m.a, fill: same ? C.dark : good ? C.good : C.bad, text: f(m.a) + '　' + (same ? '＝' : (diff > 0 ? '▲ +' : '▼ −') + f(Math.abs(diff))), tfill: same ? 'var(--text-primary)' : good ? C.good : C.bad, tip: m.label + ' 精算後 ' + f(m.a) })
   })
-  return stlRangeChart(rows, { id: 'stl-ch-pair', rowH: 30, rightW: 220, aria: '原始與精算後對照：報價、總成本、毛利、最終淨利' })
+  return stlRangeChart(rows, { id: 'stl-ch-pair', rowH: 30, rightW: 220, aria: '原始與精算後對照：報價、總成本、毛利、最終營業利益' })
 }
 // ③ 各品項毛利（由高到低；虧損紅色＋✖；附毛利比）
 function stlItemsSvg(items, f, pf) {
@@ -1404,14 +1404,14 @@ function settlementPage() {
           R('b1-cost', '實際總成本', '原始＝未稅 Σ(數量×成本)；精算後＝品項含稅(×1.05)＋承攬商含稅＋額外未分稅（後端同源）', sm.origTotalCost, sm.totalActualCost, 'cost'),
           R('b1-gp', '真實毛利', '報價 − 總成本（原始毛利另扣進項稅 5%）', sm.origDirectProfit, sm.grossProfit, 'good', { strong: true, neg: true }),
           R('b1-gpp', '真實毛利率', '毛利比＝毛利 ÷ 報價', pct(sm.origDirectProfit), pct(sm.grossProfit), 'good', { pct: true }),
-          R('b1-pre', '未扣費用淨利', '＝毛利（尚未扣管理費、公益）', sm.origDirectProfit, sm.grossProfit, 'good', { neg: true }),
+          R('b1-pre', '扣費用前（直接毛利）', '＝毛利（尚未扣管理費、公益）', sm.origDirectProfit, sm.grossProfit, 'good', { neg: true }),
         ] },
         { key: 'after', title: '② 扣管理費／公益後', rows: [
           R('b2-admin', MotrixProfitRules.adminLabel(sm.formulaVer || 1, sm.overheadPct), this.adminHow(sm), sm.origAdminCost, sm.adminCost, 'cost'),
           R('b2-ch', '公益捐款（1%）', '公益捐贈＝毛利 × 1%（毛利為負時以 0 計）', sm.origCharity, sm.charityDonation, 'cost'),
-          ...(sm.origIndirectReserve > 0 ? [R('b2-reserve', '報價預留間接成本', '報價單淨利已扣的間接成本預算＝間接合計 − 管銷 − 公益（原始端資訊）', sm.origIndirectReserve, null, 'cost', { info: true })] : []),
-          R('b2-net', '真實淨利', '最終淨利＝毛利 − 管理費 − 公益捐贈（＝獎金分潤基數）', sm.origNetProfit, sm.netProfit, 'good', { strong: true, neg: true, diffNote: sm.origIndirectReserve > 0 ? '其中報價預留間接成本 ' + this.fmt(sm.origIndirectReserve) + '（原始預估已扣、實際只計單據）' : '' }),
-          R('b2-netp', '真實淨利率', '淨利比＝最終淨利 ÷ 報價', pct(sm.origNetProfit), pct(sm.netProfit), 'good', { pct: true }),
+          ...(sm.origIndirectReserve > 0 ? [R('b2-reserve', '報價預留間接成本', '報價單營業利益已扣的間接成本預算＝間接合計 − 管銷 − 公益（原始端資訊）', sm.origIndirectReserve, null, 'cost', { info: true })] : []),
+          R('b2-net', '真實營業利益', '最終營業利益＝毛利 − 管理費 − 公益捐贈（＝獎金分潤基數）', sm.origNetProfit, sm.netProfit, 'good', { strong: true, neg: true, diffNote: sm.origIndirectReserve > 0 ? '其中報價預留間接成本 ' + this.fmt(sm.origIndirectReserve) + '（原始預估已扣、實際只計單據）' : '' }),
+          R('b2-netp', '真實營業利益率', '營業利益比＝最終營業利益 ÷ 報價', pct(sm.origNetProfit), pct(sm.netProfit), 'good', { pct: true }),
         ] },
       ]
     },
@@ -1437,11 +1437,11 @@ function settlementPage() {
     // 圖表的文字替代（螢幕閱讀器；數字與上方表格同源）
     get chartDescBridge() {
       const sm = this.summary, f = n => this.fmt(n)
-      return '從報價到最終淨利：報價 ' + f(sm.quotedPretax) + '，總實際成本 ' + f(sm.totalActualCost) + '，毛利 ' + f(sm.grossProfit) + '，管銷分攤 ' + f(sm.adminCost) + '，公益捐款 ' + f(sm.charityDonation) + '，最終淨利 ' + f(sm.netProfit) + '。同樣的數字見下方「每個品項的賺賠」表與扣費前後兩個區塊。'
+      return '從報價到最終營業利益：報價 ' + f(sm.quotedPretax) + '，總實際成本 ' + f(sm.totalActualCost) + '，毛利 ' + f(sm.grossProfit) + '，管銷分攤 ' + f(sm.adminCost) + '，公益捐款 ' + f(sm.charityDonation) + '，最終營業利益 ' + f(sm.netProfit) + '。同樣的數字見下方「每個品項的賺賠」表與扣費前後兩個區塊。'
     },
     get chartDescPair() {
       const sm = this.summary, f = n => this.fmt(n)
-      return '原始與精算後：總成本 ' + f(sm.origTotalCost) + ' 變為 ' + f(sm.totalActualCost) + '；毛利 ' + f(sm.origDirectProfit) + ' 變為 ' + f(sm.grossProfit) + '；最終淨利 ' + f(sm.origNetProfit) + ' 變為 ' + f(sm.netProfit) + '。'
+      return '原始與精算後：總成本 ' + f(sm.origTotalCost) + ' 變為 ' + f(sm.totalActualCost) + '；毛利 ' + f(sm.origDirectProfit) + ' 變為 ' + f(sm.grossProfit) + '；最終營業利益 ' + f(sm.origNetProfit) + ' 變為 ' + f(sm.netProfit) + '。'
     },
     get chartDescItems() {
       return '各品項毛利（由高到低）：' + this.settlement.items.slice().sort((a, b) => this.itemProfit(b) - this.itemProfit(a)).map(i => '#' + this.itemNo(i.id) + ' ' + (i.origDescription || '') + ' ' + this.fmt(this.itemProfit(i)) + '（' + this.pctTxt(this.itemPct(i)) + '）').join('；') + '。'
@@ -1458,7 +1458,7 @@ function settlementPage() {
         { id: 'rev', label: '報價', o: sm.quotedPretax, a: sm.quotedPretax, kind: 'good' },
         { id: 'cost', label: '總成本', o: sm.origTotalCost, a: sm.totalActualCost, kind: 'cost' },
         { id: 'gp', label: '毛利', o: sm.origDirectProfit, a: sm.grossProfit, kind: 'good' },
-        { id: 'net', label: '最終淨利', o: sm.origNetProfit, a: sm.netProfit, kind: 'good' },
+        { id: 'net', label: '最終營業利益', o: sm.origNetProfit, a: sm.netProfit, kind: 'good' },
       ] }, n => this.fmt(n))
     },
     get chartItems() {
@@ -1530,8 +1530,8 @@ function settlementPage() {
         { key: 'rev', label: '報價（稅前收入）', value: 'NT$ ' + this.fmt(rev), sub: '折扣／調整 ' + signed(this.quoteAdjust), status: '', cls: 'n', tip: '報價單稅前收入（未稅）；來源：報價單' },
         { key: 'cost', label: '總成本', value: 'NT$ ' + this.fmt(sm.totalActualCost), sub: '原始 ' + this.fmt(sm.origTotalCost), status: sm.totalActualCost > sm.origTotalCost ? '▲ 高於原始' : sm.totalActualCost < sm.origTotalCost ? '▼ 低於原始' : '＝原始', cls: sm.totalActualCost > sm.origTotalCost ? 'a' : 'g', tip: '總實際成本＝品項實際（估計含稅 ×1.05）＋未對應項目（派發未稅、額外未分稅）；與伺服器 totalActualCost 同源；原始總成本為未稅，兩者口徑不同' },
         { key: 'gp', label: '毛利／毛利比', value: signed(sm.grossProfit), value2: this.pctTxt(rev > 0 ? sm.grossMarginPct : null), neg: sm.grossProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origMarginPct : null), status: gpCls === 'r' ? '✖ 虧損' : gpCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: gpCls, tip: '毛利＝報價 − 總成本；毛利比＝毛利 ÷ 報價（未扣管理費、公益）' },
-        { key: 'net', label: '最終淨利／淨利比', value: signed(sm.netProfit), value2: this.pctTxt(rev > 0 ? sm.netMarginPct : null), neg: sm.netProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origNetMarginPct : null), status: netCls === 'r' ? '✖ 虧損' : netCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: netCls, tip: '最終淨利＝毛利 − 管理費（報價×10%）− 公益（毛利×1%）' },
-        { key: 'diff', label: '與原始差額（淨利）', value: (d > 0 ? '+' : d < 0 ? '−' : '') + 'NT$ ' + f(d), neg: d < 0, sub: '原始 ' + this.fmt(sm.origNetProfit), status: d < 0 ? '▼ 少賺' : d > 0 ? '▲ 多賺' : '＝原始', cls: d < 0 ? 'r' : 'g', tip: '差額＝精算後最終淨利 − 原始（報價單估計）最終淨利' },
+        { key: 'net', label: '最終營業利益／營業利益比', value: signed(sm.netProfit), value2: this.pctTxt(rev > 0 ? sm.netMarginPct : null), neg: sm.netProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origNetMarginPct : null), status: netCls === 'r' ? '✖ 虧損' : netCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: netCls, tip: '最終營業利益＝毛利 − 管理費（報價×10%）− 公益（毛利×1%）' },
+        { key: 'diff', label: '與原始差額（營業利益）', value: (d > 0 ? '+' : d < 0 ? '−' : '') + 'NT$ ' + f(d), neg: d < 0, sub: '原始 ' + this.fmt(sm.origNetProfit), status: d < 0 ? '▼ 少賺' : d > 0 ? '▲ 多賺' : '＝原始', cls: d < 0 ? 'r' : 'g', tip: '差額＝精算後最終營業利益 − 原始（報價單估計）最終營業利益' },
       ]
     },
     get exceptionsList() {
@@ -1769,7 +1769,7 @@ function settlementPage() {
     convertBannerText() {
       const tax = this.dispatchTaxTotal()
       return '此精算草稿存於 35c 的未稅口徑（承攬商成本 NT$ ' + this.fmt(this.dispatchPretax()) + '）。精算現已全部含稅：轉換後承攬商成本 NT$ ' + this.fmt(this.dispatchGross())
-        + '（＋' + this.fmt(tax) + '），總成本、毛利、淨利（獎金基數）隨之變動。完結前必須轉換。'
+        + '（＋' + this.fmt(tax) + '），總成本、毛利、營業利益（獎金基數）隨之變動。完結前必須轉換。'
     },
     convertToTaxed() {
       this._draftBasis = 'taxed'
@@ -1900,13 +1900,13 @@ function settlementPage() {
       const netMarginPct    = quotedPretax > 0 ? netProfit / quotedPretax * 100 : 0
 
       const origAdminCost   = tot.adminCost != null ? tot.adminCost : MotrixProfitRules.adminCost(quotedPretax, origDirectProfit, tot.overheadPct, tot.formulaVer || 1)
-      // 原始側同規則：報價單原始毛利＜0 ⇒ 公益金 0、原始淨利＝毛利 − 管銷（報價單存的舊值可能帶負的公益金，不沿用）
+      // 原始側同規則：報價單原始毛利＜0 ⇒ 公益金 0、原始營業利益＝毛利 − 管銷（報價單存的舊值可能帶負的公益金，不沿用）
       const origFloor       = origDirectProfit < 0
       const origCharity     = origFloor ? 0 : (tot.charityDonation != null ? tot.charityDonation : MotrixProfitRules.charity(origDirectProfit))
-      // 報價預留間接成本（原始端資訊）：報價單淨利早已扣掉；實際端以單據為準、不另算。開著的草稿用報價單數字算；已完結讀存檔 summary（舊案沒有 ⇒ 0＝不顯示）
+      // 報價預留間接成本（原始端資訊）：報價單營業利益早已扣掉；實際端以單據為準、不另算。開著的草稿用報價單數字算；已完結讀存檔 summary（舊案沒有 ⇒ 0＝不顯示）
       const origIndirectReserve = frz ? (typeof frz.origIndirectReserve === 'number' ? frz.origIndirectReserve : 0)
         : (typeof tot.totalIndirect === 'number' ? Math.max(0, tot.totalIndirect - origAdminCost - origCharity) : 0)
-      // 原始淨利：報價單存的淨利優先；否則 毛利 − 管銷 − 公益 − 預留（與後端 original_side 同一恆等式）
+      // 原始營業利益：報價單存的營業利益優先；否則 毛利 − 管銷 − 公益 − 預留（與後端 original_side 同一恆等式）
       const origNetProfit   = tot.netProfit != null ? tot.netProfit : (origDirectProfit - origAdminCost - origCharity - origIndirectReserve)
       const origNetMarginPct = tot.netMarginPct != null ? tot.netMarginPct
         : (quotedPretax > 0 ? origNetProfit / quotedPretax * 100 : 0)

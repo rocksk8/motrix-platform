@@ -53,7 +53,7 @@ window.CM_PARTS.push(() => ({
       const t = item && item.actualTotalCost, v2 = Number(this.caseSettlement()?.schemaVersion) >= 2
       return v2 ? (t !== null && t !== undefined && t !== '') : ((+t || 0) > 0)
     },
-    // 公益金顯示：≥0（含 0；有下限後的資料）照舊以「− 金額」表示扣除；舊的已凍結負值（會加回淨利）直接顯示帶號金額，不再出現「− −50」
+    // 公益金顯示：≥0（含 0；有下限後的資料）照舊以「− 金額」表示扣除；舊的已凍結負值（會加回營業利益）直接顯示帶號金額，不再出現「− −50」
     caseSettleCharityText(n) { n = +n || 0; return n >= 0 ? '− ' + this.caseSettleFmt(n) : this.caseSettleFmt(n) },
     caseSettleItemCost(item) { return this.caseSettleItemFilled(item) ? this.caseSettleFmt(item.actualTotalCost) : '未填寫' },
     caseSettleExtras()  { return this.caseSettlement()?.extraItems || [] },

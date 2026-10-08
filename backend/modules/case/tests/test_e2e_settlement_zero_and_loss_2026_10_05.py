@@ -110,7 +110,7 @@ def test_loss_case_charity_is_zero_with_a_note_and_profitable_case_is_unchanged(
     page = _open(e2e_browser, live_server, sa)
     s = page.evaluate(f"() => ({{...{S}.summary}})")
     assert s["grossProfit"] < 0 and s["charityDonation"] == 0, s
-    assert s["netProfit"] == s["grossProfit"] - s["adminCost"], s                                    # 淨利＝毛利 − 管銷（公益 0）
+    assert s["netProfit"] == s["grossProfit"] - s["adminCost"], s                                    # 營業利益＝毛利 − 管銷（公益 0）
     assert s["origDirectProfit"] < 0 and s["origCharity"] == 0 and s["origNetProfit"] == s["origDirectProfit"] - s["origAdminCost"], s
     note = page.locator('[data-testid="stl-charity-floor-note"]')
     note.wait_for(state="visible", timeout=5000)
@@ -160,7 +160,7 @@ def test_quotation_form_charity_floor(live_server, make_user, e2e_browser):
     page.wait_for_function(f"() => {{ const d = {S}; return d && d.q && d.q.items && d.q.items.length && d.tot && d.tot.pretax > 0 }}", timeout=20000)
     t = page.evaluate(f"() => ({{...{S}.tot}})")
     assert t["directProfit"] < 0 and t["charityDonation"] == 0, t                                    # 虧損 ⇒ 公益 0（不是負數）
-    assert t["netProfit"] == t["directProfit"] - t["totalIndirect"], t                               # 淨利＝直接毛利 − 間接（含管銷；公益 0）
+    assert t["netProfit"] == t["directProfit"] - t["totalIndirect"], t                               # 營業利益＝直接毛利 − 間接（含管銷；公益 0）
     note = page.locator('[data-testid="qf-charity-floor-note"]')
     note.wait_for(state="visible", timeout=5000)
     assert "虧損案公益金以 0 計" in note.inner_text()
@@ -169,8 +169,8 @@ def test_quotation_form_charity_floor(live_server, make_user, e2e_browser):
 
 @pytest.mark.e2e
 def test_original_column_shows_the_indirect_reserve_so_it_adds_up(live_server, make_user, e2e_browser):
-    """報價單的「間接成本預算」（tot.totalIndirect − 管銷 − 公益，例：物流 5,000）：原始欄多一列資訊列，原始淨利＝報價單淨利；
-    差額欄在最終淨利列說明「其中 間接成本預算 X；實際端以單據為準」；補上等額的實際支出後，淨利只因公益金差一點點。"""
+    """報價單的「間接成本預算」（tot.totalIndirect − 管銷 − 公益，例：物流 5,000）：原始欄多一列資訊列，原始營業利益＝報價單營業利益；
+    差額欄在最終營業利益列說明「其中 間接成本預算 X；實際端以單據為準」；補上等額的實際支出後，營業利益只因公益金差一點點。"""
     import db
     sa = make_user(username="sa_sa", role="superadmin")
     _seed()
@@ -178,7 +178,7 @@ def test_original_column_shows_the_indirect_reserve_so_it_adds_up(live_server, m
                                               "totalIndirect": 2000 + 90 + 5000, "netProfit": 9000 - 2000 - 90 - 5000, "totalCost": 11025}))
     page = _open(e2e_browser, live_server, sa)
     s = page.evaluate(f"() => ({{...{S}.summary}})")
-    assert s["origNetProfit"] == 1910, s                                                              # ＝報價單淨利
+    assert s["origNetProfit"] == 1910, s                                                              # ＝報價單營業利益
     assert s["origIndirectReserve"] == 5000 and s["origDirectProfit"] - s["origAdminCost"] - s["origCharity"] - s["origIndirectReserve"] == s["origNetProfit"]  # 原始欄加得起來
     row = page.locator('[data-testid="stl-b2-reserve"]')
     row.wait_for(state="visible", timeout=5000)
@@ -187,7 +187,7 @@ def test_original_column_shows_the_indirect_reserve_so_it_adds_up(live_server, m
     note = page.locator('[data-testid="stl-diffnote-b2-net"]').inner_text()
     assert "其中報價預留間接成本 5,000（原始預估已扣、實際只計單據）" in note, note
     net_before, ch_before = s["netProfit"], s["charityDonation"]
-    # 補一筆等額 5,000 的實際（額外）支出 ⇒ 實際端淨利減少 5,000，只因公益金（1% 毛利）少一點點而差一些
+    # 補一筆等額 5,000 的實際（額外）支出 ⇒ 實際端營業利益減少 5,000，只因公益金（1% 毛利）少一點點而差一些
     c = db.get_db()
     try:
         c.execute("INSERT INTO case_extra_expenses (quote_no, category, description, qty, unit, unit_cost, total_cost, note, expense_date, doc_no, files_json, "
@@ -202,7 +202,7 @@ def test_original_column_shows_the_indirect_reserve_so_it_adds_up(live_server, m
     page.wait_for_function(f"() => !{S}.loading && {S}._actualsOk && {S}.summary.totalActualCost > 0", timeout=20000)
     s2 = page.evaluate(f"() => ({{...{S}.summary}})")
     assert s2["netProfit"] - net_before == -5000 + (ch_before - s2["charityDonation"]), (s, s2)
-    # 沒有報價單間接預算（舊報價單／沒填）⇒ 不出現資訊列、淨利列沒有說明
+    # 沒有報價單間接預算（舊報價單／沒填）⇒ 不出現資訊列、營業利益列沒有說明
     _set_data(lambda d: d.__setitem__("tot", {"pretax": 20000, "total": 21000}))
     page.reload()
     page.wait_for_function(f"() => !{S}.loading && {S}._actualsOk && {S}.summary.quotedPretax === 20000", timeout=20000)

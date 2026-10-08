@@ -62,7 +62,7 @@ def test_bn12_a_pending_award_previews_with_the_unsigned_watermark_but_cannot_ex
     aid = _seed_award("MQ-BN12-P", ["bn12_p"], status="待審核")
     html = _preview(client, sup, aid)
     assert any(UNSIGNED in t for t in _wm_titles(html)), "待審核的預覽沒有「尚未簽核完成」浮水印"
-    assert "真實淨利" in html, "預覽裡沒有精算明細表（與 PDF 不是同一份版面？）"
+    assert "真實營業利益" in html, "預覽裡沒有精算明細表（與 PDF 不是同一份版面？）"
     r = client.get("%s/%s/pdf-download" % (AWARDS, aid), headers=sup)
     assert r.status_code == 400, "待審核的單竟然匯得出 PDF（%s）—— 匯出閘門不見了" % r.status_code
 

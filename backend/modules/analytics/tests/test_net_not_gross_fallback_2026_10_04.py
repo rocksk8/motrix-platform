@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""T38 F9：營運報表／儀表板的「實際毛利」不可在淨利為 0 時退回毛利；儀表板只算 finalized、比的是淨利率。
+"""T38 F9：營運報表／儀表板的「實際毛利」不可在營業利益為 0 時退回毛利；儀表板只算 finalized、比的是營業利益率。
 
-`settle.get("netProfit") or settle.get("grossProfit")` 把「淨利剛好 0」當成「沒有這個欄位」⇒ 顯示毛利（payroll/bonus.py 的〈null 不等於 0〉）。
+`settle.get("netProfit") or settle.get("grossProfit")` 把「營業利益剛好 0」當成「沒有這個欄位」⇒ 顯示毛利（payroll/bonus.py 的〈null 不等於 0〉）。
 舊 finalized（沒有 netProfit／netMarginPct 鍵）仍走毛利，值不改寫。
 """
 import json
@@ -118,7 +118,7 @@ def test_dashboard_legacy_finalized_without_net_keys_uses_gross(client, make_use
     assert cmp["T38-D4"]["actualMarginPct"] == 40.0 and cmp["T38-D4"]["grossProfit"] == 4000
 
 
-# ── 字樣：預估／實際都是淨利口徑 ⇒ 標「淨利」；舊精算（沒有 netProfit 鍵）的實際欄加註 ────────────────────
+# ── 字樣：預估／實際都是營業利益口徑 ⇒ 標「營業利益」；舊精算（沒有 netProfit 鍵）的實際欄加註 ────────────────────
 
 LEGACY_NOTE = "（舊精算為毛利）"
 
@@ -143,7 +143,7 @@ def test_legacy_flag_only_on_summaries_without_the_net_profit_key(client):
     _case("T38-L-ZERO", {"netProfit": 0, "netMarginPct": 0, "grossProfit": 30000, "grossMarginPct": 30.0})
     cases = {c["quoteNo"]: c for c in _collect("2026-01-01", "2026-12-31")["casesAll"]}
     assert cases["T38-L-NEW"]["actualIsGross"] is False
-    assert cases["T38-L-ZERO"]["actualIsGross"] is False            # 淨利 0 是真的 0，不是舊精算
+    assert cases["T38-L-ZERO"]["actualIsGross"] is False            # 營業利益 0 是真的 0，不是舊精算
     assert cases["T38-L-OLD"]["actualIsGross"] is True
 
 
@@ -157,7 +157,7 @@ def test_excel_headers_say_net_note_only_on_legacy_rows_and_sheet_name_is_unchan
     assert "毛利分析" in wb.sheetnames and "利潤分析" not in wb.sheetnames        # 使用者裁：工作表名不改
     ws = wb["案件清單"]
     cells = [str(c.value) for row in ws.iter_rows() for c in row if c.value is not None]
-    assert {"預估淨利率", "實際淨利率", "實際淨利"} <= set(cells)
+    assert {"預估營業利益率", "實際營業利益率", "實際營業利益"} <= set(cells)
     assert not {"預估毛利率", "實際毛利率", "實際毛利"} & set(cells)
     rows = {r[0].value: r for r in ws.iter_rows() if r[0].value in ("T38-L-NEW", "T38-L-OLD")}
     assert LEGACY_NOTE in str(rows["T38-L-OLD"][12].value)
@@ -173,7 +173,7 @@ def test_pdf_html_labels_are_net_and_note_only_on_legacy_rows(client):
     html = _build_report_html(data, lab, "t")
     for gone in ("預估毛利率", "實際毛利率", "實際毛利<", "精算實際毛利合計", "平均淨毛利率", "年度實際毛利"):
         assert gone not in html, gone
-    for there in ("預估淨利率", "實際淨利率", "精算實際淨利合計", "利潤分析"):
+    for there in ("預估營業利益率", "實際營業利益率", "精算實際營業利益合計", "利潤分析"):
         assert there in html, there
     assert html.count(LEGACY_NOTE) >= 1
     # 新格式案件的列不帶註記：整份只有舊案那兩處（案件清單＋利潤分析）才出現
@@ -203,7 +203,7 @@ def test_screen_page_and_script_use_net_wording_and_the_same_legacy_note():
         assert gone not in page, gone
     for gone in ("預估毛利率", "實際毛利率", "平均毛利率", "平均淨毛利率", "年度實際毛利"):
         assert gone not in js, gone
-    for there in ("預估淨利率", "實際淨利率", "預估淨利", "實際淨利", "精算實際淨利", "利潤分析", "淨利率比較"):
+    for there in ("預估營業利益率", "實際營業利益率", "預估營業利益", "實際營業利益", "精算實際營業利益", "利潤分析", "營業利益率比較"):
         assert there in page, there
     assert page.count(LEGACY_NOTE) == 4                              # 兩張案件表＋利潤分析表的實際率與實際金額
     assert page.count("actualIsGross") == 4

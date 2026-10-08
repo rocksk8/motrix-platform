@@ -92,7 +92,7 @@ def test_closing_pdf_cost_basis_notes_add_text_only():
 def test_settlement_rows_labels_are_untouched():
     from modules.payroll.bonus import SETTLEMENT_ROWS
     assert [r[1] for r in SETTLEMENT_ROWS] == ["報價稅前收入", "品項實際成本", "額外支出", "承攬商派發成本", "實際總成本", "真實毛利", "真實毛利率",
-                                               "管銷分攤（10%）", "公益捐款（1%）", "真實淨利", "真實淨利率"]
+                                               "管銷分攤", "公益捐款（1%）", "真實營業利益", "真實營業利益率"]
 
 
 # ── ③ 稽核 T39 ───────────────────────────────────────────────────────────────────
