@@ -83,7 +83,7 @@ def test_cash_basis_also_skips_linked_orders(W):
     assert [e["source_key"] for e in _gl() if e["event_code"] == "E12b"] == ["%s::N" % NO]
 
 
-def test_order_with_paid_history_is_never_treated_as_po_linked_so_paid_money_stays_in_cash(W):
+def test_order_with_paid_history_is_never_treated_as_po_linked_so_paid_money_stays_in_cash(W, client):
     """c7 預審：舊單有已付歷史（3000，2026-08-01），之後才連到有效採購單 ⇒ 不視為連結，已付的錢仍在現金口徑（不消失）。"""
     c, h = W
     po = _approved_po(c, h, [_ln("a", 3, unitCost=1000)])

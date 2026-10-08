@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1200,
-  "unmapped": 12,
+  "tests": 1202,
+  "unmapped": 13,
   "kinds": {
-   "api": 653,
-   "e2e": 293,
+   "api": 654,
+   "e2e": 294,
    "audit": 145,
    "unit": 109
   },
@@ -17,6 +17,7 @@
   "backend/tests/platform/test_deploy_dashboard_health.py",
   "backend/tests/platform/test_deploy_dashboard_jobs.py",
   "backend/tests/platform/test_deploy_dashboard_scope_gate_2026_09_30.py",
+  "backend/tests/platform/test_no_import_time_clock_2026_10_09.py",
   "backend/tests/platform/test_no_leaky_tempdirs.py",
   "backend/tests/platform/test_no_swallowed_dict_keys_2026_10_03.py",
   "backend/tests/test_approval_queue_extra_types_2026_09_30.py",
@@ -8221,7 +8222,7 @@
    "module": "case"
   },
   "backend/modules/case/tests/test_settlement_actuals_conservation_2026_10_03.py": {
-   "kind": "unit",
+   "kind": "api",
    "units": [
     "core:db",
     "dir:backend/modules/case/",
@@ -17951,6 +17952,11 @@
     ]
    }
   },
+  "backend/tests/platform/test_no_import_time_clock_2026_10_09.py": {
+   "kind": "unit",
+   "units": [],
+   "evidence": {}
+  },
   "backend/tests/platform/test_no_install_path_detection.py": {
    "kind": "audit",
    "units": [
@@ -26734,6 +26740,23 @@
     ],
     "path": [
      "frontend/pages/storage-settings.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_supplier_log_plain_roles_2026_10_09.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/supplier-log.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/supplier-log.html"
     ]
    }
   },

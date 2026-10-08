@@ -125,7 +125,7 @@ def test_offsets_move_money_between_buckets_but_never_change_the_total(W):
     assert after["sources"]["materialAssigned"] == 250 and after["sources"]["extraAssigned"] == 700
 
 
-def test_cash_basis_report_equals_gl_for_materials_and_adopt_toggle_never_changes_purchased(W):
+def test_cash_basis_report_equals_gl_for_materials_and_adopt_toggle_never_changes_purchased(W, client):
     c, h = W
     po = _approved_po(c, h, [_ln("a", 3, unitCost=1000)])
     _put_materials([_order("K", 3, 3000, quoteItemId="a", poDocCode=po["docCode"]),

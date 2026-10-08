@@ -264,7 +264,7 @@ def _ups(calls, code):
     return {c[2]: c for c in calls if c[0] == "up" and c[1] == code}
 
 
-def test_warranty_source_only_won_cases_future_expiry_and_no_money(calls):
+def test_warranty_source_only_won_cases_future_expiry_and_no_money(calls, client):
     from modules.case import case_deadlines as cd
     start = (_today() - timedelta(days=330)).isoformat()                          # 12 個月 ⇒ 約 35 天後到期
     old = (_today() - timedelta(days=900)).isoformat()                            # 早已過期
@@ -293,7 +293,7 @@ def test_warranty_source_only_won_cases_future_expiry_and_no_money(calls):
     assert calls == [("del", "warranty_expiry", "Q-W1#i0")]                    # 不再是已成案 ⇒ 刪
 
 
-def test_project_end_source_open_cases_only_and_follows_edits(calls):
+def test_project_end_source_open_cases_only_and_follows_edits(calls, client):
     from modules.case import case_deadlines as cd
     _quote("Q-P1", "已成案", {"projectTimeline": {"endDate": _d(10)}})
     _quote("Q-P2", "已結案", {"projectTimeline": {"endDate": _d(10)}})
@@ -315,7 +315,7 @@ def test_project_end_source_open_cases_only_and_follows_edits(calls):
     assert [(c[0], c[2], c[3]) for c in calls] == [("up", "Q-P1", _d(20))]
 
 
-def test_range_task_source_unfinished_only_without_assignee_names(calls):
+def test_range_task_source_unfinished_only_without_assignee_names(calls, client):
     from modules.daily_tasks import api as dt
     import db
     conn = db.get_db()
