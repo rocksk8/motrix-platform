@@ -475,7 +475,7 @@ def test_sl16_no_new_hits_means_no_mail(radar_ready, monkeypatch):
     )
 
 
-def test_sl4_data_lands_even_outside_the_notify_slots(radar_ready, monkeypatch):
+def test_sl4_data_lands_even_outside_the_notify_slots(radar_ready, monkeypatch, client):
     """🔴 SL4：非寄信時段抓到新標案 → **資料要進資料庫**（當下不寄）。
 
     ⚠️ **斷言的重心刻意放在「資料有進去」**（D 指出）——
@@ -580,7 +580,7 @@ def test_sl5_each_mail_only_contains_hits_new_since_the_last_one(
 
 
 def test_sl7_clearing_the_fetch_log_does_not_resend_the_mail(
-        radar_ready, monkeypatch):
+        radar_ready, monkeypatch, client):
     """🔴 SL7：**通知的標記與抓取的標記分開** —— 清掉抓取紀錄不可以讓信重寄。
 
     ## 🔑 這個理由是可查證的，不只是「語意上該分開」
@@ -917,7 +917,7 @@ def test_sl17_an_empty_new_key_must_not_fall_back_to_the_old_one(
 
 
 def test_sl23_the_first_run_after_an_upgrade_does_not_double_fetch(
-        radar_bare, monkeypatch):
+        radar_bare, monkeypatch, client):
     """🔴 SL23：**升級當下「新標記還不存在」，不可以被誤判成「沒抓過」而多抓一輪。**
 
     ## 兩個方向都要防（A 與 D 各推出一個）
