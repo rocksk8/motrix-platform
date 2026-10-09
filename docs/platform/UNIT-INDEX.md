@@ -92,5 +92,5 @@
 | `helper:tax_calc` | L1 | 稅額純函式（L1；2026-09-26 自 M01 `helpers/quotations.py` 下沉，主持核准「T」）。（無單位卡） | 12 | 8 | — |
 | `helper:tiered_approval` | L1 | 共用的 tiers 依序簽核純邏輯（2026-08-22）。（無單位卡） | 31 | 33 | — |
 | `helper:uploads` | L1 | 通用「已開立/已回簽單據」附件上傳（2026-08-24）：報價單回簽、出貨單回簽、（無單位卡） | 19 | 28 | — |
-| `helper:validation` | L1 | 請求本文的共用驗證（第 49 班 W1c-P2）。 | 2 | 16 | — |
+| `helper:validation` | L1 | 請求本文的共用驗證（第 49 班 W1c-P2）。 | 2 | 16 | `tests/test_strict_bool_helper_t49.py` |
 | `helper:xlsx_out` | L1 | L1 輸出：Excel 樣式、公式注入防護、匯出速率限制（ROADMAP A8／DEPENDENCY-MAP §3 #10 #13）。（無單位卡） | 15 | 11 | — |

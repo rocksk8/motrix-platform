@@ -2,7 +2,8 @@
 """請求本文的共用驗證（第 49 班 W1c-P2）。
 
 [單位] helper:validation    [層] L1    [穩定度] 實作
-[公開介面] strict_bool(value, field), body_flag(body, key, default=False)
+[公開介面] body_flag、strict_bool
+[契約題] tests/test_strict_bool_helper_t49.py
 
 🔴 為什麼有這一支：`bool(body.get("flag"))` 與 `1 if body.get("flag") else 0` 會把 JSON 字串 `"false"`、`"0"`、`""` 當成 **true**。
 前端送真正的布林所以平時無事，但 API 直打、舊用戶端或腳本只要多帶一個引號，**關卡（確認旗標、`accept_warnings`、緊急開關…）就被繞過**。

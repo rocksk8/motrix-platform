@@ -25,6 +25,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import nowindow  # noqa: E402
+
 HERE = Path(__file__).resolve().parent
 ALLOW_FILE = HERE / "final_verify_allow.json"
 
@@ -652,6 +655,7 @@ def render_markdown(results, root, tag=""):
 
 
 def main(argv=None):
+    nowindow.install()                                   # 預設不跳視窗（MOTRIX_SHOW_WINDOWS=1 可關掉）
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:                                                # noqa: BLE001
@@ -680,4 +684,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    nowindow.install()                                   # 入口先裝（main() 裡也會裝，這裡讓靜態守門認得）
     sys.exit(main())

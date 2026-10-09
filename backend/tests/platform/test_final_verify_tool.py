@@ -202,9 +202,12 @@ def test_route_auth_layers(tmp_path, monkeypatch):
     assert _by(F.check_route_auth(tmp_path), "V3.2a")[0].status == F.FAIL
 
 
+_FE = "frontend"      # 合成樹裡的目錄名（不是讀真實頁面）
+
+
 def test_frontend_calls_dangling(tmp_path):
     _api_tree(tmp_path)
-    _w(tmp_path, "frontend/pages/p.html",
+    _w(tmp_path, _FE + "/pages/p.html",
        "<script>fetch('/api/things/list'); fetch(`/api/things/${id}/go`); fetch('/api/things/' + id + '/go'); fetch(`/api/things/${a}/${b}${qs}`)\n"
        "fetch('/api/nothing/here'); // /api/vouchers/{x}/...\n</script>")
     miss = F.find_dangling_frontend_calls(tmp_path)

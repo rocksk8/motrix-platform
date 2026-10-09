@@ -629,10 +629,10 @@ def _work_log_fields(conn, body: dict, keys) -> dict:
     if "user_id" in keys and "user_id" in body:
         v = body["user_id"]
         if isinstance(v, bool) or not isinstance(v, (int, str)) or not str(v).strip().lstrip("-").isdigit():
-            raise HTTPException(422, "記錄對象格式不正確")
+            raise HTTPException(422, "人員格式不正確")
         v = int(v)
         if conn.execute("SELECT 1 FROM users WHERE id=?", (v,)).fetchone() is None:
-            raise HTTPException(422, "找不到記錄對象")
+            raise HTTPException(422, "找不到這位人員")
         out["user_id"] = v
     if "content" in keys and "content" in body:
         v = body["content"]
