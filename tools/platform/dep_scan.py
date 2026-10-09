@@ -209,6 +209,26 @@ def _docstring_only(p: Path) -> bool:
     return all(isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant) for n in body)
 
 
+def _router_vars(tree: ast.Module) -> dict[str, str]:
+    """檔內所有 `<名稱> = APIRouter(...)` ⇒ {變數名: 自己的 prefix}。
+    🔴 第 49 班（端點稽核 W1a）：以前只認名為 `router` 的變數，而且全檔共用「最後一個 APIRouter 的 prefix」——
+    `ledger_category_map.list_router`（`GET /api/expense-categories`）因此從路由歸屬檢查消失、前綴沒宣告也沒人發現。
+    現在每個 APIRouter 變數各自帶自己的 prefix，裝飾器 `@<變數>.get(...)` 都算。"""
+    out: dict[str, str] = {}
+    for n in ast.walk(tree):
+        if (isinstance(n, ast.Assign) and isinstance(n.value, ast.Call)
+                and (getattr(n.value.func, "id", None) == "APIRouter"
+                     or getattr(n.value.func, "attr", None) == "APIRouter")):
+            pre = ""
+            for kw in n.value.keywords:
+                if kw.arg == "prefix" and isinstance(kw.value, ast.Constant):
+                    pre = kw.value.value
+            for t in n.targets:
+                if isinstance(t, ast.Name):
+                    out[t.id] = pre
+    return out
+
+
 def _is_router_file(tree: ast.Module) -> bool:
     return any(isinstance(n, ast.Assign) and isinstance(n.value, ast.Call)
                and getattr(n.value.func, "id", None) == "APIRouter"
@@ -343,13 +363,7 @@ def router_prefixes_from_main() -> dict[str, str]:
 
 
 def router_routes(tree: ast.Module, main_prefix: str) -> list[dict]:
-    own = ""
-    for node in ast.walk(tree):
-        if (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
-                and getattr(node.value.func, "id", None) == "APIRouter"):
-            for kw in node.value.keywords:
-                if kw.arg == "prefix" and isinstance(kw.value, ast.Constant):
-                    own = kw.value.value
+    rvars = _router_vars(tree)
     routes = []
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -357,8 +371,8 @@ def router_routes(tree: ast.Module, main_prefix: str) -> list[dict]:
         for d in node.decorator_list:
             if (isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute)
                     and d.func.attr in HTTP_METHODS and isinstance(d.func.value, ast.Name)
-                    and d.func.value.id == "router" and d.args and isinstance(d.args[0], ast.Constant)):
-                routes.append({"method": d.func.attr.upper(), "path": main_prefix + own + d.args[0].value,
+                    and d.func.value.id in rvars and d.args and isinstance(d.args[0], ast.Constant)):
+                routes.append({"method": d.func.attr.upper(), "path": main_prefix + rvars[d.func.value.id] + d.args[0].value,
                                "func": node.name, "line": node.lineno})
     return routes
 
@@ -612,14 +626,16 @@ SYNTHETIC_FILES = {
     "backend/modules/zz_mod/api.py": (
         "from fastapi import APIRouter\nfrom modules.zz_mod import work\nfrom . import util\n"
         "from modules.zz_mod.service import calc\n"
-        "router = APIRouter()\n@router.get(\"/api/zz-mod/run\")\ndef run():\n    return work.go()\n"),
+        "router = APIRouter()\n@router.get(\"/api/zz-mod/run\")\ndef run():\n    return work.go()\n"
+        # 第二個 APIRouter 變數、自己的 prefix（端點稽核 W1a：原本只認名為 router 的變數 ⇒ 這類路由從歸屬檢查消失）
+        "list_router = APIRouter(prefix=\"/api/zz-pub\")\n@list_router.get(\"/list\")\ndef pub():\n    return 1\n"),
     # 子目錄裡的檔（CORE-SPEC §3 的 api/、service/）：原本 dep_scan 只掃第一層 ⇒ 這裡的跨組 import 看不到
     "backend/modules/zz_mod/service/calc.py": "from routers.zz_beta import beta_public\n",
     "backend/modules/zz_mod/tests/test_zz.py": "from routers.zz_alpha import get_item\n",   # 反向控制：tests 不算模組的檔
     "backend/modules/zz_mod/work.py": "def go():\n    return \"DELETE FROM zz_log\"\n",
     "backend/modules/zz_mod/util.py": "X = 1\n",
     "backend/modules/zz_mod/module.json": (
-        '{"key": "zz_mod", "tables": ["zz_log"], "provides": {"api_prefixes": ["/api/zz-mod"]}}\n'),
+        '{"key": "zz_mod", "tables": ["zz_log"], "provides": {"api_prefixes": ["/api/zz-mod", "/api/zz-pub"]}}\n'),
     "frontend/pages/zz.html": (
         "<script src=\"../js/zz.js\"></script>\n<script>\nconst API = '/api'\n"
         "fetch(`${API}/zz-alpha/items/${id}`)\n</script>\n"),
@@ -635,7 +651,7 @@ SYNTHETIC_MODULES = {
         "MB": {"key": "zz_b", "name": "乙", "units": ["router:zz_beta"], "tables": [], "api_prefixes": ["/api/zz-beta"]},
         "MC": {"key": "zz_mod", "name": "丙", "units": ["mod:zz_mod/__init__", "mod:zz_mod/api", "mod:zz_mod/work",
                                                     "mod:zz_mod/util", "mod:zz_mod/service/calc"], "tables": ["zz_log"],
-               "api_prefixes": ["/api/zz-mod"]},
+               "api_prefixes": ["/api/zz-mod", "/api/zz-pub"]},
     },
     "retired": {},
 }
@@ -656,6 +672,8 @@ def _synthetic_checks(U: dict) -> list[tuple[str, bool]]:
          {"router:zz_alpha", "mod:zz_mod/api"} <= set(U.get("page:pages/zz.html", {}).get("routers_called_effective", []))),
         ("模組 router 角色與路由", U.get("mod:zz_mod/api", {}).get("role") == "router"
          and "/api/zz-mod" in U.get("mod:zz_mod/api", {}).get("api_prefixes", [])),
+        ("第二個 APIRouter 變數（list_router）的路由用自己的 prefix 被掃到；router 的路由不被它的 prefix 污染",
+         sorted(r["path"] for r in U.get("mod:zz_mod/api", {}).get("routes", [])) == ["/api/zz-mod/run", "/api/zz-pub/list"]),
         ("模組內 import（modules.<key> 與相對 import）",
          {"mod:zz_mod/work", "mod:zz_mod/util"} <= set(U.get("mod:zz_mod/api", {}).get("imports", []))),
         ("模組 → 平台（core.<file>）", "plat:zz_reg" in U.get("mod:zz_mod/__init__", {}).get("imports", [])),

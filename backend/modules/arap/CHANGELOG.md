@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## (next) — 2026-10-09（wip/t49-05-bonus-cleanup）：移除憑據／請款單詳情與 PDF 端點裡不可達的 `if not row`
+- `api/invoice_vouchers.py`、`api/payment_requests.py`：`get_*`／`download_*_pdf` 在 `_guard_voucher` 與 `conn.close()` 之後的 `if not row: raise 404`（上方已處理 `not row`，永遠進不來）共 4 處刪除；行為不變。
+
 ## 1.0.46 — 2026-10-08（第 47 班整合）：出納 hook 記錄標籤微調
 - `api/cashier.py`：承攬商匯款改預定日後呼叫提供者的記錄標籤由 `contractor_voucher.planned_changed` 改為「承攬商匯款 planned_changed」（原標籤與串接能力名同字串，被船運分級守門判成未解析取用）；行為不變。
 

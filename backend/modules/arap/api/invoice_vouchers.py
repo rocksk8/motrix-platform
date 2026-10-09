@@ -291,8 +291,6 @@ def get_invoice_voucher(voucher_no: str, authorization: str = Header(None)):
         raise HTTPException(404, "單據不存在")
     _guard_voucher(conn, row, user)
     conn.close()
-    if not row:
-        raise HTTPException(404, f"憑據 {voucher_no} 不存在")
     return _voucher_public(row)
 
 
@@ -752,8 +750,6 @@ def download_invoice_voucher_pdf(voucher_no: str, authorization: str = Header(No
         raise HTTPException(404, "單據不存在")
     _guard_voucher(conn, row, user)
     conn.close()
-    if not row:
-        raise HTTPException(404, "憑據不存在")
     try:
         pdf_bytes = generate_invoice_voucher_pdf_bytes(voucher_no)
     except (ValueError, RuntimeError) as e:
