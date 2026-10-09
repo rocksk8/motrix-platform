@@ -8,8 +8,9 @@
 
 # 🔴 這一支**不重算任何係數**
 
-營業利益的算式只寫在一個地方（`frontend/pages/settlement.html`，儲存時算），
-後端兩個讀它的地方（`pdf_gen.py`／`routers/reports.py`）都是**讀已存值**。
+營業利益的算式只寫在一個地方（第 48 班起：`backend/helpers/profit_rules.py`，前端同式 `frontend/static/profit-rules.js`；
+完結時由 `settlement_actuals.fill_downstream` 以伺服器重算值寫進 summary），
+後端讀它的地方（`pdf_gen.py`／`routers/reports.py`／本檔）都是**讀已存值**。
 ```
 獎金若自己再乘一次 => **第三份實作，而三份一定會分岔**
 => 分岔之後「獎金算出來跟精算頁對不上」會被當成**精算頁的錯**

@@ -67,6 +67,16 @@ def admin_cost_label(summary, orig=False, hide_default=False) -> str:
     return "管銷分攤（直接毛利 %s%%）" % (int(p) if p == int(p) else p)
 
 
+def estimated_margin_label(summary) -> str:
+    """未完成精算的結案報表『預估…率』列標籤（第 50 班稽核）：這個數字是 summary.netMarginPct＝營業利益率。
+    新口徑（summary.formulaVer>=2）⇒「預估營業利益率」；舊口徑／無戳記 ⇒ 維持舊字樣「預估淨毛利率」（歷史不動）。"""
+    try:
+        v2 = int((summary or {}).get("formulaVer") or 1) >= 2
+    except (TypeError, ValueError):
+        v2 = False
+    return "預估營業利益率" if v2 else "預估淨毛利率"
+
+
 def _orig_reserve_row(summary, money=None):
     """39：原始預估欄的「報價預留間接成本」資訊列（`origIndirectReserve`＝報價 totalIndirect − 管銷 − 公益；原始營業利益已扣掉它）。
     沒有這個鍵（舊完結案）或為 0 ⇒ 空字串（輸出逐位元不變）。"""
@@ -2696,7 +2706,7 @@ def _build_case_closing_html(data: dict) -> str:
             '以下僅列報價階段的預估數字，實際成本、真實毛利／營業利益待精算完結後才會顯示。</div>'
             '<div class="total-box" style="justify-content:flex-start"><div class="total-table" style="width:320px">'
             f'<div class="row"><span>報價稅前收入</span><span>{money(data["pretax"])}</span></div>'
-            f'<div class="row"><span>預估淨毛利率</span><span>{float(summary.get("netMarginPct") or 0):.1f}%</span></div>'
+            f'<div class="row"><span>{estimated_margin_label(summary)}</span><span>{float(summary.get("netMarginPct") or 0):.1f}%</span></div>'
             '</div></div>'
         )
 

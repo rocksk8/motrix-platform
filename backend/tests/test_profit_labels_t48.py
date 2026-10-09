@@ -15,12 +15,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BACKEND = os.path.dirname(HERE)
 ROOT = os.path.dirname(BACKEND)
 TABLE = json.load(open(os.path.join(BACKEND, "data", "profit_labels_t48.json"), encoding="utf-8"))
+#: 掃描的舊字樣：主字樣「淨利」＋表內 extra_old_terms（例：「淨毛利率」——第 50 班稽核發現它不含「淨利」兩字而漏網）
+TERMS = ["淨利"] + list(TABLE.get("extra_old_terms", []))
 
 #: 還沒改的檔（原因）——所屬切片合併後必須從這裡移除
 PENDING = {
 }
 #: 只剩歷史說明性註解／DDL 註解，不是畫面字樣
 HISTORICAL_COMMENTS = {
+    "backend/pdf_gen.py": "舊口徑歷史字樣「預估淨毛利率」（estimated_margin_label 的舊口徑分支；新口徑一律「預估營業利益率」，test_estimated_margin_label_follows_the_basis）",
     "backend/helpers/profit_rules.py": "ab：docstring「營業利益（舊稱淨利）」",
     "backend/db.py": "bonus_case_awards DDL 註解（凍住的歷史）",
     "backend/routers/system.py": "舊設計說明註解",
@@ -46,8 +49,9 @@ def _scan(extra_excluded=()):
                     s = open(p, encoding="utf-8").read()
                 except (UnicodeDecodeError, OSError):
                     continue
-                if "淨利" in s:
-                    out[rel] = s.count("淨利")
+                n = sum(s.count(t) for t in TERMS)
+                if n:
+                    out[rel] = n
     return out
 
 
@@ -165,3 +169,17 @@ def test_no_old_admin_fee_wording_in_frontend_and_non_test_backend():
                 except (UnicodeDecodeError, OSError):
                     continue
     assert not stray, "這些檔還有舊字樣「管理費」（請改『管銷分攤』／走口徑感知標籤）：%s" % stray
+
+
+def test_the_scanner_also_knows_the_extra_old_terms():
+    """正對照：『預估淨毛利率』不含『淨利』兩字，舊掃描器看不到；現在 TERMS 含『淨毛利率』。"""
+    assert "淨毛利率" in TERMS
+    assert sum("預估淨毛利率".count(t) for t in TERMS) == 1
+
+
+def test_estimated_margin_label_follows_the_basis():
+    import pdf_gen
+    assert pdf_gen.estimated_margin_label({"formulaVer": 2}) == "預估營業利益率"
+    assert pdf_gen.estimated_margin_label({"formulaVer": "2"}) == "預估營業利益率"
+    for old in ({}, None, {"formulaVer": 1}, {"formulaVer": None}, {"formulaVer": "x"}):
+        assert pdf_gen.estimated_margin_label(old) == "預估淨毛利率", old        # 舊口徑歷史不動
