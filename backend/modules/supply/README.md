@@ -19,6 +19,11 @@
 - 提供 IP-18 `shipping.list_for_case`：M01 案件整包的出貨單段
 - 提供 IP-19 `stock.serial`：M01 案件設備序號認領／釋放庫存（呼叫端連線、不 commit）
 
+## 第 46～51 班追加（文件同步 DOCSYNC-T52；細節與版本見 CHANGELOG）
+
+- **旗標嚴格解析**（1.0.23）：`POST /api/shipping-notes/{no}/approve` 的 `cascade` 只收真布林（字串 `"false"` ⇒ 422、什麼都不寫）。
+- `suppliers.html`（1.0.22）：聯絡人區塊在 `form` 尚未載入時不再丟 `Cannot read properties of undefined`。
+
 ## 本模組不在時
 - 案件頁「出貨單」分頁顯示「採購・庫存・出貨模組未安裝：沒有出貨單資料」，不顯示新增鈕
 - 案件設備序號照常存檔、不同步庫存；有序號變動時存檔狀態列顯示「已儲存；設備序號未同步庫存：採購・庫存・出貨模組未安裝」
