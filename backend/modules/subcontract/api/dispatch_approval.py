@@ -10,6 +10,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 
 from db import get_db
 from core.txn import begin_write
+from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers import (_require_user, _tok, _audit, _notify, require_any_module,
                      active_tiers as _active_tiers, current_tier_idx as _current_tier_idx,
                      setting_to_active_tiers as _setting_to_active_tiers,
@@ -154,6 +155,7 @@ def dispatch_review_submit(did, user, authorization, st: Stage, *, allowed_from,
 
 
 def dispatch_review_approve(did, body, user, authorization, st: Stage, *, on_done=None):
+    _cascade = body_flag(body, "cascade")          # 第50班 W1c-P2b：先驗旗標（字串 "false" 以前會替簽核人自動簽完剩下的層）
     conn = get_db()
     try:
         begin_write(conn)
@@ -177,7 +179,7 @@ def dispatch_review_approve(did, body, user, authorization, st: Stage, *, on_don
         display = user.get("display_name") or user["username"]
         tier_done = sign_first_pending(tiers[ct], user, now, conn=conn) if tiers else True
         cascaded = (cascade_self_tiers(tiers, ct, user["username"], now, conn=conn)
-                    if (tiers and tier_done and (body or {}).get("cascade")) else [])
+                    if (tiers and tier_done and _cascade) else [])
         appr["tiers"] = tiers
         appr["currentTier"] = (ct + 1 + len(cascaded)) if tier_done else ct
         done = appr["currentTier"] >= len(tiers)

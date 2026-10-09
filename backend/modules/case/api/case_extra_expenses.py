@@ -41,6 +41,7 @@ from pydantic import BaseModel
 from core.txn import begin_write
 from db import get_db
 from modules.case import payable_calendar as PC   # 行事曆「付款待辦」（預定付款日；預設關）
+from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers.case_access import deny_case, require_case   # M01-O1：逐案拒絕＝查無（同一個 404）
 from helpers import row_access
 from helpers.uploads import purge_document_files, UPLOAD_LIMITS_BY_SUBFOLDER      # 草稿刪除時一併刪實體檔案（第44班）
@@ -944,6 +945,7 @@ def approve_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default=
     """
     quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
+    _cascade = body_flag(body, "cascade")          # 第50班 W1c-P2b：先驗旗標（字串 "false" 以前會替簽核人自動簽完剩下的層）
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
@@ -980,7 +982,7 @@ def approve_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default=
         # 同一人連任多層時一次簽完（2026-09-15）：前端確認過才會帶 cascade=true；
         # 只吃「剩下未簽的全是他（或他代理的人）」的連續層，不替同層的別人簽。
         cascaded = (cascade_self_tiers(tiers, ct, user["username"], now, conn=conn)
-                    if (tiers and tier_done and (body or {}).get("cascade")) else [])
+                    if (tiers and tier_done and _cascade) else [])
 
         appr["tiers"] = tiers
         appr["currentTier"] = (ct + 1 + len(cascaded)) if tier_done else ct
@@ -1581,6 +1583,7 @@ def approve_change_request(quote_no: str, exp_id: int, body: dict = Body(default
     完全不動——這正是使用者要的「原核准金額不動，核准後才生效」。"""
     quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
+    _cascade = body_flag(body, "cascade")          # 第50班 W1c-P2b：先驗旗標（字串 "false" 以前會替簽核人自動簽完剩下的層）
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
@@ -1618,7 +1621,7 @@ def approve_change_request(quote_no: str, exp_id: int, body: dict = Body(default
         # 同一人連任多層時一次簽完（2026-09-15）：前端確認過才會帶 cascade=true；
         # 只吃「剩下未簽的全是他（或他代理的人）」的連續層，不替同層的別人簽。
         cascaded = (cascade_self_tiers(tiers, ct, user["username"], now, conn=conn)
-                    if (tiers and tier_done and (body or {}).get("cascade")) else [])
+                    if (tiers and tier_done and _cascade) else [])
 
         appr["tiers"] = tiers
         appr["currentTier"] = (ct + 1 + len(cascaded)) if tier_done else ct
