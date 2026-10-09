@@ -135,3 +135,36 @@ L2 模組**不互相 import**，一律經 provider；提供者不在 ⇒ 少那�
 
 新增或改動跨模組寫入時：同一個 commit 補註解＋更新本表。
 
+## 10. 利潤口徑：管銷分攤、公益捐款、營業利益（不是金流，但決定獎金基數與營運報表數字）
+> 來源：`plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`（使用者 2026-10-09 表單裁示）、`backend/helpers/profit_rules.py`（唯一算式）、`backend/modules/case/profit_guard.py`（伺服器把關）、`plans/OVERHEAD-25PCT-CUTOVER-RUNBOOK-T48.md`。這一節只寫與金額有關的規則；改動時的戳記規則見 MODULE-GUIDE §14.5。
+
+### 10.1 現行算式（`overhead_rule_mode`）
+| 項目 | 舊口徑（`formulaVer` 缺＝1） | 新口徑（`formulaVer = 2`） |
+|---|---|---|
+| 直接毛利 | 報價稅前 − 總成本 − 進項稅 | 同左 |
+| **管銷分攤** | 報價稅前 × **10%**（固定） | **max(直接毛利, 0) × 比率**；預設 **25%**；**每張報價單一個比率** |
+| 公益捐款 | max(0, 直接毛利 × 1%) | 同左（T52 預定改基數，見 10.4） |
+| 運輸物流／安裝施工／差異項／保固預估／其他（**五項舊間接成本**） | 計入間接成本合計 | **不計**（使用者 2026-10-09：費用一律走請款申請）；舊值留在 `data_json.indirect*`，不歸零，只供歷史與回滾 |
+| **營業利益**（舊稱稅後淨利） | 直接毛利 − 管銷 − 公益 − 五項 | 直接毛利 − 管銷 − 公益 |
+| 營業利益率 | 營業利益 ÷ 報價稅前，警示門檻 12%（<12 紅、<20 黃） | 同左 |
+- **直接毛利為負 ⇒ 管銷 0**（Q2）；精算端的管銷基數＝精算**實際**毛利（稅前 − 實際總成本），比率取報價單存值（Q4）。
+- **誰能改比率**：只有最高管理者（superadmin），伺服器端把關——非最高管理者送出與存值不同的比率 ⇒ 403（`legacy` 模式也擋）；偏離全域預設要在 UI 警示並寫稽核（動作 `quotation.overhead_pct_change`）。全域預設與口徑開關：`GET／PUT /api/overhead/settings`（PUT 只有最高管理者）。新建報價單＝全域預設；複製為新單也用全域預設（Q8）。
+- **口徑開關 `overhead_rule_mode`**：`legacy`（預設，數字不變）｜`v2`；切到 `v2` 要 `confirm:true` 且 `overhead_migration_done`（既有未精算報價單已遷移）。
+- **上線狀態**：口徑已在正式機切到 `v2`（2026-10-10 00:59，48b 切換；重算 35 張未精算報價單、已精算 10 張略過且 `data_json` 雜湊前後逐張相同；詳見正式機回報 `…_管銷切換_成功`）。**已精算／結案**（`settle_status=finalized` 或 `deal_tag=已結案`）一律保留舊值、舊口徑，歷史不回改。
+
+### 10.2 對其他金流／報表的影響
+- **獎金（E8 `bonus`、E8b `bonus_correction`）**：基數讀**完結當下凍結**的 `summary.netProfit`，不自己重算 ⇒ 已完結案不變；重新開啟再完結才用新算法。畫面用語「營業利益」，內部鍵 `netProfit`／`BASE_FIELD` 不改。
+- **營運報表／儀表板**：『平均營業利益率』『預估營業利益』『年度實際營業利益』的合計與平均**同時含兩種口徑**（未精算＝新、已精算＝舊），本班不拆口徑、只加註記（設計稿 §12.1）。打平點＝直接毛利率 40%（低於 40% 新口徑營業利益較高、高於 40% 較低）。
+- **收入、支出、傳票**：不受影響——含稅總額、稅額、請款、收款、付款都不因口徑改變。
+
+### 10.3 五項舊間接成本在新口徑下被忽略的後果
+- 新口徑重算時 `tot.totalIndirect` ＝ 管銷 ＋ 公益；重算前的舊 `totalIndirect` 留在 `tot._legacy`（回滾還原用）。
+- 遷移前報告（`overhead_migrate.py report`）列出「舊五項非零」的未精算單：這些單的營業利益會因此再上升一個舊值的金額（除了管銷改 25% 的變化）。正式機切換時此類單為 0 張（X＝0）。
+
+### 10.4 預定變更：公益捐款改「報價含稅 1%」（第 52 班，**尚未上線**）
+> 規格：`docs/platform/plans/CHARITY-QUOTE-1PCT-DESIGN-T52.md`（使用者裁示）。以下是規格摘要，**上線後以程式為準並更新本節**。
+- 新規則 `charityBasis = "total"`：公益捐款＝max(0, 四捨五入(**報價含稅金額 `tot.total`** × 1%))；**不看直接毛利、虧損案照扣**；精算端用**報價單**的含稅額（不隨實際成本變動），凍結為 `quotedTotal`。營業利益＝直接毛利 − 管銷 − 公益（管銷算式不變）。
+- 方向：含稅額 ≥ 稅前 ≥ 直接毛利 ⇒ 公益金只增不減、營業利益只減不增（增量約 1% × (含稅額 − 直接毛利)，約為含稅額的 0.6～1%）；12% 門檻達標件數會下降（`charity_migrate.py report` 列「達標件數 舊→新」）。價格（含稅總額、稅額）不變。
+- 範圍：只重算**未結案**且 `formulaVer = 2` 的報價單；已結案與 `formulaVer = 1` 不動。**不新增 `formulaVer 3`**，公益基另用戳記 `tot.charityBasis`（由伺服器蓋）。
+- 開關：`charity_basis_mode`（`direct`｜`total`，預設 `direct`＝上線零行為變更）＋ `charity_migration_done`；有效條件＝`overhead_rule_mode=v2` 且 `overhead_migration_done` 且 `charity_migration_done` 且 mode＝`total`，缺一就當 `direct`。離線工具 `backend/tools/charity_migrate.py`（`report|recalc|rollback|mode`）。切換屬於 `PROD-DEV-CHANNEL.md` §7 的寫入步驟（使用者本人確認）。
+- 同班：精算頁新增 `PUT /api/quotations/{no}/overhead-pct`（最高管理者；已精算／結案、`formulaVer≠2`、`legacy` 模式 ⇒ 409）。標籤：`公益捐款（報價含稅 1%）`／舊基 `公益捐款（直接毛利 1%）`。
