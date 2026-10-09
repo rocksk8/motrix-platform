@@ -255,7 +255,7 @@ _BASELINE_A_NAMED_EXCEPTION = {
 
 #: B 組基準（**不要動**的 17 處）。
 _BASELINE_B = {
-    ("backend\\modules\\payroll\\api\\bonus.py", "submit_award"),
+    # 〔第49班：舊版獎金分潤 submit_award 隨 8 條 410 墓碑端點移除（使用者裁示），B 組基準 17 → 16〕
     ("backend\\modules\\case\\api\\case_extra_expenses.py", "submit_extra_expense"),
     ("backend\\modules\\case\\api\\case_extra_expenses.py", "submit_change_request"),
     ("backend\\modules\\case\\api\\completion_notes.py", "submit_completion_note"),
