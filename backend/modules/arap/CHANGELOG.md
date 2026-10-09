@@ -1,6 +1,6 @@
 # 應收應付 更新紀錄
 
-## (next) — 2026-10-10（wip/t51-05-status-colors）：`payment-request-form.html` 狀態徽章補「已駁回」「已作廢」顏色
+## 1.0.50 — 2026-10-10（wip/t51-05-status-colors）：`payment-request-form.html` 狀態徽章補「已駁回」「已作廢」顏色
 - 頁首狀態徽章的對照表原本只有 4 個狀態，已駁回／已作廢掉成無底色灰字；補上 `badge--rejected`／`badge--lost`。純畫面。
 
 ## 1.0.49 — 2026-10-10（wip/t50-int；第 50 班）

@@ -1890,6 +1890,7 @@
   "js:js/case-management-mlink.js": {
    "api_calls": [
     "/api/quotations/",
+    "/api/quotations/{}/material-coverage",
     "/api/quotations/{}/material-link-status"
    ],
    "api_prefixes": [
@@ -2935,6 +2936,17 @@
     "router:platform_menu",
     "router:system"
    ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "js:static/status-chip.js": {
+   "api_calls": [],
+   "api_prefixes": [],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/status-chip.js",
+   "routers_called": [],
    "tables_r": [],
    "tables_w": []
   },
@@ -11281,8 +11293,14 @@
      "path": "/api/payslip-person-dispatches"
     },
     {
+     "func": "person_dispatch_roster",
+     "line": 99,
+     "method": "GET",
+     "path": "/api/payslip-person-dispatches/by-dispatch"
+    },
+    {
      "func": "confirm_contractor",
-     "line": 93,
+     "line": 121,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/confirm-contractor"
     }
@@ -11290,7 +11308,8 @@
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [
-    "contractors"
+    "contractors",
+    "payslip_dispatch_links"
    ],
    "tables_r_transitive": [
     "approval_delegates",
@@ -11300,6 +11319,7 @@
     "dev_cases",
     "divisions",
     "duty_roles",
+    "payslip_dispatch_links",
     "payslips",
     "projects",
     "quotations",
@@ -15809,7 +15829,8 @@
     "js:static/auth-guard.js",
     "js:static/definition-form.js",
     "js:static/notif.js",
-    "js:static/sidebar.js"
+    "js:static/sidebar.js",
+    "js:static/status-chip.js"
    ],
    "kind": "page",
    "path": "frontend/pages/payment-request.html",
@@ -15862,6 +15883,7 @@
     "/api/contractors/{}/id-card",
     "/api/next-slip-no",
     "/api/payslip-person-dispatches",
+    "/api/payslip-person-dispatches/by-dispatch",
     "/api/payslips",
     "/api/payslips/{}",
     "/api/payslips/{}/archive/{}",
@@ -22124,7 +22146,9 @@
    "kind": "table",
    "named_by": [],
    "path": "backend/modules/payroll/migrations/0004_payslip_approval.py:22",
-   "readers": [],
+   "readers": [
+    "mod:payroll/api/payslip_links"
+   ],
    "tables_r": [],
    "tables_w": [],
    "writers": [

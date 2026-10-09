@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1239,
+  "tests": 1242,
   "unmapped": 13,
   "kinds": {
-   "api": 675,
-   "e2e": 299,
-   "audit": 154,
+   "api": 676,
+   "e2e": 300,
+   "audit": 155,
    "unit": 111
   },
-  "routes": 783
+  "routes": 784
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -6798,6 +6798,35 @@
    },
    "module": "case"
   },
+  "backend/modules/case/tests/test_mat_candidates_t51.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/case/",
+    "dir:frontend/js/",
+    "dir:frontend/pages/",
+    "js:js/case-management-exec.js",
+    "js:js/case-management-mlink.js",
+    "page:pages/case-management.html"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/js/case-management-exec.js",
+     "frontend/js/case-management-mlink.js",
+     "frontend/pages/case-management.html"
+    ],
+    "path": [
+     "frontend/js/",
+     "frontend/js/case-management-exec.js",
+     "frontend/js/case-management-mlink.js",
+     "frontend/pages/",
+     "frontend/pages/case-management.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
   "backend/modules/case/tests/test_material_approval_api_2026_10_02.py": {
    "kind": "api",
    "units": [
@@ -11735,6 +11764,34 @@
     "api": [
      "backend/modules/payroll/api/payslip_approval.py",
      "backend/modules/payroll/api/payslips.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_payslip_prefill_t51.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "dir:backend/modules/subcontract/",
+    "mod:payroll/api/payslip_links",
+    "mod:payroll/tests/test_payslip_person_link_t48",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/modules/payroll/tests/test_payslip_person_link_t48.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslip_links.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
     ],
     "module_dir": [
      "backend/modules/payroll/"
@@ -32370,6 +32427,45 @@
      "backend/modules/tender_radar/",
      "backend/modules/tender_radar/module.json",
      "frontend/pages/tender-radar.html"
+    ]
+   }
+  },
+  "backend/tests/test_status_chip_t51.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:frontend/js/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "file:frontend/css/style.css",
+    "js:js/case-management-dispatch.js",
+    "js:js/case-management-fin.js",
+    "js:js/case-management-shipping.js",
+    "js:static/status-chip.js",
+    "page:pages/payment-request-form.html",
+    "page:pages/payment-request.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "page": [
+     "frontend/css/style.css",
+     "frontend/js/case-management-dispatch.js",
+     "frontend/js/case-management-fin.js",
+     "frontend/js/case-management-shipping.js",
+     "frontend/pages/payment-request-form.html",
+     "frontend/pages/payment-request.html",
+     "frontend/static/status-chip.js"
+    ],
+    "path": [
+     "frontend/css/style.css",
+     "frontend/js/",
+     "frontend/pages/payment-request-form.html",
+     "frontend/pages/payment-request.html",
+     "frontend/static/status-chip.js"
     ]
    }
   },
