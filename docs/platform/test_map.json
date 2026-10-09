@@ -7,8 +7,8 @@
   "kinds": {
    "api": 673,
    "e2e": 299,
-   "audit": 151,
-   "unit": 110
+   "audit": 150,
+   "unit": 111
   },
   "routes": 783
  },
@@ -10098,6 +10098,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/payroll/",
+    "js:static/profit-rules.js",
     "mod:payroll/api/bonus",
     "mod:payroll/bonus",
     "page:pages/settlement.html"
@@ -10112,11 +10113,13 @@
      "backend/modules/payroll/api/bonus.py"
     ],
     "page": [
-     "frontend/pages/settlement.html"
+     "frontend/pages/settlement.html",
+     "frontend/static/profit-rules.js"
     ],
     "path": [
      "backend/db.py",
-     "frontend/pages/settlement.html"
+     "frontend/pages/settlement.html",
+     "frontend/static/profit-rules.js"
     ],
     "module_dir": [
      "backend/modules/payroll/"
@@ -30493,21 +30496,20 @@
    }
   },
   "backend/tests/test_overhead_s3_form_t48.py": {
-   "kind": "audit",
+   "kind": "unit",
    "units": [
-    "dir:frontend/pages/",
     "file:backend/tests/test_money_round_half_up_2026_09_26.py",
-    "page:pages/quotation-form.html"
+    "page:pages/quotation-form.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/tests/test_money_round_half_up_2026_09_26.py"
     ],
     "page": [
-     "frontend/pages/quotation-form.html"
-    ],
-    "path": [
-     "frontend/pages/",
      "frontend/pages/quotation-form.html"
     ]
    }
@@ -31024,10 +31026,14 @@
     "mod:case/api/__init__",
     "mod:case/api/quotations",
     "page:pages/quotation-form.html",
+    "plat:__init__",
+    "plat:source_tree",
     "router:system"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/financial_mask.py",
      "backend/modules/case/api/__init__.py",
      "backend/modules/case/api/quotations.py",

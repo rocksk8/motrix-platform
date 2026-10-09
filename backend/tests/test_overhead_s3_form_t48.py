@@ -96,8 +96,8 @@ def test_five_indirect_costs_counted_only_on_the_old_basis():
 
 
 def test_the_five_inputs_are_gone_from_the_page_markup():
-    import pathlib
-    html = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "pages" / "quotation-form.html").read_text(encoding="utf-8")
+    from core import source_tree
+    html = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")
     for k in ("indirectLogistics", "indirectInstallation", "indirectTravel", "indirectWarranty", "indirectOther"):
         assert 'data-num="%s"' % k not in html and "setNumField(q, '%s'" % k not in html, k
     assert "qf-legacy-indirect" in html

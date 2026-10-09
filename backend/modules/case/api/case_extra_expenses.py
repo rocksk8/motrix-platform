@@ -690,7 +690,7 @@ def po_bank_block_set(body: dict = Body(...), authorization: str = Header(None))
         raise HTTPException(422, "enabled 必須是 true 或 false")
     old = _PB.po_bank_block_since()
     now = datetime.now().replace(microsecond=0)
-    if body["enabled"]:
+    if body["enabled"] is True:        # 上面已驗為真布林
         raw = body.get("since")
         if raw in (None, ""):
             new = now.isoformat(timespec="seconds")

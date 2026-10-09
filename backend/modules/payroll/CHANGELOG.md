@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## 1.2.8 — 2026-10-10（wip/t50-int 整合修正）
+- `module.json`：`api_prefixes` 補登記 `/api/payslip-person-dispatches`（勞報單人員⇄派發連動，48c；路由歸屬守門 dep_scan --check-modules）。行為不變。
+
 ## 1.2.7 — 2026-10-10（wip/t50-int；48b 獎金用語跟進營業利益（s6））
 - **（併入）(next) — 2026-10-09（wip/t48-oh25-s6／s3）：獎金用語跟進營業利益；bonus_case 註解改管銷分攤**
 - 獎金分潤的「淨利」字樣（精算明細表、PDF、獎金頁、錯誤訊息）改稱「營業利益」；基數鍵 `netProfit` 與算式不變（仍讀精算已存值）。

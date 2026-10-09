@@ -153,7 +153,7 @@ def test_bonus_row_label_follows_the_stamp_written_at_finalize(W):
     assert "30%" in new and "直接毛利" in new and "報價稅前" not in new, new
 
 
-def test_original_side_stamp_comes_only_from_the_quotation(W):
+def test_original_side_stamp_comes_only_from_the_quotation(W, client):
     """完結時 summary 同時蓋 formulaVer／overheadPct 與原始側 origFormulaVer／origOverheadPct（報價是新口徑才有）；用戶端偽造的原始側戳記丟掉。"""
     c, h = W
     _set_tot()

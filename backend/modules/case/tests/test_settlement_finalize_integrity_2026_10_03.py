@@ -130,7 +130,7 @@ def test_remit_fee_and_custom_expense_are_verified_too(case):
     assert _put(c, h, p).status_code == 409
 
 
-def test_a_summary_missing_the_downstream_fields_cannot_bypass_the_check_the_server_fills_them_in(case):
+def test_a_summary_missing_the_downstream_fields_cannot_bypass_the_check_the_server_fills_them_in(case, client):
     """省略欄位也繞不過：沒送的下游欄位不是偽造所以不拒絕，但存檔前由伺服器用重算值補齊（含口徑標記）⇒ 存下來的一定是完整且正確的。"""
     c, h = case
     honest = page_payload(c, h)["summary"]
@@ -214,7 +214,7 @@ def _with_custom_expense(monkeypatch, total):
     monkeypatch.setattr(CFIN, "case_finance", lambda conn, no: {"expense": {"total": total, "items": []}, "income": {"total": 0, "items": [], "skippedTotal": 0}})
 
 
-def test_a_non_zero_custom_module_expense_is_part_of_the_honest_finalize(case, monkeypatch):
+def test_a_non_zero_custom_module_expense_is_part_of_the_honest_finalize(case, monkeypatch, client):
     """35c（0c 稽核 (d)）：自訂模組支出非 0 的 fixture——頁面算法（extraTotal／totalActualCost／利潤線都含它）的完結要過，存下來的自訂模組支出與總成本含它。"""
     c, h = case
     _with_custom_expense(monkeypatch, 3000)

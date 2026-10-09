@@ -602,11 +602,13 @@ def test_the_net_profit_formula_lives_in_exactly_one_place():
        「不可以再加一份」這句話就沒有意義了。
     """
     html = (_FRONTEND / "pages" / "settlement.html").read_text(encoding="utf-8")
-    # 〔X-VAT，2026-09-26：算式改成 MotrixLegalRound.halfUp(quotedPretax, 0.10)／halfUp(grossProfit, 0.01)
-    #   （四捨五入與後端一致；係數仍只在這裡）。原斷言："quotedPretax * 0.10"、"grossProfit * 0.01"〕
-    assert "halfUp(quotedPretax, 0.10)" in html and "halfUp(grossProfit, 0.01)" in html, (
-        "`settlement.html` 裡找不到那兩個係數 ——\n"
-        + "🔑 算式搬家了 ⇒ **本檔引用的行號與禁令都要重寫**。")
+    # 〔第48班（S1 利潤規則單一來源）：算式搬進 static/profit-rules.js（與 helpers/profit_rules.py 黃金向量等值）；
+    #   settlement.html 只載入並呼叫它，頁面本身不再有係數。原斷言："halfUp(quotedPretax, 0.10)"、"halfUp(grossProfit, 0.01)"〕
+    assert "profit-rules.js" in html, "`settlement.html` 沒有載入利潤規則單一來源（static/profit-rules.js）"
+    assert "halfUp(quotedPretax, 0.10)" not in html and "halfUp(grossProfit, 0.01)" not in html, (
+        "`settlement.html` 又長出第二份係數 ——\n🔑 算式只准在 static/profit-rules.js／helpers/profit_rules.py。")
+    rules_js = (_FRONTEND / "static" / "profit-rules.js").read_text(encoding="utf-8")
+    assert "0.10" in rules_js or "0.1" in rules_js, "`profit-rules.js` 裡找不到管銷係數 —— 算式搬家了 ⇒ 本檔要重寫"
 
     # 後端**不可以**有第二份乘法（它們只讀已存值）。
     hits = []

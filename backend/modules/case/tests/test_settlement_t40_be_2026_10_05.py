@@ -109,7 +109,7 @@ def test_reserve_note_splits_the_net_difference_into_uncovered_reserve_and_the_r
     assert "NT$ 5,000（實際只計單據）" in note and ("未被實際成本抵用 NT$ %s" % y) in note and note.rstrip().endswith("其他 %s</span>" % z), note
 
 
-def test_original_side_floors_a_stored_negative_charity_and_keeps_net_profit(W):
+def test_original_side_floors_a_stored_negative_charity_and_keeps_net_profit(W, client):
     c, h = W
     cn = db.get_db()
     try:

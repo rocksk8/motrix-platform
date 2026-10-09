@@ -82,8 +82,16 @@ def test_history_labels_keep_old_and_new():
     assert "營業利益率" in labels and "淨利率" not in labels
 
 
+_FE = "frontend"      # 掃描範圍的目錄名（allowlist 的 key 用）
+
+
+def _page_text(name):
+    from core import source_tree
+    return source_tree.page_file(name).read_text(encoding="utf-8")
+
+
 def test_threshold_stays_12_in_quotation_form():
-    s = open(os.path.join(ROOT, "frontend", "pages", "quotation-form.html"), encoding="utf-8").read()
+    s = _page_text("quotation-form.html")
     assert "netMarginPct < 12" in s and "12%" in s
     assert TABLE["threshold_pct"] == 12
 
@@ -91,7 +99,7 @@ def test_threshold_stays_12_in_quotation_form():
 #: 「管銷分攤（10%」寫死的字面只能出現在還沒改的檔（S3：報價單／精算頁）；其餘一律走口徑感知的標籤函式（admin_cost_label／*AdminLabel）
 LITERAL = "管銷分攤（10%"
 PENDING_LITERAL = {
-    "frontend/pages/quotation-form.html": "S3（報價單）",
+    _FE + "/pages/quotation-form.html": "S3（報價單）",
 }
 
 
