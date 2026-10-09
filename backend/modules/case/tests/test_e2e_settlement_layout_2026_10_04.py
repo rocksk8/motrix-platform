@@ -64,7 +64,7 @@ def test_settlement_page_is_centered_and_kpi_cards_are_never_clipped(live_server
         page.wait_for_timeout(350)
         page.evaluate("() => window.scrollTo(0, 0)")
         assert page.evaluate(clipped) == [], (w, page.evaluate(clipped))                    # (a) 摘要卡內沒有任何東西被裁切／超出卡片
-        # 毛利、淨利兩張卡：金額與比例都看得到（比例可以換到下一行，但一定在卡片裡）
+        # 毛利、營業利益兩張卡：金額與比例都看得到（比例可以換到下一行，但一定在卡片裡）
         for k in ("gp", "net"):
             card = page.locator(f'[data-testid="stl-k-{k}"]')
             assert "%" in card.inner_text(), (w, k, card.inner_text())

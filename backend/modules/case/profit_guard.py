@@ -86,15 +86,38 @@ def _clean(v):
     return int(v) if float(v) == int(v) else v
 
 
-def server_totals(q: dict) -> dict:
-    """依品項／折讓／運費／稅率重算 小計、稅前、稅額、含稅（與 quotation-form `calcTotals` 同式同進位）。"""
+def item_amount(i: dict) -> int:
+    """品項金額＝數量 × 單價（四捨五入到元）；標題列（type=header）沒有金額（與 quotation-form `calcItem` 同式）。"""
+    if i.get("type") == "header":
+        return 0
+    return round_half_up(_num(i.get("qty")), _num(i.get("unitPrice")))
+
+
+def effective_tax_rate(q: dict, stored_tot=None):
+    """這張報價單的營業稅率（%）——**不靜默改舊語意**（稽核 #5）：
+    ① 稅別 零稅率／免稅（`taxType` 或稅率 0 的舊單）⇒ 0；② 稅率是數字 ⇒ 那個數字；③ 完全沒有 `taxRate` 這個鍵（新單）⇒ 5；
+    ④ 鍵存在但是 null／空字串（舊儲存形狀；舊 `calcTotals` 算 0%）⇒ 以資料庫存的 `tot.tax` 為準：存的是 0 ⇒ 0（維持報價當時顯示的樣子）、否則 5。"""
+    from helpers.tax_calc import quote_tax_type
+    if quote_tax_type(q) in ("zero", "exempt"):
+        return 0
+    r = q.get("taxRate")
+    if isinstance(r, (int, float)) and not isinstance(r, bool):
+        return r
+    if "taxRate" not in q:
+        return 5
+    st = (stored_tot or {}).get("tax")
+    return 0 if (isinstance(st, (int, float)) and not isinstance(st, bool) and st == 0) else 5
+
+
+def server_totals(q: dict, stored_tot=None) -> dict:
+    """依品項／折讓／運費／稅率重算 小計、稅前、稅額、含稅（與 quotation-form `calcTotals` 同式同進位）。
+    品項金額一律由數量×單價重算（不採用用戶端送的 `amount`）；稅率規則見 `effective_tax_rate`（不改舊語意）。"""
     subtotal = 0.0
     for i in q.get("items") or []:
         if isinstance(i, dict):
-            subtotal = subtotal + _num(i.get("amount"))
+            subtotal = subtotal + item_amount(i)
     pretax = subtotal - _num(q.get("discount")) + _num(q.get("freight"))
-    rate = q.get("taxRate")
-    rate = 5 if (rate is None or isinstance(rate, bool) or not isinstance(rate, (int, float))) else rate
+    rate = effective_tax_rate(q, stored_tot)
     tax = round_half_up(pretax, PR.pct_rate(rate)) if 0 <= rate <= 100 else 0
     return {"subtotal": _clean(subtotal), "pretax": _clean(pretax), "tax": tax, "total": _clean(pretax + tax)}
 
@@ -174,7 +197,10 @@ def prepare(q: dict, user: dict, existing_row=None, quote_no: str = ""):
     if "overheadPct" in q:
         tot["overheadPct"] = q["overheadPct"]                    # 精算頁／伺服器重算都從 tot 讀比率（單一讀法）
     if mode == "v2":
-        tot.update(server_totals(q))
+        for i in q.get("items") or []:
+            if isinstance(i, dict):
+                i["amount"] = item_amount(i)                       # 品項金額由伺服器重算寫回（用戶端送的 amount 不採用）
+        tot.update(server_totals(q, old_tot))
         tot.update(server_profit(q, new, PR.FORMULA_VER, pretax=tot["pretax"]))
         tot["overheadPct"], tot["formulaVer"] = new, PR.FORMULA_VER
     else:

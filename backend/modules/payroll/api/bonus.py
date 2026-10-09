@@ -566,7 +566,7 @@ def award_candidates(authorization: str = Header(None)):
     ## 🔴 兩件不可以被濾掉的事（`SPEC-BN2-BN5.md §4`）
 
     ```
-    ① 淨利 <= 0／精算是舊格式的案件  -> 列出來、標原因、不可選
+    ① 營業利益 <= 0／精算是舊格式的案件  -> 列出來、標原因、不可選
     ② 已經有有效獎金分潤單的案件    -> 標示「已產生（#id）」、不可選
        ⚠️ 判斷用 voided_at = ''，不是「有沒有紀錄」——作廢重開是正常
           流程，作廢之後同一個案件要能再選一次。
@@ -574,7 +574,7 @@ def award_candidates(authorization: str = Header(None)):
     ☠️ 濾掉的症狀是使用者只看到選單裡沒有它，而他不知道為什麼——
        與 `BN1` 的「`ok=false` 的項目不可以濾掉」同一條規則。
 
-    ## 🔑 「淨利<=0」與「精算是舊格式」是兩件不同的事，訊息不可以合併
+    ## 🔑 「營業利益<=0」與「精算是舊格式」是兩件不同的事，訊息不可以合併
 
     直接重用 `base_amount_for()` 的 `err`——那一支對這兩種情況本來就回
     不同的訊息（前者「沒有可分配的獎金基數」，後者
@@ -607,7 +607,7 @@ def award_candidates(authorization: str = Header(None)):
 
         aid = live_by_quote.get(r["quote_no"])
         if aid is not None:
-            # ④ 已有有效獎金分潤單：優先於淨利判斷——就算這個案子現在淨利
+            # ④ 已有有效獎金分潤單：優先於營業利益判斷——就算這個案子現在營業利益
             #    算不出來，「已經有一張單」仍然是使用者最需要知道的事。
             selectable, reason = False, "已產生（#%s）" % aid
         else:
@@ -923,7 +923,7 @@ def _plan_allocations(conn, quote_no, allocations):
         # ⚠️ 而**不可以只在前端擋** —— `bonus.js` 自己的註解逐字：
         #    「前端過濾是假的：值仍然在 API 回應裡」，同一個道理套在輸入上。
         if total_pct < 0:
-            # 📌 `base` 那一側已經擋了（base_amount_for 對負淨利回 False），
+            # 📌 `base` 那一側已經擋了（base_amount_for 對負營業利益回 False），
             #    缺的只有 `pct` 這一側：pool_for(123456, -5000) = -61728
             #    ⇒ 負的獎金池在傳票上是一筆反向分錄，**帳是平的**。
             raise HTTPException(
@@ -931,7 +931,7 @@ def _plan_allocations(conn, quote_no, allocations):
         if total_pct > BASIS_POINTS:
             raise HTTPException(
                 400, "「%s」的發放比例 %s%% 超過 100%%，"
-                     "獎金池會大於案件淨利。"
+                     "獎金池會大於案件營業利益。"
                      % (item["name"], _pct_text(total_pct)))
         person_sum = sum(p[1] for p in pairs)
         if person_sum <= 0:
@@ -1306,11 +1306,11 @@ def _case_award_view(conn, award, lines, user):
     """依身分決定回多少（過濾在後端，§七／§11.4 字面）。
 
     superadmin                         整張
-    待發放／已發放＋出納模組持有者（C1）   整張的每人金額、合計、尾差；**不含**淨利、比率、個人比例、獎金池
-    待發放／已發放＋名單上的人             **只有自己那幾列**（金額＋比例），不含淨利、獎金池、別人
+    待發放／已發放＋出納模組持有者（C1）   整張的每人金額、合計、尾差；**不含**營業利益、比率、個人比例、獎金池
+    待發放／已發放＋名單上的人             **只有自己那幾列**（金額＋比例），不含營業利益、獎金池、別人
     其他                                 None（當作不存在）
     （簽核人只能是 superadmin，W1 (c)，所以不需要「簽核人可見」這一格。）
-    C1：使用者「待發放／已發放的整張，不含淨利與比率」——出納要照著發錢，看不到就發不了。
+    C1：使用者「待發放／已發放的整張，不含營業利益與比率」——出納要照著發錢，看不到就發不了。
     """
     if _sees_all_lines(user):
         return {"award": award, "lines": lines, "scope": "all"}
@@ -1570,7 +1570,7 @@ def get_case_bonus(quote_no: str, authorization: str = Header(None)):
                                                               for m in members[c]] for c in CATEGORIES})
             return {"case": case, "status": _derive_status(settle, None), "scope": "all",
                     "netProfit": net, "canCreate": bool(ok and float(net) > 0),
-                    "reason": err or ("" if not ok or float(net) > 0 else "淨利不大於 0，無獎金"),
+                    "reason": err or ("" if not ok or float(net) > 0 else "營業利益不大於 0，無獎金"),
                     "defaults": {"rate_bp": rate, "split_bp": split},
                     "autoMembers": members, "memberNotes": notes, "preview": preview}
         view = _case_award_view(conn, award, lines, user)
@@ -1645,7 +1645,7 @@ def create_case_bonus(quote_no: str, body: dict = Body(default={}), authorizatio
 
 @router.put("/cases/{quote_no}")
 def update_case_bonus(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
-    """編輯：比率、三類比例、名單與個人比例。淨利快照每次存檔重讀。
+    """編輯：比率、三類比例、名單與個人比例。營業利益快照每次存檔重讀。
 
     BN22（2026-09-25 使用者「核准前都能改」）：草稿與待審核（簽核中）可改，待發放以後 409。
     待審核且**有實際變更**：
@@ -1786,9 +1786,9 @@ def _signed_approvers(appr):
 
 @router.post("/cases/{quote_no}/preview")
 def preview_case_bonus(quote_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
-    """BN22 即時重算：與存檔**同一個** `allocate()`、同一份淨利，不寫任何東西。
+    """BN22 即時重算：與存檔**同一個** `allocate()`、同一份營業利益，不寫任何東西。
     body 同 PUT（rate_bp／split_bp／members），沒帶的取這張單的現值（還沒建單取預設與自動名單）。
-    只給能編輯的人（最高管理者）：結果由淨利推得，出納（C1）不可以看到。"""
+    只給能編輯的人（最高管理者）：結果由營業利益推得，出納（C1）不可以看到。"""
     _require_user(authorization, require_superadmin=True)
     conn = get_db()
     try:

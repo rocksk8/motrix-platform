@@ -28,6 +28,7 @@ from db import (
 from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_case_closing_report, run_edge_pdf
 from helpers import receipt_amounts as _receipt_amounts
 from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr
+
 # 未核可紅色警示（使用者 2026-09-30）：各單據 builder 共用同一個元件與同一個字樣
 from helpers.doc_template import unapproved_banner as _unapproved_banner, inject_unapproved as _inject_unapproved
 
@@ -35,8 +36,39 @@ from core import paths as _paths
 
 
 
+def default_overhead_pct():
+    """全域預設管銷百分比（system_settings.overhead_default_pct；缺或壞值＝25）。PDF／Excel 只在『和預設不同』時才印百分比（使用者 Q7 裁示）。"""
+    try:
+        from helpers.settings import _get_setting
+        return float(_get_setting("overhead_default_pct", 25))
+    except Exception:                                             # noqa: BLE001
+        return 25.0
+
+
+def admin_cost_label(summary, orig=False, hide_default=False) -> str:
+    """管銷分攤列標籤（第 48 班）：口徑 2（summary.formulaVer>=2）＝「管銷分攤（直接毛利 N%）」，無戳記／1＝「管銷分攤（報價稅前 10%）」。
+    N 是該案存值（summary.overheadPct，每案可調）。原始側（orig=True）優先看 origFormulaVer／origOverheadPct，沒有就跟實際側同一口徑。
+    前端同式：frontend/js/reports.js stlAdminLabel、case-management-fin.js caseSettleAdminLabel；守門 tests/test_profit_labels_t48.py。"""
+    s = summary or {}
+    ver, pct = s.get("formulaVer"), s.get("overheadPct")
+    if orig and s.get("origFormulaVer") is not None:
+        ver, pct = s.get("origFormulaVer"), s.get("origOverheadPct", pct)
+    try:
+        v2 = int(ver or 1) >= 2
+    except (TypeError, ValueError):
+        v2 = False
+    if not v2:
+        return "管銷分攤（報價稅前 10%）"
+    if pct is None:
+        return "管銷分攤（直接毛利）"
+    p = float(pct)
+    if hide_default and abs(p - default_overhead_pct()) < 1e-9:   # PDF／Excel：等於預設就不印百分比（畫面上的標籤仍一律顯示）
+        return "管銷分攤（直接毛利）"
+    return "管銷分攤（直接毛利 %s%%）" % (int(p) if p == int(p) else p)
+
+
 def _orig_reserve_row(summary, money=None):
-    """39：原始預估欄的「報價預留間接成本」資訊列（`origIndirectReserve`＝報價 totalIndirect − 管銷 − 公益；原始淨利已扣掉它）。
+    """39：原始預估欄的「報價預留間接成本」資訊列（`origIndirectReserve`＝報價 totalIndirect − 管銷 − 公益；原始營業利益已扣掉它）。
     沒有這個鍵（舊完結案）或為 0 ⇒ 空字串（輸出逐位元不變）。"""
     n = (summary or {}).get("origIndirectReserve") or 0
     if not n:
@@ -46,13 +78,13 @@ def _orig_reserve_row(summary, money=None):
 
 
 def _orig_reserve_note(summary, money=None):
-    """39：差額橫幅的拆解——原始淨利含報價預留的間接成本，實際只含單據；預留沒有發生的部分會讓真實淨利看起來「多賺」。"""
+    """39：差額橫幅的拆解——原始營業利益含報價預留的間接成本，實際只含單據；預留沒有發生的部分會讓真實營業利益看起來「多賺」。"""
     n = (summary or {}).get("origIndirectReserve") or 0
     if not n:
         return ""
     fmt = money or (lambda v: "{:,}".format(int(round(float(v)))))
-    # 稽核 T39：預留 R 只有「沒被實際成本抵用」的部分才是淨利差額的來源。C＝實際多花的直接成本（原始直接毛利 − 實際毛利）；
-    # Y＝clamp(R − max(C,0), 0, R)＝預留裡未被實際成本抵用的部分；Z＝淨利差額 − Y（其他：公益金連動、成本差異等）。與營運報表（analytics）同一規則；數字不動，只做說明。
+    # 稽核 T39：預留 R 只有「沒被實際成本抵用」的部分才是營業利益差額的來源。C＝實際多花的直接成本（原始直接毛利 − 實際毛利）；
+    # Y＝clamp(R − max(C,0), 0, R)＝預留裡未被實際成本抵用的部分；Z＝營業利益差額 − Y（其他：公益金連動、成本差異等）。與營運報表（analytics）同一規則；數字不動，只做說明。
     sm = summary or {}
     c = float(sm.get("origDirectProfit") or 0) - float(sm.get("grossProfit") or 0)
     y = min(max(float(n) - max(c, 0.0), 0.0), float(n))
@@ -2630,10 +2662,10 @@ def _build_case_closing_html(data: dict) -> str:
       <tr><td>原始成本（料件）</td><td class="r">{money(summary.get("origTotalCost"))}</td></tr>
       <tr><td class="bold">原始直接毛利</td><td class="r bold">{money(summary.get("origDirectProfit"))}</td></tr>
       <tr><td>原始毛利率</td><td class="r">{float(summary.get("origMarginPct") or 0):.1f}%</td></tr>
-      <tr><td>管銷分攤（10%）</td><td class="r red">− {money(summary.get("origAdminCost"))}</td></tr>
+      <tr><td>{admin_cost_label(summary, True, hide_default=True)}</td><td class="r red">− {money(summary.get("origAdminCost"))}</td></tr>
       <tr><td>公益捐款（1%）</td><td class="r red">− {money(summary.get("origCharity"))}</td></tr>{_orig_reserve_row(summary, money)}
-      <tr class="bold-row"><td>原始預估淨利</td><td class="r">{money(summary.get("origNetProfit"))}</td></tr>
-      <tr><td>原始預估淨利率</td><td class="r">{float(summary.get("origNetMarginPct") or 0):.1f}%</td></tr>
+      <tr class="bold-row"><td>原始預估營業利益</td><td class="r">{money(summary.get("origNetProfit"))}</td></tr>
+      <tr><td>原始預估營業利益率</td><td class="r">{float(summary.get("origNetMarginPct") or 0):.1f}%</td></tr>
     </tbody>
   </table>
   <table>
@@ -2647,21 +2679,21 @@ def _build_case_closing_html(data: dict) -> str:
       <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{money(summary.get("totalActualCost"))}</td></tr>
       <tr><td>真實毛利</td><td class="r {'green' if int(summary.get('grossProfit',0) or 0)>=0 else 'red'}">{money(summary.get("grossProfit"))}</td></tr>
       <tr><td>真實毛利率</td><td class="r">{float(summary.get("grossMarginPct") or 0):.1f}%</td></tr>
-      <tr><td>管銷分攤（10%）</td><td class="r red">− {money(summary.get("adminCost"))}</td></tr>
+      <tr><td>{admin_cost_label(summary, hide_default=True)}</td><td class="r red">− {money(summary.get("adminCost"))}</td></tr>
       <tr><td>公益捐款（1%）</td><td class="r red">− {money(summary.get("charityDonation"))}</td></tr>
-      <tr class="bold-row"><td>真實淨利</td><td class="r {'green' if int(summary.get('netProfit',0) or 0)>=0 else 'red'}">{money(summary.get("netProfit"))}</td></tr>
-      <tr><td>真實淨利率</td><td class="r bold" style="color:{'#15803D' if float(summary.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(summary.get('netMarginPct',0) or 0)>=0 else '#DC2626'}">{float(summary.get("netMarginPct") or 0):.1f}%</td></tr>
+      <tr class="bold-row"><td>真實營業利益</td><td class="r {'green' if int(summary.get('netProfit',0) or 0)>=0 else 'red'}">{money(summary.get("netProfit"))}</td></tr>
+      <tr><td>真實營業利益率</td><td class="r bold" style="color:{'#15803D' if float(summary.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(summary.get('netMarginPct',0) or 0)>=0 else '#DC2626'}">{float(summary.get("netMarginPct") or 0):.1f}%</td></tr>
     </tbody>
   </table>
 </div>
 <div class="diff-banner" style="background:{'#F0FDF4' if prof_diff>=0 else '#FFF1F2'};border-color:{'#86EFAC' if prof_diff>=0 else '#FECACA'};color:{diff_clr}">
-  {'真實淨利比原始預估高' if prof_diff>=0 else '真實淨利比原始預估低'} NT$ {abs(prof_diff):,}（{'+' if diff_ppts>=0 else ''}{diff_ppts:.1f} ppts）{_orig_reserve_note(summary, money)}
+  {'真實營業利益比原始預估高' if prof_diff>=0 else '真實營業利益比原始預估低'} NT$ {abs(prof_diff):,}（{'+' if diff_ppts>=0 else ''}{diff_ppts:.1f} ppts）{_orig_reserve_note(summary, money)}
 </div>"""
     else:
         profit_section = (
             '<div class="section-label">三、損益分析</div>'
             '<div class="notice-banner">⚠ 本案尚未完成成本精算（settlement 未 finalized），'
-            '以下僅列報價階段的預估數字，實際成本、真實毛利／淨利待精算完結後才會顯示。</div>'
+            '以下僅列報價階段的預估數字，實際成本、真實毛利／營業利益待精算完結後才會顯示。</div>'
             '<div class="total-box" style="justify-content:flex-start"><div class="total-table" style="width:320px">'
             f'<div class="row"><span>報價稅前收入</span><span>{money(data["pretax"])}</span></div>'
             f'<div class="row"><span>預估淨毛利率</span><span>{float(summary.get("netMarginPct") or 0):.1f}%</span></div>'

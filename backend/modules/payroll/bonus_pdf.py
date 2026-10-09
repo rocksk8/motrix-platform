@@ -31,7 +31,7 @@ status == "已核准"      -> 放
 import logging
 
 from db import get_db
-from modules.payroll.bonus import bonus_signatures_of, SETTLEMENT_ROWS, settlement_fields
+from modules.payroll.bonus import bonus_signatures_of, SETTLEMENT_ROWS, row_label, settlement_fields
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 
@@ -196,7 +196,7 @@ def _settlement_rows_html(settle):
     for key, label, kind, note in SETTLEMENT_ROWS:
         val = fields.get(key)
         text = _settle_pct(val) if kind == "pct1" else _settle_money(val)
-        lbl = e(label)
+        lbl = e(row_label(key, label, ((settle or {}).get("summary") or {})))
         if note:
             lbl += "<small>%s</small>" % e(note)
         if key == "quotedPretax":
@@ -233,7 +233,7 @@ def build_award_html(award, lines, signatures, display_names, exported_at,
     值與 `bonus.html` 的 `bn-settle`、`GET /awards/{id}` 回應裡的
     `settlement` 是同一份資料。`settle=None`（呼叫端沒帶）時整張精算表
     仍然印出來，11 列全部是「—」，不是整段消失——使用者原話「最後算出
-    真實淨利，才能用真實淨利去算獎金」，這張表在說明基數怎麼來的，
+    真實營業利益，才能用真實營業利益去算獎金」，這張表在說明基數怎麼來的，
     印不出值也要讓人看到「這裡本來該有 11 個數字」。
     """
     e = _esc

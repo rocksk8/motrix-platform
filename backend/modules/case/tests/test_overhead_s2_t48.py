@@ -179,7 +179,7 @@ def test_v2_negative_direct_profit_has_zero_overhead_and_five_items_count(client
               indirectLogistics=1000, indirectOther=500)
     t = _row(_post(client, ad, loss).json()["quote_no"])[0]["tot"]
     assert t["directProfit"] == 100000 - 99000 - 4950 and t["adminCost"] == 0 and t["charityDonation"] == 0
-    assert t["totalIndirect"] == 1500 and t["netProfit"] == t["directProfit"] - 1500
+    assert t["totalIndirect"] == 0 and t["netProfit"] == t["directProfit"], "新口徑不再計入五項間接成本（使用者 2026-10-09）"
     _mode(client, su, "legacy")
 
 
@@ -321,3 +321,83 @@ def test_v2_without_the_migration_marker_is_treated_as_legacy(client, who):
     cn.execute("DELETE FROM system_settings WHERE key IN ('overhead_rule_mode', 'overhead_migration_done')")
     cn.commit()
     cn.close()
+
+
+def test_v2_recomputes_item_amounts_from_qty_times_unit_price(client, who):
+    su, ad = who
+    _mode(client, su, "v2")
+    forged = _q(items=[{"type": "header", "title": "標題", "amount": 777},
+                       {"type": "item", "qty": 2, "unitPrice": 50000, "amount": 1, "cost": 60000}])
+    d, _, _ = _row(_post(client, ad, forged).json()["quote_no"])
+    assert d["items"][1]["amount"] == 100000 and d["items"][0]["amount"] == 0, "品項金額由伺服器重算（標題列 0）"
+    assert (d["tot"]["subtotal"], d["tot"]["pretax"], d["tot"]["total"]) == (100000, 100000, 105000)
+    _mode(client, su, "legacy")
+
+
+def test_server_tax_rate_rule_keeps_the_old_semantics(client):
+    """稽核 #5：不靜默改舊單語意——缺鍵＝5%；鍵存在但 null／空字串＝舊 calcTotals 的 0%（以資料庫存的 tot.tax 為準）；零稅率／免稅恆 0。"""
+    from modules.case import profit_guard as PG
+    base = {"items": [{"type": "item", "qty": 1, "unitPrice": 10000, "cost": 0}]}
+    tax = lambda q, st=None: PG.server_totals(q, st)["tax"]      # noqa: E731
+    assert tax(dict(base)) == 500, "新單（沒有 taxRate 鍵）＝5%"
+    assert tax(dict(base, taxRate=5)) == 500 and tax(dict(base, taxRate=0)) == 0
+    assert tax(dict(base, taxRate=None), {"tax": 0}) == 0 and tax(dict(base, taxRate=""), {"tax": 0}) == 0, "舊儲存形狀：存的稅額是 0 ⇒ 維持 0"
+    assert tax(dict(base, taxRate=None), {"tax": 500}) == 500 and tax(dict(base, taxRate=None)) == 500, "存的稅額不是 0／沒有存值 ⇒ 5%"
+    assert tax(dict(base, taxType="exempt", taxRate=0)) == 0 and tax(dict(base, taxType="zero")) == 0, "免稅／零稅率恆 0"
+    assert tax(dict(base, taxType="taxable")) == 500
+
+
+def test_switching_back_to_legacy_removes_the_migration_marker(client, who):
+    """退回舊口徑後標記一併移除：再切 v2 必須重新 recalc（legacy 期間存檔的單是舊口徑，不能被當成已遷移）。"""
+    su, ad = who
+    _mode(client, su, "v2")
+    assert client.get("/api/overhead/settings", headers=ad).json()["migrationDone"] is True
+    assert client.put("/api/overhead/settings", json={"ruleMode": "legacy"}, headers=su).status_code == 200
+    assert client.get("/api/overhead/settings", headers=ad).json()["migrationDone"] is False
+    r = client.put("/api/overhead/settings", json={"ruleMode": "v2", "confirm": True}, headers=su)
+    assert r.status_code == 409, "標記不見 ⇒ 不能直接再切回 v2"
+    assert any(json.loads(a["detail"]).get("migrationMarker") == "removed" for a in _audits("settings.overhead.update"))
+
+
+def test_v2_save_of_a_legacy_shaped_quote_keeps_zero_tax(client, who):
+    """舊儲存形狀（taxRate:null、稅額 0）在 v2 第一次存檔時不會憑空多 5% 稅；新單（沒有 taxRate 鍵）才是 5%。"""
+    su, ad = who
+    legacy = _q(taxRate=None)
+    legacy["tot"].update(tax=0, total=100000)
+    qno = _post(client, ad, legacy).json()["quote_no"]               # legacy 模式建立：伺服器不改
+    assert _row(qno)[0]["tot"]["tax"] == 0
+    _mode(client, su, "v2")
+    r = client.put("/api/quotations/%s" % qno, json={"status": "草稿", "data": dict(_q(taxRate=None, customerName="改名"), tot=dict(_q()["tot"], tax=0, total=100000))}, headers=ad)
+    assert r.status_code == 200, r.text
+    t = _row(qno)[0]["tot"]
+    assert (t["pretax"], t["tax"], t["total"]) == (100000, 0, 100000), "存的稅額是 0 ⇒ 維持 0%"
+    fresh = _q()
+    fresh.pop("taxRate", None)
+    t2 = _row(_post(client, ad, fresh).json()["quote_no"])[0]["tot"]
+    assert t2["tax"] == 5000, "新單（沒有 taxRate 鍵）＝5%"
+    _mode(client, su, "legacy")
+
+
+def test_unsettled_ignores_legacy_indirect_values_settled_keeps_them(client, who):
+    """五項間接成本拿掉（使用者 2026-10-09）：未精算單在新口徑一律不計舊值；已結案單保留存值（數字不變）；legacy 模式照舊計入。"""
+    su, ad = who
+    five = dict(indirectLogistics=1000, indirectInstallation=2000, indirectTravel=500, indirectWarranty=300, indirectOther=200)
+    legacy = _q(**five)
+    legacy["tot"].update(totalIndirect=10370 + 4000, netProfit=37000 - 14370, netMarginPct=22.6)
+    qno = _post(client, ad, legacy).json()["quote_no"]                 # legacy 模式：不改前端送來的值，五項仍計入
+    assert _row(qno)[0]["tot"]["totalIndirect"] == 14370
+    cn = db.get_db()                                                    # 另一張：已結案，同樣有舊值
+    settled = _post(client, ad, _q(**five)).json()["quote_no"]
+    cn.execute("UPDATE quotations SET deal_tag='已結案' WHERE quote_no=?", (settled,))
+    cn.commit()
+    d0 = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (settled,)).fetchone()["data_json"])
+    cn.close()
+    _mode(client, su, "v2")
+    r = client.put("/api/quotations/%s" % qno, json={"status": "草稿", "data": _q(customerName="改名", **five)}, headers=ad)
+    assert r.status_code == 200, r.text
+    t = _row(qno)[0]["tot"]
+    assert (t["adminCost"], t["charityDonation"], t["totalIndirect"], t["netProfit"]) == (9250, 370, 9620, 27380), "未精算：五項舊值（共 4000）不計入"
+    assert _row(qno)[0]["indirectLogistics"] == 1000, "舊值留在資料裡（歷史／回滾），只是不計"
+    client.put("/api/quotations/%s" % settled, json={"status": "草稿", "data": _q(**five)}, headers=su)        # 已結案：存檔端點不重算
+    assert _row(settled)[0]["tot"] == d0["tot"], "已結案單的 tot 逐位不變"
+    _mode(client, su, "legacy")

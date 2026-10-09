@@ -102,8 +102,8 @@ def test_every_field_downstream_reads_is_verified_one_at_a_time(case, field, val
     c, h = case
     r = _put(c, h, page_payload(c, h, **{field: value}))
     assert r.status_code == 409, (field, r.status_code, r.text[:160])
-    assert field in r.text or {"dispatchTotal": "承攬商", "totalActualCost": "總成本", "grossProfit": "毛利", "adminCost": "管理費",
-                               "charityDonation": "公益", "netProfit": "淨利"}[field] in r.text, r.text[:240]
+    assert field in r.text or {"dispatchTotal": "承攬商", "totalActualCost": "總成本", "grossProfit": "毛利", "adminCost": "管銷分攤",
+                               "charityDonation": "公益", "netProfit": "營業利益"}[field] in r.text, r.text[:240]
     assert _status() is None
 
 
@@ -205,8 +205,8 @@ def test_the_409_prefix_is_neutral_and_the_field_list_names_what_differs(case):
     r = _put(c, h, page_payload(c, h, dispatchTotal=0, netProfit=888888))
     assert r.status_code == 409
     d = r.json()["detail"]
-    assert "重新整理" in d and "承攬商" in d and "淨利" in d, d
-    assert "採購單、材料申請" not in d, "前綴還在說採購／材料變動，但不符的是承攬商與淨利：%s" % d
+    assert "重新整理" in d and "承攬商" in d and "營業利益" in d, d
+    assert "採購單、材料申請" not in d, "前綴還在說採購／材料變動，但不符的是承攬商與營業利益：%s" % d
 
 
 def _with_custom_expense(monkeypatch, total):
