@@ -266,3 +266,49 @@ def test_tool_refuses_a_missing_db_and_never_creates_one(tmp_path):
     ghost = str(tmp_path / "ghost.db")
     rc, _ = _run("--db", ghost, "report")
     assert rc != 0 and not os.path.exists(ghost)
+
+
+# ── 稽核 05 MUST-FIX 2：離線把管銷退回 legacy 時，公益新基一併失效（不得混基）────────────────
+OH_TOOL = os.path.join(BACKEND, "tools", "overhead_migrate.py")
+
+
+def _run_oh(*args):
+    p = subprocess.run([sys.executable, "-I", OH_TOOL, *args], capture_output=True, text=True, encoding="utf-8", cwd=BACKEND,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    return p.returncode, p.stdout + p.stderr
+
+
+def test_offline_overhead_mode_legacy_also_resets_charity_mode_and_marker(db):
+    assert _run("--db", db, "recalc", "--apply", "--set-total", "--no-backup")[0] == 0
+    assert _setting(db, "charity_basis_mode") == "total" and _setting(db, "charity_migration_done")
+    rc, out = _run_oh("--db", db, "mode", "legacy", "--apply")
+    assert rc == 0, out
+    assert _setting(db, "overhead_rule_mode") == "legacy" and _setting(db, "overhead_migration_done") is None
+    assert _setting(db, "charity_basis_mode") == "direct" and _setting(db, "charity_migration_done") is None, "公益新基一併失效"
+    # 之後重做管銷遷移，不得讓公益基數悄悄變回 total
+    c = sqlite3.connect(db)
+    c.execute("INSERT OR REPLACE INTO system_settings(key, value_json) VALUES('overhead_migration_done', '{\"doneAt\": \"x\"}')")
+    c.execute("INSERT OR REPLACE INTO system_settings(key, value_json) VALUES('overhead_rule_mode', '\"v2\"')")
+    c.commit()
+    c.close()
+    assert _setting(db, "charity_basis_mode") == "direct" and _setting(db, "charity_migration_done") is None
+
+
+def test_offline_mode_legacy_without_any_charity_settings_adds_none(tmp_path):
+    p = str(tmp_path / "plain.db")
+    _mk(p, [("Q1", _v2_tot(), "", "")])
+    assert _run_oh("--db", p, "mode", "legacy", "--apply")[0] == 0
+    assert _setting(p, "charity_basis_mode") is None, "沒有公益設定的庫不憑空長出設定"
+
+
+def test_offline_overhead_rollback_also_resets_charity(tmp_path):
+    p = str(tmp_path / "rb.db")
+    t = _v2_tot()
+    t["_legacy"] = {"adminCost": 10000, "charityDonation": 370, "totalIndirect": 10370, "netProfit": 26630, "netMarginPct": 26.6, "formulaVer": None,
+                    "netMarginPctCol": 26.6, "had_overheadPct": False, "tot_overheadPct": None}
+    _mk(p, [("Q1", t, "", "")], settings={"overhead_rule_mode": "v2", "overhead_migration_done": {"doneAt": "x"},
+                                          "charity_basis_mode": "total", "charity_migration_done": {"doneAt": "y"}})
+    rc, out = _run_oh("--db", p, "rollback", "--apply", "--no-backup")
+    assert rc == 0 and "已還原 1 張" in out, out
+    assert _setting(p, "overhead_rule_mode") == "legacy"
+    assert _setting(p, "charity_basis_mode") == "direct" and _setting(p, "charity_migration_done") is None

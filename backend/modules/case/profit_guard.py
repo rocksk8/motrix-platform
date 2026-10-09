@@ -9,7 +9,7 @@
 - **戳記只由伺服器蓋**：`tot.formulaVer`／`tot.overheadPct`／`tot._legacy`／`tot._recalc` 一律不採用用戶端送來的值（防偽造口徑戳記讓遷移跳過、標籤顯示錯誤）；
   `_legacy`／`_recalc`（遷移留下的回滾依據）沿用資料庫現值，不因表單存檔而遺失。
 - **公益捐款基數**（第 52 班；設計 docs/platform/plans/CHARITY-QUOTE-1PCT-DESIGN-T52.md）：`charity_basis_mode`（`direct`｜`total`，預設 `direct`）＋
-  `charity_migration_done` 標記（`overhead_migrate.py charity recalc --apply` 寫）。`total` ＝ 公益捐款改為報價含稅金額 × 1%；**只在 v2 口徑生效**，
+  `charity_migration_done` 標記（`tools/charity_migrate.py recalc --apply --set-total` 寫）。`total` ＝ 公益捐款改為報價含稅金額 × 1%；**只在 v2 口徑生效**，
   要同時滿足 overhead_rule_mode=v2 ＋ overhead_migration_done ＋ charity_migration_done，否則一律當 `direct`（失效安全）。
   戳記 `tot.charityBasis`（`total`；舊基不帶）與 `tot._legacyCharity`（遷移前的公益／合計／營業利益，回滾依據）同樣只由伺服器蓋。
 - 伺服器重算（Q9）：`v2` 時以 `helpers.profit_rules` 重算 `tot` 的稅前／稅額／含稅與利潤欄位（不信前端送來的）；`legacy` 時只做影子比對、不一致記 warning，
@@ -75,7 +75,7 @@ def migration_done() -> bool:
 
 
 def charity_migration_done() -> bool:
-    """既有報價單的公益基數遷移已完成（`overhead_migrate.py charity recalc --apply` 寫入標記）。"""
+    """既有報價單的公益基數遷移已完成（`tools/charity_migrate.py recalc --apply --set-total` 寫入標記）。"""
     from helpers.settings import _get_setting
     m = _get_setting(CHARITY_MIGRATION_KEY, None)
     return isinstance(m, dict) and bool(m.get("doneAt"))

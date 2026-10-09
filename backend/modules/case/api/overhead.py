@@ -80,10 +80,11 @@ def put_overhead_settings(body: dict = Body(...), authorization: str = Header(No
             if body["ruleMode"] == "legacy":                          # 退回舊口徑：遷移完成標記一併移除（legacy 期間存檔的單是舊口徑；再切 v2 前必須重新跑 recalc）
                 _delete_setting(PG.MIGRATION_KEY)
                 detail["migrationMarker"] = "removed"
-                if PG.charity_mode() != "direct" or PG.charity_migration_done():     # 公益基數 total 只在 v2 生效：管銷退回 legacy ⇒ 公益基數一併退回 direct（標記一併移除）
+                _old_charity = PG.charity_mode()
+                if _old_charity != "direct" or PG.charity_migration_done():     # 公益基數 total 只在 v2 生效：管銷退回 legacy ⇒ 公益基數一併退回 direct（標記一併移除）
                     _set_setting(PG.CHARITY_MODE_KEY, "direct")
                     _delete_setting(PG.CHARITY_MIGRATION_KEY)
-                    detail["charityMode"] = {"old": "total", "new": "direct", "forcedBy": "ruleMode=legacy"}
+                    detail["charityMode"] = {"old": _old_charity, "new": "direct", "forcedBy": "ruleMode=legacy"}
                     changes.append("公益基數 → direct（隨管銷口徑退回）")
             _set_setting(PG.MODE_KEY, body["ruleMode"])
             detail["ruleMode"] = {"old": old, "new": body["ruleMode"]}
@@ -99,7 +100,7 @@ def put_overhead_settings(body: dict = Body(...), authorization: str = Header(No
             if PG.rule_mode() != "v2" or not PG.migration_done():
                 raise HTTPException(409, "公益基數 total 需要管銷口徑已是 v2 且完成遷移")
             if not PG.charity_migration_done():
-                raise HTTPException(409, "既有報價單尚未完成公益基數遷移（tools/overhead_migrate.py charity recalc --apply 會寫入完成標記）")
+                raise HTTPException(409, "既有報價單尚未完成公益基數遷移（tools/charity_migrate.py recalc --apply --set-total 會寫入完成標記）")
         if want != old:
             if want == "direct":                                       # 退回舊基：完成標記一併移除（再切 total 前必須重新跑 charity recalc）
                 _delete_setting(PG.CHARITY_MIGRATION_KEY)

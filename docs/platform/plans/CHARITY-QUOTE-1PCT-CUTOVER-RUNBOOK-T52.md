@@ -42,7 +42,8 @@ python tools/charity_migrate.py --db <正式庫> recalc --apply --set-total
 - 工具回滾（優先）：`rollback` 先看報告（可還原／因『遷移後已完結·已編輯·已退回舊基』不還原的清單），確認後 `--apply`：依 `_legacyCharity`／伺服器快照還原未動過的單，模式設回 `direct`、刪標記。**先回滾公益、再回滾管銷**（管銷回滾遇到公益已改過的單會視為已編輯而不還原）。
 - 還原 DB 備份：關服務、覆蓋 `motrix_erp.db`、啟動、確認 `mode`＝`direct`；會丟掉切換後所有新資料。
 - 程式碼回滾：舊程式不認得 `charityBasis`，會把新基單當舊基重算——程式回滾前必須先做工具回滾。
-- 管銷口徑退回 legacy（`PUT ruleMode=legacy` 或 `overhead_migrate mode legacy`）時，伺服器會**強制把公益基數一併退回 direct 並刪標記**。
+- 管銷口徑退回 legacy 時公益基數一併失效，**三條路徑一致**：`PUT /api/overhead/settings ruleMode=legacy`、離線 `overhead_migrate.py mode legacy --apply`、離線 `overhead_migrate.py rollback --apply`（有還原時）都會在同一交易把 `charity_basis_mode` 設回 `direct` 並刪 `charity_migration_done` 標記。
+- **順序**：先 `charity_migrate.py rollback`、再 `overhead_migrate.py rollback`（反向）。管銷口徑每次重新 `recalc`（含回滾後重做）之後，**必須重跑** `charity_migrate.py recalc --apply --set-total` 才會重新啟用公益新基；在那之前重遷移的單是未戴戳記的直接毛利基，伺服器因無公益標記一律當 direct。
 
 ## 7. 使用者驗收清單
 1. 報價單／精算／案件頁／報表／結案 PDF 的公益列：新基「公益捐款（報價含稅 1%）」，舊案「公益捐款（直接毛利 1%）」。
