@@ -966,7 +966,15 @@
           <div><div style="color:var(--text-secondary)">資料截至</div><b x-text="_loadedAt.toLocaleString('zh-TW', { hour12: false })"></b></div>
           <div><div style="color:var(--text-secondary)">精算日期</div>
             <input type="date" class="stl-input" x-model="settlement.settlementDate" :disabled="settlement.status === 'finalized'" style="max-width:160px"></div>
-          <div><div style="color:var(--text-secondary)">管銷分攤／公益</div><b x-text="adminHow(summary) + '；公益＝毛利×1%（毛利為負時以 0 計；營業利益只在總結區顯示）'"></b></div>
+          <div><div style="color:var(--text-secondary)">管銷分攤／公益</div><b data-testid="stl-audit-admin-how" x-text="adminHow(summary) + '；' + charityHow(summary) + '；營業利益只在總結區顯示'"></b>
+            <div x-show="ohCanEdit()" x-cloak data-testid="stl-oh-edit" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+              <span style="font-size:12px;color:var(--text-secondary)">調整管銷比率（僅最高管理者）</span>
+              <input type="number" min="0" max="100" step="0.1" class="stl-input" style="max-width:90px" data-testid="stl-oh-input"
+                     :placeholder="ohCurrentPct()" x-model="ohEdit.val">
+              <span>%</span>
+              <button type="button" class="btn" data-testid="stl-oh-save" :disabled="ohEdit.busy || ohEdit.val === ''" @click="saveOhPct()">套用</button>
+              <span x-show="ohDeviatesNow()" x-cloak data-testid="stl-oh-warning" style="flex-basis:100%;font-size:11px;color:var(--warning)">⚠ 與預設 <span x-text="oh.defaultPct"></span>% 不同——將影響這張報價單的營業利益與獎金基數（套用時需再確認）</span>
+            </div></div>
         </div>
       </div>
 
@@ -1004,7 +1012,7 @@
       真實毛利：NT$ <span x-text="fmt(summary.grossProfit)"
                           :style="summary.grossProfit >= 0 ? 'color:#15803D;font-weight:600' : 'color:#DC2626;font-weight:600'"></span>
       （<span x-text="summary.grossMarginPct.toFixed(1) + '%'"></span>）<br>
-      <span x-text="adminShort(summary)"></span> + 公益（1%）：NT$ <span x-text="fmt(summary.adminCost + summary.charityDonation)"></span><br>
+      <span x-text="adminShort(summary)"></span> + <span x-text="summary.charityBasis === 'total' ? '公益（報價含稅 1%）' : '公益（直接毛利 1%）'"></span>：NT$ <span x-text="fmt(summary.adminCost + summary.charityDonation)"></span><br>
       <b>真實營業利益：NT$ <span x-text="fmt(summary.netProfit)"
                           :style="summary.netProfit >= 0 ? 'color:#15803D' : 'color:#DC2626'"></span>
       （<span x-text="summary.netMarginPct.toFixed(1) + '%'"
@@ -1078,7 +1086,7 @@ function stlBridgeSvg(d, f) {
   d.costParts.forEach(p => dec('c-' + p.id, p.label, p.amt))
   rows.push(Object.assign(tot('gp', '毛利', d.gp, d.gp < 0 ? C.bad : C.good), { text: (d.gp < 0 ? '✖ ' : '＝ ') + f(d.gp) }))
   cur = d.gp
-  dec('admin', d.adminLbl || '管銷分攤', d.admin); dec('ch', '公益捐贈（毛利×1%）', d.ch)
+  dec('admin', d.adminLbl || '管銷分攤', d.admin); dec('ch', d.chLbl || '公益捐贈（毛利×1%）', d.ch)
   rows.push(Object.assign(tot('net', '最終營業利益', d.net, d.net < 0 ? C.bad : C.good), { text: (d.net < 0 ? '✖ ' : '＝ ') + f(d.net) }))
   return stlRangeChart(rows, { id: 'stl-ch-bridge', aria: '報價到最終營業利益的橋接圖：報價 ' + f(d.rev) + '，總成本 ' + f(d.cost) + '，毛利 ' + f(d.gp) + '，最終營業利益 ' + f(d.net) })
 }
@@ -1148,7 +1156,8 @@ function settlementPage() {
     dispatches: [],  // 承攬商派發（唯讀，即時從 /api/contractor-dispatches 讀取，不隨精算存檔凍結）
     _finalizing: false,   // 完結送出中：此刻狀態已是 finalized 但 _frozenSummary 還沒有——新完結一律是新口徑（未稅），不可誤判成舊口徑
     _frozenSummary: null,  // 精算完結當下寫入 data_json 的 summary 快照，供比對是否已過期
-    oh: { mode: 'legacy', defaultPct: 25 },   // 第 48 班 S3：管銷口徑開關與全域預設（init 時由 GET /api/overhead/settings 填入）
+    oh: { mode: 'legacy', defaultPct: 25, charityBasis: 'direct' },
+    ohEdit: { busy: false, val: '' },         // 第 52 班：精算頁調整管銷比率（僅最高管理者）   // 第 48 班 S3：管銷口徑開關與全域預設（init 時由 GET /api/overhead/settings 填入）
 
     summary: {
       quotedPretax:    0,
@@ -1193,7 +1202,7 @@ function settlementPage() {
       if (!this.session?.token) { location.href = 'login.html'; return }
       try {                                   // 第 48 班 S3：管銷口徑與全域預設（取不到＝legacy）
         const r = await fetch(`${API}/overhead/settings`, { headers: { Authorization: 'Bearer ' + this.session.token } })
-        if (r.ok) { const d = await r.json(); this.oh = { mode: d.ruleMode === 'v2' ? 'v2' : 'legacy', defaultPct: d.defaultPct } }
+        if (r.ok) { const d = await r.json(); this.oh = { mode: d.ruleMode === 'v2' ? 'v2' : 'legacy', defaultPct: d.defaultPct, charityBasis: d.charityBasis === 'total' ? 'total' : 'direct' } }
       } catch (e) { /* 維持 legacy */ }
 
       const params = new URLSearchParams(location.search)
@@ -1408,7 +1417,7 @@ function settlementPage() {
         ] },
         { key: 'after', title: '② 扣管銷分攤／公益後', rows: [
           R('b2-admin', this.adminLbl(sm), this.adminHow(sm), sm.origAdminCost, sm.adminCost, 'cost'),
-          R('b2-ch', '公益捐款（1%）', '公益捐贈＝毛利 × 1%（毛利為負時以 0 計）', sm.origCharity, sm.charityDonation, 'cost'),
+          R('b2-ch', this.charityLbl(sm), (sm.charityBasis === 'total' ? '公益捐贈＝報價含稅金額 × 1%（與毛利無關）' : '公益捐贈＝毛利 × 1%（毛利為負時以 0 計）') + (!!sm.origCharityBasis !== (sm.charityBasis === 'total') ? '；報價端基數：' + this.charityLbl(sm, true) : ''), sm.origCharity, sm.charityDonation, 'cost'),
           ...(sm.origIndirectReserve > 0 ? [R('b2-reserve', '報價預留間接成本', '報價單營業利益已扣的間接成本預算＝間接合計 − 管銷 − 公益（原始端資訊）', sm.origIndirectReserve, null, 'cost', { info: true })] : []),
           R('b2-net', '真實營業利益', '最終營業利益＝毛利 − 管銷分攤 − 公益捐贈（＝獎金分潤基數）', sm.origNetProfit, sm.netProfit, 'good', { strong: true, neg: true, diffNote: sm.origIndirectReserve > 0 ? '其中報價預留間接成本 ' + this.fmt(sm.origIndirectReserve) + '（原始預估已扣、實際只計單據）' : '' }),
           R('b2-netp', '真實營業利益率', '營業利益比＝最終營業利益 ÷ 報價', pct(sm.origNetProfit), pct(sm.netProfit), 'good', { pct: true }),
@@ -1450,7 +1459,7 @@ function settlementPage() {
       const sm = this.summary
       const parts = [{ id: 'items', label: '品項實際成本', amt: sm.itemActualTotal }]
         .concat(this.unassignedCostRows.filter(r => r.amount).map(r => ({ id: r.key, label: r.label.replace('未對應項目：', '').replace('（含未對應材料申請）', '（含材料）').replace('（未被品項吸收）', '（未吸收）').replace('（品項尚未採用）', '（未採用）'), amt: r.amount })))
-      return stlBridgeSvg({ adminLbl: this.adminLbl(sm), rev: sm.quotedPretax, costParts: parts, cost: sm.totalActualCost, gp: sm.grossProfit, admin: sm.adminCost, ch: sm.charityDonation, net: sm.netProfit }, n => this.fmt(n))
+      return stlBridgeSvg({ adminLbl: this.adminLbl(sm), chLbl: this.charityLbl(sm), rev: sm.quotedPretax, costParts: parts, cost: sm.totalActualCost, gp: sm.grossProfit, admin: sm.adminCost, ch: sm.charityDonation, net: sm.netProfit }, n => this.fmt(n))
     },
     get chartPair() {
       const sm = this.summary
@@ -1468,7 +1477,8 @@ function settlementPage() {
     get charityFloorNote() {
       const sm = this.summary, stored = this.settlement.status === 'finalized' && this._frozenSummary && typeof this._frozenSummary.charityDonation === 'number'
       if (stored) return ''            // 已完結：照存檔值顯示，不提規則
-      return sm.grossProfit < 0 || sm.origDirectProfit < 0 ? '虧損案公益金以 0 計' : ''
+      if (sm.charityBasis === 'total' && sm.origCharityBasis === 'total') return ''     // 第 52 班：含稅 1% 基數與毛利無關，沒有『虧損案以 0 計』
+      return (sm.charityBasis !== 'total' && sm.grossProfit < 0) || (sm.origCharityBasis !== 'total' && sm.origDirectProfit < 0) ? '虧損案公益金以 0 計' : ''
     },
     // 稅基標籤（純文字）：伺服器有回 taxBasis 就用它，沒有就用常數
     taxBasis(key) {
@@ -1895,13 +1905,16 @@ function settlementPage() {
       const ohVer = frz ? (frz.formulaVer || 1) : (this.oh.mode === 'v2' ? 2 : 1)
       const ohPct = frz && frz.overheadPct != null ? frz.overheadPct : (this._origTot.overheadPct != null ? this._origTot.overheadPct : this.oh.defaultPct)
       const adminCost       = MotrixProfitRules.adminCost(quotedPretax, grossProfit, ohPct, ohVer)
-      const charityDonation = frz && typeof frz.charityDonation === 'number' ? frz.charityDonation : MotrixProfitRules.charity(grossProfit)
+      // 第 52 班：公益基數。已完結＝存檔 summary 的戳記；其餘＝目前模式（total＝報價含稅金額×1%、不看毛利；只在新管銷口徑 ver 2）
+      const chBasis = ohVer !== 2 ? 'direct' : (frz ? (frz.charityBasis === 'total' ? 'total' : 'direct') : (this.oh.charityBasis === 'total' ? 'total' : 'direct'))
+      const charityDonation = frz && typeof frz.charityDonation === 'number' ? frz.charityDonation : MotrixProfitRules.charity(grossProfit, quotedTotal, chBasis)
       const netProfit       = grossProfit - adminCost - charityDonation
       const netMarginPct    = quotedPretax > 0 ? netProfit / quotedPretax * 100 : 0
 
       const origAdminCost   = tot.adminCost != null ? tot.adminCost : MotrixProfitRules.adminCost(quotedPretax, origDirectProfit, tot.overheadPct, tot.formulaVer || 1)
       // 原始側同規則：報價單原始毛利＜0 ⇒ 公益金 0、原始營業利益＝毛利 − 管銷（報價單存的舊值可能帶負的公益金，不沿用）
-      const origFloor       = origDirectProfit < 0
+      const origCharityTotal = tot.formulaVer === 2 && tot.charityBasis === 'total'        // 第 52 班：原始側的公益基數看報價單自己的戳記（與實際側的目前模式分開）
+      const origFloor       = origDirectProfit < 0 && !origCharityTotal
       const origCharity     = origFloor ? 0 : (tot.charityDonation != null ? tot.charityDonation : MotrixProfitRules.charity(origDirectProfit))
       // 報價預留間接成本（原始端資訊）：報價單營業利益早已扣掉；實際端以單據為準、不另算。開著的草稿用報價單數字算；已完結讀存檔 summary（舊案沒有 ⇒ 0＝不顯示）
       const origIndirectReserve = frz ? (typeof frz.origIndirectReserve === 'number' ? frz.origIndirectReserve : 0)
@@ -1919,6 +1932,7 @@ function settlementPage() {
         origMarginPct:    MotrixLegalRound.halfUp(origMarginPct, 10) / 10,
         origAdminCost, origCharity, origIndirectReserve,
         ...(tot.formulaVer === 2 ? { origFormulaVer: 2, origOverheadPct: tot.overheadPct } : {}),
+        ...(origCharityTotal ? { origCharityBasis: 'total' } : {}),
         origNetProfit:    MotrixLegalRound.halfUp(origNetProfit),
         origNetMarginPct: MotrixLegalRound.halfUp(origNetMarginPct, 10) / 10,
         itemActualTotal, itemPoUnadopted, extraTotal, dispatchTotal, dispatchAbsorbed, totalActualCost, remitFeeTotal: this.remitFeeTotal, customExpenseTotal: this.customExpenseTotal,
@@ -1928,6 +1942,7 @@ function settlementPage() {
         grossProfit:     MotrixLegalRound.halfUp(grossProfit),
         grossMarginPct:  MotrixLegalRound.halfUp(grossMarginPct, 10) / 10,
         adminCost, charityDonation,
+        ...(chBasis === 'total' ? { charityBasis: 'total' } : {}),            // 第 52 班：公益基數戳記隨 summary 凍結（舊基不帶）
         ...(ohVer === 2 ? { overheadPct: ohPct, formulaVer: 2 } : {}),        // 第 48 班：新口徑的比率與版本戳記隨 summary 凍結（舊口徑不帶＝舊算法）
         netProfit:       MotrixLegalRound.halfUp(netProfit),
         netMarginPct:    MotrixLegalRound.halfUp(netMarginPct, 10) / 10,
@@ -1948,6 +1963,40 @@ function settlementPage() {
     adminLbl(sm) {                                   // 同式 pdf_gen.admin_cost_label／reports.js stlAdminLabel
       if (!(sm && sm.formulaVer >= 2)) return '管銷分攤（報價稅前 10%）'
       return sm.overheadPct == null ? '管銷分攤（直接毛利）' : '管銷分攤（直接毛利 ' + sm.overheadPct + '%）'
+    },
+    charityLbl(sm, orig) {                           // 第 52 班：公益捐款標籤（新基＝報價含稅 1%；舊基＝直接毛利 1%）。orig＝原始（報價）側，看 origCharityBasis
+      return ((orig ? sm && sm.origCharityBasis : sm && sm.charityBasis) === 'total') ? '公益捐款（報價含稅 1%）' : '公益捐款（直接毛利 1%）'
+    },
+    charityHow(sm) {
+      return (sm && sm.charityBasis === 'total') ? '公益＝報價含稅金額×1%（與毛利無關）' : '公益＝毛利×1%（毛利為負時以 0 計）'
+    },
+    // 第 52 班：精算頁調整這張報價單的管銷比率——只有最高管理者、未完結、新管銷口徑；其餘人完全看不到輸入框
+    ohCanEdit() {
+      return !!(this.session && this.session.role === 'superadmin' && this.settlement.status !== 'finalized' && this.oh.mode === 'v2'
+        && this._origTot && this._origTot.formulaVer === 2)
+    },
+    ohCurrentPct() { return this.summary.overheadPct != null ? this.summary.overheadPct : this.oh.defaultPct },
+    ohDeviatesNow() { return Number(this.ohEdit.val === '' ? this.ohCurrentPct() : this.ohEdit.val) !== Number(this.oh.defaultPct) },
+    async saveOhPct() {
+      const s = String(this.ohEdit.val == null ? '' : this.ohEdit.val).trim()
+      const n = Number(s)
+      if (s === '' || !isFinite(n) || n < 0 || n > 100 || Math.round(n * 10) !== n * 10) { this.toastErr('管銷比率必須是 0～100 的數字，最多 1 位小數'); return }
+      const dev = n !== Number(this.oh.defaultPct)
+      if (dev && !confirm('管銷分攤比率為 ' + n + '%（預設 ' + this.oh.defaultPct + '%）。\n這會改變這張報價單的營業利益與獎金基數，確定要套用嗎？')) return
+      this.ohEdit.busy = true
+      try {
+        const res = await fetch(`${API}/quotations/${encodeURIComponent(this.quoteNo)}/overhead-pct`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ pct: n, confirm: dev })
+        })
+        const d = await res.json().catch(() => ({}))
+        if (!res.ok) { this.toastErr(typeof d.detail === 'string' ? d.detail : this._httpMsg(res.status, '調整管銷比率')); return }
+        Object.assign(this._origTot, d.tot || {})
+        this._updatedAt = d.updatedAt || this._updatedAt
+        this.ohEdit.val = ''
+        this.calcSummary()
+        this.toast('已套用管銷比率 ' + n + '%')
+      } catch (e) { this.toastErr('網路連線失敗，管銷比率未變更') } finally { this.ohEdit.busy = false }
     },
     adminShort(sm) {
       return (sm && sm.formulaVer === 2) ? ('管銷（' + sm.overheadPct + '%）') : '管銷（10%）'

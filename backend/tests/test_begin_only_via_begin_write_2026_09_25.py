@@ -27,6 +27,7 @@ ALLOWED = {
     ("modules/payroll/api/bonus.py", "mark_case_bonus_paid"): "同上",
     ("modules/case/api/quotations.py", "case_batch_assign"): "批次指派；讀前已拿鎖、try/finally 關連線（lost update C 組判讀）",
     ("tools/overhead_migrate.py", "main"): "管銷重算遷移 CLI（第48班 S5）；單一行程手動工具，BEGIN IMMEDIATE 拿寫鎖後規劃／寫入，main 以 try/finally 關連線，錯誤時未 commit 的交易隨 close 丟棄；不經請求路徑，不需要 write-txn watcher",
+    ("tools/charity_migrate.py", "main"): "公益基數遷移 CLI（第52班）；單一行程手動工具，BEGIN IMMEDIATE 拿寫鎖後規劃／寫入，main 以 try/finally 關連線，錯誤時未 commit 的交易隨 close 丟棄；不經請求路徑，不需要 write-txn watcher",
     ("archive.py", "_db_content_fingerprint"): ("每日備份「同上一份」的內容指紋（2026-09-30）：**唯讀** `BEGIN DEFERRED`（不拿寫鎖）——跨所有表雜湊需要同一時間點的一致讀取快照；"
                                                 "begin_write 是 BEGIN IMMEDIATE（寫鎖），會擋住正式庫上使用者的寫入，對唯讀讀取是錯的工具；try/finally 會 close"),
 }

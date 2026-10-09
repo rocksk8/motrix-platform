@@ -4921,6 +4921,1775 @@ null,
 "netProfit": 12109,
 "netMarginPct": 34.597142857142856
 }
+},
+{
+"fn": "quote",
+"args": [
+100000,
+60000,
+3000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": null,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": 37000,
+"directMarginPct": 37.0,
+"adminCost": 9250,
+"charityDonation": 1050,
+"totalIndirect": 10300,
+"netProfit": 26700,
+"netMarginPct": 26.700000000000003
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+60000,
+3000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 25,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": 37000,
+"directMarginPct": 37.0,
+"adminCost": 9250,
+"charityDonation": 1050,
+"totalIndirect": 10300,
+"netProfit": 26700,
+"netMarginPct": 26.700000000000003
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+60000,
+3000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 12.5,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": 37000,
+"directMarginPct": 37.0,
+"adminCost": 4625,
+"charityDonation": 1050,
+"totalIndirect": 5675,
+"netProfit": 31325,
+"netMarginPct": 31.324999999999996
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+60000,
+3000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 0,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": 37000,
+"directMarginPct": 37.0,
+"adminCost": 0,
+"charityDonation": 1050,
+"totalIndirect": 1050,
+"netProfit": 35950,
+"netMarginPct": 35.949999999999996
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+60000,
+3000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 1,
+"pct": null,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": 37000,
+"directMarginPct": 37.0,
+"adminCost": 10000,
+"charityDonation": 370,
+"totalIndirect": 14370,
+"netProfit": 22630,
+"netMarginPct": 22.63
+}
+},
+{
+"fn": "quote",
+"args": [
+35000,
+20001,
+1000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": null,
+"total": 36750,
+"basis": "total",
+"expect": {
+"directProfit": 13999,
+"directMarginPct": 39.99714285714286,
+"adminCost": 3500,
+"charityDonation": 368,
+"totalIndirect": 3868,
+"netProfit": 10131,
+"netMarginPct": 28.945714285714285
+}
+},
+{
+"fn": "quote",
+"args": [
+35000,
+20001,
+1000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 25,
+"total": 36750,
+"basis": "total",
+"expect": {
+"directProfit": 13999,
+"directMarginPct": 39.99714285714286,
+"adminCost": 3500,
+"charityDonation": 368,
+"totalIndirect": 3868,
+"netProfit": 10131,
+"netMarginPct": 28.945714285714285
+}
+},
+{
+"fn": "quote",
+"args": [
+35000,
+20001,
+1000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 12.5,
+"total": 36750,
+"basis": "total",
+"expect": {
+"directProfit": 13999,
+"directMarginPct": 39.99714285714286,
+"adminCost": 1750,
+"charityDonation": 368,
+"totalIndirect": 2118,
+"netProfit": 11881,
+"netMarginPct": 33.94571428571428
+}
+},
+{
+"fn": "quote",
+"args": [
+35000,
+20001,
+1000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 0,
+"total": 36750,
+"basis": "total",
+"expect": {
+"directProfit": 13999,
+"directMarginPct": 39.99714285714286,
+"adminCost": 0,
+"charityDonation": 368,
+"totalIndirect": 368,
+"netProfit": 13631,
+"netMarginPct": 38.94571428571428
+}
+},
+{
+"fn": "quote",
+"args": [
+35000,
+20001,
+1000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 1,
+"pct": null,
+"total": 36750,
+"basis": "total",
+"expect": {
+"directProfit": 13999,
+"directMarginPct": 39.99714285714286,
+"adminCost": 3500,
+"charityDonation": 140,
+"totalIndirect": 7640,
+"netProfit": 6359,
+"netMarginPct": 18.16857142857143
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+99000,
+4950,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": null,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": -3950,
+"directMarginPct": -3.95,
+"adminCost": 0,
+"charityDonation": 1050,
+"totalIndirect": 1050,
+"netProfit": -5000,
+"netMarginPct": -5.0
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+99000,
+4950,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 25,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": -3950,
+"directMarginPct": -3.95,
+"adminCost": 0,
+"charityDonation": 1050,
+"totalIndirect": 1050,
+"netProfit": -5000,
+"netMarginPct": -5.0
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+99000,
+4950,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 12.5,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": -3950,
+"directMarginPct": -3.95,
+"adminCost": 0,
+"charityDonation": 1050,
+"totalIndirect": 1050,
+"netProfit": -5000,
+"netMarginPct": -5.0
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+99000,
+4950,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 0,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": -3950,
+"directMarginPct": -3.95,
+"adminCost": 0,
+"charityDonation": 1050,
+"totalIndirect": 1050,
+"netProfit": -5000,
+"netMarginPct": -5.0
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+99000,
+4950,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 1,
+"pct": null,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": -3950,
+"directMarginPct": -3.95,
+"adminCost": 10000,
+"charityDonation": 0,
+"totalIndirect": 14000,
+"netProfit": -17950,
+"netMarginPct": -17.95
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+120000,
+6000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": null,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": -26000,
+"directMarginPct": -26.0,
+"adminCost": 0,
+"charityDonation": 1050,
+"totalIndirect": 1050,
+"netProfit": -27050,
+"netMarginPct": -27.05
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+120000,
+6000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 25,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": -26000,
+"directMarginPct": -26.0,
+"adminCost": 0,
+"charityDonation": 1050,
+"totalIndirect": 1050,
+"netProfit": -27050,
+"netMarginPct": -27.05
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+120000,
+6000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 12.5,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": -26000,
+"directMarginPct": -26.0,
+"adminCost": 0,
+"charityDonation": 1050,
+"totalIndirect": 1050,
+"netProfit": -27050,
+"netMarginPct": -27.05
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+120000,
+6000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 0,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": -26000,
+"directMarginPct": -26.0,
+"adminCost": 0,
+"charityDonation": 1050,
+"totalIndirect": 1050,
+"netProfit": -27050,
+"netMarginPct": -27.05
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+120000,
+6000,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 1,
+"pct": null,
+"total": 105000,
+"basis": "total",
+"expect": {
+"directProfit": -26000,
+"directMarginPct": -26.0,
+"adminCost": 10000,
+"charityDonation": 0,
+"totalIndirect": 14000,
+"netProfit": -40000,
+"netMarginPct": -40.0
+}
+},
+{
+"fn": "quote",
+"args": [
+0,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": null,
+"total": 0,
+"basis": "total",
+"expect": {
+"directProfit": 0,
+"directMarginPct": 0,
+"adminCost": 0,
+"charityDonation": 0,
+"totalIndirect": 0,
+"netProfit": 0,
+"netMarginPct": 0
+}
+},
+{
+"fn": "quote",
+"args": [
+0,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 25,
+"total": 0,
+"basis": "total",
+"expect": {
+"directProfit": 0,
+"directMarginPct": 0,
+"adminCost": 0,
+"charityDonation": 0,
+"totalIndirect": 0,
+"netProfit": 0,
+"netMarginPct": 0
+}
+},
+{
+"fn": "quote",
+"args": [
+0,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 12.5,
+"total": 0,
+"basis": "total",
+"expect": {
+"directProfit": 0,
+"directMarginPct": 0,
+"adminCost": 0,
+"charityDonation": 0,
+"totalIndirect": 0,
+"netProfit": 0,
+"netMarginPct": 0
+}
+},
+{
+"fn": "quote",
+"args": [
+0,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 0,
+"total": 0,
+"basis": "total",
+"expect": {
+"directProfit": 0,
+"directMarginPct": 0,
+"adminCost": 0,
+"charityDonation": 0,
+"totalIndirect": 0,
+"netProfit": 0,
+"netMarginPct": 0
+}
+},
+{
+"fn": "quote",
+"args": [
+0,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 1,
+"pct": null,
+"total": 0,
+"basis": "total",
+"expect": {
+"directProfit": 0,
+"directMarginPct": 0,
+"adminCost": 0,
+"charityDonation": 0,
+"totalIndirect": 4000,
+"netProfit": -4000,
+"netMarginPct": 0
+}
+},
+{
+"fn": "quote",
+"args": [
+1250,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": null,
+"total": 1313,
+"basis": "total",
+"expect": {
+"directProfit": 1250,
+"directMarginPct": 100.0,
+"adminCost": 313,
+"charityDonation": 13,
+"totalIndirect": 326,
+"netProfit": 924,
+"netMarginPct": 73.92
+}
+},
+{
+"fn": "quote",
+"args": [
+1250,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 25,
+"total": 1313,
+"basis": "total",
+"expect": {
+"directProfit": 1250,
+"directMarginPct": 100.0,
+"adminCost": 313,
+"charityDonation": 13,
+"totalIndirect": 326,
+"netProfit": 924,
+"netMarginPct": 73.92
+}
+},
+{
+"fn": "quote",
+"args": [
+1250,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 12.5,
+"total": 1313,
+"basis": "total",
+"expect": {
+"directProfit": 1250,
+"directMarginPct": 100.0,
+"adminCost": 156,
+"charityDonation": 13,
+"totalIndirect": 169,
+"netProfit": 1081,
+"netMarginPct": 86.48
+}
+},
+{
+"fn": "quote",
+"args": [
+1250,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 0,
+"total": 1313,
+"basis": "total",
+"expect": {
+"directProfit": 1250,
+"directMarginPct": 100.0,
+"adminCost": 0,
+"charityDonation": 13,
+"totalIndirect": 13,
+"netProfit": 1237,
+"netMarginPct": 98.96000000000001
+}
+},
+{
+"fn": "quote",
+"args": [
+1250,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 1,
+"pct": null,
+"total": 1313,
+"basis": "total",
+"expect": {
+"directProfit": 1250,
+"directMarginPct": 100.0,
+"adminCost": 125,
+"charityDonation": 13,
+"totalIndirect": 4138,
+"netProfit": -2888,
+"netMarginPct": -231.04
+}
+},
+{
+"fn": "quote",
+"args": [
+10010,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": null,
+"total": 10511,
+"basis": "total",
+"expect": {
+"directProfit": 10010,
+"directMarginPct": 100.0,
+"adminCost": 2503,
+"charityDonation": 105,
+"totalIndirect": 2608,
+"netProfit": 7402,
+"netMarginPct": 73.94605394605395
+}
+},
+{
+"fn": "quote",
+"args": [
+10010,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 25,
+"total": 10511,
+"basis": "total",
+"expect": {
+"directProfit": 10010,
+"directMarginPct": 100.0,
+"adminCost": 2503,
+"charityDonation": 105,
+"totalIndirect": 2608,
+"netProfit": 7402,
+"netMarginPct": 73.94605394605395
+}
+},
+{
+"fn": "quote",
+"args": [
+10010,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 12.5,
+"total": 10511,
+"basis": "total",
+"expect": {
+"directProfit": 10010,
+"directMarginPct": 100.0,
+"adminCost": 1251,
+"charityDonation": 105,
+"totalIndirect": 1356,
+"netProfit": 8654,
+"netMarginPct": 86.45354645354645
+}
+},
+{
+"fn": "quote",
+"args": [
+10010,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 0,
+"total": 10511,
+"basis": "total",
+"expect": {
+"directProfit": 10010,
+"directMarginPct": 100.0,
+"adminCost": 0,
+"charityDonation": 105,
+"totalIndirect": 105,
+"netProfit": 9905,
+"netMarginPct": 98.95104895104895
+}
+},
+{
+"fn": "quote",
+"args": [
+10010,
+0,
+0,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 1,
+"pct": null,
+"total": 10511,
+"basis": "total",
+"expect": {
+"directProfit": 10010,
+"directMarginPct": 100.0,
+"adminCost": 1001,
+"charityDonation": 100,
+"totalIndirect": 5101,
+"netProfit": 4909,
+"netMarginPct": 49.040959040959045
+}
+},
+{
+"fn": "quote",
+"args": [
+777777,
+123456,
+6172,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": null,
+"total": 816666,
+"basis": "total",
+"expect": {
+"directProfit": 648149,
+"directMarginPct": 83.33352619066905,
+"adminCost": 162037,
+"charityDonation": 8167,
+"totalIndirect": 170204,
+"netProfit": 477945,
+"netMarginPct": 61.45013287870431
+}
+},
+{
+"fn": "quote",
+"args": [
+777777,
+123456,
+6172,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 25,
+"total": 816666,
+"basis": "total",
+"expect": {
+"directProfit": 648149,
+"directMarginPct": 83.33352619066905,
+"adminCost": 162037,
+"charityDonation": 8167,
+"totalIndirect": 170204,
+"netProfit": 477945,
+"netMarginPct": 61.45013287870431
+}
+},
+{
+"fn": "quote",
+"args": [
+777777,
+123456,
+6172,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 12.5,
+"total": 816666,
+"basis": "total",
+"expect": {
+"directProfit": 648149,
+"directMarginPct": 83.33352619066905,
+"adminCost": 81019,
+"charityDonation": 8167,
+"totalIndirect": 89186,
+"netProfit": 558963,
+"netMarginPct": 71.86674329531473
+}
+},
+{
+"fn": "quote",
+"args": [
+777777,
+123456,
+6172,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 2,
+"pct": 0,
+"total": 816666,
+"basis": "total",
+"expect": {
+"directProfit": 648149,
+"directMarginPct": 83.33352619066905,
+"adminCost": 0,
+"charityDonation": 8167,
+"totalIndirect": 8167,
+"netProfit": 639982,
+"netMarginPct": 82.28348228348227
+}
+},
+{
+"fn": "quote",
+"args": [
+777777,
+123456,
+6172,
+[
+1000,
+2000,
+500,
+300,
+200
+]
+],
+"ver": 1,
+"pct": null,
+"total": 816666,
+"basis": "total",
+"expect": {
+"directProfit": 648149,
+"directMarginPct": 83.33352619066905,
+"adminCost": 77778,
+"charityDonation": 6481,
+"totalIndirect": 88259,
+"netProfit": 559890,
+"netMarginPct": 71.98592912878627
+}
+},
+{
+"fn": "charity",
+"args": [
+500
+],
+"ver": null,
+"pct": null,
+"total": 49,
+"basis": "total",
+"expect": 0
+},
+{
+"fn": "charity",
+"args": [
+500
+],
+"ver": null,
+"pct": null,
+"total": 50,
+"basis": "total",
+"expect": 1
+},
+{
+"fn": "charity",
+"args": [
+500
+],
+"ver": null,
+"pct": null,
+"total": 149,
+"basis": "total",
+"expect": 1
+},
+{
+"fn": "charity",
+"args": [
+500
+],
+"ver": null,
+"pct": null,
+"total": 150,
+"basis": "total",
+"expect": 2
+},
+{
+"fn": "charity",
+"args": [
+500
+],
+"ver": null,
+"pct": null,
+"total": 1050,
+"basis": "total",
+"expect": 11
+},
+{
+"fn": "charity",
+"args": [
+500
+],
+"ver": null,
+"pct": null,
+"total": 100000,
+"basis": "total",
+"expect": 1000
+},
+{
+"fn": "charity",
+"args": [
+500
+],
+"ver": null,
+"pct": null,
+"total": 999999,
+"basis": "total",
+"expect": 10000
+},
+{
+"fn": "charity",
+"args": [
+500
+],
+"ver": null,
+"pct": null,
+"total": 1050000,
+"basis": "total",
+"expect": 10500
+},
+{
+"fn": "charity",
+"args": [
+-5000
+],
+"ver": null,
+"pct": null,
+"total": 105000,
+"basis": "total",
+"expect": 1050
+},
+{
+"fn": "charity",
+"args": [
+-5000
+],
+"ver": null,
+"pct": null,
+"total": null,
+"basis": "direct",
+"expect": 0
+},
+{
+"fn": "settlement",
+"args": [
+100000,
+70000,
+null
+],
+"ver": 2,
+"pct": null,
+"total": 105000,
+"basis": "total",
+"expect": {
+"grossProfit": 30000,
+"grossMarginPct": 30.0,
+"adminCost": 7500,
+"charityDonation": 1050,
+"netProfit": 21450,
+"netMarginPct": 21.45
+}
+},
+{
+"fn": "settlement",
+"args": [
+100000,
+70000,
+null
+],
+"ver": 2,
+"pct": 25,
+"total": 105000,
+"basis": "total",
+"expect": {
+"grossProfit": 30000,
+"grossMarginPct": 30.0,
+"adminCost": 7500,
+"charityDonation": 1050,
+"netProfit": 21450,
+"netMarginPct": 21.45
+}
+},
+{
+"fn": "settlement",
+"args": [
+100000,
+70000,
+null
+],
+"ver": 2,
+"pct": 7.1,
+"total": 105000,
+"basis": "total",
+"expect": {
+"grossProfit": 30000,
+"grossMarginPct": 30.0,
+"adminCost": 2130,
+"charityDonation": 1050,
+"netProfit": 26820,
+"netMarginPct": 26.82
+}
+},
+{
+"fn": "settlement",
+"args": [
+100000,
+70000,
+777
+],
+"ver": 2,
+"pct": 25,
+"total": 105000,
+"basis": "total",
+"expect": {
+"grossProfit": 30000,
+"grossMarginPct": 30.0,
+"adminCost": 7500,
+"charityDonation": 777,
+"netProfit": 21723,
+"netMarginPct": 21.723
+}
+},
+{
+"fn": "settlement",
+"args": [
+100000,
+70000,
+null
+],
+"ver": 1,
+"pct": null,
+"total": 105000,
+"basis": "total",
+"expect": {
+"grossProfit": 30000,
+"grossMarginPct": 30.0,
+"adminCost": 10000,
+"charityDonation": 300,
+"netProfit": 19700,
+"netMarginPct": 19.7
+}
+},
+{
+"fn": "settlement",
+"args": [
+100000,
+105000,
+null
+],
+"ver": 2,
+"pct": null,
+"total": 105000,
+"basis": "total",
+"expect": {
+"grossProfit": -5000,
+"grossMarginPct": -5.0,
+"adminCost": 0,
+"charityDonation": 1050,
+"netProfit": -6050,
+"netMarginPct": -6.05
+}
+},
+{
+"fn": "settlement",
+"args": [
+100000,
+105000,
+null
+],
+"ver": 2,
+"pct": 25,
+"total": 105000,
+"basis": "total",
+"expect": {
+"grossProfit": -5000,
+"grossMarginPct": -5.0,
+"adminCost": 0,
+"charityDonation": 1050,
+"netProfit": -6050,
+"netMarginPct": -6.05
+}
+},
+{
+"fn": "settlement",
+"args": [
+100000,
+105000,
+null
+],
+"ver": 2,
+"pct": 7.1,
+"total": 105000,
+"basis": "total",
+"expect": {
+"grossProfit": -5000,
+"grossMarginPct": -5.0,
+"adminCost": 0,
+"charityDonation": 1050,
+"netProfit": -6050,
+"netMarginPct": -6.05
+}
+},
+{
+"fn": "settlement",
+"args": [
+100000,
+105000,
+777
+],
+"ver": 2,
+"pct": 25,
+"total": 105000,
+"basis": "total",
+"expect": {
+"grossProfit": -5000,
+"grossMarginPct": -5.0,
+"adminCost": 0,
+"charityDonation": 777,
+"netProfit": -5777,
+"netMarginPct": -5.777
+}
+},
+{
+"fn": "settlement",
+"args": [
+100000,
+105000,
+null
+],
+"ver": 1,
+"pct": null,
+"total": 105000,
+"basis": "total",
+"expect": {
+"grossProfit": -5000,
+"grossMarginPct": -5.0,
+"adminCost": 10000,
+"charityDonation": 0,
+"netProfit": -15000,
+"netMarginPct": -15.0
+}
+},
+{
+"fn": "settlement",
+"args": [
+35000,
+20001,
+null
+],
+"ver": 2,
+"pct": null,
+"total": 36750,
+"basis": "total",
+"expect": {
+"grossProfit": 14999,
+"grossMarginPct": 42.854285714285716,
+"adminCost": 3750,
+"charityDonation": 368,
+"netProfit": 10881,
+"netMarginPct": 31.088571428571427
+}
+},
+{
+"fn": "settlement",
+"args": [
+35000,
+20001,
+null
+],
+"ver": 2,
+"pct": 25,
+"total": 36750,
+"basis": "total",
+"expect": {
+"grossProfit": 14999,
+"grossMarginPct": 42.854285714285716,
+"adminCost": 3750,
+"charityDonation": 368,
+"netProfit": 10881,
+"netMarginPct": 31.088571428571427
+}
+},
+{
+"fn": "settlement",
+"args": [
+35000,
+20001,
+null
+],
+"ver": 2,
+"pct": 7.1,
+"total": 36750,
+"basis": "total",
+"expect": {
+"grossProfit": 14999,
+"grossMarginPct": 42.854285714285716,
+"adminCost": 1065,
+"charityDonation": 368,
+"netProfit": 13566,
+"netMarginPct": 38.76
+}
+},
+{
+"fn": "settlement",
+"args": [
+35000,
+20001,
+777
+],
+"ver": 2,
+"pct": 25,
+"total": 36750,
+"basis": "total",
+"expect": {
+"grossProfit": 14999,
+"grossMarginPct": 42.854285714285716,
+"adminCost": 3750,
+"charityDonation": 777,
+"netProfit": 10472,
+"netMarginPct": 29.92
+}
+},
+{
+"fn": "settlement",
+"args": [
+35000,
+20001,
+null
+],
+"ver": 1,
+"pct": null,
+"total": 36750,
+"basis": "total",
+"expect": {
+"grossProfit": 14999,
+"grossMarginPct": 42.854285714285716,
+"adminCost": 3500,
+"charityDonation": 150,
+"netProfit": 11349,
+"netMarginPct": 32.425714285714285
+}
+},
+{
+"fn": "settlement",
+"args": [
+0,
+0,
+null
+],
+"ver": 2,
+"pct": null,
+"total": 0,
+"basis": "total",
+"expect": {
+"grossProfit": 0,
+"grossMarginPct": 0,
+"adminCost": 0,
+"charityDonation": 0,
+"netProfit": 0,
+"netMarginPct": 0
+}
+},
+{
+"fn": "settlement",
+"args": [
+0,
+0,
+null
+],
+"ver": 2,
+"pct": 25,
+"total": 0,
+"basis": "total",
+"expect": {
+"grossProfit": 0,
+"grossMarginPct": 0,
+"adminCost": 0,
+"charityDonation": 0,
+"netProfit": 0,
+"netMarginPct": 0
+}
+},
+{
+"fn": "settlement",
+"args": [
+0,
+0,
+null
+],
+"ver": 2,
+"pct": 7.1,
+"total": 0,
+"basis": "total",
+"expect": {
+"grossProfit": 0,
+"grossMarginPct": 0,
+"adminCost": 0,
+"charityDonation": 0,
+"netProfit": 0,
+"netMarginPct": 0
+}
+},
+{
+"fn": "settlement",
+"args": [
+0,
+0,
+777
+],
+"ver": 2,
+"pct": 25,
+"total": 0,
+"basis": "total",
+"expect": {
+"grossProfit": 0,
+"grossMarginPct": 0,
+"adminCost": 0,
+"charityDonation": 777,
+"netProfit": -777,
+"netMarginPct": 0
+}
+},
+{
+"fn": "settlement",
+"args": [
+0,
+0,
+null
+],
+"ver": 1,
+"pct": null,
+"total": 0,
+"basis": "total",
+"expect": {
+"grossProfit": 0,
+"grossMarginPct": 0,
+"adminCost": 0,
+"charityDonation": 0,
+"netProfit": 0,
+"netMarginPct": 0
+}
+},
+{
+"fn": "settlement",
+"args": [
+500000,
+0,
+null
+],
+"ver": 2,
+"pct": null,
+"total": 525000,
+"basis": "total",
+"expect": {
+"grossProfit": 500000,
+"grossMarginPct": 100.0,
+"adminCost": 125000,
+"charityDonation": 5250,
+"netProfit": 369750,
+"netMarginPct": 73.95
+}
+},
+{
+"fn": "settlement",
+"args": [
+500000,
+0,
+null
+],
+"ver": 2,
+"pct": 25,
+"total": 525000,
+"basis": "total",
+"expect": {
+"grossProfit": 500000,
+"grossMarginPct": 100.0,
+"adminCost": 125000,
+"charityDonation": 5250,
+"netProfit": 369750,
+"netMarginPct": 73.95
+}
+},
+{
+"fn": "settlement",
+"args": [
+500000,
+0,
+null
+],
+"ver": 2,
+"pct": 7.1,
+"total": 525000,
+"basis": "total",
+"expect": {
+"grossProfit": 500000,
+"grossMarginPct": 100.0,
+"adminCost": 35500,
+"charityDonation": 5250,
+"netProfit": 459250,
+"netMarginPct": 91.85
+}
+},
+{
+"fn": "settlement",
+"args": [
+500000,
+0,
+777
+],
+"ver": 2,
+"pct": 25,
+"total": 525000,
+"basis": "total",
+"expect": {
+"grossProfit": 500000,
+"grossMarginPct": 100.0,
+"adminCost": 125000,
+"charityDonation": 777,
+"netProfit": 374223,
+"netMarginPct": 74.8446
+}
+},
+{
+"fn": "settlement",
+"args": [
+500000,
+0,
+null
+],
+"ver": 1,
+"pct": null,
+"total": 525000,
+"basis": "total",
+"expect": {
+"grossProfit": 500000,
+"grossMarginPct": 100.0,
+"adminCost": 50000,
+"charityDonation": 5000,
+"netProfit": 445000,
+"netMarginPct": 89.0
+}
+},
+{
+"fn": "charity",
+"args": [
+5000
+],
+"ver": null,
+"pct": null,
+"total": -5000,
+"basis": "total",
+"expect": 0
+},
+{
+"fn": "quote",
+"args": [
+100000,
+60000,
+3000,
+[
+0,
+0,
+0,
+0,
+0
+]
+],
+"ver": 2,
+"pct": 25,
+"total": -100,
+"basis": "total",
+"expect": {
+"directProfit": 37000,
+"directMarginPct": 37.0,
+"adminCost": 9250,
+"charityDonation": 0,
+"totalIndirect": 9250,
+"netProfit": 27750,
+"netMarginPct": 27.750000000000004
+}
 }
 ]
 }

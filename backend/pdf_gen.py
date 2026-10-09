@@ -67,6 +67,13 @@ def admin_cost_label(summary, orig=False, hide_default=False) -> str:
     return "管銷分攤（直接毛利 %s%%）" % (int(p) if p == int(p) else p)
 
 
+def charity_cost_label(summary, orig=False) -> str:
+    """公益捐款列標籤（第 52 班）：`charityBasis=total`（orig 側看 `origCharityBasis`）＝「公益捐款（報價含稅 1%）」，其餘（無戳記／舊基）＝「公益捐款（直接毛利 1%）」。
+    前端同式：reports.js stlCharityLabel、case-management-fin.js caseSettleCharityLabel、settlement.html charityLbl；守門 tests/test_profit_labels_t52.py。"""
+    s = summary or {}
+    return "公益捐款（報價含稅 1%）" if s.get("origCharityBasis" if orig else "charityBasis") == "total" else "公益捐款（直接毛利 1%）"
+
+
 def estimated_margin_label(summary) -> str:
     """未完成精算的結案報表『預估…率』列標籤（第 50 班稽核）：這個數字是 summary.netMarginPct＝營業利益率。
     新口徑（summary.formulaVer>=2）⇒「預估營業利益率」；舊口徑／無戳記 ⇒ 維持舊字樣「預估淨毛利率」（歷史不動）。"""
@@ -2673,7 +2680,7 @@ def _build_case_closing_html(data: dict) -> str:
       <tr><td class="bold">原始直接毛利</td><td class="r bold">{money(summary.get("origDirectProfit"))}</td></tr>
       <tr><td>原始毛利率</td><td class="r">{float(summary.get("origMarginPct") or 0):.1f}%</td></tr>
       <tr><td>{admin_cost_label(summary, True, hide_default=True)}</td><td class="r red">− {money(summary.get("origAdminCost"))}</td></tr>
-      <tr><td>公益捐款（1%）</td><td class="r red">− {money(summary.get("origCharity"))}</td></tr>{_orig_reserve_row(summary, money)}
+      <tr><td>{charity_cost_label(summary, True)}</td><td class="r red">− {money(summary.get("origCharity"))}</td></tr>{_orig_reserve_row(summary, money)}
       <tr class="bold-row"><td>原始預估營業利益</td><td class="r">{money(summary.get("origNetProfit"))}</td></tr>
       <tr><td>原始預估營業利益率</td><td class="r">{float(summary.get("origNetMarginPct") or 0):.1f}%</td></tr>
     </tbody>
@@ -2690,7 +2697,7 @@ def _build_case_closing_html(data: dict) -> str:
       <tr><td>真實毛利</td><td class="r {'green' if int(summary.get('grossProfit',0) or 0)>=0 else 'red'}">{money(summary.get("grossProfit"))}</td></tr>
       <tr><td>真實毛利率</td><td class="r">{float(summary.get("grossMarginPct") or 0):.1f}%</td></tr>
       <tr><td>{admin_cost_label(summary, hide_default=True)}</td><td class="r red">− {money(summary.get("adminCost"))}</td></tr>
-      <tr><td>公益捐款（1%）</td><td class="r red">− {money(summary.get("charityDonation"))}</td></tr>
+      <tr><td>{charity_cost_label(summary)}</td><td class="r red">− {money(summary.get("charityDonation"))}</td></tr>
       <tr class="bold-row"><td>真實營業利益</td><td class="r {'green' if int(summary.get('netProfit',0) or 0)>=0 else 'red'}">{money(summary.get("netProfit"))}</td></tr>
       <tr><td>真實營業利益率</td><td class="r bold" style="color:{'#15803D' if float(summary.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(summary.get('netMarginPct',0) or 0)>=0 else '#DC2626'}">{float(summary.get("netMarginPct") or 0):.1f}%</td></tr>
     </tbody>

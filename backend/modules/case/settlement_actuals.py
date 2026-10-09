@@ -513,13 +513,16 @@ def _expected_downstream(conn, quote_no, d, tol_item):
     tol_total = tol_item + 3                         # 總成本由多塊加總，每塊各自進位
     total = t["totalActualCost"]
     ver, ohpct = _profit_basis(tot)
-    pr = profit_rules.settlement_profit(pretax, total, ohpct, ver)   # 第 48 班：算式的唯一來源（管銷／公益金／營業利益）；口徑由 overhead_rule_mode 決定（legacy＝稅前×10%；v2＝實際毛利×報價單比率）
+    from modules.case import profit_guard as PG
+    cbasis = PG.charity_basis()                                       # 第 52 班：公益基數跟目前模式（total＝報價含稅×1%；只在 v2 生效）
+    pr = profit_rules.settlement_profit(pretax, total, ohpct, ver, None, _num(tot.get("total")), cbasis)   # 第 48 班：算式的唯一來源（管銷／公益金／營業利益）；口徑由 overhead_rule_mode 決定（legacy＝稅前×10%；v2＝實際毛利×報價單比率）
     gross, admin, charity, net = pr["grossProfit"], pr["adminCost"], pr["charityDonation"], pr["netProfit"]   # 第 39 班：毛利為負時公益金為 0
     pct_tol = 0.1 + (100.0 * tol_total / pretax if pretax > 0 else 0.0)
     return {"_pretax": pretax,
             "dispatchTotal": (t["dispatchTotal"], 1), "remitFeeTotal": (t["remitFeeTotal"], 1), "customExpenseTotal": (t["customExpenseTotal"], 1),
             "totalActualCost": (total, tol_total), "grossProfit": (gross, tol_total), "adminCost": (admin, 1),
-            "charityDonation": (charity, 2 + round(tol_total * 0.01)), "netProfit": (net, tol_total + 3),
+            "charityDonation": (charity, 0 if (cbasis == profit_rules.CHARITY_TOTAL and ver == profit_rules.FORMULA_VER) else 2 + round(tol_total * 0.01)),   # total 基數與實際成本無關 ⇒ 必須逐位相同
+            "netProfit": (net, tol_total + 3),
             "grossMarginPct": (round(gross / pretax * 100, 1) if pretax > 0 else 0.0, pct_tol),
             "netMarginPct": (round(net / pretax * 100, 1) if pretax > 0 else 0.0, pct_tol)}
 
@@ -579,7 +582,9 @@ def original_side(conn, quote_no, summ) -> dict:
     admin = _num(tot["adminCost"]) if tot.get("adminCost") is not None else profit_rules.admin_cost(pretax, direct)
     # 第 39 班後的稽核 S-2：舊報價（虧損案）存的 charityDonation 可能是負的（當時沒有下限）；頁面已改成下限 0，伺服器這裡也一律下限 0，
     # 預留（totalIndirect − 管銷 − 公益）隨之重算——原始營業利益（tot.netProfit）不變，對帳式仍成立。已凍結的舊 summary 不改寫。
-    charity = max(0, _num(tot["charityDonation"])) if tot.get("charityDonation") is not None else profit_rules.charity(direct)
+    _ctotal = tot.get("formulaVer") == profit_rules.FORMULA_VER and tot.get("charityBasis") == profit_rules.CHARITY_TOTAL     # 第 52 班：報價單自己戳記的公益基數
+    charity = max(0, _num(tot["charityDonation"])) if tot.get("charityDonation") is not None else (
+        profit_rules.charity(direct, _num(tot.get("total")), profit_rules.CHARITY_TOTAL) if _ctotal else profit_rules.charity(direct))
     net = _num(tot["netProfit"]) if tot.get("netProfit") is not None else direct - admin - charity
     net_pct = _num(tot["netMarginPct"]) if tot.get("netMarginPct") is not None else (net / pretax * 100 if pretax > 0 else 0.0)
     # 第 39 班：報價預留的間接成本（運費／安裝／差旅／保固／其他五項；`tot.totalIndirect` 含管銷分攤與公益金，扣掉這兩項後的餘額）——原始營業利益已扣掉它、
@@ -590,6 +595,8 @@ def original_side(conn, quote_no, summ) -> dict:
            "profitDiff": _num(summ.get("netProfit")) - net}
     if tot.get("formulaVer") == profit_rules.FORMULA_VER:          # 第 48 班：報價是新口徑時，原始側也標出版本與比率（標籤用）
         out["origFormulaVer"], out["origOverheadPct"] = profit_rules.FORMULA_VER, tot.get("overheadPct")
+        if tot.get("charityBasis") == profit_rules.CHARITY_TOTAL:     # 第 52 班：原始側的公益基數來自報價單自己的戳記（與實際側的目前模式分開標示）
+            out["origCharityBasis"] = profit_rules.CHARITY_TOTAL
     return out
 
 
@@ -618,16 +625,22 @@ def fill_downstream(conn, quote_no, settlement):
     except (TypeError, ValueError):
         _tot = {}
     _ver, _pct = _profit_basis(_tot)
+    from modules.case import profit_guard as _PG
     if _ver == profit_rules.FORMULA_VER:                            # 第 48 班：新口徑的版本與比率隨 summary 凍結（舊口徑不帶＝舊算法）
         summ["formulaVer"], summ["overheadPct"] = _ver, _pct
+        if _PG.charity_basis() == profit_rules.CHARITY_TOTAL:       # 第 52 班：公益基數戳記只由伺服器蓋（用戶端值一律丟棄）
+            summ["charityBasis"] = profit_rules.CHARITY_TOTAL
+        else:
+            summ.pop("charityBasis", None)
     else:
         summ.pop("formulaVer", None)
         summ.pop("overheadPct", None)
+        summ.pop("charityBasis", None)
     put("taxExpense", d["totals"]["taxExpense"])                  # 稅額（含在成本內）：伺服器重算值，隨 summary 凍結
     _orig = original_side(conn, quote_no, summ)
     for k, v in _orig.items():                                     # 38（稽核 S-1）：「原始側」欄位也由伺服器依報價單重算，不凍結用戶端偽造的值
         put(k, v)
-    for k in ("origFormulaVer", "origOverheadPct"):                # 第 48 班：原始側口徑戳記只由伺服器依報價單蓋（報價是舊口徑 ⇒ 不帶）
+    for k in ("origFormulaVer", "origOverheadPct", "origCharityBasis"):                # 第 48 班：原始側口徑戳記只由伺服器依報價單蓋（報價是舊口徑 ⇒ 不帶）
         if k not in _orig:
             summ.pop(k, None)
     for k in ("dispatchAssignedTotal", "dispatchUnassignedTotal", "dispatchAbsorbedTotal"):          # 36／38：派發對應拆分隨 summary 凍結

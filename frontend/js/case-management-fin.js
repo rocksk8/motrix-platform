@@ -61,6 +61,10 @@ window.CM_PARTS.push(() => ({
       if (!(Number(ver) >= 2)) return '管銷分攤（報價稅前 10%）'
       return pct == null ? '管銷分攤（直接毛利）' : '管銷分攤（直接毛利 ' + Number(pct) + '%）'
     },
+    caseSettleCharityLabel(sm, orig) {   // 第 52 班：公益列標籤依基數戳記（同式 pdf_gen.charity_cost_label）
+      sm = sm || {}
+      return (orig ? sm.origCharityBasis : sm.charityBasis) === 'total' ? '公益捐款（報價含稅 1%）' : '公益捐款（直接毛利 1%）'
+    },
     caseSettleCharityText(n) { n = +n || 0; return n >= 0 ? '− ' + this.caseSettleFmt(n) : this.caseSettleFmt(n) },
     caseSettleItemCost(item) { return this.caseSettleItemFilled(item) ? this.caseSettleFmt(item.actualTotalCost) : '未填寫' },
     caseSettleExtras()  { return this.caseSettlement()?.extraItems || [] },

@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## (next) — 2026-10-10（wip/t52-ab-charity-quote）：營運報表利潤分析 PDF 的公益捐款列標籤依基數戳記
+- 營運報表利潤分析 PDF 的公益捐款列改用 `pdf_gen.charity_cost_label`（原始側看 `origCharityBasis`）：新基「公益捐款（報價含稅 1%）」，舊基/無戳記「公益捐款（直接毛利 1%）」。數字不變。
+
 ## 1.0.36 — 2026-10-09（wip/t48-oh25-s4）：利潤名詞改名；管銷分攤列標籤依口徑；PDF 管銷百分比只在不同於預設時才印、Excel 加「管銷比率」欄
 - 營運報表（頁面／Excel／PDF）「淨利／淨利率」改稱「營業利益／營業利益率」（使用者 2026-10-09 裁示；內部鍵 netProfit／netMarginPct 不變，只改字樣）；清單見 `backend/data/profit_labels_t48.json`。
 - 營運報表利潤分析 PDF 的「管銷分攤」列標籤改為口徑感知（`pdf_gen.admin_cost_label`）：口徑 2＝「（直接毛利 N%）」，舊／無戳記＝「（報價稅前 10%）」。

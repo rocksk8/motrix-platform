@@ -1880,11 +1880,11 @@
         </div>
         <div class="cost-row" style="flex-wrap:wrap">
           <span class="cost-row__label" style="display:flex;align-items:center;gap:6px">
-            公益捐款（直接毛利 1%）
+            <span data-testid="qf-charity-label" x-text="charityBasis() === 'total' ? '公益捐款（報價含稅 1%）' : '公益捐款（直接毛利 1%）'"></span>
             <span style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#1A1A1A;color:#888;padding:1px 5px;border-radius:3px;letter-spacing:.04em">不可修改</span>
           </span>
           <span class="cost-row__val warning" x-text="'NT$ ' + tot.charityDonation.toLocaleString()" data-testid="qf-charity-value"></span>
-          <span x-show="tot.directProfit < 0" x-cloak data-testid="qf-charity-floor-note" style="flex-basis:100%;font-size:11px;color:var(--warning)">虧損案公益金以 0 計</span>
+          <span x-show="tot.directProfit < 0 && charityBasis() !== 'total'" x-cloak data-testid="qf-charity-floor-note" style="flex-basis:100%;font-size:11px;color:var(--warning)">虧損案公益金以 0 計</span>
         </div>
         <!-- 第 48 班（使用者 2026-10-09）：運輸物流／安裝施工／差異項／保固預估／其他費用 五個輸入拿掉——所有費用一律走請款申請。
              舊口徑（未切換前、已精算／結案單）的既有值仍計入間接成本合計，改成唯讀一列；新口徑一律不計。 -->
@@ -2181,7 +2181,7 @@
   // V3.11（2026-09-28，H10 品牌設定；第十四班列車補號）：分頁圖示改讀 /api/system/branding/favicon
   // V3.14（2026-10-01，本地日期）：報價日期預設值與送審時間改用本地日期（static/motrix-date.js；台灣 00:00–08:00 不再得到前一天）
   // V3.19（2026-10-09，第 48 班 S3）：利潤算式改呼叫 static/profit-rules.js；管銷分攤比率（直接毛利×%，最高管理者可調、偏離預設警示）——口徑開關預設 legacy，畫面與數字不變。
-  const FORM_VERSION = 'V3.19'
+  const FORM_VERSION = 'V3.20'
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
   // 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：內容在
@@ -2324,7 +2324,7 @@
       // 會被存檔流程整包送回後端，混進 q 會讓每次存檔都把它再寫一遍。
       docVersions: [],
 
-      oh: { mode: 'legacy', defaultPct: 25 },   // 第 48 班 S3：管銷口徑開關與全域預設（init 時由 GET /api/overhead/settings 填入）
+      oh: { mode: 'legacy', defaultPct: 25, charityBasis: 'direct' },   // 第 48 班 S3：管銷口徑開關與全域預設（init 時由 GET /api/overhead/settings 填入）
       tot: {
         subtotal:0, pretax:0, tax:0, total:0,
         totalCost:0, inputVat:0, directProfit:0,
@@ -2465,7 +2465,7 @@
         const ver = this.ohVer()
         const pr = MotrixProfitRules.quote(pretax, totalCost, inputVat,
           [this.q.indirectLogistics, this.q.indirectInstallation, this.q.indirectTravel, this.q.indirectWarranty, this.q.indirectOther],
-          this.ohPct(), ver)
+          this.ohPct(), ver, total, this.charityBasis())        // 第 52 班：公益基數 total＝報價含稅金額×1%（只在 ver 2）
         const { directProfit, directMarginPct, adminCost, charityDonation, totalIndirect, netProfit, netMarginPct } = pr
 
         this.tot = { subtotal, pretax, tax, total,
@@ -2475,6 +2475,7 @@
           netProfit: MotrixLegalRound.halfUp(netProfit),
           netMarginPct: MotrixLegalRound.halfUp(netMarginPct, 10)/10,
           ...(ver === 2 ? { overheadPct: this.ohPct(), formulaVer: 2 } : {}),
+          ...(ver === 2 && this.charityBasis() === 'total' ? { charityBasis: 'total' } : {}),
         }
       },
 
@@ -2485,6 +2486,11 @@
       ohVer() {
         if (this.ohSettled()) return (this.q.tot && this.q.tot.formulaVer) || 1
         return this.oh.mode === 'v2' ? 2 : 1
+      },
+      charityBasis() {                                // 第 52 班：公益捐款基數。已精算／結案＝這張單自己的戳記；其餘＝目前模式（只在新管銷口徑 ver 2 才可能是 total）
+        if (this.ohVer() !== 2) return 'direct'
+        if (this.ohSettled()) return (this.q.tot && this.q.tot.charityBasis === 'total') ? 'total' : 'direct'
+        return this.oh.charityBasis === 'total' ? 'total' : 'direct'
       },
       ohPct() {
         const v = this.q.overheadPct
@@ -2510,7 +2516,7 @@
       async loadOverheadSettings() {
         try {
           const r = await fetch(`${this.API}/overhead/settings`, { headers: { Authorization: 'Bearer ' + this.session.token } })
-          if (r.ok) { const d = await r.json(); this.oh = { mode: d.ruleMode === 'v2' ? 'v2' : 'legacy', defaultPct: d.defaultPct } }
+          if (r.ok) { const d = await r.json(); this.oh = { mode: d.ruleMode === 'v2' ? 'v2' : 'legacy', defaultPct: d.defaultPct, charityBasis: d.charityBasis === 'total' ? 'total' : 'direct' } }
         } catch (e) { /* 取不到 ⇒ 維持舊口徑（legacy），與後端預設一致 */ }
       },
 
