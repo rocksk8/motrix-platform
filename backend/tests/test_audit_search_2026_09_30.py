@@ -285,6 +285,7 @@ def test_login_failed_recorded_without_password_and_rate_limited(client):
 
 # ── 7. 效能（100k 列，門檻同設計書）─────────────────────────────────────────
 
+@pytest.mark.timing
 def test_perf_100k_rows_filters_and_tree(client, auditor):
     from db import get_db
     c = get_db()

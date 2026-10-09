@@ -61,6 +61,7 @@ def _seed(quote_no="MQ-202608-555"):
     return quote_no, cid
 
 
+@pytest.mark.timing
 def test_approve_does_not_block_on_its_own_write_lock(client, make_user):
     """核准要在合理時間內完成。
 
@@ -127,6 +128,7 @@ def test_the_change_is_actually_applied(client, make_user):
     assert req["status"] == "approved"
 
 
+@pytest.mark.timing
 def test_payment_mark_branch_also_does_not_block(client, make_user):
     """另一條分支（標記收款）走的是同一個「先寫後 audit」的形狀，一起釘住。"""
     from db import get_db

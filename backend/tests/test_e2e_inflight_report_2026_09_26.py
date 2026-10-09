@@ -269,6 +269,7 @@ def test_rc_teardown_hang_fails_only_that_test(xdist, tmp_path):
 
 # ── e2e 每題死線（conftest pytest_runtest_call＋_close_contexts_threadsafe）─────────────────────
 
+@pytest.mark.timing
 @pytest.mark.e2e
 @pytest.mark.e2e_limit(4)
 def test_deadline_breaks_a_never_settling_evaluate(live_server, new_page, request):

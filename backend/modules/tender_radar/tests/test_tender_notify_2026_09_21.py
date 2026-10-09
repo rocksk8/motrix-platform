@@ -1070,6 +1070,7 @@ os._exit(0)
 ''' % _S6_SLOW
 
 
+@pytest.mark.timing
 def test_s6_first_scan_does_not_block_import_main():
     """第一輪掃描很慢（睡 60 秒）時，真的 `import main` 仍在 60 秒內完成，而第一輪確實在背景起跑。"""
     backend = Path(__file__).resolve().parents[3]
