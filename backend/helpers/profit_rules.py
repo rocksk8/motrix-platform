@@ -46,14 +46,15 @@ def charity(direct_profit) -> int:
 
 
 def quote_profit(pretax, total_cost, input_vat, indirect_items, pct=None, ver=None) -> dict:
-    """報價單損益：`indirect_items`＝運輸物流、安裝施工、差異項、保固預估、其他費用（依序，缺＝0）。"""
+    """報價單損益：`indirect_items`＝運輸物流、安裝施工、差異項、保固預估、其他費用（依序，缺＝0）；**只有舊口徑（ver 1）計入**，新口徑（ver 2）一律忽略。"""
     direct = pretax - total_cost - input_vat
     direct_pct = direct / pretax * 100 if pretax > 0 else 0
     admin = admin_cost(pretax, direct, pct, ver)
     ch = charity(direct)
     total_indirect = admin + ch
-    for x in indirect_items:
-        total_indirect = total_indirect + (x or 0)
+    if (ACTIVE_VER if ver is None else ver) == LEGACY_VER:          # 新口徑不再計入五項間接成本（使用者 2026-10-09：費用一律走請款申請）；舊口徑照舊
+        for x in indirect_items:
+            total_indirect = total_indirect + (x or 0)
     net = direct - total_indirect
     net_pct = net / pretax * 100 if pretax > 0 else 0
     return {"directProfit": direct, "directMarginPct": direct_pct, "adminCost": admin, "charityDonation": ch,
@@ -70,3 +71,4 @@ def settlement_profit(pretax, actual_cost, pct=None, ver=None, frozen_charity=No
     net_pct = net / pretax * 100 if pretax > 0 else 0
     return {"grossProfit": gross, "grossMarginPct": gross_pct, "adminCost": admin, "charityDonation": ch,
             "netProfit": net, "netMarginPct": net_pct}
+

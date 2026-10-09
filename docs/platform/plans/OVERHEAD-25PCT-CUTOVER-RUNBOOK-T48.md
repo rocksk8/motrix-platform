@@ -1,0 +1,71 @@
+# 管銷分攤 25% 切換 Runbook（第 48b 班；給步驟檔用）
+
+作者：b5。範圍：把「管銷分攤＝報價稅前 10%」切到「直接毛利 × 每案百分比（預設 25%）」，並把「淨利」字樣改成「營業利益」。程式隨列車上線時 **模式預設 `legacy`＝新行為關**，下面的切換步驟由使用者核准後才做。
+
+## 0. 前置（上線包套用完、服務起來後）
+- 確認程式版本已含 S1～S6（`/api/overhead/settings` 回 `{"ruleMode":"legacy","migrationDone":false,…}`）。
+- 全程在 **系統停用／無人編輯** 的時段做（工具交易內已重檢查已精算／結案，但仍以停機為準）。
+
+## 1. 備份（必做，先於一切）
+1. 關服務，複製 `motrix_erp.db` → `<備份資料夾>\motrix_erp.db.pre_overhead_<yyyymmdd_hhmmss>`（人工備份）。
+2. 驗證備份：`python tools/overhead_migrate.py --db <備份檔> mode`（只讀；應印出 `overhead_rule_mode = legacy`）且檔案大小與原庫相同。
+3. 工具 `recalc --apply` 另會在庫旁自動做一份 `<庫>.pre_overhead_<時間>.bak`（sqlite 備份 API）；兩份都留到使用者驗收完。
+
+## 2. 影響報告（唯讀，在正式機庫的複本上跑）
+```
+python tools/overhead_migrate.py --db <正式庫複本> report --csv <報告資料夾>\overhead_plan.csv     # 逐張計畫＋合計
+python tools/platform/overhead_impact_report.py --db <正式庫複本> --csv <報告資料夾>\overhead_impact.csv   # 含獎金影響
+```
+正式機 Claude 把兩份輸出貼到「正式機回報」資料夾給使用者看。**使用者看的表**（固定格式）：
+
+| 項目 | 內容 |
+|---|---|
+| 件數 | 報價單總數／重算（未精算）／略過：已精算·已結案／略過：資料不足（列單號與原因）／已是新口徑 |
+| 營業利益 | 重算件的『舊合計 → 新合計』與差額；已完結件不動（情境 B 曝險另列：若重新開啟再完結的差額） |
+| 12% 門檻 | 營業利益率達標件數：舊 → 新 |
+| 變動最大前 10 筆 | 單號、管銷 舊→新、營業利益 舊→新、利潤率 舊→新（含每案百分比） |
+| 獎金影響 | 情境 A（依需求，已完結沿用舊值）＝0；情境 B（重新開啟再完結）逐人舊→新；草稿／待審核獎金單在下次儲存才會重讀基數 |
+| 方向提醒 | 直接毛利率 <40% 的案件營業利益上升（獎金池變大）；>40% 下降 |
+
+**稅別前置計數（唯讀，切換前一定要看；舊報價單不可被悄悄改稅）**：新口徑伺服器重算的稅額規則＝免稅/零稅率一律 0；`taxRate` 有數字就照存值；整個 `taxRate` 鍵不存在＝5%；**鍵存在但值是 null／空字串（舊式報價單，舊算法當 0%）＝若已存的 `tot.tax` 為 0 就維持 0，否則套 5%**。下面這段在正式庫複本上跑（`sqlite3 <複本> < 檔` 或任何唯讀 SQL 工具），結果貼進報告：
+```
+SELECT CASE WHEN COALESCE(json_extract(data_json,'$.tot.tax'),0)=0 THEN 'tax=0（v2：維持 0%）' ELSE 'tax≠0（v2：套 5%）' END AS stored_tax, COUNT(*) AS n
+FROM quotations
+WHERE COALESCE(settle_status,'')!='finalized' AND COALESCE(deal_tag,'')!='已結案'
+  AND (json_type(data_json,'$.taxRate')='null' OR (json_type(data_json,'$.taxRate')='text' AND json_extract(data_json,'$.taxRate')=''))
+GROUP BY 1;
+```
+解讀：`tax≠0` 那一列＝舊式 taxRate 空值、但已存稅額非 0 的未精算單；這些單下次在新口徑被儲存時稅額會依 5% 重算（`recalc` 本身只重算管銷／營業利益，用存的 `tot`，**不重算稅**）。件數非 0 時請使用者先確認是否接受（或先由業務在舊口徑下補正 `taxRate`）。
+
+## 3. 使用者核准閘門
+使用者看完第 2 節報告，**明確回覆「核准切換」**（含是否接受報告中的略過件與獎金方向）才進第 4 節。沒有核准 ⇒ 到此為止，系統維持 legacy，零影響。
+
+## 4. 切換（單一指令、單一交易）
+```
+python tools/overhead_migrate.py --db <正式庫> recalc --apply --set-mode-v2
+```
+同一交易內：重算未精算報價單（每張用自己存的百分比，沒有才用預設 25）、寫舊值快照（`tot._legacy` ＋ 伺服器端 `overhead_legacy_snapshot`）、寫完成標記 `overhead_migration_done`、把模式設 `v2`。已精算／結案不動。之後啟動服務。
+（單獨 `mode v2 --apply` 在沒有完成標記時會被拒絕；API `PUT /api/overhead/settings` 也要 `confirm=true` 且有標記。）
+
+## 5. 切換後檢查（正式機 Claude 逐項回報）
+1. `overhead_migrate.py --db <庫> mode` ⇒ `v2`；`GET /api/overhead/settings` ⇒ `ruleMode=v2, migrationDone=true`。
+2. 工具輸出的『已重算 N 張／期間已精算而略過 M 張』與第 2 節報告一致（N＝重算件數；M 應為 0，非 0 要說明）。
+3. 抽查 3 張未精算單（開報價單頁）：管銷＝直接毛利×百分比、營業利益率與報告 CSV 該列一致；價格（含稅總額）不變；tot._recalc 有「口徑更新」註記。
+4. 抽查 2 張已完結／已結案單：精算頁與案件頁數字、結案 PDF 與切換前相同，管銷列寫「（報價稅前 10%）」。
+5. 新建一張報價單：管銷＝直接毛利×25%（超管可改，非超管看不到輸入框）；虧損案管銷＝0。
+6. 營運報表 Excel「毛利分析」最右「管銷比率」欄：新口徑 `25%`、舊口徑 `稅前 10%`。
+7. 獎金：任一已完結案建立獎金分潤單，基數＝該案凍結的舊值（無變動）。
+
+## 6. 回滾
+- **只想暫時關掉新口徑**：`python tools/overhead_migrate.py --db <庫> mode legacy --apply`（或 API `PUT /api/overhead/settings ruleMode=legacy`）會同時**刪除完成標記**；之後再切回 v2 必須重新 `recalc --apply --set-mode-v2`（已是新口徑的單會被跳過，只補新增的未精算單）。注意：legacy 模式下舊式表單重存會把新口徑的單悄悄退回 10% 基準，所以這只適合短時間止血，要完整退回請用下一條。
+- **工具回滾（優先）**：`python tools/overhead_migrate.py --db <庫> rollback` 先看報告（可還原／因『遷移後已完結·已編輯·已退回舊口徑』而不還原的清單），確認後加 `--apply`：依伺服器端快照把未精算單還原成舊值，成功還原後自動把模式設回 `legacy` 並移除完成標記。遷移後才完結的單不自動還原（其完結值已是新口徑）。
+- **還原 DB 備份**：只在使用者決定時做（會一併丟掉切換後的所有新資料）；做法＝關服務、以第 1 節備份覆蓋 `motrix_erp.db`、啟動、確認 `mode`＝`legacy`。
+- 程式碼回滾（不還原 DB）：舊程式不認得 `formulaVer`/`overheadPct`，新口徑的單會被當舊口徑重算（悄悄退回 10% 基準）⇒ 程式回滾前必須先做工具回滾。
+
+## 7. 使用者驗收清單（新的可見行為）
+1. 報價單：管銷分攤列顯示「（直接毛利 N%）」；只有最高管理者看得到並能調整百分比（偏離預設有橘色警示＋二次確認）。
+2. 全站「稅後淨利／淨利／淨利率」改稱「營業利益／營業利益率」（會計報表的「稅後淨利」不變）；門檻仍 12%。
+3. 結案 PDF／營運報表 PDF：管銷列在百分比＝預設時只寫「管銷分攤（直接毛利）」，不同才印百分比；舊案寫「（報價稅前 10%）」。
+4. Excel 毛利分析多一欄「管銷比率」（最右）。
+5. 未精算單（含已核准／已送出）已改新算法並標「口徑更新」；已精算／結案單數字不變。
+6. 獎金基數＝精算完結時凍結的營業利益；已完結案獎金不變，重新開啟再完結才會用新算法。

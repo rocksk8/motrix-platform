@@ -12,10 +12,10 @@ from core import source_tree
 
 FRONTEND = source_tree.BACKEND.parent / "frontend"
 ALLOWED = {"helpers/profit_rules.py"}
-#: 過渡（S3 清空）：{前端相對路徑: 登記的出現次數}
-TRANSITIONAL = {"pages/quotation-form.html": 1, "pages/settlement.html": 2}
+#: 過渡登記：{前端相對路徑: 登記的出現次數}
+TRANSITIONAL = {}                              # S3 已清空（頁面都改呼叫 MotrixProfitRules）；日後有過渡需求才再登記
 _PATS = (re.compile(r"(?:halfUp|round_half_up)\([^()]*,\s*0?\.10\)"),
-         re.compile(r"\badminCost\s*=(?!=)"))
+         re.compile(r"\badminCost\s*=(?!=)(?!\s*MotrixProfitRules\.)"))
 
 
 def hits(text: str) -> list:
@@ -31,6 +31,7 @@ def test_positive_control_the_scanner_finds_the_legacy_overhead_expressions():
     assert hits("const adminCost       = MotrixLegalRound.halfUp(pretax, 0.10)")
     assert hits("admin = round_half_up(pretax, 0.10)")
     assert hits("adminCost = x")
+    assert not hits("const adminCost = MotrixProfitRules.adminCost(a, b, c, d)"), "呼叫規則不算違規"
     assert not hits("if (a.adminCost == null) y()")
     assert not hits("# admin = round_half_up(pretax, 0.10)  註解不算")
     assert not hits("x = round_half_up(a, 0.105)")

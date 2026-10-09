@@ -73,11 +73,11 @@ def new_tot_fields(tot: dict, pct) -> dict:
     rate = _dec(pct).scaleb(-2)
     admin = _round(max(direct, Decimal(0)) * rate)
     charity = max(Decimal(0), _round(direct * Decimal("0.01")))
-    total_indirect = admin + charity + five
+    total_indirect = admin + charity                                  # 新口徑不再計入五項間接成本（舊值留在 tot._legacy／data_json，供回滾與稽核）
     net = direct - total_indirect
     net_pct = float(_round(net / pretax * 100, 1)) if pretax > 0 else 0.0
     return {"adminCost": int(admin), "totalIndirect": _num(total_indirect), "netProfit": int(_round(net)),
-            "netMarginPct": net_pct, "charityDonation": int(charity)}
+            "netMarginPct": net_pct, "charityDonation": int(charity), "legacyIndirect": _num(five)}
 
 
 def _numpct(p):
@@ -113,7 +113,7 @@ def plan(conn, default_pct):
             out.append(dict(base, action="skip_nodata", reason=str(exc)))
             continue
         out.append(dict(base, action="recalc", old={k: tot.get(k) for k in TOT_KEYS}, new=new, old_col=r["net_margin_pct"],
-                        pretax=tot.get("pretax"), pct=pct))
+                        pretax=tot.get("pretax"), pct=pct, legacy_indirect=new.get("legacyIndirect") or 0))
     return out
 
 

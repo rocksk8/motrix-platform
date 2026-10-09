@@ -355,7 +355,7 @@
               <div class="kpi-card__sub" x-text="'淨 ' + fmt(summary.periodNet)"></div>
             </div>
             <div class="kpi-card purple">
-              <div class="kpi-card__lbl">精算實際淨利</div>
+              <div class="kpi-card__lbl">精算實際營業利益</div>
               <div class="kpi-card__val" x-text="fmt(summary.totalActualGrossProfit)"></div>
               <div class="kpi-card__sub" x-text="'已精算 ' + summary.settledCases + ' 件'"></div>
             </div>
@@ -452,7 +452,7 @@
             <span style="font-size:14px">⚠️</span>
             <span>
               <strong>精算快照可能已過期：</strong>
-              <span x-text="summary.staleSettlementCount + ' 件'"></span> 已結案案件的承攬商成本在精算完結後又異動，下方淨利/業務員/部門績效可能未反映最新數字——請至個別案件的成本精算頁面確認並視需要重新完結
+              <span x-text="summary.staleSettlementCount + ' 件'"></span> 已結案案件的承攬商成本在精算完結後又異動，下方營業利益/業務員/部門績效可能未反映最新數字——請至個別案件的成本精算頁面確認並視需要重新完結
             </span>
           </div>
 
@@ -469,7 +469,7 @@
             <span style="font-size:14px">⚠️</span>
             <span>
               <strong>案件缺收款期別：</strong>
-              <span x-text="casesWithoutPaymentItems.length + ' 件'"></span> 已成案/已結案案件沒有填寫收款期別，合約金額不會計入收款率/淨利等統計
+              <span x-text="casesWithoutPaymentItems.length + ' 件'"></span> 已成案/已結案案件沒有填寫收款期別，合約金額不會計入收款率/營業利益等統計
               —
               <template x-for="cw in casesWithoutPaymentItems.slice(0,4)" :key="cw.quoteNo">
                 <span style="margin-right:4px;font-family:monospace" x-text="cw.quoteNo"></span>
@@ -1078,9 +1078,9 @@
                 <thead><tr>
                   <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
                   <th class="c">報價日</th><th class="c">進度</th>
-                  <th class="r">合約金額</th><th class="r">預估淨利率</th>
+                  <th class="r">合約金額</th><th class="r">預估營業利益率</th>
                   <th class="r">已收款</th><th class="r">收款率</th>
-                  <th class="c">實際淨利率</th><th class="c">精算</th>
+                  <th class="c">實際營業利益率</th><th class="c">精算</th>
                 </tr></thead>
                 <template x-for="mgroup in casesByMonth" :key="mgroup.month">
                   <tbody>
@@ -1127,9 +1127,9 @@
                 <thead><tr>
                   <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
                   <th class="c">報價日</th><th class="c">進度</th>
-                  <th class="r">合約金額</th><th class="r">預估淨利率</th>
+                  <th class="r">合約金額</th><th class="r">預估營業利益率</th>
                   <th class="r">已收款</th><th class="r">收款率</th>
-                  <th class="c">實際淨利率</th><th class="c">精算</th>
+                  <th class="c">實際營業利益率</th><th class="c">精算</th>
                 </tr></thead>
                 <tbody>
                   <template x-for="c in casesAll" :key="c.quoteNo">
@@ -1170,8 +1170,8 @@
                 <th class="r">合約總額</th>
                 <th class="r">已收款</th>
                 <th class="r">收款率</th>
-                <th class="r">預估淨利率</th>
-                <th class="r">實際淨利率</th>
+                <th class="r">預估營業利益率</th>
+                <th class="r">實際營業利益率</th>
                 <th class="r">精算件數</th>
               </tr></thead>
               <tbody>
@@ -1201,7 +1201,7 @@
                   <th class="r">合約總額</th>
                   <th class="r">已收款</th>
                   <th class="r">收款率</th>
-                  <th class="r">預估淨利率</th>
+                  <th class="r">預估營業利益率</th>
                 </tr></thead>
                 <tbody>
                   <template x-for="dp in deptPerf" :key="dp.deptName">
@@ -1229,8 +1229,8 @@
                 <thead><tr>
                   <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
                   <th class="c">進度</th><th class="r">報價稅前</th>
-                  <th class="r">預估淨利率</th><th class="r">預估淨利</th>
-                  <th class="r">實際淨利率</th><th class="r">實際淨利</th>
+                  <th class="r">預估營業利益率</th><th class="r">預估營業利益</th>
+                  <th class="r">實際營業利益率</th><th class="r">實際營業利益</th>
                   <th class="r">差異(pp)</th><th class="r">差異金額</th><th class="c">精算狀態</th>
                 </tr></thead>
                 <tbody>
@@ -1272,7 +1272,7 @@
               <div class="empty-state">
                 <p style="font-size:28px;margin-bottom:10px">🎯</p>
                 <p style="margin-bottom:6px">尚未設定 <span x-text="year"></span> 年度目標</p>
-                <p style="font-size:11px;color:var(--text-dim);margin-bottom:16px">設定後，系統將追蹤營收、收款率、淨利等六大核心指標的年度達成進度</p>
+                <p style="font-size:11px;color:var(--text-dim);margin-bottom:16px">設定後，系統將追蹤營收、收款率、營業利益等六大核心指標的年度達成進度</p>
                 <template x-if="_role()==='superadmin'">
                   <button class="btn-set-target" @click="openTargetModal()">立即設定年度目標</button>
                 </template>
@@ -1347,9 +1347,9 @@
                       <span class="acv-prorata" style="font-size:9px">基於 YTD 成案</span>
                     </div>
                   </div>
-                  <!-- 平均淨利率 -->
+                  <!-- 平均營業利益率 -->
                   <div class="acv-card">
-                    <div class="acv-card__lbl">平均淨利率</div>
+                    <div class="acv-card__lbl">平均營業利益率</div>
                     <div class="acv-value-row">
                       <span class="acv-actual" x-text="(achievement.annual.avgMarginPct.actual||0).toFixed(1) + '%'"></span>
                       <span class="acv-sep">/</span>
@@ -1363,9 +1363,9 @@
                       <span class="acv-prorata">基於精算案件</span>
                     </div>
                   </div>
-                  <!-- 年度實際淨利 -->
+                  <!-- 年度實際營業利益 -->
                   <div class="acv-card">
-                    <div class="acv-card__lbl">年度實際淨利</div>
+                    <div class="acv-card__lbl">年度實際營業利益</div>
                     <div class="acv-value-row">
                       <span class="acv-actual" x-text="fmt(achievement.annual.grossProfit.actual)"></span>
                       <span class="acv-sep">/</span>
@@ -1535,7 +1535,7 @@
                             <th class="c">狀態</th>
                             <th class="r">報價金額</th>
                             <th class="r">已收款</th>
-                            <th class="r">淨利率</th>
+                            <th class="r">營業利益率</th>
                           </tr></thead>
                           <tbody>
                             <template x-for="t in selectedCust.transactions" :key="t.quoteNo">
@@ -1788,9 +1788,9 @@
                 </div>
               </template>
             </div>
-            <!-- 淨利率比較 -->
+            <!-- 營業利益率比較 -->
             <div class="chart-card" x-show="marginCases.length > 0">
-              <div class="chart-card__title">淨利率比較（預估 vs 實際精算，依業務員平均）</div>
+              <div class="chart-card__title">營業利益率比較（預估 vs 實際精算，依業務員平均）</div>
               <div style="position:relative;height:200px">
                 <canvas id="rpt-chart-margin"></canvas>
               </div>
@@ -2114,11 +2114,11 @@
             <input type="number" min="0" max="100" step="0.1" x-model.number="targetForm.annual.collectionRate" placeholder="例：85">
           </div>
           <div class="tgt-field">
-            <label>平均淨利率目標（%）</label>
+            <label>平均營業利益率目標（%）</label>
             <input type="number" min="0" max="100" step="0.1" x-model.number="targetForm.annual.avgNetMarginPct" placeholder="例：25">
           </div>
           <div class="tgt-field">
-            <label>年度實際淨利目標（元，精算後）</label>
+            <label>年度實際營業利益目標（元，精算後）</label>
             <input type="number" min="0" x-model.number="targetForm.annual.grossProfit" placeholder="例：2000000">
           </div>
         </div>
@@ -2200,11 +2200,11 @@
                 <div style="font-size:10px;color:var(--text-dim)" x-text="'毛利率 '+(stlSummary().grossMarginPct||0).toFixed(1)+'%'"></div>
               </div>
               <div class="stl-kpi">
-                <div class="stl-kpi__lbl">真實淨利率</div>
+                <div class="stl-kpi__lbl">真實營業利益率</div>
                 <div class="stl-kpi__val"
                      :style="(stlSummary().netMarginPct||0)>=20?'color:#15803D':(stlSummary().netMarginPct||0)>=0?'color:#B45309':'color:#DC2626'"
                      x-text="(stlSummary().netMarginPct||0).toFixed(1)+'%'"></div>
-                <div style="font-size:10px;color:var(--text-dim)" x-text="'淨利 ' + stlFmt(stlSummary().netProfit)"></div>
+                <div style="font-size:10px;color:var(--text-dim)" x-text="'營業利益 ' + stlFmt(stlSummary().netProfit)"></div>
               </div>
             </div>
 
@@ -2226,18 +2226,18 @@
                       <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"
                           x-text="(stlSummary().origMarginPct||0).toFixed(1)+'%'"></td></tr>
                   <tr style="border-top:1px solid #E5E7EB">
-                      <td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">管銷分攤（10%）</td>
+                      <td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)" x-text="stlAdminLabel(stlSummary(), true)"></td>
                       <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#DC2626"
                           x-text="'− '+stlFmt(stlSummary().origAdminCost)"></td></tr>
                   <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">公益捐款（1%）</td>
                       <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#DC2626"
                           x-text="'− '+stlFmt(stlSummary().origCharity)"></td></tr>
                   <tr style="border-top:1.5px solid #E5E7EB">
-                      <td style="padding:4px 0;font-weight:700;font-family:var(--font-zh)">原始預估淨利</td>
+                      <td style="padding:4px 0;font-weight:700;font-family:var(--font-zh)">原始預估營業利益</td>
                       <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"
                           :style="(stlSummary().origNetProfit||0)>=0?'color:#15803D':'color:#DC2626'"
                           x-text="stlFmt(stlSummary().origNetProfit)"></td></tr>
-                  <tr><td style="padding:4px 0;font-weight:600;color:var(--text-dim);font-family:var(--font-zh)">原始預估淨利率</td>
+                  <tr><td style="padding:4px 0;font-weight:600;color:var(--text-dim);font-family:var(--font-zh)">原始預估營業利益率</td>
                       <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600"
                           :style="(stlSummary().origNetMarginPct||0)>=20?'color:#15803D':(stlSummary().origNetMarginPct||0)>=0?'color:#B45309':'color:#DC2626'"
                           x-text="(stlSummary().origNetMarginPct||0).toFixed(1)+'%'"></td></tr>
@@ -2264,18 +2264,18 @@
                       <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"
                           x-text="(stlSummary().grossMarginPct||0).toFixed(1)+'%'"></td></tr>
                   <tr style="border-top:1px solid #FDE68A">
-                      <td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">管銷分攤（10%）</td>
+                      <td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)" x-text="stlAdminLabel(stlSummary())"></td>
                       <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#DC2626"
                           x-text="'− '+stlFmt(stlSummary().adminCost)"></td></tr>
                   <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">公益捐款（1%）</td>
                       <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#DC2626"
                           x-text="stlCharityText(stlSummary().charityDonation)" data-testid="rp-settle-charity"></td></tr>
                   <tr style="border-top:1.5px solid #FDE68A">
-                      <td style="padding:4px 0;font-weight:700;font-family:var(--font-zh)">真實淨利</td>
+                      <td style="padding:4px 0;font-weight:700;font-family:var(--font-zh)">真實營業利益</td>
                       <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"
                           :style="(stlSummary().netProfit||0)>=0?'color:#15803D':'color:#DC2626'"
                           x-text="stlFmt(stlSummary().netProfit)"></td></tr>
-                  <tr><td style="padding:4px 0;font-weight:600;color:var(--text-dim);font-family:var(--font-zh)">真實淨利率</td>
+                  <tr><td style="padding:4px 0;font-weight:600;color:var(--text-dim);font-family:var(--font-zh)">真實營業利益率</td>
                       <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"
                           :style="(stlSummary().netMarginPct||0)>=20?'color:#15803D':(stlSummary().netMarginPct||0)>=0?'color:#B45309':'color:#DC2626'"
                           x-text="(stlSummary().netMarginPct||0).toFixed(1)+'%'"></td></tr>
@@ -2287,8 +2287,8 @@
                  style="border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;font-family:var(--font-zh)"
                  :style="(stlSummary().profitDiff||0)>=0?'background:#F0FDF4;border:1px solid #86EFAC;color:#15803D':'background:#FFF1F2;border:1px solid #FECACA;color:#DC2626'">
               <span x-text="(stlSummary().profitDiff||0)>=0
-                ? '真實淨利比原始預估高 NT$ '+Math.abs(Math.round(stlSummary().profitDiff||0)).toLocaleString()+'（+'+(((stlSummary().netMarginPct||0)-(stlSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'
-                : '真實淨利比原始預估低 NT$ '+Math.abs(Math.round(stlSummary().profitDiff||0)).toLocaleString()+'（'+(((stlSummary().netMarginPct||0)-(stlSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'">
+                ? '真實營業利益比原始預估高 NT$ '+Math.abs(Math.round(stlSummary().profitDiff||0)).toLocaleString()+'（+'+(((stlSummary().netMarginPct||0)-(stlSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'
+                : '真實營業利益比原始預估低 NT$ '+Math.abs(Math.round(stlSummary().profitDiff||0)).toLocaleString()+'（'+(((stlSummary().netMarginPct||0)-(stlSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'">
               </span>
             </div>
 

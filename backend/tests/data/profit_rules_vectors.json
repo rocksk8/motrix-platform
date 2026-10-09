@@ -256,9 +256,9 @@
 "directMarginPct": 37.0,
 "adminCost": 9250,
 "charityDonation": 370,
-"totalIndirect": 13620,
-"netProfit": 23380,
-"netMarginPct": 23.380000000000003
+"totalIndirect": 9620,
+"netProfit": 27380,
+"netMarginPct": 27.38
 }
 },
 {
@@ -282,9 +282,9 @@
 "directMarginPct": 37.0,
 "adminCost": 9250,
 "charityDonation": 370,
-"totalIndirect": 13620,
-"netProfit": 23380,
-"netMarginPct": 23.380000000000003
+"totalIndirect": 9620,
+"netProfit": 27380,
+"netMarginPct": 27.38
 }
 },
 {
@@ -308,9 +308,9 @@
 "directMarginPct": 37.0,
 "adminCost": 4625,
 "charityDonation": 370,
-"totalIndirect": 8995,
-"netProfit": 28005,
-"netMarginPct": 28.005000000000003
+"totalIndirect": 4995,
+"netProfit": 32005,
+"netMarginPct": 32.005
 }
 },
 {
@@ -334,9 +334,9 @@
 "directMarginPct": 37.0,
 "adminCost": 2627,
 "charityDonation": 370,
-"totalIndirect": 6997,
-"netProfit": 30003,
-"netMarginPct": 30.003
+"totalIndirect": 2997,
+"netProfit": 34003,
+"netMarginPct": 34.003
 }
 },
 {
@@ -360,9 +360,9 @@
 "directMarginPct": 37.0,
 "adminCost": 0,
 "charityDonation": 370,
-"totalIndirect": 4370,
-"netProfit": 32630,
-"netMarginPct": 32.629999999999995
+"totalIndirect": 370,
+"netProfit": 36630,
+"netMarginPct": 36.63
 }
 },
 {
@@ -386,9 +386,9 @@
 "directMarginPct": 37.0,
 "adminCost": 37000,
 "charityDonation": 370,
-"totalIndirect": 41370,
-"netProfit": -4370,
-"netMarginPct": -4.37
+"totalIndirect": 37370,
+"netProfit": -370,
+"netMarginPct": -0.37
 }
 },
 {
@@ -412,9 +412,9 @@
 "directMarginPct": 37.0,
 "adminCost": 37,
 "charityDonation": 370,
-"totalIndirect": 4407,
-"netProfit": 32593,
-"netMarginPct": 32.592999999999996
+"totalIndirect": 407,
+"netProfit": 36593,
+"netMarginPct": 36.592999999999996
 }
 },
 {
@@ -1920,9 +1920,9 @@ null,
 "directMarginPct": 47.499947499947496,
 "adminCost": 118750,
 "charityDonation": 4750,
-"totalIndirect": 124889,
-"netProfit": 350110,
-"netMarginPct": 35.01103501103501
+"totalIndirect": 123500,
+"netProfit": 351499,
+"netMarginPct": 35.14993514993515
 }
 },
 {
@@ -1946,9 +1946,9 @@ null,
 "directMarginPct": 47.499947499947496,
 "adminCost": 118750,
 "charityDonation": 4750,
-"totalIndirect": 124889,
-"netProfit": 350110,
-"netMarginPct": 35.01103501103501
+"totalIndirect": 123500,
+"netProfit": 351499,
+"netMarginPct": 35.14993514993515
 }
 },
 {
@@ -1972,9 +1972,9 @@ null,
 "directMarginPct": 47.499947499947496,
 "adminCost": 59375,
 "charityDonation": 4750,
-"totalIndirect": 65514,
-"netProfit": 409485,
-"netMarginPct": 40.94854094854095
+"totalIndirect": 64125,
+"netProfit": 410874,
+"netMarginPct": 41.08744108744109
 }
 },
 {
@@ -1998,9 +1998,9 @@ null,
 "directMarginPct": 47.499947499947496,
 "adminCost": 33725,
 "charityDonation": 4750,
-"totalIndirect": 39864,
-"netProfit": 435135,
-"netMarginPct": 43.51354351354351
+"totalIndirect": 38475,
+"netProfit": 436524,
+"netMarginPct": 43.65244365244365
 }
 },
 {
@@ -2024,9 +2024,9 @@ null,
 "directMarginPct": 47.499947499947496,
 "adminCost": 0,
 "charityDonation": 4750,
-"totalIndirect": 6139,
-"netProfit": 468860,
-"netMarginPct": 46.886046886046884
+"totalIndirect": 4750,
+"netProfit": 470249,
+"netMarginPct": 47.024947024947025
 }
 },
 {
@@ -2050,9 +2050,9 @@ null,
 "directMarginPct": 47.499947499947496,
 "adminCost": 474999,
 "charityDonation": 4750,
-"totalIndirect": 481138,
-"netProfit": -6139,
-"netMarginPct": -0.6139006139006139
+"totalIndirect": 479749,
+"netProfit": -4750,
+"netMarginPct": -0.475000475000475
 }
 },
 {
@@ -2076,9 +2076,9 @@ null,
 "directMarginPct": 47.499947499947496,
 "adminCost": 475,
 "charityDonation": 4750,
-"totalIndirect": 6614,
-"netProfit": 468385,
-"netMarginPct": 46.83854683854684
+"totalIndirect": 5225,
+"netProfit": 469774,
+"netMarginPct": 46.97744697744698
 }
 },
 {
@@ -4713,6 +4713,214 @@ null
 "ver": 1,
 "pct": null,
 "expect": "0.3333"
+},
+{
+"fn": "quote",
+"args": [
+100000,
+99000,
+4950,
+[
+500,
+0,
+0,
+0,
+500
+]
+],
+"ver": 1,
+"pct": null,
+"expect": {
+"directProfit": -3950,
+"directMarginPct": -3.95,
+"adminCost": 10000,
+"charityDonation": 0,
+"totalIndirect": 11000,
+"netProfit": -14950,
+"netMarginPct": -14.95
+}
+},
+{
+"fn": "quote",
+"args": [
+35000,
+20001,
+1000,
+[
+null,
+7,
+null,
+0,
+3
+]
+],
+"ver": 1,
+"pct": null,
+"expect": {
+"directProfit": 13999,
+"directMarginPct": 39.99714285714286,
+"adminCost": 3500,
+"charityDonation": 140,
+"totalIndirect": 3650,
+"netProfit": 10349,
+"netMarginPct": 29.568571428571428
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+99000,
+4950,
+[
+500,
+0,
+0,
+0,
+500
+]
+],
+"ver": 2,
+"pct": null,
+"expect": {
+"directProfit": -3950,
+"directMarginPct": -3.95,
+"adminCost": 0,
+"charityDonation": 0,
+"totalIndirect": 0,
+"netProfit": -3950,
+"netMarginPct": -3.95
+}
+},
+{
+"fn": "quote",
+"args": [
+35000,
+20001,
+1000,
+[
+null,
+7,
+null,
+0,
+3
+]
+],
+"ver": 2,
+"pct": null,
+"expect": {
+"directProfit": 13999,
+"directMarginPct": 39.99714285714286,
+"adminCost": 3500,
+"charityDonation": 140,
+"totalIndirect": 3640,
+"netProfit": 10359,
+"netMarginPct": 29.597142857142856
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+99000,
+4950,
+[
+500,
+0,
+0,
+0,
+500
+]
+],
+"ver": 2,
+"pct": 25,
+"expect": {
+"directProfit": -3950,
+"directMarginPct": -3.95,
+"adminCost": 0,
+"charityDonation": 0,
+"totalIndirect": 0,
+"netProfit": -3950,
+"netMarginPct": -3.95
+}
+},
+{
+"fn": "quote",
+"args": [
+35000,
+20001,
+1000,
+[
+null,
+7,
+null,
+0,
+3
+]
+],
+"ver": 2,
+"pct": 25,
+"expect": {
+"directProfit": 13999,
+"directMarginPct": 39.99714285714286,
+"adminCost": 3500,
+"charityDonation": 140,
+"totalIndirect": 3640,
+"netProfit": 10359,
+"netMarginPct": 29.597142857142856
+}
+},
+{
+"fn": "quote",
+"args": [
+100000,
+99000,
+4950,
+[
+500,
+0,
+0,
+0,
+500
+]
+],
+"ver": 2,
+"pct": 12.5,
+"expect": {
+"directProfit": -3950,
+"directMarginPct": -3.95,
+"adminCost": 0,
+"charityDonation": 0,
+"totalIndirect": 0,
+"netProfit": -3950,
+"netMarginPct": -3.95
+}
+},
+{
+"fn": "quote",
+"args": [
+35000,
+20001,
+1000,
+[
+null,
+7,
+null,
+0,
+3
+]
+],
+"ver": 2,
+"pct": 12.5,
+"expect": {
+"directProfit": 13999,
+"directMarginPct": 39.99714285714286,
+"adminCost": 1750,
+"charityDonation": 140,
+"totalIndirect": 1890,
+"netProfit": 12109,
+"netMarginPct": 34.597142857142856
+}
 }
 ]
 }

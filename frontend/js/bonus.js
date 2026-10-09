@@ -288,7 +288,7 @@ function bonusPage() {
         if (ch.field === 'rate_bp') return '獎金比率 ' + bnPct(ch.old) + '% → ' + bnPct(ch.new) + '%'
         if (ch.field === 'split_bp') return '分配 ' + BN_CATS.map(k => bnPct((ch.old || {})[k])).join('/') + ' → ' +
           BN_CATS.map(k => bnPct((ch.new || {})[k])).join('/')
-        if (ch.field === 'net_profit') return '淨利 ' + ch.old + ' → ' + ch.new
+        if (ch.field === 'net_profit') return '營業利益 ' + ch.old + ' → ' + ch.new
         return ch.field
       }).filter(Boolean).join('；')
     },

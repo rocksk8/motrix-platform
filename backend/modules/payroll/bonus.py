@@ -8,7 +8,7 @@
 
 # 🔴 這一支**不重算任何係數**
 
-淨利的算式只寫在一個地方（`frontend/pages/settlement.html`，儲存時算），
+營業利益的算式只寫在一個地方（`frontend/pages/settlement.html`，儲存時算），
 後端兩個讀它的地方（`pdf_gen.py`／`routers/reports.py`）都是**讀已存值**。
 ```
 獎金若自己再乘一次 => **第三份實作，而三份一定會分岔**
@@ -22,10 +22,10 @@
 「Fallback to gross fields for legacy settlements saved before netProfit was
 recorded.」——**對報表是合理的折衷**（寧可有個數字）。
 ```
-☠️ 而獎金照抄它：毛利 > 淨利 => **獎金發多**
+☠️ 而獎金照抄它：毛利 > 營業利益 => **獎金發多**
    而它**不報錯，畫面上每一個數字都正常**
 ```
-⇒ 沒有淨利 ⇒ **拒絕**，而拒絕訊息要講得出**出路**。
+⇒ 沒有營業利益 ⇒ **拒絕**，而拒絕訊息要講得出**出路**。
 
 📌 〈模組化：L2 功能模組彼此不可依賴〉：本支不碰資料庫、不 import 任何 router。
 """
@@ -41,7 +41,7 @@ BASIS_POINTS = 10000
 #: 獎金分潤模組**出貨預設開**（2026-09-24 翻面）。
 #:
 #: 使用者逐字：「獎金分潤模組上傳到正式機就自動啟用」（SPEC-BONUS §11.7）。
-#: 📌 原本預設關的理由是舊設計「三組各自佔淨利的比例、沒有人檢查加總」（`SPEC-BN21.md`）；
+#: 📌 原本預設關的理由是舊設計「三組各自佔營業利益的比例、沒有人檢查加總」（`SPEC-BN21.md`）；
 #:    §十一 的新設計改成**同一個獎金池**分三類（合計須 100%，modules/payroll/bonus_case.py 擋），
 #:    那個理由已經不成立。
 #: ⚙️ 現場仍可關：環境變數 `BONUS_MODULE_ENABLED=0`。
@@ -69,13 +69,13 @@ BASE_FIELD = "netProfit"
 
 #: 舊精算的拒絕訊息。**必須講出路** ——
 #:
-#: ☠️ 只說「沒有淨利」的副作用是**舊案永遠發不了獎金**，而使用者看不出路在哪。
-#: 🔑 出路存在：淨利是**儲存精算時**算出來寫進去的
+#: ☠️ 只說「沒有營業利益」的副作用是**舊案永遠發不了獎金**，而使用者看不出路在哪。
+#: 🔑 出路存在：營業利益是**儲存精算時**算出來寫進去的
 #:    ⇒ 重新儲存一次就會補上。
 #: 📌 與 `RAISE(ABORT)` 那一條同源：**那句話是使用者唯一看得到的東西。**
 LEGACY_SETTLEMENT_MESSAGE = (
-    "這個案件的精算是舊格式（沒有淨利欄位），無法產生獎金分潤單。\n"
-    "請重新開啟並儲存一次該案的精算，系統會自動補算淨利後即可發放。")
+    "這個案件的精算是舊格式（沒有營業利益欄位），無法產生獎金分潤單。\n"
+    "請重新開啟並儲存一次該案的精算，系統會自動補算營業利益後即可發放。")
 
 
 def base_amount_for(settlement):
@@ -89,7 +89,7 @@ def base_amount_for(settlement):
 
     ## ⚠️ 「沒有這個欄位」與「值是 0」是兩件事
 
-    ☠️ 寫成 `summary.get("netProfit") or ...` 的話，**淨利剛好是 0 的案子**
+    ☠️ 寫成 `summary.get("netProfit") or ...` 的話，**營業利益剛好是 0 的案子**
        會被當成舊格式 ⇒ 使用者收到「請重新儲存精算」，而他照做之後
        **還是 0，訊息還是一樣** ⇒ 他會以為系統壞了。
     ⇒ 用 `is None` 分辨（〈null 不等於 0〉）。
@@ -106,7 +106,7 @@ def base_amount_for(settlement):
         # ☠️ 硬發的話，負的獎金在傳票上是一筆反向分錄，**帳是平的**，
         #    沒有人會報修 —— 而某個人的獎金分潤單上是一個負數。
         return False, 0, (
-            "這個案件的淨利是 %s，沒有可分配的獎金基數。" % f"{value:,}")
+            "這個案件的營業利益是 %s，沒有可分配的獎金基數。" % f"{value:,}")
     return True, value, None
 
 
@@ -141,8 +141,8 @@ def settlement_fields(settle):
 #:
 #: 🔴 第 10 列（`netProfit`）的 `note` 是使用者 2026-09-23 裁示要印的
 #: 「（＝獎金分潤基數）」——**不是與 `settlement.html` 的漂移**，那句話
-#: 正是使用者這次強調的因果（「必須有詳細金額最後算出真實淨利，才能用
-#: 真實淨利去算獎金」）。
+#: 正是使用者這次強調的因果（「必須有詳細金額最後算出真實營業利益，才能用
+#: 真實營業利益去算獎金」）。
 #: ⚠️ `quotedTotal`（含稅總額）不在列定義裡——它是 `quotedPretax` 那一列
 #: 的**註記**，不是獨立的一列（`bonus.html` 的 `bn-settle__note` 已經是
 #: 這樣做的）。
@@ -154,11 +154,30 @@ SETTLEMENT_ROWS = (
     ("totalActualCost", "實際總成本",       "money", ""),
     ("grossProfit",     "真實毛利",         "money", ""),
     ("grossMarginPct",  "真實毛利率",       "pct1",  ""),
-    ("adminCost",       "管銷分攤（10%）",  "money", ""),
+    ("adminCost",       "管銷分攤",        "money", ""),   # 括號內的基數說明由 row_label() 依 summary.formulaVer／overheadPct 組（第 48 班）
     ("charityDonation", "公益捐款（1%）",   "money", ""),
-    ("netProfit",       "真實淨利",         "money", "（＝獎金分潤基數）"),
-    ("netMarginPct",    "真實淨利率",       "pct1",  ""),
+    ("netProfit",       "真實營業利益",         "money", "（＝獎金分潤基數）"),
+    ("netMarginPct",    "真實營業利益率",       "pct1",  ""),
 )
+
+
+def row_label(key, label, summary):
+    """精算明細表的列標籤。只有管銷分攤列會變：新口徑（summary.formulaVer>=2）＝「管銷分攤（直接毛利 N%）」，
+    舊口徑（沒有戳記／1）＝「管銷分攤（報價稅前 10%）」。N 是該案存下來的百分比（每案可調），不是寫死 25。"""
+    if key != "adminCost":
+        return label
+    s = summary or {}
+    try:
+        ver = int(s.get("formulaVer") or 1)
+    except (TypeError, ValueError):
+        ver = 1
+    if ver < 2:
+        return label + "（報價稅前 10%）"
+    p = s.get("overheadPct")
+    if p is None:
+        return label + "（直接毛利）"
+    p = float(p)
+    return label + "（直接毛利 %s%%）" % (int(p) if p == int(p) else p)
 
 
 def pool_for(base, total_pct):

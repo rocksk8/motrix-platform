@@ -285,3 +285,33 @@ def test_inconsistent_tot_with_negative_other_indirect_is_skipped_not_written(tm
     assert c.execute("SELECT value_json FROM system_settings WHERE key='overhead_rule_mode'").fetchone()[0] == '"v2"'   # 模式仍在同交易設定
     c.close()
     assert json.loads(_rows(p)["B1"][0])["tot"] == bad
+
+
+def test_mode_legacy_deletes_the_marker_so_a_later_v2_needs_a_fresh_recalc(db):
+    _run("--db", db, "recalc", "--apply", "--set-mode-v2")
+    assert _setting(db, "overhead_migration_done") is not None
+    assert _run("--db", db, "mode", "legacy", "--apply")[0] == 0
+    assert _setting(db, "overhead_migration_done") is None and _setting(db, "overhead_rule_mode") == "legacy"
+    assert _run("--db", db, "mode", "v2", "--apply")[0] == 2                   # 標記被刪 ⇒ 不能直接切回 v2
+    rc, out = _run("--db", db, "recalc", "--apply", "--set-mode-v2")           # 重新 recalc（冪等：已是新口徑的跳過）才能再切
+    assert rc == 0 and _setting(db, "overhead_rule_mode") == "v2" and _setting(db, "overhead_migration_done") is not None
+
+
+def test_report_lists_unsettled_quotes_with_non_zero_legacy_indirect_costs_and_recalc_drops_them(db, tmp_path):
+    """使用者 2026-10-09：五項間接成本不再輸入／計入。report 要列出舊值非零的未精算單；recalc 後 totalIndirect＝管銷＋公益（五項不計），舊值留在 _legacy；已精算／結案不動。"""
+    csv_path = str(tmp_path / "r.csv")
+    rc, out = _run("--db", db, "report", "--csv", csv_path)
+    assert rc == 0, out
+    assert "舊『五項間接成本』非零的未精算單 2 張" in out and "舊間接成本 U1" in out and "舊間接成本 D1" in out and "合計 3,500" in out, out
+    assert "舊間接成本 U2" not in out and "舊間接成本 F1" not in out and "舊間接成本 C1" not in out, "全 0 的不列；已精算／結案不是遷移對象"
+    rows = open(csv_path, encoding="utf-8-sig").read().splitlines()
+    assert rows[0].endswith("legacy_indirect")
+    u1 = [r for r in rows if r.startswith("U1,")][0].split(",")
+    assert u1[-1] == "1750"
+    rc, out = _run("--db", db, "recalc", "--apply", "--set-mode-v2", "--no-backup")
+    assert rc == 0, out
+    d = {no: json.loads(v[0]) for no, v in _rows(db).items()}
+    t = d["U1"]["tot"]
+    assert t["totalIndirect"] == t["adminCost"] + t["charityDonation"], "新口徑：五項不計"
+    assert t["_legacy"]["totalIndirect"] > t["totalIndirect"], "舊值留在 _legacy（回滾用）"
+    assert d["F1"]["tot"].get("formulaVer") is None and d["C1"]["tot"].get("formulaVer") is None, "已精算／結案不動"

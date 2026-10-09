@@ -2,6 +2,8 @@
 """管銷分攤設定端點（第 48 班 S2）：登入者可讀目前口徑與全域預設；只有最高管理者可改（每次稽核）。"""
 from fastapi import APIRouter, Body, Header, HTTPException
 
+from db import get_db
+from db import get_db
 from helpers import _audit, _require_user, _tok
 from helpers.settings import _set_setting
 from modules.case import profit_guard as PG
@@ -40,6 +42,14 @@ def put_overhead_settings(body: dict = Body(...), authorization: str = Header(No
             if not PG.migration_done():
                 raise HTTPException(409, "既有報價單尚未完成遷移（tools/overhead_migrate.py recalc --apply 會寫入完成標記），不能切換到新口徑")
         if body["ruleMode"] != old:
+            if body["ruleMode"] == "legacy":                          # 退回舊口徑：遷移完成標記一併移除（legacy 期間存檔的單是舊口徑；再切 v2 前必須重新跑 recalc）
+                _c = get_db()
+                try:
+                    _c.execute("DELETE FROM system_settings WHERE key=?", (PG.MIGRATION_KEY,))
+                    _c.commit()
+                finally:
+                    _c.close()
+                detail["migrationMarker"] = "removed"
             _set_setting(PG.MODE_KEY, body["ruleMode"])
             detail["ruleMode"] = {"old": old, "new": body["ruleMode"]}
             changes.append("口徑 %s → %s" % (old, body["ruleMode"]))
