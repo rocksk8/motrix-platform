@@ -145,3 +145,23 @@ def test_recorder_failure_is_swallowed(tmp_path):
     p = _run(proj, bad, run_id="r1")
     assert p.returncode == 0, "錄製失敗不可影響測試結果：" + p.stdout + p.stderr
     assert "passed" in p.stdout
+
+
+def test_cache_dir_inside_the_repo_is_refused_and_nothing_is_written(tmp_path):
+    """MOTRIX_TESTCACHE_DIR 解析後落在被觀察的 repo／worktree 裡 ⇒ 錄製器自己停用（清楚訊息、不丟例外、測試照跑），不寫任何檔。"""
+    (tmp_path / "proj").mkdir()
+    proj = _project(tmp_path / "proj")
+    inside = proj / "tc_cache"
+    p = _run(proj, inside, run_id="r1")
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "testcache_shadow: 停用" in p.stderr and "repo" in p.stderr
+    assert "passed" in p.stdout and "testcache_shadow: 錄了" not in p.stdout
+    assert not inside.exists(), "拒絕後不可建立任何檔案"
+    # 用 .. 繞進去也一樣（解析後判斷）
+    sneaky = proj / "sub" / ".." / "tc_cache2"
+    p = _run(proj, sneaky, run_id="r2")
+    assert p.returncode == 0 and "testcache_shadow: 停用" in p.stderr and not (proj / "tc_cache2").exists()
+    # 對照：repo 外的目錄照常錄
+    out = tmp_path / "outside_cache"
+    p = _run(proj, out, run_id="r3")
+    assert p.returncode == 0 and (out / "shadow" / "r3").is_dir()
