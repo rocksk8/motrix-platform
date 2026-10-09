@@ -1350,7 +1350,7 @@ local dict（改成直接 import 呼叫，不可能解析歪掉），而且測�
 ### 2026-09-14（第九輪）— 視覺化語彙推到其餘模組、報表補數值、動態附件（**DB v82**）
 
 分支 `feature/ui-viz-boards`（接續第八輪），master 未動。待辦收斂在
-[`docs/UI-BACKLOG.md`](../../docs/UI-BACKLOG.md)——使用者邊看邊提，那份是唯一的收斂點。
+[`docs/platform/archive/docs/UI-BACKLOG.md`](../platform/archive/docs/UI-BACKLOG.md)——使用者邊看邊提，那份是唯一的收斂點。
 
 #### 一、⚠️ **DB v82：動態附件**（唯一需要注意部署的一項）
 
