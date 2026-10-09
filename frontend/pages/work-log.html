@@ -287,7 +287,7 @@
         <!-- 出勤人員 -->
         <div class="wl-field">
           <label>出勤人員</label>
-          <select x-model="form.user_id">
+          <select x-model="form.user_id" :disabled="session.role !== 'superadmin'" data-testid="wl-user-select" title="只有最高管理者能替別人記錄">
             <option value="" x-text="usersLoaded ? (users.length ? '請選擇人員…' : '（無可用人員）') : '載入人員中…'"></option>
             <template x-for="u in users" :key="u.id">
               <option :value="String(u.id)" x-text="(u.display_name || u.username) + (u.role === 'superadmin' ? ' (管理員)' : u.role === 'admin' ? ' (主管)' : '')"></option>

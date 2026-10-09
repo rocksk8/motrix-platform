@@ -670,6 +670,8 @@ def create_work_log(body: dict = Body(...), authorization: str = Header(None)):
     finally:
         _c.close()
     log_date, user_id, content = _f["log_date"], _f["user_id"], _f["content"]
+    if user_id != u["id"] and u["role"] != "superadmin":              # 第 52 班（使用者裁示）：建立時也只有最高管理者能指定別人為記錄對象（同值＝自己 OK；與 PUT 的『不得改記錄對象』對稱）
+        raise HTTPException(403, "只有最高管理者可以替別人建立工作日誌")
     hours    = _f.get("hours", 8.0)
     case_no  = _f.get("case_no", "")
     contact_type = _f.get("contact_type", "")

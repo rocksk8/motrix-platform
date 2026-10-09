@@ -1848,11 +1848,40 @@ def submit_case_bonus(quote_no: str, authorization: str = Header(None)):
     return {"ok": True, "status": "待審核"}
 
 
+def _sole_approver_bypass(appr, tiers, user, reason, code, msg):
+    """第 52 班（使用者裁示）：整條簽核鏈**只有一位簽核人**時，不在簽核層內的最高管理者可以代核——但必須填原因（寫稽核＋通知其他最高管理者）。
+    回 `{"approver": 原簽核人帳號, "reason": 原因}`；不符合條件 ⇒ 丟原本的 403（`code`／`msg`）。
+    條件：①原本被擋的是權限（403）②整條鏈（所有層）合計恰一位簽核人 ③操作者是最高管理者（端點已要求）且不是送審人（送審人不可自核）。"""
+    names = [(a.get("username") or "") for t in tiers for a in (t.get("approvers") or [])]
+    sole = names[0] if len(names) == 1 else ""
+    if code != 403 or not sole or user["username"] == sole or user["username"] == (appr.get("requestedBy") or ""):
+        raise HTTPException(code, msg)
+    reason = (reason or "").strip() if isinstance(reason, str) else ""
+    if not reason:
+        raise HTTPException(403, "你不在這張獎金分潤的簽核層內；這條鏈只有一位簽核人（%s）。若要以最高管理者身分代為核准，請填寫原因"
+                                 "（會寫入稽核紀錄，並通知其他最高管理者）。" % sole)
+    return {"approver": sole, "reason": reason[:500]}
+
+
+def _audit_in_txn(conn, user, action, target_type, target_id, label, detail):
+    """**強制**稽核：寫在核准同一個交易裡（寫不進去 ⇒ 例外 ⇒ 整個核准回滾），不像 `_audit` 失敗只吞掉。"""
+    import re
+    m = re.search(r"MQ-\d{6}-\d{3}", str(target_id) + " " + str(label))        # 與 L1 稽核的 module／case_no 推導同規則（module＝動作第一段、case_no＝單號）；不 import L1 私有函式
+    d = {"module": (action or "").split(".", 1)[0], "case_no": m.group(0) if m else "", "ref_no": ""}
+    conn.execute(
+        "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
+        (datetime.now().isoformat(), user.get("id"), user.get("username") or "", user.get("display_name") or "", action, target_type, target_id, label,
+         json.dumps(detail, ensure_ascii=False), d["module"], d["case_no"], d["ref_no"]))
+
+
 @router.post("/cases/{quote_no}/approve")
-def approve_case_bonus(quote_no: str, authorization: str = Header(None)):
+def approve_case_bonus(quote_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
     """走共用簽核引擎：有鏈 ⇒ 當層簽核人（或代理人）；沒鏈 ⇒ superadmin，且不可自簽（唯一最高管理者例外）。
-    簽完最後一層 ⇒ 待發放。簽核人只能是最高管理者（W1）⇒ 操作者本身也必須是 superadmin。"""
+    簽完最後一層 ⇒ 待發放。簽核人只能是最高管理者（W1）⇒ 操作者本身也必須是 superadmin。
+    第 52 班：整條鏈只有一位簽核人時，層外最高管理者可帶 `reason` 代核（強制稽核＋通知其他最高管理者）。"""
     user = _require_user(authorization, require_superadmin=True)
+    bypass = None
     conn = get_db()
     try:
         conn.execute("BEGIN IMMEDIATE")
@@ -1866,7 +1895,7 @@ def approve_case_bonus(quote_no: str, authorization: str = Header(None)):
             ct = int(appr.get("currentTier") or 0)
             ok, code, msg = check_approve_permission(tiers, ct, user["username"], conn)
             if not ok:
-                raise HTTPException(code, msg)
+                bypass = _sole_approver_bypass(appr, tiers, user, (body or {}).get("reason"), code, msg)      # 條件不符 ⇒ 丟原本的錯
             # 共用規則（tiered_approval）：同一層可放多人、依序輪流簽，**全數 approved 才換層**。
             # ☠️ 2026-09-25 修正：原本第一人一簽就 currentTier+1、也不寫 status ⇒ 同層第二位以後永遠不用簽，
             #    而最後一層一過就開核定傳票（AC3）。check_approve_permission 已確認他是當層第一個未簽的人（或其代理人）。
@@ -1875,6 +1904,9 @@ def approve_case_bonus(quote_no: str, authorization: str = Header(None)):
             fp["status"] = "approved"
             fp["approvedAt"] = now
             fp["approvedBy"] = _user_name(user)
+            if bypass:                                              # 層外代核：把『誰、代誰、為什麼』留在簽核紀錄本身
+                fp["bypass"] = {"by": user["username"], "reason": bypass["reason"], "at": now}
+                appr["bypass"] = {"by": user["username"], "forApprover": bypass["approver"], "reason": bypass["reason"], "at": now}
             if all(a.get("status") == "approved" for a in approvers):
                 appr["currentTier"] = ct + 1
             nxt = "待發放" if int(appr.get("currentTier") or 0) >= len(tiers) else "待審核"
@@ -1890,6 +1922,11 @@ def approve_case_bonus(quote_no: str, authorization: str = Header(None)):
                      " WHERE id=?", (nxt, json.dumps(appr, ensure_ascii=False), _user_name(user), now,
                                      award["id"]))
         _case_log(conn, award["id"], user, "approve", {"status": nxt})
+        if bypass:
+            _case_log(conn, award["id"], user, "approve_bypass", {"forApprover": bypass["approver"], "reason": bypass["reason"], "status": nxt})
+            _audit_in_txn(conn, user, "bonus.case.approve_bypass", "bonus_case_awards", quote_no,
+                          "獎金分潤 %s 層外核准" % quote_no,
+                          {"award": quote_no, "by": user["username"], "tierApprover": bypass["approver"], "tierBypassed": True, "reason": bypass["reason"], "status": nxt})
         voucher, notice = None, ""
         if nxt == "待發放":
             # `AC3`（§11.8）：進入待發放 ⇒ 轉帳傳票草稿（借 費用／貸 應付）；科目有問題只提示、不擋簽核
@@ -1898,11 +1935,27 @@ def approve_case_bonus(quote_no: str, authorization: str = Header(None)):
     finally:
         conn.close()
     _audit(_tok(authorization), "bonus.case.approve", "bonus_case_awards", quote_no, "獎金分潤簽核：%s" % nxt)
+    if bypass:
+        _notify_bypass(quote_no, user, bypass)
     _notify_after(quote_no, nxt, by=user["username"])
     if voucher:
         _audit(_tok(authorization), "voucher.create", "vouchers", str(voucher["id"]),
                "獎金分潤 %s 進入待發放，產生傳票草稿：%s" % (quote_no, voucher["voucher_no"]))
     return {"ok": True, "status": nxt, "voucher": voucher, "notice": notice}
+
+
+def _notify_bypass(quote_no, user, bypass):
+    """層外代核後知會其他在職最高管理者（含原簽核人，不含操作者）。附帶動作：失敗只記 log。"""
+    try:
+        conn = get_db()
+        try:
+            who = [r["username"] for r in conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' ORDER BY id")]
+            row = conn.execute("SELECT COALESCE(customer_name, '') AS c FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone()
+        finally:
+            conn.close()
+        _bonus_notify.fire_bypass(quote_no, row["c"] if row else "", user["username"], bypass["approver"], bypass["reason"], who)
+    except Exception:                                            # noqa: BLE001 — 附帶動作
+        logger.exception("獎金分潤層外核准通知失敗（%s）", quote_no)
 
 
 def _back_to_draft(conn, award, user, action, reason):
