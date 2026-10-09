@@ -25,7 +25,7 @@
 |---|---|---|
 | `GET /api/quotations/{quote_no}/material-po-lines` | 前端、測試、文件皆無呼叫；只剩 CHANGELOG 敘述、模組 docstring、`route_table_golden.json` | 可刪，但要同步改 route_table_golden 並由主持裁示（golden 規則「只准加不准改」）。 |
 | `POST /api/quotations/case-activity` | 前端無呼叫；有測試（write-audit 清單）與文件 | 確認是否還有外部腳本／行動端使用後再議。 |
-| `GET /api/contractor-vouchers/last-paid-bank-account`、`GET /api/inventory/batches/last-paid-bank-account` | 前端無呼叫（標記視窗另有來源），只有測試引用 | 保留（已收緊權限）；若確認 UI 不再需要，可連測試一起移除。 |
+| （更正）`GET /api/contractor-vouchers/last-paid-bank-account`、`GET /api/inventory/batches/last-paid-bank-account` | **有前端呼叫者**：`cashier.js:615`、`case-management-dispatch.js:722`（承攬商匯款標記視窗預帶帳戶）、`inventory.html:697`（進貨批次付款視窗）；原稿「前端無呼叫」是我 grep 漏了模板字串（`${…}`）造成的錯誤 | 保留；承攬商那支已收緊為財務角色／最高管理者——標記已匯款本來就是出納動作，視窗預帶失敗時退回預設帳戶（前端對非 ok 回應不報錯） |
 其餘 70 條「找不到精確前端字串」的路由，皆為前端以字串拼接動態呼叫（`.../${action}`、`_postWriteoff(idx,'request-writeoff')` 等），逐筆 grep 有前端或測試引用。
 
 ## 延後

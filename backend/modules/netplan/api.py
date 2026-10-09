@@ -67,9 +67,11 @@ def _plan_visible(conn, row, user) -> bool:
         return True
     ca = _case_access()
     allowed = getattr(ca, "allowed", None) if ca is not None else None
+    if user.get("role") in ("superadmin", "admin"):                  # admin 以上本來就直通；案件列已被刪掉時 allowed 會回 False，不能因此讓規劃書從 admin 眼前消失
+        return True
     if allowed is not None:
         return bool(allowed(conn, qn, user, allow_module="case_manage"))
-    return user.get("role") in ("superadmin", "admin")
+    return False
 
 
 def _load_visible_plan(conn, plan_id, user, cols="*"):
@@ -208,10 +210,7 @@ def create_network_plan(body: dict = Body(...), authorization: str = Header(None
 def update_network_plan(plan_id: int, body: dict = Body(...), authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     conn = get_db()
-    row = conn.execute("SELECT * FROM network_plans WHERE id=?", (plan_id,)).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, "規劃書不存在")
+    row = _load_visible_plan(conn, plan_id, user)                      # 第 49 班：寫入端點同讀取端點，看不到該案 ⇒ 404、什麼都不寫
 
     expected = body.get("_expectedUpdatedAt")
     if expected and row["updated_at"] and expected != row["updated_at"]:
@@ -246,10 +245,7 @@ def update_network_plan_status(plan_id: int, body: dict = Body(...), authorizati
     note = (body.get("note") or "").strip()
 
     conn = get_db()
-    row = conn.execute("SELECT * FROM network_plans WHERE id=?", (plan_id,)).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, "規劃書不存在")
+    row = _load_visible_plan(conn, plan_id, user)                      # 第 49 班：寫入端點同讀取端點，看不到該案 ⇒ 404、什麼都不寫
 
     data = json.loads(row["data_json"] or "{}")
     log = data.get("revisionLog") or []
@@ -367,10 +363,7 @@ async def import_network_plan_excel(plan_id: int, file: UploadFile = File(...),
     案場資訊（siteName/quoteNo/status 等識別欄位）不受匯入影響，只動明細。"""
     user = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     conn = get_db()
-    row = conn.execute("SELECT * FROM network_plans WHERE id=?", (plan_id,)).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, "規劃書不存在")
+    row = _load_visible_plan(conn, plan_id, user)                      # 第 49 班：寫入端點同讀取端點，看不到該案 ⇒ 404、什麼都不寫
 
     content = await file.read()
     try:
@@ -431,10 +424,8 @@ def ack_network_plan_privacy_notice(plan_id: int, body: dict = Body(...), author
     user = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
     subject = str((body or {}).get("subject") or "").strip()
     conn = get_db()
-    row = conn.execute("SELECT plan_no, contact_name FROM network_plans WHERE id=?", (plan_id,)).fetchone()
+    row = _load_visible_plan(conn, plan_id, user, cols="plan_no, contact_name")      # 第 49 班：看不到該案 ⇒ 404（不洩漏存在與否）
     conn.close()
-    if not row:
-        raise HTTPException(404, "規劃書不存在")
     if not subject or subject != (row["contact_name"] or "").strip():
         raise HTTPException(409, "聯絡人與已儲存的不同，請先儲存規劃書再勾選")
     rec, created = _pn.record_purpose_ack("network_plan_contact", f"{plan_id}:{subject}", user, "contact")

@@ -29,6 +29,8 @@ def world(client, make_user):
     other, _ = _h(client, make_user, "np49_other", "sales", ["netplan", "quotation"])
     cm, _ = _h(client, make_user, "np49_cm", "engineer", ["netplan", "case_manage"])
     nomod, _ = _h(client, make_user, "np49_nomod", "sales", ["dashboard"])
+    other_edit, _ = _h(client, make_user, "np49_other_edit", "sales", ["netplan", "netplan_edit", "quotation"])
+    owner_edit, _ = _h(client, make_user, "np49_owner_edit", "sales", ["netplan", "netplan_edit", "quotation"])
     import db
     c = db.get_db()
     try:
@@ -40,7 +42,7 @@ def world(client, make_user):
     bound = client.post("/api/network-plans", headers=sa, json={"quoteNo": CASE, "siteName": "綁案件"})
     alone = client.post("/api/network-plans", headers=sa, json={"siteName": "獨立評估"})
     assert bound.status_code == 201 and alone.status_code == 201, (bound.text, alone.text)
-    return {"sa": sa, "admin": admin, "owner": owner, "other": other, "cm": cm, "nomod": nomod, "bound": bound.json()["id"], "alone": alone.json()["id"]}
+    return {"sa": sa, "admin": admin, "owner": owner, "other": other, "cm": cm, "nomod": nomod, "other_edit": other_edit, "owner_edit": owner_edit, "bound": bound.json()["id"], "alone": alone.json()["id"]}
 
 
 def _names(client, h):
@@ -92,3 +94,62 @@ def test_without_the_case_module_bound_plans_are_admin_only(client, world, monke
     assert _names(client, world["admin"]) == ["獨立評估", "綁案件"]
     assert client.get("/api/network-plans/%d" % world["bound"], headers=world["owner"]).status_code == 404
     assert client.get("/api/network-plans/%d" % world["bound"], headers=world["sa"]).status_code == 200
+
+
+# ── 第 49 班補強（寫入端點同樣套逐案權限；ab 稽核）──────────────────────────────────────────────────────
+
+def _row(plan_id):
+    import db
+    c = db.get_db()
+    try:
+        r = c.execute("SELECT site_name, status, updated_at, data_json FROM network_plans WHERE id=?", (plan_id,)).fetchone()
+        return tuple(r) if r else None
+    finally:
+        c.close()
+
+
+def _owner_edit_owns_the_case(world):
+    import db
+    c = db.get_db()
+    try:
+        c.execute("UPDATE quotations SET sales_person=? WHERE quote_no=?", ("np49_owner_edit", CASE))
+        c.commit()
+    finally:
+        c.close()
+
+
+def test_write_endpoints_return_404_and_write_nothing_without_case_access(client, world):
+    b, h = world["bound"], world["other_edit"]
+    before = _row(b)
+    r = client.put("/api/network-plans/%d" % b, headers=h, json={"siteName": "被改掉"})
+    assert r.status_code == 404, r.text
+    r = client.patch("/api/network-plans/%d/status" % b, headers=h, json={"status": "已確認"})
+    assert r.status_code == 404, r.text
+    r = client.post("/api/network-plans/%d/import/excel" % b, headers=h, files={"file": ("x.xlsx", b"not-an-excel", "application/octet-stream")})
+    assert r.status_code == 404, r.text                                  # 不是 400（解析失敗）也不是 200：先擋在可見性
+    r = client.post("/api/network-plans/%d/privacy-notice/ack" % b, headers=h, json={"subject": "任何人"})
+    assert r.status_code == 404, r.text                                  # 不是 409：409 會洩漏『存在』
+    assert _row(b) == before, "看不到該案的人什麼都不該寫得進去"
+
+
+def test_write_endpoints_still_work_for_the_case_owner_and_standalone_plans(client, world):
+    _owner_edit_owns_the_case(world)
+    b, a = world["bound"], world["alone"]
+    assert client.put("/api/network-plans/%d" % b, headers=world["owner_edit"], json={"siteName": "擁有者改名"}).status_code == 200
+    assert client.patch("/api/network-plans/%d/status" % b, headers=world["owner_edit"], json={"status": "已確認"}).status_code == 200
+    assert client.put("/api/network-plans/%d" % a, headers=world["other_edit"], json={"siteName": "獨立可改"}).status_code == 200
+    assert client.patch("/api/network-plans/%d/status" % a, headers=world["other_edit"], json={"status": "已確認"}).status_code == 200
+
+
+def test_admins_still_see_plans_whose_case_row_was_deleted(client, world):
+    import db
+    c = db.get_db()
+    try:
+        c.execute("DELETE FROM quotations WHERE quote_no=?", (CASE,))
+        c.commit()
+    finally:
+        c.close()
+    assert _names(client, world["admin"]) == ["獨立評估", "綁案件"]
+    assert _names(client, world["sa"]) == ["獨立評估", "綁案件"]
+    assert client.get("/api/network-plans/%d" % world["bound"], headers=world["admin"]).status_code == 200
+    assert _names(client, world["other"]) == ["獨立評估"]                      # 一般人員：案件不在了就不給看
