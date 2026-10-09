@@ -9,7 +9,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[4]
 JS = ROOT / "frontend" / "js" / "case-management-mlink.js"
-HTML = ROOT / "frontend" / "pages" / "case-management.html"
+from core import source_tree as _st  # noqa: E402
+HTML = _st.page_file("case-management.html")
 EXEC = ROOT / "frontend" / "js" / "case-management-exec.js"
 NODE = shutil.which("node")
 needs_node = pytest.mark.skipif(not NODE, reason="需要 node")

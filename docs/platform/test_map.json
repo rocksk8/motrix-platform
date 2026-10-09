@@ -6803,12 +6803,17 @@
    "units": [
     "dir:backend/modules/case/",
     "dir:frontend/js/",
-    "dir:frontend/pages/",
     "js:js/case-management-exec.js",
     "js:js/case-management-mlink.js",
-    "page:pages/case-management.html"
+    "page:pages/case-management.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
     "page": [
      "frontend/js/case-management-exec.js",
      "frontend/js/case-management-mlink.js",
@@ -6817,9 +6822,7 @@
     "path": [
      "frontend/js/",
      "frontend/js/case-management-exec.js",
-     "frontend/js/case-management-mlink.js",
-     "frontend/pages/",
-     "frontend/pages/case-management.html"
+     "frontend/js/case-management-mlink.js"
     ],
     "module_dir": [
      "backend/modules/case/"
@@ -32443,10 +32446,14 @@
     "js:js/case-management-shipping.js",
     "js:static/status-chip.js",
     "page:pages/payment-request-form.html",
-    "page:pages/payment-request.html"
+    "page:pages/payment-request.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/tests/_e2e_login.py",
      "backend/tests/_requires.py"
@@ -32463,8 +32470,6 @@
     "path": [
      "frontend/css/style.css",
      "frontend/js/",
-     "frontend/pages/payment-request-form.html",
-     "frontend/pages/payment-request.html",
      "frontend/static/status-chip.js"
     ]
    }

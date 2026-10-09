@@ -19,8 +19,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 CSS = os.path.join(ROOT, "frontend", "css", "style.css")
 JS = os.path.join(ROOT, "frontend", "static", "status-chip.js")
-PAGE = os.path.join(ROOT, "frontend", "pages", "payment-request.html")
-FORM = os.path.join(ROOT, "frontend", "pages", "payment-request-form.html")
+from core import source_tree as _st  # noqa: E402
+PAGE = str(_st.page_file("payment-request.html"))
+FORM = str(_st.page_file("payment-request-form.html"))
 
 TONES = ("draft", "pending", "signing", "approved", "rejected", "paid", "void")
 
