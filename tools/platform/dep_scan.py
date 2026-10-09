@@ -773,6 +773,7 @@ def check_module_folders(U: dict, path: Path = MODULES) -> list[str]:
         for field, mine, theirs in (
             ("tables", set(spec.get("tables", [])), set(grp.get("tables", []))),
             ("api_prefixes", set(spec.get("provides", {}).get("api_prefixes", [])), set(grp.get("api_prefixes", []))),
+            ("routes", set(spec.get("provides", {}).get("routes", [])), set(grp.get("routes", []))),     # 第49班 W1c-P4：明列路由也要兩邊一致（demo 缺席訊息吃 module.json）
         ):
             if mine != theirs:
                 errors.append(f"modules/{key}/module.json {field} 與 modules.json {gid} 不一致："

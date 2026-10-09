@@ -1,5 +1,9 @@
 # 網路規劃 更新紀錄
 
+## (next) — 2026-10-10（wip/t50-int；第 50 班）
+- **（併入）(next) — 2026-10-09（wip/t49-strict-bool；W1c-P4）**
+- `module.json` `provides.routes` 明列 `/api/quotations/{quote_no}/network-plan`（`modules.json` M10 本來就有）：它落在案件模組的 `/api/quotations` 前綴底下，demo 缺席訊息原本會把它算成案件的。行為只影響 demo 缺席提示；沒有端點／權限變更。
+
 ## 1.0.9 — 2026-10-09（wip/t49b-b5-netplan-writes）：規劃書寫入端點同套逐案權限
 - ab 稽核補強：`PUT /api/network-plans/{id}`、`PATCH …/status`、`POST …/import/excel`、`POST …/privacy-notice/ack` 原本用裸 `SELECT … WHERE id=?`，沒有讀取端點的逐案權限——有 netplan_edit 但沒有該案權限的人讀得到 404、卻能改（200）；ack 回 409 還洩漏『存在』。現在四支都先過 `_load_visible_plan`（看不到＝404、什麼都不寫）。
 - admin／最高管理者視為直通：案件列被刪掉時 `case.access.allowed` 回 False，不能讓規劃書從 admin 眼前消失（一般人員案件不在就不給看）。

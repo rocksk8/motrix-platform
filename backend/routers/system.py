@@ -660,6 +660,7 @@ def _work_log_fields(conn, body: dict, keys) -> dict:
 @router.post("/api/work-logs")
 def create_work_log(body: dict = Body(...), authorization: str = Header(None)):
     u = _require_user(authorization)
+    require_any_module(u, ('work_log', 'case_manage'), "工作日誌")      # 第49班 W1c-P5：與 GET 同一把（原本寫入只要登入）
     _ct = body.get("content")
     if not body.get("log_date") or not body.get("user_id") or not (_ct.strip() if isinstance(_ct, str) else _ct):
         raise HTTPException(400, "請填寫日期、記錄對象與工作內容。")
@@ -691,6 +692,7 @@ def create_work_log(body: dict = Body(...), authorization: str = Header(None)):
 @router.put("/api/work-logs/{wid}")
 def update_work_log(wid: int, body: dict = Body(...), authorization: str = Header(None)):
     u = _require_user(authorization)
+    require_any_module(u, ('work_log', 'case_manage'), "工作日誌")      # 第49班 W1c-P5
     conn = get_db()
     row = conn.execute("SELECT * FROM work_logs WHERE id=?", (wid,)).fetchone()
     if not row:
@@ -705,6 +707,9 @@ def update_work_log(wid: int, body: dict = Body(...), authorization: str = Heade
     except HTTPException:
         conn.close()
         raise
+    if "user_id" in _f and _f["user_id"] != row["user_id"] and u["role"] != "superadmin":
+        conn.close()                                                    # 第49班 W1c-P5：記錄對象只有最高管理者能改（本人／管理員不能把日誌轉給別人）
+        raise HTTPException(403, "只有最高管理者可以更改工作日誌的記錄對象")
     for field in ("log_date", "user_id", "content", "hours", "case_no", "contact_type"):
         if field in _f:
             sets.append(f"{field}=?")
@@ -723,6 +728,7 @@ def update_work_log(wid: int, body: dict = Body(...), authorization: str = Heade
 @router.delete("/api/work-logs/{wid}")
 def delete_work_log(wid: int, authorization: str = Header(None)):
     u = _require_user(authorization)
+    require_any_module(u, ('work_log', 'case_manage'), "工作日誌")      # 第49班 W1c-P5
     conn = get_db()
     row = conn.execute("SELECT user_id FROM work_logs WHERE id=?", (wid,)).fetchone()
     if not row:

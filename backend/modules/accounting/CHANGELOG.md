@@ -1,5 +1,10 @@
 # 會計 更新紀錄
 
+## (next) — 2026-10-10（wip/t50-int；第 50 班）
+- **（併入）(next) — 2026-10-09（wip/t48-w1a-fixes）：宣告 `GET /api/expense-categories` 的前綴（端點稽核 W1a）；併第49班 strict-bool（W1c-P2）；併 2026-10-09(wip/t49-strict-bool；W1c-P2 旗標嚴格解析＋P4 明列路由)**
+- **（併入）(next) — 2026-10-09（wip/t49-strict-bool；W1c-P2 旗標嚴格解析＋P4 明列路由）**
+- `module.json` `provides.routes` 明列 `/api/expense-categories`（費用單據下拉用，不在任何 api_prefixes 底下；demo 缺席訊息才不會漏接，W1c-P4）；`docs/platform/modules.json` M06 同步。
+
 ## 1.1.56 — 2026-10-09（wip/t49b-1d-strictbool2；W1c-P2b 旗標嚴格解析補丁）
 - `PUT /api/ledger/category-map` 的稽核訊息改用 `body_flag` 判斷『不得扣抵』旗標（寫入本身在第 49 班已驗旗標；這裡只是不再用真值判斷）。 旗標只收真布林（`helpers.validation.body_flag`）：JSON 字串 `"false"`／`"0"`／`""` 以前是 truthy，現在回 422、什麼都不寫（先驗旗標，再碰資料庫與簽核鏈）；真布林與沒帶（預設 false）行為不變。測試：`tests/test_strict_bool_cascade_t49b.py`。
 

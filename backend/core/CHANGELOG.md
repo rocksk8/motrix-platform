@@ -1,5 +1,11 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-10（wip/t50-int；第 50 班）
+- **（併入）(next) — 2026-10-09（wip/t48-w1c-fixes；端點稽核 W1c）；併 2026-10-09(wip/t48-w1c-fixes；端點稽核 W1c)**
+- **（併入）(next) — 2026-10-09（wip/t48-w1c-fixes；端點稽核 W1c）**
+- **工作日誌權限（W1c-P5，權限相關）**：`POST／PUT／DELETE /api/work-logs` 補上與 `GET` 同一把模組鑰匙（`work_log` 或 `case_manage`；原本寫入只要登入）；`PUT` 的 `user_id`（記錄對象）只有最高管理者能改為不同的人（本人與管理員 ⇒ 403；送回同一個值不算改，畫面編輯視窗每次都會帶）。測試：`tests/test_work_log_permissions_t49.py`。
+- **demo 缺席訊息涵蓋明列路由（W1c-P4）**：`helpers/module_startup.demo_absent_reason` 除 `provides.api_prefixes` 外也吃 `provides.routes`（可含 `{參數}`、結尾 `/*`），多個模組都吃得到時取最具體（最長）的；`tools/platform/dep_scan` 的 module.json ⇄ modules.json 一致性加比 `routes`。新守門 `tests/platform/test_module_routes_declared.py`：執行中 app 的每條模組路由都要在自己模組的 api_prefixes／routes 底下。
+
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
 ## 1.121 — 2026-10-09（wip/t48-w1c-fixes；端點稽核 W1c）

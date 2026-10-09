@@ -26,6 +26,7 @@
       "/api/network-plans",
       "/api/network-plans-quick"
     ],
+    "routes": ["/api/quotations/{quote_no}/network-plan"],
     "probes": ["/api/network-plans"]
   },
   "pages": [

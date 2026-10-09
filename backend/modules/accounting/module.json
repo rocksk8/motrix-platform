@@ -235,6 +235,7 @@
       "/api/settings",
       "/api/vouchers"
     ],
+    "routes": ["/api/expense-categories"],
     "probes": [
       "/api/vouchers",
       "/api/account-items"
