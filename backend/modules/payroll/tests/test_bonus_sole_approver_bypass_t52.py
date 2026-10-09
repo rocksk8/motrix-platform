@@ -124,3 +124,16 @@ def test_audit_write_failure_rolls_the_whole_approval_back(client, people, sa3, 
     a = _award("MQ-BY52-007")
     assert a["status"] == "待審核" and "bypass" not in a["appr"], "稽核寫不進去，核准不可以成立"
     assert _q("SELECT 1 FROM bonus_case_award_edit_log WHERE award_id=? AND action IN ('approve','approve_bypass')", (a["id"],)) == []
+
+
+def test_mail_rows_escape_free_text_reason_and_names(client, people, sa3, monkeypatch):
+    sent = []
+    import modules.payroll.bonus_notify as bn
+    monkeypatch.setattr(bn._en, "send_registered", lambda key, **kw: sent.append((key, kw)) or True)
+    _submitted(client, people, "MQ-BY52-008", [["bc_sa2"]])
+    r = _approve(client, sa3, "MQ-BY52-008", reason="<script>alert(1)</script> & 急件")
+    assert r.status_code == 200, r.text
+    kw = [kw for key, kw in sent if key == "bonus_approver_bypass"][0]
+    why = dict(kw["rows"])["原因"]
+    assert "<script>" not in why and "&lt;script&gt;" in why and "&amp;" in why
+    assert all("<" not in str(v) for _k, v in kw["rows"]) and "<" not in kw["note"]
