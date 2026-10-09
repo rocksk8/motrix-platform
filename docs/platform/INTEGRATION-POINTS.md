@@ -249,7 +249,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 使用方 | M07 薪資獎金：`modules/payroll/api/payslip_links.py`（`GET /api/payslip-person-dispatches`） |
 | 形式 | provider，單一提供者（名稱 `subcontract`） |
 | 語法 | 提供：`("dispatch.by_person", "subcontract"): dispatch_payslip_links.dispatches_for_person`；取用：`registry.single_provider("dispatch.by_person")` ⇒ `fn(conn, contractor_id)` |
-| 回傳 | `[{id, docCode, quoteNo, status, vendorName, dispatchDate}]`（新到舊，上限 200）；**不含金額** |
+| 回傳 | `[{id, docCode, quoteNo, status, vendorName, dispatchDate, scope, itemsSummary, projectName, customerName, caseVisible}]`（新到舊，上限 200；不含 draft／cancelled；`projectName`／`customerName` 只在呼叫端帶 `user=` 且通過案件讀取守門時有值；第 51 班加法）；**不含金額** |
 | 對方不在時 | 提供者不在 ⇒ 勞報單頁明說「外包工班模組未安裝」，不能依人勾選 |
 | 契約版本 | 1（2026-10-09）；`dispatch.brief`（IP-113）同日加欄位 `personnelIds`、`dispatchDate`（加法） |
 | 守門 | `backend/modules/payroll/tests/test_payslip_person_link_t48.py` |

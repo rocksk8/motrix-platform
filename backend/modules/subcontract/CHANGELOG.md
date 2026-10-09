@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-10（wip/t51-1d-payslip-prefill；勞報單預設選取已派工、一鍵帶入）
+- `dispatch.by_person` 提供者（IP-115，加法）：`dispatches_for_person(conn, contractor_id, limit, user=None)` 多回 `scope`、`itemsSummary`、`projectName`、`customerName`、`caseVisible`，並排除狀態 draft／cancelled；案件名稱只在 `user` 通過 `guard_case_access` 時給（用自己的短連線，不影響呼叫端連線），沒給 user ⇒ 空字串。仍不含金額。
+
 ## 1.1.28 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-09（wip/t48-w1b-fixes）：端點稽核 W1b；併第49班 strict-bool（W1c-P2）；併 2026-10-09(wip/t48-payslip-person-link)**
 - **（併入）(next) — 2026-10-09（wip/t48-payslip-person-link）：派發 ⇄ 勞報單依人連動；獨立稽核#3 修補（byPerson 限同案）；缺案號派發的同案判斷**

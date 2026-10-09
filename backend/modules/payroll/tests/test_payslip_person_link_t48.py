@@ -263,6 +263,6 @@ def test_person_dispatches_endpoint(client, make_user):
     r = client.get("/api/payslip-person-dispatches?contractor_id=%d" % cid, headers=sa)
     assert r.status_code == 200, r.text
     items = r.json()["items"]
-    assert [i["id"] for i in items] == [d1] and set(items[0]) == {"id", "docCode", "quoteNo", "status", "vendorName", "dispatchDate"}
+    assert [i["id"] for i in items] == [d1] and set(items[0]) == {"id", "docCode", "quoteNo", "status", "vendorName", "dispatchDate", "scope", "itemsSummary", "projectName", "customerName", "caseVisible", "linkedForThisPerson"}   # 第51班：IP-115 加法
     assert "12345" not in r.text
     assert client.get("/api/payslip-person-dispatches?contractor_id=%d" % cid, headers=staff).status_code == 403

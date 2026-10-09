@@ -1,5 +1,9 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-10-10（wip/t51-1d-payslip-prefill；勞報單預設選取已派工、一鍵帶入）
+- **勞報單表單（`payslip-form.html`）**：選了外包名冊人員後，他的派工清單**預設勾選『還沒連過這位人員勞報單』的**（連過的標『已有勞報單』不勾），每列顯示狀態色塊、單號、案件／客戶名稱（僅通過案件讀取守門者）、工作範圍、品項摘要、日期；新增『帶入勾選的派工』按鈕：只填**目前是空的**欄位——工作內容（案件名稱＋範圍）、服務起訖日（派發日期）、備註（派工單號／案號），不覆蓋已打的字、**不帶金額**。從派發頁『新增勞報單』（`?dispatchId=`）進來，若該派發名單剛好只有一位外包名冊人員 ⇒ 預選他。清單仍只在新增勞報單時出現。
+- API（加法）：`GET /api/payslip-person-dispatches` 每列多 `scope`、`itemsSummary`、`projectName`、`customerName`、`caseVisible`、`linkedForThisPerson`（本人有未作廢勞報單連到該派發）；不含草稿與已取消的派發；仍不含金額。新端點 `GET /api/payslip-person-dispatches/by-dispatch?dispatch_id=`（最高管理者／勞報單模組）：派發名單裡的外包名冊人員（id、姓名）。沒有 migration、沒有權限放寬、派發頁不動。測試：`modules/payroll/tests/test_payslip_prefill_t51.py`、`tests/test_e2e_payslip_person_link_t48.py`。
+
 ## 1.2.9 — 2026-10-09（wip/t50b-05-roundfix）：`bonus.py` 檔頭註解更正（營業利益算式的唯一來源已是 profit_rules）
 - `bonus.py` 模組說明的過時註解（還寫「算式只在 settlement.html」）改為第 48 班起的實況；只改註解，行為不變。
 

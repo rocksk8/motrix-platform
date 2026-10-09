@@ -77,16 +77,44 @@ def remove_link(slip_no: str, dispatch_id: int, authorization: str = Header(None
 @router.get("/api/payslip-person-dispatches")
 def person_dispatches(contractor_id: int, authorization: str = Header(None)):
     """第 48 班：這位外包名冊人員被排進哪些派發（勞報單表單勾選用）。最高管理者＋勞報單模組；**不含金額**。"""
-    _require_user(authorization, require_superadmin=True, module="payslip")
+    user = _require_user(authorization, require_superadmin=True, module="payslip")
     fn = registry.single_provider("dispatch.by_person")
     if fn is None:
         return {"items": [], "notice": DISPATCH_MISSING}
     conn = get_db()
     try:
-        items = fn(conn, contractor_id)
+        items = fn(conn, contractor_id, user=user)
+        # 第 51 班：這位人員是否已經有『未作廢的勞報單』連到該派發（勞報單頁預設只勾還沒連過的）。資料在 M07 自己的表，不經提供者。
+        linked = {r[0] for r in conn.execute(
+            "SELECT DISTINCT l.dispatch_id FROM payslip_dispatch_links l JOIN payslips p ON p.slip_no = l.slip_no"
+            " WHERE p.contractor_id = ? AND p.status != '已作廢'", (int(contractor_id),)).fetchall()}
+        for it in items:
+            it["linkedForThisPerson"] = it["id"] in linked
     finally:
         conn.close()
     return {"items": items, "notice": ""}
+
+
+@router.get("/api/payslip-person-dispatches/by-dispatch")
+def person_dispatch_roster(dispatch_id: int, authorization: str = Header(None)):
+    """第 51 班：從派發頁『新增勞報單』（?dispatchId=）進來時，預填受領人用——該派發名單裡的外包名冊人員（id、姓名）。
+    最高管理者＋勞報單模組；不含金額、身分證、銀行資料。派發不存在或沒有名單人員 ⇒ 空清單。"""
+    _require_user(authorization, require_superadmin=True, module="payslip")
+    fn = registry.single_provider("dispatch.brief")
+    if fn is None:
+        return {"persons": [], "notice": DISPATCH_MISSING}
+    conn = get_db()
+    try:
+        b = fn(conn, dispatch_id)
+        ids = [int(x) for x in ((b or {}).get("personnelIds") or [])][:50]
+        persons = []
+        if ids:
+            q = ",".join("?" * len(ids))
+            by_id = {r[0]: r[1] for r in conn.execute("SELECT id, name FROM contractors WHERE id IN (%s)" % q, ids).fetchall()}
+            persons = [{"id": i, "name": by_id[i]} for i in ids if i in by_id]
+    finally:
+        conn.close()
+    return {"persons": persons, "notice": ""}
 
 
 @router.post("/api/payslips/{slip_no}/confirm-contractor")

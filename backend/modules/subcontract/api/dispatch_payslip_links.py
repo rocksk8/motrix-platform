@@ -121,21 +121,55 @@ def _personnel_ids(raw) -> list:
     return out
 
 
-def dispatches_for_person(conn, contractor_id, limit=200) -> list:
-    """提供者 `dispatch.by_person`（M04 → M07 勞報單頁；IP-115 暫定）：這位外包名冊人員被排進哪些派發（新到舊）。**不含金額**。"""
+#: 勞報單頁的『這位人員的派工』清單不列草稿與已取消的派發（還不算真的派下去／已作廢）
+_PERSON_LIST_EXCLUDED_STATUS = ("draft", "cancelled")
+
+
+def dispatches_for_person(conn, contractor_id, limit=200, user=None) -> list:
+    """提供者 `dispatch.by_person`（M04 → M07 勞報單頁；IP-115 暫定）：這位外包名冊人員被排進哪些派發（新到舊；不含草稿／已取消）。**不含金額**。
+    第 51 班（加法）：另帶 `scope`（工作範圍）、`itemsSummary`（前 3 個品項描述）、`projectName`／`customerName`——案件名稱**只給通過案件讀取守門的人**
+    （`guard_case_access`：案件成員／case_manage／管理員；沒給 `user` 或沒通過 ⇒ 空字串，`caseVisible=False`，畫面只顯示單號）。"""
     try:
         cid = int(contractor_id)
     except (TypeError, ValueError):
         return []
-    out = []
-    for r in conn.execute("SELECT d.id, d.doc_code, d.quote_no, d.status, d.dispatch_date, d.personnel_json, v.name AS vendor_name"
+    out, visible = [], {}
+    for r in conn.execute("SELECT d.id, d.doc_code, d.quote_no, d.status, d.dispatch_date, d.personnel_json, d.scope, d.items_json, v.name AS vendor_name,"
+                          " q.project_name AS project_name, q.customer_name AS customer_name"
                           " FROM contractor_dispatches d LEFT JOIN vendor_contractors v ON v.id = d.vendor_id"
+                          " LEFT JOIN quotations q ON q.quote_no = d.quote_no"
                           " WHERE d.personnel_json LIKE ? ORDER BY d.id DESC", ("%" + str(cid) + "%",)).fetchall():
-        if cid in _personnel_ids(r["personnel_json"]):
-            out.append({"id": r["id"], "docCode": r["doc_code"] or "", "quoteNo": r["quote_no"] or "", "status": r["status"] or "",
-                        "vendorName": r["vendor_name"] or "", "dispatchDate": (r["dispatch_date"] or "")[:10]})
-            if len(out) >= limit:
-                break
+        if (r["status"] or "") in _PERSON_LIST_EXCLUDED_STATUS or cid not in _personnel_ids(r["personnel_json"]):
+            continue
+        qn = r["quote_no"] or ""
+        if qn not in visible:
+            ok = False
+            if user is not None and qn and (r["project_name"] is not None or r["customer_name"] is not None):
+                gconn = get_db()          # guard_case_access 拒絕時會把傳進去的連線關掉 ⇒ 用自己的短連線，不影響外面這條
+                try:
+                    guard_case_access(gconn, qn, user, allow_module="case_manage")
+                    ok = True
+                except HTTPException:
+                    ok = False
+                finally:
+                    try:
+                        gconn.close()
+                    except Exception:                                   # noqa: BLE001
+                        pass
+            visible[qn] = ok
+        try:
+            items = json.loads(r["items_json"] or "[]")
+        except (TypeError, ValueError):
+            items = []
+        descs = [str(it.get("description") or "").strip() for it in (items if isinstance(items, list) else []) if isinstance(it, dict)]
+        summary = "、".join([x for x in descs if x][:3])
+        out.append({"id": r["id"], "docCode": r["doc_code"] or "", "quoteNo": qn, "status": r["status"] or "",
+                    "vendorName": r["vendor_name"] or "", "dispatchDate": (r["dispatch_date"] or "")[:10],
+                    "scope": (r["scope"] or "")[:200], "itemsSummary": summary[:200],
+                    "projectName": (r["project_name"] or "") if visible[qn] else "", "customerName": (r["customer_name"] or "") if visible[qn] else "",
+                    "caseVisible": bool(visible[qn])})
+        if len(out) >= limit:
+            break
     return out
 
 

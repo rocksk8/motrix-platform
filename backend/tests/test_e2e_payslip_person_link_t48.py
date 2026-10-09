@@ -169,3 +169,48 @@ def test_payslips_page_confirm_button_promotes_the_guess_and_badge_disappears(li
     finally:
         c.close()
     assert row == {"contractor_id": pid, "contractor_guess_id": None}, row
+
+
+# ── 第 51 班：預設勾選尚未連過的派工、一鍵帶入、?dispatchId= 預選受領人 ─────────────────────────────
+
+@pytest.mark.e2e
+def test_payslip_form_default_checks_dispatch_and_bring_in_fills_only_empty_fields(live_server, world, new_context):
+    pid, d_with, d_without, sa, _staff = world
+    page = new_context(viewport={"width": 1440, "height": 1000}).new_page()
+    inject_login(page, live_server, sa[0], sa[1])
+    page.goto(live_server + "/pages/payslip-form.html")
+    _ready(page, f"{ROOT}.rulesVersion !== '' && {ROOT}.contractors && {ROOT}.contractors.length >= 2")
+    page.evaluate(f"""() => {{ const d = {ROOT}; d.selectCon(d.contractors.find(x => x.name === '名冊甲')) }}""")
+    row = "[data-testid=ps-dispatch-row-%s]" % d_with
+    page.wait_for_selector(row, state="visible", timeout=15000)
+    assert page.locator("[data-testid=ps-pick-dispatch-%s]" % d_with).is_checked(), "還沒連過這位人員勞報單的派工預設要勾"
+    txt = page.locator(row).inner_text()
+    assert "專案" in txt and "客戶" in txt and "管線施工" in txt and "2026-03-08" in txt, txt        # 案件名稱／工作範圍／日期（超管通過案件守門）
+    assert page.locator("[data-testid=ps-dispatch-chip-%s]" % d_with).count() == 1
+    assert "7777" not in page.locator("[data-testid=ps-person-dispatch-box]").inner_text(), "不得出現金額"
+    page.click("[data-testid=ps-fill-from-dispatch]")
+    page.wait_for_function(f"() => {ROOT}.q.serviceContent !== ''", timeout=5000)
+    got = page.evaluate(f"() => ({{ c: {ROOT}.q.serviceContent, s: {ROOT}.q.serviceStartDate, e: {ROOT}.q.serviceEndDate, r: {ROOT}.q.remarks, g: {ROOT}.q.grossAmount }})")
+    assert got["c"] == "專案 管線施工" and got["s"] == "2026-03-08" and got["e"] == "2026-03-08", got
+    assert ("#%s" % d_with) in got["r"] and NO in got["r"], got
+    assert got["g"] == 0, "金額不帶入（第一階段）"
+    # 已經打過字的欄位不覆蓋
+    page.evaluate(f"() => {{ {ROOT}.q.serviceContent = '我自己寫的'; {ROOT}.q.remarks = '' }}")
+    page.click("[data-testid=ps-fill-from-dispatch]")
+    page.wait_for_function(f"() => {ROOT}.q.remarks !== ''", timeout=5000)
+    assert page.evaluate(f"() => {ROOT}.q.serviceContent") == "我自己寫的"
+    assert "已有內容" in page.locator("[data-testid=ps-fill-msg]").inner_text()
+    # 取消勾選 ⇒ 存檔不連結它（預設勾選不是強制）
+    page.locator("[data-testid=ps-pick-dispatch-%s]" % d_with).uncheck()
+    assert page.evaluate(f"() => {ROOT}.pickedDispatchIds.length") == 0
+
+
+@pytest.mark.e2e
+def test_payslip_form_opened_from_a_dispatch_preselects_the_only_roster_person(live_server, world, new_context):
+    pid, d_with, d_without, sa, _staff = world
+    page = new_context(viewport={"width": 1440, "height": 1000}).new_page()
+    inject_login(page, live_server, sa[0], sa[1])
+    page.goto(live_server + "/pages/payslip-form.html?dispatchId=%s" % d_with)
+    page.wait_for_function(f"() => window.Alpine && document.querySelector('[x-data]') && {ROOT}.q && {ROOT}.q.contractorId === {pid}", timeout=25000)
+    assert page.evaluate(f"() => {ROOT}.q.contractorName") == "名冊甲"
+    page.wait_for_selector("[data-testid=ps-pick-dispatch-%s]" % d_with, state="visible", timeout=15000)
