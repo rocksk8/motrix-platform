@@ -1,3 +1,4 @@
+from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 # -*- coding: utf-8 -*-
 """IP-100 `payables.pending`：M01 的待付款申請（INTEGRATION-POINTS；2026-09-27 使用者裁示請款流程）。
 
@@ -340,7 +341,7 @@ def parse_remit(body, payable):
     if actual <= 0:
         raise BadRemit("實付金額必須大於 0")
     fee = 0.0
-    if body.get("hasFee", body.get("has_fee")):
+    if body_flag(body, "hasFee", body_flag(body, "has_fee")):
         fee = _num(body.get("fee", body.get("remit_fee")), "手續費")
         if fee < 0:
             raise BadRemit("手續費不可為負數")

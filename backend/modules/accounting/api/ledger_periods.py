@@ -9,6 +9,7 @@ import sqlite3
 from fastapi import APIRouter, Body, Header, HTTPException
 
 from db import get_db
+from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers import _audit, _require_user, _tok, require_any_module
 from modules.accounting.api import ledger_requests as _requests
 from modules.accounting.ledger import opening as _opening
@@ -126,7 +127,7 @@ def close(period_id: int, body: dict = Body(default={}), authorization: str = He
         return _requests.submit(user, "period_close", dict(body or {}, period_id=period_id), authorization)
     conn = get_db()
     try:
-        h = _run(conn, _periods.close_period, period_id, _who(user), bool((body or {}).get("accept_warnings")),
+        h = _run(conn, _periods.close_period, period_id, _who(user), body_flag(body, "accept_warnings"),
                  str((body or {}).get("reason") or ""))
         conn.commit()
     finally:

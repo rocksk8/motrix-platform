@@ -2,6 +2,8 @@
 
 ## (next) — 2026-10-09（wip/t48-w1a-fixes）：宣告 `GET /api/expense-categories` 的前綴（端點稽核 W1a）
 - `module.json` `provides.api_prefixes` 與 `docs/platform/modules.json` M06 補上 `/api/expense-categories`：路由 `ledger_category_map.list_router`（費用單據類別下拉，IP `expense.categories`，任何登入者）原本實際由本模組提供、但前綴沒宣告（依 `list_router` 另建、靜態掃描只看 `router` 而漏看）；行為不變。
+- **（併入）(next) — 2026-10-09（wip/t49-strict-bool；W1c-P2 旗標嚴格解析）**
+- 套用點：`POST /api/ledger/years/{year}/closing/generate`（`regenerate`）、`POST /years/{year}/close` 與 `POST /periods/{id}/close`（`accept_warnings`——字串 `"false"` 以前等於『接受警告』結帳）、`PUT /features/{key}`（`enabled`）、`PUT /category-map`（`nondeductible`）、`POST /api/vouchers/{id}/void`（`reopen`）；非最高管理者送出的結帳申請（`ledger/requests.py` `normalize`）同樣驗旗標，核准時改用 `is True`（申請參數存的本來就是布林）。旗標只收真布林（`helpers.validation.body_flag`）；JSON 字串 `"false"`／`"0"`／`""` 以前會被當成 true，現在回 422、什麼都不寫。前端本來就送真布林，行為不變。測試：`tests/test_strict_bool_sites_t49.py`。
 
 ## 1.1.54 — 2026-10-06（wip/t44-settle-terms）：`ledger-settings.html` 費用單據說明「請款」→「支出申請」（只改畫面文字）
 

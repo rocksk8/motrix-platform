@@ -12,6 +12,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from db import get_db, is_demo_mode, DEMO_PAYSLIP_ARCHIVE_DIR
+from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers import _require_user, _tok, _audit, _get_setting, notify_module_activity, user_has_module
 from helpers.uploads import _check_upload_magic
 from helpers.errors import trace_id
@@ -298,7 +299,7 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     gross       = int(d.get("grossAmount", 0))
     income_type = d.get("incomeType", "9A")
     nationality = d.get("contractorNationality", "本國籍")
-    has_union   = bool(d.get("contractorHasUnionInsurance", False))
+    has_union   = body_flag(d, "contractorHasUnionInsurance")
     calc        = _calc(gross, income_type, nationality, has_union, rules)
 
     d["slipNo"]         = slip_no
@@ -419,7 +420,7 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
         gross       = int(d.get("grossAmount", 0))
         income_type = d.get("incomeType", "9A")
         nationality = d.get("contractorNationality", "本國籍")
-        has_union   = bool(d.get("contractorHasUnionInsurance", False))
+        has_union   = body_flag(d, "contractorHasUnionInsurance")
         calc        = _calc(gross, income_type, nationality, has_union, rules)
 
         d["slipNo"]          = slip_no

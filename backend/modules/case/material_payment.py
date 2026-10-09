@@ -17,6 +17,7 @@ import math
 from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
+from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers.dates import normalize_date
 from helpers.auth import has_finance_access  # 第42班：取消／撤回／作廢的財務動作只認財務角色與 superadmin
 from helpers.tiered_approval import (
@@ -517,7 +518,7 @@ def parse_line(body, remaining):
     if amount <= 0:
         raise BadRemit("實付金額必須大於 0")
     fee = 0.0
-    if body.get("hasFee", body.get("has_fee")):
+    if body_flag(body, "hasFee", body_flag(body, "has_fee")):
         fee = _num(body.get("fee", body.get("remit_fee")), "手續費")
         if fee < 0:
             raise BadRemit("手續費不可為負數")

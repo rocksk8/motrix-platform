@@ -30,6 +30,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 from fastapi.responses import HTMLResponse, Response
 
 from db import get_db
+from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers.auth import has_finance_access  # noqa: E402  第42班：財務只認「財務」角色與 superadmin
 from helpers import _require_user, _audit, _tok, _get_setting
 from modules.payroll.bonus import (
@@ -226,7 +227,7 @@ def set_bonus_group_active(group_id: int, body: dict = Body(...),
     抱怨自己沒領到錢。⇒ 這支**不碰** `bonus_group_members`。
     """
     _require_user(authorization, require_superadmin=True)
-    is_active = 1 if body.get("is_active") else 0
+    is_active = 1 if body_flag(body, "is_active") else 0
     conn = get_db()
     try:
         row = conn.execute("SELECT id, name FROM bonus_groups WHERE id = ?",

@@ -17,6 +17,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 
 from core.txn import begin_write
 from db import get_db
+from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers import _audit, _notify, _require_user, _tok, notify_org_chain_notice
 from helpers.approval_queue import approval_raw_of as _approval_raw_of, tier_fields as _queue_tier_fields
 from modules.case import purchase_items as _PI
@@ -199,13 +200,14 @@ def submit(quote_no: str, item_id: str, authorization: str = Header(None)):
 def approve(quote_no: str, item_id: str, body: dict = Body(default={}), authorization: str = Header(None)):
     """核准當層；全部層都過了才「已核准」。能不能簽由「是否為當層簽核人」決定（不另要求 admin／案件成員）。"""
     user = _require_user(authorization)
+    _cascade = body_flag(body, "cascade")          # 第49班 W1c-P2：先驗旗標（422），再碰資料庫
     conn = get_db()
     try:
         begin_write(conn)
         q = _load_case(conn, quote_no)
         order = _order(q, item_id)
         try:
-            res = MA.approve(conn, quote_no, order, user, comment=(body or {}).get("comment") or "", cascade=bool((body or {}).get("cascade")))
+            res = MA.approve(conn, quote_no, order, user, comment=(body or {}).get("comment") or "", cascade=_cascade)
         except MA.MaterialApprovalError as e:
             raise _http(e)
         row = MA.get(conn, quote_no, item_id)

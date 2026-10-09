@@ -1,5 +1,5 @@
 {
- "core_version": "1.120",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1186,6 +1186,10 @@
    "upload_owner": "def(rel)",
    "upload_path_key": "def(entry, folder, depth=…)",
    "upload_readable": "def(conn, rel, user)"
+  },
+  "helper:validation": {
+   "body_flag": "def(body, key, default=…)",
+   "strict_bool": "def(value, field=…)"
   },
   "helper:xlsx_out": {
    "EXCEL_COOLDOWN": "const",

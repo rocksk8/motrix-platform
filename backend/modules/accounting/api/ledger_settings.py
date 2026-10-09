@@ -7,6 +7,7 @@
 from fastapi import APIRouter, Body, Header, HTTPException
 
 from db import get_db
+from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers import _audit, _require_user, _tok, require_any_module
 from modules.accounting.ledger import features as _features
 from modules.accounting.ledger import fs_lines as _fs
@@ -116,7 +117,7 @@ def put_feature(key: str, body: dict = Body(...), authorization: str = Header(No
         raise HTTPException(403, "只有最高管理者可以開關總帳功能。")
     if key not in _features.FEATURES:
         raise HTTPException(404, "沒有這個功能：%s。" % key)
-    enabled = bool((body or {}).get("enabled"))
+    enabled = body_flag(body, "enabled")
     if enabled and key not in _features.READY:
         raise HTTPException(409, "這項功能還在開發中，這一版尚未提供，不能開啟。")
     conn = get_db()

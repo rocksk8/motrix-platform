@@ -23,6 +23,7 @@ from pydantic import BaseModel, model_validator
 from db import get_db, next_entity_code, spawn_bg_thread
 from core import registry
 from core.txn import begin_write, write_txn
+from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers.dates import normalize_date
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers.gl_status import gl_posted_warning
@@ -990,7 +991,7 @@ def set_remit_require_payslip(body: dict = Body(...), authorization: str = Heade
     user = _require_user(authorization)
     if user["role"] != "superadmin":
         raise HTTPException(403, "只有最高管理者可以更動")
-    on = bool((body or {}).get("enabled"))
+    on = body_flag(body, "enabled")
     _set_setting("remit_require_payslip", "1" if on else "0")
     _audit(_tok(authorization), "contractor_voucher.remit_require_payslip", "system_settings", "remit_require_payslip", "remit_require_payslip",
            {"enabled": on, "reason": str((body or {}).get("reason") or "")[:200]})

@@ -5,6 +5,8 @@
 - 新守門 `tests/test_endpoint_auth_w1b_t48.py`：case／subcontract／supply 宣告前綴下的每條路由無憑證呼叫一律不得 2xx／5xx。報告 `docs/platform/plans/ENDPOINT-AUDIT-W1B-T48.md`。
 - **（併入）(next) — 2026-10-09（wip/t49-b5-visibility）：外包名冊下拉限權（可見範圍收緊）**
 - `GET /api/contractors/selectable`（外包名冊 id／姓名／電話）原本所有登入者可讀；現在限最高管理者、財務角色，或持有 procurement／case_manage／contractor_list／payslip 任一模組者，其他 403。唯一前端呼叫者（案件管理頁的派發表單；該頁本來就要求 case_manage）沒有受影響的角色，前端對沒有這些模組的 session 不送請求。
+- **（併入）(next) — 2026-10-09（wip/t49-strict-bool；W1c-P2 旗標嚴格解析）**
+- 套用點：`PUT /api/contractor-vouchers/settings/remit-require-payslip` 的 `enabled`（**個人外包匯款強制關聯勞報單的緊急開關**；字串以前會被當成 true）。旗標只收真布林（`helpers.validation.body_flag`）；JSON 字串 `"false"`／`"0"`／`""` 以前會被當成 true，現在回 422、什麼都不寫。前端本來就送真布林，行為不變。測試：`tests/test_strict_bool_sites_t49.py`。
 
 ## 1.1.25 — 2026-10-08（wip/t47-audit-fixes）：承攬商匯款預定付款日提供者先拿寫鎖（第 46 班稽核 S4）；併 wip/t47-paydate-l1
 - `set_planned_pay_date`：讀取前先 `begin_write`（與案件／叫料匯款提供者一致），「沒變」的比較與寫入在同一個寫交易；兩位出納並發時後到的不會得到過期的 `unchanged`。

@@ -55,6 +55,16 @@ def _year_open(conn, year):
         raise RequestError("%d 年度已經決算，不能再送這個申請。" % year)
 
 
+def _flag(p, key):
+    """申請參數裡的旗標：只收真布林（第49班 W1c-P2；字串 "false" 以前會被存成 true，最高管理者核准時就用『接受警告』結帳）。"""
+    from fastapi import HTTPException
+    from helpers.validation import body_flag
+    try:
+        return body_flag(p, key)
+    except HTTPException as exc:
+        raise RequestError(str(exc.detail))
+
+
 def normalize(conn, action, params):
     """驗證並整理參數 ⇒ (params, 顯示名稱)。只留該動作認得的欄位（多餘欄位丟掉，避免夾帶）。"""
     if action not in ACTIONS:
@@ -67,7 +77,7 @@ def normalize(conn, action, params):
         if action == "period_close":
             if per["status"] != "open":                     # 送出前就擋：不要讓最高管理者核准一個做不了的申請
                 raise RequestError("這個期間現在是「%s」，只有開放的期間可以結帳。" % {"closed": "已結帳", "locked": "已鎖定"}.get(per["status"], per["status"]))
-            return ({"period_id": pid, "accept_warnings": bool(p.get("accept_warnings")), "reason": str(p.get("reason") or "").strip()[:500]}, "結帳：" + base)
+            return ({"period_id": pid, "accept_warnings": _flag(p, "accept_warnings"), "reason": str(p.get("reason") or "").strip()[:500]}, "結帳：" + base)
         reason = str(p.get("reason") or "").strip()
         if not reason:
             raise RequestError("重開期間必須填寫理由。")
@@ -79,7 +89,7 @@ def normalize(conn, action, params):
     if action == "year_close":
         y = _int(p.get("year"), "年度")
         _year_open(conn, y)
-        return ({"year": y, "accept_warnings": bool(p.get("accept_warnings"))}, "年度決算：%d 年度" % y)
+        return ({"year": y, "accept_warnings": _flag(p, "accept_warnings")}, "年度決算：%d 年度" % y)
     year = _int(p.get("year"), "年度")
     _year_open(conn, year)
     rows, items = p.get("rows") or [], p.get("items") or []
@@ -175,11 +185,11 @@ def _execute(conn, row):
     who = row["requested_by"]
     try:
         if row["action"] == "period_close":
-            return {"tb_hash": _periods.close_period(conn, p["period_id"], who, bool(p.get("accept_warnings")), p.get("reason") or "")}
+            return {"tb_hash": _periods.close_period(conn, p["period_id"], who, p.get("accept_warnings") is True, p.get("reason") or "")}
         if row["action"] == "period_reopen":
             return {"stale_later_periods": _periods.reopen_period(conn, p["period_id"], who, p.get("reason") or "")}
         if row["action"] == "year_close":
-            return dict(_closing.close_year(conn, p["year"], who, bool(p.get("accept_warnings"))) or {})
+            return dict(_closing.close_year(conn, p["year"], who, p.get("accept_warnings") is True) or {})
         return dict(_opening.create_batch(conn, p["year"], p.get("opening_date") or "", p.get("rows") or [], p.get("items") or [], p.get("filename") or "", who))
     except (_periods.PeriodError, _closing.ClosingError, _opening.OpeningError) as exc:
         raise RequestError(str(exc))

@@ -19,6 +19,7 @@ from datetime import datetime
 from fastapi import APIRouter, Body, Header, HTTPException, Response
 
 from db import get_db
+from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers.settings import  _set_setting
 from helpers import _audit, _require_user, _tok, require_any_module
 # ⚠️ 走模組不是 `from ... import run_scan`：那會複製走副本，
@@ -54,19 +55,6 @@ def _json_list(value, field):
         raise HTTPException(422, f"{field} 必須是陣列或逗號分隔字串")
     return json.dumps([str(v).strip() for v in value if str(v).strip()],
                       ensure_ascii=False)
-
-
-def _flag(body, key, default):
-    """布林欄位的嚴格解析（W1c）：缺 ⇒ default；true/false 或 0/1 ⇒ 布林；其他（字串 "false"、"0"、null…）⇒ 422。
-    原本 `bool(body.get(...))` 把 JSON 字串 "false" 當成 True——『需確認的高頻時段』確認旗標與『啟用』旗標可被字串蓋過。"""
-    if key not in body:
-        return default
-    v = body[key]
-    if isinstance(v, bool):
-        return v
-    if isinstance(v, int) and v in (0, 1):
-        return bool(v)
-    raise HTTPException(422, "%s 必須是 true 或 false" % key)
 
 
 def _opt_int(value, field):
@@ -136,7 +124,7 @@ def create_watch(body: dict = Body(...), authorization: str = Header(None)):
             (name, keywords, _json_list(body.get("excludes"), "excludes"), org,
              _opt_int(body.get("budgetMin"), "budgetMin"),
              _opt_int(body.get("budgetMax"), "budgetMax"),
-             1 if _flag(body, "enabled", True) else 0, now, now),
+             1 if body_flag(body, "enabled", True) else 0, now, now),
         )
         new_id = cur.lastrowid
         conn.commit()
@@ -213,8 +201,8 @@ def update_watch(watch_id: int, body: dict = Body(...),
         # 🔑 這是〈降級之後它還是會動〉的寫入版本：
         # **操作成功了，而它做的不只是你要的那件事。**
         enabled = row["enabled"]
-        if "enabled" in body:
-            enabled = 1 if _flag(body, "enabled", True) else 0
+        if body.get("enabled") is not None:                       # JSON null ＝沒帶（維持原值），不是停用
+            enabled = 1 if body_flag(body, "enabled", True) else 0
 
         conn.execute(
             "UPDATE tender_watches SET name=?, keywords=?, excludes=?, org=?, "
@@ -474,7 +462,7 @@ def set_schedule(body: dict = Body(...), authorization: str = Header(None)):
     而使用者看到的是一個錯誤訊息 ⇒ 他會以為什麼都沒變。
     """
     _require_radar(authorization)
-    confirmed = _flag(body, "confirmHighFrequency", False)
+    confirmed = body_flag(body, "confirmHighFrequency", False)
     changes = []
     _hours_field(body, "scanHours", tender_source.SCAN_HOURS_SETTING,
                  "抓取時段", confirmed, changes)
