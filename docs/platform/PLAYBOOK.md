@@ -366,7 +366,7 @@
 
 ### G7. 一班列車的實際流程（第 46～51 班；以 git 與 RUN-PLAN §6 為準的整理，2026-10-10）
 > 為什麼有這一節：§G3／§G4 寫的是第九～十班的做法（每小時一班、`train/<時間>`、`D:\MOTRIX-PLATFORM-TRAIN<N>`、列車長子代理）。第 46 班起實際做法已改成「一班一條整合分支、官方閘門跑在凍結的 head 上、作者以外的獨立稽核、主持自己發布與推基準」。§G3／§G4 的細節（月台登記、自查 §G5、取號 §G6）仍然有效，下面只補它們沒寫的那一段。
-> 腳本類別說明：`publish_tNN.sh`、`push_tNN_baseline.sh` 是主持維護的**班次腳本，不在 repo 內**；下面只寫它們的規則，不寫內容。
+> 腳本類別說明：`publish_tNN.sh`、`push_tNN_baseline.sh` 是主持維護的**班次腳本，放在 `C:\Users\hichan\`、不在 repo 內**；下面只寫它們的規則，不寫內容。
 
 **0. 角色**：整合者（一個開發視窗，第 46～47 班 hichan-05、第 48a 班起 hichan-b7）建整合分支、取號、跑閘門；獨立稽核者（1d、ab、05、b5 交叉，**不得稽核自己寫的包**）；主持（node-d8）定案、發布、推基準。使用者外出期間主持全權，範圍見 `PROD-DEV-CHANNEL.md` §8。
 
@@ -381,7 +381,7 @@
 2. 兩段用同一個入口各跑一次，結果寫進沿用紀錄，建包時直接沿用：
    - `python backend/tools/build_test_reuse.py run-stage --stage not_e2e`（第 49～50 班 3 個 worker，約 10,000 題）
    - `python backend/tools/build_test_reuse.py run-stage --stage e2e`（2 個 worker，約 990 題）
-   - **e2e 不與 not_e2e 並行**（第 47 班：並行 e2e 的負載造成偶發紅）；機器 CPU 是瓶頸，其他視窗此時只做讀寫、不開 pytest。
+   - **規則（主持成文，第 47 班起）：官方 e2e 單獨跑，絕不與 not_e2e 並行；not_e2e 用 3 個 worker。** 並行跑在負載下曾逾時；機器 CPU 是瓶頸，其他視窗此時只做讀寫、不開 pytest。
 3. 任何一個修正 commit 之後，**先跑 CHANGELOG 守門**（第 47 班 4 次登記類紅燈之一），再重跑受影響的段；最終確認要在最後的 head 上兩段都綠。
 4. 偶發失敗的處理不變（§D-建包②）：當成真問題查；**未登記、未蓋章**的偶發題不得放行（第 49 班計時測試例；第 46 班結束時偶發登記簿為空）。測試不在 import／收集階段取系統日期（第 47 班跨午夜偶發紅燈；守門 `tests/platform/test_no_import_time_clock_2026_10_09.py`）。
 5. 最後在 RUN-PLAN §6 與步驟檔寫下：not_e2e／e2e 的題數、worker 數、head SHA。
@@ -392,7 +392,7 @@
 3. 稽核報告放 `docs/platform/plans/`（`ENDPOINT-AUDIT-*`、`AUDIT-*`），RUN-PLAN 只寫結論一行。
 
 **4. 發布（主持）**
-1. 執行 `publish_tNN.sh`，規則（使用者 2026-10-09 授權主持自己推送、不用等指令）：**先讀腳本全文 → 先 `--check`（只檢查不發）→ 才正式執行**；fail-closed；只傳金鑰的路徑、**不讀簽章金鑰內容**；不強推；任何一項檢查紅燈就不發布。被分類器擋下就停下請使用者處理，不繞過、不叫別的視窗代做。
+1. 執行 `publish_tNN.sh`，規則（使用者 2026-10-09 授權主持自己推送、不用等指令）：**先讀腳本全文 → 先 `--check`（只檢查不發）→ 才正式執行**；fail-closed 前置條件：`HEAD` ＝ 過閘門的 commit ＝ origin 上的整合分支、manifest commit 存在、包內沒有 `*.db`／`.pyc`、`verify_package --expect-db-version <目前 schema 版本，現為 118>` 通過；簽章金鑰只以**路徑**傳入、**不讀內容**；不強推；任何一項檢查紅燈就不發布。被分類器擋下就停下請使用者處理，不繞過、不叫別的視窗代做。
 2. 發布產物：部署包 `YYYYMMDD_HHMMSS_<sha8>_full`（含 `package.sha256`、行數／檔案數）、雲端步驟檔 `給正式機Claude_第N班更新步驟.md`；repo 內的 `docs/platform/prod-tasks/YYYYMMDD-trainNN-apply.md` 與它逐字一致。步驟檔寫法見 `prod-tasks/TEMPLATE-apply.md`；套用規則見 `PROD-DEV-CHANNEL.md` §6。
 3. 正式機 Claude 依步驟檔自動套用（§6）；寫入資料類的作業另走 §7（使用者本人確認）。
 
@@ -401,7 +401,7 @@
    - `backend/tests/_prod_baseline.py`：`BASELINE = "<sha8>"` 與一行 📌 說明（這一班上線了什麼）；
    - `docs/platform/RUN-PLAN.md` §6 最上面一筆（時間、整合者／主持、新舊 commit、秒數、套件名與檔數、schema 版本、套用前備份檔名、步驟 3 結果、閘門題數、稽核與必修項處置、發布腳本名；這一筆由基準腳本寫入）；
    - 步驟檔定稿存檔到 `docs/platform/prod-tasks/`，文首「定稿」行改成「已發布並已套用成功，<時間>」。
-2. `push_tNN_baseline.sh`：推 `platform` 並打受信 tag `prod/<sha8>`（§D-1a：範圍驗證的基準只認最新的 `prod/*` tag）。同樣先讀、先 `--check`。
+2. `push_tNN_baseline.sh`：推 `platform` 只准 **fast-forward**，並有「diff 只能是文件」的守門；之後在**過閘門的那個 commit** 上打受信 tag `prod/<sha8>`（§D-1a：範圍驗證的基準只認最新的 `prod/*` tag）。同樣先讀、先 `--check`。
 3. 之後才開下一班；使用者驗收項（會寫資料的、要各角色帳號的）留給使用者，不在正式機代測。
 
 **過期的摘要（已知，待處理）**：`docs/platform/CACHE-INDEX.md` 的各段「來源 commit」落後（守門 `test_cache_index_fresh.py` 只警告不擋）。沒有重產工具，要人讀原檔對應章節後改摘要、換來源 commit；§G7 與 `PROD-DEV-CHANNEL.md` §6～§8 是這次新增的，下次更新 CACHE-INDEX 時要一併納入。

@@ -22,11 +22,11 @@
 5. **PROD-DEV-CHANNEL §3**「`prod_status_snapshot.py` 隨下一個部署包進正式機，之前的快照改人工逐項查」：該工具早已在部署包內、`status\latest.json` 也在用，這句多半已過期；但我無法在不連正式機的情況下確認，沒有刪。
 6. **RUN-PLAN §6 有 35 筆**（規則：只留最新 20 筆、超過 40 筆封存到 RUN-LOG）。依 node-d8 的指示 §6 由基準腳本維護，我沒有動。
 
-## 三、寫進文件但來源不是 repo 檔（請主持確認）
+## 三、寫進文件但來源不是 repo 檔（node-d8 已於 2026-10-10 確認並要求更正，已改）
 
-- **§14.4 的事故**（2026-10-09 20:20，用命令列比對誤殺非 pytest 的 python 行程）：來源是主持的離開日誌（不在 repo）。文中已註明「主持離開日誌記錄」。規則本身（只依自己的 PID 結束行程）是 node-d8 轉述的要求。
-- **PLAYBOOK §G7 第 4 節**「`publish_tNN.sh`／`push_tNN_baseline.sh` 先讀全文、先 `--check`、fail-closed、只傳金鑰路徑、不讀金鑰內容」：腳本**不在 repo**，我沒有讀到腳本本身；規則取自 RUN-PLAN 第 47 班一筆（「使用者授權自己推送」）與主持慣例。已在 §G7 註明腳本不在 repo。
-- **§G7 第 2 節** 的 worker 數與題數取自 RUN-PLAN §6 各班一筆；「e2e 不與 not_e2e 並行」來自第 47 班的整合紀錄（「並行 e2e 負載偶發」），沒有找到成文的規則。
+- **§14.4 的事故**：來源是主持的離開日誌（不在 repo）。主持更正為 2026-10-09 約 19:50（不是 20:20）、一次結束 8 個行程、其中 2 個不明確是自己的；規則＝只依精確的自己的 PID 結束。已照改。
+- **PLAYBOOK §G7 第 4～5 節**：腳本在 `C:\Users\hichan\`（不在 repo），我沒有讀到腳本本身；主持確認規則如實，並補上 fail-closed 前置條件與基準推送的 fast-forward／docs-only 守門，已寫入 §G7。
+- **§G7 第 2 節** 的 worker 數與題數取自 RUN-PLAN §6 各班一筆；「官方 e2e 單獨跑、不與 not_e2e 並行、not_e2e 3 個 worker」是主持自第 47 班起的成文規則（寫在主持筆記，repo 內原本沒有），已在 §G7 寫成規則。
 - **MONEY-FLOWS §10.4**（第 52 班公益捐款）依規格摘要，規格在 `origin/wip/t52-ab-charity-quote`，尚未進 `platform`；上線後要依程式更新本節（已在節內註明）。
 - 沒有核對的：`prod-tasks/TEMPLATE-apply.md` 是否已反映 §6（授權段）的寫法；`MULTIWIN-PROTOCOL.md` 內是否仍寫主持為 `node-bb`。
 
