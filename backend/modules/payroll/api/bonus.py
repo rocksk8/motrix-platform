@@ -1865,8 +1865,9 @@ def _sole_approver_bypass(appr, tiers, user, reason, code, msg):
 
 def _audit_in_txn(conn, user, action, target_type, target_id, label, detail):
     """**強制**稽核：寫在核准同一個交易裡（寫不進去 ⇒ 例外 ⇒ 整個核准回滾），不像 `_audit` 失敗只吞掉。"""
-    from helpers.audit import _derive_fields
-    d = _derive_fields(action, target_type, target_id, label, detail)
+    import re
+    m = re.search(r"MQ-\d{6}-\d{3}", str(target_id) + " " + str(label))        # 與 L1 稽核的 module／case_no 推導同規則（module＝動作第一段、case_no＝單號）；不 import L1 私有函式
+    d = {"module": (action or "").split(".", 1)[0], "case_no": m.group(0) if m else "", "ref_no": ""}
     conn.execute(
         "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code)"
         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
