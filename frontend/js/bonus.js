@@ -379,7 +379,12 @@ function bonusPage() {
       if (await this._post('/submit', {})) await this._refresh('已送審')
     },
     async approve() {
-      const d = await this._post('/approve', {})
+      let d = await this._post('/approve', {})
+      // 第52班：整條簽核鏈只有一位簽核人、而我不在簽核層內 ⇒ 後端要求填原因才讓最高管理者代核（寫稽核＋通知其他最高管理者）
+      if (!d && /請填寫原因/.test(this.msg || '')) {
+        const reason = await MotrixUI.prompt(this.msg, { title: '代為核准（不在簽核層內）', okText: '代為核准', placeholder: '原因（會寫入稽核紀錄）', required: true })
+        if (reason && String(reason).trim()) d = await this._post('/approve', { reason: String(reason).trim() })
+      }
       if (d) await this._refresh(this._withNotice('已核准', d))
     },
     async reject() {

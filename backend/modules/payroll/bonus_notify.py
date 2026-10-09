@@ -23,6 +23,10 @@ _mt.register("bonus_returned", "獎金分潤退回（送審人）", "approval", 
              "獎金分潤被駁回或退回（回到草稿），需要修改後重新送審。", "請登入系統，於獎金分潤頁查看退回原因並修改後重新送審。（信中不含金額）", owner="payroll")
 
 
+_mt.register("bonus_approver_bypass", "獎金分潤層外核准（通知其他最高管理者）", "approval", "none", "其他最高管理者",
+             "有最高管理者不在簽核層內、代替唯一的簽核人核准了一張獎金分潤。", "請登入系統，於獎金分潤頁與稽核紀錄查看核准人、原簽核人與原因。（信中不含金額）", owner="payroll")
+
+
 def ident(quote_no) -> str:
     return "獎金分潤 %s" % (quote_no or "")
 
@@ -88,4 +92,28 @@ def fire_returned(quote_no, customer, requester, *, approver="", reason="") -> b
             note="您好，您送審的%s已被退回（回到草稿），請依原因修改後重新送審。" % ident(quote_no))
     except Exception:                                            # noqa: BLE001 — 附帶動作：不可以讓退回失敗
         logger.exception("獎金分潤退回通知失敗（%s）", quote_no)
+        return False
+
+
+def fire_bypass(quote_no, customer, actor, sole_approver, reason, recipients) -> bool:
+    """層外最高管理者代核（簽核層只有一位簽核人）⇒ 通知**其他**在職最高管理者（信＋站內；含原簽核人，不含操作者本人）。
+    附帶動作：任何例外只記 log，不可以讓已完成的核准失敗；稽核紀錄已在核准的同一個交易裡寫好（強制），這裡只是知會。"""
+    who = [r for r in dict.fromkeys(x for x in (recipients or []) if x) if r != (actor or "")]
+    if not who:
+        return False
+    text = "%s 由 %s 代 %s 核准（不在簽核層內）：%s" % (ident(quote_no), actor, sole_approver or "—", (reason or "")[:120])
+    for r in who:
+        try:
+            _notice_in_app(quote_no, r, type_="bonus_approver_bypass", message=text)
+        except Exception:                                        # noqa: BLE001 — 附帶動作
+            logger.exception("獎金分潤層外核准站內通知失敗（%s → %s）", quote_no, r)
+    try:
+        return _en.send_registered(
+            "bonus_approver_bypass", title="獎金分潤層外核准", reason="%s 層外核准" % ident(quote_no), usernames=who,
+            rows=[("單號", quote_no or "—"), ("客戶", customer or "—"), ("核准人", actor or "—"), ("原簽核人", sole_approver or "—"), ("原因", reason or "—")],
+            badge_text="層外核准", badge_color="#B45309",
+            link=_mail_link(quote_no), button_text="前往查看",
+            note="您好，%s 的簽核層只有一位簽核人，由 %s 以最高管理者身分代為核准；原因與時間已寫入稽核紀錄。" % (ident(quote_no), actor))
+    except Exception:                                            # noqa: BLE001 — 附帶動作
+        logger.exception("獎金分潤層外核准通知失敗（%s）", quote_no)
         return False
