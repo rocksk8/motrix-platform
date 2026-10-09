@@ -3509,7 +3509,7 @@
                     </div>
                     <div style="display:flex;align-items:center;gap:6px">
                       <label style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);white-space:nowrap">記錄對象</label>
-                      <select x-model="newCommentUserId"
+                      <select x-model="newCommentUserId" :disabled="session.role !== 'superadmin'" title="只有最高管理者能替別人記錄" data-testid="cm-feed-user-select"
                               style="padding:5px 8px;font-size:12px;border:1px solid var(--border-light);border-radius:6px;font-family:var(--font-zh);outline:none;background:var(--surface)">
                         <option value="">我自己</option>
                         <template x-for="u in selectableUsers" :key="u.id">

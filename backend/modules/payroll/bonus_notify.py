@@ -9,6 +9,7 @@
 用語（t44 申請人通知統一規範）：識別＝「獎金分潤 {單號}」＋結果字「已核准」；主旨與信件事由是同一句「獎金分潤 {單號} 已核准」。
 🔴 **信內不放金額**（只放單號與客戶名稱，與既有獎金信一致）。寄信是附帶動作：任何例外只記 log，不可以讓簽核失敗——對外入口自己包 try。
 """
+import html
 import logging
 from urllib.parse import quote
 
@@ -107,13 +108,14 @@ def fire_bypass(quote_no, customer, actor, sole_approver, reason, recipients) ->
             _notice_in_app(quote_no, r, type_="bonus_approver_bypass", message=text)
         except Exception:                                        # noqa: BLE001 — 附帶動作
             logger.exception("獎金分潤層外核准站內通知失敗（%s → %s）", quote_no, r)
+    e = lambda v: html.escape(str(v or ""), quote=True)       # 信件模板不跳脫列值：原因是自由文字 ⇒ 在這裡跳脫（站內通知照原文，前端以文字顯示）
     try:
         return _en.send_registered(
             "bonus_approver_bypass", title="獎金分潤層外核准", reason="%s 層外核准" % ident(quote_no), usernames=who,
-            rows=[("單號", quote_no or "—"), ("客戶", customer or "—"), ("核准人", actor or "—"), ("原簽核人", sole_approver or "—"), ("原因", reason or "—")],
+            rows=[("單號", e(quote_no) or "—"), ("客戶", e(customer) or "—"), ("核准人", e(actor) or "—"), ("原簽核人", e(sole_approver) or "—"), ("原因", e(reason) or "—")],
             badge_text="層外核准", badge_color="#B45309",
             link=_mail_link(quote_no), button_text="前往查看",
-            note="您好，%s 的簽核層只有一位簽核人，由 %s 以最高管理者身分代為核准；原因與時間已寫入稽核紀錄。" % (ident(quote_no), actor))
+            note="您好，%s 的簽核層只有一位簽核人，由 %s 以最高管理者身分代為核准；原因與時間已寫入稽核紀錄。" % (e(ident(quote_no)), e(actor)))
     except Exception:                                            # noqa: BLE001 — 附帶動作
         logger.exception("獎金分潤層外核准通知失敗（%s）", quote_no)
         return False

@@ -235,7 +235,7 @@ window.CM_PARTS.push(() => ({
     async postWorkLogEntry(content) {
       this.postingComment = true
       try {
-        const uid = this.newCommentUserId ? Number(this.newCommentUserId) : this.session.id
+        const uid = (this.newCommentUserId && this.session.role === 'superadmin') ? Number(this.newCommentUserId) : this.session.id   // 只有最高管理者能替別人記錄（伺服器也擋）
         const r = await fetch('/api/work-logs', {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
