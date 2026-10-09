@@ -74,8 +74,13 @@ def new_tot_fields(tot: dict, pct) -> dict:
     admin = _round(max(direct, Decimal(0)) * rate)
     charity = max(Decimal(0), _round(direct * Decimal("0.01")))
     total_indirect = admin + charity                                  # 新口徑不再計入五項間接成本（舊值留在 tot._legacy／data_json，供回滾與稽核）
-    net = direct - total_indirect
-    net_pct = float(_round(net / pretax * 100, 1)) if pretax > 0 else 0.0
+    # 營業利益與營業利益率：照「線上程式」的二進位浮點算法（profit_rules.quote_profit 的雙精度減法／除法，再以最短表示的
+    # 十進位字串四捨五入——helpers.legal_params.round_half_up(x, 10)/10；伺服器重存、前端顯示都是這個值）。
+    # 🔴 第 50 班稽核：以前這裡用精確 Decimal 比值，於「剛好 .x5」的平手差 0.1 個百分點（pretax 2000／成本 895／7.5% ⇒ 精確 48.45 → 48.5，
+    # 線上浮點 48.449999999999996 → 48.4）⇒ 遷移寫的值與該單第一次重存的值不同。這裡只用標準庫重寫同一算法，不 import 線上程式。
+    net_f = float(direct) - float(total_indirect)
+    net = _dec(net_f)
+    net_pct = (int(_round(_dec(net_f / float(pretax) * 100) * 10)) / 10) if pretax > 0 else 0.0
     return {"adminCost": int(admin), "totalIndirect": _num(total_indirect), "netProfit": int(_round(net)),
             "netMarginPct": net_pct, "charityDonation": int(charity), "legacyIndirect": _num(five)}
 

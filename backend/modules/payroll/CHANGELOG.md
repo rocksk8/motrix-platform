@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-10-09（wip/t50b-05-roundfix）：`bonus.py` 檔頭註解更正（營業利益算式的唯一來源已是 profit_rules）
+- `bonus.py` 模組說明的過時註解（還寫「算式只在 settlement.html」）改為第 48 班起的實況；只改註解，行為不變。
+
 ## 1.2.8 — 2026-10-10（wip/t50-int 整合修正）
 - `module.json`：`api_prefixes` 補登記 `/api/payslip-person-dispatches`（勞報單人員⇄派發連動，48c；路由歸屬守門 dep_scan --check-modules）。行為不變。
 

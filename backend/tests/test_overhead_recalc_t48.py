@@ -315,3 +315,57 @@ def test_report_lists_unsettled_quotes_with_non_zero_legacy_indirect_costs_and_r
     assert t["totalIndirect"] == t["adminCost"] + t["charityDonation"], "新口徑：五項不計"
     assert t["_legacy"]["totalIndirect"] > t["totalIndirect"], "舊值留在 _legacy（回滾用）"
     assert d["F1"]["tot"].get("formulaVer") is None and d["C1"]["tot"].get("formulaVer") is None, "已精算／結案不動"
+
+
+# ── 第 50 班稽核：遷移寫的 netMarginPct 必須與線上重存的值逐位相同（「剛好 .x5」的平手）──────────────
+
+#: (pretax, cost, pct) → 線上（profit_guard.server_profit）的 (adminCost, charityDonation, netProfit, netMarginPct)。
+#: 精確十進位會得到 …48.5／28.5／24.4／-0.6／-77.2；線上是二進位浮點的最短表示再四捨五入 ⇒ …48.4／28.4／24.3／-0.5／-77.1。
+TIE_VECTORS = [
+    (2000, 895, "7.5", (80, 11, 969, 48.4)),
+    (4000, 2346, "25", (384, 15, 1138, 28.4)),
+    (2000, 1200, "33.3", (246, 7, 487, 24.3)),
+    (2000, 891, "100", (1064, 11, -11, -0.5)),          # 負的平手
+    (46000, 77609, "30", (0, 0, -35489, -77.1)),         # 虧損案（管銷 0、公益 0）
+]
+
+
+def _tot_for(pretax, cost):
+    from helpers.legal_params import round_half_up
+    vat = round_half_up(cost, 0.05)
+    direct = pretax - cost - vat
+    old_admin = round_half_up(pretax, 0.10)
+    return {"pretax": pretax, "directProfit": direct, "adminCost": old_admin, "charityDonation": 0, "totalIndirect": old_admin}
+
+
+@pytest.mark.parametrize("pretax,cost,pct,want", TIE_VECTORS)
+def test_tie_vectors_match_what_a_live_resave_writes(pretax, cost, pct, want):
+    got = R.new_tot_fields(_tot_for(pretax, cost), pct)
+    assert (got["adminCost"], got["charityDonation"], got["netProfit"], got["netMarginPct"]) == want
+
+
+def test_the_old_exact_decimal_rounding_would_have_failed_these_vectors():
+    """反向控制：用精確 Decimal 比值（舊寫法）算第一組，得到 48.5 ≠ 線上的 48.4 ⇒ 向量真的在擋這個差異。"""
+    from decimal import Decimal, ROUND_HALF_UP
+    pretax, cost, pct, want = TIE_VECTORS[0]
+    t = _tot_for(pretax, cost)
+    got = R.new_tot_fields(t, pct)
+    exact = float((Decimal(got["netProfit"]) / Decimal(pretax) * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+    assert exact == 48.5 and got["netMarginPct"] == 48.4
+
+
+def test_frozen_equals_live_resave_over_seeded_cases():
+    """fuzz-lite：3000 組種子固定的隨機案，凍結算式 == 線上 `profit_guard.server_profit`（伺服器重存寫進 tot 的四個值），逐位相同。"""
+    PG = pytest.importorskip("modules.case.profit_guard")
+    rnd = random.Random(20261009)
+    bad = []
+    for _ in range(3000):
+        pretax = rnd.choice([rnd.randint(1, 5_000_000), rnd.randint(1, 200) * 1000, rnd.randint(1, 400) * 500])
+        cost = int(pretax * rnd.choice([0.2, 0.4, 0.55, 0.6, 0.75, 0.9, 1.0, 1.2])) if rnd.random() < 0.8 else rnd.randint(0, 2 * pretax)
+        pct = rnd.choice([25, 25, 25, 10, 0, 7.5, 12.5, 30, 33.3, 100, 0.1])
+        live = PG.server_profit({"items": [{"qty": 1, "cost": cost}], "tot": {"pretax": pretax}}, pct, 2, pretax=pretax)
+        got = R.new_tot_fields(_tot_for(pretax, cost), str(pct))
+        for k in ("adminCost", "charityDonation", "netProfit", "netMarginPct"):
+            if got[k] != live[k]:
+                bad.append((pretax, cost, pct, k, got[k], live[k]))
+    assert not bad, bad[:5]
