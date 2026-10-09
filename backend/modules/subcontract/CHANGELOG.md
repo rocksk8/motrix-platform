@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-09（wip/t48-w1b-fixes）：端點稽核 W1b；併第49班 strict-bool（W1c-P2）
+## 1.1.26 — 2026-10-09（wip/t48-w1b-fixes）：端點稽核 W1b；併第49班 strict-bool（W1c-P2）
 - 修：`GET /api/contractor-vouchers/last-paid-bank-account` 原本任何登入者都讀得到公司最近一次付款帳戶（名稱＋科目代碼）；現在限財務角色／最高管理者（其他 403），與 `quotations/last-received-bank-account` 一致。
 - 新守門 `tests/test_endpoint_auth_w1b_t48.py`：case／subcontract／supply 宣告前綴下的每條路由無憑證呼叫一律不得 2xx／5xx。報告 `docs/platform/plans/ENDPOINT-AUDIT-W1B-T48.md`。
 - **（併入）(next) — 2026-10-09（wip/t49-b5-visibility）：外包名冊下拉限權（可見範圍收緊）**

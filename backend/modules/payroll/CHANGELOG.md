@@ -1,6 +1,6 @@
 # 薪資獎金 更新紀錄
 
-## (next) — 2026-10-09（wip/t49-05-bonus-cleanup）：移除舊版獎金分潤的 8 條 410 墓碑寫入端點（端點稽核 W1a，使用者裁示）；併第49班 strict-bool（W1c-P2）
+## 1.2.6 — 2026-10-09（wip/t49-05-bonus-cleanup）：移除舊版獎金分潤的 8 條 410 墓碑寫入端點（端點稽核 W1a，使用者裁示）；併第49班 strict-bool（W1c-P2）
 - `api/bonus.py`：移除 `POST /api/bonus/items`、`POST /api/bonus/awards`、`POST /api/bonus/awards/{id}/submit｜approve｜reject｜mark-paid｜void｜recall`（原本一律回 410「舊的獎金分潤流程已停用」，函式本體是被 `dependencies=_GONE` 擋掉的死碼，共約 450 行）與 `_legacy_write_gone`／`_GONE`、不再用到的匯入。現在對這些路徑的 POST 回 404／405；前端沒有任何呼叫（`bonus.js` 只打 `/api/bonus/cases`）。
 - 保留：舊版唯讀端點（`GET /api/bonus/items｜base/{q}｜awards｜awards/{id}｜awards/plan/{q}｜awards/candidates｜awards/{id}/preview｜pdf-download`）、群組維護、`module.json` probes（皆 GET）。
 - 測試：`test_bonus_legacy_retired_2026_09_24.py` 改驗「POST 已無路由（404／405，不寫任何東西）」＋路由表層級反向控制；`modules/case/tests/route_table_golden.json` 刪去那 8 筆（使用者裁示的刻意移除，其餘逐筆不變）。

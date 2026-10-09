@@ -1,6 +1,6 @@
 # 標案雷達 更新紀錄
 
-## (next) — 2026-10-09（wip/t48-w1c-fixes＋wip/t49-strict-bool；端點稽核 W1c／旗標嚴格解析）
+## 1.5.8 — 2026-10-09（wip/t48-w1c-fixes＋wip/t49-strict-bool；端點稽核 W1c／旗標嚴格解析）
 - **布林旗標嚴格解析**：`PUT /api/tender-radar/schedule` 的 `confirmHighFrequency`、`POST/PUT /api/tender-radar/watches` 的 `enabled` 原本用 `bool(...)`／真值判斷，JSON 字串 `"false"`、`"0"` 會被當成 true（⇒ 悄悄通過『頻繁時段需確認』、或把條件啟用）。現在只收 `true/false`（或 0/1），其他型別回 422，設定不變。前端本來就送真正的布林，行為不變。
 - 第 49 班：改用共用的 `helpers.validation.body_flag`（行為相同；JSON null 視同沒帶：`PUT watches` 的 `enabled: null` 維持原值、不再停用）。
 

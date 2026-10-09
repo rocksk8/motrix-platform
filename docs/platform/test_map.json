@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1211,
+  "tests": 1221,
   "unmapped": 13,
   "kinds": {
-   "api": 657,
-   "e2e": 297,
-   "audit": 148,
-   "unit": 109
+   "api": 664,
+   "e2e": 298,
+   "audit": 149,
+   "unit": 110
   },
-  "routes": 787
+  "routes": 779
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -9677,6 +9677,31 @@
    },
    "module": "netplan"
   },
+  "backend/modules/netplan/tests/test_netplan_visibility_t49.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/netplan/",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/platform/test_case_stage_connectors.py",
+    "mod:netplan/api"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_requires.py",
+     "backend/tests/platform/test_case_stage_connectors.py"
+    ],
+    "api": [
+     "backend/modules/netplan/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/netplan/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "netplan"
+  },
   "backend/modules/netplan/tests/test_network_plan_topology.py": {
    "kind": "api",
    "units": [
@@ -10491,6 +10516,14 @@
      "backend/modules/payroll/"
     ]
    },
+   "unresolved_api": [
+    "/api/bonus/awards/1/approve",
+    "/api/bonus/awards/1/mark-paid",
+    "/api/bonus/awards/1/recall",
+    "/api/bonus/awards/1/reject",
+    "/api/bonus/awards/1/submit",
+    "/api/bonus/awards/1/void"
+   ],
    "login_fixture": true,
    "module": "payroll"
   },
@@ -12014,6 +12047,28 @@
     ]
    },
    "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_contractors_selectable_t49.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:payroll/tests/test_payslip_edit_guard_2026_08_28",
+    "mod:subcontract/api/contractors"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/tests/test_payslip_edit_guard_2026_08_28.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
    "module": "subcontract"
   },
   "backend/modules/subcontract/tests/test_dispatch_approval_s1_2026_10_01.py": {
@@ -13677,6 +13732,26 @@
     ]
    },
    "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_w1b_fixes_t48.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/subcontract/",
+    "mod:payroll/tests/test_payslip_edit_guard_2026_08_28",
+    "mod:subcontract/api/contractor_vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/payroll/tests/test_payslip_edit_guard_2026_08_28.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
    "module": "subcontract"
   },
   "backend/modules/supply/tests/test_e2e_boolean_status_select_2026_09_25.py": {
@@ -16049,7 +16124,12 @@
      "docs/platform/modules.json",
      "tools/platform/"
     ]
-   }
+   },
+   "unresolved_api": [
+    "/api/zz-mod/run",
+    "/api/zz-pub",
+    "/api/zz-pub/list"
+   ]
   },
   "backend/tests/platform/test_dep_scan_module_files.py": {
    "kind": "unit",
@@ -16741,6 +16821,58 @@
     "/api/voucher",
     "/api/zz",
     "/api/zz/list",
+    "/api/zzz"
+   ]
+  },
+  "backend/tests/platform/test_final_verify_tool.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:main",
+    "dir:tools/platform/",
+    "file:backend/core/CHANGELOG.md",
+    "file:backend/modules/case/CHANGELOG.md",
+    "file:backend/modules/case/module.json",
+    "file:backend/tests/platform/l1_interface_snapshot.json",
+    "file:backend/version_manifest.json",
+    "file:docs/platform/CACHE-INDEX.md",
+    "file:docs/platform/INTEGRATION-POINTS.md",
+    "file:tools/platform/final_verify_allow.json",
+    "mod:case/__init__",
+    "mod:case/api/quotations",
+    "plat:registry",
+    "plat:upgrade",
+    "router:auth"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/auth.py"
+    ],
+    "path": [
+     "backend/core/CHANGELOG.md",
+     "backend/core/registry.py",
+     "backend/core/upgrade.py",
+     "backend/db.py",
+     "backend/main.py",
+     "backend/modules/case/CHANGELOG.md",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/module.json",
+     "backend/routers/auth.py",
+     "backend/tests/platform/l1_interface_snapshot.json",
+     "backend/version_manifest.json",
+     "docs/platform/CACHE-INDEX.md",
+     "docs/platform/INTEGRATION-POINTS.md",
+     "tools/platform/",
+     "tools/platform/final_verify_allow.json"
+    ]
+   },
+   "unresolved_api": [
+    "/api/nothing/here",
+    "/api/things",
+    "/api/things/list",
+    "/api/things/open",
+    "/api/things/{}/go",
     "/api/zzz"
    ]
   },
@@ -18053,6 +18185,17 @@
     "path": [
      "backend/tests/platform/test_no_temp_files_in_shared_tests_dir_2026_09_30.py",
      "backend/tests/test_exception_detail_leak_2026_09_23.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_no_truthy_request_flags.py": {
+   "kind": "audit",
+   "units": [
+    "mod:accounting/ledger/requests"
+   ],
+   "evidence": {
+    "path": [
+     "backend/modules/accounting/ledger/requests.py"
     ]
    }
   },
@@ -27119,6 +27262,35 @@
     ]
    }
   },
+  "backend/tests/test_e2e_visibility_t49.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "mod:netplan/api",
+    "mod:subcontract/api/contractors",
+    "page:pages/case-management.html",
+    "page:pages/network-plans.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/netplan/api.py",
+     "backend/modules/subcontract/api/contractors.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/network-plans.html"
+    ],
+    "path": [
+     "frontend/pages/network-plans.html"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_e2e_wiring_2026_09_30.py": {
    "kind": "e2e",
    "units": [
@@ -27334,6 +27506,21 @@
    "evidence": {
     "import": [
      "backend/helpers/email_notify.py"
+    ]
+   }
+  },
+  "backend/tests/test_endpoint_auth_w1b_t48.py": {
+   "kind": "api",
+   "units": [
+    "mod:case/api/quotations",
+    "mod:subcontract/api/contractors",
+    "mod:supply/api/shipping_notes"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/supply/api/shipping_notes.py"
     ]
    }
   },
@@ -31771,6 +31958,68 @@
    "evidence": {},
    "login_fixture": true
   },
+  "backend/tests/test_strict_bool_helper_t49.py": {
+   "kind": "unit",
+   "units": [
+    "helper:validation"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/validation.py"
+    ]
+   }
+  },
+  "backend/tests/test_strict_bool_sites_t49.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "mod:accounting/api/ledger_category_map",
+    "mod:accounting/api/ledger_closing",
+    "mod:accounting/api/ledger_periods",
+    "mod:accounting/api/ledger_settings",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/requests",
+    "mod:case/__init__",
+    "mod:case/api/__init__",
+    "mod:case/api/material_payments",
+    "mod:case/api/quotations",
+    "mod:case/material_payment",
+    "mod:case/payables",
+    "mod:payroll/api/bonus",
+    "mod:payroll/api/payslips",
+    "mod:subcontract/api/contractor_vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/requests.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/material_payment.py",
+     "backend/modules/case/payables.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_category_map.py",
+     "backend/modules/accounting/api/ledger_closing.py",
+     "backend/modules/accounting/api/ledger_periods.py",
+     "backend/modules/accounting/api/ledger_settings.py",
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/payroll/api/bonus.py",
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py"
+    ]
+   },
+   "unresolved_api": [
+    "/api/quotations/NOPE/material-changes/1/approve",
+    "/api/quotations/NOPE/material-orders/it1/approve"
+   ],
+   "login_fixture": true
+  },
   "backend/tests/test_subproc_helper_2026_09_21.py": {
    "kind": "unit",
    "units": [
@@ -32619,13 +32868,31 @@
     ]
    }
   },
+  "backend/tests/test_work_log_validation_w1c_2026_10_09.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_write_endpoints_are_audited_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
+    "helper:xlsx_out",
     "mod:accounting/api/ledger_periods",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
+    "mod:lodging/api_records",
     "mod:netplan/api",
     "mod:payroll/api/bonus",
     "mod:subcontract/api/contractor_vouchers",
@@ -32652,6 +32919,7 @@
     "api": [
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/api/settlement_actuals.py",
+     "backend/modules/lodging/api_records.py",
      "backend/modules/netplan/api.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/routers/approval_delegates.py",
@@ -32665,9 +32933,11 @@
      "backend/routers/uploads.py"
     ],
     "path": [
+     "backend/helpers/xlsx_out.py",
      "backend/modules/accounting/api/ledger_periods.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/api/settlement_actuals.py",
+     "backend/modules/lodging/api_records.py",
      "backend/modules/netplan/api.py",
      "backend/modules/payroll/api/bonus.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",

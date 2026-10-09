@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## (next) — 2026-10-09（wip/t48-w1c-fixes；端點稽核 W1c）
+## 1.121 — 2026-10-09（wip/t48-w1c-fixes；端點稽核 W1c）
 - **L1 新增（向下相容）`helpers/validation.py`（第 49 班 W1c-P2）**：`strict_bool(value, field)`、`body_flag(body, key, default=False)`——請求本文的布林旗標只收真布林（或 0／1），字串 `"false"`／`"0"`／`""`、list、dict、其他整數 ⇒ 422；沒帶或 JSON null ⇒ default。原因：各處 `bool(body.get(...))`／`1 if body.get(...) else 0` 把 JSON 字串 `"false"` 當 true，關卡（確認旗標、`accept_warnings`、緊急開關…）可被多帶一個引號繞過。守門：`tests/platform/test_no_truthy_request_flags.py`（ast 掃端點檔，含正對照／反對照）。
 - 套用點（行為修正，真布林不變）：`routers` 無；各模組見其 CHANGELOG（accounting／case／payroll／subcontract／tender_radar）。測試：`tests/test_strict_bool_helper_t49.py`、`tests/test_strict_bool_sites_t49.py`。
 - L1 行為修正（不新增、不移除介面）：`POST／PUT /api/work-logs` 的欄位型別與範圍檢查——`hours` 非數字／負數／超過 1000、`content` 非字串或空白、`log_date` 非 YYYY-MM-DD、`user_id` 不存在、`case_no`／`contact_type` 非字串 ⇒ 4xx（原本 `float("abc")`、`.strip()` 打在非字串是 500，`PUT` 與不存在的 `user_id` 則直接把壞值寫進庫）。正常值與前端送的內容不受影響；缺欄位與空白內容維持原本的 400。權限不變。測試：`tests/test_work_log_validation_w1c_2026_10_09.py`。
