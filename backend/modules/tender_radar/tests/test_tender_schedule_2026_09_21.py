@@ -1103,7 +1103,7 @@ def test_w1c_string_false_is_not_a_high_frequency_confirmation(client, make_user
     threshold = _need("HIGH_FREQUENCY_SLOT_THRESHOLD")
     _set_setting(SCAN_HOURS_KEY, DEFAULT_SCAN_HOURS)
     hours = ",".join(str(h) for h in range(threshold + 1))
-    for bad in ("false", "0", "no", None, [], {}):
+    for bad in ("false", "0", "no", "", [], {}):
         r = _schedule_put(client, hdr, scanHours=hours, **{CONFIRM_FLAG: bad})
         assert r.status_code == 422, (bad, r.status_code, r.text[:200])
         assert _get_setting(SCAN_HOURS_KEY) == DEFAULT_SCAN_HOURS, "422 但設定被改了"

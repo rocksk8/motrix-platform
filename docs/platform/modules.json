@@ -69,6 +69,7 @@
    "helper:system_checks",
    "helper:tiered_approval",
    "helper:uploads",
+   "helper:validation",
    "helper:xlsx_out",
    "js:static/approval-cascade.js",
    "js:static/approval-return.js",

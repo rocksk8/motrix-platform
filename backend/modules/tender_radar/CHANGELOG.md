@@ -2,6 +2,7 @@
 
 ## (next) — 2026-10-09（wip/t48-w1c-fixes；端點稽核 W1c）
 - **布林旗標嚴格解析**：`PUT /api/tender-radar/schedule` 的 `confirmHighFrequency`、`POST/PUT /api/tender-radar/watches` 的 `enabled` 原本用 `bool(...)`／真值判斷，JSON 字串 `"false"`、`"0"` 會被當成 true（⇒ 悄悄通過『頻繁時段需確認』、或把條件啟用）。現在只收 `true/false`（或 0/1），其他型別回 422，設定不變。前端本來就送真正的布林，行為不變。
+- 第 49 班：改用共用的 `helpers.validation.body_flag`（行為相同；JSON null 視同沒帶：`PUT watches` 的 `enabled: null` 維持原值、不再停用）。
 
 ## 1.5.7 — 2026-10-05（wip/t44-business-days）：假日表與判定提升到 L1（純搬移，行為不變）
 - `calendar_tw.py` 的實作與 `holidays_tw.json` 搬到 L1 `helpers/business_days.py`／`helpers/holidays_tw.json`（供別的模組共用，例如 M01 預定付款日提醒）；`calendar_tw.py` 只轉出 M11 一向使用的名字（`load`／`coverage`／`covered`／`days_until_expiry`／`no_mail_day`／`next_mail_day`／`DATA_PATH`），`source.py`／`api.py` 與 `tests/test_tender_calendar_2026_10_03.py` 不必改。假日表到期告警的更新路徑文字改為 `helpers/holidays_tw.json`。

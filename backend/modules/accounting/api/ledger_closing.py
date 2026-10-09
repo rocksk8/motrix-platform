@@ -9,6 +9,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 from fastapi.responses import Response
 
 from db import get_db
+from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers import _audit, _require_user, _tok, require_any_module
 from modules.accounting.api import ledger_requests as _requests
 from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged
@@ -66,7 +67,7 @@ def closing_generate(year: int, body: dict = Body(default={}), authorization: st
     user = _require_closing_write(authorization)
     conn = get_db()
     try:
-        made = _run(conn, _closing.generate, year, _who(user), bool((body or {}).get("regenerate")))
+        made = _run(conn, _closing.generate, year, _who(user), body_flag(body, "regenerate"))
         conn.commit()
     finally:
         conn.close()
@@ -81,7 +82,7 @@ def year_close(year: int, body: dict = Body(default={}), authorization: str = He
         return _requests.submit(user, "year_close", dict(body or {}, year=year), authorization)
     conn = get_db()
     try:
-        res = _run(conn, _closing.close_year, year, _who(user), bool((body or {}).get("accept_warnings")))
+        res = _run(conn, _closing.close_year, year, _who(user), body_flag(body, "accept_warnings"))
         conn.commit()
     finally:
         conn.close()

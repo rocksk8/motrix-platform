@@ -8,6 +8,7 @@
 from fastapi import APIRouter, Body, Header, HTTPException
 
 from db import get_db
+from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers import _audit, _require_user, _tok, require_any_module
 from modules.accounting.ledger import category_map as _cm
 
@@ -51,7 +52,7 @@ def put_category_map(body: dict = Body(...), authorization: str = Header(None)):
     conn = get_db()
     try:
         try:
-            res = _cm.upsert_map(conn, b.get("category"), b.get("account_code"), b.get("role"), bool(b.get("nondeductible")), b.get("note"))
+            res = _cm.upsert_map(conn, b.get("category"), b.get("account_code"), b.get("role"), body_flag(b, "nondeductible"), b.get("note"))
         except _cm.CategoryError as exc:
             conn.rollback()
             raise HTTPException(400, str(exc))

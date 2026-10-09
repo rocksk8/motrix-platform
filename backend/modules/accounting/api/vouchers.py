@@ -38,6 +38,7 @@ from modules.accounting.api.accounting_export import validate_account_code
 # 不 import M04 的私有函式、不讀 M04 的表。
 # ⚠️ **不要自己重算**：`total_amount` 少了稅、也少了外包人員費用，`ACC-BN6 §3` 已經踩過這個坑。
 from core import registry as _registry
+from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers import _require_user, _tok, _audit, require_any_module
 from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from helpers.edit_log import append_edit_log, MissingOldValue
@@ -198,7 +199,7 @@ def _category_update(conn, voucher_id, current, body, new_lines, line_changes):
     cur_cat = current.get("category") or ""
     cur_manual = int(current.get("category_manual") or 0)
     if "category_manual" in body:
-        if body.get("category_manual"):
+        if body_flag(body, "category_manual"):
             cat = body.get("category")
             if cat not in _CATEGORIES:
                 raise HTTPException(422, "傳票類別只能是收入、支出或轉帳。")
@@ -265,7 +266,7 @@ def create_voucher(body: dict = Body(...), authorization: str = Header(None)):
         _check_account_codes(conn, lines)
         _refuse_reused_expenses(conn, lines)
         # `N6`：明確說要手動（`category_manual`）才採用請求的類別；否則依分錄判斷。
-        if body.get("category_manual"):
+        if body_flag(body, "category_manual"):
             if body.get("category") not in _CATEGORIES:
                 raise HTTPException(422, "傳票類別只能是收入、支出或轉帳。")
             cat, manual = body.get("category"), 1
@@ -917,7 +918,7 @@ def void_voucher(voucher_id: int, body: dict = Body(default={}),
         raise HTTPException(400, "請填寫作廢原因。")
     # 🔴 `reopen` 用**鍵在不在**判斷不到，它是真假值 ⇒ 明著轉 bool。
     #    ⚠️ 而**預設是不重開** —— 重開會多出一張單，那不該是順手發生的。
-    reopen = bool((body or {}).get("reopen"))
+    reopen = body_flag(body, "reopen")
     now = _dt.datetime.now().isoformat()
     who = _user_name(user)
     new_id = new_no = None

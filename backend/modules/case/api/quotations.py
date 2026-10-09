@@ -42,6 +42,7 @@ from pydantic import BaseModel, Field
 from db import get_db, spawn_bg_thread
 from db import db_conn  # /api/sales-orders（M08 搬遷移入）
 from modules.case.quotations import payment_item_amounts  # 同上
+from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers.gl_status import gl_posted_warning
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import row_access
@@ -3548,7 +3549,7 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
         conn.close(); raise HTTPException(404, "階段不存在")
     updates = {}
     if "label" in body:     updates["label"]      = body.get("label") or ""
-    if "done" in body:      updates["done"]       = 1 if body.get("done") else 0
+    if "done" in body:      updates["done"]       = 1 if body_flag(body, "done") else 0
     if "doneAt" in body:    updates["done_at"]    = body.get("doneAt") or ""
     if "startDate" in body: updates["start_date"] = body.get("startDate") or ""
     if "dueDate" in body:   updates["due_date"]   = body.get("dueDate") or ""
@@ -3862,6 +3863,8 @@ def _validate_receipt_body(body: dict) -> None:
       刻意不把 "" 當 null——那會把「清空」變成「以應收計」，屬於金額語意
     - feeAmount：""／null 維持視為 0；其餘必須是非負數字
     """
+    if "received" in body:
+        strict_bool(body["received"], "received")      # 第49班 W1c-P2：字串 "false"／"0" 不可被當成『已收款』
     if not body.get("received"):
         return
     rat = body.get("receivedAt")
@@ -3886,7 +3889,7 @@ def _apply_payment_mark(pits: list, idx: int, body: dict, received_by: str) -> N
     通過後的重播共用（原本兩處各寫一份）。呼叫前要先 _validate_receipt_body()。"""
     if "received" not in body:
         return
-    is_rcv = bool(body["received"])
+    is_rcv = strict_bool(body["received"], "received")
     pits[idx]["received"]   = is_rcv
     pits[idx]["receivedAt"] = body.get("receivedAt", "") if is_rcv else ""
     pits[idx]["receivedBy"] = received_by if is_rcv else ""
@@ -5394,7 +5397,7 @@ def preview_quotation_html(body: dict = Body(...), authorization: str = Header(N
     狀態、成案標記、據點以資料庫為準（與 PDF 一致）；新單用表單上的值。"""
     user = _require_user(authorization)
     q = dict((body or {}).get("data") or {})
-    internal = bool((body or {}).get("internal"))
+    internal = body_flag(body, "internal")
     quote_no = ((body or {}).get("quoteNo") or "").strip()
     conn = get_db()
     try:

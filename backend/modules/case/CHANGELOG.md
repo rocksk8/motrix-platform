@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-09（wip/t49-strict-bool；W1c-P2 旗標嚴格解析）
+- 套用點：叫料／叫料變更／叫料匯款核准的 `cascade`（驗旗標移到取資料庫之前）、報價預覽 `internal`（含成本的內部版）、案件階段 `done`、款項標記收款 `received`（`_validate_receipt_body` 先驗，`_apply_payment_mark` 用 `strict_bool`）、出納／叫料匯款的 `hasFee`（手續費）。旗標只收真布林（`helpers.validation.body_flag`）；JSON 字串 `"false"`／`"0"`／`""` 以前會被當成 true，現在回 422、什麼都不寫。前端本來就送真布林，行為不變。測試：`tests/test_strict_bool_sites_t49.py`。
+
 ## 1.0.164 — 2026-10-09（wip/t48-oh25-s1／s2／s2b）：利潤規則單一來源（S1，零行為變更）＋管銷分攤比率與伺服器把關（S2，新行為預設關；`/api/overhead` 前綴登記於 module.json；s2b＝獨立稽核 1d 修正）
 - `settlement_actuals`：完結比對的管銷分攤、公益金、營業利益、報價原始側後備改呼叫 `helpers.profit_rules`（口徑仍是第 47 班的 10%）。前端 `static/profit-rules.js` 與黃金向量等值測試已備，頁面第 3 步（S3）才改接。設計：`docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
 

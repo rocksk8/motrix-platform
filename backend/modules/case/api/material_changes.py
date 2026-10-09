@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 
 from core.txn import begin_write
 from db import get_db
+from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers import _notify, _require_user
 from helpers.approval_queue import approval_raw_of as _approval_raw_of, tier_fields as _queue_tier_fields
 from helpers.case_access import require_case
@@ -259,13 +260,14 @@ def submit_change(quote_no: str, change_id: int, authorization: str = Header(Non
 def approve_change(quote_no: str, change_id: int, body: dict = Body(default={}), authorization: str = Header(None)):
     """核准當層；最後一層過了 ⇒ 同一個交易內套用到材料申請。"""
     user = _require_user(authorization)
+    _cascade = body_flag(body, "cascade")          # 第49班 W1c-P2：先驗旗標（422），再碰資料庫
     conn = get_db()
     try:
         begin_write(conn)
         q = _load_case(conn, quote_no)
         ch = _change_for(conn, quote_no, change_id)
         try:
-            res = MC.approve(conn, change_id, user, comment=(body or {}).get("comment") or "", cascade=bool((body or {}).get("cascade")))
+            res = MC.approve(conn, change_id, user, comment=(body or {}).get("comment") or "", cascade=_cascade)
         except MC.MaterialChangeError as e:
             raise _http(e)
         conn.commit()
