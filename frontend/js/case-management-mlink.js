@@ -96,14 +96,53 @@ window.CM_PARTS.push(() => ({
     _mlPush(o) {
       const quantity = Number(o.quantity) || 0
       const unitPrice = Number(o.unitPrice) || 0
+      const itemId = this._moNewId()
       this.materialOrders.push({
-        itemId: this._moNewId(), itemName: o.itemName || '', quantity, unit: o.unit || '', unitPrice,
+        itemId, itemName: o.itemName || '', quantity, unit: o.unit || '', unitPrice,
         totalPrice: (o.totalPrice != null ? Number(o.totalPrice) : MotrixLegalRound.halfUp(quantity * unitPrice, 100) / 100), paidStatus: 'pending', paidAmount: 0, paidDate: '', notes: '',
         invoiceDate: '', supplierId: null, quoteItemId: o.quoteItemId || '', poDocCode: o.poDocCode || '', poLine: o.poLine || null,
         overPlanReason: '', _saved: false, _recvDate: ''
       })
       this.moDirty = true
       this.moMsg = ''
+      return itemId
+    },
+
+    // ── 第 51 班：材料卡片的『對應材料申請』候選（使用者：「已經申請過的沒辦法自動帶入」）──────────────────────────────
+    // 下拉原本只列這個案件已有的材料申請；已核准的採購單（甚至已經申請過）還沒「從採購單帶入」成材料申請時，清單只剩（未連結）。
+    // 現在額外列出『同案件、品名／型號相符、已核准採購單涵蓋、尚未有材料申請』的採購單分組；選取＝帶入成材料申請草稿並連結到這張卡片
+    // （仍須選供應商、儲存、送審、核准後才能勾「已申購」——31-C 規則不變）。恰好一個候選 ⇒ 卡片上多一顆一鍵『帶入並連結』。
+    async mlLoadGroups(quoteNo) {                         // 載入案件時取一次（不開面板也有候選）；沒有編輯權限的角色不取（不會用到）
+      if (!quoteNo || !this.moCanEdit || !this.moCanEdit()) return
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-coverage`, { headers: this._mlHeaders() })
+        if (r.ok && this.selected?.quote_no === quoteNo) { this.mlGroups = (await r.json()).groups || []; this.mlTick++ }
+      } catch {}
+    },
+    _mlNorm(s) { return String(s || '').replace(/\s+/g, ' ').trim().toLowerCase() },
+    mlCandidatesFor(mat) {
+      void this.mlTick
+      if (!mat || mat.orderItemId || !this.moCanEdit || !this.moCanEdit()) return []
+      const keys = new Set([this._mlNorm(mat.name), this._mlNorm(mat.model), this._mlNorm(`${mat.name || ''} ${mat.model || ''}`)])
+      keys.delete('')
+      return (this.mlGroups || []).filter(g => g && g.key && g.totalPrice != null && !g.existing && !this.mlGroupBlock(g) && keys.has(this._mlNorm(g.name)))
+    },
+    mlPickCandidate(mat, groupKey) {                      // groupKey＝mlGroupKey(g)（'g:' + key）；回 true＝已帶入並連結
+      const g = (this.mlGroups || []).find(x => this.mlGroupKey(x) === groupKey)
+      mat.orderItemId = ''
+      if (!g || !this.moCanEdit || !this.moCanEdit()) return false
+      if (this.mlGroupBlock(g)) { this.mlMsg = this.mlGroupBlock(g); return false }
+      if (g.totalPrice == null) { this.mlMsg = '看不到金額的帳號不能從採購單帶入材料申請（需要財務檢視權限）'; return false }
+      mat.orderItemId = this._mlPush({ itemName: g.name, quantity: g.quantity, unit: g.unit, unitPrice: g.unitPrice, totalPrice: g.totalPrice,
+                                       quoteItemId: g.quoteItemId || '', poDocCode: g.poDocCode, poLine: g.poLine })
+      this.mlMsg = `已帶入材料申請草稿並連結到「${mat.name || g.name}」：請到「材料申請」選供應商、儲存並送審；核准後即可勾「已申購」`
+      this.mlTick++
+      if (this.setDirty) this.setDirty()
+      return true
+    },
+    mlOnLinkChange(mat) {                                 // 下拉變更：選到候選（g:）＝帶入並連結；其餘照舊
+      if (String(mat.orderItemId || '').startsWith('g:')) { this.mlPickCandidate(mat, mat.orderItemId); return }
+      if (this.setDirty) this.setDirty()
     },
 
     // 材料卡片自動連結：未連結的材料，品名（去空白）與「恰好一筆」已核准且有採購單的材料申請相同 ⇒ 帶入 orderItemId；

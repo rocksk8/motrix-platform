@@ -1072,12 +1072,19 @@
                       <!-- 材料申請審核（31-C）：「已申購」「已到料」只能對著一張已核准的材料申請勾 -->
                       <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap;font-size:11px;font-family:var(--font-zh)">
                         <span style="color:var(--text-dim)">對應材料申請</span>
-                        <select class="fi fi--sm" style="min-width:220px" x-model="mat.orderItemId" @change="setDirty()" data-testid="mat-order-link">
+                        <select class="fi fi--sm" style="min-width:220px" x-model="mat.orderItemId" @change="mlOnLinkChange(mat)" data-testid="mat-order-link">
                           <option value="">（未連結）</option>
                           <template x-for="o in materialOrders" :key="o.itemId">
                             <option :value="o.itemId" x-text="(moAp(o).docCode || '未送審') + '｜' + (o.itemName || '未命名') + '（' + moApLabel(o) + '）'"></option>
                           </template>
+                          <optgroup label="已核准採購單・尚未申請材料（選取＝帶入草稿並連結）" x-show="mlCandidatesFor(mat).length">
+                            <template x-for="g in mlCandidatesFor(mat)" :key="g.key">
+                              <option :value="mlGroupKey(g)" x-text="g.docCodes.join('、') + '｜' + g.name + '（採購單已核准，尚未帶入材料申請）'" data-testid="mat-order-candidate"></option>
+                            </template>
+                          </optgroup>
                         </select>
+                        <button type="button" class="btn btn-ghost btn-sm" x-show="mlCandidatesFor(mat).length === 1" x-cloak data-testid="mat-order-oneclick"
+                                @click="mlPickCandidate(mat, mlGroupKey(mlCandidatesFor(mat)[0]))">找到採購單 <span x-text="mlCandidatesFor(mat)[0] && mlCandidatesFor(mat)[0].docCodes.join('、')"></span>：帶入並連結</button>
                       </div>
                       <div style="display:flex;gap:16px;margin-bottom:6px">
                         <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer"
