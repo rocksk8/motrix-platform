@@ -3863,9 +3863,7 @@ def _validate_receipt_body(body: dict) -> None:
       刻意不把 "" 當 null——那會把「清空」變成「以應收計」，屬於金額語意
     - feeAmount：""／null 維持視為 0；其餘必須是非負數字
     """
-    if "received" in body:
-        strict_bool(body["received"], "received")      # 第49班 W1c-P2：字串 "false"／"0" 不可被當成『已收款』
-    if not body.get("received"):
+    if not body_flag(body, "received"):                # 第49班 W1c-P2：字串 "false"／"0" 不可被當成『已收款』（非布林 ⇒ 422）
         return
     rat = body.get("receivedAt")
     ok_date = isinstance(rat, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", rat) is not None
@@ -3889,7 +3887,7 @@ def _apply_payment_mark(pits: list, idx: int, body: dict, received_by: str) -> N
     通過後的重播共用（原本兩處各寫一份）。呼叫前要先 _validate_receipt_body()。"""
     if "received" not in body:
         return
-    is_rcv = strict_bool(body["received"], "received")
+    is_rcv = body_flag(body, "received")
     pits[idx]["received"]   = is_rcv
     pits[idx]["receivedAt"] = body.get("receivedAt", "") if is_rcv else ""
     pits[idx]["receivedBy"] = received_by if is_rcv else ""
@@ -3969,7 +3967,7 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         validate_invoice_amounts({**pits[idx], **{k: body[k] for k in _INVOICE_AMOUNT_KEYS if k in body}})
         gated, change_id = _gate_case_edit(
             conn, no, user, authorization, "payment_mark",
-            f"{no} 第{idx+1}期款項標記（{'收款' if body.get('received') else '取消收款'}）",
+            f"{no} 第{idx+1}期款項標記（{'收款' if body_flag(body, 'received') else '取消收款'}）",
             {"idx": idx, "itemId": item_id, "body": dict(body)},
         )
         if gated:
@@ -3998,8 +3996,8 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
     label = pits[idx].get('label', f'第{idx+1}期')
     fee   = pits[idx].get("feeAmount") or 0
     action_detail = (
-        f'標記收款（手續費 {fee:,}）' if body.get('received') and fee
-        else ('標記收款' if body.get('received') else '取消收款')
+        f'標記收款（手續費 {fee:,}）' if body_flag(body, 'received') and fee
+        else ('標記收款' if body_flag(body, 'received') else '取消收款')
     )
     _audit(_tok(authorization), 'payment.mark', 'quotation', no, f"{no} {label}（{action_detail}）")
     if invoice_changed_from:

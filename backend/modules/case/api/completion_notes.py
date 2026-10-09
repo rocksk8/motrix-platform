@@ -28,6 +28,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from db import get_db, next_entity_code
+from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers.errors import trace_id
 from helpers.case_access import is_document_approver
 from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
@@ -454,6 +455,7 @@ def approve_completion_note(note_no: str, body: dict = Body(default={}),
     ——簽核設定頁允許把任何角色加進簽核人清單，硬擋 admin 會讓非管理員簽核人卡死
     （出貨單當初漏掉這條、2026-08-22 架構複查才補上，這裡一開始就照做）。"""
     user = _require_user(authorization)
+    _cascade = body_flag(body, "cascade")          # 第50班 W1c-P2b：先驗旗標（字串 "false" 以前會替簽核人自動簽完剩下的層）
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, customer_name, quote_no FROM completion_notes "
@@ -485,7 +487,7 @@ def approve_completion_note(note_no: str, body: dict = Body(default={}),
         # plan_self_cascade()）：前端跳確認視窗問過才會帶 cascade=true，
         # 且只吃「剩下未簽核的只有他自己」的連續層，不會替別人做決定。
         cascaded = (cascade_self_tiers(tiers, ct_idx, user["username"], now, conn=conn)
-                    if (tier_done and (body or {}).get("cascade")) else [])
+                    if (tier_done and _cascade) else [])
         landed = ct_idx + 1 + len(cascaded)
         if tier_done:
             appr["currentTier"] = landed

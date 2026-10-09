@@ -23,6 +23,7 @@ from pydantic import BaseModel, model_validator
 from db import get_db, next_entity_code, spawn_bg_thread
 from core import registry
 from core.txn import begin_write, write_txn
+from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers.dates import normalize_date
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
@@ -678,6 +679,7 @@ def approve_contractor_voucher(voucher_no: str, body: dict = Body(default={}), a
     # 簽核人帳號角色必須是 admin/superadmin——簽核設定頁面允許加入任何角色的
     # 使用者當簽核人，這裡若硬性擋 admin 會讓非管理員角色的簽核人永遠卡死無法簽核。
     user = _require_user(authorization)
+    _cascade = body_flag(body, "cascade")          # 第50班 W1c-P2b：先驗旗標（字串 "false" 以前會替簽核人自動簽完剩下的層）
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, snapshot_json FROM contractor_payment_vouchers "
@@ -712,7 +714,7 @@ def approve_contractor_voucher(voucher_no: str, body: dict = Body(default={}), a
         # plan_self_cascade()）：前端跳確認視窗問過才會帶 cascade=true，
         # 且只吃「剩下未簽核的只有他自己」的連續層，不會替別人做決定。
         cascaded = (cascade_self_tiers(tiers, ct_idx, user["username"], now, conn=conn)
-                    if (tier_done and (body or {}).get("cascade")) else [])
+                    if (tier_done and _cascade) else [])
         landed = ct_idx + 1 + len(cascaded)
         next_tier_usernames = []
         if tier_done:

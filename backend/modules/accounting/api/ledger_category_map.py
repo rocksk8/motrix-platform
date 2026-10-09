@@ -60,7 +60,7 @@ def put_category_map(body: dict = Body(...), authorization: str = Header(None)):
     finally:
         conn.close()
     _audit(_tok(authorization), "ledger.category_map.put", "gl_category_map", str(b.get("category")),
-           "費用類別 %s → 科目 %s%s（原：%s）" % (b.get("category"), b.get("account_code") or b.get("role"), "（不得扣抵進項稅額）" if b.get("nondeductible") else "", res["previous"] or "無"))
+           "費用類別 %s → 科目 %s%s（原：%s）" % (b.get("category"), b.get("account_code") or b.get("role"), "（不得扣抵進項稅額）" if body_flag(b, "nondeductible") else "", res["previous"] or "無"))
     return {"ok": True, **res}
 
 

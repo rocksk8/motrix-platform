@@ -10,6 +10,7 @@
 - IP-102 `remit.reviews`（名稱 `contractor_voucher`）：M05 出納頁的審核清單與核可／退回都經 `_RemitReviews`。
 - IP-9 `expense.entries`（名稱 `remit_fee_contractor`）：手續費以匯款日列為營運報表支出（權責／現金兩口徑相同）。
 """
+from helpers.validation import body_flag  # noqa: E402
 import json
 import math
 from datetime import datetime
@@ -49,7 +50,7 @@ def parse_remit(body, payable):
     actual = payable if raw_actual in (None, "") else _num(raw_actual, "實付金額")
     if actual <= 0:
         raise ValueError("實付金額必須大於 0")
-    has_fee = body.get("hasFee", body.get("has_fee"))
+    has_fee = body_flag(body, "hasFee", body_flag(body, "has_fee"))      # 第50班 W1c-P2b：字串 "false" 以前會被當成有手續費
     fee = 0.0
     if has_fee:
         fee = _num(body.get("fee", body.get("remit_fee")), "手續費")
