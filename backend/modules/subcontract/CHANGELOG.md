@@ -1,5 +1,9 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-09（wip/t48-w1b-fixes）：端點稽核 W1b
+- 修：`GET /api/contractor-vouchers/last-paid-bank-account` 原本任何登入者都讀得到公司最近一次付款帳戶（名稱＋科目代碼）；現在限財務角色／最高管理者（其他 403），與 `quotations/last-received-bank-account` 一致。
+- 新守門 `tests/test_endpoint_auth_w1b_t48.py`：case／subcontract／supply 宣告前綴下的每條路由無憑證呼叫一律不得 2xx／5xx。報告 `docs/platform/plans/ENDPOINT-AUDIT-W1B-T48.md`。
+
 ## 1.1.25 — 2026-10-08（wip/t47-audit-fixes）：承攬商匯款預定付款日提供者先拿寫鎖（第 46 班稽核 S4）；併 wip/t47-paydate-l1
 - `set_planned_pay_date`：讀取前先 `begin_write`（與案件／叫料匯款提供者一致），「沒變」的比較與寫入在同一個寫交易；兩位出納並發時後到的不會得到過期的 `unchanged`。
 - S5：`payable_due.py`（薄接線）——提醒信／站內通知（`daily.check` 提供者 `subcontract_payable_due`，規則在 L1 `payable_due_core`，3 天前／當天／逾期）、行事曆「付款待辦」事件 `subcontract_voucher:<單號>`（核准、退回、撤銷核准、作廢、標記／取消已匯款、差額退回、出納改預定日後依現況對齊；不含金額、廠商名、承攬人員姓名）；新提供者 `contractor_voucher.planned_changed`。M01 不在 ⇒ 信件類型未登記 ⇒ 寄信 fail-closed（只給超級管理員），已知取捨。

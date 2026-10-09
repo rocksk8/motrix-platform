@@ -269,7 +269,9 @@ def get_last_paid_bank_account(vendor_id: Optional[int] = None, authorization: s
     """查這個承攬商上一次「標記已匯款」用的銀行帳戶，供標記 Modal 開啟時預帶值。
     純讀取，找不到（vendor_id 未提供、或這個承攬商從沒被標記過已匯款、或舊資料
     沒填帳戶）一律回傳空字串，由前端接著退回系統預設帳戶。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
+    if not has_cashier_access(user):                    # 第48班 W1b 稽核：原本任何登入者都讀得到公司付款帳戶；比照 quotations/last-received-bank-account 限財務角色
+        raise HTTPException(403, "只有財務角色可以查詢付款帳戶")
     if not vendor_id:
         return {"name": "", "acctCode": ""}
     conn = get_db()
