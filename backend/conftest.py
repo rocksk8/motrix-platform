@@ -246,7 +246,7 @@ class _FastHashlib:
 
 @pytest.fixture(autouse=True)
 def _fast_pbkdf2(request, monkeypatch):
-    if request.node.get_closest_marker("real_pbkdf2"):
+    if request.node.get_closest_marker("real_pbkdf2") or os.environ.get("MOTRIX_TEST_REAL_PBKDF2") == "1":     # 環境變數＝A/B 對照用（只在測試行程；產品碼看不到）
         return
     import helpers.auth as _auth
     monkeypatch.setattr(_auth, "hashlib", _FastHashlib())
