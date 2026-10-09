@@ -114,17 +114,40 @@ def test_tool_crash_is_exit_2_not_a_silent_pass(monkeypatch):
     assert PP.main(["--hook"]) == 2
 
 
+def _code_only(path):
+    """原始碼去掉所有 docstring 與註解（ast.unparse）——只檢查『會執行的碼』。"""
+    import ast
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.body:
+            f = n.body[0]
+            if isinstance(f, ast.Expr) and isinstance(f.value, ast.Constant) and isinstance(f.value.value, str):
+                n.body = n.body[1:] or [ast.Pass()]
+    return ast.unparse(tree)
+
+
 def test_the_tool_never_sets_train_mode_or_calls_numbering_or_regen():
-    src = (REPO / "tools" / "platform" / "prepush_check.py").read_text(encoding="utf-8")
-    code = "\n".join(l for l in src.splitlines() if not l.lstrip().startswith("#"))
-    body = code.split('"""', 2)[-1]                                              # 去掉模組 docstring
-    assert "MOTRIX_TRAIN" not in body.replace('k != "MOTRIX_TRAIN"', "")
-    for bad in ("train_number", "regen_all", "git commit", "git push", '"commit"', '"push"', '"checkout"'):
+    body = _code_only(REPO / "tools" / "platform" / "prepush_check.py")
+    assert body.count("MOTRIX_TRAIN") == 1 and "k != 'MOTRIX_TRAIN'" in body          # 唯一出現＝把它從環境拿掉
+    for bad in ("train_number", "regen_all", "git commit", "git push", "'commit'", "'push'", "'checkout'"):
         assert bad not in body, bad
     assert body.count(".write_text(") == 1, "唯一的寫檔是使用者指定的 --json-out"
 
 
 # ── setup_prepush／hook 檔 ──────────────────────────────
+
+def _bash():
+    """Git Bash（不是 PATH 上的 WSL bash.exe）：從 git 的位置推出來；找不到 ⇒ None（相關題 skip）。"""
+    g = shutil.which("git")
+    if not g:
+        return None
+    for parent in Path(g).resolve().parents:
+        for sub in (("bin", "bash.exe"), ("usr", "bin", "bash.exe")):
+            cand = parent.joinpath(*sub)
+            if cand.is_file():
+                return str(cand)
+    return shutil.which("bash") if os.name != "nt" else None
+
 
 def _git(repo, *args):
     return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, encoding="utf-8")
@@ -150,18 +173,18 @@ def test_setup_install_check_remove(tmp_repo):
     assert any("core.hooksPath" in p for p in SETUP.problems(tmp_repo))
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="沒有 bash")
+@pytest.mark.skipif(_bash() is None, reason="沒有 Git Bash")
 @pytest.mark.parametrize("hook", ["pre-push", "post-commit"])
 def test_hook_files_parse(hook):
-    r = subprocess.run(["bash", "-n", str(REPO / ".githooks" / hook)], capture_output=True, text=True)
+    r = subprocess.run([_bash(), "-n", (REPO / ".githooks" / hook).as_posix()], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
 
 
 @pytest.fixture()
 def hook_env(tmp_path):
     """暫存 repo＋假的 prepush_check.py（照環境變數決定結束碼、把參數記下來）＋真的 pre-push。"""
-    if shutil.which("bash") is None:
-        pytest.skip("沒有 bash")
+    if _bash() is None:
+        pytest.skip("沒有 Git Bash")
     r = tmp_path / "h"
     (r / "tools" / "platform").mkdir(parents=True)
     (r / ".githooks").mkdir()
@@ -179,7 +202,7 @@ def hook_env(tmp_path):
 
     def push(lsha, rref, rc=0):
         env = dict(os.environ, MOTRIX_PY=sys.executable, STUB_RC=str(rc), ARGS_OUT=str(tmp_path / "args.txt"))
-        p = subprocess.run(["bash", str(r / ".githooks" / "pre-push")], cwd=str(r), env=env, capture_output=True, text=True, encoding="utf-8",
+        p = subprocess.run([_bash(), (r / ".githooks" / "pre-push").as_posix()], cwd=str(r), env=env, capture_output=True, text=True, encoding="utf-8",
                            input="refs/heads/x %s %s %s\n" % (lsha, rref, ZERO))
         return p.returncode, p.stdout
     return push, head, tmp_path / "args.txt"
@@ -236,8 +259,6 @@ def test_integ_watch_skips_when_machine_is_busy_or_low_on_memory(monkeypatch, tm
 
 
 def test_integ_watch_never_touches_gate_records():
-    src = (REPO / "tools" / "platform" / "integ_watch.py").read_text(encoding="utf-8")
-    code = "\n".join(l for l in src.splitlines() if not l.lstrip().startswith("#"))
-    body = code.split('"""', 2)[-1]
+    body = _code_only(REPO / "tools" / "platform" / "integ_watch.py")
     for bad in ("record-stage", "record_stage", "build_test_reuse", "train_number", "regen_all", "git commit", "git push", "stage_record"):
         assert bad not in body, bad
