@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-09（wip/t49-b5-visibility）：case.access 加 allowed（供網路規劃書依案件過濾）
+## (next) — 2026-10-09（wip/t49-b5-visibility）：case.access 加 allowed（供網路規劃書依案件過濾）；併第49班 strict-bool（W1c-P2）
 - IP-12 `case.access` 提供者新增 `allowed(conn, quote_no, user, allow_module=None)`：不丟例外、不關連線的「看得到／看不到」判斷（規則與 `guard` 同一份 `case_access_allowed`）。`case-management-dispatch.js` 對沒有外包名冊權限的 session 不再呼叫 `/api/contractors/selectable`。
 - **（併入）(next) — 2026-10-09（wip/t49-strict-bool；W1c-P2 旗標嚴格解析）**
 - 套用點：叫料／叫料變更／叫料匯款核准的 `cascade`（驗旗標移到取資料庫之前）、報價預覽 `internal`（含成本的內部版）、案件階段 `done`、款項標記收款 `received`（`_validate_receipt_body` 先驗，`_apply_payment_mark` 用 `strict_bool`）、出納／叫料匯款的 `hasFee`（手續費）。旗標只收真布林（`helpers.validation.body_flag`）；JSON 字串 `"false"`／`"0"`／`""` 以前會被當成 true，現在回 422、什麼都不寫。前端本來就送真布林，行為不變。測試：`tests/test_strict_bool_sites_t49.py`。
