@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1233,
+  "tests": 1237,
   "unmapped": 13,
   "kinds": {
    "api": 673,
    "e2e": 299,
-   "audit": 150,
+   "audit": 154,
    "unit": 111
   },
   "routes": 783
@@ -15627,6 +15627,19 @@
     ]
    }
   },
+  "backend/tests/platform/test_build_stage_no_failfast_t51.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/tools/",
+    "file:backend/tools/build_test_reuse.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/tools/",
+     "backend/tools/build_test_reuse.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_build_stage_reuse_2026_10_02.py": {
    "kind": "audit",
    "units": [
@@ -17164,6 +17177,17 @@
     ]
    }
   },
+  "backend/tests/platform/test_heavy_run_tool.py": {
+   "kind": "audit",
+   "units": [
+    "dir:tools/platform/"
+   ],
+   "evidence": {
+    "path": [
+     "tools/platform/"
+    ]
+   }
+  },
   "backend/tests/platform/test_integration_points_registered.py": {
    "kind": "audit",
    "units": [
@@ -18634,6 +18658,29 @@
     ]
    }
   },
+  "backend/tests/platform/test_prepush_check.py": {
+   "kind": "audit",
+   "units": [
+    "dir:tools/platform/",
+    "file:backend/tests/platform/test_ship_tier_2026_09_28.py",
+    "file:backend/tests/test_version_manifest_2026_09_22.py",
+    "file:backend/version_manifest.json",
+    "file:docs/platform/test_map.json",
+    "file:tools/platform/integ_watch.py",
+    "file:tools/platform/prepush_check.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/tests/platform/test_ship_tier_2026_09_28.py",
+     "backend/tests/test_version_manifest_2026_09_22.py",
+     "backend/version_manifest.json",
+     "docs/platform/test_map.json",
+     "tools/platform/",
+     "tools/platform/integ_watch.py",
+     "tools/platform/prepush_check.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_probe_leak_guard.py": {
    "kind": "audit",
    "units": [
@@ -19386,6 +19433,19 @@
     "path": [
      "backend/helpers/tax_calc.py",
      "backend/modules/case/"
+    ]
+   }
+  },
+  "backend/tests/platform/test_testcache_shadow_t51.py": {
+   "kind": "audit",
+   "units": [
+    "dir:tools/platform/",
+    "file:tools/platform/testcache_shadow.py"
+   ],
+   "evidence": {
+    "path": [
+     "tools/platform/",
+     "tools/platform/testcache_shadow.py"
     ]
    }
   },
