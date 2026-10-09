@@ -1,6 +1,6 @@
 # 薪資獎金 更新紀錄
 
-## (next) — 2026-10-09（wip/t49-05-bonus-cleanup）：移除舊版獎金分潤的 8 條 410 墓碑寫入端點（端點稽核 W1a，使用者裁示）；併第49班 strict-bool（W1c-P2）；併 wip/t48-oh25-s3b（s6／s3 用語跟進）；併 2026-10-09(wip/t48-payslip-person-link)
+## (next) — 2026-10-09（wip/t49-05-bonus-cleanup）：移除舊版獎金分潤的 8 條 410 墓碑寫入端點（端點稽核 W1a，使用者裁示）；併第49班 strict-bool（W1c-P2）；併 wip/t48-oh25-s3b（s6／s3 用語跟進）；併 2026-10-09(wip/t48-payslip-person-link)；併 2026-10-09(wip/t49-strict-bool；W1c-P2 旗標嚴格解析)
 - `api/bonus.py`：移除 `POST /api/bonus/items`、`POST /api/bonus/awards`、`POST /api/bonus/awards/{id}/submit｜approve｜reject｜mark-paid｜void｜recall`（原本一律回 410「舊的獎金分潤流程已停用」，函式本體是被 `dependencies=_GONE` 擋掉的死碼，共約 450 行）與 `_legacy_write_gone`／`_GONE`、不再用到的匯入。現在對這些路徑的 POST 回 404／405；前端沒有任何呼叫（`bonus.js` 只打 `/api/bonus/cases`）。
 - 保留：舊版唯讀端點（`GET /api/bonus/items｜base/{q}｜awards｜awards/{id}｜awards/plan/{q}｜awards/candidates｜awards/{id}/preview｜pdf-download`）、群組維護、`module.json` probes（皆 GET）。
 - 測試：`test_bonus_legacy_retired_2026_09_24.py` 改驗「POST 已無路由（404／405，不寫任何東西）」＋路由表層級反向控制；`modules/case/tests/route_table_golden.json` 刪去那 8 筆（使用者裁示的刻意移除，其餘逐筆不變）。
@@ -15,6 +15,8 @@
 - payroll migration 6（修復）：早期開發版本的 migration 5 曾把推測寫進 `contractor_id`（只在開發／演練庫跑過）；本支補欄位並把 `contractor_match='unconfirmed'` 的列搬回 `contractor_guess_id`、`contractor_id` 還原 NULL（冪等；全新庫不動）。
 - 新端點：`GET /api/payslip-person-dispatches?contractor_id=`（勞報單表單勾選用，無金額）、`POST /api/payslips/{slip_no}/confirm-contractor`（最高管理者把 guess 升格成 `contractor_id`；已簽回／已付款／已作廢的單不給確認，單一條件式 UPDATE＋稽核）；`PUT`：同名重存保留推測、改受領人姓名或人工選名冊（＝確認）即清除推測；單一 `?dispatchId=` 建立路徑與 `dispatchIds` 同樣檢查人員名單；清單多回 `contractor_guess_id`。
 - 提供者 `payslip.dispatch_links` 加 `payslips_for_contractors`（只回已確認對應，無金額）。頁面：`payslip-form.html` 勾選派發、`payslips.html`「身分待確認」標籤＋確認鈕。
+- **（併入）(next) — 2026-10-09（wip/t49-strict-bool；W1c-P2 旗標嚴格解析）**
+- 套用點：勞報單建立／更新 `data.contractorHasUnionInsurance`（影響扣繳／二代健保試算，字串 `"false"` 以前會被當成有工會保險）、獎金群組 `PATCH /groups/{id}/active` 的 `is_active`。旗標只收真布林（`helpers.validation.body_flag`）；JSON 字串 `"false"`／`"0"`／`""` 以前會被當成 true，現在回 422、什麼都不寫。前端本來就送真布林，行為不變。測試：`tests/test_strict_bool_sites_t49.py`。
 
 ## 1.2.5 — 2026-10-08（wip/t47-audit-fixes）：勞報單政策收緊（Q-S6 自核、Q-S9 作廢已核准；Q-S7 維持現狀）與並發防護補強（S1／S2／S3 本體已在 1.2.4）
 - **Q-S6（A）**：有簽核層時，送審人也不得自行核准自己送的勞報單（`check_no_tier_self_approval`，與沒有簽核層的路徑一致）；**例外**：全公司只有這一位在職最高管理者。簽核層裡只列了送審人自己、且還有別的在職最高管理者時，這張單無法被簽過——送審人可以退回（回草稿）再改由他人簽。

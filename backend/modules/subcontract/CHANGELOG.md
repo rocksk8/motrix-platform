@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-09（wip/t48-w1b-fixes）：端點稽核 W1b；併第49班 strict-bool（W1c-P2）；併 2026-10-09(wip/t48-payslip-person-link)
+## (next) — 2026-10-09（wip/t48-w1b-fixes）：端點稽核 W1b；併第49班 strict-bool（W1c-P2）；併 2026-10-09(wip/t48-payslip-person-link)；併 2026-10-09(wip/t49-strict-bool；W1c-P2 旗標嚴格解析)
 - 修：`GET /api/contractor-vouchers/last-paid-bank-account` 原本任何登入者都讀得到公司最近一次付款帳戶（名稱＋科目代碼）；現在限財務角色／最高管理者（其他 403），與 `quotations/last-received-bank-account` 一致。
 - 新守門 `tests/test_endpoint_auth_w1b_t48.py`：case／subcontract／supply 宣告前綴下的每條路由無憑證呼叫一律不得 2xx／5xx。報告 `docs/platform/plans/ENDPOINT-AUDIT-W1B-T48.md`。
 - **（併入）(next) — 2026-10-09（wip/t49-b5-visibility）：外包名冊下拉限權（可見範圍收緊）**
@@ -10,6 +10,8 @@
 - **（併入）(next) — 2026-10-09（wip/t48-payslip-person-link）：派發 ⇄ 勞報單依人連動；獨立稽核#3 修補（byPerson 限同案）；缺案號派發的同案判斷**
 - 新提供者 `dispatch.by_person`（IP-115 暫定）：外包名冊人員 → 他被排進的派發（無金額）；`dispatch.brief` 加 `personnelIds`、`dispatchDate`（加法）。
 - `GET /api/contractor-dispatches/{id}/payslip-links` 多回 `byPerson`（派發人員名單內人員、**且連到同一案件派發**的已確認勞報單，扣掉已手動連結的；無金額；不跨案揭露）與 `unconfirmedCount`（待確認張數，API 層只給最高管理者，其他人為 0）。
+- **（併入）(next) — 2026-10-09（wip/t49-strict-bool；W1c-P2 旗標嚴格解析）**
+- 套用點：`PUT /api/contractor-vouchers/settings/remit-require-payslip` 的 `enabled`（**個人外包匯款強制關聯勞報單的緊急開關**；字串以前會被當成 true）。旗標只收真布林（`helpers.validation.body_flag`）；JSON 字串 `"false"`／`"0"`／`""` 以前會被當成 true，現在回 422、什麼都不寫。前端本來就送真布林，行為不變。測試：`tests/test_strict_bool_sites_t49.py`。
 
 ## 1.1.25 — 2026-10-08（wip/t47-audit-fixes）：承攬商匯款預定付款日提供者先拿寫鎖（第 46 班稽核 S4）；併 wip/t47-paydate-l1
 - `set_planned_pay_date`：讀取前先 `begin_write`（與案件／叫料匯款提供者一致），「沒變」的比較與寫入在同一個寫交易；兩位出納並發時後到的不會得到過期的 `unchanged`。

@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-09（wip/t49-b5-visibility）：case.access 加 allowed（供網路規劃書依案件過濾）；併第49班 strict-bool（W1c-P2）；併 wip/t48-oh25-s3b（s3＋s4／s5／s6，內含 s1／s2／s2b）；併 2026-10-09(wip/t48-payslip-person-link)；併 2026-10-09(wip/t48-po-bank-block)
+## (next) — 2026-10-09（wip/t49-b5-visibility）：case.access 加 allowed（供網路規劃書依案件過濾）；併第49班 strict-bool（W1c-P2）；併 wip/t48-oh25-s3b（s3＋s4／s5／s6，內含 s1／s2／s2b）；併 2026-10-09(wip/t48-payslip-person-link)；併 2026-10-09(wip/t48-po-bank-block)；併 2026-10-09(wip/t49-strict-bool；W1c-P2 旗標嚴格解析)
 - IP-12 `case.access` 提供者新增 `allowed(conn, quote_no, user, allow_module=None)`：不丟例外、不關連線的「看得到／看不到」判斷（規則與 `guard` 同一份 `case_access_allowed`）。`case-management-dispatch.js` 對沒有外包名冊權限的 session 不再呼叫 `/api/contractors/selectable`。
 - **（併入）(next) — 2026-10-09（wip/t49-strict-bool；W1c-P2 旗標嚴格解析）**
 - 套用點：叫料／叫料變更／叫料匯款核准的 `cascade`（驗旗標移到取資料庫之前）、報價預覽 `internal`（含成本的內部版）、案件階段 `done`、款項標記收款 `received`（`_validate_receipt_body` 先驗，`_apply_payment_mark` 用 `strict_bool`）、出納／叫料匯款的 `hasFee`（手續費）。旗標只收真布林（`helpers.validation.body_flag`）；JSON 字串 `"false"`／`"0"`／`""` 以前會被當成 true，現在回 422、什麼都不寫。前端本來就送真布林，行為不變。測試：`tests/test_strict_bool_sites_t49.py`。
@@ -21,6 +21,8 @@
 - 新增 `GET /api/extra-expenses/po-bank-block`（財務角色／最高管理者：開關、切換時間點、目前被擋張數）與 `PUT`（只有最高管理者：`{"enabled": true[, "since": "本地時間"]}`／`{"enabled": false}`；每次變更稽核 `settings.po_bank_block.update`）。補資料走第 47 班既有的變更申請；沒有新增任何權限或編輯入口。自然人廠商只提示（Q3）。設計：`docs/platform/plans/PO-BANK-BLOCK-T48.md`。
 - **稽核 #5**：`PATCH …/extra-expenses/{id}/dates` 設付款日也套同一道擋（原本可繞過出納登錄）；`paid_date` 的寫入路徑全盤點只有 `mark_paid` 與日期端點；述詞同時放進兩處 UPDATE 的 WHERE（讀→寫之間收款資料被清空也擋得住）。收款人類型 `employee` 的採購單不套用（已知取捨，見設計備忘）。
 - 測試：`modules/case/tests/test_po_bank_block_t48.py`。
+- **（併入）(next) — 2026-10-09（wip/t49-strict-bool；W1c-P2 旗標嚴格解析）**
+- 套用點：叫料／叫料變更／叫料匯款核准的 `cascade`（驗旗標移到取資料庫之前）、報價預覽 `internal`（含成本的內部版）、案件階段 `done`、款項標記收款 `received`（`_validate_receipt_body` 先驗，`_apply_payment_mark` 用 `strict_bool`）、出納／叫料匯款的 `hasFee`（手續費）。旗標只收真布林（`helpers.validation.body_flag`）；JSON 字串 `"false"`／`"0"`／`""` 以前會被當成 true，現在回 422、什麼都不寫。前端本來就送真布林，行為不變。測試：`tests/test_strict_bool_sites_t49.py`。
 
 ## 1.0.164 — 2026-10-09（wip/t48-oh25-s1／s2／s2b）：利潤規則單一來源（S1，零行為變更）＋管銷分攤比率與伺服器把關（S2，新行為預設關；`/api/overhead` 前綴登記於 module.json；s2b＝獨立稽核 1d 修正）
 - `settlement_actuals`：完結比對的管銷分攤、公益金、營業利益、報價原始側後備改呼叫 `helpers.profit_rules`（口徑仍是第 47 班的 10%）。前端 `static/profit-rules.js` 與黃金向量等值測試已備，頁面第 3 步（S3）才改接。設計：`docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
