@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""W1c 端點稽核：工作日誌 POST／PUT 的型別與範圍檢查——壞值要 422，不是 500，也不能把壞資料寫進庫。
+"""W1-c 端點稽核：工作日誌 POST／PUT 的型別與範圍檢查——壞值要 422，不是 500，也不能把壞資料寫進庫。
 
 原本：`float("abc")` ⇒ 500；`content` 不是字串 ⇒ `AttributeError` 500；不存在的 `user_id` 寫進去（日誌從此沒有主人）；
 `PUT` 直接把 body 的值寫進欄位（`hours: "abc"`、`log_date: "昨天"`、`content: 123`）。

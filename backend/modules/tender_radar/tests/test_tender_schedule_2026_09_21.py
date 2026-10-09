@@ -1095,9 +1095,9 @@ def test_sl28_duplicate_slots_do_not_multiply_the_fetches(radar_ready, monkeypat
     )
 
 
-# ── W1c 稽核：布林旗標嚴格解析（字串 "false" 不可被當成 True）─────────────────────────
+# ── W1-c 稽核：布林旗標嚴格解析（字串 "false" 不可被當成 True）─────────────────────────
 
-def test_w1c_string_false_is_not_a_high_frequency_confirmation(client, make_user):
+def test_flag_w1c_string_false_is_not_a_high_frequency_confirmation(client, make_user):
     """`confirmHighFrequency: "false"`（字串）原本被 bool() 當成 True ⇒ 悄悄通過『頻繁時段需確認』。現在 422，設定沒被改。"""
     hdr = _auth(client, make_user)
     threshold = _need("HIGH_FREQUENCY_SLOT_THRESHOLD")
@@ -1112,7 +1112,7 @@ def test_w1c_string_false_is_not_a_high_frequency_confirmation(client, make_user
     assert _schedule_put(client, hdr, scanHours=hours, **{CONFIRM_FLAG: False}).status_code == 409, "明確 false ⇒ 仍是『需要確認』"
 
 
-def test_w1c_watch_enabled_flag_must_be_boolean(client, make_user):
+def test_flag_w1c_watch_enabled_flag_must_be_boolean(client, make_user):
     hdr = _auth(client, make_user)
     ok = client.post("/api/tender-radar/watches", headers=hdr, json={"name": "w1c", "keywords": ["網路"], "enabled": False})
     assert ok.status_code == 201, ok.text

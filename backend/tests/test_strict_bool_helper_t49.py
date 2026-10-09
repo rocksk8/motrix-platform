@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""helpers.validation（第 49 班 W1c-P2）：旗標只收真布林；字串 "false"／"0"／"" 永遠不是 true。"""
+"""helpers.validation（第 49 班 W1-c-P2）：旗標只收真布林；字串 "false"／"0"／"" 永遠不是 true。"""
 import pytest
 from fastapi import HTTPException
 

@@ -303,7 +303,7 @@ def test_quote_validation(client, users, seeded, kw, code):
     assert fx.rows("SELECT * FROM lodging_quotes") == []
 
 
-# ── W1c 稽核：建立紀錄／詢價要留稽核（不含地址、不含金額）──────────────────────────
+# ── W1-c 稽核：建立紀錄／詢價要留稽核（不含地址、不含金額）──────────────────────────
 
 def _audit_rows(action):
     return fx.rows("SELECT * FROM audit_log WHERE action=?", action)

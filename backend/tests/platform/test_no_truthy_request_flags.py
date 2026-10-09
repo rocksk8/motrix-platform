@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""請求本文的旗標不可用真值判斷（第 49 班 W1c-P2）。
+"""請求本文的旗標不可用真值判斷（第 49 班 W1-c-P2）。
 
 `bool(body.get("flag"))`、`bool((body or {}).get("flag"))`、`1 if body.get("flag") else 0` 會把 JSON 字串 `"false"`／`"0"`／`""` 當成 true
 （關卡被繞過：確認旗標、`accept_warnings`、緊急開關…）。請求本文的旗標一律用 `helpers.validation.body_flag`／`strict_bool`（非布林 ⇒ 422）。

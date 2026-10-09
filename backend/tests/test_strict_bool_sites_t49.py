@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""第 49 班 W1c-P2：每個請求旗標的接收點——字串 "false"／"0"／"" ⇒ 422 且什麼都沒寫；真布林照舊。
+"""第 49 班 W1-c-P2：每個請求旗標的接收點——字串 "false"／"0"／"" ⇒ 422 且什麼都沒寫；真布林照舊。
 （守門 tests/platform/test_no_truthy_request_flags.py 保證不會再出現 bool(body.get(...))。）"""
 import json
 
