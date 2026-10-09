@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-09（wip/t49b-1d-strictbool2；W1c-P2b 旗標嚴格解析補丁）
+## 1.0.166 — 2026-10-09（wip/t49b-1d-strictbool2；W1c-P2b 旗標嚴格解析補丁）
 - `POST /api/quotations/{q}/extra-expenses/{id}/approve`、`…/change-request/approve`、`POST /api/completion-notes/{no}/approve` 的 `cascade`（『同一人連任多層時一次簽完』）：字串 `"false"` 以前會替簽核人自動簽完剩下的連續層。 另：款項標記收款 `received` 的判斷改用同一個 `body_flag`（行為同上一版，只是不再各處自己判斷真值）。 旗標只收真布林（`helpers.validation.body_flag`）：JSON 字串 `"false"`／`"0"`／`""` 以前是 truthy，現在回 422、什麼都不寫（先驗旗標，再碰資料庫與簽核鏈）；真布林與沒帶（預設 false）行為不變。測試：`tests/test_strict_bool_cascade_t49b.py`。
 
 ## 1.0.165 — 2026-10-09（wip/t49-b5-visibility）：case.access 加 allowed（供網路規劃書依案件過濾）；併第49班 strict-bool（W1c-P2）

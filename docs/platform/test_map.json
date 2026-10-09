@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1221,
+  "tests": 1222,
   "unmapped": 13,
   "kinds": {
-   "api": 664,
+   "api": 665,
    "e2e": 298,
    "audit": 149,
    "unit": 110
@@ -31954,6 +31954,38 @@
    "kind": "api",
    "units": [],
    "evidence": {},
+   "login_fixture": true
+  },
+  "backend/tests/test_strict_bool_cascade_t49b.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/completion_notes",
+    "mod:subcontract/__init__",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/dispatch_approval",
+    "mod:subcontract/remit",
+    "mod:supply/api/shipping_notes"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/remit.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/dispatch_approval.py",
+     "backend/modules/supply/api/shipping_notes.py"
+    ]
+   },
    "login_fixture": true
   },
   "backend/tests/test_strict_bool_helper_t49.py": {

@@ -1,6 +1,6 @@
 # 網路規劃 更新紀錄
 
-## (next) — 2026-10-09（wip/t49b-b5-netplan-writes）：規劃書寫入端點同套逐案權限
+## 1.0.9 — 2026-10-09（wip/t49b-b5-netplan-writes）：規劃書寫入端點同套逐案權限
 - ab 稽核補強：`PUT /api/network-plans/{id}`、`PATCH …/status`、`POST …/import/excel`、`POST …/privacy-notice/ack` 原本用裸 `SELECT … WHERE id=?`，沒有讀取端點的逐案權限——有 netplan_edit 但沒有該案權限的人讀得到 404、卻能改（200）；ack 回 409 還洩漏『存在』。現在四支都先過 `_load_visible_plan`（看不到＝404、什麼都不寫）。
 - admin／最高管理者視為直通：案件列被刪掉時 `case.access.allowed` 回 False，不能讓規劃書從 admin 眼前消失（一般人員案件不在就不給看）。
 - 測試：`test_netplan_visibility_t49.py` 新增三題（無案件權限的寫入 404 且資料列不變、擁有者與獨立規劃書照常可寫、案件被刪後 admin 仍看得到）。

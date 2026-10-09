@@ -6057,7 +6057,8 @@
     "helper:settings",
     "helper:tax_calc",
     "helper:tiered_approval",
-    "helper:uploads"
+    "helper:uploads",
+    "helper:validation"
    ],
    "imports": [
     "core:db",
@@ -6073,6 +6074,7 @@
     "helper:tax_calc",
     "helper:tiered_approval",
     "helper:uploads",
+    "helper:validation",
     "plat:registry",
     "plat:txn"
    ],
@@ -6084,79 +6086,79 @@
    "routes": [
     {
      "func": "list_invoice_vouchers",
-     "line": 241,
+     "line": 242,
      "method": "GET",
      "path": "/api/invoice-vouchers"
     },
     {
      "func": "get_invoice_voucher_remaining",
-     "line": 264,
+     "line": 265,
      "method": "GET",
      "path": "/api/invoice-vouchers/remaining"
     },
     {
      "func": "get_invoice_voucher",
-     "line": 285,
+     "line": 286,
      "method": "GET",
      "path": "/api/invoice-vouchers/{voucher_no}"
     },
     {
      "func": "create_invoice_voucher",
-     "line": 298,
+     "line": 299,
      "method": "POST",
      "path": "/api/invoice-vouchers"
     },
     {
      "func": "delete_invoice_voucher",
-     "line": 461,
+     "line": 462,
      "method": "DELETE",
      "path": "/api/invoice-vouchers/{voucher_no}"
     },
     {
      "func": "submit_invoice_voucher",
-     "line": 486,
+     "line": 487,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/submit"
     },
     {
      "func": "approve_invoice_voucher",
-     "line": 547,
+     "line": 548,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/approve"
     },
     {
      "func": "revoke_invoice_voucher_approval",
-     "line": 656,
+     "line": 658,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/revoke-approval"
     },
     {
      "func": "reject_invoice_voucher",
-     "line": 697,
+     "line": 699,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_invoice_voucher_pdf",
-     "line": 744,
+     "line": 746,
      "method": "GET",
      "path": "/api/invoice-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_invoice_voucher_export",
-     "line": 771,
+     "line": 773,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/export"
     },
     {
      "func": "upload_invoice_voucher_issued_files",
-     "line": 799,
+     "line": 801,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/issued-files"
     },
     {
      "func": "delete_invoice_voucher_issued_file",
-     "line": 828,
+     "line": 830,
      "method": "DELETE",
      "path": "/api/invoice-vouchers/{voucher_no}/issued-files/{file_id}"
     }
@@ -6222,7 +6224,8 @@
     "helper:notify_matrix",
     "helper:row_access",
     "helper:settings",
-    "helper:tiered_approval"
+    "helper:tiered_approval",
+    "helper:validation"
    ],
    "imports": [
     "core:db",
@@ -6236,6 +6239,7 @@
     "helper:google_calendar",
     "helper:legal_params",
     "helper:tiered_approval",
+    "helper:validation",
     "plat:registry",
     "plat:txn"
    ],
@@ -6247,73 +6251,73 @@
    "routes": [
     {
      "func": "list_payment_requests",
-     "line": 311,
+     "line": 312,
      "method": "GET",
      "path": "/api/payment-requests"
     },
     {
      "func": "get_payment_request_remaining",
-     "line": 334,
+     "line": 335,
      "method": "GET",
      "path": "/api/payment-requests/remaining"
     },
     {
      "func": "get_payment_request",
-     "line": 351,
+     "line": 352,
      "method": "GET",
      "path": "/api/payment-requests/{request_no}"
     },
     {
      "func": "create_payment_request",
-     "line": 364,
+     "line": 365,
      "method": "POST",
      "path": "/api/payment-requests"
     },
     {
      "func": "update_payment_request",
-     "line": 456,
+     "line": 457,
      "method": "PUT",
      "path": "/api/payment-requests/{request_no}"
     },
     {
      "func": "delete_payment_request",
-     "line": 554,
+     "line": 555,
      "method": "DELETE",
      "path": "/api/payment-requests/{request_no}"
     },
     {
      "func": "submit_payment_request",
-     "line": 579,
+     "line": 580,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/submit"
     },
     {
      "func": "approve_payment_request",
-     "line": 640,
+     "line": 641,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/approve"
     },
     {
      "func": "revoke_payment_request_approval",
-     "line": 748,
+     "line": 750,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/revoke-approval"
     },
     {
      "func": "reject_payment_request",
-     "line": 789,
+     "line": 791,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/reject"
     },
     {
      "func": "download_payment_request_pdf",
-     "line": 836,
+     "line": 838,
      "method": "GET",
      "path": "/api/payment-requests/{request_no}/pdf-download"
     },
     {
      "func": "record_payment_request_export",
-     "line": 863,
+     "line": 865,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/export"
     }
@@ -6626,6 +6630,7 @@
     "helper:row_access",
     "helper:tiered_approval",
     "helper:uploads",
+    "helper:validation",
     "mod:case/expense_forms",
     "mod:case/expense_notify",
     "mod:case/payable_calendar",
@@ -6641,133 +6646,133 @@
    "routes": [
     {
      "func": "list_extra_expenses",
-     "line": 383,
+     "line": 384,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/extra-expenses"
     },
     {
      "func": "list_purchase_items",
-     "line": 456,
+     "line": 457,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/purchase-items"
     },
     {
      "func": "list_purchase_request_lines",
-     "line": 480,
+     "line": 481,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/purchase-requests/lines"
     },
     {
      "func": "create_extra_expense",
-     "line": 497,
+     "line": 498,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses"
     },
     {
      "func": "update_extra_expense",
-     "line": 563,
+     "line": 564,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "payreq_cases",
-     "line": 641,
+     "line": 642,
      "method": "GET",
      "path": "/api/extra-expenses/cases"
     },
     {
      "func": "payreq_mine",
-     "line": 667,
+     "line": 668,
      "method": "GET",
      "path": "/api/extra-expenses/mine"
     },
     {
      "func": "set_extra_expense_dates",
-     "line": 689,
+     "line": 690,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/dates"
     },
     {
      "func": "delete_extra_expense",
-     "line": 765,
+     "line": 766,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "void_extra_expense",
-     "line": 790,
+     "line": 791,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/void"
     },
     {
      "func": "submit_extra_expense",
-     "line": 849,
+     "line": 850,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/submit"
     },
     {
      "func": "approve_extra_expense",
-     "line": 937,
+     "line": 938,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/approve"
     },
     {
      "func": "reject_extra_expense",
-     "line": 1024,
+     "line": 1026,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/reject"
     },
     {
      "func": "upload_extra_expense_files",
-     "line": 1139,
+     "line": 1141,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files"
     },
     {
      "func": "delete_extra_expense_file",
-     "line": 1194,
+     "line": 1196,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}"
     },
     {
      "func": "upsert_change_request",
-     "line": 1370,
+     "line": 1372,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "cancel_change_request",
-     "line": 1411,
+     "line": 1413,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "upload_change_request_files",
-     "line": 1437,
+     "line": 1439,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files"
     },
     {
      "func": "delete_change_request_file",
-     "line": 1480,
+     "line": 1482,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}"
     },
     {
      "func": "submit_change_request",
-     "line": 1507,
+     "line": 1509,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/submit"
     },
     {
      "func": "approve_change_request",
-     "line": 1578,
+     "line": 1580,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/approve"
     },
     {
      "func": "reject_change_request",
-     "line": 1667,
+     "line": 1670,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/reject"
     }
@@ -6872,6 +6877,7 @@
     "helper:startup",
     "helper:tiered_approval",
     "helper:uploads",
+    "helper:validation",
     "mod:case/completion_pdf",
     "mod:case/expense_notify"
    ],
@@ -6886,6 +6892,7 @@
     "helper:privacy_notice",
     "helper:tiered_approval",
     "helper:uploads",
+    "helper:validation",
     "mod:case/completion_pdf",
     "mod:case/expense_notify"
    ],
@@ -6897,97 +6904,97 @@
    "routes": [
     {
      "func": "list_completion_notes",
-     "line": 220,
+     "line": 221,
      "method": "GET",
      "path": "/api/completion-notes"
     },
     {
      "func": "get_completion_note",
-     "line": 262,
+     "line": 263,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}"
     },
     {
      "func": "create_completion_note",
-     "line": 272,
+     "line": 273,
      "method": "POST",
      "path": "/api/completion-notes"
     },
     {
      "func": "update_completion_note",
-     "line": 314,
+     "line": 315,
      "method": "PUT",
      "path": "/api/completion-notes/{note_no}"
     },
     {
      "func": "delete_completion_note",
-     "line": 361,
+     "line": 362,
      "method": "DELETE",
      "path": "/api/completion-notes/{note_no}"
     },
     {
      "func": "submit_completion_note",
-     "line": 386,
+     "line": 387,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/submit"
     },
     {
      "func": "approve_completion_note",
-     "line": 451,
+     "line": 452,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/approve"
     },
     {
      "func": "reject_completion_note",
-     "line": 559,
+     "line": 561,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/reject"
     },
     {
      "func": "revoke_completion_approval",
-     "line": 601,
+     "line": 603,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/revoke-approval"
     },
     {
      "func": "download_completion_pdf",
-     "line": 647,
+     "line": 649,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}/pdf-download"
     },
     {
      "func": "record_completion_export",
-     "line": 674,
+     "line": 676,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/export"
     },
     {
      "func": "toggle_completion_signed",
-     "line": 703,
+     "line": 705,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/signed-toggle"
     },
     {
      "func": "upload_completion_signed_files",
-     "line": 755,
+     "line": 757,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/signed-files"
     },
     {
      "func": "delete_completion_signed_file",
-     "line": 781,
+     "line": 783,
      "method": "DELETE",
      "path": "/api/completion-notes/{note_no}/signed-files/{file_id}"
     },
     {
      "func": "get_completion_privacy_acks",
-     "line": 818,
+     "line": 820,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}/privacy-notice"
     },
     {
      "func": "ack_completion_privacy_notice",
-     "line": 830,
+     "line": 832,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/privacy-notice/ack"
     }
@@ -8348,181 +8355,181 @@
     },
     {
      "func": "mark_payment",
-     "line": 3912,
+     "line": 3910,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 4044,
+     "line": 4042,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 4087,
+     "line": 4085,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 4127,
+     "line": 4125,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 4166,
+     "line": 4164,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 4191,
+     "line": 4189,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 4232,
+     "line": 4230,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 4257,
+     "line": 4255,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 4289,
+     "line": 4287,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 4318,
+     "line": 4316,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_finance_summary",
-     "line": 4362,
+     "line": 4360,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "approve_quotation",
-     "line": 4818,
+     "line": 4816,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 4943,
+     "line": 4941,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 5029,
+     "line": 5027,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5095,
+     "line": 5093,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5241,
+     "line": 5239,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5327,
+     "line": 5325,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5358,
+     "line": 5356,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5389,
+     "line": 5387,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5430,
+     "line": 5428,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5490,
+     "line": 5488,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5557,
+     "line": 5555,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5598,
+     "line": 5596,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5636,
+     "line": 5634,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 6229,
+     "line": 6227,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6349,
+     "line": 6347,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6417,
+     "line": 6415,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6571,
+     "line": 6569,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6585,
+     "line": 6583,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6616,
+     "line": 6614,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -10356,91 +10363,91 @@
    "routes": [
     {
      "func": "list_network_plans",
-     "line": 104,
+     "line": 106,
      "method": "GET",
      "path": "/api/network-plans"
     },
     {
      "func": "get_network_plan",
-     "line": 128,
+     "line": 130,
      "method": "GET",
      "path": "/api/network-plans/{plan_id}"
     },
     {
      "func": "get_network_plan_by_case",
-     "line": 138,
+     "line": 140,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/network-plan"
     },
     {
      "func": "create_network_plan",
-     "line": 156,
+     "line": 158,
      "method": "POST",
      "path": "/api/network-plans"
     },
     {
      "func": "update_network_plan",
-     "line": 208,
+     "line": 210,
      "method": "PUT",
      "path": "/api/network-plans/{plan_id}"
     },
     {
      "func": "update_network_plan_status",
-     "line": 241,
+     "line": 240,
      "method": "PATCH",
      "path": "/api/network-plans/{plan_id}/status"
     },
     {
      "func": "delete_network_plan",
-     "line": 275,
+     "line": 271,
      "method": "DELETE",
      "path": "/api/network-plans/{plan_id}"
     },
     {
      "func": "preview_network_plan_topology",
-     "line": 296,
+     "line": 292,
      "method": "POST",
      "path": "/api/network-plans/{plan_id}/topology-preview"
     },
     {
      "func": "export_network_plan_excel",
-     "line": 318,
+     "line": 314,
      "method": "GET",
      "path": "/api/network-plans/{plan_id}/export/excel"
     },
     {
      "func": "export_network_plan_pdf",
-     "line": 336,
+     "line": 332,
      "method": "GET",
      "path": "/api/network-plans/{plan_id}/export/pdf"
     },
     {
      "func": "import_network_plan_excel",
-     "line": 357,
+     "line": 353,
      "method": "POST",
      "path": "/api/network-plans/{plan_id}/import/excel"
     },
     {
      "func": "get_network_plan_privacy_acks",
-     "line": 418,
+     "line": 411,
      "method": "GET",
      "path": "/api/network-plans/{plan_id}/privacy-notice"
     },
     {
      "func": "ack_network_plan_privacy_notice",
-     "line": 429,
+     "line": 422,
      "method": "POST",
      "path": "/api/network-plans/{plan_id}/privacy-notice/ack"
     },
     {
      "func": "preview_quick_topology",
-     "line": 472,
+     "line": 463,
      "method": "POST",
      "path": "/api/network-plans-quick/preview"
     },
     {
      "func": "export_quick_topology_pdf",
-     "line": 485,
+     "line": 476,
      "method": "POST",
      "path": "/api/network-plans-quick/pdf"
     }
@@ -11897,133 +11904,133 @@
    "routes": [
     {
      "func": "get_remit_fee_total",
-     "line": 254,
+     "line": 255,
      "method": "GET",
      "path": "/api/contractor-vouchers/remit-fee-total"
     },
     {
      "func": "get_last_paid_bank_account",
-     "line": 269,
+     "line": 270,
      "method": "GET",
      "path": "/api/contractor-vouchers/last-paid-bank-account"
     },
     {
      "func": "list_contractor_vouchers",
-     "line": 294,
+     "line": 295,
      "method": "GET",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "get_contractor_voucher",
-     "line": 320,
+     "line": 321,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "create_contractor_voucher",
-     "line": 333,
+     "line": 334,
      "method": "POST",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "preview_contractor_voucher",
-     "line": 490,
+     "line": 491,
      "method": "POST",
      "path": "/api/contractor-vouchers/preview"
     },
     {
      "func": "delete_contractor_voucher",
-     "line": 514,
+     "line": 515,
      "method": "DELETE",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "set_voucher_invoice",
-     "line": 543,
+     "line": 544,
      "method": "PATCH",
      "path": "/api/contractor-vouchers/{voucher_no}/invoice"
     },
     {
      "func": "void_contractor_voucher",
-     "line": 579,
+     "line": 580,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/void"
     },
     {
      "func": "submit_contractor_voucher",
-     "line": 614,
+     "line": 615,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/submit"
     },
     {
      "func": "approve_contractor_voucher",
-     "line": 676,
+     "line": 677,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/approve"
     },
     {
      "func": "revoke_contractor_voucher_approval",
-     "line": 787,
+     "line": 789,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/revoke-approval"
     },
     {
      "func": "reject_contractor_voucher",
-     "line": 832,
+     "line": 834,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_contractor_voucher_pdf",
-     "line": 881,
+     "line": 883,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_contractor_voucher_export",
-     "line": 913,
+     "line": 915,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/export"
     },
     {
      "func": "get_remit_require_payslip",
-     "line": 981,
+     "line": 983,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "set_remit_require_payslip",
-     "line": 989,
+     "line": 991,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "get_personnel_links",
-     "line": 1002,
+     "line": 1004,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-links"
     },
     {
      "func": "link_personnel_payslip",
-     "line": 1036,
+     "line": 1038,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-link"
     },
     {
      "func": "toggle_paid",
-     "line": 1091,
+     "line": 1093,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/paid-toggle"
     },
     {
      "func": "get_contractor_voucher_approval_flow",
-     "line": 1214,
+     "line": 1216,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     },
     {
      "func": "set_contractor_voucher_approval_flow",
-     "line": 1231,
+     "line": 1233,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     }
@@ -12236,6 +12243,7 @@
     "helper:notify_matrix",
     "helper:settings",
     "helper:tiered_approval",
+    "helper:validation",
     "mod:subcontract/dispatch_flow",
     "mod:subcontract/dispatch_notify"
    ],
@@ -12245,6 +12253,7 @@
     "helper:audit",
     "helper:auth",
     "helper:tiered_approval",
+    "helper:validation",
     "mod:subcontract/dispatch_flow",
     "mod:subcontract/dispatch_notify",
     "plat:registry",
@@ -12258,49 +12267,49 @@
    "routes": [
     {
      "func": "submit_dispatch",
-     "line": 286,
+     "line": 288,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/submit"
     },
     {
      "func": "approve_dispatch",
-     "line": 292,
+     "line": 294,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/approve"
     },
     {
      "func": "reject_dispatch",
-     "line": 298,
+     "line": 300,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/reject"
     },
     {
      "func": "withdraw_dispatch",
-     "line": 304,
+     "line": 306,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/withdraw"
     },
     {
      "func": "request_completion",
-     "line": 333,
+     "line": 335,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/completion/request"
     },
     {
      "func": "approve_completion",
-     "line": 340,
+     "line": 342,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/completion/approve"
     },
     {
      "func": "reject_completion",
-     "line": 346,
+     "line": 348,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/completion/reject"
     },
     {
      "func": "withdraw_completion",
-     "line": 352,
+     "line": 354,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/completion/withdraw"
     }
@@ -12862,6 +12871,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:validation",
     "mod:subcontract/payable_due"
    ],
    "kind": "mod",
@@ -13124,6 +13134,7 @@
     "helper:settings",
     "helper:tiered_approval",
     "helper:uploads",
+    "helper:validation",
     "mod:supply/material_link"
    ],
    "imports": [
@@ -13139,6 +13150,7 @@
     "helper:privacy_notice",
     "helper:tiered_approval",
     "helper:uploads",
+    "helper:validation",
     "mod:supply/material_link",
     "plat:txn"
    ],
@@ -13150,115 +13162,115 @@
    "routes": [
     {
      "func": "list_shipping_notes",
-     "line": 99,
+     "line": 100,
      "method": "GET",
      "path": "/api/shipping-notes"
     },
     {
      "func": "material_shippable_for_note",
-     "line": 124,
+     "line": 125,
      "method": "GET",
      "path": "/api/shipping-notes/material-shippable"
     },
     {
      "func": "list_shipping_export_history",
-     "line": 137,
+     "line": 138,
      "method": "GET",
      "path": "/api/shipping-notes/export-history"
     },
     {
      "func": "material_link_check",
-     "line": 220,
+     "line": 221,
      "method": "GET",
      "path": "/api/shipping-notes/{note_no}/material-link-check"
     },
     {
      "func": "get_shipping_note",
-     "line": 232,
+     "line": 233,
      "method": "GET",
      "path": "/api/shipping-notes/{note_no}"
     },
     {
      "func": "get_shipping_recipient_privacy_acks",
-     "line": 254,
+     "line": 255,
      "method": "GET",
      "path": "/api/shipping-notes/{note_no}/privacy-notice"
     },
     {
      "func": "ack_shipping_recipient_privacy_notice",
-     "line": 264,
+     "line": 265,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/privacy-notice/ack"
     },
     {
      "func": "create_shipping_note",
-     "line": 287,
+     "line": 288,
      "method": "POST",
      "path": "/api/shipping-notes"
     },
     {
      "func": "update_shipping_note",
-     "line": 324,
+     "line": 325,
      "method": "PUT",
      "path": "/api/shipping-notes/{note_no}"
     },
     {
      "func": "delete_shipping_note",
-     "line": 354,
+     "line": 355,
      "method": "DELETE",
      "path": "/api/shipping-notes/{note_no}"
     },
     {
      "func": "submit_shipping_note",
-     "line": 379,
+     "line": 380,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/submit"
     },
     {
      "func": "approve_shipping_note",
-     "line": 449,
+     "line": 450,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/approve"
     },
     {
      "func": "revoke_shipping_note_approval",
-     "line": 603,
+     "line": 605,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/revoke-approval"
     },
     {
      "func": "reject_shipping_note",
-     "line": 665,
+     "line": 667,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/reject"
     },
     {
      "func": "download_shipping_pdf",
-     "line": 710,
+     "line": 712,
      "method": "GET",
      "path": "/api/shipping-notes/{note_no}/pdf-download"
     },
     {
      "func": "record_shipping_export",
-     "line": 740,
+     "line": 742,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/export"
     },
     {
      "func": "toggle_signed",
-     "line": 774,
+     "line": 776,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/signed-toggle"
     },
     {
      "func": "upload_shipping_signed_files",
-     "line": 831,
+     "line": 833,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/signed-files"
     },
     {
      "func": "delete_shipping_signed_file",
-     "line": 853,
+     "line": 855,
      "method": "DELETE",
      "path": "/api/shipping-notes/{note_no}/signed-files/{file_id}"
     }

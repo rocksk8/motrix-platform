@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-09（wip/t49b-1d-strictbool2；W1c-P2b 旗標嚴格解析補丁）
+## 1.1.27 — 2026-10-09（wip/t49b-1d-strictbool2；W1c-P2b 旗標嚴格解析補丁）
 - `POST /api/contractor-vouchers/{no}/approve`、`POST /api/contractor-dispatches/{id}/approve`、`…/completion/approve` 的 `cascade`（『同一人連任多層時一次簽完』）：字串 `"false"` 以前會替簽核人自動簽完剩下的連續層。 另：匯款實付／手續費解析（`remit.parse_remit`）的 `hasFee`／`has_fee` 字串 `"false"` 以前會被當成有手續費。 旗標只收真布林（`helpers.validation.body_flag`）：JSON 字串 `"false"`／`"0"`／`""` 以前是 truthy，現在回 422、什麼都不寫（先驗旗標，再碰資料庫與簽核鏈）；真布林與沒帶（預設 false）行為不變。測試：`tests/test_strict_bool_cascade_t49b.py`。
 
 ## 1.1.26 — 2026-10-09（wip/t48-w1b-fixes）：端點稽核 W1b；併第49班 strict-bool（W1c-P2）
