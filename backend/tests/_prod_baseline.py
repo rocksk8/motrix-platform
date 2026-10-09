@@ -28,6 +28,7 @@
 📌 2026-10-09 07:31：正式機已更新到 e526a2ef（第四十八班 48a：使用者管理整合職責角色（R2 第2步：角色／個人扣項／生效權限預覽、舊 PUT 勾到被扣的鍵改回 400、既有使用者權限為空不再預填模板、permission_changes.audit_id 填值）、承攬商匯款建立視窗預定付款日、營業利益規則底座（profit_rules 單一來源＋/api/overhead/settings＋離線重算工具；overhead_rule_mode 預設 legacy＝新行為關、不改任何數字）、供應商紀錄頁防呆、跨午夜日期測試修正；無 migration（schema 維持 118）；正式機 Claude 依步驟檔「自動套用」（使用者已同意）執行 apply_update，13 秒成功、無回滾，步驟 3 十七項全過、職責角色等值關卡 PASS 0 差異）⇒ 基準改 e526a2ef。
 📌 2026-10-09 18:39：正式機已更新到 56d02cdb（第四十九班：端點稽核補強——網路規劃書逐案權限（讀取、匯出、拓樸預覽、個資告知、修改／狀態／匯入／告知確認四個寫入端點）、外包名冊下拉限權、承攬商上次付款帳號限財務、請求旗標嚴格解析（含 8 個簽核端點 cascade、匯款 hasFee）、工作日誌欄位檢查、8 條舊版獎金分潤墓碑端點移除；無 migration（schema 維持 118）；正式機 Claude 依步驟檔「自動套用」執行 apply_update，15 秒成功、無回滾，步驟 3 十七項全過、職責角色等值關卡 PASS 0 差異）⇒ 基準改 56d02cdb。
 📌 2026-10-09 22:57：正式機已更新到 18aed9a3（第五十班：利潤口徑 48b——「淨利」改稱「營業利益」（畫面／PDF／Excel／獎金明細）、報價單拿掉五個間接成本輸入欄、管銷比率欄與伺服器把關／離線遷移工具（口徑開關預設仍是舊口徑，本班不切換）；勞報單人員 ⇄ 派工連動（payroll 模組 migration 5／6，核心 schema 維持 118）；採購單缺廠商收款帳戶擋付款（選用開關預設關）；工作日誌新增／修改／刪除權限收緊；模組路由宣告；正式機 Claude 依步驟檔「自動套用」執行 apply_update，14 秒成功、無回滾，步驟 3 十七項全過、職責角色等值關卡 PASS 0 差異）⇒ 基準改 18aed9a3。
+📌 2026-10-10 06:38：正式機已更新到 adc97ca6（第五十一班：獎金分潤唯一簽核人層外超管帶原因代核（強制稽核＋通知）、工作日誌新增只限最高管理者指定他人、勞報單新增預設選取已派工並一鍵帶入（不帶金額）、單據狀態徽章依狀態上色、案件頁材料申請列出已核准採購單候選、開發端工具（排隊包裝、--no-failfast、pre-push、影子記錄器）；無 migration（schema 118；payroll 6）；營業利益口徑維持 v2；正式機 Claude 依步驟檔「自動套用」執行 apply_update，15 秒成功、無回滾，步驟 3 十七項全過、職責角色等值關卡 PASS 0 差異）⇒ 基準改 adc97ca6。
 """
 import json
 import subprocess
@@ -36,7 +37,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "18aed9a3"
+BASELINE = "adc97ca6"
 
 
 def baseline_manifest():
