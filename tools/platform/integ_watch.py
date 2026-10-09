@@ -29,7 +29,6 @@ import nowindow  # noqa: E402
 OUT = REPO / "tools" / "platform" / "full_results" / "integ_watch"
 DEBOUNCE_SEC = 60
 MIN_FREE_GB = 4.0
-BUDGET_SEC = 240
 
 
 def _git(*args):
@@ -95,10 +94,44 @@ def once(wait=True, runner=None):
     if gb is not None and gb < MIN_FREE_GB:
         return write_status(sha, state="skipped", note="可用記憶體 %.1f GB < %.0f GB" % (gb, MIN_FREE_GB))
     import prepush_check as PP
-    code, text, data = PP.run(REPO, None, BUDGET_SEC, False, True, runner)
+    polite_run.reason = ""
+    code, text, data = PP.run(REPO, None, None, False, True, runner or polite_run)           # 預算＝prepush_check 的整合模式預設（300 秒）
+    if polite_run.reason:                                                                    # 測試途中別的 pytest／記憶體吃緊 ⇒ 讓出，不當綠
+        return write_status(sha, state="yielded", exit=code, reds=[x for x in data["findings"] if not x["msg"].startswith("未能檢查")],
+                            warnings=data["warnings"], fails=data["fails"], tests=len(data["tests"]), note=polite_run.reason,
+                            summary=text.splitlines()[-1])
     return write_status(sha, state="done", exit=code, reds=[x for x in data["findings"] if not x["msg"].startswith("未能檢查")],
                         warnings=data["warnings"], fails=data["fails"], tests=len(data["tests"]),
                         note=("psutil 不可用，沒檢查別的 pytest" if busy is None else "") or "只是提示；閘門以官方 run-stage 為準", summary=text.splitlines()[-1])
+
+
+def polite_run(repo, tests, timeout):
+    """逐檔跑（每檔一個 pytest 行程）；**每一檔開跑前**再查一次『別的 pytest 在跑』與可用記憶體——閘門（run-stage）在這一輪中途才開跑，
+    就讓出（回 INCOMPLETE＝未完成，不可當綠；原因記在 polite_run.reason），不拖慢它。⇒ (rc, output, seconds)。"""
+    import prepush_check as PP
+    t0 = time.time()
+    outs, rc_all = [], 0
+    for item in tests:
+        busy, gb = other_pytest_running(), free_gb()
+        if busy:
+            polite_run.reason = "測試途中偵測到別的 pytest 在跑（閘門優先）；已讓出，剩下的檔沒跑（已跑 %d／%d 個檔）" % (len(outs), len(tests))
+            return PP.INCOMPLETE, chr(10).join(outs), time.time() - t0
+        if gb is not None and gb < MIN_FREE_GB:
+            polite_run.reason = "測試途中可用記憶體 %.1f GB < %.0f GB；已讓出（已跑 %d／%d 個檔）" % (gb, MIN_FREE_GB, len(outs), len(tests))
+            return PP.INCOMPLETE, chr(10).join(outs), time.time() - t0
+        left = timeout - (time.time() - t0)
+        if left < 5:
+            return PP.INCOMPLETE, chr(10).join(outs), time.time() - t0
+        rc, out, _secs = PP.run_tests(repo, [item], left)
+        outs.append(out)
+        if rc == PP.INCOMPLETE:
+            return PP.INCOMPLETE, chr(10).join(outs), time.time() - t0
+        if rc not in (0,) and rc_all == 0:
+            rc_all = rc
+    return rc_all, chr(10).join(outs), time.time() - t0
+
+
+polite_run.reason = ""
 
 
 def spawn():
