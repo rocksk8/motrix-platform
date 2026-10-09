@@ -1,0 +1,11 @@
+#!/bin/bash
+# post-commit（SPEEDUP-PREPUSH-T50 §3）：只在整合分支（train/*）上、分離行程、低優先地排一次背景檢查。
+# 只寫狀態檔（tools/platform/full_results/integ_watch/），**不寫任何綠燈紀錄**、不取號、不重產、不 commit。
+b=$(git symbolic-ref --short -q HEAD)
+case "$b" in train/*) ;; *) exit 0 ;; esac
+PY="${MOTRIX_PY:-D:/MOTRIX-PLATFORM/.venv312/Scripts/python.exe}"
+[ -x "$PY" ] || PY=python
+root=$(git rev-parse --show-toplevel) || exit 0
+[ -f "$root/tools/platform/integ_watch.py" ] || exit 0
+"$PY" -X utf8 "$root/tools/platform/integ_watch.py" --spawn >/dev/null 2>&1 &
+exit 0

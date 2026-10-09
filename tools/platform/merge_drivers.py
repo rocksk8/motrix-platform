@@ -9,6 +9,9 @@
   changelog：以「## 」標題切段。兩邊各自＝〔自己新增的段落〕＋〔基底的段落（可被其中一邊改過）〕。
              結果＝前言＋我方新增＋對方新增（完全相同的段落只留一份）＋基底段落。
              基底段落兩邊都改、且改得不一樣 ⇒ 衝突；找不到基底第一段 ⇒ 衝突；前言兩邊改得不一樣 ⇒ 衝突。
+             🔸 第 51 班：兩邊各新增一塊 `## (next)` ⇒ **併成一塊**（A 的整塊照舊；B 的標題變成
+             「- **（併入）(next) — …**」一行、內文接後面）——一班一個模組只該有一塊（test_version_slots）；
+             版號段落（`## X.Y.Z`）不併，仍然兩個都留。
   manifest ：逐筆（JSON 物件）比對。結果＝我方的順序＋對方新增的條目（插在對方檔裡它後面那一筆之前）；
              兩邊加了同一筆（內容完全相同）只留一份；只有一邊刪／改基底條目 ⇒ 照那一邊；
              兩邊都刪／改了基底條目 ⇒ 衝突；檔案格式不是「每筆以 `,\\n  ` 相隔」⇒ 衝突。
@@ -47,6 +50,33 @@ def _pick3(o, a, b):
     return None
 
 
+def coalesce_next(sections):
+    """第 51 班（SPEEDUP-PREPUSH-T50 類 1）：一班一個模組只該有**一塊** `## (next)`——兩邊各新增一塊時併成一塊
+    （第一塊的標題與內文照舊；其餘各塊的標題變成「- **（併入）(next) — …**」一行，內文接在後面）。
+    少於兩塊 ⇒ 原樣回傳。完全相同的塊已在上游去重。"""
+    idx = [i for i, s in enumerate(sections) if _head(s).startswith("## (next)")]
+    if len(idx) < 2:
+        return sections
+    nl = chr(10)
+    out_sec = sections[idx[0]].rstrip(nl)
+    for i in idx[1:]:
+        s = sections[i]
+        head, _, body = s.partition(nl)
+        title = head[len("## (next)"):].lstrip(" —-").strip()
+        out_sec += nl + "- **（併入）(next) — " + title + "**"
+        if body.strip():
+            out_sec += nl + body.rstrip(nl)
+    out_sec += nl + nl
+    drop = set(idx[1:])
+    res = []
+    for i, s in enumerate(sections):
+        if i == idx[0]:
+            res.append(out_sec)
+        elif i not in drop:
+            res.append(s)
+    return res
+
+
 def merge_changelog(o, a, b):
     """⇒ 合併結果，或 None（不是看得懂的形狀 ⇒ 交給一般合併）。"""
     po, so = split_sections(o)
@@ -67,7 +97,7 @@ def merge_changelog(o, a, b):
     new_b = [s for s in sb[:ib] if s not in new_a]
     if new_a and new_b and not new_a[-1].endswith("\n\n"):
         new_a[-1] += "\n" if new_a[-1].endswith("\n") else "\n\n"
-    return pre + "".join(new_a + new_b + rest)
+    return pre + "".join(coalesce_next(new_a + new_b) + rest)
 
 
 # ── version_manifest.json ────────────────────────────────────────────────
