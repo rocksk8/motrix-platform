@@ -264,12 +264,37 @@ def stage_command(stage, python, workers, basetemp):
             "-p", "fail_stream", "-p", "failfast", "-p", "no:cacheprovider"]
 
 
-def run_stage(repo, stage, records, python=None, runner=None, workers=None, note=print):
+def collect_reds(fail_stream_dir, limit=500):
+    """讀 fail_stream 的 JSONL（只讀 type=fail／node_down），回不重複的紅題 nodeid 清單（依出現順序）。"""
+    out, seen = [], set()
+    d = Path(fail_stream_dir)
+    for f in sorted(d.glob("*.jsonl")) if d.is_dir() else []:
+        try:
+            lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for ln in lines:
+            try:
+                r = json.loads(ln)
+            except ValueError:
+                continue
+            nid = r.get("nodeid")
+            if r.get("type") in ("fail", "node_down") and nid and nid not in seen:
+                seen.add(nid)
+                out.append(nid)
+                if len(out) >= limit:
+                    return out
+    return out
+
+
+def run_stage(repo, stage, records, python=None, runner=None, workers=None, note=print, no_failfast=False):
     """**獨立跑一段也算數**（建包優化 2 項 2）：跑與建包同一組指令；開跑與結束的指紋相同且工作樹乾淨 ⇒ 把這一段（綠或紅）寫進沿用紀錄
     （source=standalone）。之後建包遇到同指紋、同一天、12 小時內的綠就直接沿用這一段，不再跑第二次。
     - 紅也照記（同指紋之前的綠不可以再被沿用，與建包同一條規則）；fail-fast 提前停止的一段是紅。
     - 指紋不同（跑到一半 HEAD／工作樹／環境變了）或一開始就不乾淨 ⇒ 照跑、回傳 exit code，但**不寫紀錄**。
     - 這裡不做偶發重跑：紅就是紅（要走偶發登記請用建包）。
+    - `no_failfast=True`（`--no-failfast`）：**找出全部紅**——只把 `MOTRIX_FAILFAST=0`，其餘指令／plugin／指紋完全相同；紅的段多記 `reds` 清單。
+      全綠的 run 本來就不可能被 failfast 截斷（執行題數＝收集題數）⇒ 無 failfast 的全綠與有 failfast 的全綠是同一份證據，照舊可被沿用；有紅照舊不沿用。
     回 (exit code, 是否寫了紀錄, 說明)。`runner(cmd, cwd, env)` 供測試注入（回 returncode）。"""
     import tempfile
     python = python or sys.executable
@@ -282,6 +307,12 @@ def run_stage(repo, stage, records, python=None, runner=None, workers=None, note
     env["PYTHONPATH"] = os.pathsep.join([str(repo / "tools" / "platform")] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
     env.update({"MOTRIX_FAIL_STREAM_STAGE": stage, "MOTRIX_FAILFAST": "1", "MOTRIX_FAILFAST_N": "10", "MOTRIX_FAILFAST_QUIET_MIN": "3",
                 "MOTRIX_FAILFIRST": "1", "MOTRIX_FAILFIRST_BASE": "auto"})
+    fs_dir = None
+    if no_failfast:
+        env["MOTRIX_FAILFAST"] = "0"
+        fs_dir = base + "-failstream"                                  # 讀回這一輪的紅清單：fail_stream 寫到這個專用目錄
+        env["MOTRIX_FAIL_STREAM_DIR"] = fs_dir
+        env["MOTRIX_FAIL_STREAM_RUN"] = "runstage-%s-%s" % (stage, datetime.now().strftime("%H%M%S"))
     note("[run-stage] %s：%s" % (stage, " ".join(cmd)))
     if runner is None:
         rc = subprocess.run(cmd, cwd=str(backend), env=env).returncode
@@ -291,8 +322,12 @@ def run_stage(repo, stage, records, python=None, runner=None, workers=None, note
     if not fp0 or fp0 != fp1:
         return rc, False, "不寫紀錄：%s" % ("開跑時工作樹不乾淨（含未追蹤檔）" if not fp0 else "跑到一半指紋變了（HEAD／工作樹／環境）")
     commit = _git(repo, "rev-parse", "--short", "HEAD").strip()
-    record(records, fp1, False, commit, stages={stage: stage_entry(rc == 0)}, source="standalone")
-    return rc, True, "已記錄：%s=%s（建包同指紋、同一天、%d 小時內會沿用）" % (stage, "綠" if rc == 0 else "紅", MAX_HOURS)
+    reds = collect_reds(fs_dir) if (no_failfast and rc != 0 and fs_dir) else None
+    record(records, fp1, False, commit, stages={stage: stage_entry(rc == 0, reds=reds, failfast=False if no_failfast else None)}, source="standalone")
+    extra = ""
+    if reds:
+        extra = "；紅 %d 題（無 failfast，全部列出）：%s" % (len(reds), "、".join(reds[:20]) + ("…" if len(reds) > 20 else ""))
+    return rc, True, "已記錄：%s=%s（建包同指紋、同一天、%d 小時內會沿用）%s" % (stage, "綠" if rc == 0 else "紅", MAX_HOURS, extra)
 
 
 def find_reusable(records, fp, now, max_hours=MAX_HOURS):
@@ -391,10 +426,14 @@ def record(records, fp, green, commit, stages=None, source=None):
     _append(records, line)
 
 
-def stage_entry(green, tested_at=None, flaky=None):
+def stage_entry(green, tested_at=None, flaky=None, reds=None, failfast=None):
     e = {"green": bool(green), "tested_at": tested_at or datetime.now().strftime(TS_FMT)}
     if flaky:
         e["flaky_retried"] = list(flaky)
+    if reds:
+        e["reds"] = list(reds)                       # 無 failfast 跑完的紅題清單（只供人看；紅的段不會被沿用）
+    if failfast is False:
+        e["failfast"] = False                        # 這一段是『找出全部紅』模式跑的；全綠時與有 failfast 的全綠是同一份證據（failfast 截不到全綠的 run）
     return e
 
 
@@ -471,6 +510,7 @@ def main(argv=None):
     rn.add_argument("--stage", required=True, choices=STAGES)
     rn.add_argument("--records")
     rn.add_argument("--workers", type=int)
+    rn.add_argument("--no-failfast", action="store_true", help="找出全部紅（只關 failfast，其餘同正式指令）；紅的段記 reds 清單")
     ex = sub.add_parser("explain", help="為什麼這一段沒被沿用／同一份東西為何跑兩次（唯讀診斷）")
     ex.add_argument("--records")
     ex.add_argument("--last", type=int, default=12)
@@ -499,7 +539,7 @@ def main(argv=None):
             remember_parts(default_records(repo), fp, comps)      # 診斷旁表（只存元件雜湊）；寫不進去不影響指紋
         print(json.dumps({"fingerprint": fp, "components": comps}))
     elif a.cmd == "run-stage":
-        rc, wrote, why = run_stage(repo, a.stage, a.records or default_records(repo), workers=a.workers)
+        rc, wrote, why = run_stage(repo, a.stage, a.records or default_records(repo), workers=a.workers, no_failfast=a.no_failfast)
         print("[run-stage] " + why)
         return rc
     elif a.cmd == "explain":
