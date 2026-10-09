@@ -239,6 +239,21 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 契約版本 | 1（2026-10-08） |
 | 守門 | `backend/modules/payroll/tests/test_payslip_links_t46.py` |
 
+## IP-115　`dispatch.by_person`：外包名冊人員 → 他的派發（M04 外包工班 → M07 薪資獎金勞報單頁；暫定號，列車定號；2026-10-09，第48班）
+
+勞報單表單選了名冊人員後，要列出他被排進的派發供勾選；薪資獎金不 import 外包工班，改經 registry 取用。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M04 外包工班：`modules/subcontract/api/dispatch_payslip_links.py::dispatches_for_person` |
+| 使用方 | M07 薪資獎金：`modules/payroll/api/payslip_links.py`（`GET /api/payslip-person-dispatches`） |
+| 形式 | provider，單一提供者（名稱 `subcontract`） |
+| 語法 | 提供：`("dispatch.by_person", "subcontract"): dispatch_payslip_links.dispatches_for_person`；取用：`registry.single_provider("dispatch.by_person")` ⇒ `fn(conn, contractor_id)` |
+| 回傳 | `[{id, docCode, quoteNo, status, vendorName, dispatchDate}]`（新到舊，上限 200）；**不含金額** |
+| 對方不在時 | 提供者不在 ⇒ 勞報單頁明說「外包工班模組未安裝」，不能依人勾選 |
+| 契約版本 | 1（2026-10-09）；`dispatch.brief`（IP-113）同日加欄位 `personnelIds`、`dispatchDate`（加法） |
+| 守門 | `backend/modules/payroll/tests/test_payslip_person_link_t48.py` |
+
 ## IP-114　`contractor_voucher.planned_changed`：承攬商匯款預定付款日變動後對齊行事曆（M04 外包工班 → M05 出納；暫定號，列車定號；2026-10-08，第47班 paydate-l1）
 
 出納改承攬商匯款的預定付款日（`PATCH /api/cashier/payable-queue/{voucher_no}/planned-pay-date`）commit 之後，要依現況對齊行事曆「付款待辦」事件；出納不 import 外包工班，改經 registry 取用。

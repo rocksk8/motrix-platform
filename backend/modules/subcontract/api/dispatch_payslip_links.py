@@ -4,6 +4,8 @@
 🔴 Q9：派發頁的使用者不一定是最高管理者 ⇒ 只回**單號、狀態、受領人姓名、開單日期、已作廢旗標**，**沒有金額、扣繳、身分資料、銀行帳號**；
 `canOpen`＝呼叫者是最高管理者（頁面據此決定連結可不可點）。新增／解除連結＝最高管理者＋勞報單模組（同勞報單）。
 M04 不 import M07：只經 registry 提供者。"""
+import json
+
 from fastapi import APIRouter, Body, Header, HTTPException
 
 from core import registry
@@ -38,9 +40,18 @@ def list_payslip_links(did: int, authorization: str = Header(None)):
         if prov is None:
             return {"available": False, "notice": PAYROLL_MISSING, "items": [], "canOpen": False, "canEdit": False}
         items = prov.links_for_dispatch(conn, did)
+        by_person, unconfirmed = [], 0
+        ids = _personnel_ids(conn.execute("SELECT personnel_json FROM contractor_dispatches WHERE id=?", (did,)).fetchone()["personnel_json"])
+        if ids and hasattr(prov, "payslips_for_contractors"):                   # 第 48 班：依「人」顯示該派發人員的已確認勞報單（無金額；舊單名稱推測未確認的只給數字）
+            linked = {i["slipNo"] for i in items}
+            same_case = [r["id"] for r in conn.execute("SELECT id FROM contractor_dispatches WHERE quote_no=?", (row["quote_no"],)).fetchall()] if row["quote_no"] else [did]      # 沒有案號的派發：「同案」只剩它自己（不可退化成所有沒案號的派發）
+            res = prov.payslips_for_contractors(conn, ids, same_case)                  # 只限連到「同一案件的派發」的勞報單（不跨案揭露）
+            by_person = [x for x in res["items"] if x["slipNo"] not in linked]
+            unconfirmed = res["unconfirmedCount"] if _can_open(user) else 0            # 待確認張數只給最高管理者（API 層強制）
     finally:
         conn.close()
-    return {"available": True, "notice": "", "items": items, "canOpen": _can_open(user), "canEdit": _can_open(user)}
+    return {"available": True, "notice": "", "items": items, "byPerson": by_person, "unconfirmedCount": unconfirmed,
+            "canOpen": _can_open(user), "canEdit": _can_open(user)}
 
 
 def _guard_edit(user):
@@ -93,10 +104,46 @@ def remove_payslip_link(did: int, slip_no: str, authorization: str = Header(None
     return {"ok": True, **res}
 
 
+def _personnel_ids(raw) -> list:
+    """派發 `personnel_json`（[{id, name, amount, note}]）裡的外包名冊人員 id（int、去重、保序）。壞 JSON ⇒ []。"""
+    try:
+        arr = json.loads(raw or "[]")
+    except (TypeError, ValueError):
+        return []
+    out = []
+    for p in arr if isinstance(arr, list) else []:
+        try:
+            v = int((p or {}).get("id"))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if v not in out:
+            out.append(v)
+    return out
+
+
+def dispatches_for_person(conn, contractor_id, limit=200) -> list:
+    """提供者 `dispatch.by_person`（M04 → M07 勞報單頁；IP-115 暫定）：這位外包名冊人員被排進哪些派發（新到舊）。**不含金額**。"""
+    try:
+        cid = int(contractor_id)
+    except (TypeError, ValueError):
+        return []
+    out = []
+    for r in conn.execute("SELECT d.id, d.doc_code, d.quote_no, d.status, d.dispatch_date, d.personnel_json, v.name AS vendor_name"
+                          " FROM contractor_dispatches d LEFT JOIN vendor_contractors v ON v.id = d.vendor_id"
+                          " WHERE d.personnel_json LIKE ? ORDER BY d.id DESC", ("%" + str(cid) + "%",)).fetchall():
+        if cid in _personnel_ids(r["personnel_json"]):
+            out.append({"id": r["id"], "docCode": r["doc_code"] or "", "quoteNo": r["quote_no"] or "", "status": r["status"] or "",
+                        "vendorName": r["vendor_name"] or "", "dispatchDate": (r["dispatch_date"] or "")[:10]})
+            if len(out) >= limit:
+                break
+    return out
+
+
 def dispatch_brief(conn, dispatch_id):
     """提供者 `dispatch.brief`（M04 → M07 勞報單頁）：派發的簡要識別（編號、單號、案件、狀態、廠商名）；查無 ⇒ None。**不含金額**。"""
-    r = conn.execute("SELECT d.id, d.doc_code, d.quote_no, d.status, v.name AS vendor_name FROM contractor_dispatches d"
+    r = conn.execute("SELECT d.id, d.doc_code, d.quote_no, d.status, d.dispatch_date, d.personnel_json, v.name AS vendor_name FROM contractor_dispatches d"
                      " LEFT JOIN vendor_contractors v ON v.id = d.vendor_id WHERE d.id=?", (int(dispatch_id),)).fetchone()
     if r is None:
         return None
-    return {"id": r["id"], "docCode": r["doc_code"] or "", "quoteNo": r["quote_no"] or "", "status": r["status"] or "", "vendorName": r["vendor_name"] or ""}
+    return {"id": r["id"], "docCode": r["doc_code"] or "", "quoteNo": r["quote_no"] or "", "status": r["status"] or "", "vendorName": r["vendor_name"] or "",
+            "dispatchDate": (r["dispatch_date"] or "")[:10], "personnelIds": _personnel_ids(r["personnel_json"])}

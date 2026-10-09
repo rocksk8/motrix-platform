@@ -227,7 +227,7 @@ def list_payslips(month: Optional[str] = None, contractor_id: Optional[int] = No
            "export_count, created_by, created_at, updated_at, "
            "voided_at, voided_by, void_reason, signed_at, signed_by, "
            "payment_date, voucher_no, paid_by, paid_at, signed_files_json, "
-           "planned_pay_date, approved_at, approved_by "
+           "planned_pay_date, approved_at, approved_by, contractor_guess_id "
            "FROM payslips WHERE 1=1")
     params = []
     if month:
@@ -249,6 +249,42 @@ def list_payslips(month: Optional[str] = None, contractor_id: Optional[int] = No
     return {"items": [dict(r) for r in rows], "total": total}
 
 
+def _person_dispatch_ids(raw, contractor_id, single) -> list:
+    """第 48 班：`dispatchIds` 檢查——整數、去重、至多 50；需要 contractor_id；每張派發必須存在且人員名單含此人（否則 400，整張不建）。"""
+    if raw in (None, "", []):
+        return []
+    if not isinstance(raw, list):
+        raise HTTPException(400, "dispatchIds 必須是派發編號清單")
+    ids = []
+    for x in raw:
+        try:
+            v = int(x)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "派發編號格式不正確：%r" % (x,))
+        if v not in ids and v != single:
+            ids.append(v)
+    if len(ids) > 50:
+        raise HTTPException(400, "一次最多連結 50 張派發")
+    if not ids:
+        return []
+    if not contractor_id:
+        raise HTTPException(400, "依人員連結派發需要先從外包名冊選取受領人（contractor_id）")
+    brief = registry.single_provider("dispatch.brief")
+    if brief is None:
+        raise HTTPException(400, "外包工班模組未安裝，無法連結派發")
+    c = get_db()
+    try:
+        for v in ids:
+            b = brief(c, v)
+            if b is None:
+                raise HTTPException(400, "查無派發 #%s" % v)
+            if int(contractor_id) not in (b.get("personnelIds") or []):
+                raise HTTPException(400, "派發 #%s 的人員名單沒有這位受領人，不能連結" % v)
+    finally:
+        c.close()
+    return ids
+
+
 @router.post("/api/payslips", status_code=201)
 def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     user  = _require_user(authorization, require_superadmin=True, module='payslip')
@@ -259,6 +295,7 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     d.pop("status", None)                  # 稽核 S5：狀態不採用前端送來的值，data_json 也不留（避免 data.status 顯示被偽造的值）
     d.pop("paid_via_remit", None)          # 第46班稽核跟進：只有匯款連結（remit_link）能寫；前端送來的會讓草稿從出納歷史消失、假裝已由匯款付款
     dispatch_id = d.pop("dispatchId", None)                        # 第46班 P3（Q8）：建立時可選填來源派發（不存進單據 data）
+    dispatch_ids = d.pop("dispatchIds", None)                      # 第48班：依「人」一次連結多張派發（需 contractor_id；每張派發的人員名單必須含此人）
     rules = _rules_for_slip(d)            # R1：依開單（給付）日期挑版本；沒有適用版本 ⇒ 400
     if dispatch_id not in (None, ""):
         try:
@@ -268,12 +305,16 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
         _brief = registry.single_provider("dispatch.brief")
         _c = get_db()
         try:
-            if _brief is None or _brief(_c, dispatch_id) is None:
+            _b = _brief(_c, dispatch_id) if _brief is not None else None
+            if _b is None:
                 raise HTTPException(400, "查無來源派發 #%s（或外包工班模組未安裝）" % dispatch_id)
+            if body.contractor_id and int(body.contractor_id) not in (_b.get("personnelIds") or []):      # 第48班：與 dispatchIds 同一條——選了名冊人員就必須在這張派發的人員名單內
+                raise HTTPException(400, "派發 #%s 的人員名單沒有這位受領人，不能連結" % dispatch_id)
         finally:
             _c.close()
     else:
         dispatch_id = None
+    dispatch_ids = _person_dispatch_ids(dispatch_ids, body.contractor_id, dispatch_id)
 
     conn = get_db()
     conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
@@ -340,10 +381,11 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
         conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, ?) "
                      "ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)",
                      (month, seq_no))
-    if dispatch_id is not None:                                     # 與勞報單同一個交易：連結失敗就整張不建
+    if dispatch_id is not None or dispatch_ids:                     # 與勞報單同一個交易：連結失敗就整張不建
         from modules.payroll import payslip_links as _pl
         try:
-            _pl.link(conn, slip_no, dispatch_id, user)
+            for _did in ([dispatch_id] if dispatch_id is not None else []) + dispatch_ids:
+                _pl.link(conn, slip_no, _did, user)
         except _pl.LinkError as e:
             conn.rollback()
             conn.close()
@@ -427,15 +469,20 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
         d["calc"]            = calc
         _freeze_rules(d, rules)
 
+        _ex = conn.execute("SELECT contractor_guess_id, contractor_name FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+        _guess = _ex["contractor_guess_id"] if _ex is not None else None
+        if _guess is not None and (body.contractor_id is not None                                        # 人工選了名冊人員 ⇒ 視為確認，推測作廢
+                                   or (d.get("contractorName", "") or "").strip() != (_ex["contractor_name"] or "").strip()):   # 改了受領人姓名 ⇒ 推測不再適用
+            _guess = None
         conn.execute("""
             UPDATE payslips SET
-              contractor_id=?, contractor_name=?, income_type=?,
+              contractor_guess_id=?, contractor_id=?, contractor_name=?, income_type=?,
               gross_amount=?, tax_withheld=?, nhi_supplement=?, net_amount=?,
               payment_method=?, slip_date=?, status=?, tax_rules_version=?,
               data_json=?, updated_at=?
             WHERE slip_no=?
         """, (
-            body.contractor_id, d.get("contractorName", ""),
+            _guess, body.contractor_id, d.get("contractorName", ""),
             income_type, gross,
             calc["taxWithheld"], calc["nhiSupplement"], calc["netAmount"],
             d.get("paymentMethod", "匯款"), d.get("slipDate", ""),

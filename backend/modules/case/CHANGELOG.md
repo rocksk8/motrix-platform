@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-09（wip/t49-b5-visibility）：case.access 加 allowed（供網路規劃書依案件過濾）；併第49班 strict-bool（W1c-P2）；併 wip/t48-oh25-s3b（s3＋s4／s5／s6，內含 s1／s2／s2b）
+## (next) — 2026-10-09（wip/t49-b5-visibility）：case.access 加 allowed（供網路規劃書依案件過濾）；併第49班 strict-bool（W1c-P2）；併 wip/t48-oh25-s3b（s3＋s4／s5／s6，內含 s1／s2／s2b）；併 2026-10-09(wip/t48-payslip-person-link)
 - IP-12 `case.access` 提供者新增 `allowed(conn, quote_no, user, allow_module=None)`：不丟例外、不關連線的「看得到／看不到」判斷（規則與 `guard` 同一份 `case_access_allowed`）。`case-management-dispatch.js` 對沒有外包名冊權限的 session 不再呼叫 `/api/contractors/selectable`。
 - **（併入）(next) — 2026-10-09（wip/t49-strict-bool；W1c-P2 旗標嚴格解析）**
 - 套用點：叫料／叫料變更／叫料匯款核准的 `cascade`（驗旗標移到取資料庫之前）、報價預覽 `internal`（含成本的內部版）、案件階段 `done`、款項標記收款 `received`（`_validate_receipt_body` 先驗，`_apply_payment_mark` 用 `strict_bool`）、出納／叫料匯款的 `hasFee`（手續費）。旗標只收真布林（`helpers.validation.body_flag`）；JSON 字串 `"false"`／`"0"`／`""` 以前會被當成 true，現在回 422、什麼都不寫。前端本來就送真布林，行為不變。測試：`tests/test_strict_bool_sites_t49.py`。
@@ -13,6 +13,8 @@
 - **稽核 #4 跟進（wip/t48-oh25-s3，48b）**：①組裝——s3 含 b5 的 S5 最新（`overhead_migration_done` 標記寫入者），新增完整切換流程測試（`test_overhead_cutover_t48.py`：report → `recalc --apply --set-mode-v2` → 標記存在 → 伺服器認 v2 → 新報價單用新口徑；反向：v2 沒標記 ⇒ legacy）；②`v2` 時品項金額由數量×單價在伺服器重算（不採用用戶端 `amount`），稅率缺／null／空字串＝5%（前端 `calcTotals` 對齊後端 `quote_tax_type`）；③精算頁殘留的「管理費」字樣（橋接圖標籤、說明文字）全改「管銷分攤」並依口徑顯示，標籤守門新增禁用「管理費」；④設計稿新增 §12（新舊口徑並存的報表註記、`skip_nodata` 單的原始／實際側基礎、重算範圍）。**上線備註（Q10）**：報表的合計／平均會混到新舊兩種口徑（歷史案件不回改，直毛率 40% 為打平點）。
 - **獨立稽核 1d 修正（wip/t48-oh25-s2／s3）**：①`tot.formulaVer`／`overheadPct`／`_legacy`／`_recalc` 戳記只由伺服器蓋（用戶端送的一律丟掉，已結案沿用現值；遷移的 `_legacy` 不因表單存檔遺失）；②切到新口徑只能經 `PUT /api/overhead/settings`，要 `confirm=true` 且 `overhead_migration_done` 標記存在（`overhead_migrate recalc --apply` 寫）；③`v2` 時稅前／稅額／含稅一併由伺服器依品項重算；④`PUT /api/quotations` 的比率驗證／權限檢查提前到開連線與寄簽核通知之前；⑤legacy 模式不憑空長出 `overheadPct`（只在有存值或最高管理者明確改過時才存）；⑥`overheadPct` 列入金額遮罩鍵。
 - **S3（wip/t48-oh25-s2）畫面與精算接上單一規則（口徑開關預設 legacy，畫面與數字不變）**：`quotation-form.html` V3.19——`calcTotals` 改呼叫 `MotrixProfitRules`；`overhead_rule_mode=v2` 時顯示「管銷分攤（直接毛利 N%）」，最高管理者可改比率（偏離預設 ⇒ 橘色警示＋『還原預設』＋存檔二次確認），其他人唯讀；已精算／結案單不重算；複製為新單比率回全域預設（Q8）。`settlement.html`／`settlement_actuals`：管銷依口徑算（v2＝實際毛利×報價單比率、負毛利 0），完結時 summary 蓋 `formulaVer=2`／`overheadPct`（舊口徑不帶）；報價原始側新口徑時帶 `origFormulaVer`／`origOverheadPct`。案件管理頁、結案 PDF（`pdf_gen`）、營運報表 PDF 的「管銷分攤」標籤依口徑顯示（PDF 只在偏離全域預設時印百分比，Q7）。測試：`test_overhead_s3_form_t48.py`（node）、`test_overhead_s3_settlement_t48.py`。
+- **（併入）(next) — 2026-10-09（wip/t48-payslip-person-link）：派發分頁顯示同一人員的勞報單**
+- `case-management.html` 派發卡片的「勞報單」區塊下新增「同一人員的勞報單」（單號、狀態、受領人；無金額；最高管理者可點進、一般人員純文字）。
 
 ## 1.0.164 — 2026-10-09（wip/t48-oh25-s1／s2／s2b）：利潤規則單一來源（S1，零行為變更）＋管銷分攤比率與伺服器把關（S2，新行為預設關；`/api/overhead` 前綴登記於 module.json；s2b＝獨立稽核 1d 修正）
 - `settlement_actuals`：完結比對的管銷分攤、公益金、營業利益、報價原始側後備改呼叫 `helpers.profit_rules`（口徑仍是第 47 班的 10%）。前端 `static/profit-rules.js` 與黃金向量等值測試已備，頁面第 3 步（S3）才改接。設計：`docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
