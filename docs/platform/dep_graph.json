@@ -10880,37 +10880,37 @@
     },
     {
      "func": "approve_case_bonus",
-     "line": 1852,
+     "line": 1879,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/approve"
     },
     {
      "func": "reject_case_bonus",
-     "line": 1920,
+     "line": 1973,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/reject"
     },
     {
      "func": "return_case_bonus",
-     "line": 1948,
+     "line": 2001,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/return"
     },
     {
      "func": "mark_case_bonus_paid",
-     "line": 1980,
+     "line": 2033,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/mark-paid"
     },
     {
      "func": "get_insurance_profiles",
-     "line": 2028,
+     "line": 2081,
      "method": "GET",
      "path": "/api/bonus/insurance"
     },
     {
      "func": "put_insurance_profile",
-     "line": 2072,
+     "line": 2125,
      "method": "PUT",
      "path": "/api/bonus/insurance/{username}"
     }
@@ -10957,6 +10957,7 @@
     "users"
    ],
    "tables_w": [
+    "audit_log",
     "bonus_case_award_edit_log",
     "bonus_case_award_lines",
     "bonus_case_awards",
@@ -19554,355 +19555,355 @@
     },
     {
      "func": "update_work_log",
-     "line": 693,
+     "line": 695,
      "method": "PUT",
      "path": "/api/work-logs/{wid}"
     },
     {
      "func": "delete_work_log",
-     "line": 729,
+     "line": 731,
      "method": "DELETE",
      "path": "/api/work-logs/{wid}"
     },
     {
      "func": "upload_work_log_photos",
-     "line": 756,
+     "line": 758,
      "method": "POST",
      "path": "/api/work-logs/{wid}/photos"
     },
     {
      "func": "delete_work_log_photo",
-     "line": 810,
+     "line": 812,
      "method": "DELETE",
      "path": "/api/work-logs/{wid}/photos/{photo_id}"
     },
     {
      "func": "get_runtime_switches",
-     "line": 984,
+     "line": 986,
      "method": "GET",
      "path": "/api/system/runtime-switches"
     },
     {
      "func": "list_system_modules",
-     "line": 1084,
+     "line": 1086,
      "method": "GET",
      "path": "/api/system/modules"
     },
     {
      "func": "toggle_system_module",
-     "line": 1098,
+     "line": 1100,
      "method": "PUT",
      "path": "/api/system/modules/{key}"
     },
     {
      "func": "module_availability",
-     "line": 1118,
+     "line": 1120,
      "method": "GET",
      "path": "/api/system/modules/availability"
     },
     {
      "func": "unavailable_module_pages",
-     "line": 1130,
+     "line": 1132,
      "method": "GET",
      "path": "/api/system/modules/unavailable-pages"
     },
     {
      "func": "get_bonus_module_status",
-     "line": 1140,
+     "line": 1142,
      "method": "GET",
      "path": "/api/system/bonus-module-status"
     },
     {
      "func": "get_company_profile",
-     "line": 1601,
+     "line": 1603,
      "method": "GET",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "set_company_profile",
-     "line": 1702,
+     "line": 1704,
      "method": "PUT",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "company_setup_status",
-     "line": 1847,
+     "line": 1849,
      "method": "GET",
      "path": "/api/settings/company-setup/status"
     },
     {
      "func": "get_default_payment_terms",
-     "line": 1898,
+     "line": 1900,
      "method": "GET",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "set_default_payment_terms",
-     "line": 1905,
+     "line": 1907,
      "method": "PUT",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "get_edge_path_setting",
-     "line": 1916,
+     "line": 1918,
      "method": "GET",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "set_edge_path_setting",
-     "line": 1927,
+     "line": 1929,
      "method": "PATCH",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "get_pdf_base_path_setting",
-     "line": 1943,
+     "line": 1945,
      "method": "GET",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "set_pdf_base_path_setting",
-     "line": 1951,
+     "line": 1953,
      "method": "PATCH",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "get_webauthn_config",
-     "line": 2035,
+     "line": 2037,
      "method": "GET",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "set_webauthn_config",
-     "line": 2051,
+     "line": 2053,
      "method": "PATCH",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "get_google_quota_setting",
-     "line": 2121,
+     "line": 2123,
      "method": "GET",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "set_google_quota_setting",
-     "line": 2144,
+     "line": 2146,
      "method": "PUT",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "get_storage_locations",
-     "line": 2206,
+     "line": 2208,
      "method": "GET",
      "path": "/api/settings/storage-locations"
     },
     {
      "func": "set_storage_locations",
-     "line": 2216,
+     "line": 2218,
      "method": "PUT",
      "path": "/api/settings/storage-locations"
     },
     {
      "func": "create_storage_location",
-     "line": 2236,
+     "line": 2238,
      "method": "POST",
      "path": "/api/settings/storage-locations/create"
     },
     {
      "func": "get_backup_retention_setting",
-     "line": 2269,
+     "line": 2271,
      "method": "GET",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "set_backup_retention_setting",
-     "line": 2276,
+     "line": 2278,
      "method": "PATCH",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "get_quote_terms_defaults",
-     "line": 2385,
+     "line": 2387,
      "method": "GET",
      "path": "/api/settings/quote-terms-defaults"
     },
     {
      "func": "get_quote_terms_presets",
-     "line": 2396,
+     "line": 2398,
      "method": "GET",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "set_quote_terms_presets",
-     "line": 2403,
+     "line": 2405,
      "method": "PUT",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "get_cloud_backup_target_setting",
-     "line": 2481,
+     "line": 2483,
      "method": "GET",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_pii_archive_status",
-     "line": 2488,
+     "line": 2490,
      "method": "GET",
      "path": "/api/settings/pii-archive-status"
     },
     {
      "func": "set_cloud_backup_target_setting",
-     "line": 2500,
+     "line": 2502,
      "method": "PUT",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_email_notify",
-     "line": 2536,
+     "line": 2538,
      "method": "GET",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "set_email_notify",
-     "line": 2549,
+     "line": 2551,
      "method": "PUT",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "get_google_calendar",
-     "line": 2574,
+     "line": 2576,
      "method": "GET",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "set_google_calendar",
-     "line": 2612,
+     "line": 2614,
      "method": "PUT",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "test_google_calendar",
-     "line": 2638,
+     "line": 2640,
      "method": "POST",
      "path": "/api/settings/google-calendar/test"
     },
     {
      "func": "test_email_notify",
-     "line": 2654,
+     "line": 2656,
      "method": "POST",
      "path": "/api/settings/email-notify/test"
     },
     {
      "func": "get_custom_roles",
-     "line": 2682,
+     "line": 2684,
      "method": "GET",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "create_custom_role",
-     "line": 2688,
+     "line": 2690,
      "method": "POST",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "update_custom_role",
-     "line": 2715,
+     "line": 2717,
      "method": "PUT",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "delete_custom_role",
-     "line": 2739,
+     "line": 2741,
      "method": "DELETE",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "get_schema_status",
-     "line": 2764,
+     "line": 2766,
      "method": "GET",
      "path": "/api/system/schema-status"
     },
     {
      "func": "get_role_labels",
-     "line": 2794,
+     "line": 2796,
      "method": "GET",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "put_role_labels",
-     "line": 2809,
+     "line": 2811,
      "method": "PUT",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "get_webauthn_config_status",
-     "line": 2824,
+     "line": 2826,
      "method": "GET",
      "path": "/api/system/webauthn-config-status"
     },
     {
      "func": "list_online_users",
-     "line": 2857,
+     "line": 2859,
      "method": "GET",
      "path": "/api/online-users"
     },
     {
      "func": "user_activity_stats",
-     "line": 2901,
+     "line": 2903,
      "method": "GET",
      "path": "/api/user-activity"
     },
     {
      "func": "user_activity_trail",
-     "line": 2975,
+     "line": 2977,
      "method": "GET",
      "path": "/api/user-activity/trail"
     },
     {
      "func": "edit_presence_heartbeat",
-     "line": 3110,
+     "line": 3112,
      "method": "POST",
      "path": "/api/edit-presence"
     },
     {
      "func": "edit_presence_release",
-     "line": 3141,
+     "line": 3143,
      "method": "DELETE",
      "path": "/api/edit-presence"
     },
     {
      "func": "case_roles_unmapped",
-     "line": 3157,
+     "line": 3159,
      "method": "GET",
      "path": "/api/system/case-roles-unmapped"
     },
     {
      "func": "get_reminder_send_failures",
-     "line": 3198,
+     "line": 3200,
      "method": "GET",
      "path": "/api/settings/reminder-send-failures"
     },
     {
      "func": "get_branding_asset",
-     "line": 3227,
+     "line": 3229,
      "method": "GET",
      "path": "/api/system/branding/{kind}"
     },
     {
      "func": "get_branding_settings",
-     "line": 3266,
+     "line": 3268,
      "method": "GET",
      "path": "/api/settings/branding"
     },
     {
      "func": "upload_branding_asset",
-     "line": 3275,
+     "line": 3277,
      "method": "PUT",
      "path": "/api/settings/branding/{kind}"
     },
     {
      "func": "reset_branding_asset",
-     "line": 3292,
+     "line": 3294,
      "method": "DELETE",
      "path": "/api/settings/branding/{kind}"
     }
@@ -20179,6 +20180,7 @@
     "mod:case/material_approval",
     "mod:case/material_change",
     "mod:crm/api",
+    "mod:payroll/api/bonus",
     "mod:payroll/api/payslip_approval",
     "plat:migrations",
     "router:approval_queue",

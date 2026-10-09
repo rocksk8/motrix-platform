@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1237,
+  "tests": 1239,
   "unmapped": 13,
   "kinds": {
-   "api": 673,
+   "api": 675,
    "e2e": 299,
    "audit": 154,
    "unit": 111
@@ -10896,6 +10896,35 @@
     ]
    },
    "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_sole_approver_bypass_t52.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/__init__",
+    "mod:payroll/api/bonus",
+    "mod:payroll/bonus_notify",
+    "mod:payroll/tests/test_bonus_case_api_2026_09_24",
+    "mod:payroll/tests/test_bonus_case_multi_approver_tier_2026_09_25"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/api/__init__.py",
+     "backend/modules/payroll/api/bonus.py",
+     "backend/modules/payroll/bonus_notify.py",
+     "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py",
+     "backend/modules/payroll/tests/test_bonus_case_multi_approver_tier_2026_09_25.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
    "module": "payroll"
   },
   "backend/modules/payroll/tests/test_e2e_bank_account_2026_10_01.py": {
@@ -33288,6 +33317,23 @@
      "backend/modules/case/expense_notify.py",
      "backend/modules/tender_radar/",
      "backend/modules/tender_radar/notify.py",
+     "backend/routers/system.py"
+    ]
+   }
+  },
+  "backend/tests/test_work_log_create_target_t52.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "mod:payroll/tests/test_payslip_edit_guard_2026_08_28",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/tests/test_payslip_edit_guard_2026_08_28.py"
+    ],
+    "api": [
      "backend/routers/system.py"
     ]
    }
