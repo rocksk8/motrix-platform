@@ -27,6 +27,7 @@
 📌 2026-10-09 02:36：正式機已更新到 c107fd8f（第四十七班：預定付款日提醒 L1（站內通知＋行事曆「付款待辦」，承攬商匯款／叫料匯款）、採購單廠商收款帳戶（銀行／分行／帳號／戶名；完整帳號只給財務加超管、其餘末四碼、稽核先寫＋no-store）、勞報單送審限真超管（S6 禁自核／S9 作廢已核准限超管）與並發防護、GET /api/users 對非管理員不再給他人 email／phone／modules／notificationMuted（報價人聯絡資料改走 sales-contact）、派發頁勞報單區塊 403 UX、列車預檢與 regen_all 工具；無 migration（schema 維持 118）；正式機 Claude 依步驟檔「自動套用」（使用者已同意）執行 apply_update，28 秒成功、無回滾，步驟 3 十六項全過、職責角色等值關卡 PASS 0 差異）⇒ 基準改 c107fd8f。
 📌 2026-10-09 07:31：正式機已更新到 e526a2ef（第四十八班 48a：使用者管理整合職責角色（R2 第2步：角色／個人扣項／生效權限預覽、舊 PUT 勾到被扣的鍵改回 400、既有使用者權限為空不再預填模板、permission_changes.audit_id 填值）、承攬商匯款建立視窗預定付款日、營業利益規則底座（profit_rules 單一來源＋/api/overhead/settings＋離線重算工具；overhead_rule_mode 預設 legacy＝新行為關、不改任何數字）、供應商紀錄頁防呆、跨午夜日期測試修正；無 migration（schema 維持 118）；正式機 Claude 依步驟檔「自動套用」（使用者已同意）執行 apply_update，13 秒成功、無回滾，步驟 3 十七項全過、職責角色等值關卡 PASS 0 差異）⇒ 基準改 e526a2ef。
 📌 2026-10-09 18:39：正式機已更新到 56d02cdb（第四十九班：端點稽核補強——網路規劃書逐案權限（讀取、匯出、拓樸預覽、個資告知、修改／狀態／匯入／告知確認四個寫入端點）、外包名冊下拉限權、承攬商上次付款帳號限財務、請求旗標嚴格解析（含 8 個簽核端點 cascade、匯款 hasFee）、工作日誌欄位檢查、8 條舊版獎金分潤墓碑端點移除；無 migration（schema 維持 118）；正式機 Claude 依步驟檔「自動套用」執行 apply_update，15 秒成功、無回滾，步驟 3 十七項全過、職責角色等值關卡 PASS 0 差異）⇒ 基準改 56d02cdb。
+📌 2026-10-09 22:57：正式機已更新到 18aed9a3（第五十班：利潤口徑 48b——「淨利」改稱「營業利益」（畫面／PDF／Excel／獎金明細）、報價單拿掉五個間接成本輸入欄、管銷比率欄與伺服器把關／離線遷移工具（口徑開關預設仍是舊口徑，本班不切換）；勞報單人員 ⇄ 派工連動（payroll 模組 migration 5／6，核心 schema 維持 118）；採購單缺廠商收款帳戶擋付款（選用開關預設關）；工作日誌新增／修改／刪除權限收緊；模組路由宣告；正式機 Claude 依步驟檔「自動套用」執行 apply_update，14 秒成功、無回滾，步驟 3 十七項全過、職責角色等值關卡 PASS 0 差異）⇒ 基準改 18aed9a3。
 """
 import json
 import subprocess
@@ -35,7 +36,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "56d02cdb"
+BASELINE = "18aed9a3"
 
 
 def baseline_manifest():
