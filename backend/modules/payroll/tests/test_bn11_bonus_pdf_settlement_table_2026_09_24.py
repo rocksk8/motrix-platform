@@ -90,7 +90,7 @@ def test_bn11_settlement_page_still_carries_every_label_verbatim():
           "**不要為了讓這一題變綠去改 settlement.html 的文案。**")
 
 
-def test_t48_admin_row_label_follows_the_summary_basis():
+def test_admin_row_label_follows_the_summary_basis():
     """第 48 班 S6：管銷分攤列標籤依該案 summary 的口徑戳記——無戳記＝報價稅前 10%；formulaVer 2＝直接毛利 N%（每案百分比）。"""
     base = dict(_SETTLE["summary"])
     for extra, want in (({}, "管銷分攤（報價稅前 10%）"),
