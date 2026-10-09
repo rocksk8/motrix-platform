@@ -72,3 +72,52 @@ def remove_link(slip_no: str, dispatch_id: int, authorization: str = Header(None
         conn.close()
     _audit(_tok(authorization), "payslip.dispatch_unlink", "payslip", slip_no, "%s 解除與派發 #%s 的關聯" % (slip_no, dispatch_id))
     return {"ok": True, **res}
+
+
+@router.get("/api/payslip-person-dispatches")
+def person_dispatches(contractor_id: int, authorization: str = Header(None)):
+    """第 48 班：這位外包名冊人員被排進哪些派發（勞報單表單勾選用）。最高管理者＋勞報單模組；**不含金額**。"""
+    _require_user(authorization, require_superadmin=True, module="payslip")
+    fn = registry.single_provider("dispatch.by_person")
+    if fn is None:
+        return {"items": [], "notice": DISPATCH_MISSING}
+    conn = get_db()
+    try:
+        items = fn(conn, contractor_id)
+    finally:
+        conn.close()
+    return {"items": items, "notice": ""}
+
+
+@router.post("/api/payslips/{slip_no}/confirm-contractor")
+def confirm_contractor(slip_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """第 48 班：確認舊勞報單「靠姓名推測」的外包名冊對應——把 `contractor_guess_id`（或 body.contractorId 指定的人）升格成權威的 `contractor_id`。
+    只有最高管理者＋勞報單模組。已簽回／已付款／已作廢的單不給確認（升格會改變已入帳分錄的對象鍵）。單一條件式 UPDATE（競態安全）；稽核。"""
+    user = _require_user(authorization, require_superadmin=True, module="payslip")
+    new_id = (body or {}).get("contractorId")
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT contractor_id, contractor_guess_id, status FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "找不到此勞報單")
+        if row["contractor_guess_id"] is None or row["contractor_id"] is not None:
+            raise HTTPException(409, "這張勞報單沒有待確認的受領人對應")
+        if (row["status"] or "") in ("已簽回", "已付款", "已作廢"):
+            raise HTTPException(409, "已簽回／已付款／已作廢的勞報單不能確認對應（會改變已入帳分錄的對象）")
+        cid = row["contractor_guess_id"]
+        if new_id not in (None, ""):
+            try:
+                cid = int(new_id)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "contractorId 格式不正確")
+            if conn.execute("SELECT 1 FROM contractors WHERE id=?", (cid,)).fetchone() is None:
+                raise HTTPException(404, "外包名冊沒有這位人員")
+        cur = conn.execute("UPDATE payslips SET contractor_id=?, contractor_guess_id=NULL WHERE slip_no=? AND contractor_id IS NULL"
+                           " AND contractor_guess_id IS NOT NULL AND status NOT IN ('已簽回','已付款','已作廢')", (cid, slip_no))
+        if cur.rowcount != 1:
+            raise HTTPException(409, "勞報單剛被改變，請重新整理後再試")
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "payslip.confirm_contractor", "payslip", slip_no, "%s 確認受領人對應（名冊 #%s）" % (slip_no, cid))
+    return {"ok": True, "contractorId": cid}

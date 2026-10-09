@@ -129,6 +129,8 @@
                   <div style="width:28px;height:28px;border-radius:50%;background:#0EA5E9;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0"
                        x-text="(p.contractor_name||'?')[0]"></div>
                   <span x-text="p.contractor_name || '—'"></span>
+                  <span x-show="p.contractor_guess_id != null && p.contractor_id == null" data-testid="ps-unconfirmed-badge" title="這張舊勞報單是用姓名推測對應到外包名冊，尚未確認；確認前不會自動顯示在派工頁"
+                        style="font-size:10px;padding:1px 6px;border-radius:8px;background:#FEF3C7;color:#92400E;white-space:nowrap">身分待確認</span>
                 </div>
               </td>
               <td><span class="itype" x-text="p.income_type"></span></td>
@@ -177,6 +179,8 @@
             <span class="tag" :class="statusCls(selectedSlip.status)"
                   x-text="selectedSlip.status"></span>
             <span class="itype" x-text="selectedSlip.income_type"></span>
+            <button x-show="selectedSlip.contractor_guess_id != null && selectedSlip.contractor_id == null && ['已簽回','已付款','已作廢'].indexOf(selectedSlip.status) < 0" data-testid="ps-confirm-contractor" @click.stop="confirmContractor(selectedSlip)"
+                    style="font-size:11px;padding:2px 8px;border:1px solid #D97706;border-radius:6px;background:#FFFBEB;color:#92400E;cursor:pointer">確認受領人對應</button>
           </div>
         </div>
         <button class="detail-close" @click="selectedId=null;selectedSlip=null">×</button>
@@ -491,6 +495,16 @@ function payslipsPage() {
         alert('此頁面僅限最高權限使用者或具有「勞報單」模組授權的使用者存取'); window.history.back(); return
       }
       await this.load()
+    },
+
+    async confirmContractor(p) {
+      if (!confirm('確認這張勞報單的受領人（' + (p.contractor_name || '') + '）就是外包名冊中對應的那一位？確認後會出現在該人員的派工頁。')) return
+      try {
+        const r = await fetch(`${API}/payslips/${encodeURIComponent(p.slip_no)}/confirm-contractor`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: '{}' })
+        if (!r.ok) { let m = ''; try { m = (await r.json()).detail } catch (e) {} ; alert(m || ('確認失敗（HTTP ' + r.status + '）')); return }
+        await this.load()
+      } catch (e) { alert('確認失敗') }
     },
 
     async load() {
