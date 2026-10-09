@@ -77,16 +77,36 @@ def fail_incomplete_modules(main_db_path, demo_db_path=None) -> dict:
     return {"offline": offline, "demo_absent": demo}
 
 
+def _pattern_hit(pattern: str, path: str) -> bool:
+    """`routes` 明列寫法：完整路徑（可含 `{參數}`＝一段非斜線），或結尾 `/*`＝本身與整棵子樹。"""
+    if pattern.endswith("/*"):
+        base = pattern[:-2]
+        return path == base or path.startswith(base + "/")
+    if "{" in pattern:
+        import re
+        rx = "".join("[^/]+" if part.startswith("{") else re.escape(part) for part in re.split(r"(\{[^}]*\})", pattern) if part)
+        return re.fullmatch(rx, path) is not None
+    return path == pattern
+
+
 def demo_absent_reason(path: str):
     """demo 模式的請求路徑 ⇒ 該模組缺席的原因（字串），不是 demo 缺席模組的前綴 ⇒ None。
-    前綴取已載入模組 module.json 的 `provides.api_prefixes`（完全相同或其下的路徑）。只在 demo 模式呼叫（main.py auth middleware）。"""
+    比對來源：已載入模組 module.json 的 `provides.api_prefixes`（完全相同或其下的路徑）與 `provides.routes`（明列的個別路由，可含 `{參數}`、結尾 `/*`；
+    第49班 W1c-P4：例如 netplan 的 `/api/quotations/{quote_no}/network-plan` 落在 case 的 `/api/quotations` 前綴底下，不明列就會被算成 case 的）。
+    多個模組都吃得到時取**最具體**（最長）的那個。只在 demo 模式呼叫（main.py auth middleware）。"""
     if not _DEMO_ABSENT:
         return None
+    best, best_len = None, -1
     for m in _registry.loaded():
         why = _DEMO_ABSENT.get(m.key)
         if not why:
             continue
-        for p in ((m.manifest or {}).get("provides") or {}).get("api_prefixes") or []:
+        prov = (m.manifest or {}).get("provides") or {}
+        for p in prov.get("api_prefixes") or []:
             if path == p or path.startswith(p.rstrip("/") + "/"):
-                return why
-    return None
+                if len(p) > best_len:
+                    best, best_len = why, len(p)
+        for r in prov.get("routes") or []:
+            if _pattern_hit(r, path) and len(r) > best_len:
+                best, best_len = why, len(r)
+    return best

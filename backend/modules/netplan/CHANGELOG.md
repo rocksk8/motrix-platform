@@ -1,5 +1,8 @@
 # 網路規劃 更新紀錄
 
+## (next) — 2026-10-09（wip/t49-strict-bool；W1c-P4）
+- `module.json` `provides.routes` 明列 `/api/quotations/{quote_no}/network-plan`（`modules.json` M10 本來就有）：它落在案件模組的 `/api/quotations` 前綴底下，demo 缺席訊息原本會把它算成案件的。行為只影響 demo 缺席提示；沒有端點／權限變更。
+
 ## 1.0.7 — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
 - 匯出規則（使用者 2026-09-30）：網路規劃 Excel／PDF 匯出每次寫稽核（`export.xlsx`／`export.pdf`）。
 

@@ -604,6 +604,9 @@
     "expense_categories",
     "gl_dimensions"
    ],
+   "routes": [
+    "/api/expense-categories"
+   ],
    "api_prefixes": [
     "/api/account-items",
     "/api/reports",
