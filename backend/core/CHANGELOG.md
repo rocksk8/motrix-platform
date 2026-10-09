@@ -5,6 +5,8 @@
 ## (next) — 2026-10-09（wip/t48-w1c-fixes；端點稽核 W1c）
 - **L1 新增（向下相容）`helpers/validation.py`（第 49 班 W1c-P2）**：`strict_bool(value, field)`、`body_flag(body, key, default=False)`——請求本文的布林旗標只收真布林（或 0／1），字串 `"false"`／`"0"`／`""`、list、dict、其他整數 ⇒ 422；沒帶或 JSON null ⇒ default。原因：各處 `bool(body.get(...))`／`1 if body.get(...) else 0` 把 JSON 字串 `"false"` 當 true，關卡（確認旗標、`accept_warnings`、緊急開關…）可被多帶一個引號繞過。守門：`tests/platform/test_no_truthy_request_flags.py`（ast 掃端點檔，含正對照／反對照）。
 - 套用點（行為修正，真布林不變）：`routers` 無；各模組見其 CHANGELOG（accounting／case／payroll／subcontract／tender_radar）。測試：`tests/test_strict_bool_helper_t49.py`、`tests/test_strict_bool_sites_t49.py`。
+- **工作日誌權限（W1c-P5，權限相關）**：`POST／PUT／DELETE /api/work-logs` 補上與 `GET` 同一把模組鑰匙（`work_log` 或 `case_manage`；原本寫入只要登入）；`PUT` 的 `user_id`（記錄對象）只有最高管理者能改為不同的人（本人與管理員 ⇒ 403；送回同一個值不算改，畫面編輯視窗每次都會帶）。測試：`tests/test_work_log_permissions_t49.py`。
+- **demo 缺席訊息涵蓋明列路由（W1c-P4）**：`helpers/module_startup.demo_absent_reason` 除 `provides.api_prefixes` 外也吃 `provides.routes`（可含 `{參數}`、結尾 `/*`），多個模組都吃得到時取最具體（最長）的；`tools/platform/dep_scan` 的 module.json ⇄ modules.json 一致性加比 `routes`。新守門 `tests/platform/test_module_routes_declared.py`：執行中 app 的每條模組路由都要在自己模組的 api_prefixes／routes 底下。
 - L1 行為修正（不新增、不移除介面）：`POST／PUT /api/work-logs` 的欄位型別與範圍檢查——`hours` 非數字／負數／超過 1000、`content` 非字串或空白、`log_date` 非 YYYY-MM-DD、`user_id` 不存在、`case_no`／`contact_type` 非字串 ⇒ 4xx（原本 `float("abc")`、`.strip()` 打在非字串是 500，`PUT` 與不存在的 `user_id` 則直接把壞值寫進庫）。正常值與前端送的內容不受影響；缺欄位與空白內容維持原本的 400。權限不變。測試：`tests/test_work_log_validation_w1c_2026_10_09.py`。
 
 ## 1.120 — 2026-10-09（wip/t48-oh25-s1：利潤規則單一來源，L1 新增 helpers/profit_rules）
