@@ -158,11 +158,24 @@
 
         <div x-show="isNew" data-testid="ps-person-dispatch-box" style="margin-bottom:10px">
           <div x-show="q.contractorId && personDispatches.length" style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;background:var(--bg-sub,#F9FAFB)">
-            <div style="font-size:12px;font-weight:600;margin-bottom:4px">這位人員的派工（勾選後，建立勞報單時一併關聯）</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+              <span style="font-size:12px;font-weight:600">這位人員的派工（已預設勾選還沒連過勞報單的；建立勞報單時一併關聯）</span>
+              <button type="button" class="btn btn-ghost btn-sm" data-testid="ps-fill-from-dispatch" @click="fillFromPicked()" style="padding:2px 8px;font-size:12px">帶入勾選的派工</button>
+              <span x-show="personDispatchFillMsg" data-testid="ps-fill-msg" style="font-size:11px;color:var(--text-dim)" x-text="personDispatchFillMsg"></span>
+            </div>
             <template x-for="d in personDispatches" :key="d.id">
-              <label style="display:flex;gap:6px;align-items:center;font-size:12px;padding:2px 0;cursor:pointer">
-                <input type="checkbox" :value="d.id" x-model.number="pickedDispatchIds" :data-testid="'ps-pick-dispatch-' + d.id" style="width:auto" @change="dirty()">
-                <span x-text="'#' + d.id + (d.docCode ? '　' + d.docCode : '') + '　' + (d.quoteNo || '') + '　' + (d.vendorName || '') + '　' + (d.dispatchDate || '') + '　' + (d.status || '')"></span>
+              <label style="display:flex;gap:6px;align-items:flex-start;font-size:12px;padding:3px 0;cursor:pointer" :data-testid="'ps-dispatch-row-' + d.id">
+                <input type="checkbox" :value="d.id" x-model.number="pickedDispatchIds" :data-testid="'ps-pick-dispatch-' + d.id" style="width:auto;margin-top:2px" @change="dirty()">
+                <span style="flex:1">
+                  <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                    <span :data-testid="'ps-dispatch-chip-' + d.id" :style="dispatchChipStyle(d.status)" style="padding:0 6px;border-radius:8px;font-size:11px;font-weight:600" x-text="dispatchStatusLabel(d.status)"></span>
+                    <b x-text="d.docCode || ('#' + d.id)"></b>
+                    <span x-show="d.caseVisible && (d.projectName || d.customerName)" x-text="[d.projectName, d.customerName ? '（' + d.customerName + '）' : ''].join('')"></span>
+                    <span x-show="d.caseVisible && d.quoteNo" style="color:var(--text-dim)" x-text="d.quoteNo"></span>
+                    <span x-show="d.linkedForThisPerson" :data-testid="'ps-dispatch-linked-' + d.id" style="color:#B45309">已有勞報單</span>
+                  </span>
+                  <span style="display:block;color:var(--text-dim)" x-text="[d.vendorName, d.scope, d.itemsSummary, d.dispatchDate].filter(Boolean).join('　')"></span>
+                </span>
               </label>
             </template>
           </div>
@@ -557,6 +570,7 @@ function payslipForm() {
     personDispatches: [],          // 第48班：選了名冊人員後，該人被排進的派發（勾選後建立時一併連結；不含金額）
     pickedDispatchIds: [],
     personDispatchNotice: '',
+    personDispatchFillMsg: '',
     loadingIdCard: false,
     previewModal: false,
     previewBlobUrl: '',
@@ -695,13 +709,59 @@ function payslipForm() {
     },
 
     async loadPersonDispatches(cid) {
-      this.personDispatches = []; this.pickedDispatchIds = []; this.personDispatchNotice = ''
+      this.personDispatches = []; this.pickedDispatchIds = []; this.personDispatchNotice = ''; this.personDispatchFillMsg = ''
       if (!this.isNew || !cid) return
       try {
         const r = await fetch(`${API}/payslip-person-dispatches?contractor_id=${cid}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
-        if (r.ok) { const b = await r.json(); this.personDispatches = b.items || []; this.personDispatchNotice = b.notice || '' }
+        if (r.ok) {
+          const b = await r.json(); this.personDispatches = b.items || []; this.personDispatchNotice = b.notice || ''
+          this.pickedDispatchIds = this.personDispatches.filter(d => !d.linkedForThisPerson).map(d => d.id)      // 第 51 班：預設勾選還沒連過這位人員勞報單的派工
+        }
         else this.personDispatchNotice = '無法讀取這位人員的派工（HTTP ' + r.status + '）'
       } catch (e) { this.personDispatchNotice = '無法讀取這位人員的派工' }
+    },
+
+    dispatchStatusLabel(s) {
+      return ({ sent: '已送出', confirmed: '已確認', pending_acceptance: '待驗收', accepted: '已驗收', completed: '已完成' })[s] || s || ''
+    },
+    dispatchChipStyle(s) {
+      const c = ({ sent: ['#DBEAFE', '#1E40AF'], confirmed: ['#CFFAFE', '#155E75'], pending_acceptance: ['#FEF3C7', '#92400E'],
+                   accepted: ['#EDE9FE', '#5B21B6'], completed: ['#DCFCE7', '#166534'] })[s] || ['#E5E7EB', '#374151']
+      return 'background:' + c[0] + ';color:' + c[1]
+    },
+
+    // 第 51 班：把勾選的派工帶進表單——只填『目前是空的』欄位（不覆蓋使用者已經打的）；不碰金額、不碰受領人資料
+    fillFromPicked() {
+      const rows = this.personDispatches.filter(d => this.pickedDispatchIds.map(Number).includes(d.id))
+      if (!rows.length) { this.personDispatchFillMsg = '請先勾選要帶入的派工'; return }
+      const filled = [], kept = []
+      const put = (key, label, val) => {
+        if (!val) return
+        if ((this.q[key] || '').toString().trim()) { kept.push(label); return }
+        this.q[key] = val; filled.push(label)
+      }
+      const content = rows.map(d => (d.caseVisible && d.projectName ? d.projectName : '') + ((d.scope || d.itemsSummary) ? (d.caseVisible && d.projectName ? ' ' : '') + (d.scope || d.itemsSummary) : '') || ('派工 ' + (d.docCode || ('#' + d.id)))).join('；')
+      put('serviceContent', '工作內容', content)
+      const dates = rows.map(d => d.dispatchDate).filter(Boolean).sort()
+      if (dates.length) { put('serviceStartDate', '服務起日', dates[0]); put('serviceEndDate', '服務迄日', dates[dates.length - 1]) }
+      const remark = '派工單：' + rows.map(d => d.docCode || ('#' + d.id)).join('、') + (rows.some(d => d.caseVisible && d.quoteNo) ? '；案號：' + [...new Set(rows.filter(d => d.caseVisible && d.quoteNo).map(d => d.quoteNo))].join('、') : '')
+      put('remarks', '備註', remark)
+      if (filled.length) this.dirty()
+      this.personDispatchFillMsg = (filled.length ? '已帶入：' + filled.join('、') : '沒有可帶入的空欄位') + (kept.length ? '（' + kept.join('、') + ' 已有內容，沒覆蓋）' : '')
+    },
+
+    // 第 51 班：從派發頁「新增勞報單」（?dispatchId=）進來——派發名單剛好只有一位外包名冊人員 ⇒ 直接選他（其餘情況維持手動選人）
+    async prefillFromDispatchParam() {
+      const did = parseInt(new URLSearchParams(window.location.search).get('dispatchId'), 10)
+      if (!this.isNew || !did || this.q.contractorId) return
+      try {
+        const r = await fetch(`${API}/payslip-person-dispatches/by-dispatch?dispatch_id=${did}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) return
+        const persons = (await r.json()).persons || []
+        if (persons.length !== 1) return
+        const c = this.contractors.find(x => x.id === persons[0].id)
+        if (c) await this.selectCon(c)
+      } catch (e) {}
     },
 
     async selectCon(c) {
@@ -824,6 +884,7 @@ function payslipForm() {
         } catch(e) {}
       }
 
+      await this.prefillFromDispatchParam()   // 第 51 班：?dispatchId= 且名單只有一位名冊人員 ⇒ 預選受領人
       await this.onSlipDateChange()   // 新單：套用開單日期的版本；既有單：只比對、顯示差異
       this.calc()
     },
