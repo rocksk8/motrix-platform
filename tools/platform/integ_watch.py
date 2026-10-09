@@ -24,6 +24,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 
+import nowindow  # noqa: E402
+
 OUT = REPO / "tools" / "platform" / "full_results" / "integ_watch"
 DEBOUNCE_SEC = 60
 MIN_FREE_GB = 4.0
@@ -131,4 +133,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    nowindow.install()                                   # 入口先裝（背景執行不彈主控台視窗）
     sys.exit(main())

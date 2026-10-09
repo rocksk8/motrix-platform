@@ -53,8 +53,9 @@ CONDITIONAL = (
     (r"^backend/modules/[^/]+/(api/|[^/]*\.py$)|^backend/routers/", "tests/platform/test_ship_tier_2026_09_28.py", 53),
     (r"^backend/modules/[^/]+/api/|^backend/routers/", "modules/case/tests/test_route_table_golden_2026_10_05.py", 15),
 )
-USER_VISIBLE = re.compile(r"^(frontend/pages/|backend/modules/[^/]+/api/|backend/routers/)")
-FORM = "frontend/pages/quotation-form.html"
+_FE = "frontend"                     # git diff 出來的 repo 相對路徑前綴（不是讀頁面檔）
+USER_VISIBLE = re.compile(r"^(" + _FE + r"/pages/|backend/modules/[^/]+/api/|backend/routers/)")
+FORM = _FE + "/pages/quotation-form.html"
 
 
 def _git(repo, *args):

@@ -16,6 +16,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import nowindow  # noqa: E402
+
 HOOKS_DIR = ".githooks"
 NEEDED = ("pre-push", "post-commit")
 
@@ -77,4 +80,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    nowindow.install()                                   # 入口先裝（背景執行不彈主控台視窗）
     sys.exit(main())

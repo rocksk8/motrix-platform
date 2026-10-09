@@ -27,6 +27,7 @@ def _load(name):
 
 
 PP = _load("prepush_check")
+_FE = "frontend"          # git diff 的 repo 相對路徑前綴（合成輸入，不讀頁面檔）
 SETUP = _load("setup_prepush")
 IW = _load("integ_watch")
 TP = PP.TP
@@ -57,9 +58,9 @@ def test_integration_mode_asks_for_fresh_generated_files_check_only(monkeypatch)
 
 
 def test_warning_only_for_user_visible_changes_without_a_manifest_entry():
-    assert PP.warnings(["frontend/pages/x.html"])
+    assert PP.warnings([_FE + "/pages/x.html"])
     assert PP.warnings(["backend/modules/case/api/a.py"])
-    assert not PP.warnings(["frontend/pages/x.html", "backend/version_manifest.json"])
+    assert not PP.warnings([_FE + "/pages/x.html", "backend/version_manifest.json"])
     assert not PP.warnings(["backend/modules/case/tests/test_a.py", "docs/x.md"])
 
 
