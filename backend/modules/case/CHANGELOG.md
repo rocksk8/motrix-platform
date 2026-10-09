@@ -13,6 +13,13 @@
 - **（併入）(next) — 2026-10-09（wip/t49-b5-visibility）：case.access 加 allowed（供網路規劃書依案件過濾）；併第49班 strict-bool（W1c-P2）；併 wip/t48-oh25-s3b（s3＋s4／s5／s6，內含 s1／s2／s2b）；併 2026-10-09(wip/t48-payslip-person-link)**
 - **（併入）(next) — 2026-10-09（wip/t48-payslip-person-link）：派發分頁顯示同一人員的勞報單**
 - `case-management.html` 派發卡片的「勞報單」區塊下新增「同一人員的勞報單」（單號、狀態、受領人；無金額；最高管理者可點進、一般人員純文字）。
+- **（併入）(next) — 2026-10-09（wip/t49-b5-visibility）：case.access 加 allowed（供網路規劃書依案件過濾）；併第49班 strict-bool（W1c-P2）；併 wip/t48-oh25-s3b（s3＋s4／s5／s6，內含 s1／s2／s2b）；併 2026-10-09(wip/t48-payslip-person-link)；併 2026-10-09(wip/t48-po-bank-block)**
+- **（併入）(next) — 2026-10-09（wip/t48-po-bank-block）：新採購單缺廠商收款帳戶 ⇒ 擋出納登錄付款（預設關；含日期端點繞道）**
+- 使用者 Q2：只對『切換時間點之後建立』的採購單（收款人是廠商、銀行名稱或帳號任一為空）擋付款；舊單、其他單據類型、員工收款人完全不受影響。開關 `system_settings.po_bank_block_since`（缺／空＝關閉，預設）。
+- `payables._Payables.mark_paid`：符合規則 ⇒ 409「缺廠商收款帳戶…」（沒寫任何東西）；`pending` 每列新增 `blocked`／`blockReason`（原有 `payeeNote` 警示照舊）；`cashier.html` 顯示紅字原因並停用『登錄付款』。
+- 新增 `GET /api/extra-expenses/po-bank-block`（財務角色／最高管理者：開關、切換時間點、目前被擋張數）與 `PUT`（只有最高管理者：`{"enabled": true[, "since": "本地時間"]}`／`{"enabled": false}`；每次變更稽核 `settings.po_bank_block.update`）。補資料走第 47 班既有的變更申請；沒有新增任何權限或編輯入口。自然人廠商只提示（Q3）。設計：`docs/platform/plans/PO-BANK-BLOCK-T48.md`。
+- **稽核 #5**：`PATCH …/extra-expenses/{id}/dates` 設付款日也套同一道擋（原本可繞過出納登錄）；`paid_date` 的寫入路徑全盤點只有 `mark_paid` 與日期端點；述詞同時放進兩處 UPDATE 的 WHERE（讀→寫之間收款資料被清空也擋得住）。收款人類型 `employee` 的採購單不套用（已知取捨，見設計備忘）。
+- 測試：`modules/case/tests/test_po_bank_block_t48.py`。
 
 ## 1.0.166 — 2026-10-09（wip/t49b-1d-strictbool2；W1c-P2b 旗標嚴格解析補丁）
 - `POST /api/quotations/{q}/extra-expenses/{id}/approve`、`…/change-request/approve`、`POST /api/completion-notes/{no}/approve` 的 `cascade`（『同一人連任多層時一次簽完』）：字串 `"false"` 以前會替簽核人自動簽完剩下的連續層。 另：款項標記收款 `received` 的判斷改用同一個 `body_flag`（行為同上一版，只是不再各處自己判斷真值）。 旗標只收真布林（`helpers.validation.body_flag`）：JSON 字串 `"false"`／`"0"`／`""` 以前是 truthy，現在回 422、什麼都不寫（先驗旗標，再碰資料庫與簽核鏈）；真布林與沒帶（預設 false）行為不變。測試：`tests/test_strict_bool_cascade_t49b.py`。
