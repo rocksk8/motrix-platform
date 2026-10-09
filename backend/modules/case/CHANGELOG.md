@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-10（wip/t50b-ab-labelfix）：報價單頁管銷分攤列依『這張單的口徑』顯示
+## 1.0.169 — 2026-10-10（wip/t50b-ab-labelfix）：報價單頁管銷分攤列依『這張單的口徑』顯示
 - `quotation-form.html`：兩列管銷分攤（「管銷分攤（10%，固定）」／「管銷分攤（直接毛利 N%）」）與偏離警示改看 `ohVer()`（這張單的口徑：已結案的舊單＝1），不再看全域開關 `oh.mode`——全域 v2 時，已結案的舊口徑單仍顯示 10% 那一列（數字本來就沒變，只是標籤說錯）。精算頁的口徑本來就先看凍結的 summary，不需改。測試 `tests/test_overhead_s3_form_t48.py`（已結案舊單／已結案新口徑戳記／未結案三種）。
 
 ## 1.0.168 — 2026-10-10（wip/t50-int 整合修正）
@@ -16,17 +16,14 @@
 - **稽核 #4 跟進（wip/t48-oh25-s3，48b）**：①組裝——s3 含 b5 的 S5 最新（`overhead_migration_done` 標記寫入者），新增完整切換流程測試（`test_overhead_cutover_t48.py`：report → `recalc --apply --set-mode-v2` → 標記存在 → 伺服器認 v2 → 新報價單用新口徑；反向：v2 沒標記 ⇒ legacy）；②`v2` 時品項金額由數量×單價在伺服器重算（不採用用戶端 `amount`），稅率缺／null／空字串＝5%（前端 `calcTotals` 對齊後端 `quote_tax_type`）；③精算頁殘留的「管理費」字樣（橋接圖標籤、說明文字）全改「管銷分攤」並依口徑顯示，標籤守門新增禁用「管理費」；④設計稿新增 §12（新舊口徑並存的報表註記、`skip_nodata` 單的原始／實際側基礎、重算範圍）。**上線備註（Q10）**：報表的合計／平均會混到新舊兩種口徑（歷史案件不回改，直毛率 40% 為打平點）。
 - **獨立稽核 1d 修正（wip/t48-oh25-s2／s3）**：①`tot.formulaVer`／`overheadPct`／`_legacy`／`_recalc` 戳記只由伺服器蓋（用戶端送的一律丟掉，已結案沿用現值；遷移的 `_legacy` 不因表單存檔遺失）；②切到新口徑只能經 `PUT /api/overhead/settings`，要 `confirm=true` 且 `overhead_migration_done` 標記存在（`overhead_migrate recalc --apply` 寫）；③`v2` 時稅前／稅額／含稅一併由伺服器依品項重算；④`PUT /api/quotations` 的比率驗證／權限檢查提前到開連線與寄簽核通知之前；⑤legacy 模式不憑空長出 `overheadPct`（只在有存值或最高管理者明確改過時才存）；⑥`overheadPct` 列入金額遮罩鍵。
 - **S3（wip/t48-oh25-s2）畫面與精算接上單一規則（口徑開關預設 legacy，畫面與數字不變）**：`quotation-form.html` V3.19——`calcTotals` 改呼叫 `MotrixProfitRules`；`overhead_rule_mode=v2` 時顯示「管銷分攤（直接毛利 N%）」，最高管理者可改比率（偏離預設 ⇒ 橘色警示＋『還原預設』＋存檔二次確認），其他人唯讀；已精算／結案單不重算；複製為新單比率回全域預設（Q8）。`settlement.html`／`settlement_actuals`：管銷依口徑算（v2＝實際毛利×報價單比率、負毛利 0），完結時 summary 蓋 `formulaVer=2`／`overheadPct`（舊口徑不帶）；報價原始側新口徑時帶 `origFormulaVer`／`origOverheadPct`。案件管理頁、結案 PDF（`pdf_gen`）、營運報表 PDF 的「管銷分攤」標籤依口徑顯示（PDF 只在偏離全域預設時印百分比，Q7）。測試：`test_overhead_s3_form_t48.py`（node）、`test_overhead_s3_settlement_t48.py`。
-- **（併入）(next) — 2026-10-09（wip/t49-b5-visibility）：case.access 加 allowed（供網路規劃書依案件過濾）；併第49班 strict-bool（W1c-P2）；併 wip/t48-oh25-s3b（s3＋s4／s5／s6，內含 s1／s2／s2b）；併 2026-10-09(wip/t48-payslip-person-link)**
 - **（併入）(next) — 2026-10-09（wip/t48-payslip-person-link）：派發分頁顯示同一人員的勞報單**
 - `case-management.html` 派發卡片的「勞報單」區塊下新增「同一人員的勞報單」（單號、狀態、受領人；無金額；最高管理者可點進、一般人員純文字）。
-- **（併入）(next) — 2026-10-09（wip/t49-b5-visibility）：case.access 加 allowed（供網路規劃書依案件過濾）；併第49班 strict-bool（W1c-P2）；併 wip/t48-oh25-s3b（s3＋s4／s5／s6，內含 s1／s2／s2b）；併 2026-10-09(wip/t48-payslip-person-link)；併 2026-10-09(wip/t48-po-bank-block)**
 - **（併入）(next) — 2026-10-09（wip/t48-po-bank-block）：新採購單缺廠商收款帳戶 ⇒ 擋出納登錄付款（預設關；含日期端點繞道）**
 - 使用者 Q2：只對『切換時間點之後建立』的採購單（收款人是廠商、銀行名稱或帳號任一為空）擋付款；舊單、其他單據類型、員工收款人完全不受影響。開關 `system_settings.po_bank_block_since`（缺／空＝關閉，預設）。
 - `payables._Payables.mark_paid`：符合規則 ⇒ 409「缺廠商收款帳戶…」（沒寫任何東西）；`pending` 每列新增 `blocked`／`blockReason`（原有 `payeeNote` 警示照舊）；`cashier.html` 顯示紅字原因並停用『登錄付款』。
 - 新增 `GET /api/extra-expenses/po-bank-block`（財務角色／最高管理者：開關、切換時間點、目前被擋張數）與 `PUT`（只有最高管理者：`{"enabled": true[, "since": "本地時間"]}`／`{"enabled": false}`；每次變更稽核 `settings.po_bank_block.update`）。補資料走第 47 班既有的變更申請；沒有新增任何權限或編輯入口。自然人廠商只提示（Q3）。設計：`docs/platform/plans/PO-BANK-BLOCK-T48.md`。
 - **稽核 #5**：`PATCH …/extra-expenses/{id}/dates` 設付款日也套同一道擋（原本可繞過出納登錄）；`paid_date` 的寫入路徑全盤點只有 `mark_paid` 與日期端點；述詞同時放進兩處 UPDATE 的 WHERE（讀→寫之間收款資料被清空也擋得住）。收款人類型 `employee` 的採購單不套用（已知取捨，見設計備忘）。
 - 測試：`modules/case/tests/test_po_bank_block_t48.py`。
-- **（併入）(next) — 2026-10-09（wip/t49-b5-visibility）：case.access 加 allowed（供網路規劃書依案件過濾）；併第49班 strict-bool（W1c-P2）；併 wip/t48-oh25-s3b（s3＋s4／s5／s6，內含 s1／s2／s2b）；併 2026-10-09(wip/t48-payslip-person-link)；併 2026-10-09(wip/t48-po-bank-block)；併 2026-10-09(wip/t49-strict-bool；W1c-P2 旗標嚴格解析)**
 
 ## 1.0.166 — 2026-10-09（wip/t49b-1d-strictbool2；W1c-P2b 旗標嚴格解析補丁）
 - `POST /api/quotations/{q}/extra-expenses/{id}/approve`、`…/change-request/approve`、`POST /api/completion-notes/{no}/approve` 的 `cascade`（『同一人連任多層時一次簽完』）：字串 `"false"` 以前會替簽核人自動簽完剩下的連續層。 另：款項標記收款 `received` 的判斷改用同一個 `body_flag`（行為同上一版，只是不再各處自己判斷真值）。 旗標只收真布林（`helpers.validation.body_flag`）：JSON 字串 `"false"`／`"0"`／`""` 以前是 truthy，現在回 422、什麼都不寫（先驗旗標，再碰資料庫與簽核鏈）；真布林與沒帶（預設 false）行為不變。測試：`tests/test_strict_bool_cascade_t49b.py`。

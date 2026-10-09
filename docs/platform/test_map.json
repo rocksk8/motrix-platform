@@ -7,8 +7,8 @@
   "kinds": {
    "api": 673,
    "e2e": 299,
-   "audit": 150,
-   "unit": 111
+   "audit": 151,
+   "unit": 110
   },
   "routes": 783
  },
@@ -30481,14 +30481,18 @@
     "file:backend/migrations_frozen/t48_overhead25/__init__.py",
     "file:backend/migrations_frozen/t48_overhead25/recalc.py",
     "file:backend/tools/overhead_migrate.py",
-    "helper:profit_rules"
+    "helper:legal_params",
+    "helper:profit_rules",
+    "mod:case/profit_guard"
    ],
    "evidence": {
     "import": [
      "backend/helpers/__init__.py",
+     "backend/helpers/legal_params.py",
      "backend/helpers/profit_rules.py",
      "backend/migrations_frozen/t48_overhead25/__init__.py",
-     "backend/migrations_frozen/t48_overhead25/recalc.py"
+     "backend/migrations_frozen/t48_overhead25/recalc.py",
+     "backend/modules/case/profit_guard.py"
     ],
     "path": [
      "backend/tools/overhead_migrate.py"
@@ -30496,8 +30500,9 @@
    }
   },
   "backend/tests/test_overhead_s3_form_t48.py": {
-   "kind": "unit",
+   "kind": "audit",
    "units": [
+    "dir:frontend/pages/",
     "file:backend/tests/test_money_round_half_up_2026_09_26.py",
     "page:pages/quotation-form.html",
     "plat:__init__",
@@ -30510,6 +30515,10 @@
      "backend/tests/test_money_round_half_up_2026_09_26.py"
     ],
     "page": [
+     "frontend/pages/quotation-form.html"
+    ],
+    "path": [
+     "frontend/pages/",
      "frontend/pages/quotation-form.html"
     ]
    }
@@ -31051,6 +31060,7 @@
      "backend/helpers/profit_rules.py",
      "backend/modules/accounting/",
      "backend/modules/case/api/quotations.py",
+     "backend/pdf_gen.py",
      "backend/routers/system.py",
      "frontend/pages/quotation-form.html"
     ]
