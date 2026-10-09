@@ -1886,40 +1886,11 @@
           <span class="cost-row__val warning" x-text="'NT$ ' + tot.charityDonation.toLocaleString()" data-testid="qf-charity-value"></span>
           <span x-show="tot.directProfit < 0" x-cloak data-testid="qf-charity-floor-note" style="flex-basis:100%;font-size:11px;color:var(--warning)">虧損案公益金以 0 計</span>
         </div>
-        <div class="cost-row" style="align-items:center">
-          <span class="cost-row__label">運輸物流費</span>
-          <input class="cost-input" type="text" inputmode="decimal" data-num="indirectLogistics"
-                 :value="numShown(q.indirectLogistics, $el, 'indirectLogistics')" :class="{'num-bad': badNum.indirectLogistics}"
-                 @blur="$el.value = numShown(q.indirectLogistics, $el, 'indirectLogistics', true)"
-                 @input="if (setNumField(q, 'indirectLogistics', 'indirectLogistics', $event.target.value)) { calcTotals(); setDirty() }">
-        </div>
-        <div class="cost-row" style="align-items:center">
-          <span class="cost-row__label">安裝施工</span>
-          <input class="cost-input" type="text" inputmode="decimal" data-num="indirectInstallation"
-                 :value="numShown(q.indirectInstallation, $el, 'indirectInstallation')" :class="{'num-bad': badNum.indirectInstallation}"
-                 @blur="$el.value = numShown(q.indirectInstallation, $el, 'indirectInstallation', true)"
-                 @input="if (setNumField(q, 'indirectInstallation', 'indirectInstallation', $event.target.value)) { calcTotals(); setDirty() }">
-        </div>
-        <div class="cost-row" style="align-items:center">
-          <span class="cost-row__label">差異項</span>
-          <input class="cost-input" type="text" inputmode="decimal" data-num="indirectTravel"
-                 :value="numShown(q.indirectTravel, $el, 'indirectTravel')" :class="{'num-bad': badNum.indirectTravel}"
-                 @blur="$el.value = numShown(q.indirectTravel, $el, 'indirectTravel', true)"
-                 @input="if (setNumField(q, 'indirectTravel', 'indirectTravel', $event.target.value)) { calcTotals(); setDirty() }">
-        </div>
-        <div class="cost-row" style="align-items:center">
-          <span class="cost-row__label">保固預估</span>
-          <input class="cost-input" type="text" inputmode="decimal" data-num="indirectWarranty"
-                 :value="numShown(q.indirectWarranty, $el, 'indirectWarranty')" :class="{'num-bad': badNum.indirectWarranty}"
-                 @blur="$el.value = numShown(q.indirectWarranty, $el, 'indirectWarranty', true)"
-                 @input="if (setNumField(q, 'indirectWarranty', 'indirectWarranty', $event.target.value)) { calcTotals(); setDirty() }">
-        </div>
-        <div class="cost-row" style="align-items:center">
-          <span class="cost-row__label">其他費用</span>
-          <input class="cost-input" type="text" inputmode="decimal" data-num="indirectOther"
-                 :value="numShown(q.indirectOther, $el, 'indirectOther')" :class="{'num-bad': badNum.indirectOther}"
-                 @blur="$el.value = numShown(q.indirectOther, $el, 'indirectOther', true)"
-                 @input="if (setNumField(q, 'indirectOther', 'indirectOther', $event.target.value)) { calcTotals(); setDirty() }">
+        <!-- 第 48 班（使用者 2026-10-09）：運輸物流／安裝施工／差異項／保固預估／其他費用 五個輸入拿掉——所有費用一律走請款申請。
+             舊口徑（未切換前、已精算／結案單）的既有值仍計入間接成本合計，改成唯讀一列；新口徑一律不計。 -->
+        <div class="cost-row" x-show="ohVer() === 1 && legacyIndirectSum() !== 0" x-cloak data-testid="qf-legacy-indirect">
+          <span class="cost-row__label">既有間接成本（運輸／安裝／差異／保固／其他；舊單，不再可編輯）</span>
+          <span class="cost-row__val warning" x-text="'NT$ ' + legacyIndirectSum().toLocaleString()"></span>
         </div>
         <div class="cost-row" style="border-bottom:none">
           <span class="cost-row__label">間接成本合計</span>
@@ -2518,6 +2489,10 @@
       ohPct() {
         const v = this.q.overheadPct
         return (v === undefined || v === null || v === '') ? this.oh.defaultPct : v
+      },
+      legacyIndirectSum() {                           // 舊單既有的五項間接成本（唯讀顯示；新口徑不計）
+        return ['indirectLogistics', 'indirectInstallation', 'indirectTravel', 'indirectWarranty', 'indirectOther']
+          .reduce((t, k) => t + (Number(this.q[k]) || 0), 0)
       },
       ohDeviates() { return this.oh.mode === 'v2' && Number(this.ohPct()) !== Number(this.oh.defaultPct) },
       setOhPct(raw, el) {

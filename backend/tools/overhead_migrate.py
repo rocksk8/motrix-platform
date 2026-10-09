@@ -99,6 +99,10 @@ def _print_plan(items, a, label):
                                                                  i["old"]["netProfit"], i["new"]["netProfit"], i["old"]["netMarginPct"], i["new"]["netMarginPct"]))
     for i in [x for x in items if x["action"] == "skip_nodata"][:5]:
         print("  略過(資料不足) %s：%s" % (i["quote_no"], i.get("reason")))
+    legacy = sorted([x for x in items if x["action"] == "recalc" and float(x.get("legacy_indirect") or 0) != 0], key=lambda x: -abs(float(x["legacy_indirect"])))
+    print("  含舊『五項間接成本』非零的未精算單 %d 張（新口徑不再計入；舊值保留在 tot._legacy，合計 %s）" % (len(legacy), "{:,.0f}".format(sum(float(x["legacy_indirect"]) for x in legacy))))
+    for i in legacy[:a.top]:
+        print("  舊間接成本 %-14s %s（重算後營業利益 %s→%s）" % (i["quote_no"], "{:,.0f}".format(float(i["legacy_indirect"])), i["old"]["netProfit"], i["new"]["netProfit"]))
 
 
 def _write_csv(items, a):
@@ -107,11 +111,11 @@ def _write_csv(items, a):
         return 2
     with open(a.csv, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
-        w.writerow(["quote_no", "action", "settle_status", "deal_tag", "pct", "old_admin", "new_admin", "old_net", "new_net", "old_pct", "new_pct"])
+        w.writerow(["quote_no", "action", "settle_status", "deal_tag", "pct", "old_admin", "new_admin", "old_net", "new_net", "old_pct", "new_pct", "legacy_indirect"])
         for i in items:
             o, nw = i.get("old") or {}, i.get("new") or {}
             w.writerow([i["quote_no"], i["action"], i["settle_status"], i["deal_tag"], i.get("pct"), o.get("adminCost"), nw.get("adminCost"),
-                        o.get("netProfit"), nw.get("netProfit"), o.get("netMarginPct"), nw.get("netMarginPct")])
+                        o.get("netProfit"), nw.get("netProfit"), o.get("netMarginPct"), nw.get("netMarginPct"), i.get("legacy_indirect", "")])
     return 0
 
 

@@ -179,7 +179,7 @@ def test_v2_negative_direct_profit_has_zero_overhead_and_five_items_count(client
               indirectLogistics=1000, indirectOther=500)
     t = _row(_post(client, ad, loss).json()["quote_no"])[0]["tot"]
     assert t["directProfit"] == 100000 - 99000 - 4950 and t["adminCost"] == 0 and t["charityDonation"] == 0
-    assert t["totalIndirect"] == 1500 and t["netProfit"] == t["directProfit"] - 1500
+    assert t["totalIndirect"] == 0 and t["netProfit"] == t["directProfit"], "新口徑不再計入五項間接成本（使用者 2026-10-09）"
     _mode(client, su, "legacy")
 
 
@@ -375,4 +375,29 @@ def test_v2_save_of_a_legacy_shaped_quote_keeps_zero_tax(client, who):
     fresh.pop("taxRate", None)
     t2 = _row(_post(client, ad, fresh).json()["quote_no"])[0]["tot"]
     assert t2["tax"] == 5000, "新單（沒有 taxRate 鍵）＝5%"
+    _mode(client, su, "legacy")
+
+
+def test_unsettled_ignores_legacy_indirect_values_settled_keeps_them(client, who):
+    """五項間接成本拿掉（使用者 2026-10-09）：未精算單在新口徑一律不計舊值；已結案單保留存值（數字不變）；legacy 模式照舊計入。"""
+    su, ad = who
+    five = dict(indirectLogistics=1000, indirectInstallation=2000, indirectTravel=500, indirectWarranty=300, indirectOther=200)
+    legacy = _q(**five)
+    legacy["tot"].update(totalIndirect=10370 + 4000, netProfit=37000 - 14370, netMarginPct=22.6)
+    qno = _post(client, ad, legacy).json()["quote_no"]                 # legacy 模式：不改前端送來的值，五項仍計入
+    assert _row(qno)[0]["tot"]["totalIndirect"] == 14370
+    cn = db.get_db()                                                    # 另一張：已結案，同樣有舊值
+    settled = _post(client, ad, _q(**five)).json()["quote_no"]
+    cn.execute("UPDATE quotations SET deal_tag='已結案' WHERE quote_no=?", (settled,))
+    cn.commit()
+    d0 = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (settled,)).fetchone()["data_json"])
+    cn.close()
+    _mode(client, su, "v2")
+    r = client.put("/api/quotations/%s" % qno, json={"status": "草稿", "data": _q(customerName="改名", **five)}, headers=ad)
+    assert r.status_code == 200, r.text
+    t = _row(qno)[0]["tot"]
+    assert (t["adminCost"], t["charityDonation"], t["totalIndirect"], t["netProfit"]) == (9250, 370, 9620, 27380), "未精算：五項舊值（共 4000）不計入"
+    assert _row(qno)[0]["indirectLogistics"] == 1000, "舊值留在資料裡（歷史／回滾），只是不計"
+    client.put("/api/quotations/%s" % settled, json={"status": "草稿", "data": _q(**five)}, headers=su)        # 已結案：存檔端點不重算
+    assert _row(settled)[0]["tot"] == d0["tot"], "已結案單的 tot 逐位不變"
     _mode(client, su, "legacy")

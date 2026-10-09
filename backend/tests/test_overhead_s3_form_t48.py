@@ -79,3 +79,25 @@ def test_form_tax_rate_keeps_the_old_semantics_missing_is_five_null_or_blank_is_
         for (const v of [undefined, null, '', 0, 5]) { o.q.taxRate = v; o.calcTotals(); out[String(v)] = o.tot.tax }
         return out""")
     assert got == {"undefined": 5000, "null": 0, "": 0, "0": 0, "5": 5000}, got        # 舊語意不動；後端 effective_tax_rate 對齊（見 test_overhead_s2_t48）
+
+
+@needs_node
+def test_five_indirect_costs_counted_only_on_the_old_basis():
+    """報價單頁：五個間接成本輸入已拿掉。舊口徑（legacy 模式、已精算／結案單）既有值照計；新口徑一律不計；唯讀列只在舊口徑且有值時出現。"""
+    got = _page("quotation-form.html", "quotationForm", _SETUP + """
+        o.q.indirectLogistics = 1000; o.q.indirectOther = 200
+        const legacy = run().indirect
+        o.oh = { mode: 'v2', defaultPct: 25 }
+        const v2 = run().indirect
+        o.q.dealTag = '已結案'
+        const settled = run().indirect
+        return { legacy, v2, settled, sum: o.legacyIndirectSum(), verSettled: o.ohVer() }""")
+    assert got == {"legacy": 10370 + 1200, "v2": 9620, "settled": 10370 + 1200, "sum": 1200, "verSettled": 1}, got
+
+
+def test_the_five_inputs_are_gone_from_the_page_markup():
+    import pathlib
+    html = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "pages" / "quotation-form.html").read_text(encoding="utf-8")
+    for k in ("indirectLogistics", "indirectInstallation", "indirectTravel", "indirectWarranty", "indirectOther"):
+        assert 'data-num="%s"' % k not in html and "setNumField(q, '%s'" % k not in html, k
+    assert "qf-legacy-indirect" in html

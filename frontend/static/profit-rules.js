@@ -34,7 +34,8 @@
     var admin = adminCost(pretax, direct, pct, ver)
     var ch = charity(direct)
     var totalIndirect = admin + ch
-    ;(indirectItems || []).forEach(function (x) { totalIndirect = totalIndirect + (x || 0) })
+    var useIndirect = (ver == null ? ACTIVE_VER : ver) === LEGACY_VER       // 新口徑（ver 2）不再計入五項間接成本；舊口徑照舊
+    ;(useIndirect ? (indirectItems || []) : []).forEach(function (x) { totalIndirect = totalIndirect + (x || 0) })
     var net = direct - totalIndirect
     var netPct = pretax > 0 ? net / pretax * 100 : 0
     return { directProfit: direct, directMarginPct: directPct, adminCost: admin, charityDonation: ch,

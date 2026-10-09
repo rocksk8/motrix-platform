@@ -119,3 +119,13 @@ def test_frontend_js_equals_python_vectors(tmp_path):
     bad = [(c, g) for c, g in zip(VECTORS, got) if g != c["expect"]]
     assert len(got) == len(VECTORS) and not bad, bad[:3]
 
+
+
+def test_new_basis_ignores_the_five_indirect_items_old_basis_counts_them():
+    """使用者 2026-10-09：運輸物流／安裝施工／差異項／保固預估／其他費用 不再輸入，新口徑（ver 2）一律不計；舊口徑（ver 1，含已精算／結案單）照舊。"""
+    five = [1000, 2000, 500, 300, 200]
+    old = P.quote_profit(100000, 60000, 3000, five, ver=1)
+    new = P.quote_profit(100000, 60000, 3000, five, pct=25, ver=2)
+    assert old["totalIndirect"] == 10000 + 370 + 4000 and old["netProfit"] == 37000 - 14370
+    assert new["totalIndirect"] == 9250 + 370 and new["netProfit"] == 37000 - 9620
+    assert new == P.quote_profit(100000, 60000, 3000, [0] * 5, pct=25, ver=2), "新口徑：給不給五項結果都一樣"

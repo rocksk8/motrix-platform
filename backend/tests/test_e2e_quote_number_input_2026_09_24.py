@@ -169,7 +169,8 @@ def _saved_data():
 
 @pytest.mark.e2e
 def test_internal_cost_inputs_accept_separators_and_block_bad_values(live_server, make_user, e2e_browser):
-    """N14 擴大範圍（使用者裁示）：內部成本區五個間接費也接受千分位與全形數字；無法辨識時標紅不存。"""
+    """N14：金額欄位接受千分位與全形數字；無法辨識時標紅不存。（原本打在『內部成本區五個間接費』；第 48 班使用者裁示五項拿掉，
+    改打同一套 `setNumField`／`numShown` 的運費與折讓欄位。）"""
     username, password = make_user(username="e2e_num3", role="superadmin")
     _seed()
     browser = e2e_browser
@@ -178,32 +179,32 @@ def test_internal_cost_inputs_accept_separators_and_block_bad_values(live_server
     page.on("dialog", lambda d: (dialogs.append(d.message), d.accept()))
     _login(page, live_server, username, password)
     _open(page, live_server)
-    LOG = 'input[data-num="indirectLogistics"]'
-    OTHER = 'input[data-num="indirectOther"]'
-    page.locator(LOG).wait_for(state="visible")
-    page.fill(LOG, "12,000")
-    assert page.evaluate(f"{DATA}.q.indirectLogistics") == 12000
-    page.fill(OTHER, "３，５００")
-    assert page.evaluate(f"{DATA}.q.indirectOther") == 3500
-    assert page.evaluate(f"{DATA}.tot.totalIndirect") >= 15500
+    assert page.locator('input[data-num="indirectLogistics"]').count() == 0, "五項間接成本輸入已拿掉"
+    FREIGHT = 'xpath=//label[normalize-space()="運費"]/following::input[1]'
+    page.locator(FREIGHT).wait_for(state="visible")
+    page.evaluate(f"{DATA}.q.showDiscount = true")
+    DISC = 'xpath=//label[contains(normalize-space(), "折讓")]/following::input[1]'
+    page.fill(FREIGHT, "12,000")
+    assert page.evaluate(f"{DATA}.q.freight") == 12000
+    page.fill(DISC, "３，５００")
+    assert page.evaluate(f"{DATA}.q.discount") == 3500
 
-    page.fill(OTHER, "35oo")
-    assert "num-bad" in (page.get_attribute(OTHER, "class") or "")
-    assert page.evaluate(f"{DATA}.q.indirectOther") == 3500
+    page.fill(DISC, "35oo")
+    assert "num-bad" in (page.get_attribute(DISC, "class") or "")
+    assert page.evaluate(f"{DATA}.q.discount") == 3500
     writes = _watch_writes(page)
     page.click('button:has-text("儲存草稿")')
     assert any("無法辨識" in m for m in _wait_dialog(page, dialogs)), dialogs
     page.wait_for_timeout(1000)
     assert writes == [], "標紅時不可以送出任何存檔請求：%s" % writes
-    assert "indirectLogistics" not in _saved_data() or _saved_data().get("indirectLogistics") != 12000, \
-        "標紅時不可以存檔"
+    assert _saved_data().get("freight") != 12000, "標紅時不可以存檔"
 
-    page.fill(OTHER, "3,500")
+    page.fill(DISC, "3,500")
     page.click('button:has-text("儲存草稿")')
     for _ in range(100):
-        if _saved_data().get("indirectLogistics") == 12000:
+        if _saved_data().get("freight") == 12000:
             break
         page.wait_for_timeout(100)
     d = _saved_data()
-    assert d["indirectLogistics"] == 12000 and d["indirectOther"] == 3500
+    assert d["freight"] == 12000 and d["discount"] == 3500
     assert writes, "正對照：修正後的存檔請求有被記錄到"
