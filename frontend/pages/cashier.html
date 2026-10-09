@@ -552,9 +552,11 @@
                             </div>
                           </td>
                           <td class="c">
+                            <div x-show="it.blockReason" :data-testid="'cashier-payreq-blocked-' + it.source + '-' + it.key" x-text="it.blockReason"
+                                 style="font-size:11px;color:#b91c1c;font-weight:600;text-align:left;margin-bottom:4px;max-width:220px"></div>
                             <div x-show="it.payeeNote" :data-testid="'cashier-payreq-payeenote-' + it.source + '-' + it.key" x-text="it.payeeNote"
                                  style="font-size:11px;color:var(--tone-warning-fg);text-align:left;margin-bottom:4px;max-width:220px"></div>
-                            <button x-show="payreqQueue.canPay" class="action-btn pay" @click="payPayreq(it)" :disabled="payreqBusy || !payreqDates[it.source + ':' + it.key] || !!remitError(payreqRemit(it)) || !!payreqExtraError(it)"
+                            <button x-show="payreqQueue.canPay" class="action-btn pay" @click="payPayreq(it)" :disabled="payreqBusy || !!it.blocked || !payreqDates[it.source + ':' + it.key] || !!remitError(payreqRemit(it)) || !!payreqExtraError(it)"
                                     :data-testid="'cashier-payreq-pay-' + it.source + '-' + it.key">登錄付款</button>
                             <span x-show="!payreqQueue.canPay" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
                           </td>
