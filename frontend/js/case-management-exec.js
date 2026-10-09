@@ -100,6 +100,7 @@ window.CM_PARTS.push(() => ({
             _recvDate: ''
           }))
           await this.loadMoApprovals(quoteNo)
+          if (this._moReqFor === quoteNo && this.mlLoadGroups) await this.mlLoadGroups(quoteNo)       // 第51班：採購單候選（不開面板也有）
           if (this._moReqFor === quoteNo && this.mlAutoLinkMaterials) this.mlAutoLinkMaterials()   // 只在開啟／重載時比對一次（不在每次送審／核准後重跑，避免把手動取消的連結又帶回來）
           await this.loadMoPayments(quoteNo)
           if (this.mlLoadStatus) this.mlLoadStatus(quoteNo)     // 32-S4：連結徽章
