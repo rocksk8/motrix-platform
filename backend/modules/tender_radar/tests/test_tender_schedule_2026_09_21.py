@@ -1093,3 +1093,36 @@ def test_sl28_duplicate_slots_do_not_multiply_the_fetches(radar_ready, monkeypat
         f"時段設成 `9,9,9,9`，而 9 點抓了 {len(calls)} 次 —— "
         "重複值沒有去重，對政府網站的請求變四倍而畫面上看不出來"
     )
+
+
+# ── W1c 稽核：布林旗標嚴格解析（字串 "false" 不可被當成 True）─────────────────────────
+
+def test_w1c_string_false_is_not_a_high_frequency_confirmation(client, make_user):
+    """`confirmHighFrequency: "false"`（字串）原本被 bool() 當成 True ⇒ 悄悄通過『頻繁時段需確認』。現在 422，設定沒被改。"""
+    hdr = _auth(client, make_user)
+    threshold = _need("HIGH_FREQUENCY_SLOT_THRESHOLD")
+    _set_setting(SCAN_HOURS_KEY, DEFAULT_SCAN_HOURS)
+    hours = ",".join(str(h) for h in range(threshold + 1))
+    for bad in ("false", "0", "no", None, [], {}):
+        r = _schedule_put(client, hdr, scanHours=hours, **{CONFIRM_FLAG: bad})
+        assert r.status_code == 422, (bad, r.status_code, r.text[:200])
+        assert _get_setting(SCAN_HOURS_KEY) == DEFAULT_SCAN_HOURS, "422 但設定被改了"
+    assert _schedule_put(client, hdr, scanHours=hours, **{CONFIRM_FLAG: True}).status_code == 200
+    _set_setting(SCAN_HOURS_KEY, DEFAULT_SCAN_HOURS)
+    assert _schedule_put(client, hdr, scanHours=hours, **{CONFIRM_FLAG: False}).status_code == 409, "明確 false ⇒ 仍是『需要確認』"
+
+
+def test_w1c_watch_enabled_flag_must_be_boolean(client, make_user):
+    hdr = _auth(client, make_user)
+    ok = client.post("/api/tender-radar/watches", headers=hdr, json={"name": "w1c", "keywords": ["網路"], "enabled": False})
+    assert ok.status_code == 201, ok.text
+    wid = ok.json()["id"]
+    assert client.post("/api/tender-radar/watches", headers=hdr, json={"name": "w1c2", "keywords": ["網路"], "enabled": "false"}).status_code == 422
+    assert client.put("/api/tender-radar/watches/%d" % wid, headers=hdr, json={"enabled": "false"}).status_code == 422
+    assert client.put("/api/tender-radar/watches/%d" % wid, headers=hdr, json={"enabled": True}).status_code == 200
+    import db
+    c = db.get_db()
+    try:
+        assert c.execute("SELECT enabled FROM tender_watches WHERE id=?", (wid,)).fetchone()[0] == 1
+    finally:
+        c.close()

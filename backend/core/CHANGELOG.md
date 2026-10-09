@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-09（wip/t48-w1c-fixes；端點稽核 W1c）
+- L1 行為修正（不新增、不移除介面）：`POST／PUT /api/work-logs` 的欄位型別與範圍檢查——`hours` 非數字／負數／超過 1000、`content` 非字串或空白、`log_date` 非 YYYY-MM-DD、`user_id` 不存在、`case_no`／`contact_type` 非字串 ⇒ 4xx（原本 `float("abc")`、`.strip()` 打在非字串是 500，`PUT` 與不存在的 `user_id` 則直接把壞值寫進庫）。正常值與前端送的內容不受影響；缺欄位與空白內容維持原本的 400。權限不變。測試：`tests/test_work_log_validation_w1c_2026_10_09.py`。
+
 ## 1.120 — 2026-10-09（wip/t48-oh25-s1：利潤規則單一來源，L1 新增 helpers/profit_rules）
 - L1（新增，向下相容）：新單位 `helpers/profit_rules.py`——報價單／精算的管銷分攤、公益捐款、間接成本合計、營業利益（舊稱淨利）、營業利益率的**唯一算式**（`admin_cost`／`charity`／`quote_profit`／`settlement_profit`／`pct_rate`；口徑 `LEGACY_VER=1` 稅前×10%、`FORMULA_VER=2` 直接毛利×pct%）。前端同一套：`static/profit-rules.js`（`MotrixProfitRules`）。`ACTIVE_VER` 仍是 1，**S1 零行為變更**；設計 `docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
 - 守門與測試：`tests/test_profit_rules_t48.py`（黃金向量 Python／node 等值、舊內嵌算式對拍、ver 2 獨立 Decimal 對拍）、`tests/platform/test_profit_rule_single_source.py`（管銷算式只准寫在規則檔；前端過渡登記 S3 清空）。
