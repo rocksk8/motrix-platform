@@ -1,0 +1,25 @@
+#!/bin/bash
+# pre-push（SPEEDUP-PREPUSH-T50）：推送前跑 tools/platform/prepush_check.py（< 60 秒、只讀）。
+# 紅 ⇒ 擋推送；未完成（超過時間預算）、整合分支（train/*、platform）⇒ 只警告、放行。
+# 逃生口：git push --no-verify（用了請在推送說明寫理由）。安裝：python tools/platform/setup_prepush.py
+PY="${MOTRIX_PY:-D:/MOTRIX-PLATFORM/.venv312/Scripts/python.exe}"
+[ -x "$PY" ] || PY=python
+ZERO=0000000000000000000000000000000000000000
+root=$(git rev-parse --show-toplevel) || exit 0
+[ -f "$root/tools/platform/prepush_check.py" ] || exit 0          # 舊分支沒有這支工具 ⇒ 不擋
+HEAD_SHA=$(git rev-parse HEAD)
+while read -r lref lsha rref rsha; do
+  [ "$lsha" = "$ZERO" ] && continue                                 # 刪除遠端分支
+  if [ "$lsha" != "$HEAD_SHA" ]; then
+    echo "[prepush] 推的不是目前的 HEAD（$lref）；檢查略過"
+    continue
+  fi
+  branch="${rref#refs/heads/}"
+  mode=""
+  case "$branch" in train/*|platform) mode="--integration" ;; esac
+  "$PY" -X utf8 "$root/tools/platform/prepush_check.py" --hook $mode || {
+    echo "[prepush] 推送被擋下：修好上面的紅燈再推（緊急才用 --no-verify，並寫理由）"
+    exit 1
+  }
+done
+exit 0

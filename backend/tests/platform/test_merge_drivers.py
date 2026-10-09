@@ -35,9 +35,28 @@ def _ins(sec, text=BASE):
 
 # ── CHANGELOG（純函式）──────────────────────────────────────────────────
 
-def test_both_top_insertions_are_kept_as_whole_blocks():
+#: 兩邊各新增一塊 `## (next)` ⇒ 併成一塊（第 51 班，SPEEDUP-PREPUSH-T50 類 1）：A 的整塊照舊，B 的標題變成「（併入）」一行、內文接在後面
+COALESCED = (SEC_A.rstrip("\n") + "\n- **（併入）(next) — 2026-09-30（wip/b）**\n- b1\n- 題：tests/platform/test_same.py\n\n")
+SEC_N1 = "## 1.0.3 — x\n- n1\n\n"
+SEC_N2 = "## 1.0.2 — y\n- n2\n\n"
+
+
+def test_both_top_next_blocks_are_coalesced_into_one():
     got = MD.merge_changelog(BASE, _ins(SEC_A), _ins(SEC_B))
-    assert got == PRE + SEC_A + SEC_B + "## 1.0.1 — d\n- old\n\n## 1.0.0 — d\n- init\n"
+    assert got == PRE + COALESCED + "## 1.0.1 — d\n- old\n\n## 1.0.0 — d\n- init\n"
+    assert got.count("## (next)") == 1
+
+
+def test_both_top_numbered_blocks_are_still_kept_as_whole_blocks():
+    """反向控制：只有 `## (next)` 才併；兩邊各新增一個『版號』段落仍然兩個都留。"""
+    got = MD.merge_changelog(BASE, _ins(SEC_N1), _ins(SEC_N2))
+    assert got == PRE + SEC_N1 + SEC_N2 + "## 1.0.1 — d\n- old\n\n## 1.0.0 — d\n- init\n"
+
+
+def test_coalesce_next_is_a_noop_with_fewer_than_two_next_blocks():
+    secs = [SEC_A, SEC_N1]
+    assert MD.coalesce_next(secs) == secs
+    assert MD.coalesce_next([]) == []
 
 
 def test_identical_insertions_are_kept_once():
@@ -52,7 +71,8 @@ def test_one_side_edits_an_old_section_the_other_inserts():
 def test_missing_blank_line_between_blocks_is_restored():
     a = _ins("## (next) — a\n- a\n")                       # 作者沒留空行
     got = MD.merge_changelog(BASE, a, _ins(SEC_B))
-    assert "- a\n\n## (next) — 2026-09-30（wip/b）" in got
+    assert "- a\n- **（併入）(next) — 2026-09-30（wip/b）**\n- b1" in got      # 作者沒留空行也照常併成一塊
+    assert got.count("## (next)") == 1
 
 
 @pytest.mark.parametrize("a,b,why", [
@@ -156,7 +176,7 @@ def test_git_merge_with_drivers_keeps_both_sides(two_branches):
     _g(r, "merge", "-q", "--no-ff", "wip/a", "-m", "a")
     res = _g(r, "merge", "--no-ff", "wip/b", "-m", "b", check=False)
     assert res.returncode == 0, res.stdout + res.stderr
-    assert (r / "CHANGELOG.md").read_text(encoding="utf-8") == PRE + SEC_A + SEC_B + BASE[len(PRE):]
+    assert (r / "CHANGELOG.md").read_text(encoding="utf-8") == PRE + COALESCED + BASE[len(PRE):]
     assert [e["module"] for e in json.loads((r / "version_manifest.json").read_text(encoding="utf-8"))] == ["甲", "乙", "舊"]
 
 
@@ -169,7 +189,8 @@ def test_git_cherry_pick_with_drivers_keeps_both_sides(two_branches):
     res = _g(r, "cherry-pick", "wip/b", check=False)
     assert res.returncode == 0, res.stdout + res.stderr
     text = (r / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert SEC_A in text and SEC_B in text and "<<<<<<<" not in text
+    assert SEC_A.rstrip("\n") in text and "（併入）(next) — 2026-09-30（wip/b）" in text and "<<<<<<<" not in text
+    assert text.count("## (next)") == 1
 
 
 def test_rc_without_drivers_git_reports_a_conflict(two_branches):
