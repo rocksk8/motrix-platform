@@ -605,6 +605,7 @@
    ],
    "api_prefixes": [
     "/api/account-items",
+    "/api/expense-categories",
     "/api/reports",
     "/api/settings",
     "/api/vouchers",

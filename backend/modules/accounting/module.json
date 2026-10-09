@@ -229,6 +229,7 @@
   "provides": {
     "api_prefixes": [
       "/api/account-items",
+      "/api/expense-categories",
       "/api/ledger",
       "/api/reports",
       "/api/settings",
