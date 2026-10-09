@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-10（wip/t50-int；第 50 班）
+## 1.1.28 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-09（wip/t48-w1b-fixes）：端點稽核 W1b；併第49班 strict-bool（W1c-P2）；併 2026-10-09(wip/t48-payslip-person-link)**
 - **（併入）(next) — 2026-10-09（wip/t48-payslip-person-link）：派發 ⇄ 勞報單依人連動；獨立稽核#3 修補（byPerson 限同案）；缺案號派發的同案判斷**
 - 新提供者 `dispatch.by_person`（IP-115 暫定）：外包名冊人員 → 他被排進的派發（無金額）；`dispatch.brief` 加 `personnelIds`、`dispatchDate`（加法）。

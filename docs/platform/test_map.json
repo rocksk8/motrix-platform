@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1222,
+  "tests": 1233,
   "unmapped": 13,
   "kinds": {
-   "api": 665,
-   "e2e": 298,
-   "audit": 149,
+   "api": 673,
+   "e2e": 299,
+   "audit": 151,
    "unit": 110
   },
-  "routes": 779
+  "routes": 783
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -4019,6 +4019,30 @@
    },
    "module": "analytics"
   },
+  "backend/modules/analytics/tests/test_overhead_q7_exports_t48.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:pdf_gen",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/reports",
+    "mod:analytics/tests/test_original_indirect_reserve_2026_10_05",
+    "mod:analytics/tests/test_reports_logic_fixes_2026_08_28"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/analytics/tests/test_original_indirect_reserve_2026_10_05.py",
+     "backend/modules/analytics/tests/test_reports_logic_fixes_2026_08_28.py",
+     "backend/pdf_gen.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
   "backend/modules/analytics/tests/test_payment_anomalies_2026_09_11.py": {
    "kind": "api",
    "units": [
@@ -7667,6 +7691,33 @@
    "login_fixture": true,
    "module": "case"
   },
+  "backend/modules/case/tests/test_overhead_cutover_t48.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/tools/overhead_migrate.py",
+    "mod:case/api/overhead",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/case/api/overhead.py",
+     "backend/modules/case/api/quotations.py"
+    ],
+    "path": [
+     "backend/tools/overhead_migrate.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
   "backend/modules/case/tests/test_overhead_s2_t48.py": {
    "kind": "api",
    "units": [
@@ -7696,6 +7747,44 @@
     ]
    },
    "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_overhead_s3_settlement_t48.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "mod:case/api/settlement_api",
+    "mod:case/settlement_actuals",
+    "mod:case/tests/_t40_won",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02",
+    "mod:case/tests/test_settlement_actuals_2026_10_03",
+    "mod:case/tests/test_settlement_finalize_integrity_2026_10_03",
+    "mod:case/tests/test_settlement_tax_basis_2026_10_03",
+    "mod:payroll/__init__",
+    "mod:payroll/bonus"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/settlement_actuals.py",
+     "backend/modules/case/tests/_t40_won.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py",
+     "backend/modules/case/tests/test_settlement_actuals_2026_10_03.py",
+     "backend/modules/case/tests/test_settlement_finalize_integrity_2026_10_03.py",
+     "backend/modules/case/tests/test_settlement_tax_basis_2026_10_03.py",
+     "backend/modules/payroll/__init__.py",
+     "backend/modules/payroll/bonus.py"
+    ],
+    "api": [
+     "backend/modules/case/api/settlement_api.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
    "module": "case"
   },
   "backend/modules/case/tests/test_payable_calendar_resync_t45.py": {
@@ -7869,6 +7958,35 @@
      "backend/tests/_requires.py"
     ],
     "api": [
+     "backend/modules/case/api/case_extra_expenses.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_po_bank_block_t48.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/case/",
+    "file:backend/tests/_requires.py",
+    "mod:arap/api/cashier",
+    "mod:case/__init__",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/payables",
+    "mod:case/tests/test_queue_detail_real_forms_2026_10_07"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/payables.py",
+     "backend/modules/case/tests/test_queue_detail_real_forms_2026_10_07.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
      "backend/modules/case/api/case_extra_expenses.py"
     ],
     "module_dir": [
@@ -11492,6 +11610,79 @@
    },
    "module": "payroll"
   },
+  "backend/modules/payroll/tests/test_payslip_person_link_repair_t48.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "dir:backend/modules/subcontract/",
+    "mod:payroll/tests/test_payslip_person_link_t48",
+    "mod:subcontract/api/dispatch_payslip_links",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/modules/payroll/tests/test_payslip_person_link_t48.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/dispatch_payslip_links.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_payslip_person_link_t48.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "dir:backend/modules/subcontract/",
+    "mod:payroll/__init__",
+    "mod:payroll/api/__init__",
+    "mod:payroll/api/payslip_links",
+    "mod:payroll/api/payslips",
+    "mod:payroll/gl_events",
+    "mod:payroll/remit_link",
+    "mod:payroll/tests/test_payslip_edit_guard_2026_08_28",
+    "mod:subcontract/api/dispatch_payslip_links",
+    "mod:subcontract/api/vendor_contractors",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/payroll/__init__.py",
+     "backend/modules/payroll/api/__init__.py",
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/payroll/gl_events.py",
+     "backend/modules/payroll/remit_link.py",
+     "backend/modules/payroll/tests/test_payslip_edit_guard_2026_08_28.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslip_links.py",
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/subcontract/api/dispatch_payslip_links.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
   "backend/modules/payroll/tests/test_payslip_policy_t47.py": {
    "kind": "api",
    "units": [
@@ -13179,6 +13370,7 @@
     "mod:daily_tasks/api",
     "mod:netplan/api",
     "mod:payroll/api/bank_account",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -13221,6 +13413,7 @@
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
      "backend/modules/payroll/api/bank_account.py",
+     "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
@@ -16725,6 +16918,7 @@
     "mod:daily_tasks/api",
     "mod:netplan/api",
     "mod:payroll/api/bank_account",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -16770,6 +16964,7 @@
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
      "backend/modules/payroll/api/bank_account.py",
+     "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
@@ -17764,6 +17959,43 @@
     "/api/zz-items"
    ]
   },
+  "backend/tests/platform/test_module_routes_declared.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:module_startup",
+    "mod:case/api/quotations",
+    "mod:netplan/api",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/module_startup.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/netplan/api.py"
+    ]
+   },
+   "unresolved_api": [
+    "/api/a",
+    "/api/a/b",
+    "/api/ab",
+    "/api/other",
+    "/api/q/Q1/x",
+    "/api/q/Q1/x/more",
+    "/api/q/Q1/y",
+    "/api/q/{}/x",
+    "/api/z",
+    "/api/z/*",
+    "/api/z/1/2",
+    "/api/zz"
+   ]
+  },
   "backend/tests/platform/test_module_selection.py": {
    "kind": "api",
    "units": [
@@ -17843,6 +18075,7 @@
     "mod:daily_tasks/api",
     "mod:netplan/api",
     "mod:payroll/api/bank_account",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -17896,6 +18129,7 @@
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
      "backend/modules/payroll/api/bank_account.py",
+     "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
@@ -18579,8 +18813,6 @@
    "units": [
     "helper:profit_rules",
     "js:static/profit-rules.js",
-    "page:pages/quotation-form.html",
-    "page:pages/settlement.html",
     "plat:__init__",
     "plat:source_tree"
    ],
@@ -18590,14 +18822,10 @@
      "backend/core/source_tree.py"
     ],
     "page": [
-     "frontend/pages/quotation-form.html",
-     "frontend/pages/settlement.html",
      "frontend/static/profit-rules.js"
     ],
     "path": [
      "backend/helpers/profit_rules.py",
-     "frontend/pages/quotation-form.html",
-     "frontend/pages/settlement.html",
      "frontend/static/profit-rules.js"
     ]
    }
@@ -20074,6 +20302,7 @@
     "mod:daily_tasks/api",
     "mod:netplan/api",
     "mod:payroll/api/bank_account",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -20120,6 +20349,7 @@
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
      "backend/modules/payroll/api/bank_account.py",
+     "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
@@ -22919,6 +23149,7 @@
     "mod:daily_tasks/api",
     "mod:netplan/api",
     "mod:payroll/api/bank_account",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -22972,6 +23203,7 @@
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
      "backend/modules/payroll/api/bank_account.py",
+     "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
@@ -26326,6 +26558,31 @@
     ]
    }
   },
+  "backend/tests/test_e2e_payslip_person_link_t48.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/case-management.html",
+    "page:pages/payslip-form.html",
+    "page:pages/payslips.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/payslip-form.html",
+     "frontend/pages/payslips.html"
+    ],
+    "path": [
+     "frontend/pages/payslip-form.html",
+     "frontend/pages/payslips.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_pdf_unapproved_2026_09_30.py": {
    "kind": "e2e",
    "units": [
@@ -29248,6 +29505,7 @@
     "mod:daily_tasks/api",
     "mod:netplan/api",
     "mod:payroll/api/bank_account",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -29297,6 +29555,7 @@
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
      "backend/modules/payroll/api/bank_account.py",
+     "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
@@ -30233,6 +30492,26 @@
     ]
    }
   },
+  "backend/tests/test_overhead_s3_form_t48.py": {
+   "kind": "audit",
+   "units": [
+    "dir:frontend/pages/",
+    "file:backend/tests/test_money_round_half_up_2026_09_26.py",
+    "page:pages/quotation-form.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/test_money_round_half_up_2026_09_26.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html"
+    ],
+    "path": [
+     "frontend/pages/",
+     "frontend/pages/quotation-form.html"
+    ]
+   }
+  },
   "backend/tests/test_package_prune_by_age_2026_09_25.py": {
    "kind": "audit",
    "units": [
@@ -30567,6 +30846,7 @@
     "mod:payroll/api/bank_account",
     "mod:payroll/api/bonus",
     "mod:payroll/api/bonus_correction",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -30644,6 +30924,7 @@
      "backend/modules/payroll/api/bank_account.py",
      "backend/modules/payroll/api/bonus.py",
      "backend/modules/payroll/api/bonus_correction.py",
+     "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
@@ -30728,6 +31009,46 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_profit_labels_t48.py": {
+   "kind": "audit",
+   "units": [
+    "core:db",
+    "core:pdf_gen",
+    "dir:backend/modules/accounting/",
+    "file:backend/data/account_items_112.json",
+    "file:backend/data/profit_labels_t48.json",
+    "helper:financial_mask",
+    "helper:legal_params",
+    "helper:profit_rules",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
+    "page:pages/quotation-form.html",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/financial_mask.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/pdf_gen.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html"
+    ],
+    "path": [
+     "backend/data/account_items_112.json",
+     "backend/data/profit_labels_t48.json",
+     "backend/db.py",
+     "backend/helpers/financial_mask.py",
+     "backend/helpers/legal_params.py",
+     "backend/helpers/profit_rules.py",
+     "backend/modules/accounting/",
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/system.py",
+     "frontend/pages/quotation-form.html"
+    ]
+   }
   },
   "backend/tests/test_profit_rules_t48.py": {
    "kind": "audit",
@@ -31238,6 +31559,7 @@
     "mod:daily_tasks/api",
     "mod:netplan/api",
     "mod:payroll/api/bank_account",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -31281,6 +31603,7 @@
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
      "backend/modules/payroll/api/bank_account.py",
+     "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
@@ -32897,6 +33220,22 @@
      "backend/routers/system.py"
     ]
    }
+  },
+  "backend/tests/test_work_log_permissions_t49.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_work_log_validation_w1c_2026_10_09.py": {
    "kind": "api",

@@ -5684,6 +5684,7 @@
    ],
    "imports": [
     "core:db",
+    "core:pdf_gen",
     "helper:audit",
     "helper:auth",
     "helper:case_roles",
@@ -5709,67 +5710,67 @@
    "routes": [
     {
      "func": "report_json",
-     "line": 2488,
+     "line": 2506,
      "method": "GET",
      "path": "/api/reports/financial"
     },
     {
      "func": "report_excel",
-     "line": 2502,
+     "line": 2520,
      "method": "GET",
      "path": "/api/reports/financial/excel"
     },
     {
      "func": "report_pdf",
-     "line": 2538,
+     "line": 2556,
      "method": "GET",
      "path": "/api/reports/financial/pdf"
     },
     {
      "func": "get_ar_aging",
-     "line": 2657,
+     "line": 2675,
      "method": "GET",
      "path": "/api/reports/ar-aging"
     },
     {
      "func": "get_cash_position",
-     "line": 2718,
+     "line": 2736,
      "method": "GET",
      "path": "/api/reports/cash-position"
     },
     {
      "func": "tax_export_excel",
-     "line": 2786,
+     "line": 2804,
      "method": "GET",
      "path": "/api/reports/tax-export"
     },
     {
      "func": "customer_history",
-     "line": 2820,
+     "line": 2838,
      "method": "GET",
      "path": "/api/reports/customer-history"
     },
     {
      "func": "monthly_trend",
-     "line": 3095,
+     "line": 3113,
      "method": "GET",
      "path": "/api/reports/monthly-trend"
     },
     {
      "func": "report_payment_anomalies",
-     "line": 3321,
+     "line": 3339,
      "method": "GET",
      "path": "/api/reports/payment-anomalies"
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3753,
+     "line": 3771,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 3937,
+     "line": 3955,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
@@ -6574,6 +6575,7 @@
    "dynamic_sql": true,
    "helpers_transitive": [
     "helper:approval_queue",
+    "helper:attachment_search",
     "helper:audit",
     "helper:auth",
     "helper:case_access",
@@ -6608,6 +6610,7 @@
     "helper:tiered_approval",
     "helper:uploads",
     "helper:validation",
+    "mod:case/attachments",
     "mod:case/expense_forms",
     "mod:case/expense_notify",
     "mod:case/material_approval",
@@ -6615,6 +6618,7 @@
     "mod:case/material_guard",
     "mod:case/material_payment",
     "mod:case/payable_calendar",
+    "mod:case/payables",
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
@@ -6628,12 +6632,14 @@
     "helper:email_notify",
     "helper:legal_params",
     "helper:row_access",
+    "helper:settings",
     "helper:tiered_approval",
     "helper:uploads",
     "helper:validation",
     "mod:case/expense_forms",
     "mod:case/expense_notify",
     "mod:case/payable_calendar",
+    "mod:case/payables",
     "mod:case/purchase_items",
     "mod:case/recognition",
     "plat:txn"
@@ -6681,98 +6687,110 @@
      "path": "/api/extra-expenses/cases"
     },
     {
-     "func": "payreq_mine",
+     "func": "po_bank_block_status",
      "line": 668,
+     "method": "GET",
+     "path": "/api/extra-expenses/po-bank-block"
+    },
+    {
+     "func": "po_bank_block_set",
+     "line": 683,
+     "method": "PUT",
+     "path": "/api/extra-expenses/po-bank-block"
+    },
+    {
+     "func": "payreq_mine",
+     "line": 715,
      "method": "GET",
      "path": "/api/extra-expenses/mine"
     },
     {
      "func": "set_extra_expense_dates",
-     "line": 690,
+     "line": 737,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/dates"
     },
     {
      "func": "delete_extra_expense",
-     "line": 766,
+     "line": 824,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "void_extra_expense",
-     "line": 791,
+     "line": 849,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/void"
     },
     {
      "func": "submit_extra_expense",
-     "line": 850,
+     "line": 908,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/submit"
     },
     {
      "func": "approve_extra_expense",
-     "line": 938,
+     "line": 996,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/approve"
     },
     {
      "func": "reject_extra_expense",
-     "line": 1026,
+     "line": 1084,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/reject"
     },
     {
      "func": "upload_extra_expense_files",
-     "line": 1141,
+     "line": 1199,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files"
     },
     {
      "func": "delete_extra_expense_file",
-     "line": 1196,
+     "line": 1254,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}"
     },
     {
      "func": "upsert_change_request",
-     "line": 1372,
+     "line": 1430,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "cancel_change_request",
-     "line": 1413,
+     "line": 1471,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "upload_change_request_files",
-     "line": 1439,
+     "line": 1497,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files"
     },
     {
      "func": "delete_change_request_file",
-     "line": 1482,
+     "line": 1540,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}"
     },
     {
      "func": "submit_change_request",
-     "line": 1509,
+     "line": 1567,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/submit"
     },
     {
      "func": "approve_change_request",
-     "line": 1580,
+     "line": 1638,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/approve"
     },
     {
      "func": "reject_change_request",
-     "line": 1670,
+     "line": 1728,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/reject"
     }
@@ -6785,9 +6803,12 @@
    "tables_r_transitive": [
     "approval_delegates",
     "audit_log",
+    "case_change_requests",
     "case_extra_expenses",
     "case_material_approvals",
     "case_stages",
+    "case_updates",
+    "completion_notes",
     "contractor_dispatches",
     "contractor_payment_vouchers",
     "custom_record_finance_outbox",
@@ -7957,10 +7978,12 @@
     "helper:module_registry",
     "helper:profit_rules",
     "helper:settings",
+    "helper:tax_calc",
     "helper:tiered_approval",
     "mod:case/profit_guard"
    ],
    "imports": [
+    "core:db",
     "helper:audit",
     "helper:auth",
     "helper:settings",
@@ -7974,13 +7997,13 @@
    "routes": [
     {
      "func": "get_overhead_settings",
-     "line": 13,
+     "line": 15,
      "method": "GET",
      "path": "/api/overhead/settings"
     },
     {
      "func": "put_overhead_settings",
-     "line": 19,
+     "line": 21,
      "method": "PUT",
      "path": "/api/overhead/settings"
     }
@@ -8004,7 +8027,9 @@
     "user_perm_subtracts",
     "users"
    ],
-   "tables_w": [],
+   "tables_w": [
+    "system_settings"
+   ],
    "tables_w_transitive": [
     "audit_log",
     "duty_roles",
@@ -8679,6 +8704,7 @@
     "mod:case/material_coverage",
     "mod:case/material_guard",
     "mod:case/material_payment",
+    "mod:case/profit_guard",
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
@@ -8810,6 +8836,7 @@
     "mod:case/material_coverage",
     "mod:case/material_guard",
     "mod:case/material_payment",
+    "mod:case/profit_guard",
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
@@ -9354,6 +9381,7 @@
    "dynamic_sql": false,
    "imports": [
     "helper:approval_queue",
+    "helper:settings",
     "helper:uploads",
     "helper:validation",
     "mod:case/attachments",
@@ -9382,7 +9410,8 @@
    "imports": [
     "helper:legal_params",
     "helper:profit_rules",
-    "helper:settings"
+    "helper:settings",
+    "helper:tax_calc"
    ],
    "kind": "mod",
    "module_key": "case",
@@ -9515,6 +9544,7 @@
     "helper:custom_finance",
     "helper:legal_params",
     "helper:profit_rules",
+    "mod:case/profit_guard",
     "mod:case/purchase_items",
     "mod:case/recognition",
     "plat:registry"
@@ -11199,6 +11229,7 @@
   },
   "mod:payroll/api/payslip_links": {
    "api_prefixes": [
+    "/api/payslip-person-dispatches",
     "/api/payslips"
    ],
    "dynamic_sql": false,
@@ -11241,15 +11272,28 @@
      "line": 62,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}/dispatch-links/{dispatch_id}"
+    },
+    {
+     "func": "person_dispatches",
+     "line": 78,
+     "method": "GET",
+     "path": "/api/payslip-person-dispatches"
+    },
+    {
+     "func": "confirm_contractor",
+     "line": 93,
+     "method": "POST",
+     "path": "/api/payslips/{slip_no}/confirm-contractor"
     }
    ],
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [
-    "payslips"
+    "contractors"
    ],
    "tables_r_transitive": [
     "approval_delegates",
+    "contractors",
     "daily_tasks",
     "departments",
     "dev_cases",
@@ -11265,12 +11309,15 @@
     "user_perm_subtracts",
     "users"
    ],
-   "tables_w": [],
+   "tables_w": [
+    "payslips"
+   ],
    "tables_w_transitive": [
     "audit_log",
     "duty_roles",
     "notifications",
     "payslip_dispatch_links",
+    "payslips",
     "permission_changes",
     "system_settings",
     "user_duty_roles",
@@ -11352,91 +11399,91 @@
     },
     {
      "func": "create_payslip",
-     "line": 253,
+     "line": 289,
      "method": "POST",
      "path": "/api/payslips"
     },
     {
      "func": "get_payslip",
-     "line": 362,
+     "line": 404,
      "method": "GET",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "update_payslip",
-     "line": 376,
+     "line": 418,
      "method": "PUT",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "delete_payslip",
-     "line": 455,
+     "line": 502,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "record_export",
-     "line": 480,
+     "line": 527,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/export"
     },
     {
      "func": "record_archive_download",
-     "line": 526,
+     "line": 573,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/archive/{orig_idx}/record"
     },
     {
      "func": "get_archive_pdf",
-     "line": 555,
+     "line": 602,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/archive/{idx}"
     },
     {
      "func": "pdf_download",
-     "line": 591,
+     "line": 638,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/pdf-download"
     },
     {
      "func": "void_payslip",
-     "line": 629,
+     "line": 676,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/void"
     },
     {
      "func": "upload_signed_files",
-     "line": 677,
+     "line": 724,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/signed-files"
     },
     {
      "func": "get_signed_file",
-     "line": 730,
+     "line": 777,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "delete_signed_file",
-     "line": 759,
+     "line": 806,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "unsign_payslip",
-     "line": 791,
+     "line": 838,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unsign"
     },
     {
      "func": "payslip_mark_paid",
-     "line": 818,
+     "line": 865,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/mark-paid"
     },
     {
      "func": "payslip_unpay",
-     "line": 846,
+     "line": 893,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unpay"
     }
@@ -12381,19 +12428,19 @@
    "routes": [
     {
      "func": "list_payslip_links",
-     "line": 27,
+     "line": 29,
      "method": "GET",
      "path": "/api/contractor-dispatches/{did}/payslip-links"
     },
     {
      "func": "add_payslip_link",
-     "line": 52,
+     "line": 63,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/payslip-links"
     },
     {
      "func": "remove_payslip_link",
-     "line": 77,
+     "line": 88,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}/payslip-links/{slip_no}"
     }
@@ -14189,6 +14236,7 @@
     "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
+    "js:static/profit-rules.js",
     "js:static/sidebar.js",
     "js:static/ui.js"
    ],
@@ -15812,6 +15860,7 @@
     "/api/contractors",
     "/api/contractors/{}/id-card",
     "/api/next-slip-no",
+    "/api/payslip-person-dispatches",
     "/api/payslips",
     "/api/payslips/{}",
     "/api/payslips/{}/archive/{}",
@@ -15825,6 +15874,7 @@
    "api_prefixes": [
     "/api/contractors",
     "/api/next-slip-no",
+    "/api/payslip-person-dispatches",
     "/api/payslips",
     "/api/settings",
     "/api/system",
@@ -15864,6 +15914,7 @@
     "/api/payslips/{}/approve",
     "/api/payslips/{}/archive/{}",
     "/api/payslips/{}/archive/{}/record",
+    "/api/payslips/{}/confirm-contractor",
     "/api/payslips/{}/dispatch-links",
     "/api/payslips/{}/dispatch-links/{}",
     "/api/payslips/{}/export",
@@ -15964,6 +16015,7 @@
     "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
+    "js:static/profit-rules.js",
     "js:static/sidebar.js"
    ],
    "kind": "page",
@@ -16196,6 +16248,7 @@
     "/api/contractor-dispatches",
     "/api/contractor-vouchers/remit-fee-total",
     "/api/custom-modules/finance/case/{}",
+    "/api/overhead/settings",
     "/api/quotations/{}/extra-expenses",
     "/api/quotations/{}/item-shipped",
     "/api/quotations/{}/purchase-items",
@@ -16207,6 +16260,7 @@
     "/api/contractor-dispatches",
     "/api/contractor-vouchers",
     "/api/custom-modules",
+    "/api/overhead",
     "/api/quotations",
     "/api/system"
    ],
@@ -16217,6 +16271,7 @@
     "js:static/legal-round.js",
     "js:static/motrix-date.js",
     "js:static/notif.js",
+    "js:static/profit-rules.js",
     "js:static/sidebar.js"
    ],
    "kind": "page",
@@ -16224,6 +16279,7 @@
    "routers_called": [
     "mod:case/api/case_extra_expenses",
     "mod:case/api/material_approvals",
+    "mod:case/api/overhead",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
     "mod:subcontract/api/contractor_vouchers",
@@ -16234,6 +16290,7 @@
    "routers_called_effective": [
     "mod:case/api/case_extra_expenses",
     "mod:case/api/material_approvals",
+    "mod:case/api/overhead",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
     "mod:subcontract/api/contractor_vouchers",
@@ -19497,355 +19554,355 @@
     },
     {
      "func": "update_work_log",
-     "line": 692,
+     "line": 693,
      "method": "PUT",
      "path": "/api/work-logs/{wid}"
     },
     {
      "func": "delete_work_log",
-     "line": 724,
+     "line": 729,
      "method": "DELETE",
      "path": "/api/work-logs/{wid}"
     },
     {
      "func": "upload_work_log_photos",
-     "line": 750,
+     "line": 756,
      "method": "POST",
      "path": "/api/work-logs/{wid}/photos"
     },
     {
      "func": "delete_work_log_photo",
-     "line": 804,
+     "line": 810,
      "method": "DELETE",
      "path": "/api/work-logs/{wid}/photos/{photo_id}"
     },
     {
      "func": "get_runtime_switches",
-     "line": 978,
+     "line": 984,
      "method": "GET",
      "path": "/api/system/runtime-switches"
     },
     {
      "func": "list_system_modules",
-     "line": 1078,
+     "line": 1084,
      "method": "GET",
      "path": "/api/system/modules"
     },
     {
      "func": "toggle_system_module",
-     "line": 1092,
+     "line": 1098,
      "method": "PUT",
      "path": "/api/system/modules/{key}"
     },
     {
      "func": "module_availability",
-     "line": 1112,
+     "line": 1118,
      "method": "GET",
      "path": "/api/system/modules/availability"
     },
     {
      "func": "unavailable_module_pages",
-     "line": 1124,
+     "line": 1130,
      "method": "GET",
      "path": "/api/system/modules/unavailable-pages"
     },
     {
      "func": "get_bonus_module_status",
-     "line": 1134,
+     "line": 1140,
      "method": "GET",
      "path": "/api/system/bonus-module-status"
     },
     {
      "func": "get_company_profile",
-     "line": 1595,
+     "line": 1601,
      "method": "GET",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "set_company_profile",
-     "line": 1696,
+     "line": 1702,
      "method": "PUT",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "company_setup_status",
-     "line": 1841,
+     "line": 1847,
      "method": "GET",
      "path": "/api/settings/company-setup/status"
     },
     {
      "func": "get_default_payment_terms",
-     "line": 1892,
+     "line": 1898,
      "method": "GET",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "set_default_payment_terms",
-     "line": 1899,
+     "line": 1905,
      "method": "PUT",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "get_edge_path_setting",
-     "line": 1910,
+     "line": 1916,
      "method": "GET",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "set_edge_path_setting",
-     "line": 1921,
+     "line": 1927,
      "method": "PATCH",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "get_pdf_base_path_setting",
-     "line": 1937,
+     "line": 1943,
      "method": "GET",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "set_pdf_base_path_setting",
-     "line": 1945,
+     "line": 1951,
      "method": "PATCH",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "get_webauthn_config",
-     "line": 2029,
+     "line": 2035,
      "method": "GET",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "set_webauthn_config",
-     "line": 2045,
+     "line": 2051,
      "method": "PATCH",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "get_google_quota_setting",
-     "line": 2115,
+     "line": 2121,
      "method": "GET",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "set_google_quota_setting",
-     "line": 2138,
+     "line": 2144,
      "method": "PUT",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "get_storage_locations",
-     "line": 2200,
+     "line": 2206,
      "method": "GET",
      "path": "/api/settings/storage-locations"
     },
     {
      "func": "set_storage_locations",
-     "line": 2210,
+     "line": 2216,
      "method": "PUT",
      "path": "/api/settings/storage-locations"
     },
     {
      "func": "create_storage_location",
-     "line": 2230,
+     "line": 2236,
      "method": "POST",
      "path": "/api/settings/storage-locations/create"
     },
     {
      "func": "get_backup_retention_setting",
-     "line": 2263,
+     "line": 2269,
      "method": "GET",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "set_backup_retention_setting",
-     "line": 2270,
+     "line": 2276,
      "method": "PATCH",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "get_quote_terms_defaults",
-     "line": 2379,
+     "line": 2385,
      "method": "GET",
      "path": "/api/settings/quote-terms-defaults"
     },
     {
      "func": "get_quote_terms_presets",
-     "line": 2390,
+     "line": 2396,
      "method": "GET",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "set_quote_terms_presets",
-     "line": 2397,
+     "line": 2403,
      "method": "PUT",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "get_cloud_backup_target_setting",
-     "line": 2475,
+     "line": 2481,
      "method": "GET",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_pii_archive_status",
-     "line": 2482,
+     "line": 2488,
      "method": "GET",
      "path": "/api/settings/pii-archive-status"
     },
     {
      "func": "set_cloud_backup_target_setting",
-     "line": 2494,
+     "line": 2500,
      "method": "PUT",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_email_notify",
-     "line": 2530,
+     "line": 2536,
      "method": "GET",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "set_email_notify",
-     "line": 2543,
+     "line": 2549,
      "method": "PUT",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "get_google_calendar",
-     "line": 2568,
+     "line": 2574,
      "method": "GET",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "set_google_calendar",
-     "line": 2606,
+     "line": 2612,
      "method": "PUT",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "test_google_calendar",
-     "line": 2632,
+     "line": 2638,
      "method": "POST",
      "path": "/api/settings/google-calendar/test"
     },
     {
      "func": "test_email_notify",
-     "line": 2648,
+     "line": 2654,
      "method": "POST",
      "path": "/api/settings/email-notify/test"
     },
     {
      "func": "get_custom_roles",
-     "line": 2676,
+     "line": 2682,
      "method": "GET",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "create_custom_role",
-     "line": 2682,
+     "line": 2688,
      "method": "POST",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "update_custom_role",
-     "line": 2709,
+     "line": 2715,
      "method": "PUT",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "delete_custom_role",
-     "line": 2733,
+     "line": 2739,
      "method": "DELETE",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "get_schema_status",
-     "line": 2758,
+     "line": 2764,
      "method": "GET",
      "path": "/api/system/schema-status"
     },
     {
      "func": "get_role_labels",
-     "line": 2788,
+     "line": 2794,
      "method": "GET",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "put_role_labels",
-     "line": 2803,
+     "line": 2809,
      "method": "PUT",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "get_webauthn_config_status",
-     "line": 2818,
+     "line": 2824,
      "method": "GET",
      "path": "/api/system/webauthn-config-status"
     },
     {
      "func": "list_online_users",
-     "line": 2851,
+     "line": 2857,
      "method": "GET",
      "path": "/api/online-users"
     },
     {
      "func": "user_activity_stats",
-     "line": 2895,
+     "line": 2901,
      "method": "GET",
      "path": "/api/user-activity"
     },
     {
      "func": "user_activity_trail",
-     "line": 2969,
+     "line": 2975,
      "method": "GET",
      "path": "/api/user-activity/trail"
     },
     {
      "func": "edit_presence_heartbeat",
-     "line": 3104,
+     "line": 3110,
      "method": "POST",
      "path": "/api/edit-presence"
     },
     {
      "func": "edit_presence_release",
-     "line": 3135,
+     "line": 3141,
      "method": "DELETE",
      "path": "/api/edit-presence"
     },
     {
      "func": "case_roles_unmapped",
-     "line": 3151,
+     "line": 3157,
      "method": "GET",
      "path": "/api/system/case-roles-unmapped"
     },
     {
      "func": "get_reminder_send_failures",
-     "line": 3192,
+     "line": 3198,
      "method": "GET",
      "path": "/api/settings/reminder-send-failures"
     },
     {
      "func": "get_branding_asset",
-     "line": 3221,
+     "line": 3227,
      "method": "GET",
      "path": "/api/system/branding/{kind}"
     },
     {
      "func": "get_branding_settings",
-     "line": 3260,
+     "line": 3266,
      "method": "GET",
      "path": "/api/settings/branding"
     },
     {
      "func": "upload_branding_asset",
-     "line": 3269,
+     "line": 3275,
      "method": "PUT",
      "path": "/api/settings/branding/{kind}"
     },
     {
      "func": "reset_branding_asset",
-     "line": 3286,
+     "line": 3292,
      "method": "DELETE",
      "path": "/api/settings/branding/{kind}"
     }
@@ -20719,6 +20776,7 @@
    "readers": [
     "core:archive",
     "core:pdf_gen",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/payslip_bank",
     "mod:subcontract/api/contractor_vouchers"
    ],
@@ -22100,7 +22158,6 @@
    "readers": [
     "core:archive",
     "core:pdf_gen",
-    "mod:payroll/api/payslip_links",
     "mod:payroll/attachments",
     "mod:payroll/gl_events",
     "mod:payroll/payslip_links",
@@ -22110,6 +22167,7 @@
    "tables_w": [],
    "writers": [
     "mod:payroll/api/payslip_approval",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:payroll/payslip_payables",
     "mod:payroll/remit_link"
@@ -22503,6 +22561,7 @@
     "helper:settings",
     "helper:storage_locations",
     "helper:system_checks",
+    "mod:case/api/overhead",
     "mod:case/case_deadlines",
     "mod:tender_radar/source",
     "plat:upgrade"

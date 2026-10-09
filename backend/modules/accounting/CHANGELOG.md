@@ -1,6 +1,6 @@
 # 會計 更新紀錄
 
-## (next) — 2026-10-10（wip/t50-int；第 50 班）
+## 1.1.57 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-09（wip/t48-w1a-fixes）：宣告 `GET /api/expense-categories` 的前綴（端點稽核 W1a）；併第49班 strict-bool（W1c-P2）；併 2026-10-09(wip/t49-strict-bool；W1c-P2 旗標嚴格解析＋P4 明列路由)**
 - **（併入）(next) — 2026-10-09（wip/t49-strict-bool；W1c-P2 旗標嚴格解析＋P4 明列路由）**
 - `module.json` `provides.routes` 明列 `/api/expense-categories`（費用單據下拉用，不在任何 api_prefixes 底下；demo 缺席訊息才不會漏接，W1c-P4）；`docs/platform/modules.json` M06 同步。

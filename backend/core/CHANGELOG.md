@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-10（wip/t50-int；第 50 班）
+## 1.122 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-09（wip/t48-w1c-fixes；端點稽核 W1c）；併 2026-10-09(wip/t48-w1c-fixes；端點稽核 W1c)**
 - **（併入）(next) — 2026-10-09（wip/t48-w1c-fixes；端點稽核 W1c）**
 - **工作日誌權限（W1c-P5，權限相關）**：`POST／PUT／DELETE /api/work-logs` 補上與 `GET` 同一把模組鑰匙（`work_log` 或 `case_manage`；原本寫入只要登入）；`PUT` 的 `user_id`（記錄對象）只有最高管理者能改為不同的人（本人與管理員 ⇒ 403；送回同一個值不算改，畫面編輯視窗每次都會帶）。測試：`tests/test_work_log_permissions_t49.py`。
