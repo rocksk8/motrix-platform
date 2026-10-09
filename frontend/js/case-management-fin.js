@@ -692,7 +692,7 @@ window.CM_PARTS.push(() => ({
     },
 
     _ivStatusClass(s) {
-      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[s] || ''
+      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved', '已駁回': 'badge--rejected', '已作廢': 'badge--lost' }[s] || ''
     },
 
     async uploadInvoiceVoucherIssuedFiles(v, evt) {
@@ -795,7 +795,7 @@ window.CM_PARTS.push(() => ({
     },
 
     _prStatusClass(s) {
-      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[s] || ''
+      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved', '已駁回': 'badge--rejected', '已作廢': 'badge--lost' }[s] || ''
     },
 
     // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）

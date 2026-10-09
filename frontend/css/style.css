@@ -946,6 +946,23 @@ body {
 .badge--lost     { background: #F3F4F6; color: #6B7280; }
 .badge--active   { background: var(--success-light); color: var(--success); }
 .badge--repair   { background: var(--orange-light);  color: var(--orange); }
+/* 備註（第 51 班）：payment-request-form／案件頁的狀態對照表原本沒有「已駁回」「已作廢」兩個鍵 ⇒ 掉成無底色的灰字，與「已核准」
+   分不清；現在已駁回用 .badge--rejected、已作廢沿用 .badge--lost（上面兩條）。 */
+
+/* ─── 單據狀態晶片 .st-chip（第 51 班；「我的申請」清單原本所有狀態都是同一個灰色，已核准／已駁回看起來一樣）──────────────
+   全部走語意 token（--tone-*／--surface-*／--ink-*／--line-*），沒有寫死色碼：淺色與深色各有一組值（深色值在
+   :root[data-theme="dark"]），對比由 backend/tests/test_status_chip_t51.py 逐組算（WCAG ≥ 4.5:1，淺／深各一份）。
+   狀態 → 修飾類別的對照只有一份：frontend/static/status-chip.js（MotrixStatus.chipClass）。
+   顏色之外狀態文字本身就在晶片裡（不靠顏色單獨傳達）。 */
+.st-chip { display: inline-block; font-size: 11px; font-weight: 600; line-height: 1.5; padding: 1px 8px; border-radius: 10px;
+           border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-secondary); white-space: nowrap; }
+.st-chip--draft    { background: var(--surface-sunken);   color: var(--ink-strong);       border-color: var(--line-strong); }
+.st-chip--pending  { background: var(--tone-warning-bg);  color: var(--tone-warning-fg);  border-color: var(--tone-warning-border); }
+.st-chip--signing  { background: var(--tone-info-bg);     color: var(--tone-info-fg);     border-color: var(--tone-info-border); }
+.st-chip--approved { background: var(--tone-success-bg);  color: var(--tone-success-fg);  border-color: var(--tone-success-border); }
+.st-chip--rejected { background: var(--tone-danger-bg);   color: var(--tone-danger-fg);   border-color: var(--tone-danger-border); }
+.st-chip--paid     { background: var(--tone-violet-bg);   color: var(--tone-violet-fg);   border-color: var(--tone-violet-border); }
+.st-chip--void     { background: var(--surface);          color: var(--ink-secondary);    border: 1px dashed var(--line-strong); text-decoration: line-through; }
 
 /* ═══════════════════════════════════════
    共用按鈕元件（全站規格統一，2026-08-09）

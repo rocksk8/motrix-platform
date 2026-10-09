@@ -468,7 +468,7 @@ window.CM_PARTS.push(() => ({
     },
 
     _shippingStatusClass(s) {
-      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[s] || ''
+      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved', '已駁回': 'badge--rejected', '已作廢': 'badge--lost' }[s] || ''
     },
 
     async uploadShippingSignedFiles(note, evt) {

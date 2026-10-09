@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## (next) — 2026-10-10（wip/t51-05-status-colors）：`payment-request-form.html` 狀態徽章補「已駁回」「已作廢」顏色
+- 頁首狀態徽章的對照表原本只有 4 個狀態，已駁回／已作廢掉成無底色灰字；補上 `badge--rejected`／`badge--lost`。純畫面。
+
 ## 1.0.49 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-09（wip/t49-05-bonus-cleanup）：移除憑據／請款單詳情與 PDF 端點裡不可達的 `if not row`；併 2026-10-09(wip/t48-po-bank-block)**
 - **（併入）(next) — 2026-10-09（wip/t48-po-bank-block）：出納待付款——採購單缺廠商收款帳戶時顯示原因並停用『登錄付款』**

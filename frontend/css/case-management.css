@@ -730,6 +730,8 @@ transition:background .1s;
 :root[data-theme="dark"] body.cm-page .badge--signing  { background: var(--tone-info-bg);     color: var(--tone-info-fg); }
 :root[data-theme="dark"] body.cm-page .badge--running  { background: var(--tone-success-bg);  color: var(--tone-success-fg); }
 :root[data-theme="dark"] body.cm-page .badge--settled  { background: var(--tone-violet-bg);   color: var(--tone-violet-fg); }
+:root[data-theme="dark"] body.cm-page .badge--rejected { background: var(--tone-danger-bg);   color: var(--tone-danger-fg);  border-color: var(--tone-danger-border); }
+:root[data-theme="dark"] body.cm-page .badge--lost     { background: var(--surface-neutral); color: var(--ink-secondary); }
 :root[data-theme="dark"] body.cm-page .btn-ghost       { background: var(--surface); }
 /* 原生元件的瀏覽器預設色（淺灰鈕底、黑字、白輸入框、藍連結）在不反轉的深色模式下會變成白塊／看不見的字。
    用 :where() 讓特定度為零：本頁任何作者樣式（.aq-sort、.fi、.btn…）都優先，這裡只補「沒人設」的預設值。 */
