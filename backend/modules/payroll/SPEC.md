@@ -67,7 +67,7 @@ BN(1):  BN19
 BN(2):  BN13 BN16
 ```
 
-> 📌 `BN13`、`BN16`（2026-09-24，hichan-0a 應 hichan-8d 登記，原文在 SCOPE.md）：SPEC-BONUS §十一：舊獎金項目／分潤單流程停用，寫入端點 410；題於 2026-09-24 退役（404da7c）。功能被移除，不是換一種驗證方式。
+> 📌 `BN13`、`BN16`（2026-09-24，hichan-0a 應 hichan-8d 登記，原文在 SCOPE.md）：SPEC-BONUS §十一：舊獎金項目／分潤單流程停用，寫入端點 410；題於 2026-09-24 退役（404da7c）。功能被移除，不是換一種驗證方式。**2026-10-09（第 49 班，使用者裁示）**：那 8 條 410 墓碑寫入端點（`POST /api/bonus/items｜awards｜awards/{id}/submit｜approve｜reject｜mark-paid｜void｜recall`）本身也移除（POST 現為 404／405）；舊版唯讀 GET 與群組維護保留。
 
 ## 登記
 

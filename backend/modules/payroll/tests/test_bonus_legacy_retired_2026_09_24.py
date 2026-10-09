@@ -1,7 +1,7 @@
 """舊「獎金項目＋分潤單」流程停用（SPEC-BONUS §十一／§11.7，2026-09-24）。
 
 使用者：「上一次開發的內容我無法接受」「重做成新流程」；舊單「舊的都是開發機測試用，直接作廢」。
-⇒ 舊的**寫入**端點一律 410，說明改用新頁面；**不寫入任何東西**；讀取端點與群組維護照舊。
+⇒ 舊的**寫入**端點停用（第 49 班起整個移除，原本回 410）；**不寫入任何東西**；讀取端點與群組維護照舊。
 （不以 migration 作廢任何資料——migration 會在正式機執行。）
 """
 import pytest
@@ -31,15 +31,29 @@ RETIRED = [
 
 
 @pytest.mark.parametrize("path", RETIRED)
-def test_legacy_write_endpoint_is_gone_and_writes_nothing(client, make_user, path):
+def test_legacy_write_endpoint_is_removed_and_writes_nothing(client, make_user, path):
+    """第 49 班（使用者裁示）：8 條 410 墓碑端點整個移除 ⇒ 這些 POST 不再有路由（404／405），仍然不寫任何東西。"""
     u, p = make_user(username="lg_sa", role="superadmin")
     tok = _login(client, u, p)
     before = _counts()
     r = client.post(path, headers={"Authorization": f"Bearer {tok}"},
                     json={"name": "x", "quote_no": "MQ-X", "reason": "x"})
-    assert r.status_code == 410, (path, r.status_code, r.text)
-    assert "獎金分潤" in r.json()["detail"] and "停用" in r.json()["detail"]
-    assert _counts() == before, "410 之前不可以寫入任何東西"
+    assert r.status_code in (404, 405), (path, r.status_code, r.text)
+    assert r.status_code != 410, "墓碑端點應已移除，不是回 410"
+    assert _counts() == before, "移除後不可以寫入任何東西"
+
+
+def test_no_post_route_is_registered_for_the_retired_paths(client):
+    """路由表層級的反向控制：8 條退役路徑沒有任何 POST 路由（放寬到「路徑模板」比對，/awards/1/submit ⇒ /awards/{award_id}/submit）。
+    正對照：GET /api/bonus/awards 與 /items 仍在（讀取端點保留）。"""
+    import re
+    ops = {}
+    for path, methods in client.app.openapi()["paths"].items():
+        ops[path] = {m.upper() for m in methods}
+    retired = {re.sub(r"/awards/1/", "/awards/{award_id}/", p) for p in RETIRED}
+    for path in retired:
+        assert "POST" not in ops.get(path, set()), (path, ops.get(path))
+    assert "GET" in ops["/api/bonus/awards"] and "GET" in ops["/api/bonus/items"]
 
 
 def test_legacy_read_and_group_endpoints_still_work(client, make_user):

@@ -1,5 +1,10 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-10-09（wip/t49-05-bonus-cleanup）：移除舊版獎金分潤的 8 條 410 墓碑寫入端點（端點稽核 W1a，使用者裁示）
+- `api/bonus.py`：移除 `POST /api/bonus/items`、`POST /api/bonus/awards`、`POST /api/bonus/awards/{id}/submit｜approve｜reject｜mark-paid｜void｜recall`（原本一律回 410「舊的獎金分潤流程已停用」，函式本體是被 `dependencies=_GONE` 擋掉的死碼，共約 450 行）與 `_legacy_write_gone`／`_GONE`、不再用到的匯入。現在對這些路徑的 POST 回 404／405；前端沒有任何呼叫（`bonus.js` 只打 `/api/bonus/cases`）。
+- 保留：舊版唯讀端點（`GET /api/bonus/items｜base/{q}｜awards｜awards/{id}｜awards/plan/{q}｜awards/candidates｜awards/{id}/preview｜pdf-download`）、群組維護、`module.json` probes（皆 GET）。
+- 測試：`test_bonus_legacy_retired_2026_09_24.py` 改驗「POST 已無路由（404／405，不寫任何東西）」＋路由表層級反向控制；`modules/case/tests/route_table_golden.json` 刪去那 8 筆（使用者裁示的刻意移除，其餘逐筆不變）。
+
 ## 1.2.5 — 2026-10-08（wip/t47-audit-fixes）：勞報單政策收緊（Q-S6 自核、Q-S9 作廢已核准；Q-S7 維持現狀）與並發防護補強（S1／S2／S3 本體已在 1.2.4）
 - **Q-S6（A）**：有簽核層時，送審人也不得自行核准自己送的勞報單（`check_no_tier_self_approval`，與沒有簽核層的路徑一致）；**例外**：全公司只有這一位在職最高管理者。簽核層裡只列了送審人自己、且還有別的在職最高管理者時，這張單無法被簽過——送審人可以退回（回草稿）再改由他人簽。
 - **Q-S9（A）**：作廢「已核准」的勞報單需要真正的最高管理者（持有勞報單模組但不是最高管理者者 403）；作廢「已匯出」維持原規則（模組持有者可作廢）。

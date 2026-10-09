@@ -268,9 +268,10 @@ def _extract_function_source(path, func_name):
 
 #: `§5` 今天的母體。改動這裡**退回給 A**——它是規格點名的清單，不是我
 #: 自己盤點的。
+#: 2026-10-09（第 49 班，使用者裁示）：舊版獎金分潤的 8 條 410 墓碑寫入端點整個移除——`reject_award`、
+#: `mark_award_paid` 這兩支（本來就被 `dependencies=_GONE` 擋掉、永遠回 410）一併從母體拿掉；
+#: 母體剩下仍在運作的 `void_voucher`。掃描器本身的正對照（下面兩題）不受影響。
 _REASON_GUARD_FAMILY = (
-    ("modules/payroll/api/bonus.py", "reject_award"),
-    ("modules/payroll/api/bonus.py", "mark_award_paid"),
     ("modules/accounting/api/vouchers.py", "void_voucher"),   # M06 搬遷（2026-09-26）；M06 不在時不比
 )
 
@@ -317,14 +318,11 @@ def test_bn17_scanner_positive_control_comment_only_reason_is_not_counted():
         "用文字比對，不是真的解析 AST。")
 
 
-def test_bn17_edit_log_write_site_for_bonus_award_exists():
-    """✅ **第二道：`bonus_award_edit_log` 的寫入端至少存在一處——
-    釘呼叫點存在，不釘資料列數。**
-
-    ☠️ 釘列數的話，一個「測試跑完清空資料庫」的環境會讓這題紅；而
-    ⚠️ 表存在超過一整輪都是 0 筆（規格 §5 自己踩過這個坑），只驗
-    「表在」證明不了「有人在寫」。
-    """
+def test_bn17_edit_log_write_site_for_bonus_award_is_gone_with_the_legacy_write_endpoints():
+    """第 49 班（使用者裁示）：舊版獎金分潤的寫入端點（含寫 `bonus_award_edit_log` 的 reject／void 等）整個移除 ⇒
+    `api/bonus.py` 裡不應再有任何寫該表的 `append_edit_log` 呼叫點（舊表只剩唯讀的 GET）。
+    原本這題釘「至少一處存在」（防『表在但沒人寫』）；現在是反過來釘「沒有殘留的寫入點」，
+    防止移除一半（端點沒了、寫入碼還在）。"""
     src = (ROOT / "modules" / "payroll" / "api" / "bonus.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     found = False
@@ -339,6 +337,6 @@ def test_bn17_edit_log_write_site_for_bonus_award_exists():
                 if kw.arg == "table" and isinstance(kw.value, ast.Constant) \
                         and kw.value.value == "bonus_award_edit_log":
                     found = True
-    assert found, (
-        "`modules/payroll/api/bonus.py` 裡找不到任何一個 `append_edit_log(..., "
-        "table=\"bonus_award_edit_log\")` 呼叫點——表存在不代表有人在用它。")
+    assert not found, (
+        "`modules/payroll/api/bonus.py` 裡還有 `append_edit_log(..., table=\"bonus_award_edit_log\")` 呼叫點——"
+        "舊版獎金分潤寫入端點已移除，這裡不該再寫舊表。")
