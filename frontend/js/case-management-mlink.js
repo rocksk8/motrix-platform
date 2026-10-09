@@ -125,7 +125,7 @@ window.CM_PARTS.push(() => ({
       if (!mat || mat.orderItemId || !this.moCanEdit || !this.moCanEdit()) return []
       const keys = new Set([this._mlNorm(mat.name), this._mlNorm(mat.model), this._mlNorm(`${mat.name || ''} ${mat.model || ''}`)])
       keys.delete('')
-      return (this.mlGroups || []).filter(g => g && g.key && !g.existing && !this.mlGroupBlock(g) && keys.has(this._mlNorm(g.name)))
+      return (this.mlGroups || []).filter(g => g && g.key && g.totalPrice != null && !g.existing && !this.mlGroupBlock(g) && keys.has(this._mlNorm(g.name)))
     },
     mlPickCandidate(mat, groupKey) {                      // groupKey＝mlGroupKey(g)（'g:' + key）；回 true＝已帶入並連結
       const g = (this.mlGroups || []).find(x => this.mlGroupKey(x) === groupKey)

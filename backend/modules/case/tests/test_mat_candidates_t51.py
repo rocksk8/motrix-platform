@@ -69,6 +69,13 @@ def test_already_linked_or_read_only_card_has_no_candidates():
 
 
 @needs_node
+def test_no_amount_visibility_means_no_candidates():
+    # moCanEdit() 對 admin／project_manage 為真，但後端對看不到金額者回 totalPrice=null ⇒ 不顯示只會失敗的候選
+    assert _run([_g("a", "A", totalPrice=None)], [["cands", {"name": "A"}]])["cands"] == []
+    assert _run([_g("a", "A")], [["cands", {"name": "A"}]])["cands"] == ["a"]
+
+
+@needs_node
 def test_pick_imports_draft_and_links_card_without_touching_ordered_flags():
     mat = {"name": "A", "ordered": False, "arrived": False, "orderItemId": "g:a"}
     r = _run([_g("a", "A")], [["change", mat], ["cands", mat]])
