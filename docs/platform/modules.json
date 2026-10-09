@@ -106,6 +106,7 @@
    "js:static/privacy-notice.js",
    "js:static/record-link.js",
    "js:static/sidebar.js",
+   "js:static/status-chip.js",
    "js:static/users-duty.js",
    "js:static/ui.js",
    "page:index.html",

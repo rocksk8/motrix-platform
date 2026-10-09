@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-10（wip/t51-05-status-colors）：單據狀態徽章依狀態上色（使用者回報：「我的申請」已核准／已駁回同一個灰色）
+- `payment-request.html`「我的申請」清單：狀態改用共用晶片 `st-chip`（`css/style.css`，全走語意 token、淺／深色對比 ≥ 4.5:1）＋狀態對照表 `static/status-chip.js`（`MotrixStatus.chipClass`）：草稿＝中性、待審核＝琥珀、簽核中＝藍、已核准＝綠、已駁回＝紅、已付款＝紫、已作廢／已取消＝灰虛線刪除線；未知狀態維持中性。
+- 案件頁（`case-management-dispatch／fin／shipping.js`）的 4 狀態徽章對照表補上「已駁回→`badge--rejected`」「已作廢→`badge--lost`」（原本掉成無底色灰字）；深色補 `case-management.css` 兩條覆寫。純畫面，沒有後端與權限變更。
+- 測試：`backend/tests/test_status_chip_t51.py`（顏色兩兩不同、無寫死色碼、淺／深色對比逐組算、對照表詞彙、標記釘、瀏覽器端實際算出的底色／字色彼此不同）。
+
 ## 1.0.169 — 2026-10-10（wip/t50b-ab-labelfix）：報價單頁管銷分攤列依『這張單的口徑』顯示
 - `quotation-form.html`：兩列管銷分攤（「管銷分攤（10%，固定）」／「管銷分攤（直接毛利 N%）」）與偏離警示改看 `ohVer()`（這張單的口徑：已結案的舊單＝1），不再看全域開關 `oh.mode`——全域 v2 時，已結案的舊口徑單仍顯示 10% 那一列（數字本來就沒變，只是標籤說錯）。精算頁的口徑本來就先看凍結的 summary，不需改。測試 `tests/test_overhead_s3_form_t48.py`（已結案舊單／已結案新口徑戳記／未結案三種）。
 

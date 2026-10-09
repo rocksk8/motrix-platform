@@ -391,7 +391,7 @@ function paymentRequestForm() {
     dirty() { this.isDirty = true },
 
     statusClass() {
-      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[this.q.status] || ''
+      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved', '已駁回': 'badge--rejected', '已作廢': 'badge--lost' }[this.q.status] || ''
     },
 
     // X-VAT（2026-09-26）：試算與後端 _calc_scope_amount 同一個算式、同一套四捨五入（legal-round.js）
