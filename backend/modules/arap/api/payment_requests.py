@@ -357,8 +357,6 @@ def get_payment_request(request_no: str, authorization: str = Header(None)):
         raise HTTPException(404, "單據不存在")
     _guard_voucher(conn, row, user)
     conn.close()
-    if not row:
-        raise HTTPException(404, f"請款單 {request_no} 不存在")
     return _request_public(row)
 
 
@@ -844,8 +842,6 @@ def download_payment_request_pdf(request_no: str, authorization: str = Header(No
         raise HTTPException(404, "單據不存在")
     _guard_voucher(conn, row, user)
     conn.close()
-    if not row:
-        raise HTTPException(404, "請款單不存在")
     try:
         pdf_bytes = generate_payment_request_pdf_bytes(request_no)
     except (ValueError, RuntimeError) as e:
