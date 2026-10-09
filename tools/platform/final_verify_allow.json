@@ -1,0 +1,64 @@
+{
+ "_說明": "final_verify 的已知例外與基準；改它要有理由（審查看得到）。root_files＝根目錄允許的追蹤檔；public_ok＝公開 API 白名單基準（main._PUBLIC_API_PATHS）；auth_ok＝handler 自己沒有授權檢查、只靠全站閘門的已知路由（'METHOD /path' 或 '/path'）；dangling_links_ok（'檔::連結'）／dangling_ticks／dangling_tick_patterns＝文件裡刻意寫成範例或執行期才有的路徑；frontend_calls_ok／ip_ok／tracked_ok＝其他已知例外。",
+ "root_files": [
+  ".gitattributes",
+  ".gitignore",
+  "AGENT-HANDOFF-TEMPLATE.md",
+  "CHANGELOG.md",
+  "DEPLOY.md",
+  "DR-SOP.md",
+  "GITFLOW.md",
+  "HTTPS-DEPLOY-CHECKLIST.md",
+  "LETSENCRYPT-PUBLIC-CERT-PLAN.md",
+  "MODULE-AUDIT-2026-09-13.md",
+  "MOTRIX-ERP-ARCHITECTURE-MAP.md",
+  "MOTRIX-ERP-QUICK.md",
+  "MULTIWIN-PROTOCOL.md",
+  "NETWORK-PLAN-MODULE-DESIGN.md",
+  "PASSKEY-CA-ROLLOUT.md",
+  "SELLABLE-AND-MOBILE-SPEC.md",
+  "WEEKLY-AUDIT-2026-09-07_2026-09-10.md",
+  "firewall_setup.bat",
+  "start_server.ps1"
+ ],
+ "public_ok": [
+  "/api/auth/login",
+  "/api/auth/login/qr-approve",
+  "/api/auth/login/qr-info",
+  "/api/auth/login/qr-status",
+  "/api/auth/login/totp",
+  "/api/auth/logout",
+  "/api/auth/webauthn/login/begin",
+  "/api/auth/webauthn/login/complete",
+  "/api/ping",
+  "/api/system/branding",
+  "/api/system/branding/favicon",
+  "/api/system/branding/logo",
+  "/api/system/branding/logo-dark",
+  "/api/system/deployed-version",
+  "/api/system/version",
+  "/api/system/webauthn-config-status"
+ ],
+ "auth_ok": [
+  "GET /api/now"
+ ],
+ "dangling_links_ok": [
+  "docs/platform/plans/DOC-CLEANUP-INVENTORY-T48.md::x.md"
+ ],
+ "dangling_ticks": [],
+ "dangling_tick_patterns": [
+  "\\.db$",
+  "\\.deployed_files\\.json$",
+  "company_setup_grace\\.json$",
+  "prod_env\\.json$",
+  "modules\\.lock\\.json$",
+  "^backend/(logs|certs|db_backups|data)/",
+  "\\.(key|pem|log)$",
+  "heartbeat_config\\.json$",
+  "credentials",
+  "\\.deployed_commit\\.json$"
+ ],
+ "frontend_calls_ok": [],
+ "ip_ok": [],
+ "tracked_ok": []
+}
