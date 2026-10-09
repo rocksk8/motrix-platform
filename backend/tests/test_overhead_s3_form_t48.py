@@ -101,3 +101,28 @@ def test_the_five_inputs_are_gone_from_the_page_markup():
     for k in ("indirectLogistics", "indirectInstallation", "indirectTravel", "indirectWarranty", "indirectOther"):
         assert 'data-num="%s"' % k not in html and "setNumField(q, '%s'" % k not in html, k
     assert "qf-legacy-indirect" in html
+
+
+@needs_node
+def test_row_switch_and_deviation_follow_the_quotes_own_basis_not_the_global_mode():
+    """稽核 b5：全域 mode=v2 時，已結案的舊口徑單（沒有 formulaVer）仍是 10% 口徑——畫面要顯示『管銷分攤（10%，固定）』那一列、不顯示 25% 那一列，也不出偏離警示。"""
+    got = _page("quotation-form.html", "quotationForm", _SETUP + """
+        o.oh = { mode: 'v2', defaultPct: 25 }
+        o.q.overheadPct = 40
+        const unsettled = { ver: o.ohVer(), dev: o.ohDeviates(), admin: run().admin }
+        o.q.dealTag = '已結案'                       // 舊單：沒有 formulaVer
+        const settledLegacy = { ver: o.ohVer(), dev: o.ohDeviates(), admin: run().admin }
+        o.q.tot = { formulaVer: 2 }                 // 已結案但存的是新口徑戳記
+        const settledV2 = { ver: o.ohVer(), dev: o.ohDeviates() }
+        return { unsettled, settledLegacy, settledV2 }""")
+    assert got["unsettled"] == {"ver": 2, "dev": True, "admin": 14800}, got
+    assert got["settledLegacy"] == {"ver": 1, "dev": False, "admin": 10000}, got
+    assert got["settledV2"] == {"ver": 2, "dev": True}, got
+
+
+def test_the_two_admin_rows_are_switched_by_the_quotes_basis_in_the_markup():
+    import pathlib
+    html = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "pages" / "quotation-form.html").read_text(encoding="utf-8")
+    assert '<div class="cost-row" x-show="ohVer() !== 2">' in html and 'x-show="ohVer() === 2" x-cloak style="flex-wrap:wrap" data-testid="qf-overhead-row"' in html
+    assert "x-show=\"oh.mode" not in html, "列的顯示不可以再看全域開關"
+    assert "ohDeviates() { return this.ohVer() === 2" in html

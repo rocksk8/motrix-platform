@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-10（wip/t50b-ab-labelfix）：報價單頁管銷分攤列依『這張單的口徑』顯示
+- `quotation-form.html`：兩列管銷分攤（「管銷分攤（10%，固定）」／「管銷分攤（直接毛利 N%）」）與偏離警示改看 `ohVer()`（這張單的口徑：已結案的舊單＝1），不再看全域開關 `oh.mode`——全域 v2 時，已結案的舊口徑單仍顯示 10% 那一列（數字本來就沒變，只是標籤說錯）。精算頁的口徑本來就先看凍結的 summary，不需改。測試 `tests/test_overhead_s3_form_t48.py`（已結案舊單／已結案新口徑戳記／未結案三種）。
+
 ## 1.0.168 — 2026-10-10（wip/t50-int 整合修正）
 - `api/case_extra_expenses.py`：採購單廠商帳戶檢查開關（`PUT /api/extra-expenses/po-bank-block`）的 `enabled` 以 `is True` 判斷（上面已驗為真布林；符合請求旗標不可用真值判斷的守門）。行為不變。
 

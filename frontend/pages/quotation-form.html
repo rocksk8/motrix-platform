@@ -1854,12 +1854,12 @@
         <hr class="cost-divider">
         <div style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#555;margin-bottom:8px">間接成本</div>
 
-        <div class="cost-row" x-show="oh.mode !== 'v2'">
+        <div class="cost-row" x-show="ohVer() !== 2">
           <span class="cost-row__label">管銷分攤（10%，固定）</span>
           <span class="cost-row__val warning" x-text="'NT$ ' + tot.adminCost.toLocaleString()"></span>
         </div>
         <!-- 第 48 班 S3：管銷分攤＝直接毛利 × 比率（每張可調，預設取全域設定；只有最高管理者能改，偏離預設要警示）。口徑開關 off（legacy）時整塊不顯示 -->
-        <div class="cost-row" x-show="oh.mode === 'v2'" x-cloak style="flex-wrap:wrap" data-testid="qf-overhead-row">
+        <div class="cost-row" x-show="ohVer() === 2" x-cloak style="flex-wrap:wrap" data-testid="qf-overhead-row">
           <span class="cost-row__label" style="display:flex;align-items:center;gap:6px">
             管銷分攤（直接毛利
             <template x-if="session.role === 'superadmin' && !ohSettled()">
@@ -2494,7 +2494,7 @@
         return ['indirectLogistics', 'indirectInstallation', 'indirectTravel', 'indirectWarranty', 'indirectOther']
           .reduce((t, k) => t + (Number(this.q[k]) || 0), 0)
       },
-      ohDeviates() { return this.oh.mode === 'v2' && Number(this.ohPct()) !== Number(this.oh.defaultPct) },
+      ohDeviates() { return this.ohVer() === 2 && Number(this.ohPct()) !== Number(this.oh.defaultPct) },     // 看這張單的口徑（ohVer），不是全域開關：已結案的舊口徑單不顯示偏離警示
       setOhPct(raw, el) {
         const s = String(raw == null ? '' : raw).trim()
         const n = Number(s)
