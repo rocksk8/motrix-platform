@@ -6,12 +6,12 @@ python tools/platform/setup_prepush.py            # 登記 .githooks（core.hook
 python tools/platform/setup_merge_drivers.py      # 兩邊各新增 `## (next)` 併成一塊（merge_drivers.py 有更新，複本要重登記）
 python tools/platform/setup_prepush.py --check    # 開工第一件事
 ```
-日常：`git push` 自動跑 `tools/platform/prepush_check.py --hook`（< 60 秒）。手動：`python tools/platform/prepush_check.py [--static-only] [--base origin/platform]`。
+日常：`git push` 自動跑 `tools/platform/prepush_check.py --hook`（閒置機器 ≈ 1 分鐘；硬上限 90 秒）。手動：`python tools/platform/prepush_check.py [--static-only] [--base origin/platform]`。
 
 | 情況 | 結果 |
 |---|---|
 | 有紅（靜態 A1～A8、wip 帶了產生檔、動到模組的 changelog_follows_code、FORM_VERSION、便宜守門檔） | 擋推送，印「檔案／原因／修法」 |
-| 超過時間預算（55 秒）未完成 | 警告放行（輸出明寫「不可當綠」） |
+| 超過時間預算（預設 90 秒；閒置機器約 60 秒內）未完成 | 警告放行（輸出明寫「不可當綠」） |
 | 推 `train/*`、`platform`（整合模式：A0 產生檔過期＋全模組 changelog） | 只警告、不擋 |
 | 推的不是目前 HEAD／刪除遠端分支 | 略過 |
 | 緊急 | `git push --no-verify`（在推送說明寫理由） |

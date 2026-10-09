@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """推送前檢查（第 51 班；設計 docs/platform/plans/SPEEDUP-PREPUSH-T50.md）。
 
-把「整合期才紅」的登記／守門類紅燈提前到作者推送之前：< 60 秒、單一行程、只讀。
+把「整合期才紅」的登記／守門類紅燈提前到作者推送之前：目標閒置機器約 1 分鐘（硬上限 --budget-sec 90）、單一行程、只讀。
 **絕不做**：取號（train_number assign）、重產（regen_all 只准 check_only）、commit／push／checkout、
 設 MOTRIX_TRAIN=1（分支上的 `(next)` 佔位本來就合法）、e2e／瀏覽器、改任何追蹤檔、寫任何「綠燈紀錄」。
 預檢綠 ≠ 閘門綠：完整 B／e2e 仍由 run-stage 負責。
@@ -9,7 +9,7 @@
 [單位] tools:prepush_check   [層] 工具   [穩定度] 內部
 
 用法（任一 worktree 根目錄；Python＝主工作樹 .venv312）：
-  python tools/platform/prepush_check.py [--base <ref>] [--budget-sec 55] [--static-only] [--integration] [--json-out F]
+  python tools/platform/prepush_check.py [--base <ref>] [--budget-sec 90] [--static-only] [--integration] [--json-out F]
   python tools/platform/prepush_check.py --hook      （git pre-push 呼叫：紅 ⇒ exit 1 擋推送；未完成／警告 ⇒ exit 0）
 結束碼：0 綠（可含警告）；1 有紅；2 工具本身出錯；3 未完成（超過時間預算；hook 當警告放行）。
   --integration：整合分支模式（train/*、platform）：A0 產生檔過期（check_only）＋全模組 changelog 檢查；**只警告、不擋**。
@@ -188,7 +188,7 @@ def run_tests(repo, tests, timeout):
 
 # ── 主流程 ─────────────────────────────────────────────
 
-def run(repo=REPO, base=None, budget_sec=55, static_only=False, integration=False, runner=None):
+def run(repo=REPO, base=None, budget_sec=90, static_only=False, integration=False, runner=None):
     """⇒ (exit_code, report_text, data)。runner 供測試注入：runner(repo, tests, timeout) ⇒ (rc, out, secs)。"""
     t0 = time.time()
     repo = Path(repo)
@@ -241,7 +241,7 @@ def run(repo=REPO, base=None, budget_sec=55, static_only=False, integration=Fals
 def main(argv=None):
     ap = argparse.ArgumentParser(description="推送前檢查（< 60 秒、只讀）")
     ap.add_argument("--base")
-    ap.add_argument("--budget-sec", type=int, default=55)
+    ap.add_argument("--budget-sec", type=int, default=90)
     ap.add_argument("--static-only", action="store_true")
     ap.add_argument("--integration", action="store_true")
     ap.add_argument("--hook", action="store_true", help="git pre-push：紅 ⇒ 1；未完成／整合模式 ⇒ 0（只警告）")
