@@ -56,6 +56,19 @@ def _json_list(value, field):
                       ensure_ascii=False)
 
 
+def _flag(body, key, default):
+    """布林欄位的嚴格解析（W1c）：缺 ⇒ default；true/false 或 0/1 ⇒ 布林；其他（字串 "false"、"0"、null…）⇒ 422。
+    原本 `bool(body.get(...))` 把 JSON 字串 "false" 當成 True——『需確認的高頻時段』確認旗標與『啟用』旗標可被字串蓋過。"""
+    if key not in body:
+        return default
+    v = body[key]
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, int) and v in (0, 1):
+        return bool(v)
+    raise HTTPException(422, "%s 必須是 true 或 false" % key)
+
+
 def _opt_int(value, field):
     """金額上下限：空值 → `None`（不篩）。**`None` 不是 `0`。**
 
@@ -123,7 +136,7 @@ def create_watch(body: dict = Body(...), authorization: str = Header(None)):
             (name, keywords, _json_list(body.get("excludes"), "excludes"), org,
              _opt_int(body.get("budgetMin"), "budgetMin"),
              _opt_int(body.get("budgetMax"), "budgetMax"),
-             1 if body.get("enabled", True) else 0, now, now),
+             1 if _flag(body, "enabled", True) else 0, now, now),
         )
         new_id = cur.lastrowid
         conn.commit()
@@ -201,7 +214,7 @@ def update_watch(watch_id: int, body: dict = Body(...),
         # **操作成功了，而它做的不只是你要的那件事。**
         enabled = row["enabled"]
         if "enabled" in body:
-            enabled = 1 if body["enabled"] else 0
+            enabled = 1 if _flag(body, "enabled", True) else 0
 
         conn.execute(
             "UPDATE tender_watches SET name=?, keywords=?, excludes=?, org=?, "
@@ -461,7 +474,7 @@ def set_schedule(body: dict = Body(...), authorization: str = Header(None)):
     而使用者看到的是一個錯誤訊息 ⇒ 他會以為什麼都沒變。
     """
     _require_radar(authorization)
-    confirmed = bool(body.get("confirmHighFrequency"))
+    confirmed = _flag(body, "confirmHighFrequency", False)
     changes = []
     _hours_field(body, "scanHours", tender_source.SCAN_HOURS_SETTING,
                  "抓取時段", confirmed, changes)

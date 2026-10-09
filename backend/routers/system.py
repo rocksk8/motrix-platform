@@ -616,17 +616,62 @@ def list_work_logs(
     return result
 
 
+def _work_log_fields(conn, body: dict, keys) -> dict:
+    """工作日誌欄位的型別與範圍檢查（W1c 稽核）：原本 `float("abc")`、`.strip()` 打在非字串、不存在的 user_id 都是 500 或寫進壞資料；
+    現在一律 422。只檢查 `keys` 裡且有帶的欄位；回傳正規化後的值（日期 YYYY-MM-DD、時數 float、user_id int、文字去頭尾空白）。"""
+    from helpers.dates import normalize_date
+    out = {}
+    if "log_date" in keys and "log_date" in body:
+        v = body["log_date"]
+        if not isinstance(v, str) or not v.strip():
+            raise HTTPException(422, "日期格式不正確，需為 YYYY-MM-DD")
+        out["log_date"] = normalize_date(v, "日期")
+    if "user_id" in keys and "user_id" in body:
+        v = body["user_id"]
+        if isinstance(v, bool) or not isinstance(v, (int, str)) or not str(v).strip().lstrip("-").isdigit():
+            raise HTTPException(422, "記錄對象格式不正確")
+        v = int(v)
+        if conn.execute("SELECT 1 FROM users WHERE id=?", (v,)).fetchone() is None:
+            raise HTTPException(422, "找不到記錄對象")
+        out["user_id"] = v
+    if "content" in keys and "content" in body:
+        v = body["content"]
+        if not isinstance(v, str) or not v.strip():
+            raise HTTPException(422, "請填寫工作內容")
+        out["content"] = v.strip()
+    if "hours" in keys and "hours" in body:
+        v = body["hours"]
+        try:
+            h = float(v) if not isinstance(v, bool) and isinstance(v, (int, float, str)) else None
+        except ValueError:
+            h = None
+        if h is None or h != h or h in (float("inf"), float("-inf")) or h < 0 or h > 1000:
+            raise HTTPException(422, "時數必須是 0～1000 的數字")
+        out["hours"] = h
+    for k in ("case_no", "contact_type"):
+        if k in keys and k in body:
+            v = body[k]
+            if v is not None and not isinstance(v, str):
+                raise HTTPException(422, "%s 必須是文字" % k)
+            out[k] = (v or "").strip()
+    return out
+
+
 @router.post("/api/work-logs")
 def create_work_log(body: dict = Body(...), authorization: str = Header(None)):
     u = _require_user(authorization)
-    log_date = body.get("log_date", "")
-    user_id  = body.get("user_id")
-    content  = body.get("content", "").strip()
-    hours    = float(body.get("hours", 8.0))
-    case_no  = (body.get("case_no") or "").strip()
-    contact_type = (body.get("contact_type") or "").strip()
-    if not log_date or not user_id or not content:
+    _ct = body.get("content")
+    if not body.get("log_date") or not body.get("user_id") or not (_ct.strip() if isinstance(_ct, str) else _ct):
         raise HTTPException(400, "請填寫日期、記錄對象與工作內容。")
+    _c = get_db()
+    try:
+        _f = _work_log_fields(_c, body, ("log_date", "user_id", "content", "hours", "case_no", "contact_type"))
+    finally:
+        _c.close()
+    log_date, user_id, content = _f["log_date"], _f["user_id"], _f["content"]
+    hours    = _f.get("hours", 8.0)
+    case_no  = _f.get("case_no", "")
+    contact_type = _f.get("contact_type", "")
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     conn = get_db()
     cur = conn.execute(
@@ -655,10 +700,15 @@ def update_work_log(wid: int, body: dict = Body(...), authorization: str = Heade
         conn.close()
         raise HTTPException(403, "只能修改自己的工作日誌")
     sets, params = [], []
+    try:
+        _f = _work_log_fields(conn, body, ("log_date", "user_id", "content", "hours", "case_no", "contact_type"))
+    except HTTPException:
+        conn.close()
+        raise
     for field in ("log_date", "user_id", "content", "hours", "case_no", "contact_type"):
-        if field in body:
+        if field in _f:
             sets.append(f"{field}=?")
-            params.append(body[field])
+            params.append(_f[field])
     if not sets:
         conn.close()
         return {"ok": True}

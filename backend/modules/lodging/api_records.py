@@ -150,6 +150,8 @@ def lodging_record_create(body: dict = Body(...), authorization: str = Header(No
             conn.commit()
     finally:
         conn.close()
+    # 稽核（W1c）：只記紀錄編號與筆數；中心點地址可能指向自然人（IP-97），不進稽核內容
+    _audit(_tok(authorization), "lodging_record_create", "lodging_search", str(rid), "旅宿查詢紀錄", {"count": len(items)})
     return {"id": rid, "count": len(items)}
 
 
@@ -326,6 +328,7 @@ def lodging_quote_create(body: dict = Body(...), authorization: str = Header(Non
             conn.commit()
     finally:
         conn.close()
+    _audit(_tok(authorization), "lodging_quote_create", "lodging_quote", str(qid), "旅宿詢價紀錄", {"source": src, "sourceId": sid})   # 稽核（W1c）：不記金額
     return {"id": qid}
 
 
