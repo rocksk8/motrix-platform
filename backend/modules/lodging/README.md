@@ -43,3 +43,7 @@
 | L1 `helpers.geo`（定位） | L1 函式 | —（L1 一定在） |
 | L1 地圖頁覆蓋層（IP-101 `map.overlay`） | `module.json` `map_overlays` 宣告＋`pages/lodging-overlay.js` 經 `MotrixMapOverlay.register` | 本模組不在 ⇒ 地圖頁沒有「附近旅宿」按鈕 |
 | L1 每日 JSON 備份 | `module.json` `data.tables` 宣告 T1（archive 自動併入） | —（本模組未載入 ⇒ 不列，資料仍在整庫備份） |
+
+## 第 46～51 班追加（文件同步 DOCSYNC-T52；細節與版本見 CHANGELOG）
+
+- **稽核補洞**（1.2.4，端點稽核 W1c）：`POST /api/lodging/records`（建立查詢紀錄）與 `POST /api/lodging/quotes`（人工詢價）成功時寫稽核（`lodging_record_create`…；只記紀錄編號與筆數，中心點地址可能指向自然人，不進稽核內容）。模組內任何定義 `@router` 端點的檔都納入「寫入端點必須稽核」守門掃描。無 migration、無權限變更。

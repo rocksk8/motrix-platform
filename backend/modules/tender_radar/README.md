@@ -48,3 +48,7 @@
 ## 拿掉本模組時
 
 伺服器照常啟動；`/api/tender-radar/*` 回 404；系統頁不再列出這個開關；資料表與資料保留。
+
+## 第 46～51 班追加（文件同步 DOCSYNC-T52；細節與版本見 CHANGELOG）
+
+- **旗標嚴格解析**（1.5.8）：`PUT /api/tender-radar/schedule` 的 `confirmHighFrequency`、`POST/PUT /api/tender-radar/watches` 的 `enabled` 只收真布林（`helpers.validation.body_flag`；字串 `"false"` 以前會被當成 true）；JSON null 視同沒帶（`PUT watches` 的 `enabled: null` 維持原值、不再停用）。端點稽核 W1c 的其餘修正見 CHANGELOG 1.5.8。

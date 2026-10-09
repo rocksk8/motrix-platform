@@ -45,3 +45,8 @@
 `reports.html`、`devices.html`、`warranty.html`、`procurement.html`、`sales-orders.html`（轉址頁）。
 實體檔暫留 `frontend/pages/`（core.pages 依 module.json 宣告歸屬本模組；搬進 `modules/analytics/pages/` 屬 STAGE-C C5）。
 地圖（`map.html`、`map_points`）是 L1 共用能力，不屬於本模組。
+
+## 第 46～51 班追加（文件同步 DOCSYNC-T52；細節與版本見 CHANGELOG）
+
+- **用語與標籤**（1.0.36）：營運報表（頁面／Excel／PDF）「淨利／淨利率」改稱「營業利益／營業利益率」（內部鍵 `netProfit`／`netMarginPct` 不變）；「管銷分攤」列標籤依該案口徑戳記（`pdf_gen.admin_cost_label`：新口徑「（直接毛利 N%）」，舊／無戳記「（報價稅前 10%）」）；PDF 的管銷列在比率＝全域預設時只寫「管銷分攤（直接毛利）」，不同才印 N%；Excel「毛利分析」最右多一欄「管銷比率」（既有欄號不動，現為 27 欄）。數字一律讀已存值，本模組不重算利潤。
+- 未完成精算的結案報表（`pdf_gen.estimated_margin_label`）：新口徑「預估營業利益率」、舊口徑維持「預估淨毛利率」。
