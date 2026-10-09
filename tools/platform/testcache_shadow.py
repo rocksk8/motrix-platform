@@ -201,9 +201,27 @@ def _start_monitoring(rec):
 
 
 # ── pytest plugin hooks ─────────────────────────────────────────────────────────────────────────
+def cache_dir_inside_repo():
+    """快取目錄解析後落在被觀察的 repo／本檔所在 worktree 裡 ⇒ 回那個根；否則 None。
+    寫進 repo 會弄髒工作樹（官方階段紀錄要求樹乾淨，指紋 = 整棵 tracked tree）⇒ 一律拒絕。"""
+    try:
+        d = cache_dir().resolve()
+    except (OSError, ValueError):
+        return None
+    for r in (root(), _REPO.resolve()):
+        if _under(d, r):
+            return r
+    return None
+
+
 def pytest_configure(config):
     global _REC, _HOOKED
     if not enabled():
+        return
+    bad = cache_dir_inside_repo()
+    if bad is not None:
+        sys.stderr.write("testcache_shadow: 停用——MOTRIX_TESTCACHE_DIR（%s）在 repo／worktree（%s）裡，錄製會弄髒工作樹並使官方階段紀錄失效；"
+                         "請改指到 repo 外的目錄（預設 D:\\MOTRIX-TESTCACHE）。測試照常執行。\n" % (cache_dir(), bad))
         return
     try:
         _REC = Recorder(root())
