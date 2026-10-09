@@ -471,6 +471,17 @@ class _CaseAccess:
         return guard_case_access(conn, quote_no, user, allow_module=allow_module)
 
     @staticmethod
+    def allowed(conn, quote_no, user, allow_module=None):
+        """不丟例外、不關連線的版本（第 49 班）：這個人能不能碰這張案件（案件不存在 ⇒ False）。規則與 guard 同一份（case_access_allowed）。
+        給只需要『看得到／看不到』的取用端（網路規劃書清單依案件過濾）。"""
+        import sqlite3
+        try:
+            q = conn.execute("SELECT sales_person_id, sales_person, assigned_user_ids, data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        except sqlite3.OperationalError:
+            return False
+        return bool(q) and bool(case_access_allowed(conn, q, user, allow_module=allow_module))
+
+    @staticmethod
     def summary(conn, quote_no):
         """{customer, project}；案件不存在 ⇒ None。
         〔淘汰（主持裁示 2026-09-26）：正式版是 `case.summary`；這裡轉呼叫它（系統身分＝原本就不驗權限，行為不變）。
