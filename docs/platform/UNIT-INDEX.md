@@ -30,7 +30,7 @@
 | `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 29 | 120 | — |
 | `core:heartbeat_job` | L1 | Independent heartbeat pinger: confirms local ERP is responding, then pings an（無單位卡） | 1 | 0 | — |
 | `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 11 | 0 | — |
-| `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 21 | 17 | — |
+| `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 22 | 17 | — |
 | `core:photos` | L1 | Photo upload processing: EXIF GPS extraction and watermarking.（無單位卡） | 2 | 2 | — |
 | `core:trail` | L1 | 操作軌跡（`user_request_log`）的共用設定，以及把路徑翻成人話的對照表。（無單位卡） | 23 | 2 | — |
 | `helper:approval_queue` | L1 | 「待我簽核」佇列與轉簽的共用形狀（L1；M01-PLAN §3-7，2026-09-26）。（無單位卡） | 11 | 18 | — |

@@ -1,5 +1,5 @@
 {
- "core_version": "1.122",
+ "core_version": "1.123",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -100,6 +100,7 @@
    "admin_cost_label": "def(summary, orig=…, hide_default=…)",
    "build_quote_preview_html": "def(q, status, deal_tag, internal=…)",
    "default_overhead_pct": "def()",
+   "estimated_margin_label": "def(summary)",
    "fmt_money_blank_zero": "def(n)",
    "generate_case_closing_pdf_bytes": "def(quote_no)",
    "generate_contractor_voucher_pdf_bytes": "def(voucher_no, mask_bank=…)",

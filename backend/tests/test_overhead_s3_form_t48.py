@@ -122,7 +122,8 @@ def test_row_switch_and_deviation_follow_the_quotes_own_basis_not_the_global_mod
 
 def test_the_two_admin_rows_are_switched_by_the_quotes_basis_in_the_markup():
     import pathlib
-    html = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "pages" / "quotation-form.html").read_text(encoding="utf-8")
+    from core import source_tree
+    html = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")
     assert '<div class="cost-row" x-show="ohVer() !== 2">' in html and 'x-show="ohVer() === 2" x-cloak style="flex-wrap:wrap" data-testid="qf-overhead-row"' in html
     assert "x-show=\"oh.mode" not in html, "列的顯示不可以再看全域開關"
     assert "ohDeviates() { return this.ohVer() === 2" in html

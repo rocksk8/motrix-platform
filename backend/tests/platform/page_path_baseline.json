@@ -3,7 +3,6 @@
  "backend/db.py": 1,
  "backend/helpers/notification_prefs.py": 1,
  "backend/modules/case/api/material_orders.py": 1,
- "backend/modules/payroll/bonus.py": 1,
  "backend/modules/payroll/tests/test_bn11_bonus_pdf_settlement_table_2026_09_24.py": 1,
  "backend/modules/payroll/tests/test_bonus_award_2026_09_23.py": 1,
  "backend/modules/payroll/tests/test_bonus_empty_state_2026_09_23.py": 1,
