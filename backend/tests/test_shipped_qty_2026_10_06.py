@@ -314,7 +314,7 @@ def test_excel_export_columns_order_rows_and_totals(sq, monkeypatch):
     ws = load_workbook(io.BytesIO(r.content))["毛利分析"]
     hdr = [c.value for c in ws[3]]
     assert hdr[21:26] == ["報價預留間接成本", "其中：預留未被實際成本抵用", "其中：其他", "已出貨數量合計", "報價品項數量合計"], hdr
-    assert hdr[0] == "案件號" and len([x for x in hdr if x]) == 26, "既有欄位不動、只在最右加兩欄"
+    assert hdr[0] == "案件號" and len([x for x in hdr if x]) == 27 and hdr[26] == "管銷比率", "既有欄位不動、只在最右加兩欄（第48班 S4 再加『管銷比率』在最右）"
     row = {ws.cell(row=r_i, column=1).value: [ws.cell(row=r_i, column=c).value for c in (25, 26)] for r_i in (4, 5, 6)}
     assert row[Q] == [7, 26], row                                                      # 已出貨 7、訂購 26（欄位順序：已出貨在前）
     assert row["NO-SHIP-CASE"] == [0, 0], row                                          # 案件不存在／沒有品項 ⇒ 0（不是空白也不是別案的值）
