@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-10-10（wip/t52-ab-charity-quote）：精算明細表／獎金 PDF 的公益捐款列標籤依基數戳記
+- `bonus.row_label`：公益捐款列＝「公益捐款（報價含稅 1%）」（`summary.charityBasis=total`）或「公益捐款（直接毛利 1%）」（無戳記／舊基）。基數鍵 `netProfit` 與獎金算式不變（仍讀精算凍結值）；已完結案獎金不變。
+
 ## 1.2.12 — 2026-10-10（wip/t50-int；第 50 班）
 - 層外核准通知信：客戶／核准人／原簽核人／原因（自由文字）寫進信件前先 HTML 跳脫（信件模板不跳脫列值）；站內通知不變。
 
@@ -12,9 +15,6 @@
 - 代核一定留痕：簽核紀錄（`approval_json.bypass`＋該簽核人格內 `bypass`）、編修紀錄（`approve_bypass`）、**稽核 `bonus.case.approve_bypass`（誰、哪張、略過哪位簽核人、原因；與核准同一個交易，寫不進去整個核准回滾）**。
 - 代核後通知其他在職最高管理者（含原簽核人，不含操作者）：站內通知＋信（新信件類型 `bonus_approver_bypass`，owner payroll，預設不寄、依個人偏好）。獎金頁：核准被擋且訊息要求原因時，跳出輸入原因的視窗再送。
 - 測試：`test_bonus_sole_approver_bypass_t52.py`（7 題）。
-
-## (next) — 2026-10-10（wip/t52-ab-charity-quote）：精算明細表／獎金 PDF 的公益捐款列標籤依基數戳記
-- `bonus.row_label`：公益捐款列＝「公益捐款（報價含稅 1%）」（`summary.charityBasis=total`）或「公益捐款（直接毛利 1%）」（無戳記／舊基）。基數鍵 `netProfit` 與獎金算式不變（仍讀精算凍結值）；已完結案獎金不變。
 
 ## 1.2.9 — 2026-10-09（wip/t50b-05-roundfix）：`bonus.py` 檔頭註解更正（營業利益算式的唯一來源已是 profit_rules）
 - `bonus.py` 模組說明的過時註解（還寫「算式只在 settlement.html」）改為第 48 班起的實況；只改註解，行為不變。

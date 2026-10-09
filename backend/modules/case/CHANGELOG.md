@@ -1,5 +1,13 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-10（wip/t52-ab-charity-quote）：公益捐款改『報價含稅 1%』（新基，預設關）＋精算頁可調管銷比率（僅最高管理者）
+- **公益捐款基數**（使用者 2026-10-10）：新基 `charityBasis=total` ＝ `round_half_up(tot.total × 1%)`（報價含稅金額；不看直接毛利、虧損案照扣；下限 0 只設在含稅金額上）。只在新管銷口徑（formulaVer 2）生效，舊基（直接毛利 1%、虧損 0）逐位不變。唯一來源 `helpers/profit_rules.py`＋`static/profit-rules.js`（`charity(direct, total, basis)`、`quote_profit/settlement_profit` 加 `total`／`charity_basis`），黃金向量 +77 筆。
+- 設定：`charity_basis_mode`（direct｜total，預設 direct＝上線零行為變更）＋標記 `charity_migration_done`；有效條件＝overhead v2＋管銷標記＋公益標記＋mode total，缺一當 direct。`GET/PUT /api/overhead/settings` 增 `charityBasis/charityMode/charityMigrationDone`；切 total 要 `confirm:true` 且三條件俱備，切回 direct 刪標記，管銷退回 legacy 時公益基數一併強制退回 direct。
+- 伺服器戳記：`tot.charityBasis`、`tot._legacyCharity`（回滾依據）只由伺服器蓋/沿用資料庫現值（`profit_guard.STAMP_KEYS`）；精算 summary 增 `charityBasis`、`origCharityBasis`（原始側看報價單戳記，與實際側目前模式分開）；完結比對公益金改逐位相同（total 基數與實際成本無關）。
+- **精算頁調整管銷比率**：`PUT /api/quotations/{no}/overhead-pct`（僅最高管理者；已精算/結案、非新口徑、legacy 模式 409；偏離預設需 confirm；稽核 `quotation.overhead_pct_change`；同交易更新 `updated_at`＋重算利潤欄位、用該單自己的公益戳記）。整份存檔端點的樂觀鎖檢查提前到 `profit_guard.prepare()` 之前：開著舊表單的人得到 409『已被其他人更新』而非 403。精算頁（僅 superadmin）顯示輸入框、偏離預設橘色警示＋二次確認。
+- 標籤：「公益捐款（報價含稅 1%）」/「公益捐款（直接毛利 1%）」依戳記（報價單頁、精算頁含橋接圖、案件頁、報表頁、結案 PDF）。`quotation-form.html` FORM_VERSION V3.20。
+- 離線工具 `tools/charity_migrate.py`（report/recalc/rollback/mode）＋凍結算式 `migrations_frozen/t52_charity/recalc.py`；runbook `docs/platform/plans/CHARITY-QUOTE-1PCT-CUTOVER-RUNBOOK-T52.md`。
+
 ## 1.0.171 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t52-b5-s6-worklog）：案件動態『記錄對象』只有最高管理者可選**
 - `case-management.html`／`case-management-feed.js`：非最高管理者的『記錄對象』下拉停用、一律記自己（與工作日誌頁一致；伺服器本來就擋，原本是選了才跳 403）。純畫面。
@@ -12,14 +20,6 @@
 - `payment-request.html`「我的申請」清單：狀態改用共用晶片 `st-chip`（`css/style.css`，全走語意 token、淺／深色對比 ≥ 4.5:1）＋狀態對照表 `static/status-chip.js`（`MotrixStatus.chipClass`）：草稿＝中性、待審核＝琥珀、簽核中＝藍、已核准＝綠、已駁回＝紅、已付款＝紫、已作廢／已取消＝灰虛線刪除線；未知狀態維持中性。
 - 案件頁（`case-management-dispatch／fin／shipping.js`）的 4 狀態徽章對照表補上「已駁回→`badge--rejected`」「已作廢→`badge--lost`」（原本掉成無底色灰字）；深色補 `case-management.css` 兩條覆寫。純畫面，沒有後端與權限變更。
 - 測試：`backend/tests/test_status_chip_t51.py`（顏色兩兩不同、無寫死色碼、淺／深色對比逐組算、對照表詞彙、標記釘、瀏覽器端實際算出的底色／字色彼此不同）。
-
-## (next) — 2026-10-10（wip/t52-ab-charity-quote）：公益捐款改『報價含稅 1%』（新基，預設關）＋精算頁可調管銷比率（僅最高管理者）
-- **公益捐款基數**（使用者 2026-10-10）：新基 `charityBasis=total` ＝ `round_half_up(tot.total × 1%)`（報價含稅金額；不看直接毛利、虧損案照扣；下限 0 只設在含稅金額上）。只在新管銷口徑（formulaVer 2）生效，舊基（直接毛利 1%、虧損 0）逐位不變。唯一來源 `helpers/profit_rules.py`＋`static/profit-rules.js`（`charity(direct, total, basis)`、`quote_profit/settlement_profit` 加 `total`／`charity_basis`），黃金向量 +77 筆。
-- 設定：`charity_basis_mode`（direct｜total，預設 direct＝上線零行為變更）＋標記 `charity_migration_done`；有效條件＝overhead v2＋管銷標記＋公益標記＋mode total，缺一當 direct。`GET/PUT /api/overhead/settings` 增 `charityBasis/charityMode/charityMigrationDone`；切 total 要 `confirm:true` 且三條件俱備，切回 direct 刪標記，管銷退回 legacy 時公益基數一併強制退回 direct。
-- 伺服器戳記：`tot.charityBasis`、`tot._legacyCharity`（回滾依據）只由伺服器蓋/沿用資料庫現值（`profit_guard.STAMP_KEYS`）；精算 summary 增 `charityBasis`、`origCharityBasis`（原始側看報價單戳記，與實際側目前模式分開）；完結比對公益金改逐位相同（total 基數與實際成本無關）。
-- **精算頁調整管銷比率**：`PUT /api/quotations/{no}/overhead-pct`（僅最高管理者；已精算/結案、非新口徑、legacy 模式 409；偏離預設需 confirm；稽核 `quotation.overhead_pct_change`；同交易更新 `updated_at`＋重算利潤欄位、用該單自己的公益戳記）。整份存檔端點的樂觀鎖檢查提前到 `profit_guard.prepare()` 之前：開著舊表單的人得到 409『已被其他人更新』而非 403。精算頁（僅 superadmin）顯示輸入框、偏離預設橘色警示＋二次確認。
-- 標籤：「公益捐款（報價含稅 1%）」/「公益捐款（直接毛利 1%）」依戳記（報價單頁、精算頁含橋接圖、案件頁、報表頁、結案 PDF）。`quotation-form.html` FORM_VERSION V3.20。
-- 離線工具 `tools/charity_migrate.py`（report/recalc/rollback/mode）＋凍結算式 `migrations_frozen/t52_charity/recalc.py`；runbook `docs/platform/plans/CHARITY-QUOTE-1PCT-CUTOVER-RUNBOOK-T52.md`。
 
 ## 1.0.169 — 2026-10-10（wip/t50b-ab-labelfix）：報價單頁管銷分攤列依『這張單的口徑』顯示
 - `quotation-form.html`：兩列管銷分攤（「管銷分攤（10%，固定）」／「管銷分攤（直接毛利 N%）」）與偏離警示改看 `ohVer()`（這張單的口徑：已結案的舊單＝1），不再看全域開關 `oh.mode`——全域 v2 時，已結案的舊口徑單仍顯示 10% 那一列（數字本來就沒變，只是標籤說錯）。精算頁的口徑本來就先看凍結的 summary，不需改。測試 `tests/test_overhead_s3_form_t48.py`（已結案舊單／已結案新口徑戳記／未結案三種）。
