@@ -1,5 +1,9 @@
 # 網路規劃 更新紀錄
 
+## (next) — 2026-10-09（wip/t49-b5-visibility）：規劃書讀取加逐案權限（可見範圍收緊）
+- `GET /api/network-plans`、`GET /api/network-plans/{id}`：綁定案件的規劃書改依「依案件查詢」同一道逐案權限——看不到該案的人（不是該案業務／協作者、不是 admin 以上、沒有 case_manage）清單看不到、單筆 404；沒綁案件的獨立規劃書與 admin／最高管理者不受影響。案件模組不在時，綁案件的規劃書只給 admin 以上。
+- 補洞：Excel／PDF 匯出、拓樸預覽原本只驗登入（任何登入者可匯出任一份），現在要規劃書讀取模組（netplan／netplan_edit／case_manage）並套同一道逐案權限；個資告知查詢同樣套逐案權限。
+
 ## 1.0.7 — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
 - 匯出規則（使用者 2026-09-30）：網路規劃 Excel／PDF 匯出每次寫稽核（`export.xlsx`／`export.pdf`）。
 

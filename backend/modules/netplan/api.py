@@ -58,6 +58,30 @@ _EDIT_MODULE = "netplan_edit"
 _STATUSES = ("規劃中", "已確認", "已交付")
 
 
+def _plan_visible(conn, row, user) -> bool:
+    """第 49 班（使用者裁示）：綁定案件的規劃書，和『依案件查詢』同一道逐案權限——看不到該案的人看不到這張規劃書
+    （admin／最高管理者與案件執行面模組 case_manage 持有者照舊，規則在 case.access 的 allowed）。沒綁案件的獨立規劃書不受影響。
+    案件模組不在 ⇒ 綁案件的規劃書只給 admin 以上。"""
+    qn = (row["quote_no"] or "").strip()
+    if not qn:
+        return True
+    ca = _case_access()
+    allowed = getattr(ca, "allowed", None) if ca is not None else None
+    if allowed is not None:
+        return bool(allowed(conn, qn, user, allow_module="case_manage"))
+    return user.get("role") in ("superadmin", "admin")
+
+
+def _load_visible_plan(conn, plan_id, user, cols="*"):
+    """讀單一規劃書；不存在與看不到是同一個 404（M01-O1 慣例）；看不到時關連線。"""
+    sel = "*" if cols == "*" else cols + ", quote_no"
+    row = conn.execute("SELECT %s FROM network_plans WHERE id=?" % sel, (plan_id,)).fetchone()
+    if not row or not _plan_visible(conn, row, user):
+        conn.close()
+        raise HTTPException(404, "規劃書不存在")
+    return row
+
+
 def _plan_public(row) -> dict:
     d = dict(row)
     return {
@@ -95,6 +119,7 @@ def list_network_plans(quote_no: Optional[str] = None, status: Optional[str] = N
         params.extend([f"%{q}%", f"%{q}%"])
     sql += " ORDER BY updated_at DESC LIMIT 300"
     rows = conn.execute(sql, params).fetchall()
+    rows = [r for r in rows if _plan_visible(conn, r, user)]               # 第 49 班：綁案件的規劃書依逐案權限過濾
     conn.close()
     return [_plan_public(r) for r in rows]
 
@@ -104,10 +129,8 @@ def get_network_plan(plan_id: int, authorization: str = Header(None)):
     user = _require_user(authorization)
     require_any_module(user, _VIEW_MODULES, "網路架構規劃書")
     conn = get_db()
-    row = conn.execute("SELECT * FROM network_plans WHERE id=?", (plan_id,)).fetchone()
+    row = _load_visible_plan(conn, plan_id, user)
     conn.close()
-    if not row:
-        raise HTTPException(404, "規劃書不存在")
     return _plan_public(row)
 
 
@@ -273,12 +296,11 @@ def delete_network_plan(plan_id: int, authorization: str = Header(None)):
 def preview_network_plan_topology(plan_id: int, body: dict = Body(...), authorization: str = Header(None)):
     """即時預覽用：不落地存檔，直接把前端目前（含尚未儲存）的 data 拿去畫拓樸圖，
     供「拓樸圖」分頁按下「重新產生預覽」時呼叫。"""
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, _VIEW_MODULES, "網路架構規劃書")
     conn = get_db()
-    row = conn.execute("SELECT id FROM network_plans WHERE id=?", (plan_id,)).fetchone()
+    _load_visible_plan(conn, plan_id, user, cols="id")
     conn.close()
-    if not row:
-        raise HTTPException(404, "規劃書不存在")
     data = body.get("data") or {}
     try:
         result = build_topology_svg(data)
@@ -294,12 +316,11 @@ def preview_network_plan_topology(plan_id: int, body: dict = Body(...), authoriz
 @router.get("/api/network-plans/{plan_id}/export/excel")
 @export_logged("xlsx", "netplan", "network-plan")
 def export_network_plan_excel(plan_id: int, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, _VIEW_MODULES, "網路架構規劃書")              # 第 49 班：原本任何登入者都能匯出任一份規劃書
     conn = get_db()
-    row = conn.execute("SELECT * FROM network_plans WHERE id=?", (plan_id,)).fetchone()
+    row = _load_visible_plan(conn, plan_id, user)
     conn.close()
-    if not row:
-        raise HTTPException(404, "規劃書不存在")
     plan = _plan_public(row)
     xlsx_bytes = build_plan_excel(plan)
     filename = urlquote(f"{plan['planNo']}_{plan['siteName']}_網路架構規劃表.xlsx")
@@ -313,12 +334,11 @@ def export_network_plan_excel(plan_id: int, authorization: str = Header(None)):
 @router.get("/api/network-plans/{plan_id}/export/pdf")
 @export_logged("pdf", "netplan", "network-plan")
 def export_network_plan_pdf(plan_id: int, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
+    require_any_module(user, _VIEW_MODULES, "網路架構規劃書")              # 第 49 班：同上
     conn = get_db()
-    row = conn.execute("SELECT * FROM network_plans WHERE id=?", (plan_id,)).fetchone()
+    row = _load_visible_plan(conn, plan_id, user)
     conn.close()
-    if not row:
-        raise HTTPException(404, "規劃書不存在")
     plan = _plan_public(row)
     try:
         pdf_bytes = build_plan_pdf_bytes(plan)
@@ -400,10 +420,8 @@ def get_network_plan_privacy_acks(plan_id: int, authorization: str = Header(None
     user = _require_user(authorization)
     require_any_module(user, _VIEW_MODULES, "網路架構規劃書")
     conn = get_db()
-    row = conn.execute("SELECT id FROM network_plans WHERE id=?", (plan_id,)).fetchone()
+    _load_visible_plan(conn, plan_id, user, cols="id")
     conn.close()
-    if not row:
-        raise HTTPException(404, "規劃書不存在")
     return {"acks": _pn.acks_with_prefix("network_plan_contact", plan_id)}
 
 

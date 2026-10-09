@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-09（wip/t49-b5-visibility）：外包名冊下拉限權（可見範圍收緊）
+- `GET /api/contractors/selectable`（外包名冊 id／姓名／電話）原本所有登入者可讀；現在限最高管理者、財務角色，或持有 procurement／case_manage／contractor_list／payslip 任一模組者，其他 403。唯一前端呼叫者（案件管理頁的派發表單；該頁本來就要求 case_manage）沒有受影響的角色，前端對沒有這些模組的 session 不送請求。
+
 ## 1.1.25 — 2026-10-08（wip/t47-audit-fixes）：承攬商匯款預定付款日提供者先拿寫鎖（第 46 班稽核 S4）；併 wip/t47-paydate-l1
 - `set_planned_pay_date`：讀取前先 `begin_write`（與案件／叫料匯款提供者一致），「沒變」的比較與寫入在同一個寫交易；兩位出納並發時後到的不會得到過期的 `unchanged`。
 - S5：`payable_due.py`（薄接線）——提醒信／站內通知（`daily.check` 提供者 `subcontract_payable_due`，規則在 L1 `payable_due_core`，3 天前／當天／逾期）、行事曆「付款待辦」事件 `subcontract_voucher:<單號>`（核准、退回、撤銷核准、作廢、標記／取消已匯款、差額退回、出納改預定日後依現況對齊；不含金額、廠商名、承攬人員姓名）；新提供者 `contractor_voucher.planned_changed`。M01 不在 ⇒ 信件類型未登記 ⇒ 寄信 fail-closed（只給超級管理員），已知取捨。

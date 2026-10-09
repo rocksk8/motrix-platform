@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-09（wip/t49-b5-visibility）：case.access 加 allowed（供網路規劃書依案件過濾）
+- IP-12 `case.access` 提供者新增 `allowed(conn, quote_no, user, allow_module=None)`：不丟例外、不關連線的「看得到／看不到」判斷（規則與 `guard` 同一份 `case_access_allowed`）。`case-management-dispatch.js` 對沒有外包名冊權限的 session 不再呼叫 `/api/contractors/selectable`。
+
 ## 1.0.164 — 2026-10-09（wip/t48-oh25-s1／s2／s2b）：利潤規則單一來源（S1，零行為變更）＋管銷分攤比率與伺服器把關（S2，新行為預設關；`/api/overhead` 前綴登記於 module.json；s2b＝獨立稽核 1d 修正）
 - `settlement_actuals`：完結比對的管銷分攤、公益金、營業利益、報價原始側後備改呼叫 `helpers.profit_rules`（口徑仍是第 47 班的 10%）。前端 `static/profit-rules.js` 與黃金向量等值測試已備，頁面第 3 步（S3）才改接。設計：`docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
 

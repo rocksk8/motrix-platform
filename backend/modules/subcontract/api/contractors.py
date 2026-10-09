@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel
 
 from db import get_db
-from helpers import _require_user, _tok, _audit, notify_module_activity
+from helpers import _require_user, _tok, _audit, notify_module_activity, has_finance_access, require_any_module
 from modules.subcontract import bank_mask as _bm
 
 # 字體路徑（Windows 微軟正黑體，找不到退回預設）
@@ -155,9 +155,13 @@ def _row_to_dict(row, user=None) -> dict:
 
 @router.get("/api/contractors/selectable")
 def list_contractors_selectable(authorization: str = Header(None)):
-    """輕量列表供案件管理承攬商派發的「外包名單人員」下拉使用（所有登入者皆可讀，
-    比照 vendor-contractors/selectable 的慣例——不含銀行/身分證等敏感欄位）。"""
-    _require_user(authorization)
+    """輕量列表供案件管理承攬商派發的「外包名單人員」下拉使用——不含銀行/身分證等敏感欄位。
+    第 49 班（使用者裁示）：姓名＋電話是個資，不再是「所有登入者皆可讀」；限財務角色，或持有派發（procurement／case_manage）、
+    勞報單（payslip）、外包名冊（contractor_list）任一模組者（最高管理者持有全部）。其他人 403。
+    前端唯一呼叫者 case-management-dispatch.js 依同一組條件才發請求。"""
+    user = _require_user(authorization)
+    if not has_finance_access(user):
+        require_any_module(user, ("procurement", "case_manage", "contractor_list", "payslip"), "外包名冊")
     conn = get_db()
     rows = conn.execute(
         "SELECT id, name, phone FROM contractors WHERE active=1 ORDER BY name"

@@ -533,6 +533,8 @@ M10 網路規劃搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/networ
 | 契約版本 | 1（2026-09-26） |
 | 守門 | `backend/modules/netplan/tests/test_netplan_case_access.py`：①提供者已登記 ②正對照：綁定案件時帶出客戶名、依案件查詢有逐案權限（外人 403）③**反向控制**：拿掉提供者 ⇒ 不綁案件的建立照常、綁案件 400、依案件查詢 404，訊息明說；逐案守門的歸類由 `test_case_read_scope.py` 守 |
 
+**第 49 班加法：`allowed(conn, quote_no, user, allow_module=None)`（不丟例外、不關連線，回 bool）給只需要『可見／不可見』的取用端（網路規劃書清單依案件過濾）。**
+
 **L1 案件存取守門也以本串接點為「M01 在不在」的訊號**（主持裁示 2026-09-26，只留一個訊號；原本 C 另立的 `case.present` 已刪）：`helpers.case_access.case_module_present()` ＝ 有沒有 `case.access` 提供者；沒有 ⇒ `guard_case_access` 404、`case_access_allowed` False，表與資料在、超級管理員也一樣（稽核 D CA-M1）。守門 `tests/platform/test_case_access_l1.py`：拿掉 `case.access` ⇒ L1 守門 404，且取用方（網路規劃書）明說「案件模組未安裝」——兩條路結果一致。
 
 

@@ -66,6 +66,10 @@ window.CM_PARTS.push(() => ({
         })
         if (r.ok) this.vendors = await r.json()
       } catch {}
+      // 第49班：外包名冊（姓名＋電話）只給財務／派發／勞報單／名冊權限者（後端 403 其餘）；沒有這些權限的人不送請求（不留 403）
+      const mods = (this.session && this.session.modules) || []
+      const canRoster = (this.session && this.session.role === 'superadmin') || ['procurement', 'case_manage', 'contractor_list', 'payslip', 'finance', 'cashier'].some(k => mods.includes(k))
+      if (!canRoster) { this.contractorRoster = []; return }
       try {
         const r2 = await fetch('/api/contractors/selectable', {
           headers: { Authorization: 'Bearer ' + this.session.token }
