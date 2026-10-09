@@ -1,10 +1,10 @@
 # L0／L1 底層 更新紀錄
 
-## 1.124 — 2026-10-10（wip/t52-b5-s6-worklog）：工作日誌建立時記錄對象只有最高管理者能指定別人
-- `POST /api/work-logs`：`user_id` 不是自己、且操作者不是最高管理者 ⇒ 403「只有最高管理者可以替別人建立工作日誌」（同值＝自己可以；PUT 本來就不准改記錄對象）。`work-log.html` 的『出勤人員』下拉對非最高管理者改為停用（固定本人）。測試：`tests/test_work_log_create_target_t52.py`。
-
 ## (next) — 2026-10-10（wip/t52-ab-charity-quote）
 - L1（新增，向下相容）：`helpers.profit_rules` 公益捐款基數——`CHARITY_DIRECT／CHARITY_TOTAL／ACTIVE_CHARITY_BASIS`；`charity(direct, total=None, basis='direct')`、`quote_profit(..., total=None, charity_basis=None)`、`settlement_profit(..., quoted_total=None, charity_basis=None)` 加選填參數（不傳＝舊算法，逐位不變）；`pdf_gen.charity_cost_label(summary, orig=False)`（公益捐款列標籤依基數戳記）。
+
+## 1.124 — 2026-10-10（wip/t52-b5-s6-worklog）：工作日誌建立時記錄對象只有最高管理者能指定別人
+- `POST /api/work-logs`：`user_id` 不是自己、且操作者不是最高管理者 ⇒ 403「只有最高管理者可以替別人建立工作日誌」（同值＝自己可以；PUT 本來就不准改記錄對象）。`work-log.html` 的『出勤人員』下拉對非最高管理者改為停用（固定本人）。測試：`tests/test_work_log_create_target_t52.py`。
 
 ## 1.123 — 2026-10-10（wip/t50b-05-roundfix；第 50 班稽核修正）
 - L1（新增，向下相容）：`pdf_gen.estimated_margin_label(summary)`——結案 PDF 的「預估營業利益率」列標籤依這張單的口徑（舊／無戳記＝稅前 10% 語意、口徑 2＝直接毛利語意）組字；原本內嵌在 PDF 產生函式裡，抽成公開小函式供測試與頁面對照。純函式、無 I/O。
