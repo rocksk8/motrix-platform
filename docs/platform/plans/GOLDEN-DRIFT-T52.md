@@ -19,7 +19,7 @@ assert not missing, "既有路由被改動或消失：%s" % missing[:5]
 - 不是比對子集合：`_table()` 取整個 app 的 OpenAPI（含方法、路徑、operationId、參數、requestBody、security），比的是每一筆完整內容；只是方向單向。
 - 檔案沒有最近被改過：測試檔只有兩個 commit（`cac019498`、`cb0ac7193`，都是 2026-10-05）。
 - **golden 的維護因此不對稱**：刪路由或改參數會紅，作者被迫去改 golden（`7531753e3` 第 49 班移除 8 條墓碑端點時刪了 177 行）；新增路由不會紅，只有作者「記得」才補（`d7607ff0f` pr-to-po +19 行、`d4572e2d9` attach-views 稽核修正 +29 行，是僅有的兩次新增）。第 46～50 班新增的 30 條路由沒有人補，也沒有任何東西會提醒。
-- golden 檔目前不含 `duty-roles`（`grep -c` ＝ 0），與 b7 的觀察一致。
+- golden 檔目前不含 `duty-roles`（`grep -c` ＝ 0），與 b7 的觀察一致。golden 的歷史：`cb0ac7193` 建立，之後只有三次實質改動（兩次新增、一次刪除）加一次合併。
 
 ## 二、哪些守門有同樣的盲點
 
@@ -45,18 +45,18 @@ assert not missing, "既有路由被改動或消失：%s" % missing[:5]
 3. 把「方法＋路徑」鍵與「內容」分開報：避免操作 ID 或參數順序小改動被誤判成一堆新增＋消失。
 
 **B. 讓 golden 不再是合併衝突的來源**（嚴格相等後，每個新增路由的分支都會改這個檔）
-- 現在 `json.dumps(..., indent=0)` 一筆路由寫成約 20 行，兩個分支各加路由必衝突。改成**一行一筆**、依 (路徑, 方法) 排序（`json.dumps(entry, ensure_ascii=False)` 逐行寫），相鄰才會衝突，且可用既有的合併驅動（`tools/platform/setup_merge_drivers.py`）登記成「兩邊都取、排序去重」。
+- 現在 `json.dumps(..., indent=0)` 一筆路由寫成約 20 行，兩個分支各加路由必衝突。改成**一行一筆**、依 (路徑, 方法) 排序（`json.dumps(entry, ensure_ascii=False)` 逐行寫），相鄰才會衝突，且可比照 `merge_drivers.py` 現有的 changelog／manifest 驅動，新增一種「兩邊都取、排序去重」的驅動（現有驅動只認這兩類）。
 - 或把它歸入**產生檔**（跟 `dep_graph.json`／`test_map.json` 一樣，只由列車提交，`regen_all.py` 重產），分支上只跑 `--check`；缺點是需要先載入整個 app，`regen_all --check` 會多一段時間（我沒量）。
 
 **C. 補上一次性的現況修復**
 - 把現在漂移的 30 條補進 golden（`T40_WRITE_GOLDEN=1` 重產一次，審 `git diff`：應該只有新增，沒有任何既有筆內容改變）。這要跑 pytest，等主持放行；b7 已有名單，可直接做。
 
-**D. 預檢加一項（選配）**：`train_preflight.py` 的 A 層不載入 app，放不進去；但 B 層的「便宜守門」會自動挑到這支（若實測 < 10 秒）。請 `train_preflight.py measure` 後確認它在 B 層清單裡，否則手動加入 `NARROW_FIXED` 類固定清單。
+**D. 預檢加一項（選配）**：`train_preflight.py` 的 A 層不載入 app，放不進去；但 B 層的「便宜守門」會自動挑到這支（若實測 < 10 秒）。請 `train_preflight.py measure` 後確認它在 B 層清單裡，否則手動加入 `ALWAYS_FILES`（`train_preflight.py` 第 32 行起的固定清單）。
 
 **E. 涵蓋缺口另案**：`test_endpoint_auth_w1b_t48.py` 的 `MODS` 改成「所有模組」，或新增同型守門掃其餘模組與核心 `routers`；先跑一次看有幾條要進 `PUBLIC` 白名單（目前為空）。
 
 ## 四、沒有查到／限制
 
-- 沒有執行 pytest，也沒有載入 app，所以「30 條」是引用 b7 的名單，golden 缺它們是用 `grep` 與 git 歷史旁證（`duty-roles` 0 筆；golden 僅 3 次新增／刪除的 commit），不是我重新比對出來的。
+- 沒有執行 pytest，也沒有載入 app，所以「30 條」是引用 b7 的名單，golden 缺它們是用 `grep` 與 git 歷史旁證（`duty-roles` 0 筆；golden 只有上述幾次改動的 commit），不是我重新比對出來的。
 - 沒有逐一讀所有 `*_baseline.json` 的測試實作，二節表中「不盲」是依各檔檔頭與 `assert` 形狀判斷。
 - 第 46～50 班各自的閘門紀錄沒有逐一查，結論來自測試程式本身的邏輯（單向比對不可能對新增報紅），不是從閘門輸出倒推。
