@@ -37,6 +37,7 @@ def timers(monkeypatch):
     return _RecordingTimer.made
 
 
+@pytest.mark.timing
 def test_schedule_returns_immediately_and_does_not_run_the_round_inline(timers, monkeypatch):
     """① 第一輪很慢（替身睡 3 秒）時，`schedule_geocode_warm()` 仍立即返回、呼叫者的執行緒裡沒有跑任何一輪。"""
     calls = []
@@ -148,6 +149,7 @@ def _scheduler_block():
     pytest.fail("main.py 裡找不到 `if MOTRIX_DISABLE_SCHEDULERS` 區塊 ⇒ 這一題切不出東西，不可以放行")
 
 
+@pytest.mark.timing
 def test_main_scheduler_block_returns_while_first_warm_round_is_slow(client, backlog, real_path, monkeypatch):
     from helpers import daily_checks
 
@@ -247,6 +249,7 @@ def _tree_credentials_state():
     return {n: (os.path.getmtime(backend / n) if (backend / n).exists() else None) for n in names}
 
 
+@pytest.mark.timing
 def test_import_main_finishes_while_first_warm_round_is_slow():
     """主持追加：預熱第一輪很慢（睡 60 秒）時，真的 `import main` 仍在 60 秒內完成，而第一輪確實在背景起跑。"""
     from pathlib import Path

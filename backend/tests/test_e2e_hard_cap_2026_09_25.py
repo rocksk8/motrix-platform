@@ -91,6 +91,7 @@ def _pytest(args, cap, tmp_path, tag, temp_dir=None):
     return r, time.time() - t0, r.stdout + r.stderr
 
 
+@pytest.mark.timing
 def test_under_xdist_a_stuck_e2e_is_stopped_and_says_where(probe, tmp_path):
     f = probe(60)
     r, took, out = _pytest([f, "-n", "1"], 3, tmp_path, "x")

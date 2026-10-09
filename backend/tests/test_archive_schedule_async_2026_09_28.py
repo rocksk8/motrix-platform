@@ -161,6 +161,7 @@ def _tree_credentials_state():
     return {n: (os.path.getmtime(backend / n) if (backend / n).exists() else None) for n in names}
 
 
+@pytest.mark.timing
 def test_import_main_finishes_while_every_scheduler_is_slow():
     """主持指定：所有排程都慢（含雲端路徑在但卡住）時 import main 仍在時限內完成；而各排程的第一輪確實在背景起跑。
     反向控制＝舊碼：`_ensure_archive_dirs()`／`_schedule_daily()` 同步 ⇒ import ≥ 2×_SLOW 秒而紅（突變測過）。"""

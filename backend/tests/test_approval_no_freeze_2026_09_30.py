@@ -115,6 +115,7 @@ def two_tier(client, make_user):
     return a1, a2
 
 
+@pytest.mark.timing
 def test_middle_tier_approval_is_fast_and_the_notification_is_written(client, two_tier):
     """量測：修前 _notify 等自己握著的寫鎖，等滿 busy timeout（30 秒）才失敗、通知遺失；修後 < 1 秒、通知寫入。"""
     a1, _a2 = two_tier
@@ -268,6 +269,7 @@ def _seed_many(n, kb):
         conn.close()
 
 
+@pytest.mark.timing
 def test_queue_and_badge_with_200_large_pending_quotations_stay_under_200ms(client, make_user):
     """量測（修前 200 張×60KB：佇列 441 ms、角標 400 ms）。使用者體感線 300 ms，這裡取 200 ms 留餘裕並讓任一項優化被退回都會紅；取 5 次中位數。"""
     a = make_user("pf_appr", "Conn-Pass-123", role="admin")[:2]

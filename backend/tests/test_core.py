@@ -155,6 +155,7 @@ class TestCurrentTierIdx:
 
 # ── Password helpers ──────────────────────────────────────────────────────────
 
+@pytest.mark.real_pbkdf2        # 雜湊格式／相容性題：保留產品真值 260,000 次（conftest 的測試用降次數代理不套用）
 class TestPasswordHelpers:
     def test_hash_and_verify_roundtrip(self):
         pw = "SecurePass!99"
