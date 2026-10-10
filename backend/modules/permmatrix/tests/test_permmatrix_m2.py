@@ -378,3 +378,12 @@ def test_C_requester_still_active_superadmin_is_applied_as_before(conn, make_use
     monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
     assert S.activate_due(conn) == 1
     assert _rows(conn, "SELECT state FROM perm_pending WHERE id=?", (r["id"],)) == [{"state": "active"}]
+
+
+def test_B_lock_is_released_when_the_thread_cannot_start(monkeypatch):
+    def _no_start(self):
+        raise RuntimeError("can't start new thread")
+    monkeypatch.setattr(S.threading.Thread, "start", _no_start)
+    assert S.kick_activation() is None, "起不了執行緒 ⇒ 回 None、不丟例外（權限檢查不受影響）"
+    assert S._act_lock.acquire(blocking=False), "鎖已放掉，下次還能再試"
+    S._act_lock.release()
