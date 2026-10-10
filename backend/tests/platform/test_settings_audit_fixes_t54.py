@@ -204,3 +204,15 @@ def test_materialize_revalidates_against_edition_bounds(grp):
     assert R.materialize_due(grp, now=_later(8)) == 0
     grp.commit()
     assert L.state_of(grp, cid) == "cancelled" and R.get("zz_afx_t54", "cap", conn=grp) == 10
+
+
+def test_company_profile_page_tells_user_when_change_is_only_pending():
+    """舊保存期限頁：縮短只是「已送出、N 天後生效」，不能顯示成「設定已儲存」；文字白話、不顯示代碼。"""
+    import os
+    html = open(os.path.join(os.path.dirname(__file__), "..", "..", "..", "frontend", "pages", "company-profile-settings.html"), encoding="utf-8").read()
+    i = html.index("async _saveSetting(")
+    body = html[i:i + 2500]
+    assert "d.pending" in body and "effectiveAt" in body                      # N 取自實際的待生效項
+    assert "天後生效" in body and "需另一位最高管理者確認" in body and "已送出" in body
+    for code in ("approvalsRequired}", "pending}", "confirm_period_days"):
+        assert "${" + code not in body and code not in body.split("this[prefix + 'Msg'] = `")[1].split("`")[0]
