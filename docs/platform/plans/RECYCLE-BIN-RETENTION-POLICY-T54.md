@@ -1,6 +1,6 @@
 # 刪除暫存區：保存期限、永久刪除與設定項（設計說明，第 54 班；僅文件，閘門結束前不寫程式）
 
-作者 b5；2026-10-10。與 `FINANCE-MECHANISMS-DESIGN-T54.md`（ab，wip/t54-ab-finance-mech 最新 84dc4104a／034be89df：kind `retention`、`change_control.confirm_period_days`）及設定中心 §2.2（node-39）對齊。承接 `RECYCLE-BIN-P0-STATE-T53.md`（P0 現況）與 `RECYCLE-BIN-P1-CASE-T53.md`（案件／供應 adapter）；使用者 10/10 表單裁示 (a)(b)(c) 與 PM 審查意見合併成本稿。**文件狀態**：`RECYCLE-BIN-DESIGN-T52.md` 已被第 53 班實作取代（見第 7 節）。
+作者 b5；2026-10-10。與 `FINANCE-MECHANISMS-DESIGN-T54.md`（ab，分支 wip/t54-ab-finance-mech 的 `FINANCE-MECHANISMS-DESIGN-T54.md`（以該稿現行版為準）：kind `retention`、`change_control.confirm_period_days`）及設定中心 `SETTINGS-CENTER-DESIGN-T54.md` §2.2（分支 wip/t54-n39-settings-design）對齊。承接 `RECYCLE-BIN-P0-STATE-T53.md`（P0 現況）與 `RECYCLE-BIN-P1-CASE-T53.md`（案件／供應 adapter）；使用者 10/10 表單裁示 (a)(b)(c) 與 PM 審查意見合併成本稿。**文件狀態**：`RECYCLE-BIN-DESIGN-T52.md` 已被第 53 班實作取代（見第 7 節）。
 
 ## 0. 白話摘要（給負責人）
 
@@ -50,7 +50,7 @@
 | 事情 | `key` | `new_json`（domain 專屬 payload） | `risk` | 到期（`activated`）後的執行器 |
 |---|---|---|---|---|
 | 永久刪除一筆 | `purge:<bin id>` | `{binId, entityType, entityId, label, fileCount}` | `legal` | 每日工作取 `in_effect` 且仍 `purge_allowed` 的項目 ⇒ 刪隔離檔、清快照、留墓碑 |
-| 改保留天數 | `retention_days` | `{from, to}` | `ops`（縮短＝放寬 `loosen='down'`） | 設定中心 `publish` 自己處理 |
+| 改保留天數 | `recyclebin.retention_days` | `{from, to}` | `ops`（縮短＝放寬 `loosen='down'`） | 設定中心 `publish` 自己處理 |
 | 改存放位置 | `dir` | `{from, to}` | `security` | 搬移流程（1.1），由到期事件觸發 |
 
 確認期長度＝`effective_at` 的計算一律由設定中心依 `change_control.confirm_period_days` 決定（回收筒不自己算）；寫入 `config_changes` 時同交易寫 `audit_log` 並（`risk ≥ money`）通知其他所有最高管理者；撤銷＝`cancelled` 事件；『放寬』類的第二人核准＝`approved` 事件（`approvals_required`）。讀取端以 `in_effect(row, now)` 判斷，**漏跑每日工作不影響效力**；回收筒讀自己的設定也走 `settings.get()`，失效依 `config_epoch`（見設定中心 §2.2）。
