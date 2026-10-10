@@ -723,6 +723,41 @@ if (typeof module !== 'undefined' && module.exports) {
 
   function _setMenuState(st) { document.documentElement.setAttribute('data-menu-state', st) }
 
+  // 系統中心（第54班）：群組裡有 `hub` 項（menu_l1 的 system-hub.html）時，導覽列只留這一個連結（群組名當標籤、
+  // 底下所有系統頁都算它的『目前位置』）；使用者一個系統頁都開不了 ⇒ 整個群組不出現。其他群組沒有 hub 項 ⇒ 原樣。
+  function _collapseHub(g) {
+    var items = g.items || []
+    var hub = null, rest = []
+    items.forEach(function (it) { if (it.hub) hub = it; else rest.push(it) })
+    if (!hub) return g
+    if (!rest.length) return { key: g.key, label: g.label, items: [] }
+    var active = (hub.active || []).slice()
+    rest.forEach(function (it) { active = active.concat(it.active || []) })
+    return { key: g.key, label: g.label, items: [{ href: hub.href, label: g.label, active: active, badge: hub.badge, extra_badge: hub.extra_badge, hub: true }] }
+  }
+
+  // 『← 系統』麵包屑：站在系統群組底下的頁面時，在內容區頂端加一條回系統中心的連結（頁面本身不用改）。
+  function _systemCrumb() {
+    try {
+      if (file === 'system-hub.html' || document.getElementById('sys-crumb')) return
+      var inSys = false
+      _declaredGroups().forEach(function (g) {
+        if (g.key !== 'system') return
+        g.items.forEach(function (it) { if (!it.hub && (it.active || []).indexOf(file) > -1) inSys = true })
+      })
+      if (!inSys) return
+      var host = document.querySelector('main') || document.querySelector('.page-main')
+      if (!host) return
+      var a = document.createElement('a')
+      a.id = 'sys-crumb'
+      a.href = pg('system-hub.html')
+      a.setAttribute('data-testid', 'sys-crumb')
+      a.textContent = '\u2190 \u7cfb\u7d71'
+      a.style.cssText = 'display:inline-block;margin:0 0 10px;font-size:12px;color:var(--text-secondary);text-decoration:none'
+      host.insertBefore(a, host.firstChild)
+    } catch (e) { /* 麵包屑是附帶功能：失敗不影響頁面 */ }
+  }
+
   function buildSidebar() {
     var decl = _declaredGroups()
     decl.forEach(function (g) {
@@ -733,6 +768,7 @@ if (typeof module !== 'undefined' && module.exports) {
     var groups = _layoutGroups || decl.map(function (g) {
       return { key: g.key, label: g.label, items: g.items.filter(function (it) { return _permOk(it.perm) }) }       // key：群組標題紅點的 id 要靠它（宣告版與角色版面兩條路都要有）
     })
+    groups = groups.map(_collapseHub)               // 第54班：『系統』群組收成單一入口（系統中心）；其餘群組不動
     groups.forEach(function (g) {
       if (!g.items || !g.items.length) return          // 群組顯示＝底下至少一項可見（不留空標題）
       sec(g.label, true, g.key)
@@ -750,6 +786,7 @@ if (typeof module !== 'undefined' && module.exports) {
     var el = document.getElementById('app-sidebar')
     if (el) el.innerHTML = ''
     renderMainNav()
+    _systemCrumb()
 
     // 使用者正站在一個「側欄判定他不該看到」的頁面上 → 顯示沒有權限，而不是
     // 把頁面內容留在那裡讓 API 一路 403（看起來像壞掉，不像沒權限）。

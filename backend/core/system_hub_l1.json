@@ -1,0 +1,244 @@
+{
+ "_doc": "L1 系統中心卡片（core.system_hub）。只放 L1 頁面；模組頁面的卡片宣告在各自 module.json 的 system_cards。新設定／新頁面＝一筆註冊，不改 hub。",
+ "cards": [
+  {
+   "id": "audit-log",
+   "section": "audit",
+   "title": "歷史紀錄",
+   "desc": "稽核日誌：誰在何時對哪張單做了什麼",
+   "href": "audit-log.html",
+   "perm": [
+    "audit_log"
+   ],
+   "order": 10,
+   "keywords": "稽核 紀錄 日誌 軌跡",
+   "icon": "log"
+  },
+  {
+   "id": "online-stats",
+   "section": "audit",
+   "title": "在線時數統計",
+   "desc": "各帳號登入與在線時數",
+   "href": "online-stats.html",
+   "perm": "superadmin",
+   "order": 30,
+   "keywords": "在線 登入 時數 統計",
+   "icon": "user"
+  },
+  {
+   "id": "storage-settings",
+   "section": "data",
+   "title": "儲存位置",
+   "desc": "上傳檔、報價單 PDF 與備份存放的位置與容量",
+   "href": "storage-settings.html",
+   "perm": "superadmin",
+   "order": 10,
+   "keywords": "儲存 位置 容量 磁碟",
+   "icon": "disk"
+  },
+  {
+   "id": "backup-retention",
+   "section": "data",
+   "title": "備份與保留",
+   "desc": "備份保留天數、最近一次備份、還原說明",
+   "href": "company-profile-settings.html#backup",
+   "perm": "superadmin",
+   "order": 20,
+   "keywords": "備份 還原 保留 災難",
+   "icon": "disk"
+  },
+  {
+   "id": "users",
+   "section": "identity",
+   "title": "使用者管理",
+   "desc": "新增帳號、停用、重設密碼、指派職責角色",
+   "href": "users.html",
+   "perm": "superadmin",
+   "order": 10,
+   "keywords": "帳號 密碼 停用 人員 登入",
+   "icon": "user"
+  },
+  {
+   "id": "duty-roles",
+   "section": "identity",
+   "title": "職責角色",
+   "desc": "把常用的模組權限組合成角色，一次授權給多人",
+   "href": "duty-roles.html",
+   "perm": "superadmin",
+   "order": 20,
+   "keywords": "角色 權限 授權 職責",
+   "icon": "shield"
+  },
+  {
+   "id": "permission-matrix",
+   "section": "identity",
+   "title": "權限設定",
+   "desc": "角色 × 模組 × 動作的矩陣檢視與調整（設計中）",
+   "href": "permission-matrix.html",
+   "perm": "superadmin",
+   "order": 30,
+   "keywords": "權限 矩陣 授權 角色",
+   "icon": "shield",
+   "planned": true
+  },
+  {
+   "id": "org-structure",
+   "section": "identity",
+   "title": "組織架構設定",
+   "desc": "處、部門與主管；簽核鏈與報表的部門來源",
+   "href": "org-structure.html",
+   "perm": "superadmin",
+   "order": 40,
+   "keywords": "部門 處 主管 組織",
+   "icon": "org"
+  },
+  {
+   "id": "approval-delegates",
+   "section": "identity",
+   "title": "簽核代理人",
+   "desc": "請假或出差期間，指定誰代你簽核",
+   "href": "approval-delegates.html",
+   "perm": [
+    "quotation"
+   ],
+   "order": 50,
+   "keywords": "代理 請假 出差 簽核",
+   "icon": "user"
+  },
+  {
+   "id": "module-settings",
+   "section": "modules",
+   "title": "模組管理",
+   "desc": "啟用、停用模組與授權狀態",
+   "href": "module-settings.html",
+   "perm": "superadmin",
+   "order": 10,
+   "keywords": "模組 啟用 停用 授權",
+   "icon": "build"
+  },
+  {
+   "id": "module-builder",
+   "section": "modules",
+   "title": "模組建構器",
+   "desc": "不寫程式建立自訂記錄與表單",
+   "href": "module-builder.html",
+   "perm": "superadmin",
+   "order": 20,
+   "keywords": "自訂 表單 建構 記錄",
+   "icon": "build"
+  },
+  {
+   "id": "notification-settings",
+   "section": "notify",
+   "title": "通知設定",
+   "desc": "寄件帳號、系統網址、寄信開關與測試",
+   "href": "notification-settings.html",
+   "perm": "superadmin",
+   "order": 10,
+   "keywords": "通知 寄件 SMTP 信件",
+   "icon": "mail"
+  },
+  {
+   "id": "mail-settings",
+   "section": "notify",
+   "title": "信件與通知收件設定",
+   "desc": "逐類型設定誰收信、誰收站內通知",
+   "href": "mail-settings.html",
+   "perm": "superadmin",
+   "order": 20,
+   "keywords": "收件人 信件 通知 退訂",
+   "icon": "mail"
+  },
+  {
+   "id": "google-calendar-settings",
+   "section": "notify",
+   "title": "Google 行事曆設定",
+   "desc": "哪些事件同步到行事曆、日曆帳號",
+   "href": "google-calendar-settings.html",
+   "perm": "superadmin",
+   "order": 30,
+   "keywords": "行事曆 日曆 Google 同步",
+   "icon": "cal"
+  },
+  {
+   "id": "settings-center",
+   "section": "settings",
+   "title": "設定中心",
+   "desc": "所有可調參數的索引：提醒天數、保存期限、上傳上限、編號規則（規劃中）",
+   "href": "settings-center.html",
+   "perm": "superadmin",
+   "order": 10,
+   "keywords": "設定 參數 門檻 天數 上限",
+   "icon": "gear",
+   "planned": true
+  },
+  {
+   "id": "company-profile-settings",
+   "section": "settings",
+   "title": "公司資料設定",
+   "desc": "公司抬頭、統編、據點、Logo 與品牌名稱",
+   "href": "company-profile-settings.html",
+   "perm": "superadmin",
+   "order": 20,
+   "keywords": "公司 抬頭 統編 據點 Logo 品牌",
+   "icon": "gear"
+  },
+  {
+   "id": "legal-params",
+   "section": "settings",
+   "title": "法規參數設定",
+   "desc": "所得稅扣繳、健保費率等依生效日版本的法定參數",
+   "href": "legal-params.html",
+   "perm": "superadmin",
+   "order": 30,
+   "keywords": "法規 稅 扣繳 健保 費率",
+   "icon": "scale"
+  },
+  {
+   "id": "module-versions",
+   "section": "status",
+   "title": "版本紀錄",
+   "desc": "目前版本與各模組更新紀錄",
+   "href": "module-versions.html",
+   "perm": [
+    "module_versions"
+   ],
+   "order": 10,
+   "keywords": "版本 更新 紀錄",
+   "icon": "ver"
+  },
+  {
+   "id": "schema-status",
+   "section": "status",
+   "title": "Schema 狀態",
+   "desc": "資料庫結構版本與各模組遷移是否完成",
+   "href": "schema-status.html",
+   "perm": "superadmin",
+   "order": 20,
+   "keywords": "資料庫 schema 遷移",
+   "icon": "ver"
+  },
+  {
+   "id": "approval-settings",
+   "section": "workflow",
+   "title": "簽核設定",
+   "desc": "各種單據的簽核層級、簽核人與套用範圍",
+   "href": "approval-settings.html",
+   "perm": "superadmin",
+   "order": 10,
+   "keywords": "簽核 流程 層級 審核",
+   "icon": "flow"
+  },
+  {
+   "id": "expense-types",
+   "section": "workflow",
+   "title": "支出申請類型",
+   "desc": "請購、採購、差旅、零用金的欄位、版面與單號",
+   "href": "expense-types.html",
+   "perm": "superadmin",
+   "order": 20,
+   "keywords": "支出 費用 請購 採購 差旅 零用金",
+   "icon": "file"
+  }
+ ]
+}
