@@ -161,6 +161,8 @@
 
 ## 4. 顯示模式（C 類；51 項掃描）與所需的新框架
 
+> **更正（來自小模組盤點）**：版面框架 **P9 已存在**（`frontend/static/layout-runtime.js`＋`module.json` 的 `customization`，角色＞公司＞程式預設再疊個人，tender_radar 頁在用；見 `MODULE-SWEEP-PLATFORM-T54.md`）。下文的 D1「欄位顯示與順序」**優先走 P9**（case 模組補 `customization` 登記與載入 runtime），D1 新儲存只補 `list_prefs` 缺的檢視模式、每頁筆數、預設分頁／篩選。D3 與 P9 合併為同一件接線工作。
+
 ### 4.1 需要新建的兩個東西（先於逐項施作）
 
 - **D1 個人／公司顯示偏好框架**：擴充 `user_list_prefs` 的儲存（新增 JSON 欄位，保留既有三欄不破壞），內容＝`{columns[], viewMode, pageSize, defaultTab, filters{}}`；另有「公司預設」層（`ui_definitions` 新 kind `list_view`，scope＝company／`role:<角色>`），讀取順序＝個人 → 角色 → 公司 → 程式預設。白話設定頁：用圖示勾選欄位，不出現鍵名。**欄位含成本／毛利者：一律先過 `money_visible()`；設定只能「再隱藏」，不能「放出」後端已遮罩的值。**
