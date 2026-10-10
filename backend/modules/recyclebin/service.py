@@ -47,6 +47,14 @@ def _files_of(snap: dict) -> list:
     return out
 
 
+def _codes_text(snap: dict) -> str:
+    """快照 `meta.codes`（字串清單）⇒ 換行分隔的文字，存進 `recycle_bin.codes`（單號產生器查詢用；不含換行的字串才收）。"""
+    codes = ((snap or {}).get("meta") or {}).get("codes")
+    if not isinstance(codes, (list, tuple)):
+        return ""
+    return "\n".join(sorted({str(c).strip() for c in codes if c not in (None, "") and "\n" not in str(c)}))
+
+
 def _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group_token, parent, impact):
     snap = ad.snapshot(conn, entity_id)
     if not isinstance(snap, dict) or not isinstance(snap.get("rows"), dict):
@@ -65,12 +73,12 @@ def _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group_token, p
     try:
         cur = conn.execute(
             "INSERT INTO recycle_bin (token, group_token, entity_type, entity_id, entity_label, parent_type, parent_id, deleted_by, deleted_by_display,"
-            " deleted_at, purge_after, reason, via, impact_json, snapshot_json, files_manifest_json, bytes, file_count, restore_status)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " deleted_at, purge_after, reason, via, impact_json, snapshot_json, files_manifest_json, bytes, file_count, restore_status, codes)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (token, group_token, entity_type, str(entity_id), str(snap.get("label") or entity_id), parent[0] if parent else "", str(parent[1]) if parent else "",
              (user or {}).get("username", ""), (user or {}).get("display_name", ""), now.isoformat(), purge_after_for(now), (reason or "")[:500], via,
              json.dumps(impact or [], ensure_ascii=False), payload, json.dumps(manifest, ensure_ascii=False),
-             sum(int(m.get("size") or 0) for m in manifest), sum(1 for m in manifest if m.get("state") == "moved"), S_IN_BIN))
+             sum(int(m.get("size") or 0) for m in manifest), sum(1 for m in manifest if m.get("state") == "moved"), S_IN_BIN, _codes_text(snap)))
         ad.delete_in_tx(conn, entity_id)
     except Exception:
         _mapping, back_fails = Q.move_back(token, manifest)
@@ -133,7 +141,7 @@ def _run_hook(ad, event, entity_id, snap, result):
 
 def reserved_ids(conn, entity_type="") -> set:
     """provider `recyclebin.reserved`：暫存區保留中的單號（entity_id ＋ 快照 meta.codes）；見 helpers/recycle_bin.reserved_ids。"""
-    sql = "SELECT entity_id, CASE WHEN json_valid(snapshot_json) THEN json_extract(snapshot_json, '$.meta.codes') END AS codes FROM recycle_bin WHERE restore_status IN (?,?)"
+    sql = "SELECT entity_id, codes FROM recycle_bin WHERE restore_status IN (?,?)"            # codes 欄＝進暫存區當下從快照抄出（不讀快照 JSON）
     args = list(LIVE)
     if entity_type:
         sql += " AND entity_type=?"
@@ -145,12 +153,7 @@ def reserved_ids(conn, entity_type="") -> set:
         return out
     for r in rows:
         out.add(str(r[0]))
-        try:
-            codes = json.loads(r[1]) if isinstance(r[1], str) else (r[1] or [])
-        except ValueError:
-            codes = []
-        if isinstance(codes, list):
-            out.update(str(c) for c in codes if c not in (None, ""))
+        out.update(c for c in str(r[1] or "").split("\n") if c)
     return out
 
 

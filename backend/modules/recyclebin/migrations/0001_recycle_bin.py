@@ -3,6 +3,7 @@
 
 - recycle_bin（T1）：每一張被刪的單據一列。`snapshot_json`（單據列＋子表列的原文，還原用）與 `files_manifest_json`（隔離檔清單）**整欄是 F2**
   （含個資原文；一般每日 JSON 備份排除、完整列只進個資資料夾，見 archive._F2_FIELDS）。清除後保留一列精簡墓碑（snapshot 清空、狀態 purged），供稽核。
+- codes：進暫存區當下從快照 `meta.codes` 抄出的單據代號（換行分隔；單號產生器每次取號都要查，不能每次去讀好幾 MB 的快照 JSON）。
 - token：uuid hex（隔離目錄名）；group_token：連帶刪除的一組單據共用；purge_after：刪除日 + 30 天（固定，D4）。
 - 冪等（IF NOT EXISTS）；不自己 commit（run_all 包 SAVEPOINT）；凍住的歷史：SQL 寫在這裡，不 import 會演進的程式碼。
 """
@@ -28,6 +29,7 @@ def up(conn):
         " impact_json TEXT NOT NULL DEFAULT '[]',"
         " snapshot_json TEXT NOT NULL DEFAULT '{}',"
         " files_manifest_json TEXT NOT NULL DEFAULT '[]',"
+        " codes TEXT NOT NULL DEFAULT '',"
         " bytes INTEGER NOT NULL DEFAULT 0,"
         " file_count INTEGER NOT NULL DEFAULT 0,"
         " restore_status TEXT NOT NULL DEFAULT 'in_bin',"
@@ -37,6 +39,8 @@ def up(conn):
         " purged_at TEXT NOT NULL DEFAULT '',"
         " purged_by TEXT NOT NULL DEFAULT '',"
         " schema_ver INTEGER NOT NULL DEFAULT 1)")
+    if "codes" not in {r[1] for r in conn.execute("PRAGMA table_info(recycle_bin)").fetchall()}:     # 模組尚未出貨前就建過表的開發／測試庫：補欄（冪等）
+        conn.execute("ALTER TABLE recycle_bin ADD COLUMN codes TEXT NOT NULL DEFAULT ''")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_recycle_bin_status_due ON recycle_bin(restore_status, purge_after)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_recycle_bin_entity ON recycle_bin(entity_type, entity_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_recycle_bin_group ON recycle_bin(group_token)")
