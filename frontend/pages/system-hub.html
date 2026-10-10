@@ -25,6 +25,8 @@
     .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-light)}
     .search-wrap kbd{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);border:1px solid var(--border-light);border-radius:4px;padding:1px 5px;background:var(--surface-sunken)}
 
+    .first-hint{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:0 0 14px;padding:10px 14px;border:1px solid var(--tone-info-border);background:var(--tone-info-bg);color:var(--tone-info-fg);border-radius:var(--radius-lg);font-size:12.5px}
+    .hint-x{border:1px solid var(--tone-info-border);background:var(--surface);color:var(--tone-info-fg);border-radius:var(--radius);padding:4px 12px;font-size:12px;cursor:pointer;font-family:var(--font-zh)}
     .hub{display:grid;grid-template-columns:240px minmax(0,1fr);gap:24px;align-items:start;margin-top:14px}
     .groups{position:sticky;top:calc(var(--topbar-h) + 12px);display:flex;flex-direction:column;gap:2px;padding:6px;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg)}
     .grp{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:9px 11px;border:0;border-left:3px solid transparent;border-radius:var(--radius);background:transparent;color:var(--text-primary);font-size:13.5px;font-family:var(--font-zh);cursor:pointer}
@@ -50,6 +52,7 @@
     .row__title{font-size:14px;font-weight:700;line-height:1.3}
     .row__desc{font-size:12px;color:var(--text-secondary);margin-top:1px}
     .row__grp{font-size:10.5px;color:var(--text-dim);margin-top:2px}
+    .row__impact{font-size:11.5px;color:var(--text-dim);margin-top:3px}
     .row__go{color:var(--text-dim);flex:0 0 auto}
     .tag{padding:1px 7px;border-radius:999px;background:var(--surface-sunken);border:1px solid var(--border-light);font-size:10.5px;color:var(--text-dim)}
     .badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;border:1px solid transparent;flex:0 0 auto}
@@ -94,6 +97,11 @@
 
         <div x-show="error" class="error-bar" x-text="error" role="alert"></div>
 
+        <div class="first-hint" x-show="hint && loaded && sections.length" data-testid="hub-first-hint">
+          <span>第一次使用？左邊選一個分類，右邊就會列出這個分類裡可以設定的項目；找不到時，直接在上面的搜尋框打幾個字。</span>
+          <button type="button" class="hint-x" @click="dismissHint()" aria-label="我知道了，不用再顯示">我知道了</button>
+        </div>
+
         <div class="hub" x-show="loaded && sections.length">
           <nav class="groups" role="tablist" aria-orientation="vertical" aria-label="系統分組" data-testid="hub-groups" @keydown="groupKey($event)">
             <template x-for="s in sections" :key="s.key">
@@ -118,7 +126,8 @@
                       <span class="row__main">
                         <div class="row__title"><span x-html="hl(it.title)"></span> <span class="tag" x-show="it.planned">規劃中</span></div>
                         <div class="row__desc" x-html="hl(it.desc)"></div>
-                        <div class="row__grp" x-text="it._sec + ' ・ ' + it.module"></div>
+                        <div class="row__impact" x-text="it.impact"></div>
+                        <div class="row__grp" x-text="it._sec"></div>
                       </span>
                       <span class="badge" x-show="it.badge" :class="it.badge ? it.badge.tone : ''" x-text="it.badge ? it.badge.text : ''"></span>
                       <svg class="row__go" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
@@ -139,6 +148,7 @@
                       <span class="row__main">
                         <div class="row__title"><span x-text="it.title"></span> <span class="tag" x-show="it.planned">規劃中</span></div>
                         <div class="row__desc" x-text="it.desc"></div>
+                        <div class="row__impact" x-text="it.impact"></div>
                       </span>
                       <span class="badge" x-show="it.badge" :class="it.badge ? it.badge.tone : ''" x-text="it.badge ? it.badge.text : ''"></span>
                       <svg class="row__go" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
@@ -177,12 +187,13 @@ function systemHub() {
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] }) }
   var LAST_KEY = 'motrix_system_hub_group'
   return {
-    session: {}, sections: [], cur: '', q: '', loaded: false, error: '',
+    session: {}, sections: [], cur: '', q: '', loaded: false, error: '', hint: true,
     async init() {
       var s = {}
       try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { s = {} }
       if (!s.token) { location.href = 'login.html'; return }
       this.session = s
+      try { this.hint = localStorage.getItem('motrix_system_hub_hint') !== 'done' } catch (e) { this.hint = true }
       var self = this
       window.addEventListener('hashchange', function () { self.fromHash() })
       document.addEventListener('keydown', function (e) {
@@ -214,6 +225,7 @@ function systemHub() {
       try { sessionStorage.setItem(LAST_KEY, key) } catch (e) { /* 無痕模式：不記住 */ }
       if (focus) { var self = this; this.$nextTick(function () { var b = document.getElementById('g-' + key); if (b) b.focus() }) }
     },
+    dismissHint() { this.hint = false; try { localStorage.setItem('motrix_system_hub_hint', 'done') } catch (e) { /* 無痕模式：下次還會顯示 */ } },
     remember() { try { sessionStorage.setItem(LAST_KEY, this.cur) } catch (e) { /* ignore */ } },
     groupKey(e) {
       var k = e.key
@@ -232,7 +244,7 @@ function systemHub() {
       var out = []
       this.sections.forEach(function (s) {
         s.items.forEach(function (it) {
-          if ((it.title + ' ' + it.desc + ' ' + it.keywords + ' ' + it.module).toLowerCase().indexOf(q) > -1) out.push(Object.assign({ _sec: s.title }, it))
+          if ((it.title + ' ' + it.desc + ' ' + it.keywords).toLowerCase().indexOf(q) > -1) out.push(Object.assign({ _sec: s.title }, it))
         })
       })
       return out

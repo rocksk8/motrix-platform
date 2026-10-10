@@ -44,6 +44,7 @@
       "section": "data",
       "title": "旅宿檔案更新",
       "desc": "更新旅宿住宿資料檔",
+      "impact": "影響：更新後，之後查詢旅宿資料會用新的內容。",
       "href": "lodging-records.html",
       "perm": [
         "lodging"
