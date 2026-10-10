@@ -1,5 +1,8 @@
 # 附近旅宿 更新紀錄
 
+## (next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1）：module.json 新增 `system_cards`（旅宿檔案更新卡片）
+- 加性宣告：在系統中心（`/pages/system-hub.html`）登記這個模組擁有的系統頁面；只影響索引顯示，頁面與 API 的權限、行為完全不變。
+
 ## 1.2.4 — 2026-10-09（wip/t48-w1c-fixes；端點稽核 W1c）
 - **稽核補洞**：`POST /api/lodging/records`（建立查詢紀錄）與 `POST /api/lodging/quotes`（人工詢價，永久保存的使用者資料）成功時原本不寫稽核——「寫入端點必須稽核」守門只掃 `api.py`／`api/`，漏了 `api_records.py`。現在各寫一筆 `lodging_record_create`／`lodging_quote_create`（只記編號、筆數、來源代號；**不記中心點地址（可能指向自然人，IP-97）、不記金額**）。驗證失敗不留稽核。
 - 沒有 migration、沒有端點或權限變更；回滾＝程式回退。守門同步擴大：模組內任何定義 `@router` 端點的檔都納入稽核掃描，另加『沒有端點檔逃出掃描』一題。
