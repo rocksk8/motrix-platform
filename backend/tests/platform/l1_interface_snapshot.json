@@ -1,5 +1,5 @@
 {
- "core_version": "1.125",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -973,6 +973,20 @@
    "sync_event": "def(source, key, item=…)",
    "sync_lock": "def(source, key)"
   },
+  "helper:perm": {
+   "Matrix": "class",
+   "Matrix.allow": "field=…",
+   "Matrix.deny": "field=…",
+   "Matrix.role_grants": "field=…",
+   "can": "def(user, key)",
+   "compute": "def(role, uid, has_module, cap, m)",
+   "effective_caps": "def(user)",
+   "explain": "def(user, key)",
+   "matrix": "def()",
+   "require": "def(user, key)",
+   "seed_from_legacy": "def(caps=…)",
+   "set_matrix_source": "def(fn)"
+  },
   "helper:prefill_sources": {
    "PREFILL_SOURCES": "const",
    "check_field": "def(field, *, mount_has_case=…, locked=…, path=…)",
@@ -1214,6 +1228,34 @@
    "xl_safe": "def(val)",
    "xl_style": "def(wb)",
    "xlsx_to_html": "def(data, title=…, max_rows=…)"
+  },
+  "plat:capabilities": {
+   "ACTIONS": "const",
+   "Capability": "class",
+   "Capability.action": "field",
+   "Capability.delegable": "field",
+   "Capability.key": "field",
+   "Capability.label": "field",
+   "Capability.legacy": "field",
+   "Capability.modules": "field",
+   "Capability.obj": "field",
+   "Capability.reserved": "field",
+   "Capability.risk": "field",
+   "Capability.roles": "field",
+   "Capability.unit": "field",
+   "CapabilityError": "class",
+   "HIGH_RISK_ACTIONS": "const",
+   "KEY_RE": "const",
+   "RISKS": "const",
+   "all_caps": "def()",
+   "collect": "def(manifests, valid_roles=…)",
+   "configure": "def(valid_roles=…)",
+   "get": "def(key)",
+   "parse_decl": "def(unit, decl, valid_roles=…)",
+   "parse_legacy": "def(node, valid_roles=…)",
+   "problems": "def()",
+   "reset_cache": "def()",
+   "signature": "def()"
   },
   "plat:catalog": {
    "CATALOG_VERSION": "const",
