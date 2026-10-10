@@ -21,6 +21,11 @@ def _approve(client, no, h, **body):
     return client.post("/api/payslips/%s/approve" % no, json=body, headers=h)
 
 
+def _x_deactivate(username):
+    from modules.payroll.tests.test_payslip_approval_t46 import _x
+    _x("UPDATE users SET active=0 WHERE username=?", (username,))
+
+
 def _submit(client, no, h):
     r = client.post("/api/payslips/%s/submit" % no, headers=h)
     assert r.status_code == 200 and r.json()["status"] == "待審核", r.text
@@ -108,16 +113,34 @@ def test_no_bypass_when_the_blocked_approver_is_not_the_requester(client, make_u
     assert _status("PS-203102-006") == "待審核" and not _q("SELECT 1 FROM audit_log WHERE action='payslip.approve_bypass'")
 
 
-def test_sole_approver_chain_absent_approver_can_be_bypassed_like_bonus(client, make_user):
+def test_active_sole_approver_cannot_be_overridden_but_a_deactivated_one_can(client, make_user):
     ua, ha = _su(client, make_user, "ps54_a")
     ub, hb = _su(client, make_user, "ps54_b")
-    uc, _ = _su(client, make_user, "ps54_c")
-    _flow([uc])                                                                       # 整條鏈只有 C 一位（例如 C 休假）
+    uc, hc = _su(client, make_user, "ps54_c")
+    _flow([uc])                                                                       # 整條鏈只有 C 一位
     _insert_payslip("PS-203102-007")
     _submit(client, "PS-203102-007", ha)
     assert _approve(client, "PS-203102-007", hb).status_code == 403
+    r = _approve(client, "PS-203102-007", hb, reason="C 休假")                           # C 在職：他自己能簽（缺席走轉簽），不給覆寫（有錢有扣繳）
+    assert r.status_code == 403 and _status("PS-203102-007") == "待審核" and not _q("SELECT 1 FROM audit_log WHERE action='payslip.approve_bypass'")
+    _x_deactivate(uc)                                                                 # C 離職／帳號停用 ⇒ 單據真的卡死 ⇒ 可代核
     r = _approve(client, "PS-203102-007", hb, reason="C 離職交接中")
     assert r.status_code == 200 and r.json()["status"] == "已核准" and _appr("PS-203102-007")["bypass"]["forApprover"] == uc
+
+
+def test_same_person_cannot_provide_two_signatures_via_bypass(client, make_user):
+    ua, ha = _su(client, make_user, "ps54_a")
+    us, hs = _su(client, make_user, "ps54_s")
+    _flow([ua], [us])                                                                 # 第二層是送審人 S 本人；A 簽完第一層後第二層卡在 S 身上
+    _insert_payslip("PS-203102-010")
+    _submit(client, "PS-203102-010", hs)
+    assert _approve(client, "PS-203102-010", ha).json()["status"] == "待審核"          # A 簽第一層
+    r = _approve(client, "PS-203102-010", ha, reason="我再代 S 簽第二層")               # A 已經簽過一格 ⇒ 不能再代核第二格
+    assert r.status_code == 403 and _status("PS-203102-010") == "待審核"
+    ub, hb = _su(client, make_user, "ps54_b2")                                         # 另一位沒簽過的最高管理者可以
+    r = _approve(client, "PS-203102-010", hb, reason="S 是送審人不能簽")
+    assert r.status_code == 200 and r.json()["status"] == "已核准"
+    assert not _q("SELECT 1 FROM audit_log WHERE action='payslip.approve_bypass' AND username=?", (ua,))
 
 
 def test_non_superadmin_cannot_bypass(client, make_user):

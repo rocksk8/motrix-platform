@@ -164,22 +164,31 @@ def submit_payslip(slip_no: str, body: dict = Body(default={}), authorization: s
     return {"ok": True, "status": status, "tierCount": len(tiers)}
 
 
-def _deadlock_bypass(appr, tiers, ct, user, reason, code, msg):
-    """第 54 班（使用者回報：勞報單送審後卡死）：送審人不得自核（Q-S6），若當層**排序最前的未簽核人就是送審人**（或整條鏈只有一位簽核人），
-    其他人不是簽不了（不在層內／要等送審人先簽）⇒ 單據卡死。比照獎金分潤（第 52 班）：**層外的另一位最高管理者**可帶原因代核。
+def _deadlock_bypass(conn, appr, tiers, ct, user, reason, code, msg):
+    """第 54 班（使用者回報：勞報單送審後卡死）：送審人不得自核（Q-S6），若當層**排序最前的未簽核人就是送審人**，其他人不是簽不了
+    （不在層內／要等送審人先簽）⇒ 單據卡死。比照獎金分潤（第 52 班）：**另一位最高管理者**可帶原因代核。
     回 `{"approver": 被代的簽核人帳號, "reason": 原因}`；條件不符 ⇒ 丟原本的 403／錯誤（`code`／`msg`）。
-    條件：①原本被擋的是權限（403）②操作者不是送審人（送審人永遠不可自核）③當層排序最前的未簽核人是送審人，或整條鏈合計恰一位簽核人
-    ④必填原因（寫強制稽核 `payslip.approve_bypass`、簽核紀錄、並通知其他最高管理者）。操作者本身必須是真正的最高管理者（端點已要求）。"""
+    條件：①原本被擋的是權限（403）②操作者不是送審人（送審人永遠不可自核）
+    ③卡點成立：當層排序最前的未簽核人是送審人；或整條鏈只有一位簽核人、而他**已停用／帳號不存在**（有錢有扣繳的單據，不給覆寫一位在職的單一簽核人——
+      他自己能簽，缺席走轉簽）④操作者**還沒在這張單簽過任何一格**（避免同一個人簽出兩個人的簽名）⑤必填原因（強制稽核、簽核紀錄、通知其他最高管理者）。
+    操作者本身必須是真正的最高管理者（端點已要求）。"""
     requester = appr.get("requestedBy") or ""
     names = [(a.get("username") or "") for t in tiers for a in (t.get("approvers") or [])]
     cur = (tiers[ct].get("approvers") or []) if ct < len(tiers) else []
     first = next((a.get("username") or "" for a in cur if a.get("status") != "approved"), "")
-    blocker = first if (first and first == requester) else (names[0] if len(names) == 1 else "")
-    if code != 403 or not blocker or user["username"] == requester or user["username"] == blocker:
+    blocker = ""
+    if first and first == requester:
+        blocker = first
+    elif len(names) == 1 and names[0]:
+        r = conn.execute("SELECT active FROM users WHERE username=?", (names[0],)).fetchone()
+        if r is None or not r["active"]:
+            blocker = names[0]
+    signed = {h.get("by") for h in (appr.get("history") or []) if h.get("action") in ("approve", "approve_bypass")}
+    if code != 403 or not blocker or user["username"] == requester or user["username"] == blocker or user["username"] in signed:
         raise HTTPException(code, msg)
     reason = (reason or "").strip() if isinstance(reason, str) else ""
     if not reason:
-        raise HTTPException(403, "這張勞報單目前輪到的簽核人（%s）無法簽核（送審人不能自行核准），單據會卡住。若要以最高管理者身分代為核准，請填寫原因"
+        raise HTTPException(403, "這張勞報單目前輪到的簽核人（%s）無法簽核（送審人不能自行核准，或該帳號已停用），單據會卡住。若要以最高管理者身分代為核准，請填寫原因"
                                  "（會寫入稽核紀錄，並通知其他最高管理者）。" % blocker)
     return {"approver": blocker, "reason": reason[:500]}
 
@@ -208,7 +217,7 @@ def approve_payslip(slip_no: str, body: dict = Body(default={}), authorization: 
             ct = int(appr.get("currentTier") or 0)
             ok, code, msg = check_approve_permission(tiers, ct, user["username"], conn)
             if not ok:
-                bypass = _deadlock_bypass(appr, tiers, ct, user, (body or {}).get("reason"), code, msg)      # 條件不符 ⇒ 丟原本的錯
+                bypass = _deadlock_bypass(conn, appr, tiers, ct, user, (body or {}).get("reason"), code, msg)      # 條件不符 ⇒ 丟原本的錯
             approvers = tiers[ct].get("approvers") or []
             fp = next(a for a in approvers if a.get("status") != "approved")
             fp["status"], fp["approvedAt"], fp["approvedBy"] = "approved", now, _name(user)
