@@ -3,6 +3,7 @@
 ## (next) — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t53-b5-rb-adapters；刪除暫存區 P1：出貨單）**
 - `DELETE /api/shipping-notes/{no}` 改進刪除暫存區（IP-RB1／IP-RB2）：只有草稿能刪的規則不變；資料列與回簽檔進暫存區、最高管理者 30 天內可還原；暫存區模組不在 ⇒ 照舊硬刪並在回應 `notice` 明說。『刪除已核可』：已扣庫存序號的出貨單明確拒絕（先用『撤銷核准』歸還庫存）。還原：單號被占用／報價單不在 ⇒ 衝突，不覆蓋。測試 `tests/test_recycle_adapter_t53.py`。
+- **（併入）(next) — 2026-10-10（wip/t53-b5-rb-adapters；刪除暫存區 P1：出貨單，提供者字面登記）**
 
 ## 1.0.23 — 2026-10-09（wip/t49b-1d-strictbool2；W1c-P2b 旗標嚴格解析補丁）
 - `POST /api/shipping-notes/{no}/approve` 的 `cascade`（『同一人連任多層時一次簽完』）：字串 `"false"` 以前會替簽核人自動簽完剩下的連續層。 旗標只收真布林（`helpers.validation.body_flag`）：JSON 字串 `"false"`／`"0"`／`""` 以前是 truthy，現在回 422、什麼都不寫（先驗旗標，再碰資料庫與簽核鏈）；真布林與沒帶（預設 false）行為不變。測試：`tests/test_strict_bool_cascade_t49b.py`。
