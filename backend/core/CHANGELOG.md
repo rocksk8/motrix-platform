@@ -17,7 +17,7 @@
 - **（併入）(next) — 2026-10-10（wip/t53-ab-recyclebin-p0）；next_entity_code 跳過暫存區保留號**
 - `db.next_entity_code`（簽名不變）：產號時向 `helpers.recycle_bin.reserved_ids(conn, "")` 取暫存區裡還在的單據編號並跳過——請款單、收款憑據、完工單、出貨單…所有呼叫端刪掉最新一張後，下一張不會重發同一個號碼（還原才不會撞號）；暫存區模組不在或讀不到 ⇒ 舊行為。
 
-## (next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2）
+## (next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2；併入系統中心 P1 r2）
 - L0（新增，只增）：`core.definitions.publish_direct(conn, kind, key, scope, body, note, user, commit=True)`——不經草稿直接發布一份 body（寫鎖內驗證、有送審中版本時 409）；`commit=False` 讓呼叫端同交易寫變更明細與稽核。
 - core migration（NEXT 佔位，列車取號）：表 `config_changes`（不可變）與 `config_change_events`（只增不改不刪，觸發器擋）。
 - L1（新增）：`helpers.config_ledger`（`record／history／register_domain／pending／cancel／supersede／activate_due／in_effect／restore_version／snapshot_version`；與權限矩陣設計 §7 對齊）；`helpers.settings_registry`（`SettingDef／register_group／get／get_group／publish／validate_values／groups／invalidate`；kind `setting_group`）；`helpers.settings_groups`（群組 `retention`、`uploads`）；`helpers.uploads.limits_for／max_file_bytes`。
