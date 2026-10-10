@@ -9,6 +9,7 @@
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
   <script src="../static/legal-round.js"></script>
   <script src="../static/profit-rules.js"></script>
+  <script src="../static/margin-tone.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script src="../static/privacy-notice.js"></script>
@@ -1847,7 +1848,7 @@
         <div class="cost-row" style="border-bottom:none">
           <span class="cost-row__label">直接毛利率</span>
           <span class="cost-row__val"
-                :class="tot.directMarginPct < 30 ? 'danger' : tot.directMarginPct < 40 ? 'warning' : 'success'"
+                :class="MotrixMargin.tone(tot.directMarginPct)"
                 x-text="tot.directMarginPct.toFixed(1) + '%'"></span>
         </div>
 

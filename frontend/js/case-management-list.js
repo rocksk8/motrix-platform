@@ -393,6 +393,8 @@ window.CM_PARTS.push(() => ({
     // 件數是另一支非同步請求；還沒到之前回 null（不可以退回已載入那一頁的件數冒充總數）
     summaryTotal()   { return this.caseCounts ? this.caseCounts.all : null },
     summaryActive()  { return this.caseCounts ? this.caseCounts.active : 0 },
+    // 『已成案』頁籤自己的徽章：這個母體只有已成案／已結案，所以『進行中』＝已成案；用自己的存取函式，日後兩者的定義分開時不會互相牽動
+    summaryWon()     { return this.caseCounts ? this.caseCounts.active : 0 },
     summaryClosed()  { return this.caseCounts ? this.caseCounts.closed : 0 },
     summaryOverdue() { return this.caseCounts ? this.caseCounts.overdueStages : 0 },
     summarySettling(){ return this.caseCounts ? this.caseCounts.settling : 0 },
