@@ -12,6 +12,9 @@
 - 安全／風險設定（使用者 2026-10-10 裁示）：`SettingDef(loosen='up'|'down')`——放寬方向的變更走 24 小時待生效＋**雙人核准**（`config_ledger.approve`，申請人不能自核、同人不能重複投票；`config_changes.approvals_required`、事件 `approved`；只有一位最高管理者時改為原因＋24 小時＋警告＋通知）；收緊立即生效。版本邊界 `settings_registry.set_edition_bounds`（程式／授權設定，客戶無 API 可改）；預設組 `profiles／profile_preview／apply_profile`（欄位 `presets`，走同一條 publish 管制）。欄位必填繁中 `question／label／help／impact`（高風險加 `risk_text`），守門 `test_settings_ui_plain_language`。
 - 新端點：`/api/settings-center/groups`（GET／GET {group}／POST {group}）、`/api/settings-center/pending`（GET）、`/api/settings-center/pending/{id}/cancel`／`approve`（POST）、`/api/settings-center/profiles`（GET）、`…/profiles/{name}/preview`（GET）、`…/apply`（POST）、`/api/settings-center/public`；頁面 `settings-center.html`（系統 > 設定中心）。
 - 每日 JSON 備份新增 `設定變更明細`（config_changes）與 `設定變更事件`（config_change_events）兩張表：設定中心的變更帳本屬稽核等級、只增不改不刪，備份不可漏。
+- **（併入）(next) — 2026-10-10（wip/t54-1d-permmatrix-p0；權限矩陣框架 P0：能力登錄與中央檢查）**
+- L0（新增，向下相容）：`core.capabilities`——能力登錄。模組在 `module.json` 以 `capabilities` 宣告 `<單位>.<物件>.<動作>`（18 個固定動作；高風險動作自動拉高 risk），每個能力附 `legacy`（今天判斷式的小型 DSL：superadmin／role／module／any）；`collect`／`all_caps`／`get`／`signature`／`problems`；壞宣告只回報、不讓載入失敗。角色清單不在這裡寫死（`configure(valid_roles)` 由 `helpers.perm` 交進來）。
+- L1（新增，向下相容）：`helpers.perm`——中央檢查 `can(user, cap)`／`require(user, cap)`／`effective_caps`／`explain`，矩陣模型 `Matrix`（角色格＋個人允許／禁止）、`seed_from_legacy`、`compute`（純函式）。superadmin 直通；禁止優先；不可委派者忽略個人允許；預設矩陣＝由 legacy 推導的種子 ⇒ 與今天的判斷逐字相同（關卡 A：`tests/platform/test_perm_equivalence_gate_a.py`）。尚無任何端點使用；資料表來源、off／shadow／on 旗標、授權矩陣金標、權限頁在後續里程碑。
 
 ## 1.128 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-05-reassign-rules）：轉簽不能變成自核的後門（使用者裁示）**
