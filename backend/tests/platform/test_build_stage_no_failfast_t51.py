@@ -2,6 +2,7 @@
 """run-stage --no-failfast（SPEEDUP-PIPELINE-T50 步驟 1）：只關 failfast、其餘同正式指令；紅的段記 reds 清單；全綠仍可被沿用、有紅不沿用。
 自造 git 小 repo＋注入的 runner（不真的跑 pytest）。"""
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -36,6 +37,10 @@ def repo(tmp_path, monkeypatch):
     git(r, "add", "-A")
     git(r, "commit", "-qm", "c1")
     monkeypatch.setattr(btr, "current_env", lambda: dict(ENV1))
+    # 正式閘門／run-stage 的子行程會帶著 MOTRIX_FAIL_STREAM_*／MOTRIX_FAILFAST*；本檔的假 runner 會讀這些並寫檔，
+    # 不清掉就會讀到外層閘門的值（斷言失敗），且把假紅題 t::a 寫進外層閘門的 fail_stream
+    for k in [k for k in os.environ if k.startswith(("MOTRIX_FAIL_STREAM", "MOTRIX_FAILFAST", "MOTRIX_FAILFIRST"))]:
+        monkeypatch.delenv(k, raising=False)
     return r
 
 
