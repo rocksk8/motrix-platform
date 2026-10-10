@@ -4,7 +4,7 @@
 
 ## 0. 白話摘要（給負責人）
 
-1. 單據刪掉後先進『資源回收筒』，預設保留 **30 天**（可拉長、**不可低於 30 天**）。
+1. 單據刪掉後先進『資源回收筒』，預設保留 **30 天**（可調整，範圍由設定登錄表決定；縮短需經確認期與第二人核准）。
 2. 每一種單據另有『**法定最短保存年數**』（沿用財務機制的法定參數 `retention`：每種單據類型各一列，財務負責人在系統裡設定，**發布與撤回都走確認期與雙人確認**）。**還在保存年限內的單據，系統不允許永久刪除**——只有『單據年齡 > 法定保存年數』**而且**符合回收筒自己的規則，才能清除。
 3. 要把已核可的單據『永久刪除』：必須**寫原因** → 系統**通知其他所有最高管理者** → 進入**確認期**（全系統共用設定 `change_control.confirm_period_days`，預設 **7 天**，最短 24 小時，可在系統調整；該設定由設定中心登錄，本稿只讀取）→ 這段期間**任何一位最高管理者都能撤銷**；沒人撤銷、也已過法定保存年限，才真的刪。
 4. 回收筒存放位置、保留天數這類設定也有保護：改位置要寫原因、記錄、進確認期，並把已存放的檔案一起搬過去；回收筒相關權限固定給最高管理者，**不能委派**。
@@ -14,18 +14,18 @@
 
 | 設定 | 預設 | 下限／規則 | 誰能改 | 改的時候 |
 |---|---|---|---|---|
-| 保留天數 `recyclebin_retention_days` | 30 | **不得低於 30**；上限 3650 | 最高管理者 | 立即生效，**只影響之後刪除的單據**（拉長時可選擇一併套用到現有項目；縮短永遠不縮短現有項目的 `purge_after`）；寫稽核 |
-| 單據法定保存年數（財務機制 kind `retention`，`{"years":N}`／單據類型） | 由財務負責人設定（建議 5 年起，待財務確認） | 屬財務機制（`FINANCE-MECHANISMS-DESIGN-T54`，ab：wip/t54-ab-finance-mech）：生效日 ≥ 發布日 + 確認期、**發布與撤回走待確認＋第二人確認**、已生效列凍結（只增不改）；本稿**只讀取**，不另存一份 | 財務負責人（能力 `finance.statutory.publish`，superadmin 可授權；**這不是 `recyclebin.*`，兩套能力不互相覆蓋**） | 依財務機制流程 |
+| 保留天數 `recyclebin.retention_days` | **30**（決定） | **上下限寫在設定登錄表（`SettingDef`／版本邊界），不寫在程式**：目前登錄為下限 7、上限由登錄表定；程式只讀有效範圍。縮短＝『放寬』（`loosen='down'`）⇒ 依設定中心規則走確認期＋第二人核准；拉長立即生效 | 最高管理者 | **只影響之後刪除的單據**（拉長時可選擇一併套用到現有項目；縮短永遠不縮短現有項目的 `purge_after`）；經設定中心的 `config_changes`（domain `recyclebin`）留明細 |
+| 單據法定保存年數（財務機制 kind `retention`，`{"years":N}`／單據類型） | **由財務負責人設定；回收筒不內建任何年數種子值**（法定最短年數只存在 ab 的 `retention` kind） | 屬財務機制（`FINANCE-MECHANISMS-DESIGN-T54`，ab：wip/t54-ab-finance-mech）：生效日 ≥ 發布日 + 確認期、**發布與撤回走待確認＋第二人確認**、已生效列凍結（只增不改）；本稿**只讀取**，不另存一份 | 財務負責人（能力 `finance.statutory.publish`，superadmin 可授權；**這不是 `recyclebin.*`，兩套能力不互相覆蓋**） | 依財務機制流程 |
 | 確認期 `change_control.confirm_period_days` | 7 天 | 全系統共用單一設定（設定中心 §2.2 第 6 點，node-39 擁有，wip/t54-n39-settings-design）；**下限 24 小時**；本稿只讀取 `settings.get("change_control.confirm_period_days")` | 最高管理者（依設定中心規則） | 依設定中心規則 |
-| 存放位置 `recyclebin_dir` | 安裝目錄下『資源回收筒』 | 必須在網站樹外的絕對路徑；不可設在 uploads／backend／frontend／雲端同步資料夾下（現況守門保留） | 最高管理者 | **寫原因＋稽核＋確認期**；生效時**把現有隔離資料夾整批搬過去**（見 1.1） |
+| 存放位置 `recyclebin.dir` | 安裝目錄下『資源回收筒』 | 必須在網站樹外的絕對路徑；不可設在 uploads／backend／frontend／雲端同步資料夾下（現況守門保留） | 最高管理者 | **寫原因＋稽核＋確認期**（`config_changes`，domain `recyclebin`，`requires_pending`）；生效時**把現有隔離資料夾整批搬過去**（見 1.1） |
 | 能不能永久刪除 | 只有最高管理者 | 不可委派（第 4 節） | — | — |
 
-**兩層保存的關係（不互相覆蓋）**：①回收筒保留天數（本稿，預設 30、下限 30）＝『刪掉後多久可以清』的**最短等待**；②單據法定保存年數（財務機制 `retention`）＝『這類單據在法律上至少要留多久』。**清除條件＝兩者同時成立**：已超過回收筒保留天數 **且** `today > 單據日期 + retention.years`。任何一個不成立 ⇒ 不清除。
+**兩層保存的關係（不互相覆蓋）**：①回收筒保留天數（本稿，預設 30、下限由設定登錄表定）＝『刪掉後多久可以清』的**最短等待**；②單據法定保存年數（財務機制 `retention`）＝『這類單據在法律上至少要留多久』。**清除條件＝兩者同時成立**：已超過回收筒保留天數 **且** `today > 單據日期 + retention.years`。任何一個不成立 ⇒ 不清除。
 
 ### 1.1 改存放位置的步驟（固定流程，每步可回報）
 1. 新位置驗證（存在、可寫、容量足夠、不在禁止路徑下）。2. 寫『待生效』請求（原因必填、稽核、通知其他最高管理者）。3. 確認期內可撤銷。
 4. 到期後，**到『切換』為止全程可逆（只複製、不刪舊的）**：
-   a. 開『搬移中』**功能旗標**（`recyclebin_move_in_progress`，存在設定裡；**不用資料庫寫鎖**——大量複製期間鎖住會讓整個系統的寫入卡住）；旗標開著時：**暫停每日 `reconcile` 與清除工作**（避免新位置的資料夾被當成孤兒搬走、或舊位置的項目被清掉）、**新的刪除照常進舊位置**。
+   a. 開『搬移中』**功能旗標**（`recyclebin.move_in_progress`，存在設定裡；**不用資料庫寫鎖**——大量複製期間鎖住會讓整個系統的寫入卡住）；旗標開著時：**暫停每日 `reconcile` 與清除工作**（避免新位置的資料夾被當成孤兒搬走、或舊位置的項目被清掉）、**新的刪除照常進舊位置**。
    b. 第一輪：逐個隔離資料夾**複製**到新位置，每個以 sha256 驗證（舊位置原封不動）。
    c. 第二輪（補差）：短暫把旗標切到『拒絕新進』（新的刪除顯示『回收筒搬移中，請稍候幾分鐘再試』，其餘功能不受影響），補複製第一輪之後新增的資料夾並驗證。
    d. **切換**：把設定指到新位置（單一動作）→ 旗標關閉 → 恢復 reconcile／清除。
@@ -43,28 +43,35 @@
 - 『永久刪除』（含手動、含到期自動）一律先過 `purge_allowed(entry)`：`today > retention_basis + retention.years` 且已過回收筒保留天數，否則回『還在法定保存期內（到 YYYY-MM-DD）』並拒絕。查不到該類型的 `retention` 設定 ⇒ **視為不可清除**（fail-closed，並告警請財務補設定）。
 - 隔離區容量：`held` 會讓回收筒長期變大 ⇒ 現有水位告警（預設 5 GB）要把 `held` 單獨統計；必要時（建議）`held` 的附件可轉存到『封存位置』（同樣不上雲、不入每日匯出）。
 
-## 3. 永久刪除與設定變更的『確認期』流程
+## 3. 永久刪除與設定變更的『確認期』流程（**沿用設定中心的單一機制，不另建待生效狀態機**）
 
-共用一張請求表（模組 migration 0002，不改 `recycle_bin`）：`recycle_requests(id, kind, target, payload_json, reason, requested_by, requested_at, due_at, status, revoked_by, revoked_at, executed_at, result)`；`kind ∈ {purge, retention_days, dir_move}`（法定保存年數與確認期的變更各自走財務機制／設定中心的流程，不進這張表）；`status ∈ {pending, revoked, done, failed}`。
+**不另建請求表**（取消原構想的 `recycle_requests`）。待生效／撤銷／核准一律走設定中心共用的 `config_ledger`：不可變明細 `config_changes` ＋ 事件 `config_change_events`（`pending｜approved｜activated｜cancelled｜superseded`），**domain＝`recyclebin`**。回收筒只提供 domain 專屬的 payload 與執行器：
+
+| 事情 | `key` | `new_json`（domain 專屬 payload） | `risk` | 到期（`activated`）後的執行器 |
+|---|---|---|---|---|
+| 永久刪除一筆 | `purge:<bin id>` | `{binId, entityType, entityId, label, fileCount}` | `legal` | 每日工作取 `in_effect` 且仍 `purge_allowed` 的項目 ⇒ 刪隔離檔、清快照、留墓碑 |
+| 改保留天數 | `retention_days` | `{from, to}` | `ops`（縮短＝放寬 `loosen='down'`） | 設定中心 `publish` 自己處理 |
+| 改存放位置 | `dir` | `{from, to}` | `security` | 搬移流程（1.1），由到期事件觸發 |
+
+確認期長度＝`effective_at` 的計算一律由設定中心依 `change_control.confirm_period_days` 決定（回收筒不自己算）；寫入 `config_changes` 時同交易寫 `audit_log` 並（`risk ≥ money`）通知其他所有最高管理者；撤銷＝`cancelled` 事件；『放寬』類的第二人核准＝`approved` 事件（`approvals_required`）。讀取端以 `in_effect(row, now)` 判斷，**漏跑每日工作不影響效力**；回收筒讀自己的設定也走 `settings.get()`，失效依 `config_epoch`（見設定中心 §2.2）。
 
 流程（以永久刪除為例）：
-1. 最高管理者在回收筒按『永久刪除』→ 畫面白話問：『為什麼要永久刪除？（必填）』＋影響說明（『這份單據是 XXX，法定保存到 YYYY-MM-DD；確認期 7 天內任何最高管理者都能撤銷』）＋一句話預覽 → 送出。
-2. 系統：驗 `purge_allowed`；寫請求（`pending`、`due_at = now + 確認期`）；**站內通知＋信件給其他所有最高管理者**（含原因、誰申請、到期時間、『撤銷』連結）；稽核 `recyclebin.purge_request`。
-3. 確認期內：任何最高管理者（含申請人）可『撤銷』→ `revoked`，稽核＋通知；單據維持原狀。
-4. 到期：每日工作檢查 `pending` 且 `due_at<=now`：再驗 `purge_allowed`（期間規則可能改過）→ 執行清除（隔離檔刪除、快照清空、留墓碑）→ `done`，稽核 `recyclebin.purge_manual`＋通知。失敗 ⇒ `failed`＋告警，不重試風暴。
-5. 自動清除（保留天數到期且已過法定保存年限）**不需要**確認期，但要在到期前 N 天（預設 7）通知最高管理者，並寫稽核。
-回收筒自己的設定變更（保留天數、存放位置）使用同一套 pending→撤銷→到期生效；『位置』到期執行第 1.1 節步驟。確認期長度一律讀 `change_control.confirm_period_days`。
+1. 最高管理者在回收筒按『永久刪除』→ 畫面白話問：『為什麼要永久刪除？（必填）』＋影響說明（『這份單據是 XXX，法定保存到 YYYY-MM-DD；確認期 N 天內任何最高管理者都能撤銷』）＋一句話預覽＋備份殘留提醒（第 6 節）→ 送出。
+2. 系統：驗 `purge_allowed`；`config_ledger.record(domain='recyclebin', key='purge:<id>', …, reason)`（`pending` 事件）；通知其他所有最高管理者（含原因、誰申請、到期時間、『撤銷』）；稽核 `recyclebin.purge_request`。
+3. 確認期內：任何最高管理者（含申請人）可『撤銷』→ `cancelled`；單據維持原狀。
+4. 到期：執行器再驗 `purge_allowed`（期間規則可能改過）→ 清除 → 稽核 `recyclebin.purge_manual`＋通知。失敗 ⇒ 告警，不重試風暴。
+5. 自動清除（保留天數到期且已過法定保存年限）**不需要**確認期，但到期前 N 天通知最高管理者並寫稽核。
 
 使用者介面遵守核心原則：白話提問、建議預設標示、一句話預覽、一鍵撤銷；畫面不出現代碼或鍵名。
 
 ## 4. 能力（capability）與權限
 
-回收筒相關能力一律登記為**不可委派**（固定最高管理者，權限矩陣不可勾選給其他角色）：`recyclebin.view`、`recyclebin.restore`、`recyclebin.purge.request`、`recyclebin.purge.revoke`、`recyclebin.settings.edit`。法定保存年數的編輯／發布屬財務機制的能力（`finance.statutory.*`），可由 superadmin 授權給財務負責人；它與回收筒能力分開，回收筒不替財務決定年限、財務也不能因此取得清除權。需要 1d 的能力登記表支援 `delegable: false` 旗標（待與 1d 對齊）；守門測試：矩陣 API 嘗試把這些能力授權給非最高管理者 ⇒ 被拒。
+能力鍵一律三段 `<unit>.<object>.<action>`（1d 的登錄表格式），回收筒的能力登記為**不可委派**（固定最高管理者，權限矩陣不可勾選給其他角色）：`recyclebin.bin.view`（看回收筒）、`recyclebin.bin.restore`（還原）、`recyclebin.purge.request`（申請永久刪除）、`recyclebin.purge.revoke`（撤銷）、`recyclebin.settings.edit`（改回收筒設定）。**動作名稱以 1d 的固定動作清單為準**（上列為意圖，定案名稱待與 1d 對齊）；每個能力需有中文名稱、說明與影響（登錄表會拒絕缺漏）。法定保存年數的編輯／發布屬財務機制的能力（`finance.statutory.*`），可由 superadmin 授權給財務負責人；它與回收筒能力分開，回收筒不替財務決定年限、財務也不能因此取得清除權。需要 1d 的能力登記表支援 `delegable: false`；守門測試：矩陣 API 嘗試把這些能力授權給非最高管理者 ⇒ 被拒。
 
 ## 5. 對 P1 adapter 的影響（待排班）
 
 - `Adapter.retention_basis(snap)`（預設用快照主列的日期欄／建立日）；各 adapter 提供單據日期欄（報價單 `quote_date`、額外支出 `expense_date`、完工單 `completion_date`、出貨單 `ship_date`、材料申請核准日）。
-- 單據類別預設年數表放在 recyclebin 模組（`recyclebin_min_years` 的種子值），各擁有模組只提供 `entity_type` 與日期。
+- 法定保存年數**只存在 ab 的 `retention` kind**，回收筒不內建任何年數種子值；各擁有模組只提供 `entity_type` 與單據日期欄，`purge_allowed` 查 `statutory.on('retention', <單據類型>, today)`。
 - 『刪除已核可』入口與永久刪除是兩件事：前者只是進回收筒（可還原）；後者才走本節流程。
 
 ## 6. 備份殘留（必須明說）
