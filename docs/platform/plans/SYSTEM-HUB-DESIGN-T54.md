@@ -102,6 +102,8 @@
 - **cap 鍵格式**：三段 `<unit>.<object>.menu`，unit＝擁有該頁的模組鍵（L1 頁面為 `core`）、object＝頁面檔名去掉 `.html` 並把 `-` 換成 `_`（`users.html` → `core.users.menu`；`vendor-contractors.html` → `subcontract.vendor_contractors.menu`）。**不手打**：由 1d 的 `capabilities.menu_cap_key(unit, href)` 衍生；卡片可省略 `cap`，由聚合器衍生。
 - **種子值**：矩陣的 menu 能力的種子由選單 `perm` 機械衍生（any→所有人、superadmin→僅最高管理者、[模組鍵]→任一模組）；hub 的對等守門比對的是**種子宣告**（`module.json`／`menu_l1`），不是矩陣的即時值（矩陣可以合法地改掉）。
 - **快取與失效**：整頁回應**依使用者**快取 15 秒（鍵＝使用者 id＋角色＋有效模組；不同人不共用）。矩陣／設定異動時由兩條路讓它立刻失效：①`perm.changed` 提供者（hub 登記 `clear_cache`，1d 在授權／代理異動時呼叫）；②與設定中心共用的 **`config_epoch`**（`config_changes`／`config_change_events` 的最大 id）——快取項記住載入時的 epoch，命中時超過 2 秒才重查，變了就丟棄。兩者並存，最壞延遲（多行程）15 秒。
+  - **`perm.changed` 只清『本行程』的快取**（它是行程內的函式呼叫）；**跨行程的真相是 `config_epoch`**——別的行程靠 epoch 比對才會丟棄舊快取，所以不能只靠 `perm.changed`。
+  - **時間性失效**：載入時同時算出下一個 `effective_at`（待生效的授權／設定到期時間）；快取項在到期時刻之後一律視為過期（即使 15 秒還沒到、即使 epoch 沒變），這樣『到點生效』的變更不會被舊快取蓋住。
 - **徽章唯讀**：每個徽章提供者拿到的連線是 `PRAGMA query_only=ON`，寫入一律失敗（守門題驗證）。
 
 ## 5. 守門與測試
