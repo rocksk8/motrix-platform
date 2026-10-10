@@ -45,6 +45,7 @@ def _all_cards():
 def _run_badge(fn, user):
     conn = get_db()
     try:
+        conn.execute("PRAGMA query_only = ON")        # 徽章提供者必須唯讀：這條連線寫入一律失敗（IP-HUB1；測試以會寫入的提供者驗證）
         return fn(conn, user)
     finally:
         conn.close()
@@ -92,6 +93,14 @@ def attach_badges(sections, user, timeout=BADGE_TIMEOUT):
     return failures
 
 
+def _capability_checker(user):
+    """權限矩陣（`perm.can` 提供者，1d）存在時：回 `can(cap) -> bool`；不在或沒有 cap 的卡片 ⇒ None／退回舊 perm 語意。"""
+    fn = registry.single_provider("perm.can")
+    if fn is None:
+        return None
+    return lambda cap: bool(fn(user, cap))
+
+
 def show_denied():
     return _get_setting(SHOW_DENIED_KEY, False) is True
 
@@ -109,7 +118,8 @@ def build_for(user):
     modules = effective_modules(user.get("role"), user.get("modules"))
     sa = user.get("role") == "superadmin"
     allc = _all_cards()
-    cards = hub.visible_cards(allc, modules, sa)
+    can = _capability_checker(user)
+    cards = hub.visible_cards(allc, modules, sa, can)
     shown = {c["id"] for c in cards}
     denied = [c for c in allc if c["id"] not in shown] if show_denied() else []
     sections = hub.build_sections(cards, denied, _module_labels())

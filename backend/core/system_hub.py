@@ -13,6 +13,7 @@
   title    標題                              desc     一行說明
   impact   『改了會影響什麼』一句白話（必填；例：影響：只影響之後送出的單據，簽核中的不變。）
   href     頁面檔名（可帶 #錨點）            perm     'superadmin' | ["模組鍵",…] | 'any'（同選單語意）
+  cap      （選用）權限矩陣的能力鍵（選單項會變成可勾選的能力時，用它過濾；有 cap 且有 `perm.can` 提供者 ⇒ 以它為準，否則退回 perm）
   order    整數（同組內排序）                keywords 搜尋關鍵字（空白分隔，選用）
   icon     圖示鍵（選用，ICONS 之一）        planned  True ⇒ 規劃中（頁面尚未存在，不檢查 href 是否存在，列上標「規劃中」）
 即時狀態徽章（選用）由提供者回傳：`ModuleSpec.providers[("system.hub_badge", "<card id>")] = fn(conn, user) -> {"text", "tone", "count"?}`。
@@ -35,7 +36,7 @@ SECTIONS = (
     {"key": "status", "title": "系統狀態與版本", "sub": "版本、資料庫結構、使用狀況"},
 )
 ICONS = ("user", "shield", "flow", "mail", "cal", "disk", "trash", "log", "gear", "build", "ver", "org", "file", "scale")
-CARD_KEYS = {"id", "section", "title", "desc", "impact", "href", "perm", "order", "keywords", "icon", "planned"}
+CARD_KEYS = {"id", "section", "title", "desc", "impact", "href", "perm", "cap", "order", "keywords", "icon", "planned"}
 TONES = ("ok", "info", "warn", "bad", "plan")
 
 
@@ -108,6 +109,8 @@ def validate(cards, pages=None):
             problems.append("%s 的系統卡片 %s 缺整數 order" % (where, cid))
         if not _perm_ok(c.get("perm")):
             problems.append("%s 的系統卡片 %s 的 perm 不合法：%r" % (where, cid, c.get("perm")))
+        if c.get("cap") is not None and not (isinstance(c.get("cap"), str) and c["cap"].strip()):
+            problems.append("%s 的系統卡片 %s 的 cap 不合法：%r" % (where, cid, c.get("cap")))
         if c.get("icon") is not None and c.get("icon") not in ICONS:
             problems.append("%s 的系統卡片 %s 的 icon 不認得：%r" % (where, cid, c.get("icon")))
         if pages is not None and not c.get("planned") and _page_of(c.get("href")) not in pages:
@@ -115,11 +118,22 @@ def validate(cards, pages=None):
     return problems
 
 
-def visible_cards(cards, modules, superadmin):
-    """依使用者權限過濾（規則同 core.menu.visible；hub 不放寬也不收緊任何頁面的權限）。"""
+def visible_cards(cards, modules, superadmin, can=None):
+    """依使用者權限過濾（規則同 core.menu.visible；hub 不放寬也不收緊任何頁面的權限）。
+    can：選用的 `can(cap) -> bool`（權限矩陣，由 `perm.can` 提供者給）。卡片有 `cap` 且給了 `can` ⇒ 以 can(cap) 為準；否則用舊的 perm 語意。
+    最高管理者一律可見（與選單相同）。"""
     from core.menu import visible
     mods = set(modules or [])
-    return [c for c in cards if visible(c["perm"], mods, superadmin)]
+    out = []
+    for c in cards:
+        if superadmin:
+            out.append(c)
+        elif can is not None and c.get("cap"):
+            if can(c["cap"]):
+                out.append(c)
+        elif visible(c["perm"], mods, superadmin):
+            out.append(c)
+    return out
 
 
 def denied_reason(perm, module_labels=None):
