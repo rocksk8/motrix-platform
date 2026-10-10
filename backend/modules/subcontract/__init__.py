@@ -4,7 +4,8 @@ import importlib
 
 from core.registry import ModuleSpec
 
-from modules.subcontract import attachments, dispatch_notify, gl_events, payable_due, remit, remit_kinds  # noqa: F401（dispatch_notify：載入時登記信件類型）
+from helpers import recycle_bin as _rb
+from modules.subcontract import attachments, dispatch_notify, gl_events, payable_due, recycle_adapter, remit, remit_kinds  # noqa: F401（dispatch_notify：載入時登記信件類型）
 from modules.subcontract.api import contractor_vouchers, contractors, dispatch_approval, dispatch_payslip_links, vendor_contractors
 from modules.subcontract.api import remit_kinds as remit_kinds_api
 
@@ -22,6 +23,9 @@ MODULE = ModuleSpec(
     migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up), (6, _m0006.up)],
     routers=[contractors.router, vendor_contractors.router, dispatch_approval.router, dispatch_payslip_links.router, contractor_vouchers.router, remit_kinds_api.router],
     providers={
+        # 第 53 班 P1：刪除暫存區 adapter（IP-RB1；契約 helpers/recycle_bin.py）
+        (_rb.CAP_ADAPTER, recycle_adapter.ET_DISPATCH): recycle_adapter.DispatchBinAdapter,
+        (_rb.CAP_ADAPTER, recycle_adapter.ET_VOUCHER): recycle_adapter.VoucherBinAdapter,
         # IP-1：派工單列序列化（M01 應計派工成本、M06 傳票摘要來源）
         ("dispatch.row", "subcontract"): vendor_contractors._dispatch_row,
         # 第46班 P3：派發簡要識別（M07 勞報單頁顯示「來源派發」；不含金額）
