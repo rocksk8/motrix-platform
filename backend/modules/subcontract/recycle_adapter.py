@@ -154,7 +154,7 @@ class DispatchBinAdapter(RB.Adapter):
         quote_exists = bool(_has_table(conn, "quotations") and conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (d["quote_no"],)).fetchone())
         files = [{"root": "uploads", "rel": p} for p in _file_rels(d.get("files_json"), d.get("invoice_files_json"))]
         return {"rows": rows, "files": files, "label": "派發 %s（%s）" % (d.get("doc_code") or "#%s" % d["id"], d["quote_no"]),
-                "parent": None, "meta": {"quote_exists": quote_exists, "vendor_id": d.get("vendor_id")}}
+                "parent": None, "meta": {"quote_exists": quote_exists, "vendor_id": d.get("vendor_id"), "codes": [d["doc_code"]] if d.get("doc_code") else []}}
 
     def delete_in_tx(self, conn, entity_id):
         did = int(entity_id)
