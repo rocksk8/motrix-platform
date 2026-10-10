@@ -318,6 +318,17 @@ def test_static_guard_g_m1_only_the_gate_writes_orders_and_flags():
             # 只准在註解／字串說明裡提到（不可有指派）
             assert not re.search(r"""\[["']materialOrders["']\]\s*=|setdefault\(["']materialOrders["']|["']materialOrders["']\s*:\s*\[""", txt), rel
         hits[rel] = txt
+    # 暫存區 adapter 對 materialOrders 的寫入只准出現在 delete_in_tx／restore_in_tx（其他函式一律不准碰）
+    import ast
+    ra = hits["recycle_adapter.py"]
+    tree = ast.parse(ra)
+    writers = set()
+    for cls in [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]:
+        for fn in [n for n in cls.body if isinstance(n, ast.FunctionDef)]:
+            src = ast.get_source_segment(ra, fn) or ""
+            if re.search(r"""\[["']materialOrders["']\]\s*=|setdefault\(["']materialOrders["']|UPDATE quotations SET data_json""", src):
+                writers.add(cls.name + "." + fn.name)
+    assert writers == {"MaterialOrderAdapter.delete_in_tx", "MaterialOrderAdapter.restore_in_tx"}, writers
     for rel, txt in hits.items():
         assert not re.search(r"""\[["'](ordered|arrived)["']\]\s*=""", txt), "後端不應指派物流旗標：" + rel
     mo = hits["api/material_orders.py"]

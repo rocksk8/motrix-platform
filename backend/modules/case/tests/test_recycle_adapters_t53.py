@@ -325,20 +325,7 @@ def test_adapters_are_registered_by_the_case_module():
 
 
 # ── 單號不重發（node-39 MUST）／採購單被材料申請對應／下游表 ─────────────────────────────────────
-@pytest.fixture
-def reserved_ids(monkeypatch):
-    """ab 的 RB.reserved_ids 還沒進來時用同語意的替身（暫存區裡的 entity_id 與 snapshot.meta.codes）。"""
-    if not hasattr(RB, "reserved_ids"):
-        def fake(conn, entity_type):
-            out = set()
-            for r in conn.execute("SELECT entity_id, snapshot_json FROM recycle_bin WHERE entity_type=? AND restore_status IN ('in_bin','restore_failed')", (entity_type,)).fetchall():
-                out.add(r["entity_id"])
-                out.update(((json.loads(r["snapshot_json"] or "{}").get("meta") or {}).get("codes")) or [])
-            return out
-        monkeypatch.setattr(RB, "reserved_ids", fake, raising=False)
-
-
-def test_completion_note_number_is_not_reissued_while_in_the_bin(client, who, reserved_ids):
+def test_completion_note_number_is_not_reissued_while_in_the_bin(client, who):
     from modules.case import recycle_adapter as RA
     su, _ = who
     cn = db.get_db()
@@ -359,7 +346,7 @@ def test_completion_note_number_is_not_reissued_while_in_the_bin(client, who, re
     assert client.post("/api/recycle-bin/%d/restore" % _bin_rows()[0]["id"], headers=su).status_code == 200
 
 
-def test_extra_expense_and_material_doc_codes_skip_the_bin(client, who, reserved_ids):
+def test_extra_expense_and_material_doc_codes_skip_the_bin(client, who):
     from modules.case import expense_forms as EF
     from modules.case import material_approval as MA
     su, _ = who
