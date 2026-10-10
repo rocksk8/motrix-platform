@@ -20,7 +20,7 @@ FIN = ("cashier", "finance", "financial_view")
 
 
 def _decl(key, legacy, **kw):
-    return dict(key=key, label=key, legacy=legacy, **kw)
+    return dict(key=key, label="測試項目" + key[-4:], desc="測試用的一句話說明", impact="勾選後測試用的影響說明", legacy=legacy, **kw)
 
 
 CATALOG = [
