@@ -62,6 +62,7 @@
    "helper:privacy_notice",
    "helper:procurement",
    "helper:receivables",
+   "helper:recycle_bin",
    "helper:row_access",
    "helper:settings",
    "helper:startup",
@@ -834,6 +835,24 @@
    "tables": [],
    "api_prefixes": [
     "/api/filehub"
+   ]
+  },
+"M15": {
+   "key": "recyclebin",
+   "name": "刪除暫存區",
+   "units": [
+    "mod:recyclebin/__init__",
+    "mod:recyclebin/api",
+    "mod:recyclebin/jobs",
+    "mod:recyclebin/quarantine",
+    "mod:recyclebin/service",
+    "page:pages/recycle-bin.html"
+   ],
+   "tables": [
+    "recycle_bin"
+   ],
+   "api_prefixes": [
+    "/api/recycle-bin"
    ]
   }
  },

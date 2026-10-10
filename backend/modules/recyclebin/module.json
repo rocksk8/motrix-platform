@@ -1,0 +1,38 @@
+{
+  "key": "recyclebin",
+  "name": "刪除暫存區",
+  "version": "1.0.0",
+  "core": ">=1.0,<2.0",
+  "license_key": "recyclebin",
+  "permissions": [],
+  "tables": [
+    "recycle_bin"
+  ],
+  "tables_note": "表由本模組自己的 migration（migrations/0001_recycle_bin.py）建立",
+  "data": {
+    "tables": [
+      {"name": "recycle_bin", "class": "T1"}
+    ],
+    "files": [
+      {"key": "recycle_bin_files", "class": "F3", "setting": "recyclebin_dir"}
+    ]
+  },
+  "provides": {
+    "api_prefixes": [
+      "/api/recycle-bin"
+    ],
+    "probes": ["/api/recycle-bin/status"]
+  },
+  "pages": [
+    {
+      "path": "recycle-bin.html",
+      "menu": {"group": "system", "label": "刪除暫存區", "order": 90, "perm": ["superadmin"]}
+    }
+  ],
+  "customization": {
+    "schema": 1,
+    "fields": {},
+    "pages": [],
+    "outputs": []
+  }
+}

@@ -88,7 +88,7 @@ SHARED_FILES = ("auth-guard.js", "notif.js", "sidebar.js", "edit-presence.js",
 #: 2026-10-01（W3，wip/w3-etype-editor）+1：新增 expense-types.html（請款類型編輯頁），Alpine，有 _initDone 守衛。
 #: 2026-10-01（W1，wip/w1-attach-p3-a3）+1：新增 file-center.html（檔案中心），Alpine，有 _initDone 守衛。
 #: 2026-10-02（wip/t33-remit-s0-a3）+1：新增 remit-kinds-settings.html（匯款款別設定頁，Alpine，_initDone 守衛）
-PAGE_POPULATION = 49 + 1 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1                 # +1：bonus-corrections.html（2026-10-01 獎金更正單，已加 _initDone 守衛）；+1：bank-account.html；+1：expense-types.html（請款類型編輯頁，有 _initDone 守衛）；+1：file-center.html（檔案中心，W1 wip/w1-attach-p3-a3，有 _initDone 守衛）；+1：duty-roles.html（職責角色化 R1，Alpine、有 _initDone 守衛，2026-10-06）
+PAGE_POPULATION = 49 + 1 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1                 # +1：bonus-corrections.html（2026-10-01 獎金更正單，已加 _initDone 守衛）；+1：bank-account.html；+1：expense-types.html（請款類型編輯頁，有 _initDone 守衛）；+1：file-center.html（檔案中心，W1 wip/w1-attach-p3-a3，有 _initDone 守衛）；+1：duty-roles.html（職責角色化 R1，Alpine、有 _initDone 守衛，2026-10-06）  # 第 53 班：+1 recycle-bin.html（刪除暫存區，有 _initDone 守衛）
 SHARED_POPULATION = 2
 ALREADY_GUARDED = 2
 
