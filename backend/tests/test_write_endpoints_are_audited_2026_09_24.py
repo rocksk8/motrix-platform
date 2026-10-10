@@ -41,6 +41,9 @@ AUDIT_WRAPPERS = {
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
 EXEMPT = {
+    # ── 轉簽（第54班）：稽核與換人同一個交易（直接 INSERT audit_log，寫不進去整個轉簽回滾），掃描器只認 _audit／_system_audit 呼叫 ──
+    ("approval_queue.py", "POST", "/api/approval-queue/reassign"):
+        "稽核 approval.reassign 在同一個交易內由端點直接寫入 audit_log（第 54 班強制稽核：寫不進去整個轉簽回滾，不再是 commit 之後吞錯誤的 _audit）；detail 上限與欄位推導沿用 _audit 的同一份規則",
     # ── 刪除暫存區（第53班）：稽核與刪除同一個交易，經 service.audit_tx 寫入（掃描器只認 _audit／_system_audit 呼叫）──
     ("modules/recyclebin/api.py", "POST", "/api/recycle-bin/delete-approved"):
         "稽核 recyclebin.delete_approved 在同一個交易內由 service.audit_tx 寫入（寫不進去整筆回滾，附件搬回）；端點本身不再另呼叫 _audit",

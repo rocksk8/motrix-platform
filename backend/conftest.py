@@ -88,12 +88,32 @@ def archive_path_is_isolated(path) -> bool:
 _BK19_WRITES: set = set()
 
 
+def _bk19_resolve(path):
+    """Path.resolve() 加重試＋正規化：Windows 上別的執行緒同時在建同一個父目錄時，resolve 偶爾（量到約 1/25）回
+    「延伸路徑」形式（前綴是兩個反斜線加問號加反斜線；與 tmp 根目錄的一般形式比對不上 ⇒ 被當成越界），也可能丟暫態 OSError。
+    fail closed 把這兩種都當成「不允許」會讓合法的併發寫入（test_concurrent_runs_within_the_limit…）隨機紅；
+    所以去掉該前綴（UNC 形式不動），OSError 重試 4 次（每次 20 ms）才照舊回報。"""
+    import time as _t
+    ext = chr(92) * 2 + "?" + chr(92)             # 延伸路徑前綴（兩個反斜線、問號、反斜線）
+    for i in range(4):
+        try:
+            r = _Bk19Path(str(path)).resolve()
+            t = str(r)
+            if t.startswith(ext) and not t.startswith(ext + "UNC" + chr(92)):
+                r = _Bk19Path(t[len(ext):])
+            return r
+        except OSError:
+            if i == 3:
+                raise
+            _t.sleep(0.02)
+
+
 def _bk19_write_allowed(path) -> bool:
     """這個**寫入**路徑允不允許。fail closed。"""
     if not path:
         return False
     try:
-        resolved = _Bk19Path(str(path)).resolve()
+        resolved = _bk19_resolve(path)
     except (OSError, ValueError, TypeError):
         return False
     roots = set(_ISOLATION_ROOTS)
@@ -132,7 +152,7 @@ _BK19_REPO_ROOT = _Bk19Path(__file__).resolve().parents[1]   # 本檔在 backend
 
 def _bk19_inside_repo(path) -> bool:
     try:
-        _Bk19Path(str(path)).resolve().relative_to(_BK19_REPO_ROOT)
+        _bk19_resolve(path).relative_to(_BK19_REPO_ROOT)
         return True
     except (OSError, ValueError, TypeError):
         return False

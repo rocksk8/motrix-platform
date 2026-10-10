@@ -2747,6 +2747,17 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:static/margin-tone.js": {
+   "api_calls": [],
+   "api_prefixes": [],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/margin-tone.js",
+   "routers_called": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:static/motrix-date.js": {
    "api_calls": [],
    "api_prefixes": [],
@@ -16563,6 +16574,7 @@
     "js:static/edit-presence.js",
     "js:static/file-preview.js",
     "js:static/legal-round.js",
+    "js:static/margin-tone.js",
     "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
@@ -16627,6 +16639,7 @@
    "imports": [
     "js:static/auth-guard.js",
     "js:static/list-sort.js",
+    "js:static/margin-tone.js",
     "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"

@@ -285,6 +285,7 @@
     "js:js/case-management-feed.js",
     "js:js/case-management-fin.js",
     "js:js/case-management-list.js",
+    "js:static/margin-tone.js",
     "js:js/case-management-shipping.js",
     "js:js/case-management-xexp.js",
     "js:js/case-management-mchange.js",

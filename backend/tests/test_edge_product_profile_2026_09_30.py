@@ -26,7 +26,13 @@ def prod(monkeypatch, tmp_path):
     monkeypatch.setattr(startup, "_EDGE_PROFILE_STATE", {"init": False, "runs": 0})
     st = {"seen": [], "delay": 0.0, "rc": 0, "raise": None, "barrier": None, "lock": threading.Lock()}
 
+    real_run = subprocess.run
+
     def fake_run(cmd, **kw):
+        # 這裡換掉的是整個行程共用的 subprocess.run：同一行程裡別的執行緒（背景工作、外掛）呼叫它時不是我們的 Edge 命令，
+        # 不能被記錄、更不能被 Barrier 擋住（多一條就會讓 Barrier 提早放行、少一條就等到逾時）⇒ 非 Edge 命令交還原函式
+        if not (cmd and str(cmd[0]).lower().startswith("msedge")):
+            return real_run(cmd, **kw)
         d = next((a.split("=", 1)[1] for a in cmd if str(a).startswith("--user-data-dir=")), None)
         with st["lock"]:
             st["seen"].append(list(cmd))

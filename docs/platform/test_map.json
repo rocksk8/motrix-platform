@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1263,
+  "tests": 1264,
   "unmapped": 13,
   "kinds": {
    "api": 689,
    "e2e": 301,
-   "audit": 160,
+   "audit": 161,
    "unit": 113
   },
   "routes": 793
@@ -23776,6 +23776,28 @@
     ]
    }
   },
+  "backend/tests/test_display_consistency_t55.py": {
+   "kind": "audit",
+   "units": [
+    "js:js/case-management-list.js",
+    "js:static/margin-tone.js",
+    "page:pages/case-management.html",
+    "page:pages/quotation-form.html",
+    "page:pages/quotations.html"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/js/case-management-list.js",
+     "frontend/pages/case-management.html",
+     "frontend/pages/quotation-form.html",
+     "frontend/pages/quotations.html",
+     "frontend/static/margin-tone.js"
+    ],
+    "path": [
+     "frontend/static/margin-tone.js"
+    ]
+   }
+  },
   "backend/tests/test_doc_template_p2_2026_09_25.py": {
    "kind": "api",
    "units": [
@@ -34193,6 +34215,7 @@
     "plat:__init__",
     "plat:source_tree",
     "router:approval_delegates",
+    "router:approval_queue",
     "router:auth",
     "router:custom_records",
     "router:definitions",
@@ -34216,6 +34239,7 @@
      "backend/modules/recyclebin/api.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/routers/approval_delegates.py",
+     "backend/routers/approval_queue.py",
      "backend/routers/auth.py",
      "backend/routers/custom_records.py",
      "backend/routers/definitions.py",
