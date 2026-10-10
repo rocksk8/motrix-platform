@@ -6,20 +6,26 @@
   並行執行、每個 300ms 逾時；逾時、例外、回傳格式不對 ⇒ 該項不顯示徽章（記 log），**不影響其他項、不 500**。提供者必須唯讀。
 - 15 秒快取（依使用者＋角色＋模組權限）：換頁回來不重算；徽章最多落後 15 秒。
 """
+import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Body, Header, HTTPException
 
 from core import registry, system_hub as hub
 from db import get_db
-from helpers import _require_user
+from helpers import _audit, _require_user, _tok
+from helpers.settings import _get_setting, _set_setting
+from helpers.validation import body_flag
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 CACHE_SECONDS = 15
+SHOW_DENIED_KEY = "system_hub_show_denied"      # 超級管理員設定：沒有權限的項目要不要列出（預設隱藏）
+RECENT_KEY = "system_hub_recent"                 # 每個帳號的『最近使用』（user_list_prefs 的 customOrder，最多 5 個卡片 id）
+RECENT_MAX = 5
 BADGE_TIMEOUT = 0.3
 _CACHE = {}
 _POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="hub-badge")
@@ -86,14 +92,48 @@ def attach_badges(sections, user, timeout=BADGE_TIMEOUT):
     return failures
 
 
+def show_denied():
+    return _get_setting(SHOW_DENIED_KEY, False) is True
+
+
+def _module_labels():
+    try:
+        from helpers.module_registry import MODULES
+        return {m[0]: m[1] for m in MODULES}
+    except Exception:                                            # noqa: BLE001 — 取不到名稱只影響原因文字
+        return {}
+
+
 def build_for(user):
     from helpers.auth import effective_modules
     modules = effective_modules(user.get("role"), user.get("modules"))
     sa = user.get("role") == "superadmin"
-    cards = hub.visible_cards(_all_cards(), modules, sa)
-    sections = hub.build_sections(cards)
+    allc = _all_cards()
+    cards = hub.visible_cards(allc, modules, sa)
+    shown = {c["id"] for c in cards}
+    denied = [c for c in allc if c["id"] not in shown] if show_denied() else []
+    sections = hub.build_sections(cards, denied, _module_labels())
     attach_badges(sections, user)
-    return {"v": 1, "sections": sections, "total": sum(s["count"] for s in sections)}
+    return {"v": 1, "sections": sections, "total": sum(s["count"] for s in sections), "showDenied": show_denied()}
+
+
+def recent_for(user, sections):
+    """這個帳號的最近使用（卡片 id，新→舊，最多 5 個）；只留現在還看得到、能開的（權限或模組變動後自動消失）。"""
+    openable = {it["id"] for s in sections for it in s["items"] if not it.get("denied")}
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT custom_order FROM user_list_prefs WHERE username=? AND list_key=?", (user["username"], RECENT_KEY)).fetchone()
+    finally:
+        conn.close()
+    try:
+        ids = json.loads(row["custom_order"] or "[]") if row else []
+    except (TypeError, ValueError):
+        ids = []
+    out = []
+    for i in ids:
+        if isinstance(i, str) and i in openable and i not in out:
+            out.append(i)
+    return out[:RECENT_MAX]
 
 
 @router.get("/api/system-hub")
@@ -104,12 +144,27 @@ def system_hub(authorization: str = Header(None)):
     now = time.monotonic()
     hit = _CACHE.get(key)
     if hit and now - hit[0] < CACHE_SECONDS:
-        return hit[1]
-    out = build_for(user)
-    if len(_CACHE) > 256:
-        _CACHE.clear()
-    _CACHE[key] = (now, out)
-    return out
+        out = hit[1]
+    else:
+        out = build_for(user)
+        if len(_CACHE) > 256:
+            _CACHE.clear()
+        _CACHE[key] = (now, out)
+    return dict(out, recent=recent_for(user, out["sections"]))      # 最近使用不進快取：點過馬上看得到
+
+
+@router.put("/api/system-hub/settings")
+def system_hub_settings(body: dict = Body(default={}), authorization: str = Header(None)):
+    """超級管理員：沒有權限的項目要不要列出來（預設隱藏；列出時灰色、不可點、並說明原因）。寫稽核。"""
+    user = _require_user(authorization, require_superadmin=True)
+    if "showDenied" not in (body or {}):
+        raise HTTPException(400, "請選擇要隱藏還是顯示沒有權限的項目")
+    flag = body_flag(body, "showDenied")
+    _set_setting(SHOW_DENIED_KEY, bool(flag))
+    clear_cache()
+    _audit(_tok(authorization), "system_hub.settings.update", "setting", SHOW_DENIED_KEY,
+           "系統中心：沒有權限的項目 %s（%s）" % ("顯示為灰色並說明原因" if flag else "隱藏", user["username"]))
+    return {"showDenied": bool(flag)}
 
 
 def clear_cache():
