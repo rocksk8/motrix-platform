@@ -994,3 +994,16 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 對方不在時 | 提供者不在或單案失敗 ⇒ 匯出欄位留白，不影響其他欄位 |
 | 契約版本 | 1（2026-10-06） |
 | 守門 | `backend/tests/test_shipped_qty_2026_10_06.py::test_case_shipped_summary_provider_and_report_helper` |
+
+## IP-HUB1　`system.hub_badge`：系統中心項目的即時狀態徽章（各擁有模組 → 系統中心 `routers/system_hub.py`；多提供者；暫定號，列車定號；2026-10-10，第 54 班 P1）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | 擁有該系統頁面的模組（選用） |
+| 使用方 | `routers/system_hub.py::attach_badges`（`GET /api/system-hub`） |
+| 形式 | provider，多提供者；名稱＝系統卡片 `id`（卡片本身宣告在擁有模組 module.json 的 `system_cards`，或 L1 `core/system_hub_l1.json`） |
+| 語法 | 提供：`("system.hub_badge", "<card id>"): fn`；取用：`registry.providers("system.hub_badge")` ⇒ `fn(conn, user) -> {"text": str, "tone": "ok|info|warn|bad|plan", "count"?: int}` |
+| 回傳 | 一行文字徽章（≤ 40 字）與語氣；`warn` 會讓該分組出現『待處理』琥珀點。**唯讀**（不得寫入、不得查他組的表）；連線由 hub 為每個提供者各開一條 |
+| 對方不在時 | 提供者不在、逾時（300ms）、例外、格式不對 ⇒ 該項不顯示徽章（記 log），不影響其他項、不 500 |
+| 契約版本 | 1（2026-10-10） |
+| 守門 | `backend/tests/platform/test_system_hub.py`（徽章隔離、逾時、格式、15 秒快取） |

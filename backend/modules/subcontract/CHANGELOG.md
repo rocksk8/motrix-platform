@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1）：module.json 新增 `system_cards`（匯款款別設定卡片）
+- 加性宣告：在系統中心（`/pages/system-hub.html`）登記這個模組擁有的系統頁面；只影響索引顯示，頁面與 API 的權限、行為完全不變。
+
 ## 1.1.29 — 2026-10-10（wip/t51-1d-payslip-prefill；勞報單預設選取已派工、一鍵帶入）
 - `dispatch.by_person` 提供者（IP-115，加法）：`dispatches_for_person(conn, contractor_id, limit, user=None)` 多回 `scope`、`itemsSummary`、`projectName`、`customerName`、`caseVisible`，並排除狀態 draft／cancelled；案件名稱只在 `user` 通過 `guard_case_access` 時給（用自己的短連線，不影響呼叫端連線），沒給 user ⇒ 空字串。仍不含金額。
 

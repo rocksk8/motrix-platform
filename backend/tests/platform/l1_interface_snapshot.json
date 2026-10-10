@@ -1,5 +1,5 @@
 {
- "core_version": "1.125",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1444,6 +1444,19 @@
    "product_files": "def()",
    "rel": "def(p)",
    "router_files": "def()"
+  },
+  "plat:system_hub": {
+   "CARD_KEYS": "const",
+   "ICONS": "const",
+   "L1_CARDS": "const",
+   "SECTIONS": "const",
+   "TONES": "const",
+   "build_sections": "def(cards)",
+   "load_l1_cards": "def(path=…)",
+   "module_cards": "def(manifests)",
+   "section_keys": "def()",
+   "validate": "def(cards, pages=…)",
+   "visible_cards": "def(cards, modules, superadmin)"
   },
   "plat:txn": {
    "begin_write": "def(conn)",
