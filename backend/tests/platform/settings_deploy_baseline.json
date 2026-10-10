@@ -1,0 +1,75 @@
+{
+ "_note": "部署零行為變更凍結基準（第54班 Train A）：[預設, 下限, 上限, 讀取夾值]；改動＝行為變更，須同步改本檔並走裁示。",
+ "groups": {
+  "retention": {
+   "audit_log_keep_days": [
+    1825,
+    365,
+    null,
+    true
+   ],
+   "cloud_daily_keep_days": [
+    60,
+    1,
+    3650,
+    false
+   ],
+   "cloud_monthly_keep_days": [
+    0,
+    0,
+    3650,
+    false
+   ],
+   "cloud_weekly_keep_days": [
+    90,
+    1,
+    3650,
+    false
+   ],
+   "local_db_keep_days": [
+    30,
+    1,
+    3650,
+    false
+   ],
+   "local_pre_update_keep": [
+    5,
+    0,
+    100,
+    false
+   ],
+   "notification_keep_days": [
+    90,
+    7,
+    3650,
+    false
+   ],
+   "request_log_keep_days": [
+    90,
+    7,
+    3650,
+    false
+   ]
+  },
+  "uploads": {
+   "case_extra_expense_max_files": [
+    10,
+    1,
+    100,
+    false
+   ],
+   "case_extra_expense_max_request_mb": [
+    50,
+    1,
+    500,
+    false
+   ],
+   "max_file_mb": [
+    20,
+    1,
+    200,
+    false
+   ]
+  }
+ }
+}

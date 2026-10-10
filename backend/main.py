@@ -83,6 +83,7 @@ from routers import item_reads
 from routers import definitions, custom_records
 from routers import modules
 from routers import legal_params
+from routers import settings_center
 from routers import mail_settings
 # 職責角色化 R1（僅最高管理者）
 from routers import duty_roles
@@ -941,6 +942,7 @@ app.include_router(map_points.router)
 app.include_router(item_reads.router)
 app.include_router(modules.router)
 app.include_router(legal_params.router)
+app.include_router(settings_center.router)
 app.include_router(mail_settings.router)
 app.include_router(duty_roles.router)
 app.include_router(platform_menu.router)
