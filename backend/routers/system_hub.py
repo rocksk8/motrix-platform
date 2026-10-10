@@ -16,8 +16,8 @@ from fastapi import APIRouter, Header
 from core import registry, system_hub as hub
 from db import get_db
 from helpers import _require_user
+from helpers import settings_groups  # noqa: F401  確保群組已登錄（單一登錄處）
 from helpers import settings_registry as sr
-from helpers.settings_registry import SettingDef as S
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -29,23 +29,7 @@ BADGE_TIMEOUT = 0.3
 _CACHE = {}
 _INFLIGHT = {}                  # 徽章 id → 還在跑的執行緒（卡住的提供者只擋它自己，不佔共用執行緒池）
 
-# 『沒有權限的項目要不要列出來』是一個『放寬可見度』的設定：走設定登錄表（版本、影響說明、稽核同交易、放寬要確認期間與第二人核准），不自己寫設定鍵。
-sr.register_group(
-    "system_hub", "系統中心",
-    [
-        S("show_denied", "int", 0, min=0, max=1, risk="security", loosen="up", recommended=0,
-          question="系統中心要不要列出『你沒有權限使用』的項目？", label="沒有權限的項目",
-          help="預設隱藏：每個人只看到自己能用的項目。也可以改成顯示為灰色，並說明為什麼不能用。",
-          impact="只影響系統中心的畫面，不會改變任何人實際能使用的功能。改成『顯示為灰色』時，沒有權限的人會看到有哪些管理項目的名稱，但點不進去。",
-          risk_text="顯示後，沒有權限的人也能知道系統裡有哪些管理功能（例如備份、權限、稽核）；若不希望外人知道，請維持隱藏。",
-          choices=[(0, "隱藏（建議）", "每個人只看到自己能用的項目；沒有權限的人完全看不到其他項目。"),
-                   (1, "顯示為灰色並說明原因", "沒有權限的人會看到項目名稱與『需要什麼權限』，但點不進去。")]),
-    ],
-    sensitive=True, risk="security",
-    help="系統中心的顯示方式。",
-)
-
-
+# 設定群組 `system_hub`（『沒有權限的項目要不要列出』）登錄在 helpers/settings_groups.py（單一登錄處；載入本檔時已載入）。
 def _all_cards():
     loaded = registry.loaded()
     cards = hub.load_l1_cards() + hub.module_cards({m.key: m.manifest for m in loaded})

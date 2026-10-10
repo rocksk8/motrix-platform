@@ -470,3 +470,10 @@ def test_hung_badge_providers_never_blank_the_other_badges_and_are_not_restarted
     finally:
         gate.set()
         R._INFLIGHT.clear()
+
+
+def test_system_hub_setting_group_is_registered_without_importing_the_app():
+    """群組登錄在 helpers/settings_groups.py（單一登錄處）：不需要 client／main 就存在（凍結基準題單獨跑也要過）。"""
+    from helpers import settings_groups  # noqa: F401
+    from helpers import settings_registry as sr
+    assert "system_hub" in sr.groups() and "show_denied" in sr.groups()["system_hub"]["fields"]
