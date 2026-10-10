@@ -11359,19 +11359,19 @@
     },
     {
      "func": "approve_payslip",
-     "line": 188,
+     "line": 197,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/approve"
     },
     {
      "func": "reject_payslip",
-     "line": 255,
+     "line": 264,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/reject"
     },
     {
      "func": "approval_reveal",
-     "line": 390,
+     "line": 399,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/approval-reveal"
     }
