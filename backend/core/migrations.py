@@ -516,7 +516,7 @@ register("core", 8, _core_next_notifications_link)
 
 # ── 設定變更明細（config_ledger；第 54 班設定中心 S0；未取號，PLAYBOOK §G6）──────────────────────────
 # `config_changes`：一個欄位一列的變更明細（設定、權限矩陣共用；domain＝`setting:<群組>`／`perm`／…），**不可變**（觸發器）。
-# `config_change_events`：狀態不是欄位，而是只增不改的事件（pending／activated／cancelled／superseded）；目前狀態＝最後一個事件，
+# `config_change_events`：狀態不是欄位，而是只增不改的事件（pending／activated／cancelled／superseded；approved＝雙人核准的一票，不改變狀態）；目前狀態＝最後一個事件，
 # 沒有事件＝立即生效。冪等（IF NOT EXISTS）；不 import 會演進的程式碼（凍住的歷史）。
 def _core_next_config_ledger(conn):
     conn.executescript("""
@@ -535,7 +535,8 @@ def _core_next_config_ledger(conn):
             risk          TEXT    NOT NULL DEFAULT 'none',
             ref_version   INTEGER,
             effective_at  TEXT    NOT NULL DEFAULT '',
-            batch         TEXT    NOT NULL DEFAULT ''
+            batch         TEXT    NOT NULL DEFAULT '',
+            approvals_required INTEGER NOT NULL DEFAULT 0
         );
         CREATE INDEX IF NOT EXISTS idx_config_changes_lookup ON config_changes(domain, key, id);
         CREATE TRIGGER IF NOT EXISTS config_changes_no_update BEFORE UPDATE ON config_changes
@@ -545,7 +546,7 @@ def _core_next_config_ledger(conn):
         CREATE TABLE IF NOT EXISTS config_change_events (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
             change_id INTEGER NOT NULL,
-            event     TEXT    NOT NULL CHECK (event IN ('pending','activated','cancelled','superseded')),
+            event     TEXT    NOT NULL CHECK (event IN ('pending','approved','activated','cancelled','superseded')),
             actor     TEXT    NOT NULL DEFAULT '',
             reason    TEXT    NOT NULL DEFAULT '',
             at        TEXT    NOT NULL

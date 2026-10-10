@@ -33,6 +33,28 @@ def _zh(v):
     """有實質的繁中文字（至少 2 個中日韓字元）。"""
     return isinstance(v, str) and sum(1 for ch in v if "一" <= ch <= "鿿") >= 2
 
+_EDITION = {}                                  # (group, field) -> (min, max)：版本／授權邊界，只由程式或授權載入器設定，客戶不可改
+
+
+def set_edition_bounds(group, field, *, min=None, max=None):
+    """設定販售版本的欄位邊界（與欄位自己的上下限取交集）。給授權／版本載入器呼叫；沒有任何 API 讓客戶改它。"""
+    _EDITION[(group, field)] = (min, max)
+
+
+def clear_edition_bounds():
+    _EDITION.clear()
+
+
+def _bounds(group, f):
+    lo, hi = f.min, f.max
+    elo, ehi = _EDITION.get((group, f.key), (None, None))
+    if elo is not None:
+        lo = elo if lo is None else max(lo, elo)
+    if ehi is not None:
+        hi = ehi if hi is None else min(hi, ehi)
+    return lo, hi
+
+
 _GROUPS = {}                                   # group -> {"label", "fields": {name: SettingDef}, "sensitive", "risk", "legacy_key", "cross_check", "help"}
 _cache = {}                                    # group -> (monotonic, values)
 _lock = threading.Lock()
@@ -49,13 +71,15 @@ class SettingDef:
     **必填**：`question`（白話問句）、`label`、`help`、`impact`（影響說明：對象／既有或之後／可否復原／何時生效）；`risk` 屬 money／legal／security 或
     `requires_pending` ⇒ 另需 `risk_text`（白話風險提示）；`choices=[(值, 中文標籤, 影響說明)]`（選項型；三項皆必填）。缺必填 ⇒ ValueError（登錄當下就失敗）。
     選填：`recommended`（建議值）、`presets={預設組名: 值}`、`advanced`（收進「進階」）、`impact_fn(conn, 新值)->{"numbers":…, "sentence":…}`（唯讀即時影響，失敗只顯示靜態說明）、
-    `effect`（儲存前確認句型，預設見 `DEFAULT_EFFECT`）。`legacy`＝舊儲存位置；`clamp`＝讀取時夾到 [min, ...]；`requires_pending`＝變更 24 小時後才生效。"""
+    `effect`（儲存前確認句型，預設見 `DEFAULT_EFFECT`）。`legacy`＝舊儲存位置；`clamp`＝讀取時夾到 [min, ...]；`requires_pending`＝變更 24 小時後才生效。
+    `loosen`＝放寬方向：往該方向調整的變更視同風險變更——24 小時待生效，且需要另一位最高管理者核准（只有一位時改為原因＋24 小時＋警告＋通知）；
+    收緊（反方向）立即生效。販售版本的邊界（`set_edition_bounds`）寫在程式／授權，客戶不能改。"""
     __slots__ = ("key", "type", "default", "min", "max", "unit", "label", "help", "risk", "legacy", "clamp", "requires_pending",
-                 "question", "impact", "risk_text", "choices", "recommended", "presets", "advanced", "impact_fn", "effect")
+                 "question", "impact", "risk_text", "choices", "recommended", "presets", "advanced", "impact_fn", "effect", "loosen")
 
     def __init__(self, key, type, default, *, question="", label="", help="", impact="", min=None, max=None, unit="", risk="ops",
                  legacy=None, clamp=False, requires_pending=False, risk_text="", choices=None, recommended=None, presets=None,
-                 advanced=False, impact_fn=None, effect=""):
+                 advanced=False, impact_fn=None, effect="", loosen=None):
         if type not in _TYPES:
             raise ValueError("型別不合法：%r" % (type,))
         self.key, self.type, self.default = key, type, default
@@ -67,6 +91,9 @@ class SettingDef:
         self.choices = [tuple(c) for c in (choices or [])]
         self.presets = dict(presets or {})
         self.impact_fn, self.effect = impact_fn, effect or DEFAULT_EFFECT
+        if loosen not in (None, "up", "down"):
+            raise ValueError("loosen 只能是 up／down／None：%r" % (loosen,))
+        self.loosen = loosen          # 數值往哪個方向變是「放寬」（up＝調大算放寬，如允許更大的檔案；down＝調小算放寬，如更短的密碼長度）；放寬要雙人核准
         miss = [n for n, v in (("question", question), ("label", label), ("help", help), ("impact", impact)) if not _zh(v)]
         if (risk in ("money", "legal", "security") or self.requires_pending) and not _zh(risk_text):
             miss.append("risk_text")
@@ -101,7 +128,7 @@ class SettingDef:
         return {"key": self.key, "type": self.type, "default": self.default, "min": self.min, "max": self.max, "unit": self.unit,
                 "question": self.question, "label": self.label, "help": self.help, "impact": self.impact, "riskText": self.risk_text,
                 "risk": self.risk, "clamp": self.clamp, "requiresPending": self.requires_pending, "recommended": self.recommended,
-                "presets": self.presets, "advanced": self.advanced, "effect": self.effect, "hasLiveImpact": self.impact_fn is not None,
+                "presets": self.presets, "advanced": self.advanced, "effect": self.effect, "hasLiveImpact": self.impact_fn is not None, "loosen": self.loosen,
                 "choices": [{"value": c[0], "label": c[1], "impact": c[2]} for c in self.choices]}
 
 
@@ -120,7 +147,7 @@ def register_group(group, label, fields, *, sensitive=False, risk="ops", legacy_
 
 def groups():
     return {g: {"label": v["label"], "sensitive": v["sensitive"], "risk": v["risk"], "help": v["help"],
-                "fields": [f.meta() for f in v["fields"].values()]} for g, v in _GROUPS.items()}
+                "fields": [dict(f.meta(), min=_bounds(g, f)[0], max=_bounds(g, f)[1]) for f in v["fields"].values()]} for g, v in _GROUPS.items()}
 
 
 def _g(group):
@@ -156,6 +183,12 @@ def validate_values(group, values, *, partial=False):
             out.append({"path": k, "message": "未知的設定欄位"})
             continue
         msg = f.check(v)
+        if not msg and f.type in ("int", "float"):
+            lo, hi = _bounds(group, f)
+            if lo is not None and v < lo:
+                msg = "這個版本不可小於 %s" % lo
+            elif hi is not None and v > hi:
+                msg = "這個版本不可大於 %s" % hi
         if msg:
             out.append({"path": k, "message": "%s：%s" % (f.label, msg)})
     if not partial:
@@ -208,7 +241,7 @@ def _stored(conn, group):
 def _due_pending(conn, group, now):
     """已到時、尚未被寫進定義的待生效值（依申請先後；同欄位後者蓋前者）。只有群組含 `requires_pending` 欄位才查。"""
     g = _g(group)
-    if not any(f.requires_pending for f in g["fields"].values()):
+    if not any(f.requires_pending or f.loosen for f in g["fields"].values()):
         return []
     from helpers import config_ledger as L
     try:
@@ -345,8 +378,13 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
         began = begin_write(c)
         base = _effective(c, group, overlay=False)
         eff = _effective(c, group)
-        imm = {k: v for k, v in values.items() if not g["fields"][k].requires_pending}
-        pend = {k: v for k, v in values.items() if g["fields"][k].requires_pending}
+        def _loosens(f, new_v):
+            old_v = eff[f.key]
+            return bool(f.loosen) and isinstance(new_v, (int, float)) and not isinstance(new_v, bool) and (
+                (f.loosen == "up" and new_v > old_v) or (f.loosen == "down" and new_v < old_v))
+        pend = {k: v for k, v in values.items() if g["fields"][k].requires_pending or _loosens(g["fields"][k], v)}
+        imm = {k: v for k, v in values.items() if k not in pend}
+        loose = {k for k, v in pend.items() if _loosens(g["fields"][k], v)}
         new = dict(base, **imm)
         problems = validate_values(group, dict(new, **pend))
         if problems:
@@ -354,7 +392,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
         changes = [{"field": k, "old": base[k], "new": new[k]} for k in g["fields"] if base[k] != new[k]]
         actor_ = actor if actor is not None else user
         domain = "setting:%s" % group
-        result = {"changed": False, "values": eff, "pending": []}
+        result = {"changed": False, "values": eff, "pending": [], "warnings": []}
         if changes:
             risk = _risk_of(group, [x["field"] for x in changes])
             out = D.publish_direct(c, KIND, group, SCOPE, {"group": group, "values": new}, note or reason, user, commit=False)
@@ -369,10 +407,18 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
                     L.supersede(c, r["id"], actor_, "被較新的申請取代")
             pchanges = [{"field": k, "old": eff[k], "new": v} for k, v in pend.items() if eff[k] != v]
             if pchanges:
-                risk = _risk_of(group, [x["field"] for x in pchanges])
-                rec = L.record(c, domain, group, pchanges, reason or note, actor_, ip=ip, risk=risk, effective_at=when,
-                               audit_action="settings.%s.pending" % group, target_label=g["label"])
-                result["pending"] = [{"id": i, "field": x["field"], "new": x["new"], "effectiveAt": when} for i, x in zip(rec["ids"], pchanges)]
+                others = c.execute("SELECT COUNT(*) FROM users WHERE active=1 AND role='superadmin' AND username<>?", (user or "",)).fetchone()[0]
+                for need in (0, 1):                  # 先寫一般待生效，再寫要雙人核准的（放寬）
+                    part = [x for x in pchanges if (x["field"] in loose and others > 0) == bool(need)]
+                    if not part:
+                        continue
+                    risk = _risk_of(group, [x["field"] for x in part])
+                    rec = L.record(c, domain, group, part, reason or note, actor_, ip=ip, risk=risk, effective_at=when,
+                                   audit_action="settings.%s.pending" % group, target_label=g["label"], approvals_required=need)
+                    result["pending"] += [{"id": i, "field": x["field"], "new": x["new"], "effectiveAt": when, "approvalsRequired": need}
+                                          for i, x in zip(rec["ids"], part)]
+                if loose and others == 0 and any(x["field"] in loose for x in pchanges):
+                    result["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬改為「填寫原因、等 24 小時後生效」，並已留下紀錄。")
         if not changes and not pend:
             if began:
                 c.rollback()
@@ -423,6 +469,40 @@ def materialize_due(conn=None, now=None):
     finally:
         if own:
             c.close()
+
+
+# --- 預設組（政策設定檔；販售時依客戶／版本套用，走同一條 publish 管制）-------------
+
+def profiles():
+    """所有欄位 `presets` 裡出現過的預設組名稱 → 涵蓋的欄位數。"""
+    out = {}
+    for g in _GROUPS.values():
+        for f in g["fields"].values():
+            for name in f.presets:
+                out[name] = out.get(name, 0) + 1
+    return out
+
+
+def profile_preview(name, *, conn=None):
+    """套用預設組會改哪些欄位（目前值 → 新值）；不寫入。"""
+    out = []
+    for gk, g in _GROUPS.items():
+        cur = get_group(gk, conn=conn)
+        for k, f in g["fields"].items():
+            if name in f.presets and cur[k] != f.presets[name]:
+                out.append({"group": gk, "groupLabel": g["label"], "field": k, "label": f.label, "old": cur[k], "new": f.presets[name], "unit": f.unit})
+    return out
+
+
+def apply_profile(name, *, reason="", user="", ip="", conn=None, actor=None):
+    """套用預設組：每個群組各走一次 `publish()`（放寬照樣需要雙人核准／24 小時）。回 `{群組: publish 結果}`。"""
+    if name not in profiles():
+        raise SettingError("沒有這個預設組：%s" % name)
+    by_group = {}
+    for ch in profile_preview(name, conn=conn):
+        by_group.setdefault(ch["group"], {})[ch["field"]] = ch["new"]
+    return {gk: publish(gk, vals, note="套用預設組「%s」" % name, user=user, reason=reason or "套用預設組「%s」" % name, ip=ip, conn=conn, actor=actor)
+            for gk, vals in by_group.items()}
 
 
 # --- 定義種類／版本 adapter ----------------------------------------------
