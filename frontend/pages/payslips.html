@@ -767,7 +767,12 @@ function payslipsPage() {
       this.planned = ''
     },
     async approveSlip(p) {
-      await this._post(`${API}/payslips/${p.slip_no}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      const url = `${API}/payslips/${p.slip_no}/approve`, hdr = { 'Content-Type': 'application/json' }
+      if (await this._post(url, { method: 'POST', headers: hdr, body: '{}' })) return
+      if (!/請填寫原因/.test(this.actionErr)) return                    // 第54班：當層簽核人就是送審人、單據會卡住 ⇒ 另一位最高管理者填原因代核（後端稽核＋通知）
+      const reason = (prompt(this.actionErr + '\n\n代為核准的原因（必填）') || '').trim()
+      if (!reason) return
+      await this._post(url, { method: 'POST', headers: hdr, body: JSON.stringify({ reason }) })
     },
     async rejectSlip(p) {
       const reason = (prompt('退回原因（必填）') || '').trim()
