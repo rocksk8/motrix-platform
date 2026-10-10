@@ -151,7 +151,7 @@
 
 | id | 群組 | 位置 | 寫死的內容 | 目標框架 | 優先 | 風險 | 狀態 | 負責人 |
 |---|---|---|---|---|---|---|---|---|
-| T53-01 | 回收桶 R | helpers/recycle_bin.py:39（訊息：recyclebin/api.py:157、jobs.py:63、service.py:33,303、recycle-bin.html:14,55,259） | 保存天數 RETENTION_DAYS=30（使用者裁示 D4「固定 30 天」早於框架優先規則） | 設定 `recyclebin.keep_days`，預設 30，上下限在登錄；訊息改讀設定 | P2 | ops | open | |
+| T53-01 | 回收桶 R | helpers/recycle_bin.py:39（訊息：recyclebin/api.py:157、jobs.py:63、service.py:33,303、recycle-bin.html:14,55,259） | 保存天數 RETENTION_DAYS=30（使用者裁示 D4「固定 30 天」早於框架優先規則） | 設定 `recyclebin.retention_days`，預設 30，上下限在登錄；訊息改讀設定 | P2 | ops | open | |
 | T53-02 | 回收桶 R | helpers/recycle_bin.py:40-41 | 快照大小上限 MAX_SNAPSHOT_BYTES 5 MB／管理者 50 MB | 設定 `recyclebin.max_snapshot_mb`（一般／管理者） | P3 | ops | open | |
 | T53-03 | 回收桶 R | recyclebin/service.py:63（依角色上限）、:106（`role != superadmin` 閘）、:328（通知名單 role='superadmin' AND active）；recyclebin/api.py:70（can_delete_approved 角色字串）；recyclebin/module.json:29（選單權限） | 角色字串決定誰能看／還原／清除／刪已核准、通知誰 | 權限矩陣能力 `recyclebin.view／restore／purge／delete_approved` ＋通知規則 | P2 | security | open（待 1d 權限矩陣） | |
 | T53-04 | 回收桶 R | case/recycle_adapter.py:136 EDITABLE、:418 DELETABLE、:250、:462 狀態元組；subcontract/recycle_adapter.py:111；payroll/recycle_adapter.py:21 _NOTICE_TYPES、:71 ('已付款',) | 各單據可編輯／可刪除的狀態名單、通知類型 | 單據型別狀態／規則定義（churn T1／T3） | P3 | ops | open | |
