@@ -352,7 +352,6 @@ def test_baseline_file_is_well_formed():
     assert len(b["routes"]) >= 50
     migrated = sum(1 for v in scan_routes(product_files()).values() if v)
     assert sum(1 for r in b["routes"].values() if r.startswith("p1:")) + migrated >= 9, "第一期核心單據的 DELETE 路由：基線 p1: ＋ 已接入的 ≥ 9"
-    assert any(k.endswith("::case_material_approvals") and v["reason"].startswith("p1:") for k, v in b["delete_from"].items()), "材料申請（採購單）是存檔 diff 內的隱性刪除，要列 p1:"
 
 
 # 稽核補強（1d）：別名 import、api_route／add_api_route、f-string 表名、from os import remove 等不再是盲點

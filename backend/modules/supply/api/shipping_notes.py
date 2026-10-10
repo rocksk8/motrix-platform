@@ -16,6 +16,9 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
+from core.txn import begin_write
+from helpers import recycle_bin                       # 第 53 班 P1：刪除先進暫存區（IP-RB2）
+from modules.supply import recycle_adapter as _RA
 from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
@@ -363,15 +366,23 @@ def delete_shipping_note(note_no: str, authorization: str = Header(None)):
     if row["status"] != "草稿":
         conn.close()
         raise HTTPException(409, "僅草稿狀態可刪除")
-    conn.execute("DELETE FROM shipping_notes WHERE note_no=?", (note_no,))
+    begin_write(conn)                                # 讀快照前先拿寫鎖
+    try:
+        res = recycle_bin.delete(conn, "shipping_note", note_no, user)    # 進暫存區（回簽檔一併搬走）
+    except recycle_bin.BinError as e:
+        conn.rollback()
+        conn.close()
+        raise HTTPException(409, str(e))
+    if res is None:                                  # 暫存區模組不在 ⇒ 照舊硬刪並明說（IP-RB2）
+        _RA.ShippingNoteAdapter().delete_in_tx(conn, note_no)
     conn.commit()
     conn.close()
     _purge_notifications(note_no, ['shipping_approval_request', 'shipping_approved',
                                     'shipping_returned'])
-    _audit(_tok(authorization), "shipping.delete", "shipping_note", note_no, note_no)
+    _audit(_tok(authorization), "shipping.delete", "shipping_note", note_no, note_no + ("（已進暫存區）" if res else "（暫存區未安裝，已直接刪除）"))
     notify_module_activity("出貨單", "刪除", user.get("display_name") or user["username"],
                             note_no, "shipping-notes.html")
-    return {"ok": True}
+    return {"ok": True, **({} if res else {"binned": False, "notice": _RA.BIN_ABSENT_NOTICE})}
 
 
 # ── 簽核流程 ──────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ from core.registry import ModuleSpec
 from modules.supply import attachments
 from modules.supply import gl_events
 from modules.supply import material_link
+from modules.supply import recycle_adapter as _recycle_adapter   # 刪除暫存區 adapter（IP-RB1）
 from modules.supply.api import inventory, shipping_notes, suppliers
 
 MODULE = ModuleSpec(
@@ -35,5 +36,7 @@ MODULE = ModuleSpec(
         ("uploads.path_access", "supply"): shipping_notes._ShippingPathAccess,
         # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
         ("attachments.catalog", "supply"): attachments._SupplyCatalog,
+        # IP-RB1（第 53 班 P1）：刪除暫存區的單據轉接（出貨單）
+        **{("recyclebin.adapter", _et): _cls for _et, _cls in _recycle_adapter.adapters().items()},
     },
 )
