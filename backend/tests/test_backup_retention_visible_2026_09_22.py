@@ -176,6 +176,23 @@ def test_bk8_the_page_says_which_layers_are_never_deleted():
 # BK3 · 只送四個欄位，不可以把另外兩個重設掉
 # ══════════════════════════════════════════════════════════════════════
 
+def _settle_pending_retention():
+    """保存期限縮短屬放寬（第54班）：不立即生效。測試用：第二位核准後快轉到確認期間之後讓它生效。"""
+    from datetime import datetime, timedelta
+    from db import get_db
+    from helpers import config_ledger as L, settings_registry as R
+    c = get_db()
+    try:
+        for p in L.pending(c, "setting:retention"):
+            if p["approvals_required"]:
+                L.approve(c, p["id"], "settle_approver")
+        c.commit()
+        R.materialize_due(c, now=(datetime.now() + timedelta(days=8)).isoformat(timespec="seconds"))
+    finally:
+        c.close()
+    R.invalidate()
+
+
 def test_bk3_a_partial_patch_does_not_reset_the_other_fields(client, make_user):
     """🔴🔴 BK3：舊 client 只送四個欄位 ⇒ **另外兩個要保持原值**。
 
@@ -207,6 +224,7 @@ def test_bk3_a_partial_patch_does_not_reset_the_other_fields(client, make_user):
     full["local_pre_update_keep"] = 9
     r = client.patch("/api/settings/backup-retention", headers=auth, json=full)
     assert r.status_code == 200, r.text
+    _settle_pending_retention()
 
     legacy = {k: base[k] for k in ("local_db_keep_days", "cloud_daily_keep_days",
                                    "cloud_weekly_keep_days", "audit_log_keep_days")}
@@ -236,6 +254,7 @@ def test_bk3_a_full_patch_still_changes_everything(client, make_user):
     value["local_pre_update_keep"] = 3
     r = client.patch("/api/settings/backup-retention", headers=auth, json=value)
     assert r.status_code == 200, r.text
+    _settle_pending_retention()
 
     got = client.get("/api/settings/backup-retention", headers=auth).json()
     assert got["cloud_monthly_keep_days"] == 730, "送了值卻沒有生效 —— 欄位變成唯讀"

@@ -74,8 +74,8 @@ def test_bad_stored_value_falls_back(conn):
 
 
 def test_defaults_only_env(conn, monkeypatch):
-    R.publish("uploads", {"max_file_mb": 30}, user="admin", conn=conn)
-    assert R.get("uploads", "max_file_mb") == 30
+    R.publish("uploads", {"max_file_mb": 12}, user="admin", conn=conn)
+    assert R.get("uploads", "max_file_mb") == 12
     monkeypatch.setenv("MOTRIX_SETTINGS_DEFAULTS_ONLY", "1")
     assert R.get("uploads", "max_file_mb") == 20
 
@@ -130,13 +130,13 @@ def test_api_list_save_and_history(client, make_user):
     r = client.get("/api/settings-center/groups", headers=h)
     assert r.status_code == 200
     assert {g["group"] for g in r.json()["groups"]} >= {"retention", "uploads"}
-    assert client.post("/api/settings-center/groups/uploads", json={"values": {"max_file_mb": 25}}, headers=h).status_code == 400   # 缺原因
+    assert client.post("/api/settings-center/groups/uploads", json={"values": {"max_file_mb": 15}}, headers=h).status_code == 400   # 缺原因
     bad = client.post("/api/settings-center/groups/retention", json={"values": {"audit_log_keep_days": 100}, "reason": "x"}, headers=h)
     assert bad.status_code == 400
-    ok = client.post("/api/settings-center/groups/uploads", json={"values": {"max_file_mb": 25}, "reason": "測試"}, headers=h)
+    ok = client.post("/api/settings-center/groups/uploads", json={"values": {"max_file_mb": 15}, "reason": "測試"}, headers=h)
     assert ok.status_code == 200 and ok.json()["changed"] is True
     d = client.get("/api/settings-center/groups/uploads", headers=h).json()
-    assert d["values"]["max_file_mb"] == 25 and d["history"][0]["field"] == "max_file_mb" and d["history"][0]["reason"] == "測試"
+    assert d["values"]["max_file_mb"] == 15 and d["history"][0]["field"] == "max_file_mb" and d["history"][0]["reason"] == "測試"
     assert client.get("/api/settings-center/groups/nope", headers=h).status_code == 404
 
 

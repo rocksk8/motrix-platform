@@ -4,7 +4,7 @@
 - GET  /api/settings-center/groups                 全部群組＋目前值＋最後變更（superadmin）
 - GET  /api/settings-center/groups/{group}         單一群組欄位定義＋目前值＋變更明細（superadmin）
 - POST /api/settings-center/groups/{group}         儲存（部分欄位即可；`reason` 必填；superadmin）
-- GET  /api/settings-center/pending                待生效清單（風險欄位 24 小時後才生效；superadmin）
+- GET  /api/settings-center/pending                待生效清單（風險欄位經「變更確認期間」才生效，含已核准／需要票數；superadmin）
 - POST /api/settings-center/pending/{id}/cancel    撤銷一筆待生效（寫稽核；superadmin）
 - POST /api/settings-center/pending/{id}/approve   雙人核准的一票（放寬安全／風險設定需要另一位最高管理者核准；superadmin）
 - GET  /api/settings-center/profiles               預設組清單；GET …/profiles/{name}/preview 預覽會改什麼；POST …/profiles/{name}/apply 套用（superadmin）
@@ -12,7 +12,7 @@
 """
 from fastapi import APIRouter, Body, Header, HTTPException, Request
 
-from helpers import _require_user, _tok, _audit
+from helpers import _require_user
 from helpers import config_ledger as ledger
 from helpers import settings_groups  # noqa: F401  登錄群組
 from helpers import settings_registry as sr
@@ -110,36 +110,47 @@ def list_pending(authorization: str = Header(None)):
     finally:
         conn.close()
     return {"pending": [{"id": r["id"], "group": r["key"], "field": r["field"], "old": r["old"], "new": r["new"], "reason": r["reason"],
-                         "actor": r["actor_display"] or r["actor"], "at": r["at"], "effectiveAt": r["effective_at"]} for r in rows]}
+                         "actor": r["actor_display"] or r["actor"], "at": r["at"], "effectiveAt": r["effective_at"],
+                         "approvals": list(r.get("approvals") or []), "required": int(r.get("approvals_required") or 0)} for r in rows]}
 
 
 @router.post("/api/settings-center/pending/{change_id}/cancel")
 def cancel_pending(change_id: int, body: dict = Body(default={}), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
+    from core.txn import begin_write
     from db import get_db
     conn = get_db()
+    began = False
     try:
+        began = begin_write(conn)                         # 先拿寫鎖再讀狀態：兩人同時按不會雙重處理
         row = conn.execute("SELECT domain, key, field FROM config_changes WHERE id=?", (change_id,)).fetchone()
         if row is None or not row["domain"].startswith("setting:"):
             raise HTTPException(404, "找不到這筆待生效的設定變更")
         reason = str((body or {}).get("reason") or "").strip() or "撤銷待生效"
         if not ledger.cancel(conn, change_id, actor, reason):
             raise HTTPException(409, "這筆變更已不是待生效狀態")
+        ledger.audit_event(conn, actor, "settings.%s.pending_cancel" % row["key"], row["key"],
+                           "撤銷待生效：%s（#%d）原因：%s" % (row["field"], change_id, reason))   # 同交易：變更與稽核一起成功
         conn.commit()
+    except Exception:
+        if began and conn.in_transaction:
+            conn.rollback()
+        raise
     finally:
         conn.close()
     sr.invalidate(row["key"])
-    _audit(_tok(authorization), "settings.%s.pending_cancel" % row["key"], "config", str(row["key"]),
-           "撤銷待生效：%s（#%d）原因：%s" % (row["field"], change_id, reason))
     return {"ok": True}
 
 
 @router.post("/api/settings-center/pending/{change_id}/approve")
 def approve_pending(change_id: int, body: dict = Body(default={}), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
+    from core.txn import begin_write
     from db import get_db
     conn = get_db()
+    began = False
     try:
+        began = begin_write(conn)
         row = conn.execute("SELECT domain, key, field FROM config_changes WHERE id=?", (change_id,)).fetchone()
         if row is None or not row["domain"].startswith("setting:"):
             raise HTTPException(404, "找不到這筆待生效的設定變更")
@@ -147,11 +158,16 @@ def approve_pending(change_id: int, body: dict = Body(default={}), authorization
         out = ledger.approve(conn, change_id, actor, reason)
         if not out["ok"]:
             raise HTTPException(409, out["why"])
+        ledger.audit_event(conn, actor, "settings.%s.approve" % row["key"], row["key"],
+                           "核准待生效變更：%s（#%d）%d／%d" % (row["field"], change_id, out["approvals"], out["required"]))
         conn.commit()
+    except Exception:
+        if began and conn.in_transaction:
+            conn.rollback()
+        raise
     finally:
         conn.close()
-    _audit(_tok(authorization), "settings.%s.approve" % row["key"], "config", str(row["key"]),
-           "核准待生效變更：%s（#%d）%d／%d" % (row["field"], change_id, out["approvals"], out["required"]))
+    sr.invalidate(row["key"])
     return {"ok": True, "approvals": out["approvals"], "required": out["required"]}
 
 
