@@ -164,6 +164,19 @@ def submit_payslip(slip_no: str, body: dict = Body(default={}), authorization: s
     return {"ok": True, "status": status, "tierCount": len(tiers)}
 
 
+#: 代核原因的最短有意義長度（正規化後：去掉零寬字元與多餘空白再算字數）。登錄式常數；README／SPEC／CHANGELOG 都引用這個名字，日後要調整只改這一處。
+BYPASS_REASON_MIN_LEN = 4
+_ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u200e\u200f\u2060\u2061\u2062\u2063\u2064\ufeff\u00ad\u180e"))   # 零寬／格式字元（原始碼用跳脫寫法，不放不可見字元）
+
+
+def normalize_reason(text) -> str:
+    """原因正規化：去零寬／格式字元、全形空白換半形、連續空白收成一個、頭尾去空白。非字串 ⇒ 空字串。"""
+    if not isinstance(text, str):
+        return ""
+    t = text.translate(_ZERO_WIDTH).replace("\u3000", " ")
+    return " ".join(t.split())
+
+
 def _deadlock_bypass(conn, appr, tiers, ct, user, reason, code, msg):
     """第 54 班（使用者回報：勞報單送審後卡死）：送審人不得自核（Q-S6），若當層**排序最前的未簽核人就是送審人**，其他人不是簽不了
     （不在層內／要等送審人先簽）⇒ 單據卡死。比照獎金分潤（第 52 班）：**另一位最高管理者**可帶原因代核。
@@ -189,10 +202,10 @@ def _deadlock_bypass(conn, appr, tiers, ct, user, reason, code, msg):
     in_chain = user["username"] in set(names) or bool(active_delegators_for(conn, user["username"]) & set(names))
     if code != 403 or not blocker or user["username"] == requester or user["username"] == blocker or user["username"] in signed or in_chain:
         raise HTTPException(code, msg)
-    reason = (reason or "").strip() if isinstance(reason, str) else ""
-    if not reason:
+    reason = normalize_reason(reason)
+    if len(reason) < BYPASS_REASON_MIN_LEN:
         raise HTTPException(403, "這張勞報單目前輪到的簽核人（%s）無法簽核（送審人不能自行核准，或該帳號已停用），單據會卡住。若要以最高管理者身分代為核准，請填寫原因"
-                                 "（會寫入稽核紀錄，並通知其他最高管理者）。" % blocker)
+                                 "（至少 %d 個字；會寫入稽核紀錄，並通知其他最高管理者）。" % (blocker, BYPASS_REASON_MIN_LEN))
     return {"approver": blocker, "reason": reason[:500]}
 
 
