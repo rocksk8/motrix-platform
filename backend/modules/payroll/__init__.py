@@ -10,6 +10,7 @@ from modules.payroll import bank_account, bonus, bonus_correction, bonus_payouts
 from modules.payroll.api import bank_account as bank_account_api, bonus as bonus_api, bonus_correction as bonus_correction_api, payslips as payslips_api
 from modules.payroll.api import payslip_approval as payslip_approval_api, payslip_links as payslip_links_api
 from modules.payroll import payslip_links
+from modules.payroll import recycle_adapter
 from modules.payroll import attachments   # 要在 api 之後：提供者用 payslips 的 _signed_path／_archive_dir
 
 _m0001 = importlib.import_module("modules.payroll.migrations.0001_payslip_void_signed_paid")
@@ -28,6 +29,8 @@ MODULE = ModuleSpec(
         ("bonus.payouts", "payroll"): bonus_payouts._Payouts,
         # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
         ("attachments.catalog", "payroll"): attachments._PayrollCatalog,
+        # IP-RB1（第 53 班，刪除暫存區 P1）：勞報單（含派發連結）的快照／刪除／還原
+        ("recyclebin.adapter", "payslip"): lambda: recycle_adapter.PayslipBinAdapter(),
         # IP-BK1（A2 收款人）：員工收款帳號（依檢視者回完整／遮蔽；完整必帶稽核 token）
         ("payee.bank_profile", "payroll"): bank_account.payee_bank_profile,
         # IP-9：已發放的獎金列入營運報表與月支出（M08）
