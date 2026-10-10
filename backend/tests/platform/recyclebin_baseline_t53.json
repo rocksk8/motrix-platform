@@ -181,17 +181,9 @@
    "count": 1,
    "reason": "p2: 其他業務資料（P2 評估）"
   },
-  "modules/payroll/api/payslips.py::payslip_dispatch_links": {
-   "count": 1,
-   "reason": "p1: 勞報單連結（隨勞報單）"
-  },
-  "modules/payroll/api/payslips.py::payslips": {
-   "count": 1,
-   "reason": "p1: 勞報單"
-  },
   "modules/payroll/payslip_links.py::payslip_dispatch_links": {
    "count": 1,
-   "reason": "p1: 勞報單連結（隨勞報單）"
+   "reason": "p2: 其他業務資料（解除派發連結；P2 評估）"
   },
   "modules/subcontract/api/contractor_vouchers.py::contractor_payment_vouchers": {
    "count": 1,
@@ -370,7 +362,6 @@
   "modules/netplan/api.py::delete_network_plan::DELETE /api/network-plans/{plan_id}": "p2: 其他業務資料（P2 評估）",
   "modules/payroll/api/bonus.py::remove_bonus_group_member::DELETE /groups/{group_id}/members/{username}": "p2: 其他業務資料（P2 評估）",
   "modules/payroll/api/payslip_links.py::remove_link::DELETE /api/payslips/{slip_no}/dispatch-links/{dispatch_id}": "p2: 其他業務資料（P2 評估）",
-  "modules/payroll/api/payslips.py::delete_payslip::DELETE /api/payslips/{slip_no}": "p1: 勞報單",
   "modules/payroll/api/payslips.py::delete_signed_file::DELETE /api/payslips/{slip_no}/signed-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/subcontract/api/contractor_vouchers.py::delete_contractor_voucher::DELETE /api/contractor-vouchers/{voucher_no}": "p1: 承攬商匯款申請",
   "modules/subcontract/api/dispatch_payslip_links.py::remove_payslip_link::DELETE /api/contractor-dispatches/{did}/payslip-links/{slip_no}": "p2: 其他業務資料（P2 評估）",
