@@ -60,6 +60,12 @@ def test_scanner_does_not_flag_what_runs_after_the_lock_is_released():
     # 區塊內只是「定義」稍後才執行的收集（lambda／partial 建構不算執行）
     assert _hits("def f(conn):\n    with write_txn(conn):\n        after.append(lambda: _notify(1))\n        conn.commit()\n") == []
     assert _hits("def f(conn):\n    with write_txn(conn):\n        def later():\n            _notify(1)\n        conn.commit()\n") == []
+    # 手動 begin 後的 with 區塊（如 delete_scope）頂層 commit ⇒ 區塊之後寫鎖已放掉
+    assert _hits("def f(conn):\n    begin_write(conn)\n    with scope():\n        x()\n        conn.commit()\n    _audit(1)\n") == []
+    # 反例：with 區塊裡沒有頂層 commit ⇒ 區塊之後仍持鎖
+    assert _hits("def f(conn):\n    begin_write(conn)\n    with scope():\n        x()\n    _audit(1)\n") == [("f", "_audit")]
+    # 反例：commit 只在 if 裡 ⇒ 仍持鎖
+    assert _hits("def f(conn):\n    begin_write(conn)\n    with scope():\n        if a:\n            conn.commit()\n    _audit(1)\n") == [("f", "_audit")]
     # 不相干的函式
     assert _hits("def f(conn):\n    _notify(1)\n    with other(conn):\n        _audit(1)\n") == []
 
