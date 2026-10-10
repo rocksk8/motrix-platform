@@ -128,7 +128,7 @@
 | P2c | accounting、supply、其餘小模組 | 7–9 | 稅務／總帳維持不可委派 |
 | P2d | legacy routers（235，106 個 superadmin 閘）：多登錄為不可委派能力，只換標記 | 3–4 | 量大但機械 |
 | P3 | 前端約 150 處 `role ===` 改 `can()`；移除包裝裡的 `legacy` 判斷；基線歸零 | 4–5 | 逐頁 e2e |
-| **合計** | | **49–62** | 與 §7 共用稽核／版本層可省約 3–5 |
+| **合計** | | **49–62**（含 §7 的待生效部分；`config_ledger` 的寫入／明細部分由設定中心 S0 先做，不計入） | |
 
 **推出節奏（node-d8 預設，同意）**：P0＋P1 完成後先接 payroll＋arap，即開放矩陣編輯；其他模組的格子標「尚未生效」，隨 P2b–P2d 逐批轉為「已接入」。
 
@@ -142,5 +142,11 @@
 2. 18 個動作中，`print`（產 PDF）要不要與 `export` 合併？預設：分開（PDF 常是對外文件，風險不同）。
 3. 「只限本人」的撤回／編輯草稿維持資料範圍守門、不進矩陣（§2.1）？預設：是。
 
-## 7 與 n39 設定盤點共用稽核／版本層
-權限需要的三件事——**變更明細（誰/何時/舊→新/原因）、版本快照與回溯、待生效狀態**——和「所有可設定項」（簽核流程、通知矩陣、利潤規則、公司設定…）是同一類。建議抽成 L1 `helpers/config_ledger.py`：`record(domain, key, old, new, reason, actor, effective_at=None)`、`snapshot(domain)`／`restore(domain, version)`、`pending(domain)`／`cancel(id)`；`permission_changes` 以 `domain='perm'` 接入（保留只增不改的觸發器與既有資料，不搬資料）。權限獨有的只有 `perm_pending` 的「讀時判斷」規則與矩陣語意。**待 `wip/t54-n39-config-inventory` 出來後對照其設定項清單與稽核需求，再決定共用介面的最小集合**（若對方已有現成的版本／稽核表則直接沿用，本稿的 `perm_versions` 改為其一個 domain）；我會在對方分支出現後更新本節。
+## 7 與設定中心共用的稽核／待生效層：`helpers/config_ledger`（與 node-39 `SETTINGS-CENTER-DESIGN-T54` §2 一致的協議）
+**原則：不建第二套版本表。** 版本、差異、還原留在各 domain 自己的儲存（權限＝`perm_versions`；設定＝`core/definitions.py` 的 `ui_definitions`／kind `setting_group`）。`config_ledger` 只做兩件那些儲存沒有的事：**變更明細**與**待生效狀態**。L1、只增不改、不 import 任何 L2。
+1. **寫入**：`record(conn, domain, key, changes, reason, actor, *, ip="", effective_at=None, risk="low", ref_version=None) -> change_id`；`changes=[{field, old, new}]`；`domain` ＝ `perm` 或 `setting:<群組>`。與被改的資料**同一交易**寫入；同交易寫 `audit_log`（action `<domain>.change`）；`risk >= money`（view_money／approve／pay／delete／view_sensitive 等）時通知其他 superadmin。
+2. **表（只增不改）**：`config_changes(id, at, domain, key, field, old_json, new_json, reason, actor, ip, effective_at, risk, ref_version, batch_id)`，DB 觸發器擋 UPDATE／DELETE；**狀態不放在這張表**，改記 `config_change_events(id, change_id, event, actor, reason, at)`，`event ∈ {pending, activated, cancelled, superseded}`，現況＝最後一筆（無事件＝立即生效的一般變更）。
+3. **待生效 API**（只存與轉態，不決定效力）：`pending(domain=None)`、`cancel(change_id, actor, reason)`（寫 `cancelled` 事件、通知申請人）、`activate_due(now)`（把 `effective_at <= now` 且仍 pending 的轉 `activated`、寫稽核、通知；由 5 分鐘工作呼叫，**漏跑不影響效力**）、純函式 `in_effect(row, now)`（`effective_at` 空或已到、且最後事件不是 cancelled／superseded）。**效力在讀取時由 domain 判斷**（`perm.can()`／`settings.get()` 自行呼叫 `in_effect`），ledger 不介入。
+4. **版本與還原**：`register_domain(domain, label, snapshot_fn, restore_fn, diff_fn, reason_required_fn=None)`；ledger 只提供「歷史」查詢 `history(domain, key)` 與統一的「還原＝新版本、歷史不改」呼叫流程。`perm` → `perm_versions`；`setting:*` → `ui_definitions`（`definitions.versions/restore/diff`）。還原含待生效項 ⇒ domain 的 restore 負責一併 cancel。
+5. **既有表**：R1／R2 職責角色的 `permission_changes`（含只增不改觸發器）**不搬資料、不雙寫**，仍是 `duty` domain 的明細；權限矩陣的新變更只寫 `config_changes`（domain `perm`）。稽核報表以 UNION 呈現，避免兩份漂移。
+6. **誰先做**：設定中心 S0（第一批不用待生效）先實作並上線 `config_ledger` 的 1、2、4 與 `history`；權限矩陣 P1 再加 3（待生效 API、`activate_due` 工作、`in_effect`）——介面現在就定死，後補不改簽名。設定第二批的 K04（登入安全）也走待生效層。
