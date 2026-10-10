@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-10（wip/t53-ab-recyclebin-p0）
+## 1.126 — 2026-10-10（wip/t53-ab-recyclebin-p0）
 - L1（新增，向下相容）：`helpers/recycle_bin.py`——刪除暫存區契約（`CAP_ADAPTER`／`CAP_DELETE`、`Adapter`、`RestoreContext`、`BinError`、`delete()`、`adapters()`、`mask_obj()`）；擁有單據的模組提供 adapter、刪除端點呼叫 `delete()`，模組不在時回 None（照舊硬刪並明說）。串接點 IP-RB1／IP-RB2（暫定號）。
 - `archive._F2_FIELDS` 宣告 `recycle_bin.snapshot_json`／`files_manifest_json` 整欄為 F2（一般 JSON 備份排除、完整列只進個資資料夾）。
 
