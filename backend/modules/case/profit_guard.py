@@ -31,7 +31,7 @@ MODES = ("legacy", "v2")
 INDIRECT_KEYS = ("indirectLogistics", "indirectInstallation", "indirectTravel", "indirectWarranty", "indirectOther")
 CHARITY_MODE_KEY, CHARITY_MIGRATION_KEY = "charity_basis_mode", "charity_migration_done"
 CHARITY_MODES = (PR.CHARITY_DIRECT, PR.CHARITY_TOTAL)
-# 已精算／結案單的管銷與利潤衍生欄位：同戳記，一律沿用資料庫現值（解鎖編輯路徑也不得由用戶端改寫）
+# 已精算／結案單沿用資料庫現值的管銷與利潤衍生欄位
 SETTLED_PROFIT_KEYS = ("adminCost", "charityDonation", "totalIndirect", "netProfit", "netMarginPct")
 STAMP_KEYS = ("formulaVer", "overheadPct", "_legacy", "_recalc", "charityBasis", "_legacyCharity")
 _ONLY_SUPERADMIN = "只有最高管理者可調整管銷分攤比率"
@@ -203,7 +203,9 @@ def prepare(q: dict, user: dict, existing_row=None, quote_no: str = ""):
         else:
             q["overheadPct"] = stored
         _restore_stamps(tot, old_tot)
-        _restore_stamps(tot, old_tot, keys=SETTLED_PROFIT_KEYS)
+        # 利潤欄位同戳記沿用資料庫現值（解鎖編輯是唯一能走到這裡的路徑，用戶端的值一律不採用）。
+        # 已知取捨（PM 2026-10-10 裁示維持）：解鎖編輯改了價格時，利潤欄位在重新簽核、重新精算前仍是舊值。
+        tot.update({k: old_tot[k] for k in SETTLED_PROFIT_KEYS if k in old_tot})
         return None
     incoming = q.get("overheadPct")
     if incoming is None or incoming == "":
