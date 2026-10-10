@@ -110,6 +110,17 @@ def record(conn, domain, key, changes, reason, actor, *, ip="", risk="none", ref
     return {"batch": batch, "ids": ids, "audit_id": audit_id}
 
 
+def audit_event(conn, actor, action, key, detail, *, target_label=""):
+    """在呼叫端交易內寫一筆稽核（和變更同一個交易，一起成功或一起回復）。不 commit。回稽核列 id。"""
+    username, display, uid = _actor(actor)
+    cur = conn.execute(
+        "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
+        (_now(), uid, username, display, action, "config", str(key), target_label or str(key), detail if isinstance(detail, str) else _dump(detail),
+         action.split(".", 1)[0], "", ""))
+    return cur.lastrowid
+
+
 def _notify_others(conn, actor_username, domain, key, risk, link, now, message):
     """同交易 INSERT 站內通知（不呼叫 helpers.audit._notify：它自己開連線，會撞呼叫端的寫鎖）。"""
     rows = conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' AND username<>? ORDER BY id", (actor_username or "",)).fetchall()

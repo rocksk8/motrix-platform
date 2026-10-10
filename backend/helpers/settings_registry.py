@@ -6,7 +6,7 @@
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
     ④寫入口只有 `publish()`：同一交易寫定義新版本＋變更明細（config_ledger）＋稽核＋（有舊鍵時）雙寫舊鍵；⑤讀取走 15 秒行程內快取，
-    `publish()` 之後本行程立即失效（多行程以 TTL 為準）；⑥風險欄位（`requires_pending`）的變更不立即生效：寫待生效明細（預設 24 小時，可撤銷），
+    `publish()` 之後本行程立即失效（多行程以 TTL 為準）；⑥風險欄位（`requires_pending`）的變更不立即生效：寫待生效明細（預設 7 天＝`change_control.confirm_period_days`，下限 1 天，可撤銷），
     讀取時到期即生效（`in_effect`），`materialize_due()` 再把到期值寫進定義版本；⑦環境變數 `MOTRIX_SETTINGS_DEFAULTS_ONLY=1` ⇒ 一律回程式預設（出事時的逃生口）。
 [契約題] backend/tests/platform/test_settings_registry_t54.py
 """
@@ -24,7 +24,8 @@ logger = logging.getLogger("motrix.settings")
 KIND = "setting_group"
 SCOPE = "company"
 _TTL = 15.0
-PENDING_HOURS = 24
+DEFAULT_CONFIRM_DAYS = 7                       # 變更確認期間預設天數（設定 `change_control.confirm_period_days` 沒有值時用；下限 1 天）
+CONFIRM_GROUP, CONFIRM_FIELD = "change_control", "confirm_period_days"
 _TYPES = ("int", "float", "bool", "str")
 DEFAULT_EFFECT = "你即將把「{名稱}」從 {舊} 改成 {新}，{生效時間}生效"
 
@@ -71,15 +72,15 @@ class SettingDef:
     **必填**：`question`（白話問句）、`label`、`help`、`impact`（影響說明：對象／既有或之後／可否復原／何時生效）；`risk` 屬 money／legal／security 或
     `requires_pending` ⇒ 另需 `risk_text`（白話風險提示）；`choices=[(值, 中文標籤, 影響說明)]`（選項型；三項皆必填）。缺必填 ⇒ ValueError（登錄當下就失敗）。
     選填：`recommended`（建議值）、`presets={預設組名: 值}`、`advanced`（收進「進階」）、`impact_fn(conn, 新值)->{"numbers":…, "sentence":…}`（唯讀即時影響，失敗只顯示靜態說明）、
-    `effect`（儲存前確認句型，預設見 `DEFAULT_EFFECT`）。`legacy`＝舊儲存位置；`clamp`＝讀取時夾到 [min, ...]；`requires_pending`＝變更 24 小時後才生效。
-    `loosen`＝放寬方向：往該方向調整的變更視同風險變更——24 小時待生效，且需要另一位最高管理者核准（只有一位時改為原因＋24 小時＋警告＋通知）；
+    `effect`（儲存前確認句型，預設見 `DEFAULT_EFFECT`）。`legacy`＝舊儲存位置；`clamp`＝讀取時夾到 [min, ...]；`requires_pending`＝變更經過「確認期間」（`confirm_period_days`，預設 7 天）後才生效。
+    `loosen`＝放寬方向：往該方向調整的變更視同風險變更——確認期間後才生效，且需要另一位最高管理者核准（只有一位時改為原因＋確認期間＋警告＋通知）；
     收緊（反方向）立即生效。販售版本的邊界（`set_edition_bounds`）寫在程式／授權，客戶不能改。"""
     __slots__ = ("key", "type", "default", "min", "max", "unit", "label", "help", "risk", "legacy", "clamp", "requires_pending",
-                 "question", "impact", "risk_text", "choices", "recommended", "presets", "advanced", "impact_fn", "effect", "loosen")
+                 "question", "impact", "risk_text", "choices", "recommended", "presets", "advanced", "impact_fn", "effect", "loosen", "zero_is_max")
 
     def __init__(self, key, type, default, *, question="", label="", help="", impact="", min=None, max=None, unit="", risk="ops",
                  legacy=None, clamp=False, requires_pending=False, risk_text="", choices=None, recommended=None, presets=None,
-                 advanced=False, impact_fn=None, effect="", loosen=None):
+                 advanced=False, impact_fn=None, effect="", loosen=None, zero_is_max=False):
         if type not in _TYPES:
             raise ValueError("型別不合法：%r" % (type,))
         self.key, self.type, self.default = key, type, default
@@ -93,6 +94,7 @@ class SettingDef:
         self.impact_fn, self.effect = impact_fn, effect or DEFAULT_EFFECT
         if loosen not in (None, "up", "down"):
             raise ValueError("loosen 只能是 up／down／None：%r" % (loosen,))
+        self.zero_is_max = bool(zero_is_max)   # 0 代表「不限／永久」（比任何正數都寬鬆）：判斷放寬方向時 0 視為無限大
         self.loosen = loosen          # 數值往哪個方向變是「放寬」（up＝調大算放寬，如允許更大的檔案；down＝調小算放寬，如更短的密碼長度）；放寬要雙人核准
         miss = [n for n, v in (("question", question), ("label", label), ("help", help), ("impact", impact)) if not _zh(v)]
         if (risk in ("money", "legal", "security") or self.requires_pending) and not _zh(risk_text):
@@ -270,8 +272,7 @@ def _effective(conn, group, now=None, overlay=True):
     if overlay:
         from datetime import datetime
         for r in _due_pending(conn, group, now or datetime.now().isoformat(timespec="seconds")):
-            f = g["fields"][r["field"]]
-            if not f.check(r["new"]):
+            if not validate_values(group, {r["field"]: r["new"]}, partial=True):      # 含版本邊界：邊界收緊後，舊的待生效值不會生效
                 out[r["field"]] = r["new"]
     return out
 
@@ -358,10 +359,30 @@ def _risk_of(group, changed):
     return top
 
 
+def confirm_period_days(conn=None):
+    """變更確認期間（天）：`change_control.confirm_period_days`，預設 7、下限 1（程式下限，設定與授權邊界都不能低於）。永不丟例外。"""
+    own = conn is None
+    try:
+        c = conn if conn is not None else get_db()
+        try:
+            v = _effective(c, CONFIRM_GROUP)[CONFIRM_FIELD]
+        finally:
+            if own:
+                c.close()
+        return max(1, int(v))
+    except Exception:                               # noqa: BLE001 — 群組沒登錄或讀不到 ⇒ 預設
+        return DEFAULT_CONFIRM_DAYS
+
+
+def _rank(f, v):
+    return float("inf") if (f.zero_is_max and v == 0) else v
+
+
 def publish(group, values, *, note="", user="", reason="", ip="", conn=None, actor=None):
     """唯一寫入口。`values`＝要改的欄位（部分即可）。
     一般欄位：合併目前儲存值後整組發布成新版本，同交易寫 `config_changes`＋稽核（`settings.<group>.update`）＋舊鍵雙寫。
-    `requires_pending` 欄位：不立即生效——寫待生效明細（`PENDING_HOURS` 小時後，可撤銷，同欄位更早的待生效項標 superseded），讀取時到期即生效。
+    `requires_pending` 欄位與放寬（`loosen`）：不立即生效——寫待生效明細（確認期間後，可撤銷），讀取時到期即生效。
+    **本次送出的每個欄位**（不論立即或待生效），同欄位更早的待生效項一律標 superseded（避免舊的放寬事後蓋過新的收緊）。
     回 `{"changed": 一般欄位有無變更, "version"?, "values", "changes", "pending": [待生效項]}`；都沒有變更 ⇒ `{"changed": False, "pending": []}`。
     驗證不過 ⇒ SettingError（帶 problems）；有送審中的版本 ⇒ `core.definitions.DefinitionConflict`。"""
     from datetime import datetime, timedelta
@@ -380,8 +401,10 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
         eff = _effective(c, group)
         def _loosens(f, new_v):
             old_v = eff[f.key]
-            return bool(f.loosen) and isinstance(new_v, (int, float)) and not isinstance(new_v, bool) and (
-                (f.loosen == "up" and new_v > old_v) or (f.loosen == "down" and new_v < old_v))
+            if not (f.loosen and isinstance(new_v, (int, float)) and not isinstance(new_v, bool)):
+                return False
+            a, b = _rank(f, new_v), _rank(f, old_v)
+            return (f.loosen == "up" and a > b) or (f.loosen == "down" and a < b)
         pend = {k: v for k, v in values.items() if g["fields"][k].requires_pending or _loosens(g["fields"][k], v)}
         imm = {k: v for k, v in values.items() if k not in pend}
         loose = {k for k, v in pend.items() if _loosens(g["fields"][k], v)}
@@ -392,7 +415,10 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
         changes = [{"field": k, "old": base[k], "new": new[k]} for k in g["fields"] if base[k] != new[k]]
         actor_ = actor if actor is not None else user
         domain = "setting:%s" % group
-        result = {"changed": False, "values": eff, "pending": [], "warnings": []}
+        result = {"changed": False, "values": eff, "pending": [], "warnings": [], "superseded": 0}
+        for r in L.pending(c, domain):                # 本次送出的欄位：舊的待生效項一律被取代（即使這次是立即生效的收緊）
+            if r["domain"] == domain and r["key"] == group and r["field"] in values and L.supersede(c, r["id"], actor_, "被較新的申請取代"):
+                result["superseded"] += 1
         if changes:
             risk = _risk_of(group, [x["field"] for x in changes])
             out = D.publish_direct(c, KIND, group, SCOPE, {"group": group, "values": new}, note or reason, user, commit=False)
@@ -401,10 +427,8 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
             _write_legacy(c, group, new)
             result.update(changed=True, version=out["version"], values=dict(eff, **new), changes=changes)
         if pend:
-            when = (datetime.now() + timedelta(hours=PENDING_HOURS)).isoformat(timespec="seconds")
-            for r in L.pending(c, domain):
-                if r["domain"] == domain and r["field"] in pend:
-                    L.supersede(c, r["id"], actor_, "被較新的申請取代")
+            days = confirm_period_days(c)
+            when = (datetime.now() + timedelta(days=days)).isoformat(timespec="seconds")
             pchanges = [{"field": k, "old": eff[k], "new": v} for k, v in pend.items() if eff[k] != v]
             if pchanges:
                 others = c.execute("SELECT COUNT(*) FROM users WHERE active=1 AND role='superadmin' AND username<>?", (user or "",)).fetchone()[0]
@@ -418,8 +442,8 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
                     result["pending"] += [{"id": i, "field": x["field"], "new": x["new"], "effectiveAt": when, "approvalsRequired": need}
                                           for i, x in zip(rec["ids"], part)]
                 if loose and others == 0 and any(x["field"] in loose for x in pchanges):
-                    result["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬改為「填寫原因、等 24 小時後生效」，並已留下紀錄。")
-        if not changes and not pend:
+                    result["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬改為「填寫原因、等 %d 天確認期間後生效」，並已留下紀錄。" % days)
+        if not changes and not pend and not result["superseded"]:
             if began:
                 c.rollback()
             return result
@@ -452,8 +476,15 @@ def materialize_due(conn=None, now=None):
                 continue
             base = _effective(c, group, overlay=False)
             new = dict(base)
-            for r in due:
+            for r in list(due):
+                if validate_values(group, {r["field"]: r["new"]}, partial=True):
+                    logger.warning("settings: 待生效項 #%s（%s.%s=%r）超出目前的欄位範圍或版本邊界，自動撤銷", r["id"], group, r["field"], r["new"])
+                    L.cancel(c, r["id"], "system", "超出目前的欄位範圍或版本邊界，到期時自動撤銷")
+                    due.remove(r)
+                    continue
                 new[r["field"]] = r["new"]
+            if not due:
+                continue
             out = D.publish_direct(c, KIND, group, SCOPE, {"group": group, "values": new}, "待生效項到期生效", "system", commit=False)
             _write_legacy(c, group, new)
             total += len(L.activate_due(c, now, domain="setting:%s" % group))
