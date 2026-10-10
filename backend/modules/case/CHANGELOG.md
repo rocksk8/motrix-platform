@@ -3,6 +3,8 @@
 - **（併入）(next) — 2026-10-10（wip/t54-ab-quote-gaps）：報價存檔路徑的伺服器自有欄位不採用用戶端的值（獨立稽核 3 項確認）**
   - `PUT /api/quotations/{no}`：`data.quoteNo` 一律以網址單號為準（原可被帶成別張單號）；`editHistory` 一律取資料庫現值再由伺服器追加（原可被偽造或清空）。
   - `profit_guard.prepare()` 已精算／結案分支另沿用 `adminCost／charityDonation／totalIndirect／netProfit／netMarginPct` 現值（原只還原戳記，解鎖編輯可改寫利潤欄位）。
+  - 稽核 05 追加：`POST` 建立也丟掉用戶端的 `editHistory`（新單從空白起）；`PUT` 的編輯紀錄改在寫入交易內讀到 `existing` 後才放回資料庫現值（含解鎖編輯那一筆），避免併發的伺服器追加被蓋掉。
+  - 已知取捨（PM 裁示維持）：已結案單解鎖編輯改價時，利潤欄位維持資料庫舊值（程式註解＋測試 `test_unlock_edit_price_change_keeps_profit_until_resettled` 記錄）。
   - 測試 `tests/test_quote_server_owned_fields_t54.py`。案件紀錄 PATCH 的狀態鎖（待審核／簽核中是否鎖合約與收款）為設計題，未改。
 
 ## 1.0.172 — 2026-10-10（wip/t52-ab-charity-quote）：公益捐款改『報價含稅 1%』（新基，預設關）＋精算頁可調管銷比率（僅最高管理者）（含稽核 05 修正；作者閘門修正）

@@ -1501,6 +1501,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     # 前端「複製為新單」本來就送 dealTag=''、settlement=null，不受影響。
     q["dealTag"] = ""
     q.pop("settlement", None)
+    q["editHistory"] = []   # 編輯紀錄只由伺服器維護：新單從空白開始（用戶端帶的一律丟掉）
     deal_tag, settle_status = quote_hot_fields(q)
     conn = get_db()
 
@@ -1712,17 +1713,10 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     if _oh_row and expected_updated_at and _oh_row["updated_at"] and expected_updated_at != _oh_row["updated_at"]:
         raise HTTPException(409, "報價單已被其他人更新，請重新載入後再存")
     _oh_change = _PG.prepare(q, user, _oh_row, quote_no) if _oh_row else None
-    # 伺服器自有欄位不採用用戶端的值：單號以網址為準；編輯紀錄一律取資料庫現值（之後只由伺服器追加）
+    # 伺服器自有欄位不採用用戶端的值：單號以網址為準；編輯紀錄先丟掉用戶端的，
+    # 寫入交易內讀到 existing 後再放回資料庫現值（避免沒帶 _expectedUpdatedAt 時蓋掉併發的伺服器追加）。
     q["quoteNo"] = quote_no
-    if _oh_row:
-        try:
-            _db_hist = (json.loads(_oh_row["data_json"] or "{}") or {}).get("editHistory")
-        except (TypeError, ValueError):
-            _db_hist = None
-        if isinstance(_db_hist, list):
-            q["editHistory"] = _db_hist
-        else:
-            q.pop("editHistory", None)
+    q.pop("editHistory", None)
     # 款項日期一律存 YYYY-MM-DD（「2026/09/01」等寫法否則會被報表歸月靜默漏掉）
     for _pi in (((q.get("caseRecord") or {}).get("payment") or {}).get("items") or []):
         if isinstance(_pi, dict):
@@ -1738,18 +1732,12 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         editor = _require_user(authorization)
         if editor["role"] != "superadmin":
             raise HTTPException(403, "解鎖編輯需要超級管理員權限")
-        history = q.get("editHistory") or []
-        if not isinstance(history, list):
-            history = []
-        edit_rev = len(history) + 1
-        history.append({
-            "rev":       edit_rev,
-            "at":        now,
-            "by":        editor["username"],
-            "byDisplay": editor["display_name"] or editor["username"],
-            "type":      "quote_edit",
-        })
-        q["editHistory"] = history
+        # 編輯紀錄的追加延到寫入交易內（見 existing 讀取之後）；這裡只先估版次供簽核理由用
+        try:
+            _h0 = (json.loads((_oh_row["data_json"] if _oh_row else None) or "{}") or {}).get("editHistory")
+        except (TypeError, ValueError):
+            _h0 = None
+        edit_rev = (len(_h0) if isinstance(_h0, list) else 0) + 1
         # Force re-approval regardless of current status
         new_status = "待審核"
         q["approval"] = {
@@ -1812,6 +1800,19 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     if not existing:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    # 編輯紀錄只由伺服器維護：此處（寫入交易內）放回資料庫現值；解鎖編輯的那一筆也在這裡追加
+    try:
+        _db_hist = (json.loads(existing["data_json"] or "{}") or {}).get("editHistory")
+    except (TypeError, ValueError):
+        _db_hist = None
+    if isinstance(_db_hist, list):
+        q["editHistory"] = _db_hist
+    if is_unlock_edit:
+        _hist = q.get("editHistory") if isinstance(q.get("editHistory"), list) else []
+        edit_rev = len(_hist) + 1
+        _hist.append({"rev": edit_rev, "at": now, "by": user["username"],
+                      "byDisplay": user.get("display_name") or user["username"], "type": "quote_edit"})
+        q["editHistory"] = _hist
     try:
         require_case(user, existing, quote_no)
     except HTTPException:
