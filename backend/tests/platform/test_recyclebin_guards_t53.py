@@ -23,7 +23,9 @@ BASELINE = Path(__file__).with_name("recyclebin_baseline_t53.json")
 ADAPTER_FILE = "recycle_adapter.py"
 QUARANTINE = "modules/recyclebin/quarantine.py"
 REASON_PREFIXES = ("p1:", "p2:", "exempt:", "tmp:")
-_SKIP_DIRS = {"tests", "__pycache__", "migrations_frozen", "node_modules", ".git", "tools", "migrations", "_demo_pdf_archive"}
+_SKIP_DIRS = {"tests", "__pycache__", "migrations_frozen", "node_modules", ".git", "_demo_pdf_archive"}
+_SKIP_TOP = {"tools"}                                  # 只跳 backend/tools（離線工具）；模組裡剛好叫 tools 的資料夾要掃
+_SKIP_REL = ("modules/", "core/")                      # 這些底下的 migrations 資料夾不掃（凍結的建表／升版 SQL）
 
 
 def product_files():
@@ -31,7 +33,9 @@ def product_files():
     base = source_tree.BACKEND
     out = {}
     for d, dirs, files in os.walk(base):
-        dirs[:] = [x for x in dirs if x not in _SKIP_DIRS]
+        rel_dir = Path(d).relative_to(base).as_posix()
+        dirs[:] = [x for x in dirs if x not in _SKIP_DIRS and not (rel_dir == "." and x in _SKIP_TOP)
+                   and not (x == "migrations" and rel_dir.startswith(_SKIP_REL))]
         for fn in files:
             if fn.endswith(".py") and not fn.startswith("test_") and fn != "conftest.py":
                 p = Path(d) / fn
@@ -44,33 +48,76 @@ def _is_adapter(rel):
 
 
 # ── 1 路由 ─────────────────────────────────────────────────────────────────────
-def _calls_bin_delete(fn):
+def _bin_aliases(tree):
+    """這個檔把 `helpers.recycle_bin` 取了哪些名字：({模組別名}, {直接 import 的 delete 別名})。預設名 recycle_bin／RB 也算。"""
+    mods, fns = {"recycle_bin", "RB"}, set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom):
+            for a in n.names:
+                if (n.module or "") == "helpers" and a.name == "recycle_bin":
+                    mods.add(a.asname or a.name)
+                elif (n.module or "") == "helpers.recycle_bin" and a.name == "delete":
+                    fns.add(a.asname or a.name)
+        elif isinstance(n, ast.Import):
+            for a in n.names:
+                if a.name == "helpers.recycle_bin" and a.asname:
+                    mods.add(a.asname)
+    return mods, fns
+
+
+def _calls_bin_delete(fn, aliases=None):
+    mods, fns = aliases or ({"recycle_bin", "RB"}, set())
     for n in ast.walk(fn):
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "delete":
-            v = n.func.value
-            if (isinstance(v, ast.Name) and v.id in ("recycle_bin", "RB")) or (isinstance(v, ast.Attribute) and v.attr == "recycle_bin"):
+        if isinstance(n, ast.Call):
+            f = n.func
+            if isinstance(f, ast.Attribute) and f.attr == "delete":
+                v = f.value
+                if (isinstance(v, ast.Name) and v.id in mods) or (isinstance(v, ast.Attribute) and v.attr == "recycle_bin"):
+                    return True
+            elif isinstance(f, ast.Name) and f.id in fns:
                 return True
     return False
+
+
+def _delete_route_paths(fn):
+    """函式上所有『DELETE 路由』裝飾器的路徑：`@x.delete(p)`、`@x.api_route(p, methods=[..'DELETE'..])`、`@x.route(...)`。`add_api_route(p, fn, methods=[...])` 另在 scan_routes 處理。"""
+    out = []
+    for d in fn.decorator_list:
+        if not (isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.args):
+            continue
+        a = d.args[0]
+        path = a.value if isinstance(a, ast.Constant) else (ast.unparse(a) if hasattr(ast, "unparse") else "?")
+        if d.func.attr == "delete":
+            out.append(path)
+        elif d.func.attr in ("api_route", "route") and any(
+                k.arg == "methods" and "DELETE" in ast.unparse(k.value).upper() for k in d.keywords):
+            out.append(path)
+    return out
 
 
 def scan_routes(files):
     """⇒ {key: migrated(bool)}；key＝`檔::函式::DELETE 路徑`。只認 `@<x>.delete("<path>")` 形式的裝飾器。"""
     out = {}
     for rel, src in files.items():
-        if rel == "modules/recyclebin/api.py":
-            continue                                   # 暫存區自己的『永久刪除』：本身就是暫存區的最後一步，不能再進暫存區（見基線 exempt 說明）
         try:
             tree = ast.parse(src)
         except SyntaxError:
             continue
+        aliases = _bin_aliases(tree)
+        funcs = {}
         for fn in ast.walk(tree):
             if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            for d in fn.decorator_list:
-                if (isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr == "delete" and d.args):
-                    a = d.args[0]
-                    path = a.value if isinstance(a, ast.Constant) else (ast.unparse(a) if hasattr(ast, "unparse") else "?")
-                    out["%s::%s::DELETE %s" % (rel, fn.name, path)] = _calls_bin_delete(fn)
+            funcs.setdefault(fn.name, fn)
+            for path in _delete_route_paths(fn):
+                out["%s::%s::DELETE %s" % (rel, fn.name, path)] = _calls_bin_delete(fn, aliases)
+        for c in ast.walk(tree):                       # app.add_api_route("/x", handler, methods=["DELETE"])
+            if (isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) and c.func.attr == "add_api_route" and len(c.args) >= 2
+                    and any(k.arg == "methods" and "DELETE" in ast.unparse(k.value).upper() for k in c.keywords)):
+                a, h = c.args[0], c.args[1]
+                path = a.value if isinstance(a, ast.Constant) else ast.unparse(a)
+                name = h.id if isinstance(h, ast.Name) else ast.unparse(h)
+                out["%s::%s::DELETE %s" % (rel, name, path)] = bool(funcs.get(name)) and _calls_bin_delete(funcs[name], aliases)
     return out
 
 
@@ -91,7 +138,7 @@ def check_routes(found, baseline_routes):
 
 
 # ── 2 DELETE FROM ─────────────────────────────────────────────────────────────
-_DEL_SQL = re.compile(r"DELETE\s+FROM\s+([A-Za-z_][A-Za-z0-9_]*)", re.I)
+_DEL_SQL = re.compile(r"DELETE\s+FROM\s+([\"'`\[]?[A-Za-z_{][A-Za-z0-9_{}.]*[\"'`\]]?)", re.I)
 
 
 def scan_delete_sql(files):
@@ -110,9 +157,15 @@ def scan_delete_sql(files):
                     and isinstance(getattr(n.body[0], "value", None), ast.Constant):
                 doc_nodes.add(id(n.body[0].value))
         for n in ast.walk(tree):
-            if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in doc_nodes:
-                for m in _DEL_SQL.finditer(n.value):
-                    key = "%s::%s" % (rel, m.group(1).lower())
+            text = None
+            if isinstance(n, ast.JoinedStr):                       # f-string：把 {表達式} 還原成文字（表名常常是 {tbl}），其下的常數片段不再單獨算
+                text = "".join(v.value if isinstance(v, ast.Constant) else "{%s}" % ast.unparse(v.value) for v in n.values if isinstance(v, (ast.Constant, ast.FormattedValue)))
+                doc_nodes.update(id(v) for v in n.values if isinstance(v, ast.Constant))
+            elif isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in doc_nodes:
+                text = n.value
+            if text is not None:
+                for m in _DEL_SQL.finditer(text):
+                    key = "%s::%s" % (rel, m.group(1).strip("\"'`[]").lower())
                     out[key] = out.get(key, 0) + 1
     return out
 
@@ -150,13 +203,29 @@ def scan_file_removals(files):
         except SyntaxError:
             continue
         n = 0
+        os_names, sh_names, direct = {"os"}, {"shutil"}, set()
+        for c in ast.walk(tree):                       # 別名：import os as _os／import shutil as sh／from os import remove as rm
+            if isinstance(c, ast.Import):
+                for a in c.names:
+                    if a.name == "os":
+                        os_names.add(a.asname or "os")
+                    elif a.name == "shutil":
+                        sh_names.add(a.asname or "shutil")
+            elif isinstance(c, ast.ImportFrom) and c.module in ("os", "shutil"):
+                for a in c.names:
+                    if (c.module, a.name) in _REMOVERS:
+                        direct.add(a.asname or a.name)
+        pairs = {(b, "remove") for b in os_names} | {(b, "unlink") for b in os_names} | {(b, "rmdir") for b in os_names} | {(b, "removedirs") for b in os_names} \
+            | {(b, "rmtree") for b in sh_names}
         for c in ast.walk(tree):
-            if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute):
+            if isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id in direct:
+                n += 1
+            elif isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute):
                 base = c.func.value
-                if isinstance(base, ast.Name) and (base.id, c.func.attr) in _REMOVERS:
+                if isinstance(base, ast.Name) and (base.id, c.func.attr) in pairs:
                     n += 1
-                elif c.func.attr == "unlink" and not c.args:
-                    n += 1
+                elif c.func.attr == "unlink" and (not c.args or (len(c.args) == 1 and isinstance(base, ast.Name) and base.id in ("Path", "pathlib"))):
+                    n += 1                              # p.unlink()／Path.unlink(p)
         if n:
             out[rel] = n
     return out
@@ -281,5 +350,30 @@ def test_baseline_file_is_well_formed():
     b = _baseline()
     assert set(b) == {"_doc", "routes", "delete_from", "file_removals"}
     assert len(b["routes"]) >= 50
-    assert sum(1 for r in b["routes"].values() if r.startswith("p1:")) >= 9, "第一期核心單據的 DELETE 路由要列在基線（p1:）"
+    migrated = sum(1 for v in scan_routes(product_files()).values() if v)
+    assert sum(1 for r in b["routes"].values() if r.startswith("p1:")) + migrated >= 9, "第一期核心單據的 DELETE 路由：基線 p1: ＋ 已接入的 ≥ 9"
     assert any(k.endswith("::case_material_approvals") and v["reason"].startswith("p1:") for k, v in b["delete_from"].items()), "材料申請（採購單）是存檔 diff 內的隱性刪除，要列 p1:"
+
+
+# 稽核補強（1d）：別名 import、api_route／add_api_route、f-string 表名、from os import remove 等不再是盲點
+def test_scanners_have_no_alias_or_dynamic_blind_spots():
+    aliased = "from helpers import recycle_bin as _rb\n@router.delete('/a/{i}')\ndef f(i):\n    _rb.delete(conn, 't', i, u)\n"
+    assert list(scan_routes({"x.py": aliased}).values()) == [True], "別名 import 的已接入路由要認得"
+    direct = "from helpers.recycle_bin import delete as bd\n@router.delete('/a/{i}')\ndef f(i):\n    bd(conn, 't', i, u)\n"
+    assert list(scan_routes({"x.py": direct}).values()) == [True]
+    api_route = "@router.api_route('/b/{i}', methods=['GET', 'DELETE'])\ndef g(i):\n    pass\n"
+    assert list(scan_routes({"x.py": api_route}).values()) == [False], "api_route(methods=[DELETE]) 也是刪除路由"
+    added = "def h(i):\n    pass\napp.add_api_route('/c/{i}', h, methods=['DELETE'])\n"
+    assert list(scan_routes({"x.py": added}).values()) == [False]
+    assert scan_routes({"x.py": "@router.get('/d')\ndef k():\n    pass\n"}) == {}
+    sql = 'conn.execute(f"DELETE FROM {tbl} WHERE id=?")\nconn.execute(\'DELETE FROM "quoted_t" WHERE 1\')\nconn.execute("delete from [br_t]")'
+    assert scan_delete_sql({"x.py": sql}) == {"x.py::{tbl}": 1, "x.py::quoted_t": 1, "x.py::br_t": 1}
+    rm = ("import os as _os\nimport shutil as sh\nfrom os import remove as rm\nfrom pathlib import Path\n"
+          "_os.remove(a)\nsh.rmtree(b)\nrm(c)\nPath.unlink(d)\np.unlink()\nPL.unlink(conn, 1)\n")
+    assert scan_file_removals({"x.py": rm}) == {"x.py": 5}, "別名與 Path.unlink(p) 都數；領域方法 PL.unlink(conn, …) 不數"
+
+
+def test_recyclebin_own_purge_route_is_baselined_not_skipped():
+    routes = scan_routes(product_files())
+    key = "modules/recyclebin/api.py::bin_purge::DELETE /api/recycle-bin/{bin_id}"
+    assert routes.get(key) is False and _baseline()["routes"][key].startswith("exempt:")

@@ -132,8 +132,10 @@ def bin_delete_approved(body: dict = Body(...), authorization: str = Header(None
     """superadmin 專用『刪除已核可』：進暫存區（可還原），不是硬刪。要 `confirm:true` 且 `confirm_text` 等於單據編號（二次確認）。
     哪些單據／狀態可以走這個入口由各 adapter 的 `can_delete_approved` 決定（P0 沒有任何 adapter ⇒ 一律 404）。"""
     user = _sa(authorization)
-    et, eid = str(body.get("entity_type") or ""), str(body.get("entity_id") or "")
-    if body.get("confirm") is not True or str(body.get("confirm_text") or "") != eid or not eid:
+    et, eid = body.get("entity_type"), body.get("entity_id")
+    et, eid = (et if isinstance(et, str) else ""), (eid if isinstance(eid, str) else str(eid) if isinstance(eid, int) and not isinstance(eid, bool) else "")
+    ctext = body.get("confirm_text")
+    if body.get("confirm") is not True or not isinstance(ctext, str) or ctext != eid or not eid:
         raise HTTPException(422, "需要二次確認：confirm=true 並輸入單據編號（confirm_text）")
     if RB.get_adapter(et) is None:
         raise HTTPException(404, "沒有這種單據的暫存區 adapter")
@@ -141,7 +143,8 @@ def bin_delete_approved(body: dict = Body(...), authorization: str = Header(None
     try:
         try:
             with write_txn(conn):               # 讀快照前先拿寫鎖；區塊內任何例外 ⇒ rollback 並關連線
-                res = S.delete(conn, et, eid, user, str(body.get("reason") or ""), approved=True)
+                rsn = body.get("reason")
+                res = S.delete(conn, et, eid, user, rsn if isinstance(rsn, str) else "", approved=True)
                 conn.commit()
         except RB.BinError as e:
             raise _http(e)
