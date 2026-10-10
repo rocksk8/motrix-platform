@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+- **（併入）(next) — 2026-10-10（wip/t54-ab-quote-gaps）：報價存檔路徑的伺服器自有欄位不採用用戶端的值（獨立稽核 3 項確認）**
+  - `PUT /api/quotations/{no}`：`data.quoteNo` 一律以網址單號為準（原可被帶成別張單號）；`editHistory` 一律取資料庫現值再由伺服器追加（原可被偽造或清空）。
+  - `profit_guard.prepare()` 已精算／結案分支另沿用 `adminCost／charityDonation／totalIndirect／netProfit／netMarginPct` 現值（原只還原戳記，解鎖編輯可改寫利潤欄位）。
+  - 測試 `tests/test_quote_server_owned_fields_t54.py`。案件紀錄 PATCH 的狀態鎖（待審核／簽核中是否鎖合約與收款）為設計題，未改。
+
 ## 1.0.172 — 2026-10-10（wip/t52-ab-charity-quote）：公益捐款改『報價含稅 1%』（新基，預設關）＋精算頁可調管銷比率（僅最高管理者）（含稽核 05 修正；作者閘門修正）
 - **公益捐款基數**（使用者 2026-10-10）：新基 `charityBasis=total` ＝ `round_half_up(tot.total × 1%)`（報價含稅金額；不看直接毛利、虧損案照扣；下限 0 只設在含稅金額上）。只在新管銷口徑（formulaVer 2）生效，舊基（直接毛利 1%、虧損 0）逐位不變。唯一來源 `helpers/profit_rules.py`＋`static/profit-rules.js`（`charity(direct, total, basis)`、`quote_profit/settlement_profit` 加 `total`／`charity_basis`），黃金向量 +77 筆。
 - 設定：`charity_basis_mode`（direct｜total，預設 direct＝上線零行為變更）＋標記 `charity_migration_done`；有效條件＝overhead v2＋管銷標記＋公益標記＋mode total，缺一當 direct。`GET/PUT /api/overhead/settings` 增 `charityBasis/charityMode/charityMigrationDone`；切 total 要 `confirm:true` 且三條件俱備，切回 direct 刪標記，管銷退回 legacy 時公益基數一併強制退回 direct。

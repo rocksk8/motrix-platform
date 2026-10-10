@@ -1712,6 +1712,17 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     if _oh_row and expected_updated_at and _oh_row["updated_at"] and expected_updated_at != _oh_row["updated_at"]:
         raise HTTPException(409, "報價單已被其他人更新，請重新載入後再存")
     _oh_change = _PG.prepare(q, user, _oh_row, quote_no) if _oh_row else None
+    # 伺服器自有欄位不採用用戶端的值：單號以網址為準；編輯紀錄一律取資料庫現值（之後只由伺服器追加）
+    q["quoteNo"] = quote_no
+    if _oh_row:
+        try:
+            _db_hist = (json.loads(_oh_row["data_json"] or "{}") or {}).get("editHistory")
+        except (TypeError, ValueError):
+            _db_hist = None
+        if isinstance(_db_hist, list):
+            q["editHistory"] = _db_hist
+        else:
+            q.pop("editHistory", None)
     # 款項日期一律存 YYYY-MM-DD（「2026/09/01」等寫法否則會被報表歸月靜默漏掉）
     for _pi in (((q.get("caseRecord") or {}).get("payment") or {}).get("items") or []):
         if isinstance(_pi, dict):
