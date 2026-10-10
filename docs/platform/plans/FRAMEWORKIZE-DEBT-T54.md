@@ -146,3 +146,13 @@
 | CFG-139 | K16 | backend/core/menu.py:26 | 選單群組固定在 core/menu_l1.json，模組不可自開群組；項目 group/order/perm 來自各 module.json（管理員已可用 apply_layout 調整排版）（群組鍵固定；perm ∈ any/superadmin/[模組鍵]） | core/menu.py:139 apply_layout + routers/platform_menu.py:51（已可編輯排版）；modules_disabled 控制顯示 | P4 | none | open | |
 | CFG-140 | K16 | backend/modules/analytics/api/dashboard.py:842 | 儀表板活動動態每區塊最多列 40 筆（LIMIT 40（:858/882/900/926/949/978 同）） | none | P4 | none | open | |
 | CFG-141 | K16 | backend/routers/search.py:14 | 全域搜尋每類結果數（_LIMIT = 6） | none | P4 | none | open | |
+
+## 第 53 班回收桶列車新增的寫死值（b7 提供；預設皆＝今天的行為）
+
+| id | 群組 | 位置 | 寫死的內容 | 目標框架 | 優先 | 風險 | 狀態 | 負責人 |
+|---|---|---|---|---|---|---|---|---|
+| T53-01 | 回收桶 R | helpers/recycle_bin.py:39（訊息：recyclebin/api.py:157、jobs.py:63、service.py:33,303、recycle-bin.html:14,55,259） | 保存天數 RETENTION_DAYS=30（使用者裁示 D4「固定 30 天」早於框架優先規則） | 設定 `recyclebin.keep_days`，預設 30，上下限在登錄；訊息改讀設定 | P2 | ops | open | |
+| T53-02 | 回收桶 R | helpers/recycle_bin.py:40-41 | 快照大小上限 MAX_SNAPSHOT_BYTES 5 MB／管理者 50 MB | 設定 `recyclebin.max_snapshot_mb`（一般／管理者） | P3 | ops | open | |
+| T53-03 | 回收桶 R | recyclebin/service.py:63（依角色上限）、:106（`role != superadmin` 閘）、:328（通知名單 role='superadmin' AND active）；recyclebin/api.py:70（can_delete_approved 角色字串）；recyclebin/module.json:29（選單權限） | 角色字串決定誰能看／還原／清除／刪已核准、通知誰 | 權限矩陣能力 `recyclebin.view／restore／purge／delete_approved` ＋通知規則 | P2 | security | open（待 1d 權限矩陣） | |
+| T53-04 | 回收桶 R | case/recycle_adapter.py:136 EDITABLE、:418 DELETABLE、:250、:462 狀態元組；subcontract/recycle_adapter.py:111；payroll/recycle_adapter.py:21 _NOTICE_TYPES、:71 ('已付款',) | 各單據可編輯／可刪除的狀態名單、通知類型 | 單據型別狀態／規則定義（churn T1／T3） | P3 | ops | open | |
+| T53-05 | 薪資 | payroll/api/payslip_approval.py:310 | 通知名單 role='superadmin' | approval_policy 通知對象（audiences） | P3 | ops | open | |
