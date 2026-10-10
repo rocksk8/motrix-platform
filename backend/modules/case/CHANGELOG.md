@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-11（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S2）
+- `api/case_extra_expenses.py`：額外支出附件的件數／合計大小上限改讀設定中心（`uploads` 群組，`helpers.uploads.limits_for`）；預設值與原本的常數相同，部署後行為不變。
+
 ## 1.0.174 — 2026-10-10（wip/t53b-int；ab 稽核修正 r5）
 - `update_quotation`（PUT）：連線區段加 try/except，任何例外 rollback＋close（不帶寫鎖漏出）；材料申請在存檔中被刪後若後續失敗，由請求保險網搬回附件。
 - delete() 之後的步驟或 commit 失敗時，已搬進隔離區的附件搬回原處（報價單／額外支出／完工單刪除；報價單刪除端點另補連線不外漏）。

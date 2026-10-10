@@ -6,7 +6,6 @@
 ②設定中心頁面模板的靜態文字。判準：英文字母連續兩個以上的詞若不在白名單 ⇒ 紅燈（內部鍵、snake_case、camelCase、allow／forbid／in_bin 之類列舉字
 全部會被抓到）。⚠️ 守門只抓得到裸露的鍵與列舉字，措辭好不好懂要靠人看（MODULE-GUIDE §15 稽核者檢查表）。
 """
-import os
 import re
 
 import pytest
@@ -16,7 +15,6 @@ from helpers import settings_registry as R
 
 ALLOW = {"MOTRIX", "PDF", "MB", "GB", "KB", "OK", "Excel", "Word", "Google", "QR", "ID"}
 _WORD = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
-PAGE = os.path.join(os.path.dirname(__file__), "..", "..", "..", "frontend", "pages", "settings-center.html")
 
 
 def raw_words(text):
@@ -62,7 +60,8 @@ def test_every_field_has_plain_language_texts():
 
 
 def test_page_template_has_no_raw_words():
-    html = open(PAGE, encoding="utf-8").read()
+    from core import source_tree
+    html = source_tree.page_file("settings-center.html").read_text(encoding="utf-8")
     assert not raw_words(template_text(html)), raw_words(template_text(html))
 
 
