@@ -411,6 +411,7 @@
    "key": "subcontract",
    "name": "外包工班",
    "units": [
+    "mod:subcontract/recycle_adapter",
     "mod:subcontract/__init__",
     "mod:subcontract/gl_events",
     "mod:subcontract/attachments",
@@ -483,6 +484,7 @@
     "page:pages/cashier.html",
     "page:pages/payment-request-form.html",
     "page:pages/receivables.html",
+    "mod:arap/recycle_adapter",
     "mod:arap/__init__",
     "mod:arap/api/cashier",
     "mod:arap/api/invoice_vouchers",
@@ -625,6 +627,7 @@
    "name": "薪資獎金",
    "units": [
     "js:js/bonus.js",
+    "mod:payroll/recycle_adapter",
     "mod:payroll/__init__",
     "mod:payroll/gl_events",
     "mod:payroll/remit_link",

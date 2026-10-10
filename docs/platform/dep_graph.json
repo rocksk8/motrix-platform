@@ -22954,7 +22954,7 @@
     "mod:recyclebin/api",
     "mod:recyclebin/jobs"
    ],
-   "path": "backend/modules/recyclebin/migrations/0001_recycle_bin.py:13",
+   "path": "backend/modules/recyclebin/migrations/0001_recycle_bin.py:14",
    "readers": [
     "mod:recyclebin/api"
    ],
