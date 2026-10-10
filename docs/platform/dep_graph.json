@@ -12182,7 +12182,6 @@
     "helper:perm_text",
     "helper:settings",
     "plat:capabilities",
-    "plat:registry",
     "plat:txn"
    ],
    "kind": "mod",
