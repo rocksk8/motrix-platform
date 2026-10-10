@@ -338,11 +338,12 @@ def test_completion_note_number_is_not_reissued_while_in_the_bin(client, who):
     assert client.delete("/api/completion-notes/%s" % first, headers=su).status_code == 200
     cn = db.get_db()
     try:
-        plain = db.next_entity_code(cn, "completion_notes", "CN", code_col="note_no")
-        safe = db.next_entity_code(cn, "completion_notes", "CN", code_col="note_no", reserved=RA.reserved(cn, "completion_note"))
+        default = db.next_entity_code(cn, "completion_notes", "CN", code_col="note_no")
+        old = db.next_entity_code(cn, "completion_notes", "CN", code_col="note_no", reserved=set())
+        explicit = db.next_entity_code(cn, "completion_notes", "CN", code_col="note_no", reserved=RA.reserved(cn, "completion_note"))
     finally:
         cn.close()
-    assert plain == first and safe != first                       # 沒帶 reserved ⇒ 舊行為（重發）；帶了 ⇒ 跳過暫存區裡的號碼
+    assert old == first and default != first and explicit != first   # 預設就跳過暫存區裡的號碼；明確傳空集合＝舊行為（只給測試用）
     assert client.post("/api/recycle-bin/%d/restore" % _bin_rows()[0]["id"], headers=su).status_code == 200
 
 
@@ -399,3 +400,20 @@ def test_quotation_approved_delete_refuses_more_downstream_tables(client, who, t
     body = {"entity_type": "quotation", "entity_id": "MQ-RBC-044", "confirm": True, "confirm_text": "MQ-RBC-044"}
     r = client.post("/api/recycle-bin/delete-approved", headers=su, json=body)
     assert r.status_code in (400, 409) and label in r.text and _q("SELECT 1 FROM quotations WHERE quote_no='MQ-RBC-044'") != []
+
+
+def test_default_numbering_skips_the_bin_for_every_caller_including_arap(client):
+    """arap 的請款單／收款憑據（以及任何用 next_entity_code 的呼叫端）不用傳 reserved 也不重發暫存區裡的號碼。"""
+    month = db.datetime.now().strftime("%Y%m") if hasattr(db, "datetime") else __import__("datetime").datetime.now().strftime("%Y%m")
+    for table, prefix, col, et in (("payment_requests", "PR", "request_no", "payment_request"), ("invoice_vouchers", "IV", "voucher_no", "invoice_voucher")):
+        cn = db.get_db()
+        try:
+            first = db.next_entity_code(cn, table, prefix, code_col=col)
+            assert first == "%s-%s-001" % (prefix, month)
+            cn.execute("INSERT INTO recycle_bin (token, group_token, entity_type, entity_id, entity_label, deleted_by, deleted_at, purge_after, snapshot_json, restore_status)"
+                       " VALUES (?,?,?,?,?,?,?,?,?,?)", ("tok-" + et, "", et, first, first, "x", "2026-10-10T00:00:00", "2026-11-09", "{}", "in_bin"))
+            cn.commit()
+            assert db.next_entity_code(cn, table, prefix, code_col=col) == "%s-%s-002" % (prefix, month)       # 已刪那張的號碼不重發
+            assert db.next_entity_code(cn, table, prefix, code_col=col, reserved=set()) == first              # 明確傳空集合 ⇒ 舊行為（測試用）
+        finally:
+            cn.close()

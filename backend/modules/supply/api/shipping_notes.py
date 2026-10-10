@@ -305,7 +305,7 @@ def create_shipping_note(body: ShippingNoteIn, authorization: str = Header(None)
         raise HTTPException(404, "找不到關聯的報價單")
     customer_name = (body.customer_name or '').strip() or (q["customer_name"] or "")
     project_name  = (body.project_name or '').strip() or (q["project_name"] or "")
-    note_no = next_entity_code(conn, "shipping_notes", "DN", code_col="note_no", reserved=_RA.reserved(conn, "shipping_note"))
+    note_no = next_entity_code(conn, "shipping_notes", "DN", code_col="note_no")
     conn.execute(
         "INSERT INTO shipping_notes "
         "(note_no, quote_no, status, ship_date, customer_name, project_name, recipient, "
