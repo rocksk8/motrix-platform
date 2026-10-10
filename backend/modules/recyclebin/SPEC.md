@@ -22,10 +22,17 @@
 - **RBN10.** 永久刪除需要二次確認（`confirm=永久刪除`）；寫稽核 `recyclebin.purge_manual` 並通知其他最高管理者；隔離檔與快照一併刪除，只留墓碑。
 - **RBN11.** 隔離目錄只能被本模組的 `quarantine.py` 動檔案；目錄設定在暫存區有項目時不准改，且不可設在 uploads／backend／frontend 底下。
 
+- **RBN12.** 遮罩涵蓋『JSON 字串欄位』（`data_json`／`snapshot_json` 這類整份存成字串的欄位會被解開再遮罩，巢狀的 JSON 字串也是）、敏感鍵底下的整個值（含 dict／list）、與較寬的鍵名（account_no／acct_no／id_no／national_id／birthday／payee_account／credit_card／tel…）；`data:` 內嵌影像一律遮罩；壞掉的 adapter 工廠要留 log，不得靜默。
+- **RBN13.** 隔離目錄設定只收本機絕對路徑：拒絕網路路徑（UNC）、磁碟機根目錄、系統目錄（Windows／Program Files／ProgramData…）、以及等於／在／包含安裝目錄與 uploads 的位置；留空＝預設位置。
+- **RBN14.** 還原與清除先拿寫鎖、鎖內重讀狀態，且狀態更新用條件式 UPDATE 並檢查影響列數：連點兩次還原時第二次被擋下、不會把已還原的列翻成 `restore_failed`；已還原的不能永久刪除。
+- **RBN15.** 進暫存區失敗（資料列刪除或寫列失敗）而附件又搬不回原路徑時，隔離資料夾與檔案原封不動保留（不 rmtree），單據視為未刪除並回報；每日工作 reconcile 之後會再搬回。
+- **RBN16.** 永久清除要驗證隔離資料夾真的刪乾淨：刪不掉（檔案被占用）⇒ 這一筆維持在暫存區（快照與清單不清）、回 409、稽核 `recyclebin.purge_failed`；每日工作同樣不可把刪不掉的標成已清除。
+- **RBN17.** 隔離資料夾 `資源回收筒/` 在 `.gitignore` 內（隔離檔含個資，`git add -A` 不可帶走）；『刪除已核可』也通知其他最高管理者。
+
 ## 非目標
 
 - P0 不含任何單據 adapter、不改任何既有刪除端點（P1 由各擁有模組接入）；不做單據的『批次還原』；不做保存期設定。
 
 ## 測試
 
-`backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py`（以合成 adapter 驗 RBN2～RBN11）、`backend/tests/platform/test_recyclebin_guards_t53.py`（三道守門）。
+`backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py`（以合成 adapter 驗 RBN2～RBN11）、`test_recyclebin_hardening_t53.py`（RBN12～RBN17，稽核回歸題）、`backend/tests/platform/test_recyclebin_guards_t53.py`（三道守門）。

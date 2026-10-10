@@ -1,8 +1,9 @@
 # 刪除暫存區 更新紀錄
 
-## (next) — 2026-10-10（wip/t53-ab-recyclebin-p0）：頁面 e2e、『刪除已核可』入口改用 write_txn、隔離目錄預設從 UPLOADS_ROOT 推
+## (next) — 2026-10-10（wip/t53-ab-recyclebin-p0）：頁面 e2e、『刪除已核可』入口改用 write_txn、隔離目錄預設從 UPLOADS_ROOT 推；稽核 node-39 六個必修＋兩個建議
 - 『刪除已核可』端點的寫入交易改走 `core.txn.write_txn`（begin-only 守門）；隔離目錄預設＝uploads 的上一層「資源回收筒」（測試換 UPLOADS_ROOT 時自動跟著換，不寫真的安裝目錄）。
 - 頁面 `recycle-bin.html` 的 e2e（superadmin：列表、詳情遮罩、還原、永久刪除二次確認；一般管理員被平台權限頁擋下）。
+- 稽核 node-39 修正：①遮罩解開 JSON 字串欄位、敏感鍵整個值遮罩、鍵名放寬（`helpers/recycle_bin.mask_obj`）；②隔離目錄設定拒絕 UNC／磁碟機根目錄／系統目錄／包含或在安裝目錄與 uploads 內；③還原與清除拿寫鎖、鎖內重讀、條件式 UPDATE（連點第二次不翻狀態）；④刪除失敗又搬不回附件時保留隔離資料夾（不 rmtree）；⑤清除驗證資料夾真的刪乾淨，刪不掉維持暫存中並稽核 `recyclebin.purge_failed`；⑥`.gitignore` 加 `資源回收筒/`。建議：壞掉的 adapter 工廠記 log；『刪除已核可』通知其他最高管理者。
 
 ## 1.0.0 — 2026-10-10（wip/t53-ab-recyclebin-p0）：P0——模組骨架、隔離目錄、adapter 契約、每日清除、最高管理者 API 與頁面
 - 新模組 `recyclebin`（M15；使用者 D2 獨立模組）。表 `recycle_bin`（T1；`snapshot_json`／`files_manifest_json` 整欄為 F2，一般備份排除）。沒有 core schema 版本升級。

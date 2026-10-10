@@ -12,6 +12,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 
+from core.txn import begin_write
 from helpers import recycle_bin as RB
 from modules.recyclebin import quarantine as Q
 
@@ -70,7 +71,10 @@ def _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group_token, p
              sum(int(m.get("size") or 0) for m in manifest), sum(1 for m in manifest if m.get("state") == "moved"), S_IN_BIN))
         ad.delete_in_tx(conn, entity_id)
     except Exception:
-        Q.move_back(token, manifest)
+        _mapping, back_fails = Q.move_back(token, manifest)
+        if back_fails:                      # 搬不回原路徑（防毒鎖檔…）⇒ 資料夾與檔案原封不動留在隔離區，每日工作會再搬；回報給呼叫端，**不可刪掉**
+            logger.error("recyclebin: 單據 %s 刪除失敗後附件搬不回去，保留在隔離區 %s：%s", entity_id, token, back_fails)
+            raise RB.BinError("單據未刪除，但有 %d 個附件暫時搬不回原路徑（已保留在隔離區 %s，系統會自動再搬回）" % (len(back_fails), token))
         Q.remove(token)
         raise
     return {"bin_id": cur.lastrowid, "token": token, "entity_type": entity_type, "entity_id": str(entity_id),
@@ -168,30 +172,37 @@ def detail(conn, bin_id) -> dict:
 
 def restore(conn, bin_id, user) -> dict:
     """還原一筆。自己 commit。失敗 ⇒ 檔案搬回隔離區、資料列留在暫存區、狀態 restore_failed 並記原因；丟 BinError。"""
+    begin_write(conn)                       # 寫鎖＋鎖內重讀：連點兩次還原，第二個等第一個做完、重讀到 restored 就被擋下
     r = _row(conn, bin_id)
     if r["restore_status"] not in LIVE:
+        conn.rollback()
         raise RB.BinError("這一筆不在暫存區（狀態：%s）" % r["restore_status"])
     ad = RB.get_adapter(r["entity_type"])
     if ad is None:
+        conn.rollback()
         raise RB.BinError("adapter_missing: 『%s』的擁有模組未載入，無法還原" % r["entity_type"])
     if r["group_token"] and r["parent_type"]:                      # 子單據：父層還在暫存區 ⇒ 先還原父層
         p = conn.execute("SELECT id, entity_label FROM recycle_bin WHERE group_token=? AND entity_type=? AND entity_id=? AND restore_status IN (?,?)",
                          (r["group_token"], r["parent_type"], r["parent_id"], S_IN_BIN, S_FAILED)).fetchone()
         if p is not None:
+            conn.rollback()
             raise RB.BinError("parent_in_bin: 請先還原上層單據『%s』（暫存區 #%d）" % (p["entity_label"], p["id"]))
     snap = json.loads(r["snapshot_json"] or "{}")
     manifest = json.loads(r["files_manifest_json"] or "[]")
     mapping, fails = Q.move_back(r["token"], manifest)
     if fails:
         Q.stash_again(r["token"], mapping)
+        conn.rollback()
         _fail(conn, bin_id, "附件搬回失敗：" + "；".join("%s（%s）" % (f["rel"], f["why"]) for f in fails[:5]))
         raise RB.BinError("附件搬回失敗，已保留在暫存區：" + "；".join(f["rel"] for f in fails[:5]))
     ctx = RB.RestoreContext(files=mapping, user=user)
     now = _now().isoformat()
     try:
         res = ad.restore_in_tx(conn, snap, ctx) or {}
-        conn.execute("UPDATE recycle_bin SET restore_status=?, restored_by=?, restored_at=?, restore_note=? WHERE id=?",
-                     (S_RESTORED, (user or {}).get("username", ""), now, "；".join(res.get("notes") or [])[:500], bin_id))
+        cur = conn.execute("UPDATE recycle_bin SET restore_status=?, restored_by=?, restored_at=?, restore_note=? WHERE id=? AND restore_status IN (?,?)",
+                           (S_RESTORED, (user or {}).get("username", ""), now, "；".join(res.get("notes") or [])[:500], bin_id, S_IN_BIN, S_FAILED))
+        if cur.rowcount != 1:
+            raise RB.BinError("這一筆的狀態剛被改變，請重新整理後再試")
         conn.commit()
     except Exception as e:                                         # noqa: BLE001 — 任何失敗都要還原到『還在暫存區』
         conn.rollback()
@@ -207,18 +218,28 @@ def restore(conn, bin_id, user) -> dict:
 
 
 def _fail(conn, bin_id, note):
-    conn.execute("UPDATE recycle_bin SET restore_status=?, restore_note=? WHERE id=?", (S_FAILED, note[:500], bin_id))
+    """記『還原失敗』——只改還在暫存區的列（條件式）：不會把已還原／已清除的列翻成失敗（連點兩次還原的第二次）。"""
+    conn.execute("UPDATE recycle_bin SET restore_status=?, restore_note=? WHERE id=? AND restore_status IN (?,?)", (S_FAILED, note[:500], bin_id, S_IN_BIN, S_FAILED))
     conn.commit()
 
 
 def purge(conn, bin_id, by="system") -> dict:
     """永久刪除：隔離檔整個刪掉、快照清空，保留一列墓碑（狀態 purged）。自己 commit。"""
+    begin_write(conn)
     r = _row(conn, bin_id)
     if r["restore_status"] not in LIVE:
+        conn.rollback()
         raise RB.BinError("這一筆不在暫存區（狀態：%s）" % r["restore_status"])
-    Q.remove(r["token"])
-    conn.execute("UPDATE recycle_bin SET restore_status=?, snapshot_json='{}', files_manifest_json='[]', bytes=0, file_count=0, purged_at=?, purged_by=? WHERE id=?",
-                 (S_PURGED, _now().isoformat(), by, bin_id))
+    try:
+        Q.remove(r["token"])                # 驗證資料夾真的刪乾淨；刪不掉就丟 OSError，這一筆維持在暫存區（不標已清除、不清快照）
+    except OSError as e:
+        conn.rollback()
+        raise RB.BinError("purge_blocked: 隔離檔刪不乾淨，這一筆仍留在暫存區：%s" % e)
+    cur = conn.execute("UPDATE recycle_bin SET restore_status=?, snapshot_json='{}', files_manifest_json='[]', bytes=0, file_count=0, purged_at=?, purged_by=?"
+                       " WHERE id=? AND restore_status IN (?,?)", (S_PURGED, _now().isoformat(), by, bin_id, S_IN_BIN, S_FAILED))
+    if cur.rowcount != 1:
+        conn.rollback()
+        raise RB.BinError("這一筆的狀態剛被改變，請重新整理後再試")
     conn.commit()
     return _summary(_row(conn, bin_id))
 

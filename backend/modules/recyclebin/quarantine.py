@@ -114,12 +114,15 @@ def move_in(token: str, files: list) -> list:
                     ent["state"] = "missing"
             manifest.append(ent)
     except Exception:
+        stuck = []
         for src, dst in reversed(done):
             try:
                 _move(dst, src)
             except OSError:
+                stuck.append(dst)
                 logger.exception("暫存區搬移失敗後搬回也失敗：%s", dst)
-        _remove_tree(base)
+        if not stuck:                       # 全部都搬回去了才清掉資料夾；有搬不回的（防毒鎖檔…）⇒ 保留，每日工作 reconcile 會再搬回，絕不連檔案一起刪掉
+            _remove_tree(base)
         raise
     return manifest
 
@@ -181,16 +184,61 @@ def stash_again(token: str, mapping: dict) -> list:
 
 
 def _remove_tree(path: str) -> None:
+    """刪除一個隔離資料夾並**驗證它真的不見了**；刪不掉（檔案被占用）⇒ 丟 OSError（呼叫端不可以把這一筆標成已清除）。"""
     if not os.path.isdir(path):
         return
     if not _within(root_dir(), path) or os.path.normcase(os.path.realpath(path)) == os.path.normcase(os.path.realpath(root_dir())):
         raise ValueError("拒絕刪除隔離區以外的路徑：%s" % path)
-    shutil.rmtree(path, ignore_errors=True)
+
+    def _writable_retry(func, p, _exc):          # 唯讀檔：改權限再試一次
+        try:
+            os.chmod(p, 0o700)
+            func(p)
+        except OSError:
+            pass
+    shutil.rmtree(path, onerror=_writable_retry)
+    if os.path.exists(path):
+        raise OSError("隔離資料夾刪不掉（檔案可能被其他程式占用）：%s" % os.path.basename(path))
 
 
 def remove(token: str) -> None:
-    """永久刪除這一筆的隔離檔（整個資料夾）。"""
+    """永久刪除這一筆的隔離檔（整個資料夾）。刪不乾淨 ⇒ OSError。"""
     _remove_tree(bin_dir(token))
+
+
+def location_problem(d: str) -> str:
+    """隔離目錄設定值（非空）的位置規則；合格回 ""，否則回原因。
+    必須是本機磁碟的絕對路徑；不可以是網路路徑（UNC）、磁碟機根目錄、系統目錄，也不可以等於／在／包含安裝根目錄
+    （預設位置 `<uploads 的上一層>\資源回收筒` 是唯一在樹內的位置，用『留空』選它）。"""
+    d = str(d or "").strip()
+    if not os.path.isabs(d):
+        return "隔離目錄必須是絕對路徑"
+    if d.startswith("\\\\") or d.startswith("//"):
+        return "隔離目錄不可以是網路路徑（UNC）"
+    real = os.path.normcase(os.path.realpath(d))
+    drive, tail = os.path.splitdrive(real)
+    if tail.strip("\\/") == "":
+        return "隔離目錄不可以是磁碟機根目錄"
+    install = os.path.normcase(os.path.realpath(_install_root()))
+    if real == install or real.startswith(install + os.sep):
+        return "隔離目錄不可以在安裝目錄裡面（要放樹內請留空＝預設位置）"
+    if install.startswith(real + os.sep):
+        return "隔離目錄不可以包含安裝目錄"
+    for env in ("SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData"):
+        v = os.environ.get(env)
+        if v:
+            sysd = os.path.normcase(os.path.realpath(v))
+            if real == sysd or real.startswith(sysd + os.sep):
+                return "隔離目錄不可以在系統目錄（%s）底下" % os.path.basename(v)
+    for unix in ("/etc", "/usr", "/bin", "/sbin", "/lib", "/boot", "/proc", "/sys", "/dev", "/var/lib"):
+        if real == unix or real.startswith(unix + "/"):
+            return "隔離目錄不可以在系統目錄底下"
+    return ""
+
+
+def _install_root() -> str:
+    from core import paths
+    return paths.INSTALL_ROOT
 
 
 def used_bytes() -> tuple:

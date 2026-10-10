@@ -116,6 +116,7 @@ def bin_purge(bin_id: int, confirm: str = Query(""), authorization: str = Header
         try:
             res = S.purge(conn, bin_id, by=user["username"])
         except RB.BinError as e:
+            _audit(_tok(authorization), "recyclebin.purge_failed", "recycle_bin", str(bin_id), str(e)[:200], {"error": str(e)[:500]})
             raise _http(e)
         _audit(_tok(authorization), "recyclebin.purge_manual", "recycle_bin", str(bin_id), "%s %s" % (res["entityType"], res["entityId"]),
                {"entity_type": res["entityType"], "entity_id": res["entityId"], "deleted_at": res["deletedAt"]})
@@ -146,6 +147,8 @@ def bin_delete_approved(body: dict = Body(...), authorization: str = Header(None
             raise _http(e)
         _audit(_tok(authorization), "recyclebin.delete_approved", et, eid, "%s %s" % (et, eid),
                {"bin_id": res["bin_id"], "purge_after": res["purge_after"], "children": len(res["children"])})
+        _notify_superadmins(conn, user["username"], "recyclebin_delete_approved", res["bin_id"], "%s %s" % (et, eid),
+                            "%s 把已核可的單據 %s %s 送進了暫存區（30 天內可還原）" % (user.get("display_name") or user["username"], et, eid))
         return res
     finally:
         conn.close()
@@ -163,13 +166,14 @@ def bin_settings(body: dict = Body(...), authorization: str = Header(None)):
         if live:
             raise HTTPException(409, "暫存區還有 %d 筆項目，請先還原或清除後再改隔離目錄" % live)
         if d:
-            if not os.path.isabs(d):
-                raise HTTPException(422, "隔離目錄必須是絕對路徑")
-            norm = os.path.normcase(os.path.realpath(d))
-            for forbidden in (_paths.UPLOADS_ROOT, _paths.backend(), _paths.root("frontend")):
-                f = os.path.normcase(os.path.realpath(forbidden))
-                if norm == f or norm.startswith(f + os.sep):
-                    raise HTTPException(422, "隔離目錄不可在 uploads／backend／frontend 底下")
+            why = Q.location_problem(d)
+            if not why:
+                up = os.path.normcase(os.path.realpath(_paths.UPLOADS_ROOT))      # uploads 底下也不行（會被檔案服務／雲端鏡像碰到）；測試把 UPLOADS_ROOT 換掉時也要擋
+                nd = os.path.normcase(os.path.realpath(d))
+                if nd == up or nd.startswith(up + os.sep):
+                    why = "隔離目錄不可在 uploads 底下"
+            if why:
+                raise HTTPException(422, why)
             if not os.path.isdir(d):
                 if not os.path.isdir(os.path.dirname(d)):
                     raise HTTPException(422, "上一層資料夾不存在")

@@ -24,21 +24,50 @@
 - `impact`：『刪除已核可』入口的影響清單（已付款／已入獎金／已回簽…）；預設空。`can_delete_approved`：預設不支援（P1 各 adapter 實作）。
 - `mask`：列表／詳情用的遮罩副本（預設以欄位名稱規則遮罩帳號、身分證、電話、信箱、地址、影像）；還原一律用未遮罩原文。
 """
+import json as _json
+import logging
 import re
 from typing import Callable, Dict, List, Optional, Tuple
 
 from core import registry
+
+logger = logging.getLogger(__name__)
 
 CAP_ADAPTER = "recyclebin.adapter"
 CAP_DELETE = "recyclebin.delete"
 RETENTION_DAYS = 30                    # 使用者 D4：固定 30 天，不可設定
 MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024   # 單筆快照上限；超過 ⇒ 拒絕進暫存區（BinError），不悄悄硬刪
 
-#: 預設遮罩的欄位名稱（不分大小寫、駝峰／底線皆可）。看到 → 值換成 MASK；adapter 可覆寫 mask()。
+#: 預設遮罩的欄位名稱（不分大小寫、駝峰／底線皆可，**子字串比對**——寧可多遮，不可漏）。看到 → 整個值（含巢狀 dict／list）換成 MASK；adapter 可覆寫 mask()。
 _SENSITIVE = re.compile(
-    r"(bank_?account|account_?(number|name)|passbook|id_?number|id_?card|phone|mobile|tel$|email|address|line_?id|password|secret|token|"
-    r"signature|image|photo|iban|swift)", re.I)
+    r"(bank_?account|account|acct|passbook|id_?number|id_?no(?![a-z])|id_?card|national_?id|identity|birth|phone|mobile|telephone|tel_?(?:no|number)|(?:^|[_\W])tel(?:$|[_\W])|"
+    r"e?mail|address|line_?id|password|passwd|secret|token|signature|image|photo|iban|swift|credit_?card|card_?(?:no|number)|payee|salary|wage)", re.I)
 MASK = "＊＊＊"
+_MAX_JSON_DEPTH = 6
+
+
+class _Masker:
+    """遞迴遮罩：欄位名稱符合 `_SENSITIVE` ⇒ 整個值遮罩；**字串值若是 JSON（`{…}`／`[…]`）就解開再遮罩**（`data_json`／`snapshot_json` 這類欄位把整份資料存成字串，
+    承攬人員身分證、銀行帳號都在裡面）；`data:` 開頭的內嵌影像一律遮罩。解不開的字串原樣保留（它不是 JSON）。"""
+
+    def __call__(self, obj, key: str = "", depth: int = 0):
+        if key and _SENSITIVE.search(key) and obj not in (None, "", 0, False, [], {}):
+            return MASK
+        if isinstance(obj, dict):
+            return {k: self(v, str(k), depth) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [self(v, key, depth) for v in obj]
+        if isinstance(obj, str):
+            if obj.startswith("data:") and len(obj) > 40:
+                return MASK
+            st = obj.lstrip()
+            if depth < _MAX_JSON_DEPTH and st[:1] in ("{", "[") and st.rstrip()[-1:] in ("}", "]"):
+                try:
+                    inner = _json.loads(obj)
+                except ValueError:
+                    return obj
+                return _json.dumps(self(inner, "", depth + 1), ensure_ascii=False)
+        return obj
 
 
 class BinError(Exception):
@@ -98,14 +127,8 @@ class RestoreContext:
 
 
 def mask_obj(obj, _key: str = ""):
-    """遞迴遮罩：欄位名稱符合 `_SENSITIVE` 的非空值 ⇒ MASK。回新物件，不改原物件。"""
-    if isinstance(obj, dict):
-        return {k: mask_obj(v, str(k)) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [mask_obj(v, _key) for v in obj]
-    if _key and _SENSITIVE.search(_key) and obj not in (None, "", 0, False):
-        return MASK
-    return obj
+    """遮罩副本（不改原物件）。規則見 `_Masker`；adapter 預設的 `mask()` 就是它。"""
+    return _Masker()(obj, _key)
 
 
 def available() -> bool:
@@ -119,7 +142,8 @@ def adapters() -> Dict[str, Adapter]:
     for name, fn in registry.providers(CAP_ADAPTER).items():
         try:
             a = fn()
-        except Exception:                      # noqa: BLE001 — 一個壞掉的 adapter 不拖垮其他類型
+        except Exception:                      # noqa: BLE001 — 一個壞掉的 adapter 不拖垮其他類型，但要留下紀錄（不可靜默）
+            logger.exception("recyclebin adapter factory %r failed", name)
             continue
         out[getattr(a, "entity_type", None) or name] = a
     return out

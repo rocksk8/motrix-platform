@@ -49,9 +49,10 @@ def run_daily(now=None) -> dict:
                 _audit("", "recyclebin.purge_auto", "recycle_bin", str(bin_id), label,
                        {"entity_type": r["entity_type"], "entity_id": r["entity_id"], "deleted_at": r["deleted_at"], "purge_after": r["purge_after"]})
                 out["purged"] += 1
-            except Exception:                                    # noqa: BLE001
+            except Exception as e:                               # noqa: BLE001
                 out["failed"] += 1
                 logger.exception("recyclebin purge #%s failed", bin_id)
+                _audit("", "recyclebin.purge_failed", "recycle_bin", str(bin_id), str(e)[:200], {"error": str(e)[:500]})
         st = S.status(conn)
         out["overWarn"] = bool(st["overWarn"])
         if out["overWarn"]:
