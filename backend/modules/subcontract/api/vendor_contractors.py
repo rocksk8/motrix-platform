@@ -99,6 +99,8 @@ class DispatchIn(BaseModel):
 
 from modules.subcontract import bank_mask as _bm  # noqa: E402
 from modules.subcontract import dispatch_flow as _flow  # noqa: E402
+from modules.subcontract import recycle_adapter as _rb_adapter  # noqa: E402  第53班 P1：刪除暫存區 adapter
+from helpers import recycle_bin  # noqa: E402
 from core.txn import begin_write as _begin_write  # noqa: E402
 
 
@@ -716,32 +718,45 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
 
 @router.delete("/api/contractor-dispatches/{did}")
 def delete_dispatch(did: int, authorization: str = Header(None)):
+    """刪除派發＝送進刪除暫存區（30 天內最高管理者可還原，含附件與勞報單連結）。規則不變：審核中／已核准／已有匯款申請不可刪
+    （已核准的只有最高管理者能走暫存區的『刪除已核可』入口，`/api/recycle-bin/delete-approved`）。
+    暫存區模組不在 ⇒ 照舊刪資料列（附件留在原處）並在回應 notice 與稽核明說。"""
     user = _require_user(authorization)
     require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     if user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "需要管理員權限")
     conn = get_db()
-    row = conn.execute("SELECT quote_no FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
-    if not row:
+    try:
+        _begin_write(conn)
+        row = conn.execute("SELECT quote_no FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
+        if not row:
+            raise HTTPException(404, "派發紀錄不存在")
+        notice = ""
+        try:
+            res = recycle_bin.delete(conn, _rb_adapter.ET_DISPATCH, did, user)
+        except recycle_bin.BinError as e:
+            conn.rollback()
+            raise HTTPException(409, str(e))
+        if res is None:                                                      # 暫存區模組不在：照舊刪（不刪附件）並明說
+            ad = _rb_adapter.DispatchBinAdapter()
+            ok, why = ad.can_delete(conn, did, user)
+            if not ok:
+                raise HTTPException(409, why)
+            ad.delete_in_tx(conn, did)
+            notice = "刪除暫存區未啟用：此派發已永久刪除，無法還原"
+        conn.commit()
+    finally:
         conn.close()
-        raise HTTPException(404, "派發紀錄不存在")
-    voucher = conn.execute(
-        "SELECT voucher_no FROM contractor_payment_vouchers WHERE dispatch_id=? AND voided_at=''", (did,)
-    ).fetchone()
-    if voucher:
-        conn.close()
-        raise HTTPException(409, f"此派發已產生匯款申請（{voucher['voucher_no']}），請先處理該申請後再刪除")
-    st = conn.execute("SELECT approval_status, status FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
-    if st and st["approval_status"] in (_flow.PENDING, _flow.IN_PROGRESS, _flow.APPROVED):      # 審核中／已核准的派發不可刪（留下紀錄）：請改用「取消」
-        conn.close()
-        raise HTTPException(409, "審核中或已核准的派發不能刪除，請改用「取消」並填理由")
-    conn.execute("DELETE FROM contractor_dispatches WHERE id=?", (did,))
-    conn.commit()
-    conn.close()
-    _audit(_tok(authorization), 'vendor.dispatch.delete', 'contractor_dispatch', str(did), row["quote_no"])
+    _audit(_tok(authorization), 'vendor.dispatch.delete', 'contractor_dispatch', str(did), row["quote_no"],
+           {"bin": True, "binId": res["bin_id"], "purgeAfter": res["purge_after"]} if res else {"bin": False, "notice": notice})
     notify_module_activity("承攬商派發", "刪除", user.get("display_name") or user["username"],
                             row["quote_no"], "vendor-contractors.html")
-    return {"ok": True}
+    out = {"ok": True, "binned": bool(res)}
+    if res:
+        out.update(binId=res["bin_id"], purgeAfter=res["purge_after"])
+    else:
+        out["notice"] = notice
+    return out
 
 
 # ── 承攬商報價附件 ────────────────────────────────────────────────────────────

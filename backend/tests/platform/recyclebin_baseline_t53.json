@@ -201,14 +201,6 @@
    "count": 1,
    "reason": "p1: 勞報單連結（隨勞報單）"
   },
-  "modules/subcontract/api/contractor_vouchers.py::contractor_payment_vouchers": {
-   "count": 1,
-   "reason": "p1: 承攬商匯款申請"
-  },
-  "modules/subcontract/api/vendor_contractors.py::contractor_dispatches": {
-   "count": 1,
-   "reason": "p1: 承攬商派發"
-  },
   "modules/subcontract/api/vendor_contractors.py::vendor_contractors": {
    "count": 1,
    "reason": "p2: 其他業務資料（P2 評估）"
@@ -382,9 +374,7 @@
   "modules/payroll/api/payslip_links.py::remove_link::DELETE /api/payslips/{slip_no}/dispatch-links/{dispatch_id}": "p2: 其他業務資料（P2 評估）",
   "modules/payroll/api/payslips.py::delete_payslip::DELETE /api/payslips/{slip_no}": "p1: 勞報單",
   "modules/payroll/api/payslips.py::delete_signed_file::DELETE /api/payslips/{slip_no}/signed-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
-  "modules/subcontract/api/contractor_vouchers.py::delete_contractor_voucher::DELETE /api/contractor-vouchers/{voucher_no}": "p1: 承攬商匯款申請",
   "modules/subcontract/api/dispatch_payslip_links.py::remove_payslip_link::DELETE /api/contractor-dispatches/{did}/payslip-links/{slip_no}": "p2: 其他業務資料（P2 評估）",
-  "modules/subcontract/api/vendor_contractors.py::delete_dispatch::DELETE /api/contractor-dispatches/{did}": "p1: 承攬商派發",
   "modules/subcontract/api/vendor_contractors.py::delete_dispatch_file::DELETE /api/contractor-dispatches/{did}/files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/subcontract/api/vendor_contractors.py::delete_dispatch_invoice_file::DELETE /api/contractor-dispatches/{did}/invoice-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/subcontract/api/vendor_contractors.py::delete_vendor_contractor::DELETE /api/vendor-contractors/{vid}": "p2: 其他業務資料（P2 評估）",
