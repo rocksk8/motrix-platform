@@ -149,6 +149,7 @@
    "api_prefixes": [],
    "dynamic_sql": true,
    "imports": [
+    "helper:recycle_bin",
     "plat:migrations",
     "plat:paths",
     "plat:registry"
