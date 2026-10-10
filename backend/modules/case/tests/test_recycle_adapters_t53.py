@@ -286,6 +286,21 @@ def test_material_order_blocked_cases_keep_old_messages_and_approved_path(client
     assert _q("SELECT 1 FROM case_material_approvals") == []
 
 
+def test_approved_delete_and_restore_bump_updated_at_so_stale_forms_get_409(client, who):
+    su, _ = who
+    _material_case("MQ-RBC-033", "已核准")
+    _x("UPDATE quotations SET updated_at='2026-10-01T00:00:00' WHERE quote_no='MQ-RBC-033'")
+    body = {"entity_type": "material_order", "entity_id": "MQ-RBC-033|mo-1", "confirm": True, "confirm_text": "MQ-RBC-033|mo-1"}
+    assert client.post("/api/recycle-bin/delete-approved", headers=su, json=body).status_code == 200
+    after_delete = _q("SELECT updated_at FROM quotations WHERE quote_no='MQ-RBC-033'")[0]["updated_at"]
+    assert after_delete != "2026-10-01T00:00:00"
+    bid = _bin_rows()[0]["id"]
+    assert _bin_rows()[0]["file_count"] == 0                       # 材料申請列沒有附件要搬進隔離區
+    _x("UPDATE quotations SET updated_at='2026-10-01T00:00:00' WHERE quote_no='MQ-RBC-033'")
+    assert client.post("/api/recycle-bin/%d/restore" % bid, headers=su).status_code == 200
+    assert _q("SELECT updated_at FROM quotations WHERE quote_no='MQ-RBC-033'")[0]["updated_at"] != "2026-10-01T00:00:00"
+
+
 def test_legacy_material_order_without_approval_row_is_binned_too(client, who):
     from modules.case import material_guard as MG
     su, _ = who
