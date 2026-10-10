@@ -367,7 +367,7 @@ class QuotationAdapter(RB.Adapter):
                 seen.add(p)
                 files.append(p)
         return {"rows": rows, "files": _files(files), "label": "報價單 %s（%s）" % (qn, row.get("customer_name") or ""), "parent": None,
-                "meta": {"status": row.get("status") or "", "crm_unlink": "業務開發案件的轉建連結不會自動恢復"}}
+                "meta": {"status": row.get("status") or "", "crm_unlink": "業務開發案件的轉建連結不會自動恢復", "codes": [qn]}}
 
     def delete_in_tx(self, conn, entity_id) -> None:
         qn = str(entity_id)
@@ -387,8 +387,19 @@ class QuotationAdapter(RB.Adapter):
         rows = snap["rows"]
         q = rows["quotations"][0]
         qn = q["quote_no"]
+        notes = ["業務開發案件的轉建連結沒有自動恢復（若有，請到業務開發頁重新連結）"]
+        renumbered = False
         if self._row(conn, qn) is not None:
-            raise RB.BinError("conflict: 報價單號 %s 已被占用（請先處理現有那張）" % qn)
+            # 單號被占用：只有『草稿』可以改用新單號還原（還沒對外發出）；已核准／已成案的單號可能已寄給客戶或寫進別處，不改號、不覆蓋 ⇒ 衝突
+            if (q.get("status") or "") != "草稿":
+                raise RB.BinError("conflict: 報價單號 %s 已被占用，且這張不是草稿，不能改號還原（請先處理現有那張）" % qn)
+            new_qn = _next_quote_no(conn)
+            q = dict(q, quote_no=new_qn)
+            q["data_json"] = _renumber_json(q.get("data_json"), qn, new_qn)
+            for table in ("case_stages", "case_updates", "case_action_items"):
+                rows[table] = [dict(r, quote_no=new_qn) for r in rows.get(table, [])]
+            notes.insert(0, "原單號 %s 已被占用，這張草稿改用新單號 %s 還原" % (qn, new_qn))
+            qn, renumbered = new_qn, True
         _insert(conn, "quotations", _remap_json_cols(q, ctx, "signed_files_json", "data_json"), drop_id=_id_taken(conn, "quotations", q))
         idmap = {}
         for s in rows.get("case_stages", []):
@@ -401,8 +412,7 @@ class QuotationAdapter(RB.Adapter):
         for table in ("case_updates", "case_action_items"):
             for r in rows.get(table, []):
                 _insert(conn, table, _remap_json_cols(r, ctx, "files_json"), drop_id=_id_taken(conn, table, r))
-        return {"entity_id": qn, "renumbered": False,
-                "notes": ["業務開發案件的轉建連結沒有自動恢復（若有，請到業務開發頁重新連結）"]}
+        return {"entity_id": qn, "renumbered": renumbered, "notes": notes}
 
 
 # ── 材料申請（quotations.data_json 的 materialOrders 一列＋審核疊加列）─────────────────────────
@@ -528,6 +538,28 @@ class MaterialOrderAdapter(RB.Adapter):
         orders.append(_remap_paths(snap["order"], ctx))
         conn.execute("UPDATE quotations SET data_json=?, updated_at=? WHERE quote_no=?", (json.dumps(data, ensure_ascii=False), datetime.now().isoformat(), qn))
         return {"entity_id": "%s|%s" % (qn, iid), "renumbered": False, "notes": ["材料清單裡原本對應到它的項目，連結需到案件頁重新確認"]}
+
+
+def _renumber_json(raw, old, new):
+    """報價單 data_json 裡自帶的單號欄位跟著換（找得到才換；其餘內容不動）。"""
+    try:
+        d = json.loads(raw) if isinstance(raw, str) and raw else None
+    except ValueError:
+        return raw
+    if isinstance(d, dict) and d.get("quoteNo") == old:
+        d["quoteNo"] = new
+        return json.dumps(d, ensure_ascii=False)
+    return raw
+
+
+def _next_quote_no(conn) -> str:
+    """改號還原用：取下一個可用的報價單號並登記進 quote_seq（與建立報價單同一條規則；暫存區裡的號碼不重發）。"""
+    from modules.case.api.quotations import _peek_next_no
+    month = datetime.now().strftime("%Y%m")
+    conn.execute("INSERT INTO quote_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING", (month,))
+    qn = _peek_next_no(conn, month)
+    conn.execute("INSERT INTO quote_seq (month, seq) VALUES (?, ?) ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)", (month, int(qn.split("-")[-1])))
+    return qn
 
 
 def legacy_delete_quotation(conn, quote_no) -> None:

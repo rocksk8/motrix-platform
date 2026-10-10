@@ -724,7 +724,9 @@ def _peek_next_no(conn, month: str) -> str:
     row = conn.execute("SELECT seq FROM quote_seq WHERE month=?", (month,)).fetchone()
     next_seq = max(row["seq"] if row else 0, db_max) + 1
 
-    while conn.execute(
+    from modules.case.recycle_adapter import reserved as _reserved      # 第 53 班：暫存區裡的報價單號不重發（還原時才不會撞號）
+    taken = _reserved(conn, "quotation")
+    while (f"MQ-{month}-{next_seq:03d}" in taken) or conn.execute(
         "SELECT 1 FROM quotations WHERE quote_no=?", (f"MQ-{month}-{next_seq:03d}",)
     ).fetchone():
         next_seq += 1
@@ -1638,6 +1640,11 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
                     ") WHERE month = ?",
                     (f"MQ-{month}-???", month)
                 )
+                # 暫存區裡的報價單號不能被這次收回洗掉（它們不在 quotations 裡，重算會把序號壓回去 ⇒ 之後重發同一個號、還原就撞號）
+                from modules.case.recycle_adapter import reserved as _reserved
+                _held = [int(x.split("-")[-1]) for x in _reserved(_cleanup, "quotation") if x.startswith(f"MQ-{month}-") and len(x) == 13]
+                if _held:
+                    _cleanup.execute("UPDATE quote_seq SET seq = MAX(seq, ?) WHERE month = ?", (max(_held), month))
                 _cleanup.commit()
                 _cleanup.close()
                 logger.warning("create_quotation 送審失敗，已回收剛建立的 %s：%s", qno, e)

@@ -418,3 +418,70 @@ def test_default_numbering_skips_the_bin_for_every_caller_including_arap(client)
             assert db.next_entity_code(cn, table, prefix, code_col=col) == first
         finally:
             cn.close()
+
+
+# ── 審查補強：報價單號保留、草稿改號還原、還原不蓋掉並行修改 ───────────────────────────────────────
+def _month():
+    from datetime import datetime
+    return datetime.now().strftime("%Y%m")
+
+
+def test_quote_number_in_the_bin_is_never_reissued_even_if_quote_seq_was_pulled_back(client, who):
+    su, _ = who
+    qn = "MQ-%s-001" % _month()
+    _quote(qn)
+    _x("INSERT INTO quote_seq (month, seq) VALUES (?, 1) ON CONFLICT(month) DO UPDATE SET seq=1", (_month(),))
+    assert client.delete("/api/quotations/%s" % qn, headers=su).status_code == 200
+    _x("UPDATE quote_seq SET seq=0 WHERE month=?", (_month(),))              # 模擬『建立失敗收回』把序號壓回去
+    from modules.case.api.quotations import _peek_next_no
+    cn = db.get_db()
+    try:
+        assert _peek_next_no(cn, _month()) == "MQ-%s-002" % _month()
+    finally:
+        cn.close()
+
+
+def test_draft_quotation_restores_under_a_new_number_when_its_number_was_taken(client, who):
+    su, _ = who
+    qn = "MQ-%s-001" % _month()
+    _quote(qn)
+    _x("INSERT INTO case_stages (quote_no, label, sort_order, created_at, updated_at) VALUES (?,?,?,?,?)", (qn, "施工", 1, "2026-10-01", "2026-10-01"))
+    assert client.delete("/api/quotations/%s" % qn, headers=su).status_code == 200
+    _quote(qn, customer="另一位客戶")                                         # 有人（例如客戶端自帶單號）占用了同一個號碼
+    bid = _bin_rows()[0]["id"]
+    r = client.post("/api/recycle-bin/%d/restore" % bid, headers=su)
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["renumbered"] is True and j["restoredEntityId"] != qn and "新單號" in " ".join(j["notes"])
+    new = j["restoredEntityId"]
+    assert _q("SELECT customer_name FROM quotations WHERE quote_no=?", (qn,))[0]["customer_name"] == "另一位客戶", "不覆蓋現有那張"
+    assert _q("SELECT customer_name FROM quotations WHERE quote_no=?", (new,))[0]["customer_name"] == "暫存客戶"
+    assert [r["label"] for r in _q("SELECT label FROM case_stages WHERE quote_no=?", (new,))] == ["施工"]
+
+
+def test_non_draft_quotation_never_renumbers_on_restore(client, who):
+    su, _ = who
+    qn = "MQ-%s-005" % _month()
+    _quote(qn, status="已核准")
+    body = {"entity_type": "quotation", "entity_id": qn, "confirm": True, "confirm_text": qn}
+    assert client.post("/api/recycle-bin/delete-approved", headers=su, json=body).status_code == 200
+    _quote(qn, status="已核准", customer="占用者")
+    r = client.post("/api/recycle-bin/%d/restore" % _bin_rows()[0]["id"], headers=su)
+    assert r.status_code in (400, 409) and "不是草稿" in r.text
+    assert _q("SELECT customer_name FROM quotations WHERE quote_no=?", (qn,))[0]["customer_name"] == "占用者"
+
+
+def test_material_order_restore_keeps_edits_made_to_the_quotation_json_meanwhile(client, who):
+    su, _ = who
+    order = _material_case("MQ-RBC-050", "已核准")
+    body = {"entity_type": "material_order", "entity_id": "MQ-RBC-050|mo-1", "confirm": True, "confirm_text": "MQ-RBC-050|mo-1"}
+    assert client.post("/api/recycle-bin/delete-approved", headers=su, json=body).status_code == 200
+    d = json.loads(_q("SELECT data_json FROM quotations WHERE quote_no='MQ-RBC-050'")[0]["data_json"])
+    d["caseRecord"]["note"] = "刪除之後別人改過的備註"
+    d["caseRecord"]["materials"].append({"id": "m2", "name": "新增的材料"})
+    _x("UPDATE quotations SET data_json=?, updated_at='2026-10-01T00:00:00' WHERE quote_no='MQ-RBC-050'", (json.dumps(d, ensure_ascii=False),))
+    assert client.post("/api/recycle-bin/%d/restore" % _bin_rows()[0]["id"], headers=su).status_code == 200
+    got = json.loads(_q("SELECT data_json FROM quotations WHERE quote_no='MQ-RBC-050'")[0]["data_json"])["caseRecord"]
+    assert got["note"] == "刪除之後別人改過的備註" and any(m["id"] == "m2" for m in got["materials"]), "還原不能蓋掉並行修改"
+    assert got["materialOrders"] == [order]
+    assert _q("SELECT updated_at FROM quotations WHERE quote_no='MQ-RBC-050'")[0]["updated_at"] != "2026-10-01T00:00:00"

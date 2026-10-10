@@ -23,3 +23,13 @@
 - 其他 p1 項目（收款憑據、請款單、勞報單、承攬商派發／匯款申請）不在本班範圍。
 - `material_payment.py::case_material_payment_lines`（匯款明細隨匯款申請）仍 p2：材料申請有匯款申請紀錄時一律拒刪，所以不會被連帶刪。
 - 『以新單號還原』、跨類型 group 還原（派發隨報價單）留給之後。
+
+## 審查補充（PM 獨立審查，2026-10-10）
+**(2) 報價單號與『改號還原』**
+- 報價單號由 `quote_seq`（每月單調遞增，建立時登記）產生，刪除不會讓它倒退——**但**『建立送審失敗的自我修復』會依 `quotations` 現存列重算並壓低序號；暫存區裡的報價單不在 `quotations`，會被這個重算漏掉 ⇒ 之後可能重發同一個號。已修：`_peek_next_no` 與該收回路徑都向 `RB.reserved_ids`（暫存區保留號，快照 `meta.codes` 含報價單號）取值並跳過／不低於。
+- 還原時單號被占用（例如客戶端自帶單號）：**草稿**改用新單號還原（`renumbered:true`，附屬資料與 JSON 內的 `quoteNo` 一併改，回應備註『原單號 X 已被占用，改用新單號 Y』）；**非草稿**（已核准／已成案）單號可能已寄出或寫進別處 ⇒ **不改號**，維持 `conflict`（先處理現有那張）。
+**(3) 還原與既有守門／並行修改**
+- 還原**不重跑**欄位政策（field policy）與 `material_guard`：還原的是『刪除當下本來就合法』的資料，原封放回；還原只做結構檢查（單號／主鍵衝突、父層是否存在、附件搬回）。這是刻意的，也是『還原後資料可能與當下規則不一致』的已知取捨——要重新送審或修改仍照現行規則。
+- 並行修改：還原在 recyclebin 的寫鎖內進行，材料申請還原是『讀目前的報價單 JSON → 放回那一列 → 寫回』並 **bump `updated_at`**（舊畫面的 `_expectedUpdatedAt` 之後會 409）；不會用快照蓋掉刪除後別人改過的其他欄位。守門題：`test_material_order_restore_keeps_edits_made_to_the_quotation_json_meanwhile`、`test_approved_delete_and_restore_bump_updated_at_so_stale_forms_get_409`。
+**(1)(4)(5)**（T52 設計標記 superseded、recyclebin 的設定項與不可委派能力、備份仍含已清除資料的隱私說明）屬 P0 設計文件（ab 的分支），本分支未改。
+
