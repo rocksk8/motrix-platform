@@ -67,48 +67,42 @@ a{color:inherit;text-decoration:none}
 .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-light)}
 .search-wrap kbd{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);border:1px solid var(--border-light);border-radius:4px;padding:1px 5px;background:var(--surface-sunken)}
 
-/* 狀態列（比照 kpi-grid / kpi-card）*/
-.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin:14px 0 22px}
-.kpi-card{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 18px;display:block}
-.kpi-card:hover{box-shadow:var(--shadow-sm);border-color:var(--text-dim)}
-.kpi-card__lbl{font-size:10px;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px}
-.kpi-card__val{font-size:19px;font-weight:700;line-height:1.15}
-.kpi-card__hint{font-size:11px;color:var(--text-secondary);margin-top:5px}
-.tone-ok{color:var(--success)} .tone-warn{color:var(--warning)} .tone-bad{color:var(--danger)}
-
-/* 最近使用 */
-.recent{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 22px;font-size:12px;color:var(--text-secondary)}
-.chip{display:inline-flex;gap:6px;align-items:center;padding:4px 11px;border:1px solid var(--border-light);border-radius:999px;background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-primary)}
-.chip:hover{border-color:var(--accent);color:var(--accent)}
-
-/* 區塊標題（官網 v4 的 28×3 紅色標記）*/
-.sec{margin:0 0 26px}
-.sec-title{display:flex;align-items:baseline;gap:10px;margin:0 0 4px;font-size:16px;font-weight:700}
-.sec-title::before{content:"";width:28px;height:3px;background:var(--accent);align-self:center}
-.sec-title small{font-weight:400;font-size:12px;color:var(--text-secondary)}
-.sec-sub{font-size:12px;color:var(--text-secondary);margin:0 0 10px 38px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
-
-/* 卡片：標題、一行說明、即時狀態徽章、深連結 */
-.card{position:relative;display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 16px 12px;min-height:112px;transition:border-color .12s, box-shadow .12s}
-.card:hover{border-color:var(--accent);box-shadow:var(--shadow)}
-.card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.card__top{display:flex;align-items:flex-start;gap:10px}
-.card__ico{flex:0 0 32px;height:32px;border-radius:8px;background:var(--surface-sunken);color:var(--text-secondary);display:grid;place-items:center}
-.card__ico svg{width:17px;height:17px}
-.card__title{font-size:14px;font-weight:700;line-height:1.3}
-.card__desc{font-size:12px;color:var(--text-secondary)}
-.card__foot{margin-top:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding-top:6px;font-size:10.5px;color:var(--text-dim)}
-.tag{padding:1px 7px;border-radius:999px;background:var(--surface-sunken);border:1px solid var(--border-light)}
-.badge{margin-left:auto;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;border:1px solid transparent}
+/* 兩欄：左＝8 個大分組（含權限過濾後的項數、有待處理時琥珀點），右＝所選分組的細項列 */
+.hub{display:grid;grid-template-columns:240px minmax(0,1fr);gap:24px;align-items:start;margin-top:14px}
+.groups{position:sticky;top:56px;display:flex;flex-direction:column;gap:2px;padding:6px;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg)}
+.grp{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:9px 11px;border:0;border-left:3px solid transparent;border-radius:var(--radius);background:transparent;color:var(--text-primary);font-size:13.5px;cursor:pointer}
+.grp:hover{background:var(--surface-sunken)}
+.grp[aria-selected="true"]{background:var(--accent-light);border-left-color:var(--accent);color:var(--accent);font-weight:700}
+.grp:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.grp .cnt{margin-left:auto;font-size:11px;color:var(--text-dim);font-weight:600}
+.grp[aria-selected="true"] .cnt{color:var(--accent)}
+.grp .dot{width:8px;height:8px;border-radius:50%;background:var(--warning);flex:0 0 8px}
+.grp.is-empty{display:none}
+.pane-head{display:flex;align-items:baseline;gap:10px;margin:0 0 2px}
+.pane-head h2{margin:0;font-size:18px;font-weight:700;display:flex;gap:10px;align-items:center}
+.pane-head h2::before{content:"";width:28px;height:3px;background:var(--accent)}
+.pane-sub{font-size:12px;color:var(--text-secondary);margin:0 0 12px 38px}
+.rows{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-light);color:inherit}
+.row:first-child{border-top:0}
+a.row:hover{background:var(--surface-sunken)}
+a.row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.row__ico{flex:0 0 32px;height:32px;border-radius:8px;background:var(--surface-sunken);color:var(--text-secondary);display:grid;place-items:center}
+.row__ico svg{width:17px;height:17px}
+.row__main{min-width:0;flex:1}
+.row__title{font-size:14px;font-weight:700;line-height:1.3}
+.row__desc{font-size:12px;color:var(--text-secondary);margin-top:1px}
+.row__why{font-size:11px;color:var(--danger);margin-top:1px}
+.row__go{color:var(--text-dim);flex:0 0 auto}
+.row.is-denied{opacity:.62;background:var(--surface-sunken);cursor:not-allowed}
+.row__grp{font-size:10.5px;color:var(--text-dim);margin-top:2px}
+.tag{padding:1px 7px;border-radius:999px;background:var(--surface-sunken);border:1px solid var(--border-light);font-size:10.5px;color:var(--text-dim)}
+.badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;border:1px solid transparent;flex:0 0 auto}
 .badge.ok{background:var(--success-light);color:var(--success);border-color:var(--success-border)}
 .badge.warn{background:var(--warning-light);color:var(--warning);border-color:var(--warning-border)}
 .badge.bad{background:var(--danger-light);color:var(--danger);border-color:var(--danger-border)}
 .badge.info{background:var(--info-light);color:var(--info);border-color:var(--info-border)}
 .badge.plan{background:var(--surface-sunken);color:var(--text-secondary);border-color:var(--border-light);font-weight:600}
-.card.is-denied{opacity:.62;background:var(--surface-sunken);border-style:dashed;cursor:not-allowed}
-.card.is-denied:hover{border-color:var(--border-light);box-shadow:none}
-.card .why{font-size:11px;color:var(--danger)}
 mark{background:var(--accent-light);color:var(--accent);padding:0 1px;border-radius:2px}
 .empty{padding:40px 10px;text-align:center;color:var(--text-secondary);border:1px dashed var(--border-light);border-radius:var(--radius-lg)}
 .note{margin-top:30px;padding:14px 16px;border:1px solid var(--info-border);background:var(--info-light);color:var(--info);border-radius:var(--radius-lg);font-size:12px}
@@ -117,11 +111,14 @@ mark{background:var(--accent-light);color:var(--accent);padding:0 1px;border-rad
   .page-main{padding:18px 16px 56px}
   .hub-head h1{font-size:22px}
   .search-wrap{flex-basis:100%;max-width:none;margin-left:0}
-  .grid{grid-template-columns:1fr}
-  .kpi-grid{grid-template-columns:1fr 1fr}
+  .hub{grid-template-columns:1fr;gap:14px}
+  .groups{position:static;flex-direction:row;overflow-x:auto;padding:4px;gap:4px;scrollbar-width:thin}
+  .grp{width:auto;flex:0 0 auto;white-space:nowrap;border-left:0;border-bottom:3px solid transparent}
+  .grp[aria-selected="true"]{border-bottom-color:var(--accent)}
+  .pane-sub{margin-left:0}
   .mock-ctl{font-size:11px;gap:8px}
 }
-@media (prefers-reduced-motion:reduce){.card{transition:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
@@ -136,7 +133,7 @@ mark{background:var(--accent-light);color:var(--accent);padding:0 1px;border-rad
   </select></label>
   <label><input type="checkbox" id="showDenied"> 顯示未授權項目（灰階＋原因）</label>
   <button id="theme" type="button">切換深／淺色</button>
-  <span style="opacity:.7">示意資料；卡片來自『註冊表』，不是寫死在這一頁。</span>
+  <span style="opacity:.7">示意資料；項目來自『註冊表』，左欄分組與項數也由註冊表算出（依權限）。</span>
 </div>
 
 <header class="topbar"><span class="logo">MOTRIX</span><span class="sp"></span><span class="who" id="who">王小明・最高管理者</span></header>
@@ -153,15 +150,14 @@ mark{background:var(--accent-light);color:var(--accent);padding:0 1px;border-rad
   </div>
   <div class="sub" data-testid="hub-subtitle">管理用・帳號、流程、通知、資料與稽核都從這裡進去；你看得到的項目依權限顯示</div>
 
-  <section class="kpi-grid" id="kpis" aria-label="系統狀態摘要"></section>
-
-  <div class="recent" id="recent" aria-label="最近使用"></div>
-
-  <div id="sections"></div>
+  <div class="hub">
+    <nav class="groups" id="groups" role="tablist" aria-orientation="vertical" aria-label="系統分組"></nav>
+    <section id="pane" aria-live="polite"></section>
+  </div>
 
   <div class="note">
-    <b>給評審的說明</b>：每張卡片＝一筆『系統卡片註冊』（各模組在 <code>module.json</code> 加性宣告：標題、說明、深連結、所需權限、所屬區塊、搜尋關鍵字），即時狀態徽章由該模組的選用提供者回傳（逾時或失敗＝不顯示徽章、不影響卡片）。
-    新模組或新設定頁只要宣告一筆卡片就會出現在這裡，不必改本頁。舊網址全部照舊可用；點進去的頁面頂端會多一條『← 系統』麵包屑。
+    <b>給評審的說明</b>：每一列＝一筆『系統卡片註冊』（各模組在 <code>module.json</code> 加性宣告：標題、說明、深連結、所需權限、所屬區塊、搜尋關鍵字），即時狀態徽章由該模組的選用提供者回傳（逾時或失敗＝不顯示徽章、不影響卡片）。
+    新模組或新設定頁只要宣告一筆就會出現在這裡，不必改本頁。舊網址全部照舊可用；點進去的頁面頂端會多一條『← 系統』麵包屑。
   </div>
 </main>
 
@@ -231,12 +227,6 @@ var CARDS=[
   {id:'ver',sec:'status',ico:'ver',title:'版本紀錄',desc:'目前版本與各模組更新紀錄',href:'module-versions.html',perm:['module_versions'],mod:'core',kw:'版本 更新 紀錄',badge:{t:'第 52 班',tone:'info'}},
   {id:'schema',sec:'status',ico:'ver',title:'Schema 狀態',desc:'資料庫結構版本與各模組遷移是否完成',href:'schema-status.html',perm:'superadmin',mod:'core',kw:'資料庫 schema 遷移',badge:{t:'全部最新',tone:'ok'}}
 ];
-var KPIS=[
-  {id:'backup',lbl:'最近備份',val:'今天 03:12',hint:'已上傳雲端・保留 30 份',tone:'ok',href:'company-profile-settings.html#backup',perm:'superadmin'},
-  {id:'grants',lbl:'待核權限申請',val:'2 項',hint:'來自 權限設定',tone:'warn',href:'permission-matrix.html',perm:'superadmin'},
-  {id:'bin',lbl:'資源回收筒',val:'12 筆',hint:'3 筆將在 7 天內永久清除',tone:'warn',href:'recycle-bin.html',perm:'superadmin'},
-  {id:'sys',lbl:'系統狀態',val:'正常',hint:'第 52 班・Schema 全部最新',tone:'ok',href:'schema-status.html',perm:'superadmin'}
-];
 var ROLES={
   superadmin:{label:'最高管理者',mods:null},
   admin:{label:'管理員',mods:['audit_log','module_versions','file_center']},
@@ -258,68 +248,100 @@ function hl(text,q){
   var i=text.toLowerCase().indexOf(q); if(i<0) return t;
   return esc(text.slice(0,i))+'<mark>'+esc(text.slice(i,i+q.length))+'</mark>'+esc(text.slice(i+q.length));
 }
-var RECENT_KEY='motrix_system_hub_recent';
-function getRecent(){ try{return JSON.parse(localStorage.getItem(RECENT_KEY)||'[]')}catch(e){return []} }
-function pushRecent(id){ try{var a=getRecent().filter(function(x){return x!==id});a.unshift(id);localStorage.setItem(RECENT_KEY,JSON.stringify(a.slice(0,5)))}catch(e){} }
 
+var SECBY={}; SECTIONS.forEach(function(x){SECBY[x.key]=x});
+var curGroup='identity';
+function curRole(){return document.getElementById('role').value}
+function visibleIn(sec,role,showDenied){
+  return CARDS.filter(function(c){return c.sec===sec && (allowed(role,c.perm)||showDenied)});
+}
+function toneClass(t){return t==='warn'?'warn':t==='ok'?'ok':t==='plan'?'plan':t==='bad'?'bad':'info'}
+function rowHtml(c,role,q,withGroup){
+  var ok=allowed(role,c.perm);
+  var b=c.badge?'<span class="badge '+toneClass(c.badge.tone)+'">'+esc(c.badge.t)+'</span>':'';
+  var inner='<span class="row__ico">'+ICONS[c.ico]+'</span>'
+    +'<span class="row__main"><div class="row__title">'+hl(c.title,q)+(c.planned?' <span class="tag">規劃中</span>':'')+'</div>'
+    +'<div class="row__desc">'+hl(c.desc,q)+'</div>'
+    +(ok?'':'<div class="row__why">🔒 '+esc(why(c.perm))+'</div>')
+    +(withGroup?'<div class="row__grp">'+esc(SECBY[c.sec].title)+' ・ '+esc(c.mod)+'</div>':'')
+    +'</span>'+(ok?b:'')+(ok?'<svg class="row__go" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>':'');
+  return ok?'<a class="row" href="#'+c.id+'" data-open="'+c.id+'" title="'+esc(c.href)+'">'+inner+'</a>'
+           :'<div class="row is-denied" aria-disabled="true" title="'+esc(why(c.perm))+'">'+inner+'</div>';
+}
 function render(){
-  var role=document.getElementById('role').value;
-  var showDenied=document.getElementById('showDenied').checked;
+  var role=curRole(), showDenied=document.getElementById('showDenied').checked;
   var q=document.getElementById('q').value.trim().toLowerCase();
   document.getElementById('who').textContent='王小明・'+ROLES[role].label;
 
-  // 狀態列：只放使用者有權限的
-  var k=KPIS.filter(function(x){return allowed(role,x.perm)});
-  document.getElementById('kpis').innerHTML=k.map(function(x){
-    return '<a class="kpi-card" href="#'+x.id+'"><div class="kpi-card__lbl">'+esc(x.lbl)+'</div><div class="kpi-card__val tone-'+x.tone+'">'+esc(x.val)+'</div><div class="kpi-card__hint">'+esc(x.hint)+'</div></a>';
-  }).join('');
-  document.getElementById('kpis').style.display=k.length?'':'none';
-
-  // 最近使用
-  var byId={}; CARDS.forEach(function(c){byId[c.id]=c});
-  var rc=getRecent().map(function(id){return byId[id]}).filter(function(c){return c&&allowed(role,c.perm)});
-  var rEl=document.getElementById('recent');
-  rEl.style.display=rc.length?'':'none';
-  rEl.innerHTML=rc.length?('<span>最近使用：</span>'+rc.map(function(c){return '<a class="chip" href="#'+c.id+'" data-open="'+c.id+'">'+esc(c.title)+'</a>'}).join('')):'';
-
-  // 區塊與卡片
-  var html='';
+  // 左欄：分組（項數＝這個使用者可見的項目；有 warn 徽章 ⇒ 琥珀點）
+  var firstVisible=null, gh='';
   SECTIONS.forEach(function(s){
-    var list=CARDS.filter(function(c){
-      if(c.sec!==s.key) return false;
-      var ok=allowed(role,c.perm);
-      if(!ok && !showDenied) return false;
-      if(q){ var hay=(c.title+' '+c.desc+' '+c.kw+' '+c.mod).toLowerCase(); if(hay.indexOf(q)<0) return false; }
-      return true;
-    });
-    if(!list.length) return;
-    html+='<section class="sec" aria-labelledby="s-'+s.key+'"><h2 class="sec-title" id="s-'+s.key+'">'+esc(s.title)+' <small>'+list.length+' 項</small></h2><div class="sec-sub">'+esc(s.sub)+'</div><div class="grid">';
-    list.forEach(function(c){
-      var ok=allowed(role,c.perm);
-      var b=c.badge?'<span class="badge '+(c.badge.tone==='warn'?'warn':c.badge.tone==='ok'?'ok':c.badge.tone==='plan'?'plan':c.badge.tone==='bad'?'bad':'info')+'">'+esc(c.badge.t)+'</span>':'';
-      html+=(ok?'<a class="card" href="#'+c.id+'" data-open="'+c.id+'">':'<div class="card is-denied" aria-disabled="true" title="'+esc(why(c.perm))+'">')
-        +'<div class="card__top"><span class="card__ico">'+ICONS[c.ico]+'</span><div style="min-width:0"><div class="card__title">'+hl(c.title,q)+'</div></div>'+(ok?b:'')+'</div>'
-        +'<div class="card__desc">'+hl(c.desc,q)+'</div>'
-        +(ok?'':'<div class="why">🔒 '+esc(why(c.perm))+'</div>')
-        +'<div class="card__foot"><span class="tag">'+esc(c.mod)+'</span>'+(c.planned?'<span class="tag">規劃中</span>':'')+'<span>→ '+esc(c.href)+'</span></div>'
-        +(ok?'</a>':'</div>');
-    });
-    html+='</div></section>';
+    var list=visibleIn(s.key,role,showDenied);
+    if(list.length&&!firstVisible) firstVisible=s.key;
   });
-  document.getElementById('sections').innerHTML=html||'<div class="empty">'+(q?'沒有符合「'+esc(q)+'」的項目。試試別的關鍵字，或確認你有該功能的權限。':'你目前沒有可用的系統功能。')+'</div>';
+  if(!visibleIn(curGroup,role,showDenied).length && firstVisible) curGroup=firstVisible;
+  SECTIONS.forEach(function(s){
+    var list=visibleIn(s.key,role,showDenied);
+    var pending=list.some(function(c){return allowed(role,c.perm)&&c.badge&&c.badge.tone==='warn'});
+    var on=(s.key===curGroup&&!q);
+    gh+='<button type="button" class="grp'+(list.length?'':' is-empty')+'" role="tab" id="g-'+s.key+'" data-g="'+s.key+'" aria-selected="'+on+'" tabindex="'+(s.key===curGroup?'0':'-1')+'">'
+      +'<span>'+esc(s.title)+'</span>'+(pending?'<i class="dot" role="status" aria-label="有待處理項目" title="有待處理項目"></i>':'')+'<span class="cnt">'+list.length+'</span></button>';
+  });
+  document.getElementById('groups').innerHTML=gh;
+
+  // 右欄：搜尋時＝跨分組結果（每列標示所屬分組）；否則＝所選分組的細項列
+  var html='';
+  if(q){
+    var res=CARDS.filter(function(c){
+      if(!(allowed(role,c.perm)||showDenied)) return false;
+      return (c.title+' '+c.desc+' '+c.kw+' '+c.mod).toLowerCase().indexOf(q)>-1;
+    });
+    html='<div class="pane-head"><h2>搜尋結果</h2><small style="color:var(--text-secondary)">'+res.length+' 項</small></div><div class="pane-sub">跨所有分組；清空搜尋回到分組檢視</div>'
+      +(res.length?'<div class="rows">'+res.map(function(c){return rowHtml(c,role,q,true)}).join('')+'</div>'
+        :'<div class="empty">沒有符合「'+esc(q)+'」的項目。試試別的關鍵字，或確認你有該功能的權限。</div>');
+  } else {
+    var s=SECBY[curGroup], list=visibleIn(curGroup,role,showDenied);
+    html=list.length?('<div class="pane-head"><h2>'+esc(s.title)+'</h2><small style="color:var(--text-secondary)">'+list.length+' 項</small></div><div class="pane-sub">'+esc(s.sub)+'</div>'
+      +'<div class="rows">'+list.map(function(c){return rowHtml(c,role,"",false)}).join('')+'</div>')
+      :'<div class="empty">你目前沒有可用的系統功能。</div>';
+  }
+  document.getElementById('pane').innerHTML=html;
+}
+function selectGroup(key,push){
+  curGroup=key; document.getElementById('q').value="";
+  if(push!==false){ try{ history.pushState(null,"","#"+key) }catch(e){ location.hash=key } }
+  render();
+  var b=document.getElementById('g-'+key); if(b && push!==false) b.focus();
+}
+function fromHash(){
+  var h=(location.hash||"").replace("#","");
+  if(SECBY[h]){ curGroup=h; document.getElementById('q').value=""; render(); }
 }
 
 document.getElementById('role').addEventListener('change',render);
 document.getElementById('showDenied').addEventListener('change',render);
 document.getElementById('q').addEventListener('input',render);
+document.getElementById('groups').addEventListener('click',function(e){ var b=e.target.closest('.grp'); if(b) selectGroup(b.getAttribute('data-g')); });
+document.getElementById('groups').addEventListener('keydown',function(e){
+  var keys=['ArrowDown','ArrowUp','ArrowRight','ArrowLeft','Home','End'];
+  if(keys.indexOf(e.key)<0) return;
+  var btns=[].slice.call(document.querySelectorAll('.grp:not(.is-empty)'));
+  var i=btns.indexOf(document.activeElement);
+  if(i<0) i=Math.max(0,btns.findIndex(function(b){return b.getAttribute('data-g')===curGroup}));
+  if(e.key==='ArrowDown'||e.key==='ArrowRight') i=(i+1)%btns.length;
+  else if(e.key==='ArrowUp'||e.key==='ArrowLeft') i=(i-1+btns.length)%btns.length;
+  else if(e.key==='Home') i=0; else i=btns.length-1;
+  e.preventDefault(); selectGroup(btns[i].getAttribute('data-g'));
+});
 document.addEventListener('keydown',function(e){ if(e.key==='/'&&document.activeElement.tagName!=='INPUT'){e.preventDefault();document.getElementById('q').focus();} });
-document.addEventListener('click',function(e){ var a=e.target.closest('[data-open]'); if(a){ e.preventDefault(); pushRecent(a.getAttribute('data-open')); render(); } });
+document.addEventListener('click',function(e){ var a=e.target.closest('[data-open]'); if(a){ e.preventDefault(); } });
+window.addEventListener('hashchange',fromHash);
 document.getElementById('theme').addEventListener('click',function(){
   var d=document.documentElement; var on=d.getAttribute('data-theme')==='dark';
   if(on) d.removeAttribute('data-theme'); else d.setAttribute('data-theme','dark');
 });
 if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.setAttribute('data-theme','dark');
-render();
+fromHash(); render();
 </script>
 </body>
 </html>
