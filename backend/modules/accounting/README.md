@@ -26,6 +26,12 @@
 
 `tests/platform/test_accounting_foreign_reads.py`：`api/vouchers.py` 讀 M01 的 `quotations`、`case_extra_expenses`（到期：M01 提供 `case.summary`／`case.extra_expenses`），讀 M04 的 `contractor_dispatches`、`vendor_contractors`（到期：IP-15 成本檢視 `dispatch.cost_for_case`）。
 
+## 第 46～51 班追加（文件同步 DOCSYNC-T52；細節與版本見 CHANGELOG）
+
+- **旗標嚴格解析**（1.1.55～1.1.57）：`POST /api/ledger/years/{year}/closing/generate`（`regenerate`）、`POST /years/{year}/close` 與 `POST /periods/{id}/close`（`accept_warnings`——字串 `"false"` 以前等於『接受警告』結帳）、`PUT /api/ledger/features/{key}`（`enabled`）、`PUT /api/ledger/category-map`（`nondeductible`）、傳票 `category_manual`／作廢 `reopen`、總帳申請 payload 的旗標，一律只收真布林（`helpers.validation.body_flag`），其他型別 ⇒ 422 且什麼都不寫。
+- **路由宣告**：`GET /api/expense-categories`（費用單據類別下拉，IP `expense.categories`，任何登入者）由本模組提供；已在 `module.json` 的 `provides.routes` 明列（不在任何 `api_prefixes` 底下）。
+- 端點稽核 W1a 結論：本模組所有路由無憑證 401、零模組帳號 403（科目樹 `GET /api/account-items` 與類別下拉為「登入即可」的挑選資料，不含金額）；`PUT /api/ledger/settings`（會計年度起始月）目前沒有設定畫面（API／DBA 設定）。
+
 ## 本模組不在時（別人怎麼辦）
 
 - M01 案件整包：`parts.vouchers` 404＋「會計傳票模組未安裝：沒有傳票資料」，案件頁不列傳票連結

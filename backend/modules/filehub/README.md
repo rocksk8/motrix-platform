@@ -7,3 +7,7 @@
 - 看不到的檔不列、也不回「因權限未列出 N 個」（`q` 可任意輸入，回個數本身就是外洩）
 - 模組不在／提供者壞掉 ⇒ 回應 `unavailable` 明說那一類沒有列入（不是 0 筆）
 - 新增一種上傳點：照 proposal-attachments-search-preview §4-5 在擁有模組登記提供者；本模組不用改
+
+## 第 46～51 班追加（文件同步 DOCSYNC-T52；細節與版本見 CHANGELOG）
+
+- `module.json` 宣告探針 `provides.probes`＝`GET /api/filehub/search`（唯讀、不帶查詢字串；守門 `test_product_drill_probes`）。無行為變更。
