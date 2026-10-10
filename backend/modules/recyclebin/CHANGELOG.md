@@ -1,6 +1,6 @@
 # 刪除暫存區 更新紀錄
 
-## 1.0.5 — 2026-10-10（wip/t53-ab-rb-fixes-r5；獨立稽核 node-39 回饋，M1＋三項建議）
+## 1.0.5 — 2026-10-10（wip/t53-ab-rb-fixes-r5；獨立稽核 node-39 回饋：連帶刪除、呼叫端失敗、請求保險網、清除順序）
 - **M1 連帶刪除中途失敗**：`service.delete()` 外層 try/except——子單據已搬進隔離區的附件在父層（或後面的子單據）失敗時搬回；另回傳 `rollback_files()` 供呼叫端在 delete() 之後、commit 之前失敗時使用（`/api/recycle-bin/delete-approved` 已用）。
 - **刪除已核可必填原因**（`reason` 空白 ⇒ 422，adapter 404 檢查在前）。
 - **精確 30 天**：`purge_after` 改存完整時間（秒），到期比對用現在時間；舊列只有日期者仍以當天起算到期。

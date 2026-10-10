@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-10（wip/t53-ab-rb-fixes-r5）：刪除端點包進 `recycle_bin.delete_scope()`
+## (next) — 2026-10-10（wip/t53-ab-rb-fixes-r5）：刪除端點包進 `recycle_bin.delete_scope()`；PUT 連線不外漏
 - `update_quotation`（PUT）：連線區段加 try/except，任何例外 rollback＋close（不帶寫鎖漏出）；材料申請在存檔中被刪後若後續失敗，由請求保險網搬回附件。
 - delete() 之後的步驟或 commit 失敗時，已搬進隔離區的附件搬回原處（報價單／額外支出／完工單刪除；報價單刪除端點另補連線不外漏）。
 
