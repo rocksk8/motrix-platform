@@ -133,7 +133,12 @@ def kick_activation(wait=False):
             _act_lock.release()
 
     t = threading.Thread(target=_run, name="permmatrix-activate", daemon=True)
-    t.start()
+    try:
+        t.start()
+    except Exception:                                               # noqa: BLE001 — 起不了執行緒：放鎖，下次讀取再試（不讓鎖永遠卡住）
+        _act_lock.release()
+        logger.exception("permmatrix activation thread failed to start")
+        return None
     if wait:
         t.join()
     return t
