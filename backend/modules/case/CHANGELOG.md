@@ -5,6 +5,8 @@
   - `PUT /api/quotations/{no}`：`data.quoteNo` 一律以網址單號為準（原可被帶成別張單號）；`editHistory` 一律取資料庫現值再由伺服器追加（原可被偽造或清空）。
   - `profit_guard.prepare()` 已精算／結案分支另沿用 `adminCost／charityDonation／totalIndirect／netProfit／netMarginPct` 現值（原只還原戳記，解鎖編輯可改寫利潤欄位）。
   - 測試 `tests/test_quote_server_owned_fields_t54.py`。案件紀錄 PATCH 的狀態鎖（待審核／簽核中是否鎖合約與收款）為設計題，未改。
+  - 稽核 05 追加：`POST` 建立也丟掉用戶端的 `editHistory`（新單從空白起）；`PUT` 的編輯紀錄改在寫入交易內讀到 `existing` 後才放回資料庫現值（含解鎖編輯那一筆），避免併發的伺服器追加被蓋掉。
+  - 已知取捨（PM 裁示維持）：已結案單解鎖編輯改價時，利潤欄位維持資料庫舊值（程式註解＋測試 `test_unlock_edit_price_change_keeps_profit_until_resettled` 記錄）。
 
 ## 1.0.174 — 2026-10-10（wip/t53b-int；ab 稽核修正 r5）
 - `update_quotation`（PUT）：連線區段加 try/except，任何例外 rollback＋close（不帶寫鎖漏出）；材料申請在存檔中被刪後若後續失敗，由請求保險網搬回附件。

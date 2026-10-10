@@ -51,7 +51,8 @@ def test_put_forces_quote_no_to_url_number(client, who):
     r = client.put("/api/quotations/%s" % a, json={"status": "草稿", "data": _q(quoteNo=b)}, headers=ad)
     assert r.status_code == 200, r.text
     assert _stored(a)[0].get("quoteNo") == a
-    assert _stored(b)[0].get("quoteNo") in (b, None)
+    assert _stored(b)[0].get("quoteNo") in (b, None), "B 自己的單不受影響"
+    assert client.get("/api/quotations/%s" % a, headers=ad).json()["data"]["quoteNo"] == a
 
 
 def test_put_ignores_client_edit_history(client, who):
@@ -69,10 +70,9 @@ def test_put_ignores_client_edit_history(client, who):
     assert len(_stored(a)[0].get("editHistory") or []) >= len(real), "清空編輯紀錄不可生效"
 
 
-def test_unlock_edit_on_settled_quote_keeps_db_profit_fields(client, who):
+def _settled_unlock(client, who, tot_patch, items=None):
     su, ad = who
     a = _mk(client, ad)
-    before = _stored(a)[0]["tot"]
     cn = db.get_db()
     cn.execute("UPDATE quotations SET status='已成案', deal_tag='已成案', settle_status='finalized' WHERE quote_no=?", (a,))
     cn.commit()
@@ -91,10 +91,33 @@ def test_unlock_edit_on_settled_quote_keeps_db_profit_fields(client, who):
     finally:
         cn.close()
     body = _q()
-    body["tot"] = dict(body["tot"], netProfit=999999, adminCost=1, netMarginPct=99.9, charityDonation=0, totalIndirect=1)
+    if items:
+        body["items"] = items
+    body["tot"] = dict(body["tot"], **tot_patch)
     body["_isUnlockEdit"] = True
     r = client.put("/api/quotations/%s" % a, json={"status": "已成案", "data": body}, headers=su)
     assert r.status_code == 200, r.text
-    after = _stored(a)[0]["tot"]
-    for k in ("netProfit", "adminCost", "netMarginPct", "charityDonation", "totalIndirect"):
-        assert after.get(k) == before.get(k), k
+    return _stored(a)[0]["tot"]
+
+
+def test_unlock_edit_on_settled_quote_keeps_db_profit_fields(client, who):
+    keys = ("netProfit", "adminCost", "netMarginPct", "charityDonation", "totalIndirect")
+    forged = dict(netProfit=999999, adminCost=1, netMarginPct=99.9, charityDonation=0, totalIndirect=1)
+    t = _settled_unlock(client, who, forged)
+    assert t["netProfit"] == 26630 and t["adminCost"] == 10000 and t["charityDonation"] == 370 and t["totalIndirect"] == 10370
+    assert t["netMarginPct"] == 26.6
+
+
+def test_unlock_edit_price_change_keeps_profit_until_resettled(client, who):
+    """已知取捨（PM 裁示維持）：改價後利潤欄位維持舊值；價格欄位本身可改。"""
+    items = [{"type": "item", "qty": 1, "unitPrice": 200000, "amount": 200000, "cost": 60000}]
+    t = _settled_unlock(client, who, dict(netProfit=999999, pretax=200000), items=items)
+    assert t["pretax"] == 200000 and t["netProfit"] == 26630
+
+
+def test_create_discards_client_edit_history(client, who):
+    su, ad = who
+    forged = [{"rev": 1, "at": "2020-01-01T00:00:00", "by": "boss", "byDisplay": "老闆", "type": "quote_update"}]
+    r = client.post("/api/quotations", json={"status": "草稿", "data": _q(editHistory=forged)}, headers=ad)
+    assert r.status_code == 201, r.text
+    assert (_stored(r.json()["quote_no"])[0].get("editHistory") or []) == []
