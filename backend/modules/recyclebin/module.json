@@ -34,5 +34,21 @@
     "fields": {},
     "pages": [],
     "outputs": []
-  }
+  },
+  "system_cards": [
+    {
+      "id": "recycle-bin",
+      "section": "data",
+      "title": "資源回收筒",
+      "desc": "刪除的單據與附件保留一段時間，可還原或永久刪除",
+      "impact": "影響：還原會把單據與附件放回原處；永久刪除後無法還原（需寫原因並等確認期）。",
+      "href": "recycle-bin.html",
+      "perm": [
+        "superadmin"
+      ],
+      "order": 30,
+      "keywords": "刪除 還原 回收 暫存",
+      "icon": "trash"
+    }
+  ]
 }

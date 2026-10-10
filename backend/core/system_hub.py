@@ -63,8 +63,8 @@ def _perm_ok(perm):
     return perm in ("any", "superadmin") or (isinstance(perm, list) and bool(perm) and all(isinstance(k, str) and k for k in perm))
 
 
-_CJK = re.compile(r"[一-鿿]")
-_CODEISH = re.compile(r"\.html|/api/|https?://|[a-z]+_[a-z_]+|module|API|JSON", re.I)
+_CJK = re.compile(r"[\u4e00-\u9fff]")
+_CODEISH = re.compile(r"\.html|/api/|https?://|(?<![A-Za-z0-9])[a-z]+_[a-z_]+(?![A-Za-z0-9])|(?<![A-Za-z])module(?![A-Za-z])|(?<![A-Za-z])(API|JSON)(?![A-Za-z])", re.I)
 
 
 def plain_problem(text):

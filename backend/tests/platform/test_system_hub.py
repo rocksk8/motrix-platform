@@ -232,7 +232,8 @@ def test_page_hardcodes_no_card_titles_or_links():
     assert leaked == [], "系統中心頁面寫死了項目標題（項目只能來自註冊表）：%s" % leaked
     hrefs = [c["href"] for c in _all_cards() if c["href"] in html]
     assert hrefs == []
-    assert html.count("/api/system-hub") == 1, "載入只打一支端點"
+    assert html.count("fetch('/api/system-hub',") == 2, "載入（init）與設定變更後重新載入（reload）各一處，其餘不得再打"
+    assert html.count("init()") >= 1 and "async init()" in html and html.index("fetch('/api/system-hub',") < html.index("async reload()")
 
 
 NODE = shutil.which("node")
@@ -277,7 +278,7 @@ def test_all_user_visible_strings_are_plain_language():
 
 def test_plain_language_check_catches_code_like_text():
     assert H.plain_problem("使用者管理") == ""
-    for t in ("users.html", "Open /api/x", "module_settings 設定", "只有英文", "請到 https://x.y 設定", "給 API 用"):
+    for t in ("users.html", "Open /api/x", "module_settings 設定", "English only", "請到 https://x.y 設定", "給 API 用"):
         assert H.plain_problem(t), t
     ok = {"id": "a", "section": "data", "title": "標題", "desc": "說明", "impact": "影響：沒有。", "href": "x.html", "perm": "superadmin", "order": 1}
     assert H.validate([ok], {"x.html"}) == []
