@@ -9,6 +9,7 @@
 - 測試：`tests/test_recycle_adapters_t53.py`（還原逐欄相等、附件回原位、規則不放寬、已核可入口、衝突／父層不在、暫存區缺席的硬刪＋說明）。
 - **（併入）(next) — 2026-10-10（wip/t53-b5-rb-adapters；刪除暫存區 P1：案件模組 adapter，提供者字面登記）**
 - **（併入）(next) — 2026-10-10（wip/t53-b5-rb-adapters；刪除暫存區 P1：案件模組 adapter，提供者字面登記；材料申請存檔外改 JSON 時 bump updated_at）**
+- **（併入）(next) — 2026-10-10（wip/t53-b5-rb-adapters；刪除暫存區 P1：案件模組 adapter，提供者字面登記；材料申請存檔外改 JSON 時 bump updated_at；單號不重發）**
 
 ## 1.0.172 — 2026-10-10（wip/t52-ab-charity-quote）：公益捐款改『報價含稅 1%』（新基，預設關）＋精算頁可調管銷比率（僅最高管理者）（含稽核 05 修正；作者閘門修正）
 - **公益捐款基數**（使用者 2026-10-10）：新基 `charityBasis=total` ＝ `round_half_up(tot.total × 1%)`（報價含稅金額；不看直接毛利、虧損案照扣；下限 0 只設在含稅金額上）。只在新管銷口徑（formulaVer 2）生效，舊基（直接毛利 1%、虧損 0）逐位不變。唯一來源 `helpers/profit_rules.py`＋`static/profit-rules.js`（`charity(direct, total, basis)`、`quote_profit/settlement_profit` 加 `total`／`charity_basis`），黃金向量 +77 筆。
