@@ -2,11 +2,11 @@
 """刪除暫存區（資源回收筒）的 L1 契約（第 53 班 P0；設計 docs/platform/plans/RECYCLE-BIN-DESIGN-T52.md、狀態 RECYCLE-BIN-P0-STATE-T53.md）。
 
 [單位] helper:recycle_bin    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] CAP_ADAPTER, CAP_DELETE, RETENTION_DAYS, MAX_SNAPSHOT_BYTES, Adapter, BinError, BinUnavailable, available, adapters, get_adapter, delete, mask_obj
+[公開介面] Adapter, BinError, BinUnavailable, CAP_ADAPTER, CAP_DELETE, MASK, MAX_SNAPSHOT_BYTES, RETENTION_DAYS, RestoreContext, adapters, available, delete, get_adapter, mask_obj
 [不變式] 這裡**不認識任何業務表、不碰檔案系統、不讀資料庫**：只定義『擁有模組 ⇄ recyclebin 模組』之間的契約（IP-RB1／IP-RB2，列車定號）。
          擁有模組只 import 本檔（L1）；絕不 import `modules.recyclebin`。recyclebin 模組不在 ⇒ `delete()` 回 None，呼叫端**照舊硬刪並明說**，
          不得靜默（缺席與『進了暫存區』長得不一樣）。
-[契約題] backend/modules/recyclebin/tests/、tests/platform/test_recyclebin_guards_t53.py
+[契約題] backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py, backend/modules/recyclebin/tests/test_recyclebin_hardening_t53.py, backend/tests/platform/test_recyclebin_guards_t53.py
 
 ## 兩個能力（core.registry 的 provider）
 - `recyclebin.adapter`（多提供者；擁有模組提供）：名稱＝`entity_type`，值＝回傳 `Adapter` 實例的無參數函式。
