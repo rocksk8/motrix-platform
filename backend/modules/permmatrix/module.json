@@ -1,0 +1,37 @@
+{
+  "key": "permmatrix",
+  "name": "權限矩陣",
+  "version": "1.0.0",
+  "core": ">=1.0,<2.0",
+  "license_key": "permmatrix",
+  "permissions": [],
+  "tables": [
+    "perm_role_caps",
+    "perm_user_overrides",
+    "perm_versions",
+    "perm_pending",
+    "perm_delegations"
+  ],
+  "tables_note": "表由本模組自己的 migration（migrations/0001_permission_matrix.py）建立",
+  "data": {
+    "tables": [
+      {"name": "perm_role_caps", "class": "T1"},
+      {"name": "perm_user_overrides", "class": "T1"},
+      {"name": "perm_versions", "class": "T1"},
+      {"name": "perm_pending", "class": "T1"},
+      {"name": "perm_delegations", "class": "T1"}
+    ],
+    "files": []
+  },
+  "provides": {
+    "api_prefixes": [],
+    "probes": []
+  },
+  "pages": [],
+  "customization": {
+    "schema": 1,
+    "fields": {},
+    "pages": [],
+    "outputs": []
+  }
+}
