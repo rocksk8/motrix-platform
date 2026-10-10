@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1248,
+  "tests": 1257,
   "unmapped": 13,
   "kinds": {
-   "api": 678,
-   "e2e": 300,
-   "audit": 157,
+   "api": 685,
+   "e2e": 301,
+   "audit": 158,
    "unit": 113
   },
-  "routes": 785
+  "routes": 793
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -5428,6 +5428,37 @@
    "login_fixture": true,
    "module": "arap"
   },
+  "backend/modules/arap/tests/test_recycle_adapter_t53.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "file:backend/helpers/__init__.py",
+    "helper:recycle_bin",
+    "helper:uploads",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
+    "mod:recyclebin/api"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/recycle_bin.py",
+     "backend/helpers/uploads.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/recyclebin/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
   "backend/modules/arap/tests/test_reports_tax_compliance_2026_09_02.py": {
    "kind": "api",
    "units": [
@@ -8397,6 +8428,49 @@
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_recycle_adapters_t53.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "helper:recycle_bin",
+    "helper:uploads",
+    "mod:case/__init__",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/completion_notes",
+    "mod:case/api/quotations",
+    "mod:case/expense_forms",
+    "mod:case/material_approval",
+    "mod:case/material_guard",
+    "mod:case/recycle_adapter",
+    "mod:recyclebin/api"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/recycle_bin.py",
+     "backend/helpers/uploads.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/expense_forms.py",
+     "backend/modules/case/material_approval.py",
+     "backend/modules/case/material_guard.py",
+     "backend/modules/case/recycle_adapter.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/recyclebin/api.py"
     ],
     "module_dir": [
      "backend/modules/case/"
@@ -12041,6 +12115,37 @@
    },
    "module": "payroll"
   },
+  "backend/modules/payroll/tests/test_recycle_adapter_t53.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "file:backend/helpers/__init__.py",
+    "helper:recycle_bin",
+    "mod:payroll/api/payslips",
+    "mod:recyclebin/api",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/recycle_bin.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/recyclebin/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
   "backend/modules/payroll/tests/test_voucher_connectors.py": {
    "kind": "api",
    "units": [
@@ -12139,6 +12244,114 @@
     ]
    },
    "module": "payroll"
+  },
+  "backend/modules/recyclebin/tests/test_e2e_recyclebin_t53.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/recyclebin/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:recyclebin/tests/test_recyclebin_p0_t53",
+    "page:pages/recycle-bin.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/recycle-bin.html"
+    ],
+    "path": [
+     "frontend/pages/recycle-bin.html"
+    ],
+    "module_dir": [
+     "backend/modules/recyclebin/"
+    ]
+   },
+   "module": "recyclebin"
+  },
+  "backend/modules/recyclebin/tests/test_recyclebin_hardening_t53.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/recyclebin/",
+    "file:backend/helpers/__init__.py",
+    "helper:recycle_bin",
+    "helper:storage_locations",
+    "helper:uploads",
+    "mod:recyclebin/__init__",
+    "mod:recyclebin/api",
+    "mod:recyclebin/jobs",
+    "mod:recyclebin/quarantine",
+    "mod:recyclebin/service",
+    "mod:recyclebin/tests/test_recyclebin_p0_t53",
+    "plat:__init__",
+    "plat:paths",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/paths.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/recycle_bin.py",
+     "backend/helpers/storage_locations.py",
+     "backend/helpers/uploads.py",
+     "backend/modules/recyclebin/__init__.py",
+     "backend/modules/recyclebin/jobs.py",
+     "backend/modules/recyclebin/quarantine.py",
+     "backend/modules/recyclebin/service.py",
+     "backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py"
+    ],
+    "api": [
+     "backend/modules/recyclebin/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/recyclebin/"
+    ]
+   },
+   "module": "recyclebin"
+  },
+  "backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/recyclebin/",
+    "file:backend/helpers/__init__.py",
+    "helper:recycle_bin",
+    "helper:uploads",
+    "mod:recyclebin/__init__",
+    "mod:recyclebin/api",
+    "mod:recyclebin/jobs",
+    "mod:recyclebin/quarantine",
+    "mod:recyclebin/service",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/recycle_bin.py",
+     "backend/helpers/uploads.py",
+     "backend/modules/recyclebin/__init__.py",
+     "backend/modules/recyclebin/jobs.py",
+     "backend/modules/recyclebin/quarantine.py",
+     "backend/modules/recyclebin/service.py"
+    ],
+    "api": [
+     "backend/modules/recyclebin/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/recyclebin/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "recyclebin"
   },
   "backend/modules/subcontract/tests/test_api_integration.py": {
    "kind": "api",
@@ -13528,6 +13741,7 @@
     "mod:payroll/api/bank_account",
     "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
+    "mod:recyclebin/api",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/remit_kinds",
@@ -13571,6 +13785,7 @@
      "backend/modules/payroll/api/bank_account.py",
      "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
+     "backend/modules/recyclebin/api.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
      "backend/modules/subcontract/api/remit_kinds.py",
@@ -13622,6 +13837,50 @@
     ]
    },
    "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_recycle_adapter_t53.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_fake_gcal.py",
+    "helper:recycle_bin",
+    "helper:uploads",
+    "mod:payroll/tests/test_payslip_person_link_t48",
+    "mod:recyclebin/api",
+    "mod:subcontract/__init__",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
+    "mod:subcontract/payable_due",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/recycle_bin.py",
+     "backend/helpers/uploads.py",
+     "backend/modules/payroll/tests/test_payslip_person_link_t48.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/payable_due.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_fake_gcal.py"
+    ],
+    "api": [
+     "backend/modules/recyclebin/api.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
    "module": "subcontract"
   },
   "backend/modules/subcontract/tests/test_remit_fee_2026_09_30.py": {
@@ -14372,6 +14631,35 @@
     "api": [
      "backend/modules/supply/api/inventory.py",
      "backend/routers/parts.py"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "supply"
+  },
+  "backend/modules/supply/tests/test_recycle_adapter_t53.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/supply/",
+    "file:backend/helpers/__init__.py",
+    "helper:recycle_bin",
+    "helper:uploads",
+    "mod:recyclebin/api",
+    "mod:supply/api/shipping_notes"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/recycle_bin.py",
+     "backend/helpers/uploads.py"
+    ],
+    "api": [
+     "backend/modules/recyclebin/api.py",
+     "backend/modules/supply/api/shipping_notes.py"
     ],
     "module_dir": [
      "backend/modules/supply/"
@@ -17091,6 +17379,7 @@
     "mod:payroll/api/bank_account",
     "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
+    "mod:recyclebin/api",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/remit_kinds",
@@ -17137,6 +17426,7 @@
      "backend/modules/payroll/api/bank_account.py",
      "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
+     "backend/modules/recyclebin/api.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
      "backend/modules/subcontract/api/remit_kinds.py",
@@ -18259,6 +18549,7 @@
     "mod:payroll/api/bank_account",
     "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
+    "mod:recyclebin/api",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/remit_kinds",
@@ -18313,6 +18604,7 @@
      "backend/modules/payroll/api/bank_account.py",
      "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
+     "backend/modules/recyclebin/api.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
      "backend/modules/subcontract/api/remit_kinds.py",
@@ -19122,6 +19414,29 @@
     "path": [
      "backend/helpers/receivables.py",
      "backend/modules/arap/"
+    ]
+   }
+  },
+  "backend/tests/platform/test_recyclebin_guards_t53.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/recyclebin/",
+    "helper:recycle_bin",
+    "helper:uploads",
+    "mod:recyclebin/quarantine",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/helpers/recycle_bin.py"
+    ],
+    "path": [
+     "backend/helpers/uploads.py",
+     "backend/modules/recyclebin/",
+     "backend/modules/recyclebin/quarantine.py"
     ]
    }
   },
@@ -20522,6 +20837,7 @@
     "mod:payroll/api/bank_account",
     "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
+    "mod:recyclebin/api",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/remit_kinds",
@@ -20569,6 +20885,7 @@
      "backend/modules/payroll/api/bank_account.py",
      "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
+     "backend/modules/recyclebin/api.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
      "backend/modules/subcontract/api/remit_kinds.py",
@@ -23413,6 +23730,7 @@
     "mod:payroll/api/bank_account",
     "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
+    "mod:recyclebin/api",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/remit_kinds",
@@ -23467,6 +23785,7 @@
      "backend/modules/payroll/api/bank_account.py",
      "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
+     "backend/modules/recyclebin/api.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
      "backend/modules/subcontract/api/remit_kinds.py",
@@ -29799,6 +30118,7 @@
     "mod:payroll/api/bank_account",
     "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
+    "mod:recyclebin/api",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/remit_kinds",
@@ -29849,6 +30169,7 @@
      "backend/modules/payroll/api/bank_account.py",
      "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
+     "backend/modules/recyclebin/api.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
      "backend/modules/subcontract/api/remit_kinds.py",
@@ -31161,6 +31482,7 @@
     "mod:payroll/api/bonus_correction",
     "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
+    "mod:recyclebin/api",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/remit_kinds",
@@ -31239,6 +31561,7 @@
      "backend/modules/payroll/api/bonus_correction.py",
      "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
+     "backend/modules/recyclebin/api.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
      "backend/modules/subcontract/api/remit_kinds.py",
@@ -31921,6 +32244,7 @@
     "mod:payroll/api/bank_account",
     "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
+    "mod:recyclebin/api",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/remit_kinds",
@@ -31965,6 +32289,7 @@
      "backend/modules/payroll/api/bank_account.py",
      "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
+     "backend/modules/recyclebin/api.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
      "backend/modules/subcontract/api/remit_kinds.py",

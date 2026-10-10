@@ -27,6 +27,7 @@
     "customers",
     "payslips",
     "quotations",
+    "recycle_bin",
     "schema_version",
     "sessions",
     "system_settings",
@@ -1323,6 +1324,19 @@
    "imports": [],
    "kind": "helper",
    "path": "backend/helpers/recognition_basis.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "helper:recycle_bin": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "plat:registry"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/recycle_bin.py",
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [],
@@ -2829,6 +2843,7 @@
     "mod:payroll/api/payslip_approval",
     "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
+    "mod:recyclebin/api",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/dispatch_approval",
@@ -5864,6 +5879,7 @@
     "mod:arap/attachments",
     "mod:arap/gl_events",
     "mod:arap/receivables",
+    "mod:arap/recycle_adapter",
     "plat:registry"
    ],
    "kind": "mod",
@@ -6071,12 +6087,14 @@
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:notify_matrix",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
     "helper:tiered_approval",
     "helper:uploads",
-    "helper:validation"
+    "helper:validation",
+    "mod:arap/recycle_adapter"
    ],
    "imports": [
     "core:db",
@@ -6089,10 +6107,12 @@
     "helper:errors",
     "helper:google_calendar",
     "helper:legal_params",
+    "helper:recycle_bin",
     "helper:tax_calc",
     "helper:tiered_approval",
     "helper:uploads",
     "helper:validation",
+    "mod:arap/recycle_adapter",
     "plat:registry",
     "plat:txn"
    ],
@@ -6104,79 +6124,79 @@
    "routes": [
     {
      "func": "list_invoice_vouchers",
-     "line": 242,
+     "line": 243,
      "method": "GET",
      "path": "/api/invoice-vouchers"
     },
     {
      "func": "get_invoice_voucher_remaining",
-     "line": 265,
+     "line": 266,
      "method": "GET",
      "path": "/api/invoice-vouchers/remaining"
     },
     {
      "func": "get_invoice_voucher",
-     "line": 286,
+     "line": 287,
      "method": "GET",
      "path": "/api/invoice-vouchers/{voucher_no}"
     },
     {
      "func": "create_invoice_voucher",
-     "line": 299,
+     "line": 300,
      "method": "POST",
      "path": "/api/invoice-vouchers"
     },
     {
      "func": "delete_invoice_voucher",
-     "line": 462,
+     "line": 463,
      "method": "DELETE",
      "path": "/api/invoice-vouchers/{voucher_no}"
     },
     {
      "func": "submit_invoice_voucher",
-     "line": 487,
+     "line": 497,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/submit"
     },
     {
      "func": "approve_invoice_voucher",
-     "line": 548,
+     "line": 558,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/approve"
     },
     {
      "func": "revoke_invoice_voucher_approval",
-     "line": 658,
+     "line": 668,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/revoke-approval"
     },
     {
      "func": "reject_invoice_voucher",
-     "line": 699,
+     "line": 709,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_invoice_voucher_pdf",
-     "line": 746,
+     "line": 756,
      "method": "GET",
      "path": "/api/invoice-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_invoice_voucher_export",
-     "line": 773,
+     "line": 783,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/export"
     },
     {
      "func": "upload_invoice_voucher_issued_files",
-     "line": 801,
+     "line": 811,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/issued-files"
     },
     {
      "func": "delete_invoice_voucher_issued_file",
-     "line": 830,
+     "line": 840,
      "method": "DELETE",
      "path": "/api/invoice-vouchers/{voucher_no}/issued-files/{file_id}"
     }
@@ -6240,10 +6260,12 @@
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:notify_matrix",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tiered_approval",
-    "helper:validation"
+    "helper:validation",
+    "mod:arap/recycle_adapter"
    ],
    "imports": [
     "core:db",
@@ -6256,8 +6278,10 @@
     "helper:errors",
     "helper:google_calendar",
     "helper:legal_params",
+    "helper:recycle_bin",
     "helper:tiered_approval",
     "helper:validation",
+    "mod:arap/recycle_adapter",
     "plat:registry",
     "plat:txn"
    ],
@@ -6269,73 +6293,73 @@
    "routes": [
     {
      "func": "list_payment_requests",
-     "line": 312,
+     "line": 313,
      "method": "GET",
      "path": "/api/payment-requests"
     },
     {
      "func": "get_payment_request_remaining",
-     "line": 335,
+     "line": 336,
      "method": "GET",
      "path": "/api/payment-requests/remaining"
     },
     {
      "func": "get_payment_request",
-     "line": 352,
+     "line": 353,
      "method": "GET",
      "path": "/api/payment-requests/{request_no}"
     },
     {
      "func": "create_payment_request",
-     "line": 365,
+     "line": 366,
      "method": "POST",
      "path": "/api/payment-requests"
     },
     {
      "func": "update_payment_request",
-     "line": 457,
+     "line": 458,
      "method": "PUT",
      "path": "/api/payment-requests/{request_no}"
     },
     {
      "func": "delete_payment_request",
-     "line": 555,
+     "line": 556,
      "method": "DELETE",
      "path": "/api/payment-requests/{request_no}"
     },
     {
      "func": "submit_payment_request",
-     "line": 580,
+     "line": 590,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/submit"
     },
     {
      "func": "approve_payment_request",
-     "line": 641,
+     "line": 651,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/approve"
     },
     {
      "func": "revoke_payment_request_approval",
-     "line": 750,
+     "line": 760,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/revoke-approval"
     },
     {
      "func": "reject_payment_request",
-     "line": 791,
+     "line": 801,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/reject"
     },
     {
      "func": "download_payment_request_pdf",
-     "line": 838,
+     "line": 848,
      "method": "GET",
      "path": "/api/payment-requests/{request_no}/pdf-download"
     },
     {
      "func": "record_payment_request_export",
-     "line": 865,
+     "line": 875,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/export"
     }
@@ -6440,6 +6464,30 @@
    ],
    "tables_w": []
   },
+  "mod:arap/recycle_adapter": {
+   "api_prefixes": [],
+   "dynamic_sql": true,
+   "imports": [
+    "helper:recycle_bin",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests"
+   ],
+   "kind": "mod",
+   "module_key": "arap",
+   "path": "backend/modules/arap/recycle_adapter.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [
+    "invoice_vouchers",
+    "payment_requests"
+   ],
+   "tables_r": [
+    "quotations"
+   ],
+   "tables_w": [
+    "notifications"
+   ]
+  },
   "mod:case/__init__": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -6470,6 +6518,7 @@
     "mod:case/material_shippable",
     "mod:case/payables",
     "mod:case/quotations",
+    "mod:case/recycle_adapter",
     "plat:registry"
    ],
    "kind": "mod",
@@ -6621,6 +6670,7 @@
     "helper:payable_due_core",
     "helper:prefill_sources",
     "helper:recognition_basis",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -6639,7 +6689,8 @@
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
-    "mod:case/recognition"
+    "mod:case/recognition",
+    "mod:case/recycle_adapter"
    ],
    "imports": [
     "core:db",
@@ -6648,6 +6699,7 @@
     "helper:case_access",
     "helper:email_notify",
     "helper:legal_params",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tiered_approval",
@@ -6659,6 +6711,7 @@
     "mod:case/payables",
     "mod:case/purchase_items",
     "mod:case/recognition",
+    "mod:case/recycle_adapter",
     "plat:txn"
    ],
    "kind": "mod",
@@ -6669,145 +6722,145 @@
    "routes": [
     {
      "func": "list_extra_expenses",
-     "line": 384,
+     "line": 386,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/extra-expenses"
     },
     {
      "func": "list_purchase_items",
-     "line": 457,
+     "line": 459,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/purchase-items"
     },
     {
      "func": "list_purchase_request_lines",
-     "line": 481,
+     "line": 483,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/purchase-requests/lines"
     },
     {
      "func": "create_extra_expense",
-     "line": 498,
+     "line": 500,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses"
     },
     {
      "func": "update_extra_expense",
-     "line": 564,
+     "line": 566,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "payreq_cases",
-     "line": 642,
+     "line": 644,
      "method": "GET",
      "path": "/api/extra-expenses/cases"
     },
     {
      "func": "po_bank_block_status",
-     "line": 668,
+     "line": 670,
      "method": "GET",
      "path": "/api/extra-expenses/po-bank-block"
     },
     {
      "func": "po_bank_block_set",
-     "line": 683,
+     "line": 685,
      "method": "PUT",
      "path": "/api/extra-expenses/po-bank-block"
     },
     {
      "func": "payreq_mine",
-     "line": 715,
+     "line": 717,
      "method": "GET",
      "path": "/api/extra-expenses/mine"
     },
     {
      "func": "set_extra_expense_dates",
-     "line": 737,
+     "line": 739,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/dates"
     },
     {
      "func": "delete_extra_expense",
-     "line": 824,
+     "line": 826,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "void_extra_expense",
-     "line": 849,
+     "line": 859,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/void"
     },
     {
      "func": "submit_extra_expense",
-     "line": 908,
+     "line": 918,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/submit"
     },
     {
      "func": "approve_extra_expense",
-     "line": 996,
+     "line": 1006,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/approve"
     },
     {
      "func": "reject_extra_expense",
-     "line": 1084,
+     "line": 1094,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/reject"
     },
     {
      "func": "upload_extra_expense_files",
-     "line": 1199,
+     "line": 1209,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files"
     },
     {
      "func": "delete_extra_expense_file",
-     "line": 1254,
+     "line": 1264,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}"
     },
     {
      "func": "upsert_change_request",
-     "line": 1430,
+     "line": 1440,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "cancel_change_request",
-     "line": 1471,
+     "line": 1481,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "upload_change_request_files",
-     "line": 1497,
+     "line": 1507,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files"
     },
     {
      "func": "delete_change_request_file",
-     "line": 1540,
+     "line": 1550,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}"
     },
     {
      "func": "submit_change_request",
-     "line": 1567,
+     "line": 1577,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/submit"
     },
     {
      "func": "approve_change_request",
-     "line": 1638,
+     "line": 1648,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/approve"
     },
     {
      "func": "reject_change_request",
-     "line": 1728,
+     "line": 1738,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/reject"
     }
@@ -6823,6 +6876,7 @@
     "case_change_requests",
     "case_extra_expenses",
     "case_material_approvals",
+    "case_material_payments",
     "case_stages",
     "case_updates",
     "completion_notes",
@@ -6860,6 +6914,8 @@
     "case_material_approvals",
     "case_material_payment_lines",
     "case_material_payments",
+    "case_stage_visits",
+    "completion_notes",
     "custom_record_counters",
     "custom_record_files",
     "custom_record_finance_outbox",
@@ -6910,6 +6966,7 @@
     "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:privacy_notice",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:startup",
@@ -6917,7 +6974,8 @@
     "helper:uploads",
     "helper:validation",
     "mod:case/completion_pdf",
-    "mod:case/expense_notify"
+    "mod:case/expense_notify",
+    "mod:case/recycle_adapter"
    ],
    "imports": [
     "core:db",
@@ -6928,11 +6986,14 @@
     "helper:email_notify",
     "helper:errors",
     "helper:privacy_notice",
+    "helper:recycle_bin",
     "helper:tiered_approval",
     "helper:uploads",
     "helper:validation",
     "mod:case/completion_pdf",
-    "mod:case/expense_notify"
+    "mod:case/expense_notify",
+    "mod:case/recycle_adapter",
+    "plat:txn"
    ],
    "kind": "mod",
    "module_key": "case",
@@ -6942,97 +7003,97 @@
    "routes": [
     {
      "func": "list_completion_notes",
-     "line": 221,
+     "line": 224,
      "method": "GET",
      "path": "/api/completion-notes"
     },
     {
      "func": "get_completion_note",
-     "line": 263,
+     "line": 266,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}"
     },
     {
      "func": "create_completion_note",
-     "line": 273,
+     "line": 276,
      "method": "POST",
      "path": "/api/completion-notes"
     },
     {
      "func": "update_completion_note",
-     "line": 315,
+     "line": 318,
      "method": "PUT",
      "path": "/api/completion-notes/{note_no}"
     },
     {
      "func": "delete_completion_note",
-     "line": 362,
+     "line": 365,
      "method": "DELETE",
      "path": "/api/completion-notes/{note_no}"
     },
     {
      "func": "submit_completion_note",
-     "line": 387,
+     "line": 397,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/submit"
     },
     {
      "func": "approve_completion_note",
-     "line": 452,
+     "line": 462,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/approve"
     },
     {
      "func": "reject_completion_note",
-     "line": 561,
+     "line": 571,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/reject"
     },
     {
      "func": "revoke_completion_approval",
-     "line": 603,
+     "line": 613,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/revoke-approval"
     },
     {
      "func": "download_completion_pdf",
-     "line": 649,
+     "line": 659,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}/pdf-download"
     },
     {
      "func": "record_completion_export",
-     "line": 676,
+     "line": 686,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/export"
     },
     {
      "func": "toggle_completion_signed",
-     "line": 705,
+     "line": 715,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/signed-toggle"
     },
     {
      "func": "upload_completion_signed_files",
-     "line": 757,
+     "line": 767,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/signed-files"
     },
     {
      "func": "delete_completion_signed_file",
-     "line": 783,
+     "line": 793,
      "method": "DELETE",
      "path": "/api/completion-notes/{note_no}/signed-files/{file_id}"
     },
     {
      "func": "get_completion_privacy_acks",
-     "line": 820,
+     "line": 830,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}/privacy-notice"
     },
     {
      "func": "ack_completion_privacy_notice",
-     "line": 832,
+     "line": 842,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/privacy-notice/ack"
     }
@@ -7045,6 +7106,8 @@
    "tables_r_transitive": [
     "approval_delegates",
     "case_extra_expenses",
+    "case_material_payments",
+    "case_stages",
     "completion_notes",
     "custom_record_finance_outbox",
     "custom_record_values",
@@ -7069,6 +7132,9 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "case_extra_expenses",
+    "case_material_approvals",
+    "case_stage_visits",
     "completion_notes",
     "custom_record_counters",
     "custom_record_files",
@@ -7083,6 +7149,7 @@
     "module_versions",
     "notifications",
     "permission_changes",
+    "quotations",
     "sessions",
     "system_settings",
     "user_duty_roles",
@@ -7229,6 +7296,7 @@
     "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:recognition_basis",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -7247,7 +7315,8 @@
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
-    "mod:case/recognition"
+    "mod:case/recognition",
+    "mod:case/recycle_adapter"
    ],
    "imports": [
     "core:db",
@@ -7295,6 +7364,7 @@
     "audit_log",
     "case_extra_expenses",
     "case_material_approvals",
+    "case_material_payments",
     "case_stages",
     "contractor_dispatches",
     "contractor_payment_vouchers",
@@ -7322,9 +7392,12 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "case_extra_expenses",
     "case_material_approvals",
     "case_material_payment_lines",
     "case_material_payments",
+    "case_stage_visits",
+    "completion_notes",
     "custom_record_counters",
     "custom_record_files",
     "custom_record_finance_outbox",
@@ -7375,6 +7448,7 @@
     "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:recognition_basis",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -7391,7 +7465,8 @@
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
-    "mod:case/recognition"
+    "mod:case/recognition",
+    "mod:case/recycle_adapter"
    ],
    "imports": [
     "core:db",
@@ -7443,6 +7518,7 @@
     "case_extra_expenses",
     "case_material_approvals",
     "case_material_changes",
+    "case_material_payments",
     "case_stages",
     "contractor_dispatches",
     "contractor_payment_vouchers",
@@ -7470,10 +7546,13 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "case_extra_expenses",
     "case_material_approvals",
     "case_material_changes",
     "case_material_payment_lines",
     "case_material_payments",
+    "case_stage_visits",
+    "completion_notes",
     "custom_record_counters",
     "custom_record_files",
     "custom_record_finance_outbox",
@@ -7524,6 +7603,7 @@
     "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:recognition_basis",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -7539,7 +7619,8 @@
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
-    "mod:case/recognition"
+    "mod:case/recognition",
+    "mod:case/recycle_adapter"
    ],
    "imports": [
     "core:db",
@@ -7581,6 +7662,7 @@
     "audit_log",
     "case_extra_expenses",
     "case_material_approvals",
+    "case_material_payments",
     "case_stages",
     "contractor_dispatches",
     "contractor_payment_vouchers",
@@ -7608,9 +7690,12 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "case_extra_expenses",
     "case_material_approvals",
     "case_material_payment_lines",
     "case_material_payments",
+    "case_stage_visits",
+    "completion_notes",
     "custom_record_counters",
     "custom_record_files",
     "custom_record_finance_outbox",
@@ -7661,6 +7746,7 @@
     "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:recognition_basis",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -7675,7 +7761,8 @@
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
-    "mod:case/recognition"
+    "mod:case/recognition",
+    "mod:case/recycle_adapter"
    ],
    "imports": [
     "core:db",
@@ -7725,6 +7812,7 @@
     "audit_log",
     "case_extra_expenses",
     "case_material_approvals",
+    "case_material_payments",
     "case_stages",
     "contractor_dispatches",
     "contractor_payment_vouchers",
@@ -7752,9 +7840,12 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "case_extra_expenses",
     "case_material_approvals",
     "case_material_payment_lines",
     "case_material_payments",
+    "case_stage_visits",
+    "completion_notes",
     "custom_record_counters",
     "custom_record_files",
     "custom_record_finance_outbox",
@@ -7810,6 +7901,7 @@
     "helper:prefill_sources",
     "helper:privacy_notice",
     "helper:recognition_basis",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -7827,7 +7919,8 @@
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
-    "mod:case/recognition"
+    "mod:case/recognition",
+    "mod:case/recycle_adapter"
    ],
    "imports": [
     "core:db",
@@ -7931,6 +8024,7 @@
     "audit_log",
     "case_extra_expenses",
     "case_material_approvals",
+    "case_material_payments",
     "case_stages",
     "contractor_dispatches",
     "contractor_payment_vouchers",
@@ -7962,9 +8056,12 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "case_extra_expenses",
     "case_material_approvals",
     "case_material_payment_lines",
     "case_material_payments",
+    "case_stage_visits",
+    "completion_notes",
     "custom_record_counters",
     "custom_record_files",
     "custom_record_finance_outbox",
@@ -8113,6 +8210,7 @@
     "helper:privacy_notice",
     "helper:profit_rules",
     "helper:recognition_basis",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -8134,7 +8232,8 @@
     "mod:case/quotations",
     "mod:case/quote_terms",
     "mod:case/receipt_calendar",
-    "mod:case/recognition"
+    "mod:case/recognition",
+    "mod:case/recycle_adapter"
    ],
    "imports": [
     "core:archive",
@@ -8155,6 +8254,7 @@
     "helper:gl_status",
     "helper:google_calendar",
     "helper:privacy_notice",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -8172,6 +8272,7 @@
     "mod:case/quote_terms",
     "mod:case/receipt_calendar",
     "mod:case/recognition",
+    "mod:case/recycle_adapter",
     "plat:registry",
     "plat:txn",
     "router:item_reads"
@@ -8262,325 +8363,325 @@
     },
     {
      "func": "update_status",
-     "line": 1954,
+     "line": 1955,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/status"
     },
     {
      "func": "recall_quotation",
-     "line": 2032,
+     "line": 2033,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/recall"
     },
     {
      "func": "case_bundle",
-     "line": 2314,
+     "line": 2315,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/case-bundle"
     },
     {
      "func": "case_close_gates",
-     "line": 2369,
+     "line": 2370,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/close-gates"
     },
     {
      "func": "update_deal_tag",
-     "line": 2408,
+     "line": 2409,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/deal-tag"
     },
     {
      "func": "delete_quotation",
-     "line": 2487,
+     "line": 2488,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "unlock_case",
-     "line": 2586,
+     "line": 2597,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-unlock"
     },
     {
      "func": "lock_case",
-     "line": 2635,
+     "line": 2646,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-lock"
     },
     {
      "func": "update_case_record",
-     "line": 2816,
+     "line": 2827,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/case-record"
     },
     {
      "func": "get_case_change_request",
-     "line": 3187,
+     "line": 3198,
      "method": "GET",
      "path": "/api/case-changes/{change_id}"
     },
     {
      "func": "approve_case_change",
-     "line": 3210,
+     "line": 3221,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/approve"
     },
     {
      "func": "reject_case_change",
-     "line": 3261,
+     "line": 3272,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/reject"
     },
     {
      "func": "list_case_stages_normalized",
-     "line": 3495,
+     "line": 3506,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "create_case_stage",
-     "line": 3513,
+     "line": 3524,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "update_case_stage",
-     "line": 3542,
+     "line": 3553,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "delete_case_stage",
-     "line": 3596,
+     "line": 3607,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "reorder_case_stages",
-     "line": 3637,
+     "line": 3648,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/stages/reorder"
     },
     {
      "func": "add_stage_assignee",
-     "line": 3661,
+     "line": 3672,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees"
     },
     {
      "func": "remove_stage_assignee",
-     "line": 3689,
+     "line": 3700,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}"
     },
     {
      "func": "toggle_stage_dependency",
-     "line": 3712,
+     "line": 3723,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}"
     },
     {
      "func": "add_stage_visit",
-     "line": 3745,
+     "line": 3756,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits"
     },
     {
      "func": "update_stage_visit",
-     "line": 3771,
+     "line": 3782,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "delete_stage_visit",
-     "line": 3802,
+     "line": 3813,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "record_export",
-     "line": 3825,
+     "line": 3836,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/export"
     },
     {
      "func": "mark_payment",
-     "line": 3914,
+     "line": 3925,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 4046,
+     "line": 4057,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 4089,
+     "line": 4100,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 4129,
+     "line": 4140,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 4168,
+     "line": 4179,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 4193,
+     "line": 4204,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 4234,
+     "line": 4245,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 4259,
+     "line": 4270,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 4291,
+     "line": 4302,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 4320,
+     "line": 4331,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_finance_summary",
-     "line": 4364,
+     "line": 4375,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "approve_quotation",
-     "line": 4820,
+     "line": 4831,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 4945,
+     "line": 4956,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 5031,
+     "line": 5042,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5097,
+     "line": 5108,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5243,
+     "line": 5254,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5329,
+     "line": 5340,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5360,
+     "line": 5371,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5391,
+     "line": 5402,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5432,
+     "line": 5443,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5492,
+     "line": 5503,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5559,
+     "line": 5570,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5600,
+     "line": 5611,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5638,
+     "line": 5649,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 6231,
+     "line": 6242,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6351,
+     "line": 6362,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6419,
+     "line": 6430,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6573,
+     "line": 6584,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6587,
+     "line": 6598,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6618,
+     "line": 6629,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -8661,12 +8762,14 @@
    "tables_w_transitive": [
     "audit_log",
     "case_change_requests",
+    "case_extra_expenses",
     "case_material_approvals",
     "case_material_payment_lines",
     "case_material_payments",
     "case_stage_visits",
     "case_stages",
     "case_updates",
+    "completion_notes",
     "custom_record_counters",
     "custom_record_files",
     "custom_record_finance_outbox",
@@ -8719,6 +8822,7 @@
     "helper:prefill_sources",
     "helper:profit_rules",
     "helper:recognition_basis",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -8735,6 +8839,7 @@
     "mod:case/quotations",
     "mod:case/quote_terms",
     "mod:case/recognition",
+    "mod:case/recycle_adapter",
     "mod:case/settlement_actuals"
    ],
    "imports": [
@@ -8770,6 +8875,7 @@
     "audit_log",
     "case_extra_expenses",
     "case_material_approvals",
+    "case_material_payments",
     "case_stages",
     "contractor_dispatches",
     "contractor_payment_vouchers",
@@ -8797,9 +8903,12 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "case_extra_expenses",
     "case_material_approvals",
     "case_material_payment_lines",
     "case_material_payments",
+    "case_stage_visits",
+    "completion_notes",
     "custom_record_counters",
     "custom_record_files",
     "custom_record_finance_outbox",
@@ -8851,6 +8960,7 @@
     "helper:prefill_sources",
     "helper:profit_rules",
     "helper:recognition_basis",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -8867,6 +8977,7 @@
     "mod:case/quotations",
     "mod:case/quote_terms",
     "mod:case/recognition",
+    "mod:case/recycle_adapter",
     "mod:case/settlement_actuals"
    ],
    "imports": [
@@ -8910,6 +9021,7 @@
     "audit_log",
     "case_extra_expenses",
     "case_material_approvals",
+    "case_material_payments",
     "case_stages",
     "contractor_dispatches",
     "contractor_payment_vouchers",
@@ -8937,9 +9049,12 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "case_extra_expenses",
     "case_material_approvals",
     "case_material_payment_lines",
     "case_material_payments",
+    "case_stage_visits",
+    "completion_notes",
     "custom_record_counters",
     "custom_record_files",
     "custom_record_finance_outbox",
@@ -9063,6 +9178,7 @@
    "imports": [
     "helper:expense_types",
     "helper:legal_params",
+    "mod:case/recycle_adapter",
     "plat:registry"
    ],
    "kind": "mod",
@@ -9141,7 +9257,8 @@
     "helper:auth",
     "helper:dates",
     "helper:tiered_approval",
-    "mod:case/material_payment"
+    "mod:case/material_payment",
+    "mod:case/recycle_adapter"
    ],
    "kind": "mod",
    "module_key": "case",
@@ -9221,9 +9338,11 @@
     "helper:auth",
     "helper:dates",
     "helper:financial_mask",
+    "helper:recycle_bin",
     "mod:case/material_approval",
     "mod:case/material_payment",
-    "mod:case/purchase_items"
+    "mod:case/purchase_items",
+    "mod:case/recycle_adapter"
    ],
    "kind": "mod",
    "module_key": "case",
@@ -9234,9 +9353,7 @@
    "tables_r": [
     "quotations"
    ],
-   "tables_w": [
-    "case_material_approvals"
-   ]
+   "tables_w": []
   },
   "mod:case/material_notify": {
    "api_prefixes": [],
@@ -9564,6 +9681,45 @@
     "vendor_contractors"
    ],
    "tables_w": []
+  },
+  "mod:case/recycle_adapter": {
+   "api_prefixes": [],
+   "dynamic_sql": true,
+   "imports": [
+    "helper:recycle_bin",
+    "helper:uploads"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/recycle_adapter.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [
+    "bonus_case_awards",
+    "case_action_items",
+    "case_change_requests",
+    "case_material_changes",
+    "case_material_payments",
+    "case_stages",
+    "case_updates",
+    "contractor_dispatches",
+    "contractor_payment_vouchers",
+    "invoice_vouchers",
+    "payment_requests",
+    "shipping_notes",
+    "stock_items"
+   ],
+   "tables_r": [
+    "case_material_payments",
+    "case_stages"
+   ],
+   "tables_w": [
+    "case_extra_expenses",
+    "case_material_approvals",
+    "case_stage_visits",
+    "completion_notes",
+    "quotations"
+   ]
   },
   "mod:case/settlement_actuals": {
    "api_prefixes": [],
@@ -10597,6 +10753,7 @@
     "mod:payroll/payslip_links",
     "mod:payroll/payslip_payables",
     "mod:payroll/payslip_payouts",
+    "mod:payroll/recycle_adapter",
     "mod:payroll/remit_link",
     "plat:registry"
    ],
@@ -11382,6 +11539,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:privacy_notice",
+    "helper:recycle_bin",
     "helper:settings",
     "helper:tiered_approval",
     "helper:uploads",
@@ -11389,7 +11547,8 @@
     "mod:payroll/payslip_bank",
     "mod:payroll/payslip_links",
     "mod:payroll/payslip_notify",
-    "mod:payroll/payslip_payables"
+    "mod:payroll/payslip_payables",
+    "mod:payroll/recycle_adapter"
    ],
    "imports": [
     "core:db",
@@ -11400,12 +11559,14 @@
     "helper:errors",
     "helper:legal_params",
     "helper:privacy_notice",
+    "helper:recycle_bin",
     "helper:settings",
     "helper:uploads",
     "helper:validation",
     "mod:payroll/payslip_bank",
     "mod:payroll/payslip_links",
     "mod:payroll/payslip_payables",
+    "mod:payroll/recycle_adapter",
     "plat:paths",
     "plat:registry",
     "plat:txn"
@@ -11418,109 +11579,109 @@
    "routes": [
     {
      "func": "get_tax_rules",
-     "line": 186,
+     "line": 187,
      "method": "GET",
      "path": "/api/tax-rules"
     },
     {
      "func": "next_slip_no",
-     "line": 206,
+     "line": 207,
      "method": "GET",
      "path": "/api/next-slip-no"
     },
     {
      "func": "list_payslips",
-     "line": 219,
+     "line": 220,
      "method": "GET",
      "path": "/api/payslips"
     },
     {
      "func": "create_payslip",
-     "line": 289,
+     "line": 290,
      "method": "POST",
      "path": "/api/payslips"
     },
     {
      "func": "get_payslip",
-     "line": 404,
+     "line": 405,
      "method": "GET",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "update_payslip",
-     "line": 418,
+     "line": 419,
      "method": "PUT",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "delete_payslip",
-     "line": 502,
+     "line": 503,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "record_export",
-     "line": 527,
+     "line": 533,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/export"
     },
     {
      "func": "record_archive_download",
-     "line": 573,
+     "line": 579,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/archive/{orig_idx}/record"
     },
     {
      "func": "get_archive_pdf",
-     "line": 602,
+     "line": 608,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/archive/{idx}"
     },
     {
      "func": "pdf_download",
-     "line": 638,
+     "line": 644,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/pdf-download"
     },
     {
      "func": "void_payslip",
-     "line": 676,
+     "line": 682,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/void"
     },
     {
      "func": "upload_signed_files",
-     "line": 724,
+     "line": 730,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/signed-files"
     },
     {
      "func": "get_signed_file",
-     "line": 777,
+     "line": 783,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "delete_signed_file",
-     "line": 806,
+     "line": 812,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "unsign_payslip",
-     "line": 838,
+     "line": 844,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unsign"
     },
     {
      "func": "payslip_mark_paid",
-     "line": 865,
+     "line": 871,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/mark-paid"
     },
     {
      "func": "payslip_unpay",
-     "line": 893,
+     "line": 899,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unpay"
     }
@@ -11547,7 +11708,6 @@
     "users"
    ],
    "tables_w": [
-    "payslip_dispatch_links",
     "payslip_seq",
     "payslips"
    ],
@@ -11879,6 +12039,29 @@
    ],
    "tables_w": []
   },
+  "mod:payroll/recycle_adapter": {
+   "api_prefixes": [],
+   "dynamic_sql": true,
+   "imports": [
+    "helper:recycle_bin",
+    "mod:payroll/api/payslips",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "payroll",
+   "path": "backend/modules/payroll/recycle_adapter.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "contractors"
+   ],
+   "tables_w": [
+    "notifications",
+    "payslip_dispatch_links",
+    "payslips"
+   ]
+  },
   "mod:payroll/remit_link": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -11896,10 +12079,209 @@
     "payslips"
    ]
   },
+  "mod:recyclebin/__init__": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:recycle_bin",
+    "mod:recyclebin/api",
+    "mod:recyclebin/jobs",
+    "mod:recyclebin/service",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "recyclebin",
+   "path": "backend/modules/recyclebin/__init__.py",
+   "role": "init",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:recyclebin/api": {
+   "api_prefixes": [
+    "/api/recycle-bin"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:duty_roles",
+    "helper:module_registry",
+    "helper:recycle_bin",
+    "helper:settings",
+    "helper:storage_locations",
+    "helper:tiered_approval",
+    "helper:uploads",
+    "mod:recyclebin/quarantine",
+    "mod:recyclebin/service"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:recycle_bin",
+    "helper:settings",
+    "mod:recyclebin/quarantine",
+    "mod:recyclebin/service",
+    "plat:paths",
+    "plat:txn"
+   ],
+   "kind": "mod",
+   "module_key": "recyclebin",
+   "path": "backend/modules/recyclebin/api.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_bin",
+     "line": 42,
+     "method": "GET",
+     "path": "/api/recycle-bin"
+    },
+    {
+     "func": "bin_status",
+     "line": 52,
+     "method": "GET",
+     "path": "/api/recycle-bin/status"
+    },
+    {
+     "func": "bin_impact",
+     "line": 62,
+     "method": "GET",
+     "path": "/api/recycle-bin/impact"
+    },
+    {
+     "func": "bin_detail",
+     "line": 77,
+     "method": "GET",
+     "path": "/api/recycle-bin/{bin_id}"
+    },
+    {
+     "func": "bin_restore",
+     "line": 89,
+     "method": "POST",
+     "path": "/api/recycle-bin/{bin_id}/restore"
+    },
+    {
+     "func": "bin_purge",
+     "line": 109,
+     "method": "DELETE",
+     "path": "/api/recycle-bin/{bin_id}"
+    },
+    {
+     "func": "bin_delete_approved",
+     "line": 131,
+     "method": "POST",
+     "path": "/api/recycle-bin/delete-approved"
+    },
+    {
+     "func": "bin_settings",
+     "line": 164,
+     "method": "PUT",
+     "path": "/api/recycle-bin/settings"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [
+    "recycle_bin"
+   ],
+   "tables_r": [
+    "recycle_bin"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
+    "recycle_bin",
+    "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "duty_roles",
+    "notifications",
+    "permission_changes",
+    "recycle_bin",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
+  },
+  "mod:recyclebin/jobs": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:settings",
+    "mod:recyclebin/service"
+   ],
+   "kind": "mod",
+   "module_key": "recyclebin",
+   "path": "backend/modules/recyclebin/jobs.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [
+    "recycle_bin"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:recyclebin/quarantine": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:settings",
+    "helper:storage_locations",
+    "helper:uploads",
+    "plat:paths"
+   ],
+   "kind": "mod",
+   "module_key": "recyclebin",
+   "path": "backend/modules/recyclebin/quarantine.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:recyclebin/service": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:recycle_bin",
+    "mod:recyclebin/quarantine",
+    "plat:txn"
+   ],
+   "kind": "mod",
+   "module_key": "recyclebin",
+   "path": "backend/modules/recyclebin/service.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "users"
+   ],
+   "tables_w": [
+    "recycle_bin"
+   ]
+  },
   "mod:subcontract/__init__": {
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:recycle_bin",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/dispatch_approval",
@@ -11910,6 +12292,7 @@
     "mod:subcontract/dispatch_notify",
     "mod:subcontract/gl_events",
     "mod:subcontract/payable_due",
+    "mod:subcontract/recycle_adapter",
     "mod:subcontract/remit",
     "mod:subcontract/remit_kinds",
     "plat:registry"
@@ -11946,12 +12329,15 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:payable_due_core",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tiered_approval",
     "helper:validation",
     "mod:subcontract/bank_mask",
+    "mod:subcontract/dispatch_flow",
     "mod:subcontract/payable_due",
+    "mod:subcontract/recycle_adapter",
     "mod:subcontract/remit",
     "mod:subcontract/remit_create",
     "mod:subcontract/remit_kinds",
@@ -11970,11 +12356,13 @@
     "helper:gl_status",
     "helper:google_calendar",
     "helper:legal_params",
+    "helper:recycle_bin",
     "helper:settings",
     "helper:tiered_approval",
     "helper:validation",
     "mod:subcontract/bank_mask",
     "mod:subcontract/payable_due",
+    "mod:subcontract/recycle_adapter",
     "mod:subcontract/remit",
     "mod:subcontract/remit_create",
     "plat:registry",
@@ -11988,133 +12376,133 @@
    "routes": [
     {
      "func": "get_remit_fee_total",
-     "line": 255,
+     "line": 257,
      "method": "GET",
      "path": "/api/contractor-vouchers/remit-fee-total"
     },
     {
      "func": "get_last_paid_bank_account",
-     "line": 270,
+     "line": 272,
      "method": "GET",
      "path": "/api/contractor-vouchers/last-paid-bank-account"
     },
     {
      "func": "list_contractor_vouchers",
-     "line": 295,
+     "line": 297,
      "method": "GET",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "get_contractor_voucher",
-     "line": 321,
+     "line": 323,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "create_contractor_voucher",
-     "line": 334,
+     "line": 336,
      "method": "POST",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "preview_contractor_voucher",
-     "line": 491,
+     "line": 493,
      "method": "POST",
      "path": "/api/contractor-vouchers/preview"
     },
     {
      "func": "delete_contractor_voucher",
-     "line": 515,
+     "line": 517,
      "method": "DELETE",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "set_voucher_invoice",
-     "line": 544,
+     "line": 562,
      "method": "PATCH",
      "path": "/api/contractor-vouchers/{voucher_no}/invoice"
     },
     {
      "func": "void_contractor_voucher",
-     "line": 580,
+     "line": 598,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/void"
     },
     {
      "func": "submit_contractor_voucher",
-     "line": 615,
+     "line": 633,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/submit"
     },
     {
      "func": "approve_contractor_voucher",
-     "line": 677,
+     "line": 695,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/approve"
     },
     {
      "func": "revoke_contractor_voucher_approval",
-     "line": 789,
+     "line": 807,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/revoke-approval"
     },
     {
      "func": "reject_contractor_voucher",
-     "line": 834,
+     "line": 852,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_contractor_voucher_pdf",
-     "line": 883,
+     "line": 901,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_contractor_voucher_export",
-     "line": 915,
+     "line": 933,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/export"
     },
     {
      "func": "get_remit_require_payslip",
-     "line": 983,
+     "line": 1001,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "set_remit_require_payslip",
-     "line": 991,
+     "line": 1009,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "get_personnel_links",
-     "line": 1004,
+     "line": 1022,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-links"
     },
     {
      "func": "link_personnel_payslip",
-     "line": 1038,
+     "line": 1056,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-link"
     },
     {
      "func": "toggle_paid",
-     "line": 1093,
+     "line": 1111,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/paid-toggle"
     },
     {
      "func": "get_contractor_voucher_approval_flow",
-     "line": 1216,
+     "line": 1234,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     },
     {
      "func": "set_contractor_voucher_approval_flow",
-     "line": 1233,
+     "line": 1251,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     }
@@ -12140,6 +12528,7 @@
     "duty_roles",
     "invoice_vouchers",
     "payment_requests",
+    "payslips",
     "projects",
     "quotations",
     "sessions",
@@ -12159,8 +12548,10 @@
     "audit_log",
     "contractor_dispatches",
     "contractor_payment_vouchers",
+    "dispatch_file_delete_requests",
     "duty_roles",
     "notifications",
+    "payslip_dispatch_links",
     "permission_changes",
     "system_settings",
     "user_duty_roles",
@@ -12598,23 +12989,32 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:business_days",
     "helper:company_identity",
     "helper:company_setup",
     "helper:dates",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:gl_status",
+    "helper:google_calendar",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:notify_matrix",
+    "helper:payable_due_core",
     "helper:privacy_notice",
+    "helper:recycle_bin",
     "helper:settings",
     "helper:tiered_approval",
     "helper:uploads",
     "mod:subcontract/bank_mask",
-    "mod:subcontract/dispatch_flow"
+    "mod:subcontract/dispatch_flow",
+    "mod:subcontract/payable_due",
+    "mod:subcontract/recycle_adapter",
+    "mod:subcontract/remit_create",
+    "mod:subcontract/remit_kinds",
+    "mod:subcontract/remit_split"
    ],
    "imports": [
     "core:db",
@@ -12626,11 +13026,13 @@
     "helper:gl_status",
     "helper:legal_params",
     "helper:privacy_notice",
+    "helper:recycle_bin",
     "helper:tiered_approval",
     "helper:uploads",
     "mod:subcontract/api/contractors",
     "mod:subcontract/bank_mask",
     "mod:subcontract/dispatch_flow",
+    "mod:subcontract/recycle_adapter",
     "plat:registry",
     "plat:txn"
    ],
@@ -12642,163 +13044,163 @@
    "routes": [
     {
      "func": "list_vendor_contractors",
-     "line": 234,
+     "line": 236,
      "method": "GET",
      "path": "/api/vendor-contractors"
     },
     {
      "func": "list_vendors_selectable",
-     "line": 262,
+     "line": 264,
      "method": "GET",
      "path": "/api/vendor-contractors/selectable"
     },
     {
      "func": "get_vendor_contractor",
-     "line": 276,
+     "line": 278,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "create_vendor_contractor",
-     "line": 288,
+     "line": 290,
      "method": "POST",
      "path": "/api/vendor-contractors"
     },
     {
      "func": "update_vendor_contractor",
-     "line": 316,
+     "line": 318,
      "method": "PUT",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "get_vendor_privacy_ack",
-     "line": 364,
+     "line": 366,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}/privacy-notice"
     },
     {
      "func": "ack_vendor_privacy_notice",
-     "line": 374,
+     "line": 376,
      "method": "POST",
      "path": "/api/vendor-contractors/{vid}/privacy-notice/ack"
     },
     {
      "func": "toggle_vendor_active",
-     "line": 394,
+     "line": 396,
      "method": "PATCH",
      "path": "/api/vendor-contractors/{vid}/active"
     },
     {
      "func": "get_vendor_passbook",
-     "line": 417,
+     "line": 419,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}/passbook"
     },
     {
      "func": "upload_vendor_passbook",
-     "line": 435,
+     "line": 437,
      "method": "PUT",
      "path": "/api/vendor-contractors/{vid}/passbook"
     },
     {
      "func": "delete_vendor_contractor",
-     "line": 468,
+     "line": 470,
      "method": "DELETE",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "update_vendor_visits",
-     "line": 495,
+     "line": 497,
      "method": "PATCH",
      "path": "/api/vendor-contractors/{vid}/visits"
     },
     {
      "func": "list_dispatches",
-     "line": 530,
+     "line": 532,
      "method": "GET",
      "path": "/api/contractor-dispatches"
     },
     {
      "func": "get_dispatch",
-     "line": 553,
+     "line": 555,
      "method": "GET",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "create_dispatch",
-     "line": 570,
+     "line": 572,
      "method": "POST",
      "path": "/api/contractor-dispatches"
     },
     {
      "func": "update_dispatch",
-     "line": 616,
+     "line": 618,
      "method": "PUT",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "delete_dispatch",
-     "line": 718,
+     "line": 720,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "upload_dispatch_files",
-     "line": 750,
+     "line": 767,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files"
     },
     {
      "func": "delete_dispatch_file",
-     "line": 845,
+     "line": 862,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}"
     },
     {
      "func": "approve_dispatch_file_delete",
-     "line": 911,
+     "line": 928,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}/delete-approve"
     },
     {
      "func": "reject_dispatch_file_delete",
-     "line": 967,
+     "line": 984,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}/delete-reject"
     },
     {
      "func": "upload_dispatch_invoice_files",
-     "line": 1042,
+     "line": 1059,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/invoice-files"
     },
     {
      "func": "delete_dispatch_invoice_file",
-     "line": 1079,
+     "line": 1096,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}/invoice-files/{file_id}"
     },
     {
      "func": "set_dispatch_invoice_date",
-     "line": 1108,
+     "line": 1125,
      "method": "PATCH",
      "path": "/api/contractor-dispatches/{did}/invoice-date"
     },
     {
      "func": "accept_dispatch",
-     "line": 1147,
+     "line": 1164,
      "method": "PATCH",
      "path": "/api/contractor-dispatches/{did}/accept"
     },
     {
      "func": "set_dispatch_status",
-     "line": 1195,
+     "line": 1212,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/status"
     },
     {
      "func": "import_dispatch_to_quote",
-     "line": 1211,
+     "line": 1228,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/import-to-quote"
     }
@@ -12810,20 +13212,26 @@
    ],
    "tables_r_transitive": [
     "approval_delegates",
+    "case_stages",
     "contractor_payment_vouchers",
     "daily_tasks",
     "departments",
     "dev_cases",
     "divisions",
     "duty_roles",
+    "invoice_vouchers",
+    "payment_requests",
+    "payslips",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
     "system_settings",
+    "ui_definitions",
     "user_duty_roles",
     "user_perm_subtracts",
-    "users"
+    "users",
+    "vendor_contractors"
    ],
    "tables_w": [
     "contractor_dispatches",
@@ -12833,9 +13241,11 @@
    "tables_w_transitive": [
     "audit_log",
     "contractor_dispatches",
+    "contractor_payment_vouchers",
     "dispatch_file_delete_requests",
     "duty_roles",
     "notifications",
+    "payslip_dispatch_links",
     "permission_changes",
     "system_settings",
     "user_duty_roles",
@@ -12951,6 +13361,38 @@
    ],
    "tables_w": []
   },
+  "mod:subcontract/recycle_adapter": {
+   "api_prefixes": [],
+   "dynamic_sql": true,
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:gl_status",
+    "helper:recycle_bin",
+    "mod:subcontract/dispatch_flow",
+    "mod:subcontract/payable_due",
+    "mod:subcontract/remit_create"
+   ],
+   "kind": "mod",
+   "module_key": "subcontract",
+   "path": "backend/modules/subcontract/recycle_adapter.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [
+    "quotations"
+   ],
+   "tables_r": [
+    "payslips",
+    "quotations",
+    "vendor_contractors"
+   ],
+   "tables_w": [
+    "contractor_dispatches",
+    "contractor_payment_vouchers",
+    "dispatch_file_delete_requests",
+    "payslip_dispatch_links"
+   ]
+  },
   "mod:subcontract/remit": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -13034,6 +13476,7 @@
     "mod:supply/attachments",
     "mod:supply/gl_events",
     "mod:supply/material_link",
+    "mod:supply/recycle_adapter",
     "plat:registry"
    ],
    "kind": "mod",
@@ -13214,12 +13657,14 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:privacy_notice",
+    "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:tiered_approval",
     "helper:uploads",
     "helper:validation",
-    "mod:supply/material_link"
+    "mod:supply/material_link",
+    "mod:supply/recycle_adapter"
    ],
    "imports": [
     "core:db",
@@ -13232,10 +13677,12 @@
     "helper:errors",
     "helper:google_calendar",
     "helper:privacy_notice",
+    "helper:recycle_bin",
     "helper:tiered_approval",
     "helper:uploads",
     "helper:validation",
     "mod:supply/material_link",
+    "mod:supply/recycle_adapter",
     "plat:txn"
    ],
    "kind": "mod",
@@ -13246,115 +13693,115 @@
    "routes": [
     {
      "func": "list_shipping_notes",
-     "line": 100,
+     "line": 103,
      "method": "GET",
      "path": "/api/shipping-notes"
     },
     {
      "func": "material_shippable_for_note",
-     "line": 125,
+     "line": 128,
      "method": "GET",
      "path": "/api/shipping-notes/material-shippable"
     },
     {
      "func": "list_shipping_export_history",
-     "line": 138,
+     "line": 141,
      "method": "GET",
      "path": "/api/shipping-notes/export-history"
     },
     {
      "func": "material_link_check",
-     "line": 221,
+     "line": 224,
      "method": "GET",
      "path": "/api/shipping-notes/{note_no}/material-link-check"
     },
     {
      "func": "get_shipping_note",
-     "line": 233,
+     "line": 236,
      "method": "GET",
      "path": "/api/shipping-notes/{note_no}"
     },
     {
      "func": "get_shipping_recipient_privacy_acks",
-     "line": 255,
+     "line": 258,
      "method": "GET",
      "path": "/api/shipping-notes/{note_no}/privacy-notice"
     },
     {
      "func": "ack_shipping_recipient_privacy_notice",
-     "line": 265,
+     "line": 268,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/privacy-notice/ack"
     },
     {
      "func": "create_shipping_note",
-     "line": 288,
+     "line": 291,
      "method": "POST",
      "path": "/api/shipping-notes"
     },
     {
      "func": "update_shipping_note",
-     "line": 325,
+     "line": 328,
      "method": "PUT",
      "path": "/api/shipping-notes/{note_no}"
     },
     {
      "func": "delete_shipping_note",
-     "line": 355,
+     "line": 358,
      "method": "DELETE",
      "path": "/api/shipping-notes/{note_no}"
     },
     {
      "func": "submit_shipping_note",
-     "line": 380,
+     "line": 391,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/submit"
     },
     {
      "func": "approve_shipping_note",
-     "line": 450,
+     "line": 461,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/approve"
     },
     {
      "func": "revoke_shipping_note_approval",
-     "line": 605,
+     "line": 616,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/revoke-approval"
     },
     {
      "func": "reject_shipping_note",
-     "line": 667,
+     "line": 678,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/reject"
     },
     {
      "func": "download_shipping_pdf",
-     "line": 712,
+     "line": 723,
      "method": "GET",
      "path": "/api/shipping-notes/{note_no}/pdf-download"
     },
     {
      "func": "record_shipping_export",
-     "line": 742,
+     "line": 753,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/export"
     },
     {
      "func": "toggle_signed",
-     "line": 776,
+     "line": 787,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/signed-toggle"
     },
     {
      "func": "upload_shipping_signed_files",
-     "line": 833,
+     "line": 844,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/signed-files"
     },
     {
      "func": "delete_shipping_signed_file",
-     "line": 855,
+     "line": 866,
      "method": "DELETE",
      "path": "/api/shipping-notes/{note_no}/signed-files/{file_id}"
     }
@@ -13378,6 +13825,7 @@
     "quotations",
     "sessions",
     "shipping_notes",
+    "stock_items",
     "system_settings",
     "user_duty_roles",
     "user_perm_subtracts",
@@ -13569,6 +14017,27 @@
     "shipping_notes"
    ],
    "tables_w": []
+  },
+  "mod:supply/recycle_adapter": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:recycle_bin",
+    "helper:uploads"
+   ],
+   "kind": "mod",
+   "module_key": "supply",
+   "path": "backend/modules/supply/recycle_adapter.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "quotations",
+    "stock_items"
+   ],
+   "tables_w": [
+    "shipping_notes"
+   ]
   },
   "mod:tender_radar/__init__": {
    "api_prefixes": [],
@@ -16175,6 +16644,40 @@
    "path": "frontend/pages/receivables.html",
    "routers_called": [],
    "routers_called_effective": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "page:pages/recycle-bin.html": {
+   "api_calls": [
+    "/api/recycle-bin",
+    "/api/recycle-bin/",
+    "/api/recycle-bin/delete-approved",
+    "/api/recycle-bin/impact",
+    "/api/recycle-bin/status",
+    "/api/system/branding/favicon"
+   ],
+   "api_prefixes": [
+    "/api/recycle-bin",
+    "/api/system"
+   ],
+   "api_unmatched": [],
+   "imports": [
+    "js:static/auth-guard.js",
+    "js:static/motrix-date.js",
+    "js:static/notif.js",
+    "js:static/sidebar.js",
+    "js:static/ui.js"
+   ],
+   "kind": "page",
+   "path": "frontend/pages/recycle-bin.html",
+   "routers_called": [
+    "mod:recyclebin/api",
+    "router:system"
+   ],
+   "routers_called_effective": [
+    "mod:recyclebin/api",
+    "router:system"
+   ],
    "tables_r": [],
    "tables_w": []
   },
@@ -20391,6 +20894,7 @@
    "kind": "table",
    "named_by": [
     "helper:audit",
+    "mod:case/recycle_adapter",
     "plat:migrations"
    ],
    "path": "backend/db.py:4581",
@@ -20539,7 +21043,9 @@
    "api_prefixes": [],
    "imports": [],
    "kind": "table",
-   "named_by": [],
+   "named_by": [
+    "mod:case/recycle_adapter"
+   ],
    "path": "backend/db.py:2089",
    "readers": [
     "core:archive",
@@ -20557,7 +21063,8 @@
    "imports": [],
    "kind": "table",
    "named_by": [
-    "core:db"
+    "core:db",
+    "mod:case/recycle_adapter"
    ],
    "path": "backend/db.py:2036",
    "readers": [
@@ -20602,7 +21109,8 @@
    "writers": [
     "core:db",
     "mod:case/api/case_extra_expenses",
-    "mod:case/payables"
+    "mod:case/payables",
+    "mod:case/recycle_adapter"
    ]
   },
   "table:case_material_approvals": {
@@ -20620,14 +21128,16 @@
    "writers": [
     "mod:case/material_approval",
     "mod:case/material_change",
-    "mod:case/material_guard"
+    "mod:case/recycle_adapter"
    ]
   },
   "table:case_material_changes": {
    "api_prefixes": [],
    "imports": [],
    "kind": "table",
-   "named_by": [],
+   "named_by": [
+    "mod:case/recycle_adapter"
+   ],
    "path": "backend/modules/case/migrations/0006_material_changes.py:12",
    "readers": [
     "mod:case/api/material_changes"
@@ -20658,11 +21168,13 @@
    "imports": [],
    "kind": "table",
    "named_by": [
-    "core:archive"
+    "core:archive",
+    "mod:case/recycle_adapter"
    ],
    "path": "backend/modules/case/migrations/0005_material_payments.py:11",
    "readers": [
-    "mod:case/payable_reminders"
+    "mod:case/payable_reminders",
+    "mod:case/recycle_adapter"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -20686,14 +21198,17 @@
    "tables_w": [],
    "writers": [
     "core:db",
-    "mod:case/api/quotations"
+    "mod:case/api/quotations",
+    "mod:case/recycle_adapter"
    ]
   },
   "table:case_stages": {
    "api_prefixes": [],
    "imports": [],
    "kind": "table",
-   "named_by": [],
+   "named_by": [
+    "mod:case/recycle_adapter"
+   ],
    "path": "backend/db.py:1731",
    "readers": [
     "core:archive",
@@ -20701,6 +21216,7 @@
     "helper:google_calendar",
     "mod:case/case_deadlines",
     "mod:case/recognition",
+    "mod:case/recycle_adapter",
     "mod:payroll/api/bonus"
    ],
    "tables_r": [],
@@ -20718,7 +21234,8 @@
    "named_by": [
     "core:db",
     "mod:accounting/voucher_attachments",
-    "mod:case/attachments"
+    "mod:case/attachments",
+    "mod:case/recycle_adapter"
    ],
    "path": "backend/db.py:1472",
    "readers": [
@@ -20753,7 +21270,8 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "mod:case/api/completion_notes"
+    "mod:case/api/completion_notes",
+    "mod:case/recycle_adapter"
    ]
   },
   "table:contractor_dispatches": {
@@ -20762,6 +21280,7 @@
    "kind": "table",
    "named_by": [
     "mod:accounting/voucher_attachments",
+    "mod:case/recycle_adapter",
     "mod:subcontract/attachments"
    ],
    "path": "backend/db.py:733",
@@ -20782,7 +21301,8 @@
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/dispatch_approval",
     "mod:subcontract/api/vendor_contractors",
-    "mod:subcontract/dispatch_flow"
+    "mod:subcontract/dispatch_flow",
+    "mod:subcontract/recycle_adapter"
    ]
   },
   "table:contractor_payment_vouchers": {
@@ -20792,7 +21312,8 @@
    "named_by": [
     "core:archive",
     "helper:system_checks",
-    "mod:case/api/quotations"
+    "mod:case/api/quotations",
+    "mod:case/recycle_adapter"
    ],
    "path": "backend/db.py:1572",
    "readers": [
@@ -20813,6 +21334,7 @@
    "tables_w": [],
    "writers": [
     "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/recycle_adapter",
     "mod:subcontract/remit"
    ]
   },
@@ -20832,6 +21354,7 @@
     "core:pdf_gen",
     "mod:payroll/api/payslip_links",
     "mod:payroll/payslip_bank",
+    "mod:payroll/recycle_adapter",
     "mod:subcontract/api/contractor_vouchers"
    ],
    "tables_r": [],
@@ -21166,7 +21689,8 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "mod:subcontract/api/vendor_contractors"
+    "mod:subcontract/api/vendor_contractors",
+    "mod:subcontract/recycle_adapter"
    ]
   },
   "table:divisions": {
@@ -21854,7 +22378,9 @@
     "helper:system_checks",
     "mod:accounting/voucher_attachments",
     "mod:arap/attachments",
+    "mod:arap/recycle_adapter",
     "mod:case/api/quotations",
+    "mod:case/recycle_adapter",
     "router:definitions"
    ],
    "path": "backend/db.py:1623",
@@ -22123,6 +22649,8 @@
    "tables_w": [],
    "writers": [
     "helper:audit",
+    "mod:arap/recycle_adapter",
+    "mod:payroll/recycle_adapter",
     "router:system"
    ]
   },
@@ -22155,7 +22683,9 @@
    "kind": "table",
    "named_by": [
     "helper:system_checks",
-    "mod:case/api/quotations"
+    "mod:arap/recycle_adapter",
+    "mod:case/api/quotations",
+    "mod:case/recycle_adapter"
    ],
    "path": "backend/db.py:1894",
    "readers": [
@@ -22182,8 +22712,9 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "mod:payroll/api/payslips",
-    "mod:payroll/payslip_links"
+    "mod:payroll/payslip_links",
+    "mod:payroll/recycle_adapter",
+    "mod:subcontract/recycle_adapter"
    ]
   },
   "table:payslip_seq": {
@@ -22217,7 +22748,8 @@
     "mod:payroll/attachments",
     "mod:payroll/gl_events",
     "mod:payroll/payslip_links",
-    "mod:payroll/payslip_payouts"
+    "mod:payroll/payslip_payouts",
+    "mod:subcontract/recycle_adapter"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -22226,6 +22758,7 @@
     "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:payroll/payslip_payables",
+    "mod:payroll/recycle_adapter",
     "mod:payroll/remit_link"
    ]
   },
@@ -22327,6 +22860,7 @@
     "mod:accounting/voucher_attachments",
     "mod:case/__init__",
     "mod:case/attachments",
+    "mod:subcontract/recycle_adapter",
     "router:search"
    ],
    "path": "backend/db.py:496",
@@ -22344,6 +22878,7 @@
     "mod:arap/api/payment_requests",
     "mod:arap/gl_events",
     "mod:arap/receivables",
+    "mod:arap/recycle_adapter",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
@@ -22374,8 +22909,10 @@
     "mod:payroll/bonus_pdf",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/dispatch_payslip_links",
+    "mod:subcontract/recycle_adapter",
     "mod:subcontract/remit",
     "mod:supply/api/shipping_notes",
+    "mod:supply/recycle_adapter",
     "router:item_reads",
     "router:search",
     "router:system"
@@ -22388,7 +22925,8 @@
     "mod:case/material_change",
     "mod:case/material_payment",
     "mod:case/profit_guard",
-    "mod:case/quotations"
+    "mod:case/quotations",
+    "mod:case/recycle_adapter"
    ]
   },
   "table:quote_seq": {
@@ -22404,6 +22942,25 @@
    "tables_w": [],
    "writers": [
     "mod:case/api/quotations"
+   ]
+  },
+  "table:recycle_bin": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [
+    "core:archive",
+    "mod:recyclebin/api",
+    "mod:recyclebin/jobs"
+   ],
+   "path": "backend/modules/recyclebin/migrations/0001_recycle_bin.py:13",
+   "readers": [
+    "mod:recyclebin/api"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:recyclebin/service"
    ]
   },
   "table:schema_version": {
@@ -22453,6 +23010,7 @@
    "named_by": [
     "helper:system_checks",
     "mod:case/api/quotations",
+    "mod:case/recycle_adapter",
     "mod:supply/attachments",
     "router:map_points"
    ],
@@ -22470,7 +23028,8 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "mod:supply/api/shipping_notes"
+    "mod:supply/api/shipping_notes",
+    "mod:supply/recycle_adapter"
    ]
   },
   "table:stock_batches": {
@@ -22495,7 +23054,8 @@
    "imports": [],
    "kind": "table",
    "named_by": [
-    "core:db"
+    "core:db",
+    "mod:case/recycle_adapter"
    ],
    "path": "backend/db.py:3082",
    "readers": [
@@ -22504,6 +23064,7 @@
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
     "mod:supply/gl_events",
+    "mod:supply/recycle_adapter",
     "router:parts"
    ],
    "tables_r": [],
@@ -22891,6 +23452,7 @@
     "mod:payroll/bonus_correction",
     "mod:payroll/bonus_payouts",
     "mod:payroll/bonus_pdf",
+    "mod:recyclebin/service",
     "mod:tender_radar/listing",
     "router:approval_delegates",
     "router:approval_queue",
@@ -22926,7 +23488,8 @@
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/dispatch_approval",
     "mod:subcontract/api/dispatch_payslip_links",
-    "mod:subcontract/gl_events"
+    "mod:subcontract/gl_events",
+    "mod:subcontract/recycle_adapter"
    ],
    "tables_r": [],
    "tables_w": [],
