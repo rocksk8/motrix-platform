@@ -3,7 +3,7 @@
 只 import core／helpers／db（L1），不 import 其他 L2 模組（M04 的付款憑據走 IP-14、M07 的獎金走 IP-8）。"""
 from core.registry import ModuleSpec
 
-from modules.arap import attachments, gl_events, receivables
+from modules.arap import attachments, gl_events, receivables, recycle_adapter
 from modules.arap.api import cashier, invoice_vouchers, payment_requests
 
 MODULE = ModuleSpec(
@@ -29,5 +29,8 @@ MODULE = ModuleSpec(
         ("uploads.path_access", "arap"): invoice_vouchers._InvoiceVoucherPathAccess,
         # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
         ("attachments.catalog", "arap"): attachments._ArapCatalog,
+        # IP-RB1（第 53 班，刪除暫存區 P1）：請款單、開票申請憑據的快照／刪除／還原
+        ("recyclebin.adapter", "payment_request"): lambda: recycle_adapter.PaymentRequestBinAdapter(),
+        ("recyclebin.adapter", "invoice_voucher"): lambda: recycle_adapter.InvoiceVoucherBinAdapter(),
     },
 )
