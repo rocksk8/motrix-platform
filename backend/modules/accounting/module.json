@@ -332,6 +332,7 @@
       "section": "settings",
       "title": "報表設定",
       "desc": "總帳報表的科目對照、期間與輸出設定",
+      "impact": "影響：改科目對照後，之後產生的報表會用新的對照；已出的報表不變。",
       "href": "ledger-settings.html",
       "perm": [
         "cashier",

@@ -87,6 +87,7 @@
       "section": "audit",
       "title": "出貨單歷史紀錄",
       "desc": "出貨單匯出與列印的歷史",
+      "impact": "影響：只是查看，不會改動任何資料。",
       "href": "shipping-export-history.html",
       "perm": [
         "shipping_export_log"

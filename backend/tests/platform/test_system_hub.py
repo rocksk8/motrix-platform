@@ -55,8 +55,9 @@ def test_sections_are_fixed_in_l1_and_modules_cannot_add_one():
 
 
 def test_validate_catches_each_kind_of_bad_card():
-    ok = {"id": "a", "section": "data", "title": "t", "desc": "d", "href": "x.html", "perm": "superadmin", "order": 1}
+    ok = {"id": "a", "section": "data", "title": "標題", "desc": "說明", "impact": "影響：只是查看。", "href": "x.html", "perm": "superadmin", "order": 1}
     assert H.validate([ok], {"x.html"}) == []
+    assert H.validate([{k: v for k, v in ok.items() if k != "impact"}], {"x.html"}), "缺 impact 要被抓到"
     assert H.validate([ok, dict(ok)], {"x.html"}), "重複 id 要被抓到"
     assert H.validate([dict(ok, perm="everyone")]), "不合法 perm 要被抓到"
     assert H.validate([dict(ok, order="1")]), "order 要是整數"
@@ -261,3 +262,41 @@ console.log(JSON.stringify({full, none, otherN: other.items.length}))
 def test_breadcrumb_wiring_exists_and_skips_the_hub_page():
     src = (ROOT / "frontend" / "static" / "sidebar.js").read_text(encoding="utf-8")
     assert "_systemCrumb()" in src and "file === 'system-hub.html'" in src and "sys-crumb" in src
+
+
+# ── 6 使用者介面核心原則：畫面上不出現程式碼（render-scan）──────────────────────────────────────
+def test_all_user_visible_strings_are_plain_language():
+    """標題、說明、分組名稱都要白話中文；不得出現網址、檔名、底線代碼、module、API 等字樣。"""
+    cards = _all_cards()
+    bad = {c["id"]: [(f, H.plain_problem(c.get(f))) for f in ("title", "desc", "impact") if H.plain_problem(c.get(f))] for c in cards}
+    bad = {k: v for k, v in bad.items() if v}
+    assert bad == {}, bad
+    for sct in H.SECTIONS:
+        assert H.plain_problem(sct["title"]) == "" and H.plain_problem(sct["sub"]) == "", sct
+
+
+def test_plain_language_check_catches_code_like_text():
+    assert H.plain_problem("使用者管理") == ""
+    for t in ("users.html", "Open /api/x", "module_settings 設定", "只有英文", "請到 https://x.y 設定", "給 API 用"):
+        assert H.plain_problem(t), t
+    ok = {"id": "a", "section": "data", "title": "標題", "desc": "說明", "impact": "影響：沒有。", "href": "x.html", "perm": "superadmin", "order": 1}
+    assert H.validate([ok], {"x.html"}) == []
+    assert any("不是白話" in p for p in H.validate([dict(ok, desc="see module_settings")], {"x.html"}))
+
+
+def test_page_never_renders_ids_hrefs_or_module_keys_as_text():
+    """頁面模板裡 x-text／x-html 不得綁 href、module、id、keywords（它們只用在連結與搜尋）；徽章只顯示白話 text。"""
+    html = (ROOT / "frontend" / "pages" / "system-hub.html").read_text(encoding="utf-8")
+    binds = re.findall(r'x-(?:text|html)="([^"]*)"', html)
+    assert binds, "掃不到任何 x-text／x-html ⇒ 掃描器壞了"
+    for b in binds:
+        assert not re.search(r"\.(href|module|id|keywords)", b), "畫面不可顯示程式碼欄位：%s" % b
+    assert "title=\"" not in re.sub(r"<title>.*?</title>", "", html, flags=re.S) or ":title" not in html, "不要用 title 屬性洩漏網址"
+    assert not re.search(r':title="[^"]*(href|module)', html)
+
+
+def test_first_time_hint_is_plain_dismissible_and_remembered():
+    html = (ROOT / "frontend" / "pages" / "system-hub.html").read_text(encoding="utf-8")
+    m = re.search(r'data-testid="hub-first-hint">\s*<span>(.*?)</span>', html, re.S)
+    assert m, "找不到第一次使用的提示"
+    assert H.plain_problem(m.group(1)) == "" and "dismissHint()" in html and "motrix_system_hub_hint" in html

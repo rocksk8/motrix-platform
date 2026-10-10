@@ -33,6 +33,7 @@
       "section": "workflow",
       "title": "匯款款別設定",
       "desc": "訂金、進度款、完工款…各款別可開立的派發階段",
+      "impact": "影響：只影響之後新開的匯款申請；已開的申請不變。",
       "href": "remit-kinds-settings.html",
       "perm": "superadmin",
       "order": 30,
