@@ -11,7 +11,7 @@
 
 ## 我做的設計決定（PM 請複核）
 1. **L1 契約** `backend/helpers/recycle_bin.py`（unit `helper:recycle_bin`）：`Adapter` 基底類別（`entity_type, label, can_delete, snapshot, delete_in_tx, restore_in_tx, impact, purge_files, mask, cascade_children`）；能力名 `recyclebin.adapter`（各擁有模組以 `ModuleSpec.providers[("recyclebin.adapter", entity_type)]` 提供）與 `recyclebin.delete`（recyclebin 模組提供，擁有模組的刪除端點呼叫 `recycle_bin.delete(...)`；**模組不在 ⇒ 回 None，呼叫端走舊的硬刪並明說**，不得靜默）。IP 編號暫定 IP-RB1／IP-RB2，列車定號。
-2. **隔離目錄**：預設 `core.paths.RECYCLE_DIR` ＝ `root("資源回收筒")`（與 `報價單PDF` 等並列、git 忽略、不在 `uploads/` 下 ⇒ 不被 `_mirror_uploads` 鏡像上雲、不被檔案開啟路由服務）；`system_settings.recyclebin_dir` 可由 superadmin 改到樹外絕對路徑。檔案以 `os.replace` **搬**進 `<根>/<bin_id>/<原相對路徑>`；跨磁碟時退化為「複製→驗 sha256→刪原」。隔離檔含個資 ⇒ 視為 F2：**永不上雲**、不進每日匯出。
+2. **隔離目錄**：預設＝`<uploads 的上一層>\資源回收筒`（正式機＝安裝根目錄下；從 `UPLOADS_ROOT` 推，測試換掉 UPLOADS_ROOT 時自動跟著換；與 `報價單PDF` 等並列、git 忽略、不在 `uploads/` 下 ⇒ 不被 `_mirror_uploads` 鏡像上雲、不被檔案開啟路由服務）；`system_settings.recyclebin_dir` 可由 superadmin 改到樹外絕對路徑。檔案以 `os.replace` **搬**進 `<根>/<token(uuid)>/<root>/<原相對路徑>`（token 不用自增 id：交易回滾後 id 會被重用）；跨磁碟時退化為「複製→驗 sha256→刪原」。隔離檔含個資 ⇒ module.json 宣告 F3（永不上雲、不匯出）：**永不上雲**、不進每日匯出。
 3. **表分類**：`recycle_bin` ＝ T1；`snapshot_json`／`files_manifest_json` 整欄在 `archive._F2_FIELDS` 宣告為 F2（一般 JSON 備份排除，完整列只進個資資料夾）。本機 sqlite 備份含整表。
 4. **磁碟水位**：`GET /api/recycle-bin/status` 回總量／筆數／最舊；超過門檻（預設 5 GB）寫告警（不自動提前清除）。
 5. 沒有 core schema 版本升級：新表走模組 migration（`module_schema_versions`）。
