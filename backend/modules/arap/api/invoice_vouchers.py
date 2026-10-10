@@ -472,15 +472,16 @@ def delete_invoice_voucher(voucher_no: str, authorization: str = Header(None)):
                 raise HTTPException(404, "憑據不存在")
             if row["status"] != "草稿":
                 raise HTTPException(409, "僅草稿狀態可刪除")
-            try:
-                res = recycle_bin.delete(conn, "invoice_voucher", voucher_no, user)
-            except recycle_bin.BinError as e:
-                raise HTTPException(409, str(e))
-            if res is None:                                              # 暫存區模組不在 ⇒ 照舊硬刪（不可還原），回應與稽核明說
-                from modules.arap.recycle_adapter import InvoiceVoucherBinAdapter
-                InvoiceVoucherBinAdapter().delete_in_tx(conn, voucher_no)     # 與進暫存區同一段刪除實作（adapter 檔內的 DELETE 免守門登記）
-                recycled = False
-            conn.commit()
+            with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
+                try:
+                    res = recycle_bin.delete(conn, "invoice_voucher", voucher_no, user)
+                except recycle_bin.BinError as e:
+                    raise HTTPException(409, str(e))
+                if res is None:                                              # 暫存區模組不在 ⇒ 照舊硬刪（不可還原），回應與稽核明說
+                    from modules.arap.recycle_adapter import InvoiceVoucherBinAdapter
+                    InvoiceVoucherBinAdapter().delete_in_tx(conn, voucher_no)     # 與進暫存區同一段刪除實作（adapter 檔內的 DELETE 免守門登記）
+                    recycled = False
+                conn.commit()
     finally:
         conn.close()
     _purge_notifications(voucher_no, ['invoice_voucher_approval_request', 'invoice_voucher_approved',

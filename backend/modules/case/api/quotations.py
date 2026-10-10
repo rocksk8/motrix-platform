@@ -2507,19 +2507,28 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
     from helpers import recycle_bin                  # 第 53 班 P1：刪除先進暫存區（IP-RB2）
     from modules.case import recycle_adapter as _ra
     begin_write(conn)                                # 讀快照前先拿寫鎖
-    try:
-        res = recycle_bin.delete(conn, "quotation", quote_no, user)   # 報價單＋名下階段／拜訪／進度更新／行動事項＋附件一併進暫存區
-    except recycle_bin.BinError as e:
-        conn.rollback()
-        conn.close()
-        raise HTTPException(409, str(e))
-    if res is None:                                  # 暫存區模組不在 ⇒ 照舊只刪報價單那一列並明說
-        _ra.legacy_delete_quotation(conn, quote_no)
-    # 轉建連結指到這張單的業務開發案件解除連結（IP-13 `crm.quote_deleted`，M02 提供；同一筆交易）。
-    # M02 不在 ⇒ 報價單照刪，回應 notice 明說連結沒有解除（INTEGRATION-POINTS IP-13「對方不在時」）。
-    unlink = _registry.single_provider("crm.quote_deleted")
-    orphaned = unlink(conn, quote_no) if unlink else []
-    conn.commit()
+    with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
+        try:
+            try:
+                res = recycle_bin.delete(conn, "quotation", quote_no, user)   # 報價單＋名下階段／拜訪／進度更新／行動事項＋附件一併進暫存區
+            except recycle_bin.BinError as e:
+                conn.rollback()
+                conn.close()
+                raise HTTPException(409, str(e))
+            if res is None:                                  # 暫存區模組不在 ⇒ 照舊只刪報價單那一列並明說
+                _ra.legacy_delete_quotation(conn, quote_no)
+            # 轉建連結指到這張單的業務開發案件解除連結（IP-13 `crm.quote_deleted`，M02 提供；同一筆交易）。
+            # M02 不在 ⇒ 報價單照刪，回應 notice 明說連結沒有解除（INTEGRATION-POINTS IP-13「對方不在時」）。
+            unlink = _registry.single_provider("crm.quote_deleted")
+            orphaned = unlink(conn, quote_no) if unlink else []
+            conn.commit()
+        except BaseException:             # 連線不可帶著寫鎖漏出去（原本沒有 finally；附件搬回由 delete_scope 處理）
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:             # noqa: BLE001 — 前面可能已關閉
+                pass
+            raise
     conn.close()
     _purge_notifications(quote_no, ['approval_request', 'approval_returned',
                                      'approval_rejected', 'case_stage_deadline', 'approval_reminder'])

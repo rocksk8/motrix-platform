@@ -418,3 +418,48 @@ def test_default_numbering_skips_the_bin_for_every_caller_including_arap(client)
             assert db.next_entity_code(cn, table, prefix, code_col=col) == first
         finally:
             cn.close()
+
+
+def _inject_failure_after_delete(monkeypatch):
+    """模擬『delete() 成功之後、commit 之前』的後續步驟失敗（delete_scope 要把附件搬回）。"""
+    from helpers import recycle_bin as _RB
+    orig = _RB.delete
+
+    def wrapped(*a, **k):
+        res = orig(*a, **k)
+        if res is not None:
+            raise RuntimeError("later step failed")
+        return res
+    monkeypatch.setattr(_RB, "delete", wrapped)
+
+
+def _quarantine_is_empty():
+    import os as _os
+    from modules.recyclebin import quarantine as _Q
+    root = _Q.root_dir()
+    return (not _os.path.isdir(root)) or _os.listdir(root) == []
+
+
+def _call(fn, *a, **k):
+    try:
+        return fn(*a, **k)
+    except RuntimeError:
+        return None                      # TestClient 把伺服器例外丟出來也算失敗
+
+
+def test_caller_failure_after_delete_returns_the_files(client, who, monkeypatch):
+    su, _ = who
+    rel = "rbc/qf/signed.pdf"
+    full = _file(rel)
+    _quote("MQ-RBC-090", signed=[{"id": "sg", "filename": "signed.pdf", "path": rel}])
+    rel2 = "rbc/ef/a.txt"
+    full2 = _file(rel2)
+    _quote("MQ-RBC-091")
+    eid = _expense("MQ-RBC-091", rel=rel2)
+    _inject_failure_after_delete(monkeypatch)
+    _call(client.delete, "/api/quotations/MQ-RBC-090", headers=su)
+    _call(client.delete, "/api/quotations/MQ-RBC-091/extra-expenses/%d" % eid, headers=su)
+    assert os.path.isfile(full) and os.path.isfile(full2)
+    assert _q("SELECT 1 FROM quotations WHERE quote_no='MQ-RBC-090'") and _q("SELECT 1 FROM case_extra_expenses WHERE id=?", (eid,))
+    assert _bin_rows() == [] and _quarantine_is_empty()
+

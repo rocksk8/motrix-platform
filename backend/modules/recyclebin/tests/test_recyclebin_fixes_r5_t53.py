@@ -161,3 +161,26 @@ def test_c_successful_flows_write_their_audit_in_the_same_transaction(client, wh
     res2 = _delete("C6", {"username": "u1", "role": "admin"})
     assert client.delete("/api/recycle-bin/%d?confirm=永久刪除" % res2["bin_id"], headers=su).status_code == 200
     assert len(_q("SELECT * FROM audit_log WHERE action='recyclebin.purge_manual'")) == 1
+
+
+def test_delete_scope_undoes_on_error_and_keeps_on_success(who):
+    rels = _doc("S1")
+    cn = db.get_db()
+    try:
+        with RB.delete_scope():
+            res = RB.delete(cn, ET, "S1", {"username": "u1", "role": "admin"})
+            cn.commit()
+        assert res is not None and all(not os.path.exists(_abs(r)) for r in rels), "成功（commit 後離開區塊）⇒ 不回復"
+    finally:
+        cn.close()
+    rels2 = _doc("S2")
+    cn = db.get_db()
+    try:
+        with pytest.raises(RuntimeError):
+            with RB.delete_scope():
+                RB.delete(cn, ET, "S2", {"username": "u1", "role": "admin"})
+                raise RuntimeError("later step")
+        cn.rollback()
+    finally:
+        cn.close()
+    assert all(os.path.isfile(_abs(r)) for r in rels2), "區塊以例外結束 ⇒ 附件搬回"

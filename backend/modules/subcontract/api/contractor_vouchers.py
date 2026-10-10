@@ -527,20 +527,21 @@ def delete_contractor_voucher(voucher_no: str, authorization: str = Header(None)
             conn.close()
             raise HTTPException(404, "申請不存在")
         notice = ""
-        try:
-            res = recycle_bin.delete(conn, _rb_adapter.ET_VOUCHER, voucher_no, user)
-        except recycle_bin.BinError as e:
-            conn.close()
-            raise HTTPException(409, str(e))
-        if res is None:                                                      # 暫存區模組不在：照舊刪並明說
-            ad = _rb_adapter.VoucherBinAdapter()
-            ok, why = ad.can_delete(conn, voucher_no, user)
-            if not ok:
+        with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
+            try:
+                res = recycle_bin.delete(conn, _rb_adapter.ET_VOUCHER, voucher_no, user)
+            except recycle_bin.BinError as e:
                 conn.close()
-                raise HTTPException(409, why)
-            ad.delete_in_tx(conn, voucher_no)
-            notice = "刪除暫存區未啟用：此申請已永久刪除，無法還原"
-        conn.commit()
+                raise HTTPException(409, str(e))
+            if res is None:                                                      # 暫存區模組不在：照舊刪並明說
+                ad = _rb_adapter.VoucherBinAdapter()
+                ok, why = ad.can_delete(conn, voucher_no, user)
+                if not ok:
+                    conn.close()
+                    raise HTTPException(409, why)
+                ad.delete_in_tx(conn, voucher_no)
+                notice = "刪除暫存區未啟用：此申請已永久刪除，無法還原"
+            conn.commit()
         conn.close()
     if res and res.get("after_commit"):
         res["after_commit"]()                                                # 第53班：commit 之後的後續動作（L1 hook；含行事曆事件對齊與簽核通知清理）

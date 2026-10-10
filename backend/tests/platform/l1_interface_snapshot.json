@@ -1,5 +1,5 @@
 {
- "core_version": "1.126",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -172,10 +172,12 @@
   },
   "helper:audit": {
    "NOTIFICATION_RETENTION_DAYS": "const",
+   "_DETAIL_MAX": "const",
    "_FAIL_REASON_LABELS": "const",
    "_MODULE_LABELS": "const",
    "_audit": "def(token, action, target_type=…, target_id=…, target_label=…, detail=…)",
    "_audit_login_failed": "def(username, ip=…, now=…)",
+   "_derive_fields": "def(action, target_type=…, target_id=…, target_label=…, detail=…)",
    "_filter_live_notifications": "def(conn, rows)",
    "_mark_notifications_read": "def(ref_id, types, username=…)",
    "_notify": "def(username, type_, ref_id, ref_label, message, link=…)",
@@ -1078,6 +1080,7 @@
    "adapters": "def()",
    "available": "def()",
    "delete": "def(conn, entity_type, entity_id, user, reason=…, approved=…)",
+   "delete_scope": "def()",
    "get_adapter": "def(entity_type)",
    "mask_obj": "def(obj, _key=…)",
    "reserved_ids": "def(conn, entity_type=…)"
