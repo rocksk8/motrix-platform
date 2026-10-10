@@ -4,7 +4,7 @@
 - 新 `recycle_adapter.py`（IP-RB1）：`DispatchBinAdapter`（`contractor_dispatch`）、`VoucherBinAdapter`（`contractor_voucher`），在 `ModuleSpec.providers` 以 `recyclebin.adapter` 登記。快照＝單據列＋子表列（派發：勞報單連結、附件刪除申請）＋附件清單；還原放回原值（同主鍵、同欄位）；單號（`DP-`／`PV-`）被占用 ⇒ 換新號並回報；承攬商／報價單／所屬派發不在 ⇒ `parent_missing`；勞報單不在 ⇒ 略過該連結並註記；列表/詳情遮罩用 L1 預設 `mask_obj`（展開 JSON 字串欄位後遮罩）。
 - `DELETE /api/contractor-dispatches/{id}`、`DELETE /api/contractor-vouchers/{no}` 改為 `recycle_bin.delete()`（IP-RB2）：回應多 `binned`、`binId`、`purgeAfter`；暫存區模組不在 ⇒ 照舊刪資料列（附件留在原處）並在回應 `notice` 與稽核明說。**刪除條件不放寬**（派發：審核中／已核准／已有匯款申請不可刪；匯款申請：只有草稿、分期草稿守 LIFO）；已核可的單據只能走暫存區的最高管理者『刪除已核可』入口（`can_delete_approved`＋`impact`：已匯款不可、有匯款申請的派發不可）。
 - 行為差異：派發有**已作廢**的匯款申請時，刪除回 409「有已作廢的匯款申請留存紀錄」（以前會在外鍵上 500）；刪派發時一併移除它的勞報單連結與附件刪除申請（以前留下孤兒列；還原時復原）。
-- 守門基線：`tests/platform/recyclebin_baseline_t53.json` 移除這兩類的路由與 `DELETE FROM` 項目；`test_baseline_file_is_well_formed` 的 p1 下限改為『待接入＋已接入』合計（棘輪下每接入一條就少一條，原寫法會逼每個 adapter 作者去改下限）。測試：`tests/test_recycle_adapter_t53.py`。
+- 守門基線：`tests/platform/recyclebin_baseline_t53.json` 移除這兩類的路由與 `DELETE FROM` 項目。測試：`tests/test_recycle_adapter_t53.py`。
 
 ## 1.1.29 — 2026-10-10（wip/t51-1d-payslip-prefill；勞報單預設選取已派工、一鍵帶入）
 - `dispatch.by_person` 提供者（IP-115，加法）：`dispatches_for_person(conn, contractor_id, limit, user=None)` 多回 `scope`、`itemsSummary`、`projectName`、`customerName`、`caseVisible`，並排除狀態 draft／cancelled；案件名稱只在 `user` 通過 `guard_case_access` 時給（用自己的短連線，不影響呼叫端連線），沒給 user ⇒ 空字串。仍不含金額。
