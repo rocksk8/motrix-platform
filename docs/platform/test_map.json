@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1262,
+  "tests": 1263,
   "unmapped": 13,
   "kinds": {
    "api": 689,
    "e2e": 301,
-   "audit": 159,
+   "audit": 160,
    "unit": 113
   },
   "routes": 793
@@ -18265,6 +18265,19 @@
     ]
    }
   },
+  "backend/tests/platform/test_mk_delivery_scripts_m1.py": {
+   "kind": "audit",
+   "units": [
+    "dir:tools/platform/",
+    "file:tools/platform/mk_delivery_scripts.py"
+   ],
+   "evidence": {
+    "path": [
+     "tools/platform/",
+     "tools/platform/mk_delivery_scripts.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_modtest_full_results.py": {
    "kind": "audit",
    "units": [
@@ -32266,10 +32279,12 @@
    "kind": "api",
    "units": [
     "core:db",
-    "mod:case/api/quotations"
+    "mod:case/api/quotations",
+    "plat:txn"
    ],
    "evidence": {
     "import": [
+     "backend/core/txn.py",
      "backend/db.py"
     ],
     "api": [
