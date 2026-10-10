@@ -307,12 +307,13 @@ def run_stage(repo, stage, records, python=None, runner=None, workers=None, note
     env["PYTHONPATH"] = os.pathsep.join([str(repo / "tools" / "platform")] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
     env.update({"MOTRIX_FAIL_STREAM_STAGE": stage, "MOTRIX_FAILFAST": "1", "MOTRIX_FAILFAST_N": "10", "MOTRIX_FAILFAST_QUIET_MIN": "3",
                 "MOTRIX_FAILFIRST": "1", "MOTRIX_FAILFIRST_BASE": "auto"})
-    fs_dir = None
+    # 失敗明細一律落在這一輪專用目錄（failfast 提早停也一樣）：run-stage 結束時讀回、印出路徑與紅題，不必再去主工作樹翻 jsonl
+    # （T53：failfast 停下時明細其實有寫，但 run-stage 只印「紅」，別的視窗看不到哪一題）
+    fs_dir = base + "-failstream"
+    env["MOTRIX_FAIL_STREAM_DIR"] = fs_dir
+    env["MOTRIX_FAIL_STREAM_RUN"] = "runstage-%s-%s" % (stage, datetime.now().strftime("%H%M%S"))
     if no_failfast:
         env["MOTRIX_FAILFAST"] = "0"
-        fs_dir = base + "-failstream"                                  # 讀回這一輪的紅清單：fail_stream 寫到這個專用目錄
-        env["MOTRIX_FAIL_STREAM_DIR"] = fs_dir
-        env["MOTRIX_FAIL_STREAM_RUN"] = "runstage-%s-%s" % (stage, datetime.now().strftime("%H%M%S"))
     note("[run-stage] %s：%s" % (stage, " ".join(cmd)))
     if runner is None:
         rc = subprocess.run(cmd, cwd=str(backend), env=env).returncode
@@ -322,11 +323,13 @@ def run_stage(repo, stage, records, python=None, runner=None, workers=None, note
     if not fp0 or fp0 != fp1:
         return rc, False, "不寫紀錄：%s" % ("開跑時工作樹不乾淨（含未追蹤檔）" if not fp0 else "跑到一半指紋變了（HEAD／工作樹／環境）")
     commit = _git(repo, "rev-parse", "--short", "HEAD").strip()
-    reds = collect_reds(fs_dir) if (no_failfast and rc != 0 and fs_dir) else None
+    found = collect_reds(fs_dir) if rc != 0 else None
+    reds = found if no_failfast else None                              # 沿用紀錄的欄位維持原樣：只有 --no-failfast 才多記 reds
     record(records, fp1, False, commit, stages={stage: stage_entry(rc == 0, reds=reds, failfast=False if no_failfast else None)}, source="standalone")
     extra = ""
-    if reds:
-        extra = "；紅 %d 題（無 failfast，全部列出）：%s" % (len(reds), "、".join(reds[:20]) + ("…" if len(reds) > 20 else ""))
+    if found:
+        extra = "；紅 %d 題（%s）：%s；明細（longrepr）：%s" % (
+            len(found), "無 failfast，全部列出" if no_failfast else "failfast 提早停，只含已出現的", "、".join(found[:20]) + ("…" if len(found) > 20 else ""), fs_dir)
     return rc, True, "已記錄：%s=%s（建包同指紋、同一天、%d 小時內會沿用）%s" % (stage, "綠" if rc == 0 else "紅", MAX_HOURS, extra)
 
 

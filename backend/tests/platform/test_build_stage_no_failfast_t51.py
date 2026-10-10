@@ -62,9 +62,10 @@ def _runner(code, reds=(), seen=None):
 def test_default_run_stage_is_unchanged_failfast_on_no_reds_field(repo, tmp_path):
     rec, seen = tmp_path / "rec.jsonl", {}
     rc, wrote, why = btr.run_stage(repo, "not_e2e", rec, runner=_runner(1, ["t::a"], seen), note=lambda *_: None)
-    assert rc == 1 and wrote and seen["MOTRIX_FAILFAST"] == "1" and "MOTRIX_FAIL_STREAM_DIR" not in seen
+    assert rc == 1 and wrote and seen["MOTRIX_FAILFAST"] == "1" and seen["MOTRIX_FAIL_STREAM_DIR"].endswith("-failstream")
     line = json.loads(rec.read_text(encoding="utf-8").splitlines()[-1])
     assert "reds" not in line["stages"]["not_e2e"] and "failfast" not in line["stages"]["not_e2e"], "原行為：不多記欄位"
+    assert "t::a" in why and "failfast 提早停" in why and "-failstream" in why, "failfast 停下也要印出紅題與明細位置：%s" % why
 
 
 def test_no_failfast_turns_only_failfast_off_and_lists_every_red_once(repo, tmp_path):

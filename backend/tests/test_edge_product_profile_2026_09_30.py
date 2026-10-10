@@ -24,7 +24,7 @@ def prod(monkeypatch, tmp_path):
     monkeypatch.setattr(startup, "_EDGE_PROFILE_ROOT", str(root))
     monkeypatch.setattr(startup, "_EDGE_PROFILE_POOL", [])
     monkeypatch.setattr(startup, "_EDGE_PROFILE_STATE", {"init": False, "runs": 0})
-    st = {"seen": [], "delay": 0.0, "rc": 0, "raise": None, "lock": threading.Lock()}
+    st = {"seen": [], "delay": 0.0, "rc": 0, "raise": None, "barrier": None, "lock": threading.Lock()}
 
     def fake_run(cmd, **kw):
         d = next((a.split("=", 1)[1] for a in cmd if str(a).startswith("--user-data-dir=")), None)
@@ -34,6 +34,8 @@ def prod(monkeypatch, tmp_path):
             os.makedirs(d, exist_ok=True)
             with open(os.path.join(d, "cache.bin"), "ab") as f:
                 f.write(b"x" * 1024)
+        if st["barrier"] is not None:                 # 要求「n 條同時在跑」：全員到齊才放行（不靠睡眠時間，機器忙也穩定）
+            st["barrier"].wait(timeout=30)
         time.sleep(st["delay"])
         if st["raise"]:
             raise st["raise"]
@@ -69,8 +71,8 @@ def test_sequential_runs_reuse_the_same_profile_and_keep_the_command_intact(prod
 
 
 def test_concurrent_runs_within_the_limit_get_different_profiles(prod):
-    prod["delay"] = 0.3
     n = startup.EDGE_PDF_MAX_CONCURRENCY
+    prod["barrier"] = threading.Barrier(n)          # n 條都進到 fake run 才一起放行 ⇒ 一定同時各持一份 profile
     ts = [threading.Thread(target=_run, args=(["msedge.exe", "--headless", "u%d" % i],)) for i in range(n)]
     [t.start() for t in ts]
     [t.join() for t in ts]
