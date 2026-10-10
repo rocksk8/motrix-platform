@@ -196,15 +196,22 @@ def test_voucher_delete_restore_round_trip_and_numbering_conflict(client, who):
 
     r = client.delete("/api/contractor-vouchers/%s" % no, headers=su)
     bid = r.json()["binId"]
-    no2 = _voucher(client, su, did)                                    # 取到同一個 PV- 單號
-    assert no2 == no
+    no2 = _voucher(client, su, did)                                    # 新申請的單號依現行取號政策（單號不重發 ⇒ 不同於 no；舊政策可能同號——測試不依賴）
     rr = _restore(client, su, bid)
     assert rr.status_code in (409, 400), "同派發同款別已有有效申請 ⇒ 衝突，不覆蓋"
     assert _row("recycle_bin", "id", bid)["restore_status"] == "restore_failed"
     _x("UPDATE contractor_payment_vouchers SET voided_at='2031-01-01', status='已作廢' WHERE voucher_no=?", (no2,))
+    # 單號衝突路徑：直接放一張同單號、已作廢的申請（不占有效名額）⇒ 還原時換新號並回報
+    if no2 == no:                                                      # 舊取號政策下新單會拿到同號：先改掉，免得和下面刻意放的同號列撞唯一鍵
+        _x("UPDATE contractor_payment_vouchers SET voucher_no='PV-TEST-0002' WHERE voucher_no=?", (no2,))
+        no2 = "PV-TEST-0002"
+    row = {k: v for k, v in _row("contractor_payment_vouchers", "voucher_no", no2).items() if k != "id"}
+    row["voucher_no"] = no
+    cols = list(row)
+    _x("INSERT INTO contractor_payment_vouchers (%s) VALUES (%s)" % (",".join(cols), ",".join("?" * len(cols))), tuple(row[c] for c in cols))
     rr = _restore(client, su, bid)
-    assert rr.status_code == 200 and rr.json()["renumbered"] is True, rr.text
-    assert _row("contractor_payment_vouchers", "voucher_no", no2)["voided_at"] == "2031-01-01", "既有的不動"
+    assert rr.status_code == 200 and rr.json()["renumbered"] is True and any(no in n for n in rr.json()["notes"]), rr.text
+    assert _row("contractor_payment_vouchers", "voucher_no", no)["voided_at"] == "2031-01-01", "同單號的既有申請不動"
 
 
 def test_voucher_rules_not_relaxed_and_approved_entry(client, who):
@@ -326,7 +333,7 @@ def test_hook_runs_after_endpoint_delete_and_not_when_the_action_fails(client, w
     r = client.delete("/api/contractor-vouchers/%s" % no, headers=su)
     assert r.status_code == 200 and fired == [no], "端點自己 commit 之後呼叫 hook"
     bid = r.json()["binId"]
-    no2 = _voucher(client, su, did)                                    # 取到同一個單號 ⇒ 同款別同期別有效申請 ⇒ 還原衝突
+    no2 = _voucher(client, su, did)                                    # 同派發又有一張有效申請 ⇒ 還原衝突（單號是否相同依取號政策，測試不依賴）
     fired.clear()
     assert _restore(client, su, bid).status_code in (409, 400)
     assert fired == [], "還原失敗（回滾）⇒ 不執行 commit 後動作"
