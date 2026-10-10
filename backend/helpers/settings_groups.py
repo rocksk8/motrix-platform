@@ -79,7 +79,7 @@ register_group(
 )
 
 # 系統中心（第 54 班）：『沒有權限的項目要不要列出來』是『放寬可見度』的設定——走設定登錄表（版本、影響說明、稽核同交易、放寬要確認期間與第二人核准）。
-sr.register_group(
+register_group(
     "system_hub", "系統中心",
     [
         S("show_denied", "int", 0, min=0, max=1, risk="security", loosen="up", recommended=0,

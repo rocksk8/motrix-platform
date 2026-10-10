@@ -307,8 +307,7 @@ def test_first_time_hint_is_plain_dismissible_and_remembered():
 def test_show_denied_is_a_registered_setting_with_ledger_and_loosening_rules(client, make_user):
     """可見度放寬走設定登錄表：群組已登錄、放寬方向＝up、風險＝security、有白話影響與風險說明；預設隱藏。"""
     from helpers import settings_registry as sr
-    g = sr.groups()["system_hub"]
-    f = g["fields"]["show_denied"]
+    f = sr._g("system_hub")["fields"]["show_denied"]            # 內部的 SettingDef（groups() 回的是畫面用的 meta）
     assert f.loosen == "up" and f.risk == "security" and f.default == 0 and f.recommended == 0
     assert f.impact and f.risk_text and [c[0] for c in f.choices] == [0, 1] and all(c[1] and c[2] for c in f.choices)
     assert sr.get("system_hub", "show_denied") == 0
@@ -476,4 +475,4 @@ def test_system_hub_setting_group_is_registered_without_importing_the_app():
     """群組登錄在 helpers/settings_groups.py（單一登錄處）：不需要 client／main 就存在（凍結基準題單獨跑也要過）。"""
     from helpers import settings_groups  # noqa: F401
     from helpers import settings_registry as sr
-    assert "system_hub" in sr.groups() and "show_denied" in sr.groups()["system_hub"]["fields"]
+    assert "system_hub" in sr.groups() and "show_denied" in [f["key"] for f in sr.groups()["system_hub"]["fields"]]
