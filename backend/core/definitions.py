@@ -2,7 +2,7 @@
 """定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。
 
 [單位] plat:definitions    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] DefinitionConflict, DefinitionError, DraftConflict, KINDS, decide_submitted, default_for, delete_draft, diff, etag_of, get, kinds, kinds_meta, list_definitions, open_submission, publish,
+[公開介面] DefinitionConflict, DefinitionError, DraftConflict, KINDS, decide_submitted, default_for, delete_draft, diff, etag_of, get, kinds, kinds_meta, list_definitions, open_submission, publish, publish_direct,
     register_default, register_kind, register_validator, resolve, restore, save_decision, save_draft, submit_draft, validate, versions
 [不變式] 每個 (kind, key, scope) 最多一份草稿；已發布的版本不可改、不可刪；還原＝把舊版再發布成新的一版；發布前驗證不過就不發布
 [契約題] tests/test_definitions_store_2026_09_25.py
@@ -354,6 +354,30 @@ def publish(conn, kind, key, scope, note="", user="", base_etag=None) -> dict:
         return _publish_locked(conn, kind, key, scope, note, user)
     except Exception:
         if began:
+            conn.rollback()
+        raise
+
+
+def publish_direct(conn, kind, key, scope, body, note="", user="", commit=True) -> dict:
+    """直接發布一份 `body`（不經草稿）：給『一次動作＝發布』的使用者（設定中心，第 54 班）。寫鎖內先過驗證器，不過不寫（`DefinitionError`＋問題清單）；
+    有送審中的版本時不直接發布（同 `publish`）。`commit=False` ⇒ 不 commit（呼叫端要在同一個交易內再寫變更明細／稽核，最後自己 commit；
+    此時若是本函式開的交易，例外時才由本函式 rollback）。"""
+    from core.txn import begin_write
+    _check(kind, key, scope)
+    if not isinstance(body, dict):
+        raise DefinitionError("定義必須是 JSON 物件")
+    began = begin_write(conn)
+    try:
+        _open_blocks_direct(conn, kind, key, scope, "發布")
+        problems = validate(kind, key, body)
+        if problems:
+            raise DefinitionError("驗證不通過，未發布（%d 個問題）" % len(problems), problems)
+        out = _insert_published(conn, kind, key, scope, body, note, user)
+        if commit:
+            conn.commit()
+        return out
+    except Exception:
+        if began and conn.in_transaction:
             conn.rollback()
         raise
 

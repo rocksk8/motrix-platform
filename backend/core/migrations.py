@@ -512,3 +512,52 @@ def _core_next_notifications_link(conn):
 
 
 register("core", 8, _core_next_notifications_link)
+
+
+# ── 設定變更明細（config_ledger；第 54 班設定中心 S0；未取號，PLAYBOOK §G6）──────────────────────────
+# `config_changes`：一個欄位一列的變更明細（設定、權限矩陣共用；domain＝`setting:<群組>`／`perm`／…），**不可變**（觸發器）。
+# `config_change_events`：狀態不是欄位，而是只增不改的事件（pending／activated／cancelled／superseded）；目前狀態＝最後一個事件，
+# 沒有事件＝立即生效。冪等（IF NOT EXISTS）；不 import 會演進的程式碼（凍住的歷史）。
+def _core_next_config_ledger(conn):
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS config_changes (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            at            TEXT    NOT NULL,
+            domain        TEXT    NOT NULL,
+            key           TEXT    NOT NULL,
+            field         TEXT    NOT NULL DEFAULT '',
+            old_json      TEXT    NOT NULL DEFAULT 'null',
+            new_json      TEXT    NOT NULL DEFAULT 'null',
+            reason        TEXT    NOT NULL DEFAULT '',
+            actor         TEXT    NOT NULL DEFAULT '',
+            actor_display TEXT    NOT NULL DEFAULT '',
+            ip            TEXT    NOT NULL DEFAULT '',
+            risk          TEXT    NOT NULL DEFAULT 'none',
+            ref_version   INTEGER,
+            effective_at  TEXT    NOT NULL DEFAULT '',
+            batch         TEXT    NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_config_changes_lookup ON config_changes(domain, key, id);
+        CREATE TRIGGER IF NOT EXISTS config_changes_no_update BEFORE UPDATE ON config_changes
+        BEGIN SELECT RAISE(ABORT, 'config_changes 只增不改'); END;
+        CREATE TRIGGER IF NOT EXISTS config_changes_no_delete BEFORE DELETE ON config_changes
+        BEGIN SELECT RAISE(ABORT, 'config_changes 只增不刪'); END;
+        CREATE TABLE IF NOT EXISTS config_change_events (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            change_id INTEGER NOT NULL,
+            event     TEXT    NOT NULL CHECK (event IN ('pending','activated','cancelled','superseded')),
+            actor     TEXT    NOT NULL DEFAULT '',
+            reason    TEXT    NOT NULL DEFAULT '',
+            at        TEXT    NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_config_change_events_change ON config_change_events(change_id, id);
+        CREATE TRIGGER IF NOT EXISTS config_change_events_no_update BEFORE UPDATE ON config_change_events
+        BEGIN SELECT RAISE(ABORT, 'config_change_events 只增不改'); END;
+        CREATE TRIGGER IF NOT EXISTS config_change_events_no_delete BEFORE DELETE ON config_change_events
+        BEGIN SELECT RAISE(ABORT, 'config_change_events 只增不刪'); END;
+    """)
+    conn.commit()
+    return None
+
+
+register("core", NEXT, _core_next_config_ledger)
