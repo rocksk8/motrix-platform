@@ -158,6 +158,10 @@ def next_doc_code(conn, today: str = "") -> str:
     row = conn.execute("SELECT MAX(doc_code) FROM case_material_approvals WHERE doc_code LIKE ? AND LENGTH(doc_code)=?",
                        (stem + "%", len(stem) + 4)).fetchone()
     last = int(row[0][-4:]) if row and row[0] else 0
+    from modules.case.recycle_adapter import reserved as _reserved           # 第 53 班：暫存區裡的單號不重發（還原時才不會撞號）
+    taken = _reserved(conn, "material_order")
+    while "%s%04d" % (stem, last + 1) in taken:
+        last += 1
     return "%s%04d" % (stem, last + 1)
 
 

@@ -322,3 +322,93 @@ def test_adapters_are_registered_by_the_case_module():
     ads = RB.adapters()
     assert {"quotation", "extra_expense", "completion_note", "material_order"} <= set(ads)
     assert all(ads[k].label for k in ads)
+
+
+# ── 單號不重發（node-39 MUST）／採購單被材料申請對應／下游表 ─────────────────────────────────────
+@pytest.fixture
+def reserved_ids(monkeypatch):
+    """ab 的 RB.reserved_ids 還沒進來時用同語意的替身（暫存區裡的 entity_id 與 snapshot.meta.codes）。"""
+    if not hasattr(RB, "reserved_ids"):
+        def fake(conn, entity_type):
+            out = set()
+            for r in conn.execute("SELECT entity_id, snapshot_json FROM recycle_bin WHERE entity_type=? AND restore_status IN ('in_bin','restore_failed')", (entity_type,)).fetchall():
+                out.add(r["entity_id"])
+                out.update(((json.loads(r["snapshot_json"] or "{}").get("meta") or {}).get("codes")) or [])
+            return out
+        monkeypatch.setattr(RB, "reserved_ids", fake, raising=False)
+
+
+def test_completion_note_number_is_not_reissued_while_in_the_bin(client, who, reserved_ids):
+    from modules.case import recycle_adapter as RA
+    su, _ = who
+    cn = db.get_db()
+    try:
+        first = db.next_entity_code(cn, "completion_notes", "CN", code_col="note_no")
+    finally:
+        cn.close()
+    _quote("MQ-RBC-040")
+    _note(first, "MQ-RBC-040")
+    assert client.delete("/api/completion-notes/%s" % first, headers=su).status_code == 200
+    cn = db.get_db()
+    try:
+        plain = db.next_entity_code(cn, "completion_notes", "CN", code_col="note_no")
+        safe = db.next_entity_code(cn, "completion_notes", "CN", code_col="note_no", reserved=RA.reserved(cn, "completion_note"))
+    finally:
+        cn.close()
+    assert plain == first and safe != first                       # 沒帶 reserved ⇒ 舊行為（重發）；帶了 ⇒ 跳過暫存區裡的號碼
+    assert client.post("/api/recycle-bin/%d/restore" % _bin_rows()[0]["id"], headers=su).status_code == 200
+
+
+def test_extra_expense_and_material_doc_codes_skip_the_bin(client, who, reserved_ids):
+    from modules.case import expense_forms as EF
+    from modules.case import material_approval as MA
+    su, _ = who
+    _quote("MQ-RBC-041")
+    eid = _expense("MQ-RBC-041")
+    code = EF.KIND_PREFIX["purchase_order"] + "-20261010-0001" if "purchase_order" in EF.KIND_PREFIX else None
+    if code is None:
+        pytest.skip("沒有 purchase_order 單據類型")
+    _x("UPDATE case_extra_expenses SET kind='purchase_order', doc_code=? WHERE id=?", (code, eid))
+    assert client.delete("/api/quotations/MQ-RBC-041/extra-expenses/%d" % eid, headers=su).status_code == 200
+    cn = db.get_db()
+    try:
+        assert EF.next_doc_code(cn, "purchase_order", "2026-10-10") == EF.KIND_PREFIX["purchase_order"] + "-20261010-0002"
+    finally:
+        cn.close()
+    _material_case("MQ-RBC-042", "草稿")
+    _x("UPDATE case_material_approvals SET doc_code='MO-20261010-0001' WHERE quote_no='MQ-RBC-042'")
+    from modules.case import material_guard as MG
+    cn = db.get_db()
+    try:
+        MG._gate_orders(cn, "MQ-RBC-042", [json.loads(_q("SELECT data_json FROM quotations WHERE quote_no='MQ-RBC-042'")[0]["data_json"])["caseRecord"]["materialOrders"][0]], [],
+                        {"username": "rbc_su", "role": "superadmin", "id": 1}, [])
+        cn.commit()
+        assert MA.next_doc_code(cn, "2026-10-10") == "MO-20261010-0002"
+    finally:
+        cn.close()
+
+
+def test_approved_po_referenced_by_a_material_order_cannot_be_deleted(client, who):
+    su, _ = who
+    _material_case("MQ-RBC-043", "已核准")
+    d = json.loads(_q("SELECT data_json FROM quotations WHERE quote_no='MQ-RBC-043'")[0]["data_json"])
+    d["caseRecord"]["materialOrders"][0]["poDocCode"] = "PO-20261010-0001"
+    _x("UPDATE quotations SET data_json=? WHERE quote_no='MQ-RBC-043'", (json.dumps(d, ensure_ascii=False),))
+    eid = _expense("MQ-RBC-043", status="已核准")
+    _x("UPDATE case_extra_expenses SET kind='purchase_order', doc_code='PO-20261010-0001' WHERE id=?", (eid,))
+    body = {"entity_type": "extra_expense", "entity_id": str(eid), "confirm": True, "confirm_text": str(eid)}
+    r = client.post("/api/recycle-bin/delete-approved", headers=su, json=body)
+    assert r.status_code in (400, 409) and "材料申請" in r.text and _q("SELECT 1 FROM case_extra_expenses WHERE id=?", (eid,)) != []
+
+
+@pytest.mark.parametrize("table,sql,label", [
+    ("case_material_payments", "INSERT INTO case_material_payments (quote_no, item_id, status, created_at, updated_at) VALUES ('MQ-RBC-044','mo-1','待付款','2026-10-01','2026-10-01')", "匯款"),
+    ("stock_items", "INSERT INTO stock_items (part_no, serial_no, quote_no, shipping_note_no, status) VALUES ('P','S1','MQ-RBC-044','SN-X','shipped')", "庫存"),
+])
+def test_quotation_approved_delete_refuses_more_downstream_tables(client, who, table, sql, label):
+    su, _ = who
+    _quote("MQ-RBC-044", status="已核准")
+    _x(sql)
+    body = {"entity_type": "quotation", "entity_id": "MQ-RBC-044", "confirm": True, "confirm_text": "MQ-RBC-044"}
+    r = client.post("/api/recycle-bin/delete-approved", headers=su, json=body)
+    assert r.status_code in (400, 409) and label in r.text and _q("SELECT 1 FROM quotations WHERE quote_no='MQ-RBC-044'") != []
