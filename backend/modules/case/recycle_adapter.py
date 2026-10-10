@@ -75,6 +75,13 @@ def _paths_of(*raws) -> List[str]:
     return list(dict.fromkeys(out))
 
 
+def reserved(conn, entity_type) -> set:
+    """暫存區裡（還在、或還原失敗）的單據編號——產生新編號的地方要跳過它們，否則刪掉最新一張後下一張會重用同一個號碼、還原就撞號（也避免已寄出的單號被重發）。
+    暫存區模組不在 ⇒ 空集合。在呼叫端自己的交易內讀（與產號同一個寫鎖）。"""
+    fn = getattr(RB, "reserved_ids", None)
+    return set(fn(conn, entity_type) or ()) if fn else set()
+
+
 def _rm_empty_dirs(rels) -> None:
     """附件被搬進暫存區後，原本單據專屬的資料夾若已空就拿掉（與原本 purge_document_files 的行為相同；有別的檔就保留；還原時由 recyclebin 重建）。"""
     import os
@@ -167,6 +174,13 @@ class ExtraExpenseAdapter(RB.Adapter):
                 if r["doc_code"] in (x["data_json"] or "")]
             if used:
                 out.append({"kind": "referenced", "label": "請購單 %s 已被採購單 %s 引用：請先處理那些採購單" % (r["doc_code"], "、".join(used)), "blocking": True})
+        code = (r["doc_code"] if "doc_code" in keys else "") or ""
+        if code:
+            qd = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (r["quote_no"],)).fetchone()
+            orders = (_jload(qd["data_json"], {}).get("caseRecord") or {}).get("materialOrders") or [] if qd is not None else []
+            used = [str(o.get("itemName") or o.get("itemId")) for o in orders if isinstance(o, dict) and str(o.get("poDocCode") or "").strip() == code]
+            if used:
+                out.append({"kind": "linked_material_orders", "label": "採購單 %s 已被材料申請對應（%s）：刪除會讓連結失效、成本口徑改變；請先處理那些材料申請" % (code, "、".join(used[:5])), "blocking": True})
         if r["status"] == "已核准":
             out.append({"kind": "approved_cost", "label": "已核准、已計入成本與報表；刪除後總帳來源事件消失（對應傳票由總帳引擎產生反向草稿）", "blocking": False})
         return out
@@ -178,7 +192,8 @@ class ExtraExpenseAdapter(RB.Adapter):
         row = dict(r)
         label = "額外支出 #%s「%s」%s" % (row["id"], row.get("description") or "", ("（案件 %s）" % row["quote_no"]) if row.get("quote_no") else "（無案件）")
         return {"rows": {"case_extra_expenses": [row]}, "files": _files(_paths_of(row.get("files_json"), row.get("change_json"))), "label": label,
-                "parent": ("quotation", row["quote_no"]) if row.get("quote_no") else None, "meta": {"quote_no": row.get("quote_no") or "", "status": row.get("status") or ""}}
+                "parent": ("quotation", row["quote_no"]) if row.get("quote_no") else None,
+                "meta": {"quote_no": row.get("quote_no") or "", "status": row.get("status") or "", "codes": [c for c in (row.get("doc_code"),) if c]}}
 
     def delete_in_tx(self, conn, entity_id) -> None:
         r = self._row(conn, entity_id)
@@ -244,7 +259,7 @@ class CompletionNoteAdapter(RB.Adapter):
         row = dict(r)
         return {"rows": {"completion_notes": [row]}, "files": _files(_paths_of(row.get("signed_files_json"), row.get("data_json"))),
                 "label": "完工單 %s（%s）" % (row["note_no"], row.get("customer_name") or ""), "parent": ("quotation", row["quote_no"]) if row.get("quote_no") else None,
-                "meta": {"quote_no": row.get("quote_no") or "", "status": row.get("status") or ""}}
+                "meta": {"quote_no": row.get("quote_no") or "", "status": row.get("status") or "", "codes": [row["note_no"]]}}
 
     def delete_in_tx(self, conn, entity_id) -> None:
         r = self._row(conn, entity_id)
@@ -272,7 +287,10 @@ _OWNED = (("case_stages", "quote_no"), ("case_updates", "quote_no"), ("case_acti
 #: 其他『單獨存在的單據』：報價單被刪時**不連帶刪**；『刪除已核可』時只要還有就明確拒絕（要先處理那些單據）
 _DEPENDENTS = (("case_extra_expenses", "額外支出／請購單／採購單"), ("completion_notes", "完工單"), ("shipping_notes", "出貨單"), ("contractor_dispatches", "承攬商派發"),
                ("payment_requests", "請款單"), ("invoice_vouchers", "收款憑據"), ("contractor_payment_vouchers", "承攬商匯款申請"), ("bonus_case_awards", "獎金分潤"),
-               ("case_change_requests", "變更申請"), ("case_material_approvals", "材料申請審核"))
+               ("case_change_requests", "變更申請"), ("case_material_approvals", "材料申請審核"), ("case_material_payments", "材料匯款申請"),
+               ("case_material_changes", "材料申請變更申請"), ("stock_items", "已出貨的庫存序號"))
+#: 上面某些表只算『特定狀態』的列（stock_items 只有 shipped 才是下游紀錄）
+_DEPENDENT_WHERE = {"stock_items": " AND status='shipped'"}
 
 
 class QuotationAdapter(RB.Adapter):
@@ -292,7 +310,7 @@ class QuotationAdapter(RB.Adapter):
         out = []
         for table, label in _DEPENDENTS:
             try:
-                n = conn.execute("SELECT COUNT(*) FROM %s WHERE quote_no=?" % table, (quote_no,)).fetchone()[0]
+                n = conn.execute("SELECT COUNT(*) FROM %s WHERE quote_no=?%s" % (table, _DEPENDENT_WHERE.get(table, "")), (quote_no,)).fetchone()[0]
             except sqlite3.OperationalError:                   # 該表不存在（模組未裝）＝沒有
                 continue
             if n:
@@ -471,7 +489,8 @@ class MaterialOrderAdapter(RB.Adapter):
         rows = {"case_material_approvals": [dict(a)] if a is not None else []}
         # files 刻意為空：材料申請這一列本身沒有附件（附件在材料清單與匯款申請上）；若附件先搬進隔離區而存檔隨後中止，列還在、檔卻要等每小時 reconcile 才搬回
         return {"rows": rows, "order": order, "files": [], "label": "材料申請 %s「%s」（案件 %s）" % ((a["doc_code"] if a is not None and a["doc_code"] else iid), order.get("itemName") or "", qn),
-                "parent": ("quotation", qn), "meta": {"quote_no": qn, "item_id": iid, "status": a["status"] if a is not None else ""}}
+                "parent": ("quotation", qn), "meta": {"quote_no": qn, "item_id": iid, "status": a["status"] if a is not None else "",
+                                                 "codes": [a["doc_code"]] if a is not None and a["doc_code"] else []}}
 
     def delete_in_tx(self, conn, entity_id) -> None:
         qn, iid = _split_mid(entity_id)

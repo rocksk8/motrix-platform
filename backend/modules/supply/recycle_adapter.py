@@ -42,6 +42,13 @@ def _paths_of(*raws) -> List[str]:
     return list(dict.fromkeys(out))
 
 
+def reserved(conn, entity_type) -> set:
+    """暫存區裡（還在、或還原失敗）的單據編號——產生新編號的地方要跳過它們，否則刪掉最新一張後下一張會重用同一個號碼、還原就撞號（也避免已寄出的單號被重發）。
+    暫存區模組不在 ⇒ 空集合。在呼叫端自己的交易內讀（與產號同一個寫鎖）。"""
+    fn = getattr(RB, "reserved_ids", None)
+    return set(fn(conn, entity_type) or ()) if fn else set()
+
+
 def _rm_empty_dirs(rels) -> None:
     """附件被搬進暫存區後，原本單據專屬的資料夾若已空就拿掉（與原本 purge_document_files 的行為相同；有別的檔就保留；還原時由 recyclebin 重建）。"""
     import os
@@ -119,7 +126,7 @@ class ShippingNoteAdapter(RB.Adapter):
         row = dict(r)
         return {"rows": {"shipping_notes": [row]}, "files": [{"root": "uploads", "rel": p} for p in _paths_of(row.get("signed_files_json"), row.get("data_json"))],
                 "label": "出貨單 %s（%s）" % (row["note_no"], row.get("customer_name") or ""), "parent": ("quotation", row["quote_no"]) if row.get("quote_no") else None,
-                "meta": {"quote_no": row.get("quote_no") or "", "status": row.get("status") or ""}}
+                "meta": {"quote_no": row.get("quote_no") or "", "status": row.get("status") or "", "codes": [row["note_no"]]}}
 
     def delete_in_tx(self, conn, entity_id) -> None:
         r = self._row(conn, entity_id)
