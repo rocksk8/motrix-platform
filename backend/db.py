@@ -5831,12 +5831,14 @@ _MIGRATIONS = [
 
 # ── Entity code helper ────────────────────────────────────────────────────────
 
-def next_entity_code(conn, table: str, prefix: str, code_col: str = "code") -> str:
+def next_entity_code(conn, table: str, prefix: str, code_col: str = "code", reserved=None) -> str:
     """Return next available code like C-202507-001 (or DN-202508-001 for a
     multi-char prefix) for entity tables. table/prefix/code_col must be
     trusted internal constants (not user input).
+    `reserved`（第 53 班）：暫存區裡還在的單據編號集合——編號取最大值是看『現存的列』，刪掉最新一張後會重用它的號碼，還原時就撞號；呼叫端傳入就跳過這些。
     """
     month = datetime.now().strftime("%Y%m")
+    reserved = reserved or ()
     pattern = f"{prefix}-{month}-???"
     code_len = len(prefix) + 11   # prefix '-' YYYYMM '-' NNN
     seq_start = len(prefix) + 9    # 1-based SUBSTR offset of the NNN part
@@ -5846,7 +5848,7 @@ def next_entity_code(conn, table: str, prefix: str, code_col: str = "code") -> s
         (pattern,),
     ).fetchone()
     next_seq = (row_max["mx"] if row_max else 0) + 1
-    while conn.execute(
+    while (f"{prefix}-{month}-{next_seq:03d}" in reserved) or conn.execute(
         f"SELECT 1 FROM {table} WHERE {code_col}=?",
         (f"{prefix}-{month}-{next_seq:03d}",),
     ).fetchone():

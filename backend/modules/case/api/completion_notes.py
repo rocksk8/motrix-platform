@@ -287,7 +287,7 @@ def create_completion_note(body: CompletionNoteIn, authorization: str = Header(N
             raise HTTPException(404, "找不到關聯的報價單")
         customer_name = (body.customer_name or '').strip() or (q["customer_name"] or "")
         project_name  = (body.project_name or '').strip() or (q["project_name"] or "")
-        note_no = next_entity_code(conn, "completion_notes", "CN", code_col="note_no")
+        note_no = next_entity_code(conn, "completion_notes", "CN", code_col="note_no", reserved=_RA.reserved(conn, "completion_note"))
         conn.execute(
             "INSERT INTO completion_notes "
             "(note_no, quote_no, status, customer_name, project_name, site_address, start_date, "
