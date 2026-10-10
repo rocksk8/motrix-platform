@@ -264,3 +264,51 @@ def test_rbn15_clean_move_back_but_unremovable_folder_raises_binerror_not_oserro
     cn.rollback()
     cn.close()
     assert _q("SELECT * FROM rbn_doc"), "單據還在"
+
+
+# ── RBN19 commit 之後的 hook（adapter.after_commit）─────────────────────────────────────────
+class _HookAdapter(SynAdapter):
+    calls = []
+
+    def after_commit(self, event, entity_id, snap, result):
+        cn = db.get_db()                                      # 另開連線讀：看得到資料庫裡的結果 ＝ 已經 commit
+        try:
+            n_doc = cn.execute("SELECT COUNT(*) FROM rbn_doc WHERE no=?", (entity_id,)).fetchone()[0]
+            st = cn.execute("SELECT restore_status FROM recycle_bin WHERE entity_id=? ORDER BY id DESC", (entity_id,)).fetchone()
+        finally:
+            cn.close()
+        _HookAdapter.calls.append((event, entity_id, n_doc, st[0] if st else None))
+        if getattr(_HookAdapter, "boom", False):
+            raise RuntimeError("後續動作失敗")
+
+
+def test_rbn19_restore_runs_the_adapter_hook_after_commit_and_errors_are_only_logged(monkeypatch, client, who, caplog):
+    su, ad, su_user = who
+    _HookAdapter.calls, _HookAdapter.boom = [], False
+    monkeypatch.setitem(registry._LEGACY_PROVIDERS, (RB.CAP_ADAPTER, ET), _HookAdapter)
+    _doc()
+    res = _delete("D1", su_user)
+    assert _HookAdapter.calls == [], "一般刪除：hook 要等呼叫端 commit 之後自己呼叫 result['after_commit']()"
+    assert callable(res["after_commit"])
+    res["after_commit"]()
+    assert _HookAdapter.calls == [("delete", "D1", 0, "in_bin")], "刪除已 commit：資料列不在、暫存區有列"
+    assert client.post("/api/recycle-bin/%d/restore" % res["bin_id"], headers=su).status_code == 200
+    assert _HookAdapter.calls[-1] == ("restore", "D1", 1, "restored"), "還原的 hook 在 commit 之後：資料列回來了、狀態已是 restored"
+    # hook 丟例外 ⇒ 只記 log，動作照樣成功
+    _HookAdapter.boom = True
+    res2 = _delete("D1", su_user)
+    with caplog.at_level(logging.ERROR):
+        res2["after_commit"]()
+        assert client.post("/api/recycle-bin/%d/restore" % res2["bin_id"], headers=su).status_code == 200
+    assert sum(1 for r in caplog.records if "after_commit" in r.getMessage()) >= 2
+    assert _q("SELECT restore_status FROM recycle_bin WHERE id=?", res2["bin_id"])[0]["restore_status"] == "restored"
+
+
+def test_rbn19_delete_approved_endpoint_runs_the_hook_after_commit_and_hides_it_from_the_response(monkeypatch, client, who):
+    su, ad, su_user = who
+    _HookAdapter.calls, _HookAdapter.boom = [], False
+    monkeypatch.setitem(registry._LEGACY_PROVIDERS, (RB.CAP_ADAPTER, ET), _HookAdapter)
+    _doc("H1", status="已核可")
+    r = client.post("/api/recycle-bin/delete-approved", json={"entity_type": ET, "entity_id": "H1", "confirm": True, "confirm_text": "H1"}, headers=su)
+    assert r.status_code == 200 and "after_commit" not in r.json() and "_hook" not in r.json()
+    assert _HookAdapter.calls == [("delete", "H1", 0, "in_bin")]

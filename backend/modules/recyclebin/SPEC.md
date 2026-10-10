@@ -28,6 +28,7 @@
 - **RBN15.** 進暫存區失敗（資料列刪除或寫列失敗）而附件又搬不回原路徑時，隔離資料夾與檔案原封不動保留（不 rmtree），單據視為未刪除並回報；每日工作 reconcile 之後會再搬回。
 - **RBN16.** 永久清除要驗證隔離資料夾真的刪乾淨：刪不掉（檔案被占用）⇒ 這一筆維持在暫存區（快照與清單不清）、回 409、稽核 `recyclebin.purge_failed`；每日工作同樣不可把刪不掉的標成已清除。
 - **RBN18.** 『刪除已核可』入口（`POST /api/recycle-bin/delete-approved`）直接呼叫通用 `service.delete`，**不會執行擁有模組刪除端點裡的領域後續動作**（例如清除該單據的站內通知、領域稽核動作名稱）；這些由 adapter 的 `delete_in_tx` 負責（P1 各 adapter 要把原端點的後續清理搬進去，或在 adapter 的 `after_delete` 擴充點補）。通用稽核 `recyclebin.delete_approved` 與通知其他最高管理者一定會做。
+- **RBN19.** Adapter 可實作 `after_commit(event, entity_id, snap, result)`（`delete`｜`restore`）：還原與『刪除已核可』由暫存區模組在**commit 之後**自動呼叫；一般刪除由擁有模組的端點在自己 commit 之後呼叫 `delete()` 回傳的 `result["after_commit"]()`。錯誤只記 log、不往外丟（資料已 commit）；回傳給前端的結果不含 hook。
 - **RBN17.** 隔離資料夾 `資源回收筒/` 在 `.gitignore` 內（隔離檔含個資，`git add -A` 不可帶走）；『刪除已核可』也通知其他最高管理者。
 
 ## 非目標
@@ -36,4 +37,4 @@
 
 ## 測試
 
-`backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py`（以合成 adapter 驗 RBN2～RBN11）、`test_recyclebin_hardening_t53.py`（RBN12～RBN17，稽核回歸題）、`backend/tests/platform/test_recyclebin_guards_t53.py`（三道守門）。
+`backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py`（以合成 adapter 驗 RBN2～RBN11）、`test_recyclebin_hardening_t53.py`（RBN12～RBN19，稽核回歸題）、`backend/tests/platform/test_recyclebin_guards_t53.py`（三道守門）。

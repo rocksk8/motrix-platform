@@ -148,6 +148,9 @@ def bin_delete_approved(body: dict = Body(...), authorization: str = Header(None
                 conn.commit()
         except RB.BinError as e:
             raise _http(e)
+        post = res.pop("after_commit", None)
+        if post:
+            post()                                          # commit 之後：擁有模組的後續動作（行事曆同步等），錯誤只記 log
         _audit(_tok(authorization), "recyclebin.delete_approved", et, eid, "%s %s" % (et, eid),
                {"bin_id": res["bin_id"], "purge_after": res["purge_after"], "children": len(res["children"])})
         _notify_superadmins(conn, user["username"], "recyclebin_delete_approved", res["bin_id"], "%s %s" % (et, eid),

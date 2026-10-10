@@ -1052,6 +1052,7 @@
   },
   "helper:recycle_bin": {
    "Adapter": "class",
+   "Adapter.after_commit": "def(self, event, entity_id, snap, result)",
    "Adapter.can_delete": "def(self, conn, entity_id, user)",
    "Adapter.can_delete_approved": "def(self, conn, entity_id, user)",
    "Adapter.cascade_children": "def(self, conn, entity_id)",

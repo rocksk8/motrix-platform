@@ -82,7 +82,8 @@ def _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group_token, p
             raise RB.BinError("單據未刪除（資料與附件都在原處）；暫存區的暫存資料夾稍後會自動清理")
         raise
     return {"bin_id": cur.lastrowid, "token": token, "entity_type": entity_type, "entity_id": str(entity_id),
-            "purge_after": purge_after_for(now), "files": sum(1 for m in manifest if m.get("state") == "moved")}
+            "purge_after": purge_after_for(now), "files": sum(1 for m in manifest if m.get("state") == "moved"),
+            "_hook": (ad, entity_id, snap)}
 
 
 def delete(conn, entity_type, entity_id, user, reason="", approved=False) -> dict:
@@ -110,7 +111,22 @@ def delete(conn, entity_type, entity_id, user, reason="", approved=False) -> dic
         children.append(_bin_one(conn, cad, ct, cid, user, reason, via, group, (entity_type, entity_id), []))
     info = _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group, None, impact)
     info["children"] = children
+    hooks = [c.pop("_hook") for c in children] + [info.pop("_hook")]
+
+    def after_commit():
+        """呼叫端在**自己 commit 之後**呼叫：逐個 adapter 的 after_commit('delete', …)；錯誤只記 log。"""
+        for h_ad, h_id, h_snap in hooks:
+            _run_hook(h_ad, "delete", h_id, h_snap, info)
+    info["after_commit"] = after_commit
     return info
+
+
+def _run_hook(ad, event, entity_id, snap, result):
+    """commit 之後的後續動作：錯誤只記 log、不往外丟（資料已經 commit）。"""
+    try:
+        ad.after_commit(event, entity_id, snap, result)
+    except Exception:                                          # noqa: BLE001
+        logger.exception("recyclebin after_commit(%s) %s %s failed", event, getattr(ad, "entity_type", "?"), entity_id)
 
 
 def _row(conn, bin_id):
@@ -219,6 +235,7 @@ def restore(conn, bin_id, user) -> dict:
         raise RB.BinError(msg)
     out = _summary(_row(conn, bin_id))
     out.update(restoredEntityId=res.get("entity_id"), renumbered=bool(res.get("renumbered")), notes=res.get("notes") or [])
+    _run_hook(ad, "restore", res.get("entity_id") or r["entity_id"], snap, out)      # commit 之後
     return out
 
 

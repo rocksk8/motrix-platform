@@ -113,6 +113,14 @@ class Adapter:
     def mask(self, snap: dict) -> dict:
         return mask_obj(snap)
 
+    def after_commit(self, event: str, entity_id, snap: dict, result: dict) -> None:
+        """交易 **commit 之後** 才執行的後續動作（原刪除／還原端點在 commit 後做的事：行事曆同步、通知清理、背景備份…）。
+        `event` ＝ `delete`｜`restore`；`result` ＝ 該動作的回傳 dict。預設不做事。
+        **錯誤只記 log、不往外丟**（資料已經 commit，不可以因為後續動作失敗而回報失敗）；實作要冪等。
+        觸發時機：還原與『刪除已核可』由暫存區模組在 commit 後自動呼叫；一般刪除（擁有模組的端點自己的交易）由端點在**自己 commit 之後**呼叫
+        `delete()` 回傳的 `result["after_commit"]()`（沒有這個鍵 ＝ 暫存區模組不在 ⇒ 端點走舊的硬刪流程）。"""
+        return None
+
 
 class RestoreContext:
     """還原時交給 adapter 的資訊。`files`＝{(root, 原相對路徑): 實際相對路徑}（檔案已搬回；被占用時實際路徑不同）。"""
