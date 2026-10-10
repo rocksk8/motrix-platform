@@ -35,6 +35,18 @@ ALWAYS_FILES = (
     "tests/platform/test_product_drill_probes.py", "tests/platform/test_integration_points_registered.py", "tests/platform/test_changelog_sections.py",
     "tests/test_begin_only_via_begin_write_2026_09_25.py", "tests/test_approval_flow_scope.py", "tests/test_approval_queue_covers_every_doc_type_2026_09_24.py",
 )
+#: --full-lint：整合者在「凍結前」於自己的工作樹跑一次（約 10～15 分，3 worker，單一行程批次）的守門集合——T48a～T53 只有完整閘門才抓到的紅燈類別
+#: （font-zoom／system_audit／view_filter／page_paths／no_window／EM1／spec-coverage／A8／route golden／L1 snapshot／PII 鏡像／unit card／
+#: 寫入端點稽核／寫鎖內通知）。`tests/platform` 整個目錄一律納入；下列是 tests/ 與模組內、不在 tests/platform 的守門檔。路徑相對 backend/；不存在的略過。
+FULL_LINT_DIRS = ("tests/platform",)
+FULL_LINT_FILES = (
+    "tests/test_system_audit_2026_09_14.py", "tests/test_view_filter_marking_2026_09_25.py", "tests/test_write_endpoints_are_audited_2026_09_24.py",
+    "tests/test_em1_screen_words_in_long_messages_2026_09_24.py", "tests/test_spec_coverage_2026_09_21.py", "tests/test_approval_no_freeze_2026_09_30.py",
+    "tests/test_pii_archive_mirror_2026_09_25.py", "modules/subcontract/tests/test_pii_archive_mirror_2026_09_25.py",
+    "tests/test_exception_detail_leak_2026_09_23.py", "tests/test_no_truthy_request_flags.py", "tests/test_edge_product_profile_2026_09_30.py",
+    "tests/test_begin_only_via_begin_write_2026_09_25.py", "modules/case/tests/test_route_table_golden_2026_10_05.py",
+)
+FULL_LINT_WORKERS = 3
 _NOWIN = getattr(subprocess, "CREATE_NO_WINDOW", 0)                  # 背景執行不彈主控台視窗（test_no_window_guard）
 _FE = "frontend"                                                      # 本工具對任意 repo 根目錄運作，不能用 core.source_tree（它只認執行中的這棵樹）
 _PAGES = _FE + "/pages/"                                              # 變動檔清單用的相對路徑前綴
@@ -458,6 +470,12 @@ def impacted_dirs(repo, changed):
     return dirs, none, keys
 
 
+def full_lint_targets(repo):
+    """--full-lint 的測試目標（相對 backend/）：FULL_LINT_DIRS 整個目錄＋ FULL_LINT_FILES 裡存在的檔。"""
+    backend = Path(repo) / "backend"
+    return [d for d in FULL_LINT_DIRS if (backend / d).is_dir()] + [f for f in FULL_LINT_FILES if (backend / f).is_file()]
+
+
 def build_targets(repo, changed, include_impacted=True, seconds=None, full=False):
     cheap, why = select_cheap(repo, seconds, full=full)
     targets = list(cheap)
@@ -524,7 +542,7 @@ def format_report(findings, test_groups, plan, rc, secs, passed_line):
 
 
 def preflight(repo=REPO, base="origin/platform", static_only=False, impacted=True, dry_run=False, runner=None, seconds=None, full=False,
-              budget_min=None):
+              budget_min=None, full_lint=False):
     """⇒ (exit_code, report_text, data)。runner 供測試注入：runner(repo, targets) ⇒ (rc, out, secs)。"""
     repo = Path(repo)
     changed = changed_files(repo, base)
@@ -534,12 +552,15 @@ def preflight(repo=REPO, base="origin/platform", static_only=False, impacted=Tru
     groups, passed_line = [], ""
     if not static_only:
         plan = build_targets(repo, changed, impacted, seconds, full=full)
+        if full_lint:                                                       # 凍結前完整守門：取代窄版／便宜集合，多 worker 一次跑完
+            plan["targets"] = plan["cheap"] = full_lint_targets(repo)
+            plan["impacted_dirs"] = []
         if not dry_run:
             import pre_train_check as PT
             if runner is not None:
                 rc, out, secs = runner(repo, plan["targets"])
             else:
-                rc, out, secs = run_pytest(repo, plan["targets"], timeout=(budget_min * 60 if budget_min else None))
+                rc, out, secs = run_pytest(repo, plan["targets"], timeout=(budget_min * 60 if budget_min else None), workers=(FULL_LINT_WORKERS if full_lint else None))
             fails = PT.parse_failures(out)
             groups = PT.group_reds(fails, changed)
             m = re.findall(r"^.*\d+ (?:passed|failed).*$", out, re.M)
@@ -577,6 +598,7 @@ def main(argv=None):
     ap.add_argument("--no-impacted", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--full-cheap", action="store_true", help="B 層用完整的便宜集合（量過耗時前很大，單行程跑不完；預設是窄版）")
+    ap.add_argument("--full-lint", action="store_true", help="凍結前完整守門：tests/platform ＋ 已知會在完整閘門才紅的守門檔，%d worker（約 10～15 分）" % FULL_LINT_WORKERS)
     ap.add_argument("--budget-min", type=float, default=None, help="B/C 測試的時間預算（分鐘）；超過就停並回報 incomplete（exit 3）")
     ap.add_argument("--workers", type=int, default=2, help="measure 用的 pytest worker 數（預設 2＝全機上限）")
     ap.add_argument("--json-out")
@@ -586,7 +608,7 @@ def main(argv=None):
             n, secs = measure(REPO, a.workers)
             print("已量測 %d 個測試檔（%.0f 秒）" % (n, secs))
             return 0
-        code, text, data = preflight(REPO, a.base, a.static_only, not a.no_impacted, a.dry_run, full=a.full_cheap, budget_min=a.budget_min)
+        code, text, data = preflight(REPO, a.base, a.static_only, not a.no_impacted, a.dry_run, full=a.full_cheap, budget_min=a.budget_min, full_lint=a.full_lint)
     except Exception as e:                                                   # noqa: BLE001
         print("預檢工具出錯：%s" % e, file=sys.stderr)
         return 2

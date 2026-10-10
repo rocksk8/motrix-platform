@@ -338,3 +338,17 @@ def test_narrow_selection_drops_measured_slow_files_but_keeps_the_always_list(tm
     assert "tests/platform/test_scan_slow.py" not in files and "tests/platform/test_scan_fast.py" in files
     assert "tests/platform/test_generated_maps.py" in files                   # 固定清單不受慢檔門檻影響
     assert "tests/platform/test_scan_slow.py" in TP.select_cheap(tmp_path, secs, full=True)[0]
+
+
+def test_full_lint_targets_are_platform_dir_plus_existing_guard_files_and_use_three_workers(tmp_path):
+    """--full-lint（M1）：目標＝tests/platform 整個目錄＋清單內存在的檔（不存在的略過）；預檢以 FULL_LINT_WORKERS 個 worker 跑。"""
+    b = tmp_path / "backend"
+    (b / "tests" / "platform").mkdir(parents=True)
+    (b / "tests" / "test_system_audit_2026_09_14.py").write_text("", encoding="utf-8")
+    t = TP.full_lint_targets(tmp_path)
+    assert t[0] == "tests/platform" and "tests/test_system_audit_2026_09_14.py" in t
+    assert "tests/test_view_filter_marking_2026_09_25.py" not in t, "不存在的檔不放進目標"
+    assert TP.FULL_LINT_WORKERS == 3
+    assert len(TP.FULL_LINT_FILES) == len(set(TP.FULL_LINT_FILES))
+    for f in ("tests/test_system_audit_2026_09_14.py", "tests/test_write_endpoints_are_audited_2026_09_24.py", "tests/test_approval_no_freeze_2026_09_30.py"):
+        assert f in TP.FULL_LINT_FILES, "T53 抓到的守門檔必須在清單內：" + f
