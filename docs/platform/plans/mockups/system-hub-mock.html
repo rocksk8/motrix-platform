@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>系統 — MOTRIX 專案管理系統（設計稿）</title>
+<!--
+  系統中心（System Hub）靜態設計稿：自足的單一檔案，示意資料，不連任何後端。
+  版面比照『營運報表』頁（reports.html）：頂欄＋主導覽、.page-main 內容區、副標題、KPI 卡列、區塊標題、卡片格。
+  色票與半徑沿用 frontend/css/style.css 的 :root（--accent #C8102E、--border-light、--radius…）；深色用 token 覆寫示範
+  （正式頁沿用全站 data-theme="dark" 機制，頁面只用 token，兩者皆相容）。
+  設計稿上方的控制列（角色、顯示未授權項目、深淺色）只在稿中存在，正式頁沒有。
+-->
+<style>
+:root{
+  --black:#0A0A0A; --white:#F5F4F0; --surface:#FFFFFF; --surface-sunken:#F0EEE9;
+  --border-light:#E5E3DE; --text-primary:#0A0A0A; --text-secondary:#6B6B6B; --text-dim:#767676;
+  --accent:#C8102E; --accent-light:#FBE9EC; --accent-hover:#A60D26;
+  --success:#15803D; --success-light:#F0FDF4; --success-border:#BBF7D0;
+  --warning:#92400E; --warning-light:#FFFBEB; --warning-border:#FDE68A;
+  --danger:#B91C1C; --danger-light:#FEF2F2; --danger-border:#FECACA;
+  --info:#1D4ED8; --info-light:#EFF6FF; --info-border:#BFDBFE;
+  --radius:6px; --radius-lg:10px; --shadow-sm:0 1px 3px rgba(0,0,0,.08); --shadow:0 2px 8px rgba(0,0,0,.10);
+  --topbar-bar-h:60px; --mainnav-h:44px; --topbar-h:104px;
+  --font-zh:'LINE Seed TW_OTF', system-ui, -apple-system, 'Segoe UI', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+}
+:root[data-theme="dark"]{
+  --white:#15161A; --surface:#1E2026; --surface-sunken:#262932;
+  --border-light:#33363F; --text-primary:#ECECEF; --text-secondary:#A8ABB5; --text-dim:#9A9EAA;
+  --accent:#FF4D63; --accent-light:#3A1A21; --accent-hover:#FF7385;
+  --success:#4ADE80; --success-light:#12301F; --success-border:#1F5A38;
+  --warning:#FBBF24; --warning-light:#33280E; --warning-border:#5C4712;
+  --danger:#F87171; --danger-light:#3A1B1B; --danger-border:#6B2A2A;
+  --info:#7DB2FF; --info-light:#16253F; --info-border:#27487F;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.5); --shadow:0 2px 8px rgba(0,0,0,.55);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:var(--font-zh);background:var(--white);color:var(--text-primary);font-size:14px;line-height:1.5}
+button{font-family:inherit}
+a{color:inherit;text-decoration:none}
+
+/* ── 設計稿控制列（正式頁沒有）── */
+.mock-ctl{position:sticky;top:0;z-index:50;display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:8px 16px;background:#2B2D33;color:#EDEDF0;font-size:12px}
+.mock-ctl b{font-weight:700;color:#FFB4BE}
+.mock-ctl select,.mock-ctl button{background:#3A3D45;color:#fff;border:1px solid #555964;border-radius:5px;padding:3px 8px;font-size:12px;cursor:pointer}
+.mock-ctl label{display:flex;gap:5px;align-items:center;cursor:pointer}
+
+/* ── 頂欄與主導覽（示意；正式頁由 sidebar.js 產生）── */
+.topbar{height:var(--topbar-bar-h);background:#0A0A0A;color:#F5F4F0;display:flex;align-items:center;gap:16px;padding:0 24px}
+.topbar .logo{font-weight:800;letter-spacing:.04em}
+.topbar .sp{flex:1}
+.topbar .who{font-size:12px;color:#BDBDBD}
+.mnav{height:var(--mainnav-h);background:#171717;color:#D8D8D8;display:flex;align-items:center;gap:4px;padding:0 20px;overflow-x:auto;white-space:nowrap}
+.mnav span{padding:6px 12px;border-radius:6px;font-size:13px}
+.mnav span.on{background:#2A2A2A;color:#fff;font-weight:700;box-shadow:inset 0 -2px 0 var(--accent)}
+.mnav small{color:#8C8C8C;margin-left:8px}
+
+/* ── 內容區（與營運報表同一個 .page-main）── */
+.page-main{max-width:1280px;margin:0 auto;padding:28px 32px 64px}
+.hub-head{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:6px}
+.hub-head h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.01em}
+.sub{font-size:12px;color:var(--text-secondary);margin:2px 0 14px}
+.search-wrap{position:relative;flex:1 1 320px;max-width:520px;margin-left:auto}
+.search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+.search-input{width:100%;padding:9px 40px 9px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:var(--surface);color:var(--text-primary);outline:none}
+.search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-light)}
+.search-wrap kbd{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);border:1px solid var(--border-light);border-radius:4px;padding:1px 5px;background:var(--surface-sunken)}
+
+/* 狀態列（比照 kpi-grid / kpi-card）*/
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin:14px 0 22px}
+.kpi-card{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 18px;display:block}
+.kpi-card:hover{box-shadow:var(--shadow-sm);border-color:var(--text-dim)}
+.kpi-card__lbl{font-size:10px;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px}
+.kpi-card__val{font-size:19px;font-weight:700;line-height:1.15}
+.kpi-card__hint{font-size:11px;color:var(--text-secondary);margin-top:5px}
+.tone-ok{color:var(--success)} .tone-warn{color:var(--warning)} .tone-bad{color:var(--danger)}
+
+/* 最近使用 */
+.recent{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 22px;font-size:12px;color:var(--text-secondary)}
+.chip{display:inline-flex;gap:6px;align-items:center;padding:4px 11px;border:1px solid var(--border-light);border-radius:999px;background:var(--surface);font-size:12px;cursor:pointer;color:var(--text-primary)}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+
+/* 區塊標題（官網 v4 的 28×3 紅色標記）*/
+.sec{margin:0 0 26px}
+.sec-title{display:flex;align-items:baseline;gap:10px;margin:0 0 4px;font-size:16px;font-weight:700}
+.sec-title::before{content:"";width:28px;height:3px;background:var(--accent);align-self:center}
+.sec-title small{font-weight:400;font-size:12px;color:var(--text-secondary)}
+.sec-sub{font-size:12px;color:var(--text-secondary);margin:0 0 10px 38px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+
+/* 卡片：標題、一行說明、即時狀態徽章、深連結 */
+.card{position:relative;display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 16px 12px;min-height:112px;transition:border-color .12s, box-shadow .12s}
+.card:hover{border-color:var(--accent);box-shadow:var(--shadow)}
+.card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.card__top{display:flex;align-items:flex-start;gap:10px}
+.card__ico{flex:0 0 32px;height:32px;border-radius:8px;background:var(--surface-sunken);color:var(--text-secondary);display:grid;place-items:center}
+.card__ico svg{width:17px;height:17px}
+.card__title{font-size:14px;font-weight:700;line-height:1.3}
+.card__desc{font-size:12px;color:var(--text-secondary)}
+.card__foot{margin-top:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding-top:6px;font-size:10.5px;color:var(--text-dim)}
+.tag{padding:1px 7px;border-radius:999px;background:var(--surface-sunken);border:1px solid var(--border-light)}
+.badge{margin-left:auto;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;border:1px solid transparent}
+.badge.ok{background:var(--success-light);color:var(--success);border-color:var(--success-border)}
+.badge.warn{background:var(--warning-light);color:var(--warning);border-color:var(--warning-border)}
+.badge.bad{background:var(--danger-light);color:var(--danger);border-color:var(--danger-border)}
+.badge.info{background:var(--info-light);color:var(--info);border-color:var(--info-border)}
+.badge.plan{background:var(--surface-sunken);color:var(--text-secondary);border-color:var(--border-light);font-weight:600}
+.card.is-denied{opacity:.62;background:var(--surface-sunken);border-style:dashed;cursor:not-allowed}
+.card.is-denied:hover{border-color:var(--border-light);box-shadow:none}
+.card .why{font-size:11px;color:var(--danger)}
+mark{background:var(--accent-light);color:var(--accent);padding:0 1px;border-radius:2px}
+.empty{padding:40px 10px;text-align:center;color:var(--text-secondary);border:1px dashed var(--border-light);border-radius:var(--radius-lg)}
+.note{margin-top:30px;padding:14px 16px;border:1px solid var(--info-border);background:var(--info-light);color:var(--info);border-radius:var(--radius-lg);font-size:12px}
+
+@media (max-width:720px){
+  .page-main{padding:18px 16px 56px}
+  .hub-head h1{font-size:22px}
+  .search-wrap{flex-basis:100%;max-width:none;margin-left:0}
+  .grid{grid-template-columns:1fr}
+  .kpi-grid{grid-template-columns:1fr 1fr}
+  .mock-ctl{font-size:11px;gap:8px}
+}
+@media (prefers-reduced-motion:reduce){.card{transition:none}}
+</style>
+</head>
+<body>
+
+<div class="mock-ctl" role="toolbar" aria-label="設計稿控制列">
+  <b>設計稿</b>
+  <label>角色 <select id="role">
+    <option value="superadmin">最高管理者</option>
+    <option value="admin">管理員（有稽核、版本紀錄）</option>
+    <option value="finance">財務（有報表設定）</option>
+    <option value="viewer">一般人員</option>
+  </select></label>
+  <label><input type="checkbox" id="showDenied"> 顯示未授權項目（灰階＋原因）</label>
+  <button id="theme" type="button">切換深／淺色</button>
+  <span style="opacity:.7">示意資料；卡片來自『註冊表』，不是寫死在這一頁。</span>
+</div>
+
+<header class="topbar"><span class="logo">MOTRIX</span><span class="sp"></span><span class="who" id="who">王小明・最高管理者</span></header>
+<nav class="mnav" aria-label="主選單"><span>主選單</span><span>業務</span><span>案件</span><span>廠商與採購</span><span>經營分析</span><span>財務會計</span><span>勞務管理</span><span>我的工作</span><span class="on">系統</span><small>↑ 原本是 21 項的下拉；改成單一入口</small></nav>
+
+<main class="page-main">
+  <div class="hub-head">
+    <h1>系統</h1>
+    <div class="search-wrap">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="q" class="search-input" type="search" placeholder="搜尋設定或功能：例如 備份、簽核、信件、權限" aria-label="搜尋系統功能" autocomplete="off">
+      <kbd>/</kbd>
+    </div>
+  </div>
+  <div class="sub" data-testid="hub-subtitle">管理用・帳號、流程、通知、資料與稽核都從這裡進去；你看得到的項目依權限顯示</div>
+
+  <section class="kpi-grid" id="kpis" aria-label="系統狀態摘要"></section>
+
+  <div class="recent" id="recent" aria-label="最近使用"></div>
+
+  <div id="sections"></div>
+
+  <div class="note">
+    <b>給評審的說明</b>：每張卡片＝一筆『系統卡片註冊』（各模組在 <code>module.json</code> 加性宣告：標題、說明、深連結、所需權限、所屬區塊、搜尋關鍵字），即時狀態徽章由該模組的選用提供者回傳（逾時或失敗＝不顯示徽章、不影響卡片）。
+    新模組或新設定頁只要宣告一筆卡片就會出現在這裡，不必改本頁。舊網址全部照舊可用；點進去的頁面頂端會多一條『← 系統』麵包屑。
+  </div>
+</main>
+
+<script>
+/* ── 示意資料：實際來自 GET /api/system-hub（伺服器已依權限過濾）── */
+var ICONS={
+  user:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>',
+  shield:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>',
+  flow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M9 6h6a3 3 0 013 3v6"/></svg>',
+  mail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
+  cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+  disk:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
+  log:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7M9 8h3"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>',
+  build:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 7l3-3 3 3-3 3M3 21l9-9M12 12l4 4"/></svg>',
+  ver:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  org:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="5"/><rect x="3" y="16" width="6" height="5"/><rect x="15" y="16" width="6" height="5"/><path d="M12 8v4M6 16v-4h12v4"/></svg>',
+  file:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>',
+  scale:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5 21h14M5 7h14M5 7l-3 7a3 3 0 006 0zM19 7l-3 7a3 3 0 006 0z"/></svg>'
+};
+var SECTIONS=[
+  {key:'identity', title:'帳號與權限', sub:'誰能進系統、能看什麼、能做什麼'},
+  {key:'workflow', title:'簽核與流程', sub:'誰簽什麼、單據類型與款別'},
+  {key:'notify',   title:'通知與信件', sub:'什麼事通知誰、怎麼通知'},
+  {key:'data',     title:'資料與備份', sub:'檔案位置、備份、刪除後的暫存區'},
+  {key:'audit',    title:'稽核與紀錄', sub:'誰在什麼時候做了什麼'},
+  {key:'settings', title:'公司與參數設定', sub:'公司資料、法規參數、報表與利潤口徑（設定中心索引）'},
+  {key:'modules',  title:'模組與擴充', sub:'功能開關與自訂模組'},
+  {key:'status',   title:'系統狀態與版本', sub:'版本、資料庫結構、使用狀況'}
+];
+/* perm 語意同選單：'superadmin'｜['模組鍵',…]｜'any'；badge 為模組提供者的即時回傳（示意）*/
+var CARDS=[
+  {id:'users',sec:'identity',ico:'user',title:'使用者管理',desc:'新增帳號、停用、重設密碼、指派職責角色',href:'users.html',perm:'superadmin',mod:'core',kw:'帳號 密碼 停用 人員 登入',badge:{t:'23 位啟用',tone:'info'}},
+  {id:'duty',sec:'identity',ico:'shield',title:'職責角色',desc:'把常用的模組權限組合成角色，一次授權給多人',href:'duty-roles.html',perm:'superadmin',mod:'core',kw:'角色 權限 授權 職責',badge:{t:'7 個角色',tone:'info'}},
+  {id:'matrix',sec:'identity',ico:'shield',title:'權限設定',desc:'角色 × 模組 × 動作的矩陣檢視與調整（設計中）',href:'permission-matrix.html',perm:'superadmin',mod:'core',kw:'權限 矩陣 授權 角色',badge:{t:'2 項待核',tone:'warn'},planned:true},
+  {id:'org',sec:'identity',ico:'org',title:'組織架構設定',desc:'處、部門與主管；簽核鏈與報表的部門來源',href:'org-structure.html',perm:'superadmin',mod:'core',kw:'部門 處 主管 組織'},
+  {id:'deleg',sec:'identity',ico:'user',title:'簽核代理人',desc:'請假或出差期間，指定誰代你簽核',href:'approval-delegates.html',perm:'any',mod:'core',kw:'代理 請假 出差 簽核'},
+
+  {id:'apprset',sec:'workflow',ico:'flow',title:'簽核設定',desc:'各種單據的簽核層級、簽核人與套用範圍',href:'approval-settings.html',perm:'superadmin',mod:'core',kw:'簽核 流程 層級 審核',badge:{t:'9 類單據',tone:'info'}},
+  {id:'remit',sec:'workflow',ico:'flow',title:'匯款款別設定',desc:'訂金、進度款、完工款…各款別可開立的派發階段',href:'remit-kinds-settings.html',perm:'superadmin',mod:'subcontract',kw:'匯款 款別 承攬商 訂金'},
+  {id:'exptype',sec:'workflow',ico:'file',title:'支出申請類型',desc:'請購、採購、差旅、零用金的欄位、版面與單號',href:'expense-types.html',perm:'superadmin',mod:'core',kw:'支出 費用 請購 採購 差旅 零用金'},
+
+  {id:'notif',sec:'notify',ico:'mail',title:'通知設定',desc:'寄件帳號、系統網址、寄信開關與測試',href:'notification-settings.html',perm:'superadmin',mod:'core',kw:'通知 寄件 SMTP 信件',badge:{t:'寄信正常',tone:'ok'}},
+  {id:'mail',sec:'notify',ico:'mail',title:'信件與通知收件設定',desc:'逐類型設定誰收信、誰收站內通知',href:'mail-settings.html',perm:'superadmin',mod:'core',kw:'收件人 信件 通知 退訂'},
+  {id:'gcal',sec:'notify',ico:'cal',title:'Google 行事曆設定',desc:'哪些事件同步到行事曆、日曆帳號',href:'google-calendar-settings.html',perm:'superadmin',mod:'core',kw:'行事曆 日曆 Google 同步',badge:{t:'已連線',tone:'ok'}},
+
+  {id:'storage',sec:'data',ico:'disk',title:'儲存位置',desc:'上傳檔、報價單 PDF 與備份存放的位置與容量',href:'storage-settings.html',perm:'superadmin',mod:'core',kw:'儲存 位置 容量 磁碟',badge:{t:'剩 412 GB',tone:'ok'}},
+  {id:'backup',sec:'data',ico:'disk',title:'備份與保留',desc:'備份保留天數、最近一次備份、還原說明',href:'company-profile-settings.html#backup',perm:'superadmin',mod:'core',kw:'備份 還原 保留 災難',badge:{t:'今天 03:12 ✓',tone:'ok'}},
+  {id:'recycle',sec:'data',ico:'trash',title:'資源回收筒',desc:'刪除的單據與附件保留 30 天，可還原或永久刪除',href:'recycle-bin.html',perm:'superadmin',mod:'recyclebin',kw:'刪除 還原 回收 暫存',badge:{t:'12 筆・3 筆 7 天內到期',tone:'warn'}},
+  {id:'filec',sec:'data',ico:'file',title:'檔案中心',desc:'搜尋與下載所有單據的附件',href:'file-center.html',perm:['file_center'],mod:'filehub',kw:'檔案 附件 搜尋 下載'},
+  {id:'lodge',sec:'data',ico:'file',title:'旅宿檔案更新',desc:'更新旅宿住宿資料檔',href:'lodging-records.html',perm:['lodging'],mod:'lodging',kw:'旅宿 住宿 差旅'},
+
+  {id:'audit',sec:'audit',ico:'log',title:'歷史紀錄',desc:'稽核日誌：誰在何時對哪張單做了什麼',href:'audit-log.html',perm:['audit_log'],mod:'core',kw:'稽核 紀錄 日誌 軌跡',badge:{t:'今天 148 筆',tone:'info'}},
+  {id:'shiphist',sec:'audit',ico:'log',title:'出貨單歷史紀錄',desc:'出貨單匯出與列印的歷史',href:'shipping-export-history.html',perm:['shipping_export_log'],mod:'supply',kw:'出貨 匯出 歷史'},
+  {id:'online',sec:'audit',ico:'user',title:'在線時數統計',desc:'各帳號登入與在線時數',href:'online-stats.html',perm:'superadmin',mod:'core',kw:'在線 登入 時數 統計'},
+
+  {id:'center',sec:'settings',ico:'gear',title:'設定中心',desc:'所有可調參數的索引：提醒天數、保存期限、上傳上限、編號規則（規劃中）',href:'settings-center.html',perm:'superadmin',mod:'core',kw:'設定 參數 門檻 天數 上限',badge:{t:'規劃中',tone:'plan'},planned:true},
+  {id:'company',sec:'settings',ico:'gear',title:'公司資料設定',desc:'公司抬頭、統編、據點、Logo 與品牌名稱',href:'company-profile-settings.html',perm:'superadmin',mod:'core',kw:'公司 抬頭 統編 據點 Logo 品牌'},
+  {id:'legal',sec:'settings',ico:'scale',title:'法規參數設定',desc:'所得稅扣繳、健保費率等依生效日版本的法定參數',href:'legal-params.html',perm:'superadmin',mod:'core',kw:'法規 稅 扣繳 健保 費率',badge:{t:'2027-01 生效 1 項待確認',tone:'warn'}},
+  {id:'ledgerset',sec:'settings',ico:'gear',title:'報表設定',desc:'總帳報表的科目對照、期間與輸出設定',href:'ledger-settings.html',perm:['cashier','finance'],mod:'accounting',kw:'報表 科目 總帳 期間'},
+  {id:'overhead',sec:'settings',ico:'gear',title:'利潤口徑與管銷比率',desc:'營業利益口徑、管銷分攤比率與遷移狀態（目前只有 API，需補頁）',href:'overhead-settings.html',perm:'superadmin',mod:'case',kw:'利潤 管銷 營業利益 比率 口徑',planned:true},
+
+  {id:'modset',sec:'modules',ico:'build',title:'模組管理',desc:'啟用、停用模組與授權狀態',href:'module-settings.html',perm:'superadmin',mod:'core',kw:'模組 啟用 停用 授權',badge:{t:'15 個模組',tone:'info'}},
+  {id:'builder',sec:'modules',ico:'build',title:'模組建構器',desc:'不寫程式建立自訂記錄與表單',href:'module-builder.html',perm:'superadmin',mod:'core',kw:'自訂 表單 建構 記錄'},
+
+  {id:'ver',sec:'status',ico:'ver',title:'版本紀錄',desc:'目前版本與各模組更新紀錄',href:'module-versions.html',perm:['module_versions'],mod:'core',kw:'版本 更新 紀錄',badge:{t:'第 52 班',tone:'info'}},
+  {id:'schema',sec:'status',ico:'ver',title:'Schema 狀態',desc:'資料庫結構版本與各模組遷移是否完成',href:'schema-status.html',perm:'superadmin',mod:'core',kw:'資料庫 schema 遷移',badge:{t:'全部最新',tone:'ok'}}
+];
+var KPIS=[
+  {id:'backup',lbl:'最近備份',val:'今天 03:12',hint:'已上傳雲端・保留 30 份',tone:'ok',href:'company-profile-settings.html#backup',perm:'superadmin'},
+  {id:'grants',lbl:'待核權限申請',val:'2 項',hint:'來自 權限設定',tone:'warn',href:'permission-matrix.html',perm:'superadmin'},
+  {id:'bin',lbl:'資源回收筒',val:'12 筆',hint:'3 筆將在 7 天內永久清除',tone:'warn',href:'recycle-bin.html',perm:'superadmin'},
+  {id:'sys',lbl:'系統狀態',val:'正常',hint:'第 52 班・Schema 全部最新',tone:'ok',href:'schema-status.html',perm:'superadmin'}
+];
+var ROLES={
+  superadmin:{label:'最高管理者',mods:null},
+  admin:{label:'管理員',mods:['audit_log','module_versions','file_center']},
+  finance:{label:'財務',mods:['cashier','finance','shipping_export_log']},
+  viewer:{label:'一般人員',mods:[]}
+};
+
+function allowed(role,perm){
+  var r=ROLES[role];
+  if(perm==='any') return true;
+  if(r.mods===null) return true;
+  if(perm==='superadmin') return false;
+  return perm.some(function(m){return r.mods.indexOf(m)>-1});
+}
+function why(perm){ return perm==='superadmin' ? '需要最高管理者' : '需要模組權限：'+perm.join('、'); }
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function hl(text,q){
+  var t=esc(text); if(!q) return t;
+  var i=text.toLowerCase().indexOf(q); if(i<0) return t;
+  return esc(text.slice(0,i))+'<mark>'+esc(text.slice(i,i+q.length))+'</mark>'+esc(text.slice(i+q.length));
+}
+var RECENT_KEY='motrix_system_hub_recent';
+function getRecent(){ try{return JSON.parse(localStorage.getItem(RECENT_KEY)||'[]')}catch(e){return []} }
+function pushRecent(id){ try{var a=getRecent().filter(function(x){return x!==id});a.unshift(id);localStorage.setItem(RECENT_KEY,JSON.stringify(a.slice(0,5)))}catch(e){} }
+
+function render(){
+  var role=document.getElementById('role').value;
+  var showDenied=document.getElementById('showDenied').checked;
+  var q=document.getElementById('q').value.trim().toLowerCase();
+  document.getElementById('who').textContent='王小明・'+ROLES[role].label;
+
+  // 狀態列：只放使用者有權限的
+  var k=KPIS.filter(function(x){return allowed(role,x.perm)});
+  document.getElementById('kpis').innerHTML=k.map(function(x){
+    return '<a class="kpi-card" href="#'+x.id+'"><div class="kpi-card__lbl">'+esc(x.lbl)+'</div><div class="kpi-card__val tone-'+x.tone+'">'+esc(x.val)+'</div><div class="kpi-card__hint">'+esc(x.hint)+'</div></a>';
+  }).join('');
+  document.getElementById('kpis').style.display=k.length?'':'none';
+
+  // 最近使用
+  var byId={}; CARDS.forEach(function(c){byId[c.id]=c});
+  var rc=getRecent().map(function(id){return byId[id]}).filter(function(c){return c&&allowed(role,c.perm)});
+  var rEl=document.getElementById('recent');
+  rEl.style.display=rc.length?'':'none';
+  rEl.innerHTML=rc.length?('<span>最近使用：</span>'+rc.map(function(c){return '<a class="chip" href="#'+c.id+'" data-open="'+c.id+'">'+esc(c.title)+'</a>'}).join('')):'';
+
+  // 區塊與卡片
+  var html='';
+  SECTIONS.forEach(function(s){
+    var list=CARDS.filter(function(c){
+      if(c.sec!==s.key) return false;
+      var ok=allowed(role,c.perm);
+      if(!ok && !showDenied) return false;
+      if(q){ var hay=(c.title+' '+c.desc+' '+c.kw+' '+c.mod).toLowerCase(); if(hay.indexOf(q)<0) return false; }
+      return true;
+    });
+    if(!list.length) return;
+    html+='<section class="sec" aria-labelledby="s-'+s.key+'"><h2 class="sec-title" id="s-'+s.key+'">'+esc(s.title)+' <small>'+list.length+' 項</small></h2><div class="sec-sub">'+esc(s.sub)+'</div><div class="grid">';
+    list.forEach(function(c){
+      var ok=allowed(role,c.perm);
+      var b=c.badge?'<span class="badge '+(c.badge.tone==='warn'?'warn':c.badge.tone==='ok'?'ok':c.badge.tone==='plan'?'plan':c.badge.tone==='bad'?'bad':'info')+'">'+esc(c.badge.t)+'</span>':'';
+      html+=(ok?'<a class="card" href="#'+c.id+'" data-open="'+c.id+'">':'<div class="card is-denied" aria-disabled="true" title="'+esc(why(c.perm))+'">')
+        +'<div class="card__top"><span class="card__ico">'+ICONS[c.ico]+'</span><div style="min-width:0"><div class="card__title">'+hl(c.title,q)+'</div></div>'+(ok?b:'')+'</div>'
+        +'<div class="card__desc">'+hl(c.desc,q)+'</div>'
+        +(ok?'':'<div class="why">🔒 '+esc(why(c.perm))+'</div>')
+        +'<div class="card__foot"><span class="tag">'+esc(c.mod)+'</span>'+(c.planned?'<span class="tag">規劃中</span>':'')+'<span>→ '+esc(c.href)+'</span></div>'
+        +(ok?'</a>':'</div>');
+    });
+    html+='</div></section>';
+  });
+  document.getElementById('sections').innerHTML=html||'<div class="empty">'+(q?'沒有符合「'+esc(q)+'」的項目。試試別的關鍵字，或確認你有該功能的權限。':'你目前沒有可用的系統功能。')+'</div>';
+}
+
+document.getElementById('role').addEventListener('change',render);
+document.getElementById('showDenied').addEventListener('change',render);
+document.getElementById('q').addEventListener('input',render);
+document.addEventListener('keydown',function(e){ if(e.key==='/'&&document.activeElement.tagName!=='INPUT'){e.preventDefault();document.getElementById('q').focus();} });
+document.addEventListener('click',function(e){ var a=e.target.closest('[data-open]'); if(a){ e.preventDefault(); pushRecent(a.getAttribute('data-open')); render(); } });
+document.getElementById('theme').addEventListener('click',function(){
+  var d=document.documentElement; var on=d.getAttribute('data-theme')==='dark';
+  if(on) d.removeAttribute('data-theme'); else d.setAttribute('data-theme','dark');
+});
+if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.setAttribute('data-theme','dark');
+render();
+</script>
+</body>
+</html>
