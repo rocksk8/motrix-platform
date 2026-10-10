@@ -178,5 +178,9 @@ def system_hub_settings(body: dict = Body(default={}), authorization: str = Head
 
 
 def clear_cache():
-    """測試用。"""
+    """清掉快取（權限矩陣／代理／設定異動時由 `perm.changed` 通知；也給測試用）。"""
     _CACHE.clear()
+
+
+# 權限矩陣（1d）在任何授權／代理／狀態異動時呼叫所有 `perm.changed` 提供者：系統中心的快取立刻失效，不等 15 秒（多行程時最壞仍是 15 秒）
+registry.provide("perm.changed", "system_hub", lambda: clear_cache())
