@@ -158,6 +158,13 @@ def _g(group):
     return _GROUPS[group]
 
 
+def _merged(base, over):
+    """新字典＝base 加上 over 的鍵（over 蓋 base）；不用 `**` 展開（守門：禁止非字面值的 ** 傳參）。"""
+    out = dict(base)
+    out.update(over)
+    return out
+
+
 def _defaults(group):
     return {k: f.default for k, f in _g(group)["fields"].items()}
 
@@ -199,7 +206,7 @@ def validate_values(group, values, *, partial=False):
                 out.append({"path": k, "message": "缺少欄位"})
     if not out and g["cross_check"]:
         try:
-            out += list(g["cross_check"](dict(_defaults(group), **values)))
+            out += list(g["cross_check"](_merged(_defaults(group), values)))
         except Exception as e:                      # noqa: BLE001
             out.append({"path": "", "message": "跨欄位檢查失敗：%s" % e})
     return out
@@ -408,8 +415,8 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
         pend = {k: v for k, v in values.items() if g["fields"][k].requires_pending or _loosens(g["fields"][k], v)}
         imm = {k: v for k, v in values.items() if k not in pend}
         loose = {k for k, v in pend.items() if _loosens(g["fields"][k], v)}
-        new = dict(base, **imm)
-        problems = validate_values(group, dict(new, **pend))
+        new = _merged(base, imm)
+        problems = validate_values(group, _merged(new, pend))
         if problems:
             raise SettingError("設定未儲存（%d 個問題）" % len(problems), problems)
         changes = [{"field": k, "old": base[k], "new": new[k]} for k in g["fields"] if base[k] != new[k]]
@@ -425,7 +432,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
             L.record(c, domain, group, changes, reason or note, actor_, ip=ip, risk=risk, ref_version=out["version"],
                      audit_action="settings.%s.update" % group, target_label=g["label"])
             _write_legacy(c, group, new)
-            result.update(changed=True, version=out["version"], values=dict(eff, **new), changes=changes)
+            result.update(changed=True, version=out["version"], values=_merged(eff, new), changes=changes)
         if pend:
             days = confirm_period_days(c)
             when = (datetime.now() + timedelta(days=days)).isoformat(timespec="seconds")
