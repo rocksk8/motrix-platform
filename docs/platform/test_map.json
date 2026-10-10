@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1242,
+  "tests": 1248,
   "unmapped": 13,
   "kinds": {
-   "api": 676,
+   "api": 678,
    "e2e": 300,
-   "audit": 155,
-   "unit": 111
+   "audit": 157,
+   "unit": 113
   },
-  "routes": 784
+  "routes": 785
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -5842,6 +5842,43 @@
    "login_fixture": true,
    "module": "case"
   },
+  "backend/modules/case/tests/test_charity_t52.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "mod:case/api/overhead",
+    "mod:case/api/quotations",
+    "mod:case/api/settlement_api",
+    "mod:case/settlement_actuals",
+    "mod:case/tests/_t40_won",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02",
+    "mod:case/tests/test_settlement_actuals_2026_10_03",
+    "mod:case/tests/test_settlement_finalize_integrity_2026_10_03"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/settlement_actuals.py",
+     "backend/modules/case/tests/_t40_won.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py",
+     "backend/modules/case/tests/test_settlement_actuals_2026_10_03.py",
+     "backend/modules/case/tests/test_settlement_finalize_integrity_2026_10_03.py"
+    ],
+    "api": [
+     "backend/modules/case/api/overhead.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/api/settlement_api.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
   "backend/modules/case/tests/test_e2e_approval_queue_attachment_p0_2026_09_30.py": {
    "kind": "e2e",
    "units": [
@@ -6711,6 +6748,7 @@
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
+    "mod:case/api/overhead",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -6734,6 +6772,7 @@
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/overhead.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/case/api/settlement_api.py",
@@ -6847,6 +6886,7 @@
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
+    "mod:case/api/overhead",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -6876,6 +6916,7 @@
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/overhead.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/case/api/settlement_api.py",
@@ -6936,6 +6977,7 @@
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
+    "mod:case/api/overhead",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -6975,6 +7017,7 @@
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/overhead.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/case/api/settlement_api.py",
@@ -7097,6 +7140,7 @@
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
+    "mod:case/api/overhead",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -7125,6 +7169,7 @@
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/overhead.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/case/api/settlement_api.py",
@@ -7242,6 +7287,7 @@
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
+    "mod:case/api/overhead",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -7275,6 +7321,7 @@
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/overhead.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/case/api/settlement_api.py",
@@ -7394,6 +7441,7 @@
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
+    "mod:case/api/overhead",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -7420,6 +7468,7 @@
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/overhead.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/case/api/settlement_api.py",
@@ -7574,6 +7623,7 @@
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
+    "mod:case/api/overhead",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -7599,6 +7649,7 @@
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/overhead.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/case/api/settlement_api.py",
@@ -8364,10 +8415,21 @@
     "api": [
      "backend/modules/case/api/settlement_api.py"
     ],
+    "path": [
+     "backend/modules/case/tests/test_route_table_golden_2026_10_05.py"
+    ],
     "module_dir": [
      "backend/modules/case/"
     ]
    },
+   "unresolved_api": [
+    "/api/a",
+    "/api/b",
+    "/api/c/{}",
+    "/api/new",
+    "/api/x",
+    "/api/x%03d"
+   ],
    "module": "case"
   },
   "backend/modules/case/tests/test_settlement_actuals_2026_10_03.py": {
@@ -8924,6 +8986,7 @@
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
+    "mod:case/api/overhead",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -8953,6 +9016,7 @@
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/overhead.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/case/api/settlement_api.py",
@@ -14188,6 +14252,7 @@
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
+    "mod:case/api/overhead",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -14212,6 +14277,7 @@
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/overhead.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/case/api/settlement_api.py",
@@ -20704,6 +20770,7 @@
   "backend/tests/test_begin_only_via_begin_write_2026_09_25.py": {
    "kind": "audit",
    "units": [
+    "file:backend/tools/charity_migrate.py",
     "file:backend/tools/overhead_migrate.py",
     "mod:case/api/quotations",
     "mod:payroll/api/bonus",
@@ -20724,6 +20791,7 @@
      "backend/modules/payroll/api/bonus.py",
      "backend/modules/payroll/api/payslip_approval.py",
      "backend/modules/payroll/api/payslips.py",
+     "backend/tools/charity_migrate.py",
      "backend/tools/overhead_migrate.py"
     ]
    }
@@ -22126,6 +22194,48 @@
      "backend/db.py",
      "backend/helpers/notification_prefs.py",
      "backend/helpers/system_checks.py"
+    ]
+   }
+  },
+  "backend/tests/test_charity_form_t52.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/tests/test_money_round_half_up_2026_09_26.py",
+    "page:pages/quotation-form.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/tests/test_money_round_half_up_2026_09_26.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html"
+    ]
+   }
+  },
+  "backend/tests/test_charity_recalc_t52.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/migrations_frozen/t52_charity/__init__.py",
+    "file:backend/migrations_frozen/t52_charity/recalc.py",
+    "file:backend/tools/charity_migrate.py",
+    "file:backend/tools/overhead_migrate.py",
+    "mod:case/__init__",
+    "mod:case/profit_guard"
+   ],
+   "evidence": {
+    "import": [
+     "backend/migrations_frozen/t52_charity/__init__.py",
+     "backend/migrations_frozen/t52_charity/recalc.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/profit_guard.py"
+    ],
+    "path": [
+     "backend/tools/charity_migrate.py",
+     "backend/tools/overhead_migrate.py"
     ]
    }
   },
@@ -27919,17 +28029,47 @@
   "backend/tests/test_endpoint_auth_w1b_t48.py": {
    "kind": "api",
    "units": [
+    "mod:accounting/api/account_items",
+    "mod:arap/api/cashier",
     "mod:case/api/quotations",
+    "mod:payroll/api/bank_account",
     "mod:subcontract/api/contractors",
-    "mod:supply/api/shipping_notes"
+    "mod:supply/api/shipping_notes",
+    "page:pages/change-password.html",
+    "page:pages/login.html",
+    "router:approval_queue",
+    "router:auth",
+    "router:system"
    ],
    "evidence": {
     "api": [
+     "backend/modules/accounting/api/account_items.py",
+     "backend/modules/arap/api/cashier.py",
      "backend/modules/case/api/quotations.py",
+     "backend/modules/payroll/api/bank_account.py",
      "backend/modules/subcontract/api/contractors.py",
-     "backend/modules/supply/api/shipping_notes.py"
+     "backend/modules/supply/api/shipping_notes.py",
+     "backend/routers/approval_queue.py",
+     "backend/routers/auth.py",
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/change-password.html",
+     "frontend/pages/login.html"
     ]
-   }
+   },
+   "unresolved_api": [
+    "/api/a",
+    "/api/a/9/b",
+    "/api/a/{}/b",
+    "/api/b/{}",
+    "/api/boom/1",
+    "/api/boom/{}",
+    "/api/fine",
+    "/api/leak",
+    "/api/system/branding/logo/extra",
+    "/api/system/other"
+   ]
   },
   "backend/tests/test_exception_detail_leak_2026_09_23.py": {
    "kind": "api",
@@ -30823,6 +30963,24 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_pbkdf2_test_only_t51.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/tests/",
+    "file:backend/conftest.py",
+    "helper:auth"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/auth.py"
+    ],
+    "path": [
+     "backend/conftest.py",
+     "backend/tests/"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_pdf_archive_mirror_2026_09_07.py": {
    "kind": "api",
    "units": [
@@ -31210,6 +31368,46 @@
     ]
    }
   },
+  "backend/tests/test_profit_labels_t52.py": {
+   "kind": "audit",
+   "units": [
+    "core:pdf_gen",
+    "js:js/case-management-fin.js",
+    "js:js/reports.js",
+    "mod:analytics/api/reports",
+    "mod:payroll/__init__",
+    "mod:payroll/bonus",
+    "page:pages/case-management.html",
+    "page:pages/quotation-form.html",
+    "page:pages/reports.html",
+    "page:pages/settlement.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/modules/payroll/__init__.py",
+     "backend/modules/payroll/bonus.py",
+     "backend/pdf_gen.py"
+    ],
+    "page": [
+     "frontend/js/case-management-fin.js",
+     "frontend/js/reports.js",
+     "frontend/pages/case-management.html",
+     "frontend/pages/quotation-form.html",
+     "frontend/pages/reports.html",
+     "frontend/pages/settlement.html"
+    ],
+    "path": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/pdf_gen.py",
+     "frontend/js/case-management-fin.js",
+     "frontend/js/reports.js"
+    ]
+   }
+  },
   "backend/tests/test_profit_rules_t48.py": {
    "kind": "audit",
    "units": [
@@ -31571,6 +31769,7 @@
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
+    "mod:case/api/overhead",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -31591,6 +31790,7 @@
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/overhead.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/case/api/settlement_api.py",
@@ -32721,6 +32921,17 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_tmp_cleanup_t51.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/conftest.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/conftest.py"
+    ]
+   }
   },
   "backend/tests/test_totp_2026_09_07.py": {
    "kind": "api",

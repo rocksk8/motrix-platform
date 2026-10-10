@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-10（wip/t52-ab-charity-quote）
+## 1.125 — 2026-10-10（wip/t52-ab-charity-quote）
 - L1（新增，向下相容）：`helpers.profit_rules` 公益捐款基數——`CHARITY_DIRECT／CHARITY_TOTAL／ACTIVE_CHARITY_BASIS`；`charity(direct, total=None, basis='direct')`、`quote_profit(..., total=None, charity_basis=None)`、`settlement_profit(..., quoted_total=None, charity_basis=None)` 加選填參數（不傳＝舊算法，逐位不變）；`pdf_gen.charity_cost_label(summary, orig=False)`（公益捐款列標籤依基數戳記）。
 
 ## 1.124 — 2026-10-10（wip/t52-b5-s6-worklog）：工作日誌建立時記錄對象只有最高管理者能指定別人
