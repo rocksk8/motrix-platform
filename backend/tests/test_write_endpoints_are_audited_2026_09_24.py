@@ -41,6 +41,9 @@ AUDIT_WRAPPERS = {
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
 EXEMPT = {
+    # ── 刪除暫存區（第53班）：稽核與刪除同一個交易，經 service.audit_tx 寫入（掃描器只認 _audit／_system_audit 呼叫）──
+    ("modules/recyclebin/api.py", "POST", "/api/recycle-bin/delete-approved"):
+        "稽核 recyclebin.delete_approved 在同一個交易內由 service.audit_tx 寫入（寫不進去整筆回滾，附件搬回）；端點本身不再另呼叫 _audit",
     # ── 職責角色（R2 第2步 8a）：稽核改在 helper 的同一交易內寫入 ──────────
     ("duty_roles.py", "POST", "/api/duty-roles"):
         "稽核在同一個交易內由 helpers/duty_roles._record→_write_audit 寫入（R2 第2步 8a：audit_log 與 permission_changes 同交易、audit_id 回填），端點本身不再另呼叫 _audit；失敗整筆回滾",
