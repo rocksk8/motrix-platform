@@ -11,13 +11,17 @@ from helpers import auth as A
 from helpers import perm as P
 from modules.permmatrix import service as S
 
+def _d(key, label, legacy, **kw):
+    return dict(key=key, label=label, desc=label + "（測試用的一句話說明）", impact="勾選後可以" + label + "（測試用的影響說明）", legacy=legacy, **kw)
+
+
 DECLS = [
-    dict(key="zz.doc.view", label="檢視", legacy={"module": "payslip"}),
-    dict(key="zz.doc.edit", label="修改", legacy={"role": ["admin"]}),
-    dict(key="zz.doc.submit", label="送出", legacy={"role": ["admin"]}),
-    dict(key="zz.doc.approve", label="核准", legacy={"superadmin": True}),
-    dict(key="zz.doc.pay", label="付款", legacy={"role": ["admin"]}),
-    dict(key="zz.doc.config", label="設定", legacy={"role": ["admin"]}, delegable=False),
+    _d("zz.doc.view", "檢視測試單", {"module": "payslip"}),
+    _d("zz.doc.edit", "修改測試單", {"role": ["admin"]}),
+    _d("zz.doc.submit", "送出測試單", {"role": ["admin"]}),
+    _d("zz.doc.approve", "核准測試單", {"superadmin": True}),
+    _d("zz.doc.pay", "付款測試單", {"role": ["admin"]}),
+    _d("zz.doc.config", "設定測試單", {"role": ["admin"]}, delegable=False),
 ]
 CAPS, PROBLEMS = C.collect({"zz": {"capabilities": DECLS}}, valid_roles=A.VALID_ROLES)
 SU = {"id": 1, "username": "root", "display_name": "root", "role": "superadmin"}
@@ -241,3 +245,46 @@ def test_doc_type_scope_and_policy_option_and_date_validation(conn, make_user, m
         S.create_delegation(conn, boss, "pm_boss", "pm_dlg", "caps", caps=["zz.doc.edit"], reason="政策關掉了")
     assert e.value.status == 403, "『本人可替自己建非風險代理』是可調的選項（預設＝今天的行為）"
     assert S.POLICY_DEFAULT == {"selfDelegateNonRisky": True, "delegationAdditive": True, "concurrentRoleExpiry": "optional"}
+
+
+# ── 白話預覽（影響面板）與一鍵復原 ──────────────────────────────────────────────────────
+def test_preview_role_cap_explains_who_is_affected_when_and_whether_it_can_be_undone(conn, make_user):
+    _mk(make_user, "pv_fin1", "finance")
+    _mk(make_user, "pv_fin2", "finance")
+    p = S.preview_role_cap(conn, "finance", "zz.doc.edit", True)
+    assert p["sentence"] == "財務可以修改測試單" and p["changed"] and p["users"] >= 2 and "位使用者" in p["usersText"]
+    assert p["effective"] == "儲存後立即生效" and not p["pending"] and p["reversible"] and "一鍵復原" in p["reversibleText"]
+    assert "不受影響" in p["appliesTo"] and p["risk"] == "" and p["question"] == "財務可以修改測試單嗎？"
+    hi = S.preview_role_cap(conn, "finance", "zz.doc.pay", True)
+    assert hi["pending"] and "24 小時" in hi["effective"] and "高風險" in hi["risk"]
+    same = S.preview_role_cap(conn, "admin", "zz.doc.edit", True)
+    assert same["changed"] is False and same["users"] == 0, "已經是這樣 ⇒ 沒有影響"
+    for text in (p["sentence"], p["impact"], p["usersText"], p["appliesTo"], hi["risk"], hi["effective"]):
+        assert "zz.doc" not in text and "allow" not in text and "deny" not in text, "畫面不露出代碼"
+
+
+def test_preview_delegation_gives_the_plain_confirmation_sentence(conn, make_user):
+    _mk(make_user, "pv_boss", "admin")
+    _mk(make_user, "pv_dlg", "viewer")
+    p = S.preview_delegation(conn, "pv_boss", "pv_dlg", ["zz.doc.edit"], "2031-11-30")
+    assert p["sentence"].startswith("你即將讓") and "代理" in p["sentence"] and "修改測試單" in p["sentence"] and "11/30" in p["sentence"] and "立即生效" in p["sentence"]
+    risky = S.preview_delegation(conn, "pv_boss", "pv_dlg", ["zz.doc.pay"], "2031-11-30")
+    assert risky["pending"] and "24 小時後生效" in risky["sentence"] and "高風險" in risky["risk"]
+    with pytest.raises(S.PermError):
+        S.preview_delegation(conn, "pv_boss", "pv_dlg", [], "")
+
+
+def test_one_click_undo_walks_back_one_step_each_time(conn, make_user):
+    fin = _mk(make_user, "pv_fin", "finance")
+    with pytest.raises(S.PermError):
+        S.undo_last_change(conn, SU)
+    S.set_role_cap(conn, SU, "finance", "zz.doc.edit", True, "一")
+    S.set_role_cap(conn, SU, "finance", "zz.doc.submit", True, "二")
+    assert P.can(fin, "zz.doc.edit") and P.can(fin, "zz.doc.submit")
+    S.undo_last_change(conn, SU)
+    assert P.can(fin, "zz.doc.edit") and not P.can(fin, "zz.doc.submit"), "復原最後一步"
+    S.undo_last_change(conn, SU)
+    assert not P.can(fin, "zz.doc.edit"), "再按一次回到更早的狀態"
+    with pytest.raises(S.PermError) as e:
+        S.undo_last_change(conn, {"username": "x", "role": "admin"})
+    assert e.value.status == 403

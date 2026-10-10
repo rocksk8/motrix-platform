@@ -371,7 +371,10 @@ def restore_version(conn, actor, version_id, reason):
     row = conn.execute("SELECT snapshot_json FROM perm_versions WHERE id=?", (int(version_id),)).fetchone()
     if row is None:
         raise PermError("找不到這個版本", 404)
-    target = json.loads(row["snapshot_json"] or "{}")
+    return _restore_snapshot(conn, actor, json.loads(row["snapshot_json"] or "{}"), reason, "版本 #%s" % version_id)
+
+
+def _restore_snapshot(conn, actor, target, reason, label):
     cur = _snapshot(conn)
     tr = {(r["role"], r["cap"]): bool(r["granted"]) for r in target.get("role_caps", [])}
     cr = {(r["role"], r["cap"]): bool(r["granted"]) for r in cur["role_caps"]}
@@ -395,9 +398,35 @@ def restore_version(conn, actor, version_id, reason):
             pending += 1 if res.get("pending") else 0
             done += 0 if res.get("pending") else 1
     begin_write(conn)
-    _audit_tx(conn, actor, "permmatrix.version.restore", "perm_version", version_id, "回溯到版本 #%s" % version_id, {"applied": done, "pending": pending, "reason": reason})
+    _audit_tx(conn, actor, "permmatrix.version.restore", "perm_version", label, "回溯到" + label, {"applied": done, "pending": pending, "reason": reason})
     conn.commit()
     return {"ok": True, "applied": done, "pending": pending}
+
+
+UNDO_REASON = "一鍵復原"
+
+
+def undo_last_change(conn, actor):
+    """一鍵復原：回到『上一個狀態』。每按一次往回一步（復原本身產生的版本不算一步，所以不會來回跳）；
+    走一般寫入規則（新增高風險授予仍要 24 小時）。已經是最早的狀態 ⇒ 錯誤。"""
+    _need_super(actor)
+    cur = _snapshot(conn)
+    vers = [(r["id"], json.loads(r["snapshot_json"] or "{}")) for r in conn.execute(
+        "SELECT id, snapshot_json FROM perm_versions WHERE reason<>? ORDER BY id", (UNDO_REASON,)).fetchall()]
+    empty = {"role_caps": [], "user_overrides": []}
+    idx = None
+    for i in range(len(vers) - 1, -1, -1):
+        if vers[i][1] == cur:
+            idx = i
+            break
+    if idx is None:
+        idx = len(vers)                       # 現況不在歷史裡（例如待生效剛生效）⇒ 回到最近一個版本
+    if idx == 0 and cur == empty:
+        raise PermError("沒有可以復原的變更")
+    target = vers[idx - 1][1] if idx >= 1 else empty
+    if target == cur:
+        raise PermError("沒有可以復原的變更")
+    return _restore_snapshot(conn, actor, target, UNDO_REASON, "上一個狀態")
 
 
 # ── 代理 ──────────────────────────────────────────────────────────────────────────
@@ -517,4 +546,81 @@ def list_delegations(conn, state=None):
         d = dict(r)
         d["scope"] = json.loads(d.pop("scope_json") or "{}")
         out.append(d)
+    return out
+
+
+# ── 白話預覽（存檔前的「影響面板」）與一鍵復原 ─────────────────────────────────────────────
+def _impact_provider(cap):
+    from core import registry
+    return registry.providers("perm.impact").get(cap.unit) if cap.impact_calc else None
+
+
+def _preview(conn, cap, sentence, users, delay, extra=None):
+    """共用的預覽內容：句子、勾選後會影響什麼、影響幾位使用者／幾份單據、適用範圍、可否復原、何時生效、風險提示。畫面只顯示這些中文。"""
+    from helpers import perm_text as T
+    out = {
+        "sentence": sentence,
+        "impact": cap.impact,                                             # 宣告時寫的白話影響說明
+        "users": users,
+        "usersText": "約影響 %d 位使用者" % users,
+        "appliesTo": "之後的操作會依新設定；已經送出或完成的單據與簽核紀錄不受影響",
+        "reversible": True,
+        "reversibleText": "隨時可以一鍵復原",
+        "effective": ("%d 小時後生效（這段時間內可以撤銷）" % PENDING_HOURS) if delay else "儲存後立即生效",
+        "pending": bool(delay),
+        "risk": T.risk_hint(cap.key),
+    }
+    prov = _impact_provider(cap)
+    if prov is not None:
+        try:
+            out["documents"] = prov(conn, cap.key, extra or {})
+        except Exception:                                                 # noqa: BLE001 — 影響計算失敗不擋預覽
+            logger.exception("perm.impact provider failed for %s", cap.key)
+    return out
+
+
+def preview_role_cap(conn, role, cap_key, granted):
+    from helpers import perm_text as T
+    c = _cap_or_err(cap_key)
+    if role not in _roles():
+        raise PermError("角色不存在或不可調整")
+    seeded = cap_key in P.seed_from_legacy(CAP.all_caps()).role_grants.get(role, ())
+    cur = conn.execute("SELECT granted FROM perm_role_caps WHERE role=? AND cap=?", (role, cap_key)).fetchone()
+    now_has = seeded if cur is None else bool(cur["granted"])
+    n = conn.execute("SELECT COUNT(*) FROM users WHERE role=? AND active=1", (role,)).fetchone()[0]
+    delay = bool(granted) and not seeded and c.risk == "high" and now_has != bool(granted)
+    out = _preview(conn, c, T.sentence_role_cap(role, cap_key, bool(granted)), n if now_has != bool(granted) else 0, delay, {"role": role, "granted": bool(granted)})
+    out["changed"] = now_has != bool(granted)
+    out["question"] = T.question(cap_key, T.role_label(role))
+    out["recommended"] = role in c.recommended
+    return out
+
+
+def preview_user_override(conn, user_id, cap_key, effect):
+    from helpers import perm_text as T
+    c = _cap_or_err(cap_key)
+    u = _target_user(conn, user_id)
+    name = conn.execute("SELECT display_name, username FROM users WHERE id=?", (u["id"],)).fetchone()
+    label = name["display_name"] or name["username"]
+    delay = effect == "allow" and c.risk == "high"
+    return _preview(conn, c, T.sentence_user_override(label, cap_key, effect == "allow"), 1, delay, {"user_id": u["id"], "effect": effect})
+
+
+def preview_delegation(conn, delegator, delegate, keys, valid_to=""):
+    from helpers import perm_text as T
+    allc = CAP.all_caps()
+    caps = [allc[k] for k in keys if k in allc]
+    if not caps:
+        raise PermError("請指定代理範圍")
+    names = {}
+    for u in (delegator, delegate):
+        r = conn.execute("SELECT display_name, username FROM users WHERE username=? AND active=1", (u,)).fetchone()
+        if r is None:
+            raise PermError("找不到帳號或已停用：%s" % u, 404)
+        names[u] = r["display_name"] or r["username"]
+    risky = any(c.risk == "high" for c in caps)
+    out = _preview(conn, caps[0], T.sentence_delegation(names[delegator], names[delegate], [c.key for c in caps], valid_to, PENDING_HOURS if risky else 0), 1, risky)
+    out["impact"] = "；".join(c.impact for c in caps)
+    out["risk"] = "；".join(h for h in (T.risk_hint(c.key) for c in caps) if h)
+    out["appliesTo"] = "代理期間內，%s可以以自己的帳號做這些事，並會註明是代理%s；%s本人的權限不變" % (names[delegate], names[delegator], names[delegator])
     return out

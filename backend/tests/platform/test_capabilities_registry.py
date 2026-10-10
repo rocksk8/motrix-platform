@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """權限矩陣框架 P0：能力登錄（core/capabilities.py）的宣告規則、真實模組宣告的健檢、與 auth 角色清單同步。"""
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -13,13 +14,15 @@ MODULES_DIR = Path(__file__).resolve().parents[2] / "modules"
 
 
 def _ok(**kw):
-    d = {"key": "zz.doc.view", "label": "檢視", "legacy": {"module": "payslip"}}
+    d = {"key": "zz.doc.view", "label": "檢視文件", "desc": "可以打開並閱讀文件", "impact": "勾選後可以看到文件內容", "legacy": {"module": "payslip"}}
     d.update(kw)
     return d
 
 
 def test_vocabulary_is_the_user_approved_set_and_high_risk_is_a_subset():
-    assert len(C.ACTIONS) == 18 and len(set(C.ACTIONS)) == 18
+    assert len(C.ACTIONS) == 19 and len(set(C.ACTIONS)) == 19 and "menu" in C.ACTIONS, "18 個動作＋選單可見度"
+    assert set(C.ACTION_INFO) == set(C.ACTIONS), "每個動作都有白話名稱與說明"
+    assert all(re.search("[㐀-鿿]", lab) and re.search("[㐀-鿿]", desc) for lab, desc in C.ACTION_INFO.values())
     assert set(C.HIGH_RISK_ACTIONS) <= set(C.ACTIONS)
     assert {"view_money", "approve", "pay", "delete"} <= set(C.HIGH_RISK_ACTIONS), "使用者裁示的四個高風險動作"
     assert "export" in C.ACTIONS and "print" in C.ACTIONS, "匯出與列印各自獨立"
@@ -32,19 +35,26 @@ def test_valid_decl_is_parsed_with_derived_leaves():
 
 
 @pytest.mark.parametrize("decl,needle", [
-    ({"key": "zz.view", "label": "x", "legacy": {"module": "a"}}, "格式"),
-    ({"key": "yy.doc.view", "label": "x", "legacy": {"module": "a"}}, "第一段"),
-    ({"key": "zz.doc.fly", "label": "x", "legacy": {"module": "a"}}, "詞彙"),
-    ({"key": "zz.doc.view", "label": " ", "legacy": {"module": "a"}}, "label"),
-    ({"key": "zz.doc.view", "label": "x"}, "legacy"),
-    ({"key": "zz.doc.view", "label": "x", "legacy": {"module": "a"}, "risk": "extreme"}, "risk"),
-    ({"key": "zz.doc.view", "label": "x", "legacy": {"role": ["nobody"]}}, "角色"),
-    ({"key": "zz.doc.view", "label": "x", "legacy": {"role": []}}, "非空"),
-    ({"key": "zz.doc.view", "label": "x", "legacy": {"module": "A b"}}, "模組鍵"),
-    ({"key": "zz.doc.view", "label": "x", "legacy": {"any": []}}, "非空"),
-    ({"key": "zz.doc.view", "label": "x", "legacy": {"superadmin": False}}, "true"),
-    ({"key": "zz.doc.view", "label": "x", "legacy": {"module": "a", "role": ["admin"]}}, "一個鍵"),
-    ({"key": "zz.doc.view", "label": "x", "legacy": {"all": []}}, "不認得"),
+    ({"key": "zz.view", "label": "測試", "desc": "說明文字", "impact": "影響說明", "legacy": {"module": "a"}}, "格式"),
+    ({"key": "yy.doc.view", "label": "測試", "desc": "說明文字", "impact": "影響說明", "legacy": {"module": "a"}}, "第一段"),
+    ({"key": "zz.doc.fly", "label": "測試", "desc": "說明文字", "impact": "影響說明", "legacy": {"module": "a"}}, "詞彙"),
+    ({"key": "zz.doc.view", "label": " ", "desc": "說明文字", "impact": "影響說明", "legacy": {"module": "a"}}, "label"),
+    ({"key": "zz.doc.view", "label": "測試", "impact": "影響說明", "legacy": {"module": "a"}}, "desc"),
+    ({"key": "zz.doc.view", "label": "測試", "desc": "說明文字", "legacy": {"module": "a"}}, "impact"),
+    ({"key": "zz.doc.view", "label": "view", "desc": "說明文字", "impact": "影響說明", "legacy": {"module": "a"}}, "中文"),
+    ({"key": "zz.doc.view", "label": "測試", "desc": "only english", "impact": "影響說明", "legacy": {"module": "a"}}, "中文"),
+    ({"key": "zz.doc.view", "label": "測試", "desc": "說明文字", "impact": "影響說明", "legacy": {"module": "a"}, "question": "can they?"}, "question"),
+    ({"key": "zz.doc.view", "label": "測試", "desc": "說明文字", "impact": "影響說明", "legacy": {"module": "a"}, "recommended": ["nobody"]}, "角色"),
+    ({"key": "zz.doc.view", "label": "測試", "desc": "說明文字", "impact": "影響說明", "legacy": {"module": "a"}, "presets": {"strict": ["nobody"]}}, "角色"),
+    ({"key": "zz.doc.view", "label": "測試", "desc": "說明文字", "impact": "影響說明"}, "legacy"),
+    ({"key": "zz.doc.view", "label": "測試", "desc": "說明文字", "impact": "影響說明", "legacy": {"module": "a"}, "risk": "extreme"}, "risk"),
+    ({"key": "zz.doc.view", "label": "測試", "desc": "說明文字", "impact": "影響說明", "legacy": {"role": ["nobody"]}}, "角色"),
+    ({"key": "zz.doc.view", "label": "測試", "desc": "說明文字", "impact": "影響說明", "legacy": {"role": []}}, "非空"),
+    ({"key": "zz.doc.view", "label": "測試", "desc": "說明文字", "impact": "影響說明", "legacy": {"module": "A b"}}, "模組鍵"),
+    ({"key": "zz.doc.view", "label": "測試", "desc": "說明文字", "impact": "影響說明", "legacy": {"any": []}}, "非空"),
+    ({"key": "zz.doc.view", "label": "測試", "desc": "說明文字", "impact": "影響說明", "legacy": {"superadmin": False}}, "true"),
+    ({"key": "zz.doc.view", "label": "測試", "desc": "說明文字", "impact": "影響說明", "legacy": {"module": "a", "role": ["admin"]}}, "一個鍵"),
+    ({"key": "zz.doc.view", "label": "測試", "desc": "說明文字", "impact": "影響說明", "legacy": {"all": []}}, "不認得"),
     ("not a dict", "物件"),
 ])
 def test_bad_declarations_are_rejected_with_a_readable_reason(decl, needle):
@@ -94,3 +104,21 @@ def test_all_caps_follows_the_loaded_modules_and_a_missing_module_means_no_capab
     mans.clear()
     assert C.all_caps() == {} and C.signature() != sig1, "模組缺席 ⇒ 能力不存在（不是錯誤）"
     C.reset_cache()
+
+
+def test_question_defaults_from_the_label_recommended_defaults_to_the_seed_and_presets_are_parsed():
+    c = C.parse_decl("zz", _ok(label="送出勞報單", legacy={"role": ["admin"]}), valid_roles=A.VALID_ROLES)
+    assert c.question == "{who}可以送出勞報單嗎？" and c.recommended == frozenset({"admin"}) and c.presets == {}
+    c2 = C.parse_decl("zz", _ok(question="{who}要不要核准？", recommended=["finance"], presets={"strict": [], "general": ["finance"]}), valid_roles=A.VALID_ROLES)
+    assert c2.recommended == frozenset({"finance"}) and c2.presets["general"] == frozenset({"finance"}) and c2.presets["strict"] == frozenset()
+
+
+def test_preset_definitions_need_a_chinese_name_and_sentence_and_must_agree_across_modules():
+    ok = {"a": {"capability_presets": [{"key": "general", "label": "一般公司", "desc": "大多數公司的建議設定"}]},
+          "b": {"capability_presets": [{"key": "general", "label": "一般公司", "desc": "大多數公司的建議設定"}, {"key": "strict", "label": "嚴格分工", "desc": "送出與核准由不同的人負責"}]}}
+    presets, probs = C.collect_presets(ok)
+    assert probs == [] and set(presets) == {"general", "strict"}
+    _, probs = C.collect_presets({"a": {"capability_presets": [{"key": "g", "label": "General", "desc": "x"}]}})
+    assert probs
+    _, probs = C.collect_presets({"a": {"capability_presets": [{"key": "g", "label": "一般", "desc": "說明一"}]}, "b": {"capability_presets": [{"key": "g", "label": "一般", "desc": "說明二"}]}})
+    assert any("不一致" in p for p in probs)
