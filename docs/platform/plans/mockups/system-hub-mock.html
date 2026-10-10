@@ -119,6 +119,8 @@ mark{background:var(--accent-light);color:var(--accent);padding:0 1px;border-rad
   .mock-ctl{font-size:11px;gap:8px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.first-hint{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:0 0 14px;padding:10px 14px;border:1px solid var(--info-border);background:var(--info-light);color:var(--info);border-radius:var(--radius-lg);font-size:12.5px}
+.first-hint button{border:1px solid var(--info-border);background:var(--surface);color:var(--info);border-radius:var(--radius);padding:4px 12px;font-size:12px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -148,6 +150,7 @@ mark{background:var(--accent-light);color:var(--accent);padding:0 1px;border-rad
       <kbd>/</kbd>
     </div>
   </div>
+  <div class="first-hint" id="hint"><span>第一次使用？左邊選一個分類，右邊就會列出這個分類裡可以設定的項目；找不到時，直接在上面的搜尋框打幾個字。</span><button type="button" id="hintx">我知道了</button></div>
   <div class="sub" data-testid="hub-subtitle">管理用・帳號、流程、通知、資料與稽核都從這裡進去；你看得到的項目依權限顯示</div>
 
   <div class="hub">
@@ -263,9 +266,9 @@ function rowHtml(c,role,q,withGroup){
     +'<span class="row__main"><div class="row__title">'+hl(c.title,q)+(c.planned?' <span class="tag">規劃中</span>':'')+'</div>'
     +'<div class="row__desc">'+hl(c.desc,q)+'</div>'
     +(ok?'':'<div class="row__why">🔒 '+esc(why(c.perm))+'</div>')
-    +(withGroup?'<div class="row__grp">'+esc(SECBY[c.sec].title)+' ・ '+esc(c.mod)+'</div>':'')
+    +(withGroup?'<div class="row__grp">'+esc(SECBY[c.sec].title)+'</div>':'')
     +'</span>'+(ok?b:'')+(ok?'<svg class="row__go" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>':'');
-  return ok?'<a class="row" href="#'+c.id+'" data-open="'+c.id+'" title="'+esc(c.href)+'">'+inner+'</a>'
+  return ok?'<a class="row" href="#'+c.id+'" data-open="'+c.id+'">'+inner+'</a>'
            :'<div class="row is-denied" aria-disabled="true" title="'+esc(why(c.perm))+'">'+inner+'</div>';
 }
 function render(){
@@ -294,7 +297,7 @@ function render(){
   if(q){
     var res=CARDS.filter(function(c){
       if(!(allowed(role,c.perm)||showDenied)) return false;
-      return (c.title+' '+c.desc+' '+c.kw+' '+c.mod).toLowerCase().indexOf(q)>-1;
+      return (c.title+' '+c.desc+' '+c.kw).toLowerCase().indexOf(q)>-1;
     });
     html='<div class="pane-head"><h2>搜尋結果</h2><small style="color:var(--text-secondary)">'+res.length+' 項</small></div><div class="pane-sub">跨所有分組；清空搜尋回到分組檢視</div>'
       +(res.length?'<div class="rows">'+res.map(function(c){return rowHtml(c,role,q,true)}).join('')+'</div>'
@@ -341,6 +344,7 @@ document.getElementById('theme').addEventListener('click',function(){
   if(on) d.removeAttribute('data-theme'); else d.setAttribute('data-theme','dark');
 });
 if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.setAttribute('data-theme','dark');
+document.getElementById('hintx').addEventListener('click',function(){document.getElementById('hint').style.display='none'});
 fromHash(); render();
 </script>
 </body>
