@@ -579,6 +579,7 @@
 ["GET", "/api/quotations/{quote_no}/material-payments", "list_payments_api_quotations__quote_no__material_payments_get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
 ["GET", "/api/quotations/{quote_no}/material-po-lines", "material_po_lines_api_quotations__quote_no__material_po_lines_get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
 ["GET", "/api/quotations/{quote_no}/network-plan", "get_network_plan_by_case_api_quotations__quote_no__network_plan_get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
+["PUT", "/api/quotations/{quote_no}/overhead-pct", "put_quotation_overhead_pct_api_quotations__quote_no__overhead_pct_put", [["header", "authorization", false], ["path", "quote_no", true]], [["application/json", ""]], []]
 ["GET", "/api/quotations/{quote_no}/pdf-download", "download_quotation_pdf_api_quotations__quote_no__pdf_download_get", [["header", "authorization", false], ["path", "quote_no", true], ["query", "internal", false]], [], []]
 ["GET", "/api/quotations/{quote_no}/privacy-notice", "get_quotation_privacy_acks_api_quotations__quote_no__privacy_notice_get", [["header", "authorization", false], ["path", "quote_no", true], ["query", "role", false]], [], []]
 ["POST", "/api/quotations/{quote_no}/privacy-notice/ack", "ack_quotation_privacy_notice_api_quotations__quote_no__privacy_notice_ack_post", [["header", "authorization", false], ["path", "quote_no", true]], [["application/json", ""]], []]
