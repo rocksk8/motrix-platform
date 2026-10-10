@@ -326,6 +326,7 @@
     "mod:case/material_shippable",
     "mod:case/material_shipping_view",
     "mod:case/purchase_items",
+    "mod:case/recycle_adapter",
     "mod:case/settlement_actuals"
    ],
    "tables": [
@@ -387,6 +388,7 @@
     "mod:supply/__init__",
     "mod:supply/gl_events",
     "mod:supply/material_link",
+    "mod:supply/recycle_adapter",
     "mod:supply/api/inventory",
     "mod:supply/api/shipping_notes",
     "mod:supply/api/suppliers",
