@@ -2,6 +2,10 @@
 
 ## (next) — 2026-10-10（wip/t50-int；第 50 班）
 - 白話預覽（影響面板：摘要、影響、人數、適用範圍、可否復原、何時生效、風險提示）與一鍵復原；文字由 L1 `helpers/perm_text.py` 產生（畫面無代碼、無代名詞）。
+- **（併入）(next) — 2026-10-11（wip/t54-1d-permmatrix-p0-r3；05 稽核 A／B／C 修正）**
+- `load_matrix` 改為純讀取（不再呼叫 `activate_due`）；到期待生效由 `kick_activation()` 背景轉態（單一飛行、不阻塞權限檢查）。
+- `activate_due`：套用前確認申請人仍是在職最高管理者，否則標 `superseded` 並稽核（不以已降級／停用帳號的名義套用）。
+- `perm_pending`／24 小時仍是過渡實作，M1 不接端點或畫面（見 SPEC PMX13）。
 
 ## 1.0.0 — 2026-10-10（wip/t54-1d-permmatrix-p0）：里程碑 2——矩陣資料表、提供者、服務層（覆寫／代理／24 小時待生效／版本回溯）
 - 新模組 `permmatrix`（M16）。表 `perm_role_caps`／`perm_user_overrides`／`perm_versions`／`perm_pending`／`perm_delegations`（皆 T1；沒有 core schema 版本升級）。
