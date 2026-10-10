@@ -45,8 +45,7 @@ def _paths_of(*raws) -> List[str]:
 def reserved(conn, entity_type) -> set:
     """暫存區裡（還在、或還原失敗）的單據編號——產生新編號的地方要跳過它們，否則刪掉最新一張後下一張會重用同一個號碼、還原就撞號（也避免已寄出的單號被重發）。
     暫存區模組不在 ⇒ 空集合。在呼叫端自己的交易內讀（與產號同一個寫鎖）。"""
-    fn = getattr(RB, "reserved_ids", None)
-    return set(fn(conn, entity_type) or ()) if fn else set()
+    return set(RB.reserved_ids(conn, entity_type) or ())            # 暫存區模組不在 ⇒ 空集合（IP-RB3）
 
 
 def _rm_empty_dirs(rels) -> None:
