@@ -156,7 +156,7 @@
       <ul style="margin:0 0 8px 18px;font-size:12px"><template x-for="(fl, i) in (detail ? detail.files : [])" :key="i"><li x-text="fl.rel + '（' + fmtBytes(fl.size) + '，' + fl.state + '）'"></li></template></ul>
       <div style="margin:8px 0 4px"><b>內容</b>（敏感欄位已遮罩）</div>
       <pre class="rb-pre" data-testid="rb-snapshot" x-text="detail && JSON.stringify(detail.snapshot, null, 2)"></pre>
-      <div style="text-align:right;margin-top:10px"><button class="rb-btn" @click="detail = null">關閉</button></div>
+      <div style="text-align:right;margin-top:10px"><button class="rb-btn" @click="detail = null" data-testid="rb-detail-close">關閉</button></div>
     </div>
   </div>
 

@@ -16,11 +16,19 @@
 4. **磁碟水位**：`GET /api/recycle-bin/status` 回總量／筆數／最舊；超過門檻（預設 5 GB）寫告警（不自動提前清除）。
 5. 沒有 core schema 版本升級：新表走模組 migration（`module_schema_versions`）。
 
-## 進度
-- [ ] 1 骨架（module.json／README／SPEC／CHANGELOG／migration／註冊 modules.json、sidebar）
-- [ ] 2 L1 契約 helpers/recycle_bin.py ＋ IP 文件 ＋ core CHANGELOG (next) ＋ L1 快照
-- [ ] 3 store／quarantine／purge job／通知／稽核
-- [ ] 4 API ＋ 頁面
-- [ ] 5 archive F2 宣告
-- [ ] 6 三道守門＋EXEMPT＋突變題
-- [ ] 7 測試（模組內）、guards 全跑一次、author_gate
+## 進度（2026-10-10）
+- [x] 1 骨架：module.json／README／SPEC（RBN1～RBN11）／CHANGELOG 1.0.0／migration 0001／modules.json M15／sidebar 由 module.json 的 pages 帶入
+- [x] 2 L1 契約 `helpers/recycle_bin.py` ＋ INTEGRATION-POINTS IP-RB1／IP-RB2 ＋ core CHANGELOG (next) ＋ L1 快照（core_bump --pending）
+- [x] 3 service／quarantine／jobs（每日清除、孤兒搬回、水位告警）／通知／稽核
+- [x] 4 API（僅 superadmin）＋ 頁面 `frontend/pages/recycle-bin.html`（Alpine 母體 +1、已更新 test_alpine_double_init 的 PAGE_POPULATION）
+- [x] 5 `archive._F2_FIELDS`：`模組-recyclebin-recycle_bin` 整欄 snapshot_json／files_manifest_json 為 F2（test_pii_archive_mirror 種一列）
+- [x] 6 三道守門 `tests/platform/test_recyclebin_guards_t53.py` ＋ 基線 `recyclebin_baseline_t53.json`（60 路由／70 表／16 檔；p1 路由 9 條＝報價單、額外費用單、完工單、請款單、收款憑據、勞報單、承攬商派發、承攬商匯款申請、出貨單；材料申請走 `DELETE FROM case_material_approvals` p1）
+- [x] 7 模組測試 19 題（17 單元／API＋2 e2e）全綠；結構守門（package files／data classes／spec coverage／catalog／route ownership／L1 snapshot／audit／begin-only／alpine／pii／page paths／module selection）全綠
+- [ ] 8 作者閘門（author_gate）、changelog 守門在最後一次 commit 後再跑、回報 PM
+- 產生檔（dep_graph.json、UNIT-INDEX.md、test_map.json）**不由分支提交**（列車規則）；`regen_all --check` 會顯示過期是預期。
+
+## P1 交接備忘（PM 派給各窗口時用）
+- 每個擁有模組新增 `modules/<key>/recycle_adapter.py`（`Adapter` 子類別；`snapshot` 含子表列與附件 `{root:'uploads',rel}`；`delete_in_tx` 內的 `DELETE FROM` 免守門登記）、在 `ModuleSpec.providers` 登記 `("recyclebin.adapter","<entity_type>")`。
+- 把刪除端點改成：`res = recycle_bin.delete(conn, "<type>", id, user)`；回 None（暫存區模組不在）⇒ 走舊的硬刪並在回應 notice 與稽核明說；丟 `BinError` ⇒ 轉 409/400 並帶原因。**並把基線 `routes`／`delete_from`／`file_removals` 對應項目刪掉**（棘輪）。
+- 『刪除已核可』：adapter 實作 `can_delete_approved`（不可刪的狀態：已付款、已入獎金…要回 False＋原因）與 `impact`（已付款／已入獎金／已回簽）。
+- 還原衝突：單號被占用 ⇒ `BinError('conflict: …')`（P1 可選擇『以新單號還原』）；父層不在 ⇒ `parent_missing:`。
