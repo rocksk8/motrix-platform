@@ -311,9 +311,9 @@ def reject_payslip(slip_no: str, body: dict = Body(default={}), authorization: s
 
 def _audit_in_txn(conn, user, action, target_type, target_id, label, detail):
     """**強制**稽核：寫在核准同一個交易裡（寫不進去 ⇒ 例外 ⇒ 整個核准回滾），不像 `_audit` 失敗只吞掉。
-    module／case_no／ref_no 與 `_audit` 同一個推導函式（單號歷史搜尋靠 ref_no）。"""
-    from helpers.audit import _derive_fields
-    d = _derive_fields(action, target_type, target_id, label, detail)
+    module／case_no／ref_no 的規則同 L1 `_audit`（module＝動作第一段；勞報單屬單據類 target_type ⇒ ref_no＝單號；勞報單單號不是報價單號 ⇒ case_no 空）；
+    不 import L1 的私有函式（L2 只能用宣告過的 L1 名稱），規則在這裡直接寫。"""
+    d = {"module": (action or "").split(".", 1)[0], "case_no": "", "ref_no": str(target_id or "") if target_type == "payslip" else ""}
     conn.execute(
         "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code)"
         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
