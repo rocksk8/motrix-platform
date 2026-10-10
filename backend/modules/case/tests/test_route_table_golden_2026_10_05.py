@@ -126,14 +126,31 @@ def report(d):
     return body + tail
 
 
+def regen_refused_reason(env):
+    """閘門／列車（`MOTRIX_TRAIN=1`）上不得重產 golden：否則設錯環境變數的一輪閘門會默默把漂移寫進 golden 然後綠燈。回傳拒絕原因或 None。"""
+    if env.get("T40_WRITE_GOLDEN") == "1" and env.get("MOTRIX_TRAIN") == "1":
+        return "T40_WRITE_GOLDEN=1 不可與 MOTRIX_TRAIN=1 並用（閘門／列車上不重產 golden；請在分支上用重產指令，並把 golden 和程式碼一起 commit）"
+    return None
+
+
 def test_openapi_route_table_matches_the_golden(client):
     table = _table(client.app)
+    refused = regen_refused_reason(os.environ)
+    assert refused is None, refused
     if os.environ.get("T40_WRITE_GOLDEN") == "1":
         with open(GOLDEN, "w", encoding="utf-8", newline="\n") as f:
             f.write(_serialize(table))
     golden = _parse(GOLDEN.read_text(encoding="utf-8"))
     d = diff_tables(golden, table)
     assert not (d["added"] or d["missing"] or d["changed"]), "\n" + report(d)
+
+
+def test_regeneration_is_refused_on_a_gate_or_train_run():
+    assert regen_refused_reason({"T40_WRITE_GOLDEN": "1", "MOTRIX_TRAIN": "1"}), "閘門上要求重產 ⇒ 必須拒絕"
+    assert regen_refused_reason({"T40_WRITE_GOLDEN": "1"}) is None, "分支上正常重產不受影響"
+    assert regen_refused_reason({"MOTRIX_TRAIN": "1"}) is None, "閘門上沒要求重產 ⇒ 照常比對"
+    assert regen_refused_reason({"T40_WRITE_GOLDEN": "0", "MOTRIX_TRAIN": "1"}) is None
+    assert "MOTRIX_TRAIN=1" in regen_refused_reason({"T40_WRITE_GOLDEN": "1", "MOTRIX_TRAIN": "1"})
 
 
 def test_golden_file_is_canonical_one_entry_per_line_sorted():
