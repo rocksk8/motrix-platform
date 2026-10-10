@@ -72,6 +72,11 @@ def _seed_pii(conn):
                      ("MP-20260925-0001", "", "x", 1, 1000,
                       _j.dumps({"supplierName": "哨兵供應商", "bankCode": "812", "bankName": "台新銀行", "bankAccountName": _M_ACCT_NAME, "bankAccountNumber": _M_ACCT_NO,
                                 "itemName": "交換器"}, ensure_ascii=False), "已核准", "2026-09-25"))
+    if conn.execute("PRAGMA table_info(recycle_bin)").fetchall():           # recyclebin 模組在（第53班：快照含個資原文 ⇒ 宣告為 F2，每張 F2 表都要有資料）
+        conn.execute("INSERT INTO recycle_bin (token, group_token, entity_type, entity_id, entity_label, deleted_by, deleted_by_display, deleted_at, purge_after, snapshot_json, files_manifest_json) "
+                     "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                     ("a" * 32, "", "payslip", "PS-202609-009", "哨兵暫存區單據", "sentinel", "哨兵", "2026-09-25T10:00:00", "2026-10-25",
+                      _j.dumps({"rows": {"payslips": [{"slip_no": "PS-202609-009", "contractor_name": "哨兵承攬", "bankAccountNumber": _C_ACCT}]}}, ensure_ascii=False), "[]"))
     conn.execute("UPDATE users SET totp_secret=? WHERE id=(SELECT MIN(id) FROM users)", (_TOTP,))
     conn.commit()
 
