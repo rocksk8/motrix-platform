@@ -29,18 +29,15 @@
 - 版本與還原留在各 domain 自己的儲存：權限＝`perm_versions`，設定＝`ui_definitions`。`snapshot/restore` 以 adapter 形式註冊，不複製資料。
 - 設定的 domain＝`setting:<群組>`，權限＝`perm`；**第一批設定（僅第一批的原規劃；Train A 實際已含待生效層）**不用待生效層（只有 K04 與高風險授權用），所以 `config_ledger` 可晚於設定中心第一版上線，介面先寫死 `record(domain, key, changes, reason, actor, effective_at=None)`。請 1d 確認這個最小集合。
 
-### 2.1 定案協議（與 1d 一致；以下是 1d 設計稿 §7 全文，兩份文件保持同文）
+### 2.1 定案協議（與 1d 一致；兩份文件同文，以本節為準）
 
-## 7 與設定中心共用的稽核／待生效層：`helpers/config_ledger`（與 node-39 `SETTINGS-CENTER-DESIGN-T54` §2 一致的協議）
-**原則：不建第二套版本表。** 版本、差異、還原留在各 domain 自己的儲存（權限＝`perm_versions`；設定＝`core/definitions.py` 的 `ui_definitions`／kind `setting_group`）。`config_ledger` 只做兩件那些儲存沒有的事：**變更明細**與**待生效狀態**。L1、只增不改、不 import 任何 L2。
-1. **寫入**：`record(conn, domain, key, changes, reason, actor, *, ip="", effective_at=None, risk="low", ref_version=None) -> change_id`；`changes=[{field, old, new}]`；`domain` ＝ `perm` 或 `setting:<群組>`。與被改的資料**同一交易**寫入；同交易寫 `audit_log`（action `<domain>.change`）；`risk >= money`（view_money／approve／pay／delete／view_sensitive 等）時通知其他 superadmin。
-2. **表（只增不改）**：`config_changes(id, at, domain, key, field, old_json, new_json, reason, actor, ip, effective_at, risk, ref_version, batch_id)`，DB 觸發器擋 UPDATE／DELETE；**狀態不放在這張表**，改記 `config_change_events(id, change_id, event, actor, reason, at)`，`event ∈ {pending, activated, cancelled, superseded}`，現況＝最後一筆（無事件＝立即生效的一般變更）。
-3. **待生效 API**（只存與轉態，不決定效力）：`pending(domain=None)`、`cancel(change_id, actor, reason)`（寫 `cancelled` 事件、通知申請人）、`activate_due(now)`（把 `effective_at <= now` 且仍 pending 的轉 `activated`、寫稽核、通知；由 5 分鐘工作呼叫，**漏跑不影響效力**）、純函式 `in_effect(row, now)`（`effective_at` 空或已到、且最後事件不是 cancelled／superseded）。**效力在讀取時由 domain 判斷**（`perm.can()`／`settings.get()` 自行呼叫 `in_effect`），ledger 不介入。
-4. **版本與還原**：`register_domain(domain, label, snapshot_fn, restore_fn, diff_fn, reason_required_fn=None)`；ledger 只提供「歷史」查詢 `history(domain, key)` 與統一的「還原＝新版本、歷史不改」呼叫流程。`perm` → `perm_versions`；`setting:*` → `ui_definitions`（`definitions.versions/restore/diff`）。還原含待生效項 ⇒ domain 的 restore 負責一併 cancel。
+**`helpers/config_ledger`：設定與權限共用的稽核／待生效層。** 原則：**不建第二套版本表**。版本、差異、還原留在各 domain 自己的儲存（權限＝`perm_versions`；設定＝`core/definitions.py` 的 `ui_definitions`／kind `setting_group`）。`config_ledger` 只做兩件那些儲存沒有的事：**變更明細**與**待生效狀態**。L1、只增不改、不 import 任何 L2。
+1. **寫入**：`record(conn, domain, key, changes, reason, actor, *, ip="", risk="none", ref_version=None, effective_at=None, approvals_required=0, audit_action=None, target_label="") -> {batch, ids, audit_id}`；`changes=[{field, old, new}]`（新舊相同的略過）；`domain` ＝ `perm`、`setting:<群組>` 或 `duty`。與被改的資料**同一交易**寫入（不 commit）；同交易寫 `audit_log`（動作預設 `<domain 前綴>.change`，呼叫端可指定如 `settings.<群組>.update`）；`risk ∈ none｜ops｜money｜legal｜security`，≥ money 時在同交易 INSERT 站內通知其他在職最高管理者（`HIGH_RISK` 只管通知）。
+2. **表（只增不改）**：`config_changes(id, at, domain, key, field, old_json, new_json, reason, actor, actor_display, ip, risk, ref_version, effective_at, batch, approvals_required)`，DB 觸發器擋 UPDATE／DELETE；**狀態不放在這張表**，改記 `config_change_events(id, change_id, event, actor, reason, at)`，`event ∈ {pending, approved, activated, cancelled, superseded}`；`approved` 是雙人核准的一票、不改變狀態；現況＝最後一個**狀態事件**（無事件＝立即生效的一般變更）。
+3. **待生效 API**（只存與轉態，不決定效力）：`pending(conn, domain=None)`、`cancel(conn, change_id, actor, reason)`、`supersede(…)`、`approve(conn, change_id, actor, reason) -> {ok, approvals, required, why}`（申請人不能核准自己的、同一人不能重複投票）、`activate_due(conn, now=None, domain=None)`（把已有效的 pending 轉 `activated`；**漏跑不影響效力**）、純函式 `in_effect(row, now)`：`cancelled／superseded` ⇒ 否；`pending` ⇒ 核准票數 ≥ `approvals_required` **且** `effective_at ≤ now`；立即生效或 `activated` ⇒ 是。**效力在讀取時由 domain 判斷**（`perm.can()`／`settings.get()` 自行呼叫 `in_effect`），ledger 不介入。
+4. **版本與還原**：`register_domain(prefix, snapshot_fn, restore_fn, diff_fn, label)`；ledger 提供 `history(conn, domain, key)` 與統一的「還原＝新版本、歷史不改」流程（`restore_version`、`snapshot_version`、`cancel_pending_for`）。`perm` → `perm_versions`；`setting:*` → `ui_definitions`（`definitions.versions/restore/diff`）。還原含待生效項 ⇒ domain 的 restore 一併 cancel。
 5. **既有表**：R1／R2 職責角色的 `permission_changes`（含只增不改觸發器）**不搬資料、不雙寫**，仍是 `duty` domain 的明細；權限矩陣的新變更只寫 `config_changes`（domain `perm`）。稽核報表以 UNION 呈現，避免兩份漂移。
-6. **誰先做**：設定中心 S0（第一批不用待生效）先實作並上線 `config_ledger` 的 1、2、4 與 `history`；權限矩陣 P1 再加 3（待生效 API、`activate_due` 工作、`in_effect`）——介面現在就定死，後補不改簽名。設定第二批的 K04（登入安全）也走待生效層。
-
-> 實作對照（node-39，第 54 班 Train A）：`risk` 預設為 `'none'`（程式內五級，與上文 1d 稿的 `low` 預設不同，以本節為準）；事件集合為 `pending｜approved｜activated｜cancelled｜superseded`（多一個 `approved`＝雙人核准的一票，不改變狀態）；`record(conn, domain, key, changes, reason, actor, *, ip, risk, ref_version, effective_at)`；`risk ∈ none|ops|money|legal|security`（≥money 通知其他最高管理者）；回 `{batch, ids, audit_id}`；另有 `supersede／cancel_pending_for／restore_version／snapshot_version`。
+6. **誰先做**：Train A（併入 M1）已實作 1–4 全部（含待生效、雙人核准、`activate_due`）；權限矩陣直接使用，不再另做。K04（登入安全）等高風險項也走待生效層。
 
 ### 2.2 與權限矩陣共用的協議（單一版本；兩份設計稿同文）
 
@@ -50,7 +47,8 @@
 4. **版本邊界（edition bounds）涵蓋設定欄位與權限能力**：同一個載入點（程式／授權）設定；設定欄位＝數值上下限、可選項的子集；能力＝該版本可授予的最大範圍或整個能力停用。客戶沒有任何 API 能改。
 5. **放寬＝雙人核准**、預設組（政策檔）、白話文字與影響說明的規則一體適用於設定與能力（見附錄 C、D）。
 6. **確認期（待生效期）只有一個設定鍵：`change_control.confirm_period_days`**（使用者 2026-10-10）——預設 **7 天**，可在系統內調整，**下限 1 天（＝24 小時）**，無上限；所有「待生效」的變更（設定的 `requires_pending`／放寬、權限矩陣、財務機制、簽核政策…）的 `effective_at` 一律＝申請時間＋`confirm_period_days` 天。各設計稿**引用此鍵，不得自訂期間**。此設定本身是 `legal` 風險、`loosen='down'`：**縮短確認期視同放寬**，要走「目前的確認期」＋雙人核准才會生效；拉長則立即生效。已在待生效中的舊變更，其 `effective_at` 在申請當下已寫定，不受之後調整影響。登錄：群組 `change_control`（白話名稱「變更管理」），欄位問句「重要設定變更，要等幾天才生效？」，建議值 7；`settings_registry.PENDING_HOURS` 常數於 Train A 之後的第一個小改動改為讀此鍵（Train A 現況：常數 24 小時，尚無使用中的待生效欄位，所以不影響上線行為）。
-7. 兩份設計稿以此節為準；任何一方要改協議，先改這一節並通知對方。
+8. **能力鍵格式**：所有權限能力鍵一律三段 `<單位>.<物件>.<動作>`（小寫英數與底線，例 `case.quotation.approve`）；登錄時以格式守門（`test_capability_key_format`：缺段、超過三段、大寫、空白都失敗，含正反對照）；設定欄位的鍵走另一套（群組 `^[a-z][a-z0-9_]*$` 與欄位 `^[a-z][a-z0-9_]*$`，同樣在登錄時驗證）。能力登錄屬 1d 的 `core/capabilities.py`，守門隨 P0 一併做。
+9. 兩份設計稿以此節為準；任何一方要改協議，先改這一節並通知對方。
 
 ## 3. 各 K 項的遷移與等價證明
 
