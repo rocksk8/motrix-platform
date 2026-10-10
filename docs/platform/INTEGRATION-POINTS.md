@@ -1031,7 +1031,7 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 提供方 | M15 `modules/recyclebin/service.py::reserved_ids`（名稱 `recyclebin`） |
 | 使用方 | 各擁有模組的單號產生器（`next_entity_code`、`expense_forms.next_doc_code`、`material_approval.next_doc_code`、報價單編號…）：`helpers.recycle_bin.reserved_ids(conn, entity_type)` |
 | 形式 | provider，單一提供者；L1 包裝在 `helpers/recycle_bin.py`（呼叫端不直接取 provider） |
-| 回傳 | `set[str]`＝狀態 in_bin／restore_failed 的列的 `entity_id`，加上快照 `meta.codes`（adapter 在 `snapshot()["meta"]["codes"]` 放字串清單，供 entity_id 不是代號的單據）；`entity_type` 空 ⇒ 全部類型；已還原／已清除不保留 |
+| 回傳 | `set[str]`＝狀態 in_bin／restore_failed 的列的 `entity_id`，加上單據代號（adapter 在 `snapshot()["meta"]["codes"]` 放字串清單，供 entity_id 不是代號的單據；進暫存區當下抄進 `recycle_bin.codes` 欄，**查詢不讀快照 JSON**）；`entity_type` 空 ⇒ 全部類型；已還原／已清除不保留 |
 | 對方不在時 | 暫存區模組不在 ⇒ 空集合（沒有保留號碼，行為同暫存區上線前） |
 | 契約版本 | 1 |
 | 守門 | `backend/modules/recyclebin/tests/test_recyclebin_hardening_t53.py::test_rbn20_*` |

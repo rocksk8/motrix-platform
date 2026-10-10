@@ -29,7 +29,7 @@
 - **RBN16.** 永久清除要驗證隔離資料夾真的刪乾淨：刪不掉（檔案被占用）⇒ 這一筆維持在暫存區（快照與清單不清）、回 409、稽核 `recyclebin.purge_failed`；每日工作同樣不可把刪不掉的標成已清除。
 - **RBN18.** 『刪除已核可』入口（`POST /api/recycle-bin/delete-approved`）直接呼叫通用 `service.delete`，**不會執行擁有模組刪除端點裡的領域後續動作**（例如清除該單據的站內通知、領域稽核動作名稱）；這些由 adapter 的 `delete_in_tx` 負責（P1 各 adapter 要把原端點的後續清理搬進去，或在 adapter 的 `after_delete` 擴充點補）。通用稽核 `recyclebin.delete_approved` 與通知其他最高管理者一定會做。
 - **RBN19.** Adapter 可實作 `after_commit(event, entity_id, snap, result)`（`delete`｜`restore`）：還原與『刪除已核可』由暫存區模組在**commit 之後**自動呼叫；一般刪除由擁有模組的端點在自己 commit 之後呼叫 `delete()` 回傳的 `result["after_commit"]()`。錯誤只記 log、不往外丟（資料已 commit）；回傳給前端的結果不含 hook。
-- **RBN20.** 暫存區保留中的單號可被單號產生器查到：`helpers.recycle_bin.reserved_ids(conn, entity_type)` ＝ in_bin／restore_failed 的 `entity_id` ＋ 快照 `meta.codes`（adapter 放單據代號）；已還原、已清除的不保留；暫存區模組不在 ⇒ 空集合。產生器（取現存最大號 + 1 的那些）要跳過這些號碼，避免最新一張進暫存區後號碼被重發、還原撞號。
+- **RBN20.** 暫存區保留中的單號可被單號產生器查到：`helpers.recycle_bin.reserved_ids(conn, entity_type)` ＝ in_bin／restore_failed 的 `entity_id` ＋ 單據代號（adapter 放在快照 `meta.codes`，進暫存區當下抄進 `recycle_bin.codes` 欄；查詢只讀這一欄，不讀快照 JSON、不用 json_extract）；已還原、已清除的不保留；暫存區模組不在 ⇒ 空集合。產生器（取現存最大號 + 1 的那些）要跳過這些號碼，避免最新一張進暫存區後號碼被重發、還原撞號。
 - **RBN17.** 隔離資料夾 `資源回收筒/` 在 `.gitignore` 內（隔離檔含個資，`git add -A` 不可帶走）；『刪除已核可』也通知其他最高管理者。
 
 ## 非目標

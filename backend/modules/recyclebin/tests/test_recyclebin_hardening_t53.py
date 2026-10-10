@@ -358,7 +358,8 @@ def test_rbn20_reserved_ids_is_empty_when_the_module_is_absent_and_survives_bad_
     cn.execute("INSERT INTO recycle_bin (token, entity_type, entity_id, deleted_at, purge_after, snapshot_json) VALUES (?,?,?,?,?,?)",
                ("4" * 32, "bad_meta", "B2", "2026-10-10T00:00:00", "2099-01-01", "{broken"))
     cn.commit()
-    assert RB.reserved_ids(cn, "bad_meta") == {"B1", "B2"}, "meta 壞掉不影響 entity_id 的保留"
+    assert RB.reserved_ids(cn, "bad_meta") == {"B1", "B2"}, "快照壞掉不影響 entity_id 的保留（也不讀快照）"
+    assert S._codes_text({"meta": {"codes": "not-a-list"}}) == "" and S._codes_text({"meta": {"codes": ["A", "A", "", None, "B\nC"]}}) == "A", "壞形狀／含換行的丟掉、去重"
     monkeypatch.setattr(registry, "single_provider", lambda cap: None)
     assert RB.reserved_ids(cn, "bad_meta") == set(), "暫存區模組不在 ⇒ 沒有保留號碼"
     cn.close()
