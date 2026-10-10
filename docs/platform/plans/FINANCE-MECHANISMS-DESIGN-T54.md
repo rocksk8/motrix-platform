@@ -192,8 +192,8 @@
 | 假日曆：整年匯入 | 『匯入後，{年} 年的放假與補班日以新資料為準。』 | 新增／更動／移除的天數；更動的日子中有幾天已有預定付款日 |
 | 客戶信用額度 | 『超過額度時，出貨與核准畫面會顯示提醒（或阻擋，視您的選擇）。』 | 以目前曝險計：『這個額度會讓 3 位客戶超額』並列出客戶與超額金額；全公司預設額度則統計全部客戶 |
 | 逾期與寬限 | 『逾期的應收款會依規則提醒業務；不會自動停止出貨（除非您選「必須阻擋」）。』 | 以目前應收帳款計：今天有幾筆算逾期、分幾個客戶、今天將發出幾封提醒信 |
-| 大額付款提醒 | 『超過金額的付款，出納按下付款前會看到確認視窗。』 | 回測最近 90 天的付款：『若用這個金額，過去 90 天有 14 筆會被提醒』（列出前 10 筆）；累計規則同理 |
-| 依金額加簽 | 『達到金額的單據會多一位簽核人；已在簽核中的單據不受影響（簽核流程在送審時就已固定）。』 | 回測最近 90 天送審的單據：『有 6 張會多簽一人』；目前進行中的單據：『不受影響』 |
+| 大額付款提醒 | 『超過金額的付款，出納按下付款前會看到確認視窗。』 | 回測最近 N 天的付款（N＝`impact.backtest_days`，見 §6.1）：『若用這個金額，過去 N 天有 14 筆會被提醒』（列出前 10 筆）；累計規則同理 |
+| 依金額加簽 | 『達到金額的單據會多一位簽核人；已在簽核中的單據不受影響（簽核流程在送審時就已固定）。』 | 回測最近 N 天（`impact.backtest_days`）送審的單據：『有 6 張會多簽一人』；目前進行中的單據：『不受影響』 |
 | 「只提醒／必須阻擋」 | 只提醒：『畫面顯示提醒，使用者可以繼續。』／必須阻擋：『被擋下的單據要由被授權的人填理由例外放行。』 | 以目前資料計『若現在就必須阻擋，有 N 筆進行中的出貨／付款會被擋住』 |
 
 ### 一致性規則
@@ -259,6 +259,7 @@ statutory_params(
 ```
 - **生效日必須在發布日之後，且間隔 ≥ 確認期（使用者 2026-10-10）**：發布時檢查 `effective_from ≥ 發布日 + 確認期`。**確認期＝全系統共用設定 `change_control.confirm_period_days`（預設 7 天，可在系統內調整，下限 24 小時）——它是設定中心的『單一登錄設定』，本稿不自行定義其儲存或預設，只讀取 `settings.get("change_control.confirm_period_days")`；建議群組與鍵名由 node-39 在 §2.2 定案，本稿隨之引用**；`statutory.min_lead_days` 不另設，一律等於確認期（舊稿的『結構下限 1 天』改為確認期本身的下限）。縮短確認期本身屬『放寬』，要先經**目前**確認期的待確認流程才生效。理由：已生效列凍結，若允許回溯或當天生效，已存的歷史／推估會在無人察覺下改值。**種子列（`seed=1`）與部署 migration 不受此限**（它們就是今天的值）。
 - **法定保存年限（使用者 2026-10-10）**：每種單據類型的法定保存年限＝kind `retention`，**系統內可調**，走與其他法定參數**相同的確認期與雙人確認**（縮短保存年限屬放寬，預設與其他參數一樣先待確認一個確認期；延長亦需確認，但可在確認期內預覽影響）。與暫存區保存期的銜接由 b5（RB）筆記負責，本稿只登錄 kind。**兩層分開但清除要同時檢查**：暫存區 `RETENTION_DAYS`（桶內放幾天）與 `retention.years`（法定最短保存年限，依單據類型）——任何清除（含到期自動清除、手動永久刪除）都須兩者皆滿足，**法定年限內一律不得清除**；細節見 b5 的 `docs/platform/plans/RECYCLE-BIN-RETENTION-POLICY-T54.md`（分支 `wip/t54-b5-rb-notes` @ `5493fb176`）。
+- **保存年限的法定下限（稽核）**：`StatuteKind(retention)` 登錄表內另持 `statutory_minimum_years`（每種單據類型一格，**由財務負責人／法務依法源填入並附法源文號；未填＝未知**，程式不發明數字）。規則：①`retention.years` 低於該單據類型的 `statutory_minimum_years` ⇒ 不可存，除非另填『法律理由』欄（必填、附文號）並走**加重確認**（兩位確認人，且確認期加倍）；②該格未填 ⇒ 允許修改，但畫面顯示『尚未登錄法定下限，請先填寫』並通知財務；③縮短永遠算放寬；④清除（含暫存區到期、永久刪除）仍須同時滿足 b5 的暫存區天數與本年限。若日後決定不設下限，必須在此處明寫理由，而不是留白。
 - **只增不改**：`active` 且 `effective_from ≤ 今天` 的列**凍結**（不可改、不可撤回）；未生效的 `draft`／`active` 列可撤回（`withdrawn`，留痕）。要『修正已生效的值』＝新增一列（新的 `effective_from`）＋原因，**不改歷史**；真的算錯要追溯，走『更正單』流程（另案，不在本稿）。
 - `kind='tax_rules'` 不入此表（第一階段）：`statutory.on('tax_rules', None, date)` 代理到 `legal_params.rules_for_date`；第二階段才把 `tax_rules_versions` 搬進此表（一次性、可還原）。
 
@@ -315,7 +316,7 @@ statutory.gaps(today) -> [缺口提示]                      # 例：2027 版缺
 - **操作流程**（負責人加一列）：選 kind→表單由 `StatuteKind.schema` 產生→填 `effective_from`、值、`source`（必填）、`reason`（必填）→『存草稿』→預覽（**影響說明**：『從 2027-01-01 起新建的報價預設稅率 5%→5%；已存單據不變』；`vat` 變動並列出受影響的衍生（毛利估算、精算預設））→『發布』。
 - **權限與雙人確認（稽核 H2；使用者 2026-10-10 裁示）**：能力 `finance.statutory.edit`（存草稿）、`finance.statutory.publish`（發布；預設僅 superadmin；可由 superadmin 授給財務負責人）、`finance.statutory.confirm`（第二人確認）。**發布與撤回都走『待確認』**：第一人發布／撤回 ⇒ `state=pending`，須由**另一位 superadmin 或持 `finance.statutory.confirm` 者**（不得同一人）在設定中心『待確認』清單確認後才轉 `active`／`withdrawn`；待確認的事件**沿用設定中心／1d 共用的 `config_changes`＋`config_change_events`（pending｜approved｜activated｜cancelled｜superseded），不另建待生效表**（`statutory_params.state=pending` 只是對應事件的投影）；**只有一位 superadmin 時＝待確認滿一個確認期（預設 7 天）後由同一人再確認一次**，並通知所有持稽核能力者。確認期見 §2.2（`change_control.confirm_period_days`）。理由：稅率類變動是金錢風險的放寬／變動，單人即可生效不可接受。1d 矩陣就緒前，沿用 `superadmin`＋上述雙人流程。必填原因；取代原稿『7 天內再加 confirm』。
 - **稽核與待生效**：寫 `config_ledger.record(domain='statutory:<kind>', key, changes, reason, actor, effective_at=effective_from)`（設計稿 §2 的最小介面）；舊→新差異、來源、發布者都進只增不改的明細；『待生效』狀態由 `effective_from > 今天` 表示；『待確認』（`state=pending`）是另一件事（雙人確認，見上），兩者並存。
-- **提醒**：`statutory.gaps()` 每日檢查：下一年版缺（**10 月 1 日起**提示，取代現在的 12 月才提示）、已排程但 30 天內生效的列（給財務確認）、`form401` 超過 12 個月沒覆核（提示『請確認公告令有無更新』）。**2027 版必須在 2026-12 前完成**：最低工資（30,900 待核定）與扣繳起扣標準；`vat` 本身不需要新列。
+- **提醒**：`statutory.gaps()` 每日檢查三類，**天數與起算日都是設定項（§6.1，不寫死）**：①下一年版缺（自 `statutory.remind_next_year_from` 起提示）；②已排程且在 `statutory.remind_before_effective_days` 天內生效的列（給財務確認）；③`form401` 超過 `statutory.form401_review_months` 個月沒覆核（提示『請確認公告令有無更新』）。**2027 版必須在 2026-12 前完成**：最低工資（30,900 待核定）與扣繳起扣標準；`vat` 本身不需要新列。
 - **稽核動作**：`statutory.draft／publish／withdraw`、`statutory.lookup_fallback`（用了程式預設）。
 
 ### 2.8 分期與工作量
@@ -397,7 +398,7 @@ finance_guard.check(event, doc, user, *, override=None) -> Result{level: ok|warn
 - **模組歸屬（已裁示）**：規則、額度、逾期、覆寫與 `finance_guard` 放**獨立模組 `credit`**（可單獨販售、可拿掉）。檢查點所在的模組（出貨單、報價、出納）**只 import L1 契約** `helpers/finance_guard.py`：`finance_guard.check(event, doc, user)`——`credit` 模組在 ⇒ 轉給它；**不在 ⇒ 回 `ok` 並記 log**（比照暫存區 `recycle_bin.delete()` 回 None 的缺席語意：缺席要看得出來，不靜默）。**缺席指示**：`finance_guard` 回 ok 時若是因為 `credit` 模組不在，除了 log，儀表板（對 superadmin／財務負責人）顯示常駐『信用／逾期把關未啟用（模組不在）』徽章，並把每日次數列在摘要；模組在但某規則 `mode=off` 或數字留空則顯示『未設定』而非『已把關』，避免空白被誤讀成安全。金額級距簽核的規則表存在 `setting_group`、求值在 `tiered_approval`（L1），不依賴 `credit`。
 - **等級（已裁示）**：每條規則有 `mode: off | warn | block`，**信用額度、大額付款、逾期上線一律 `warn`**；滿一季後檢視 `finance_guard_log` 的誤報率（警告後單據最終順利完成且無異常的比例、被業務／出納回報『誤報』的筆數）再由負責人決定是否改 `block`。`block` 模式一旦開啟，覆寫才有意義（理由必填、`finance_overrides`、稽核、通知財務）。
 - **覆寫**：被 `block` 時，持有能力 `finance.guard.override` 者可填**必填理由**後放行；寫 `finance_overrides(id, rule, event, doc_type, doc_no, amount, limit_value, reason, overridden_by, approved_by?, at)`，通知財務負責人與 superadmin；覆寫記錄進單據歷史。是否需要**第二位確認**、觸發條件（例如超過額度幾倍）全部是**規則欄位**（`override.second_approver_if_over_ratio`，預設空＝不需要）；實作用既有簽核機制『臨時加簽』。
-- **警告**：`warn` 不需理由，但回傳給前端顯示橘色提示，並寫 `finance_guard_log`（輕量；保留天數是設定項，預設 90）供一季後檢討誤報率。
+- **警告**：`warn` 不需理由，但回傳給前端顯示橘色提示，並寫 `finance_guard_log`（輕量；保留天數＝`finance_guard.log_keep_days`，見 §6.1）供一季後檢討誤報率。
 - **規則與政策的儲存（稽核 M7）**：信用額度預設／模式（off｜warn｜block）、`payment_thresholds`、`overdue_rules`、`amount_rules`（金額級距）**都是經營政策，存 node-39 的 `setting_group`**（每個群組宣告 `risk` 與 `requires_pending`），版本與稽核走 `config_ledger`；**不進 `statutory_params`**（該表只收法定參數與日期型切換旗標，見 §2.1）。**放寬一律要等**：`block→warn`、`warn→off`、門檻調高、寬限天數加長、刪除級距或加簽層、把規則改為不啟用 ⇒ 屬『放寬』，走 `requires_pending`（待生效一個確認期〔`change_control.confirm_period_days`，預設 7 天〕＋第二位 superadmin／財務負責人確認，兩者都要）；**收緊**（`off→warn→block`、門檻調低、新增級距）即時生效並通知。**客戶個別額度**是資料（見 4.3）。
 - **權限矩陣**：能力 `finance.credit.view`（看額度與曝險）、`finance.credit.edit_limit`（設客戶額度；高風險＝授予走確認期待生效）、`finance.guard.override`、`finance.payment.large_ack`、`finance.approval.tiers.edit`。1d 就緒前沿用 superadmin／財務角色。
 
@@ -484,7 +485,7 @@ amount_rules = [ {from_amount: 0,        tiers: <基礎層級，維持現行>},
 
 **已裁示**（見 §0.5）：預設只警告（滿一季再檢視）；曝險＝未收款應收＋已出貨未開票；金額級距含稅、數字日後由財務填、預設留空；信用／逾期／`finance_guard` ＝ 獨立模組 `credit`＋L1 契約（缺席 ⇒ ok＋log）；多幣別不做。
 
-**框架內的程式預設**（供檢視，皆可由負責人改或本來就是結構）：預設等級 `warn`（填了數字才生效）；`finance_guard_log` 預設保留 90 天（設定項）；覆寫必填理由（結構，不可關）；金額級距的區間為半開區間 `[from, next)`、金額讀不到時套最高級距並標『金額未識別』（安全側的結構性選擇；若覺得過嚴可改成設定項）。其餘門檻、金額、天數、清單一律空。
+**框架內的程式預設**（供檢視，皆可由負責人改或本來就是結構）：預設等級 `warn`（填了數字才生效）；`finance_guard_log` 保留天數（設定項，§6.1）；覆寫必填理由（結構，不可關）；金額級距的區間為半開區間 `[from, next)`、金額讀不到時套最高級距並標『金額未識別』（安全側的結構性選擇；若覺得過嚴可改成設定項）。其餘門檻、金額、天數、清單一律空。
 
 **仍待決**：
 1. **大額付款門檻**：數字、是否分單據類型、累計規則（當日／當月；防拆單）——需財務給數字。
@@ -494,6 +495,19 @@ amount_rules = [ {from_amount: 0,        tiers: <基礎層級，維持現行>},
 5. **分期計畫（甲～戊班）核准**——核准前不寫程式（傳票流水修正除外）。
 6. **稅率日期不一致**：已核准未開票的報價遇稅率變動時，開票以開票日稅率、報價並列顯示（§2.3）——確認採用（FB01(c)）。
 7. ~~雙人確認的人選~~ **已裁示（使用者 2026-10-10）**：第二位確認人＝另一位 superadmin 或持 `finance.statutory.confirm` 者；只有一位 superadmin ⇒ 滿確認期後同一人再確認＋通知（§2.7）。
+
+### 6.1 本稿新增的可調數字（設定項登錄；擁有者與影響說明）
+
+這些原本是稿中的內嵌數字，一律改為設定項（登錄於設定中心 `setting_group`，每項有白話名稱、擁有者、風險、影響面板文字）。**「初始值」只是部署時種入的建議起點，負責人可改；改動的放寬／收緊方向決定是否走 `change_control.confirm_period_days`（§4.1）。**
+
+| 設定鍵 | 白話名稱 | 初始值 | 擁有者 | 風險 | 影響說明（面板）| 放寬方向 |
+|---|---|---|---|---|---|---|
+| `statutory.remind_next_year_from` | 幾月幾日起提醒『明年的法定參數還沒建』 | 10-01 | 財務負責人 | legal | 『改晚：提醒變晚、可能來不及在年底前建好』| 日期往後＝放寬 |
+| `statutory.remind_before_effective_days` | 幾天內要生效的新參數提醒財務確認 | 30 | 財務負責人 | legal | 『改小：確認時間變短』| 天數變小＝放寬 |
+| `statutory.form401_review_months` | 401 申報格式幾個月沒覆核就提醒 | 12 | 財務負責人 | legal | 『改大：公告令更新可能晚發現』| 月數變大＝放寬 |
+| `calendar.warn_days` | 假日曆到期前幾天警示 | 60（使用者裁示）| superadmin | ops | §3.3；下限 14 | 天數變小＝放寬 |
+| `impact.backtest_days` | 影響面板回測最近幾天 | 90 | superadmin | none | 只影響試算顯示，不影響任何規則 | 否 |
+| `finance_guard.log_keep_days` | 警告紀錄保留幾天 | 90 | 財務負責人 | ops | 『改小：一季檢討誤報率可能缺資料』（建議不小於一季）| 天數變小＝放寬 |
 
 ## 7. 風險
 
