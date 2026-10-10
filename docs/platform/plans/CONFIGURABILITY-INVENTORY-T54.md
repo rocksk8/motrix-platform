@@ -19,7 +19,7 @@
 | 11 個專屬設定頁 | 簽核、承攬商匯款簽核、公司資料（含備份保留）、帳務、法規參數、郵件、通知、模組、儲存位置、匯款款別、Google 日曆 | 各頁各自驗證；沒有總入口 |
 | **定義文件庫** `core/definitions.py`、`/api/definitions/{kind}/{key}` | 草稿、驗證器、發布（版本不可改）、差異、還原、範圍（`company`／`role:x`）、`register_kind()` 可擴充；已用於 layout、output_template、custom_fields、custom_module、remit_kinds、費用類型 | 只有結構化文件用法；單值設定尚未使用 |
 | 法規參數 `helpers/legal_params.py` | 依**生效日**版本化，已生效不可改，單據凍結快照（CUSTOMIZATION-SPEC §9） | 只含所得稅、健保；**不含營業稅** |
-| 利潤口徑 `/api/overhead/settings`、`operating_targets` | 開關、預設比率、`confirm`、遷移旗標 | 前端 `profit-rules.js` 另抄一份常數；警示門檻沒讀 `operating_targets` |
+| 利潤口徑 `/api/overhead/settings` | 開關、預設比率、`confirm`、遷移旗標 | 前端 `profit-rules.js` 另抄一份常數；警示門檻（12／20／10）是各畫面寫死值，沒有任何設定（`operating_targets` 是財務年度營收／毛利目標，與警示無關） |
 | 簽核 `approval-flow`、`approval-flow-scope`、`register_doc_type` | 每種單據的層級與簽核人可設 | 預設分組、組織鏈兩層仍寫死 |
 | 郵件 `mail_types`、`email_notify`、`mail_recipient_overrides` | 逐類型開關與收件人覆寫 | 「角色→收件人」規則寫死；站內通知沒有逐類型開關 |
 | 備份保留 `backup_retention` | GET／PATCH 與設定頁都有（1～3650 天） | **稽核紀錄保留可被設成 1 天，沒有法遵下限**；通知 90 天、請求日誌 90 天不在內 |
@@ -40,7 +40,7 @@
 
 | 群 | 項(P1) | 風險重心 | 建議機制／先做什麼 |
 |---|---|---|---|
-| K01 利潤警示與目標門檻 | 7(4) | money | 單一來源：`operating_targets`＋`/api/overhead/settings` 回傳；刪前端抄本；12／20／10 收成一組 |
+| K01 利潤警示與目標門檻 | 7(4) | money | 新群組 `profit_warning`（**不是** `operating_targets`，那是財務年度目標）；各畫面維持各自語意；刪未使用的抄本 |
 | K02 營業稅與法定參數 | 9(0) | legal | 新增 `vat_rate` 進 `legal_params`（生效日版本），收斂十餘處 `0.05`／`/1.05`；L |
 | K03 獎金與薪資規則 | 5(0) | money | 後備常數收斂到既有 `bonus_case_default_*`；獎金分類可設（P2） |
 | K04 登入與安全政策 | 14(4) | security | `security.policy`：閒置 8h／2h、鎖定 5 次／900 秒、Session 30 天、密碼最短 8；加上下限＋稽核 |
