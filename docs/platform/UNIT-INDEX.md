@@ -79,7 +79,7 @@
 | `helper:notify_matrix` | L1 | 通知矩陣（信件 × 行事曆）的對照登記（L1；MAIL-CAL 階段 1，設計 docs/platform/plans/MAIL-CAL-MERGE-DESIGN.md）。 | 10 | 2 | `tests/test_notify_matrix_2026_10_05.py` |
 | `helper:part_catalog` | L1 | 料件分類代碼表（L1；DEPENDENCY-MAP §3 #17）。（無單位卡） | 2 | 2 | — |
 | `helper:payable_due_core` | L1 | 預定付款日提醒的共用純函式庫（第 45 班；使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）。 | 16 | 5 | `tests/test_payable_due_core_t45.py` |
-| `helper:perm` | L1 | 權限矩陣的中央檢查（框架 P0；設計 docs/platform/plans/PERMISSION-MATRIX-DESIGN-T54.md §2–§3、§8）。 | 15 | 2 | `tests/platform/test_perm_equivalence_gate_a.py` |
+| `helper:perm` | L1 | 權限矩陣的中央檢查（框架 P0；設計 docs/platform/plans/PERMISSION-MATRIX-DESIGN-T54.md §2–§3、§8）。 | 16 | 2 | `tests/platform/test_perm_equivalence_gate_a.py` |
 | `helper:perm_text` | L1 | 權限矩陣的白話文字（使用者核心規則 2026-10-10：畫面上沒有代碼、沒有 allow/deny 這類英文、沒有 id；只有繁體中文名稱、一句話說明與白話風險提示）。 | 11 | 1 | `tests/platform/test_perm_text.py` |
 | `helper:prefill_sources` | L1 | 表單「自動帶入」來源的唯一登記處（L1；表單設計器的下拉、定義驗證、伺服器端取值都讀這一份）。（無單位卡） | 8 | 3 | — |
 | `helper:privacy_notice` | L1 | L1 個資蒐集告知（R3；規格 CUSTOMIZATION-SPEC §9.3；個人資料保護法 §8 I）。（無單位卡） | 23 | 13 | — |

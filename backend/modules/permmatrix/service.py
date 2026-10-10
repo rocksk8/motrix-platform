@@ -6,6 +6,7 @@
 """
 import json
 import logging
+import threading
 from datetime import datetime, timedelta
 
 from core import capabilities as CAP
@@ -96,14 +97,46 @@ def _roles():
 
 # ── 讀：矩陣（提供者）────────────────────────────────────────────────────────────────
 def load_matrix(seed):
-    """provider `perm.matrix_source`：種子 ⊕ 覆寫列，加個人覆寫與有效代理。先把到期的待生效轉為生效（讀取時判斷，不靠排程）。"""
+    """provider `perm.matrix_source`：種子 ⊕ 覆寫列，加個人覆寫與有效代理。**純讀取**——權限檢查的讀取路徑不寫資料庫、不等寫鎖
+    （05 稽核 B）。到期的待生效由 `kick_activation()` 在背景執行緒（單一飛行、拿不到鎖就略過）轉為生效；轉完會 `invalidate()`，下一次讀取就看到。"""
     from db import get_db
     conn = get_db()
     try:
-        activate_due(conn)
-        return _build_matrix(conn, seed)
+        m = _build_matrix(conn, seed)
+        due = conn.execute("SELECT 1 FROM perm_pending WHERE state='pending' AND effective_at<=? LIMIT 1", (_iso(_now()),)).fetchone() is not None
     finally:
         conn.close()
+    if due:
+        kick_activation()
+    return m
+
+
+_act_lock = threading.Lock()
+
+
+def kick_activation(wait=False):
+    """到期待生效的背景轉態：單一飛行（已有一條在跑 ⇒ 直接返回 None），不阻塞呼叫端。`wait=True`（測試／排程）等它跑完。回執行緒或 None。"""
+    if not _act_lock.acquire(blocking=False):
+        return None
+
+    def _run():
+        try:
+            from db import get_db
+            c = get_db()
+            try:
+                activate_due(c)
+            finally:
+                c.close()
+        except Exception:                                           # noqa: BLE001
+            logger.exception("permmatrix background activation failed")
+        finally:
+            _act_lock.release()
+
+    t = threading.Thread(target=_run, name="permmatrix-activate", daemon=True)
+    t.start()
+    if wait:
+        t.join()
+    return t
 
 
 def _build_matrix(conn, seed):
@@ -209,7 +242,10 @@ def activate_due(conn, now=None):
                 continue
             payload = json.loads(r["payload_json"] or "{}")
             actor = {"username": r["requested_by"], "role": "superadmin"}
-            note = _apply_pending(conn, r["kind"], payload, r["reason"], actor)
+            if conn.execute("SELECT 1 FROM users WHERE username=? AND active=1 AND role='superadmin'", (r["requested_by"],)).fetchone() is None:
+                note = "申請人已不是在職的最高管理者，未套用"          # 05 稽核 C：申請後被降級／停用 ⇒ 不以他的名義套用
+            else:
+                note = _apply_pending(conn, r["kind"], payload, r["reason"], actor)
             state = "active" if note == "" else "superseded"
             conn.execute("UPDATE perm_pending SET state=?, resolved_by='system', resolved_at=?, resolve_note=? WHERE id=?", (state, now_iso, note, r["id"]))
             _audit_tx(conn, {"username": "system"}, "permmatrix.pending." + ("activate" if state == "active" else "supersede"), "perm_pending", r["id"],

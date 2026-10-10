@@ -999,6 +999,7 @@
    "effective_caps": "def(user)",
    "explain": "def(user, key)",
    "invalidate": "def()",
+   "is_degraded": "def()",
    "load_user": "def(username)",
    "matrix": "def()",
    "require": "def(user, key)",

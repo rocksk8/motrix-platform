@@ -1,5 +1,10 @@
 # 權限矩陣 更新紀錄
 
+## (next) — 2026-10-11（wip/t54-1d-permmatrix-p0-r3；05 稽核 A／B／C 修正）
+- `load_matrix` 改為純讀取（不再呼叫 `activate_due`）；到期待生效由 `kick_activation()` 背景轉態（單一飛行、不阻塞權限檢查）。
+- `activate_due`：套用前確認申請人仍是在職最高管理者，否則標 `superseded` 並稽核（不以已降級／停用帳號的名義套用）。
+- `perm_pending`／24 小時仍是過渡實作，M1 不接端點或畫面（見 SPEC PMX13）。
+
 ## 1.0.0 — 2026-10-10（wip/t54-1d-permmatrix-p0）：里程碑 2——矩陣資料表、提供者、服務層（覆寫／代理／24 小時待生效／版本回溯）
 - 新模組 `permmatrix`（M16）。表 `perm_role_caps`／`perm_user_overrides`／`perm_versions`／`perm_pending`／`perm_delegations`（皆 T1；沒有 core schema 版本升級）。
 - 提供者 `perm.matrix_source`（IP-PM1）：L1 `helpers/perm.py` 取「種子 ⊕ 覆寫」＋有效代理；模組不在或讀取失敗 ⇒ L1 用種子（＝今天的行為）。

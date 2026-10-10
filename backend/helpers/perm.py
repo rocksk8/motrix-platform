@@ -78,7 +78,12 @@ def compute(role: str, uid, has_module: Callable[[str], bool], cap: "_cap.Capabi
 _source: Optional[Callable[[], Matrix]] = None
 _seed_cache = {"key": None, "m": None}
 _prov_cache = {"at": -1e9, "m": None, "sig": None}
+#: 最後一次成功載入的矩陣——**和 TTL 快取分開**：`invalidate()` 只清 `_prov_cache`，不清這裡。
+#: 提供者暫時讀不到時用它（含個人禁止、角色格取消），不退回種子：種子沒有那些收緊列 ⇒ 會 fail-open（05 稽核 A）。
+_last_good = {"m": None}
+_degraded = {"on": False}                          # True＝目前用的是種子且從未成功載入過（降級）
 _PROV_TTL = 3.0                                    # 秒；寫入端呼叫 `invalidate()` 立即失效（同程序）
+_FAIL_RETRY = 1.0                                  # 秒；提供者失敗後多久再試一次（避免每次檢查都打資料庫）
 
 
 def set_matrix_source(fn: Optional[Callable[[], Matrix]]) -> None:
@@ -108,12 +113,29 @@ def matrix() -> Matrix:
         try:
             m = prov(seed_from_legacy(_cap.all_caps()))
             _prov_cache.update(at=now, m=m, sig=sig)
+            _last_good["m"] = m
+            _degraded["on"] = False
             return m
-        except Exception:                           # noqa: BLE001 — 讀不到資料表 ⇒ 退回種子（= 今天的行為），不因此多給或少給
-            logger.exception("perm.matrix_source failed; falling back to the legacy seed")
+        except Exception:                           # noqa: BLE001
+            # 讀不到資料表：用『最後一次成功的矩陣』（保留所有收緊列）；從未成功過才用種子，且進入降級（高風險能力只放行最高管理者）
+            logger.exception("perm.matrix_source failed; using the last good matrix" if _last_good["m"] is not None
+                             else "perm.matrix_source failed and no good matrix yet; using the legacy seed (degraded: high-risk caps denied)")
+            if _last_good["m"] is not None:
+                _prov_cache.update(at=now - _PROV_TTL + _FAIL_RETRY, m=_last_good["m"], sig=sig)
+                return _last_good["m"]
+            _degraded["on"] = True
+            if _seed_cache["key"] != sig:
+                _seed_cache.update(key=sig, m=seed_from_legacy(_cap.all_caps()))
+            _prov_cache.update(at=now - _PROV_TTL + _FAIL_RETRY, m=_seed_cache["m"], sig=sig)     # 失敗後 1 秒內不重打資料庫
+            return _seed_cache["m"]
     if _seed_cache["key"] != sig:
         _seed_cache.update(key=sig, m=seed_from_legacy(_cap.all_caps()))
     return _seed_cache["m"]
+
+
+def is_degraded() -> bool:
+    """True＝提供者讀不到、而且從未成功載入過矩陣（目前只用種子）。此時高風險能力對非最高管理者一律拒絕。"""
+    return bool(_degraded["on"])
 
 
 def _today() -> str:
@@ -191,6 +213,8 @@ def can(user: Optional[dict], key: str) -> bool:
         return False
     try:
         m = matrix()
+        if _degraded["on"] and cap.risk == "high":                 # 降級（從未載入過矩陣）：種子沒有收緊列 ⇒ 高風險能力 fail-closed
+            return False
         if base_can(user, cap, m):
             return True
         return _via_delegation(user, cap, m) is not None
@@ -210,6 +234,8 @@ def can_via(user: Optional[dict], key: str) -> Tuple[bool, str, str]:
         return False, "unknown", ""
     try:
         m = matrix()
+        if _degraded["on"] and cap.risk == "high":
+            return False, "none", ""
         if base_can(user, cap, m):
             return True, "base", ""
         who = _via_delegation(user, cap, m)
@@ -247,6 +273,8 @@ def explain(user: dict, key: str) -> Dict[str, object]:
     if cap is None:
         return {"allowed": False, "via": "unknown"}
     m, uid, role = matrix(), user.get("id"), user.get("role")
+    if _degraded["on"] and cap.risk == "high":
+        return {"allowed": False, "via": "none"}
     if key in m.deny.get(uid, ()):
         return {"allowed": False, "via": "deny"}
     if cap.delegable and key in m.allow.get(uid, ()):
