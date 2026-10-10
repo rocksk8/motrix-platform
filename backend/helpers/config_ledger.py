@@ -2,7 +2,7 @@
 """設定與權限共用的「變更明細＋待生效」層（L1；第 54 班設定中心 S0；與 1d 的權限矩陣設計 §7 共同定案）。
 
 [單位] helper:config_ledger    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] HIGH_RISK, RISKS, activate_due, cancel, cancel_pending_for, domains, history, in_effect, pending, record, register_domain,
+[公開介面] HIGH_RISK, RISKS, activate_due, approve, cancel, cancel_pending_for, domains, history, in_effect, pending, record, register_domain,
     restore_version, snapshot_version, state_of, supersede
 [不變式] ①`config_changes` 與 `config_change_events` 只增不改不刪（資料庫觸發器擋）；②狀態**不是欄位**：目前狀態＝該變更最後一個事件
     （`pending`／`activated`／`cancelled`／`superseded`），沒有事件＝立即生效；③`record()` 在**呼叫端的交易內**寫變更明細、稽核與
@@ -19,7 +19,8 @@ from datetime import datetime
 
 RISKS = ("none", "ops", "money", "legal", "security")
 HIGH_RISK = ("money", "legal", "security")          # 通知其他最高管理者、原因必填由呼叫端把關
-EVENTS = ("pending", "activated", "cancelled", "superseded")
+EVENTS = ("pending", "approved", "activated", "cancelled", "superseded")
+_STATE_EVENTS = ("pending", "activated", "cancelled", "superseded")      # approved 是一票，不改變狀態
 _DOMAIN_RE = re.compile(r"^[a-z][a-z0-9_]{0,19}(:[A-Za-z0-9_.\-]{1,60})?$")
 _PREFIX_RE = re.compile(r"^[a-z][a-z0-9_]{0,19}$")
 _VALUE_MAX = 20000                                   # 單一值序列化後的長度上限（過長只留摘要，明細層不是資料倉庫）
@@ -65,9 +66,10 @@ def _now():
 
 
 def record(conn, domain, key, changes, reason, actor, *, ip="", risk="none", ref_version=None, effective_at=None,
-           audit_action=None, target_label="", link="settings-center.html"):
+           audit_action=None, target_label="", link="settings-center.html", approvals_required=0):
     """在呼叫端交易內寫一批變更。`changes`＝`[{field, old, new}]`（舊＝新的略過）；回 `{"batch", "ids", "audit_id"}`（沒有實質變更 ⇒ ids＝[]）。
     - `effective_at`（ISO 字串）給了 ⇒ 每列加一個 `pending` 事件（待生效）；不給＝立即生效（沒有事件）。
+    - `approvals_required`＞0 ⇒ 要有這麼多位**不同於申請人**的最高管理者按 `approve()` 才算生效（雙人核准；到時間也不生效）。
     - 同交易寫 `audit_log`（動作＝`audit_action` 或 `<前綴>.change`；明細含逐欄舊→新與原因）。
     - `risk` 屬 HIGH_RISK ⇒ 站內通知**其他**在職最高管理者（同交易 INSERT；操作者本人不通知）。
     不 commit。"""
@@ -84,10 +86,10 @@ def record(conn, domain, key, changes, reason, actor, *, ip="", risk="none", ref
     ids = []
     for c in real:
         cur = conn.execute(
-            "INSERT INTO config_changes (at, domain, key, field, old_json, new_json, reason, actor, actor_display, ip, risk, ref_version, effective_at, batch)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO config_changes (at, domain, key, field, old_json, new_json, reason, actor, actor_display, ip, risk, ref_version, effective_at, batch, approvals_required)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (now, domain, str(key), str(c["field"]), _dump(c.get("old")), _dump(c.get("new")), reason or "", username, display, ip or "", risk,
-             ref_version, effective_at or "", batch))
+             ref_version, effective_at or "", batch, int(approvals_required or 0)))
         ids.append(cur.lastrowid)
         if effective_at:
             conn.execute("INSERT INTO config_change_events (change_id, event, actor, reason, at) VALUES (?,?,?,?,?)", (cur.lastrowid, "pending", username, reason or "", now))
@@ -133,7 +135,20 @@ def _last_events(conn, ids):
     out = {}
     q = "SELECT change_id, event FROM config_change_events WHERE change_id IN (%s) ORDER BY id" % ",".join("?" * len(ids))
     for cid, ev in conn.execute(q, list(ids)).fetchall():
-        out[cid] = ev                                        # 依 id 排序，最後一個覆蓋＝最新事件
+        if ev in _STATE_EVENTS:
+            out[cid] = ev                                    # 依 id 排序，最後一個狀態事件覆蓋＝目前狀態
+    return out
+
+
+def _approvals(conn, ids):
+    """每筆變更已核准的人（不重複）。"""
+    out = {i: [] for i in ids}
+    if not ids:
+        return out
+    q = "SELECT change_id, actor FROM config_change_events WHERE event='approved' AND change_id IN (%s) ORDER BY id" % ",".join("?" * len(ids))
+    for cid, who in conn.execute(q, list(ids)).fetchall():
+        if who not in out[cid]:
+            out[cid].append(who)
     return out
 
 
@@ -152,8 +167,14 @@ def history(conn, domain=None, key=None, limit=100, offset=0):
         args.append(str(key))
     sql = "SELECT * FROM config_changes" + ((" WHERE " + " AND ".join(where)) if where else "") + " ORDER BY id DESC LIMIT ? OFFSET ?"
     rows = conn.execute(sql, args + [max(1, min(int(limit), 1000)), max(0, int(offset))]).fetchall()
-    ev = _last_events(conn, [r["id"] for r in rows])
-    return [_row(r, ev.get(r["id"])) for r in rows]
+    ids = [r["id"] for r in rows]
+    ev, ap = _last_events(conn, ids), _approvals(conn, ids)
+    out = []
+    for r in rows:
+        d = _row(r, ev.get(r["id"]))
+        d["approvals"] = ap.get(r["id"], [])
+        out.append(d)
+    return out
 
 
 def state_of(conn, change_id):
@@ -185,6 +206,24 @@ def cancel(conn, change_id, actor, reason=""):
     return True
 
 
+def approve(conn, change_id, actor, reason=""):
+    """雙人核准的一票：只對**待生效**的變更；申請人不能核准自己的、同一人不能投兩次。回 `{"ok", "approvals", "required", "why"}`。不 commit。"""
+    r = conn.execute("SELECT actor, approvals_required FROM config_changes WHERE id=?", (change_id,)).fetchone()
+    if r is None:
+        return {"ok": False, "why": "找不到這筆變更", "approvals": 0, "required": 0}
+    username, _d, _i = _actor(actor)
+    required = int(r["approvals_required"] or 0)
+    if state_of(conn, change_id) != "pending":
+        return {"ok": False, "why": "這筆變更已不是待生效狀態", "approvals": 0, "required": required}
+    have = _approvals(conn, [change_id])[change_id]
+    if username == r["actor"]:
+        return {"ok": False, "why": "申請人不能核准自己的變更", "approvals": len(have), "required": required}
+    if username in have:
+        return {"ok": False, "why": "你已經核准過了", "approvals": len(have), "required": required}
+    _append(conn, change_id, "approved", actor, reason)
+    return {"ok": True, "why": "", "approvals": len(have) + 1, "required": required}
+
+
 def supersede(conn, change_id, actor, reason=""):
     """同一目標同一欄位再次申請 ⇒ 舊的待生效項標為 superseded。不 commit。"""
     if state_of(conn, change_id) != "pending":
@@ -207,7 +246,7 @@ def activate_due(conn, now=None, domain=None):
     now = now or _now()
     done = []
     for r in pending(conn, domain):
-        if r["effective_at"] and r["effective_at"] <= now:
+        if r["effective_at"] and in_effect(r, now):
             _append(conn, r["id"], "activated", "system", "")
             done.append(r["id"])
     return done
@@ -220,6 +259,8 @@ def in_effect(row, now=None):
     if st in ("cancelled", "superseded"):
         return False
     if st == "pending":
+        if len(row.get("approvals") or []) < int(row.get("approvals_required") or 0):
+            return False                                     # 雙人核准的票數不夠 ⇒ 到時間也不生效
         return bool(row.get("effective_at")) and row["effective_at"] <= (now or _now())
     return True
 

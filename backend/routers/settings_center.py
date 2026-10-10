@@ -6,6 +6,8 @@
 - POST /api/settings-center/groups/{group}         儲存（部分欄位即可；`reason` 必填；superadmin）
 - GET  /api/settings-center/pending                待生效清單（風險欄位 24 小時後才生效；superadmin）
 - POST /api/settings-center/pending/{id}/cancel    撤銷一筆待生效（寫稽核；superadmin）
+- POST /api/settings-center/pending/{id}/approve   雙人核准的一票（放寬安全／風險設定需要另一位最高管理者核准；superadmin）
+- GET  /api/settings-center/profiles               預設組清單；GET …/profiles/{name}/preview 預覽會改什麼；POST …/profiles/{name}/apply 套用（superadmin）
 - GET  /api/settings-center/public?groups=a,b      非敏感群組的目前值（登入即可；敏感群組只有最高管理者能讀）
 """
 from fastapi import APIRouter, Body, Header, HTTPException, Request
@@ -130,3 +132,53 @@ def cancel_pending(change_id: int, body: dict = Body(default={}), authorization:
     _audit(_tok(authorization), "settings.%s.pending_cancel" % row["key"], "config", str(row["key"]),
            "撤銷待生效：%s（#%d）原因：%s" % (row["field"], change_id, reason))
     return {"ok": True}
+
+
+@router.post("/api/settings-center/pending/{change_id}/approve")
+def approve_pending(change_id: int, body: dict = Body(default={}), authorization: str = Header(None)):
+    actor = _require_user(authorization, require_superadmin=True)
+    from db import get_db
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT domain, key, field FROM config_changes WHERE id=?", (change_id,)).fetchone()
+        if row is None or not row["domain"].startswith("setting:"):
+            raise HTTPException(404, "找不到這筆待生效的設定變更")
+        reason = str((body or {}).get("reason") or "").strip() or "同意放寬"
+        out = ledger.approve(conn, change_id, actor, reason)
+        if not out["ok"]:
+            raise HTTPException(409, out["why"])
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "settings.%s.approve" % row["key"], "config", str(row["key"]),
+           "核准待生效變更：%s（#%d）%d／%d" % (row["field"], change_id, out["approvals"], out["required"]))
+    return {"ok": True, "approvals": out["approvals"], "required": out["required"]}
+
+
+@router.get("/api/settings-center/profiles")
+def list_profiles(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    return {"profiles": [{"name": n, "fieldCount": c} for n, c in sr.profiles().items()]}
+
+
+@router.get("/api/settings-center/profiles/{name}/preview")
+def preview_profile(name: str, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    if name not in sr.profiles():
+        raise HTTPException(404, "沒有這個預設組")
+    return {"name": name, "changes": sr.profile_preview(name)}
+
+
+@router.post("/api/settings-center/profiles/{name}/apply")
+def apply_profile(name: str, request: Request, body: dict = Body(default={}), authorization: str = Header(None)):
+    actor = _require_user(authorization, require_superadmin=True)
+    reason = str((body or {}).get("reason") or "").strip()
+    if not reason:
+        raise HTTPException(400, "請填寫套用原因")
+    if name not in sr.profiles():
+        raise HTTPException(404, "沒有這個預設組")
+    try:
+        out = sr.apply_profile(name, reason=reason, user=actor["username"], ip=(request.client.host if request.client else ""), actor=actor)
+    except sr.SettingError as e:
+        raise HTTPException(400, {"message": str(e), "problems": e.problems})
+    return {"ok": True, "results": out}
