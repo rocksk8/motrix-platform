@@ -75,7 +75,11 @@ def _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group_token, p
         if back_fails:                      # 搬不回原路徑（防毒鎖檔…）⇒ 資料夾與檔案原封不動留在隔離區，每日工作會再搬；回報給呼叫端，**不可刪掉**
             logger.error("recyclebin: 單據 %s 刪除失敗後附件搬不回去，保留在隔離區 %s：%s", entity_id, token, back_fails)
             raise RB.BinError("單據未刪除，但有 %d 個附件暫時搬不回原路徑（已保留在隔離區 %s，系統會自動再搬回）" % (len(back_fails), token))
-        Q.remove(token)
+        try:
+            Q.remove(token)
+        except OSError as e:                # 單據沒刪成、附件已全部搬回；只是空的隔離資料夾暫時清不掉 ⇒ 仍以 BinError 回報（不丟裸 OSError），每日工作會清
+            logger.warning("recyclebin: 單據 %s 刪除失敗後空的隔離資料夾 %s 清不掉：%s", entity_id, token, e)
+            raise RB.BinError("單據未刪除（資料與附件都在原處）；暫存區的暫存資料夾稍後會自動清理")
         raise
     return {"bin_id": cur.lastrowid, "token": token, "entity_type": entity_type, "entity_id": str(entity_id),
             "purge_after": purge_after_for(now), "files": sum(1 for m in manifest if m.get("state") == "moved")}

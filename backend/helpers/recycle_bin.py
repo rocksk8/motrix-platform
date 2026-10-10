@@ -40,7 +40,7 @@ MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024   # 單筆快照上限；超過 ⇒ 拒絕�
 
 #: 預設遮罩的欄位名稱（不分大小寫、駝峰／底線皆可，**子字串比對**——寧可多遮，不可漏）。看到 → 整個值（含巢狀 dict／list）換成 MASK；adapter 可覆寫 mask()。
 _SENSITIVE = re.compile(
-    r"(bank_?account|account|acct|passbook|id_?number|id_?no(?![a-z])|id_?card|national_?id|identity|birth|phone|mobile|telephone|tel_?(?:no|number)|(?:^|[_\W])tel(?:$|[_\W])|"
+    r"(bank_?account|account|acct|passbook|id_?number|id_?no(?![a-z])|id_?card|national_?id|tax_?id|identity|birth|phone|mobile|telephone|tel_?(?:no|number)|(?:^|[_\W])tel(?:$|[_\W])|"
     r"e?mail|address|line_?id|password|passwd|secret|token|signature|image|photo|iban|swift|credit_?card|card_?(?:no|number)|payee|salary|wage)", re.I)
 MASK = "＊＊＊"
 _MAX_JSON_DEPTH = 6

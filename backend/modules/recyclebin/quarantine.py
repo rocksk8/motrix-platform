@@ -122,7 +122,10 @@ def move_in(token: str, files: list) -> list:
                 stuck.append(dst)
                 logger.exception("暫存區搬移失敗後搬回也失敗：%s", dst)
         if not stuck:                       # 全部都搬回去了才清掉資料夾；有搬不回的（防毒鎖檔…）⇒ 保留，每日工作 reconcile 會再搬回，絕不連檔案一起刪掉
-            _remove_tree(base)
+            try:
+                _remove_tree(base)
+            except OSError:                 # 空資料夾清不掉不要蓋掉原本的錯誤（呼叫端要的是『搬進去失敗』的原因）
+                logger.warning("暫存區搬移失敗後空資料夾清不掉：%s", base)
         raise
     return manifest
 
@@ -196,7 +199,7 @@ def _remove_tree(path: str) -> None:
             func(p)
         except OSError:
             pass
-    shutil.rmtree(path, onerror=_writable_retry)
+    shutil.rmtree(path, onerror=_writable_retry)       # TODO: Python 3.12+ 的 `onexc` 取代 `onerror`（onerror 已標記為棄用）；升到 3.12 再改
     if os.path.exists(path):
         raise OSError("隔離資料夾刪不掉（檔案可能被其他程式占用）：%s" % os.path.basename(path))
 
@@ -224,6 +227,9 @@ def location_problem(d: str) -> str:
         return "隔離目錄不可以在安裝目錄裡面（要放樹內請留空＝預設位置）"
     if install.startswith(real + os.sep):
         return "隔離目錄不可以包含安裝目錄"
+    cloud = _cloud_problem(real)
+    if cloud:
+        return cloud
     for env in ("SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData"):
         v = os.environ.get(env)
         if v:
@@ -233,6 +239,33 @@ def location_problem(d: str) -> str:
     for unix in ("/etc", "/usr", "/bin", "/sbin", "/lib", "/boot", "/proc", "/sys", "/dev", "/var/lib"):
         if real == unix or real.startswith(unix + "/"):
             return "隔離目錄不可以在系統目錄底下"
+    return ""
+
+
+#: 路徑裡出現這些資料夾名稱 ⇒ 多半是雲端同步／共用資料夾（隔離檔含個資，F3 永不上雲）。不分大小寫。
+_CLOUD_SEGMENTS = {"我的雲端硬碟", "共用雲端硬碟", "my drive", "shared drives", "google drive", "googledrive", "drive", "onedrive", "dropbox", "icloud", "iclouddrive",
+                   "box", "box sync", "public", "公用", "sync", "mega", "pcloud drive"}
+
+
+def _cloud_problem(real: str) -> str:
+    """雲端鏡像／同步資料夾不可當隔離目錄：已設定的雲端存檔根目錄、個資資料夾、更新交付資料夾，以及路徑裡有常見雲端同步資料夾名稱（Google 雲端硬碟、OneDrive、Dropbox、Public…）。"""
+    try:
+        from helpers import storage_locations as SL
+        for kind in SL.KINDS:
+            try:
+                root = SL.path(kind) or ""
+            except Exception:                      # noqa: BLE001 — 讀不到設定不當成通過，下面的名稱規則還會擋
+                root = ""
+            if root:
+                r = os.path.normcase(os.path.realpath(root))
+                if real == r or real.startswith(r + os.sep) or r.startswith(real + os.sep):
+                    return "隔離目錄不可以在（或包含）雲端存檔／個資／交付資料夾：%s" % SL.LABELS.get(kind, kind)
+    except Exception:                              # noqa: BLE001
+        pass
+    for seg in os.path.normcase(real).replace("/", os.sep).split(os.sep):
+        seg = seg.strip()
+        if seg in _CLOUD_SEGMENTS or seg.startswith("onedrive") or seg.startswith("google drive"):
+            return "隔離目錄不可以放在雲端同步資料夾底下（%s）——隔離檔含個資，永不上雲" % seg
     return ""
 
 

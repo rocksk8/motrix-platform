@@ -221,3 +221,46 @@ def test_delete_approved_notifies_the_other_superadmins(client, make_user, who):
     got = _q("SELECT username FROM notifications WHERE type='recyclebin_delete_approved'")
     names = [g["username"] for g in got]
     assert other in names and su_user["username"] not in names, "通知其他最高管理者；操作者自己不通知"
+
+
+# ── node-39 再驗證的小項 ──────────────────────────────────────────────────────────────
+def test_rbn12_tax_id_is_masked_too():
+    m = RB.mask_obj({"tax_id": "A123456789", "taxId": "B1", "vendor": {"tax_id": "C2", "name": "某工作室"}, "tax": 5, "taxAmount": 100, "taxRate": 5})
+    assert m["tax_id"] == m["taxId"] == RB.MASK and m["vendor"]["tax_id"] == RB.MASK and m["vendor"]["name"] == "某工作室"
+    assert m["tax"] == 5 and m["taxAmount"] == 100 and m["taxRate"] == 5, "稅額／稅率不是個資，不遮罩"
+
+
+def test_rbn13_cloud_mirror_and_public_folders_are_rejected(monkeypatch, tmp_path):
+    for d in (r"H:\我的雲端硬碟\系統存檔\bin", r"C:\Users\Public\bin", r"C:\Users\x\OneDrive\bin", r"C:\Users\x\OneDrive - 公司\bin", r"D:\Dropbox\bin",
+              r"D:\Google Drive\bin", r"E:\My Drive\bin", r"C:\Users\x\iCloudDrive\bin"):
+        if os.name != "nt":
+            break
+        assert Q.location_problem(d), d
+    from helpers import storage_locations as SL
+    root = str(tmp_path / "cloud_pii_root")
+    monkeypatch.setattr(SL, "path", lambda kind: root if kind == "pii_root" else "")
+    assert Q.location_problem(os.path.join(root, "bin")), "已設定的個資資料夾底下不行"
+    assert "個資" in Q.location_problem(os.path.join(root, "bin"))
+    assert Q.location_problem(os.path.dirname(root)), "包含設定好的雲端資料夾也不行"
+
+
+def test_rbn15_clean_move_back_but_unremovable_folder_raises_binerror_not_oserror(monkeypatch, who):
+    su, ad, su_user = who
+    _doc()
+
+    class Boom(SynAdapter):
+        def delete_in_tx(self, conn, entity_id):
+            raise RuntimeError("資料庫寫入失敗")
+
+    monkeypatch.setitem(registry._LEGACY_PROVIDERS, (RB.CAP_ADAPTER, ET), Boom)
+
+    def locked(token):
+        raise OSError("資料夾被占用")
+
+    monkeypatch.setattr(Q, "remove", locked)
+    cn = db.get_db()
+    with pytest.raises(RB.BinError, match="單據未刪除"):
+        S.delete(cn, ET, "D1", su_user)
+    cn.rollback()
+    cn.close()
+    assert _q("SELECT * FROM rbn_doc"), "單據還在"
