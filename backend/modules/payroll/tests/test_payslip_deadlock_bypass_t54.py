@@ -192,3 +192,33 @@ def test_normal_approval_is_unchanged_and_not_marked_as_bypass(client, make_user
     assert "bypass" not in appr and appr["history"][-1]["action"] == "approve"
     assert not _q("SELECT 1 FROM audit_log WHERE action='payslip.approve_bypass'")
     _clear_flow()
+
+
+def test_bypass_reason_is_normalized_and_needs_a_meaningful_length(client, make_user):
+    from modules.payroll.api.payslip_approval import BYPASS_REASON_MIN_LEN, normalize_reason
+    assert BYPASS_REASON_MIN_LEN == 4
+    assert normalize_reason("  \u200b \u3000 ") == "" and normalize_reason("a\u200bb\u3000\u3000 c") == "ab c" and normalize_reason(None) == ""
+    ua, ha = _su(client, make_user, "ps54_a")
+    ub, hb = _su(client, make_user, "ps54_b")
+    _flow([ua])
+    _insert_payslip("PS-203102-012")
+    _submit(client, "PS-203102-012", ha)
+    for bad in ("", "   ", "\u200b\u200b\u200b\u200b\u200b", "\u3000\u3000\u3000\u3000", "a b", "好\u200b\u200b好好", None, 12345):
+        r = client.post("/api/payslips/PS-203102-012/approve", json={"reason": bad}, headers=hb)
+        assert r.status_code == 403 and "至少 4 個字" in r.text, (bad, r.status_code, r.text)
+    assert _status("PS-203102-012") == "待審核" and not _q("SELECT 1 FROM audit_log WHERE action='payslip.approve_bypass'")
+    r = client.post("/api/payslips/PS-203102-012/approve", json={"reason": "  出差中\u200b  "}, headers=hb)         # 正規化後 3 字 ⇒ 仍擋
+    assert r.status_code == 403
+    r = client.post("/api/payslips/PS-203102-012/approve", json={"reason": " 出差中，已電話確認 "}, headers=hb)
+    assert r.status_code == 200 and _appr("PS-203102-012")["bypass"]["reason"] == "出差中，已電話確認"
+
+
+def test_cross_tier_chain_member_cannot_bypass_the_requesters_tier(client, make_user):
+    ua, ha = _su(client, make_user, "ps54_a")
+    ub, hb = _su(client, make_user, "ps54_b")
+    _flow([ua], [ub])                                                                 # 送審人 A 在第 1 層；B 只在第 2 層
+    _insert_payslip("PS-203102-013")
+    _submit(client, "PS-203102-013", ha)
+    r = client.post("/api/payslips/PS-203102-013/approve", json={"reason": "代核第一層再簽第二層"}, headers=hb)
+    assert r.status_code == 403 and _status("PS-203102-013") == "待審核"
+    assert not _q("SELECT 1 FROM audit_log WHERE action='payslip.approve_bypass'")
