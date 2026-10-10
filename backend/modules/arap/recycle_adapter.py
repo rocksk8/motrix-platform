@@ -5,7 +5,7 @@
 所以影響清單只有資訊性項目（已匯出幾次、有幾個已開立附件、行事曆事件）——不擋刪除。
 - 一般刪除：沿用現行規則（只准草稿；使用者 D1 不放寬）。
 - 『刪除已核可』（superadmin 專用入口 POST /api/recycle-bin/delete-approved）：只支援『已核准』。
-- 還原：單號被占用 ⇒ `conflict:`；案件（quote_no）不在 ⇒ `parent_missing:`；已開立附件已由暫存區搬回（路徑被占用時改寫）。
+- 還原：單號被占用 ⇒ `conflict:`；案件（quote_no）不在 ⇒ `parent_missing:`；剩餘額度（金額／品項數量）被其他單據用掉 ⇒ `conflict:`（與建立同一套規則）；已開立附件已由暫存區搬回（路徑被占用時改寫）。
 本檔只 import L1 契約 `helpers.recycle_bin`，不 import `modules.recyclebin`。
 """
 import json
@@ -40,6 +40,8 @@ class _ArapDocAdapter(RB.Adapter):
     key_col = ""
     id_cols = ("id",)
     noun = ""
+    quota_word = ""
+    notice_types = ()
     has_issued_files = False
 
     # ── 規則 ──
@@ -80,8 +82,28 @@ class _ArapDocAdapter(RB.Adapter):
         except ValueError:
             d = {}
         if d.get("googleCalendarEventId"):
-            out.append({"kind": "calendar", "label": "已建立行事曆事件（不會自動刪除，請自行處理）", "blocking": False})
+            out.append({"kind": "calendar", "label": "已建立『已核准』行事曆事件（屬歷史紀錄，不會自動刪除，還原也不會重建）", "blocking": False})
         return out
+
+    def _check_quota(self, conn, row):
+        """還原也要守建立時的額度規則：草稿就鎖額度，刪除釋出的額度可能已被新單據用掉——還原會讓報價單超額，所以先重算（此列尚未放回）。"""
+        info = self._remaining(conn, row["quote_no"])
+        if info is None:
+            return
+        amount = float(row.get("amount") or 0)
+        if amount > info["remainingAmount"] + 1e-6:
+            raise RB.BinError("conflict: 剩餘可%s額度不足（還原需要 NT$ %s，目前剩餘 NT$ %s；該額度已被其他單據占用）"
+                              % (self.quota_word, format(amount, ",.0f"), format(max(info["remainingAmount"], 0), ",.0f")))
+        try:
+            snap = json.loads(row.get("snapshot_json") or "{}")
+        except (TypeError, ValueError):
+            snap = {}
+        left = {i["itemId"]: i["remainingQty"] for i in info["items"]}
+        for it in (snap.get("selectedItems") or []):
+            iid = it.get("itemId")
+            if iid in left and float(it.get("qty", 0) or 0) > left[iid] + 1e-6:
+                raise RB.BinError("conflict: 品項「%s」剩餘可%s數量不足（需要 %s，剩 %s；已被其他單據占用）"
+                                  % (it.get("description") or iid, self.quota_word, it.get("qty"), left[iid]))
 
     # ── 快照／刪除／還原 ──
     def _files(self, row):
@@ -105,6 +127,9 @@ class _ArapDocAdapter(RB.Adapter):
 
     def delete_in_tx(self, conn, entity_id):
         conn.execute("DELETE FROM %s WHERE %s=?" % (self.table, self.key_col), (entity_id,))
+        # 該單據的簽核通知／催簽提醒（端點路徑原本在 commit 後清；『刪除已核可』走通用入口，不會經過端點 ⇒ 在同一個交易內一起清，不留指向已刪單據的通知）
+        ph = ",".join("?" * len(self.notice_types))
+        conn.execute("DELETE FROM notifications WHERE ref_id=? AND type IN (%s)" % ph, [str(entity_id), *self.notice_types])
 
     def restore_in_tx(self, conn, snap, ctx):
         rows = (snap.get("rows") or {}).get(self.table) or []
@@ -116,6 +141,7 @@ class _ArapDocAdapter(RB.Adapter):
             raise RB.BinError("conflict: 單號 %s 已被占用（可能已有同號的新單據），不覆蓋" % key)
         if row.get("quote_no") and conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (row["quote_no"],)).fetchone() is None:
             raise RB.BinError("parent_missing: 案件 %s 已不存在，無法還原" % row["quote_no"])
+        self._check_quota(conn, row)
         notes = []
         if self.has_issued_files:
             files = _json_list(row.get("issued_files_json"))
@@ -139,6 +165,13 @@ class PaymentRequestBinAdapter(_ArapDocAdapter):
     table = "payment_requests"
     key_col = "request_no"
     noun = "請款單"
+    quota_word = "請款"
+    notice_types = ("payment_request_approval_request", "payment_request_approved", "payment_request_returned", "approval_reminder")
+
+    @staticmethod
+    def _remaining(conn, quote_no):
+        from modules.arap.api.payment_requests import _quote_remaining      # 晚綁定（api 模組 import 本檔）
+        return _quote_remaining(conn, quote_no)
 
 
 class InvoiceVoucherBinAdapter(_ArapDocAdapter):
@@ -147,4 +180,11 @@ class InvoiceVoucherBinAdapter(_ArapDocAdapter):
     table = "invoice_vouchers"
     key_col = "voucher_no"
     noun = "開票申請憑據"
+    quota_word = "開票"
+    notice_types = ("invoice_voucher_approval_request", "invoice_voucher_approved", "invoice_voucher_returned", "approval_reminder")
+
+    @staticmethod
+    def _remaining(conn, quote_no):
+        from modules.arap.api.invoice_vouchers import _quote_remaining      # 晚綁定（api 模組 import 本檔）
+        return _quote_remaining(conn, quote_no)
     has_issued_files = True
