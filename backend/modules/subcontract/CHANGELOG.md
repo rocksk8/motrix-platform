@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-10（wip/t53-1d-rb-adapters-r4；刪除暫存區 P1：承攬商派發、承攬商匯款申請）
+## (next) — 2026-10-10（wip/t53-1d-rb-adapters-r5；刪除暫存區 P1：承攬商派發、承攬商匯款申請）
 - 新 `recycle_adapter.py`（IP-RB1）：`DispatchBinAdapter`（`contractor_dispatch`）、`VoucherBinAdapter`（`contractor_voucher`），在 `ModuleSpec.providers` 以 `recyclebin.adapter` 登記。快照＝單據列＋子表列（派發：勞報單連結、附件刪除申請）＋附件清單；還原放回原值（同主鍵、同欄位）；單號（`DP-`／`PV-`）被占用 ⇒ 換新號並回報；承攬商／報價單／所屬派發不在 ⇒ `parent_missing`；勞報單不在 ⇒ 略過該連結並註記；列表/詳情遮罩用 L1 預設 `mask_obj`（展開 JSON 字串欄位後遮罩）。
 - `DELETE /api/contractor-dispatches/{id}`、`DELETE /api/contractor-vouchers/{no}` 改為 `recycle_bin.delete()`（IP-RB2）：回應多 `binned`、`binId`、`purgeAfter`；暫存區模組不在 ⇒ 照舊刪資料列（附件留在原處）並在回應 `notice` 與稽核明說。**刪除條件不放寬**（派發：審核中／已核准／已有匯款申請不可刪；匯款申請：只有草稿、分期草稿守 LIFO）；已核可的單據只能走暫存區的最高管理者『刪除已核可』入口（`can_delete_approved`＋`impact`：已匯款不可、有匯款申請的派發不可）。
 - 稽核跟進（05）：經暫存區的『刪除已核可』與『還原』現在也會對齊 commit 之後的副作用——匯款申請：收回／重建行事曆『付款待辦』事件（`payable_due.fire`）、清簽核通知；審核中的派發：清簽核人的待辦通知。走 L1 hook `Adapter.after_commit`（還原與『刪除已核可』由暫存區在 commit 後自動呼叫；一般刪除由端點在自己 commit 後呼叫 `res["after_commit"]()`；回滾／被拒絕 ⇒ 不執行）。還原派發時，同一勞報單的連結已存在 ⇒ 略過並註記；其他唯一鍵衝突 ⇒ `conflict:`。
