@@ -113,7 +113,7 @@ def test_delete_approved_entry_is_not_offered_for_payslips(client, su):
     imp = client.get("/api/recycle-bin/impact", params={"entity_type": "payslip", "entity_id": SLIP}, headers=su).json()
     assert imp["supported"] is False and "作廢" in imp["reason"]
     assert any(i["kind"] == "locked" and i["blocking"] for i in imp["impact"])
-    r = client.post("/api/recycle-bin/delete-approved", json={"entity_type": "payslip", "entity_id": SLIP, "confirm": True, "confirm_text": SLIP}, headers=su)
+    r = client.post("/api/recycle-bin/delete-approved", json={"entity_type": "payslip", "entity_id": SLIP, "confirm": True, "confirm_text": SLIP, "reason": "測試"}, headers=su)
     assert r.status_code == 409 and _row() is not None and _bin() == []
 
 

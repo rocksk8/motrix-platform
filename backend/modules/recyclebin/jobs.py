@@ -41,13 +41,13 @@ def run_daily(now=None) -> dict:
         out["reconciled"] = S.reconcile(conn)
         if out["reconciled"]:
             _audit("", "recyclebin.reconcile", "recycle_bin", "", "孤兒隔離檔搬回", {"folders": out["reconciled"]})
-        for bin_id in S.due_ids(conn, now.date().isoformat()):
+        for bin_id in S.due_ids(conn, now.isoformat(timespec="seconds")):
             try:
                 r = S._row(conn, bin_id)
                 label = "%s %s" % (r["entity_type"], r["entity_id"])
-                S.purge(conn, bin_id, by="system")
-                _audit("", "recyclebin.purge_auto", "recycle_bin", str(bin_id), label,
-                       {"entity_type": r["entity_type"], "entity_id": r["entity_id"], "deleted_at": r["deleted_at"], "purge_after": r["purge_after"]})
+                S.purge(conn, bin_id, by="system", audit=lambda c, x: S.audit_tx(
+                    c, None, "recyclebin.purge_auto", "recycle_bin", str(bin_id), label,
+                    {"entity_type": r["entity_type"], "entity_id": r["entity_id"], "deleted_at": r["deleted_at"], "purge_after": r["purge_after"]}))
                 out["purged"] += 1
             except Exception as e:                               # noqa: BLE001
                 out["failed"] += 1

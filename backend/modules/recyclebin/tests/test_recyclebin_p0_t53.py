@@ -160,7 +160,7 @@ def test_rbn2_delete_moves_rows_and_files_and_sets_thirty_days(who):
     snap = json.loads(row["snapshot_json"])
     assert snap["rows"]["rbn_doc"][0]["bank_account"] == "012345678901" and len(snap["rows"]["rbn_item"]) == 2
     assert row["file_count"] == 2 and row["via"] == "normal" and row["deleted_by"] == "u1"
-    assert row["purge_after"] == (datetime.now() + timedelta(days=30)).date().isoformat()
+    assert abs(datetime.fromisoformat(row["purge_after"]) - (datetime.now() + timedelta(days=30))) < timedelta(minutes=1), "精確 30 天（含時間）"
     assert RB.RETENTION_DAYS == 30
 
 

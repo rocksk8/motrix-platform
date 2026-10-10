@@ -170,7 +170,7 @@ def test_completion_note_round_trip_conflict_and_rules(client, who):
     assert _q("SELECT * FROM completion_notes WHERE note_no='CN-RBC-1'")[0] == before and os.path.isfile(full)
     _note("CN-RBC-2", "MQ-RBC-010", status="已核准", done="2026-10-02")
     assert client.delete("/api/completion-notes/CN-RBC-2", headers=su).status_code == 409           # 僅草稿（D1 不放寬）
-    body = {"entity_type": "completion_note", "entity_id": "CN-RBC-2", "confirm": True, "confirm_text": "CN-RBC-2"}
+    body = {"entity_type": "completion_note", "entity_id": "CN-RBC-2", "confirm": True, "confirm_text": "CN-RBC-2", "reason": "測試"}
     assert client.post("/api/recycle-bin/delete-approved", headers=ad, json=body).status_code == 403
     assert client.post("/api/recycle-bin/delete-approved", headers=su, json=body).status_code == 200
     d = client.get("/api/recycle-bin/%d" % _bin_rows()[-1]["id"], headers=su).json()
@@ -207,7 +207,7 @@ def test_quotation_non_draft_still_refused_and_approved_path_refuses_dependents(
     su, ad = who
     _quote("MQ-RBC-021", status="已核准")
     assert client.delete("/api/quotations/MQ-RBC-021", headers=su).status_code == 403
-    body = {"entity_type": "quotation", "entity_id": "MQ-RBC-021", "confirm": True, "confirm_text": "MQ-RBC-021"}
+    body = {"entity_type": "quotation", "entity_id": "MQ-RBC-021", "confirm": True, "confirm_text": "MQ-RBC-021", "reason": "測試"}
     assert client.post("/api/recycle-bin/delete-approved", headers=ad, json=body).status_code == 403
     _expense("MQ-RBC-021")
     r = client.post("/api/recycle-bin/delete-approved", headers=su, json=body)
@@ -274,7 +274,7 @@ def test_material_order_blocked_cases_keep_old_messages_and_approved_path(client
     finally:
         cn.close()
     assert out == [order] and rej and "不可刪除" in json.dumps(rej, ensure_ascii=False) and _bin_rows() == []
-    body = {"entity_type": "material_order", "entity_id": "MQ-RBC-031|mo-1", "confirm": True, "confirm_text": "MQ-RBC-031|mo-1"}
+    body = {"entity_type": "material_order", "entity_id": "MQ-RBC-031|mo-1", "confirm": True, "confirm_text": "MQ-RBC-031|mo-1", "reason": "測試"}
     assert client.post("/api/recycle-bin/delete-approved", headers=ad, json=body).status_code == 403
     _x("INSERT INTO case_material_payments (quote_no, item_id, status, created_at, updated_at) VALUES (?,?,?,?,?)", ("MQ-RBC-031", "mo-1", "待付款", "2026-10-01", "2026-10-01"))
     r = client.post("/api/recycle-bin/delete-approved", headers=su, json=body)
@@ -290,7 +290,7 @@ def test_approved_delete_and_restore_bump_updated_at_so_stale_forms_get_409(clie
     su, _ = who
     _material_case("MQ-RBC-033", "已核准")
     _x("UPDATE quotations SET updated_at='2026-10-01T00:00:00' WHERE quote_no='MQ-RBC-033'")
-    body = {"entity_type": "material_order", "entity_id": "MQ-RBC-033|mo-1", "confirm": True, "confirm_text": "MQ-RBC-033|mo-1"}
+    body = {"entity_type": "material_order", "entity_id": "MQ-RBC-033|mo-1", "confirm": True, "confirm_text": "MQ-RBC-033|mo-1", "reason": "測試"}
     assert client.post("/api/recycle-bin/delete-approved", headers=su, json=body).status_code == 200
     after_delete = _q("SELECT updated_at FROM quotations WHERE quote_no='MQ-RBC-033'")[0]["updated_at"]
     assert after_delete != "2026-10-01T00:00:00"
@@ -383,7 +383,7 @@ def test_approved_po_referenced_by_a_material_order_cannot_be_deleted(client, wh
     _x("UPDATE quotations SET data_json=? WHERE quote_no='MQ-RBC-043'", (json.dumps(d, ensure_ascii=False),))
     eid = _expense("MQ-RBC-043", status="已核准")
     _x("UPDATE case_extra_expenses SET kind='purchase_order', doc_code='PO-20261010-0001' WHERE id=?", (eid,))
-    body = {"entity_type": "extra_expense", "entity_id": str(eid), "confirm": True, "confirm_text": str(eid)}
+    body = {"entity_type": "extra_expense", "entity_id": str(eid), "confirm": True, "confirm_text": str(eid), "reason": "測試"}
     r = client.post("/api/recycle-bin/delete-approved", headers=su, json=body)
     assert r.status_code in (400, 409) and "材料申請" in r.text and _q("SELECT 1 FROM case_extra_expenses WHERE id=?", (eid,)) != []
 
@@ -396,7 +396,7 @@ def test_quotation_approved_delete_refuses_more_downstream_tables(client, who, t
     su, _ = who
     _quote("MQ-RBC-044", status="已核准")
     _x(sql)
-    body = {"entity_type": "quotation", "entity_id": "MQ-RBC-044", "confirm": True, "confirm_text": "MQ-RBC-044"}
+    body = {"entity_type": "quotation", "entity_id": "MQ-RBC-044", "confirm": True, "confirm_text": "MQ-RBC-044", "reason": "測試"}
     r = client.post("/api/recycle-bin/delete-approved", headers=su, json=body)
     assert r.status_code in (400, 409) and label in r.text and _q("SELECT 1 FROM quotations WHERE quote_no='MQ-RBC-044'") != []
 

@@ -102,7 +102,7 @@ def test_rules_not_relaxed_and_approved_path(client, who):
     su, ad = who
     _note("SN-RBS-3", status="已核准")
     assert client.delete("/api/shipping-notes/SN-RBS-3", headers=su).status_code == 409           # D1：仍然只有草稿
-    body = {"entity_type": "shipping_note", "entity_id": "SN-RBS-3", "confirm": True, "confirm_text": "SN-RBS-3"}
+    body = {"entity_type": "shipping_note", "entity_id": "SN-RBS-3", "confirm": True, "confirm_text": "SN-RBS-3", "reason": "測試"}
     assert client.post("/api/recycle-bin/delete-approved", headers=ad, json=body).status_code == 403
     _x("INSERT INTO stock_items (part_no, serial_no, shipping_note_no, status) VALUES ('P-RBS','SER-RBS','SN-RBS-3','shipped')")
     r = client.post("/api/recycle-bin/delete-approved", headers=su, json=body)

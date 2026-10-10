@@ -91,12 +91,12 @@ def bin_restore(bin_id: int, authorization: str = Header(None)):
     conn = get_db()
     try:
         try:
-            res = S.restore(conn, bin_id, user)
+            res = S.restore(conn, bin_id, user, audit=lambda c, x: S.audit_tx(
+                c, user, "recyclebin.restore", "recycle_bin", str(bin_id), "%s %s" % (x["entityType"], x["entityId"]),
+                {"entity_type": x["entityType"], "entity_id": x["entityId"], "renumbered": x["renumbered"], "notes": x["notes"]}))
         except RB.BinError as e:
             _audit(_tok(authorization), "recyclebin.restore_failed", "recycle_bin", str(bin_id), str(e)[:200], {"error": str(e)[:500]})
             raise _http(e)
-        _audit(_tok(authorization), "recyclebin.restore", "recycle_bin", str(bin_id), "%s %s" % (res["entityType"], res["entityId"]),
-               {"entity_type": res["entityType"], "entity_id": res["entityId"], "renumbered": res["renumbered"], "notes": res["notes"]})
         deleter = conn.execute("SELECT deleted_by FROM recycle_bin WHERE id=?", (bin_id,)).fetchone()
         _notify_superadmins(conn, user["username"], "recyclebin_restore", bin_id, res["label"],
                             "%s 已從暫存區還原：%s" % (user.get("display_name") or user["username"], res["label"]), [deleter["deleted_by"] if deleter else ""])
@@ -114,12 +114,12 @@ def bin_purge(bin_id: int, confirm: str = Query(""), authorization: str = Header
     conn = get_db()
     try:
         try:
-            res = S.purge(conn, bin_id, by=user["username"])
+            res = S.purge(conn, bin_id, by=user["username"], audit=lambda c, x: S.audit_tx(
+                c, user, "recyclebin.purge_manual", "recycle_bin", str(bin_id), "%s %s" % (x["entityType"], x["entityId"]),
+                {"entity_type": x["entityType"], "entity_id": x["entityId"], "deleted_at": x["deletedAt"]}))
         except RB.BinError as e:
             _audit(_tok(authorization), "recyclebin.purge_failed", "recycle_bin", str(bin_id), str(e)[:200], {"error": str(e)[:500]})
             raise _http(e)
-        _audit(_tok(authorization), "recyclebin.purge_manual", "recycle_bin", str(bin_id), "%s %s" % (res["entityType"], res["entityId"]),
-               {"entity_type": res["entityType"], "entity_id": res["entityId"], "deleted_at": res["deletedAt"]})
         _notify_superadmins(conn, user["username"], "recyclebin_purge", bin_id, res["label"],
                             "%s 已永久刪除暫存區項目：%s" % (user.get("display_name") or user["username"], res["label"]))
         return {"ok": True, "id": bin_id}
@@ -139,20 +139,29 @@ def bin_delete_approved(body: dict = Body(...), authorization: str = Header(None
         raise HTTPException(422, "需要二次確認：confirm=true 並輸入單據編號（confirm_text）")
     if RB.get_adapter(et) is None:
         raise HTTPException(404, "沒有這種單據的暫存區 adapter")
+    rsn = body.get("reason")
+    rsn = rsn.strip() if isinstance(rsn, str) else ""
+    if not rsn:
+        raise HTTPException(422, "刪除已核可的單據必須填寫原因（reason）")
     conn = get_db()
     try:
+        res = None
         try:
             with write_txn(conn):               # 讀快照前先拿寫鎖；區塊內任何例外 ⇒ rollback 並關連線
-                rsn = body.get("reason")
-                res = S.delete(conn, et, eid, user, rsn if isinstance(rsn, str) else "", approved=True)
+                res = S.delete(conn, et, eid, user, rsn, approved=True)
+                S.audit_tx(conn, user, "recyclebin.delete_approved", et, eid, "%s %s" % (et, eid),   # 稽核與刪除同一個交易
+                           {"bin_id": res["bin_id"], "purge_after": res["purge_after"], "children": len(res["children"]), "reason": rsn[:200]})
                 conn.commit()
-        except RB.BinError as e:
-            raise _http(e)
+        except BaseException as e:
+            if res is not None and callable(res.get("rollback_files")):
+                res["rollback_files"]()         # 資料列已隨交易 rollback；附件搬回原處
+            if isinstance(e, RB.BinError):
+                raise _http(e)
+            raise
+        res.pop("rollback_files", None)
         post = res.pop("after_commit", None)
         if post:
             post()                                          # commit 之後：擁有模組的後續動作（行事曆同步等），錯誤只記 log
-        _audit(_tok(authorization), "recyclebin.delete_approved", et, eid, "%s %s" % (et, eid),
-               {"bin_id": res["bin_id"], "purge_after": res["purge_after"], "children": len(res["children"])})
         _notify_superadmins(conn, user["username"], "recyclebin_delete_approved", res["bin_id"], "%s %s" % (et, eid),
                             "%s 把已核可的單據 %s %s 送進了暫存區（30 天內可還原）" % (user.get("display_name") or user["username"], et, eid))
         return res

@@ -216,7 +216,7 @@ def test_delete_approved_notifies_the_other_superadmins(client, make_user, who):
     su, ad, su_user = who
     other, _p = make_user(username="rb_su2", role="superadmin")
     _doc("N1", status="已核可")
-    r = client.post("/api/recycle-bin/delete-approved", json={"entity_type": ET, "entity_id": "N1", "confirm": True, "confirm_text": "N1"}, headers=su)
+    r = client.post("/api/recycle-bin/delete-approved", json={"entity_type": ET, "entity_id": "N1", "confirm": True, "confirm_text": "N1", "reason": "測試"}, headers=su)
     assert r.status_code == 200, r.text
     got = _q("SELECT username FROM notifications WHERE type='recyclebin_delete_approved'")
     names = [g["username"] for g in got]
@@ -309,7 +309,7 @@ def test_rbn19_delete_approved_endpoint_runs_the_hook_after_commit_and_hides_it_
     _HookAdapter.calls, _HookAdapter.boom = [], False
     monkeypatch.setitem(registry._LEGACY_PROVIDERS, (RB.CAP_ADAPTER, ET), _HookAdapter)
     _doc("H1", status="已核可")
-    r = client.post("/api/recycle-bin/delete-approved", json={"entity_type": ET, "entity_id": "H1", "confirm": True, "confirm_text": "H1"}, headers=su)
+    r = client.post("/api/recycle-bin/delete-approved", json={"entity_type": ET, "entity_id": "H1", "confirm": True, "confirm_text": "H1", "reason": "測試"}, headers=su)
     assert r.status_code == 200 and "after_commit" not in r.json() and "_hook" not in r.json()
     assert _HookAdapter.calls == [("delete", "H1", 0, "in_bin")]
 
