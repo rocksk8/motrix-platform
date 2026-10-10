@@ -1,5 +1,12 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-10（wip/t53-b5-rb-adapters；刪除暫存區 P1：案件模組 adapter）
+- **刪除先進暫存區（IP-RB1／IP-RB2）**：`DELETE /api/quotations/{no}`、`/api/quotations/{no}/extra-expenses/{id}`（額外支出／請購單／採購單／費用單據）、`/api/completion-notes/{no}`、報價單存檔 diff 內的材料申請刪除（`material_guard.py`），改呼叫 `recycle_bin.delete()`：資料列＋名下資料＋附件進暫存區，最高管理者 30 天內可還原；**刪除條件完全沿用原規則**（報價單／完工單只有草稿、額外支出只有草稿與已駁回、材料申請只有草稿／已退回，錯誤訊息與狀態碼不變）。回應不變（`{ok:true}`）；暫存區模組不在 ⇒ 照舊硬刪，回應多 `binned:false`＋`notice` 明說「無法還原」，稽核內容也註明。
+- 報價單 adapter 把名下的階段／拜訪／進度更新／行動事項／附件一併進同一筆暫存區、一起還原（原本只刪報價單那一列、名下資料成孤兒）；其他單獨存在的單據（額外支出、完工單、出貨單、派發、請款單…）**不連帶刪**。還原：單號被占用 ⇒ 衝突（不覆蓋）；整數主鍵被占用 ⇒ 配新 id；業務開發的轉建連結不會自動恢復（還原備註說明）。
+- 『刪除已核可』（superadmin、二次確認、可還原）：額外支出（已付款、已被採購單引用 ⇒ 拒絕）、完工單（回簽／保固列影響清單）、報價單（底下還有其他單據、已結案 ⇒ 明確拒絕並列出張數）、材料申請（有匯款申請紀錄 ⇒ 拒絕）。
+- 守門基線移除已接入項目（4 條路由、`case_extra_expenses`／`completion_notes`／`case_material_approvals` 的 DELETE FROM）；報價單存檔 diff 刪材料的 G-M1 靜態守門把 `recycle_adapter.py` 列為合法寫入者。
+- 測試：`tests/test_recycle_adapters_t53.py`（還原逐欄相等、附件回原位、規則不放寬、已核可入口、衝突／父層不在、暫存區缺席的硬刪＋說明）。
+
 ## 1.0.172 — 2026-10-10（wip/t52-ab-charity-quote）：公益捐款改『報價含稅 1%』（新基，預設關）＋精算頁可調管銷比率（僅最高管理者）（含稽核 05 修正；作者閘門修正）
 - **公益捐款基數**（使用者 2026-10-10）：新基 `charityBasis=total` ＝ `round_half_up(tot.total × 1%)`（報價含稅金額；不看直接毛利、虧損案照扣；下限 0 只設在含稅金額上）。只在新管銷口徑（formulaVer 2）生效，舊基（直接毛利 1%、虧損 0）逐位不變。唯一來源 `helpers/profit_rules.py`＋`static/profit-rules.js`（`charity(direct, total, basis)`、`quote_profit/settlement_profit` 加 `total`／`charity_basis`），黃金向量 +77 筆。
 - 設定：`charity_basis_mode`（direct｜total，預設 direct＝上線零行為變更）＋標記 `charity_migration_done`；有效條件＝overhead v2＋管銷標記＋公益標記＋mode total，缺一當 direct。`GET/PUT /api/overhead/settings` 增 `charityBasis/charityMode/charityMigrationDone`；切 total 要 `confirm:true` 且三條件俱備，切回 direct 刪標記，管銷退回 legacy 時公益基數一併強制退回 direct。
