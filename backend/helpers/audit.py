@@ -169,9 +169,12 @@ _PURGE_BATCH = 2000
 _PURGE_MAX_BATCHES = 25                 # 每次最多清 5 萬列；沒清完下次（每日／啟動）接著清，不一次卡住寫鎖
 
 
-def purge_old_notifications(now=None, days: int = NOTIFICATION_RETENTION_DAYS) -> int:
+def purge_old_notifications(now=None, days: int = None) -> int:
     """刪掉 `created_at` 早於 `days` 天前的站內通知（已讀、未讀都刪）。冪等、分批（每批短交易，不長時間握寫鎖）、有上限；回傳刪除列數並記 log。
     只動 `notifications`，不碰其他表；表不存在／例外只記 warning，不影響其他每日檢查。"""
+    if days is None:        # 第54班：天數由設定中心 `retention.notification_keep_days` 給（預設＝NOTIFICATION_RETENTION_DAYS）
+        from helpers import settings_groups, settings_registry as sr     # noqa: F401
+        days = sr.get('retention', 'notification_keep_days')
     cutoff = ((now or datetime.now()) - timedelta(days=days)).isoformat()
     total = 0
     conn = get_db()

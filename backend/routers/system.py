@@ -2313,7 +2313,14 @@ def set_backup_retention_setting(body: BackupRetentionBody, authorization: str =
                 raise HTTPException(400, f"{label} 需介於 0～3650 天之間（0 = 永久保留）")
         elif days < 1 or days > 3650:
             raise HTTPException(400, f"{label} 需介於 1～3650 天之間")
-    _set_setting("backup_retention", value)
+    # 第54班：稽核紀錄是法遵證據，新設定不得低於 365 天（只檢查這次送來的值；舊值不因別的欄位被改而擋住）
+    if "audit_log_keep_days" in sent and sent["audit_log_keep_days"] < 365:
+        raise HTTPException(400, "audit_log_keep_days 不可低於 365 天（稽核紀錄屬法遵證據）")
+    from helpers import settings_groups as _sg, settings_registry as _sr      # noqa: F401
+    try:
+        _sr.publish("retention", value, note="備份保留設定（舊端點）", user=actor["username"], reason="變更備份保留設定")
+    except _sr.SettingError as e:
+        raise HTTPException(400, str(e) + "：" + "；".join(p["message"] for p in e.problems))
     _monthly_label = ("永久保留" if value["cloud_monthly_keep_days"] <= 0
                       else f"{value['cloud_monthly_keep_days']}天")
     _audit(_tok(authorization), "settings.backup_retention.update", "settings", "backup_retention",

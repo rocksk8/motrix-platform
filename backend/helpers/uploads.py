@@ -42,6 +42,26 @@ _MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB／檔
 UPLOAD_LIMITS_BY_SUBFOLDER = {
     'case_extra_expense': {'max_files': 10, 'max_request_bytes': 50 * 1024 * 1024},
 }
+_DEFAULT_MAX_FILE_SIZE = _MAX_FILE_SIZE
+
+
+def limits_for(subfolder):
+    """該資料夾目前生效的數量／總量上限（第54班：值改由設定中心 `uploads` 群組給；上面兩個常數是程式預設與測試用的覆寫縫隙）。
+    只有 `UPLOAD_LIMITS_BY_SUBFOLDER` 有列的資料夾才有數量／總量上限（目前只有 case_extra_expense），其他資料夾回 `{}`。"""
+    base = UPLOAD_LIMITS_BY_SUBFOLDER.get(subfolder) or {}
+    if subfolder != 'case_extra_expense' or not base:
+        return dict(base)
+    from helpers import settings_groups, settings_registry as sr     # noqa: F401
+    g = sr.get_group('uploads')
+    return {'max_files': g['case_extra_expense_max_files'], 'max_request_bytes': g['case_extra_expense_max_request_mb'] * 1024 * 1024}
+
+
+def max_file_bytes():
+    """單檔上限（位元組）：`_MAX_FILE_SIZE` 被覆寫（測試）⇒ 用覆寫值；否則取設定中心 `uploads.max_file_mb`。"""
+    if _MAX_FILE_SIZE != _DEFAULT_MAX_FILE_SIZE:
+        return _MAX_FILE_SIZE
+    from helpers import settings_groups, settings_registry as sr     # noqa: F401
+    return sr.get('uploads', 'max_file_mb') * 1024 * 1024
 
 
 # ── 檔頭（magic bytes）檢查：副檔名白名單之外的第二道（NIGHT 計畫 line 161，2026-09-30）──────────────────────
@@ -172,7 +192,7 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
     if not files:
         raise HTTPException(400, "請至少選擇一個檔案")
 
-    limits = UPLOAD_LIMITS_BY_SUBFOLDER.get(subfolder) or {}
+    limits = limits_for(subfolder)
     max_files = limits.get('max_files')
     if max_files and int(existing_count or 0) + len(files) > max_files:
         raise HTTPException(400, f"每張單據最多 {max_files} 個附件（目前已有 {int(existing_count or 0)} 個，這次要加 {len(files)} 個）")
@@ -189,8 +209,9 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
         if ext not in allowed:
             raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 {allowed_label}）")
         raw = await upload.read()
-        if len(raw) > _MAX_FILE_SIZE:
-            raise HTTPException(400, f"檔案過大：{upload.filename}（單檔上限 20MB）")
+        file_cap = max_file_bytes()
+        if len(raw) > file_cap:
+            raise HTTPException(400, f"檔案過大：{upload.filename}（單檔上限 {file_cap // (1024 * 1024)}MB）")
         if not raw:
             raise HTTPException(400, f"檔案是空的：{upload.filename}")
         _check_upload_magic(upload.filename or '', ext, raw, subfolder, uploaded_by)

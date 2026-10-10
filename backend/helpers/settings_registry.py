@@ -155,7 +155,10 @@ def _legacy_values(conn, group):
 
 def _stored(conn, group):
     """資料庫裡的值（定義最新發布版優先，否則舊鍵）；沒有 ⇒ {}。"""
-    row = D.get(conn, KIND, group, SCOPE)
+    try:
+        row = D.get(conn, KIND, group, SCOPE)
+    except Exception:                               # noqa: BLE001 — 定義表還沒建（極舊庫／獨立執行的備份工作）⇒ 只看舊鍵
+        row = None
     if row is not None:
         body = row.get("body") or {}
         vals = body.get("values") if isinstance(body, dict) else None
@@ -192,7 +195,8 @@ def get_group(group, *, conn=None):
     if os.environ.get("MOTRIX_SETTINGS_DEFAULTS_ONLY") == "1":
         return _defaults(group)
     now = time.monotonic()
-    hit = _cache.get(group)
+    ck = (group, _db_id())
+    hit = _cache.get(ck)
     if conn is None and hit and now - hit[0] < _TTL:
         return dict(hit[1])
     own = conn is None
@@ -208,7 +212,7 @@ def get_group(group, *, conn=None):
         return dict(hit[1]) if hit else _defaults(group)
     if own:
         with _lock:
-            _cache[group] = (now, vals)
+            _cache[ck] = (now, vals)
     return dict(vals)
 
 
@@ -219,12 +223,18 @@ def get(group, field, *, conn=None):
     return vals[field]
 
 
+def _db_id():
+    import db
+    return str(getattr(db, "DB_PATH", ""))
+
+
 def invalidate(group=None):
     with _lock:
         if group is None:
             _cache.clear()
         else:
-            _cache.pop(group, None)
+            for k in [k for k in _cache if k[0] == group]:
+                del _cache[k]
 
 
 # --- 寫 ---------------------------------------------------------------

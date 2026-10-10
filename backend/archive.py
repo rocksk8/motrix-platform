@@ -61,7 +61,9 @@ _BACKUP_RETENTION_DEFAULT = {
 
 def _backup_retention() -> dict:
     """可調整的備份保留天數設定，供 _daily_backup()/_snapshot_sqlite() 讀取。"""
-    return {**_BACKUP_RETENTION_DEFAULT, **(_get_setting("backup_retention", {}) or {})}
+    from helpers import settings_groups as _sg, settings_registry as _sr      # noqa: F401  第54班：值改由設定登錄讀（預設＝_BACKUP_RETENTION_DEFAULT；舊鍵雙讀）
+    vals = _sr.get_group("retention")
+    return {k: vals[k] for k in _BACKUP_RETENTION_DEFAULT}
 
 # Google Drive for Desktop's drive letter is NOT stable across reboots/relogins
 # (observed switching G:<->H: repeatedly, see 2026-08-24 note in _ensure_archive_dirs).

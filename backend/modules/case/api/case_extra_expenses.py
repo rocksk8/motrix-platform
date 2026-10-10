@@ -46,7 +46,7 @@ from helpers.case_access import deny_case, require_case   # M01-O1：逐案拒�
 from helpers import row_access
 from helpers import recycle_bin                       # 第 53 班 P1：刪除先進暫存區（IP-RB2）
 from modules.case import recycle_adapter as _RA
-from helpers.uploads import purge_document_files, UPLOAD_LIMITS_BY_SUBFOLDER      # 草稿刪除時一併刪實體檔案（第44班）
+from helpers.uploads import purge_document_files, limits_for as _upload_limits_for      # 草稿刪除時一併刪實體檔案（第44班）
 from helpers.case_access import case_owner_readable   # AT-M1b：與附件提供者同一支
 from helpers.auth import user_has_module, has_finance_access, has_cashier_access
 from modules.case.recognition import normalize_date, COUNTED_EXTRA_STATUSES  # `AC2`；後者＝合計與營運報表同一條規則（32-Q6）
@@ -1189,7 +1189,7 @@ def _attached_count(row) -> int:
 
 def _cap_or_purge(new_files: list, current_count: int):
     """寫鎖內重讀後的最終數量檢查（上傳前的檢查是 check-then-act：同時兩個上傳都會過）。超過 ⇒ 刪掉剛存的實體檔案並 400。"""
-    cap = (UPLOAD_LIMITS_BY_SUBFOLDER.get("case_extra_expense") or {}).get("max_files")
+    cap = _upload_limits_for("case_extra_expense").get("max_files")
     if cap and current_count + len(new_files) > cap:
         purge_document_files(new_files)
         raise HTTPException(400, f"每張單據最多 {cap} 個附件（目前已有 {current_count} 個，這次要加 {len(new_files)} 個）")
