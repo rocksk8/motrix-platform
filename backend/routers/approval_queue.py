@@ -454,7 +454,8 @@ class ReassignIn(BaseModel):
 
 @router.post("/api/approval-queue/reassign")
 def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
-    """把某一筆待簽核轉給別人（限最高管理者）。
+    """把某一筆待簽核轉給別人（限最高管理者）。第 54 班規則：操作者與轉給的對象都不得是送審人；原簽核人與其他在職最高管理者都會收到通知；
+    稽核（`approval.reassign`）與換人在同一個交易裡寫（強制）；原因必填。
 
     只動**當層尚未簽核**的那個人：已經簽過的不能被換掉（那會讓簽核紀錄失真），
     後面幾層也不動（那是簽核流程設定的事，不是單筆處置）。沒有 `approval.reassign` 提供者的類型不支援
@@ -515,6 +516,12 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
         old = approvers[idx]
         if old.get("username") == to_username:
             raise HTTPException(400, "轉簽對象與原簽核人相同")
+        # 第 54 班（使用者裁示）：轉簽不能變成自核的後門——操作者不得是送審人、轉給的對象也不得是送審人（送審人不得自行核准自己送審的單據）
+        requester = str(appr.get("requestedBy") or "").strip()
+        if requester and user["username"] == requester:
+            raise HTTPException(403, "你是這張單的送審人，不能轉簽自己送審的單據。")
+        if requester and to_username == requester:
+            raise HTTPException(400, "不能把簽核轉給送審人本人（送審人不得自行核准自己送審的單據）。")
 
         now = datetime.now().isoformat()
         actor = user.get("display_name") or user["username"]
@@ -542,18 +549,34 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
         appr["tiers"] = tiers
 
         store.save(conn, row, appr, now)
+        # 第 54 班：**強制稽核**——與換人同一個交易（寫不進去 ⇒ 整個轉簽回滾），不再是 commit 之後吞錯誤的 `_audit`
+        label = body.id + "：" + (old.get("displayName") or old.get("username") or "") + " → " + (target["display_name"] or target["username"])
+        conn.execute(
+            "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
+            (now, user.get("id"), user.get("username") or "", user.get("display_name") or "", "approval.reassign", body.type, body.id, label,
+             json.dumps({"from": old.get("username"), "to": to_username, "reason": reason, "tier": ct + 1, "docType": body.type,
+                         "requestedBy": requester}, ensure_ascii=False),
+             "approval", (row["quoteNo"] or "") if "MQ-" in str(row["quoteNo"] or "") else "", ""))
+        supers = [r["username"] for r in conn.execute("SELECT username FROM users WHERE role='superadmin' AND active=1 ORDER BY id")]
         conn.commit()
     finally:
         conn.close()
 
-    _audit(_tok(authorization), "approval.reassign", body.type, body.id,
-           body.id + "：" + (old.get("displayName") or old.get("username") or "") + " → "
-           + (target["display_name"] or target["username"]),
-           {"from": old.get("username"), "to": to_username, "reason": reason,
-            "tier": ct + 1, "docType": body.type})
     # 被轉到的人要知道自己多了一張要簽的單，否則這張會靜靜卡在他的佇列裡
     _notify(to_username, "approval_request", body.id, row["quoteNo"] or body.id,
             actor + " 將「" + body.id + "」的簽核轉給你（原因：" + reason + "）")
+    # 第 54 班：原簽核人與其他在職最高管理者也要知道（否則簽核被拿走了，當事人和其他監督者都不知道）
+    seen = {user["username"], to_username}
+    note = "%s 將「%s」第 %d 層的簽核由 %s 轉給 %s（原因：%s）" % (
+        actor, body.id, ct + 1, old.get("displayName") or old.get("username") or "—", target["display_name"] or target["username"], reason)
+    for u in [old.get("username")] + supers:
+        if u and u not in seen:
+            seen.add(u)
+            try:
+                _notify(u, "approval_reassigned", body.id, row["quoteNo"] or body.id, note)
+            except Exception:                                    # noqa: BLE001 — 附帶動作
+                logger.exception("轉簽知會通知失敗（%s → %s）", body.id, u)
 
     return {"ok": True, "to": to_username,
             "toDisplay": target["display_name"] or target["username"],

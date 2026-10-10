@@ -57,17 +57,19 @@ def _user_id(username):
         conn.close()
 
 
-def _pending_voucher(client, hdr, approver):
-    """一張卡在 `approver` 身上的傳票（一層，手動挑人）。回 `(id, voucher_no)`。"""
+def _pending_voucher(client, hdr, approver, submitter=None):
+    """一張卡在 `approver` 身上的傳票（一層，手動挑人）。回 `(id, voucher_no)`。
+    第 54 班：轉簽的操作者不得是送審人 ⇒ 需要驗轉簽成功的題，用 `submitter`（另一位）建單與送審；`hdr` 只設流程。"""
     r = client.put("/api/settings/approval-flow/voucher", headers=hdr, json={
         "includeSubmitterManagerTier": False,
         "tiers": [{"approvers": [{"userId": _user_id(approver), "username": approver,
                                   "displayName": approver}]}]})
     assert r.status_code == 200, r.text[:200]
-    r = client.post(VOUCHERS, headers=hdr, json={"summary": "JV35", "lines": _LINES})
+    sub = submitter or hdr
+    r = client.post(VOUCHERS, headers=sub, json={"summary": "JV35", "lines": _LINES})
     assert r.status_code == 200, r.text[:200]
     vid, no = r.json()["id"], r.json()["voucher_no"]
-    r = client.post("%s/%s/submit" % (VOUCHERS, vid), headers=hdr)
+    r = client.post("%s/%s/submit" % (VOUCHERS, vid), headers=sub)
     assert r.status_code == 200, r.text[:200]
     return vid, no
 
@@ -93,7 +95,8 @@ def test_jv35_reassign_hands_the_tier_to_the_new_person_and_takes_it_from_the_ol
     su, sh = _login(client, make_user, "jv35a_su")
     old, oh = _login(client, make_user, "jv35a_old")
     new, nh = _login(client, make_user, "jv35a_new")
-    vid, no = _pending_voucher(client, sh, old)
+    _sub, subh = _login(client, make_user, "jv35a_sub")
+    vid, no = _pending_voucher(client, sh, old, submitter=subh)
 
     r = client.post("%s/%s/approve" % (VOUCHERS, vid), headers=nh)
     assert r.status_code == 403, "轉簽之前，新的人就按得動：%s %s" % (r.status_code, r.text[:200])
@@ -119,7 +122,8 @@ def test_jv35_reassign_records_history_and_notifies_the_new_approver(client, mak
     su, sh = _login(client, make_user, "jv35b_su")
     old, _oh = _login(client, make_user, "jv35b_old")
     new, _nh = _login(client, make_user, "jv35b_new")
-    vid, no = _pending_voucher(client, sh, old)
+    _sub, subh = _login(client, make_user, "jv35b_sub")
+    vid, no = _pending_voucher(client, sh, old, submitter=subh)
     assert _reassign(client, sh, no, new).status_code == 200
 
     conn = db.get_db()
@@ -214,7 +218,9 @@ def test_jv35_the_queue_shows_a_reassign_button_on_a_voucher(live_server, client
     make_user(username="jv35e_new", role="superadmin", modules=["cashier"])
     r = client.post("/api/auth/login", json={"username": su, "password": sp})
     sh = {"Authorization": "Bearer " + r.json()["token"]}
-    vid, no = _pending_voucher(client, sh, "jv35e_old")
+    su2, sp2 = make_user(username="jv35e_sub", role="superadmin", modules=["cashier"])
+    r2 = client.post("/api/auth/login", json={"username": su2, "password": sp2})
+    vid, no = _pending_voucher(client, sh, "jv35e_old", submitter={"Authorization": "Bearer " + r2.json()["token"]})
 
     browser = e2e_browser
     page = browser.new_page()

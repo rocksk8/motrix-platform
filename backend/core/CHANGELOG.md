@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-10（wip/t50-int；第 50 班）
+- **（併入）(next) — 2026-10-10（wip/t54-05-reassign-rules）：轉簽不能變成自核的後門（使用者裁示）**
+- L1 `routers/approval_queue.py::reassign_approval`（`POST /api/approval-queue/reassign`，所有 `approval.reassign` 提供者一體適用）：①操作者不得是送審人（403）②轉給的對象不得是送審人本人（400）③原簽核人與其他在職最高管理者也收到通知（新通知類型 `approval_reassigned`；新簽核人仍收 `approval_request`；操作者本人不收）④稽核 `approval.reassign` 與換人**同一個交易**寫入（強制；寫不進去 ⇒ 轉簽回滾），不再是 commit 之後吞錯誤的 `_audit`。原因必填、只動當層第一個未簽核人等既有規則不變。
+- 無 migration、無 helpers 介面變更。
+
 ## 1.127 — 2026-10-10（wip/t53b-int；ab 稽核修正 r5）
 - L1（新增，向下相容）：`helpers/recycle_bin.delete_scope()`——包住『delete() … commit』；區塊以例外結束時，把已搬進隔離區的附件搬回原處（呼叫端的後續步驟失敗時用）。`delete()` 在 scope 內自動登記結果。另宣告 `helpers/audit` 的 `_DETAIL_MAX`、`_derive_fields` 為 L1 公開介面（暫存區把稽核列寫進同一個交易）。
 - L1（新增，向下相容）：`helpers/recycle_bin.request_scope_begin／request_scope_end`——每個 HTTP 請求一個保險網（`main.py` 新增一個 `recycle_bin_request_scope` 中介層呼叫它們）：請求裡 `delete()` 搬進隔離區的附件，請求結束時暫存區資料列沒 commit ⇒ 搬回原處（涵蓋 `material_guard` 在報價存檔裡刪材料申請等沒有自己 commit 的路徑）。
