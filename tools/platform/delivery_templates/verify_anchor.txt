@@ -1,0 +1,1 @@
+`verify_package --expect-db-version 118`、V5、`final_drill`、`final_verify`：見定稿時填入。獨立稽核（node-39／1d／05／ab）全數 PASS。
