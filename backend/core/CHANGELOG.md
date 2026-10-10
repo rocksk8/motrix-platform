@@ -20,6 +20,7 @@
 - L1（新增，向下相容）：`helpers.perm`——中央檢查 `can(user, cap)`／`require(user, cap)`／`effective_caps`／`explain`，矩陣模型 `Matrix`（角色格＋個人允許／禁止）、`seed_from_legacy`、`compute`（純函式）。superadmin 直通；禁止優先；不可委派者忽略個人允許；預設矩陣＝由 legacy 推導的種子 ⇒ 與今天的判斷逐字相同（關卡 A：`tests/platform/test_perm_equivalence_gate_a.py`）。尚無任何端點使用；資料表來源、off／shadow／on 旗標、授權矩陣金標、權限頁在後續里程碑。
 - L1（新增，向下相容）：`helpers.perm`——中央檢查 `can(user, cap)`／`require(user, cap)`／`effective_caps`／`explain`，矩陣模型 `Matrix`（角色格＋個人允許／禁止）、`seed_from_legacy`、`compute`（純函式）。superadmin 直通；禁止優先；不可委派者忽略個人允許；預設矩陣＝由 legacy 推導的種子 ⇒ 與今天的判斷逐字相同（關卡 A：`tests/platform/test_perm_equivalence_gate_a.py`）。尚無任何端點使用；off／shadow／on 旗標、授權矩陣金標、權限頁在後續里程碑。
 - L1（里程碑 2，加法）：`helpers.perm` 新增 `Delegation`、`can_via`、`acting_as`、`invalidate`；矩陣來源改為提供者 `perm.matrix_source`（IP-PM1，M16 `permmatrix` 模組提供；缺席或讀取失敗 ⇒ 種子＝今天的行為）；代理（範圍＝能力或單據類型、委派人自己要有、不可再轉、不可委派者不經代理、個人禁止優先）。
+- L0／L1（加法，使用者白話規則）：`core.capabilities` 動作加 `menu`（共 19 個）與 `ACTION_INFO`（每個動作的白話名稱／說明）；能力宣告**必填** `desc`、`impact`（含中文），選填 `question`（含 {who}）、`recommended`、`presets`、`impact_calc`，缺或只有代碼／英文 ⇒ 拒絕；`collect_presets`／`all_presets`（模組宣告 `capability_presets`）。新 L1 `helpers.perm_text`：白話提問、角色／模組／動作名稱、`explain_text`、`sentence_*`、`risk_hint`（輸出無代碼、無「他／她」）。
 
 ## 1.128 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-05-reassign-rules）：轉簽不能變成自核的後門（使用者裁示）**
