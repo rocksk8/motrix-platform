@@ -85,6 +85,10 @@ def next_dispatch_code(conn, today=None) -> str:
     row = conn.execute("SELECT MAX(doc_code) FROM contractor_dispatches WHERE doc_code LIKE ? AND LENGTH(doc_code)=?",
                        (stem + "%", len(stem) + 4)).fetchone()
     last = int(row[0][-4:]) if row and row[0] else 0
+    from helpers import recycle_bin as _rb                                   # 第 53 班：暫存區裡的派發單號不重發（已寄出／列印的單號不能被新單取代，還原也不必換號）
+    taken = _rb.reserved_ids(conn, "contractor_dispatch")
+    while "%s%04d" % (stem, last + 1) in taken:
+        last += 1
     return "%s%04d" % (stem, last + 1)
 
 

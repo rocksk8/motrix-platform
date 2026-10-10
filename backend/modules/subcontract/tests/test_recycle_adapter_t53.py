@@ -382,3 +382,43 @@ def test_payslip_links_go_through_the_payroll_provider_and_degrade_without_it(cl
     bid = client.delete("/api/contractor-dispatches/%d" % did, headers=ad).json()["binId"]
     r = _restore(client, su, bid)
     assert r.status_code == 200 and _q("SELECT * FROM payslip_dispatch_links WHERE dispatch_id=?", (did,)) == []
+
+
+def test_dispatch_number_in_the_bin_is_reserved_so_a_new_dispatch_cannot_reuse_it(client, who):
+    """node-39 稽核：派發單號 DP-YYYYMMDD-NNNN 是『取現存最大號 + 1』，當天最新一張進暫存區後新單會拿到同號，還原只好換號（已寄出／列印的原單號被取代）。
+    現在：進暫存區時單號進快照 meta.codes，產生器跳過暫存區保留的號碼；還原後號碼原樣回來、不換號。"""
+    from modules.subcontract import dispatch_flow as flow
+    su, ad = who
+    day = "2031-10-01"
+    d1, _ = _dispatch(client, ad)
+    _x("UPDATE contractor_dispatches SET doc_code=? WHERE id=?", ("DP-20311001-0001", d1))
+    c = db.get_db()
+    try:
+        assert flow.next_dispatch_code(c, day) == "DP-20311001-0002"
+    finally:
+        c.close()
+    bid = client.delete("/api/contractor-dispatches/%d" % d1, headers=ad).json()["binId"]
+    c = db.get_db()
+    try:
+        assert _q("SELECT codes FROM recycle_bin WHERE id=?", (bid,))[0]["codes"] == "DP-20311001-0001", "單號進了暫存區的保留清單"
+        assert flow.next_dispatch_code(c, day) == "DP-20311001-0002", "最新一張（0001）在暫存區 ⇒ 不重發；沒有別的單 ⇒ 下一號是 0002"
+        c.execute("INSERT INTO contractor_dispatches (quote_no, vendor_id, status, doc_code, created_at, updated_at) VALUES ('MQ-RB53-001', NULL, 'draft', 'DP-20311001-0002', '2031-10-01', '2031-10-01')")
+        c.commit()
+        assert flow.next_dispatch_code(c, day) == "DP-20311001-0003", "現存 0002、暫存區保留 0001 ⇒ 0003（不倒退回 0001）"
+    finally:
+        c.close()
+    rr = _restore(client, su, bid)
+    assert rr.status_code == 200 and rr.json()["renumbered"] is False, rr.text
+    assert _row("contractor_dispatches", "id", d1)["doc_code"] == "DP-20311001-0001", "還原後原單號原樣回來，沒有被換號"
+    c = db.get_db()
+    try:
+        assert flow.next_dispatch_code(c, day) == "DP-20311001-0003", "已還原 ⇒ 保留解除，現存 0001／0002 ⇒ 0003"
+    finally:
+        c.close()
+    bid2 = client.delete("/api/contractor-dispatches/%d" % d1, headers=ad).json()["binId"]
+    assert client.delete("/api/recycle-bin/%s?confirm=永久刪除" % bid2, headers=su).status_code == 200
+    c = db.get_db()
+    try:
+        assert flow.next_dispatch_code(c, day) == "DP-20311001-0003", "永久刪除後保留解除（0001 變成空號但最大號仍是 0002，產生器不回頭補洞）"
+    finally:
+        c.close()
