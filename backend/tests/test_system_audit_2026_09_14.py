@@ -473,6 +473,9 @@ _SECRET_NAME_OK = {
     "totp_enabled",           # 布林旗標：有沒有啟用 2FA，不是金鑰
     "credential_id",          # Passkey 的公開識別碼（規格上就是可公開的）
     "public_key",             # 顧名思義
+    "token",                  # recycle_bin.token（第53班 P0）：刪除暫存區的隔離資料夾名（uuid hex），不是認證素材；
+                              # 沒有任何端點用它授權，只用來對應磁碟上的隔離資料夾
+    "group_token",            # recycle_bin.group_token：連帶刪除的一組單據共用的分組代碼，同上
     "bank_passbook_image",    # 存摺影像欄位，不是密碼；值本身已被
                               # _strip_inline_images() 換成佔位字串，見下方影像那題
 }

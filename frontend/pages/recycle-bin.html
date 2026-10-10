@@ -69,7 +69,7 @@
       </div>
 
       <div class="rb-bar">
-        <select x-model="f.status" @change="apply()" data-testid="rb-status-filter">
+        <select class="filter" x-model="f.status" @change="apply()" data-testid="rb-status-filter">
           <option value="in_bin">暫存中</option><option value="restore_failed">還原失敗</option><option value="restored">已還原</option>
           <option value="purged">已清除</option><option value="all">全部</option>
         </select>

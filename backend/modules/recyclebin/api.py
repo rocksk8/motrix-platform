@@ -22,7 +22,7 @@ router = APIRouter()
 PURGE_CONFIRM = "永久刪除"
 
 
-def _sa(authorization):
+def _require_sa(authorization):
     return _require_user(authorization, require_superadmin=True)
 
 
@@ -40,7 +40,7 @@ def _notify_superadmins(conn, actor, type_, ref, label, message, extra_users=())
 
 @router.get("/api/recycle-bin")
 def list_bin(status: str = "in_bin", entity_type: str = "", q: str = "", page: int = 1, size: int = 50, authorization: str = Header(None)):
-    _sa(authorization)
+    _require_sa(authorization)
     conn = get_db()
     try:
         return S.list_items(conn, status, entity_type, q.strip(), page, size)
@@ -50,7 +50,7 @@ def list_bin(status: str = "in_bin", entity_type: str = "", q: str = "", page: i
 
 @router.get("/api/recycle-bin/status")
 def bin_status(authorization: str = Header(None)):
-    _sa(authorization)
+    _require_sa(authorization)
     conn = get_db()
     try:
         return S.status(conn)
@@ -61,7 +61,7 @@ def bin_status(authorization: str = Header(None)):
 @router.get("/api/recycle-bin/impact")
 def bin_impact(entity_type: str = Query(...), entity_id: str = Query(...), authorization: str = Header(None)):
     """『刪除已核可』前的影響清單（已付款／已入獎金／已回簽…）；adapter 決定內容。"""
-    _sa(authorization)
+    _require_sa(authorization)
     ad = RB.get_adapter(entity_type)
     if ad is None:
         raise HTTPException(404, "沒有這種單據的暫存區 adapter")
@@ -75,7 +75,7 @@ def bin_impact(entity_type: str = Query(...), entity_id: str = Query(...), autho
 
 @router.get("/api/recycle-bin/{bin_id}")
 def bin_detail(bin_id: int, authorization: str = Header(None)):
-    _sa(authorization)
+    _require_sa(authorization)
     conn = get_db()
     try:
         return S.detail(conn, bin_id)
@@ -87,7 +87,7 @@ def bin_detail(bin_id: int, authorization: str = Header(None)):
 
 @router.post("/api/recycle-bin/{bin_id}/restore")
 def bin_restore(bin_id: int, authorization: str = Header(None)):
-    user = _sa(authorization)
+    user = _require_sa(authorization)
     conn = get_db()
     try:
         try:
@@ -108,7 +108,7 @@ def bin_restore(bin_id: int, authorization: str = Header(None)):
 @router.delete("/api/recycle-bin/{bin_id}")
 def bin_purge(bin_id: int, confirm: str = Query(""), authorization: str = Header(None)):
     """永久刪除一筆（附件與快照都刪，不能復原）。要帶 `confirm=永久刪除`（前端二次確認後送）。"""
-    user = _sa(authorization)
+    user = _require_sa(authorization)
     if confirm != PURGE_CONFIRM:
         raise HTTPException(422, "永久刪除需要二次確認（confirm=%s）" % PURGE_CONFIRM)
     conn = get_db()
@@ -131,7 +131,7 @@ def bin_purge(bin_id: int, confirm: str = Query(""), authorization: str = Header
 def bin_delete_approved(body: dict = Body(...), authorization: str = Header(None)):
     """superadmin 專用『刪除已核可』：進暫存區（可還原），不是硬刪。要 `confirm:true` 且 `confirm_text` 等於單據編號（二次確認）。
     哪些單據／狀態可以走這個入口由各 adapter 的 `can_delete_approved` 決定（P0 沒有任何 adapter ⇒ 一律 404）。"""
-    user = _sa(authorization)
+    user = _require_sa(authorization)
     et, eid = body.get("entity_type"), body.get("entity_id")
     et, eid = (et if isinstance(et, str) else ""), (eid if isinstance(eid, str) else str(eid) if isinstance(eid, int) and not isinstance(eid, bool) else "")
     ctext = body.get("confirm_text")
@@ -164,7 +164,7 @@ def bin_delete_approved(body: dict = Body(...), authorization: str = Header(None
 def bin_settings(body: dict = Body(...), authorization: str = Header(None)):
     """隔離目錄：空字串＝預設（安裝根目錄下的「資源回收筒」）；否則必須是樹外的絕對路徑（上一層存在，最後一層會建）。
     暫存區還有項目時不准改（會讓隔離檔失聯）。"""
-    user = _sa(authorization)
+    user = _require_sa(authorization)
     d = str(body.get("dir") or "").strip()
     conn = get_db()
     try:

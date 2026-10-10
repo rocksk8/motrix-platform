@@ -1,5 +1,10 @@
 # 刪除暫存區 更新紀錄
 
+## 1.0.4 — 2026-10-10（wip/t53b-int 整合修正 2）
+- `api.py`：內部守門 helper `_sa` 更名 `_require_sa`（系統稽核掃描器認 `_require*` 開頭的守門呼叫；行為不變：仍是 `_require_user(require_superadmin=True)`）。
+- `frontend/pages/recycle-bin.html`：狀態下拉標 `class="filter"`（看法類篩選標記守門）。
+- 備份匯出祕密欄位守門：`recycle_bin.token`／`group_token`（隔離資料夾名，不是認證素材）登記進 `_SECRET_NAME_OK` 並註明理由。
+
 ## 1.0.3 — 2026-10-10（wip/t53b-int 整合修正）
 - `frontend/pages/recycle-bin.html`：對話框 `max-height: 86vh` 改為 `calc(86vh / var(--fz,1))`（字級放大時不超出畫面；守門 `test_fz_no_raw_vh_is_left_in_the_frontend`）。純樣式，行為不變。
 

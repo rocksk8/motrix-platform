@@ -1,7 +1,7 @@
 {
   "key": "recyclebin",
   "name": "刪除暫存區",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "core": ">=1.0,<2.0",
   "license_key": "recyclebin",
   "permissions": [],
