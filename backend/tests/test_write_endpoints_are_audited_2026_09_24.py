@@ -80,6 +80,8 @@ EXEMPT = {
         "純試算：獎金分潤改比例／人員時即時重算（BN22），與存檔同一個 allocate()，不寫任何資料表",
     ("modules/netplan/api.py", "POST", "/api/network-plans-quick/pdf"):
         "即時產生 PDF 回傳下載，沒有資料表也不歸檔",
+    ("settings_center.py", "POST", "/api/settings-center/groups/{group}"):
+        "稽核在同一個交易內由 helpers/config_ledger.record 寫入（第54班：audit_log＋config_changes＋定義新版本同交易，動作 settings.<group>.update），端點本身不再另呼叫 _audit；失敗整筆回滾",
     ("system.py", "POST", "/api/audit-log/module-counts"):
         "純查詢：選單紅色數字的計數（舊端點，前端已改用 /api/reads/module-counts）",
     ("modules/payroll/api/bonus.py", "POST", "/awards/plan/{quote_no}"):

@@ -6,7 +6,8 @@
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
     ④寫入口只有 `publish()`：同一交易寫定義新版本＋變更明細（config_ledger）＋稽核＋（有舊鍵時）雙寫舊鍵；⑤讀取走 15 秒行程內快取，
-    `publish()` 之後本行程立即失效（多行程以 TTL 為準）；⑥環境變數 `MOTRIX_SETTINGS_DEFAULTS_ONLY=1` ⇒ 一律回程式預設（出事時的逃生口）。
+    `publish()` 之後本行程立即失效（多行程以 TTL 為準）；⑥風險欄位（`requires_pending`）的變更不立即生效：寫待生效明細（預設 24 小時，可撤銷），
+    讀取時到期即生效（`in_effect`），`materialize_due()` 再把到期值寫進定義版本；⑦環境變數 `MOTRIX_SETTINGS_DEFAULTS_ONLY=1` ⇒ 一律回程式預設（出事時的逃生口）。
 [契約題] backend/tests/platform/test_settings_registry_t54.py
 """
 import json
@@ -23,6 +24,7 @@ logger = logging.getLogger("motrix.settings")
 KIND = "setting_group"
 SCOPE = "company"
 _TTL = 15.0
+PENDING_HOURS = 24
 _TYPES = ("int", "float", "bool", "str")
 
 _GROUPS = {}                                   # group -> {"label", "fields": {name: SettingDef}, "sensitive", "risk", "legacy_key", "cross_check", "help"}
@@ -39,14 +41,15 @@ class SettingError(ValueError):
 class SettingDef:
     """一個設定欄位。`legacy`＝舊儲存位置（舊鍵 dict 裡的欄位名）；`clamp`＝讀取時夾到 [min, ...]（稽核保存期限那種「不可低於」）；
     `risk`＝none|ops|money|legal|security（高風險變更會通知其他最高管理者）。"""
-    __slots__ = ("key", "type", "default", "min", "max", "unit", "label", "help", "risk", "legacy", "clamp")
+    __slots__ = ("key", "type", "default", "min", "max", "unit", "label", "help", "risk", "legacy", "clamp", "requires_pending")
 
-    def __init__(self, key, type, default, *, min=None, max=None, unit="", label="", help="", risk="ops", legacy=None, clamp=False):
+    def __init__(self, key, type, default, *, min=None, max=None, unit="", label="", help="", risk="ops", legacy=None, clamp=False, requires_pending=False):
         if type not in _TYPES:
             raise ValueError("型別不合法：%r" % (type,))
         self.key, self.type, self.default = key, type, default
         self.min, self.max, self.unit, self.label, self.help = min, max, unit, label or key, help
         self.risk, self.legacy, self.clamp = risk, legacy, bool(clamp)
+        self.requires_pending = bool(requires_pending)
         if self.check(default):
             raise ValueError("預設值自己就不合法：%s=%r（%s）" % (key, default, self.check(default)))
 
@@ -68,7 +71,7 @@ class SettingDef:
 
     def meta(self):
         return {"key": self.key, "type": self.type, "default": self.default, "min": self.min, "max": self.max, "unit": self.unit,
-                "label": self.label, "help": self.help, "risk": self.risk, "clamp": self.clamp}
+                "label": self.label, "help": self.help, "risk": self.risk, "clamp": self.clamp, "requiresPending": self.requires_pending}
 
 
 def register_group(group, label, fields, *, sensitive=False, risk="ops", legacy_key=None, cross_check=None, help=""):
@@ -169,7 +172,22 @@ def _stored(conn, group):
     return _legacy_values(conn, group)
 
 
-def _effective(conn, group):
+def _due_pending(conn, group, now):
+    """已到時、尚未被寫進定義的待生效值（依申請先後；同欄位後者蓋前者）。只有群組含 `requires_pending` 欄位才查。"""
+    g = _g(group)
+    if not any(f.requires_pending for f in g["fields"].values()):
+        return []
+    from helpers import config_ledger as L
+    try:
+        rows = L.pending(conn, "setting:%s" % group)
+    except Exception:                               # noqa: BLE001 — 沒有明細表（極舊庫）⇒ 沒有待生效
+        return []
+    due = [r for r in rows if r["domain"] == "setting:%s" % group and r["field"] in g["fields"] and L.in_effect(r, now)]
+    due.sort(key=lambda r: r["id"])
+    return due
+
+
+def _effective(conn, group, now=None, overlay=True):
     g = _g(group)
     out = _defaults(group)
     for k, v in _stored(conn, group).items():
@@ -183,41 +201,44 @@ def _effective(conn, group):
             logger.warning("settings: %s.%s 的值 %r 不合法（%s），改用預設 %r", group, k, v, f.check(v), f.default)
         else:
             out[k] = int(v) if f.type == "int" else v
+    if overlay:
+        from datetime import datetime
+        for r in _due_pending(conn, group, now or datetime.now().isoformat(timespec="seconds")):
+            f = g["fields"][r["field"]]
+            if not f.check(r["new"]):
+                out[r["field"]] = r["new"]
     return out
 
 
-def get_group(group, *, conn=None):
-    """整組的有效值（程式預設 ＋ 已儲存的值）。永不丟例外。"""
-    try:
-        _g(group)
-    except KeyError:
-        raise
+def get_group(group, *, conn=None, now=None):
+    """整組的有效值（程式預設 ＋ 已儲存的值 ＋ 已到時的待生效值）。永不丟例外。`now`（ISO 字串）只給測試／預覽「某時間點」用，不走快取。"""
+    _g(group)                                       # 未登錄 ⇒ KeyError（程式錯誤，不吞）
     if os.environ.get("MOTRIX_SETTINGS_DEFAULTS_ONLY") == "1":
         return _defaults(group)
-    now = time.monotonic()
+    tick = time.monotonic()
     ck = (group, _db_id())
     hit = _cache.get(ck)
-    if conn is None and hit and now - hit[0] < _TTL:
+    if conn is None and now is None and hit and tick - hit[0] < _TTL:
         return dict(hit[1])
     own = conn is None
     try:
         c = conn if conn is not None else get_db()
         try:
-            vals = _effective(c, group)
+            vals = _effective(c, group, now)
         finally:
             if own:
                 c.close()
     except Exception:                               # noqa: BLE001 — 設定讀取不可拖垮呼叫端
         logger.warning("settings: 讀取群組 %s 失敗，改用快取或預設", group, exc_info=True)
         return dict(hit[1]) if hit else _defaults(group)
-    if own:
+    if own and now is None:
         with _lock:
-            _cache[ck] = (now, vals)
+            _cache[ck] = (tick, vals)
     return dict(vals)
 
 
-def get(group, field, *, conn=None):
-    vals = get_group(group, conn=conn)
+def get(group, field, *, conn=None, now=None):
+    vals = get_group(group, conn=conn, now=now)
     if field not in vals:
         raise KeyError("群組 %r 沒有欄位 %r" % (group, field))
     return vals[field]
@@ -272,9 +293,12 @@ def _risk_of(group, changed):
 
 
 def publish(group, values, *, note="", user="", reason="", ip="", conn=None, actor=None):
-    """唯一寫入口。`values`＝要改的欄位（部分即可）；合併目前有效值後整組發布成新版本。
-    同交易：定義新版本＋`config_changes`＋稽核（`settings.<group>.update`）＋舊鍵雙寫；沒有實質變更 ⇒ 不產生新版本（回 `{"changed": False}`）。
+    """唯一寫入口。`values`＝要改的欄位（部分即可）。
+    一般欄位：合併目前儲存值後整組發布成新版本，同交易寫 `config_changes`＋稽核（`settings.<group>.update`）＋舊鍵雙寫。
+    `requires_pending` 欄位：不立即生效——寫待生效明細（`PENDING_HOURS` 小時後，可撤銷，同欄位更早的待生效項標 superseded），讀取時到期即生效。
+    回 `{"changed": 一般欄位有無變更, "version"?, "values", "changes", "pending": [待生效項]}`；都沒有變更 ⇒ `{"changed": False, "pending": []}`。
     驗證不過 ⇒ SettingError（帶 problems）；有送審中的版本 ⇒ `core.definitions.DefinitionConflict`。"""
+    from datetime import datetime, timedelta
     from core.txn import begin_write
     from helpers import config_ledger as L
     g = _g(group)
@@ -286,24 +310,79 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
     began = False
     try:
         began = begin_write(c)
-        cur = _effective(c, group)
-        new = dict(cur, **values)
-        problems = validate_values(group, new)
+        base = _effective(c, group, overlay=False)
+        eff = _effective(c, group)
+        imm = {k: v for k, v in values.items() if not g["fields"][k].requires_pending}
+        pend = {k: v for k, v in values.items() if g["fields"][k].requires_pending}
+        new = dict(base, **imm)
+        problems = validate_values(group, dict(new, **pend))
         if problems:
             raise SettingError("設定未儲存（%d 個問題）" % len(problems), problems)
-        changes = [{"field": k, "old": cur[k], "new": new[k]} for k in g["fields"] if cur[k] != new[k]]
-        if not changes:
+        changes = [{"field": k, "old": base[k], "new": new[k]} for k in g["fields"] if base[k] != new[k]]
+        actor_ = actor if actor is not None else user
+        domain = "setting:%s" % group
+        result = {"changed": False, "values": eff, "pending": []}
+        if changes:
+            risk = _risk_of(group, [x["field"] for x in changes])
+            out = D.publish_direct(c, KIND, group, SCOPE, {"group": group, "values": new}, note or reason, user, commit=False)
+            L.record(c, domain, group, changes, reason or note, actor_, ip=ip, risk=risk, ref_version=out["version"],
+                     audit_action="settings.%s.update" % group, target_label=g["label"])
+            _write_legacy(c, group, new)
+            result.update(changed=True, version=out["version"], values=dict(eff, **new), changes=changes)
+        if pend:
+            when = (datetime.now() + timedelta(hours=PENDING_HOURS)).isoformat(timespec="seconds")
+            for r in L.pending(c, domain):
+                if r["domain"] == domain and r["field"] in pend:
+                    L.supersede(c, r["id"], actor_, "被較新的申請取代")
+            pchanges = [{"field": k, "old": eff[k], "new": v} for k, v in pend.items() if eff[k] != v]
+            if pchanges:
+                risk = _risk_of(group, [x["field"] for x in pchanges])
+                rec = L.record(c, domain, group, pchanges, reason or note, actor_, ip=ip, risk=risk, effective_at=when,
+                               audit_action="settings.%s.pending" % group, target_label=g["label"])
+                result["pending"] = [{"id": i, "field": x["field"], "new": x["new"], "effectiveAt": when} for i, x in zip(rec["ids"], pchanges)]
+        if not changes and not pend:
             if began:
                 c.rollback()
-            return {"changed": False, "values": cur}
-        risk = _risk_of(group, [x["field"] for x in changes])
-        out = D.publish_direct(c, KIND, group, SCOPE, {"group": group, "values": new}, note or reason, user, commit=False)
-        L.record(c, "setting:%s" % group, group, changes, reason or note, actor if actor is not None else user, ip=ip, risk=risk,
-                 ref_version=out["version"], audit_action="settings.%s.update" % group, target_label=g["label"])
-        _write_legacy(c, group, new)
+            return result
         c.commit()
         invalidate(group)
-        return {"changed": True, "version": out["version"], "values": new, "changes": changes}
+        return result
+    except Exception:
+        if began and c.in_transaction:
+            c.rollback()
+        raise
+    finally:
+        if own:
+            c.close()
+
+
+def materialize_due(conn=None, now=None):
+    """把已到時的待生效值寫進定義版本並標 activated（每日工作呼叫；漏跑也不影響效力——讀取時本來就套用到時的待生效值）。回處理的明細列數。"""
+    from datetime import datetime
+    from core.txn import begin_write
+    from helpers import config_ledger as L
+    now = now or datetime.now().isoformat(timespec="seconds")
+    own = conn is None
+    c = conn if conn is not None else get_db()
+    began, total = False, 0
+    try:
+        began = begin_write(c)
+        for group in list(_GROUPS):
+            due = _due_pending(c, group, now)
+            if not due:
+                continue
+            base = _effective(c, group, overlay=False)
+            new = dict(base)
+            for r in due:
+                new[r["field"]] = r["new"]
+            out = D.publish_direct(c, KIND, group, SCOPE, {"group": group, "values": new}, "待生效項到期生效", "system", commit=False)
+            _write_legacy(c, group, new)
+            total += len(L.activate_due(c, now, domain="setting:%s" % group))
+            invalidate(group)
+            logger.info("settings: 群組 %s 的 %d 項待生效值已生效（定義 v%s）", group, len(due), out["version"])
+        if began or own:
+            c.commit()
+        return total
     except Exception:
         if began and c.in_transaction:
             c.rollback()

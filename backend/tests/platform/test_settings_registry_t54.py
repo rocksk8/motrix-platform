@@ -108,3 +108,54 @@ def test_high_risk_notifies_other_superadmins_only(conn, make_user):
     conn.commit()
     who = {r[0] for r in conn.execute("SELECT username FROM notifications WHERE type='config_change'").fetchall()}
     assert "sa_other" in who and "sa_actor" not in who
+
+
+# --- API ---------------------------------------------------------------
+
+def _hdr(client, make_user, role="superadmin", name="sc_" ):
+    username, password = make_user(username=name + role, role=role)
+    r = client.post("/api/auth/login", json={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def test_api_anonymous_blocked(client):
+    for m, u in (("get", "/api/settings-center/groups"), ("get", "/api/settings-center/groups/retention"),
+                 ("post", "/api/settings-center/groups/retention"), ("get", "/api/settings-center/public?groups=uploads")):
+        assert getattr(client, m)(u).status_code in (401, 403), u
+
+
+def test_api_list_save_and_history(client, make_user):
+    h = _hdr(client, make_user)
+    r = client.get("/api/settings-center/groups", headers=h)
+    assert r.status_code == 200
+    assert {g["group"] for g in r.json()["groups"]} >= {"retention", "uploads"}
+    assert client.post("/api/settings-center/groups/uploads", json={"values": {"max_file_mb": 25}}, headers=h).status_code == 400   # 缺原因
+    bad = client.post("/api/settings-center/groups/retention", json={"values": {"audit_log_keep_days": 100}, "reason": "x"}, headers=h)
+    assert bad.status_code == 400
+    ok = client.post("/api/settings-center/groups/uploads", json={"values": {"max_file_mb": 25}, "reason": "測試"}, headers=h)
+    assert ok.status_code == 200 and ok.json()["changed"] is True
+    d = client.get("/api/settings-center/groups/uploads", headers=h).json()
+    assert d["values"]["max_file_mb"] == 25 and d["history"][0]["field"] == "max_file_mb" and d["history"][0]["reason"] == "測試"
+    assert client.get("/api/settings-center/groups/nope", headers=h).status_code == 404
+
+
+def test_api_public_visibility(client, make_user):
+    hs = _hdr(client, make_user)
+    ha = _hdr(client, make_user, role="admin")
+    assert client.get("/api/settings-center/public?groups=uploads", headers=ha).json()["groups"]["uploads"]["max_file_mb"] == 20
+    assert client.get("/api/settings-center/public?groups=retention", headers=ha).status_code == 403
+    assert client.get("/api/settings-center/public?groups=retention", headers=hs).status_code == 200
+    assert client.get("/api/settings-center/groups", headers=ha).status_code == 403
+
+
+def test_legacy_patch_floor_and_dual_write(client, make_user):
+    h = _hdr(client, make_user)
+    low = client.patch("/api/settings/backup-retention", json={"audit_log_keep_days": 100}, headers=h)
+    assert low.status_code == 400
+    ok = client.patch("/api/settings/backup-retention", json={"local_db_keep_days": 44}, headers=h)
+    assert ok.status_code == 200
+    got = client.get("/api/settings/backup-retention", headers=h).json()
+    assert got["local_db_keep_days"] == 44 and set(got) == {"local_db_keep_days", "cloud_daily_keep_days", "cloud_weekly_keep_days",
+                                                         "cloud_monthly_keep_days", "local_pre_update_keep", "audit_log_keep_days"}
+    assert client.get("/api/settings-center/groups/retention", headers=h).json()["values"]["local_db_keep_days"] == 44

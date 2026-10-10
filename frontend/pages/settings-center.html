@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>設定中心 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    .sc-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 32px 36px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .sc-card { max-width: 1100px; margin-top: 20px; border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+    .sc-card h2 { margin: 0 0 4px; font-size: 16px; }
+    .sc-help { color: var(--text-secondary); font-size: 12px; margin-bottom: 10px; }
+    .sc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .sc-table th, .sc-table td { padding: 7px 10px; border-bottom: 1px solid var(--border-light); text-align: left; }
+    .sc-table th { font-size: 11px; color: var(--text-secondary); font-weight: 600; }
+    .sc-tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--border-light); color: var(--text-secondary); margin-left: 6px; }
+    .sc-last { margin-top: 8px; font-size: 11px; color: var(--text-dim); }
+    @media (max-width: 767px) { .sc-main { margin-left: 0; padding: 20px 16px; } }
+  </style>
+</head>
+<body x-data="settingsCenterPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="sc-main">
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">系統設定</div>
+        <h1 class="pg__t">設定中心</h1>
+        <p class="pg__s">系統內可調整的數字與開關集中在這裡，每一項都有預設值、範圍與變更紀錄。群組由程式登錄，新增一組設定會自動出現在此頁。</p>
+      </div>
+    </div>
+    <div x-show="errMsg" class="sc-help" style="color:var(--danger)" x-text="errMsg"></div>
+    <template x-for="g in groups" :key="g.group">
+      <div class="sc-card" :data-group="g.group">
+        <h2><span x-text="g.label"></span><span class="sc-tag" x-show="g.sensitive">敏感</span></h2>
+        <div class="sc-help" x-text="g.help"></div>
+        <table class="sc-table">
+          <thead><tr><th>項目</th><th>目前值</th><th>預設</th><th>範圍</th></tr></thead>
+          <tbody>
+            <template x-for="f in (details[g.group] || [])" :key="f.key">
+              <tr>
+                <td x-text="f.label"></td>
+                <td><strong x-text="show(g.values[f.key], f)"></strong></td>
+                <td x-text="show(f.default, f)"></td>
+                <td x-text="range(f)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="sc-last" x-show="g.lastChange" x-text="g.lastChange ? ('最後變更：' + g.lastChange.at.replace('T', ' ') + '　' + g.lastChange.actor + (g.lastChange.reason ? '（' + g.lastChange.reason + '）' : '')) : ''"></div>
+      </div>
+    </template>
+  </main>
+
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+  <script>
+    function settingsCenterPage() {
+      return {
+        groups: [], details: {}, errMsg: '',
+        _initDone: false,
+        _hdr() {
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s.token || '') }
+        },
+        async init() {
+          if (this._initDone) return
+          this._initDone = true
+          const r = await fetch('/api/settings-center/groups', { headers: this._hdr() })
+          if (!r.ok) { this.errMsg = '讀取失敗：' + await r.text(); return }
+          this.groups = (await r.json()).groups || []
+          for (const g of this.groups) {
+            const d = await fetch('/api/settings-center/groups/' + encodeURIComponent(g.group), { headers: this._hdr() })
+            if (d.ok) this.details[g.group] = (await d.json()).fields || []
+          }
+        },
+        show(v, f) { return (typeof v === 'boolean' ? (v ? '開' : '關') : String(v)) + (f.unit ? ' ' + f.unit : '') },
+        range(f) {
+          if (f.type === 'bool' || f.type === 'str') return '—'
+          if (f.min != null && f.max != null) return f.min + '～' + f.max
+          if (f.min != null) return '至少 ' + f.min + '（無上限）'
+          if (f.max != null) return '至多 ' + f.max
+          return '—'
+        },
+      }
+    }
+  </script>
+</body>
+</html>

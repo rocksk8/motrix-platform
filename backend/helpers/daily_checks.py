@@ -37,6 +37,12 @@ def run_once(mode: str) -> list:
     except Exception:                         # noqa: BLE001
         _logger.exception("purge_old_notifications failed")
     try:
+        from helpers.settings_registry import materialize_due     # 設定中心：到期的待生效值寫進定義版本（漏跑不影響效力，讀取時本來就套用）
+        import helpers.settings_groups                           # noqa: F401
+        materialize_due()
+    except Exception:                         # noqa: BLE001
+        _logger.exception("settings materialize_due failed")
+    try:
         system_checks.run_all(prune=(mode == "daily"))
     except Exception:                         # noqa: BLE001
         _logger.exception("system_checks.run_all failed")

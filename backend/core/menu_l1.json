@@ -209,6 +209,13 @@
   },
   {
    "group": "system",
+   "href": "settings-center.html",
+   "label": "設定中心",
+   "order": 75,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
    "href": "legal-params.html",
    "label": "法規參數設定",
    "order": 80,
