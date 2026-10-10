@@ -21,6 +21,11 @@ def _approve(client, no, h, **body):
     return client.post("/api/payslips/%s/approve" % no, json=body, headers=h)
 
 
+def _x(sql, args=()):
+    from modules.payroll.tests.test_payslip_approval_t46 import _x as _xx
+    _xx(sql, args)
+
+
 def _x_deactivate(username):
     from modules.payroll.tests.test_payslip_approval_t46 import _x
     _x("UPDATE users SET active=0 WHERE username=?", (username,))
@@ -60,6 +65,7 @@ def test_other_superadmin_can_bypass_with_reason_audited_and_notified(client, ma
     assert last["action"] == "approve_bypass" and ua in last["comment"] and "出差中" in last["comment"]
     rows = _q("SELECT * FROM audit_log WHERE action='payslip.approve_bypass'")
     assert len(rows) == 1 and rows[0]["username"] == ub and rows[0]["target_id"] == "PS-203102-002"
+    assert rows[0]["ref_no"] == "PS-203102-002"                                       # 單號歷史搜尋靠 ref_no（與 `_audit` 同一個推導函式）
     d = json.loads(rows[0]["detail"])
     assert d["forApprover"] == ua and d["reason"] == "出差中，已電話確認" and d["requestedBy"] == ua
     got = sorted(r["username"] for r in _q("SELECT username FROM notifications WHERE type='payslip_approver_bypass' AND ref_id=?", ("PS-203102-002",)))
@@ -77,27 +83,47 @@ def test_requester_can_never_self_approve_even_with_a_reason(client, make_user):
     assert _status("PS-203102-003") == "待審核" and not _q("SELECT 1 FROM audit_log WHERE action='payslip.approve_bypass'")
 
 
-def test_two_person_tier_where_requester_is_first_pending_is_also_unstuck(client, make_user):
+def test_two_person_tier_chain_member_cannot_bypass_only_an_outsider_can(client, make_user):
     ua, ha = _su(client, make_user, "ps54_a")
     ub, hb = _su(client, make_user, "ps54_b")
+    ux, hx = _su(client, make_user, "ps54_x")
     _flow([ua, ub])                                                                   # 同層兩人、送審人排第一（B 要等 A 先簽）
     _insert_payslip("PS-203102-004")
     _submit(client, "PS-203102-004", ha)
-    assert "請填寫原因" in _approve(client, "PS-203102-004", hb).text
-    r = _approve(client, "PS-203102-004", hb, reason="A 無法簽核")
-    assert r.status_code == 200 and r.json()["status"] == "待審核"                    # 代 A 簽了 A 的格；B 自己那格還沒簽
-    r = _approve(client, "PS-203102-004", hb)
+    r = _approve(client, "PS-203102-004", hb, reason="A 無法簽核")                       # 1d 稽核：B 是鏈上的人 ⇒ 不能代 A 簽一格再簽自己那一格
+    assert r.status_code == 403 and _status("PS-203102-004") == "待審核" and not _q("SELECT 1 FROM audit_log WHERE action='payslip.approve_bypass'")
+    assert "請填寫原因" in _approve(client, "PS-203102-004", hx).text                    # 鏈外的 X：要原因
+    r = _approve(client, "PS-203102-004", hx, reason="A 是送審人")
+    assert r.status_code == 200 and r.json()["status"] == "待審核"                    # X 代 A 簽了 A 的格；B 自己那格還沒簽
+    r = _approve(client, "PS-203102-004", hb)                                         # B 照常簽自己的格
     assert r.status_code == 200 and r.json()["status"] == "已核准"
+    rows = _q("SELECT username FROM audit_log WHERE action='payslip.approve_bypass'")
+    assert [x["username"] for x in rows] == [ux]
 
 
-def test_two_tiers_first_is_requester_second_is_other(client, make_user):
+def test_two_tiers_chain_member_cannot_bypass_first_tier_outsider_can(client, make_user):
     ua, ha = _su(client, make_user, "ps54_a")
     ub, hb = _su(client, make_user, "ps54_b")
+    ux, hx = _su(client, make_user, "ps54_x")
     _flow([ua], [ub])
     _insert_payslip("PS-203102-005")
     _submit(client, "PS-203102-005", ha)
-    assert _approve(client, "PS-203102-005", hb, reason="代核第一層").json()["status"] == "待審核"
+    assert _approve(client, "PS-203102-005", hb, reason="代核第一層").status_code == 403    # B 是第二層簽核人：不能再代簽第一層
+    assert _approve(client, "PS-203102-005", hx, reason="代核第一層").json()["status"] == "待審核"
     assert _approve(client, "PS-203102-005", hb).json()["status"] == "已核准"          # 第二層 B 本來就是簽核人，不需要原因
+
+
+def test_active_delegate_of_a_chain_member_cannot_bypass(client, make_user):
+    ua, ha = _su(client, make_user, "ps54_a")
+    ub, hb = _su(client, make_user, "ps54_b")
+    ud, hd = _su(client, make_user, "ps54_d")
+    _flow([ua], [ub])
+    _x("INSERT INTO approval_delegates (delegator_username, delegate_username, start_date, end_date, active, created_by, created_at, updated_at)"
+       " VALUES (?,?,?,?,1,?,?,?)", (ub, ud, "2020-01-01", "2099-12-31", ub, "2026-01-01T00:00:00", "2026-01-01T00:00:00"))
+    _insert_payslip("PS-203102-011")
+    _submit(client, "PS-203102-011", ha)
+    r = _approve(client, "PS-203102-011", hd, reason="我是 B 的代理人，想代 A 簽")      # D 是鏈上 B 的有效代理人 ⇒ 等同鏈上的人
+    assert r.status_code == 403 and _status("PS-203102-011") == "待審核"
 
 
 def test_no_bypass_when_the_blocked_approver_is_not_the_requester(client, make_user):

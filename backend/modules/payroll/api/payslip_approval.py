@@ -17,7 +17,7 @@ from helpers import _audit, _get_setting, _require_user, _tok
 from helpers.dates import normalize_date
 from helpers.tiered_approval import (
     UnresolvedManagerError, approval_flow_setting_key, check_approve_permission, check_no_tier_self_approval,
-    check_reject_permission, register_doc_type, setting_to_active_tiers,
+    active_delegators_for, check_reject_permission, register_doc_type, setting_to_active_tiers,
 )
 from modules.payroll import payslip_notify as _pn
 
@@ -184,7 +184,10 @@ def _deadlock_bypass(conn, appr, tiers, ct, user, reason, code, msg):
         if r is None or not r["active"]:
             blocker = names[0]
     signed = {h.get("by") for h in (appr.get("history") or []) if h.get("action") in ("approve", "approve_bypass")}
-    if code != 403 or not blocker or user["username"] == requester or user["username"] == blocker or user["username"] in signed:
+    # 1d 稽核：代核人不得是這條簽核鏈上的任何簽核人，也不得是鏈上任何人目前有效的代理人——否則同層 [送審人 S, A] 時 A 代 S 簽一格、再簽自己那一格
+    # ＝一個人填滿兩格（雙人控管失效）。鏈外的另一位最高管理者才能代核。
+    in_chain = user["username"] in set(names) or bool(active_delegators_for(conn, user["username"]) & set(names))
+    if code != 403 or not blocker or user["username"] == requester or user["username"] == blocker or user["username"] in signed or in_chain:
         raise HTTPException(code, msg)
     reason = (reason or "").strip() if isinstance(reason, str) else ""
     if not reason:
@@ -294,12 +297,15 @@ def reject_payslip(slip_no: str, body: dict = Body(default={}), authorization: s
 
 
 def _audit_in_txn(conn, user, action, target_type, target_id, label, detail):
-    """**強制**稽核：寫在核准同一個交易裡（寫不進去 ⇒ 例外 ⇒ 整個核准回滾），不像 `_audit` 失敗只吞掉。"""
+    """**強制**稽核：寫在核准同一個交易裡（寫不進去 ⇒ 例外 ⇒ 整個核准回滾），不像 `_audit` 失敗只吞掉。
+    module／case_no／ref_no 與 `_audit` 同一個推導函式（單號歷史搜尋靠 ref_no）。"""
+    from helpers.audit import _derive_fields
+    d = _derive_fields(action, target_type, target_id, label, detail)
     conn.execute(
         "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code)"
         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
         (datetime.now().isoformat(), user.get("id"), user.get("username") or "", user.get("display_name") or "", action, target_type, target_id, label,
-         json.dumps(detail, ensure_ascii=False), (action or "").split(".", 1)[0], "", ""))
+         json.dumps(detail, ensure_ascii=False), d["module"], d["case_no"], d["ref_no"]))
 
 
 def _notify_bypass(slip_no, slip_date, user, bypass):
