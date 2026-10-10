@@ -1067,8 +1067,10 @@
    "BinUnavailable": "class",
    "CAP_ADAPTER": "const",
    "CAP_DELETE": "const",
+   "CAP_RESERVED": "const",
    "MASK": "const",
    "MAX_SNAPSHOT_BYTES": "const",
+   "MAX_SNAPSHOT_BYTES_ADMIN": "const",
    "RETENTION_DAYS": "const",
    "RestoreContext": "class",
    "RestoreContext.__init__": "def(self, files=…, user=…, group=…)",
@@ -1077,7 +1079,8 @@
    "available": "def()",
    "delete": "def(conn, entity_type, entity_id, user, reason=…, approved=…)",
    "get_adapter": "def(entity_type)",
-   "mask_obj": "def(obj, _key=…)"
+   "mask_obj": "def(obj, _key=…)",
+   "reserved_ids": "def(conn, entity_type=…)"
   },
   "helper:row_access": {
    "ADMIN_ROLES": "const",

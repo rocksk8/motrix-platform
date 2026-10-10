@@ -196,7 +196,7 @@ def test_rbn9_oversized_snapshot_is_refused_and_nothing_is_touched(monkeypatch, 
     rels = _doc()
     monkeypatch.setattr(RB, "MAX_SNAPSHOT_BYTES", 200)
     with pytest.raises(RB.BinError, match="too_large"):
-        _delete("D1", {"username": "u1", "role": "admin"})
+        _delete("D1", {"username": "u1", "role": "sales"})        # 一般使用者上限 5 MB（管理員較大，見 hardening 的 rbn9 題）
     assert _q("SELECT * FROM rbn_doc") and all(os.path.exists(_abs(r)) for r in rels) and not _q("SELECT * FROM recycle_bin")
 
 

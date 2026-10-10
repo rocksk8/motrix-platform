@@ -18,7 +18,7 @@
 - **RBN6.** 每日工作清除 `purge_after` 已到的項目（隔離檔刪除、快照清空、留墓碑），逐筆稽核 `recyclebin.purge_auto`；未到期的與已還原的不碰；有清除或磁碟水位超標 ⇒ 通知所有最高管理者。
 - **RBN7.** 列表與詳情的快照欄位遮罩敏感值（帳號、身分證、電話、信箱、地址、影像、簽名…）；還原用的原文不受影響。
 - **RBN8.** 呼叫端的交易回滾（隔離區有檔、資料庫沒有列）⇒ 每日工作 `reconcile` 把檔案搬回原路徑，不遺失、不覆蓋既有檔。
-- **RBN9.** 快照超過上限（5 MB）⇒ 拒絕進暫存區（`too_large`），單據與附件原封不動，不悄悄硬刪。
+- **RBN9.** 快照超過上限（一般使用者 5 MB、管理員／最高管理者 50 MB）⇒ 拒絕進暫存區（`too_large`），單據與附件原封不動，不悄悄硬刪。
 - **RBN10.** 永久刪除需要二次確認（`confirm=永久刪除`）；寫稽核 `recyclebin.purge_manual` 並通知其他最高管理者；隔離檔與快照一併刪除，只留墓碑。
 - **RBN11.** 隔離目錄只能被本模組的 `quarantine.py` 動檔案；目錄設定在暫存區有項目時不准改，且不可設在 uploads／backend／frontend 底下。
 
@@ -29,6 +29,7 @@
 - **RBN16.** 永久清除要驗證隔離資料夾真的刪乾淨：刪不掉（檔案被占用）⇒ 這一筆維持在暫存區（快照與清單不清）、回 409、稽核 `recyclebin.purge_failed`；每日工作同樣不可把刪不掉的標成已清除。
 - **RBN18.** 『刪除已核可』入口（`POST /api/recycle-bin/delete-approved`）直接呼叫通用 `service.delete`，**不會執行擁有模組刪除端點裡的領域後續動作**（例如清除該單據的站內通知、領域稽核動作名稱）；這些由 adapter 的 `delete_in_tx` 負責（P1 各 adapter 要把原端點的後續清理搬進去，或在 adapter 的 `after_delete` 擴充點補）。通用稽核 `recyclebin.delete_approved` 與通知其他最高管理者一定會做。
 - **RBN19.** Adapter 可實作 `after_commit(event, entity_id, snap, result)`（`delete`｜`restore`）：還原與『刪除已核可』由暫存區模組在**commit 之後**自動呼叫；一般刪除由擁有模組的端點在自己 commit 之後呼叫 `delete()` 回傳的 `result["after_commit"]()`。錯誤只記 log、不往外丟（資料已 commit）；回傳給前端的結果不含 hook。
+- **RBN20.** 暫存區保留中的單號可被單號產生器查到：`helpers.recycle_bin.reserved_ids(conn, entity_type)` ＝ in_bin／restore_failed 的 `entity_id` ＋ 快照 `meta.codes`（adapter 放單據代號）；已還原、已清除的不保留；暫存區模組不在 ⇒ 空集合。產生器（取現存最大號 + 1 的那些）要跳過這些號碼，避免最新一張進暫存區後號碼被重發、還原撞號。
 - **RBN17.** 隔離資料夾 `資源回收筒/` 在 `.gitignore` 內（隔離檔含個資，`git add -A` 不可帶走）；『刪除已核可』也通知其他最高管理者。
 
 ## 非目標
@@ -37,4 +38,4 @@
 
 ## 測試
 
-`backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py`（以合成 adapter 驗 RBN2～RBN11）、`test_recyclebin_hardening_t53.py`（RBN12～RBN19，稽核回歸題）、`backend/tests/platform/test_recyclebin_guards_t53.py`（三道守門）。
+`backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py`（以合成 adapter 驗 RBN2～RBN11）、`test_recyclebin_hardening_t53.py`（RBN12～RBN20，稽核回歸題）、`backend/tests/platform/test_recyclebin_guards_t53.py`（三道守門）。

@@ -312,3 +312,69 @@ def test_rbn19_delete_approved_endpoint_runs_the_hook_after_commit_and_hides_it_
     r = client.post("/api/recycle-bin/delete-approved", json={"entity_type": ET, "entity_id": "H1", "confirm": True, "confirm_text": "H1"}, headers=su)
     assert r.status_code == 200 and "after_commit" not in r.json() and "_hook" not in r.json()
     assert _HookAdapter.calls == [("delete", "H1", 0, "in_bin")]
+
+
+# ── RBN20 保留單號（單號產生器要跳過暫存區裡的號碼）；RBN9 管理員較大的上限 ─────────────────────────
+class _CodeAdapter(SynAdapter):
+    """快照 meta.codes 帶單據代號（entity_id 不是代號的單據，例：費用單據 PR／PO 號）。"""
+
+    def snapshot(self, conn, entity_id):
+        snap = super().snapshot(conn, entity_id)
+        snap["meta"] = {"codes": ["PR-202610-001", "PO-202610-001"]}
+        return snap
+
+
+def test_rbn20_reserved_ids_cover_entity_ids_and_meta_codes_only_while_in_the_bin(monkeypatch, client, who):
+    su, ad, su_user = who
+    monkeypatch.setitem(registry._LEGACY_PROVIDERS, (RB.CAP_ADAPTER, ET), _CodeAdapter)
+    cn = db.get_db()
+    assert RB.reserved_ids(cn, ET) == set()
+    cn.close()
+    _doc("R1")
+    _doc("R2")
+    r1, r2 = _delete("R1", su_user), _delete("R2", su_user)
+    cn = db.get_db()
+    assert RB.reserved_ids(cn, ET) == {"R1", "R2", "PR-202610-001", "PO-202610-001"}
+    assert RB.reserved_ids(cn, "other_type") == set() and RB.reserved_ids(cn, "") == RB.reserved_ids(cn, ET)
+    cn.close()
+    assert client.post("/api/recycle-bin/%d/restore" % r1["bin_id"], headers=su).status_code == 200
+    cn = db.get_db()
+    assert RB.reserved_ids(cn, ET) == {"R2", "PR-202610-001", "PO-202610-001"}, "已還原的不再保留"
+    cn.execute("UPDATE recycle_bin SET restore_status='restore_failed' WHERE id=?", (r2["bin_id"],))
+    cn.commit()
+    assert "R2" in RB.reserved_ids(cn, ET), "還原失敗仍留在暫存區 ⇒ 仍保留"
+    cn.close()
+    assert client.delete("/api/recycle-bin/%d?confirm=永久刪除" % r2["bin_id"], headers=su).status_code == 200
+    cn = db.get_db()
+    assert RB.reserved_ids(cn, ET) == set(), "永久刪除之後號碼釋放"
+    cn.close()
+
+
+def test_rbn20_reserved_ids_is_empty_when_the_module_is_absent_and_survives_bad_meta(monkeypatch, who):
+    su, ad, su_user = who
+    cn = db.get_db()
+    cn.execute("INSERT INTO recycle_bin (token, entity_type, entity_id, deleted_at, purge_after, snapshot_json) VALUES (?,?,?,?,?,?)",
+               ("3" * 32, "bad_meta", "B1", "2026-10-10T00:00:00", "2099-01-01", '{"meta": {"codes": "not-a-list"}}'))
+    cn.execute("INSERT INTO recycle_bin (token, entity_type, entity_id, deleted_at, purge_after, snapshot_json) VALUES (?,?,?,?,?,?)",
+               ("4" * 32, "bad_meta", "B2", "2026-10-10T00:00:00", "2099-01-01", "{broken"))
+    cn.commit()
+    assert RB.reserved_ids(cn, "bad_meta") == {"B1", "B2"}, "meta 壞掉不影響 entity_id 的保留"
+    monkeypatch.setattr(registry, "single_provider", lambda cap: None)
+    assert RB.reserved_ids(cn, "bad_meta") == set(), "暫存區模組不在 ⇒ 沒有保留號碼"
+    cn.close()
+
+
+def test_rbn9_admins_get_a_larger_snapshot_cap_than_ordinary_users(monkeypatch, who):
+    su, ad, su_user = who
+    monkeypatch.setattr(RB, "MAX_SNAPSHOT_BYTES", 200)
+    monkeypatch.setattr(RB, "MAX_SNAPSHOT_BYTES_ADMIN", 100000)
+    rels = _doc("BIG1")
+    with pytest.raises(RB.BinError, match="管理員可刪除到"):
+        _delete("BIG1", {"username": "sales1", "role": "sales"})
+    assert _q("SELECT * FROM rbn_doc") and all(os.path.exists(_abs(r)) for r in rels)
+    res = _delete("BIG1", {"username": "adm1", "role": "admin"})
+    assert res["bin_id"] and not _q("SELECT * FROM rbn_doc")
+    _doc("BIG2")
+    monkeypatch.setattr(RB, "MAX_SNAPSHOT_BYTES_ADMIN", 300)
+    with pytest.raises(RB.BinError, match="too_large"):
+        _delete("BIG2", su_user)

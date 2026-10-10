@@ -2,7 +2,7 @@
 """刪除暫存區（資源回收筒）的 L1 契約（第 53 班 P0；設計 docs/platform/plans/RECYCLE-BIN-DESIGN-T52.md、狀態 RECYCLE-BIN-P0-STATE-T53.md）。
 
 [單位] helper:recycle_bin    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] Adapter, BinError, BinUnavailable, CAP_ADAPTER, CAP_DELETE, MASK, MAX_SNAPSHOT_BYTES, RETENTION_DAYS, RestoreContext, adapters, available, delete, get_adapter, mask_obj
+[公開介面] Adapter, BinError, BinUnavailable, CAP_ADAPTER, CAP_DELETE, CAP_RESERVED, MASK, MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_BYTES_ADMIN, RETENTION_DAYS, RestoreContext, adapters, available, delete, get_adapter, mask_obj, reserved_ids
 [不變式] 這裡**不認識任何業務表、不碰檔案系統、不讀資料庫**：只定義『擁有模組 ⇄ recyclebin 模組』之間的契約（IP-RB1／IP-RB2，列車定號）。
          擁有模組只 import 本檔（L1）；絕不 import `modules.recyclebin`。recyclebin 模組不在 ⇒ `delete()` 回 None，呼叫端**照舊硬刪並明說**，
          不得靜默（缺席與『進了暫存區』長得不一樣）。
@@ -35,8 +35,10 @@ logger = logging.getLogger(__name__)
 
 CAP_ADAPTER = "recyclebin.adapter"
 CAP_DELETE = "recyclebin.delete"
+CAP_RESERVED = "recyclebin.reserved"
 RETENTION_DAYS = 30                    # 使用者 D4：固定 30 天，不可設定
-MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024   # 單筆快照上限；超過 ⇒ 拒絕進暫存區（BinError），不悄悄硬刪
+MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024         # 單筆快照上限（一般使用者）；超過 ⇒ 拒絕進暫存區（BinError），不悄悄硬刪
+MAX_SNAPSHOT_BYTES_ADMIN = 50 * 1024 * 1024  # 管理員（admin／superadmin）的上限：很大的草稿報價單仍要刪得掉
 
 #: 預設遮罩的欄位名稱（不分大小寫、駝峰／底線皆可，**子字串比對**——寧可多遮，不可漏）。看到 → 整個值（含巢狀 dict／list）換成 MASK；adapter 可覆寫 mask()。
 _SENSITIVE = re.compile(
@@ -137,6 +139,17 @@ class RestoreContext:
 def mask_obj(obj, _key: str = ""):
     """遮罩副本（不改原物件）。規則見 `_Masker`；adapter 預設的 `mask()` 就是它。"""
     return _Masker()(obj, _key)
+
+
+def reserved_ids(conn, entity_type: str = "") -> set:
+    """暫存區裡**還保留著**的單號：`restore_status` 為 in_bin／restore_failed 的列的 `entity_id`，再加上快照 `meta.codes`（字串清單，adapter 放單據代號用，
+    例：費用單據 PR／PO 號、材料申請 MO- 號——它們的 entity_id 不是代號）。`entity_type` 空 ⇒ 全部類型。
+    **單號產生器要跳過這些號碼**：否則『取現存最大號 + 1』會把剛進暫存區的最新一張的號碼再發出去，還原時撞號（外部已寄出的單號重複更糟）。
+    在呼叫端的交易內讀；暫存區模組不在 ⇒ 空集合（沒有保留的號碼）。"""
+    fn = registry.single_provider(CAP_RESERVED)
+    if fn is None:
+        return set()
+    return set(fn(conn, entity_type or ""))
 
 
 def available() -> bool:

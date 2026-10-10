@@ -52,8 +52,10 @@ def _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group_token, p
     if not isinstance(snap, dict) or not isinstance(snap.get("rows"), dict):
         raise RB.BinError("adapter %s 的快照格式不對（需要 {'rows': {...}}）" % entity_type)
     payload = json.dumps(snap, ensure_ascii=False, default=str)
-    if len(payload.encode("utf-8")) > RB.MAX_SNAPSHOT_BYTES:
-        raise RB.BinError("too_large: 這張單據的資料太大，無法進暫存區（上限 %d MB）" % (RB.MAX_SNAPSHOT_BYTES // (1024 * 1024)))
+    cap = RB.MAX_SNAPSHOT_BYTES_ADMIN if (user or {}).get("role") in ("admin", "superadmin") else RB.MAX_SNAPSHOT_BYTES
+    if len(payload.encode("utf-8")) > cap:
+        more = "" if cap == RB.MAX_SNAPSHOT_BYTES_ADMIN else "（管理員可刪除到 %d MB）" % (RB.MAX_SNAPSHOT_BYTES_ADMIN // (1024 * 1024))
+        raise RB.BinError("too_large: 這張單據的資料太大，無法進暫存區（上限 %d MB）%s" % (cap // (1024 * 1024), more))
     token = uuid.uuid4().hex
     try:
         manifest = Q.move_in(token, _files_of(snap))
@@ -127,6 +129,29 @@ def _run_hook(ad, event, entity_id, snap, result):
         ad.after_commit(event, entity_id, snap, result)
     except Exception:                                          # noqa: BLE001
         logger.exception("recyclebin after_commit(%s) %s %s failed", event, getattr(ad, "entity_type", "?"), entity_id)
+
+
+def reserved_ids(conn, entity_type="") -> set:
+    """provider `recyclebin.reserved`：暫存區保留中的單號（entity_id ＋ 快照 meta.codes）；見 helpers/recycle_bin.reserved_ids。"""
+    sql = "SELECT entity_id, CASE WHEN json_valid(snapshot_json) THEN json_extract(snapshot_json, '$.meta.codes') END AS codes FROM recycle_bin WHERE restore_status IN (?,?)"
+    args = list(LIVE)
+    if entity_type:
+        sql += " AND entity_type=?"
+        args.append(entity_type)
+    out = set()
+    try:
+        rows = conn.execute(sql, args).fetchall()
+    except Exception:                                          # noqa: BLE001 — 表還沒建（模組剛啟用、migration 未跑）⇒ 沒有保留號碼
+        return out
+    for r in rows:
+        out.add(str(r[0]))
+        try:
+            codes = json.loads(r[1]) if isinstance(r[1], str) else (r[1] or [])
+        except ValueError:
+            codes = []
+        if isinstance(codes, list):
+            out.update(str(c) for c in codes if c not in (None, ""))
+    return out
 
 
 def _row(conn, bin_id):

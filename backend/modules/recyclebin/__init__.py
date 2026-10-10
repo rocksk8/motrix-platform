@@ -19,5 +19,6 @@ MODULE = ModuleSpec(
     routers=[api.router],
     migrations=[(1, _m0001.up)],
     schedulers=[lambda: jobs.schedule_daily()],
-    providers={("recyclebin.delete", "recyclebin"): service.delete},      # 字面字串：整合點登記表守門（test_integration_points_registered）掃字面值，不認常數,
+    providers={("recyclebin.delete", "recyclebin"): service.delete,
+               ("recyclebin.reserved", "recyclebin"): service.reserved_ids},      # 字面字串：整合點登記表守門（test_integration_points_registered）掃字面值，不認常數,
 )

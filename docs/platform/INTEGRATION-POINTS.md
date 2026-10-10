@@ -1021,3 +1021,17 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 對方不在時 | 暫存區模組不在 ⇒ `delete()` 回 **None**，呼叫端照舊硬刪並在回應與稽核**明說**『未進暫存區』（缺席不可靜默） |
 | 契約版本 | 1 |
 | 守門 | 同 IP-RB1；另 `tests/platform/test_recyclebin_guards_t53.py` 的路由／`DELETE FROM`／直接刪檔三道基線 |
+
+## IP-RB3　`recyclebin.reserved`：暫存區保留中的單號（M15 recyclebin → 各擁有模組的單號產生器；單一提供者；暫定號，列車定號；2026-10-10，第 53 班 P0）
+
+單號產生器多是『取現存最大號 + 1』。最新一張單據進暫存區後，現存最大號變小，下一張會**重發同一個號碼**；還原時撞號（外部已寄出的單號重複更糟）。產生器要跳過暫存區保留的號碼。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M15 `modules/recyclebin/service.py::reserved_ids`（名稱 `recyclebin`） |
+| 使用方 | 各擁有模組的單號產生器（`next_entity_code`、`expense_forms.next_doc_code`、`material_approval.next_doc_code`、報價單編號…）：`helpers.recycle_bin.reserved_ids(conn, entity_type)` |
+| 形式 | provider，單一提供者；L1 包裝在 `helpers/recycle_bin.py`（呼叫端不直接取 provider） |
+| 回傳 | `set[str]`＝狀態 in_bin／restore_failed 的列的 `entity_id`，加上快照 `meta.codes`（adapter 在 `snapshot()["meta"]["codes"]` 放字串清單，供 entity_id 不是代號的單據）；`entity_type` 空 ⇒ 全部類型；已還原／已清除不保留 |
+| 對方不在時 | 暫存區模組不在 ⇒ 空集合（沒有保留號碼，行為同暫存區上線前） |
+| 契約版本 | 1 |
+| 守門 | `backend/modules/recyclebin/tests/test_recyclebin_hardening_t53.py::test_rbn20_*` |
