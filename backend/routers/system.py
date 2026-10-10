@@ -2318,7 +2318,7 @@ def set_backup_retention_setting(body: BackupRetentionBody, authorization: str =
         raise HTTPException(400, "audit_log_keep_days 不可低於 365 天（稽核紀錄屬法遵證據）")
     from helpers import settings_groups as _sg, settings_registry as _sr      # noqa: F401
     try:
-        _sr.publish("retention", value, note="備份保留設定（舊端點）", user=actor["username"], reason="變更備份保留設定")
+        _res = _sr.publish("retention", sent, note="備份保留設定（舊端點）", user=actor["username"], reason="變更備份保留設定", actor=actor)
     except _sr.SettingError as e:
         raise HTTPException(400, str(e) + "：" + "；".join(p["message"] for p in e.problems))
     _monthly_label = ("永久保留" if value["cloud_monthly_keep_days"] <= 0
@@ -2330,7 +2330,8 @@ def set_backup_retention_setting(body: BackupRetentionBody, authorization: str =
     notify_module_activity("系統設定", "變更備份保留天數", actor.get("display_name") or actor["username"],
                             f"每日{value['cloud_daily_keep_days']}天／週{value['cloud_weekly_keep_days']}天",
                             "notification-settings.html")
-    return {"ok": True}
+    # 縮短保存期限（會更早刪除資料）屬放寬：不立即生效，須另一位最高管理者核准並等確認期間（走設定中心的待生效清單）
+    return {"ok": True, "pending": _res.get("pending", []), "warnings": _res.get("warnings", [])}
 
 
 # ── 報價條款組（2026-09-14 使用者交辦）────────────────────────────────────────

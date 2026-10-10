@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""第 54 班 Train A：風險欄位的 24 小時待生效（requires_pending）＋部署零行為變更的凍結基準。"""
+"""第 54 班 Train A：風險欄位的 確認期間待生效（requires_pending）＋部署零行為變更的凍結基準。"""
 import json
 import os
 from datetime import datetime, timedelta
@@ -30,13 +30,13 @@ def conn(client):
     R.invalidate()
 
 
-def test_risky_field_waits_24h_then_materializes(conn):
+def test_risky_field_waits_confirm_period_then_materializes(conn):
     out = R.publish("zz_pending_t54", {"limit": 200}, reason="調高", user="admin", conn=conn)
     assert out["pending"] and out["changed"] is False
     assert R.get("zz_pending_t54", "limit", conn=conn) == 100                 # 還沒生效
     rows = L.pending(conn, "setting:zz_pending_t54")
     assert len(rows) == 1 and rows[0]["effective_at"] > datetime.now().isoformat()
-    later = (datetime.now() + timedelta(hours=25)).isoformat(timespec="seconds")
+    later = (datetime.now() + timedelta(days=8)).isoformat(timespec="seconds")
     assert R.get_group("zz_pending_t54", conn=conn, now=later)["limit"] == 200   # 讀取時判斷：到期即生效，不靠排程
     done = R.materialize_due(conn, now=later)
     conn.commit()
@@ -49,7 +49,7 @@ def test_cancel_pending(conn):
     cid = L.pending(conn, "setting:zz_pending_t54")[0]["id"]
     assert L.cancel(conn, cid, "admin", "撤銷") is True
     conn.commit()
-    later = (datetime.now() + timedelta(hours=48)).isoformat(timespec="seconds")
+    later = (datetime.now() + timedelta(days=9)).isoformat(timespec="seconds")
     assert R.get_group("zz_pending_t54", conn=conn, now=later)["limit"] == 100
 
 

@@ -31,8 +31,8 @@ def secgrp(client, make_user):
     R.invalidate()
 
 
-def _later(hours=25):
-    return (datetime.now() + timedelta(hours=hours)).isoformat(timespec="seconds")
+def _later(days=8):
+    return (datetime.now() + timedelta(days=days)).isoformat(timespec="seconds")
 
 
 def test_tightening_is_immediate_loosening_needs_second_person(secgrp):
@@ -47,7 +47,7 @@ def test_tightening_is_immediate_loosening_needs_second_person(secgrp):
     assert L.approve(c, cid, "sec_b")["ok"] is True
     assert L.approve(c, cid, "sec_b")["ok"] is False                            # 同一人不能投兩次
     c.commit()
-    assert R.get("zz_sec_t54", "max_mb", conn=c) == 10                          # 核准了但還沒滿 24 小時
+    assert R.get("zz_sec_t54", "max_mb", conn=c) == 10                          # 核准了但還沒滿確認期間
     assert R.get("zz_sec_t54", "max_mb", conn=c, now=_later()) == 100
 
 

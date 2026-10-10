@@ -18,6 +18,23 @@ def _auth(token):
     return {"Authorization": f"Bearer {token}"}
 
 
+def _settle_pending_retention():
+    """保存期限縮短屬放寬（第54班）：不立即生效。測試用：第二位核准後快轉到確認期間之後讓它生效。"""
+    from datetime import datetime, timedelta
+    from db import get_db
+    from helpers import config_ledger as L, settings_registry as R
+    c = get_db()
+    try:
+        for p in L.pending(c, "setting:retention"):
+            if p["approvals_required"]:
+                L.approve(c, p["id"], "settle_approver")
+        c.commit()
+        R.materialize_due(c, now=(datetime.now() + timedelta(days=8)).isoformat(timespec="seconds"))
+    finally:
+        c.close()
+    R.invalidate()
+
+
 def test_backup_retention_default_matches_policy(client):
     """未曾設定過時，_backup_retention() 直接回傳政策預設值，不需要先手動
     存一次設定才生效。"""
@@ -63,6 +80,7 @@ def test_patch_backup_retention_updates_and_persists(client, make_user):
               "cloud_weekly_keep_days": 365, "audit_log_keep_days": 365},
     )
     assert p.status_code == 200, p.text
+    _settle_pending_retention()
 
     g2 = client.get("/api/settings/backup-retention", headers=_auth(token))
     body = g2.json()
