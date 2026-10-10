@@ -208,8 +208,8 @@ def test_materialize_revalidates_against_edition_bounds(grp):
 
 def test_company_profile_page_tells_user_when_change_is_only_pending():
     """舊保存期限頁：縮短只是「已送出、N 天後生效」，不能顯示成「設定已儲存」；文字白話、不顯示代碼。"""
-    import os
-    html = open(os.path.join(os.path.dirname(__file__), "..", "..", "..", "frontend", "pages", "company-profile-settings.html"), encoding="utf-8").read()
+    from core import source_tree
+    html = source_tree.page_file("company-profile-settings.html").read_text(encoding="utf-8")
     i = html.index("async _saveSetting(")
     body = html[i:i + 2500]
     assert "d.pending" in body and "effectiveAt" in body                      # N 取自實際的待生效項
