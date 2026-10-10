@@ -316,8 +316,25 @@ def orphan_tokens(known: set) -> list:
     return out
 
 
+def existing_tokens(tokens) -> list:
+    """給定的 token 裡，隔離區實際還有資料夾的那些。"""
+    return [t for t in tokens if _token_ok(t) and os.path.isdir(bin_dir(t))]
+
+
+def _collision_free(dst: str, token: str) -> str:
+    """原路徑被占用時的替代檔名：`名稱.rb-<token前6碼>.副檔名`（仍重複就加序號）。"""
+    stem, ext = os.path.splitext(dst)
+    cand = "%s.rb-%s%s" % (stem, token[:6], ext)
+    k = 1
+    while os.path.exists(cand):
+        k += 1
+        cand = "%s.rb-%s-%d%s" % (stem, token[:6], k, ext)
+    return cand
+
+
 def restore_orphan(token: str) -> int:
-    """孤兒資料夾 ⇒ 檔案搬回原路徑（原路徑被占用的留在隔離區，不覆蓋）後移除資料夾。回搬回幾個檔。"""
+    """孤兒資料夾 ⇒ 檔案搬回原路徑後移除資料夾。原路徑被占用（同名檔又被上傳了）⇒ 不覆蓋，改搬到不衝突的檔名並記 log
+    （不再把資料夾永遠留在隔離區）。回搬回幾個檔。"""
     base = bin_dir(token)
     n = 0
     left = False
@@ -326,10 +343,13 @@ def restore_orphan(token: str) -> int:
             src = os.path.join(d, nm)
             rel = os.path.relpath(src, os.path.join(base, ROOT_UPLOADS)).replace(os.sep, "/")
             dst = _src_abs(ROOT_UPLOADS, rel)
-            if dst is not None and not os.path.exists(dst):
+            if dst is not None:
+                final = dst if not os.path.exists(dst) else _collision_free(dst, token)
                 try:
-                    _move(src, dst)
+                    _move(src, final)
                     n += 1
+                    if final != dst:
+                        logger.warning("孤兒隔離檔 %s 的原路徑已被占用，改存為 %s", dst, final)
                     continue
                 except OSError:
                     logger.exception("孤兒隔離檔搬回失敗：%s", src)

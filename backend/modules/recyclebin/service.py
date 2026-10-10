@@ -333,17 +333,16 @@ def purge(conn, bin_id, by="system", audit=None) -> dict:
             conn.rollback()
             logger.exception("recyclebin purge #%s audit failed", bin_id)
             raise RB.BinError("audit_failed: 稽核紀錄寫不進去，未清除：%s" % e.__class__.__name__)
-    try:
-        Q.remove(r["token"])                # 驗證資料夾真的刪乾淨；刪不掉就丟 OSError，這一筆維持在暫存區（不標已清除、不清快照）
-    except OSError as e:
-        conn.rollback()
-        raise RB.BinError("purge_blocked: 隔離檔刪不乾淨，這一筆仍留在暫存區：%s" % e)
     cur = conn.execute("UPDATE recycle_bin SET restore_status=?, snapshot_json='{}', files_manifest_json='[]', bytes=0, file_count=0, purged_at=?, purged_by=?"
                        " WHERE id=? AND restore_status IN (?,?)", (S_PURGED, _now().isoformat(), by, bin_id, S_IN_BIN, S_FAILED))
     if cur.rowcount != 1:
         conn.rollback()
         raise RB.BinError("這一筆的狀態剛被改變，請重新整理後再試")
-    conn.commit()
+    conn.commit()                           # 先 commit 再刪檔：commit 失敗時檔案還在、這一筆仍可還原；不會出現『列還在、檔案已不見』
+    try:
+        Q.remove(r["token"])
+    except OSError as e:                    # 刪不掉（防毒鎖檔…）⇒ 這一筆已是墓碑；殘留資料夾由每日 reconcile 再刪（只記 log，不回報失敗）
+        logger.warning("recyclebin: 已清除 #%s 的隔離資料夾 %s 暫時刪不掉，稍後 reconcile 再試：%s", bin_id, r["token"], e)
     return _summary(_row(conn, bin_id))
 
 
@@ -362,6 +361,13 @@ def reconcile(conn) -> int:
     """孤兒隔離資料夾（呼叫端交易回滾／當機）⇒ 檔案搬回原路徑。回處理幾個資料夾。"""
     known = {r[0] for r in conn.execute("SELECT token FROM recycle_bin").fetchall()}
     n = 0
+    purged = [r[0] for r in conn.execute("SELECT token FROM recycle_bin WHERE restore_status=?", (S_PURGED,)).fetchall()]
+    for tok in Q.existing_tokens(purged):                           # 已清除（墓碑）的列，隔離資料夾卻還在（當時刪不掉）⇒ 再刪一次，不搬回
+        try:
+            Q.remove(tok)
+            n += 1
+        except Exception:                                          # noqa: BLE001
+            logger.exception("recyclebin reconcile purged leftover %s failed", tok)
     for tok in Q.orphan_tokens(known):
         try:
             Q.restore_orphan(tok)

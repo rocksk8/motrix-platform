@@ -169,24 +169,46 @@ def test_rbn15_move_in_keeps_the_folder_when_the_undo_fails(monkeypatch, who):
 
 
 # ── RBN16 清除要驗證真的刪乾淨 ────────────────────────────────────────────────────────
-def test_rbn16_purge_that_cannot_delete_the_files_stays_live_and_is_audited(monkeypatch, client, who):
+def test_rbn16_purge_commits_first_and_a_stuck_folder_is_removed_by_reconcile(monkeypatch, client, who):
+    """第 53 班 R5：先 commit 再刪檔——檔案刪不掉（被占用）時這一筆已是墓碑（不會出現『列還在、檔案已不見』），殘留資料夾由 reconcile 再刪。"""
     su, ad, su_user = who
     _doc()
     res = _delete("D1", su_user)
+    real_rmtree = shutil.rmtree
     monkeypatch.setattr(shutil, "rmtree", lambda *a, **k: None)                 # 模擬檔案被占用、刪不掉
     r = client.delete("/api/recycle-bin/%d?confirm=永久刪除" % res["bin_id"], headers=su)
-    assert r.status_code == 409 and "刪不乾淨" in r.text, r.text
+    assert r.status_code == 200, r.text
     row = _q("SELECT restore_status, snapshot_json, files_manifest_json FROM recycle_bin WHERE id=?", res["bin_id"])[0]
-    assert row["restore_status"] == "in_bin" and row["snapshot_json"] != "{}" and json.loads(row["files_manifest_json"]), "快照與清單不可清掉"
-    assert os.path.isdir(Q.bin_dir(res["token"])) and _audits("recyclebin.purge_failed")
+    assert row["restore_status"] == "purged" and row["snapshot_json"] == "{}" and _audits("recyclebin.purge_manual")
+    assert os.path.isdir(Q.bin_dir(res["token"])), "資料夾暫時刪不掉"
+    monkeypatch.setattr(shutil, "rmtree", real_rmtree)                           # 檔案不再被占用（不用 undo()：它會連 env 的隔離區暫存設定一起還原）
     cn = db.get_db()
-    cn.execute("UPDATE recycle_bin SET purge_after='2000-01-01' WHERE id=?", (res["bin_id"],))
-    cn.commit()
-    cn.close()
-    out = jobs.run_daily()
-    assert out["purged"] == 0 and out["failed"] == 1, "每日工作也不可以把刪不掉的標成已清除"
-    assert _q("SELECT restore_status FROM recycle_bin WHERE id=?", res["bin_id"])[0]["restore_status"] == "in_bin"
-    monkeypatch.undo()
+    try:
+        assert S.reconcile(cn) >= 1
+    finally:
+        cn.close()
+    assert not os.path.exists(Q.bin_dir(res["token"])), "reconcile 把已清除那一筆殘留的資料夾刪掉（不是搬回）"
+
+
+def test_restore_orphan_with_an_occupied_destination_uses_a_collision_safe_name(who):
+    """原路徑被同名新檔占用 ⇒ 不覆蓋、不把資料夾永遠留在隔離區：改存為不衝突的檔名。"""
+    su, ad, su_user = who
+    rels = _doc("O1", nfiles=1)
+    res = _delete("O1", su_user)
+    with open(_abs(rels[0]), "w", encoding="utf-8") as f:                       # 同名檔又被上傳了
+        f.write("新檔")
+    cn = db.get_db()
+    try:
+        cn.execute("DELETE FROM recycle_bin WHERE id=?", (res["bin_id"],))      # 變成孤兒資料夾
+        cn.commit()
+    finally:
+        cn.close()
+    assert Q.restore_orphan(res["token"]) == 1
+    assert open(_abs(rels[0]), encoding="utf-8").read() == "新檔", "不覆蓋既有檔"
+    stem, ext = os.path.splitext(_abs(rels[0]))
+    saved = [n for n in os.listdir(os.path.dirname(_abs(rels[0]))) if ".rb-" in n]
+    assert len(saved) == 1 and open(os.path.join(os.path.dirname(_abs(rels[0])), saved[0]), encoding="utf-8").read().startswith("內容")
+    assert not os.path.exists(Q.bin_dir(res["token"])), "資料夾不再永遠留著"
 
 
 # ── RBN17 .gitignore ─────────────────────────────────────────────────────────────────

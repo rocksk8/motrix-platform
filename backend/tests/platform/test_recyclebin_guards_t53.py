@@ -376,3 +376,42 @@ def test_recyclebin_own_purge_route_is_baselined_not_skipped():
     routes = scan_routes(product_files())
     key = "modules/recyclebin/api.py::bin_purge::DELETE /api/recycle-bin/{bin_id}"
     assert routes.get(key) is False and _baseline()["routes"][key].startswith("exempt:")
+
+
+# ── 第 53 班 R5：delete_scope 只能用在一般 `def` 端點 ───────────────────────────────────────────
+# delete_scope 用 threading.local 記「這個區塊內的刪除」；`async def` 端點在事件迴圈執行緒上跑，多個請求交錯 ⇒ 登記會串到別的請求。
+def _async_funcs_using_delete_scope(src: str) -> list:
+    out = []
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.AsyncFunctionDef):
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Call):
+                    f = sub.func
+                    if (isinstance(f, ast.Attribute) and f.attr == "delete_scope") or (isinstance(f, ast.Name) and f.id == "delete_scope"):
+                        out.append(node.name)
+                        break
+    return out
+
+
+def _sync_funcs_using_delete_scope(src: str) -> list:
+    out = []
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.FunctionDef):
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute) and sub.func.attr == "delete_scope":
+                    out.append(node.name)
+                    break
+    return out
+
+
+def test_delete_scope_is_never_used_inside_an_async_endpoint():
+    bad = {rel: _async_funcs_using_delete_scope(src) for rel, src in product_files().items() if "delete_scope" in src}
+    bad = {k: v for k, v in bad.items() if v}
+    assert not bad, "delete_scope 不可用在 async def 端點（threading.local 會串到別的請求）：%s" % bad
+
+
+def test_the_delete_scope_scanner_sees_both_kinds_and_the_endpoints_use_it():
+    assert _async_funcs_using_delete_scope("async def f():\n    with recycle_bin.delete_scope():\n        pass\n") == ["f"], "正對照：抓得到 async 誤用"
+    assert _async_funcs_using_delete_scope("def f():\n    with recycle_bin.delete_scope():\n        pass\n") == []
+    users = [rel for rel, src in product_files().items() if "delete_scope" in src and _sync_funcs_using_delete_scope(src)]
+    assert len(users) >= 9, "掃描器要看得到現有的刪除端點（基數檢查）：%s" % users

@@ -463,3 +463,27 @@ def test_caller_failure_after_delete_returns_the_files(client, who, monkeypatch)
     assert _q("SELECT 1 FROM quotations WHERE quote_no='MQ-RBC-090'") and _q("SELECT 1 FROM case_extra_expenses WHERE id=?", (eid,))
     assert _bin_rows() == [] and _quarantine_is_empty()
 
+
+
+def test_quotation_put_that_fails_after_the_material_gate_leaves_the_order_and_no_stuck_files(client, who, monkeypatch):
+    """報價存檔（PUT）裡材料申請被刪（material_guard → delete()），之後的步驟丟例外 ⇒ 請求保險網搬回、單據與審核單都還在。"""
+    from modules.case.api import quotations as QA
+    su, _ = who
+    order = _material_case("MQ-RBC-095", "草稿")
+    _x("UPDATE quotations SET status='草稿' WHERE quote_no='MQ-RBC-095'")        # 已送出的單被狀態鎖擋在最前面，走不到材料閘
+    row = _q("SELECT data_json FROM quotations WHERE quote_no='MQ-RBC-095'")[0]
+    data = json.loads(row["data_json"])
+    data["caseRecord"]["materialOrders"] = []
+    data["caseRecord"]["materials"] = []
+    appr = _q("SELECT * FROM case_material_approvals")
+    data["caseRecord"]["stages"] = [{"label": "施工", "sortOrder": 1}]                 # 有 stages 才會走到下面被打壞的同步步驟
+    monkeypatch.setattr(QA, "_sync_json_stages_to_table", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("later step failed")))
+    from helpers import recycle_bin as _RB
+    calls = []
+    _orig = _RB.delete
+    monkeypatch.setattr(_RB, "delete", lambda *a, **k: calls.append(a[1]) or _orig(*a, **k))
+    _call(client.put, "/api/quotations/MQ-RBC-095", json={"status": "草稿", "data": data}, headers=su)
+    assert calls == ["material_order"], "PUT 真的走到了材料申請的刪除（否則這題是空測）"
+    assert _bin_rows() == [] and _quarantine_is_empty()
+    got = json.loads(_q("SELECT data_json FROM quotations WHERE quote_no='MQ-RBC-095'")[0]["data_json"])["caseRecord"]["materialOrders"]
+    assert got == [order] and _q("SELECT * FROM case_material_approvals") == appr, "整筆回到存檔前"
