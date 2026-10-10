@@ -26,6 +26,17 @@
 
 **仍未裁示**（等財務或使用者）：大額付款的門檻數字／是否分單據類型／累計規則（§4.5）；傳票單號長度上限（T100／會計師，§3.5）；假日曆匯入人與『公司自訂休日』層（§3.2）；第一批政策生效日的收編項目（`dispatch_cost_taxed`、`po_required`、報表預設口徑，§2.1）。
 
+## 0.6 核心規則（使用者 2026-10-10）：做框架模組，不替管理者鎖死內容
+
+> 「從框架模組開發；不要用太多我們的決定鎖死內容；讓未來的主管／使用者自己調整內容。」
+
+本稿一律照辦，具體落成五條：
+1. **交付的是『登錄表＋資料表＋頁面＋預設值』**，預設值要嘛**等於今天的行為**（法定參數的第一列、政策生效日的現況），要嘛**留空**；程式裡**不發明**任何門檻、金額、清單、名稱。
+2. **新機制的所有數字預設留空＝規則不啟用**：信用額度（客戶額度未填＝不檢查）、逾期（寬限天數、催收節奏、升級動作未填＝不產生逾期狀態動作）、大額付款（門檻未填＝不警示）、簽核金額級距（`amount_rules` 空＝沿用現行層級）。**『預設等級 warn』的意思是：負責人填了數字之後，該規則預設以警告運作**；沒填數字什麼都不會發生。
+3. **內容由負責人在頁面填**，每次變更有**原因、稽核、版本、（法定／政策類）生效日**；能回看歷史、能還原。
+4. **程式只保留不可由人決定的結構**：型別、上下限（防輸入錯誤）、法定演算法、資料格式；這些上下限也要寫明理由，並盡量寬。
+5. **逐項檢查本稿有無『替人決定』**：已把先前稿中的示例數字（例如『超額 >2 倍需第二位確認』、『首次付款警示』、『N 天內變更需 confirm』）改成**可設定項（預設空或關）**，見各節標注；若仍有寫死的選擇，列在 §6『框架內的程式預設』供檢視。
+
 ## 1. 現況錨點（這些決定了設計）
 
 | 事實 | 位置 |
@@ -209,8 +220,8 @@ finance_guard.check(event, doc, user, *, override=None) -> Result{level: ok|warn
 - **事件**（enforce 點）：`quote.approve`、`ship.submit`／`ship.approve`、`pay.execute`、`approval.submit`（金額級距）。每個事件點只加**一行呼叫**＋回應多一個 `warnings`/`blocked` 欄位。
 - **模組歸屬（已裁示）**：規則、額度、逾期、覆寫與 `finance_guard` 放**獨立模組 `credit`**（可單獨販售、可拿掉）。檢查點所在的模組（出貨單、報價、出納）**只 import L1 契約** `helpers/finance_guard.py`：`finance_guard.check(event, doc, user)`——`credit` 模組在 ⇒ 轉給它；**不在 ⇒ 回 `ok` 並記 log**（比照暫存區 `recycle_bin.delete()` 回 None 的缺席語意：缺席要看得出來，不靜默）。金額級距簽核的規則表存在 `statutory_params`、求值在 `tiered_approval`（L1），不依賴 `credit`。
 - **等級（已裁示）**：每條規則有 `mode: off | warn | block`，**信用額度、大額付款、逾期上線一律 `warn`**；滿一季後檢視 `finance_guard_log` 的誤報率（警告後單據最終順利完成且無異常的比例、被業務／出納回報『誤報』的筆數）再由負責人決定是否改 `block`。`block` 模式一旦開啟，覆寫才有意義（理由必填、`finance_overrides`、稽核、通知財務）。
-- **覆寫**：被 `block` 時，持有能力 `finance.guard.override` 者可填**必填理由**後放行；寫 `finance_overrides(id, rule, event, doc_type, doc_no, amount, limit_value, reason, overridden_by, approved_by?, at)`，通知財務負責人與 superadmin；覆寫記錄進單據歷史。高金額覆寫（超過限額 2 倍）需**第二位**（財務負責人）確認——用既有簽核機制『臨時加簽』實作（待決）。
-- **警告**：`warn` 不需理由，但回傳給前端顯示橘色提示，並寫 `finance_guard_log`（輕量；90 天輪替）供一季後檢討誤報率。
+- **覆寫**：被 `block` 時，持有能力 `finance.guard.override` 者可填**必填理由**後放行；寫 `finance_overrides(id, rule, event, doc_type, doc_no, amount, limit_value, reason, overridden_by, approved_by?, at)`，通知財務負責人與 superadmin；覆寫記錄進單據歷史。是否需要**第二位確認**、觸發條件（例如超過額度幾倍）全部是**規則欄位**（`override.second_approver_if_over_ratio`，預設空＝不需要）；實作用既有簽核機制『臨時加簽』。
+- **警告**：`warn` 不需理由，但回傳給前端顯示橘色提示，並寫 `finance_guard_log`（輕量；保留天數是設定項，預設 90）供一季後檢討誤報率。
 - **規則版本**：額度政策表（門檻、模式）屬『經營決策、需留歷史』⇒ 存 `statutory_params` 的 `kind='policy'`（有生效日、只增不改），**客戶個別額度**是資料（見 4.3）。
 - **權限矩陣**：能力 `finance.credit.view`（看額度與曝險）、`finance.credit.edit_limit`（設客戶額度；高風險＝授予走 24 小時待生效）、`finance.guard.override`、`finance.payment.large_ack`、`finance.approval.tiers.edit`。1d 就緒前沿用 superadmin／財務角色。
 
@@ -223,7 +234,7 @@ finance_guard.check(event, doc, user, *, override=None) -> Result{level: ok|warn
 
 ### 4.3 信用額度
 
-- **資料**：`customer_credit(customer_id PK, limit_amount, terms_days, hold INTEGER, note, set_by, set_at)`＋`customer_credit_history`（只增不改，每次變更一列：舊→新、原因、操作者）。額度 0／空＝未設定＝不檢查。
+- **資料**：`customer_credit(customer_id PK, limit_amount, terms_days, hold INTEGER, note, set_by, set_at)`＋`customer_credit_history`（只增不改，每次變更一列：舊→新、原因、操作者）。**額度空＝未設定＝不檢查**（上線時全部客戶都是空，零行為變更）；全公司預設額度也是一個**可選的政策列**（空＝無預設額度）。
 - **曝險定義（已裁示）**：`曝險 = 該客戶 未收款應收（已成案案件 `payment.items` 中未 `received` 的含稅金額）＋ 已出貨但尚未開立發票的金額 ＋（本次）新單金額`。**不含**已成案但尚未出貨的訂單、也不含尚未成案的報價。
   - 『已出貨未開票』的求值：出貨單（`shipping_notes` 已核准）的品項金額，扣掉同案件已開立發票的對應金額（`invoice_vouchers`／收款項 `invoicePretax+invoiceTax`）；對不上品項的以案件為單位取差額（`max(0, 已出貨含稅 − 已開票含稅)`）。
   - 求值函式 `credit.exposure(customer_id, on_date)` 回傳明細（逐案件、逐期），供客戶頁『曝險明細』與警告訊息引用（『目前曝險 X，額度 Y，本次 +Z』）。
@@ -233,7 +244,7 @@ finance_guard.check(event, doc, user, *, override=None) -> Result{level: ok|warn
 ### 4.4 逾期／寬限規則
 
 - **前置**：結構化付款條件（FB08 建議）——付款期數、比例、**付款日規則**（交貨後 N 天／次月某日／驗收後 N 天）。做出來後每個 `payment.items` 才有『預計收款日 `due_date`』。沒有它，逾期只能用報價日估（現況帳齡就是這樣），**所以本機制排在付款條件之後**。
-- **規則表**（有生效日）：`overdue_rules(scope: global|customer, grace_days, reminder_cadence[], escalation: [{after_days, action}], ship_hold_after_days, interest_note)`。動作：`remind`（信件給業務／財務）、`flag`（客戶標記逾期）、`hold_warn`（出貨/成案時警告）、`hold_block`（預設關）。
+- **規則表**（有生效日；**預設沒有任何規則列＝不啟用**）：`overdue_rules(scope: global|customer, grace_days, reminder_cadence[], escalation: [{after_days, action}], ship_hold_after_days, interest_note)`。欄位全可空；動作清單由程式定義**種類**（`remind` 信件給業務／財務、`flag` 客戶標記逾期、`hold_warn` 出貨／成案時警告、`hold_block`），**天數與是否啟用都由負責人填**。
 - **狀態**：每筆應收派生 `not_due｜due_soon｜grace｜overdue(N天)`；帳齡報表改以 `due_date` 為基準（可切回報價日以對照）。
 - **排程**：每日工作（08:00 補跑語意同 `payable_due_core`）；通知對象依角色（業務＝案件業務、財務）；工作日以假日曆計（寬限天數可選『日曆日／工作日』）。
 - **覆寫**：個別客戶可有較長寬限（`customer_credit.terms_days` 或規則 scope=customer）；經批准的展延記 `finance_overrides`。
@@ -241,7 +252,7 @@ finance_guard.check(event, doc, user, *, override=None) -> Result{level: ok|warn
 ### 4.5 大額付款警示
 
 - **咽喉**：`pay_pending_payable`（`cashier.py:190`）在呼叫提供者 `mark_paid` **之前**加 `finance_guard.check('pay.execute', …)`；所有待付款來源（請款單、承攬商匯款、叫料、勞報、獎金…）都經此，一處覆蓋。
-- **規則**：(1) 單筆 ≥ 門檻（預設值待負責人給；建議依單據類型分別設）⇒ 警告出納並**要求勾選確認＋可選備註**；(2) 同一收款人當日／當月累計 ≥ 門檻 ⇒ 警告（防拆單）；(3) 收款人首次付款（無歷史）且金額 ≥ 較低門檻 ⇒ 警告；(4) 付款帳戶與申請時不一致 ⇒ 既有檢查，不在此。
+- **規則（框架，全部預設關）**：規則表 `payment_thresholds(scope: global|doc_type, single_min, window: none|day|month, window_min, first_payee_min, ack_required, note)`——(1) 單筆 ≥ `single_min` ⇒ 警告出納並**要求勾選確認＋可選備註**；(2) 同一收款人在 `window`（當日／當月）累計 ≥ `window_min` ⇒ 警告（防拆單）；(3) 收款人首次付款且 ≥ `first_payee_min` ⇒ 警告。**每個欄位預設空＝該條不啟用**，門檻數字、是否分單據類型、要不要累計**全由財務負責人填**；程式不預設任何金額。(4) 付款帳戶與申請時不一致 ⇒ 既有檢查，不在此。
 - **等級**：預設 `warn`（出納需確認勾選，不需理由）；`block` 模式時需 `finance.guard.override` 持有者放行（不可是出納本人，建議）。記入 `cashier.payable_paid` 稽核明細（`large_ack: true`）。
 - 工作量小（單一咽喉）。
 
@@ -295,6 +306,8 @@ amount_rules = [ {from_amount: 0,        tiers: <基礎層級，維持現行>},
 ## 6. 決定狀態
 
 **已裁示**（見 §0.5）：預設只警告（滿一季再檢視）；曝險＝未收款應收＋已出貨未開票；金額級距含稅、數字日後由財務填、預設留空；信用／逾期／`finance_guard` ＝ 獨立模組 `credit`＋L1 契約（缺席 ⇒ ok＋log）；多幣別不做。
+
+**框架內的程式預設**（供檢視，皆可由負責人改或本來就是結構）：預設等級 `warn`（填了數字才生效）；`finance_guard_log` 預設保留 90 天（設定項）；覆寫必填理由（結構，不可關）；金額級距的區間為半開區間 `[from, next)`、金額讀不到時套最高級距並標『金額未識別』（安全側的結構性選擇；若覺得過嚴可改成設定項）。其餘門檻、金額、天數、清單一律空。
 
 **仍待決**：
 1. **大額付款門檻**：數字、是否分單據類型、累計規則（當日／當月；防拆單）——需財務給數字。
