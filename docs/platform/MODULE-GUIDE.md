@@ -277,7 +277,7 @@ modules/<key>/
 ### 14.1 請求本文的旗標只收真布林（第 49 班 W1c-P2）
 - `bool(body.get("flag"))`、`1 if body.get("flag") else 0` 會把 JSON 字串 `"false"`、`"0"`、`""` 當成 **true**：前端送真布林所以平時無事，API 直打、舊用戶端或腳本多帶一個引號，關卡（確認旗標、`accept_warnings`、緊急開關…）就被誤開。
 - 規則：取旗標一律用 `helpers/validation.py` 的 `body_flag(body, key, default=False)`（沒帶或 JSON `null` ⇒ default）或 `strict_bool(value, field)`；只收 `true`／`false`（或整數 `0`／`1`），其他型別 **422、什麼都不寫**。
-- 守門：`backend/tests/platform/test_no_truthy_request_flags.py`（禁止端點對請求本文用 `bool(...)`／真值三元式取旗標）；契約題 `tests/test_strict_bool_helper_t49.py`。
+- 守門：`backend/tests/platform/test_no_truthy_request_flags.py`，用 ast 掃兩個範圍：①`routers/*.py`、各模組 `api.py`／`api/` 底下、`accounting/ledger/requests.py`（請求本文慣用名 body／b／payload／params／p／req／request_body）；②**全部非測試產品檔**（`modules/**`、`helpers/`、`routers/` 的所有層，不含 tests／migrations；包含 api 以外的檔，例：`subcontract/remit.py` 曾漏網；只認 body／payload／request_body／req）。抓 `bool(請求旗標)`、`1 if 請求旗標 else 0`，以及 `if`／`and`／`or`／`not`／`assert`／三元式的條件直接就是 `body.get("旗標鍵")`（旗標鍵以名稱判斷，文字欄位的存在檢查不誤殺）。已知限制：先 `x = body.get(...)` 再 `if x:` 的間接形狀掃不到。契約題 `tests/test_strict_bool_helper_t49.py`。
 - 其他型別同理：比率類欄位用 `parse_pct` 一類的嚴格解析；第 49 班第一版曾因 `cascade`、`hasFee` 兩處嚴格解析漏網被獨立稽核列為必修（RUN-PLAN §6 第 49 班）。
 
 ### 14.2 逐案可見範圍：**讀與寫都要守**，匯出與預覽也算讀
@@ -287,8 +287,8 @@ modules/<key>/
 - 下拉／選單類清單（例：`GET /api/contractors/selectable`）也是資料出口：限最高管理者、財務角色或相關模組持有者，其他 403；盤點前端唯一呼叫者，確認沒有頁面因此壞掉，再加一道前端防線。
 
 ### 14.3 寫入端點要有稽核；例外清單 `EXEMPT` 的規矩
-- 守門：`backend/tests/test_write_endpoints_are_audited_2026_09_24.py`——用 **ast**（不用 regex）掃 `routers/*.py` 與各模組 `api.py`，每個寫入端點必須直接呼叫 `_audit`／`_system_audit`，或呼叫 `AUDIT_WRAPPERS` 明列的包裝函式；**不做同名函式推論**（第一版量尺被「只在拒絕時寫 audit」的函式騙過）。
-- 真的不寫業務資料的端點才列 `EXEMPT`，key 是 `(檔名, 方法, 路徑)`，**每一筆寫原因**；原因不可空泛。另有守門守清單本身：列了不存在的端點 ⇒ 紅（改名或刪除要一起清）；列了卻已經有稽核 ⇒ 紅（該拿掉）。
+- 守門：`backend/tests/test_write_endpoints_are_audited_2026_09_24.py`——用 **ast**（不用 regex）掃 `routers/*.py`、各模組 `api.py`／`api/` 底下，以及模組裡其他含 `@router.` 的檔（例：lodging 的 `api_records.py`；第一版漏掃、W1c 稽核補上），每個寫入端點必須直接呼叫 `_audit`／`_system_audit`，或呼叫 `AUDIT_WRAPPERS` 明列的包裝函式；**不做同名函式推論**（第一版量尺被「只在拒絕時寫 audit」的函式騙過）。
+- 真的不寫業務資料的端點才列 `EXEMPT`，key 是 `(檔案, 方法, 路徑)`（`routers/` 的檔用檔名、模組的檔用 `modules/<key>/…` 相對路徑），**每一筆寫原因**；原因不可空泛。另有守門守清單本身：列了不存在的端點 ⇒ 紅（改名或刪除要一起清）；列了卻已經有稽核 ⇒ 紅（該拿掉）。
 - 稽核改在 helper 的**同一個交易內**寫入時（例：職責角色 `helpers/duty_roles._record→_write_audit`，`audit_log` 與 `permission_changes` 同交易、`audit_id` 回填），端點本身不再另呼叫 `_audit`：照規矩列 `EXEMPT` 並寫明「稽核在哪裡、為什麼同交易」（第 48a 班）。失敗要整筆回滾，不要先寫業務、後補稽核。
 
 ### 14.4 不用命令列比對來結束行程
