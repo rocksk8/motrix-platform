@@ -1,6 +1,7 @@
 # 應收應付 更新紀錄
 
-- **（併入）(next) — 2026-10-10（wip/t53-ab-rb-fixes-r5）：刪除端點包進 `recycle_bin.delete_scope()`**：delete() 之後的步驟或 commit 失敗時，已搬進隔離區的附件搬回原處（發票憑據／請款單刪除）。
+## (next) — 2026-10-10（wip/t53-ab-rb-fixes-r5）：刪除端點包進 `recycle_bin.delete_scope()`
+- delete() 之後的步驟或 commit 失敗時，已搬進隔離區的附件搬回原處（發票憑據／請款單刪除）。
 
 ## 1.0.51 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t53-05-rb-adapters）：請款單、開票申請憑據進刪除暫存區（IP-RB1 adapter；第 53 班 P1）**

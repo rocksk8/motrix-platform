@@ -1,6 +1,7 @@
 # 外包工班 更新紀錄
 
-- **（併入）(next) — 2026-10-10（wip/t53-ab-rb-fixes-r5）：刪除端點包進 `recycle_bin.delete_scope()`**：delete() 之後的步驟或 commit 失敗時，已搬進隔離區的附件搬回原處（派發／匯款申請刪除）。
+## (next) — 2026-10-10（wip/t53-ab-rb-fixes-r5）：刪除端點包進 `recycle_bin.delete_scope()`
+- delete() 之後的步驟或 commit 失敗時，已搬進隔離區的附件搬回原處（派發／匯款申請刪除）。
 
 ## 1.1.31 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t53-1d-rb-adapters-r6；刪除暫存區 P1：承攬商派發、承攬商匯款申請）**
