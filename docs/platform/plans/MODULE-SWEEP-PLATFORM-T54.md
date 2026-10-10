@@ -8,9 +8,9 @@
 | id | 名稱 | 現況 | file:line | 選項→預設 | 風險 | 宿主 | 工 |
 |---|---|---|---|---|---|---|---|
 | DT01 | 誰能建立／改／刪任務 | 僅 superadmin（另需模組 daily_task 或 case_manage） | api.py:418,471,551 | 角色集合 {superadmin} | security | M | S |
-| DT02 | 誰能回報完成 | 只有被指派者（superadmin 也不能代報） | api.py:824 | 僅被指派／含主管／含 superadmin，預設僅被指派 | ops | M | S |
+| DT02 | 誰能回報完成 | 只有被指派者（superadmin 也不能代報） | api.py:824 | **使用者裁示（2026-10-10）**：設定選項「最高管理者可代報」，預設關（僅被指派者）；開啟後必填原因、留稽核、通知被指派者；開啟屬放寬（雙人核准＋待生效） | ops | SR＋M | M |
 | DT03 | 誰能看任務 | superadmin 全部；其他＝被指派者或負責主管 | api.py:233-246,409 | 範圍選項（現行） | ops | M | M |
-| DT04 | 匯出歷史 CSV 權限 | 被指派者或 superadmin；**主管不能匯出**（但能看歷史） | api.py:742 vs 591 | 角色集合（現行） | ops | M | S |
+| DT04 | 匯出歷史 CSV 權限 | 被指派者或 superadmin；**主管不能匯出**（但能看歷史） | api.py:742 vs 591 | **使用者裁示（2026-10-10）**：設定選項「主管可匯出所管成員歷史」，預設允許；範圍限所管成員，每次匯出留稽核 | ops | SR＋M | S |
 | DT05 | 週期類型 | once／weekly／range；weekly 至少一天；range 必填截止日 | api.py:424-431,473-480 | 啟用的週期類型集合（三種全開） | none | S | M |
 | DT06 | 優先級集合與預設 | 一般／重要／緊急，預設一般；前端 option 寫死 | api.py:52,442；daily-tasks.html:2301-2303 | 值清單＋預設 | none | S | S |
 | DT07 | 優先級顏色 | 緊急紅 #DC2626、重要琥珀 #D97706、一般藍 #2563EB 其他灰 | daily-tasks.html:3060-3066 | 色票 | none | S | S |
@@ -61,7 +61,7 @@
 | NP02 | 狀態顏色與副標 | 規劃中 warning、已確認 orange、已交付 success；副標「尚未定案／待交付／已完成」 | network-plans.html:93-106,336-337 | 色票／副標 | none | S | S |
 | NP03 | 誰能編輯 | superadmin／admin／netplan_edit；檢視 netplan／netplan_edit／case_manage | api.py:48,57,159；form.html:628-632 | 角色集合 | security | M | S |
 | NP04 | 誰能刪除 | 僅 superadmin 且僅「規劃中」；硬刪，不進暫存區 | api.py:270-282 | 可刪狀態集合、角色 | ops | M＋S，接回收筒 | M |
-| NP05 | 編輯鎖定（前後端不一致） | 前端：僅規劃中／已確認可編輯；**後端 PUT 不檢查狀態** | form.html:633-635 vs api.py:209-236 | 可編輯狀態集合，後端同步擋 | ops | S | M |
+| NP05 | 編輯鎖定（前後端不一致） | 前端：僅規劃中／已確認可編輯；**後端 PUT 不檢查狀態** | form.html:633-635 vs api.py:209-236 | **使用者裁示（2026-10-10）：維持現狀，只有畫面擋、後端不變**；不開選項 | ops | — | - |
 | NP06 | 編號格式 | `NP`＋流水（next_entity_code） | api.py:179 | 前綴／位數 | none | F5 編號框架 | M |
 | NP07 | 一案一份 | 同 quote_no 只能一份（唯一索引→409） | api.py:172-174,196-198 | — | none | locked（DB 完整性） | - |
 | NP08 | 綁案可見性 | 沿用逐案權限；案模組不在則僅 admin 以上 | api.py:61-74 | — | security | locked（第 49 班使用者裁示） | - |
@@ -222,7 +222,7 @@
 
 ## 10. 注意事項
 1. **版面框架 P9 已存在**（tender_radar 在用），daily_tasks／filehub／netplan 的 `customization.pages` 都是空的；欄位顯示類（D1）不需新機制，只要這三模組補登記。這修正了報價／案件範疇文件「需新建 D1」的前提：**D1 的欄位顯示與順序應優先走 P9，D1 新儲存只補 `list_prefs` 缺的欄位／頁大小／預設分頁**。（待下一版範疇文件對照修正。）
-2. **前後端不一致須先修再參數化**：NP05（後端不擋已交付編輯）、DT04（主管看得到歷史卻不能匯出）、DT02（superadmin 不能代報完成）。這些是行為差異，開成選項前須由使用者裁示預設。
+2. **前後端不一致三處已由使用者裁示（2026-10-10，見 `SWEEP-USER-QUESTIONS-T54.md`）**：NP05 維持現狀；DT04 做成設定、預設允許；DT02 做成設定、預設僅被指派者。
 3. 信件與通知已有半套宿主 MT；天數／小時／百分比門檻（NT06–NT14、HM03–HM07、DT10–DT14）仍是常數，適合進 SR；安全項（AU01／03／04／06）依框架規定走 `loosen`＋待生效＋雙人核准。
 4. 同一個數字在多處重複出現（保固 90／30、報價追蹤 14、停滯 30、卡關 5）：HM03／HM05／HM06／HM07 與 ANA、CRM、NT08/C22 是**同一項**，登錄時只建一個設定、各處引用。
 5. recyclebin 保存 30 天是使用者裁示 D4「固定不可設定」，放進 SR 前必須重新裁示。行號已讀驗證，唯 `system_checks.py`（約 470–530）、`notify_matrix.py`（約 47–65）、`settings_groups.py`（約 35／46）、`main.py`（約 275）為近似；部分 locked 項（FH03／09／10、TR09／13、AU14）屬資安／法遵／對外承諾邊界，建議維持不開放。
