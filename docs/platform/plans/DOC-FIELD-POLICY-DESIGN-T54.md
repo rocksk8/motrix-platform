@@ -43,11 +43,14 @@
 | 3 | `deal_tag=已結案`（**不論**精算是否完結；已結案可在未 finalized 時發生，`quotations.py:2438`） | `closed` | 已結案 |
 | 4 | `status∈{待審核, 簽核中}` 且（`deal_tag=已成案` 或 `settle_status=finalized`） | `re_review` | 改價後重新審核中（解鎖編輯觸發，見下） |
 | 5 | `status∈{待審核, 簽核中}`（`簽核中` 與 `待審核` 同碼） | `in_review` | 審核中 |
-| 6 | `settle_status=finalized`（且 `deal_tag=已成案`） | `settled` | 已精算 |
-| 7 | `deal_tag=已成案` | `won` | 已成案 |
+| 6 | `status=已送出` 且 `settle_status=finalized`（且 `deal_tag=已成案`） | `settled` | 已精算 |
+| 7 | `status=已送出` 且 `deal_tag=已成案` | `won` | 已成案 |
 | 8 | `status=已送出`（`deal_tag` 為空字串或「未成案」皆視為未成案） | `approved` | 已通過審核 |
-| 9 | `status=草稿` | `draft` | 草稿 |
-（任何不在對照內的組合＝`states_fn` 丟錯，守門失敗，見下。）
+| 9 | `status=草稿` 且（`deal_tag=已成案` 或 `settle_status=finalized`）——已成案／已精算的單經「收回」或「退回修改」回到草稿（兩者只改 `status`、保留 `dealTag` 與精算，`quotations.py` 收回約 2040-2063、退回約 5005-5020） | `draft_won` | 已成案（退回修改中） |
+| 10 | `status=草稿` | `draft` | 草稿 |
+`draft_won` 的預設格＝**與 `draft` 相同**（今天 `PUT` 在草稿狀態一律放行，行為不變）；獨立成碼是為了讓管理者日後可以對「已成案但退回修改中」另外設定（例如價格改動要備註）。
+
+**真實資料值（不可丟錯）**：`deal_tag` 在舊資料中除了空字串／未成案／已成案／已結案，還出現過「未提供」「已提供」（`quotations.py:2437` 註解）；`states_fn` 只認「恰為 `已成案` 或 `已結案`」兩個值，其餘任何值（含空字串、未提供、已提供、未成案、NULL）一律視為未成案，**絕不丟錯**。`status` 不在 6 個已知值內的組合：執行期＝回傳 `locked_unknown`（所有群組視為鎖住、記 warning，寧可擋也不放行），測試期＝守門失敗（見下）。
 
 **解鎖編輯與評估用哪一列（審查 H1-2）**：解鎖編輯（`_isUnlockEdit`）會把 `status` 強制改成「待審核」並重簽（`quotations.py:1743`）。因此：
 - **授權與政策格一律用「寫入前（資料庫現存）那一列」算狀態**：已精算的單被解鎖編輯時，授權依據是 `settled`（價格群組在 `settled` ＝「要送審（解鎖編輯）」，見 §8 已決定）；寫入成功後的新狀態是 `re_review`，只用於**之後**的請求。`evaluate` 另回傳 `transition`（寫入前碼 → 寫入後碼），供「進入某狀態」的規則與稽核使用。
@@ -68,10 +71,10 @@
 鍵＝（單據類型, 狀態碼, 欄位群組）。每格一個模式：
 `editable`（可改）｜`locked`（鎖死）｜`remark`（可改但必須填備註，附最短字數與提示語）｜`approval`（可改但變成「變更申請」，走審核）｜`hidden`（隱藏）。
 
-**「誰」只引用 1d v5 的能力，鍵格式三段 `<單位>.<物件>.<動作>`**：欄位群組本身當「物件」，動作固定 `edit`：`case.quote_header.edit`、`case.quote_pricing.edit`、`case.quote_cost.edit`、`case.quote_terms.edit`、`case.quote_payment.edit`、`case.quote_materials.edit`、`case.quote_files.edit`（`module.json` 登錄，`risk_class` 由 1d 的表推導：價格／成本／收款＝money）。**「刪除」群組不新增能力，直接重用既有的 `case.quotation.delete`**（其他單據同理：`<單位>.<單據>.delete`）；格子只決定「在哪個狀態、要不要備註或審核」，誰能刪仍由該能力決定。沒填能力＝沿用今天的角色判斷（種子由 1d 的 `seed_from_legacy()` 產生）。`approval` 格另有「核准人」（預設最高管理者）與是否允許自核（沿用 approval_policy）。
+**「誰」只引用 1d v7（`21c06bae1`）的能力，鍵格式三段 `<單位>.<物件>.<動作>`**：欄位群組本身當「物件」，動作固定 `edit`：`case.quote_header.edit`、`case.quote_pricing.edit`、`case.quote_cost.edit`、`case.quote_terms.edit`、`case.quote_payment.edit`、`case.quote_materials.edit`、`case.quote_files.edit`（`module.json` 登錄，`risk_class` 由 1d 的表推導：價格／成本／收款＝money）。**「刪除」群組不新增能力，直接重用既有的 `case.quotation.delete`**（其他單據同理：`<單位>.<單據>.delete`）；格子只決定「在哪個狀態、要不要備註或審核」，誰能刪仍由該能力決定。沒填能力＝沿用今天的角色判斷（種子由 1d 的 `seed_from_legacy()` 產生）。`approval` 格另有「核准人」（預設最高管理者）與是否允許自核（沿用 approval_policy）。
 
 **儲存（對齊設定中心 §2.2 的共用協議）**：node-39 的 `setting_group`，群組代號 `field_policy.<doc_type>`，**扁平值**：登錄表把（狀態碼 × 群組）展開成固定的 `SettingDef` 鍵——`mode.<狀態碼>.<群組>`（列舉）、`who.<狀態碼>.<群組>`（能力鍵清單）、`remark_min.<狀態碼>.<群組>`（整數）、`remark_hint.<狀態碼>.<群組>`（文字）、`approver.<狀態碼>.<群組>`（能力鍵）。上下限與列舉子集只在程式，管理者改不了；缺值＝登錄預設（今天的行為）。畫面的方格圖是這些扁平值的視圖。
-**風險與生效（使用者決定）**：變更方向依 1d v5 §10.1 的放寬／收緊表。**收緊**（鎖死化、加備註、加審核、移除可改的人）＝立即。**放寬**（鎖死→可改、移除備註或審核、增加可改的人、顯示隱藏欄位）＝ `risk=money/legal` ⇒ 必填原因＋`config_ledger` 寫入＋`approvals_required=1`（**另一位最高管理者核准**；申請人不能自核、同一人不能重複投票；只有一位最高管理者時＝必填原因＋確認期＋畫面警告＋通知並留紀錄）＋**確認期**後才生效，期間可撤銷。確認期長度**不是本框架自己的設定**，一律讀設定中心的 `change_control.confirm_period_days`（預設 7 天、下限 1 天、管理者可調；設定中心 §2.2 第 6 點），欄位政策與權限矩陣共用同一個值。畫面上寫成「這個放寬需要另一位最高管理者同意，並在 7 天後生效」。
+**風險與生效（使用者決定）**：變更方向依 1d v7（`21c06bae1`）的放寬／收緊表（章節號以 v7 為準）。**收緊**（鎖死化、加備註、加審核、移除可改的人）＝立即。**放寬**（鎖死→可改、移除備註或審核、增加可改的人、顯示隱藏欄位）＝ `risk=money/legal` ⇒ 必填原因＋`config_ledger` 寫入＋`approvals_required=1`（**另一位最高管理者核准**；申請人不能自核、同一人不能重複投票；只有一位最高管理者時＝必填原因＋確認期＋畫面警告＋通知並留紀錄）＋**確認期**後才生效，期間可撤銷。確認期長度**不是本框架自己的設定**，一律讀設定中心的 `change_control.confirm_period_days`（預設 7 天、下限 1 天、管理者可調；設定中心 §2.2 第 6 點），欄位政策與權限矩陣共用同一個值。畫面上寫成「這個放寬需要另一位最高管理者同意，並在 7 天後生效」。
 **快取與一致性**：`evaluate` 經 `settings.get`/`perm.can` 讀政策與能力，兩者共用 `config_epoch` 失效機制（快取命中時最多每 2 秒檢查一次 `MAX(config_changes.id)`／`MAX(config_change_events.id)`；本行程發布後立即清；TTL 15 秒保底）；每個請求只載入一次（同一請求內的政策不變）。
 
 ### 2.2.1 邊界與例外群組（審查 ext）
@@ -95,7 +98,11 @@
 
 不進政策格的欄位／規則（不是「不能改」，是「只有伺服器能蓋」）：
 `tot.formulaVer`、`tot._legacy／_recalc／_legacyCharity`、`tot.charityBasis`、v2 口徑下伺服器重算的 `items[].amount` 與 `tot.*` 利潤欄位；`dealTag`、`settlement.status`（有專用端點與狀態機）；`approval`（鏈、原因、層級）；`editHistory`（只增）；`locationIdentity` 抬頭快照；`quote_no`（資料庫欄位為準）；`deal_tag/settle_status` 欄位；他人上傳的檔案路徑（`_strip_foreign_file_entries`）；叫料閘門的不變式（付款欄位只由匯款流程寫、`ordered/arrived` 的前置條件）；已收款項的凍結與發票號碼變更權限（金額完整性）。
-`tot._profitStale`（新增；伺服器戳記）：已精算（寫入前碼 `settled`）的報價單被解鎖編輯、且價格欄位（`tot.pretax／total`）與資料庫不同時由伺服器蓋上 `{at, by, settledPretax}`（`settledPretax`＝**第一次**偏離時精算完成的未稅金額，之後再改價**不覆寫**）。**清除規則**：①重新精算完結（精算 PUT 的 finalized）時清除；②價格改回 `settledPretax`（總額也一致）時自動清除。**報表怎麼看得到**：報表與儀表板讀的是 `net_margin_pct`／`settlement.summary`（`ledger/reports.py`、`analytics/api/reports.py:379,614`），不讀 `tot`，所以戳記同時落到 `quotations.profit_stale_at`（新欄位，case 模組 migration，隨 `quote_hot_fields` 與 `deal_tag/settle_status` 同一處同步）；報表、匯出與案件列表 JOIN 這個欄位顯示黃色提示。用戶端不得設定。
+`tot._profitStale`（新增；伺服器戳記）：已精算（寫入前碼 `settled`）的報價單被解鎖編輯、且價格欄位（`tot.pretax／total`）與資料庫不同時由伺服器蓋上 `{at, by, settledPretax}`（`settledPretax`＝**第一次**偏離時精算完成的未稅金額，之後再改價**不覆寫**）。**清除規則**：①重新精算完結（精算 PUT 的 finalized）時清除；②價格改回 `settledPretax`（總額也一致）時自動清除。**報表怎麼看得到**（審查 M2）：報表與儀表板讀的是 `net_margin_pct`／`settlement.summary`（`ledger/reports.py`、`analytics/api/reports.py:379,614`），不讀 `tot`。`quotations` 的熱欄位（`deal_tag`、`settle_status`）是**核心** `backend/db.py::_m006_hot_columns` 建的，不是 case 模組的 migration，所以「加欄位」不是模組自己的事。三個做法（建議 ①）：
+  - ① **不加欄位，報表 SQL 內直接 `json_extract(data_json, '$.tot._profitStale.at')`**：零 schema 變更、零同步點（資料只有一份）；代價是這幾支報表要多解析 JSON（只在有「利潤」欄位的查詢上加，且可先用 `LIKE '%_profitStale%'` 過濾再解析）。
+  - ② 核心 migration 加 **VIRTUAL 生成欄位** `profit_stale_at AS (json_extract(data_json,'$.tot._profitStale.at'))`（SQLite ≥3.31；唯讀、隨 `data_json` 自動更新，**不需要同步點**）；需要核心 schema 版本號與 core CHANGELOG，且要先確認「由 case 模組的 migration 對核心表做 ALTER」是否允許。
+  - ③ 旁表 `quote_profit_stale(quote_no, at, by, settled_pretax)`（case 模組 migration，不動核心表）：**不建議**——要自己維護同步點：`quote_hot_fields`（回傳二元組，被 `save_quotation_json` `quotations.py:321`、建立 `:1504`、收回 `:2059` 三處使用）、建立 `INSERT :1545`、整份存檔 `UPDATE :1900`、強制改狀態 `UPDATE status,data_json :2008`（不寫熱欄位）、退回改號 `UPDATE quote_no :5013`（單號會變，旁表要跟著改）、以及所有只寫 `data_json` 的路徑（`material_change.py:511`、`material_payment.py:646`、`profit_guard.py:289`、`quotations.py:571`、`api/quotations.py:1667/6401/6500`），任何一處漏掉就不同步。
+  報表／匯出／案件列表一律從上述來源顯示黃色提示。用戶端不得設定。
 **可調但不是本框架的**：管銷比率（`overhead`）已是「每張覆寫、僅最高管理者」＝能力＋既有 `overhead_rule_mode`，保留在 `approval_policy`／利潤設定，不在欄位政策重複。
 
 ## 4. 推廣到其他單據
