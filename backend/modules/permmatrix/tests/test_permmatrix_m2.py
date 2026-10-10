@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """權限矩陣框架 P0 里程碑 2：矩陣資料表、提供者、服務層（覆寫／個人覆寫／代理／24 小時待生效／版本回溯）。規格 modules/permmatrix/SPEC.md（PMX1…）。"""
 import json
+import time
 from datetime import datetime, timedelta
 
 import pytest
@@ -36,6 +37,8 @@ def _env(client, monkeypatch):
     monkeypatch.setattr(A, "_finance_mode", lambda: "off")
     monkeypatch.setattr(P, "_source", None)
     monkeypatch.setattr(P, "_provider", lambda: S.load_matrix)
+    monkeypatch.setattr(P, "_last_good", {"m": None})
+    monkeypatch.setattr(P, "_degraded", {"on": False})
     P.invalidate()
     yield
     P.invalidate()
@@ -96,6 +99,7 @@ def test_revoking_a_seeded_grant_is_immediate(conn, make_user):
 def test_high_risk_grant_needs_a_reason_waits_24h_can_be_cancelled_and_activates_on_read(conn, make_user, monkeypatch):
     fin = _mk(make_user, "pm_fin", "finance")
     boss = _mk(make_user, "pm_boss", "superadmin")
+    _mk(make_user, "root", "superadmin")                  # 申請人（SU）必須是真的在職最高管理者：到期套用時會再確認（05 稽核 C）
     with pytest.raises(S.PermError) as e:
         S.set_role_cap(conn, SU, "finance", "zz.doc.pay", True, "好")
     assert "原因" in str(e.value)
@@ -115,8 +119,9 @@ def test_high_risk_grant_needs_a_reason_waits_24h_can_be_cancelled_and_activates
     r2 = S.set_role_cap(conn, SU, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
     assert r2["pending"] and not P.can(fin, "zz.doc.pay")
     monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    assert S.activate_due(conn) == 1                       # 轉態在背景（kick_activation）或排程做；讀取路徑本身不寫（見下方 B 測試）
     P.invalidate()
-    assert P.can(fin, "zz.doc.pay"), "到期後第一次讀取就轉為生效，不靠排程"
+    assert P.can(fin, "zz.doc.pay"), "轉為生效後下一次讀取就看到"
     assert _rows(conn, "SELECT state, resolved_by FROM perm_pending WHERE id=?", (r2["id"],)) == [{"state": "active", "resolved_by": "system"}]
     assert _rows(conn, "SELECT granted FROM perm_role_caps") == [{"granted": 1}]
     assert _rows(conn, "SELECT 1 FROM audit_log WHERE action='permmatrix.pending.activate'")
@@ -213,11 +218,13 @@ def test_delegation_cannot_escalate_and_risky_scopes_need_superadmin_and_24h(con
 
 
 def test_pending_delegation_activates_and_is_superseded_if_the_delegator_lost_the_capability(conn, make_user, monkeypatch):
+    _mk(make_user, "root", "superadmin")                  # 申請人須是在職最高管理者（到期套用時再確認）
     boss = _mk(make_user, "pm_boss", "admin")
     dlg = _mk(make_user, "pm_dlg", "viewer")
     r1 = S.create_delegation(conn, SU, "pm_boss", "pm_dlg", "caps", caps=["zz.doc.pay"], reason="月底付款由他代理")
     S.set_role_cap(conn, SU, "admin", "zz.doc.pay", False, "收回")                     # 委派人在等待期間失去這項能力
     monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    S.activate_due(conn)
     P.invalidate()
     assert not P.can(dlg, "zz.doc.pay")
     assert _rows(conn, "SELECT state FROM perm_pending WHERE id=?", (r1["id"],)) == [{"state": "superseded"}]
@@ -225,6 +232,7 @@ def test_pending_delegation_activates_and_is_superseded_if_the_delegator_lost_th
     S.set_role_cap(conn, SU, "admin", "zz.doc.pay", True, "")
     r2 = S.create_delegation(conn, SU, "pm_boss", "pm_dlg", "caps", caps=["zz.doc.pay"], reason="月底付款由他代理")
     monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    S.activate_due(conn)
     P.invalidate()
     assert P.can(dlg, "zz.doc.pay") and P.acting_as(dlg, "zz.doc.pay") == "pm_boss"
     assert _rows(conn, "SELECT state FROM perm_pending WHERE id=?", (r2["id"],)) == [{"state": "active"}]
@@ -288,3 +296,85 @@ def test_one_click_undo_walks_back_one_step_each_time(conn, make_user):
     with pytest.raises(S.PermError) as e:
         S.undo_last_change(conn, {"username": "x", "role": "admin"})
     assert e.value.status == 403
+
+
+# ── 05 稽核 A／B／C（P0 修正）──────────────────────────────────────────────────────────────────────────────────
+
+def _boom(seed):
+    raise RuntimeError("db down")
+
+
+def test_A_provider_failure_keeps_the_last_good_matrix_so_personal_denies_are_not_lost(conn, make_user, monkeypatch):
+    adm = _mk(make_user, "pm_adm_a", "admin")
+    S.set_user_override(conn, SU, adm["id"], "zz.doc.edit", "deny", "暫停此人修改")
+    assert not P.can(adm, "zz.doc.edit"), "（對照）個人禁止先生效"
+    assert P.can(adm, "zz.doc.submit"), "（對照）其他種子權限仍在"
+    monkeypatch.setattr(P, "_provider", lambda: _boom)
+    P.invalidate()                                                       # 清 TTL 快取；最後成功的矩陣不受影響
+    assert not P.can(adm, "zz.doc.edit"), "提供者讀不到 ⇒ 沿用最後成功的矩陣：個人禁止仍有效（退回種子會 fail-open）"
+    assert P.can(adm, "zz.doc.submit") and not P.is_degraded()
+
+
+def test_A_never_loaded_means_seed_plus_high_risk_denied_for_non_superadmin(conn, make_user, monkeypatch):
+    adm = _mk(make_user, "pm_adm_b", "admin")
+    assert C.get("zz.doc.pay").risk == "high" and P.can(adm, "zz.doc.pay"), "前提：種子本來允許 admin 做這個高風險動作"
+    monkeypatch.setattr(P, "_last_good", {"m": None})
+    monkeypatch.setattr(P, "_provider", lambda: _boom)
+    P.invalidate()
+    assert not P.can(adm, "zz.doc.pay"), "從未成功載入過 + 讀不到 ⇒ 降級：高風險能力對非最高管理者拒絕"
+    assert P.is_degraded()
+    assert P.can({"role": "superadmin", "id": 1, "username": "root"}, "zz.doc.pay"), "最高管理者永遠通過（不變式 ①）"
+    assert P.can(adm, "zz.doc.submit"), "非高風險能力仍用種子，不整個鎖死"
+    monkeypatch.setattr(P, "_provider", lambda: S.load_matrix)
+    P.invalidate()
+    assert P.can(adm, "zz.doc.pay") and not P.is_degraded(), "資料庫恢復後自動離開降級"
+
+
+def test_B_load_matrix_never_writes_and_never_waits_for_the_write_lock(conn, monkeypatch):
+    S.set_role_cap(conn, SU, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
+    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    calls = []
+    monkeypatch.setattr(S, "kick_activation", lambda wait=False: calls.append(1))      # 只記錄：讀取路徑不得自己轉態
+    monkeypatch.setattr(S, "activate_due", lambda *a, **k: (_ for _ in ()).throw(AssertionError("讀取路徑不可呼叫 activate_due")))
+    m = S.load_matrix(P.seed_from_legacy(CAPS))
+    assert calls == [1], "有到期項目 ⇒ 只踢背景轉態"
+    assert _rows(conn, "SELECT state FROM perm_pending") == [{"state": "pending"}], "讀取沒有改任何列"
+    assert "zz.doc.pay" not in m.role_grants.get("finance", ()), "尚未轉態的到期項目不納入這次的矩陣"
+
+
+def test_B_background_activation_is_single_flight_and_does_not_block_when_busy(conn, make_user, monkeypatch):
+    boss = _mk(make_user, "pm_boss_b", "superadmin")
+    assert S._act_lock.acquire(blocking=False)
+    try:
+        t0 = time.monotonic()
+        assert S.kick_activation() is None, "已有一條在跑 ⇒ 立刻返回，不排隊"
+        assert time.monotonic() - t0 < 0.5
+    finally:
+        S._act_lock.release()
+    S.set_role_cap(conn, boss, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
+    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    t = S.kick_activation(wait=True)
+    assert t is not None and _rows(conn, "SELECT state FROM perm_pending") == [{"state": "active"}]
+    assert S._act_lock.acquire(blocking=False), "跑完一定放鎖"
+    S._act_lock.release()
+
+
+def test_C_pending_is_not_applied_when_the_requester_was_demoted_meanwhile(conn, make_user, monkeypatch):
+    boss = _mk(make_user, "pm_boss_c", "superadmin")
+    r = S.set_role_cap(conn, boss, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
+    conn.execute("UPDATE users SET role='finance' WHERE username=?", (boss["username"],))
+    conn.commit()
+    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    assert S.activate_due(conn) == 1
+    row = _rows(conn, "SELECT state, resolve_note FROM perm_pending WHERE id=?", (r["id"],))[0]
+    assert row["state"] == "superseded" and "最高管理者" in row["resolve_note"]
+    assert _rows(conn, "SELECT * FROM perm_role_caps") == [], "沒有套用"
+    assert _rows(conn, "SELECT 1 FROM audit_log WHERE action='permmatrix.pending.supersede'")
+
+
+def test_C_requester_still_active_superadmin_is_applied_as_before(conn, make_user, monkeypatch):
+    boss = _mk(make_user, "pm_boss_c2", "superadmin")
+    r = S.set_role_cap(conn, boss, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
+    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    assert S.activate_due(conn) == 1
+    assert _rows(conn, "SELECT state FROM perm_pending WHERE id=?", (r["id"],)) == [{"state": "active"}]
