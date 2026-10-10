@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1259,
+  "tests": 1263,
   "unmapped": 13,
   "kinds": {
-   "api": 687,
+   "api": 688,
    "e2e": 301,
    "audit": 158,
-   "unit": 113
+   "unit": 116
   },
   "routes": 793
  },
@@ -12283,6 +12283,36 @@
    },
    "module": "payroll"
   },
+  "backend/modules/permmatrix/tests/test_permmatrix_m2.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/permmatrix/",
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "helper:perm",
+    "mod:permmatrix/__init__",
+    "mod:permmatrix/service",
+    "plat:__init__",
+    "plat:capabilities"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/capabilities.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/perm.py",
+     "backend/modules/permmatrix/__init__.py",
+     "backend/modules/permmatrix/service.py"
+    ],
+    "module_dir": [
+     "backend/modules/permmatrix/"
+    ]
+   },
+   "module": "permmatrix"
+  },
   "backend/modules/recyclebin/tests/test_e2e_recyclebin_t53.py": {
    "kind": "e2e",
    "units": [
@@ -16201,6 +16231,27 @@
     ]
    }
   },
+  "backend/tests/platform/test_capabilities_registry.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "helper:perm",
+    "plat:__init__",
+    "plat:capabilities",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/capabilities.py",
+     "backend/core/registry.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/perm.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_case404.py": {
    "kind": "api",
    "units": [
@@ -19087,6 +19138,50 @@
      "frontend/pages/",
      "frontend/pages/login.html",
      "tools/platform/product_select.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_perm_equivalence_gate_a.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "helper:module_registry",
+    "helper:perm",
+    "plat:__init__",
+    "plat:capabilities"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/capabilities.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/module_registry.py",
+     "backend/helpers/perm.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_perm_text.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "helper:perm",
+    "helper:perm_text",
+    "plat:__init__",
+    "plat:capabilities",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/capabilities.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/perm.py",
+     "backend/helpers/perm_text.py",
+     "backend/routers/system.py"
     ]
    }
   },

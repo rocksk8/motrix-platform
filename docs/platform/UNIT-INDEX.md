@@ -6,10 +6,11 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 85 個；有單位卡 34 個。
+單位 88 個；有單位卡 37 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
+| `plat:capabilities` | L0 | 能力登錄（權限矩陣框架 P0；設計 docs/platform/plans/PERMISSION-MATRIX-DESIGN-T54.md §2）。 | 18 | 3 | `tests/platform/test_capabilities_registry.py`、`tests/platform/test_perm_equivalence_gate_a.py` |
 | `plat:catalog` | L0 | 能力目錄（CUSTOMIZATION-SPEC P1；CORE-SPEC §7 端點登錄表的擴充）。 | 13 | 3 | `tests/platform/test_platform_catalog.py` |
 | `plat:customization` | L0 | L0 模組描述：可自訂點（CUSTOMIZATION-SPEC P3；§8.2 排版器需求）。 | 12 | 2 | `tests/platform/test_platform_catalog.py` |
 | `plat:definitions` | L0 | 定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。 | 25 | 8 | `tests/test_definitions_store_2026_09_25.py` |
@@ -20,14 +21,14 @@
 | `plat:mounts` | L0 | 內建頁面開放給自訂模組的「掛載點」（建構器方案 B；設計 docs/platform/plans/BUILDER-B-DESIGN.md）。 | 6 | 3 | `tests/test_builder_b_mounts_2026_10_01.py` |
 | `plat:pages` | L0 | 頁面對照與提供（階段 C／C1，docs/platform/STAGE-C-DESIGN.md §3）：`/pages/<檔名>` ⇒ 實體檔、提示頁或 404。 | 15 | 2 | `tests/platform/test_core_pages.py` |
 | `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 45 | 27 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
-| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 21 | 79 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
+| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 21 | 83 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
 | `plat:source_tree` | L0 | 守門測試要掃的原始碼範圍：唯一來源。 | 11 | 0 | `tests/platform/test_core_loader.py` |
-| `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 modules/case/quotations.py 下沉）。 | 7 | 36 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
+| `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 modules/case/quotations.py 下沉）。 | 7 | 37 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
 | `plat:upgrade` | L0 | V9 → 新版 升級轉換與回滾的核心（CORE-SPEC §9b）。L0 工具，不是業務模組。 | 50 | 0 | `tests/platform/test_core_upgrade.py` |
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 24 | 9 | — |
 | `core:backup_job` | L1 | MOTRIX ERP 獨立備份腳本（無單位卡） | 1 | 0 | — |
 | `core:cloud_storage` | L1 | Pluggable cloud backup storage backend (2026-09-07, architecture map §6.4).（無單位卡） | 9 | 2 | — |
-| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 29 | 124 | — |
+| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 29 | 126 | — |
 | `core:heartbeat_job` | L1 | Independent heartbeat pinger: confirms local ERP is responding, then pings an（無單位卡） | 1 | 0 | — |
 | `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 12 | 0 | — |
 | `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 23 | 17 | — |
@@ -35,8 +36,8 @@
 | `core:trail` | L1 | 操作軌跡（`user_request_log`）的共用設定，以及把路徑翻成人話的對照表。（無單位卡） | 23 | 2 | — |
 | `helper:approval_queue` | L1 | 「待我簽核」佇列與轉簽的共用形狀（L1；M01-PLAN §3-7，2026-09-26）。（無單位卡） | 11 | 18 | — |
 | `helper:attachment_search` | L1 | 附件目錄的搜尋共用件（`attachments.catalog` 契約 v1 的 `search`／`count`；附件目錄 P3， | 10 | 9 | `tests/test_filehub_search_2026_09_30.py` |
-| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 13 | 80 | — |
-| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 100 | — |
+| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 13 | 81 | — |
+| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 102 | — |
 | `helper:branding` | L1 | 品牌圖檔（主 LOGO／深色底 LOGO／favicon）：上傳驗證、存放、讀取時回預設。 | 16 | 2 | `tests/test_branding_2026_09_27.py` |
 | `helper:build_info` | L1 | 這個**行程**載入的是哪一份程式碼（`BR1`）。（無單位卡） | 3 | 2 | — |
 | `helper:business_days` | L1 | L1 工作日／假日判斷（第44班：自 M11 標案雷達 `calendar_tw.py` 提升為 L1 共用，供任何模組用——例如 M01 預定付款日提醒、M11 不寄信日）。**純函式，不連網、不讀時鐘（日期由呼叫端給）。**（無單位卡） | 9 | 3 | — |
@@ -57,7 +58,7 @@
 | `helper:dates` | L1 | Date arithmetic utilities.（無單位卡） | 5 | 17 | — |
 | `helper:doc_render` | L1 | L1 單據輸出的公開入口 `render_document`（A2-0 #7）：版型＋單據視圖 ⇒ 完整 HTML（交給 `html_to_pdf_bytes` 轉 PDF）。 | 1 | 2 | `tests/platform/test_doc_render_2026_10_01.py` |
 | `helper:doc_template` | L1 | L1 輸出引擎：版型定義（資料）＋單據視圖（資料）⇒ HTML（P2，CUSTOMIZATION-SPEC §3.4）。（無單位卡） | 20 | 8 | — |
-| `helper:duty_roles` | L1 | 職責角色化 R1（設計：docs/platform/plans/DUTY-ROLES-DESIGN.md；使用者 2026-10-06 裁示 Q1–Q12、N1–N4）。 | 19 | 2 | `tests/test_duty_roles_r1_2026_10_06.py`、`tests/test_duty_roles_equivalence_2026_10_06.py` |
+| `helper:duty_roles` | L1 | 職責角色化 R1（設計：docs/platform/plans/DUTY-ROLES-DESIGN.md；使用者 2026-10-06 裁示 Q1–Q12、N1–N4）。 | 19 | 3 | `tests/test_duty_roles_r1_2026_10_06.py`、`tests/test_duty_roles_equivalence_2026_10_06.py` |
 | `helper:edit_log` | L1 | 逐筆編寫紀錄（`FN4②`）—— **缺「改前值」就寫不進去**。（無單位卡） | 5 | 4 | — |
 | `helper:email_notify` | L1 | External email notifications via SMTP (Gmail App Password).（無單位卡） | 71 | 45 | — |
 | `helper:errors` | L1 | 例外訊息的去處（`EM3`）：畫面只給代碼，例外全文進 log。（無單位卡） | 1 | 11 | — |
@@ -71,13 +72,15 @@
 | `helper:licensing` | L1 | 授權金鑰核心（2026-09-21，細線 1 第 1、2 步）。（無單位卡） | 13 | 4 | — |
 | `helper:mail_types` | L1 | L1 信件類型登記表（CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）。（無單位卡） | 13 | 16 | — |
 | `helper:map_overlays` | L1 | L1 地圖覆蓋層（串接點 IP-101 `map.overlay`；docs/platform/LODGING-NEARBY.md §3.6.1，D 稽核 LG-M1／LG2-S1～S3）。 | 5 | 2 | `tests/test_map_overlay_contract_2026_09_28.py`、`tests/test_e2e_map_overlay_contract_2026_09_28.py` |
-| `helper:module_registry` | L1 | 權限模組的**唯一來源**（B7，2026-09-24 使用者裁示「整併成一份」）。（無單位卡） | 11 | 8 | — |
+| `helper:module_registry` | L1 | 權限模組的**唯一來源**（B7，2026-09-24 使用者裁示「整併成一份」）。（無單位卡） | 11 | 9 | — |
 | `helper:module_startup` | L1 | 啟動時載入 L2 模組：main.py 與「只做 init_db 的工具」（乾跑 migration、V9→新版轉換）共用同一段。 | 3 | 1 | `tests/platform/test_module_startup.py` |
 | `helper:module_switches` | L1 | CORE-SPEC §9c ③ 管理者啟停：`system_settings.modules_disabled`（模組 key 陣列）。（無單位卡） | 9 | 2 | — |
 | `helper:notification_prefs` | L1 | Per-user email notification opt-out list.（無單位卡） | 5 | 4 | — |
 | `helper:notify_matrix` | L1 | 通知矩陣（信件 × 行事曆）的對照登記（L1；MAIL-CAL 階段 1，設計 docs/platform/plans/MAIL-CAL-MERGE-DESIGN.md）。 | 10 | 2 | `tests/test_notify_matrix_2026_10_05.py` |
 | `helper:part_catalog` | L1 | 料件分類代碼表（L1；DEPENDENCY-MAP §3 #17）。（無單位卡） | 2 | 2 | — |
 | `helper:payable_due_core` | L1 | 預定付款日提醒的共用純函式庫（第 45 班；使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）。 | 16 | 5 | `tests/test_payable_due_core_t45.py` |
+| `helper:perm` | L1 | 權限矩陣的中央檢查（框架 P0；設計 docs/platform/plans/PERMISSION-MATRIX-DESIGN-T54.md §2–§3、§8）。 | 15 | 2 | `tests/platform/test_perm_equivalence_gate_a.py` |
+| `helper:perm_text` | L1 | 權限矩陣的白話文字（使用者核心規則 2026-10-10：畫面上沒有代碼、沒有 allow/deny 這類英文、沒有 id；只有繁體中文名稱、一句話說明與白話風險提示）。 | 11 | 1 | `tests/platform/test_perm_text.py` |
 | `helper:prefill_sources` | L1 | 表單「自動帶入」來源的唯一登記處（L1；表單設計器的下拉、定義驗證、伺服器端取值都讀這一份）。（無單位卡） | 8 | 3 | — |
 | `helper:privacy_notice` | L1 | L1 個資蒐集告知（R3；規格 CUSTOMIZATION-SPEC §9.3；個人資料保護法 §8 I）。（無單位卡） | 23 | 13 | — |
 | `helper:procurement` | L1 | 採購前置時間與採購建議狀態的判定（2026-09-21，第 3 輪）。（無單位卡） | 11 | 3 | — |
@@ -86,7 +89,7 @@
 | `helper:recognition_basis` | L1 | 權責／現金口徑的純標籤（L1；2026-09-26 自 M01 modules/case/recognition.py 下沉，M01-PLAN §3-6）。（無單位卡） | 4 | 3 | — |
 | `helper:recycle_bin` | L1 | 刪除暫存區（資源回收筒）的 L1 契約（第 53 班 P0；設計 docs/platform/plans/RECYCLE-BIN-DESIGN-T52.md、狀態 RECYCLE-BIN-P0-STATE-T53.md）。 | 20 | 22 | `backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py`、`backend/modules/recyclebin/tests/test_recyclebin_hardening_t53.py`、`backend/tests/platform/test_recyclebin_guards_t53.py` |
 | `helper:row_access` | L1 | L1 資料列權限（row-level access）：一份宣告，同時產生「單筆判斷」與「SQL 過濾」。（無單位卡） | 8 | 10 | — |
-| `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 50 | — |
+| `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 52 | — |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 23 | 10 | — |
 | `helper:storage_locations` | L1 | 儲存位置：雲端存檔根目錄、個資資料夾、更新交付資料夾的**唯一**解析處（CORE-SPEC 裁示表「儲存位置可設定」，2026-09-28）。 | 13 | 3 | `tests/platform/test_storage_locations_2026_09_28.py` |
 | `helper:system_checks` | L1 | L1 系統健康的每日檢查（2026-09-26 自 routers/daily_tasks.py 搬出，M12 搬遷前置）。（無單位卡） | 8 | 2 | — |
