@@ -746,7 +746,14 @@ if (typeof module !== 'undefined' && module.exports) {
         g.items.forEach(function (it) { if (!it.hub && (it.active || []).indexOf(file) > -1) inSys = true })
       })
       if (!inSys) return
-      var host = document.querySelector('main') || document.querySelector('.page-main')
+      // 內容容器：多數頁是 <main>；少數頁用 <div class="xxx-main">；再不行就用側欄後面的第一個內容區塊
+      var host = document.querySelector('main, .page-main, [class$="-main"], [class*="-main "]')
+      if (!host) {
+        var sb = document.getElementById('app-sidebar')
+        var n = sb && sb.nextElementSibling
+        while (n && (n.id === 'sidebar-overlay' || /^(SCRIPT|STYLE)$/.test(n.tagName))) n = n.nextElementSibling
+        host = n
+      }
       if (!host) return
       var a = document.createElement('a')
       a.id = 'sys-crumb'
