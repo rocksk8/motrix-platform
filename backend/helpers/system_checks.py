@@ -728,7 +728,7 @@ def _check_approval_reminders() -> None:
         _logger.warning("_check_approval_reminders failed: %s", exc)
 
 
-def _prune_request_log(keep_days: int = 90) -> None:
+def _prune_request_log(keep_days: int = None) -> None:
     """清掉 90 天前的操作軌跡（2026-09-14，DB v80）。
 
     這張表每個人每次操作都寫一列，不設保留期限的話它會變成整個資料庫裡最大的一張，
@@ -738,6 +738,9 @@ def _prune_request_log(keep_days: int = 90) -> None:
     同時也是隱私上的分寸——逐條行為紀錄留越久，外洩時的代價越大。
     """
     from datetime import datetime as _dt, timedelta as _td
+    if keep_days is None:   # 第54班：由設定中心 `retention.request_log_keep_days` 給（預設 90）
+        from helpers import settings_groups, settings_registry as sr     # noqa: F401
+        keep_days = sr.get('retention', 'request_log_keep_days')
     cutoff = (_dt.now() - _td(days=keep_days)).isoformat()
     try:
         conn = get_db()
