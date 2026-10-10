@@ -412,3 +412,18 @@ def test_cards_with_a_cap_follow_the_permission_matrix_when_it_exists(monkeypatc
     assert [c["id"] for c in H.visible_cards(cards, [], False, can=lambda cap: cap == "menu.a")] == ["a"]
     assert [c["id"] for c in H.visible_cards(cards, [], True, can=lambda cap: False)] == ["a", "b", "c"], "最高管理者一律可見"
     assert H.validate([dict(cards[0], title="標題", desc="說明", impact="影響：無。", href="x.html", order=1, cap="")], {"x.html"}), "空 cap 不合法"
+
+
+def test_declared_cap_keys_follow_the_menu_capability_format():
+    """卡片若自帶 cap：三段 <unit>.<object>.menu，unit＝擁有模組（L1 頁為 core），object＝頁名去 .html、'-'→'_'（與 1d 的 menu_cap_key 同一規則；種子卡片不寫 cap 時由聚合器衍生）。"""
+    pat = re.compile(r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*\.menu$")
+    for c in _all_cards():
+        cap = c.get("cap")
+        if cap is None:
+            continue
+        assert pat.match(cap), (c["id"], cap)
+        want = "%s.%s.menu" % (c.get("module") or "core", H._page_of(c["href"]).rsplit(".", 1)[0].replace("-", "_"))
+        assert cap == want, (c["id"], cap, want)
+    # 規則本身的正反例
+    good = "core.%s.menu" % "users"
+    assert pat.match(good) and not pat.match("core.users") and not pat.match("Core.users.menu") and not pat.match("menu:users.html")
