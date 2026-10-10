@@ -11,6 +11,7 @@
 - **（併入）(next) — 2026-10-10（wip/t53-1d-rb-adapters-r3；刪除暫存區 P1：承攬商派發、承攬商匯款申請）**
 - **（併入）(next) — 2026-10-10（wip/t53-1d-rb-adapters-r4；刪除暫存區 P1：承攬商派發、承攬商匯款申請）**
 - 稽核跟進（05）：經暫存區的『刪除已核可』與『還原』現在也會對齊 commit 之後的副作用——匯款申請：收回／重建行事曆『付款待辦』事件（`payable_due.fire`）、清簽核通知；審核中的派發：清簽核人的待辦通知。走 L1 hook `Adapter.after_commit`（還原與『刪除已核可』由暫存區在 commit 後自動呼叫；一般刪除由端點在自己 commit 後呼叫 `res["after_commit"]()`；回滾／被拒絕 ⇒ 不執行）。還原派發時，同一勞報單的連結已存在 ⇒ 略過並註記；其他唯一鍵衝突 ⇒ `conflict:`。
+- **（併入）(next) — 2026-10-10（wip/t53-1d-rb-adapters-r5；刪除暫存區 P1：承攬商派發、承攬商匯款申請）**
 
 ## 1.1.29 — 2026-10-10（wip/t51-1d-payslip-prefill；勞報單預設選取已派工、一鍵帶入）
 - `dispatch.by_person` 提供者（IP-115，加法）：`dispatches_for_person(conn, contractor_id, limit, user=None)` 多回 `scope`、`itemsSummary`、`projectName`、`customerName`、`caseVisible`，並排除狀態 draft／cancelled；案件名稱只在 `user` 通過 `guard_case_access` 時給（用自己的短連線，不影響呼叫端連線），沒給 user ⇒ 空字串。仍不含金額。
