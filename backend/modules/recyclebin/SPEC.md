@@ -11,7 +11,7 @@
 ## 規格條件
 
 - **RBN1.** 所有端點只有最高管理者可用（其他角色 403、未登入 401）；選單入口 `perm: ["superadmin"]`。
-- **RBN2.** 進暫存區＝資料列刪除＋附件**搬**進隔離目錄（原路徑不再有檔、隔離區有檔、`recycle_bin` 有一列含完整快照）；`purge_after` ＝ 刪除日 + 30 天（固定，不可設定）。
+- **RBN2.** 進暫存區＝資料列刪除＋附件**搬**進隔離目錄（原路徑不再有檔、隔離區有檔、`recycle_bin` 有一列含完整快照）；`purge_after` ＝ 刪除日 + 保留天數（預設 30，**下限 30**，超級管理員可拉長，變更只影響之後刪除的單據；見 `RECYCLE-BIN-RETENTION-POLICY-T54.md`）。另有 `held`（法定保存中）狀態：保留天數到了但還在法定保存年數內，不清除、仍可還原。
 - **RBN3.** 不放寬任何刪除條件：adapter 的 `can_delete` 不通過 ⇒ 丟 `BinError`、資料與檔案原封不動；『刪除已核可』只有最高管理者、且 adapter 的 `can_delete_approved` 通過、並需要二次確認。
 - **RBN4.** 缺席要明說：本模組不在 ⇒ `helpers.recycle_bin.delete()` 回 None（擁有模組照舊硬刪並明說）；沒有該類型的 adapter ⇒ `BinError`，不刪任何東西。
 - **RBN5.** 還原把資料列與附件放回；任何失敗（衝突、父層不在、adapter 例外、附件搬不回）⇒ 資料列留在暫存區、附件回到隔離區、狀態 `restore_failed` 並記原因；不覆蓋既有資料。
@@ -29,7 +29,7 @@
 - **RBN16.** 永久清除要驗證隔離資料夾真的刪乾淨：刪不掉（檔案被占用）⇒ 這一筆維持在暫存區（快照與清單不清）、回 409、稽核 `recyclebin.purge_failed`；每日工作同樣不可把刪不掉的標成已清除。
 - **RBN18.** 『刪除已核可』入口（`POST /api/recycle-bin/delete-approved`）直接呼叫通用 `service.delete`，**不會執行擁有模組刪除端點裡的領域後續動作**（例如清除該單據的站內通知、領域稽核動作名稱）；這些由 adapter 的 `delete_in_tx` 負責（P1 各 adapter 要把原端點的後續清理搬進去，或在 adapter 的 `after_delete` 擴充點補）。通用稽核 `recyclebin.delete_approved` 與通知其他最高管理者一定會做。
 - **RBN19.** Adapter 可實作 `after_commit(event, entity_id, snap, result)`（`delete`｜`restore`）：還原與『刪除已核可』由暫存區模組在**commit 之後**自動呼叫；一般刪除由擁有模組的端點在自己 commit 之後呼叫 `delete()` 回傳的 `result["after_commit"]()`。錯誤只記 log、不往外丟（資料已 commit）；回傳給前端的結果不含 hook。
-- **RBN20.** 暫存區保留中的單號可被單號產生器查到：`helpers.recycle_bin.reserved_ids(conn, entity_type)` ＝ in_bin／restore_failed 的 `entity_id` ＋ 快照 `meta.codes`（adapter 放單據代號）；已還原、已清除的不保留；暫存區模組不在 ⇒ 空集合。產生器（取現存最大號 + 1 的那些）要跳過這些號碼，避免最新一張進暫存區後號碼被重發、還原撞號。
+- **RBN20.** 暫存區保留中的單號可被單號產生器查到：`helpers.recycle_bin.reserved_ids(conn, entity_type)` ＝ in_bin／restore_failed／held 的 `entity_id` ＋ 快照 `meta.codes`（adapter 放單據代號）；已還原的不保留；**已清除的墓碑保留單號（不重發）**；暫存區模組不在 ⇒ 空集合。產生器（取現存最大號 + 1 的那些）要跳過這些號碼，避免最新一張進暫存區後號碼被重發、還原撞號。
 - **RBN17.** 隔離資料夾 `資源回收筒/` 在 `.gitignore` 內（隔離檔含個資，`git add -A` 不可帶走）；『刪除已核可』也通知其他最高管理者。
 
 ## 非目標
