@@ -373,14 +373,15 @@ def delete_completion_note(note_no: str, authorization: str = Header(None)):
         if row["status"] != "草稿":
             raise HTTPException(409, "僅草稿狀態可刪除")
         begin_write(conn)
-        try:
-            res = recycle_bin.delete(conn, "completion_note", note_no, user)    # 進暫存區（回簽檔一併搬走）
-        except recycle_bin.BinError as e:
-            conn.rollback()
-            raise HTTPException(409, str(e))
-        if res is None:                                                         # 暫存區模組不在 ⇒ 照舊硬刪並明說（IP-RB2）
-            _RA.CompletionNoteAdapter().delete_in_tx(conn, note_no)
-        conn.commit()
+        with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
+            try:
+                res = recycle_bin.delete(conn, "completion_note", note_no, user)    # 進暫存區（回簽檔一併搬走）
+            except recycle_bin.BinError as e:
+                conn.rollback()
+                raise HTTPException(409, str(e))
+            if res is None:                                                         # 暫存區模組不在 ⇒ 照舊硬刪並明說（IP-RB2）
+                _RA.CompletionNoteAdapter().delete_in_tx(conn, note_no)
+            conn.commit()
     finally:
         conn.close()
     _purge_notifications(note_no, ['completion_approval_request', 'completion_approved',

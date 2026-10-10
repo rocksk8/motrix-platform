@@ -732,19 +732,20 @@ def delete_dispatch(did: int, authorization: str = Header(None)):
         if not row:
             raise HTTPException(404, "派發紀錄不存在")
         notice = ""
-        try:
-            res = recycle_bin.delete(conn, _rb_adapter.ET_DISPATCH, did, user)
-        except recycle_bin.BinError as e:
-            conn.rollback()
-            raise HTTPException(409, str(e))
-        if res is None:                                                      # 暫存區模組不在：照舊刪（不刪附件）並明說
-            ad = _rb_adapter.DispatchBinAdapter()
-            ok, why = ad.can_delete(conn, did, user)
-            if not ok:
-                raise HTTPException(409, why)
-            ad.delete_in_tx(conn, did)
-            notice = "刪除暫存區未啟用：此派發已永久刪除，無法還原"
-        conn.commit()
+        with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
+            try:
+                res = recycle_bin.delete(conn, _rb_adapter.ET_DISPATCH, did, user)
+            except recycle_bin.BinError as e:
+                conn.rollback()
+                raise HTTPException(409, str(e))
+            if res is None:                                                      # 暫存區模組不在：照舊刪（不刪附件）並明說
+                ad = _rb_adapter.DispatchBinAdapter()
+                ok, why = ad.can_delete(conn, did, user)
+                if not ok:
+                    raise HTTPException(409, why)
+                ad.delete_in_tx(conn, did)
+                notice = "刪除暫存區未啟用：此派發已永久刪除，無法還原"
+            conn.commit()
     finally:
         conn.close()
     if res and res.get("after_commit"):

@@ -123,3 +123,42 @@ def test_without_bin_module_hard_deletes_and_says_so(client, who, monkeypatch):
 
 def test_adapter_registered_by_supply():
     assert "shipping_note" in RB.adapters() and RB.adapters()["shipping_note"].label == "出貨單"
+
+
+def _inject_failure_after_delete(monkeypatch):
+    """模擬『delete() 成功之後、commit 之前』的後續步驟失敗（delete_scope 要把附件搬回）。"""
+    from helpers import recycle_bin as _RB
+    orig = _RB.delete
+
+    def wrapped(*a, **k):
+        res = orig(*a, **k)
+        if res is not None:
+            raise RuntimeError("later step failed")
+        return res
+    monkeypatch.setattr(_RB, "delete", wrapped)
+
+
+def _quarantine_is_empty():
+    import os as _os
+    from modules.recyclebin import quarantine as _Q
+    root = _Q.root_dir()
+    return (not _os.path.isdir(root)) or _os.listdir(root) == []
+
+
+def _call(fn, *a, **k):
+    try:
+        return fn(*a, **k)
+    except RuntimeError:
+        return None                      # TestClient 把伺服器例外丟出來也算失敗
+
+
+def test_caller_failure_after_delete_returns_the_files(client, who, monkeypatch):
+    su, _ = who
+    rel = "rbs/sf/s.pdf"
+    full = _file(rel)
+    _note("SN-RBS-9", rel=rel)
+    _inject_failure_after_delete(monkeypatch)
+    _call(client.delete, "/api/shipping-notes/SN-RBS-9", headers=su)
+    assert os.path.isfile(full) and _q("SELECT 1 FROM shipping_notes WHERE note_no='SN-RBS-9'")
+    assert _q("SELECT * FROM recycle_bin") == [] and _quarantine_is_empty()
+

@@ -382,3 +382,41 @@ def test_payslip_links_go_through_the_payroll_provider_and_degrade_without_it(cl
     bid = client.delete("/api/contractor-dispatches/%d" % did, headers=ad).json()["binId"]
     r = _restore(client, su, bid)
     assert r.status_code == 200 and _q("SELECT * FROM payslip_dispatch_links WHERE dispatch_id=?", (did,)) == []
+
+
+def _inject_failure_after_delete(monkeypatch):
+    """模擬『delete() 成功之後、commit 之前』的後續步驟失敗（delete_scope 要把附件搬回）。"""
+    from helpers import recycle_bin as _RB
+    orig = _RB.delete
+
+    def wrapped(*a, **k):
+        res = orig(*a, **k)
+        if res is not None:
+            raise RuntimeError("later step failed")
+        return res
+    monkeypatch.setattr(_RB, "delete", wrapped)
+
+
+def _quarantine_is_empty():
+    import os as _os
+    from modules.recyclebin import quarantine as _Q
+    root = _Q.root_dir()
+    return (not _os.path.isdir(root)) or _os.listdir(root) == []
+
+
+def _call(fn, *a, **k):
+    try:
+        return fn(*a, **k)
+    except RuntimeError:
+        return None                      # TestClient 把伺服器例外丟出來也算失敗
+
+
+def test_caller_failure_after_delete_returns_the_files(client, who, monkeypatch):
+    su, ad = who
+    did, _ = _dispatch(client, ad)
+    metas = _put_files(did)
+    _inject_failure_after_delete(monkeypatch)
+    _call(client.delete, "/api/contractor-dispatches/%d" % did, headers=ad)
+    assert all(os.path.exists(_abs(m["path"])) for m in metas) and _row("contractor_dispatches", "id", did) is not None
+    assert _q("SELECT * FROM recycle_bin") == [] and _quarantine_is_empty()
+

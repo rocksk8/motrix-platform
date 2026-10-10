@@ -5,6 +5,7 @@
 - **刪除已核可必填原因**（`reason` 空白 ⇒ 422，adapter 404 檢查在前）。
 - **精確 30 天**：`purge_after` 改存完整時間（秒），到期比對用現在時間；舊列只有日期者仍以當天起算到期。
 - **稽核與操作同一交易**：還原／永久刪除／刪除已核可／每日自動清除的稽核紀錄改在同一個交易內寫入（`service.audit_tx`），寫不進去 ⇒ 整筆失敗（永久刪除在刪隔離檔『之前』先寫稽核；刪除已核可失敗會把附件搬回）。
+- **呼叫端在 delete() 之後失敗**：L1 新增 `helpers.recycle_bin.delete_scope()`（區塊以例外結束 ⇒ 附件搬回）；擁有模組的刪除端點（arap／case／payroll／subcontract／supply）全部改用。
 - 測試 `tests/test_recyclebin_fixes_r5_t53.py`；各 adapter 測試的 delete-approved 請求補 `reason`。
 
 ## 1.0.4 — 2026-10-10（wip/t53b-int 整合修正 2）

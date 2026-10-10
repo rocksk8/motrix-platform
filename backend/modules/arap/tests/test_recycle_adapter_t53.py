@@ -266,3 +266,41 @@ def test_delete_approved_clears_that_documents_notifications(client, who):
     assert client.post("/api/recycle-bin/delete-approved", json=body, headers=su).status_code == 200
     left = [r["ref_id"] for r in _q("SELECT ref_id FROM notifications WHERE type IN ('payment_request_approved','approval_reminder')")]
     assert left == ["PR-B"]                                                          # 只清 PR-A 的，PR-B 的不動
+
+
+def _inject_failure_after_delete(monkeypatch):
+    """模擬『delete() 成功之後、commit 之前』的後續步驟失敗（delete_scope 要把附件搬回）。"""
+    from helpers import recycle_bin as _RB
+    orig = _RB.delete
+
+    def wrapped(*a, **k):
+        res = orig(*a, **k)
+        if res is not None:
+            raise RuntimeError("later step failed")
+        return res
+    monkeypatch.setattr(_RB, "delete", wrapped)
+
+
+def _quarantine_is_empty():
+    import os as _os
+    from modules.recyclebin import quarantine as _Q
+    root = _Q.root_dir()
+    return (not _os.path.isdir(root)) or _os.listdir(root) == []
+
+
+def _call(fn, *a, **k):
+    try:
+        return fn(*a, **k)
+    except RuntimeError:
+        return None                      # TestClient 把伺服器例外丟出來也算失敗
+
+
+def test_caller_failure_after_delete_returns_the_files(client, who, monkeypatch):
+    admin, su = who
+    meta, path = _issued("IV-9")
+    _iv(no="IV-9", files=[meta])
+    _inject_failure_after_delete(monkeypatch)
+    _call(client.delete, "/api/invoice-vouchers/IV-9", headers=admin)
+    assert os.path.isfile(path) and _row("invoice_vouchers", "voucher_no", "IV-9") is not None
+    assert _bin("invoice_voucher") == [] and _quarantine_is_empty()
+

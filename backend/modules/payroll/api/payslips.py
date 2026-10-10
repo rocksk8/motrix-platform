@@ -510,18 +510,19 @@ def delete_payslip(slip_no: str, authorization: str = Header(None)):
             raise HTTPException(404, "找不到此勞報單")
         if row["status"] in _LOCKED_STATUSES:
             raise HTTPException(400, f"{row['status']}的勞報單須保留備查，不可刪除")
-        try:
-            res = recycle_bin.delete(conn, "payslip", slip_no, user)    # 第53班（刪除暫存區 P1）：連結列一併進暫存區（可還原）；規則仍是上面的鎖定狀態
-        except recycle_bin.BinError as e:
-            raise HTTPException(409, str(e))
-        if res is None:                                                  # 暫存區模組不在 ⇒ 照舊硬刪（不可還原），稽核明說
-            from modules.payroll.recycle_adapter import PayslipBinAdapter
+        with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
             try:
-                PayslipBinAdapter().delete_in_tx(conn, slip_no)          # 連結列＋本體在同一個交易、條件式刪除（狀態剛被改 ⇒ 409）；與進暫存區同一段實作
+                res = recycle_bin.delete(conn, "payslip", slip_no, user)    # 第53班（刪除暫存區 P1）：連結列一併進暫存區（可還原）；規則仍是上面的鎖定狀態
             except recycle_bin.BinError as e:
-                conn.rollback()
                 raise HTTPException(409, str(e))
-        conn.commit()
+            if res is None:                                                  # 暫存區模組不在 ⇒ 照舊硬刪（不可還原），稽核明說
+                from modules.payroll.recycle_adapter import PayslipBinAdapter
+                try:
+                    PayslipBinAdapter().delete_in_tx(conn, slip_no)          # 連結列＋本體在同一個交易、條件式刪除（狀態剛被改 ⇒ 409）；與進暫存區同一段實作
+                except recycle_bin.BinError as e:
+                    conn.rollback()
+                    raise HTTPException(409, str(e))
+            conn.commit()
     finally:
         conn.close()
     _audit(_tok(authorization), 'payslip.delete', 'payslip', slip_no, slip_no if res is not None else slip_no + "（暫存區未啟用，已直接刪除）")

@@ -838,14 +838,15 @@ def delete_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
             raise HTTPException(403, "只有填寫人本人或管理員可以刪除這筆額外支出")
         orphan_files = _files_of(row) + [f for f in (_change_of(row).get("addFiles") or []) if isinstance(f, dict)]
         begin_write(conn)                          # 讀快照前先拿寫鎖
-        try:
-            res = recycle_bin.delete(conn, "extra_expense", exp_id, user)       # 進暫存區（附件一併搬走、30 天內最高管理者可還原）
-        except recycle_bin.BinError as e:
-            conn.rollback()
-            raise HTTPException(409, str(e))
-        if res is None:                            # 暫存區模組不在 ⇒ 照舊硬刪並明說（IP-RB2）
-            _RA.ExtraExpenseAdapter().delete_in_tx(conn, exp_id)
-        conn.commit()
+        with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
+            try:
+                res = recycle_bin.delete(conn, "extra_expense", exp_id, user)       # 進暫存區（附件一併搬走、30 天內最高管理者可還原）
+            except recycle_bin.BinError as e:
+                conn.rollback()
+                raise HTTPException(409, str(e))
+            if res is None:                            # 暫存區模組不在 ⇒ 照舊硬刪並明說（IP-RB2）
+                _RA.ExtraExpenseAdapter().delete_in_tx(conn, exp_id)
+            conn.commit()
         if res is None:
             purge_document_files(orphan_files)     # 草稿／已駁回的單據一併刪掉它名下的實體檔案（原本會留成孤兒檔）
         _audit(_tok(authorization), "extra_expense.delete", *_audit_target(quote_no, exp_id),

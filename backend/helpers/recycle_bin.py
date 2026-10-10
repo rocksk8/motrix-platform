@@ -2,7 +2,7 @@
 """刪除暫存區（資源回收筒）的 L1 契約（第 53 班 P0；設計 docs/platform/plans/RECYCLE-BIN-DESIGN-T52.md、狀態 RECYCLE-BIN-P0-STATE-T53.md）。
 
 [單位] helper:recycle_bin    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] Adapter, BinError, BinUnavailable, CAP_ADAPTER, CAP_DELETE, CAP_RESERVED, MASK, MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_BYTES_ADMIN, RETENTION_DAYS, RestoreContext, adapters, available, delete, get_adapter, mask_obj, reserved_ids
+[公開介面] Adapter, BinError, BinUnavailable, CAP_ADAPTER, CAP_DELETE, CAP_RESERVED, MASK, MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_BYTES_ADMIN, RETENTION_DAYS, RestoreContext, adapters, available, delete, delete_scope, get_adapter, mask_obj, reserved_ids
 [不變式] 這裡**不認識任何業務表、不碰檔案系統、不讀資料庫**：只定義『擁有模組 ⇄ recyclebin 模組』之間的契約（IP-RB1／IP-RB2，列車定號）。
          擁有模組只 import 本檔（L1）；絕不 import `modules.recyclebin`。recyclebin 模組不在 ⇒ `delete()` 回 None，呼叫端**照舊硬刪並明說**，
          不得靜默（缺席與『進了暫存區』長得不一樣）。
@@ -27,6 +27,8 @@
 import json as _json
 import logging
 import re
+import threading
+from contextlib import contextmanager
 from typing import Callable, Dict, List, Optional, Tuple
 
 from core import registry
@@ -181,4 +183,43 @@ def delete(conn, entity_type: str, entity_id, user: dict, reason: str = "", appr
     fn = registry.single_provider(CAP_DELETE)
     if fn is None:
         return None
-    return fn(conn, entity_type, entity_id, user, reason, approved)
+    res = fn(conn, entity_type, entity_id, user, reason, approved)
+    stack = getattr(_scopes, "stack", None)
+    if stack and res is not None:
+        stack[-1].append(res)               # 在 delete_scope() 內：登記起來，區塊失敗時把附件搬回
+    return res
+
+
+_scopes = threading.local()
+
+
+@contextmanager
+def delete_scope():
+    """包住『delete() … commit』這一段：區塊內（含更深層呼叫）任何 `delete()` 成功後，只要區塊以例外結束
+    （後續步驟失敗、commit 失敗），就把已搬進隔離區的附件全部搬回原處（資料列由呼叫端的 rollback 撤銷）。
+    **區塊要在 commit 之後結束**——commit 成功之後才發生的錯誤不要放在區塊裡（單據已在暫存區，附件不可搬回）。
+    不可巢狀依賴：每個 scope 只回復自己區塊內的刪除。擁有模組的刪除端點一律這樣用：
+
+        with recycle_bin.delete_scope():
+            res = recycle_bin.delete(conn, "quotation", quote_no, user)
+            ...其他寫入...
+            conn.commit()
+    """
+    stack = getattr(_scopes, "stack", None)
+    if stack is None:
+        stack = _scopes.stack = []
+    mine: List[dict] = []
+    stack.append(mine)
+    try:
+        yield mine
+    except BaseException:
+        for r in reversed(mine):
+            fn = r.get("rollback_files")
+            if callable(fn):
+                try:
+                    fn()
+                except Exception:                                      # noqa: BLE001 — 回復路徑不可蓋掉原本的錯誤
+                    logger.exception("recycle_bin.delete_scope: rollback_files failed")
+        raise
+    finally:
+        stack.pop()

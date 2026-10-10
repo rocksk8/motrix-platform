@@ -367,15 +367,24 @@ def delete_shipping_note(note_no: str, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(409, "僅草稿狀態可刪除")
     begin_write(conn)                                # 讀快照前先拿寫鎖
-    try:
-        res = recycle_bin.delete(conn, "shipping_note", note_no, user)    # 進暫存區（回簽檔一併搬走）
-    except recycle_bin.BinError as e:
-        conn.rollback()
-        conn.close()
-        raise HTTPException(409, str(e))
-    if res is None:                                  # 暫存區模組不在 ⇒ 照舊硬刪並明說（IP-RB2）
-        _RA.ShippingNoteAdapter().delete_in_tx(conn, note_no)
-    conn.commit()
+    with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
+        try:
+            try:
+                res = recycle_bin.delete(conn, "shipping_note", note_no, user)    # 進暫存區（回簽檔一併搬走）
+            except recycle_bin.BinError as e:
+                conn.rollback()
+                conn.close()
+                raise HTTPException(409, str(e))
+            if res is None:                                  # 暫存區模組不在 ⇒ 照舊硬刪並明說（IP-RB2）
+                _RA.ShippingNoteAdapter().delete_in_tx(conn, note_no)
+            conn.commit()
+        except BaseException:             # 連線不可帶著寫鎖漏出去（原本沒有 finally；附件搬回由 delete_scope 處理）
+            try:
+                conn.rollback()
+                conn.close()
+            except Exception:             # noqa: BLE001 — 前面可能已關閉
+                pass
+            raise
     conn.close()
     _purge_notifications(note_no, ['shipping_approval_request', 'shipping_approved',
                                     'shipping_returned'])

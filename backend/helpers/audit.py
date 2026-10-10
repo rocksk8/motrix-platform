@@ -4,6 +4,8 @@
 #: L1 以外只可以用這裡列出的底線名稱（守門：test_l1_interface_snapshot::test_l2_uses_only_declared_l1_underscore_names）。
 __l1_public__ = (
     "_audit",
+    "_DETAIL_MAX",                        # 稽核 detail 長度上限（modules/recyclebin：稽核與操作同一交易）
+    "_derive_fields",                     # 動作 ⇒ module／case_no／ref_no（同上）
     "_audit_login_failed",                # 登入失敗稽核（routers/auth.py；2026-09-30 歷史紀錄分層搜尋）
     "_FAIL_REASON_LABELS",                # 失敗原因碼 ⇒ 中文（routers/system.py）
     "_MODULE_LABELS",                     # 動作第一段 ⇒ 模組中文名（routers/system.py）
