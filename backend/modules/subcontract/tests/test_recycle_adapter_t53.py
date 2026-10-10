@@ -274,32 +274,13 @@ def test_bin_module_absent_falls_back_to_old_delete_and_says_so(client, who, mon
     assert _q("SELECT COUNT(*) n FROM recycle_bin")[0]["n"] == 0
 
 
-# ── commit 之後的副作用（行事曆『付款待辦』事件、簽核通知）──────────────────────
-from modules.subcontract import recycle_adapter as RA   # noqa: E402
-
-
-@pytest.fixture
-def deferred(monkeypatch):
-    """把『commit 之後才做』的副作用收集起來，等 API 呼叫（已 commit）結束後再逐一執行：先驗證 check() 已成立，再跑 action()。"""
-    jobs = []
-    monkeypatch.setattr(RA, "_when_committed", lambda check, action, **k: jobs.append((check, action)))
-
-    def flush():
-        todo = list(jobs)
-        jobs.clear()
-        for check, action in todo:
-            assert check(), "API 回應之後（已 commit）狀態檢查必須成立"
-            action()
-        return len(todo)
-    return flush
-
-
+# ── commit 之後的後續動作（L1 hook adapter.after_commit：行事曆『付款待辦』事件、簽核通知）─────────────
 def _notes(ref, types):
     ph = ",".join("?" * len(types))
     return _q("SELECT * FROM notifications WHERE ref_id=? AND type IN (%s)" % ph, (ref, *types))
 
 
-def test_approved_voucher_calendar_event_is_withdrawn_on_delete_and_rebuilt_on_restore(client, who, monkeypatch, deferred):
+def test_approved_voucher_calendar_event_is_withdrawn_on_delete_and_rebuilt_on_restore(client, who, monkeypatch):
     from tests import _fake_gcal
     from modules.subcontract import payable_due as PD
     su, ad = who
@@ -317,17 +298,13 @@ def test_approved_voucher_calendar_event_is_withdrawn_on_delete_and_rebuilt_on_r
     body = {"entity_type": "contractor_voucher", "entity_id": no, "confirm": True, "confirm_text": no, "reason": "測試"}
     r = client.post("/api/recycle-bin/delete-approved", headers=su, json=body)
     assert r.status_code == 200, r.text
-    assert len(cal.events) == 1, "commit 之前不動（副作用延後）"
-    assert deferred() >= 1
-    assert cal.events == {}, "刪除已核准的申請 ⇒ 收回付款待辦事件"
+    assert cal.events == {}, "刪除已核准的申請 ⇒ commit 後收回付款待辦事件"
     assert _notes(no, ["contractor_voucher_approval_request"]) == [], "簽核通知一併清掉"
     assert _restore(client, su, r.json()["bin_id"]).status_code == 200
-    assert cal.events == {}
-    assert deferred() >= 1
-    assert len(cal.events) == 1, "還原 ⇒ 依現況重建事件"
+    assert len(cal.events) == 1, "還原 ⇒ commit 後依現況重建事件"
 
 
-def test_dispatch_in_review_deleted_via_approved_path_clears_approver_notifications(client, who, deferred):
+def test_dispatch_in_review_deleted_via_approved_path_clears_approver_notifications(client, who):
     from helpers import _notify
     su, ad = who
     did, _ = _dispatch(client, ad)
@@ -336,8 +313,25 @@ def test_dispatch_in_review_deleted_via_approved_path_clears_approver_notificati
     assert len(_notes(str(did), ["dispatch_approval_request"])) == 1
     body = {"entity_type": "contractor_dispatch", "entity_id": str(did), "confirm": True, "confirm_text": str(did), "reason": "測試"}
     assert client.post("/api/recycle-bin/delete-approved", headers=su, json=body).status_code == 200
-    assert deferred() >= 1
     assert _notes(str(did), ["dispatch_approval_request"]) == []
+
+
+def test_hook_runs_after_endpoint_delete_and_not_when_the_action_fails(client, who, monkeypatch):
+    from modules.subcontract import payable_due as PD
+    su, ad = who
+    fired = []
+    monkeypatch.setattr(PD, "fire", lambda no: fired.append(no))
+    did, _ = _dispatch(client, ad)
+    no = _voucher(client, su, did)
+    r = client.delete("/api/contractor-vouchers/%s" % no, headers=su)
+    assert r.status_code == 200 and fired == [no], "端點自己 commit 之後呼叫 hook"
+    bid = r.json()["binId"]
+    no2 = _voucher(client, su, did)                                    # 取到同一個單號 ⇒ 同款別同期別有效申請 ⇒ 還原衝突
+    fired.clear()
+    assert _restore(client, su, bid).status_code in (409, 400)
+    assert fired == [], "還原失敗（回滾）⇒ 不執行 commit 後動作"
+    r = client.delete("/api/contractor-vouchers/%s" % no2, headers=ad)
+    assert r.status_code == 403 and fired == [], "被拒絕的刪除 ⇒ 不執行"
 
 
 def test_restore_with_already_existing_payslip_link_skips_it_with_a_note(client, who):
@@ -351,16 +345,3 @@ def test_restore_with_already_existing_payslip_link_skips_it_with_a_note(client,
     r = _restore(client, su, bid)
     assert r.status_code == 200 and any("PS-RB-3" in n for n in r.json()["notes"]), r.text
     assert len(_q("SELECT * FROM payslip_dispatch_links WHERE dispatch_id=?", (did,))) == 1
-
-
-def test_when_committed_waits_for_the_committed_state_then_acts_once():
-    import threading
-    state, done = {"ok": False}, threading.Event()
-    t = RA._when_committed(lambda: state["ok"], done.set, tries=50, delay=0.02)
-    assert not done.wait(0.1), "狀態尚未成立 ⇒ 不動作"
-    state["ok"] = True
-    t.join(2)
-    assert done.is_set()
-    fired = []
-    RA._when_committed(lambda: False, lambda: fired.append(1), tries=3, delay=0.01).join(2)
-    assert fired == [], "逾時（交易回滾）⇒ 不動作"

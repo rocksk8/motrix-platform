@@ -542,6 +542,8 @@ def delete_contractor_voucher(voucher_no: str, authorization: str = Header(None)
             notice = "刪除暫存區未啟用：此申請已永久刪除，無法還原"
         conn.commit()
         conn.close()
+    if res and res.get("after_commit"):
+        res["after_commit"]()                                                # 第53班：commit 之後的後續動作（L1 hook；含行事曆事件對齊與簽核通知清理）
     _purge_notifications(voucher_no, ['contractor_voucher_approval_request', 'contractor_voucher_approved',
                                        'contractor_voucher_returned', 'approval_reminder'])
     _audit(_tok(authorization), "contractor_voucher.delete", "contractor_payment_voucher", voucher_no, voucher_no,

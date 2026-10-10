@@ -747,6 +747,8 @@ def delete_dispatch(did: int, authorization: str = Header(None)):
         conn.commit()
     finally:
         conn.close()
+    if res and res.get("after_commit"):
+        res["after_commit"]()                                                # 第53班：commit 之後的後續動作（L1 hook；錯誤只記 log）
     _audit(_tok(authorization), 'vendor.dispatch.delete', 'contractor_dispatch', str(did), row["quote_no"],
            {"bin": True, "binId": res["bin_id"], "purgeAfter": res["purge_after"]} if res else {"bin": False, "notice": notice})
     notify_module_activity("承攬商派發", "刪除", user.get("display_name") or user["username"],
