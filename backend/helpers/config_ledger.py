@@ -202,11 +202,11 @@ def cancel_pending_for(conn, domain, key, actor, reason=""):
     return n
 
 
-def activate_due(conn, now=None):
+def activate_due(conn, now=None, domain=None):
     """把已到時的 pending 轉成 activated（定時工作呼叫；漏跑也不改變誰有效，因為 `in_effect()` 在讀取時判斷）。回轉態的 id 清單。不 commit。"""
     now = now or _now()
     done = []
-    for r in pending(conn):
+    for r in pending(conn, domain):
         if r["effective_at"] and r["effective_at"] <= now:
             _append(conn, r["id"], "activated", "system", "")
             done.append(r["id"])
