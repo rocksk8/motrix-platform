@@ -2,7 +2,7 @@
 """權限矩陣的中央檢查（框架 P0；設計 docs/platform/plans/PERMISSION-MATRIX-DESIGN-T54.md §2–§3、§8）。
 
 [單位] helper:perm    [層] L1    [穩定度] 實作（P0：框架與純計算；矩陣資料來自 permissions 模組的提供者，缺席時用種子）
-[公開介面] Matrix, Delegation, load_user, base_can, can, can_via, acting_as, require, effective_caps, seed_from_legacy, compute, set_matrix_source, matrix, invalidate, explain
+[公開介面] Matrix, Delegation, load_user, base_can, can, can_via, acting_as, require, effective_caps, seed_from_legacy, compute, set_matrix_source, is_degraded, matrix, invalidate, explain
 [不變式] ① **superadmin 永遠通過**（第一行直通，不看矩陣、不被覆寫扣掉）
          ② 計算順序固定（pure `compute`）：個人禁止 → 個人允許（僅可委派者）→ 角色格（種子＋矩陣編輯）→ 模組鍵展開（`user_has_module`）；沒有任何一項為真 ⇒ 否
             禁止永遠優先於允許

@@ -177,6 +177,14 @@
    "count": 1,
    "reason": "p2: 其他業務資料（解除派發連結；P2 評估）"
   },
+  "modules/permmatrix/service.py::perm_role_caps": {
+   "count": 1,
+   "reason": "exempt: 權限矩陣的覆寫列（設定格子，回到種子預設＝刪列；每次變更另存版本快照與稽核，一鍵復原；不是單據）"
+  },
+  "modules/permmatrix/service.py::perm_user_overrides": {
+   "count": 1,
+   "reason": "exempt: 權限矩陣的個人覆寫列（取消個人允許／禁止；每次變更另存版本快照與稽核，一鍵復原；不是單據）"
+  },
   "modules/subcontract/api/vendor_contractors.py::vendor_contractors": {
    "count": 1,
    "reason": "p2: 其他業務資料（P2 評估）"
