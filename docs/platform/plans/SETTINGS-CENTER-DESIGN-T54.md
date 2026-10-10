@@ -29,6 +29,19 @@
 - 版本與還原留在各 domain 自己的儲存：權限＝`perm_versions`，設定＝`ui_definitions`。`snapshot/restore` 以 adapter 形式註冊，不複製資料。
 - 設定的 domain＝`setting:<群組>`，權限＝`perm`；第一批設定**不用**待生效層（只有 K04 與高風險授權用），所以 `config_ledger` 可晚於設定中心第一版上線，介面先寫死 `record(domain, key, changes, reason, actor, effective_at=None)`。請 1d 確認這個最小集合。
 
+### 2.1 定案協議（與 1d 一致；以下是 1d 設計稿 §7 全文，兩份文件保持同文）
+
+## 7 與設定中心共用的稽核／待生效層：`helpers/config_ledger`（與 node-39 `SETTINGS-CENTER-DESIGN-T54` §2 一致的協議）
+**原則：不建第二套版本表。** 版本、差異、還原留在各 domain 自己的儲存（權限＝`perm_versions`；設定＝`core/definitions.py` 的 `ui_definitions`／kind `setting_group`）。`config_ledger` 只做兩件那些儲存沒有的事：**變更明細**與**待生效狀態**。L1、只增不改、不 import 任何 L2。
+1. **寫入**：`record(conn, domain, key, changes, reason, actor, *, ip="", effective_at=None, risk="low", ref_version=None) -> change_id`；`changes=[{field, old, new}]`；`domain` ＝ `perm` 或 `setting:<群組>`。與被改的資料**同一交易**寫入；同交易寫 `audit_log`（action `<domain>.change`）；`risk >= money`（view_money／approve／pay／delete／view_sensitive 等）時通知其他 superadmin。
+2. **表（只增不改）**：`config_changes(id, at, domain, key, field, old_json, new_json, reason, actor, ip, effective_at, risk, ref_version, batch_id)`，DB 觸發器擋 UPDATE／DELETE；**狀態不放在這張表**，改記 `config_change_events(id, change_id, event, actor, reason, at)`，`event ∈ {pending, activated, cancelled, superseded}`，現況＝最後一筆（無事件＝立即生效的一般變更）。
+3. **待生效 API**（只存與轉態，不決定效力）：`pending(domain=None)`、`cancel(change_id, actor, reason)`（寫 `cancelled` 事件、通知申請人）、`activate_due(now)`（把 `effective_at <= now` 且仍 pending 的轉 `activated`、寫稽核、通知；由 5 分鐘工作呼叫，**漏跑不影響效力**）、純函式 `in_effect(row, now)`（`effective_at` 空或已到、且最後事件不是 cancelled／superseded）。**效力在讀取時由 domain 判斷**（`perm.can()`／`settings.get()` 自行呼叫 `in_effect`），ledger 不介入。
+4. **版本與還原**：`register_domain(domain, label, snapshot_fn, restore_fn, diff_fn, reason_required_fn=None)`；ledger 只提供「歷史」查詢 `history(domain, key)` 與統一的「還原＝新版本、歷史不改」呼叫流程。`perm` → `perm_versions`；`setting:*` → `ui_definitions`（`definitions.versions/restore/diff`）。還原含待生效項 ⇒ domain 的 restore 負責一併 cancel。
+5. **既有表**：R1／R2 職責角色的 `permission_changes`（含只增不改觸發器）**不搬資料、不雙寫**，仍是 `duty` domain 的明細；權限矩陣的新變更只寫 `config_changes`（domain `perm`）。稽核報表以 UNION 呈現，避免兩份漂移。
+6. **誰先做**：設定中心 S0（第一批不用待生效）先實作並上線 `config_ledger` 的 1、2、4 與 `history`；權限矩陣 P1 再加 3（待生效 API、`activate_due` 工作、`in_effect`）——介面現在就定死，後補不改簽名。設定第二批的 K04（登入安全）也走待生效層。
+
+> 實作對照（node-39，第 54 班 Train A）：`record(conn, domain, key, changes, reason, actor, *, ip, risk, ref_version, effective_at)`；`risk ∈ none|ops|money|legal|security`（≥money 通知其他最高管理者）；回 `{batch, ids, audit_id}`；另有 `supersede／cancel_pending_for／restore_version／snapshot_version`。
+
 ## 3. 各 K 項的遷移與等價證明
 
 通用做法：①登錄群組，預設＝舊常數；②讀取點換成 `settings.get()`（缺列＝舊值）；③刪除重複字面值，舊常數名保留一班作別名；④守門：`test_settings_defaults_equal_legacy`（凍結在 `settings_deploy_baseline.json` 的部署值＝登錄預設＝舊常數，三方相等）、`test_no_legacy_literal`（舊字面值不得回流）、上下限與 `cross_check` 的正反測試。
@@ -72,3 +85,33 @@
 - **舊版本還原遇上收緊的上下限**：以現行上下限驗證並擋下（訊息指出哪一欄）。
 - **排程類設定**（每日 08:00、備份間隔）不在第一批：改時刻要連動重試語意與守門。
 - **待確認**：①五個畫面的利潤警示門檻是否要統一（預設維持各自）；②`audit_log_keep_days` 讀取時夾到 365 是否接受；③`config_ledger` 最小介面（§2）；④`visibility=public` 的群組是否僅限登入者可讀（建議是）。
+
+## 附錄 B 風險選項框架與「暫列鎖定」清單（使用者 2026-10-10：連「可簽自己的核准」也要是選項）
+
+**原則**：任何需要改動或改動有風險的東西，都做成擁有者可決定的選項；「必須留在程式」只是暫列鎖定、逐項待使用者確認，不是終局。
+
+**機制（框架，Train A 已內建）**
+- `SettingDef.risk ∈ none|ops|money|legal|security` ＋ `requires_pending`（bool）。`requires_pending` 的欄位（建議 money／legal／security 全開）經 `publish()` 時**不立即生效**：寫 `config_changes`（`effective_at` ＝ 現在＋24 小時，`pending` 事件）、通知其他最高管理者；期間任何最高管理者可 `cancel`（寫稽核）；`settings.get()` 在讀取時以 `in_effect()` 判斷——到期前仍回舊值。
+- 解鎖一個鎖定項＝在 `settings_groups` 新增一個欄位（預設＝今天的行為，等值證明＋凍結基準），標 `risk` 與 `requires_pending`，再接線；**不需要動別的地方**。
+- 變更一律：原因必填＋稽核＋通知＋版本可還原。
+
+**暫列鎖定、待使用者逐項確認（我盤點的清單）與解鎖時的方案**
+| 項目 | 今天（預設） | 若解鎖：選項與風險機制 |
+|---|---|---|
+| 密碼雜湊參數 | 程式固定 | 只開放「提高強度」，不可降低（下限寫在程式）；`security`＋24h；既有密碼下次登入重雜湊 |
+| 最高管理者直通 | 恆為真 | 選項「最高管理者也受權限矩陣約束」預設關；`security`＋24h；保留至少一位不受限的緊急帳號 |
+| 公開路徑白名單 | 程式清單 | 只開放「縮減」（把公開頁改成要登入）；新增公開路徑不開放；`security`＋24h |
+| 稽核紀錄只增不改 | 觸發器擋 | 不提供「可改」；僅提供匯出與保存年限（已有，下限 365） |
+| 路徑逃逸／簽章檢查 | 程式固定 | 不提供關閉；若要放寬簽章驗證範圍，`security`＋24h＋雙人核准 |
+| 舊 10% 管銷口徑 | 舊單沿用 | 選項「新單預設口徑」（已有 25% 設定）；舊單戳記不動；`money`＋24h |
+| `FORM_VERSION` | 程式固定 | 不開放（版本戳是資料相容用）；改版走遷移 |
+| 已過帳傳票不可變 | 不可變 | 選項「允許以更正傳票沖銷」（不是修改）；`money`＋24h＋雙人核准 |
+| 401 錯誤碼 | 程式固定 | 不開放（前端契約） |
+| `MQ-` 單號格式 | 程式固定 | 選項「前綴／補零位數」；僅對新單生效；`ops` |
+| 回收桶 30 天 | 30 天 | 設定群組 `recyclebin.keep_days`（下限 7）；`ops` |
+| D1 只存草稿 | 只存草稿 | 待確認需求後再設計；先列待決 |
+| 可簽自己的核准（本人送審本人核） | 不允許 | 選項「允許本人核准」預設關；`money`＋24h＋稽核標註「自核」＋通知其他最高管理者；金額上限欄位可配 |
+| 副檔名白名單／檔頭檢查 | 程式固定 | 只開放「在安全清單內縮減」；新增副檔名需 `security`＋24h |
+| 金額公式與進位 | 程式固定 | 公式不開放；參數（費率、門檻）依生效日已開放（§11） |
+
+以上每一項都**等使用者確認**後才排入批次；未確認前維持今天的行為。
