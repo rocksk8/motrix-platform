@@ -363,3 +363,52 @@ def _q(sql, args=()):
         return [dict(r) for r in c.execute(sql, args).fetchall()]
     finally:
         c.close()
+
+
+# ── 8 審查補強：快取按人分、徽章唯讀、cap 過濾 ──────────────────────────────────────────────────
+def test_cache_is_per_user_so_a_filtered_view_never_leaks_to_someone_else(client, make_user):
+    su, sp = make_user(username="hub_c_su", role="superadmin")
+    vu, vp = make_user(username="hub_c_v", role="viewer", modules=[])
+    sh, vh = _login(client, su, sp), _login(client, vu, vp)
+    full = _hub(client, sh)
+    assert full["total"] > 0
+    assert _hub(client, vh)["sections"] == [], "同一個 15 秒窗口內，沒有權限的人不能拿到超級管理員的快取"
+    assert _hub(client, sh)["total"] == full["total"]
+    from routers import system_hub as R
+    keys = list(R._CACHE)
+    assert len({k[0] for k in keys}) == len(keys) == 2, "快取鍵要含使用者 id"
+
+
+def test_badge_providers_run_on_a_read_only_connection(client, make_user, monkeypatch):
+    import db
+    wrote = {}
+
+    def sneaky(conn, user):
+        try:
+            conn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES ('hub_probe', '1', 'x')")
+            wrote["ok"] = True
+        except Exception as e:                                      # noqa: BLE001
+            wrote["err"] = e.__class__.__name__
+        return {"text": "已檢查", "tone": "ok"}
+
+    _install_providers(monkeypatch, {"users": sneaky})
+    u, p = make_user(username="hub_ro", role="superadmin")
+    _hub(client, _login(client, u, p))
+    assert "ok" not in wrote and wrote.get("err") == "OperationalError", wrote
+    c = db.get_db()
+    try:
+        assert c.execute("SELECT 1 FROM system_settings WHERE key='hub_probe'").fetchone() is None
+    finally:
+        c.close()
+
+
+def test_cards_with_a_cap_follow_the_permission_matrix_when_it_exists(monkeypatch):
+    cards = [{"id": "a", "perm": "superadmin", "cap": "menu.a", "section": "data"}, {"id": "b", "perm": ["audit_log"], "section": "data"},
+             {"id": "c", "perm": "superadmin", "section": "data"}]
+    # 沒有矩陣（can=None）⇒ 舊語意
+    assert [c["id"] for c in H.visible_cards(cards, [], False)] == []
+    assert [c["id"] for c in H.visible_cards(cards, ["audit_log"], False)] == ["b"]
+    # 有矩陣：有 cap 的卡片以 can(cap) 為準（即使 perm 是 superadmin）；沒 cap 的仍走舊語意
+    assert [c["id"] for c in H.visible_cards(cards, [], False, can=lambda cap: cap == "menu.a")] == ["a"]
+    assert [c["id"] for c in H.visible_cards(cards, [], True, can=lambda cap: False)] == ["a", "b", "c"], "最高管理者一律可見"
+    assert H.validate([dict(cards[0], title="標題", desc="說明", impact="影響：無。", href="x.html", order=1, cap="")], {"x.html"}), "空 cap 不合法"
