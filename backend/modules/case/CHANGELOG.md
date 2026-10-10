@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+- **（併入）(next) — 2026-10-10（wip/t54-ab-quote-gaps）：報價存檔路徑的伺服器自有欄位不採用用戶端的值（獨立稽核 3 項確認）**
+  - `PUT /api/quotations/{no}`：`data.quoteNo` 一律以網址單號為準（原可被帶成別張單號）；`editHistory` 一律取資料庫現值再由伺服器追加（原可被偽造或清空）。
+  - `profit_guard.prepare()` 已精算／結案分支另沿用 `adminCost／charityDonation／totalIndirect／netProfit／netMarginPct` 現值（原只還原戳記，解鎖編輯可改寫利潤欄位）。
+  - 測試 `tests/test_quote_server_owned_fields_t54.py`。案件紀錄 PATCH 的狀態鎖（待審核／簽核中是否鎖合約與收款）為設計題，未改。
+
 ## 1.0.174 — 2026-10-10（wip/t53b-int；ab 稽核修正 r5）
 - `update_quotation`（PUT）：連線區段加 try/except，任何例外 rollback＋close（不帶寫鎖漏出）；材料申請在存檔中被刪後若後續失敗，由請求保險網搬回附件。
 - delete() 之後的步驟或 commit 失敗時，已搬進隔離區的附件搬回原處（報價單／額外支出／完工單刪除；報價單刪除端點另補連線不外漏）。
