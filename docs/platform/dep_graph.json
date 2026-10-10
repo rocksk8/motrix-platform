@@ -1242,6 +1242,41 @@
     "system_settings"
    ]
   },
+  "helper:perm": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:auth",
+    "helper:duty_roles",
+    "plat:capabilities",
+    "plat:registry"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/perm.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "users"
+   ],
+   "tables_w": []
+  },
+  "helper:perm_text": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:module_registry",
+    "helper:perm",
+    "helper:settings",
+    "plat:capabilities"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/perm_text.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "helper:prefill_sources": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -12120,6 +12155,56 @@
     "payslips"
    ]
   },
+  "mod:permmatrix/__init__": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:permmatrix/service",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "permmatrix",
+   "path": "backend/modules/permmatrix/__init__.py",
+   "role": "init",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:permmatrix/service": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:perm",
+    "helper:perm_text",
+    "helper:settings",
+    "plat:capabilities",
+    "plat:registry",
+    "plat:txn"
+   ],
+   "kind": "mod",
+   "module_key": "permmatrix",
+   "path": "backend/modules/permmatrix/service.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [
+    "users"
+   ],
+   "tables_r": [
+    "users"
+   ],
+   "tables_w": [
+    "audit_log",
+    "perm_delegations",
+    "perm_pending",
+    "perm_role_caps",
+    "perm_user_overrides",
+    "perm_versions"
+   ]
+  },
   "mod:recyclebin/__init__": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -17310,6 +17395,19 @@
    "tables_r": [],
    "tables_w": []
   },
+  "plat:capabilities": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "plat:registry"
+   ],
+   "kind": "plat",
+   "path": "backend/core/capabilities.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "plat:catalog": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -20785,6 +20883,7 @@
     "mod:crm/api",
     "mod:payroll/api/bonus",
     "mod:payroll/api/payslip_approval",
+    "mod:permmatrix/service",
     "mod:recyclebin/service",
     "plat:migrations",
     "router:approval_queue",
@@ -22811,6 +22910,71 @@
     "mod:payroll/remit_link"
    ]
   },
+  "table:perm_delegations": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/permmatrix/migrations/0001_permission_matrix.py:38",
+   "readers": [],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:permmatrix/service"
+   ]
+  },
+  "table:perm_pending": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/permmatrix/migrations/0001_permission_matrix.py:30",
+   "readers": [],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:permmatrix/service"
+   ]
+  },
+  "table:perm_role_caps": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/permmatrix/migrations/0001_permission_matrix.py:16",
+   "readers": [],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:permmatrix/service"
+   ]
+  },
+  "table:perm_user_overrides": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/permmatrix/migrations/0001_permission_matrix.py:21",
+   "readers": [],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:permmatrix/service"
+   ]
+  },
+  "table:perm_versions": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/permmatrix/migrations/0001_permission_matrix.py:26",
+   "readers": [],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:permmatrix/service"
+   ]
+  },
   "table:permission_changes": {
    "api_prefixes": [],
    "imports": [],
@@ -23463,6 +23627,7 @@
     "mod:case/api/expense_form_pdf",
     "mod:case/api/quotations",
     "mod:payroll/api/bank_account",
+    "mod:permmatrix/service",
     "router:duty_roles",
     "router:mail_settings",
     "router:system"
@@ -23480,6 +23645,7 @@
     "helper:email_notify",
     "helper:google_calendar",
     "helper:payable_due_core",
+    "helper:perm",
     "helper:prefill_sources",
     "helper:system_checks",
     "helper:tiered_approval",
@@ -23502,6 +23668,7 @@
     "mod:payroll/bonus_correction",
     "mod:payroll/bonus_payouts",
     "mod:payroll/bonus_pdf",
+    "mod:permmatrix/service",
     "mod:recyclebin/service",
     "mod:tender_radar/listing",
     "router:approval_delegates",
