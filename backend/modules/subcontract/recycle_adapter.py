@@ -10,6 +10,7 @@
 import json
 import sqlite3
 
+from core import registry
 from helpers import recycle_bin as RB
 
 ET_DISPATCH = "contractor_dispatch"
@@ -157,8 +158,9 @@ class DispatchBinAdapter(RB.Adapter):
 
     def delete_in_tx(self, conn, entity_id):
         did = int(entity_id)
-        if _has_table(conn, _LINK_TBL):
-            conn.execute("DELETE FROM payslip_dispatch_links WHERE dispatch_id=?", (did,))
+        prov = registry.single_provider("payslip.dispatch_links")      # 連結表屬 M07 薪資獎金：只經它的提供者刪（M07 不在 ⇒ 沒有連結表可刪）
+        if prov is not None:
+            prov.delete_for_dispatch(conn, did)
         if _has_table(conn, _REQ_TBL):
             conn.execute("DELETE FROM dispatch_file_delete_requests WHERE dispatch_id=?", (did,))
         conn.execute("DELETE FROM contractor_dispatches WHERE id=?", (did,))
@@ -185,19 +187,17 @@ class DispatchBinAdapter(RB.Adapter):
             _insert(conn, _DISPATCH_TBL, d)
         except sqlite3.IntegrityError as e:
             raise RB.BinError("conflict: %s" % e)
-        for r in snap["rows"].get(_LINK_TBL) or []:
-            if not _has_table(conn, _LINK_TBL):
-                break
-            if not conn.execute("SELECT 1 FROM payslips WHERE slip_no=?", (r["slip_no"],)).fetchone():
-                notes.append("勞報單 %s 已不存在，未恢復與它的連結" % r["slip_no"])
-                continue
-            if conn.execute("SELECT 1 FROM %s WHERE slip_no=? AND dispatch_id=?" % _LINK_TBL, (r["slip_no"], d["id"])).fetchone():
-                notes.append("勞報單 %s 已經連到這張派發，略過重複的連結" % r["slip_no"])
-                continue
-            try:
-                _insert(conn, _LINK_TBL, r, drop=("id",) if conn.execute("SELECT 1 FROM %s WHERE id=?" % _LINK_TBL, (r["id"],)).fetchone() else ())
-            except sqlite3.IntegrityError as e:
-                raise RB.BinError("conflict: 勞報單連結 %s 無法放回（%s）" % (r["slip_no"], e))
+        links = snap["rows"].get(_LINK_TBL) or []
+        if links:
+            prov = registry.single_provider("payslip.dispatch_links")
+            if prov is None:
+                notes.append("薪資獎金模組不在，%d 筆勞報單連結未恢復" % len(links))
+            else:
+                try:
+                    res = prov.restore_rows(conn, links, d["id"])
+                except Exception as e:                              # noqa: BLE001 — LinkError 等
+                    raise RB.BinError("conflict: %s" % e)
+                notes += res.get("notes") or []
         for r in snap["rows"].get(_REQ_TBL) or []:
             if not _has_table(conn, _REQ_TBL):
                 break

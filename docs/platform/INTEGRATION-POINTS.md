@@ -215,7 +215,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M07 薪資獎金：`modules/payroll/payslip_links.py::_Links`（`links_for_dispatch`／`links_for_payslip`／`link`／`unlink`） |
+| 提供方 | M07 薪資獎金：`modules/payroll/payslip_links.py::_Links`（`links_for_dispatch`／`links_for_payslip`／`link`／`unlink`；第53班加法：`delete_for_dispatch(conn, dispatch_id) -> 被移除的列`、`restore_rows(conn, rows, dispatch_id) -> {restored, notes}`，供派發進／出刪除暫存區時維護連結表——連結表只由 M07 寫入） |
 | 使用方 | M04 外包工班：`modules/subcontract/api/dispatch_payslip_links.py`（`GET/POST/DELETE /api/contractor-dispatches/{id}/payslip-links`） |
 | 形式 | provider，單一提供者（名稱 `payroll`） |
 | 語法 | 提供：`("payslip.dispatch_links", "payroll"): payslip_links._Links`；取用：`registry.single_provider("payslip.dispatch_links")` |

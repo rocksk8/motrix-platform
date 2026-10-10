@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-10（wip/t50-int；第 50 班）
+- **（併入）(next) — 2026-10-10（wip/t53-1d-rb-adapters-r6；刪除暫存區 P1：承攬商派發、承攬商匯款申請）**
+
 ## 1.1.30 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t53-1d-rb-adapters；刪除暫存區 P1：承攬商派發、承攬商匯款申請）**
 - 新 `recycle_adapter.py`（IP-RB1）：`DispatchBinAdapter`（`contractor_dispatch`）、`VoucherBinAdapter`（`contractor_voucher`），在 `ModuleSpec.providers` 以 `recyclebin.adapter` 登記。快照＝單據列＋子表列（派發：勞報單連結、附件刪除申請）＋附件清單；還原放回原值（同主鍵、同欄位）；單號（`DP-`／`PV-`）被占用 ⇒ 換新號並回報；承攬商／報價單／所屬派發不在 ⇒ `parent_missing`；勞報單不在 ⇒ 略過該連結並註記；列表/詳情遮罩用 L1 預設 `mask_obj`（展開 JSON 字串欄位後遮罩）。

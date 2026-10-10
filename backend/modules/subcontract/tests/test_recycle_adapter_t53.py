@@ -345,3 +345,33 @@ def test_restore_with_already_existing_payslip_link_skips_it_with_a_note(client,
     r = _restore(client, su, bid)
     assert r.status_code == 200 and any("PS-RB-3" in n for n in r.json()["notes"]), r.text
     assert len(_q("SELECT * FROM payslip_dispatch_links WHERE dispatch_id=?", (did,))) == 1
+
+
+def test_payslip_links_go_through_the_payroll_provider_and_degrade_without_it(client, who, monkeypatch):
+    """模組邊界：連結表只由薪資獎金寫入——外包工班的 adapter 經提供者 `payslip.dispatch_links` 刪除／放回；提供者不在 ⇒ 不碰連結表並註記。"""
+    su, ad = who
+    pid = _person("孫七")
+    did, _ = _dispatch(client, ad)
+    _x("INSERT INTO payslips (slip_no, contractor_id, contractor_name, status, created_at, updated_at) VALUES ('PS-RB-4', ?, '孫七', '草稿', '2031-01-01', '2031-01-01')", (pid,))
+    _x("INSERT INTO payslip_dispatch_links (slip_no, dispatch_id, created_at) VALUES ('PS-RB-4', ?, '2031-01-01')", (did,))
+    calls = []
+    real = registry.single_provider
+
+    class Spy:
+        def __init__(self, inner):
+            self.inner = inner
+
+        def __getattr__(self, name):
+            fn = getattr(self.inner, name)
+            return (lambda *a, **k: calls.append(name) or fn(*a, **k)) if name in ("delete_for_dispatch", "restore_rows") else fn
+    monkeypatch.setattr(registry, "single_provider", lambda cap, *a, **k: Spy(real(cap, *a, **k)) if cap == "payslip.dispatch_links" else real(cap, *a, **k))
+    bid = client.delete("/api/contractor-dispatches/%d" % did, headers=ad).json()["binId"]
+    assert calls == ["delete_for_dispatch"] and _q("SELECT * FROM payslip_dispatch_links WHERE dispatch_id=?", (did,)) == []
+    assert _restore(client, su, bid).status_code == 200
+    assert calls == ["delete_for_dispatch", "restore_rows"] and len(_q("SELECT * FROM payslip_dispatch_links WHERE dispatch_id=?", (did,))) == 1
+    # 提供者不在：刪除不碰連結表、還原註記略過
+    monkeypatch.setattr(registry, "single_provider", lambda cap, *a, **k: None if cap == "payslip.dispatch_links" else real(cap, *a, **k))
+    _x("DELETE FROM payslip_dispatch_links WHERE dispatch_id=?", (did,))
+    bid = client.delete("/api/contractor-dispatches/%d" % did, headers=ad).json()["binId"]
+    r = _restore(client, su, bid)
+    assert r.status_code == 200 and _q("SELECT * FROM payslip_dispatch_links WHERE dispatch_id=?", (did,)) == []

@@ -61,6 +61,11 @@ def payslips_for_contractors(conn, contractor_ids, dispatch_ids=None) -> dict:
     return {"items": items, "unconfirmedCount": guess}
 
 
+def _delete_links(conn, where, args):
+    """連結列的唯一刪除點（暫存區守門的 `DELETE FROM` 基線只登記這一處）。`where` 只由本檔寫死的片段組成，不接使用者輸入。"""
+    conn.execute("DELETE FROM payslip_dispatch_links WHERE " + where, args)
+
+
 def link(conn, slip_no, dispatch_id, user, note="") -> dict:
     """建立連結（已存在 ⇒ 409）。勞報單不存在 ⇒ 404；已作廢 ⇒ 409（不能把作廢單接到派發）。不 commit。"""
     slip_no = str(slip_no or "").strip()
@@ -93,8 +98,43 @@ def unlink(conn, slip_no, dispatch_id, user) -> dict:
         via = None
     if row["status"] == "已付款" or via:
         raise LinkError(409, "這張勞報單已付款，不可解除與派發的關聯")
-    conn.execute("DELETE FROM payslip_dispatch_links WHERE slip_no=? AND dispatch_id=?", (slip_no, int(dispatch_id)))
+    _delete_links(conn, "slip_no=? AND dispatch_id=?", (slip_no, int(dispatch_id)))
     return {"slipNo": slip_no, "dispatchId": int(dispatch_id)}
+
+
+def delete_for_dispatch(conn, dispatch_id) -> list:
+    """派發進刪除暫存區時（第53班）：移除這張派發的全部連結列，回傳被移除的原始列（dict）。不 commit。連結表只由本模組寫入。"""
+    rows = [{k: r[k] for k in r.keys()} for r in conn.execute("SELECT * FROM payslip_dispatch_links WHERE dispatch_id=? ORDER BY id", (int(dispatch_id),)).fetchall()]
+    _delete_links(conn, "dispatch_id=?", (int(dispatch_id),))
+    return rows
+
+
+def restore_rows(conn, rows, dispatch_id) -> dict:
+    """派發從暫存區還原時（第53班）：把 `delete_for_dispatch` 回傳的列放回。勞報單已不存在 ⇒ 略過並註記；同一 (勞報單, 派發) 已有連結 ⇒ 略過並註記；
+    原 id 被占用 ⇒ 另給；其他唯一鍵衝突 ⇒ `LinkError(409)`。回 `{"restored": n, "notes": […]}`。不 commit。"""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(payslip_dispatch_links)").fetchall()}
+    restored, notes = 0, []
+    for r in rows or []:
+        slip = r.get("slip_no")
+        if not conn.execute("SELECT 1 FROM payslips WHERE slip_no=?", (slip,)).fetchone():
+            notes.append("勞報單 %s 已不存在，未恢復與它的連結" % slip)
+            continue
+        if conn.execute("SELECT 1 FROM payslip_dispatch_links WHERE slip_no=? AND dispatch_id=?", (slip, int(dispatch_id))).fetchone():
+            notes.append("勞報單 %s 已經連到這張派發，略過重複的連結" % slip)
+            continue
+        row = {k: v for k, v in r.items() if k in cols}
+        row["dispatch_id"] = int(dispatch_id)
+        if "id" in row and conn.execute("SELECT 1 FROM payslip_dispatch_links WHERE id=?", (row["id"],)).fetchone():
+            row.pop("id")
+        names = list(row)
+        try:
+            conn.execute("INSERT INTO payslip_dispatch_links (%s) VALUES (%s)" % (",".join(names), ",".join("?" * len(names))), [row[n] for n in names])
+        except Exception as exc:                                    # noqa: BLE001 — 唯一鍵衝突
+            if "UNIQUE" in str(exc).upper():
+                raise LinkError(409, "勞報單連結 %s 無法放回（%s）" % (slip, exc))
+            raise
+        restored += 1
+    return {"restored": restored, "notes": notes}
 
 
 class _Links:
@@ -104,3 +144,5 @@ class _Links:
     payslips_for_contractors = staticmethod(payslips_for_contractors)
     link = staticmethod(link)
     unlink = staticmethod(unlink)
+    delete_for_dispatch = staticmethod(delete_for_dispatch)      # 第53班（刪除暫存區 P1，加法）
+    restore_rows = staticmethod(restore_rows)
