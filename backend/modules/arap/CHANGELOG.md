@@ -5,6 +5,8 @@
 - `DELETE /api/payment-requests/{no}`、`DELETE /api/invoice-vouchers/{no}`：規則不變（只准草稿、財務角色／最高管理者），刪除改呼叫 `recycle_bin.delete()`（同一個寫交易，進暫存區可還原）；回應多 `recycled`。暫存區模組不在 ⇒ 照舊硬刪（同一段 `delete_in_tx`），`recycled:false`，稽核標籤註明「暫存區未啟用，已直接刪除」。
 - 『刪除已核可』（最高管理者，`POST /api/recycle-bin/delete-approved`）：兩種單據只收『已核准』；影響清單＝已匯出次數、已開立附件數、行事曆事件（皆資訊性，不擋——這兩種單據沒有收款／總帳／獎金下游）。
 - 無 migration、無權限變更、無 schema 變更。守門基線 `recyclebin_baseline_t53.json` 移除這兩種單據的 `routes`／`delete_from` 項目。
+- 稽核跟進（1d）：還原也守建立時的額度規則——草稿就鎖額度，刪除釋出的額度可能已被新單據用掉；還原前重算 `_quote_remaining`（此列尚未放回），金額或品項數量超過剩餘 ⇒ `conflict:`，單據留在暫存區（狀態 restore_failed）。
+- 稽核跟進：該單據的簽核通知／催簽提醒在 `delete_in_tx` 同一個交易內清掉（『刪除已核可』走通用入口、不經端點，原本不會清）；已核准當天建立的行事曆事件屬歷史紀錄，不自動刪、還原不重建，影響清單明說。
 
 ## 1.0.50 — 2026-10-10（wip/t51-05-status-colors）：`payment-request-form.html` 狀態徽章補「已駁回」「已作廢」顏色
 - 頁首狀態徽章的對照表原本只有 4 個狀態，已駁回／已作廢掉成無底色灰字；補上 `badge--rejected`／`badge--lost`。純畫面。

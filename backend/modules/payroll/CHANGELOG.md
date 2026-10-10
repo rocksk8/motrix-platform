@@ -6,6 +6,7 @@
 - 『刪除已核可』**不開放**勞報單（`can_delete_approved` 回 False：已核准之後牽涉出納待付款、總帳 E06、簽回檔與匯款連結；撤銷請用『作廢』）；影響清單仍可查（已付款／已簽回／已匯出／派發連結數，鎖定者標 blocking）。
 - 還原：單號被占 ⇒ `conflict:`；受領人（外包名冊）不在 ⇒ `parent_missing:`；`contractor_guess_id` 指向的人不在 ⇒ 清成 NULL 並註記（推測值不擋還原，且**不會**升格成 `contractor_id`）；派發已不存在的連結略過並註記。
 - 無 migration、無權限變更。守門基線移除勞報單的 `routes`／`delete_from` 項目（解除派發連結的 DELETE 改標 `p2:`）。
+- 稽核跟進（1d）：刪除時同一個交易內清掉該單號的簽核通知（退回後回到草稿的單可能還留著 `payslip_returned` 等，指向已刪單號）。勞報單沒有行事曆／應付事件（應付事件只在核准之後出現，而核准之後不可刪）。
 
 ## 1.2.13 — 2026-10-10（wip/t52-ab-charity-quote）：精算明細表／獎金 PDF 的公益捐款列標籤依基數戳記
 - `bonus.row_label`：公益捐款列＝「公益捐款（報價含稅 1%）」（`summary.charityBasis=total`）或「公益捐款（直接毛利 1%）」（無戳記／舊基）。基數鍵 `netProfit` 與獎金算式不變（仍讀精算凍結值）；已完結案獎金不變。

@@ -218,3 +218,51 @@ def test_fallback_hard_delete_when_bin_absent(client, who, monkeypatch):
 def test_adapters_registered_and_guard_baseline_shrunk():
     ads = RB.adapters()
     assert ads["payment_request"].label == "請款單" and ads["invoice_voucher"].label == "開票申請憑據"
+
+# ── 還原也守額度（建立時的規則：草稿就鎖額度）──
+
+def test_restore_refuses_when_quota_was_taken_by_a_new_request(client, who):
+    admin, su = who
+    _pr()                                                                          # 31500 / 105000
+    assert client.delete("/api/payment-requests/PR-1", headers=admin).status_code == 200
+    _pr("PR-NEW")
+    _x("UPDATE payment_requests SET amount=? WHERE request_no=?", 90000, "PR-NEW")   # 新單吃掉額度：剩 15000 < 31500
+    r = client.post("/api/recycle-bin/%d/restore" % _bin("payment_request")[0]["id"], headers=su)
+    assert r.status_code == 409 and "額度不足" in r.text
+    assert _row("payment_requests", "request_no", "PR-1") is None and _bin("payment_request")[0]["restore_status"] == "restore_failed"
+    _x("UPDATE payment_requests SET amount=? WHERE request_no=?", 60000, "PR-NEW")   # 釋出一些 ⇒ 剩 45000 ≥ 31500 ⇒ 可還原
+    assert client.post("/api/recycle-bin/%d/restore" % _bin("payment_request")[0]["id"], headers=su).status_code == 200
+
+
+def test_restore_refuses_when_item_quantity_was_taken(client, who):
+    admin, su = who
+    _x("UPDATE quotations SET data_json=? WHERE quote_no=?", json.dumps({"items": [{"id": "i1", "description": "交換器", "qty": 10}]}), Q1)
+    _pr()
+    _x("UPDATE payment_requests SET snapshot_json=? WHERE request_no=?", json.dumps({"selectedItems": [{"itemId": "i1", "description": "交換器", "qty": 6}]}), "PR-1")
+    assert client.delete("/api/payment-requests/PR-1", headers=admin).status_code == 200
+    _pr("PR-NEW")
+    _x("UPDATE payment_requests SET amount=1000, snapshot_json=? WHERE request_no=?", json.dumps({"selectedItems": [{"itemId": "i1", "qty": 6}]}), "PR-NEW")
+    r = client.post("/api/recycle-bin/%d/restore" % _bin("payment_request")[0]["id"], headers=su)
+    assert r.status_code == 409 and "數量不足" in r.text and _row("payment_requests", "request_no", "PR-1") is None
+
+
+def test_invoice_voucher_restore_refuses_when_quota_was_taken(client, who):
+    admin, su = who
+    _iv()                                                                          # amount 5000
+    assert client.delete("/api/invoice-vouchers/IV-1", headers=admin).status_code == 200
+    _iv("IV-NEW")
+    _x("UPDATE invoice_vouchers SET amount=? WHERE voucher_no=?", 103000, "IV-NEW")  # 剩 2000 < 5000
+    r = client.post("/api/recycle-bin/%d/restore" % _bin("invoice_voucher")[0]["id"], headers=su)
+    assert r.status_code == 409 and "額度不足" in r.text and _row("invoice_vouchers", "voucher_no", "IV-1") is None
+
+
+def test_delete_approved_clears_that_documents_notifications(client, who):
+    admin, su = who
+    _pr("PR-A", "已核准")
+    _pr("PR-B", "已核准")
+    for ref, t in (("PR-A", "payment_request_approved"), ("PR-A", "approval_reminder"), ("PR-B", "payment_request_approved")):
+        _x("INSERT INTO notifications (username, type, ref_id, message, created_at) VALUES (?,?,?,?,?)", "rba_admin", t, ref, "m", "2026-01-01T00:00:00")
+    body = {"entity_type": "payment_request", "entity_id": "PR-A", "confirm": True, "confirm_text": "PR-A", "reason": "測試"}
+    assert client.post("/api/recycle-bin/delete-approved", json=body, headers=su).status_code == 200
+    left = [r["ref_id"] for r in _q("SELECT ref_id FROM notifications WHERE type IN ('payment_request_approved','approval_reminder')")]
+    assert left == ["PR-B"]                                                          # 只清 PR-A 的，PR-B 的不動
