@@ -32,7 +32,7 @@
 
 | 端點 | 誰 | 說明／稽核動作 |
 |---|---|---|
-| `POST /api/payslips/{no}/submit｜approve｜reject`（`api/payslip_approval.py`） | **只有真正的最高管理者**（持有勞報單模組的非最高管理者一律 403） | 獨立簽核流程 `payslip_approval_flow`（簽核人只能是最高管理者；沒設簽核層＝送審即核准）；有簽核層時送審人不得自核（Q-S6；全公司只有一位在職最高管理者時例外）；退回原因必填。**第 54 班：當層排序最前的未簽核人就是送審人（或整條鏈唯一的簽核人已停用）而卡住時，另一位最高管理者（且沒在這張單簽過任何一格）可在 `approve` 帶必填 `reason` 代核**（強制稽核 `payslip.approve_bypass`、簽核紀錄留代核人／被代者／原因、通知其他最高管理者；送審人永遠不可自核）。稽核 `payslip.submit／approve／approve_bypass／reject` |
+| `POST /api/payslips/{no}/submit｜approve｜reject`（`api/payslip_approval.py`） | **只有真正的最高管理者**（持有勞報單模組的非最高管理者一律 403） | 獨立簽核流程 `payslip_approval_flow`（簽核人只能是最高管理者；沒設簽核層＝送審即核准）；有簽核層時送審人不得自核（Q-S6；全公司只有一位在職最高管理者時例外）；退回原因必填。**第 54 班：當層排序最前的未簽核人就是送審人（或整條鏈唯一的簽核人已停用）而卡住時，另一位最高管理者（鏈外、且沒在這張單簽過任何一格；鏈上簽核人與其有效代理人不可）可在 `approve` 帶必填 `reason` 代核**（強制稽核 `payslip.approve_bypass`、簽核紀錄留代核人／被代者／原因、通知其他最高管理者；送審人永遠不可自核）。稽核 `payslip.submit／approve／approve_bypass／reject` |
 | `GET /api/payslips/{no}/approval-reveal` | 最高管理者、僅待審核單 | 簽核佇列詳情點欄位才取身分證／銀行帳號（單欄）；**每次呼叫寫稽核 `payslip.approval_reveal`（不含值）**、先寫稽核失敗即 500 不回值、每分鐘 30 次、`no-store`；不進清單／計數／信件／通知／日誌 |
 | `POST /api/payslips/{no}/void` | 已核准＝最高管理者（Q-S9）；已匯出＝勞報單模組持有者（原規則） | 並發的簽回／付款使 UPDATE 沒中 ⇒ 409 |
 | `POST /api/payslips/{no}/mark-paid｜unpay`、簽回檔檢視、出納頁勞報單清單 | **財務角色或最高管理者**（只勾 cashier 模組不再夠） | 付款唯一實作 `mark_payslip_paid`（傳票單號必填）；取消付款允許，已過帳應計產生沖回草稿由會計審。稽核 `payslip.unpay` |
