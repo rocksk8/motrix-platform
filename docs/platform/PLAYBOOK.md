@@ -259,6 +259,7 @@
 | 17 | 新規格編號要宣告 | 新題名帶模組規格編號（例 S6）⇒ grep 該模組 SPEC 已宣告；送測清單加 `test_spec_coverage` | test_spec_coverage（第十六班 --train，B54） |
 | 18 | 新增頁／表／權限 key | 送測前跑全域釘子（modtest 模組選題選不到）：test_alpine_double_init（頁母體）、test_demo_reset dm1（表分類）、test_module_registry＋test_module_keys_consistency（權限目錄）、test_system_audit＋test_module_data_classes（備份分類） | 第十八班 --train 6 紅（E lodging） |
 | 19 | 預演列車（合併後才紅的守門） | **改到 L1（helpers／core）、frontend、routers 的分支，push 前跑** `python tools/platform/pre_train_check.py <分支>`（Python 用 .venv312；約 10～25 分，-n 2、低優先權、走全機測試鎖）：在 `D:\開發測試檔\pre-train-*` 拋棄式樹把分支合進 origin/platform（不 push、不寫 rerere）→ `train_number assign`＋`--check` → 重產 dep_graph／UNIT-INDEX／test_map → `MOTRIX_TRAIN=1` 跑 tests/platform＋GUARDS 列的非 platform 守門（spec_coverage、alpine double-init、公司設定輸出點、system_audit、raw-vh 靜態題、簽核提供者、頁面殼腳本），紅的題依歸屬（模組／core）分組並列出本分支動到的相關檔。exit 0＝綠；1＝有紅（先修再 push）；2＝合併衝突（先 rebase）。單一分支單獨看是綠、合上 platform 才紅的那批（C_OWNED、modules.json 歸屬、page_paths 棘輪、scope_gate global_tests、單位卡、L1 底線名稱、簽核提供者集合、產生檔）由它一次抓出，不必等列車逐個退回。**列車上又抓到「合併後才紅」的守門 ⇒ 加進 `pre_train_check.GUARDS`**。| 第二十六班重建 3 次（reds 只在合併＋MOTRIX_TRAIN=1 出現）；wip/pre-train-check |
+| 20 | 新增／刪除／改動路由 | 端點有任何增減或方法／路徑／參數／requestBody／security 的改動 ⇒ **同一個 commit** 更新 `backend/modules/case/tests/route_table_golden.json`：`T40_WRITE_GOLDEN=1 pytest backend/modules/case/tests/test_route_table_golden_2026_10_05.py -q`，`git diff` 只該有你的路由。golden 是整個應用的路由登記簿（嚴格雙向相等、一行一筆排序；手改或衝突解錯會被規範寫法守門抓到）；新增公開路徑（`main._PUBLIC_API_PATHS`）另要在 `tests/test_endpoint_auth_w1b_t48.py` 的 `PUBLIC_BASELINE` 寫理由 | GOLDEN-DRIFT-T52（第 46～50 班 30 條路由沒人補 golden，舊守門單向比對看不到新增） |
 
 清單會長大：列車或稽核抓到「讀碼就看得出來」的紅，當輪加一列（寫出處）。
 
@@ -288,6 +289,8 @@
 （2026-09-26 02:28 主持）
 
 ### G3. 合回列車：多條線一起驗證（使用者 2026-09-26：「如果有可多視窗共同驗證的開發項目，可一次同時驗證 CPU」）
+
+> 〔2026-10-10 註：第 46 班起實際做法（一班一條整合分支、凍結 head 官方閘門、獨立稽核、主持發布與推基準）見 §G7；本節與 §G4 保留第九～十班的細節。〕
 
 - **為什麼**：每條線各自跑全量（45～60 分鐘，全機只有 2 個名額），6～8 包要排 3～4 小時，大半是重複跑同一批題。
 - **做法**：
@@ -361,3 +364,45 @@
   取號表裡有「撞號 ⇒ 重編（⚠ 已跑過舊號的開發庫要重建）」＝舊式分支撞了 core migration 號，回報時點名。
 - **准不准有佔位**：`MOTRIX_TRAIN=1`、分支 platform／master／main／train/*、HEAD 是 prod/* 標籤 ⇒ 不准；其他（wip/*、detached）⇒ 准（`tests/_version_slots.placeholders_allowed`）。
 - **仍然要人做的**：同模組兩筆 manifest 佔位由工具以換行串接內容（文字不潤飾）；CHANGELOG 段落順序＝疊車順序；模組要引用分支上新增的 CORE 功能時 `module.json` 的 `core` 下限只能寫目前號碼（列車取號後再收緊）。
+
+### G7. 一班列車的實際流程（第 46～51 班；以 git 與 RUN-PLAN §6 為準的整理，2026-10-10）
+> 為什麼有這一節：§G3／§G4 寫的是第九～十班的做法（每小時一班、`train/<時間>`、`D:\MOTRIX-PLATFORM-TRAIN<N>`、列車長子代理）。第 46 班起實際做法已改成「一班一條整合分支、官方閘門跑在凍結的 head 上、作者以外的獨立稽核、主持自己發布與推基準」。§G3／§G4 的細節（月台登記、自查 §G5、取號 §G6）仍然有效，下面只補它們沒寫的那一段。
+> 腳本類別說明：`publish_tNN.sh`、`push_tNN_baseline.sh` 是主持維護的**班次腳本，放在 `C:\Users\hichan\`、不在 repo 內**；下面只寫它們的規則，不寫內容。
+
+**0. 角色**：整合者（一個開發視窗，第 46～47 班 hichan-05、第 48a 班起 hichan-b7）建整合分支、取號、跑閘門；獨立稽核者（1d、ab、05、b5 交叉，**不得稽核自己寫的包**）；主持（node-d8）定案、發布、推基準。使用者外出期間主持全權，範圍見 `PROD-DEV-CHANNEL.md` §8。
+
+**1. 整合**
+1. 從 `origin/platform` 開整合分支 `train/tNN-int`（例 `train/t50-int`）；各 `wip/*` 以 squash 或 merge 疊上（commit 訊息 `merge(squash): wip/…`），不 force、不改寫已推的 wip 分支。
+2. 取號（§G6 `train_number.py assign`）**放在最後一個程式修正之後**，單獨一個 commit；之後又有程式修正就重新取號（第 45 班曾 revert 後重取）。**一班一個版本**：同一模組在整合分支上的兩段 `(next)` 要併成一段（第 47 班 payroll 例）。
+3. 重產產生檔：`python tools/platform/regen_all.py`（取號 → `dep_graph.json` → `UNIT-INDEX.md` → `test_map.json`，`--check` 不寫檔）。**`CACHE-INDEX.md` 不在其中**（它是手寫摘要，沒有產生工具；見下方「過期的摘要」）。
+4. 預檢：`python tools/platform/train_preflight.py`（`TRAIN-PREFLIGHT-T47.md`）。在**已整合的列車樹**上一次列出登記類紅燈（CHANGELOG `(next)` 位置、IP 登記、`bottom_layer.json` 全域清單、approval-flow 登記、`BEGIN` 白名單、golden、產生檔過期、`--expect-db-version` 寫死、`get_db()` 缺夾具）。預檢綠 ≠ 閘門綠，但第 47 班它在閘門之前就抓到 3 項，第 46 班同類紅燈曾讓全閘門重跑約 5 次。
+
+**2. 官方閘門（跑在凍結的 head 上）**
+1. 先宣告「凍結 head」（commit SHA、模組版號）。從這一刻到發布，**整合分支上的每一個 commit（包含只改文件的）都會改變 tree 指紋，使已跑的結果不能沿用**（`build_test_reuse.py`：指紋＝tracked tree＋環境，文件不排除；同日、12 小時內、兩段都綠才沿用）。所以：要補文件或修字，先全部做完再凍結；凍結後只修必修項。
+2. 兩段用同一個入口各跑一次，結果寫進沿用紀錄，建包時直接沿用：
+   - `python backend/tools/build_test_reuse.py run-stage --stage not_e2e`（第 49～50 班 3 個 worker，約 10,000 題）
+   - `python backend/tools/build_test_reuse.py run-stage --stage e2e`（2 個 worker，約 990 題）
+   - **規則（主持成文，第 47 班起）：官方 e2e 單獨跑，絕不與 not_e2e 並行；not_e2e 用 3 個 worker。** 並行跑在負載下曾逾時；機器 CPU 是瓶頸，其他視窗此時只做讀寫、不開 pytest。
+3. 任何一個修正 commit 之後，**先跑 CHANGELOG 守門**（第 47 班 4 次登記類紅燈之一），再重跑受影響的段；最終確認要在最後的 head 上兩段都綠。
+4. 偶發失敗的處理不變（§D-建包②）：當成真問題查；**未登記、未蓋章**的偶發題不得放行（第 49 班計時測試例；第 46 班結束時偶發登記簿為空）。測試不在 import／收集階段取系統日期（第 47 班跨午夜偶發紅燈；守門 `tests/platform/test_no_import_time_clock_2026_10_09.py`）。
+5. 最後在 RUN-PLAN §6 與步驟檔寫下：not_e2e／e2e 的題數、worker 數、head SHA。
+
+**3. 獨立稽核（作者以外）**
+1. 每班 2～4 份獨立稽核（第 50 班 1d／ab／05／b5 四份），分級照 §G4「稽核分級」。
+2. **必修項（must-fix）一律修完再重跑閘門**，不是只修不驗：第 49 班第一版（`c0d01cd57`）因兩項必修（cascade／hasFee 嚴格解析漏網、網路規劃書寫入端點漏逐案守門）整個作廢，修補後重跑閘門才發布；第 50 班三項必修（凍結重算進位平手、結案 PDF 標籤、報價單管銷列依口徑）修補後「複驗 PASS」才發布。
+3. 稽核報告放 `docs/platform/plans/`（`ENDPOINT-AUDIT-*`、`AUDIT-*`），RUN-PLAN 只寫結論一行。
+
+**4. 發布（主持）**
+1. 執行 `publish_tNN.sh`，規則（使用者 2026-10-09 授權主持自己推送、不用等指令）：**先讀腳本全文 → 先 `--check`（只檢查不發）→ 才正式執行**；fail-closed 前置條件：`HEAD` ＝ 過閘門的 commit ＝ origin 上的整合分支、manifest commit 存在、包內沒有 `*.db`／`.pyc`、`verify_package --expect-db-version <目前 schema 版本，現為 118>` 通過；簽章金鑰只以**路徑**傳入、**不讀內容**；不強推；任何一項檢查紅燈就不發布。被分類器擋下就停下請使用者處理，不繞過、不叫別的視窗代做。
+2. 發布產物：部署包 `YYYYMMDD_HHMMSS_<sha8>_full`（含 `package.sha256`、行數／檔案數）、雲端步驟檔 `給正式機Claude_第N班更新步驟.md`；repo 內的 `docs/platform/prod-tasks/YYYYMMDD-trainNN-apply.md` 與它逐字一致。步驟檔寫法見 `prod-tasks/TEMPLATE-apply.md`；套用規則見 `PROD-DEV-CHANNEL.md` §6。
+3. 正式機 Claude 依步驟檔自動套用（§6）；寫入資料類的作業另走 §7（使用者本人確認）。
+
+**5. 基準（套用成功之後，主持）**
+1. 一個 commit：`chore: 正式機基準更新為 <sha8>（第N班已上線）＋RUN-PLAN 進度＋步驟檔存檔`，內容三項：
+   - `backend/tests/_prod_baseline.py`：`BASELINE = "<sha8>"` 與一行 📌 說明（這一班上線了什麼）；
+   - `docs/platform/RUN-PLAN.md` §6 最上面一筆（時間、整合者／主持、新舊 commit、秒數、套件名與檔數、schema 版本、套用前備份檔名、步驟 3 結果、閘門題數、稽核與必修項處置、發布腳本名；這一筆由基準腳本寫入）；
+   - 步驟檔定稿存檔到 `docs/platform/prod-tasks/`，文首「定稿」行改成「已發布並已套用成功，<時間>」。
+2. `push_tNN_baseline.sh`：推 `platform` 只准 **fast-forward**，並有「diff 只能是文件」的守門；之後在**過閘門的那個 commit** 上打受信 tag `prod/<sha8>`（§D-1a：範圍驗證的基準只認最新的 `prod/*` tag）。同樣先讀、先 `--check`。
+3. 之後才開下一班；使用者驗收項（會寫資料的、要各角色帳號的）留給使用者，不在正式機代測。
+
+**過期的摘要（已知，待處理）**：`docs/platform/CACHE-INDEX.md` 的各段「來源 commit」落後（守門 `test_cache_index_fresh.py` 只警告不擋）。沒有重產工具，要人讀原檔對應章節後改摘要、換來源 commit；§G7 與 `PROD-DEV-CHANNEL.md` §6～§8 是這次新增的，下次更新 CACHE-INDEX 時要一併納入。

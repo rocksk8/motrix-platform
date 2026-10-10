@@ -35,6 +35,7 @@
 
 - 機器可讀的唯一來源：`docs/platform/case_read_scope.json`（每一條 GET、路徑或參數帶 `quote_no` 的讀取路徑，都要歸在其中一類）。
 - 守門：`backend/tests/platform/test_case_read_scope.py`——新增的讀取路徑沒有歸類 ⇒ 紅；標 row_access 而處理函式沒有呼叫逐案守門 ⇒ 紅。
+- 〔第 49 班補〕逐案守門**讀與寫都要套**（含匯出、預覽、下拉清單），看不到回 404；做法與先例見 §14.2。
 
 ## 2. 底層穩定契約（「底層不會變動」的具體意思）
 
@@ -270,3 +271,38 @@ modules/<key>/
 3. 口徑不同的支出（權責日期≠現金日期，例：派工、叫料、額外支出）交給 M01 `case.recognition` 決定，其他模組不自己歸月。
 4. **登記**：同一個 commit 在 `docs/platform/money_flows.json` 加一筆（module／capability／name／direction／doc）並更新 `docs/platform/MONEY-FLOWS.md` 覆蓋表（報表現金／權責、案件成本、出納、T100 各格標 ✅／🔴／⚪＋理由）。守門 `tests/platform/test_money_flows_registered.py` 兩邊對帳：登記了沒宣告、宣告了沒登記都紅。
 5. 不是金流（文件、參考價、預算）在 MONEY-FLOWS.md §3 寫明理由，不進 `money_flows.json`。
+
+## 14. 端點與資料規則（第 48～50 班累積；每一條都有對應守門或事故來源）
+
+### 14.1 請求本文的旗標只收真布林（第 49 班 W1c-P2）
+- `bool(body.get("flag"))`、`1 if body.get("flag") else 0` 會把 JSON 字串 `"false"`、`"0"`、`""` 當成 **true**：前端送真布林所以平時無事，API 直打、舊用戶端或腳本多帶一個引號，關卡（確認旗標、`accept_warnings`、緊急開關…）就被誤開。
+- 規則：取旗標一律用 `helpers/validation.py` 的 `body_flag(body, key, default=False)`（沒帶或 JSON `null` ⇒ default）或 `strict_bool(value, field)`；只收 `true`／`false`（或整數 `0`／`1`），其他型別 **422、什麼都不寫**。
+- 守門：`backend/tests/platform/test_no_truthy_request_flags.py`（禁止端點對請求本文用 `bool(...)`／真值三元式取旗標）；契約題 `tests/test_strict_bool_helper_t49.py`。
+- 其他型別同理：比率類欄位用 `parse_pct` 一類的嚴格解析；第 49 班第一版曾因 `cascade`、`hasFee` 兩處嚴格解析漏網被獨立稽核列為必修（RUN-PLAN §6 第 49 班）。
+
+### 14.2 逐案可見範圍：**讀與寫都要守**，匯出與預覽也算讀
+- 做法承 §1.1：綁定案件的資料，只有該案業務／協作者、admin 以上、持 `case_manage` 者看得到；看不到的回 **404**（看不到＝不存在），清單不列。沒綁案件的獨立資料不受影響；案件模組不在 ⇒ 綁案件的資料只給 admin 以上。
+- 第 49 班先例（`plans/VISIBILITY-TIGHTENING-T49.md`、網路規劃書）：盤點同一份資料的**所有**出口——清單、單筆、Excel／PDF 匯出、拓樸預覽、個資告知查詢——匯出與預覽原本只驗登入，一併收緊。第 49 班第二輪（`t49b`）才發現**寫入端點**（`PUT`／`PATCH status`／匯入 Excel／個資告知確認）沒套同一道規則，補上並加測；`admin` 不受案件列被刪影響。
+- 新增或收緊時一次做完：讀端點、寫端點、匯出、預覽、批次／下拉清單；在 `docs/platform/case_read_scope.json` 歸類（守門 `test_case_read_scope.py`）；上線備註寫「誰會看不到、怎麼補權限」（使用者問「我的資料不見了」⇒ 確認他是不是該案業務／協作者，或給 `case_manage`）。
+- 下拉／選單類清單（例：`GET /api/contractors/selectable`）也是資料出口：限最高管理者、財務角色或相關模組持有者，其他 403；盤點前端唯一呼叫者，確認沒有頁面因此壞掉，再加一道前端防線。
+
+### 14.3 寫入端點要有稽核；例外清單 `EXEMPT` 的規矩
+- 守門：`backend/tests/test_write_endpoints_are_audited_2026_09_24.py`——用 **ast**（不用 regex）掃 `routers/*.py` 與各模組 `api.py`，每個寫入端點必須直接呼叫 `_audit`／`_system_audit`，或呼叫 `AUDIT_WRAPPERS` 明列的包裝函式；**不做同名函式推論**（第一版量尺被「只在拒絕時寫 audit」的函式騙過）。
+- 真的不寫業務資料的端點才列 `EXEMPT`，key 是 `(檔名, 方法, 路徑)`，**每一筆寫原因**；原因不可空泛。另有守門守清單本身：列了不存在的端點 ⇒ 紅（改名或刪除要一起清）；列了卻已經有稽核 ⇒ 紅（該拿掉）。
+- 稽核改在 helper 的**同一個交易內**寫入時（例：職責角色 `helpers/duty_roles._record→_write_audit`，`audit_log` 與 `permission_changes` 同交易、`audit_id` 回填），端點本身不再另呼叫 `_audit`：照規矩列 `EXEMPT` 並寫明「稽核在哪裡、為什麼同交易」（第 48a 班）。失敗要整筆回滾，不要先寫業務、後補稽核。
+
+### 14.4 不用命令列比對來結束行程
+- 事故（2026-10-09 約 19:50，第 50 班官方閘門前；主持確認，記錄在主持離開日誌、不是 repo 檔）：整合者清自己的預跑時，用**含自己 pytest basetemp 名稱的命令列**比對行程，一次結束 8 個，其中 2 個不明確是自己的（一個 hermes-agent 的 venv python、一個 uv 的 python 3.11）；Claude 視窗未受影響。事後規則：**只依精確的自己的 PID 結束**。同機有多個視窗、多個 PM 共用，命令列字串一定會撞到別人。
+- 規則：**只依自己啟動的 PID（及其子行程樹）結束行程**；要找子行程就從自己記下的 PID 往下找（`Get-CimInstance Win32_Process` 以 `ParentProcessId` 展開），不要用命令列、行程名稱或 `taskkill /im python.exe` 這類寬條件。
+- 「等工作結束」同理：盯 PID 是否存在（背景 `until` 迴圈），不要用命令列字串比對判斷（查詢指令自己的命令列也含那個字串，會永遠比對到自己）。
+- `TaskStop` 結束 pytest 背景任務後，子行程可能還在：用自己記下的 PID 樹確認並清掉，不要再用命令列搜。
+
+### 14.5 利潤口徑改動的戳記規則（`formulaVer`、`STAMP_KEYS`；第 48～52 班）
+- **算式只有一個來源**：`backend/helpers/profit_rules.py`（Python）與 `frontend/static/profit-rules.js`（同一套算法的 JS 版），用同一份黃金向量 `tests/data/profit_rules_vectors.json` 做等值測試；守門 `tests/platform/test_profit_rule_single_source.py`。任何地方不得自己再寫一份管銷／公益／營業利益算式。
+- **口徑用戳記表示，不改內部鍵名**：`tot.formulaVer`（缺＝1＝舊口徑，2＝新口徑）、`tot.overheadPct`、`tot._legacy`（遷移前舊值，回滾依據）、`tot._recalc`。內部鍵 `adminCost`、`netProfit`、`netMarginPct`、`origNetProfit`、欄位 `net_margin_pct`、`bonus_case_awards.net_profit` 一律不改名，只改顯示用語；改名清單用白名單（會計報表的「稅後淨利」是另一個概念，不可改）。
+- **戳記只由伺服器蓋**（`modules/case/profit_guard.py`，`STAMP_KEYS = ("formulaVer", "overheadPct", "_legacy", "_recalc")`）：用戶端送來的值一律丟棄；`_legacy`／`_recalc` 表單重存時沿用資料庫現值。新增戳記鍵要加進 `STAMP_KEYS`，否則表單重存會把它洗掉或被偽造。
+- **開關預設＝舊行為**：設定值（`overhead_rule_mode`、`overhead_default_pct`、`overhead_migration_done`；T52 加 `charity_basis_mode`、`charity_migration_done`）缺＝舊口徑；程式上線零行為變更，切換是另一個步驟（`PROD-DEV-CHANNEL.md` §7）。切到新口徑要有「遷移完成」標記與 `confirm:true`，失效安全（缺一就當舊口徑）。
+- **已精算／結案不動**：`settle_status=finalized` 或 `deal_tag=已結案` 的存檔、重算、遷移工具一律跳過，數字、標籤、PDF 與切換前 bit 相同；重新開啟再完結才用新算法並蓋新戳記。獎金基數讀完結當下凍結的 `summary.netProfit`，不自己重算。
+- **不為子規則新增 `formulaVer`**：現有 20 多處 `formulaVer === 2` 判斷（標籤、PDF、Excel、獎金）不用動；同一口徑下的子規則改變（例：T52 公益捐款基數）另用獨立戳記（`tot.charityBasis`），與管銷口徑互不牽連。
+- **遷移工具的數字要與線上同式**：離線重算的進位、二進位浮點路徑要與線上重存逐位一致（第 50 班稽核必修：`netMarginPct` 差一個尾數就翻轉 12% 警示旗標）；附平手向量與 fuzz-lite 等值測試。工具先 `report`（dry-run）、使用者核准影響報告、再 `recalc --apply`，回滾用 `rollback`。
+- **舊口徑與新口徑並存的報表**：加註記、不做口徑篩選（設計稿 §12.1）；每筆精算 summary 的 `formulaVer` 可供日後要拆時使用。
