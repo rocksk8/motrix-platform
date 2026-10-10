@@ -38,6 +38,7 @@ def test_the_shim_exists_only_under_tests():
     out = subprocess.run(["git", "grep", "-l", "-E", "_FastHashlib|_FAST_PBKDF2_ITERATIONS", "--", "backend", "tools"],
                          capture_output=True, text=True, encoding="utf-8", cwd=REPO,
                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout.split()
+    assert "backend/conftest.py" in out, "git grep 沒找到代理本身（git 不在或輸出為空）⇒ 下面的檢查會空過：%r" % out
     allowed = ("backend/conftest.py",)
     stray = [f for f in out if f not in allowed and "/tests/" not in f and not f.startswith("backend/tests/")]
     assert not stray, "降次數的代理跑進了產品碼：%s" % stray

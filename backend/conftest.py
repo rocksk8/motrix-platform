@@ -259,6 +259,8 @@ def cleanup_tmp_if_passed(node) -> bool:
     import shutil
     if os.environ.get("MOTRIX_KEEP_TMP") == "1" or not getattr(node, "_motrix_call_passed", False):
         return False
+    if getattr(node, "_motrix_teardown_failed", False):      # 拆除階段出錯（teardown ERROR）⇒ 現場留著供查
+        return False
     tp = (getattr(node, "funcargs", None) or {}).get("tmp_path")
     if not tp:
         return False
@@ -269,10 +271,8 @@ def cleanup_tmp_if_passed(node) -> bool:
     return True
 
 
-@pytest.fixture(autouse=True)
-def _tmp_path_cleanup_on_pass(request):
-    yield
-    cleanup_tmp_if_passed(request.node)
+# 刪除時機＝該題『拆除階段的報告』產生之後（pytest_runtest_makereport，when=="teardown"）：此時所有 fixture 的拆除都跑完了，
+# 才知道有沒有 teardown ERROR；有就保留。（原本用 autouse fixture 的拆除，那時別的 fixture 的拆除錯誤還沒被記錄。）
 
 
 @pytest.fixture(autouse=True)
@@ -1858,6 +1858,9 @@ class _TeardownWatchdog:
 def pytest_runtest_makereport(item, call):
     outcome = yield
     rep = outcome.get_result()
+    if rep.when == "teardown":
+        item._motrix_teardown_failed = bool(getattr(rep, "failed", False))
+        cleanup_tmp_if_passed(item)
     if rep.when == "call":
         item._motrix_call_passed = bool(getattr(rep, 'passed', False))            # 第 51 班：給 _tmp_path_cleanup_on_pass 判斷（通過才刪該題暫存）
     if not rep.failed:

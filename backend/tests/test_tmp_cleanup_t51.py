@@ -29,3 +29,9 @@ def test_keep_switch_and_missing_tmp_path_are_respected(tmp_path, monkeypatch):
     monkeypatch.delenv("MOTRIX_KEEP_TMP")
     _d2 = types.SimpleNamespace(_motrix_call_passed=True, funcargs={})
     assert cleanup_tmp_if_passed(_d2) is False
+
+
+def test_teardown_error_keeps_the_directory(tmp_path):
+    d, node = _node(tmp_path, True)
+    node._motrix_teardown_failed = True
+    assert cleanup_tmp_if_passed(node) is False and (d / "f.txt").exists()
