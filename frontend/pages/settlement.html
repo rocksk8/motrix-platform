@@ -1980,7 +1980,7 @@ function settlementPage() {
     async saveOhPct() {
       const s = String(this.ohEdit.val == null ? '' : this.ohEdit.val).trim()
       const n = Number(s)
-      if (s === '' || !isFinite(n) || n < 0 || n > 100 || Math.round(n * 10) !== n * 10) { this.toastErr('管銷比率必須是 0～100 的數字，最多 1 位小數'); return }
+      if (s === '' || !isFinite(n) || n < 0 || n > 100 || Math.round(n * 10) !== n * 10 /* 非金額 */) { this.toastErr('管銷比率必須是 0～100 的數字，最多 1 位小數'); return }
       const dev = n !== Number(this.oh.defaultPct)
       if (dev && !confirm('管銷分攤比率為 ' + n + '%（預設 ' + this.oh.defaultPct + '%）。\n這會改變這張報價單的營業利益與獎金基數，確定要套用嗎？')) return
       this.ohEdit.busy = true

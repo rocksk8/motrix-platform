@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-10（wip/t52-ab-charity-quote）：公益捐款改『報價含稅 1%』（新基，預設關）＋精算頁可調管銷比率（僅最高管理者）（含稽核 05 修正）
+## (next) — 2026-10-10（wip/t52-ab-charity-quote）：公益捐款改『報價含稅 1%』（新基，預設關）＋精算頁可調管銷比率（僅最高管理者）（含稽核 05 修正；作者閘門修正）
 - **公益捐款基數**（使用者 2026-10-10）：新基 `charityBasis=total` ＝ `round_half_up(tot.total × 1%)`（報價含稅金額；不看直接毛利、虧損案照扣；下限 0 只設在含稅金額上）。只在新管銷口徑（formulaVer 2）生效，舊基（直接毛利 1%、虧損 0）逐位不變。唯一來源 `helpers/profit_rules.py`＋`static/profit-rules.js`（`charity(direct, total, basis)`、`quote_profit/settlement_profit` 加 `total`／`charity_basis`），黃金向量 +77 筆。
 - 設定：`charity_basis_mode`（direct｜total，預設 direct＝上線零行為變更）＋標記 `charity_migration_done`；有效條件＝overhead v2＋管銷標記＋公益標記＋mode total，缺一當 direct。`GET/PUT /api/overhead/settings` 增 `charityBasis/charityMode/charityMigrationDone`；切 total 要 `confirm:true` 且三條件俱備，切回 direct 刪標記，管銷退回 legacy 時公益基數一併強制退回 direct。
 - 伺服器戳記：`tot.charityBasis`、`tot._legacyCharity`（回滾依據）只由伺服器蓋/沿用資料庫現值（`profit_guard.STAMP_KEYS`）；精算 summary 增 `charityBasis`、`origCharityBasis`（原始側看報價單戳記，與實際側目前模式分開）；完結比對公益金改逐位相同（total 基數與實際成本無關）。

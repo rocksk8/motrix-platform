@@ -18,6 +18,12 @@ def _read(rel):
     return open(os.path.join(ROOT, *rel.split("/")), encoding="utf-8").read()
 
 
+def _page(name):
+    """頁面路徑集中（tests/platform/test_page_paths_centralized）：頁面一律走 source_tree.page_file。"""
+    from core import source_tree
+    return source_tree.page_file(name).read_text(encoding="utf-8")
+
+
 def test_python_labels_follow_the_stamp_not_the_mode():
     assert pdf_gen.charity_cost_label({"charityBasis": "total"}) == NEW
     assert pdf_gen.charity_cost_label({}) == OLD and pdf_gen.charity_cost_label(None) == OLD
@@ -44,16 +50,19 @@ def test_frontend_label_helpers_exist_with_the_same_strings():
         i = s.index(fn + "(sm, orig)")
         body = s[i:i + 420]
         assert NEW in body and OLD in body and "origCharityBasis" in body and "charityBasis" in body, rel
-    st = _read("frontend/pages/settlement.html")
+    st = _page("settlement.html")
     assert re.search(r"charityLbl\(sm, orig\)", st) and NEW in st and OLD in st
-    q = _read("frontend/pages/quotation-form.html")
+    q = _page("quotation-form.html")
     assert "qf-charity-label" in q and NEW in q and OLD in q
 
 
 def test_no_hardcoded_old_charity_label_left_in_display_code():
     stray = {}
-    for rel in ("frontend/pages/case-management.html", "frontend/pages/reports.html", "frontend/pages/settlement.html", "backend/pdf_gen.py",
-                "backend/modules/analytics/api/reports.py"):
+    for name in ("case-management.html", "reports.html", "settlement.html"):
+        n = _page(name).count("公益捐款（1%）")
+        if n:
+            stray[name] = n
+    for rel in ("backend/pdf_gen.py", "backend/modules/analytics/api/reports.py"):
         n = _read(rel).count("公益捐款（1%）")
         if n:
             stray[rel] = n

@@ -59,7 +59,7 @@ def test_settled_quote_follows_its_own_stamp_not_the_current_mode():
 
 @needs_node
 def test_label_text_follows_the_basis_in_the_page_source():
-    src = open(__import__("os").path.join(__import__("os").path.dirname(__import__("os").path.dirname(__import__("os").path.dirname(__file__))),
-                                          "frontend", "pages", "quotation-form.html"), encoding="utf-8").read()
+    from core import source_tree
+    src = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")
     assert "公益捐款（報價含稅 1%）" in src and "公益捐款（直接毛利 1%）" in src and "qf-charity-label" in src
     assert "charityBasis() !== 'total'" in src, "新基沒有『虧損案以 0 計』提示"
