@@ -17,6 +17,7 @@ from modules.case.api import (case_action_items as _api_action_items, case_extra
                               material_payments as _api_material_payments,
                               material_links as _api_material_links, settlement_actuals as _api_settlement_actuals,
                               quotations as _api_quotations, settlement_api as _api_settlement_api, overhead as _api_overhead)
+from modules.case import recycle_adapter as _recycle_adapter   # 刪除暫存區 adapter（IP-RB1）
 from modules.case import expense_notify as _expense_notify     # noqa: F401 — 載入時登記費用單據的信件類型
 from modules.case import material_approval as _material_approval  # noqa: F401 — 載入時登記簽核單據類型 material_order（叫料）
 from modules.case import material_change as _material_change      # noqa: E402
@@ -96,6 +97,8 @@ MODULE = ModuleSpec(
         ("material.shippable", "case"): material_shippable.material_shippable,
         # 第 43 班（IP-SH5）：整案「訂購／已出貨／占用中」數量小計（營運報表匯出用；只有數量）
         ("case.shipped_summary", "case"): item_shipped.case_shipped_summary,
+        # IP-RB1（第 53 班 P1）：刪除暫存區的單據轉接（報價單、額外支出／請購單／採購單、完工單、材料申請）
+        **{("recyclebin.adapter", _et): _cls for _et, _cls in _recycle_adapter.adapters().items()},
         # IP-102（W1）：匯款差額審核；IP-9：額外支出的匯款手續費列營運報表支出
         ("remit.reviews", "case"): payables._RemitReviews,
         ("expense.entries", "remit_fee_case"): payables._expense_entries,

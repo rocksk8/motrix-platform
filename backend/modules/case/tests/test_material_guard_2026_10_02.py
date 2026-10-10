@@ -306,7 +306,8 @@ def test_static_guard_g_m1_only_the_gate_writes_orders_and_flags():
     """G-M1：`modules/case`（非測試）裡寫 `materialOrders` 的地方只准是閘與專屬端點（且專屬端點寫入後馬上過閘）；沒有任何地方指派 `ordered`／`arrived`；
     寫入漏斗 `save_quotation_json` 一定呼叫閘。"""
     root = Path(__file__).resolve().parents[1]
-    allowed_files = {"material_guard.py", "material_orders.py", "recognition.py", "material_approvals.py"}
+    # 第 53 班 P1：recycle_adapter.py（刪除暫存區）進出暫存區時把那一列從報價單 JSON 拿掉／放回——有刪除規則（can_delete）與衝突檢查把關，不是繞過閘的寫入
+    allowed_files = {"material_guard.py", "material_orders.py", "recognition.py", "material_approvals.py", "recycle_adapter.py"}
     hits = {}
     for p in root.rglob("*.py"):
         rel = p.relative_to(root).as_posix()

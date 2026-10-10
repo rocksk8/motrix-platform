@@ -31,6 +31,9 @@ from db import get_db, next_entity_code
 from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers.errors import trace_id
 from helpers.case_access import is_document_approver
+from helpers import recycle_bin                       # 第 53 班 P1：刪除先進暫存區（IP-RB2）
+from modules.case import recycle_adapter as _RA
+from core.txn import begin_write
 from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from modules.case import expense_notify as _expense_notify  # 第44班：完工單核准通知申請人（信件類型在 expense_notify 登記）
 from helpers import (
@@ -369,16 +372,23 @@ def delete_completion_note(note_no: str, authorization: str = Header(None)):
             raise HTTPException(404, "完工單不存在")
         if row["status"] != "草稿":
             raise HTTPException(409, "僅草稿狀態可刪除")
-        conn.execute("DELETE FROM completion_notes WHERE note_no=?", (note_no,))
+        begin_write(conn)
+        try:
+            res = recycle_bin.delete(conn, "completion_note", note_no, user)    # 進暫存區（回簽檔一併搬走）
+        except recycle_bin.BinError as e:
+            conn.rollback()
+            raise HTTPException(409, str(e))
+        if res is None:                                                         # 暫存區模組不在 ⇒ 照舊硬刪並明說（IP-RB2）
+            _RA.CompletionNoteAdapter().delete_in_tx(conn, note_no)
         conn.commit()
     finally:
         conn.close()
     _purge_notifications(note_no, ['completion_approval_request', 'completion_approved',
                                    'completion_returned'])
-    _audit(_tok(authorization), "completion.delete", "completion_note", note_no, note_no)
+    _audit(_tok(authorization), "completion.delete", "completion_note", note_no, note_no + ("（已進暫存區）" if res else "（暫存區未安裝，已直接刪除）"))
     notify_module_activity("完工單", "刪除", user.get("display_name") or user["username"],
                            note_no, "case-management.html")
-    return {"ok": True}
+    return {"ok": True, **({} if res else {"binned": False, "notice": _RA.BIN_ABSENT_NOTICE})}
 
 
 # ── 簽核流程（比照 shipping_notes.py，語意逐條對齊）──────────────────────────
