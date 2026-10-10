@@ -223,6 +223,58 @@ def _bk19_no_write_outside_tmp():
                 print("   ", line)
 
 
+# ── 第 51 班 SPEEDUP-IO-T50（主持裁示）─────────────────────────────────────────────────────────────
+# (1) 測試行程內把 PBKDF2 次數降到 1,000：`make_user` 雜湊＋登入驗證各一次 = 2 × 210 ms（260,000 次），占整輪約 18%。
+#     🔴 只動測試行程：用 monkeypatch 把 `helpers.auth.hashlib` 換成代理，**不改產品碼、沒有任何產品開關**；
+#     雜湊與驗證都在 helpers.auth 同一個模組內，所以兩邊用同一個次數；e2e 的行程內伺服器讀的是同一個模組，登入照常。
+#     要驗雜湊格式／強度的題掛 `@pytest.mark.real_pbkdf2` 保留真值。守門：tests/test_pbkdf2_test_only_t51.py。
+_FAST_PBKDF2_ITERATIONS = 1000
+
+
+class _FastHashlib:
+    """只給 helpers.auth 用的 hashlib 代理：pbkdf2_hmac 的次數上限 1,000，其餘屬性原樣轉給真的 hashlib。"""
+
+    def __getattr__(self, name):
+        import hashlib
+        return getattr(hashlib, name)
+
+    @staticmethod
+    def pbkdf2_hmac(hash_name, password, salt, iterations, dklen=None):
+        import hashlib
+        return hashlib.pbkdf2_hmac(hash_name, password, salt, min(int(iterations), _FAST_PBKDF2_ITERATIONS), dklen)
+
+
+@pytest.fixture(autouse=True)
+def _fast_pbkdf2(request, monkeypatch):
+    if request.node.get_closest_marker("real_pbkdf2") or os.environ.get("MOTRIX_TEST_REAL_PBKDF2") == "1":     # 環境變數＝A/B 對照用（只在測試行程；產品碼看不到）
+        return
+    import helpers.auth as _auth
+    monkeypatch.setattr(_auth, "hashlib", _FastHashlib())
+
+
+# (2) 題目通過就立刻刪掉該題的 tmp_path（失敗保留供查）：整輪約 12 GB 的建檔／刪檔流量與數萬個小檔不再堆到 session 結束才清。
+#     MOTRIX_KEEP_TMP=1 關閉。自動使用的 fixture 最先建立、最後拆除 ⇒ 在 client 等 fixture 的拆除（含背景執行緒 join）之後才刪。
+def cleanup_tmp_if_passed(node) -> bool:
+    """回 True＝刪了。測得到的純函式（tests/test_tmp_cleanup_t51.py）。"""
+    import shutil
+    if os.environ.get("MOTRIX_KEEP_TMP") == "1" or not getattr(node, "_motrix_call_passed", False):
+        return False
+    tp = (getattr(node, "funcargs", None) or {}).get("tmp_path")
+    if not tp:
+        return False
+    try:
+        shutil.rmtree(str(tp), ignore_errors=True)   # 檔案還被開著（Windows）刪不掉的留給 basetemp 收尾
+    except Exception:                                # noqa: BLE001 — 清理不可讓題目變紅（有題目會把 os.walk 換掉）
+        return False
+    return True
+
+
+@pytest.fixture(autouse=True)
+def _tmp_path_cleanup_on_pass(request):
+    yield
+    cleanup_tmp_if_passed(request.node)
+
+
 @pytest.fixture(autouse=True)
 def _guard_archive_isolation(tmp_path_factory):
     """🔴 BK19：每一題開始前，確保存檔根目錄不是真的雲端硬碟。
@@ -1806,6 +1858,8 @@ class _TeardownWatchdog:
 def pytest_runtest_makereport(item, call):
     outcome = yield
     rep = outcome.get_result()
+    if rep.when == "call":
+        item._motrix_call_passed = bool(getattr(rep, 'passed', False))            # 第 51 班：給 _tmp_path_cleanup_on_pass 判斷（通過才刪該題暫存）
     if not rep.failed:
         return
     if rep.when == "call" and getattr(item, "_e2e_deadline_hit", False):
