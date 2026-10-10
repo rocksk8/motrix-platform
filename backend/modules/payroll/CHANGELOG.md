@@ -1,5 +1,12 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-10-10（wip/t53-05-rb-adapters）：勞報單進刪除暫存區（IP-RB1 adapter；第 53 班 P1）
+- 新 `recycle_adapter.py`（`payslip` adapter）：快照＝勞報單本體＋`payslip_dispatch_links`（無附件：簽回檔／匯出存檔只在鎖定狀態才有）；詳情的遮罩視圖會展開 `data_json` 等 JSON 字串再遮罩（銀行帳號等），還原用原文。
+- `DELETE /api/payslips/{slip_no}`（仍只有最高管理者）：規則不變——待審核／已核准／已匯出／已簽回／已付款／已作廢一律不可刪（須保留備查）；草稿改進暫存區（連結列一併進、一併還原）。暫存區模組不在 ⇒ 照舊硬刪（同一段條件式 `delete_in_tx`），稽核標籤註明。
+- 『刪除已核可』**不開放**勞報單（`can_delete_approved` 回 False：已核准之後牽涉出納待付款、總帳 E06、簽回檔與匯款連結；撤銷請用『作廢』）；影響清單仍可查（已付款／已簽回／已匯出／派發連結數，鎖定者標 blocking）。
+- 還原：單號被占 ⇒ `conflict:`；受領人（外包名冊）不在 ⇒ `parent_missing:`；`contractor_guess_id` 指向的人不在 ⇒ 清成 NULL 並註記（推測值不擋還原，且**不會**升格成 `contractor_id`）；派發已不存在的連結略過並註記。
+- 無 migration、無權限變更。守門基線移除勞報單的 `routes`／`delete_from` 項目（解除派發連結的 DELETE 改標 `p2:`）。
+
 ## 1.2.13 — 2026-10-10（wip/t52-ab-charity-quote）：精算明細表／獎金 PDF 的公益捐款列標籤依基數戳記
 - `bonus.row_label`：公益捐款列＝「公益捐款（報價含稅 1%）」（`summary.charityBasis=total`）或「公益捐款（直接毛利 1%）」（無戳記／舊基）。基數鍵 `netProfit` 與獎金算式不變（仍讀精算凍結值）；已完結案獎金不變。
 
