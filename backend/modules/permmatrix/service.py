@@ -586,11 +586,6 @@ def list_delegations(conn, state=None):
 
 
 # ── 白話預覽（存檔前的「影響面板」）與一鍵復原 ─────────────────────────────────────────────
-def _impact_provider(cap):
-    from core import registry
-    return registry.providers("perm.impact").get(cap.unit) if cap.impact_calc else None
-
-
 def _preview(conn, cap, sentence, users, delay, extra=None):
     """共用的預覽內容：句子、勾選後會影響什麼、影響幾位使用者／幾份單據、適用範圍、可否復原、何時生效、風險提示。畫面只顯示這些中文。"""
     from helpers import perm_text as T
@@ -606,12 +601,7 @@ def _preview(conn, cap, sentence, users, delay, extra=None):
         "pending": bool(delay),
         "risk": T.risk_hint(cap.key),
     }
-    prov = _impact_provider(cap)
-    if prov is not None:
-        try:
-            out["documents"] = prov(conn, cap.key, extra or {})
-        except Exception:                                                 # noqa: BLE001 — 影響計算失敗不擋預覽
-            logger.exception("perm.impact provider failed for %s", cap.key)
+    # 影響計算（單據筆數等）：能力宣告的 `impact_calc` 已預留；提供者機制 `perm.impact` 等第一個單位真的需要時再登記（P1），目前只顯示白話影響說明與人數。
     return out
 
 

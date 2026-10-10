@@ -1050,18 +1050,3 @@ L1 的中央檢查 `perm.can()` 需要「種子 ⊕ 管理者的覆寫」＋有�
 | 對方不在時 | 模組不在或讀取失敗 ⇒ L1 用種子（＝今天的行為）並記 log，不多給也不少給 |
 | 契約版本 | 1（2026-10-10） |
 | 守門 | `backend/modules/permmatrix/tests/test_permmatrix_m2.py`、`backend/tests/platform/test_perm_equivalence_gate_a.py` |
-
-## IP-PM2　`perm.impact`：能力的影響人數／筆數計算（各單位 → M16 `permmatrix`；每單位一個提供者；暫定號，列車定號；2026-10-11）
-
-能力宣告可帶 `impact_calc`（「這項調整會影響到誰」的數字由擁有單位算，權限矩陣頁只負責顯示）；沒有提供者時頁面只顯示宣告裡的白話影響說明、不顯示數字。
-
-| 欄位 | 內容 |
-|---|---|
-| 提供方 | 擁有該能力的單位（名稱＝單位鍵，例：`payroll`），宣告 `impact_calc: true` 的能力才會被呼叫 |
-| 使用方 | M16 `modules/permmatrix/service.py`（影響預覽 `preview_*`） |
-| 形式 | provider，每單位一個（名稱＝單位鍵） |
-| 語法 | 提供：`("perm.impact", "<單位>"): fn`；取用：`registry.providers("perm.impact").get(unit)` ⇒ `fn(conn, cap_key, extra: dict) -> 可 JSON 序列化的值` |
-| 回傳 | 放進預覽的 `documents` 欄（例如受影響的單據筆數）；呼叫失敗只記 log，預覽退回只顯示白話說明 |
-| 對方不在時 | 沒有提供者 ⇒ 不顯示數字（不影響預覽與套用） |
-| 契約版本 | 1（2026-10-11） |
-| 守門 | `backend/modules/permmatrix/tests/test_permmatrix_m2.py` |
