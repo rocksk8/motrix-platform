@@ -7,6 +7,7 @@
 
 能力名 `gl.source_status`（accounting 提供，IP-106 暫定號）。L2 不互相 import：來源模組不直接讀總帳表。"""
 import logging
+import re
 
 _log = logging.getLogger(__name__)
 
@@ -26,5 +27,6 @@ def gl_posted_warning(conn, source_type, source_key, prefix=False):
         return None
     if not hits:
         return None
-    nos = sorted({h["voucher_no"] for h in hits if h.get("voucher_no")})
+    nos = sorted({h["voucher_no"] for h in hits if h.get("voucher_no")},
+                 key=lambda s: [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", s)])        # 自然排序：-1000 在 -999 之後（第 54 班）
     return MESSAGE.format(voucher="（傳票 %s）" % "、".join(nos[:3]) if nos else "")

@@ -288,11 +288,25 @@ def next_revision_no(voucher_no):
     return "%s-R%d" % (m.group("base"), int(m.group("n")) + 1)
 
 
-#: 單號的主體：`YYYYMMDD-NNN`（日期 ＋ 三位流水）。
+#: 單號的主體：`YYYYMMDD-NNN`（日期 ＋ **至少**三位流水）。
 #:
 #: 📌 格式**不是推的** —— 使用者提供的實例逐字是 `20260330-006`
 #:    （`docs/reference/傳票-實例-20260330-006.pdf`，分析在 `STATE.md §103b`）。
-_DAILY_NO_RE = re.compile(r"^(\d{8})-(\d{3})(?:-R\d+)?$")
+#: 🔴 第 54 班修正：流水是 `\d{3,}`，不是 `\d{3}`。產生端 `"%s-%03d" % (day, biggest + 1)` 第 1000 張會自然變成 `-1000`，
+#:    但舊正則 `\d{3}` 認不得它 ⇒ `biggest` 停在 999 ⇒ 下一次又產出 `-1000` ⇒ 唯一索引撞號。寬度（三位起跳）不改。
+_DAILY_NO_RE = re.compile(r"^(\d{8})-(\d{3,})(?:-R\d+)?$")
+
+
+def voucher_seq_sql(col="voucher_no"):
+    """SQL 運算式：單號 `YYYYMMDD-NNN[N…][-Rn]` 的流水**整數值**（`20261010-1000` ⇒ 1000；`-R1` 尾碼不算）。
+    ORDER BY 要用它（`ORDER BY substr(<col>,1,8), <本式>, <col>`），不能直接 `ORDER BY voucher_no`：字串排序會把 `-1000` 排在 `-999` 前面。"""
+    rest = "substr(%s, 10)" % col
+    return "CAST(CASE WHEN instr(%s, '-') > 0 THEN substr(%s, 1, instr(%s, '-') - 1) ELSE %s END AS INTEGER)" % (rest, rest, rest, rest)
+
+
+def voucher_order_sql(col="voucher_no"):
+    """ORDER BY 片段：日期段、流水整數、整個單號（同流水的 `-R1`、`-R2` 版本依字串）。"""
+    return "substr(%s, 1, 8), %s, %s" % (col, voucher_seq_sql(col), col)
 
 
 def next_voucher_no(conn, voucher_date):

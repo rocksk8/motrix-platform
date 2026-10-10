@@ -11,6 +11,7 @@
 （不平衡的資料照樣顯示 `balanced=False`）。
 """
 from modules.accounting.ledger import periods as _periods
+from modules.accounting.voucher import voucher_order_sql          # 第 54 班：單號流水 ≥1000 位時的排序（字串排序會排錯）
 from modules.accounting.ledger.roles import PL_TYPES, ensure_meta
 
 _UNPOSTED = ("草稿", "待審核", "簽核中", "已核准")
@@ -176,7 +177,7 @@ def general_ledger(conn, account, start, end, include_drafts=False, include_clos
         "SELECT v.voucher_date, v.voucher_no, v.status, v.kind, l.line_no, l.account_code, l.summary, l.debit, l.credit,"
         " l.case_no, l.party_key, l.doc_no, l.counterparty, v.id AS voucher_id FROM voucher_lines l JOIN vouchers_all v ON v.id=l.voucher_id"
         " WHERE " + " AND ".join(where) + " AND substr(v.voucher_date,1,10) BETWEEN ? AND ?" + extra
-        + " ORDER BY substr(v.voucher_date,1,10), v.voucher_no, l.line_no", args + [max(start, base or start), end] + eargs).fetchall()
+        + " ORDER BY substr(v.voucher_date,1,10), " + voucher_order_sql("v.voucher_no") + ", l.line_no", args + [max(start, base or start), end] + eargs).fetchall()
     run, out = opening, []
     for r in lines:
         run += r["debit"] - r["credit"]
@@ -222,10 +223,10 @@ def subledger(conn, account, dimension, start, end, include_drafts=False):
 def journal(conn, start, end, include_drafts=False, limit=2000):
     """序時帳簿：期間內傳票依日期／號碼，附分錄。"""
     st = _statuses(include_drafts)
-    vs = conn.execute(
-        "SELECT id, voucher_no, voucher_date, category, kind, summary, status FROM vouchers_all WHERE voided_at=''"
-        " AND status IN (%s) AND substr(voucher_date,1,10) BETWEEN ? AND ? ORDER BY substr(voucher_date,1,10), voucher_no LIMIT ?"
-        % ",".join("?" * len(st)), list(st) + [start, end, int(limit)]).fetchall()
+    sql = ("SELECT id, voucher_no, voucher_date, category, kind, summary, status FROM vouchers_all WHERE voided_at=''"
+           " AND status IN (%s) AND substr(voucher_date,1,10) BETWEEN ? AND ? ORDER BY substr(voucher_date,1,10), "
+           % ",".join("?" * len(st))) + voucher_order_sql("voucher_no") + " LIMIT ?"
+    vs = conn.execute(sql, list(st) + [start, end, int(limit)]).fetchall()
     out = []
     for v in vs:
         d = dict(v)

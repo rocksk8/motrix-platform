@@ -1,5 +1,10 @@
 # 會計 更新紀錄
 
+## (next) — 2026-10-11（wip/t54-ab-voucher-no-fix）：傳票每日流水第 1000 張撞號修正
+- **bug**：`next_voucher_no` 產出 `"%s-%03d"`，第 1000 張自然變成 `20261010-1000`，但讀取用的 `_DAILY_NO_RE` 是 `\d{3}` 認不得 4 位流水 ⇒ 最大值卡在 999 ⇒ 下一次又產出 `-1000` ⇒ 唯一索引撞號。正則改 `(\d{3,})`；流水寬度（三位起跳）**不變**（是否加長交給使用者／T100 單號長度確認）。
+- 排序：新增 `voucher_seq_sql()`／`voucher_order_sql()`（依日期段、流水整數、整個單號排序）；`ledger/reports.py` 的序時帳簿與明細帳改用，不再直接 `ORDER BY voucher_no`（字串排序會把 `-1000` 排在 `-999` 前面）；`helpers/gl_status.py` 的傳票號清單改自然排序。
+- 測試 `tests/test_voucher_no_width_t54.py`：999→1000→1001 不撞號、舊正則盲點反向控制、混合寬度與 `-Rn` 修訂版、排序。
+
 ## 1.1.57 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-09（wip/t48-w1a-fixes）：宣告 `GET /api/expense-categories` 的前綴（端點稽核 W1a）；併第49班 strict-bool（W1c-P2）；併 2026-10-09(wip/t49-strict-bool；W1c-P2 旗標嚴格解析＋P4 明列路由)**
 - **（併入）(next) — 2026-10-09（wip/t49-strict-bool；W1c-P2 旗標嚴格解析＋P4 明列路由）**
