@@ -1201,7 +1201,17 @@
           try {
             const r = await fetch(url, { method, headers: this._authJson(), body: JSON.stringify(body) })
             if (r.ok) {
+              const d = await r.json().catch(() => ({}))
+              const pend = Array.isArray(d.pending) ? d.pending : []
               this[prefix + 'Msg'] = okMsg || '設定已儲存'
+              if (pend.length) {
+                // 縮短保存期限＝放寬：不立即生效，要等確認期間（天數取自實際的待生效項），可能還要另一位最高管理者確認
+                const t = Math.max(...pend.map(p => Date.parse(p.effectiveAt) || 0))
+                const n = Math.max(1, Math.ceil((t - Date.now()) / 86400000))
+                const needSecond = pend.some(p => p.approvalsRequired > 0)
+                this[prefix + 'Msg'] = `已送出，這項變更將於 ${n} 天後生效` + (needSecond ? '；需另一位最高管理者確認' : '；期間內可以撤銷')
+                  + '（沒有被延後的項目已即時儲存）'
+              }
               this[prefix + 'IsError'] = false
               this[prefix + 'Saved'] = true
               setTimeout(() => this[prefix + 'Saved'] = false, 3000)
@@ -1215,7 +1225,7 @@
             this[prefix + 'IsError'] = true
           } finally {
             this[prefix + 'Saving'] = false
-            setTimeout(() => this[prefix + 'Msg'] = '', 5000)
+            setTimeout(() => this[prefix + 'Msg'] = '', 12000)
           }
           return false
         },
