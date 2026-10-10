@@ -1,7 +1,8 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-10（wip/t54-05-reassign-rules）：轉簽不能變成自核的後門（使用者裁示）
+## (next) — 2026-10-10（wip/t54-05-reassign-rules）：轉簽不能變成自核的後門（使用者裁示）＋1d 稽核跟進
 - L1 `routers/approval_queue.py::reassign_approval`（`POST /api/approval-queue/reassign`，所有 `approval.reassign` 提供者一體適用）：①操作者不得是送審人（403）②轉給的對象不得是送審人本人（400）③原簽核人與其他在職最高管理者也收到通知（新通知類型 `approval_reassigned`；新簽核人仍收 `approval_request`；操作者本人不收）④稽核 `approval.reassign` 與換人**同一個交易**寫入（強制；寫不進去 ⇒ 轉簽回滾），不再是 commit 之後吞錯誤的 `_audit`。原因必填、只動當層第一個未簽核人等既有規則不變。
+- 稽核跟進（1d）：①讀不到送審人 ⇒ 409 擋下（fail-closed；傳票提供者的 `load` 補 `submitted_by` 後備，舊單才認得送審人）②對象已經是這張單其他層的簽核人（簽過或待簽）⇒ 409（同一個人不得簽出兩層）③自己接手（最高管理者把當層轉給自己）仍允許——這就是『另一位最高管理者接手』的情境——但稽核 detail 記 `selfAssigned: true`，通知附『（自行接手）』④稽核列的 module／case_no／ref_no 用 `_audit` 同一個推導函式，原因上限 500 字、detail 套同一道 `_DETAIL_MAX`。
 - 無 migration、無 helpers 介面變更。
 
 ## 1.125 — 2026-10-10（wip/t52-ab-charity-quote）

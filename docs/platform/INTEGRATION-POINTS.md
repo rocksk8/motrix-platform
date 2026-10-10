@@ -507,7 +507,7 @@ M01-PLAN §3-7（主持裁示 2026-09-26 11:16，RUN-PLAN §5 D1 的 M06 ①）�
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | 提供者名稱＝單據類型（佇列的 `type`）：M01 `quotation`（`modules/case/api/quotations.py::_QuotationReassign`，寫回走 `save_quotation_json`）、`completion_note`；M04 `contractor_voucher`；M05 `invoice_voucher`、`payment_request`；M03 `shipping_note`；M06 `voucher`（`modules/accounting/api/vouchers.py::_VoucherReassign`，approval_json 是欄位、作廢不算、讀不出來 fail-closed）。data_json 類共用 L1 `helpers/approval_queue.DataJsonApproval(table, key)`（表名由擁有者傳入） |
-| 使用方 | L1 `routers/approval_queue.py` 的 `POST /api/approval-queue/reassign`（權限、原因必填、換人規則（第 54 班：操作者與轉給的對象都不得是送審人）、reassignLog、audit（同交易強制）、通知（含原簽核人與其他最高管理者）都在 L1；~~M01~~（主持裁示 2026-09-27，c-approval-l1））；`GET /api/approval-queue` 回 `reassignTypes`（有提供者的類型），前端 `canReassign()` 據此顯示按鈕 |
+| 使用方 | L1 `routers/approval_queue.py` 的 `POST /api/approval-queue/reassign`（權限、原因必填、換人規則（第 54 班：操作者與轉給的對象都不得是送審人；讀不到送審人 ⇒ 409；對象已在其他層 ⇒ 409；自己接手允許但留痕；提供者可在 `load` 回 `requestedBy` 當後備）、reassignLog、audit（同交易強制）、通知（含原簽核人與其他最高管理者）都在 L1；~~M01~~（主持裁示 2026-09-27，c-approval-l1））；`GET /api/approval-queue` 回 `reassignTypes`（有提供者的類型），前端 `canReassign()` 據此顯示按鈕 |
 | 形式 | provider，多個提供者（`core.registry.providers("approval.reassign")`，以類型名取一個） |
 | 語法 | 提供：`("approval.reassign", "<type>"): obj`（ModuleSpec）或 `_registry.provide("approval.reassign", "<type>", obj)`<br>`obj.load(conn, doc_no) -> {"docNo", "quoteNo", "status", "approval"} \| None`（簽核資料讀不出來 ⇒ raise `helpers.approval_queue.ApprovalUnreadable`）；`obj.save(conn, doc, approval, now)`（`doc` 為 `load` 的回傳值；在 L1 端點的寫鎖內呼叫、L1 commit；~~M01~~） |
 | 對方不在時 | 沒有該類型的提供者 ⇒ 轉簽 400「此類型不支援轉簽（或該單據的模組未安裝）」，佇列 `reassignTypes` 不含它 ⇒ 前端不顯示按鈕 |

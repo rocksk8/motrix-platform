@@ -1,5 +1,8 @@
 # 會計 更新紀錄
 
+## (next) — 2026-10-10（wip/t54-05-reassign-rules）：傳票轉簽提供者 `load` 附送審人後備（`submitted_by`）
+- `_VoucherReassign.load` 多回 `requestedBy`（`vouchers_all.submitted_by`）：AS3 之前送審的傳票 `approval_json` 沒嵌送審人，L1 轉簽端點要靠它辨認送審人（轉簽規則不得被舊單繞過）。無 migration、無權限變更。
+
 ## 1.1.57 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-09（wip/t48-w1a-fixes）：宣告 `GET /api/expense-categories` 的前綴（端點稽核 W1a）；併第49班 strict-bool（W1c-P2）；併 2026-10-09(wip/t49-strict-bool；W1c-P2 旗標嚴格解析＋P4 明列路由)**
 - **（併入）(next) — 2026-10-09（wip/t49-strict-bool；W1c-P2 旗標嚴格解析＋P4 明列路由）**

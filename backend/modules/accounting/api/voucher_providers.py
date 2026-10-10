@@ -182,7 +182,7 @@ class _VoucherReassign:
     @staticmethod
     def load(conn, doc_no):
         row = conn.execute(
-            "SELECT voucher_no, status, approval_json FROM vouchers_all"
+            "SELECT voucher_no, status, approval_json, submitted_by FROM vouchers_all"
             " WHERE voucher_no=? AND COALESCE(voided_at, '')=''", (doc_no,)).fetchone()
         if not row:
             return None
@@ -193,7 +193,9 @@ class _VoucherReassign:
         except ApprovalChainUnreadable:
             raise _aq.ApprovalUnreadable(doc_no)
         # 📌 傳票沒有 quote_no ⇒ 以單號代入（通知的 ref_label 用它）
-        return {"docNo": row["voucher_no"], "quoteNo": row["voucher_no"], "status": row["status"], "approval": appr}
+        # 🔑 舊資料（AS3 之前送審的）approval_json 沒嵌 requestedBy ⇒ 退回 submitted_by（同佇列提供者）；轉簽規則要靠它辨認送審人
+        return {"docNo": row["voucher_no"], "quoteNo": row["voucher_no"], "status": row["status"], "approval": appr,
+                "requestedBy": (row["submitted_by"] or "")}
 
     @staticmethod
     def save(conn, doc, approval, now):
