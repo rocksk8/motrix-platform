@@ -263,3 +263,91 @@ def test_integ_watch_never_touches_gate_records():
     body = _code_only(REPO / "tools" / "platform" / "integ_watch.py")
     for bad in ("record-stage", "record_stage", "build_test_reuse", "train_number", "regen_all", "git commit", "git push", "stage_record"):
         assert bad not in body, bad
+
+
+# ── 第 52 班後續（1d 稽核兩個 nit）：預算與實測相符、背景檢查逐檔讓出 ─────────────────────────
+
+def test_default_budget_is_90_for_wip_and_300_for_integration_and_explicit_wins(monkeypatch):
+    def run(integration, budget=None):
+        monkeypatch.setattr(PP, "changed_files", lambda repo, base: [])
+        monkeypatch.setattr(PP, "static_findings", lambda *a, **k: [])
+        monkeypatch.setattr(PP, "changelog_findings", lambda *a, **k: [])
+        monkeypatch.setattr(PP, "form_version_findings", lambda *a, **k: [])
+        return PP.run(REPO, "base", budget, True, integration)[2]
+    assert run(False)["budget_sec"] == PP.WIP_BUDGET_SEC == 90
+    assert run(True)["budget_sec"] == PP.INTEGRATION_BUDGET_SEC == 300
+    assert run(True, 45)["budget_sec"] == 45 and run(False, 200)["budget_sec"] == 200
+    assert "static_secs" in run(False)
+
+
+def test_report_line_shows_static_seconds_and_budget(monkeypatch):
+    monkeypatch.setattr(PP, "changed_files", lambda repo, base: [])
+    monkeypatch.setattr(PP, "static_findings", lambda *a, **k: [])
+    monkeypatch.setattr(PP, "changelog_findings", lambda *a, **k: [])
+    monkeypatch.setattr(PP, "form_version_findings", lambda *a, **k: [])
+    text = PP.run(REPO, "base", None, True, True)[1]
+    assert "預算 300 秒" in text
+
+
+def _polite_env(monkeypatch, busy_seq, gb=16.0):
+    import prepush_check as real_pp                                             # integ_watch 以名稱匯入的那一份
+    calls = []
+    seq = list(busy_seq)
+    monkeypatch.setattr(IW, "other_pytest_running", lambda: seq.pop(0) if seq else seq_default[0])
+    monkeypatch.setattr(IW, "free_gb", lambda: gb)
+    monkeypatch.setattr(real_pp, "run_tests", lambda repo, tests, timeout: (calls.append(tests[0][0]) or (0, "ok " + tests[0][0], 0.1)))
+    return real_pp, calls
+
+
+seq_default = [False]
+
+
+def test_polite_run_yields_between_files_when_another_pytest_appears(monkeypatch):
+    real_pp, calls = _polite_env(monkeypatch, [False, True])
+    IW.polite_run.reason = ""
+    rc, out, _s = IW.polite_run(REPO, [("a.py", 1), ("b.py", 1), ("c.py", 1)], 100)
+    assert rc == real_pp.INCOMPLETE and calls == ["a.py"], calls                  # 第二檔開跑前偵測到 ⇒ 只跑了第一檔
+    assert "讓出" in IW.polite_run.reason and "1／3" in IW.polite_run.reason
+    assert "ok a.py" in out
+
+
+def test_polite_run_runs_everything_when_the_machine_stays_free(monkeypatch):
+    real_pp, calls = _polite_env(monkeypatch, [])
+    IW.polite_run.reason = ""
+    rc, out, _s = IW.polite_run(REPO, [("a.py", 1), ("b.py", 1), ("c.py", 1)], 100)
+    assert rc == 0 and calls == ["a.py", "b.py", "c.py"] and IW.polite_run.reason == ""
+
+
+def test_polite_run_yields_on_low_memory_midway(monkeypatch):
+    real_pp, calls = _polite_env(monkeypatch, [], gb=1.0)
+    IW.polite_run.reason = ""
+    rc, _o, _s = IW.polite_run(REPO, [("a.py", 1), ("b.py", 1)], 100)
+    assert rc == real_pp.INCOMPLETE and calls == [] and "記憶體" in IW.polite_run.reason
+
+
+def test_polite_run_reports_the_first_real_red(monkeypatch):
+    import prepush_check as real_pp
+    monkeypatch.setattr(IW, "other_pytest_running", lambda: False)
+    monkeypatch.setattr(IW, "free_gb", lambda: 16.0)
+    monkeypatch.setattr(real_pp, "run_tests", lambda repo, tests, timeout: (1 if tests[0][0] == "b.py" else 0, "x", 0.1))
+    rc, _o, _s = IW.polite_run(REPO, [("a.py", 1), ("b.py", 1), ("c.py", 1)], 100)
+    assert rc == 1
+
+
+def test_once_records_a_yielded_state_and_never_green(monkeypatch, tmp_path):
+    import prepush_check as real_pp
+    monkeypatch.setattr(IW, "OUT", tmp_path / "integ_watch")
+    monkeypatch.setattr(IW, "head_sha", lambda: "abcdef1234567890" * 2 + "abcdefgh")
+    monkeypatch.setattr(real_pp, "changed_files", lambda repo, base: [])
+    monkeypatch.setattr(real_pp, "static_findings", lambda *a, **k: [])
+    monkeypatch.setattr(real_pp, "changelog_findings", lambda *a, **k: [])
+    monkeypatch.setattr(real_pp, "form_version_findings", lambda *a, **k: [])
+    monkeypatch.setattr(real_pp, "select_tests", lambda repo, changed: [("a.py", 1), ("b.py", 1), ("c.py", 1)])
+    calls = []
+    monkeypatch.setattr(real_pp, "run_tests", lambda repo, tests, timeout: (calls.append(tests[0][0]) or (0, "ok", 0.1)))
+    seq = [False, False, True]                                                   # 開始時閒；第一檔前閒；第二檔前有別人
+    monkeypatch.setattr(IW, "other_pytest_running", lambda: seq.pop(0) if seq else True)
+    monkeypatch.setattr(IW, "free_gb", lambda: 16.0)
+    d = IW.once(wait=False)
+    assert d["state"] == "yielded" and d["exit"] == real_pp.INCOMPLETE and calls == ["a.py"], (d, calls)
+    assert "讓出" in d["note"]

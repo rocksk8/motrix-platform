@@ -9,10 +9,11 @@
 [單位] tools:prepush_check   [層] 工具   [穩定度] 內部
 
 用法（任一 worktree 根目錄；Python＝主工作樹 .venv312）：
-  python tools/platform/prepush_check.py [--base <ref>] [--budget-sec 90] [--static-only] [--integration] [--json-out F]
+  python tools/platform/prepush_check.py [--base <ref>] [--budget-sec N（預設 wip 90、--integration 300）] [--static-only] [--integration] [--json-out F]
   python tools/platform/prepush_check.py --hook      （git pre-push 呼叫：紅 ⇒ exit 1 擋推送；未完成／警告 ⇒ exit 0）
 結束碼：0 綠（可含警告）；1 有紅；2 工具本身出錯；3 未完成（超過時間預算；hook 當警告放行）。
   --integration：整合分支模式（train/*、platform）：A0 產生檔過期（check_only）＋全模組 changelog 檢查；**只警告、不擋**。
+                預算預設 300 秒（光靜態實測 ≈ 147 秒；wip 模式靜態約 14 秒）。
 """
 import argparse
 import importlib.util
@@ -189,9 +190,18 @@ def run_tests(repo, tests, timeout):
 
 # ── 主流程 ─────────────────────────────────────────────
 
-def run(repo=REPO, base=None, budget_sec=90, static_only=False, integration=False, runner=None):
-    """⇒ (exit_code, report_text, data)。runner 供測試注入：runner(repo, tests, timeout) ⇒ (rc, out, secs)。"""
+#: 時間預算（秒）。wip 推送前：閒置機器約 1 分鐘、硬上限 90；整合模式（train/*、platform 的背景檢查，只警告）要多做 A0 產生檔檢查＋全模組
+#: changelog 檢查，實測光靜態就 ≈ 147 秒（第 51 班 1d 量測）⇒ 預算 300。沒指定 --budget-sec 才用這兩個預設。
+WIP_BUDGET_SEC = 90
+INTEGRATION_BUDGET_SEC = 300
+
+
+def run(repo=REPO, base=None, budget_sec=None, static_only=False, integration=False, runner=None):
+    """⇒ (exit_code, report_text, data)。runner 供測試注入：runner(repo, tests, timeout) ⇒ (rc, out, secs)。
+    budget_sec=None ⇒ wip 90、整合模式 300。"""
     t0 = time.time()
+    if budget_sec is None:
+        budget_sec = INTEGRATION_BUDGET_SEC if integration else WIP_BUDGET_SEC
     repo = Path(repo)
     base = base or default_base(repo)
     changed = changed_files(repo, base)
@@ -202,6 +212,7 @@ def run(repo=REPO, base=None, budget_sec=90, static_only=False, integration=Fals
     findings += changelog_findings(repo, mods)
     findings += form_version_findings(repo, changed)
     warns = warnings(changed)
+    static_secs = time.time() - t0
     if not base:
         warns.append("找不到 origin/platform 的分叉點（先 git fetch）；沒有比較基準 ⇒ 靜態檢查幾乎沒有東西可看")
     tests, rc, out, secs = [], None, "", 0.0
@@ -221,7 +232,7 @@ def run(repo=REPO, base=None, budget_sec=90, static_only=False, integration=Fals
         lines.append("⚠ %s %s" % (x.code, x.msg))
     for w in warns:
         lines.append("⚠ 提醒：%s" % w)
-    lines.append("靜態：%d 項紅" % len(reds))
+    lines.append("靜態：%d 項紅（%.0f 秒；預算 %d 秒）" % (len(reds), static_secs, budget_sec))
     for x in reds:
         lines.append("  [%s] %s\n      %s\n      修法：%s" % (x.code, x.where, x.msg, x.fix))
     if not static_only:
@@ -235,14 +246,15 @@ def run(repo=REPO, base=None, budget_sec=90, static_only=False, integration=Fals
     code = 1 if bad else (INCOMPLETE if rc == INCOMPLETE else 0)
     lines.append("結果：%s（預檢綠 ≠ 閘門綠）" % ("有紅" if bad else "未完成" if code == INCOMPLETE else "綠"))
     data = {"base": base, "changed": len(changed), "findings": [x.as_dict() for x in findings], "warnings": warns,
-            "tests": [t for t, _ in tests], "rc": rc, "fails": fails, "exit": code, "integration": integration}
+            "tests": [t for t, _ in tests], "rc": rc, "fails": fails, "exit": code, "integration": integration,
+            "static_secs": round(static_secs, 1), "budget_sec": budget_sec}
     return code, "\n".join(lines), data
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="推送前檢查（< 60 秒、只讀）")
+    ap = argparse.ArgumentParser(description="推送前檢查（只讀；預算 wip 90 秒、整合模式 300 秒）")
     ap.add_argument("--base")
-    ap.add_argument("--budget-sec", type=int, default=90)
+    ap.add_argument("--budget-sec", type=int, default=None, help="時間預算（秒）；沒給 ⇒ wip 90、--integration 300")
     ap.add_argument("--static-only", action="store_true")
     ap.add_argument("--integration", action="store_true")
     ap.add_argument("--hook", action="store_true", help="git pre-push：紅 ⇒ 1；未完成／整合模式 ⇒ 0（只警告）")
