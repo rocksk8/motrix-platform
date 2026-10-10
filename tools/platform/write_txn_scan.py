@@ -34,6 +34,10 @@ DENY = [re.compile(p) for p in (
 ALLOWED = {
     ("backend/helpers/custom_modules.py", "decide", "notify_ref"): (
         1, "只組出通知參照字串（不寫入）；實際通知由 _Effects.flush() 在 commit 之後才做"),
+    ("backend/modules/recyclebin/service.py", "restore", "audit"): (
+        1, "audit 是呼叫端傳入的 callback，三個呼叫端（api／jobs）都只傳 lambda 呼叫 service.audit_tx：同一條 conn、同一交易 INSERT audit_log，不 commit、不另開連線、不通知、不啟動背景工作；稽核與還原必須原子（寫不進去 ⇒ 整筆 rollback，test_recyclebin_fixes_r5_t53）"),
+    ("backend/modules/recyclebin/service.py", "purge", "audit"): (
+        1, "同 restore：callback 只走 service.audit_tx（同 conn 同交易），先稽核、再 commit、最後才刪隔離檔；稽核寫不進去 ⇒ 什麼都沒刪"),
 }
 
 
@@ -112,6 +116,8 @@ class _Walker:
                         self._calls(e, fn)
                     for body in bodies:
                         self._seq(body, True, fn)
+                    if isinstance(st, (ast.With, ast.AsyncWith)) and any(_releases_lock(x) for x in st.body):
+                        held = False        # with 區塊一定會走完（例外則整個離開）：區塊頂層的 commit／close 已放掉寫鎖，區塊之後不算持鎖
                     continue
                 self._calls(st, fn)
                 if _releases_lock(st):
