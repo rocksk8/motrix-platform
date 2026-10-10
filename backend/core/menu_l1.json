@@ -125,6 +125,17 @@
   },
   {
    "group": "system",
+   "href": "system-hub.html",
+   "label": "系統",
+   "order": 0,
+   "perm": "any",
+   "active": [
+    "system-hub.html"
+   ],
+   "hub": true
+  },
+  {
+   "group": "system",
    "href": "module-builder.html",
    "label": "模組建構器",
    "order": 5,

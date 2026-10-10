@@ -80,5 +80,20 @@
       "path": "shipping-export-history.html",
       "menu": {"group": "system", "label": "出貨單歷史紀錄", "order": 100, "perm": ["shipping_export_log"]}
     }
+  ],
+  "system_cards": [
+    {
+      "id": "shipping-export-history",
+      "section": "audit",
+      "title": "出貨單歷史紀錄",
+      "desc": "出貨單匯出與列印的歷史",
+      "href": "shipping-export-history.html",
+      "perm": [
+        "shipping_export_log"
+      ],
+      "order": 20,
+      "keywords": "出貨 匯出 歷史",
+      "icon": "log"
+    }
   ]
 }

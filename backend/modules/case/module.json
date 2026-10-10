@@ -182,5 +182,19 @@
     {
       "path": "sales-orders.html"
     }
+  ],
+  "system_cards": [
+    {
+      "id": "overhead-settings",
+      "section": "settings",
+      "title": "利潤口徑與管銷比率",
+      "desc": "營業利益口徑、管銷分攤比率與遷移狀態（目前只有 API，需補頁）",
+      "href": "overhead-settings.html",
+      "perm": "superadmin",
+      "order": 50,
+      "keywords": "利潤 管銷 營業利益 比率 口徑",
+      "icon": "gear",
+      "planned": true
+    }
   ]
 }

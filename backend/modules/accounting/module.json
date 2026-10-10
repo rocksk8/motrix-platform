@@ -325,5 +325,21 @@
         ]
       }
     }
+  ],
+  "system_cards": [
+    {
+      "id": "ledger-settings",
+      "section": "settings",
+      "title": "報表設定",
+      "desc": "總帳報表的科目對照、期間與輸出設定",
+      "href": "ledger-settings.html",
+      "perm": [
+        "cashier",
+        "finance"
+      ],
+      "order": 40,
+      "keywords": "報表 科目 總帳 期間",
+      "icon": "gear"
+    }
   ]
 }

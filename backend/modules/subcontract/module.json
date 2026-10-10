@@ -26,5 +26,18 @@
      "menu": {"group": "supply", "label": "承攬商管理", "order": 30, "perm": ["procurement"], "badge": "sb-mod-vendor"}},
     {"path": "contractor-voucher-approval-settings.html"}, {"path": "remit-kinds-settings.html", "menu": {"group": "system", "label": "匯款款別設定", "order": 7, "perm": "superadmin"}}
   ],
-  "pages_note": "~~contractor-voucher-approval-settings.html 是已廢棄的舊入口（AS4：簽核設定已移到統一的簽核設定頁），不列入側欄~~〔更正 wip/b-drill-absent404-2（稽核 D）：仍列入 pages（不帶 menu ⇒ 不進側欄）——modules.json 把它歸 M04，沒列入 pages 時模組缺席也不會被移除、D7 也不會驗它回 404；守門 test_module_pages_match_units〕"
+  "pages_note": "~~contractor-voucher-approval-settings.html 是已廢棄的舊入口（AS4：簽核設定已移到統一的簽核設定頁），不列入側欄~~〔更正 wip/b-drill-absent404-2（稽核 D）：仍列入 pages（不帶 menu ⇒ 不進側欄）——modules.json 把它歸 M04，沒列入 pages 時模組缺席也不會被移除、D7 也不會驗它回 404；守門 test_module_pages_match_units〕",
+  "system_cards": [
+    {
+      "id": "remit-kinds-settings",
+      "section": "workflow",
+      "title": "匯款款別設定",
+      "desc": "訂金、進度款、完工款…各款別可開立的派發階段",
+      "href": "remit-kinds-settings.html",
+      "perm": "superadmin",
+      "order": 30,
+      "keywords": "匯款 款別 承攬商 訂金",
+      "icon": "flow"
+    }
+  ]
 }

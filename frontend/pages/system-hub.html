@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>系統 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!--
+    系統中心（第 54 班）：左＝大分組、右＝所選分組的細項列。資料全來自系統中心端點（註冊表產生、伺服器已依權限過濾），
+    本頁不寫死任何項目——新設定／新頁面＝在擁有它的模組宣告一筆 system_cards，不改這一頁。設計 docs/platform/plans/SYSTEM-HUB-DESIGN-T54.md。
+  -->
+  <style>
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px 64px;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));background:var(--white)}
+    .hub-inner{max-width:1280px;margin:0 auto}
+    .hub-head{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:6px}
+    .hub-head h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.01em;font-family:var(--font-zh)}
+    .hub-sub{font-size:12px;color:var(--text-secondary);margin:2px 0 14px}
+    .search-wrap{position:relative;flex:1 1 320px;max-width:520px;margin-left:auto}
+    .search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+    .search-input{width:100%;padding:9px 40px 9px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:var(--surface);color:var(--text-primary);outline:none;box-sizing:border-box}
+    .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-light)}
+    .search-wrap kbd{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);border:1px solid var(--border-light);border-radius:4px;padding:1px 5px;background:var(--surface-sunken)}
+
+    .hub{display:grid;grid-template-columns:240px minmax(0,1fr);gap:24px;align-items:start;margin-top:14px}
+    .groups{position:sticky;top:calc(var(--topbar-h) + 12px);display:flex;flex-direction:column;gap:2px;padding:6px;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg)}
+    .grp{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:9px 11px;border:0;border-left:3px solid transparent;border-radius:var(--radius);background:transparent;color:var(--text-primary);font-size:13.5px;font-family:var(--font-zh);cursor:pointer}
+    .grp:hover{background:var(--surface-sunken)}
+    .grp[aria-selected="true"]{background:var(--accent-light);border-left-color:var(--accent);color:var(--accent);font-weight:700}
+    .grp:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+    .grp .cnt{margin-left:auto;font-size:11px;color:var(--text-dim);font-weight:600}
+    .grp[aria-selected="true"] .cnt{color:var(--accent)}
+    .grp .dot{width:8px;height:8px;border-radius:50%;background:var(--tone-warning-fg);flex:0 0 8px}
+    .pane-head{display:flex;align-items:baseline;gap:10px;margin:0 0 2px}
+    .pane-head h2{margin:0;font-size:18px;font-weight:700;display:flex;gap:10px;align-items:center;font-family:var(--font-zh)}
+    .pane-head h2::before{content:"";width:28px;height:3px;background:var(--accent)}
+    .pane-head small{color:var(--text-secondary);font-size:12px}
+    .pane-sub{font-size:12px;color:var(--text-secondary);margin:0 0 12px 38px}
+    .rows{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
+    .row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-light);color:inherit;text-decoration:none}
+    .row:first-child{border-top:0}
+    a.row:hover{background:var(--surface-sunken)}
+    a.row:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+    .row__ico{flex:0 0 32px;height:32px;border-radius:8px;background:var(--surface-sunken);color:var(--text-secondary);display:grid;place-items:center}
+    .row__ico svg{width:17px;height:17px}
+    .row__main{min-width:0;flex:1}
+    .row__title{font-size:14px;font-weight:700;line-height:1.3}
+    .row__desc{font-size:12px;color:var(--text-secondary);margin-top:1px}
+    .row__grp{font-size:10.5px;color:var(--text-dim);margin-top:2px}
+    .row__go{color:var(--text-dim);flex:0 0 auto}
+    .tag{padding:1px 7px;border-radius:999px;background:var(--surface-sunken);border:1px solid var(--border-light);font-size:10.5px;color:var(--text-dim)}
+    .badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;border:1px solid transparent;flex:0 0 auto}
+    .badge.ok{background:var(--tone-success-bg);color:var(--tone-success-fg);border-color:var(--tone-success-border)}
+    .badge.warn{background:var(--tone-warning-bg);color:var(--tone-warning-fg);border-color:var(--tone-warning-border)}
+    .badge.bad{background:var(--tone-danger-bg);color:var(--tone-danger-fg);border-color:var(--tone-danger-border)}
+    .badge.info{background:var(--tone-info-bg);color:var(--tone-info-fg);border-color:var(--tone-info-border)}
+    .badge.plan{background:var(--surface-sunken);color:var(--text-secondary);border-color:var(--border-light);font-weight:600}
+    mark{background:var(--accent-light);color:var(--accent);padding:0 1px;border-radius:2px}
+    .empty{padding:40px 10px;text-align:center;color:var(--text-secondary);border:1px dashed var(--border-light);border-radius:var(--radius-lg)}
+    .error-bar{padding:10px 14px;margin-bottom:14px;border:1px solid var(--tone-danger-border);background:var(--tone-danger-bg);color:var(--tone-danger-fg);border-radius:var(--radius);font-size:12px}
+    @media (max-width:720px){
+      .page-main{padding:18px 16px 56px}
+      .hub-head h1{font-size:22px}
+      .search-wrap{flex-basis:100%;max-width:none;margin-left:0}
+      .hub{grid-template-columns:1fr;gap:14px}
+      .groups{position:static;flex-direction:row;overflow-x:auto;padding:4px;gap:4px;scrollbar-width:thin}
+      .grp{width:auto;flex:0 0 auto;white-space:nowrap;border-left:0;border-bottom:3px solid transparent}
+      .grp[aria-selected="true"]{border-bottom-color:var(--accent)}
+      .pane-sub{margin-left:0}
+    }
+    @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  </style>
+</head>
+<body x-data="systemHub()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <div class="app-shell">
+    <main class="page-main">
+      <div class="hub-inner">
+        <div class="hub-head">
+          <h1>系統</h1>
+          <div class="search-wrap">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input id="hub-q" class="search-input" type="search" x-model="q" data-testid="hub-search" placeholder="搜尋設定或功能：例如 備份、簽核、信件、權限" aria-label="搜尋系統功能" autocomplete="off">
+            <kbd>/</kbd>
+          </div>
+        </div>
+        <div class="hub-sub" data-testid="hub-subtitle">管理用・帳號、流程、通知、資料與稽核都從這裡進去；你看得到的項目依權限顯示</div>
+
+        <div x-show="error" class="error-bar" x-text="error" role="alert"></div>
+
+        <div class="hub" x-show="loaded && sections.length">
+          <nav class="groups" role="tablist" aria-orientation="vertical" aria-label="系統分組" data-testid="hub-groups" @keydown="groupKey($event)">
+            <template x-for="s in sections" :key="s.key">
+              <button type="button" class="grp" role="tab" :id="'g-' + s.key" :data-g="s.key" :data-testid="'hub-group-' + s.key"
+                      :aria-selected="(s.key === cur && !q.trim()) ? 'true' : 'false'" :tabindex="s.key === cur ? 0 : -1" @click="select(s.key)">
+                <span x-text="s.title"></span>
+                <i class="dot" x-show="s.pending" role="status" aria-label="有待處理項目" title="有待處理項目"></i>
+                <span class="cnt" x-text="s.count"></span>
+              </button>
+            </template>
+          </nav>
+
+          <section aria-live="polite" data-testid="hub-pane">
+            <template x-if="q.trim()">
+              <div>
+                <div class="pane-head"><h2>搜尋結果</h2><small x-text="results.length + ' 項'"></small></div>
+                <div class="pane-sub">跨所有分組；清空搜尋回到分組檢視</div>
+                <div class="rows" x-show="results.length">
+                  <template x-for="it in results" :key="it.id">
+                    <a class="row" :href="it.href" :data-testid="'hub-item-' + it.id" @click="remember()">
+                      <span class="row__ico" x-html="icon(it.icon)"></span>
+                      <span class="row__main">
+                        <div class="row__title"><span x-html="hl(it.title)"></span> <span class="tag" x-show="it.planned">規劃中</span></div>
+                        <div class="row__desc" x-html="hl(it.desc)"></div>
+                        <div class="row__grp" x-text="it._sec + ' ・ ' + it.module"></div>
+                      </span>
+                      <span class="badge" x-show="it.badge" :class="it.badge ? it.badge.tone : ''" x-text="it.badge ? it.badge.text : ''"></span>
+                      <svg class="row__go" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                    </a>
+                  </template>
+                </div>
+                <div class="empty" x-show="!results.length" x-text="'沒有符合「' + q.trim() + '」的項目。試試別的關鍵字，或確認你有該功能的權限。'"></div>
+              </div>
+            </template>
+            <template x-if="!q.trim() && current">
+              <div>
+                <div class="pane-head"><h2 x-text="current.title"></h2><small x-text="current.count + ' 項'"></small></div>
+                <div class="pane-sub" x-text="current.sub"></div>
+                <div class="rows">
+                  <template x-for="it in current.items" :key="it.id">
+                    <a class="row" :href="it.href" :data-testid="'hub-item-' + it.id" @click="remember()">
+                      <span class="row__ico" x-html="icon(it.icon)"></span>
+                      <span class="row__main">
+                        <div class="row__title"><span x-text="it.title"></span> <span class="tag" x-show="it.planned">規劃中</span></div>
+                        <div class="row__desc" x-text="it.desc"></div>
+                      </span>
+                      <span class="badge" x-show="it.badge" :class="it.badge ? it.badge.tone : ''" x-text="it.badge ? it.badge.text : ''"></span>
+                      <svg class="row__go" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                    </a>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </section>
+        </div>
+
+        <div class="empty" x-show="loaded && !sections.length && !error" data-testid="hub-empty">你目前沒有可用的系統功能。</div>
+        <div class="empty" x-show="!loaded && !error">載入中…</div>
+      </div>
+    </main>
+  </div>
+
+<script>
+function systemHub() {
+  var ICONS = {
+    user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>',
+    shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>',
+    flow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M9 6h6a3 3 0 013 3v6"/></svg>',
+    mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
+    cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+    disk: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
+    log: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7M9 8h3"/></svg>',
+    gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>',
+    build: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 7l3-3 3 3-3 3M3 21l9-9M12 12l4 4"/></svg>',
+    ver: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    org: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="5"/><rect x="3" y="16" width="6" height="5"/><rect x="15" y="16" width="6" height="5"/><path d="M12 8v4M6 16v-4h12v4"/></svg>',
+    file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>',
+    scale: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5 21h14M5 7h14M5 7l-3 7a3 3 0 006 0zM19 7l-3 7a3 3 0 006 0z"/></svg>'
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] }) }
+  var LAST_KEY = 'motrix_system_hub_group'
+  return {
+    session: {}, sections: [], cur: '', q: '', loaded: false, error: '',
+    async init() {
+      var s = {}
+      try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { s = {} }
+      if (!s.token) { location.href = 'login.html'; return }
+      this.session = s
+      var self = this
+      window.addEventListener('hashchange', function () { self.fromHash() })
+      document.addEventListener('keydown', function (e) {
+        if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); var i = document.getElementById('hub-q'); if (i) i.focus() }
+      })
+      try {
+        var r = await fetch('/api/system-hub', { headers: { Authorization: 'Bearer ' + s.token } })
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        var d = await r.json()
+        this.sections = d.sections || []
+      } catch (e) {
+        this.error = '無法載入系統中心（' + (e && e.message ? e.message : '網路錯誤') + '），請重新整理或稍後再試。'
+      }
+      this.loaded = true
+      this.fromHash(true)
+    },
+    keys() { return this.sections.map(function (s) { return s.key }) },
+    fromHash(first) {
+      var h = (location.hash || '').replace('#', '')
+      var keys = this.keys()
+      if (keys.indexOf(h) > -1) { this.cur = h; this.q = ''; return }
+      var last = ''
+      try { last = sessionStorage.getItem(LAST_KEY) || '' } catch (e) { last = '' }
+      this.cur = keys.indexOf(this.cur) > -1 ? this.cur : (keys.indexOf(last) > -1 ? last : (keys[0] || ''))
+    },
+    select(key, focus) {
+      this.cur = key; this.q = ''
+      try { history.pushState(null, '', '#' + key) } catch (e) { location.hash = key }
+      try { sessionStorage.setItem(LAST_KEY, key) } catch (e) { /* 無痕模式：不記住 */ }
+      if (focus) { var self = this; this.$nextTick(function () { var b = document.getElementById('g-' + key); if (b) b.focus() }) }
+    },
+    remember() { try { sessionStorage.setItem(LAST_KEY, this.cur) } catch (e) { /* ignore */ } },
+    groupKey(e) {
+      var k = e.key
+      if (['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].indexOf(k) < 0) return
+      var keys = this.keys(); if (!keys.length) return
+      var i = keys.indexOf(this.cur); if (i < 0) i = 0
+      if (k === 'ArrowDown' || k === 'ArrowRight') i = (i + 1) % keys.length
+      else if (k === 'ArrowUp' || k === 'ArrowLeft') i = (i - 1 + keys.length) % keys.length
+      else if (k === 'Home') i = 0
+      else i = keys.length - 1
+      e.preventDefault(); this.select(keys[i], true)
+    },
+    get current() { var c = this.cur; return this.sections.filter(function (s) { return s.key === c })[0] || null },
+    get results() {
+      var q = this.q.trim().toLowerCase(); if (!q) return []
+      var out = []
+      this.sections.forEach(function (s) {
+        s.items.forEach(function (it) {
+          if ((it.title + ' ' + it.desc + ' ' + it.keywords + ' ' + it.module).toLowerCase().indexOf(q) > -1) out.push(Object.assign({ _sec: s.title }, it))
+        })
+      })
+      return out
+    },
+    hl(text) {
+      var q = this.q.trim().toLowerCase(); var t = String(text)
+      var i = q ? t.toLowerCase().indexOf(q) : -1
+      if (i < 0) return esc(t)
+      return esc(t.slice(0, i)) + '<mark>' + esc(t.slice(i, i + q.length)) + '</mark>' + esc(t.slice(i + q.length))
+    },
+    icon(k) { return ICONS[k] || ICONS.gear }
+  }
+}
+</script>
+<script src="../static/sidebar.js"></script>
+<script src="../static/notif.js"></script>
+</body>
+</html>

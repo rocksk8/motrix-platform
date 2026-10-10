@@ -24,7 +24,7 @@ import json
 from pathlib import Path
 
 MENU_L1 = Path(__file__).with_name("menu_l1.json")
-ITEM_KEYS = {"group", "href", "label", "order", "perm", "active", "badge", "extra_badge"}
+ITEM_KEYS = {"group", "href", "label", "order", "perm", "active", "badge", "extra_badge", "hub"}
 
 
 def load_l1(path=MENU_L1):
@@ -111,6 +111,8 @@ def _grouped(l1, mod_items, keep, with_perm):
             for it in items:
                 row = {"href": it["href"], "label": it["label"], "active": list(it.get("active") or [it["href"]]),
                        "badge": it.get("badge"), "extra_badge": it.get("extra_badge"), "module": it.get("module")}
+                if it.get("hub"):                                  # 系統中心入口（第 54 班）：導覽列把整個群組收成這一個連結（sidebar.js）
+                    row["hub"] = True
                 if with_perm:
                     row["perm"] = it["perm"]
                 rows.append(row)
