@@ -37,6 +37,6 @@ MODULE = ModuleSpec(
         # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
         ("attachments.catalog", "supply"): attachments._SupplyCatalog,
         # IP-RB1（第 53 班 P1）：刪除暫存區的單據轉接（出貨單）
-        **{("recyclebin.adapter", _et): _cls for _et, _cls in _recycle_adapter.adapters().items()},
+        ("recyclebin.adapter", "shipping_note"): _recycle_adapter.ShippingNoteAdapter,           # 字面字串：整合點登記表守門掃字面值
     },
 )
