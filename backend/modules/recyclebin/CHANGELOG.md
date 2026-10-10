@@ -1,6 +1,6 @@
 # 刪除暫存區 更新紀錄
 
-## (next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1）：module.json 新增 `system_cards`（資源回收筒卡片）
+## (next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1）：module.json 新增 `system_cards`（『刪除暫存區』卡片）
 - 加性宣告：在系統中心登記資源回收筒；只影響索引顯示，頁面與 API 的權限、行為完全不變。
 
 ## 1.0.5 — 2026-10-10（wip/t53b-int；ab 稽核修正 r5）

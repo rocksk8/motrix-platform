@@ -178,14 +178,13 @@
    "id": "settings-center",
    "section": "settings",
    "title": "設定中心",
-   "desc": "所有可調參數的索引：提醒天數、保存期限、上傳上限、編號規則（規劃中）",
-   "impact": "影響：（規劃中）會列出每個可調的設定，以及改了會影響哪些畫面。",
+   "desc": "所有可調整的設定集中在這裡：保存期限、上傳大小、確認期間等",
+   "impact": "影響：每一項設定都會先說明改了會影響什麼；重要的變更需要等待確認期間才會生效。",
    "href": "settings-center.html",
    "perm": "superadmin",
    "order": 10,
    "keywords": "設定 參數 門檻 天數 上限",
-   "icon": "gear",
-   "planned": true
+   "icon": "gear"
   },
   {
    "id": "company-profile-settings",
@@ -228,8 +227,8 @@
   {
    "id": "schema-status",
    "section": "status",
-   "title": "Schema 狀態",
-   "desc": "資料庫結構版本與各模組遷移是否完成",
+   "title": "資料庫結構",
+   "desc": "資料庫結構版本，以及各模組的升級是否都已完成",
    "impact": "影響：只是查看，不會改動任何資料。",
    "href": "schema-status.html",
    "perm": "superadmin",

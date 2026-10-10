@@ -278,7 +278,7 @@ def test_all_user_visible_strings_are_plain_language():
 
 def test_plain_language_check_catches_code_like_text():
     assert H.plain_problem("使用者管理") == ""
-    for t in ("users.html", "Open /api/x", "module_settings 設定", "English only", "請到 https://x.y 設定", "給 API 用"):
+    for t in ("users.html", "Open /api/x", "module_settings 設定", "English only", "請到 https://x.y 設定", "給 API 用", "資料庫 schema 升級", "Schema 狀態", "設定 token", "SMTP 寄信"):
         assert H.plain_problem(t), t
     ok = {"id": "a", "section": "data", "title": "標題", "desc": "說明", "impact": "影響：沒有。", "href": "x.html", "perm": "superadmin", "order": 1}
     assert H.validate([ok], {"x.html"}) == []
@@ -304,32 +304,41 @@ def test_first_time_hint_is_plain_dismissible_and_remembered():
 
 
 # ── 7 使用者決定：沒有權限的項目預設隱藏（超級管理員可改成顯示灰色＋原因）；最近使用存在帳號上 ──────────────────────
-def test_denied_rows_are_hidden_by_default_and_shown_with_plain_reason_when_the_setting_is_on(client, make_user):
-    su, sp = make_user(username="hub_su_set", role="superadmin")
+def test_show_denied_is_a_registered_setting_with_ledger_and_loosening_rules(client, make_user):
+    """可見度放寬走設定登錄表：群組已登錄、放寬方向＝up、風險＝security、有白話影響與風險說明；預設隱藏。"""
+    from helpers import settings_registry as sr
+    g = sr.groups()["system_hub"]
+    f = g["fields"]["show_denied"]
+    assert f.loosen == "up" and f.risk == "security" and f.default == 0 and f.recommended == 0
+    assert f.impact and f.risk_text and [c[0] for c in f.choices] == [0, 1] and all(c[1] and c[2] for c in f.choices)
+    assert sr.get("system_hub", "show_denied") == 0
     vu, vp = make_user(username="hub_v_set", role="viewer", modules=[])
-    sh, vh = _login(client, su, sp), _login(client, vu, vp)
-    assert _hub(client, vh)["sections"] == [] and _hub(client, vh)["showDenied"] is False
-    r = client.put("/api/system-hub/settings", headers=sh, json={"showDenied": True})
-    assert r.status_code == 200 and r.json() == {"showDenied": True}
+    d = _hub(client, _login(client, vu, vp))
+    assert d["sections"] == [] and d["showDenied"] is False
+
+
+def test_turning_show_denied_on_goes_through_pending_and_only_then_shows_grey_rows(client, make_user):
+    from datetime import datetime, timedelta
+    from helpers import settings_registry as sr
+    su, sp = make_user(username="hub_su_set", role="superadmin")
+    vu, vp = make_user(username="hub_v_set2", role="viewer", modules=[])
+    vh = _login(client, vu, vp)
+    out = sr.publish("system_hub", {"show_denied": 1}, user=su, reason="要讓同仁知道有哪些管理項目", actor={"username": su, "role": "superadmin", "id": 1})
+    assert out["pending"] and out["pending"][0]["field"] == "show_denied", "放寬可見度要先進待生效（確認期間）"
+    from routers import system_hub as R
+    R.clear_cache()
+    assert _hub(client, vh)["sections"] == [], "確認期間內仍然隱藏"
+    sr.materialize_due(now=datetime.now() + timedelta(days=30))
+    sr.invalidate()
+    R.clear_cache()
     d = _hub(client, vh)
     rows = [it for s in d["sections"] for it in s["items"]]
-    assert rows and all(it["denied"] for it in rows) and d["total"] == 0
+    assert rows and all(it["denied"] for it in rows) and d["total"] == 0 and d["showDenied"] is True
     assert all(s["count"] == 0 for s in d["sections"])
     for it in rows:
         assert it["reason"] and H.plain_problem(it["reason"]) == "", it["reason"]
-    audit = [r for r in _q("SELECT action, target_id FROM audit_log WHERE action='system_hub.settings.update'")]
-    assert audit and audit[-1]["target_id"] == "system_hub_show_denied"
-    client.put("/api/system-hub/settings", headers=sh, json={"showDenied": False})
-    assert _hub(client, vh)["sections"] == []
-
-
-def test_only_superadmin_can_change_the_denied_setting_and_the_value_must_be_a_real_flag(client, make_user):
-    su, sp = make_user(username="hub_su_set2", role="superadmin")
-    au, ap = make_user(username="hub_ad_set2", role="admin")
-    assert client.put("/api/system-hub/settings", headers=_login(client, au, ap), json={"showDenied": True}).status_code == 403
-    sh = _login(client, su, sp)
-    assert client.put("/api/system-hub/settings", headers=sh, json={}).status_code == 400
-    assert client.put("/api/system-hub/settings", headers=sh, json={"showDenied": "yes"}).status_code in (400, 422)
+    audit = _q("SELECT action FROM audit_log WHERE action LIKE 'settings.system_hub.%'")
+    assert audit, "寫稽核（同交易）"
 
 
 def test_denied_reason_never_shows_module_keys():
@@ -352,7 +361,7 @@ def test_recent_used_is_stored_per_account_and_only_openable_items_come_back(cli
 
 def test_page_wires_recent_and_the_denied_setting_without_showing_codes():
     html = (ROOT / "frontend" / "pages" / "system-hub.html").read_text(encoding="utf-8")
-    assert "system_hub_recent" in html and "/api/system-hub/settings" in html and "hub-recent" in html and "hub-settings" in html
+    assert "system_hub_recent" in html and "/api/system-hub/settings" not in html and "hub-recent" in html and "hub-settings-link" in html
     for b in re.findall(r'x-(?:text|html)="([^"]*)"', html):
         assert not re.search(r"\.(href|module|id|keywords)", b), b
 
@@ -428,3 +437,36 @@ def test_declared_cap_keys_follow_the_menu_capability_format():
     # 規則本身的正反例
     good = "core.%s.menu" % "users"
     assert pat.match(good) and not pat.match("core.users") and not pat.match("Core.users.menu") and not pat.match("menu:users.html")
+
+
+def test_hung_badge_providers_never_blank_the_other_badges_and_are_not_restarted(monkeypatch):
+    import threading
+    from routers import system_hub as R
+    gate = threading.Event()
+
+    def hung(conn, user):
+        gate.wait(10)
+        return {"text": "晚了", "tone": "ok"}
+
+    def quick(conn, user):
+        return {"text": "好", "tone": "ok"}
+
+    ids = ["h1", "h2", "h3", "h4", "h5"]
+    for i in ids[:4]:
+        monkeypatch.setitem(registry._LEGACY_PROVIDERS, ("system.hub_badge", i), hung)
+    monkeypatch.setitem(registry._LEGACY_PROVIDERS, ("system.hub_badge", "h5"), quick)
+    R._INFLIGHT.clear()
+    try:
+        def secs():
+            return [{"key": "k", "items": [{"id": i, "planned": False, "badge": None} for i in ids]}]
+        s1 = secs()
+        f1 = R.attach_badges(s1, {"id": 1, "username": "x", "role": "superadmin"}, timeout=0.5)
+        assert {k for k, v in f1.items() if v == "timeout"} == set(ids[:4]) and s1[0]["items"][4]["badge"]["text"] == "好", "四個卡住的不能擋住第五個"
+        live = threading.active_count()
+        s2 = secs()
+        f2 = R.attach_badges(s2, {"id": 1, "username": "x", "role": "superadmin"}, timeout=0.5)
+        assert {k for k, v in f2.items() if v == "busy"} == set(ids[:4]), "還卡著的提供者不再開新執行緒"
+        assert s2[0]["items"][4]["badge"]["text"] == "好" and threading.active_count() <= live + 1
+    finally:
+        gate.set()
+        R._INFLIGHT.clear()

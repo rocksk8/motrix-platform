@@ -29,6 +29,7 @@
 - **系統中心 P1（併入）**：L0（新增，向下相容）：`core/system_hub.py`——系統中心註冊表（分組固定、卡片驗證、依權限過濾、組裝）與 `core/system_hub_l1.json`（L1 頁面的卡片）；`core/menu.py` 的選單項多一個選用欄位 `hub`（`ITEM_KEYS`；`declaration`／`build` 的列在有 `hub` 時多回 `hub: true`）。新端點 `GET /api/system-hub`（`routers/system_hub.py`；已登入即可，伺服器依權限過濾；15 秒快取；徽章提供者並行、300ms 逾時）、新頁 `system-hub.html`。
 - **系統中心 P1（併入）**：導覽列：『系統』群組在 `sidebar.js` 收斂成單一入口（群組名當連結、底下所有系統頁都算它的目前位置；一個系統頁都開不了的人看不到這個群組）；系統底下的頁面頂端多一條『← 系統』麵包屑。**舊網址全部不變**，頁面權限檢查不變。
 - **系統中心 P1（併入）**：原則（使用者核定）：框架先行、不寫死決定——新增一個設定或頁面 ＝ 在擁有它的模組宣告一筆 `system_cards`，**不改 hub**；守門 `tests/platform/test_system_hub.py`（與選單雙向對等、卡片 perm＝頁面選單 perm、徽章隔離、頁面不寫死項目）。
+- **系統中心 P1（併入）**：『沒有權限的項目要不要列出』是設定登錄表的設定（群組 `system_hub`、欄位 `show_denied`，放寬方向 up、風險 security；預設隱藏；放寬走確認期間與第二人核准、稽核同交易），不是自己的設定鍵／端點；徽章提供者改為每個一條 daemon 執行緒、卡住的只跳過自己；卡片名稱改為白話（『刪除暫存區』『資料庫結構』），白話檢查涵蓋英文術語。
 - **系統中心 P1（併入）**：整合點 IP-HUB1（`system.hub_badge`）；設計 `docs/platform/plans/SYSTEM-HUB-DESIGN-T54.md`。
 
 ## 1.125 — 2026-10-10（wip/t52-ab-charity-quote）

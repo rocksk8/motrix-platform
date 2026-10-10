@@ -64,7 +64,7 @@ def _perm_ok(perm):
 
 
 _CJK = re.compile(r"[\u4e00-\u9fff]")
-_CODEISH = re.compile(r"\.html|/api/|https?://|(?<![A-Za-z0-9])[a-z]+_[a-z_]+(?![A-Za-z0-9])|(?<![A-Za-z])module(?![A-Za-z])|(?<![A-Za-z])(API|JSON)(?![A-Za-z])", re.I)
+_CODEISH = re.compile(r"\.html|/api/|https?://|(?<![A-Za-z0-9])[a-z]+_[a-z_]+(?![A-Za-z0-9])|(?<![A-Za-z])(module|schema|migration|token|api|json|smtp|url|http|https|sql|db|endpoint|cache|regex|uuid|id|key|enum|payload|webhook|cron|oauth)(?![A-Za-z])", re.I)
 
 
 def plain_problem(text):

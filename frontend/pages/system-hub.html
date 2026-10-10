@@ -183,16 +183,9 @@
           </section>
         </div>
 
-        <details class="adv" x-show="loaded && session.role === 'superadmin'" data-testid="hub-settings">
-          <summary>顯示設定（進階）</summary>
-          <div class="adv__body">
-            <div class="adv__q">看不到的項目要不要列出來？</div>
-            <label class="adv__opt"><input type="radio" name="hub-denied" value="hide" :checked="!showDenied" @change="setShowDenied(false)" data-testid="hub-denied-hide"> 隱藏（建議）——每個人只看到自己能用的項目</label>
-            <label class="adv__opt"><input type="radio" name="hub-denied" value="show" :checked="showDenied" @change="setShowDenied(true)" data-testid="hub-denied-show"> 顯示為灰色，並說明為什麼不能用</label>
-            <div class="adv__preview" x-text="showDenied ? '設定後：沒有權限的人會看到灰色的項目與原因，但點不進去。' : '設定後：沒有權限的人完全看不到這些項目。'"></div>
-            <div class="adv__done" x-show="undo !== null" data-testid="hub-denied-saved"><span>已更新。</span> <button type="button" class="hint-x" @click="undoShowDenied()">復原</button></div>
-          </div>
-        </details>
+        <div class="adv" x-show="loaded && session.role === 'superadmin'" data-testid="hub-settings">
+          系統中心要不要列出『你沒有權限使用』的項目？ <a href="settings-center.html" data-testid="hub-settings-link">到「設定中心」調整</a>（預設隱藏；改成顯示需要等確認期間並由另一位最高管理者核准）
+        </div>
 
         <div class="empty" x-show="loaded && !sections.length && !error" data-testid="hub-empty">你目前沒有可用的系統功能。</div>
         <div class="empty" x-show="!loaded && !error">載入中…</div>
@@ -221,7 +214,7 @@ function systemHub() {
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] }) }
   var LAST_KEY = 'motrix_system_hub_group'
   return {
-    session: {}, sections: [], cur: '', q: '', loaded: false, error: '', hint: true, showDenied: false, recent: [], searchFocus: false, undo: null,
+    session: {}, sections: [], cur: '', q: '', loaded: false, error: '', hint: true, showDenied: false, recent: [], searchFocus: false,
     async init() {
       var s = {}
       try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { s = {} }
@@ -271,16 +264,6 @@ function systemHub() {
       this.remember(it)
     },
     goRecent(it) { this.remember(it); location.href = it.href },
-    async setShowDenied(v) {
-      var prev = this.showDenied
-      try {
-        var r = await fetch('/api/system-hub/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify({ showDenied: v }) })
-        if (!r.ok) throw new Error('HTTP ' + r.status)
-        this.showDenied = v; this.undo = prev
-        await this.reload()
-      } catch (e) { this.error = '沒有儲存成功，請再試一次。' }
-    },
-    async undoShowDenied() { if (this.undo === null) return; var v = this.undo; this.undo = null; await this.setShowDenied(v); this.undo = null },
     async reload() {
       try {
         var r = await fetch('/api/system-hub', { headers: { Authorization: 'Bearer ' + this.session.token } })
