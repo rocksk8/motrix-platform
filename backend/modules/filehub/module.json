@@ -46,6 +46,7 @@
       "section": "data",
       "title": "檔案中心",
       "desc": "搜尋與下載所有單據的附件",
+      "impact": "影響：只是查詢與下載，不會改動任何單據。",
       "href": "file-center.html",
       "perm": [
         "file_center"

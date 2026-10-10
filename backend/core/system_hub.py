@@ -11,12 +11,14 @@
 卡片欄位（`system_cards[]`）：
   id       全站唯一（英數與 -_）            section  分組鍵（SECTIONS 之一）
   title    標題                              desc     一行說明
+  impact   『改了會影響什麼』一句白話（必填；例：影響：只影響之後送出的單據，簽核中的不變。）
   href     頁面檔名（可帶 #錨點）            perm     'superadmin' | ["模組鍵",…] | 'any'（同選單語意）
   order    整數（同組內排序）                keywords 搜尋關鍵字（空白分隔，選用）
   icon     圖示鍵（選用，ICONS 之一）        planned  True ⇒ 規劃中（頁面尚未存在，不檢查 href 是否存在，列上標「規劃中」）
 即時狀態徽章（選用）由提供者回傳：`ModuleSpec.providers[("system.hub_badge", "<card id>")] = fn(conn, user) -> {"text", "tone", "count"?}`。
 """
 import json
+import re
 from pathlib import Path
 
 L1_CARDS = Path(__file__).with_name("system_hub_l1.json")
@@ -33,7 +35,7 @@ SECTIONS = (
     {"key": "status", "title": "系統狀態與版本", "sub": "版本、資料庫結構、使用狀況"},
 )
 ICONS = ("user", "shield", "flow", "mail", "cal", "disk", "trash", "log", "gear", "build", "ver", "org", "file", "scale")
-CARD_KEYS = {"id", "section", "title", "desc", "href", "perm", "order", "keywords", "icon", "planned"}
+CARD_KEYS = {"id", "section", "title", "desc", "impact", "href", "perm", "order", "keywords", "icon", "planned"}
 TONES = ("ok", "info", "warn", "bad", "plan")
 
 
@@ -60,6 +62,19 @@ def _perm_ok(perm):
     return perm in ("any", "superadmin") or (isinstance(perm, list) and bool(perm) and all(isinstance(k, str) and k for k in perm))
 
 
+_CJK = re.compile(r"[一-鿿]")
+_CODEISH = re.compile(r"\.html|/api/|https?://|[a-z]+_[a-z_]+|module|API|JSON", re.I)
+
+
+def plain_problem(text):
+    """使用者介面文字必須是白話：要有中文、不可出現網址／檔名／底線代碼／module／API 等（使用者核心原則：畫面上不出現程式碼）。"""
+    t = str(text or "")
+    if not _CJK.search(t):
+        return "沒有中文"
+    m = _CODEISH.search(t)
+    return "含程式碼樣式的字：%r" % m.group(0) if m else ""
+
+
 def _page_of(href):
     return str(href or "").split("#", 1)[0].lstrip("/")
 
@@ -83,6 +98,12 @@ def validate(cards, pages=None):
             problems.append("%s 的系統卡片 %s 用了不存在的分組 %r（分組只能在 L1 定義：%s）" % (where, cid, c.get("section"), sorted(secs)))
         if not c.get("title") or not c.get("desc") or not c.get("href"):
             problems.append("%s 的系統卡片 %s 缺 title／desc／href" % (where, cid))
+        if not str(c.get("impact") or "").strip():
+            problems.append("%s 的系統卡片 %s 缺 impact（改了會影響什麼，一句白話；使用者核心原則）" % (where, cid))
+        for fld in ("title", "desc", "impact"):
+            why = plain_problem(c.get(fld)) if c.get(fld) else ""
+            if why:
+                problems.append("%s 的系統卡片 %s 的 %s 不是白話（%s）：%r" % (where, cid, fld, why, c.get(fld)))
         if not isinstance(c.get("order"), int):
             problems.append("%s 的系統卡片 %s 缺整數 order" % (where, cid))
         if not _perm_ok(c.get("perm")):
@@ -113,7 +134,7 @@ def build_sections(cards):
         items = sorted(by[s["key"]], key=lambda c: (c["order"], c["id"]))
         if items:
             out.append({"key": s["key"], "title": s["title"], "sub": s["sub"], "count": len(items),
-                        "items": [{"id": c["id"], "title": c["title"], "desc": c["desc"], "href": c["href"], "icon": c.get("icon") or "gear",
+                        "items": [{"id": c["id"], "title": c["title"], "desc": c["desc"], "impact": c.get("impact") or "", "href": c["href"], "icon": c.get("icon") or "gear",
                                    "keywords": c.get("keywords") or "", "module": c.get("module") or "core", "planned": bool(c.get("planned")),
                                    "badge": None} for c in items]})
     return out
