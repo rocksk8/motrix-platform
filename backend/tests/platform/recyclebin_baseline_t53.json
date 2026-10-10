@@ -105,14 +105,6 @@
    "count": 3,
    "reason": "exempt: 扣繳明細（由來源重算）"
   },
-  "modules/arap/api/invoice_vouchers.py::invoice_vouchers": {
-   "count": 1,
-   "reason": "p1: 收款憑據"
-  },
-  "modules/arap/api/payment_requests.py::payment_requests": {
-   "count": 1,
-   "reason": "p1: 請款單"
-  },
   "modules/case/api/case_action_items.py::case_action_items": {
    "count": 1,
    "reason": "p2: 其他業務資料（P2 評估）"
@@ -352,9 +344,7 @@
   "modules/accounting/api/ledger_annotations.py::delete_annotation::DELETE /annotations/{annotation_id}": "p2: 其他業務資料（P2 評估）",
   "modules/accounting/api/ledger_category_map.py::delete_category_map::DELETE /category-map/{category}": "p2: 其他業務資料（P2 評估）",
   "modules/accounting/api/vouchers.py::delete_voucher_attachment::DELETE /{voucher_id}/attachments/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
-  "modules/arap/api/invoice_vouchers.py::delete_invoice_voucher::DELETE /api/invoice-vouchers/{voucher_no}": "p1: 收款憑據（開票申請）",
   "modules/arap/api/invoice_vouchers.py::delete_invoice_voucher_issued_file::DELETE /api/invoice-vouchers/{voucher_no}/issued-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
-  "modules/arap/api/payment_requests.py::delete_payment_request::DELETE /api/payment-requests/{request_no}": "p1: 請款單",
   "modules/case/api/case_action_items.py::delete_case_action_item::DELETE /api/quotations/{quote_no}/action-items/{item_id}": "p2: 其他業務資料（P2 評估）",
   "modules/case/api/case_extra_expenses.py::cancel_change_request::DELETE /api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request": "p2: 其他業務資料（P2 評估）",
   "modules/case/api/case_extra_expenses.py::delete_change_request_file::DELETE /api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
