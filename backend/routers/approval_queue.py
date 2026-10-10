@@ -21,6 +21,7 @@ from core import registry
 from core.txn import begin_write
 from db import get_db
 from helpers import _require_user, _tok, _audit, _notify, active_delegators_for, can_see_financial
+from helpers import audit as _audit_mod
 from helpers.approval_queue import ApprovalUnreadable, active_tiers, current_tier_idx
 from helpers.case_access import SYSTEM, case_module_present, guard_case_access, is_document_approver
 
@@ -462,7 +463,7 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
     （`extra_expense`：簽核名單在自己的欄位；`case_change`：單層「任一 superadmin」不會卡在特定人身上）。
     """
     user = _require_user(authorization, require_superadmin=True)
-    reason = (body.reason or "").strip()
+    reason = (body.reason or "").strip()[:500]                    # 原因上限（稽核 detail 與簽核紀錄不放無限長文字）
     if not reason:
         raise HTTPException(400, "請填寫轉簽原因")
     store = registry.providers("approval.reassign").get(body.type)
@@ -517,11 +518,20 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
         if old.get("username") == to_username:
             raise HTTPException(400, "轉簽對象與原簽核人相同")
         # 第 54 班（使用者裁示）：轉簽不能變成自核的後門——操作者不得是送審人、轉給的對象也不得是送審人（送審人不得自行核准自己送審的單據）
-        requester = str(appr.get("requestedBy") or "").strip()
-        if requester and user["username"] == requester:
+        requester = str(appr.get("requestedBy") or row.get("requestedBy") or "").strip()     # 提供者可附 `requestedBy` 當後備（舊單的簽核資料沒嵌送審人）
+        if not requester:                                                                      # 讀不到送審人 ⇒ 規則無從驗證 ⇒ 擋下（fail-closed），不放行
+            raise HTTPException(409, "無法確認這張單的送審人，不能轉簽（請改由修改簽核流程或退回重送）。")
+        if user["username"] == requester:
             raise HTTPException(403, "你是這張單的送審人，不能轉簽自己送審的單據。")
-        if requester and to_username == requester:
+        if to_username == requester:
             raise HTTPException(400, "不能把簽核轉給送審人本人（送審人不得自行核准自己送審的單據）。")
+        # 雙人控管不能被轉簽收掉：對象已經在這張單的其他層（簽過或還沒簽）⇒ 同一個人會簽出兩層
+        for ti, t in enumerate(tiers):
+            for j, a in enumerate(t.get("approvers") or []):
+                if (ti, j) != (ct, idx) and a.get("username") == to_username:
+                    raise HTTPException(409, "%s 已經是這張單第 %d 層的簽核人（%s），不能再接手第 %d 層（同一個人不得簽出兩層）。"
+                                              % (to_username, ti + 1, "已簽" if a.get("status") == "approved" else "待簽", ct + 1))
+        self_assigned = to_username == user["username"]
 
         now = datetime.now().isoformat()
         actor = user.get("display_name") or user["username"]
@@ -551,25 +561,31 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
         store.save(conn, row, appr, now)
         # 第 54 班：**強制稽核**——與換人同一個交易（寫不進去 ⇒ 整個轉簽回滾），不再是 commit 之後吞錯誤的 `_audit`
         label = body.id + "：" + (old.get("displayName") or old.get("username") or "") + " → " + (target["display_name"] or target["username"])
+        detail = {"from": old.get("username"), "to": to_username, "reason": reason[:500], "tier": ct + 1, "docType": body.type,
+                  "requestedBy": requester, "selfAssigned": self_assigned}
+        detail_json = json.dumps(detail, ensure_ascii=False)
+        if len(detail_json) > _audit_mod._DETAIL_MAX:                       # 與 `_audit` 同一道上限（W3 #5）
+            detail_json = json.dumps({"_truncated": True, "originalLength": len(detail_json), "preview": detail_json[:_audit_mod._DETAIL_MAX - 200]}, ensure_ascii=False)
+        d = _audit_mod._derive_fields("approval.reassign", body.type, body.id, label, detail)           # module／case_no／ref_no 與 `_audit` 同規則
         conn.execute(
             "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code)"
             " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
             (now, user.get("id"), user.get("username") or "", user.get("display_name") or "", "approval.reassign", body.type, body.id, label,
-             json.dumps({"from": old.get("username"), "to": to_username, "reason": reason, "tier": ct + 1, "docType": body.type,
-                         "requestedBy": requester}, ensure_ascii=False),
-             "approval", (row["quoteNo"] or "") if "MQ-" in str(row["quoteNo"] or "") else "", ""))
+             detail_json, d["module"], d["case_no"], d["ref_no"]))
         supers = [r["username"] for r in conn.execute("SELECT username FROM users WHERE role='superadmin' AND active=1 ORDER BY id")]
         conn.commit()
     finally:
         conn.close()
 
     # 被轉到的人要知道自己多了一張要簽的單，否則這張會靜靜卡在他的佇列裡
-    _notify(to_username, "approval_request", body.id, row["quoteNo"] or body.id,
-            actor + " 將「" + body.id + "」的簽核轉給你（原因：" + reason + "）")
+    if not self_assigned:                                        # 自己接手 ⇒ 不必通知自己（其他人都會收到『自行接手』）
+        _notify(to_username, "approval_request", body.id, row["quoteNo"] or body.id,
+                actor + " 將「" + body.id + "」的簽核轉給你（原因：" + reason + "）")
     # 第 54 班：原簽核人與其他在職最高管理者也要知道（否則簽核被拿走了，當事人和其他監督者都不知道）
     seen = {user["username"], to_username}
-    note = "%s 將「%s」第 %d 層的簽核由 %s 轉給 %s（原因：%s）" % (
-        actor, body.id, ct + 1, old.get("displayName") or old.get("username") or "—", target["display_name"] or target["username"], reason)
+    note = "%s 將「%s」第 %d 層的簽核由 %s 轉給 %s%s（原因：%s）" % (
+        actor, body.id, ct + 1, old.get("displayName") or old.get("username") or "—", target["display_name"] or target["username"],
+        "（自行接手）" if self_assigned else "", reason)
     for u in [old.get("username")] + supers:
         if u and u not in seen:
             seen.add(u)

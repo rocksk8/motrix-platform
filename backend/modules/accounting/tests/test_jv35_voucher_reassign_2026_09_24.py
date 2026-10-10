@@ -256,3 +256,30 @@ def test_jv35_the_queue_shows_a_reassign_button_on_a_voucher(live_server, client
         page.wait_for_timeout(200)
     print("JV35 頁面實測：轉簽後當層簽核人 =", a["username"], "／轉簽自", a.get("reassignedFrom"))
     assert a["username"] == "jv35e_new" and a["reassignedFrom"] == "jv35e_old", a
+
+
+def test_jv35_old_voucher_without_embedded_requester_still_knows_the_submitter(client, make_user):
+    """第 54 班（1d 稽核）：AS3 之前送審的傳票 approval_json 沒嵌 requestedBy ⇒ 送審人要從 `submitted_by` 取，否則轉簽規則對舊單形同虛設。"""
+    import db
+    su, sh = _login(client, make_user, "jv35g_su")
+    old, _oh = _login(client, make_user, "jv35g_old")
+    new, _nh = _login(client, make_user, "jv35g_new")
+    vid, no = _pending_voucher(client, sh, old)                                       # 送審人＝su（同一個人想轉簽自己送審的傳票）
+    conn = db.get_db()
+    try:
+        a = json.loads(conn.execute("SELECT approval_json FROM vouchers_all WHERE id=?", (vid,)).fetchone()["approval_json"])
+        a.pop("requestedBy", None)
+        conn.execute("UPDATE vouchers_all SET approval_json=? WHERE id=?", (json.dumps(a, ensure_ascii=False), vid))
+        conn.commit()
+    finally:
+        conn.close()
+    r = _reassign(client, sh, no, new)
+    assert r.status_code == 403 and "送審人" in r.text                                # submitted_by 後備生效
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE vouchers_all SET submitted_by='' WHERE id=?", (vid,))
+        conn.commit()
+    finally:
+        conn.close()
+    r = _reassign(client, sh, no, new)
+    assert r.status_code == 409 and "送審人" in r.text                                # 仍讀不到 ⇒ fail-closed
