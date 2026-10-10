@@ -90,6 +90,7 @@ def delete(conn, entity_type, entity_id, user, reason="", approved=False) -> dic
     ad = RB.get_adapter(entity_type)
     if ad is None:
         raise RB.BinError("沒有『%s』的暫存區 adapter（擁有模組未載入？）" % entity_type)
+    begin_write(conn)                       # 快照前先拿寫鎖（呼叫端已在交易內 ⇒ 不動作）：快照與刪除之間不會有別的寫入插進來
     if approved:
         if (user or {}).get("role") != "superadmin":
             raise RB.BinError("只有最高管理者可以刪除已核可的單據")
