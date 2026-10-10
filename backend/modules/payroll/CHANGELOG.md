@@ -1,6 +1,6 @@
 # 薪資獎金 更新紀錄
 
-## (next) — 2026-10-10（wip/t53-05-rb-adapters）：勞報單進刪除暫存區（IP-RB1 adapter；第 53 班 P1）
+## (next) — 2026-10-10（wip/t53-05-rb-adapters）：勞報單進刪除暫存區（IP-RB1 adapter；第 53 班 P1）＋1d 稽核跟進
 - 新 `recycle_adapter.py`（`payslip` adapter）：快照＝勞報單本體＋`payslip_dispatch_links`（無附件：簽回檔／匯出存檔只在鎖定狀態才有）；詳情的遮罩視圖會展開 `data_json` 等 JSON 字串再遮罩（銀行帳號等），還原用原文。
 - `DELETE /api/payslips/{slip_no}`（仍只有最高管理者）：規則不變——待審核／已核准／已匯出／已簽回／已付款／已作廢一律不可刪（須保留備查）；草稿改進暫存區（連結列一併進、一併還原）。暫存區模組不在 ⇒ 照舊硬刪（同一段條件式 `delete_in_tx`），稽核標籤註明。
 - 『刪除已核可』**不開放**勞報單（`can_delete_approved` 回 False：已核准之後牽涉出納待付款、總帳 E06、簽回檔與匯款連結；撤銷請用『作廢』）；影響清單仍可查（已付款／已簽回／已匯出／派發連結數，鎖定者標 blocking）。

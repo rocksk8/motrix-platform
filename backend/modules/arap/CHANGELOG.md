@@ -1,6 +1,6 @@
 # 應收應付 更新紀錄
 
-## (next) — 2026-10-10（wip/t53-05-rb-adapters）：請款單、開票申請憑據進刪除暫存區（IP-RB1 adapter；第 53 班 P1）
+## (next) — 2026-10-10（wip/t53-05-rb-adapters）：請款單、開票申請憑據進刪除暫存區（IP-RB1 adapter；第 53 班 P1）＋1d 稽核跟進
 - 新 `recycle_adapter.py`（`payment_request`、`invoice_voucher` 兩個 adapter，`ModuleSpec.providers[("recyclebin.adapter", …)]`）：快照＝單據列＋（開票申請）已開立附件清單；還原＝單號被占 ⇒ `conflict:`、案件不在 ⇒ `parent_missing:`、附件原路徑被占用 ⇒ 改寫 `issued_files_json` 並註記。
 - `DELETE /api/payment-requests/{no}`、`DELETE /api/invoice-vouchers/{no}`：規則不變（只准草稿、財務角色／最高管理者），刪除改呼叫 `recycle_bin.delete()`（同一個寫交易，進暫存區可還原）；回應多 `recycled`。暫存區模組不在 ⇒ 照舊硬刪（同一段 `delete_in_tx`），`recycled:false`，稽核標籤註明「暫存區未啟用，已直接刪除」。
 - 『刪除已核可』（最高管理者，`POST /api/recycle-bin/delete-approved`）：兩種單據只收『已核准』；影響清單＝已匯出次數、已開立附件數、行事曆事件（皆資訊性，不擋——這兩種單據沒有收款／總帳／獎金下游）。
