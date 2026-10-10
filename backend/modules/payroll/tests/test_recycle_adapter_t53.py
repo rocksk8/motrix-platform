@@ -184,3 +184,12 @@ def test_fallback_hard_delete_when_bin_absent(client, su, monkeypatch):
 
 def test_adapter_registered():
     assert RB.adapters()["payslip"].label == "勞報單"
+
+
+def test_delete_clears_the_slips_stale_notifications_only(client, su):
+    _slip()
+    _slip(no="LB-OTHER")
+    for ref in (SLIP, "LB-OTHER"):
+        _x("INSERT INTO notifications (username, type, ref_id, message, created_at) VALUES (?,?,?,?,?)", "rbp_su", "payslip_returned", ref, "m", "2026-01-01T00:00:00")
+    assert client.delete("/api/payslips/%s" % SLIP, headers=su).status_code == 204
+    assert [r["ref_id"] for r in _q("SELECT ref_id FROM notifications WHERE type='payslip_returned'")] == ["LB-OTHER"]

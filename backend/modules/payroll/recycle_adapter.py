@@ -18,6 +18,7 @@ from helpers import recycle_bin as RB
 
 _TABLE = "payslips"
 _LINKS = "payslip_dispatch_links"
+_NOTICE_TYPES = ("payslip_submitted", "payslip_next_tier", "payslip_approved", "payslip_returned", "payslip_payable", "payslip_paid", "approval_reminder")
 
 
 def _locked():
@@ -94,6 +95,8 @@ class PayslipBinAdapter(RB.Adapter):
         cur = conn.execute("DELETE FROM payslips WHERE slip_no=? AND status NOT IN (%s)" % placeholders, (entity_id, *_locked()))
         if cur.rowcount != 1:                                      # 防禦（同端點原本的條件式刪除）：狀態剛被改 ⇒ 整個動作回滾
             raise RB.BinError("勞報單狀態剛被改變，請重新整理後再試")
+        # 退回後回到草稿的單可能還留著『已送審／已退回』通知（指向剛刪掉的單號）⇒ 同一個交易內清掉
+        conn.execute("DELETE FROM notifications WHERE ref_id=? AND type IN (%s)" % ",".join("?" * len(_NOTICE_TYPES)), [str(entity_id), *_NOTICE_TYPES])
 
     def restore_in_tx(self, conn, snap, ctx):
         rows = (snap.get("rows") or {}).get(_TABLE) or []
