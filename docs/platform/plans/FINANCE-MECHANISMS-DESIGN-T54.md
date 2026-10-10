@@ -23,7 +23,7 @@
 | 模組歸屬 | 信用額度＋逾期＋`finance_guard`＝**獨立模組 `credit`**，附 **L1 契約**；各檢查點只呼叫 `finance_guard.check()`；**模組不在 ⇒ 回 ok 並記 log** | §4.1、§6 |
 | 傳票流水 bug | 先以獨立小修（`wip/t54-ab-voucher-no-fix`）處理；**三位起跳寬度不變**；T100／會計師的單號長度上限仍待使用者確認 | §3.5 |
 | 範圍 | 在使用者核准分期計畫（甲～戊班）之前，**除傳票流水修正外不寫任何程式** | §5 |
-| 確認期（2026-10-10） | 全系統共用 `confirm_period_days`（**單一設定，登錄與擁有者＝設定中心 node-39 §2.2；本稿只引用、不另定義；1d／05／b5 用同一個鍵**），**預設 7 天、可調、下限 24 小時**；法定參數的生效日須晚於發布日且間隔 ≥ 確認期；發布／撤回須第二位 superadmin（或持 `finance.statutory.confirm` 者）確認；單一 superadmin ⇒ 滿確認期後再確認＋通知；各單據類型的法定保存年限同機制、系統內可調 | §2.2、§2.7、§3.2、§4.1 |
+| 確認期（2026-10-10） | 全系統共用 `change_control.confirm_period_days`（**單一設定，登錄與擁有者＝設定中心 node-39 §2.2；本稿只引用、不另定義；1d／05／b5 用同一個鍵**），**預設 7 天、可調、下限 24 小時**；法定參數的生效日須晚於發布日且間隔 ≥ 確認期；發布／撤回須第二位 superadmin（或持 `finance.statutory.confirm` 者）確認；單一 superadmin ⇒ 滿確認期後再確認＋通知；各單據類型的法定保存年限同機制、系統內可調 | §2.2、§2.7、§3.2、§4.1 |
 
 **仍未裁示**（等財務或使用者）：大額付款的門檻數字／是否分單據類型／累計規則（§4.5）；傳票單號長度上限（T100／會計師，§3.5）；假日曆匯入人與『公司自訂休日』層（§3.2）；第一批政策生效日的收編項目（`dispatch_cost_taxed`、`po_required`、報表預設口徑，§2.1）。
 
@@ -257,7 +257,7 @@ statutory_params(
   )
 -- 部分唯一索引（SQLite 支援）：CREATE UNIQUE INDEX ux_statutory ON statutory_params(kind, key, effective_from) WHERE state != 'withdrawn';
 ```
-- **生效日必須在發布日之後，且間隔 ≥ 確認期（使用者 2026-10-10）**：發布時檢查 `effective_from ≥ 發布日 + 確認期`。**確認期＝全系統共用設定 `confirm_period_days`（預設 7 天，可在系統內調整，下限 24 小時）——它是設定中心的『單一登錄設定』，本稿不自行定義其儲存或預設，只讀取 `settings.get("confirm_period_days")`；建議群組與鍵名由 node-39 在 §2.2 定案，本稿隨之引用**；`statutory.min_lead_days` 不另設，一律等於確認期（舊稿的『結構下限 1 天』改為確認期本身的下限）。縮短確認期本身屬『放寬』，要先經**目前**確認期的待確認流程才生效。理由：已生效列凍結，若允許回溯或當天生效，已存的歷史／推估會在無人察覺下改值。**種子列（`seed=1`）與部署 migration 不受此限**（它們就是今天的值）。
+- **生效日必須在發布日之後，且間隔 ≥ 確認期（使用者 2026-10-10）**：發布時檢查 `effective_from ≥ 發布日 + 確認期`。**確認期＝全系統共用設定 `change_control.confirm_period_days`（預設 7 天，可在系統內調整，下限 24 小時）——它是設定中心的『單一登錄設定』，本稿不自行定義其儲存或預設，只讀取 `settings.get("change_control.confirm_period_days")`；建議群組與鍵名由 node-39 在 §2.2 定案，本稿隨之引用**；`statutory.min_lead_days` 不另設，一律等於確認期（舊稿的『結構下限 1 天』改為確認期本身的下限）。縮短確認期本身屬『放寬』，要先經**目前**確認期的待確認流程才生效。理由：已生效列凍結，若允許回溯或當天生效，已存的歷史／推估會在無人察覺下改值。**種子列（`seed=1`）與部署 migration 不受此限**（它們就是今天的值）。
 - **法定保存年限（使用者 2026-10-10）**：每種單據類型的法定保存年限＝kind `retention`，**系統內可調**，走與其他法定參數**相同的確認期與雙人確認**（縮短保存年限屬放寬，預設與其他參數一樣先待確認一個確認期；延長亦需確認，但可在確認期內預覽影響）。與暫存區保存期的銜接由 b5（RB）筆記負責，本稿只登錄 kind。**兩層分開但清除要同時檢查**：暫存區 `RETENTION_DAYS`（桶內放幾天）與 `retention.years`（法定最短保存年限，依單據類型）——任何清除（含到期自動清除、手動永久刪除）都須兩者皆滿足，**法定年限內一律不得清除**；cross-link 待 b5 回報其筆記路徑後補上。
 - **只增不改**：`active` 且 `effective_from ≤ 今天` 的列**凍結**（不可改、不可撤回）；未生效的 `draft`／`active` 列可撤回（`withdrawn`，留痕）。要『修正已生效的值』＝新增一列（新的 `effective_from`）＋原因，**不改歷史**；真的算錯要追溯，走『更正單』流程（另案，不在本稿）。
 - `kind='tax_rules'` 不入此表（第一階段）：`statutory.on('tax_rules', None, date)` 代理到 `legal_params.rules_for_date`；第二階段才把 `tax_rules_versions` 搬進此表（一次性、可還原）。
@@ -313,7 +313,7 @@ statutory.gaps(today) -> [缺口提示]                      # 例：2027 版缺
 
 - **位置**：設定中心頁（`系統 > 設定中心`）新增一個區塊『法定參數（生效日版本）』，**法定參數與日期型政策旗標不放進 `setting_group`**（它們需要生效日與凍結語意，`setting_group` 沒有；**經營政策反之一律放 `setting_group`**，見 §4.1），但沿用同一套外觀（群組樹、差異預覽、原因欄）。已有的『法規參數設定』頁（`legal-params.html`）併入此區塊作為 `tax_rules` 分頁，原網址保留轉址。
 - **操作流程**（負責人加一列）：選 kind→表單由 `StatuteKind.schema` 產生→填 `effective_from`、值、`source`（必填）、`reason`（必填）→『存草稿』→預覽（**影響說明**：『從 2027-01-01 起新建的報價預設稅率 5%→5%；已存單據不變』；`vat` 變動並列出受影響的衍生（毛利估算、精算預設））→『發布』。
-- **權限與雙人確認（稽核 H2；使用者 2026-10-10 裁示）**：能力 `finance.statutory.edit`（存草稿）、`finance.statutory.publish`（發布；預設僅 superadmin；可由 superadmin 授給財務負責人）、`finance.statutory.confirm`（第二人確認）。**發布與撤回都走『待確認』**：第一人發布／撤回 ⇒ `state=pending`，須由**另一位 superadmin 或持 `finance.statutory.confirm` 者**（不得同一人）在設定中心『待確認』清單確認後才轉 `active`／`withdrawn`；待確認的事件**沿用設定中心／1d 共用的 `config_changes`＋`config_change_events`（pending｜approved｜activated｜cancelled｜superseded），不另建待生效表**（`statutory_params.state=pending` 只是對應事件的投影）；**只有一位 superadmin 時＝待確認滿一個確認期（預設 7 天）後由同一人再確認一次**，並通知所有持稽核能力者。確認期見 §2.2（`confirm_period_days`）。理由：稅率類變動是金錢風險的放寬／變動，單人即可生效不可接受。1d 矩陣就緒前，沿用 `superadmin`＋上述雙人流程。必填原因；取代原稿『7 天內再加 confirm』。
+- **權限與雙人確認（稽核 H2；使用者 2026-10-10 裁示）**：能力 `finance.statutory.edit`（存草稿）、`finance.statutory.publish`（發布；預設僅 superadmin；可由 superadmin 授給財務負責人）、`finance.statutory.confirm`（第二人確認）。**發布與撤回都走『待確認』**：第一人發布／撤回 ⇒ `state=pending`，須由**另一位 superadmin 或持 `finance.statutory.confirm` 者**（不得同一人）在設定中心『待確認』清單確認後才轉 `active`／`withdrawn`；待確認的事件**沿用設定中心／1d 共用的 `config_changes`＋`config_change_events`（pending｜approved｜activated｜cancelled｜superseded），不另建待生效表**（`statutory_params.state=pending` 只是對應事件的投影）；**只有一位 superadmin 時＝待確認滿一個確認期（預設 7 天）後由同一人再確認一次**，並通知所有持稽核能力者。確認期見 §2.2（`change_control.confirm_period_days`）。理由：稅率類變動是金錢風險的放寬／變動，單人即可生效不可接受。1d 矩陣就緒前，沿用 `superadmin`＋上述雙人流程。必填原因；取代原稿『7 天內再加 confirm』。
 - **稽核與待生效**：寫 `config_ledger.record(domain='statutory:<kind>', key, changes, reason, actor, effective_at=effective_from)`（設計稿 §2 的最小介面）；舊→新差異、來源、發布者都進只增不改的明細；『待生效』狀態由 `effective_from > 今天` 表示；『待確認』（`state=pending`）是另一件事（雙人確認，見上），兩者並存。
 - **提醒**：`statutory.gaps()` 每日檢查：下一年版缺（**10 月 1 日起**提示，取代現在的 12 月才提示）、已排程但 30 天內生效的列（給財務確認）、`form401` 超過 12 個月沒覆核（提示『請確認公告令有無更新』）。**2027 版必須在 2026-12 前完成**：最低工資（30,900 待核定）與扣繳起扣標準；`vat` 本身不需要新列。
 - **稽核動作**：`statutory.draft／publish／withdraw`、`statutory.lookup_fallback`（用了程式預設）。
@@ -350,7 +350,7 @@ calendar_coverage(layer TEXT, year INT, complete INT, batch_id INT)  -- 該年�
 ### 3.2 匯入與編輯（superadmin；能力 `system.calendar.edit`）
 
 - **匯入（預設不連外）**：上傳政府公開資料 CSV（人事行政總處『政府行政機關辦公日曆表』，`data.gov.tw/dataset/14718`）→ 伺服器解析→**預覽與驗證**：每年天數、週六日是否都被標為休（官方資料已含）、補班日必為週末且不與假日重疊、跨年連續、與現有批次的**差異表**（新增／改名／刪除的日期）→ 確認＋原因 → 寫入新批次、`calendar_coverage` 更新。『一鍵抓取』做成**選配**：沿用既有對外連線開關模式（環境變數開才出現按鈕，預設關），抓回來的資料同樣先預覽。
-- **手動**：月曆畫面點一天→加／改／移除（必填原因、記 `entered_by`）；company 層同。假日曆是事實表，不凍結；但每次改動寫稽核明細（舊→新、原因）。**影響面分級（稽核 M8）**：(a) **整批匯入**與**修改今天以前的日期**會改動付款提醒與簽核催辦的計算 ⇒ 一律先成為『待確認』，由**另一位** superadmin 確認後才生效（只有一位 superadmin 時＝滿一個確認期〔`confirm_period_days`，預設 7 天〕再確認一次）；(b) 修改今天以後的單日 ⇒ 即時生效，但**即時通知其他 superadmin**（日期、舊→新、原因）；(c) 兩種情況編輯畫面都顯示『會影響已寄出的提醒／已過的順延計算』與受影響筆數（影響面板，§0.9）。
+- **手動**：月曆畫面點一天→加／改／移除（必填原因、記 `entered_by`）；company 層同。假日曆是事實表，不凍結；但每次改動寫稽核明細（舊→新、原因）。**影響面分級（稽核 M8）**：(a) **整批匯入**與**修改今天以前的日期**會改動付款提醒與簽核催辦的計算 ⇒ 一律先成為『待確認』，由**另一位** superadmin 確認後才生效（只有一位 superadmin 時＝滿一個確認期〔`change_control.confirm_period_days`，預設 7 天〕再確認一次）；(b) 修改今天以後的單日 ⇒ 即時生效，但**即時通知其他 superadmin**（日期、舊→新、原因）；(c) 兩種情況編輯畫面都顯示『會影響已寄出的提醒／已過的順延計算』與受影響筆數（影響面板，§0.9）。
 - **整批復原**：匯入批次可『復原』（`state=reverted`，日期回到上一批的值），不刪資料、留痕。
 
 ### 3.3 涵蓋警示（使用者：涵蓋最後一天前 60 天）
@@ -398,7 +398,7 @@ finance_guard.check(event, doc, user, *, override=None) -> Result{level: ok|warn
 - **等級（已裁示）**：每條規則有 `mode: off | warn | block`，**信用額度、大額付款、逾期上線一律 `warn`**；滿一季後檢視 `finance_guard_log` 的誤報率（警告後單據最終順利完成且無異常的比例、被業務／出納回報『誤報』的筆數）再由負責人決定是否改 `block`。`block` 模式一旦開啟，覆寫才有意義（理由必填、`finance_overrides`、稽核、通知財務）。
 - **覆寫**：被 `block` 時，持有能力 `finance.guard.override` 者可填**必填理由**後放行；寫 `finance_overrides(id, rule, event, doc_type, doc_no, amount, limit_value, reason, overridden_by, approved_by?, at)`，通知財務負責人與 superadmin；覆寫記錄進單據歷史。是否需要**第二位確認**、觸發條件（例如超過額度幾倍）全部是**規則欄位**（`override.second_approver_if_over_ratio`，預設空＝不需要）；實作用既有簽核機制『臨時加簽』。
 - **警告**：`warn` 不需理由，但回傳給前端顯示橘色提示，並寫 `finance_guard_log`（輕量；保留天數是設定項，預設 90）供一季後檢討誤報率。
-- **規則與政策的儲存（稽核 M7）**：信用額度預設／模式（off｜warn｜block）、`payment_thresholds`、`overdue_rules`、`amount_rules`（金額級距）**都是經營政策，存 node-39 的 `setting_group`**（每個群組宣告 `risk` 與 `requires_pending`），版本與稽核走 `config_ledger`；**不進 `statutory_params`**（該表只收法定參數與日期型切換旗標，見 §2.1）。**放寬一律要等**：`block→warn`、`warn→off`、門檻調高、寬限天數加長、刪除級距或加簽層、把規則改為不啟用 ⇒ 屬『放寬』，走 `requires_pending`（待生效一個確認期〔`confirm_period_days`，預設 7 天〕＋第二位 superadmin／財務負責人確認，兩者都要）；**收緊**（`off→warn→block`、門檻調低、新增級距）即時生效並通知。**客戶個別額度**是資料（見 4.3）。
+- **規則與政策的儲存（稽核 M7）**：信用額度預設／模式（off｜warn｜block）、`payment_thresholds`、`overdue_rules`、`amount_rules`（金額級距）**都是經營政策，存 node-39 的 `setting_group`**（每個群組宣告 `risk` 與 `requires_pending`），版本與稽核走 `config_ledger`；**不進 `statutory_params`**（該表只收法定參數與日期型切換旗標，見 §2.1）。**放寬一律要等**：`block→warn`、`warn→off`、門檻調高、寬限天數加長、刪除級距或加簽層、把規則改為不啟用 ⇒ 屬『放寬』，走 `requires_pending`（待生效一個確認期〔`change_control.confirm_period_days`，預設 7 天〕＋第二位 superadmin／財務負責人確認，兩者都要）；**收緊**（`off→warn→block`、門檻調低、新增級距）即時生效並通知。**客戶個別額度**是資料（見 4.3）。
 - **權限矩陣**：能力 `finance.credit.view`（看額度與曝險）、`finance.credit.edit_limit`（設客戶額度；高風險＝授予走確認期待生效）、`finance.guard.override`、`finance.payment.large_ack`、`finance.approval.tiers.edit`。1d 就緒前沿用 superadmin／財務角色。
 
 ### 4.2 前置條件一：客戶識別
