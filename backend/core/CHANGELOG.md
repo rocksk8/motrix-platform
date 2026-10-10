@@ -15,6 +15,9 @@
 - 展示重置（`db.reset_demo_db`）把 `config_changes`／`config_change_events` 納入整張清空（比照 `permission_changes`：先拿掉四個只增不改不刪的觸發器、清完建回）；`config_ledger.activate_due` 改名 `promote_due`（與權限矩陣的寫入函式同名，被 PMX14 名稱守門誤判；行為不變，尚無外部呼叫者）。
 - L1（新增）：`helpers.config_ledger`（`record／history／register_domain／pending／cancel／supersede／promote_due／in_effect／restore_version／snapshot_version`；與權限矩陣設計 §7 對齊）；`helpers.settings_registry`（`SettingDef／register_group／get／get_group／publish／validate_values／groups／invalidate`；kind `setting_group`）；`helpers.settings_groups`（群組 `retention`、`uploads`）；`helpers.uploads.limits_for／max_file_bytes`。
 - 風險欄位：`SettingDef(risk=…, requires_pending=True)` 的變更不立即生效，寫待生效明細（24 小時、可撤銷、讀取時到期即生效）；`settings_registry.materialize_due()` 由每日檢查呼叫；`config_ledger.promote_due(conn, now, domain=None)` 新增 domain 篩選。第一批沒有任何欄位使用（框架先行，欄位待使用者逐項確認）。
+- **（併入）(next) — 2026-10-10（wip/t54-1d-permmatrix-p0；權限矩陣框架 P0：能力登錄與中央檢查）**
+- L0（新增，向下相容）：`core.capabilities`——能力登錄。模組在 `module.json` 以 `capabilities` 宣告 `<單位>.<物件>.<動作>`（18 個固定動作；高風險動作自動拉高 risk），每個能力附 `legacy`（今天判斷式的小型 DSL：superadmin／role／module／any）；`collect`／`all_caps`／`get`／`signature`／`problems`；壞宣告只回報、不讓載入失敗。角色清單不在這裡寫死（`configure(valid_roles)` 由 `helpers.perm` 交進來）。
+- L1（新增，向下相容）：`helpers.perm`——中央檢查 `can(user, cap)`／`require(user, cap)`／`effective_caps`／`explain`，矩陣模型 `Matrix`（角色格＋個人允許／禁止）、`seed_from_legacy`、`compute`（純函式）。superadmin 直通；禁止優先；不可委派者忽略個人允許；預設矩陣＝由 legacy 推導的種子 ⇒ 與今天的判斷逐字相同（關卡 A：`tests/platform/test_perm_equivalence_gate_a.py`）。尚無任何端點使用；資料表來源、off／shadow／on 旗標、授權矩陣金標、權限頁在後續里程碑。
 
 ## 1.128 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-05-reassign-rules）：轉簽不能變成自核的後門（使用者裁示）**
