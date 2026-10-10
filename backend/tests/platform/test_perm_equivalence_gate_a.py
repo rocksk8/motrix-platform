@@ -172,3 +172,61 @@ def test_effective_caps_equals_the_set_of_can():
     u = _user("admin", ["payslip"], uid=18)
     assert P.effective_caps(u) == frozenset(k for k in CAPS if P.can(u, k))
     assert P.effective_caps(None) == frozenset()
+
+
+# ── 代理（IP-PM1）：額外給代理人、不能憑代理升權、不可再轉、不可委派者不通過、禁止優先、只靠代理才算「代」─────────────
+def _deleg(**kw):
+    base = dict(id=1, delegator="boss", delegate="dlg", scope_kind="caps", caps=frozenset({"zz.doc.submit"}), doc_types=frozenset(), valid_from="2031-01-01", valid_to="2031-01-31")
+    base.update(kw)
+    return P.Delegation(**base)
+
+
+@pytest.fixture
+def delegation_env(monkeypatch):
+    users = {"boss": _user("admin", [], uid=20) | {"username": "boss"}, "plain": _user("viewer", [], uid=21) | {"username": "plain"},
+             "chain": _user("admin", [], uid=22) | {"username": "chain"}}
+    monkeypatch.setattr(P, "load_user", lambda name: users.get(name))
+    monkeypatch.setattr(P, "_today", lambda: "2031-01-15")
+
+    def put(*delegations, deny=None):
+        P.set_matrix_source(lambda: P.Matrix(role_grants=P.seed_from_legacy(CAPS).role_grants, deny=deny or {},
+                                            delegations={"dlg": tuple(delegations)}))
+    return users, put
+
+
+def test_delegate_gets_the_delegators_capability_and_acting_as_names_the_delegator(delegation_env):
+    users, put = delegation_env
+    dlg = _user("viewer", [], uid=30) | {"username": "dlg"}
+    assert not P.can(dlg, "zz.doc.submit")
+    put(_deleg())
+    assert P.can(dlg, "zz.doc.submit") and P.acting_as(dlg, "zz.doc.submit") == "boss"
+    assert P.can_via(dlg, "zz.doc.submit") == (True, "delegation", "boss") and P.explain(dlg, "zz.doc.submit")["via"] == "delegation"
+    assert not P.can(dlg, "zz.doc.edit"), "範圍外的能力不給"
+    own = _user("admin", [], uid=31) | {"username": "dlg"}
+    assert P.can(own, "zz.doc.submit") and P.acting_as(own, "zz.doc.submit") == "", "自己的權限足夠 ⇒ 不算代理"
+
+
+def test_delegation_cannot_escalate_chain_or_cover_non_delegable_and_respects_window_and_deny(delegation_env):
+    users, put = delegation_env
+    dlg = _user("viewer", [], uid=30) | {"username": "dlg"}
+    put(_deleg(delegator="plain"))
+    assert not P.can(dlg, "zz.doc.submit"), "委派人自己沒有 ⇒ 不能憑代理升權"
+    put(_deleg(caps=frozenset({"zz.doc.config"}), delegator="boss"))
+    assert not P.can(dlg, "zz.doc.config"), "不可委派的能力不經代理"
+    put(_deleg(valid_to="2031-01-10"))
+    assert not P.can(dlg, "zz.doc.submit"), "過期"
+    put(_deleg(valid_from="2031-02-01", valid_to="2031-02-28"))
+    assert not P.can(dlg, "zz.doc.submit"), "未開始"
+    put(_deleg(), deny={30: frozenset({"zz.doc.submit"})})
+    assert not P.can(dlg, "zz.doc.submit"), "個人禁止優先於代理"
+    put(_deleg(delegator="dlg2"))
+    users["dlg2"] = _user("viewer", [], uid=32) | {"username": "dlg2"}
+    assert not P.can(dlg, "zz.doc.submit"), "代理不可再轉：委派人本身只有代理而沒有基礎權限 ⇒ 不通過"
+
+
+def test_doc_type_scope_expands_to_every_capability_of_that_object(delegation_env):
+    users, put = delegation_env
+    dlg = _user("viewer", [], uid=30) | {"username": "dlg"}
+    put(_deleg(scope_kind="doc_types", caps=frozenset(), doc_types=frozenset({"zz.doc"})))
+    assert P.can(dlg, "zz.doc.edit") and P.can(dlg, "zz.doc.submit") and P.can(dlg, "zz.doc.export")
+    assert not P.can(dlg, "zz.doc.approve"), "委派人（admin）自己沒有 approve"

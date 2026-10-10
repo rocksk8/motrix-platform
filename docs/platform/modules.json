@@ -837,6 +837,22 @@
    "api_prefixes": [
     "/api/filehub"
    ]
+  },
+  "M16": {
+   "key": "permmatrix",
+   "name": "權限矩陣",
+   "units": [
+    "mod:permmatrix/__init__",
+    "mod:permmatrix/service"
+   ],
+   "tables": [
+    "perm_delegations",
+    "perm_pending",
+    "perm_role_caps",
+    "perm_user_overrides",
+    "perm_versions"
+   ],
+   "api_prefixes": []
   }
  },
  "retired": {

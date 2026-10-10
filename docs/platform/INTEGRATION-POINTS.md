@@ -994,3 +994,18 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 對方不在時 | 提供者不在或單案失敗 ⇒ 匯出欄位留白，不影響其他欄位 |
 | 契約版本 | 1（2026-10-06） |
 | 守門 | `backend/tests/test_shipped_qty_2026_10_06.py::test_case_shipped_summary_provider_and_report_helper` |
+
+## IP-PM1　`perm.matrix_source`：權限矩陣資料（M16 權限矩陣 → L1 `helpers/perm.py`；單一提供者；暫定號，列車定號；2026-10-10，權限矩陣框架 P0）
+
+L1 的中央檢查 `perm.can()` 需要「種子 ⊕ 管理者的覆寫」＋有效代理；資料在 M16 `permmatrix` 模組的表裡，L1 不 import L2，改經 registry 取用。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M16 權限矩陣：`modules/permmatrix/service.py::load_matrix` |
+| 使用方 | L1 `helpers/perm.py::matrix()`（3 秒快取；寫入端呼叫 `perm.invalidate()`） |
+| 形式 | provider，單一提供者（名稱 `permmatrix`） |
+| 語法 | 提供：`("perm.matrix_source", "permmatrix"): fn`；取用：`registry.single_provider("perm.matrix_source")` ⇒ `fn(seed: Matrix) -> Matrix` |
+| 回傳 | `Matrix(role_grants, allow, deny, delegations)`：種子套上覆寫列、個人覆寫、有效代理；呼叫時順便把到期的 24 小時待生效轉為生效 |
+| 對方不在時 | 模組不在或讀取失敗 ⇒ L1 用種子（＝今天的行為）並記 log，不多給也不少給 |
+| 契約版本 | 1（2026-10-10） |
+| 守門 | `backend/modules/permmatrix/tests/test_permmatrix_m2.py`、`backend/tests/platform/test_perm_equivalence_gate_a.py` |
