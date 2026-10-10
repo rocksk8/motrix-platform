@@ -39,5 +39,20 @@
     "fields": {},
     "pages": [],
     "outputs": []
-  }
+  },
+  "system_cards": [
+    {
+      "id": "file-center",
+      "section": "data",
+      "title": "檔案中心",
+      "desc": "搜尋與下載所有單據的附件",
+      "href": "file-center.html",
+      "perm": [
+        "file_center"
+      ],
+      "order": 40,
+      "keywords": "檔案 附件 搜尋 下載",
+      "icon": "file"
+    }
+  ]
 }

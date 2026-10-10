@@ -37,5 +37,20 @@
     "fields": {},
     "pages": [],
     "outputs": []
-  }
+  },
+  "system_cards": [
+    {
+      "id": "lodging-records",
+      "section": "data",
+      "title": "旅宿檔案更新",
+      "desc": "更新旅宿住宿資料檔",
+      "href": "lodging-records.html",
+      "perm": [
+        "lodging"
+      ],
+      "order": 50,
+      "keywords": "旅宿 住宿 差旅",
+      "icon": "file"
+    }
+  ]
 }
