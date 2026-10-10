@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## 1.0.174 — 2026-10-10（wip/t53b-int；ab 稽核修正 r5）
+- `update_quotation`（PUT）：連線區段加 try/except，任何例外 rollback＋close（不帶寫鎖漏出）；材料申請在存檔中被刪後若後續失敗，由請求保險網搬回附件。
+- delete() 之後的步驟或 commit 失敗時，已搬進隔離區的附件搬回原處（報價單／額外支出／完工單刪除；報價單刪除端點另補連線不外漏）。
+
 ## 1.0.173 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t53-b5-rb-adapters；刪除暫存區 P1：案件模組 adapter）**
 - **刪除先進暫存區（IP-RB1／IP-RB2）**：`DELETE /api/quotations/{no}`、`/api/quotations/{no}/extra-expenses/{id}`（額外支出／請購單／採購單／費用單據）、`/api/completion-notes/{no}`、報價單存檔 diff 內的材料申請刪除（`material_guard.py`），改呼叫 `recycle_bin.delete()`：資料列＋名下資料＋附件進暫存區，最高管理者 30 天內可還原；**刪除條件完全沿用原規則**（報價單／完工單只有草稿、額外支出只有草稿與已駁回、材料申請只有草稿／已退回，錯誤訊息與狀態碼不變）。回應不變（`{ok:true}`）；暫存區模組不在 ⇒ 照舊硬刪，回應多 `binned:false`＋`notice` 明說「無法還原」，稽核內容也註明。

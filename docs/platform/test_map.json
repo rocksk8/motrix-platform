@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1258,
+  "tests": 1259,
   "unmapped": 13,
   "kinds": {
-   "api": 686,
+   "api": 687,
    "e2e": 301,
    "audit": 158,
    "unit": 113
@@ -5438,14 +5438,18 @@
     "helper:uploads",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
-    "mod:recyclebin/api"
+    "mod:recyclebin/__init__",
+    "mod:recyclebin/api",
+    "mod:recyclebin/quarantine"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/recycle_bin.py",
-     "backend/helpers/uploads.py"
+     "backend/helpers/uploads.py",
+     "backend/modules/recyclebin/__init__.py",
+     "backend/modules/recyclebin/quarantine.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",
@@ -8445,6 +8449,7 @@
     "helper:recycle_bin",
     "helper:uploads",
     "mod:case/__init__",
+    "mod:case/api/__init__",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
     "mod:case/api/quotations",
@@ -8452,7 +8457,9 @@
     "mod:case/material_approval",
     "mod:case/material_guard",
     "mod:case/recycle_adapter",
-    "mod:recyclebin/api"
+    "mod:recyclebin/__init__",
+    "mod:recyclebin/api",
+    "mod:recyclebin/quarantine"
    ],
    "evidence": {
     "import": [
@@ -8461,10 +8468,14 @@
      "backend/helpers/recycle_bin.py",
      "backend/helpers/uploads.py",
      "backend/modules/case/__init__.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/case/expense_forms.py",
      "backend/modules/case/material_approval.py",
      "backend/modules/case/material_guard.py",
-     "backend/modules/case/recycle_adapter.py"
+     "backend/modules/case/recycle_adapter.py",
+     "backend/modules/recyclebin/__init__.py",
+     "backend/modules/recyclebin/quarantine.py"
     ],
     "api": [
      "backend/modules/case/api/case_extra_expenses.py",
@@ -11760,6 +11771,7 @@
    ],
    "evidence": {
     "import": [
+     "backend/modules/payroll/api/payslip_approval.py",
      "backend/modules/payroll/tests/test_payslip_approval_t46.py",
      "backend/modules/payroll/tests/test_payslip_edit_guard_2026_08_28.py"
     ],
@@ -12145,7 +12157,9 @@
     "file:backend/helpers/__init__.py",
     "helper:recycle_bin",
     "mod:payroll/api/payslips",
+    "mod:recyclebin/__init__",
     "mod:recyclebin/api",
+    "mod:recyclebin/quarantine",
     "plat:__init__",
     "plat:registry"
    ],
@@ -12155,7 +12169,9 @@
      "backend/core/registry.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
-     "backend/helpers/recycle_bin.py"
+     "backend/helpers/recycle_bin.py",
+     "backend/modules/recyclebin/__init__.py",
+     "backend/modules/recyclebin/quarantine.py"
     ],
     "api": [
      "backend/modules/payroll/api/payslips.py",
@@ -12285,6 +12301,42 @@
     ],
     "path": [
      "frontend/pages/recycle-bin.html"
+    ],
+    "module_dir": [
+     "backend/modules/recyclebin/"
+    ]
+   },
+   "module": "recyclebin"
+  },
+  "backend/modules/recyclebin/tests/test_recyclebin_fixes_r5_t53.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/recyclebin/",
+    "file:backend/helpers/__init__.py",
+    "helper:recycle_bin",
+    "mod:recyclebin/__init__",
+    "mod:recyclebin/api",
+    "mod:recyclebin/quarantine",
+    "mod:recyclebin/service",
+    "mod:recyclebin/tests/test_recyclebin_p0_t53",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/recycle_bin.py",
+     "backend/modules/recyclebin/__init__.py",
+     "backend/modules/recyclebin/quarantine.py",
+     "backend/modules/recyclebin/service.py",
+     "backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py"
+    ],
+    "api": [
+     "backend/modules/recyclebin/api.py"
     ],
     "module_dir": [
      "backend/modules/recyclebin/"
@@ -13872,10 +13924,13 @@
     "helper:recycle_bin",
     "helper:uploads",
     "mod:payroll/tests/test_payslip_person_link_t48",
+    "mod:recyclebin/__init__",
     "mod:recyclebin/api",
+    "mod:recyclebin/quarantine",
     "mod:subcontract/__init__",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
+    "mod:subcontract/dispatch_flow",
     "mod:subcontract/payable_due",
     "plat:__init__",
     "plat:registry"
@@ -13889,7 +13944,10 @@
      "backend/helpers/recycle_bin.py",
      "backend/helpers/uploads.py",
      "backend/modules/payroll/tests/test_payslip_person_link_t48.py",
+     "backend/modules/recyclebin/__init__.py",
+     "backend/modules/recyclebin/quarantine.py",
      "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/dispatch_flow.py",
      "backend/modules/subcontract/payable_due.py",
      "backend/tests/__init__.py",
      "backend/tests/_fake_gcal.py"
@@ -14669,7 +14727,9 @@
     "file:backend/helpers/__init__.py",
     "helper:recycle_bin",
     "helper:uploads",
+    "mod:recyclebin/__init__",
     "mod:recyclebin/api",
+    "mod:recyclebin/quarantine",
     "mod:supply/api/shipping_notes"
    ],
    "evidence": {
@@ -14677,7 +14737,9 @@
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/recycle_bin.py",
-     "backend/helpers/uploads.py"
+     "backend/helpers/uploads.py",
+     "backend/modules/recyclebin/__init__.py",
+     "backend/modules/recyclebin/quarantine.py"
     ],
     "api": [
      "backend/modules/recyclebin/api.py",

@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## 1.0.52 — 2026-10-10（wip/t53b-int；ab 稽核修正 r5）
+- delete() 之後的步驟或 commit 失敗時，已搬進隔離區的附件搬回原處（發票憑據／請款單刪除）。
+
 ## 1.0.51 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t53-05-rb-adapters）：請款單、開票申請憑據進刪除暫存區（IP-RB1 adapter；第 53 班 P1）**
 - 新 `recycle_adapter.py`（`payment_request`、`invoice_voucher` 兩個 adapter，`ModuleSpec.providers[("recyclebin.adapter", …)]`）：快照＝單據列＋（開票申請）已開立附件清單；還原＝單號被占 ⇒ `conflict:`、案件不在 ⇒ `parent_missing:`、附件原路徑被占用 ⇒ 改寫 `issued_files_json` 並註記。

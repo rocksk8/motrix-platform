@@ -1,5 +1,17 @@
 # 刪除暫存區 更新紀錄
 
+## 1.0.5 — 2026-10-10（wip/t53b-int；ab 稽核修正 r5）
+- **請求保險網**：`main.py` 中介層 ＋ `recycle_bin.request_scope_begin／end`：請求結束時資料列沒 commit 的刪除，附件搬回（涵蓋報價存檔 PUT 裡 `material_guard` 刪材料申請）。
+- **永久刪除改先 commit 再刪檔**（commit 失敗不會出現『列還在、檔案已不見』）；刪不掉的隔離資料夾由 `reconcile` 再刪。
+- **孤兒檔搬回遇到原路徑被占用**：改存為 `名稱.rb-<token前6碼>.副檔名` 並記 log，不再把資料夾永遠留在隔離區。
+- 守門 `test_recyclebin_guards_t53`：`delete_scope` 不可用在 `async def` 端點。
+- **M1 連帶刪除中途失敗**：`service.delete()` 外層 try/except——子單據已搬進隔離區的附件在父層（或後面的子單據）失敗時搬回；另回傳 `rollback_files()` 供呼叫端在 delete() 之後、commit 之前失敗時使用（`/api/recycle-bin/delete-approved` 已用）。
+- **刪除已核可必填原因**（`reason` 空白 ⇒ 422，adapter 404 檢查在前）。
+- **精確 30 天**：`purge_after` 改存完整時間（秒），到期比對用現在時間；舊列只有日期者仍以當天起算到期。
+- **稽核與操作同一交易**：還原／永久刪除／刪除已核可／每日自動清除的稽核紀錄改在同一個交易內寫入（`service.audit_tx`），寫不進去 ⇒ 整筆失敗（永久刪除在刪隔離檔『之前』先寫稽核；刪除已核可失敗會把附件搬回）。
+- **呼叫端在 delete() 之後失敗**：L1 新增 `helpers.recycle_bin.delete_scope()`（區塊以例外結束 ⇒ 附件搬回）；擁有模組的刪除端點（arap／case／payroll／subcontract／supply）全部改用。
+- 測試 `tests/test_recyclebin_fixes_r5_t53.py`；各 adapter 測試的 delete-approved 請求補 `reason`。
+
 ## 1.0.4 — 2026-10-10（wip/t53b-int 整合修正 2）
 - `api.py`：內部守門 helper `_sa` 更名 `_require_sa`（系統稽核掃描器認 `_require*` 開頭的守門呼叫；行為不變：仍是 `_require_user(require_superadmin=True)`）。
 - `frontend/pages/recycle-bin.html`：狀態下拉標 `class="filter"`（看法類篩選標記守門）。

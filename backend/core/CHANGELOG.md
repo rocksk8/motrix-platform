@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+## 1.127 — 2026-10-10（wip/t53b-int；ab 稽核修正 r5）
+- L1（新增，向下相容）：`helpers/recycle_bin.delete_scope()`——包住『delete() … commit』；區塊以例外結束時，把已搬進隔離區的附件搬回原處（呼叫端的後續步驟失敗時用）。`delete()` 在 scope 內自動登記結果。另宣告 `helpers/audit` 的 `_DETAIL_MAX`、`_derive_fields` 為 L1 公開介面（暫存區把稽核列寫進同一個交易）。
+- L1（新增，向下相容）：`helpers/recycle_bin.request_scope_begin／request_scope_end`——每個 HTTP 請求一個保險網（`main.py` 新增一個 `recycle_bin_request_scope` 中介層呼叫它們）：請求裡 `delete()` 搬進隔離區的附件，請求結束時暫存區資料列沒 commit ⇒ 搬回原處（涵蓋 `material_guard` 在報價存檔裡刪材料申請等沒有自己 commit 的路徑）。
+- **本段涉及的 core 檔案只有三個**：`helpers/recycle_bin.py`、`helpers/audit.py`（`__l1_public__`）、`main.py`（上述中介層）＋ `core/CHANGELOG.md`、`tests/platform/l1_interface_snapshot.json`（`core_bump --pending`）；本檔只有這一個 `## (next)` 段落，列車取號（`train_number.py assign`）可直接指派。
+
 ## 1.126 — 2026-10-10（wip/t53-ab-recyclebin-p0）
 - L1（新增，向下相容）：`helpers/recycle_bin.py`——刪除暫存區契約（`CAP_ADAPTER`／`CAP_DELETE`、`Adapter`、`RestoreContext`、`BinError`、`delete()`、`adapters()`、`mask_obj()`；`Adapter.after_commit(event, entity_id, snap, result)`＝commit 之後的後續動作 hook）；`reserved_ids(conn, entity_type)`＝暫存區保留中的單號（單號產生器跳過用）、`CAP_RESERVED`、`MAX_SNAPSHOT_BYTES_ADMIN`；擁有單據的模組提供 adapter、刪除端點呼叫 `delete()`，模組不在時回 None（照舊硬刪並明說）。串接點 IP-RB1／IP-RB2（暫定號）。
 - `archive._F2_FIELDS` 宣告 `recycle_bin.snapshot_json`／`files_manifest_json` 整欄為 F2（一般 JSON 備份排除、完整列只進個資資料夾）。
