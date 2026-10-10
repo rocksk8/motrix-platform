@@ -9,7 +9,7 @@
 1. **一張核心表 `statutory_params`（kind, key, effective_from, value_json, source, entered_by, reason…）＋一個查找 API `statutory.on(kind, key, date)`**，是『法定參數』與『政策生效日』共用的唯一機制。上線當天零行為變更：今天所有寫死值作為**第一列**種入，另有等價黃金向量與『不得再出現字面 0.05／1.05』的棘輪守門（比照暫存區守門）。
 2. **單據大多已經『帶著自己的稅率』**（報價 `taxRate`、派工 `tax_rate`、發票金額欄位）。所以查找表的實際工作只有兩種：**新單據的預設值**（以單據日期取當時版本）與**沒有自帶稅率的推估**（精算預設成本倍數 1.05、含稅反推 ÷1.05，用該筆來源單據的日期）。這讓『取代 15 處』變成可機械化的替換，而不是改資料。
 3. **假日曆**：核心表 `calendar_days`＋匯入批次表；CSV 上傳預覽（預設不連外）、手動加減（必填原因）、公司自訂休日層、涵蓋到期前 60 天警示（儀表板＋信件＋所有用到工作日的功能標示），匯入可整批復原。**附帶抓到一個 bug**：傳票單號產生器已經會產出第 1000 張的 `-1000`，但讀取用的正則 `\d{3}` 認不得它 ⇒ 會一直產出同一個號碼（見 §3.5），一行即可修，建議立刻修（獨立於本設計）。
-4. **四個新機制共用同一組骨架**：規則表（含生效日）＋ 單一檢查函式 `finance_guard.check(event, doc, user)` 回 `ok／warn／block` ＋ 覆寫（理由必填、記 `finance_overrides`、通知財務）＋ 能力（接 1d 的 `finance.credit.override` 等）。**預設全部『只警告』**（先觀察一季再決定要不要擋）。
+4. **四個新機制共用同一組骨架**：規則表（含生效日）＋ 單一檢查函式 `finance_guard.check(event, doc, user)` 回 `ok／warn／block` ＋ 覆寫（理由必填、記 `finance_overrides`、通知財務）＋ 能力（接 1d 的 `finance.guard.override` 等）。**預設全部『只警告』**（先觀察一季再決定要不要擋）。
 5. **兩個前置條件不先做會做不好**：(a) 結構化付款條件（有『到期日』才有逾期與帳齡）；(b) 客戶識別——案件沒有正規化客戶 id（只在從下拉選時才有 `customerId`，很多舊案是打字的客戶名稱），信用額度要先決定『同一個客戶』怎麼認。
 6. 工作量合計約 **52～68 人日**（精確 51.5～67.5；**唯一明細表在 §5**，各節 §2.8／§3.7／§4.8 的小計加總即為此數：法定參數 S0～S4 17～22、假日曆 7～9、`finance_guard` 骨架 3～4、付款條件 5～6、逾期 3～4、信用額度 6～8、大額付款 2～3、金額級距 8～11、傳票流水修正 0.5），建議分五班（§5）。
 
@@ -400,7 +400,7 @@ finance_guard.check(event, doc, user, *, override=None) -> Result{level: ok|warn
 - **覆寫**：被 `block` 時，持有能力 `finance.guard.override` 者可填**必填理由**後放行；寫 `finance_overrides(id, rule, event, doc_type, doc_no, amount, limit_value, reason, overridden_by, approved_by?, at)`，通知財務負責人與 superadmin；覆寫記錄進單據歷史。是否需要**第二位確認**、觸發條件（例如超過額度幾倍）全部是**規則欄位**（`override.second_approver_if_over_ratio`，預設空＝不需要）；實作用既有簽核機制『臨時加簽』。
 - **警告**：`warn` 不需理由，但回傳給前端顯示橘色提示，並寫 `finance_guard_log`（輕量；保留天數＝`finance_guard.log_keep_days`，見 §6.1）供一季後檢討誤報率。
 - **規則與政策的儲存（稽核 M7）**：信用額度預設／模式（off｜warn｜block）、`payment_thresholds`、`overdue_rules`、`amount_rules`（金額級距）**都是經營政策，存 node-39 的 `setting_group`**（每個群組宣告 `risk` 與 `requires_pending`），版本與稽核走 `config_ledger`；**不進 `statutory_params`**（該表只收法定參數與日期型切換旗標，見 §2.1）。**放寬一律要等**：`block→warn`、`warn→off`、門檻調高、寬限天數加長、刪除級距或加簽層、把規則改為不啟用 ⇒ 屬『放寬』，走 `requires_pending`（待生效一個確認期〔`change_control.confirm_period_days`，預設 7 天〕＋第二位 superadmin／財務負責人確認，兩者都要）；**收緊**（`off→warn→block`、門檻調低、新增級距）即時生效並通知。**客戶個別額度**是資料（見 4.3）。
-- **權限矩陣**：能力 `finance.credit.view`（看額度與曝險）、`finance.credit.edit_limit`（設客戶額度；高風險＝授予走確認期待生效）、`finance.guard.override`、`finance.payment.large_ack`、`finance.approval.tiers.edit`。1d 就緒前沿用 superadmin／財務角色。
+- **權限矩陣**：能力 `finance.credit.view`（看額度與曝險）、`finance.credit.edit_limit`（設客戶額度；高風險＝授予與放寬〔調高額度、解除暫停〕都走確認期待生效，**且須第二位確認人**：另一位 superadmin 或持 `finance.statutory.confirm` 者；收緊即時生效並通知）、`finance.guard.override`、`finance.payment.large_ack`、`finance.tiers.edit`。1d 就緒前沿用 superadmin／財務角色。
 
 ### 4.2 前置條件一：客戶識別
 
@@ -444,7 +444,7 @@ amount_rules = [ {from_amount: 0,        tiers: <基礎層級，維持現行>},
   存 `setting_group`（群組 `approval_amount_tiers`，每個單據類型一組；放寬＝刪除或調高級距，走 §4.1 的待生效規則；版本與還原走 `config_ledger`）。**送審當下**依單據金額求出適用層級，**快照進單據 `approval.tiers`**（現有機制已快照 tiers，所以流程中途改規則不影響進行中的單據）。
 - **金額基準（已裁示）＝含稅金額**；級距數字與加簽人**預設留空，待財務負責人日後填寫**——本期只交付機制、不預設任何級距。
 - **金額基準表**（每單據類型一個函式 `doc_amount(doc_type, doc)`）：報價＝`tot.total`；出貨＝品項合計含稅；請款／發票憑據＝憑據金額；承攬商匯款＝應付含稅；額外支出＝總額；獎金＝總發放額；傳票＝借方合計。金額讀不到 ⇒ 套用**最高級距**並標『金額未識別』（寧嚴勿鬆）。
-- **簽核人金額授權（第二期）**：能力參數 `finance.approve` 的 `max_amount`（某人最多核准多少）——與 1d 能力矩陣的『參數化能力』對接；超過 ⇒ 該層不可由他簽、自動上送。
+- **簽核人金額授權（第二期）**：能力參數 `finance.approval.approve` 的 `max_amount`（某人最多核准多少）——與 1d 能力矩陣的『參數化能力』對接；超過 ⇒ 該層不可由他簽、自動上送。
 - **互動**：金額級距只**加**簽核層，不減；現有 `check_no_tier_self_approval`、委派、組織鏈規則照舊；改單據金額（解鎖編輯）⇒ 重算適用層級並重新簽核（與現行『解鎖編輯強制重簽』一致）；級距邊界用含稅金額、半開區間 `[from, next)`。
 - **上線當天零行為變更（已裁示）**：`amount_rules` 預設空 ⇒ 完全沿用現行層級；財務負責人在簽核設定頁填表後才開始加簽。
 - **UI**：簽核設定頁每個單據類型加『金額級距』區塊（表格＋預覽『若金額 X ⇒ 簽核鏈 …』）；單據送審畫面顯示『因金額 X 加簽：…』。
@@ -496,6 +496,8 @@ amount_rules = [ {from_amount: 0,        tiers: <基礎層級，維持現行>},
 6. **稅率日期不一致**：已核准未開票的報價遇稅率變動時，開票以開票日稅率、報價並列顯示（§2.3）——確認採用（FB01(c)）。
 7. ~~雙人確認的人選~~ **已裁示（使用者 2026-10-10）**：第二位確認人＝另一位 superadmin 或持 `finance.statutory.confirm` 者；只有一位 superadmin ⇒ 滿確認期後同一人再確認＋通知（§2.7）。
 
+**能力鍵命名**：一律三段 `領域.對象.動作`（例 `finance.guard.override`、`finance.tiers.edit`、`finance.approval.approve`），全稿同一名稱不並存別名。
+
 ### 6.1 本稿新增的可調數字（設定項登錄；擁有者與影響說明）
 
 這些原本是稿中的內嵌數字，一律改為設定項（登錄於設定中心 `setting_group`，每項有白話名稱、擁有者、風險、影響面板文字）。**「初始值」只是部署時種入的建議起點，負責人可改；改動的放寬／收緊方向決定是否走 `change_control.confirm_period_days`（§4.1）。**
@@ -508,6 +510,8 @@ amount_rules = [ {from_amount: 0,        tiers: <基礎層級，維持現行>},
 | `calendar.warn_days` | 假日曆到期前幾天警示 | 60（使用者裁示）| superadmin | ops | §3.3；下限 14 | 天數變小＝放寬 |
 | `impact.backtest_days` | 影響面板回測最近幾天 | 90 | superadmin | none | 只影響試算顯示，不影響任何規則 | 否 |
 | `finance_guard.log_keep_days` | 警告紀錄保留幾天 | 90 | 財務負責人 | ops | 『改小：一季檢討誤報率可能缺資料』（建議不小於一季）| 天數變小＝放寬 |
+
+**放寬方向的確認規則（全表通用）**：朝「放寬方向」改動 ⇒ 待生效一個確認期（`change_control.confirm_period_days`）**且**須第二位確認人；第二位確認人＝另一位 superadmin，**或持有 `finance.statutory.confirm` 能力者**（使用者裁示，兩者皆可）；只有一位 superadmin 且無其他持有者 ⇒ 滿確認期後同一人再確認＋通知。朝收緊方向改動 ⇒ 即時生效並通知。
 
 ## 7. 風險
 
