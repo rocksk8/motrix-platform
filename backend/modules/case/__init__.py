@@ -98,7 +98,10 @@ MODULE = ModuleSpec(
         # 第 43 班（IP-SH5）：整案「訂購／已出貨／占用中」數量小計（營運報表匯出用；只有數量）
         ("case.shipped_summary", "case"): item_shipped.case_shipped_summary,
         # IP-RB1（第 53 班 P1）：刪除暫存區的單據轉接（報價單、額外支出／請購單／採購單、完工單、材料申請）
-        **{("recyclebin.adapter", _et): _cls for _et, _cls in _recycle_adapter.adapters().items()},
+        ("recyclebin.adapter", "quotation"): _recycle_adapter.QuotationAdapter,                 # 字面字串：整合點登記表守門掃字面值
+        ("recyclebin.adapter", "extra_expense"): _recycle_adapter.ExtraExpenseAdapter,
+        ("recyclebin.adapter", "completion_note"): _recycle_adapter.CompletionNoteAdapter,
+        ("recyclebin.adapter", "material_order"): _recycle_adapter.MaterialOrderAdapter,
         # IP-102（W1）：匯款差額審核；IP-9：額外支出的匯款手續費列營運報表支出
         ("remit.reviews", "case"): payables._RemitReviews,
         ("expense.entries", "remit_fee_case"): payables._expense_entries,
