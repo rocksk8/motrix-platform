@@ -18,10 +18,12 @@ BASELINE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings_de
 def conn(client):
     c = get_db()
     R.invalidate()
-    R.register_group("zz_pending_t54", "待生效測試", [
-        R.SettingDef("limit", "int", 100, min=1, max=1000, risk="money", requires_pending=True),
-        R.SettingDef("note_days", "int", 7, min=1, max=30, risk="ops"),
-    ], risk="money")
+    R.register_group("zz_pending_t54", "待生效測試群組", [
+        R.SettingDef("limit", "int", 100, min=1, max=1000, risk="money", requires_pending=True, question="額度上限要設多少？", label="額度上限",
+                     help="單筆核准的額度上限。", impact="影響之後送出的單據，既有單據不變；二十四小時後生效。", risk_text="額度調高後可核准更大的金額。"),
+        R.SettingDef("note_days", "int", 7, min=1, max=30, risk="ops", question="提醒要提前幾天？", label="提前提醒天數",
+                     help="到期前幾天開始提醒。", impact="影響之後產生的提醒，立即生效。"),
+    ], help="測試用的設定群組。", risk="money")
     yield c
     R._GROUPS.pop("zz_pending_t54", None)
     c.close()

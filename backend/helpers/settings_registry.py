@@ -26,6 +26,12 @@ SCOPE = "company"
 _TTL = 15.0
 PENDING_HOURS = 24
 _TYPES = ("int", "float", "bool", "str")
+DEFAULT_EFFECT = "你即將把「{名稱}」從 {舊} 改成 {新}，{生效時間}生效"
+
+
+def _zh(v):
+    """有實質的繁中文字（至少 2 個中日韓字元）。"""
+    return isinstance(v, str) and sum(1 for ch in v if "一" <= ch <= "鿿") >= 2
 
 _GROUPS = {}                                   # group -> {"label", "fields": {name: SettingDef}, "sensitive", "risk", "legacy_key", "cross_check", "help"}
 _cache = {}                                    # group -> (monotonic, values)
@@ -39,19 +45,41 @@ class SettingError(ValueError):
 
 
 class SettingDef:
-    """一個設定欄位。`legacy`＝舊儲存位置（舊鍵 dict 裡的欄位名）；`clamp`＝讀取時夾到 [min, ...]（稽核保存期限那種「不可低於」）；
-    `risk`＝none|ops|money|legal|security（高風險變更會通知其他最高管理者）。"""
-    __slots__ = ("key", "type", "default", "min", "max", "unit", "label", "help", "risk", "legacy", "clamp", "requires_pending")
+    """一個設定欄位。畫面規則（使用者 2026-10-10，CORE-SPEC 零技術門檻）：問白話問題、少量選項、標示建議、說明影響；內部鍵 `key` 不顯示。
+    **必填**：`question`（白話問句）、`label`、`help`、`impact`（影響說明：對象／既有或之後／可否復原／何時生效）；`risk` 屬 money／legal／security 或
+    `requires_pending` ⇒ 另需 `risk_text`（白話風險提示）；`choices=[(值, 中文標籤, 影響說明)]`（選項型；三項皆必填）。缺必填 ⇒ ValueError（登錄當下就失敗）。
+    選填：`recommended`（建議值）、`presets={預設組名: 值}`、`advanced`（收進「進階」）、`impact_fn(conn, 新值)->{"numbers":…, "sentence":…}`（唯讀即時影響，失敗只顯示靜態說明）、
+    `effect`（儲存前確認句型，預設見 `DEFAULT_EFFECT`）。`legacy`＝舊儲存位置；`clamp`＝讀取時夾到 [min, ...]；`requires_pending`＝變更 24 小時後才生效。"""
+    __slots__ = ("key", "type", "default", "min", "max", "unit", "label", "help", "risk", "legacy", "clamp", "requires_pending",
+                 "question", "impact", "risk_text", "choices", "recommended", "presets", "advanced", "impact_fn", "effect")
 
-    def __init__(self, key, type, default, *, min=None, max=None, unit="", label="", help="", risk="ops", legacy=None, clamp=False, requires_pending=False):
+    def __init__(self, key, type, default, *, question="", label="", help="", impact="", min=None, max=None, unit="", risk="ops",
+                 legacy=None, clamp=False, requires_pending=False, risk_text="", choices=None, recommended=None, presets=None,
+                 advanced=False, impact_fn=None, effect=""):
         if type not in _TYPES:
             raise ValueError("型別不合法：%r" % (type,))
         self.key, self.type, self.default = key, type, default
-        self.min, self.max, self.unit, self.label, self.help = min, max, unit, label or key, help
+        self.min, self.max, self.unit = min, max, unit
+        self.label, self.help, self.question, self.impact = label, help, question, impact
         self.risk, self.legacy, self.clamp = risk, legacy, bool(clamp)
         self.requires_pending = bool(requires_pending)
+        self.risk_text, self.recommended, self.advanced = risk_text, recommended, bool(advanced)
+        self.choices = [tuple(c) for c in (choices or [])]
+        self.presets = dict(presets or {})
+        self.impact_fn, self.effect = impact_fn, effect or DEFAULT_EFFECT
+        miss = [n for n, v in (("question", question), ("label", label), ("help", help), ("impact", impact)) if not _zh(v)]
+        if (risk in ("money", "legal", "security") or self.requires_pending) and not _zh(risk_text):
+            miss.append("risk_text")
+        for c in self.choices:
+            if len(c) != 3 or not _zh(c[1]) or not _zh(c[2]):
+                miss.append("choices（每個選項要有 值／中文標籤／影響說明）")
+                break
+        if miss:
+            raise ValueError("設定欄位 %r 缺少必填的繁中文字：%s" % (key, "、".join(miss)))
         if self.check(default):
             raise ValueError("預設值自己就不合法：%s=%r（%s）" % (key, default, self.check(default)))
+        if recommended is not None and self.check(recommended):
+            raise ValueError("建議值不合法：%s=%r（%s）" % (key, recommended, self.check(recommended)))
 
     def check(self, v):
         """回問題描述字串；合法回 ''."""
@@ -71,13 +99,18 @@ class SettingDef:
 
     def meta(self):
         return {"key": self.key, "type": self.type, "default": self.default, "min": self.min, "max": self.max, "unit": self.unit,
-                "label": self.label, "help": self.help, "risk": self.risk, "clamp": self.clamp, "requiresPending": self.requires_pending}
+                "question": self.question, "label": self.label, "help": self.help, "impact": self.impact, "riskText": self.risk_text,
+                "risk": self.risk, "clamp": self.clamp, "requiresPending": self.requires_pending, "recommended": self.recommended,
+                "presets": self.presets, "advanced": self.advanced, "effect": self.effect, "hasLiveImpact": self.impact_fn is not None,
+                "choices": [{"value": c[0], "label": c[1], "impact": c[2]} for c in self.choices]}
 
 
 def register_group(group, label, fields, *, sensitive=False, risk="ops", legacy_key=None, cross_check=None, help=""):
     """登錄一個設定群組。`fields`＝SettingDef 清單；`cross_check(values)->[問題]`＝跨欄位檢查；`sensitive`＝只有設定權限者能讀。重複登錄 ⇒ ValueError。"""
     if group in _GROUPS:
         raise ValueError("設定群組已登錄：%r" % group)
+    if not _zh(label) or not _zh(help):
+        raise ValueError("設定群組 %r 需要繁中的名稱與說明" % group)
     names = [f.key for f in fields]
     if len(set(names)) != len(names):
         raise ValueError("群組 %r 欄位重複" % group)

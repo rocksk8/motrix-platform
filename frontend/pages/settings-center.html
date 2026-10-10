@@ -19,6 +19,7 @@
     .sc-table th, .sc-table td { padding: 7px 10px; border-bottom: 1px solid var(--border-light); text-align: left; }
     .sc-table th { font-size: 11px; color: var(--text-secondary); font-weight: 600; }
     .sc-tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--border-light); color: var(--text-secondary); margin-left: 6px; }
+    .sc-risk { color: var(--danger); font-size: 12px; margin-top: 4px; }
     .sc-last { margin-top: 8px; font-size: 11px; color: var(--text-dim); }
     @media (max-width: 767px) { .sc-main { margin-left: 0; padding: 20px 16px; } }
   </style>
@@ -41,18 +42,20 @@
         <h2><span x-text="g.label"></span><span class="sc-tag" x-show="g.sensitive">敏感</span></h2>
         <div class="sc-help" x-text="g.help"></div>
         <table class="sc-table">
-          <thead><tr><th>項目</th><th>目前值</th><th>預設</th><th>範圍</th></tr></thead>
+          <thead><tr><th>要設定什麼</th><th>目前</th><th>建議</th><th>可設定範圍</th><th>會影響什麼</th></tr></thead>
           <tbody>
-            <template x-for="f in (details[g.group] || [])" :key="f.key">
+            <template x-for="f in (details[g.group] || []).filter(x => !x.advanced || showAdv[g.group])" :key="f.key">
               <tr>
-                <td x-text="f.label"></td>
+                <td><div x-text="f.question"></div><div class="sc-help" x-text="f.help"></div></td>
                 <td><strong x-text="show(g.values[f.key], f)"></strong></td>
-                <td x-text="show(f.default, f)"></td>
+                <td x-text="f.recommended != null ? show(f.recommended, f) : '—'"></td>
                 <td x-text="range(f)"></td>
+                <td><div x-text="f.impact"></div><div class="sc-risk" x-show="f.riskText" x-text="'注意：' + f.riskText"></div></td>
               </tr>
             </template>
           </tbody>
         </table>
+        <div class="sc-help" style="margin-top:8px"><a href="#" @click.prevent="showAdv[g.group] = !showAdv[g.group]" x-text="showAdv[g.group] ? '收起進階項目' : '顯示進階項目'"></a></div>
         <div class="sc-last" x-show="g.lastChange" x-text="g.lastChange ? ('最後變更：' + g.lastChange.at.replace('T', ' ') + '　' + g.lastChange.actor + (g.lastChange.reason ? '（' + g.lastChange.reason + '）' : '')) : ''"></div>
       </div>
     </template>
@@ -63,7 +66,7 @@
   <script>
     function settingsCenterPage() {
       return {
-        groups: [], details: {}, errMsg: '',
+        groups: [], details: {}, showAdv: {}, errMsg: '',
         _initDone: false,
         _hdr() {
           const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
