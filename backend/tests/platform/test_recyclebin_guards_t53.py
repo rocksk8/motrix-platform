@@ -281,5 +281,6 @@ def test_baseline_file_is_well_formed():
     b = _baseline()
     assert set(b) == {"_doc", "routes", "delete_from", "file_removals"}
     assert len(b["routes"]) >= 50
-    assert sum(1 for r in b["routes"].values() if r.startswith("p1:")) >= 9, "第一期核心單據的 DELETE 路由要列在基線（p1:）"
+    migrated = sum(1 for v in scan_routes(product_files()).values() if v)      # 棘輪：接入一條就從基線移除一條 ⇒ 『待接入』＋『已接入』合計才是固定的
+    assert sum(1 for r in b["routes"].values() if r.startswith("p1:")) + migrated >= 9, "第一期核心單據的 DELETE 路由要列在基線（p1:）或已接入"
     assert any(k.endswith("::case_material_approvals") and v["reason"].startswith("p1:") for k, v in b["delete_from"].items()), "材料申請（採購單）是存檔 diff 內的隱性刪除，要列 p1:"
