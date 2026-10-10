@@ -122,19 +122,35 @@ def visible_cards(cards, modules, superadmin):
     return [c for c in cards if visible(c["perm"], mods, superadmin)]
 
 
-def build_sections(cards):
+def denied_reason(perm, module_labels=None):
+    """沒有權限時顯示給使用者的白話原因（不出現模組鍵）。module_labels：{模組鍵: 中文名稱}。"""
+    if perm == "superadmin":
+        return "需要最高管理者的權限"
+    labels = []
+    for k in perm if isinstance(perm, list) else []:
+        t = (module_labels or {}).get(k) or ""
+        t = t.split("（", 1)[0].strip()
+        labels.append("「%s」" % t if t else "相關")
+    return "需要%s的使用權限" % ("、".join(labels) if labels else "相關")
+
+
+def build_sections(cards, denied=(), module_labels=None):
     """已過濾的卡片 ⇒ [{key,title,sub,count,items:[…]}]（只含有項目的分組；組內依 order、再依 id）。
-    badge／pending 由呼叫端（routers/system_hub.py）補上。"""
+    denied：使用者**沒有權限**的卡片（超級管理員在設定打開『顯示沒有權限的項目』時才給；預設不給）——列出但標 denied＋白話原因，不可點。
+    count＝能開的項數（不含 denied）。badge／pending 由呼叫端（routers/system_hub.py）補上。"""
     by = {s["key"]: [] for s in SECTIONS}
     for c in cards:
         if c.get("section") in by:
-            by[c["section"]].append(c)
+            by[c["section"]].append((c, False))
+    for c in denied:
+        if c.get("section") in by:
+            by[c["section"]].append((c, True))
     out = []
     for s in SECTIONS:
-        items = sorted(by[s["key"]], key=lambda c: (c["order"], c["id"]))
+        items = sorted(by[s["key"]], key=lambda t: (t[1], t[0]["order"], t[0]["id"]))
         if items:
-            out.append({"key": s["key"], "title": s["title"], "sub": s["sub"], "count": len(items),
+            out.append({"key": s["key"], "title": s["title"], "sub": s["sub"], "count": sum(1 for _c, d in items if not d),
                         "items": [{"id": c["id"], "title": c["title"], "desc": c["desc"], "impact": c.get("impact") or "", "href": c["href"], "icon": c.get("icon") or "gear",
                                    "keywords": c.get("keywords") or "", "module": c.get("module") or "core", "planned": bool(c.get("planned")),
-                                   "badge": None} for c in items]})
+                                   "denied": d, "reason": denied_reason(c["perm"], module_labels) if d else "", "badge": None} for c, d in items]})
     return out

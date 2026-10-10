@@ -27,6 +27,19 @@
 
     .first-hint{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:0 0 14px;padding:10px 14px;border:1px solid var(--tone-info-border);background:var(--tone-info-bg);color:var(--tone-info-fg);border-radius:var(--radius-lg);font-size:12.5px}
     .hint-x{border:1px solid var(--tone-info-border);background:var(--surface);color:var(--tone-info-fg);border-radius:var(--radius);padding:4px 12px;font-size:12px;cursor:pointer;font-family:var(--font-zh)}
+    .recent-pop{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:6px}
+    .recent-pop__t{font-size:11px;color:var(--text-dim);padding:4px 8px}
+    .recent-pop__i{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:var(--radius);color:var(--text-primary);text-decoration:none;font-size:13px}
+    .recent-pop__i:hover{background:var(--surface-sunken)}
+    .row.is-denied{opacity:.62;background:var(--surface-sunken);cursor:not-allowed}
+    .row__why{font-size:11.5px;color:var(--tone-danger-fg);margin-top:3px}
+    .adv{margin-top:26px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:var(--surface);padding:10px 14px;font-size:13px}
+    .adv summary{cursor:pointer;color:var(--text-secondary);font-weight:600}
+    .adv__body{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+    .adv__q{font-weight:700}
+    .adv__opt{display:flex;gap:8px;align-items:flex-start;cursor:pointer}
+    .adv__preview{font-size:12px;color:var(--text-secondary);border-left:3px solid var(--border-light);padding-left:10px}
+    .adv__done{font-size:12px;color:var(--tone-success-fg);display:flex;gap:8px;align-items:center}
     .hub{display:grid;grid-template-columns:240px minmax(0,1fr);gap:24px;align-items:start;margin-top:14px}
     .groups{position:sticky;top:calc(var(--topbar-h) + 12px);display:flex;flex-direction:column;gap:2px;padding:6px;background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius-lg)}
     .grp{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:9px 11px;border:0;border-left:3px solid transparent;border-radius:var(--radius);background:transparent;color:var(--text-primary);font-size:13.5px;font-family:var(--font-zh);cursor:pointer}
@@ -89,8 +102,16 @@
           <h1>系統</h1>
           <div class="search-wrap">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-            <input id="hub-q" class="search-input" type="search" x-model="q" data-testid="hub-search" placeholder="搜尋設定或功能：例如 備份、簽核、信件、權限" aria-label="搜尋系統功能" autocomplete="off">
+            <input id="hub-q" class="search-input" type="search" x-model="q" @focus="searchFocus = true" @blur="searchFocus = false" data-testid="hub-search" placeholder="搜尋設定或功能：例如 備份、簽核、信件、權限" aria-label="搜尋系統功能" autocomplete="off">
             <kbd>/</kbd>
+            <div class="recent-pop" x-show="searchFocus && !q.trim() && recentItems.length" data-testid="hub-recent" role="listbox" aria-label="最近使用">
+              <div class="recent-pop__t">最近使用</div>
+              <template x-for="it in recentItems" :key="it.id">
+                <a class="recent-pop__i" :href="it.href" :data-testid="'hub-recent-' + it.id" @mousedown.prevent="goRecent(it)">
+                  <span class="row__ico" x-html="icon(it.icon)"></span><span x-text="it.title"></span>
+                </a>
+              </template>
+            </div>
           </div>
         </div>
         <div class="hub-sub" data-testid="hub-subtitle">管理用・帳號、流程、通知、資料與稽核都從這裡進去；你看得到的項目依權限顯示</div>
@@ -121,16 +142,17 @@
                 <div class="pane-sub">跨所有分組；清空搜尋回到分組檢視</div>
                 <div class="rows" x-show="results.length">
                   <template x-for="it in results" :key="it.id">
-                    <a class="row" :href="it.href" :data-testid="'hub-item-' + it.id" @click="remember()">
+                    <a class="row" :class="{'is-denied': it.denied}" :href="it.denied ? null : it.href" :aria-disabled="it.denied ? 'true' : null" :data-testid="'hub-item-' + it.id" @click="open($event, it)">
                       <span class="row__ico" x-html="icon(it.icon)"></span>
                       <span class="row__main">
                         <div class="row__title"><span x-html="hl(it.title)"></span> <span class="tag" x-show="it.planned">規劃中</span></div>
                         <div class="row__desc" x-html="hl(it.desc)"></div>
                         <div class="row__impact" x-text="it.impact"></div>
+                        <div class="row__why" x-show="it.denied" x-text="'🔒 ' + it.reason"></div>
                         <div class="row__grp" x-text="it._sec"></div>
                       </span>
-                      <span class="badge" x-show="it.badge" :class="it.badge ? it.badge.tone : ''" x-text="it.badge ? it.badge.text : ''"></span>
-                      <svg class="row__go" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                      <span class="badge" x-show="it.badge && !it.denied" :class="it.badge ? it.badge.tone : ''" x-text="it.badge ? it.badge.text : ''"></span>
+                      <svg class="row__go" x-show="!it.denied" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
                     </a>
                   </template>
                 </div>
@@ -143,15 +165,16 @@
                 <div class="pane-sub" x-text="current.sub"></div>
                 <div class="rows">
                   <template x-for="it in current.items" :key="it.id">
-                    <a class="row" :href="it.href" :data-testid="'hub-item-' + it.id" @click="remember()">
+                    <a class="row" :class="{'is-denied': it.denied}" :href="it.denied ? null : it.href" :aria-disabled="it.denied ? 'true' : null" :data-testid="'hub-item-' + it.id" @click="open($event, it)">
                       <span class="row__ico" x-html="icon(it.icon)"></span>
                       <span class="row__main">
                         <div class="row__title"><span x-text="it.title"></span> <span class="tag" x-show="it.planned">規劃中</span></div>
                         <div class="row__desc" x-text="it.desc"></div>
                         <div class="row__impact" x-text="it.impact"></div>
+                        <div class="row__why" x-show="it.denied" x-text="'🔒 ' + it.reason"></div>
                       </span>
-                      <span class="badge" x-show="it.badge" :class="it.badge ? it.badge.tone : ''" x-text="it.badge ? it.badge.text : ''"></span>
-                      <svg class="row__go" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+                      <span class="badge" x-show="it.badge && !it.denied" :class="it.badge ? it.badge.tone : ''" x-text="it.badge ? it.badge.text : ''"></span>
+                      <svg class="row__go" x-show="!it.denied" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
                     </a>
                   </template>
                 </div>
@@ -159,6 +182,17 @@
             </template>
           </section>
         </div>
+
+        <details class="adv" x-show="loaded && session.role === 'superadmin'" data-testid="hub-settings">
+          <summary>顯示設定（進階）</summary>
+          <div class="adv__body">
+            <div class="adv__q">看不到的項目要不要列出來？</div>
+            <label class="adv__opt"><input type="radio" name="hub-denied" value="hide" :checked="!showDenied" @change="setShowDenied(false)" data-testid="hub-denied-hide"> 隱藏（建議）——每個人只看到自己能用的項目</label>
+            <label class="adv__opt"><input type="radio" name="hub-denied" value="show" :checked="showDenied" @change="setShowDenied(true)" data-testid="hub-denied-show"> 顯示為灰色，並說明為什麼不能用</label>
+            <div class="adv__preview" x-text="showDenied ? '設定後：沒有權限的人會看到灰色的項目與原因，但點不進去。' : '設定後：沒有權限的人完全看不到這些項目。'"></div>
+            <div class="adv__done" x-show="undo !== null" data-testid="hub-denied-saved"><span>已更新。</span> <button type="button" class="hint-x" @click="undoShowDenied()">復原</button></div>
+          </div>
+        </details>
 
         <div class="empty" x-show="loaded && !sections.length && !error" data-testid="hub-empty">你目前沒有可用的系統功能。</div>
         <div class="empty" x-show="!loaded && !error">載入中…</div>
@@ -187,7 +221,7 @@ function systemHub() {
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] }) }
   var LAST_KEY = 'motrix_system_hub_group'
   return {
-    session: {}, sections: [], cur: '', q: '', loaded: false, error: '', hint: true,
+    session: {}, sections: [], cur: '', q: '', loaded: false, error: '', hint: true, showDenied: false, recent: [], searchFocus: false, undo: null,
     async init() {
       var s = {}
       try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { s = {} }
@@ -204,6 +238,8 @@ function systemHub() {
         if (!r.ok) throw new Error('HTTP ' + r.status)
         var d = await r.json()
         this.sections = d.sections || []
+        this.showDenied = d.showDenied === true
+        this.recent = d.recent || []
       } catch (e) {
         this.error = '無法載入系統中心（' + (e && e.message ? e.message : '網路錯誤') + '），請重新整理或稍後再試。'
       }
@@ -225,8 +261,42 @@ function systemHub() {
       try { sessionStorage.setItem(LAST_KEY, key) } catch (e) { /* 無痕模式：不記住 */ }
       if (focus) { var self = this; this.$nextTick(function () { var b = document.getElementById('g-' + key); if (b) b.focus() }) }
     },
+    get recentItems() {
+      var by = {}
+      this.sections.forEach(function (s) { s.items.forEach(function (it) { by[it.id] = it }) })
+      return this.recent.map(function (id) { return by[id] }).filter(function (it) { return it && !it.denied })
+    },
+    open(e, it) {
+      if (it.denied) { e.preventDefault(); return }
+      this.remember(it)
+    },
+    goRecent(it) { this.remember(it); location.href = it.href },
+    async setShowDenied(v) {
+      var prev = this.showDenied
+      try {
+        var r = await fetch('/api/system-hub/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify({ showDenied: v }) })
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        this.showDenied = v; this.undo = prev
+        await this.reload()
+      } catch (e) { this.error = '沒有儲存成功，請再試一次。' }
+    },
+    async undoShowDenied() { if (this.undo === null) return; var v = this.undo; this.undo = null; await this.setShowDenied(v); this.undo = null },
+    async reload() {
+      try {
+        var r = await fetch('/api/system-hub', { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { var d = await r.json(); this.sections = d.sections || []; this.showDenied = d.showDenied === true; this.recent = d.recent || []; this.fromHash() }
+      } catch (e) { /* 保持目前畫面 */ }
+    },
     dismissHint() { this.hint = false; try { localStorage.setItem('motrix_system_hub_hint', 'done') } catch (e) { /* 無痕模式：下次還會顯示 */ } },
-    remember() { try { sessionStorage.setItem(LAST_KEY, this.cur) } catch (e) { /* ignore */ } },
+    remember(it) {
+      try { sessionStorage.setItem(LAST_KEY, this.cur) } catch (e) { /* ignore */ }
+      if (!it || !it.id) return
+      this.recent = [it.id].concat(this.recent.filter(function (x) { return x !== it.id })).slice(0, 5)
+      try {            // 存在帳號上（跨裝置）；失敗不影響跳轉
+        fetch('/api/list-prefs/system_hub_recent', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+                                                     body: JSON.stringify({ customOrder: this.recent }), keepalive: true }).catch(function () {})
+      } catch (e) { /* ignore */ }
+    },
     groupKey(e) {
       var k = e.key
       if (['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].indexOf(k) < 0) return
