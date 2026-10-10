@@ -184,3 +184,21 @@ def test_delete_scope_undoes_on_error_and_keeps_on_success(who):
     finally:
         cn.close()
     assert all(os.path.isfile(_abs(r)) for r in rels2), "區塊以例外結束 ⇒ 附件搬回"
+
+
+def test_request_scope_undoes_uncommitted_deletes_and_keeps_committed_ones(who):
+    """請求保險網（main.py 中介層）：資料列沒 commit ⇒ 附件搬回；已 commit ⇒ 不動。"""
+    rels_a, rels_b = _doc("R1"), _doc("R2")
+    state = RB.request_scope_begin()
+    cn = db.get_db()
+    try:
+        RB.delete(cn, ET, "R1", {"username": "u1", "role": "admin"})
+        cn.rollback()                                           # R1：後續步驟失敗 ⇒ rollback
+        RB.delete(cn, ET, "R2", {"username": "u1", "role": "admin"})
+        cn.commit()                                             # R2：成功
+    finally:
+        cn.close()
+    assert RB.request_scope_end(state) == 1
+    assert all(os.path.isfile(_abs(r)) for r in rels_a), "沒 commit 的那筆附件搬回"
+    assert all(not os.path.exists(_abs(r)) for r in rels_b), "已 commit 的不動"
+    assert _q("SELECT COUNT(*) n FROM recycle_bin")[0]["n"] == 1

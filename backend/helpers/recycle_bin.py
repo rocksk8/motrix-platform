@@ -2,7 +2,7 @@
 """刪除暫存區（資源回收筒）的 L1 契約（第 53 班 P0；設計 docs/platform/plans/RECYCLE-BIN-DESIGN-T52.md、狀態 RECYCLE-BIN-P0-STATE-T53.md）。
 
 [單位] helper:recycle_bin    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] Adapter, BinError, BinUnavailable, CAP_ADAPTER, CAP_DELETE, CAP_RESERVED, MASK, MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_BYTES_ADMIN, RETENTION_DAYS, RestoreContext, adapters, available, delete, delete_scope, get_adapter, mask_obj, reserved_ids
+[公開介面] Adapter, BinError, BinUnavailable, CAP_ADAPTER, CAP_DELETE, CAP_RESERVED, MASK, MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_BYTES_ADMIN, RETENTION_DAYS, RestoreContext, adapters, available, delete, delete_scope, get_adapter, mask_obj, request_scope_begin, request_scope_end, reserved_ids
 [不變式] 這裡**不認識任何業務表、不碰檔案系統、不讀資料庫**：只定義『擁有模組 ⇄ recyclebin 模組』之間的契約（IP-RB1／IP-RB2，列車定號）。
          擁有模組只 import 本檔（L1）；絕不 import `modules.recyclebin`。recyclebin 模組不在 ⇒ `delete()` 回 None，呼叫端**照舊硬刪並明說**，
          不得靜默（缺席與『進了暫存區』長得不一樣）。
@@ -24,6 +24,7 @@
 - `impact`：『刪除已核可』入口的影響清單（已付款／已入獎金／已回簽…）；預設空。`can_delete_approved`：預設不支援（P1 各 adapter 實作）。
 - `mask`：列表／詳情用的遮罩副本（預設以欄位名稱規則遮罩帳號、身分證、電話、信箱、地址、影像）；還原一律用未遮罩原文。
 """
+import contextvars
 import json as _json
 import logging
 import re
@@ -184,13 +185,61 @@ def delete(conn, entity_type: str, entity_id, user: dict, reason: str = "", appr
     if fn is None:
         return None
     res = fn(conn, entity_type, entity_id, user, reason, approved)
-    stack = getattr(_scopes, "stack", None)
-    if stack and res is not None:
-        stack[-1].append(res)               # 在 delete_scope() 內：登記起來，區塊失敗時把附件搬回
+    if res is not None:
+        entry = (res.get("token"), res.get("rollback_files"))      # 登記（token, 搬回函式）；不留 res 本身（端點會 pop 它的鍵）
+        stack = getattr(_scopes, "stack", None)
+        if stack:
+            stack[-1].append(entry)         # 在 delete_scope() 內：區塊失敗時把附件搬回
+        reqs = _req_results.get()
+        if reqs is not None:
+            reqs.append(entry)              # 整個請求的保險：請求結束時資料列沒 commit 的，附件搬回（見 request_scope_end）
     return res
 
 
 _scopes = threading.local()
+_req_results: "contextvars.ContextVar" = contextvars.ContextVar("recycle_bin_request_results", default=None)
+
+
+def request_scope_begin():
+    """每個 HTTP 請求開始時由 main.py 的中介層呼叫；回傳要交給 `request_scope_end` 的狀態。"""
+    lst: list = []
+    return _req_results.set(lst), lst
+
+
+def _is_committed(token) -> bool:
+    """暫存區資料列（以 token 找）是否已 commit 進資料庫；查不到／查詢失敗時一律當作『已 commit』（寧可不搬，交給每日 reconcile）。"""
+    if not token:
+        return True
+    try:
+        from db import get_db
+        cn = get_db()
+        try:
+            return cn.execute("SELECT 1 FROM recycle_bin WHERE token=?", (token,)).fetchone() is not None
+        finally:
+            cn.close()
+    except Exception:                                                  # noqa: BLE001
+        logger.exception("recycle_bin.request_scope_end: commit check failed (token=%s)", token)
+        return True
+
+
+def request_scope_end(state) -> int:
+    """請求結束時呼叫：這個請求裡所有 `delete()` 搬進隔離區的附件，凡是暫存區資料列最後**沒有 commit**的（呼叫端在
+    delete() 之後的步驟失敗並 rollback、或沒關好連線被丟棄），一律搬回原處。回傳搬回的筆數。已 commit 的不動。
+    這是保險網：每個刪除端點仍應用 `delete_scope()` 就近回復；這裡負責存檔路徑（`material_guard` 在報價存檔裡刪材料申請等）。"""
+    token, lst = state
+    try:
+        _req_results.reset(token)
+    except ValueError:                                                 # 不在同一個 context（保險）
+        _req_results.set(None)
+    n = 0
+    for tok, fn in reversed(lst):
+        if callable(fn) and not _is_committed(tok):
+            try:
+                fn()
+                n += 1
+            except Exception:                                          # noqa: BLE001
+                logger.exception("recycle_bin.request_scope_end: rollback_files failed (token=%s)", tok)
+    return n
 
 
 @contextmanager
@@ -208,13 +257,12 @@ def delete_scope():
     stack = getattr(_scopes, "stack", None)
     if stack is None:
         stack = _scopes.stack = []
-    mine: List[dict] = []
+    mine: list = []
     stack.append(mine)
     try:
         yield mine
     except BaseException:
-        for r in reversed(mine):
-            fn = r.get("rollback_files")
+        for _tok_, fn in reversed(mine):
             if callable(fn):
                 try:
                     fn()

@@ -83,6 +83,7 @@
    "map_overlay_script": "def(module_key, script)",
    "module_page": "def(name)",
    "no_cache_static": "async def(request, call_next)",
+   "recycle_bin_request_scope": "async def(request, call_next)",
    "root": "def()",
    "security_headers": "async def(request, call_next)",
    "sidebar_js": "def()",
@@ -1083,6 +1084,8 @@
    "delete_scope": "def()",
    "get_adapter": "def(entity_type)",
    "mask_obj": "def(obj, _key=…)",
+   "request_scope_begin": "def()",
+   "request_scope_end": "def(state)",
    "reserved_ids": "def(conn, entity_type=…)"
   },
   "helper:row_access": {

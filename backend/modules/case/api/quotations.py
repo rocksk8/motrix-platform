@@ -1782,151 +1782,159 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     tot = q.get("tot", {})
 
     conn = get_db()
+    try:                                 # 任何例外都不可帶著寫鎖漏出連線（先前沒有 finally；各早退路徑自己 close 的照舊）
 
-    sp_name = (q.get("salesPerson") or "").strip()
-    sp_row = conn.execute(
-        "SELECT id FROM users WHERE display_name=? AND active=1 LIMIT 1", (sp_name,)
-    ).fetchone() if sp_name else None
-    sp_id = sp_row["id"] if sp_row else None
+        sp_name = (q.get("salesPerson") or "").strip()
+        sp_row = conn.execute(
+            "SELECT id FROM users WHERE display_name=? AND active=1 LIMIT 1", (sp_name,)
+        ).fetchone() if sp_name else None
+        sp_id = sp_row["id"] if sp_row else None
 
-    begin_write(conn)   # 第 53 班：讀 existing（含 materialOrders 舊值）之前先拿寫鎖，與暫存區的刪除／還原互斥（lost update）
-    existing = conn.execute(
-        # data_json 是 2026-09-14 加進來的：一般編輯要寫「改了什麼」的變更摘要，
-        # 需要拿得到存檔前的內容（見 _summarize_quote_changes()）。
-        # location_id：`QL25` 算「離開草稿」的有效據點要用（見下方 COALESCE
-        # 同一條規則：沒送 locationId 就沿用既有欄位值）。
-        "SELECT id, status, deal_tag, settle_status, updated_at, sales_person_id, "
-        "sales_person, data_json, location_id "
-        "FROM quotations WHERE quote_no=?", (quote_no,)
-    ).fetchone()
-    if not existing:
-        conn.close()
-        raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    try:
-        require_case(user, existing, quote_no)
-    except HTTPException:
-        conn.close()
-        raise
-    if not money_visible(user):
-        # 第42班：業務／管理員可編輯報價單，但看不到精算與款項期別（財務角色專屬）⇒ 被遮蔽的部分以資料庫現值補回，
-        # 不可以用遮蔽後的空值蓋掉真正的資料（同 case-record 存檔的 restore）。
+        begin_write(conn)   # 第 53 班：讀 existing（含 materialOrders 舊值）之前先拿寫鎖，與暫存區的刪除／還原互斥（lost update）
+        existing = conn.execute(
+            # data_json 是 2026-09-14 加進來的：一般編輯要寫「改了什麼」的變更摘要，
+            # 需要拿得到存檔前的內容（見 _summarize_quote_changes()）。
+            # location_id：`QL25` 算「離開草稿」的有效據點要用（見下方 COALESCE
+            # 同一條規則：沒送 locationId 就沿用既有欄位值）。
+            "SELECT id, status, deal_tag, settle_status, updated_at, sales_person_id, "
+            "sales_person, data_json, location_id "
+            "FROM quotations WHERE quote_no=?", (quote_no,)
+        ).fetchone()
+        if not existing:
+            conn.close()
+            raise HTTPException(404, f"報價單 {quote_no} 不存在")
         try:
-            _db_data = json.loads(existing["data_json"] or "{}")
-        except (TypeError, ValueError):
-            _db_data = {}
-        if "settlement" in _db_data:
-            q["settlement"] = _db_data["settlement"]
-        else:
-            q.pop("settlement", None)
-        if "caseRecord" in q:
+            require_case(user, existing, quote_no)
+        except HTTPException:
+            conn.close()
+            raise
+        if not money_visible(user):
+            # 第42班：業務／管理員可編輯報價單，但看不到精算與款項期別（財務角色專屬）⇒ 被遮蔽的部分以資料庫現值補回，
+            # 不可以用遮蔽後的空值蓋掉真正的資料（同 case-record 存檔的 restore）。
             try:
-                q["caseRecord"] = restore_case_record(q.get("caseRecord") or {}, _db_data.get("caseRecord") or {},
-                                                      keep_orders=material_money_visible(user))
-            except PaymentStructureChange:
-                conn.close()
-                raise HTTPException(403, "此帳號沒有財務檢視權限，不可新增、刪除或調整款項期別")
-    if existing["status"] == "已拒絕":
-        conn.close()
-        raise HTTPException(403, "已拒絕結案的報價單不可修改")
-    try:                                                   # 安全審查 W3：整份存檔也不得夾帶新的檔案路徑
-        _strip_foreign_file_entries(q.get("caseRecord"), (json.loads(existing["data_json"] or "{}") or {}).get("caseRecord") or {})
-    except (ValueError, TypeError):
-        _strip_foreign_file_entries(q.get("caseRecord"), {})
-    # 樂觀鎖（選填）：草稿階段沒有狀態鎖保護，兩人同時編輯同一張草稿會後寫覆蓋
-    # 前寫且完全沒有提示。自動存檔（autoSave）跟手動存檔共用這支端點，衝突時
-    # 一律回 409，讓呼叫端自行決定要不要提示使用者或重新載入。
-    if expected_updated_at and existing["updated_at"] and expected_updated_at != existing["updated_at"]:
-        conn.close()
-        raise HTTPException(409, "報價單已被其他人更新，請重新載入後再存")
-    _LOCKED = ("待審核", "簽核中", "已送出", "已成案", "已結案")
-    if existing["status"] in _LOCKED and not is_unlock_edit:
-        conn.close()
-        raise HTTPException(403, f"報價單狀態為「{existing['status']}」，請透過正式流程操作或解鎖後修改")
-    # dealTag／settlement.status 只能透過各自的專用端點（PATCH /deal-tag、
-    # PATCH /settlement）異動，兩邊都有完整的狀態機檢查（已成案需先簽核完成、
-    # 已成案降級需 admin+、已結案不可逆轉等）。這支端點是編輯報價單「內容」用
-    # 的通用存檔，client 送來的 body 完全可能挾帶跟現況不同的 dealTag/
-    # settlement.status（不論是前端沒清乾淨的舊資料、還是刻意構造的請求），
-    # 若不在這裡攔截，等於讓這支端點繞過另外兩支端點的所有規則。一律強制沿用
-    # 資料庫現有值，忽略 client 送來的異動。
-    deal_tag, settle_status = existing["deal_tag"] or "", existing["settle_status"] or ""
-    q["dealTag"] = deal_tag
-    # 38：精算本文只能經 PUT /settlement 異動——整份存檔一律沿用資料庫現有的精算（含 status），不採用 client 帶來的（舊頁面載入時的過期副本會蓋掉別人剛存的精算）
-    try:
-        _db_settlement = (json.loads(existing["data_json"] or "{}") or {}).get("settlement")
-    except (ValueError, TypeError):
-        _db_settlement = None
-    if isinstance(_db_settlement, dict):
-        q["settlement"] = _db_settlement
-    elif "settlement" in q:
-        q.pop("settlement")
-
-    tot = q.get("tot", {})
-    # 一般編輯的編輯紀錄（2026-09-14）——解鎖編輯那條路徑上面已經記過了，
-    # 這裡只補「不是解鎖編輯」的一般存檔。
-    # **沒有任何可辨識變更時不寫**：這支端點同時被自動存檔（autoSave）與手動
-    # 存檔呼叫，每次 autoSave 都寫一筆會讓紀錄被無意義的條目淹沒，反而查不到
-    # 真正的修改。_summarize_quote_changes() 找不到追蹤欄位的差異時還會做一次
-    # 整包比對，所以「有改但改到追蹤清單外的欄位」仍然會留下一筆「其他內容」，
-    # 不會被靜默略過。
-    if not is_unlock_edit:
-        try:
-            _old_data = json.loads(existing["data_json"] or "{}")
+                _db_data = json.loads(existing["data_json"] or "{}")
+            except (TypeError, ValueError):
+                _db_data = {}
+            if "settlement" in _db_data:
+                q["settlement"] = _db_data["settlement"]
+            else:
+                q.pop("settlement", None)
+            if "caseRecord" in q:
+                try:
+                    q["caseRecord"] = restore_case_record(q.get("caseRecord") or {}, _db_data.get("caseRecord") or {},
+                                                          keep_orders=material_money_visible(user))
+                except PaymentStructureChange:
+                    conn.close()
+                    raise HTTPException(403, "此帳號沒有財務檢視權限，不可新增、刪除或調整款項期別")
+        if existing["status"] == "已拒絕":
+            conn.close()
+            raise HTTPException(403, "已拒絕結案的報價單不可修改")
+        try:                                                   # 安全審查 W3：整份存檔也不得夾帶新的檔案路徑
+            _strip_foreign_file_entries(q.get("caseRecord"), (json.loads(existing["data_json"] or "{}") or {}).get("caseRecord") or {})
         except (ValueError, TypeError):
-            _old_data = {}
-        _changes = _summarize_quote_changes(_old_data, q)
-        if _changes:
-            _append_edit_history(q, user, now, "quote_update", _changes)
+            _strip_foreign_file_entries(q.get("caseRecord"), {})
+        # 樂觀鎖（選填）：草稿階段沒有狀態鎖保護，兩人同時編輯同一張草稿會後寫覆蓋
+        # 前寫且完全沒有提示。自動存檔（autoSave）跟手動存檔共用這支端點，衝突時
+        # 一律回 409，讓呼叫端自行決定要不要提示使用者或重新載入。
+        if expected_updated_at and existing["updated_at"] and expected_updated_at != existing["updated_at"]:
+            conn.close()
+            raise HTTPException(409, "報價單已被其他人更新，請重新載入後再存")
+        _LOCKED = ("待審核", "簽核中", "已送出", "已成案", "已結案")
+        if existing["status"] in _LOCKED and not is_unlock_edit:
+            conn.close()
+            raise HTTPException(403, f"報價單狀態為「{existing['status']}」，請透過正式流程操作或解鎖後修改")
+        # dealTag／settlement.status 只能透過各自的專用端點（PATCH /deal-tag、
+        # PATCH /settlement）異動，兩邊都有完整的狀態機檢查（已成案需先簽核完成、
+        # 已成案降級需 admin+、已結案不可逆轉等）。這支端點是編輯報價單「內容」用
+        # 的通用存檔，client 送來的 body 完全可能挾帶跟現況不同的 dealTag/
+        # settlement.status（不論是前端沒清乾淨的舊資料、還是刻意構造的請求），
+        # 若不在這裡攔截，等於讓這支端點繞過另外兩支端點的所有規則。一律強制沿用
+        # 資料庫現有值，忽略 client 送來的異動。
+        deal_tag, settle_status = existing["deal_tag"] or "", existing["settle_status"] or ""
+        q["dealTag"] = deal_tag
+        # 38：精算本文只能經 PUT /settlement 異動——整份存檔一律沿用資料庫現有的精算（含 status），不採用 client 帶來的（舊頁面載入時的過期副本會蓋掉別人剛存的精算）
+        try:
+            _db_settlement = (json.loads(existing["data_json"] or "{}") or {}).get("settlement")
+        except (ValueError, TypeError):
+            _db_settlement = None
+        if isinstance(_db_settlement, dict):
+            q["settlement"] = _db_settlement
+        elif "settlement" in q:
+            q.pop("settlement")
 
-    # `QL25`（依據使用者 2026-09-23 裁示）入口②：PUT 送審（含解鎖編輯強制
-    # 重簽）。判準是**離開草稿這個轉換**（同入口③的理由：client 端理論上
-    # 送得出非「待審核」的 new_status，不能只認字面值），不是「只寫一次」：
-    # 解鎖重簽再次進到這裡一樣會覆蓋，用的是當下的據點設定。有效據點的
-    # 解法同下方 UPDATE 的 `COALESCE(?, location_id)`：沒送 `locationId`
-    # 就沿用既有欄位值，不可以在快照這裡退回主要據點——那會與實際存進
-    # `location_id` 欄位的值不一致。
-    if existing["status"] == "草稿" and new_status != "草稿":
-        _eff_location_id = ((body.location_id or "").strip()
-                            or (existing["location_id"] or ""))
-        q[SNAPSHOT_KEY] = snapshot_for(_eff_location_id)
-    elif new_status == "草稿":
-        q.pop(SNAPSHOT_KEY, None)
+        tot = q.get("tot", {})
+        # 一般編輯的編輯紀錄（2026-09-14）——解鎖編輯那條路徑上面已經記過了，
+        # 這裡只補「不是解鎖編輯」的一般存檔。
+        # **沒有任何可辨識變更時不寫**：這支端點同時被自動存檔（autoSave）與手動
+        # 存檔呼叫，每次 autoSave 都寫一筆會讓紀錄被無意義的條目淹沒，反而查不到
+        # 真正的修改。_summarize_quote_changes() 找不到追蹤欄位的差異時還會做一次
+        # 整包比對，所以「有改但改到追蹤清單外的欄位」仍然會留下一筆「其他內容」，
+        # 不會被靜默略過。
+        if not is_unlock_edit:
+            try:
+                _old_data = json.loads(existing["data_json"] or "{}")
+            except (ValueError, TypeError):
+                _old_data = {}
+            _changes = _summarize_quote_changes(_old_data, q)
+            if _changes:
+                _append_edit_history(q, user, now, "quote_update", _changes)
 
-    MG.enforce(conn, quote_no, q, actor=user)   # 叫料審核（31-C）：整份存檔也要過閘（以資料庫現值為準；被拒的項目維持原值）
-    conn.execute("""
-        UPDATE quotations SET
-          status=?, customer_name=?, project_name=?,
-          total=?, pretax=?, direct_margin_pct=?, net_margin_pct=?,
-          sales_person=?, sales_person_id=?, quote_date=?, valid_days=?,
-          data_json=?, updated_at=?, deal_tag=?, settle_status=?,
-          location_id=COALESCE(?, location_id)
-        WHERE quote_no=?
-    """, (
-        new_status,
-        q.get("customerName"), q.get("projectName"),
-        tot.get("total", 0), tot.get("pretax", 0),
-        tot.get("directMarginPct", 0), tot.get("netMarginPct", 0),
-        q.get("salesPerson"), sp_id, q.get("quoteDate"), q.get("validDays", 30),
-        json.dumps(q, ensure_ascii=False), now, deal_tag, settle_status,
-        # QL13：沒送 `locationId` 時傳 `None` => `COALESCE` 保持原值。
-        # 一個只改了金額的 PUT 不應該把這張單的據點清掉 —— 那會讓它的抬頭
-        # 與匯款帳號安靜地退回主要據點，而沒有任何地方會報錯。
-        (body.location_id or "").strip() or None,
-        quote_no,
-    ))
-    # caseRecord.stages 正規化 Phase 3a（2026-08-23）：quotation-form.html::apiSave()
-    # 走的是這支整包存檔端點，跟 update_case_record() 是完全分開的路徑，一樣可能
-    # 挾帶 caseRecord.stages（例如它自己那份較舊、欄位不全的 ensureCaseRecord()
-    # 產生的階段）。邏輯與 update_case_record() 完全比照：送了 stages 就整批同步
-    # 回 case_stages/case_stage_visits，沒送這個 key 才維持表內現有值不動。
-    cr = q.get("caseRecord")
-    if isinstance(cr, dict) and isinstance(cr.get("stages"), list):
-        _sync_json_stages_to_table(conn, quote_no, cr["stages"])
-        # 3b 收尾追加修正（2026-08-23）：合併後有些階段可能拿到新的真實 id，立刻
-        # 寫回 data_json，前端下一次讀到的 id 才會跟 case_stages 表一致。updated_at
-        # 沿用上面 UPDATE 已經用掉的同一個 now，不產生第二個時間戳，樂觀鎖不受影響。
-        _sync_stages_to_json(conn, quote_no, updated_at=now)
-    conn.commit()
+        # `QL25`（依據使用者 2026-09-23 裁示）入口②：PUT 送審（含解鎖編輯強制
+        # 重簽）。判準是**離開草稿這個轉換**（同入口③的理由：client 端理論上
+        # 送得出非「待審核」的 new_status，不能只認字面值），不是「只寫一次」：
+        # 解鎖重簽再次進到這裡一樣會覆蓋，用的是當下的據點設定。有效據點的
+        # 解法同下方 UPDATE 的 `COALESCE(?, location_id)`：沒送 `locationId`
+        # 就沿用既有欄位值，不可以在快照這裡退回主要據點——那會與實際存進
+        # `location_id` 欄位的值不一致。
+        if existing["status"] == "草稿" and new_status != "草稿":
+            _eff_location_id = ((body.location_id or "").strip()
+                                or (existing["location_id"] or ""))
+            q[SNAPSHOT_KEY] = snapshot_for(_eff_location_id)
+        elif new_status == "草稿":
+            q.pop(SNAPSHOT_KEY, None)
+
+        MG.enforce(conn, quote_no, q, actor=user)   # 叫料審核（31-C）：整份存檔也要過閘（以資料庫現值為準；被拒的項目維持原值）
+        conn.execute("""
+            UPDATE quotations SET
+              status=?, customer_name=?, project_name=?,
+              total=?, pretax=?, direct_margin_pct=?, net_margin_pct=?,
+              sales_person=?, sales_person_id=?, quote_date=?, valid_days=?,
+              data_json=?, updated_at=?, deal_tag=?, settle_status=?,
+              location_id=COALESCE(?, location_id)
+            WHERE quote_no=?
+        """, (
+            new_status,
+            q.get("customerName"), q.get("projectName"),
+            tot.get("total", 0), tot.get("pretax", 0),
+            tot.get("directMarginPct", 0), tot.get("netMarginPct", 0),
+            q.get("salesPerson"), sp_id, q.get("quoteDate"), q.get("validDays", 30),
+            json.dumps(q, ensure_ascii=False), now, deal_tag, settle_status,
+            # QL13：沒送 `locationId` 時傳 `None` => `COALESCE` 保持原值。
+            # 一個只改了金額的 PUT 不應該把這張單的據點清掉 —— 那會讓它的抬頭
+            # 與匯款帳號安靜地退回主要據點，而沒有任何地方會報錯。
+            (body.location_id or "").strip() or None,
+            quote_no,
+        ))
+        # caseRecord.stages 正規化 Phase 3a（2026-08-23）：quotation-form.html::apiSave()
+        # 走的是這支整包存檔端點，跟 update_case_record() 是完全分開的路徑，一樣可能
+        # 挾帶 caseRecord.stages（例如它自己那份較舊、欄位不全的 ensureCaseRecord()
+        # 產生的階段）。邏輯與 update_case_record() 完全比照：送了 stages 就整批同步
+        # 回 case_stages/case_stage_visits，沒送這個 key 才維持表內現有值不動。
+        cr = q.get("caseRecord")
+        if isinstance(cr, dict) and isinstance(cr.get("stages"), list):
+            _sync_json_stages_to_table(conn, quote_no, cr["stages"])
+            # 3b 收尾追加修正（2026-08-23）：合併後有些階段可能拿到新的真實 id，立刻
+            # 寫回 data_json，前端下一次讀到的 id 才會跟 case_stages 表一致。updated_at
+            # 沿用上面 UPDATE 已經用掉的同一個 now，不產生第二個時間戳，樂觀鎖不受影響。
+            _sync_stages_to_json(conn, quote_no, updated_at=now)
+        conn.commit()
+    except BaseException:
+        try:
+            conn.rollback()
+            conn.close()
+        except Exception:                # noqa: BLE001 — 前面可能已關閉
+            pass
+        raise
     conn.close()
     spawn_bg_thread(_backup_quotation, args=(quote_no,))
     if is_unlock_edit:
