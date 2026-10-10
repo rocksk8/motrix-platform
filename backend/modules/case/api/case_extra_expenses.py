@@ -44,6 +44,8 @@ from modules.case import payable_calendar as PC   # 行事曆「付款待辦」�
 from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers.case_access import deny_case, require_case   # M01-O1：逐案拒絕＝查無（同一個 404）
 from helpers import row_access
+from helpers import recycle_bin                       # 第 53 班 P1：刪除先進暫存區（IP-RB2）
+from modules.case import recycle_adapter as _RA
 from helpers.uploads import purge_document_files, UPLOAD_LIMITS_BY_SUBFOLDER      # 草稿刪除時一併刪實體檔案（第44班）
 from helpers.case_access import case_owner_readable   # AT-M1b：與附件提供者同一支
 from helpers.auth import user_has_module, has_finance_access, has_cashier_access
@@ -835,12 +837,20 @@ def delete_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
         if not _can_modify(row, user):
             raise HTTPException(403, "只有填寫人本人或管理員可以刪除這筆額外支出")
         orphan_files = _files_of(row) + [f for f in (_change_of(row).get("addFiles") or []) if isinstance(f, dict)]
-        conn.execute("DELETE FROM case_extra_expenses WHERE id=? AND quote_no=?", (exp_id, quote_no))
+        begin_write(conn)                          # 讀快照前先拿寫鎖
+        try:
+            res = recycle_bin.delete(conn, "extra_expense", exp_id, user)       # 進暫存區（附件一併搬走、30 天內最高管理者可還原）
+        except recycle_bin.BinError as e:
+            conn.rollback()
+            raise HTTPException(409, str(e))
+        if res is None:                            # 暫存區模組不在 ⇒ 照舊硬刪並明說（IP-RB2）
+            _RA.ExtraExpenseAdapter().delete_in_tx(conn, exp_id)
         conn.commit()
-        purge_document_files(orphan_files)         # 草稿／已駁回的單據一併刪掉它名下的實體檔案（原本會留成孤兒檔）
+        if res is None:
+            purge_document_files(orphan_files)     # 草稿／已駁回的單據一併刪掉它名下的實體檔案（原本會留成孤兒檔）
         _audit(_tok(authorization), "extra_expense.delete", *_audit_target(quote_no, exp_id),
-               f"{quote_no or '無案件'} 刪除額外支出 #{exp_id}「{row['description']}」", _asum(row))
-        return {"ok": True}
+               f"{quote_no or '無案件'} 刪除額外支出 #{exp_id}「{row['description']}」" + ("（已進暫存區）" if res else "（暫存區未安裝，已直接刪除）"), _asum(row))
+        return {"ok": True, **({} if res else {"binned": False, "notice": _RA.BIN_ABSENT_NOTICE})}
     finally:
         conn.close()
 
