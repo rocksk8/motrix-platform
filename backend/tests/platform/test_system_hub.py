@@ -300,3 +300,66 @@ def test_first_time_hint_is_plain_dismissible_and_remembered():
     m = re.search(r'data-testid="hub-first-hint">\s*<span>(.*?)</span>', html, re.S)
     assert m, "找不到第一次使用的提示"
     assert H.plain_problem(m.group(1)) == "" and "dismissHint()" in html and "motrix_system_hub_hint" in html
+
+
+# ── 7 使用者決定：沒有權限的項目預設隱藏（超級管理員可改成顯示灰色＋原因）；最近使用存在帳號上 ──────────────────────
+def test_denied_rows_are_hidden_by_default_and_shown_with_plain_reason_when_the_setting_is_on(client, make_user):
+    su, sp = make_user(username="hub_su_set", role="superadmin")
+    vu, vp = make_user(username="hub_v_set", role="viewer", modules=[])
+    sh, vh = _login(client, su, sp), _login(client, vu, vp)
+    assert _hub(client, vh)["sections"] == [] and _hub(client, vh)["showDenied"] is False
+    r = client.put("/api/system-hub/settings", headers=sh, json={"showDenied": True})
+    assert r.status_code == 200 and r.json() == {"showDenied": True}
+    d = _hub(client, vh)
+    rows = [it for s in d["sections"] for it in s["items"]]
+    assert rows and all(it["denied"] for it in rows) and d["total"] == 0
+    assert all(s["count"] == 0 for s in d["sections"])
+    for it in rows:
+        assert it["reason"] and H.plain_problem(it["reason"]) == "", it["reason"]
+    audit = [r for r in _q("SELECT action, target_id FROM audit_log WHERE action='system_hub.settings.update'")]
+    assert audit and audit[-1]["target_id"] == "system_hub_show_denied"
+    client.put("/api/system-hub/settings", headers=sh, json={"showDenied": False})
+    assert _hub(client, vh)["sections"] == []
+
+
+def test_only_superadmin_can_change_the_denied_setting_and_the_value_must_be_a_real_flag(client, make_user):
+    su, sp = make_user(username="hub_su_set2", role="superadmin")
+    au, ap = make_user(username="hub_ad_set2", role="admin")
+    assert client.put("/api/system-hub/settings", headers=_login(client, au, ap), json={"showDenied": True}).status_code == 403
+    sh = _login(client, su, sp)
+    assert client.put("/api/system-hub/settings", headers=sh, json={}).status_code == 400
+    assert client.put("/api/system-hub/settings", headers=sh, json={"showDenied": "yes"}).status_code in (400, 422)
+
+
+def test_denied_reason_never_shows_module_keys():
+    labels = {"audit_log": "歷史紀錄（全系統操作軌跡）"}
+    assert H.denied_reason("superadmin", labels) == "需要最高管理者的權限"
+    r = H.denied_reason(["audit_log"], labels)
+    assert "audit_log" not in r and "「歷史紀錄」" in r and H.plain_problem(r) == ""
+    assert "audit_log" not in H.denied_reason(["audit_log"], {})
+
+
+def test_recent_used_is_stored_per_account_and_only_openable_items_come_back(client, make_user):
+    au, ap = make_user(username="hub_ad_rec", role="admin", modules=["audit_log"])
+    bu, bp = make_user(username="hub_ad_rec2", role="admin", modules=["audit_log"])
+    ah, bh = _login(client, au, ap), _login(client, bu, bp)
+    r = client.put("/api/list-prefs/system_hub_recent", headers=ah, json={"customOrder": ["audit-log", "users", "no-such-card", "audit-log"]})
+    assert r.status_code == 200
+    assert _hub(client, ah)["recent"] == ["audit-log"], "看不到的、不存在的、重複的都要被濾掉"
+    assert _hub(client, bh)["recent"] == [], "最近使用是每個帳號各自的"
+
+
+def test_page_wires_recent_and_the_denied_setting_without_showing_codes():
+    html = (ROOT / "frontend" / "pages" / "system-hub.html").read_text(encoding="utf-8")
+    assert "system_hub_recent" in html and "/api/system-hub/settings" in html and "hub-recent" in html and "hub-settings" in html
+    for b in re.findall(r'x-(?:text|html)="([^"]*)"', html):
+        assert not re.search(r"\.(href|module|id|keywords)", b), b
+
+
+def _q(sql, args=()):
+    import db
+    c = db.get_db()
+    try:
+        return [dict(r) for r in c.execute(sql, args).fetchall()]
+    finally:
+        c.close()
