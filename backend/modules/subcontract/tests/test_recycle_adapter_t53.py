@@ -272,3 +272,95 @@ def test_bin_module_absent_falls_back_to_old_delete_and_says_so(client, who, mon
     r = client.delete("/api/contractor-dispatches/%d" % d2, headers=ad)
     assert r.status_code == 200 and r.json()["binned"] is False and _row("contractor_dispatches", "id", d2) is None
     assert _q("SELECT COUNT(*) n FROM recycle_bin")[0]["n"] == 0
+
+
+# ── commit 之後的副作用（行事曆『付款待辦』事件、簽核通知）──────────────────────
+from modules.subcontract import recycle_adapter as RA   # noqa: E402
+
+
+@pytest.fixture
+def deferred(monkeypatch):
+    """把『commit 之後才做』的副作用收集起來，等 API 呼叫（已 commit）結束後再逐一執行：先驗證 check() 已成立，再跑 action()。"""
+    jobs = []
+    monkeypatch.setattr(RA, "_when_committed", lambda check, action, **k: jobs.append((check, action)))
+
+    def flush():
+        todo = list(jobs)
+        jobs.clear()
+        for check, action in todo:
+            assert check(), "API 回應之後（已 commit）狀態檢查必須成立"
+            action()
+        return len(todo)
+    return flush
+
+
+def _notes(ref, types):
+    ph = ",".join("?" * len(types))
+    return _q("SELECT * FROM notifications WHERE ref_id=? AND type IN (%s)" % ph, (ref, *types))
+
+
+def test_approved_voucher_calendar_event_is_withdrawn_on_delete_and_rebuilt_on_restore(client, who, monkeypatch, deferred):
+    from tests import _fake_gcal
+    from modules.subcontract import payable_due as PD
+    su, ad = who
+    cal = _fake_gcal.install(monkeypatch)
+    _fake_gcal.sync_spawn(monkeypatch, PD)
+    _fake_gcal.set_events(events={"payable_due": True})
+    did, _ = _dispatch(client, ad)
+    r = client.post("/api/contractor-vouchers", headers=su, json={"dispatch_id": did, "planned_pay_date": "2031-07-15"})
+    assert r.status_code == 201, r.text
+    no = r.json()["voucher_no"]
+    _x("UPDATE contractor_payment_vouchers SET status='已核准' WHERE voucher_no=?", (no,))
+    PD.fire(no)
+    assert len(cal.events) == 1
+    _x("INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at) VALUES ('rb53_su','contractor_voucher_approval_request',?,'x','m',0,'2031-01-01')", (no,))
+    body = {"entity_type": "contractor_voucher", "entity_id": no, "confirm": True, "confirm_text": no, "reason": "測試"}
+    r = client.post("/api/recycle-bin/delete-approved", headers=su, json=body)
+    assert r.status_code == 200, r.text
+    assert len(cal.events) == 1, "commit 之前不動（副作用延後）"
+    assert deferred() >= 1
+    assert cal.events == {}, "刪除已核准的申請 ⇒ 收回付款待辦事件"
+    assert _notes(no, ["contractor_voucher_approval_request"]) == [], "簽核通知一併清掉"
+    assert _restore(client, su, r.json()["bin_id"]).status_code == 200
+    assert cal.events == {}
+    assert deferred() >= 1
+    assert len(cal.events) == 1, "還原 ⇒ 依現況重建事件"
+
+
+def test_dispatch_in_review_deleted_via_approved_path_clears_approver_notifications(client, who, deferred):
+    from helpers import _notify
+    su, ad = who
+    did, _ = _dispatch(client, ad)
+    _x("UPDATE contractor_dispatches SET approval_status='待審核' WHERE id=?", (did,))
+    _notify("rb53_su", "dispatch_approval_request", str(did), Q, "需要您簽核")
+    assert len(_notes(str(did), ["dispatch_approval_request"])) == 1
+    body = {"entity_type": "contractor_dispatch", "entity_id": str(did), "confirm": True, "confirm_text": str(did), "reason": "測試"}
+    assert client.post("/api/recycle-bin/delete-approved", headers=su, json=body).status_code == 200
+    assert deferred() >= 1
+    assert _notes(str(did), ["dispatch_approval_request"]) == []
+
+
+def test_restore_with_already_existing_payslip_link_skips_it_with_a_note(client, who):
+    su, ad = who
+    pid = _person("趙六")
+    did, _ = _dispatch(client, ad)
+    _x("INSERT INTO payslips (slip_no, contractor_id, contractor_name, status, created_at, updated_at) VALUES ('PS-RB-3', ?, '趙六', '草稿', '2031-01-01', '2031-01-01')", (pid,))
+    _x("INSERT INTO payslip_dispatch_links (slip_no, dispatch_id, created_at) VALUES ('PS-RB-3', ?, '2031-01-01')", (did,))
+    bid = client.delete("/api/contractor-dispatches/%d" % did, headers=ad).json()["binId"]
+    _x("INSERT INTO payslip_dispatch_links (slip_no, dispatch_id, created_at) VALUES ('PS-RB-3', ?, '2031-02-02')", (did,))      # 派發不在期間又被連了一次
+    r = _restore(client, su, bid)
+    assert r.status_code == 200 and any("PS-RB-3" in n for n in r.json()["notes"]), r.text
+    assert len(_q("SELECT * FROM payslip_dispatch_links WHERE dispatch_id=?", (did,))) == 1
+
+
+def test_when_committed_waits_for_the_committed_state_then_acts_once():
+    import threading
+    state, done = {"ok": False}, threading.Event()
+    t = RA._when_committed(lambda: state["ok"], done.set, tries=50, delay=0.02)
+    assert not done.wait(0.1), "狀態尚未成立 ⇒ 不動作"
+    state["ok"] = True
+    t.join(2)
+    assert done.is_set()
+    fired = []
+    RA._when_committed(lambda: False, lambda: fired.append(1), tries=3, delay=0.01).join(2)
+    assert fired == [], "逾時（交易回滾）⇒ 不動作"

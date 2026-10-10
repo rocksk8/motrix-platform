@@ -9,7 +9,9 @@
 """
 import json
 import sqlite3
+import time
 
+from db import get_db, spawn_bg_thread as _spawn
 from helpers import recycle_bin as RB
 
 ET_DISPATCH = "contractor_dispatch"
@@ -70,6 +72,35 @@ def _rewrite_paths(json_text, ctx):
                 f["path"] = new
                 changed = True
     return json.dumps(items, ensure_ascii=False) if changed else json_text
+
+
+def _when_committed(check, action, tries=75, delay=0.2):
+    """交易 commit 之後才做的副作用（行事曆事件、站內通知清理）。暫存區的刪除／還原由 recyclebin 在『呼叫端的交易』內呼叫 adapter、之後才 commit，
+    而 L1 契約沒有 commit 之後的掛鉤——所以這裡背景輪詢『已提交的狀態』（`check()` 用自己的連線讀，看到新狀態＝已 commit）再做 `action()`。
+    交易回滾／逾時（約 15 秒）⇒ 什麼都不做；動作本身都是『依現況對齊』（冪等），多做一次無害。"""
+    def run():
+        for _ in range(tries):
+            try:
+                if check():
+                    break
+            except Exception:                                  # noqa: BLE001
+                pass
+            time.sleep(delay)
+        else:
+            return
+        try:
+            action()
+        except Exception:                                      # noqa: BLE001 — 副作用失敗不影響已完成的刪除／還原
+            pass
+    return _spawn(run)
+
+
+def _exists(table, col, val):
+    c = get_db()
+    try:
+        return c.execute("SELECT 1 FROM %s WHERE %s=?" % (table, col), (val,)).fetchone() is not None
+    finally:
+        c.close()
 
 
 def _gl_note(conn, source_type, source_key):
@@ -157,6 +188,11 @@ class DispatchBinAdapter(RB.Adapter):
 
     def delete_in_tx(self, conn, entity_id):
         did = int(entity_id)
+        row = self._row(conn, did)
+        if row is not None and (row["approval_status"] in ("待審核", "簽核中") or row["completion_status"] in ("待審核", "簽核中")):
+            from helpers import _purge_notifications               # 審核中的派發（走『刪除已核可』入口）⇒ 清掉簽核人手上的待辦通知（commit 之後）
+            _when_committed(lambda: not _exists(_DISPATCH_TBL, "id", did),
+                            lambda: _purge_notifications(str(did), ["dispatch_approval_request", "dispatch_completion_request"]))
         if _has_table(conn, _LINK_TBL):
             conn.execute("DELETE FROM payslip_dispatch_links WHERE dispatch_id=?", (did,))
         if _has_table(conn, _REQ_TBL):
@@ -191,14 +227,20 @@ class DispatchBinAdapter(RB.Adapter):
             if not conn.execute("SELECT 1 FROM payslips WHERE slip_no=?", (r["slip_no"],)).fetchone():
                 notes.append("勞報單 %s 已不存在，未恢復與它的連結" % r["slip_no"])
                 continue
-            if conn.execute("SELECT 1 FROM %s WHERE id=?" % _LINK_TBL, (r["id"],)).fetchone():
-                _insert(conn, _LINK_TBL, r, drop=("id",))
-            else:
-                _insert(conn, _LINK_TBL, r)
+            if conn.execute("SELECT 1 FROM %s WHERE slip_no=? AND dispatch_id=?" % _LINK_TBL, (r["slip_no"], d["id"])).fetchone():
+                notes.append("勞報單 %s 已經連到這張派發，略過重複的連結" % r["slip_no"])
+                continue
+            try:
+                _insert(conn, _LINK_TBL, r, drop=("id",) if conn.execute("SELECT 1 FROM %s WHERE id=?" % _LINK_TBL, (r["id"],)).fetchone() else ())
+            except sqlite3.IntegrityError as e:
+                raise RB.BinError("conflict: 勞報單連結 %s 無法放回（%s）" % (r["slip_no"], e))
         for r in snap["rows"].get(_REQ_TBL) or []:
             if not _has_table(conn, _REQ_TBL):
                 break
-            _insert(conn, _REQ_TBL, r, drop=() if not conn.execute("SELECT 1 FROM %s WHERE id=?" % _REQ_TBL, (r["id"],)).fetchone() else ("id",))
+            try:
+                _insert(conn, _REQ_TBL, r, drop=() if not conn.execute("SELECT 1 FROM %s WHERE id=?" % _REQ_TBL, (r["id"],)).fetchone() else ("id",))
+            except sqlite3.IntegrityError as e:
+                raise RB.BinError("conflict: 附件刪除申請無法放回（%s）" % e)
         return {"entity_id": d["id"], "renumbered": renumbered, "notes": notes}
 
 
@@ -263,7 +305,17 @@ class VoucherBinAdapter(RB.Adapter):
                 "parent": (ET_DISPATCH, str(d["dispatch_id"])), "meta": {"dispatch_id": d["dispatch_id"], "kind": d.get("kind") or ""}}
 
     def delete_in_tx(self, conn, entity_id):
-        conn.execute("DELETE FROM contractor_payment_vouchers WHERE voucher_no=?", (str(entity_id),))
+        no = str(entity_id)
+        conn.execute("DELETE FROM contractor_payment_vouchers WHERE voucher_no=?", (no,))
+        _when_committed(lambda: not _exists(_VOUCHER_TBL, "voucher_no", no), lambda: self._after_delete(no))
+
+    @staticmethod
+    def _after_delete(no):
+        """commit 之後：收回『付款待辦』行事曆事件（已核准的申請才有）、清掉簽核通知（與端點的一般刪除同一份清單）。"""
+        from helpers import _purge_notifications
+        from modules.subcontract import payable_due as _PD
+        _PD.fire(no)
+        _purge_notifications(no, ["contractor_voucher_approval_request", "contractor_voucher_approved", "contractor_voucher_returned", "approval_reminder"])
 
     def restore_in_tx(self, conn, snap, ctx):
         d = dict(snap["rows"][_VOUCHER_TBL][0])
@@ -283,4 +335,11 @@ class VoucherBinAdapter(RB.Adapter):
             _insert(conn, _VOUCHER_TBL, d)
         except sqlite3.IntegrityError as e:
             raise RB.BinError("conflict: 同派發同款別同期別已有有效申請（%s）" % e)
-        return {"entity_id": d["voucher_no"], "renumbered": renumbered, "notes": notes}
+        no = d["voucher_no"]
+        _when_committed(lambda: _exists(_VOUCHER_TBL, "voucher_no", no), lambda: self._after_restore(no))     # commit 之後：依現況重建『付款待辦』事件
+        return {"entity_id": no, "renumbered": renumbered, "notes": notes}
+
+    @staticmethod
+    def _after_restore(no):
+        from modules.subcontract import payable_due as _PD
+        _PD.fire(no)

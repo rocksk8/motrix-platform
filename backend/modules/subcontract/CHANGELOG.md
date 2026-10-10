@@ -7,6 +7,7 @@
 - 行為差異：派發有**已作廢**的匯款申請時，刪除回 409「有已作廢的匯款申請留存紀錄」（以前會在外鍵上 500）；刪派發時一併移除它的勞報單連結與附件刪除申請（以前留下孤兒列；還原時復原）。
 - 守門基線：`tests/platform/recyclebin_baseline_t53.json` 移除這兩類的路由與 `DELETE FROM` 項目；`test_baseline_file_is_well_formed` 的 p1 下限改為『待接入＋已接入』合計（棘輪下每接入一條就少一條，原寫法會逼每個 adapter 作者去改下限）。測試：`tests/test_recycle_adapter_t53.py`。
 - 守門基線：`tests/platform/recyclebin_baseline_t53.json` 移除這兩類的路由與 `DELETE FROM` 項目。測試：`tests/test_recycle_adapter_t53.py`。
+- 稽核跟進（05）：經暫存區的『刪除已核可』與『還原』現在也會對齊 commit 之後的副作用——匯款申請：收回／重建行事曆『付款待辦』事件（`payable_due.fire`）、清簽核通知；審核中的派發：清簽核人的待辦通知。L1 契約沒有 commit 之後的掛鉤，所以 adapter 以背景輪詢『已提交的狀態』再動作（冪等、回滾或逾時不動作）。還原派發時，同一勞報單的連結已存在 ⇒ 略過並註記；其他唯一鍵衝突 ⇒ `conflict:`。
 
 ## 1.1.29 — 2026-10-10（wip/t51-1d-payslip-prefill；勞報單預設選取已派工、一鍵帶入）
 - `dispatch.by_person` 提供者（IP-115，加法）：`dispatches_for_person(conn, contractor_id, limit, user=None)` 多回 `scope`、`itemsSummary`、`projectName`、`customerName`、`caseVisible`，並排除狀態 draft／cancelled；案件名稱只在 `user` 通過 `guard_case_access` 時給（用自己的短連線，不影響呼叫端連線），沒給 user ⇒ 空字串。仍不含金額。
