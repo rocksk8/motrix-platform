@@ -121,3 +121,39 @@ def test_create_discards_client_edit_history(client, who):
     r = client.post("/api/quotations", json={"status": "草稿", "data": _q(editHistory=forged)}, headers=ad)
     assert r.status_code == 201, r.text
     assert (_stored(r.json()["quote_no"])[0].get("editHistory") or []) == []
+
+
+def test_concurrent_edit_history_append_survives_a_put(client, who):
+    """別的連線握著寫鎖時另一個人追加了編輯紀錄並 commit：PUT 拿到鎖後必須讀到那一筆（begin_write 在讀 existing 之前），不可用舊快照蓋回。"""
+    import threading
+    import time
+    from core.txn import begin_write
+    su, ad = who
+    a = _mk(client, ad)
+    client.put("/api/quotations/%s" % a, json={"status": "草稿", "data": _q(customerName="先改一次")}, headers=ad)
+    base = _stored(a)[0].get("editHistory") or []
+    marker = {"rev": 999, "at": "2026-10-11T00:00:00", "by": "other", "byDisplay": "別人", "type": "quote_edit"}
+    out = {}
+
+    def put():
+        out["r"] = client.put("/api/quotations/%s" % a, json={"status": "草稿", "data": _q(customerName="並行編輯")}, headers=ad)
+
+    holder = db.get_db()
+    try:
+        assert begin_write(holder), "測試的第二條連線要先握住寫鎖"
+        t = threading.Thread(target=put)
+        t.start()
+        time.sleep(0.8)                                         # PUT 卡在拿寫鎖
+        assert t.is_alive() and "r" not in out, "PUT 必須等寫鎖，而不是用舊快照先讀"
+        row = holder.execute("SELECT data_json FROM quotations WHERE quote_no=?", (a,)).fetchone()
+        d = json.loads(row["data_json"])
+        d["editHistory"] = list(d.get("editHistory") or []) + [marker]
+        holder.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), a))
+        holder.commit()
+    finally:
+        holder.close()
+    t.join(30)
+    assert out["r"].status_code == 200, out["r"].text
+    final = _stored(a)[0].get("editHistory") or []
+    assert marker in final, "並行追加的編輯紀錄不可被 PUT 蓋掉"
+    assert len(final) >= len(base) + 1

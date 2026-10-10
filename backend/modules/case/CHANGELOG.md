@@ -7,6 +7,7 @@
   - 測試 `tests/test_quote_server_owned_fields_t54.py`。案件紀錄 PATCH 的狀態鎖（待審核／簽核中是否鎖合約與收款）為設計題，未改。
   - 稽核 05 追加：`POST` 建立也丟掉用戶端的 `editHistory`（新單從空白起）；`PUT` 的編輯紀錄改在寫入交易內讀到 `existing` 後才放回資料庫現值（含解鎖編輯那一筆），避免併發的伺服器追加被蓋掉。
   - 已知取捨（PM 裁示維持）：已結案單解鎖編輯改價時，利潤欄位維持資料庫舊值（程式註解＋測試 `test_unlock_edit_price_change_keeps_profit_until_resettled` 記錄）。
+  - 並行測試：`update_quotation` 的 `begin_write(conn)`（t53 已在讀 `existing` 之前）加並行測試——別的連線握寫鎖並追加編輯紀錄，PUT 必須等鎖、讀到新值、不蓋掉（拿掉 begin_write 該題會紅，已突變驗證）。
 
 ## 1.0.174 — 2026-10-10（wip/t53b-int；ab 稽核修正 r5）
 - `update_quotation`（PUT）：連線區段加 try/except，任何例外 rollback＋close（不帶寫鎖漏出）；材料申請在存檔中被刪後若後續失敗，由請求保險網搬回附件。
