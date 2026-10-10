@@ -262,7 +262,10 @@ def cleanup_tmp_if_passed(node) -> bool:
     tp = (getattr(node, "funcargs", None) or {}).get("tmp_path")
     if not tp:
         return False
-    shutil.rmtree(str(tp), ignore_errors=True)       # 檔案還被開著（Windows）刪不掉的留給 basetemp 收尾
+    try:
+        shutil.rmtree(str(tp), ignore_errors=True)   # 檔案還被開著（Windows）刪不掉的留給 basetemp 收尾
+    except Exception:                                # noqa: BLE001 — 清理不可讓題目變紅（有題目會把 os.walk 換掉）
+        return False
     return True
 
 
@@ -1856,7 +1859,7 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     rep = outcome.get_result()
     if rep.when == "call":
-        item._motrix_call_passed = bool(rep.passed)            # 第 51 班：給 _tmp_path_cleanup_on_pass 判斷（通過才刪該題暫存）
+        item._motrix_call_passed = bool(getattr(rep, 'passed', False))            # 第 51 班：給 _tmp_path_cleanup_on_pass 判斷（通過才刪該題暫存）
     if not rep.failed:
         return
     if rep.when == "call" and getattr(item, "_e2e_deadline_hit", False):

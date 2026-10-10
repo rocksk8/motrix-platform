@@ -44,7 +44,10 @@ def test_the_shim_exists_only_under_tests():
 
 
 def test_unmarked_tests_run_with_the_shim_and_login_still_works(client, make_user):
+    import os
     import helpers.auth as auth
+    if os.environ.get("MOTRIX_TEST_REAL_PBKDF2") == "1":
+        pytest.skip("A/B 對照跑：本機刻意關掉代理")
     assert type(auth.hashlib).__name__ == "_FastHashlib"
     u, p = make_user(username="pb51", role="superadmin")
     r = client.post("/api/auth/login", json={"username": u, "password": p})
