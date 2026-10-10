@@ -423,7 +423,6 @@
     "mod:subcontract/api/dispatch_approval",
     "mod:subcontract/api/vendor_contractors",
     "mod:subcontract/payable_due",
-    "mod:subcontract/recycle_adapter",
     "mod:subcontract/remit",
     "mod:subcontract/api/dispatch_payslip_links",
     "mod:subcontract/remit_kinds",

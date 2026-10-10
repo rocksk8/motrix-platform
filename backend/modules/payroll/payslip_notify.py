@@ -27,6 +27,9 @@ _mt.register("payslip_payable", "勞報單已核准待付款（出納）", "busi
 _mt.register("payslip_paid", "勞報單已付款（送審人）", "approval", "none", "送審人",
              "勞報單已由出納登錄付款。", "請登入系統，於勞報單頁查看。（信中不含金額與受領人資料）", owner="payroll")
 
+_mt.register("payslip_approver_bypass", "勞報單層外代核（通知其他最高管理者）", "approval", "none", "其他最高管理者",
+             "當層簽核人就是送審人、不能自核，由另一位最高管理者代為核准了一張勞報單。", "請登入系統，於勞報單頁與稽核紀錄查看核准人、原簽核人與原因。（信中不含金額與受領人資料）", owner="payroll")
+
 
 def ident(slip_no) -> str:
     return "勞報單 %s" % (slip_no or "")
@@ -137,4 +140,27 @@ def fire_paid(slip_no, slip_date, requester, *, payer="") -> bool:
                                    note="您好，%s 已由出納登錄付款。" % ident(slip_no))
     except Exception:                                                # noqa: BLE001
         logger.exception("勞報單已付款通知失敗（%s）", slip_no)
+        return False
+
+
+def fire_bypass(slip_no, slip_date, actor, sole_approver, reason, recipients) -> bool:
+    """層外最高管理者代核 ⇒ 通知**其他**在職最高管理者（站內＋信；含被代的簽核人，不含操作者）。信與站內不放金額、受領人。附帶動作：例外只記 log。"""
+    who = [r for r in dict.fromkeys(x for x in (recipients or []) if x) if r != (actor or "")]
+    if not who:
+        return False
+    text = "%s 由 %s 代 %s 核准：%s" % (ident(slip_no), actor, sole_approver or "—", (reason or "")[:120])
+    for r in who:
+        try:
+            _inapp(r, "payslip_approver_bypass", slip_no, text)
+        except Exception:                                        # noqa: BLE001
+            logger.exception("勞報單層外代核站內通知失敗（%s → %s）", slip_no, r)
+    import html
+    e = lambda v: html.escape(str(v or ""), quote=True)       # noqa: E731 — 原因是自由文字，信件模板不跳脫列值
+    try:
+        return _en.send_registered("payslip_approver_bypass", title="勞報單層外代核", reason="%s 層外代核" % ident(slip_no), usernames=who,
+                                   rows=[("單號", e(slip_no) or "—"), ("開單日期", e(slip_date) or "—"), ("核准人", e(actor) or "—"), ("原簽核人", e(sole_approver) or "—"), ("原因", e(reason) or "—")],
+                                   badge_text="層外代核", badge_color="#B45309", link=_mail_link(slip_no), button_text="前往查看",
+                                   note="您好，%s 目前輪到的簽核人是送審人本人、不能自核，由 %s 以最高管理者身分代為核准；原因與時間已寫入稽核紀錄。" % (e(ident(slip_no)), e(actor)))
+    except Exception:                                            # noqa: BLE001
+        logger.exception("勞報單層外代核通知失敗（%s）", slip_no)
         return False

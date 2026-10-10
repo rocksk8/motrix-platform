@@ -164,6 +164,26 @@ def submit_payslip(slip_no: str, body: dict = Body(default={}), authorization: s
     return {"ok": True, "status": status, "tierCount": len(tiers)}
 
 
+def _deadlock_bypass(appr, tiers, ct, user, reason, code, msg):
+    """第 54 班（使用者回報：勞報單送審後卡死）：送審人不得自核（Q-S6），若當層**排序最前的未簽核人就是送審人**（或整條鏈只有一位簽核人），
+    其他人不是簽不了（不在層內／要等送審人先簽）⇒ 單據卡死。比照獎金分潤（第 52 班）：**層外的另一位最高管理者**可帶原因代核。
+    回 `{"approver": 被代的簽核人帳號, "reason": 原因}`；條件不符 ⇒ 丟原本的 403／錯誤（`code`／`msg`）。
+    條件：①原本被擋的是權限（403）②操作者不是送審人（送審人永遠不可自核）③當層排序最前的未簽核人是送審人，或整條鏈合計恰一位簽核人
+    ④必填原因（寫強制稽核 `payslip.approve_bypass`、簽核紀錄、並通知其他最高管理者）。操作者本身必須是真正的最高管理者（端點已要求）。"""
+    requester = appr.get("requestedBy") or ""
+    names = [(a.get("username") or "") for t in tiers for a in (t.get("approvers") or [])]
+    cur = (tiers[ct].get("approvers") or []) if ct < len(tiers) else []
+    first = next((a.get("username") or "" for a in cur if a.get("status") != "approved"), "")
+    blocker = first if (first and first == requester) else (names[0] if len(names) == 1 else "")
+    if code != 403 or not blocker or user["username"] == requester or user["username"] == blocker:
+        raise HTTPException(code, msg)
+    reason = (reason or "").strip() if isinstance(reason, str) else ""
+    if not reason:
+        raise HTTPException(403, "這張勞報單目前輪到的簽核人（%s）無法簽核（送審人不能自行核准），單據會卡住。若要以最高管理者身分代為核准，請填寫原因"
+                                 "（會寫入稽核紀錄，並通知其他最高管理者）。" % blocker)
+    return {"approver": blocker, "reason": reason[:500]}
+
+
 @router.post("/api/payslips/{slip_no}/approve")
 def approve_payslip(slip_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
     """當層簽核人（或代理人）簽；同層全數簽完才換層；最後一層簽完 ⇒ 已核准。沒有簽核鏈（設定被移除）⇒ superadmin 且不可自核（唯一最高管理者例外）。"""
@@ -171,6 +191,7 @@ def approve_payslip(slip_no: str, body: dict = Body(default={}), authorization: 
     if user.get("role") != "superadmin":                              # 簽核當下再確認一次（簽核人被降級、代理人不是最高管理者 ⇒ 拒絕；W1）
         raise HTTPException(403, _ONLY_SUPERADMIN_MSG)
     comment = str((body or {}).get("comment") or "").strip()[:200]
+    bypass = None
     conn = get_db()
     now = datetime.now().isoformat()
     try:
@@ -187,10 +208,13 @@ def approve_payslip(slip_no: str, body: dict = Body(default={}), authorization: 
             ct = int(appr.get("currentTier") or 0)
             ok, code, msg = check_approve_permission(tiers, ct, user["username"], conn)
             if not ok:
-                raise HTTPException(code, msg)
+                bypass = _deadlock_bypass(appr, tiers, ct, user, (body or {}).get("reason"), code, msg)      # 條件不符 ⇒ 丟原本的錯
             approvers = tiers[ct].get("approvers") or []
             fp = next(a for a in approvers if a.get("status") != "approved")
             fp["status"], fp["approvedAt"], fp["approvedBy"] = "approved", now, _name(user)
+            if bypass:                                                # 代核：把『誰、代誰、為什麼』留在簽核紀錄本身
+                fp["bypass"] = {"by": user["username"], "reason": bypass["reason"], "at": now}
+                appr["bypass"] = {"by": user["username"], "forApprover": bypass["approver"], "reason": bypass["reason"], "at": now}
             if all(a.get("status") == "approved" for a in approvers):
                 appr["currentTier"] = ct + 1
             done = int(appr.get("currentTier") or 0) >= len(tiers)
@@ -199,7 +223,11 @@ def approve_payslip(slip_no: str, body: dict = Body(default={}), authorization: 
             if err:
                 raise HTTPException(403, err)
             done = True
-        appr.setdefault("history", []).append({"at": now, "by": user["username"], "byDisplay": _name(user), "action": "approve", "comment": comment})
+        appr.setdefault("history", []).append({"at": now, "by": user["username"], "byDisplay": _name(user), "action": "approve_bypass" if bypass else "approve",
+                                               "comment": ("【代 %s 核准】%s" % (bypass["approver"], bypass["reason"])) if bypass else comment})
+        if bypass:
+            _audit_in_txn(conn, user, "payslip.approve_bypass", "payslip", slip_no, "%s 層外代核（代 %s）" % (slip_no, bypass["approver"]),
+                          {"by": user["username"], "forApprover": bypass["approver"], "reason": bypass["reason"], "requestedBy": appr.get("requestedBy") or ""})
         if done:
             appr["approvedBy"], appr["approvedAt"] = _name(user), now
             conn.execute("UPDATE payslips SET status=?, approval_json=?, approved_at=?, approved_by=?, updated_at=? WHERE slip_no=? AND status=?",
@@ -214,6 +242,8 @@ def approve_payslip(slip_no: str, body: dict = Body(default={}), authorization: 
     finally:
         conn.close()
     _audit(_tok(authorization), "payslip.approve", "payslip", slip_no, "%s 簽核 → %s" % (slip_no, S_APPROVED if done else S_REVIEW))
+    if bypass:
+        _notify_bypass(slip_no, row["slip_date"], user, bypass)
     if done:
         _pn.fire_approved(slip_no, row["slip_date"], requester, fin, approver=user["username"])
     else:
@@ -252,6 +282,28 @@ def reject_payslip(slip_no: str, body: dict = Body(default={}), authorization: s
     _audit(_tok(authorization), "payslip.reject", "payslip", slip_no, "%s 退回：%s" % (slip_no, reason))
     _pn.fire_returned(slip_no, row["slip_date"], requester, approver=user["username"], reason=reason)
     return {"ok": True, "status": S_DRAFT}
+
+
+def _audit_in_txn(conn, user, action, target_type, target_id, label, detail):
+    """**強制**稽核：寫在核准同一個交易裡（寫不進去 ⇒ 例外 ⇒ 整個核准回滾），不像 `_audit` 失敗只吞掉。"""
+    conn.execute(
+        "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
+        (datetime.now().isoformat(), user.get("id"), user.get("username") or "", user.get("display_name") or "", action, target_type, target_id, label,
+         json.dumps(detail, ensure_ascii=False), (action or "").split(".", 1)[0], "", ""))
+
+
+def _notify_bypass(slip_no, slip_date, user, bypass):
+    """代核後知會其他在職最高管理者（含被代的簽核人，不含操作者）。附帶動作：失敗只記 log。"""
+    try:
+        conn = get_db()
+        try:
+            who = [r["username"] for r in conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' ORDER BY id")]
+        finally:
+            conn.close()
+        _pn.fire_bypass(slip_no, slip_date, user["username"], bypass["approver"], bypass["reason"], who)
+    except Exception:                                            # noqa: BLE001 — 附帶動作
+        logger.exception("勞報單層外代核通知失敗（%s）", slip_no)
 
 
 # ── 「待我簽核」佇列提供者（IP-10 `approval.queue_items`，名稱 payroll_payslip）──────────────────────────────
