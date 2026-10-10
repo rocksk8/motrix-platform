@@ -2503,7 +2503,17 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(403, f"只有草稿狀態的報價單可以刪除（目前狀態：{row['status']}）")
     cname = row['customer_name'] or ''
-    conn.execute("DELETE FROM quotations WHERE quote_no=?", (quote_no,))
+    from helpers import recycle_bin                  # 第 53 班 P1：刪除先進暫存區（IP-RB2）
+    from modules.case import recycle_adapter as _ra
+    begin_write(conn)                                # 讀快照前先拿寫鎖
+    try:
+        res = recycle_bin.delete(conn, "quotation", quote_no, user)   # 報價單＋名下階段／拜訪／進度更新／行動事項＋附件一併進暫存區
+    except recycle_bin.BinError as e:
+        conn.rollback()
+        conn.close()
+        raise HTTPException(409, str(e))
+    if res is None:                                  # 暫存區模組不在 ⇒ 照舊只刪報價單那一列並明說
+        _ra.legacy_delete_quotation(conn, quote_no)
     # 轉建連結指到這張單的業務開發案件解除連結（IP-13 `crm.quote_deleted`，M02 提供；同一筆交易）。
     # M02 不在 ⇒ 報價單照刪，回應 notice 明說連結沒有解除（INTEGRATION-POINTS IP-13「對方不在時」）。
     unlink = _registry.single_provider("crm.quote_deleted")
@@ -2512,16 +2522,16 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
     conn.close()
     _purge_notifications(quote_no, ['approval_request', 'approval_returned',
                                      'approval_rejected', 'case_stage_deadline', 'approval_reminder'])
-    _audit(_tok(authorization), 'quotation.delete', 'quotation', quote_no, f"{quote_no}（{cname}）")
+    _audit(_tok(authorization), 'quotation.delete', 'quotation', quote_no, f"{quote_no}（{cname}）" + ("（已進暫存區）" if res else "（暫存區未安裝，已直接刪除）"))
     for c in orphaned:
         _audit(_tok(authorization), 'dev_case.unlink_deleted_quote', 'dev_case', str(c['id']),
                f"{c['case_name']}：連結的報價單 {quote_no} 已刪除，自動解除連結")
     notify_module_activity("報價單", "刪除", user.get("display_name") or user["username"],
                             f"{quote_no}（{cname}）", "quotations.html")
+    notices = ([QUOTE_DELETED_CRM_ABSENT] if unlink is None else []) + ([_ra.BIN_ABSENT_NOTICE] if res is None else [])
     if unlink is None:
         logger.warning("報價單 %s 已刪除；業務開發模組未安裝 —— 轉建連結未解除（IP-13）", quote_no)
-        return {"ok": True, "notice": QUOTE_DELETED_CRM_ABSENT}
-    return {"ok": True}
+    return {"ok": True, **({"binned": False} if res is None else {}), **({"notice": "；".join(notices)} if notices else {})}
 
 
 #: IP-13 對方不在時的說明（測試與畫面共用同一句）

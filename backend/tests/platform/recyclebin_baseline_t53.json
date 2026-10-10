@@ -113,14 +113,6 @@
    "count": 1,
    "reason": "p2: 其他業務資料（P2 評估）"
   },
-  "modules/case/api/case_extra_expenses.py::case_extra_expenses": {
-   "count": 1,
-   "reason": "p1: 額外費用單"
-  },
-  "modules/case/api/completion_notes.py::completion_notes": {
-   "count": 1,
-   "reason": "p1: 完工單"
-  },
   "modules/case/api/material_payments.py::case_material_payments": {
    "count": 1,
    "reason": "p2: 其他業務資料（P2 評估）"
@@ -131,27 +123,23 @@
   },
   "modules/case/api/quotations.py::case_stage_visits": {
    "count": 1,
-   "reason": "p1: 案件階段訪視（隨報價單）"
+   "reason": "p2: 案件階段拜訪單筆刪除（整張報價單刪除已進暫存區）"
   },
   "modules/case/api/quotations.py::case_stages": {
    "count": 3,
-   "reason": "p1: 案件階段（隨報價單）"
+   "reason": "p2: 案件階段單筆刪除／存檔差異（整張報價單刪除已進暫存區）"
   },
   "modules/case/api/quotations.py::case_updates": {
    "count": 1,
-   "reason": "p1: 案件進度更新（隨報價單）"
+   "reason": "p2: 案件進度更新單筆刪除（整張報價單刪除已進暫存區）"
   },
   "modules/case/api/quotations.py::quotations": {
-   "count": 2,
-   "reason": "p1: 報價單"
+   "count": 1,
+   "reason": "exempt: 建立失敗時刪掉剛建的那一筆（補償動作，不是使用者刪除）"
   },
   "modules/case/case_deadlines.py::system_settings": {
    "count": 1,
    "reason": "exempt: 系統設定鍵值（非單據）"
-  },
-  "modules/case/material_guard.py::case_material_approvals": {
-   "count": 1,
-   "reason": "p1: 材料申請（採購單；報價單存檔 diff 內的隱性刪除）"
   },
   "modules/case/material_payment.py::case_material_payment_lines": {
    "count": 1,
@@ -196,10 +184,6 @@
   "modules/supply/api/inventory.py::stock_items": {
    "count": 1,
    "reason": "p2: 其他業務資料（P2 評估）"
-  },
-  "modules/supply/api/shipping_notes.py::shipping_notes": {
-   "count": 1,
-   "reason": "p1: 出貨單"
   },
   "modules/supply/api/suppliers.py::suppliers": {
    "count": 1,
@@ -336,9 +320,7 @@
   "modules/case/api/case_action_items.py::delete_case_action_item::DELETE /api/quotations/{quote_no}/action-items/{item_id}": "p2: 其他業務資料（P2 評估）",
   "modules/case/api/case_extra_expenses.py::cancel_change_request::DELETE /api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request": "p2: 其他業務資料（P2 評估）",
   "modules/case/api/case_extra_expenses.py::delete_change_request_file::DELETE /api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
-  "modules/case/api/case_extra_expenses.py::delete_extra_expense::DELETE /api/quotations/{quote_no}/extra-expenses/{exp_id}": "p1: 額外費用單（含請款申請單的費用單據）",
   "modules/case/api/case_extra_expenses.py::delete_extra_expense_file::DELETE /api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
-  "modules/case/api/completion_notes.py::delete_completion_note::DELETE /api/completion-notes/{note_no}": "p1: 完工單",
   "modules/case/api/completion_notes.py::delete_completion_signed_file::DELETE /api/completion-notes/{note_no}/signed-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/case/api/material_approvals.py::receive_undo::DELETE _BASE + '/receive'": "p2: 其他業務資料（P2 評估）",
   "modules/case/api/quotations.py::delete_case_stage::DELETE /api/quotations/{quote_no}/stages/{stage_id}": "p2: 其他業務資料（P2 評估）",
@@ -347,7 +329,6 @@
   "modules/case/api/quotations.py::delete_material_file::DELETE /api/quotations/{no}/materials/{idx}/files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/case/api/quotations.py::delete_material_invoice_file::DELETE /api/quotations/{no}/materials/{idx}/invoice-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/case/api/quotations.py::delete_payment_item_invoice_file::DELETE /api/quotations/{no}/payment/{idx}/invoice-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
-  "modules/case/api/quotations.py::delete_quotation::DELETE /api/quotations/{quote_no}": "p1: 報價單",
   "modules/case/api/quotations.py::delete_quotation_signed_file::DELETE /api/quotations/{quote_no}/signed-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/case/api/quotations.py::delete_stage_visit::DELETE /api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}": "p2: 其他業務資料（P2 評估）",
   "modules/case/api/quotations.py::remove_stage_assignee::DELETE /api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}": "p2: 其他業務資料（P2 評估）",
@@ -365,7 +346,6 @@
   "modules/subcontract/api/vendor_contractors.py::delete_dispatch_invoice_file::DELETE /api/contractor-dispatches/{did}/invoice-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/subcontract/api/vendor_contractors.py::delete_vendor_contractor::DELETE /api/vendor-contractors/{vid}": "p2: 其他業務資料（P2 評估）",
   "modules/supply/api/inventory.py::delete_stock_item::DELETE /api/inventory/stock-items/{item_id}": "p2: 其他業務資料（P2 評估）",
-  "modules/supply/api/shipping_notes.py::delete_shipping_note::DELETE /api/shipping-notes/{note_no}": "p1: 出貨單",
   "modules/supply/api/shipping_notes.py::delete_shipping_signed_file::DELETE /api/shipping-notes/{note_no}/signed-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/supply/api/suppliers.py::delete_supplier::DELETE /api/suppliers/{sid}": "p2: 其他業務資料（P2 評估）",
   "modules/tender_radar/api.py::delete_watch::DELETE /api/tender-radar/watches/{watch_id}": "exempt: 標案關注條件（使用者偏好，可重建）",
