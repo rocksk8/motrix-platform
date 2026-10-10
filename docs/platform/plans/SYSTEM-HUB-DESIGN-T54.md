@@ -76,7 +76,8 @@
   "id": "backup", "section": "data",            // section 為 L1 固定清單的 key；未知 ⇒ 『其他』
   "title": "備份與保留", "desc": "備份保留天數、最近一次備份、還原說明",
   "href": "company-profile-settings.html#backup",
-  "perm": "superadmin",                         // 同選單語意：'superadmin' | ["模組鍵",…] | 'any'
+  "perm": "superadmin",                         // 舊語意（種子值／後備）：'superadmin' | ["模組鍵",…] | 'any'
+  "cap": "core.users.menu",                     // （選用）權限矩陣的能力鍵 <unit>.<page>.menu；有 cap 且矩陣存在 ⇒ 以矩陣為準
   "order": 20, "keywords": "備份 還原 保留 災難", "icon": "disk"
 }]
 ```
@@ -94,10 +95,19 @@
 - **深連結區塊**：`company-profile-settings.html#backup` 需補錨點；利潤口徑補一個獨立頁（目前只有 API）。
 - **權限不放寬**：hub 只是索引，每個目標頁自己的權限檢查不變；卡片 `perm` 必須與目標頁的選單 `perm` 一致（守門測試保證）。
 
+### 3.1 權限：`cap` 與 `perm.can`（與 1d 權限矩陣對齊）
+
+權限矩陣把『選單』變成可勾選的能力（動作 `menu`），所以卡片多一個選用欄位 `cap`：
+- **過濾**：伺服器對每位使用者先看 `registry.single_provider("perm.can")`（1d 提供者：`fn(user, cap) -> bool`，最高管理者恆真、未知 cap 為假、失敗關閉）。卡片有 `cap` 且提供者在 ⇒ 以 `perm.can(user, cap)` 為準；**沒有提供者（矩陣模組不在）或卡片沒有 `cap` ⇒ 退回舊 `perm` 語意**（今天的行為）。最高管理者恆見。
+- **cap 鍵格式**：三段 `<unit>.<object>.menu`，unit＝擁有該頁的模組鍵（L1 頁面為 `core`）、object＝頁面檔名去掉 `.html` 並把 `-` 換成 `_`（`users.html` → `core.users.menu`；`vendor-contractors.html` → `subcontract.vendor_contractors.menu`）。**不手打**：由 1d 的 `capabilities.menu_cap_key(unit, href)` 衍生；卡片可省略 `cap`，由聚合器衍生。
+- **種子值**：矩陣的 menu 能力的種子由選單 `perm` 機械衍生（any→所有人、superadmin→僅最高管理者、[模組鍵]→任一模組）；hub 的對等守門比對的是**種子宣告**（`module.json`／`menu_l1`），不是矩陣的即時值（矩陣可以合法地改掉）。
+- **快取與失效**：整頁回應**依使用者**快取 15 秒（鍵＝使用者 id＋角色＋有效模組；不同人不共用）。矩陣／設定異動時由兩條路讓它立刻失效：①`perm.changed` 提供者（hub 登記 `clear_cache`，1d 在授權／代理異動時呼叫）；②與設定中心共用的 **`config_epoch`**（`config_changes`／`config_change_events` 的最大 id）——快取項記住載入時的 epoch，命中時超過 2 秒才重查，變了就丟棄。兩者並存，最壞延遲（多行程）15 秒。
+- **徽章唯讀**：每個徽章提供者拿到的連線是 `PRAGMA query_only=ON`，寫入一律失敗（守門題驗證）。
+
 ## 5. 守門與測試
 
 1. **對等**：每個 `menu.group=="system"` 的頁面都有一張 `system_cards`（反向：每張卡的 `href` 指向存在的頁面）——仿 `test_menu_parity`，新增頁面忘了登記就紅。
-2. **權限一致**：卡片 `perm` 與頁面 `menu.perm` 相同；hub 對每個測試角色回傳的項目與各分組項數＝該角色在選單舊群組中可見的項目（零洩漏／零遺漏）。
+2. **權限一致**：卡片 `perm`（種子）與頁面 `menu.perm`（種子）相同；有 `cap` 的卡片，`cap` 必須符合 `^<unit>\.<page>\.menu$`（三段、unit＝擁有模組、page＝頁名去 `.html`、`-`→`_`），且等於 `menu_cap_key` 的衍生結果（與 1d 對齊後加守門）；hub 對每個測試角色回傳的項目與各分組項數＝該角色在選單舊群組中可見的項目（零洩漏／零遺漏）。
 3. **徽章隔離**：徽章提供者丟例外／逾時／回傳壞格式 ⇒ 卡片仍在、無徽章、不 500；提供者不得寫入（begin-only 守門）。
 4. **載入預算**：頁面載入 = 1 個 `system-hub` 請求（寫進黃金請求清單）；P95 < 300ms（徽章並行）。
 5. **e2e**：superadmin 看到全部；一般人員只看到自己有權限的；左欄切換＋網址 hash＋上一頁、鍵盤方向鍵、搜尋、手機寬度（分組列水平捲動）、深色各一題；舊網址仍可開。
