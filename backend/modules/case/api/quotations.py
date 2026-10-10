@@ -1789,6 +1789,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     ).fetchone() if sp_name else None
     sp_id = sp_row["id"] if sp_row else None
 
+    begin_write(conn)   # 第 53 班：讀 existing（含 materialOrders 舊值）之前先拿寫鎖，與暫存區的刪除／還原互斥（lost update）
     existing = conn.execute(
         # data_json 是 2026-09-14 加進來的：一般編輯要寫「改了什麼」的變更摘要，
         # 需要拿得到存檔前的內容（見 _summarize_quote_changes()）。

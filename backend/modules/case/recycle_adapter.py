@@ -9,6 +9,7 @@
 """
 import json
 import sqlite3
+from datetime import datetime
 from typing import List, Tuple
 
 from helpers import recycle_bin as RB
@@ -468,7 +469,8 @@ class MaterialOrderAdapter(RB.Adapter):
             raise RB.BinError("找不到這筆材料申請")
         a = self._approval(conn, qn, iid)
         rows = {"case_material_approvals": [dict(a)] if a is not None else []}
-        return {"rows": rows, "order": order, "files": _files(_paths_of(order)), "label": "材料申請 %s「%s」（案件 %s）" % ((a["doc_code"] if a is not None and a["doc_code"] else iid), order.get("itemName") or "", qn),
+        # files 刻意為空：材料申請這一列本身沒有附件（附件在材料清單與匯款申請上）；若附件先搬進隔離區而存檔隨後中止，列還在、檔卻要等每小時 reconcile 才搬回
+        return {"rows": rows, "order": order, "files": [], "label": "材料申請 %s「%s」（案件 %s）" % ((a["doc_code"] if a is not None and a["doc_code"] else iid), order.get("itemName") or "", qn),
                 "parent": ("quotation", qn), "meta": {"quote_no": qn, "item_id": iid, "status": a["status"] if a is not None else ""}}
 
     def delete_in_tx(self, conn, entity_id) -> None:
@@ -484,7 +486,8 @@ class MaterialOrderAdapter(RB.Adapter):
             kept = [o for o in cr["materialOrders"] if not (isinstance(o, dict) and str(o.get("itemId")) == iid)]
             if len(kept) != len(cr["materialOrders"]):
                 cr["materialOrders"] = kept
-                conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(data, ensure_ascii=False), qn))
+                # updated_at 要跟著動：存檔流程之外（刪除已核可、還原）改了 JSON，舊畫面的 _expectedUpdatedAt 才會對不上而得到 409（否則舊畫面存檔會把這一列救活／再丟進暫存區）
+                conn.execute("UPDATE quotations SET data_json=?, updated_at=? WHERE quote_no=?", (json.dumps(data, ensure_ascii=False), datetime.now().isoformat(), qn))
 
     def restore_in_tx(self, conn, snap, ctx) -> dict:
         meta = snap.get("meta") or {}
@@ -505,7 +508,7 @@ class MaterialOrderAdapter(RB.Adapter):
                 raise RB.BinError("conflict: 這筆材料申請的審核單已存在")
             _insert(conn, "case_material_approvals", a)
         orders.append(_remap_paths(snap["order"], ctx))
-        conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(data, ensure_ascii=False), qn))
+        conn.execute("UPDATE quotations SET data_json=?, updated_at=? WHERE quote_no=?", (json.dumps(data, ensure_ascii=False), datetime.now().isoformat(), qn))
         return {"entity_id": "%s|%s" % (qn, iid), "renumbered": False, "notes": ["材料清單裡原本對應到它的項目，連結需到案件頁重新確認"]}
 
 
