@@ -1,5 +1,8 @@
 # 刪除暫存區 更新紀錄
 
+## 1.0.3 — 2026-10-10（wip/t53b-int 整合修正）
+- `frontend/pages/recycle-bin.html`：對話框 `max-height: 86vh` 改為 `calc(86vh / var(--fz,1))`（字級放大時不超出畫面；守門 `test_fz_no_raw_vh_is_left_in_the_frontend`）。純樣式，行為不變。
+
 ## 1.0.2 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t53-ab-recyclebin-p0）：頁面 e2e、『刪除已核可』入口改用 write_txn、隔離目錄預設從 UPLOADS_ROOT 推；稽核 node-39 六個必修＋兩個建議；1d／05 審查跟進；node-39 再驗證小項；delete 快照前拿寫鎖；adapter after_commit hook；保留單號 reserved_ids；管理員快照上限 50 MB；codes 欄**
 - **codes 欄**（json_extract 棘輪守門）：`recycle_bin.codes`（換行分隔的單據代號）在進暫存區當下從快照 `meta.codes` 抄出；`reserved_ids` 只讀這一欄，不再 `json_extract` 讀幾 MB 的快照。模組尚未出貨 ⇒ 直接改 migration 0001（建表含 codes；已建過表的開發庫由同一支 migration 冪等補欄）。

@@ -38,7 +38,7 @@
     .rb-btn[disabled] { opacity: .5; cursor: default; }
     .rb-pre { max-height: 360px; overflow: auto; background: var(--border-light); border-radius: var(--radius); padding: 10px; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
     .rb-modal { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; z-index: 50; }
-    .rb-modal > div { background: #fff; border-radius: var(--radius); padding: 18px 20px; width: min(560px, 92vw); max-height: 86vh; overflow: auto; }
+    .rb-modal > div { background: #fff; border-radius: var(--radius); padding: 18px 20px; width: min(560px, 92vw); max-height: calc(86vh / var(--fz,1)); overflow: auto; }
     @media (max-width: 900px) { .rb-main { margin-left: 0; padding: 16px; } }
   </style>
 </head>

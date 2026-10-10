@@ -180,7 +180,7 @@ def test_rbn3_refusal_changes_nothing_and_approved_needs_superadmin(who):
         _delete("D3", su_user, approved=True)
 
 
-def test_rbn4_absent_module_or_adapter_is_explicit(monkeypatch, who):
+def test_rbn4_absent_module_or_adapter_is_explicit(monkeypatch, who, client):
     monkeypatch.setattr(registry, "single_provider", lambda cap: None)
     cn = db.get_db()
     assert RB.delete(cn, ET, "D1", {"role": "admin"}) is None and RB.available() is False, "模組不在 ⇒ None（呼叫端照舊硬刪並明說）"
@@ -290,7 +290,7 @@ def test_rbn6_tick_runs_once_per_day_after_the_run_hour(monkeypatch):
     assert len(calls) == 2
 
 
-def test_rbn8_rolled_back_delete_is_reconciled_by_moving_files_back(monkeypatch, who):
+def test_rbn8_rolled_back_delete_is_reconciled_by_moving_files_back(monkeypatch, who, client):
     rels = _doc()
     cn = db.get_db()
     res = S.delete(cn, ET, "D1", {"username": "u1", "role": "admin"})     # 還沒 commit

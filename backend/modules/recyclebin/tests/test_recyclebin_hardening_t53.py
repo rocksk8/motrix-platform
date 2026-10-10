@@ -97,7 +97,7 @@ def test_rbn14_second_restore_is_refused_and_does_not_flip_the_status(client, wh
     assert client.delete("/api/recycle-bin/%d?confirm=永久刪除" % res["bin_id"], headers=su).status_code == 409, "已還原的不能永久刪除"
 
 
-def test_rbn14_restore_and_purge_hold_the_write_lock_and_recheck(monkeypatch, who):
+def test_rbn14_restore_and_purge_hold_the_write_lock_and_recheck(monkeypatch, who, client):
     su, ad, su_user = who
     _doc()
     res = _delete("D1", su_user)
@@ -113,7 +113,7 @@ def test_rbn14_restore_and_purge_hold_the_write_lock_and_recheck(monkeypatch, wh
 
 
 # ── RBN15 刪除失敗又搬不回：隔離資料夾與檔案不可以被刪掉 ──────────────────────────────────
-def test_rbn15_failed_delete_with_stuck_files_keeps_the_quarantine_folder(monkeypatch, who):
+def test_rbn15_failed_delete_with_stuck_files_keeps_the_quarantine_folder(monkeypatch, who, client):
     su, ad, su_user = who
     rels = _doc()
 
@@ -244,7 +244,7 @@ def test_rbn13_cloud_mirror_and_public_folders_are_rejected(monkeypatch, tmp_pat
     assert Q.location_problem(os.path.dirname(root)), "包含設定好的雲端資料夾也不行"
 
 
-def test_rbn15_clean_move_back_but_unremovable_folder_raises_binerror_not_oserror(monkeypatch, who):
+def test_rbn15_clean_move_back_but_unremovable_folder_raises_binerror_not_oserror(monkeypatch, who, client):
     su, ad, su_user = who
     _doc()
 
@@ -350,7 +350,7 @@ def test_rbn20_reserved_ids_cover_entity_ids_and_meta_codes_only_while_in_the_bi
     cn.close()
 
 
-def test_rbn20_reserved_ids_is_empty_when_the_module_is_absent_and_survives_bad_meta(monkeypatch, who):
+def test_rbn20_reserved_ids_is_empty_when_the_module_is_absent_and_survives_bad_meta(monkeypatch, who, client):
     su, ad, su_user = who
     cn = db.get_db()
     cn.execute("INSERT INTO recycle_bin (token, entity_type, entity_id, deleted_at, purge_after, snapshot_json) VALUES (?,?,?,?,?,?)",
