@@ -190,7 +190,7 @@ def test_rbn16_purge_commits_first_and_a_stuck_folder_is_removed_by_reconcile(mo
     assert not os.path.exists(Q.bin_dir(res["token"])), "reconcile 把已清除那一筆殘留的資料夾刪掉（不是搬回）"
 
 
-def test_restore_orphan_with_an_occupied_destination_uses_a_collision_safe_name(who):
+def test_restore_orphan_with_an_occupied_destination_uses_a_collision_safe_name(who, client):
     """原路徑被同名新檔占用 ⇒ 不覆蓋、不把資料夾永遠留在隔離區：改存為不衝突的檔名。"""
     su, ad, su_user = who
     rels = _doc("O1", nfiles=1)

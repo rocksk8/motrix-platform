@@ -41,7 +41,7 @@ def _quarantine_tokens():
     return [n for n in os.listdir(root)] if os.path.isdir(root) else []
 
 
-def test_m1_cascade_failure_moves_the_children_files_back(monkeypatch, who):
+def test_m1_cascade_failure_moves_the_children_files_back(monkeypatch, who, client):
     rels = _doc("C1")
     monkeypatch.setitem(registry._LEGACY_PROVIDERS, (RB.CAP_ADAPTER, PET), ParentAdapter)
     ParentAdapter.fail = True
@@ -58,7 +58,7 @@ def test_m1_cascade_failure_moves_the_children_files_back(monkeypatch, who):
     assert _q("SELECT COUNT(*) n FROM recycle_bin")[0]["n"] == 0 and _q("SELECT COUNT(*) n FROM rbn_doc")[0]["n"] == 1
 
 
-def test_m1_caller_can_undo_the_moves_after_delete_returned(who):
+def test_m1_caller_can_undo_the_moves_after_delete_returned(who, client):
     rels = _doc("D1")
     cn = db.get_db()
     try:
@@ -83,7 +83,7 @@ def test_a_delete_approved_requires_a_reason(client, who):
     assert _q("SELECT reason FROM recycle_bin")[0]["reason"] == "客戶撤單"
 
 
-def test_b_purge_after_is_exactly_thirty_days_and_due_uses_the_clock(who):
+def test_b_purge_after_is_exactly_thirty_days_and_due_uses_the_clock(who, client):
     _doc("B1", nfiles=0)
     res = _delete("B1", {"username": "u1", "role": "admin"})
     row = _q("SELECT deleted_at, purge_after FROM recycle_bin WHERE id=?", res["bin_id"])[0]
@@ -120,7 +120,7 @@ def test_c_delete_approved_audit_failure_rolls_everything_back(monkeypatch, clie
     assert _quarantine_tokens() == []
 
 
-def test_c_purge_audit_failure_deletes_nothing(who):
+def test_c_purge_audit_failure_deletes_nothing(who, client):
     _doc("C8", nfiles=1)
     res = _delete("C8", {"username": "u1", "role": "admin"})
 
@@ -136,7 +136,7 @@ def test_c_purge_audit_failure_deletes_nothing(who):
     assert _q("SELECT restore_status FROM recycle_bin WHERE id=?", res["bin_id"])[0]["restore_status"] == "in_bin"
 
 
-def test_c_restore_audit_failure_keeps_the_item_in_the_bin(who):
+def test_c_restore_audit_failure_keeps_the_item_in_the_bin(who, client):
     _doc("C7", nfiles=1)
     res = _delete("C7", {"username": "u1", "role": "admin"})
 
@@ -163,7 +163,7 @@ def test_c_successful_flows_write_their_audit_in_the_same_transaction(client, wh
     assert len(_q("SELECT * FROM audit_log WHERE action='recyclebin.purge_manual'")) == 1
 
 
-def test_delete_scope_undoes_on_error_and_keeps_on_success(who):
+def test_delete_scope_undoes_on_error_and_keeps_on_success(who, client):
     rels = _doc("S1")
     cn = db.get_db()
     try:
@@ -186,7 +186,7 @@ def test_delete_scope_undoes_on_error_and_keeps_on_success(who):
     assert all(os.path.isfile(_abs(r)) for r in rels2), "區塊以例外結束 ⇒ 附件搬回"
 
 
-def test_request_scope_undoes_uncommitted_deletes_and_keeps_committed_ones(who):
+def test_request_scope_undoes_uncommitted_deletes_and_keeps_committed_ones(who, client):
     """請求保險網（main.py 中介層）：資料列沒 commit ⇒ 附件搬回；已 commit ⇒ 不動。"""
     rels_a, rels_b = _doc("R1"), _doc("R2")
     state = RB.request_scope_begin()
