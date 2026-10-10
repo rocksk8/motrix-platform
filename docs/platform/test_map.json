@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1259,
+  "tests": 1262,
   "unmapped": 13,
   "kinds": {
-   "api": 687,
+   "api": 689,
    "e2e": 301,
-   "audit": 158,
+   "audit": 159,
    "unit": 113
   },
   "routes": 793
@@ -3030,6 +3030,32 @@
     ]
    },
    "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_no_width_t54.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "file:backend/helpers/__init__.py",
+    "helper:gl_status",
+    "mod:accounting/__init__",
+    "mod:accounting/ledger/reports",
+    "mod:accounting/voucher"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/gl_status.py",
+     "backend/modules/accounting/__init__.py",
+     "backend/modules/accounting/voucher.py"
+    ],
+    "path": [
+     "backend/modules/accounting/ledger/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
    "module": "accounting"
   },
   "backend/modules/accounting/tests/test_voucher_office_attachments_2026_09_30.py": {
@@ -20663,6 +20689,25 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_approval_reassign_rules_t54.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/test_approval_reassign_history_2026_09_14.py",
+    "router:approval_queue"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_requires.py",
+     "backend/tests/test_approval_reassign_history_2026_09_14.py"
+    ],
+    "api": [
+     "backend/routers/approval_queue.py"
+    ]
+   }
+  },
   "backend/tests/test_approval_reminder_ladder_2026_09_22.py": {
    "kind": "api",
    "units": [
@@ -32205,6 +32250,22 @@
     ],
     "page": [
      "frontend/pages/quotation-form.html"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_quote_server_owned_fields_t54.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true

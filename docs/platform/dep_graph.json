@@ -3454,7 +3454,8 @@
     "mod:accounting/ledger/periods",
     "mod:accounting/ledger/reports",
     "mod:accounting/ledger/roles",
-    "mod:accounting/ledger/statements"
+    "mod:accounting/ledger/statements",
+    "mod:accounting/voucher"
    ],
    "imports": [
     "core:db",
@@ -3537,6 +3538,7 @@
     "user_duty_roles",
     "user_perm_subtracts",
     "users",
+    "voucher_attachments",
     "voucher_lines",
     "vouchers_all"
    ],
@@ -3557,6 +3559,7 @@
     "system_settings",
     "user_duty_roles",
     "user_perm_subtracts",
+    "voucher_lines",
     "vouchers_all"
    ]
   },
@@ -3893,7 +3896,8 @@
     "mod:accounting/ledger/fs_lines",
     "mod:accounting/ledger/periods",
     "mod:accounting/ledger/reports",
-    "mod:accounting/ledger/roles"
+    "mod:accounting/ledger/roles",
+    "mod:accounting/voucher"
    ],
    "imports": [
     "core:db",
@@ -3978,6 +3982,7 @@
     "user_duty_roles",
     "user_perm_subtracts",
     "users",
+    "voucher_attachments",
     "voucher_lines",
     "vouchers_all"
    ],
@@ -3999,7 +4004,9 @@
     "permission_changes",
     "system_settings",
     "user_duty_roles",
-    "user_perm_subtracts"
+    "user_perm_subtracts",
+    "voucher_lines",
+    "vouchers_all"
    ]
   },
   "mod:accounting/api/ledger_requests": {
@@ -4260,7 +4267,8 @@
     "mod:accounting/ledger/periods",
     "mod:accounting/ledger/reports",
     "mod:accounting/ledger/roles",
-    "mod:accounting/ledger/statements"
+    "mod:accounting/ledger/statements",
+    "mod:accounting/voucher"
    ],
    "imports": [
     "core:db",
@@ -4329,6 +4337,7 @@
     "user_duty_roles",
     "user_perm_subtracts",
     "users",
+    "voucher_attachments",
     "voucher_lines",
     "vouchers_all"
    ],
@@ -4347,7 +4356,9 @@
     "permission_changes",
     "system_settings",
     "user_duty_roles",
-    "user_perm_subtracts"
+    "user_perm_subtracts",
+    "voucher_lines",
+    "vouchers_all"
    ]
   },
   "mod:accounting/api/ledger_tax": {
@@ -5198,7 +5209,8 @@
    "dynamic_sql": false,
    "imports": [
     "mod:accounting/ledger/periods",
-    "mod:accounting/ledger/roles"
+    "mod:accounting/ledger/roles",
+    "mod:accounting/voucher"
    ],
    "kind": "mod",
    "module_key": "accounting",
@@ -8371,331 +8383,331 @@
     },
     {
      "func": "update_quotation",
-     "line": 1690,
+     "line": 1691,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_status",
-     "line": 1963,
+     "line": 1975,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/status"
     },
     {
      "func": "recall_quotation",
-     "line": 2041,
+     "line": 2053,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/recall"
     },
     {
      "func": "case_bundle",
-     "line": 2323,
+     "line": 2335,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/case-bundle"
     },
     {
      "func": "case_close_gates",
-     "line": 2378,
+     "line": 2390,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/close-gates"
     },
     {
      "func": "update_deal_tag",
-     "line": 2417,
+     "line": 2429,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/deal-tag"
     },
     {
      "func": "delete_quotation",
-     "line": 2496,
+     "line": 2508,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "unlock_case",
-     "line": 2614,
+     "line": 2626,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-unlock"
     },
     {
      "func": "lock_case",
-     "line": 2663,
+     "line": 2675,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-lock"
     },
     {
      "func": "update_case_record",
-     "line": 2844,
+     "line": 2856,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/case-record"
     },
     {
      "func": "get_case_change_request",
-     "line": 3215,
+     "line": 3227,
      "method": "GET",
      "path": "/api/case-changes/{change_id}"
     },
     {
      "func": "approve_case_change",
-     "line": 3238,
+     "line": 3250,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/approve"
     },
     {
      "func": "reject_case_change",
-     "line": 3289,
+     "line": 3301,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/reject"
     },
     {
      "func": "list_case_stages_normalized",
-     "line": 3523,
+     "line": 3535,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "create_case_stage",
-     "line": 3541,
+     "line": 3553,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "update_case_stage",
-     "line": 3570,
+     "line": 3582,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "delete_case_stage",
-     "line": 3624,
+     "line": 3636,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "reorder_case_stages",
-     "line": 3665,
+     "line": 3677,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/stages/reorder"
     },
     {
      "func": "add_stage_assignee",
-     "line": 3689,
+     "line": 3701,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees"
     },
     {
      "func": "remove_stage_assignee",
-     "line": 3717,
+     "line": 3729,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}"
     },
     {
      "func": "toggle_stage_dependency",
-     "line": 3740,
+     "line": 3752,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}"
     },
     {
      "func": "add_stage_visit",
-     "line": 3773,
+     "line": 3785,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits"
     },
     {
      "func": "update_stage_visit",
-     "line": 3799,
+     "line": 3811,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "delete_stage_visit",
-     "line": 3830,
+     "line": 3842,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "record_export",
-     "line": 3853,
+     "line": 3865,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/export"
     },
     {
      "func": "mark_payment",
-     "line": 3942,
+     "line": 3954,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 4074,
+     "line": 4086,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 4117,
+     "line": 4129,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 4157,
+     "line": 4169,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 4196,
+     "line": 4208,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 4221,
+     "line": 4233,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 4262,
+     "line": 4274,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 4287,
+     "line": 4299,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 4319,
+     "line": 4331,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 4348,
+     "line": 4360,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_finance_summary",
-     "line": 4392,
+     "line": 4404,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "approve_quotation",
-     "line": 4848,
+     "line": 4860,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 4973,
+     "line": 4985,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 5059,
+     "line": 5071,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5125,
+     "line": 5137,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5271,
+     "line": 5283,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5357,
+     "line": 5369,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5388,
+     "line": 5400,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5419,
+     "line": 5431,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5460,
+     "line": 5472,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5520,
+     "line": 5532,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5587,
+     "line": 5599,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5628,
+     "line": 5640,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5666,
+     "line": 5678,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 6259,
+     "line": 6271,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6379,
+     "line": 6391,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6447,
+     "line": 6459,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6601,
+     "line": 6613,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6615,
+     "line": 6627,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6646,
+     "line": 6658,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -17594,25 +17606,25 @@
    "routes": [
     {
      "func": "get_approval_queue",
-     "line": 164,
+     "line": 165,
      "method": "GET",
      "path": "/api/approval-queue"
     },
     {
      "func": "get_approval_queue_count",
-     "line": 247,
+     "line": 248,
      "method": "GET",
      "path": "/api/approval-queue/count"
     },
     {
      "func": "approval_queue_detail",
-     "line": 409,
+     "line": 410,
      "method": "GET",
      "path": "/api/approval-queue/detail"
     },
     {
      "func": "reassign_approval",
-     "line": 456,
+     "line": 457,
      "method": "POST",
      "path": "/api/approval-queue/reassign"
     }
