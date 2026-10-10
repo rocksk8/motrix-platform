@@ -30,7 +30,7 @@ def _now():
 
 
 def purge_after_for(dt) -> str:
-    return (dt + timedelta(days=RB.RETENTION_DAYS)).date().isoformat()
+    return (dt + timedelta(days=RB.RETENTION_DAYS)).isoformat(timespec="seconds")      # 精確 30 天（含時間）；舊列只有日期，字串比較時仍以當天 00:00 視為到期
 
 
 def _files_of(snap: dict) -> list:
@@ -93,7 +93,7 @@ def _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group_token, p
         raise
     return {"bin_id": cur.lastrowid, "token": token, "entity_type": entity_type, "entity_id": str(entity_id),
             "purge_after": purge_after_for(now), "files": sum(1 for m in manifest if m.get("state") == "moved"),
-            "_hook": (ad, entity_id, snap)}
+            "_hook": (ad, entity_id, snap), "_undo": (token, manifest)}
 
 
 def delete(conn, entity_type, entity_id, user, reason="", approved=False) -> dict:
@@ -114,21 +114,63 @@ def delete(conn, entity_type, entity_id, user, reason="", approved=False) -> dic
     impact = ad.impact(conn, entity_id) if approved else []
     group = uuid.uuid4().hex
     children = []
-    for ct, cid in ad.cascade_children(conn, entity_id) or []:   # 子單據先進（外鍵順序）；還原時父層先
-        cad = RB.get_adapter(ct)
-        if cad is None:
-            raise RB.BinError("連帶刪除的『%s』沒有暫存區 adapter，單據未刪除" % ct)
-        children.append(_bin_one(conn, cad, ct, cid, user, reason, via, group, (entity_type, entity_id), []))
-    info = _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group, None, impact)
+    try:
+        for ct, cid in ad.cascade_children(conn, entity_id) or []:   # 子單據先進（外鍵順序）；還原時父層先
+            cad = RB.get_adapter(ct)
+            if cad is None:
+                raise RB.BinError("連帶刪除的『%s』沒有暫存區 adapter，單據未刪除" % ct)
+            children.append(_bin_one(conn, cad, ct, cid, user, reason, via, group, (entity_type, entity_id), []))
+        info = _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group, None, impact)
+    except Exception:
+        _undo_moves(children)               # 前面已搬進隔離區的子單據附件要搬回（呼叫端會 rollback，資料列不會留）；失敗的那一筆 _bin_one 已自己處理
+        raise
     info["children"] = children
     hooks = [c.pop("_hook") for c in children] + [info.pop("_hook")]
+    undo_all = children + [info]
+    undos = [x.pop("_undo") for x in undo_all]
 
     def after_commit():
         """呼叫端在**自己 commit 之後**呼叫：逐個 adapter 的 after_commit('delete', …)；錯誤只記 log。"""
         for h_ad, h_id, h_snap in hooks:
             _run_hook(h_ad, "delete", h_id, h_snap, info)
+
+    def rollback_files():
+        """呼叫端在 delete() 回來**之後**、commit 之前失敗要 rollback 時呼叫：把已搬進隔離區的附件全部搬回（資料列由呼叫端 rollback 一併撤銷）。"""
+        _undo_moves_raw(undos)
     info["after_commit"] = after_commit
+    info["rollback_files"] = rollback_files
     return info
+
+
+def _undo_moves(infos):
+    _undo_moves_raw([i["_undo"] for i in infos if i.get("_undo")])
+
+
+def _undo_moves_raw(undos):
+    """把一組 (token, manifest) 的附件搬回原路徑並清掉空的隔離資料夾；搬不回的留在隔離區（每日 reconcile 會再搬），只記 log。"""
+    for token, manifest in reversed(undos):
+        try:
+            _mapping, back_fails = Q.move_back(token, manifest)
+            if back_fails:
+                logger.error("recyclebin: 回復時附件搬不回去，保留在隔離區 %s：%s", token, back_fails)
+                continue
+            Q.remove(token)
+        except Exception:                                          # noqa: BLE001 — 回復路徑不可再丟例外蓋掉原本的錯誤
+            logger.exception("recyclebin: 回復隔離區 %s 失敗（每日 reconcile 會處理）", token)
+
+
+def audit_tx(conn, user, action, target_type="", target_id="", label="", detail=None):
+    """稽核寫進**同一個交易**（不 commit）：寫不進去就丟例外，讓呼叫端整筆 rollback（不可『做完了才發現沒稽核』）。"""
+    from helpers.audit import _derive_fields, _DETAIL_MAX
+    d = _derive_fields(action, target_type, target_id, label, detail)
+    payload = json.dumps(detail or {}, ensure_ascii=False)
+    if len(payload) > _DETAIL_MAX:
+        payload = json.dumps({"_truncated": True, "originalLength": len(payload), "preview": payload[:_DETAIL_MAX - 200]}, ensure_ascii=False)
+    conn.execute(
+        "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
+        (_now().isoformat(), (user or {}).get("id"), (user or {}).get("username", ""), (user or {}).get("display_name", ""),
+         action, target_type, target_id, label, payload, d["module"], d["case_no"], d["ref_no"]))
 
 
 def _run_hook(ad, event, entity_id, snap, result):
@@ -219,8 +261,8 @@ def detail(conn, bin_id) -> dict:
     return out
 
 
-def restore(conn, bin_id, user) -> dict:
-    """還原一筆。自己 commit。失敗 ⇒ 檔案搬回隔離區、資料列留在暫存區、狀態 restore_failed 並記原因；丟 BinError。"""
+def restore(conn, bin_id, user, audit=None) -> dict:
+    """還原一筆。自己 commit。`audit(conn, result)`（可選）在 commit 前、同一交易內呼叫：稽核寫不進去 ⇒ 整筆還原失敗並回到暫存區。失敗 ⇒ 檔案搬回隔離區、資料列留在暫存區、狀態 restore_failed 並記原因；丟 BinError。"""
     begin_write(conn)                       # 寫鎖＋鎖內重讀：連點兩次還原，第二個等第一個做完、重讀到 restored 就被擋下
     r = _row(conn, bin_id)
     if r["restore_status"] not in LIVE:
@@ -252,6 +294,9 @@ def restore(conn, bin_id, user) -> dict:
                            (S_RESTORED, (user or {}).get("username", ""), now, "；".join(res.get("notes") or [])[:500], bin_id, S_IN_BIN, S_FAILED))
         if cur.rowcount != 1:
             raise RB.BinError("這一筆的狀態剛被改變，請重新整理後再試")
+        if audit is not None:
+            audit(conn, {"entityType": r["entity_type"], "entityId": r["entity_id"], "label": r["entity_label"], "renumbered": bool(res.get("renumbered")),
+                         "notes": res.get("notes") or []})
         conn.commit()
     except Exception as e:                                         # noqa: BLE001 — 任何失敗都要還原到『還在暫存區』
         conn.rollback()
@@ -273,13 +318,21 @@ def _fail(conn, bin_id, note):
     conn.commit()
 
 
-def purge(conn, bin_id, by="system") -> dict:
+def purge(conn, bin_id, by="system", audit=None) -> dict:
     """永久刪除：隔離檔整個刪掉、快照清空，保留一列墓碑（狀態 purged）。自己 commit。"""
     begin_write(conn)
     r = _row(conn, bin_id)
     if r["restore_status"] not in LIVE:
         conn.rollback()
         raise RB.BinError("這一筆不在暫存區（狀態：%s）" % r["restore_status"])
+    if audit is not None:                   # 稽核先寫進同一個交易（寫不進去 ⇒ 還沒刪任何東西就整筆失敗）；之後才刪隔離檔
+        try:
+            audit(conn, {"entityType": r["entity_type"], "entityId": r["entity_id"], "label": r["entity_label"], "deletedAt": r["deleted_at"],
+                         "purgeAfter": r["purge_after"]})
+        except Exception as e:              # noqa: BLE001
+            conn.rollback()
+            logger.exception("recyclebin purge #%s audit failed", bin_id)
+            raise RB.BinError("audit_failed: 稽核紀錄寫不進去，未清除：%s" % e.__class__.__name__)
     try:
         Q.remove(r["token"])                # 驗證資料夾真的刪乾淨；刪不掉就丟 OSError，這一筆維持在暫存區（不標已清除、不清快照）
     except OSError as e:
@@ -319,9 +372,11 @@ def reconcile(conn) -> int:
 
 
 def due_ids(conn, today=None) -> list:
-    today = today or _now().date().isoformat()
+    now = today or _now().isoformat(timespec="seconds")                 # 完整時間；傳日期字串（舊用法）＝當天 24:00 前到期的都算
+    if len(now) == 10:
+        now += "T23:59:59"
     return [r[0] for r in conn.execute("SELECT id FROM recycle_bin WHERE restore_status IN (?,?) AND purge_after<=? ORDER BY id LIMIT ?",
-                                       (S_IN_BIN, S_FAILED, today, DAILY_BATCH)).fetchall()]
+                                       (S_IN_BIN, S_FAILED, now, DAILY_BATCH)).fetchall()]
 
 
 def superadmins(conn) -> list:
