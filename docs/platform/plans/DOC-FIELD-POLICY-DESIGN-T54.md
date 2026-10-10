@@ -71,10 +71,10 @@
 鍵＝（單據類型, 狀態碼, 欄位群組）。每格一個模式：
 `editable`（可改）｜`locked`（鎖死）｜`remark`（可改但必須填備註，附最短字數與提示語）｜`approval`（可改但變成「變更申請」，走審核）｜`hidden`（隱藏）。
 
-**「誰」只引用 1d v7（`21c06bae1`）的能力，鍵格式三段 `<單位>.<物件>.<動作>`**：欄位群組本身當「物件」，動作固定 `edit`：`case.quote_header.edit`、`case.quote_pricing.edit`、`case.quote_cost.edit`、`case.quote_terms.edit`、`case.quote_payment.edit`、`case.quote_materials.edit`、`case.quote_files.edit`（`module.json` 登錄，`risk_class` 由 1d 的表推導：價格／成本／收款＝money）。**「刪除」群組不新增能力，直接重用既有的 `case.quotation.delete`**（其他單據同理：`<單位>.<單據>.delete`）；格子只決定「在哪個狀態、要不要備註或審核」，誰能刪仍由該能力決定。沒填能力＝沿用今天的角色判斷（種子由 1d 的 `seed_from_legacy()` 產生）。`approval` 格另有「核准人」（預設最高管理者）與是否允許自核（沿用 approval_policy）。
+**「誰」只引用 1d 的權限矩陣設計稿（分支 `wip/t54-1d-permmatrix-design`，v8）的能力，鍵格式三段 `<單位>.<物件>.<動作>`**：欄位群組本身當「物件」，動作固定 `edit`：`case.quote_header.edit`、`case.quote_pricing.edit`、`case.quote_cost.edit`、`case.quote_terms.edit`、`case.quote_payment.edit`、`case.quote_materials.edit`、`case.quote_files.edit`（`module.json` 登錄，`risk_class` 由 1d 的表推導：價格／成本／收款＝money）。**「刪除」群組不新增能力，直接重用既有的 `case.quotation.delete`**（其他單據同理：`<單位>.<單據>.delete`）；格子只決定「在哪個狀態、要不要備註或審核」，誰能刪仍由該能力決定。沒填能力＝沿用今天的角色判斷（種子由 1d 的 `seed_from_legacy()` 產生）。`approval` 格另有「核准人」（預設最高管理者）與是否允許自核（沿用 approval_policy）。
 
 **儲存（對齊設定中心 §2.2 的共用協議）**：node-39 的 `setting_group`，群組代號 `field_policy.<doc_type>`，**扁平值**：登錄表把（狀態碼 × 群組）展開成固定的 `SettingDef` 鍵——`mode.<狀態碼>.<群組>`（列舉）、`who.<狀態碼>.<群組>`（能力鍵清單）、`remark_min.<狀態碼>.<群組>`（整數）、`remark_hint.<狀態碼>.<群組>`（文字）、`approver.<狀態碼>.<群組>`（能力鍵）。上下限與列舉子集只在程式，管理者改不了；缺值＝登錄預設（今天的行為）。畫面的方格圖是這些扁平值的視圖。
-**風險與生效（使用者決定）**：變更方向依 1d v7（`21c06bae1`）的放寬／收緊表（章節號以 v7 為準）。**收緊**（鎖死化、加備註、加審核、移除可改的人）＝立即。**放寬**（鎖死→可改、移除備註或審核、增加可改的人、顯示隱藏欄位）＝ `risk=money/legal` ⇒ 必填原因＋`config_ledger` 寫入＋`approvals_required=1`（**另一位最高管理者核准**；申請人不能自核、同一人不能重複投票；只有一位最高管理者時＝必填原因＋確認期＋畫面警告＋通知並留紀錄）＋**確認期**後才生效，期間可撤銷。確認期長度**不是本框架自己的設定**，一律讀設定中心的 `change_control.confirm_period_days`（預設 7 天、下限 1 天、管理者可調；設定中心 §2.2 第 6 點），欄位政策與權限矩陣共用同一個值。畫面上寫成「這個放寬需要另一位最高管理者同意，並在 7 天後生效」。
+**風險與生效（使用者決定）**：變更方向依 1d 的權限矩陣設計稿（分支 `wip/t54-1d-permmatrix-design`，v8）的放寬／收緊表（章節號以 v8 為準）。**收緊**（鎖死化、加備註、加審核、移除可改的人）＝立即。**放寬**（鎖死→可改、移除備註或審核、增加可改的人、顯示隱藏欄位）＝ `risk=money/legal` ⇒ 必填原因＋`config_ledger` 寫入＋`approvals_required=1`（**另一位最高管理者核准**；申請人不能自核、同一人不能重複投票；只有一位最高管理者時＝必填原因＋確認期＋畫面警告＋通知並留紀錄）＋**確認期**後才生效，期間可撤銷。確認期長度**不是本框架自己的設定**，一律讀設定中心的 `change_control.confirm_period_days`（預設 7 天、下限 1 天、管理者可調；設定中心 §2.2 第 6 點），欄位政策與權限矩陣共用同一個值。畫面上寫成「這個放寬需要另一位最高管理者同意，並在 7 天後生效」。
 **快取與一致性**：`evaluate` 經 `settings.get`/`perm.can` 讀政策與能力，兩者共用 `config_epoch` 失效機制（快取命中時最多每 2 秒檢查一次 `MAX(config_changes.id)`／`MAX(config_change_events.id)`；本行程發布後立即清；TTL 15 秒保底）；每個請求只載入一次（同一請求內的政策不變）。
 
 ### 2.2.1 邊界與例外群組（審查 ext）
@@ -100,7 +100,7 @@
 | `case.stages` | 案件進度階段 | 案件 | 案件成員（有自己的端點） | 階段、指派與拜訪；`PUT` 會忽略階段欄位，改動走專屬端點 | ops | 增加可改的人 |
 | `case.files` | 附件檔案 | 案件 | 案件成員（`case.quote_files.edit`） | 上傳照片與文件；只能動自己名下的檔案路徑（§3） | ops | 鎖住→可改 |
 | `settlement` | 精算結果 | 案件（精算） | 有財務檢視權限者；完結後只有最高管理者（`case.quote_cost.edit`） | 實際成本與利潤；完結後修改必填原因；解鎖編輯改價不重算利潤（§8 已決定） | money | 完結後允許更多人修改、取消必填原因 |
-| `delete` | 刪除 | 案件 | 依 `case.quotation.delete`（重用既有） | 刪除報價單；進回收筒 30 天內可還原；預設只有草稿可刪 | money | 允許刪除草稿以外的狀態、移除備註 |
+| `delete` | 刪除 | 案件 | 依 `case.quotation.delete`（重用既有） | 刪除報價單；進回收筒後在保存期內（預設 30 天，設定 `recyclebin.retention_days`）可還原；預設只有草稿可刪 | money | 允許刪除草稿以外的狀態、移除備註 |
 
 不進政策的項目（伺服器擁有）見 §3；管銷比率（`overhead`）由「簽核與管銷設定」管，不在這張表。其他單據（請購、採購、費用單據、勞報單、派發、匯款單、完工單、出貨單）由各自擁有模組用同一張表格式登錄，**缺任何一欄（擁有模組、畫面名稱、影響說明、風險、放寬方向）＝登錄失敗**（守門）。
 
