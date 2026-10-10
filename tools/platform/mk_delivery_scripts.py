@@ -52,6 +52,11 @@ def letters_seq(start: str, count: int) -> list:
     return out
 
 
+def _read(path) -> str:
+    """範本一律讀成 LF（Windows 上 git autocrlf 可能把工作樹檔轉成 CRLF，CRLF 的 .sh 在 bash 會壞）。"""
+    return Path(path).read_bytes().decode("utf-8").replace("\r\n", "\n")
+
+
 def sh_quote(text: str) -> str:
     return "'" + text.replace("'", "'\\''") + "'"
 
@@ -74,9 +79,9 @@ def _sha(x: str, name: str) -> str:
 def render_publish(train, gated, pkgname, branch, wt, pkgroot, draft, audit_text, drill_text, letters_from, letters_to, letter_count,
                    prev=None, patches=(), verify_anchor=None):
     prev = train - 1 if prev is None else prev
-    anchor = verify_anchor or (TPL / "verify_anchor.txt").read_text(encoding="utf-8").rstrip("\n")
+    anchor = verify_anchor or _read(TPL / "verify_anchor.txt").rstrip("\n")
     lf, lt = letters_seq(letters_from, letter_count), letters_seq(letters_to, letter_count)
-    return _fill((TPL / "publish.sh.tpl").read_text(encoding="utf-8"), {
+    return _fill(_read(TPL / "publish.sh.tpl"), {
         "TRAIN": str(train), "PREV": str(prev), "THIS_CN": cn_number(train), "PREV_CN": cn_number(prev),
         "GATED": _sha(gated, "gated"), "PKGNAME": pkgname, "BRANCH": branch, "WT": wt, "PKGROOT": pkgroot, "DRAFT": draft,
         "AUDIT_TEXT_SH": sh_quote(audit_text), "DRILL_TEXT_SH": sh_quote(drill_text),
@@ -86,7 +91,7 @@ def render_publish(train, gated, pkgname, branch, wt, pkgroot, draft, audit_text
 
 
 def render_push(train, gated, old_platform, branch):
-    return _fill((TPL / "push_baseline.sh.tpl").read_text(encoding="utf-8"), {
+    return _fill(_read(TPL / "push_baseline.sh.tpl"), {
         "TRAIN": str(train), "GATED": _sha(gated, "gated"), "GATED8": gated[:8], "OLD_PLATFORM": _sha(old_platform, "old-platform"), "BRANCH": branch,
     })
 

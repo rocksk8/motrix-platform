@@ -79,3 +79,13 @@ def test_rendered_scripts_parse_with_bash(tmp_path):
         f.write_text(text, encoding="utf-8", newline="\n")
         r = subprocess.run(["bash", "-n", name], cwd=str(tmp_path), capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
+
+
+def test_rendered_output_is_lf_only_even_if_templates_were_checked_out_as_crlf(tmp_path, monkeypatch):
+    tpl = tmp_path / "tpl"
+    tpl.mkdir()
+    for f in M.TPL.iterdir():
+        if f.suffix in (".tpl", ".txt"):
+            (tpl / f.name).write_bytes(f.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+    monkeypatch.setattr(M, "TPL", tpl)
+    assert "\r" not in _pub() and "\r" not in M.render_push(54, G, OLD, "train/t54-int")
