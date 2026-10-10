@@ -138,8 +138,8 @@
 ## 7 與設定中心共用的稽核／待生效層：`helpers/config_ledger`（與 node-39 `SETTINGS-CENTER-DESIGN-T54` §2 一致的協議）
 **原則：不建第二套版本表。** 版本、差異、還原留在各 domain 自己的儲存（權限＝`perm_versions`；設定＝`core/definitions.py` 的 `ui_definitions`／kind `setting_group`）。`config_ledger` 只做兩件那些儲存沒有的事：**變更明細**與**待生效狀態**。L1、只增不改、不 import 任何 L2。
 1. **寫入**：`record(conn, domain, key, changes, reason, actor, *, ip="", effective_at=None, risk="none", approvals_required=0, ref_version=None) -> change_id`（`risk ∈ none|ops|money|legal|security`）；`changes=[{field, old, new}]`；`domain` ＝ `perm` 或 `setting:<群組>`。與被改的資料**同一交易**寫入；同交易寫 `audit_log`（action `<domain>.change`）；`risk >= money`（view_money／approve／pay／delete／view_sensitive 等）時通知其他 superadmin。
-2. **表（只增不改）**：`config_changes(id, at, domain, key, field, old_json, new_json, reason, actor, ip, effective_at, risk, ref_version, batch_id)`，DB 觸發器擋 UPDATE／DELETE；**狀態不放在這張表**，改記 `config_change_events(id, change_id, event, actor, reason, at)`，`event ∈ {pending, activated, cancelled, superseded}`，現況＝最後一筆（無事件＝立即生效的一般變更）。
-3. **待生效 API**（只存與轉態，不決定效力）：`pending(domain=None)`、`cancel(change_id, actor, reason)`（寫 `cancelled` 事件、通知申請人）、`activate_due(now)`（把 `effective_at <= now` 且仍 pending 的轉 `activated`、寫稽核、通知；由 5 分鐘工作呼叫，**漏跑不影響效力**）、純函式 `in_effect(row, now)`（`effective_at` 空或已到、且最後事件不是 cancelled／superseded）。**`in_effect` 只在帳本裡實作一份**（含核准票數與確認期判斷）；`perm.can()`／`settings.get()` 在讀取時**呼叫它**，domain 不得自己重寫（§10.2）。
+2. **表（只增不改）**：`config_changes(id, at, domain, key, field, old_json, new_json, reason, actor, ip, effective_at, risk, approvals_required, ref_version, batch_id)`，`risk ∈ none|ops|money|legal|security`，DB 觸發器擋 UPDATE／DELETE；**狀態不放在這張表**，改記 `config_change_events(id, change_id, event, actor, reason, at)`，**`event ∈ {pending, approved, activated, cancelled, superseded}`（五種）**，現況由事件序列推得（無事件＝立即生效的一般變更）。`approved`＝一張核准票（申請人不能自核、同一人不能重複投票）。
+3. **待生效 API 與唯一的 `in_effect`**：`record(…)` 寫變更（高風險放寬寫 `pending` 事件）；`approve(change_id, actor)` 投票（寫 `approved`）；`cancel(change_id, actor, reason)`（寫 `cancelled`、通知申請人）；`activate_due(now)`（把到期且條件已滿足者寫 `activated`、稽核、通知；5 分鐘工作呼叫，**漏跑不影響效力**）；`pending(domain=None)`。**唯一的效力判斷** `in_effect(change, now)` **只在帳本實作一份**，規則：最後事件不是 `cancelled`／`superseded`；`now >= effective_at`；且有效核准票數（只計仍在職、仍是最高管理者的核准人）≥ `approvals_required`（該值於申請時固定，§10.8）。`perm.can()`／`settings.get()` 讀取時**呼叫它**，不得各自重寫。
 4. **版本與還原**：`register_domain(domain, label, snapshot_fn, restore_fn, diff_fn, reason_required_fn=None)`；ledger 只提供「歷史」查詢 `history(domain, key)` 與統一的「還原＝新版本、歷史不改」呼叫流程。`perm` → `perm_versions`；`setting:*` → `ui_definitions`（`definitions.versions/restore/diff`）。還原含待生效項 ⇒ domain 的 restore 負責一併 cancel。
 5. **既有表**：R1／R2 職責角色的 `permission_changes`（含只增不改觸發器）**不搬資料、不雙寫**，仍是 `duty` domain 的明細；權限矩陣的新變更只寫 `config_changes`（domain `perm`）。稽核報表以 UNION 呈現，避免兩份漂移。
 6. **誰先做**：設定中心 S0（第一批不用待生效）先實作並上線 `config_ledger` 的 1、2、4 與 `history`；權限矩陣 P1 再加 3（待生效 API、`activate_due` 工作、`in_effect`）——介面現在就定死，後補不改簽名。設定第二批的 K04（登入安全）也走待生效層。
@@ -264,7 +264,7 @@
 
 ### 10.5 其他必修與建議
 - **（6）勞報單送出的種子**：`POST /api/payslips/{no}/submit` 今天是 `_require_user(require_superadmin=True)`（`payslip_approval.py:123`），**沒有財務閘可抄**——§2.1 的『抄最近既有閘』在此為**明列例外**：`payroll.payslip.submit` 種子＝`{"superadmin": true}`。頁面在這一題旁明寫：「勾選『送出』只代表可以送去審核，**不代表**是簽核人；簽核人仍由簽核流程設定決定。」
-- **（7）中樞卡片**（已與 b5 對齊）：卡片宣告選填 `cap`；中樞呼叫單一提供者 `("perm.can","permmatrix")`＝`fn(user, cap) -> bool`（模組缺席 ⇒ 沿用卡片原本的 perm 宣告＝今天的行為）。選單能力鍵格式＝`<單位>.<頁面檔名去 .html、- 換 _>.menu`（L1 頁面單位為 `core`，例：`core.users.menu`、`arap.cashier.menu`），由 `capabilities.menu_cap_key(unit, href)` 產生、不手打。矩陣變更時呼叫所有 `("perm.changed", <名稱>)` 提供者（中樞登記 `clear_cache`）。守門：中樞的 parity 測試比對卡片宣告與頁面的**種子**宣告；關卡 C 比對種子矩陣下的可見集合。
+- **（7）中樞卡片**（已與 b5 對齊）：卡片宣告選填 `cap`；中樞呼叫單一提供者 `("perm.can","permmatrix")`＝`fn(user, cap) -> bool`（模組缺席 ⇒ 沿用卡片原本的 perm 宣告＝今天的行為）。選單能力鍵格式＝`<單位>.<頁面檔名去 .html、- 換 _>.menu`（L1 頁面單位為 `core`，例：`core.users.menu`、`arap.cashier.menu`），由 `capabilities.menu_cap_key(unit, href)` 產生、不手打。矩陣變更時呼叫所有 `("perm.changed", <名稱>)` 提供者（中樞登記 `clear_cache`）——**這只是『本程序』的即時清快取掛鉤**，不是跨程序機制；跨程序一致性的唯一依據是 (8) 的 `config_epoch`（其他程序最多 2 秒後重載）。守門：中樞的 parity 測試比對卡片宣告與頁面的**種子**宣告；關卡 C 比對種子矩陣下的可見集合；**選單能力鍵格式守門**（中樞程式碼只檢查非空字串，所以由我們補）：`capabilities.menu_cap_key(unit, href)` 是唯一的產生器，並提供 `valid_menu_cap(cap)`（格式 `<單位>.<頁面>.menu`、單位為已載入模組鍵或 `core`）；`test_menu_cap_keys`（我方）與中樞 parity 測試（b5）都用它核對『每個宣告的選單能力＝產生器的輸出』。
 - **（8）快取失效與效能預算（PM 決定：只用一套機制）**：沿用設定中心的 **`config_epoch`**＝（`MAX(config_changes.id)`、`MAX(config_change_events.id)`）兩個數；各程序**至少每 2 秒**重查一次 epoch，變了就重載矩陣，另有 15 秒的硬 TTL。**不再另設單調版本號列**。因為矩陣的每個變更（含待生效轉態、撤銷、核准）都經帳本，epoch 一定會動。再加『**到下一個時間界線就失效**』：快取的有效期限＝`min(2 秒查詢間隔下的 epoch、最近的未來 effective_at／valid_to／代理到期)`，所以到時間才生效或到期的授予不必等 epoch 變動（此規則同步加進設定中心）。預算：`can()` 快取命中 P95 ≤ 0.2 ms、重載 P95 ≤ 50 ms、單請求只算一次生效集合；以微基準測試守。**授權矩陣金標**（B 層）只收**已遷移的路由**×7 種帳號（每路由一行位元遮罩），未遷移者仍由路由金標與匿名掃描守；行數設上限棘輪（超過需註明原因）。
 - **（9）緊急開關與回溯驗證**：環境變數 `MOTRIX_PERM_LEGACY_ONLY=1` ⇒ `perm.can()` 只用種子（忽略矩陣覆寫與代理＝今天的行為）；與 `MOTRIX_SETTINGS_DEFAULTS_ONLY` 同層級、不改資料庫。回溯／預設組合套用時以**目前的能力登錄**重新驗證：已移除或不可委派的能力略過並在摘要說明，不套用。
 - **（10）版本邊界涵蓋能力**：`capabilities.set_edition_bounds(unit_or_pattern, allowed, delegable)` 由授權載入器設定（客戶無 API 可改），與矩陣取交集——例：基本版 `payroll.*` 不可用、不可委派能力清單固定；頁面顯示「此版本不提供」並禁用該格。
@@ -310,3 +310,12 @@
 - 作廢：「逾期沒有人核准，已自動作廢；需要的話請重新申請。」
 - 已撤銷：「由 王小明 在 10/12 撤銷：原因……」
 句子由 `perm_text` 依帳本狀態產生（輸出沿用既有的『無代碼、無代名詞』守門）；每種狀態各有一題測試。
+
+### 10.10 可併入專案級總表的摘要（供 node-39 合併；人日、單人）
+| 區塊 | 內容 | 人日 |
+|---|---|---|
+| 權限框架 F0–F2 | 能力登錄／`perm`／種子基準／關卡 A／版本邊界／緊急開關／快取；資料層改用帳本＋雙人核准＋代理；問句式頁面 | 36–44 |
+| 選單能力＋中樞 | `menu` 能力、選單／中樞卡片改讀能力、關卡 C、鍵格式守門 | 5–6 |
+| 代理統一 | `approval_delegates` 併入（正反向讀點、切換旗標、唯讀、回滾工具、關卡 D、acting-as 留痕） | 9–11 |
+| 逐模組遷移 P2a–P3 | payroll＋arap 6–8；case＋subcontract 12–14；accounting／supply／其餘 7–9；legacy routers 3–4；前端 150 處 4–5 | 32–40 |
+| **權限專案合計** | （與 §10.6 同一組數字，不含 `config_ledger` 核心與設定中心） | **82–101**（其中遷移前的框架與統一部分約 50–61、逐模組遷移 32–40） |
