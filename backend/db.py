@@ -5831,20 +5831,19 @@ _MIGRATIONS = [
 
 # ── Entity code helper ────────────────────────────────────────────────────────
 
-def next_entity_code(conn, table: str, prefix: str, code_col: str = "code", reserved=None) -> str:
+def next_entity_code(conn, table: str, prefix: str, code_col: str = "code") -> str:
     """Return next available code like C-202507-001 (or DN-202508-001 for a
     multi-char prefix) for entity tables. table/prefix/code_col must be
     trusted internal constants (not user input).
     `reserved`（第 53 班）：暫存區裡還在的單據編號集合——編號取最大值是看『現存的列』，刪掉最新一張後會重用它的號碼，還原時就撞號。
-    沒傳 ⇒ 自己向暫存區要（所有類型；編號帶前綴、不會互撞）：所有呼叫端（請款單、收款憑據、完工單、出貨單…）一律不重發暫存區裡的號碼；暫存區模組不在 ⇒ 空集合。
+    自己向暫存區要保留號（所有類型；編號帶前綴、不會互撞）：所有呼叫端（請款單、收款憑據、完工單、出貨單…）一律不重發暫存區裡的號碼；暫存區模組不在 ⇒ 空集合。
     """
     month = datetime.now().strftime("%Y%m")
-    if reserved is None:
-        try:
-            from helpers import recycle_bin as _rb
-            reserved = _rb.reserved_ids(conn, "") or ()
-        except Exception:                                  # noqa: BLE001 — 暫存區讀不到不可讓開單失敗（最壞＝回到舊行為）
-            reserved = ()
+    try:
+        from helpers import recycle_bin as _rb
+        reserved = _rb.reserved_ids(conn, "") or ()
+    except Exception:                                      # noqa: BLE001 — 暫存區讀不到不可讓開單失敗（最壞＝回到舊行為）
+        reserved = ()
     pattern = f"{prefix}-{month}-???"
     code_len = len(prefix) + 11   # prefix '-' YYYYMM '-' NNN
     seq_start = len(prefix) + 9    # 1-based SUBSTR offset of the NNN part

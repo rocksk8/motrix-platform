@@ -339,11 +339,10 @@ def test_completion_note_number_is_not_reissued_while_in_the_bin(client, who):
     cn = db.get_db()
     try:
         default = db.next_entity_code(cn, "completion_notes", "CN", code_col="note_no")
-        old = db.next_entity_code(cn, "completion_notes", "CN", code_col="note_no", reserved=set())
-        explicit = db.next_entity_code(cn, "completion_notes", "CN", code_col="note_no", reserved=RA.reserved(cn, "completion_note"))
+        explicit = RA.reserved(cn, "completion_note")
     finally:
         cn.close()
-    assert old == first and default != first and explicit != first   # 預設就跳過暫存區裡的號碼；明確傳空集合＝舊行為（只給測試用）
+    assert default != first and first in explicit                    # 預設就跳過暫存區裡的號碼
     assert client.post("/api/recycle-bin/%d/restore" % _bin_rows()[0]["id"], headers=su).status_code == 200
 
 
@@ -414,6 +413,8 @@ def test_default_numbering_skips_the_bin_for_every_caller_including_arap(client)
                        " VALUES (?,?,?,?,?,?,?,?,?,?)", ("tok-" + et, "", et, first, first, "x", "2026-10-10T00:00:00", "2026-11-09", "{}", "in_bin"))
             cn.commit()
             assert db.next_entity_code(cn, table, prefix, code_col=col) == "%s-%s-002" % (prefix, month)       # 已刪那張的號碼不重發
-            assert db.next_entity_code(cn, table, prefix, code_col=col, reserved=set()) == first              # 明確傳空集合 ⇒ 舊行為（測試用）
+            cn.execute("UPDATE recycle_bin SET restore_status='restored' WHERE token=?", ("tok-" + et,))        # 還原後釋放
+            cn.commit()
+            assert db.next_entity_code(cn, table, prefix, code_col=col) == first
         finally:
             cn.close()
