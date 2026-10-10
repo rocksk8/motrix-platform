@@ -64,6 +64,15 @@ def _open(path, write):
     return conn
 
 
+def _force_charity_direct(conn, now):
+    """第 52 班：管銷口徑退回 legacy（mode legacy／rollback）時，公益基數 total 一併失效——與伺服器 PUT /api/overhead/settings ruleMode=legacy 同一規則：
+    charity_basis_mode 設回 direct、刪 charity_migration_done 標記（否則之後重跑 recalc --set-mode-v2，重遷移的單是未戴戳記的直接毛利基，卻被 charity_basis()=total 當成新基 ⇒ 混基）。
+    再次啟用公益新基必須重跑 tools/charity_migrate.py recalc --apply --set-total。"""
+    if _get(conn, "charity_basis_mode") is not None:
+        _put(conn, "charity_basis_mode", "direct", now)
+    conn.execute("DELETE FROM system_settings WHERE key=?", ("charity_migration_done",))
+
+
 def _backup(path, stamp):
     dst = "%s.pre_overhead_%s.bak" % (path, stamp)
     src = sqlite3.connect(path)
@@ -163,6 +172,7 @@ def main(argv=None):
                 _put(conn, MODE_KEY, a.value, now)
                 if a.value == "legacy":                             # 與伺服器一致：退回 legacy 就刪完成標記 ⇒ 之後再切 v2 必須重新 recalc（防止新舊口徑的單混在一起）
                     conn.execute("DELETE FROM system_settings WHERE key=?", (DONE_KEY,))
+                    _force_charity_direct(conn, now)
                 conn.execute("COMMIT")
             return 0
         default_pct = a.pct or str(_get(conn, PCT_KEY, R.DEFAULT_PCT))
@@ -192,6 +202,7 @@ def main(argv=None):
                 if n:
                     _put(conn, MODE_KEY, "legacy", now)               # 回到 legacy 並移除完成標記（伺服器隨即只認 legacy）
                     conn.execute("DELETE FROM system_settings WHERE key=?", (DONE_KEY,))
+                    _force_charity_direct(conn, now)                  # 第 52 班：公益新基一併退回 direct（見 _force_charity_direct）
                 _put(conn, LOG_KEY, (_get(conn, LOG_KEY, []) or [])[-19:] + [{"at": stamp, "op": "rollback", "n": n}], now)
                 conn.execute("COMMIT")
                 print("已還原 %d 張" % n)

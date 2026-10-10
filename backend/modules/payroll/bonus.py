@@ -156,7 +156,7 @@ SETTLEMENT_ROWS = (
     ("grossProfit",     "真實毛利",         "money", ""),
     ("grossMarginPct",  "真實毛利率",       "pct1",  ""),
     ("adminCost",       "管銷分攤",        "money", ""),   # 括號內的基數說明由 row_label() 依 summary.formulaVer／overheadPct 組（第 48 班）
-    ("charityDonation", "公益捐款（1%）",   "money", ""),
+    ("charityDonation", "公益捐款（1%）",   "money", ""),   # 顯示時 row_label() 依 summary.charityBasis 換成『（報價含稅 1%）』／『（直接毛利 1%）』（第 52 班）
     ("netProfit",       "真實營業利益",         "money", "（＝獎金分潤基數）"),
     ("netMarginPct",    "真實營業利益率",       "pct1",  ""),
 )
@@ -165,6 +165,8 @@ SETTLEMENT_ROWS = (
 def row_label(key, label, summary):
     """精算明細表的列標籤。只有管銷分攤列會變：新口徑（summary.formulaVer>=2）＝「管銷分攤（直接毛利 N%）」，
     舊口徑（沒有戳記／1）＝「管銷分攤（報價稅前 10%）」。N 是該案存下來的百分比（每案可調），不是寫死 25。"""
+    if key == "charityDonation":                    # 第 52 班：新基（summary.charityBasis=total）＝報價含稅 1%；無戳記＝舊基（直接毛利 1%）
+        return label.replace("（1%）", "") + ("（報價含稅 1%）" if (summary or {}).get("charityBasis") == "total" else "（直接毛利 1%）")
     if key != "adminCost":
         return label
     s = summary or {}

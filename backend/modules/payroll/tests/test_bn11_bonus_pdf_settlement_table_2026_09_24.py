@@ -41,7 +41,7 @@ def _rows(html):
     out = []
     for m in re.finditer(r"<tr><td>(.*?)</td><td class='num'>(.*?)</td></tr>", html):
         lbl = re.sub(r"<small>.*?</small>", "", m.group(1))
-        if lbl in labels or lbl.startswith("管銷分攤（"):          # 第 48 班：管銷列的括號內說明依 summary 口徑組（row_label）
+        if lbl in labels or lbl.startswith("管銷分攤（") or lbl.startswith("公益捐款（"):          # 第 48/52 班：管銷／公益列的括號內說明依 summary 口徑組（row_label）
             out.append((lbl, re.sub(r"<small>.*?</small>", "", m.group(2))))
     return out
 
@@ -51,7 +51,7 @@ def _rows(html):
 #:    把常數兩列對調 ⇒ PDF 跟著對調 ⇒ 題照樣綠（驗到的是自己設的值）。
 _SPEC_ORDER = (
     "報價稅前收入", "品項實際成本", "額外支出", "承攬商派發成本", "實際總成本",
-    "真實毛利", "真實毛利率", "管銷分攤（報價稅前 10%）", "公益捐款（1%）", "真實營業利益", "真實營業利益率",
+    "真實毛利", "真實毛利率", "管銷分攤（報價稅前 10%）", "公益捐款（直接毛利 1%）", "真實營業利益", "真實營業利益率",
 )
 
 
@@ -66,7 +66,7 @@ def test_bn11_the_values_are_the_stored_ones_not_recomputed():
     assert vals["管銷分攤（報價稅前 10%）"] == "NT$ 7,777", (
         "管銷分攤印的是 %r —— 存值是 7,777（刻意不等於 10%%）。\n" % vals["管銷分攤（報價稅前 10%）"]
         + "☠️ 印出 10,000 表示 PDF 自己重算了，而規格要求值一律來自精算存值。")
-    assert vals["公益捐款（1%）"] == "NT$ 333"
+    assert vals["公益捐款（直接毛利 1%）"] == "NT$ 333"
     assert vals["額外支出"] == "NT$ 3,500"
     assert vals["真實營業利益"] == "NT$ 35,390"
     assert vals["真實營業利益率"] == "35.4%"
@@ -83,7 +83,9 @@ def test_bn11_settlement_page_still_carries_every_label_verbatim():
     """🔴 **誤報時改這一題，不要改 `settlement.html` 的文案。**"""
     from modules.payroll.bonus import SETTLEMENT_ROWS
     src = (FRONTEND / "settlement.html").read_text(encoding="utf-8")
-    missing = [lbl for _k, lbl, _kind, _n in SETTLEMENT_ROWS if lbl not in src]
+    # 第 52 班：公益列的括號內說明依基數戳記（row_label／settlement.html charityLbl），頁面以『直接毛利 1%』『報價含稅 1%』兩種字樣承載
+    missing = [lbl for k, lbl, _kind, _n in SETTLEMENT_ROWS
+               if lbl not in src and not (k == "charityDonation" and "公益捐款（直接毛利 1%）" in src and "公益捐款（報價含稅 1%）" in src)]
     assert not missing, (
         "`SETTLEMENT_ROWS` 的這些標籤在 settlement.html 找不到：%r\n" % missing
         + "⇒ 兩份精算表的列已經分岔。先確認是哪一邊改了、該不該改；"

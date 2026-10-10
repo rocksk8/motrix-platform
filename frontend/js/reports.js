@@ -607,6 +607,10 @@ function reportsApp() {
       if (!(Number(ver) >= 2)) return '管銷分攤（報價稅前 10%）'
       return pct == null ? '管銷分攤（直接毛利）' : '管銷分攤（直接毛利 ' + Number(pct) + '%）'
     },
+    stlCharityLabel(sm, orig) {   // 第 52 班：公益列標籤依基數戳記（同式 pdf_gen.charity_cost_label）
+      sm = sm || {}
+      return (orig ? sm.origCharityBasis : sm.charityBasis) === 'total' ? '公益捐款（報價含稅 1%）' : '公益捐款（直接毛利 1%）'
+    },
     stlFmt(n) { return 'NT$ ' + (Math.round(n || 0)).toLocaleString() },
     stlSummary() { return (this.settlement && this.settlement.settlement && this.settlement.settlement.summary) || {} },
     stlItems()   { return (this.settlement && this.settlement.settlement && this.settlement.settlement.items)   || [] },

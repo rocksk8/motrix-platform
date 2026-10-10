@@ -22,13 +22,13 @@ VECTORS = json.loads((pathlib.Path(__file__).parent / "data" / "profit_rules_vec
 def _run(c):
     fn, a, ver, pct = c["fn"], c["args"], c["ver"], c["pct"]
     if fn == "quote":
-        return P.quote_profit(a[0], a[1], a[2], a[3], pct, ver)
+        return P.quote_profit(a[0], a[1], a[2], a[3], pct, ver, c.get("total"), c.get("basis"))
     if fn == "settlement":
-        return P.settlement_profit(a[0], a[1], pct, ver, a[2])
+        return P.settlement_profit(a[0], a[1], pct, ver, a[2], c.get("total"), c.get("basis"))
     if fn == "adminCost":
         return P.admin_cost(a[0], a[1], pct, ver)
     if fn == "charity":
-        return P.charity(a[0])
+        return P.charity(a[0], c.get("total"), c.get("basis") or "direct")
     return P.pct_rate(a[0])
 
 
@@ -97,10 +97,10 @@ const P = require(process.argv[3])
 const cases = JSON.parse(fs.readFileSync(process.argv[4], 'utf8')).cases
 const out = cases.map(c => {
   const a = c.args
-  if (c.fn === 'quote') return P.quote(a[0], a[1], a[2], a[3], c.pct, c.ver)
-  if (c.fn === 'settlement') return P.settlement(a[0], a[1], c.pct, c.ver, a[2])
+  if (c.fn === 'quote') return P.quote(a[0], a[1], a[2], a[3], c.pct, c.ver, c.total, c.basis)
+  if (c.fn === 'settlement') return P.settlement(a[0], a[1], c.pct, c.ver, a[2], c.total, c.basis)
   if (c.fn === 'adminCost') return P.adminCost(a[0], a[1], c.pct, c.ver)
-  if (c.fn === 'charity') return P.charity(a[0])
+  if (c.fn === 'charity') return P.charity(a[0], c.total, c.basis || 'direct')
   return P.pctRate(a[0])
 })
 process.stdout.write(JSON.stringify(out))
@@ -129,3 +129,38 @@ def test_new_basis_ignores_the_five_indirect_items_old_basis_counts_them():
     assert old["totalIndirect"] == 10000 + 370 + 4000 and old["netProfit"] == 37000 - 14370
     assert new["totalIndirect"] == 9250 + 370 and new["netProfit"] == 37000 - 9620
     assert new == P.quote_profit(100000, 60000, 3000, [0] * 5, pct=25, ver=2), "新口徑：給不給五項結果都一樣"
+
+
+# ── 第 52 班：公益捐款基數 total（報價含稅 × 1%，不設下限）──────────────────────
+def test_charity_total_basis_matches_an_independent_oracle_and_has_no_floor():
+    for total in (0, 49, 50, 149, 150, 1050, 105000, 999999):
+        expect = int((Decimal(total) * Decimal("0.01")).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+        assert P.charity(-123456, total, "total") == expect == P.charity(999, total, "total"), "total 基數與直接毛利無關"
+    assert P.charity(5000, -5000, "total") == 0, "負的含稅金額不可變成收入（下限只設在含稅金額上）"
+    r = P.quote_profit(100000, 120000, 6000, [0] * 5, pct=25, ver=2, total=105000, charity_basis="total")
+    assert r["directProfit"] == -26000 and r["adminCost"] == 0 and r["charityDonation"] == 1050, "虧損案照扣（不再下限 0）"
+    assert r["netProfit"] == -26000 - 0 - 1050
+    s = P.settlement_profit(100000, 105000, 25, 2, None, 105000, "total")
+    assert s["charityDonation"] == 1050 and s["netProfit"] == -5000 - 0 - 1050
+
+
+def test_old_basis_and_ver1_are_bit_identical_to_before():
+    for c in VECTORS:
+        if c["fn"] == "quote" and c.get("basis") is None:
+            a = c["args"]
+            assert P.quote_profit(a[0], a[1], a[2], a[3], c["pct"], c["ver"]) == c["expect"]
+    # ver 1 即使被要求 total 基數也維持直接毛利基（最舊口徑不可被悄悄改）
+    a = P.quote_profit(100000, 60000, 3000, [0] * 5, ver=1)
+    assert a == P.quote_profit(100000, 60000, 3000, [0] * 5, ver=1, total=105000, charity_basis="total")
+    assert P.ACTIVE_CHARITY_BASIS == "direct", "預設舊基：上線零行為變更"
+    # 預設不傳基數時 ver 2 仍是舊基
+    assert P.quote_profit(100000, 60000, 3000, [0] * 5, pct=25, ver=2)["charityDonation"] == 370
+
+
+def test_total_basis_requires_the_amount_and_rejects_unknown_basis():
+    with pytest.raises(ValueError):
+        P.charity(1000, None, "total")
+    with pytest.raises(ValueError):
+        P.quote_profit(100000, 60000, 3000, [0] * 5, pct=25, ver=2, charity_basis="total")      # 沒給含稅金額
+    with pytest.raises(ValueError):
+        P.quote_profit(100000, 60000, 3000, [0] * 5, pct=25, ver=2, charity_basis="oops")

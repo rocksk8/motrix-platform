@@ -1704,9 +1704,13 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # 已精算／結案不動；v2 口徑時伺服器重算利潤欄位。用自己的短連線讀現值。
     _oh_conn = get_db()
     try:
-        _oh_row = _oh_conn.execute("SELECT deal_tag, settle_status, data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        _oh_row = _oh_conn.execute("SELECT deal_tag, settle_status, data_json, updated_at FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     finally:
         _oh_conn.close()
+    # 第 52 班：樂觀鎖檢查要排在 prepare() 之前——最高管理者剛在精算頁改過比率（會更新 updated_at）時，開著舊表單的非最高管理者儲存，
+    # 應得到『已被其他人更新』的 409，而不是因為表單帶的比率 ≠ 現值被當成『改比率』而吃 403。後面的同一檢查（寫鎖內）保留。
+    if _oh_row and expected_updated_at and _oh_row["updated_at"] and expected_updated_at != _oh_row["updated_at"]:
+        raise HTTPException(409, "報價單已被其他人更新，請重新載入後再存")
     _oh_change = _PG.prepare(q, user, _oh_row, quote_no) if _oh_row else None
     # 款項日期一律存 YYYY-MM-DD（「2026/09/01」等寫法否則會被報表歸月靜默漏掉）
     for _pi in (((q.get("caseRecord") or {}).get("payment") or {}).get("items") or []):

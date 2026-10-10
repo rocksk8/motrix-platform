@@ -1,5 +1,5 @@
 {
- "core_version": "1.124",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -99,6 +99,7 @@
    "_get_pdf_base": "def()",
    "admin_cost_label": "def(summary, orig=…, hide_default=…)",
    "build_quote_preview_html": "def(q, status, deal_tag, internal=…)",
+   "charity_cost_label": "def(summary, orig=…)",
    "default_overhead_pct": "def()",
    "estimated_margin_label": "def(summary)",
    "fmt_money_blank_zero": "def(n)",
@@ -1021,18 +1022,21 @@
    "validate_transition": "def(current, target)"
   },
   "helper:profit_rules": {
+   "ACTIVE_CHARITY_BASIS": "const",
    "ACTIVE_VER": "const",
+   "CHARITY_DIRECT": "const",
    "CHARITY_RATE": "const",
+   "CHARITY_TOTAL": "const",
    "DEFAULT_OVERHEAD_PCT": "const",
    "FORMULA_VER": "const",
    "LEGACY_ADMIN_RATE": "const",
    "LEGACY_VER": "const",
    "TARGET_MARGIN_PCT": "const",
    "admin_cost": "def(pretax, direct_profit, pct=…, ver=…)",
-   "charity": "def(direct_profit)",
+   "charity": "def(direct_profit, total=…, basis=…)",
    "pct_rate": "def(pct)",
-   "quote_profit": "def(pretax, total_cost, input_vat, indirect_items, pct=…, ver=…)",
-   "settlement_profit": "def(pretax, actual_cost, pct=…, ver=…, frozen_charity=…)"
+   "quote_profit": "def(pretax, total_cost, input_vat, indirect_items, pct=…, ver=…, total=…, charity_basis=…)",
+   "settlement_profit": "def(pretax, actual_cost, pct=…, ver=…, frozen_charity=…, quoted_total=…, charity_basis=…)"
   },
   "helper:receivables": {
    "RECEIVABLES_MISSING": "const",

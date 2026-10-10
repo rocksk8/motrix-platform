@@ -2747,7 +2747,7 @@
                                 <td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)" x-text="caseSettleAdminLabel(caseSettleSummary(), true)"></td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-danger-fg)"
                                     x-text="'− '+caseSettleFmt(caseSettleSummary().origAdminCost)"></td></tr>
-                            <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">公益捐款（1%）</td>
+                            <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)" x-text="caseSettleCharityLabel(caseSettleSummary(), true)"></td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-danger-fg)"
                                     x-text="'− '+caseSettleFmt(caseSettleSummary().origCharity)"></td></tr>
                             <tr style="border-top:1.5px solid var(--line)">
@@ -2788,7 +2788,7 @@
                                 <td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)" x-text="caseSettleAdminLabel(caseSettleSummary())"></td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-danger-fg)"
                                     x-text="'− '+caseSettleFmt(caseSettleSummary().adminCost)"></td></tr>
-                            <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">公益捐款（1%）</td>
+                            <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)" x-text="caseSettleCharityLabel(caseSettleSummary())"></td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-danger-fg)"
                                     x-text="caseSettleCharityText(caseSettleSummary().charityDonation)" data-testid="cm-settle-charity"></td></tr>
                             <tr style="border-top:1.5px solid var(--tone-warning-border)">
