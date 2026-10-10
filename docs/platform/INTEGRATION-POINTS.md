@@ -994,3 +994,30 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 對方不在時 | 提供者不在或單案失敗 ⇒ 匯出欄位留白，不影響其他欄位 |
 | 契約版本 | 1（2026-10-06） |
 | 守門 | `backend/tests/test_shipped_qty_2026_10_06.py::test_case_shipped_summary_provider_and_report_helper` |
+
+## IP-RB1　`recyclebin.adapter`：單據的暫存區轉接（各擁有模組 → M15 recyclebin；多提供者；暫定號，列車定號；2026-10-10，第 53 班 P0）
+
+擁有單據的模組告訴暫存區『這種單據怎麼快照、怎麼刪資料列、怎麼還原』。暫存區不認識任何單據；擁有模組只 import L1 契約 `helpers/recycle_bin.py`，不 import `modules.recyclebin`。設計 `plans/RECYCLE-BIN-DESIGN-T52.md`。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | 每個有可刪單據的 L2 模組（P1 起；P0 沒有任何提供者）。慣例檔名 `modules/<key>/recycle_adapter.py`（守門免登記其中的 `DELETE FROM`／刪檔） |
+| 使用方 | M15 `modules/recyclebin/service.py`（刪除、還原、清除、列表） |
+| 形式 | provider，多提供者，名稱＝`entity_type` |
+| 語法 | 提供：`ModuleSpec.providers[("recyclebin.adapter", "<entity_type>")] = lambda: MyAdapter()`；取用：`helpers.recycle_bin.adapters()` ⇒ `{entity_type: Adapter}` |
+| 介面 | `Adapter.can_delete`（沿用現行刪除規則，不放寬）、`can_delete_approved`、`impact`、`snapshot`（`{rows:{表:[列]}, files:[{root,rel}], label, parent, meta}`）、`delete_in_tx`（只刪資料列）、`restore_in_tx`（衝突丟 `BinError('conflict: …')`）、`cascade_children`、`mask` |
+| 對方不在時 | 擁有模組沒載入 ⇒ 該類型沒有 adapter：列表照顯示（標明擁有模組未載入）、還原回 409，不影響其他類型 |
+| 契約版本 | 1（欄位只准加不准改名／刪除） |
+| 守門 | `backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py`（合成 adapter）、`backend/tests/platform/test_recyclebin_guards_t53.py`（沒有刪除路徑被漏掉） |
+
+## IP-RB2　`recyclebin.delete`：把單據送進暫存區（M15 recyclebin → 各擁有模組的刪除端點；單一提供者；暫定號，列車定號；2026-10-10，第 53 班 P0）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M15 `modules/recyclebin/service.py::delete`（名稱 `recyclebin`） |
+| 使用方 | 各擁有模組的刪除端點（P1 起）：`helpers.recycle_bin.delete(conn, entity_type, entity_id, user, reason, approved)`，在自己的寫入交易內呼叫、不 commit |
+| 形式 | provider，單一提供者 |
+| 回傳 | `{"bin_id","token","entity_type","entity_id","purge_after","files","children"}`；不能刪（現行規則）⇒ 丟 `BinError`（原因字串）；快照超過 5 MB ⇒ `BinError('too_large: …')` |
+| 對方不在時 | 暫存區模組不在 ⇒ `delete()` 回 **None**，呼叫端照舊硬刪並在回應與稽核**明說**『未進暫存區』（缺席不可靜默） |
+| 契約版本 | 1 |
+| 守門 | 同 IP-RB1；另 `tests/platform/test_recyclebin_guards_t53.py` 的路由／`DELETE FROM`／直接刪檔三道基線 |

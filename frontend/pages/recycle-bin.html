@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>刪除暫存區 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!--
+    刪除暫存區（L2 模組 recyclebin；第 53 班 P0）：被刪的單據（含附件）先進這裡，30 天內可由最高管理者還原；超過 30 天自動永久清除。
+    - 只有最高管理者看得到（選單 perm=superadmin；所有 /api/recycle-bin 端點也是）。
+    - 列表與詳情的敏感欄位（帳號、身分證、電話、信箱、地址、影像…）已由伺服器遮罩；還原用的原文不經過畫面。
+    - 還原失敗（單號被占用、擁有模組未載入…）＝資料與附件仍在暫存區，狀態「還原失敗」並顯示原因。
+    - 永久刪除不能復原：要輸入「永久刪除」二次確認。
+    - 「刪除已核可」：最高管理者專用，進暫存區（可還原）而不是硬刪；先看影響清單，再輸入單據編號確認。哪些單據類型可用由各擁有模組決定。
+  -->
+  <style>
+    .rb-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 24px 32px 60px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .rb-wrap { max-width: 1280px; }
+    .rb-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 14px 0; }
+    .rb-bar input, .rb-bar select { padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; font-family: inherit; background: #fff; }
+    .rb-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin: 10px 0; font-size: 13px; background: #fff; }
+    .rb-warn { padding: 8px 12px; border-radius: var(--radius); background: #fef3c7; color: #92400e; font-size: 13px; margin: 8px 0; }
+    .rb-err { padding: 8px 12px; border-radius: var(--radius); background: #fee2e2; color: #b91c1c; font-size: 13px; margin: 8px 0; }
+    .rb-ok { padding: 8px 12px; border-radius: var(--radius); background: #dcfce7; color: #166534; font-size: 13px; margin: 8px 0; }
+    table.rb-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.rb-t th, table.rb-t td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border-light); vertical-align: top; }
+    .rb-tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: var(--border-light); }
+    .rb-tag.fail { background: #fee2e2; color: #b91c1c; }
+    .rb-tag.appr { background: #ede9fe; color: #6d28d9; }
+    .rb-btn { padding: 5px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; cursor: pointer; font-size: 12px; font-family: inherit; }
+    .rb-btn.danger { color: #b91c1c; border-color: #fca5a5; }
+    .rb-btn[disabled] { opacity: .5; cursor: default; }
+    .rb-pre { max-height: 360px; overflow: auto; background: var(--border-light); border-radius: var(--radius); padding: 10px; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+    .rb-modal { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; z-index: 50; }
+    .rb-modal > div { background: #fff; border-radius: var(--radius); padding: 18px 20px; width: min(560px, 92vw); max-height: 86vh; overflow: auto; }
+    @media (max-width: 900px) { .rb-main { margin-left: 0; padding: 16px; } }
+  </style>
+</head>
+<body x-data="recycleBinPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="rb-main">
+    <div class="rb-wrap">
+      <div class="pg">
+        <div class="pg__l">
+          <div class="pg__eyebrow">系統</div>
+          <h1 class="pg__t">刪除暫存區</h1>
+          <p class="pg__s">被刪除的單據（含附件）先放在這裡，<b>30 天內</b>可還原；超過 30 天自動永久清除。只有最高管理者看得到。</p>
+        </div>
+      </div>
+
+      <div class="rb-err" data-testid="rb-error" x-show="err" x-text="err"></div>
+      <div class="rb-ok" data-testid="rb-msg" x-show="msg" x-text="msg"></div>
+
+      <div class="rb-card" data-testid="rb-status" x-show="st">
+        <span>暫存區 <b x-text="st && st.counts.in_bin"></b> 筆</span>
+        <span x-show="st && st.counts.restore_failed"> ｜ 還原失敗 <b x-text="st && st.counts.restore_failed"></b> 筆</span>
+        ｜ 隔離檔 <b x-text="st && fmtBytes(st.usedBytes)"></b>（<span x-text="st && st.fileCount"></span> 個檔）
+        ｜ 保存 <b x-text="st && st.retentionDays"></b> 天
+        <div style="color:var(--text-secondary);margin-top:4px">隔離目錄：<span x-text="st && st.dir"></span></div>
+        <div class="rb-warn" x-show="st && st.overWarn">隔離區用量已超過 <span x-text="st && fmtBytes(st.warnBytes)"></span>，請檢查是否有大量待清除項目（不會自動提前清除）。</div>
+      </div>
+
+      <div class="rb-bar">
+        <select x-model="f.status" @change="apply()" data-testid="rb-status-filter">
+          <option value="in_bin">暫存中</option><option value="restore_failed">還原失敗</option><option value="restored">已還原</option>
+          <option value="purged">已清除</option><option value="all">全部</option>
+        </select>
+        <select x-model="f.entity_type" @change="apply()" data-testid="rb-type-filter">
+          <option value="">全部類型</option>
+          <template x-for="(lbl, key) in types" :key="key"><option :value="key" x-text="lbl"></option></template>
+        </select>
+        <input type="search" placeholder="單號／名稱／刪除者" x-model="f.q" @keydown.enter="apply()" data-testid="rb-q">
+        <button class="rb-btn" @click="apply()">查詢</button>
+      </div>
+
+      <table class="rb-t" data-testid="rb-table">
+        <thead><tr><th>類型</th><th>單號／名稱</th><th>刪除者</th><th>刪除時間</th><th>剩餘</th><th>附件</th><th>狀態</th><th></th></tr></thead>
+        <tbody>
+          <template x-for="it in items" :key="it.id">
+            <tr :data-testid="'rb-row-' + it.id">
+              <td x-text="types[it.entityType] || it.entityType"></td>
+              <td><b x-text="it.entityId"></b><div style="color:var(--text-secondary)" x-text="it.label !== it.entityId ? it.label : ''"></div></td>
+              <td x-text="it.deletedBy"></td>
+              <td x-text="(it.deletedAt || '').slice(0, 16).replace('T', ' ')"></td>
+              <td><span x-show="it.status === 'in_bin' || it.status === 'restore_failed'" x-text="it.daysLeft + ' 天'"></span></td>
+              <td x-text="it.fileCount ? it.fileCount + ' 個（' + fmtBytes(it.bytes) + '）' : '—'"></td>
+              <td>
+                <span class="rb-tag" :class="{ fail: it.status === 'restore_failed' }" x-text="statusLabel(it.status)"></span>
+                <span class="rb-tag appr" x-show="it.via === 'approved'">已核可單據</span>
+                <div style="color:#b91c1c;font-size:12px" x-show="it.status === 'restore_failed'" x-text="it.restoreNote"></div>
+              </td>
+              <td style="white-space:nowrap">
+                <button class="rb-btn" @click="open(it)" :data-testid="'rb-detail-' + it.id">詳情</button>
+                <button class="rb-btn" x-show="it.status === 'in_bin' || it.status === 'restore_failed'" :disabled="busy" @click="restore(it)" :data-testid="'rb-restore-' + it.id">還原</button>
+                <button class="rb-btn danger" x-show="it.status === 'in_bin' || it.status === 'restore_failed'" :disabled="busy" @click="askPurge(it)" :data-testid="'rb-purge-' + it.id">永久刪除</button>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="loaded && !items.length"><td colspan="8" style="color:var(--text-secondary)" data-testid="rb-empty">沒有符合的項目。</td></tr>
+        </tbody>
+      </table>
+      <div class="rb-bar" x-show="total > size">
+        <button class="rb-btn" :disabled="page <= 1" @click="go(page - 1)">上一頁</button>
+        <span x-text="page + ' / ' + Math.ceil(total / size)"></span>
+        <button class="rb-btn" :disabled="page * size >= total" @click="go(page + 1)">下一頁</button>
+      </div>
+
+      <div class="rb-card" data-testid="rb-approved">
+        <b>刪除已核可單據（最高管理者專用）</b>
+        <div style="color:var(--text-secondary);margin:4px 0 8px">一般刪除仍只限草稿等現行規則。這個入口把<b>已核可</b>的單據也送進暫存區（可還原，不是硬刪），先看影響清單再確認。</div>
+        <div class="rb-warn" x-show="!Object.keys(types).length" data-testid="rb-no-types">目前沒有任何單據類型開放（由各擁有模組提供）。</div>
+        <div class="rb-bar" x-show="Object.keys(types).length">
+          <select x-model="ap.entity_type" data-testid="rb-ap-type">
+            <option value="">選擇單據類型</option>
+            <template x-for="(lbl, key) in types" :key="key"><option :value="key" x-text="lbl"></option></template>
+          </select>
+          <input type="text" placeholder="單據編號" x-model.trim="ap.entity_id" data-testid="rb-ap-id">
+          <button class="rb-btn" :disabled="busy || !ap.entity_type || !ap.entity_id" @click="loadImpact()" data-testid="rb-ap-impact">查看影響</button>
+        </div>
+        <div x-show="ap.loaded" data-testid="rb-ap-result">
+          <div class="rb-err" x-show="!ap.supported" x-text="ap.reason || '此單據不能走這個入口'"></div>
+          <ul x-show="ap.supported" style="margin:6px 0 6px 18px">
+            <template x-for="(im, i) in ap.impact" :key="i"><li x-text="im.label + (im.blocking ? '（會被影響）' : '')"></li></template>
+            <li x-show="!ap.impact.length">沒有已知的下游影響。</li>
+          </ul>
+          <div class="rb-bar" x-show="ap.supported">
+            <input type="text" :placeholder="'再輸入一次單據編號（' + ap.entity_id + '）確認'" x-model.trim="ap.confirm_text" data-testid="rb-ap-confirm">
+            <input type="text" placeholder="原因（選填）" x-model.trim="ap.reason_text">
+            <button class="rb-btn danger" :disabled="busy || ap.confirm_text !== ap.entity_id" @click="deleteApproved()" data-testid="rb-ap-go">送進暫存區</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="rb-modal" x-show="detail" x-cloak @click.self="detail = null" data-testid="rb-detail-modal">
+    <div x-show="detail">
+      <h3 style="margin:0 0 8px" x-text="detail && (detail.entityId + ' — ' + (types[detail.entityType] || detail.entityType))"></h3>
+      <div style="font-size:13px;color:var(--text-secondary)" x-show="detail">
+        刪除者 <span x-text="detail && detail.deletedBy"></span> ｜ <span x-text="detail && (detail.deletedAt || '').slice(0, 16).replace('T', ' ')"></span>
+        ｜ 到期 <span x-text="detail && detail.purgeAfter"></span>
+      </div>
+      <div class="rb-warn" x-show="detail && !detail.adapterAvailable">這種單據的擁有模組目前未載入，無法還原。</div>
+      <div class="rb-warn" x-show="detail && detail.impact && detail.impact.length">
+        刪除當時的影響清單：<template x-for="(im, i) in (detail ? detail.impact : [])" :key="i"><div x-text="'・' + im.label"></div></template>
+      </div>
+      <div style="margin:8px 0 4px"><b>附件</b>（<span x-text="detail && detail.files.length"></span>）</div>
+      <ul style="margin:0 0 8px 18px;font-size:12px"><template x-for="(fl, i) in (detail ? detail.files : [])" :key="i"><li x-text="fl.rel + '（' + fmtBytes(fl.size) + '，' + fl.state + '）'"></li></template></ul>
+      <div style="margin:8px 0 4px"><b>內容</b>（敏感欄位已遮罩）</div>
+      <pre class="rb-pre" data-testid="rb-snapshot" x-text="detail && JSON.stringify(detail.snapshot, null, 2)"></pre>
+      <div style="text-align:right;margin-top:10px"><button class="rb-btn" @click="detail = null" data-testid="rb-detail-close">關閉</button></div>
+    </div>
+  </div>
+
+  <div class="rb-modal" x-show="purgeTarget" x-cloak data-testid="rb-purge-modal">
+    <div x-show="purgeTarget">
+      <h3 style="margin:0 0 8px">永久刪除</h3>
+      <p style="font-size:13px">要永久刪除 <b x-text="purgeTarget && purgeTarget.entityId"></b>（<span x-text="purgeTarget && (types[purgeTarget.entityType] || purgeTarget.entityType)"></span>）及其附件。<b>這個動作不能復原。</b>請輸入「永久刪除」確認：</p>
+      <input type="text" x-model.trim="purgeText" style="width:100%;padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius)" data-testid="rb-purge-input">
+      <div style="text-align:right;margin-top:12px">
+        <button class="rb-btn" @click="purgeTarget = null">取消</button>
+        <button class="rb-btn danger" :disabled="busy || purgeText !== '永久刪除'" @click="purge()" data-testid="rb-purge-go">永久刪除</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function recycleBinPage() {
+      return {
+        _initDone: false,
+        st: null, types: {}, items: [], total: 0, page: 1, size: 50, loaded: false, busy: false, err: '', msg: '',
+        f: { status: 'in_bin', entity_type: '', q: '' },
+        detail: null, purgeTarget: null, purgeText: '',
+        ap: { entity_type: '', entity_id: '', loaded: false, supported: false, reason: '', impact: [], confirm_text: '', reason_text: '' },
+        _hdr() {
+          let s = {}
+          try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {}
+          return { Authorization: 'Bearer ' + (s.token || ''), 'Content-Type': 'application/json' }
+        },
+        init() {
+          if (this._initDone) return                    // <body> 的 x-init 與 Alpine 自動呼叫 ⇒ 不守衛會跑兩遍
+          this._initDone = true
+          this.refresh()
+        },
+        statusLabel(s) { return { in_bin: '暫存中', restored: '已還原', purged: '已清除', restore_failed: '還原失敗' }[s] || s },
+        fmtBytes(n) {
+          n = Number(n) || 0
+          if (n < 1024) return n + ' B'
+          if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB'
+          if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB'
+          return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB'
+        },
+        async _json(url, opt) {
+          const r = await fetch(url, Object.assign({ headers: this._hdr() }, opt || {}))
+          const d = await r.json().catch(() => null)
+          if (!r.ok) throw new Error((d && d.detail) ? (typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail)) : ('失敗（' + r.status + '）'))
+          return d
+        },
+        async refresh() {
+          this.err = ''
+          try {
+            this.st = await this._json('/api/recycle-bin/status')
+            await this.load()
+          } catch (e) { this.err = String(e.message || e) }
+        },
+        async load() {
+          const p = new URLSearchParams({ status: this.f.status, page: String(this.page), size: String(this.size) })
+          if (this.f.entity_type) p.set('entity_type', this.f.entity_type)
+          if (this.f.q) p.set('q', this.f.q)
+          const d = await this._json('/api/recycle-bin?' + p.toString())
+          this.items = d.items; this.total = d.total; this.types = d.types || {}; this.loaded = true
+        },
+        apply() { this.page = 1; this.refresh() },
+        go(n) { this.page = n; this.refresh() },
+        async open(it) {
+          this.err = ''
+          try { this.detail = await this._json('/api/recycle-bin/' + it.id) } catch (e) { this.err = String(e.message || e) }
+        },
+        async restore(it) {
+          if (!confirm('還原 ' + it.entityId + '（連同附件）？')) return
+          this.busy = true; this.err = ''; this.msg = ''
+          try {
+            const r = await this._json('/api/recycle-bin/' + it.id + '/restore', { method: 'POST' })
+            this.msg = '已還原 ' + it.entityId + (r.notes && r.notes.length ? '：' + r.notes.join('；') : '')
+          } catch (e) { this.err = '還原失敗：' + String(e.message || e) }
+          finally { this.busy = false; await this.refresh() }
+        },
+        askPurge(it) { this.purgeTarget = it; this.purgeText = '' },
+        async purge() {
+          const it = this.purgeTarget
+          this.busy = true; this.err = ''; this.msg = ''
+          try {
+            await this._json('/api/recycle-bin/' + it.id + '?confirm=' + encodeURIComponent('永久刪除'), { method: 'DELETE' })
+            this.msg = '已永久刪除 ' + it.entityId
+            this.purgeTarget = null
+          } catch (e) { this.err = '永久刪除失敗：' + String(e.message || e) }
+          finally { this.busy = false; await this.refresh() }
+        },
+        async loadImpact() {
+          this.err = ''; this.ap.loaded = false
+          try {
+            const d = await this._json('/api/recycle-bin/impact?entity_type=' + encodeURIComponent(this.ap.entity_type) + '&entity_id=' + encodeURIComponent(this.ap.entity_id))
+            this.ap.supported = !!d.supported; this.ap.reason = d.reason || ''; this.ap.impact = d.impact || []; this.ap.confirm_text = ''; this.ap.loaded = true
+          } catch (e) { this.err = String(e.message || e) }
+        },
+        async deleteApproved() {
+          this.busy = true; this.err = ''; this.msg = ''
+          try {
+            await this._json('/api/recycle-bin/delete-approved', { method: 'POST', body: JSON.stringify({
+              entity_type: this.ap.entity_type, entity_id: this.ap.entity_id, confirm: true, confirm_text: this.ap.confirm_text, reason: this.ap.reason_text }) })
+            this.msg = this.ap.entity_id + ' 已送進暫存區（30 天內可還原）'
+            this.ap = { entity_type: '', entity_id: '', loaded: false, supported: false, reason: '', impact: [], confirm_text: '', reason_text: '' }
+          } catch (e) { this.err = '送進暫存區失敗：' + String(e.message || e) }
+          finally { this.busy = false; await this.refresh() }
+        },
+      }
+    }
+  </script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/ui.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

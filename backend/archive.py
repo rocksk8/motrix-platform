@@ -2560,6 +2560,9 @@ _F2_FIELDS = {
     # 2026-10-02（31-C 叫料匯款）：供應商（可能是個人）的收款帳戶凍結在申請的 snapshot_json 最上層（戶名、帳號）⇒ 一般份拿掉、完整列只進個資資料夾；
     # 銀行代碼／名稱是機構資訊不列入。模組表宣告 T1 ⇒ 自動進每日 JSON（鍵＝`模組-case-case_material_payments`）；模組未載入時略過。
     "模組-case-case_material_payments": {"table": "case_material_payments", "json": ("snapshot_json", ("bankAccountName", "bankAccountNumber"))},
+    # 2026-10-10（第 53 班 P0，刪除暫存區）：被刪單據的完整快照（含銀行帳號、身分證、電話等原文，還原要用）與隔離檔清單 ⇒ 兩欄整欄是 F2：
+    # 一般每日 JSON 備份排除，完整列只進個資資料夾（本機 sqlite 備份含整表）。模組表宣告 T1 ⇒ 自動進每日 JSON（鍵＝`模組-recyclebin-recycle_bin`）；模組未載入時略過。
+    "模組-recyclebin-recycle_bin": {"table": "recycle_bin", "columns": ("snapshot_json", "files_manifest_json")},
 }
 #: data_json 解析不了時一般份放這個——**不可以原樣照放**（那等於把個資原樣帶進一般份）
 _F2_UNPARSEABLE = "<含個資欄位且無法解析，僅收錄於個資備份>"
