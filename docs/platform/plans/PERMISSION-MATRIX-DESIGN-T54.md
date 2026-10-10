@@ -1,4 +1,4 @@
-# 權限矩陣（勾選制）設計稿 — 第 54 班（v2：併入使用者裁示）
+# 權限矩陣（勾選制）設計稿 — 第 54 班（v3：併入使用者裁示與選單／代理／兼任增補）
 
 > 作者 1d（獨立設計，唯讀；基準 origin/platform `b2486535c`）。**只有設計，沒有程式。** 使用者原話：「權限的部分跟哪一個權限可以送出、填寫的，變成一個獨立頁面，勾選就能放行或是修改，未來也不用單獨寫程式微調……財務我勾選勞報單，他也可以送出審核；某個管理員可以有財務查看，但不能修改……不寫死在系統內，保留彈性跟確認稽核」。
 > **v2 修訂（node-d8 轉述使用者裁示）**：① 動作要再細分 ② 匯出獨立一格 ③ 高風險授權＝必填原因＋24 小時後生效、期間可撤銷（不需第二位 superadmin）④ 勾「核准」只代表允許，簽核人仍由簽核流程設定決定。本版改動：§2 動作詞彙與 §2.1 分類表、§4 待生效授權機制、§5 分期、§6、新增 §7（與 n39 設定盤點共用稽核／版本層）。
@@ -49,7 +49,7 @@
 ## 2 模型：能力登錄＋矩陣＋覆寫
 
 **能力（capability）**＝`<單位>.<物件>.<動作>`，例：`payroll.payslip.submit`、`finance.receivable.view_money`、`case.quotation.delete`。
-- **動作詞彙固定 18 個**（避免各模組自創；單位可再宣告專屬動作，但須有 `risk`）：`view` 檢視、`view_money` 檢視金額、`view_sensitive` 檢視敏感個資（帳號／身分證／電話，今天只有 superadmin）、`create` 填寫新增、`edit` 修改、`submit` 送出審核、`withdraw` 撤回、`approve` 核准、`reject` 退回、`void` 作廢／取消、`pay` 付款／標記已匯款、`delete` 刪除、`export` 匯出、`print` 列印／產 PDF、`attach` 附件上傳／刪除、`comment` 備註／留言、`reassign` 改負責人／指派、`config` 該模組的管理設定。**匯出獨立一格，不由 `view` 帶出**（使用者裁示）。
+- **動作詞彙固定 19 個（v3 加 `menu`，見 §8.1；以下列出原 18 個）**（避免各模組自創；單位可再宣告專屬動作，但須有 `risk`）：`view` 檢視、`view_money` 檢視金額、`view_sensitive` 檢視敏感個資（帳號／身分證／電話，今天只有 superadmin）、`create` 填寫新增、`edit` 修改、`submit` 送出審核、`withdraw` 撤回、`approve` 核准、`reject` 退回、`void` 作廢／取消、`pay` 付款／標記已匯款、`delete` 刪除、`export` 匯出、`print` 列印／產 PDF、`attach` 附件上傳／刪除、`comment` 備註／留言、`reassign` 改負責人／指派、`config` 該模組的管理設定。**匯出獨立一格，不由 `view` 帶出**（使用者裁示）。
 - **每個物件只列「適用的動作」**（見 §2.1），矩陣不是 18×物件的全表；預估登錄能力約 350 條。
 - **登錄**：各模組在 `module.json` 新增 `capabilities: [{key, label, risk: low|mid|high, legacy: "<舊判斷式描述>", implies: […]}]`（**加法、L1 契約 `core/capabilities.py`**，載入時彙整；模組缺席＝能力不存在，畫面不列）。新模組／新端點自己宣告，**不必改權限頁或權限程式**。
 - **舊模組鍵相容**：30 個模組鍵保留，視為「粗粒度別名」＝該模組全部能力的預設集合（`implied_by_module_key`）。`users.modules` 與職責角色**不改格式**。
@@ -150,3 +150,47 @@
 4. **版本與還原**：`register_domain(domain, label, snapshot_fn, restore_fn, diff_fn, reason_required_fn=None)`；ledger 只提供「歷史」查詢 `history(domain, key)` 與統一的「還原＝新版本、歷史不改」呼叫流程。`perm` → `perm_versions`；`setting:*` → `ui_definitions`（`definitions.versions/restore/diff`）。還原含待生效項 ⇒ domain 的 restore 負責一併 cancel。
 5. **既有表**：R1／R2 職責角色的 `permission_changes`（含只增不改觸發器）**不搬資料、不雙寫**，仍是 `duty` domain 的明細；權限矩陣的新變更只寫 `config_changes`（domain `perm`）。稽核報表以 UNION 呈現，避免兩份漂移。
 6. **誰先做**：設定中心 S0（第一批不用待生效）先實作並上線 `config_ledger` 的 1、2、4 與 `history`；權限矩陣 P1 再加 3（待生效 API、`activate_due` 工作、`in_effect`）——介面現在就定死，後補不改簽名。設定第二批的 K04（登入安全）也走待生效層。
+
+## 8 v3 增補：選單能力、代理與兼任、把「寫死」變成可勾選（使用者 10-10 三項要求）
+
+**核心做法不變**：框架＋由今天行為推導的種子；誰勾什麼全由 superadmin 在頁面決定，不新增任何寫死名單（使用者核心規則）。
+
+### 8.1 選單可見度＝獨立的能力種類 `menu`
+- 動作詞彙加第 19 個 **`menu`**（導覽列項目、系統中樞卡片是否出現）。`menu` 與 `view` **各自獨立**：只藏入口不擋 API（API 仍由 `view` 擋）；反之有 `view` 沒有 `menu` ＝能開（直接網址／被連結）但導覽列不顯示。使用者要求的四個獨立勾選＝`menu`／`view`／`edit`／`submit`／`approve`。
+- 宣告：`module.json` 的 `pages[].menu` 新增選填 `cap`（省略＝`<單位>.<頁面鍵>.menu` 自動產生）。**legacy 由現有 `perm` 欄位機械推導**：`"any"`→`{"everyone": true}`（DSL 新葉子＝所有角色）、`"superadmin"`→`{"superadmin": true}`、`[鍵…]`→`{"any": [{"module": 鍵}…]}`——即 `core/menu.py::visible` 的語意，所以**今天的選單規則就是種子**，不必人工翻譯。
+- 消費：選單 builder（`core/menu.py`）與系統中樞卡片改以 `perm.can(user, cap)` 過濾；前端 `MOTRIX_MENU` 宣告改帶 `cap`，登入 payload 帶使用者的 `caps`（含 `menu`）。`perm` 欄位保留為 legacy 來源（棘輪：模組逐步改宣告 `cap`，`perm` 計數只減）。
+- **關卡 C（選單等價）**：每個（角色 × 模組勾選形狀）的「可見選單集合」＝內嵌的 `core/menu.visible` 逐字副本；新舊必須逐項相同。
+
+### 8.2 把寫死變設定——以勞報單送出為第一個遷移（P2a）
+- 今天 `POST /api/payslips/{no}/submit` 是 `_require_user(require_superadmin=True)`：**只有 superadmin**，財務角色不能（核准／退回則是 superadmin 或持有 `payslip` 模組）。
+- 遷移後：宣告 `payroll.payslip.submit`（`legacy: {"superadmin": true}` ⇒ 種子＝只有 superadmin，**上線當天行為不變，關卡 B 證明**）；端點改 `perm.require(user, "payroll.payslip.submit")`。之後 superadmin 在權限頁「角色」分頁於「財務」欄勾這一格，財務就能送出——**不改任何程式**。「某管理員可以有財務查看、不能修改」＝在「人員」分頁給該人 `finance.*.view`／`view_money` 個人允許，不給 `edit`／`pay`。
+
+### 8.3 代理（delegation）與兼任（concurrent role）
+**生效能力＝ 基礎角色格 ∪ 模組鍵展開 ∪ 職責角色（可多個，疊加＝兼任）∪ 有效代理（受 §下列限制）∪ 個人允許 − 個人禁止**；禁止優先於所有來源（含代理）；superadmin 直通。
+- **兼任＝職責角色疊加**：R2 的 `user_duty_roles` 本來就允許一個人綁多個職責角色，矩陣的「欄」就是職責角色 ⇒ 不新增機制。人員分頁顯示「基礎角色＋各兼任角色＋來源」。選配：綁定可帶 `valid_to`（臨時兼任到期自動失效；P1 小改，預設無期限＝現況）。
+- **代理＝統一現有「簽核代理人」`approval_delegates`，不做第二套**：新表 `perm_delegations(id, delegator, delegate, scope_kind caps|doc_types|approval_slot, scope_json, valid_from, valid_to, reason, state pending|active|revoked|expired, requested_by, requested_at, effective_at, revoked_by, revoked_at, revoke_reason, legacy_id)`。
+  - 現有 `approval_delegates` 的每一列遷成 `scope_kind=approval_slot, state=active`（語意＝今天的「代替他在簽核層裡簽」）；`tiered_approval.active_delegators_for()` 改成讀這張表（單一讀點；過渡期同時讀舊表）；`/api/approval-delegates` 舊端點變薄包裝（寫新表）。**關卡 D**：對現有每一列，改前後 `active_delegators_for(delegate, 日期)` 逐日相同。
+  - **範圍**：`caps`（能力清單）或 `doc_types`（單據類型，展開成該類型的 `view/comment/submit/approve…` 能力）；委派的只能是**委派人自己目前有的**能力（不能憑代理升權）、不含不可委派能力、**不可再轉代理**（A→B→C 不傳遞）。
+  - **風險範圍**（含 `view_money／approve／pay／delete／view_sensitive／config`）一律走 24 小時待生效＋可撤銷（與 §4 同一機制，同一張 `perm_pending`／`config_ledger` 事件）；一般範圍立即生效。撤銷與到期立即失效。
+  - **誰能建**：superadmin 任何人；本人替自己建（限非風險範圍）需要能力 `perm.delegation.create_own`（種子＝今天能建簽核代理的人）。
+  - **「代理某某」要留痕**：`perm.can_via()`/`perm.acting_as(user, cap)` 回傳這次是否**只靠代理**才通過、代誰（自己的基礎權限足夠時不算代理）。靠代理完成的動作：稽核 `detail.actingAs=<委派人>`、通知文字「X（代理 Y）…」、單據自己的簽核紀錄同時記**代理人與委派人**（`approvedBy` 加 `onBehalfOf`），簽核歷史／PDF 顯示「X 代 Y」。
+  - **介面**：「代理與兼任」分頁——建立代理（選委派人／被代理人／範圍：能力或單據類型／起訖／原因）、清單（有效／待生效／已撤銷／已到期）、撤銷鈕；被代理人與其他 superadmin 在生效前收到通知。
+
+### 8.4 權限設定頁（系統 > 權限設定）分頁
+**角色（矩陣）｜人員（生效預覽＋每項來源：角色／兼任／代理／個人）｜代理與兼任｜選單（每頁一列的 `menu` 勾選）｜待生效（24 小時內可撤銷）｜變更紀錄／版本**。每格標「已接入／未接入」。
+
+### 8.5 等價證明的影響
+關卡 A（判斷）＋ B（端點授權金標）維持；新增 **C（選單可見集合）**與 **D（代理讀點）**；種子新增 `menu` 能力與 DSL `everyone` 葉子後，A 的窮舉形狀同步擴充。P2a 的 `payroll.payslip.submit` 以 `{"superadmin": true}` 種子，B 金標證明財務帳號仍被擋，之後勾選才改變。
+
+### 8.6 工作量變化（相對 §5 的 49–62 人日）
+| 項目 | 增加 |
+|---|---|
+| `menu` 能力＋選單 builder／中樞卡片改讀能力＋關卡 C＋前端宣告 | +5–6 |
+| 代理統一（`perm_delegations`、遷移、`active_delegators_for` 單一讀點、舊端點包裝、acting-as 留痕、關卡 D、分頁） | +9–11 |
+| 兼任 `valid_to`＋人員分頁來源顯示 | +2 |
+| **合計** | **+16–19 ⇒ 約 65–81 人日**（P0 仍先做框架；代理表介面在里程碑 2 就先建，端點接線隨 P2） |
+
+### 8.7 需要使用者確認
+1. 本人能否自行替自己建「非風險範圍」的代理（預設：能，若今天就是這樣）？風險範圍一律需 superadmin 並 24 小時待生效。
+2. 兼任是否需要到期日（預設選配、不填＝長期）？
+3. 代理期間，被代理人自己是否仍保有同樣權限（預設：是，只是「額外」給代理人；不是轉移）？
