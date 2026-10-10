@@ -146,6 +146,10 @@ def _seed_pii(conn):
     if conn.execute("PRAGMA table_info(user_bank_accounts)").fetchall():     # payroll 模組在（W3 員工收款帳號）
         conn.execute("INSERT INTO user_bank_accounts (user_id, username, bank_code, bank_name, account_name, account_number, active, created_at) "
                      "SELECT MIN(id), MIN(username), '808', '玉山銀行', ?, ?, 1, '2026-10-01' FROM users", (_U_ACCT_NAME, _U_ACCT_NO))
+    if conn.execute("PRAGMA table_info(recycle_bin)").fetchall():     # recyclebin 模組在（第 53 班：快照與隔離檔清單整欄是 F2）
+        conn.execute("INSERT INTO recycle_bin (token, entity_type, entity_id, deleted_at, purge_after, snapshot_json, files_manifest_json) VALUES (?,?,?,?,?,?,?)",
+                     ("0" * 32, "sentinel_doc", "SENT-1", "2026-10-10T00:00:00", "2026-11-09", '{"rows": {"d": [{"bankAccountNumber": "SENT-ACCT-RB"}]}}',
+                      '[{"root": "uploads", "rel": "x/y.pdf", "state": "moved"}]'))
     if conn.execute("PRAGMA table_info(case_material_payments)").fetchall():     # case 模組在（31-C 叫料匯款申請：供應商收款帳戶凍結在 snapshot_json）
         conn.execute("INSERT INTO case_material_payments (doc_code, quote_no, item_id, seq, amount_approved, snapshot_json, status, created_at) VALUES (?,?,?,?,?,?,?,?)",
                      ("MP-20260925-0001", "", "x", 1, 1000,

@@ -134,3 +134,6 @@ tools/platform/full_results/
 # 失敗先行出 log（tools/platform/fail_stream.py）：每次跑一個 JSONL，本機狀態
 tools/platform/fail_stream/
 tools/platform/author_gate_results/
+
+# 刪除暫存區的隔離資料夾（第 53 班；內含被刪單據的附件＝可能有個資，絕不可 git add）
+資源回收筒/

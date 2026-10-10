@@ -1,5 +1,5 @@
 {
- "core_version": "1.125",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1049,6 +1049,38 @@
    "BASIS_NOTES": "const",
    "DEFAULT_BASIS": "const",
    "normalize_basis": "def(v)"
+  },
+  "helper:recycle_bin": {
+   "Adapter": "class",
+   "Adapter.after_commit": "def(self, event, entity_id, snap, result)",
+   "Adapter.can_delete": "def(self, conn, entity_id, user)",
+   "Adapter.can_delete_approved": "def(self, conn, entity_id, user)",
+   "Adapter.cascade_children": "def(self, conn, entity_id)",
+   "Adapter.delete_in_tx": "def(self, conn, entity_id)",
+   "Adapter.entity_type": "field=…",
+   "Adapter.impact": "def(self, conn, entity_id)",
+   "Adapter.label": "field=…",
+   "Adapter.mask": "def(self, snap)",
+   "Adapter.restore_in_tx": "def(self, conn, snap, ctx)",
+   "Adapter.snapshot": "def(self, conn, entity_id)",
+   "BinError": "class",
+   "BinUnavailable": "class",
+   "CAP_ADAPTER": "const",
+   "CAP_DELETE": "const",
+   "CAP_RESERVED": "const",
+   "MASK": "const",
+   "MAX_SNAPSHOT_BYTES": "const",
+   "MAX_SNAPSHOT_BYTES_ADMIN": "const",
+   "RETENTION_DAYS": "const",
+   "RestoreContext": "class",
+   "RestoreContext.__init__": "def(self, files=…, user=…, group=…)",
+   "RestoreContext.file_path": "def(self, root, rel)",
+   "adapters": "def()",
+   "available": "def()",
+   "delete": "def(conn, entity_type, entity_id, user, reason=…, approved=…)",
+   "get_adapter": "def(entity_type)",
+   "mask_obj": "def(obj, _key=…)",
+   "reserved_ids": "def(conn, entity_type=…)"
   },
   "helper:row_access": {
    "ADMIN_ROLES": "const",
