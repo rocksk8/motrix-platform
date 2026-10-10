@@ -50,6 +50,8 @@ from helpers.legal_params import round_half_up
 from modules.subcontract import payable_due as _PD
 from modules.subcontract import remit as _remit
 from modules.subcontract import remit_create as _rc
+from modules.subcontract import recycle_adapter as _rb_adapter  # 第53班 P1：刪除暫存區 adapter
+from helpers import recycle_bin
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -513,31 +515,45 @@ def preview_contractor_voucher(body: VoucherPreviewIn, authorization: str = Head
 
 @router.delete("/api/contractor-vouchers/{voucher_no}")
 def delete_contractor_voucher(voucher_no: str, authorization: str = Header(None)):
+    """刪除匯款申請＝送進刪除暫存區（30 天內最高管理者可還原）。規則不變：只有草稿；分期草稿守 LIFO
+    （已送審／已核准的只有最高管理者能走暫存區的『刪除已核可』入口，`/api/recycle-bin/delete-approved`；已匯款不可）。
+    暫存區模組不在 ⇒ 照舊刪資料列並在回應 notice 與稽核明說。"""
     user = _require_user(authorization)
     _require_admin(user)
     conn = get_db()
     with write_txn(conn):                                                   # 檢查與刪除在同一把寫鎖內（否則檢查後有人新增一期，就刪到中間期）
-        row = conn.execute("SELECT status, voucher_no, dispatch_id, kind, is_paid, voided_at FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+        row = conn.execute("SELECT voucher_no FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
         if not row:
             conn.close()
             raise HTTPException(404, "申請不存在")
-        if row["status"] != "草稿":
+        notice = ""
+        try:
+            res = recycle_bin.delete(conn, _rb_adapter.ET_VOUCHER, voucher_no, user)
+        except recycle_bin.BinError as e:
             conn.close()
-            raise HTTPException(409, "僅草稿狀態可刪除" + ("（已送審的分期申請請用「作廢」）" if row["kind"] else ""))
-        if row["kind"]:                                                     # 分期草稿也守 LIFO：刪中間一期會讓已凍結的補差失準
-            why = _rc.void_blocker(conn, row)
-            if why:
+            raise HTTPException(409, str(e))
+        if res is None:                                                      # 暫存區模組不在：照舊刪並明說
+            ad = _rb_adapter.VoucherBinAdapter()
+            ok, why = ad.can_delete(conn, voucher_no, user)
+            if not ok:
                 conn.close()
                 raise HTTPException(409, why)
-        conn.execute("DELETE FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,))
+            ad.delete_in_tx(conn, voucher_no)
+            notice = "刪除暫存區未啟用：此申請已永久刪除，無法還原"
         conn.commit()
         conn.close()
     _purge_notifications(voucher_no, ['contractor_voucher_approval_request', 'contractor_voucher_approved',
                                        'contractor_voucher_returned', 'approval_reminder'])
-    _audit(_tok(authorization), "contractor_voucher.delete", "contractor_payment_voucher", voucher_no, voucher_no)
+    _audit(_tok(authorization), "contractor_voucher.delete", "contractor_payment_voucher", voucher_no, voucher_no,
+           {"bin": True, "binId": res["bin_id"], "purgeAfter": res["purge_after"]} if res else {"bin": False, "notice": notice})
     notify_module_activity("承攬商匯款申請", "刪除", user.get("display_name") or user["username"],
                             voucher_no, "case-management.html", audience="finance")
-    return {"ok": True}
+    out = {"ok": True, "binned": bool(res)}
+    if res:
+        out.update(binId=res["bin_id"], purgeAfter=res["purge_after"])
+    else:
+        out["notice"] = notice
+    return out
 
 
 @router.patch("/api/contractor-vouchers/{voucher_no}/invoice")
