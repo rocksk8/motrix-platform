@@ -25,9 +25,9 @@
 
 1d 提議 L1 `config_ledger`：變更明細、版本快照與回溯、待生效。定義文件庫**已有**版本、差異、還原、作者、備註，所以建議**不要兩邊各做一套版本表**：
 
-- `config_ledger` 只做兩件定義文件庫沒有的事：**變更明細**（`domain, key, 欄位, 舊→新, 原因, 操作者, IP`，只增不改）與**待生效**（`effective_at`、撤銷、到期轉態，即 1d 的 24 小時機制）。
+- `config_ledger` 只做兩件定義文件庫沒有的事：**變更明細**（`domain, key, 欄位, 舊→新, 原因, 操作者, IP`，只增不改）與**待生效**（`effective_at`、撤銷、到期轉態，即 1d 的 待生效期（預設 7 天，下限 24 小時）機制）。
 - 版本與還原留在各 domain 自己的儲存：權限＝`perm_versions`，設定＝`ui_definitions`。`snapshot/restore` 以 adapter 形式註冊，不複製資料。
-- 設定的 domain＝`setting:<群組>`，權限＝`perm`；第一批設定**不用**待生效層（只有 K04 與高風險授權用），所以 `config_ledger` 可晚於設定中心第一版上線，介面先寫死 `record(domain, key, changes, reason, actor, effective_at=None)`。請 1d 確認這個最小集合。
+- 設定的 domain＝`setting:<群組>`，權限＝`perm`；**第一批設定（僅第一批的原規劃；Train A 實際已含待生效層）**不用待生效層（只有 K04 與高風險授權用），所以 `config_ledger` 可晚於設定中心第一版上線，介面先寫死 `record(domain, key, changes, reason, actor, effective_at=None)`。請 1d 確認這個最小集合。
 
 ### 2.1 定案協議（與 1d 一致；以下是 1d 設計稿 §7 全文，兩份文件保持同文）
 
@@ -40,16 +40,17 @@
 5. **既有表**：R1／R2 職責角色的 `permission_changes`（含只增不改觸發器）**不搬資料、不雙寫**，仍是 `duty` domain 的明細；權限矩陣的新變更只寫 `config_changes`（domain `perm`）。稽核報表以 UNION 呈現，避免兩份漂移。
 6. **誰先做**：設定中心 S0（第一批不用待生效）先實作並上線 `config_ledger` 的 1、2、4 與 `history`；權限矩陣 P1 再加 3（待生效 API、`activate_due` 工作、`in_effect`）——介面現在就定死，後補不改簽名。設定第二批的 K04（登入安全）也走待生效層。
 
-> 實作對照（node-39，第 54 班 Train A）：`record(conn, domain, key, changes, reason, actor, *, ip, risk, ref_version, effective_at)`；`risk ∈ none|ops|money|legal|security`（≥money 通知其他最高管理者）；回 `{batch, ids, audit_id}`；另有 `supersede／cancel_pending_for／restore_version／snapshot_version`。
+> 實作對照（node-39，第 54 班 Train A）：`risk` 預設為 `'none'`（程式內五級，與上文 1d 稿的 `low` 預設不同，以本節為準）；事件集合為 `pending｜approved｜activated｜cancelled｜superseded`（多一個 `approved`＝雙人核准的一票，不改變狀態）；`record(conn, domain, key, changes, reason, actor, *, ip, risk, ref_version, effective_at)`；`risk ∈ none|ops|money|legal|security`（≥money 通知其他最高管理者）；回 `{batch, ids, audit_id}`；另有 `supersede／cancel_pending_for／restore_version／snapshot_version`。
 
 ### 2.2 與權限矩陣共用的協議（單一版本；兩份設計稿同文）
 
-1. **風險詞彙只有一套**：`none｜ops｜money｜legal｜security`（`config_ledger.RISKS`）。權限能力宣告若沿用 `low｜mid｜high`，只是宣告時的別名：`low→ops`、`mid→money`、`high→security`（能力自己另可明寫 `legal`）；寫入明細與稽核時一律用五級。`money｜legal｜security` 為「高風險」＝通知其他最高管理者＋預設 24 小時待生效。
-2. **待生效只有一套機制**：`config_changes`（不可變）＋`config_change_events`（`pending｜approved｜activated｜cancelled｜superseded`）。**不另建 `perm_pending` 表**；權限矩陣的待生效申請就是 `domain='perm'` 的 `config_changes` 列（`effective_at` ＝ 申請時間＋24 小時），撤銷＝`cancelled` 事件，雙人核准＝`approved` 事件（`approvals_required`）。權限設計稿 §4 的 `perm_pending` 欄位（scope、cap、effect…）改存於該列的 `field`／`new_json`，不另開表。
-3. **快取失效只有一套說法**：每個讀取端（`settings.get`、`perm.can`）記住自己載入時的 **`config_epoch`**＝`MAX(config_changes.id)` 與 `MAX(config_change_events.id)` 兩數的組合；快取命中時，距上次檢查超過 2 秒才重查這兩個數字（單次索引查詢），變了就清自己的快取。**本行程發布後立即清**；多行程（日後多 uvicorn worker）最多延遲 2 秒對齊，不再依賴固定 15 秒 TTL。TTL 15 秒保留為保底。（Train A 先用 15 秒 TTL＋本行程立即清；`config_epoch` 於 M1 實作，介面不變。）
+1. **風險詞彙只有一套**：`none｜ops｜money｜legal｜security`（`config_ledger.RISKS`）。權限能力宣告若沿用 `low｜mid｜high`，只是宣告時的別名：`low→ops`、`mid→money`、`high→security`（能力自己另可明寫 `legal`）；寫入明細與稽核時一律用五級。`money｜legal｜security` 為「高風險」＝**通知**其他最高管理者（`HIGH_RISK` 只管通知）。待生效期不是由風險等級自動帶出，而是由呼叫端／登錄宣告決定（`requires_pending`、`loosen`）；待生效期長度見本節第 6 點（`confirm_period_days`）。
+2. **待生效只有一套機制**：`config_changes`（不可變）＋`config_change_events`（`pending｜approved｜activated｜cancelled｜superseded`）。**不另建 `perm_pending` 表**；權限矩陣的待生效申請就是 `domain='perm'` 的 `config_changes` 列（`effective_at` ＝ 申請時間＋待生效期（預設 7 天，下限 24 小時）），撤銷＝`cancelled` 事件，雙人核准＝`approved` 事件（`approvals_required`）。權限設計稿 §4 的 `perm_pending` 欄位（scope、cap、effect…）改存於該列的 `field`／`new_json`，不另開表。
+3. **快取失效只有一套說法**：每個讀取端（`settings.get`、`perm.can`）記住自己載入時的 **`config_epoch`**＝`MAX(config_changes.id)` 與 `MAX(config_change_events.id)` 兩數的組合；快取命中時，距上次檢查超過 2 秒才重查這兩個數字（單次索引查詢），變了就清自己的快取。**本行程發布後立即清**；多行程（日後多 uvicorn worker）最多延遲 2 秒對齊，不再依賴固定 15 秒 TTL。TTL 15 秒保留為保底。**注意**：待生效值「到達 `effective_at`」是時間的流逝，不會改變 `MAX(id)`，所以 epoch 抓不到它——到時生效只靠 15 秒 TTL（或下一次 `materialize_due`／`activate_due` 寫入事件才會推進 epoch）；因此讀取端在 TTL 內可能晚最多 15 秒看到到期值，這是可接受的並明列於此。（Train A 先用 15 秒 TTL＋本行程立即清；`config_epoch` 於 M1 實作，介面不變。）
 4. **版本邊界（edition bounds）涵蓋設定欄位與權限能力**：同一個載入點（程式／授權）設定；設定欄位＝數值上下限、可選項的子集；能力＝該版本可授予的最大範圍或整個能力停用。客戶沒有任何 API 能改。
 5. **放寬＝雙人核准**、預設組（政策檔）、白話文字與影響說明的規則一體適用於設定與能力（見附錄 C、D）。
-6. 兩份設計稿以此節為準；任何一方要改協議，先改這一節並通知對方。
+6. **確認期（待生效期）只有一個設定鍵：`change_control.confirm_period_days`**（使用者 2026-10-10）——預設 **7 天**，可在系統內調整，**下限 1 天（＝24 小時）**，無上限；所有「待生效」的變更（設定的 `requires_pending`／放寬、權限矩陣、財務機制、簽核政策…）的 `effective_at` 一律＝申請時間＋`confirm_period_days` 天。各設計稿**引用此鍵，不得自訂期間**。此設定本身是 `legal` 風險、`loosen='down'`：**縮短確認期視同放寬**，要走「目前的確認期」＋雙人核准才會生效；拉長則立即生效。已在待生效中的舊變更，其 `effective_at` 在申請當下已寫定，不受之後調整影響。登錄：群組 `change_control`（白話名稱「變更管理」），欄位問句「重要設定變更，要等幾天才生效？」，建議值 7；`settings_registry.PENDING_HOURS` 常數於 Train A 之後的第一個小改動改為讀此鍵（Train A 現況：常數 24 小時，尚無使用中的待生效欄位，所以不影響上線行為）。
+7. 兩份設計稿以此節為準；任何一方要改協議，先改這一節並通知對方。
 
 ## 3. 各 K 項的遷移與等價證明
 
@@ -57,10 +58,12 @@
 
 | K | 群組與欄位（預設＝今天） | 改動點 | 等價證明 |
 |---|---|---|---|
-| K01 利潤警示 | `profit_warning`：`quote.red_below=12`、`quote.yellow_below=20`、`settlement.green_from=20`、`reports.green_from=20`、`reports.orange_from=10`、`export.green_from=20`、`export.amber_from=0`（%；僅顯示，risk none） | `quotation-form.html:1911/1915/1916`、`settlement.html:1019`、`reports.html:1563`、`reports.py:2198`、`pdf_gen.py:2702`；`profit_rules.py:34` 與 `profit-rules.js:10/74` 的 `TARGET_MARGIN_PCT` **保留為別名（預設值導出自設定，等於 12）**，不刪（`tests/test_profit_rules_t48.py:87` 斷言 ==12、L1 快照列有它）；同一班更新 L1 快照 | 各畫面**維持各自的語意與數值**（不順手統一，統一是之後改一個值的事）；以黃金向量（毛利率 −5～40 每 0.1）比對舊三元式與新函式，前端用 node、後端用 Python，沿用 `profit_rules_vectors.json` 做法；文字「低於目標 12%」改插值，預設輸出逐字相同 |
+| K01 利潤警示 | `profit_warning`：`quote.red_below=12`、`quote.yellow_below=20`、`settlement.green_from=20`、`reports.green_from=20`、`reports.orange_from=10`、`export.green_from=20`、`export.amber_from=0`（%；僅顯示，risk none） | `quotation-form.html:1911/1915/1916`、`settlement.html:1019`、`reports.html:1563`、`reports.py:2198`、`pdf_gen.py:2702`；`profit_rules.py:34` 與 `profit-rules.js:10/74` 的 `TARGET_MARGIN_PCT` **保留為字面常數 12，作為登錄預設值的鏡像**（不是執行時導出：L1 快照記的是常數、`tests/test_profit_rules_t48.py:87` 斷言 ==12、前端是靜態字面值）；由 `test_settings_defaults_equal_legacy` 守住「鏡像＝登錄預設」；`test_no_legacy_literal` 對它列為**已知例外**（見 §3 末） | 各畫面**維持各自的語意與數值**（不順手統一，統一是之後改一個值的事）；以黃金向量（毛利率 −5～40 每 0.1）比對舊三元式與新函式，前端用 node、後端用 Python，沿用 `profit_rules_vectors.json` 做法；文字「低於目標 12%」改插值，預設輸出逐字相同 |
 | K08 提醒天數 | `reminders`：`payable.soon_days=3`、`approval.remind_stages=[1,3,5]`、`approval.remind_step=5`、`crm.stale_days=30`、`crm.renotify_days=14`、`crm.hold_auto_convert_days=180`、`quote.followup_days=14`、`warranty.warn_days=[7,30]`、`ar_aging.orange_over=60`、`ar_aging.red_over=90`、`map.closing_soon_days=7`；`quote.valid_days_review_over=30`（**risk money**：是審核觸發條件） | `payable_due_core.py:33/39`、`cashier.html:370/503`、`system_checks.py:503`、`crm/api.py:1083-1085`、`dashboard.py:584/654`、`case_deadlines.py:218`、`reports.py:1862`、`map_points.py:1025`、`quotation-form.html:2253/2599`＋`quotations.py:1557` | 抽成純函式（日期、天數、設定值→等級），對 ±400 天日期格比對舊／新；既有提醒測試**不改動即全綠**；前後端的「3 天／30 天」改讀同一個鍵（消除重複）；`payable_reminders` 的「08:00＋補跑」語意不動（時刻不在第一批） |
 | K05＋K06 保存與容量 | `retention` 包住現有 `backup_retention`（六鍵不變）＋新增 `notification_keep_days=90`、`request_log_keep_days=90`；`uploads`：`max_file_mb=20`、`case_extra_expense.max_files=10`、`max_request_mb=50`。**稽核紀錄 `audit_log_keep_days` 下限 365、無上限**（其餘保留鍵維持 1～3650） | `archive.py:52/62`、`routers/system.py:2277-2314`（PATCH 轉為同一支發布）、`audit.py:165`、`system_checks.py:731`、`uploads.py:38/43` | 第一次發布時把現有 `backup_retention` 值原樣存成 v1，`_backup_retention()` 先讀群組、缺列退回舊鍵（雙讀一班）；部署前後值比對腳本；**唯一有意的行為差異**：已存的 `audit_log_keep_days<365` 在讀取時**向上夾到 365**（只會多留、不會多刪）並在設定中心提示——先查正式機現值，預期是預設 1825。副檔名白名單**不開放**（檔頭檢查是 fail-closed） |
 | K10 徽章與選項 | `options.crm_status`、`options.netplan_status`、`options.expense_category`：項目 `{code,label,color,active,order}`，`code` 發布後不可改、不可刪只能停用（沿用 `remit_kinds` 規則）；`status_badges`：狀態→**既有 CSS badge 類別**（固定清單，不收任意色碼） | `crm/api.py:26`、`netplan/api.py:58`、`case_extra_expenses.py:91`＋伺服器端狀態驗證改讀登錄；前端 `static/status-badge.js` 取代 `case-management-dispatch.js:845`、`-fin.js:699/802`、`-shipping.js:471`、`payment-request-form.html:394` | 五份對照表**已用雜湊比對確認逐字相同**，合併後外觀不變；選項預設＝今天的清單，伺服器接受值＝啟用的 `code`；硬編碼十六進位色的完工單頁（`completion-note-form.html:455`）**不在第一批**，因為換成徽章類別會改外觀 |
+
+> **`test_no_legacy_literal` 已知例外**：`TARGET_MARGIN_PCT = 12`（`profit_rules.py:34`、`profit-rules.js`）保留字面值作為登錄預設的鏡像，由 `test_settings_defaults_equal_legacy` 比對；刪除該常數屬於 K01 之後的清理，需先改測試與 L1 快照。
 
 ## 4. 設定中心頁（系統 > 設定中心，僅 superadmin 可改）
 
@@ -100,34 +103,34 @@
 **原則**：任何需要改動或改動有風險的東西，都做成擁有者可決定的選項；「必須留在程式」只是暫列鎖定、逐項待使用者確認，不是終局。
 
 **機制（框架，Train A 已內建）**
-- `SettingDef.risk ∈ none|ops|money|legal|security` ＋ `requires_pending`（bool）。`requires_pending` 的欄位（建議 money／legal／security 全開）經 `publish()` 時**不立即生效**：寫 `config_changes`（`effective_at` ＝ 現在＋24 小時，`pending` 事件）、通知其他最高管理者；期間任何最高管理者可 `cancel`（寫稽核）；`settings.get()` 在讀取時以 `in_effect()` 判斷——到期前仍回舊值。
+- `SettingDef.risk ∈ none|ops|money|legal|security` ＋ `requires_pending`（bool）。`requires_pending` 的欄位（建議 money／legal／security 全開）經 `publish()` 時**不立即生效**：寫 `config_changes`（`effective_at` ＝ 現在＋待生效期（預設 7 天，下限 24 小時），`pending` 事件）、通知其他最高管理者；期間任何最高管理者可 `cancel`（寫稽核）；`settings.get()` 在讀取時以 `in_effect()` 判斷——到期前仍回舊值。
 - 解鎖一個鎖定項＝在 `settings_groups` 新增一個欄位（預設＝今天的行為，等值證明＋凍結基準），標 `risk` 與 `requires_pending`，再接線；**不需要動別的地方**。
 - 變更一律：原因必填＋稽核＋通知＋版本可還原。
 
 **暫列鎖定、待使用者逐項確認（我盤點的清單）與解鎖時的方案**
 | 項目 | 今天（預設） | 若解鎖：選項與風險機制 |
 |---|---|---|
-| 密碼雜湊參數 | 程式固定 | 只開放「提高強度」，不可降低（下限寫在程式）；`security`＋24h；既有密碼下次登入重雜湊 |
-| 最高管理者直通 | 恆為真 | 選項「最高管理者也受權限矩陣約束」預設關；`security`＋24h；保留至少一位不受限的緊急帳號 |
-| 公開路徑白名單 | 程式清單 | 只開放「縮減」（把公開頁改成要登入）；新增公開路徑不開放；`security`＋24h |
+| 密碼雜湊參數 | 程式固定 | 只開放「提高強度」，不可降低（下限寫在程式）；`security`＋待生效期；既有密碼下次登入重雜湊 |
+| 最高管理者直通 | 恆為真 | 選項「最高管理者也受權限矩陣約束」預設關；`security`＋待生效期；保留至少一位不受限的緊急帳號 |
+| 公開路徑白名單 | 程式清單 | 只開放「縮減」（把公開頁改成要登入）；新增公開路徑不開放；`security`＋待生效期 |
 | 稽核紀錄只增不改 | 觸發器擋 | 不提供「可改」；僅提供匯出與保存年限（已有，下限 365） |
-| 路徑逃逸／簽章檢查 | 程式固定 | 不提供關閉；若要放寬簽章驗證範圍，`security`＋24h＋雙人核准 |
-| 舊 10% 管銷口徑 | 舊單沿用 | 選項「新單預設口徑」（已有 25% 設定）；舊單戳記不動；`money`＋24h |
+| 路徑逃逸／簽章檢查 | 程式固定 | 不提供關閉；若要放寬簽章驗證範圍，`security`＋待生效期＋雙人核准 |
+| 舊 10% 管銷口徑 | 舊單沿用 | 選項「新單預設口徑」（已有 25% 設定）；舊單戳記不動；`money`＋待生效期 |
 | `FORM_VERSION` | 程式固定 | 不開放（版本戳是資料相容用）；改版走遷移 |
-| 已過帳傳票不可變 | 不可變 | 選項「允許以更正傳票沖銷」（不是修改）；`money`＋24h＋雙人核准 |
+| 已過帳傳票不可變 | 不可變 | 選項「允許以更正傳票沖銷」（不是修改）；`money`＋待生效期＋雙人核准 |
 | 401 錯誤碼 | 程式固定 | 不開放（前端契約） |
 | `MQ-` 單號格式 | 程式固定 | 選項「前綴／補零位數」；僅對新單生效；`ops` |
 | 回收桶 30 天 | 30 天 | 設定群組 `recyclebin.keep_days`（下限 7）；`ops` |
 | D1 只存草稿 | 只存草稿 | 待確認需求後再設計；先列待決 |
-| 可簽自己的核准（本人送審本人核） | 不允許 | 選項「允許本人核准」預設關；`money`＋24h＋稽核標註「自核」＋通知其他最高管理者；金額上限欄位可配 |
-| 副檔名白名單／檔頭檢查 | 程式固定 | 只開放「在安全清單內縮減」；新增副檔名需 `security`＋24h |
+| 可簽自己的核准（本人送審本人核） | 不允許 | 選項「允許本人核准」預設關；`money`＋待生效期＋稽核標註「自核」＋通知其他最高管理者；金額上限欄位可配 |
+| 副檔名白名單／檔頭檢查 | 程式固定 | 只開放「在安全清單內縮減」；新增副檔名需 `security`＋待生效期 |
 | 金額公式與進位 | 程式固定 | 公式不開放；參數（費率、門檻）依生效日已開放（§11） |
 
 以上每一項都**等使用者確認**後才排入批次；未確認前維持今天的行為。
 
 ## 附錄 C 介面規則：零技術門檻（使用者 2026-10-10）
 
-**零技術門檻**（使用者 2026-10-10 強化）：每個設定畫面都當使用者完全不懂技術來設計——①用白話中文**問問題**、選項很少（「財務可以送出勞報單嗎？　可以／不可以」），不放鍵值表；②標出**建議**選項；③常見情境給一鍵**預設組**（如「小型公司」「嚴格管控」），套用前先顯示會造成的效果；④進階選項收在「進階」；⑤複雜設定做成一步一步的精靈；⑥儲存前用一句話摘要（「你即將讓財務可以送出勞報單，24 小時後生效」）並預覽受影響的人；⑦一鍵復原。
+**零技術門檻**（使用者 2026-10-10 強化）：每個設定畫面都當使用者完全不懂技術來設計——①用白話中文**問問題**、選項很少（「財務可以送出勞報單嗎？　可以／不可以」），不放鍵值表；②標出**建議**選項；③常見情境給一鍵**預設組**（如「小型公司」「嚴格管控」），套用前先顯示會造成的效果；④進階選項收在「進階」；⑤複雜設定做成一步一步的精靈；⑥儲存前用一句話摘要（「你即將讓財務可以送出勞報單，待生效期滿後生效」）並預覽受影響的人；⑦一鍵復原。
 
 結構強制：`SettingDef`／能力／欄位政策宣告**必填** `question`（問句）、`label`、`help`、選項標籤、風險文字（高風險）、`effect`（效果句型，含 `{舊}`／`{新}`／`{生效時間}`）；可填 `recommended`（建議）、`presets`（所屬預設組）、`advanced`（進階）。缺必填 ⇒ 登錄驗證失敗。
 
@@ -163,7 +166,7 @@
 **裁示**：公開頁面、密碼雜湊強度、檔案路徑／簽章檢查、允許上傳類型四項**不鎖死**，雙向可調（可收緊也可放寬），因為未來要販售、必須保有最大彈性；放寬用最強管制。
 
 **機制（Train A 已實作於 `settings_registry` 與 `config_ledger`）**
-- 欄位宣告 `risk="security"`（另有 money／legal）與 `loosen="up"|"down"`（哪個方向算放寬）。**收緊立即生效；放寬**＝24 小時待生效＋需要**另一位在職最高管理者核准**（`config_ledger.approve`：申請人不能自核、同一人不能重複投票；票數不足時到時間也不生效）。只有一位最高管理者時：必填原因＋24 小時＋畫面警告＋通知，並留紀錄。
+- 欄位宣告 `risk="security"`（另有 money／legal）與 `loosen="up"|"down"`（哪個方向算放寬）。**收緊立即生效；放寬**＝待生效（預設 7 天）＋需要**另一位在職最高管理者核准**（`config_ledger.approve`：申請人不能自核、同一人不能重複投票；票數不足時到時間也不生效）。只有一位最高管理者時：必填原因＋待生效期（預設 7 天，下限 24 小時）＋畫面警告＋通知，並留紀錄。
 - 資料：`config_changes.approvals_required`、事件 `approved`（只增不改）；待生效清單與撤銷介面（`/api/settings-center/pending`、`…/approve`、`…/cancel`）。
 - **版本邊界**：`set_edition_bounds(group, field, min, max)` 由程式／授權載入器設定，與欄位自己的上下限取交集；客戶沒有任何 API 能改；畫面顯示的範圍是交集後的有效範圍。販售不同版本＝同一份程式、不同邊界。
 - **政策預設組**：欄位 `presets={"標準": v, "嚴格": v, "寬鬆": v}`；`profiles()`／`profile_preview(name)`（套用前顯示逐項「目前 → 新值」）／`apply_profile(name)`（每個群組各走一次 `publish`，同一套管制，所以套用「寬鬆」也要雙人核准）。建置客戶環境時套用預設組，之後客戶在邊界內自行調整。
