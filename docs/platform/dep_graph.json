@@ -11359,19 +11359,19 @@
     },
     {
      "func": "approve_payslip",
-     "line": 168,
+     "line": 188,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/approve"
     },
     {
      "func": "reject_payslip",
-     "line": 225,
+     "line": 255,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/reject"
     },
     {
      "func": "approval_reveal",
-     "line": 338,
+     "line": 390,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/approval-reveal"
     }
@@ -12529,7 +12529,6 @@
     "duty_roles",
     "invoice_vouchers",
     "payment_requests",
-    "payslips",
     "projects",
     "quotations",
     "sessions",
@@ -12552,7 +12551,6 @@
     "dispatch_file_delete_requests",
     "duty_roles",
     "notifications",
-    "payslip_dispatch_links",
     "permission_changes",
     "system_settings",
     "user_duty_roles",
@@ -13222,7 +13220,6 @@
     "duty_roles",
     "invoice_vouchers",
     "payment_requests",
-    "payslips",
     "projects",
     "quotations",
     "sessions",
@@ -13246,7 +13243,6 @@
     "dispatch_file_delete_requests",
     "duty_roles",
     "notifications",
-    "payslip_dispatch_links",
     "permission_changes",
     "system_settings",
     "user_duty_roles",
@@ -13372,7 +13368,8 @@
     "helper:recycle_bin",
     "mod:subcontract/dispatch_flow",
     "mod:subcontract/payable_due",
-    "mod:subcontract/remit_create"
+    "mod:subcontract/remit_create",
+    "plat:registry"
    ],
    "kind": "mod",
    "module_key": "subcontract",
@@ -13380,18 +13377,17 @@
    "role": "helper",
    "tables_ddl": [],
    "tables_named": [
+    "payslip_dispatch_links",
     "quotations"
    ],
    "tables_r": [
-    "payslips",
     "quotations",
     "vendor_contractors"
    ],
    "tables_w": [
     "contractor_dispatches",
     "contractor_payment_vouchers",
-    "dispatch_file_delete_requests",
-    "payslip_dispatch_links"
+    "dispatch_file_delete_requests"
    ]
   },
   "mod:subcontract/remit": {
@@ -22705,7 +22701,9 @@
    "api_prefixes": [],
    "imports": [],
    "kind": "table",
-   "named_by": [],
+   "named_by": [
+    "mod:subcontract/recycle_adapter"
+   ],
    "path": "backend/modules/payroll/migrations/0004_payslip_approval.py:22",
    "readers": [
     "mod:payroll/api/payslip_links"
@@ -22714,8 +22712,7 @@
    "tables_w": [],
    "writers": [
     "mod:payroll/payslip_links",
-    "mod:payroll/recycle_adapter",
-    "mod:subcontract/recycle_adapter"
+    "mod:payroll/recycle_adapter"
    ]
   },
   "table:payslip_seq": {
@@ -22749,8 +22746,7 @@
     "mod:payroll/attachments",
     "mod:payroll/gl_events",
     "mod:payroll/payslip_links",
-    "mod:payroll/payslip_payouts",
-    "mod:subcontract/recycle_adapter"
+    "mod:payroll/payslip_payouts"
    ],
    "tables_r": [],
    "tables_w": [],

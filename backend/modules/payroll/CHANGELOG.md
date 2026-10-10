@@ -1,6 +1,6 @@
 # 薪資獎金 更新紀錄
 
-## (next) — 2026-10-10（wip/t50-int；第 50 班）
+## 1.2.15 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t53-1d-rb-adapters-r6；刪除暫存區 P1 跟進）**
 - 提供者 `payslip.dispatch_links`（IP-112，加法）多兩個方法：`delete_for_dispatch(conn, dispatch_id)`（移除並回傳該派發的連結列）、`restore_rows(conn, rows, dispatch_id)`（放回；勞報單已不存在、或同一組已有連結 ⇒ 略過並註記；其他唯一鍵衝突 ⇒ `LinkError(409)`）。外包工班的派發進／出刪除暫存區時經它維護連結表，不再自己寫 `payslip_dispatch_links`（模組邊界：連結表只由薪資獎金寫入）。
 - **（併入）(next) — 2026-10-10（wip/t54-05-payslip-bypass）：勞報單簽核卡死的出口——層外最高管理者帶原因代核（使用者回報）**

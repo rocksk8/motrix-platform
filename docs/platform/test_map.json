@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1257,
+  "tests": 1258,
   "unmapped": 13,
   "kinds": {
-   "api": 685,
+   "api": 686,
    "e2e": 301,
    "audit": 158,
    "unit": 113
@@ -11743,6 +11743,28 @@
     "path": [
      "backend/modules/accounting/",
      "backend/modules/arap/"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_payslip_deadlock_bypass_t54.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/payslip_approval",
+    "mod:payroll/tests/test_payslip_approval_t46",
+    "mod:payroll/tests/test_payslip_edit_guard_2026_08_28"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/payroll/tests/test_payslip_approval_t46.py",
+     "backend/modules/payroll/tests/test_payslip_edit_guard_2026_08_28.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslip_approval.py"
     ],
     "module_dir": [
      "backend/modules/payroll/"
