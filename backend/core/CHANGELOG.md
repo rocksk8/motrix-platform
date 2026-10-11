@@ -32,6 +32,7 @@
 - **（併入）(next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2；系統中心 r7 併入；補記）**
 - **（併入）(next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2；系統中心 r7 併入；r8）**
 - **（併入）(next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2；系統中心 r7 併入；r8b）**
+- **（併入）(next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2；系統中心 r7 併入；r9）**
 
 ## 1.128 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-05-reassign-rules）：轉簽不能變成自核的後門（使用者裁示）**
