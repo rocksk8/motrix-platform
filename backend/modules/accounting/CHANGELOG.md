@@ -3,6 +3,7 @@
 ## (next) — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1）：module.json 新增 `system_cards`（報表設定卡片）**
 - 加性宣告：在系統中心（`/pages/system-hub.html`）登記這個模組擁有的系統頁面；只影響索引顯示，頁面與 API 的權限、行為完全不變。
+- **（併入）(next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1；r5）：module.json 新增 `system_cards`（報表設定卡片）**
 
 ## 1.1.58 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-11（wip/t54-ab-voucher-no-fix）：傳票每日流水第 1000 張撞號修正**
