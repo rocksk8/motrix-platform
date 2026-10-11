@@ -2,7 +2,8 @@
 """設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。
 
 [單位] helper:settings_registry    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] SettingDef, SettingError, clamp_value, get, get_group, groups, invalidate, publish, register_group, validate_values
+[公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, KIND, SCOPE, SettingDef, SettingError, apply_profile, clamp_value, clear_edition_bounds, confirm_period_days,
+    get, get_group, groups, invalidate, materialize_due, profile_preview, profiles, publish, register_group, set_edition_bounds, validate_values
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
     ④寫入口只有 `publish()`：同一交易寫定義新版本＋變更明細（config_ledger）＋稽核＋（有舊鍵時）雙寫舊鍵；⑤讀取走 15 秒行程內快取，
