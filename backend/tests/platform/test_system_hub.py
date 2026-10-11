@@ -574,3 +574,29 @@ def test_concurrent_requests_start_only_one_thread_for_a_hung_badge(monkeypatch)
     finally:
         gate.set()
         R._INFLIGHT.clear()
+
+
+def test_perm_can_raising_hides_only_that_card_and_the_hub_still_answers(client, make_user, monkeypatch):
+    import sys
+    import types
+    from routers import system_hub as R
+    fake = types.ModuleType("helpers.perm")
+
+    def boom(user, cap):
+        if cap.endswith(".audit_log.menu"):
+            raise RuntimeError("矩陣壞了")
+        return True
+
+    fake.can = boom
+    monkeypatch.setitem(sys.modules, "helpers.perm", fake)
+    import helpers
+    monkeypatch.setattr(helpers, "perm", fake, raising=False)
+    chk = R._capability_checker({"username": "u", "role": "viewer"})
+    assert chk("core.audit_log.menu") is False and chk("core.users.menu") is True
+    cards = [{"id": "a", "perm": ["audit_log"], "cap": "core.audit_log.menu", "section": "data"},
+             {"id": "b", "perm": ["audit_log"], "cap": "core.users.menu", "section": "data"}]
+    assert [c["id"] for c in H.visible_cards(cards, ["audit_log"], False, can=chk)] == ["b"]
+    assert [c["id"] for c in H.visible_cards(cards, [], True, can=chk)] == ["a", "b"], "最高管理者不受影響"
+    u, p = make_user(username="hub_permboom", role="viewer", modules=["audit_log"])
+    R.clear_cache()
+    assert _hub(client, _login(client, u, p)) is not None, "perm.can 例外時整個系統中心仍要回 200"

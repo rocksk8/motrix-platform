@@ -123,7 +123,13 @@ def _capability_checker(user):
     except Exception:                                            # noqa: BLE001
         logger.exception("系統中心：權限矩陣存在但匯入失敗，有能力鍵的項目一律不顯示")
         return lambda cap: False
-    return lambda cap: bool(perm.can(user, cap))
+    def can(cap):
+        try:
+            return bool(perm.can(user, cap))
+        except Exception:                                        # noqa: BLE001 — 一張卡的判斷壞了只隱藏那張，不拖垮整個系統中心
+            logger.exception("系統中心：權限判斷丟出例外，這個項目不顯示")
+            return False
+    return can
 
 
 def show_denied():
