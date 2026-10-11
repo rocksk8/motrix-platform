@@ -2321,12 +2321,7 @@ def set_backup_retention_setting(body: BackupRetentionBody, authorization: str =
         _res = _sr.publish("retention", sent, note="備份保留設定（舊端點）", user=actor["username"], reason="變更備份保留設定", actor=actor)
     except _sr.SettingError as e:
         raise HTTPException(400, str(e) + "：" + "；".join(p["message"] for p in e.problems))
-    _monthly_label = ("永久保留" if value["cloud_monthly_keep_days"] <= 0
-                      else f"{value['cloud_monthly_keep_days']}天")
-    _audit(_tok(authorization), "settings.backup_retention.update", "settings", "backup_retention",
-           f"本機DB快照{value['local_db_keep_days']}天／雲端每日{value['cloud_daily_keep_days']}天／"
-           f"雲端週{value['cloud_weekly_keep_days']}天／雲端月{_monthly_label}／"
-           f"套用前快照{value['local_pre_update_keep']}份／稽核紀錄{value['audit_log_keep_days']}天")
+    # 稽核由 publish() 在同一交易內寫（立即生效＝settings.retention.update／待生效＝settings.retention.pending）；這裡不再另寫，避免同一次變更兩列
     notify_module_activity("系統設定", "變更備份保留天數", actor.get("display_name") or actor["username"],
                             f"每日{value['cloud_daily_keep_days']}天／週{value['cloud_weekly_keep_days']}天",
                             "notification-settings.html")

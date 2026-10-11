@@ -110,6 +110,27 @@ def test_legacy_retention_endpoint_goes_through_ledger(client, make_user):
     assert client.get("/api/settings/backup-retention", headers=h).json()["audit_log_keep_days"] == 3000
 
 
+def _retention_audit_rows():
+    c = get_db()
+    try:
+        return c.execute("SELECT action FROM audit_log WHERE action LIKE 'settings.%retention%'").fetchall()
+    finally:
+        c.close()
+
+
+def test_legacy_retention_endpoint_writes_exactly_one_audit_row(client, make_user):
+    """ab 次要稽核：舊端點在 publish() 同交易稽核之外又在提交後多寫一筆 ⇒ 同一次變更兩列。"""
+    h = _hdr(client, make_user)
+    before = len(_retention_audit_rows())
+    r = client.patch("/api/settings/backup-retention", json={"audit_log_keep_days": 3000}, headers=h)    # 延長＝立即生效
+    assert r.status_code == 200 and not r.json()["pending"]
+    assert len(_retention_audit_rows()) - before == 1
+    before = len(_retention_audit_rows())
+    r = client.patch("/api/settings/backup-retention", json={"audit_log_keep_days": 400}, headers=h)     # 縮短＝待生效
+    assert r.status_code == 200 and r.json()["pending"]
+    assert len(_retention_audit_rows()) - before == 1
+
+
 # --- 必修 3：收緊要取代同欄位較舊的待生效放寬 ---------------------------------------
 
 def test_tightening_supersedes_older_pending_loosening(grp):
