@@ -228,7 +228,9 @@ def test_pending_delegation_activates_and_is_superseded_if_the_delegator_lost_th
     P.invalidate()
     assert not P.can(dlg, "zz.doc.pay")
     assert _rows(conn, "SELECT state FROM perm_pending WHERE id=?", (r1["id"],)) == [{"state": "superseded"}]
+    monkeypatch.setattr(S, "_now", lambda: datetime.now())
     S.set_role_cap(conn, SU, "admin", "zz.doc.pay", True, "恢復付款作業")           # 勾回種子預設的高風險格子＝放寬 ⇒ 待生效（r10），先讓它到期生效
+    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
     S.activate_due(conn)
     P.invalidate()
     monkeypatch.setattr(S, "_now", lambda: datetime.now())
