@@ -254,6 +254,7 @@
    "/api/reads",
    "/api/search",
    "/api/settings",
+   "/api/settings-center",
    "/api/system",
    "/api/uploads",
    "/api/user-activity",
