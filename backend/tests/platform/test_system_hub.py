@@ -476,3 +476,40 @@ def test_system_hub_setting_group_is_registered_without_importing_the_app():
     from helpers import settings_groups  # noqa: F401
     from helpers import settings_registry as sr
     assert "system_hub" in sr.groups() and "show_denied" in [f["key"] for f in sr.groups()["system_hub"]["fields"]]
+
+
+def test_cap_path_uses_the_l1_perm_can_and_never_silently_falls_back(monkeypatch):
+    """正對照：L1 有 `helpers.perm` 時，`_capability_checker` 必須回可用的 checker 並把結果交給 perm.can；
+    只有模組不存在才允許 None。曾經登錄表 `perm.can` 沒人提供 ⇒ 默默退回舊語意（本測試要在那種狀態下失敗）。"""
+    import sys
+    import types
+    from routers import system_hub as R
+    fake = types.ModuleType("helpers.perm")
+    seen = []
+    fake.can = lambda user, cap: (seen.append((user.get("username"), cap)) or cap == "core.x.menu")
+    monkeypatch.setitem(sys.modules, "helpers.perm", fake)
+    import helpers
+    monkeypatch.setattr(helpers, "perm", fake, raising=False)
+    chk = R._capability_checker({"username": "u"})
+    assert chk is not None, "L1 有 helpers.perm 卻回 None＝能力判斷默默失效"
+    assert chk("core.x.menu") is True and chk("core.y.menu") is False and seen == [("u", "core.x.menu"), ("u", "core.y.menu")]
+    src = open(R.__file__, encoding="utf-8").read()
+    assert 'single_provider("perm.can")' not in src, "perm.can 不是提供者（沒人提供）"
+
+
+def test_cap_checker_is_none_only_when_helpers_perm_does_not_exist(monkeypatch):
+    import importlib.util
+    from routers import system_hub as R
+    exists = importlib.util.find_spec("helpers.perm") is not None
+    got = R._capability_checker({"username": "u"})
+    assert (got is not None) == exists, "helpers.perm 存在與否必須和 checker 一致（存在卻 None ＝默默退回）"
+
+
+def test_perm_changed_provider_clears_the_hub_cache():
+    from core import registry
+    from routers import system_hub as R
+    fn = registry.providers("perm.changed").get("system_hub")
+    assert fn is not None
+    R._CACHE["k"] = (0, {})
+    fn()
+    assert not R._CACHE

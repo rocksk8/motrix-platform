@@ -108,11 +108,20 @@ def attach_badges(sections, user, timeout=BADGE_TIMEOUT):
 
 
 def _capability_checker(user):
-    """權限矩陣（`perm.can` 提供者，1d）存在時：回 `can(cap) -> bool`；不在或沒有 cap 的卡片 ⇒ None／退回舊 perm 語意。"""
-    fn = registry.single_provider("perm.can")
-    if fn is None:
+    """權限矩陣（L1 `helpers.perm.can(user, cap)`，1d）存在時：回 `can(cap) -> bool`；L1 尚未帶 `helpers.perm`（矩陣上線前）⇒ None ⇒ 退回舊 perm 語意。
+
+    直接用 L1 名稱（不經登錄表提供者——曾經沒人提供 `perm.can`，能力判斷等於默默失效）。
+    只有『模組根本不存在』才退回；其他匯入錯誤要大聲（log error），不可默默退回。"""
+    try:
+        from helpers import perm
+    except ModuleNotFoundError as e:
+        if e.name not in ("helpers.perm", "helpers"):
+            logger.error("系統中心：權限矩陣匯入失敗 %s", e)
         return None
-    return lambda cap: bool(fn(user, cap))
+    except Exception:                                            # noqa: BLE001
+        logger.exception("系統中心：權限矩陣匯入失敗，退回舊權限語意")
+        return None
+    return lambda cap: bool(perm.can(user, cap))
 
 
 def show_denied():
