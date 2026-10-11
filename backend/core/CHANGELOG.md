@@ -25,6 +25,7 @@
 - **系統中心 P1（併入）**：原則（使用者核定）：框架先行、不寫死決定——新增一個設定或頁面 ＝ 在擁有它的模組宣告一筆 `system_cards`，**不改 hub**；守門 `tests/platform/test_system_hub.py`（與選單雙向對等、卡片 perm＝頁面選單 perm、徽章隔離、頁面不寫死項目）。
 - **系統中心 P1（併入）**：整合點 IP-HUB1（`system.hub_badge`；能力判斷直接用 L1 `helpers.perm.can`；hub 提供 `perm.changed`，其整合點由權限矩陣登記）；設計 `docs/platform/plans/SYSTEM-HUB-DESIGN-T54.md`。
 - **（併入）(next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2；系統中心 r5 併入）**
+- **（併入）(next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2；系統中心 r6 併入）**
 
 ## 1.128 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-05-reassign-rules）：轉簽不能變成自核的後門（使用者裁示）**

@@ -27,6 +27,7 @@ RECENT_KEY = "system_hub_recent"                 # 每個帳號的『最近使�
 RECENT_MAX = 5
 BADGE_TIMEOUT = 0.3
 _CACHE = {}
+_INFLIGHT_LOCK = threading.Lock()   # 『檢查有沒有還在跑 → 開新執行緒』必須是一個不可分割的動作，否則兩個請求會同時開兩條
 _INFLIGHT = {}                  # 徽章 id → 還在跑的執行緒（卡住的提供者只擋它自己，不佔共用執行緒池）
 
 # 設定群組 `system_hub`（『沒有權限的項目要不要列出』）登錄在 helpers/settings_groups.py（單一登錄處；載入本檔時已載入）。
@@ -80,14 +81,15 @@ def attach_badges(sections, user, timeout=BADGE_TIMEOUT):
             fn = providers.get(it["id"])
             if fn is None or it["planned"] or it.get("denied"):
                 continue
-            prev = _INFLIGHT.get(it["id"])
-            if prev is not None and prev.is_alive():                # 上一次還卡著：跳過這個徽章（不再開新執行緒、不影響別的徽章）
-                failures[it["id"]] = "busy"
-                continue
             box, done = {}, threading.Event()
             t = threading.Thread(target=_run_badge_into, args=(it["id"], fn, user, box, done), daemon=True, name="hub-badge-%s" % it["id"])
-            _INFLIGHT[it["id"]] = t
-            t.start()
+            with _INFLIGHT_LOCK:
+                prev = _INFLIGHT.get(it["id"])
+                if prev is not None and prev.is_alive():            # 上一次還卡著：跳過這個徽章（不再開新執行緒、不影響別的徽章）
+                    failures[it["id"]] = "busy"
+                    continue
+                _INFLIGHT[it["id"]] = t
+                t.start()
             jobs[it["id"]] = (it, box, done)
     deadline = time.monotonic() + timeout
     for cid, (it, box, done) in jobs.items():
@@ -111,7 +113,7 @@ def _capability_checker(user):
     """權限矩陣（L1 `helpers.perm.can(user, cap)`，1d）存在時：回 `can(cap) -> bool`；L1 尚未帶 `helpers.perm`（矩陣上線前）⇒ None ⇒ 退回舊 perm 語意。
 
     直接用 L1 名稱（不經登錄表提供者——曾經沒人提供 `perm.can`，能力判斷等於默默失效）。
-    只有『模組根本不存在』才退回；其他匯入錯誤要大聲（log error），不可默默退回。"""
+    只有『模組根本不存在』才退回舊語意；模組存在卻匯入失敗 ⇒ **一律拒絕**有 cap 的卡片（fail-closed；舊語意可能顯示矩陣已收回的項目）並大聲記 log。"""
     import importlib.util
     import sys
     if "helpers.perm" not in sys.modules and importlib.util.find_spec("helpers.perm") is None:     # 權限矩陣尚未上線：唯一允許的退回
@@ -119,8 +121,8 @@ def _capability_checker(user):
     try:
         from helpers import perm
     except Exception:                                            # noqa: BLE001
-        logger.exception("系統中心：權限矩陣匯入失敗，退回舊權限語意")
-        return None
+        logger.exception("系統中心：權限矩陣存在但匯入失敗，有能力鍵的項目一律不顯示")
+        return lambda cap: False
     return lambda cap: bool(perm.can(user, cap))
 
 
