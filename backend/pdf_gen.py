@@ -334,7 +334,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
     terms_html  = term_block('付款條件', q.get('paymentTerms', ''))
     terms_html += term_block('交貨條件', q.get('deliveryTerms', ''))
     terms_html += term_block('保固條件', q.get('warrantyTerms', ''))
-    terms_html += term_block('售後服務', q.get('afterSales', ''))
+    terms_html += term_block('售後服務及備註說明', q.get('afterSales', ''))  # 名稱同 modules/case/quote_terms.AFTERSALES_LABEL（L1 不反向 import 模組）
     terms_html += term_block('驗收標準', q.get('acceptanceTerms', ''), span_full=True)
 
     terms_section = (
