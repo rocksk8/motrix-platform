@@ -184,6 +184,20 @@ def list_versions(conn, limit=50):
 
 
 # ── 待生效 ────────────────────────────────────────────────────────────────────────
+def _write_role_cell(conn, actor, role, cap, granted, seeded, reason):
+    """寫一個角色格：回到種子預設＝刪覆寫列，否則 upsert。立即路徑與到期套用共用這一份。"""
+    if granted == seeded:
+        conn.execute("DELETE FROM perm_role_caps WHERE role=? AND cap=?", (role, cap))
+    else:
+        conn.execute("INSERT INTO perm_role_caps (role, cap, granted, set_by, set_at, reason) VALUES (?,?,?,?,?,?)"
+                     " ON CONFLICT(role, cap) DO UPDATE SET granted=excluded.granted, set_by=excluded.set_by, set_at=excluded.set_at, reason=excluded.reason",
+                     (role, cap, 1 if granted else 0, _name(actor), _iso(_now()), reason))
+
+
+def _delete_override(conn, user_id, cap):
+    conn.execute("DELETE FROM perm_user_overrides WHERE user_id=? AND cap=?", (user_id, cap))
+
+
 def _request_pending(conn, actor, kind, payload, risk_caps, reason, label):
     now = _now()
     eff = _iso(now + timedelta(hours=PENDING_HOURS))
@@ -272,9 +286,8 @@ def _apply_pending(conn, kind, p, reason, actor):
     """套用一筆到期的待生效；回 '' ＝成功，否則是『被取代／失效』的說明。"""
     now = _iso(_now())
     if kind == "role_cap":
-        conn.execute("INSERT INTO perm_role_caps (role, cap, granted, set_by, set_at, reason) VALUES (?,?,?,?,?,?)"
-                     " ON CONFLICT(role, cap) DO UPDATE SET granted=excluded.granted, set_by=excluded.set_by, set_at=excluded.set_at, reason=excluded.reason",
-                     (p["role"], p["cap"], 1 if p["granted"] else 0, _name(actor), now, reason))
+        seeded = p["cap"] in P.seed_from_legacy(CAP.all_caps()).role_grants.get(p["role"], ())
+        _write_role_cell(conn, actor, p["role"], p["cap"], bool(p["granted"]), seeded, reason)      # 回到種子預設 ⇒ 刪覆寫列（與立即路徑一致）
         _version(conn, actor, "role_cap.activate", reason)
         return ""
     if kind == "user_override":
@@ -284,6 +297,13 @@ def _apply_pending(conn, kind, p, reason, actor):
                      " ON CONFLICT(user_id, cap) DO UPDATE SET effect=excluded.effect, set_by=excluded.set_by, set_at=excluded.set_at, reason=excluded.reason",
                      (p["user_id"], p["cap"], p["effect"], _name(actor), now, reason))
         _version(conn, actor, "user_override.activate", reason)
+        return ""
+    if kind == "user_override_clear":
+        cur = conn.execute("SELECT effect FROM perm_user_overrides WHERE user_id=? AND cap=?", (p["user_id"], p["cap"])).fetchone()
+        if cur is None or cur["effect"] != "deny":
+            return "個人禁止已不存在或已改變"
+        _delete_override(conn, p["user_id"], p["cap"])
+        _version(conn, actor, "user_override.clear_activate", reason)
         return ""
     if kind == "delegation":
         if _live_scope(p, _build_matrix(conn, P.seed_from_legacy(CAP.all_caps()))) is None:
@@ -295,7 +315,7 @@ def _apply_pending(conn, kind, p, reason, actor):
 
 # ── 角色格 ────────────────────────────────────────────────────────────────────────
 def set_role_cap(conn, actor, role, cap, granted, reason=""):
-    """把某角色的某能力改成勾／不勾。回到種子預設＝刪覆寫列（立即）；新增高風險授予＝24 小時待生效。"""
+    """把某角色的某能力改成勾／不勾。收緊與低風險放寬立即；**任何放寬高風險能力**（含把種子本來就有、後來被取消的格子勾回來）＝24 小時待生效（過渡實作，見 SPEC PMX13）。"""
     _need_super(actor)
     c = _cap_or_err(cap)
     if role not in _roles():
@@ -312,18 +332,13 @@ def set_role_cap(conn, actor, role, cap, granted, reason=""):
             conn.rollback()
             return {"ok": True, "changed": False}
         label = "%s 角色：%s %s" % (role, c.label, "勾選" if granted else "取消")
-        if granted and not seeded and c.risk == "high":
+        if granted and c.risk == "high":                # 此時 effective_now 必為 False ⇒ 一定是放寬（含種子預設被取消後勾回）
             _require_reason(reason)
             res, notices = _request_pending(conn, actor, "role_cap", {"role": role, "cap": cap, "granted": True}, [cap], reason, label)
             conn.commit()
             _send(notices)
             return res
-        if granted == seeded:                          # 回到種子預設 ⇒ 刪覆寫列
-            conn.execute("DELETE FROM perm_role_caps WHERE role=? AND cap=?", (role, cap))
-        else:
-            conn.execute("INSERT INTO perm_role_caps (role, cap, granted, set_by, set_at, reason) VALUES (?,?,?,?,?,?)"
-                         " ON CONFLICT(role, cap) DO UPDATE SET granted=excluded.granted, set_by=excluded.set_by, set_at=excluded.set_at, reason=excluded.reason",
-                         (role, cap, 1 if granted else 0, _name(actor), _iso(_now()), reason))
+        _write_role_cell(conn, actor, role, cap, granted, seeded, reason)
         vid = _version(conn, actor, "role_cap.set", reason)
         _audit_tx(conn, actor, "permmatrix.role_cap.set", "perm_role_cap", "%s:%s" % (role, cap), label,
                   {"role": role, "cap": cap, "old": effective_now, "new": granted, "reason": reason, "version": vid})
@@ -381,7 +396,7 @@ def set_user_override(conn, actor, user_id, cap, effect, reason=""):
 
 
 def clear_user_override(conn, actor, user_id, cap, reason=""):
-    """移除個人覆寫（回到角色／模組的結果）。立即生效。"""
+    """移除個人覆寫（回到角色／模組的結果）。移除個人允許＝收緊，立即；**移除高風險能力的個人禁止＝放寬**，走 24 小時待生效（需原因；過渡實作，見 SPEC PMX13）。"""
     _need_super(actor)
     c = _cap_or_err(cap)
     u = _target_user(conn, user_id)
@@ -391,7 +406,14 @@ def clear_user_override(conn, actor, user_id, cap, reason=""):
         if cur is None:
             conn.rollback()
             return {"ok": True, "changed": False}
-        conn.execute("DELETE FROM perm_user_overrides WHERE user_id=? AND cap=?", (u["id"], cap))
+        if cur["effect"] == "deny" and c.risk == "high":
+            _require_reason(reason)
+            label = "%s：%s 取消個人禁止" % (u["username"], c.label)
+            res, notices = _request_pending(conn, actor, "user_override_clear", {"user_id": u["id"], "username": u["username"], "cap": cap}, [cap], reason, label)
+            conn.commit()
+            _send(notices)
+            return res
+        _delete_override(conn, u["id"], cap)
         vid = _version(conn, actor, "user_override.clear", reason)
         _audit_tx(conn, actor, "permmatrix.user_override.clear", "perm_user_override", "%s:%s" % (u["id"], cap), "%s：%s 取消個人%s" % (u["username"], c.label, cur["effect"]),
                   {"user": u["username"], "cap": cap, "old": cur["effect"], "new": "", "reason": reason, "version": vid})
