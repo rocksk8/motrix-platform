@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """系統中心（System Hub）登錄表：『系統』底下所有設定／管理／稽核入口的索引（第 54 班 P1；設計 docs/platform/plans/SYSTEM-HUB-DESIGN-T54.md）。
 
+[單位] plat:system_hub    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] SECTIONS, CARD_KEYS, ICONS, TONES, L1_CARDS, load_l1_cards, module_cards, validate, visible_cards, build_sections, section_keys, denied_reason, plain_problem
-[公開介面] SECTIONS, CARD_KEYS, load_l1_cards, module_cards, validate, visible_cards, build_sections, section_keys
 [不變式] 原則（使用者核定）：**框架先行、不寫死決定**——新增一個設定或頁面 ＝ 在擁有它的模組宣告一筆 `system_cards`，**不改 hub**。
          卡片只來自 `core/system_hub_l1.json`（L1 頁面）與已載入模組的 module.json `system_cards`；分組（section）固定在這裡，模組只能選用不能自開。
          卡片的 `perm` 必須與它指向的頁面的選單 `perm` 相同（hub 只是索引，不放寬、不收緊任何頁面的權限）。
