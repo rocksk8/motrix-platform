@@ -88,6 +88,8 @@ EXEMPT = {
         "稽核在同一個交易內由 helpers/config_ledger.audit_event 寫入（第54班：先 begin_write、撤銷與稽核同交易、寫不進去整筆回滾；動作 settings.<group>.pending_cancel），端點本身不再另呼叫 _audit",
     ("settings_center.py", "POST", "/api/settings-center/pending/{change_id}/approve"):
         "稽核在同一個交易內由 helpers/config_ledger.audit_event 寫入（第54班：先 begin_write、核准票與稽核同交易、寫不進去整筆回滾；動作 settings.<group>.approve），端點本身不再另呼叫 _audit",
+    ("system.py", "PATCH", "/api/settings/backup-retention"):
+        "稽核在同一個交易內由 settings_registry.publish 寫入（動作 settings.retention.update／.pending），端點本身不再另呼叫 _audit，避免同一次變更兩列（test_legacy_retention_endpoint_writes_exactly_one_audit_row）",
     ("system.py", "POST", "/api/audit-log/module-counts"):
         "純查詢：選單紅色數字的計數（舊端點，前端已改用 /api/reads/module-counts）",
     ("modules/payroll/api/bonus.py", "POST", "/awards/plan/{quote_no}"):
