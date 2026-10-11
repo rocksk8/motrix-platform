@@ -22,6 +22,7 @@
 - L1（里程碑 2，加法）：`helpers.perm` 新增 `Delegation`、`can_via`、`acting_as`、`invalidate`；矩陣來源改為提供者 `perm.matrix_source`（IP-PM1，M16 `permmatrix` 模組提供；缺席或讀取失敗 ⇒ 種子＝今天的行為）；代理（範圍＝能力或單據類型、委派人自己要有、不可再轉、不可委派者不經代理、個人禁止優先）。
 - L0／L1（加法，使用者白話規則）：`core.capabilities` 動作加 `menu`（共 19 個）與 `ACTION_INFO`（每個動作的白話名稱／說明）；能力宣告**必填** `desc`、`impact`（含中文），選填 `question`（含 {who}）、`recommended`、`presets`、`impact_calc`，缺或只有代碼／英文 ⇒ 拒絕；`collect_presets`／`all_presets`（模組宣告 `capability_presets`）。新 L1 `helpers.perm_text`：白話提問、角色／模組／動作名稱、`explain_text`、`sentence_*`、`risk_hint`（輸出無代碼、無「他／她」）。
 - L1（新增，向下相容）：`helpers.perm.is_degraded()`；`perm.matrix()` 在提供者讀不到時沿用『最後一次成功載入的矩陣』（與 TTL 快取分開，`invalidate()` 不清它），從未成功過才退回種子並進入降級（高風險能力對非最高管理者拒絕）——修正 fail-open（05 稽核 A）。
+- L1（行為，向下相容）：`helpers.perm.invalidate()` 會呼叫所有 `("perm.changed", <名稱>)` 提供者（本程序即時清快取；單一訂閱者例外不擋其他人）。
 
 ## 1.128 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-05-reassign-rules）：轉簽不能變成自核的後門（使用者裁示）**

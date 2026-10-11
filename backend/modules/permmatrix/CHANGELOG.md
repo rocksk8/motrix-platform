@@ -7,6 +7,7 @@
 - `activate_due`：套用前確認申請人仍是在職最高管理者，否則標 `superseded` 並稽核（不以已降級／停用帳號的名義套用）。
 - `perm_pending`／24 小時仍是過渡實作，M1 不接端點或畫面（見 SPEC PMX13）。
 - `kick_activation`：執行緒起不來時放掉鎖並回 None（05 複驗備註；有測試）。
+- r6：提供者 `perm.can`（IP-PM2，值＝L1 `helpers.perm.can`，給系統中心）；`perm.invalidate()` 會通知所有 `perm.changed` 提供者（IP-PM3；只涵蓋本程序，跨程序靠 P1 `config_epoch`）。
 
 ## 1.0.0 — 2026-10-10（wip/t54-1d-permmatrix-p0）：里程碑 2——矩陣資料表、提供者、服務層（覆寫／代理／24 小時待生效／版本回溯）
 - 新模組 `permmatrix`（M16）。表 `perm_role_caps`／`perm_user_overrides`／`perm_versions`／`perm_pending`／`perm_delegations`（皆 T1；沒有 core schema 版本升級）。
