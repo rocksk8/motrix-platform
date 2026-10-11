@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2；系統中心 r6 併入）
+## (next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2；系統中心 r6 併入；補記）
 - L0（新增，只增）：`core.definitions.publish_direct(conn, kind, key, scope, body, note, user, commit=True)`——不經草稿直接發布一份 body（寫鎖內驗證、有送審中版本時 409）；`commit=False` 讓呼叫端同交易寫變更明細與稽核。
 - core migration（NEXT 佔位，列車取號）：表 `config_changes`（不可變）與 `config_change_events`（只增不改不刪，觸發器擋）。
 - L1（新增）：`helpers.config_ledger`（`record／history／register_domain／pending／cancel／supersede／activate_due／in_effect／restore_version／snapshot_version`；與權限矩陣設計 §7 對齊）；`helpers.settings_registry`（`SettingDef／register_group／get／get_group／publish／validate_values／groups／invalidate`；kind `setting_group`）；`helpers.settings_groups`（群組 `retention`、`uploads`）；`helpers.uploads.limits_for／max_file_bytes`。
