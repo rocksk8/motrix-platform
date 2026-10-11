@@ -40,6 +40,22 @@ def links_for_payslip(conn, slip_no) -> list:
     return [_public(r) for r in conn.execute(_SELECT + " WHERE l.slip_no=? ORDER BY l.id", (str(slip_no),)).fetchall()]
 
 
+def link_flags(conn, dispatch_ids, slip_no=None) -> dict:
+    """下拉標籤用（第 55 班）：`{dispatch_id: {"linked": 已連到任何『未作廢』勞報單, "linkedToThis": 已連到 slip_no 這張}}`。只回單號以外的布林，不回金額。"""
+    ids = [int(x) for x in dispatch_ids][:200]
+    if not ids:
+        return {}
+    q = ",".join("?" * len(ids))
+    out = {i: {"linked": False, "linkedToThis": False} for i in ids}
+    for r in conn.execute("SELECT l.dispatch_id, l.slip_no, p.status FROM payslip_dispatch_links l JOIN payslips p ON p.slip_no = l.slip_no"
+                          " WHERE l.dispatch_id IN (%s)" % q, ids).fetchall():
+        if (r["status"] or "") != "已作廢":
+            out[r["dispatch_id"]]["linked"] = True
+        if slip_no and r["slip_no"] == slip_no:
+            out[r["dispatch_id"]]["linkedToThis"] = True
+    return out
+
+
 def payslips_for_contractors(conn, contractor_ids, dispatch_ids=None) -> dict:
     """第 48 班：這些外包名冊人員的勞報單，**只限連到 `dispatch_ids`（呼叫端傳「同一案件的派發」）的**——不跨案揭露某人的全部勞報單。
     只看權威的 `contractor_id`（名稱推測存在 `contractor_guess_id`，不列、只回張數）。欄位：單號、狀態、受領人、開單日、已作廢旗標——
@@ -66,14 +82,21 @@ def _delete_links(conn, where, args):
     conn.execute("DELETE FROM payslip_dispatch_links WHERE " + where, args)
 
 
-def link(conn, slip_no, dispatch_id, user, note="") -> dict:
-    """建立連結（已存在 ⇒ 409）。勞報單不存在 ⇒ 404；已作廢 ⇒ 409（不能把作廢單接到派發）。不 commit。"""
+MSG_OFF_ROSTER = "這張派發的人員名單沒有這張勞報單的受領人，不能關聯"          # 第 55 班：與建立勞報單時同一條規則（使用者裁示 3：擋下）
+
+
+def link(conn, slip_no, dispatch_id, user, note="", personnel_ids=None) -> dict:
+    """建立連結（已存在 ⇒ 409）。勞報單不存在 ⇒ 404；已作廢 ⇒ 409（不能把作廢單接到派發）。不 commit。
+    第 55 班：呼叫端給了 `personnel_ids`（該派發人員名單的外包名冊 id）且這張勞報單有權威的 `contractor_id` ⇒ 受領人不在名單內就 400
+    （不論從哪個入口建立都一樣；勞報單沒選名冊人員 ⇒ 不檢查，同建立勞報單的既有規則）。"""
     slip_no = str(slip_no or "").strip()
-    row = conn.execute("SELECT status FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+    row = conn.execute("SELECT status, contractor_id FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
     if row is None:
         raise LinkError(404, "找不到此勞報單")
     if row["status"] == "已作廢":
         raise LinkError(409, "已作廢的勞報單不能關聯派發")
+    if personnel_ids is not None and row["contractor_id"] is not None and int(row["contractor_id"]) not in [int(x) for x in personnel_ids]:
+        raise LinkError(400, MSG_OFF_ROSTER)
     now = datetime.now().isoformat(timespec="seconds")
     try:
         conn.execute("INSERT INTO payslip_dispatch_links (slip_no, dispatch_id, note, created_by, created_at) VALUES (?,?,?,?,?)",
@@ -143,6 +166,7 @@ class _Links:
     links_for_payslip = staticmethod(links_for_payslip)
     payslips_for_contractors = staticmethod(payslips_for_contractors)
     link = staticmethod(link)
+    link_flags = staticmethod(link_flags)                          # 第 55 班（加法）
     unlink = staticmethod(unlink)
     delete_for_dispatch = staticmethod(delete_for_dispatch)      # 第53班（刪除暫存區 P1，加法）
     restore_rows = staticmethod(restore_rows)

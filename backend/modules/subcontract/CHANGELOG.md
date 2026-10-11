@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next)
+- 新提供者 `dispatch.search`（IP-116，暫定；第 55 班）：可搜尋、分頁的派發清單供勞報單下拉用（不含草稿／已取消、不含金額；案件名稱只給通過案件守門者）。`dispatches_for_person` 的每列組裝與案件可見性抽成共用函式，輸出不變。派發頁 `POST …/payslip-links` 新增勞報單關聯時一併傳人員名單給 `payslip.dispatch_links.link`（名單外 400）。無 migration。
+
 ## 1.1.32 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t53-1d-rb-dispatch-no；node-39 稽核：派發單號不重發）**
 - 派發單號 `DP-YYYYMMDD-NNNN`（取現存最大號 + 1）原本會在『當天最新一張進暫存區』後被新單重發、還原時只好換號（已寄出／列印的原單號被取代）。現在：進暫存區時單號放進快照 `meta.codes`，`dispatch_flow.next_dispatch_code` 跳過暫存區保留的號碼（`helpers.recycle_bin.reserved_ids`；暫存區模組不在 ⇒ 行為不變）；還原後單號原樣回來、不換號。測試：`tests/test_recycle_adapter_t53.py::test_dispatch_number_in_the_bin_is_reserved_…`。

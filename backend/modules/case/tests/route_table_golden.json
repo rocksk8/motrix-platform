@@ -463,6 +463,7 @@
 ["POST", "/api/payment-requests/{request_no}/reject", "reject_payment_request_api_payment_requests__request_no__reject_post", [["header", "authorization", false], ["path", "request_no", true]], [["application/json", ""]], []]
 ["POST", "/api/payment-requests/{request_no}/revoke-approval", "revoke_payment_request_approval_api_payment_requests__request_no__revoke_approval_post", [["header", "authorization", false], ["path", "request_no", true]], [["application/json", ""]], []]
 ["POST", "/api/payment-requests/{request_no}/submit", "submit_payment_request_api_payment_requests__request_no__submit_post", [["header", "authorization", false], ["path", "request_no", true]], [], []]
+["GET", "/api/payslip-dispatch-options", "dispatch_options_api_payslip_dispatch_options_get", [["header", "authorization", false], ["query", "contractor_id", false], ["query", "include_all", false], ["query", "offset", false], ["query", "q", false], ["query", "slip_no", false]], [], []]
 ["GET", "/api/payslip-person-dispatches", "person_dispatches_api_payslip_person_dispatches_get", [["header", "authorization", false], ["query", "contractor_id", true]], [], []]
 ["GET", "/api/payslip-person-dispatches/by-dispatch", "person_dispatch_roster_api_payslip_person_dispatches_by_dispatch_get", [["header", "authorization", false], ["query", "dispatch_id", true]], [], []]
 ["GET", "/api/payslips", "list_payslips_api_payslips_get", [["header", "authorization", false], ["query", "contractor_id", false], ["query", "limit", false], ["query", "month", false], ["query", "offset", false]], [], []]
