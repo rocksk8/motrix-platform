@@ -387,3 +387,29 @@ def test_B_lock_is_released_when_the_thread_cannot_start(monkeypatch):
     assert S.kick_activation() is None, "起不了執行緒 ⇒ 回 None、不丟例外（權限檢查不受影響）"
     assert S._act_lock.acquire(blocking=False), "鎖已放掉，下次還能再試"
     S._act_lock.release()
+
+
+def test_perm_can_provider_is_the_l1_can_and_hub_style_lookup_works(conn, make_user):
+    import modules.permmatrix as PM
+    assert PM.MODULE.providers[("perm.can", "permmatrix")] is P.can
+    su = _mk(make_user, "root", "superadmin")
+    assert PM.MODULE.providers[("perm.can", "permmatrix")](su, "payroll.payslip.approve") is True
+    assert PM.MODULE.providers[("perm.can", "permmatrix")](None, "payroll.payslip.approve") is False
+
+
+def test_perm_changed_invalidate_calls_every_subscriber_and_one_failure_does_not_block_others(monkeypatch):
+    from core import registry
+    calls = []
+    monkeypatch.setitem(registry._LEGACY_PROVIDERS, ("perm.changed", "t_bad"), lambda: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setitem(registry._LEGACY_PROVIDERS, ("perm.changed", "t_ok"), lambda: calls.append(1))
+    P.invalidate()
+    assert calls == [1]
+    assert P._prov_cache["m"] is None
+
+
+def test_perm_changed_fires_when_a_write_goes_through_the_service(conn, make_user, monkeypatch):
+    from core import registry
+    calls = []
+    monkeypatch.setitem(registry._LEGACY_PROVIDERS, ("perm.changed", "t_ok"), lambda: calls.append(1))
+    S.set_role_cap(conn, SU, "finance", "zz.doc.edit", True, "財務協助修改")
+    assert len(calls) >= 1, "服務層寫入 ⇒ invalidate ⇒ 訂閱者收到通知"

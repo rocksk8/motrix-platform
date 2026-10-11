@@ -1,6 +1,7 @@
 # 權限矩陣 更新紀錄
 
 ## (next) — 2026-10-11（wip/t54-1d-permmatrix-p0-r3；05 稽核 A／B／C 修正）
+- r6：提供者 `perm.can`（IP-PM2，值＝L1 `helpers.perm.can`，給系統中心）；`perm.invalidate()` 會通知所有 `perm.changed` 提供者（IP-PM3；只涵蓋本程序，跨程序靠 P1 `config_epoch`）。
 - `load_matrix` 改為純讀取（不再呼叫 `activate_due`）；到期待生效由 `kick_activation()` 背景轉態（單一飛行、不阻塞權限檢查）。
 - `activate_due`：套用前確認申請人仍是在職最高管理者，否則標 `superseded` 並稽核（不以已降級／停用帳號的名義套用）。
 - `kick_activation`：執行緒起不來時放掉鎖並回 None（05 複驗備註；有測試）。
