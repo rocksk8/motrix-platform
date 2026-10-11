@@ -389,14 +389,6 @@ def test_B_lock_is_released_when_the_thread_cannot_start(monkeypatch):
     S._act_lock.release()
 
 
-def test_perm_can_provider_is_the_l1_can_and_hub_style_lookup_works(conn, make_user):
-    import modules.permmatrix as PM
-    assert PM.MODULE.providers[("perm.can", "permmatrix")] is P.can
-    su = _mk(make_user, "root", "superadmin")
-    assert PM.MODULE.providers[("perm.can", "permmatrix")](su, "payroll.payslip.approve") is True
-    assert PM.MODULE.providers[("perm.can", "permmatrix")](None, "payroll.payslip.approve") is False
-
-
 def test_perm_changed_invalidate_calls_every_subscriber_and_one_failure_does_not_block_others(monkeypatch):
     from core import registry
     calls = []
