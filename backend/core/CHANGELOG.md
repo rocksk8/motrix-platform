@@ -20,6 +20,10 @@
 - L0／L1（加法，使用者白話規則）：`core.capabilities` 動作加 `menu`（共 19 個）與 `ACTION_INFO`（每個動作的白話名稱／說明）；能力宣告**必填** `desc`、`impact`（含中文），選填 `question`（含 {who}）、`recommended`、`presets`、`impact_calc`，缺或只有代碼／英文 ⇒ 拒絕；`collect_presets`／`all_presets`（模組宣告 `capability_presets`）。新 L1 `helpers.perm_text`：白話提問、角色／模組／動作名稱、`explain_text`、`sentence_*`、`risk_hint`（輸出無代碼、無「他／她」）。
 - L1（新增，向下相容）：`helpers.perm.is_degraded()`；`perm.matrix()` 在提供者讀不到時沿用『最後一次成功載入的矩陣』（與 TTL 快取分開，`invalidate()` 不清它），從未成功過才退回種子並進入降級（高風險能力對非最高管理者拒絕）——修正 fail-open（05 稽核 A）。
 - L1（行為，向下相容）：`helpers.perm.invalidate()` 會呼叫所有 `("perm.changed", <名稱>)` 提供者（本程序即時清快取；單一訂閱者例外不擋其他人）。
+- **系統中心 P1（併入）**：L0（新增，向下相容）：`core/system_hub.py`——系統中心註冊表（分組固定、卡片驗證、依權限過濾、組裝）與 `core/system_hub_l1.json`（L1 頁面的卡片）；`core/menu.py` 的選單項多一個選用欄位 `hub`（`ITEM_KEYS`；`declaration`／`build` 的列在有 `hub` 時多回 `hub: true`）。新端點 `GET /api/system-hub`（`routers/system_hub.py`；已登入即可，伺服器依權限過濾；15 秒快取；徽章提供者並行、300ms 逾時）、新頁 `system-hub.html`。
+- **系統中心 P1（併入）**：導覽列：『系統』群組在 `sidebar.js` 收斂成單一入口（群組名當連結、底下所有系統頁都算它的目前位置；一個系統頁都開不了的人看不到這個群組）；系統底下的頁面頂端多一條『← 系統』麵包屑。**舊網址全部不變**，頁面權限檢查不變。
+- **系統中心 P1（併入）**：原則（使用者核定）：框架先行、不寫死決定——新增一個設定或頁面 ＝ 在擁有它的模組宣告一筆 `system_cards`，**不改 hub**；守門 `tests/platform/test_system_hub.py`（與選單雙向對等、卡片 perm＝頁面選單 perm、徽章隔離、頁面不寫死項目）。
+- **系統中心 P1（併入）**：整合點 IP-HUB1（`system.hub_badge`；能力判斷直接用 L1 `helpers.perm.can`；hub 提供 `perm.changed`，其整合點由權限矩陣登記）；設計 `docs/platform/plans/SYSTEM-HUB-DESIGN-T54.md`。
 
 ## 1.128 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-05-reassign-rules）：轉簽不能變成自核的後門（使用者裁示）**

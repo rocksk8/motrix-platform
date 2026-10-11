@@ -1,5 +1,9 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-10（wip/t50-int；第 50 班）
+- **（併入）(next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1）：module.json 新增 `system_cards`（匯款款別設定卡片）**
+- 加性宣告：在系統中心（`/pages/system-hub.html`）登記這個模組擁有的系統頁面；只影響索引顯示，頁面與 API 的權限、行為完全不變。
+
 ## 1.1.32 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t53-1d-rb-dispatch-no；node-39 稽核：派發單號不重發）**
 - 派發單號 `DP-YYYYMMDD-NNNN`（取現存最大號 + 1）原本會在『當天最新一張進暫存區』後被新單重發、還原時只好換號（已寄出／列印的原單號被取代）。現在：進暫存區時單號放進快照 `meta.codes`，`dispatch_flow.next_dispatch_code` 跳過暫存區保留的號碼（`helpers.recycle_bin.reserved_ids`；暫存區模組不在 ⇒ 行為不變）；還原後單號原樣回來、不換號。測試：`tests/test_recycle_adapter_t53.py::test_dispatch_number_in_the_bin_is_reserved_…`。

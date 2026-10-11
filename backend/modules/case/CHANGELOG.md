@@ -5,6 +5,8 @@
 - 報價單表單 V3.21 → V3.22：欄位名稱「售後服務」改為「售後服務及備註說明」（報價單表單、條款組管理、列印／PDF、送審原因文字）。只改顯示名稱：欄位鍵 `afterSales`、條款組與已存報價單的資料都不變；顯示名稱集中在 `quote_terms.AFTERSALES_LABEL`（表單端 `AFTERSALES_LABEL`），日後要讓管理者自訂時從這裡接。
 - **（併入）(next) — 2026-10-11（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S2）**
 - `api/case_extra_expenses.py`：額外支出附件的件數／合計大小上限改讀設定中心（`uploads` 群組，`helpers.uploads.limits_for`）；預設值與原本的常數相同，部署後行為不變。
+- **（併入）(next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1）：module.json 新增 `system_cards`（利潤口徑設定（規劃中）卡片）**
+- 加性宣告：在系統中心（`/pages/system-hub.html`）登記這個模組擁有的系統頁面；只影響索引顯示，頁面與 API 的權限、行為完全不變。
 
 ## 1.0.176 — 2026-10-11（wip/m1-int；報價單表單 V3.21）
 - 報價單表單 V3.20 → V3.21（M1-a 整合補登）：毛利率顏色門檻改用 `static/margin-tone.js` 單一來源（報價單列表與報價單表單；案件管理沒有毛利率顏色；`wip/t55-05-display-consistency`）；表單版本帳（`test_form_version_bumped`）與版本紀錄（`version_manifest.json` 2026-10-11a～c）同批補上。

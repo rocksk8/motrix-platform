@@ -1,0 +1,264 @@
+{
+ "_doc": "L1 系統中心卡片（core.system_hub）。只放 L1 頁面；模組頁面的卡片宣告在各自 module.json 的 system_cards。新設定／新頁面＝一筆註冊，不改 hub。",
+ "cards": [
+  {
+   "id": "audit-log",
+   "section": "audit",
+   "title": "歷史紀錄",
+   "desc": "稽核日誌：誰在何時對哪張單做了什麼",
+   "impact": "影響：只是查看，不會改動任何資料。",
+   "href": "audit-log.html",
+   "perm": [
+    "audit_log"
+   ],
+   "order": 10,
+   "keywords": "稽核 紀錄 日誌 軌跡",
+   "icon": "log"
+  },
+  {
+   "id": "online-stats",
+   "section": "audit",
+   "title": "在線時數統計",
+   "desc": "各帳號登入與在線時數",
+   "impact": "影響：只是查看，不會改動任何資料。",
+   "href": "online-stats.html",
+   "perm": "superadmin",
+   "order": 30,
+   "keywords": "在線 登入 時數 統計",
+   "icon": "user"
+  },
+  {
+   "id": "storage-settings",
+   "section": "data",
+   "title": "儲存位置",
+   "desc": "上傳檔、報價單 PDF 與備份存放的位置與容量",
+   "impact": "影響：換位置後，新上傳的檔案存到新位置；舊檔案不會自動搬移。",
+   "href": "storage-settings.html",
+   "perm": "superadmin",
+   "order": 10,
+   "keywords": "儲存 位置 容量 磁碟",
+   "icon": "disk"
+  },
+  {
+   "id": "backup-retention",
+   "section": "data",
+   "title": "備份與保留",
+   "desc": "備份保留天數、最近一次備份、還原說明",
+   "impact": "影響：縮短保留天數後，超過天數的舊備份會在下次清理時被刪除。",
+   "href": "company-profile-settings.html#backup",
+   "perm": "superadmin",
+   "order": 20,
+   "keywords": "備份 還原 保留 災難",
+   "icon": "disk"
+  },
+  {
+   "id": "users",
+   "section": "identity",
+   "title": "使用者管理",
+   "desc": "新增帳號、停用、重設密碼、指派職責角色",
+   "impact": "影響：停用或改權限後，對方下次登入就生效；已寫入的紀錄不會被刪除。",
+   "href": "users.html",
+   "perm": "superadmin",
+   "order": 10,
+   "keywords": "帳號 密碼 停用 人員 登入",
+   "icon": "user"
+  },
+  {
+   "id": "duty-roles",
+   "section": "identity",
+   "title": "職責角色",
+   "desc": "把常用的模組權限組合成角色，一次授權給多人",
+   "impact": "影響：改角色內容，所有套用這個角色的人會一起改變。",
+   "href": "duty-roles.html",
+   "perm": "superadmin",
+   "order": 20,
+   "keywords": "角色 權限 授權 職責",
+   "icon": "shield"
+  },
+  {
+   "id": "permission-matrix",
+   "section": "identity",
+   "title": "權限設定",
+   "desc": "角色 × 模組 × 動作的矩陣檢視與調整（設計中）",
+   "impact": "影響：調整後，相關人員能看到與能做的事會立刻改變。",
+   "href": "permission-matrix.html",
+   "perm": "superadmin",
+   "order": 30,
+   "keywords": "權限 矩陣 授權 角色",
+   "icon": "shield",
+   "planned": true
+  },
+  {
+   "id": "org-structure",
+   "section": "identity",
+   "title": "組織架構設定",
+   "desc": "處、部門與主管；簽核鏈與報表的部門來源",
+   "impact": "影響：改部門或主管後，之後送出的單據簽核人會跟著變；已在簽核中的單據不變。",
+   "href": "org-structure.html",
+   "perm": "superadmin",
+   "order": 40,
+   "keywords": "部門 處 主管 組織",
+   "icon": "org"
+  },
+  {
+   "id": "approval-delegates",
+   "section": "identity",
+   "title": "簽核代理人",
+   "desc": "請假或出差期間，指定誰代你簽核",
+   "impact": "影響：代理期間內，要你簽的單據也會交給代理人簽。",
+   "href": "approval-delegates.html",
+   "perm": [
+    "quotation"
+   ],
+   "order": 50,
+   "keywords": "代理 請假 出差 簽核",
+   "icon": "user"
+  },
+  {
+   "id": "module-settings",
+   "section": "modules",
+   "title": "模組管理",
+   "desc": "啟用、停用模組與授權狀態",
+   "impact": "影響：停用模組後，它的頁面與選單項目會隱藏；資料不會被刪除。",
+   "href": "module-settings.html",
+   "perm": "superadmin",
+   "order": 10,
+   "keywords": "模組 啟用 停用 授權",
+   "icon": "build"
+  },
+  {
+   "id": "module-builder",
+   "section": "modules",
+   "title": "模組建構器",
+   "desc": "不寫程式建立自訂記錄與表單",
+   "impact": "影響：新增的自訂記錄只有被授權的人看得到；既有資料不變。",
+   "href": "module-builder.html",
+   "perm": "superadmin",
+   "order": 20,
+   "keywords": "自訂 表單 建構 記錄",
+   "icon": "build"
+  },
+  {
+   "id": "notification-settings",
+   "section": "notify",
+   "title": "通知設定",
+   "desc": "寄件帳號、系統網址、寄信開關與測試",
+   "impact": "影響：改寄件帳號後，全公司的通知信都從新的帳號寄出。",
+   "href": "notification-settings.html",
+   "perm": "superadmin",
+   "order": 10,
+   "keywords": "通知 寄件 SMTP 信件",
+   "icon": "mail"
+  },
+  {
+   "id": "mail-settings",
+   "section": "notify",
+   "title": "信件與通知收件設定",
+   "desc": "逐類型設定誰收信、誰收站內通知",
+   "impact": "影響：改收件人後，之後的通知會寄給新的人；已寄出的信不會更改。",
+   "href": "mail-settings.html",
+   "perm": "superadmin",
+   "order": 20,
+   "keywords": "收件人 信件 通知 退訂",
+   "icon": "mail"
+  },
+  {
+   "id": "google-calendar-settings",
+   "section": "notify",
+   "title": "Google 行事曆設定",
+   "desc": "哪些事件同步到行事曆、日曆帳號",
+   "impact": "影響：關掉某類事件後，新的事件不再放到行事曆；已存在的事件不會自動刪除。",
+   "href": "google-calendar-settings.html",
+   "perm": "superadmin",
+   "order": 30,
+   "keywords": "行事曆 日曆 Google 同步",
+   "icon": "cal"
+  },
+  {
+   "id": "settings-center",
+   "section": "settings",
+   "title": "設定中心",
+   "desc": "所有可調整的設定集中在這裡：保存期限、上傳大小、確認期間等",
+   "impact": "影響：每一項設定都會先說明改了會影響什麼；重要的變更需要等待確認期間才會生效。",
+   "href": "settings-center.html",
+   "perm": "superadmin",
+   "order": 10,
+   "keywords": "設定 參數 門檻 天數 上限",
+   "icon": "gear"
+  },
+  {
+   "id": "company-profile-settings",
+   "section": "settings",
+   "title": "公司資料設定",
+   "desc": "公司抬頭、統編、據點、Logo 與品牌名稱",
+   "impact": "影響：改抬頭或統編後，之後產生的報價單與文件會用新資料；已產生的文件不變。",
+   "href": "company-profile-settings.html",
+   "perm": "superadmin",
+   "order": 20,
+   "keywords": "公司 抬頭 統編 據點 Logo 品牌",
+   "icon": "gear"
+  },
+  {
+   "id": "legal-params",
+   "section": "settings",
+   "title": "法規參數設定",
+   "desc": "所得稅扣繳、健保費率等依生效日版本的法定參數",
+   "impact": "影響：新的稅率或費率從生效日起計算；生效日之前的單據不受影響。",
+   "href": "legal-params.html",
+   "perm": "superadmin",
+   "order": 30,
+   "keywords": "法規 稅 扣繳 健保 費率",
+   "icon": "scale"
+  },
+  {
+   "id": "module-versions",
+   "section": "status",
+   "title": "版本紀錄",
+   "desc": "目前版本與各模組更新紀錄",
+   "impact": "影響：只是查看，不會改動任何資料。",
+   "href": "module-versions.html",
+   "perm": [
+    "module_versions"
+   ],
+   "order": 10,
+   "keywords": "版本 更新 紀錄",
+   "icon": "ver"
+  },
+  {
+   "id": "schema-status",
+   "section": "status",
+   "title": "資料庫結構",
+   "desc": "資料庫結構版本，以及各模組的升級是否都已完成",
+   "impact": "影響：只是查看，不會改動任何資料。",
+   "href": "schema-status.html",
+   "perm": "superadmin",
+   "order": 20,
+   "keywords": "資料庫 schema 遷移",
+   "icon": "ver"
+  },
+  {
+   "id": "approval-settings",
+   "section": "workflow",
+   "title": "簽核設定",
+   "desc": "各種單據的簽核層級、簽核人與套用範圍",
+   "impact": "影響：只影響之後送出的單據；簽核中的單據照原本的流程走完。",
+   "href": "approval-settings.html",
+   "perm": "superadmin",
+   "order": 10,
+   "keywords": "簽核 流程 層級 審核",
+   "icon": "flow"
+  },
+  {
+   "id": "expense-types",
+   "section": "workflow",
+   "title": "支出申請類型",
+   "desc": "請購、採購、差旅、零用金的欄位、版面與單號",
+   "impact": "影響：只影響之後新開的申請單；已開立的單據保持原樣。",
+   "href": "expense-types.html",
+   "perm": "superadmin",
+   "order": 20,
+   "keywords": "支出 費用 請購 採購 差旅 零用金",
+   "icon": "file"
+  }
+ ]
+}
