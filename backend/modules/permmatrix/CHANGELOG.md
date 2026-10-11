@@ -13,6 +13,8 @@
 - **（併入）(next) — 2026-10-11（wip/t54-1d-permmatrix-p0-r9；05 稽核 A／B／C 修正＋perm.changed 通知）**
 - **（併入）(next) — 2026-10-11（wip/t54-1d-permmatrix-p0-r10；05 稽核 A／B／C 修正＋perm.changed 通知）**
 - r10（05 稽核 B）：放寬一律不立即——勾回「種子本來就有、後來被取消」的高風險格子、取消高風險能力的個人禁止，都改走 24 小時待生效（需原因）；到期套用回種子預設時刪覆寫列。新增守門 `test_permmatrix_writes_unwired.py`：帳本接上前不得有端點／頁面／其他程式呼叫 P0 寫入函式（SPEC PMX14）。
+- **（併入）(next) — 2026-10-11（wip/t54-1d-permmatrix-p0-r11；05 稽核 A／B／C 修正＋perm.changed 通知）**
+- r11：未接線守門補洞——字串常數（含 `a`+`b` 折疊）、`modules.permmatrix.service` 的匯入／字串／屬性鏈（堵 getattr／importlib／globals 寫法），正對照列出 12 種寫法。
 
 ## 1.0.0 — 2026-10-10（wip/t54-1d-permmatrix-p0）：里程碑 2——矩陣資料表、提供者、服務層（覆寫／代理／24 小時待生效／版本回溯）
 - 新模組 `permmatrix`（M16）。表 `perm_role_caps`／`perm_user_overrides`／`perm_versions`／`perm_pending`／`perm_delegations`（皆 T1；沒有 core schema 版本升級）。
