@@ -30,7 +30,17 @@ WHERE d.active=1
   AND (d.end_date < date('now','localtime') OR d.start_date > date('now','localtime'));
 ```
 
-（獎金簽核與獎金發放的待辦表名以正式機實際結構為準；步驟檔附 b7 對照過的版本。**結果為空，或使用者逐筆確認可失效，才切換。**）
+```sql
+-- 案件分潤：待審核中，簽核鏈上有委派人（表名由 b7 對照程式確認：bonus_case_awards；approval_json 欄）
+SELECT d.id AS delegate_row, d.delegator_username, d.delegate_username, d.end_date, a.id AS award_id, a.quote_no, a.status
+FROM approval_delegates d
+JOIN bonus_case_awards a ON a.status='待審核' AND a.approval_json LIKE '%"' || d.delegator_username || '"%'
+WHERE d.active=1
+  AND (d.end_date < date('now','localtime') OR d.start_date > date('now','localtime'));
+-- 獎金分潤：表 bonus_awards（approval_json＋status）；同上寫法，status 的「簽核中」字樣請以正式機該表實際值為準（未逐一核對）
+```
+
+（獎金發放沒有獨立表：`bonus_payouts` 是模組檔，待發放／已發放狀態來自 `bonus_case_awards.status='待發放'／'已發放'`＋`paid_at／paid_by`，明細在 `bonus_case_award_lines`。表名由 b7 查證。**結果為空，或使用者逐筆確認可失效，才切換。**）
 
 ## 3. 步驟檔「行為變更清單」文字（貼用）
 
