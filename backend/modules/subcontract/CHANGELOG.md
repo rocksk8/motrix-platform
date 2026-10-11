@@ -32,7 +32,7 @@
 - 加性宣告：在系統中心（`/pages/system-hub.html`）登記這個模組擁有的系統頁面；只影響索引顯示，頁面與 API 的權限、行為完全不變。
 - **（併入）(next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1；r5）：module.json 新增 `system_cards`（匯款款別設定卡片）**
 
-## (next)
+## (next) — wip/t55-05-payslip-dropdown-r2（第 55 班）
 - 新提供者 `dispatch.search`（IP-116，暫定；第 55 班）：可搜尋、分頁的派發清單供勞報單下拉用（不含草稿／已取消、不含金額；案件名稱只給通過案件守門者）。`dispatches_for_person` 的每列組裝與案件可見性抽成共用函式，輸出不變。派發頁 `POST …/payslip-links` 新增勞報單關聯時一併傳人員名單給 `payslip.dispatch_links.link`（名單外 400）。無 migration。
 
 ## 1.1.32 — 2026-10-10（wip/t50-int；第 50 班）
