@@ -4,7 +4,6 @@
 - **（併入）(next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2）**
 - L0（新增，只增）：`core.definitions.publish_direct(conn, kind, key, scope, body, note, user, commit=True)`——不經草稿直接發布一份 body（寫鎖內驗證、有送審中版本時 409）；`commit=False` 讓呼叫端同交易寫變更明細與稽核。
 - core migration（NEXT 佔位，列車取號）：表 `config_changes`（不可變）與 `config_change_events`（只增不改不刪，觸發器擋）。
-- 風險欄位：`SettingDef(risk=…, requires_pending=True)` 的變更不立即生效，寫待生效明細（24 小時、可撤銷、讀取時到期即生效）；`settings_registry.materialize_due()` 由每日檢查呼叫；`config_ledger.activate_due(conn, now, domain=None)` 新增 domain 篩選。第一批沒有任何欄位使用（框架先行，欄位待使用者逐項確認）。
 - 新端點：`/api/settings-center/groups`（GET／GET {group}／POST {group}）、`/api/settings-center/pending`（GET）、`/api/settings-center/pending/{id}/cancel`（POST）、`/api/settings-center/public`；頁面 `settings-center.html`（系統 > 設定中心）。
 - **部署零行為變更**：不寫任何定義列；沒有列＝程式預設＝原本的常數（`audit_log_keep_days` 1825、通知 90、請求紀錄 90、單檔 20MB、支出附件 10 個／50MB）。唯一新增的拒絕：`PATCH /api/settings/backup-retention` 的 `audit_log_keep_days` < 365 ⇒ 400；舊庫裡低於 365 的值讀取時夾到 365。
 - 回滾：環境變數 `MOTRIX_SETTINGS_DEFAULTS_ONLY=1` ⇒ 所有 `settings.get` 回程式預設；純程式回退即還原（兩張新表留著無害）。
