@@ -1050,3 +1050,17 @@ L1 的中央檢查 `perm.can()` 需要「種子 ⊕ 管理者的覆寫」＋有�
 | 對方不在時 | 模組不在或讀取失敗 ⇒ L1 用種子（＝今天的行為）並記 log，不多給也不少給 |
 | 契約版本 | 1（2026-10-10） |
 | 守門 | `backend/modules/permmatrix/tests/test_permmatrix_m2.py`、`backend/tests/platform/test_perm_equivalence_gate_a.py` |
+
+## IP-PM2　`perm.changed`：權限／代理／狀態異動通知（L1 `helpers/perm.py::invalidate()` → 訂閱者；多提供者；暫定號，列車定號；2026-10-11，權限矩陣框架 P0 r9）
+
+矩陣、覆寫、代理或待生效狀態變更時，L1 在 `invalidate()` 內逐一呼叫所有訂閱者，讓快取權限結果的模組立刻清自己的快取。**只涵蓋本程序**；跨程序一致性靠 P1 的 `config_epoch`（最多數秒後重載）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | 訂閱者自行登記，例如系統中心 `routers/system_hub.py`（`registry.provide("perm.changed", "system_hub", clear_cache)`）；權限矩陣本身不訂閱 |
+| 使用方 | L1 `helpers/perm.py::invalidate()`：逐一呼叫所有提供者（每個包 try，一個壞不影響其他） |
+| 形式 | provider，多提供者；`fn() -> None` |
+| 語法 | 提供：`registry.provide("perm.changed", "<name>", fn)`；取用：`registry.providers("perm.changed")` ⇒ `{名稱: fn}` |
+| 對方不在時 | 沒有訂閱者 ⇒ 只清矩陣快取；訂閱者的快取最壞等自己的 TTL 過期 |
+| 契約版本 | 1 |
+| 守門 | `backend/modules/permmatrix/tests/test_permmatrix_m2.py::test_perm_changed_*` |
