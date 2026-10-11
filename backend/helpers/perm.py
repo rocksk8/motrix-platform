@@ -93,7 +93,20 @@ def set_matrix_source(fn: Optional[Callable[[], Matrix]]) -> None:
 
 
 def invalidate() -> None:
+    """清本程序的矩陣快取，並通知所有 `("perm.changed", <名稱>)` 提供者（例：系統中心清它的頁面快取）。
+    只涵蓋本程序；跨程序一致性靠 P1 的 `config_epoch`（其他程序最多數秒後重載）。通知失敗不影響清快取。"""
     _prov_cache.update(at=-1e9, m=None)
+    try:
+        from core import registry
+        hooks = registry.providers("perm.changed")
+    except Exception:                                              # noqa: BLE001
+        logger.exception("perm.changed: 取得提供者失敗")
+        return
+    for name, fn in hooks.items():
+        try:
+            fn()
+        except Exception:                                          # noqa: BLE001 — 單一訂閱者壞掉不擋其他人
+            logger.exception("perm.changed 提供者 %s 失敗", name)
 
 
 def _provider():
