@@ -38,6 +38,7 @@ SECTIONS = (
 ICONS = ("user", "shield", "flow", "mail", "cal", "disk", "trash", "log", "gear", "build", "ver", "org", "file", "scale")
 CARD_KEYS = {"id", "section", "title", "desc", "impact", "href", "perm", "cap", "order", "keywords", "icon", "planned"}
 TONES = ("ok", "info", "warn", "bad", "plan")
+L1_OWNER = "core"                         # L1 頁面的卡片歸屬標記（只是索引上的註記，不是權限用的模組鍵）
 
 
 def section_keys():
@@ -46,7 +47,7 @@ def section_keys():
 
 def load_l1_cards(path=L1_CARDS):
     d = json.loads(Path(path).read_text(encoding="utf-8"))
-    return [dict(c, module="core") for c in d.get("cards") or []]
+    return [dict(c, **{"module": L1_OWNER}) for c in d.get("cards") or []]
 
 
 def module_cards(manifests):
