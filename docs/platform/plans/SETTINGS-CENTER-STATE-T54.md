@@ -1,16 +1,16 @@
 # 設定中心 Train A 實作狀態備忘（S0＋S2；給 context 壓縮／換手接手）
 
-更新：2026-10-10 傍晚。分支 `wip/t54-n39-settings-s0s2`（工作樹 `D:\開發測試檔\n39-s0`；基底 origin/platform `b2486535c`；**本地 commit，尚未 push**，HEAD d7140d627 之後只有本檔更新）。
-規則：只有我寫這個分支；與 recyclebin 完全不重疊；單程序輕量測試；不 merge／不部署；上線**零行為變更**；(next) 區塊每模組一則；里程碑回報 node-d8。
-**安靜規則（node-d8，10-10）**：官方閘門（第 53 班）在跑時，不跑 pytest／建置；等 node-d8 宣布 gate 結束再跑 `tests/platform` 全跑。第 54 班小修與第 55 班框架**合併為一班**，在第 53 班上線後出貨，Train A 搭這一班；保持可 rebase（新分支名，不強推）。
+更新：2026-10-12（換手：node-39 → hichan-1d）。分支 `wip/t54-n39-settings-s0s2-r8` @ `09c9c2c53`（鏈：r4 5ad288732→r5 23b57f5fc→r6 32e319606→r7 6438b57cf→r8；已 push；ab 稽核 PASS；M2 r2 官方閘門 `train/m2-int-r2` 8207b54d8 測試中）。本檔更新在 r9（只動文件）。
+規則：**閘門期間（安靜規則）不跑 pytest／重型作業**；M2 上線並驗證前不開始新程式；自己寫的分支不自審（ab／05／b5 稽核）；新分支名、不強推；上線零行為變更；(next) 區塊每模組一則；里程碑回報 node-d8。
 
 ## 相關分支與最新 SHA
 | 分支 | 內容 | SHA |
 |---|---|---|
-| wip/t54-n39-settings-s0s2（本地） | Train A 程式 | d7140d627 |
-| wip/t54-n39-settings-design | 設計稿（§2.1 與 1d 同文、附錄 B 鎖定清單、C 零技術門檻/影響、D 安全/雙人/預設組） | 846f04f9e |
-| wip/t54-n39-guide-framework | MODULE-GUIDE §15（含 15.8–15.10 UX/影響/碰到就框架化）、CORE-SPEC 裁示列、plans/FRAMEWORKIZE-DEBT-T54.md | dad3ab7d8 |
-| wip/t54-n39-program | FRAMEWORKIZE-PROGRAM-T54.md（DONE、框架層、矩陣 363 項、合併班 M1–M4）、LOCKED-LIST-CHECKLIST（已裁示）、framework_sweep_matrix_t54.csv、configurability_gaps_t54.csv | 8451d9c3e |
+| wip/t54-n39-settings-s0s2-r8 | Train A 程式（工作樹 `D:\開發測試檔
+39-s0b`；紀錄 `n39-s0b-*.txt`） | 09c9c2c53 |
+| wip/t54-n39-settings-design-r2 | 設計稿；含報價單「擇一方案」§9.12（`QUOTE-CASE-DISPLAY-FRAMEWORK-SCOPE-T54.md`，工作樹 `n39-sd`） | 921c6ddf9 |
+| wip/t54-n39-program-r3 | 專案總表 FRAMEWORKIZE-PROGRAM-T54.md（§5.2；工作樹 `n39-prog`） | 576fca1b0 |
+| wip/t54-n39-guide-framework | MODULE-GUIDE §15、CORE-SPEC 裁示列、FRAMEWORKIZE-DEBT-T54.md | dad3ab7d8 |
 
 ## 已完成（Train A 程式，皆有測試）
 - L0 `definitions.publish_direct`；core migration（NEXT 佔位）`config_changes`（含 approvals_required）＋`config_change_events`（含 approved）；
@@ -22,12 +22,21 @@
 - 登記：core CHANGELOG (next)、L1 快照（--update --pending）、route golden（T40_WRITE_GOLDEN）、PAGE_POPULATION+1、write-endpoint EXEMPT（groups POST、profiles apply）。
 - 測試：`tests/platform/test_settings_registry_t54.py`、`test_settings_pending_t54.py`、`test_settings_security_t54.py`、`test_settings_ui_plain_language.py`（共 49+ 項綠）；相關既有 110 項綠（backup retention、attach caps、notifications、online activity、voucher attachments、daily checks）。
 
+## r4–r8 修正（稽核與閘門紅燈；皆已綠）
+- r4：`modules.json` 補 `/api/settings-center` 前綴（core）。
+- r5：舊「備份保留」端點不再雙寫稽核（只留 `publish()` 同交易稽核）＋測試斷言恰一列。
+- r6：`config_ledger` 單元卡（EVENTS、audit_event、契約測試檔）；設定變更帳本表納入每日 JSON 備份。
+- r7：單元卡 `settings_groups` 公開介面「無」（群組名移至不變式）、`settings_registry` 補 11 個公開名稱。
+- r8（M2 not_e2e 紅燈）：`config_ledger.activate_due` 改名 **`promote_due`**（PMX14 名稱守門：權限矩陣的 `activate_due` 不得被其他程式呼叫）；`settings-center.html` 登記為唯讀頁並附理由（AC1，S1 編輯 UI 上線時要從 `READ_ONLY_PAGES` 拿掉）；示範資料重設（DM1）一併清設定帳本（暫時拿掉 append-only 觸發器後重建）＋測試。
+- 稽核第 1 輪（b0c285ce1）：`confirm_period_days`（預設 7 天、下限 1 天；來源 `change_control.confirm_period_days`）；retention／uploads 全欄位的放寬判定（0＝永久為最寬）；每個送出欄位都取代既有待生效；取消／核准用 `begin_write` 並同交易稽核；`/pending` 含核准資訊；`materialize` 重新驗證邊界；公司資料頁在有待生效時顯示「已送出，N 天後生效」。
+
 ## 待辦（依序）
-1. node-d8 宣布 gate 結束 ⇒ `tests/platform` 全跑（單程序，BelowNormal，basetemp 放 %TEMP%，輸出到檔案，用 `-rf` 列名失敗；不要設會砍掉的 timeout）。上次部分跑到 47%：有 4 個失敗尚未點名（另一次 -x 曾紅 `test_case_summary_purpose::test_only_the_voucher_module_passes_the_voucher_link_purpose`，未確認是否與我有關）。逐一判斷是否為我造成。
-2. 修完 ⇒ 若 route/L1/PAGE 計數再變就重產（route golden：`T40_WRITE_GOLDEN=1 pytest modules/case/tests/test_route_table_golden_2026_10_05.py`；L1：`python tests/platform/_l1_interface.py --update --pending`）。
-3. `train_preflight.py --static-only`；push `wip/t54-n39-settings-s0s2`；回報 SHA。
-4. 第 53 班上線後 rebase（新分支名，不強推）。
-5. 之後（M1）：S1 編輯 UI（問句卡片、預設組挑選器、儲存前一句話確認＋影響面板、精靈、一鍵復原）、K01／K08／K10 群組、棘輪守門 `test_no_new_hardcoded_business_values`、各框架操作手冊（系統內頁側顯示）。
+0. **（現在）** M2 閘門結束且正式機驗證前：只做文件／設計／唯讀稽核；不跑測試。
+
+1. M2 r2 閘門（not_e2e → e2e）通過並上線驗證後：node-d8 宣布結束，才可恢復跑測試。
+2. 之後（依 node-d8 指示順序）：S1 編輯 UI（問句卡片、預設組挑選器、儲存前一句話確認＋影響面板、精靈、一鍵復原；上線時從 AC1 `READ_ONLY_PAGES` 移除 `settings-center.html`）→ K01／K08／K10 群組 → `config_epoch`／`next_change_at`（跨程序一致）→ 棘輪守門 `test_no_new_hardcoded_business_values` → 各框架操作手冊。
+3. 與權限矩陣（hichan-1d）的接點：權限放寬的真正規則（第二位超管核准＋確認期間）P1 走本帳本；權限端不得呼叫 `promote_due` 以外的本帳本寫入口之外的東西；權限矩陣自己的函式叫 `activate_due`，兩邊名字不可再撞（PMX14）。
+4. 報價單「擇一方案」另案：見設計稿 §9.12（`wip/t54-n39-settings-design-r2`）與專案總表 §5.2（`wip/t54-n39-program-r3`）。
 6. 盤點補漏已完成（GAP 82 列）；credit 僅名目。
 
 ## 重要實作決定
