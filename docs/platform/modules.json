@@ -829,6 +829,7 @@
     "/api/next-slip-no",
     "/api/payslips",
     "/api/payslip-person-dispatches",
+    "/api/payslip-dispatch-options",
     "/api/tax-rules"
    ]
   },
