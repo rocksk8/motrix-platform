@@ -1064,3 +1064,19 @@ L1 的中央檢查 `perm.can()` 需要「種子 ⊕ 管理者的覆寫」＋有�
 | 對方不在時 | 沒有訂閱者 ⇒ 只清矩陣快取；訂閱者的快取最壞等自己的 TTL 過期 |
 | 契約版本 | 1 |
 | 守門 | `backend/modules/permmatrix/tests/test_permmatrix_m2.py::test_perm_changed_*` |
+
+## IP-HUB1　`system.hub_badge`：系統中心項目的即時狀態徽章（各擁有模組 → 系統中心 `routers/system_hub.py`；多提供者；暫定號，列車定號；2026-10-11，第 54 班 P1）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | 擁有該系統頁面的模組（選用）；目前：`modules/recyclebin/service.py::hub_badge`（卡片 `recycle-bin`） |
+| 使用方 | `backend/routers/system_hub.py::attach_badges`（`GET /api/system-hub`） |
+| 形式 | provider，多提供者；名稱＝系統卡片 `id` |
+| 語法 | 提供：`("system.hub_badge", "<card id>"): fn`；取用：`registry.providers("system.hub_badge")` ⇒ `fn(conn, user) -> {"text": str, "tone": "ok|info|warn|bad|plan", "count"?: int}` |
+| 回傳 | 一行文字（≤ 40 字）與語氣；`warn` 讓該分組出現『待處理』琥珀點。**唯讀**（連線 `PRAGMA query_only=ON`），每個提供者各開一條連線 |
+| 對方不在時 | 提供者不在、逾時（300ms）、例外、格式不對、上一次還卡著 ⇒ 該項不顯示徽章（記 log），不影響其他項、不 500 |
+| 契約版本 | 1 |
+| 守門 | `backend/tests/platform/test_system_hub.py`（徽章隔離、逾時、格式、15 秒快取、唯讀、刪除暫存區正對照） |
+
+系統中心另外**提供** `perm.changed`（權限異動時清自己的快取；整合點由權限矩陣 1d 登記為消費端，本節不重複登記）、並**直接使用 L1 名稱** `helpers.perm.can(user, cap)` 判斷有 `cap` 的卡片是否可見（不是提供者）。
+

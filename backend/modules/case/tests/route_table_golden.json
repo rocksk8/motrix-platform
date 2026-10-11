@@ -740,6 +740,7 @@
 ["POST", "/api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack", "ack_supplier_contact_privacy_notice_api_suppliers__sid__contacts__ctid__privacy_notice_ack_post", [["header", "authorization", false], ["path", "ctid", true], ["path", "sid", true]], [], []]
 ["GET", "/api/suppliers/{sid}/privacy-notice", "get_supplier_contact_privacy_acks_api_suppliers__sid__privacy_notice_get", [["header", "authorization", false], ["path", "sid", true]], [], []]
 ["PATCH", "/api/suppliers/{sid}/visits", "update_supplier_visits_api_suppliers__sid__visits_patch", [["header", "authorization", false], ["path", "sid", true]], [["application/json", ""]], []]
+["GET", "/api/system-hub", "system_hub_api_system_hub_get", [["header", "authorization", false]], [], []]
 ["GET", "/api/system/bonus-module-status", "get_bonus_module_status_api_system_bonus_module_status_get", [["header", "authorization", false]], [], []]
 ["GET", "/api/system/branding", "system_branding_api_system_branding_get", [["header", "authorization", false]], [], []]
 ["GET", "/api/system/branding/{kind}", "get_branding_asset_api_system_branding__kind__get", [["header", "if-none-match", false], ["path", "kind", true], ["query", "v", false]], [], []]

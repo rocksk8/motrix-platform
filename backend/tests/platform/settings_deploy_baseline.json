@@ -59,6 +59,7 @@
     false
    ]
   },
+  "system_hub": {"show_denied": [0, 0, 1, false]},
   "uploads": {
    "case_extra_expense_max_files": [
     10,
