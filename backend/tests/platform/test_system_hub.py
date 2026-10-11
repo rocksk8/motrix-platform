@@ -563,7 +563,14 @@ def test_concurrent_requests_start_only_one_thread_for_a_hung_badge(monkeypatch)
         return {"text": "x", "tone": "ok"}
 
     monkeypatch.setitem(registry._LEGACY_PROVIDERS, ("system.hub_badge", "hz"), hung)
-    R._INFLIGHT.clear()
+
+    class SlowGet(dict):                          # 把『檢查』和『設定』之間的空檔撐大：沒有鎖時 8 個請求必然同時看到『沒有執行緒』
+        def get(self, k, d=None):
+            v = dict.get(self, k, d)
+            time.sleep(0.05)
+            return v
+
+    monkeypatch.setattr(R, "_INFLIGHT", SlowGet())
     try:
         def one():
             R.attach_badges([{"key": "k", "items": [{"id": "hz", "planned": False, "badge": None}]}], {"id": 1, "username": "x", "role": "superadmin"}, timeout=0.2)
@@ -573,7 +580,6 @@ def test_concurrent_requests_start_only_one_thread_for_a_hung_badge(monkeypatch)
         assert len(calls) == 1, "同時 8 個請求只能有一條徽章執行緒（%d）" % len(calls)
     finally:
         gate.set()
-        R._INFLIGHT.clear()
 
 
 def test_perm_can_raising_hides_only_that_card_and_the_hub_still_answers(client, make_user, monkeypatch):
