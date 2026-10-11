@@ -43,12 +43,15 @@ DEFAULT_TERMS = {
     ),
 }
 
+# 畫面／列印／送審原因顯示的名稱（只改顯示，欄位鍵 afterSales 與已存資料不變）；日後要讓管理者自訂時從這一處接
+AFTERSALES_LABEL = "售後服務及備註說明"
+
 TERMS_FIELD_DEFS = (
     ("paymentTerms", "付款條件"),
     ("deliveryTerms", "交貨條件"),
     ("acceptanceTerms", "驗收標準"),
     ("warrantyTerms", "保固條件"),
-    ("afterSales", "售後服務"),
+    ("afterSales", AFTERSALES_LABEL),
 )
 
 _NO_REASON = "標準報價單送出"

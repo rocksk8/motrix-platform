@@ -134,7 +134,7 @@ def test_terms_changed_against_backend_defaults_and_presets(client, token):
     finally:
         conn.close()
     no2 = _create(client, token, _data(termsPresetKey="p1"))
-    assert "報價條件已修改，與條款組「純購料」不同（售後服務）" in _reasons(no2)
+    assert "報價條件已修改，與條款組「純購料」不同（售後服務及備註說明）" in _reasons(no2)
 
 
 # ── 唯一來源 ───────────────────────────────────────────────────────────────

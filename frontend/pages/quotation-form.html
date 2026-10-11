@@ -1750,7 +1750,7 @@
               <textarea class="form-textarea" rows="2" x-model="q.warrantyTerms" @input="setDirty(); checkApproval()"></textarea>
             </div>
             <div class="form-group">
-              <label class="form-label">售後服務</label>
+              <label class="form-label">售後服務及備註說明</label>
               <textarea class="form-textarea" rows="2" x-model="q.afterSales" @input="setDirty(); checkApproval()"></textarea>
             </div>
           </div>
@@ -2015,7 +2015,7 @@
       </div>
       <div style="padding:16px 18px;max-height:calc(70vh / var(--fz,1));overflow:auto">
         <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px;line-height:1.7">
-          每一組包含付款條件、交貨條件、驗收標準、保固條件、售後服務五段文字。
+          每一組包含付款條件、交貨條件、驗收標準、保固條件、售後服務及備註說明五段文字。
           <b>★ 是新增報價單時自動帶入的那一組。</b><br>
           ⚠️ 改這裡<b>不會動到任何已經開出去的報價單</b>——報價單存的是當下複製過去的文字，
           不是指向這裡的連結。
@@ -2182,7 +2182,8 @@
   // V3.11（2026-09-28，H10 品牌設定；第十四班列車補號）：分頁圖示改讀 /api/system/branding/favicon
   // V3.14（2026-10-01，本地日期）：報價日期預設值與送審時間改用本地日期（static/motrix-date.js；台灣 00:00–08:00 不再得到前一天）
   // V3.19（2026-10-09，第 48 班 S3）：利潤算式改呼叫 static/profit-rules.js；管銷分攤比率（直接毛利×%，最高管理者可調、偏離預設警示）——口徑開關預設 legacy，畫面與數字不變。
-  const FORM_VERSION = 'V3.21'
+  const FORM_VERSION = 'V3.22'
+  const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
   // 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：內容在
@@ -2319,7 +2320,7 @@
         { key: 'deliveryTerms',   label: '交貨條件' },
         { key: 'acceptanceTerms', label: '驗收標準' },
         { key: 'warrantyTerms',   label: '保固條件' },
-        { key: 'afterSales',      label: '售後服務' },
+        { key: 'afterSales',      label: AFTERSALES_LABEL },
       ],
       // 存檔版本索引（2026-09-14）。單獨向 /versions 取，不塞進 q——它是衍生資料，
       // 會被存檔流程整包送回後端，混進 q 會讓每次存檔都把它再寫一遍。
@@ -2686,7 +2687,7 @@
         let html = ''
         if ((this.q.paymentTerms||'').trim()) html += block({ title: '付款條件', text: this.q.paymentTerms })
         html += pair({ title: '交貨條件', text: this.q.deliveryTerms }, { title: '驗收標準', text: this.q.acceptanceTerms })
-        html += pair({ title: '保固條件', text: this.q.warrantyTerms }, { title: '售後服務', text: this.q.afterSales })
+        html += pair({ title: '保固條件', text: this.q.warrantyTerms }, { title: AFTERSALES_LABEL, text: this.q.afterSales })
         return html
       },
 
