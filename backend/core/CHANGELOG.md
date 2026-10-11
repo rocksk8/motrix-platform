@@ -9,6 +9,10 @@
 - 新端點：`/api/settings-center/groups`（GET／GET {group}／POST {group}）、`/api/settings-center/pending`（GET）、`/api/settings-center/pending/{id}/cancel`／`approve`（POST）、`/api/settings-center/profiles`（GET）、`…/profiles/{name}/preview`（GET）、`…/apply`（POST）、`/api/settings-center/public`；頁面 `settings-center.html`（系統 > 設定中心）。
 - **部署零行為變更**：不寫任何定義列；沒有列＝程式預設＝原本的常數（`audit_log_keep_days` 1825、通知 90、請求紀錄 90、單檔 20MB、支出附件 10 個／50MB）。唯一新增的拒絕：`PATCH /api/settings/backup-retention` 的 `audit_log_keep_days` < 365 ⇒ 400；舊庫裡低於 365 的值讀取時夾到 365。
 - 回滾：環境變數 `MOTRIX_SETTINGS_DEFAULTS_ONLY=1` ⇒ 所有 `settings.get` 回程式預設；純程式回退即還原（兩張新表留著無害）。
+- **系統中心 P1（併入）**：L0（新增，向下相容）：`core/system_hub.py`——系統中心註冊表（分組固定、卡片驗證、依權限過濾、組裝）與 `core/system_hub_l1.json`（L1 頁面的卡片）；`core/menu.py` 的選單項多一個選用欄位 `hub`（`ITEM_KEYS`；`declaration`／`build` 的列在有 `hub` 時多回 `hub: true`）。新端點 `GET /api/system-hub`（`routers/system_hub.py`；已登入即可，伺服器依權限過濾；15 秒快取；徽章提供者並行、300ms 逾時）、新頁 `system-hub.html`。
+- **系統中心 P1（併入）**：導覽列：『系統』群組在 `sidebar.js` 收斂成單一入口（群組名當連結、底下所有系統頁都算它的目前位置；一個系統頁都開不了的人看不到這個群組）；系統底下的頁面頂端多一條『← 系統』麵包屑。**舊網址全部不變**，頁面權限檢查不變。
+- **系統中心 P1（併入）**：原則（使用者核定）：框架先行、不寫死決定——新增一個設定或頁面 ＝ 在擁有它的模組宣告一筆 `system_cards`，**不改 hub**；守門 `tests/platform/test_system_hub.py`（與選單雙向對等、卡片 perm＝頁面選單 perm、徽章隔離、頁面不寫死項目）。
+- **系統中心 P1（併入）**：整合點 IP-HUB1（`system.hub_badge`；能力判斷直接用 L1 `helpers.perm.can`；hub 提供 `perm.changed`，其整合點由權限矩陣登記）；設計 `docs/platform/plans/SYSTEM-HUB-DESIGN-T54.md`。
 
 ## 1.127 — 2026-10-10（wip/t53b-int；ab 稽核修正 r5）
 - L1（新增，向下相容）：`helpers/recycle_bin.delete_scope()`——包住『delete() … commit』；區塊以例外結束時，把已搬進隔離區的附件搬回原處（呼叫端的後續步驟失敗時用）。`delete()` 在 scope 內自動登記結果。另宣告 `helpers/audit` 的 `_DETAIL_MAX`、`_derive_fields` 為 L1 公開介面（暫存區把稽核列寫進同一個交易）。

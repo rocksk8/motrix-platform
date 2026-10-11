@@ -181,6 +181,15 @@ def _run_hook(ad, event, entity_id, snap, result):
         logger.exception("recyclebin after_commit(%s) %s %s failed", event, getattr(ad, "entity_type", "?"), entity_id)
 
 
+def hub_badge(conn, user) -> dict:
+    """provider `system.hub_badge`（卡片 recycle-bin）：保存中的筆數；有還原失敗的 ⇒ 琥珀色提醒。唯讀（系統中心給 query_only 連線）。"""
+    n = conn.execute("SELECT COUNT(*) FROM recycle_bin WHERE restore_status IN (?,?)", LIVE).fetchone()[0]
+    bad = conn.execute("SELECT COUNT(*) FROM recycle_bin WHERE restore_status='restore_failed'").fetchone()[0]
+    if bad:
+        return {"text": "%d 筆還原失敗，需要處理" % bad, "tone": "warn", "count": bad}
+    return {"text": "保存中 %d 筆" % n, "tone": "info" if n else "ok", "count": n}
+
+
 def reserved_ids(conn, entity_type="") -> set:
     """provider `recyclebin.reserved`：暫存區保留中的單號（entity_id ＋ 快照 meta.codes）；見 helpers/recycle_bin.reserved_ids。"""
     sql = "SELECT entity_id, codes FROM recycle_bin WHERE restore_status IN (?,?)"            # codes 欄＝進暫存區當下從快照抄出（不讀快照 JSON）
