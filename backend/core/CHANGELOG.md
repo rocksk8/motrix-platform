@@ -26,6 +26,7 @@
 - **系統中心 P1（併入）**：整合點 IP-HUB1（`system.hub_badge`；能力判斷直接用 L1 `helpers.perm.can`；hub 提供 `perm.changed`，其整合點由權限矩陣登記）；設計 `docs/platform/plans/SYSTEM-HUB-DESIGN-T54.md`。
 - **（併入）(next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2；系統中心 r5 併入）**
 - **（併入）(next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2；系統中心 r6 併入）**
+- **（併入）(next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2；系統中心 r6 併入；補記）**
 
 ## 1.128 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-05-reassign-rules）：轉簽不能變成自核的後門（使用者裁示）**
