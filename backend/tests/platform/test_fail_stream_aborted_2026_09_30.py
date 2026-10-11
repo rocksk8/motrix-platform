@@ -166,6 +166,15 @@ def _kill(pid, tree=False):
         os.kill(pid, signal.SIGKILL)
 
 
+def _kill_all(pids):
+    """一次殺光（兩個 worker 的死亡間隔≈0）。分兩次 taskkill 時，慢機器上第二次可能晚於保留期，第一個 worker 的紀錄就被當成真的失敗（T55-21，8207b54d8 重跑實例）。"""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F"] + [a for p in pids for a in ("/PID", str(p))], capture_output=True)
+    else:
+        for p in pids:
+            _kill(p)
+
+
 def _recs(out, run="a1"):
     p = Path(out) / (run + ".jsonl")
     return [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()] if p.exists() else []
@@ -177,11 +186,11 @@ def test_killing_every_worker_with_no_restart_is_recorded_as_aborted(tmp_path):
     root, out, pids = tmp_path / "s", tmp_path / "out", tmp_path / "pids"
     pids.mkdir()
     _write_sleepers(root, pids)
+    # 保留期 5 秒（其餘整合題維持 1 秒）：第二道餘裕，負載下兩個 worker 的掉線通知可能相隔超過 1 秒（T55-21）
     proc = subprocess.Popen([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-p", "fail_stream", "-n", "2", "--max-worker-restart=0", "."],
-                            cwd=str(root), env=_env(out), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                            cwd=str(root), env=_env(out, **{FS.GRACE_ENV: "5"}), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     try:
-        for pid in _wait_pids(pids):
-            _kill(pid)
+        _kill_all(_wait_pids(pids))
         proc.communicate(timeout=120)
     finally:
         if proc.poll() is None:
