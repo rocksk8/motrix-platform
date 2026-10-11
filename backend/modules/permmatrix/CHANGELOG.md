@@ -11,6 +11,8 @@
 - r7：`perm.invalidate()` 會通知所有 `perm.changed` 提供者（系統中心登記，整合點見其 IP-HUB1；只涵蓋本程序，跨程序靠 P1 `config_epoch`）。系統中心直接呼叫 `helpers.perm.can`，不需 `perm.can` 提供者。
 - **（併入）(next) — 2026-10-11（wip/t54-1d-permmatrix-p0-r8；05 稽核 A／B／C 修正＋perm.changed 通知）**
 - **（併入）(next) — 2026-10-11（wip/t54-1d-permmatrix-p0-r9；05 稽核 A／B／C 修正＋perm.changed 通知）**
+- **（併入）(next) — 2026-10-11（wip/t54-1d-permmatrix-p0-r10；05 稽核 A／B／C 修正＋perm.changed 通知）**
+- r10（05 稽核 B）：放寬一律不立即——勾回「種子本來就有、後來被取消」的高風險格子、取消高風險能力的個人禁止，都改走 24 小時待生效（需原因）；到期套用回種子預設時刪覆寫列。新增守門 `test_permmatrix_writes_unwired.py`：帳本接上前不得有端點／頁面／其他程式呼叫 P0 寫入函式（SPEC PMX14）。
 
 ## 1.0.0 — 2026-10-10（wip/t54-1d-permmatrix-p0）：里程碑 2——矩陣資料表、提供者、服務層（覆寫／代理／24 小時待生效／版本回溯）
 - 新模組 `permmatrix`（M16）。表 `perm_role_caps`／`perm_user_overrides`／`perm_versions`／`perm_pending`／`perm_delegations`（皆 T1；沒有 core schema 版本升級）。

@@ -228,8 +228,10 @@ def test_pending_delegation_activates_and_is_superseded_if_the_delegator_lost_th
     P.invalidate()
     assert not P.can(dlg, "zz.doc.pay")
     assert _rows(conn, "SELECT state FROM perm_pending WHERE id=?", (r1["id"],)) == [{"state": "superseded"}]
+    S.set_role_cap(conn, SU, "admin", "zz.doc.pay", True, "恢復付款作業")           # 勾回種子預設的高風險格子＝放寬 ⇒ 待生效（r10），先讓它到期生效
+    S.activate_due(conn)
+    P.invalidate()
     monkeypatch.setattr(S, "_now", lambda: datetime.now())
-    S.set_role_cap(conn, SU, "admin", "zz.doc.pay", True, "")
     r2 = S.create_delegation(conn, SU, "pm_boss", "pm_dlg", "caps", caps=["zz.doc.pay"], reason="月底付款由他代理")
     monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
     S.activate_due(conn)
@@ -405,3 +407,52 @@ def test_perm_changed_fires_when_a_write_goes_through_the_service(conn, make_use
     monkeypatch.setitem(registry._LEGACY_PROVIDERS, ("perm.changed", "t_ok"), lambda: calls.append(1))
     S.set_role_cap(conn, SU, "finance", "zz.doc.edit", True, "財務協助修改")
     assert len(calls) >= 1, "服務層寫入 ⇒ invalidate ⇒ 訂閱者收到通知"
+
+
+def test_D_regranting_a_seeded_high_risk_cell_after_revoke_is_a_loosening_and_waits(conn, make_user, monkeypatch):
+    adm = _mk(make_user, "pm_adm", "admin")
+    _mk(make_user, "root", "superadmin")
+    assert P.can(adm, "zz.doc.pay")                                    # 種子：admin 本來就能付款（高風險）
+    assert S.set_role_cap(conn, SU, "admin", "zz.doc.pay", False, "暫停付款")["changed"]      # 收緊：立即
+    assert not P.can(adm, "zz.doc.pay")
+    with pytest.raises(S.PermError) as e:
+        S.set_role_cap(conn, SU, "admin", "zz.doc.pay", True, "")      # 勾回種子預設也是放寬：要原因
+    assert "原因" in str(e.value)
+    r = S.set_role_cap(conn, SU, "admin", "zz.doc.pay", True, "恢復付款")
+    assert r.get("pending") and not P.can(adm, "zz.doc.pay"), "勾回高風險格子不得立即生效"
+    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    assert S.activate_due(conn) == 1
+    P.invalidate()
+    assert P.can(adm, "zz.doc.pay")
+    assert _rows(conn, "SELECT * FROM perm_role_caps") == [], "回到種子預設＝不留覆寫列（與立即路徑一致）"
+
+
+def test_D_clearing_a_personal_deny_on_a_high_risk_cap_is_a_loosening_and_waits_but_low_risk_is_immediate(conn, make_user, monkeypatch):
+    adm = _mk(make_user, "pm_adm2", "admin")
+    _mk(make_user, "root", "superadmin")
+    S.set_user_override(conn, SU, adm["id"], "zz.doc.pay", "deny", "調查中")        # 收緊：立即
+    S.set_user_override(conn, SU, adm["id"], "zz.doc.submit", "deny", "調查中")
+    assert not P.can(adm, "zz.doc.pay") and not P.can(adm, "zz.doc.submit")
+    assert S.clear_user_override(conn, SU, adm["id"], "zz.doc.submit")["changed"] and P.can(adm, "zz.doc.submit"), "低風險：立即"
+    with pytest.raises(S.PermError):
+        S.clear_user_override(conn, SU, adm["id"], "zz.doc.pay", "")
+    r = S.clear_user_override(conn, SU, adm["id"], "zz.doc.pay", "調查完畢")
+    assert r.get("pending") and not P.can(adm, "zz.doc.pay"), "取消高風險的個人禁止不得立即生效"
+    assert _rows(conn, "SELECT effect FROM perm_user_overrides WHERE cap='zz.doc.pay'") == [{"effect": "deny"}]
+    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    assert S.activate_due(conn) == 1
+    P.invalidate()
+    assert P.can(adm, "zz.doc.pay") and _rows(conn, "SELECT * FROM perm_user_overrides WHERE cap='zz.doc.pay'") == []
+
+
+def test_D_pending_clear_is_superseded_if_the_deny_changed_meanwhile(conn, make_user, monkeypatch):
+    adm = _mk(make_user, "pm_adm3", "admin")
+    _mk(make_user, "root", "superadmin")
+    S.set_user_override(conn, SU, adm["id"], "zz.doc.pay", "deny", "調查中")
+    r = S.clear_user_override(conn, SU, adm["id"], "zz.doc.pay", "調查完畢")
+    assert r.get("pending")
+    conn.execute("DELETE FROM perm_user_overrides WHERE cap='zz.doc.pay'")      # 模擬別處已移除
+    conn.commit()
+    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    S.activate_due(conn)
+    assert _rows(conn, "SELECT state FROM perm_pending WHERE id=?", (r["id"],)) == [{"state": "superseded"}]
