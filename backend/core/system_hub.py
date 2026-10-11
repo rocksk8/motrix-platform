@@ -164,7 +164,7 @@ def build_sections(cards, denied=(), module_labels=None):
         items = sorted(by[s["key"]], key=lambda t: (t[1], t[0]["order"], t[0]["id"]))
         if items:
             out.append({"key": s["key"], "title": s["title"], "sub": s["sub"], "count": sum(1 for _c, d in items if not d),
-                        "items": [{"id": c["id"], "title": c["title"], "desc": c["desc"], "impact": c.get("impact") or "", "href": c["href"], "icon": c.get("icon") or "gear",
+                        "items": [{"id": c["id"], "title": c["title"], "desc": c["desc"], "impact": c.get("impact") or "", "href": "" if d else c["href"], "icon": c.get("icon") or "gear",
                                    "keywords": c.get("keywords") or "", "module": c.get("module") or "core", "planned": bool(c.get("planned")),
                                    "denied": d, "reason": denied_reason(c["perm"], module_labels) if d else "", "badge": None} for c, d in items]})
     return out

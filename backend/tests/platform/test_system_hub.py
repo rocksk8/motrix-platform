@@ -529,3 +529,48 @@ def test_perm_changed_provider_clears_the_hub_cache():
     R._CACHE["k"] = (0, {})
     fn()
     assert not R._CACHE
+
+
+def test_perm_module_present_but_broken_import_denies_cap_cards_and_keeps_old_rule_for_the_rest(monkeypatch, caplog):
+    """fail-closed：helpers.perm 存在卻匯入失敗 ⇒ 有 cap 的卡片一律不顯示（舊語意可能顯示矩陣已收回的項目）；沒 cap 的仍走舊語意。"""
+    import sys
+    from routers import system_hub as R
+    monkeypatch.setitem(sys.modules, "helpers.perm", None)          # 匯入會丟 ImportError（不是『模組不存在』）
+    chk = R._capability_checker({"username": "u", "role": "viewer"})
+    assert chk is not None and chk("core.users.menu") is False, "壞掉不可退回舊語意（fail-open）"
+    cards = [{"id": "a", "perm": ["audit_log"], "cap": "core.a.menu", "section": "data"}, {"id": "b", "perm": ["audit_log"], "section": "data"}]
+    assert [c["id"] for c in H.visible_cards(cards, ["audit_log"], False, can=chk)] == ["b"]
+    assert [c["id"] for c in H.visible_cards(cards, [], True, can=chk)] == ["a", "b"], "最高管理者不受影響"
+
+
+def test_denied_rows_never_carry_the_real_link():
+    cards = [{"id": "a", "title": "甲", "desc": "d", "impact": "", "href": "secret-page.html", "perm": "superadmin", "order": 1, "section": "data"}]
+    sec = H.build_sections([], cards, {})
+    it = sec[0]["items"][0]
+    assert it["denied"] and it["href"] == ""
+    ok = H.build_sections(cards, [], {})[0]["items"][0]
+    assert ok["href"] == "secret-page.html"
+
+
+def test_concurrent_requests_start_only_one_thread_for_a_hung_badge(monkeypatch):
+    import threading
+    from routers import system_hub as R
+    gate, calls = threading.Event(), []
+
+    def hung(conn, user):
+        calls.append(1)
+        gate.wait(10)
+        return {"text": "x", "tone": "ok"}
+
+    monkeypatch.setitem(registry._LEGACY_PROVIDERS, ("system.hub_badge", "hz"), hung)
+    R._INFLIGHT.clear()
+    try:
+        def one():
+            R.attach_badges([{"key": "k", "items": [{"id": "hz", "planned": False, "badge": None}]}], {"id": 1, "username": "x", "role": "superadmin"}, timeout=0.2)
+        ts = [threading.Thread(target=one) for _ in range(8)]
+        [t.start() for t in ts]
+        [t.join(5) for t in ts]
+        assert len(calls) == 1, "同時 8 個請求只能有一條徽章執行緒（%d）" % len(calls)
+    finally:
+        gate.set()
+        R._INFLIGHT.clear()
