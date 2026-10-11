@@ -95,9 +95,9 @@ def test_ledger_immutable_and_events(conn):
         conn.execute("DELETE FROM config_change_events")
 
 
-def test_activate_due(conn):
+def test_promote_due(conn):
     r = L.record(conn, "setting:x", "x", [{"field": "a", "old": 1, "new": 2}], "", "u", effective_at="2020-01-01T00:00:00")
-    assert L.activate_due(conn, "2021-01-01T00:00:00") == r["ids"]
+    assert L.promote_due(conn, "2021-01-01T00:00:00") == r["ids"]
     assert L.state_of(conn, r["ids"][0]) == "activated"
 
 

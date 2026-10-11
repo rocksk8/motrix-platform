@@ -495,7 +495,7 @@ def materialize_due(conn=None, now=None):
                 continue
             out = D.publish_direct(c, KIND, group, SCOPE, {"group": group, "values": new}, "待生效項到期生效", "system", commit=False)
             _write_legacy(c, group, new)
-            total += len(L.activate_due(c, now, domain="setting:%s" % group))
+            total += len(L.promote_due(c, now, domain="setting:%s" % group))
             invalidate(group)
             logger.info("settings: 群組 %s 的 %d 項待生效值已生效（定義 v%s）", group, len(due), out["version"])
         if began or own:

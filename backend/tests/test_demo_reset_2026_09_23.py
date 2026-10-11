@@ -97,6 +97,29 @@ def _named(seams):
 # 🔴 主題 · 連續重置兩次都要成功
 # ══════════════════════════════════════════════════════════════════════
 
+def test_dm1_reset_clears_the_settings_change_ledger_despite_its_append_only_triggers(demo_sandbox):
+    """第54班設定變更帳本（config_changes／config_change_events）有「只增不改不刪」觸發器；展示重置必須比照 permission_changes 先拿掉再建回。
+    修正前：第二次重置在 DELETE 時 ABORT（demo 登入 500）；修正後：兩張表清空、四個觸發器都還在。"""
+    db.reset_demo_db()
+    conn = db._connect(db.DEMO_DB_PATH)
+    try:
+        conn.execute("INSERT INTO config_changes (at,domain,key,field,old_json,new_json,reason,actor,actor_display,ip,risk,batch,approvals_required)"
+                     " VALUES ('2026-10-11T00:00:00','setting:g','g','f','1','2','r','a','','','none','b',0)")
+        conn.execute("INSERT INTO config_change_events (change_id,event,actor,reason,at) VALUES (1,'pending','a','','2026-10-11T00:00:00')")
+        conn.commit()
+    finally:
+        conn.close()
+    db.reset_demo_db()
+    conn = db._connect(db.DEMO_DB_PATH)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM config_changes").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM config_change_events").fetchone()[0] == 0
+        trg = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'config_change%'")}
+        assert trg == {"config_changes_no_update", "config_changes_no_delete", "config_change_events_no_update", "config_change_events_no_delete"}
+    finally:
+        conn.close()
+
+
 def test_dm1_resetting_the_demo_database_twice_still_works(demo_sandbox):
     """🔴🔴 `DM1`：**demo 重置連跑兩次都要成功。**
 
