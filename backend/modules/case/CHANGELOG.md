@@ -1,7 +1,8 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-11（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S2）
+## (next) — 2026-10-11（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S2；系統中心 r5 併入）
 - `api/case_extra_expenses.py`：額外支出附件的件數／合計大小上限改讀設定中心（`uploads` 群組，`helpers.uploads.limits_for`）；預設值與原本的常數相同，部署後行為不變。
+- **系統中心 P1（併入）**：module.json 新增 `system_cards`（利潤口徑設定（規劃中）卡片）
 
 ## 1.0.174 — 2026-10-10（wip/t53b-int；ab 稽核修正 r5）
 - `update_quotation`（PUT）：連線區段加 try/except，任何例外 rollback＋close（不帶寫鎖漏出）；材料申請在存檔中被刪後若後續失敗，由請求保險網搬回附件。
@@ -19,9 +20,6 @@
 - **（併入）(next) — 2026-10-10（wip/t53-b5-rb-adapters；刪除暫存區 P1：案件模組 adapter，提供者字面登記；材料申請存檔外改 JSON 時 bump updated_at；單號不重發）**
 - **（併入）(next) — 2026-10-10（wip/t53-b5-rb-adapters；刪除暫存區 P1：案件模組 adapter，提供者字面登記；材料申請存檔外改 JSON 時 bump updated_at；單號不重發（IP-RB3））**
 - **（併入）(next) — 2026-10-10（wip/t53-b5-rb-adapters；刪除暫存區 P1：案件模組 adapter，提供者字面登記；材料申請存檔外改 JSON 時 bump updated_at；單號不重發（IP-RB3；next_entity_code 預設跳過））**
-
-## (next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1）：module.json 新增 `system_cards`（利潤口徑設定（規劃中）卡片）
-- 加性宣告：在系統中心（`/pages/system-hub.html`）登記這個模組擁有的系統頁面；只影響索引顯示，頁面與 API 的權限、行為完全不變。
 
 ## 1.0.172 — 2026-10-10（wip/t52-ab-charity-quote）：公益捐款改『報價含稅 1%』（新基，預設關）＋精算頁可調管銷比率（僅最高管理者）（含稽核 05 修正；作者閘門修正）
 - **公益捐款基數**（使用者 2026-10-10）：新基 `charityBasis=total` ＝ `round_half_up(tot.total × 1%)`（報價含稅金額；不看直接毛利、虧損案照扣；下限 0 只設在含稅金額上）。只在新管銷口徑（formulaVer 2）生效，舊基（直接毛利 1%、虧損 0）逐位不變。唯一來源 `helpers/profit_rules.py`＋`static/profit-rules.js`（`charity(direct, total, basis)`、`quote_profit/settlement_profit` 加 `total`／`charity_basis`），黃金向量 +77 筆。

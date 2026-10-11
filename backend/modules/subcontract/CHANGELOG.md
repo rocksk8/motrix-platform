@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1；r5）：module.json 新增 `system_cards`（匯款款別設定卡片）
+- 加性宣告：在系統中心（`/pages/system-hub.html`）登記這個模組擁有的系統頁面；只影響索引顯示，頁面與 API 的權限、行為完全不變。
+
 ## 1.1.32 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t53-1d-rb-dispatch-no；node-39 稽核：派發單號不重發）**
 - 派發單號 `DP-YYYYMMDD-NNNN`（取現存最大號 + 1）原本會在『當天最新一張進暫存區』後被新單重發、還原時只好換號（已寄出／列印的原單號被取代）。現在：進暫存區時單號放進快照 `meta.codes`，`dispatch_flow.next_dispatch_code` 跳過暫存區保留的號碼（`helpers.recycle_bin.reserved_ids`；暫存區模組不在 ⇒ 行為不變）；還原後單號原樣回來、不換號。測試：`tests/test_recycle_adapter_t53.py::test_dispatch_number_in_the_bin_is_reserved_…`。
@@ -20,9 +23,6 @@
 - **（併入）(next) — 2026-10-10（wip/t53-1d-rb-adapters-r4；刪除暫存區 P1：承攬商派發、承攬商匯款申請）**
 - 稽核跟進（05）：經暫存區的『刪除已核可』與『還原』現在也會對齊 commit 之後的副作用——匯款申請：收回／重建行事曆『付款待辦』事件（`payable_due.fire`）、清簽核通知；審核中的派發：清簽核人的待辦通知。走 L1 hook `Adapter.after_commit`（還原與『刪除已核可』由暫存區在 commit 後自動呼叫；一般刪除由端點在自己 commit 後呼叫 `res["after_commit"]()`；回滾／被拒絕 ⇒ 不執行）。還原派發時，同一勞報單的連結已存在 ⇒ 略過並註記；其他唯一鍵衝突 ⇒ `conflict:`。
 - **（併入）(next) — 2026-10-10（wip/t53-1d-rb-adapters-r5；刪除暫存區 P1：承攬商派發、承攬商匯款申請）**
-
-## (next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1）：module.json 新增 `system_cards`（匯款款別設定卡片）
-- 加性宣告：在系統中心（`/pages/system-hub.html`）登記這個模組擁有的系統頁面；只影響索引顯示，頁面與 API 的權限、行為完全不變。
 
 ## 1.1.29 — 2026-10-10（wip/t51-1d-payslip-prefill；勞報單預設選取已派工、一鍵帶入）
 - `dispatch.by_person` 提供者（IP-115，加法）：`dispatches_for_person(conn, contractor_id, limit, user=None)` 多回 `scope`、`itemsSummary`、`projectName`、`customerName`、`caseVisible`，並排除狀態 draft／cancelled；案件名稱只在 `user` 通過 `guard_case_access` 時給（用自己的短連線，不影響呼叫端連線），沒給 user ⇒ 空字串。仍不含金額。
