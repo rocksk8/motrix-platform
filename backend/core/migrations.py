@@ -561,4 +561,4 @@ def _core_next_config_ledger(conn):
     return None
 
 
-register("core", NEXT, _core_next_config_ledger)
+register("core", 9, _core_next_config_ledger)

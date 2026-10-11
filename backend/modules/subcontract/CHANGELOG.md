@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-10（wip/t50-int；第 50 班）
+## 1.1.33 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1）：module.json 新增 `system_cards`（匯款款別設定卡片）**
 - 加性宣告：在系統中心（`/pages/system-hub.html`）登記這個模組擁有的系統頁面；只影響索引顯示，頁面與 API 的權限、行為完全不變。
 - **（併入）(next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1；r5）：module.json 新增 `system_cards`（匯款款別設定卡片）**

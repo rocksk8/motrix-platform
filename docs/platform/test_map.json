@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1264,
+  "tests": 1277,
   "unmapped": 13,
   "kinds": {
-   "api": 689,
-   "e2e": 301,
-   "audit": 161,
-   "unit": 113
+   "api": 696,
+   "e2e": 302,
+   "audit": 162,
+   "unit": 117
   },
-  "routes": 793
+  "routes": 804
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -12309,6 +12309,63 @@
    },
    "module": "payroll"
   },
+  "backend/modules/permmatrix/tests/test_permmatrix_m2.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/permmatrix/",
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "helper:perm",
+    "mod:permmatrix/__init__",
+    "mod:permmatrix/service",
+    "plat:__init__",
+    "plat:capabilities",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/capabilities.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/perm.py",
+     "backend/modules/permmatrix/__init__.py",
+     "backend/modules/permmatrix/service.py"
+    ],
+    "module_dir": [
+     "backend/modules/permmatrix/"
+    ]
+   },
+   "module": "permmatrix"
+  },
+  "backend/modules/permmatrix/tests/test_permmatrix_writes_unwired.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/permmatrix/",
+    "mod:permmatrix/__init__",
+    "mod:permmatrix/service",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/modules/permmatrix/__init__.py"
+    ],
+    "path": [
+     "backend/modules/permmatrix/__init__.py",
+     "backend/modules/permmatrix/service.py"
+    ],
+    "module_dir": [
+     "backend/modules/permmatrix/"
+    ]
+   },
+   "module": "permmatrix"
+  },
   "backend/modules/recyclebin/tests/test_e2e_recyclebin_t53.py": {
    "kind": "e2e",
    "units": [
@@ -13862,6 +13919,7 @@
     "router:parts",
     "router:search",
     "router:system",
+    "router:system_hub",
     "router:uploads"
    ],
    "evidence": {
@@ -13906,6 +13964,7 @@
      "backend/routers/parts.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
+     "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
     ],
     "module_dir": [
@@ -16227,6 +16286,27 @@
     ]
    }
   },
+  "backend/tests/platform/test_capabilities_registry.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "helper:perm",
+    "plat:__init__",
+    "plat:capabilities",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/capabilities.py",
+     "backend/core/registry.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/perm.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_case404.py": {
    "kind": "api",
    "units": [
@@ -16550,6 +16630,21 @@
      "backend/core/",
      "backend/core/CHANGELOG.md",
      "backend/modules/"
+    ]
+   }
+  },
+  "backend/tests/platform/test_config_ledger_t54.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:config_ledger"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/config_ledger.py"
     ]
    }
   },
@@ -17512,6 +17607,7 @@
     "router:parts",
     "router:search",
     "router:system",
+    "router:system_hub",
     "router:uploads"
    ],
    "evidence": {
@@ -17557,6 +17653,7 @@
      "backend/routers/parts.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
+     "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
     ],
     "page": [
@@ -18697,6 +18794,7 @@
     "router:parts",
     "router:search",
     "router:system",
+    "router:system_hub",
     "router:uploads"
    ],
    "evidence": {
@@ -18748,6 +18846,7 @@
      "backend/routers/parts.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
+     "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
     ],
     "path": [
@@ -19126,6 +19225,50 @@
      "frontend/pages/",
      "frontend/pages/login.html",
      "tools/platform/product_select.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_perm_equivalence_gate_a.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "helper:module_registry",
+    "helper:perm",
+    "plat:__init__",
+    "plat:capabilities"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/capabilities.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/module_registry.py",
+     "backend/helpers/perm.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_perm_text.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "helper:perm",
+    "helper:perm_text",
+    "plat:__init__",
+    "plat:capabilities",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/capabilities.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/perm.py",
+     "backend/helpers/perm_text.py",
+     "backend/routers/system.py"
     ]
    }
   },
@@ -19733,6 +19876,152 @@
     ]
    }
   },
+  "backend/tests/platform/test_settings_audit_fixes_t54.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:config_ledger",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "page:pages/company-profile-settings.html",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:settings_center",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/config_ledger.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py"
+    ],
+    "api": [
+     "backend/routers/settings_center.py",
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/company-profile-settings.html"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_settings_pending_t54.py": {
+   "kind": "api",
+   "units": [
+    "core:archive",
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/platform/settings_deploy_baseline.json",
+    "helper:audit",
+    "helper:config_ledger",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "helper:uploads",
+    "router:settings_center"
+   ],
+   "evidence": {
+    "import": [
+     "backend/archive.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/audit.py",
+     "backend/helpers/config_ledger.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/helpers/uploads.py"
+    ],
+    "api": [
+     "backend/routers/settings_center.py"
+    ],
+    "path": [
+     "backend/tests/platform/settings_deploy_baseline.json"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_settings_registry_t54.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:config_ledger",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "plat:__init__",
+    "plat:definitions",
+    "router:settings_center",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/config_ledger.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py"
+    ],
+    "api": [
+     "backend/routers/settings_center.py",
+     "backend/routers/system.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_settings_security_t54.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_routes.py",
+    "helper:config_ledger",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "router:settings_center"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/config_ledger.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/tests/_routes.py"
+    ],
+    "api": [
+     "backend/routers/settings_center.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_settings_ui_plain_language.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "page:pages/settings-center.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py"
+    ],
+    "page": [
+     "frontend/pages/settings-center.html"
+    ]
+   }
+  },
   "backend/tests/platform/test_ship_tier_2026_09_28.py": {
    "kind": "api",
    "units": [
@@ -19991,6 +20280,73 @@
      "backend/modules/case/api/quotations.py"
     ]
    },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_system_hub.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:frontend/static/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "helper:auth",
+    "helper:config_ledger",
+    "helper:perm",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "js:static/sidebar.js",
+    "page:pages/audit-log.html",
+    "page:pages/ledger-settings.html",
+    "page:pages/module-versions.html",
+    "page:pages/system-hub.html",
+    "page:pages/users.html",
+    "plat:__init__",
+    "plat:menu",
+    "plat:pages",
+    "plat:registry",
+    "plat:source_tree",
+    "plat:system_hub",
+    "router:list_prefs",
+    "router:system_hub"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/menu.py",
+     "backend/core/pages.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/core/system_hub.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/config_ledger.py",
+     "backend/helpers/perm.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/routers/__init__.py",
+     "backend/routers/system_hub.py"
+    ],
+    "api": [
+     "backend/routers/list_prefs.py",
+     "backend/routers/system_hub.py"
+    ],
+    "page": [
+     "frontend/pages/audit-log.html",
+     "frontend/pages/ledger-settings.html",
+     "frontend/pages/module-versions.html",
+     "frontend/pages/system-hub.html",
+     "frontend/pages/users.html",
+     "frontend/static/sidebar.js"
+    ],
+    "path": [
+     "frontend/static/",
+     "frontend/static/sidebar.js"
+    ]
+   },
+   "unresolved_api": [
+    "/api/system-hub/settings"
+   ],
    "login_fixture": true
   },
   "backend/tests/platform/test_tax_calc_contract.py": {
@@ -20288,6 +20644,7 @@
     "page:pages/online-stats.html",
     "page:pages/receivables.html",
     "page:pages/sales-orders.html",
+    "page:pages/settings-center.html",
     "page:pages/shipping-export-history.html"
    ],
    "evidence": {
@@ -20303,6 +20660,7 @@
      "frontend/pages/online-stats.html",
      "frontend/pages/receivables.html",
      "frontend/pages/sales-orders.html",
+     "frontend/pages/settings-center.html",
      "frontend/pages/shipping-export-history.html",
      "frontend/static/auth-guard.js",
      "frontend/static/notif.js",
@@ -21010,6 +21368,7 @@
     "router:parts",
     "router:search",
     "router:system",
+    "router:system_hub",
     "router:uploads"
    ],
    "evidence": {
@@ -21056,6 +21415,7 @@
      "backend/routers/parts.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
+     "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
     ]
    },
@@ -21123,11 +21483,19 @@
    "kind": "api",
    "units": [
     "core:archive",
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:config_ledger",
+    "helper:settings_registry",
     "router:system"
    ],
    "evidence": {
     "import": [
-     "backend/archive.py"
+     "backend/archive.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/config_ledger.py",
+     "backend/helpers/settings_registry.py"
     ],
     "api": [
      "backend/routers/system.py"
@@ -21141,13 +21509,19 @@
     "core:archive",
     "core:db",
     "dir:frontend/pages/",
+    "file:backend/helpers/__init__.py",
+    "helper:config_ledger",
+    "helper:settings_registry",
     "page:pages/company-profile-settings.html",
     "router:system"
    ],
    "evidence": {
     "import": [
      "backend/archive.py",
-     "backend/db.py"
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/config_ledger.py",
+     "backend/helpers/settings_registry.py"
     ],
     "api": [
      "backend/routers/system.py"
@@ -23927,6 +24301,7 @@
     "router:parts",
     "router:search",
     "router:system",
+    "router:system_hub",
     "router:uploads"
    ],
    "evidence": {
@@ -23978,6 +24353,7 @@
      "backend/routers/parts.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
+     "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
     ],
     "page": [
@@ -28003,6 +28379,31 @@
     ]
    }
   },
+  "backend/tests/test_e2e_system_hub_t54.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/system-hub.html",
+    "page:pages/users.html",
+    "router:system_hub"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/routers/system_hub.py"
+    ],
+    "page": [
+     "frontend/pages/system-hub.html",
+     "frontend/pages/users.html"
+    ],
+    "path": [
+     "frontend/pages/system-hub.html",
+     "frontend/pages/users.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_system_settings_ui_2026_09_11.py": {
    "kind": "e2e",
    "units": [
@@ -30316,6 +30717,7 @@
     "router:parts",
     "router:search",
     "router:system",
+    "router:system_hub",
     "router:uploads"
    ],
    "evidence": {
@@ -30362,6 +30764,7 @@
      "backend/routers/parts.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
+     "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
     ],
     "page": [
@@ -31687,7 +32090,9 @@
     "router:platform_catalog",
     "router:platform_menu",
     "router:search",
+    "router:settings_center",
     "router:system",
+    "router:system_hub",
     "router:uploads"
    ],
    "evidence": {
@@ -31764,7 +32169,9 @@
      "backend/routers/platform_catalog.py",
      "backend/routers/platform_menu.py",
      "backend/routers/search.py",
+     "backend/routers/settings_center.py",
      "backend/routers/system.py",
+     "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
     ],
     "path": [
@@ -32455,6 +32862,7 @@
     "router:parts",
     "router:search",
     "router:system",
+    "router:system_hub",
     "router:uploads"
    ],
    "evidence": {
@@ -32500,6 +32908,7 @@
      "backend/routers/parts.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
+     "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
     ]
    }
@@ -34125,6 +34534,7 @@
     "helper:geo",
     "mod:accounting/notify",
     "mod:case/expense_notify",
+    "mod:permmatrix/service",
     "mod:tender_radar/notify",
     "plat:__init__",
     "plat:source_tree",
@@ -34142,6 +34552,7 @@
      "backend/helpers/geo.py",
      "backend/modules/accounting/notify.py",
      "backend/modules/case/expense_notify.py",
+     "backend/modules/permmatrix/service.py",
      "backend/modules/tender_radar/",
      "backend/modules/tender_radar/notify.py",
      "backend/routers/system.py"
@@ -34222,6 +34633,7 @@
     "router:duty_roles",
     "router:item_reads",
     "router:list_prefs",
+    "router:settings_center",
     "router:system",
     "router:uploads"
    ],
@@ -34246,6 +34658,7 @@
      "backend/routers/duty_roles.py",
      "backend/routers/item_reads.py",
      "backend/routers/list_prefs.py",
+     "backend/routers/settings_center.py",
      "backend/routers/system.py",
      "backend/routers/uploads.py"
     ],
