@@ -1050,32 +1050,3 @@ L1 的中央檢查 `perm.can()` 需要「種子 ⊕ 管理者的覆寫」＋有�
 | 對方不在時 | 模組不在或讀取失敗 ⇒ L1 用種子（＝今天的行為）並記 log，不多給也不少給 |
 | 契約版本 | 1（2026-10-10） |
 | 守門 | `backend/modules/permmatrix/tests/test_permmatrix_m2.py`、`backend/tests/platform/test_perm_equivalence_gate_a.py` |
-
-## IP-PM2　`perm.can`：能力查詢（M16 權限矩陣 → 系統中心等 L2 使用方；單一提供者；暫定號，列車定號；2026-10-11）
-
-L2 需要「這個人能不能用這項能力」時（系統中心依能力過濾卡片），不 import L1 的 `helpers.perm`，改經 registry 取用。
-
-| 欄位 | 內容 |
-|---|---|
-| 提供方 | M16 權限矩陣：`modules/permmatrix/__init__.py`，值為 L1 公開函式 `helpers.perm.can` |
-| 使用方 | 系統中心 `routers/system_hub.py::_capability_checker` |
-| 形式 | provider，單一提供者（名稱 `permmatrix`） |
-| 語法 | 提供：`("perm.can", "permmatrix"): fn`；取用：`registry.single_provider("perm.can")` ⇒ `fn(user: dict, cap: str) -> bool` |
-| 回傳 | 與 `perm.can()` 完全相同（不變式 ①⑤：最高管理者恆真、未知能力拒絕、錯誤一律拒絕） |
-| 對方不在時 | 提供者不在 ⇒ 使用方退回舊的角色／模組判斷（＝今天的行為） |
-| 契約版本 | 1 |
-| 守門 | `backend/modules/permmatrix/tests/test_permmatrix_m2.py::test_perm_can_provider_*` |
-
-## IP-PM3　`perm.changed`：權限變更通知（L1 `helpers/perm.py::invalidate` → 各訂閱者；多提供者；暫定號，列車定號；2026-10-11）
-
-矩陣、覆寫、代理或待生效狀態變更時，L1 在 `invalidate()` 內呼叫所有訂閱者，讓它們立刻清自己的快取。**只涵蓋本程序**；跨程序一致性靠 P1 的 `config_epoch`（最多數秒後重載）。
-
-| 欄位 | 內容 |
-|---|---|
-| 提供方（訂閱者） | 系統中心 `routers/system_hub.py`：`registry.provide("perm.changed", "system_hub", clear_cache)` |
-| 使用方（通知者） | L1 `helpers/perm.py::invalidate()` |
-| 形式 | provider，多提供者（名稱各自一個）；通知者逐一呼叫、單一訂閱者例外不擋其他人 |
-| 語法 | 提供：`("perm.changed", <名稱>): fn`；取用：`registry.providers("perm.changed")` ⇒ `{名稱: fn}`；`fn() -> None` |
-| 對方不在時 | 沒有訂閱者 ⇒ 只清矩陣快取 |
-| 契約版本 | 1 |
-| 守門 | `backend/modules/permmatrix/tests/test_permmatrix_m2.py::test_perm_changed_*` |

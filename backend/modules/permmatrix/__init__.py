@@ -7,7 +7,6 @@
 import importlib
 
 from core.registry import ModuleSpec
-from helpers import perm as _perm
 
 from modules.permmatrix import service
 
@@ -18,8 +17,5 @@ MODULE = ModuleSpec(
     key="permmatrix",
     routers=[],
     migrations=[(1, _m0001.up)],
-    providers={
-        ("perm.matrix_source", "permmatrix"): service.load_matrix,              # 字面字串：整合點登記表守門只認字面值
-        ("perm.can", "permmatrix"): _perm.can,                                  # 給 L2 的唯讀查詢：fn(user, cap) -> bool（L2 不直接 import L1 私有名）
-    },
+    providers={("perm.matrix_source", "permmatrix"): service.load_matrix},      # 字面字串：整合點登記表守門只認字面值
 )
