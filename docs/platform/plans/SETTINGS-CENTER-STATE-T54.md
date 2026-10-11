@@ -14,7 +14,7 @@
 
 ## 已完成（Train A 程式，皆有測試）
 - L0 `definitions.publish_direct`；core migration（NEXT 佔位）`config_changes`（含 approvals_required）＋`config_change_events`（含 approved）；
-- `helpers/config_ledger.py`（record/history/register_domain/pending/cancel/supersede/approve/activate_due(domain)/in_effect/restore_version…）；
+- `helpers/config_ledger.py`（record/history/register_domain/pending/cancel/supersede/approve/promote_due(domain)/in_effect/restore_version…）；
 - `helpers/settings_registry.py`（SettingDef 必填 question/label/help/impact＋risk_text；requires_pending 24h；loosen＋雙人核准；edition bounds；profiles；materialize_due；15 秒快取以 DB 路徑為鍵；DEFAULTS_ONLY）；
 - `helpers/settings_groups.py`（retention 8 欄、uploads 3 欄，預設＝舊常數；凍結基準 `tests/platform/settings_deploy_baseline.json`）；
 - S2 接線：archive._backup_retention、舊 PATCH backup-retention（稽核下限 365＋publish 雙寫舊鍵）、audit.purge_old_notifications、system_checks._prune_request_log、uploads.limits_for/max_file_bytes、daily_checks 呼叫 materialize_due；

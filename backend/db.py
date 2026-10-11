@@ -304,7 +304,10 @@ def reset_demo_db() -> None:
                 " 'bonus_case_award_edit_log_no_delete',"
                 " 'bonus_case_award_edit_log_no_update',"
                 # 職責角色化 R1：權限變更紀錄只增不改不刪，展示重置要整張清空 ⇒ 拿掉再建回
-                " 'permission_changes_no_update', 'permission_changes_no_delete')")]
+                " 'permission_changes_no_update', 'permission_changes_no_delete',"
+                # 第54班設定變更帳本：兩張表都只增不改不刪，展示重置要整張清空 ⇒ 拿掉再建回
+                " 'config_changes_no_update', 'config_changes_no_delete',"
+                " 'config_change_events_no_update', 'config_change_events_no_delete')")]
             for name, _sql in saved_triggers:
                 conn.execute(f"DROP TRIGGER IF EXISTS {name}")
             # ⚠️ 跳過不存在的表：這段 DELETE 跑在 `init_db()` **之前**，
@@ -421,6 +424,7 @@ DEMO_CLEARED_TABLES = frozenset((
     "ui_definitions",           # 2026-09-25 定義文件庫（core 模組 migration v1）；demo 的定義一併清空
     "custom_records", "custom_record_values", "custom_record_counters", "custom_record_log",   # P8 自訂模組單據（core v2）
     "duty_roles", "user_duty_roles", "user_perm_subtracts", "permission_changes",   # 職責角色化 R1（core 未取號 migration）；demo 清空後由 init_db 重種子
+    "config_changes", "config_change_events",   # 第54班設定變更帳本（core migration；只增不改不刪的觸發器，重置時比照 permission_changes 拿掉再建回）：設定值（ui_definitions）在 demo 一併清空，帳本不留下上一位客戶的變更與待生效項
     "custom_record_revisions", "custom_record_finance_outbox", "custom_record_files", "custom_record_snapshots",   # 建構器第三輪（core v3／v4／v5）
     "module_schema_versions",   # 2026-09-25 模組 migration 版本表；比照 schema_version（清掉 ⇒ init_db 重跑）
     "module_versions", "monitor_categories", "monitor_fit",

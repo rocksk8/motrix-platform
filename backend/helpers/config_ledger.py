@@ -2,7 +2,7 @@
 """設定與權限共用的「變更明細＋待生效」層（L1；第 54 班設定中心 S0；與 1d 的權限矩陣設計 §7 共同定案）。
 
 [單位] helper:config_ledger    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] EVENTS, HIGH_RISK, RISKS, activate_due, approve, audit_event, cancel, cancel_pending_for, domains, history, in_effect, pending, record, register_domain,
+[公開介面] EVENTS, HIGH_RISK, RISKS, approve, audit_event, cancel, cancel_pending_for, domains, history, in_effect, pending, promote_due, record, register_domain,
     restore_version, snapshot_version, state_of, supersede
 [不變式] ①`config_changes` 與 `config_change_events` 只增不改不刪（資料庫觸發器擋）；②狀態**不是欄位**：目前狀態＝該變更最後一個事件
     （`pending`／`activated`／`cancelled`／`superseded`），沒有事件＝立即生效；③`record()` 在**呼叫端的交易內**寫變更明細、稽核與
@@ -253,7 +253,7 @@ def cancel_pending_for(conn, domain, key, actor, reason=""):
     return n
 
 
-def activate_due(conn, now=None, domain=None):
+def promote_due(conn, now=None, domain=None):
     """把已到時的 pending 轉成 activated（定時工作呼叫；漏跑也不改變誰有效，因為 `in_effect()` 在讀取時判斷）。回轉態的 id 清單。不 commit。"""
     now = now or _now()
     done = []

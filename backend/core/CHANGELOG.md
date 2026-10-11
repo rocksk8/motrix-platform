@@ -12,6 +12,9 @@
 - 安全／風險設定（使用者 2026-10-10 裁示）：`SettingDef(loosen='up'|'down')`——放寬方向的變更走 24 小時待生效＋**雙人核准**（`config_ledger.approve`，申請人不能自核、同人不能重複投票；`config_changes.approvals_required`、事件 `approved`；只有一位最高管理者時改為原因＋24 小時＋警告＋通知）；收緊立即生效。版本邊界 `settings_registry.set_edition_bounds`（程式／授權設定，客戶無 API 可改）；預設組 `profiles／profile_preview／apply_profile`（欄位 `presets`，走同一條 publish 管制）。欄位必填繁中 `question／label／help／impact`（高風險加 `risk_text`），守門 `test_settings_ui_plain_language`。
 - 新端點：`/api/settings-center/groups`（GET／GET {group}／POST {group}）、`/api/settings-center/pending`（GET）、`/api/settings-center/pending/{id}/cancel`／`approve`（POST）、`/api/settings-center/profiles`（GET）、`…/profiles/{name}/preview`（GET）、`…/apply`（POST）、`/api/settings-center/public`；頁面 `settings-center.html`（系統 > 設定中心）。
 - 每日 JSON 備份新增 `設定變更明細`（config_changes）與 `設定變更事件`（config_change_events）兩張表：設定中心的變更帳本屬稽核等級、只增不改不刪，備份不可漏。
+- 展示重置（`db.reset_demo_db`）把 `config_changes`／`config_change_events` 納入整張清空（比照 `permission_changes`：先拿掉四個只增不改不刪的觸發器、清完建回）；`config_ledger.activate_due` 改名 `promote_due`（與權限矩陣的寫入函式同名，被 PMX14 名稱守門誤判；行為不變，尚無外部呼叫者）。
+- L1（新增）：`helpers.config_ledger`（`record／history／register_domain／pending／cancel／supersede／promote_due／in_effect／restore_version／snapshot_version`；與權限矩陣設計 §7 對齊）；`helpers.settings_registry`（`SettingDef／register_group／get／get_group／publish／validate_values／groups／invalidate`；kind `setting_group`）；`helpers.settings_groups`（群組 `retention`、`uploads`）；`helpers.uploads.limits_for／max_file_bytes`。
+- 風險欄位：`SettingDef(risk=…, requires_pending=True)` 的變更不立即生效，寫待生效明細（24 小時、可撤銷、讀取時到期即生效）；`settings_registry.materialize_due()` 由每日檢查呼叫；`config_ledger.promote_due(conn, now, domain=None)` 新增 domain 篩選。第一批沒有任何欄位使用（框架先行，欄位待使用者逐項確認）。
 
 ## 1.128 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-05-reassign-rules）：轉簽不能變成自核的後門（使用者裁示）**

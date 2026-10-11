@@ -32,7 +32,7 @@ def _pending(conn, approvals=0, actor="lc_a"):
 
 def test_public_interface_names_exist():
     for name in ("EVENTS", "HIGH_RISK", "RISKS", "audit_event", "record", "history", "pending", "approve", "cancel",
-                 "supersede", "activate_due", "in_effect", "state_of", "cancel_pending_for", "register_domain",
+                 "supersede", "promote_due", "in_effect", "state_of", "cancel_pending_for", "register_domain",
                  "domains", "snapshot_version", "restore_version"):
         assert hasattr(L, name), name
     assert set(L.EVENTS) == {"pending", "approved", "activated", "cancelled", "superseded"}
@@ -55,7 +55,7 @@ def test_pending_not_in_effect_until_due_then_activates(conn):
     row = [r for r in L.history(conn, DOMAIN, "k") if r["id"] == cid][0]
     assert row["state"] == "pending" and L.in_effect(row) is False
     assert L.in_effect(row, _later(30)) is True                 # 讀取時判斷，不靠排程
-    assert L.activate_due(conn, _later(30), DOMAIN) == [cid]
+    assert L.promote_due(conn, _later(30), DOMAIN) == [cid]
     assert L.state_of(conn, cid) == "activated"
 
 
