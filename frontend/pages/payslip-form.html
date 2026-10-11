@@ -184,6 +184,34 @@
           </div>
           <div x-show="q.contractorId && !personDispatches.length && !personDispatchNotice" style="font-size:12px;color:var(--text-dim)">這位人員目前沒有被排進任何派工。</div>
           <div x-show="personDispatchNotice" style="font-size:12px;color:var(--danger)" x-text="personDispatchNotice"></div>
+          <div x-show="isNew" style="position:relative;margin-top:4px" @click.outside="dpClose()" data-testid="ps-form-dp">
+          <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+            <input type="text" :placeholder="dpLabels.placeholder" x-model="dp.q" @focus="dpOpen()" @input="dp.open = true; dpTyping()" data-testid="ps-form-dp-input" autocomplete="off" style="min-width:220px;flex:1;font-size:12px">
+            <button type="button" class="btn btn-ghost btn-sm" @click="dpToggleAll()" data-testid="ps-form-dp-all" x-text="dp.includeAll ? dpLabels.showRoster : dpLabels.showAll" x-show="q.contractorId"></button>
+          </div>
+          <div x-show="dp.open" style="position:absolute;z-index:20;left:0;right:0;max-height:260px;overflow:auto;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:6px;margin-top:2px;box-shadow:0 4px 12px rgba(0,0,0,.12)" data-testid="ps-form-dp-list">
+            <div x-show="dp.loading" style="padding:6px 10px;font-size:12px;color:var(--text-dim)" x-text="dpLabels.loading"></div>
+            <div x-show="dp.notice" style="padding:6px 10px;font-size:12px;color:var(--danger)" x-text="dp.notice"></div>
+            <div x-show="!dp.loading && !dp.notice && !dp.items.length" style="padding:6px 10px;font-size:12px;color:var(--text-dim)" x-text="(q.contractorId && !dp.includeAll) ? dpLabels.emptyRoster : dpLabels.empty"></div>
+            <template x-for="it in dp.items" :key="it.id">
+              <div @click="dpPick(it)" :data-testid="'ps-form-dp-opt-' + it.id" :style="'padding:6px 10px;font-size:12px;border-bottom:1px solid var(--border);' + (dpPickable(it) ? 'cursor:pointer' : 'opacity:.5;cursor:not-allowed')">
+                <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                  <b x-text="it.docCode || ('#' + it.id)"></b>
+                  <span x-text="dpStatusLabel(it.status)" style="color:var(--text-dim)"></span>
+                  <span x-show="it.caseVisible && (it.projectName || it.customerName)" x-text="[it.projectName, it.customerName ? '（' + it.customerName + '）' : ''].join('')"></span>
+                  <span x-show="it.linked && !it.linkedToThis" :data-testid="'ps-form-dp-linked-' + it.id" style="color:#B45309" x-text="dpLabels.linked"></span>
+                  <span x-show="dpReason(it)" style="color:var(--danger)" x-text="dpReason(it)"></span>
+                </span>
+                <span style="display:block;color:var(--text-dim)" x-text="[it.vendorName, it.scope, it.dispatchDate].filter(Boolean).join('　')"></span>
+              </div>
+            </template>
+            <div x-show="dp.hasMore" style="padding:6px 10px"><button type="button" class="btn btn-ghost btn-sm" @click="dpSearch(true)" x-text="dpLabels.loadMore"></button></div>
+          </div>
+        </div>
+          <div x-show="extraDispatch" data-testid="ps-form-extra" style="font-size:12px;margin-top:4px">
+            <span>將關聯派發：</span><b x-text="extraDispatch && (extraDispatch.docCode || ('#' + extraDispatch.id))"></b>
+            <button type="button" class="btn btn-ghost btn-sm" @click="extraDispatch = null; dirty()" style="padding:0 6px">取消</button>
+          </div>
           <div x-show="!q.contractorId && q.contractorName.trim()" data-testid="ps-no-roster-hint" style="font-size:12px;color:#B45309">未從外包名冊選取受領人：這張勞報單不會連到任何派工（請用上方搜尋框選人）。</div>
         </div>
         <div class="form-row">
@@ -545,10 +573,24 @@
 <script src="../static/privacy-notice.js"></script>
 <script src="../static/legal-round.js"></script>
 <script src="../static/sidebar.js"></script>
+<script src="../static/dispatch-picker.js"></script>
 <script>
 const API = '/api'
 function payslipForm() {
   return {
+    ...MotrixDispatchPicker.mixin({
+      contractorId() { return this.q.contractorId },
+      slipNo() { return '' },
+      onPick(it) {
+        // 第 55 班：搜尋選到的派發——有名冊受領人 ⇒ 併入上方勾選清單並勾選；沒有 ⇒ 單一來源派發（建立時帶 dispatchId）
+        if (this.q.contractorId) {
+          if (!this.personDispatches.some(d => d.id === it.id)) this.personDispatches.push({ ...it, linkedForThisPerson: !!it.linked })
+          if (!this.pickedDispatchIds.map(Number).includes(it.id)) this.pickedDispatchIds.push(it.id)
+        } else this.extraDispatch = it
+        this.dp.q = ''; this.dp.searched = false; this.dirty()
+      }
+    }),
+    extraDispatch: null,           // 第 55 班：沒選名冊人員時，搜尋選到的單一來源派發
     session: {},
     isNew: true,
     isDirty: false,
@@ -712,7 +754,7 @@ function payslipForm() {
     },
 
     async loadPersonDispatches(cid) {
-      this.personDispatches = []; this.pickedDispatchIds = []; this.personDispatchNotice = ''; this.personDispatchFillMsg = ''
+      this.personDispatches = []; this.pickedDispatchIds = []; this.extraDispatch = null; this.dp.searched = false; this.personDispatchNotice = ''; this.personDispatchFillMsg = ''
       if (!this.isNew || !cid) return
       try {
         const r = await fetch(`${API}/payslip-person-dispatches?contractor_id=${cid}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
@@ -903,7 +945,7 @@ function payslipForm() {
           slip_no: this.q.slipNo,
           contractor_id: this.q.contractorId || null,
           data: { ...this.q, calc: this.result,
-                  ...(this.isNew && new URLSearchParams(window.location.search).get('dispatchId') ? { dispatchId: parseInt(new URLSearchParams(window.location.search).get('dispatchId'), 10) } : {}),   // 第46班 P3：從派發頁「新增勞報單」進來 ⇒ 建立時一併關聯來源派發
+                  ...(this.isNew && new URLSearchParams(window.location.search).get('dispatchId') ? { dispatchId: parseInt(new URLSearchParams(window.location.search).get('dispatchId'), 10) } : (this.isNew && !this.q.contractorId && this.extraDispatch ? { dispatchId: this.extraDispatch.id } : {})),   // 第46班 P3：從派發頁「新增勞報單」進來 ⇒ 建立時一併關聯來源派發
                   ...(this.isNew && this.q.contractorId && this.pickedDispatchIds.length ? { dispatchIds: this.pickedDispatchIds.map(Number) } : {}),   // 第48班：依人勾選的派發，伺服器同一交易連結
                   recalcTaxRules: this.recalcTaxRules,          // R1：明確選擇重算才依日期重挑
                   privacyNoticeAcked: this.privacyNoticeAcked } // R3：時間與人員由伺服器記錄
