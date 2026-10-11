@@ -255,10 +255,7 @@
 ### 10.4 `approval_delegates` → `perm_delegations` 的切換（審查 5）
 - 旗標 `perm_delegation_source ∈ legacy｜new`（`system_settings`，預設 `legacy`＝今天）。
 - **讀點其實有兩個方向，先前「單一讀點」不成立**：今天 `approval_delegates` 還被直接讀在 `payroll/api/payslip_approval.py:60,98`、`payroll/api/bonus.py:1296`、`payroll/bonus_payouts.py:117`（皆為**反向**：委派人→代理人們）與 `archive.py:2206`（備份匯出）。因此統一成**兩個**讀點（`helpers/tiered_approval`）：**正向** `active_delegators_for(delegate, today)`（代理人→委派人們，既有）與新增**反向** `active_delegates_of(delegator, today=None, window=True)`；依旗標讀一邊（`legacy` 只讀舊表、`new` 只讀 `perm_delegations` 的 `approval_slot`），任何時刻只讀一邊，不會重複計算。上述三處改呼叫反向讀點。**`window` 預設為 `True`（強制日期區間）——使用者裁示（10-10）：過期代理仍被計入是安全缺陷，與代理統一一起修正**；`window=False` 只留給等價測試重現舊行為，產品程式不使用。
-- **使用者裁示：與代理統一一起修掉既有缺陷（有意的行為變更）。** 今天 `payslip_approval.py:98` 用日期區間（`start_date<=今天<=end_date`），但 `:60`、`bonus.py:1296`、`bonus_payouts.py:117` 只看 `active=1`、**不看日期**——已過期（也包含還沒開始）的代理仍被當作有效。統一後三處改呼叫 `active_delegates_of(window=True)`，**日期區間（含頭尾）一律強制**。
-  - **上線前 SQL 預檢**（唯讀，列出會因此失效的代理，給使用者確認）：`SELECT id, delegator_username, delegate_username, start_date, end_date, reason FROM approval_delegates WHERE active=1 AND (end_date < date('now','localtime') OR start_date > date('now','localtime')) ORDER BY end_date;`；另列『目前實際影響到勞報單／獎金簽核的人』：把上列代理人與 `payslips`／獎金簽核待辦交叉比對（步驟檔附查詢）。預檢結果為空或使用者確認後才切換。
-  - **關卡 D 的預期差異**：對每一列、每一天，`active_delegates_of(window=False)` 必須與舊的三處內嵌查詢**逐字相同**（重現舊行為，證明沒有別的改動）；`window=True` 與舊行為的差異集合**只能是『當天落在 [start,end] 之外的 active=1 代理』**（邊界日 start／end 當天仍有效），多或少一個都紅。
-  - **步驟檔／驗收註記（行為變更清單）**：①『已過期或尚未開始的簽核代理，在勞報單簽核與獎金簽核不再生效』；②驗收：以一筆已過期代理測勞報單簽核與獎金簽核，確認被擋（403／不在可簽名單）；以一筆有效代理確認仍可簽；③回滾＝旗標切回 `legacy` 並把三處恢復為內嵌查詢的程式回退（此缺陷修正隨程式版本，不隨旗標）。
+- **更正（2026-10-11，05 稽核）：先前此處寫的「三處讀點不看日期」已過時。** 平台 c14f0a1df 上 `payslip_approval.py:60-61/:98`、`bonus.py:1296-97`、`bonus_payouts.py:117-118`、`tiered_approval.active_delegators_for` 都已檢查日期區間。統一時仍以 `active_delegates_of(window=True)` 為預設，但**不是行為變更**；關卡 D 的預期是 `window=True` 與現行四處逐字等價。上線前請以當時程式重新核對，舊的預檢 SQL 已撤回（見 `PERM-P0-PROD-IMPACT-T54.md` §0）。
 - **備份**：`archive.py` 匯出同時涵蓋舊表與 `perm_delegations`（T1，隨表備份）；切換後舊表唯讀仍可匯出。
 - **守門**：直接 `SELECT … FROM approval_delegates` 只准出現在這兩個讀點、遷移、舊端點包裝與 `archive.py`（棘輪基線，只減）。
 - 遷移（冪等）：把舊表每列複製為 `approval_slot`＋`legacy_id`，不刪舊列。**關卡 D**：對每一列、每一天，`legacy` 與 `new` 兩種模式下**正向 `active_delegators_for` 與反向 `active_delegates_of`（含 `window` 兩種）**結果逐日相同，才可切換。
