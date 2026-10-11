@@ -2,7 +2,7 @@
 """設定與權限共用的「變更明細＋待生效」層（L1；第 54 班設定中心 S0；與 1d 的權限矩陣設計 §7 共同定案）。
 
 [單位] helper:config_ledger    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] HIGH_RISK, RISKS, activate_due, approve, cancel, cancel_pending_for, domains, history, in_effect, pending, record, register_domain,
+[公開介面] EVENTS, HIGH_RISK, RISKS, activate_due, approve, audit_event, cancel, cancel_pending_for, domains, history, in_effect, pending, record, register_domain,
     restore_version, snapshot_version, state_of, supersede
 [不變式] ①`config_changes` 與 `config_change_events` 只增不改不刪（資料庫觸發器擋）；②狀態**不是欄位**：目前狀態＝該變更最後一個事件
     （`pending`／`activated`／`cancelled`／`superseded`），沒有事件＝立即生效；③`record()` 在**呼叫端的交易內**寫變更明細、稽核與
@@ -10,6 +10,7 @@
     以 `register_domain()` 登記 adapter（權限＝perm_versions、設定＝ui_definitions）；⑤`in_effect()` 是純函式，讀取端（`perm.can()`、
     `settings.get()`）在**讀取時**判斷待生效項，不靠排程。
 [契約題] backend/tests/platform/test_config_ledger_t54.py
+
 domain 命名：`<前綴>` 或 `<前綴>:<key>`；前綴＝`setting`（設定群組，key＝群組代號）、`perm`（權限矩陣）、`duty`（R1/R2 的 permission_changes 歷史，不搬資料）。
 """
 import json

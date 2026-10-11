@@ -12,7 +12,7 @@
 |---|---|---|---:|---:|---|
 | `plat:catalog` | L0 | 能力目錄（CUSTOMIZATION-SPEC P1；CORE-SPEC §7 端點登錄表的擴充）。 | 13 | 3 | `tests/platform/test_platform_catalog.py` |
 | `plat:customization` | L0 | L0 模組描述：可自訂點（CUSTOMIZATION-SPEC P3；§8.2 排版器需求）。 | 12 | 2 | `tests/platform/test_platform_catalog.py` |
-| `plat:definitions` | L0 | 定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。 | 25 | 8 | `tests/test_definitions_store_2026_09_25.py` |
+| `plat:definitions` | L0 | 定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。 | 26 | 10 | `tests/test_definitions_store_2026_09_25.py` |
 | `plat:events` | L0 | L1 事件匯流排（CUSTOMIZATION-SPEC §6，ROADMAP P6）。 | 9 | 2 | `tests/platform/test_core_events.py` |
 | `plat:loader` | L0 | L0 模組載入器：掃 `modules/*/module.json`，相容且匯入成功的才登錄。 | 9 | 4 | `tests/platform/test_core_loader.py` |
 | `plat:menu` | L0 | 選單由登錄表產生（階段 C／C3，docs/platform/STAGE-C-DESIGN.md §4）。 | 14 | 2 | `tests/platform/test_menu.py` |
@@ -22,12 +22,12 @@
 | `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 45 | 27 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
 | `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 21 | 79 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
 | `plat:source_tree` | L0 | 守門測試要掃的原始碼範圍：唯一來源。 | 11 | 0 | `tests/platform/test_core_loader.py` |
-| `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 modules/case/quotations.py 下沉）。 | 7 | 36 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
+| `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 modules/case/quotations.py 下沉）。 | 7 | 38 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
 | `plat:upgrade` | L0 | V9 → 新版 升級轉換與回滾的核心（CORE-SPEC §9b）。L0 工具，不是業務模組。 | 50 | 0 | `tests/platform/test_core_upgrade.py` |
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 24 | 9 | — |
 | `core:backup_job` | L1 | MOTRIX ERP 獨立備份腳本（無單位卡） | 1 | 0 | — |
 | `core:cloud_storage` | L1 | Pluggable cloud backup storage backend (2026-09-07, architecture map §6.4).（無單位卡） | 9 | 2 | — |
-| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 29 | 124 | — |
+| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 29 | 126 | — |
 | `core:heartbeat_job` | L1 | Independent heartbeat pinger: confirms local ERP is responding, then pings an（無單位卡） | 1 | 0 | — |
 | `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 12 | 0 | — |
 | `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 23 | 17 | — |
@@ -36,7 +36,7 @@
 | `helper:approval_queue` | L1 | 「待我簽核」佇列與轉簽的共用形狀（L1；M01-PLAN §3-7，2026-09-26）。（無單位卡） | 11 | 18 | — |
 | `helper:attachment_search` | L1 | 附件目錄的搜尋共用件（`attachments.catalog` 契約 v1 的 `search`／`count`；附件目錄 P3， | 10 | 9 | `tests/test_filehub_search_2026_09_30.py` |
 | `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 13 | 80 | — |
-| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 100 | — |
+| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 101 | — |
 | `helper:branding` | L1 | 品牌圖檔（主 LOGO／深色底 LOGO／favicon）：上傳驗證、存放、讀取時回預設。 | 16 | 2 | `tests/test_branding_2026_09_27.py` |
 | `helper:build_info` | L1 | 這個**行程**載入的是哪一份程式碼（`BR1`）。（無單位卡） | 3 | 2 | — |
 | `helper:business_days` | L1 | L1 工作日／假日判斷（第44班：自 M11 標案雷達 `calendar_tw.py` 提升為 L1 共用，供任何模組用——例如 M01 預定付款日提醒、M11 不寄信日）。**純函式，不連網、不讀時鐘（日期由呼叫端給）。**（無單位卡） | 9 | 3 | — |
@@ -92,6 +92,6 @@
 | `helper:system_checks` | L1 | L1 系統健康的每日檢查（2026-09-26 自 routers/daily_tasks.py 搬出，M12 搬遷前置）。（無單位卡） | 8 | 2 | — |
 | `helper:tax_calc` | L1 | 稅額純函式（L1；2026-09-26 自 M01 `helpers/quotations.py` 下沉，主持核准「T」）。（無單位卡） | 12 | 9 | — |
 | `helper:tiered_approval` | L1 | 共用的 tiers 依序簽核純邏輯（2026-08-22）。（無單位卡） | 31 | 33 | — |
-| `helper:uploads` | L1 | 通用「已開立/已回簽單據」附件上傳（2026-08-24）：報價單回簽、出貨單回簽、（無單位卡） | 19 | 31 | — |
+| `helper:uploads` | L1 | 通用「已開立/已回簽單據」附件上傳（2026-08-24）：報價單回簽、出貨單回簽、（無單位卡） | 21 | 31 | — |
 | `helper:validation` | L1 | 請求本文的共用驗證（第 49 班 W1c-P2）。 | 2 | 23 | `tests/test_strict_bool_helper_t49.py` |
 | `helper:xlsx_out` | L1 | L1 輸出：Excel 樣式、公式注入防護、匯出速率限制（ROADMAP A8／DEPENDENCY-MAP §3 #10 #13）。（無單位卡） | 15 | 11 | — |

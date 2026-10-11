@@ -11,6 +11,7 @@
 - 回滾：環境變數 `MOTRIX_SETTINGS_DEFAULTS_ONLY=1` ⇒ 所有 `settings.get` 回程式預設；純程式回退即還原（兩張新表留著無害）。
 - 安全／風險設定（使用者 2026-10-10 裁示）：`SettingDef(loosen='up'|'down')`——放寬方向的變更走 24 小時待生效＋**雙人核准**（`config_ledger.approve`，申請人不能自核、同人不能重複投票；`config_changes.approvals_required`、事件 `approved`；只有一位最高管理者時改為原因＋24 小時＋警告＋通知）；收緊立即生效。版本邊界 `settings_registry.set_edition_bounds`（程式／授權設定，客戶無 API 可改）；預設組 `profiles／profile_preview／apply_profile`（欄位 `presets`，走同一條 publish 管制）。欄位必填繁中 `question／label／help／impact`（高風險加 `risk_text`），守門 `test_settings_ui_plain_language`。
 - 新端點：`/api/settings-center/groups`（GET／GET {group}／POST {group}）、`/api/settings-center/pending`（GET）、`/api/settings-center/pending/{id}/cancel`／`approve`（POST）、`/api/settings-center/profiles`（GET）、`…/profiles/{name}/preview`（GET）、`…/apply`（POST）、`/api/settings-center/public`；頁面 `settings-center.html`（系統 > 設定中心）。
+- 每日 JSON 備份新增 `設定變更明細`（config_changes）與 `設定變更事件`（config_change_events）兩張表：設定中心的變更帳本屬稽核等級、只增不改不刪，備份不可漏。
 
 ## 1.128 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-05-reassign-rules）：轉簽不能變成自核的後門（使用者裁示）**

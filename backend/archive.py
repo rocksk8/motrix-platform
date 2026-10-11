@@ -2310,6 +2310,11 @@ def _daily_backup_tables() -> dict:
         "標案命中":         "SELECT * FROM tender_hits ORDER BY id",
         # ── 紀錄類 ──
         "稽核紀錄":         "SELECT * FROM audit_log ORDER BY id",
+        # 🔑 設定變更明細（第54班設定中心 S0）：誰、何時、把什麼從舊值改成新值、為何、誰核准——和稽核紀錄同等級的法遵證據，
+        #    表本身只增不改不刪（觸發器擋），**算不回來**；每列一筆小紀錄，量與稽核紀錄相比可忽略。事件表（待生效／核准／生效／撤銷）一起備份，
+        #    否則還原後只剩變更而不知道哪些仍在等待、誰已核准。
+        "設定變更明細":     "SELECT * FROM config_changes ORDER BY id",
+        "設定變更事件":     "SELECT * FROM config_change_events ORDER BY id",
         # 🔑 Google 額度計數器（§16 GB1）。**它算不回來。**
         # ☠️ 掉了就從 0 重算 ⇒ 我們會以為還有額度，而自動降回免費**太晚觸發**
         #    ⇒ 真的花到錢。〈計數器要有落點〉的落點本身也要有備份。
