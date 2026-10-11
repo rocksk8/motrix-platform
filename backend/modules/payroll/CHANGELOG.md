@@ -1,6 +1,6 @@
 # 薪資獎金 更新紀錄
 
-## (next)
+## (next) — wip/t55-05-payslip-dropdown（第 55 班）
 - 勞報單「選派發」下拉（第 55 班）：新端點 `GET /api/payslip-dispatch-options`（最高管理者＋勞報單模組；搜尋＋分頁；預設只列受領人在名單內、非草稿非已取消的派發，`include_all` 列全部；標 `linked`／`linkedToThis`／`onRoster`；不含金額）。`payslips.html` 詳情的「手打派發編號」與 `payslip-form.html` 新增表單都改用共用元件 `static/dispatch-picker.js`（文字集中在 `LABELS`）。
 - 名單外的派發擋下（`link()` 加選用參數 `personnel_ids`；受領人有權威 `contractor_id` 且不在名單 ⇒ 400「這張派發的人員名單沒有這張勞報單的受領人，不能關聯」）。詳情入口與派發頁入口都擋；沒選名冊人員的勞報單不檢查（同建立勞報單）。提供者 `payslip.dispatch_links` 加 `link_flags()`（加法）。稽核 `payslip.dispatch_link` 的說明多派發編號，並註記是否經「顯示全部」選取。`module.json` 的 `api_prefixes` 加 `/api/payslip-dispatch-options`。無 migration、不動簽核與付款。
 
