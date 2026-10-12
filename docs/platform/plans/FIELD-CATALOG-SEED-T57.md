@@ -1,5 +1,7 @@
 # 欄位目錄（A6）種子設計：報價單清單／詳情、案件管理頁、財務／應收應付摘要（僅文件，未跑任何測試）
 
+> **r2（回應 0d 對 r1 `bc688512b` 的稽核：4 項必修＋6 項建議）**：①§3 通道規則更正（`moneyClass=internal` 才禁客戶通道；`filename`／`carry_in` 對所有金額與隱私欄位一律禁）；②新增 §5.0『唯一規則』——**每一種衍生操作**（排序、篩選、搜尋、分組、聚合／計數、快速篩選條件與筆數、警示條件與文字、匯出欄、tooltip、條件式列樣式）都只對『檢視者通過該欄位判定函式』者在**伺服器端**成立，並補 `searchable／groupable／aggregatable` 屬性；③新增 §5.5『欄位可見＝表面門檻 AND 欄位判定』與 §5.6 `maskStyle`（`null`／`strip`／`absent`，預設＝今天的遮蔽形狀）；④新增 §5.7 付款衍生事實（`recv_overdue`、`missing_invoice`、`overdue`）的明確決定；⑤判定函式登錄表加『同一函式物件』守門與兩條縫的註記；⑥`derived_ui` 守門；⑦隱私類最低通道規則；⑧對齊 `USER-DEFINED-LOGIC-THREAT-MODEL.md` §1／§5；⑨U3 先黃金比對、U5 已定案；⑩工量 +1 pd。
+
 > 日期：2026-10-13　作者：hichan-5e（T57）　狀態：r1，待非作者稽核（0d）。
 > 需求（使用者，經 1c 轉）：**早期功能都要使用者可自訂**——每個畫面顯示哪些資料、匯出（PDF／Excel）的範本、條件式紅色警示與上限、自訂按鈕與選單。地基＝**A6 欄位目錄**：每個模組宣告可顯示的欄位（id、白話名、來源、金額／隱私類別、格式、誰看得到），畫面從目錄挑選與排列。
 > 依據（已讀）：`FIELD-LAYOUT-FRAMEWORK-T56.md` r9（`9fca488ec`，§3 目錄、§4 版面鍵、§7 權限、§14 脊柱、§17 登錄）、`SPINE-ENGINE-DESIGN-T57.md` r3（`features[]`、`status`）、`SPINE-FIXTURES-T57.md` r1（夾具與問題代碼）；程式取自本分支基底（M3 `c51fc84d1` 之後、專案毛利% `e5a6b4f9f`），行號僅供起點。
@@ -79,7 +81,10 @@ FL §3 已列屬性概念；SPINE-FIXTURES 已提議問題代碼。本節把它�
      "group": "pricing", "isMoney": true, "moneyClass": "internal",
      "visibility": "quote_money_visible", "maskKeys": ["direct_margin_pct"],
      "lock": "display", "channels": ["screen", "internal_excel"],
-     "list": {"sortable": false, "filterable": false, "defaultVisible": true, "width": "narrow", "align": "right"},
+     "list": {"defaultVisible": true, "width": "narrow", "align": "right"},
+     "ops": {"sortable": false, "filterable": false, "searchable": false, "groupable": false, "aggregatable": false,
+             "quickFilterable": false, "ruleUsable": false, "tooltip": false, "opsRequireVisibility": true},
+     "maskStyle": "null",
      "rule": {"usable": true, "valueType": "percent"},
      "tone": "margin_tone"}
   ]
@@ -96,19 +101,21 @@ FL §3 已列屬性概念；SPINE-FIXTURES 已提議問題代碼。本節把它�
 | `group` | ✔ | 沿用 F7 FieldGroup（`header／items／pricing／cost／terms／case.payment…`） |
 | `isMoney` | ✔ | 金額／價格／比率類（對應 `financial_mask`）；**與 `moneyClass` 獨立** |
 | `moneyClass` | ✔ | `public`（客戶可見）／`internal`（成本、毛利、管銷…）／`none` |
-| `privacyClass` | ✔ | **本文新增（使用者要求『金額／隱私類別』）**：`none`／`contact`（電話、E-mail、傳真）／`identity`（統編、身分證字號）／`address`／`payroll`（薪資、獎金）。非 `none` 者不得進檔名、客戶以外的通道由『隱私判定』決定（§8 U6） |
+| `privacyClass` | ✔ | **本文新增（使用者要求『金額／隱私類別』）**：`none`／`contact`（電話、E-mail、傳真）／`identity`（統編、身分證字號）／`address`／`payroll`（薪資、獎金）。**最低通道規則（0d 建議 7，現在就生效）**：`identity／payroll／contact／address` 一律**預設不含** `filename`、`carry_in`、`customer_excel`；是否進 `customer_pdf` 由欄位自己的 `channels` 明列（例：客戶統編、聯絡人本來就印在客戶版，且受 `pdfShow` 控制）；`payroll`（獎金）只能經 `bonus_visible` **且**通過出納頁門檻（§5.5）；更細的隱私判定留 §8 U6 |
 | `visibility` | ✔（`isMoney` 真或 `privacyClass` 非 `none` 時） | 判定函式 id（封閉登錄表，§5.1）；解析器逐檢視者呼叫；缺少 ⇒ 驗證失敗 `money_without_visibility_fn` |
 | `maskKeys` | `isMoney` 真時 ✔ | 此欄位對應的**資料鍵**（`financial_mask` 清單內的鍵名）；雙向守門用 |
 | `lock` | ✔ | `core`（不可隱藏）／`display`（可隱藏、改名、移動）／`required`（業務必填連動，不可隱藏） |
-| `channels` | ✔ | `screen`（畫面編輯）、`preview`（畫面預覽）、`customer_pdf`、`internal_pdf`、`internal_excel`、`customer_excel`、`filename`、`carry_in`（帶入其他單據）、`rule`（可用於警示規則）。**`isMoney` 真者不得含 `customer_*`／`filename`／`carry_in`**；`moneyClass=internal` 者不得含任何客戶通道 |
-| `list` | 清單表面必填 | `sortable`、`filterable`、`defaultVisible`、`width`（檔位）、`align`；**`isMoney` 真者 `sortable`／`filterable` 預設 false**，要開須宣告 `sortRequiresVisibility: true`（§5.4） |
+| `channels` | ✔ | `screen`（畫面編輯）、`preview`（畫面預覽）、`customer_pdf`、`internal_pdf`、`internal_excel`、`customer_excel`、`filename`、`carry_in`（帶入其他單據）、`rule`（可用於警示規則）。**規則（r2 更正）**：①`moneyClass=internal` ⇒ **永遠不得**含任何客戶通道（`customer_pdf`／`customer_excel`／回簽頁／客戶預覽）；②`isMoney` 真且 `moneyClass=public`（例：單價、金額）⇒ **可以**進客戶通道（客戶版報價單本來就印價格）；③**所有** `isMoney` 與 `privacyClass≠none` 欄位 ⇒ **一律不得**含 `filename`、`carry_in`；④`rule` 通道另受 §5.0 與 §5.7 限制 |
+| `list` | 清單表面必填 | `sortable`、`filterable`、`defaultVisible`、`width`（檔位）、`align` |
+| `ops` | ✔ | **衍生操作許可（r2，§5.0）**：`sortable／filterable／searchable／groupable／aggregatable`（含計數）／`quickFilterable`／`ruleUsable`／`tooltip`。**`isMoney` 真或 `privacyClass≠none` 者全部預設 false**；要開某項必須同時宣告 `opsRequireVisibility: true`（承諾由解析器以欄位判定函式把關，§5.0），否則驗證失敗 `ops_without_visibility_guard` |
+| `maskStyle` | `isMoney` 真時 ✔ | 遮蔽後的**回應形狀**（r2，§5.6）：`null`（鍵保留、值置 None、列加 `moneyMasked`，例：報價單清單）／`strip`（鍵剝除，例：報價單與案件詳情）／`absent`（鍵不存在，例：專案毛利%）。**預設＝今天各表面的實際形狀**，使『預設＝今天』黃金比對成立 |
 | `rule` | 選填 | `usable`（可被警示規則引用）、`valueType`（決定可用運算子） |
 | `tone` | 選填 | 具名色階函式（`margin_tone`、`aging_tone`、`gate_tone`）；管理者不選，由規則覆寫 |
 | `editable` | 表單表面 | 使用者輸入／系統計算（唯讀） |
 | `dynamicFamily` | 選填 | 欄位家族（閘門、階段）：`{"source": "gate_heads"}`，成員由程式提供、目錄只登記家族（§4.3） |
 | `since`／`deprecated` | 選填 | 版本註記；移除欄位走 `dropped`（FL §8），不悄悄略過 |
 
-**問題代碼**（沿用 `SPINE-FIXTURES-T57` §3，本文新增者標★）：`catalog_mask_mismatch`、`money_without_visibility_fn`、`money_in_customer_channel`、`bad_surface_key`；★`privacy_without_visibility_fn`、★`sortable_money_without_visibility_guard`、★`derived_ui_in_export_or_rule`、★`unknown_visibility_fn`、★`unknown_formatter`、★`duplicate_field_id`。
+**問題代碼**（沿用 `SPINE-FIXTURES-T57` §3，本文新增者標★）：`catalog_mask_mismatch`、`money_without_visibility_fn`、`bad_surface_key`；`money_in_customer_channel`（**r2 更正判準**：`moneyClass=internal` 含任何客戶通道才算；`isMoney`＋`public` 的客戶通道**不是**違規，夾具需有此反例『應通過』與正對照『internal 欄位放進 `customer_pdf` 必須失敗』）；★`money_or_privacy_in_filename_or_carry_in`（`filename`／`carry_in` 含任何 `isMoney` 或隱私欄位）、★`privacy_without_visibility_fn`、★`ops_without_visibility_guard`、★`unknown_ops_key`、★`derived_ui_in_export_or_rule`、★`unknown_visibility_fn`、★`unknown_formatter`、★`duplicate_field_id`、★`mask_style_mismatch`（與該表面今天的遮蔽形狀不符）、★`rule_input_forbidden`（§5.7）。
 
 ## 4. 種子清單
 
@@ -125,7 +132,7 @@ FL §3 已列屬性概念；SPINE-FIXTURES 已提議問題代碼。本節把它�
 | `revision_badge` | 改版標記 | badge | **derived_ui**：`/-R\d+$/` | — | — | — | 併在單號欄 | 衍生；建議後端 `computed`（`is_revision`） |
 | `customer_name` | 客戶名稱 | text | SQL `customer_name` | — | — | — | ✔ | 排序鍵 |
 | `project_name` | 案件名稱 | text | SQL `project_name` | — | — | — | ✔ | |
-| `total` | 金額（含稅） | money／`money_ntd` | SQL `total`（0 顯示『—』） | $ int(對客戶是 pub 但清單為內部) | `quote_money_visible` | **R**（`QUOTATION_MONEY_COLS` 置 None＋`moneyMasked`） | ✔ | 排序鍵（看不到者忽略） |
+| `total` | 金額（含稅） | money／`money_ntd` | SQL `total`（0 顯示『—』） | $ **pub**（客戶版會印；但在清單只有 `quote_money_visible` 者可見） | `quote_money_visible` | **R**（`QUOTATION_MONEY_COLS` 置 None＋`moneyMasked`） | ✔ | 排序鍵（看不到者忽略） |
 | `pretax` | 金額（未稅） | money／`money_ntd` | SQL `pretax` | $ | `quote_money_visible` | R | ✘（API 有、表頭無） | 專案毛利%的分母 |
 | `direct_margin_pct` | 毛利率 | percent／`pct1` | SQL `direct_margin_pct` | $ int | `quote_money_visible` | R | ✔（色階 `margin_tone`＝A3） | |
 | `net_margin_pct` | 營業利益率 | percent／`pct1` | SQL `net_margin_pct` | $ int | `quote_money_visible` | R | ✘ | |
@@ -144,7 +151,7 @@ FL §3 已列屬性概念；SPINE-FIXTURES 已提議問題代碼。本節把它�
 | `stage_progress` | 階段進度 | badge | SQL 子查詢 `stage_total/done/overdue` | — | — | — | ✘（案件卡） | 計數 |
 | `missing_docs` | 缺單據 | badge | SQL 子查詢（`_CASE_MISSING_*`） | — | — | — | ✘（案件卡） | 規則 A7 |
 
-**篩選／搜尋**（目前寫死）：文字搜尋（單號、客戶、案名）、`filterSales`、`filterMonth`、`filterDealTag`、生命週期頁籤（進行中／草稿／待審核／已核准／已送出／已確認／已結案／已取消／未成案…，`tabs` 陣列寫死）。→ 目錄 `filterable` 屬性＋表面的 `quickFilters[]`（§6.3，頁籤也是一種『篩選預設』）。
+**篩選／搜尋**（目前寫死）：文字搜尋（單號、客戶、案名）、`filterSales`、`filterMonth`、`filterDealTag`、生命週期頁籤（進行中／草稿／待審核／已核准／已送出／已確認／已結案／已取消／未成案…，`tabs` 陣列寫死）。→ 目錄 `ops.filterable` 屬性＋表面的 `quickFilters[]`（§6.3，頁籤也是一種『篩選預設』）。**快速篩選的條件與筆數同受 §5.0 約束**（例：不得做『毛利率 <20％：5 件』給遮蔽者看）。
 **金額遮蔽事實**（已核對）：`masked = not quote_money_visible(user)` ⇒ SQL 之後 `mask_row` 把 `total／pretax／direct_margin_pct／net_margin_pct` 置 None 並加 `moneyMasked`；`sort=total` 對遮蔽者被忽略（:893–898）。
 
 ### 4.2 報價單詳情／表單（`quotation-form.html`＋`GET /api/quotations/{no}`）— 表面 `module:case.quotation_form`（由 FL P0～P2 主幹承接，本表供 P0 轉錄）
@@ -249,6 +256,26 @@ FL §3 已列屬性概念；SPINE-FIXTURES 已提議問題代碼。本節把它�
 
 ## 5. 遮蔽與可見性如何綁在目錄欄位上（使用者永遠放不出自己看不到的欄位）
 
+### 5.0 唯一規則：每一種衍生操作都只對『通過該欄位判定函式的檢視者』成立（伺服器端；r2 必修 2）
+
+**規則**：對欄位 X 的任何**衍生操作**，只有當**本次請求的檢視者**通過 X 的 `visibility` 判定函式**且**目錄 `ops` 對該操作為 true 時才成立。在**解析器**（伺服器）強制，不靠前端、不靠各端點各自記得。檢視者不通過 ⇒ ①請求端：新的目錄驅動請求回 **400**（威脅模型 §5）；舊參數維持今天行為（忽略）；②回應端：該操作的**結果與痕跡**都不出現。
+
+| 衍生操作 | 對『不可見欄位』的結果 | 要防的洩漏 |
+|---|---|---|
+| 排序（含預設排序、個人排序偏好） | 該欄不在可排序清單；個人偏好引用它 ⇒ 丟棄入 `dropped` | 順序洩漏大小 |
+| 篩選／快速篩選條件 | 條件不成立；快速篩選的**定義**對該檢視者不出現 | 二分搜尋出值 |
+| 快速篩選／頁籤的**筆數** | 筆數由伺服器以檢視者可見性計算；依賴不可見欄位的篩選不回筆數（連 0 都不回） | 筆數差異洩漏（例：『毛利率 <20％：5 件』） |
+| 搜尋（全文／欄位搜尋） | 搜尋範圍只含可見欄位 | 命中與否洩漏 |
+| 分組、聚合（總計、平均、小計列、`count`） | 不可見欄位不得被分組或聚合；由它衍生的合計列一併剔除 | 總額洩漏 |
+| 警示規則的**條件** | 引用不可見欄位的規則對該檢視者**不評估**，且不回任何訊號（連『被隱藏』都不回） | 標紅＝洩漏門檻比較結果 |
+| 警示規則的**文字**（badge、tooltip） | 代入值只能取可見欄位（chips） | 文字內夾帶金額 |
+| 匯出欄 | 範本欄 ∩ 匯出者可見 ∩ 通道可用 | 匯出夾帶 |
+| tooltip／`title`／無障礙文字 | 同上：只用可見欄位 | 滑鼠懸停洩漏 |
+| 條件式列／儲存格樣式（class、色階） | 色階函式的輸入欄位必須可見；否則該樣式不套用 | 顏色洩漏（`margin_tone` 對遮蔽者不得上色） |
+| 衍生欄位（`computed`／`derived_ui`） | 衍生欄位的可見性＝其**所有輸入欄位**可見性的交集（目錄 `source.inputs` 宣告） | 由可見欄位推回不可見欄位 |
+
+**測試（正對照必備）**：①對每個表面，遮蔽檢視者的回應**不得含任何依賴不可見欄位的排序鍵、篩選定義、筆數、聚合、警示標記、tooltip、列樣式**（遞迴走訪回應）；②正對照：把 `direct_margin_pct` 設 `ops.filterable=true` 但**不**宣告 `opsRequireVisibility` ⇒ 驗證器必須失敗（`ops_without_visibility_guard`）；宣告了卻在解析器關掉把關（突變）⇒ 遮蔽檢視者測試必須紅；③二分探測：engineer 對不可見欄位的目錄驅動篩選一律 400，回應內容不隨門檻值改變（只斷言 400，不做計時）。
+
 ### 5.1 三層，缺一不可
 1. **宣告層（目錄）**：每個 `isMoney` 或 `privacyClass≠none` 的欄位**必須**宣告 `visibility`（引用上面的**封閉判定函式登錄表**；字串不在表內 ⇒ `unknown_visibility_fn`）。金額欄位必須宣告 `maskKeys`（對應 `financial_mask` 的資料鍵）。
 2. **解析層（伺服器，逐檢視者）**：解析器 `resolve(surface, version, viewer, channel)` 對每個欄位呼叫其判定函式；**為假 ⇒ 該欄位、其標題、其衍生欄位／合計列整個不出現在回應**（不是置空）。檢視者永遠是**本次請求的使用者**（預覽用『角色合成檢視者』，限制見 FL §4-5b）。
@@ -259,11 +286,11 @@ FL §3 已列屬性概念；SPINE-FIXTURES 已提議問題代碼。本節把它�
 - **後端驗證器再擋一次**：發布版面／匯出範本／警示規則時，驗證器檢查其引用的每個欄位 id ① 存在於目錄 ② **引用者看得到**（否則 422『這項資料你沒有權限使用』，不洩漏欄位內容）。
 - **渲染時再剔除一次**：定義是共用資產（公司版），可能含『編輯者看得到、檢視者看不到』的欄位；渲染時**用檢視者的可見性重新剔除**。所以『管理者放進去的內部欄位，業務看不到』是安全的預期行為，而不是漏洞。
 - **角色預覽**：以被預覽角色的合成檢視者解析（FL §4-5b）；限制：不反映個別使用者另外被加減的能力（例：被授予出納模組的一般帳號）。
-- **客戶通道硬規則**：`moneyClass=internal` 欄位不可進任何 `customer_*`／`filename`／`carry_in` 通道——驗證器擋（發布不過），輸出端再擋一次（FL §7-2；`SPINE-FIXTURES` 的 `money_in_customer_channel`）。
+- **通道硬規則（r2 更正）**：①`moneyClass=internal` 欄位不可進**任何客戶通道**；②所有 `isMoney`／隱私欄位不可進 `filename`／`carry_in`；`isMoney`＋`public`（單價、金額）**可以**進客戶版。驗證器擋（發布不過），輸出端再擋一次（FL §7-2）。夾具：`internal`＋`customer_pdf` 必須失敗（正對照）、`public` 金額＋`customer_pdf` 必須通過（反例）。
 
 ### 5.3 規則與匯出對遮蔽的特別要求（容易漏的洩漏面）
 - **警示規則**：規則引用欄位 X 時，**只對看得到 X 的人評估**；看不到者連『這列有被標紅』都不能出現（標紅本身洩漏『X 低於門檻』）。規則在伺服器端以檢視者可見性評估後才附標記（§6.2）。
-- **排序／篩選**：依金額欄排序或篩選會洩漏大小；遮蔽者一律忽略（沿用 :893 規則）。目錄 `list.sortable=true` 且 `isMoney` 真者必須宣告 `sortRequiresVisibility`，解析器對遮蔽者把該欄的排序／篩選能力剔除。
+- **排序／篩選／搜尋／分組／聚合／計數**：一律依 §5.0 唯一規則。**既有行為不變**（黃金）：報價單清單目前對遮蔽者『忽略』 `sort=total`；**目錄驅動的新請求**依威脅模型 §5 改為對不可見欄位回 **400**（不是靜默忽略後仍用該欄排序）。兩者並存的過渡：舊參數保持舊行為、只有目錄新增的操作走 400。
 - **匯出**：沿用 `export_logged` 稽核；欄位集合＝範本欄位 ∩ 匯出者可見欄位 ∩ 通道可用欄位；匯出者的可見性以**匯出當下的使用者**評估（不是範本作者的）。
 - **個人層**：個人偏好只能改顯示／排序，不能改『可用欄位』；個人層引用不存在或已不可見的欄位 ⇒ 靜默丟棄並列入 `dropped`。
 
@@ -272,6 +299,38 @@ FL §3 已列屬性概念；SPINE-FIXTURES 已提議問題代碼。本節把它�
 2. 每個 `isMoney` 欄位有 `visibility`；每個 `visibility` id 在判定函式登錄表內。
 3. 5 角色 × 每個表面的**可見度參數化測試**（admin／sales／finance／cashier／engineer，專案毛利% 設計 §6-4 已定模式）：`欄位出現 ⇔ 該角色該表面判定為真`；反向：無權限者的回應**任何位置**（含巢狀、含標題）都不得出現該欄位 id 或其資料鍵（遞迴走訪）。
 4. 預設版面 ＝ 今天（黃金比對：預設解析結果轉成 DOM／API 形狀，與改前逐位元相同）。
+
+### 5.5 欄位可見＝表面門檻 AND 欄位判定（r2 必修 3a）
+
+**一個欄位對某檢視者出現，必須同時通過兩道門**：①**表面門檻**（`surface.gate`：該頁／該表面本身誰能開，例：出納頁 `finance_access`、案件頁 `case_page_readable` 逐案）；②**欄位判定**（`field.visibility`）。任何一道不過 ⇒ 不出現。
+- 例（出納頁，已核對）：頁面端點 `_require_view_access` ⇒ `has_finance_access`（財務角色＋superadmin）；獎金分潤表另需 `bonus_visible`（superadmin 或**出納模組**）。**只有出納模組、不是財務角色的一般帳號** `bonus_visible` 為真但過不了頁面門檻 ⇒ 看不到獎金（目前端點層就是如此；目錄化後不得因為『欄位判定為真』而放行）。
+- 測試（兩個方向）：持出納模組的**非財務**帳號 ⇒ 出納頁任何欄位都不出現（含獎金）；財務角色（無出納模組）⇒ 出納頁其餘欄位出現、獎金不出現；superadmin ⇒ 全部出現。
+
+### 5.6 遮蔽後的回應形狀 `maskStyle`（r2 必修 3b）
+
+今天三種形狀並存，目錄必須逐欄記錄，才能保證『預設＝今天』逐位元相同：
+| 形狀 | 表面 | 行為 |
+|---|---|---|
+| `null` | 報價單清單（`mask_row`） | 鍵保留、值置 None、列加 `moneyMasked: true` |
+| `strip` | 報價單詳情、案件詳情（`mask_quotation_data`、`mask_case_record`） | 鍵整個剝除（`tot`、品項金額鍵、`settlement`、款項期別金額） |
+| `absent` | 專案毛利%（信封鍵 `project_margin_pct`） | 判定為假時鍵不存在 |
+預設 `maskStyle` 取各表面今天的形狀；改成別的形狀＝回應形狀變更，須走黃金比對與版本。測試：每個 `isMoney` 欄位對遮蔽檢視者的回應形狀 == 目錄 `maskStyle`（`mask_style_mismatch`）。
+
+### 5.7 付款衍生事實的明確決定（r2 必修 4）
+
+`recv_overdue`（應收逾期，SQL 以 `json_each` 掃 `caseRecord.payment.items`）、`missing_invoice`（缺發票）、`overdue`（出納應收佇列）、案件卡的 `stage_overdue`／`missing_docs` 等，**從金額資料衍生，但今天對任何『有該案件列存取權』的檢視者都回傳**（案件清單的快速篩選與筆數、卡片徽章），並不經 `money_visible`。
+- **決定（記錄為已接受的現況，需使用者確認，§8 U13）**：這些旗標屬『進度提醒』而非金額；`visibility = case_page_readable`（逐案），`isMoney = false`，但標 `derivedFromMoney: true`。
+- **限制（避免它們變成金額旁路）**：①`ops.ruleUsable = false`——**不得作為警示規則的輸入**，也不得與金額門檻組合成條件（`rule_input_forbidden`）；②不得進 `filename`／`carry_in`／匯出的金額欄；③筆數僅顯示『有 N 件逾期』，**不得提供『逾期金額』**；④若日後要『逾期金額』欄，那是另一個 `isMoney` 欄位，走 `money_visible`。
+- 不接受此決定時的備案：改 `visibility = money_visible`（遮蔽者不見這些徽章與筆數），屬行為變更，需使用者裁示。
+
+### 5.8 與威脅模型對齊（`USER-DEFINED-LOGIC-THREAT-MODEL.md` §1、§5；0d 建議 8）
+
+本文**不重寫**威脅模型的控制，只對齊：①目錄是唯一事實來源；讀取衍生操作先與可見欄位集合取交集（→ §5.0）；②自訂欄位（日後）一律 `x_` 前綴、與系統欄位分離、同名拒絕；③**敏感度只能往更嚴改**（放寬走放寬流程）；④標籤與選項文字存**純文字**、前端一律 `textContent`、後端輸出跳脫（`alert_rule` 的 badge 文字、`relabel` 皆同）；⑤警示規則的求值身分＝目前使用者，輸出型別只有標記（§6.2），不寫入、不改狀態。威脅模型 §1 的『規則評估預算』（節點數、深度、逾時）適用於 `alert_rule`，上界寫死、管理者只能調小。
+
+### 5.9 判定函式登錄表的守門（r2 建議 5、6）
+1. **同一函式物件**：登錄表中的每個判定函式 id 必須解析到**與實際使用處相同的函式物件**（`registry[id] is financial_mask.quote_money_visible` 之類的 `is` 斷言），不得另寫一份包裝；測試：突變其中一個實際函式的行為，目錄解析結果必須跟著變。
+2. **兩條縫**：`quote_money_visible`／`material_money_visible` 經 `finance_duty_person` 縫，`has_finance_access` 經 `_finance_mode()`（旗標 `finance_via_effective`：`off`／`shadow`／`on`，快取 15 秒）。旗標翻到 `on` 時判定語意由『角色』改為『生效權限』——因為登錄表指向同一函式物件，行為會一起變；測試需在 `off` 與 `on` 兩種模式各跑一次 5 角色矩陣。
+3. **`derived_ui` 守門**：`source.kind=derived_ui` 的欄位不得出現在匯出、規則、檔名、帶入通道（`derived_ui_in_export_or_rule`，正對照：把一個 `derived_ui` 欄位加進匯出範本必須失敗）；另測『瀏覽器端用被剝除的鍵算 `derived_ui` 值』結果為空（例：`item_profit` 在無成本權限者的畫面算不出東西、且沒有殘留數字）。
 
 ## 6. 介面（只定介面，不實作）
 
@@ -285,7 +344,7 @@ FL §3 已列屬性概念；SPINE-FIXTURES 已提議問題代碼。本節把它�
             "header": {"title": "報價單清單", "showExportedAt": true} } }
 ```
 - 欄位只能引用目錄 id；`label` 為 relabel；`width` 是檔位；**無運算式、無程式**。
-- 通道欄位＝範本欄位 ∩ 目錄 `channels` 含該通道 ∩ 匯出者可見（§5.3）。客戶通道含 internal／money 欄位 ⇒ 發布失敗。
+- 通道欄位＝範本欄位 ∩ 目錄 `channels` 含該通道 ∩ 匯出者可見（§5.0、§5.3）。**客戶通道含 `moneyClass=internal` 欄位 ⇒ 發布失敗**（`isMoney`＋`public` 的價格可以進客戶版）。
 - 現況落點：案件批次匯出（`case_batch_export`，欄位寫死）、報價單 PDF（`pdf_gen`）、之後的報價單 Excel（FL P5）都吃同一個解析結果；**PDF 版型**走 `doc_template` 積木（`items_table` 的 `columns[].width`），Excel 走 openpyxl 適配器（空字串須轉 None 的既有陷阱照舊）。
 - 檔名：沿用下載檔名設計的『範本變數由目錄產生、金額類不可成為變數』。
 
@@ -308,7 +367,7 @@ FL §3 已列屬性概念；SPINE-FIXTURES 已提議問題代碼。本節把它�
 - 現況：`module.json` 的 `pages[].menu` 與排版器已能 `move／hide／relabel` **既有**按鈕與選單項；**不能新增**。
 - 設計：新增兩種點 `buttons[]`、`menus[]`，管理者可新增項目，但 `action` 只能選**封閉的動作登錄表**（由程式登錄、帶白話名稱與必要參數）：`open_page`（開某個頁面＋預設分頁）、`apply_filter_preset`（套用表面的『篩選預設』，例：清單頁籤 `進行中`／`逾期階段`）、`run_export`（執行某個匯出範本）、`open_link`（站內連結，**限相對路徑白名單**，禁外部網址與 `javascript:`）、`create_from`（新增某單據並帶入預設值，僅限程式登錄的預設集合）。**沒有腳本、沒有任意 HTTP 呼叫。**
 - 權限：按鈕顯示條件＝其動作所需能力（動作登錄表的 `requires`）∩ 檢視者；管理者新增按鈕**不會**讓沒有權限的人做到更多事（動作本身仍過既有端點權限）。
-- 篩選預設：把清單的頁籤／快速篩選（目前寫死的 `tabs`、`quickFilterDefs`）登錄為表面的 `quickFilters[]`（id、白話名、條件＝目錄欄位上的封閉運算式），管理者可增刪排序——與警示規則共用同一組運算子。
+- 篩選預設：把清單的頁籤／快速篩選（目前寫死的 `tabs`、`quickFilterDefs`）登錄為表面的 `quickFilters[]`（id、白話名、條件＝目錄欄位上的封閉運算式），管理者可增刪排序——與警示規則共用同一組運算子。**快速篩選的條件欄位與筆數受 §5.0 約束**：條件欄位必須是檢視者可見且 `ops.quickFilterable`；筆數由伺服器以檢視者可見性計算，依賴不可見欄位的快速篩選對該檢視者**整個不出現**（不回筆數、不回 0）。
 
 ### 6.4 解析輸出（所有消費者吃同一份）
 `GET /api/layout/{module}?surface=<表面>`（FL §4-3，不新增路由前綴）回：
@@ -339,10 +398,10 @@ FL §3 已列屬性概念；SPINE-FIXTURES 已提議問題代碼。本節把它�
 | 10 | 匯出範本（PDF／Excel）介面落地 | — | `export` 變體＋適配器；FL P5 已含報價單 Excel | 2.0 | 依 #1／#6 的解析器；與 `doc_template` 轉錄 |
 | 11 | `alert_rule` kind＋評估器＋第一批遷移（A1、A2、A3、A5、A8） | 5 條 | 規則 kind 驗證 0.5；評估器（伺服器＋前端孿生＋黃金向量）1.0；遷移 5 條 0.5 | 2.0 | 依 #1 的清單解析；與專案毛利% 同型的前後端等值做法 |
 | 12 | 自訂按鈕／選單（動作登錄表） | — | `buttons/menus` 點＋5 種動作＋權限 | 2.0 | 最後做；風險低但要安全審查（`open_link`） |
-| — | **合計（#1～#5 ＋ #7～#12，不含 #6 主幹）** | | | **約 25.5 pd** | 加 S-D2 格式化器 2.0（共同前置）＝ **約 27.5 pd**；前三頁 10.0 pd |
+| — | **合計（#1～#5 ＋ #7～#12，不含 #6 主幹）** | | | **約 25.5 pd**（r1） | 加 S-D2 格式化器 2.0（共同前置）＝ 27.5 pd；**r2 新增 §3／§5 的驗證器與測試（`ops` 屬性驗證、唯一規則的角色×操作矩陣、`maskStyle` 對照、判定函式同一物件與兩模式矩陣、`derived_ui` 守門、正對照夾具）約 +1.0 pd ⇒ 約 28.5 pd**；前三頁 10.0 pd（r2 的 +1.0 屬共同前置，攤在 #1 首先落地） |
 
 ### 7.1 前三頁：選擇理由
-1. **報價單清單**——最小的完整垂直切片：資料來源單一端點、欄位 18 個且多數非金額、金額遮蔽已有成熟的 5 角色測試模式、個人排序偏好已存在可擴充為 `list_view`。能一次驗證：目錄 schema、解析器（含欄位投影）、衍生欄位搬遷、`quickFilters`、第一批 `alert_rule` 的資料來源。
+1. **報價單清單**——最小的完整垂直切片：資料來源單一端點、欄位 22 個且多數非金額、金額遮蔽已有成熟的 5 角色測試模式、個人排序偏好已存在可擴充為 `list_view`。能一次驗證：目錄 schema、解析器（含欄位投影）、衍生欄位搬遷、`quickFilters`、第一批 `alert_rule` 的資料來源。
 2. **案件管理—財務總覽**——全金額、純顯示、端點已把數字算好（前端不重算，程式註解自述）；能驗證判定函式登錄表（`money_visible`／前端旗標的前後端判定不一致問題 §8 U5）與『遮蔽後整區消失』的行為；不碰有版本守門的表單。
 3. **案件清單與矩陣**——驗證動態欄位家族（閘門）、逐案可見範圍、子查詢按需計算，也是使用者最常用的日常頁。
 **不選報價單表單當前三頁**：同檔多班衝突、`FORM_VERSION` 守門、三份手寫渲染，已由脊柱主幹 P2 專責；強行放前三頁會與 M3／專案毛利% 同檔排隊。
@@ -355,13 +414,14 @@ FL §3 已列屬性概念；SPINE-FIXTURES 已提議問題代碼。本節把它�
 | U2 | 判定函式登錄表放哪、如何擴充 | 目錄驗證 `unknown_visibility_fn` | `core/spine.py` 擴充點由 L1 登錄（比照驗證器擴充點）；`helpers/financial_mask` 與 `auth`/`cashier` 各登錄自己的；需 2b |
 | ★U3 | 清單 API 的 SQL 由目錄投影組裝 | 改 `list_quotations` 核心查詢（6 個子查詢、`SQL_DEAL_TAG`、遮蔽、分頁、計數）；回歸風險最大的一處 | 先做『相同結果、只是欄位按需』的黃金比對；子查詢逐個變成 `source.kind=sql_subquery` 並可按需略過；需 #1 原型 |
 | ★U4 | `derived_ui` 欄位（`dealDisplayStatus`、`agingOf`、改版徽章、`item_profit`）搬後端 | 不搬就不能進匯出、規則、檔名 | 先登錄為 `derived_ui`（驗證器：不得進匯出／規則通道）；#1 搬 3 個 |
-| ★U5 | 案件頁金額的前後端判定函式不一致：前端 `canSeeFinancial()`（財務角色／superadmin），後端 `money_visible`（另含出納模組）、案件清單用 `quote_money_visible` | 目錄只能有一個 `visibility` | 以**後端函式為準**，前端旗標改由解析器結果決定（前端不再自己判斷）；需稽核既有不一致是否為缺口（專案毛利% 設計 §1.1 註記同一現象） |
-| U6 | `privacyClass` 的可見性規則（聯絡資料、統編、地址、獎金）怎麼判 | 客戶通道、檔名、匯出對隱私欄位的處理 | 本文只登記類別；判定先沿用『逐案可見＋既有 `pdfShow`』；個資告知（`privacy_notice_acks`）如何與目錄互動待設計；需使用者／法務確認 |
+| ~~★U5~~ 已定案（0d） | 案件頁金額的前後端判定不一致：前端 `canSeeFinancial()` 較窄（財務角色／superadmin），後端 `money_visible`（另含出納模組）、案件清單 `quote_money_visible` | — | **後端函式是真相**；前端 `canSeeFinancial()` 只是較窄的顯示偏好，轉換後由解析器結果決定、前端不再自行判斷 |
+| U6 | `privacyClass` 的可見性規則（聯絡資料、統編、地址、獎金）怎麼判 | 客戶通道、檔名、匯出對隱私欄位的處理 | r2：最低通道規則已定（§3 `privacyClass` 列：`filename`／`carry_in`／`customer_excel` 預設排除；獎金經 `bonus_visible` AND 出納頁門檻）；其餘（個資告知 `privacy_notice_acks` 與目錄互動、聯絡資料在匯出的處置）待設計；需使用者／法務確認 |
 | U7 | 動態欄位家族（閘門、階段、自訂欄位 `custom_fields`）如何登記 | 閘門 5 欄由後端回傳；自訂模組欄位是另一個目錄來源 | `dynamicFamily`（成員由程式提供）；自訂模組表單設計器的欄位如何併入目錄＝另案 |
 | U8 | `status`（`open／planned／hidden`）對目錄項的繼承 | 未完成功能的欄位（例：M3 擇一欄位）要不要先出現在編輯器 | 沿用 `SPINE-ENGINE-DESIGN` §3.7-7：`planned` 灰色列出不可放入版面 |
 | U9 | 同一欄位在多個表面的『預設寬度／預設顯示』是否可不同 | 目錄 schema 是欄位級還是（欄位×表面）級 | 預設值放在**表面的 `fields[]` 引用**（`{"id","defaultVisible","width"}`），欄位定義放全域屬性；本文 §3 範例的 `list` 屬性應視為預設，需 2b 定案 |
 | U10 | 匯出範本的『列來源』（用哪個篩選、是否分頁）與權限（誰可執行匯出） | 匯出量大時的效能與稽核 | 沿用 `export_logged`＋`quickFilters`；匯出權限沿用各端點既有判定；上限（列數）走設定中心 |
 | U11 | 工量未經原型驗證 | §7 數字的誤差可能 ±30% | 做完 #1 後以實績重估；#1 結束前不承諾 #2 以後日期 |
+| U13 | §5.7 付款衍生事實（應收逾期、缺發票等）今天對任何有列存取權者可見，目錄記錄為『已接受現況』 | 若使用者視為金額洩漏則需改 `money_visible`（行為變更） | 需使用者確認（備案見 §5.7） |
 | U12 | 阻擋類『上限』的政策承載 | 使用者說的『上限』若指阻擋，需政策框架（簽核政策 t55） | 本文只做標紅類；阻擋類另開設計（以政策選項登錄，高影響橫幅） |
 
 ## 9. 登錄檢查清單（FL §17.1）對本文的套用
