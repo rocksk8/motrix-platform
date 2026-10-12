@@ -2,6 +2,7 @@
 
 > **r2 修訂（依 0d 稽核）**：①端點權限收斂為「管理員＋案件頁可讀」，不新增讀取者；②`quoteItemId` 為字串；③白名單移除 `notes`；④報價單狀態閘；⑤累計口徑；⑥`quoteSync` 儲存；⑦M3 相依；⑧表頭範圍同閘。
 > **r4 修訂（依使用者表單與更正）**：表單答案**不是固定行為，而是設定項的預設值**（框架優先：管理者在設定中心可調，程式內只留不可變的安全底線）。①Q1 印金額＝設定（預設關；開啟仍受財務權限約束）；②Q2 回簽前能否帶入＝設定（預設：已送出未回簽可帶入並提示）；③Q6 **開放有案件權限的業務建立／編輯完工單＝權限變更**，閘門重新設計（§6b），**實作前需另行的非作者權限審查**；④M3 側使用者已定：整張報價鎖定、成案／PO 後禁止取消回簽。
+> **r5 修訂（依 §6b 權限審查，原 r4 不可採用）**：①`can_author_completion` 改用**擁有者範圍**，不用 `case_page_readable`（後者因 `read_bypass_modules=("cashier",)` 會讓兼任出納的業務通過「所有案件」）；②單據層端點一律先由 `note_no` 查出 `quote_no` 再判權限，PUT 內文的 `quote_no` 不具授權力，且「查無此單」與「不是你的案件」回同一個 404；③前端能力旗標改走「單筆完工單＋案件詳情＋小端點」，不動 `list_completion_notes` 的形狀；另補刪除、設定語意、簽核、撤回限制。
 > 2026-10-12；委託：hichan-1c（使用者新需求：「完工單要能自動帶入報價單項目」）。底：`origin/platform` c14f0a1df（內容＝正式機 M1-a `4eb521384`；**M2／M3 尚未上線**）。
 > 標記：**【需使用者回答】**＝會改變行為或對外輸出，回答前不實作該部分；**【PM 預設】**＝我給預設值，不需問，使用者可事後調。**UNKNOWN**＝沒查到證據。
 > 框架優先（記憶 `feedback_framework_first_no_hardcode`）：行為開關放設定中心，程式內只有「安全底線」（不帶金額、守門權限）。
@@ -12,7 +13,7 @@
 2. **欄位幾乎天然對得上**：完工單項目 `description／qty／unit／status／notes`（＋分段 `type=header`）；報價單項目 `id`(**字串**：`crypto.randomUUID()` 或 `id-<時間>-<亂數>`，`quotation-form.html` `genId()` 約 2524–2528；舊資料可能無 id)`／description／brand／qty／unit／…／notes`（＋`type=header`）。**不需要資料庫遷移**——項目存在 `items_json`、加性欄位即可（比照出貨單 `materialLink` 的加性做法）。
 3. **建議做法**：新增一支**唯讀**「可帶入項目」端點（後端白名單只回非金額欄位，且只給**能建立／編輯完工單草稿的管理員＋讀得到該案件頁的人**）＋ 完工單表單「從報價單帶入」（新建時自動執行一次、草稿可再按）。帶入後**全部可編輯**；每列記住來源品項編號（字串），分批完工時顯示「報價 N／已完工 M／本次預設 剩餘」。擇一方案報價**只帶已回簽選定的品項**。
 4. **金額不進完工單**（預設）：後端白名單 `{id, type, description, brand, qty, unit}`，**任何金額鍵（`cost／margin／unitPrice／amount`）一律不出**，守門測試鎖住。完工單要不要印金額是**設定項（預設關；開啟時仍依 `money_visible` 約束）**。
-5. **工量 ≈ 7.0–8.5 pd（約 7.75）**（§7；含印金額開關與權限閘重新設計；不含另行的權限審查），主要風險＝擇一方案相依 M3、報價單事後變動的對帳（§8）。
+5. **工量 ≈ 7.5–9.0 pd（約 8.25）**（§7；含印金額開關與權限閘重新設計；不含另行的權限審查），主要風險＝擇一方案相依 M3、報價單事後變動的對帳（§8）。
 
 ## 1. 完工單現況（資料模型、誰編輯、狀態、PDF）
 
@@ -108,12 +109,13 @@
 |---|---|
 | `backend/modules/case/completion_sync.py`（新） | 純函式：`quote_source_items(q)`（白名單＋`counted_items` 降級）、`completed_qty_by_item(conn, quote_no, exclude_note)`、`fingerprint(items)`、`diff(note_items, source_items)`。不寫庫。 |
 | `backend/modules/case/api/completion_notes.py` | 新端點 `GET /api/completion-notes/quote-items?quote_no=&exclude_note=`（`_require_admin` ＋ `case_page_readable`；報價單狀態閘見 §3.1；回 `header`、`items[]`（`id/type/description/brand/qty/unit` ＋ `alreadyCompleted`、`remaining`）、`sourceState`（`signed`/`unsigned`/`alt_unselected` 白話欄位）、`fingerprint`）。`CompletionNoteIn` 加 `quote_sync`；`_validate` 加：`quoteItemId` 若存在須為**字串且 ≤64 字元**、`quoteQty` 為有限數字；**不加必填**。`create` 寫入 `data_json.quoteSync`、`update` 僅在帶 `quote_sync` 且指紋等於伺服器當下指紋時才更新，否則 409；不帶則保留原值。 |
-| `backend/modules/case/api/quotations.py` | 不改（唯讀引用 `data_json`）。若 M3 已併入，`completion_sync` 才呼叫 `profit_guard.counted_items`。 |
+| `backend/modules/case/api/quotations.py`（報價單本體端點） | 不改（唯讀引用 `data_json`）；聚合器的 `caps` 另列一行。若 M3 已併入，`completion_sync` 才呼叫 `profit_guard.counted_items`。 |
 | `backend/modules/case/completion_pdf.py` | 不改（項目額外鍵被忽略）；加守門測試確認 PDF 不含金額。 |
 | `frontend/pages/completion-note-form.html` | `prefillFromCase` 改用新端點；`autoFillItems()`、`openSyncDiff()`；項目列加「報價/已完工」小字與超量底色；橫幅。 |
 | `frontend/js/case-management-completion.js` | 不改（清單）；若清單要顯示「已帶入」不需要。 |
 | 設定登錄（`helpers/settings_registry.py`，M2 才有） | 註冊「完工單」群組 10 項（§5）；程式內讀取走註冊表，缺列或模組缺席＝常數預設（不得在模組載入時 import）。 |
-| `frontend/pages/case-management.html`（約 3352、3399、3419 行） | 把寫死的 `['superadmin','admin'].includes(session.role)` 換成伺服器回的能力旗標 `canAuthorCompletion`／`canRevokeCompletion`（見 §6b）；前端不再自己判角色。 |
+| `frontend/pages/case-management.html`（約 3352、3399、3419 行；1428／1458 行與完工單無關，不動）、`frontend/pages/completion-note-form.html`、`frontend/js/case-management-completion.js` | 把寫死的 `['superadmin','admin'].includes(session.role)` 換成伺服器旗標（單筆回傳 `canAuthor`、案件詳情 `caps.canAuthorCompletion`、小端點 `can-author`；見 §6b.4）；前端不再自己判角色；加靜態守門。 |
+| `backend/modules/case/api/quotations.py`（案件詳情聚合器，約 2350–2372 行） | 頂層加 `caps`；`parts.completionNotes` 與 `list_completion_notes` 形狀不動。 |
 | `backend/modules/case/CHANGELOG.md`、`backend/version_manifest.json`、`docs/quick/changelog.md`、`INTEGRATION-POINTS.md`（新端點） | 版本紀錄；`FORM_VERSION` **不動**（不碰 `quotation-form.html`）。 |
 | `backend/modules/case/README.md` | 補一行 `completion_sync.py`。 |
 
@@ -121,47 +123,67 @@
 
 ## 6b. 權限變更：開放有案件權限的業務建立／編輯完工單（Q6）——**須另行的非作者權限審查後才可實作**
 
-**這是權限變更**（涉及硬排除 X2 權限與 X9 簽核流程，走完整車道＋非作者完整稽核，不得走快速車道）。
+**這是權限變更**（涉及硬排除 X2 權限與 X9 簽核流程，走完整車道＋非作者完整稽核，不得走快速車道）。本節已吸收第一輪權限審查（r4 不可採用，3 項必修）。
 
-### 6b.1 今天的閘門（`backend/modules/case/api/completion_notes.py`，行號取自 c14f0a1df）
+### 6b.1 今天的閘門與提案（`backend/modules/case/api/completion_notes.py`，行號取自 c14f0a1df）
 | 端點 | 行 | 今天 | 提案 |
 |---|---|---|---|
-| `POST /api/completion-notes`（建立） | 278 | `_require_admin` | `can_author_completion` |
-| `PUT /{note_no}`（改草稿） | 320 | `_require_admin` | `can_author_completion`（仍僅草稿；樂觀鎖不變） |
-| `DELETE /{note_no}`（刪草稿） | 367 | `_require_admin` | `can_author_completion` 且「自己建的草稿」；他人建立的草稿仍須管理員（待確認 Q-A1） |
-| `POST /{note_no}/submit`（申請完工） | 402 | `_require_admin` | `can_author_completion`（送審人＝申請人；簽核鏈與自簽防護不變） |
-| `POST /{note_no}/approve`／`reject` | 462／571 | 簽核人（`check_approve_permission`／`check_reject_permission`） | **不變**（核准仍由簽核人） |
+| `POST /api/completion-notes`（建立） | 278 | `_require_admin` | `can_author_completion(conn, user, body.quote_no)` |
+| `PUT /{note_no}`（改草稿） | 320 | `_require_admin` | 由 `note_no` 查 `quote_no` → `can_author_completion`（仍僅草稿；樂觀鎖不變）；**內文的 `quote_no` 忽略，不能搬單、不能借以授權** |
+| `DELETE /{note_no}`（刪草稿） | 367 | `_require_admin` | 同上 ＋「自己建的草稿（`created_by == user.username`）否則須管理員」；此 API 檢查**是唯一閘門**（`recycle_adapter` 的 `can_delete` 只檢查 `status == 草稿`），在 `recycle_bin.delete` 之前判斷 |
+| `POST /{note_no}/submit` | 402 | `_require_admin` | 同上（送審人＝申請人） |
+| `POST /{note_no}/approve`／`reject` | 462／571 | 簽核人 | **不變** |
 | `POST /{note_no}/revoke-approval` | 624 | `_require_admin` | **不變**（仍僅管理員） |
-| `GET /{note_no}/pdf-download` | 659–670 | 管理員或簽核人 | 加上 `can_author_completion`（作者要能看自己的單） |
-| `POST /{note_no}/export` | 689 | `_require_admin` | `can_author_completion` |
+| `GET /{note_no}/pdf-download` | 659–670 | 管理員或簽核人 | 加上 `can_author_completion`（同樣由 `note_no` 查案件） |
+| `POST /{note_no}/export` | 689 | `_require_admin` | 同上 |
 | `POST /{note_no}/signed-toggle` | 720 | `_require_admin` | **不變**（回簽狀態仍僅管理員） |
-| `POST /{note_no}/privacy-notice/ack` | 847 | `_require_admin` | `can_author_completion` |
-| 讀取／回簽檔上傳／清單 | 223–270、767–793 | `guard_case_access(case_manage)` | **不變**（不新增讀取者） |
-| 新端點 `quote-items` | 新 | — | `can_author_completion` ＋ `case_page_readable`（不比報價單本體的讀者更寬） |
+| `POST /{note_no}/privacy-notice/ack` | 847 | `_require_admin` | 同上 |
+| 讀取／回簽檔上傳／清單 | 223–270、767–793 | `guard_case_access(case_manage)` | **不變**（不新增讀取者；`list_completion_notes` 回傳形狀不動） |
+| 新端點 `quote-items` | 新 | — | `can_author_completion`（擁有者範圍，已比報價單本體的讀者更窄；保留 `case_page_readable` 作冗餘檢查，防兩份規則日後分歧） |
 
 ### 6b.2 `can_author_completion(conn, user, quote_no)`（新；放 `helpers/case_access.py` 旁，L1 共用）
-1. `superadmin`／`admin` ⇒ 真。
-2. 設定＝「有案件權限的業務與管理員」且 `user.role == 'sales'` 且 `case_page_readable(conn, quote_no, user)`（＝案件擁有者／協作成員；**不放行 `case_manage` 模組持有者**，也不因 cashier 而放行）⇒ 真。
-3. 其餘 ⇒ 假。設定缺席／讀取失敗 ⇒ 用常數預設（＝使用者決定值）。**fail closed 例外**：任何例外 ⇒ 假。
-- 草稿的編輯範圍：同一案件上有權限的業務**都可編輯該案件的草稿**（協作情境；樂觀鎖防覆蓋）；若要限「只能改自己建的」是 Q-A1。
+1. **查案件列**（`SELECT sales_person_id, sales_person, assigned_user_ids FROM quotations WHERE quote_no=?`）；查無 ⇒ 假。
+2. `superadmin`／`admin` ⇒ 真。
+3. 設定＝「有案件權限的業務與管理員」且 `user.role == 'sales'` 且 **`row_access.visible("case", user, q, scope="owner")`**（案件業務、`assigned_user_ids` 協作成員、admin+；與 `guard_case_access`／`case_access_allowed` 的擁有者規則同一份）⇒ 真。
+   - **不得使用 `case_page_readable`**（`CASE_ACCESS` 的 `read_bypass_modules=("cashier",)`：兼任出納的業務會對**所有案件**通過）；**不使用 `case_owner_readable`**（含財務例外）；不放行任何模組持有者（`case_manage`、`cashier`）。
+4. 其餘 ⇒ 假。
+5. **設定語意**：設定列**不存在** ⇒ 常數預設（＝使用者決定值：有案件權限的業務與管理員）；設定**讀取發生例外／值不合法** ⇒ **fail closed＝僅管理員**；任何其他例外 ⇒ 假。
+6. **此底（platform）沒有 `settings_registry`**：預設值在部署當下**就會生效**（不是等 S1）——所以這個權限變更會隨 M2 之後的那一班直接上線；步驟檔必須帶 **⚠ 權限變更** 提示，且 **CORE-SPEC 的「使用者裁示」必須先有一筆登記**（10-12 表單答案＋更正）才可實作——兩者列為驗收項。
 
-### 6b.3 前端
-- `case-management.html` 的新增／編輯／申請按鈕不再寫死角色，改用伺服器隨完工單清單回傳的 `canAuthorCompletion`（每案件一個布林），與後端同一函式算出；`canRevokeCompletion` 同理（維持管理員）。
-- 表單頁 `completion-note-form.html` 進入時若 `canAuthorCompletion` 為假 ⇒ 唯讀（今天是後端 403）。
+### 6b.3 單據層端點的授權順序（防洩漏、防越權）
+- 範本：`row = SELECT quote_no, status, created_by FROM completion_notes WHERE note_no=?` → `can_author_completion(conn, user, row.quote_no)` → 其餘分支（狀態、樂觀鎖、內容驗證）。
+- **權限檢查先於任何其他分支**；「查無此單」與「不是你的案件」**回同一個 404**（沿用 `deny_case` 的作法），避免用 `note_no` 列舉單據是否存在（今天非管理員會得到中性的 403，提案不得變得比今天更會洩漏）。
+- `PUT` 內文的 `quote_no`（若有）**一律忽略**，授權與搬單都以資料庫中的 `quote_no` 為準。
 
-### 6b.4 稽核與通知
-- 既有 `completion.create／update／delete／submit` 稽核**不變名稱**；`detail` 加 `via`（`admin`／`case_sales`）與操作者角色，讓事後能分辨權限來源。
-- 設定變更走設定中心帳本（原因、前後值、核准人、確認期間）。
-- 簽核通知：申請人是業務時，`completion_approval_request`／`completed_approved`／`returned` 的收件對象與文案需確認不假設申請人是管理員（`notify_org_chain_notice`、`cascade_self_tiers` 的行為需逐一核對，列為審查項）。
+### 6b.4 前端能力旗標的通道（不動 `list_completion_notes`）
+`list_completion_notes` 在案件沒有完工單、新建頁、直接網址時都帶不出旗標，且它被案件詳情聚合器 `part(list_completion_notes, …)`（`quotations.py` 約 2350–2372）原樣使用，**形狀不改**。旗標改走：
+1. **單筆完工單回傳**加 `canAuthor`（`GET /api/completion-notes/{note_no}`；由 `can_author_completion` 算）。
+2. **案件詳情聚合器**頂層加 `caps: { canAuthorCompletion: bool }`（與 `quotation`／`parts` 並列，不放進 `parts.completionNotes`）。
+3. 新建頁、直接網址：小端點 `GET /api/completion-notes/can-author?quote_no=`（回 `{canAuthor: bool}`；查無案件與無權限同一個結果 `false`，不洩漏案件存在）。
+4. 前端檔案（加入變更清單）：`frontend/pages/case-management.html`（約 3352、3399、3419 行的寫死角色陣列；**1428、1458 行是行動項目／成員分配，與完工單無關，不動**）、`frontend/pages/completion-note-form.html`、`frontend/js/case-management-completion.js`。
+5. **靜態守門**：完工單相關前端（上述三檔中與完工單有關的區塊）不得再出現寫死的角色陣列（例：`['superadmin','admin'].includes(session.role)`）；按鈕只看伺服器旗標。
 
-### 6b.5 測試（權限矩陣）
-業務（案件擁有者）可建立／改草稿／送審；業務（非該案件）404；業務對他人案件 404；`case_manage` 工程師仍不可建立（與 quote-items 一律 404/403）；admin／superadmin 不變；設定＝僅管理員 ⇒ 業務 403 且按鈕不顯示；核准／退回／撤銷核准／回簽切換對業務仍 403；業務同時是簽核層時自簽防護仍生效（`check_no_tier_self_approval`）；稽核 `via` 正確；設定放寬需核准、收緊即時；前端旗標與後端一致（同一函式）；舊單／既有流程回歸（管理員全部不變）。
+### 6b.5 稽核、簽核與已知限制
+- 稽核：既有 `completion.create／update／delete／submit` **名稱不變**；`detail` 加 `via`（`admin`／`case_sales`）與操作者角色；設定變更走設定中心帳本。
+- 簽核（申請人是業務時）：送審取簽核層沿用 `_setting_to_active_tiers`／`resolve_active_flow_setting`；`UnresolvedManagerError`（例如業務沒有上級可簽）⇒ 回 400，訊息白話化（「找不到可簽核的主管，請聯絡管理員」）；`check_no_tier_self_approval` 擋自簽；退回（`reject`）使單據回到草稿，申請人可再改；通知（`completion_approval_request`／`completion_approved`／`completion_returned`）的收件對象逐一核對不假設申請人是管理員。
+- **已知限制（本案不解）**：**待審核的完工單沒有「撤回」**——業務送審後不能自己撤回（`revoke-approval` 是撤銷**已核准**的單，仍僅管理員）。選項：維持限制並在畫面說明；或另增「申請人撤回待審核」（屬簽核流程變更，另案）。預設＝維持限制。
 
-### 6b.6 受影響測試與文件
-`backend/tests/test_completion_notes_2026_09_12.py`、`test_e2e_completion_form_2026_09_12.py`（現有以管理員為前提）、權限守門 `test_module_no_admin_bypass`／`finance_role` 系列需確認不被新函式誤判；`INTEGRATION-POINTS.md`（新 L1 函式）、`docs/platform/CORE-SPEC.md` 的權限裁示記錄（需使用者書面裁示的紀錄：10-12 表單答案＋更正）。
+### 6b.6 測試（權限矩陣）
+1. 業務（案件擁有者／協作成員）可建立／改草稿／送審／刪自己建的草稿／匯出／PDF／隱私告知。
+2. **業務兼任出納（持 `cashier`）對「別人的案件」的每一個寫入端點 ⇒ 403/404**；業務擁有者 ⇒ 成功。
+3. 業務（非該案件）、業務對他人案件 ⇒ 404；`case_manage` 工程師仍不可建立／改／送審；admin／superadmin 不變。
+4. 單據層端點：**`PUT` 內文帶別人案件的 `quote_no` 不能搬單、不能授權**；`note_no` 不存在與「不是你的案件」**同一個 404**；權限檢查先於其他分支（無權限者打已送審的單也得 404，不是 409）。
+5. 刪除：同事建立的草稿（同案件）業務刪除 ⇒ 403/404；自己建的 ⇒ 成功且進暫存區；管理員不變（`recycle_adapter` 單獨不是閘門）。
+6. 設定：列不存在 ⇒ 預設（業務可）；設定＝僅管理員 ⇒ 業務 403 且旗標為假；設定讀取丟例外 ⇒ 僅管理員（fail closed）。
+7. 核准／退回／撤銷核准／回簽切換對業務仍 403；業務同時是簽核層時自簽防護生效；簽核層無法解析 ⇒ 400 白話訊息；業務送審後無撤回路徑（現況）。
+8. 旗標通道：單筆回傳、案件詳情 `caps`、小端點三者與後端函式一致；`list_completion_notes` 形狀不變（快照題）；靜態守門無寫死角色陣列。
+9. 稽核 `via` 正確；管理員全部既有流程回歸不變。
 
-### 6b.7 審查閘
-本節是**權限變更提案**，實作前須有獨立的非作者權限審查（對象：6b.1 表格每一列的前後差異、6b.2 函式、6b.4 通知假設）。審查通過前，只實作與權限無關的部分（帶入、指紋、累計），建立／編輯閘維持今天的 `_require_admin`。
+### 6b.7 受影響測試與文件
+`backend/tests/test_completion_notes_2026_09_12.py`、`test_e2e_completion_form_2026_09_12.py`（現有以管理員為前提）、`test_module_no_admin_bypass`／`finance_role` 系列確認不誤判新函式；`INTEGRATION-POINTS.md`（新 L1 函式與 `can-author` 端點）；`docs/platform/CORE-SPEC.md`「使用者裁示」登記（**驗收項，先於實作**）；步驟檔的 ⚠ 權限變更提示（**驗收項**）。
+
+### 6b.8 審查閘
+實作前須有獨立的非作者權限審查（對象：6b.1 每列前後差異、6b.2 函式與設定語意、6b.3 授權順序、6b.4 旗標通道、6b.5 簽核假設）。審查通過前，只實作與權限無關的部分（帶入、指紋、累計），建立／編輯閘維持今天的 `_require_admin`。
 
 ## 7. 測試與工量
 
@@ -187,8 +209,8 @@
 | 測試（含 e2e、負向權限、狀態閘） | 1.5 |
 | 版本紀錄／IP 登錄／README／收尾 | 0.25 |
 | 印金額開關（讀取當下取價、遮蔽、PDF／畫面） | 1.0 |
-| 權限閘重新設計（§6b：函式、端點改接、前端旗標、稽核、通知核對、矩陣測試） | 1.5 |
-| **合計** | **7.75**（範圍 7.0–8.5；不含另行的非作者權限審查、不含 M3 相依整合） |
+| 權限閘重新設計（§6b：擁有者範圍函式、單據層授權順序、前端旗標通道、稽核、簽核核對、矩陣測試） | 2.0 |
+| **合計** | **8.25**（範圍 7.5–9.0；不含另行的非作者權限審查、不含 M3 相依整合） |
 
 ## 8. 風險
 
@@ -222,7 +244,8 @@
 |---|---|---|---|
 | Q-C1 | 成案**之前**取消回簽時，若已有依該選定建立的完工單，要不要警告／阻擋？（§8b） | M3 設計者或使用者 | 接受並在完工單提示，不擋 |
 | Q-A1 | 業務能否編輯／刪除**他人**建立的完工單草稿（同案件協作者）？ | **使用者** | 可編輯同案件草稿；刪除只限自己建的，他人建立的須管理員 |
-| Q-A2 | 簽核通知文案與收件人：申請人是業務時，是否沿用今天的簽核鏈與通知（§6b.4）？ | 權限審查者 | 沿用，審查時逐項核對 |
+| Q-A2 | 簽核通知文案與收件人：申請人是業務時，是否沿用今天的簽核鏈與通知（§6b.5）？ | 權限審查者 | 沿用，審查時逐項核對 |
+| Q-A3 | 業務送審後要不要能「撤回待審核」？（今天沒有撤回；§6b.5 已知限制） | **使用者** | 維持限制並在畫面說明；要撤回另案（簽核流程變更） |
 
 ## 10. 依據與限制
 
