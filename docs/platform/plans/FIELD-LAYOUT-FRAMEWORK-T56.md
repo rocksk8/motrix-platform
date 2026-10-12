@@ -103,11 +103,12 @@
 **現況（已核對程式）**：`routers/definitions.py` 的 `LAYOUT_KEY = ^module:([a-z][a-z0-9_]{0,39})$` 只接受『模組鍵』；`_validate_layout` 以此解析並要求模組已載入；`GET /api/layout/{module_key}`（`effective_layout`）以模組鍵取版面；`catalog.layout_points(module_key)` 與 `catalog.effective_layout_ops(conn, module_key, role)` 以模組為單位；`layout-runtime.js` 以 `/api/layout/<cfg.module>` 取版面、個人層鍵為 `personalKey(cfg.module, listKey)`。這套**沒有『同一模組內多個單據／表面』的概念**（報價單屬 `case` 模組，日後請款單屬 `arap`，一個模組可有多個表面）。
 
 **設計（向下相容的擴充）**：
-1. **版面鍵**：沿用 `module:<模組鍵>`（舊鍵不變、行為不變），新增**表面子鍵** `module:<模組鍵>/<表面鍵>`，表面鍵同樣 `[a-z][a-z0-9_]{0,39}`（例：`module:case/quotation`、`module:case/quotation_list`、`module:arap/payment_request`）。`LAYOUT_KEY` 改為 `^module:([a-z][a-z0-9_]{0,39})(?:/([a-z][a-z0-9_]{0,39}))?$`。
+1. **版面鍵**：沿用 `module:<模組鍵>`（舊鍵不變、行為不變），新增**表面子鍵** `module:<模組鍵>.<表面鍵>`（**分隔符用句點，不用斜線**：定義庫所有路由與 `/api/list-prefs/{list_key}` 都把鍵當成『單一路徑段』，斜線會被路由當成路徑分隔而 404／錯送；句點在路徑段內合法，不必把路由改成 `{key:path}`），表面鍵同樣 `[a-z][a-z0-9_]{0,39}`（例：`module:case.quotation`、`module:case.quotation_list`、`module:arap.payment_request`）。`LAYOUT_KEY` 改為 `^module:([a-z][a-z0-9_]{0,39})(?:[.]([a-z][a-z0-9_]{0,39}))?$`（模組鍵本身不含句點，故解析無歧義）。
 2. **目錄登記**：`customization` v2 的 `surfaces[]` 宣告該模組有哪些表面（表面鍵、型別 `form／table／list／page／dashboard／report／output`、目錄項）；沒有 `surface` 的點維持原狀（舊版面照舊可用）。
 3. **端點**：維持 `GET /api/layout/{module_key}`，新增選填查詢參數 `surface=`（回傳該表面的版面、點與解析輸出）；`?role=` **仍僅超級管理員**可用。不新增路由前綴（只改既有路由的參數，仍需重產 route golden 並登記整合點）。
 4. **需要改的地方（P1 計價）**：`LAYOUT_KEY` 與 `_validate_layout`（解析模組＋表面、檢查表面已宣告）；`effective_layout`（接 `surface`）；`catalog.layout_points(module_key, surface=None)`（`surface=None` 回舊的未綁表面點，向下相容）、`catalog.check_layout`、`catalog.effective_layout_ops(conn, module_key, role, surface=None)`；`core/customization.py` v2 的 `surfaces` 驗證與 `_check_ops`；`layout-runtime.js`／`custom-layout.js`（`cfg.surface`、URL 加 `?surface=`、`personalKey` 納入表面）；`platform_menu.py` 呼叫 `effective_layout_ops` 時 `surface=None`（不變）。**P1 因此 3.5 → 4.25 pd（+0.75）**。
-5. **角色預覽**：編輯器的『以某角色預覽』必須以**被預覽角色**的可見性判定函式（§3 的 `quote_money_visible` 等）解析，而不是超級管理員自己的；做法＝解析器的 `viewer` 參數接受『角色合成檢視者』（僅依角色預設能力，**不是**特定使用者，避免個資問題）。限制：以角色預覽不反映個別使用者另外被加減的能力；需要時另案『以某使用者預覽』（涉個資，預設不提供）。測試：以無金額權限角色預覽時，金額欄位、其標題與衍生欄位／合計列皆不出現；以有權限角色預覽時出現（正反對照）。
+5. **路由相容與介面快照**：①**不放寬任何路由成 `{key:path}`**；`/api/definitions/{kind}/{key}`、`…/draft`、`…/publish`、`…/validate`、`…/default`、`…/diff`、`…/resolve`、`…/versions/{version}`、`…/restore/{version}`（`routers/definitions.py`）與 `/api/list-prefs/{list_key}`（`list_prefs.py`）的 `personalKey(cfg.module, listKey)` 都收單一路徑段，句點鍵直接可用。②`catalog.effective_layout_ops(conn, module_key, role)` 的簽章改為加 `surface=None`，**簽章被 `tests/platform/l1_interface_snapshot.json`（約第 1261 行）釘住 ⇒ P1／閘門時須重產 L1 介面快照**（已計入 P1 的底層閘門項）。③**測試**：以真實路由對『表面鍵』版面（例 `module:case.quotation`）走完 建草稿 → 驗證 → 發布 → 差異 → 還原 → 以角色解析，並同時驗『舊鍵 `module:case`』行為不變（回歸）；個人層以 `personalKey` 含表面鍵讀寫 `/api/list-prefs/…` 成功；`module:case/quotation`（含斜線）被 `LAYOUT_KEY` 拒絕（驗證問題，不是 500）。
+5b. **角色預覽**：編輯器的『以某角色預覽』必須以**被預覽角色**的可見性判定函式（§3 的 `quote_money_visible` 等）解析，而不是超級管理員自己的；做法＝解析器的 `viewer` 參數接受『角色合成檢視者』（僅依角色預設能力，**不是**特定使用者，避免個資問題）。限制：以角色預覽不反映個別使用者另外被加減的能力；需要時另案『以某使用者預覽』（涉個資，預設不提供）。測試：以無金額權限角色預覽時，金額欄位、其標題與衍生欄位／合計列皆不出現；以有權限角色預覽時出現（正反對照）。
 
 ## 5. 圖形編輯器
 
@@ -304,6 +305,8 @@ ResolvedLayout = 區塊[ 欄位[{目錄項, 標籤, 寬度檔位→實際比例,
 - **脊柱不做**：自訂公式、自訂程式、第二套權限、第二套版本表。
 
 ### 工作順序建議（給 PM／1c 排班，非使用者問題）
+
+0. **發版節奏（使用者決定，2026-10-12）**：M2 之後採**里程碑式發版**——在一條整合線上持續開發，約每 5–6 天一個里程碑列車、共約 4 個，每個里程碑都做完整驗證才上線。本框架據此排：**第 1 個里程碑＝P0＋P1＋閘門（6.75 pd，與 `download_name` 同車過底層閘門）**；P2／P3(a)／插槽（D2、F5 標籤）排第 2 個之後；P4 編輯器與 D1／D3／F7 整合排後面里程碑；每個里程碑只帶『可獨立驗收』的片段，預設行為不變（黃金比對）。
 1. **單據類型登錄的擴充與目錄轉錄（本文 P0）**宜先於 completion-note 與下載檔名的『白名單／變數』改為從目錄產生；但它們都有常數起點，**不阻擋**其先行上線。M3 同理：T1 需要的『報價本文鍵清單』可在本班**本地依目錄格式產出**，不等本文合併。
 2. **M3 不等 F7（FL-1）**：M3 以自己的比對實作 T9（H1／H8＋目錄⊆比對集合守門）；與 F7 的對齊是**事後機械式遷移**，不是前置條件。
 3. 下載檔名與完工單的『白名單／變數』在目錄落地後改為從目錄產生；在那之前沿用其文件已寫的常數，不得另建設定機制。
