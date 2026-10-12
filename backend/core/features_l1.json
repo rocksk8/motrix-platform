@@ -1,0 +1,15 @@
+{
+ "_doc": "核心功能宣告（脊柱 E-b；core 沒有 module.json，所以放這裡）。每一筆是一個『之後會開放』的功能：status=planned 時，設定中心會顯示成灰色『開發中，預計 MSn 版提供』（只由 planned_train 組出句子；不寫日期）。planned_train 對照（路線圖 r19 的 BP-n 建構包 → 里程碑班 MS(n+1)；MS1＝本次 S1／E-a／E-b／下載檔名）：BP-1→MS2、BP-2→MS3、BP-3→MS4、BP-4→MS5、BP-5→MS6、BP-6→MS7。label 必須是白話（不寫代號、不寫日期、不寫時程）。目前都還沒有設定群組，所以是『只有狀態』的卡片；功能做完那一班把 status 改為 open（或刪掉該筆）並補 settings.group。",
+ "features": [
+  {"code": "field_catalog", "label": "新增與調整畫面上的欄位、修改欄位名稱", "status": "planned", "planned_train": "MS2"},
+  {"code": "menu_buttons", "label": "自訂選單與按鈕", "status": "planned", "planned_train": "MS2"},
+  {"code": "snapshot_restore", "label": "改動前自動存檔、可以一鍵還原", "status": "planned", "planned_train": "MS2"},
+  {"code": "rule_engine", "label": "條件提醒與標紅（例如毛利偏低就標紅）", "status": "planned", "planned_train": "MS3"},
+  {"code": "field_permissions", "label": "每個欄位誰看得到、誰能修改", "status": "planned", "planned_train": "MS3"},
+  {"code": "export_templates", "label": "自訂匯出（Excel、CSV）", "status": "planned", "planned_train": "MS4"},
+  {"code": "pdf_templates", "label": "自訂 PDF 版型與浮水印", "status": "planned", "planned_train": "MS4"},
+  {"code": "attachment_slots", "label": "附件與上傳資料夾設定", "status": "planned", "planned_train": "MS5"},
+  {"code": "custom_notifications", "label": "自訂通知", "status": "planned", "planned_train": "MS5"},
+  {"code": "workflow_builder", "label": "調整單據流程（誰簽核、要不要簽核、退回是否留紀錄）", "status": "planned", "planned_train": "MS6"}
+ ]
+}

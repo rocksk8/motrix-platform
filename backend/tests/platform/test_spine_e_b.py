@@ -495,3 +495,52 @@ def test_hub_badge_reports_failures_info_and_ok(sp):
     spine.validate_all()
     b = SC._hub_badge(None, None)
     assert b["tone"] == "bad" and b["count"] == 1 and "1 項功能登錄未通過驗證" in b["text"] and len(b["text"]) <= 40
+
+
+# --- 核心功能宣告（core/features_l1.json）＝灰色『開發中』卡片 ---------------------------------------
+
+def test_core_declaration_file_is_valid_plain_and_all_planned(sp):
+    import json
+    import re
+    assert spine.register_core_declarations() == []                                   # 真的檔案：沒有任何驗證問題
+    r = spine.validate_all()
+    assert r["problems"] == 0 and r["features"] and all(f["state"] == "ok" and f["owner"] == "core" for f in r["features"])
+    codes = [f["code"] for f in r["features"]]
+    assert len(codes) == len(set(codes)) >= 10
+    for f in r["features"]:
+        assert f["status"] == "planned" and re.match(r"^MS[1-9][0-9]?$", f["plannedTrain"]), f
+        plain = re.sub(r"Excel|CSV|PDF", "", f["label"])                                      # 使用者熟悉的產品名稱可以出現，其餘不放英文代號／數字
+        assert not re.search(r"[A-Za-z0-9_]", plain), "label 要是白話（不放英文代號／數字）：%r" % f["label"]
+    raw = json.loads(spine.CORE_FEATURES_FILE.read_text(encoding="utf-8"))
+    assert all(set(x) == {"code", "label", "status", "planned_train"} for x in raw["features"])      # 目前沒有設定群組＝只有狀態的卡片
+    assert not any("settings" in x for x in raw["features"])
+
+
+def test_planned_cards_lists_only_status_only_planned_features_sorted_by_train(sp):
+    _group("zz_eb_g")
+    _reg([_feat("zz_eb_c3", label="後面的卡片", status="planned", planned_train="MS3"),
+          _feat("zz_eb_c2b", label="乙卡片", status="planned", planned_train="MS2"),
+          _feat("zz_eb_c2a", label="甲卡片", status="planned", planned_train="MS2"),
+          _feat("zz_eb_with_group", label="有群組的", status="planned", planned_train="MS2", settings={"group": "zz_eb_g"}),
+          _feat("zz_eb_hidden", label="隱藏的", status="hidden"),
+          _feat("zz_eb_open", label="已開放的"),
+          _feat("zz_eb_bad", label="壞的", status="planned", planned_train="MS2", mail=["zz_eb_nomail"])])
+    spine.validate_all()
+    assert [c["code"] for c in spine.planned_cards()] == ["zz_eb_c2a", "zz_eb_c2b", "zz_eb_c3"]
+    assert spine.planned_cards()[0] == {"code": "zz_eb_c2a", "label": "甲卡片", "plannedTrain": "MS2"}
+
+
+def test_core_declaration_file_problems_never_break_loading(sp, tmp_path):
+    bad = tmp_path / "features_l1.json"
+    bad.write_text("{not json", encoding="utf-8")
+    probs = spine.register_core_declarations(bad)
+    assert probs and "讀不懂" in probs[0] and spine.report()["orphans"]["core"]
+    assert spine.register_core_declarations(tmp_path / "missing.json") == [] and spine.report()["features"] == []
+    bad.write_text('{"features": [{"code": "x_f", "label": "壞掉的", "status": "planned"}]}', encoding="utf-8")        # 缺 planned_train
+    assert any("planned_train" in p for p in spine.register_core_declarations(bad))
+
+
+def test_loader_registers_core_declarations_even_without_a_modules_dir(tmp_path, sp):
+    assert loader.load_all(str(tmp_path / "nope"), "nope") == []
+    rep = spine.report()
+    assert rep["validated"] is True and any(f["code"] == "rule_engine" and f["plannedTrain"] == "MS3" for f in rep["features"])

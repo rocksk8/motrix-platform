@@ -6,7 +6,7 @@
 `/public` hidden 404、planned 回已儲存的值（＝預設，因為寫入被拒）；預設組 preview／apply 不會因為預設組只涵蓋 planned 群組而 404，並回 `skipped`（只列 planned，hidden 不回傳以免洩漏）。
 新增路由必須在 `tests/platform/test_settings_center_status_routes.py` 的路由表裡分類，否則該測試紅。
 
-- GET  /api/settings-center/groups                 全部群組＋目前值＋最後變更（superadmin）；每組多 `status`／`plannedTrain`
+- GET  /api/settings-center/groups                 全部群組＋目前值＋最後變更（superadmin）；每組多 `status`／`plannedTrain`；另有 `plannedFeatures`（開發中、尚無設定群組的功能：code／label／plannedTrain）
 - GET  /api/settings-center/groups/{group}         單一群組欄位定義＋目前值＋變更明細（superadmin）
 - POST /api/settings-center/groups/{group}         儲存（部分欄位即可；`reason` 必填；superadmin）；回應附 `classification`（逐欄 立即／待生效／需核准）
 - POST /api/settings-center/groups/{group}/preview 預覽（dry-run，不寫入）：逐欄分類、效果句、橫幅、驗證問題（S1-4）
@@ -97,7 +97,7 @@ def list_groups(authorization: str = Header(None)):
                         "lastChange": ({"at": last[0]["at"], "actor": last[0]["actor_display"] or last[0]["actor"], "reason": last[0]["reason"]} if last else None)})
     finally:
         conn.close()
-    return {"groups": out}
+    return {"groups": out, "plannedFeatures": _spine.planned_cards()}        # 『即將推出』：開發中、還沒有設定群組的功能（只有名稱與預計班次）
 
 
 @router.get("/api/settings-center/groups/{group}")

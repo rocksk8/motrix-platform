@@ -1637,6 +1637,7 @@
    "router_files": "def()"
   },
   "plat:spine": {
+   "CORE_FEATURES_FILE": "const",
    "STATUSES": "const",
    "drop_owner": "def(owner)",
    "feature_enabled": "def(code)",
@@ -1646,7 +1647,9 @@
    "on_validated": "def(fn)",
    "parse_feature": "def(raw, owner, index=…)",
    "parse_features": "def(manifest, owner)",
+   "planned_cards": "def()",
    "planned_train": "def(code)",
+   "register_core_declarations": "def(path=…)",
    "register_manifest": "def(manifest, owner)",
    "register_validator": "def(name, fn, covers=…)",
    "report": "def()",

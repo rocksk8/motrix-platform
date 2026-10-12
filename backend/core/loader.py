@@ -108,7 +108,13 @@ def load_all(modules_dir: str = None, package: str = None,
         modules_dir = _current_modules_dir()
     if package is None:
         package = MODULES_PACKAGE
+    for _p in spine.register_core_declarations():            # core 沒有 module.json：核心功能宣告在 core/features_l1.json
+        logger.warning("核心功能宣告：%s", _p)
     if not os.path.isdir(modules_dir):
+        try:
+            spine.validate_all()
+        except Exception:                                    # noqa: BLE001
+            logger.exception("spine.validate_all 失敗")
         return []
     for name in sorted(os.listdir(modules_dir)):
         folder = os.path.join(modules_dir, name)

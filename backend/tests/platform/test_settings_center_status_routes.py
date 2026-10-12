@@ -28,6 +28,8 @@ def _declare(statuses):
         if st == "planned":
             f["planned_train"] = "MS2"
         feats.append(f)
+    feats.append({"code": "zz_rt_card", "label": "只有狀態的規劃中功能", "status": "planned", "planned_train": "MS4"})     # 沒有設定群組的卡片
+    feats.append({"code": "zz_rt_hidden_card", "label": "隱藏的卡片", "status": "hidden"})
     spine.register_manifest({"features": feats}, "zz_rt")
     spine.validate_all()
     R.invalidate()
@@ -86,7 +88,11 @@ GROUP = {"planned": PLAN, "hidden": HIDE}
 
 
 def case_list_groups(c, kind):
-    groups = {x["group"]: x for x in _g(c, "/groups").json()["groups"]}
+    body = _g(c, "/groups").json()
+    cards = {x["code"]: x for x in body["plannedFeatures"]}
+    assert cards["zz_rt_card"] == {"code": "zz_rt_card", "label": "只有狀態的規劃中功能", "plannedTrain": "MS4"}
+    assert "zz_rt_hidden_card" not in cards and "zz_rt_plan_f" not in cards                       # hidden 不列；有群組的 planned 以灰色群組出現，不重複列
+    groups = {x["group"]: x for x in body["groups"]}
     assert OPEN in groups and groups[OPEN]["status"] == "open"
     if kind == "hidden":
         assert HIDE not in groups

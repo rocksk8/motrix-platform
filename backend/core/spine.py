@@ -2,7 +2,7 @@
 """L0 脊柱功能登錄（E-b；設計 docs/platform/plans/SPINE-ENGINE-DESIGN-T57.md、FIELD-LAYOUT-FRAMEWORK-T56.md §17）。
 
 [單位] plat:spine    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] STATUSES, drop_owner, feature_enabled, feature_status, group_status, group_info, on_validated, parse_feature, parse_features, planned_train,
+[公開介面] CORE_FEATURES_FILE, STATUSES, drop_owner, feature_enabled, feature_status, group_status, group_info, on_validated, parse_feature, parse_features, planned_cards, planned_train, register_core_declarations,
     register_manifest, register_validator, report, reset, restore, snapshot, validate_all
 [不變式] ①只用標準函式庫（載入器在 import 模組之前要驗宣告）；依賴 L1 的驗證（設定、信件…）以**回呼**注入——`register_validator`／`on_validated`，
     L0 不 import L1。②宣告式：功能寫在 `module.json` 的 `features[]`，靜態可掃。③**fail-closed 的方向**：驗證失敗的功能 `feature_enabled`＝False、
@@ -10,8 +10,10 @@
     ④`status`（open／planned／hidden）是**宣告的成熟度**，與驗證結果 `state`（ok／failed／pending_validator）分開。
 [契約題] backend/tests/platform/test_spine_e_b.py
 """
+import json
 import logging
 import re
+from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 from core import registry
@@ -29,6 +31,9 @@ _DATE_KEYS = {"date", "eta", "deadline", "planned_date", "due", "release_date", 
 #: planned 功能的 label／notes 不得出現看起來像日期或時程的文字（使用者要求不承諾日期）
 _DATEISH = re.compile(r"\d{4}\s*[-/年]\s*\d{1,2}|\d{1,2}\s*[/月]\s*\d{1,2}|(\d+|[一二兩三四五六七八九十百]+)\s*(天|週|周|日|個月|月|年)|[Qq][1-4]|下\s*(週|周|個月)|本月|月底|年底|週內|周內")
 _SECTIONS_NEEDING_VALIDATOR = ("catalog", "labels")      # P0 目錄落地前沒有驗證器：宣告了只記 pending_validator，不算失敗
+
+#: core 沒有 module.json：核心功能宣告放在這支 JSON（owner＝core；格式同 module.json 的 `features[]`）。載入器在 `load_all` 一開始讀它。
+CORE_FEATURES_FILE = Path(__file__).with_name("features_l1.json")
 
 _FEATURES: Dict[str, dict] = {}
 _ORPHANS: Dict[str, List[str]] = {}                       # 擁有者 → 無法歸到任何功能的問題（缺 code、代號重複…）
@@ -172,6 +177,22 @@ def register_manifest(manifest: dict, owner: str) -> List[str]:
     return problems
 
 
+def register_core_declarations(path=None) -> List[str]:
+    """讀 `core/features_l1.json`（核心功能宣告，owner＝core）並登錄。檔案不存在 ⇒ 沒有核心宣告（[]）；讀不懂 ⇒ 記成 core 的擁有者層級問題（不丟例外、不擋啟動）。"""
+    p = Path(path) if path else CORE_FEATURES_FILE
+    if not p.exists():
+        drop_owner("core")
+        return []
+    try:
+        manifest = json.loads(p.read_text(encoding="utf-8"))
+        return register_manifest(manifest, "core")
+    except (ValueError, OSError) as e:
+        drop_owner("core")
+        msg = "core 功能宣告檔 %s 讀不懂：%s" % (p.name, e)
+        _ORPHANS["core"] = [msg]
+        return [msg]
+
+
 def drop_owner(owner: str) -> None:
     """擁有者的功能全部移除（模組失敗／卸載／重登錄）。"""
     for code in [c for c, f in _FEATURES.items() if f["owner"] == owner]:
@@ -295,6 +316,18 @@ def group_info(group: str) -> dict:
             code = c
             break
     return {"status": st, "plannedTrain": planned_train(code) if (code and st == "planned") else None, "feature": code}
+
+
+def planned_cards() -> List[dict]:
+    """設定中心的『即將推出』卡片：status＝planned、**沒有設定群組**（有群組的會以灰色群組出現在群組清單裡）、驗證沒失敗的功能。
+    只回 `{code, label, plannedTrain}`，依 planned_train 數字、再依代號排序。hidden 永遠不列。"""
+    out = []
+    for code in sorted(_FEATURES):
+        f = _FEATURES[code]
+        if f["status"] != "planned" or f["group"] or not f["planned_train"] or _state(code) == STATE_FAILED:
+            continue
+        out.append({"code": code, "label": f["label"], "plannedTrain": f["planned_train"]})
+    return sorted(out, key=lambda c: (int(c["plannedTrain"][2:]), c["code"]))
 
 
 def report() -> dict:
