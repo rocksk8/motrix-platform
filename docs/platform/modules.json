@@ -288,6 +288,7 @@
     "mod:case/alt_policy",
     "mod:case/alt_options",
     "mod:case/alt_view",
+    "mod:case/api/project_margin",
     "mod:case/alt_sign",
     "mod:case/alt_lock",
     "mod:case/api/alt_plan",
@@ -376,6 +377,7 @@
     "/api/material-suppliers",
     "/api/next-quote-no",
     "/api/overhead",
+    "/api/project-margin",
     "/api/quotations",
     "/api/sales-orders"
    ]

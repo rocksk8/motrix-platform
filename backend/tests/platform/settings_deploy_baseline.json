@@ -60,6 +60,7 @@
    ]
   },
   "quote_alt": {"alt_enabled": [true, null, null, false], "total_text": ["依方案選擇", null, null, false], "note_template": ["項次{items}為{group}擇一方案選擇", null, null, false], "show_unpicked_in_pdf": [false, null, null, false], "alt_groups_max": [10, 1, 20, false], "combo_view_max": [24, 1, 200, false], "combo_view_default_open": [false, null, null, false], "lock_scope": [1, 1, 2, false], "cancel_after_deal": [1, 1, 3, false], "move_out_of_sent": [1, 1, 2, false], "reject_final_keep": [1, 1, 2, false], "unlock_edit_signed": [1, 1, 2, false], "approval_basis": [1, 1, 2, false], "cancel_after_export": [1, 1, 2, false], "cancel_after_invoice": [1, 1, 2, false], "cancel_after_settle": [1, 1, 2, false]},
+  "project_margin": {"warn_pct": [0, 0, 100, false]},
   "system_hub": {"show_denied": [0, 0, 1, false]},
   "uploads": {
    "case_extra_expense_max_files": [

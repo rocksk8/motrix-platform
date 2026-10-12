@@ -12,7 +12,7 @@ from modules.case import profit_guard as PG
 COMBO_HARD_CAP = 200            # 安全上限（與設定 combo_view_max 的最大值相同）；超過不展開，避免乘積爆炸
 
 FIGURE_KEYS = ("subtotal", "pretax", "tax", "total", "totalCost", "inputVat", "directProfit", "directMarginPct",
-               "adminCost", "charityDonation", "netProfit", "netMarginPct")
+               "adminCost", "charityDonation", "netProfit", "netMarginPct", "projectMarginPct")
 
 
 def stamps(q: dict, settled: bool = False):
@@ -38,6 +38,7 @@ def _figures(q: dict, picks: dict, st) -> dict:
     p = PG.server_profit(dict(qq, tot=t), pct, ver, pretax=t["pretax"], total=t["total"], charity_basis=basis)
     out = dict(t)
     out.update(p)
+    out["projectMarginPct"] = PR.project_margin(t["pretax"], p["totalCost"])["pct"]      # 專案毛利%：與詳情同一個函式
     return {k: out[k] for k in FIGURE_KEYS}
 
 
@@ -48,6 +49,7 @@ def _figures_actual(q: dict, st) -> dict:
     p = PG.server_profit(dict(q, tot=t), pct, ver, pretax=t["pretax"], total=t["total"], charity_basis=basis)
     out = dict(t)
     out.update(p)
+    out["projectMarginPct"] = PR.project_margin(t["pretax"], p["totalCost"])["pct"]      # 專案毛利%：與詳情同一個函式
     return {k: out[k] for k in FIGURE_KEYS}
 
 

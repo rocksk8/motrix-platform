@@ -209,3 +209,16 @@ register_group(
     sensitive=True, risk="money", cross_check=_alt_cross_check,
     help="報價單「擇一方案」的文字範本、數量上限，以及客戶回簽後的處理規則。",
 )
+
+# 專案毛利%（設計 docs/platform/plans/QUOTE-PROJECT-GROSS-MARGIN-T56.md §4.1）：警示門檻，預設 0＝不提醒（今日行為）。只改畫面提示，不阻擋存檔、送審、回簽。
+register_group(
+    "project_margin", "專案毛利%",
+    [
+        S("warn_pct", "float", 0, min=0, max=100, unit="%", risk="none", recommended=0,
+          question="專案毛利% 低於多少時，在報價單上提醒業務？（0 代表不提醒）", label="專案毛利提醒門檻",
+          help="專案毛利% ＝（未稅營業收入 − 未稅品項成本）÷ 未稅營業收入。設成 0 就不提醒；設成例如 20，專案毛利低於 20% 時，報價單的內部損益區會用警示色標出來。",
+          impact="只改畫面提示，不影響存檔、送審與審核；只有看得到成本與毛利的人會看到。立即生效。"),
+    ],
+    sensitive=False, risk="none",
+    help="報價單「專案毛利%」的提醒門檻；算式本身固定，不在此調整。",
+)

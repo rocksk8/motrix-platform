@@ -1,0 +1,170 @@
+{
+ "cases": [
+  {
+   "name": "normal",
+   "pretax": 100000,
+   "cost": 60000,
+   "expect": {
+    "amount": 40000,
+    "pct": 40.0
+   }
+  },
+  {
+   "name": "discount_applied",
+   "pretax": 95000,
+   "cost": 60000,
+   "expect": {
+    "amount": 35000,
+    "pct": 36.8
+   }
+  },
+  {
+   "name": "freight_included",
+   "pretax": 101000,
+   "cost": 60000,
+   "expect": {
+    "amount": 41000,
+    "pct": 40.6
+   }
+  },
+  {
+   "name": "zero_cost",
+   "pretax": 5000,
+   "cost": 0,
+   "expect": {
+    "amount": 5000,
+    "pct": 100.0
+   }
+  },
+  {
+   "name": "zero_pretax",
+   "pretax": 0,
+   "cost": 100,
+   "expect": {
+    "amount": -100,
+    "pct": null
+   }
+  },
+  {
+   "name": "negative_pretax",
+   "pretax": -500,
+   "cost": 100,
+   "expect": {
+    "amount": -600,
+    "pct": null
+   }
+  },
+  {
+   "name": "loss_negative_not_zero",
+   "pretax": 1000,
+   "cost": 1500,
+   "expect": {
+    "amount": -500,
+    "pct": -50.0
+   }
+  },
+  {
+   "name": "tie_positive",
+   "pretax": 2000,
+   "cost": 1755,
+   "expect": {
+    "amount": 245,
+    "pct": 12.3
+   }
+  },
+  {
+   "name": "tie_negative",
+   "pretax": 2000,
+   "cost": 2245,
+   "expect": {
+    "amount": -245,
+    "pct": -12.3
+   }
+  },
+  {
+   "name": "fractional_cost_noise",
+   "pretax": 1000,
+   "cost": 31.499999999999996,
+   "expect": {
+    "amount": 968.5,
+    "pct": 96.9
+   }
+  },
+  {
+   "name": "small",
+   "pretax": 3,
+   "cost": 1,
+   "expect": {
+    "amount": 2,
+    "pct": 66.7
+   }
+  },
+  {
+   "name": "cost_none",
+   "pretax": 1000,
+   "cost": null,
+   "expect": {
+    "amount": null,
+    "pct": null
+   }
+  },
+  {
+   "name": "cost_string",
+   "pretax": 1000,
+   "cost": "x",
+   "expect": {
+    "amount": null,
+    "pct": null
+   }
+  },
+  {
+   "name": "pretax_none",
+   "pretax": null,
+   "cost": 100,
+   "expect": {
+    "amount": null,
+    "pct": null
+   }
+  },
+  {
+   "name": "cost_equals_pretax",
+   "pretax": 800,
+   "cost": 800,
+   "expect": {
+    "amount": 0,
+    "pct": 0.0
+   }
+  }
+ ],
+ "uncosted": {
+  "items": [
+   {
+    "cost": 0
+   },
+   {
+    "cost": ""
+   },
+   {
+    "type": "header"
+   },
+   {
+    "cost": null
+   },
+   {},
+   {
+    "cost": 5
+   },
+   {
+    "cost": "5"
+   },
+   {
+    "type": "header",
+    "cost": null
+   },
+   {
+    "cost": 7.5
+   }
+  ],
+  "expect": 4
+ }
+}

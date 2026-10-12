@@ -100,6 +100,7 @@
       "/api/material-suppliers",
       "/api/next-quote-no",
       "/api/overhead",
+      "/api/project-margin",
       "/api/quotations",
       "/api/sales-orders"
     ],

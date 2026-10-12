@@ -95,3 +95,43 @@ def settlement_profit(pretax, actual_cost, pct=None, ver=None, frozen_charity=No
     return {"grossProfit": gross, "grossMarginPct": gross_pct, "adminCost": admin, "charityDonation": ch,
             "netProfit": net, "netMarginPct": net_pct}
 
+
+
+# ── 專案毛利%（M3 之後；設計 docs/platform/plans/QUOTE-PROJECT-GROSS-MARGIN-T56.md）────────────────────
+# 專案毛利% ＝ (未稅營業收入 − 未稅品項成本) ÷ 未稅營業收入 × 100。成本只算品項『成本單價 × 數量』，**不扣**進項稅、攤分保留款、公益金、管銷、營業稅。
+# 與直接毛利率的差異恰為進項稅（direct = pretax − cost − inputVat）。衍生值：讀取時計算，不寫進 tot、不加 SQL 欄。
+# 進位：精確的有理數運算後『四捨五入到 0.1、平手一律遠離零』（12.25 → 12.3、−12.25 → −12.3），與前端 `MotrixProfitRules.projectMargin` 孿生，共用黃金向量。
+
+def _is_number(x) -> bool:
+    import math
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
+
+
+def uncosted_items(items) -> int:
+    """成本未填的品項數：非標題、且 cost 缺鍵／None／空字串／非數字。`cost = 0` 是合法的零成本（如贈品），不算未填。"""
+    n = 0
+    for i in items or []:
+        if not isinstance(i, dict) or i.get("type") == "header":
+            continue
+        c = i.get("cost")
+        if not _is_number(c):
+            n += 1
+    return n
+
+
+def project_margin(pretax, total_cost, uncosted=0) -> dict:
+    """回 `{amount, pct, uncosted_items}`。pct 為 None 的情況：pretax／total_cost 不是有限數字，或 pretax ≤ 0（None 不是 0）。虧損回負數、不補零。"""
+    from fractions import Fraction
+    out = {"amount": None, "pct": None, "uncosted_items": int(uncosted or 0)}
+    if not _is_number(pretax) or not _is_number(total_cost):
+        return out
+    p, c = Fraction(Decimal(repr(pretax))), Fraction(Decimal(repr(total_cost)))
+    a = p - c
+    out["amount"] = float(a) if a.denominator != 1 else int(a)
+    if p <= 0:
+        return out
+    x = a * 1000 / p                                    # 以 0.1% 為單位
+    n, d = abs(x.numerator), x.denominator
+    tenths = (2 * n + d) // (2 * d)                      # 四捨五入，平手遠離零
+    out["pct"] = (-tenths if x < 0 else tenths) / 10
+    return out

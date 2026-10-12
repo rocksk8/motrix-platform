@@ -70,8 +70,45 @@
              netProfit: net, netMarginPct: netPct }
   }
 
+  // ── 專案毛利%（設計 QUOTE-PROJECT-GROSS-MARGIN-T56）：(未稅收入 − 未稅品項成本) ÷ 未稅收入 × 100，不扣進項稅／管銷／公益。
+  // 後端孿生：helpers/profit_rules.py project_margin（同一份黃金向量 tests/data/project_margin_vectors.json）。
+  // 以十進位字串轉 BigInt 做精確運算，四捨五入到 0.1、平手遠離零（12.25 → 12.3、−12.25 → −12.3）；pretax ≤ 0 或輸入不是有限數字 ⇒ pct = null（不是 0）。
+  function isNum(x) { return typeof x === 'number' && isFinite(x) }
+  function decParts(x) {
+    var s = String(x)
+    if (/e/i.test(s)) s = Number(x).toFixed(12)
+    var neg = s.charAt(0) === '-'
+    if (neg) s = s.slice(1)
+    var p = s.split('.'), frac = p[1] || ''
+    var n = BigInt(p[0] + frac)
+    return { n: neg ? -n : n, scale: frac.length }
+  }
+  function pow10(k) { return BigInt('1' + new Array(k + 1).join('0')) }
+  function uncostedItems(items) {
+    var n = 0
+    ;(items || []).forEach(function (i) {
+      if (!i || typeof i !== 'object' || i.type === 'header') return
+      if (!isNum(i.cost)) n++
+    })
+    return n
+  }
+  function projectMargin(pretax, totalCost, uncosted) {
+    var out = { amount: null, pct: null, uncosted_items: uncosted || 0 }
+    if (!isNum(pretax) || !isNum(totalCost)) return out
+    var p = decParts(pretax), c = decParts(totalCost)
+    var S = Math.max(p.scale, c.scale)
+    var P = p.n * pow10(S - p.scale), C = c.n * pow10(S - c.scale)
+    var A = P - C
+    out.amount = Number(A) / Math.pow(10, S)
+    if (P <= 0n) return out
+    var neg = A < 0n, n = neg ? -A : A
+    var tenths = (2n * n * 1000n + P) / (2n * P)
+    out.pct = Number(neg ? -tenths : tenths) / 10
+    return out
+  }
+
   var api = { LEGACY_VER: LEGACY_VER, FORMULA_VER: FORMULA_VER, ACTIVE_VER: ACTIVE_VER, DEFAULT_OVERHEAD_PCT: DEFAULT_OVERHEAD_PCT,
-              TARGET_MARGIN_PCT: TARGET_MARGIN_PCT, CHARITY_DIRECT: CHARITY_DIRECT, CHARITY_TOTAL: CHARITY_TOTAL, ACTIVE_CHARITY_BASIS: ACTIVE_CHARITY_BASIS, basisOf: basisOf, pctRate: pctRate, adminCost: adminCost, charity: charity, quote: quote, settlement: settlement }
+              TARGET_MARGIN_PCT: TARGET_MARGIN_PCT, CHARITY_DIRECT: CHARITY_DIRECT, CHARITY_TOTAL: CHARITY_TOTAL, ACTIVE_CHARITY_BASIS: ACTIVE_CHARITY_BASIS, basisOf: basisOf, pctRate: pctRate, adminCost: adminCost, charity: charity, quote: quote, settlement: settlement, projectMargin: projectMargin, uncostedItems: uncostedItems }
   if (typeof window !== 'undefined') window.MotrixProfitRules = api
   if (typeof module !== 'undefined' && module.exports) module.exports = api
 })()
