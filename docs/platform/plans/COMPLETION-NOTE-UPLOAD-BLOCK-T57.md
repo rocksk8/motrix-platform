@@ -4,6 +4,7 @@
 > 基底：`origin/platform` `33b84b332`（M2.1 已上線）。完工單核心由 c7 的堆疊負責（實作者＝c7）；本文是設計，不含程式。
 > **r2（c7 事實更新，`completion_notes.py` @ `33b84b332` 與 `wip/t57-completion-r2` `9922b1777`）**：①同一份清單加「種類」（不另開第二份清單，回收桶 adapter 與讀取提供者不用改）；②完工單**沒有**「匯出後凍結」的概念，`lock_after_export` 改為 `lock_after_customer_signoff`（客戶驗收簽回後鎖定）；③上傳會更新 `updated_at`＝樂觀鎖權杖，編輯草稿的人會被誤擋 409，附件變動**不再更新** `updated_at`；④政策鍵放進 c7 已登錄的 `completion_note` 群組（前綴 `attach_`），不另開群組；⑤上傳授權比編輯寬（案件管理模組持有者都能傳）；⑥章戳的階段改為三段（核准前／已核准／已客戶簽回）。
 > **r3（0d 對 r2 的必修 M1–M4／建議 S1–S6；1c 的答覆已併入）**：①寫入順序改為「存檔在鎖外 → 取寫鎖 → **重新讀列**並在鎖內重跑檢查 → 以鎖內的狀態算 `phase` → 追加 → commit；任何拒絕／失敗清掉剛存的檔；刪除在 DB commit 之後才移除實體檔」（§4）；②只增不刪的漏洞：含核准後檔案的草稿單據**不得經回收桶 30 天清除**繞過（§4c），並新增**寫死、僅最高管理者**的「作廢／清除附件」路徑（§4b，**不再是選項**）；③金額隱藏選項涵蓋 `signedFiles` 清單與檔名、`attachments.catalog`、`path_access`（單一伺服器端閘）；④插槽宣告的 `folder`／`list_column`／`doc_type` 是路徑／SQL 識別字來源，**必須對引擎登錄表驗證**，`kinds[].exts` 只能縮小；⑤`kind` 等欄位由伺服器蓋章；請求上限；`reopen` 與 `is_signed`；HEIC 延後；下載標頭。1c 的答覆：預設只增不刪維持、通知預設關、作廢路徑為寫死、HEIC 走安全審查。
+> **r4（0d 對 r3 的非阻擋註記 i–iv）**：①`list_column` 必須屬於**宣告模組自己的資料表**，且是 **JSON 檔案清單欄**（形如 `*_files_json`），不是任意欄位（§2.1）；②§4c 列舉一張完工單的**所有刪除路徑**並逐一加閘；③回收桶清單／預覽與簽核佇列的 payload 也要遵守金額隱藏（檔名）；④§4a 明寫暫存檔**改名到最終路徑的時點**（鎖內檢查通過之後）與失敗清理，確保資料夾外不寫任何東西。
 > 標記：**UNKNOWN**＝沒有證據，不推測；pd 的「估」是我的粗估。
 
 ## 0. 結論（先看）
@@ -54,7 +55,7 @@
 | `recycle` | 回收桶是否一併處理清單欄 | 是（沿用既有 adapter） |
 | `download` | 下載命名的文件類型鍵 | `completion`＋「附件」前綴（見 §6） |
 
-**宣告驗證（0d M4；`folder`／`list_column`／`doc_type` 是路徑／SQL 識別字的來源）**：驗證器在載入宣告時檢查——①`folder` 必須是 uploads 子資料夾表內的名稱（含 demo 前綴規則）且通過 `_safe_save_dir` 的單段規則；②`list_column` 必須形如 `表.欄`，符合 `^[a-z_]+[.][a-z_]+$`，且該表該欄**存在於資料庫結構**（不是任意字串拼進 SQL）；③`doc_type` 必須在 `DOC_TYPES` 內；④這些值**只能來自程式／部署的宣告檔**，**絕不來自請求或可由使用者編輯的設定**（設定中心與建構器只能選「已通過驗證的插槽」，不能改這三個欄位）；⑤`kinds[].exts` 只能**縮小**（與 uploads 白名單取交集）；magic 檢查**無條件**。**測試（含正對照）**：`folder='../x'`、`list_column='a;drop table b'`、`exts=['.html']` 的宣告 ⇒ 驗證失敗、插槽不載入。
+**宣告驗證（0d M4；`folder`／`list_column`／`doc_type` 是路徑／SQL 識別字的來源）**：驗證器在載入宣告時檢查——①`folder` 必須是 uploads 子資料夾表內的名稱（含 demo 前綴規則）且通過 `_safe_save_dir` 的單段規則；②`list_column` 必須形如 `表.欄`，符合 `^[a-z_]+[.][a-z_]+$`，且 **(a) 該表屬於宣告模組自己的 `module.json` `tables` 清單**、**(b) 該欄存在於資料庫結構**、**(c) 是 JSON 檔案清單欄（欄名符合 `^[a-z_]+_files_json$`，且資料型別為 TEXT）**——不是任何結構內的欄位（不是任意字串拼進 SQL，也不能指向別的模組的表或 `users.password_hash` 之類）；③`doc_type` 必須在 `DOC_TYPES` 內；④這些值**只能來自程式／部署的宣告檔**，**絕不來自請求或可由使用者編輯的設定**（設定中心與建構器只能選「已通過驗證的插槽」，不能改這三個欄位）；⑤`kinds[].exts` 只能**縮小**（與 uploads 白名單取交集）；magic 檢查**無條件**。**測試（含正對照）**：`folder='../x'`、`list_column='a;drop table b'`、`exts=['.html']` 的宣告 ⇒ 驗證失敗、插槽不載入。
 
 ### 2.2 引擎提供（一次做好）
 - `helpers/attachment_slots.py`（L1，新）：`load_slots()`（讀宣告）、`check_upload(slot, doc_row, user, kind, existing, incoming)`、`check_delete(…)`、`stamp(file_meta, phase, kind, user)`；全部**純函式＋讀設定**，不碰資料庫寫入。
@@ -92,6 +93,7 @@
 ### 4a. 上傳
 1. `_require_user` → `_readable_note`（讀取閘；失敗＝404「完工單不存在」）。
 2. **鎖外**（便宜、不依賴單據狀態）：解析請求（`kind` 為 **Form 欄位**；多檔上傳時，同一次請求的所有檔共用同一個 `kind`，要不同種類就分次請求）→ 未知 `kind` ⇒ 400；該種類被政策停用 ⇒ 403；請求上限（單次檔數、單次合計位元組，見 §S2）；magic／副檔名／單檔大小檢查；`save_document_files` 把檔存到暫存位置。**客戶端送來的 `phase`／`uploadedBy`／`uploadedAt` 一律忽略（送了＝400）**，全部由伺服器蓋章。
+2b. **暫存位置與最終路徑**：`save_document_files` 先把檔寫到**同一個 `uploads/completion_notes/<單號>/` 資料夾內的暫存檔名**（亂數、`.part` 後綴，不被 `path_access` 認得、不被清單引用）；**只有在下一步鎖內檢查全部通過、清單更新成功、commit 之前的最後一步**才以 `os.replace` 改名為最終檔名（同一資料夾內，原子；不跨資料夾、不跨磁碟）；任何失敗或拒絕 ⇒ 刪除暫存檔（`finally` 內清理）。**資料夾外不寫任何東西**；啟動時與每日備份前掃描並清除超過 1 小時的 `.part` 殘留。測試：模擬在改名前拋例外 ⇒ 沒有最終檔、沒有 `.part`；在改名後、commit 前失敗 ⇒ 最終檔被清除。
 3. **取寫鎖**（`begin_write`）→ **重新讀取該單據列**（`status`、`is_signed`、`signed_files_json`）→ **在鎖內重跑 `check_upload`**（誰可新增、狀態、種類、`attach_max_files` 以**鎖內清單的長度**計、`attach_lock_after_customer_signoff`）→ **以鎖內的狀態計算 `phase`**（`draft`／`approved`／`signed`）→ 追加到清單 → 更新（**不動 `updated_at`**）→ 寫稽核 → commit。
 4. **任何拒絕或失敗**（檢查不過、異常、commit 失敗）⇒ **刪除剛存的實體檔**（只刪這次存的）；沒有孤兒檔。
 5. `attach_reopen_approval_on_upload` 開 ⇒ 在**同一個鎖內交易**把狀態改回「待審核」、**更新 `updated_at`**（這個才是真的內容變動）、寫稽核；若 `is_signed=1` ⇒ **回 409 擋下**（`revoke-approval` 在已簽回時本來就拒絕，不得靜默略過成「上傳成功但沒重開」）。
@@ -104,12 +106,28 @@
 2. 刪除的順序：鎖內重新讀列 → `check_delete` → 從清單移除 → commit → **commit 成功之後**才移除實體檔（失敗時檔案仍在、清單未動）。
 3. **寫死的「作廢／清除附件」路徑（0d M2b；取代 r2 的「Q4 暫不做」）**：**僅最高管理者**；**原因必填**；寫稽核＋變更帳本一筆；清單中**保留墓碑**（`kind`、`phase`、`uploadedBy`、`uploadedAt`、作廢者、作廢時間、原因代碼；**不留檔名內容以外的敏感資料**）；實體檔移除。用途＝法律／隱私下架。**任何政策（含 `append_only`、`lock_after_customer_signoff`）都不能關閉這條路徑**；它是 H 層（寫死）。測試：政策全部設到最嚴，最高管理者仍可作廢；一般管理者／其他角色 ⇒ 403；墓碑存在、實體檔不存在、帳本有列。
 
-### 4c. 回收桶與「只增不刪」的漏洞（0d M2a）
-`recycle_adapter` 在**草稿**被刪除時打包 `signed_files_json` 與實體檔，30 天後可被清除。若一張**草稿**單據帶有 `phase=approved/signed` 的檔案（核准後退回草稿，例如 `revoke-approval`），管理員刪除該草稿 → 回收桶 → 30 天清除，就繞過了只增不刪。**規則**：含 `phase=approved/signed` 檔案的單據，**刪除與回收桶清除**都要求**最高管理者＋原因＋帳本**（與 §4b 的作廢路徑同一個閘）；一般管理者刪除這類草稿 ⇒ 403 並說明；回收桶往返（還原）後章戳保留。**測試**：核准後新增附件 → 退回草稿 → 管理員刪除 ⇒ 403；最高管理者帶原因刪除 ⇒ 帳本有列；移除此閘 ⇒ 測試必須紅。
+### 4c. 所有刪除路徑與「只增不刪」的漏洞（0d M2a；r4 列舉全部路徑並逐一加閘）
+含 `phase=approved/signed` 檔案的單據，**任何會讓這些檔案消失的路徑**都要求**最高管理者＋原因＋帳本**（與 §4b 作廢路徑同一個閘）。一張完工單的刪除／清除路徑**全部列舉**如下：
+
+| # | 路徑 | 現況 | 閘 |
+|---|---|---|---|
+| D1 | `DELETE /api/completion-notes/{no}`（草稿刪除；進回收桶 `recycle_adapter.delete_in_tx`，打包 `signed_files_json` 與實體檔） | 只有草稿可刪 | 草稿帶 `approved/signed` 章戳檔 ⇒ 一般管理者 403，最高管理者＋原因＋帳本 |
+| D2 | 回收桶 30 天到期清除（保留期限清理工作） | 自動 | **到期清除前檢查**：含 `approved/signed` 章戳檔的項目**不自動清除**，轉為「待最高管理者處置」並告警；保留期限不得低於法定下限 |
+| D3 | 回收桶手動清除／「刪除已核准」（`POST /api/recycle-bin/delete-approved`，目前只收請款單、開票申請；完工單**不在清單內**時，維持不開放） | 僅最高管理者 | 若將來納入完工單，沿用 D1 的閘 |
+| D4 | 回收桶還原（`restore`） | 還原清單與章戳 | 章戳保留；還原不降低保護 |
+| D5 | 取消核准後退回草稿（`revoke-approval`）再 D1 | 兩步組合 | 退回草稿不清章戳；D1 的閘擋住第二步 |
+| D6 | 案件／報價單層級的連動刪除（若存在） | **UNKNOWN**（未見完工單隨報價單刪除的程式碼；實作前以 `git grep "DELETE FROM completion_notes"` 與案件刪除路徑核對） | 若有，同 D1 |
+| D7 | 批次端點（`case-batch`…）是否能刪附件 | 目前只改指派 | 確認為否；加守門測試（批次端點不呼叫 `delete_document_file`／`purge_document_files`） |
+| D8 | 失敗上傳的清理（§4a-4） | 只刪**這次**存的暫存／最終檔 | 清理函式只接受「本次請求登記的路徑清單」，不接受使用者輸入 |
+| D9 | 展示重置（`db.reset_demo_db`，只作用於 `_demo_uploads` 前綴） | 僅 demo | 與正式資料隔離；測試證明不碰正式 `uploads/completion_notes` |
+| D10 | §4b 的「作廢／清除附件」 | 寫死的最高管理者路徑 | 這是唯一允許讓章戳檔消失的正規入口 |
+
+**測試（含正對照）**：核准後新增附件 → 退回草稿 → D1 一般管理者 ⇒ 403、最高管理者帶原因 ⇒ 成功且帳本有列；D2：到期清除工作遇到含章戳檔的項目 ⇒ 不清除並產生告警；D7/D8/D9 的守門測試；移除任一道閘 ⇒ 對應測試必須紅。
 
 ### 4d. 讀取與金額隱藏（0d M3）
 - 讀取授權：`uploads.path_access` 的完工單規則與 `attachments.catalog`（`completion_note`）同為**單一伺服器端閘**。
 - `attach_money_hidden_can_view`＝「不能」時，**三處都要剝除**：①`GET /api/completion-notes/{no}` 回傳的 `signedFiles` 清單與檔名；②`attachments.catalog` 的列舉與開啟；③`path_access` 的實體檔讀取。**逐角色矩陣測試**（admin／sales／finance／cashier／engineer／viewer × 三處）。
+- **其他會顯示檔名的表面（0d iii）**：①**回收桶清單與預覽**（`recycle_bin` 列出項目時顯示的快照摘要、檔案名稱）；②**簽核佇列的詳情 payload**（`approval_queue.detail_file_paths`／詳情提供者回傳的檔案清單）；③稽核檢視的 `detail`。這三處在 `attach_money_hidden_can_view`＝「不能」時同樣剝除檔名與清單（只留件數），並納入逐角色矩陣測試。簽核人看詳情時的檔案存取仍走 `_approval_context_paths` 的既有規則，不因本選項而放寬。
 - **明講預設**：預設「能」，等於**維持今天的暴露面**（今天任何能讀完工單的人都看得到附件清單與檔名）；要收緊需管理者主動選「不能」。
 - 下載（0d S6）：走 `download_name`；`Content-Disposition: attachment`＋`X-Content-Type-Options: nosniff`；不從靜態路由直出。
 
