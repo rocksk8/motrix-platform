@@ -241,7 +241,7 @@ def _login(client, username, password):
 
 def _body(**over):
     d = {"customerName": "擇一客", "projectName": "擇一案", "salesPerson": "", "quoteDate": "2026-10-12", "taxRate": 5,
-         "items": _alt()["items"], "tot": {}}
+         "items": _alt()["items"], "tot": {}, "totalsByAlt": True}
     d.update(over)
     return d
 

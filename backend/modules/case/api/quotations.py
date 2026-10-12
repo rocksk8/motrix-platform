@@ -1808,6 +1808,21 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # R2（營業稅法 §7、§8）：零稅率／免稅送出（非草稿）要有依據；應稅單移除殘留依據
     validate_tax_basis(q, new_status)
 
+    # M3 T9b：已回簽擇一單的鎖定要在任何副作用（組簽核層級、寄通知）之前先擋；這裡是提早的快速檢查，
+    # 寫入交易內讀出已存列後的 `guard_update` 仍是權威（同一規則、以鎖內已存值為準）。
+    if is_unlock_edit or new_status == "待審核":
+        _pre = get_db()
+        try:
+            _pre_row = _pre.execute("SELECT is_signed, data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        finally:
+            _pre.close()
+        if _pre_row and _pre_row["is_signed"]:
+            try:
+                _pre_old = json.loads(_pre_row["data_json"] or "{}") or {}
+            except (TypeError, ValueError):
+                _pre_old = {}
+            _ALT_SIGN.guard_update(q, _pre_old, is_unlock_edit)
+
     # ── 待審核：build approval tiers from settings ─────────────────────────────
     if new_status == "待審核":
         appr = q.get("approval") or {}

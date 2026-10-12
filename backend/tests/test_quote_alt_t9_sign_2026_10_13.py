@@ -330,11 +330,16 @@ def test_frozen_snapshot_survives_switch_off():
 
 
 def test_audit_rows_carry_module_case_and_user_columns(client, admin_h):
+    """交易內寫的稽核列，欄位要與一般 `_audit()` 為同一張單寫的列一致（同一請求內的 quotation.sign 列當對照），個案／模組檢視才查得到。"""
     no = _sent(client, admin_h)
     assert _toggle(client, admin_h, no, "sign", picks={"投影機": "x1", "線材": "y1"}).status_code == 200
+    cols = "user_id, module, case_no, ref_no, target_type, target_id, result, reason_code, status_code"
     cn = db.get_db()
     try:
-        r = cn.execute("SELECT user_id, module, ref_no, result FROM audit_log WHERE target_id=? AND action='quotation.sign_alt'", (no,)).fetchone()
+        mine = cn.execute("SELECT %s FROM audit_log WHERE target_id=? AND action='quotation.sign_alt'" % cols, (no,)).fetchone()
+        ref = cn.execute("SELECT %s FROM audit_log WHERE target_id=? AND action='quotation.sign'" % cols, (no,)).fetchone()
     finally:
         cn.close()
-    assert r["user_id"] and r["module"] == "quotation" and r["ref_no"] == no and r["result"] == "ok"
+    assert mine is not None and ref is not None, "兩種稽核列都必須存在（對照列缺少時此題無意義）"
+    assert tuple(mine) == tuple(ref)
+    assert mine["user_id"] and mine["module"] == "quotation" and mine["case_no"] == no

@@ -231,7 +231,7 @@ def test_put_with_unlock_edit_is_409_by_default_and_server_ignores_client_flag(c
     d = json.loads(_row(no)["data_json"])
     d["_isUnlockEdit"] = True
     r = client.put("/api/quotations/%s" % no, json={"status": "待審核", "data": d}, headers=su_h)
-    assert r.status_code == 409 and "取消回簽" in r.text
+    assert r.status_code == 409 and "取消回簽" in r.text, (r.status_code, r.text[:300])
     d.pop("_isUnlockEdit")
     d["items"][1]["unitPrice"] = 1
     r = client.put("/api/quotations/%s" % no, json={"status": "已送出", "data": d}, headers=su_h)
