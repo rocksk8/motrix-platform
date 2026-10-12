@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## 1.0.179 — 2026-10-12（wip/t57-completion-fixes-r1）
+- **安全修正**：`GET /api/completion-notes/{note_no}/privacy-notice` 原本只要求登入，任何登入者可用可列舉的單號讀到該單聯絡人的告知紀錄；改走 `_readable_note`（與單筆 GET 同一道閘），查無與看不到同一句「完工單不存在」。
+- 簽核佇列完工單卡片的金額欄原本顯示「報價金額 NT$ 8」（8 是項目數）；改為「完成項目　8 項」（`approval-queue.html` 的 `amountLabel`／`amountDisplay`；後端 `total` 仍是項目數）。
+- 測試 `tests/test_completion_fixes_t57.py`。
+
 ## 1.0.178 — 2026-10-12（wip/t57-completion-core-r1）
 - 完工單「從報價單帶入項目」核心：新增唯讀 `GET /api/completion-notes/quote-items`（限管理員＋報價單本體可讀；回應只有程式明列的非金額欄位 `id／type／description／brand／qty／unit`，任何金額鍵結構性帶不出）；報價單狀態閘（只有「已送出」可帶入，其餘 409 白話）；累計已完工數每次即時計算（待審核／簽核中／已核准的完工單、同一來源編號相加）；`quoteSync` 協議（指紋只含非金額欄位，只在明確帶入時改變；不符 409；一般存檔不動）；超量政策（警示／擋下）。新純函式 `completion_sync.py`；`CompletionNoteIn.quote_sync`；項目加性欄位 `quoteItemId`／`quoteQty`（舊單照舊）。
 - 設定中心新增群組「完工單」（`completion_note`，7 項，預設＝使用者 2026-10-12 裁示；凍結基準同步）。建立／編輯完工單仍僅管理員（放寬給業務屬另案權限審查）。
