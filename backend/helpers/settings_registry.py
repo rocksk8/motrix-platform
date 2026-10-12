@@ -3,7 +3,7 @@
 
 [單位] helper:settings_registry    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, IMPACT_SCOPE_GRANDFATHERED, KIND, RISK_ORDER, SCOPE, SettingDef, SettingError, apply_profile, banner_of, clamp_value, clear_edition_bounds, confirm_period_days,
-    cancel_pending_of_nonopen, field_defs, field_views, get, get_group, group_info, group_status, groups, invalidate, live_impact, materialize_due, owner_groups, plan, profile_preview, profile_skipped, profiles, publish, register_group, set_edition_bounds, show_value, unregister_owner, validate_values
+    audit_spine_failures, cancel_pending_of_nonopen, field_defs, field_views, get, get_group, group_info, group_status, groups, invalidate, live_impact, materialize_due, owner_groups, plan, profile_preview, profile_skipped, profiles, publish, register_group, set_edition_bounds, show_value, unregister_owner, validate_values
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
     ④寫入口只有 `publish()`：同一交易寫定義新版本＋變更明細（config_ledger）＋稽核＋（有舊鍵時）雙寫舊鍵；⑤讀取走 15 秒行程內快取，
@@ -238,6 +238,44 @@ def cancel_pending_of_nonopen(conn=None):
             c.commit()
     except Exception:                               # noqa: BLE001
         logger.warning("settings: 取消非 open 群組的待生效項失敗", exc_info=True)
+        return 0
+    finally:
+        if own and c is not None:
+            c.close()
+    return n
+
+
+def audit_spine_failures(conn=None):
+    """啟動時（`spine.validate_all()` 之後的回呼）：驗證失敗的功能各寫一筆稽核 `spine.validation_failed`（actor `system`）。
+    **去重**：同一功能、同一組問題只記一次（簽章＝功能代號＋問題文字的雜湊），之後每次重啟不再灌；問題變了才再記。永不丟例外。回新寫的筆數。"""
+    import hashlib
+    from helpers import config_ledger as L
+    items = []
+    try:
+        rep = _spine.report()
+        items = [(f["code"], f["label"], f["owner"], f["problems"]) for f in rep["features"] if f["state"] == "failed"]
+        items += [("owner:%s" % o, "擁有者宣告問題", o, p) for o, p in rep["orphans"].items()]
+    except Exception:                               # noqa: BLE001
+        return 0
+    if not items:
+        return 0
+    n = 0
+    own = conn is None
+    c = None
+    try:
+        c = conn if conn is not None else get_db()
+        for code, label, owner, problems in items:
+            sig = hashlib.sha1((code + "\n" + "\n".join(problems)).encode("utf-8")).hexdigest()[:16]
+            if c.execute("SELECT 1 FROM audit_log WHERE action='spine.validation_failed' AND target_id=? AND json_extract(detail,'$.sig')=? LIMIT 1",
+                         (code, sig)).fetchone():
+                continue
+            L.audit_event(c, "system", "spine.validation_failed", code,
+                          {"sig": sig, "owner": owner, "problems": problems}, target_label="功能登錄驗證失敗：%s" % label)
+            n += 1
+        if n:
+            c.commit()
+    except Exception:                               # noqa: BLE001
+        logger.warning("settings: 寫功能登錄驗證失敗的稽核失敗", exc_info=True)
         return 0
     finally:
         if own and c is not None:
@@ -914,6 +952,7 @@ def _register_once():
     _reg.register_owned("settings", owner_groups)    # 載入器用它核對 module.json 的 settings.groups 宣告
     _spine.register_validator("settings", _spine_check_settings, covers=("settings",))   # features[].settings.group 的跨表檢查
     _spine.on_validated(cancel_pending_of_nonopen)   # 脊柱驗證完 ⇒ 取消非 open 群組的待生效項
+    _spine.on_validated(audit_spine_failures)        # 脊柱驗證完 ⇒ 驗證失敗的功能寫稽核（去重）
     if KIND not in D.kinds():
         D.register_kind(KIND, label="設定群組", validator=_kind_validator, default=_kind_default)
     from helpers import config_ledger as L

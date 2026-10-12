@@ -23,6 +23,8 @@
 """
 from fastapi import APIRouter, Body, Header, HTTPException, Request
 
+from core import registry as _registry
+from core import spine as _spine
 from helpers import _require_user
 from helpers import config_ledger as ledger
 from helpers import settings_groups  # noqa: F401  登錄群組
@@ -30,6 +32,22 @@ from helpers import settings_registry as sr
 
 router = APIRouter()
 
+
+def _hub_badge(conn, user):
+    """系統中心『設定中心』卡片的徽章（IP-HUB1，唯讀、不查資料庫）：驗證失敗 ⇒ 紅色警示；有開發中／隱藏的功能 ⇒ 資訊（不算失敗）；否則『功能登錄正常』。"""
+    rep = _spine.report()
+    n = rep["problems"]
+    if n:
+        return {"text": "%d 項功能登錄未通過驗證" % n, "tone": "bad", "count": n}
+    planned = sum(1 for f in rep["features"] if f["status"] == "planned")
+    hidden = sum(1 for f in rep["features"] if f["status"] == "hidden")
+    if planned or hidden:
+        parts = (["開發中 %d 項" % planned] if planned else []) + (["已隱藏 %d 項" % hidden] if hidden else [])
+        return {"text": "・".join(parts), "tone": "plan"}
+    return {"text": "功能登錄正常", "tone": "ok"}
+
+
+_registry.provide("system.hub_badge", "settings-center", _hub_badge)
 
 _REASON_MAX = 500
 

@@ -1187,6 +1187,7 @@
    "SettingError": "class",
    "SettingError.__init__": "def(self, message, problems=…)",
    "apply_profile": "def(name, *, reason=…, user=…, ip=…, conn=…, actor=…)",
+   "audit_spine_failures": "def(conn=…)",
    "banner_of": "def(f, value, *, default=…, days=…)",
    "cancel_pending_of_nonopen": "def(conn=…)",
    "clamp_value": "def(f, v)",

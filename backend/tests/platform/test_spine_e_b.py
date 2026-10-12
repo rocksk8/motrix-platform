@@ -427,3 +427,45 @@ def test_publish_never_fails_because_the_spine_is_broken_or_uninitialised(eng, m
     spine.reset()
     monkeypatch.undo()
     assert R.group_status("retention") == "open" and spine.group_status("retention") == "open"
+
+
+# --- 稽核去重與健康卡徽章 -------------------------------------------------------------------------
+
+def test_failed_features_are_audited_once_per_distinct_problem_set(eng):
+    spine.reset()
+    spine.register_manifest({"features": [{"code": "zz_eb_bad", "label": "壞功能", "mail": ["zz_eb_nomail"]}]}, "zz_eb1")
+    spine.validate_all()
+    q = "SELECT detail FROM audit_log WHERE action='spine.validation_failed' AND target_id='zz_eb_bad'"
+    assert R.audit_spine_failures(eng) == 1 and len(eng.execute(q).fetchall()) == 1
+    assert R.audit_spine_failures(eng) == 0 and len(eng.execute(q).fetchall()) == 1          # 重啟再跑：不再灌
+    spine.reset()
+    spine.register_manifest({"features": [{"code": "zz_eb_bad", "label": "壞功能", "mail": ["zz_eb_nomail2"]}]}, "zz_eb1")
+    spine.validate_all()
+    assert R.audit_spine_failures(eng) == 1 and len(eng.execute(q).fetchall()) == 2          # 問題變了才再記
+    spine.reset()
+    spine.register_manifest({"features": [{"code": "zz_eb_ok", "label": "好功能"}]}, "zz_eb1")
+    spine.validate_all()
+    assert R.audit_spine_failures(eng) == 0
+
+
+def test_orphan_problems_are_audited_too(eng):
+    spine.reset()
+    spine.register_manifest({"features": [{"label": "沒有代號"}]}, "zz_eb1")
+    spine.validate_all()
+    assert R.audit_spine_failures(eng) == 1
+    assert eng.execute("SELECT COUNT(*) FROM audit_log WHERE action='spine.validation_failed' AND target_id='owner:zz_eb1'").fetchone()[0] == 1
+
+
+def test_hub_badge_reports_failures_info_and_ok(sp):
+    from core import registry as _r
+    from routers import settings_center as SC
+    assert _r.providers("system.hub_badge")["settings-center"] is SC._hub_badge
+    assert SC._hub_badge(None, None) == {"text": "功能登錄正常", "tone": "ok"}
+    _reg([_feat("zz_eb_p", status="planned", planned_train="MS2"), _feat("zz_eb_h", status="hidden")])
+    spine.validate_all()
+    b = SC._hub_badge(None, None)
+    assert b == {"text": "開發中 1 項・已隱藏 1 項", "tone": "plan"}                                 # 資訊，不是失敗
+    _reg([_feat("zz_eb_bad", mail=["zz_eb_nomail"])], owner="zz_eb2")
+    spine.validate_all()
+    b = SC._hub_badge(None, None)
+    assert b["tone"] == "bad" and b["count"] == 1 and "1 項功能登錄未通過驗證" in b["text"] and len(b["text"]) <= 40
