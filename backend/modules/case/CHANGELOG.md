@@ -1,12 +1,6 @@
 # 案件 更新紀錄
 
-## 1.0.178 — 2026-10-13（wip/t57-hotfix-r1；M2.1 熱修）
-- **安全修正**：`GET /api/completion-notes/{note_no}/privacy-notice` 原本只要求登入，任何登入者可用可列舉的單號讀到該單聯絡人的告知紀錄；改走 `_readable_note`（與單筆 GET 同一道閘），查無與看不到同一句「完工單不存在」。
-- 簽核佇列完工單卡片的金額欄原本顯示「報價金額 NT$ 8」（8 是項目數）；改為「完成項目　8 項」（`approval-queue.html`；後端 `total` 仍是項目數）。
-- 材料申請「從採購單帶入」修正：①新增材料申請是否一定要選供應商改為設定中心選項（群組 `material_order`，`supplier_required`，預設＝一律要選＝今天的行為；「帶入採購單的免選」只豁免有對應採購單的新列，手動新增仍要選；設定讀不到＝最嚴；採購單連結檢查器（`LINK_VALIDATOR`）沒掛上時不豁免；程式總開關 `SUPPLIER_REQUIRED_ON_NEW` 保留）；②被審核規則擋下的項目（`rejected[]`）寫進伺服器 log（`PATCH material-orders` 與 `PATCH case-record`；只記項目編號／欄位／代碼，不記內容）；③案件頁自動存檔不再送出『連到尚未儲存的材料申請列』的連結（原本被擋下並把材料卡片換回舊值）——列存好後補送一次（扣住期間存檔訊息會說明「連結將在材料申請儲存後送出」）；④材料申請儲存被擋時顯示第一個項目名稱與原因；`GET material-orders` 加 `supplierRequiredAlways` 供畫面判斷。
-- 測試 `tests/test_completion_fixes_t57.py`、`tests/test_material_import_t57.py`。
-
-## 1.0.177 — 2026-10-10（wip/t50-int；第 50 班）
+## 1.0.179 — 2026-10-13（wip/t57-m3-t11-r6；M3 擇一方案報價）
 - **（併入）(next) — 2026-10-12（wip/t57-m3-t1-r2；M3 擇一方案報價 T2）：資料模型＋唯一計入集合＋設定中心群組『擇一方案』**
   - `profit_guard.counted_items(q, picks=None)`：計入合計／毛利的品項＝非擇一項＋每組被選定的那一項（未選整組不計入）。`server_totals`、`server_profit`（成本、進項稅）只走它；品項沒有 `altGroup` 的單與修改前逐位元相同。品項新增選填鍵 `altGroup`（空＝非擇一）；單層新增 `totalsByAlt`（布林）、`altPicks`／`altPickedAt`／`altPickedBy`（只由回簽路徑寫，T9）。
   - `profit_guard.prepare()`：①一般存檔不採用用戶端的 `altPicks`／`altPickedAt`／`altPickedBy`，放回資料庫現值；②驗證（422，白話）：`totalsByAlt` 只收真布林、`altGroup` 須為文字、標題列不可擇一、每組至少 2 項、組數不超過設定 `alt_groups_max`；③已精算／結案單改動擇一結構（哪個品項在哪一組、`totalsByAlt`）→ 409。
@@ -22,6 +16,14 @@
   - T3（2026-10-13）：新增前端 `static/alt-items.js`（`MotrixAltItems.countedItems` 等，與後端 `counted_items` 同規則）與雙端黃金向量 `tests/data/quote_alt_vectors.json`；測試 `tests/test_quote_alt_t3_2026_10_13.py`（已跑：13 項過）。表單 `calcTotals` 的接線與 `FORM_VERSION` V3.22→V3.23 隨 T6 一起（表單雜湊守門要求一次升版）；本批沒有畫面或金額變更。
   - T2 稽核修正（0d）：①`note_template` 說明文字不含大括號（守門測試轉綠）；②`total_text`／`note_template` 加長度上限（40／200 字）與控制字元檢查，`note_template` 只允許 `{items}`、`{group}` 兩個代入位置（T7/T8 以一般字串取代、不用 `str.format`，輸出 PDF／Excel 須跳脫）；③`validate_alt`：擇一組內品項須有非空文字編號且組內不重複（422）；④凡尚無程式使用的選項（鎖定範圍②、成案後取消③、狀態離開②、拒絕結案②、解鎖修改②、送審基準②，及 P6/P7/P8 的②）全部登錄為『尚未提供』（不可儲存、讀取夾回預設），由實作該路徑的任務在自己的 commit 開放；⑤送審金額基準選項文字更正（現行行為＝逐項檢查所有品項＝最嚴＝選項①；`compute_approval_reasons` 不改）；⑥`modules.json` 登記 `alt_policy`、README 補列、version_manifest 與快速變更摘要補登。T2＋T3 同一列車上線。
   - 測試（已寫、未跑）：`tests/test_quote_alt_t2_2026_10_12.py`。本批沒有 UI、PDF、回簽選定變更（T3 起）；無資料庫遷移；`FORM_VERSION` 於本班 T6 升一次。
+
+## 1.0.178 — 2026-10-13（wip/t57-hotfix-r1；M2.1 熱修）
+- **安全修正**：`GET /api/completion-notes/{note_no}/privacy-notice` 原本只要求登入，任何登入者可用可列舉的單號讀到該單聯絡人的告知紀錄；改走 `_readable_note`（與單筆 GET 同一道閘），查無與看不到同一句「完工單不存在」。
+- 簽核佇列完工單卡片的金額欄原本顯示「報價金額 NT$ 8」（8 是項目數）；改為「完成項目　8 項」（`approval-queue.html`；後端 `total` 仍是項目數）。
+- 材料申請「從採購單帶入」修正：①新增材料申請是否一定要選供應商改為設定中心選項（群組 `material_order`，`supplier_required`，預設＝一律要選＝今天的行為；「帶入採購單的免選」只豁免有對應採購單的新列，手動新增仍要選；設定讀不到＝最嚴；採購單連結檢查器（`LINK_VALIDATOR`）沒掛上時不豁免；程式總開關 `SUPPLIER_REQUIRED_ON_NEW` 保留）；②被審核規則擋下的項目（`rejected[]`）寫進伺服器 log（`PATCH material-orders` 與 `PATCH case-record`；只記項目編號／欄位／代碼，不記內容）；③案件頁自動存檔不再送出『連到尚未儲存的材料申請列』的連結（原本被擋下並把材料卡片換回舊值）——列存好後補送一次（扣住期間存檔訊息會說明「連結將在材料申請儲存後送出」）；④材料申請儲存被擋時顯示第一個項目名稱與原因；`GET material-orders` 加 `supplierRequiredAlways` 供畫面判斷。
+- 測試 `tests/test_completion_fixes_t57.py`、`tests/test_material_import_t57.py`。
+
+## 1.0.177 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t50-int；第 50 班）**
 - **（併入）(next) — **
 - 報價單表單 V3.21 → V3.22：欄位名稱「售後服務」改為「售後服務及備註說明」（報價單表單、條款組管理、列印／PDF、送審原因文字）。只改顯示名稱：欄位鍵 `afterSales`、條款組與已存報價單的資料都不變；顯示名稱集中在 `quote_terms.AFTERSALES_LABEL`（表單端 `AFTERSALES_LABEL`），日後要讓管理者自訂時從這裡接。
