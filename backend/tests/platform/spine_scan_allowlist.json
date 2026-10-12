@@ -1,0 +1,130 @@
+{
+ "_doc": "脊柱字面掃描器誤報／既有項目白名單：每筆須有 reason／owner／expires，且必須仍對得上實際程式（見 _spine_scan.py）",
+ "entries": [
+  {
+   "kind": "mail_register",
+   "file": "modules/accounting/notify.py",
+   "keys": [
+    "ledger_action_approved",
+    "ledger_action_returned",
+    "ledger_action_submitted",
+    "voucher_approved",
+    "voucher_next_tier",
+    "voucher_returned",
+    "voucher_submitted"
+   ],
+   "reason": "脊柱 E-b 之前就存在的模組登記；module.json 尚未補 features[]（逐模組在下次動到時補宣告後移出本名單）",
+   "owner": "accounting",
+   "expires": "2027-06-30"
+  },
+  {
+   "kind": "mail_register",
+   "file": "modules/case/expense_notify.py",
+   "keys": [
+    "completion_note_approved",
+    "expense_change_approved",
+    "expense_change_returned",
+    "expense_form_approved",
+    "expense_form_next_tier",
+    "expense_form_paid",
+    "expense_form_payout_pending",
+    "expense_form_returned",
+    "expense_form_submitted"
+   ],
+   "reason": "脊柱 E-b 之前就存在的模組登記；module.json 尚未補 features[]（逐模組在下次動到時補宣告後移出本名單）",
+   "owner": "case",
+   "expires": "2027-06-30"
+  },
+  {
+   "kind": "mail_register",
+   "file": "modules/case/material_notify.py",
+   "keys": [
+    "material_change_approved",
+    "material_change_next_tier",
+    "material_change_returned",
+    "material_change_submitted",
+    "material_order_approved",
+    "material_order_next_tier",
+    "material_order_returned",
+    "material_order_submitted",
+    "material_payment_approved",
+    "material_payment_next_tier",
+    "material_payment_returned",
+    "material_payment_submitted"
+   ],
+   "reason": "脊柱 E-b 之前就存在的模組登記；module.json 尚未補 features[]（逐模組在下次動到時補宣告後移出本名單）",
+   "owner": "case",
+   "expires": "2027-06-30"
+  },
+  {
+   "kind": "mail_register",
+   "file": "modules/case/payable_reminders.py",
+   "keys": [
+    "payable_due_overdue",
+    "payable_due_soon",
+    "payable_due_today"
+   ],
+   "reason": "脊柱 E-b 之前就存在的模組登記；module.json 尚未補 features[]（逐模組在下次動到時補宣告後移出本名單）",
+   "owner": "case",
+   "expires": "2027-06-30"
+  },
+  {
+   "kind": "mail_register",
+   "file": "modules/payroll/bonus_notify.py",
+   "keys": [
+    "bonus_approved",
+    "bonus_approver_bypass",
+    "bonus_returned"
+   ],
+   "reason": "脊柱 E-b 之前就存在的模組登記；module.json 尚未補 features[]（逐模組在下次動到時補宣告後移出本名單）",
+   "owner": "payroll",
+   "expires": "2027-06-30"
+  },
+  {
+   "kind": "mail_register",
+   "file": "modules/payroll/payslip_notify.py",
+   "keys": [
+    "payslip_approved",
+    "payslip_approver_bypass",
+    "payslip_next_tier",
+    "payslip_paid",
+    "payslip_payable",
+    "payslip_returned",
+    "payslip_submitted"
+   ],
+   "reason": "脊柱 E-b 之前就存在的模組登記；module.json 尚未補 features[]（逐模組在下次動到時補宣告後移出本名單）",
+   "owner": "payroll",
+   "expires": "2027-06-30"
+  },
+  {
+   "kind": "mail_register",
+   "file": "modules/subcontract/dispatch_notify.py",
+   "keys": [
+    "dispatch_approved",
+    "dispatch_completion_approved",
+    "dispatch_completion_next_tier",
+    "dispatch_completion_returned",
+    "dispatch_completion_submitted",
+    "dispatch_next_tier",
+    "dispatch_returned",
+    "dispatch_submitted"
+   ],
+   "reason": "脊柱 E-b 之前就存在的模組登記；module.json 尚未補 features[]（逐模組在下次動到時補宣告後移出本名單）",
+   "owner": "subcontract",
+   "expires": "2027-06-30"
+  },
+  {
+   "kind": "mail_register",
+   "file": "modules/tender_radar/notify.py",
+   "keys": [
+    "tender_detail_blocked",
+    "tender_fetch_failed",
+    "tender_found",
+    "tender_source_changed"
+   ],
+   "reason": "脊柱 E-b 之前就存在的模組登記；module.json 尚未補 features[]（逐模組在下次動到時補宣告後移出本名單）",
+   "owner": "tender_radar",
+   "expires": "2027-06-30"
+  }
+ ]
+}

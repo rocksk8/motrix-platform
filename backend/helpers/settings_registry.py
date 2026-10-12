@@ -2,8 +2,8 @@
 """設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。
 
 [單位] helper:settings_registry    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, KIND, SCOPE, SettingDef, SettingError, apply_profile, clamp_value, clear_edition_bounds, confirm_period_days,
-    get, get_group, groups, invalidate, materialize_due, profile_preview, profiles, publish, register_group, set_edition_bounds, validate_values
+[公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, IMPACT_SCOPE_GRANDFATHERED, KIND, RISK_ORDER, SCOPE, SettingDef, SettingError, apply_profile, banner_of, clamp_value, clear_edition_bounds, confirm_period_days,
+    audit_spine_failures, cancel_pending_of_nonopen, field_defs, field_views, get, get_group, group_info, group_status, groups, invalidate, live_impact, materialize_due, owner_groups, plan, profile_preview, profile_skipped, profiles, publish, register_group, set_edition_bounds, show_value, unregister_owner, validate_values
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
     ④寫入口只有 `publish()`：同一交易寫定義新版本＋變更明細（config_ledger）＋稽核＋（有舊鍵時）雙寫舊鍵；⑤讀取走 15 秒行程內快取，
@@ -18,6 +18,8 @@ import threading
 import time
 
 from core import definitions as D
+from core import registry as _reg
+from core import spine as _spine
 from db import get_db
 
 logger = logging.getLogger("motrix.settings")
@@ -29,6 +31,12 @@ DEFAULT_CONFIRM_DAYS = 7                       # 變更確認期間預設天數�
 CONFIRM_GROUP, CONFIRM_FIELD = "change_control", "confirm_period_days"
 _TYPES = ("int", "float", "bool", "str")
 DEFAULT_EFFECT = "你即將把「{名稱}」從 {舊} 改成 {新}，{生效時間}生效"
+RISK_ORDER = ("none", "ops", "money", "legal", "security")
+#: 結構化影響範圍（脊柱 E-e；欄位版面框架 §16.6／§17）：documents／roles＝白話清單；amounts＝一句話；reversible＝可否復原；effective＝immediate｜pending（須與欄位旗標一致）。
+_IMPACT_SCOPE_KEYS = ("documents", "roles", "amounts", "reversible", "effective")
+#: E-e 之前就已登錄的群組：風險 ≥ money 的欄位暫免 `impact_scope`（下次被修改時補上，不追溯變紅）。**新群組不得加入此名單**；
+#: 守門見 `tests/platform/test_settings_editor_s1.py::test_new_groups_with_high_risk_fields_declare_impact_scope`。
+IMPACT_SCOPE_GRANDFATHERED = frozenset({"change_control", "retention", "uploads", "system_hub", "completion_note", "quote_alt", "material_order"})
 
 
 def _zh(v):
@@ -68,6 +76,28 @@ class SettingError(ValueError):
         self.problems = problems or []
 
 
+def _check_impact_scope(key, s, *, pending):
+    """`impact_scope` 的結構驗證（None 合法＝尚未宣告）。`effective` 必須與欄位旗標一致（有 `requires_pending`／`loosen` ⇒ pending）。"""
+    if s is None:
+        return None
+    if not isinstance(s, dict) or set(s) != set(_IMPACT_SCOPE_KEYS):
+        raise ValueError("設定欄位 %r 的 impact_scope 必須剛好有這些鍵：%s" % (key, "、".join(_IMPACT_SCOPE_KEYS)))
+    for k in ("documents", "roles"):
+        v = s[k]
+        if not isinstance(v, (list, tuple)) or any(not _zh(x) for x in v):
+            raise ValueError("設定欄位 %r 的 impact_scope.%s 必須是繁中白話名稱的清單" % (key, k))
+    if not _zh(s["amounts"]):
+        raise ValueError("設定欄位 %r 的 impact_scope.amounts 需要一句繁中白話" % key)
+    if not isinstance(s["reversible"], bool):
+        raise ValueError("設定欄位 %r 的 impact_scope.reversible 必須是 true／false" % key)
+    if s["effective"] not in ("immediate", "pending"):
+        raise ValueError("設定欄位 %r 的 impact_scope.effective 只能是 immediate／pending" % key)
+    if (s["effective"] == "pending") != bool(pending):
+        raise ValueError("設定欄位 %r 的 impact_scope.effective 與欄位的 requires_pending／loosen 旗標不一致" % key)
+    return {"documents": list(s["documents"]), "roles": list(s["roles"]), "amounts": s["amounts"],
+            "reversible": s["reversible"], "effective": s["effective"]}
+
+
 class SettingDef:
     """一個設定欄位。畫面規則（使用者 2026-10-10，CORE-SPEC 零技術門檻）：問白話問題、少量選項、標示建議、說明影響；內部鍵 `key` 不顯示。
     **必填**：`question`（白話問句）、`label`、`help`、`impact`（影響說明：對象／既有或之後／可否復原／何時生效）；`risk` 屬 money／legal／security 或
@@ -77,11 +107,11 @@ class SettingDef:
     `loosen`＝放寬方向：往該方向調整的變更視同風險變更——確認期間後才生效，且需要另一位最高管理者核准（只有一位時改為原因＋確認期間＋警告＋通知）；
     收緊（反方向）立即生效。販售版本的邊界（`set_edition_bounds`）寫在程式／授權，客戶不能改。"""
     __slots__ = ("key", "type", "default", "min", "max", "unit", "label", "help", "risk", "legacy", "clamp", "requires_pending",
-                 "question", "impact", "risk_text", "choices", "recommended", "presets", "advanced", "impact_fn", "effect", "loosen", "zero_is_max")
+                 "question", "impact", "risk_text", "choices", "recommended", "presets", "advanced", "impact_fn", "effect", "loosen", "zero_is_max", "impact_scope")
 
     def __init__(self, key, type, default, *, question="", label="", help="", impact="", min=None, max=None, unit="", risk="ops",
                  legacy=None, clamp=False, requires_pending=False, risk_text="", choices=None, recommended=None, presets=None,
-                 advanced=False, impact_fn=None, effect="", loosen=None, zero_is_max=False):
+                 advanced=False, impact_fn=None, effect="", loosen=None, zero_is_max=False, impact_scope=None):
         if type not in _TYPES:
             raise ValueError("型別不合法：%r" % (type,))
         self.key, self.type, self.default = key, type, default
@@ -95,6 +125,9 @@ class SettingDef:
         self.impact_fn, self.effect = impact_fn, effect or DEFAULT_EFFECT
         if loosen not in (None, "up", "down"):
             raise ValueError("loosen 只能是 up／down／None：%r" % (loosen,))
+        if loosen and type not in ("int", "float"):
+            # 放寬判定只認數字（publish()._loosens）：bool／str 設了 loosen 不會觸發待生效，等於沒管制。選項欄位請用整數代碼（0/1、1..n）。
+            raise ValueError("設定欄位 %r：loosen 只能用在數字欄位（int／float）；選項請用整數代碼" % (key,))
         self.zero_is_max = bool(zero_is_max)   # 0 代表「不限／永久」（比任何正數都寬鬆）：判斷放寬方向時 0 視為無限大
         self.loosen = loosen          # 數值往哪個方向變是「放寬」（up＝調大算放寬，如允許更大的檔案；down＝調小算放寬，如更短的密碼長度）；放寬要雙人核准
         miss = [n for n, v in (("question", question), ("label", label), ("help", help), ("impact", impact)) if not _zh(v)]
@@ -106,6 +139,7 @@ class SettingDef:
                 break
         if miss:
             raise ValueError("設定欄位 %r 缺少必填的繁中文字：%s" % (key, "、".join(miss)))
+        self.impact_scope = _check_impact_scope(key, impact_scope, pending=bool(self.requires_pending or self.loosen))
         if self.check(default):
             raise ValueError("預設值自己就不合法：%s=%r（%s）" % (key, default, self.check(default)))
         if recommended is not None and self.check(recommended):
@@ -114,9 +148,13 @@ class SettingDef:
     def check(self, v):
         """回問題描述字串；合法回 ''."""
         if self.type == "bool":
-            return "" if isinstance(v, bool) else "必須是 true／false"
+            if not isinstance(v, bool):
+                return "必須是 true／false"
+            return "不是可選的選項" if (self.choices and v not in [c[0] for c in self.choices]) else ""
         if self.type == "str":
-            return "" if isinstance(v, str) else "必須是文字"
+            if not isinstance(v, str):
+                return "必須是文字"
+            return "不是可選的選項" if (self.choices and v not in [c[0] for c in self.choices]) else ""
         if isinstance(v, bool) or not isinstance(v, (int, float)):
             return "必須是數字"
         if self.type == "int" and not (isinstance(v, int) or float(v).is_integer()):
@@ -125,32 +163,147 @@ class SettingDef:
             return "不可小於 %s" % self.min
         if self.max is not None and v > self.max:
             return "不可大於 %s" % self.max
+        if self.choices and v not in [c[0] for c in self.choices]:
+            return "不是可選的選項"                                   # E-f：有 choices 就必須是其中之一（寫入被拒；讀取視為不合法而回預設）
         return ""
 
     def meta(self):
         return {"key": self.key, "type": self.type, "default": self.default, "min": self.min, "max": self.max, "unit": self.unit,
                 "question": self.question, "label": self.label, "help": self.help, "impact": self.impact, "riskText": self.risk_text,
                 "risk": self.risk, "clamp": self.clamp, "requiresPending": self.requires_pending, "recommended": self.recommended,
-                "presets": self.presets, "advanced": self.advanced, "effect": self.effect, "hasLiveImpact": self.impact_fn is not None, "loosen": self.loosen,
+                "presets": self.presets, "advanced": self.advanced, "effect": self.effect, "hasLiveImpact": self.impact_fn is not None, "loosen": self.loosen, "impactScope": self.impact_scope,
                 "choices": [{"value": c[0], "label": c[1], "impact": c[2]} for c in self.choices]}
 
 
-def register_group(group, label, fields, *, sensitive=False, risk="ops", legacy_key=None, cross_check=None, help=""):
-    """登錄一個設定群組。`fields`＝SettingDef 清單；`cross_check(values)->[問題]`＝跨欄位檢查；`sensitive`＝只有設定權限者能讀。重複登錄 ⇒ ValueError。"""
+def register_group(group, label, fields, *, sensitive=False, risk="ops", legacy_key=None, cross_check=None, help="", owner=None):
+    """登錄一個設定群組。`fields`＝SettingDef 清單；`cross_check(values)->[問題]`＝跨欄位檢查；`sensitive`＝只有設定權限者能讀。重複登錄 ⇒ ValueError。
+    `owner`：擁有者（模組鍵）；省略 ⇒ 載入器 import 該模組期間自動帶入（`core.registry.owner_scope`），不在範圍內 ⇒ `core`。"""
     if group in _GROUPS:
         raise ValueError("設定群組已登錄：%r" % group)
+    cur = _reg.current_owner()
+    if owner is not None and cur is not None and owner != cur:
+        # 模組 import 期間只能替自己登記：不准替別人（或 core）登記，否則別人載入失敗時會連帶刪掉不是它的群組
+        raise ValueError("設定群組 %r：import 範圍的擁有者是 %r，不能指定 owner=%r" % (group, cur, owner))
     if not _zh(label) or not _zh(help):
         raise ValueError("設定群組 %r 需要繁中的名稱與說明" % group)
     names = [f.key for f in fields]
     if len(set(names)) != len(names):
         raise ValueError("群組 %r 欄位重複" % group)
     _GROUPS[group] = {"label": label, "fields": {f.key: f for f in fields}, "sensitive": bool(sensitive), "risk": risk,
-                      "legacy_key": legacy_key, "cross_check": cross_check, "help": help}
+                      "legacy_key": legacy_key, "cross_check": cross_check, "help": help,
+                      "owner": owner if owner is not None else (cur or "core")}
 
 
 def groups():
-    return {g: {"label": v["label"], "sensitive": v["sensitive"], "risk": v["risk"], "help": v["help"],
-                "fields": [dict(f.meta(), min=_bounds(g, f)[0], max=_bounds(g, f)[1]) for f in v["fields"].values()]} for g, v in _GROUPS.items()}
+    return {g: {"label": v["label"], "sensitive": v["sensitive"], "risk": v["risk"], "help": v["help"], "owner": v["owner"],
+                "fields": [dict(f.meta(), min=_bounds(g, f)[0], max=_bounds(g, f)[1]) for f in v["fields"].values()]} for g, v in list(_GROUPS.items())}
+
+
+def group_status(group):
+    """群組的功能狀態 `open｜planned｜hidden`（脊柱 E-b；`features[].status`）。脊柱未初始化、匯入失敗或任何例外 ⇒ `open`（保守維持今天的行為）。"""
+    try:
+        return _spine.group_status(group)
+    except Exception:                               # noqa: BLE001
+        return "open"
+
+
+def group_info(group):
+    """`{status, plannedTrain, feature}`（設定中心畫面用）；脊柱不可用 ⇒ open。"""
+    try:
+        return _spine.group_info(group)
+    except Exception:                               # noqa: BLE001
+        return {"status": "open", "plannedTrain": None, "feature": None}
+
+
+_NOT_OPEN_MSG = {"planned": "這項功能還在開發中，尚未開放調整。", "hidden": "沒有這個設定群組。"}
+
+
+def cancel_pending_of_nonopen(conn=None):
+    """啟動時（`spine.validate_all()` 之後的回呼）：非 open 群組的**所有**待生效項標 `cancelled`（ledger actor＝`system`），已投的核准票隨之作廢、
+    之後翻回 open 也不復活。永不丟例外（沒有資料庫、舊庫沒有明細表都只是略過）。回取消筆數。"""
+    from helpers import config_ledger as L
+    n = 0
+    own = conn is None
+    c = None
+    try:
+        c = conn if conn is not None else get_db()
+        for g in list(_GROUPS):
+            if group_status(g) == "open":
+                continue
+            for r in L.pending(c, "setting:%s" % g):
+                if r["domain"] == "setting:%s" % g and L.cancel(c, r["id"], "system", "功能改為開發中／隱藏，待生效項自動撤銷"):
+                    n += 1
+            invalidate(g)
+        if n:
+            c.commit()
+    except Exception:                               # noqa: BLE001
+        logger.warning("settings: 取消非 open 群組的待生效項失敗", exc_info=True)
+        return 0
+    finally:
+        if own and c is not None:
+            c.close()
+    return n
+
+
+def audit_spine_failures(conn=None):
+    """啟動時（`spine.validate_all()` 之後的回呼）：驗證失敗的功能各寫一筆稽核 `spine.validation_failed`（actor `system`）。
+    **去重**：同一功能、同一組問題只記一次（簽章＝功能代號＋問題文字的雜湊），之後每次重啟不再灌；問題變了才再記。永不丟例外。回新寫的筆數。"""
+    import hashlib
+    from helpers import config_ledger as L
+    items = []
+    try:
+        rep = _spine.report()
+        items = [(f["code"], f["label"], f["owner"], f["problems"]) for f in rep["features"] if f["state"] == "failed"]
+        items += [("owner:%s" % o, "擁有者宣告問題", o, p) for o, p in rep["orphans"].items()]
+    except Exception:                               # noqa: BLE001
+        return 0
+    if not items:
+        return 0
+    n = 0
+    own = conn is None
+    c = None
+    try:
+        c = conn if conn is not None else get_db()
+        for code, label, owner, problems in items:
+            sig = hashlib.sha1((code + "\n" + "\n".join(problems)).encode("utf-8")).hexdigest()[:16]
+            seen = False
+            for (d,) in c.execute("SELECT detail FROM audit_log WHERE action='spine.validation_failed' AND target_id=?", (code,)).fetchall():
+                try:                                # 逐列解析（不用 json_extract：守門棘輪）
+                    if (json.loads(d) or {}).get("sig") == sig:
+                        seen = True
+                        break
+                except (TypeError, ValueError, AttributeError):
+                    continue
+            if seen:
+                continue
+            L.audit_event(c, "system", "spine.validation_failed", code,
+                          {"sig": sig, "owner": owner, "problems": problems}, target_label="功能登錄驗證失敗：%s" % label)
+            n += 1
+        if n:
+            c.commit()
+    except Exception:                               # noqa: BLE001
+        logger.warning("settings: 寫功能登錄驗證失敗的稽核失敗", exc_info=True)
+        return 0
+    finally:
+        if own and c is not None:
+            c.close()
+    return n
+
+
+def owner_groups(owner):
+    """擁有者 `owner` 登記的群組代號集合（載入器核對 module.json 宣告用）。"""
+    return {g for g, v in list(_GROUPS.items()) if v["owner"] == owner}
+
+
+def unregister_owner(owner):
+    """移除擁有者登記的所有群組（模組載入失敗／卸載時由 `core.registry.on_unload` 呼叫）；`core` 不可移除。回移除的群組數。"""
+    if owner == "core":
+        return 0
+    gone = [g for g, v in _GROUPS.items() if v["owner"] == owner]
+    for g in gone:
+        _GROUPS.pop(g, None)
+        invalidate(g)
+    return len(gone)
 
 
 def _g(group):
@@ -249,7 +402,10 @@ def _stored(conn, group):
 
 
 def _due_pending(conn, group, now):
-    """已到時、尚未被寫進定義的待生效值（依申請先後；同欄位後者蓋前者）。只有群組含 `requires_pending` 欄位才查。"""
+    """已到時、尚未被寫進定義的待生效值（依申請先後；同欄位後者蓋前者）。只有群組含 `requires_pending` 欄位才查。
+    非 open 群組（功能 planned／hidden）一律回空：即使項目已到時、票數已足，讀取時也不生效——讀到的永遠是已儲存的值。"""
+    if group_status(group) != "open":
+        return []
     g = _g(group)
     if not any(f.requires_pending or f.loosen for f in g["fields"].values()):
         return []
@@ -386,6 +542,196 @@ def _rank(f, v):
     return float("inf") if (f.zero_is_max and v == 0) else v
 
 
+def banner_of(f, value, *, default=None, days=None):
+    """畫面橫幅（欄位版面框架 §16.6）：回 None（不顯示）或 `{"level": "amber"|"red", "lines": [三行白話], "fallback": bool}`。
+    只在『風險 ≥ money、值不是預設、且（有 `loosen` 的數值欄位）往放寬方向』時出現。等級：風險 legal／security 或不可復原 ⇒ 紅，其餘（money）⇒ 琥珀。
+    有 `impact_scope` ⇒ 依結構產生三行（單據／人／金額與後果＋可否復原＋何時生效）；沒有（E-e 之前登錄的欄位）⇒ 降級為『影響說明＋風險提示＋何時生效』。
+    句子一律由這裡產生，畫面只負責呈現。`days`＝目前的變更確認期間（天），省略用預設。"""
+    base = f.default if default is None else default
+    if value == base or RISK_ORDER.index(f.risk) < RISK_ORDER.index("money"):
+        return None
+    if f.loosen and isinstance(value, (int, float)) and not isinstance(value, bool):
+        a, b = _rank(f, value), _rank(f, base)
+        if not ((f.loosen == "up" and a > b) or (f.loosen == "down" and a < b)):
+            return None
+    n = int(days or DEFAULT_CONFIRM_DAYS)
+    if f.loosen:
+        when = "需等 %d 天確認期間，並經另一位最高管理者核准後才會生效（只有一位最高管理者時，改為填寫原因、等確認期間後生效）" % n
+    elif f.requires_pending:
+        when = "需等 %d 天確認期間後才會生效，期間內可以撤銷" % n
+    else:
+        when = "儲存後立即生效"
+    s = f.impact_scope
+    if s is None:
+        lines = [f.impact]
+        if f.risk_text:
+            lines.append("注意：" + f.risk_text)
+        lines.append(when)
+        return {"level": "red" if f.risk in ("legal", "security") else "amber", "lines": lines, "fallback": True}
+    docs = "、".join(s["documents"]) if s["documents"] else "不影響既有單據"
+    roles = "、".join(s["roles"]) if s["roles"] else "不影響特定角色"
+    return {"level": "red" if (f.risk in ("legal", "security") or not s["reversible"]) else "amber",
+            "lines": ["會影響這些單據：" + docs, "會影響這些人：" + roles,
+                      "%s。%s；%s。" % (s["amounts"].rstrip("。"), "可以復原" if s["reversible"] else "無法復原", when)],
+            "fallback": False}
+
+
+def field_defs(group):
+    """群組的欄位定義 `{欄位鍵: SettingDef}`（唯讀複本；給設定中心的差異／白話顯示用）。"""
+    return dict(_g(group)["fields"])
+
+
+def field_views(group, values=None, *, days=None):
+    """設定中心畫面用的欄位清單：欄位定義（含版本邊界後的有效範圍）＋目前值、白話值、是否預設、預設的白話值、目前值的橫幅、
+    選項型欄位每個選項的橫幅（`choiceBanners`，鍵為代碼字串）。句子與等級一律由這裡（`banner_of`）產生。"""
+    g = _g(group)
+    vals = values if values is not None else get_group(group)
+    n = days if days is not None else confirm_period_days()
+    out = []
+    for k, f in g["fields"].items():
+        lo, hi = _bounds(group, f)
+        cur = vals[k]
+        m = dict(f.meta(), min=lo, max=hi)
+        m.update(value=cur, valueText=show_value(f, cur), isDefault=(cur == f.default), defaultText=show_value(f, f.default),
+                 recommendedText=(show_value(f, f.recommended) if f.recommended is not None else None),
+                 banner=banner_of(f, cur, days=n),
+                 choiceBanners=({str(c[0]): banner_of(f, c[0], days=n) for c in f.choices} if f.choices else None))
+        out.append(m)
+    return out
+
+
+def _split(g, eff, values):
+    """把本次送出的欄位分成 (待生效 pend, 立即 imm, 放寬 loose)。`publish()` 與 `plan()`（預覽）共用同一個分類，不得各寫一份。"""
+    def _loosens(f, new_v):
+        old_v = eff[f.key]
+        if not (f.loosen and isinstance(new_v, (int, float)) and not isinstance(new_v, bool)):
+            return False
+        a, b = _rank(f, new_v), _rank(f, old_v)
+        return (f.loosen == "up" and a > b) or (f.loosen == "down" and a < b)
+    pend = {k: v for k, v in values.items() if g["fields"][k].requires_pending or _loosens(g["fields"][k], v)}
+    imm = {k: v for k, v in values.items() if k not in pend}
+    loose = {k for k, v in pend.items() if _loosens(g["fields"][k], v)}
+    return pend, imm, loose
+
+
+def show_value(f, v):
+    """給人看的值（白話）：選項型＝中文標籤；開關＝開／關；其他＝值＋單位。內部代碼不外露。"""
+    for c in f.choices:
+        if c[0] == v:
+            return c[1]
+    if isinstance(v, bool):
+        return "開" if v else "關"
+    return "%s%s" % (v, (" " + f.unit) if f.unit else "")
+
+
+def plan(group, values, *, user="", conn=None):
+    """預覽（dry-run）：**不寫入、不 commit**。回逐欄分類與驗證結果，分類與 `publish()` 完全一致（共用 `_split`）。
+    `kind`：`immediate`（立即生效）｜`pending`（確認期間後生效）｜`pending_approval`（確認期間後且需另一位最高管理者核准）｜`unchanged`。"""
+    from datetime import datetime, timedelta
+    g = _g(group)
+    st = group_status(group)
+    if st != "open":
+        return {"ok": False, "problems": [{"path": "", "message": _NOT_OPEN_MSG.get(st, "這個設定群組目前不可調整。")}], "fields": [], "warnings": [],
+                "otherSuperadmins": 0, "confirmDays": DEFAULT_CONFIRM_DAYS, "status": st}
+    problems = validate_values(group, values, partial=True)
+    out = {"ok": not problems, "problems": problems, "fields": [], "warnings": [], "otherSuperadmins": 0, "confirmDays": DEFAULT_CONFIRM_DAYS}
+    if problems:
+        return out
+    own = conn is None
+    c = conn if conn is not None else get_db()
+    try:
+        base = _effective(c, group, overlay=False)
+        eff = _effective(c, group)
+        days = confirm_period_days(c)
+        others = c.execute("SELECT COUNT(*) FROM users WHERE active=1 AND role='superadmin' AND username<>?", (user or "",)).fetchone()[0]
+    finally:
+        if own:
+            c.close()
+    pend, imm, loose = _split(g, eff, values)
+    merged = _merged(_merged(base, imm), pend)
+    cross = validate_values(group, merged)                       # 與 publish 相同：整組＋跨欄位檢查
+    if cross:
+        out.update(ok=False, problems=cross)
+        return out
+    when = (datetime.now() + timedelta(days=days)).isoformat(timespec="seconds")
+    out.update(otherSuperadmins=others, confirmDays=days)
+    for k, v in values.items():
+        f = g["fields"][k]
+        if k in pend:
+            old = eff[k]
+            kind = "unchanged" if v == old else ("pending_approval" if (k in loose and others > 0) else "pending")
+        else:
+            old = base[k]
+            kind = "unchanged" if v == old else "immediate"
+        approvals = 1 if kind == "pending_approval" else 0
+        if kind == "immediate":
+            when_text = "立即"
+        elif kind == "pending":
+            when_text = "%d 天確認期間後（%s 起）" % (days, when[:10])
+        elif kind == "pending_approval":
+            when_text = "另一位最高管理者核准、且 %d 天確認期間後（%s 起）" % (days, when[:10])
+        else:
+            when_text = "不變"
+        effect = (f.effect.replace("{名稱}", f.label).replace("{舊}", show_value(f, old)).replace("{新}", show_value(f, v))
+                  .replace("{生效時間}", when_text))
+        out["fields"].append({"field": k, "label": f.label, "question": f.question, "unit": f.unit, "old": old, "new": v,
+                              "oldText": show_value(f, old), "newText": show_value(f, v), "kind": kind,
+                              "effectiveAt": when if kind in ("pending", "pending_approval") else None,
+                              "approvalsRequired": approvals, "effect": effect, "banner": banner_of(f, v, days=days)})
+    if loose and others == 0 and any(x["kind"] == "pending" and x["field"] in loose for x in out["fields"]):
+        out["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬會改為「填寫原因、等 %d 天確認期間後生效」，儲存後會留下紀錄。" % days)
+    return out
+
+
+_IMPACT_CACHE = {}          # (db, group, field, 值) -> (monotonic, 結果)
+_IMPACT_TTL = 60.0
+_IMPACT_TIMEOUT = 1.5
+_IMPACT_CACHE_MAX = 256
+
+
+def live_impact(group, field, value, *, timeout=None):
+    """即時影響（唯讀）：呼叫欄位的 `impact_fn(conn, 新值)`。唯讀連線（`PRAGMA query_only`）、逾時 1.5 秒、結果快取 60 秒；
+    沒有 `impact_fn`、值不合法、逾時或丟例外 ⇒ `live=None`，只回靜態 `impact`（永不丟例外）。
+    ⚠ 逾時只是「不再等」：計算用的 daemon 執行緒會繼續跑到 `impact_fn` 結束（結果丟棄、不寫快取），所以 `impact_fn` 自己必須有成本上限（查詢要有索引／LIMIT）。回 `{"live": {numbers, sentence}|None, "static": impact}`。"""
+    import json as _json
+    g = _g(group)
+    f = g["fields"].get(field)
+    if f is None:
+        raise KeyError("群組 %r 沒有欄位 %r" % (group, field))
+    res = {"live": None, "static": f.impact}
+    if f.impact_fn is None or f.check(value) or group_status(group) != "open":
+        return res
+    ck = (_db_id(), group, field, _json.dumps(value, sort_keys=True, default=str))
+    hit = _IMPACT_CACHE.get(ck)
+    if hit and time.monotonic() - hit[0] < _IMPACT_TTL:
+        return {"live": hit[1], "static": f.impact}
+    box = {}
+
+    def _run():
+        c = None
+        try:
+            c = get_db()
+            c.execute("PRAGMA query_only = ON")                    # 唯讀：impact_fn 想寫就會失敗
+            box["v"] = f.impact_fn(c, value)
+        except Exception:                                           # noqa: BLE001
+            logger.warning("settings: %s.%s 的即時影響計算失敗，改顯示靜態說明", group, field, exc_info=True)
+        finally:
+            if c is not None:
+                c.close()
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout if timeout is not None else _IMPACT_TIMEOUT)
+    v = box.get("v")
+    if isinstance(v, dict) and v.get("sentence"):
+        live = {"numbers": v.get("numbers"), "sentence": str(v["sentence"])}
+        with _lock:
+            while len(_IMPACT_CACHE) >= _IMPACT_CACHE_MAX:             # 有上限：不讓不同值的請求把快取撐大
+                _IMPACT_CACHE.pop(next(iter(_IMPACT_CACHE)))
+            _IMPACT_CACHE[ck] = (time.monotonic(), live)
+        res["live"] = live
+    return res
+
+
 def publish(group, values, *, note="", user="", reason="", ip="", conn=None, actor=None):
     """唯一寫入口。`values`＝要改的欄位（部分即可）。
     一般欄位：合併目前儲存值後整組發布成新版本，同交易寫 `config_changes`＋稽核（`settings.<group>.update`）＋舊鍵雙寫。
@@ -397,6 +743,9 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
     from core.txn import begin_write
     from helpers import config_ledger as L
     g = _g(group)
+    st = group_status(group)
+    if st != "open":                                # 功能狀態（脊柱）：開發中／隱藏的群組一律不能寫——引擎層攔截，內部呼叫端（預設組、還原…）一併被擋
+        raise SettingError(_NOT_OPEN_MSG.get(st, "這個設定群組目前不可調整。"))
     problems = validate_values(group, values, partial=True)
     if problems:
         raise SettingError("設定未儲存（%d 個問題）" % len(problems), problems)
@@ -407,15 +756,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
         began = begin_write(c)
         base = _effective(c, group, overlay=False)
         eff = _effective(c, group)
-        def _loosens(f, new_v):
-            old_v = eff[f.key]
-            if not (f.loosen and isinstance(new_v, (int, float)) and not isinstance(new_v, bool)):
-                return False
-            a, b = _rank(f, new_v), _rank(f, old_v)
-            return (f.loosen == "up" and a > b) or (f.loosen == "down" and a < b)
-        pend = {k: v for k, v in values.items() if g["fields"][k].requires_pending or _loosens(g["fields"][k], v)}
-        imm = {k: v for k, v in values.items() if k not in pend}
-        loose = {k for k, v in pend.items() if _loosens(g["fields"][k], v)}
+        pend, imm, loose = _split(g, eff, values)
         new = _merged(base, imm)
         problems = validate_values(group, _merged(new, pend))
         if problems:
@@ -479,6 +820,11 @@ def materialize_due(conn=None, now=None):
     try:
         began = begin_write(c)
         for group in list(_GROUPS):
+            if group_status(group) != "open":
+                for r in L.pending(c, "setting:%s" % group):
+                    if r["domain"] == "setting:%s" % group:
+                        L.cancel(c, r["id"], "system", "功能改為開發中／隱藏，待生效項自動撤銷")
+                continue
             due = _due_pending(c, group, now)
             if not due:
                 continue
@@ -515,17 +861,35 @@ def materialize_due(conn=None, now=None):
 def profiles():
     """所有欄位 `presets` 裡出現過的預設組名稱 → 涵蓋的欄位數。"""
     out = {}
-    for g in _GROUPS.values():
+    for gk, g in list(_GROUPS.items()):
+        if group_status(gk) != "open":              # 開發中／隱藏的群組不算在預設組裡（略過，見 profile_skipped）
+            continue
         for f in g["fields"].values():
             for name in f.presets:
                 out[name] = out.get(name, 0) + 1
     return out
 
 
+def profile_skipped(name):
+    """預設組裡因功能狀態被略過的群組：`[{group, groupLabel, status, reason}]`（畫面／API 回報『略過 N 項』，不得說成全部套用）。"""
+    out = []
+    for gk, g in list(_GROUPS.items()):
+        st = group_status(gk)
+        if st == "open":
+            continue
+        n = sum(1 for f in g["fields"].values() if name in f.presets)
+        if n:
+            out.append({"group": gk, "groupLabel": g["label"], "status": st, "fields": n,
+                        "reason": "開發中" if st == "planned" else "隱藏"})
+    return out
+
+
 def profile_preview(name, *, conn=None):
     """套用預設組會改哪些欄位（目前值 → 新值）；不寫入。"""
     out = []
-    for gk, g in _GROUPS.items():
+    for gk, g in list(_GROUPS.items()):
+        if group_status(gk) != "open":
+            continue
         cur = get_group(gk, conn=conn)
         for k, f in g["fields"].items():
             if name in f.presets and cur[k] != f.presets[name]:
@@ -571,7 +935,31 @@ def _restore(conn, key, version, actor, reason):
     return publish(key, (old.get("body") or {}).get("values", {}), note="還原自第 %s 版" % version, user=str(actor or ""), reason=reason, conn=conn)
 
 
+def _spine_check_settings(feat):
+    """脊柱驗證器：功能宣告的設定群組必須已登錄、擁有者相符；**新群組**的 money／legal／security 欄位必須有 impact_scope；選項欄位用整數代碼。"""
+    g = (feat.get("settings") or {}).get("group")
+    if not g:
+        return []
+    meta = _GROUPS.get(g)
+    if meta is None:
+        return ["設定群組 %s 沒有登錄（register_group）" % g]
+    out = []
+    if meta["owner"] != feat["owner"]:
+        out.append("設定群組 %s 的擁有者是 %s，不是本功能所屬的模組 %s" % (g, meta["owner"], feat["owner"]))
+    for f in meta["fields"].values():
+        if RISK_ORDER.index(f.risk) >= RISK_ORDER.index("money") and f.impact_scope is None and g not in IMPACT_SCOPE_GRANDFATHERED:
+            out.append("%s.%s 風險 %s，新登錄的設定必須宣告 impact_scope" % (g, f.key, f.risk))
+        if f.choices and f.type != "int":
+            out.append("%s.%s 是選項欄位，必須用整數代碼（int）" % (g, f.key))
+    return out
+
+
 def _register_once():
+    _reg.on_unload(unregister_owner)                 # 模組失敗／卸載 ⇒ 它登記的群組一併移除（不留孤兒）
+    _reg.register_owned("settings", owner_groups)    # 載入器用它核對 module.json 的 settings.groups 宣告
+    _spine.register_validator("settings", _spine_check_settings, covers=("settings",))   # features[].settings.group 的跨表檢查
+    _spine.on_validated(cancel_pending_of_nonopen)   # 脊柱驗證完 ⇒ 取消非 open 群組的待生效項
+    _spine.on_validated(audit_spine_failures)        # 脊柱驗證完 ⇒ 驗證失敗的功能寫稽核（去重）
     if KIND not in D.kinds():
         D.register_kind(KIND, label="設定群組", validator=_kind_validator, default=_kind_default)
     from helpers import config_ledger as L

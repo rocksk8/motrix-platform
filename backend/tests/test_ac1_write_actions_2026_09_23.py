@@ -90,11 +90,6 @@ READ_ONLY_PAGES = {
         "回 404（舊書籤還連得到，404 說不出搬到哪裡去了）。commit "
         "`e2b774d`。",
     "map.html": "地圖：只讀座標與標記，沒有可寫的東西。",
-    "settings-center.html":
-        "設定中心（第 54 班 Train A／S0）：頁面目前只呼叫 `GET /api/settings-center/groups`、`/groups/{group}`（唯讀列出群組與目前值）；"
-        "寫入入口 `POST /api/settings-center/groups/{group}`、待生效的核准／撤銷、方案套用都已在後端完成（稽核、雙人核准、確認期間皆有測試），"
-        "但「改值」的編輯畫面（S1：問句卡片、方案選擇、存檔前一句話摘要、復原）排在後續班次 ⇒ 這一頁現在沒有送出動作是刻意的；"
-        "S1 接上寫入後 `test_ac1_a_registered_page_that_started_writing_must_be_unregistered` 會逼這一筆拿掉。",
     # 🔴 **這一筆是這道守門抓到的第一個東西 —— 抓到的是我自己。**
     #    我第一版寫「線上統計：純報表。」（9 字）⇒ `len(why) >= 12` 直接紅。
     #    ☠️ 而那句話是**重述結論**，不是理由：下一個人看不出它有沒有過期。

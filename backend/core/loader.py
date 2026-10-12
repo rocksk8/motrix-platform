@@ -2,7 +2,7 @@
 """L0 模組載入器：掃 `modules/*/module.json`，相容且匯入成功的才登錄。
 
 [單位] plat:loader    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] ALL, DISABLED_REASON, MODULES_DIR, MODULES_PACKAGE, check_migrations, core_compatible, load_all, mount_modules,
+[公開介面] ALL, DISABLED_REASON, MODULES_DIR, MODULES_PACKAGE, check_declared_settings, check_migrations, core_compatible, declared_settings_groups, load_all, mount_modules,
     start_schedulers
 [不變式] 載入失敗一律「不載入＋記 ERROR＋記進 registry.failed()」，不讓伺服器起不來；版本範圍看不懂 ⇒ 不載入
 [契約題] tests/platform/test_core_loader.py
@@ -19,6 +19,7 @@ import re
 
 from core import registry
 from core import customization
+from core import spine
 from core import migrations as _migrations
 
 logger = logging.getLogger("motrix.loader")
@@ -107,7 +108,16 @@ def load_all(modules_dir: str = None, package: str = None,
         modules_dir = _current_modules_dir()
     if package is None:
         package = MODULES_PACKAGE
+    try:
+        for _p in spine.register_core_declarations():        # core 沒有 module.json：核心功能宣告在 core/features_l1.json
+            logger.warning("核心功能宣告：%s", _p)
+    except Exception:                                        # noqa: BLE001  脊柱的問題永遠不擋開機（register_core_declarations 自己也會接住）
+        logger.exception("讀取核心功能宣告失敗")
     if not os.path.isdir(modules_dir):
+        try:
+            spine.validate_all()
+        except Exception:                                    # noqa: BLE001
+            logger.exception("spine.validate_all 失敗")
         return []
     for name in sorted(os.listdir(modules_dir)):
         folder = os.path.join(modules_dir, name)
@@ -126,6 +136,8 @@ def load_all(modules_dir: str = None, package: str = None,
             if not ok:
                 raise ValueError(f"requires core {manifest.get('core')}, have {registry.CORE_VERSION}")
             customization.require_valid(manifest)   # 可自訂點格式錯誤 ⇒ 不載入（CUSTOMIZATION-SPEC P3）
+            declared_settings_groups(manifest)       # settings 宣告形狀不對 ⇒ 不載入，且**不執行模組程式碼**（import 之前驗）
+            spine.parse_features(manifest, name)     # features 不是清單 ⇒ 認不出功能，整個模組不載入（單一功能的問題不擋模組，見 spine.validate_all）
             if license_check is not None:
                 licensed, why = license_check(manifest)
                 if not licensed:
@@ -139,11 +151,15 @@ def load_all(modules_dir: str = None, package: str = None,
                 registry.set_state(name, registry.STATE_DISABLED, why, manifest, note=note)
                 logger.info("模組 %s 未載入：%s", name, why)
                 continue
-            mod = importlib.import_module(f"{package}.{name}")
+            with registry.owner_scope(name):          # E-a：import 期間登記的設定群組等，擁有者＝本模組
+                mod = importlib.import_module(f"{package}.{name}")
             spec = getattr(mod, "MODULE", None)
             if not isinstance(spec, registry.ModuleSpec) or spec.key != name:
                 raise ValueError("MODULE missing or key mismatch")
             check_migrations(spec.migrations)       # 版號不對 ⇒ 這個模組不載入（不猜要跳過哪一支）
+            check_declared_settings(manifest, name)  # 宣告的設定群組 ≠ 實際登錄的 ⇒ 不載入（fail-closed）
+            for _p in spine.register_manifest(manifest, name):   # 功能層級的問題只記 log；狀態與降級在 spine.validate_all()
+                logger.warning("模組 %s 的功能宣告：%s", name, _p)
             for v, fn in spec.migrations:           # 載入才登記（CORE-SPEC §6）：停用／未授權的模組走不到這裡
                 _migrations.register(name, v, fn)
         except Exception as e:  # 單一模組壞掉不可以拖垮整台
@@ -154,7 +170,42 @@ def load_all(modules_dir: str = None, package: str = None,
         registry.register(registry.LoadedModule(key=name, manifest=manifest, spec=spec))
         registry.set_state(name, registry.STATE_LOADED, "", manifest, note=note)
         logger.info("模組 %s %s 已載入", name, manifest.get("version", "?"))
+    try:
+        spine.validate_all()                    # 所有模組都登錄完才驗：跨模組的重複、群組歸屬才算得準
+    except Exception:                           # noqa: BLE001  脊柱壞掉不可拖垮啟動（未驗證＝open，維持今天的行為）
+        logger.exception("spine.validate_all 失敗")
     return registry.loaded()
+
+
+_GROUP_CODE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def declared_settings_groups(manifest) -> list:
+    """`module.json` 的 `settings: {"groups": [群組代號…]}`；沒有區段 ⇒ []。形狀不對 ⇒ ValueError（載入前就擋）。"""
+    sec = manifest.get("settings")
+    if sec is None:
+        return []
+    groups = sec.get("groups", []) if isinstance(sec, dict) else None
+    if not isinstance(groups, list) or any(not isinstance(g, str) or not _GROUP_CODE.match(g) for g in groups):
+        raise ValueError("module.json settings 必須是 {\"groups\": [小寫英數底線的群組代號…]}")
+    if len(set(groups)) != len(groups):
+        raise ValueError("module.json settings.groups 有重複的群組代號")
+    return list(groups)
+
+
+def check_declared_settings(manifest, name) -> None:
+    """脊柱 E-a：模組在 `module.json` 宣告它擁有的設定群組，import 後核對『實際以本模組為擁有者登記的群組』必須相同。
+    缺（宣告了沒登記）、多（登記了沒宣告）都擋——沒宣告而登記＝繞過登錄清單。L1 的設定登錄表還沒載入（沒有解析器）⇒ 不核對。"""
+    declared = set(declared_settings_groups(manifest))
+    actual = registry.owned("settings", name)
+    if actual is None:
+        if declared:
+            raise ValueError("module.json 宣告了設定群組 %s，但設定登錄表沒有載入，無法核對" % sorted(declared))
+        return
+    actual = set(actual)
+    if declared != actual:
+        miss, extra = sorted(declared - actual), sorted(actual - declared)
+        raise ValueError("宣告的設定群組與實際登錄不一致：宣告了沒登記 %s；登記了沒宣告 %s" % (miss or "無", extra or "無"))
 
 
 def check_migrations(items) -> None:
