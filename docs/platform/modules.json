@@ -364,6 +364,7 @@
     "quote_seq"
    ],
    "api_prefixes": [
+    "/api/alt-quote",
     "/api/approval-history",
     "/api/case-batch",
     "/api/case-changes",

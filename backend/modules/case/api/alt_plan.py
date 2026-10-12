@@ -45,3 +45,12 @@ def get_plan_view(quote_no: str, picks: str = Query("", description="假設的�
             raise HTTPException(422, "假設的選擇格式不正確")
     return alt_options.plan_view(q, selection, settled=PG.is_settled(row), combos=combos,
                                  combo_max=alt_policy.setting("combo_view_max"))
+
+
+@router.get("/api/alt-quote/config")
+def get_alt_config(authorization: str = Header(None)):
+    """報價單表單用的擇一方案設定（登入者可讀；只有設定中心的文字與數量，沒有任何金額／成本）。"""
+    _require_user(authorization)
+    return {"enabled": bool(alt_policy.setting("alt_enabled")), "totalText": str(alt_policy.setting("total_text")),
+            "noteTemplate": str(alt_policy.setting("note_template")), "groupsMax": int(alt_policy.setting("alt_groups_max")),
+            "comboViewMax": int(alt_policy.setting("combo_view_max")), "comboViewDefaultOpen": bool(alt_policy.setting("combo_view_default_open"))}

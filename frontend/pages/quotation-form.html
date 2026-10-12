@@ -9,6 +9,7 @@
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
   <script src="../static/legal-round.js"></script>
   <script src="../static/profit-rules.js"></script>
+  <script src="../static/alt-items.js"></script>
   <script src="../static/margin-tone.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
@@ -217,6 +218,17 @@
     .items-table tr:last-child td { border-bottom: none; }
     .items-table tr:hover td { background: #FDFCFA; }
     .items-table td.internal { background: #FFFBF5; }
+    /* M3 擇一方案（2026-10-13） */
+    .alt-row { display:flex; align-items:center; gap:6px; margin-top:3px; font-size:11px; color:var(--text-dim); flex-wrap:wrap }
+    .alt-row label { display:inline-flex; align-items:center; gap:3px; cursor:pointer; white-space:nowrap }
+    .alt-row .cell-input { width:120px; font-size:11px; padding:1px 4px }
+    .alt-tag { display:inline-block; margin-top:2px; font-size:10px; padding:0 6px; border-radius:8px; background:#EEF2FF; color:#4338CA }
+    .alt-tag.dropped { background:#F3F4F6; color:#6B7280 }
+    .alt-warn { margin-top:6px; font-size:11px; color:var(--danger); font-weight:600 }
+    .alt-plan table { width:100%; border-collapse:collapse; font-size:11px; margin:4px 0 10px }
+    .alt-plan th, .alt-plan td { padding:3px 6px; text-align:right; border-bottom:1px solid #2a2a2a33; white-space:nowrap }
+    .alt-plan th:first-child, .alt-plan td:first-child { text-align:left; white-space:normal }
+    @media (max-width: 640px) { .alt-plan table, .alt-plan thead, .alt-plan tbody, .alt-plan tr, .alt-plan td { display:block } .alt-plan thead { display:none } .alt-plan td { text-align:left } .alt-plan td::before { content: attr(data-l) "："; color:#9CA3AF } }
     /* 2026-09-24：數字欄位解析不了（見 parseNumInput()）時標紅，數值不更新、不存檔 */
     .num-bad { border-color: var(--danger) !important; background: #FEF2F2 !important; }
     .cell-input {
@@ -1435,6 +1447,7 @@
             <tbody x-ref="itemsTbody">
               <template x-for="(item, idx) in q.items" :key="item.id">
                 <tr :class="item.type === 'header' ? 'item-header-row' : ''"
+                    :style="altIsDropped(item) ? 'opacity:.55' : ''"
                     @keydown.ctrl.enter.prevent="insertItemAfter(idx)"
                     @keydown.alt.up.prevent="moveItemBy(idx, -1, $event)"
                     @keydown.alt.down.prevent="moveItemBy(idx, 1, $event)">
@@ -1458,6 +1471,14 @@
                               rows="1"
                               @input="setDirty(); $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px'"
                               x-init="$nextTick(()=>{ $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px' })"></textarea>
+                    <div class="alt-row" x-show="item.type !== 'header' && (altCfg.enabled || altGroupOf(item))" data-testid="qf-alt-row">
+                      <label title="同一組的品項只會有一個被客戶選中，合計只算被選中的那一個">
+                        <input type="checkbox" :checked="!!altGroupOf(item)" @change="altToggle(item, $event.target.checked)"> 擇一方案
+                      </label>
+                      <input class="cell-input" type="text" list="alt-group-options" maxlength="40" placeholder="組別名稱"
+                             x-show="altGroupOf(item)" :value="item.altGroup" @input="item.altGroup = $event.target.value; calcTotals(); setDirty()">
+                      <span class="alt-tag" :class="altIsDropped(item) ? 'dropped' : ''" x-show="altGroupOf(item)" x-text="altTagText(item)"></span>
+                    </div>
                   </td>
                   <td class="va-top">
                     <textarea class="cell-textarea" x-model="item.brand"
@@ -1549,6 +1570,10 @@
               </template>
             </tbody>
           </table>
+        </div>
+        <datalist id="alt-group-options"><template x-for="g in altGroupNames()" :key="g"><option :value="g"></option></template></datalist>
+        <div class="alt-warn" x-show="altIssues().length" data-testid="qf-alt-issues">
+          <template x-for="m in altIssues()" :key="m"><div x-text="m"></div></template>
         </div>
         <datalist id="quote-unit-options">
           <option value="台"></option><option value="套"></option><option value="組"></option>
@@ -1651,7 +1676,14 @@
           </div>
 
           <!-- 右欄：金額小計 -->
-          <div class="totals-grid" style="min-width:320px">
+          <div style="min-width:320px">
+          <div x-show="altGroupNames().length" style="margin-bottom:8px;font-size:12px" data-testid="qf-alt-totals-opt">
+            <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
+              <input type="checkbox" :checked="q.totalsByAlt === true" @change="q.totalsByAlt = $event.target.checked; setDirty()"> 合計依方案選擇
+            </label>
+            <div class="form-hint" x-text="'勾選後，客戶還沒選定方案時，報價單的「稅前合計」與「總計」兩格會顯示「' + altCfg.totalText + '」，選定後恢復金額。'"></div>
+          </div>
+          <div class="totals-grid">
             <div class="total-row">
               <span class="total-label">品項小計</span>
               <span class="total-currency">NTD</span>
@@ -1670,7 +1702,7 @@
             <div class="total-row">
               <span class="total-label">稅前合計</span>
               <span class="total-currency">NTD</span>
-              <span class="total-amount" x-text="tot.pretax.toLocaleString()"></span>
+              <span class="total-amount" x-text="altTotalsText() || tot.pretax.toLocaleString()"></span>
             </div>
             <div class="total-row">
               <span class="total-label"
@@ -1682,8 +1714,13 @@
             <div class="total-row grand">
               <span>總　計</span>
               <span>NTD</span>
-              <span x-text="tot.total.toLocaleString()"></span>
+              <span x-text="altTotalsText() || tot.total.toLocaleString()"></span>
             </div>
+          </div>
+          <div x-show="altNotePreview().length" style="margin-top:8px;font-size:11px;color:var(--text-dim)" data-testid="qf-alt-note-preview">
+            <div>列印時會自動加在「售後服務及備註說明」最後（尚未選定時的樣子）：</div>
+            <template x-for="n in altNotePreview()" :key="n"><div x-text="n" style="color:var(--text-secondary)"></div></template>
+          </div>
           </div>
         </div>
       </div>
@@ -1827,6 +1864,8 @@
           INTERNAL · 成本分機
         </div>
 
+        <div x-show="altUnpicked()" style="font-size:11px;color:#9CA3AF;margin-bottom:8px" data-testid="qf-alt-estimate"
+             x-text="'尚有 ' + altUnpicked() + ' 組擇一方案還沒選定，下面的毛利是不含擇一品項的暫估'"></div>
         <div style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#555;margin-bottom:8px">直接利潤</div>
 
         <div class="cost-row">
@@ -1848,7 +1887,7 @@
         <div class="cost-row" style="border-bottom:none">
           <span class="cost-row__label">直接毛利率</span>
           <span class="cost-row__val"
-                :class="MotrixMargin.tone(tot.directMarginPct)"
+                :class="altUnpicked() ? '' : MotrixMargin.tone(tot.directMarginPct)"
                 x-text="tot.directMarginPct.toFixed(1) + '%'"></span>
         </div>
 
@@ -1909,14 +1948,81 @@
 
         <div class="net-profit">
           <div class="net-profit__val"
-               :style="tot.netMarginPct < 12 ? 'color:#F87171' : tot.netMarginPct < 20 ? 'color:#FCD34D' : 'color:#4ADE80'"
+               :style="altUnpicked() ? 'color:#9CA3AF' : tot.netMarginPct < 12 ? 'color:#F87171' : tot.netMarginPct < 20 ? 'color:#FCD34D' : 'color:#4ADE80'"
                x-text="tot.netMarginPct.toFixed(1) + '%'"></div>
           <div class="net-profit__label">
             營業利益率
-            <span :style="tot.netMarginPct < 12 ? 'color:#F87171' : 'color:#4ADE80'"
-                  x-text="tot.netMarginPct < 12 ? '⚠ 低於目標 12%' : '✓ 達標'"></span>
+            <span :style="altUnpicked() ? 'color:#9CA3AF' : tot.netMarginPct < 12 ? 'color:#F87171' : 'color:#4ADE80'"
+                  x-text="altUnpicked() ? '（暫估，尚未選定方案）' : tot.netMarginPct < 12 ? '⚠ 低於目標 12%' : '✓ 達標'"></span>
           </div>
         </div>
+      </div>
+
+      <!-- M3 T5：擇一方案比較（只給成本權限者；內容全由後端 plan-view 回傳，前端不自算；列印預覽不含） -->
+      <div class="cost-panel alt-plan" x-show="showCostCols && altGroupNames().length && q.quoteNo" x-cloak data-testid="qf-alt-plan"
+           x-init="$watch('q.quoteNo', v => { if (v && altGroupNames().length) loadPlan() })">
+        <div class="cost-panel__title"><span></span>INTERNAL · 擇一方案比較</div>
+        <div style="font-size:11px;color:#9CA3AF;margin-bottom:6px">依「已儲存」的內容計算；改了品項或單價請先儲存，再按「重新計算」。每個方案欄是「其他組都取下方選的基準」時的結果。</div>
+        <button class="btn btn-ghost btn-sm" @click="loadPlan()" :disabled="plan.loading" x-text="plan.loading ? '計算中…' : '重新計算'"></button>
+        <div class="alt-warn" x-show="plan.error" x-text="plan.error"></div>
+        <template x-if="plan.data">
+          <div>
+            <template x-for="g in plan.data.groups" :key="g.group">
+              <div>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px">
+                  <b x-text="g.group"></b>
+                  <span style="color:#9CA3AF">其他組以</span>
+                  <select class="cell-input" style="width:auto;font-size:11px" :value="plan.picks[g.group] || plan.data.baseline[g.group]"
+                          @change="plan.picks[g.group] = $event.target.value; loadPlan()">
+                    <template x-for="o in g.options" :key="o.id"><option :value="o.id" x-text="o.label"></option></template>
+                  </select>
+                  <span style="color:#9CA3AF">為準（只影響這個畫面）</span>
+                </div>
+                <table>
+                  <thead><tr><th>方案</th><th>稅前</th><th>成本</th><th>直接毛利</th><th>毛利率</th><th>營業利益</th><th>營業利益率</th></tr></thead>
+                  <tbody>
+                    <template x-for="o in g.options" :key="o.id">
+                      <tr>
+                        <td x-text="o.label"></td>
+                        <td :data-l="'稅前'" x-text="o.pretax.toLocaleString()"></td>
+                        <td :data-l="'成本'" x-text="o.totalCost.toLocaleString()"></td>
+                        <td :data-l="'直接毛利'" x-text="o.directProfit.toLocaleString()"></td>
+                        <td :data-l="'毛利率'" :class="MotrixMargin.tone(o.directMarginPct)" x-text="o.directMarginPct.toFixed(1) + '%'"></td>
+                        <td :data-l="'營業利益'" x-text="o.netProfit.toLocaleString()"></td>
+                        <td :data-l="'營業利益率'" x-text="o.netMarginPct.toFixed(1) + '%'"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+            <div style="margin-top:6px">
+              <button class="btn btn-ghost btn-sm" @click="toggleCombos()" x-text="plan.combosOpen ? '收合組合比較' : '展開組合比較'"></button>
+              <button class="btn btn-ghost btn-sm" x-show="plan.combosOpen && plan.data.combos && plan.data.combos.rows.length" @click="plan.sortKey = plan.sortKey === 'directMarginPct' ? 'netProfit' : 'directMarginPct'"
+                      x-text="'排序：' + (plan.sortKey === 'directMarginPct' ? '毛利率高到低' : '營業利益高到低')"></button>
+            </div>
+            <template x-if="plan.combosOpen && plan.data.combos">
+              <div>
+                <div style="font-size:11px;color:#9CA3AF;margin:4px 0" x-show="plan.data.combos.truncated || !plan.data.combos.expanded"
+                     x-text="plan.data.combos.expanded ? ('共 ' + plan.data.combos.total + ' 種組合，只顯示前 ' + plan.data.combos.rows.length + ' 種') : ('共 ' + plan.data.combos.total + ' 種組合，數量太多不展開；請減少擇一組數或每組的選項')"></div>
+                <table x-show="plan.data.combos.rows.length">
+                  <thead><tr><th>組合</th><th>稅前</th><th>直接毛利</th><th>毛利率</th><th>營業利益</th></tr></thead>
+                  <tbody>
+                    <template x-for="(r, ri) in comboRows()" :key="ri">
+                      <tr>
+                        <td x-text="comboLabel(r)"></td>
+                        <td :data-l="'稅前'" x-text="r.figures.pretax.toLocaleString()"></td>
+                        <td :data-l="'直接毛利'" x-text="r.figures.directProfit.toLocaleString()"></td>
+                        <td :data-l="'毛利率'" :class="MotrixMargin.tone(r.figures.directMarginPct)" x-text="r.figures.directMarginPct.toFixed(1) + '%'"></td>
+                        <td :data-l="'營業利益'" x-text="r.figures.netProfit.toLocaleString()"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+        </template>
       </div>
 
       <!-- 隱藏成本時的簡易摘要 -->
@@ -2182,7 +2288,8 @@
   // V3.11（2026-09-28，H10 品牌設定；第十四班列車補號）：分頁圖示改讀 /api/system/branding/favicon
   // V3.14（2026-10-01，本地日期）：報價日期預設值與送審時間改用本地日期（static/motrix-date.js；台灣 00:00–08:00 不再得到前一天）
   // V3.19（2026-10-09，第 48 班 S3）：利潤算式改呼叫 static/profit-rules.js；管銷分攤比率（直接毛利×%，最高管理者可調、偏離預設警示）——口徑開關預設 legacy，畫面與數字不變。
-  const FORM_VERSION = 'V3.22'
+  // V3.23（2026-10-13，M3 T5／T6）：擇一方案——品項可標組別、「合計依方案選擇」、合計只算計入品項（static/alt-items.js）、內部成本面板「擇一方案比較」、備註說明句預覽
+  const FORM_VERSION = 'V3.23'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -2326,6 +2433,8 @@
       // 會被存檔流程整包送回後端，混進 q 會讓每次存檔都把它再寫一遍。
       docVersions: [],
 
+      altCfg: { enabled: true, totalText: '依方案選擇', noteTemplate: '項次{items}為{group}擇一方案選擇', groupsMax: 10, comboViewMax: 24, comboViewDefaultOpen: false },   // M3：init 時由 GET /api/alt-quote/config 填入
+      plan: { loading: false, data: null, error: '', picks: {}, combosOpen: false, sortKey: 'directMarginPct' },
       oh: { mode: 'legacy', defaultPct: 25, charityBasis: 'direct' },   // 第 48 班 S3：管銷口徑開關與全域預設（init 時由 GET /api/overhead/settings 填入）
       tot: {
         subtotal:0, pretax:0, tax:0, total:0,
@@ -2453,7 +2562,7 @@
       },
 
       calcTotals() {
-        const items = this.q.items
+        const items = MotrixAltItems.countedItems(this.q)     // 擇一方案：只算計入的品項（沒有擇一組別的單＝全部品項，與舊算法逐項相同）
         const subtotal   = items.reduce((s,i) => s + (i.amount||0), 0)
         const totalCost  = items.reduce((s,i) => s + (i.qty||0)*(i.cost||0), 0)
         const inputVat   = MotrixLegalRound.halfUp(totalCost, 0.05)
@@ -2520,6 +2629,69 @@
           const r = await fetch(`${this.API}/overhead/settings`, { headers: { Authorization: 'Bearer ' + this.session.token } })
           if (r.ok) { const d = await r.json(); this.oh = { mode: d.ruleMode === 'v2' ? 'v2' : 'legacy', defaultPct: d.defaultPct, charityBasis: d.charityBasis === 'total' ? 'total' : 'direct' } }
         } catch (e) { /* 取不到 ⇒ 維持舊口徑（legacy），與後端預設一致 */ }
+      },
+
+      /* ── M3 擇一方案（2026-10-13）：計算規則在 static/alt-items.js（與後端 counted_items 同式）；選定結果 altPicks 只由伺服器寫入 ── */
+      altGroupOf(item) { return MotrixAltItems.groupOf(item) },
+      altGroupNames() { const seen = []; (this.q.items || []).forEach(i => { const g = MotrixAltItems.groupOf(i); if (g && !seen.includes(g)) seen.push(g) }); return seen },
+      altUnpicked() { return MotrixAltItems.unpickedGroupCount(this.q) },
+      altIsDropped(item) { const g = MotrixAltItems.groupOf(item); const p = this.q.altPicks || {}; return !!g && p[g] !== undefined && String(p[g]) !== String(item.id) },
+      altTagText(item) {
+        const g = MotrixAltItems.groupOf(item), p = this.q.altPicks || {}
+        if (p[g] === undefined) return '擇一：' + g + '（尚未選定）'
+        return this.altIsDropped(item) ? '未選' : '擇一：' + g + '（客戶選定）'
+      },
+      altToggle(item, on) {
+        if (on) { const names = this.altGroupNames(); item.altGroup = names.length ? names[names.length - 1] : '擇一組1' } else { delete item.altGroup }
+        this.calcTotals(); this.setDirty()
+      },
+      altIssues() {
+        const out = [], cnt = {}
+        ;(this.q.items || []).forEach(i => { const g = MotrixAltItems.groupOf(i); if (g) cnt[g] = (cnt[g] || 0) + 1 })
+        Object.keys(cnt).forEach(g => { if (cnt[g] < 2) out.push('擇一組別「' + g + '」只有 1 個品項，擇一組至少要 2 個品項') })
+        if (Object.keys(cnt).length > this.altCfg.groupsMax) out.push('擇一方案最多 ' + this.altCfg.groupsMax + ' 組，目前有 ' + Object.keys(cnt).length + ' 組')
+        return out
+      },
+      altTotalsText() { return (this.q.totalsByAlt === true && this.altUnpicked() > 0) ? this.altCfg.totalText : '' },
+      altNotePreview() {                                  // 單趟取代（不用格式化函式）；畫面用文字節點輸出，不會被當 HTML
+        const t = this.altCfg.noteTemplate, names = this.altGroupNames(), out = []
+        let n = 0; const num = new Map()
+        ;(this.q.items || []).forEach(i => { if (i.type !== 'header') { n++; num.set(i, n) } })
+        names.forEach(g => {
+          const nums = (this.q.items || []).filter(i => MotrixAltItems.groupOf(i) === g).map(i => num.get(i))
+          out.push(String(t).replace(/\{(items|group)\}/g, (m, k) => k === 'items' ? nums.join('、') : g))
+        })
+        return out
+      },
+      async loadAltConfig() {
+        try {
+          const r = await fetch(`${this.API}/alt-quote/config`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (r.ok) { const d = await r.json(); this.altCfg = Object.assign({}, this.altCfg, d); this.plan.combosOpen = !!d.comboViewDefaultOpen }
+        } catch (e) { /* 取不到 ⇒ 用預設文字，不影響開單 */ }
+      },
+      async loadPlan() {
+        if (!this.q.quoteNo || !this.showCostCols) return
+        this.plan.loading = true; this.plan.error = ''
+        try {
+          const qs = []
+          if (Object.keys(this.plan.picks).length) qs.push('picks=' + encodeURIComponent(JSON.stringify(this.plan.picks)))
+          if (this.plan.combosOpen) qs.push('combos=true')
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}/plan-view` + (qs.length ? '?' + qs.join('&') : ''), { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (r.status === 403) { this.plan.data = null; this.plan.error = '你沒有查看報價成本與毛利的權限'; return }
+          if (!r.ok) { this.plan.error = '方案比較暫時算不出來，請稍後再試'; return }
+          this.plan.data = await r.json()
+        } catch (e) { this.plan.error = '方案比較暫時算不出來，請稍後再試' } finally { this.plan.loading = false }
+      },
+      toggleCombos() { this.plan.combosOpen = !this.plan.combosOpen; if (this.plan.combosOpen) this.loadPlan() },
+      comboRows() {
+        const rows = (this.plan.data && this.plan.data.combos && this.plan.data.combos.rows) || []
+        const k = this.plan.sortKey
+        return rows.slice().sort((a, b) => (b.figures[k] - a.figures[k]))
+      },
+      comboLabel(r) {
+        const labels = {}
+        ;((this.plan.data && this.plan.data.groups) || []).forEach(g => g.options.forEach(o => { labels[g.group + '\u0000' + o.id] = o.label }))
+        return Object.keys(r.picks).map(g => g + '：' + (labels[g + '\u0000' + r.picks[g]] || '')).join('；')
       },
 
       genId() {
@@ -2750,6 +2922,7 @@
               history.replaceState(null, '', '?id=' + d.quote_no)
             }
           }
+          if (this.altGroupNames().length) this.loadPlan()      // M3：存檔後更新內部方案比較（沒有成本權限時 loadPlan 直接略過）
           return true
         } catch(e) {
           console.warn('API 儲存失敗（後端未啟動）', e.message)
@@ -3905,6 +4078,7 @@
         // 既有單自己的 locationId。
         await this.loadLocations()
         await this.loadOverheadSettings()      // 第 48 班 S3：管銷口徑與全域預設（取不到＝legacy）
+        await this.loadAltConfig()             // M3：擇一方案文字與上限（取不到＝預設）
 
         // ── 帶入業務員資料（從後端 API 取最新顯示名稱），同時以回應結果判斷後端是否在線 ──
         try {
