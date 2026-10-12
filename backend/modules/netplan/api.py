@@ -30,6 +30,7 @@ from fastapi import APIRouter, Body, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
 
 from db import get_db, next_entity_code
+from helpers import download_name
 from helpers import (_require_user, _tok, _audit, notify_module_activity,
                      require_any_module)
 from core import registry as _registry
@@ -319,11 +320,11 @@ def export_network_plan_excel(plan_id: int, authorization: str = Header(None)):
     conn.close()
     plan = _plan_public(row)
     xlsx_bytes = build_plan_excel(plan)
-    filename = urlquote(f"{plan['planNo']}_{plan['siteName']}_網路架構規劃表.xlsx")
+    filename = f"{plan['planNo']}_{plan['siteName']}_網路架構規劃表.xlsx"
     return Response(
         content=xlsx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+        headers={"Content-Disposition": download_name.content_disposition(filename)},
     )
 
 
@@ -342,10 +343,10 @@ def export_network_plan_pdf(plan_id: int, authorization: str = Header(None)):
         raise HTTPException(503, str(e))
     except ValueError as e:
         raise HTTPException(500, str(e))
-    filename = urlquote(f"{plan['planNo']}_{plan['siteName']}_網路架構規劃書.pdf")
+    filename = f"{plan['planNo']}_{plan['siteName']}_網路架構規劃書.pdf"
     return Response(
         content=pdf_bytes, media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+        headers={"Content-Disposition": download_name.content_disposition(filename)},
     )
 
 
@@ -488,5 +489,5 @@ def export_quick_topology_pdf(body: dict = Body(...), authorization: str = Heade
     filename = (title or "拓樸圖") + ".pdf"
     return Response(
         content=pdf_bytes, media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{urlquote(filename)}"},
+        headers={"Content-Disposition": download_name.content_disposition(filename)},
     )

@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>勞報單 — MOTRIX ERP</title>
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <script src="../static/download.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -574,6 +575,7 @@ function payslipsPage() {
         if (!r.ok) { alert('PDF 產生失敗：' + await r.text()); this.closePreview(); return }
         const blob = await r.blob()
         this.previewBlobUrl = URL.createObjectURL(blob)
+        this.previewName = MotrixDownload.nameFrom(r, `勞報單_${p.contractor_name}_${p.slip_date || p.slip_no}.pdf`)
       } catch(e) { alert('載入失敗：' + e.message); this.closePreview() }
       this.previewFetching = false
     },
@@ -583,7 +585,7 @@ function payslipsPage() {
       const p = this.previewItem
       const a = document.createElement('a')
       a.href = this.previewBlobUrl
-      a.download = `勞報單_${p.contractor_name}_${p.slip_date || p.slip_no}.pdf`
+      a.download = this.previewName || `勞報單_${p.contractor_name}_${p.slip_date || p.slip_no}.pdf`
       a.click()
       try {
         const r = await fetch(`${API}/payslips/${p.slip_no}/export`, {
@@ -632,6 +634,7 @@ function payslipsPage() {
         if (!r.ok) { alert('PDF 載入失敗：' + await r.text()); this.closePreview(); return }
         const blob = await r.blob()
         this.previewBlobUrl = URL.createObjectURL(blob)
+        this.previewName = MotrixDownload.nameFrom(r, `勞報單_${p.contractor_name||p.slip_no}_${p.slip_date||p.slip_no}_第${idx}次.pdf`)
       } catch(e) { alert('載入失敗：' + e.message); this.closePreview() }
       this.previewFetching = false
     },
@@ -642,7 +645,7 @@ function payslipsPage() {
       const idx = this.previewArchiveIdx
       const a = document.createElement('a')
       a.href = this.previewBlobUrl
-      a.download = `勞報單_${p.contractor_name||p.slip_no}_${p.slip_date||p.slip_no}_第${idx}次.pdf`
+      a.download = this.previewName || `勞報單_${p.contractor_name||p.slip_no}_${p.slip_date||p.slip_no}_第${idx}次.pdf`
       a.click()
       try {
         const r = await fetch(`${API}/payslips/${p.slip_no}/archive/${idx}/record`, {
@@ -665,7 +668,7 @@ function payslipsPage() {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `勞報單_${p.contractor_name||p.slip_no}_${p.slip_date||p.slip_no}_第${effective_idx}次.pdf`
+        a.download = MotrixDownload.nameFrom(r, `勞報單_${p.contractor_name||p.slip_no}_${p.slip_date||p.slip_no}_第${effective_idx}次.pdf`)
         a.click()
         setTimeout(() => URL.revokeObjectURL(url), 2000)
         const rr = await fetch(`${API}/payslips/${p.slip_no}/archive/${effective_idx}/record`, {
@@ -712,7 +715,7 @@ function payslipsPage() {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `勞報單_${p.contractor_name||p.slip_no}_${p.slip_date||p.slip_no}.pdf`
+        a.download = MotrixDownload.nameFrom(r, `勞報單_${p.contractor_name||p.slip_no}_${p.slip_date||p.slip_no}.pdf`)
         a.click()
         setTimeout(() => URL.revokeObjectURL(url), 2000)
       } catch(e) { alert('下載失敗：' + e.message) }

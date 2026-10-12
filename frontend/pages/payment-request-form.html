@@ -8,6 +8,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <script src="../static/legal-round.js"></script>
+  <script src="../static/download.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <style>
@@ -710,6 +711,7 @@ function paymentRequestForm() {
         if (!r.ok) { this.errMsg = 'PDF 產生失敗：' + (await r.text()); this.previewFetching = false; return }
         const blob = await r.blob()
         this.previewBlobUrl = URL.createObjectURL(blob)
+        this.previewName = MotrixDownload.nameFrom(r, `${this.q.requestNo}.pdf`)
         this.previewIframeReady = false
         this.previewModal = true
       } catch (e) { this.errMsg = '載入失敗：' + e.message }
@@ -720,7 +722,7 @@ function paymentRequestForm() {
       if (!this.previewBlobUrl) return
       const a = document.createElement('a')
       a.href = this.previewBlobUrl
-      a.download = `${this.q.requestNo}.pdf`
+      a.download = this.previewName || `${this.q.requestNo}.pdf`
       a.click()
       try {
         const r = await fetch(`${API}/payment-requests/${this.q.requestNo}/export?mode=external`, {

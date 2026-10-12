@@ -9,6 +9,134 @@
     false
    ]
   },
+  "download_name": {
+    "add_date": [
+     0,
+     0,
+     1,
+     false
+    ],
+    "case_name_max_chars": [
+     20,
+     5,
+     60,
+     false
+    ],
+    "case_name_source": [
+     0,
+     0,
+     2,
+     false
+    ],
+    "label_bonus_award": [
+     "獎金分配單",
+     null,
+     null,
+     false
+    ],
+    "label_close_report": [
+     "結案報表",
+     null,
+     null,
+     false
+    ],
+    "label_completion": [
+     "完工單",
+     null,
+     null,
+     false
+    ],
+    "label_contractor_voucher": [
+     "承攬商傳票",
+     null,
+     null,
+     false
+    ],
+    "label_execution_report": [
+     "專案執行報告",
+     null,
+     null,
+     false
+    ],
+    "label_expense_form": [
+     "費用單",
+     null,
+     null,
+     false
+    ],
+    "label_invoice_voucher": [
+     "開票申請",
+     null,
+     null,
+     false
+    ],
+    "label_payment_request": [
+     "請款單",
+     null,
+     null,
+     false
+    ],
+    "label_payslip": [
+     "勞報單",
+     null,
+     null,
+     false
+    ],
+    "label_quotation": [
+     "報價單",
+     null,
+     null,
+     false
+    ],
+    "label_quotation_version": [
+     "報價單存檔版本",
+     null,
+     null,
+     false
+    ],
+    "label_shipping": [
+     "出貨單",
+     null,
+     null,
+     false
+    ],
+    "label_voucher": [
+     "傳票",
+     null,
+     null,
+     false
+    ],
+    "name_layout": [
+     0,
+     0,
+     3,
+     false
+    ],
+    "no_access": [
+     1,
+     0,
+     2,
+     false
+    ],
+    "payslip_show_name": [
+     1,
+     0,
+     1,
+     false
+    ],
+    "separator": [
+     0,
+     0,
+     2,
+     false
+    ],
+    "total_max_chars": [
+     100,
+     40,
+     150,
+     false
+    ]
+   },
   "material_order": {"supplier_required": [1, 0, 1, false]},
   "retention": {
    "audit_log_keep_days": [

@@ -39,6 +39,7 @@ from modules.accounting.api.accounting_export import validate_account_code
 # ⚠️ **不要自己重算**：`total_amount` 少了稅、也少了外包人員費用，`ACC-BN6 §3` 已經踩過這個坑。
 from core import registry as _registry
 from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
+from helpers import download_name
 from helpers import _require_user, _tok, _audit, require_any_module
 from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from helpers.edit_log import append_edit_log, MissingOldValue
@@ -1549,10 +1550,7 @@ def download_voucher_pdf(voucher_id: int, with_attachments: bool = False,
         conn.close()
     name = (dict(row).get("voucher_no") if row else "") or str(voucher_id)
 
-    headers = {
-        # ⚠️ 檔名走 ASCII：單號是 `YYYYMMDD-NNN[-Rn]`，本來就不含非 ASCII。
-        "Content-Disposition": 'attachment; filename="voucher-%s.pdf"' % name,
-    }
+    headers = download_name.build("voucher", doc_no=name, ext="pdf").headers()   # A7：檔名一律走 download_name（傳票與案件的關聯不固定，第一期不放案件欄位）
     if missing:
         headers["X-Voucher-Missing-Attachments"] = str(len(missing))
         headers["X-Voucher-Missing-Attachment-Names"] = quote(

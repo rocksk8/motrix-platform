@@ -248,6 +248,22 @@ def case_page_readable(conn, quote_no: str, user: dict) -> bool:
     return bool(q) and row_access.visible("case", user, q, scope="read")
 
 
+def case_download_label(conn, quote_no: str, user: dict) -> dict:
+    """給下載檔名用（`helpers/download_name.py`）：`{"readable": 讀得到案件頁?, "project": 專案名稱, "customer": 客戶名稱}`。
+    `readable` 與 `case_page_readable` 同一規則（`user` 為 None ⇒ False）；案件不存在、M01 不在 ⇒ 全空。
+    名稱是否放進檔名由呼叫端依 `readable` 與設定決定。⚠️ **名稱無條件回傳，呼叫者是唯一的閘門**：只有 `helpers/download_name.py` 可以呼叫，且必須先看 `readable`（或設定明確放寬）；
+    任何端點不得把本函式的結果原樣回給使用者。"""
+    empty = {"readable": False, "project": "", "customer": ""}
+    if not quote_no or not case_module_present():
+        return empty
+    q = conn.execute("SELECT sales_person_id, sales_person, assigned_user_ids, project_name, customer_name FROM quotations WHERE quote_no = ?",
+                     (quote_no,)).fetchone()
+    if not q:
+        return empty
+    return {"readable": user is not None and bool(row_access.visible("case", user, q, scope="read")),
+            "project": q["project_name"] or "", "customer": q["customer_name"] or ""}
+
+
 def case_owner_readable(conn, quote_no: str, user: dict) -> bool:
     """案件的**擁有者規則**：row_access `case`／scope="owner"（案件業務／協作者、admin+），**不放行任何模組**。
 

@@ -1,5 +1,8 @@
 # 採購・庫存・出貨 更新紀錄
 
+## (next) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）
+- 出貨單 PDF 下載檔名改走 `helpers.download_name`。無 migration、無新路由、無權限變更。
+
 ## 1.0.26 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1）：module.json 新增 `system_cards`（出貨單歷史紀錄卡片）**
 - 加性宣告：在系統中心（`/pages/system-hub.html`）登記這個模組擁有的系統頁面；只影響索引顯示，頁面與 API 的權限、行為完全不變。

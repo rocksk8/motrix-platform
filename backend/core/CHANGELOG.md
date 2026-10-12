@@ -26,6 +26,14 @@
 - 測試基礎（脊柱 E-a3，非 L1）：部署凍結基準依擁有者分檔——核心 `tests/platform/settings_deploy_baseline.json`（只含 owner＝core）＋模組 `modules/<模組>/tests/settings_deploy_baseline.json`；共用比對 `tests/platform/_settings_baseline.py`；`test_deploy_baseline_frozen` 只比對 core（順序獨立），`tests/platform/test_settings_baseline_owners.py` 守『每個登錄表裡有群組的擁有者都有基準且一致、基準檔不重疊』。目前只有核心有群組，現有基準檔內容不變。
 - 畫面（S1，非 L1）：`frontend/pages/settings-center.html` 改為可編輯的設定中心（群組清單、白話表單、建議值／範圍／影響說明、還原預設、儲存前預覽與一句話效果、紅／琥珀橫幅＋『我已了解』、待生效處理（核准／撤銷）、版本差異與還原、預設組）；`GET /api/settings-center/pending` 每筆多回 `label／groupLabel／oldText／newText／actorUser`（原有欄位不變）。`tests/test_ac1_write_actions_2026_09_23.py` 拿掉 settings-center 的唯讀登記（頁面已會寫入）。e2e：`tests/test_e2e_settings_center_edit_s1.py`。
 
+## (next:minor) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）
+- 第二期（wip/t57-download-name-p2-r1）：`routers/custom_records.py` 的 PDF 下載標頭改用 `helpers.download_name.content_disposition()`（檔名不變）。
+- L1（新增，只增）：`helpers.download_name`（`build`、`content_disposition`、`DownloadName`、`DOC_TYPES`、`TOKENS`、`DEFAULTS`）——下載檔名的單一來源：案件編號＋案件名＋文件類型＋單號；淨化（非法字元、Cf、保留名稱、位元組上限）、RFC 8187、latin-1 安全 ASCII 退路；沒有使用者（排程、郵件）或讀不到案件 ⇒ 不放案件名；任何例外 ⇒ 今天的檔名。
+- L1（新增，只增）：`helpers.case_access.case_download_label(conn, quote_no, user)`——給下載檔名用的案件標籤與可見度（與 `case_page_readable` 同一規則）。
+- 設定群組 `download_name`（`helpers/settings_groups.py`，21 個平鋪鍵；預設＝使用者決定，部署基準 `settings_deploy_baseline.json` 同步）。**部署零行為變更於資料層**：不寫任何定義列；檔名行為依預設（案件編號＋案件名＋文件類型＋單號）改變，是使用者 10-12 的裁示。
+- 前端 `static/download.js`（`MotrixDownload.nameFrom／save／saveBlob`）；第一期案件文件頁面改讀回應的 `Content-Disposition`。
+- 無 migration、無新路由、無權限變更；檔名永不含金額。
+
 ## 1.129 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-13（wip/t57-s1-1-managed-r3；S1-1 設定群組受管）**
 - L1（行為，向下相容）：`routers/definitions.py` 新增『受管 kind』（`_MANAGED_KINDS`，目前 `setting_group`）：通用的 `PUT …/draft`、`POST …/publish`、`POST …/restore/{v}`、`DELETE …/draft` 對受管 kind 一律回 409（白話訊息指向『系統 > 設定中心』）；`GET`（清單、單版、差異、解析）不受影響。原本任一最高管理者可經通用端點直接改設定群組，繞過 `settings_registry.publish()` 的 放寬→待生效→第二位最高管理者核准 與 `config_changes` 明細（只留 `definitions.publish_unreviewed` 稽核）。其他 kind 不受影響；設定中心端點仍是唯一寫入路徑。被擋下的嘗試寫稽核 `definitions.managed_refused`（只記 kind／key／操作者，不記內容）。

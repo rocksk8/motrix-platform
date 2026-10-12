@@ -17,6 +17,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 from fastapi.responses import Response
 
 from db import get_db
+from helpers import download_name
 from helpers import _audit, _tok
 from helpers.xlsx_out import log_export
 # 走模組：測試要換得掉 geo.locate_cached
@@ -243,7 +244,7 @@ def lodging_record_export(rid: int, format: str = "csv", authorization: str = He
                           ensure_ascii=False, indent=1)
         log_export(authorization, "json", "lodging", "lodging-record", {"format": format, "rid": rid}, len(d["items"]))     # 每次匯出都留紀錄（2026-09-30）
         return Response(body, media_type="application/json; charset=utf-8",
-                        headers={"Content-Disposition": 'attachment; filename="lodging-%d.json"' % rid})
+                        headers={"Content-Disposition": download_name.content_disposition("lodging-%d.json" % rid)})
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["資料來源", _csv_cell(attr)])
@@ -254,7 +255,7 @@ def lodging_record_export(rid: int, format: str = "csv", authorization: str = He
         w.writerow([_csv_cell(it[k]) for k, _l in _EXPORT_COLS])
     log_export(authorization, "csv", "lodging", "lodging-record", {"format": format, "rid": rid}, len(d["items"]))
     return Response("﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": 'attachment; filename="lodging-%d.csv"' % rid})
+                    headers={"Content-Disposition": download_name.content_disposition("lodging-%d.csv" % rid)})
 
 
 @router.get("/api/lodging/compare")

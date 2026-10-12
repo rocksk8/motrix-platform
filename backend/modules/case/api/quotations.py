@@ -42,6 +42,7 @@ from pydantic import BaseModel, Field
 from db import get_db, spawn_bg_thread
 from db import db_conn  # /api/sales-orders（M08 搬遷移入）
 from modules.case.quotations import payment_item_amounts  # 同上
+from helpers import download_name
 from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers.gl_status import gl_posted_warning
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
@@ -5617,13 +5618,9 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
             #    要答的是「這張印的是哪一組」，不是「帳號是多少」。
             "companyName": _ident.get("company_name") or None,
             "bankAccountLast4": (_ident.get("bank_account_number") or "")[-4:] or None})
-    fname = f"{quote_no}_內部.pdf" if internal else f"{quote_no}.pdf"
-    encoded = urlquote(fname)
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"}
-    )
+    dn = download_name.build("quotation", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
+                             extra={"variant": "internal"} if internal else None)
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=dn.headers())
 
 
 # ── 單據版本與編輯紀錄查詢（2026-09-14）──────────────────────────────────────
@@ -5727,13 +5724,11 @@ def download_quotation_version(quote_no: str, seq: int, authorization: str = Hea
     _audit(_tok(authorization), "quotation.download_version", "quotation", quote_no,
            f"{quote_no} 下載存檔版本 #{seq}（{target.get('event','')}）",
            {"seq": seq, "file": target.get("file")})
-    fname = os.path.basename(full)
-    encoded = urlquote(fname)
-    return Response(
-        content=content,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"}
-    )
+    # 檔名＝案件欄位＋報價單存檔版本＋單號＋事件與日期（沿用今天存檔檔名裡的事件與日期資訊）
+    _stamp = "_".join(x for x in (str(target.get("event") or "").strip(), str(target.get("at") or "")[:10].replace("-", "")) if x)
+    dn = download_name.build("quotation_version", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user,
+                             extra={"suffix": _stamp} if _stamp else None)
+    return Response(content=content, media_type="application/pdf", headers=dn.headers())
 
 
 @router.get("/api/quotations/{quote_no}/closing-report-pdf")
@@ -5765,13 +5760,8 @@ def download_case_closing_report_pdf(quote_no: str, authorization: str = Header(
         raise HTTPException(500, f"結案報表 PDF 產生失敗（代碼 {tid}）")
     _audit(_tok(authorization), "quotation.export_closing_report", "quotation", quote_no,
            f"{quote_no} 結案報表 PDF 下載", {"via": "server"})
-    fname = f"{quote_no}_結案報表.pdf"
-    encoded = urlquote(fname)
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"}
-    )
+    dn = download_name.build("close_report", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user)
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=dn.headers())
 
 
 @router.get("/api/quotations/{quote_no}/project-report-pdf")
@@ -5798,13 +5788,8 @@ def download_project_execution_report_pdf(quote_no: str, authorization: str = He
         raise HTTPException(500, f"專案執行報告 PDF 產生失敗（代碼 {tid}）")
     _audit(_tok(authorization), "quotation.export_project_report", "quotation", quote_no,
            f"{quote_no} 專案執行報告 PDF 下載", {"via": "server"})
-    fname = f"{quote_no}_專案執行報告.pdf"
-    encoded = urlquote(fname)
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"}
-    )
+    dn = download_name.build("execution_report", quote_no=quote_no, doc_no=quote_no, ext="pdf", user=user)
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=dn.headers())
 
 
 # ── 簽核佇列的送審詳情（2026-09-14）──────────────────────────────────────────
@@ -6617,7 +6602,7 @@ def case_batch_export(body: dict = Body(...), authorization: str = Header(None))
     return Response(
         content=buf.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{urlquote(fname)}"},
+        headers={"Content-Disposition": download_name.content_disposition(fname)},
     )
 
 

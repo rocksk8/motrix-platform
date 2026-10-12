@@ -16,6 +16,7 @@ from fastapi.responses import Response as _HTTPResponse
 from pydantic import BaseModel
 
 from db import get_db, spawn_bg_thread
+from helpers import download_name
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_daily_task_assigned, notify_daily_task_completed, notify_daily_task_overdue,
@@ -805,7 +806,7 @@ def export_task_history(task_id: int, authorization: str = Header(None)):
     return _HTTPResponse(
         content=buf.getvalue().encode("utf-8-sig"),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f"attachment; filename=\"task_{task_id}_history.csv\""},
+        headers={"Content-Disposition": download_name.content_disposition(f"task_{task_id}_history.csv")},
     )
 
 

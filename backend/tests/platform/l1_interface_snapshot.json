@@ -265,6 +265,7 @@
    "SYSTEM": "const",
    "case_access_allowed": "def(conn, q, user, *, allow_approver=…, allow_module=…)",
    "case_documents_readable": "def(conn, quote_no, user)",
+   "case_download_label": "def(conn, quote_no, user)",
    "case_exists": "def(conn, quote_no)",
    "case_module_present": "def()",
    "case_not_found_message": "def(quote_no)",
@@ -585,6 +586,16 @@
    "unapproved_banner": "def(status=…, detail=…, cls=…, doc_no=…, wm_text=…)",
    "unapproved_overlay": "def(doc_no=…, wm_text=…)",
    "validate": "def(template, sample_view=…)"
+  },
+  "helper:download_name": {
+   "DEFAULTS": "const",
+   "DOC_TYPES": "const",
+   "DownloadName": "class",
+   "DownloadName.__init__": "def(self, name, header)",
+   "DownloadName.headers": "def(self)",
+   "TOKENS": "const",
+   "build": "def(doc_type, *, quote_no=…, doc_no=…, ext=…, user=…, conn=…, extra=…, inline=…)",
+   "content_disposition": "def(name, inline=…)"
   },
   "helper:duty_roles": {
    "DutyError": "class",

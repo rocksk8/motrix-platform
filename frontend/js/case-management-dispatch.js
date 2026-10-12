@@ -806,7 +806,7 @@ window.CM_PARTS.push(() => ({
         const url  = URL.createObjectURL(blob)
         const a    = document.createElement('a')
         a.href     = url
-        a.download = `${v.voucherNo}.pdf`
+        a.download = MotrixDownload.nameFrom(r, `${v.voucherNo}.pdf`)
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)

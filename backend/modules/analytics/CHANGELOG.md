@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## (next) — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）
+- 營運報表與銷項發票清單下載的 `Content-Disposition` 改用 `helpers.download_name.content_disposition()`（檔名不變，只統一編碼：latin-1 安全退路＋RFC 8187）。
+
 ## 1.0.37 — 2026-10-10（wip/t52-ab-charity-quote）：營運報表利潤分析 PDF 的公益捐款列標籤依基數戳記
 - 營運報表利潤分析 PDF 的公益捐款列改用 `pdf_gen.charity_cost_label`（原始側看 `origCharityBasis`）：新基「公益捐款（報價含稅 1%）」，舊基/無戳記「公益捐款（直接毛利 1%）」。數字不變。
 
