@@ -1,5 +1,8 @@
 # L0／L1 底層 更新紀錄
 
+## (next:minor) — 2026-10-13（wip/t57-s1-settings-edit-r1；S1 設定中心可編輯）
+- L1（新增，向下相容）：`helpers.settings_registry` —— `SettingDef(…, impact_scope=None)`（結構化影響範圍：`documents／roles／amounts／reversible／effective`；`effective` 必須與 `requires_pending`／`loosen` 旗標一致，否則登錄失敗）、`banner_of(f, value, *, default=None, days=None)`（畫面橫幅文字與等級的唯一產生處：風險 legal／security 或不可復原 ⇒ 紅，money ⇒ 琥珀；只在非預設且往放寬方向時出現；沒有 `impact_scope` 的舊欄位降級為影響說明＋風險提示）、常數 `RISK_ORDER`、`IMPACT_SCOPE_GRANDFATHERED`（E-e 之前登錄的群組暫免宣告，名單固定；新群組的 money／legal／security 欄位缺 `impact_scope` 由 `tests/platform/test_settings_editor_s1.py` 守門）。`SettingDef.meta()` 多回 `impactScope`。
+
 ## 1.129 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-13（wip/t57-s1-1-managed-r3；S1-1 設定群組受管）**
 - L1（行為，向下相容）：`routers/definitions.py` 新增『受管 kind』（`_MANAGED_KINDS`，目前 `setting_group`）：通用的 `PUT …/draft`、`POST …/publish`、`POST …/restore/{v}`、`DELETE …/draft` 對受管 kind 一律回 409（白話訊息指向『系統 > 設定中心』）；`GET`（清單、單版、差異、解析）不受影響。原本任一最高管理者可經通用端點直接改設定群組，繞過 `settings_registry.publish()` 的 放寬→待生效→第二位最高管理者核准 與 `config_changes` 明細（只留 `definitions.publish_unreviewed` 稽核）。其他 kind 不受影響；設定中心端點仍是唯一寫入路徑。被擋下的嘗試寫稽核 `definitions.managed_refused`（只記 kind／key／操作者，不記內容）。

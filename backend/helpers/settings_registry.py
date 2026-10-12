@@ -2,7 +2,7 @@
 """設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。
 
 [單位] helper:settings_registry    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, KIND, SCOPE, SettingDef, SettingError, apply_profile, clamp_value, clear_edition_bounds, confirm_period_days,
+[公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, IMPACT_SCOPE_GRANDFATHERED, KIND, RISK_ORDER, SCOPE, SettingDef, SettingError, apply_profile, banner_of, clamp_value, clear_edition_bounds, confirm_period_days,
     get, get_group, groups, invalidate, materialize_due, profile_preview, profiles, publish, register_group, set_edition_bounds, validate_values
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
@@ -29,6 +29,12 @@ DEFAULT_CONFIRM_DAYS = 7                       # 變更確認期間預設天數�
 CONFIRM_GROUP, CONFIRM_FIELD = "change_control", "confirm_period_days"
 _TYPES = ("int", "float", "bool", "str")
 DEFAULT_EFFECT = "你即將把「{名稱}」從 {舊} 改成 {新}，{生效時間}生效"
+RISK_ORDER = ("none", "ops", "money", "legal", "security")
+#: 結構化影響範圍（脊柱 E-e；欄位版面框架 §16.6／§17）：documents／roles＝白話清單；amounts＝一句話；reversible＝可否復原；effective＝immediate｜pending（須與欄位旗標一致）。
+_IMPACT_SCOPE_KEYS = ("documents", "roles", "amounts", "reversible", "effective")
+#: E-e 之前就已登錄的群組：風險 ≥ money 的欄位暫免 `impact_scope`（下次被修改時補上，不追溯變紅）。**新群組不得加入此名單**；
+#: 守門見 `tests/platform/test_settings_editor_s1.py::test_new_groups_with_high_risk_fields_declare_impact_scope`。
+IMPACT_SCOPE_GRANDFATHERED = frozenset({"change_control", "retention", "uploads", "system_hub", "completion_note", "quote_alt", "material_order"})
 
 
 def _zh(v):
@@ -68,6 +74,28 @@ class SettingError(ValueError):
         self.problems = problems or []
 
 
+def _check_impact_scope(key, s, *, pending):
+    """`impact_scope` 的結構驗證（None 合法＝尚未宣告）。`effective` 必須與欄位旗標一致（有 `requires_pending`／`loosen` ⇒ pending）。"""
+    if s is None:
+        return None
+    if not isinstance(s, dict) or set(s) != set(_IMPACT_SCOPE_KEYS):
+        raise ValueError("設定欄位 %r 的 impact_scope 必須剛好有這些鍵：%s" % (key, "、".join(_IMPACT_SCOPE_KEYS)))
+    for k in ("documents", "roles"):
+        v = s[k]
+        if not isinstance(v, (list, tuple)) or any(not _zh(x) for x in v):
+            raise ValueError("設定欄位 %r 的 impact_scope.%s 必須是繁中白話名稱的清單" % (key, k))
+    if not _zh(s["amounts"]):
+        raise ValueError("設定欄位 %r 的 impact_scope.amounts 需要一句繁中白話" % key)
+    if not isinstance(s["reversible"], bool):
+        raise ValueError("設定欄位 %r 的 impact_scope.reversible 必須是 true／false" % key)
+    if s["effective"] not in ("immediate", "pending"):
+        raise ValueError("設定欄位 %r 的 impact_scope.effective 只能是 immediate／pending" % key)
+    if (s["effective"] == "pending") != bool(pending):
+        raise ValueError("設定欄位 %r 的 impact_scope.effective 與欄位的 requires_pending／loosen 旗標不一致" % key)
+    return {"documents": list(s["documents"]), "roles": list(s["roles"]), "amounts": s["amounts"],
+            "reversible": s["reversible"], "effective": s["effective"]}
+
+
 class SettingDef:
     """一個設定欄位。畫面規則（使用者 2026-10-10，CORE-SPEC 零技術門檻）：問白話問題、少量選項、標示建議、說明影響；內部鍵 `key` 不顯示。
     **必填**：`question`（白話問句）、`label`、`help`、`impact`（影響說明：對象／既有或之後／可否復原／何時生效）；`risk` 屬 money／legal／security 或
@@ -77,11 +105,11 @@ class SettingDef:
     `loosen`＝放寬方向：往該方向調整的變更視同風險變更——確認期間後才生效，且需要另一位最高管理者核准（只有一位時改為原因＋確認期間＋警告＋通知）；
     收緊（反方向）立即生效。販售版本的邊界（`set_edition_bounds`）寫在程式／授權，客戶不能改。"""
     __slots__ = ("key", "type", "default", "min", "max", "unit", "label", "help", "risk", "legacy", "clamp", "requires_pending",
-                 "question", "impact", "risk_text", "choices", "recommended", "presets", "advanced", "impact_fn", "effect", "loosen", "zero_is_max")
+                 "question", "impact", "risk_text", "choices", "recommended", "presets", "advanced", "impact_fn", "effect", "loosen", "zero_is_max", "impact_scope")
 
     def __init__(self, key, type, default, *, question="", label="", help="", impact="", min=None, max=None, unit="", risk="ops",
                  legacy=None, clamp=False, requires_pending=False, risk_text="", choices=None, recommended=None, presets=None,
-                 advanced=False, impact_fn=None, effect="", loosen=None, zero_is_max=False):
+                 advanced=False, impact_fn=None, effect="", loosen=None, zero_is_max=False, impact_scope=None):
         if type not in _TYPES:
             raise ValueError("型別不合法：%r" % (type,))
         self.key, self.type, self.default = key, type, default
@@ -106,6 +134,7 @@ class SettingDef:
                 break
         if miss:
             raise ValueError("設定欄位 %r 缺少必填的繁中文字：%s" % (key, "、".join(miss)))
+        self.impact_scope = _check_impact_scope(key, impact_scope, pending=bool(self.requires_pending or self.loosen))
         if self.check(default):
             raise ValueError("預設值自己就不合法：%s=%r（%s）" % (key, default, self.check(default)))
         if recommended is not None and self.check(recommended):
@@ -131,7 +160,7 @@ class SettingDef:
         return {"key": self.key, "type": self.type, "default": self.default, "min": self.min, "max": self.max, "unit": self.unit,
                 "question": self.question, "label": self.label, "help": self.help, "impact": self.impact, "riskText": self.risk_text,
                 "risk": self.risk, "clamp": self.clamp, "requiresPending": self.requires_pending, "recommended": self.recommended,
-                "presets": self.presets, "advanced": self.advanced, "effect": self.effect, "hasLiveImpact": self.impact_fn is not None, "loosen": self.loosen,
+                "presets": self.presets, "advanced": self.advanced, "effect": self.effect, "hasLiveImpact": self.impact_fn is not None, "loosen": self.loosen, "impactScope": self.impact_scope,
                 "choices": [{"value": c[0], "label": c[1], "impact": c[2]} for c in self.choices]}
 
 
@@ -384,6 +413,40 @@ def confirm_period_days(conn=None):
 
 def _rank(f, v):
     return float("inf") if (f.zero_is_max and v == 0) else v
+
+
+def banner_of(f, value, *, default=None, days=None):
+    """畫面橫幅（欄位版面框架 §16.6）：回 None（不顯示）或 `{"level": "amber"|"red", "lines": [三行白話], "fallback": bool}`。
+    只在『風險 ≥ money、值不是預設、且（有 `loosen` 的數值欄位）往放寬方向』時出現。等級：風險 legal／security 或不可復原 ⇒ 紅，其餘（money）⇒ 琥珀。
+    有 `impact_scope` ⇒ 依結構產生三行（單據／人／金額與後果＋可否復原＋何時生效）；沒有（E-e 之前登錄的欄位）⇒ 降級為『影響說明＋風險提示＋何時生效』。
+    句子一律由這裡產生，畫面只負責呈現。`days`＝目前的變更確認期間（天），省略用預設。"""
+    base = f.default if default is None else default
+    if value == base or RISK_ORDER.index(f.risk) < RISK_ORDER.index("money"):
+        return None
+    if f.loosen and isinstance(value, (int, float)) and not isinstance(value, bool):
+        a, b = _rank(f, value), _rank(f, base)
+        if not ((f.loosen == "up" and a > b) or (f.loosen == "down" and a < b)):
+            return None
+    n = int(days or DEFAULT_CONFIRM_DAYS)
+    if f.loosen:
+        when = "需等 %d 天確認期間，並經另一位最高管理者核准後才會生效（只有一位最高管理者時，改為填寫原因、等確認期間後生效）" % n
+    elif f.requires_pending:
+        when = "需等 %d 天確認期間後才會生效，期間內可以撤銷" % n
+    else:
+        when = "儲存後立即生效"
+    s = f.impact_scope
+    if s is None:
+        lines = [f.impact]
+        if f.risk_text:
+            lines.append("注意：" + f.risk_text)
+        lines.append(when)
+        return {"level": "red" if f.risk in ("legal", "security") else "amber", "lines": lines, "fallback": True}
+    docs = "、".join(s["documents"]) if s["documents"] else "不影響既有單據"
+    roles = "、".join(s["roles"]) if s["roles"] else "不影響特定角色"
+    return {"level": "red" if (f.risk in ("legal", "security") or not s["reversible"]) else "amber",
+            "lines": ["會影響這些單據：" + docs, "會影響這些人：" + roles,
+                      "%s。%s；%s。" % (s["amounts"].rstrip("。"), "可以復原" if s["reversible"] else "無法復原", when)],
+            "fallback": False}
 
 
 def publish(group, values, *, note="", user="", reason="", ip="", conn=None, actor=None):
