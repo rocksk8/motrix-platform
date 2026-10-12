@@ -1191,6 +1191,7 @@
    "clamp_value": "def(f, v)",
    "clear_edition_bounds": "def()",
    "confirm_period_days": "def(conn=…)",
+   "field_defs": "def(group)",
    "field_views": "def(group, values=…, *, days=…)",
    "get": "def(group, field, *, conn=…, now=…)",
    "get_group": "def(group, *, conn=…, now=…)",

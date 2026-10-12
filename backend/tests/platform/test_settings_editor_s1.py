@@ -287,3 +287,87 @@ def test_live_impact_is_cached_read_only_and_fails_soft(client, make_user, impac
     assert client.post(url, json={"field": "nope", "value": 1}, headers=h).status_code == 404
     r = client.post("/api/settings-center/groups/retention/impact", json={"field": "local_db_keep_days", "value": 40}, headers=h).json()
     assert r["live"] is None and r["static"]                                   # 沒有 impact_fn ⇒ 只有靜態
+
+
+# ===================================================================================================
+# S1-5：版本清單、白話差異、還原（含 G3：還原成較寬鬆的舊值不會被自己撤銷）
+# ===================================================================================================
+
+def _save(client, h, group, values, reason="測試"):
+    r = client.post("/api/settings-center/groups/%s" % group, json={"values": values, "reason": reason}, headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_versions_and_plain_diff(client, make_user):
+    h = _hdr(client, make_user, "s15_a")
+    v1 = _save(client, h, "uploads", {"max_file_mb": 10}, "收緊一")["version"]
+    v2 = _save(client, h, "uploads", {"max_file_mb": 5}, "收緊二")["version"]
+    vs = client.get("/api/settings-center/groups/uploads/versions", headers=h).json()
+    assert [v["version"] for v in vs["versions"]] == [v2, v1] and vs["latest"] == v2 and vs["versions"][0]["note"] == "收緊二" and vs["versions"][0]["by"]
+    d = client.get("/api/settings-center/groups/uploads/diff?a=%d&b=%d" % (v1, v2), headers=h).json()
+    assert d["changes"] == [{"field": "max_file_mb", "label": "單檔大小上限", "oldText": "10 MB", "newText": "5 MB"}]
+    d = client.get("/api/settings-center/groups/uploads/diff?a=default&b=current", headers=h).json()
+    assert [c["field"] for c in d["changes"]] == ["max_file_mb"] and d["changes"][0]["newText"] == "5 MB"
+    assert client.get("/api/settings-center/groups/uploads/diff?a=99&b=current", headers=h).status_code == 404
+    assert client.get("/api/settings-center/groups/uploads/diff?a=xx&b=current", headers=h).status_code == 400
+
+
+def test_restore_to_a_looser_version_becomes_a_surviving_pending_item(client, make_user):
+    h = _hdr(client, make_user, "s15_b")
+    make_user(username="s15_b2", role="superadmin")
+    v1 = _save(client, h, "uploads", {"max_file_mb": 10})["version"]
+    _save(client, h, "uploads", {"max_file_mb": 5})
+    pv = client.post("/api/settings-center/groups/uploads/restore/%d" % v1, json={"preview": True}, headers=h).json()
+    assert [x["kind"] for x in pv["fields"] if x["field"] == "max_file_mb"] == ["pending_approval"]     # 5 → 10 ＝ 放寬
+    r = client.post("/api/settings-center/groups/uploads/restore/%d" % v1, json={"reason": "回到第一版"}, headers=h)
+    assert r.status_code == 200, r.text
+    pend = [p for p in client.get("/api/settings-center/pending", headers=h).json()["pending"] if p["group"] == "uploads"]
+    assert len(pend) == 1 and pend[0]["new"] == 10 and pend[0]["required"] == 1                       # 修正前：被自己撤銷 ⇒ []
+    c = _get_db()
+    try:
+        assert R.get("uploads", "max_file_mb", conn=c) == 5                                             # 放寬不立即生效
+        assert c.execute("SELECT COUNT(*) FROM audit_log WHERE action='settings.uploads.restore'").fetchone()[0] == 1
+    finally:
+        c.close()
+
+
+def test_restore_to_a_tighter_version_is_immediate_and_clears_older_pending(client, make_user):
+    h = _hdr(client, make_user, "s15_c")
+    make_user(username="s15_c2", role="superadmin")
+    v1 = _save(client, h, "uploads", {"max_file_mb": 5})["version"]
+    out = _save(client, h, "uploads", {"max_file_mb": 50})                                              # 放寬 ⇒ 待生效，不產生新版本
+    assert out["pending"] and not out.get("changed")
+    r = client.post("/api/settings-center/groups/uploads/restore/%d" % v1, json={"reason": "回到嚴的"}, headers=h)
+    assert r.status_code == 200
+    assert [p for p in client.get("/api/settings-center/pending", headers=h).json()["pending"] if p["group"] == "uploads"] == []   # 舊的待生效放寬被清掉
+    c = _get_db()
+    try:
+        assert R.get("uploads", "max_file_mb", conn=c) == 5
+    finally:
+        c.close()
+
+
+def test_restore_guards(client, make_user):
+    h = _hdr(client, make_user, "s15_d")
+    v1 = _save(client, h, "uploads", {"max_file_mb": 10})["version"]
+    _save(client, h, "uploads", {"max_file_mb": 5})
+    url = "/api/settings-center/groups/uploads/restore/%d"
+    assert client.post(url % 99, json={"reason": "x"}, headers=h).status_code == 404
+    assert client.post(url % v1, json={}, headers=h).status_code == 400                                 # 沒有原因
+    assert client.post(url % v1, json={"preview": True}, headers=h).status_code == 200                  # 預覽不需要原因
+    R.set_edition_bounds("uploads", "max_file_mb", max=8)                                                # 版本邊界收緊：第一版的 10 已超出
+    try:
+        r = client.post(url % v1, json={"reason": "x"}, headers=h)
+        assert r.status_code == 400 and r.json()["detail"]["problems"]
+    finally:
+        R.clear_edition_bounds()
+    c = _get_db()
+    try:
+        assert R.get("uploads", "max_file_mb", conn=c) == 5                                              # 沒動
+    finally:
+        c.close()
+    ha = _hdr(client, make_user, "s15_adm", role="admin")
+    assert client.post(url % v1, json={"reason": "x"}, headers=ha).status_code == 403
+    assert client.get("/api/settings-center/groups/uploads/versions", headers=ha).status_code == 403
+    assert client.get("/api/settings-center/groups/uploads/diff", headers=ha).status_code == 403

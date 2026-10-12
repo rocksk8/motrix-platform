@@ -3,7 +3,7 @@
 
 [單位] helper:settings_registry    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, IMPACT_SCOPE_GRANDFATHERED, KIND, RISK_ORDER, SCOPE, SettingDef, SettingError, apply_profile, banner_of, clamp_value, clear_edition_bounds, confirm_period_days,
-    field_views, get, get_group, groups, invalidate, live_impact, materialize_due, plan, profile_preview, profiles, publish, register_group, set_edition_bounds, show_value, validate_values
+    field_defs, field_views, get, get_group, groups, invalidate, live_impact, materialize_due, plan, profile_preview, profiles, publish, register_group, set_edition_bounds, show_value, validate_values
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
     ④寫入口只有 `publish()`：同一交易寫定義新版本＋變更明細（config_ledger）＋稽核＋（有舊鍵時）雙寫舊鍵；⑤讀取走 15 秒行程內快取，
@@ -453,6 +453,11 @@ def banner_of(f, value, *, default=None, days=None):
             "lines": ["會影響這些單據：" + docs, "會影響這些人：" + roles,
                       "%s。%s；%s。" % (s["amounts"].rstrip("。"), "可以復原" if s["reversible"] else "無法復原", when)],
             "fallback": False}
+
+
+def field_defs(group):
+    """群組的欄位定義 `{欄位鍵: SettingDef}`（唯讀複本；給設定中心的差異／白話顯示用）。"""
+    return dict(_g(group)["fields"])
 
 
 def field_views(group, values=None, *, days=None):
