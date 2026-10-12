@@ -4,6 +4,7 @@
 > 例：報價單由管理者從「欄位目錄」挑欄位（總成本、稅額…），自己決定順序、**欄寬**、列高，圖形化操作。
 > 方法：**先盤點已有什麼，再設計**（§1）；結論是「多半已有，缺的是寬高、目錄與單一輸出」，所以本文是**擴充既有 P9 排版器與定義文件庫**，不另起一套。
 > 程式錨點取自 `origin/platform`（c14f0a1df）；M2 新增的設定登錄／設定中心／系統中心**尚未在 platform 基底**，相依處標明。
+> **r8（依 0d 對 r7 §17 的 NOT-PASS 與 1c 決定）**：`impact_scope` 在程式中不存在 ⇒ 新增引擎缺口 **E-e**（§17.2；既有群組下次修改時補、不追溯變紅）；風險類改為實際的 `none／ops／money／legal／security`（§17.1 #4）；**E-a 會破壞部署基準凍結測試** ⇒ 基準依擁有者分割、群組總數由宣告計算（§17.2a）；執行期驗證失敗的降級策略（§17.2b）；掃描器加正對照與誤報白名單（§17.5-7）；**底層一班一閘門**明列（§17.7）；§17.3 可見性改為『每個表面等於該表面上 `directMarginPct` 的判定』、CRM 列含 `dev_crm` 模組門；`features[]` 驗證器併入 `test_core_loader`。
 > **r7（使用者：框架化並行、含未來需求）**：新增 §17『功能進件＝脊柱登錄』——登錄檢查清單、登錄層缺口（E-a 模組自登錄設定群組、E-b 彙整驗證、E-c 通知範本、E-d 通知類型）、以專案毛利%／CRM 批示／完工單／下載檔名／M3 為實例、主幹與功能並行排序、登錄表驅動守門。
 > **r4（依 0d 稽核）**：§4 補『版面鍵與端點延伸』（現行 LAYOUT_KEY 只認模組鍵，需明確擴充並計入 P1）、§12.3 重算與 QUOTE-CASE 排班的重疊（逐插槽對應項目編號，未對應者視為淨新增）。**r3（依使用者範圍澄清 2026-10-12：框架包含頁面顯示與資訊內容）**：已讀並對齊 `FRAMEWORKIZE-PROGRAM-T54.md`、`CONFIGURABILITY-INVENTORY-T54.md`／items／gaps csv、`QUOTE-CASE-DISPLAY-FRAMEWORK-SCOPE-T54.md`（D1／D2／D3）、`DOC-FIELD-POLICY-DESIGN-T54.md`（F7）、`SETTINGS-CENTER-DESIGN-T54.md`、archive 盤點、completion-note r6／download-filename r4 設計；0d 稽核 FL-1～FL-9 與 98 交叉稽核 S1～S8 已納入。**脊柱現在涵蓋**：欄位、清單欄位／排序／篩選（D1）、格式（D2）、頁面區塊與儀表板／報表欄位（D3）、標籤與編號（F5）、欄位可見／可改（F7）——全部是同一個脊柱的插槽（§0.5、§16），沒有第二套機制。10 日範圍只做 P0＋P1（目錄＋解析器）；其餘在上線後依序插入（§12）。
 
@@ -354,7 +355,7 @@ ResolvedLayout = 區塊[ 欄位[{目錄項, 標籤, 寬度檔位→實際比例,
 2. **橫幅內容固定三段**：①『會影響哪些單據』（用 DocType 登錄的白話名稱，如『已回簽的擇一報價單』）；②『會影響哪些人／角色』（用白話角色或能力名稱）；③『會影響哪些金額或後果』＋『可否復原』＋『何時生效』（立即／需第二位最高管理者核准＋確認期 N 天）。若能即時算出，附一句**實際受影響數量**（例：『目前有 12 張已回簽的報價單會適用』）。
 3. **目前值為非預設時**，設定頁頂端有常駐提示條『此項目目前不是系統預設（預設：…）』並列在『變更摘要』頁，讓接手的管理者一眼看到。
 4. **紅色橫幅**要求勾選『我已了解上述影響』才可送出；琥珀色不需勾選但仍需填寫原因。
-**影響範圍文字如何產生與維護**：每個高影響選項在登錄時一併宣告 `impact_scope`（結構化，不是整段文字）：`{documents:[單據類型鍵], roles:[能力或角色鍵], amounts:'白話一句', reversible:bool, effective:'immediate|pending'}`，選填 `impact_calc(conn)` 回傳即時數量。畫面由結構渲染成三段文字，單據類型與角色名稱取自 DocType 登錄／標籤來源——改名只改一處。**登錄守門**：風險等級 ≥ `money` 的選項缺 `impact_scope` ⇒ 登錄失敗；白話守門測（沿用 `test_settings_ui_plain_language`）涵蓋橫幅文字。
+**影響範圍文字如何產生與維護**：每個高影響選項在登錄時一併宣告 `impact_scope`（結構化，不是整段文字）：`{documents:[單據類型鍵], roles:[能力或角色鍵], amounts:'白話一句', reversible:bool, effective:'immediate|pending'}`，選填 `impact_calc(conn)` 回傳即時數量。畫面由結構渲染成三段文字，單據類型與角色名稱取自 DocType 登錄／標籤來源——改名只改一處。**登錄守門**：風險等級 ≥ `money` 的選項缺 `impact_scope` ⇒ 登錄失敗（**r8 更正：`SettingDef` 目前沒有 `impact_scope` 欄位，由 §17.2 的 E-e 新增；就緒前此守門只對新登錄生效，既有群組下次修改時補**）；白話守門測（沿用 `test_settings_ui_plain_language`）涵蓋橫幅文字。
 **帳本紀錄**：每次變更寫 `config_changes`（舊值→新值、原因、操作者、風險等級、`approvals_required`、`effective_at`）；放寬類另寫待生效事件與雙人核准；稽核事件 `settings.<群組>.update／pending`；通知其他最高管理者。橫幅是**畫面**，帳本才是證據——兩者都必須存在，缺一視為不合格。
 **測試**：①宣告→渲染的快照（三段文字、顏色等級）；②缺 `impact_scope` 登錄失敗；③非預設值時常駐提示條出現；④紅色橫幅未勾選不可送出；⑤變更同交易寫帳本與稽核；⑥白話守門。
 
@@ -369,7 +370,7 @@ ResolvedLayout = 區塊[ 欄位[{目錄項, 標籤, 寬度檔位→實際比例,
 | 1 | 功能代號 | 一個 snake_case 代號（＝設定群組代號；§15-2） | 模組宣告檔 `features[]` | 重複代號 ⇒ 載入失敗 |
 | 2 | **欄位目錄項** | 鍵、白話名稱、型別、`format`、**`isMoney`**、金額類別（`public／internal／none`）、**可見性判定函式**、可用通道（畫面／內部 Excel／客戶 PDF／列印／檔名／帶入其他單據）、來源（`stored`／`computed`＋來源函式）、可否編輯、預設是否顯示與位置、預設寬度檔位 | 目錄（`customization` v2 `fields[]`） | `isMoney` 必有可見性判定；`isMoney` 項不得進客戶通道；目錄 ⇔ `financial_mask` 雙向一致 |
 | 3 | 表面 | 這些項目出現在哪些表面（`form／table／list／page／dashboard／report／output`），表面鍵 `module:<模組>.<表面>`（≤30 字） | 目錄 `surfaces[]` | 表面鍵格式與長度；每項至少一個表面 |
-| 4 | **設定群組＋鍵＋預設＋影響範圍** | 每個選項：題目（白話）、選項、**預設＝今天的行為**、風險類（`none／money／security／irreversible`）、**`impact_scope`**（單據、角色、金額、可否復原、何時生效）、是否需橫幅（§16.6） | 模組宣告的設定群組（見 17.2 E-a） | 預設＝現況（`defaults_equal_legacy`）；風險 ≥ `money` 缺 `impact_scope` ⇒ 登錄失敗；白話守門；群組總數斷言 |
+| 4 | **設定群組＋欄位＋預設＋風險類** | 每個欄位：白話題目 `question`、`label`、`help`、**`impact`（影響說明，必填）**、**預設＝今天的行為**、**風險類——實際只有 `none／ops／money／legal／security`，沒有『irreversible』（不可逆以 `risk_text` 與 `loosen`／`requires_pending` 表達）**；選項型的每個選項（`choices`）都要有『值／中文標籤／影響說明』。**各類需要什麼**：`none`／`ops` ＝ `impact`；`money`／`legal`／`security` ＝ 再加 `risk_text`（白話風險提示）並依 §16.6 顯示橫幅（琥珀／紅）；設了 `loosen`（放寬方向）者 ＝ 確認期間＋第二位最高管理者核准（只有一位時改為原因＋確認期＋警告＋通知）；`requires_pending` ＝ 確認期間後才生效（亦需 `risk_text`）。結構化 `impact_scope` 為 **E-e 新增欄位（現在不存在）**：E-e 就緒前，新登錄（`directive`、`project_margin`）在登錄清單標註『impact_scope 待補』並以 `impact`＋`risk_text` 承載；既有群組（`completion_note`、`quote_alt`、`material_order`）於**下次被修改時**補上，**不追溯變紅** | 模組宣告的設定群組（§17.2 E-a） | 預設＝現況；`money／legal／security` 缺 `risk_text` ⇒ 登錄失敗（既有規則）；E-e 就緒後，**新登錄**的 `money／legal／security` 缺 `impact_scope` ⇒ 失敗；白話守門（`test_settings_ui_plain_language`）；群組總數由宣告計算 |
 | 5 | 標籤與白話 | 欄位名、按鈕名、狀態名、錯誤訊息、單據類型用語；哪些可由管理者改 | `label_map`／relabel／DocType 登錄 | 畫面不得出現代碼與鍵名；標籤只有一個來源 |
 | 6 | 權限與能力 | 誰能看／寫／管理；能力名稱（`<功能>.<動作>`）、預設能力集合、是否 `security` 風險 | F3 能力（命名由 1d 提供）；過渡期內建預設集合並標記待遷移 | 帶權限效果的設定必為 `security`；看不到來源記錄就不可操作 |
 | 7 | **通知與信件** | 站內通知類型（白話標題、連結規則、是否遮金額）；信件類型（分類、預設收件人、事件收件人、影響、建議處理）；**範本文字鍵**（標題／開頭／按鈕）與占位符白名單；頻率與失敗處理；主旨不含內容 | `mail_types.register(owner=模組)`＋通知類型登錄＋範本登錄（E-c／E-d） | `event_key` 字面且已登記（既有 `test_mail_registry`）；範本占位符不得是金額／個資欄位；主旨掃描 |
@@ -388,29 +389,49 @@ ResolvedLayout = 區塊[ 欄位[{目錄項, 標籤, 寬度檔位→實際比例,
 
 | 登錄面 | 現況 | 缺口（引擎仍需的改動） | 何時 | 工量 |
 |---|---|---|---|---|
-| 設定群組／鍵 | M2 設定登錄存在，但群組集中在共用檔 `settings_groups.py`（各班追加，熱點；§15-8） | **E-a 模組自行登錄設定群組**（模組宣告檔 `settings`，載入器合併；共用檔不再追加） | 里程碑 1 | 0.5 pd |
+| 設定群組／鍵 | M2 設定登錄存在；群組集中在 `helpers/settings_groups.py`，凍結基準為**單一** `settings_deploy_baseline.json`（`test_deploy_baseline_frozen`，`tests/platform/test_settings_pending_t54.py:77`）——c7 與 5e 都改這兩個檔（熱點） | **E-a 模組自行登錄設定群組＋基準分割**（§17.2a）：模組宣告檔 `settings` 由載入器合併；基準改為『核心一份＋每個模組一份』，只比對已載入的擁有者；群組總數斷言由宣告計算 | 里程碑 1（底層列車） | 1.0 pd |
 | 欄位目錄／表面 | `customization` v1；v2 為本文 P0 | 無新增（P0 已含）；**宣告檔格式**併入 P0 的 v2 schema | 里程碑 1（P0） | 含於 P0 |
-| 彙整與驗證 | 無 | **E-b `core/spine.py`**：載入所有 `features[]`，做 17.1 的跨表檢查（目錄⇔遮蔽、設定風險⇔`impact_scope`、標籤存在、信件已登記、群組代號唯一），啟動 fail-closed（只停用該功能，不停系統）；提供**登錄表驅動的 pytest 夾具** | 里程碑 1 | 1.0 pd |
+| 彙整與驗證 | 無 | **E-b `core/spine.py`**：載入所有 `features[]`，做 §17.1 的跨表檢查（目錄⇔遮蔽、設定風險⇔必填文字、標籤存在、信件已登記、群組代號唯一）；執行期降級見 §17.2b；掃描器含正對照與誤報白名單（§17.5-7）；`features[]` 區塊在 `module.json` **不需改載入器**（載入器忽略未知區塊），驗證器併入 `test_core_loader`；提供登錄表驅動的 pytest 夾具 | 里程碑 1（底層列車） | 1.5 pd（驗證 1.0＋降級與健康卡 0.25＋掃描器正對照與白名單 0.25） |
+| 影響範圍欄位 | `SettingDef.__slots__` ＝ `key／type／default／min／max／unit／label／help／risk／legacy／clamp／requires_pending／question／impact／risk_text／choices／recommended／presets／advanced／impact_fn／effect／loosen／zero_is_max`（已核對），**沒有 `impact_scope`**；今日唯一規則：風險 ∈ `money／legal／security` 或 `requires_pending` ⇒ `risk_text` 必填 | **E-e `SettingDef.impact_scope`**（結構化：documents／roles／amounts／reversible／effective）＋登錄驗證（只對新登錄生效，既有群組下次修改補）＋橫幅與影響文字渲染＋變更帳本的白話文字；渲染與帳本文字與設定中心 S1 編輯畫面綁定 | 欄位＋驗證：里程碑 1；渲染與帳本文字：隨 S1 | 0.5（欄位＋驗證）＋1.0（渲染、帳本，與 S1 同做）＝1.5 pd |
 | 信件類型 | `mail_types.register(owner=模組)` 存在（含個人偏好、超管覆寫） | 無（沿用）；僅把呼叫改為宣告檔投影（相容舊呼叫） | — | 0 |
-| 通知範本 | **內文寫死在 `email_notify.py`**（`_build_html` rows） | **E-c 通知範本登錄**：`register_template(key, default_title, default_intro, default_button, placeholders)`；管理者可改文字鍵，占位符白名單（chips，不用大括號），金額／個資欄不可成為占位符。本期最小版＝三個文字鍵；完整版（欄位列增減）後續 | 最小版里程碑 2；完整版後續 | 0.5（最小）＋1.0（完整） |
-| 站內通知類型 | `notifications.type` 自由字串，各處硬寫 | **E-d 通知類型登錄**（白話標題、連結規則、保留天數、是否遮金額）；既有類型逐步回填，不強制 | 里程碑 2 | 0.25 pd |
+| 通知範本 | **內文寫死在 `email_notify.py`**（`_build_html` rows） | **E-c 通知範本登錄**：`register_template(key, default_title, default_intro, default_button, placeholders)`；管理者可改文字鍵，占位符白名單（chips，不用大括號），金額／個資欄不可成為占位符。最小版＝三個文字鍵；完整版（欄位列增減）後續 | 最小版：**里程碑 1 同一列車**（§17.7）；完整版後續 | 0.5（最小）＋1.0（完整） |
+| 站內通知類型 | `notifications.type` 自由字串，各處硬寫 | **E-d 通知類型登錄**（白話標題、連結規則、保留天數、是否遮金額）；既有類型逐步回填，不強制 | **里程碑 1 同一列車**（§17.7） | 0.25 pd |
 | 留言／批註元件 | 無（`case_updates` 無收件人與已讀） | **`annotations` 元件**（`CRM-DIRECTIVE-COMMENTS-T56.md`；目標類型登錄 `register_annotation_target`）——本身是『登錄式元件』的範例：別的單據只登錄目標類型 | 與 CRM 批示同班 | 該文 8.0 pd（不計入本表） |
 | 能力 | F3 設計中 | 無新增；命名由 1d 供給；過渡期內建預設集合 | 隨 F3 | — |
 | 標籤／DocType | `label_map`／relabel 存在；F7 `register_doctype` 設計中 | 無新增（沿用 §15-1） | — | — |
 | 輸出適配器 | 手寫 PDF | 本文 P3（適配器讀解析結果） | 里程碑 2 之後 | 已在 §12 |
 
-**新增登錄層合計**：E-a 0.5＋E-b 1.0＝**1.5 pd**（里程碑 1，使 P0＋P1＋閘門 6.75 → **8.25 pd**）；E-c 最小 0.5＋E-d 0.25＝0.75 pd（里程碑 2）；完整範本 +1.0 pd（後續）。
+**新增登錄層合計（r8）**：E-a 1.0＋E-b 1.5＋E-e 核心 0.5＋E-c 最小 0.5＋E-d 0.25＝**3.75 pd**；加上 P0＋P1＋閘門 6.75 ⇒ **底層列車 10.5 pd**（閘門只算一次）。`annotations` 核心（CRM 批示 A1，1.75 pd）若同車 ⇒ 12.25 pd，仍是**同一次**約 105 分鐘閘門。後續另計：E-e 渲染與帳本 1.0（隨 S1）、完整範本 +1.0。
 
 **誠實邊界（沿用 §14）**：仍需程式的——新的計算函式（如 `project_margin`）、新的儲存格畫法、新的資料表與結構、涉及金流的連動、新的單據類型結構。登錄涵蓋的是**其餘一切**：它在哪出現、誰看得到、怎麼叫、怎麼調、怎麼通知、怎麼輸出、怎麼稽核、怎麼測。
+
+### 17.2a 部署基準凍結要依擁有者分割（E-a 的前提；0d M3）
+
+**現況（已核對）**：`test_deploy_baseline_frozen`（`tests/platform/test_settings_pending_t54.py:77`）把**所有已登錄的設定群組**與**單一** `tests/platform/settings_deploy_baseline.json` 比對（預設值＝上線前常數）；`helpers/settings_groups.py` 集中登錄。若照 r7 讓模組自行登錄群組而基準仍是一份：①core-only RC（沒有該模組）與**單模組安裝包**會因『基準有、登錄表沒有』而紅；②c7 與 5e 同時改 `settings_groups.py` 與該 JSON（熱點衝突）。
+
+**決定（1c）**：
+1. **基準依擁有者分割**：核心一份（`tests/platform/settings_deploy_baseline.json`，只含 owner＝core 的群組）＋**每個模組一份**（`modules/<模組>/tests/settings_deploy_baseline.json`，只含該模組宣告的群組）。測試**只比對已載入的擁有者**：某模組未載入 ⇒ 它的基準檔不參與、其群組也不應出現在登錄表。
+2. **擁有者來自宣告**（`features[]`／`settings` 區塊的 `owner`），不是檔案位置推測；群組登錄時記錄 owner（既有 `register_group` 的呼叫端補 owner，預設 `core`）。
+3. **群組總數斷言由宣告計算**：總數＝所有已載入擁有者宣告的群組數之和；不再有人手改的常數（步驟檔 #19／相關測試改為讀宣告）。
+4. **遷移（機械式，隨 E-a 同批）**：把現有 JSON 依 owner 拆開（`completion_note`、`quote_alt`、`material_order` 等模組群組搬到各自模組基準；其餘留核心）；拆分前後『全部群組的預設值集合』逐位相同（一次性比對腳本＋測試）。
+5. **新增測試**：①core-only RC：模組缺席 ⇒ 其基準不需要、登錄表無其群組；②單模組安裝包可載入且基準自洽；③已載入擁有者的基準缺群組／多群組／預設值改變 ⇒ 紅（原凍結語意不變）；④孤兒基準檔（擁有者未載入）被忽略但不得被其他擁有者引用；⑤群組總數＝宣告和。
+效果：模組不再改共用檔，**`settings_groups.py` 與基準 JSON 的熱點消失**（c7、5e 不再互相衝突）。
+
+### 17.2b 驗證失敗的降級（執行期）與 CI 的差別（0d S1）
+
+- **CI／測試**：任何宣告驗證失敗 ＝ **硬紅**（不得合併）。
+- **執行期**（例如升級後宣告與資料不一致、或載入器版本差）：驗證失敗的**目錄項**不得被當成『無害』。規則：視為**未驗證項 ＝ `isMoney=真`、類別 `internal`**——對客戶通道（PDF／預覽／回簽頁／客戶 Excel）、檔名變數、帶入白名單、範本占位符一律隱藏；**絕不當成 `public`**。該功能的其他部分（設定、信件登記）一併停用，不影響其他功能與系統啟動。
+- **可見性**：於系統中心健康卡新增一行『有 N 項功能登錄未通過驗證』並列出功能代號與原因（白話），超級管理員可見；同時寫 `audit_log`（動作 `spine.validation_failed`）。
+- **測試**：①故意破壞一筆宣告 ⇒ 該項在所有客戶通道不可見、不在白名單、不在變數表；②其他功能正常；③健康卡出現；④修復後恢復（正反對照）。
 
 ### 17.3 套用到進行中的功能（證明：每個都只靠登錄表達）
 
 | 登錄項 | 專案毛利%（98：`QUOTE-PROJECT-GROSS-MARGIN-T56`） | CRM 批示（`CRM-DIRECTIVE-COMMENTS-T56`） | 完工單（completion note） | 下載檔名 | M3 擇一方案 |
 |---|---|---|---|---|---|
 | 1 功能代號 | `project_margin` ★ | `directive` | `completion_note` | `download_name` | `quote_alt` |
-| 2 欄位目錄 | `project_margin_pct`：`computed`、`isMoney=真`、`internal`、判定＝`quote_money_visible`／`money_visible`（同 `directMarginPct`）、唯讀、內部損益預設顯示於直接毛利率後 | `directive_badge`／`directive_count`／`directive_panel`（`isMoney=假`；判定＝有 `directive.write` 或為收件人） | 可帶入欄位＝目錄屬性『可帶入其他單據』且 `isMoney=假`（白名單由目錄查詢產生） | 檔名變數由目錄產生，**金額類不可成為變數**；文件類型用語＝DocType 登錄 | `altGroup`、`totalsByAlt` 目錄項；鎖定比對集合＝目錄中報價本文鍵 |
+| 2 欄位目錄 | `project_margin_pct`：`computed`、`isMoney=真`、`internal`、判定＝**每個表面等於該表面上 `directMarginPct` 所用的函式**（報價單頁／清單／詳情＝`quote_money_visible`；`money_visible` 只用於精算相關位）、唯讀、內部損益預設顯示於直接毛利率後 | `directive_badge`／`directive_count`／`directive_panel`（`isMoney=假`；判定＝CRM `visible_fn`（`_require_dev` 規則：admin+ 或 `dev_crm` 模組，且 `row_access`）**並且**收件人存取檢查（寫入與讀取時都跑）） | 可帶入欄位＝目錄屬性『可帶入其他單據』且 `isMoney=假`（白名單由目錄查詢產生） | 檔名變數由目錄產生，**金額類不可成為變數**；文件類型用語＝DocType 登錄 | `altGroup`、`totalsByAlt` 目錄項；鎖定比對集合＝目錄中報價本文鍵 |
 | 3 表面 | 報價單內部損益（form）、案件清單（list，可選欄）、案件詳情摘要（page） | `module:crm.dev_log`（page）、`module:crm.dev_log_list`（list） | 完工單表單／清單 | 28 個下載端點（output） | 報價單表單、案件詳情方案比較 |
-| 4 設定 | 警示門檻 `warn_pct`（預設關、風險 `none`、只顯示不擋）。**群組代號已定（1c 確認）**：群組 `project_margin`、鍵 `project_margin.warn_pct`（慣例 `<群組>.<鍵>`；98 同步更新其文件；K01 落地後再搬分組，不改鍵） | §6 十餘項（安全預設；`who`、`visible_to`、`include_text` 為 `security`＋橫幅） | 印金額、品牌併入、預設狀態、超量警告／擋（依其 r4 已走設定） | 格式範本、長度上限、顯示客戶名稱（高影響＋橫幅） | P1～P8（高影響者橫幅＋`impact_scope`） |
+| 4 設定 | 警示門檻 `warn_pct`（預設關、風險 `none`、只顯示不擋）。**群組代號已定（1c 確認）**：群組 `project_margin`、鍵 `project_margin.warn_pct`（慣例 `<群組>.<鍵>`；98 同步更新其文件；K01 落地後再搬分組，不改鍵） | §6 十餘個平面欄位（安全預設；`who`、`supervisor_read`、`visible_to`、`email_include_text`、`on_deleted` 為 `security`＋橫幅；『指定角色』F3 前不提供） | 印金額、品牌併入、預設狀態、超量警告／擋（依其 r4 已走設定） | 格式範本、長度上限、顯示客戶名稱（高影響＋橫幅） | P1～P8（高影響者橫幅＋`impact_scope`） |
 | 5 標籤 | 『專案毛利%』可改；說明文字註明『不扣進項稅，故高於直接毛利率』 | 按鈕『批示』可改；狀態字全走標籤 | 欄名走 relabel | 文件類型用語表＝同一份標籤 | 『依方案選擇』等 |
 | 6 能力 | 沿用既有金額判定（不新增能力） | `directive.write`、`directive.view_all` | 建立者能力（過渡別名 `can-author`） | 無新增 | sign／unsign 沿用現行 admin／superadmin |
 | 7 通知 | 無 | 站內＋信件 `annotation_received`＋三個範本文字鍵 | 待核（依其文件） | 無 | P6② 後續通知財務（尚未提供，屆時登錄） |
@@ -427,12 +448,12 @@ ResolvedLayout = 區塊[ 欄位[{目錄項, 標籤, 寬度檔位→實際比例,
 ### 17.4 排序：主幹與功能並行（不先寫死再遷移）
 
 ```
-里程碑 1（主幹）：P0 目錄＋P1 解析器/端點延伸＋閘門＋E-a 設定群組自登錄＋E-b 彙整驗證      → 6.75 + 1.5 = 8.25 pd
+里程碑 1（底層列車，一次閘門）：P0 目錄＋P1 解析器/端點延伸＋閘門＋E-a 設定群組自登錄與基準分割＋E-b 彙整驗證＋E-e 欄位與驗證＋E-c 範本最小版＋E-d 通知類型  → 10.5 pd
           並行 ├ 專案毛利%：計算＋宣告檔（第一筆目錄項）
                ├ 批示：annotations 後端 A1～A4、A7（不依賴解析器）＋CRM 目標登錄
                ├ 下載檔名：build() 與宣告（變數取自目錄；目錄未落地前用其文件的常數起點，宣告同日提交）
                └ M3：沿用自己的 P1 比對（FL-1，不等 F7）；宣告檔同日提交
-里程碑 2：E-c 範本最小版＋E-d 通知類型登錄；P2 報價單欄位／品項表；批示前端與設定；完工單
+里程碑 2：P2 報價單欄位／品項表；批示前端與設定；完工單；E-e 渲染與帳本文字（隨 S1）
 里程碑 3：D1 清單、D2 格式、P3(a) PDF 欄位；批示徽章換成目錄項
 里程碑 4：P4 編輯器；D3 區塊；F7 整合
 ```
@@ -448,15 +469,31 @@ ResolvedLayout = 區塊[ 欄位[{目錄項, 標籤, 寬度檔位→實際比例,
 4. 所有信件類型與範本：已登記、字面鍵、主旨不含內容、占位符白名單。
 5. 所有批註目標類型：`owner_fn／visible_fn／link_fn` 可呼叫、連結合格、設定預設齊全。
 6. 所有表面鍵：格式、長度（≤78 整鍵）、`effective_layout_ops` 快照釘（`l1_interface_snapshot.json`）。
-7. 『宣告檔存在』守門：新模組／新功能 PR 若動了設定、信件、目錄而沒有宣告 ⇒ 紅（以靜態掃描：程式中出現未登錄的設定鍵、`event_key`、金額欄位名）。
+7. 『宣告檔存在』守門（**限精確字面案例**，不做啟發式、不掃散文）：只檢查三類——`send_registered("…")`／`mail_types.register("…")` 的 `event_key` 字面字串、`register_group("…")` 與 `SettingDef("…")` 的字面鍵、與 `QUOTE_MONEY_KEYS`／`QUOTATION_MONEY_COLS` 中已列出的金額鍵名；凡程式出現但**宣告檔沒有**者 ⇒ 紅。**必須有正對照**：測試內放一份故意違規的樣本（未登記的 `event_key`、未登記的群組、未登記的金額鍵）斷言掃描器**確實抓到**，抓不到 ⇒ 掃描器自己紅（避免空轉）。**誤報白名單**：`spine_scan_allowlist.json`，每筆需有『原因、擁有者、到期日』，測試斷言白名單項目**仍然對得上**程式中的實際出現（過期或失效即紅，不累積殭屍）。
 
 ### 17.6 相依與待決（內部協調，不是使用者問題）
 
 - 設定中心 **S1 編輯畫面**尚未建：登錄與預設不受影響，但管理者無法改選項——排班需決定 S1 與里程碑 1 的先後。
 - F3 能力命名：`directive.*`、`doc_layout.edit`、`quote.*` 由 1d 供名，F3 窗口確認。
 - 98 的專案毛利設定群組代號（見 17.3 第 4 列）。
-- 本節的 E-a／E-b 是否納入里程碑 1（+1.5 pd）由 PM／1c 決定；若不納入，各功能以『宣告檔＋手寫載入』暫行，**風險**：宣告格式分歧，之後要逐功能對齊。
+- 底層列車的範圍已由 1c 決定（§17.7）：E-a／E-b／E-e 核心／E-c 最小／E-d 與 P0＋P1 同一列車；列車合計 **10.5 pd**（見 §17.2 合計）。若 PM 要縮小，優先順序為先砍 E-c／E-d（回到各功能暫用固定文字），E-a／E-b 不可砍（否則宣告格式分歧、基準衝突）。
 - 以上皆不涉不可逆的使用者決定。
+
+### 17.7 底層一班一閘門（0d S3；1c 決定）
+
+**同一列車、同一次全量官方閘門（約 105 分鐘，只算一次）** 包含：
+
+| 項 | 內容 | 出處 |
+|---|---|---|
+| 脊柱 P0／P1 | 目錄（`customization` v2）、解析器 `helpers/layout_resolve.py`、版面鍵與端點延伸 | §3–§4 |
+| E-a／E-b | 設定群組自登錄＋基準分割、`core/spine.py` 彙整驗證 | §17.2、§17.2a |
+| E-e（核心） | `SettingDef.impact_scope` 欄位與登錄驗證 | §17.2 |
+| E-c／E-d | 通知範本最小版、通知類型登錄 | §17.2 |
+| `annotations` 資料表與服務層 | CRM 批示 A1（三表、觸發器、`db.py` 三份清單、core-only RC） | `CRM-DIRECTIVE-COMMENTS-T56.md` §8 |
+| `download_name` | `helpers/download_name.py` | §15-5 |
+
+**規則**：上列項目不得各自單獨過底層閘門；其他不碰 `core/**`／`helpers/**` 的功能（CRM 模組側登錄與前端、專案毛利的計算與表單區塊若只在模組內）走各自模組列車。合計 pd 不重複計閘門（P0＋P1 的 6.75 已含 1.0 pd 閘門）。
+
 
 
 ## 附錄：對既有零件的接點一覽
