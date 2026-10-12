@@ -5,6 +5,7 @@
 > **r2（c7 事實更新，`completion_notes.py` @ `33b84b332` 與 `wip/t57-completion-r2` `9922b1777`）**：①同一份清單加「種類」（不另開第二份清單，回收桶 adapter 與讀取提供者不用改）；②完工單**沒有**「匯出後凍結」的概念，`lock_after_export` 改為 `lock_after_customer_signoff`（客戶驗收簽回後鎖定）；③上傳會更新 `updated_at`＝樂觀鎖權杖，編輯草稿的人會被誤擋 409，附件變動**不再更新** `updated_at`；④政策鍵放進 c7 已登錄的 `completion_note` 群組（前綴 `attach_`），不另開群組；⑤上傳授權比編輯寬（案件管理模組持有者都能傳）；⑥章戳的階段改為三段（核准前／已核准／已客戶簽回）。
 > **r3（0d 對 r2 的必修 M1–M4／建議 S1–S6；1c 的答覆已併入）**：①寫入順序改為「存檔在鎖外 → 取寫鎖 → **重新讀列**並在鎖內重跑檢查 → 以鎖內的狀態算 `phase` → 追加 → commit；任何拒絕／失敗清掉剛存的檔；刪除在 DB commit 之後才移除實體檔」（§4）；②只增不刪的漏洞：含核准後檔案的草稿單據**不得經回收桶 30 天清除**繞過（§4c），並新增**寫死、僅最高管理者**的「作廢／清除附件」路徑（§4b，**不再是選項**）；③金額隱藏選項涵蓋 `signedFiles` 清單與檔名、`attachments.catalog`、`path_access`（單一伺服器端閘）；④插槽宣告的 `folder`／`list_column`／`doc_type` 是路徑／SQL 識別字來源，**必須對引擎登錄表驗證**，`kinds[].exts` 只能縮小；⑤`kind` 等欄位由伺服器蓋章；請求上限；`reopen` 與 `is_signed`；HEIC 延後；下載標頭。1c 的答覆：預設只增不刪維持、通知預設關、作廢路徑為寫死、HEIC 走安全審查。
 > **r4（0d 對 r3 的非阻擋註記 i–iv）**：①`list_column` 必須屬於**宣告模組自己的資料表**，且是 **JSON 檔案清單欄**（形如 `*_files_json`），不是任意欄位（§2.1）；②§4c 列舉一張完工單的**所有刪除路徑**並逐一加閘；③回收桶清單／預覽與簽核佇列的 payload 也要遵守金額隱藏（檔名）；④§4a 明寫暫存檔**改名到最終路徑的時點**（鎖內檢查通過之後）與失敗清理，確保資料夾外不寫任何東西。
+> **r5（0d 對 r4 的必修 D3 與註記）**：①**D3 更正**：`CompletionNoteAdapter` **已實作** `can_delete_approved`（`recycle_adapter.py` 約 234），最高管理者今天就能經 `POST /api/recycle-bin/delete-approved` 刪除**已核准／已簽回**的完工單——必須在這條路徑同樣要求原因＋帳本（D2「回收桶不自動清除含章戳檔的項目」保留）；②`save_document_files` 是**所有上傳資料夾共用**的 helper（`helpers/uploads.py` 約 69 行），`.part`＋`os.replace` 流程必須是**選用**（參數或完工單專屬包裝），並加其他呼叫端的回歸測試；③`.part` 清掃範圍限 uploads 子資料夾與精確的亂數檔名樣式，記錄清掃數量。
 > 標記：**UNKNOWN**＝沒有證據，不推測；pd 的「估」是我的粗估。
 
 ## 0. 結論（先看）
@@ -93,7 +94,8 @@
 ### 4a. 上傳
 1. `_require_user` → `_readable_note`（讀取閘；失敗＝404「完工單不存在」）。
 2. **鎖外**（便宜、不依賴單據狀態）：解析請求（`kind` 為 **Form 欄位**；多檔上傳時，同一次請求的所有檔共用同一個 `kind`，要不同種類就分次請求）→ 未知 `kind` ⇒ 400；該種類被政策停用 ⇒ 403；請求上限（單次檔數、單次合計位元組，見 §S2）；magic／副檔名／單檔大小檢查；`save_document_files` 把檔存到暫存位置。**客戶端送來的 `phase`／`uploadedBy`／`uploadedAt` 一律忽略（送了＝400）**，全部由伺服器蓋章。
-2b. **暫存位置與最終路徑**：`save_document_files` 先把檔寫到**同一個 `uploads/completion_notes/<單號>/` 資料夾內的暫存檔名**（亂數、`.part` 後綴，不被 `path_access` 認得、不被清單引用）；**只有在下一步鎖內檢查全部通過、清單更新成功、commit 之前的最後一步**才以 `os.replace` 改名為最終檔名（同一資料夾內，原子；不跨資料夾、不跨磁碟）；任何失敗或拒絕 ⇒ 刪除暫存檔（`finally` 內清理）。**資料夾外不寫任何東西**；啟動時與每日備份前掃描並清除超過 1 小時的 `.part` 殘留。測試：模擬在改名前拋例外 ⇒ 沒有最終檔、沒有 `.part`；在改名後、commit 前失敗 ⇒ 最終檔被清除。
+2b. **共用 helper 的相容性（0d 註記）**：`save_document_files` 被**所有**上傳資料夾使用，`.part`＋`os.replace` 流程**不得改變其他呼叫端的行為**——以**選用參數**（例 `atomic_final=False` 預設）或**完工單專屬包裝**實作；回歸測試：其他資料夾的上傳（款項、材料、額外支出、開票申請…）的檔案落地行為與回傳 metadata **逐位元不變**。
+2c. **暫存位置與最終路徑**：`save_document_files` 先把檔寫到**同一個 `uploads/completion_notes/<單號>/` 資料夾內的暫存檔名**（亂數、`.part` 後綴，不被 `path_access` 認得、不被清單引用）；**只有在下一步鎖內檢查全部通過、清單更新成功、commit 之前的最後一步**才以 `os.replace` 改名為最終檔名（同一資料夾內，原子；不跨資料夾、不跨磁碟）；任何失敗或拒絕 ⇒ 刪除暫存檔（`finally` 內清理）。**資料夾外不寫任何東西**；啟動時與每日備份前掃描並清除超過 1 小時的 `.part` 殘留——**掃描範圍只限 uploads 的子資料夾，且只比對精確的亂數檔名樣式**（例如 32 位十六進位加 `.part`），不處理其他檔案；**記錄清掃數量**（log／稽核，不記檔名內容）。測試：模擬在改名前拋例外 ⇒ 沒有最終檔、沒有 `.part`；在改名後、commit 前失敗 ⇒ 最終檔被清除。
 3. **取寫鎖**（`begin_write`）→ **重新讀取該單據列**（`status`、`is_signed`、`signed_files_json`）→ **在鎖內重跑 `check_upload`**（誰可新增、狀態、種類、`attach_max_files` 以**鎖內清單的長度**計、`attach_lock_after_customer_signoff`）→ **以鎖內的狀態計算 `phase`**（`draft`／`approved`／`signed`）→ 追加到清單 → 更新（**不動 `updated_at`**）→ 寫稽核 → commit。
 4. **任何拒絕或失敗**（檢查不過、異常、commit 失敗）⇒ **刪除剛存的實體檔**（只刪這次存的）；沒有孤兒檔。
 5. `attach_reopen_approval_on_upload` 開 ⇒ 在**同一個鎖內交易**把狀態改回「待審核」、**更新 `updated_at`**（這個才是真的內容變動）、寫稽核；若 `is_signed=1` ⇒ **回 409 擋下**（`revoke-approval` 在已簽回時本來就拒絕，不得靜默略過成「上傳成功但沒重開」）。
@@ -113,7 +115,7 @@
 |---|---|---|---|
 | D1 | `DELETE /api/completion-notes/{no}`（草稿刪除；進回收桶 `recycle_adapter.delete_in_tx`，打包 `signed_files_json` 與實體檔） | 只有草稿可刪 | 草稿帶 `approved/signed` 章戳檔 ⇒ 一般管理者 403，最高管理者＋原因＋帳本 |
 | D2 | 回收桶 30 天到期清除（保留期限清理工作） | 自動 | **到期清除前檢查**：含 `approved/signed` 章戳檔的項目**不自動清除**，轉為「待最高管理者處置」並告警；保留期限不得低於法定下限 |
-| D3 | 回收桶手動清除／「刪除已核准」（`POST /api/recycle-bin/delete-approved`，目前只收請款單、開票申請；完工單**不在清單內**時，維持不開放） | 僅最高管理者 | 若將來納入完工單，沿用 D1 的閘 |
+| D3 | 回收桶「刪除已核准」`POST /api/recycle-bin/delete-approved`——**`CompletionNoteAdapter` 已實作 `can_delete_approved`**，最高管理者今天就能刪除已核准／已簽回的完工單（含其附件） | 僅最高管理者（既有） | **加閘**：含 `approved/signed` 章戳檔的完工單走此路徑時**原因必填＋帳本一筆**（與 §4b 作廢路徑同一個閘）；**測試（正對照）**：已核准且含核准後檔案的完工單，經 `delete-approved` 不帶原因 ⇒ 拒絕；帶原因 ⇒ 成功且帳本有列；移除閘 ⇒ 測試必須紅 |
 | D4 | 回收桶還原（`restore`） | 還原清單與章戳 | 章戳保留；還原不降低保護 |
 | D5 | 取消核准後退回草稿（`revoke-approval`）再 D1 | 兩步組合 | 退回草稿不清章戳；D1 的閘擋住第二步 |
 | D6 | 案件／報價單層級的連動刪除（若存在） | **UNKNOWN**（未見完工單隨報價單刪除的程式碼；實作前以 `git grep "DELETE FROM completion_notes"` 與案件刪除路徑核對） | 若有，同 D1 |
