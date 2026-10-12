@@ -933,21 +933,6 @@
    "tables_r": [],
    "tables_w": []
   },
-  "helper:download_name": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "core:db",
-    "helper:case_access",
-    "helper:settings_registry"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/download_name.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_w": []
-  },
   "helper:duty_roles": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -2667,17 +2652,6 @@
    "imports": [],
    "kind": "js",
    "path": "frontend/static/definition-form.js",
-   "routers_called": [],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "js:static/download.js": {
-   "api_calls": [],
-   "api_prefixes": [],
-   "api_unmatched": [],
-   "imports": [],
-   "kind": "js",
-   "path": "frontend/static/download.js",
    "routers_called": [],
    "tables_r": [],
    "tables_w": []
@@ -4840,7 +4814,6 @@
     "helper:company_setup",
     "helper:config_ledger",
     "helper:doc_template",
-    "helper:download_name",
     "helper:duty_roles",
     "helper:edit_log",
     "helper:email_notify",
@@ -4869,7 +4842,6 @@
     "core:db",
     "helper:audit",
     "helper:auth",
-    "helper:download_name",
     "helper:edit_log",
     "helper:settings",
     "helper:tiered_approval",
@@ -4895,115 +4867,115 @@
    "routes": [
     {
      "func": "create_voucher",
-     "line": 237,
+     "line": 236,
      "method": "POST",
      "path": "/api/vouchers"
     },
     {
      "func": "list_vouchers",
-     "line": 288,
+     "line": 287,
      "method": "GET",
      "path": "/api/vouchers"
     },
     {
      "func": "vouchers_by_case",
-     "line": 336,
+     "line": 335,
      "method": "GET",
      "path": "/api/vouchers/by-case/{quote_no}"
     },
     {
      "func": "summary_sources",
-     "line": 363,
+     "line": 362,
      "method": "GET",
      "path": "/api/vouchers/summary-sources"
     },
     {
      "func": "line_source_files_endpoint",
-     "line": 495,
+     "line": 494,
      "method": "GET",
      "path": "/api/vouchers/line-source-files"
     },
     {
      "func": "line_source_file_endpoint",
-     "line": 522,
+     "line": 521,
      "method": "GET",
      "path": "/api/vouchers/line-source-file"
     },
     {
      "func": "read_voucher",
-     "line": 555,
+     "line": 554,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}"
     },
     {
      "func": "voucher_edit_log",
-     "line": 618,
+     "line": 617,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/edit-log"
     },
     {
      "func": "submit_voucher",
-     "line": 653,
+     "line": 652,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/submit"
     },
     {
      "func": "approve_voucher",
-     "line": 728,
+     "line": 727,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/approve"
     },
     {
      "func": "send_back_voucher",
-     "line": 828,
+     "line": 827,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/send-back"
     },
     {
      "func": "void_voucher",
-     "line": 907,
+     "line": 906,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/void"
     },
     {
      "func": "post_voucher_endpoint",
-     "line": 991,
+     "line": 990,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/post"
     },
     {
      "func": "update_voucher",
-     "line": 1026,
+     "line": 1025,
      "method": "PUT",
      "path": "/api/vouchers/{voucher_id}"
     },
     {
      "func": "add_voucher_attachments",
-     "line": 1209,
+     "line": 1208,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/attachments"
     },
     {
      "func": "delete_voucher_attachment",
-     "line": 1322,
+     "line": 1321,
      "method": "DELETE",
      "path": "/api/vouchers/{voucher_id}/attachments/{file_id}"
     },
     {
      "func": "download_voucher_attachment",
-     "line": 1391,
+     "line": 1390,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/attachments/{file_id}"
     },
     {
      "func": "download_voucher_pdf",
-     "line": 1494,
+     "line": 1493,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/pdf-download"
     },
     {
      "func": "preview_voucher",
-     "line": 1564,
+     "line": 1566,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/preview"
     }
@@ -6325,7 +6297,6 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
-    "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
@@ -6353,7 +6324,6 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
-    "helper:download_name",
     "helper:email_notify",
     "helper:errors",
     "helper:google_calendar",
@@ -6435,19 +6405,19 @@
     },
     {
      "func": "record_invoice_voucher_export",
-     "line": 781,
+     "line": 784,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/export"
     },
     {
      "func": "upload_invoice_voucher_issued_files",
-     "line": 809,
+     "line": 812,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/issued-files"
     },
     {
      "func": "delete_invoice_voucher_issued_file",
-     "line": 838,
+     "line": 841,
      "method": "DELETE",
      "path": "/api/invoice-vouchers/{voucher_no}/issued-files/{file_id}"
     }
@@ -6506,7 +6476,6 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
-    "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
@@ -6532,7 +6501,6 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
-    "helper:download_name",
     "helper:email_notify",
     "helper:errors",
     "helper:google_calendar",
@@ -6618,7 +6586,7 @@
     },
     {
      "func": "record_payment_request_export",
-     "line": 873,
+     "line": 876,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/export"
     }
@@ -7228,7 +7196,6 @@
     "helper:dates",
     "helper:doc_render",
     "helper:doc_template",
-    "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
@@ -7260,7 +7227,6 @@
     "helper:auth",
     "helper:case_access",
     "helper:dates",
-    "helper:download_name",
     "helper:email_notify",
     "helper:errors",
     "helper:privacy_notice",
@@ -7341,37 +7307,37 @@
     },
     {
      "func": "record_completion_export",
-     "line": 686,
+     "line": 687,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/export"
     },
     {
      "func": "toggle_completion_signed",
-     "line": 715,
+     "line": 716,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/signed-toggle"
     },
     {
      "func": "upload_completion_signed_files",
-     "line": 767,
+     "line": 768,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/signed-files"
     },
     {
      "func": "delete_completion_signed_file",
-     "line": 793,
+     "line": 794,
      "method": "DELETE",
      "path": "/api/completion-notes/{note_no}/signed-files/{file_id}"
     },
     {
      "func": "get_completion_privacy_acks",
-     "line": 830,
+     "line": 831,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}/privacy-notice"
     },
     {
      "func": "ack_completion_privacy_notice",
-     "line": 842,
+     "line": 843,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/privacy-notice/ack"
     }
@@ -7459,7 +7425,6 @@
     "helper:custom_modules",
     "helper:doc_render",
     "helper:doc_template",
-    "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:expense_types",
@@ -7482,7 +7447,6 @@
     "core:pdf_gen",
     "helper:auth",
     "helper:doc_render",
-    "helper:download_name",
     "helper:expense_types",
     "mod:case/api/case_extra_expenses"
    ],
@@ -7494,7 +7458,7 @@
    "routes": [
     {
      "func": "expense_document",
-     "line": 79,
+     "line": 78,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/document"
     }
@@ -11251,11 +11215,9 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
-    "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
-    "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:legal_params",
@@ -11263,7 +11225,6 @@
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:notify_matrix",
-    "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_registry",
@@ -11282,7 +11243,6 @@
     "core:db",
     "helper:audit",
     "helper:auth",
-    "helper:download_name",
     "helper:email_notify",
     "helper:settings",
     "helper:tiered_approval",
@@ -11304,181 +11264,181 @@
    "routes": [
     {
      "func": "list_bonus_items",
-     "line": 130,
+     "line": 129,
      "method": "GET",
      "path": "/api/bonus/items"
     },
     {
      "func": "list_bonus_groups",
-     "line": 166,
+     "line": 165,
      "method": "GET",
      "path": "/api/bonus/groups"
     },
     {
      "func": "create_bonus_group",
-     "line": 191,
+     "line": 190,
      "method": "POST",
      "path": "/api/bonus/groups"
     },
     {
      "func": "set_bonus_group_active",
-     "line": 222,
+     "line": 221,
      "method": "PATCH",
      "path": "/api/bonus/groups/{group_id}/active"
     },
     {
      "func": "add_bonus_group_member",
-     "line": 250,
+     "line": 249,
      "method": "POST",
      "path": "/api/bonus/groups/{group_id}/members"
     },
     {
      "func": "remove_bonus_group_member",
-     "line": 288,
+     "line": 287,
      "method": "DELETE",
      "path": "/api/bonus/groups/{group_id}/members/{username}"
     },
     {
      "func": "get_bonus_base",
-     "line": 413,
+     "line": 412,
      "method": "GET",
      "path": "/api/bonus/base/{quote_no}"
     },
     {
      "func": "plan_award",
-     "line": 448,
+     "line": 447,
      "method": "GET",
      "path": "/api/bonus/awards/plan/{quote_no}"
     },
     {
      "func": "award_candidates",
-     "line": 559,
+     "line": 558,
      "method": "GET",
      "path": "/api/bonus/awards/candidates"
     },
     {
      "func": "list_awards",
-     "line": 630,
+     "line": 629,
      "method": "GET",
      "path": "/api/bonus/awards"
     },
     {
      "func": "get_award",
-     "line": 702,
+     "line": 701,
      "method": "GET",
      "path": "/api/bonus/awards/{award_id}"
     },
     {
      "func": "preview_award",
-     "line": 952,
+     "line": 951,
      "method": "POST",
      "path": "/api/bonus/awards/plan/{quote_no}"
     },
     {
      "func": "preview_award",
-     "line": 1022,
+     "line": 1021,
      "method": "GET",
      "path": "/api/bonus/awards/{award_id}/preview"
     },
     {
      "func": "download_award_pdf",
-     "line": 1039,
+     "line": 1038,
      "method": "GET",
      "path": "/api/bonus/awards/{award_id}/pdf-download"
     },
     {
      "func": "get_case_bonus_settings",
-     "line": 1397,
+     "line": 1398,
      "method": "GET",
      "path": "/api/bonus/cases/settings"
     },
     {
      "func": "put_case_bonus_settings",
-     "line": 1404,
+     "line": 1405,
      "method": "PUT",
      "path": "/api/bonus/cases/settings"
     },
     {
      "func": "get_case_bonus_voucher_accounts",
-     "line": 1460,
+     "line": 1461,
      "method": "GET",
      "path": "/api/bonus/cases/voucher-accounts"
     },
     {
      "func": "put_case_bonus_voucher_accounts",
-     "line": 1475,
+     "line": 1476,
      "method": "PUT",
      "path": "/api/bonus/cases/voucher-accounts"
     },
     {
      "func": "list_case_bonuses",
-     "line": 1501,
+     "line": 1502,
      "method": "GET",
      "path": "/api/bonus/cases"
     },
     {
      "func": "get_case_bonus",
-     "line": 1552,
+     "line": 1553,
      "method": "GET",
      "path": "/api/bonus/cases/{quote_no}"
     },
     {
      "func": "create_case_bonus",
-     "line": 1607,
+     "line": 1608,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}"
     },
     {
      "func": "update_case_bonus",
-     "line": 1646,
+     "line": 1647,
      "method": "PUT",
      "path": "/api/bonus/cases/{quote_no}"
     },
     {
      "func": "preview_case_bonus",
-     "line": 1787,
+     "line": 1788,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/preview"
     },
     {
      "func": "submit_case_bonus",
-     "line": 1823,
+     "line": 1824,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/submit"
     },
     {
      "func": "approve_case_bonus",
-     "line": 1878,
+     "line": 1879,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/approve"
     },
     {
      "func": "reject_case_bonus",
-     "line": 1972,
+     "line": 1973,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/reject"
     },
     {
      "func": "return_case_bonus",
-     "line": 2000,
+     "line": 2001,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/return"
     },
     {
      "func": "mark_case_bonus_paid",
-     "line": 2032,
+     "line": 2033,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/mark-paid"
     },
     {
      "func": "get_insurance_profiles",
-     "line": 2080,
+     "line": 2081,
      "method": "GET",
      "path": "/api/bonus/insurance"
     },
     {
      "func": "put_insurance_profile",
-     "line": 2124,
+     "line": 2125,
      "method": "PUT",
      "path": "/api/bonus/insurance/{username}"
     }
@@ -11928,11 +11888,9 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
-    "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
-    "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
@@ -11943,7 +11901,6 @@
     "helper:notify_matrix",
     "helper:privacy_notice",
     "helper:recycle_bin",
-    "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_registry",
@@ -11961,7 +11918,6 @@
     "core:pdf_gen",
     "helper:audit",
     "helper:auth",
-    "helper:download_name",
     "helper:email_notify",
     "helper:errors",
     "helper:legal_params",
@@ -11986,109 +11942,109 @@
    "routes": [
     {
      "func": "get_tax_rules",
-     "line": 188,
+     "line": 187,
      "method": "GET",
      "path": "/api/tax-rules"
     },
     {
      "func": "next_slip_no",
-     "line": 208,
+     "line": 207,
      "method": "GET",
      "path": "/api/next-slip-no"
     },
     {
      "func": "list_payslips",
-     "line": 221,
+     "line": 220,
      "method": "GET",
      "path": "/api/payslips"
     },
     {
      "func": "create_payslip",
-     "line": 291,
+     "line": 290,
      "method": "POST",
      "path": "/api/payslips"
     },
     {
      "func": "get_payslip",
-     "line": 406,
+     "line": 405,
      "method": "GET",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "update_payslip",
-     "line": 420,
+     "line": 419,
      "method": "PUT",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "delete_payslip",
-     "line": 504,
+     "line": 503,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "record_export",
-     "line": 535,
+     "line": 534,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/export"
     },
     {
      "func": "record_archive_download",
-     "line": 581,
+     "line": 580,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/archive/{orig_idx}/record"
     },
     {
      "func": "get_archive_pdf",
-     "line": 640,
+     "line": 609,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/archive/{idx}"
     },
     {
      "func": "pdf_download",
-     "line": 673,
+     "line": 645,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/pdf-download"
     },
     {
      "func": "void_payslip",
-     "line": 707,
+     "line": 683,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/void"
     },
     {
      "func": "upload_signed_files",
-     "line": 755,
+     "line": 731,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/signed-files"
     },
     {
      "func": "get_signed_file",
-     "line": 808,
+     "line": 784,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "delete_signed_file",
-     "line": 837,
+     "line": 813,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "unsign_payslip",
-     "line": 869,
+     "line": 845,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unsign"
     },
     {
      "func": "payslip_mark_paid",
-     "line": 896,
+     "line": 872,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/mark-paid"
     },
     {
      "func": "payslip_unpay",
-     "line": 924,
+     "line": 900,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unpay"
     }
@@ -12850,7 +12806,6 @@
     "helper:case_access",
     "helper:config_ledger",
     "helper:dates",
-    "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
@@ -12886,7 +12841,6 @@
     "helper:auth",
     "helper:case_access",
     "helper:dates",
-    "helper:download_name",
     "helper:email_notify",
     "helper:errors",
     "helper:gl_status",
@@ -12996,49 +12950,49 @@
     },
     {
      "func": "record_contractor_voucher_export",
-     "line": 931,
+     "line": 934,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/export"
     },
     {
      "func": "get_remit_require_payslip",
-     "line": 999,
+     "line": 1002,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "set_remit_require_payslip",
-     "line": 1007,
+     "line": 1010,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "get_personnel_links",
-     "line": 1020,
+     "line": 1023,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-links"
     },
     {
      "func": "link_personnel_payslip",
-     "line": 1054,
+     "line": 1057,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-link"
     },
     {
      "func": "toggle_paid",
-     "line": 1109,
+     "line": 1112,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/paid-toggle"
     },
     {
      "func": "get_contractor_voucher_approval_flow",
-     "line": 1232,
+     "line": 1235,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     },
     {
      "func": "set_contractor_voucher_approval_flow",
-     "line": 1249,
+     "line": 1252,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     }
@@ -14219,7 +14173,6 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
-    "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
@@ -14247,7 +14200,6 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
-    "helper:download_name",
     "helper:email_notify",
     "helper:errors",
     "helper:google_calendar",
@@ -14358,25 +14310,25 @@
     },
     {
      "func": "record_shipping_export",
-     "line": 758,
+     "line": 762,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/export"
     },
     {
      "func": "toggle_signed",
-     "line": 792,
+     "line": 796,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/signed-toggle"
     },
     {
      "func": "upload_shipping_signed_files",
-     "line": 849,
+     "line": 853,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/signed-files"
     },
     {
      "func": "delete_shipping_signed_file",
-     "line": 871,
+     "line": 875,
      "method": "DELETE",
      "path": "/api/shipping-notes/{note_no}/signed-files/{file_id}"
     }
@@ -15323,7 +15275,6 @@
     "js:static/approval-cascade.js",
     "js:static/approval-return.js",
     "js:static/auth-guard.js",
-    "js:static/download.js",
     "js:static/edit-presence.js",
     "js:static/file-preview.js",
     "js:static/legal-round.js",
@@ -16835,7 +16786,6 @@
     "js:static/approval-cascade.js",
     "js:static/approval-return.js",
     "js:static/auth-guard.js",
-    "js:static/download.js",
     "js:static/edit-presence.js",
     "js:static/legal-round.js",
     "js:static/notif.js",
@@ -16989,7 +16939,6 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
-    "js:static/download.js",
     "js:static/legal-round.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
@@ -17041,7 +16990,6 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
-    "js:static/download.js",
     "js:static/file-preview.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
@@ -17834,7 +17782,6 @@
     "js:js/voucher.js",
     "js:static/approval-return.js",
     "js:static/auth-guard.js",
-    "js:static/download.js",
     "js:static/file-preview.js",
     "js:static/notif.js",
     "js:static/sidebar.js"

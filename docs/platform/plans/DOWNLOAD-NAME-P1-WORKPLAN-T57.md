@@ -40,9 +40,14 @@ C1 helper＋單元測試 → C2 設定群組＋基準＋守門 → C3 前端 `do
 
 ## 環境與合併備註（0d S5／S6）
 - **Node.js 相依**：`tests/test_download_js_2026_10_13.py` 的兩題用 `node` 跑 `static/download.js`；沒有 node 的機器會略過（⚠️ skip 不是驗過）。整合者的閘門機器有 node（`tests/test_cascade_self_tiers_records_signer_2026_09_25.py` 同一假設）。
-- **底層列車（完整車道）**：`helpers/download_name.py`、`helpers/case_access.py`、`helpers/settings_groups.py`、`tests/platform/settings_deploy_baseline.json`、`core/CHANGELOG.md`（`(next:minor)` 佔位）、`tests/platform/l1_interface_snapshot.json`（`core_version: next`）、`docs/platform/modules.json`（`helper:download_name`、`js:static/download.js`）、`dep_graph.json`／`UNIT-INDEX.md`／`test_map.json`（重產）。版號與 `version_manifest.json` 的 `"version": "next"` 由列車 `train_number.py` 取號。
+- **底層列車（完整車道）**：`helpers/download_name.py`、`helpers/case_access.py`、`helpers/settings_groups.py`、`tests/platform/settings_deploy_baseline.json`、`core/CHANGELOG.md`（`(next:minor)` 佔位）、`tests/platform/l1_interface_snapshot.json`（`core_version: next`）、`docs/platform/modules.json`（`helper:download_name`、`js:static/download.js`）。**`dep_graph.json`／`UNIT-INDEX.md`／`test_map.json` 不在本分支**（倉庫規則：作者分支不動產生檔，整合者在列車組好後重產；本分支已移除）。版號與 `version_manifest.json` 的 `"version": "next"` 由列車 `train_number.py` 取號。
 - **合併順序**：`settings_groups.py` 與基準 JSON 與 `quote_alt`／`completion_note`／`project_margin` 群組文字衝突（尾端追加）；基準 JSON 以文字插入（`download_name` 插在 `retention` 之前），整合者依列車順序重排；**先 `git add` 新測試檔**（`test_download_name_*`、`test_download_js_*`）再重產 `test_map`；產生檔（`dep_graph`、`UNIT-INDEX`、`test_map`、`l1_interface_snapshot`）由整合者在合併後重產，不手解衝突。
 - 掃描器：`test_company_setup_output_points_2026_09_28.py` 的 `OUTPUT_PAT` 加入 `download_name.build`／`_dl_name(`，`NO_COMPANY_DATA` 登記 `download_name.build`、`download_name.headers`、`payslips._dl_name`（只組檔名，不產生內容）。
 
 ## 決定（1c，10-13）：報價單四個文件端點不在本列車
 `quotations.py` 的 5525／5635／5673／5706 四個文件端點與其前端（`quotation-form.html`、`case-management-close.js`、`case-management-core.js`）**等 5e 的 M3 T9（sign／unsign，同檔大改）合併後**，以後續 commit 併入；本列車（`wip/t57-download-name-p1-r1`）不含它們，避免同檔衝突。M3 的分支是 `origin/wip/t57-m3-t1-r2`（頭在移動）。
+
+## r2 修訂（0d 的 3 個 should-fix）
+- **產生檔已移除**：本分支不含 `UNIT-INDEX.md`、`dep_graph.json`、`test_map.json`（整合者重產；新測試檔 `test_download_name_p1_2026_10_13.py`、`test_download_name_endpoints_2026_10_13.py`、`test_download_js_2026_10_13.py` 需在重產 `test_map` 前已 `git add`）。
+- **取號由整合者解決**：core CHANGELOG 的 `(next:minor)` 與 `version_manifest.json` 的 `"version": "next"` 佔位在合併時取號；`2026-10-13a`～`d` 字母已被占用，取下一個空字母。
+- **刻意保留舊標頭的下載點**（不是缺口）：報價單 PDF／存檔版本（5525／5635）、結案報表與專案執行報告（5673／5706）及其前端；見上方清單。Node.js 相依：由 5c 確認閘門機器 PATH 有 `node`。
