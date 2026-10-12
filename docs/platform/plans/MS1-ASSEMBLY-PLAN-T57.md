@@ -102,7 +102,7 @@ MS2：M3 → 完工單（rebase 後）→ 專案毛利（V3.24）→ 文件類�
 
 ## 7. E-a／E-b（含 S1）合併順序與組裝注意事項（1d 補，2026-10-13；給 5c／整合者）
 
-> 來源：1d 自己的分支與各單檔測試結果（不是模擬合併；§1～§6 的衝突模擬仍以整合者的為準）。鏈：S1 r2 `de3321788` ⊂ E-a r1 `5bff2f28c` ⊂ E-a r2 `4a04ad556` ⊂ E-a r3 `278180804` ⊂ E-b M1 `df5e7f0e3` ⊂ r2 `8428ecfe3` ⊂ r3 `031205075` ⊂ **r4 `73decbb5c`**（E-b 要 0d 稽核通過；**E-b 不可只帶 M1、r2——r3 的路由層沒進就不得出貨**，否則 `hidden`／`planned` 群組會在設定中心 API 洩漏）。
+> 來源：1d 自己的分支與各單檔測試結果（不是模擬合併；§1～§6 的衝突模擬仍以整合者的為準）。鏈：S1 r2 `de3321788` ⊂ E-a r1 `5bff2f28c` ⊂ E-a r2 `4a04ad556` ⊂ E-a r3 `278180804` ⊂ E-b M1 `df5e7f0e3` ⊂ r2 `8428ecfe3` ⊂ r3 `031205075` ⊂ r4 `73decbb5c` ⊂ **r5 `25664078f`**（**鏈必須終止在 r5 或更新**：r3 單獨仍會透過 `GET /api/definitions/setting_group*` 洩漏 `hidden`／`planned` 群組，r5 才補上通用定義路由的閘門與撞名輸家的 hidden；r5 的提交訊息寫明『測試尚未執行』，**r5 必須通過正式閘門**；E-b 另需 0d 稽核通過才可出貨）。r5 沒有新增路由，route golden 仍是 6 條；組裝後請再跑 `_l1_interface.py --diff` 確認只有新增。（r5 之後若有新尖端，以 `wip/t57-eb-spine-r*` 最大號為準。）
 
 ### 7.1 檔案範圍（相對 M2 頭 `c87079be2` 共 31 檔；含 S1＋E-a＋E-b）
 
@@ -142,6 +142,7 @@ MS2：M3 → 完工單（rebase 後）→ 專案毛利（V3.24）→ 文件類�
 
 - E-a／E-b **沒有**新增 manifest 條目（內部機制）。S1 帶兩個條目：`2026-10-13b`（模組『平台/設定中心』，＝M2.1 已出貨的 S1-1，內容相同，模擬乾淨）與 `2026-10-13d`（模組『平台/設定中心編輯畫面』，S1 畫面，**待取號**）。
 - 依 §6 規則：未出貨的條目改用 `next`，最後一個程式修正之後 `train_number assign`；**同一模組在未出貨包內只能有一筆**（`test_version_manifest_2026_09_22` 守），所以 `2026-10-13d` 的模組名刻意與 `2026-10-13b` 分開；組裝時不要把兩者改成同一模組名。
+- **標籤撞號明列（組裝者用 `train_number assign` 重取，同一模組在未出貨包內只留一列）**：S1 畫面條目『平台/設定中心編輯畫面 `2026-10-13d`（待取號）』↔ 完工單 r2『案件管理/完工單帶入報價項目 `2026-10-13d`』↔ M3 自己的列（`13e`／`13f`）↔ M2.1 已出貨的 `13a`～`13c`（S1-1 的 `13b` 與 platform 內容相同）。四組字母互撞，全部改 `next`，由取號依（日期,時間）排序重發；『平台/設定中心』（`13b`，已出貨）與『平台/設定中心編輯畫面』（S1 畫面）是兩個模組名，**不要合併**。
 - 若要讓使用者在『更新紀錄』看到功能狀態頁（灰色『開發中，預計 MSn 版提供』），由整合者在取號時加一筆（模組沿用『平台/設定中心編輯畫面』即可，合併到 `13d` 那筆的 content，**不要新開同模組第二筆**）。
 
 ### 7.7 route golden
@@ -158,7 +159,7 @@ MS2：M3 → 完工單（rebase 後）→ 專案毛利（V3.24）→ 文件類�
 
 ### 7.9 合完後的守門與已知會紅的地方
 
-- **字面掃描器**（`test_spine_literal_scan.py`）：其他候選若在 `modules/**` 新增 `mail_types.register("<key>", …, "business|approval|system", …)` 或 `register_group("…")` 的字面呼叫，掃描器會紅——處理方式二選一：①在該模組 `module.json` 加 `features[].mail`／`settings.groups` 宣告（建議，做法見 `SPINE-ENGINE-DESIGN-T57.md` §3.2）；②附 reason／owner／expires 加進 `spine_scan_allowlist.json`（目前 8 檔 53 筆既有項目）。M3、完工單若新增通知類型，預期會觸發。
+- **字面掃描器**（`test_spine_literal_scan.py`）：其他候選若在 `modules/**` 新增 `mail_types.register("<key>", …, "business|approval|system", …)` 或 `register_group("…")` 的字面呼叫，掃描器會紅——處理方式二選一：①在該模組 `module.json` 加 `features[].mail`／`settings.groups` 宣告（建議，做法見 `SPINE-ENGINE-DESIGN-T57.md` §3.2）；②附 reason／owner／expires 加進 `spine_scan_allowlist.json`（目前 8 檔 53 筆既有項目）。**已核對（1d，2026-10-13，對 `origin/platform` 逐檔比較 `mail_types.register`／`_mt.register`／`register_group(` 的出現次數）**：完工單 r2（`wip/t57-completion-r2`）、M3（`wip/t57-m3-t11-r6`）、A7 p2（`wip/t57-download-name-p2-r2`）在 `backend/modules/**` **沒有新增任何被掃描的字面登記**——它們新增的設定群組都寫在 `backend/helpers/settings_groups.py`（core，不在掃描範圍）。所以預期**不會**觸發掃描器；之後若有候選把通知類型或設定群組登記放進模組，才需要宣告或加白名單。
 - **載入器核對**：任何候選若把設定群組搬進 `modules/**`，需 `module.json settings.groups` 與實際登錄相等，否則該模組載入失敗（`registry.failed()` 有原因）。
 - **凍結基準**：`test_deploy_baseline_frozen` 現在只比對 owner＝core；候選在 `settings_groups.py` 追加的群組仍屬 core，需同步更新核心基準 JSON（取聯集，§2 已列）；新增的 `test_settings_baseline_owners.py` 會檢查『每個有群組的擁有者都有基準』。
 - **E-b 啟動順序**：`validate_all()` 在 `load_all` 結尾執行；其回呼（取消非 open 群組的待生效項、稽核去重）需要資料庫，任何錯誤只記 log。沒有宣告 `features[]` 的既有模組完全不受影響（未宣告＝open）。
@@ -166,3 +167,7 @@ MS2：M3 → 完工單（rebase 後）→ 專案毛利（V3.24）→ 文件類�
 ### 7.10 建議的單檔驗證順序（full-lint 前，每次一檔）
 
 `test_spine_owner_e_a` → `test_settings_baseline_owners` → `test_spine_e_b` → `test_settings_center_status_routes` → `test_spine_literal_scan` → `test_core_loader` → `test_l1_interface_snapshot` → `test_module_selection` → `test_mail_registry` → `test_system_hub` → `test_settings_editor_s1` → `test_s1_managed_kind` → `test_settings_registry_t54`／`pending_t54`／`audit_fixes_t54`／`security_t54`／`ui_plain_language` → `test_write_endpoints_are_audited` → `test_route_table_golden` → `test_alpine_double_init`／`test_ac1_write_actions`。瀏覽器 e2e（`test_e2e_settings_center_edit_s1.py`，含 planned 灰色卡片）依規定在機器空出來時才跑。
+
+### 7.11 不在 MS1 的後續小項（backlog；98 路線圖 r18 §3.9b：E-b 出貨**之後**才做）
+
+E-b 出貨後由 1d 在新分支（預計 `wip/t57-eb-spine-r6`）依序做，每項單檔測試與 L1 快照 `--update --pending`：①`register_kind_gate(kind, fn)`（通用定義路由的 hidden／planned 閘門改為掛點，`setting_group` 搬上去，`alert_rule` 以受管 kind 接入；約 0.25 pd）；②`spine.register_health_source`（多來源共用『設定中心』卡的單一徽章；約 0.2 pd）；③`SettingDef.loosen="both"`（任何數值變動都算放寬；約 0.1 pd）；④`settings_registry.group_stamp(group)`（規則快取鍵用）；⑤`spine.surface_status(surface)`（目錄表面繼承功能狀態；規則發布／還原時檢查）。**這些不屬於 MS1 組裝範圍，組裝者不需處理。**
