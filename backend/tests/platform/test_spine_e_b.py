@@ -319,7 +319,7 @@ def test_loader_registers_features_validates_after_all_modules_and_isolates_bad_
     monkeypatch.syspath_prepend(str(tmp_path))
     try:
         got = loader.load_all(str(root), pkg)
-        assert sorted(m.key for m in got) == ["eb_a", "eb_b", "eb_d"]                      # features 不是清單 ⇒ 整個模組不載入
+        assert sorted(m.key for m in got if m.key.startswith("eb_")) == ["eb_a", "eb_b", "eb_d"]      # features 不是清單 ⇒ 整個模組不載入（load_all 回傳全域已載入清單：組裝樹上還有真實模組，只看自己的夾具）
         assert "features" in registry.failed()["eb_c"]
         rep = {f["code"]: f for f in spine.report()["features"]}
         assert spine.report()["validated"] is True

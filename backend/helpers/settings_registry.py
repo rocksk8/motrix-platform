@@ -266,8 +266,15 @@ def audit_spine_failures(conn=None):
         c = conn if conn is not None else get_db()
         for code, label, owner, problems in items:
             sig = hashlib.sha1((code + "\n" + "\n".join(problems)).encode("utf-8")).hexdigest()[:16]
-            if c.execute("SELECT 1 FROM audit_log WHERE action='spine.validation_failed' AND target_id=? AND json_extract(detail,'$.sig')=? LIMIT 1",
-                         (code, sig)).fetchone():
+            seen = False
+            for (d,) in c.execute("SELECT detail FROM audit_log WHERE action='spine.validation_failed' AND target_id=?", (code,)).fetchall():
+                try:                                # 逐列解析（不用 json_extract：守門棘輪）
+                    if (json.loads(d) or {}).get("sig") == sig:
+                        seen = True
+                        break
+                except (TypeError, ValueError, AttributeError):
+                    continue
+            if seen:
                 continue
             L.audit_event(c, "system", "spine.validation_failed", code,
                           {"sig": sig, "owner": owner, "problems": problems}, target_label="功能登錄驗證失敗：%s" % label)

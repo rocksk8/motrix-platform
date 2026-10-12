@@ -2,7 +2,7 @@
 """L0 模組載入器：掃 `modules/*/module.json`，相容且匯入成功的才登錄。
 
 [單位] plat:loader    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] ALL, DISABLED_REASON, MODULES_DIR, MODULES_PACKAGE, check_migrations, core_compatible, load_all, mount_modules,
+[公開介面] ALL, DISABLED_REASON, MODULES_DIR, MODULES_PACKAGE, check_declared_settings, check_migrations, core_compatible, declared_settings_groups, load_all, mount_modules,
     start_schedulers
 [不變式] 載入失敗一律「不載入＋記 ERROR＋記進 registry.failed()」，不讓伺服器起不來；版本範圍看不懂 ⇒ 不載入
 [契約題] tests/platform/test_core_loader.py
