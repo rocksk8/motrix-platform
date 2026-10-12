@@ -5,8 +5,8 @@
      ⚠️ **文件不排除**：45 個測試檔會讀 `docs/`（spec_coverage 掃規格、manifest 對照…），
         排除文件＝改規格不重跑規格守門。
    - 執行環境：Python 版本、`pip freeze`、Playwright 版本與已安裝的瀏覽器、影響測試的 `MOTRIX_*` 環境變數。
-🔑 還要：上一次**兩段都嚴格全綠**（e2e 逾時放行不算）、**同一天**、12 小時內。
-   時間相依的題（VR1 比日期、跨午夜）⇒ 跨日一律重跑。
+🔑 還要：上一次**兩段都嚴格全綠**（e2e 逾時放行不算）、12 小時內（2026-10-13 起不再要求同一天：跨午夜照樣沿用，使用者書面裁示；
+   整棵 tree 指紋＋12 小時新鮮度仍在，時間戳在未來者不沿用）。
 """
 import json
 import subprocess
@@ -87,13 +87,13 @@ def _rec(fp, when, green=True):
     return {"fingerprint": fp, "tested_at": when.strftime("%Y-%m-%d %H:%M:%S"), "green": green, "commit": "abc"}
 
 
-def test_reuse_only_a_strictly_green_same_day_recent_match():
+def test_reuse_only_a_strictly_green_recent_match():
     now = datetime(2026, 9, 25, 15, 0, 0)
     ok = _rec("F", now - timedelta(hours=2))
     assert tr.find_reusable([ok], "F", now) == ok
     assert tr.find_reusable([ok], "G", now) is None, "指紋不同也沿用"
     assert tr.find_reusable([_rec("F", now - timedelta(hours=2), green=False)], "F", now) is None, "沒全綠也沿用"
-    assert tr.find_reusable([_rec("F", datetime(2026, 9, 24, 23, 50))], "F", now) is None, "跨日也沿用"
+    assert tr.find_reusable([_rec("F", datetime(2026, 9, 24, 23, 50))], "F", now) is None, "超過 12 小時（跨日）也沿用"
     assert tr.find_reusable([_rec("F", now - timedelta(hours=13))], "F", now) is None, "超過 12 小時也沿用"
     assert tr.find_reusable([], "F", now) is None
     assert tr.find_reusable([ok], None, now) is None, "沒有指紋（工作樹髒）也沿用"
@@ -181,3 +181,20 @@ def test_the_ignore_list_is_pinned():
     for name in SPEED_ONLY:
         assert name in tr._ENV_IGNORE, name
     assert len(tr._ENV_IGNORE) == 32, "個數變了：%s（改清單時同步這個數字並說明理由）" % sorted(tr._ENV_IGNORE)
+
+def test_green_is_reused_across_midnight_within_the_window():
+    """2026-10-13 起：23:50 的綠，00:10 還能用（不再要求同一個日曆日）；窗口與其他條件不變。"""
+    late = datetime(2026, 9, 24, 23, 50)
+    rec = _rec("F", late)
+    after = datetime(2026, 9, 25, 0, 10)
+    assert tr.find_reusable([rec], "F", after) == rec
+    assert tr.find_reusable([rec], "F", late + timedelta(hours=11, minutes=59)) == rec, "12 小時內（跨午夜）"
+    assert tr.find_reusable([rec], "F", late + timedelta(hours=13)) is None, "13 小時前的綠不沿用"
+    assert tr.find_reusable([_rec("F", late, green=False)], "F", after) is None, "紅的不沿用"
+    assert tr.find_reusable([rec], "G", after) is None, "指紋不同不沿用"
+    assert tr.find_reusable([_rec("F", after + timedelta(minutes=5))], "F", after) is None, "時間戳在未來不沿用"
+    stage = {"fingerprint": "F", "tested_at": "2026-09-24 20:00:00", "green": True, "commit": "c",
+             "stages": {"not_e2e": {"green": True, "tested_at": "2026-09-24 23:50:00", "flaky_retried": []}}}
+    assert tr.find_reusable_stage([stage], "F", "not_e2e", after) is not None, "分段也一樣跨午夜可沿用"
+    assert tr.find_reusable_stage([stage], "F", "not_e2e", late + timedelta(hours=13)) is None
+    assert tr.find_reusable_stage([stage], "F", "not_e2e", late - timedelta(minutes=1)) is None, "分段時間戳在未來不沿用"

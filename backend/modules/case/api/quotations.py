@@ -3032,6 +3032,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         data["caseRecord"] = new_case_record
         # 叫料審核（31-C）：叫料列與物流旗標一律過閘（以資料庫現值為準，只拒有問題的項目，其餘照存；被拒的逐項回報）
         mat_rejected = MG.enforce(conn, quote_no, data, actor=user)
+        MG.log_rejected(quote_no, user, mat_rejected, "case-record")
         new_devices = (data["caseRecord"] or {}).get("devices") or []       # 閘可能把被拒的到料項目的序號改回現值
         stock_conflicts, stock_notice = [], None
         if new_devices != old_devices:

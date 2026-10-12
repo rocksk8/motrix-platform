@@ -170,6 +170,7 @@ def update_material_orders(quote_no: str,
         data["caseRecord"]["materialOrders"] = [_dump_order(mo) for mo in body.materialOrders]
         # 叫料審核（31-C）：整份覆蓋也要過閘（新列建審核單、實質欄位變更依審核狀態處理、被拒的項目維持原值並逐項回報）
         rejected = MG.enforce(conn, quote_no, data, actor=user)
+        MG.log_rejected(quote_no, user, rejected, "material-orders")
 
         # 7. 寫入 DB —— save_quotation_json() 只組 UPDATE、不 commit，呼叫端
         #    必須自己 commit（比照 modules/case/api/quotations.py:1310 附近既有寫法）。
@@ -275,6 +276,7 @@ def get_material_orders(quote_no: str, authorization: str = Header(None)):
             "materialOrders": orders,
             "totalAmount": sum(float(o.get("totalPrice") or 0) for o in orders),
             "paidAmount": sum(float(o.get("paidAmount") or 0) for o in orders),
+            "supplierRequiredAlways": MG.supplier_policy() == 1,      # 設定中心 material_order.supplier_required：畫面據此決定帶入採購單的新列要不要先選供應商
         }
 
     finally:

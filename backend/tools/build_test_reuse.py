@@ -7,7 +7,8 @@
 
 🔑 指紋＝整棵 tracked tree（`HEAD^{tree}`；2026-09-30 起改算 `ls-tree -r HEAD` 扣掉 REUSE_EXCLUDE）＋執行環境。文件不排除：測試會讀 docs/（見
    tests/test_build_test_reuse_2026_09_25.py 的說明）。
-🔑 沿用條件：同指紋、**嚴格全綠**（兩段 exit 0，逾時放行不算）、**同一天**、12 小時內；
+🔑 沿用條件：同指紋、**嚴格全綠**（兩段 exit 0，逾時放行不算）、12 小時內（不再要求同一個日曆日：跨午夜照樣沿用，使用者 2026-10-13 書面裁示；
+   把關靠整棵 tree 的指紋＋12 小時新鮮度，時間相依的題由 `test_no_import_time_clock_2026_10_09` 這類守門處理）；
    同指紋的最新一筆若是紅的，不沿用更早的綠。
 
 ## 分段沿用（2026-09-30，建包優化「避免非正常情況的失敗」；正反論證見 PLAYBOOK §D-建包）
@@ -18,7 +19,7 @@
   python build_test_reuse.py record-stage --fp X --stage S --green 1 [--flaky-from R] [--reused-at T] [--flaky ID…]
 - 每一行可帶 `stages: {not_e2e|e2e: {green, tested_at, flaky_retried[]}}`；舊格式（沒有 stages）的一行＝兩段同一個結果。
 - 一段的判定＝同指紋、**帶有這一段**的最新一筆（沒帶這一段的行跳過：例如只跑完非 e2e 就中斷的那一行不影響 e2e）；
-  該段綠、同一天、12 小時內——以**該段原本實跑的時間**算（沿用後再記錄時帶原時間，窗口不會被一路延長）。
+  該段綠、12 小時內（可跨午夜）——以**該段原本實跑的時間**算（沿用後再記錄時帶原時間，窗口不會被一路延長）。
 - 段的綠＝該段閘門通過：exit 0，或失敗題經隔離重跑通過且已登記在 known_flakes（`flaky_retried` 清單跟著沿用、寫進 manifest）。
   頂層 `green` 仍只代表「這一行兩段都嚴格 exit 0」（舊版建包只看它）。
 - `modtest --full` 在乾淨工作樹、無縮小範圍的參數時也寫進同一份紀錄（record_full_run），建包就不必把同一份 tree 再跑一次。
@@ -175,7 +176,7 @@ def _stage_verdict(records_list, fp, stage, now):
         if entry.get("green") is not True:
             return False, "同指紋帶這一段的最新一筆是紅的（%s，來源 %s）" % (entry.get("tested_at") or r.get("tested_at"), r.get("source") or "build")
         if not _stage_ok(entry, now, MAX_HOURS):
-            return False, "同指紋的綠已過期（需同一天且 %d 小時內；實跑於 %s）" % (MAX_HOURS, entry.get("tested_at"))
+            return False, "同指紋的綠已過期（需 %d 小時內；實跑於 %s）" % (MAX_HOURS, entry.get("tested_at"))
         return True, "可沿用（%s 實跑於 %s，來源 %s）" % (r.get("commit"), entry["tested_at"], r.get("source") or "build")
     return False, "同指紋的紀錄都沒有帶這一段"
 
@@ -289,7 +290,7 @@ def collect_reds(fail_stream_dir, limit=500):
 
 def run_stage(repo, stage, records, python=None, runner=None, workers=None, note=print, no_failfast=False):
     """**獨立跑一段也算數**（建包優化 2 項 2）：跑與建包同一組指令；開跑與結束的指紋相同且工作樹乾淨 ⇒ 把這一段（綠或紅）寫進沿用紀錄
-    （source=standalone）。之後建包遇到同指紋、同一天、12 小時內的綠就直接沿用這一段，不再跑第二次。
+    （source=standalone）。之後建包遇到同指紋、12 小時內的綠就直接沿用這一段，不再跑第二次。
     - 紅也照記（同指紋之前的綠不可以再被沿用，與建包同一條規則）；fail-fast 提前停止的一段是紅。
     - 指紋不同（跑到一半 HEAD／工作樹／環境變了）或一開始就不乾淨 ⇒ 照跑、回傳 exit code，但**不寫紀錄**。
     - 這裡不做偶發重跑：紅就是紅（要走偶發登記請用建包）。
@@ -330,11 +331,11 @@ def run_stage(repo, stage, records, python=None, runner=None, workers=None, note
     if found:
         extra = "；紅 %d 題（%s）：%s；明細（longrepr）：%s" % (
             len(found), "無 failfast，全部列出" if no_failfast else "failfast 提早停，只含已出現的", "、".join(found[:20]) + ("…" if len(found) > 20 else ""), fs_dir)
-    return rc, True, "已記錄：%s=%s（建包同指紋、同一天、%d 小時內會沿用）%s" % (stage, "綠" if rc == 0 else "紅", MAX_HOURS, extra)
+    return rc, True, "已記錄：%s=%s（建包同指紋、%d 小時內會沿用，可跨午夜）%s" % (stage, "綠" if rc == 0 else "紅", MAX_HOURS, extra)
 
 
 def find_reusable(records, fp, now, max_hours=MAX_HOURS):
-    """同指紋的**最新一筆**：嚴格全綠、同一天、max_hours 內 ⇒ 回它；否則 None。純函式。"""
+    """同指紋的**最新一筆**：嚴格全綠、max_hours 內（可跨午夜）、時間戳不在未來 ⇒ 回它；否則 None。純函式。"""
     if not fp:
         return None
     same = [r for r in records if r.get("fingerprint") == fp]
@@ -345,7 +346,7 @@ def find_reusable(records, fp, now, max_hours=MAX_HOURS):
         t = datetime.strptime(last["tested_at"], TS_FMT)
     except (KeyError, ValueError):
         return None
-    if last.get("green") is not True or t.date() != now.date():
+    if last.get("green") is not True:
         return None
     if (now - t).total_seconds() > max_hours * 3600 or t > now:
         return None
@@ -357,7 +358,7 @@ def _stage_ok(entry, now, max_hours):
         t = datetime.strptime(entry["tested_at"], TS_FMT)
     except (KeyError, TypeError, ValueError):
         return False
-    if entry.get("green") is not True or t.date() != now.date():
+    if entry.get("green") is not True:
         return False
     return not ((now - t).total_seconds() > max_hours * 3600 or t > now)
 
