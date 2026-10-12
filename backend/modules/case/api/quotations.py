@@ -65,6 +65,7 @@ from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
 from modules.case import material_guard as MG  # 叫料審核的寫入閘（31-C）
 from modules.case import profit_guard as _PG  # 第 48 班 S2：管銷分攤比率權限／伺服器重算
+from helpers import profit_rules as _PR  # 專案毛利%（project_margin）
 from modules.case import alt_sign as _ALT_SIGN  # M3 T9：擇一方案回簽選定／取消回簽
 from modules.case import receipt_calendar as _RC  # 行事曆「收款登錄／應收到期提醒」（2026-10-05，預設關）
 from modules.case.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
@@ -813,6 +814,7 @@ def list_quotations(
     recv_overdue:  int = 0,
     missing_docs:  int = 0,
     unread:        int = 0,
+    include_project_margin: int = 0,
     authorization: str = Header(None),
 ):
     """CM6（2026-09-24）：案件頁改由伺服器搜尋／篩選／排序／分頁（原本一次拉 500 件在前端篩，
@@ -950,12 +952,24 @@ def list_quotations(
         all_nos = [r[0] for r in conn.execute(
             f"SELECT quote_no FROM quotations WHERE 1=1{base_where}", base_params)]
         counts_out["unread"] = len(unread_keys(conn, user, "case", all_nos))
+    _tc_map = {}
+    if include_project_margin and not masked and rows:        # 專案毛利%（清單，選用）：只有要求才多讀這一頁的 data_json，在 Python 端取成本合計（不新增 SQL json_extract；ratchet）
+        _nos = [r["quote_no"] for r in rows]
+        for _c0 in range(0, len(_nos), 300):
+            _chunk = _nos[_c0:_c0 + 300]
+            for _r2 in conn.execute("SELECT quote_no, data_json FROM quotations WHERE quote_no IN (%s)" % ",".join("?" * len(_chunk)), _chunk):
+                try:
+                    _tc_map[_r2["quote_no"]] = ((json.loads(_r2["data_json"] or "{}") or {}).get("tot") or {}).get("totalCost")
+                except (TypeError, ValueError, AttributeError):
+                    _tc_map[_r2["quote_no"]] = None
     conn.close()
     items = []
     for r in rows:
         row = dict(r)
         if masked:
             _mask_money_row(row)
+        elif include_project_margin:                         # 專案毛利%：判定式與 direct_margin_pct 相同；看不到者／沒要求者鍵不存在（不是 None）
+            row["project_margin_pct"] = _PR.project_margin(row.get("pretax"), _tc_map.get(row.get("quote_no")))["pct"]
         el_json     = row.pop("edit_last_json", None)
         edit_last = None
         if el_json:
@@ -1288,6 +1302,12 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
     # QL13：前端用 `locationId`，DB 欄位叫 `location_id`。
     # 兩個都回：舊的呼叫端不會因此壞掉，而新的表單讀得到它。
     result["locationId"] = result.get("location_id") or ""
+    _pm_pct = None                                                  # 專案毛利%：由已存品項重算（遮蔽前算，遮蔽後只在仍保有 tot 時附加）
+    if quote_money_visible(user) or money_visible(user):            # 只替本來就看得到報價金額的人算；壞掉的舊單絕不能把 200 變成 500
+        try:
+            _pm_pct = _PG.quote_project_margin(result["data"])["pct"]
+        except Exception:                                           # noqa: BLE001
+            logger.warning("project margin recompute failed for %s", quote_no, exc_info=True)
     if not money_visible(user):
         # CM13（2026-09-24 使用者裁示）：金額、毛利、單價、成本不回
         # 第42班（使用者裁示「拆開」）：業務／管理員仍看得到報價單層級（品項單價／成本／毛利、總額），精算與款項期別（收款／付款）才遮
@@ -1295,6 +1315,8 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
         mask_quotation_data(result["data"], keep_orders=material_money_visible(user), keep_quote=_keep_quote)
         if not _keep_quote:
             _mask_money_row(result)
+    if isinstance(result["data"].get("tot"), dict):                 # 判定式＝該回應本來就保有 tot 金額（與 directMarginPct 同步）；否則鍵不存在
+        result["project_margin_pct"] = _pm_pct
     return result
 
 

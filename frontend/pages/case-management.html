@@ -2705,6 +2705,13 @@
                       </div>
                     </template>
 
+                    <!-- 專案毛利%：後端由已存品項重算，信封鍵只在該回應本來就保有報價金額時才存在 -->
+                    <div x-show="canSeeFinancial() && selected && selected.project_margin_pct !== undefined && selected.project_margin_pct !== null" data-testid="cm-project-margin"
+                         style="margin-bottom:10px;font-size:12px">
+                      <span style="color:var(--text-dim)">專案毛利%：</span><b x-text="selected && selected.project_margin_pct !== undefined && selected.project_margin_pct !== null ? Number(selected.project_margin_pct).toFixed(1) + '%' : ''"></b>
+                      <span style="color:var(--text-dim)">（未稅收入 − 未稅品項成本；不扣進項稅、管銷、公益與保留款）</span>
+                    </div>
+
                     <!-- M3 擇一方案：所選方案與（財務權限者）方案比較 -->
                     <template x-if="altHasGroups()">
                       <div data-testid="cm-alt-block" style="margin-bottom:14px;font-size:12px">

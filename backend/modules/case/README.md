@@ -14,6 +14,7 @@
 | `quotations.py` | 報價單熱欄位同步、驗證；提供者：`case.access`、`case.summary`、`case.locations`、`case.recognition`、`case.default_terms`、`case.doc_version` |
 | `recognition.py` | 收入認列／支出歸月／待補登（經 `case.recognition` 給 M08） |
 | `alt_policy.py` | 擇一方案報價（M3）設定讀取入口：設定中心群組 `quote_alt` 的數值、文字範本與回簽政策（『尚未提供』的選項夾回預設） |
+| `api/project_margin.py` | `GET /api/project-margin/config`：專案毛利% 的提醒門檻（需 `quote_money_visible`，只有一個數字）；算式在 `helpers/profit_rules.py::project_margin` |
 | `alt_sign.py` | 擇一單回簽選定／取消回簽（M3 T9）：唯一清除入口 `clear_signed_selection`＋守門鏈 P8→P7→P6→P2；整份存檔守門 `guard_update`（P1／P4）、移出已送出 `guard_move_out_of_sent`（P3） |
 | `alt_lock.py` | 已回簽擇一單的本文鎖定比對（純函式；P1 ①整份本文／②只鎖品項與金額；fail-closed） |
 | `alt_view.py` | 擇一方案客戶版輸出資料（提供者 `case.alt_view`，IP-ALT1）：哪些品項印、標記字、合計格文字、自動備註句；**不含成本**，範本代入用單趟取代、不用 `str.format` |

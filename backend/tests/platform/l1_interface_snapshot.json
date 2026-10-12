@@ -1112,8 +1112,10 @@
    "admin_cost": "def(pretax, direct_profit, pct=…, ver=…)",
    "charity": "def(direct_profit, total=…, basis=…)",
    "pct_rate": "def(pct)",
+   "project_margin": "def(pretax, total_cost, uncosted=…)",
    "quote_profit": "def(pretax, total_cost, input_vat, indirect_items, pct=…, ver=…, total=…, charity_basis=…)",
-   "settlement_profit": "def(pretax, actual_cost, pct=…, ver=…, frozen_charity=…, quoted_total=…, charity_basis=…)"
+   "settlement_profit": "def(pretax, actual_cost, pct=…, ver=…, frozen_charity=…, quoted_total=…, charity_basis=…)",
+   "uncosted_items": "def(items)"
   },
   "helper:receivables": {
    "RECEIVABLES_MISSING": "const",

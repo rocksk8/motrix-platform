@@ -47,8 +47,9 @@ def test_picks_are_never_written_by_the_form():
     assert not re.search(r"\.altPicks\s*=", FORM) and not re.search(r"altPicks\[[^\]]+\]\s*=", FORM)
 
 
-def test_form_version_bumped_to_v3_23():
-    assert "const FORM_VERSION = 'V3.23'" in FORM
+def test_form_version_is_at_least_v3_23():
+    m = re.search(r"const FORM_VERSION = 'V(\d+)\.(\d+)'", FORM)
+    assert m and (int(m.group(1)), int(m.group(2))) >= (3, 23)             # M3 起點 V3.23；之後的表單改動（例如 V3.24 專案毛利%）只會更大
 
 
 def test_alt_group_toggle_removes_key_and_texts_are_plain_language():

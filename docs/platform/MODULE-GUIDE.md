@@ -307,6 +307,8 @@ modules/<key>/
 - **遷移工具的數字要與線上同式**：離線重算的進位、二進位浮點路徑要與線上重存逐位一致（第 50 班稽核必修：`netMarginPct` 差一個尾數就翻轉 12% 警示旗標）；附平手向量與 fuzz-lite 等值測試。工具先 `report`（dry-run）、使用者核准影響報告、再 `recalc --apply`，回滾用 `rollback`。
 - **舊口徑與新口徑並存的報表**：加註記、不做口徑篩選（設計稿 §12.1）；每筆精算 summary 的 `formulaVer` 可供日後要拆時使用。
 
+- **專案毛利%（衍生值，不是戳記）**：（未稅收入 − 未稅品項成本）÷ 未稅收入，算式只在 `helpers/profit_rules.py::project_margin`（前端孿生 `profit-rules.js projectMargin`，共用黃金向量 `tests/data/project_margin_vectors.json`）。**不寫進 `tot`、不加 SQL 欄、不需遷移**；詳情由已存品項讀取時重算，回應信封鍵 `project_margin_pct` 登記在 `financial_mask.QUOTATION_MONEY_COLS`，只在該回應本來就保有報價金額時才附加（與 `directMarginPct` 同判定式）。與直接毛利率的差異恰為進項稅。
+
 ### 14.6 擇一方案（M3；T57）：計入集合與鎖定規則
 - **單據層總開關**：`totalsByAlt is True`（`profit_guard.alt_active`，前端 `MotrixAltItems.active`）。沒開 ⇒ 擇一組別惰性（全部品項照一般報價單計入、無標記、無選定與鎖定規則）；任何新程式要判斷『這張單是不是擇一單』只用這一個定義，不要自己看 `altGroup`。
 - **計入集合只有一個**：`profit_guard.counted_items(q, picks=None)`（Python）＝ `static/alt-items.js::countedItems`（JS），兩邊用同一份黃金向量 `tests/data/quote_alt_vectors.json`。新增算金額／成本的地方一律走它，不要自己過濾 `altGroup`。**例外**：`quote_terms.compute_approval_reasons` 刻意逐項檢查全部品項（含未選的），不得改成計入集合（等於偷放寬簽核）。
