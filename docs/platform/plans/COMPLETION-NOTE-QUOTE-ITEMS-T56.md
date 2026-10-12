@@ -3,6 +3,7 @@
 > **r2 修訂（依 0d 稽核）**：①端點權限收斂為「管理員＋案件頁可讀」，不新增讀取者；②`quoteItemId` 為字串；③白名單移除 `notes`；④報價單狀態閘；⑤累計口徑；⑥`quoteSync` 儲存；⑦M3 相依；⑧表頭範圍同閘。
 > **r4 修訂（依使用者表單與更正）**：表單答案**不是固定行為，而是設定項的預設值**（框架優先：管理者在設定中心可調，程式內只留不可變的安全底線）。①Q1 印金額＝設定（預設關；開啟仍受財務權限約束）；②Q2 回簽前能否帶入＝設定（預設：已送出未回簽可帶入並提示）；③Q6 **開放有案件權限的業務建立／編輯完工單＝權限變更**，閘門重新設計（§6b），**實作前需另行的非作者權限審查**；④M3 側使用者已定：整張報價鎖定、成案／PO 後禁止取消回簽。
 > **r5 修訂（依 §6b 權限審查，原 r4 不可採用）**：①`can_author_completion` 改用**擁有者範圍**，不用 `case_page_readable`（後者因 `read_bypass_modules=("cashier",)` 會讓兼任出納的業務通過「所有案件」）；②單據層端點一律先由 `note_no` 查出 `quote_no` 再判權限，PUT 內文的 `quote_no` 不具授權力，且「查無此單」與「不是你的案件」回同一個 404；③前端能力旗標改走「單筆完工單＋案件詳情＋小端點」，不動 `list_completion_notes` 的形狀；另補刪除、設定語意、簽核、撤回限制。
+> **r6 修訂（依權限審查通過後的建議）**：①建立路徑對「報價單不存在」與「不是你的案件」回同一個 404；②稽核備註：擁有者規則也會以顯示名稱比對舊資料（`sales_person_id` 為 NULL 時，`legacy_name_col`）；③**既有安全漏洞**：`GET /api/completion-notes/{note_no}/privacy-notice` 只做 `_require_user`，任何登入者可讀任一完工單的個資告知紀錄——列為獨立小修（§6b.1），並進路線圖。
 > 2026-10-12；委託：hichan-1c（使用者新需求：「完工單要能自動帶入報價單項目」）。底：`origin/platform` c14f0a1df（內容＝正式機 M1-a `4eb521384`；**M2／M3 尚未上線**）。
 > 標記：**【需使用者回答】**＝會改變行為或對外輸出，回答前不實作該部分；**【PM 預設】**＝我給預設值，不需問，使用者可事後調。**UNKNOWN**＝沒查到證據。
 > 框架優先（記憶 `feedback_framework_first_no_hardcode`）：行為開關放設定中心，程式內只有「安全底線」（不帶金額、守門權限）。
@@ -138,6 +139,7 @@
 | `POST /{note_no}/export` | 689 | `_require_admin` | 同上 |
 | `POST /{note_no}/signed-toggle` | 720 | `_require_admin` | **不變**（回簽狀態仍僅管理員） |
 | `POST /{note_no}/privacy-notice/ack` | 847 | `_require_admin` | 同上 |
+| `GET /{note_no}/privacy-notice`（讀個資告知紀錄） | 830–838 | **只有 `_require_user`——既有漏洞**：任何登入者可用可列舉的 `note_no` 讀到該單聯絡人（`completion_contact`）的告知紀錄；查無單回 404 還會洩漏單號是否存在 | **修**：改用 `_readable_note(conn, note_no, user)`（＝`guard_case_access(case_manage)`，與單筆 GET 同一道閘；查無與看不到同一句「完工單不存在」）。**與本功能無關、可獨立先出**；負向測試：無該案件權限者 ⇒ 404；有權限者 ⇒ 200 |
 | 讀取／回簽檔上傳／清單 | 223–270、767–793 | `guard_case_access(case_manage)` | **不變**（不新增讀取者；`list_completion_notes` 回傳形狀不動） |
 | 新端點 `quote-items` | 新 | — | `can_author_completion`（擁有者範圍，已比報價單本體的讀者更窄；保留 `case_page_readable` 作冗餘檢查，防兩份規則日後分歧） |
 
@@ -149,6 +151,9 @@
 4. 其餘 ⇒ 假。
 5. **設定語意**：設定列**不存在** ⇒ 常數預設（＝使用者決定值：有案件權限的業務與管理員）；設定**讀取發生例外／值不合法** ⇒ **fail closed＝僅管理員**；任何其他例外 ⇒ 假。
 6. **此底（platform）沒有 `settings_registry`**：預設值在部署當下**就會生效**（不是等 S1）——所以這個權限變更會隨 M2 之後的那一班直接上線；步驟檔必須帶 **⚠ 權限變更** 提示，且 **CORE-SPEC 的「使用者裁示」必須先有一筆登記**（10-12 表單答案＋更正）才可實作——兩者列為驗收項。
+
+- **建立路徑**（`POST /api/completion-notes`，body 帶 `quote_no`）：對「報價單不存在」與「不是你的案件」**回同一個 404**（不得維持今天先 404「找不到關聯的報價單」、再 403 的分層，否則可用 `quote_no` 列舉案件是否存在）；權限檢查先於其他分支。
+- **擁有者規則的舊資料注意**：`row_access` 的 `case` 擁有者規則在 `sales_person_id` 為 NULL 的舊資料列上，會以**顯示名稱**（`legacy_name_col`）比對案件業務——與所有經 `guard_case_access` 的案件寫入端點同一風險類別（同名同姓誤判），本案不另處理，列入權限審查的已知項。
 
 ### 6b.3 單據層端點的授權順序（防洩漏、防越權）
 - 範本：`row = SELECT quote_no, status, created_by FROM completion_notes WHERE note_no=?` → `can_author_completion(conn, user, row.quote_no)` → 其餘分支（狀態、樂觀鎖、內容驗證）。
@@ -178,6 +183,8 @@
 7. 核准／退回／撤銷核准／回簽切換對業務仍 403；業務同時是簽核層時自簽防護生效；簽核層無法解析 ⇒ 400 白話訊息；業務送審後無撤回路徑（現況）。
 8. 旗標通道：單筆回傳、案件詳情 `caps`、小端點三者與後端函式一致；`list_completion_notes` 形狀不變（快照題）；靜態守門無寫死角色陣列。
 9. 稽核 `via` 正確；管理員全部既有流程回歸不變。
+10. **建立**：不存在的 `quote_no` 與「別人的案件」對業務回**完全相同**的 404（狀態碼與訊息）。
+11. **個資告知紀錄讀取漏洞修復**：`GET /{note_no}/privacy-notice`——無案件權限的登入者 ⇒ 404（與查無單同句）；有權限者 ⇒ 200 且內容不變；舊行為（任何登入者可讀）有回歸題證明已關閉。
 
 ### 6b.7 受影響測試與文件
 `backend/tests/test_completion_notes_2026_09_12.py`、`test_e2e_completion_form_2026_09_12.py`（現有以管理員為前提）、`test_module_no_admin_bypass`／`finance_role` 系列確認不誤判新函式；`INTEGRATION-POINTS.md`（新 L1 函式與 `can-author` 端點）；`docs/platform/CORE-SPEC.md`「使用者裁示」登記（**驗收項，先於實作**）；步驟檔的 ⚠ 權限變更提示（**驗收項**）。
