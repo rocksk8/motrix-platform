@@ -34,6 +34,7 @@ _FEATURES: Dict[str, dict] = {}
 _ORPHANS: Dict[str, List[str]] = {}                       # 擁有者 → 無法歸到任何功能的問題（缺 code、代號重複…）
 _STATE: Dict[str, dict] = {}
 _MANIFEST_CAPS: Dict[str, set] = {}
+_REJECTED_GROUPS: Dict[str, set] = {}                    # 設定群組 → 宣告被拒（代號撞名輸家）的擁有者們：該群組一律 hidden（輸家不能因為宣告被丟掉就變成可寫的 open）
 _CLAIMS: Dict[str, set] = {}                              # 功能代號 → 宣告過它的擁有者們（含沒被收下的）；>1 個擁有者＝兩邊都標失敗，與載入順序無關
 _VALIDATORS: Dict[str, Tuple[Callable, Tuple[str, ...]]] = {}
 _POST_VALIDATE: List[Callable[[], None]] = []
@@ -164,6 +165,8 @@ def register_manifest(manifest: dict, owner: str) -> List[str]:
             continue
         orphan.append(msg)
         problems.append(msg)
+        if f["group"]:
+            _REJECTED_GROUPS.setdefault(f["group"], set()).add(owner)
     if orphan:
         _ORPHANS[owner] = orphan
     return problems
@@ -180,6 +183,10 @@ def drop_owner(owner: str) -> None:
         _CLAIMS[code].discard(owner)
         if not _CLAIMS[code]:
             del _CLAIMS[code]
+    for g in list(_REJECTED_GROUPS):
+        _REJECTED_GROUPS[g].discard(owner)
+        if not _REJECTED_GROUPS[g]:
+            del _REJECTED_GROUPS[g]
 
 
 def register_validator(name: str, fn: Callable[[dict], List[str]], covers: Tuple[str, ...] = ()) -> None:
@@ -267,6 +274,8 @@ def group_status(group: str) -> str:
     功能驗證失敗 ⇒ hidden（fail-closed：不顯示、不可寫）。"""
     if not _VALIDATED:
         return "open"
+    if _REJECTED_GROUPS.get(group):                    # 某個被拒絕的宣告（撞名輸家）指名了這個群組 ⇒ hidden，不論贏家是誰
+        return "hidden"
     for code in sorted(_FEATURES):
         f = _FEATURES[code]
         if f["group"] == group:
@@ -308,7 +317,8 @@ def report() -> dict:
 
 def snapshot() -> tuple:
     return (dict(_FEATURES), {k: list(v) for k, v in _ORPHANS.items()}, {k: dict(v) for k, v in _STATE.items()},
-            {k: set(v) for k, v in _MANIFEST_CAPS.items()}, _VALIDATED, {k: set(v) for k, v in _CLAIMS.items()})
+            {k: set(v) for k, v in _MANIFEST_CAPS.items()}, _VALIDATED, {k: set(v) for k, v in _CLAIMS.items()},
+            {k: set(v) for k, v in _REJECTED_GROUPS.items()})
 
 
 def restore(snap: tuple) -> None:
@@ -319,11 +329,12 @@ def restore(snap: tuple) -> None:
     _MANIFEST_CAPS.clear(); _MANIFEST_CAPS.update(snap[3])
     _VALIDATED = snap[4]
     _CLAIMS.clear(); _CLAIMS.update(snap[5] if len(snap) > 5 else {})
+    _REJECTED_GROUPS.clear(); _REJECTED_GROUPS.update(snap[6] if len(snap) > 6 else {})
 
 
 def reset() -> None:
     """測試用：清空功能登錄與驗證狀態（驗證器與回呼是 import 時登記的，不動）。"""
-    restore(({}, {}, {}, {}, False, {}))
+    restore(({}, {}, {}, {}, False, {}, {}))
 
 
 registry.on_unload(drop_owner)          # 模組失敗／卸載 ⇒ 它的功能一併移除

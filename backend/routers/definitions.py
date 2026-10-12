@@ -132,8 +132,39 @@ _MANAGED_KINDS = {
 }
 
 
+def _group_status(kind, key):
+    """kind＝setting_group 且 key 是已登錄群組 ⇒ 該群組的功能狀態（open｜planned｜hidden）；其他一律 open。脊柱不可用 ⇒ open。"""
+    if kind != "setting_group":
+        return "open"
+    try:
+        from helpers import settings_registry as sr
+        return sr.group_info(key)["status"]
+    except Exception:                                                      # noqa: BLE001
+        return "open"
+
+
+_PLANNED_MSG = "這項功能還在開發中，尚未開放調整。"
+
+
+def _group_info(key):
+    try:
+        from helpers import settings_registry as sr
+        return sr.group_info(key)
+    except Exception:                                                      # noqa: BLE001
+        return {"status": "open", "plannedTrain": None, "feature": None}
+
+
+def _group_gate(kind, key):
+    """設定群組的任何『指名某個群組』的通用路由（讀取、驗證）：hidden ⇒ 404（連 superadmin 也不顯示）、planned ⇒ 409（只有名稱與狀態可見，細節不給）。"""
+    st = _group_status(kind, key)
+    if st == "hidden":
+        raise HTTPException(404, "沒有這個定義")
+    if st == "planned":
+        raise HTTPException(409, _PLANNED_MSG)
+
+
 def _managed_guard(kind, authorization=None, key="", verb=""):
-    """受管 kind 的通用寫入一律 409；並留稽核 `definitions.managed_refused`（只記 kind／key／動作，不記內容）——繞過設定中心的嘗試要看得到。"""
+    """受管 kind 的通用寫入一律 409（hidden 群組 ⇒ 404，不洩漏存在）；並留稽核 `definitions.managed_refused`（只記 kind／key／動作，不記內容）——繞過設定中心的嘗試要看得到。"""
     msg = _MANAGED_KINDS.get(kind)
     if msg:
         try:
@@ -141,6 +172,8 @@ def _managed_guard(kind, authorization=None, key="", verb=""):
                    "拒絕經通用定義介面%s %s %s（受管類型，請到設定中心）" % (verb, kind, key), {})
         except Exception:                                                  # noqa: BLE001  稽核寫不進去也要擋下
             pass
+        if _group_status(kind, key) == "hidden":
+            raise HTTPException(404, "沒有這個定義")
         raise HTTPException(409, msg)
 
 
@@ -206,7 +239,19 @@ def list_definitions(kind: str, authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     conn = get_db()
     try:
-        return D.list_definitions(conn, kind)
+        rows = D.list_definitions(conn, kind)
+        if kind != "setting_group":
+            return rows
+        out = []                                                           # 設定群組：hidden 不列；planned 只留名稱與狀態
+        for r in rows:
+            info = _group_info(r["key"])
+            if info["status"] == "hidden":
+                continue
+            if info["status"] == "planned":
+                out.append({"key": r["key"], "scope": r.get("scope", "company"), "status": "planned", "plannedTrain": info["plannedTrain"]})
+                continue
+            out.append(r)
+        return out
     except D.DefinitionError as e:
         return _err(e)
     finally:
@@ -252,6 +297,7 @@ def delete_custom_module(key: str, with_records: bool = Query(False), authorizat
 @router.get("/api/definitions/{kind}/{key}")
 def get_definition(kind: str, key: str, scope: str = Query("company"), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
+    _group_gate(kind, key)
     conn = get_db()
     try:
         return {"draft": D.get(conn, kind, key, scope, 0), "latest": D.get(conn, kind, key, scope),
@@ -266,6 +312,7 @@ def get_definition(kind: str, key: str, scope: str = Query("company"), authoriza
 def get_definition_default(kind: str, key: str, authorization: str = Header(None)):
     """程式出貨預設（v0；不看資料庫）。沒有預設 ⇒ `{"body": null}`。D14／D15：複製出貨範本到草稿、與出貨範本逐項比較。"""
     _require_user(authorization, require_superadmin=True)
+    _group_gate(kind, key)
     if kind not in D.kinds():
         raise HTTPException(400, "未知的定義種類")
     return {"body": D.default_for(kind, key)}
@@ -304,6 +351,7 @@ def save_definition_draft(kind: str, key: str, scope: str = Query("company"), pa
 @router.post("/api/definitions/{kind}/{key}/validate")
 def validate_definition(kind: str, key: str, payload: dict = Body(...), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
+    _group_gate(kind, key)
     if kind not in D.kinds():
         raise HTTPException(400, "未知的定義種類")
     return {"problems": D.validate(kind, key, payload.get("body"))}
@@ -360,6 +408,7 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
 def get_definition_version(kind: str, key: str, version: int, scope: str = Query("company"),
                            authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
+    _group_gate(kind, key)
     conn = get_db()
     try:
         d = D.get(conn, kind, key, scope, version)
@@ -377,6 +426,7 @@ def diff_definition(kind: str, key: str, scope: str = Query("company"), a: str =
                     b: str = Query("draft"), authorization: str = Header(None)):
     """版本對版本的差異；`latest`＝最新發布、`draft`＝草稿、`default`＝程式預設、數字＝該版。"""
     _require_user(authorization, require_superadmin=True)
+    _group_gate(kind, key)
     conn = get_db()
     try:
         def pick(x):
@@ -431,6 +481,7 @@ def restore_definition(kind: str, key: str, version: int, scope: str = Query("co
 @router.get("/api/definitions/{kind}/{key}/resolve")
 def resolve_definition(kind: str, key: str, role: str = Query(None), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
+    _group_gate(kind, key)
     conn = get_db()
     try:
         body, source = D.resolve(conn, kind, key, role)

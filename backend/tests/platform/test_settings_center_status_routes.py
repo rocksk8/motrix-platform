@@ -54,7 +54,8 @@ def ctx(client, make_user, monkeypatch):
     db = get_db()
     try:
         c.pend = {}
-        for g in (OPEN, PLAN, HIDE):                                   # 三個群組各留一筆待生效項，再把兩個翻成非 open
+        for g in (OPEN, PLAN, HIDE):                                   # 三個群組各有一個已發布版本＋一筆待生效項，再把兩個翻成非 open
+            R.publish(g, {"note": 9}, reason="建立定義", user="rt_a", conn=db)
             out = R.publish(g, {"limit": 200}, reason="調高", user="rt_a", conn=db)
             c.pend[g] = out["pending"][0]["id"]
         db.commit()
@@ -92,6 +93,7 @@ def case_list_groups(c, kind):
     else:
         x = groups[PLAN]
         assert x["status"] == "planned" and x["plannedTrain"] == "MS2" and x["values"] == {} and x["fieldCount"] == 0 and x["lastChange"] is None
+        assert x["help"] == "" and x["sensitive"] is False and x["risk"] == "none"                 # 名稱＋狀態以外不給
 
 
 def case_get_group(c, kind):
@@ -100,6 +102,7 @@ def case_get_group(c, kind):
     if kind == "planned":
         d = r.json()
         assert d["status"] == "planned" and d["plannedTrain"] == "MS2" and d["fields"] == [] and d["values"] == {} and d["history"] == []
+        assert d["help"] == "" and d["sensitive"] is False
 
 
 def case_save(c, kind):
@@ -142,7 +145,7 @@ def case_approve(c, kind):
 
 def case_cancel(c, kind):
     r = _p(c, "/pending/%d/cancel" % c.pend[GROUP[kind]], {"reason": "收尾"})
-    assert r.status_code == 200, (kind, r.status_code, r.text[:200])                     # 收尾用：允許（planned 與 hidden 都可）
+    _code(r, 200, 404, kind)                                                             # planned 收尾用允許；hidden 對外等同不存在（啟動時／materialize_due 會代為取消）
 
 
 def case_public(c, kind):
@@ -231,3 +234,74 @@ def test_open_group_is_unaffected(ctx):
     assert d.status_code == 200 and d.json()["status"] == "open" and d.json()["fields"]
     assert _p(ctx, "/groups/%s/preview" % OPEN, {"values": {"note": 9}}).status_code == 200
     assert _p(ctx, "/groups/" + OPEN, {"values": {"note": 9}, "reason": "測試"}).status_code == 200
+
+
+# ── 通用定義路由（kind=setting_group）也依功能狀態——不是只有 /api/settings-center ────────────────
+DP = "/api/definitions"
+KIND = "setting_group"
+_BODY = {"body": {"group": "x", "values": {"note": 5}}}
+
+
+def _dg(c, path, **kw):
+    return c.client.get(DP + path, headers=c.h, **kw)
+
+
+def dcase_list(c, kind):
+    rows = {r["key"]: r for r in _dg(c, "/" + KIND).json()}
+    assert OPEN in rows and rows[OPEN].get("latestVersion")                               # open 照舊（有版本資訊）
+    if kind == "hidden":
+        assert HIDE not in rows
+    else:
+        assert rows[PLAN] == {"key": PLAN, "scope": "company", "status": "planned", "plannedTrain": "MS2"}
+
+
+def _dcode(r, kind):
+    _code(r, 409, 404, kind)
+
+
+CASES_DEF = {
+    ("GET", DP + "/{kind}"): dcase_list,
+    ("DELETE", DP + "/{kind}/{key}/draft"): lambda c, k: _dcode(c.client.delete(DP + "/%s/%s/draft" % (KIND, GROUP[k]), headers=c.h), k),
+    ("GET", DP + "/{kind}/{key}"): lambda c, k: _dcode(_dg(c, "/%s/%s" % (KIND, GROUP[k])), k),
+    ("GET", DP + "/{kind}/{key}/default"): lambda c, k: _dcode(_dg(c, "/%s/%s/default" % (KIND, GROUP[k])), k),
+    ("PUT", DP + "/{kind}/{key}/draft"): lambda c, k: _dcode(c.client.put(DP + "/%s/%s/draft" % (KIND, GROUP[k]), json=_BODY, headers=c.h), k),
+    ("POST", DP + "/{kind}/{key}/validate"): lambda c, k: _dcode(c.client.post(DP + "/%s/%s/validate" % (KIND, GROUP[k]), json=_BODY, headers=c.h), k),
+    ("POST", DP + "/{kind}/{key}/publish"): lambda c, k: _dcode(c.client.post(DP + "/%s/%s/publish" % (KIND, GROUP[k]), json={}, headers=c.h), k),
+    ("GET", DP + "/{kind}/{key}/versions/{version}"): lambda c, k: _dcode(_dg(c, "/%s/%s/versions/1" % (KIND, GROUP[k])), k),
+    ("GET", DP + "/{kind}/{key}/diff"): lambda c, k: _dcode(_dg(c, "/%s/%s/diff" % (KIND, GROUP[k])), k),
+    ("POST", DP + "/{kind}/{key}/restore/{version}"): lambda c, k: _dcode(c.client.post(DP + "/%s/%s/restore/1" % (KIND, GROUP[k]), json={}, headers=c.h), k),
+    ("GET", DP + "/{kind}/{key}/resolve"): lambda c, k: _dcode(_dg(c, "/%s/%s/resolve" % (KIND, GROUP[k])), k),
+}
+#: 不以 kind 為參數、與設定群組無關的路由（明列，讓『沒分類』和『刻意略過』分得開）
+NOT_KIND_PARAMETRIC = {
+    ("DELETE", DP + "/custom_module/{key}"): "kind 固定為 custom_module",
+    ("POST", DP + "/output_template/{key}/preview"): "kind 固定為 output_template",
+    ("GET", "/api/layout/{module_key}"): "版面讀取：以模組鍵為參數，不涉及設定群組",
+}
+
+
+def _generic_routes(client):
+    spec = client.app.openapi()
+    return {(m.upper(), p) for p, ops in spec["paths"].items() if p.startswith(DP) or p.startswith("/api/layout/")
+            for m in ops if m in ("get", "post", "put", "patch", "delete")}
+
+
+def test_every_generic_definitions_route_is_classified(client):
+    """通用 /api/definitions／版面路由：新增路由時要決定它對 kind=setting_group 的 planned／hidden 群組怎麼辦（否則紅）。"""
+    actual = _generic_routes(client)
+    known = set(CASES_DEF) | set(NOT_KIND_PARAMETRIC)
+    assert not (actual - known), "通用定義路由有沒分類的（加進 CASES_DEF 或 NOT_KIND_PARAMETRIC）：%s" % sorted(actual - known)
+    assert not (known - actual), "分類表裡的路由已不存在：%s" % sorted(known - actual)
+
+
+@pytest.mark.parametrize("kind", ["planned", "hidden"])
+def test_generic_definitions_routes_hide_non_open_setting_groups(ctx, kind):
+    failures = []
+    for key, fn in CASES_DEF.items():
+        try:
+            fn(ctx, kind)
+        except AssertionError as e:
+            failures.append("%s %s：%s" % (key[0], key[1], e))
+    assert not failures, "\n".join(failures)
+    # 開放的群組不受影響：照舊可讀
+    assert _dg(ctx, "/%s/%s" % (KIND, OPEN)).status_code == 200

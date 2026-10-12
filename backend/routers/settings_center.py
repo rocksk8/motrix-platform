@@ -34,7 +34,8 @@ router = APIRouter()
 
 
 def _hub_badge(conn, user):
-    """系統中心『設定中心』卡片的徽章（IP-HUB1，唯讀、不查資料庫）：驗證失敗 ⇒ 紅色警示；有開發中／隱藏的功能 ⇒ 資訊（不算失敗）；否則『功能登錄正常』。"""
+    """系統中心『設定中心』卡片的徽章（IP-HUB1，唯讀、不查資料庫）。**這張卡 `perm` 是 superadmin**（`core/system_hub_l1.json`，測試鎖定），
+    系統中心只對有權限的人附徽章（`denied` 項目不附），所以『已隱藏 M 項』只有最高管理者看得到。驗證失敗 ⇒ 紅色警示；有開發中／隱藏的功能 ⇒ 資訊（不算失敗）；否則『功能登錄正常』。"""
     rep = _spine.report()
     n = rep["problems"]
     if n:
@@ -87,7 +88,7 @@ def list_groups(authorization: str = Header(None)):
             if info["status"] == "hidden":
                 continue
             if info["status"] == "planned":                       # 只有名稱＋狀態：沒有欄位、值、變更明細
-                out.append({"group": g, "label": meta["label"], "help": meta["help"], "sensitive": meta["sensitive"], "risk": meta["risk"],
+                out.append({"group": g, "label": meta["label"], "help": "", "sensitive": False, "risk": "none",
                             "values": {}, "fieldCount": 0, "lastChange": None, "status": "planned", "plannedTrain": info["plannedTrain"]})
                 continue
             last = ledger.history(conn, "setting:%s" % g, g, limit=1)
@@ -106,7 +107,7 @@ def get_group(group: str, authorization: str = Header(None)):
     info = sr.group_info(group)
     meta = sr.groups()[group]
     if info["status"] == "planned":                               # 開發中：只回名稱與狀態（畫面顯示灰色『開發中，預計 MSn 版提供』）
-        return {"group": group, "label": meta["label"], "help": meta["help"], "sensitive": meta["sensitive"], "status": "planned",
+        return {"group": group, "label": meta["label"], "help": "", "sensitive": False, "status": "planned",
                 "plannedTrain": info["plannedTrain"], "fields": [], "values": {}, "history": []}
     from db import get_db
     conn = get_db()
@@ -327,6 +328,8 @@ def cancel_pending(change_id: int, body: dict = Body(default={}), authorization:
         began = begin_write(conn)                         # 先拿寫鎖再讀狀態：兩人同時按不會雙重處理
         row = conn.execute("SELECT domain, key, field FROM config_changes WHERE id=?", (change_id,)).fetchone()
         if row is None or not row["domain"].startswith("setting:"):
+            raise HTTPException(404, "找不到這筆待生效的設定變更")
+        if row["key"] in sr.groups() and sr.group_status(row["key"]) == "hidden":    # hidden 群組的項目對外等同不存在（planned 允許收尾）
             raise HTTPException(404, "找不到這筆待生效的設定變更")
         reason = _clip(str((body or {}).get("reason") or "").strip()) or "撤銷待生效"
         if not ledger.cancel(conn, change_id, actor, reason):

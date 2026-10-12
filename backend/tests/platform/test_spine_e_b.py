@@ -145,6 +145,32 @@ def test_due_pending_keeps_its_docstring_and_guard():
     assert R._due_pending.__doc__ and "非 open" in R._due_pending.__doc__
 
 
+def test_group_of_a_rejected_duplicate_declaration_is_hidden_in_both_load_orders(sp):
+    """同一功能代號被兩個模組宣告：贏家被存、輸家的宣告被丟掉——輸家指名的群組不能因此變成可寫的 open。兩種載入順序結果相同。"""
+    _group("zz_eb_g1", "zz_eb1")
+    _group("zz_eb_g2", "zz_eb2")
+    a, b = ("zz_eb1", "zz_eb_g1"), ("zz_eb2", "zz_eb_g2")
+    for first, second in ((a, b), (b, a)):
+        spine.reset()
+        _reg([_feat(settings={"group": first[1]})], owner=first[0])
+        _reg([_feat(settings={"group": second[1]})], owner=second[0])
+        spine.validate_all()
+        assert spine.group_status("zz_eb_g1") == "hidden" and spine.group_status("zz_eb_g2") == "hidden", (first, second)
+        assert spine.feature_enabled("zz_eb_f") is False
+    spine.drop_owner("zz_eb2")                                                               # 輸家／贏家其一卸載 ⇒ 另一方重新登錄後恢復
+    _reg([_feat(settings={"group": "zz_eb_g1"})], owner="zz_eb1")
+    spine.validate_all()
+    assert spine.group_status("zz_eb_g1") == "open" and spine.group_status("zz_eb_g2") == "open"       # g2 已無任何宣告 ⇒ 未歸屬＝open
+
+
+def test_settings_center_hub_card_is_superadmin_only():
+    import json
+    from pathlib import Path
+    cards = json.loads((Path(__file__).resolve().parents[2] / "core" / "system_hub_l1.json").read_text(encoding="utf-8"))["cards"]
+    c = [x for x in cards if x["id"] == "settings-center"][0]
+    assert c["perm"] == "superadmin"                  # 徽章（含『已隱藏 M 項』）只附在有權限者看得到的卡片上
+
+
 # --- 驗證 ---------------------------------------------------------------------------------------
 
 def test_settings_group_must_exist_and_belong_to_the_owner(sp):
