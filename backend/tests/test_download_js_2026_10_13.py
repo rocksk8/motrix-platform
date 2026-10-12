@@ -48,3 +48,20 @@ def test_roundtrip_with_backend_header():
     cases = [{"h": D.content_disposition(n), "fb": "x"} for n in names]
     got = _run(cases)
     assert got == [D._clean(n) for n in names]
+
+
+def test_every_page_using_motrix_download_loads_download_js():
+    """用到 `MotrixDownload.` 的頁面（含它載入的本地 js）一定要載入 `static/download.js`——否則點下載才發現 undefined。"""
+    import re
+    fe = Path(__file__).resolve().parents[2] / "frontend"
+    missing = []
+    for page in (fe / "pages").glob("*.html"):
+        src = page.read_text(encoding="utf-8")
+        uses = "MotrixDownload." in src
+        for m in re.finditer(r'<script[^>]*\bsrc="\.\./js/([^"]+)"', src):
+            js = fe / "js" / m.group(1)
+            if js.is_file() and "MotrixDownload." in js.read_text(encoding="utf-8"):
+                uses = True
+        if uses and "static/download.js" not in src:
+            missing.append(page.name)
+    assert not missing, missing

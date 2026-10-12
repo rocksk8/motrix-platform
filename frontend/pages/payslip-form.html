@@ -7,6 +7,7 @@
   <title>勞報單開立 — MOTRIX ERP</title>
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <script src="../static/download.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <style>
@@ -949,6 +950,7 @@ function payslipForm() {
         if (!r.ok) { this.errMsg = 'PDF 產生失敗：' + await r.text(); this.previewFetching = false; return }
         const blob = await r.blob()
         this.previewBlobUrl = URL.createObjectURL(blob)
+        this.previewName = MotrixDownload.nameFrom(r, `勞報單_${this.q.contractorName}_${this.q.slipDate || this.q.slipNo}.pdf`)
         this.previewIframeReady = false
         this.previewModal = true
       } catch(e) { this.errMsg = '載入失敗：' + e.message }
@@ -959,7 +961,7 @@ function payslipForm() {
       if (!this.previewBlobUrl) return
       const a = document.createElement('a')
       a.href = this.previewBlobUrl
-      a.download = `勞報單_${this.q.contractorName}_${this.q.slipDate || this.q.slipNo}.pdf`
+      a.download = this.previewName || `勞報單_${this.q.contractorName}_${this.q.slipDate || this.q.slipNo}.pdf`
       a.click()
       try {
         const r = await fetch(`${API}/payslips/${this.q.slipNo}/export`, {
@@ -998,6 +1000,7 @@ function payslipForm() {
         if (!r.ok) { this.errMsg = 'PDF 載入失敗：' + await r.text(); this.previewFetching = false; return }
         const blob = await r.blob()
         this.previewBlobUrl = URL.createObjectURL(blob)
+        this.previewName = MotrixDownload.nameFrom(r, `勞報單_${this.q.contractorName}_${this.q.slipDate||this.q.slipNo}_第${idx}次.pdf`)
         this.previewIframeReady = false
         this.previewModal = true
       } catch(e) { this.errMsg = '載入失敗：' + e.message }
@@ -1009,7 +1012,7 @@ function payslipForm() {
       const idx = this.previewArchiveIdx
       const a = document.createElement('a')
       a.href = this.previewBlobUrl
-      a.download = `勞報單_${this.q.contractorName}_${this.q.slipDate||this.q.slipNo}_第${idx}次.pdf`
+      a.download = this.previewName || `勞報單_${this.q.contractorName}_${this.q.slipDate||this.q.slipNo}_第${idx}次.pdf`
       a.click()
       try {
         const r = await fetch(`${API}/payslips/${this.q.slipNo}/archive/${idx}/record`, {

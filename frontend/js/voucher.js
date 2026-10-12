@@ -611,7 +611,7 @@ function voucherPage() {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = 'voucher-' + (this.voucherNo || this.id) + '.pdf'
+        a.download = MotrixDownload.nameFrom(r, 'voucher-' + (this.voucherNo || this.id) + '.pdf')
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
