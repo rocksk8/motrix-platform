@@ -813,6 +813,7 @@ def list_quotations(
     recv_overdue:  int = 0,
     missing_docs:  int = 0,
     unread:        int = 0,
+    include_project_margin: int = 0,
     authorization: str = Header(None),
 ):
     """CM6（2026-09-24）：案件頁改由伺服器搜尋／篩選／排序／分頁（原本一次拉 500 件在前端篩，
@@ -825,8 +826,6 @@ def list_quotations(
         "direct_margin_pct, net_margin_pct, sales_person, quote_date, valid_days, "
         f"{SQL_DEAL_TAG} as deal_tag, "
         "created_at, updated_at, "
-        # 專案毛利%（清單）：只有看得到報價金額的人才多取一欄成本合計（與 direct_margin_pct 同信任等級），Python 端用 project_margin() 算；看不到者 SQL 裡就沒有這欄
-        + ("json_extract(data_json, '$.tot.totalCost') as _tc, " if quote_money_visible(user) else "") +
         "COALESCE(json_array_length(json_extract(data_json, '$.editHistory')), 0) as edit_count, "
         # CM6：只取最後一筆，不把整段 editHistory 撈回來（`[#-1]` 需要 SQLite 3.31，改用長度組路徑）
         "CASE WHEN COALESCE(json_array_length(json_extract(data_json, '$.editHistory')), 0) > 0 "
@@ -952,15 +951,24 @@ def list_quotations(
         all_nos = [r[0] for r in conn.execute(
             f"SELECT quote_no FROM quotations WHERE 1=1{base_where}", base_params)]
         counts_out["unread"] = len(unread_keys(conn, user, "case", all_nos))
+    _tc_map = {}
+    if include_project_margin and not masked and rows:        # 專案毛利%（清單，選用）：只有要求才多讀這一頁的 data_json，在 Python 端取成本合計（不新增 SQL json_extract；ratchet）
+        _nos = [r["quote_no"] for r in rows]
+        for _c0 in range(0, len(_nos), 300):
+            _chunk = _nos[_c0:_c0 + 300]
+            for _r2 in conn.execute("SELECT quote_no, data_json FROM quotations WHERE quote_no IN (%s)" % ",".join("?" * len(_chunk)), _chunk):
+                try:
+                    _tc_map[_r2["quote_no"]] = ((json.loads(_r2["data_json"] or "{}") or {}).get("tot") or {}).get("totalCost")
+                except (TypeError, ValueError, AttributeError):
+                    _tc_map[_r2["quote_no"]] = None
     conn.close()
     items = []
     for r in rows:
         row = dict(r)
-        _tc = row.pop("_tc", None)
         if masked:
             _mask_money_row(row)
-        else:                                               # 專案毛利%：判定式與 direct_margin_pct 相同；看不到者鍵不存在（不是 None）
-            row["project_margin_pct"] = _PR.project_margin(row.get("pretax"), _tc)["pct"]
+        elif include_project_margin:                         # 專案毛利%：判定式與 direct_margin_pct 相同；看不到者／沒要求者鍵不存在（不是 None）
+            row["project_margin_pct"] = _PR.project_margin(row.get("pretax"), _tc_map.get(row.get("quote_no")))["pct"]
         el_json     = row.pop("edit_last_json", None)
         edit_last = None
         if el_json:

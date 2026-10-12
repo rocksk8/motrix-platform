@@ -84,13 +84,18 @@ def test_detail_value_is_recomputed_from_items_not_from_client_tot(client, world
 
 
 def test_list_includes_the_value_only_where_direct_margin_is_unmasked(client, world):
-    r = client.get("/api/quotations", headers=world["admin"])
+    r = client.get("/api/quotations", headers=world["admin"])             # 預設不附（選用欄，不多讀 data_json）
+    assert r.status_code == 200
+    items = r.json()["items"] if isinstance(r.json(), dict) else r.json()
+    assert all("project_margin_pct" not in i for i in items)
+    r = client.get("/api/quotations?include_project_margin=1", headers=world["admin"])
     assert r.status_code == 200
     items = r.json()["items"] if isinstance(r.json(), dict) else r.json()
     mine = [i for i in items if i["quote_no"] == world["no"]]
     assert mine and mine[0]["project_margin_pct"] == EXPECT and mine[0]["direct_margin_pct"] is not None
-    r = client.get("/api/quotations", headers=world["engineer"])
-    assert not _walk_has_key(r.json(), "project_margin") and "_tc" not in r.text
+    for who in ("engineer", "other_sales"):                                # 看不到報價金額者：即使要求也沒有這個鍵
+        r = client.get("/api/quotations?include_project_margin=1", headers=world[who])
+        assert not _walk_has_key(r.json(), "project_margin") and "_tc" not in r.text
 
 
 def test_client_supplied_values_are_not_stored(client, world):
