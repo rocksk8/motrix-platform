@@ -528,6 +528,7 @@
 ["PATCH", "/api/quotations/{quote_no}/assigned-users", "update_case_assigned_users_api_quotations__quote_no__assigned_users_patch", [["header", "authorization", false], ["path", "quote_no", true]], [["application/json", ""]], []]
 ["GET", "/api/quotations/{quote_no}/case-bundle", "case_bundle_api_quotations__quote_no__case_bundle_get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
 ["POST", "/api/quotations/{quote_no}/case-lock", "lock_case_api_quotations__quote_no__case_lock_post", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
+["GET", "/api/quotations/{quote_no}/case-plan-view", "get_case_plan_view_api_quotations__quote_no__case_plan_view_get", [["header", "authorization", false], ["path", "quote_no", true], ["query", "combos", false], ["query", "picks", false]], [], []]
 ["PATCH", "/api/quotations/{quote_no}/case-record", "update_case_record_api_quotations__quote_no__case_record_patch", [["header", "authorization", false], ["path", "quote_no", true]], [["application/json", "#/components/schemas/CaseRecordUpdate"]], []]
 ["POST", "/api/quotations/{quote_no}/case-unlock", "unlock_case_api_quotations__quote_no__case_unlock_post", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
 ["GET", "/api/quotations/{quote_no}/close-gates", "case_close_gates_api_quotations__quote_no__close_gates_get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]

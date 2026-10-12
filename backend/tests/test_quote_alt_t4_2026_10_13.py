@@ -229,3 +229,17 @@ def test_switch_off_quote_still_compares_but_current_counts_everything():
     t = PG.server_totals(all_items)
     assert v["current"]["pretax"] == t["pretax"]
     assert [g["group"] for g in v["groups"]] == ["投影機", "線材"]          # 比較視圖仍可試算各方案
+
+
+# --- T10：案件頁的方案比較用 money_visible（與報價單頁的 quote_money_visible 不同，不得互換）---------------
+
+def test_case_plan_view_uses_money_visible_not_quote_money_visible(client, make_user):
+    owner = _hdr(client, make_user, "alt_cp_sales", "sales")
+    no = _own_quote(client, owner, "alt_cp_sales")
+    assert client.get("/api/quotations/%s/plan-view" % no, headers=owner).status_code == 200        # 業務：報價單頁看得到
+    r = client.get("/api/quotations/%s/case-plan-view" % no, headers=owner)
+    assert r.status_code == 403 and not any(k in r.text for k in _COST_KEYS)                         # 案件頁方案比較：只有財務角色／最高管理者
+    su = _hdr(client, make_user, "alt_cp_su", "superadmin")
+    r = client.get("/api/quotations/%s/case-plan-view" % no, headers=su)
+    assert r.status_code == 200 and [g["group"] for g in r.json()["groups"]] == ["投影機", "線材"]
+    assert client.get("/api/quotations/NOPE-1/case-plan-view", headers=su).status_code == 404
