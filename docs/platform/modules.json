@@ -286,6 +286,8 @@
     "mod:case/payable_calendar",
     "mod:case/profit_guard",
     "mod:case/alt_policy",
+    "mod:case/alt_options",
+    "mod:case/api/alt_plan",
     "mod:case/api/overhead",
     "mod:case/payable_reminders",
     "mod:case/quotations",
