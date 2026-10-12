@@ -75,11 +75,12 @@ def test_pending_api_list_and_cancel(client, make_user):
 
 
 def test_deploy_baseline_frozen():
-    """部署零行為變更：每個登錄群組的預設值與範圍等於凍結基準（改動＝行為變更，要同步改基準並走裁示）；沒有任何欄位預設 requires_pending。"""
+    """部署零行為變更：核心（owner＝core）每個登錄群組的預設值與範圍等於凍結基準（改動＝行為變更，要同步改基準並走裁示）。
+    脊柱 E-a：基準依擁有者分檔，這題只比對 core（與模組有沒有被載入無關）；模組群組由各模組自己的基準與 test_settings_baseline_owners.py 守。"""
+    from tests.platform import _settings_baseline as B
+    assert B.problems("core") == []
     frozen = json.load(open(BASELINE, encoding="utf-8"))
-    now = {g: {f["key"]: [f["default"], f["min"], f["max"], f["clamp"]] for f in m["fields"]} for g, m in R.groups().items()
-           if not g.startswith("zz_")}
-    assert now == frozen["groups"]
+    assert set(frozen["groups"]) == set(B.snapshot_of("core"))
 
 
 def test_no_definition_rows_after_boot(client):
