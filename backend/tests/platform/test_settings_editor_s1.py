@@ -80,6 +80,48 @@ def test_banner_text_has_no_internal_codes():
     assert "t_field" not in text and "security" not in text and "immediate" not in text
 
 
+# --- E-f：choices 值域規則 ---------------------------------------------------------------------
+
+def _pick(**kw):
+    return R.SettingDef("pick", "int", 1, min=1, max=3, question="選哪一個？", label="選項", help="測試用的選項欄位。", impact="影響測試用的畫面。",
+                        choices=[(1, "選項甲", "選甲的影響。"), (2, "選項乙", "選乙的影響。"), (3, "選項丙", "選丙的影響。")], **kw)
+
+
+def test_choices_are_a_value_domain_not_just_display():
+    f = _pick()
+    assert [f.check(v) for v in (1, 2, 3)] == ["", "", ""] and f.check(1.0) == ""
+    assert f.check(4)                                                # min/max 之外
+    g = R.SettingDef("pick2", "int", 1, min=1, max=5, question="選哪一個？", label="選項", help="測試用的選項欄位。", impact="影響測試用的畫面。",
+                     choices=[(1, "選項甲", "選甲的影響。"), (3, "選項丙", "選丙的影響。")])
+    assert g.check(3) == "" and g.check(2) == "不是可選的選項" and g.check(5) == "不是可選的選項"   # 在範圍內但不是選項
+    with pytest.raises(ValueError):                                   # 預設值自己就要是選項
+        R.SettingDef("pick3", "int", 2, min=1, max=5, question="選哪一個？", label="選項", help="測試用的選項欄位。", impact="影響測試用的畫面。",
+                     choices=[(1, "選項甲", "選甲的影響。"), (3, "選項丙", "選丙的影響。")])
+    s = R.SettingDef("mode", "str", "a", question="選哪一個？", label="選項", help="測試用的選項欄位。", impact="影響測試用的畫面。",
+                     choices=[("a", "選項甲", "選甲的影響。"), ("b", "選項乙", "選乙的影響。")])
+    assert s.check("b") == "" and s.check("zzz") == "不是可選的選項"        # str＋choices 以前會接受任何字串
+
+
+def test_non_choice_value_is_refused_on_write_and_defaulted_on_read(client, monkeypatch):
+    from db import get_db
+    R.register_group("zz_s1_choice", "選項測試群組", [_pick()], help="測試用的選項群組。")
+    try:
+        assert R.validate_values("zz_s1_choice", {"pick": 2}, partial=True) == []
+        problems = R.validate_values("zz_s1_choice", {"pick": 9}, partial=True)
+        assert problems and problems[0]["path"] == "pick"
+        with pytest.raises(R.SettingError):
+            R.publish("zz_s1_choice", {"pick": 9}, reason="測試", user="t")
+        c = get_db()
+        try:
+            monkeypatch.setattr(R, "_stored", lambda conn, group: {"pick": 9})          # 庫內被竄改成未知代碼
+            assert R._effective(c, "zz_s1_choice")["pick"] == 1                          # 讀取回預設，不丟例外、不放行
+        finally:
+            c.close()
+    finally:
+        R._GROUPS.pop("zz_s1_choice", None)
+        R.invalidate()
+
+
 # --- 守門：新群組的高風險欄位必須宣告 impact_scope --------------------------------------------------
 
 def test_new_groups_with_high_risk_fields_declare_impact_scope():

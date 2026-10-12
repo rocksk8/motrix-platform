@@ -143,9 +143,13 @@ class SettingDef:
     def check(self, v):
         """回問題描述字串；合法回 ''."""
         if self.type == "bool":
-            return "" if isinstance(v, bool) else "必須是 true／false"
+            if not isinstance(v, bool):
+                return "必須是 true／false"
+            return "不是可選的選項" if (self.choices and v not in [c[0] for c in self.choices]) else ""
         if self.type == "str":
-            return "" if isinstance(v, str) else "必須是文字"
+            if not isinstance(v, str):
+                return "必須是文字"
+            return "不是可選的選項" if (self.choices and v not in [c[0] for c in self.choices]) else ""
         if isinstance(v, bool) or not isinstance(v, (int, float)):
             return "必須是數字"
         if self.type == "int" and not (isinstance(v, int) or float(v).is_integer()):
@@ -154,6 +158,8 @@ class SettingDef:
             return "不可小於 %s" % self.min
         if self.max is not None and v > self.max:
             return "不可大於 %s" % self.max
+        if self.choices and v not in [c[0] for c in self.choices]:
+            return "不是可選的選項"                                   # E-f：有 choices 就必須是其中之一（寫入被拒；讀取視為不合法而回預設）
         return ""
 
     def meta(self):

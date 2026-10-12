@@ -2,6 +2,7 @@
 
 ## (next:minor) — 2026-10-13（wip/t57-s1-settings-edit-r1；S1 設定中心可編輯）
 - L1（新增，向下相容）：`helpers.settings_registry` —— `SettingDef(…, impact_scope=None)`（結構化影響範圍：`documents／roles／amounts／reversible／effective`；`effective` 必須與 `requires_pending`／`loosen` 旗標一致，否則登錄失敗）、`banner_of(f, value, *, default=None, days=None)`（畫面橫幅文字與等級的唯一產生處：風險 legal／security 或不可復原 ⇒ 紅，money ⇒ 琥珀；只在非預設且往放寬方向時出現；沒有 `impact_scope` 的舊欄位降級為影響說明＋風險提示）、常數 `RISK_ORDER`、`IMPACT_SCOPE_GRANDFATHERED`（E-e 之前登錄的群組暫免宣告，名單固定；新群組的 money／legal／security 欄位缺 `impact_scope` 由 `tests/platform/test_settings_editor_s1.py` 守門）。`SettingDef.meta()` 多回 `impactScope`。
+- L1（行為，向下相容）：`SettingDef.check()` 新增 **choices 值域規則（E-f）**：欄位有 `choices` 時，值必須是其中一個代碼——寫入（`validate_values`／`publish`）被拒、讀取到庫內未知代碼視為不合法而回程式預設（記 warning）。原本 `choices` 只用於顯示，`str`＋`choices` 會接受任何字串。既有群組的預設值與預設組都在選項內（測試守住）。選項欄位的登錄規約：整數代碼（開關 0/1、多選一 1..n）。
 
 ## 1.129 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-13（wip/t57-s1-1-managed-r3；S1-1 設定群組受管）**
