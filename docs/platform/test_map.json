@@ -17347,6 +17347,7 @@
    "units": [
     "core:db",
     "page:index.html",
+    "page:pages/system-hub.html",
     "plat:__init__",
     "plat:definitions",
     "plat:registry",
@@ -17365,10 +17366,12 @@
      "backend/routers/platform_menu.py"
     ],
     "page": [
-     "frontend/index.html"
+     "frontend/index.html",
+     "frontend/pages/system-hub.html"
     ],
     "path": [
-     "frontend/index.html"
+     "frontend/index.html",
+     "frontend/pages/system-hub.html"
     ]
    },
    "login_fixture": true
@@ -27265,6 +27268,7 @@
     "file:backend/tests/_e2e_login.py",
     "helper:licensing",
     "page:pages/module-settings.html",
+    "page:pages/system-hub.html",
     "plat:__init__",
     "plat:registry",
     "router:system"
@@ -27281,7 +27285,8 @@
      "backend/routers/system.py"
     ],
     "page": [
-     "frontend/pages/module-settings.html"
+     "frontend/pages/module-settings.html",
+     "frontend/pages/system-hub.html"
     ],
     "path": [
      "frontend/pages/module-settings.html"
