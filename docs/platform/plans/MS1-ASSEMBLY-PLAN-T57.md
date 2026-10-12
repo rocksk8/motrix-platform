@@ -99,3 +99,70 @@ MS2：M3 → 完工單（rebase 後）→ 專案毛利（V3.24）→ 文件類�
 4. 守門：`register_group` grep、manifest／changelog／page_paths／version_slots 守門先單跑，再 full-lint。
 5. 閘門與心跳照現行規則（死線：lint 20、not_e2e 42、e2e 30、建包＋驗證 45；RAM <4 GB 中止、<8 GB 通報；其他視窗靜止）。
 6. 建包仍需 VR7 最小 DB（正式機 `module_versions` 配對）與 UTF-8 主控台啟動（見 `BUILD-GATE-NOTES-M2.md`）。
+
+## 7. E-a／E-b（含 S1）合併順序與組裝注意事項（1d 補，2026-10-13；給 5c／整合者）
+
+> 來源：1d 自己的分支與各單檔測試結果（不是模擬合併；§1～§6 的衝突模擬仍以整合者的為準）。鏈：S1 r2 `de3321788` ⊂ E-a r1 `5bff2f28c` ⊂ E-a r2 `4a04ad556` ⊂ E-a r3 `278180804` ⊂ E-b M1 `df5e7f0e3` ⊂ r2 `8428ecfe3` ⊂ r3 `031205075` ⊂ **r4 `73decbb5c`**（E-b 要 0d 稽核通過；**E-b 不可只帶 M1、r2——r3 的路由層沒進就不得出貨**，否則 `hidden`／`planned` 群組會在設定中心 API 洩漏）。
+
+### 7.1 檔案範圍（相對 M2 頭 `c87079be2` 共 31 檔；含 S1＋E-a＋E-b）
+
+| 區 | 檔案 | 備註 |
+|---|---|---|
+| L0 | `core/spine.py`（新）、`core/loader.py`、`core/registry.py` | spine 只用標準庫；loader 在 import 前呼叫 `parse_features`／`declared_settings_groups`，import 後 `register_manifest`／`check_declared_settings`，全部載完 `validate_all()` |
+| L1 | `helpers/settings_registry.py`、`helpers/settings_groups.py`、`helpers/mail_types.py`、`helpers/config_ledger.py`、`routers/settings_center.py`、`routers/definitions.py` | `config_ledger.py`／`definitions.py` 的改動＝M2.1 已上線的 S1-1，內容相同（模擬乾淨） |
+| 畫面 | `frontend/pages/settings-center.html`（JS 內嵌；不新增 static 檔） | |
+| 文件／登記 | `docs/platform/modules.json`（+`plat:spine`）、`docs/platform/plans/S1-EDITOR-WORKPLAN-T57.md`、`backend/core/CHANGELOG.md`、`backend/version_manifest.json` | |
+| 既有測試被改 | `test_module_selection.py`（registry 表守門把 `_OWNED` 與 `_LEGACY_PROVIDERS` 同列例外）、`test_settings_pending_t54.py`（`test_deploy_baseline_frozen` 改為只比對 owner＝core）、`test_ac1_write_actions_2026_09_23.py`（拿掉 settings-center 的唯讀登記）、`test_write_endpoints_are_audited_2026_09_24.py`（EXEMPT +4：preview／impact／reset／restore，各附理由） | 這四個檔其他候選也可能碰，合併時以『保留雙方新增』為原則 |
+| 新測試（組裝時要 `git add`） | `test_s1_managed_kind.py`、`test_settings_editor_s1.py`、`test_e2e_settings_center_edit_s1.py`、`test_spine_owner_e_a.py`、`test_settings_baseline_owners.py`、`_settings_baseline.py`（輔助）、`test_spine_e_b.py`、`test_settings_center_status_routes.py`、`test_spine_literal_scan.py`、`_spine_scan.py`（輔助）、`spine_scan_allowlist.json` | 前述都在 `backend/tests/platform/`，除了 `test_e2e_settings_center_edit_s1.py` 在 `backend/tests/` |
+
+### 7.2 `settings_groups.py` 別名（合併安全，E-a 一定最先）
+
+- E-a r3 之後 `helpers/settings_groups.py` 不再 import `register_group` 本名，而是：私有包裝 `_register_core`（以 `owner_scope("core")` 登記，核心群組永遠屬 core）＋模組層級別名 **`register_group = _register_core`**。
+- **M3、A7、完工單都在這個檔尾端追加區塊並呼叫 `register_group(`**：別名必須保留，否則 import 時 `NameError`、整個設定登錄表掛掉。它們的群組因此也屬 core，仍留在**核心**凍結基準 `settings_deploy_baseline.json` 裡（基準檔仍是聯集，只是現在由 owner＝core 過濾比對）。
+- 合完後必做：`grep -n "register_group" backend/helpers/settings_groups.py`（別名存在、各區塊都用它）＋單跑 `test_spine_owner_e_a.py::test_settings_groups_still_exposes_register_group_and_keeps_blocks_core_owned`。
+- **模組內（`modules/**`）不得呼叫 `register_group`／`owner_scope`／碰 `_register_core`／`_OWNER`**——靜態守門 `test_modules_never_touch_the_owner_machinery` 會紅。若某候選把群組搬進模組，必須在該模組 `module.json` 加 `settings: {"groups": [...]}`，且宣告＝實際登錄（缺或多都使該模組**載入失敗**）。
+
+### 7.3 `docs/platform/modules.json`
+
+- E-b 在 `plat:source_tree` 之後加一行 `"plat:spine"`（`plat:` 單位清單按字母序）。其他候選不動這個檔；若有人也加單位，保持字母序、保留雙方。
+- 沒有這一行，`_l1_interface.py` 看不到 `core/spine.py`，L1 快照就不含它。
+
+### 7.4 L1 快照（不要手併）
+
+- 全部合完後 `PYTHONIOENCODING=utf-8 python tools/platform/_l1_interface.py --update --pending`（分支模式，`core_version` 記為 `next`；只有『新增』、沒有修改或刪除）。
+- 對照用（1d 在 E-b r4 上的結果）：相對 M2 頭，`helper:settings_registry` 新增 `impact_scope`（`SettingDef.__init__` 參數）、`banner_of`、`plan`、`live_impact`、`field_defs`、`field_views`、`show_value`、`group_status`、`group_info`、`profile_skipped`、`cancel_pending_of_nonopen`、`audit_spine_failures`、`owner_groups`、`unregister_owner`、`RISK_ORDER`、`IMPACT_SCOPE_GRANDFATHERED`、`register_group(owner=)`；`plat:registry` 新增 `owner_scope`／`current_owner`／`on_unload`／`register_owned`／`owned`；`plat:loader` 新增 `declared_settings_groups`／`check_declared_settings`；新單位 `plat:spine`（`STATUSES`、`parse_feature(s)`、`register_manifest`、`validate_all`、`report`、`register_validator`、`on_validated`、`drop_owner`、`feature_enabled`／`feature_status`／`group_status`／`group_info`／`planned_train`、`snapshot`／`restore`／`reset`）。**沒有任何『修改』或『刪除』**；若重產後出現修改／刪除，代表合併時有人動到簽章，請回報。
+- `helpers/settings_groups.py` 的別名是模組層級賦值（非 `def`），不進快照（已用 `--diff` 確認 0 變動）。
+
+### 7.5 `CHANGELOG.md`（core）`(next:minor)` 合併
+
+- `backend/core/CHANGELOG.md` 最上面要有**一段** `## (next:minor) — …`（`pending_problems` 守門認這個標題；快照 `core_version=next` 時缺這段會紅）。E-a／S1／E-b 的全部要點都在**同一段**裡（依序：S1 L1 新增、E-f 值域規則、S1-4／S1-5 端點、E-a L0／L1 新增與兩輪稽核補強、E-a3 測試基礎、E-b L0 `core.spine`、E-b 引擎層、E-b r2 補強、E-b 路由層、E-b r4 健康卡／稽核去重／掃描器）。A7 另有一段 `(next:minor)` 時**併成一段**（PLAYBOOK §G7.1.2）；兩邊的 bullet 全留，不改寫。
+- `## 1.129` 底下 S1-1 的 `(併入)(next)` bullet 是 M2.1 已出貨的內容，保持原樣、不要搬動。
+
+### 7.6 `version_manifest.json` 標籤
+
+- E-a／E-b **沒有**新增 manifest 條目（內部機制）。S1 帶兩個條目：`2026-10-13b`（模組『平台/設定中心』，＝M2.1 已出貨的 S1-1，內容相同，模擬乾淨）與 `2026-10-13d`（模組『平台/設定中心編輯畫面』，S1 畫面，**待取號**）。
+- 依 §6 規則：未出貨的條目改用 `next`，最後一個程式修正之後 `train_number assign`；**同一模組在未出貨包內只能有一筆**（`test_version_manifest_2026_09_22` 守），所以 `2026-10-13d` 的模組名刻意與 `2026-10-13b` 分開；組裝時不要把兩者改成同一模組名。
+- 若要讓使用者在『更新紀錄』看到功能狀態頁（灰色『開發中，預計 MSn 版提供』），由整合者在取號時加一筆（模組沿用『平台/設定中心編輯畫面』即可，合併到 `13d` 那筆的 content，**不要新開同模組第二筆**）。
+
+### 7.7 route golden
+
+- 這條鏈只新增 **6 條**路由（全在設定中心，E-a／E-b 本身沒有新增）：`GET /api/settings-center/groups/{group}/versions`、`GET …/{group}/diff`、`POST …/{group}/preview`、`POST …/{group}/impact`、`POST …/{group}/reset`、`POST …/{group}/restore/{version}`。排序＝（路徑, 方法）。
+- **用官方指令重錄，不手改**：`T40_WRITE_GOLDEN=1 pytest backend/modules/case/tests/test_route_table_golden_2026_10_05.py -q`（單檔）；重錄後 diff 應**只含各候選新增的路由**，其中 1d 這條鏈的就是上列 6 條。手動備援：golden 每行是 `["方法","路徑","函式名",[參數…],[body…],[]]`，函式名＝`<函式>_<路徑底線化>_<方法小寫>`（例：`group_diff_api_settings_center_groups__group__diff_get`），可從 `origin/wip/t57-eb-spine-r4` 的 golden 對 M2 頭的 diff 直接複製這 6 行。
+- 另有路由表驅動測試 `test_settings_center_status_routes.py`：設定中心若被其他候選新增路由，必須在該測試的 `CASES` 分類，否則紅（這是刻意的）。
+
+### 7.8 regen 清單（組裝完成後，單獨一個 bookkeeping commit）
+
+1. **先 `git add` 上列所有新測試檔與輔助檔／白名單 JSON**（`regen_all.py` 從已追蹤檔產生，沒 add 的新檔不會進 `test_map.json`）。
+2. `regen_all.py` 產出：`docs/platform/UNIT-INDEX.md`（新增 `plat:spine`；`plat:registry`、`plat:loader`、`helper:settings_registry`、`helper:mail_types` 的公開介面清單與測試欄位變動）、`docs/platform/dep_graph.json`（新增邊：`loader→spine`、`spine→registry`、`settings_registry→spine`、`settings_registry→registry`、`mail_types→spine`、`routers/settings_center→spine`／`registry`）、`docs/platform/test_map.json`（上列新測試檔）。
+3. 順序：先 L1 快照 `--update --pending`、再 route golden、最後 `regen_all.py`（`regen_all` 讀得到新路由與新單位）。
+
+### 7.9 合完後的守門與已知會紅的地方
+
+- **字面掃描器**（`test_spine_literal_scan.py`）：其他候選若在 `modules/**` 新增 `mail_types.register("<key>", …, "business|approval|system", …)` 或 `register_group("…")` 的字面呼叫，掃描器會紅——處理方式二選一：①在該模組 `module.json` 加 `features[].mail`／`settings.groups` 宣告（建議，做法見 `SPINE-ENGINE-DESIGN-T57.md` §3.2）；②附 reason／owner／expires 加進 `spine_scan_allowlist.json`（目前 8 檔 53 筆既有項目）。M3、完工單若新增通知類型，預期會觸發。
+- **載入器核對**：任何候選若把設定群組搬進 `modules/**`，需 `module.json settings.groups` 與實際登錄相等，否則該模組載入失敗（`registry.failed()` 有原因）。
+- **凍結基準**：`test_deploy_baseline_frozen` 現在只比對 owner＝core；候選在 `settings_groups.py` 追加的群組仍屬 core，需同步更新核心基準 JSON（取聯集，§2 已列）；新增的 `test_settings_baseline_owners.py` 會檢查『每個有群組的擁有者都有基準』。
+- **E-b 啟動順序**：`validate_all()` 在 `load_all` 結尾執行；其回呼（取消非 open 群組的待生效項、稽核去重）需要資料庫，任何錯誤只記 log。沒有宣告 `features[]` 的既有模組完全不受影響（未宣告＝open）。
+
+### 7.10 建議的單檔驗證順序（full-lint 前，每次一檔）
+
+`test_spine_owner_e_a` → `test_settings_baseline_owners` → `test_spine_e_b` → `test_settings_center_status_routes` → `test_spine_literal_scan` → `test_core_loader` → `test_l1_interface_snapshot` → `test_module_selection` → `test_mail_registry` → `test_system_hub` → `test_settings_editor_s1` → `test_s1_managed_kind` → `test_settings_registry_t54`／`pending_t54`／`audit_fixes_t54`／`security_t54`／`ui_plain_language` → `test_write_endpoints_are_audited` → `test_route_table_golden` → `test_alpine_double_init`／`test_ac1_write_actions`。瀏覽器 e2e（`test_e2e_settings_center_edit_s1.py`，含 planned 灰色卡片）依規定在機器空出來時才跑。
