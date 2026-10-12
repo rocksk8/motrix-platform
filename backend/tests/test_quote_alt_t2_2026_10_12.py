@@ -201,7 +201,8 @@ def test_policy_fields_money_risk_with_banner_and_ordered_choices():
 
 def test_unavailable_choices_registered_but_not_selectable():
     by = _fields()
-    assert set(SG.UNAVAILABLE_ALT_CHOICES) == set(_POLICIES)        # 消費者尚未落地的選項一律不可選，各任務在自己的 commit 開放
+    # 消費者尚未落地的選項一律不可選，各任務在自己的 commit 開放（T9b：lock_scope②、unlock_edit_signed② 已有消費者 alt_lock／guard_update）
+    assert set(SG.UNAVAILABLE_ALT_CHOICES) == set(_POLICIES) - {"lock_scope", "unlock_edit_signed"}
     assert SG.UNAVAILABLE_ALT_CHOICES["cancel_after_deal"] == (2,)          # T9：③『允許，只提醒』的消費者（取消回簽守門鏈）已落地
     for k, bad in SG.UNAVAILABLE_ALT_CHOICES.items():
         labels = {c["value"]: c["label"] for c in by[k]["choices"]}
@@ -216,7 +217,8 @@ def test_unavailable_choices_registered_but_not_selectable():
 def test_policy_reader_clamps_unavailable_value_to_default(monkeypatch):
     monkeypatch.setattr(R, "get", lambda g, f, **kw: 2)
     assert alt_policy.policy("cancel_after_deal") == 1
-    assert alt_policy.policy("lock_scope") == 1            # 尚未提供 ⇒ 夾回預設
+    assert alt_policy.policy("lock_scope") == 2            # T9b 已開放
+    assert alt_policy.policy("approval_basis") == 1        # 尚未提供 ⇒ 夾回預設
     monkeypatch.setattr(R, "get", lambda g, f, **kw: 3)
     assert alt_policy.policy("cancel_after_deal") == 3
     with pytest.raises(KeyError):

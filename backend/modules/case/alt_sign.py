@@ -15,7 +15,7 @@ import sqlite3
 
 from fastapi import HTTPException
 
-from modules.case import alt_options, alt_policy
+from modules.case import alt_lock, alt_options, alt_policy
 from modules.case import profit_guard as PG
 
 #: 取消回簽允許的單據狀態（沒有進行中的簽核）；待審核／簽核中一律 409（H4）
@@ -161,3 +161,23 @@ def clear_signed_selection(conn, quote_no: str, user: dict, now: str, reason: st
     _audit_in_txn(conn, user, "quotation.unsign_alt", quote_no, "%s 取消回簽，清除擇一選定" % quote_no,
                   {"reason": reason, "cleared": cleared, "before": before, "after": after, "warnings": warnings}, now)
     return {"cleared": cleared, "warnings": warnings, "tot": after}
+
+
+def guard_update(new: dict, old: dict, is_unlock_edit: bool) -> None:
+    """整份存檔（PUT）對『已回簽的擇一單』的守門（H1／P1／P4）：呼叫端已確認該列 `is_signed=1`，並傳入**資料庫已存**的 `old`。
+    P4＝拒絕（預設）⇒ 不論用戶端旗標，一律 409；P4＝允許 ⇒ 進入解鎖修改，但 P1 的鎖定比對持續生效。無擇一資料的單不受影響（H5）。"""
+    if not applies(old):
+        return
+    if is_unlock_edit and alt_policy.policy("unlock_edit_signed") == 1:
+        raise HTTPException(409, alt_lock.LOCKED_MSG)
+    if alt_lock.changed(new, old, alt_policy.policy("lock_scope")):
+        raise HTTPException(409, alt_lock.LOCKED_MSG)
+
+
+def guard_move_out_of_sent(is_signed, data: dict, target_status: str) -> None:
+    """P3：已回簽的擇一單不可被改成草稿／待審核／已取消／已拒絕（`update_status`、`recall`、`reject`）。
+    預設（①）一律 409『請管理員取消回簽』；目標仍是『已送出』不算離開。選項②（自動清除）尚未提供（沒有消費者前不開放）。
+    拒絕結案（P3b）預設『終局保留』＝不動任何東西，所以沒有對應的守門呼叫。無擇一資料的單不受影響（H5）。"""
+    if is_signed and applies(data) and target_status != "已送出":
+        if alt_policy.policy("move_out_of_sent") == 1:
+            raise HTTPException(409, alt_lock.LOCKED_MSG)

@@ -1,0 +1,225 @@
+{
+ "comment": "M3 T9：所有寫 quotations（UPDATE quotations 字面或 save_quotation_json 呼叫）的函式清單。新增者必須先判斷是否會動已回簽擇一單的鎖定本文；guarded＝已有守門，not-body＝只動流程／執行紀錄／指派等非本文欄位（T1 筆記 §5）。",
+ "paths": {
+  "modules/case/alt_sign.py::clear_signed_selection::sql": {
+   "count": 1,
+   "class": "guarded",
+   "note": "alt_sign 唯一清除入口"
+  },
+  "modules/case/alt_sign.py::sign::sql": {
+   "count": 1,
+   "class": "guarded",
+   "note": "alt_sign 唯一回簽寫入"
+  },
+  "modules/case/api/material_orders.py::set_material_order_invoice_date::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/material_orders.py::update_material_orders::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::_append_items_to_quotation::save": {
+   "count": 1,
+   "class": "guarded",
+   "note": "已回簽擇一單 409（P1）"
+  },
+  "modules/case/api/quotations.py::_apply_case_change_request::save": {
+   "count": 4,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::_calendar_writeback_quotation::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::_sync_stages_to_json::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::approve_payment_writeoff::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::approve_quotation::save": {
+   "count": 2,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::cancel_payment_writeoff::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::case_batch_assign::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::create_quotation::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::delete_material_file::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::delete_material_invoice_file::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::delete_payment_item_invoice_file::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::delete_quotation_signed_file::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::lock_case::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::mark_payment::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::recall_quotation::sql": {
+   "count": 1,
+   "class": "guarded",
+   "note": "P3 guard_move_out_of_sent"
+  },
+  "modules/case/api/quotations.py::record_export::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::reject_final_quotation::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::reject_quotation::sql": {
+   "count": 1,
+   "class": "guarded",
+   "note": "P3 guard_move_out_of_sent（先擋、後改單號 H7）"
+  },
+  "modules/case/api/quotations.py::request_payment_writeoff::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::save::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::toggle_quotation_signed::sql": {
+   "count": 2,
+   "class": "guarded",
+   "note": "T9a 回簽／取消回簽（alt_sign）"
+  },
+  "modules/case/api/quotations.py::unlock_case::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::update_case_assigned_users::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::update_case_record::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::update_deal_tag::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::update_quotation::sql": {
+   "count": 1,
+   "class": "guarded",
+   "note": "P1/P4 伺服器端比對 guard_update"
+  },
+  "modules/case/api/quotations.py::update_status::sql": {
+   "count": 2,
+   "class": "guarded",
+   "note": "P3 guard_move_out_of_sent"
+  },
+  "modules/case/api/quotations.py::upload_material_files::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::upload_material_invoice_files::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::upload_payment_item_invoice_files::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/quotations.py::upload_quotation_signed_files::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/api/settlement_api.py::update_settlement::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/material_change.py::_apply::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/material_payment.py::sync_order_paid::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/profit_guard.py::change_pct::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/quotations.py::_record_doc_version::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/quotations.py::save_quotation_json::sql": {
+   "count": 2,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/recycle_adapter.py::delete_in_tx::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  },
+  "modules/case/recycle_adapter.py::restore_in_tx::sql": {
+   "count": 1,
+   "class": "not-body",
+   "note": ""
+  }
+ }
+}
