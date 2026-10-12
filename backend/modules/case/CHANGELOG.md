@@ -1,6 +1,12 @@
 # 案件 更新紀錄
 
 ## 1.0.177 — 2026-10-10（wip/t50-int；第 50 班）
+- **（併入）(next) — 2026-10-12（wip/t57-m3-t1-r2；M3 擇一方案報價 T2）：資料模型＋唯一計入集合＋設定中心群組『擇一方案』**
+  - `profit_guard.counted_items(q, picks=None)`：計入合計／毛利的品項＝非擇一項＋每組被選定的那一項（未選整組不計入）。`server_totals`、`server_profit`（成本、進項稅）只走它；品項沒有 `altGroup` 的單與修改前逐位元相同。品項新增選填鍵 `altGroup`（空＝非擇一）；單層新增 `totalsByAlt`（布林）、`altPicks`／`altPickedAt`／`altPickedBy`（只由回簽路徑寫，T9）。
+  - `profit_guard.prepare()`：①一般存檔不採用用戶端的 `altPicks`／`altPickedAt`／`altPickedBy`，放回資料庫現值；②驗證（422，白話）：`totalsByAlt` 只收真布林、`altGroup` 須為文字、標題列不可擇一、每組至少 2 項、組數不超過設定 `alt_groups_max`；③已精算／結案單改動擇一結構（哪個品項在哪一組、`totalsByAlt`）→ 409。
+  - 設定中心新群組 `quote_alt`（顯示名『擇一方案』）：文字範本（`total_text`、`note_template`）、`alt_enabled`、`show_unpicked_in_pdf`、`alt_groups_max`、`combo_view_max`、`combo_view_default_open`，以及回簽政策 P1～P8 與 P5（`lock_scope`、`cancel_after_deal`、`move_out_of_sent`、`reject_final_keep`、`unlock_edit_signed`、`approval_basis`、`cancel_after_export`、`cancel_after_invoice`、`cancel_after_settle`）：風險類別 money、放寬方向須第二位最高管理者核准＋確認期間、每個選項有白話影響說明與高影響橫幅文字；預設＝使用者 2026-10-12 的定案值（每項第一個選項）。『尚未提供』的選項（P2②、P6②、P7②、P8②）已登錄但不可選（`cross_check` 擋儲存，`modules/case/alt_policy.policy()` 讀取時夾回預設）。凍結基準 `settings_deploy_baseline.json` 同步新增。
+  - 新模組 `alt_policy.py`：擇一設定與政策的唯一讀取入口（程式內不放業務常數）。
+  - 測試（已寫、未跑）：`tests/test_quote_alt_t2_2026_10_12.py`。本批沒有 UI、PDF、回簽選定變更（T3 起）；無資料庫遷移；`FORM_VERSION` 於本班 T6 升一次。
 - **（併入）(next) — 2026-10-10（wip/t50-int；第 50 班）**
 - **（併入）(next) — **
 - 報價單表單 V3.21 → V3.22：欄位名稱「售後服務」改為「售後服務及備註說明」（報價單表單、條款組管理、列印／PDF、送審原因文字）。只改顯示名稱：欄位鍵 `afterSales`、條款組與已存報價單的資料都不變；顯示名稱集中在 `quote_terms.AFTERSALES_LABEL`（表單端 `AFTERSALES_LABEL`），日後要讓管理者自訂時從這裡接。

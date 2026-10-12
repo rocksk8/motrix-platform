@@ -122,6 +122,97 @@ def item_amount(i: dict) -> int:
     return round_half_up(_num(i.get("qty")), _num(i.get("unitPrice")))
 
 
+ALT_SERVER_KEYS = ("altPicks", "altPickedAt", "altPickedBy")     # 擇一回簽選定：只有回簽路徑（T9）能寫；一般存檔一律由伺服器放回資料庫現值（H6）
+
+
+def alt_group_of(i) -> str:
+    """品項的擇一組名（去頭尾空白）；空字串＝非擇一。標題列、非字串一律視為非擇一（驗證另行擋下標題列／非字串）。"""
+    if not isinstance(i, dict) or i.get("type") == "header":
+        return ""
+    g = i.get("altGroup")
+    return g.strip() if isinstance(g, str) else ""
+
+
+def counted_items(q: dict, picks=None) -> list:
+    """**計入合計與毛利的品項**（擇一方案的唯一分流點）：非擇一項 ＋ 每個擇一組中被選定的那一項（該組沒選 ⇒ 整組不計入）。
+    `picks` 預設取 `q.altPicks`（`{組名: 品項id}`）；`plan_view` 傳入假設的選擇。沒有任何 `altGroup` 的單 ⇒ 與全部品項逐項相同（零行為改變）。
+    不計入 ≠ 不能存：未選項的單價、成本照存。"""
+    items = [i for i in (q.get("items") or []) if isinstance(i, dict)]
+    if picks is None:
+        picks = q.get("altPicks")
+    picks = {str(k).strip(): str(v) for k, v in picks.items() if v not in (None, "")} if isinstance(picks, dict) else {}
+    out = []
+    for i in items:
+        g = alt_group_of(i)
+        if not g or (picks.get(g) is not None and picks[g] == str(i.get("id"))):
+            out.append(i)
+    return out
+
+
+def alt_groups(q: dict) -> dict:
+    """`{組名: [品項, …]}`（依出現順序；只含擇一品項）。"""
+    out = {}
+    for i in (q.get("items") or []):
+        g = alt_group_of(i)
+        if g:
+            out.setdefault(g, []).append(i)
+    return out
+
+
+def restore_alt_server_fields(q: dict, old: dict) -> None:
+    """一般存檔：`altPicks`／`altPickedAt`／`altPickedBy` 不採用用戶端的值，放回資料庫現值（沒有就移除）；
+    現值若指向已不存在的組／品項（舊資料旁路）則該組的選定丟掉，保持伺服器自有欄位自洽。"""
+    for k in ALT_SERVER_KEYS:
+        q.pop(k, None)
+        if isinstance(old, dict) and k in old:
+            q[k] = old[k]
+    picks = q.get("altPicks")
+    if isinstance(picks, dict):
+        groups = alt_groups(q)
+        keep = {g: v for g, v in picks.items() if g in groups and any(str(i.get("id")) == str(v) for i in groups[g])}
+        if keep:
+            q["altPicks"] = keep
+        else:
+            q.pop("altPicks", None)
+            q.pop("altPickedAt", None)
+            q.pop("altPickedBy", None)
+    elif "altPicks" in q:
+        q.pop("altPicks", None)
+
+
+def validate_alt(q: dict, max_groups: int) -> None:
+    """擇一欄位驗證（422，白話）：`totalsByAlt` 只收真布林（MODULE-GUIDE §14.1）；`altGroup` 必須是文字、標題列不可擇一；
+    每組至少 2 項；組數不超過 `max_groups`（設定中心 `quote_alt.alt_groups_max`）。`altPicks` 由伺服器放回（見 `restore_alt_server_fields`），這裡再核對一次自洽。"""
+    if "totalsByAlt" in q and not isinstance(q["totalsByAlt"], bool):
+        raise HTTPException(422, "「合計依方案選擇」必須是勾選或不勾選")
+    for n, i in enumerate(q.get("items") or [], 1):
+        if not isinstance(i, dict) or "altGroup" not in i:
+            continue
+        g = i["altGroup"]
+        if g is None or g == "":
+            continue
+        if not isinstance(g, str):
+            raise HTTPException(422, f"第 {n} 項的擇一組別必須是文字")
+        if g.strip() and i.get("type") == "header":
+            raise HTTPException(422, f"第 {n} 項是標題列，不能設為擇一方案")
+    groups = alt_groups(q)
+    if len(groups) > max_groups:
+        raise HTTPException(422, f"擇一方案最多 {max_groups} 組，目前有 {len(groups)} 組")
+    for g, members in groups.items():
+        if len(members) < 2:
+            raise HTTPException(422, f"擇一組別「{g}」至少要有 2 個品項")
+    picks = q.get("altPicks")
+    if picks is not None:
+        ok = isinstance(picks, dict) and all(g in groups and any(str(i.get("id")) == str(v) for i in groups[g]) for g, v in picks.items())
+        if not ok:
+            raise HTTPException(422, "客戶選定的方案與報價單品項不一致")
+
+
+def _alt_signature(q: dict) -> tuple:
+    """已精算／結案單比對用：擇一結構（哪個品項在哪一組）＋『合計依方案選擇』勾選。"""
+    return (tuple(sorted((str(i.get("id")), alt_group_of(i)) for i in (q.get("items") or []) if alt_group_of(i))), bool(q.get("totalsByAlt")))
+
+
 def effective_tax_rate(q: dict, stored_tot=None):
     """這張報價單的營業稅率（%）——**不靜默改舊語意**（稽核 #5）：
     ① 稅別 零稅率／免稅（`taxType` 或稅率 0 的舊單）⇒ 0；② 稅率是數字 ⇒ 那個數字；③ 完全沒有 `taxRate` 這個鍵（新單）⇒ 5；
@@ -142,9 +233,8 @@ def server_totals(q: dict, stored_tot=None) -> dict:
     """依品項／折讓／運費／稅率重算 小計、稅前、稅額、含稅（與 quotation-form `calcTotals` 同式同進位）。
     品項金額一律由數量×單價重算（不採用用戶端送的 `amount`）；稅率規則見 `effective_tax_rate`（不改舊語意）。"""
     subtotal = 0.0
-    for i in q.get("items") or []:
-        if isinstance(i, dict):
-            subtotal = subtotal + item_amount(i)
+    for i in counted_items(q):                      # 擇一方案：只算計入集合（無 altGroup 的單＝全部品項）
+        subtotal = subtotal + item_amount(i)
     pretax = subtotal - _num(q.get("discount")) + _num(q.get("freight"))
     rate = effective_tax_rate(q, stored_tot)
     tax = round_half_up(pretax, PR.pct_rate(rate)) if 0 <= rate <= 100 else 0
@@ -156,9 +246,8 @@ def server_profit(q: dict, pct, ver: int, pretax=None, total=None, charity_basis
     tot = q.get("tot") if isinstance(q.get("tot"), dict) else {}
     pretax = _num(tot.get("pretax")) if pretax is None else pretax
     total_cost = 0
-    for i in q.get("items") or []:
-        if isinstance(i, dict):
-            total_cost = total_cost + _num(i.get("qty")) * _num(i.get("cost"))
+    for i in counted_items(q):                      # 成本與進項稅同樣只算計入集合
+        total_cost = total_cost + _num(i.get("qty")) * _num(i.get("cost"))
     input_vat = round_half_up(total_cost, 0.05)
     r = PR.quote_profit(pretax, total_cost, input_vat, [_num(q.get(k)) for k in INDIRECT_KEYS], pct, ver, total, charity_basis)
     return {"totalCost": total_cost, "inputVat": input_vat, "directProfit": r["directProfit"],
@@ -186,6 +275,13 @@ def prepare(q: dict, user: dict, existing_row=None, quote_no: str = ""):
         except (TypeError, ValueError):
             old = {}
     old_tot = old.get("tot") if isinstance(old.get("tot"), dict) else {}
+    restore_alt_server_fields(q, old)                           # 擇一選定只有回簽路徑能寫（H6）；一般存檔放回現值
+    if not is_new and is_settled(existing_row):
+        if _alt_signature(q) != _alt_signature(old):
+            raise HTTPException(409, "已精算或已結案的報價單，不能更改擇一方案的設定")
+    else:
+        from modules.case import alt_policy
+        validate_alt(q, alt_policy.setting("alt_groups_max"))
     if not isinstance(q.get("tot"), dict):
         q["tot"] = {}
     tot = q["tot"]
