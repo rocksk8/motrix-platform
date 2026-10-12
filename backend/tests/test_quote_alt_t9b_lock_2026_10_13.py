@@ -237,3 +237,91 @@ def test_put_with_unlock_edit_is_409_by_default_and_server_ignores_client_flag(c
     r = client.put("/api/quotations/%s" % no, json={"status": "已送出", "data": d}, headers=su_h)
     assert r.status_code in (403, 409)                              # 已送出本來就 403；任何情況都不可寫入
     assert json.loads(_row(no)["data_json"])["items"][1]["unitPrice"] == 3000
+
+
+# --- 0d：解鎖修改要在組簽核／寄通知之前先擋（回報的症狀）----------------------------------------------------
+
+def _org_with_manager(requester_username):
+    """建一個處＋部門，部門主管是另一位使用者，並把申請人放進該部門 ⇒ 送審時簽核鏈解得出來、會寄通知給主管。"""
+    cn = db.get_db()
+    try:
+        mgr = cn.execute("SELECT id FROM users WHERE username='alt_lock_mgr'").fetchone()["id"]
+        cn.execute("INSERT INTO divisions (name, sort_order, created_at, manager_user_id) VALUES ('鎖定處', 0, '2026-01-01T00:00:00', ?)", (mgr,))
+        div = cn.execute("SELECT id FROM divisions WHERE name='鎖定處'").fetchone()["id"]
+        cn.execute("INSERT INTO departments (division_id, name, sort_order, manager_user_id, created_at) VALUES (?, '鎖定部', 0, ?, '2026-01-01T00:00:00')", (div, mgr))
+        dept = cn.execute("SELECT id FROM departments WHERE name='鎖定部'").fetchone()["id"]
+        cn.execute("UPDATE users SET department_id=? WHERE username=?", (dept, requester_username))
+        cn.commit()
+    finally:
+        cn.close()
+
+
+def _notif_count():
+    cn = db.get_db()
+    try:
+        return cn.execute("SELECT COUNT(*) AS n FROM notifications WHERE type='approval_request'").fetchone()["n"]
+    finally:
+        cn.close()
+
+
+@pytest.fixture
+def su_with_chain(client, make_user):
+    make_user(username="alt_lock_mgr", role="admin")
+    u, p = make_user(username="alt_lock_su2", role="superadmin")
+    _org_with_manager("alt_lock_su2")
+    return _login(client, u, p)
+
+
+def test_positive_control_unlock_edit_on_plain_signed_quote_does_notify(client, su_with_chain):
+    """對照：沒有擇一的已回簽單做解鎖修改，同樣的設定下會寄簽核通知——證明下面『沒寄』不是因為環境沒有簽核鏈。"""
+    h = su_with_chain
+    body = {"customerName": "客", "projectName": "案", "quoteDate": "2026-10-13", "taxRate": 5, "items": [_it("a", 1, 1000, 600)]}
+    r = client.post("/api/quotations", json={"status": "草稿", "data": body}, headers=h)
+    assert r.status_code == 201, r.text
+    no = r.json()["quote_no"]
+    cn = db.get_db()
+    try:
+        cn.execute("UPDATE quotations SET status='已送出' WHERE quote_no=?", (no,))
+        cn.commit()
+    finally:
+        cn.close()
+    d = json.loads(_row(no)["data_json"])
+    d["_isUnlockEdit"] = True
+    before = _notif_count()
+    r = client.put("/api/quotations/%s" % no, json={"status": "待審核", "data": d}, headers=h)
+    assert r.status_code == 200, (r.status_code, r.text[:300])
+    assert _notif_count() > before
+
+
+def test_unlock_edit_on_signed_alt_quote_is_409_with_no_notification_and_status_unchanged(client, su_with_chain):
+    h = su_with_chain
+    no = _signed_quote(client, h)
+    before_row, before_n = _row(no), _notif_count()
+    d = json.loads(before_row["data_json"])
+    d["_isUnlockEdit"] = True
+    r = client.put("/api/quotations/%s" % no, json={"status": "待審核", "data": d}, headers=h)
+    assert r.status_code == 409 and "取消回簽" in r.text, (r.status_code, r.text[:300])
+    after = _row(no)
+    assert _notif_count() == before_n                                   # 沒寄任何簽核通知
+    assert after["status"] == "已送出" and after["is_signed"] == 1 and after["data_json"] == before_row["data_json"]
+
+
+def test_p4_relaxed_precheck_passes_and_inner_guard_still_decides(client, su_with_chain, monkeypatch):
+    real = alt_policy.policy
+    monkeypatch.setattr(alt_policy, "policy", lambda k, conn=None: 2 if k == "unlock_edit_signed" else real(k, conn))
+    h = su_with_chain
+    no = _signed_quote(client, h)
+    before = _row(no)
+    d = json.loads(before["data_json"])
+    d["_isUnlockEdit"] = True
+    d["items"][1]["unitPrice"] = 1                                       # 動到品項金額 ⇒ P1 仍擋（提早檢查與交易內守門都用同一規則）
+    n0 = _notif_count()
+    r = client.put("/api/quotations/%s" % no, json={"status": "待審核", "data": d}, headers=h)
+    assert r.status_code == 409 and _notif_count() == n0
+    d = json.loads(before["data_json"])
+    d["_isUnlockEdit"] = True                                            # 本文沒改 ⇒ 通過提早檢查與 P1，進入解鎖修改
+    r = client.put("/api/quotations/%s" % no, json={"status": "待審核", "data": d}, headers=h)
+    assert r.status_code == 200, (r.status_code, r.text[:300])
+    after = _row(no)
+    assert after["status"] == "待審核" and after["is_signed"] == 1
+    assert json.loads(after["data_json"])["altPicks"] == {"投影機": "x2"}
