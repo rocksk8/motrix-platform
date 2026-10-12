@@ -90,12 +90,18 @@ T2,T4 ─► T9 (回簽選定) ─► T10 (案件頁／下游) ─► T11 (收�
 **API 變更（契約，T1 凍結）**
 - **sign（`toggle_quotation_signed` 開）**：請求 body 新增「每組所選」`picks`（`{組名: 品項id}`，涵蓋該單**全部**擇一組別）。伺服器在**同一交易**、**執行 UPDATE 之前**先驗：每個組別都有 pick、pick 屬於該組、非擇一項不得出現；任一不符 → 422 白話「請先選擇客戶採用的方案」，不寫任何東西。通過後同交易：寫 `altPicks`＋`altPickedAt／altPickedBy`、重算 `tot`、更新 SQL 四欄 `total／pretax／direct_margin_pct／net_margin_pct`、寫稽核（誰、哪組、哪項、金額前後）。無擇一組的單：body 不帶 `picks`，行為與今日逐位元相同。
 - **unsign（`toggle_quotation_signed` 關）**：新增守門——單據已開票、已請款（含已提請款）或已精算／結案 → **409**（白話「已請款／已開票，請先沖銷」；Q3 暫定）。通過後同交易：清空 `altPicks`（及 `altPickedAt／altPickedBy`）、重算 `tot` 回未選暫估、更新 SQL 四欄、寫稽核，**稽核內容記錄被清除的內容**（原 `altPicks` 各組→品項、清除前後 `total／pretax`、操作者）。全部或全無（中途失敗整筆回滾）。
+- **權限與前提（沿用，不變）**：`toggle_quotation_signed` 僅 admin／superadmin（:1328），且報價單狀態須為 `已送出`（:1341）；兩 action 皆然。
+- **picks 驗證對象＝伺服器已存品項**（自資料庫讀出的 `data_json`），**不採用 body 內任何品項資料**；pick 的品項 id 必須存在於已存品項且屬該組。
+- **unsign 守門的資料來源**：已開票＝`invoice_vouchers` 表（`quote_no`＋狀態欄，`db.py:1627`）；已請款＝`payment_requests` 表（`quote_no`＋`status`，`db.py:1898`）；已精算／結案＝報價 `settle_status`／`deal_tag`。「有效單據」的狀態值定義（排除草稿、已作廢／已取消／已退回）開工前自這兩張表的現行狀態集核對，不在本文寫死。
 - 回簽介面逐組列選項（預設不預選）。
 - **不做獨立「改選」動作**（10-12 裁示）：回簽後要換方案＝先取消回簽（清除選定、重算回暫估、寫稽核）→ 改 → 重新回簽並重選。管銷／公益金戳記沿用既有規則，只換基數。
 
-**回簽後鎖定（伺服器端，走一般存檔路徑）**
-- 鎖定集合（已回簽時，一般存檔對下列欄位**與已存值比對，不同即 422**「已回簽，請先取消回簽」，不依賴前端是否禁用）：品項（增、刪、改單價／數量／成本／`taxRate`）、`altGroup`、`totalsByAlt`、`altPicks`、`tot`。
-- **備註與附件是否可編輯＝鎖定範圍待定**：預設假設不在鎖定集合（可編輯），但**必須在伺服器的一般存檔路徑明文列舉**可改欄位，其餘一律比對拒絕；此為待確認項（§7 Q8，0d 複審／使用者答覆），答覆前測 18b 兩種結果都以參數化寫好。
+**回簽後鎖定（伺服器端；r3 依 0d 複審更正鎖定路徑）**
+- **現況事實（`case/api/quotations.py`，M2 凍結樹）**：`PUT /api/quotations/{quote_no}`（:1690）已在 `_LOCKED`（:1854-1857）對狀態 待審核／簽核中／已送出／已成案／已結案 回 403，**唯一例外是 `is_unlock_edit`**；該旗標來自用戶端 body 的 `_isUnlockEdit`（:1701 `q.pop`），僅另要求呼叫者為 superadmin（:1731-1734）。回簽（`toggle_quotation_signed`）需 status＝已送出，故回簽單在一般存檔必被 `_LOCKED` 擋下——**真正的洞是 unlock-edit 分支**。`is_signed` 是獨立欄位，存檔路徑目前**完全不讀**。
+- **新增檢查**：以 `is_signed` **欄位**（讀自既有 `SELECT`，:1795-1800 加選 `is_signed`）為鍵；`is_signed` 為真時，在 **unlock-edit 分支內**以及**任何其他可改品項的路徑**（T1 須全文檢索列出，例如批次／複製／成案轉換寫回 `data_json` 者），對「鎖定欄位集合」與**已存值**比對，不同即 422「已回簽，請先取消回簽」。不得以 `_isUnlockEdit` 或其他用戶端旗標作為放行依據。
+- **鎖定欄位集合**：品項（增、刪、改單價／數量／成本／`taxRate`）、`altGroup`、`totalsByAlt`、`altPicks`、`tot`。
+- **unlock-edit 對「已成案」報價仍可做什麼＝不確定，列為待確認（§7 Q10，作者／使用者答覆）**：本設計要求**不得破壞既有已成案解鎖修改流程，唯一例外是「已回簽的擇一單」**（無擇一組的單、未回簽的單，unlock-edit 行為逐位元不變）。答覆前實作預設＝已回簽擇一單的 unlock-edit 只能改鎖定集合以外的欄位。
+- **備註與附件是否在鎖定集合外＝§7 Q8**：預設假設可編輯，但伺服器必須明文列舉可改欄位，其餘比對拒絕。
 - 已精算／結案、**已請款或已開票（暫定）**：取消回簽亦拒絕（Q3 待裁示）。
 - `altPicks` 防悄悄改動：用戶端送來的 `altPicks`／`tot` 在一般存檔一律不採用，由伺服器放回（對照既有 `_restore_stamps`）；只有 sign 路徑能寫 `altPicks`。
 
@@ -105,9 +111,9 @@ T2,T4 ─► T9 (回簽選定) ─► T10 (案件頁／下游) ─► T11 (收�
 - 下游對帳清單（逐項核對取數來源是 SQL 欄位或 `tot`，皆須等於重算後數字；補整合測試，見 §4 I 類）：
   1. 開票：`arap/api/invoice_vouchers.py`（讀 `q["total"]／q["pretax"]`）
   2. 請款：`arap/api/payment_requests.py`（同上）
-  3. 精算：`settlement_actuals.py`（讀 `tot.pretax／tot.total`）
-  4. 認列：`recognition.py`
-  5. 營運報表取數
+  3. 精算：`case/settlement_actuals.py`（:504-518 `tot.pretax／tot.total`、:577-582 `tot.directProfit／directMarginPct／adminCost`；`case/api/settlement_actuals.py` 為端點層，非取數處）
+  4. 認列：`case/recognition.py`（:119 `_case_rows` 讀 SQL `total／pretax`；`caseRecord.payment.items` 亦由報價金額衍生）
+  5. 營運報表／儀表板：`analytics/api/reports.py`（:2845、:3137 讀 SQL `total／pretax／net_margin_pct`）、`analytics/api/dashboard.py`（:39、:335 讀 `total／pretax`＋`data_json`）；其餘報表出口開工前全文檢索補全
   6. PDF／Excel／回簽頁：`pdf_gen.py`（讀 `tot`）
   7. 案件詳情報價摘要、`helpers/financial_mask.py` 遮罩後金額
   8. 成案（報價轉案件）與由報價產生的採購單（PO）：凡複製或引用報價金額／品項處（T1 以全文檢索補全清單，未列入者視為遺漏）
@@ -158,7 +164,7 @@ T2,T4 ─► T9 (回簽選定) ─► T10 (案件頁／下游) ─► T11 (收�
 18. 取消回簽：`altPicks` 清空、`tot`＋SQL 四欄回未選暫估、稽核有列；已回簽狀態下改品項／組別被拒；已結案拒絕。
 
 18a. sign 驗證順序：缺任一組 pick／pick 非該組成員 → 422 且資料庫無任何變動（`altPicks`、`tot`、SQL 四欄、稽核皆不變）。
-18b. 鎖定範圍（一般存檔路徑，伺服器端）：已回簽時改品項／`altGroup`／`totalsByAlt`／`altPicks`／`tot` 一律 422；備註、附件依 Q8 答覆（參數化兩種結果）；繞過前端直接打 API 同樣被拒。
+18b. 鎖定範圍（伺服器端）：已回簽（`is_signed`＝1）時，① 一般 `PUT`（無旗標）→ 403（`_LOCKED`，既有）；② **`_isUnlockEdit=true`（superadmin）改品項／`altGroup`／`totalsByAlt`／`altPicks`／`tot` → 422**（新檢查，明確覆蓋此情境）；③ 其他可改品項的路徑同樣 422；④ 備註、附件依 Q8（參數化兩種結果）；⑤ 對照組：已成案但**未回簽**、或**無擇一組**的單，unlock-edit 行為與今日逐位元相同（Q10 預設）；⑥ 繞過前端直接打 API 同樣被拒。
 18c. `totalsByAlt` 與 `altGroup` 經一般存檔切換：未回簽時可切換，合計／`tot`／SQL 四欄隨之重算；已回簽時被拒；切換前後無擇一的單逐位元不變。
 18d. unsign 守門：已開票／已請款／已精算 → 409 且無變動；通過時稽核含被清除內容（原 `altPicks`、前後金額）。
 18e. 取消回簽發生在**已成案（轉案件）或已產生採購單（PO）之後**：確認行為（擋下或同步／標記下游，依 Q3／Q9 答覆）且下游金額與重算後一致，不出現報價頁與案件／PO 金額分叉。
@@ -220,7 +226,9 @@ T2,T4 ─► T9 (回簽選定) ─► T10 (案件頁／下游) ─► T11 (收�
 7. 管理者可調的是範本文字；**擇一品項在客戶版上的標記樣式**（「擇一」文字／組別符號）是否也要開放選項？建議本班固定一種、下班再框架化（需使用者知悉，因與「不寫死」原則有張力）。
 
 8. **回簽後鎖定範圍：備註、附件可否編輯？**（見 T9）①可編輯，伺服器明文列舉可改欄位（建議、目前假設） ②全鎖，需先取消回簽。須使用者答覆；0d 複審一併核。
-9. **取消回簽時，單據已成案（轉案件）或已產生 PO 的處理？**（測 18e）①擋下，需先處理下游（建議，與 Q3 同向） ②允許並標記下游待更新 ③允許且不處理。
+9. **取消回簽時，單據已成案（轉案件）或已產生 PO 的處理？**（測 18e）①擋下，需先處理下游（建議，與 Q3 同向；理由：`recognition.py:119` 與 `caseRecord.payment.items` 皆由報價金額衍生，允許取消回簽會使認列／案件付款項與報價頁數字分叉） ②允許並標記下游待更新 ③允許且不處理。
+
+10. **已成案報價的 unlock-edit（superadmin 解鎖編輯）目前可改哪些範圍、哪些流程依賴它？（作者／使用者答覆）** 本設計僅要求「已回簽的擇一單」例外鎖定、其餘不變；若已成案解鎖修改本就用於改品項金額，需決定回簽擇一單走「先取消回簽（受 Q3／Q9 守門）」是否可接受。
 
 ## 8. 不在本班範圍
 勞報單選關聯派發下拉（05）；報價單欄位標籤可由管理者在系統內改（F7，後續）；`quotation` output_template 化（M4，承接 T8 的字面實作）；組合以外的優化（最佳方案推薦等）。
