@@ -289,6 +289,7 @@ def restore_version(conn, domain, key, version, actor, reason=""):
     fn = (_DOMAINS.get(_prefix(domain)) or {}).get("restore")
     if fn is None:
         raise ValueError("domain %r 沒有登記 restore adapter" % domain)
-    out = fn(conn, key, version, actor, reason)
+    # 先撤銷舊的待生效項、再讓 adapter 寫還原結果（S1-1 修正）：原本順序相反，若還原的是『較寬鬆的舊值』，
+    # adapter（設定＝`publish()`）剛寫出的待生效項會被緊接著的撤銷一併撤掉，還原看似成功卻什麼都沒生效。
     cancel_pending_for(conn, domain, key, actor, reason)
-    return out
+    return fn(conn, key, version, actor, reason)
