@@ -1352,6 +1352,7 @@
           if (item?.type === 'contractor_voucher') return '申請金額'
           if (item?.type === 'invoice_voucher') return '申請金額（含稅）'
           if (item?.type === 'shipping_note') return '出貨品項'
+          if (item?.type === 'completion_note') return '完成項目'      // 後端 total＝項目數，不是金額
           if (item?.type === 'payment_request') return '請款金額（含稅）'
           if (item?.type === 'case_change') return '變更內容'
           if (item?.type === 'voucher') return '傳票金額'
@@ -1359,7 +1360,7 @@
         },
 
         amountDisplay(item) {
-          if (item?.type === 'shipping_note') return (item.total || 0) + ' 項'
+          if (item?.type === 'shipping_note' || item?.type === 'completion_note') return (item.total || 0) + ' 項'
           if (item?.type === 'case_change') return item.projectName || ''
           if (item?.type === 'custom_record') return item.statusLabel || ''
           if (item?.type === 'custom_module_def') return '第 ' + (item.definitionVersion || '') + ' 版'
