@@ -19,6 +19,8 @@
 > - **W-2**：「底層檔僅字面值變動」視為可 L1。**它推翻 PLAYBOOK §D-1a 的「底層 ⇒ `modtest --full`」**，所以必須書面同意。
 > - **W-3**：以 `scope_gate` 單獨出貨（不經凍結樹官方閘門）。
 >
+> - **X7 文件類是否可放寬**（問題，非提案）：被測試讀取的文件／規則文件，若對應守門（`regen_all --check`、`spec_coverage`、`cache_index`、`core_only_rc`；以實際名稱為準）通過並附證據，可否不走 L3？預設答案＝**否**，回答前一律 L3。
+>
 > **明講**：**L1／L2 只要隨列車出貨，一律照該列車的凍結樹官方閘門**（not_e2e → e2e → 建包 → verify_package → final_drill → final_verify → 非作者稽核 → 主持 `--check` 發布）；**凍結樹官方閘門維持強制**。本稿不提供繞過它的路徑；繞過它的項目（W-3 等）只是待回答的問題。
 
 ## 0. 結論（先講）
@@ -35,8 +37,8 @@
 | 等級 | 名稱 | 機器判定條件（全部成立） | 對應現有工具 | 出貨 |
 |---|---|---|---|---|
 | **L0** | 只改一般說明文件 | 改動檔全屬 `layer=doc`，**且不屬 §1.1 X7（規則／授權文件）、也不在下列「被測試讀取的文件」清單**，且不是 `export-ignore` 例外。**`layer=doc` 只是起點，不等於 L0**：`docs/**` 與 `*.md` 一律先過 X7 與下方清單。**`docs/platform/**` 會隨正式機交付給客戶**（`apply_update.ps1` 不部署，但交付包內含），其內容須視為對外文字 | `ship_tier` 等級 1 | 無東西要出貨 |
-| **L1** | 單模組文字／版面 | ① 改動檔全屬 `module`／`page`／`test`／`bookkeeping`／`doc` 層，且恰好 **1 個**模組；② 沒觸到 §1.1 任一硬排除；③ 非測試檔的 diff 只含：HTML 文字節點／屬性文字、CSS、**§1.2 定義的「僅文字字面值」**、CHANGELOG／manifest 條目；**不含**新 `def`／路由裝飾器／SQL 字串／`import`／判斷式（比較或布林運算）的變動；④ 改動行數 ≤ N、檔數 ≤ M（N、M 放設定表，初值 UNKNOWN，須由使用者/PM 定）；⑤ 若動到 `quotation-form.html`，同 commit 必須有 `FORM_VERSION` 升版與 `test_form_version_bumped_2026_09_24.py` 登記 | `scope_gate plan`（`module/page/test/bookkeeping/doc`）＋新增的「diff 內容檢查」（**新，屬提案**） | 單模組包或隨列車 |
-| **L2** | 單模組一般邏輯 | 同 L1 的①②，但③不成立（有邏輯變動）；且不含 §1.1 硬排除 | `ship_tier` 等級 2＋`scope_gate`（範圍驗證） | 單模組包或隨列車 |
+| **L1** | 單模組文字／版面 | ① 改動檔全屬 `module`／`page`／`test`／`bookkeeping`／`doc` 層，且恰好 **1 個**模組；② 沒觸到 §1.1 任一硬排除；③ 非測試檔的 diff 只含：**§1.2 定義的「僅文字字面值」**（HTML 只限使用者看得見的文字節點與 `title`／`placeholder`／`alt`／`aria-label`／label 文字屬性；CSS 僅限 §1.2 第 6 條）、CHANGELOG／manifest 條目；**不含**新 `def`／路由裝飾器／SQL 字串／`import`／判斷式（比較或布林運算）的變動；④ 改動行數 ≤ N、檔數 ≤ M（N、M 放設定表，初值 UNKNOWN，須由使用者/PM 定）；⑤ 若動到 `quotation-form.html`，同 commit 必須有 `FORM_VERSION` 升版與 `test_form_version_bumped_2026_09_24.py` 登記 | `scope_gate plan`（`module/page/test/bookkeeping/doc`）＋新增的「diff 內容檢查」（**新，屬提案**） | 隨列車（單模組包＝W-3，需回答） |
+| **L2** | 單模組一般邏輯 | 同 L1 的①②，但③不成立（有邏輯變動）；且不含 §1.1 硬排除 | `ship_tier` 等級 2＋`scope_gate`（範圍驗證） | 隨列車（單模組包＝W-3，需回答） |
 | **L3** | 完整車道 | 其他一切：任一硬排除命中、底層（`bottom`）層檔案、2 個以上模組、提供者（capability）被改而消費端判不了、`FORM_VERSION` 以外的公開 API 形狀變動（`l1_interface_snapshot`／路由 golden／`module.json` provides）、判不了 | `ship_tier` 等級 3 | 完整包＋凍結樹官方閘門 |
 
 ### 1.1 硬排除（**永遠 L3**；分類器內建常數，不在可調設定表）
@@ -49,7 +51,7 @@
 | X4 刪除／回收桶 | `DELETE FROM`、`recycle`、`purge`、`helpers/recycle_bin.py`、`modules/recyclebin/**`、刪除端點 | T53 回收桶 adapter 多輪修補（分支 wip/t53-1d-rb-adapters r2–r7、wip/t53-b5-rb-adapters r1–r4 的存在；各輪缺陷內容：UNKNOWN） |
 | X5 認證／工作階段 | `auth_middleware`、登入／密碼／token／cookie／CSP、`main.py`、公開路徑白名單 | final_verify V3.2（公開 API 白名單）；`main.py` 已是 bottom |
 | X6 簽章／交付 | `delivery.py`、`build_deploy_package*`、`verify_package`、`publish_*.sh`、`product/**`、`backend/tools/**`、`tools/**` | 已是 bottom；使用者規則：簽章金鑰只傳路徑 |
-| X7 閘門本身 | `tools/platform/**`、`**/conftest.py`、`pytest.ini`、`bottom_layer.json`、`known_flakes.json`、`final_verify_allow.json`、`.githooks/**`、**本框架的規則檔**；**規則／授權文件**：`docs/platform/CORE-SPEC.md`（含「使用者裁示」節）、`PLAYBOOK.md`、`MULTIWIN-PROTOCOL.md`；**被測試讀取的文件**：`docs/windows/STATE.md`、`SCOPE.md`、`docs/platform/RUN-PLAN.md`、`CACHE-INDEX` 的來源文件、`docs/platform/audit/**`——這些改動⇒ L3，**或**至少要求對應守門通過並附證據：`regen_all --check`、`spec_coverage`、`cache_index`、`core_only_rc`（以實際守門名稱為準，清單由分類器維護，**只能增加**） | 閘門改動不可由被它放行的流程自己放行（`bottom_layer.json` 檔頭：「改這份檔＝改 tools/**＝底層 ⇒ 那一包必須全量」） |
+| X7 閘門本身 | `tools/platform/**`、`**/conftest.py`、`pytest.ini`、`bottom_layer.json`、`known_flakes.json`、`final_verify_allow.json`、`.githooks/**`、**本框架的規則檔**；**規則／授權文件**：`docs/platform/CORE-SPEC.md`（含「使用者裁示」節）、`PLAYBOOK.md`、`MULTIWIN-PROTOCOL.md`；**被測試讀取的文件**：`docs/windows/STATE.md`、`SCOPE.md`、`docs/platform/RUN-PLAN.md`、`CACHE-INDEX` 的來源文件、`docs/platform/audit/**`——這些改動⇒ **一律 L3**（本表是「永遠 L3」，不含任何放寬）。清單由分類器維護，**只能增加** | 閘門改動不可由被它放行的流程自己放行（`bottom_layer.json` 檔頭：「改這份檔＝改 tools/**＝底層 ⇒ 那一包必須全量」） |
 | X8 公開形狀 | 路由新增/刪除/簽名改變（OpenAPI 路由表）、`l1_interface_snapshot.json`、`module.json` `provides`、IP 登錄（`INTEGRATION-POINTS.md`） | GOLDEN-DRIFT：路由 golden 對新增失明；雙向檢查落地前不得靠它判定 |
 
 | X9 簽核流程 | 簽核／審批流程：`approval`、`approval_queue`、`tiers`、`currentTier`、`reassign`、`approve`／`reject` 端點、簽核層設定、`is_document_approver` | 轉簽規則、代簽（E1 `cascade`）；簽核是權限＋金流的交會 |
@@ -67,7 +69,9 @@
 2. **舊字面值不得有任何其他引用**：對舊字串 grep `*.py`、`*.js`、`*.html`、`*.json`、`tests/**`（含測試斷言、golden、manifest），除本次要改的位置外**不得再出現**。
 3. 舊字面值**不得等於任何已知的**：狀態值、角色名、權限鍵、欄位鍵（如 `afterSales`）、模組名、action 名、HTML `id`、`data-*` 屬性、`href`、`onclick`／事件處理字串、列舉（enum）值。
 4. 不在 f-string 運算式、SQL、路徑、格式字串、正規式內；父節點型別不變。
-5. 任一條判不了或解析失敗 ⇒ 非字面值。
+5. HTML 屬性**只允許** `title`、`placeholder`、`alt`、`aria-label` 與 label 文字；**絕不可**變動 `id`、`class`、`name`、`value`、`href`、`src`、`onclick`（及任何 `on*`）、`data-*`、`for`。
+6. CSS 變動僅限不涉及 `display`、`visibility`、`pointer-events`、`content`（含 `::before`／`::after` 的 `content`）的屬性，且所作用的元素**不被 JS 引用、也不屬 X2 可見度控制**；否則 ≥ L2。
+7. 任一條判不了或解析失敗 ⇒ 非字面值。
 
 ## 2. 每級必經閘門、稽核者、證據、時間、回滾
 
@@ -76,11 +80,11 @@
 | 項目 | L0 | L1 | L2 | L3 |
 |---|---|---|---|---|
 | **作者端必跑** | `prepush_check --static-only`（約 1 分鐘，硬上限 90 秒）；動索引則 `regen_all --check`【已授權：PREPUSH-USAGE-T51】 | `prepush_check`；`author_gate`（設計估 9～11 分：A1 `tests/platform` 整目錄＋A2 檔名樣式守門檔＋A3 受影響題＋A4 新增測試；AUTHOR-GATE-DESIGN §2）；改頁面 ⇒ 該頁 e2e | 同 L1 | 同 L1；`pre_train_check`／`train_preflight --full-lint`（凍結前） |
-| **閘門** | 無（不出貨） | `scope_gate run`：該模組題＋提供者消費端＋改到頁面的 e2e＋`tests/platform` 全部（`MOTRIX_TRAIN=1`），not_e2e 與 e2e 兩段都綠才接受【已授權：使用者 2026-09-30 引言，PLAYBOOK §D-1a／scope_gate.py 檔頭】 | 同 L1 | 凍結樹官方閘門，**不變** |
+| **閘門** | 無（不出貨） | **隨列車：該列車的凍結樹官方閘門（強制）**。`scope_gate`-only 單獨出貨路徑＝W-3，**需使用者回答，非本稿可採用**（PLAYBOOK §D-1a 不在此當作現行同意重述） | **隨列車：該列車的凍結樹官方閘門（強制）**（單獨出貨同 W-3） | 凍結樹官方閘門，**不變** |
 | **稽核者** | 作者以外抽查（看 diff＋1 突變）【已授權：PLAYBOOK §G4 稽核分級 ③】 | **【提案·需書面同意】W-1 非作者「輕量稽核」**：看 diff＋確認分類器輸出＋作者回報（指令／題數／通過數）＋1 個突變；不重跑作者已跑的題。現行 §G4 ④ 規定「產品碼…照舊完整稽核」，L1 含產品碼（頁面/字串），故這是削弱。**輕量稽核者必須獨立重跑分類器**（不採信作者貼的輸出），結果**只能維持或升級、不得降級**；任何 §1.2 條件判不了 ⇒ 升 L2 完整稽核 | 非作者完整稽核（附突變）【已授權：§G4 ④】 | 非作者完整稽核＋必修修完重跑閘門【已授權：§G7 第 3 節】 |
 | **證據** | diff＋prepush 輸出 | 分類器 JSON（等級＋命中規則＋diff 內容檢查結果）、author_gate 結果檔（綁 tree sha）、scope_gate 紀錄（commit／基準／規則雜湊）、稽核報告 | 同 L1＋完整稽核報告 | 閘門紀錄（題數、worker、head SHA）＋步驟檔＋稽核報告 |
 | **預期牆鐘** | **UNKNOWN**（影子期資料前不填數字） | **UNKNOWN**（影子期資料前不填；作者端各工具的設計估計不當成節省量）；`scope_gate run` 實測：**UNKNOWN**（來源無實測紀錄）；稽核：**UNKNOWN** | 同 L1，稽核更長：UNKNOWN | 現況：not_e2e 約 2400 s（M1-a／M2 r1）～8766 s（M2 r2 重跑；hichan-21 報告，記憶 away_log 10-12 04:10）；e2e 另計；M2 整班超過 8 小時（記憶 `update_time_target_2h`）；使用者目標一次更新約 2 小時 |
-| **回滾** | 不需要（無出貨） | 單模組包：`module_update.py rollback`；是否已進正式交付流程：**UNKNOWN**（2026-09-28 時 ROADMAP P7 標 ⏳「不在交付流程」，之後狀態未核）。隨列車出貨則同 L3 | 同 L1 | 失敗＝步驟檔「只記錄、停下，不自行回滾」；**回滾一律由使用者決定**（PLAYBOOK §G7） |
+| **回滾** | 不需要（無出貨） | 隨列車出貨⇒同 L3。單模組包（W-3 路徑）：`module_update.py rollback`；是否已進正式交付流程：**UNKNOWN**（2026-09-28 時 ROADMAP P7 標 ⏳「不在交付流程」，之後狀態未核） | 同 L1 | 失敗＝步驟檔「只記錄、停下，不自行回滾」；**回滾一律由使用者決定**（PLAYBOOK §G7） |
 
 **不變式（所有等級）**：①分類器輸出與規則雜湊進證據；②等級只升不降（作者不能自行降級，稽核者可以升級要求）；③任一閘門紅 ⇒ 不放行，**不以「小改動」為由蓋章或放行偶發紅**（沿用 `known_flakes`：未登記未蓋章的偶發題不得放行，PLAYBOOK §G7）；④作者端結果不得寫成整段綠（AUTHOR-GATE-DESIGN §4）。
 
@@ -181,7 +185,7 @@
 |---|---|---|---|---|
 | **A. 標籤更名**「售後服務」→「售後服務及備註說明」（`c6379c50a`，表單 V3.22，鍵名 `afterSales` 不動） | `case/CHANGELOG.md`、`case/quote_terms.py`、**`backend/pdf_gen.py`**、`test_form_version_bumped`、`test_quote_submit_reasons_server`、`version_manifest.json`、`quotation-form.html` | `pdf_gen.py` 命中 `backend/*` ⇒ **底層 ⇒ 全量**（現行即 L3） | 現行規則 ⇒ **L3**。`quote_terms.py`、`pdf_gen.py` 是 §1.1 X1 明列的金額檔（`money_flows.json` 是模組登錄，不能用來判斷），**X1 命中 ⇒ L3，且不因 W-2 獲同意而改變**；X1 無法判定也是 L3，**不是**「保守 L2」。本例若要走 L1，須先把這兩檔從 X1 拆出（縮小排除屬削弱，須使用者書面同意；本稿不提議） | ab 稽核 PASS（away_log 10-11 11:24）；隨 M2 出貨（尚未上線）；省多少時間：**UNKNOWN**（無對照） |
 | **B. 狀態/顏色**：毛利率門檻單一來源、列表空列 colspan、已成案徽章（`d4c3ecf68`，M1-a） | `margin-tone.js`（`frontend/static/**` ⇒ bottom）、3 個 HTML 頁、`case-management-list.js`（`frontend/js/**` ⇒ bottom）、新測試 | 底層 ⇒ 全量 | **L3**；即使不是底層也不是 L1：門檻改成「40 較嚴」會改變哪些列變色＝行為變更（§5.1 第 5 項）；`margin-tone.js` 新增 `function` ⇒ 非字面值 | 隨 M1-a 全班出貨；M1-a 步驟檔「框架化債務」記下 30／40 仍寫死 |
-| **C. 文字修正**（版本紀錄/CHANGELOG 用語更正，`4eb521384`） | `case/CHANGELOG.md`、`version_manifest.json`（bookkeeping）、`test_form_version_bumped_2026_09_24.py`（test） | `module`＋`bookkeeping`＋`test` 層 ⇒ 可範圍驗證（ship_tier 等級 2） | **L1**（只含文字/帳務檔，單模組，無硬排除）。必經：`prepush`、`author_gate`、`scope_gate`（含 VR 守門題）；稽核：W-1 輕量稽核（E7 的文字稽核項必保留） | 該修正本身即來自 05 的非作者文字稽核（E7）；隨 M1-a 出貨 |
+| **C. 文字修正**（版本紀錄/CHANGELOG 用語更正，`4eb521384`） | `case/CHANGELOG.md`、`version_manifest.json`（bookkeeping）、`test_form_version_bumped_2026_09_24.py`（test） | `module`＋`bookkeeping`＋`test` 層 ⇒ 可範圍驗證（ship_tier 等級 2）。已核對 `bottom_layer.json`：`backend/version_manifest.json` 為 `bookkeeping`（規則排在 `backend/*` 之前），`backend/modules/*/**` 為 `module`，`backend/tests/**/test_*.py` 為 `test` | **L1**（只含文字/帳務檔，單模組，無硬排除）。必經：`prepush`、`author_gate`、`scope_gate`（含 VR 守門題）；稽核：W-1 輕量稽核（E7 的文字稽核項必保留） | 該修正本身即來自 05 的非作者文字稽核（E7）；隨 M1-a 出貨 |
 
 > 範例 A、B 說明：**今天「小」改動在實務上因 `backend/*`、`frontend/static|js|css/**` 為底層而幾乎全進完整車道**。要不要鬆這一條（W-2）是使用者決定；證據（§3）支持「底層檔僅字面值＋非金流」可考慮、不支持其他放寬。
 
@@ -193,16 +197,16 @@
 | 2 | 分類器守門題（§4.3）與真實案例回放 | UNKNOWN | 1 | 否 |
 | 3 | `prepush`／`preflight` 印出等級（只警告） | UNKNOWN | 1 | 否 |
 | 4 | 影子期：僅記錄分類結果＋稽核升級率，累積 §3 缺的證據 | 觀察期 | 3 | 否 |
-| 5 | 取得使用者書面同意 W-1／W-2（／W-4）；同意後才啟用 L1 輕量稽核與字面值證明 | — | 4 的數據 | **是** |
+| 5 | 取得使用者書面同意 W-1／W-2／W-3（／W-4）；同意後才啟用 L1 輕量稽核與字面值證明 | — | 4 的數據 | **是** |
 | 6 | 稽核報告統計（113 份：必修率、發現類型 × 等級） | UNKNOWN | — | 否；補 §3 的缺口 |
 
 ## 8. 待確認（UNKNOWN／決定）
 
 1. L1 的行數/檔數上限 N、M；是否限制「頁面 e2e 必跑」。
-2. X1 字詞清單與 `money_flows.json` 的實際涵蓋（我沒讀該檔結構）。
+2. X1 字詞清單的召回率（§4.3 回放驗證）。`money_flows.json` **已確認為模組登錄（module／capability），不用於判定檔案是否屬金流**。
 3. 單模組包（`module_update`）目前是否已在正式交付流程（2026-09-28 為 ⏳）；回滾實際路徑。
 4. `scope_gate run` 的實測牆鐘時間；L1 若不另出包而隨列車，是否仍省時間。
-5. W-1、W-2 是否同意；W-4 是否需要。
+5. W-1、W-2、W-3 是否同意；W-4 是否需要；X7 文件類是否可放寬（見標頭 B）。
 6. E1 的原始稽核報告（誰、哪份）；E8 的偵測者。
 7. 路由 golden 嚴格化（`wip/t52-n39-golden-r1`）是否已併入 platform（本稿 base c14f0a1df 上是否已修：UNKNOWN）；X8 在其落地前保持 L3。
-8. 依據文件版本：`bottom_layer.json`、`PLAYBOOK.md`、`AUTHOR-GATE-DESIGN.md`、`PREPUSH-USAGE-T51.md`、`SPEEDUP-PIPELINE-T51-USAGE.md`、`GOLDEN-DRIFT-T52.md`、`T52-NOTES.md`、`ENDPOINT-AUDIT-W1C-T48.md`、`FINAL-VERIFY-T48.md` 取自 `origin/platform` c14f0a1df；T49 commit 取自 `origin/train/t49-int`／`origin/wip/t49*`。
+8. 依據文件版本：`bottom_layer.json`、`PLAYBOOK.md`、`AUTHOR-GATE-DESIGN.md`、`PREPUSH-USAGE-T51.md`、`SPEEDUP-PIPELINE-T51-USAGE.md`、`GOLDEN-DRIFT-T52.md`、`T52-NOTES.md`、`ENDPOINT-AUDIT-W1C-T48.md`、`FINAL-VERIFY-T48.md` 取自 來源樹 `origin/platform@c14f0a1df`（文件版本；正式機基準為 `4eb521384`，見 prod tag）；T49 commit 取自 `origin/train/t49-int`／`origin/wip/t49*`。
