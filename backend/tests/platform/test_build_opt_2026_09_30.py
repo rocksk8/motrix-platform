@@ -88,7 +88,8 @@ def test_stage_window_counts_from_when_it_really_ran():
     assert tr.find_reusable_stage([_stage_row("F", "not_e2e", True, 11)], "F", "not_e2e", NOW) is not None
     cross_day = _stage_row("F", "not_e2e", True, 1)
     cross_day["stages"]["not_e2e"]["tested_at"] = "2026-09-29 23:59:00"
-    assert tr.find_reusable_stage([cross_day], "F", "not_e2e", NOW) is None, "跨日也沿用"
+    assert tr.find_reusable_stage([cross_day], "F", "not_e2e", NOW) is None, "15 小時前（跨日）的綠也沿用"
+    assert tr.find_reusable_stage([cross_day], "F", "not_e2e", datetime(2026, 9, 30, 0, 10, 0)) is not None, "跨午夜但在 12 小時內 ⇒ 可沿用（2026-10-13 起）"
     assert tr.find_reusable_stage([_stage_row("G", "not_e2e", True)], "F", "not_e2e", NOW) is None, "指紋不同也沿用"
     assert tr.find_reusable_stage([_stage_row("F", "not_e2e", True)], None, "not_e2e", NOW) is None
 
