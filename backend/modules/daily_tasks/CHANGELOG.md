@@ -1,6 +1,6 @@
 # 每日任務 更新紀錄
 
-## (next) — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）
+## 1.0.10 — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）
 - 每日任務歷程 csv 下載的 `Content-Disposition` 改用 `content_disposition()`（檔名不變）。
 
 ## 1.0.9 — 2026-10-06（wip/t43-phase2-events）：區間工作事項結束日的行事曆事件（預設關；對帳失敗會重試）

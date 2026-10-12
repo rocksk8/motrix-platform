@@ -1,6 +1,6 @@
 # 應收應付 更新紀錄
 
-## (next) — 2026-10-13（MS1 合併段：2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期） ＋ 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期））
+## 1.0.53 — 2026-10-13（MS1 合併段：2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期） ＋ 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期））
 - **（併入）(next) — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）**
 - 出納執行紀錄下載的 `Content-Disposition` 改用 `content_disposition()`（檔名不變，只統一編碼）。
 - **（併入）(next) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）**

@@ -1,6 +1,6 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）
+## 1.0.27 — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）
 - 出貨單 PDF 下載檔名改走 `helpers.download_name`。無 migration、無新路由、無權限變更。
 
 ## 1.0.26 — 2026-10-10（wip/t50-int；第 50 班）

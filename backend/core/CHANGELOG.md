@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next:minor) — 2026-10-13（MS1 合併段：2026-10-13（wip/t57-project-margin-r4；專案毛利%） ＋ 2026-10-13（wip/t57-s1-settings-edit-r1；S1 設定中心可編輯） ＋ 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期））
+## 1.131 — 2026-10-13（MS1 合併段：2026-10-13（wip/t57-project-margin-r4；專案毛利%） ＋ 2026-10-13（wip/t57-s1-settings-edit-r1；S1 設定中心可編輯） ＋ 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期））
 - **（併入）(next) — 2026-10-13（wip/t57-project-margin-r4；專案毛利%）**
 - L1（新增，只增）：`helpers.profit_rules.project_margin`、`helpers.profit_rules.uncosted_items`（報價單「專案毛利%」：（未稅收入 − 未稅品項成本）÷ 未稅收入，精確有理數運算、平手遠離零；輸入須為 0 或 1e-6 ≤ |x| < 1e15 的有限數，否則 pct 為 None；前端孿生 `static/profit-rules.js projectMargin`，共用黃金向量）。
 - `helpers.financial_mask.QUOTATION_MONEY_COLS` 新增 `project_margin_pct`（常數值變更，名稱不變）：任何走 `mask_row` 的路徑，該鍵若存在即被遮；實際附加只在該回應本來就保有報價金額時。
