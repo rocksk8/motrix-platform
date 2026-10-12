@@ -48,6 +48,9 @@ from helpers import (
     guard_case_access, require_any_module,
 )
 from modules.case.completion_pdf import generate_completion_pdf_bytes
+from modules.case import completion_sync as _CS      # 第 57 班：從報價單帶入項目（純函式）
+from helpers import settings_registry as _SR         # 設定中心：群組 completion_note
+from helpers.case_access import case_page_readable
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -115,6 +118,9 @@ class CompletionNoteIn(BaseModel):
     # 樂觀鎖（2026-09-14）：載入時拿到的 updated_at，存檔時送回來比對。
     # **選填**——舊前端／其他呼叫端不送就維持原本行為，不會因為這個欄位壞掉。
     expected_updated_at: Optional[str] = None
+    # 從報價單帶入的同步戳記（第 57 班）：只放 {fingerprint}＝載入 quote-items 時拿到的指紋。
+    # 伺服器只在它等於『此刻』重算的指紋時才接受並寫入 data_json.quoteSync，否則 409；沒帶＝維持原儲存值不動。
+    quote_sync: Optional[dict] = None
 
 
 def _require_admin(user: dict):
@@ -191,6 +197,7 @@ def _note_public(row, include_items: bool = True) -> dict:
         "exportCount":     d.get("export_count") or 0,
         "exportLog":       json.loads(d.get("export_log") or "[]"),
         "approval":        approval,
+        "quoteSync":       _dj.get("quoteSync") or None,
         "createdBy":       d.get("created_by") or "",
         "createdAt":       d.get("created_at") or "",
         "updatedAt":       d.get("updated_at") or "",
@@ -208,6 +215,12 @@ def _validate(body: CompletionNoteIn):
     for it in (body.items or []):
         if it.get("type") == "header":
             continue
+        qid = it.get("quoteItemId")
+        if qid is not None and (not isinstance(qid, str) or not qid.strip() or len(qid) > _CS.ITEM_ID_MAX):
+            raise HTTPException(400, "來源項目編號格式不正確")
+        if "quoteQty" in it and (isinstance(it["quoteQty"], bool) or not isinstance(it["quoteQty"], (int, float))
+                                 or it["quoteQty"] != it["quoteQty"] or abs(it["quoteQty"]) == float("inf")):
+            raise HTTPException(400, "報價數量格式不正確")
         st = it.get("status")
         if st and st not in ITEM_STATUSES:
             raise HTTPException(400, f"完工狀態必須是：{'／'.join(ITEM_STATUSES)}")
@@ -262,6 +275,122 @@ def _readable_note(conn, note_no: str, user: dict, cols: str = "*"):
     return row
 
 
+# ── 從報價單帶入項目（第 57 班；設計 COMPLETION-NOTE-QUOTE-ITEMS-T56）──────────────────────────────
+
+class _SourceBlocked(HTTPException):
+    """計入品項判斷失敗（失敗關閉）。與一般 409/404 區分：超量『擋下』政策下不可被當成『報價單不可用』而略過檢查。"""
+
+
+_QI_NOT_FOUND = "找不到可帶入的報價單"          # 「查無」與「看不到」同一句，不洩漏報價單是否存在
+
+
+def _opt(key: str):
+    """設定中心群組 completion_note 的值（永不丟例外；讀不到＝程式預設）。"""
+    return _SR.get("completion_note", key)
+
+
+def _quote_source(conn, quote_no: str, user: dict):
+    """報價單（唯讀）→ (列, data, 全部來源品項)。查無／看不到 ⇒ 404 同一句；狀態閘 ⇒ 409 白話。"""
+    q = conn.execute("SELECT status, is_signed, customer_name, project_name, data_json FROM quotations WHERE quote_no=?",
+                     (quote_no,)).fetchone()
+    if not q or not case_page_readable(conn, quote_no, user):
+        raise HTTPException(404, _QI_NOT_FOUND)
+    why = _CS.gate_message(q["status"] or "")
+    if why:
+        raise HTTPException(409, why)
+    if not q["is_signed"] and _opt("prefill_unsigned") != 1:
+        raise HTTPException(409, "報價單客戶尚未回簽，目前設定要回簽後才能帶入項目")
+    try:
+        data = json.loads(q["data_json"] or "{}") or {}
+    except ValueError:
+        data = {}
+    try:
+        return q, data, _CS.source_items(data)
+    except _CS.SourceUnavailable:
+        raise _SourceBlocked(409, "報價單目前無法判定計入項目，請稍後再試或洽管理員")
+
+
+def _resolve_quote_sync(conn, quote_no: str, user: dict, qs) -> Optional[dict]:
+    """用戶端送回的指紋 ⇒ 要寫入的 quoteSync；沒帶 ⇒ None（維持原值）。指紋不等於伺服器此刻重算的 ⇒ 409。"""
+    if not qs:
+        return None
+    fp = str((qs or {}).get("fingerprint") or "")
+    try:
+        _q, _d, src = _quote_source(conn, quote_no, user)
+    except HTTPException as e:
+        raise HTTPException(409, "報價單目前無法同步：" + str(e.detail))
+    cur = _CS.fingerprint(src)
+    if not fp or fp != cur:
+        raise HTTPException(409, "報價單剛有更動，請重新帶入")
+    return {"syncedAt": datetime.now().isoformat(), "itemsFingerprint": cur}
+
+
+def _enforce_over_qty(conn, quote_no: str, user: dict, items, exclude_note: str = ""):
+    """設定『完工數量超過報價數量』＝擋下 ⇒ 本張＋他單超過報價數量者 400。報價單不可用時略過（不因此擋存檔）。"""
+    if _opt("over_qty") != 1 or not any(isinstance(i, dict) and i.get("quoteItemId") for i in (items or [])):
+        return
+    try:
+        _q, _d, src = _quote_source(conn, quote_no, user)
+    except _SourceBlocked:
+        raise                       # 失敗關閉：政策是『擋下』，來源又不可靠 ⇒ 不能默默放行
+    except HTTPException:
+        return
+    over = _CS.over_quota(items, src, _CS.completed_qty_by_item(conn, quote_no, exclude_note))
+    if over:
+        raise HTTPException(400, "；".join("「%s」超過報價數量 %g" % (n, x) for n, x in over[:5])
+                            + "。請先調整完工數量或修改報價單")
+
+
+@router.get("/api/completion-notes/quote-items")
+def completion_quote_items(quote_no: str, exclude_note: str = "", authorization: str = Header(None)):
+    """可帶入的報價單項目（唯讀）。**路由須註冊在 `/{note_no}` 之前**，否則會被當成單號。
+    權限＝與建立完工單同一道閘（目前 `_require_admin`；放寬給業務屬另案權限審查）＋報價單本體可讀。
+    回應只有非金額欄位（`completion_sync.SAFE_ITEM_KEYS`），任何金額鍵都不出。"""
+    user = _require_user(authorization)
+    _require_admin(user)
+    conn = get_db()
+    try:
+        q, data, src = _quote_source(conn, quote_no, user)
+        try:
+            unselected = _CS.unselected_alt_groups(data)
+        except _CS.SourceUnavailable:
+            raise _SourceBlocked(409, "報價單目前無法判定計入項目，請稍後再試或洽管理員")
+        done = _CS.completed_qty_by_item(conn, quote_no, exclude_note)
+        items = _CS.with_progress(src, done)
+        if _opt("include_headers") != 1:
+            items = [i for i in items if i.get("type") != "header"]
+        warnings = []
+        if not q["is_signed"]:
+            warnings.append("報價單尚未回簽，項目可能再變")
+        if unselected:
+            warnings.append("尚有 %d 組方案客戶還沒選定，該組品項沒有帶入" % len(unselected))
+        return {
+            "header": {
+                "customerName": q["customer_name"] or data.get("customerName") or "",
+                "projectName":  q["project_name"] or data.get("projectName") or "",
+                "siteAddress":  data.get("deliveryAddress") or "",
+                "recipient":    data.get("contactName") or "",
+                "contactPhone": data.get("contactPhone") or "",
+            },
+            "items": items,
+            "fingerprint": _CS.fingerprint(src),
+            "computedAt": datetime.now().isoformat(),
+            "sourceState": "alt_unselected" if unselected else ("signed" if q["is_signed"] else "unsigned"),
+            "unselectedGroups": unselected,
+            "warnings": warnings,
+            "options": {
+                "autoPrefill": _opt("auto_prefill") == 1,
+                "qtyMode": "remaining" if _opt("qty_mode") == 0 else "all",
+                "defaultStatus": ITEM_STATUSES[_opt("default_status")],
+                "brandPrefix": _opt("brand_prefix") == 1,
+                "overQty": "block" if _opt("over_qty") == 1 else "warn",
+            },
+        }
+    finally:
+        conn.close()
+
+
+
 @router.get("/api/completion-notes/{note_no}")
 def get_completion_note(note_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -280,6 +409,7 @@ def create_completion_note(body: CompletionNoteIn, authorization: str = Header(N
     now = datetime.now().isoformat()
     conn = get_db()
     try:
+        begin_write(conn)          # 累計超量檢查與寫入在同一個寫鎖交易內（兩個人同時存檔不會各自通過檢查）
         q = conn.execute(
             "SELECT customer_name, project_name FROM quotations WHERE quote_no=?", (body.quote_no,)
         ).fetchone()
@@ -287,6 +417,11 @@ def create_completion_note(body: CompletionNoteIn, authorization: str = Header(N
             raise HTTPException(404, "找不到關聯的報價單")
         customer_name = (body.customer_name or '').strip() or (q["customer_name"] or "")
         project_name  = (body.project_name or '').strip() or (q["project_name"] or "")
+        qsync = _resolve_quote_sync(conn, body.quote_no, user, body.quote_sync)
+        _enforce_over_qty(conn, body.quote_no, user, body.items)
+        dj0 = {"labels": body.labels or {}}
+        if qsync:
+            dj0["quoteSync"] = qsync
         note_no = next_entity_code(conn, "completion_notes", "CN", code_col="note_no")
         conn.execute(
             "INSERT INTO completion_notes "
@@ -301,7 +436,7 @@ def create_completion_note(body: CompletionNoteIn, authorization: str = Header(N
              json.dumps(body.items or [], ensure_ascii=False),
              body.work_summary or "", body.test_result or "",
              int(body.warranty_months or 0), body.pending_items or "", body.notes or "",
-             json.dumps({"labels": body.labels or {}}, ensure_ascii=False),
+             json.dumps(dj0, ensure_ascii=False),
              user["username"], now, now),
         )
         conn.commit()
@@ -321,8 +456,9 @@ def update_completion_note(note_no: str, body: CompletionNoteIn, authorization: 
     _validate(body)
     conn = get_db()
     try:
+        begin_write(conn)          # 同上：讀取、超量檢查、寫入同一個寫鎖交易
         row = conn.execute(
-            "SELECT status, data_json, updated_at FROM completion_notes WHERE note_no=?",
+            "SELECT status, quote_no, data_json, updated_at FROM completion_notes WHERE note_no=?",
             (note_no,)).fetchone()
         if not row:
             raise HTTPException(404, "完工單不存在")
@@ -340,6 +476,11 @@ def update_completion_note(note_no: str, body: CompletionNoteIn, authorization: 
         # 的單子仍留著歷史），整包覆蓋會把它清掉
         dj = json.loads(row["data_json"] or "{}") or {}
         dj["labels"] = body.labels or {}
+        # 授權與搬單一律以資料庫中的 quote_no 為準（內文的 quote_no 被忽略）；沒帶 quote_sync ⇒ 維持原 quoteSync 不動
+        qsync = _resolve_quote_sync(conn, row["quote_no"], user, body.quote_sync)
+        if qsync:
+            dj["quoteSync"] = qsync
+        _enforce_over_qty(conn, row["quote_no"], user, body.items, exclude_note=note_no)
         conn.execute(
             "UPDATE completion_notes SET customer_name=?, project_name=?, site_address=?, "
             " start_date=?, completion_date=?, site_manager=?, recipient=?, contact_phone=?, "
