@@ -11,6 +11,7 @@ from fastapi import APIRouter, File, HTTPException, Header, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from helpers import download_name
 from helpers import recycle_bin   # 第53班：刪除暫存區 L1 契約（IP-RB1／RB2）
 from db import get_db, is_demo_mode, DEMO_PAYSLIP_ARCHIVE_DIR
 from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
@@ -605,6 +606,36 @@ def record_archive_download(slip_no: str, orig_idx: int, authorization: str = He
     return {"export_count": new_count}
 
 
+
+def _dl_name(slip_no: str, user: dict, *, nth=None, inline: bool = False):
+    """勞報單下載檔名（A7）：案件欄位＋勞報單＋承攬人＋日期（無則單號）＋第 N 次。
+    案件＝這張勞報單連結的派發所屬案件；連到 0 個或多個不同案件 ⇒ 不放案件欄位。承攬人姓名只在這個端點已確認呼叫者是最高管理者
+    （`require_superadmin`）時才傳 `contractor_allowed`，且受設定「勞報單檔名顯示承攬人姓名」控制。任何失敗 ⇒ 只用單號。"""
+    quote_no, contractor, slip_date = "", "", ""
+    try:
+        conn = get_db()
+        try:
+            row = conn.execute("SELECT contractor_name, slip_date FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+            if row:
+                contractor, slip_date = row["contractor_name"] or "", (row["slip_date"] or "")[:10]
+            fn = registry.single_provider("dispatch.brief")
+            if fn is not None:
+                from modules.payroll import payslip_links as _pl
+                quotes = set()
+                for lk in _pl.links_for_payslip(conn, slip_no):
+                    b = fn(conn, lk["dispatchId"])
+                    if b and b.get("quoteNo"):
+                        quotes.add(b["quoteNo"])
+                if len(quotes) == 1:
+                    quote_no = quotes.pop()
+        finally:
+            conn.close()
+    except Exception:                                            # noqa: BLE001 — 命名失敗不可讓下載失敗
+        logger.warning("payslip download name lookup failed", exc_info=True)
+    return download_name.build("payslip", quote_no=quote_no or None, doc_no=slip_no, ext="pdf", user=user, inline=inline,
+                               extra={"contractor": contractor, "contractor_allowed": True, "date": slip_date, "nth": nth})
+
+
 @router.get("/api/payslips/{slip_no}/archive/{idx}")
 def get_archive_pdf(slip_no: str, idx: int, authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True, module='payslip')
@@ -634,11 +665,8 @@ def get_archive_pdf(slip_no: str, idx: int, authorization: str = Header(None)):
             tid = trace_id()
             logger.exception("payslip pdf (inline) failed trace=%s", tid)
             raise HTTPException(500, f"PDF 產生失敗（代碼 {tid}）")
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{slip_no}.pdf"'},
-    )
+    return Response(content=pdf_bytes, media_type="application/pdf",
+                    headers=_dl_name(slip_no, user, nth=idx, inline=True).headers())
 
 
 @router.get("/api/payslips/{slip_no}/pdf-download")
@@ -655,11 +683,7 @@ def pdf_download(slip_no: str, authorization: str = Header(None)):
         tid = trace_id()
         logger.exception("payslip pdf (download) failed trace=%s", tid)
         raise HTTPException(500, f"PDF 產生失敗（代碼 {tid}）")
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{slip_no}.pdf"'}
-    )
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=_dl_name(slip_no, user).headers())
 
 
 # ── 作廢（已匯出 → 已作廢）／簽回（→ 已簽回）／出納付款（→ 已付款）────────────────────

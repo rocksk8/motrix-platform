@@ -123,3 +123,59 @@ def test_no_endpoint_in_phase1_still_hand_writes_the_header():
         i = src.index("pdf-download")
         body = src[i:i + 2600]
         assert "download_name.build(" in body and "Content-Disposition" not in body, mod
+
+
+# ── 勞報單（承攬人姓名、日期、第 N 次）─────────────────────────────────────────
+
+def _seed_payslip():
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO payslips (slip_no, contractor_name, slip_date, data_json) VALUES (?,?,?,?)",
+                     ("PS-202610-001", "王小明", "2026-10-13", "{}"))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_payslip_download_keeps_contractor_name_and_date(client, boss, monkeypatch):
+    import pdf_gen
+    monkeypatch.setattr(pdf_gen, "generate_payslip_pdf_bytes", lambda *a, **k: b"%PDF-1.4 stub")
+    _seed_payslip()
+    r = client.get("/api/payslips/PS-202610-001/pdf-download", headers=boss)
+    assert r.status_code == 200, r.text[:200]
+    h, name = _cd(r)
+    assert name == "勞報單_王小明_20261013.pdf", name
+
+
+def test_payslip_archive_name_has_nth(client, boss, monkeypatch):
+    import pdf_gen
+    monkeypatch.setattr(pdf_gen, "generate_payslip_pdf_bytes", lambda *a, **k: b"%PDF-1.4 stub")
+    _seed_payslip()
+    r = client.get("/api/payslips/PS-202610-001/archive/3", headers=boss)
+    assert r.status_code == 200, r.text[:200]
+    h, name = _cd(r)
+    assert name == "勞報單_王小明_20261013_第3次.pdf", name
+    assert h.startswith("inline;")
+
+
+def test_payslip_name_hidden_when_setting_off(client, boss, monkeypatch):
+    import pdf_gen
+    from helpers import download_name as D
+    monkeypatch.setattr(pdf_gen, "generate_payslip_pdf_bytes", lambda *a, **k: b"%PDF-1.4 stub")
+    monkeypatch.setattr(D, "_settings", lambda: {**D.DEFAULTS, "payslip_show_name": 0})
+    _seed_payslip()
+    r = client.get("/api/payslips/PS-202610-001/pdf-download", headers=boss)
+    h, name = _cd(r)
+    assert "王小明" not in name and "王小明" not in unquote(h)
+
+
+def test_batch2_modules_do_not_hand_write_headers():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    for rel in ("modules/payroll/api/payslips.py", "modules/payroll/api/bonus.py", "modules/accounting/api/vouchers.py",
+                "modules/case/api/expense_form_pdf.py"):
+        src = (root / rel).read_text(encoding="utf-8")
+        bad = [l for l in src.splitlines() if re.search(r'"Content-Disposition"\s*:\s*[\'"f]', l) and "download_name" not in l]
+        # payslips.py 的簽回檔讀取（inline，不是下載檔名）與報表類端點不在 A7 範圍
+        bad = [l for l in bad if '"Content-Disposition": "inline"' not in l]
+        assert not bad, (rel, bad)

@@ -32,6 +32,7 @@ from fastapi.responses import HTMLResponse, Response
 from db import get_db
 from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers.auth import has_finance_access  # noqa: E402  第42班：財務只認「財務」角色與 superadmin
+from helpers import download_name
 from helpers import _require_user, _audit, _tok, _get_setting
 from modules.payroll.bonus import (
     base_amount_for, people_for_item, split_award, remainder_of,
@@ -1062,10 +1063,8 @@ def download_award_pdf(award_id: int, authorization: str = Header(None)):
     _award, pdf_bytes = export_award_pdf(award_id)   # 版面元件都在 L1：M06 不在也能匯出
     _audit(_tok(authorization), "bonus.award.pdf_download", "bonus_awards",
            str(award_id), "匯出獎金分潤單 PDF")
-    return Response(
-        content=pdf_bytes, media_type="application/pdf",
-        headers={"Content-Disposition":
-                "attachment; filename=bonus-award-%s.pdf" % award_id})
+    dn = download_name.build("bonus_award", quote_no=row["quote_no"], doc_no=str(award_id), ext="pdf", user=user)
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=dn.headers())
 
 
 def _username_of_sales_person(conn, sales_person_id, sales_person_name):

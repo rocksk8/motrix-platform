@@ -12,6 +12,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse, Response
 
 from db import get_db
+from helpers import download_name
 from helpers.auth import _require_user
 from modules.case.api import case_extra_expenses as X
 
@@ -100,6 +101,6 @@ def expense_document(quote_no: str, exp_id: int, format: str = Query("html"), au
         conn.close()
     if format == "pdf":
         import pdf_gen
-        return Response(pdf_gen.html_to_pdf_bytes(html), media_type="application/pdf",
-                        headers={"Content-Disposition": 'attachment; filename="%s.pdf"' % view["recordNo"]})
+        dn = download_name.build("expense_form", quote_no=qn, doc_no=view["recordNo"], ext="pdf", user=user)
+        return Response(pdf_gen.html_to_pdf_bytes(html), media_type="application/pdf", headers=dn.headers())
     return HTMLResponse(html)

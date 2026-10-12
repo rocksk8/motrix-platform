@@ -21,7 +21,7 @@ BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 #: 產生對外檔案的樣式
 OUTPUT_PAT = re.compile(r"html_to_pdf_bytes|run_edge_pdf|_render_pdf_via_edge|Workbook\(|csv\.writer|text/csv"
-                        r"|Content-Disposition|FileResponse\(|_send_with_attachments")
+                        r"|Content-Disposition|download_name\.build|_dl_name\(|FileResponse\(|_send_with_attachments")
 #: 第二道本身，以及「一進來就問第二道」的輸出 helper（helpers/company_identity.py、pdf_gen.py）
 GATE_CALLS = ("require_for_output", "identity_for_output", "_cs.require", "company_setup.require",
               "company_name", "company_heading", "contact_line", "name_pair", "footer_line",
@@ -39,6 +39,12 @@ GATED_BY_CALLER = {
 
 #: (c) 不含本公司資料：{(檔, 函式): 理由}
 NO_COMPANY_DATA = {
+    ("modules/payroll/api/payslips.py", "_dl_name"):
+        "A7 勞報單下載檔名：只查承攬人姓名、日期與案件編號來組檔名字串，不產生檔案內容；PDF 內容由 generate_payslip_pdf_bytes 經第二道",
+    ("helpers/download_name.py", "build"):
+        "A7 下載檔名：只組檔名字串與 Content-Disposition 標頭，不產生檔案內容；檔案內容由呼叫端的產生器負責並各自經第二道",
+    ("helpers/download_name.py", "headers"):
+        "A7 下載檔名：把已組好的 Content-Disposition 標頭包成 dict，不產生檔案內容、不含本公司資料",
     ("modules/arap/api/cashier.py", "get_pending_payable_file"):
         "出納唯讀開啟待付款申請的附件原檔（使用者上傳的發票／收據影像，系統不產生內容），不含本公司資料生成",
     ("modules/payroll/api/payslips.py", "get_signed_file"):
