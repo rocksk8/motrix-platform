@@ -32652,12 +32652,17 @@
     "dir:backend/modules/case/",
     "dir:backend/modules/case/api/",
     "dir:frontend/js/",
-    "dir:frontend/pages/",
     "js:js/case-management-fin.js",
     "mod:case/api/alt_plan",
-    "page:pages/case-management.html"
+    "page:pages/case-management.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
     "api": [
      "backend/modules/case/api/alt_plan.py"
     ],
@@ -32671,9 +32676,7 @@
      "backend/modules/case/api/",
      "backend/modules/case/api/alt_plan.py",
      "frontend/js/",
-     "frontend/js/case-management-fin.js",
-     "frontend/pages/",
-     "frontend/pages/case-management.html"
+     "frontend/js/case-management-fin.js"
     ]
    }
   },
@@ -32757,14 +32760,17 @@
   "backend/tests/test_quote_alt_t6_form_2026_10_13.py": {
    "kind": "audit",
    "units": [
-    "dir:frontend/pages/",
     "file:backend/tests/test_money_round_half_up_2026_09_26.py",
     "js:static/alt-items.js",
     "js:static/profit-rules.js",
-    "page:pages/quotation-form.html"
+    "page:pages/quotation-form.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/tests/test_money_round_half_up_2026_09_26.py"
     ],
     "page": [
@@ -32773,8 +32779,6 @@
      "frontend/static/profit-rules.js"
     ],
     "path": [
-     "frontend/pages/",
-     "frontend/pages/quotation-form.html",
      "frontend/static/alt-items.js",
      "frontend/static/profit-rules.js"
     ]
