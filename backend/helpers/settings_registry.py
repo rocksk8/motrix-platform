@@ -48,11 +48,18 @@ _EDITION = {}                                  # (group, field) -> (min, max)：
 
 def set_edition_bounds(group, field, *, min=None, max=None):
     """設定販售版本的欄位邊界（與欄位自己的上下限取交集）。給授權／版本載入器呼叫；沒有任何 API 讓客戶改它。"""
+    global _EDITION_EPOCH
     _EDITION[(group, field)] = (min, max)
+    _EDITION_EPOCH += 1
 
 
 def clear_edition_bounds():
+    global _EDITION_EPOCH
     _EDITION.clear()
+    _EDITION_EPOCH += 1
+
+
+_EDITION_EPOCH = 0                             # 版本邊界每變一次就加一；納入 group_stamp（邊界會夾住 get_group 的結果）
 
 
 def _bounds(group, f):
@@ -595,7 +602,7 @@ def field_views(group, values=None, *, days=None):
 
 def group_stamp(group, *, conn=None):
     """群組目前『有效值可能改變』的戳記（給規則等下游快取當鍵的一部分）：功能狀態、緊急逃生口、最新發布版本、
-    待生效項（全部 id）與其中已生效者（id）。任何會改變 `get_group()` 結果的事件都會讓字串改變；讀不到資料庫 ⇒ 回每次都不同的字串（不讓下游快取住未知狀態）。永不丟例外。"""
+    待生效項（全部 id）與其中已生效者（id）、版本邊界世代（set／clear_edition_bounds 會夾住有效值）。任何會改變 `get_group()` 結果的事件都會讓字串改變；讀不到資料庫 ⇒ 回每次都不同的字串（不讓下游快取住未知狀態）。永不丟例外。"""
     import time as _t
     try:
         _g(group)
@@ -616,8 +623,8 @@ def group_stamp(group, *, conn=None):
         finally:
             if own:
                 c.close()
-        return "%s|%s|v%s|p%s|e%s" % (group_status(group), "d" if os.environ.get("MOTRIX_SETTINGS_DEFAULTS_ONLY") == "1" else "-",
-                                       ver, ",".join(map(str, sorted(pend))), ",".join(map(str, sorted(eff_ids))))
+        return "%s|%s|v%s|p%s|e%s|ed%d" % (group_status(group), "d" if os.environ.get("MOTRIX_SETTINGS_DEFAULTS_ONLY") == "1" else "-",
+                                           ver, ",".join(map(str, sorted(pend))), ",".join(map(str, sorted(eff_ids))), _EDITION_EPOCH)
     except Exception:                                   # noqa: BLE001
         return "unknown:%d" % _t.monotonic_ns()
 
