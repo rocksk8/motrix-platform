@@ -327,3 +327,14 @@ def test_frozen_snapshot_survives_switch_off():
     q = {"items": [_it("a", 1, 1, 1)], "totalsByAlt": False}
     PG.stamp_alt_texts(q, old, freeze=False)
     assert "altTexts" not in q
+
+
+def test_audit_rows_carry_module_case_and_user_columns(client, admin_h):
+    no = _sent(client, admin_h)
+    assert _toggle(client, admin_h, no, "sign", picks={"投影機": "x1", "線材": "y1"}).status_code == 200
+    cn = db.get_db()
+    try:
+        r = cn.execute("SELECT user_id, module, ref_no, result FROM audit_log WHERE target_id=? AND action='quotation.sign_alt'", (no,)).fetchone()
+    finally:
+        cn.close()
+    assert r["user_id"] and r["module"] == "quotation" and r["ref_no"] == no and r["result"] == "ok"

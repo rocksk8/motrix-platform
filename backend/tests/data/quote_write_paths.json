@@ -14,12 +14,12 @@
   "modules/case/api/material_orders.py::set_material_order_invoice_date::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "只改 caseRecord.materialOrders 的發票日（叫料執行紀錄）"
   },
   "modules/case/api/material_orders.py::update_material_orders::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "只改 caseRecord.materialOrders（叫料清單，執行紀錄）"
   },
   "modules/case/api/quotations.py::_append_items_to_quotation::save": {
    "count": 1,
@@ -29,72 +29,72 @@
   "modules/case/api/quotations.py::_apply_case_change_request::save": {
    "count": 4,
    "class": "not-body",
-   "note": ""
+   "note": "已結案變更申請核准後套用：只改 caseRecord 款項／材料／檔案（執行紀錄）"
   },
   "modules/case/api/quotations.py::_calendar_writeback_quotation::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "行事曆回寫：只改行事曆相關欄位（不碰品項與金額）"
   },
   "modules/case/api/quotations.py::_sync_stages_to_json::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "只同步 caseRecord.stages（執行階段）"
   },
   "modules/case/api/quotations.py::approve_payment_writeoff::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "稅額沖銷核准：只改 caseRecord.payment 沖銷欄位"
   },
   "modules/case/api/quotations.py::approve_quotation::save": {
    "count": 2,
    "class": "not-body",
-   "note": ""
+   "note": "簽核鏈推進：只改 approval／status，不動品項與金額"
   },
   "modules/case/api/quotations.py::cancel_payment_writeoff::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "稅額沖銷取消：只改 caseRecord.payment"
   },
   "modules/case/api/quotations.py::case_batch_assign::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "批次指派：只改指派欄位（assigned_user_ids／業務）"
   },
   "modules/case/api/quotations.py::create_quotation::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "新建單據：沒有舊的回簽狀態可鎖（restore_alt_server_fields 丟棄用戶端的 altPicks）"
   },
   "modules/case/api/quotations.py::delete_material_file::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "只刪叫料檔案（執行紀錄附件）"
   },
   "modules/case/api/quotations.py::delete_material_invoice_file::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "只刪叫料發票檔（執行紀錄附件）"
   },
   "modules/case/api/quotations.py::delete_payment_item_invoice_file::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "只刪款項發票檔（執行紀錄附件）"
   },
   "modules/case/api/quotations.py::delete_quotation_signed_file::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "客戶回簽單附件（回簽的產物，P1 明確放行）"
   },
   "modules/case/api/quotations.py::lock_case::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "案件鎖定旗標（case_semi_unlocked）：只改旗標，不碰本文"
   },
   "modules/case/api/quotations.py::mark_payment::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "收款標記：只改 caseRecord.payment"
   },
   "modules/case/api/quotations.py::recall_quotation::sql": {
    "count": 1,
@@ -104,12 +104,12 @@
   "modules/case/api/quotations.py::record_export::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "匯出次數計數：只改 export_count 欄位"
   },
   "modules/case/api/quotations.py::reject_final_quotation::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "拒絕結案：P3b 預設終局保留，只改狀態與簽核紀錄，選定與金額原樣保留"
   },
   "modules/case/api/quotations.py::reject_quotation::sql": {
    "count": 1,
@@ -119,12 +119,12 @@
   "modules/case/api/quotations.py::request_payment_writeoff::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "稅額沖銷申請：只改 caseRecord.payment"
   },
   "modules/case/api/quotations.py::save::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "報價單頁內部自動存檔輔助（呼叫端為 update_quotation 的同一條守門路徑之後）"
   },
   "modules/case/api/quotations.py::toggle_quotation_signed::sql": {
    "count": 2,
@@ -134,22 +134,22 @@
   "modules/case/api/quotations.py::unlock_case::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "案件半解鎖旗標：只改旗標，不碰本文"
   },
   "modules/case/api/quotations.py::update_case_assigned_users::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "只改指派名單"
   },
   "modules/case/api/quotations.py::update_case_record::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "只改 caseRecord（執行紀錄），伺服器端不採用其他本文鍵"
   },
   "modules/case/api/quotations.py::update_deal_tag::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "只改 dealTag／statusLog；P2 由取消回簽的守門鏈讀取"
   },
   "modules/case/api/quotations.py::update_quotation::sql": {
    "count": 1,
@@ -164,62 +164,62 @@
   "modules/case/api/quotations.py::upload_material_files::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "叫料檔案上傳（執行紀錄附件）"
   },
   "modules/case/api/quotations.py::upload_material_invoice_files::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "叫料發票檔上傳（執行紀錄附件）"
   },
   "modules/case/api/quotations.py::upload_payment_item_invoice_files::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "款項發票檔上傳（執行紀錄附件）"
   },
   "modules/case/api/quotations.py::upload_quotation_signed_files::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "客戶回簽單附件上傳（回簽的產物，P1 明確放行）"
   },
   "modules/case/api/settlement_api.py::update_settlement::save": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "只改 settlement（精算，執行紀錄）；P8 重開精算的出口"
   },
   "modules/case/material_change.py::_apply::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "材料申請變更投影：只改 caseRecord.materials 相關欄位"
   },
   "modules/case/material_payment.py::sync_order_paid::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "叫料匯款回寫：只改 caseRecord.materialOrders 的付款欄位"
   },
   "modules/case/profit_guard.py::change_pct::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "精算頁調整管銷比率：只改 overheadPct 與利潤戳記（已精算／結案 409；非本文）"
   },
   "modules/case/quotations.py::_record_doc_version::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "PDF 版本紀錄 docVersions（流程鍵，不在 P1 比對範圍）"
   },
   "modules/case/quotations.py::save_quotation_json::sql": {
    "count": 2,
    "class": "not-body",
-   "note": ""
+   "note": "共用寫入函式本身（呼叫者逐一登記）"
   },
   "modules/case/recycle_adapter.py::delete_in_tx::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "刪除暫存區：整張單據移入／移出，不是就地修改本文"
   },
   "modules/case/recycle_adapter.py::restore_in_tx::sql": {
    "count": 1,
    "class": "not-body",
-   "note": ""
+   "note": "刪除暫存區還原：整張單據還原，不是就地修改本文"
   }
  }
 }

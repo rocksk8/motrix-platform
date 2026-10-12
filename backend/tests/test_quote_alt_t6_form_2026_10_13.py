@@ -121,3 +121,10 @@ def test_sign_dialog_requires_every_group_and_posts_picks():
     seg = FORM[FORM.index("async confirmAltSign()"): FORM.index("async uploadQuotationSignedFiles")]
     assert "action: 'sign'" in seg and "picks: this.signPick.picks" in seg
     assert "MotrixAltItems.active(this.q) && this.altGroupNames().length" in FORM        # 只有擇一方案單才走對話框
+
+
+def test_sign_dialog_needs_saved_form_and_uses_toast_not_alert():
+    seg = FORM[FORM.index("async toggleQuotationSigned(action)"): FORM.index("async confirmAltSign()")]
+    assert "if (this.isDirty)" in seg and "this.toast(" in seg
+    conf = FORM[FORM.index("async confirmAltSign()"): FORM.index("async uploadQuotationSignedFiles")]
+    assert "alert(" not in conf and "this.toast(" in conf

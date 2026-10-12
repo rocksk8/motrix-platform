@@ -67,10 +67,16 @@ def recompute_tot(data: dict) -> dict:
 
 def _audit_in_txn(conn, user: dict, action: str, quote_no: str, label: str, detail: dict, now: str):
     """稽核與狀態變更同一交易（H2）：中途失敗一起回滾。"""
+    from helpers.audit import _DETAIL_MAX, _derive_fields               # 與 `_audit()` 同一個推導：個案／模組檢視才查得到這些列
+    d = _derive_fields(action, "quotation", quote_no, label, detail)
+    payload = json.dumps(detail, ensure_ascii=False)
+    if len(payload) > _DETAIL_MAX:
+        payload = json.dumps({"_truncated": True, "originalLength": len(payload), "preview": payload[:_DETAIL_MAX - 200]}, ensure_ascii=False)
     conn.execute(
-        "INSERT INTO audit_log (at, username, display_name, action, target_type, target_id, target_label, detail) VALUES (?,?,?,?,?,?,?,?)",
-        (now, user.get("username", ""), user.get("display_name") or user.get("username", ""), action, "quotation", quote_no, label,
-         json.dumps(detail, ensure_ascii=False)))
+        "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
+        (now, user.get("id"), user.get("username", ""), user.get("display_name") or user.get("username", ""), action, "quotation", quote_no, label,
+         payload, d["module"], d["case_no"], d["ref_no"]))
 
 
 def _sql_cols(tot: dict):

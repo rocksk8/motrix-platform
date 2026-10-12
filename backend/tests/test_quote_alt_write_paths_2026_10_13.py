@@ -77,8 +77,8 @@ def test_guarded_writers_actually_call_their_guard():
         j = src.find("\ndef ", i + 10)
         assert needle in src[i:j if j > 0 else None], "%s 沒有呼叫 %s" % (fn, needle)
     for k, v in LIST.items():
-        if v["class"] == "guarded":
-            assert v["note"], k
+        assert v["note"].strip(), "%s 沒有說明（每一筆都要一句話寫明為什麼守門或為什麼不碰鎖定本文）" % k
+        assert v["class"] in ("guarded", "not-body"), k
 
 
 def test_scanner_positive_control():

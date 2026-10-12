@@ -3796,6 +3796,7 @@
       // ── 客戶回簽 ──────────────────────────────────────────────────────────
       async toggleQuotationSigned(action) {
         if (action === 'sign' && MotrixAltItems.active(this.q) && this.altGroupNames().length) {      // M3：擇一方案單回簽要逐組選定客戶採用的方案（預設不預選）
+          if (this.isDirty) { this.toast('請先儲存報價單，再標記客戶回簽（選項以已儲存的品項為準）'); return }
           this.signPick = { open: true, picks: {}, note: '', busy: false }
           return
         }
@@ -3826,10 +3827,10 @@
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
             body: JSON.stringify({ action: 'sign', note: this.signPick.note || '', picks: this.signPick.picks })
           })
-          if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
+          if (!r.ok) { this.toast((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
           this.signPick.open = false
           await this.loadQuote()
-        } catch (e) { alert('網路錯誤：' + e.message) } finally { this.signPick.busy = false }
+        } catch (e) { this.toast('網路錯誤：' + e.message) } finally { this.signPick.busy = false }
       },
 
       async uploadQuotationSignedFiles(evt) {

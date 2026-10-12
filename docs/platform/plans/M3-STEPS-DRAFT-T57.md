@@ -43,6 +43,8 @@
 - legacy 管銷口徑下一般存檔不由伺服器重算 `tot`；擇一單的回簽／取消回簽一律由伺服器重算。
 - 瀏覽器端實測未跑（作者視窗不跑 e2e）：閘門須含 `tests/test_e2e_quote_alt_form_2026_10_13.py`。
 
+- **稽核檢視的金額遮蔽**：`quotation.sign_alt`／`quotation.unsign_alt` 稽核列的 `detail.before／after／picked` 含報價金額；若日後稽核檢視開放給沒有金額權限的角色，須在檢視端遮蔽這些欄位（稽核列本身已寫 module／case_no／ref_no，個案與模組檢視查得到）。
+
 ## 5. 整合備註
 
 - 列車順序：完工單核心先上，M3 再上；`case` CHANGELOG 的 `(next)` 條目併到當時的最新標題；`version_manifest` 兩筆（2026-10-13e／f）改用下一個可用字母。
