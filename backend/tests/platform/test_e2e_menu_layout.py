@@ -177,7 +177,14 @@ def test_custom_module_appears_after_layout(live_server, make_user, new_page, lo
     page.goto(f"{live_server}/index.html")
     _state(page, "layout")
     v = _vocab(page)
-    assert "C4瀏覽器自訂" in v and "模組建構器" in v, v
+    assert "C4瀏覽器自訂" in v, v
+    # 第 54 班（系統中心）：『系統』群組在導覽列收成單一連結，「模組建構器」不再是獨立導覽項（設計如此，
+    # 見 tests/platform/test_system_hub.py::test_sidebar_collapses_the_system_group…）；它改從系統中心進入。
+    assert "系統" in v and "模組建構器" not in v, v
+    page.goto(f"{live_server}/pages/system-hub.html")
+    page.wait_for_selector("[data-testid=hub-groups] .grp", state="visible", timeout=25000)
+    page.click("[data-testid=hub-group-modules]")
+    page.wait_for_selector("[data-testid=hub-item-module-builder]", state="visible", timeout=10000)
     assert page.locator("script[data-custom-modules-nav]").count() == 0, "custom-modules-nav.js 已退場"
 
 
