@@ -56,6 +56,18 @@
    "scope": "own_rule"
   },
   {
+   "file": "modules/case/api/alt_plan.py",
+   "path": "/api/quotations/{quote_no}/plan-view",
+   "handler": "get_plan_view",
+   "scope": "row_access"
+  },
+  {
+   "file": "modules/case/api/alt_plan.py",
+   "path": "/api/quotations/{quote_no}/case-plan-view",
+   "handler": "get_case_plan_view",
+   "scope": "row_access"
+  },
+  {
    "file": "modules/case/api/case_action_items.py",
    "path": "/api/quotations/{quote_no}/action-items",
    "handler": "list_case_action_items",

@@ -25,7 +25,7 @@ def test_case_plan_comparison_is_read_only_backend_driven_and_marks_unadopted():
 def test_two_interfaces_use_two_different_permission_functions():
     i = ALT_PLAN.index('"/api/quotations/{quote_no}/plan-view"')
     j = ALT_PLAN.index('"/api/quotations/{quote_no}/case-plan-view"')
-    assert "quote_money_visible(u)" in ALT_PLAN[i:j] and "money_visible(u)" in ALT_PLAN[j:j + 600]
+    assert "quote_money_visible(u)" in ALT_PLAN[i:j] and "money_visible(u)" in ALT_PLAN[j:j + 1400]
     assert "quote_money_visible(u)" not in ALT_PLAN[j:ALT_PLAN.index("/api/alt-quote/config")]
 
 

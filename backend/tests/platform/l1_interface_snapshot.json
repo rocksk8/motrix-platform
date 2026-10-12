@@ -1,5 +1,5 @@
 {
- "core_version": "1.129",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1172,7 +1172,9 @@
    "_get_setting": "def(key, default=…)",
    "_set_setting": "def(key, value)"
   },
-  "helper:settings_groups": {},
+  "helper:settings_groups": {
+   "UNAVAILABLE_ALT_CHOICES": "const"
+  },
   "helper:settings_registry": {
    "DEFAULT_CONFIRM_DAYS": "const",
    "DEFAULT_EFFECT": "const",
