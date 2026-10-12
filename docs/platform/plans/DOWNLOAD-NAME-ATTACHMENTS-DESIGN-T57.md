@@ -78,8 +78,7 @@
 
 **問題**：只有路徑，沒有脈絡；HEIC 下載名是亂數。
 **設計**：
-1. 在 `uploads.path_access` 提供者新增**選填方法** `describe(conn, folder, rest, user) -> dict|None`，回 `{filename, quote_no, doc_type, doc_no}`；**契約**：①`user` 可以是 **`None`**（簽章路徑），**每個提供者都必須處理**；②**絕不決定可讀性**（只回中繼資料）；③**只在** `canonical_upload_path`／`upload_owner` 正規化**之後**、且 `upload_readable` 已通過（或簽章已驗）**之後**呼叫；④提供者沒有此方法 ⇒ 維持現況；⑤**例外安全**：`describe()` 丟例外、或回傳含 `
-`／U+202E 的名稱 ⇒ 結果仍經 `_clean`＋`content_disposition()`，標頭安全（測試：兩種情形都得到安全的標頭，下載照舊）。
+1. 在 `uploads.path_access` 提供者新增**選填方法** `describe(conn, folder, rest, user) -> dict|None`，回 `{filename, quote_no, doc_type, doc_no}`；**契約**：①`user` 可以是 **`None`**（簽章路徑），**每個提供者都必須處理**；②**絕不決定可讀性**（只回中繼資料）；③**只在** `canonical_upload_path`／`upload_owner` 正規化**之後**、且 `upload_readable` 已通過（或簽章已驗）**之後**呼叫；④提供者沒有此方法 ⇒ 維持現況；⑤**例外安全**：`describe()` 丟例外、或回傳含 `\r\n`／U+202E 的名稱 ⇒ 結果仍經 `_clean`＋`content_disposition()`，標頭安全（測試：兩種情形都得到安全的標頭，下載照舊）。
 2. `serve_upload` 的 HEIC 分支：授權通過 → `describe()` → `download_name.build_attachment()` → `FileResponse(..., filename=dn.name, content_disposition_type="attachment")`＋`nosniff`；`describe()` 失敗或回 None ⇒ 退回 `basename`（現況）。
 3. 非 HEIC 的 `<img src>` 直連維持**不帶檔名**（inline 影像不下載，加前綴沒有意義）。
 4. **簽章（`?pt=`）路徑**：簽章只綁路徑，簽發時已查過權限；`describe()` 以**簽發者看得到**為前提——但簽章持有者可能不是簽發者本人（連結外流），因此**簽章路徑不放案件名**（`user=None` 降級，只放文件類型與原檔名）。**帶 `Authorization` 的路徑才放案件名**。
