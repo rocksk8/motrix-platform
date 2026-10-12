@@ -3,7 +3,7 @@
 
 [單位] helper:settings_registry    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, IMPACT_SCOPE_GRANDFATHERED, KIND, RISK_ORDER, SCOPE, SettingDef, SettingError, apply_profile, banner_of, clamp_value, clear_edition_bounds, confirm_period_days,
-    get, get_group, groups, invalidate, materialize_due, profile_preview, profiles, publish, register_group, set_edition_bounds, validate_values
+    field_views, get, get_group, groups, invalidate, live_impact, materialize_due, plan, profile_preview, profiles, publish, register_group, set_edition_bounds, show_value, validate_values
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
     ④寫入口只有 `publish()`：同一交易寫定義新版本＋變更明細（config_ledger）＋稽核＋（有舊鍵時）雙寫舊鍵；⑤讀取走 15 秒行程內快取，
@@ -455,6 +455,149 @@ def banner_of(f, value, *, default=None, days=None):
             "fallback": False}
 
 
+def field_views(group, values=None, *, days=None):
+    """設定中心畫面用的欄位清單：欄位定義（含版本邊界後的有效範圍）＋目前值、白話值、是否預設、預設的白話值、目前值的橫幅、
+    選項型欄位每個選項的橫幅（`choiceBanners`，鍵為代碼字串）。句子與等級一律由這裡（`banner_of`）產生。"""
+    g = _g(group)
+    vals = values if values is not None else get_group(group)
+    n = days if days is not None else confirm_period_days()
+    out = []
+    for k, f in g["fields"].items():
+        lo, hi = _bounds(group, f)
+        cur = vals[k]
+        m = dict(f.meta(), min=lo, max=hi)
+        m.update(value=cur, valueText=show_value(f, cur), isDefault=(cur == f.default), defaultText=show_value(f, f.default),
+                 recommendedText=(show_value(f, f.recommended) if f.recommended is not None else None),
+                 banner=banner_of(f, cur, days=n),
+                 choiceBanners=({str(c[0]): banner_of(f, c[0], days=n) for c in f.choices} if f.choices else None))
+        out.append(m)
+    return out
+
+
+def _split(g, eff, values):
+    """把本次送出的欄位分成 (待生效 pend, 立即 imm, 放寬 loose)。`publish()` 與 `plan()`（預覽）共用同一個分類，不得各寫一份。"""
+    def _loosens(f, new_v):
+        old_v = eff[f.key]
+        if not (f.loosen and isinstance(new_v, (int, float)) and not isinstance(new_v, bool)):
+            return False
+        a, b = _rank(f, new_v), _rank(f, old_v)
+        return (f.loosen == "up" and a > b) or (f.loosen == "down" and a < b)
+    pend = {k: v for k, v in values.items() if g["fields"][k].requires_pending or _loosens(g["fields"][k], v)}
+    imm = {k: v for k, v in values.items() if k not in pend}
+    loose = {k for k, v in pend.items() if _loosens(g["fields"][k], v)}
+    return pend, imm, loose
+
+
+def show_value(f, v):
+    """給人看的值（白話）：選項型＝中文標籤；開關＝開／關；其他＝值＋單位。內部代碼不外露。"""
+    for c in f.choices:
+        if c[0] == v:
+            return c[1]
+    if isinstance(v, bool):
+        return "開" if v else "關"
+    return "%s%s" % (v, (" " + f.unit) if f.unit else "")
+
+
+def plan(group, values, *, user="", conn=None):
+    """預覽（dry-run）：**不寫入、不 commit**。回逐欄分類與驗證結果，分類與 `publish()` 完全一致（共用 `_split`）。
+    `kind`：`immediate`（立即生效）｜`pending`（確認期間後生效）｜`pending_approval`（確認期間後且需另一位最高管理者核准）｜`unchanged`。"""
+    from datetime import datetime, timedelta
+    g = _g(group)
+    problems = validate_values(group, values, partial=True)
+    out = {"ok": not problems, "problems": problems, "fields": [], "warnings": [], "otherSuperadmins": 0, "confirmDays": DEFAULT_CONFIRM_DAYS}
+    if problems:
+        return out
+    own = conn is None
+    c = conn if conn is not None else get_db()
+    try:
+        base = _effective(c, group, overlay=False)
+        eff = _effective(c, group)
+        days = confirm_period_days(c)
+        others = c.execute("SELECT COUNT(*) FROM users WHERE active=1 AND role='superadmin' AND username<>?", (user or "",)).fetchone()[0]
+    finally:
+        if own:
+            c.close()
+    pend, imm, loose = _split(g, eff, values)
+    merged = _merged(_merged(base, imm), pend)
+    cross = validate_values(group, merged)                       # 與 publish 相同：整組＋跨欄位檢查
+    if cross:
+        out.update(ok=False, problems=cross)
+        return out
+    when = (datetime.now() + timedelta(days=days)).isoformat(timespec="seconds")
+    out.update(otherSuperadmins=others, confirmDays=days)
+    for k, v in values.items():
+        f = g["fields"][k]
+        if k in pend:
+            old = eff[k]
+            kind = "unchanged" if v == old else ("pending_approval" if (k in loose and others > 0) else "pending")
+        else:
+            old = base[k]
+            kind = "unchanged" if v == old else "immediate"
+        approvals = 1 if kind == "pending_approval" else 0
+        if kind == "immediate":
+            when_text = "立即"
+        elif kind == "pending":
+            when_text = "%d 天確認期間後（%s 起）" % (days, when[:10])
+        elif kind == "pending_approval":
+            when_text = "另一位最高管理者核准、且 %d 天確認期間後（%s 起）" % (days, when[:10])
+        else:
+            when_text = "不變"
+        effect = (f.effect.replace("{名稱}", f.label).replace("{舊}", show_value(f, old)).replace("{新}", show_value(f, v))
+                  .replace("{生效時間}", when_text))
+        out["fields"].append({"field": k, "label": f.label, "question": f.question, "unit": f.unit, "old": old, "new": v,
+                              "oldText": show_value(f, old), "newText": show_value(f, v), "kind": kind,
+                              "effectiveAt": when if kind in ("pending", "pending_approval") else None,
+                              "approvalsRequired": approvals, "effect": effect, "banner": banner_of(f, v, days=days)})
+    if loose and others == 0 and any(x["kind"] == "pending" and x["field"] in loose for x in out["fields"]):
+        out["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬改為「填寫原因、等 %d 天確認期間後生效」，並已留下紀錄。" % days)
+    return out
+
+
+_IMPACT_CACHE = {}          # (db, group, field, 值) -> (monotonic, 結果)
+_IMPACT_TTL = 60.0
+_IMPACT_TIMEOUT = 1.5
+
+
+def live_impact(group, field, value, *, timeout=None):
+    """即時影響（唯讀）：呼叫欄位的 `impact_fn(conn, 新值)`。唯讀連線（`PRAGMA query_only`）、逾時 1.5 秒、結果快取 60 秒；
+    沒有 `impact_fn`、值不合法、逾時或丟例外 ⇒ `live=None`，只回靜態 `impact`（永不丟例外）。回 `{"live": {numbers, sentence}|None, "static": impact}`。"""
+    import json as _json
+    g = _g(group)
+    f = g["fields"].get(field)
+    if f is None:
+        raise KeyError("群組 %r 沒有欄位 %r" % (group, field))
+    res = {"live": None, "static": f.impact}
+    if f.impact_fn is None or f.check(value):
+        return res
+    ck = (_db_id(), group, field, _json.dumps(value, sort_keys=True, default=str))
+    hit = _IMPACT_CACHE.get(ck)
+    if hit and time.monotonic() - hit[0] < _IMPACT_TTL:
+        return {"live": hit[1], "static": f.impact}
+    box = {}
+
+    def _run():
+        c = None
+        try:
+            c = get_db()
+            c.execute("PRAGMA query_only = ON")                    # 唯讀：impact_fn 想寫就會失敗
+            box["v"] = f.impact_fn(c, value)
+        except Exception:                                           # noqa: BLE001
+            logger.warning("settings: %s.%s 的即時影響計算失敗，改顯示靜態說明", group, field, exc_info=True)
+        finally:
+            if c is not None:
+                c.close()
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout if timeout is not None else _IMPACT_TIMEOUT)
+    v = box.get("v")
+    if isinstance(v, dict) and v.get("sentence"):
+        live = {"numbers": v.get("numbers"), "sentence": str(v["sentence"])}
+        with _lock:
+            _IMPACT_CACHE[ck] = (time.monotonic(), live)
+        res["live"] = live
+    return res
+
+
 def publish(group, values, *, note="", user="", reason="", ip="", conn=None, actor=None):
     """唯一寫入口。`values`＝要改的欄位（部分即可）。
     一般欄位：合併目前儲存值後整組發布成新版本，同交易寫 `config_changes`＋稽核（`settings.<group>.update`）＋舊鍵雙寫。
@@ -476,15 +619,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
         began = begin_write(c)
         base = _effective(c, group, overlay=False)
         eff = _effective(c, group)
-        def _loosens(f, new_v):
-            old_v = eff[f.key]
-            if not (f.loosen and isinstance(new_v, (int, float)) and not isinstance(new_v, bool)):
-                return False
-            a, b = _rank(f, new_v), _rank(f, old_v)
-            return (f.loosen == "up" and a > b) or (f.loosen == "down" and a < b)
-        pend = {k: v for k, v in values.items() if g["fields"][k].requires_pending or _loosens(g["fields"][k], v)}
-        imm = {k: v for k, v in values.items() if k not in pend}
-        loose = {k for k, v in pend.items() if _loosens(g["fields"][k], v)}
+        pend, imm, loose = _split(g, eff, values)
         new = _merged(base, imm)
         problems = validate_values(group, _merged(new, pend))
         if problems:

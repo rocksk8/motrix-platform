@@ -136,3 +136,154 @@ def test_new_groups_with_high_risk_fields_declare_impact_scope():
 
 def test_grandfather_list_is_frozen():
     assert R.IMPACT_SCOPE_GRANDFATHERED == frozenset({"change_control", "retention", "uploads", "system_hub", "completion_note", "quote_alt", "material_order"})
+
+# ===================================================================================================
+# S1-4：plan()／preview、impact、reset、欄位畫面資料（API 層）
+# ===================================================================================================
+import time as _time
+
+from db import get_db as _get_db
+
+
+def _hdr(client, make_user, name, role="superadmin"):
+    username, password = make_user(username=name, role=role)
+    tok = client.post("/api/auth/login", json={"username": username, "password": password}).json()["token"]
+    return {"Authorization": "Bearer " + tok}
+
+
+def _counts(c):
+    return (c.execute("SELECT COUNT(*) FROM config_changes").fetchone()[0],
+            c.execute("SELECT COUNT(*) FROM ui_definitions WHERE kind=?", (R.KIND,)).fetchone()[0])
+
+
+def test_preview_classifies_without_writing_and_matches_the_real_save(client, make_user):
+    h = _hdr(client, make_user, "s14_a")
+    make_user(username="s14_b", role="superadmin")                        # 有第二位最高管理者 ⇒ 放寬需核准
+    c = _get_db()
+    try:
+        before = _counts(c)
+        vals = {"local_db_keep_days": 40, "audit_log_keep_days": 400, "cloud_daily_keep_days": 60}   # 延長／縮短（放寬）／同值
+        p = client.post("/api/settings-center/groups/retention/preview", json={"values": vals}, headers=h)
+        assert p.status_code == 200 and p.json()["ok"] is True
+        kinds = {x["field"]: x["kind"] for x in p.json()["fields"]}
+        assert kinds == {"local_db_keep_days": "immediate", "audit_log_keep_days": "pending_approval", "cloud_daily_keep_days": "unchanged"}
+        assert _counts(c) == before                                        # 預覽什麼都沒寫
+        assert p.json()["confirmDays"] == 7 and p.json()["otherSuperadmins"] >= 1
+        row = {x["field"]: x for x in p.json()["fields"]}["audit_log_keep_days"]
+        assert row["approvalsRequired"] == 1 and row["effectiveAt"] and "核准" in row["effect"] and "7 天" in row["effect"]
+        assert row["banner"] and row["banner"]["level"] == "red" and row["banner"]["fallback"] is True      # legal 欄位、尚未宣告 impact_scope ⇒ 降級橫幅
+        # 真的儲存：分類逐欄相同（共用同一個分類函式）
+        s = client.post("/api/settings-center/groups/retention", json={"values": vals, "reason": "測試"}, headers=h)
+        assert s.status_code == 200
+        assert {x["field"]: x["kind"] for x in s.json()["classification"]} == kinds
+        assert len(s.json()["pending"]) == 1 and s.json()["pending"][0]["approvalsRequired"] == 1
+    finally:
+        c.close()
+
+
+def test_preview_with_a_single_superadmin_warns_and_does_not_require_approval(client, make_user):
+    c = _get_db()
+    try:
+        c.execute("UPDATE users SET active=0 WHERE role='superadmin'")
+        c.commit()
+    finally:
+        c.close()
+    h = _hdr(client, make_user, "s14_only")
+    p = client.post("/api/settings-center/groups/retention/preview", json={"values": {"audit_log_keep_days": 400}}, headers=h).json()
+    assert p["fields"][0]["kind"] == "pending" and p["fields"][0]["approvalsRequired"] == 0 and p["warnings"]
+
+
+def test_preview_reports_validation_problems_and_unknown_fields(client, make_user):
+    h = _hdr(client, make_user, "s14_c")
+    r = client.post("/api/settings-center/groups/retention/preview", json={"values": {"audit_log_keep_days": 100}}, headers=h)
+    assert r.status_code == 200 and r.json()["ok"] is False and r.json()["problems"] and r.json()["fields"] == []
+    r = client.post("/api/settings-center/groups/retention/preview", json={"values": {"nope": 1}}, headers=h)
+    assert r.json()["ok"] is False
+    assert client.post("/api/settings-center/groups/retention/preview", json={"values": {}}, headers=h).status_code == 400
+    assert client.post("/api/settings-center/groups/zz_nope/preview", json={"values": {"a": 1}}, headers=h).status_code == 404
+
+
+def test_new_endpoints_are_superadmin_only(client, make_user):
+    h = _hdr(client, make_user, "s14_admin", role="admin")
+    assert client.post("/api/settings-center/groups/retention/preview", json={"values": {"local_db_keep_days": 40}}, headers=h).status_code == 403
+    assert client.post("/api/settings-center/groups/retention/impact", json={"field": "local_db_keep_days", "value": 40}, headers=h).status_code == 403
+    assert client.post("/api/settings-center/groups/retention/reset", json={"fields": ["local_db_keep_days"], "reason": "x"}, headers=h).status_code == 403
+
+
+def test_group_detail_carries_field_views_with_banners_and_plain_values(client, make_user):
+    h = _hdr(client, make_user, "s14_d")
+    d = client.get("/api/settings-center/groups/system_hub", headers=h).json()
+    f = {x["key"]: x for x in d["fields"]}["show_denied"]
+    assert f["isDefault"] is True and f["valueText"] == "隱藏（建議）" and f["defaultText"] == "隱藏（建議）" and f["banner"] is None
+    assert set(f["choiceBanners"]) == {"0", "1"} and f["choiceBanners"]["0"] is None
+    assert f["choiceBanners"]["1"]["level"] == "red" and len(f["choiceBanners"]["1"]["lines"]) >= 2
+    r = {x["key"]: x for x in client.get("/api/settings-center/groups/retention", headers=h).json()["fields"]}["audit_log_keep_days"]
+    assert r["valueText"] == "1825 天" and r["impactScope"] is None and r["choiceBanners"] is None
+
+
+def test_reset_returns_fields_to_defaults_through_the_same_controls(client, make_user):
+    h = _hdr(client, make_user, "s14_e")
+    make_user(username="s14_f", role="superadmin")
+    assert client.post("/api/settings-center/groups/retention", json={"values": {"local_db_keep_days": 40, "audit_log_keep_days": 3000}, "reason": "測試"}, headers=h).status_code == 200
+    r = client.post("/api/settings-center/groups/retention/reset", json={"fields": ["local_db_keep_days", "audit_log_keep_days"], "reason": "還原預設"}, headers=h)
+    assert r.status_code == 200
+    kinds = {x["field"]: x["kind"] for x in r.json()["classification"]}
+    assert kinds == {"local_db_keep_days": "pending_approval", "audit_log_keep_days": "pending_approval"}   # 兩者回預設都是縮短＝放寬：需另一位最高管理者核准，不立即生效
+    assert client.post("/api/settings-center/groups/retention/reset", json={"fields": ["local_db_keep_days"], "reason": ""}, headers=h).status_code == 400
+    assert client.post("/api/settings-center/groups/retention/reset", json={"fields": ["nope"], "reason": "x"}, headers=h).status_code == 400
+    assert client.post("/api/settings-center/groups/retention/reset", json={"fields": [], "reason": "x"}, headers=h).status_code == 400
+
+
+# --- 即時影響 ----------------------------------------------------------------------------------------
+
+@pytest.fixture()
+def impact_group(client):
+    calls = {"n": 0, "mode": "ok"}
+
+    def fn(conn, new):
+        calls["n"] += 1
+        if calls["mode"] == "boom":
+            raise RuntimeError("down")
+        if calls["mode"] == "slow":
+            _time.sleep(1.0)
+        if calls["mode"] == "write":
+            conn.execute("INSERT INTO notifications (username, type, message, created_at) VALUES ('x','info','寫入測試','2026-01-01T00:00:00')")
+        return {"numbers": {"n": int(new)}, "sentence": "目前有 %d 筆資料會受影響" % int(new)}
+    R.register_group("zz_s14_impact", "影響測試群組", [
+        R.SettingDef("cap", "int", 1, min=0, max=50, question="上限要設多少？", label="上限", help="測試用的上限。", impact="影響測試用的畫面。", impact_fn=fn)],
+        help="測試用的影響群組。")
+    R.invalidate()
+    R._IMPACT_CACHE.clear()
+    yield calls
+    R._GROUPS.pop("zz_s14_impact", None)
+    R._IMPACT_CACHE.clear()
+    R.invalidate()
+
+
+def test_live_impact_is_cached_read_only_and_fails_soft(client, make_user, impact_group, monkeypatch):
+    h = _hdr(client, make_user, "s14_g")
+    url = "/api/settings-center/groups/zz_s14_impact/impact"
+    r = client.post(url, json={"field": "cap", "value": 7}, headers=h).json()
+    assert r["live"]["sentence"] == "目前有 7 筆資料會受影響" and r["static"] == "影響測試用的畫面。"
+    client.post(url, json={"field": "cap", "value": 7}, headers=h)
+    assert impact_group["n"] == 1                                              # 60 秒快取：同值只算一次
+    impact_group["mode"] = "boom"
+    r = client.post(url, json={"field": "cap", "value": 8}, headers=h).json()
+    assert r["live"] is None and r["static"]                                   # 失敗只回靜態
+    impact_group["mode"] = "write"
+    r = client.post(url, json={"field": "cap", "value": 9}, headers=h).json()
+    assert r["live"] is None                                                   # 唯讀連線：想寫就失敗
+    c = _get_db()
+    try:
+        assert c.execute("SELECT COUNT(*) FROM notifications WHERE message='寫入測試'").fetchone()[0] == 0
+    finally:
+        c.close()
+    impact_group["mode"] = "slow"
+    monkeypatch.setattr(R, "_IMPACT_TIMEOUT", 0.2)
+    t0 = _time.monotonic()
+    r = client.post(url, json={"field": "cap", "value": 10}, headers=h).json()
+    assert r["live"] is None and _time.monotonic() - t0 < 0.9                  # 逾時不等
+    assert client.post(url, json={"field": "cap", "value": 999}, headers=h).json()["live"] is None      # 值不合法 ⇒ 不呼叫
+    assert client.post(url, json={"field": "nope", "value": 1}, headers=h).status_code == 404
+    r = client.post("/api/settings-center/groups/retention/impact", json={"field": "local_db_keep_days", "value": 40}, headers=h).json()
+    assert r["live"] is None and r["static"]                                   # 沒有 impact_fn ⇒ 只有靜態

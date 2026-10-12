@@ -3,7 +3,10 @@
 
 - GET  /api/settings-center/groups                 全部群組＋目前值＋最後變更（superadmin）
 - GET  /api/settings-center/groups/{group}         單一群組欄位定義＋目前值＋變更明細（superadmin）
-- POST /api/settings-center/groups/{group}         儲存（部分欄位即可；`reason` 必填；superadmin）
+- POST /api/settings-center/groups/{group}         儲存（部分欄位即可；`reason` 必填；superadmin）；回應附 `classification`（逐欄 立即／待生效／需核准）
+- POST /api/settings-center/groups/{group}/preview 預覽（dry-run，不寫入）：逐欄分類、效果句、橫幅、驗證問題（S1-4）
+- POST /api/settings-center/groups/{group}/impact  即時影響（唯讀、1.5 秒逾時、快取 60 秒；失敗只回靜態說明）（S1-4）
+- POST /api/settings-center/groups/{group}/reset   把指定欄位改回程式預設（走同一條 publish 管制，放寬者仍待生效／核准；`reason` 必填）（S1-4）
 - GET  /api/settings-center/pending                待生效清單（風險欄位經「變更確認期間」才生效，含已核准／需要票數；superadmin）
 - POST /api/settings-center/pending/{id}/cancel    撤銷一筆待生效（寫稽核；superadmin）
 - POST /api/settings-center/pending/{id}/approve   雙人核准的一票（放寬安全／風險設定需要另一位最高管理者核准；superadmin）
@@ -53,8 +56,9 @@ def get_group(group: str, authorization: str = Header(None)):
     finally:
         conn.close()
     meta = sr.groups()[group]
-    return {"group": group, "label": meta["label"], "help": meta["help"], "sensitive": meta["sensitive"], "fields": meta["fields"],
-            "values": sr.get_group(group), "history": hist}
+    values = sr.get_group(group)
+    return {"group": group, "label": meta["label"], "help": meta["help"], "sensitive": meta["sensitive"],
+            "fields": sr.field_views(group, values), "values": values, "history": hist}
 
 
 @router.post("/api/settings-center/groups/{group}")
@@ -67,7 +71,13 @@ def save_group(group: str, request: Request, body: dict = Body(...), authorizati
         raise HTTPException(400, "沒有送出任何要變更的欄位")
     if not reason:
         raise HTTPException(400, "請填寫變更原因")
+    return _do_publish(group, values, reason, request, actor)
+
+
+def _do_publish(group, values, reason, request, actor):
+    """儲存／重置共用：先算分類（與 publish 共用 `_split`，寫入前的狀態才準）、再 publish。"""
     try:
+        cls = sr.plan(group, values, user=actor["username"])["fields"]
         out = sr.publish(group, values, note=reason, user=actor["username"], reason=reason,
                          ip=(request.client.host if request.client else ""), actor=actor)
     except sr.SettingError as e:
@@ -79,7 +89,41 @@ def save_group(group: str, request: Request, body: dict = Body(...), authorizati
         if isinstance(e, DefinitionError):
             raise HTTPException(400, str(e))
         raise
-    return {"ok": True, **out}
+    return {"ok": True, **out, "classification": cls}
+
+
+@router.post("/api/settings-center/groups/{group}/preview")
+def preview_group(group: str, body: dict = Body(...), authorization: str = Header(None)):
+    actor = _require_user(authorization, require_superadmin=True)
+    _need(group)
+    values = body.get("values")
+    if not isinstance(values, dict) or not values:
+        raise HTTPException(400, "沒有送出任何要變更的欄位")
+    return sr.plan(group, values, user=actor["username"])
+
+
+@router.post("/api/settings-center/groups/{group}/impact")
+def impact_group(group: str, body: dict = Body(...), authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    _need(group)
+    field = body.get("field")
+    if field not in {f["key"] for f in sr.groups()[group]["fields"]}:
+        raise HTTPException(404, "沒有這個設定欄位")
+    return sr.live_impact(group, field, body.get("value"))
+
+
+@router.post("/api/settings-center/groups/{group}/reset")
+def reset_group(group: str, request: Request, body: dict = Body(...), authorization: str = Header(None)):
+    actor = _require_user(authorization, require_superadmin=True)
+    _need(group)
+    reason = str(body.get("reason") or "").strip()
+    fields = body.get("fields")
+    known = {f["key"]: f["default"] for f in sr.groups()[group]["fields"]}
+    if not isinstance(fields, list) or not fields or any(k not in known for k in fields):
+        raise HTTPException(400, "請指定要還原預設的欄位")
+    if not reason:
+        raise HTTPException(400, "請填寫變更原因")
+    return _do_publish(group, {k: known[k] for k in dict.fromkeys(fields)}, reason, request, actor)
 
 
 @router.get("/api/settings-center/public")

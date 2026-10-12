@@ -91,6 +91,12 @@ EXEMPT = {
         "稽核在同一個交易內由 helpers/config_ledger.audit_event 寫入（第54班：先 begin_write、撤銷與稽核同交易、寫不進去整筆回滾；動作 settings.<group>.pending_cancel），端點本身不再另呼叫 _audit",
     ("settings_center.py", "POST", "/api/settings-center/pending/{change_id}/approve"):
         "稽核在同一個交易內由 helpers/config_ledger.audit_event 寫入（第54班：先 begin_write、核准票與稽核同交易、寫不進去整筆回滾；動作 settings.<group>.approve），端點本身不再另呼叫 _audit",
+    ("settings_center.py", "POST", "/api/settings-center/groups/{group}/preview"):
+        "S1-4：預覽（dry-run）——只呼叫 settings_registry.plan，不寫任何資料表（測試斷言前後 config_changes／定義列數不變），沒有東西可稽核",
+    ("settings_center.py", "POST", "/api/settings-center/groups/{group}/impact"):
+        "S1-4：即時影響——唯讀連線（PRAGMA query_only）執行欄位的 impact_fn 並回傳數字，不寫任何資料表（測試斷言 impact_fn 想寫入會失敗）",
+    ("settings_center.py", "POST", "/api/settings-center/groups/{group}/reset"):
+        "S1-4：還原預設——走 settings_registry.publish（與儲存同一條管制），稽核在同一個交易內由 helpers/config_ledger.record 寫入（動作 settings.<group>.update／.pending），端點本身不再另呼叫 _audit；失敗整筆回滾",
     ("system.py", "PATCH", "/api/settings/backup-retention"):
         "稽核在同一個交易內由 settings_registry.publish 寫入（動作 settings.retention.update／.pending），端點本身不再另呼叫 _audit，避免同一次變更兩列（test_legacy_retention_endpoint_writes_exactly_one_audit_row）",
     ("system.py", "POST", "/api/audit-log/module-counts"):

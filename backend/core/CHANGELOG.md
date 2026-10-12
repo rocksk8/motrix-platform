@@ -3,6 +3,8 @@
 ## (next:minor) — 2026-10-13（wip/t57-s1-settings-edit-r1；S1 設定中心可編輯）
 - L1（新增，向下相容）：`helpers.settings_registry` —— `SettingDef(…, impact_scope=None)`（結構化影響範圍：`documents／roles／amounts／reversible／effective`；`effective` 必須與 `requires_pending`／`loosen` 旗標一致，否則登錄失敗）、`banner_of(f, value, *, default=None, days=None)`（畫面橫幅文字與等級的唯一產生處：風險 legal／security 或不可復原 ⇒ 紅，money ⇒ 琥珀；只在非預設且往放寬方向時出現；沒有 `impact_scope` 的舊欄位降級為影響說明＋風險提示）、常數 `RISK_ORDER`、`IMPACT_SCOPE_GRANDFATHERED`（E-e 之前登錄的群組暫免宣告，名單固定；新群組的 money／legal／security 欄位缺 `impact_scope` 由 `tests/platform/test_settings_editor_s1.py` 守門）。`SettingDef.meta()` 多回 `impactScope`。
 - L1（行為，向下相容）：`SettingDef.check()` 新增 **choices 值域規則（E-f）**：欄位有 `choices` 時，值必須是其中一個代碼——寫入（`validate_values`／`publish`）被拒、讀取到庫內未知代碼視為不合法而回程式預設（記 warning）。原本 `choices` 只用於顯示，`str`＋`choices` 會接受任何字串。既有群組的預設值與預設組都在選項內（測試守住）。選項欄位的登錄規約：整數代碼（開關 0/1、多選一 1..n）。
+- L1（新增，向下相容）：`helpers.settings_registry` 新增 `plan(group, values, *, user="", conn=None)`（預覽／dry-run：不寫入，逐欄分類 `immediate／pending／pending_approval／unchanged`、效果句、橫幅、驗證問題；與 `publish()` 共用同一個分類函式 `_split`）、`live_impact(group, field, value)`（唯讀連線、1.5 秒逾時、60 秒快取、失敗只回靜態說明）、`field_views(group, values=None)`（設定中心畫面用的欄位清單：有效範圍、目前值與白話值、是否預設、橫幅、選項橫幅）、`show_value(f, v)`（白話值，不外露代碼）。`publish()` 行為不變（分類邏輯抽出為 `_split`）。
+- 新端點（superadmin）：`POST /api/settings-center/groups/{group}/preview`、`…/impact`、`…/reset`（把指定欄位改回程式預設，走同一條 publish 管制）；`GET /groups/{group}` 的 `fields` 改為 `field_views`（多回 value／valueText／isDefault／banner／choiceBanners，原有欄位不變）；`POST /groups/{group}` 回應多 `classification`。route golden 同提交。
 
 ## 1.129 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-13（wip/t57-s1-1-managed-r3；S1-1 設定群組受管）**
