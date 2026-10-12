@@ -222,3 +222,23 @@ def test_defaults_match_registered_group():
     assert set(fields) == set(D.DEFAULTS)
     for k, v in D.DEFAULTS.items():
         assert fields[k]["default"] == v, k
+
+
+@pytest.mark.parametrize("mode", [0, 1])
+@pytest.mark.parametrize("who", ["admin", "none"])
+def test_modes_0_and_1_never_put_case_or_customer_name_in_any_header(monkeypatch, mode, who):
+    """設定 0（兩者都省略）與 1（保留編號省略名稱）：沒有案件可見度的呼叫者，名稱絕不出現在檔名、ASCII 退路或 filename*。"""
+    user = USER if who == "admin" else None
+    r = _build(user=user, label=(False, "新竹廠區網路建置", "某某科技"), cfg={"no_access": mode, "case_name_source": 1}, monkeypatch=monkeypatch)
+    blob = r.name + r.header + unquote(r.header)
+    assert "新竹" not in blob and "某某" not in blob
+
+
+def test_label_cross_check_rejects_bad_labels_with_plain_message():
+    from helpers import settings_groups as G
+    assert G._download_name_check({"label_completion": "完工單"}) == []
+    assert G._download_name_check({"label_completion": ""}) == ["文件類型用語要 1～10 個字"]
+    assert G._download_name_check({"label_completion": "一二三四五六七八九十甲"}) == ["文件類型用語要 1～10 個字"]
+    assert G._download_name_check({"label_completion": "完工\n單"}) == ["文件類型用語不可含換行或控制字元"]
+    for msg in G._download_name_check({"label_completion": ""}):
+        assert "label_" not in msg and "download_name" not in msg

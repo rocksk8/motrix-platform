@@ -1,5 +1,12 @@
 # L0／L1 底層 更新紀錄
 
+## (next:minor) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）
+- L1（新增，只增）：`helpers.download_name`（`build`、`content_disposition`、`DownloadName`、`DOC_TYPES`、`TOKENS`、`DEFAULTS`）——下載檔名的單一來源：案件編號＋案件名＋文件類型＋單號；淨化（非法字元、Cf、保留名稱、位元組上限）、RFC 8187、latin-1 安全 ASCII 退路；沒有使用者（排程、郵件）或讀不到案件 ⇒ 不放案件名；任何例外 ⇒ 今天的檔名。
+- L1（新增，只增）：`helpers.case_access.case_download_label(conn, quote_no, user)`——給下載檔名用的案件標籤與可見度（與 `case_page_readable` 同一規則）。
+- 設定群組 `download_name`（`helpers/settings_groups.py`，21 個平鋪鍵；預設＝使用者決定，部署基準 `settings_deploy_baseline.json` 同步）。**部署零行為變更於資料層**：不寫任何定義列；檔名行為依預設（案件編號＋案件名＋文件類型＋單號）改變，是使用者 10-12 的裁示。
+- 前端 `static/download.js`（`MotrixDownload.nameFrom／save／saveBlob`）；第一期案件文件頁面改讀回應的 `Content-Disposition`。
+- 無 migration、無新路由、無權限變更；檔名永不含金額。
+
 ## 1.129 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2）**
 - L0（新增，只增）：`core.definitions.publish_direct(conn, kind, key, scope, body, note, user, commit=True)`——不經草稿直接發布一份 body（寫鎖內驗證、有送審中版本時 409）；`commit=False` 讓呼叫端同交易寫變更明細與稽核。

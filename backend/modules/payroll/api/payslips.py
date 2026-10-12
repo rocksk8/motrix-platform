@@ -609,8 +609,8 @@ def record_archive_download(slip_no: str, orig_idx: int, authorization: str = He
 
 def _dl_name(slip_no: str, user: dict, *, nth=None, inline: bool = False):
     """勞報單下載檔名（A7）：案件欄位＋勞報單＋承攬人＋日期（無則單號）＋第 N 次。
-    案件＝這張勞報單連結的派發所屬案件；連到 0 個或多個不同案件 ⇒ 不放案件欄位。承攬人姓名只在這個端點已確認呼叫者是最高管理者
-    （`require_superadmin`）時才傳 `contractor_allowed`，且受設定「勞報單檔名顯示承攬人姓名」控制。任何失敗 ⇒ 只用單號。"""
+    案件＝這張勞報單連結的派發所屬案件；連到 0 個或多個不同案件 ⇒ 不放案件欄位。承攬人姓名只在這個端點已確認呼叫者有勞報單權限
+    （`_require_user(..., require_superadmin=True, module="payslip")`：最高管理者或持有勞報單模組者）時才傳 `contractor_allowed`，且受設定「勞報單檔名顯示承攬人姓名」控制。任何失敗 ⇒ 只用單號。"""
     quote_no, contractor, slip_date = "", "", ""
     try:
         conn = get_db()

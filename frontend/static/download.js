@@ -34,8 +34,13 @@
   }
 
   function nameFrom(response, fallback) {
-    var h = response && response.headers && response.headers.get ? response.headers.get('Content-Disposition') : ''
-    return cleanName(parseDisposition(h)) || cleanName(fallback) || 'download'
+    // 永不丟例外：標頭解析失敗就用 fallback（下載不能因為取名而失敗）
+    try {
+      var h = response && response.headers && response.headers.get ? response.headers.get('Content-Disposition') : ''
+      var n = cleanName(parseDisposition(h))
+      if (n) return n
+    } catch (e) { /* fall through */ }
+    return cleanName(fallback) || 'download'
   }
 
   function saveBlob(blob, name) {

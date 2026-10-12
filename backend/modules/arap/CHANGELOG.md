@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## (next) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）
+- 請款單、開票申請 PDF 下載檔名改走 `helpers.download_name`；`payment-request-form.html` 下載讀伺服器檔名。無 migration、無新路由、無權限變更。
+
 ## 1.0.52 — 2026-10-10（wip/t53b-int；ab 稽核修正 r5）
 - delete() 之後的步驟或 commit 失敗時，已搬進隔離區的附件搬回原處（發票憑據／請款單刪除）。
 

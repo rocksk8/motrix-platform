@@ -95,6 +95,19 @@ register_group(
 )
 
 
+def _download_name_check(values):
+    """文件類型用語：每項 1～10 個字、不含控制字元或換行（設定中心用白話訊息擋下，而不是悄悄忽略）。"""
+    problems = []
+    for k, v in values.items():
+        if k.startswith("label_") and isinstance(v, str):
+            s = v.strip()
+            if not 1 <= len(s) <= 10:
+                problems.append("文件類型用語要 1～10 個字")
+            elif any(ord(c) < 32 or ord(c) == 127 for c in v):
+                problems.append("文件類型用語不可含換行或控制字元")
+    return sorted(set(problems))
+
+
 # 下載檔名（A7 第一期；設計 DOWNLOAD-FILENAME-CASE-T56.md r6）：預設＝使用者 10-12 的決定。檔名永不含金額（標籤白名單鎖在 helpers/download_name.py）。
 # 放寬（顯示客戶名稱、對沒有案件權限的人顯示案件名、勞報單由不顯示改顯示）要另一位最高管理者核准並等確認期間；收緊立即生效。
 register_group(
@@ -129,8 +142,8 @@ register_group(
                    (2, "顯示案件名", "沒有案件權限的人也會看到案件名稱。")]),
         S("payslip_show_name", "int", 1, min=0, max=1, risk="security", loosen="up", recommended=1,
           question="勞報單的檔名要不要寫出承攬人的姓名？", label="勞報單檔名顯示承攬人姓名",
-          help="與改版前相同，預設會寫。勞報單只有最高管理者可以下載。",
-          impact="影響範圍：勞報單 PDF 的檔名（只有最高管理者拿得到）。寫出姓名時，個人資料會出現在檔名裡，並跟著下載資料夾、雲端同步與郵件附件擴散。改成「不寫」是收緊，立即生效；改回「寫」須另一位最高管理者核准。",
+          help="與改版前相同，預設會寫。只有「有勞報單權限的人」（最高管理者，或被授權使用勞報單的人）才下載得到勞報單。",
+          impact="影響範圍：勞報單 PDF 的檔名（只有有勞報單權限的人拿得到）。寫出姓名時，個人資料會出現在檔名裡，並跟著下載資料夾、雲端同步與郵件附件擴散。改成「不寫」是收緊，立即生效；改回「寫」須另一位最高管理者核准。",
           risk_text="承攬人的姓名（個人資料）會寫進檔名，隨檔案存到下載資料夾、雲端硬碟與郵件附件。",
           choices=[(0, "不寫姓名", "檔名只有案件、文件類型與日期或單號。"), (1, "寫出姓名（與改版前相同）", "檔名裡會有承攬人姓名，與改版前相同。")]),
         S("case_name_max_chars", "int", 20, min=5, max=60, unit="字", risk="none", recommended=20, advanced=True,
@@ -183,6 +196,6 @@ register_group(
           question="下載檔名裡「傳票」要寫成什麼字？", label="文件類型用語：傳票", help="1～10 個字，只改檔名上的顯示用語，不影響單據本身。",
           impact="影響範圍：之後下載的傳票檔名。已經下載的檔案不會被改名；改回預設隨時可以。"),
     ],
-    sensitive=False, risk="security",
+    sensitive=False, risk="security", cross_check=_download_name_check,
     help="下載文件時的檔案名稱怎麼組成、沒有案件權限的人看到什麼。檔名永遠不含金額。",
 )

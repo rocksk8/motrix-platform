@@ -251,7 +251,8 @@ def case_page_readable(conn, quote_no: str, user: dict) -> bool:
 def case_download_label(conn, quote_no: str, user: dict) -> dict:
     """給下載檔名用（`helpers/download_name.py`）：`{"readable": 讀得到案件頁?, "project": 專案名稱, "customer": 客戶名稱}`。
     `readable` 與 `case_page_readable` 同一規則（`user` 為 None ⇒ False）；案件不存在、M01 不在 ⇒ 全空。
-    名稱是否放進檔名由呼叫端依 `readable` 與設定決定——本函式不外傳給任何端點。"""
+    名稱是否放進檔名由呼叫端依 `readable` 與設定決定。⚠️ **名稱無條件回傳，呼叫者是唯一的閘門**：只有 `helpers/download_name.py` 可以呼叫，且必須先看 `readable`（或設定明確放寬）；
+    任何端點不得把本函式的結果原樣回給使用者。"""
     empty = {"readable": False, "project": "", "customer": ""}
     if not quote_no or not case_module_present():
         return empty

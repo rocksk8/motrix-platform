@@ -25,3 +25,21 @@ C1 helper＋單元測試 → C2 設定群組＋基準＋守門 → C3 前端 `do
 
 ## 風險／UNKNOWN（實作前核對）
 叫料單下載端點（#14）、傳票與案件的關聯（#13）、`case_extra_expenses.kind` 種類（#6）——逐一核對，查不到則該端點維持現狀並記錄。
+
+## 實作狀態與刻意保留舊標頭的下載點（0d S4；r1 實作後）
+
+**已改（第一期）**：完工單、出貨單、請款單、開票申請、承攬商傳票、費用單據、獎金分配單、勞報單（含預覽存檔「第 N 次」）、會計傳票——後端 `download_name.build()`；前端 `case-management-dispatch/fin/shipping.js`、`voucher.js`、`payment-request-form.html`、`payslip-form.html`、`payslips.html` 讀伺服器檔名（`MotrixDownload.nameFrom`）。完工單目前只有預覽（無 `a.download`），其匯出走既有流程，不在本期。
+
+**刻意保留舊標頭／舊檔名（非第一期，列清單供第二期逐點勾選）**
+- 報價單四個文件端點（`quotations.py` 5525／5635／5673／5706）與前端 `quotation-form.html`（3206／3256／3310）、`case-management-close.js:230`、`case-management-core.js:401`：**等 5e 的 M3 合併後**（熱檔 `quotations.py`／`pdf_gen.py`）。
+- 多案件／期間型：案件匯出（`quotations.py:6520`、`case-management-list.js:350`）、傳票匯出 T100（`accounting_export.py`、`cashier.js:897`）、財務報表／營業稅（`ledger_closing.py`、`ledger_tax.py`、`ledger-*.js`）、營運報表與銷項發票清單（`analytics/api/reports.py`、`reports.js`）、出納執行紀錄（`arap/api/cashier.py`、`cashier.js:562`）。
+- 無案件或案件不固定：外包名冊（`contractors.py`、`contractors.html`）、住宿紀錄、每日任務歷程、自訂模組紀錄 PDF（`custom_records.py`、`custom-records.html`）、網路規劃表／書與拓樸圖（`netplan/api.py`、`network-plan-form.html`、`topology-quick.html`）、甘特圖（`case-management-exec.js`）、`module-builder-output.js`。
+- 附件類（使用者上傳的原檔，名稱＝原檔名）：`routers/uploads.py`、`routers/attachments.py`、`accounting/api/vouchers.py` 附件、`arap/api/cashier.py` 附件、`file-preview.js`、`approval-queue.html`、`payment-request.html` 的檔案下載。
+- 其他：`helpers/xlsx_out.py::_pdf_filename`（跟隨來源檔名）、`helpers/email_notify.py` 附件（呼叫端傳入檔名；已只送 `filename*`）、傳票 PDF 帶附件版（`with_attachments`）仍同一端點。
+- 未核對 UNKNOWN（維持現狀）：叫料單下載端點、傳票與案件的關聯（目前傳票檔名不含案件）、`case_extra_expenses.kind` 種類。
+
+## 環境與合併備註（0d S5／S6）
+- **Node.js 相依**：`tests/test_download_js_2026_10_13.py` 的兩題用 `node` 跑 `static/download.js`；沒有 node 的機器會略過（⚠️ skip 不是驗過）。整合者的閘門機器有 node（`tests/test_cascade_self_tiers_records_signer_2026_09_25.py` 同一假設）。
+- **底層列車（完整車道）**：`helpers/download_name.py`、`helpers/case_access.py`、`helpers/settings_groups.py`、`tests/platform/settings_deploy_baseline.json`、`core/CHANGELOG.md`（`(next:minor)` 佔位）、`tests/platform/l1_interface_snapshot.json`（`core_version: next`）、`docs/platform/modules.json`（`helper:download_name`、`js:static/download.js`）、`dep_graph.json`／`UNIT-INDEX.md`／`test_map.json`（重產）。版號與 `version_manifest.json` 的 `"version": "next"` 由列車 `train_number.py` 取號。
+- **合併順序**：`settings_groups.py` 與基準 JSON 與 `quote_alt`／`completion_note`／`project_margin` 群組文字衝突（尾端追加）；基準 JSON 以文字插入（`download_name` 插在 `retention` 之前），整合者依列車順序重排；**先 `git add` 新測試檔**（`test_download_name_*`、`test_download_js_*`）再重產 `test_map`；產生檔（`dep_graph`、`UNIT-INDEX`、`test_map`、`l1_interface_snapshot`）由整合者在合併後重產，不手解衝突。
+- 掃描器：`test_company_setup_output_points_2026_09_28.py` 的 `OUTPUT_PAT` 加入 `download_name.build`／`_dl_name(`，`NO_COMPANY_DATA` 登記 `download_name.build`、`download_name.headers`、`payslips._dl_name`（只組檔名，不產生內容）。
