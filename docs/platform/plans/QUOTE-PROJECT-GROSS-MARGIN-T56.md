@@ -1,6 +1,6 @@
 # 報價單「專案毛利%」設計（脊柱登錄項；僅文件，未跑任何測試）
 
-> 日期：2026-10-12　作者：hichan-98　狀態：r1 草稿，待非作者稽核
+> 日期：2026-10-13　作者：hichan-98　狀態：r4（回應 0d 稽核 NOT-PASS：M1 可見度判定式、M2 遮蔽機制；S1～S4）；待非作者複審
 > 依據樹：`f5ffce7d0`（M2 r3 基準；唯讀盤點，行號僅供起點）；脊柱：`FIELD-LAYOUT-FRAMEWORK-T56.md` r6（`wip/t56-field-layout-framework-r6`）。
 > 需求（使用者，經 1c 轉）：報價單多一個「專案毛利%」＝（未稅營業收入 − 未稅報價服務產品成本）÷ 未稅營業收入；成本**不扣**攤分保留款、公益金、5% 稅等，是乾淨的專案毛利，與既有「直接毛利／營業利益」並存。
 
@@ -8,10 +8,10 @@
 
 1. **定義**：`專案毛利% ＝ (tot.pretax − tot.totalCost) ÷ tot.pretax × 100`，四捨五入到 1 位小數（與 `directMarginPct` 同進位：`round_half_up(x, 10) / 10`）。分子分母都取**報價單已存的合計**，不另立第二套算法。
 2. **與既有「直接毛利率」的差異恰為進項稅**：現行 `directProfit = pretax − totalCost − inputVat`（`inputVat = round_half_up(totalCost, 5%)`，`profit_rules.quote_profit`／`profit-rules.js quote`）。專案毛利**不扣 `inputVat`**，因此同一張單的專案毛利% 會比直接毛利率高約「成本的 5% ÷ 未稅收入」。這是使用者要的差異（「不扣 5% 稅」），不是兩套口徑打架；畫面標籤並列即可。
-3. **不新增儲存欄、不需遷移**：由 `tot.pretax` 與 `tot.totalCost`（新舊單皆已存）**讀取時計算**；單一函式（後端 `helpers/profit_rules.py`，前端 `static/profit-rules.js` 為孿生，共用黃金向量）。舊單、已精算單自動有值，不需 recalc。
+3. **不新增儲存欄、不需遷移**：不寫入 `tot`、不加 SQL 欄。**報價單詳情**由已存**品項**讀取時重算（權威來源：`server_totals(q)["pretax"]` 與 Σ數量×成本，M3 後經 `counted_items`）；**清單**用既有 SQL 欄 `pretax` 與 `tot.totalCost`（與 `direct_margin_pct` 同信任等級，見 §3）。單一函式（後端 `helpers/profit_rules.py`，前端 `static/profit-rules.js` 為孿生，共用黃金向量）。舊單、已精算單自動有值，不需 recalc。
 4. **框架化（脊柱登錄，不是硬接）**：欄位目錄一筆（`isMoney` 真、金額類別 `internal`）、顯示／隱藏／位置／寬度走版面設定、標籤可改、可選警示門檻為設定項（預設關）、清單欄為可選欄（預設隱藏）。程式只負責「計算」與「登錄」，其餘皆管理者在系統內調整。
-5. **安全不變式不動**：客戶版 PDF／預覽／回簽頁／客戶版 Excel **永不出現**（`internal` 規則）；無金額權限者看不到（沿用 `tot` 在 `QUOTE_MONEY_KEYS` 的遮蔽，清單別名加入 `QUOTATION_MONEY_COLS`）。
-6. **工量**：約 **2.75 pd**（含脊柱登錄與測試）；若脊柱 A6 登錄與目錄種子尚未落地，先做計算＋表單區塊（≈1.25 pd）、登錄隨 A6 種子補（≈ +1.5 pd）。口徑已由使用者原話確定（r2），**無阻擋性使用者問題**（§9 僅一項非阻擋、可延後）。
+5. **安全不變式不動，且可見度與 `directMarginPct` 逐面相同**：專案毛利只出現在「該回應本來就保有 `tot` 金額」的表面（§1.1 逐面對照表）；客戶版 PDF／預覽／回簽頁／客戶版 Excel／案件匯出 **永不出現**。遮蔽機制是**鍵剝除**（`QUOTE_MONEY_KEYS`、`mask_row` 只把 `QUOTATION_MONEY_COLS` 設為 None），所以新增的回應鍵必須**同時**登記在遮蔽清單（縱深）並「遮蔽後、僅在判定式為真時才附加」（§3）。
+6. **工量**：約 **3.25 pd**（含逐面對照、遮蔽清單、重算與測試；r1 為 2.75，r4 加 0.5）；若脊柱 A6 登錄與目錄種子尚未落地，先做計算＋表單區塊＋端點（≈1.75 pd）、登錄隨 A6 種子補（≈ +1.5 pd）。口徑已由使用者原話確定，**無阻擋性使用者問題**（§9 僅一項非阻擋、可延後）。
 
 ## 1. 現況盤點（重用同一套成本基數）
 
@@ -24,11 +24,39 @@
 | 管銷／公益 | `admin_cost`＝max(直接毛利,0)×pct；`charity`＝直接毛利×1%（或含稅額×1%）；`total_indirect`、`netProfit`、`netMarginPct` | 專案毛利**完全不含**（使用者明確要求） |
 | 合計存放 | 前端算好送 `tot`；v2 模式後端 `prepare()` 重算並覆寫（`server_totals`＋`server_profit`）；legacy 只做影子比對；已精算／結案沿用資料庫現值（`SETTLED_PROFIT_KEYS`） | `tot.pretax`／`tot.totalCost` 於三種路徑皆已存在，直接讀 |
 | SQL 欄 | `quotations.total／pretax／direct_margin_pct／net_margin_pct`（`db.py:508`、`quotations.py:1912` 寫入）；`QUOTATION_MONEY_COLS` 為遮蔽清單 | 本案**不加 SQL 欄**；清單用 `json_extract(data_json,'$.tot.totalCost')` 與既有 `pretax` 欄計算（清單 SQL 本已對 `data_json` 做 `json_extract`，見 `quotations.py` :826） |
-| 遮蔽 | `financial_mask.QUOTE_MONEY_KEYS` 含 `tot`；`ITEM_MONEY_KEYS`＝cost／margin／unitPrice／amount | `tot` 整包被遮 ⇒ 讀取時計算的專案毛利只會出現在「本來就看得到 `tot`」的輸出 |
-| 兩種金額權限 | `quote_money_visible`（superadmin／admin／sales／finance）＝報價單頁內部成本；`money_visible`（superadmin／finance／cashier）＝案件頁（M3 T4 已明文：兩者不得互換） | 專案毛利沿用與 `directMarginPct` **相同的判定函式**，各介面不另創 |
+| 遮蔽機制 | `financial_mask`：**鍵剝除**——`mask_quotation_data` 對 `QUOTE_MONEY_KEYS`（含整個 `tot`）與品項的 `ITEM_MONEY_KEYS` 做 `pop`；`mask_row` 只把 `QUOTATION_MONEY_COLS`（`total／pretax／direct_margin_pct／net_margin_pct`）**中確實存在的鍵**設為 None。**不在清單上的新鍵不會被遮蔽，對所有人都會出現** | 新鍵必須登記進遮蔽清單，且「遮蔽後、判定式為真才附加」；否則所有角色都看得到 |
+| 兩種金額權限 | `quote_money_visible`＝role 為 superadmin／admin／sales，或財務職責人（`finance_duty_person`）；`money_visible`＝`can_see_financial`（superadmin／財務角色）**或持有 cashier 模組**。**清單與詳情的報價層級金額（含 `tot`、品項單價／成本）用 `quote_money_visible`；`money_visible` 只決定精算／款項期別／叫料金額是否再遮** | 逐面判定見 §1.1，**不得互換** |
 | 畫面 | `quotation-form.html` :1846–1907：直接毛利、直接毛利率（`MotrixMargin.tone`）、管銷、公益、間接合計、營業利益／率 | 新增一行在直接毛利附近（預設位置見 §4） |
 | 報價異動紀錄 | `_TRACKED_QUOTE_FIELDS`（`quotations.py` :109）已含 `tot.directMarginPct`；`financial_mask.HISTORY_MONEY_FIELDS` 為其遮蔽 | 專案毛利是**衍生值**，不追蹤、不入歷史（避免與成本／單價異動重複）；見 §8 |
 | 內部 PDF | `pdf_gen.py` 約 :2680–2702 是**精算**損益摘要（原始預估 vs 實際），非報價單 PDF | 專案毛利不在報價單 PDF；精算頁見 §7 |
+
+### 1.1 可見度判定對照（逐面；r4，回應 0d M1）
+
+規則：**專案毛利的可見度＝該表面 `directMarginPct`（或 `direct_margin_pct`）今天的可見度**，逐面相同。表中「今天」欄為 f5ffce7d0／c87079be2 樹的現況（行號供起點）。
+
+| # | 表面／端點 | 判定式 | `directMarginPct` 今天 | 專案毛利% |
+|---|---|---|---|---|
+| 1 | 報價單**清單** `GET /api/quotations`（`quotations.py` :821–956） | `quote_money_visible`（`masked = not quote_money_visible(user)`，:894；:956 `mask_row`） | superadmin／admin／sales／財務職責人：看得到 `direct_margin_pct`；其餘 None（`moneyMasked`） | 相同：同一判定式下才附 `project_margin_pct`；否則**鍵不存在**（不是 None） |
+| 2 | 案件清單（:1255–1262） | `quote_money_visible`，但只遮 `("total",)` | 該清單**不回** `direct_margin_pct` | **不回**（v1 無此欄；日後加欄時沿用 #1 判定式） |
+| 3 | 報價單**詳情** `GET /api/quotations/{no}`（:1284–1296） | 先 `money_visible`：**為真 ⇒ 完全不遮**（superadmin／財務角色／cashier 模組持有者）；否則 `quote_money_visible` 為真 ⇒ `keep_quote`（保留 `tot`、品項單價／成本，只遮精算／款項／叫料）；兩者皆否 ⇒ 剝除 `tot` 與品項金額、頂層 `mask_row` | 第一類與第二類：`tot.directMarginPct` 在 `data` 內；第三類（如 engineer／viewer／無財務的一般角色）：`tot` 被剝除，沒有 | 相同：**遮蔽完成後**，僅當回應 `data` 仍含 `tot`（＝前兩類）才附 `project_margin_pct`（信封層，與 `data` 同級，**不放進 `data`**）；第三類不附 |
+| 4 | 報價單**存檔** `PUT`（:1693） | `quote_money_visible` 否 ⇒ 403 | 不適用 | 回應若含 `project_margin_pct` 同 #3；**請求中的 `project_margin_pct`／`projectMargin` 一律忽略**（伺服器不採用用戶端值） |
+| 5 | 含成本／毛利的內部 PDF（:467 `_require_money_or_approver`） | `quote_money_visible` 或本單簽核人 | 內部 PDF（精算摘要等）可能印毛利 | **v1 不輸出**（§5）；以「不匯出」測試鎖定 |
+| 6 | 案件匯出 Excel（:6487） | `show_money = quote_money_visible` | 只輸出「金額」欄＝報價總額 | **不輸出**；固定欄位清單測試鎖定 |
+| 7 | 財務總覽／報表（:6668–6676 等） | `has_finance_access` ＋ `can_see_financial` | 報表讀 SQL `net_margin_pct` | **v1 不輸出**（報表欄位另案，屬第 2 層登錄） |
+| 8 | M3 `plan_view`（T4） | 報價單頁內部成本面板＝`quote_money_visible`；案件頁方案比較＝`money_visible`（M3 已明文，不得互換） | 方案列的毛利率 | 每個方案列另回 `totalCost` 與 `projectMarginPct`（同一函式）；無權限者回應**不含**這兩鍵（後端剔除，不是前端隱藏） |
+| 9 | 修改紀錄（`editHistory`） | `HISTORY_MONEY_FIELDS` | 追蹤 `tot.directMarginPct`（顯示名「直接毛利率」） | **不追蹤**（衍生值，避免與成本／單價異動重複） |
+
+**測試用角色與預期**（每面各一組斷言）：`admin`、`sales`、`finance`（財務職責人）、`cashier`（持 cashier 模組的一般角色）、`engineer`。
+
+| 角色 | #1 清單 | #3 詳情 | #8 plan_view（報價單頁／案件頁） |
+|---|---|---|---|
+| admin | 有 | 有（`keep_quote`；精算款項被遮） | 有／無（案件頁用 `money_visible`，admin 不在內） |
+| sales | 有 | 有（同 admin） | 有／無 |
+| finance | 有 | 有（完全不遮） | 有／有 |
+| cashier | **無**（鍵不存在；`quote_money_visible` 為否） | **有**（`money_visible` 為真 ⇒ 完全不遮；與今天 `tot.directMarginPct` 可見度一致） | 無／有 |
+| engineer | 無 | 無（`tot` 被剝除 ⇒ 不附） | 無／無 |
+
+> 註：上表 cashier 在詳情看得到、在清單看不到，是**今天 `directMarginPct` 的實際行為**（兩處判定式不同），本案不「修正」它；若審查認為該不一致本身是缺口，應另案處理，專案毛利與其逐面一致。
 
 ## 2. 定義（精確）
 
@@ -44,22 +72,28 @@
 - **折讓**：已反映在 `pretax`（收入減少，成本不變 ⇒ 毛利下降）。符合「未稅營業收入」。
 - **運費**：計入收入；成本只計品項成本——運費若有實際成本，使用者應以品項登錄（既有行為，新口徑已不收五項間接成本，使用者 2026-10-09：費用一律走請款申請）。
 - **`unitPriceOverride` 品項**：只影響單價（是否由成本＋毛利反推）；`amount` 仍是 qty × unitPrice、成本仍是 qty × cost，專案毛利照常（單價被手動壓低 ⇒ 單項毛利下降，會如實反映）。
-- **成本未填**：`cost` 空／0 的非標題品項視為成本 0；專案毛利會偏高。顯示層加一行小字「有 N 項尚未填成本」（`N` 由同一函式的輔助回傳計算；N＝0 不顯示）。這是提醒，不是阻擋。
-- **擇一方案（M3）**：`tot` 已只計 `counted_items`（非擇一項＋各組所選），`pretax`、`totalCost` 自動隨之；**專案毛利不另寫分流**。有未選組別時沿用 M3 T5 規則：主合計列中性色並加「尚有 N 組擇一未選，為不含擇一項的暫估」。`plan_view`（T4）在每個方案列另回 `projectMarginPct`（用同一函式，輸入為該方案的 `pretax`／`totalCost`）。
+- **成本未填**：`uncosted_items`＝計入集合內、非標題、且 `cost` **缺鍵／None／空字串／非數字**的品項數；**`cost = 0` 是合法的零成本（如贈品），不算未填**。畫面小字「有 N 項尚未填成本」為可關閉提示（本次工作階段關閉即不再顯示）；N＝0 不顯示；不阻擋。
+- **擇一方案（M3）**：`tot` 已只計 `counted_items`（非擇一項＋各組所選），`pretax`、`totalCost` 自動隨之；**專案毛利不另寫分流**。有未選組別時沿用 M3 T5 規則：主合計列中性色並加「尚有 N 組擇一未選，為不含擇一項的暫估」。`plan_view`（T4）在每個方案列另回 `totalCost` 與 `projectMarginPct`（同一函式，輸入為該方案的 `pretax`／`totalCost`；**T4 目前沒有回 `totalCost`，需補**）。
 - **標題列（`type=header`）**：無金額、無成本，不影響。
 - **幣別／稅別**：零稅率／免稅單的 `pretax` 定義不變（未稅），公式不變。
-- **進位**：`round_half_up(pct, 10) / 10`，與 `directMarginPct` 一致；比較／警示用**進位後**數字（顯示與警示一致，不出現「顯示 12.0% 卻因 11.96% 觸發」）。
+- **進位**：先以 Decimal 計算 `金額 ÷ pretax × 100`，再 `ROUND_HALF_UP` 到 0.1（即 `round_half_up(x, 10) / 10`）。**平手一律遠離零**：`12.25 → 12.3`，`−12.25 → −12.3`。後端、前端孿生共用同一組黃金向量（含負平手）。比較／警示用**進位後**數字（顯示與警示一致）。
 
 ## 3. 實作位置（單一函式、讀取時計算、免遷移）
 
-- **後端**：`helpers/profit_rules.py` 新增 `project_margin(pretax, total_cost) -> dict`，回 `{amount, pct, uncosted_items}`：
-  - 純函式、無 I/O；`pretax ≤ 0` ⇒ `pct=None`。
-  - 輸入來自 `tot.pretax`／`tot.totalCost`（不重掃品項），`uncosted_items` 另由 `count_uncosted(items)`（走 `counted_items`）。
-  - **不寫入 `tot`**：避免多一個必須與舊單同步的戳記（`_restore_stamps`、`SETTLED_PROFIT_KEYS`、影子比對都不必改）。
-- **前端**：`static/profit-rules.js` 孿生 `projectMargin`；`calcTotals()` 之外的**顯示層**讀 `tot.pretax／tot.totalCost` 計算，不進 `this.tot`（避免 `FORM_VERSION` 之外再動儲存形狀）。**共用黃金向量檔**（既有 profit_rules 黃金向量增加專案毛利案例）。
-- **端點回傳**：報價單詳情／案件詳情／`plan_view` 的回應中，於**已通過金額遮蔽的輸出**附 `projectMargin`（權限不足者整個 `tot` 已被剔除，故不另開洩漏面）；不新增獨立端點。
-- **清單**：案件清單 SQL 加計算欄別名（`ROUND((pretax - COALESCE(json_extract(data_json,'$.tot.totalCost'),0)) * 1000.0 / NULLIF(pretax,0)) / 10.0 AS project_margin_pct`，**僅在管理者啟用該欄且請求者通過 `money_visible` 時才選取**）；別名加入 `QUOTATION_MONEY_COLS`（遮蔽雙向守門）。SQLite 的捨入與 Python 半進位在 .x5 邊界可能不同 ⇒ **清單改取 `pretax`／`totalCost` 兩數在 Python 端用同一函式算**（不用 SQL 內捨入），避免兩處數字差 0.1。
-- **為何不加 SQL 欄／不存 `tot`**：(a) 既有 SQL 四欄（`total／pretax／direct_margin_pct／net_margin_pct`）已是 M3 回簽重算必須同交易更新的集合（M3 §H）；再加一欄＝再多一處同步點；(b) 衍生值讀取時計算＝舊單、已結案單、擇一暫估都自動一致；(c) 免遷移 ⇒ 不佔 M 班的資料遷移與回滾面。
+- **後端函式**：`helpers/profit_rules.py` 新增 `project_margin(pretax, total_cost) -> dict`，回 `{amount, pct, uncosted_items}`；純函式、無 I/O；`pretax` 不是數字或 ≤ 0、`total_cost` 為 None／字串／非有限數 ⇒ `pct=None`（**None 不是 0**）。
+- **輸入來源（S1：不信任用戶端 `tot`）**：
+  - **詳情**：由已存**品項**重算——`pretax = server_totals(q)["pretax"]`、`total_cost = Σ qty × cost`（M3 之後兩者都只走 `counted_items`）。理由：`tot` 在 legacy 模式與「已精算單解鎖編輯」分支是用戶端送來、伺服器不重算（`profit_guard.prepare` 的影子比對只記 log、已精算分支沿用資料庫舊值），直接讀 `tot` 會繼承它的不可信。
+  - **清單**（無法逐列解析品項）：`pretax` SQL 欄 ＋ `json_extract(data_json,'$.tot.totalCost')`——與今天的 `direct_margin_pct` SQL 欄**同信任等級**（同樣由用戶端／v2 伺服器寫入）。**單據不一致時的處置**：v2 模式下 `prepare()` 以伺服器重算覆寫，兩者一致；legacy 模式沿用現有影子比對警示，不新增行為。清單的值僅供瀏覽，**不用於任何判斷**。
+  - **身分測試**（S1）：對每一條存檔路徑（`PUT`、M3 回簽／取消回簽重算、已精算單解鎖編輯、精算）驗 `詳情的專案毛利 == project_margin(由品項重算)`，並驗 v2 模式下 `清單值 == 詳情值`。
+- **不寫入 `tot`**：不增加必須與舊單同步的戳記（`_restore_stamps`、`SETTLED_PROFIT_KEYS`、影子比對都不必改）。
+- **回應鍵（M2 遮蔽機制）**：信封層鍵 **`project_margin_pct`**（與 SQL 別名同名，放在 `data` 之外，與 `signed_files`／`locationId` 同級），**不放進 `data`／`tot`**——否則表單載入後整份 `PUT` 回去會把衍生值寫進 `data_json`（寫入端另一道防線：`prepare()` 丟棄請求中的 `project_margin_pct`／`projectMargin`）。
+  1. 把 `project_margin_pct` 加入 `QUOTATION_MONEY_COLS`（縱深：任何走 `mask_row` 的路徑，該鍵若存在即被設為 None）。
+  2. 同時避免被剝除機制「漏看」：因為它是**新鍵**，只靠 (1) 不夠（`mask_row` 只動「已存在」的鍵）；所以**一律在遮蔽完成之後、且僅當 §1.1 該表面的判定式為真才附加**——判定式為假時鍵**不存在**。
+  3. 詳情：附加條件＝遮蔽後 `result["data"]` 仍含 `tot`（等價於 `money_visible or quote_money_visible`）。
+- **清單 SQL（S3）**：`quotations.py` :821–823 的 `select_cols` 僅在 `not masked` 時追加 `json_extract(data_json,'$.tot.totalCost') AS _tc`（取出後從 row 移除），Python 端用 `project_margin()` 算出 `project_margin_pct`。**v1 不可排序、不可篩選**（Python 端算，無法進 SQL 的 `ORDER BY`／`WHERE`；金額類欄位本就不得依其排序——排序白名單 :893–898 已有「看不到金額者不可依金額排序」的規則，維持）；若日後要排序，另案以 SQL 運算式實作並處理 SQLite／Python 平手進位差（.x5 邊界）。
+- **舊單**：`tot.totalCost` 缺鍵、非數字 ⇒ `None`（畫面「—」），不顯示 0%。
+- **前端**：`static/profit-rules.js` 孿生 `projectMargin`；表單顯示層用 `calcTotals()` 已有的 `pretax`／`totalCost` 計算，不進 `this.tot`；詳情頁載入時以後端的 `project_margin_pct` 為準（兩者需一致，黃金向量鎖）。
+- **為何不加 SQL 欄／不存 `tot`**：(a) 既有 SQL 四欄已是 M3 回簽重算必須同交易更新的集合（M3 §H），再加一欄＝再多一處同步點；(b) 衍生值讀取時計算＝舊單、已結案單、擇一暫估都自動一致；(c) 免遷移。
 
 ## 4. 脊柱登錄（框架化）
 
@@ -74,20 +108,20 @@
 | 金額旗標 `isMoney` | **真** |
 | 金額類別 | **`internal`**（客戶版輸出不可用；編輯器不提供放入客戶通道的操作；驗證器遇到即擋；輸出端再擋一次） |
 | 可用通道 | 畫面編輯、內部畫面預覽、Excel（內部）；**不含** 客戶版 PDF、客戶預覽、回簽頁、客戶版 Excel |
-| 可見性判定 | 與 `directMarginPct` 相同：報價單頁＝`quote_money_visible`；案件頁／清單＝`money_visible` |
+| 可見性判定 | **逐面同 `directMarginPct`**（§1.1）：報價單清單／詳情＝`quote_money_visible`（詳情另含 `money_visible` 為真者）；M3 `plan_view` 報價單頁＝`quote_money_visible`、案件頁＝`money_visible`；目錄只記「判定函式名」，不另寫第二套 |
 | 預設顯示 | 報價單內部損益：**顯示**，位置＝「直接毛利率」之後；案件清單：**隱藏**（可選欄，今日零變化） |
 | 預設寬度 | 內部損益列為單行（無寬度屬性）；清單欄＝窄欄檔位 |
-| 欄位來源 | 系統計算欄位（`source=computed`）：來源函式 `project_margin`；**管理者不可改算式**（算式是程式，不是管理者能力——脊柱邊界 §14） |
+| 欄位來源 | 系統計算欄位（`source=computed`）：來源函式 `project_margin`；**管理者不可改算式**（算式是程式，不是管理者能力——脊柱邊界 §14）；回應鍵 `project_margin_pct`（信封層）登記進 `QUOTATION_MONEY_COLS`，目錄 ⇔ 遮蔽雙向守門 |
 | 可改性 | 唯讀（衍生值，不可編輯） |
 
 **版面可調的項目（管理者在系統內）**：顯示／隱藏、同區塊內順序、清單欄的位置與寬度檔位、標籤文字、小數位數的**格式選項**（D2，預設 1 位）。**寫死的只有**：算式、`internal` 不入客戶通道、金額權限遮蔽。
 
 ### 4.1 警示門檻（設定項，預設關）
 
-- 設定鍵：群組 `project_margin`、鍵 `project_margin.warn_pct`（PM 命名裁定：一個功能一個 snake_case 群組，鍵為 `<群組>.<鍵>`；登錄於 M2 設定登錄；本案**自第一天就走登錄**，不新增常數）。型別：0～100、至多 1 位小數，或「不啟用」；**預設＝不啟用**（今日行為零變化）。
+- 設定登錄（M2 `settings_registry`，註冊鍵為 **(群組, 鍵)** 兩段、不是帶點字串；文件簡寫 `project_margin.warn_pct`）：`register_group("project_margin", "專案毛利%", [SettingDef("warn_pct", "float", 0, min=0, max=100, unit="%", risk="none", question=…, label=…, help=…, impact=…, recommended=0)])`。**型別 float，0＝不啟用（預設）**；min 0、max 100；風險類 `none`（不需 `risk_text`）；`question`／`label`／`help`／`impact` 必填（登錄當下檢查）。目前 M2 樹**沒有 `quote` 群組**，故本設定自成群組，群組須由擁有模組（案件模組）註冊，並同步更新設定中心群組數量斷言（步驟檔 #19）。
 - 行為：僅**顯示警示**（數字旁淡色提示「低於門檻 X%」），**不阻擋存檔、送審、回簽**（阻擋屬簽核政策，不在本案；若日後要「低於門檻須審核」，應作為簽核政策選項另案登錄）。
-- 群組：獨立群組 `project_margin`（顯示名「專案毛利%」）；與 K01 利潤警示群組的關係由 K01 落地時決定，不改本鍵。
-- 風險類別：`none`（只改顯示）；**非高影響選項**，不需橫幅；放寬／收緊皆即時生效並留變更帳本（沿用 M2 帳本）。白話題目：「專案毛利% 低於多少時，在報價單上提醒業務？」；影響說明：「只改畫面提示，不影響存檔與審核。」
+- 與 K01：K01 利潤警示群組落地時再決定是否合併呈現，不改本鍵。
+- 風險類別 `none`（只改顯示）；**非高影響選項**，不需橫幅；放寬／收緊皆即時生效並留變更帳本（沿用 M2 帳本）。白話題目：「專案毛利% 低於多少時，在報價單上提醒業務？（0 代表不提醒）」；影響說明：「只改畫面提示，不影響存檔與審核。」
 - 比較用進位後數字（§2）。與 K01 的 `MotrixMargin.tone` 色階互不干涉：專案毛利預設**不上色**（中性），啟用門檻後才用既有警示色。
 
 ### 4.2 本案要登錄的東西（脊柱接案清單的實例；通用清單見路線圖 r6 §3C）
@@ -114,19 +148,24 @@
 | 精算 PDF／精算頁 | 本期不加（見 §7，需口徑確認） |
 | 異動紀錄（`editHistory`） | 不追蹤（衍生值） |
 | 下載檔名（A7） | **永不**含金額，專案毛利亦屬金額類 |
+| 案件匯出 Excel（:6487）／財務報表 | **v1 不輸出**；以固定欄位清單測試鎖定 |
+| 內部 PDF（:467 路徑，含精算摘要） | **v1 不輸出**；以「不匯出」測試鎖定（PDF 文字不含「專案毛利」） |
 | 完工單帶入（A8） | 白名單 ∩ `isMoney=假` ⇒ 自動排除 |
 
 ## 6. 測試（紅 → 綠）
 
-1. **黃金向量**（後端／前端共用檔）：一般案；折讓；運費；`pretax = 0`（回 None）；`pretax < 0`；成本 > 收入（負值、不補零）；0.05 邊界進位（如 pct 為 x.x5）；全部成本未填（100%，並 `uncosted_items = N`）；`header` 列混入；`unitPriceOverride` 品項。
-2. **與直接毛利的恆等關係**：對隨機品項集，`專案毛利金額 − 直接毛利 == input_vat`（未結案單）——鎖住「差異恰為進項稅」。
-3. **擇一**：兩組未選 ⇒ 只計非擇一項（與 `counted_items` 一致）；已選 ⇒ 計所選；`plan_view` 每個方案列的專案毛利＝以該方案 `pretax`／`totalCost` 呼叫同一函式。
-4. **遮蔽（正反對照＋突變）**：無金額權限者的報價詳情、案件詳情、清單、`plan_view` 不含專案毛利（含別名欄位）；有權限者有；把專案毛利放進客戶通道的版面被驗證器擋；客戶 PDF／預覽／回簽頁輸出文字不含「專案毛利」。
-5. **目錄 ⇔ 遮蔽雙向守門**：`project_margin_pct`（internal、isMoney）對應的鍵／別名出現在 `QUOTE_MONEY_KEYS`／`QUOTATION_MONEY_COLS`；反向亦然。
-6. **設定**：預設值＝不啟用（`test_settings_defaults_equal_legacy` 樣式）；白話守門（題目、影響不含鍵名）；啟用後以**進位後**數字比較；不阻擋存檔（端點測：低於門檻仍 200）。
-7. **舊單／已結案單**：無 `tot.totalCost` 的極舊單 ⇒ 函式回 None（不丟例外）；已精算單值不隨精算改變（因為讀 `tot`）。
-8. **清單**：欄位預設隱藏時回應形狀不變（golden）；啟用時數字與詳情頁逐位相同（同一函式）。
-9. 前端：`FORM_VERSION` 守門（表單內容雜湊變 ⇒ 升版）照常；e2e 一條：內部損益區塊出現專案毛利、客戶預覽不出現。
+1. **黃金向量**（後端／前端共用檔）：一般案；折讓；運費；`pretax = 0`、`pretax < 0`（回 None）；成本 > 收入（負值、不補零）；**正負平手**（`12.25 → 12.3`、`−12.25 → −12.3`）；`total_cost` 為 None／字串／NaN ⇒ None；`cost` 缺鍵／空字串／`0` 的 `uncosted_items`（`0` 不算）；`header` 列混入；`unitPriceOverride` 品項。
+2. **與直接毛利的恆等關係**：對隨機品項集，`專案毛利金額 − 直接毛利 == input_vat`（未結案、v2 單）——鎖住「差異恰為進項稅」。
+3. **擇一**：兩組未選 ⇒ 只計非擇一項（與 `counted_items` 一致）；已選 ⇒ 計所選；`plan_view` 每個方案列的 `totalCost`、`projectMarginPct` ＝以該方案 `pretax`／`totalCost` 呼叫同一函式。
+4. **逐面可見度（5 角色 × §1.1 各面）**：admin、sales、finance、cashier、engineer 對 #1 清單、#3 詳情、#4 存檔回應、#8 `plan_view` 各一組斷言——**預期與同面 `directMarginPct` 完全同步**（參數化測試：對每個角色與表面，`有 directMarginPct ⇔ 有 project_margin_pct`）。反向：engineer 與其他無權限者，任何回應的**任何位置**（含巢狀）都不得出現 `project_margin_pct`／`projectMargin` 字串（遞迴走訪回應 JSON）。
+5. **遮蔽機制**：`project_margin_pct` 已登記於 `QUOTATION_MONEY_COLS`；目錄 ⇔ 遮蔽雙向守門（目錄 internal／isMoney 的鍵必在遮蔽清單，遮蔽清單的鍵必屬於目錄或明列非顯示欄位）；以突變測試驗證：移除登記即紅燈。
+6. **不匯出**：客戶 PDF／預覽／回簽頁文字、案件匯出 Excel 欄位清單、內部 PDF 文字、財務報表欄位都不含專案毛利；把專案毛利放進客戶通道的版面被驗證器擋。
+7. **不回寫**：詳情載入後整份 `PUT` 回去，資料庫 `data_json` 不得出現 `project_margin_pct`／`projectMargin`（`prepare()` 丟棄用戶端值）。
+8. **身分測試（S1）**：每條存檔路徑（`PUT`、M3 sign／unsign 重算、已精算單解鎖編輯、精算）驗 `詳情值 == project_margin(由品項重算)`；v2 模式 `清單值 == 詳情值`；legacy 模式用戶端 `tot.totalCost` 被竄改時，詳情值仍由品項重算（不被竄改影響），清單值同 `direct_margin_pct` 等級（記錄，不判紅）。
+9. **設定**：`project_margin` 群組註冊成功（含必填欄位）、預設 0（不啟用）＝今日行為（`test_settings_defaults_equal_legacy` 樣式）、白話守門；啟用後以**進位後**數字比較；低於門檻仍可存檔（端點測 200）；群組數量斷言同步。
+10. **舊單**：無 `tot.totalCost` 的極舊單 ⇒ `None`（不是 0、不丟例外）；已精算單值不隨精算改變（因詳情由品項重算，但精算不改品項，穩定）。
+11. **清單**：欄位預設隱藏時回應形狀不變（golden）；啟用時數字與詳情頁一致；**不可排序／篩選**（帶 `sort=project_margin_pct` 被忽略，與金額排序規則同）。
+12. 前端：`FORM_VERSION` 守門（表單內容雜湊變 ⇒ 升版）照常；e2e 一條：內部損益區塊出現專案毛利、客戶預覽不出現。
 
 ## 7. 範圍外／後續
 
@@ -165,11 +204,11 @@
 |---|---|---|
 | 後端函式＋黃金向量＋恆等測試 | 0.5 | `profit_rules.py` ＋ 前端孿生 |
 | 報價單內部損益區塊（顯示層；含「N 項未填成本」） | 0.25 | `FORM_VERSION` 升版 |
-| 端點回傳（詳情／案件詳情／`plan_view`）＋遮蔽測試 | 0.5 | 無新端點 |
+| 端點回傳（詳情信封鍵／清單／`plan_view`）＋逐面對照表測試（5 角色）＋`QUOTATION_MONEY_COLS` 登記與雙向守門 | 1.0 | 無新端點；r4 +0.5（逐面判定、遮蔽清單、品項重算與身分測試） |
 | 清單可選欄（Python 端計算）＋別名遮蔽 | 0.5 | 預設隱藏 |
 | 脊柱登錄（目錄項＋設定項＋標籤＋守門） | 0.75 | 依賴 A6 種子；A6 前先放 0.25 的硬接版 |
 | 文件（口徑對照表） | 0.25 | |
-| **合計** | **2.75** | A6 前可先交 ≈1.25，餘 ≈1.5 隨種子補 |
+| **合計** | **3.25** | A6 前可先交 ≈1.75，餘 ≈1.5 隨種子補 |
 
 不含：官方閘門／建包／稽核的列車固定成本（每班另計）。建議併入有 `quotation-form.html` 動工的里程碑（與 A8／M3 T5 同檔需排串行，避免同檔衝突）。
 
