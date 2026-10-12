@@ -3,6 +3,7 @@
 > 日期：2026-10-13　作者：hichan-98　委託：hichan-1c　前置：A7 第一期（`wip/t57-download-name-p1-r2`）、第二期（`wip/t57-download-name-p2-r2`）
 > 範圍：只做**設計**，不寫程式。涉及授權路徑與檔案服務，所有控制點以「**授權先於命名**、名稱永遠來自資料庫中繼資料、不來自請求」為原則；HEIC 受 0d 的安全審查約束。
 > **r2（0d 對 r1 的註記 1–4）**：①S7 原本把「非影像／PDF 一律 attachment、全部 nosniff」寫成既有控制——**事實不是**：今天 `open_attachment` 一律以 `application/octet-stream` inline 回應、`serve_upload` 用猜測的 mime 且**沒有** `nosniff`；本版改為明確的**逐路由標頭表**與有意識的行為變更決定（§3b）；②`describe()` 的契約（`user=None`、不決定可讀、只在正規化之後、例外安全）；③`/api/download-name` 的速率限制用**行程內每使用者權杖桶**（現況沒有通用限流器可重用）；④以 `dn.header` 取代標頭時**保留提供者的 disposition 類型**（預覽仍 inline），只改檔名；並明寫預設值的可見度。
+> **r3（0d 對 r2 的註記）**：①S9 測試比對**「不存在」vs「讀不到」兩種案件**的回應形狀與大小必須相同（不含「存在且可讀」——那個本來就會多出案件名）；②權杖桶假設**單一行程**：需確認 uvicorn `workers=1`（倉庫內未見 `--workers` 設定，實際啟動命令在 `start_server.ps1`／服務設定，**UNKNOWN，實作前確認**；多行程則上限會乘以行程數）；字典要**設上限並淘汰閒置使用者**；③`file-preview.js` 對 xlsx／docx 的現行處理維持 **UNKNOWN**，驗證前不主張。
 > 標記：**UNKNOWN**＝沒有證據，不推測；pd 為我的粗估。
 
 ## 0. 結論（先看）
@@ -88,7 +89,7 @@
 
 **用途**：甘特圖、CSV、瀏覽器端產生的 xlsx 等（約 25 個前端點）沒有伺服器回應可讀標頭，需要向後端問「這個檔該叫什麼」。
 **設計**：
-- `GET /api/download-name?docType=&quoteNo=&docNo=&ext=`（`docType` 必須在 `DOC_TYPES` 或登記的前端文件類型表內，否則 400）→ `{"name": "…"}`；內部呼叫 `download_name.build()`，**授權與 A7 相同**（`case_page_readable`；沒有案件權限只回案件編號或不含案件欄位）；`ext` 白名單（`pdf xlsx csv png jpg json`）；需登入；**速率限制＝行程內每使用者權杖桶**（現況**沒有**通用的每使用者限流器可重用 ⇒ UNKNOWN；做法：記憶體字典 `user_id → (tokens, 時間戳)`，預設每分鐘 60 次、突發 20；超過回 429；只在單一行程有效——本平台是單一行程部署，足夠；若日後多行程再換）；沿用 A7 的**金額字串白名單**與 255 位元組上限（`_fit_name_bytes`）。
+- `GET /api/download-name?docType=&quoteNo=&docNo=&ext=`（`docType` 必須在 `DOC_TYPES` 或登記的前端文件類型表內，否則 400）→ `{"name": "…"}`；內部呼叫 `download_name.build()`，**授權與 A7 相同**（`case_page_readable`；沒有案件權限只回案件編號或不含案件欄位）；`ext` 白名單（`pdf xlsx csv png jpg json`）；需登入；**速率限制＝行程內每使用者權杖桶**（現況**沒有**通用的每使用者限流器可重用 ⇒ UNKNOWN；做法：記憶體字典 `user_id → (tokens, 時間戳)`，預設每分鐘 60 次、突發 20；超過回 429；只在單一行程有效——**需確認部署為 `workers=1`（UNKNOWN）**；字典**上限（例如 5000 個使用者）並淘汰閒置超過 10 分鐘的項目**，避免無限成長；若日後多行程再換）；沿用 A7 的**金額字串白名單**與 255 位元組上限（`_fit_name_bytes`）。
 - **不構成存在性探測**：回應中的案件編號是**請求者自己傳入的值**，案件名只有讀得到才出現；不存在的案件與讀不到的案件回應形狀相同。
 - 前端 `MotrixDownload.nameFor({docType, quoteNo, docNo, ext}, fallback)`：非同步取名，失敗／逾時（例如 1.5 秒）⇒ 用 `fallback`（下載不能因取名而失敗）；同一頁同參數快取。
 - **新路由**：需登錄路由 golden、`INTEGRATION-POINTS`、L1 快照（若為 L1）。
@@ -116,7 +117,7 @@
 | S6 | **路徑穿越**（`rest` 段） | 沿用 `canonical_upload_path`／`upload_owner` 與 `_safe_save_dir`；`describe()` 不接受未經正規化的路徑 | `..%2f`、反斜線、ADS ⇒ 400／404 |
 | S7 | **內容嗅探／XSS**（inline 檔案） | **本版新增**（非既有控制）：§3b 的標頭表——固定 mime、僅影像／PDF inline、全部 `nosniff` | §3b 的逐路由標頭矩陣；`.html` 改名 `.jpg`（已被 magic 擋）作正對照 |
 | S8 | **HEIC／EXIF 隱私** | 本設計不放行新資料夾；既有 `case_extra_expense` 的 EXIF（含 GPS）去識別化交 0d 威脅模型 | （0d 範圍） |
-| S9 | **存在性探測**（`/api/download-name`） | 回應形狀與**大小**一致；權杖桶速率限制 | 存在／不存在／無權限三種案件的回應形狀、欄位集合與位元組長度相同（依名稱長度的差異只來自請求者自己傳入的欄位）；連續請求超過桶 ⇒ 429（測試用小桶驗證邏輯） |
+| S9 | **存在性探測**（`/api/download-name`） | 回應形狀與**大小**一致；權杖桶速率限制 | **「不存在」與「讀不到」兩種案件**的回應形狀、欄位集合與位元組長度相同（「存在且可讀」本來就多出案件名，不在比對範圍；依請求者自己傳入欄位長度的差異除外）；連續請求超過桶 ⇒ 429（測試用小桶驗證邏輯） |
 | S10 | **效能**（`describe()` 多一次 DB 讀） | 只在 HEIC 與需要前綴的下載才呼叫；一次一筆；不在 `<img>` 熱路徑 | 150 張圖列表不觸發 `describe()` |
 
 ## 9. 測試（紅 → 綠）
