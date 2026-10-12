@@ -125,6 +125,26 @@ def test_duplicate_codes_within_and_across_owners(sp):
     assert [f["owner"] for f in spine.report()["features"]] == ["zz_eb1"]
 
 
+def test_same_code_from_two_owners_fails_both_regardless_of_load_order(sp):
+    for first, second in (("zz_eb1", "zz_eb2"), ("zz_eb2", "zz_eb1")):
+        spine.reset()
+        _reg([_feat()], owner=first)
+        _reg([_feat()], owner=second)
+        r = spine.validate_all()
+        assert len(r["features"]) == 1 and r["features"][0]["state"] == "failed"
+        assert "同時被多個模組宣告：zz_eb1、zz_eb2" in r["features"][0]["problems"][0]
+        assert r["orphans"]                                                                  # 沒被收下的那一方也有問題記錄
+        assert spine.feature_enabled("zz_eb_f") is False
+    spine.drop_owner("zz_eb2")                                                               # 其中一方卸載 ⇒ 另一方恢復
+    spine.drop_owner("zz_eb1")
+    _reg([_feat()], owner="zz_eb1")
+    assert spine.validate_all()["features"][0]["state"] == "ok" and spine.feature_enabled("zz_eb_f") is True
+
+
+def test_due_pending_keeps_its_docstring_and_guard():
+    assert R._due_pending.__doc__ and "非 open" in R._due_pending.__doc__
+
+
 # --- 驗證 ---------------------------------------------------------------------------------------
 
 def test_settings_group_must_exist_and_belong_to_the_owner(sp):

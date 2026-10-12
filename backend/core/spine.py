@@ -34,6 +34,7 @@ _FEATURES: Dict[str, dict] = {}
 _ORPHANS: Dict[str, List[str]] = {}                       # 擁有者 → 無法歸到任何功能的問題（缺 code、代號重複…）
 _STATE: Dict[str, dict] = {}
 _MANIFEST_CAPS: Dict[str, set] = {}
+_CLAIMS: Dict[str, set] = {}                              # 功能代號 → 宣告過它的擁有者們（含沒被收下的）；>1 個擁有者＝兩邊都標失敗，與載入順序無關
 _VALIDATORS: Dict[str, Tuple[Callable, Tuple[str, ...]]] = {}
 _POST_VALIDATE: List[Callable[[], None]] = []
 _VALIDATED = False
@@ -151,6 +152,7 @@ def register_manifest(manifest: dict, owner: str) -> List[str]:
     problems = list(orphan)
     seen = set()
     for f in feats:
+        _CLAIMS.setdefault(f["code"], set()).add(owner)
         if f["code"] in seen:
             msg = "%s：功能代號 %s 在同一份宣告裡重複" % (owner, f["code"])
         elif f["code"] in _FEATURES:
@@ -174,6 +176,10 @@ def drop_owner(owner: str) -> None:
         _STATE.pop(code, None)
     _ORPHANS.pop(owner, None)
     _MANIFEST_CAPS.pop(owner, None)
+    for code in list(_CLAIMS):
+        _CLAIMS[code].discard(owner)
+        if not _CLAIMS[code]:
+            del _CLAIMS[code]
 
 
 def register_validator(name: str, fn: Callable[[dict], List[str]], covers: Tuple[str, ...] = ()) -> None:
@@ -204,6 +210,9 @@ def validate_all() -> dict:
     for code in sorted(_FEATURES):
         f = _FEATURES[code]
         problems = list(f["problems"])
+        claimed = sorted(_CLAIMS.get(code, ()))
+        if len(claimed) > 1:                                         # 兩個模組宣告同一個功能代號：兩邊都失敗（誰先載入不影響結果）
+            problems.append("功能代號 %s 同時被多個模組宣告：%s" % (code, "、".join(claimed)))
         g = f["group"]
         if g and by_group.get(g, [code])[0] != code:
             problems.append("設定群組 %s 同時歸屬功能 %s（一個群組只能歸一個功能）" % (g, "、".join(by_group[g])))
@@ -287,7 +296,7 @@ def report() -> dict:
 
 def snapshot() -> tuple:
     return (dict(_FEATURES), {k: list(v) for k, v in _ORPHANS.items()}, {k: dict(v) for k, v in _STATE.items()},
-            {k: set(v) for k, v in _MANIFEST_CAPS.items()}, _VALIDATED)
+            {k: set(v) for k, v in _MANIFEST_CAPS.items()}, _VALIDATED, {k: set(v) for k, v in _CLAIMS.items()})
 
 
 def restore(snap: tuple) -> None:
@@ -297,11 +306,12 @@ def restore(snap: tuple) -> None:
     _STATE.clear(); _STATE.update(snap[2])
     _MANIFEST_CAPS.clear(); _MANIFEST_CAPS.update(snap[3])
     _VALIDATED = snap[4]
+    _CLAIMS.clear(); _CLAIMS.update(snap[5] if len(snap) > 5 else {})
 
 
 def reset() -> None:
     """測試用：清空功能登錄與驗證狀態（驗證器與回呼是 import 時登記的，不動）。"""
-    restore(({}, {}, {}, {}, False))
+    restore(({}, {}, {}, {}, False, {}))
 
 
 registry.on_unload(drop_owner)          # 模組失敗／卸載 ⇒ 它的功能一併移除

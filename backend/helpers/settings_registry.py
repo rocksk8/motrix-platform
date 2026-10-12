@@ -349,9 +349,10 @@ def _stored(conn, group):
 
 
 def _due_pending(conn, group, now):
-    if group_status(group) != "open":               # 非 open 群組：待生效項不生效（即使已到時、票數已足）；讀到的永遠是已儲存的值
+    """已到時、尚未被寫進定義的待生效值（依申請先後；同欄位後者蓋前者）。只有群組含 `requires_pending` 欄位才查。
+    非 open 群組（功能 planned／hidden）一律回空：即使項目已到時、票數已足，讀取時也不生效——讀到的永遠是已儲存的值。"""
+    if group_status(group) != "open":
         return []
-    """已到時、尚未被寫進定義的待生效值（依申請先後；同欄位後者蓋前者）。只有群組含 `requires_pending` 欄位才查。"""
     g = _g(group)
     if not any(f.requires_pending or f.loosen for f in g["fields"].values()):
         return []
