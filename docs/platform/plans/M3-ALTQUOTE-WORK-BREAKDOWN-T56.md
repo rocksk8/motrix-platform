@@ -43,6 +43,7 @@ T2,T4 ─► T9 (回簽選定) ─► T10 (案件頁／下游) ─► T11 (收�
 
 ### T1 前置核對與契約凍結（0.5 pd）
 - **寫入路徑清單（全文檢索，逐一標註「可否改品項／`altGroup`／`totalsByAlt`／`altPicks`／`tot`／`is_signed`」）**：必含 `update_quotation`（PUT）、`update_status`（PATCH，:1975）、`toggle_quotation_signed`（:1323）、`reject_quotation`（:4985，待審核／簽核中 → 草稿並升版單號 -Rn，同樣不動 `is_signed`，須併入上列「移出已送出」處理）、`case_batch_assign`（:6391 起，寫 `data_json`＋`assigned_user_ids`；**僅動指派欄位**，須以測試證明不改品項／`tot`，否則併入鎖定檢查）；`recall_quotation`（:2053）只收 待審核／簽核中，但**經 unlock-edit 往返後已回簽單會處於 待審核**，故**是**路徑，併入上列「移出已送出」處理。`reject_quotation_final`（:5070）見 T9 決定（終局保留）。**除字面 `UPDATE quotations` 外，必須列出 `save_quotation_json(...)`（`modules.case.quotations`，只組 UPDATE 寫 status＋`data_json`、不 commit）的全部呼叫者**，逐一標註可否改品項／`altGroup`／`altPicks`／`tot`／`is_signed`：`case/api/quotations.py` 內約 :2487、:3039、:3157、:3184、:3200、:3216、:3419、:4034、:4119、:4145、:4198、:4224、:5119（含簽核通過路徑約 :4956）與 `case/api/material_orders.py` :178、:230（行號僅供起點，以全文檢索為準）。凡可改品項金額者併入鎖定檢查；僅改簽核／備註／指派類欄位者以測試證明不觸及鎖定集合。報價**附件上傳／刪除端點**亦須列入，並**分兩類**：『報價本文附件』（P1 要擋）與『執行紀錄附件』（回簽單 `signed-files`、開票／請款／叫料／額外支出附件；P1 不擋，signed-files 明確放行）。T1 並須自報價表單欄位目錄列出『報價本文鍵清單』（P1 比較集合，fail-closed）與『執行紀錄鍵清單』（不比對，fail-open）；另須確認簽核金額基準（H9）與 H3 各單據的解除路徑。未列入而在檢索中出現的寫入點視為遺漏。
+- **T1 前置相依（r9）**：T1 需要『報價本文欄位目錄』（P1 比對集合、`altGroup`／`totalsByAlt` 等目錄項）。該目錄由**欄位版面框架設計**（分支 `wip/t56-field-layout-framework-r1`，`FIELD-LAYOUT-FRAMEWORK-T56.md`；**尚未合入 platform**）定義。T1 開工時須先取得它（合併進基底，或在本班本地依該文件的目錄格式產出同一份清單），否則 P1 的本文鍵清單只能由 T1 手列並失去『目錄 ⊆ 比對集合』守門。建議鎖定以該框架的 F7 政策格表達（見該文 §14），需 05／1c 與本計畫作者對齊。
 - 重核錨點（`profit_guard.py`、`calcTotals`、`quotations.py:1912` 存檔 SQL、`_signed_back_gate`／`toggle_quotation_signed`、`pdf_gen` 合計區、`settings_registry` 註冊樣式）。
 - 寫死「契約表」：`altGroup`／`altPick` 欄位、`totalsByAlt`、`altPicks`、`counted_items` 簽章、`plan_view` 回傳形狀、`quote_alt` 設定鍵；之後各任務不得自行加欄。
 - 產出：本文件 §5 的「契約」小節補正，並把黃金向量檔（擇一向量）先定案（T2/T3/T4 共用）。
@@ -100,7 +101,10 @@ T2,T4 ─► T9 (回簽選定) ─► T10 (案件頁／下游) ─► T11 (收�
 **硬規則（技術不變式與安全；不提供設定選項，不可被政策放寬）**
 - H1 鎖定比對一律在**伺服器端**、以**已存列的值**為準（讀既有 `SELECT` 加選 `is_signed`，:1795-1800）；不得以 `_isUnlockEdit`（用戶端旗標，:1701）或其他用戶端資料放行。
 - H2 任何清除（取消回簽、政策③選「自動清除」）都在**同一交易**內：清 `is_signed／signed_by／signed_at`＋`altPicks`（含 `altPickedAt／altPickedBy`）＋`tot` 回暫估＋SQL 四欄＋**寫稽核（記錄被清除的內容與前後金額）**；全部或全無。
-- H3 **下游 409 守門**：該單已開票（`invoice_vouchers`，以 `quote_no` 查）、已請款（`payment_requests`，以 `quote_no`＋`status` 查）、已精算／結案（報價 `settle_status`／`deal_tag`）⇒ 一律 409「已請款／已開票，請先沖銷」，任何政策都不得放寬；「有效單據」的狀態集（排除草稿、已作廢／已取消／已退回）開工前自兩張表核對，不在本文寫死。**解除路徑（H3 不得成為單向陷阱；T1 逐一確認端點與狀態並寫回本文）**：開票單 `invoice_vouchers`——`DELETE /api/invoice-vouchers/{voucher_no}`（:462）、`…/revoke-approval`（:668）、`…/reject`（:709）；請款單 `payment_requests`——`DELETE /api/payment-requests/{request_no}`（:555）、`…/revoke-approval`（:760）、`…/reject`（:801）；精算——`POST /api/quotations/{quote_no}/case-unlock`（quotations.py:2625）；成案降級——`PATCH …/deal-tag`（:2428，已成案降級需 admin+）。以上為候選，哪些真的使單據不再算『有效單據』由 T1 對照有效狀態集確認；任何一種單據找不到解除路徑 ⇒ 立即回報使用者（H3 會變成永久 409）。
+- H3 **下游 409 守門（硬安全規則，不是政策，不提供選項）**：該單已開票（`invoice_vouchers`，以 `quote_no` 查）、已請款（`payment_requests`，以 `quote_no`＋`status` 查）、已精算／結案（報價 `settle_status`／`deal_tag`）⇒ 一律 409。「有效單據」的狀態集（排除草稿、已作廢／已取消／已退回）開工前自兩張表核對，不在本文寫死。
+  - **已查證的解除路徑現況（0d 核對，r9 取代 r8 的『候選』）**：① **未匯出**的開票單／請款單可解除：開票單 `DELETE /api/invoice-vouchers/{voucher_no}`（:462，僅 草稿）、`…/revoke-approval`（:668，僅 已核准 且 `export_count`＝0）、`…/reject`（:709，僅待審）；請款單 `DELETE /api/payment-requests/{request_no}`（:555）、`…/revoke-approval`（:760，同 `export_count`＝0 條件）、`…/reject`（:801）同型。② **已匯出（`export_count`＞0）的開票單／請款單：今天沒有任何解除路徑**（revoke-approval 明確拒絕）。③ 成案／結案：`PATCH …/deal-tag`（quotations.py:2428；未成案↔已成案需 admin+，已結案需 superadmin）、案件解鎖 `POST …/case-unlock`（:2625）存在。④ 已精算：以案件解鎖／重開精算（路徑由 T1 核對）。
+  - **決定（使用者授權之 PM 決策，option a）**：**已匯出的憑據／請款單＝財務已據以開立文件，擇一方案的選定永久凍結**，這是刻意的安全規則，不是缺陷。白話說明（畫面與 409 訊息共用，不顯示代碼）：「已開立並匯出的憑據／請款單，方案選定不能再更改；如需更正，請財務先作廢該憑據。」未匯出但已開票／已請款時訊息為：「已開票／已請款，請先撤回該單據再取消回簽。」已精算：「已精算，請先重開精算再取消回簽。」
+  - **Backlog（M3 範圍外）：『財務作廢／沖銷已匯出單據』功能**——目前系統沒有；在它上線前，已匯出的擇一報價單回簽無法解除。擇一單回簽的『解除』完整性依賴此功能（記錄為 M3 的已知依賴與限制，非 M3 工作項）。
 - H4 **鎖定必有出口，但不在簽核進行中清除**：`is_signed=1` 且為擇一單時，`unsign` 可在 **已送出／草稿／已取消／已拒絕**（沒有進行中簽核的狀態）執行（仍受 H3→P2 守門鏈，H8）。在 **待審核／簽核中** 一律 409「簽核中，請先收回或退回」——簽核鏈還活著時清除選定會讓簽核人批准的金額與實際不同且不重簽；該狀態的出口是 核准（→ 已送出）、reject-final，或（P3＝自動清除時）recall／reject 同交易清除。理由：避免任何政策組合、舊資料或新寫入路徑造成「無法編輯又無法取消回簽」的死鎖，又不破壞簽核完整性。這取代 r5 的『recall／reject 自動清除』預設做法。
 - H5 適用範圍＝**僅 `is_signed=1` 且已存資料含擇一（任一品項 `altGroup` 非空，或 `altPicks` 非空）的單**；無擇一資料的單（含正式機可能已存在的 草稿／已取消 且 `is_signed=1` 的舊資料列）完全不受影響，`PUT`／`recall`／`reject`／`update_status` 維持今日行為（不清、不 409、不寫新稽核）。
 - H6 `altPicks` 防悄悄改動：用戶端送來的 `altPicks`／`tot` 在一般存檔一律不採用，由伺服器放回（對照既有 `_restore_stamps`）；只有 `sign` 路徑能寫 `altPicks`。
@@ -116,6 +120,7 @@ T2,T4 ─► T9 (回簽選定) ─► T10 (案件頁／下游) ─► T11 (收�
 | P3 | 已回簽的單，可以被改成草稿、已取消、已拒絕嗎？（`update_status`、`recall_quotation`、`reject_quotation`）；另：拒絕結案（`reject-final`）時選定要保留還是清除？（**P3b**） | P3：① **擋下**（預設）② 自動清除選定（比照取消回簽）。P3b：① **終局保留**（預設）② 清除 | P3①：409「已回簽，請管理員取消回簽」，狀態不變。P3②：呼叫 H8 的 `clear_signed_selection`（H3→P2 守門鏈，通過才清除並進入目標狀態；被擋 → 409，狀態不變）；`reject_quotation` 的 -Rn 見 H7。**目標含 待審核**：`update_status` 把已回簽單改成 待審核 同樣受此政策（見 §7 O2）。P3b：`reject_quotation_final`（→ 已拒絕）①：`is_signed／altPicks／tot／SQL 四欄`原樣保留（拒絕結案＝永久鎖定）；②：同樣呼叫 `clear_signed_selection`（H3→P2 鏈），被擋 → 409 |
 | P4 | 可以對已回簽的擇一單做「解鎖修改」嗎？（superadmin 的 unlock-edit） | ① **拒絕**（預設）② 允許 | ①：伺服器在 `update_quotation` 讀完已存列後立即回 409「已回簽，請管理員取消回簽」，**不論 `_isUnlockEdit`**（置於 `_LOCKED` 檢查之前）。②：允許進入 unlock-edit（狀態→待審核，`is_signed` 全程仍為 1、`altPicks`／`tot` 不變）；期間 P1 的鎖定比對持續生效（只能改 P1 允許的欄位），`recall`／`reject` 依 P3 處理 |
 | P5 | 擇一單送審時，簽核層級以哪個金額判斷？（H9） | ① **以各組金額最高的組合（最嚴）**（建議預設，**須使用者確認**，見 §7 O6）② 以未選時的暫估（今日行為） | 影響 `compute_approval_reasons`／簽核層級的輸入；與回簽可達性無關（不列入 18m 組合測試）。放寬＝②（較不嚴） |
+- **P2① 的解除路徑與 UNKNOWN（r9）**：成案之後取消回簽被擋時，出口＝成案降級（`PATCH …/deal-tag`：未成案↔已成案 admin+、已結案 superadmin）。**採購單（PO）UNKNOWN**：盤點到 `material_orders.py` 只有 `PATCH /api/quotations/{quote_no}/material-orders`（:79）、`PATCH …/material-orders/{item_id}/invoice-date`（:198）與 `GET`（:239）；未見『撤銷已開採購單』的獨立端點。T1 必須寫明『已開採購單如何被取消／撤回』（例如以 :79 的 PATCH 修改清單？狀態條件？）；寫不出來 ⇒ P2① 對『已有 PO』的單是另一條單向陷阱，須回報使用者決定（例如補一條撤回路徑或 P2① 只看成案、不看 PO）。
 - **放寬判定**（需原因＋變更明細＋第二位最高管理者核准＋確認期間）：P1 ①→②、P2 ①→②③、P3 ①→②、P3b ①→②（清除較寬鬆）、P4 ①→②、P5 ①→②。收緊立即生效。
 - **組合檢查（儲存設定時白話警示，不擋）**：P4＝允許 且 P3＝擋下 ⇒ 簽核人遇到被解鎖修改的已回簽單時只能核准或拒絕結案，不能退回修改（因為退回會被擋）。H4 保證任何組合都不會死鎖。
 - **`reject_quotation_final`**（`POST …/reject-final`，:5070；待審核／簽核中 → 已拒絕，經 `save_quotation_json`，:5119）：行為由 **P3b** 決定（預設終局保留；`update_quotation` 於 :1841 對 已拒絕 回 403）；離開 已拒絕 的唯一路徑是 `update_status` → 依 P3。
@@ -194,7 +199,7 @@ T9 估算拆分（r7）：預設行為（sign 驗證、unsign 清除、H1–H7�
 18j. **舊資料不受影響（H5）**：`is_signed=1`、狀態 草稿／已取消、無 `altGroup`／`altPicks` 的列：`PUT` 改品項成功；`recall`／`reject`／`update_status` 與今日逐位元相同（不清 `is_signed`、不 409、無新稽核）。
 18k. **`save_quotation_json` 呼叫者**：T1 清單中每個呼叫者各一則斷言，對已回簽擇一單不得改變 P1 鎖定範圍內的內容（或回 409）。
 18l. **設定與放寬**：五項政策（P1～P5＋P3b）預設值＝使用者定案值（`test_settings_defaults_equal_legacy` 樣式）；放寬須原因＋變更明細＋第二位核准＋確認期間，收緊立即生效；畫面無代碼（測 23）；效果面板逐選項有文字；P4＝允許 且 P3＝擋下 時儲存畫面出白話警示。
-18m. **性質測試（property-style）：全政策組合可達性**：窮舉 P1(2)×P2(3)×P3(2)×P3b(2)×P4(2)＝**48 組**（P5 與可達性無關，不列入），對每組從『每個可達狀態』（以 A1 轉移表為模型，加上舊資料旁路造出的 草稿／待審核 且 `is_signed=1`）出發，斷言**存在至少一個合法動作能離開鎖定或解除它**（取消回簽／核准／reject-final／編輯被允許的欄位…），**除非 H3 生效**；H3 生效時，斷言存在 H3 解除路徑清單中的某個端點可使單據失效後再度取得出口（對應 H3 解除路徑；若 T1 找不到某單據的解除路徑，此測紅）。
+18m. **性質測試（property-style）：全政策組合可達性**：窮舉 P1(2)×P2(3)×P3(2)×P3b(2)×P4(2)＝**48 組**（P5 與可達性無關，不列入），對每組從『每個可達狀態』（以 A1 轉移表為模型，加上舊資料旁路造出的 草稿／待審核 且 `is_signed=1`）出發，斷言：**存在一個合法動作能離開鎖定或解除它，除非 (a) H3 生效，或 (b) P2① 生效；且在 (a)(b) 兩種情況下，必須存在已文件化的解除路徑**——(a) 未匯出單據：撤回／刪除／reject 單據（上列路徑）；已匯出單據＝**文件化的永久凍結例外**（H3 決定，測試以白名單方式登記，並斷言畫面訊息為上述白話句，且 backlog『財務作廢』存在於文件）；已精算：重開精算；(b) P2①（成案／已有 PO）：成案降級（`PATCH …/deal-tag`，admin+／superadmin）；**已開採購單**的解除方式＝T1 必須說明（見 P2 列 UNKNOWN），說明不出來則此測紅且 P2① 視為另一條單向陷阱，須回報使用者。
 18n. **H9 簽核金額基準**：擇一單送審的簽核層級／原因，P5①以最嚴組合評估、P5②以暫估評估；sign 前後簽核結果不矛盾（P5① 下不會出現『以暫估通過、回簽後超過門檻』）。
 
 **E 輸出文字**
@@ -264,7 +269,7 @@ T9 估算拆分（r7）：預設行為（sign 驗證、unsign 清除、H1–H7�
 - **O4** H7：`reject_quotation` 升版單號後，以舊號為鍵的單據是否仍被新號查得到＝UNKNOWN（T1 查 `quote_no` 重新命名的全部連動點）。
 - **O5** 簽核政策『6 項鎖死』清單內容以其政策文件為準；本文只引用機制，請 0d 核對 H3 是否已在該清單。
 - **O6** H9／P5：簽核金額基準預設選『各組最嚴』是我的建議，**尚未經使用者確認**（今日未選擇一單的簽核以 `tot` 判斷，擇一未選時 `tot` 為暫估）。須使用者回答；在回答前擇一單不得走送審上線。
-- **O7** H3 解除路徑：開票單／請款單／精算／成案降級的實際端點與狀態需 T1 逐一確認（本文列的是候選）；找不到解除路徑的單據類型需使用者決定（見 H3）。
+- **O7**（r9 已查證）H3 解除路徑：未匯出的開票單／請款單可 DELETE（草稿）／revoke-approval／reject；**已匯出者今天無解除路徑 ⇒ 已決定為刻意的永久凍結**（財務已開立文件），並登記 backlog『財務作廢／沖銷已匯出單據』（M3 範圍外）。仍待 T1：已精算的重開路徑、已開採購單的撤回方式（P2①，UNKNOWN）。
 
 ## 8. 不在本班範圍
 勞報單選關聯派發下拉（05）；報價單欄位標籤可由管理者在系統內改（F7，後續）；`quotation` output_template 化（M4，承接 T8 的字面實作）；組合以外的優化（最佳方案推薦等）。
