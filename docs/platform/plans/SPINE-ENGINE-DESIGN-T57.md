@@ -7,8 +7,9 @@
 
 1. **E-a 的真問題不是『模組登不了群組』**——模組在 import 時呼叫 `register_group()` 本來就行（載入器只對『已載入』的模組 import）。真問題有三個：①凍結基準 `settings_deploy_baseline.json` 是**單一檔**，`test_deploy_baseline_frozen` 把『目前登錄的所有群組』跟它比，模組群組一進來就紅（或因載入順序而時紅時綠）；②登錄表沒有『擁有者』概念，無法判斷某群組該不該出現、該比對哪份基準；③群組集中在 `helpers/settings_groups.py`（core 檔）→ 多班同改的熱點。
 2. **E-a 做法**：登錄時蓋『擁有者』章（載入器在 import 模組期間設一個 L0 的擁有者範圍，`register_group` 自動讀取）、模組在 `module.json` 宣告它擁有的群組（宣告⇔實際登錄不一致 ⇒ 該模組不載入）、基準依擁有者分檔並**只比對已載入的擁有者**、模組卸載／載入失敗時一併移除其群組。1.0 pd。
-3. **E-b 做法**：`core/spine.py` 讀 `module.json` 的 `features[]`（宣告式、靜態可掃），在載入結束後對已載入模組的宣告做跨表驗證；**CI 失敗＝硬紅；執行期失敗＝只停用該功能並降級（未驗證目錄項視為 isMoney/internal）**，結果進系統中心健康卡。目錄（P0）尚未落地，E-b 以『擴充點』設計：先驗證今天查得到的（設定、信件、群組擁有、宣告完整），目錄與標籤驗證器在 P0 落地時掛上。1.5 pd。
-4. 兩者都在底層列車（`core/**`、`helpers/**`），與 S1 同列車的後續項；S1 先、E-a 後（1c 決定）。
+3. **功能狀態（1c 要求，§3.7）**：每個功能在 `features[]` 帶 `status ∈ {open, planned, hidden}`——設定中心可以在所有功能完成之前先上線：`planned` 顯示成灰色『開發中，預計 MSn 版提供』（無日期）、後端拒絕寫入；`hidden` 完全不顯示。
+4. **E-b 做法**：`core/spine.py` 讀 `module.json` 的 `features[]`（宣告式、靜態可掃），在載入結束後對已載入模組的宣告做跨表驗證；**CI 失敗＝硬紅；執行期失敗＝只停用該功能並降級（未驗證目錄項視為 isMoney/internal）**，結果進系統中心健康卡。目錄（P0）尚未落地，E-b 以『擴充點』設計：先驗證今天查得到的（設定、信件、群組擁有、宣告完整），目錄與標籤驗證器在 P0 落地時掛上。1.5 pd。
+5. 兩者都在底層列車（`core/**`、`helpers/**`），與 S1 同列車的後續項；S1 先、E-a 後（1c 決定）。
 
 ## 1. 已核對的現況
 
@@ -77,9 +78,11 @@
    "catalog": {"fields": ["directive_badge"], "surfaces": ["module:crm.dev_log_list"]},
    "capabilities": ["directive.write"],
    "labels": ["directive.button"],
+   "status": "open",
    "notes": "CRM-DIRECTIVE-COMMENTS-T56.md"
 }]}
 ```
+- `status`（選填，預設 `open`）：`open`｜`planned`｜`hidden`——功能的**成熟度**，見 §3.7。`planned` 時另需 `planned_train`（例 `"MS2"`，**不寫日期**）。
 - 每個區段**選填**；有宣告就必須對得上：`settings.group` ⇒ 該擁有者確有此群組；`mail[]` ⇒ `mail_types` 已登記且 owner＝本模組；`capabilities[]` ⇒ `core.capabilities` 已收集；`catalog`／`labels` ⇒ 目錄與標籤驗證器（P0 之後才掛，之前『有宣告但無驗證器』記為 `pending_validator`，不算失敗）。
 - `code`：snake_case、全域唯一（跨模組重複 ⇒ 後載入者失敗）；與設定群組代號一致是**慣例**（§15-2），不強制，但 `settings.group` 缺省取 `code`。
 - 與 §2.2 的 `settings.groups` 關係：`features[].settings.group` 必須是模組 `settings.groups` 的子集（同一份宣告檔，不兩處維護；實作上 `settings.groups` 可由 `features[]` 推導，兩者並存時以一致性檢查為準）。
@@ -98,6 +101,45 @@
 - **執行期**：失敗的功能 `state=failed`，`spine.feature_enabled(code)` 回 False；功能自己的入口（路由、按鈕、排程）依此降級；**未驗證的目錄項 ＝ isMoney 真、類別 internal**（P0 落地後由目錄讀取端套用——客戶通道、檔名變數、帶入白名單、範本占位符一律隱藏，絕不當 public）。失敗不阻止系統啟動、不影響其他功能。
 - **可見性**：系統中心健康卡新增一行『有 N 項功能登錄未通過驗證』（`system_cards` 宣告在 core 的 `system_hub_l1.json`），列功能代號與白話原因（superadmin）；同時 `audit_log` 動作 `spine.validation_failed`（啟動時每次失敗各一筆，去重）。
 - **fail-closed 的邊界**：驗證器本身丟例外 ⇒ 該功能視為失敗（不是通過）。
+
+### 3.7 功能狀態 `status`：`open`｜`planned`｜`hidden`（設定中心可先於功能上線）
+
+**目的**：設定中心與版面編輯器的畫面可以先出貨，尚未做完的功能不用等；使用者看得到『之後會有什麼』，但不能誤改一個還沒有行為的設定。
+
+| status | 畫面 | 後端 | 驗證 |
+|---|---|---|---|
+| `open`（預設；沒寫＝open） | 正常顯示、可編輯 | 正常 | 完整驗證（§3.3） |
+| `planned` | **灰色顯示**，欄位全部停用，標示『開發中，預計 MSn 版提供』（`planned_train`；**不寫日期**）；預設值與影響說明仍可讀 | **拒絕所有寫入**（儲存／還原預設／還原版本／套用預設組／預覽／即時影響一律回 409『這項功能還在開發中，尚未開放調整』）；讀取（GET）可 | 結構與擁有一致照驗（宣告的群組必須已登錄、預設＝凍結基準），讓『開放那天』只改一個字 |
+| `hidden` | **不顯示**（群組清單、版面編輯器的可挑項目、預設組預覽都不出現） | 對外回 404 `沒有這個設定群組`（不洩漏存在）；內部讀預設值照常 | 同 planned |
+
+**規則**
+1. **狀態由開發決定，不是管理者的設定**：寫在 `module.json`（隨功能程式出貨）；管理者不能把 `planned` 打開（那是成熟度，不是政策）。功能做完的那個提交把 `planned` 改成 `open`（或刪掉該行）。
+2. `planned` 必須有 `planned_train`（格式 `^MS[0-9]+$`）；出現 `date`／`eta` 之類的日期鍵 ⇒ 驗證失敗（使用者要求不承諾日期）。`hidden`、`open` 不可帶 `planned_train`。
+3. **引擎層攔截，不只靠路由**：`settings_registry.publish()` 在最前面問 `spine.group_status(group)`（L1 呼叫 L0，方向合法）；非 `open` ⇒ `SettingError`。如此 `apply_profile`、`restore`、`reset`、任何內部呼叫端都一併被擋，不必每個端點各寫一份；`apply_profile`／`profile_preview` 直接略過非 open 的群組並回報『略過 N 項（開發中）』。
+4. **到期值**：群組變成非 open 之前已有待生效項 ⇒ `materialize_due()` 不寫入、標 `cancelled`（原因『功能改為開發中』），比照『超出範圍自動撤銷』。
+5. **歸屬**：群組屬於哪個功能由 `features[].settings.group` 決定（沒歸屬任何功能的群組＝`open`）。一個群組只能歸一個功能；同一功能多個群組狀態相同。
+6. **目錄項（P0 之後）**：功能的 `catalog.fields`／`surfaces` 繼承功能狀態——`planned` 在版面編輯器的可挑清單裡灰色列出、不可放入版面；`hidden` 不出現。解析器對非 open 的項目一律不輸出（不影響既有單據）。
+7. **與降級（§3.4）的差別**：`status` 是**宣告的成熟度**（刻意、可預期）；`failed` 是**驗證失敗**（意外、要處理）。兩者在 `spine.report()` 分開欄位：`state ∈ ok｜failed｜pending_validator`、`status ∈ open｜planned｜hidden`。`feature_enabled(code)` ＝ `state != failed and status == open`。
+
+**API（`core/spine.py`，標準庫）**
+```
+feature_status(code) -> "open"|"planned"|"hidden"          # 未宣告的功能 ⇒ "open"
+group_status(group)  -> "open"|"planned"|"hidden"          # 由 features[].settings.group 對映
+planned_train(code)  -> "MS2"|None
+```
+設定中心路由：`GET /groups` 每組多 `status`、`plannedTrain`，`hidden` 不列；`GET /groups/{g}` 同（hidden ⇒ 404）；所有寫入類端點先過同一個 `_writable(group)`（planned ⇒ 409、hidden ⇒ 404），引擎層仍是最後防線。
+
+**健康卡（§3.4 的那張）**：新增一行資訊性文字『開發中的功能 N 項（planned）』並列功能與預計列車（`MSn`）；`hidden` 只計數『已隱藏 M 項』。這兩行**不算失敗**（不影響卡片的顏色）；『登錄未通過驗證 N 項』維持紅色警示。僅 superadmin 可見。
+
+**測試**
+1. `planned` 群組：GET 清單含 `status=planned`＋`plannedTrain`；儲存／預覽／即時影響／還原預設／還原版本／套用預設組各回 409 且**資料與變更明細不變**（前後計數）；直接呼叫 `publish()` 丟 `SettingError`（引擎層）；讀取預設值正常。
+2. `hidden`：清單不列、GET 單組與所有寫入端點回 404；`profile_preview`／`apply_profile` 略過；內部 `get()` 仍回預設。
+3. 狀態翻轉：`planned→open` 後可寫；`open→planned` 前已有的待生效項在 `materialize_due` 被標 `cancelled`（原因可查）。
+4. 驗證：`planned` 缺 `planned_train` ⇒ 失敗；`planned_train` 格式不符、帶日期鍵 ⇒ 失敗；`open`／`hidden` 帶 `planned_train` ⇒ 失敗；`status` 值不合法 ⇒ 失敗；沒寫 `status` ⇒ `open`（向下相容）。
+5. 歸屬：群組歸兩個功能 ⇒ 失敗；未歸屬的群組（如現有 core 群組）⇒ `open`，行為不變（黃金）。
+6. `feature_enabled`：`planned`／`hidden`／`failed` 皆 False，`open` 且 ok 才 True。
+7. 畫面（e2e，需另行同意才跑）：planned 群組欄位全部 disabled、顯示『開發中，預計 MS2 版提供』、沒有儲存列；頁面無日期字樣。
+8. 健康卡：planned／hidden 的資訊行出現、顏色不變；有 failed 才變紅。
 
 ### 3.5 字面掃描器（`宣告檔存在`守門）
 - 以 `ast` 掃 `backend/**`（排除 tests）：只抓**字面**：`send_registered("<key>"…)`、`mail_types.register("<key>"…)`、`register_group("<group>"…)`、`SettingDef("<key>"…)`、與 `QUOTE_MONEY_KEYS`／`QUOTATION_MONEY_COLS` 內已列出的金額鍵名。
@@ -121,10 +163,11 @@
 | E-a1 | `registry.owner_scope／current_owner／on_unload` ＋ loader 包 import ＋ `register_group(owner=)`／`groups()` 回 owner／`unregister_owner` ＋ 測試 1、3 | 0.3 |
 | E-a2 | `settings` 區段宣告⇔登錄檢查 ＋ 測試 2 | 0.2 |
 | E-a3 | 基準分割（腳本＋共用 `_settings_baseline.compare`＋核心題改 owner 過濾＋模組題樣板）＋ 測試 4–7 | 0.5 |
-| E-b1 | `core/spine.py`（結構驗證、擁有一致、擴充點、`feature_enabled`、`report`）＋ L1 驗證器登記（設定、信件、能力）＋ 測試 1–3、6 | 0.9 |
-| E-b2 | 健康卡＋稽核＋降級讀取端 API ＋ 測試 4 | 0.3 |
+| E-b1 | `core/spine.py`（結構驗證、擁有一致、擴充點、`feature_enabled`、`report`、**`status`／`planned_train` 驗證與 `feature_status`／`group_status`／`planned_train` API**）＋ L1 驗證器登記（設定、信件、能力）＋ 測試 1–3、6、§3.7 測試 4–6 | 1.1 |
+| E-b2 | 健康卡（含 §3.7 的 planned／hidden 資訊行）＋稽核＋降級讀取端 API ＋ 測試 4、§3.7 測試 8 | 0.4 |
 | E-b3 | 字面掃描器＋正對照＋白名單 ＋ 測試 5 | 0.3 |
-| 合計 | | **2.5**（與脊柱 r9 §17.2 的 E-a 1.0＋E-b 1.5 一致） |
+| S1+ | 設定中心套用 `status`：`publish()` 最前面問 `spine.group_status`（引擎層）、`materialize_due` 取消、`apply_profile` 略過、路由 `_writable`、清單多 `status`／`plannedTrain`、畫面灰色卡片 ＋ §3.7 測試 1–3、5、7（依賴 E-b1 的 API；S1 已出貨後的小補丁） | 0.5 |
+| 合計 | | **3.3**（E-a 1.0＋E-b 1.8＋S1+ 0.5；較 r1 的 2.5 多 0.8，來自功能狀態 `status`：E-b 內多 0.3（1.5→1.8）、設定中心套用多 0.5） |
 
 順序：E-a1→E-a2→E-a3（可單獨出貨）；E-b1 依賴 E-a1／E-a2；E-b2、E-b3 之後。每一步單檔測試各自執行，底層閘門與其他列車項合併一次（脊柱 §17.7）。
 
