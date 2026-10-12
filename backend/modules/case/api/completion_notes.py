@@ -830,12 +830,14 @@ def delete_completion_signed_file(note_no: str, file_id: str, authorization: str
 @router.get("/api/completion-notes/{note_no}/privacy-notice")
 def get_completion_privacy_acks(note_no: str, authorization: str = Header(None)):
     from helpers import privacy_notice as _pn
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute("SELECT note_no FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
-    conn.close()
-    if not row:
-        raise HTTPException(404, "完工單不存在")
+    try:
+        # 2026-10-12：原本只要求登入 ⇒ 單號可列舉即可讀任一完工單聯絡人的告知紀錄；改走與單筆 GET 同一道閘
+        # （查無與看不到同一句「完工單不存在」）
+        _readable_note(conn, note_no, user, cols="note_no, quote_no")
+    finally:
+        conn.close()
     return {"acks": _pn.acks_with_prefix("completion_contact", note_no)}
 
 

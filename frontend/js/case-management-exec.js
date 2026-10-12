@@ -44,6 +44,7 @@ window.CM_PARTS.push(() => ({
     moLoading: true,
     moSaving: false,
     moDirty: false,
+    moSupplierAlways: true,            // 設定中心『新增材料申請要選供應商』：true＝一律要選（預設）；false＝帶入採購單的新列免選
     moMsg: '',
     moMsgError: false,
     // 材料申請審核（31-C）：itemId → 審核摘要 {status, legacy, docCode, currentApprovers, rejectReason, receivedOn, receivedBy…}
@@ -82,7 +83,9 @@ window.CM_PARTS.push(() => ({
           // 這份清單是自由格式 JSON（早期資料或人工改過的 data_json 不保證
           // 欄位齊全），跟後端 GET 端點同款作法：每個欄位都給預設值，
           // 不然 x-model 綁到 undefined 會讓整列輸入框變成不受控
-          this.materialOrders = ((await r.json()).materialOrders || []).map(o => ({
+          const moBody = await r.json()
+          this.moSupplierAlways = moBody.supplierRequiredAlways !== false
+          this.materialOrders = (moBody.materialOrders || []).map(o => ({
             itemId:     o.itemId || this._moNewId(),
             itemName:   o.itemName || '',
             quantity:   Number(o.quantity) || 0,
@@ -365,7 +368,7 @@ window.CM_PARTS.push(() => ({
       for (const m of this.materialOrders) {
         const name = (m.itemName || '').trim()
         if (!name) { this.moMsgError = true; this.moMsg = '有項目還沒填名稱'; return false }
-        if (m._saved === false && !m.supplierId) { this.moMsgError = true; this.moMsg = `「${name}」還沒選供應商（新增材料申請必填）`; return false }
+        if (m._saved === false && !m.supplierId && (this.moSupplierAlways || !m.poDocCode)) { this.moMsgError = true; this.moMsg = `「${name}」還沒選供應商（新增材料申請必填）`; return false }
         const quantity  = Math.max(0, Number(m.quantity) || 0)
         const unitPrice = Math.max(0, Number(m.unitPrice) || 0)
         const totalPrice = MotrixLegalRound.halfUp(quantity * unitPrice, 100) / 100
@@ -400,7 +403,10 @@ window.CM_PARTS.push(() => ({
           if (d.rejected && d.rejected.length) {
             // 材料申請審核（31-C）：只拒有問題的項目，其餘已存——逐項說明，並重新載入以顯示伺服器現值
             this.moMsgError = true
-            this.moMsg = '部分項目沒有儲存：' + [...new Set(d.rejected.map(x => x.message))].join('；')
+            const nameOf = id => ((this.materialOrders.find(o => o.itemId === id) || {}).itemName || '').trim()
+            const first = d.rejected[0]
+            this.moMsg = '部分項目沒有儲存：' + (nameOf(first.itemId) ? '「' + nameOf(first.itemId) + '」：' : '') + first.message +
+              (d.rejected.length > 1 ? '（另有 ' + (d.rejected.length - 1) + ' 項被擋下：' + [...new Set(d.rejected.slice(1).map(x => x.message))].join('；') + '）' : '')
           } else {
             ok = true
             this.moMsgError = false
@@ -408,6 +414,8 @@ window.CM_PARTS.push(() => ({
             setTimeout(() => { if (!this.moDirty) this.moMsg = '' }, 2500)
           }
           await this.loadMaterialOrders(quoteNo)
+          // 材料卡片對這些新列的連結先前被擋在自動存檔之外（見 _crForSave）；列存好了就補送一次
+          if (this._mlHeldLink && !(d.rejected && d.rejected.length) && this.setDirty) { this._mlHeldLink = false; this.setDirty() }
         } else {
           const d = await r.json().catch(() => ({}))
           this.moMsgError = true
