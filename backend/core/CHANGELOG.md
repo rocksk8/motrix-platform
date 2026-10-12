@@ -1,6 +1,9 @@
 # L0／L1 底層 更新紀錄
 
 ## 1.129 — 2026-10-10（wip/t50-int；第 50 班）
+- **（併入）(next) — 2026-10-13（wip/t57-s1-1-managed-r3；S1-1 設定群組受管）**
+- L1（行為，向下相容）：`routers/definitions.py` 新增『受管 kind』（`_MANAGED_KINDS`，目前 `setting_group`）：通用的 `PUT …/draft`、`POST …/publish`、`POST …/restore/{v}`、`DELETE …/draft` 對受管 kind 一律回 409（白話訊息指向『系統 > 設定中心』）；`GET`（清單、單版、差異、解析）不受影響。原本任一最高管理者可經通用端點直接改設定群組，繞過 `settings_registry.publish()` 的 放寬→待生效→第二位最高管理者核准 與 `config_changes` 明細（只留 `definitions.publish_unreviewed` 稽核）。其他 kind 不受影響；設定中心端點仍是唯一寫入路徑。被擋下的嘗試寫稽核 `definitions.managed_refused`（只記 kind／key／操作者，不記內容）。
+- L1（行為修正，向下相容）：`helpers.config_ledger.restore_version` 改為『先撤銷該 key 的待生效項、再呼叫 domain 的 restore adapter』（原順序相反，還原成較寬鬆的舊值時 adapter 剛寫的待生效項會被緊接著的撤銷一併撤掉）。介面與簽章不變（`l1_interface_snapshot.json` 不動）。測試：`tests/platform/test_s1_managed_kind.py`。
 - **（併入）(next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2）**
 - L0（新增，只增）：`core.definitions.publish_direct(conn, kind, key, scope, body, note, user, commit=True)`——不經草稿直接發布一份 body（寫鎖內驗證、有送審中版本時 409）；`commit=False` 讓呼叫端同交易寫變更明細與稽核。
 - core migration（NEXT 佔位，列車取號）：表 `config_changes`（不可變）與 `config_change_events`（只增不改不刪，觸發器擋）。
