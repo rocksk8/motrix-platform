@@ -4,6 +4,12 @@
 - L1（新增，只增）：`helpers.settings_groups.UNAVAILABLE_ALT_CHOICES`（M3 擇一方案設定中『尚未提供』選項表：已登錄但不可儲存、讀取夾回預設；由 `modules/case/alt_policy.py` 讀取）。
 - 設定群組（只增，預設＝今日行為）：`quote_alt`（M3 擇一方案；政策類 requires_pending）。部署基準檔 `settings_deploy_baseline.json` 同步。
 
+## (next) — 2026-10-13（wip/t57-project-margin-r1；專案毛利%＋M3 擇一方案登錄）
+- L1（新增，只增）：`helpers.profit_rules.project_margin`、`helpers.profit_rules.uncosted_items`（報價單「專案毛利%」：（未稅收入 − 未稅品項成本）÷ 未稅收入，精確有理數運算、平手遠離零、pretax ≤ 0 回 None；前端孿生 `static/profit-rules.js projectMargin`，共用黃金向量）。
+- L1（新增，只增）：`helpers.settings_groups.UNAVAILABLE_ALT_CHOICES`（M3 擇一方案設定中『尚未提供』選項表；已登錄但不可儲存、讀取夾回預設）。
+- `helpers.financial_mask.QUOTATION_MONEY_COLS` 新增 `project_margin_pct`（常數值變更，名稱不變）：任何走 `mask_row` 的路徑，該鍵若存在即被遮；實際附加只在該回應本來就保有報價金額時。
+- 設定群組（只增，預設＝今日行為）：`quote_alt`（M3 擇一方案；政策類 requires_pending）、`project_margin`（`warn_pct`，預設 0＝不提醒）。部署基準檔 `settings_deploy_baseline.json` 同步。
+
 ## 1.129 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-13（wip/t57-s1-1-managed-r3；S1-1 設定群組受管）**
 - L1（行為，向下相容）：`routers/definitions.py` 新增『受管 kind』（`_MANAGED_KINDS`，目前 `setting_group`）：通用的 `PUT …/draft`、`POST …/publish`、`POST …/restore/{v}`、`DELETE …/draft` 對受管 kind 一律回 409（白話訊息指向『系統 > 設定中心』）；`GET`（清單、單版、差異、解析）不受影響。原本任一最高管理者可經通用端點直接改設定群組，繞過 `settings_registry.publish()` 的 放寬→待生效→第二位最高管理者核准 與 `config_changes` 明細（只留 `definitions.publish_unreviewed` 稽核）。其他 kind 不受影響；設定中心端點仍是唯一寫入路徑。被擋下的嘗試寫稽核 `definitions.managed_refused`（只記 kind／key／操作者，不記內容）。

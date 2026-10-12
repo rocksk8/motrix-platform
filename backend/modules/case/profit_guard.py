@@ -157,6 +157,16 @@ def counted_items(q: dict, picks=None) -> list:
     return out
 
 
+def quote_project_margin(q: dict) -> dict:
+    """專案毛利%（詳情）：由**已存品項**重算——未稅收入＝`server_totals(q)["pretax"]`、成本＝計入品項的 Σ 數量×成本；不信用戶端 `tot`，不寫回任何地方。
+    回 `{amount, pct, uncosted_items}`（`helpers.profit_rules.project_margin`）。"""
+    items = counted_items(q)
+    cost = 0.0
+    for i in items:
+        cost = cost + _num(i.get("qty")) * _num(i.get("cost"))
+    return PR.project_margin(server_totals(q)["pretax"], _clean(cost), PR.uncosted_items(items))
+
+
 def alt_groups(q: dict) -> dict:
     """`{組名: [品項, …]}`（依出現順序；只含擇一品項）。"""
     out = {}
@@ -297,6 +307,10 @@ def prepare(q: dict, user: dict, existing_row=None, quote_no: str = ""):
     """存檔前呼叫（建立／整份存檔；**要在開啟寫入連線、寄任何通知之前**）。就地修改 `q`；回傳比率變更資訊 `{old,new,default}`
     （沒變更 ⇒ None，供呼叫端寫稽核）。不合格的值 ⇒ 422；非最高管理者改比率 ⇒ 403。"""
     is_new = existing_row is None
+    for _k in ("project_margin_pct", "projectMargin"):          # 專案毛利%是讀取時重算的衍生值：用戶端送來的一律丟棄（頂層與 tot 內），不寫進 data_json
+        q.pop(_k, None)
+        if isinstance(q.get("tot"), dict):
+            q["tot"].pop(_k, None)
     old = {}
     if not is_new:
         try:

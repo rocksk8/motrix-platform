@@ -11,7 +11,7 @@
 import copy
 
 #: quotations 表上的金額欄位（清單、結案檢核、單筆 GET 的頂層）
-QUOTATION_MONEY_COLS = ("total", "pretax", "direct_margin_pct", "net_margin_pct")
+QUOTATION_MONEY_COLS = ("total", "pretax", "direct_margin_pct", "net_margin_pct", "project_margin_pct")
 
 #: 報價品項
 ITEM_MONEY_KEYS = ("cost", "margin", "unitPrice", "amount")
