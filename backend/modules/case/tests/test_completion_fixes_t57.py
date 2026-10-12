@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 import db
+from core import source_tree
 
 REPO = Path(__file__).resolve().parents[4]
 BASE = "/api/completion-notes"
@@ -74,7 +75,7 @@ def _fn_body(src, name):
 
 
 def test_queue_card_labels_completion_note_as_item_count_not_money():
-    src = (REPO / "frontend/pages/approval-queue.html").read_text(encoding="utf-8")
+    src = source_tree.page_file("approval-queue.html").read_text(encoding="utf-8")
     label = _fn_body(src, "amountLabel")
     shown = _fn_body(src, "amountDisplay")
     assert re.search(r"completion_note'\)\s*return\s*'完成項目'", label)
