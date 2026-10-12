@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-13（wip/t57-m3-t11-r6；M3 擇一方案報價）
+## 1.0.179 — 2026-10-13（wip/t57-m3-t11-r6；M3 擇一方案報價）
 - **（併入）(next) — 2026-10-12（wip/t57-m3-t1-r2；M3 擇一方案報價 T2）：資料模型＋唯一計入集合＋設定中心群組『擇一方案』**
   - `profit_guard.counted_items(q, picks=None)`：計入合計／毛利的品項＝非擇一項＋每組被選定的那一項（未選整組不計入）。`server_totals`、`server_profit`（成本、進項稅）只走它；品項沒有 `altGroup` 的單與修改前逐位元相同。品項新增選填鍵 `altGroup`（空＝非擇一）；單層新增 `totalsByAlt`（布林）、`altPicks`／`altPickedAt`／`altPickedBy`（只由回簽路徑寫，T9）。
   - `profit_guard.prepare()`：①一般存檔不採用用戶端的 `altPicks`／`altPickedAt`／`altPickedBy`，放回資料庫現值；②驗證（422，白話）：`totalsByAlt` 只收真布林、`altGroup` 須為文字、標題列不可擇一、每組至少 2 項、組數不超過設定 `alt_groups_max`；③已精算／結案單改動擇一結構（哪個品項在哪一組、`totalsByAlt`）→ 409。
