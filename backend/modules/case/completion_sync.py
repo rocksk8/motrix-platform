@@ -25,6 +25,10 @@ COUNTED_ITEM_STATUSES = ("完成", "部分完成")
 ITEM_ID_MAX = 64
 
 
+class SourceUnavailable(Exception):
+    """報價單『計入哪些品項』判斷失敗（擇一方案的計入函式存在卻丟例外）：不可降級為全部品項，否則會把客戶沒選的方案帶進完工單。"""
+
+
 def num(v) -> float:
     """數量解析：非數字、非有限、負數 ⇒ 0。"""
     try:
@@ -57,13 +61,13 @@ def gate_message(status: str):
 def source_items(data: dict, *, include_headers: bool = True) -> list:
     """報價單目前計入的品項（只留允許清單內的非金額欄位）。M3 之後 `profit_guard.counted_items` 存在時改用它（擇一單只取選定）；之前＝全部品項。"""
     items = (data or {}).get("items") or []
-    try:
-        from modules.case import profit_guard as _pg
-        fn = getattr(_pg, "counted_items", None)
-        if callable(fn):
+    from modules.case import profit_guard as _pg
+    fn = getattr(_pg, "counted_items", None)                               # 函式不存在（M3 前）⇒ 全部品項；存在卻失敗 ⇒ 關閉（不帶任何東西）
+    if callable(fn):
+        try:
             items = fn(data) or []
-    except Exception:                                                      # noqa: BLE001  M3 缺席或失敗 ⇒ 降級為全部品項
-        items = (data or {}).get("items") or []
+        except Exception as e:                                             # noqa: BLE001
+            raise SourceUnavailable(str(e)) from e
     out = []
     for it in items:
         if not isinstance(it, dict):
@@ -87,8 +91,8 @@ def source_items(data: dict, *, include_headers: bool = True) -> list:
 
 
 def fingerprint(items: list) -> str:
-    """來源集合的非金額指紋（id／type／description／qty／unit）。金額變動不改指紋。"""
-    canon = [[it.get("id") or "", it.get("type") or "", it.get("description") or "",
+    """來源集合的非金額指紋（id／type／description／brand／qty／unit；品牌會變成帶入的品名，所以算）。金額變動不改指紋。"""
+    canon = [[it.get("id") or "", it.get("type") or "", it.get("description") or "", it.get("brand") or "",
               it.get("qty") if it.get("type") != "header" else 0, it.get("unit") or ""] for it in items]
     return hashlib.sha256(json.dumps(canon, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:32]
 

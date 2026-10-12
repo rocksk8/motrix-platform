@@ -362,6 +362,7 @@ def test_settings_group_defaults_are_the_user_decisions():
         for c in f["choices"]:
             assert c["label"] and c["impact"]
     assert R.get("completion_note", "over_qty") == 0
+    assert {f["key"]: f["loosen"] for f in g["fields"]}["prefill_unsigned"] is None          # 便利性選項：不走雙人核准
 
 
 def test_options_in_response_follow_the_registry(client, make_user):
@@ -378,3 +379,97 @@ def test_form_no_longer_loads_the_whole_quotation_and_shows_no_price_columns():
     assert "/api/completion-notes/quote-items" in src
     for word in ("單價", "金額", "unitPrice", "價格"):
         assert word not in src, word
+
+
+# ── 補強（0d 稽核 S1–S4）────────────────────────────────────────────────────────
+
+def test_source_fails_closed_when_counted_items_exists_but_raises(client, make_user, monkeypatch):
+    from modules.case import profit_guard as PG
+
+    def boom(data):
+        raise RuntimeError("alt calc broke")
+    monkeypatch.setattr(PG, "counted_items", boom, raising=False)
+    with pytest.raises(CS.SourceUnavailable):
+        CS.source_items({"items": ITEMS})
+    h = _admin(client, make_user)
+    r = _qi(client, h, _quote())
+    assert r.status_code == 409 and "無法判定計入項目" in r.json()["detail"]
+
+
+def test_source_degrades_to_all_items_only_when_the_function_is_absent(monkeypatch):
+    from modules.case import profit_guard as PG
+    monkeypatch.delattr(PG, "counted_items", raising=False)
+    assert len(CS.source_items({"items": ITEMS})) == 4
+    monkeypatch.setattr(PG, "counted_items", lambda data: [ITEMS[0]], raising=False)
+    assert [i["id"] for i in CS.source_items({"items": ITEMS})] == ["it-1"]               # 存在就用它的結果
+
+
+def test_fingerprint_follows_brand(client, make_user):
+    h = _admin(client, make_user)
+    no = _quote()
+    fp0 = _qi(client, h, no).json()["fingerprint"]
+    chg = json.loads(json.dumps(ITEMS)); chg[0]["brand"] = "另一牌"
+    _set_quote_data(no, chg)
+    assert _qi(client, h, no).json()["fingerprint"] != fp0
+
+
+def test_put_over_quantity_is_blocked_by_setting_and_excludes_itself(client, make_user, monkeypatch):
+    from modules.case.api import completion_notes as CN
+    h = _admin(client, make_user)
+    no = _quote()
+    n1 = _note(client, h, no, [_row("it-1", 8)]); _set_status(n1, "已核准")
+    mine = _note(client, h, no, [_row("it-1", 2)])
+    real = CN._opt
+    monkeypatch.setattr(CN, "_opt", lambda k: 1 if k == "over_qty" else real(k))
+    r = client.put(f"{BASE}/{mine}", headers=h, json={"quote_no": no, "items": [_row("it-1", 5)]})
+    assert r.status_code == 400 and "超過報價數量" in r.json()["detail"]
+    assert client.put(f"{BASE}/{mine}", headers=h, json={"quote_no": no, "items": [_row("it-1", 2)]}).status_code == 200   # 自己不算進他單
+
+
+@pytest.mark.parametrize("status", ["草稿", "已取消"])
+def test_put_with_quote_sync_is_409_when_the_quote_went_back_or_was_cancelled(client, make_user, status):
+    h = _admin(client, make_user)
+    no = _quote()
+    fp = _qi(client, h, no).json()["fingerprint"]
+    n = _note(client, h, no, [_row("it-1", 1)], quote_sync={"fingerprint": fp})
+    before = _stored_sync(n)
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE quotations SET status=? WHERE quote_no=?", (status, no)); conn.commit()
+    finally:
+        conn.close()
+    r = client.put(f"{BASE}/{n}", headers=h, json={"quote_no": no, "items": [_row("it-1", 1)], "quote_sync": {"fingerprint": fp}})
+    assert r.status_code == 409 and "報價單目前無法同步" in r.json()["detail"]
+    assert _stored_sync(n) == before
+    assert client.put(f"{BASE}/{n}", headers=h, json={"quote_no": no, "items": [_row("it-1", 2)]}).status_code == 200      # 不帶同步戳記的一般存檔不受影響
+
+
+def test_unreadable_and_missing_quotes_give_the_identical_404(client, make_user, monkeypatch):
+    from fastapi import HTTPException
+    from modules.case.api import completion_notes as CN
+    no = _quote()
+    conn = db.get_db()
+    try:
+        admin = {"username": "x", "role": "admin", "id": 1}
+        monkeypatch.setattr(CN, "case_page_readable", lambda c, q, u: False)
+        with pytest.raises(HTTPException) as hidden:
+            CN._quote_source(conn, no, admin)
+        with pytest.raises(HTTPException) as missing:
+            CN._quote_source(conn, "MQ-NOPE-000", admin)
+    finally:
+        conn.close()
+    assert (hidden.value.status_code, hidden.value.detail) == (missing.value.status_code, missing.value.detail) == (404, "找不到可帶入的報價單")
+
+
+def test_create_and_update_take_the_write_lock_before_checking():
+    import inspect
+    from modules.case.api import completion_notes as CN
+    for fn in (CN.create_completion_note, CN.update_completion_note):
+        src = inspect.getsource(fn)
+        assert src.index("begin_write(conn)") < src.index("_enforce_over_qty(") < src.index("conn.commit()"), fn.__name__
+
+
+@pytest.mark.skip(reason="TODO(M3 整合)：擇一方案併入後補——①counted_items 只回客戶選定品項 ⇒ 完工單只帶選定方案；②未選定組別 ⇒ sourceState=alt_unselected 與 unselected_group 設定；"
+                         "③取消回簽清除選定 ⇒ 指紋改變、完工單顯示橫幅（§8b 選項 a）；④counted_items 簽章變更時 completion_sync 是唯一接點")
+def test_alt_quote_integration_todo():
+    raise AssertionError("placeholder")

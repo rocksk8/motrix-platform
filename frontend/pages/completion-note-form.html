@@ -422,7 +422,7 @@
         } catch (e) { this._fail('網路錯誤：' + e.message) }
       },
 
-      // 新增時把案件的客戶／名稱／項目帶進來，不要讓使用者重打（第 57 班：改讀 quote-items 端點，只含非金額資料）
+      // 新增時把案件的客戶／名稱／項目帶進來，不要讓使用者重打（第 57 班：改讀 quote-items 端點，只含品名與數量）
       async prefillFromCase() {
         if (!this.form.quote_no) return
         const res = await this._fetchQuoteItems('')
@@ -500,7 +500,7 @@
         if (res) this._mergeQuoteItems(res, true)
       },
 
-      // 既有草稿開啟時：報價單的項目有沒有更動（只比對非金額指紋；與存檔時帶入的指紋比）
+      // 既有草稿開啟時：報價單的項目有沒有更動（只比對品名／數量指紋；與存檔時帶入的指紋比）
       async checkQuoteChanged() {
         const sync = this._quoteSync
         if (!sync || !this.form.quote_no) return

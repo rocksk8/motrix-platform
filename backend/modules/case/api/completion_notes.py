@@ -300,7 +300,10 @@ def _quote_source(conn, quote_no: str, user: dict):
         data = json.loads(q["data_json"] or "{}") or {}
     except ValueError:
         data = {}
-    return q, data, _CS.source_items(data)
+    try:
+        return q, data, _CS.source_items(data)
+    except _CS.SourceUnavailable:
+        raise HTTPException(409, "報價單目前無法判定計入項目，請稍後再試或洽管理員")
 
 
 def _resolve_quote_sync(conn, quote_no: str, user: dict, qs) -> Optional[dict]:
@@ -393,6 +396,7 @@ def create_completion_note(body: CompletionNoteIn, authorization: str = Header(N
     now = datetime.now().isoformat()
     conn = get_db()
     try:
+        begin_write(conn)          # 累計超量檢查與寫入在同一個寫鎖交易內（兩個人同時存檔不會各自通過檢查）
         q = conn.execute(
             "SELECT customer_name, project_name FROM quotations WHERE quote_no=?", (body.quote_no,)
         ).fetchone()
@@ -439,6 +443,7 @@ def update_completion_note(note_no: str, body: CompletionNoteIn, authorization: 
     _validate(body)
     conn = get_db()
     try:
+        begin_write(conn)          # 同上：讀取、超量檢查、寫入同一個寫鎖交易
         row = conn.execute(
             "SELECT status, quote_no, data_json, updated_at FROM completion_notes WHERE note_no=?",
             (note_no,)).fetchone()

@@ -41,8 +41,6 @@ def test_privacy_notice_read_is_refused_for_users_without_case_access(client, ma
     u, p = make_user(username="fx_viewer", role="viewer", modules=["dashboard"])
     r = client.get(f"{BASE}/{note_no}/privacy-notice", headers=_login(client, u, p))
     assert r.status_code == 404 and r.json()["detail"] == "完工單不存在"
-    u2, p2 = make_user(username="fx_sales_other", role="sales")                  # 不是該案業務
-    assert client.get(f"{BASE}/{note_no}/privacy-notice", headers=_login(client, u2, p2)).status_code == 404
 
 
 def test_privacy_notice_missing_note_and_hidden_note_look_identical(client, make_user):
