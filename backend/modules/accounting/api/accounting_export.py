@@ -73,9 +73,8 @@ from pydantic import BaseModel
 
 from db import get_db
 from core import registry as _registry
-from helpers import download_name
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
-from helpers import _require_user, _tok, _audit, _get_setting, _set_setting
+from helpers import _require_user, _tok, _audit, _get_setting, _set_setting, download_name   # A7：download_name 併進既有 import 行，不新增行（行號白名單 test_no_swallowed_dict_keys 以行號為鍵）
 #: 收款事件（銷項）的資料屬 M05 應收應付（ROADMAP A8b 已收回模組）：經 provider 取用；M05 不在 ⇒ 沒有收款事件並明說
 T100_RECEIVABLES_MISSING = "應收應付模組未安裝：T100 匯出不含收款事件（銷項）"
 
