@@ -8,7 +8,7 @@ import importlib
 
 from core.registry import ModuleSpec
 
-from modules.case import attachments, case_deadlines, gl_events, item_shipped, material_payment_cashier, material_shippable, payables, quotations
+from modules.case import alt_view, attachments, case_deadlines, gl_events, item_shipped, material_payment_cashier, material_shippable, payables, quotations
 # ⚠️ router 一律用別名：`from modules.case.api import quotations` 會把套件屬性 `modules.case.quotations`
 #    （報價單 helper）蓋成 api 那一支，`from modules.case import quotations` 就拿錯檔
 from modules.case.api import (case_action_items as _api_action_items, case_extra_expenses as _api_extra_expenses,
@@ -55,6 +55,8 @@ MODULE = ModuleSpec(
         # IP-91／IP-92：報價預設條款（L1 system）、PDF 版本紀錄（L1 pdf_gen）
         ("case.default_terms", "case"): quotations._default_terms,
         ("case.doc_version", "case"): quotations._record_doc_version,
+        # IP-ALT1：擇一方案客戶版輸出資料（L1 pdf_gen 取用；只含客戶看得到的內容）
+        ("case.alt_view", "case"): alt_view.view,
         # IP-11：每日到期檢查
         ("daily.check", "case_deadlines"): case_deadlines.run_daily_checks,
         # IP-10：「待我簽核」佇列上 M01 的五種單據（彙整在 L1 routers/approval_queue.py，2026-09-27）

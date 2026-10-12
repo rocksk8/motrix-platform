@@ -1080,3 +1080,16 @@ L1 的中央檢查 `perm.can()` 需要「種子 ⊕ 管理者的覆寫」＋有�
 
 系統中心另外**提供** `perm.changed`（權限異動時清自己的快取；整合點由權限矩陣 1d 登記為消費端，本節不重複登記）、並**直接使用 L1 名稱** `helpers.perm.can(user, cap)` 判斷有 `cap` 的卡片是否可見（不是提供者）。
 
+---
+
+## IP-ALT1　`case.alt_view`：擇一方案報價的客戶版輸出資料（M01 → L1 `pdf_gen`；單一提供者；暫定號，列車定號；2026-10-13，M3 T7／T8）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 `modules/case/alt_view.py::view`（純函式；只含客戶看得到的內容：哪些品項印、標記字、合計格文字、自動備註句；**不含成本、毛利、管銷、方案表**） |
+| 使用方 | L1 `pdf_gen._alt_view`（`_build_quote_html`：PDF 與列印預覽共用同一支） |
+| 形式 | provider，單一提供者 |
+| 語法 | `registry.single_provider("case.alt_view")(q: dict) -> dict`；沒有擇一品項 ⇒ `{"has_alt": False}`；否則 `{has_alt, rows, numbers, notes, total_text, unpicked_groups}` |
+| 對方不在時 | 提供者不在、例外或沒有擇一品項 ⇒ `pdf_gen` 照舊全部印出（記 log），不影響 PDF 產生 |
+| 契約版本 | 1 |
+| 守門 | `backend/tests/test_quote_alt_t8_2026_10_13.py`（有／無提供者的無擇一單輸出逐字相同；客戶版不含成本字樣與數字；`pdf_gen` 不引用 `plan_view`） |

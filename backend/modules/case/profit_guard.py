@@ -122,7 +122,7 @@ def item_amount(i: dict) -> int:
     return round_half_up(_num(i.get("qty")), _num(i.get("unitPrice")))
 
 
-ALT_SERVER_KEYS = ("altPicks", "altPickedAt", "altPickedBy")     # 擇一回簽選定：只有回簽路徑（T9）能寫；一般存檔一律由伺服器放回資料庫現值（H6）
+ALT_SERVER_KEYS = ("altPicks", "altPickedAt", "altPickedBy")        # 另有 altTexts（存檔快照，見 stamp_alt_texts）     # 擇一回簽選定：只有回簽路徑（T9）能寫；一般存檔一律由伺服器放回資料庫現值（H6）
 
 
 def alt_group_of(i) -> str:
@@ -178,6 +178,20 @@ def restore_alt_server_fields(q: dict, old: dict) -> None:
             q.pop("altPickedBy", None)
     elif "altPicks" in q:
         q.pop("altPicks", None)
+
+
+def stamp_alt_texts(q: dict, old: dict, freeze: bool) -> None:
+    """`altTexts`（合計格文字、說明句範本）是**伺服器自有的存檔快照**：用戶端的值一律不採用。有擇一內容才記；
+    已回簽／已精算／已結案（`freeze`）且舊單有快照 ⇒ 沿用舊快照（改設定不改歷史單），其餘存檔時取目前設定中心的值。"""
+    q.pop("altTexts", None)
+    if not (alt_groups(q) or q.get("totalsByAlt") is True):
+        return
+    prev = old.get("altTexts") if isinstance(old, dict) else None
+    if freeze and isinstance(prev, dict) and isinstance(prev.get("total_text"), str) and isinstance(prev.get("note_template"), str):
+        q["altTexts"] = {"total_text": prev["total_text"], "note_template": prev["note_template"]}
+        return
+    from modules.case import alt_policy
+    q["altTexts"] = {"total_text": str(alt_policy.setting("total_text")), "note_template": str(alt_policy.setting("note_template"))}
 
 
 def validate_alt(q: dict, max_groups: int) -> None:
@@ -287,6 +301,13 @@ def prepare(q: dict, user: dict, existing_row=None, quote_no: str = ""):
     else:
         from modules.case import alt_policy
         validate_alt(q, alt_policy.setting("alt_groups_max"))
+    _signed = False
+    if not is_new:
+        try:
+            _signed = bool(existing_row["is_signed"])
+        except (KeyError, IndexError):
+            _signed = False
+    stamp_alt_texts(q, old, freeze=(not is_new) and (_signed or is_settled(existing_row)))
     if not isinstance(q.get("tot"), dict):
         q["tot"] = {}
     tot = q["tot"]
