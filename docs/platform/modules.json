@@ -107,6 +107,7 @@
    "js:static/layout-runtime.js",
    "js:static/legal-round.js",
    "js:static/profit-rules.js",
+   "js:static/alt-items.js",
    "js:static/list-sort.js",
    "js:static/notif.js",
    "js:static/privacy-notice.js",
