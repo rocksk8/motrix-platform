@@ -83,7 +83,8 @@
       "altGroup": "線材"
      }
     ],
-    "taxRate": 5
+    "taxRate": 5,
+    "totalsByAlt": true
    },
    "expect": {
     "ids": [
@@ -138,6 +139,7 @@
      }
     ],
     "taxRate": 5,
+    "totalsByAlt": true,
     "altPicks": {
      "投影機": "x1"
     }
@@ -196,6 +198,7 @@
      }
     ],
     "taxRate": 5,
+    "totalsByAlt": true,
     "altPicks": {
      "投影機": "x2",
      "線材": "y1"
@@ -256,6 +259,7 @@
      }
     ],
     "taxRate": 5,
+    "totalsByAlt": true,
     "altPicks": {
      "投影機": "y1",
      "線材": "zzz"
@@ -314,6 +318,7 @@
      }
     ],
     "taxRate": 5,
+    "totalsByAlt": true,
     "altPicks": {
      "不存在": "x1"
     }
@@ -371,6 +376,7 @@
      }
     ],
     "taxRate": 5,
+    "totalsByAlt": true,
     "altPicks": {
      "投影機": ""
     }
@@ -413,6 +419,7 @@
      }
     ],
     "taxRate": 5,
+    "totalsByAlt": true,
     "altPicks": {
      "G": "c"
     }
@@ -447,7 +454,8 @@
       "amount": 100
      }
     ],
-    "taxRate": 5
+    "taxRate": 5,
+    "totalsByAlt": true
    },
    "expect": {
     "ids": [
@@ -487,6 +495,7 @@
      }
     ],
     "taxRate": 5,
+    "totalsByAlt": true,
     "altPicks": {
      "N": "8"
     }
@@ -498,6 +507,240 @@
     ],
     "subtotal": 500,
     "totalCost": 200
+   }
+  },
+  {
+   "name": "switch_absent_groups_inert",
+   "q": {
+    "items": [
+     {
+      "id": "a",
+      "qty": 2,
+      "unitPrice": 1000,
+      "cost": 600,
+      "amount": 2000
+     },
+     {
+      "id": "x1",
+      "qty": 1,
+      "unitPrice": 3000,
+      "cost": 2000,
+      "amount": 3000,
+      "altGroup": "投影機"
+     },
+     {
+      "id": "x2",
+      "qty": 1,
+      "unitPrice": 5000,
+      "cost": 3500,
+      "amount": 5000,
+      "altGroup": "投影機"
+     },
+     {
+      "id": "y1",
+      "qty": 4,
+      "unitPrice": 100,
+      "cost": 60,
+      "amount": 400,
+      "altGroup": "線材"
+     },
+     {
+      "id": "y2",
+      "qty": 4,
+      "unitPrice": 150,
+      "cost": 90,
+      "amount": 600,
+      "altGroup": "線材"
+     }
+    ],
+    "taxRate": 5,
+    "altPicks": {
+     "投影機": "x1"
+    }
+   },
+   "expect": {
+    "ids": [
+     "a",
+     "x1",
+     "x2",
+     "y1",
+     "y2"
+    ],
+    "subtotal": 11000,
+    "totalCost": 7300
+   }
+  },
+  {
+   "name": "switch_false_groups_inert",
+   "q": {
+    "items": [
+     {
+      "id": "a",
+      "qty": 2,
+      "unitPrice": 1000,
+      "cost": 600,
+      "amount": 2000
+     },
+     {
+      "id": "x1",
+      "qty": 1,
+      "unitPrice": 3000,
+      "cost": 2000,
+      "amount": 3000,
+      "altGroup": "投影機"
+     },
+     {
+      "id": "x2",
+      "qty": 1,
+      "unitPrice": 5000,
+      "cost": 3500,
+      "amount": 5000,
+      "altGroup": "投影機"
+     },
+     {
+      "id": "y1",
+      "qty": 4,
+      "unitPrice": 100,
+      "cost": 60,
+      "amount": 400,
+      "altGroup": "線材"
+     },
+     {
+      "id": "y2",
+      "qty": 4,
+      "unitPrice": 150,
+      "cost": 90,
+      "amount": 600,
+      "altGroup": "線材"
+     }
+    ],
+    "taxRate": 5,
+    "totalsByAlt": false
+   },
+   "expect": {
+    "ids": [
+     "a",
+     "x1",
+     "x2",
+     "y1",
+     "y2"
+    ],
+    "subtotal": 11000,
+    "totalCost": 7300
+   }
+  },
+  {
+   "name": "switch_truthy_nonbool_is_off",
+   "q": {
+    "items": [
+     {
+      "id": "a",
+      "qty": 2,
+      "unitPrice": 1000,
+      "cost": 600,
+      "amount": 2000
+     },
+     {
+      "id": "x1",
+      "qty": 1,
+      "unitPrice": 3000,
+      "cost": 2000,
+      "amount": 3000,
+      "altGroup": "投影機"
+     },
+     {
+      "id": "x2",
+      "qty": 1,
+      "unitPrice": 5000,
+      "cost": 3500,
+      "amount": 5000,
+      "altGroup": "投影機"
+     },
+     {
+      "id": "y1",
+      "qty": 4,
+      "unitPrice": 100,
+      "cost": 60,
+      "amount": 400,
+      "altGroup": "線材"
+     },
+     {
+      "id": "y2",
+      "qty": 4,
+      "unitPrice": 150,
+      "cost": 90,
+      "amount": 600,
+      "altGroup": "線材"
+     }
+    ],
+    "taxRate": 5,
+    "totalsByAlt": "yes"
+   },
+   "expect": {
+    "ids": [
+     "a",
+     "x1",
+     "x2",
+     "y1",
+     "y2"
+    ],
+    "subtotal": 11000,
+    "totalCost": 7300
+   }
+  },
+  {
+   "name": "switch_true_unpicked_excluded",
+   "q": {
+    "items": [
+     {
+      "id": "a",
+      "qty": 2,
+      "unitPrice": 1000,
+      "cost": 600,
+      "amount": 2000
+     },
+     {
+      "id": "x1",
+      "qty": 1,
+      "unitPrice": 3000,
+      "cost": 2000,
+      "amount": 3000,
+      "altGroup": "投影機"
+     },
+     {
+      "id": "x2",
+      "qty": 1,
+      "unitPrice": 5000,
+      "cost": 3500,
+      "amount": 5000,
+      "altGroup": "投影機"
+     },
+     {
+      "id": "y1",
+      "qty": 4,
+      "unitPrice": 100,
+      "cost": 60,
+      "amount": 400,
+      "altGroup": "線材"
+     },
+     {
+      "id": "y2",
+      "qty": 4,
+      "unitPrice": 150,
+      "cost": 90,
+      "amount": 600,
+      "altGroup": "線材"
+     }
+    ],
+    "taxRate": 5,
+    "totalsByAlt": true
+   },
+   "expect": {
+    "ids": [
+     "a"
+    ],
+    "subtotal": 2000,
+    "totalCost": 1200
    }
   }
  ]

@@ -24,7 +24,7 @@ def _q(picks=None, **kw):
     q = {"quoteNo": "MQ-ALT-1", "customerName": "客", "taxRate": 5,
          "items": [_it("a", 1, 1000, 600), _it("h", 0, 0, 0, type="header", description="標題"), _it("x1", 1, 3000, 2000, "投影機"),
                    _it("x2", 1, 5000, 3500, "投影機"), _it("y1", 1, 100, 60, "線材"), _it("y2", 1, 150, 90, "線材")],
-         "afterSales": "保固一年"}
+         "afterSales": "保固一年", "totalsByAlt": True}
     if picks is not None:
         q["altPicks"] = picks
     q.update(kw)
@@ -57,10 +57,14 @@ def test_view_pending_numbers_notes_and_total_text():
     assert {r["state"] for r in v["rows"].values()} == {"pending"}
 
 
-def test_view_total_text_whenever_a_group_is_unpicked_regardless_of_flag():
-    assert alt_view.view(_q())["total_text"] == "依方案選擇"          # 0d S1：未選完時合計不含擇一品項，不能印數字
-    assert alt_view.view(_q({"投影機": "x1", "線材": "y1"}, totalsByAlt=True))["total_text"] is None
-    assert alt_view.view(_q({"投影機": "x1"}, totalsByAlt=True))["total_text"] == "依方案選擇"
+def test_view_total_text_needs_switch_and_unpicked_group():
+    assert alt_view.view(_q())["total_text"] == "依方案選擇"
+    assert alt_view.view(_q({"投影機": "x1", "線材": "y1"}))["total_text"] is None
+    assert alt_view.view(_q({"投影機": "x1"}))["total_text"] == "依方案選擇"
+    off = _q(); off["totalsByAlt"] = False
+    assert alt_view.view(off) == {"has_alt": False}              # 總開關沒開 ⇒ 惰性
+    off.pop("totalsByAlt")
+    assert alt_view.view(off) == {"has_alt": False}
 
 
 def test_view_picked_hides_unpicked_by_default_and_renumbers(_settings):
@@ -110,9 +114,12 @@ def test_stamp_removed_when_no_alt_content():
     q = {"items": [_it("a", 1, 1, 1)], "altTexts": {"total_text": "x", "note_template": "y"}}
     PG.stamp_alt_texts(q, {}, freeze=False)
     assert "altTexts" not in q
-    q = {"items": [_it("a", 1, 1, 1)], "totalsByAlt": True}
+    q = {"items": [_it("a", 1, 1, 1)], "totalsByAlt": True}            # 開關開著但沒有擇一組別
     PG.stamp_alt_texts(q, {}, freeze=False)
-    assert "altTexts" in q
+    assert "altTexts" not in q
+    q = _q(); q["totalsByAlt"] = False                                 # 有組別但開關沒開 ⇒ 惰性，不記快照
+    PG.stamp_alt_texts(q, {}, freeze=False)
+    assert "altTexts" not in q
 
 
 # --- PDF／預覽 ----------------------------------------------------------------------------

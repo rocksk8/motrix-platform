@@ -19,7 +19,9 @@ def test_calc_totals_goes_through_counted_items():
 
 def test_totals_cells_use_template_text_only_when_flagged_and_unpicked():
     assert "altTotalsText() || tot.pretax.toLocaleString()" in FORM and "altTotalsText() || tot.total.toLocaleString()" in FORM
-    assert "altTotalsText() { return this.altUnpicked() > 0" in FORM and "type=\"checkbox\" :checked=\"q.totalsByAlt" not in FORM
+    assert "altTotalsText() { return this.altUnpicked() > 0" in FORM
+    assert 'type="checkbox" :checked="q.totalsByAlt === true"' in FORM         # 使用者 2026-10-11 裁示的總開關
+    assert "勾選「合計依方案選擇」後，擇一品項才會依客戶選定的方案計入合計" in FORM
 
 
 def test_unpicked_state_is_neutral_not_green():
@@ -66,7 +68,7 @@ needs_node = pytest.mark.skipif(not shutil.which("node"), reason="沒有 node")
 
 _SETUP = """
   const it = (id, qty, price, cost, g) => Object.assign({ id, type: 'item', qty, unitPrice: price, amount: qty * price, cost, description: id }, g ? { altGroup: g } : {})
-  o.q = { items: [it('a', 1, 1000, 600), it('x1', 1, 3000, 2000, '投影機'), it('x2', 1, 5000, 3500, '投影機')], discount: 0, freight: 0, taxRate: 5 }
+  o.q = { items: [it('a', 1, 1000, 600), it('x1', 1, 3000, 2000, '投影機'), it('x2', 1, 5000, 3500, '投影機')], discount: 0, freight: 0, taxRate: 5, totalsByAlt: true }
   o.setDirty = () => {}
 """
 
@@ -103,3 +105,12 @@ def test_toggle_adds_and_removes_group_without_leaving_empty_key():
       o.q.items.push(b); o.altToggle(b, true); const g = b.altGroup; o.altToggle(b, false)
       return { g, has: 'altGroup' in b }""")
     assert got == {"g": "投影機", "has": False}
+
+
+@needs_node
+def test_switch_off_makes_groups_inert_in_the_form():
+    got = _page("quotation-form.html", "quotationForm", _SETUP + """
+      o.q.altPicks = { '投影機': 'x1' }
+      o.q.totalsByAlt = false; o.calcTotals()
+      return { sub: o.tot.subtotal, unpicked: o.altUnpicked(), txt: o.altTotalsText(), dropped: o.altIsDropped(o.q.items[2]), notes: o.altNotePreview() }""")
+    assert got == {"sub": 9000, "unpicked": 0, "txt": "", "dropped": False, "notes": []}

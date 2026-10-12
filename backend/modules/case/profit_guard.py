@@ -133,11 +133,19 @@ def alt_group_of(i) -> str:
     return g.strip() if isinstance(g, str) else ""
 
 
+def alt_active(q) -> bool:
+    """擇一方案的**單據層總開關**＝`totalsByAlt is True`（使用者 2026-10-11：『合計依方案選擇』）。沒開 ⇒ 擇一組別只是惰性資料：
+    全部品項照一般報價單計入，沒有標記、沒有未選灰字、沒有合計文字、沒有選定／鎖定規則（與沒有擇一的單逐位元相同）。"""
+    return isinstance(q, dict) and q.get("totalsByAlt") is True
+
+
 def counted_items(q: dict, picks=None) -> list:
-    """**計入合計與毛利的品項**（擇一方案的唯一分流點）：非擇一項 ＋ 每個擇一組中被選定的那一項（該組沒選 ⇒ 整組不計入）。
+    """**計入合計與毛利的品項**（擇一方案的唯一分流點）：總開關（`alt_active`）沒開 ⇒ 全部品項；開了 ⇒ 非擇一項 ＋ 每個擇一組中被選定的那一項（該組沒選 ⇒ 整組不計入）。
     `picks` 預設取 `q.altPicks`（`{組名: 品項id}`）；`plan_view` 傳入假設的選擇。沒有任何 `altGroup` 的單 ⇒ 與全部品項逐項相同（零行為改變）。
     不計入 ≠ 不能存：未選項的單價、成本照存。"""
     items = [i for i in (q.get("items") or []) if isinstance(i, dict)]
+    if not alt_active(q):
+        return items
     if picks is None:
         picks = q.get("altPicks")
     picks = {str(k).strip(): str(v) for k, v in picks.items() if v not in (None, "")} if isinstance(picks, dict) else {}
@@ -184,7 +192,7 @@ def stamp_alt_texts(q: dict, old: dict, freeze: bool) -> None:
     """`altTexts`（合計格文字、說明句範本）是**伺服器自有的存檔快照**：用戶端的值一律不採用。有擇一內容才記；
     已回簽／已精算／已結案（`freeze`）且舊單有快照 ⇒ 沿用舊快照（改設定不改歷史單），其餘存檔時取目前設定中心的值。"""
     q.pop("altTexts", None)
-    if not (alt_groups(q) or q.get("totalsByAlt") is True):
+    if not (alt_groups(q) and alt_active(q)):
         return
     prev = old.get("altTexts") if isinstance(old, dict) else None
     if freeze and isinstance(prev, dict) and isinstance(prev.get("total_text"), str) and isinstance(prev.get("note_template"), str):

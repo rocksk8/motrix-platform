@@ -1477,7 +1477,7 @@
                       </label>
                       <input class="cell-input" type="text" list="alt-group-options" maxlength="40" placeholder="組別名稱"
                              x-show="altGroupOf(item)" :value="item.altGroup" @input="item.altGroup = $event.target.value; calcTotals(); setDirty()">
-                      <span class="alt-tag" :class="altIsDropped(item) ? 'dropped' : ''" x-show="altGroupOf(item)" x-text="altTagText(item)"></span>
+                      <span class="alt-tag" :class="altIsDropped(item) ? 'dropped' : ''" x-show="altGroupOf(item) && MotrixAltItems.active(q)" x-text="altTagText(item)"></span>
                     </div>
                   </td>
                   <td class="va-top">
@@ -1678,7 +1678,11 @@
           <!-- 右欄：金額小計 -->
           <div style="min-width:320px">
           <div x-show="altGroupNames().length" style="margin-bottom:8px;font-size:12px" data-testid="qf-alt-totals-opt">
-            <div class="form-hint" x-text="'有擇一方案時，客戶還沒選定前，報價單的「稅前合計」與「總計」兩格會顯示「' + altCfg.totalText + '」（合計不含擇一品項），客戶選定後恢復金額。'"></div>
+            <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
+              <input type="checkbox" :checked="q.totalsByAlt === true" @change="q.totalsByAlt = $event.target.checked; calcTotals(); setDirty()"> 合計依方案選擇
+            </label>
+            <div class="form-hint" x-show="q.totalsByAlt !== true">勾選「合計依方案選擇」後，擇一品項才會依客戶選定的方案計入合計；沒勾選時，所有品項都照一般報價單計入。</div>
+            <div class="form-hint" x-show="q.totalsByAlt === true" x-text="'客戶還沒選定方案時，報價單的「稅前合計」與「總計」兩格會顯示「' + altCfg.totalText + '」（合計不含擇一品項），選定後恢復金額。'"></div>
           </div>
           <div class="totals-grid">
             <div class="total-row">
@@ -2632,7 +2636,7 @@
       altGroupOf(item) { return MotrixAltItems.groupOf(item) },
       altGroupNames() { const seen = []; (this.q.items || []).forEach(i => { const g = MotrixAltItems.groupOf(i); if (g && !seen.includes(g)) seen.push(g) }); return seen },
       altUnpicked() { return MotrixAltItems.unpickedGroupCount(this.q) },
-      altIsDropped(item) { const g = MotrixAltItems.groupOf(item); const p = this.q.altPicks || {}; return !!g && p[g] !== undefined && String(p[g]) !== String(item.id) },
+      altIsDropped(item) { const g = MotrixAltItems.groupOf(item); const p = this.q.altPicks || {}; return MotrixAltItems.active(this.q) && !!g && p[g] !== undefined && String(p[g]) !== String(item.id) },
       altTagText(item) {
         const g = MotrixAltItems.groupOf(item), p = this.q.altPicks || {}
         if (p[g] === undefined) return '擇一：' + g + '（尚未選定）'
@@ -2649,8 +2653,9 @@
         if (Object.keys(cnt).length > this.altCfg.groupsMax) out.push('擇一方案最多 ' + this.altCfg.groupsMax + ' 組，目前有 ' + Object.keys(cnt).length + ' 組')
         return out
       },
-      altTotalsText() { return this.altUnpicked() > 0 ? this.altCfg.totalText : '' },   // 只要還有擇一組沒選定，合計就不含該組：不印數字（後端 alt_view 同規則）
+      altTotalsText() { return this.altUnpicked() > 0 ? this.altCfg.totalText : '' },   // 總開關有開且還有擇一組沒選定：合計不含該組，不印數字（altUnpicked 在開關沒開時為 0；後端 alt_view 同規則）
       altNotePreview() {                                  // 單趟取代（不用格式化函式）；畫面用文字節點輸出，不會被當 HTML
+        if (!MotrixAltItems.active(this.q)) return []
         const t = this.altCfg.noteTemplate, names = this.altGroupNames(), out = []
         let n = 0; const num = new Map()
         ;(this.q.items || []).forEach(i => { if (i.type !== 'header') { n++; num.set(i, n) } })

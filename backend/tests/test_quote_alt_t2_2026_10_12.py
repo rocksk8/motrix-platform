@@ -27,7 +27,7 @@ def _plain():
 
 def _alt(picks=None):
     q = {"items": [_it("a", 2, 1000, 600), _it("x1", 1, 3000, 2000, "投影機"), _it("x2", 1, 5000, 3500, "投影機"),
-                   _it("y1", 4, 100, 60, "線材"), _it("y2", 4, 150, 90, "線材")], "taxRate": 5}
+                   _it("y1", 4, 100, 60, "線材"), _it("y2", 4, 150, 90, "線材")], "taxRate": 5, "totalsByAlt": True}
     if picks is not None:
         q["altPicks"] = picks
     return q
@@ -71,7 +71,7 @@ def test_pick_pointing_to_other_group_or_missing_counts_nothing():
 
 
 def test_group_name_trimmed_and_blank_is_not_alt():
-    q = {"items": [_it("a", 1, 100, 50, "  "), _it("b", 1, 100, 50, " G "), _it("c", 1, 100, 50, "G")]}
+    q = {"items": [_it("a", 1, 100, 50, "  "), _it("b", 1, 100, 50, " G "), _it("c", 1, 100, 50, "G")], "totalsByAlt": True}
     assert [i["id"] for i in PG.counted_items(q)] == ["a"]
     assert [i["id"] for i in PG.counted_items(q, {"G": "c"})] == ["a", "c"]
 
@@ -169,7 +169,7 @@ def test_alt_signature_changes_with_group_or_totals_flag():
     b["items"][1]["altGroup"] = "別組"
     assert PG._alt_signature(a) != PG._alt_signature(b)
     c = _alt()
-    c["totalsByAlt"] = True
+    c["totalsByAlt"] = False
     assert PG._alt_signature(a) != PG._alt_signature(c)
 
 
@@ -319,3 +319,24 @@ def test_completion_items_respect_picks_via_counted_items():
     q = _alt({"投影機": "x2"})
     assert [i["id"] for i in PG.counted_items(q)] == ["a", "x2"]
     assert [i["id"] for i in PG.counted_items(_alt())] == ["a"]
+
+
+# --- 總開關 totalsByAlt（1c 2026-10-13：沒開 ⇒ 擇一組別惰性）---------------------------------
+
+def test_switch_off_groups_are_inert_all_items_counted():
+    for flag in ("absent", False, "yes", 1, None):
+        q = _alt({"投影機": "x1"})
+        if flag == "absent":
+            q.pop("totalsByAlt")
+        else:
+            q["totalsByAlt"] = flag
+        assert [i["id"] for i in PG.counted_items(q)] == ["a", "x1", "x2", "y1", "y2"], flag
+        assert PG.alt_active(q) is False
+    plain = {"items": [_it("a", 2, 1000, 600), _it("x1", 1, 3000, 2000), _it("x2", 1, 5000, 3500), _it("y1", 4, 100, 60), _it("y2", 4, 150, 90)], "taxRate": 5}
+    off = _alt(); off["totalsByAlt"] = False
+    assert _profit(off) == _profit(plain)
+
+
+def test_switch_on_same_items_exclude_unpicked():
+    assert [i["id"] for i in PG.counted_items(_alt())] == ["a"]
+    assert PG.alt_active(_alt()) is True

@@ -33,9 +33,19 @@ def stamps(q: dict, settled: bool = False):
 
 def _figures(q: dict, picks: dict, st) -> dict:
     pct, ver, basis = st
-    qq = dict(q, altPicks=picks)
+    qq = dict(q, altPicks=picks, totalsByAlt=True)          # 比較視圖永遠假設『依方案選擇』已開（單據本身沒開時它只是試算）
     t = PG.server_totals(qq, q.get("tot") if isinstance(q.get("tot"), dict) else None)
     p = PG.server_profit(dict(qq, tot=t), pct, ver, pretax=t["pretax"], total=t["total"], charity_basis=basis)
+    out = dict(t)
+    out.update(p)
+    return {k: out[k] for k in FIGURE_KEYS}
+
+
+def _figures_actual(q: dict, st) -> dict:
+    """單據目前實際的數字（總開關沒開 ⇒ 全部品項；開了 ⇒ 依已存選定）。"""
+    pct, ver, basis = st
+    t = PG.server_totals(q, q.get("tot") if isinstance(q.get("tot"), dict) else None)
+    p = PG.server_profit(dict(q, tot=t), pct, ver, pretax=t["pretax"], total=t["total"], charity_basis=basis)
     out = dict(t)
     out.update(p)
     return {k: out[k] for k in FIGURE_KEYS}
@@ -61,9 +71,11 @@ def plan_view(q: dict, selection=None, *, settled: bool = False, combos: bool = 
         ids = [str(m.get("id")) for m in members]
         baseline[g] = sel[g] if sel.get(g) in ids else ids[0]
     stored = q.get("altPicks") if isinstance(q.get("altPicks"), dict) else {}
+    active = PG.alt_active(q)
     out = {
-        "groups": [], "baseline": baseline, "unpicked": sum(1 for g in groups if str(stored.get(g, "")) == ""),
-        "current": _figures(q, stored, st), "formulaVer": st[1], "overheadPct": st[0], "settled": bool(settled),
+        "groups": [], "baseline": baseline, "active": active,
+        "unpicked": sum(1 for g in groups if str(stored.get(g, "")) == "") if active else 0,
+        "current": _figures_actual(q, st), "formulaVer": st[1], "overheadPct": st[0], "settled": bool(settled),
     }
     for g, members in groups.items():
         opts = []

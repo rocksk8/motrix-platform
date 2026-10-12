@@ -18,7 +18,7 @@ NODE = shutil.which("node")
 
 def test_vectors_cover_the_edge_cases():
     names = {c["name"] for c in VECTORS}
-    assert {"no_alt", "all_unpicked", "one_group_picked", "both_picked", "pick_other_group_item", "unknown_group_pick",
+    assert {"no_alt", "switch_absent_groups_inert", "switch_false_groups_inert", "switch_truthy_nonbool_is_off", "switch_true_unpicked_excluded", "all_unpicked", "one_group_picked", "both_picked", "pick_other_group_item", "unknown_group_pick",
             "group_trimmed", "header_altgroup_is_plain", "numeric_id_vs_string_pick"} <= names
 
 
@@ -61,7 +61,7 @@ def test_frontend_js_equals_vectors(tmp_path):
 def test_frontend_helpers_and_no_mutation(tmp_path):
     js = r"""
 const A = require(process.argv[2])
-const q = {items:[{id:'a'},{id:'x1',altGroup:'G'},{id:'x2',altGroup:'G'},{id:'y1',altGroup:'H'},{id:'y2',altGroup:'H'}], altPicks:{G:'x1'}}
+const q = {items:[{id:'a'},{id:'x1',altGroup:'G'},{id:'x2',altGroup:'G'},{id:'y1',altGroup:'H'},{id:'y2',altGroup:'H'}], altPicks:{G:'x1'}, totalsByAlt:true}
 const snap = JSON.stringify(q)
 const r = {unpicked: A.unpickedGroupCount(q), u1: A.isUncounted(q, q.items[1]), u2: A.isUncounted(q, q.items[2]), u0: A.isUncounted(q, q.items[0]),
   over: A.countedItems(q, {G:'x2', H:'y1'}).map(i=>i.id), same: JSON.stringify(q) === snap}

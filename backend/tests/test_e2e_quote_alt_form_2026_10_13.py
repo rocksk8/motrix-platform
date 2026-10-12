@@ -21,7 +21,7 @@ _ITEMS_JS = """() => {
   const d = Alpine.$data(document.querySelector('[x-data]'));
   const it = (id, desc, price, cost, g) => Object.assign({ id, type: 'item', description: desc, qty: 1, unit: '式', cost, margin: 0.3,
     unitPrice: price, unitPriceOverride: true, amount: price, notes: '' }, g ? { altGroup: g } : {});
-  d.q.customerName = '擇一客'; d.q.projectName = '擇一案';
+  d.q.totalsByAlt = true; d.q.customerName = '擇一客'; d.q.projectName = '擇一案';
   d.q.items = [it('a', '一般品項', 1000, 600), it('x1', '方案甲', 3000, 2000, '投影機'), it('x2', '方案乙', 5000, 3500, '投影機')];
   d.showCostCols = true; d.calcTotals();
 }"""

@@ -45,9 +45,9 @@ def view(q: dict) -> dict:
     """沒有任何擇一品項 ⇒ `{"has_alt": False}`（輸出與今天完全相同）。否則：
     `rows`：`{品項id: {"group", "state": picked｜pending｜dropped, "hidden": bool, "tag": 標記字}}`（只含擇一品項）；
     `numbers`：`{品項id: 項次}`（只含會印出的非標題品項，與 pdf_gen 的逐列編號相同）；
-    `total_text`：合計兩格要顯示的文字（只要還有未選定的組就有，否則 None；不看 `totalsByAlt`——未選完時合計不含擇一品項，印數字會讓客戶誤解）；`notes`：每組一句自動備註。"""
+    `total_text`：合計兩格要顯示的文字（總開關有開、且仍有未選定的組才有，否則 None）；`notes`：每組一句自動備註。"""
     groups = PG.alt_groups(q)
-    if not groups:
+    if not groups or not PG.alt_active(q):          # 總開關沒開 ⇒ 惰性：輸出與一般報價單相同
         return {"has_alt": False}
     picks = _valid_picks(q, groups)
     show_unpicked = bool(alt_policy.setting("show_unpicked_in_pdf"))

@@ -20,7 +20,7 @@ def _it(id_, qty, price, cost, group=None, **kw):
 
 def _q(picks=None, **kw):
     q = {"items": [_it("a", 2, 1000, 600), _it("x1", 1, 3000, 2000, "投影機"), _it("x2", 1, 5000, 3500, "投影機"),
-                   _it("y1", 4, 100, 60, "線材"), _it("y2", 4, 150, 90, "線材"), _it("y3", 4, 200, 90, "線材")], "taxRate": 5}
+                   _it("y1", 4, 100, 60, "線材"), _it("y2", 4, 150, 90, "線材"), _it("y3", 4, 200, 90, "線材")], "taxRate": 5, "totalsByAlt": True}
     if picks is not None:
         q["altPicks"] = picks
     q.update(kw)
@@ -28,7 +28,7 @@ def _q(picks=None, **kw):
 
 
 def _expected(q, picks, pct=25, ver=2):
-    qq = dict(q, altPicks=picks)
+    qq = dict(q, altPicks=picks, totalsByAlt=True)
     t = PG.server_totals(qq)
     p = PG.server_profit(dict(qq, tot=t), pct, ver, pretax=t["pretax"], total=t["total"])
     return t, p
@@ -217,3 +217,15 @@ def test_role_matrix_finance_and_cashier_never_500_and_no_leak_when_denied(clien
     cash = _hdr(client, make_user, "alt_cash", "viewer", modules=["cashier"], legacy_finance_flag=False)
     r = client.get("/api/quotations/%s/plan-view" % no, headers=cash)
     assert r.status_code in (403, 404) and not any(k in r.text for k in _COST_KEYS)
+
+
+def test_switch_off_quote_still_compares_but_current_counts_everything():
+    q = _q(); q["totalsByAlt"] = False
+    v = AO.plan_view(q)
+    assert v["active"] is False and v["unpicked"] == 0
+    all_items = {"items": [dict(i) for i in q["items"]], "taxRate": 5}
+    for i in all_items["items"]:
+        i.pop("altGroup", None)
+    t = PG.server_totals(all_items)
+    assert v["current"]["pretax"] == t["pretax"]
+    assert [g["group"] for g in v["groups"]] == ["投影機", "線材"]          # 比較視圖仍可試算各方案
