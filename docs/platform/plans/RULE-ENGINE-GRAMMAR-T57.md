@@ -1,5 +1,7 @@
 # 規則引擎文法 v1：欄位目錄上的宣告式條件規則（僅文件，未跑任何測試）
 
+> **r4（0d 通過 r3 後的 1 項行為澄清＋2 註記）**：**C1** §6.5-1 明定『每一條已發布的 `block` 規則（兩種 `on_failure`）在規則引擎健康時照常評估，與功能狀態無關；功能狀態只管編輯器列出、新發布／還原、顯示類輸出』，break-glass 在功能被隱藏時仍可用；**N1** §6.7-3 以『`trust=server` 目錄孿生欄位』（如 `direct_margin_pct_server`）說明 legacy 管銷口徑下阻擋規則取得的是伺服器重算值，T21 兩種口徑都跑；**N2** §8 定義 `SettingDef.loosen` 靜態宣告與規則運算子方向的交會（發布時檢查＋持久化 `extra_directions` 同交易寫入，過渡期拒絕衝突規則）。
+
 > **r3（0d 對 r1 `a035abe0b` 的 NOT-PASS：M1～M3 必修＋S1～S6）**：**M1** 非保護型 `block` 對『看不到輸入欄位的角色』會因『不適用』被靜默繞過 ⇒ 新增發布驗證（§6.6）；**M2** 阻擋規則的輸入必須是**伺服器可信**欄位，且在寫入交易內對合併後的列評估（舊管銷口徑下用戶端 `tot` 不可信）⇒ §6.7；**M3** U5 裁示：殘餘可接受，但**不是 1 bit**（可經可編輯的可見輸入做適應式二分探測）⇒ 只在六項控制全做時接受（§6.3 重寫）；S1 範圍外輸入＝NULL（§3.1／T6）、S2 `json.loads` 遞迴錯誤（§7／T1）、S3 `{setting}` 只限 `rule_usable` 設定（§2.2）、S4 R7 前置欄位（§10）、S5 收緊即時的前提（§8／T15）、S6 預設 profile 位元組不變的黃金（§9／T22）。
 
 > **r2（1d／2b 對 r1 `a035abe0b` 與脊柱 E-b 的審閱）**：①**衝突修正（主要）**：脊柱的執行期失敗＝功能停用／群組隱藏（對『設定』fail-closed、對『行為』fail-open）。若規則評估被 `spine.feature_enabled` 擋住，一次驗證小故障就會**靜默關掉已發布的 `block`＋`fail_closed` 保護型規則＝繞過**。r2 規定：**功能狀態（`open／planned／hidden`）只用於編輯器可見性、新發布與顯示；已發布的 `fail_closed` 阻擋規則只要『規則引擎本身健康』就照常評估**；『引擎不健康』是本文 §6.4 自己的路徑（不是脊柱降級）。見新增的 §6.5。②重用脊柱掛鉤：`alert_rule` 為**受管 kind**（`register_kind_gate`）、規則發布／評估前問 `spine.surface_status`、`rule.degraded` 稽核去重沿用 `audit_spine_failures` 的簽名法、健康徽章共用 `spine.register_health_source`、`{"setting": …}` 指到 planned／hidden 群組的規則發布一律 422（不說 hidden）（§6.5）。③U3 改為採 `loosen="both"`（§8、§13）。④快取鍵加『設定群組戳記』（§6.1-4）。
@@ -216,7 +218,7 @@
 
 ### 6.5 與脊柱（E-b）的接點與『不可被脊柱降級繞過』（r2）
 
-1. **評估不以 `spine.feature_enabled` 為閘**（衝突修正）：功能狀態用於①編輯器是否列出該表面的規則、②**新發布**是否允許（`planned` 灰色、`hidden` 404／不顯示）、③顯示（徽章）。**已發布的 `block`＋`fail_closed` 規則的評估，在規則引擎健康時一律進行**——與『設定被脊柱隱藏』解耦。測試：把規則所屬功能翻成 `planned`／`hidden`／驗證失敗，已發布的 `fail_closed` 阻擋規則**仍然攔截**（正對照：把評估掛在 `feature_enabled` 上，測試必須紅）；`mark` 與 `degrade_loud` 規則在功能非 open 時**不顯示**（顯示屬功能狀態）但不影響儲存。
+1. **評估不以 `spine.feature_enabled` 為閘**（r4 明定，0d C1）：**每一條『已發布』的 `block` 規則——`on_failure` 不論是 `fail_closed` 或 `degrade_loud`——只要規則引擎本身健康，就照常評估並攔截，與功能狀態（`open／planned／hidden`）無關。** 功能狀態**只控制**：①編輯器是否列出該表面的規則、②**新發布與還原**是否允許、③顯示類輸出（徽章、標記、紅字）。換句話說：隱藏或停用一個功能**不會**讓它已發布的阻擋規則失效，也不會讓 `mark` 以外的任何保護消失；`mark` 規則在功能非 open 時不顯示（顯示屬功能狀態），但不影響儲存。**break-glass 在功能被隱藏時仍可用**（最高管理者可對該單一規則切 `degrade_loud` 或停用，記稽核）。測試（含正對照）：①把功能翻成 `planned`／`hidden`／驗證失敗 ⇒ 已發布的 `fail_closed` 阻擋**仍攔截**，已發布的 `degrade_loud` 阻擋**仍攔截**（評估成功時）；②break-glass 在 `hidden` 狀態下仍生效並有稽核；③正對照：把評估掛在 `feature_enabled` 上（突變）⇒ ①必須紅。
 2. **引擎層守門（比照 `settings_registry.publish()` 先問脊柱）**：規則的**發布與還原**最前面問 `spine.surface_status(surface)`（目錄 `features[].catalog.surfaces` 繼承功能狀態；2b 提供，約 0.2 pd）；非 `open` ⇒ 發布失敗（`planned`→409『這項功能還在開發中』、`hidden`→404）。**評估端不問**（見 1）。
 3. **`alert_rule` 必須是受管 kind**：定義文件庫的通用草稿／發布路由若能直接處理 `alert_rule`，就繞過本文的高影響管線（§6.3）。做法：在 `routers/definitions.py` 的受管 kind 清單登記，並用 2b 提供的 `register_kind_gate(kind, fn)` 讓**列表／讀取**路由也服從 `hidden=404／planned=409`（否則 `GET /api/definitions/alert_rule` 會洩漏 hidden 表面的規則——2b 自己在 r3 被 0d 退過的同一個洞）。路由表守門：每個 kind 要嘛在受管清單、要嘛在明列的低風險直發清單（98 §3.9）。
 4. **稽核去重**：`rule.degraded` 沿用 `audit_spine_failures` 的簽名法——`sig = sha1(規則 key + 問題清單)`，以 `json_extract(detail,'$.sig')` 去重（同一失效不重複洪水）；detail 不含欄位值。
@@ -238,7 +240,7 @@
 **規則**：
 1. **`block` 規則只能引用『伺服器可信』目錄欄位**：目錄欄位新增屬性 `trust`：`server`（來源為伺服器重算後才儲存、或伺服器計算，例：`alt_sign.recompute_tot` 產物、`profit_guard.server_totals／server_profit` 結果、專案毛利% 由已存品項重算）或 `client`（來源為用戶端輸入／合計）。`block` 規則引用 `trust=client`、`derived_ui`、或『由用戶端合計支撐』的欄位 ⇒ **發布失敗**（`rule_input_forbidden`）。`mark` 規則不受此限（標記只是顯示）。
 2. **在寫入交易內、對合併後的列評估**：`block` 規則在 `begin_write`／`write_txn` 之後、重新讀取已存列並套用此次變更（**post-merge row**）後評估；**不評估請求 JSON**。這樣用戶端無法靠送出與資料庫不一致的值來繞過，也不會有『檢查時與寫入時不同』的競態。
-3. 對 legacy 管銷口徑的單據：`block` 規則所需的合計欄位由伺服器**即時重算**（呼叫 `profit_guard.server_totals／server_profit` 對品項）作為評估輸入，而不是讀 `tot`。
+3. **舊管銷口徑（legacy）下目錄欄位與伺服器值的對應（r4，0d N1）**：legacy 模式的 SQL 欄 `direct_margin_pct`／`pretax`／`net_margin_pct` 與 `tot` 來自**用戶端合計**；而 `block` 規則評估用的是伺服器重算值。兩者可能不同，所以規則『說的是哪一個』必須明確。採用**目錄雙生欄位**：每個『可能被用戶端合計污染』的金額類欄位（`direct_margin_pct`、`net_margin_pct`、`pretax`、`total`…）在目錄多登錄一個 `trust=server` 的孿生，例如 `direct_margin_pct_server`，來源＝`profit_guard.server_totals／server_profit` 對**已存品項**的即時重算（legacy 與 v2 都一樣，不讀 `tot`、不讀 SQL 欄）；原欄位 `direct_margin_pct` 標 `trust=client`（legacy）。`block` 規則**只能引用 `trust=server` 孿生**（引用原欄位 ⇒ 發布失敗 `rule_input_forbidden`，訊息指向孿生）；`mark` 規則可用原欄位（顯示與清單一致）。孿生對檢視者的可見性判定與原欄位相同（`quote_money_visible` 等）。備案（不採用）：評估器對標 `server_recompute` 的欄位一律替換成重算值——會讓『規則所見』與『畫面所見』在同一個名稱下不同，易誤導，故採雙生欄位。
 4. **測試（含正對照）**：①`PUT` 送出被低報成本／灌水毛利的用戶端 `tot`，保護型毛利阻擋**仍然觸發**；②規則引用 `trust=client` 欄位 ⇒ 發布失敗；③正對照：讓評估改讀請求 JSON（突變）⇒ ① 必須紅；④在規則評估與寫入之間插入競態（另一請求改了成本）⇒ 以交易內重新讀取的值為準。
 
 ## 7. 上限（寫死上界；管理者只能調小）
@@ -284,7 +286,11 @@
 | `gt`／`ge`（『高於 X 就警示』） | **放寬** | **收緊** |
 | `eq`／`ne`／`between`／`in` 或其他／未知 | **放寬**（任何變動都走放寬流程） | **放寬** |
 
-- **（r2）實作機制**：設定登錄新增 `loosen="both"`（任何數值變動＝放寬、走確認期與雙人核准）。規則發布管線依上表推導：只被 `lt/le` 引用 ⇒ 該設定維持 `loosen="down"`；只被 `gt/ge` 引用 ⇒ `"up"`；多方向或其他運算子 ⇒ `"both"`。
+- **（r2→r4）實作機制與衝突處理（0d N2）**：`SettingDef.loosen` 是**程式碼裡的靜態宣告**（`"up"｜"down"`，r2 起新增 `"both"`），規則的運算子方向則是**資料**；兩者必須有定義好的交會，否則規則改變了設定被使用的方向卻沒人重新分類。採用方案 **A＋B 合用**：
+  - **A（發布時檢查）**：規則發布時，對每個被引用的設定，用上表推導『此規則的方向』，與該設定的 `SettingDef.loosen` 比對：①相同 ⇒ 通過；②`SettingDef.loosen="both"` ⇒ 通過；③**衝突或設定未宣告方向**（例：設定宣告 `down`、新規則以 `ge` 引用，推導為 `up`）⇒ 不直接拒絕，進入 B。
+  - **B（持久化的額外方向）**：設定登錄維護一個**持久化的 per-setting `extra_directions` 覆寫**（資料表/設定帳本的一欄；與規則發布在**同一個交易**內寫入），把該設定有效的放寬方向擴成 `"both"`。分類函式（`_split／plan／banner_of`）讀『靜態 `loosen` ∪ `extra_directions`』。規則被停用或改版移除該引用時，`extra_directions` 重新計算（取仍被引用方向的聯集），**只在所有引用都移除後才回到靜態宣告**。`"both"` 是安全後備：任何數值變動＝放寬。
+  - 沒有 `extra_directions` 機制前的過渡：規則發布管線**拒絕**方向與 `SettingDef.loosen` 衝突的規則（保守），不靜默放行。
+  - 測試（含正對照）：宣告 `loosen="down"` 的設定被一條額外的 `ge` 規則引用後，有效分類為 `"both"`；停用該規則後回到 `down`；規則發布與 `extra_directions` 寫入同交易（中途失敗兩者都不生效）；正對照：不寫 `extra_directions`（突變）⇒ 調高門檻會被誤判為即時收緊 ⇒ 測試必須紅。
 - **同一設定被多條規則以不同方向引用**（例：`margin_crit_pct` 同時出現在 `lt` 與 `ge`——上例 warn 規則就用 `ge`）：設定登錄的方向分類取**較嚴者＝兩個方向都視為放寬**，即任何變更都走確認期（保守）。這與今天 `SettingDef.loosen` 是**單一靜態方向**不同——需要設定登錄新增『方向由引用規則推導』（§11 U3）。
 - **正對照測試**：①`lt`→調高門檻＝收緊（即時）；②把規則運算子改成 `gt`，方向必須翻轉；③『把方向互換』的突變使測試變紅；④未知運算子＝放寬。
 
@@ -342,13 +348,13 @@
 | T12 | **零寫入**：評估前後 `total_changes` 不變；規則不能呼叫通知／API | 加一個寫入 ⇒ 紅 |
 | T13 | **篡改**：規則 JSON 被直接改庫（超大小、未知鍵、未知版本、引用不存在欄位） ⇒ 載入時重新驗證、失敗＝**不載入並大聲警示**、其他規則照常 | 略過載入時驗證 ⇒ 紅 |
 | T14 | **八條範例黃金**（§10）逐筆與今天前端輸出一致；K01 七個邊界值 | 改門檻 1 ⇒ 紅 |
-| T15 | **K01 方向**（§8）四項；**（S5）收緊即時生效僅當『所有引用該設定的規則方向一致』**：兩條規則一條 `lt` 一條 `ge` 引用同一設定，調高門檻 ⇒ 走放寬流程（不即時） | 方向互換 ⇒ 紅；只看第一條規則的方向 ⇒ 紅 |
+| T15 | **K01 方向**（§8）四項；**（N2）`down` 設定被額外 `ge` 規則引用 ⇒ 有效分類 `both`、停用後回 `down`、同交易寫入**；**（S5）收緊即時生效僅當『所有引用該設定的規則方向一致』**：兩條規則一條 `lt` 一條 `ge` 引用同一設定，調高門檻 ⇒ 走放寬流程（不即時） | 方向互換 ⇒ 紅；只看第一條規則的方向 ⇒ 紅 |
 | T16 | **靜態守門**：評估器模組不得 import `eval/exec/compile/importlib/subprocess/os.system`；規則 profile 允許集合 ⊆ 預設集合（不分叉） | 加一個 `eval` ⇒ 紅 |
 | T17 | **輸出純文字**：`badge`／`message` 含 `<img onerror>` ⇒ 前端以 `textContent` 渲染、PDF／Excel 跳脫；前端禁用 `innerHTML` 於使用者定義字串的靜態掃描 | 加一處 `innerHTML` ⇒ 紅 |
 | T18 | **目錄一致**：規則引用 `ruleUsable=false` 或 `derived_ui` 欄位（含 §6.2 付款衍生事實）⇒ 驗證失敗 | 放行一個 ⇒ 紅 |
 | T19 | **定義治理**：規則改動只能發布新版、單據凍結版本、放寬走高影響管線（門檻調鬆、停用保護規則） | 允許就地改 ⇒ 紅 |
 | T20 | **（M1）不適用繞過驗證**：成本欄 `block`、業務可執行該動作 ⇒ 發布被拒；`protective=true` 或 `applies.roles` 排除業務 ⇒ 通過且有帳本 | 關閉驗證 ⇒ 業務能送出，紅 |
-| T21 | **（M2）輸入可信**：`PUT` 帶低報成本／灌水毛利的用戶端 `tot`，保護型毛利阻擋仍觸發；規則引用 `trust=client`／`derived_ui` ⇒ 發布失敗；交易內重讀的競態以交易內值為準 | 評估改讀請求 JSON ⇒ 紅 |
+| T21 | **（M2／N1）輸入可信**：**legacy 與 v2 兩種管銷口徑各跑一次**——`PUT` 帶低報成本／灌水毛利的用戶端 `tot`，保護型毛利阻擋（引用 `direct_margin_pct_server`）仍觸發；規則引用原欄位 `direct_margin_pct` ⇒ 發布失敗；規則引用 `trust=client`／`derived_ui` ⇒ 發布失敗；交易內重讀的競態以交易內值為準 | 評估改讀請求 JSON ⇒ 紅 |
 | T22 | **（S6）預設 profile 不變**：`formula.py` 重構後，對**既有自訂模組公式**（現有範本與測試中的所有公式）做黃金：浮點結果、`not None` 為真、`and/or` 回傳運算元值等行為**位元組相同** | 讓預設 profile 使用 Decimal／三態 ⇒ 紅 |
 
 ## 12. 與 98 r16 §3.4b、0d 威脅模型 §1／§5 的對齊對照
