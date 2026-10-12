@@ -18,7 +18,7 @@
 
 ## 2026-10-12 權限矩陣模組補唯讀狀態探針（wip/t57-permmatrix-probe-r1）
 
-- 新增 `GET /api/permmatrix/status`（只回模組與版本，不含權限資料），供上線演練逐模組檢查；權限判斷與畫面不變。
+- 新增 `GET /api/permmatrix/status`（只回 ok，不含權限資料），供上線演練逐模組檢查；權限判斷與畫面不變。
 
 ## 2026-10-12 測試穩定性（train/m2-int-r4）
 

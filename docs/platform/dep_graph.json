@@ -12489,7 +12489,7 @@
    "routes": [
     {
      "func": "permmatrix_status",
-     "line": 26,
+     "line": 15,
      "method": "GET",
      "path": "/api/permmatrix/status"
     }

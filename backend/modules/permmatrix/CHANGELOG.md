@@ -1,7 +1,7 @@
 # 權限矩陣 更新紀錄
 
 ## 1.0.2 — 2026-10-12（wip/t57-permmatrix-probe-r1）
-- 新增唯讀狀態探針 `GET /api/permmatrix/status`（登入即可；只回 `{ok, module, version}`，不讀 `perm_*` 表、不改任何權限判斷），`module.json` 宣告 `provides.api_prefixes`／`probes`，補 D7 final_drill 的「沒有宣告 provides.probes」。寫入端點與頁面仍未接線（SPEC PMX14）。
+- 新增唯讀狀態探針 `GET /api/permmatrix/status`（登入即可；只回 `{"ok": true}`（無字串值，符合 probe「回應值不進 log」規則），不讀 `perm_*` 表、不改任何權限判斷），`module.json` 宣告 `provides.api_prefixes`／`probes`，補 D7 final_drill 的「沒有宣告 provides.probes」。寫入端點與頁面仍未接線（SPEC PMX14）。
 
 ## 1.0.1 — 2026-10-10（wip/t50-int；第 50 班）
 - 白話預覽（影響面板：摘要、影響、人數、適用範圍、可否復原、何時生效、風險提示）與一鍵復原；文字由 L1 `helpers/perm_text.py` 產生（畫面無代碼、無代名詞）。

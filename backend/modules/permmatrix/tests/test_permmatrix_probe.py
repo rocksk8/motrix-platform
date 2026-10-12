@@ -20,8 +20,7 @@ def test_probe_returns_200_with_exactly_the_fixed_body(client, make_user):
     u, p = make_user(username="pm_probe_su", role="superadmin")
     r = client.get(URL, headers=_login(client, u, p))
     assert r.status_code == 200, r.text
-    version = json.loads((_MOD / "module.json").read_text(encoding="utf-8"))["version"]
-    assert r.json() == {"ok": True, "module": "permmatrix", "version": version}
+    assert r.json() == {"ok": True}      # 常數、無字串值（probe 規則：回應值不得出現在 log）
 
 
 def test_probe_requires_login(client):
