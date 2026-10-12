@@ -60,7 +60,7 @@
 - 唯一不可變：來源標記 `quoteItemId`（畫面不顯示代碼；使用者看到的是「來自報價第 3 項」白話標籤）。手動新增列沒有來源，也允許。
 
 ### 3.5 報價單事後變動（重新同步政策）
-- 完工單存 `data_json.quoteSync = {syncedAt, itemsFingerprint}`（**儲存路徑**：`CompletionNoteIn` 目前沒有這個欄位、`create` 只寫 `{"labels":…}`——需新增模型欄位 `quote_sync: Optional[dict]` 並在 `create`／`update` 寫入；**伺服器在存檔時自己重算指紋**，不信任用戶端送來的值；`update` 已是 read-modify-write 保留 `approval`，同樣保留／更新 `quoteSync`；`DataJsonApproval("completion_notes","note_no")` 只讀改寫 `data["approval"]` 再整包寫回（`helpers/approval_queue.py:166-167`），不會洗掉 `quoteSync`，實作時加回歸題）；`itemsFingerprint` ＝ 來源集合的**非金額欄位**（`id/description/qty/unit/type`＋擇一選定）雜湊。**金額變動不觸發**（也不洩漏金額變動）。
+- 完工單存 `data_json.quoteSync = {syncedAt, itemsFingerprint}`（**儲存路徑**：`CompletionNoteIn` 目前沒有這個欄位、`create` 只寫 `{"labels":…}`——需新增模型欄位 `quote_sync: Optional[dict]` 並在 `create`／`update` 寫入；**指紋只在「明確帶入／重新帶入」時改變，一般存檔不碰它**：用戶端帶入時把它從 quote-items 端點拿到的 `fingerprint` 連同單據一起送回（`quote_sync.fingerprint`）；伺服器**只在它等於「此刻」伺服器自己重算的指紋時才接受並寫入**，否則 **409「報價單剛有更動，請重新帶入」**（防止載入到存檔之間發生的報價變動被誤蓋成已同步）；沒有帶 `quote_sync` 的一般更新**維持原儲存值不動**（所以按「存檔」不會悄悄清掉「報價單已更動」橫幅）；`update` 已是 read-modify-write 保留 `approval`，同樣保留／更新 `quoteSync`；`DataJsonApproval("completion_notes","note_no")` 只讀改寫 `data["approval"]` 再整包寫回（`helpers/approval_queue.py:166-167`），不會洗掉 `quoteSync`，實作時加回歸題）；`itemsFingerprint` ＝ 來源集合的**非金額欄位**（`id/description/qty/unit/type`＋擇一選定）雜湊。**金額變動不觸發**（也不洩漏金額變動）。
 - 草稿開啟時比對：不同 ⇒ 黃色提示「報價單的項目有更動（新增 N、移除 M、數量改 K），要看差異嗎？」。差異視窗**逐項勾選**加入／移除／更新數量，**絕不自動覆寫**使用者已改過的列。
 - 非草稿（已送審／核准）：只顯示唯讀提示「報價單在核准後有更動」，不提供改動入口（要改須退回草稿，沿用既有流程）。
 - M3 後報價單回簽即鎖定品項 ⇒ 回簽後帶入的來源是穩定的；回簽前帶入視為暫估（Q3）。**取消回簽會清除選定** ⇒ 指紋改變 ⇒ 提示重新比對。
@@ -122,7 +122,7 @@
 2b. 來源集合：一般單全帶；含 header；擇一單（M3 後）只帶選定、未選定組別不帶＋`sourceState`；M3 前 `counted_items` 缺席降級。
 3. 分批：多張完工單累計（同 `quoteItemId` 多列相加、header 忽略、非數字/負數/未施作計 0、`quoteQty` 不參與、無 id 舊列不算入）、撤銷核准後他單累計縮小（即時）、草稿/退回不計、`部分完成` 計入、`exclude_note` 排除自己、剩餘 0 不預設帶入、超量警告／擋下（設定）。
 4. 指紋：金額變動不改指紋；數量/品名/選定變動改指紋；diff 三類（新增/移除/改量）。
-5. 不覆寫：`create`／`update` 持久化 `quoteSync` 且伺服器重算指紋（用戶端偽造的值被忽略）；`DataJsonApproval` 核准/退回後 `quoteSync` 仍在；帶入不改非草稿單。
+5. 不覆寫：`quoteSync` 協議兩條都要有題：(i) 帶入後存檔，送回的指紋等於當下伺服器指紋 ⇒ 寫入；載入到存檔之間報價單品項被改 ⇒ 送回舊指紋 ⇒ 409，儲存值不變；偽造指紋 ⇒ 409；(ii) 一般更新（不帶 `quote_sync`）⇒ 儲存的 `quoteSync` 逐位元不變，橫幅仍在；`DataJsonApproval` 核准/退回後 `quoteSync` 仍在；帶入不改非草稿單。
 6. PDF 不含金額（含 Q1 預設）。
 7. 前端守門（靜態）：表單不再呼叫 `GET /api/quotations/{no}` 取整張；頁面不含價格欄位字樣。
 8. e2e（單頁）：新建→自動帶入→改一列→存→重開→報價單被改→看到橫幅→差異視窗。
@@ -167,7 +167,7 @@
 | Q5 | 新建時自動帶入，還是只留按鈕？ | 【PM 預設】可事後調 | 自動帶入＋可重新帶入 |
 | Q6 | 業務（非管理員）能不能建立完工單？今天只有管理員／最高管理者 | **【需使用者回答】**（若要改，屬權限變更，不在本案） | 維持不變 |
 | Q7 | 報價單「備註」要不要帶進完工單備註？ | 【PM 預設】 | 不帶，且**不在端點白名單內**（報價備註常含內部提醒） |
-| Q8 | 取消回簽時，若已有依該選定建立的完工單，要不要警告／阻擋？（§8b） | **【需 M3 設計者或使用者決定】** | 接受並在完工單提示，不擋 |
+| Q-C1 | 取消回簽時，若已有依該選定建立的完工單，要不要警告／阻擋？（§8b） | **【需 M3 設計者或使用者決定】** | 接受並在完工單提示，不擋 |
 
 ## 10. 依據與限制
 
