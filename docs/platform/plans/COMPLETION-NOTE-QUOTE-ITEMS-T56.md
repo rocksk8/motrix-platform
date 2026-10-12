@@ -5,6 +5,7 @@
 > **r5 修訂（依 §6b 權限審查，原 r4 不可採用）**：①`can_author_completion` 改用**擁有者範圍**，不用 `case_page_readable`（後者因 `read_bypass_modules=("cashier",)` 會讓兼任出納的業務通過「所有案件」）；②單據層端點一律先由 `note_no` 查出 `quote_no` 再判權限，PUT 內文的 `quote_no` 不具授權力，且「查無此單」與「不是你的案件」回同一個 404；③前端能力旗標改走「單筆完工單＋案件詳情＋小端點」，不動 `list_completion_notes` 的形狀；另補刪除、設定語意、簽核、撤回限制。
 > **r6 修訂（依權限審查通過後的建議）**：①建立路徑對「報價單不存在」與「不是你的案件」回同一個 404；②稽核備註：擁有者規則也會以顯示名稱比對舊資料（`sales_person_id` 為 NULL 時，`legacy_name_col`）；③**既有安全漏洞**：`GET /api/completion-notes/{note_no}/privacy-notice` 只做 `_require_user`，任何登入者可讀任一完工單的個資告知紀錄——列為獨立小修（§6b.1），並進路線圖。
 > **r7 修訂**：①「硬規則」依使用者新原則重新分類——**只有會弄壞系統運作的才寫死**（資料完整性、交易一致性、安全底線），其餘一律做成選項（預設安全）；②高影響選項帶醒目警示與影響範圍面板（§5）；③印金額開啟時，沒有金額檢視權限者**拒絕輸出**；④靜態 GET 路由須註冊在 `/{note_no}` 之前；⑤白名單＝程式明列 ∩ 目錄 `isMoney=false`；⑥權限設定宣告 `risk="security"`、放寬順序；⑦「誰可建立」同時對應 F3 能力；⑧新增設定群組會改變「4 組」斷言。
+> **r8 修訂**：①檔案變更表的 quote-items 列改為 `can_author_completion`（擁有者範圍），與 §6b 一致——`case_page_readable` 不得當作者閘；②印金額的判斷改用 `quote_money_visible`（金額來源是報價單品項，作者＝業務也能輸出自己的完工單），不達者仍拒絕輸出。
 > 2026-10-12；委託：hichan-1c（使用者新需求：「完工單要能自動帶入報價單項目」）。底：`origin/platform` c14f0a1df（內容＝正式機 M1-a `4eb521384`；**M2／M3 尚未上線**）。
 > 標記：**【需使用者回答】**＝會改變行為或對外輸出，回答前不實作該部分；**【PM 預設】**＝我給預設值，不需問，使用者可事後調。**UNKNOWN**＝沒查到證據。
 > 框架優先（記憶 `feedback_framework_first_no_hardcode`）：行為開關放設定中心，程式內只有「安全底線」（不帶金額、守門權限）。
@@ -14,7 +15,7 @@
 1. **今天完全沒有這個功能**：新建完工單只會從報價單帶「客戶、專案名稱、送貨地址、聯絡人、電話」（`completion-note-form.html::prefillFromCase`，約 413–434 行）；**完成項目明細是空的**，畫面寫「尚無項目，按上方『＋ 項目』開始」。（查過：`completion_notes.py`、`case-management-completion.js`、README、出貨單 `supply/api/shipping_notes.py`——沒有任何報價單→完工單的帶入程式。）
 2. **欄位幾乎天然對得上**：完工單項目 `description／qty／unit／status／notes`（＋分段 `type=header`）；報價單項目 `id`(**字串**：`crypto.randomUUID()` 或 `id-<時間>-<亂數>`，`quotation-form.html` `genId()` 約 2524–2528；舊資料可能無 id)`／description／brand／qty／unit／…／notes`（＋`type=header`）。**不需要資料庫遷移**——項目存在 `items_json`、加性欄位即可（比照出貨單 `materialLink` 的加性做法）。
 3. **建議做法**：新增一支**唯讀**「可帶入項目」端點（後端白名單只回非金額欄位，且只給**能建立／編輯完工單草稿的管理員＋讀得到該案件頁的人**）＋ 完工單表單「從報價單帶入」（新建時自動執行一次、草稿可再按）。帶入後**全部可編輯**；每列記住來源品項編號（字串），分批完工時顯示「報價 N／已完工 M／本次預設 剩餘」。擇一方案報價**只帶已回簽選定的品項**。
-4. **金額不進完工單**（預設）：後端白名單 `{id, type, description, brand, qty, unit}`，**任何金額鍵（`cost／margin／unitPrice／amount`）一律不出**，守門測試鎖住。完工單要不要印金額是**設定項（預設關；開啟時仍依 `money_visible` 約束）**。
+4. **金額不進完工單**（預設）：後端白名單 `{id, type, description, brand, qty, unit}`，**任何金額鍵（`cost／margin／unitPrice／amount`）一律不出**，守門測試鎖住。完工單要不要印金額是**設定項（預設關；開啟時仍依 `quote_money_visible` 約束）**。
 5. **工量 ≈ 7.5–9.0 pd（約 8.25）**（§7；含印金額開關與權限閘重新設計；不含另行的權限審查），主要風險＝擇一方案相依 M3、報價單事後變動的對帳（§8）。
 
 ## 1. 完工單現況（資料模型、誰編輯、狀態、PDF）
@@ -74,7 +75,7 @@
 - **端點守門（r4）＝「可建立完工單」權限（§6b：`can_author_completion`，預設＝管理員＋有案件權限的業務；設定可改為僅管理員）**，**且**要通過 `case_page_readable(conn, quote_no, user)`（`helpers/case_access.py:238-248`；與 `GET /api/quotations/{no}` 同一支，「可見範圍＝原單據，不寬也不嚴」）。查無與讀不到回同一個 404（比照 `_readable_note`）。
 - **不新增任何讀取者**：持 `case_manage` 模組的非管理員（例如工程師）今天**讀不到報價單本體**（`case_page_readable` 不放行 case_manage），所以也**拿不到**本端點的品項與表頭；他們仍可像今天一樣列出／讀取完工單（`guard_case_access(case_manage)`，不變）。不能用 `case_manage` 當本端點的閘，否則等於讓他們用可列舉的 `quote_no` 撈任何報價單的品項與客戶資料。
 - 回應不含金額，故不需財務權限；但資料範圍（品項**與表頭**：客戶、專案、地址、聯絡人、電話）都受上面同一道閘約束。
-- 完工單**不存任何金額**（永遠）。「完工單印金額」是設定項（預設**關**，Q1 使用者答案＝不印）：開啟時，金額**不寫進完工單**，PDF／畫面讀取當下以 `money_visible(user)` 即時由報價單取（遮蔽帳號得 `null`＋`moneyMasked`，比照 `financial_mask`；客戶簽收聯的 PDF 是否印出另受此設定控制），並有守門測試。**印金額開啟時，沒有金額檢視權限（`money_visible`）者不能產生或列印這份完工單 PDF**：回白話拒絕訊息（「這份完工單設定為印出金額，您沒有查看金額的權限，請洽有權限的同事輸出」），**不輸出缺金額的版本**——避免同一張客戶簽收單因列印者不同而內容不同。（業務因此在此設定開啟時無法自行輸出，這是決定，並寫在選項的影響面板。）
+- 完工單**不存任何金額**（永遠）。「完工單印金額」是設定項（預設**關**，Q1 使用者答案＝不印）：開啟時，金額**不寫進完工單**，PDF／畫面讀取當下以 `quote_money_visible(user)` 即時由報價單取（**決定：用 `quote_money_visible`，不用較嚴的 `money_visible`**——金額來源是報價單品項，其可見規則本來就是 `quote_money_visible`（最高管理者、管理員、業務、財務角色）；改用 `money_visible`（僅最高管理者與財務）會讓作者（業務）無法輸出自己開的完工單）（遮蔽帳號得 `null`＋`moneyMasked`，比照 `financial_mask`；客戶簽收聯的 PDF 是否印出另受此設定控制），並有守門測試。**印金額開啟時，沒有報價金額檢視權限（`quote_money_visible`）者不能產生或列印這份完工單 PDF**：回白話拒絕訊息（「這份完工單設定為印出金額，您沒有查看金額的權限，請洽有權限的同事輸出」），**不輸出缺金額的版本**——避免同一張客戶簽收單因列印者不同而內容不同。（業務具 `quote_money_visible`，可輸出；其他角色，例如只持 `case_manage` 的工程師，會被拒絕——寫在選項的影響面板。）
 - 順手收斂（【PM 預設】）：`prefillFromCase` 目前讀整張 `GET /api/quotations/{no}`（含單價）只為取地址聯絡人 ⇒ 改讀新端點回的 `header` 區（客戶/專案/地址/聯絡人），讓完工單頁面從此**不載入報價單金額**（表頭同樣只在上述閘通過時回；非管理員新建不了完工單，所以不影響現有操作）。
 
 ## 4. 畫面行為（白話，畫面不出現代碼）
@@ -96,7 +97,7 @@
 | 白話問句 | 預設 | 可選 | 影響範圍面板（顯示在選項旁） | 高影響？ | 變更規則 |
 |---|---|---|---|---|---|
 | 誰可以建立、編輯完工單？ | **有案件權限的業務與管理員**（使用者 10-12 決定） | 僅管理員／有案件權限的業務與管理員 | 動到：完工單的建立、改草稿、送審；角色：業務（限自己經手或被指派的案件）、管理員；金額：無。選「僅管理員」＝與今天相同 | **是**（權限類，`risk="security"`，`risk_text` 必填） | 放寬（僅管理員 → 含業務）＝原因＋帳本＋核准＋確認期間；收緊即時生效。選項順序嚴 → 寬，`loosen="up"` |
-| 完工單要不要印金額？ | **不印** | 不印／印（沒有金額檢視權限者無法輸出） | 動到：客戶簽收聯 PDF 與畫面；角色：業務無法自行輸出；金額：單價與小計（讀取當下取自報價單，不存在完工單） | **是** | 放寬類 |
+| 完工單要不要印金額？ | **不印** | 不印／印（沒有報價金額檢視權限者無法輸出） | 動到：客戶簽收聯 PDF 與畫面；角色：最高管理者、管理員、業務、財務角色可輸出，其他角色被拒絕；金額：單價與小計（讀取當下取自報價單，不存在完工單） | **是** | 放寬類 |
 | 帶入時要不要帶報價備註？ | **不帶** | 不帶／帶入 | 動到：完工單項目備註；報價備註常含內部提醒，客戶簽收聯會看到 | **是** | 放寬類 |
 | 報價單還沒回簽時能不能帶入項目？ | **能，並提示「尚未回簽，項目可能再變」** | 能（加提示）／要回簽後才能 | 「要回簽後」＝品項已鎖定，但現場要先開完工單時會被擋 | 否 | 收緊即時、放寬走確認期間 |
 | 擇一單未選定的組別怎麼處理？ | **不帶該組並提示** | 不帶／全部帶入供人工刪 | 全部帶入＝客戶沒選的方案也會出現在完工單 | **是** | 放寬類 |
@@ -130,7 +131,7 @@
 | 檔案 | 變更 |
 |---|---|
 | `backend/modules/case/completion_sync.py`（新） | 純函式：`quote_source_items(q)`（白名單＋`counted_items` 降級）、`completed_qty_by_item(conn, quote_no, exclude_note)`、`fingerprint(items)`、`diff(note_items, source_items)`。不寫庫。 |
-| `backend/modules/case/api/completion_notes.py` | **路由順序**：`GET /api/completion-notes/quote-items`、`GET /api/completion-notes/can-author` 兩個靜態路由必須註冊在 `GET /api/completion-notes/{note_no}`（現第 265 行）**之前**，否則會被當成 `note_no`；加路由順序測試。新端點 `GET /api/completion-notes/quote-items?quote_no=&exclude_note=`（`_require_admin` ＋ `case_page_readable`；報價單狀態閘見 §3.1；回 `header`、`items[]`（`id/type/description/brand/qty/unit` ＋ `alreadyCompleted`、`remaining`）、`sourceState`（`signed`/`unsigned`/`alt_unselected` 白話欄位）、`fingerprint`）。`CompletionNoteIn` 加 `quote_sync`；`_validate` 加：`quoteItemId` 若存在須為**字串且 ≤64 字元**、`quoteQty` 為有限數字；**不加必填**。`create` 寫入 `data_json.quoteSync`、`update` 僅在帶 `quote_sync` 且指紋等於伺服器當下指紋時才更新，否則 409；不帶則保留原值。 |
+| `backend/modules/case/api/completion_notes.py` | **路由順序**：`GET /api/completion-notes/quote-items`、`GET /api/completion-notes/can-author` 兩個靜態路由必須註冊在 `GET /api/completion-notes/{note_no}`（現第 265 行）**之前**，否則會被當成 `note_no`；加路由順序測試。新端點 `GET /api/completion-notes/quote-items?quote_no=&exclude_note=`（`can_author_completion`（擁有者範圍；見 §6b.2。`case_page_readable` 只作冗餘檢查，**禁止當作者閘**）；報價單狀態閘見 §3.1；回 `header`、`items[]`（`id/type/description/brand/qty/unit` ＋ `alreadyCompleted`、`remaining`）、`sourceState`（`signed`/`unsigned`/`alt_unselected` 白話欄位）、`fingerprint`）。`CompletionNoteIn` 加 `quote_sync`；`_validate` 加：`quoteItemId` 若存在須為**字串且 ≤64 字元**、`quoteQty` 為有限數字；**不加必填**。`create` 寫入 `data_json.quoteSync`、`update` 僅在帶 `quote_sync` 且指紋等於伺服器當下指紋時才更新，否則 409；不帶則保留原值。 |
 | `backend/modules/case/api/quotations.py`（報價單本體端點） | 不改（唯讀引用 `data_json`）；聚合器的 `caps` 另列一行。若 M3 已併入，`completion_sync` 才呼叫 `profit_guard.counted_items`。 |
 | `backend/modules/case/completion_pdf.py` | 不改（項目額外鍵被忽略）；加守門測試確認 PDF 不含金額。 |
 | `frontend/pages/completion-note-form.html` | `prefillFromCase` 改用新端點；`autoFillItems()`、`openSyncDiff()`；項目列加「報價/已完工」小字與超量底色；橫幅。 |
@@ -208,7 +209,7 @@
 11. **個資告知紀錄讀取漏洞修復**：`GET /{note_no}/privacy-notice`——無案件權限的登入者 ⇒ 404（與查無單同句）；有權限者 ⇒ 200 且內容不變；舊行為（任何登入者可讀）有回歸題證明已關閉。
 12. 路由順序：`GET /api/completion-notes/quote-items` 與 `/can-author` 不被 `{note_no}` 吞掉（回各自端點的結果，不是「完工單不存在」）。
 13. 白名單：回應鍵集合＝程式允許清單 ∩ `isMoney=false`；把任一金額鍵加進允許清單的突變 ⇒ 守門紅；目錄標成 `public` 的單價**不得**因此進白名單。
-14. 印金額開啟：有 `money_visible` 者輸出含金額；無者回白話拒絕訊息且不產生 PDF；關閉時兩者輸出相同。
+14. 印金額開啟：具 `quote_money_visible` 者（含**業務**）輸出含金額；無者回白話拒絕訊息且不產生 PDF；關閉時兩者輸出相同。
 15. 設定與斷言：「完工單」群組註冊後，設定中心群組數與步驟檔 #19 的斷言同步；權限設定宣告 `risk="security"`、`risk_text` 非空、選項順序嚴 → 寬。
 
 ### 6b.7 受影響測試與文件
