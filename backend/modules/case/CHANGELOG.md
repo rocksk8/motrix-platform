@@ -16,6 +16,7 @@
   - T3（2026-10-13）：新增前端 `static/alt-items.js`（`MotrixAltItems.countedItems` 等，與後端 `counted_items` 同規則）與雙端黃金向量 `tests/data/quote_alt_vectors.json`；測試 `tests/test_quote_alt_t3_2026_10_13.py`（已跑：13 項過）。表單 `calcTotals` 的接線與 `FORM_VERSION` V3.22→V3.23 隨 T6 一起（表單雜湊守門要求一次升版）；本批沒有畫面或金額變更。
   - T2 稽核修正（0d）：①`note_template` 說明文字不含大括號（守門測試轉綠）；②`total_text`／`note_template` 加長度上限（40／200 字）與控制字元檢查，`note_template` 只允許 `{items}`、`{group}` 兩個代入位置（T7/T8 以一般字串取代、不用 `str.format`，輸出 PDF／Excel 須跳脫）；③`validate_alt`：擇一組內品項須有非空文字編號且組內不重複（422）；④凡尚無程式使用的選項（鎖定範圍②、成案後取消③、狀態離開②、拒絕結案②、解鎖修改②、送審基準②，及 P6/P7/P8 的②）全部登錄為『尚未提供』（不可儲存、讀取夾回預設），由實作該路徑的任務在自己的 commit 開放；⑤送審金額基準選項文字更正（現行行為＝逐項檢查所有品項＝最嚴＝選項①；`compute_approval_reasons` 不改）；⑥`modules.json` 登記 `alt_policy`、README 補列、version_manifest 與快速變更摘要補登。T2＋T3 同一列車上線。
   - 測試（已寫、未跑）：`tests/test_quote_alt_t2_2026_10_12.py`。本批沒有 UI、PDF、回簽選定變更（T3 起）；無資料庫遷移；`FORM_VERSION` 於本班 T6 升一次。
+- **（併入）2026-10-13（wip/t57-m3-registrations-r1；M3 登錄補齊）**：方案比較兩支 GET（`/api/quotations/{quote_no}/plan-view`、`/case-plan-view`）改在處理函式內就地呼叫 `_require_user()` 與 `case_page_readable`／`deny_case`（逐案守門，非公開端點），回應內容不變；`docs/platform/case_read_scope.json` 登錄這兩條讀取路徑。
 
 ## 1.0.178 — 2026-10-13（wip/t57-hotfix-r1；M2.1 熱修）
 - **安全修正**：`GET /api/completion-notes/{note_no}/privacy-notice` 原本只要求登入，任何登入者可用可列舉的單號讀到該單聯絡人的告知紀錄；改走 `_readable_note`（與單筆 GET 同一道閘），查無與看不到同一句「完工單不存在」。
