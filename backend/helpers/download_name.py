@@ -2,7 +2,8 @@
 """下載檔名的單一來源（A7 第一期；設計 DOWNLOAD-FILENAME-CASE-T56.md r6）。
 
 [單位] helper:download_name    [層] L1    [穩定度] 契約
-[公開介面] build、content_disposition、DownloadName、DOC_TYPES、TOKENS
+[公開介面] build、content_disposition、DownloadName、DOC_TYPES、TOKENS、DEFAULTS
+[契約題] tests/test_download_name_p1_2026_10_13.py
 [不變式]
   ① 檔名**永不含金額**：版面是程式內的固定預設組（`_LAYOUTS`），可用標籤只有 `TOKENS`（案件編號、案件名、客戶名、文件類型、單號、日期）；
      沒有任何金額欄，設定不能加。
