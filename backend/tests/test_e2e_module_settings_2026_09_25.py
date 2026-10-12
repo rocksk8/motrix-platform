@@ -133,7 +133,10 @@ def test_core_only_page_and_sidebar_still_work(live_server, make_user, e2e_brows
         assert resp.value.status == 200 and resp.value.json() == {}                   # 側欄改用 availability
         page.locator("text=這個安裝包裡沒有可選配的模組").wait_for(state="visible", timeout=15000)
         page.wait_for_load_state("networkidle")
-        assert page.locator("#app-mainnav a[href$='module-settings.html']").count() >= 1, "選單要照常建出來"
+        # 第 54 班（系統中心）：『系統』群組在導覽列收成單一連結（指向系統中心），模組管理不再是獨立導覽項；
+        # 「選單照常建出來」改驗：系統中心入口在、本頁被認成系統頁（頂端有『← 系統』連結可回系統中心）。
+        assert page.locator("#app-mainnav a[href$='system-hub.html']").count() >= 1, "選單要照常建出來（系統中心入口）"
+        assert page.locator("[data-testid=sys-crumb]").count() == 1, "模組管理頁要掛『← 系統』連結"
         assert not errors, errors
     finally:
         registry.restore(snap)
