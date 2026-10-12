@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """脊柱 E-a：設定群組的擁有者（載入器 import 範圍）、module.json `settings` 宣告⇔實際登錄、失敗時移除群組。"""
+import ast
 import json
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -198,10 +200,56 @@ def test_a_module_scope_cannot_register_for_another_owner(clean_registry):
     assert R._GROUPS["zz_ea_free"]["owner"] == "zz_b"
 
 
+def test_settings_groups_still_exposes_register_group_and_keeps_blocks_core_owned(clean_registry):
+    """合併安全：別的分支在 settings_groups.py 追加的區塊會呼叫 register_group(...)——名稱不能消失，且其群組屬 core（即使在模組 import 範圍內第一次載入）。"""
+    from helpers import settings_groups as SG
+    assert callable(getattr(SG, "register_group", None))
+    with registry.owner_scope("zz_other"):
+        SG.register_group("zz_ea_appended", "追加區塊群組", [_field()], help="測試用的設定群組。")
+    assert R._GROUPS["zz_ea_appended"]["owner"] == "core"
+    registry.mark_failed("zz_other", "x")
+    assert "zz_ea_appended" in R._GROUPS                                      # 其他擁有者失敗時不被帶走
+
+
+_FORBIDDEN_IN_MODULES = {"call": {"owner_scope"}, "name": {"_register_core", "_OWNER"}}
+
+
+def _forbidden_uses(tree):
+    """AST：呼叫 owner_scope(...)、或提到 _register_core／_OWNER 的位置。"""
+    hits = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Call):
+            nm = getattr(n.func, "attr", None) or getattr(n.func, "id", None)
+            if nm in _FORBIDDEN_IN_MODULES["call"]:
+                hits.append((n.lineno, nm))
+        elif isinstance(n, (ast.Name, ast.Attribute)):
+            nm = getattr(n, "id", None) or getattr(n, "attr", None)
+            if nm in _FORBIDDEN_IN_MODULES["name"]:
+                hits.append((n.lineno, nm))
+    return hits
+
+
+def test_modules_never_touch_the_owner_machinery():
+    """靜態守門：modules/** 不得自己呼叫 owner_scope、也不得使用 _register_core／_OWNER（擁有者只能來自載入器；否則模組可替別人登記）。"""
+    root = Path(__file__).resolve().parents[2] / "modules"
+    bad = []
+    for f in root.rglob("*.py"):
+        if "tests" in f.parts:
+            continue
+        try:
+            tree = ast.parse(f.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        bad += ["%s:%d %s" % (f.relative_to(root), ln, nm) for ln, nm in _forbidden_uses(tree)]
+    assert bad == [], "模組不可碰擁有者機制：%s" % bad
+    # 正對照：三種違規寫法都抓得到
+    assert _forbidden_uses(ast.parse("with registry.owner_scope('core'):\n    pass")) == [(1, "owner_scope")]
+    assert (1, "_register_core") in _forbidden_uses(ast.parse("settings_groups._register_core('g')"))
+    assert (1, "_OWNER") in _forbidden_uses(ast.parse("registry._OWNER.set('core')"))
+
+
 def test_modules_never_pass_owner_to_register_group():
     """靜態守門：modules/** 的程式碼不得以 owner= 呼叫 register_group（擁有者只能來自載入器的 import 範圍）。"""
-    import ast
-    from pathlib import Path
     root = Path(__file__).resolve().parents[2] / "modules"
     bad = []
     for f in root.rglob("*.py"):

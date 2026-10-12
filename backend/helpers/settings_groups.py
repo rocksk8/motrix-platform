@@ -18,6 +18,11 @@ def _register_core(*args, **kwargs):
     with _reg.owner_scope("core"):
         return _register_group(*args, **kwargs)
 
+
+#: 合併安全：其他分支（M3 擇一方案、完工單、材料申請、下載檔名、專案毛利…）會在本檔追加區塊並呼叫 `register_group(`——
+#: 名稱必須還在，而且它們的群組同樣屬於 core。（本檔不再 import 註冊函式本名，這個別名接住那些區塊。）
+register_group = _register_core
+
 # 舊 PATCH /api/settings/backup-retention 的範圍：天數 1–3650、月備份 0–3650（0＝永久）、更新前快照份數 0–100。
 # 稽核紀錄保存期限另加法遵下限 365（無上限）；讀取時向上夾到 365（舊庫裡低於 365 的值不會讓稽核被提早清掉）。
 _BACKUP_IMPACT = "只影響之後的清理：超過天數的舊備份會在下一次例行清理時被刪除，已刪除的備份無法找回；改大則不會補回已刪的。調長立即生效；縮短（會更早刪除）屬放寬，須另一位最高管理者核准，並等「變更確認期間」後才生效。"
