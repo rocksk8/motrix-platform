@@ -1,15 +1,16 @@
 # 下載檔名帶「案件編號＋案件名稱＋文件類型」——設計筆記（僅文件，未跑任何測試）
 
+> **r2 修訂（依 0d 稽核）**：①掃描器登記／底層全量閘門／L1 快照與路由 golden；②淨化補 Cf 格式字元、位元組上限為實際約束、標頭編碼與 latin-1 退路；③附件下載名只在授權之後處理，HEIC 移第二期；另補 §0.2 措辭、既有測試清單、設定登錄防護。
 > 2026-10-12；委託：hichan-1c（使用者新需求：「下載下來的檔案，要有案件編號、案件名稱，跟這是什麼東西」）。底：`origin/platform` c14f0a1df（內容＝正式機 M1-a `4eb521384`；M2／M3 未上線）。
 > 標記：**【需使用者回答】**／**【PM 預設】**／**UNKNOWN**（沒查到證據，不推測）。框架優先：檔名格式、文件類型用語、長度上限由管理者在設定中心調整，程式內只留安全底線。
 
 ## 0. 結論（先講）
 
 1. **下載檔名散在 ~28 個後端端點＋~45 個前端 `a.download`，沒有共用函式**；絕大多數案件文件只用「單號.pdf」（`CN0007.pdf`），看不出是哪個案件、什麼文件。
-2. **關鍵事實：前端用 blob 下載時，`a.download = '…'` 會蓋掉伺服器的 `Content-Disposition`。** 所以只改後端不會生效——要「後端單一來源＋前端共用下載函式讀伺服器給的檔名」，兩邊一起做。
+2. **關鍵事實：前端是 `fetch`（帶 Bearer）→ `blob()` → `a.href` 下載，這條路徑上瀏覽器沒有回應標頭可用，`a.download` 是檔名的唯一來源**（例：`case-management-close.js:224-234`）。真正的限制是**認證**——下載連結不能直接帶標頭，uploads 的 `?token=` 已於 2026-09-22 拿掉（只剩 `?pt=` 單一路徑簽章）。所以只改後端不會生效，要「後端單一來源＋前端共用下載函式讀回應 `Content-Disposition` 的檔名」，兩邊一起做。
 3. **建議**：一支共用後端函式 `helpers/download_name.py::build()`（輸入：文件類型、案件、單號、使用者、副檔名；輸出：安全檔名＋完整 `Content-Disposition`），格式範本與文件類型用語放設定中心（預設 `{案件編號}_{案件名稱}_{文件類型}_{單號}.副檔名`）；前端一支 `MotrixDownload.save(response, fallback)` 讀回應的檔名。分兩期：**第一期＝有案件可查的文件（報價/完工/出貨/請款/開票/承攬商憑證/費用單/獎金分配/勞報單/傳票…）**，第二期＝期間型報表、匯出、純前端產生檔、附件。
 4. **權限底線**：案件名稱只在「這個使用者讀得到該案件」時才放進檔名（`case_page_readable`）；讀不到就退回「文件類型＋單號」。**檔名永遠不含金額。**
-5. **工量**：第一期 ≈ 4.5 pd，全部 ≈ 8.5 pd（§8）。
+5. **工量**：第一期 ≈ 5.0 pd，全部 ≈ 9.25 pd（§8）。
 
 ## 1. 下載端點盤點
 
@@ -60,9 +61,11 @@
 | 29 | `routers/attachments.py:89` 單據附件 | `opened.filename`（原檔名，inline） | 提供者回原名 |
 | 30 | `accounting/api/vouchers.py:549／1443`、`arap/api/cashier.py:186` | 原檔名（`FileResponse(filename=…)`） | 同上 |
 
+> 補充：`routers/system.py:3243` 的 `FileResponse`（品牌圖片 PNG）與本案無關，不改。
+
 ### 1.4 前端自訂下載名（要一起收斂）
 
-`a.download` 共約 45 處：案件管理（`case-management-close/core/dispatch/exec(甘特圖)/fin/list/shipping.js`）、`cashier.js`、`ledger-*.js`、`reports.js`、`voucher.js`、`module-builder-output.js`、`file-preview.js`，與頁面內嵌（`quotation-form`×3、`payment-request-form`、`payment-request`、`payslip-form`、`payslips`×4、`network-plan-form`×2、`custom-records`、`daily-tasks`、`lodging-records`、`contractors`、`topology-quick`、`approval-queue`）。**這些名稱現在全由前端決定**，包含 `payslips` 的 `勞報單_{承攬人}_…`（檔名含人名，現況如此，見 Q6）。
+`a.download` 共約 45 處：案件管理（`case-management-close/core/dispatch/exec(甘特圖)/fin/list/shipping.js`）、`cashier.js`、`ledger-*.js`、`reports.js`、`voucher.js`、`module-builder-output.js`、`file-preview.js`，與頁面內嵌（`quotation-form`×3、`payment-request-form`、`payment-request`、`payslip-form`、`payslips`×4、`network-plan-form`×2、`custom-records`、`daily-tasks`、`lodging-records`、`contractors`、`topology-quick`、`approval-queue`）。**T1 以 `git grep -nE "\.download ?=|a\.download|link\.download" frontend` 重新產生完整清單（約 40 餘處）當作實作檢查表，逐點打勾**。**這些名稱現在全由前端決定**，包含 `payslips` 的 `勞報單_{承攬人}_…`（檔名含人名，現況如此，見 Q6）。
 
 ## 2. 共用函式提案（框架優先）
 
@@ -74,8 +77,9 @@ content_disposition(name, inline=False) -> str
 ```
 - 輸入 `doc_type`＝**穩定鍵**（程式內常數，例 `quotation`、`completion`、`shipping`…），**顯示用語**取自設定的「文件類型用語表」（鍵→白話名），改用語不改程式。
 - 案件資料：`quote_no` → `quotations.project_name`（案件名稱）／`customer_name`（備用，Q2）。一次查詢；查不到＝視為無案件。
-- 可見度：`user` 非 None 時用 `case_page_readable(conn, quote_no, user)`（`get_quotation` 同一支）；**讀不到 ⇒ 不放案件名稱**（§5）。
+- 可見度：用 `case_page_readable(conn, quote_no, user)`（`get_quotation` 同一支）；**讀不到、或 `user` 為 None（排程／郵件等無使用者情境）⇒ 降級，不放案件名稱**（fail closed，§5）。
 - 範本取自設定；`build()` 先把各欄位**各自**淨化再套範本，最後整串再淨化＋截長（§4）。
+- **不得在模組載入時 import `settings_registry`**（此底上不存在；M2 才有）：設定讀取用受保護的延遲查詢（取不到／模組缺席 ⇒ 常數預設值），預設常數寫在 `download_name.py` 內。
 - 失敗一律降級：任何例外 ⇒ 回今天的檔名（`{單號}.{ext}`），不讓下載失敗；記 log 不記內容。
 
 ### 2.2 設定（設定中心群組「下載檔名」；M2 的 `settings_registry` 註冊樣式——**M2 設定中心目前只能看，編輯是 S1 以後；在那之前一律預設值＝零行為變更風險**）
@@ -101,15 +105,15 @@ content_disposition(name, inline=False) -> str
 
 ## 4. 淨化（Windows／Mac／瀏覽器）
 
-1. **非法字元**：Windows `\ / : * ? " < > |` 與控制字元（含換行，防標頭注入）→ 換成全形或底線（`／：＊？＂＜＞｜` 或 `_`）；Mac 的 `:` 在 Finder 顯示成 `/`，同樣處理。
+1. **非法字元**：Windows `\ / : * ? " < > |` 與控制字元（含換行，防標頭注入），以及 **Unicode 格式字元（類別 Cf：U+202E 由右至左覆寫、U+200B–U+200F 零寬、U+2060、U+FEFF BOM 等）與其他不可見分隔字元**（用來偽裝副檔名，例如 `…傳票‮fdp.exe`）→ 換成全形或底線（`／：＊？＂＜＞｜` 或 `_`）；Mac 的 `:` 在 Finder 顯示成 `/`，同樣處理。
 2. **首尾**：去掉前後空白；結尾的點與空白（Windows 會吃掉）；開頭的點（Mac/Linux 變隱藏檔）。
-3. **保留名稱**：`CON PRN AUX NUL COM1–9 LPT1–9`（含加副檔名）⇒ 加底線。
+3. **保留名稱**：`CON PRN AUX NUL COM1–9 LPT1–9`——對**主檔名（去除前後空白與結尾的點之後）不分大小寫**比對（`con`、`Con.txt` 都算）⇒ 加底線。
 4. **正規化**：Unicode NFC（Mac 檔案系統用 NFD，混用會出現視覺相同但搜尋不到）；全形空白→半形。
-5. **長度**：同時守「字元數」（Windows 路徑總長 260，使用者下載資料夾已佔一部分）與「UTF-8 位元組 ≤ 255」（Mac/多數檔案系統單一檔名上限；中文每字 3 位元組 ⇒ 約 80 字會逼近）。預設總長 100 字、案件名稱 20 字；**截斷順序：先截案件名稱，再截單號以外的欄位，絕不截副檔名與單號**；截斷處加 `…` 不加（避免讓人誤以為完整），改直接截。
+5. **長度**：**實際約束是 UTF-8 位元組**——多數檔案系統單一檔名上限 255 位元組，要扣掉副檔名（`.xlsx` 5 位元組）；中文每字 3 位元組，**100 個中文字＝300 位元組，已超過**，所以「字元數上限」只是設定的使用者介面，**程式以位元組為準**（可用位元組＝255 − 副檔名位元組）。Windows 另有路徑總長 260 字元的限制（下載資料夾已佔一部分），預設字元上限保守。**截斷順序：先截案件名稱，再截其他非必要欄位，絕不截副檔名與單號；若「文件類型用語＋單號」本身就超過可用位元組 ⇒ 硬截斷（從尾端依字元邊界截，不切壞多位元組字元），仍保留副檔名。截斷處不加 `…`，直接截。**
 6. **表情符號／罕用字**：保留（現代系統支援），但 ASCII 退路中換成 `_`。
-7. **標頭編碼**：`Content-Disposition: attachment; filename="{ASCII退路}"; filename*=UTF-8''{percent-encoded}`（RFC 5987／6266）。ASCII 退路＝把非 ASCII 換 `_`、去掉 `"` 與 `\`；兩者並列給舊瀏覽器。現行 `filename="…"` 未編碼的點（#6、#11、#12、#13、#24、#22、#23）一併修。
+7. **標頭編碼**：`Content-Disposition: attachment; filename="{ASCII退路}"; filename*=UTF-8''{percent-encoded}`（RFC 6266／8187）。`filename*` 的值**除 RFC 8187 attr-char（英數與 `!#$&+-.^_`|~`）外一律百分比編碼**（含空白、`'`、`(`、`)`、`,`、`;`、`=`）。**ASCII 退路必須是 latin-1 可編碼**（Starlette 以 latin-1 編碼標頭值，非 latin-1 會丟例外 ⇒ 下載整個失敗）：非 ASCII 換 `_`，去掉 `"`、`\`、`%` 與控制字元；加測試「任何輸入下標頭值皆可 `.encode("latin-1")`」。`helpers/email_notify.py:1763` 目前只送 `filename*`，保留不動。現行 `filename="…"` 未編碼的點（#6、#11、#12、#13、#24、#22、#23）一併修。
 8. **空結果**：淨化後為空 ⇒ 用文件類型＋單號；仍空 ⇒ `download`。
-9. **附件（§1.3）**：**只改回應的下載名，不動儲存路徑、不動 `_canonical_or_403`／`_inside` 的路徑守門**。名稱＝`{案件編號}_{案件名稱}_{文件類型}_附件_{原檔名}`（原檔名先淨化、保留副檔名；原檔名超長時截原檔名主檔名部分）；預設是否加前綴為 Q4。使用者要「原樣」時（設定關閉）完全不變。HEIC 現行用 `basename`（亂數）⇒ 改為原檔名。
+9. **附件（§1.3）**：**一律在授權驗證之後才處理名稱，且名稱絕不用來推導路徑或參與 `_inside` 判斷。** `routers/uploads.py`（約 200–205 行）只認實體路徑——案件編號／文件類型的查詢必須嚴格排在 `_canonical_or_403`／`_resolve_upload_path` 與 `_authorize_read`／`?pt=` 簽章驗證**之後**；`routers/attachments.py:89` 只在 `_inside(opened.abs_path, _roots(prov))` 通過、檔案存在**之後**才裝飾回應檔名；`vouchers.py:549/1443`、`cashier.py:186` 同理。只改**回應的 `Content-Disposition` 檔名**，不動儲存路徑、不動任何路徑守門。名稱＝`{案件編號}_{案件名稱}_{文件類型}_附件_{原檔名}`（原檔名先淨化、保留副檔名；原檔名超長時截主檔名）；是否加前綴為 Q4。**HEIC 的「以 `basename` 當下載名」改為原檔名一事移到第二期**（需要由實體路徑反查單據才拿得到原檔名，牽涉授權路徑，第一期不碰）。
 
 ## 5. 金額與權限影響
 
@@ -133,6 +137,10 @@ content_disposition(name, inline=False) -> str
 7. 附件：原檔名保留副檔名；前綴開關；路徑穿越 `../`、`..%2f` 的檔名被淨化且儲存路徑不變；HEIC。
 8. e2e（單頁）：完工單下載，檔名符合範本。
 
+9. **掃描器登記**：`backend/tests/test_company_setup_output_points_2026_09_28.py` 以 `OUTPUT_PAT`（`Content-Disposition|FileResponse(|…`）掃描每個函式，要求有公司資料閘呼叫或在例外表有登記——`helpers/download_name.py::content_disposition()` 與每個改接的端點都會觸發，需在掃描器 (c) 表逐一登記並寫明理由；加題確認登記完整。
+10. **既有測試回歸（T1 重新 grep 所有第一期端點）**：已知會碰檔名／標頭的有 `test_export_pdf_and_audit_2026_09_30.py`（約 286、302 行）、`test_attachments_open_2026_09_30.py`（約 109 行）、e2e 的 `expect_download`（`test_e2e_ledger_tax_wh_annot`、`test_e2e_attach_mine`）；改後逐一確認與更新。
+11. 淨化補充題：Cf 字元（U+202E、U+200B、U+FEFF）被移除；`con`／`CON.txt`／` Con. ` 被改名；100 個中文字的輸入 ⇒ 位元組 ≤ 255 − 副檔名；「文件類型＋單號」超長 ⇒ 硬截斷且副檔名仍在；`filename*` 只含 attr-char 與 `%XX`；ASCII 退路 `.encode("latin-1")` 不丟例外；設定缺席（無 `settings_registry`）⇒ 常數預設。
+
 ## 7. 風險
 
 1. **前端蓋掉標頭**（§0.2）：若只做後端，使用者看不到變化——必須兩邊一起；第一期先做案件文件頁面。
@@ -142,7 +150,8 @@ content_disposition(name, inline=False) -> str
 5. **同名檔案**：不同案件同單號不可能（單號唯一）；同一文件重複下載由瀏覽器加 `(1)`，不處理。
 6. **範圍蔓延**：45 個前端點、28 個後端點，易漏——靠 §6.5 靜態守門與分兩期。
 7. **舊瀏覽器**：`filename*` 不支援者讀 ASCII 退路（會看到底線）；可接受。
-8. **未驗證項**：叫料單下載端點（#14）、傳票與案件的關聯（#13）、`case_extra_expenses.kind` 種類（#6）、`custom_records`／`lodging`／`daily_tasks` 是否有案件（#22–24）——**UNKNOWN**，實作前逐一核。
+8. **層級與閘門**：`backend/helpers/**` 在 `bottom_layer.json` 屬底層，整個變更**走完整凍結樹官方閘門**，並須更新 L1 介面快照（`l1_interface_snapshot.json`）與整合點登錄（`INTEGRATION-POINTS.md`）；第二期新增 `/api/download-name` 路由 ⇒ 路由 golden 要重產。
+9. **未驗證項**：叫料單下載端點（#14）、傳票與案件的關聯（#13）、`case_extra_expenses.kind` 種類（#6）、`custom_records`／`lodging`／`daily_tasks` 是否有案件（#22–24）——**UNKNOWN**，實作前逐一核。
 
 ## 8. 工量（pd）
 
@@ -153,9 +162,11 @@ content_disposition(name, inline=False) -> str
 | 前端 `download.js` ＋ 第一期案件頁面改用（報價/完工/出貨/請款/開票/承攬商/費用單/獎金/勞報單/傳票 ≈ 20 處） | 1.0 |
 | 第一期後端 12 端點改接＋回歸測試 | 1.25 |
 | 靜態守門（後端/前端）＋e2e | 0.25 |
-| **第一期小計** | **4.5** |
-| 第二期：期間型報表統一 ~10 端點、附件前綴（#28–30）、`/api/download-name`＋純前端產生檔 ~25 處、郵件附件 | 4.0 |
-| **合計** | **8.5**（範圍 7.5–9.5；不含 Q6 勞報單去姓名的財務習慣溝通） |
+| 掃描器 (c) 表登記、L1 快照／整合點登錄、既有測試回歸（§6.9–6.10） | 0.5 |
+| **第一期小計** | **5.0** |
+| 第二期：期間型報表統一 ~10 端點、附件前綴與 HEIC（#28–30）、`/api/download-name`＋純前端產生檔 ~25 處、郵件附件 | 4.0 |
+| 第二期：路由 golden 重產（新增路由） | 0.25 |
+| **合計** | **9.25**（範圍 8.25–10.25；不含 Q6 勞報單去姓名的財務習慣溝通） |
 
 ## 9. 待使用者確認
 
@@ -173,5 +184,5 @@ content_disposition(name, inline=False) -> str
 ## 10. 依據與限制
 
 - 盤點方法：`git grep` `Content-Disposition／filename／FileResponse／download_name` 於 `backend/**`（排除測試）與 `a.download` 於 `frontend/**`；逐點讀取檔名組裝行。案件欄位以 `db.py` 的 `CREATE TABLE` 掃描（`quote_no` 存在於 `payment_requests／invoice_vouchers／contractor_payment_vouchers／shipping_notes／completion_notes／case_extra_expenses／bonus_groups／network_plans／voucher_attachments／contractor_dispatches`）。
-- **沒讀**：各端點的權限檢查細節（只用於判斷「案件是否已知」）、`unified_approval_flow`、M2 `settings_registry` 實際 API（不在此底上）、前端各頁面完整程式；叫料單、傳票與案件的連結見 §7.8 UNKNOWN。
+- **沒讀**：各端點的權限檢查細節（只用於判斷「案件是否已知」）、`unified_approval_flow`、M2 `settings_registry` 實際 API（不在此底上）、前端各頁面完整程式；叫料單、傳票與案件的連結見 §7.9 UNKNOWN。
 - 沒有跑任何測試或工具；行號取自 `origin/platform` c14f0a1df，實作前重核。
