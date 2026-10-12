@@ -14,6 +14,7 @@
 import json
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -44,7 +45,8 @@ _REJECTED_GROUPS: Dict[str, set] = {}                    # 設定群組 → 宣�
 _CLAIMS: Dict[str, set] = {}                              # 功能代號 → 宣告過它的擁有者們（含沒被收下的）；>1 個擁有者＝兩邊都標失敗，與載入順序無關
 _VALIDATORS: Dict[str, Tuple[Callable, Tuple[str, ...]]] = {}
 _POST_VALIDATE: List[Callable[[], None]] = []
-_KIND_GATES: Dict[str, Callable] = {}                     # 定義 kind → fn(key) -> "open"|"planned"|"hidden"｜{"status","plannedTrain"}
+_GATE_LOGGED: Dict[str, float] = {}                        # kind → 上次記錄閘門失敗的 monotonic 時間（限流）
+_KIND_GATES: Dict[str, Callable] = {}                   # 定義 kind → fn(key) -> "open"|"planned"|"hidden"｜{"status","plannedTrain"}
 _MANAGED: Dict[str, str] = {}                             # 受管 kind → 白話訊息（通用 draft／publish／restore 一律拒絕）
 _HEALTH: Dict[str, Callable] = {}                         # 健康來源 → fn() -> None｜{"text","tone","count"?}
 #: 徽章色調的嚴重度（由重到輕）；系統中心合法色調見 core.system_hub.TONES
@@ -126,6 +128,10 @@ def parse_feature(raw, owner: str, index: int = 0) -> Tuple[Optional[dict], List
                 v, p = _str_list(catalog.get(k, []), "%s 的 catalog.%s" % (where, k))
                 problems += p
                 cat[k] = v
+            for s in cat["surfaces"]:                                  # 只能宣告自己擁有的表面：否則模組可替別人的畫面蓋上 planned／hidden（誤導／阻斷）
+                if not _surface_owned(s, owner):
+                    problems.append("%s 的 catalog.surfaces %r 不屬於擁有者 %s（surface_not_owned；格式須為 %s）" % (
+                        where, s, owner, "core:<名稱>" if owner == "core" else "module:%s.<名稱>" % owner))
     notes = raw.get("notes")
     if notes is not None and not isinstance(notes, str):
         problems.append("%s 的 notes 必須是文字" % where)
@@ -134,6 +140,16 @@ def parse_feature(raw, owner: str, index: int = 0) -> Tuple[Optional[dict], List
     return {"code": code, "owner": owner, "label": label, "status": status, "planned_train": train, "group": group,
             "settings": {"group": group} if group else None, "mail": mail, "capabilities": caps, "catalog": cat,
             "labels": labels, "notes": notes, "sections": sorted(sections), "problems": problems}, []
+
+
+_SURF_NAME = r"[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)*"
+
+
+def _surface_owned(surface: str, owner: str) -> bool:
+    """表面鍵的擁有者必須等於宣告它的功能的擁有者：模組 `module:<owner>.<名稱>`；core `core:<名稱>`（core 保留前綴，模組不可用）。"""
+    if owner == "core":
+        return re.match(r"^core:" + _SURF_NAME + r"$", surface) is not None
+    return re.match(r"^module:" + re.escape(owner) + r"\.[a-z0-9_]+(?:\.[a-z0-9_]+)*$", surface) is not None
 
 
 def parse_features(manifest: dict, owner: str) -> Tuple[List[dict], List[str]]:
@@ -350,7 +366,10 @@ def kind_info(kind: str, key: str) -> dict:
     try:
         r = fn(key)
     except Exception:                                                  # noqa: BLE001
-        _log.warning("kind 閘門 %s 對 %r 失敗，視為 hidden", kind, key, exc_info=True)
+        now = time.monotonic()
+        if now - _GATE_LOGGED.get(kind, -1e9) >= 60:                   # 每個 kind 每分鐘最多記一次（列表路由每個 key 都會呼叫）
+            _GATE_LOGGED[kind] = now
+            _log.warning("kind 閘門 %s 對 %r 失敗，視為 hidden", kind, key, exc_info=True)
         return {"status": "hidden", "plannedTrain": None}
     st = r.get("status") if isinstance(r, dict) else r
     if st not in STATUSES:
@@ -380,7 +399,8 @@ def managed_message(kind: str) -> Optional[str]:
 
 def register_health_source(name: str, fn: Callable) -> None:
     """L1 登記一個健康來源：`fn()` 回 `None`（沒事）或 `{"text", "tone", "count"?}`（`tone` ∈ 系統中心色調）。同名須是同一函式。
-    系統中心每張卡只有一個徽章提供者，所以來源不要自己註冊 `system.hub_badge`，而是登記在這裡，由 `health_badge()` 合併。"""
+    系統中心每張卡只有一個徽章提供者，所以來源不要自己註冊 `system.hub_badge`，而是登記在這裡，由 `health_badge()` 合併。
+    **`text` 只可用數量與通用詞（例「2 條規則已降級」）；絕不可出現 hidden／planned 功能、群組或規則的名稱或鍵**（徽章對所有看得到系統中心的人可見）。"""
     if name in _HEALTH and _HEALTH[name] is not fn:
         raise ValueError("健康來源 %r 已登記為另一個函式" % name)
     _HEALTH[name] = fn
@@ -437,7 +457,7 @@ def surface_status(surface: str) -> str:
     worst = "open"
     for code in sorted(_FEATURES):
         f = _FEATURES[code]
-        if surface in ((f["catalog"] or {}).get("surfaces") or []):
+        if surface in ((f["catalog"] or {}).get("surfaces") or []) and _surface_owned(surface, f["owner"]):     # 非自己擁有的宣告不算（它本身也會驗證失敗）
             st = "hidden" if _state(code) == STATE_FAILED else f["status"]
             if rank[st] > rank[worst]:
                 worst = st

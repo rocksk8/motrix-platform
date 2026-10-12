@@ -20,6 +20,7 @@ def sp(monkeypatch):
     monkeypatch.setattr(spine, "_KIND_GATES", dict(spine._KIND_GATES))
     monkeypatch.setattr(spine, "_MANAGED", dict(spine._MANAGED))
     monkeypatch.setattr(spine, "_HEALTH", {})
+    monkeypatch.setattr(spine, "_GATE_LOGGED", {})
     yield spine
     spine.restore(snap)
     for g in [g for g in R._GROUPS if g.startswith("zz_r6")]:
@@ -254,6 +255,36 @@ def test_group_stamp_never_raises_and_never_repeats_when_it_cannot_tell():
 
 # ── (e) surface_status ──────────────────────────────────────────────────────────────
 
+def test_kind_gate_failure_is_logged_at_most_once_a_minute_per_kind(sp, caplog, monkeypatch):
+    """S4：列表路由對每個 key 呼叫一次閘門；閘門壞掉時不可每個 key 都灌一筆 log。"""
+    import logging
+    calls = {"n": 0}
+
+    def broken(key):
+        calls["n"] += 1
+        raise RuntimeError("down")
+    spine.register_kind_gate("zz_r6_kind", broken)
+    with caplog.at_level(logging.WARNING, logger="motrix.spine"):
+        for i in range(20):
+            assert spine.kind_info("zz_r6_kind", "k%d" % i)["status"] == "hidden"        # 每次仍 hidden（fail-closed 不受限流影響）
+    assert calls["n"] == 20 and len([r for r in caplog.records if "kind 閘門" in r.getMessage()]) == 1
+    monkeypatch.setattr(spine.time, "monotonic", lambda: spine._GATE_LOGGED["zz_r6_kind"] + 61)       # 過了一分鐘 ⇒ 再記一次
+    with caplog.at_level(logging.WARNING, logger="motrix.spine"):
+        spine.kind_info("zz_r6_kind", "again")
+    assert len([r for r in caplog.records if "kind 閘門" in r.getMessage()]) == 2
+
+
+def test_health_sources_never_name_hidden_or_planned_things(sp):
+    """S3：徽章文字只可用數量與通用詞。對『被隱藏／規劃中的功能、群組、規則鍵』逐一檢查已知來源（脊柱自己的線）的輸出。"""
+    spine.register_manifest({"features": [
+        {"code": "zz_r6_secret_h", "label": "祕密隱藏功能", "status": "hidden"},
+        {"code": "zz_r6_secret_p", "label": "祕密規劃功能", "status": "planned", "planned_train": "MS2"}]}, "zz_r6o")
+    spine.validate_all()
+    text = spine.health_badge()["text"]
+    for needle in ("zz_r6_secret_h", "zz_r6_secret_p", "祕密隱藏功能", "祕密規劃功能", "MS2"):
+        assert needle not in text, needle
+
+
 def _feat(code, surfaces, **kw):
     d = {"code": code, "label": "測試功能", "catalog": {"surfaces": surfaces, "fields": []}}
     d.update(kw)
@@ -263,10 +294,53 @@ def _feat(code, surfaces, **kw):
 def test_surface_status_takes_the_strictest_declaring_feature(sp):
     spine.register_manifest({"features": [
         _feat("zz_r6_f1", ["module:zz.open_s", "module:zz.shared"]),
-        _feat("zz_r6_f2", ["module:zz.plan_s", "module:zz.shared"], status="planned", planned_train="MS3"),
+        _feat("zz_r6_f2", ["module:zz.plan_s", "module:zz.shared", "module:zz.plan_s"], status="planned", planned_train="MS3"),    # 同擁有者重複宣告 OK（最嚴者勝）
         _feat("zz_r6_f3", ["module:zz.hide_s"], status="hidden"),
-        _feat("zz_r6_f4", ["module:zz.failed_s"], mail=["zz_r6_nomail"])]}, "zz_r6o")
+        _feat("zz_r6_f4", ["module:zz.failed_s"], mail=["zz_r6_nomail"])]}, "zz")
     assert spine.surface_status("module:zz.plan_s") == "open"                                  # validate_all 之前 ⇒ open
     spine.validate_all()
     got = {s: spine.surface_status("module:zz." + s) for s in ("open_s", "plan_s", "hide_s", "failed_s", "shared", "nobody")}
     assert got == {"open_s": "open", "plan_s": "planned", "hide_s": "hidden", "failed_s": "hidden", "shared": "planned", "nobody": "open"}
+
+
+def test_a_feature_may_only_declare_surfaces_it_owns(sp):
+    """M1：模組 zz_a 宣告別人的表面 module:zz_b.x ⇒ 該功能驗證失敗（surface_not_owned），且不影響 zz_b 的表面狀態（正對照：zz_b 自己的宣告照常生效）。"""
+    spine.register_manifest({"features": [_feat("zz_r6_spoof", ["module:zz_b.x"], status="hidden")]}, "zz_a")
+    spine.register_manifest({"features": [_feat("zz_r6_real", ["module:zz_b.y"], status="planned", planned_train="MS2")]}, "zz_b")
+    spine.validate_all()
+    rep = {f["code"]: f for f in spine.report()["features"]}
+    assert rep["zz_r6_spoof"]["state"] != "ok" and "surface_not_owned" in " ".join(rep["zz_r6_spoof"]["problems"])
+    assert spine.surface_status("module:zz_b.x") == "open"                      # 被冒名的表面不受影響
+    assert spine.surface_status("module:zz_b.y") == "planned"                   # 正對照：擁有者自己的宣告有效
+    # 前綴與 core 保留字
+    for bad in ("module:zz_a", "module:zz_ax.n", "core:n", "zz_a.n", "module:zz_a."):
+        spine.reset()
+        spine.register_manifest({"features": [_feat("zz_r6_bad", [bad])]}, "zz_a")
+        spine.validate_all()
+        assert "surface_not_owned" in " ".join(spine.report()["features"][0]["problems"]), bad
+    spine.reset()
+    spine.register_manifest({"features": [_feat("zz_r6_core_ok", ["core:zz_r6_screen"])]}, "core")
+    spine.validate_all()
+    assert not spine.report()["features"][0]["problems"] and spine.surface_status("core:zz_r6_screen") == "open"
+    spine.reset()
+    spine.register_manifest({"features": [_feat("zz_r6_core_spoof", ["module:zz_b.x"])]}, "core")        # core 也不能冒名模組表面
+    spine.validate_all()
+    assert "surface_not_owned" in " ".join(spine.report()["features"][0]["problems"])
+
+
+def test_group_stamp_covers_edition_bounds(client, make_user, sp):
+    """S2：版本邊界（夾住有效值）改變時戳記也要變。"""
+    R.register_group("zz_r6_ed", "邊界測試群組", [_f()], help="測試用的群組。", owner="zz_r6")
+    R.invalidate()
+    c = get_db()
+    try:
+        s0 = R.group_stamp("zz_r6_ed", conn=c)
+        R.set_edition_bounds("zz_r6_ed", "n", max=3)
+        try:
+            s1 = R.group_stamp("zz_r6_ed", conn=c)
+            assert s1 != s0 and R.group_stamp("zz_r6_ed", conn=c) == s1
+        finally:
+            R.clear_edition_bounds()
+        assert R.group_stamp("zz_r6_ed", conn=c) not in (s0, s1)                 # clear 也算一次變動
+    finally:
+        c.close()
