@@ -2,6 +2,7 @@
 
 > 日期：2026-10-13　作者：hichan-98　委託：hichan-1c　前置：A7 第一期（`wip/t57-download-name-p1-r2`）、第二期（`wip/t57-download-name-p2-r2`）
 > 範圍：只做**設計**，不寫程式。涉及授權路徑與檔案服務，所有控制點以「**授權先於命名**、名稱永遠來自資料庫中繼資料、不來自請求」為原則；HEIC 受 0d 的安全審查約束。
+> **r2（0d 對 r1 的註記 1–4）**：①S7 原本把「非影像／PDF 一律 attachment、全部 nosniff」寫成既有控制——**事實不是**：今天 `open_attachment` 一律以 `application/octet-stream` inline 回應、`serve_upload` 用猜測的 mime 且**沒有** `nosniff`；本版改為明確的**逐路由標頭表**與有意識的行為變更決定（§3b）；②`describe()` 的契約（`user=None`、不決定可讀、只在正規化之後、例外安全）；③`/api/download-name` 的速率限制用**行程內每使用者權杖桶**（現況沒有通用限流器可重用）；④以 `dn.header` 取代標頭時**保留提供者的 disposition 類型**（預覽仍 inline），只改檔名；並明寫預設值的可見度。
 > 標記：**UNKNOWN**＝沒有證據，不推測；pd 為我的粗估。
 
 ## 0. 結論（先看）
@@ -46,6 +47,7 @@
 - **預設**（使用者決定 Q4）：加案件前綴、保留原檔名：`{案件編號}_{案件名}_{文件類型}附件_{單號}_{原檔名}`（案件名依 A7 規則：只有讀得到案件的人才放；單號即案件編號時不重複）。
 - **原檔名處理**：先 `_clean`（NFC、非法字元、Cf／覆寫字元、控制字元）、保留**合法副檔名**、主檔名超長時先截（沿用 `_fit` 順序：案件名先縮、原檔名主檔名其次、**副檔名與單號最後**）；淨化後為空 ⇒ `附件_{序號}`。
 - **設定**：在 `download_name` 群組新增 `attachment_prefix`（int：0 不加、1 加；**預設 1**＝使用者決定；「不加→加」屬放寬：把案件名帶進附件檔名，沿用 `no_access` 的邏輯，只有讀得到案件者才會得到案件名）；基準檔同步。
+- **預設可見度（明寫）**：`attachment_prefix=1`（預設）時，**案件名只顯示給有該案件讀取權限的檢視者**（`no_access` 設定決定其餘人看到什麼，預設保留案件編號、省略案件名）；簽章路徑與郵件附件一律 `user=None`（不放案件名）。
 - **不影響**：儲存路徑、`uploads` 實體檔名（仍是亂數）、授權順序；**名稱只是下載時的標頭**。
 
 ## 3. 路徑 ①：`/api/attachments/open`
@@ -57,11 +59,27 @@
 3. **inline 維持**（預覽元件需要）；新增 `X-Content-Type-Options: nosniff`；`attachment` 與否維持現況（預覽 inline，下載按鈕由前端 `a.download` 指定名稱）。
 4. **先做的提供者**：case（回簽檔、款項、叫料、動態、額外支出、完工單回簽）、arap（開票申請）、accounting（若其 catalog 有案件脈絡）；subcontract／supply 的脈絡來源 **UNKNOWN**，逐一核對後再補，沒補的維持原樣。
 
+### 3b. 逐路由標頭表與有意識的行為變更（0d 註記 1）
+**現況（已讀）**：
+| 路由 | `Content-Type` | `Content-Disposition` | `nosniff` |
+|---|---|---|---|
+| `GET /api/attachments/open` | **一律 `application/octet-stream`** | **一律 inline**（`filename=原檔名`） | 無 |
+| `GET /api/uploads/{path}` 一般檔 | 依副檔名猜測（Starlette `FileResponse`） | 無（瀏覽器依型別決定） | 無 |
+| `GET /api/uploads/{path}` HEIC／HEIF | 猜測 | `attachment`，`filename=basename`（uuid） | 無 |
+| 會計 `voucher_attachments`、勞報單回簽檔等各自端點 | 各自 | 各自（`inline` 或 `attachment`） | 無 |
+**本版決定（行為變更，須使用者知悉）**：
+1. **所有檔案服務路由加 `X-Content-Type-Options: nosniff`**（純加標頭，無相容風險）。
+2. **`/api/attachments/open`**：`Content-Type` 改為**依白名單副檔名對應的固定 mime**（`.jpg/.jpeg/.png/.pdf`；其餘一律 `application/octet-stream`）；**預覽的 `inline` 只保留給 `image/jpeg`、`image/png`、`application/pdf`**，其他類型（含 xlsx／docx 等額外放行副檔名）改為 **`attachment`**。這是**有意的行為變更**：以前這些檔在預覽元件可能被「開啟」，之後會變成下載；原因＝避免內嵌顯示 Office／HTML 類內容。預覽元件對非影像／PDF 本來就顯示下載連結（UNKNOWN：需核對 `file-preview.js`）。
+3. **提供者宣告的 disposition 類型保留**：以 `dn.header` 取代標頭時，**只換檔名**，disposition 類型（inline／attachment）依上列規則決定，不被命名覆蓋。
+4. `serve_upload` 一般檔：維持不帶檔名（`<img src>`）；加 `nosniff`；非影像／PDF 副檔名走 `attachment`（與上同）。
+5. **測試**：逐路由、逐副檔名的標頭矩陣（類型、disposition、`nosniff`）；`.html` 改名成 `.jpg` 的檔（已被 magic 擋）作為正對照；移除 `nosniff` ⇒ 測試必須紅。
+
 ## 4. 路徑 ②：`/api/uploads/{path}`（HEIC 與前綴）
 
 **問題**：只有路徑，沒有脈絡；HEIC 下載名是亂數。
 **設計**：
-1. 在 `uploads.path_access` 提供者新增**選填方法** `describe(conn, folder, rest, user) -> dict|None`，回 `{filename, quote_no, doc_type, doc_no}`；**只在 `upload_readable` 已通過（或簽章已驗）之後呼叫**；提供者沒有此方法 ⇒ 維持現況。
+1. 在 `uploads.path_access` 提供者新增**選填方法** `describe(conn, folder, rest, user) -> dict|None`，回 `{filename, quote_no, doc_type, doc_no}`；**契約**：①`user` 可以是 **`None`**（簽章路徑），**每個提供者都必須處理**；②**絕不決定可讀性**（只回中繼資料）；③**只在** `canonical_upload_path`／`upload_owner` 正規化**之後**、且 `upload_readable` 已通過（或簽章已驗）**之後**呼叫；④提供者沒有此方法 ⇒ 維持現況；⑤**例外安全**：`describe()` 丟例外、或回傳含 `
+`／U+202E 的名稱 ⇒ 結果仍經 `_clean`＋`content_disposition()`，標頭安全（測試：兩種情形都得到安全的標頭，下載照舊）。
 2. `serve_upload` 的 HEIC 分支：授權通過 → `describe()` → `download_name.build_attachment()` → `FileResponse(..., filename=dn.name, content_disposition_type="attachment")`＋`nosniff`；`describe()` 失敗或回 None ⇒ 退回 `basename`（現況）。
 3. 非 HEIC 的 `<img src>` 直連維持**不帶檔名**（inline 影像不下載，加前綴沒有意義）。
 4. **簽章（`?pt=`）路徑**：簽章只綁路徑，簽發時已查過權限；`describe()` 以**簽發者看得到**為前提——但簽章持有者可能不是簽發者本人（連結外流），因此**簽章路徑不放案件名**（`user=None` 降級，只放文件類型與原檔名）。**帶 `Authorization` 的路徑才放案件名**。
@@ -71,7 +89,7 @@
 
 **用途**：甘特圖、CSV、瀏覽器端產生的 xlsx 等（約 25 個前端點）沒有伺服器回應可讀標頭，需要向後端問「這個檔該叫什麼」。
 **設計**：
-- `GET /api/download-name?docType=&quoteNo=&docNo=&ext=`（`docType` 必須在 `DOC_TYPES` 或登記的前端文件類型表內，否則 400）→ `{"name": "…"}`；內部呼叫 `download_name.build()`，**授權與 A7 相同**（`case_page_readable`；沒有案件權限只回案件編號或不含案件欄位）；`ext` 白名單（`pdf xlsx csv png jpg json`）；需登入；速率限制。
+- `GET /api/download-name?docType=&quoteNo=&docNo=&ext=`（`docType` 必須在 `DOC_TYPES` 或登記的前端文件類型表內，否則 400）→ `{"name": "…"}`；內部呼叫 `download_name.build()`，**授權與 A7 相同**（`case_page_readable`；沒有案件權限只回案件編號或不含案件欄位）；`ext` 白名單（`pdf xlsx csv png jpg json`）；需登入；**速率限制＝行程內每使用者權杖桶**（現況**沒有**通用的每使用者限流器可重用 ⇒ UNKNOWN；做法：記憶體字典 `user_id → (tokens, 時間戳)`，預設每分鐘 60 次、突發 20；超過回 429；只在單一行程有效——本平台是單一行程部署，足夠；若日後多行程再換）；沿用 A7 的**金額字串白名單**與 255 位元組上限（`_fit_name_bytes`）。
 - **不構成存在性探測**：回應中的案件編號是**請求者自己傳入的值**，案件名只有讀得到才出現；不存在的案件與讀不到的案件回應形狀相同。
 - 前端 `MotrixDownload.nameFor({docType, quoteNo, docNo, ext}, fallback)`：非同步取名，失敗／逾時（例如 1.5 秒）⇒ 用 `fallback`（下載不能因取名而失敗）；同一頁同參數快取。
 - **新路由**：需登錄路由 golden、`INTEGRATION-POINTS`、L1 快照（若為 L1）。
@@ -97,9 +115,9 @@
 | S4 | **案件名洩漏給只有單據權限的人** | 沿用 `no_access` 設定（預設保留案件編號、省略案件名）；簽章路徑不放案件名 | 角色矩陣：能開附件但無案件讀取權者 ⇒ 名稱不含案件名 |
 | S5 | **`describe()` 擴大讀取面** | `describe()` 只回中繼資料、只在授權後呼叫；不得用來決定是否可讀；擲例外 ⇒ 退回原行為 | 提供者 `describe()` 丟例外 ⇒ 下載照舊（原檔名／亂數名），不 500 |
 | S6 | **路徑穿越**（`rest` 段） | 沿用 `canonical_upload_path`／`upload_owner` 與 `_safe_save_dir`；`describe()` 不接受未經正規化的路徑 | `..%2f`、反斜線、ADS ⇒ 400／404 |
-| S7 | **內容嗅探／XSS**（inline 檔案） | 非影像／PDF 一律 `attachment`；全部 `nosniff` | 上傳 `.html` 改名 `.jpg`（檔頭不符，已被 magic 擋）；既有 inline 檔回應含 `nosniff` |
+| S7 | **內容嗅探／XSS**（inline 檔案） | **本版新增**（非既有控制）：§3b 的標頭表——固定 mime、僅影像／PDF inline、全部 `nosniff` | §3b 的逐路由標頭矩陣；`.html` 改名 `.jpg`（已被 magic 擋）作正對照 |
 | S8 | **HEIC／EXIF 隱私** | 本設計不放行新資料夾；既有 `case_extra_expense` 的 EXIF（含 GPS）去識別化交 0d 威脅模型 | （0d 範圍） |
-| S9 | **存在性探測**（`/api/download-name`） | 回應形狀一致；速率限制 | 存在／不存在／無權限三種案件的回應形狀相同 |
+| S9 | **存在性探測**（`/api/download-name`） | 回應形狀與**大小**一致；權杖桶速率限制 | 存在／不存在／無權限三種案件的回應形狀、欄位集合與位元組長度相同（依名稱長度的差異只來自請求者自己傳入的欄位）；連續請求超過桶 ⇒ 429（測試用小桶驗證邏輯） |
 | S10 | **效能**（`describe()` 多一次 DB 讀） | 只在 HEIC 與需要前綴的下載才呼叫；一次一筆；不在 `<img>` 熱路徑 | 150 張圖列表不觸發 `describe()` |
 
 ## 9. 測試（紅 → 綠）
