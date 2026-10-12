@@ -57,8 +57,8 @@ def test_view_pending_numbers_notes_and_total_text():
     assert {r["state"] for r in v["rows"].values()} == {"pending"}
 
 
-def test_view_total_text_needs_flag_and_unpicked_group():
-    assert alt_view.view(_q())["total_text"] is None
+def test_view_total_text_whenever_a_group_is_unpicked_regardless_of_flag():
+    assert alt_view.view(_q())["total_text"] == "依方案選擇"          # 0d S1：未選完時合計不含擇一品項，不能印數字
     assert alt_view.view(_q({"投影機": "x1", "線材": "y1"}, totalsByAlt=True))["total_text"] is None
     assert alt_view.view(_q({"投影機": "x1"}, totalsByAlt=True))["total_text"] == "依方案選擇"
 
@@ -132,11 +132,11 @@ def test_pdf_pending_shows_total_text_tags_and_note(client):
     assert h.index("保固一年") < h.index("項次2、3為投影機")     # 自動句接在使用者備註之後
 
 
-def test_pdf_without_flag_prints_numbers_even_if_unpicked(client):
-    h = _html(_q())
-    assert "依方案選擇" not in h.replace("擇一方案選擇", "")
-    t = PG.server_totals(_q())
-    assert "NT$ %s" % format(t["total"], ",") in h
+def test_pdf_unpicked_never_prints_partial_total_even_without_flag(client):
+    q = _q()
+    h = _html(q)
+    assert h.count("依方案選擇") == 2
+    assert "NT$ %s" % format(PG.server_totals(q)["total"], ",") not in h
 
 
 def test_pdf_picked_restores_numbers_and_drops_unpicked(client):

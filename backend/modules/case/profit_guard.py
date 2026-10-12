@@ -122,7 +122,7 @@ def item_amount(i: dict) -> int:
     return round_half_up(_num(i.get("qty")), _num(i.get("unitPrice")))
 
 
-ALT_SERVER_KEYS = ("altPicks", "altPickedAt", "altPickedBy")        # 另有 altTexts（存檔快照，見 stamp_alt_texts）     # 擇一回簽選定：只有回簽路徑（T9）能寫；一般存檔一律由伺服器放回資料庫現值（H6）
+ALT_SERVER_KEYS = ("altPicks", "altPickedAt", "altPickedBy")     # 擇一回簽選定：只有回簽路徑（T9）能寫；一般存檔一律由伺服器放回資料庫現值（H6）。另有 altTexts（存檔快照）見 stamp_alt_texts
 
 
 def alt_group_of(i) -> str:

@@ -1678,10 +1678,7 @@
           <!-- 右欄：金額小計 -->
           <div style="min-width:320px">
           <div x-show="altGroupNames().length" style="margin-bottom:8px;font-size:12px" data-testid="qf-alt-totals-opt">
-            <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
-              <input type="checkbox" :checked="q.totalsByAlt === true" @change="q.totalsByAlt = $event.target.checked; setDirty()"> 合計依方案選擇
-            </label>
-            <div class="form-hint" x-text="'勾選後，客戶還沒選定方案時，報價單的「稅前合計」與「總計」兩格會顯示「' + altCfg.totalText + '」，選定後恢復金額。'"></div>
+            <div class="form-hint" x-text="'有擇一方案時，客戶還沒選定前，報價單的「稅前合計」與「總計」兩格會顯示「' + altCfg.totalText + '」（合計不含擇一品項），客戶選定後恢復金額。'"></div>
           </div>
           <div class="totals-grid">
             <div class="total-row">
@@ -2652,7 +2649,7 @@
         if (Object.keys(cnt).length > this.altCfg.groupsMax) out.push('擇一方案最多 ' + this.altCfg.groupsMax + ' 組，目前有 ' + Object.keys(cnt).length + ' 組')
         return out
       },
-      altTotalsText() { return (this.q.totalsByAlt === true && this.altUnpicked() > 0) ? this.altCfg.totalText : '' },
+      altTotalsText() { return this.altUnpicked() > 0 ? this.altCfg.totalText : '' },   // 只要還有擇一組沒選定，合計就不含該組：不印數字（後端 alt_view 同規則）
       altNotePreview() {                                  // 單趟取代（不用格式化函式）；畫面用文字節點輸出，不會被當 HTML
         const t = this.altCfg.noteTemplate, names = this.altGroupNames(), out = []
         let n = 0; const num = new Map()

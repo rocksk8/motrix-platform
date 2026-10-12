@@ -19,7 +19,7 @@ def test_calc_totals_goes_through_counted_items():
 
 def test_totals_cells_use_template_text_only_when_flagged_and_unpicked():
     assert "altTotalsText() || tot.pretax.toLocaleString()" in FORM and "altTotalsText() || tot.total.toLocaleString()" in FORM
-    assert "this.q.totalsByAlt === true && this.altUnpicked() > 0" in FORM
+    assert "altTotalsText() { return this.altUnpicked() > 0" in FORM and "type=\"checkbox\" :checked=\"q.totalsByAlt" not in FORM
 
 
 def test_unpicked_state_is_neutral_not_green():
@@ -85,13 +85,13 @@ def test_calc_totals_counts_only_picked_alt_item_and_matches_plain_quote():
 @needs_node
 def test_total_text_and_note_preview_and_issues():
     got = _page("quotation-form.html", "quotationForm", _SETUP + """
-      const t0 = o.altTotalsText(); o.q.totalsByAlt = true; const t1 = o.altTotalsText()
+      const t1 = o.altTotalsText(); const t0 = ''
       o.q.altPicks = { '投影機': 'x1' }; const t2 = o.altTotalsText(); delete o.q.altPicks
       o.q.items[1].altGroup = '{items}'      // 組名含大括號不可被當範本
       const notes = o.altNotePreview()
       o.q.items[2].altGroup = '別組'
       return { t0, t1, t2, notes, issues: o.altIssues() }""")
-    assert got["t0"] == "" and got["t1"] == "依方案選擇" and got["t2"] == ""
+    assert got["t1"] == "依方案選擇" and got["t2"] == ""
     assert got["notes"] == ["項次2為{items}擇一方案選擇", "項次3為投影機擇一方案選擇"]
     assert len(got["issues"]) == 2 and "只有 1 個品項" in got["issues"][0]
 

@@ -45,7 +45,7 @@ def view(q: dict) -> dict:
     """沒有任何擇一品項 ⇒ `{"has_alt": False}`（輸出與今天完全相同）。否則：
     `rows`：`{品項id: {"group", "state": picked｜pending｜dropped, "hidden": bool, "tag": 標記字}}`（只含擇一品項）；
     `numbers`：`{品項id: 項次}`（只含會印出的非標題品項，與 pdf_gen 的逐列編號相同）；
-    `total_text`：合計兩格要顯示的文字（`totalsByAlt` 且仍有未選的組才有，否則 None）；`notes`：每組一句自動備註。"""
+    `total_text`：合計兩格要顯示的文字（只要還有未選定的組就有，否則 None；不看 `totalsByAlt`——未選完時合計不含擇一品項，印數字會讓客戶誤解）；`notes`：每組一句自動備註。"""
     groups = PG.alt_groups(q)
     if not groups:
         return {"has_alt": False}
@@ -78,5 +78,5 @@ def view(q: dict) -> dict:
         notes.append(render_note(texts["note_template"], g, nums))
     unpicked = [g for g in groups if g not in picks]
     return {"has_alt": True, "rows": rows, "numbers": numbers, "notes": notes,
-            "total_text": texts["total_text"] if (q.get("totalsByAlt") is True and unpicked) else None,
+            "total_text": texts["total_text"] if unpicked else None,
             "unpicked_groups": len(unpicked)}

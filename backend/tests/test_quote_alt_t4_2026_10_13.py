@@ -171,3 +171,49 @@ def test_endpoint_is_read_only(client, admin_h):
     n2 = cn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0] if cn.execute("SELECT name FROM sqlite_master WHERE name='audit_log'").fetchone() else 0
     cn.close()
     assert tuple(before) == tuple(after) and n_audit == n2
+
+
+# --- 0d S2：角色矩陣 ---------------------------------------------------------------------
+_COST_KEYS = ("totalCost", "directProfit", "directMarginPct", "adminCost", "netProfit", "inputVat", "groups", "combos", "baseline")
+
+
+def _hdr(client, make_user, name, role, **kw):
+    u, p = make_user(username=name, role=role, **kw)
+    return _login(client, u, p)
+
+
+def _own_quote(client, h, user_name):
+    body = {"customerName": "矩陣客", "projectName": "矩陣案", "salesPerson": user_name, "salesPersonUsername": user_name, "quoteDate": "2026-10-13",
+            "taxRate": 5, "items": _q()["items"], "tot": {}}
+    r = client.post("/api/quotations", json={"status": "草稿", "data": body, "created_by": user_name}, headers=h)
+    assert r.status_code == 201, r.text
+    return r.json()["quote_no"]
+
+
+def test_role_matrix_owner_ok_others_denied_without_cost_keys(client, make_user):
+    owner = _hdr(client, make_user, "alt_sales_owner", "sales")
+    no = _own_quote(client, owner, "alt_sales_owner")
+    assert client.get("/api/quotations/%s/plan-view" % no, headers=owner).status_code == 200
+    missing = client.get("/api/quotations/NOPE-9/plan-view", headers=owner)
+    assert missing.status_code == 404
+    other = _hdr(client, make_user, "alt_sales_other", "sales")
+    r = client.get("/api/quotations/%s/plan-view" % no, headers=other)
+    assert r.status_code == 404 and r.text.replace(no, "X") == missing.text.replace("NOPE-9", "X")      # 看不到＝不存在（同一段話）
+    for name, role in (("alt_eng", "engineer"), ("alt_view", "viewer")):
+        h = _hdr(client, make_user, name, role)
+        r = client.get("/api/quotations/%s/plan-view" % no, headers=h)
+        assert r.status_code in (403, 404), (role, r.status_code)
+        assert not any(k in r.text for k in _COST_KEYS)
+
+
+def test_role_matrix_finance_and_cashier_never_500_and_no_leak_when_denied(client, make_user):
+    owner = _hdr(client, make_user, "alt_sales_o2", "sales")
+    no = _own_quote(client, owner, "alt_sales_o2")
+    fin = _hdr(client, make_user, "alt_fin", "finance")
+    r = client.get("/api/quotations/%s/plan-view" % no, headers=fin)
+    assert r.status_code in (200, 403, 404)
+    if r.status_code != 200:
+        assert not any(k in r.text for k in _COST_KEYS)
+    cash = _hdr(client, make_user, "alt_cash", "viewer", modules=["cashier"], legacy_finance_flag=False)
+    r = client.get("/api/quotations/%s/plan-view" % no, headers=cash)
+    assert r.status_code in (403, 404) and not any(k in r.text for k in _COST_KEYS)
