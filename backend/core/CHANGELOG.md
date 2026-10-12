@@ -1,15 +1,11 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-13（wip/t57-project-margin-r4；專案毛利%）
+## (next:minor) — 2026-10-13（MS1 合併段：2026-10-13（wip/t57-project-margin-r4；專案毛利%） ＋ 2026-10-13（wip/t57-s1-settings-edit-r1；S1 設定中心可編輯） ＋ 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期））
+- **（併入）(next) — 2026-10-13（wip/t57-project-margin-r4；專案毛利%）**
 - L1（新增，只增）：`helpers.profit_rules.project_margin`、`helpers.profit_rules.uncosted_items`（報價單「專案毛利%」：（未稅收入 − 未稅品項成本）÷ 未稅收入，精確有理數運算、平手遠離零；輸入須為 0 或 1e-6 ≤ |x| < 1e15 的有限數，否則 pct 為 None；前端孿生 `static/profit-rules.js projectMargin`，共用黃金向量）。
 - `helpers.financial_mask.QUOTATION_MONEY_COLS` 新增 `project_margin_pct`（常數值變更，名稱不變）：任何走 `mask_row` 的路徑，該鍵若存在即被遮；實際附加只在該回應本來就保有報價金額時。
 - 設定群組（只增，預設＝今日行為）：`project_margin`（`warn_pct`，預設 0＝不提醒）。部署基準檔 `settings_deploy_baseline.json` 同步。
-
-## 1.130 — 2026-10-13（wip/t57-m3-registrations-r1；M3 擇一方案登錄）
-- L1（新增，只增）：`helpers.settings_groups.UNAVAILABLE_ALT_CHOICES`（M3 擇一方案設定中『尚未提供』選項表：已登錄但不可儲存、讀取夾回預設；由 `modules/case/alt_policy.py` 讀取）。
-- 設定群組（只增，預設＝今日行為）：`quote_alt`（M3 擇一方案；政策類 requires_pending）。部署基準檔 `settings_deploy_baseline.json` 同步。
-
-## (next:minor) — 2026-10-13（wip/t57-s1-settings-edit-r1；S1 設定中心可編輯）
+- **（併入）(next:minor) — 2026-10-13（wip/t57-s1-settings-edit-r1；S1 設定中心可編輯）**
 - L1（新增，向下相容）：`helpers.settings_registry` —— `SettingDef(…, impact_scope=None)`（結構化影響範圍：`documents／roles／amounts／reversible／effective`；`effective` 必須與 `requires_pending`／`loosen` 旗標一致，否則登錄失敗）、`banner_of(f, value, *, default=None, days=None)`（畫面橫幅文字與等級的唯一產生處：風險 legal／security 或不可復原 ⇒ 紅，money ⇒ 琥珀；只在非預設且往放寬方向時出現；沒有 `impact_scope` 的舊欄位降級為影響說明＋風險提示）、常數 `RISK_ORDER`、`IMPACT_SCOPE_GRANDFATHERED`（E-e 之前登錄的群組暫免宣告，名單固定；新群組的 money／legal／security 欄位缺 `impact_scope` 由 `tests/platform/test_settings_editor_s1.py` 守門）。`SettingDef.meta()` 多回 `impactScope`。
 - L1（行為，向下相容）：`SettingDef.check()` 新增 **choices 值域規則（E-f）**：欄位有 `choices` 時，值必須是其中一個代碼——寫入（`validate_values`／`publish`）被拒、讀取到庫內未知代碼視為不合法而回程式預設（記 warning）。原本 `choices` 只用於顯示，`str`＋`choices` 會接受任何字串。既有群組的預設值與預設組都在選項內（測試守住）。選項欄位的登錄規約：整數代碼（開關 0/1、多選一 1..n）。
 - L1（新增，向下相容）：`helpers.settings_registry` 新增 `plan(group, values, *, user="", conn=None)`（預覽／dry-run：不寫入，逐欄分類 `immediate／pending／pending_approval／unchanged`、效果句、橫幅、驗證問題；與 `publish()` 共用同一個分類函式 `_split`）、`live_impact(group, field, value)`（唯讀連線、1.5 秒逾時、60 秒快取、失敗只回靜態說明）、`field_views(group, values=None)`（設定中心畫面用的欄位清單：有效範圍、目前值與白話值、是否預設、橫幅、選項橫幅）、`show_value(f, v)`（白話值，不外露代碼）。`publish()` 行為不變（分類邏輯抽出為 `_split`）。
@@ -30,14 +26,17 @@
 - 稽核後補強（0d 對 planned-cards，r2）：`spine.register_core_declarations` 現在接住**任何**錯誤（最上層不是物件、`features` 不是清單、features 內有非物件項目…都只變成 core 的擁有者層級問題，不丟例外）；`loader.load_all` 再包一層 `try/except`（脊柱的問題永遠不擋開機）。靜態守門：同一個功能代號不可同時出現在 `core/features_l1.json` 與任何 `module.json` 的 `features[]`（否則 `_CLAIMS` 讓兩邊都失敗）——某模組正式宣告該功能的提交必須同時移除 core 的那一筆。label 依 98 更正四處白話承諾（選單按鈕只能挑系統提供的動作、金額欄位仍受原有權限遮蔽、PDF 先從系統內建單據、流程調整放寬需第二位管理者核准且最低稽核紀錄一律保留，先從完工單／出貨單開始）。
 - 測試基礎（脊柱 E-a3，非 L1）：部署凍結基準依擁有者分檔——核心 `tests/platform/settings_deploy_baseline.json`（只含 owner＝core）＋模組 `modules/<模組>/tests/settings_deploy_baseline.json`；共用比對 `tests/platform/_settings_baseline.py`；`test_deploy_baseline_frozen` 只比對 core（順序獨立），`tests/platform/test_settings_baseline_owners.py` 守『每個登錄表裡有群組的擁有者都有基準且一致、基準檔不重疊』。目前只有核心有群組，現有基準檔內容不變。
 - 畫面（S1，非 L1）：`frontend/pages/settings-center.html` 改為可編輯的設定中心（群組清單、白話表單、建議值／範圍／影響說明、還原預設、儲存前預覽與一句話效果、紅／琥珀橫幅＋『我已了解』、待生效處理（核准／撤銷）、版本差異與還原、預設組）；`GET /api/settings-center/pending` 每筆多回 `label／groupLabel／oldText／newText／actorUser`（原有欄位不變）。`tests/test_ac1_write_actions_2026_09_23.py` 拿掉 settings-center 的唯讀登記（頁面已會寫入）。e2e：`tests/test_e2e_settings_center_edit_s1.py`。
-
-## (next:minor) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）
+- **（併入）(next:minor) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）**
 - 第二期（wip/t57-download-name-p2-r1）：`routers/custom_records.py` 的 PDF 下載標頭改用 `helpers.download_name.content_disposition()`（檔名不變）。
 - L1（新增，只增）：`helpers.download_name`（`build`、`content_disposition`、`DownloadName`、`DOC_TYPES`、`TOKENS`、`DEFAULTS`）——下載檔名的單一來源：案件編號＋案件名＋文件類型＋單號；淨化（非法字元、Cf、保留名稱、位元組上限）、RFC 8187、latin-1 安全 ASCII 退路；沒有使用者（排程、郵件）或讀不到案件 ⇒ 不放案件名；任何例外 ⇒ 今天的檔名。
 - L1（新增，只增）：`helpers.case_access.case_download_label(conn, quote_no, user)`——給下載檔名用的案件標籤與可見度（與 `case_page_readable` 同一規則）。
 - 設定群組 `download_name`（`helpers/settings_groups.py`，21 個平鋪鍵；預設＝使用者決定，部署基準 `settings_deploy_baseline.json` 同步）。**部署零行為變更於資料層**：不寫任何定義列；檔名行為依預設（案件編號＋案件名＋文件類型＋單號）改變，是使用者 10-12 的裁示。
 - 前端 `static/download.js`（`MotrixDownload.nameFrom／save／saveBlob`）；第一期案件文件頁面改讀回應的 `Content-Disposition`。
 - 無 migration、無新路由、無權限變更；檔名永不含金額。
+
+## 1.130 — 2026-10-13（wip/t57-m3-registrations-r1；M3 擇一方案登錄）
+- L1（新增，只增）：`helpers.settings_groups.UNAVAILABLE_ALT_CHOICES`（M3 擇一方案設定中『尚未提供』選項表：已登錄但不可儲存、讀取夾回預設；由 `modules/case/alt_policy.py` 讀取）。
+- 設定群組（只增，預設＝今日行為）：`quote_alt`（M3 擇一方案；政策類 requires_pending）。部署基準檔 `settings_deploy_baseline.json` 同步。
 
 ## 1.129 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-13（wip/t57-s1-1-managed-r3；S1-1 設定群組受管）**

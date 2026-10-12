@@ -1,9 +1,9 @@
 # 會計 更新紀錄
 
-## (next) — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）
+## (next) — 2026-10-13（MS1 合併段：2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期） ＋ 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期））
+- **（併入）(next) — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）**
 - 傳票匯出（T100）、財務報表、營業稅 401 下載的 `Content-Disposition` 改用 `content_disposition()`（檔名不變，只統一編碼）。
-
-## (next) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）
+- **（併入）(next) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）**
 - 會計傳票 PDF 下載檔名改走 `helpers.download_name`（文件類型＋單號）；`voucher.html` 讀伺服器檔名。無 migration、無新路由、無權限變更。
 
 ## 1.1.59 — 2026-10-10（wip/t50-int；第 50 班）

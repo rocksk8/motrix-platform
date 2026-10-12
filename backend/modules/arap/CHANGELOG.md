@@ -1,9 +1,9 @@
 # 應收應付 更新紀錄
 
-## (next) — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）
+## (next) — 2026-10-13（MS1 合併段：2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期） ＋ 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期））
+- **（併入）(next) — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）**
 - 出納執行紀錄下載的 `Content-Disposition` 改用 `content_disposition()`（檔名不變，只統一編碼）。
-
-## (next) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）
+- **（併入）(next) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）**
 - 請款單、開票申請 PDF 下載檔名改走 `helpers.download_name`；`payment-request-form.html` 下載讀伺服器檔名。無 migration、無新路由、無權限變更。
 
 ## 1.0.52 — 2026-10-10（wip/t53b-int；ab 稽核修正 r5）

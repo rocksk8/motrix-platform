@@ -1,7 +1,12 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-13（wip/t57-project-margin-r7；報價單專案毛利%）
+## (next) — 2026-10-13（MS1 合併段：2026-10-13（wip/t57-project-margin-r7；報價單專案毛利%） ＋ 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期） ＋ 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期））
+- **（併入）(next) — 2026-10-13（wip/t57-project-margin-r7；報價單專案毛利%）**
 - **（併入）(next) — 2026-10-13（wip/t57-project-margin-r1；報價單專案毛利%）**：新增『專案毛利%』＝（未稅營業收入 − 未稅品項成本）÷ 未稅營業收入，不扣進項稅、管銷、公益與保留款（因此比『直接毛利率』高，差距就是成本的 5% 進項稅部分）。算式只在 `helpers/profit_rules.py::project_margin`（前端孿生 `static/profit-rules.js projectMargin`，共用黃金向量；精確有理數運算、平手遠離零、收入 ≤ 0 回無值）。衍生值：讀取時計算，**不寫進 `tot`、不加 SQL 欄、免遷移**。報價單詳情由已存品項重算（M3 後走 `counted_items`），回應信封鍵 `project_margin_pct` 只在該回應本來就保有報價金額時才附加（與 `directMarginPct` 同步；其餘角色鍵不存在）並登記進 `QUOTATION_MONEY_COLS`；清單**選用**附 `project_margin_pct`（`GET /api/quotations?include_project_margin=1`；預設不附、不多讀 `data_json`；同判定式；不可排序／篩選；在 Python 端取成本合計，不新增 SQL `json_extract`，守 ratchet）；`plan_view` 每個方案列另回 `projectMarginPct`；存檔時 `prepare()` 丟棄用戶端送來的 `project_margin_pct`／`projectMargin`。畫面：報價單內部損益區（成本分機內）與案件頁（財務可視者）顯示；表單 V3.23 → V3.24（未填成本提醒、可選的低於門檻提醒）。設定：新群組 `project_margin`（`warn_pct`，預設 0＝不提醒，只改畫面提示、不阻擋）；新端點 `GET /api/project-margin/config`（需看得到報價成本與毛利，最小揭露）。0d 修正：詳情只替看得到報價金額的角色計算且失敗不影響回應（壞掉的舊單不會 500）；極端指數記法輸入（|x| < 1e-6 或 ≥ 1e15）前後端一律當無效。客戶版 PDF／預覽／回簽頁／案件匯出／內部 PDF 都不輸出。測試 `tests/test_project_margin_2026_10_13.py`（已跑 29 項過）、`tests/test_project_margin_endpoints_2026_10_13.py`（已寫、需 Edge）。
+- **（併入）(next) — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）**
+- 報價單文件下載（報價單 PDF／內部版、存檔版本、結案報表、專案執行報告）檔名改走 `helpers.download_name`（案件名＋文件類型＋單號；單號即案件編號不重複；沒有案件權限者只留文件類型＋單號；永不含金額）；案件匯出改用 `content_disposition()` 統一標頭編碼；`case-management-close/core.js` 讀伺服器檔名。無 migration、無新路由、無權限變更。**注意（上線說明）**：存檔版本下載的檔名由「存檔實體檔名」改為「案件名_報價單存檔版本_單號_事件_日期」，**不再含編輯者的顯示名稱**（使用者格式「案件編號_案件名_文件類型_單號」，少一份個資）。
+- **（併入）(next) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）**
+- 完工單、費用單據的 PDF 下載檔名改走 `helpers.download_name`（案件編號＋案件名＋文件類型＋單號；沒有案件權限者只保留案件編號）；`case-management.html` 的下載頁面讀伺服器檔名。無 migration、無新路由、無權限變更；檔名永不含金額。
 
 ## 1.0.179 — 2026-10-13（wip/t57-m3-t11-r6；M3 擇一方案報價）
 - **（併入）(next) — 2026-10-12（wip/t57-m3-t1-r2；M3 擇一方案報價 T2）：資料模型＋唯一計入集合＋設定中心群組『擇一方案』**
@@ -27,12 +32,6 @@
 - 簽核佇列完工單卡片的金額欄原本顯示「報價金額 NT$ 8」（8 是項目數）；改為「完成項目　8 項」（`approval-queue.html`；後端 `total` 仍是項目數）。
 - 材料申請「從採購單帶入」修正：①新增材料申請是否一定要選供應商改為設定中心選項（群組 `material_order`，`supplier_required`，預設＝一律要選＝今天的行為；「帶入採購單的免選」只豁免有對應採購單的新列，手動新增仍要選；設定讀不到＝最嚴；採購單連結檢查器（`LINK_VALIDATOR`）沒掛上時不豁免；程式總開關 `SUPPLIER_REQUIRED_ON_NEW` 保留）；②被審核規則擋下的項目（`rejected[]`）寫進伺服器 log（`PATCH material-orders` 與 `PATCH case-record`；只記項目編號／欄位／代碼，不記內容）；③案件頁自動存檔不再送出『連到尚未儲存的材料申請列』的連結（原本被擋下並把材料卡片換回舊值）——列存好後補送一次（扣住期間存檔訊息會說明「連結將在材料申請儲存後送出」）；④材料申請儲存被擋時顯示第一個項目名稱與原因；`GET material-orders` 加 `supplierRequiredAlways` 供畫面判斷。
 - 測試 `tests/test_completion_fixes_t57.py`、`tests/test_material_import_t57.py`。
-
-## (next) — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）
-- 報價單文件下載（報價單 PDF／內部版、存檔版本、結案報表、專案執行報告）檔名改走 `helpers.download_name`（案件名＋文件類型＋單號；單號即案件編號不重複；沒有案件權限者只留文件類型＋單號；永不含金額）；案件匯出改用 `content_disposition()` 統一標頭編碼；`case-management-close/core.js` 讀伺服器檔名。無 migration、無新路由、無權限變更。**注意（上線說明）**：存檔版本下載的檔名由「存檔實體檔名」改為「案件名_報價單存檔版本_單號_事件_日期」，**不再含編輯者的顯示名稱**（使用者格式「案件編號_案件名_文件類型_單號」，少一份個資）。
-
-## (next) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）
-- 完工單、費用單據的 PDF 下載檔名改走 `helpers.download_name`（案件編號＋案件名＋文件類型＋單號；沒有案件權限者只保留案件編號）；`case-management.html` 的下載頁面讀伺服器檔名。無 migration、無新路由、無權限變更；檔名永不含金額。
 
 ## 1.0.177 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t50-int；第 50 班）**
