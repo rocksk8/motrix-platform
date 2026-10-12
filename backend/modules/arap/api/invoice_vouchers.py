@@ -19,7 +19,6 @@ import json
 import logging
 from datetime import datetime
 from typing import List, Optional
-from urllib.parse import quote as urlquote
 
 from fastapi import APIRouter, Body, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
@@ -28,6 +27,7 @@ from pydantic import BaseModel
 from db import get_db, next_entity_code, spawn_bg_thread
 from core.txn import begin_write, write_txn
 from helpers import recycle_bin   # 第 53 班：刪除暫存區 L1 契約（IP-RB1／RB2）
+from helpers import download_name
 from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import (
@@ -773,11 +773,8 @@ def download_invoice_voucher_pdf(voucher_no: str, authorization: str = Header(No
         tid = trace_id()
         logger.exception("invoice_voucher pdf failed trace=%s", tid)
         raise HTTPException(500, f"PDF 產生失敗（代碼 {tid}）")
-    encoded = urlquote(f"{voucher_no}.pdf")
-    return Response(
-        content=pdf_bytes, media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"}
-    )
+    dn = download_name.build("invoice_voucher", quote_no=row["quote_no"], doc_no=voucher_no, ext="pdf", user=user)
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=dn.headers())
 
 
 @router.post("/api/invoice-vouchers/{voucher_no}/export")

@@ -21,13 +21,13 @@ import json
 import logging
 from datetime import datetime
 from typing import List, Optional
-from urllib.parse import quote as urlquote
 
 from fastapi import APIRouter, Body, File, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from db import get_db, next_entity_code
+from helpers import download_name
 from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers.errors import trace_id
 from helpers.case_access import is_document_approver
@@ -660,7 +660,7 @@ def revoke_completion_approval(note_no: str, body: dict = Body(default={}),
 def download_completion_pdf(note_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute("SELECT note_no, data_json FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
+    row = conn.execute("SELECT note_no, quote_no, data_json FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
     # 閘門＝管理員，或本單簽核人／申請人（含有效代理人）：簽核人要看得到預覽稿（紅色「未核可」警示）才能判斷退回或核准
     allowed = bool(row) and (user.get("role") in ("admin", "superadmin") or is_document_approver(row["data_json"], user, conn))
     conn.close()
@@ -678,9 +678,8 @@ def download_completion_pdf(note_no: str, authorization: str = Header(None)):
         tid = trace_id()
         logger.exception("completion_note pdf failed trace=%s", tid)
         raise HTTPException(500, f"PDF 產生失敗（代碼 {tid}）")
-    encoded = urlquote(f"{note_no}.pdf")
-    return Response(content=pdf_bytes, media_type="application/pdf",
-                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"})
+    dn = download_name.build("completion", quote_no=row["quote_no"], doc_no=note_no, ext="pdf", user=user)
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=dn.headers())
 
 
 @router.post("/api/completion-notes/{note_no}/export")

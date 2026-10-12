@@ -14,7 +14,6 @@ import json
 import logging
 from datetime import date, datetime
 from typing import List, Optional
-from urllib.parse import quote as urlquote
 
 from fastapi import APIRouter, Body, HTTPException, Header
 from fastapi.responses import Response
@@ -23,6 +22,7 @@ from pydantic import BaseModel, model_validator
 from db import get_db, next_entity_code, spawn_bg_thread
 from core import registry
 from core.txn import begin_write, write_txn
+from helpers import download_name
 from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers.dates import normalize_date
@@ -923,11 +923,8 @@ def download_contractor_voucher_pdf(voucher_no: str, authorization: str = Header
         tid = trace_id()
         logger.exception("contractor_voucher pdf failed trace=%s", tid)
         raise HTTPException(500, f"PDF 產生失敗（代碼 {tid}）")
-    encoded = urlquote(f"{voucher_no}.pdf")
-    return Response(
-        content=pdf_bytes, media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"}
-    )
+    dn = download_name.build("contractor_voucher", quote_no=row["quote_no"], doc_no=voucher_no, ext="pdf", user=user)
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=dn.headers())
 
 
 @router.post("/api/contractor-vouchers/{voucher_no}/export")
