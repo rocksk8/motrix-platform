@@ -879,6 +879,7 @@
    "name": "權限矩陣",
    "units": [
     "mod:permmatrix/__init__",
+    "mod:permmatrix/api",
     "mod:permmatrix/service"
    ],
    "tables": [
@@ -888,7 +889,9 @@
     "perm_user_overrides",
     "perm_versions"
    ],
-   "api_prefixes": []
+   "api_prefixes": [
+    "/api/permmatrix"
+   ]
   }
  },
  "retired": {

@@ -112,6 +112,9 @@ def test_no_product_code_calls_the_permmatrix_write_functions():
     assert not bad, "P0 寫入函式是過渡實作，帳本接上前不得有人呼叫（SPEC PMX14）：\n  " + "\n  ".join(bad)
 
 
-def test_permmatrix_module_declares_no_routers():
+def test_permmatrix_module_declares_only_the_status_probe_route():
+    """1.0.2：只有唯讀狀態探針（D7 要求 provides.probes）；沒有任何寫入端點。"""
     import modules.permmatrix as PM
-    assert list(PM.MODULE.routers) == []
+    assert len(PM.MODULE.routers) == 1
+    routes = [(sorted(r.methods), r.path) for r in PM.MODULE.routers[0].routes]
+    assert routes == [(["GET"], "/api/permmatrix/status")]

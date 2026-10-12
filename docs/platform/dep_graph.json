@@ -2961,6 +2961,7 @@
     "mod:payroll/api/payslip_approval",
     "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
+    "mod:permmatrix/api",
     "mod:recyclebin/api",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -12448,6 +12449,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "mod:permmatrix/api",
     "mod:permmatrix/service",
     "plat:registry"
    ],
@@ -12459,6 +12461,70 @@
    "tables_named": [],
    "tables_r": [],
    "tables_w": []
+  },
+  "mod:permmatrix/api": {
+   "api_prefixes": [
+    "/api/permmatrix"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:config_ledger",
+    "helper:duty_roles",
+    "helper:module_registry",
+    "helper:settings",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "helper:tiered_approval"
+   ],
+   "imports": [
+    "helper:auth"
+   ],
+   "kind": "mod",
+   "module_key": "permmatrix",
+   "path": "backend/modules/permmatrix/api.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "permmatrix_status",
+     "line": 15,
+     "method": "GET",
+     "path": "/api/permmatrix/status"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "config_change_events",
+    "config_changes",
+    "duty_roles",
+    "notifications",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
   },
   "mod:permmatrix/service": {
    "api_prefixes": [],

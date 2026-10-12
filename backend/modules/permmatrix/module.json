@@ -1,7 +1,7 @@
 {
   "key": "permmatrix",
   "name": "權限矩陣",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "core": ">=1.0,<2.0",
   "license_key": "permmatrix",
   "permissions": [],
@@ -24,8 +24,8 @@
     "files": []
   },
   "provides": {
-    "api_prefixes": [],
-    "probes": []
+    "api_prefixes": ["/api/permmatrix"],
+    "probes": ["/api/permmatrix/status"]
   },
   "pages": [],
   "customization": {
