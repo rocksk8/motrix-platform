@@ -1,5 +1,7 @@
 # 規則引擎文法 v1：欄位目錄上的宣告式條件規則（僅文件，未跑任何測試）
 
+> **r2（1d／2b 對 r1 `a035abe0b` 與脊柱 E-b 的審閱）**：①**衝突修正（主要）**：脊柱的執行期失敗＝功能停用／群組隱藏（對『設定』fail-closed、對『行為』fail-open）。若規則評估被 `spine.feature_enabled` 擋住，一次驗證小故障就會**靜默關掉已發布的 `block`＋`fail_closed` 保護型規則＝繞過**。r2 規定：**功能狀態（`open／planned／hidden`）只用於編輯器可見性、新發布與顯示；已發布的 `fail_closed` 阻擋規則只要『規則引擎本身健康』就照常評估**；『引擎不健康』是本文 §6.4 自己的路徑（不是脊柱降級）。見新增的 §6.5。②重用脊柱掛鉤：`alert_rule` 為**受管 kind**（`register_kind_gate`）、規則發布／評估前問 `spine.surface_status`、`rule.degraded` 稽核去重沿用 `audit_spine_failures` 的簽名法、健康徽章共用 `spine.register_health_source`、`{"setting": …}` 指到 planned／hidden 群組的規則發布一律 422（不說 hidden）（§6.5）。③U3 改為採 `loosen="both"`（§8、§13）。④快取鍵加『設定群組戳記』（§6.1-4）。
+
 > 日期：2026-10-13　作者：hichan-5e（T57）　狀態：r1，待非作者稽核（0d）。回應 `PLATFORM-BUILDER-ARCHITECTURE-T57.md`（98）的 **UNKNOWN U1『精確的規則文法』**。
 > 對齊：98 `PLATFORM-BUILDER-ARCHITECTURE` §3.1／§3.2／§3.4／§3.4b（三態、`mode`／`on_failure`、K01 方向、長度先限制再解析）；0d `USER-DEFINED-LOGIC-THREAT-MODEL.md` §1（規則引擎）、§5（欄位目錄與衍生操作）；`FIELD-CATALOG-SEED-T57.md` r3（目錄欄位、§5.0 衍生操作唯一規則、§5.7 付款衍生事實、§6.2 `alert_rule` 介面）。
 > 已讀並**實測**的程式：`backend/helpers/formula.py`（366 行）。§9 列出『要改什麼』，每個結論都附我實跑的結果。**本文不改任何安全底線。**
@@ -181,7 +183,7 @@
 1. 編譯時算出規則的**輸入欄位集合** `I(rule)`（`when` 內所有欄位＋`expr` 引用＋`then.badge`／`message` 的欄位段）。
 2. 對檢視者 `v`：`I(rule)` 中**任何一個欄位 `v` 不可見**（目錄 `visibility`＋表面門檻 AND，FIELD-CATALOG §5.5）⇒ 這條規則對 `v` 的狀態是 **不適用**：不評估、不輸出、不寫任何痕跡、不回『被隱藏』、不計入任何筆數（連 0 都不回）。這**不是 UNKNOWN**。
 3. 不適用判定發生在**伺服器**；前端（表單即時評估）只拿到伺服器給的『可評估規則清單』，不可見欄位的值本來就不在回應中。
-4. **快取與批次**：以（規則版本，檢視者的**可見欄位集合雜湊**，`today`）為鍵；列表一次掃描、規則先編譯成評估計畫（每條規則一個閉包樹），每列只跑計畫。**正對照**：admin 先載入含 cost 衍生標記的列表，engineer 接著載入同一列表，不得見到任何由 cost 衍生的標記（98 §3.4b）。
+4. **快取與批次**：以（規則版本，檢視者的**可見欄位集合雜湊**，`today`，**規則引用到的各設定群組的『群組戳記』**）為鍵（r2：設定讀取有 15 秒快取與待生效疊加，只用規則版本會讓門檻過期；戳記＝`settings_registry.group_stamp(group)`＝該群組最新版本＋下一筆待生效的生效時間，由 2b 提供）；列表一次掃描、規則先編譯成評估計畫（每條規則一個閉包樹），每列只跑計畫。**正對照**：admin 先載入含 cost 衍生標記的列表，engineer 接著載入同一列表，不得見到任何由 cost 衍生的標記（98 §3.4b）。
 5. **衍生欄位**的可見性＝輸入欄位可見性的交集（FIELD-CATALOG §5.0 末列），故『由成本衍生的欄位』對無成本權限者不適用，規則自動不適用。
 
 ### 6.2 付款衍生事實不可作規則輸入
@@ -198,8 +200,19 @@
 - **失效＝逾時、超預算、評估器例外、`days_between` 格式錯**；**缺值不是失效**（走 UNKNOWN）；除以 0＝該 `expr` 為 NULL（不是失效，**但**登記一次 `rule.div_zero` 計數供儀表）。
 - `on_failure = degrade_loud`（預設）：該規則對該次評估視為『不適用』，**同時**：規則橫幅（編輯器可見）、管理員警示（系統中心健康卡）、稽核 `rule.degraded`（去重）；**絕不影響單據存取或儲存**。
 - `on_failure = fail_closed`：`block` 規則失效 ⇒ **攔截動作**，訊息點名該規則（『規則「X」目前無法判斷，已先攔下，請聯絡管理員』）。`mark` 規則的 `fail_closed` 無意義＝驗證失敗。
+- **引擎不健康（r2）**：這是**規則引擎自己的**狀態，不是脊柱的功能降級。定義＝評估器連續失效率超過門檻、編譯器載入失敗、或資料庫定義無法讀取。處置：①已發布的 `fail_closed` 阻擋規則**維持攔截**（訊息點名『規則引擎目前無法判斷，已先攔下』）；②`degrade_loud` 規則與 `mark` 規則大聲降級；③**絕不**因脊柱的 `feature_enabled=False` 或 `group_status≠open` 而停止評估已發布的 `fail_closed` 規則（§6.5）。
 - **break-glass**：`fail_closed` 規則故障時，最高管理者可把**該單一規則**切成 `degrade_loud` 或停用（寫稽核；自動到期或事後第二位核准複核）；`DEFAULTS_ONLY` 模式也解除。
 - 金額／法定單據上建立 `block` 時 `on_failure` **必須作者明確選擇**（介面預選 `fail_closed`，選擇寫入變更帳本）。
+
+### 6.5 與脊柱（E-b）的接點與『不可被脊柱降級繞過』（r2）
+
+1. **評估不以 `spine.feature_enabled` 為閘**（衝突修正）：功能狀態用於①編輯器是否列出該表面的規則、②**新發布**是否允許（`planned` 灰色、`hidden` 404／不顯示）、③顯示（徽章）。**已發布的 `block`＋`fail_closed` 規則的評估，在規則引擎健康時一律進行**——與『設定被脊柱隱藏』解耦。測試：把規則所屬功能翻成 `planned`／`hidden`／驗證失敗，已發布的 `fail_closed` 阻擋規則**仍然攔截**（正對照：把評估掛在 `feature_enabled` 上，測試必須紅）；`mark` 與 `degrade_loud` 規則在功能非 open 時**不顯示**（顯示屬功能狀態）但不影響儲存。
+2. **引擎層守門（比照 `settings_registry.publish()` 先問脊柱）**：規則的**發布與還原**最前面問 `spine.surface_status(surface)`（目錄 `features[].catalog.surfaces` 繼承功能狀態；2b 提供，約 0.2 pd）；非 `open` ⇒ 發布失敗（`planned`→409『這項功能還在開發中』、`hidden`→404）。**評估端不問**（見 1）。
+3. **`alert_rule` 必須是受管 kind**：定義文件庫的通用草稿／發布路由若能直接處理 `alert_rule`，就繞過本文的高影響管線（§6.3）。做法：在 `routers/definitions.py` 的受管 kind 清單登記，並用 2b 提供的 `register_kind_gate(kind, fn)` 讓**列表／讀取**路由也服從 `hidden=404／planned=409`（否則 `GET /api/definitions/alert_rule` 會洩漏 hidden 表面的規則——2b 自己在 r3 被 0d 退過的同一個洞）。路由表守門：每個 kind 要嘛在受管清單、要嘛在明列的低風險直發清單（98 §3.9）。
+4. **稽核去重**：`rule.degraded` 沿用 `audit_spine_failures` 的簽名法——`sig = sha1(規則 key + 問題清單)`，以 `json_extract(detail,'$.sig')` 去重（同一失效不重複洪水）；detail 不含欄位值。
+5. **健康徽章共用**：系統中心 `system.hub_badge` 每張卡只允許一個提供者。規則降級**不另註冊提供者**，改用 2b 的 `spine.register_health_source(name, fn)` 與脊柱失敗合併成同一個徽章（『N 項功能登錄未通過驗證／N 條規則降級』）；不在 `settings-center` 卡上註冊第二個提供者。
+6. **驗證器掛鉤**：規則驗證器以 `spine.register_validator(name, fn, covers=(…))` 登記；除本文的文法檢查外，額外規則：`{"setting": …}` 指向 `planned／hidden` 群組 ⇒ 發布 **422（通用訊息『這個設定目前無法使用』，絕不說 hidden）**。
+7. **誰提供什麼（2b 估）**：`register_kind_gate`（~0.25 pd）、`spine.register_health_source`、`spine.surface_status`（~0.2 pd）、`loosen="both"`（~0.1 pd）、`settings_registry.group_stamp`——在 E-b 出貨後插入；本文不重複實作，只引用其介面。
 
 ## 7. 上限（寫死上界；管理者只能調小）
 
@@ -244,6 +257,7 @@
 | `gt`／`ge`（『高於 X 就警示』） | **放寬** | **收緊** |
 | `eq`／`ne`／`between`／`in` 或其他／未知 | **放寬**（任何變動都走放寬流程） | **放寬** |
 
+- **（r2）實作機制**：設定登錄新增 `loosen="both"`（任何數值變動＝放寬、走確認期與雙人核准）。規則發布管線依上表推導：只被 `lt/le` 引用 ⇒ 該設定維持 `loosen="down"`；只被 `gt/ge` 引用 ⇒ `"up"`；多方向或其他運算子 ⇒ `"both"`。
 - **同一設定被多條規則以不同方向引用**（例：`margin_crit_pct` 同時出現在 `lt` 與 `ge`——上例 warn 規則就用 `ge`）：設定登錄的方向分類取**較嚴者＝兩個方向都視為放寬**，即任何變更都走確認期（保守）。這與今天 `SettingDef.loosen` 是**單一靜態方向**不同——需要設定登錄新增『方向由引用規則推導』（§11 U3）。
 - **正對照測試**：①`lt`→調高門檻＝收緊（即時）；②把規則運算子改成 `gt`，方向必須翻轉；③『把方向互換』的突變使測試變紅；④未知運算子＝放寬。
 
@@ -330,7 +344,7 @@
 |---|---|---|---|
 | ★U1 | 條件樹 JSON vs 文字運算式作為**儲存形式** | 編輯器、驗證器、攻擊面 | 本文建議樹（§0-1）；需 98／0d 確認；`expr` 葉是否值得保留（可降為只許 `field/const/setting/ctx`，把算術全部放進目錄 `computed` 欄位——更保守但每個新算術都要程式登記） |
 | U2 | `ctx.today` 的時區與『同一批次固定』的實作 | 午夜附近的清單一致性 | 沿用 `MotrixDate`／伺服器本地日期；批次開始時取一次 |
-| ★U3 | 設定登錄的 `loosen` 是**單一靜態方向**；§8 需要『由引用規則的運算子推導』且多規則取較嚴 | 設定登錄（M2 S1／E-e 範圍）要新增機制 | 先以『引用該設定的規則自帶方向』在規則發布管線判定（不改 `SettingDef`）；之後再下沉；需 2b／1c |
+| ~~★U3~~ 已有解法（2b） | 設定登錄的 `loosen` 是 `"up"｜"down"` 靜態單向；§8 需要多規則多方向取較嚴 | — | **採 `loosen="both"`**（任何數值變動都視為放寬，約 0.1 pd，2b 在 `_split／plan／banner_of` 內加）；規則發布管線把『被規則引用的門檻』的 `loosen` 設/驗為 `both`（多方向或未知運算子時）；單一明確方向（只被 `lt/le` 引用）可維持 `down`。註：設定登錄型別只有 `int／float／bool／str`（沒有 percent／money 型別；百分比用 `float`＋`unit`）、`choices` 必須整數代碼（E-f）、鍵是 `<群組>.<欄位>` 扁平欄位——§2.2 的 `{"setting": …}` 型別檢查以此為準 |
 | U4 | `lifecycle`、`approval_status` 等 `derived_ui` 欄位搬後端 | R3／R4／R8 無法在前置完成前遷移 | FIELD-CATALOG U4 同一件事；先遷 R1／R2／R5／R6／R7 |
 | ★U5 | 保護型阻擋的 1 bit 殘餘是否接受 | 沒有它，業務可繞過成本相關阻擋；有它，洩漏『被擋了』 | 建議接受＋§6.3 緩解；**需使用者與 0d 裁示**；備案：保護型阻擋只允許引用『檢視者可見』欄位（等於放棄保護成本相關條件） |
 | U6 | 條件樹是否允許跨表面引用（例：案件頁規則引用報價單欄位） | 欄位可見性有兩道門（表面門檻 AND 欄位） | v1 不允許；規則只能引用**同一表面**目錄 |
