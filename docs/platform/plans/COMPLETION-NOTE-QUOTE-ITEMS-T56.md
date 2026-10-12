@@ -103,7 +103,7 @@
 | 檔案 | 變更 |
 |---|---|
 | `backend/modules/case/completion_sync.py`（新） | 純函式：`quote_source_items(q)`（白名單＋`counted_items` 降級）、`completed_qty_by_item(conn, quote_no, exclude_note)`、`fingerprint(items)`、`diff(note_items, source_items)`。不寫庫。 |
-| `backend/modules/case/api/completion_notes.py` | 新端點 `GET /api/completion-notes/quote-items?quote_no=&exclude_note=`（`_require_admin` ＋ `case_page_readable`；報價單狀態閘見 §3.1；回 `header`、`items[]`（`id/type/description/brand/qty/unit` ＋ `alreadyCompleted`、`remaining`）、`sourceState`（`signed`/`unsigned`/`alt_unselected` 白話欄位）、`fingerprint`）。`CompletionNoteIn` 加 `quote_sync`；`_validate` 加：`quoteItemId` 若存在須為**字串且 ≤64 字元**、`quoteQty` 為有限數字；**不加必填**。`create` 寫入 `data_json.quoteSync`、`update` 保留／重算。 |
+| `backend/modules/case/api/completion_notes.py` | 新端點 `GET /api/completion-notes/quote-items?quote_no=&exclude_note=`（`_require_admin` ＋ `case_page_readable`；報價單狀態閘見 §3.1；回 `header`、`items[]`（`id/type/description/brand/qty/unit` ＋ `alreadyCompleted`、`remaining`）、`sourceState`（`signed`/`unsigned`/`alt_unselected` 白話欄位）、`fingerprint`）。`CompletionNoteIn` 加 `quote_sync`；`_validate` 加：`quoteItemId` 若存在須為**字串且 ≤64 字元**、`quoteQty` 為有限數字；**不加必填**。`create` 寫入 `data_json.quoteSync`、`update` 僅在帶 `quote_sync` 且指紋等於伺服器當下指紋時才更新，否則 409；不帶則保留原值。 |
 | `backend/modules/case/api/quotations.py` | 不改（唯讀引用 `data_json`）。若 M3 已併入，`completion_sync` 才呼叫 `profit_guard.counted_items`。 |
 | `backend/modules/case/completion_pdf.py` | 不改（項目額外鍵被忽略）；加守門測試確認 PDF 不含金額。 |
 | `frontend/pages/completion-note-form.html` | `prefillFromCase` 改用新端點；`autoFillItems()`、`openSyncDiff()`；項目列加「報價/已完工」小字與超量底色；橫幅。 |
