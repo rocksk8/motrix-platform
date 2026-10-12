@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1281,
+  "tests": 1291,
   "unmapped": 13,
   "kinds": {
-   "api": 701,
-   "e2e": 302,
-   "audit": 161,
+   "api": 707,
+   "e2e": 303,
+   "audit": 164,
    "unit": 117
   },
-  "routes": 805
+  "routes": 808
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -6834,6 +6834,7 @@
     "dir:backend/modules/case/",
     "file:backend/tests/_requires.py",
     "mod:case/__init__",
+    "mod:case/api/alt_plan",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
@@ -6858,6 +6859,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
+     "backend/modules/case/api/alt_plan.py",
      "backend/modules/case/api/case_action_items.py",
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/expense_form_pdf.py",
@@ -6972,6 +6974,7 @@
     "file:backend/tests/_requires.py",
     "helper:mail_types",
     "mod:case/__init__",
+    "mod:case/api/alt_plan",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
@@ -7002,6 +7005,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
+     "backend/modules/case/api/alt_plan.py",
      "backend/modules/case/api/case_action_items.py",
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/expense_form_pdf.py",
@@ -7063,6 +7067,7 @@
     "helper:tiered_approval",
     "mod:case/__init__",
     "mod:case/api/__init__",
+    "mod:case/api/alt_plan",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
@@ -7103,6 +7108,7 @@
      "backend/modules/case/tests/test_material_coverage_2026_10_03.py"
     ],
     "api": [
+     "backend/modules/case/api/alt_plan.py",
      "backend/modules/case/api/case_action_items.py",
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/expense_form_pdf.py",
@@ -7226,6 +7232,7 @@
     "dir:backend/modules/case/",
     "file:backend/tests/_requires.py",
     "mod:case/__init__",
+    "mod:case/api/alt_plan",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
@@ -7255,6 +7262,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
+     "backend/modules/case/api/alt_plan.py",
      "backend/modules/case/api/case_action_items.py",
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/expense_form_pdf.py",
@@ -7420,6 +7428,7 @@
     "core:db",
     "dir:backend/modules/case/",
     "mod:case/__init__",
+    "mod:case/api/alt_plan",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
@@ -7454,6 +7463,7 @@
      "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
     ],
     "api": [
+     "backend/modules/case/api/alt_plan.py",
      "backend/modules/case/api/case_action_items.py",
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/expense_form_pdf.py",
@@ -7574,6 +7584,7 @@
     "file:backend/tests/_requires.py",
     "helper:privacy_notice",
     "mod:arap/api/cashier",
+    "mod:case/api/alt_plan",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
@@ -7601,6 +7612,7 @@
     ],
     "api": [
      "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/alt_plan.py",
      "backend/modules/case/api/case_action_items.py",
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/expense_form_pdf.py",
@@ -7756,6 +7768,7 @@
     "core:db",
     "dir:backend/modules/case/",
     "mod:case/__init__",
+    "mod:case/api/alt_plan",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
@@ -7782,6 +7795,7 @@
      "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
     ],
     "api": [
+     "backend/modules/case/api/alt_plan.py",
      "backend/modules/case/api/case_action_items.py",
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/expense_form_pdf.py",
@@ -9169,6 +9183,7 @@
     "core:db",
     "dir:backend/modules/case/",
     "mod:case/__init__",
+    "mod:case/api/alt_plan",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
@@ -9199,6 +9214,7 @@
      "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
     ],
     "api": [
+     "backend/modules/case/api/alt_plan.py",
      "backend/modules/case/api/case_action_items.py",
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/expense_form_pdf.py",
@@ -14777,6 +14793,7 @@
    "units": [
     "dir:backend/modules/supply/",
     "file:backend/tests/_requires.py",
+    "mod:case/api/alt_plan",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
@@ -14802,6 +14819,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
+     "backend/modules/case/api/alt_plan.py",
      "backend/modules/case/api/case_action_items.py",
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/expense_form_pdf.py",
@@ -28192,6 +28210,26 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_e2e_quote_alt_form_2026_10_13.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "page:pages/quotation-form.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html"
+    ],
+    "path": [
+     "frontend/pages/quotation-form.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_quote_delete_crm_absent_notice_2026_09_26.py": {
    "kind": "e2e",
    "units": [
@@ -32185,6 +32223,7 @@
     "mod:arap/api/cashier",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
+    "mod:case/api/alt_plan",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
     "mod:case/api/material_payments",
@@ -32267,6 +32306,7 @@
      "backend/modules/arap/api/cashier.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/api/alt_plan.py",
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/completion_notes.py",
      "backend/modules/case/api/material_payments.py",
@@ -32605,6 +32645,235 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_quote_alt_t10_case_page_2026_10_13.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/",
+    "dir:backend/modules/case/",
+    "dir:backend/modules/case/api/",
+    "dir:frontend/js/",
+    "dir:frontend/pages/",
+    "js:js/case-management-fin.js",
+    "mod:case/api/alt_plan",
+    "page:pages/case-management.html"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/case/api/alt_plan.py"
+    ],
+    "page": [
+     "frontend/js/case-management-fin.js",
+     "frontend/pages/case-management.html"
+    ],
+    "path": [
+     "backend/modules/",
+     "backend/modules/case/",
+     "backend/modules/case/api/",
+     "backend/modules/case/api/alt_plan.py",
+     "frontend/js/",
+     "frontend/js/case-management-fin.js",
+     "frontend/pages/",
+     "frontend/pages/case-management.html"
+    ]
+   }
+  },
+  "backend/tests/test_quote_alt_t2_2026_10_12.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "mod:case/__init__",
+    "mod:case/alt_policy",
+    "mod:case/api/quotations",
+    "mod:case/profit_guard"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/alt_policy.py",
+     "backend/modules/case/profit_guard.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_quote_alt_t3_2026_10_13.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/tests/data/quote_alt_vectors.json",
+    "js:static/alt-items.js",
+    "mod:case/__init__",
+    "mod:case/profit_guard"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/profit_guard.py"
+    ],
+    "page": [
+     "frontend/static/alt-items.js"
+    ],
+    "path": [
+     "backend/tests/data/quote_alt_vectors.json",
+     "frontend/static/alt-items.js"
+    ]
+   }
+  },
+  "backend/tests/test_quote_alt_t4_2026_10_13.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "mod:case/__init__",
+    "mod:case/alt_options",
+    "mod:case/api/__init__",
+    "mod:case/api/alt_plan",
+    "mod:case/api/quotations",
+    "mod:case/profit_guard"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/alt_options.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/alt_plan.py",
+     "backend/modules/case/profit_guard.py"
+    ],
+    "api": [
+     "backend/modules/case/api/alt_plan.py",
+     "backend/modules/case/api/quotations.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_quote_alt_t6_form_2026_10_13.py": {
+   "kind": "audit",
+   "units": [
+    "dir:frontend/pages/",
+    "file:backend/tests/test_money_round_half_up_2026_09_26.py",
+    "js:static/alt-items.js",
+    "js:static/profit-rules.js",
+    "page:pages/quotation-form.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/test_money_round_half_up_2026_09_26.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html",
+     "frontend/static/alt-items.js",
+     "frontend/static/profit-rules.js"
+    ],
+    "path": [
+     "frontend/pages/",
+     "frontend/pages/quotation-form.html",
+     "frontend/static/alt-items.js",
+     "frontend/static/profit-rules.js"
+    ]
+   }
+  },
+  "backend/tests/test_quote_alt_t8_2026_10_13.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:pdf_gen",
+    "mod:case/__init__",
+    "mod:case/alt_policy",
+    "mod:case/alt_view",
+    "mod:case/profit_guard"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/alt_policy.py",
+     "backend/modules/case/alt_view.py",
+     "backend/modules/case/profit_guard.py",
+     "backend/pdf_gen.py"
+    ]
+   }
+  },
+  "backend/tests/test_quote_alt_t9_sign_2026_10_13.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "mod:case/__init__",
+    "mod:case/alt_policy",
+    "mod:case/alt_sign",
+    "mod:case/api/quotations",
+    "mod:case/profit_guard",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/alt_policy.py",
+     "backend/modules/case/alt_sign.py",
+     "backend/modules/case/profit_guard.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_quote_alt_t9b_lock_2026_10_13.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:settings_groups",
+    "mod:case/__init__",
+    "mod:case/alt_lock",
+    "mod:case/alt_policy",
+    "mod:case/alt_sign",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_groups.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/alt_lock.py",
+     "backend/modules/case/alt_policy.py",
+     "backend/modules/case/alt_sign.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_quote_alt_write_paths_2026_10_13.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/case/",
+    "dir:backend/modules/case/api/",
+    "file:backend/tests/data/quote_write_paths.json",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "path": [
+     "backend/modules/case/",
+     "backend/modules/case/api/",
+     "backend/modules/case/api/quotations.py",
+     "backend/tests/data/quote_write_paths.json"
+    ]
+   }
+  },
   "backend/tests/test_quote_json_direct_writes_lost_update_2026_09_25.py": {
    "kind": "api",
    "units": [
@@ -32810,6 +33079,7 @@
     "core:db",
     "core:pdf_gen",
     "file:backend/tests/_requires.py",
+    "mod:case/api/alt_plan",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/material_approvals",
@@ -32831,6 +33101,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
+     "backend/modules/case/api/alt_plan.py",
      "backend/modules/case/api/case_action_items.py",
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/material_approvals.py",
