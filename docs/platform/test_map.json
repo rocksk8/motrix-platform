@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1291,
+  "tests": 1304,
   "unmapped": 13,
   "kinds": {
-   "api": 707,
-   "e2e": 303,
-   "audit": 164,
-   "unit": 117
+   "api": 714,
+   "e2e": 304,
+   "audit": 166,
+   "unit": 120
   },
-  "routes": 808
+  "routes": 815
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -20070,12 +20070,83 @@
    },
    "login_fixture": true
   },
+  "backend/tests/platform/test_settings_baseline_owners.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_settings_baseline.py",
+    "file:backend/tests/platform/settings_deploy_baseline.json",
+    "helper:settings_registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_registry.py",
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_settings_baseline.py"
+    ],
+    "path": [
+     "backend/tests/platform/settings_deploy_baseline.json"
+    ]
+   }
+  },
+  "backend/tests/platform/test_settings_center_status_routes.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:settings_registry",
+    "plat:__init__",
+    "plat:spine",
+    "router:definitions",
+    "router:settings_center"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/spine.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_registry.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py",
+     "backend/routers/settings_center.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_settings_editor_s1.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "router:settings_center"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py"
+    ],
+    "api": [
+     "backend/routers/settings_center.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_settings_pending_t54.py": {
    "kind": "api",
    "units": [
     "core:archive",
     "core:db",
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_settings_baseline.py",
     "file:backend/tests/platform/settings_deploy_baseline.json",
     "helper:audit",
     "helper:config_ledger",
@@ -20093,7 +20164,9 @@
      "backend/helpers/config_ledger.py",
      "backend/helpers/settings_groups.py",
      "backend/helpers/settings_registry.py",
-     "backend/helpers/uploads.py"
+     "backend/helpers/uploads.py",
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_settings_baseline.py"
     ],
     "api": [
      "backend/routers/settings_center.py"
@@ -20254,6 +20327,81 @@
      "tools/platform/",
      "tools/platform/modtest.py",
      "tools/platform/ship_tier.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_spine_e_b.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/",
+    "file:backend/core/features_l1.json",
+    "file:backend/core/system_hub_l1.json",
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "helper:config_ledger",
+    "helper:mail_types",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "plat:__init__",
+    "plat:loader",
+    "plat:registry",
+    "plat:spine",
+    "router:settings_center"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/loader.py",
+     "backend/core/registry.py",
+     "backend/core/spine.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/config_ledger.py",
+     "backend/helpers/mail_types.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/routers/__init__.py",
+     "backend/routers/settings_center.py"
+    ],
+    "path": [
+     "backend/core/features_l1.json",
+     "backend/core/system_hub_l1.json",
+     "backend/modules/"
+    ]
+   }
+  },
+  "backend/tests/platform/test_spine_literal_scan.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_spine_scan.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_spine_scan.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_spine_owner_e_a.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "plat:__init__",
+    "plat:loader",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/loader.py",
+     "backend/core/registry.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py"
     ]
    }
   },
@@ -20804,7 +20952,6 @@
     "page:pages/online-stats.html",
     "page:pages/receivables.html",
     "page:pages/sales-orders.html",
-    "page:pages/settings-center.html",
     "page:pages/shipping-export-history.html"
    ],
    "evidence": {
@@ -20820,7 +20967,6 @@
      "frontend/pages/online-stats.html",
      "frontend/pages/receivables.html",
      "frontend/pages/sales-orders.html",
-     "frontend/pages/settings-center.html",
      "frontend/pages/shipping-export-history.html",
      "frontend/static/auth-guard.js",
      "frontend/static/notif.js",
@@ -23630,6 +23776,7 @@
    "kind": "audit",
    "units": [
     "helper:custom_modules",
+    "helper:download_name",
     "helper:email_notify",
     "helper:startup",
     "mod:accounting/api/accounting_export",
@@ -23661,6 +23808,7 @@
    "evidence": {
     "path": [
      "backend/helpers/custom_modules.py",
+     "backend/helpers/download_name.py",
      "backend/helpers/email_notify.py",
      "backend/helpers/startup.py",
      "backend/modules/accounting/api/accounting_export.py",
@@ -24382,6 +24530,128 @@
      "backend/tests/_requires.py"
     ],
     "api": [
+     "backend/modules/case/api/quotations.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_download_js_2026_10_13.py": {
+   "kind": "audit",
+   "units": [
+    "dir:frontend/static/",
+    "file:backend/helpers/__init__.py",
+    "helper:download_name",
+    "js:static/download.js"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/download_name.py"
+    ],
+    "page": [
+     "frontend/static/download.js"
+    ],
+    "path": [
+     "frontend/static/",
+     "frontend/static/download.js"
+    ]
+   }
+  },
+  "backend/tests/test_download_name_endpoints_2026_10_13.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:pdf_gen",
+    "file:backend/helpers/__init__.py",
+    "helper:case_access",
+    "helper:download_name",
+    "mod:accounting/api/vouchers",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
+    "mod:case/api/completion_notes",
+    "mod:case/api/expense_form_pdf",
+    "mod:payroll/api/bonus",
+    "mod:payroll/api/payslips",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:supply/api/shipping_notes"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/case_access.py",
+     "backend/helpers/download_name.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/supply/api/shipping_notes.py",
+     "backend/pdf_gen.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/supply/api/shipping_notes.py"
+    ],
+    "path": [
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/case/api/expense_form_pdf.py",
+     "backend/modules/payroll/api/bonus.py",
+     "backend/modules/payroll/api/payslips.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_download_name_p1_2026_10_13.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:download_name",
+    "helper:financial_mask",
+    "helper:settings_groups",
+    "helper:settings_registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/download_name.py",
+     "backend/helpers/financial_mask.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py"
+    ]
+   }
+  },
+  "backend/tests/test_download_name_p2_2026_10_13.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:case_access",
+    "helper:download_name",
+    "helper:email_notify",
+    "helper:xlsx_out",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/case_access.py",
+     "backend/helpers/download_name.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ],
+    "path": [
+     "backend/helpers/download_name.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/xlsx_out.py",
      "backend/modules/case/api/quotations.py"
     ]
    },
@@ -28456,6 +28726,34 @@
     ]
    }
   },
+  "backend/tests/test_e2e_settings_center_edit_s1.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_e2e_login.py",
+    "helper:settings_registry",
+    "page:pages/settings-center.html",
+    "plat:__init__",
+    "plat:spine"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/spine.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_registry.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/settings-center.html"
+    ],
+    "path": [
+     "frontend/pages/settings-center.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_shared_fixtures_2026_09_25.py": {
    "kind": "e2e",
    "units": [
@@ -32228,6 +32526,7 @@
     "mod:case/api/completion_notes",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
+    "mod:case/api/project_margin",
     "mod:case/api/quotations",
     "mod:crm/api",
     "mod:daily_tasks/api",
@@ -32311,6 +32610,7 @@
      "backend/modules/case/api/completion_notes.py",
      "backend/modules/case/api/material_payments.py",
      "backend/modules/case/api/overhead.py",
+     "backend/modules/case/api/project_margin.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
@@ -32522,6 +32822,75 @@
      "frontend/static/profit-rules.js"
     ]
    }
+  },
+  "backend/tests/test_project_margin_2026_10_13.py": {
+   "kind": "api",
+   "units": [
+    "core:pdf_gen",
+    "dir:backend/modules/",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/data/project_margin_vectors.json",
+    "helper:financial_mask",
+    "helper:profit_rules",
+    "helper:settings_registry",
+    "js:static/profit-rules.js",
+    "mod:case/__init__",
+    "mod:case/profit_guard",
+    "page:pages/case-management.html",
+    "page:pages/quotation-form.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/financial_mask.py",
+     "backend/helpers/profit_rules.py",
+     "backend/helpers/settings_registry.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/profit_guard.py",
+     "backend/pdf_gen.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/quotation-form.html",
+     "frontend/static/profit-rules.js"
+    ],
+    "path": [
+     "backend/modules/",
+     "backend/modules/case/",
+     "backend/pdf_gen.py",
+     "backend/tests/data/project_margin_vectors.json",
+     "frontend/static/profit-rules.js"
+    ]
+   }
+  },
+  "backend/tests/test_project_margin_endpoints_2026_10_13.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "mod:case/__init__",
+    "mod:case/api/alt_plan",
+    "mod:case/api/project_margin",
+    "mod:case/api/quotations",
+    "mod:case/profit_guard"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/profit_guard.py"
+    ],
+    "api": [
+     "backend/modules/case/api/alt_plan.py",
+     "backend/modules/case/api/project_margin.py",
+     "backend/modules/case/api/quotations.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_px1_permission_message_matches_guard_2026_09_24.py": {
    "kind": "audit",
