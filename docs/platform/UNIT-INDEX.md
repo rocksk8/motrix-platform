@@ -38,7 +38,7 @@
 | `helper:approval_queue` | L1 | 「待我簽核」佇列與轉簽的共用形狀（L1；M01-PLAN §3-7，2026-09-26）。（無單位卡） | 11 | 18 | — |
 | `helper:attachment_search` | L1 | 附件目錄的搜尋共用件（`attachments.catalog` 契約 v1 的 `search`／`count`；附件目錄 P3， | 10 | 9 | `tests/test_filehub_search_2026_09_30.py` |
 | `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 13 | 81 | — |
-| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 104 | — |
+| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 105 | — |
 | `helper:branding` | L1 | 品牌圖檔（主 LOGO／深色底 LOGO／favicon）：上傳驗證、存放、讀取時回預設。 | 16 | 2 | `tests/test_branding_2026_09_27.py` |
 | `helper:build_info` | L1 | 這個**行程**載入的是哪一份程式碼（`BR1`）。（無單位卡） | 3 | 2 | — |
 | `helper:business_days` | L1 | L1 工作日／假日判斷（第44班：自 M11 標案雷達 `calendar_tw.py` 提升為 L1 共用，供任何模組用——例如 M01 預定付款日提醒、M11 不寄信日）。**純函式，不連網、不讀時鐘（日期由呼叫端給）。**（無單位卡） | 9 | 3 | — |

@@ -12364,6 +12364,9 @@
      "backend/modules/permmatrix/"
     ]
    },
+   "unresolved_api": [
+    "/api/permmatrix/status"
+   ],
    "module": "permmatrix"
   },
   "backend/modules/recyclebin/tests/test_e2e_recyclebin_t53.py": {

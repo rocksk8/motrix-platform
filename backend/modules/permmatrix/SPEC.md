@@ -32,3 +32,5 @@
 - **PMX12.** 提供者讀不到時，`helpers.perm` 沿用**最後一次成功載入的矩陣**（保留個人禁止／角色格取消），不退回種子；從未載入成功過才用種子並進入降級——降級時高風險能力對非最高管理者一律拒絕、恢復後自動離開（05 稽核 A）。
 - **PMX14.** 放寬的判斷（P0 過渡實作）：任何**放寬高風險能力**都走 `perm_pending` 24 小時待生效、必填原因，包含：新增角色授予、把種子預設後來被取消的格子勾回來、個人允許、**取消高風險能力的個人禁止**、高風險範圍的代理。收緊與低風險放寬立即。**這不是使用者規則（第二位最高管理者核准＋確認期）**——該規則由設定帳本（`config_ledger`，Train A）實作；在帳本接上之前，P0 的所有寫入函式（`set_role_cap`／`set_user_override`／`clear_user_override`／`create_delegation`／`revoke_delegation`／`restore_version`／`undo_last_change`／`cancel_pending`／`activate_due`）**不得被任何端點、頁面或其他程式呼叫**；守門 `test_permmatrix_writes_unwired.py` 會在有人呼叫時變紅（掃 `source_tree.product_files()`：匯入、屬性、名稱、字串常數含 `a`+`b` 相加、`modules.permmatrix.service` 的匯入與屬性鏈；**不含 backend/tools 與各層 tests**，且只防不小心、不防刻意規避）。另：「沒有任何程式呼叫 `perm.can`」只對 r10＋系統中心成立，其他分支合併後需重新 grep（整合者在合併樹上做）。
 - **PMX13.** `perm_pending`／`PENDING_HOURS=24` 是過渡實作（P0）：M1 不得把任何端點或畫面接到它；P1 改走 `config_ledger` 與 `change_control.confirm_period_days`（設計稿 §10.2）。
+
+- PMX15（1.0.2）：唯一端點為唯讀狀態探針 `GET /api/permmatrix/status`（登入即可，只回 `{ok, module, version}`，不讀 `perm_*` 表）；供 D7 final_drill 的 `provides.probes`。寫入端點仍未接線（PMX14）。
