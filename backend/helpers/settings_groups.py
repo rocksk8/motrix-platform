@@ -95,13 +95,24 @@ register_group(
 )
 
 # 擇一方案報價（M3；T57）：文字範本、數量上限，以及回簽政策 P1～P8。政策的選項值為整數代碼（畫面只顯示中文標籤）、依序「由嚴到寬」，第一項＝使用者 2026-10-12 的定案值（預設，管理者可改）。
-# 『尚未提供』的選項照樣登錄但不可選：cross_check 擋下儲存、讀取端（modules.case.alt_policy）夾回預設；之後開放只需改 UNAVAILABLE_ALT_CHOICES 與實作。
-UNAVAILABLE_ALT_CHOICES = {"cancel_after_deal": (2,), "cancel_after_export": (2,), "cancel_after_invoice": (2,), "cancel_after_settle": (2,)}
+# 『尚未提供』的選項照樣登錄但不可選：cross_check 擋下儲存、讀取端（modules.case.alt_policy）夾回預設；標籤自動加註『（尚未提供）』。
+# 凡是還沒有程式會用到的放寬路徑，一律先列在這裡；由實作該路徑的任務在自己的 commit 把它從表中移除（T9 起陸續開放）。
+UNAVAILABLE_ALT_CHOICES = {"lock_scope": (2,), "cancel_after_deal": (2, 3), "move_out_of_sent": (2,), "reject_final_keep": (2,),
+                           "unlock_edit_signed": (2,), "approval_basis": (2,), "cancel_after_export": (2,),
+                           "cancel_after_invoice": (2,), "cancel_after_settle": (2,)}
 _NA = "（尚未提供）"
+_TEXT_MAX = {"total_text": 40, "note_template": 200}
+_PLACEHOLDERS = ("{items}", "{group}")
 _ALT_BANNER = "【高影響】選這個之後，已回簽的擇一報價單會有更多方式被改動或取消選定，可能讓報價、開票、請款、精算的金額彼此不一致；每次變更都會記入設定變更明細。"
 
 
+def _mark_na(key, choices):
+    bad = UNAVAILABLE_ALT_CHOICES.get(key, ())
+    return [(v, (l + _NA) if (v in bad and _NA not in l) else l, i) for v, l, i in choices]
+
+
 def _alt_policy(key, question, label, help_, choices, *, risk_text=_ALT_BANNER):
+    choices = _mark_na(key, choices)
     return S(key, "int", 1, min=1, max=len(choices), risk="money", loosen="up", recommended=1, requires_pending=True,
              question=question, label=label, help=help_,
              impact="影響已回簽的擇一方案報價單（以及同一案件下游的開票、請款、精算金額）；只影響之後的操作，已存在的單據內容不會被改寫。" + "放寬（往後面的選項）須原因、另一位最高管理者核准並等確認期間；收緊立即生效。",
@@ -110,6 +121,20 @@ def _alt_policy(key, question, label, help_, choices, *, risk_text=_ALT_BANNER):
 
 def _alt_cross_check(values):
     out = []
+    for k, mx in _TEXT_MAX.items():
+        v = values.get(k)
+        if not isinstance(v, str):
+            continue
+        if len(v) > mx:
+            out.append({"path": k, "message": "文字太長，最多 %d 字" % mx})
+        elif any(ord(c) < 32 or ord(c) == 127 for c in v):
+            out.append({"path": k, "message": "文字不能含換行或控制字元"})
+        elif k == "note_template":
+            rest = v
+            for p in _PLACEHOLDERS:
+                rest = rest.replace(p, "")
+            if "{" in rest or "}" in rest:
+                out.append({"path": k, "message": "大括號只能用在系統提供的兩個代入位置，其他地方請拿掉"})
     for k, bad in UNAVAILABLE_ALT_CHOICES.items():
         if values.get(k) in bad:
             out.append({"path": k, "message": "這個選項尚未提供，請選其他項目"})
@@ -120,7 +145,7 @@ register_group(
     "quote_alt", "擇一方案", [
         S("alt_enabled", "bool", True, risk="ops", recommended=True,
           question="報價單要不要提供「擇一方案」功能？", label="啟用擇一方案",
-          help="開啟後，報價單的品項可以標成『擇一』（例如方案 A、B、C 三選一）。關閉只是不顯示相關欄位，已經含擇一的舊單仍照原樣計算與列印。",
+          help="開啟後，報價單的品項可以標成『擇一』（例如三種方案只能選一種）。關閉只是不顯示相關欄位，已經含擇一的舊單仍照原樣計算與列印。",
           impact="只影響報價單編輯畫面是否顯示擇一欄位；既有含擇一的報價單金額與列印不變。立即生效。"),
         S("total_text", "str", "依方案選擇", risk="legal", recommended="依方案選擇",
           question="報價單尚未選定方案時，稅前合計與總計那兩格要顯示什麼字？", label="合計欄位顯示文字",
@@ -129,7 +154,7 @@ register_group(
           risk_text="這段文字會印在給客戶的報價單上，請確認措辭不會讓客戶誤解金額。"),
         S("note_template", "str", "項次{items}為{group}擇一方案選擇", risk="legal", recommended="項次{items}為{group}擇一方案選擇",
           question="報價單備註要自動帶哪一句擇一說明？", label="擇一說明句",
-          help="每一組擇一方案會自動產生一句說明，接在備註最後。句中的 {items} 會換成該組的項次、{group} 換成組別名稱。",
+          help="每一組擇一方案會自動產生一句說明，接在備註最後。編輯時可從按鈕插入「項次」與「組別名稱」兩個代入位置，存檔時系統會自動換成該組的實際內容。",
           impact="只影響之後存檔的報價單；已存檔的報價單沿用當時的句子。客戶看得到這句話。",
           risk_text="這句話會印在給客戶的報價單上，請確認措辭正確。"),
         S("show_unpicked_in_pdf", "bool", False, risk="ops", recommended=False,
@@ -166,11 +191,11 @@ register_group(
                      (2, "可以", "允許進入解鎖修改；期間仍受『回簽後鎖定範圍』限制。")]),
         S("approval_basis", "int", 1, min=1, max=2, risk="money", loosen="up", recommended=1, requires_pending=True,
           question="擇一方案的報價單送審時，審核原因用哪個金額來判斷？", label="擇一單送審金額基準",
-          help="目前審核原因逐項檢查所有品項（包含還沒被選到的）；此設定記錄管理者希望的基準。",
+          help="目前審核原因會逐項檢查所有品項（包含還沒被選到的）。",
           impact="只影響之後送審的擇一方案報價單的審核原因清單。放寬須另一位最高管理者核准並等確認期間。",
-          risk_text="選『以未選定時的暫估』時，沒被選到的低毛利方案不再列入審核原因，可能讓需要主管看的單子直接通過。",
-          choices=[(1, "以各組金額最高的組合（最嚴，建議）", "把每組最貴的選項都算進去來判斷，較不會漏掉需要審核的單。"),
-                   (2, "以未選定時的暫估", "只看不含擇一項目的金額與品項，是今天的做法。")]),
+          risk_text="【高影響】選『只看計入金額的品項』時，沒被選到的低毛利方案不再列入審核原因，可能讓需要主管看的單子直接通過。",
+          choices=[(1, "逐項檢查所有品項（最嚴，建議；目前的做法）", "包含還沒被選到的品項都逐一檢查，較不會漏掉需要審核的單。"),
+                   (2, "只看計入金額的品項" + _NA, "只檢查實際計入金額的品項（已選定的方案加上一般品項），沒被選到的方案不再列入審核原因。")]),
         _alt_policy("cancel_after_export", "已經匯出給財務的開票憑據／請款單，還可以取消回簽嗎？", "已匯出單據後取消回簽", "匯出後財務已據以開立文件。",
                     [(1, "不行，永久凍結選定方案（建議）", "請財務先作廢該憑據後才能取消回簽。"),
                      (2, "可以，並通知財務" + _NA, "取消回簽並通知財務；已匯出文件本身不會被修改。")]),

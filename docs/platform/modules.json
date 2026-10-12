@@ -284,6 +284,7 @@
     "mod:case/material_payable_event",
     "mod:case/payable_calendar",
     "mod:case/profit_guard",
+    "mod:case/alt_policy",
     "mod:case/api/overhead",
     "mod:case/payable_reminders",
     "mod:case/quotations",

@@ -201,6 +201,11 @@ def validate_alt(q: dict, max_groups: int) -> None:
     for g, members in groups.items():
         if len(members) < 2:
             raise HTTPException(422, f"擇一組別「{g}」至少要有 2 個品項")
+        ids = [m.get("id") for m in members]
+        if any(not isinstance(x, str) or not x.strip() for x in ids):
+            raise HTTPException(422, f"擇一組別「{g}」的品項缺少編號，請重新整理頁面後再存")
+        if len(set(ids)) != len(ids):
+            raise HTTPException(422, f"擇一組別「{g}」內有重複的品項編號，請重新整理頁面後再存")
     picks = q.get("altPicks")
     if picks is not None:
         ok = isinstance(picks, dict) and all(g in groups and any(str(i.get("id")) == str(v) for i in groups[g]) for g, v in picks.items())

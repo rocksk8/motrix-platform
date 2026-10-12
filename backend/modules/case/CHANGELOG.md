@@ -6,6 +6,7 @@
   - `profit_guard.prepare()`：①一般存檔不採用用戶端的 `altPicks`／`altPickedAt`／`altPickedBy`，放回資料庫現值；②驗證（422，白話）：`totalsByAlt` 只收真布林、`altGroup` 須為文字、標題列不可擇一、每組至少 2 項、組數不超過設定 `alt_groups_max`；③已精算／結案單改動擇一結構（哪個品項在哪一組、`totalsByAlt`）→ 409。
   - 設定中心新群組 `quote_alt`（顯示名『擇一方案』）：文字範本（`total_text`、`note_template`）、`alt_enabled`、`show_unpicked_in_pdf`、`alt_groups_max`、`combo_view_max`、`combo_view_default_open`，以及回簽政策 P1～P8 與 P5（`lock_scope`、`cancel_after_deal`、`move_out_of_sent`、`reject_final_keep`、`unlock_edit_signed`、`approval_basis`、`cancel_after_export`、`cancel_after_invoice`、`cancel_after_settle`）：風險類別 money、放寬方向須第二位最高管理者核准＋確認期間、每個選項有白話影響說明與高影響橫幅文字；預設＝使用者 2026-10-12 的定案值（每項第一個選項）。『尚未提供』的選項（P2②、P6②、P7②、P8②）已登錄但不可選（`cross_check` 擋儲存，`modules/case/alt_policy.policy()` 讀取時夾回預設）。凍結基準 `settings_deploy_baseline.json` 同步新增。
   - 新模組 `alt_policy.py`：擇一設定與政策的唯一讀取入口（程式內不放業務常數）。
+  - T2 稽核修正（0d）：①`note_template` 說明文字不含大括號（守門測試轉綠）；②`total_text`／`note_template` 加長度上限（40／200 字）與控制字元檢查，`note_template` 只允許 `{items}`、`{group}` 兩個代入位置（T7/T8 以一般字串取代、不用 `str.format`，輸出 PDF／Excel 須跳脫）；③`validate_alt`：擇一組內品項須有非空文字編號且組內不重複（422）；④凡尚無程式使用的選項（鎖定範圍②、成案後取消③、狀態離開②、拒絕結案②、解鎖修改②、送審基準②，及 P6/P7/P8 的②）全部登錄為『尚未提供』（不可儲存、讀取夾回預設），由實作該路徑的任務在自己的 commit 開放；⑤送審金額基準選項文字更正（現行行為＝逐項檢查所有品項＝最嚴＝選項①；`compute_approval_reasons` 不改）；⑥`modules.json` 登記 `alt_policy`、README 補列、version_manifest 與快速變更摘要補登。T2＋T3 同一列車上線。
   - 測試（已寫、未跑）：`tests/test_quote_alt_t2_2026_10_12.py`。本批沒有 UI、PDF、回簽選定變更（T3 起）；無資料庫遷移；`FORM_VERSION` 於本班 T6 升一次。
 - **（併入）(next) — 2026-10-10（wip/t50-int；第 50 班）**
 - **（併入）(next) — **

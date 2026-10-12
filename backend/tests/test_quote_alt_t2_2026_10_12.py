@@ -201,22 +201,23 @@ def test_policy_fields_money_risk_with_banner_and_ordered_choices():
 
 def test_unavailable_choices_registered_but_not_selectable():
     by = _fields()
-    assert set(SG.UNAVAILABLE_ALT_CHOICES) == {"cancel_after_deal", "cancel_after_export", "cancel_after_invoice", "cancel_after_settle"}
+    assert set(SG.UNAVAILABLE_ALT_CHOICES) == set(_POLICIES)        # 消費者尚未落地的選項一律不可選，各任務在自己的 commit 開放
+    assert SG.UNAVAILABLE_ALT_CHOICES["cancel_after_deal"] == (2, 3)
     for k, bad in SG.UNAVAILABLE_ALT_CHOICES.items():
         labels = {c["value"]: c["label"] for c in by[k]["choices"]}
         for b in bad:
             assert "尚未提供" in labels[b]
             problems = R.validate_values("quote_alt", {k: b}, partial=True)
             assert problems and problems[0]["path"] == k
-    assert R.validate_values("quote_alt", {"cancel_after_deal": 3}, partial=True) == []
+    assert R.validate_values("quote_alt", {"cancel_after_deal": 1}, partial=True) == []
 
 
 def test_policy_reader_clamps_unavailable_value_to_default(monkeypatch):
     monkeypatch.setattr(R, "get", lambda g, f, **kw: 2)
     assert alt_policy.policy("cancel_after_deal") == 1
-    assert alt_policy.policy("lock_scope") == 2            # 可選的值照原樣
+    assert alt_policy.policy("lock_scope") == 1            # 尚未提供 ⇒ 夾回預設
     monkeypatch.setattr(R, "get", lambda g, f, **kw: 3)
-    assert alt_policy.policy("cancel_after_deal") == 3
+    assert alt_policy.policy("cancel_after_deal") == 1
     with pytest.raises(KeyError):
         alt_policy.policy("total_text")
 
@@ -275,3 +276,46 @@ def test_post_group_limit_comes_from_settings(client, admin_h, monkeypatch):
     monkeypatch.setattr(R, "get", lambda g, f, **kw: 1 if (g, f) == ("quote_alt", "alt_groups_max") else real(g, f, **kw))
     r = client.post("/api/quotations", json={"status": "草稿", "data": _body()}, headers=admin_h)
     assert r.status_code == 422 and "最多 1 組" in r.text
+
+
+# --- T2 稽核修正（0d）-------------------------------------------------------------
+
+def test_validate_alt_member_needs_unique_nonblank_string_id():
+    for bad in (None, "", "  ", 5):
+        q = _alt()
+        q["items"][1]["id"] = bad
+        _raises_422(q)
+    q = _alt()
+    q["items"][2]["id"] = q["items"][1]["id"]
+    _raises_422(q)
+    q = _alt()                                   # 不同組、非擇一項的重複 id 不在本規則內
+    q["items"][0]["id"] = "x1"
+    PG.validate_alt(q, 10)
+
+
+def test_text_fields_cross_check():
+    def probs(**v):
+        return R.validate_values("quote_alt", v, partial=True)
+    assert probs(total_text="x" * 40) == [] and probs(total_text="x" * 41)
+    assert probs(note_template="x" * 201)
+    assert probs(total_text="a\nb") and probs(note_template="a\x00b")
+    assert probs(note_template="項次{items}為{group}") == []
+    assert probs(note_template="項次{items}{other}") and probs(note_template="{group")
+    assert probs(note_template="純文字") == []
+
+
+def test_note_template_help_has_no_braces():
+    f = _fields()["note_template"]
+    assert "{" not in f["help"] and "}" not in f["help"]
+
+
+def test_approval_basis_choice_texts_match_today_behavior():
+    c = _fields()["approval_basis"]["choices"]
+    assert "尚未提供" not in c[0]["label"] and "目前" in c[0]["label"] and "尚未提供" in c[1]["label"]
+
+
+def test_completion_items_respect_picks_via_counted_items():
+    """完工單／下游取『計入品項』時要尊重選定；未選整組不計入。"""
+    q = _alt({"投影機": "x2"})
+    assert [i["id"] for i in PG.counted_items(q)] == ["a", "x2"]
+    assert [i["id"] for i in PG.counted_items(_alt())] == ["a"]

@@ -13,6 +13,7 @@
 | `api/material_orders.py` | 叫料 |
 | `quotations.py` | 報價單熱欄位同步、驗證；提供者：`case.access`、`case.summary`、`case.locations`、`case.recognition`、`case.default_terms`、`case.doc_version` |
 | `recognition.py` | 收入認列／支出歸月／待補登（經 `case.recognition` 給 M08） |
+| `alt_policy.py` | 擇一方案報價（M3）設定讀取入口：設定中心群組 `quote_alt` 的數值、文字範本與回簽政策（『尚未提供』的選項夾回預設） |
 | `quote_terms.py` | 報價條款預設值、送審原因 |
 | `case_deadlines.py` | 每日到期檢查（`daily.check`） |
 | `case_stage_tasks.py` | 執行進度勾選 → 每日工作事項 |

@@ -45,7 +45,8 @@
 | `material_orders.update_material_orders`（:178）、`set_material_order_invoice_date`（:230） | 否（`caseRecord.materialOrders`） | 否 | 執行紀錄 |
 | `settlement_api.update_settlement`（:156） | 否（`settlement`） | 否 | 執行紀錄；但 `tot` 讀取點（見 P8） |
 
-**不經 `save_quotation_json` 的直寫 `data_json`／`quotations`（遺漏風險來源，需逐一證明不碰本文）**：`case_batch_assign`（:6391，SQL :6441，`data_json`＋`assigned_user_ids`——須證明只動指派）、:1312（指派）、:1668（`create_quotation` 後處理）、:6540（`data_json` 直寫）；`case/recycle_adapter.py:508/:529`（回收筒還原／清除，直寫 `data_json`）；`case/profit_guard.py:294`（戳記重算，寫 `data_json`＋`net_margin_pct`）；`case/material_payment.py:646`、`case/material_change.py:511`（材料投影）；`db.py` 內多處維運／遷移（:1037、:1880、:1943、:1980、:1984、:2144、:4193/:4203、:4552）與 `tools/backfill_*.py`、`migrations_frozen/*`（一次性，不納入執行期鎖）。**T2 動作：逐項標註後寫成『寫入路徑守門測試』（靜態：任何新增 `UPDATE quotations` 字面或 `save_quotation_json` 呼叫者不在清單即紅）。**
+**不經 `save_quotation_json` 的直寫 `data_json`／`quotations`（遺漏風險來源，需逐一證明不碰本文）**：`case_batch_assign`（:6391，SQL :6441，`data_json`＋`assigned_user_ids`——須證明只動指派）、:1312（指派）、:1668（`create_quotation` 後處理）、:6540（`data_json` 直寫）；`case/recycle_adapter.py:508/:529`（回收筒還原／清除，直寫 `data_json`）；`case/profit_guard.py:294`（戳記重算，寫 `data_json`＋`net_margin_pct`）；`case/material_payment.py:646`、`case/material_change.py:511`（材料投影）；`db.py` 內多處維運／遷移（:1037、:1880、:1943、:1980、:1984、:2144、:4193/:4203、:4552）與 `tools/backfill_*.py`、`migrations_frozen/*`（一次性，不納入執行期鎖）。另證明不碰鎖定欄位（0d 補）：`quotations.py` :2651／:2687（`case_semi_unlocked` 旗標切換，只動旗標）與 :3882（匯出次數計數，只動計數欄位）——列入『證明不碰』清單，靜態守門須認得。
+**T2 動作：逐項標註後寫成『寫入路徑守門測試』（靜態：任何新增 `UPDATE quotations` 字面或 `save_quotation_json` 呼叫者不在清單即紅）。**
 
 ## 6. 附件端點切分 — 已查證（端點層）
 - **報價本文附件**：案件 API **沒有**專屬的報價本文附件上傳／刪除端點（`frontend/pages/quotation-form.html` 僅 1 處 `attachments`/files 字樣，T6 前核對是否為表單內自帶鍵）。若本文附件存於 `data_json` 的某鍵，則只能經 `PUT /api/quotations/{no}`，**被 P1 本文鍵比對覆蓋**（本文鍵清單須含該鍵；待 T6 前核對表單欄位目錄）。
