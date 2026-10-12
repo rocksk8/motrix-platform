@@ -93,7 +93,7 @@
 | `helper:row_access` | L1 | L1 資料列權限（row-level access）：一份宣告，同時產生「單筆判斷」與「SQL 過濾」。（無單位卡） | 8 | 10 | — |
 | `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 52 | — |
 | `helper:settings_groups` | L1 | 設定群組登錄（L1；第 54 班 Train A）。**預設值＝上線前的程式常數**（部署零行為變更；`settings_deploy_baseline.json` 凍結）。 | 0 | 8 | `backend/tests/platform/test_settings_registry_t54.py` |
-| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 21 | 9 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 21 | 10 | `backend/tests/platform/test_settings_registry_t54.py` |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 23 | 10 | — |
 | `helper:storage_locations` | L1 | 儲存位置：雲端存檔根目錄、個資資料夾、更新交付資料夾的**唯一**解析處（CORE-SPEC 裁示表「儲存位置可設定」，2026-09-28）。 | 13 | 3 | `tests/platform/test_storage_locations_2026_09_28.py` |
 | `helper:system_checks` | L1 | L1 系統健康的每日檢查（2026-09-26 自 routers/daily_tasks.py 搬出，M12 搬遷前置）。（無單位卡） | 8 | 2 | — |
