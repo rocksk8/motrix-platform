@@ -1,0 +1,159 @@
+# -*- coding: utf-8 -*-
+"""脊柱 E-a：設定群組的擁有者（載入器 import 範圍）、module.json `settings` 宣告⇔實際登錄、失敗時移除群組。"""
+import json
+import sys
+
+import pytest
+
+from core import loader, registry
+from helpers import settings_groups  # noqa: F401  核心群組（測試要確認 core 不會被移除）
+from helpers import settings_registry as R
+
+
+@pytest.fixture
+def clean_registry():
+    snap = registry.snapshot()
+    registry._reset()
+    yield
+    registry.restore(snap)
+    for g in [g for g in R._GROUPS if g.startswith("zz_ea")]:
+        R._GROUPS.pop(g, None)
+    R.invalidate()
+
+
+def _field(key="n"):
+    return R.SettingDef(key, "int", 1, min=0, max=9, question="這項要設多少？", label="測試項目", help="測試用的設定項目。", impact="影響測試用的畫面。")
+
+
+def _reg(group, owner=None):
+    kw = {} if owner is None else {"owner": owner}
+    R.register_group(group, "測試群組", [_field()], help="測試用的設定群組。", **kw)
+
+
+# --- 擁有者章 -------------------------------------------------------------------------------
+
+def test_owner_is_core_outside_any_scope_and_module_inside(clean_registry):
+    _reg("zz_ea_core")
+    with registry.owner_scope("zz_mod"):
+        assert registry.current_owner() == "zz_mod"
+        _reg("zz_ea_inmod")
+        _reg("zz_ea_explicit", owner="other")                      # 顯式 owner 蓋過範圍
+    assert registry.current_owner() is None
+    owners = {g: m["owner"] for g, m in R.groups().items() if g.startswith("zz_ea")}
+    assert owners == {"zz_ea_core": "core", "zz_ea_inmod": "zz_mod", "zz_ea_explicit": "other"}
+    assert R.owner_groups("zz_mod") == {"zz_ea_inmod"}
+
+
+def test_owner_scope_is_restored_even_when_import_raises(clean_registry):
+    with pytest.raises(RuntimeError):
+        with registry.owner_scope("zz_mod"):
+            raise RuntimeError("boom")
+    assert registry.current_owner() is None
+
+
+def test_unregister_owner_removes_only_that_owner_and_never_core(clean_registry):
+    _reg("zz_ea_a", owner="zz_m1")
+    _reg("zz_ea_b", owner="zz_m2")
+    assert R.unregister_owner("zz_m1") == 1
+    assert "zz_ea_a" not in R.groups() and "zz_ea_b" in R.groups()
+    assert R.unregister_owner("core") == 0 and "change_control" in R.groups()
+
+
+def test_mark_failed_and_unload_remove_the_modules_groups(clean_registry):
+    _reg("zz_ea_f", owner="zz_failed")
+    registry.mark_failed("zz_failed", "測試")
+    assert "zz_ea_f" not in R.groups()
+    _reg("zz_ea_u", owner="zz_unloaded")
+    registry.register(registry.LoadedModule(key="zz_unloaded", manifest={}, spec=registry.ModuleSpec(key="zz_unloaded")))
+    registry.unload("zz_unloaded", "路由衝突")
+    assert "zz_ea_u" not in R.groups()
+
+
+def test_unload_hook_failure_does_not_block_other_hooks(clean_registry):
+    seen = []
+
+    def bad(key):
+        raise RuntimeError("hook down")
+
+    def good(key):
+        seen.append(key)
+    n = len(registry._UNLOAD_HOOKS)
+    registry.on_unload(bad)
+    registry.on_unload(good)
+    try:
+        registry.mark_failed("zz_hookmod", "x")
+        assert seen == ["zz_hookmod"]
+    finally:
+        del registry._UNLOAD_HOOKS[n:]
+
+
+def test_owned_resolver_none_when_nobody_registered(clean_registry):
+    assert registry.owned("zz_no_such_kind", "x") is None
+    assert registry.owned("settings", "zz_none") == set()
+    with pytest.raises(ValueError):
+        registry.register_owned("settings", lambda o: set())
+
+
+# --- 載入器：宣告⇔登錄 ---------------------------------------------------------------------
+
+def _make_pkg(tmp_path, pkg, mods):
+    root = tmp_path / pkg
+    root.mkdir()
+    (root / "__init__.py").write_text("", encoding="utf-8")
+    for key, (manifest, init_src) in mods.items():
+        d = root / key
+        d.mkdir()
+        (d / "module.json").write_text(json.dumps(manifest), encoding="utf-8")
+        (d / "__init__.py").write_text(init_src, encoding="utf-8")
+    return root
+
+
+_HEAD = ("from core.registry import ModuleSpec\nfrom helpers import settings_registry as R\n")
+_FIELD = ("R.SettingDef('n', 'int', 1, min=0, max=9, question='這項要設多少？', label='測試項目', help='測試用的設定項目。', impact='影響測試用的畫面。')")
+
+
+def _src(*groups):
+    body = "".join("R.register_group(%r, '測試群組', [%s], help='測試用的設定群組。')\n" % (g, _FIELD) for g in groups)
+    return _HEAD + body + "MODULE = ModuleSpec(key='%s')\n"
+
+
+def _mod(key, groups, decl):
+    manifest = {"key": key, "core": ">=1.0,<2.0"}
+    if decl is not None:
+        manifest["settings"] = {"groups": decl}
+    return (manifest, _src(*groups) % key)
+
+
+def test_loader_checks_declared_settings_against_actual_registration(tmp_path, monkeypatch, clean_registry):
+    pkg = "fake_mods_ea"
+    root = _make_pkg(tmp_path, pkg, {
+        "ea_ok": _mod("ea_ok", ["zz_ea_ok"], ["zz_ea_ok"]),
+        "ea_plain": _mod("ea_plain", [], None),                                  # 沒有設定：不受影響
+        "ea_miss": _mod("ea_miss", ["zz_ea_m1"], ["zz_ea_m1", "zz_ea_m2"]),     # 宣告了沒登記
+        "ea_extra": _mod("ea_extra", ["zz_ea_x1"], None),                        # 登記了沒宣告
+        "ea_baddecl": _mod("ea_baddecl", [], ["Bad-Code"]),                      # 宣告格式不合
+    })
+    monkeypatch.syspath_prepend(str(tmp_path))
+    got = loader.load_all(str(root), pkg)
+    try:
+        assert sorted(m.key for m in got) == ["ea_ok", "ea_plain"]
+        assert set(registry.failed()) == {"ea_miss", "ea_extra", "ea_baddecl"}
+        assert "宣告了沒登記" in registry.failed()["ea_miss"] and "zz_ea_m2" in registry.failed()["ea_miss"]
+        assert "登記了沒宣告" in registry.failed()["ea_extra"] and "zz_ea_x1" in registry.failed()["ea_extra"]
+        owners = {g: m["owner"] for g, m in R.groups().items() if g.startswith("zz_ea")}
+        assert owners == {"zz_ea_ok": "ea_ok"}                                     # 失敗模組的群組都已移除
+    finally:
+        for k in list(sys.modules):
+            if k.startswith(pkg):
+                del sys.modules[k]
+
+
+def test_declared_settings_shape_is_checked_before_import():
+    assert loader.declared_settings_groups({}) == []
+    assert loader.declared_settings_groups({"settings": {"groups": ["a_b"]}}) == ["a_b"]
+    for bad in ({"settings": []}, {"settings": {"groups": "a"}}, {"settings": {"groups": ["A"]}}, {"settings": {"groups": ["a", "a"]}}, {"settings": {}}):
+        if bad == {"settings": {}}:
+            assert loader.declared_settings_groups(bad) == []                      # 空區段＝沒宣告
+            continue
+        with pytest.raises(ValueError):
+            loader.declared_settings_groups(bad)

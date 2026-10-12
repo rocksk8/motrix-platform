@@ -677,9 +677,9 @@ def test_conftest_names_no_l2_module():
 # ── registry 夾具 ────────────────────────────────────────────────────────────
 
 def _registry_tables():
-    """registry 模組層級的 `_` 開頭 dict（登錄表）。_LEGACY_PROVIDERS 刻意不在 snapshot 裡（見 snapshot 的說明）。"""
+    """registry 模組層級的 `_` 開頭 dict（登錄表）。_LEGACY_PROVIDERS、_OWNED 刻意不在 snapshot 裡：兩者都是 L1/舊模組在 import 時登記的回呼（清掉就回不來），不是『載入結果』。"""
     return {n: v for n, v in vars(registry).items()
-            if n.startswith("_") and not n.startswith("__") and isinstance(v, dict) and n != "_LEGACY_PROVIDERS"}
+            if n.startswith("_") and not n.startswith("__") and isinstance(v, dict) and n not in ("_LEGACY_PROVIDERS", "_OWNED")}
 
 
 def test_registry_snapshot_restores_every_table():

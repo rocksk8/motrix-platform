@@ -2,9 +2,9 @@
 """L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。
 
 [單位] plat:registry    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] CORE_VERSION, LoadedModule, ModuleSpec, RuntimeSwitch, STATES, disabled_list, failed, is_loaded,
-    loaded, mark_failed, module_states, provide, providers, register, restore, runtime_switches,
-    set_disabled_list, set_state, single_provider, snapshot, unload
+[公開介面] CORE_VERSION, LoadedModule, ModuleSpec, RuntimeSwitch, STATES, current_owner, disabled_list, failed, is_loaded,
+    loaded, mark_failed, module_states, on_unload, owned, owner_scope, provide, providers, register, register_owned, restore,
+    runtime_switches, set_disabled_list, set_state, single_provider, snapshot, unload
 [不變式] main.py 只迭代這張表、不指名模組；對方沒裝時 providers() 回空 dict、single_provider() 回 None（不是錯誤）
 [契約題] tests/platform/test_core_loader.py, tests/platform/test_module_selection.py
 [注意] CORE_VERSION 在合回時才定（§C-7，用 core_bump）；測試夾具一律用 snapshot()／restore()
@@ -15,8 +15,13 @@ main.py 只迭代這張表，不指名任何模組 ⇒ 刪掉模組資料夾＝�
 提供者（provider）：模組把能力登記在 `(capability, name)` 底下，
 使用方用 `providers(capability)` 取；對方沒裝時拿到空 dict，使用方要當成「少一項」處理。
 """
+import contextlib
+import contextvars
+import logging
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
+
+_log = logging.getLogger("motrix.registry")
 
 #: 共用核心的契約版本；模組以 module.json 的 `core` 範圍宣告相容性。
 CORE_VERSION = "1.129"
@@ -133,8 +138,57 @@ def register(loaded: LoadedModule) -> None:
     _LOADED[loaded.key] = loaded
 
 
+# ── 擁有者範圍（脊柱 E-a）：模組 import 期間登記的東西（設定群組…）自動記在該模組名下 ──────────────
+_OWNER = contextvars.ContextVar("motrix_owner", default=None)
+_UNLOAD_HOOKS: List[Callable[[str], None]] = []
+_OWNED: Dict[str, Callable[[str], object]] = {}
+
+
+@contextlib.contextmanager
+def owner_scope(key: str):
+    """載入器在 import 模組期間包住：這段時間登記的東西（例：`settings_registry.register_group`）的擁有者＝該模組。"""
+    tok = _OWNER.set(key)
+    try:
+        yield
+    finally:
+        _OWNER.reset(tok)
+
+
+def current_owner() -> Optional[str]:
+    """目前 import 中的模組鍵；不在範圍內 ⇒ None（呼叫端自行當成 core）。"""
+    return _OWNER.get()
+
+
+def on_unload(fn: Callable[[str], None]) -> None:
+    """L1 登記『模組失敗／卸載時要清掉它登記的東西』的回呼（L0 不依賴 L1，所以用回呼）。同一函式重複登記只算一次。"""
+    if fn not in _UNLOAD_HOOKS:
+        _UNLOAD_HOOKS.append(fn)
+
+
+def register_owned(kind: str, fn: Callable[[str], object]) -> None:
+    """L1 登記『某擁有者在 <kind> 底下登記了哪些東西』的查詢函式（載入器用它核對 module.json 的宣告）。同 kind 重複登記須是同一函式。"""
+    if kind in _OWNED and _OWNED[kind] is not fn:
+        raise ValueError(f"owned resolver {kind!r} 已登記為另一個函式")
+    _OWNED[kind] = fn
+
+
+def owned(kind: str, owner: str):
+    """擁有者 `owner` 在 `kind` 底下實際登記的集合；沒有人登記這個 kind 的解析器（L1 還沒載入）⇒ None（不核對）。"""
+    fn = _OWNED.get(kind)
+    return None if fn is None else fn(owner)
+
+
+def _run_unload_hooks(key: str) -> None:
+    for fn in list(_UNLOAD_HOOKS):
+        try:
+            fn(key)
+        except Exception:                                   # noqa: BLE001  一個回呼壞掉不可擋住其他回呼
+            _log.warning("unload hook %r 對模組 %s 失敗", fn, key, exc_info=True)
+
+
 def mark_failed(key: str, reason: str) -> None:
     _FAILED[key] = reason
+    _run_unload_hooks(key)                                  # 失敗（含 import 到一半才丟例外）⇒ 清掉它已登記的東西
 
 
 def unload(key: str, reason: str) -> None:

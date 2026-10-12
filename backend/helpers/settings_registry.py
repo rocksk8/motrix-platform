@@ -3,7 +3,7 @@
 
 [單位] helper:settings_registry    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, IMPACT_SCOPE_GRANDFATHERED, KIND, RISK_ORDER, SCOPE, SettingDef, SettingError, apply_profile, banner_of, clamp_value, clear_edition_bounds, confirm_period_days,
-    field_defs, field_views, get, get_group, groups, invalidate, live_impact, materialize_due, plan, profile_preview, profiles, publish, register_group, set_edition_bounds, show_value, validate_values
+    field_defs, field_views, get, get_group, groups, invalidate, live_impact, materialize_due, owner_groups, plan, profile_preview, profiles, publish, register_group, set_edition_bounds, show_value, unregister_owner, validate_values
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
     ④寫入口只有 `publish()`：同一交易寫定義新版本＋變更明細（config_ledger）＋稽核＋（有舊鍵時）雙寫舊鍵；⑤讀取走 15 秒行程內快取，
@@ -18,6 +18,7 @@ import threading
 import time
 
 from core import definitions as D
+from core import registry as _reg
 from db import get_db
 
 logger = logging.getLogger("motrix.settings")
@@ -173,8 +174,9 @@ class SettingDef:
                 "choices": [{"value": c[0], "label": c[1], "impact": c[2]} for c in self.choices]}
 
 
-def register_group(group, label, fields, *, sensitive=False, risk="ops", legacy_key=None, cross_check=None, help=""):
-    """登錄一個設定群組。`fields`＝SettingDef 清單；`cross_check(values)->[問題]`＝跨欄位檢查；`sensitive`＝只有設定權限者能讀。重複登錄 ⇒ ValueError。"""
+def register_group(group, label, fields, *, sensitive=False, risk="ops", legacy_key=None, cross_check=None, help="", owner=None):
+    """登錄一個設定群組。`fields`＝SettingDef 清單；`cross_check(values)->[問題]`＝跨欄位檢查；`sensitive`＝只有設定權限者能讀。重複登錄 ⇒ ValueError。
+    `owner`：擁有者（模組鍵）；省略 ⇒ 載入器 import 該模組期間自動帶入（`core.registry.owner_scope`），不在範圍內 ⇒ `core`。"""
     if group in _GROUPS:
         raise ValueError("設定群組已登錄：%r" % group)
     if not _zh(label) or not _zh(help):
@@ -183,12 +185,29 @@ def register_group(group, label, fields, *, sensitive=False, risk="ops", legacy_
     if len(set(names)) != len(names):
         raise ValueError("群組 %r 欄位重複" % group)
     _GROUPS[group] = {"label": label, "fields": {f.key: f for f in fields}, "sensitive": bool(sensitive), "risk": risk,
-                      "legacy_key": legacy_key, "cross_check": cross_check, "help": help}
+                      "legacy_key": legacy_key, "cross_check": cross_check, "help": help,
+                      "owner": owner if owner is not None else (_reg.current_owner() or "core")}
 
 
 def groups():
-    return {g: {"label": v["label"], "sensitive": v["sensitive"], "risk": v["risk"], "help": v["help"],
+    return {g: {"label": v["label"], "sensitive": v["sensitive"], "risk": v["risk"], "help": v["help"], "owner": v["owner"],
                 "fields": [dict(f.meta(), min=_bounds(g, f)[0], max=_bounds(g, f)[1]) for f in v["fields"].values()]} for g, v in _GROUPS.items()}
+
+
+def owner_groups(owner):
+    """擁有者 `owner` 登記的群組代號集合（載入器核對 module.json 宣告用）。"""
+    return {g for g, v in _GROUPS.items() if v["owner"] == owner}
+
+
+def unregister_owner(owner):
+    """移除擁有者登記的所有群組（模組載入失敗／卸載時由 `core.registry.on_unload` 呼叫）；`core` 不可移除。回移除的群組數。"""
+    if owner == "core":
+        return 0
+    gone = [g for g, v in _GROUPS.items() if v["owner"] == owner]
+    for g in gone:
+        _GROUPS.pop(g, None)
+        invalidate(g)
+    return len(gone)
 
 
 def _g(group):
@@ -788,6 +807,8 @@ def _restore(conn, key, version, actor, reason):
 
 
 def _register_once():
+    _reg.on_unload(unregister_owner)                 # 模組失敗／卸載 ⇒ 它登記的群組一併移除（不留孤兒）
+    _reg.register_owned("settings", owner_groups)    # 載入器用它核對 module.json 的 settings.groups 宣告
     if KIND not in D.kinds():
         D.register_kind(KIND, label="設定群組", validator=_kind_validator, default=_kind_default)
     from helpers import config_ledger as L

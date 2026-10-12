@@ -139,11 +139,13 @@ def load_all(modules_dir: str = None, package: str = None,
                 registry.set_state(name, registry.STATE_DISABLED, why, manifest, note=note)
                 logger.info("模組 %s 未載入：%s", name, why)
                 continue
-            mod = importlib.import_module(f"{package}.{name}")
+            with registry.owner_scope(name):          # E-a：import 期間登記的設定群組等，擁有者＝本模組
+                mod = importlib.import_module(f"{package}.{name}")
             spec = getattr(mod, "MODULE", None)
             if not isinstance(spec, registry.ModuleSpec) or spec.key != name:
                 raise ValueError("MODULE missing or key mismatch")
             check_migrations(spec.migrations)       # 版號不對 ⇒ 這個模組不載入（不猜要跳過哪一支）
+            check_declared_settings(manifest, name)  # 宣告的設定群組 ≠ 實際登錄的 ⇒ 不載入（fail-closed）
             for v, fn in spec.migrations:           # 載入才登記（CORE-SPEC §6）：停用／未授權的模組走不到這裡
                 _migrations.register(name, v, fn)
         except Exception as e:  # 單一模組壞掉不可以拖垮整台
@@ -155,6 +157,37 @@ def load_all(modules_dir: str = None, package: str = None,
         registry.set_state(name, registry.STATE_LOADED, "", manifest, note=note)
         logger.info("模組 %s %s 已載入", name, manifest.get("version", "?"))
     return registry.loaded()
+
+
+_GROUP_CODE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def declared_settings_groups(manifest) -> list:
+    """`module.json` 的 `settings: {"groups": [群組代號…]}`；沒有區段 ⇒ []。形狀不對 ⇒ ValueError（載入前就擋）。"""
+    sec = manifest.get("settings")
+    if sec is None:
+        return []
+    groups = sec.get("groups", []) if isinstance(sec, dict) else None
+    if not isinstance(groups, list) or any(not isinstance(g, str) or not _GROUP_CODE.match(g) for g in groups):
+        raise ValueError("module.json settings 必須是 {\"groups\": [小寫英數底線的群組代號…]}")
+    if len(set(groups)) != len(groups):
+        raise ValueError("module.json settings.groups 有重複的群組代號")
+    return list(groups)
+
+
+def check_declared_settings(manifest, name) -> None:
+    """脊柱 E-a：模組在 `module.json` 宣告它擁有的設定群組，import 後核對『實際以本模組為擁有者登記的群組』必須相同。
+    缺（宣告了沒登記）、多（登記了沒宣告）都擋——沒宣告而登記＝繞過登錄清單。L1 的設定登錄表還沒載入（沒有解析器）⇒ 不核對。"""
+    declared = set(declared_settings_groups(manifest))
+    actual = registry.owned("settings", name)
+    if actual is None:
+        if declared:
+            raise ValueError("module.json 宣告了設定群組 %s，但設定登錄表沒有載入，無法核對" % sorted(declared))
+        return
+    actual = set(actual)
+    if declared != actual:
+        miss, extra = sorted(declared - actual), sorted(actual - declared)
+        raise ValueError("宣告的設定群組與實際登錄不一致：宣告了沒登記 %s；登記了沒宣告 %s" % (miss or "無", extra or "無"))
 
 
 def check_migrations(items) -> None:
