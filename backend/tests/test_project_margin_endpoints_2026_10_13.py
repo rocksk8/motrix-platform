@@ -161,3 +161,27 @@ def test_malformed_or_failing_recompute_never_turns_detail_into_500(client, worl
     monkeypatch.setattr(PG, "quote_project_margin", lambda q: called.append(1) or {"pct": 1})
     client.get("/api/quotations/%s" % world["no"], headers=world["engineer"])
     assert not called                                                           # 看不到報價金額的角色根本不算
+
+
+def test_list_survives_pathological_stored_json_for_the_optin_column(client, world, monkeypatch):
+    """過深的 JSON 會讓 json.loads 丟 RecursionError（SQLite 自己的 JSON 深度上限是 1000，真的做出來的文件會先讓基本欄位的 SQL 失敗，
+    所以用標記字串讓 Python 端的解析丟 RecursionError，驗證選用欄只影響該列、不讓整個清單 500）。"""
+    import json as _json
+    real = _json.loads
+
+    def flaky(s, *a, **kw):
+        if isinstance(s, str) and "__RECURSE__" in s:
+            raise RecursionError("maximum recursion depth exceeded")
+        return real(s, *a, **kw)
+    cn = db.get_db()
+    try:
+        cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", ('{"tot": {"totalCost": 1}, "x": "__RECURSE__"}', world["no"]))
+        cn.commit()
+    finally:
+        cn.close()
+    monkeypatch.setattr(_json, "loads", flaky)
+    r = client.get("/api/quotations?include_project_margin=1", headers=world["admin"])
+    assert r.status_code == 200, r.text[:200]
+    items = r.json()["items"] if isinstance(r.json(), dict) else r.json()
+    mine = [i for i in items if i["quote_no"] == world["no"]]
+    assert mine and mine[0].get("project_margin_pct") is None

@@ -959,7 +959,7 @@ def list_quotations(
             for _r2 in conn.execute("SELECT quote_no, data_json FROM quotations WHERE quote_no IN (%s)" % ",".join("?" * len(_chunk)), _chunk):
                 try:
                     _tc_map[_r2["quote_no"]] = ((json.loads(_r2["data_json"] or "{}") or {}).get("tot") or {}).get("totalCost")
-                except (TypeError, ValueError, AttributeError):
+                except Exception:                                  # noqa: BLE001  壞資料／過深的 JSON（RecursionError）只影響該列，不能讓整個選用清單 500
                     _tc_map[_r2["quote_no"]] = None
     conn.close()
     items = []
