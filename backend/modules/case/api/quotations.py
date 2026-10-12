@@ -6502,7 +6502,7 @@ def case_batch_export(body: dict = Body(...), authorization: str = Header(None))
     return Response(
         content=buf.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{urlquote(fname)}"},
+        headers={"Content-Disposition": download_name.content_disposition(fname)},
     )
 
 

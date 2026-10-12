@@ -1,6 +1,7 @@
 # 案件 更新紀錄
 
 ## (next) — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）
+- 報價單文件下載（報價單 PDF／內部版、存檔版本、結案報表、專案執行報告）檔名改走 `helpers.download_name`（案件名＋文件類型＋單號；單號即案件編號不重複；沒有案件權限者只留文件類型＋單號；永不含金額）；案件匯出改用 `content_disposition()` 統一標頭編碼；`case-management-close/core.js` 讀伺服器檔名。無 migration、無新路由、無權限變更。
 - 完工單、費用單據的 PDF 下載檔名改走 `helpers.download_name`（案件編號＋案件名＋文件類型＋單號；沒有案件權限者只保留案件編號）；`case-management.html` 的下載頁面讀伺服器檔名。無 migration、無新路由、無權限變更；檔名永不含金額。
 
 ## 1.0.177 — 2026-10-10（wip/t50-int；第 50 班）

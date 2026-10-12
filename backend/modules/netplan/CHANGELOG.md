@@ -1,5 +1,8 @@
 # 網路規劃 更新紀錄
 
+## (next) — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）
+- 網路架構規劃表／規劃書／拓樸圖下載的 `Content-Disposition` 改用 `content_disposition()`（檔名不變，只統一編碼）。
+
 ## 1.0.10 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-09（wip/t49-strict-bool；W1c-P4）**
 - `module.json` `provides.routes` 明列 `/api/quotations/{quote_no}/network-plan`（`modules.json` M10 本來就有）：它落在案件模組的 `/api/quotations` 前綴底下，demo 缺席訊息原本會把它算成案件的。行為只影響 demo 缺席提示；沒有端點／權限變更。

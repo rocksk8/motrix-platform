@@ -125,14 +125,12 @@ UNIFIED = ["modules/analytics/api/reports.py", "modules/accounting/api/accountin
 
 def test_unified_modules_use_content_disposition_helper():
     """這些檔不再手寫 `attachment; filename…`：一律 `download_name.content_disposition()`（latin-1 安全退路＋RFC 8187＋淨化）。
-    例外：`quotations.py` 的多案件匯出（約 6505 行，第二期後段）與 `xlsx_out._pdf_filename`（跟隨來源檔名）尚未納入。"""
+    例外：`xlsx_out._pdf_filename`（跟隨來源檔名）尚未納入。"""
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
     for rel in UNIFIED:
         src = (root / rel).read_text(encoding="utf-8")
         bad = [l.strip() for l in src.splitlines() if "attachment; filename" in l and "download_name" not in l]
-        if rel.endswith("quotations.py"):
-            bad = [l for l in bad if "urlquote(fname)" not in l]          # 多案件匯出：第二期後段
         assert not bad, (rel, bad)
 
 
