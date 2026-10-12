@@ -34,6 +34,7 @@
  📌 2026-10-11 11:05：正式機已更新到 4eb52138（M1-a 班：單號修正（傳票編號）、報價單存檔伺服器自有欄位（單號以網址為準、編輯紀錄由伺服器追加）、簽核轉簽規則（不得轉給送審人、需原因、通知、稽核）、毛利色階／無資料列／徽章三處畫面一致、發布與測試工具、測試守門修補；核心 1.128／accounting 1.1.58／case 1.0.176；schema 維持 118、無 migration；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，步驟 3 全過）⇒ 基準改 4eb52138。
  📌 2026-10-13 01:07：正式機已更新到 c87079be（M2 班；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-m2-apply.md；套件 20261013_005325_c87079be_full；核心 1.129、schema 維持 118（核心 migration 9、permmatrix 1）；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，31 秒，步驟 3 全過、職責角色等值關卡 PASS 0 差異）⇒ 基準改 c87079be。
  📌 2026-10-13 03:22：正式機已更新到 41348ee6（M2.1 熱修班；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-m21-apply.md；套件 20261013_031014_41348ee6_full；case 1.0.177→1.0.178（其餘模組版本不變）；核心 1.129、schema 維持 118、無 migration（173 表／262 索引／30 觸發器與套用前逐項相同）；manifest 561 筆；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，17 秒，步驟 3 全過）⇒ 基準改 41348ee6。
+ 📌 2026-10-13 06:48：正式機已更新到 c9a2fb6a（M3 擇一方案報價班；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-m3-apply.md；套件 20261013_063629_c9a2fb6a_full；case 1.0.178→1.0.179（其餘模組版本不變）、核心 1.130、schema 維持 118、無 migration（173 表／262 索引／30 觸發器與套用前逐項相同）；套用前確認含擇一資料的報價單 0 張；manifest 563 筆；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，19 秒，步驟 3 全過）⇒ 基準改 c9a2fb6a。
 """
 import json
 import subprocess
@@ -42,7 +43,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "41348ee6"
+BASELINE = "c9a2fb6a"
 
 
 def baseline_manifest():
