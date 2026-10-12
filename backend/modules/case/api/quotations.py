@@ -1293,7 +1293,12 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
     # QL13：前端用 `locationId`，DB 欄位叫 `location_id`。
     # 兩個都回：舊的呼叫端不會因此壞掉，而新的表單讀得到它。
     result["locationId"] = result.get("location_id") or ""
-    _pm_pct = _PG.quote_project_margin(result["data"])["pct"]      # 專案毛利%：由已存品項重算（遮蔽前算，遮蔽後只在仍保有 tot 時附加）
+    _pm_pct = None                                                  # 專案毛利%：由已存品項重算（遮蔽前算，遮蔽後只在仍保有 tot 時附加）
+    if quote_money_visible(user) or money_visible(user):            # 只替本來就看得到報價金額的人算；壞掉的舊單絕不能把 200 變成 500
+        try:
+            _pm_pct = _PG.quote_project_margin(result["data"])["pct"]
+        except Exception:                                           # noqa: BLE001
+            logger.warning("project margin recompute failed for %s", quote_no, exc_info=True)
     if not money_visible(user):
         # CM13（2026-09-24 使用者裁示）：金額、毛利、單價、成本不回
         # 第42班（使用者裁示「拆開」）：業務／管理員仍看得到報價單層級（品項單價／成本／毛利、總額），精算與款項期別（收款／付款）才遮

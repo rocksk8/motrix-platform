@@ -25,7 +25,11 @@ def _hdr(client, make_user, name, role, **kw):
 
 def _make(client, h, owner):
     body = {"customerName": "毛利客", "projectName": "毛利案", "salesPerson": owner, "salesPersonUsername": owner, "quoteDate": "2026-10-13",
-            "taxRate": 5, "items": json.loads(json.dumps(ITEMS)), "tot": {}}
+            "taxRate": 5, "items": json.loads(json.dumps(ITEMS)),
+            # 表單送來的合計（legacy 管銷口徑下伺服器不重算 tot，SQL 欄 pretax／direct_margin_pct 也由此而來）
+            "tot": {"subtotal": 3000, "pretax": 3000, "tax": 150, "total": 3150, "totalCost": 2100, "inputVat": 105,
+                    "directProfit": 795, "directMarginPct": 26.5, "adminCost": 300, "charityDonation": 8, "totalIndirect": 308,
+                    "netProfit": 487, "netMarginPct": 16.2}}
     r = client.post("/api/quotations", json={"status": "草稿", "data": body, "created_by": owner}, headers=h)
     assert r.status_code == 201, r.text
     return r.json()["quote_no"]
@@ -119,7 +123,36 @@ def test_plan_view_options_carry_the_same_function_result(client, world):
     assert client.get("/api/quotations/%s/plan-view" % world["no"], headers=world["engineer"]).status_code in (403, 404)
 
 
-def test_config_endpoint_returns_threshold_for_logged_in_users_only(client, world):
+def test_config_endpoint_requires_cost_visibility(client, world):
     r = client.get("/api/project-margin/config", headers=world["sales"])
     assert r.status_code == 200 and r.json() == {"warnPct": 0.0}
+    assert client.get("/api/project-margin/config", headers=world["admin"]).status_code == 200
+    r = client.get("/api/project-margin/config", headers=world["engineer"])
+    assert r.status_code == 403 and "warnPct" not in r.text                      # 最小揭露
     assert client.get("/api/project-margin/config").status_code in (401, 403)
+
+
+def test_malformed_or_failing_recompute_never_turns_detail_into_500(client, world, monkeypatch):
+    cn = db.get_db()
+    try:
+        cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?",
+                   (json.dumps({"customerName": "壞單", "items": "oops", "tot": {"pretax": "x", "totalCost": None}, "taxRate": "abc"}), world["no"]))
+        cn.commit()
+    finally:
+        cn.close()
+    for who in ("admin", "sales", "finance", "engineer"):
+        r = client.get("/api/quotations/%s" % world["no"], headers=world[who])
+        assert r.status_code in (200, 403, 404), (who, r.status_code, r.text[:200])
+        if r.status_code == 200 and "project_margin_pct" in r.json():
+            assert r.json()["project_margin_pct"] is None
+    from modules.case import profit_guard as PG
+
+    def boom(q):
+        raise ValueError("boom")
+    monkeypatch.setattr(PG, "quote_project_margin", boom)
+    r = client.get("/api/quotations/%s" % world["no"], headers=world["admin"])
+    assert r.status_code == 200 and r.json().get("project_margin_pct") is None
+    called = []
+    monkeypatch.setattr(PG, "quote_project_margin", lambda q: called.append(1) or {"pct": 1})
+    client.get("/api/quotations/%s" % world["no"], headers=world["engineer"])
+    assert not called                                                           # 看不到報價金額的角色根本不算

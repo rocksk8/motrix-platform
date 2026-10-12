@@ -134,6 +134,42 @@
     "amount": 0,
     "pct": 0.0
    }
+  },
+  {
+   "name": "cost_tiny_exponent_invalid",
+   "pretax": 1000,
+   "cost": 1e-07,
+   "expect": {
+    "amount": null,
+    "pct": null
+   }
+  },
+  {
+   "name": "pretax_huge_exponent_invalid",
+   "pretax": 1e+21,
+   "cost": 5,
+   "expect": {
+    "amount": null,
+    "pct": null
+   }
+  },
+  {
+   "name": "pretax_1e14_ok",
+   "pretax": 100000000000000.0,
+   "cost": 50000000000000.0,
+   "expect": {
+    "amount": 50000000000000,
+    "pct": 50.0
+   }
+  },
+  {
+   "name": "cost_1e_minus6_boundary_ok",
+   "pretax": 1000,
+   "cost": 1e-06,
+   "expect": {
+    "amount": 999.999999,
+    "pct": 100.0
+   }
   }
  ],
  "uncosted": {
