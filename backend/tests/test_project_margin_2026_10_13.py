@@ -9,6 +9,7 @@ import subprocess
 
 import pytest
 
+from core import source_tree
 from helpers import financial_mask as FM
 from helpers import profit_rules as PR
 from helpers import settings_registry as R
@@ -146,8 +147,8 @@ def test_warn_threshold_is_a_registered_setting_default_off_and_plain_language()
 
 # --- 顯示層（靜態）---------------------------------------------------------------------------------------
 
-FORM = (ROOT / "frontend" / "pages" / "quotation-form.html").read_text(encoding="utf-8")
-CASE = (ROOT / "frontend" / "pages" / "case-management.html").read_text(encoding="utf-8")
+FORM = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")        # 頁面一律經 page_file（C1）
+CASE = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
 
 
 def test_form_block_is_inside_the_cost_panel_and_not_stored():
