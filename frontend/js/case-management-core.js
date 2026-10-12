@@ -535,6 +535,17 @@ window.CM_PARTS.push(() => ({
       return out
     },
 
+    // 自動存檔不得把『連到尚未儲存的材料申請列』的連結送出去：那一列伺服器還沒有，會被擋下（連結的材料申請不存在）並把卡片換回舊值。
+    // 做法：送出的快照裡這些連結暫時當成空值（＝基準值），列存好之後由 moSave() 補送一次。畫面上的連結不動。
+    _crForSave() {
+      const cr = this.cr.caseRecord
+      const mats = cr && cr.materials
+      const unsaved = new Set((this.materialOrders || []).filter(o => o && o._saved === false).map(o => o.itemId))
+      if (!Array.isArray(mats) || !unsaved.size || !mats.some(m => m && unsaved.has(m.orderItemId))) return cr
+      this._mlHeldLink = true
+      return { ...cr, materials: mats.map(m => (m && unsaved.has(m.orderItemId)) ? { ...m, orderItemId: '' } : m) }
+    },
+
     _snapSegments(cr) {
       const out = {}
       for (const [k, v] of Object.entries(cr || {})) {
@@ -673,7 +684,7 @@ window.CM_PARTS.push(() => ({
         }
       }
       // CM1：只送改到的分段；快照在送出前取，存檔途中又改的部分下一次再送
-      const sent = this._snapSegments(this.cr.caseRecord)
+      const sent = this._snapSegments(this._crForSave())
       const segments = {}
       const base = {}
       const defaults = {}
@@ -736,7 +747,7 @@ window.CM_PARTS.push(() => ({
             this.saveMsg = `已儲存，但 ${conflicts.length} 個序號庫存狀態衝突（${conflicts.map(c => c.sn + ':' + c.stockStatus).join('、')}）`
           } else {
             this.saveStatus = 'saved'
-            this.saveMsg = '已儲存'
+            this.saveMsg = this._mlHeldLink ? '已儲存；材料卡片的連結將在材料申請儲存後送出' : '已儲存'     // 連到未儲存材料申請列的連結先扣住（_crForSave）
             this.flashSaved('case')
             // W-2：只清「已儲存」本身——之後若又失敗，錯誤要留著
             setTimeout(() => { if (!this.dirty && this.saveStatus === 'saved') { this.saveStatus = ''; this.saveMsg = '' } }, 2000)

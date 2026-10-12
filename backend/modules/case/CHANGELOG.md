@@ -1,5 +1,11 @@
 # 案件 更新紀錄
 
+## 1.0.178 — 2026-10-13（wip/t57-hotfix-r1；M2.1 熱修）
+- **安全修正**：`GET /api/completion-notes/{note_no}/privacy-notice` 原本只要求登入，任何登入者可用可列舉的單號讀到該單聯絡人的告知紀錄；改走 `_readable_note`（與單筆 GET 同一道閘），查無與看不到同一句「完工單不存在」。
+- 簽核佇列完工單卡片的金額欄原本顯示「報價金額 NT$ 8」（8 是項目數）；改為「完成項目　8 項」（`approval-queue.html`；後端 `total` 仍是項目數）。
+- 材料申請「從採購單帶入」修正：①新增材料申請是否一定要選供應商改為設定中心選項（群組 `material_order`，`supplier_required`，預設＝一律要選＝今天的行為；「帶入採購單的免選」只豁免有對應採購單的新列，手動新增仍要選；設定讀不到＝最嚴；採購單連結檢查器（`LINK_VALIDATOR`）沒掛上時不豁免；程式總開關 `SUPPLIER_REQUIRED_ON_NEW` 保留）；②被審核規則擋下的項目（`rejected[]`）寫進伺服器 log（`PATCH material-orders` 與 `PATCH case-record`；只記項目編號／欄位／代碼，不記內容）；③案件頁自動存檔不再送出『連到尚未儲存的材料申請列』的連結（原本被擋下並把材料卡片換回舊值）——列存好後補送一次（扣住期間存檔訊息會說明「連結將在材料申請儲存後送出」）；④材料申請儲存被擋時顯示第一個項目名稱與原因；`GET material-orders` 加 `supplierRequiredAlways` 供畫面判斷。
+- 測試 `tests/test_completion_fixes_t57.py`、`tests/test_material_import_t57.py`。
+
 ## 1.0.177 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t50-int；第 50 班）**
 - **（併入）(next) — **

@@ -19,6 +19,7 @@
 - 回傳 `rejected`：`[{itemId, field, code, message}]`。
 """
 import json
+import logging
 
 from helpers.auth import user_has_module, has_finance_access, finance_duty_person
 from helpers.dates import normalize_date
@@ -113,6 +114,37 @@ def _rej(out, item_id, field, code, message):
     out.append({"itemId": str(item_id), "field": field, "code": code, "message": message})
 
 
+logger = logging.getLogger(__name__)
+
+
+def supplier_policy() -> int:
+    """設定中心 `material_order.supplier_required`：1＝新增一律要選供應商（預設）；0＝從採購單帶入的新申請免選。永不丟例外。"""
+    try:
+        from helpers import settings_registry as _SR
+        return _SR.get("material_order", "supplier_required")
+    except Exception:                                                      # noqa: BLE001  讀不到 ⇒ 最嚴（今天的行為）
+        return 1
+
+
+def _supplier_required(order: dict) -> bool:
+    """這筆新列要不要檢查供應商：程式總開關 `SUPPLIER_REQUIRED_ON_NEW`（測試／緊急用）為真，且（設定要求一律必填，或這列沒有對應採購單，或採購單連結檢查器沒掛上）。"""
+    if not MA.SUPPLIER_REQUIRED_ON_NEW:
+        return False
+    if supplier_policy() == 1 or not str((order or {}).get("poDocCode") or "").strip():
+        return True
+    # 免選只在『採購單連結檢查已掛上』時成立：沒有檢查器（案件模組以外的路徑／接縫缺席）就無法確認採購單真的存在 ⇒ 仍要選
+    return LINK_VALIDATOR is None
+
+
+def log_rejected(quote_no: str, actor, rejected: list, where: str):
+    """被審核規則拒絕的項目寫進伺服器 log（原本只回給前端；前端沒顯示就完全沒有痕跡）。只記項目編號／欄位／代碼，不記內容。"""
+    if not rejected:
+        return
+    who = (actor or {}).get("username") if isinstance(actor, dict) else None
+    logger.warning("材料申請審核擋下 %d 項（%s／%s／%s）：%s", len(rejected), where, quote_no, who or "系統",
+                   "; ".join("%s.%s=%s" % (r.get("itemId") or "-", r.get("field") or "-", r.get("code") or "-") for r in rejected[:20]))
+
+
 def _valid_supplier_id(v) -> bool:
     """供應商 id＝正整數（存在與否在開匯款申請時才查——供應商主檔是別的模組維護的）。"""
     if isinstance(v, bool) or v in (None, ""):
@@ -204,7 +236,7 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
             if msg:
                 _rej(rejected, iid, "*", "invalid", msg)
                 continue
-            if MA.SUPPLIER_REQUIRED_ON_NEW and actor is not None and not _valid_supplier_id(no.get("supplierId")):
+            if actor is not None and _supplier_required(no) and not _valid_supplier_id(no.get("supplierId")):
                 _rej(rejected, iid, "supplierId", "supplier_required", "新增材料申請必須選擇供應商")
                 continue
             row = _norm_links(dict(no))

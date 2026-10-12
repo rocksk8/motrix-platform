@@ -9,6 +9,7 @@
     false
    ]
   },
+  "material_order": {"supplier_required": [1, 0, 1, false]},
   "retention": {
    "audit_log_keep_days": [
     1825,
