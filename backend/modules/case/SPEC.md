@@ -33,3 +33,12 @@ C_OWNED M01 第十三班列車：題名 test_m01_*（本模組的自我代稱，
 - 出納改預定付款日：同時被登錄付款 ⇒ 409；日期沒變 ⇒ 不寫、不稽核、不通知。
 - CQ7. `GET /api/completion-notes/{note_no}/privacy-notice` 與單筆 GET 同一道讀取閘（`_readable_note`）；簽核佇列完工單卡片顯示項目數（完成項目 N 項），不是金額。
 - CQ8. 新增材料申請要不要選供應商＝設定 `material_order.supplier_required`（預設 1＝一律要選；0＝有對應採購單的新列免選）；被 `material_guard.enforce` 擋下的項目一律寫伺服器 log（編號／欄位／代碼）。
+
+## 行為條件（第 57 班；完工單從報價單帶入項目）
+- CQ1. `GET /api/completion-notes/quote-items` 靜態路由須註冊在 `/{note_no}` 之前；限管理員且報價單本體可讀，查無與看不到同一句 404。
+- CQ2. 回應品項鍵＝`completion_sync.ALLOWED_ITEM_KEYS` ∩ 非金額（`ITEM_MONEY_KEYS` 結構性排除）；完工單永遠不存金額。
+- CQ3. 報價單狀態閘：只有「已送出」可帶入；草稿／待審核／簽核中／已取消／已拒絕回 409。
+- CQ4. 已完工數即時計算、不快取不存：待審核／簽核中／已核准的完工單，狀態為完成／部分完成者，同一 `quoteItemId` 數量相加；非數字／負數／標題＝0。
+- CQ5. `quoteSync`：用戶端送回的指紋須等於伺服器此刻重算的指紋才寫入，否則 409；沒帶＝維持原值；授權與重算一律以庫內 `quote_no` 為準。
+- CQ6a. 計入品項函式存在卻失敗 ⇒ 409（失敗關閉）；超量檢查與寫入同一個寫鎖交易；指紋含品牌。
+- CQ6. 行為選項在設定中心群組 `completion_note`（讀取永不丟例外；缺列＝預設）。
