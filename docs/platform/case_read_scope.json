@@ -134,6 +134,12 @@
    "scope": "row_access"
   },
   {
+   "file": "modules/case/api/completion_notes.py",
+   "path": "/api/completion-notes/quote-items",
+   "handler": "completion_quote_items",
+   "scope": "own_rule"
+  },
+  {
    "file": "modules/subcontract/api/contractor_vouchers.py",
    "path": "/api/contractor-vouchers",
    "handler": "list_contractor_vouchers",

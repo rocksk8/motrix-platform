@@ -1,5 +1,13 @@
 # 案件 更新紀錄
 
+## 1.0.180 — 2026-10-13（wip/t57-completion-r3；完工單帶入報價項目）
+- 完工單「從報價單帶入項目」：新增唯讀 `GET /api/completion-notes/quote-items`（靜態路由先於 `/{note_no}`；限管理員＋報價單本體可讀；回應只有程式明列的非金額欄位 `id／type／description／brand／qty／unit`，金額鍵結構性帶不出）；報價單狀態閘（只有「已送出」可帶入，其餘 409 白話）；已完工數每次即時計算（待審核／簽核中／已核准的完工單、同一來源編號相加）；`quoteSync` 協議（指紋含非金額欄位與品牌；只在明確帶入時改變；不符 409；一般存檔不動）；超量政策（警示／擋下；檢查與寫入在同一個寫鎖交易）。新純函式 `completion_sync.py`；`CompletionNoteIn.quote_sync`；項目加性欄位 `quoteItemId`／`quoteQty`（舊單照舊）。
+- 失敗關閉：`profit_guard.counted_items` 存在卻丟例外 ⇒ 409「報價單目前無法判定計入項目」（函式不存在才降級為全部品項）；超量『擋下』時此 409 照樣往外傳，不會默默略過檢查。
+- 設定中心新增群組「完工單」（`completion_note`，7 項，預設＝使用者 2026-10-12 裁示；凍結基準同步）。建立／編輯完工單仍僅管理員（放寬給業務屬另案權限審查）。
+- 完工單表單：新建時自動帶入（依設定）、「從報價單帶入」（草稿已有項目時開差異視窗，逐項勾選新增／移除／更新數量，沒勾的不動）、每列「報價／已完工」小字與超量底色、報價單有更動橫幅；表單不再載入整張報價單。
+- 併入 M3 擇一方案：來源＝`profit_guard.counted_items` 的選定結果（未選定的品項與整個未選定組別不帶入、不進指紋），回應加 `unselectedGroups`／`sourceState=alt_unselected` 與白話提示；判斷失敗照舊失敗關閉。
+- 測試 `tests/test_completion_quote_items_t57.py`（含擇一方案整合題）、`tests/test_completion_diff_dialog_t57.py`。
+
 ## 1.0.179 — 2026-10-13（wip/t57-m3-t11-r6；M3 擇一方案報價）
 - **（併入）(next) — 2026-10-12（wip/t57-m3-t1-r2；M3 擇一方案報價 T2）：資料模型＋唯一計入集合＋設定中心群組『擇一方案』**
   - `profit_guard.counted_items(q, picks=None)`：計入合計／毛利的品項＝非擇一項＋每組被選定的那一項（未選整組不計入）。`server_totals`、`server_profit`（成本、進項稅）只走它；品項沒有 `altGroup` 的單與修改前逐位元相同。品項新增選填鍵 `altGroup`（空＝非擇一）；單層新增 `totalsByAlt`（布林）、`altPicks`／`altPickedAt`／`altPickedBy`（只由回簽路徑寫，T9）。
