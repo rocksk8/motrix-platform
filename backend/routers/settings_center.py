@@ -36,16 +36,7 @@ router = APIRouter()
 def _hub_badge(conn, user):
     """系統中心『設定中心』卡片的徽章（IP-HUB1，唯讀、不查資料庫）。**這張卡 `perm` 是 superadmin**（`core/system_hub_l1.json`，測試鎖定），
     系統中心只對有權限的人附徽章（`denied` 項目不附），所以『已隱藏 M 項』只有最高管理者看得到。驗證失敗 ⇒ 紅色警示；有開發中／隱藏的功能 ⇒ 資訊（不算失敗）；否則『功能登錄正常』。"""
-    rep = _spine.report()
-    n = rep["problems"]
-    if n:
-        return {"text": "%d 項功能登錄未通過驗證" % n, "tone": "bad", "count": n}
-    planned = sum(1 for f in rep["features"] if f["status"] == "planned")
-    hidden = sum(1 for f in rep["features"] if f["status"] == "hidden")
-    if planned or hidden:
-        parts = (["開發中 %d 項" % planned] if planned else []) + (["已隱藏 %d 項" % hidden] if hidden else [])
-        return {"text": "・".join(parts), "tone": "plan"}
-    return {"text": "功能登錄正常", "tone": "ok"}
+    return _spine.health_badge()            # 脊柱自己的線＋所有 register_health_source 的來源（規則降級等）合併成這一個徽章
 
 
 _registry.provide("system.hub_badge", "settings-center", _hub_badge)

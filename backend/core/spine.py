@@ -2,8 +2,9 @@
 """L0 脊柱功能登錄（E-b；設計 docs/platform/plans/SPINE-ENGINE-DESIGN-T57.md、FIELD-LAYOUT-FRAMEWORK-T56.md §17）。
 
 [單位] plat:spine    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] CORE_FEATURES_FILE, STATUSES, drop_owner, feature_enabled, feature_status, group_status, group_info, on_validated, parse_feature, parse_features, planned_cards, planned_train, register_core_declarations,
-    register_manifest, register_validator, report, reset, restore, snapshot, validate_all
+[公開介面] CORE_FEATURES_FILE, STATUSES, TONE_ORDER, drop_owner, feature_enabled, feature_status, group_info, group_status, has_kind_gate, health_badge, kind_info, kind_status,
+    managed_message, on_validated, parse_feature, parse_features, planned_cards, planned_train, register_core_declarations, register_health_source, register_kind_gate,
+    register_manifest, register_managed_kind, register_validator, report, reset, restore, snapshot, surface_status, validate_all
 [不變式] ①只用標準函式庫（載入器在 import 模組之前要驗宣告）；依賴 L1 的驗證（設定、信件…）以**回呼**注入——`register_validator`／`on_validated`，
     L0 不 import L1。②宣告式：功能寫在 `module.json` 的 `features[]`，靜態可掃。③**fail-closed 的方向**：驗證失敗的功能 `feature_enabled`＝False、
     其設定群組視為 `hidden`（不顯示、不可寫）；但**脊柱本身壞掉或尚未初始化一律當 open**（未宣告＝open、`validate_all()` 之前＝open），不拖垮既有行為。
@@ -43,6 +44,11 @@ _REJECTED_GROUPS: Dict[str, set] = {}                    # 設定群組 → 宣�
 _CLAIMS: Dict[str, set] = {}                              # 功能代號 → 宣告過它的擁有者們（含沒被收下的）；>1 個擁有者＝兩邊都標失敗，與載入順序無關
 _VALIDATORS: Dict[str, Tuple[Callable, Tuple[str, ...]]] = {}
 _POST_VALIDATE: List[Callable[[], None]] = []
+_KIND_GATES: Dict[str, Callable] = {}                     # 定義 kind → fn(key) -> "open"|"planned"|"hidden"｜{"status","plannedTrain"}
+_MANAGED: Dict[str, str] = {}                             # 受管 kind → 白話訊息（通用 draft／publish／restore 一律拒絕）
+_HEALTH: Dict[str, Callable] = {}                         # 健康來源 → fn() -> None｜{"text","tone","count"?}
+#: 徽章色調的嚴重度（由重到輕）；系統中心合法色調見 core.system_hub.TONES
+TONE_ORDER = ("bad", "warn", "plan", "info", "ok")
 _VALIDATED = False
 
 
@@ -318,6 +324,124 @@ def group_info(group: str) -> dict:
             code = c
             break
     return {"status": st, "plannedTrain": planned_train(code) if (code and st == "planned") else None, "feature": code}
+
+
+# ── 定義 kind 的功能狀態閘門（通用 /api/definitions 路由用）────────────────────────────
+
+def register_kind_gate(kind: str, fn: Callable) -> None:
+    """L1 登記：某個定義 kind（例：`setting_group`、`alert_rule`）的每個 key 現在是什麼功能狀態。`fn(key)` 回 `open｜planned｜hidden`
+    或 `{"status", "plannedTrain"}`。通用定義路由據此：hidden ⇒ 404、planned ⇒ 409（清單只留名稱與狀態）。同 kind 重複登記須是同一函式。"""
+    if not isinstance(kind, str) or not _CODE.match(kind):
+        raise ValueError("kind 必須是小寫英數底線：%r" % (kind,))
+    if kind in _KIND_GATES and _KIND_GATES[kind] is not fn:
+        raise ValueError("kind 閘門 %r 已登記為另一個函式" % kind)
+    _KIND_GATES[kind] = fn
+
+
+def has_kind_gate(kind: str) -> bool:
+    return kind in _KIND_GATES
+
+
+def kind_info(kind: str, key: str) -> dict:
+    """`{status, plannedTrain}`。沒有登記閘門 ⇒ open。**閘門函式丟例外或回傳不合法的值 ⇒ hidden（fail-closed：這個閘門專門用來防洩漏）**。"""
+    fn = _KIND_GATES.get(kind)
+    if fn is None:
+        return {"status": "open", "plannedTrain": None}
+    try:
+        r = fn(key)
+    except Exception:                                                  # noqa: BLE001
+        _log.warning("kind 閘門 %s 對 %r 失敗，視為 hidden", kind, key, exc_info=True)
+        return {"status": "hidden", "plannedTrain": None}
+    st = r.get("status") if isinstance(r, dict) else r
+    if st not in STATUSES:
+        return {"status": "hidden", "plannedTrain": None}
+    train = r.get("plannedTrain") if isinstance(r, dict) else None
+    return {"status": st, "plannedTrain": train if st == "planned" else None}
+
+
+def kind_status(kind: str, key: str) -> str:
+    return kind_info(kind, key)["status"]
+
+
+def register_managed_kind(kind: str, message: str) -> None:
+    """L1 登記『受管 kind』：只能經擁有它的 L1 入口寫入；通用 draft／publish／restore／刪草稿一律拒絕並回這句白話訊息。"""
+    if not isinstance(kind, str) or not _CODE.match(kind) or not isinstance(message, str) or not message.strip():
+        raise ValueError("受管 kind 需要小寫英數底線的 kind 與一句白話訊息")
+    if kind in _MANAGED and _MANAGED[kind] != message:
+        raise ValueError("受管 kind %r 已登記為另一句訊息" % kind)
+    _MANAGED[kind] = message
+
+
+def managed_message(kind: str) -> Optional[str]:
+    return _MANAGED.get(kind)
+
+
+# ── 健康來源：多個來源共用系統中心『設定中心』卡的單一徽章 ──────────────────────────────
+
+def register_health_source(name: str, fn: Callable) -> None:
+    """L1 登記一個健康來源：`fn()` 回 `None`（沒事）或 `{"text", "tone", "count"?}`（`tone` ∈ 系統中心色調）。同名須是同一函式。
+    系統中心每張卡只有一個徽章提供者，所以來源不要自己註冊 `system.hub_badge`，而是登記在這裡，由 `health_badge()` 合併。"""
+    if name in _HEALTH and _HEALTH[name] is not fn:
+        raise ValueError("健康來源 %r 已登記為另一個函式" % name)
+    _HEALTH[name] = fn
+
+
+def health_badge() -> dict:
+    """合併後的徽章 `{text, tone, count?}`：脊柱自己的線（驗證失敗 ⇒ bad；開發中／隱藏 ⇒ plan）＋所有登記的來源。
+    色調取最嚴重者（bad＞warn＞plan＞info＞ok）；文字依嚴重度排序、去重、以『・』相連並截到 40 字；`count` 為各來源 count 之和（有才回）。
+    都沒事 ⇒ `{"text": "功能登錄正常", "tone": "ok"}`。壞掉的來源（丟例外／格式不對）略過並記 log，不影響其他來源。"""
+    lines = []
+    rep = report()
+    if rep["problems"]:
+        lines.append({"text": "%d 項功能登錄未通過驗證" % rep["problems"], "tone": "bad", "count": rep["problems"]})
+    else:
+        planned = sum(1 for f in rep["features"] if f["status"] == "planned")
+        hidden = sum(1 for f in rep["features"] if f["status"] == "hidden")
+        if planned or hidden:
+            parts = (["開發中 %d 項" % planned] if planned else []) + (["已隱藏 %d 項" % hidden] if hidden else [])
+            lines.append({"text": "・".join(parts), "tone": "plan"})
+    for name in sorted(_HEALTH):
+        try:
+            r = _HEALTH[name]()
+        except Exception:                                              # noqa: BLE001
+            _log.warning("健康來源 %s 失敗，略過", name, exc_info=True)
+            continue
+        if r is None:
+            continue
+        if not isinstance(r, dict) or not isinstance(r.get("text"), str) or not r["text"].strip() or r.get("tone") not in TONE_ORDER:
+            _log.warning("健康來源 %s 回傳格式不對，略過：%r", name, r)
+            continue
+        lines.append({"text": r["text"].strip(), "tone": r["tone"], "count": r.get("count")})
+    if not lines:
+        return {"text": "功能登錄正常", "tone": "ok"}
+    lines.sort(key=lambda x: TONE_ORDER.index(x["tone"]))
+    texts = []
+    for ln in lines:
+        if ln["text"] not in texts:
+            texts.append(ln["text"])
+    out = {"text": "・".join(texts)[:40], "tone": lines[0]["tone"]}
+    counts = [ln["count"] for ln in lines if isinstance(ln.get("count"), int) and not isinstance(ln.get("count"), bool)]
+    if counts:
+        out["count"] = sum(counts)
+    return out
+
+
+# ── 目錄表面的功能狀態（規則發布／還原時檢查）────────────────────────────────────────────
+
+def surface_status(surface: str) -> str:
+    """表面鍵（例 `module:case.quotation_list`）→ 宣告它的功能的狀態：`features[].catalog.surfaces` 指名該表面的功能，取最嚴者
+    （hidden＞planned＞open）；功能驗證失敗視為 hidden；沒有人宣告 ⇒ open；`validate_all()` 之前 ⇒ open。"""
+    if not _VALIDATED:
+        return "open"
+    rank = {"open": 0, "planned": 1, "hidden": 2}
+    worst = "open"
+    for code in sorted(_FEATURES):
+        f = _FEATURES[code]
+        if surface in ((f["catalog"] or {}).get("surfaces") or []):
+            st = "hidden" if _state(code) == STATE_FAILED else f["status"]
+            if rank[st] > rank[worst]:
+                worst = st
+    return worst
 
 
 def planned_cards() -> List[dict]:
