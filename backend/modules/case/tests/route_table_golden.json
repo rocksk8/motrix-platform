@@ -107,6 +107,7 @@
 ["GET", "/api/company/tax/{tax_id}", "lookup_by_tax_api_company_tax__tax_id__get", [["header", "authorization", false], ["path", "tax_id", true]], [], []]
 ["GET", "/api/completion-notes", "list_completion_notes_api_completion_notes_get", [["header", "authorization", false], ["query", "quote_no", false]], [], []]
 ["POST", "/api/completion-notes", "create_completion_note_api_completion_notes_post", [["header", "authorization", false]], [["application/json", "#/components/schemas/CompletionNoteIn"]], []]
+["GET", "/api/completion-notes/quote-items", "completion_quote_items_api_completion_notes_quote_items_get", [["header", "authorization", false], ["query", "exclude_note", false], ["query", "quote_no", true]], [], []]
 ["DELETE", "/api/completion-notes/{note_no}", "delete_completion_note_api_completion_notes__note_no__delete", [["header", "authorization", false], ["path", "note_no", true]], [], []]
 ["GET", "/api/completion-notes/{note_no}", "get_completion_note_api_completion_notes__note_no__get", [["header", "authorization", false], ["path", "note_no", true]], [], []]
 ["PUT", "/api/completion-notes/{note_no}", "update_completion_note_api_completion_notes__note_no__put", [["header", "authorization", false], ["path", "note_no", true]], [["application/json", "#/components/schemas/CompletionNoteIn"]], []]

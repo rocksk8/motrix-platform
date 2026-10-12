@@ -1,5 +1,13 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-13（wip/t57-completion-r5；完工單帶入報價項目）
+- 完工單「從報價單帶入項目」：新增唯讀 `GET /api/completion-notes/quote-items`（靜態路由先於 `/{note_no}`；限管理員＋報價單本體可讀；回應只有程式明列的非金額欄位 `id／type／description／brand／qty／unit`，金額鍵結構性帶不出）；報價單狀態閘（只有「已送出」可帶入，其餘 409 白話）；已完工數每次即時計算（待審核／簽核中／已核准的完工單、同一來源編號相加）；`quoteSync` 協議（指紋含非金額欄位與品牌；只在明確帶入時改變；不符 409；一般存檔不動）；超量政策（警示／擋下；檢查與寫入在同一個寫鎖交易）。新純函式 `completion_sync.py`；`CompletionNoteIn.quote_sync`；項目加性欄位 `quoteItemId`／`quoteQty`（舊單照舊）。
+- 失敗關閉：`profit_guard.counted_items` 存在卻丟例外 ⇒ 409「報價單目前無法判定計入項目」（函式不存在才降級為全部品項）；超量『擋下』時此 409 照樣往外傳，不會默默略過檢查。
+- 設定中心新增群組「完工單」（`completion_note`，7 項，預設＝使用者 2026-10-12 裁示；凍結基準同步）。建立／編輯完工單仍僅管理員（放寬給業務屬另案權限審查）。
+- 完工單表單：新建時自動帶入（依設定）、「從報價單帶入」（草稿已有項目時開差異視窗，逐項勾選新增／移除／更新數量，沒勾的不動）、每列「報價／已完工」小字與超量底色、報價單有更動橫幅；表單不再載入整張報價單。
+- 併入 M3 擇一方案：來源＝`profit_guard.counted_items` 的選定結果（未選定的品項與整個未選定組別不帶入、不進指紋），回應加 `unselectedGroups`／`sourceState=alt_unselected` 與白話提示；判斷失敗照舊失敗關閉；『未選定』的判斷與 `counted_items` 同一個正規化（組名去空白、值轉字串）。
+- 測試 `tests/test_completion_quote_items_t57.py`（含擇一方案整合題）、`tests/test_completion_diff_dialog_t57.py`。
+
 ## 1.0.180 — 2026-10-13（MS1 合併段：2026-10-13（wip/t57-project-margin-r7；報價單專案毛利%） ＋ 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期） ＋ 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期））
 - **（併入）(next) — 2026-10-13（wip/t57-project-margin-r7；報價單專案毛利%）**
 - **（併入）(next) — 2026-10-13（wip/t57-project-margin-r1；報價單專案毛利%）**：新增『專案毛利%』＝（未稅營業收入 − 未稅品項成本）÷ 未稅營業收入，不扣進項稅、管銷、公益與保留款（因此比『直接毛利率』高，差距就是成本的 5% 進項稅部分）。算式只在 `helpers/profit_rules.py::project_margin`（前端孿生 `static/profit-rules.js projectMargin`，共用黃金向量；精確有理數運算、平手遠離零、收入 ≤ 0 回無值）。衍生值：讀取時計算，**不寫進 `tot`、不加 SQL 欄、免遷移**。報價單詳情由已存品項重算（M3 後走 `counted_items`），回應信封鍵 `project_margin_pct` 只在該回應本來就保有報價金額時才附加（與 `directMarginPct` 同步；其餘角色鍵不存在）並登記進 `QUOTATION_MONEY_COLS`；清單**選用**附 `project_margin_pct`（`GET /api/quotations?include_project_margin=1`；預設不附、不多讀 `data_json`；同判定式；不可排序／篩選；在 Python 端取成本合計，不新增 SQL `json_extract`，守 ratchet）；`plan_view` 每個方案列另回 `projectMarginPct`；存檔時 `prepare()` 丟棄用戶端送來的 `project_margin_pct`／`projectMargin`。畫面：報價單內部損益區（成本分機內）與案件頁（財務可視者）顯示；表單 V3.23 → V3.24（未填成本提醒、可選的低於門檻提醒）。設定：新群組 `project_margin`（`warn_pct`，預設 0＝不提醒，只改畫面提示、不阻擋）；新端點 `GET /api/project-margin/config`（需看得到報價成本與毛利，最小揭露）。0d 修正：詳情只替看得到報價金額的角色計算且失敗不影響回應（壞掉的舊單不會 500）；極端指數記法輸入（|x| < 1e-6 或 ≥ 1e15）前後端一律當無效。客戶版 PDF／預覽／回簽頁／案件匯出／內部 PDF 都不輸出。測試 `tests/test_project_margin_2026_10_13.py`（已跑 29 項過）、`tests/test_project_margin_endpoints_2026_10_13.py`（已寫、需 Edge）。
