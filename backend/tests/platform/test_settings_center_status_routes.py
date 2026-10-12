@@ -152,7 +152,7 @@ def case_public(c, kind):
     r = _g(c, "/public", params={"groups": GROUP[kind]})
     _code(r, 200, 404, kind)
     if kind == "planned":
-        assert r.json()["groups"][PLAN] == {"limit": 100, "note": 7}                    # 已儲存的值（＝預設，因為寫入被拒）
+        assert r.json()["groups"][PLAN] == {"limit": 100, "note": 9}                    # 已儲存的值（開放時建立的版本 note=9；之後寫入被拒，不會再變）
 
 
 def case_profiles(c, kind):
