@@ -540,6 +540,38 @@ def test_core_declaration_file_problems_never_break_loading(sp, tmp_path):
     assert any("planned_train" in p for p in spine.register_core_declarations(bad))
 
 
+@pytest.mark.parametrize("raw", ["[1]", '"x"', "5", "null", "true", '{"features": 5}', '{"features": {"a": 1}}',
+                                 '{"features": [1, "x", null, [], {"code": "ok_f"}]}'])
+def test_core_declaration_file_with_any_json_shape_never_raises(sp, tmp_path, raw):
+    """0d：非物件的最上層、features 不是清單、features 裡有非物件項目——都只能變成問題，不可丟例外（否則 load_all 會讓 app 開不了機）。"""
+    f = tmp_path / "features_l1.json"
+    f.write_text(raw, encoding="utf-8")
+    probs = spine.register_core_declarations(f)                 # 不丟例外
+    assert probs, raw                                            # 每一種都有問題記錄
+    spine.validate_all()                                         # 驗證階段也不丟例外
+
+
+def test_loader_survives_a_core_declaration_reader_that_raises(tmp_path, sp, monkeypatch):
+    """loader 層自己的保險：就算 register_core_declarations 丟例外，load_all 仍照常回傳（正對照：拿掉 try／except 這題就紅）。"""
+    def boom(path=None):
+        raise RuntimeError("reader down")
+    monkeypatch.setattr(spine, "register_core_declarations", boom)
+    assert loader.load_all(str(tmp_path / "nope"), "nope") == []
+
+
+def test_no_feature_code_is_declared_by_both_core_and_a_module():
+    """一個功能代號不可同時出現在 core/features_l1.json 與任何 module.json 的 features[]：否則 _CLAIMS 會讓兩邊都失敗。
+    某模組正式宣告該功能的那個提交，必須同時把 core 的那一筆移除（或改為不重複的代號）。"""
+    from pathlib import Path
+    core = {x["code"] for x in json.loads(spine.CORE_FEATURES_FILE.read_text(encoding="utf-8"))["features"]}
+    clash = {}
+    for m in sorted((Path(__file__).resolve().parents[2] / "modules").glob("*/module.json")):
+        for f in (json.loads(m.read_text(encoding="utf-8")).get("features") or []):
+            if isinstance(f, dict) and f.get("code") in core:
+                clash[f["code"]] = m.parent.name
+    assert clash == {}, "功能代號同時出現在 core/features_l1.json 與模組宣告：%s（請在同一提交移除 core 的那一筆）" % clash
+
+
 def test_loader_registers_core_declarations_even_without_a_modules_dir(tmp_path, sp):
     assert loader.load_all(str(tmp_path / "nope"), "nope") == []
     rep = spine.report()

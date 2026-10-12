@@ -185,8 +185,10 @@ def register_core_declarations(path=None) -> List[str]:
         return []
     try:
         manifest = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict):                       # 最上層不是物件（[1]、"x"、5、null）⇒ 讀不懂，不是例外
+            raise ValueError("最上層必須是物件")
         return register_manifest(manifest, "core")
-    except (ValueError, OSError) as e:
+    except Exception as e:                                       # noqa: BLE001  脊柱的問題永遠不擋開機：任何錯誤都只變成 core 的擁有者層級問題
         drop_owner("core")
         msg = "core 功能宣告檔 %s 讀不懂：%s" % (p.name, e)
         _ORPHANS["core"] = [msg]
