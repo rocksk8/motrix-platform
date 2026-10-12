@@ -86,6 +86,7 @@
   - **清單**（無法逐列解析品項）：`pretax` SQL 欄 ＋ `json_extract(data_json,'$.tot.totalCost')`——與今天的 `direct_margin_pct` SQL 欄**同信任等級**（同樣由用戶端／v2 伺服器寫入）。**單據不一致時的處置**：v2 模式下 `prepare()` 以伺服器重算覆寫，兩者一致；legacy 模式沿用現有影子比對警示，不新增行為。清單的值僅供瀏覽，**不用於任何判斷**。
   - **身分測試**（S1）：對每一條存檔路徑（`PUT`、M3 回簽／取消回簽重算、已精算單解鎖編輯、精算）驗 `詳情的專案毛利 == project_margin(由品項重算)`，並驗 v2 模式下 `清單值 == 詳情值`。
 - **不寫入 `tot`**：不增加必須與舊單同步的戳記（`_restore_stamps`、`SETTLED_PROFIT_KEYS`、影子比對都不必改）。
+- **已知取捨（已精算＋解鎖編輯）**：詳情由品項重算，而已存的 `directMarginPct` 沿用資料庫現值（`SETTLED_PROFIT_KEYS`，PM 2026-10-10 裁示維持）；解鎖編輯改了價格後，同一畫面上兩個毛利率的差距可能**大於**進項稅，直到重新簽核、重新精算。這與既有取捨同源，不另行處理；身分測試只限未精算的 v2 單。
 - **回應鍵（M2 遮蔽機制）**：信封層鍵 **`project_margin_pct`**（與 SQL 別名同名，放在 `data` 之外，與 `signed_files`／`locationId` 同級），**不放進 `data`／`tot`**——否則表單載入後整份 `PUT` 回去會把衍生值寫進 `data_json`（寫入端另一道防線：`prepare()` 丟棄請求中的 `project_margin_pct`／`projectMargin`）。
   1. 把 `project_margin_pct` 加入 `QUOTATION_MONEY_COLS`（縱深：任何走 `mask_row` 的路徑，該鍵若存在即被設為 None）。
   2. 同時避免被剝除機制「漏看」：因為它是**新鍵**，只靠 (1) 不夠（`mask_row` 只動「已存在」的鍵）；所以**一律在遮蔽完成之後、且僅當 §1.1 該表面的判定式為真才附加**——判定式為假時鍵**不存在**。
@@ -118,7 +119,7 @@
 
 ### 4.1 警示門檻（設定項，預設關）
 
-- 設定登錄（M2 `settings_registry`，註冊鍵為 **(群組, 鍵)** 兩段、不是帶點字串；文件簡寫 `project_margin.warn_pct`）：`register_group("project_margin", "專案毛利%", [SettingDef("warn_pct", "float", 0, min=0, max=100, unit="%", risk="none", question=…, label=…, help=…, impact=…, recommended=0)])`。**型別 float，0＝不啟用（預設）**；min 0、max 100；風險類 `none`（不需 `risk_text`）；`question`／`label`／`help`／`impact` 必填（登錄當下檢查）。目前 M2 樹**沒有 `quote` 群組**，故本設定自成群組，群組須由擁有模組（案件模組）註冊，並同步更新設定中心群組數量斷言（步驟檔 #19）。
+- 設定登錄（M2 `settings_registry`，註冊鍵為 **(群組, 鍵)** 兩段、不是帶點字串；文件簡寫 `project_margin.warn_pct`）：`register_group("project_margin", "專案毛利%", [SettingDef("warn_pct", "float", 0, min=0, max=100, unit="%", risk="none", question=…, label=…, help=…, impact=…, recommended=0)])`。**型別 float，0＝不啟用（預設）**；min 0、max 100；風險類 `none`（不需 `risk_text`）；`question`／`label`／`help`／`impact` 必填（登錄當下檢查）。目前 M2 樹**沒有 `quote` 群組**，故本設定自成群組。**登錄方式（E-a 模組自行登錄落地前）**：只能寫進共用檔 `helpers/settings_groups.py`（底層熱點檔），並在 `settings_deploy_baseline.json` 加基準項 `"project_margin": {"warn_pct": [0, 0, 100, false]}`；不另創第二套機制。該共用檔會與 `quote_alt`、`completion_note` 兩個群組文字衝突，**列車順序請將 `project_margin` 排最後**；並同步更新設定中心群組數量斷言（步驟檔 #19）。E-a 落地後改為模組宣告檔登錄，鍵不變。
 - 行為：僅**顯示警示**（數字旁淡色提示「低於門檻 X%」），**不阻擋存檔、送審、回簽**（阻擋屬簽核政策，不在本案；若日後要「低於門檻須審核」，應作為簽核政策選項另案登錄）。
 - 與 K01：K01 利潤警示群組落地時再決定是否合併呈現，不改本鍵。
 - 風險類別 `none`（只改顯示）；**非高影響選項**，不需橫幅；放寬／收緊皆即時生效並留變更帳本（沿用 M2 帳本）。白話題目：「專案毛利% 低於多少時，在報價單上提醒業務？（0 代表不提醒）」；影響說明：「只改畫面提示，不影響存檔與審核。」
@@ -160,7 +161,7 @@
 4. **逐面可見度（5 角色 × §1.1 各面）**：admin、sales、finance、cashier、engineer 對 #1 清單、#3 詳情、#4 存檔回應、#8 `plan_view` 各一組斷言——**預期與同面 `directMarginPct` 完全同步**（參數化測試：對每個角色與表面，`有 directMarginPct ⇔ 有 project_margin_pct`）。反向：engineer 與其他無權限者，任何回應的**任何位置**（含巢狀）都不得出現 `project_margin_pct`／`projectMargin` 字串（遞迴走訪回應 JSON）。
 5. **遮蔽機制**：`project_margin_pct` 已登記於 `QUOTATION_MONEY_COLS`；目錄 ⇔ 遮蔽雙向守門（目錄 internal／isMoney 的鍵必在遮蔽清單，遮蔽清單的鍵必屬於目錄或明列非顯示欄位）；以突變測試驗證：移除登記即紅燈。
 6. **不匯出**：客戶 PDF／預覽／回簽頁文字、案件匯出 Excel 欄位清單、內部 PDF 文字、財務報表欄位都不含專案毛利；把專案毛利放進客戶通道的版面被驗證器擋。
-7. **不回寫**：詳情載入後整份 `PUT` 回去，資料庫 `data_json` 不得出現 `project_margin_pct`／`projectMargin`（`prepare()` 丟棄用戶端值）。
+7. **不回寫**：詳情載入後整份 `PUT` 回去，資料庫 `data_json` 不得出現 `project_margin_pct`／`projectMargin`——`prepare()` 丟棄的是**請求本文頂層與 `data`（含 `tot`）內**的這兩個鍵（不只信封鍵名）；測試分別在頂層、`data`、`data.tot` 各塞一份驗證都被丟棄。
 8. **身分測試（S1）**：每條存檔路徑（`PUT`、M3 sign／unsign 重算、已精算單解鎖編輯、精算）驗 `詳情值 == project_margin(由品項重算)`；v2 模式 `清單值 == 詳情值`；legacy 模式用戶端 `tot.totalCost` 被竄改時，詳情值仍由品項重算（不被竄改影響），清單值同 `direct_margin_pct` 等級（記錄，不判紅）。
 9. **設定**：`project_margin` 群組註冊成功（含必填欄位）、預設 0（不啟用）＝今日行為（`test_settings_defaults_equal_legacy` 樣式）、白話守門；啟用後以**進位後**數字比較；低於門檻仍可存檔（端點測 200）；群組數量斷言同步。
 10. **舊單**：無 `tot.totalCost` 的極舊單 ⇒ `None`（不是 0、不丟例外）；已精算單值不隨精算改變（因詳情由品項重算，但精算不改品項，穩定）。
@@ -210,7 +211,7 @@
 | 文件（口徑對照表） | 0.25 | |
 | **合計** | **3.25** | A6 前可先交 ≈1.75，餘 ≈1.5 隨種子補 |
 
-不含：官方閘門／建包／稽核的列車固定成本（每班另計）。建議併入有 `quotation-form.html` 動工的里程碑（與 A8／M3 T5 同檔需排串行，避免同檔衝突）。
+不含：官方閘門／建包／稽核的列車固定成本（每班另計）。**底層檔案**：`helpers/financial_mask.py`、`helpers/profit_rules.py`、`helpers/settings_groups.py` 皆屬 `helpers/**`（底層），上表「端點回傳」與「脊柱登錄」兩列須與同班其他底層變更**同一列車、走完整車道**，不能走快速車道。建議併入有 `quotation-form.html` 動工的里程碑（與 A8／M3 T5 同檔需排串行，避免同檔衝突）。
 
 ## 11. 來源
 
