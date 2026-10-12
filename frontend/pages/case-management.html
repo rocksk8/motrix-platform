@@ -2713,8 +2713,8 @@
                           </template>
                         </div>
                         <div x-show="!altPickedLines().length" style="color:var(--text-dim)">客戶尚未選定擇一方案；下面的金額不含擇一品項。</div>
-                        <button class="btn btn-ghost btn-sm" style="margin-top:4px" @click="toggleAltPlan()" x-text="altPlan.open ? '收合方案比較' : '方案比較（僅供參考，未採用的方案不計入）'"></button>
-                        <div x-show="altPlan.open">
+                        <button class="btn btn-ghost btn-sm" style="margin-top:4px" x-show="canSeeFinancial()" data-testid="cm-alt-plan-btn" @click="toggleAltPlan()" x-text="altPlan.open ? '收合方案比較' : '方案比較（僅供參考，未採用的方案不計入）'"></button>
+                        <div x-show="altPlan.open && canSeeFinancial()">
                           <div x-show="altPlan.loading" style="color:var(--text-dim)">計算中…</div>
                           <div x-show="altPlan.error" style="color:var(--danger)" x-text="altPlan.error"></div>
                           <template x-if="altPlan.data">

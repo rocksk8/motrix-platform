@@ -243,3 +243,21 @@ def test_case_plan_view_uses_money_visible_not_quote_money_visible(client, make_
     r = client.get("/api/quotations/%s/case-plan-view" % no, headers=su)
     assert r.status_code == 200 and [g["group"] for g in r.json()["groups"]] == ["投影機", "線材"]
     assert client.get("/api/quotations/NOPE-1/case-plan-view", headers=su).status_code == 404
+
+
+def test_case_plan_view_role_matrix(client, make_user):
+    owner = _hdr(client, make_user, "alt_cpm_sales", "sales")
+    no = _own_quote(client, owner, "alt_cpm_sales")
+    fin = _hdr(client, make_user, "alt_cpm_fin", "finance")
+    r = client.get("/api/quotations/%s/case-plan-view" % no, headers=fin)
+    assert r.status_code == 200, r.text
+    cash = _hdr(client, make_user, "alt_cpm_cash", "viewer", modules=["cashier"])              # 持出納勾選者在相容規則下成為財務角色
+    assert client.get("/api/quotations/%s/case-plan-view" % no, headers=cash).status_code == 200
+    adm = _hdr(client, make_user, "alt_cpm_admin", "admin")
+    r = client.get("/api/quotations/%s/case-plan-view" % no, headers=adm)
+    assert r.status_code == 403 and not any(k in r.text for k in _COST_KEYS)
+    missing = client.get("/api/quotations/NOPE-7/case-plan-view", headers=owner)
+    for name, role in (("alt_cpm_s2", "sales"), ("alt_cpm_eng", "engineer")):
+        h = _hdr(client, make_user, name, role)
+        r = client.get("/api/quotations/%s/case-plan-view" % no, headers=h)
+        assert r.status_code == 404 and r.text.replace(no, "X") == missing.text.replace("NOPE-7", "X") and not any(k in r.text for k in _COST_KEYS)

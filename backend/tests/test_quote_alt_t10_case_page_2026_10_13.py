@@ -25,3 +25,9 @@ def test_two_interfaces_use_two_different_permission_functions():
     j = ALT_PLAN.index('"/api/quotations/{quote_no}/case-plan-view"')
     assert "quote_money_visible(u)" in ALT_PLAN[i:j] and "money_visible(u)" in ALT_PLAN[j:j + 600]
     assert "quote_money_visible(u)" not in ALT_PLAN[j:ALT_PLAN.index("/api/alt-quote/config")]
+
+
+def test_plan_button_is_shown_only_to_users_with_financial_visibility():
+    i = HTML.index('data-testid="cm-alt-plan-btn"')
+    assert 'canSeeFinancial()' in HTML[i - 200:i + 60]
+    assert 'x-show="altPlan.open && canSeeFinancial()"' in HTML
