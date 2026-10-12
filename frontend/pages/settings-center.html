@@ -403,6 +403,8 @@ function settingsCenterPage() {
     resetField(f) { this.setDraft(f, f.default) },
     discard() { this.drafts = {}; this.preview = null; this.impacts = {}; this.reason = ''; this.ack = false },
     _after() {
+      // 舊預覽立刻作廢：新的預覽回來之前不能按儲存（否則會用過期的分類／橫幅確認）
+      this.preview = null
       this.msg = ''; this.err = ''; this.ack = false
       clearTimeout(this._timer)
       this._timer = setTimeout(() => this.refreshPreview(), 350)

@@ -123,6 +123,9 @@ class SettingDef:
         self.impact_fn, self.effect = impact_fn, effect or DEFAULT_EFFECT
         if loosen not in (None, "up", "down"):
             raise ValueError("loosen 只能是 up／down／None：%r" % (loosen,))
+        if loosen and type not in ("int", "float"):
+            # 放寬判定只認數字（publish()._loosens）：bool／str 設了 loosen 不會觸發待生效，等於沒管制。選項欄位請用整數代碼（0/1、1..n）。
+            raise ValueError("設定欄位 %r：loosen 只能用在數字欄位（int／float）；選項請用整數代碼" % (key,))
         self.zero_is_max = bool(zero_is_max)   # 0 代表「不限／永久」（比任何正數都寬鬆）：判斷放寬方向時 0 視為無限大
         self.loosen = loosen          # 數值往哪個方向變是「放寬」（up＝調大算放寬，如允許更大的檔案；down＝調小算放寬，如更短的密碼長度）；放寬要雙人核准
         miss = [n for n, v in (("question", question), ("label", label), ("help", help), ("impact", impact)) if not _zh(v)]
@@ -554,18 +557,20 @@ def plan(group, values, *, user="", conn=None):
                               "effectiveAt": when if kind in ("pending", "pending_approval") else None,
                               "approvalsRequired": approvals, "effect": effect, "banner": banner_of(f, v, days=days)})
     if loose and others == 0 and any(x["kind"] == "pending" and x["field"] in loose for x in out["fields"]):
-        out["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬改為「填寫原因、等 %d 天確認期間後生效」，並已留下紀錄。" % days)
+        out["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬會改為「填寫原因、等 %d 天確認期間後生效」，儲存後會留下紀錄。" % days)
     return out
 
 
 _IMPACT_CACHE = {}          # (db, group, field, 值) -> (monotonic, 結果)
 _IMPACT_TTL = 60.0
 _IMPACT_TIMEOUT = 1.5
+_IMPACT_CACHE_MAX = 256
 
 
 def live_impact(group, field, value, *, timeout=None):
     """即時影響（唯讀）：呼叫欄位的 `impact_fn(conn, 新值)`。唯讀連線（`PRAGMA query_only`）、逾時 1.5 秒、結果快取 60 秒；
-    沒有 `impact_fn`、值不合法、逾時或丟例外 ⇒ `live=None`，只回靜態 `impact`（永不丟例外）。回 `{"live": {numbers, sentence}|None, "static": impact}`。"""
+    沒有 `impact_fn`、值不合法、逾時或丟例外 ⇒ `live=None`，只回靜態 `impact`（永不丟例外）。
+    ⚠ 逾時只是「不再等」：計算用的 daemon 執行緒會繼續跑到 `impact_fn` 結束（結果丟棄、不寫快取），所以 `impact_fn` 自己必須有成本上限（查詢要有索引／LIMIT）。回 `{"live": {numbers, sentence}|None, "static": impact}`。"""
     import json as _json
     g = _g(group)
     f = g["fields"].get(field)
@@ -598,6 +603,8 @@ def live_impact(group, field, value, *, timeout=None):
     if isinstance(v, dict) and v.get("sentence"):
         live = {"numbers": v.get("numbers"), "sentence": str(v["sentence"])}
         with _lock:
+            while len(_IMPACT_CACHE) >= _IMPACT_CACHE_MAX:             # 有上限：不讓不同值的請求把快取撐大
+                _IMPACT_CACHE.pop(next(iter(_IMPACT_CACHE)))
             _IMPACT_CACHE[ck] = (time.monotonic(), live)
         res["live"] = live
     return res

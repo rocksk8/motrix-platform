@@ -26,6 +26,16 @@ from helpers import settings_registry as sr
 router = APIRouter()
 
 
+_REASON_MAX = 500
+
+
+def _clip(reason):
+    """變更原因的長度上限（會寫進變更明細與稽核，不讓它變成資料倉庫）。過長 ⇒ 白話 400。"""
+    if len(reason) > _REASON_MAX:
+        raise HTTPException(400, "原因太長了（最多 %d 字），請精簡後再送出。" % _REASON_MAX)
+    return reason
+
+
 def _need(group):
     if group not in sr.groups():
         raise HTTPException(404, "沒有這個設定群組：%s" % group)
@@ -69,7 +79,7 @@ def save_group(group: str, request: Request, body: dict = Body(...), authorizati
     actor = _require_user(authorization, require_superadmin=True)
     _need(group)
     values = body.get("values")
-    reason = str(body.get("reason") or "").strip()
+    reason = _clip(str(body.get("reason") or "").strip())
     if not isinstance(values, dict) or not values:
         raise HTTPException(400, "沒有送出任何要變更的欄位")
     if not reason:
@@ -110,7 +120,7 @@ def impact_group(group: str, body: dict = Body(...), authorization: str = Header
     _require_user(authorization, require_superadmin=True)
     _need(group)
     field = body.get("field")
-    if field not in {f["key"] for f in sr.groups()[group]["fields"]}:
+    if not isinstance(field, str) or field not in {f["key"] for f in sr.groups()[group]["fields"]}:
         raise HTTPException(404, "沒有這個設定欄位")
     return sr.live_impact(group, field, body.get("value"))
 
@@ -119,7 +129,7 @@ def impact_group(group: str, body: dict = Body(...), authorization: str = Header
 def reset_group(group: str, request: Request, body: dict = Body(...), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     _need(group)
-    reason = str(body.get("reason") or "").strip()
+    reason = _clip(str(body.get("reason") or "").strip())
     fields = body.get("fields")
     known = {f["key"]: f["default"] for f in sr.groups()[group]["fields"]}
     if not isinstance(fields, list) or not fields or any(k not in known for k in fields):
@@ -195,7 +205,7 @@ def restore_group(group: str, version: int, request: Request, body: dict = Body(
             raise HTTPException(404, "沒有這一版（只能還原已發布的版本）")
         if (body or {}).get("preview"):
             return sr.plan(group, vals, user=actor["username"], conn=conn)
-        reason = str((body or {}).get("reason") or "").strip()
+        reason = _clip(str((body or {}).get("reason") or "").strip())
         if not reason:
             raise HTTPException(400, "請填寫還原原因")
         cls = sr.plan(group, vals, user=actor["username"], conn=conn)
@@ -271,7 +281,7 @@ def cancel_pending(change_id: int, body: dict = Body(default={}), authorization:
         row = conn.execute("SELECT domain, key, field FROM config_changes WHERE id=?", (change_id,)).fetchone()
         if row is None or not row["domain"].startswith("setting:"):
             raise HTTPException(404, "找不到這筆待生效的設定變更")
-        reason = str((body or {}).get("reason") or "").strip() or "撤銷待生效"
+        reason = _clip(str((body or {}).get("reason") or "").strip()) or "撤銷待生效"
         if not ledger.cancel(conn, change_id, actor, reason):
             raise HTTPException(409, "這筆變更已不是待生效狀態")
         ledger.audit_event(conn, actor, "settings.%s.pending_cancel" % row["key"], row["key"],
@@ -299,7 +309,7 @@ def approve_pending(change_id: int, body: dict = Body(default={}), authorization
         row = conn.execute("SELECT domain, key, field FROM config_changes WHERE id=?", (change_id,)).fetchone()
         if row is None or not row["domain"].startswith("setting:"):
             raise HTTPException(404, "找不到這筆待生效的設定變更")
-        reason = str((body or {}).get("reason") or "").strip() or "同意放寬"
+        reason = _clip(str((body or {}).get("reason") or "").strip()) or "同意放寬"
         out = ledger.approve(conn, change_id, actor, reason)
         if not out["ok"]:
             raise HTTPException(409, out["why"])
@@ -333,7 +343,7 @@ def preview_profile(name: str, authorization: str = Header(None)):
 @router.post("/api/settings-center/profiles/{name}/apply")
 def apply_profile(name: str, request: Request, body: dict = Body(default={}), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
-    reason = str((body or {}).get("reason") or "").strip()
+    reason = _clip(str((body or {}).get("reason") or "").strip())
     if not reason:
         raise HTTPException(400, "請填寫套用原因")
     if name not in sr.profiles():

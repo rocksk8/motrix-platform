@@ -371,3 +371,55 @@ def test_restore_guards(client, make_user):
     assert client.post(url % v1, json={"reason": "x"}, headers=ha).status_code == 403
     assert client.get("/api/settings-center/groups/uploads/versions", headers=ha).status_code == 403
     assert client.get("/api/settings-center/groups/uploads/diff", headers=ha).status_code == 403
+
+
+# ===================================================================================================
+# 0d 稽核（S1 通過後的 should-fix）：S2 loosen 只限數字、S3 原因長度、S4 impact 輸入與快取上限、S6 預覽警告用語
+# ===================================================================================================
+
+@pytest.mark.parametrize("typ,default", [("bool", False), ("str", "a")])
+def test_loosen_is_refused_on_non_numeric_fields(typ, default):
+    with pytest.raises(ValueError):
+        R.SettingDef("t_field", typ, default, question="這項要不要開？", label="測試項目", help="測試用的設定項目。", impact="影響測試用的畫面。", loosen="up")
+    assert R.SettingDef("t_field", "float", 1.0, question="這項要不要開？", label="測試項目", help="測試用的設定項目。", impact="影響測試用的畫面。", loosen="up").loosen == "up"
+
+
+def test_reason_longer_than_500_chars_is_a_plain_400_everywhere(client, make_user):
+    h = _hdr(client, make_user, "s14_long")
+    make_user(username="s14_long2", role="superadmin")
+    long_ = "字" * 501
+    ok = "字" * 500
+    r = client.post("/api/settings-center/groups/uploads", json={"values": {"max_file_mb": 10}, "reason": long_}, headers=h)
+    assert r.status_code == 400 and "太長" in r.json()["detail"]
+    assert client.post("/api/settings-center/groups/uploads/reset", json={"fields": ["max_file_mb"], "reason": long_}, headers=h).status_code == 400
+    assert client.post("/api/settings-center/profiles/標準/apply", json={"reason": long_}, headers=h).status_code in (400, 404)    # 沒有此預設組時 404 先於原因檢查亦可
+    v = client.post("/api/settings-center/groups/uploads", json={"values": {"max_file_mb": 10}, "reason": ok}, headers=h)          # 剛好 500 字可以
+    assert v.status_code == 200
+    pend = client.post("/api/settings-center/groups/uploads", json={"values": {"max_file_mb": 50}, "reason": ok}, headers=h).json()["pending"][0]["id"]
+    assert client.post("/api/settings-center/pending/%d/approve" % pend, json={"reason": long_}, headers=h).status_code == 400
+    assert client.post("/api/settings-center/pending/%d/cancel" % pend, json={"reason": long_}, headers=h).status_code == 400
+    ver = client.get("/api/settings-center/groups/uploads/versions", headers=h).json()["versions"][0]["version"]
+    assert client.post("/api/settings-center/groups/uploads/restore/%d" % ver, json={"reason": long_}, headers=h).status_code == 400
+
+
+def test_impact_input_is_validated_and_cache_is_bounded(client, make_user, impact_group, monkeypatch):
+    h = _hdr(client, make_user, "s14_cache")
+    url = "/api/settings-center/groups/zz_s14_impact/impact"
+    assert client.post(url, json={"field": ["cap"], "value": 1}, headers=h).status_code == 404            # 非字串欄位名：404，不是 500
+    assert client.post(url, json={"field": {"a": 1}, "value": 1}, headers=h).status_code == 404
+    monkeypatch.setattr(R, "_IMPACT_CACHE_MAX", 5)
+    for v in range(12):
+        assert client.post(url, json={"field": "cap", "value": v}, headers=h).json()["live"]
+    assert len(R._IMPACT_CACHE) <= 5
+
+
+def test_preview_warning_does_not_claim_a_record_was_already_left(client, make_user):
+    c = _get_db()
+    try:
+        c.execute("UPDATE users SET active=0 WHERE role='superadmin'")
+        c.commit()
+    finally:
+        c.close()
+    h = _hdr(client, make_user, "s14_warn")
+    w = client.post("/api/settings-center/groups/retention/preview", json={"values": {"audit_log_keep_days": 400}}, headers=h).json()["warnings"]
+    assert w and "已留下紀錄" not in w[0] and "儲存後會留下紀錄" in w[0]                                  # 預覽什麼都還沒寫
