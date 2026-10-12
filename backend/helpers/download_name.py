@@ -153,9 +153,25 @@ def _rfc8187(name: str) -> str:
     return _urlquote(name.encode("utf-8"), safe=_ATTR_SAFE)
 
 
+def _fit_name_bytes(name: str, max_bytes: int = _MAX_BYTES) -> str:
+    """整個檔名（含副檔名）的 UTF-8 位元組不超過 255：超過就從主檔名尾端依字元邊界截短，副檔名保留。
+    給 `content_disposition()` 用（外部直接傳入的名稱，如各類報表，也要守這條底線；`build()` 自己已依副檔名預留）。"""
+    if _utf8_len(name) <= max_bytes:
+        return name
+    stem, dot, ext = name.rpartition(".")
+    if not dot or not _EXT_OK.match(ext):
+        stem, ext = name, ""
+    tail = ("." + ext) if ext else ""
+    stem = stem[:]
+    while stem and _utf8_len(stem + tail) > max_bytes:
+        stem = stem[:-1]
+    stem = stem.rstrip(". ")
+    return (stem or "download") + tail
+
+
 def content_disposition(name: str, inline: bool = False) -> str:
     """`attachment; filename="{ASCII 退路}"; filename*=UTF-8''{RFC 8187}`。`name` 應已淨化；仍會再過一次 `_clean` 以防外部傳入。"""
-    safe = _clean(name) or "download"
+    safe = _fit_name_bytes(_clean(name) or "download")
     return '%s; filename="%s"; filename*=UTF-8\'\'%s' % ("inline" if inline else "attachment", _ascii_fallback(safe), _rfc8187(safe))
 
 

@@ -117,27 +117,55 @@ def test_case_no_equal_to_doc_no_is_not_repeated(monkeypatch):
 
 # ── 期間型／其他端點：檔名維持現狀，只統一標頭編碼（設計 Q7）────────────────────────
 
-UNIFIED = ["modules/analytics/api/reports.py", "modules/accounting/api/accounting_export.py", "modules/arap/api/cashier.py",
-           "modules/accounting/api/ledger_closing.py", "modules/accounting/api/ledger_tax.py", "modules/netplan/api.py",
-           "modules/lodging/api_records.py", "modules/daily_tasks/api.py", "routers/custom_records.py",
-           "modules/subcontract/api/contractors.py", "modules/case/api/quotations.py"]
+#: 掃描 backend/** 的非測試 .py：手寫 `attachment; filename` 的地方只准出現在這張清單（附理由）——新增的匯出端點漏接會直接紅燈
+DOCUMENTED_EXCEPTIONS = {
+    "helpers/xlsx_out.py": "PDF 轉檔跟隨來源檔名（`_pdf_filename`），名稱由呼叫端的 xlsx 檔名決定；尚未納入 download_name（第二期後段）",
+    "helpers/email_notify.py": "郵件附件的 MIME 標頭（不是 HTTP 下載），已只送 RFC 8187 `filename*`",
+}
 
 
-def test_unified_modules_use_content_disposition_helper():
-    """這些檔不再手寫 `attachment; filename…`：一律 `download_name.content_disposition()`（latin-1 安全退路＋RFC 8187＋淨化）。
-    例外：`xlsx_out._pdf_filename`（跟隨來源檔名）尚未納入。"""
+def _scan_handwritten_headers():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
-    for rel in UNIFIED:
-        src = (root / rel).read_text(encoding="utf-8")
-        bad = [l.strip() for l in src.splitlines() if "attachment; filename" in l and "download_name" not in l]
-        assert not bad, (rel, bad)
+    hits = {}
+    for f in root.rglob("*.py"):
+        rel = f.relative_to(root).as_posix()
+        if rel.startswith(("tests/", ".venv", "venv/", "__pycache__")) or "/tests/" in rel or rel.endswith("helpers/download_name.py"):
+            continue
+        for n, line in enumerate(f.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
+            if "attachment; filename" in line:
+                hits.setdefault(rel, []).append(n)
+    return hits
+
+
+def test_no_handwritten_attachment_header_outside_documented_exceptions():
+    """掃描整個 backend：手寫 `attachment; filename` 只准出現在 DOCUMENTED_EXCEPTIONS（正對照見下一題）。"""
+    unexpected = {k: v for k, v in _scan_handwritten_headers().items() if k not in DOCUMENTED_EXCEPTIONS}
+    assert not unexpected, "新的匯出／下載端點請走 helpers.download_name（build 或 content_disposition）：%s" % unexpected
+
+
+def test_scanner_positive_control_finds_the_known_exceptions():
+    hits = _scan_handwritten_headers()
+    assert set(DOCUMENTED_EXCEPTIONS) <= set(hits), "掃描器沒找到已知例外——樣式失效了？%s" % sorted(hits)
+
+
+def test_content_disposition_caps_total_bytes_and_keeps_extension():
+    from helpers import download_name as D
+    name = "財" * 200 + ".xlsx"
+    h = D.content_disposition(name)
+    star = h.split("filename*=UTF-8''", 1)[1]
+    got = unquote(star)
+    assert got.endswith(".xlsx") and len(got.encode("utf-8")) <= 255
+    h.encode("latin-1")
+    # 沒有合法副檔名的超長名稱：整串截短、不丟例外
+    got2 = unquote(D.content_disposition("字" * 300).split("filename*=UTF-8''", 1)[1])
+    assert 0 < len(got2.encode("utf-8")) <= 255
 
 
 def test_content_disposition_helper_handles_hostile_report_names():
     from helpers import download_name as D
     for raw in ("財務報表_2026年度_決算.xlsx", "營業稅401_2026年第3期.xlsx", "MOTRIX_營運報表_2026-08.xlsx", "lodging-12.csv",
-                'x"y\z%.csv', "a\r\nSet-Cookie: x.csv", "\u202efdp.exe"):
+                r'x"y\z%.csv', "a\r\nSet-Cookie: x.csv", "\u202efdp.exe"):
         h = D.content_disposition(raw)
         h.encode("latin-1")
         assert "\r" not in h and "\n" not in h and h.startswith("attachment;")
