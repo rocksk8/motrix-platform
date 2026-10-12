@@ -2,8 +2,10 @@
 """M3 T10（T57）：案件頁——所選方案顯示與方案比較（靜態檢查）。金額本身由回簽同交易更新 SQL 欄位與 tot，下游讀同一組欄位。"""
 import pathlib
 
+from core import source_tree
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-HTML = (ROOT / "frontend" / "pages" / "case-management.html").read_text(encoding="utf-8")
+HTML = source_tree.page_file("case-management.html").read_text(encoding="utf-8")        # 頁面一律經 page_file（C1）
 FIN = (ROOT / "frontend" / "js" / "case-management-fin.js").read_text(encoding="utf-8")
 ALT_PLAN = (ROOT / "backend" / "modules" / "case" / "api" / "alt_plan.py").read_text(encoding="utf-8")
 

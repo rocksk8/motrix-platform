@@ -4,7 +4,9 @@
 import pathlib
 import re
 
-FORM = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "pages" / "quotation-form.html").read_text(encoding="utf-8")
+from core import source_tree
+
+FORM = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")        # 頁面一律經 page_file（C1）
 
 
 def test_form_loads_alt_items_before_use():
