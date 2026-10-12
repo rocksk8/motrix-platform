@@ -6925,19 +6925,19 @@
    "routes": [
     {
      "func": "get_plan_view",
-     "line": 50,
+     "line": 49,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/plan-view"
     },
     {
      "func": "get_case_plan_view",
-     "line": 57,
+     "line": 62,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/case-plan-view"
     },
     {
      "func": "get_alt_config",
-     "line": 64,
+     "line": 75,
      "method": "GET",
      "path": "/api/alt-quote/config"
     }
