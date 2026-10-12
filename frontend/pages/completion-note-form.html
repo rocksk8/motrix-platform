@@ -68,6 +68,31 @@
     </button>
   </div>
 
+  <!-- 從報價單重新帶入的差異視窗（第 57 班）：逐項勾選加入／移除／更新數量；沒勾的一律不動 -->
+  <div x-show="diffOpen" x-cloak data-testid="cnf-diff-modal"
+       style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:420;display:flex;align-items:center;justify-content:center;padding:20px"
+       @click.self="diffOpen=false">
+    <div style="background:#fff;border-radius:10px;max-width:640px;width:100%;max-height:80vh;display:flex;flex-direction:column;font-family:var(--font-zh)">
+      <div style="padding:14px 18px;border-bottom:1px solid #EDEAE4;font-weight:600">報價單的項目有更動</div>
+      <div style="padding:12px 18px;overflow:auto;flex:1">
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">勾選要套用的更動；沒勾的項目維持原樣，你改過的內容不會被覆蓋。</div>
+        <template x-for="(d, i) in diffRows" :key="i">
+          <label style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid #F3F1EC;cursor:pointer;font-size:13px">
+            <input type="checkbox" x-model="d.checked" data-testid="cnf-diff-check">
+            <span>
+              <b x-text="d.kindLabel"></b>　<span x-text="d.label"></span>
+              <span x-show="d.detail" style="display:block;font-size:11px;color:var(--text-dim)" x-text="d.detail"></span>
+            </span>
+          </label>
+        </template>
+      </div>
+      <div style="padding:12px 18px;border-top:1px solid #EDEAE4;display:flex;gap:8px;justify-content:flex-end">
+        <button class="cnf-btn" @click="diffOpen=false">取消</button>
+        <button class="cnf-btn cnf-btn--primary" data-testid="cnf-diff-apply" @click="applyDiff()">套用勾選的更動</button>
+      </div>
+    </div>
+  </div>
+
   <!-- PDF 預覽視窗（原本 window.open 新分頁；改成視窗才放得下「退回修改」）。未核可的單據 PDF 上有紅色「未核可・僅供預覽」 -->
   <div x-show="previewOpen" x-cloak data-testid="cnf-preview-modal"
        style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:410;display:flex;align-items:center;justify-content:center;padding:20px"
@@ -306,6 +331,7 @@
       session: {}, loading: true, busy: false, dirty: false,
       approval: {}, previewOpen: false, previewUrl: '',
       msg: '', msgError: false, prefilled: false,
+      diffOpen: false, diffRows: [], _diffRes: null,
       quoteNote: '', quoteChanged: false, _quoteFp: '', _quoteOpts: null, progress: {},   // 從報價單帶入（第 57 班）
       noteNo: '',
       status: '草稿',
@@ -497,7 +523,75 @@
       async reprefill() {
         if (!this.editable() || !this.form.quote_no) return
         const res = await this._fetchQuoteItems(this.noteNo || '')
-        if (res) this._mergeQuoteItems(res, true)
+        if (!res) return
+        if (!this.form.items.length) { this._mergeQuoteItems(res, true); return }
+        this._openDiff(res)
+      },
+
+      // 比對：報價新增（加入）／報價已移除（移除帶入的列）／報價數量改了（更新該列數量）。使用者手動新增的列不在比對內。
+      _openDiff(res) {
+        const o = res.options || {}, src = res.items || []
+        const have = {}
+        this.form.items.forEach(it => { if (it.quoteItemId) have[it.quoteItemId] = it })
+        const srcIds = {}
+        src.forEach(it => { if (it.id) srcIds[it.id] = it })
+        const rows = []
+        src.forEach(it => {
+          if (!it.id || have[it.id]) return
+          if (it.type !== 'header' && o.qtyMode === 'remaining' && it.tracked && it.remaining <= 0) return
+          rows.push({ kind: 'add', kindLabel: '新增', checked: true, id: it.id, label: (it.type === 'header' ? '〔標題〕' : '') + it.description,
+                      detail: it.type === 'header' ? '' : '數量 ' + (o.qtyMode === 'remaining' && it.tracked ? it.remaining : it.qty) + ' ' + (it.unit || '') })
+        })
+        this.form.items.forEach(it => {
+          if (it.quoteItemId && !srcIds[it.quoteItemId])
+            rows.push({ kind: 'remove', kindLabel: '移除', checked: true, id: it.quoteItemId, label: it.description || '（未命名）', detail: '報價單已經沒有這一項' })
+        })
+        src.forEach(it => {
+          const cur = it.id && have[it.id]
+          if (cur && it.type !== 'header' && cur.quoteQty != null && Number(cur.quoteQty) !== Number(it.qty))
+            rows.push({ kind: 'qty', kindLabel: '數量', checked: false, id: it.id, label: cur.description || it.description,
+                        detail: '報價數量 ' + cur.quoteQty + ' → ' + it.qty + '（勾選會把這一列的數量改成 ' + (o.qtyMode === 'remaining' && it.tracked ? it.remaining : it.qty) + '）' })
+        })
+        if (!rows.length) {
+          this._mergeQuoteItems(res, true)           // 沒有差異：只更新已完工數與同步戳記
+          this.quoteNote = '報價單的項目沒有更動。'
+          return
+        }
+        this._diffRes = res
+        this.diffRows = rows
+        this.diffOpen = true
+      },
+
+      applyDiff() {
+        const res = this._diffRes
+        if (!res) { this.diffOpen = false; return }
+        const o = res.options || {}, src = res.items || []
+        const byId = {}
+        src.forEach(it => { if (it.id) byId[it.id] = it })
+        let items = this.form.items.slice()
+        let added = 0, removed = 0, updated = 0
+        for (const d of this.diffRows) {
+          if (!d.checked) continue
+          const it = byId[d.id]
+          if (d.kind === 'remove') { items = items.filter(x => x.quoteItemId !== d.id); removed++ }
+          else if (d.kind === 'qty' && it) {
+            const row = items.find(x => x.quoteItemId === d.id)
+            if (row) { row.qty = o.qtyMode === 'remaining' && it.tracked ? it.remaining : it.qty; row.quoteQty = it.qty; updated++ }
+          } else if (d.kind === 'add' && it) {
+            if (it.type === 'header') items.push({ type: 'header', description: it.description, quoteItemId: it.id })
+            else items.push({ description: (o.brandPrefix && it.brand ? it.brand + ' ' : '') + it.description,
+                              qty: o.qtyMode === 'remaining' && it.tracked ? it.remaining : it.qty, unit: it.unit || '式',
+                              status: o.defaultStatus || '完成', notes: '', quoteItemId: it.id, quoteQty: it.qty })
+            added++
+          }
+        }
+        this.form.items = items
+        src.forEach(it => { if (it.id && it.type !== 'header') this.progress[it.id] = { qty: it.qty, done: it.alreadyCompleted || 0 } })
+        this._quoteFp = res.fingerprint || ''
+        this.quoteChanged = false
+        this.quoteNote = '已套用：新增 ' + added + ' 項、移除 ' + removed + ' 項、更新數量 ' + updated + ' 項；沒勾選的維持原樣。'
+        this.diffOpen = false; this._diffRes = null; this.diffRows = []
+        this.dirty = true
       },
 
       // 既有草稿開啟時：報價單的項目有沒有更動（只比對品名／數量指紋；與存檔時帶入的指紋比）
