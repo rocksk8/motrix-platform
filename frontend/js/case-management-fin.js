@@ -48,6 +48,38 @@ window.CM_PARTS.push(() => ({
     caseSettleStatus()  { return this.caseSettlement()?.status || '' },
     caseSettleSummary() { return this.caseSettlement()?.summary || {} },
     caseSettleItems()   { return this.caseSettlement()?.items   || [] },
+
+    // ── M3 擇一方案（2026-10-13）：案件頁的金額一律是『所選方案』後的數字（後端回簽時同交易重算 total／pretax／tot）；這裡只顯示選了哪個，
+    //    以及具財務權限者可展開的『方案比較』（唯讀、標示未採用；內容全由後端 case-plan-view 回傳，前端不自算）──
+    altPlan: { open: false, loading: false, data: null, error: '' },
+    altPickedLines() {
+      const d = this.selected?.data || {}
+      if (d.totalsByAlt !== true || !d.altPicks || typeof d.altPicks !== 'object') return []
+      const items = Array.isArray(d.items) ? d.items : []
+      return Object.keys(d.altPicks).map(g => {
+        const it = items.find(i => String(i.id) === String(d.altPicks[g]))
+        return { group: g, label: (it && String(it.description || '').trim()) || '（未命名品項）' }
+      })
+    },
+    altHasGroups() {
+      const d = this.selected?.data || {}
+      return d.totalsByAlt === true && (Array.isArray(d.items) ? d.items : []).some(i => i && i.type !== 'header' && String(i.altGroup || '').trim())
+    },
+    async toggleAltPlan() {
+      this.altPlan.open = !this.altPlan.open
+      if (!this.altPlan.open || !this.selected?.quote_no) return
+      this.altPlan.loading = true; this.altPlan.error = ''
+      try {
+        const r = await fetch('/api/quotations/' + encodeURIComponent(this.selected.quote_no) + '/case-plan-view', { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.status === 403) { this.altPlan.data = null; this.altPlan.error = '你沒有查看報價成本與毛利的權限'; return }
+        if (!r.ok) { this.altPlan.error = '方案比較暫時算不出來，請稍後再試'; return }
+        this.altPlan.data = await r.json()
+      } catch (e) { this.altPlan.error = '方案比較暫時算不出來，請稍後再試' } finally { this.altPlan.loading = false }
+    },
+    altPlanIsPicked(g, o) {
+      const p = (this.selected?.data || {}).altPicks || {}
+      return String(p[g]) === String(o.id)
+    },
     // 第 39 班契約：settlement.schemaVersion>=2 ⇒ actualTotalCost 是數字（含 0）＝有填，null／空＝未填；舊存檔（沒有標記）0＝未填
     caseSettleItemFilled(item) {
       const t = item && item.actualTotalCost, v2 = Number(this.caseSettlement()?.schemaVersion) >= 2

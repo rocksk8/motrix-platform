@@ -306,3 +306,11 @@ modules/<key>/
 - **不為子規則新增 `formulaVer`**：現有 20 多處 `formulaVer === 2` 判斷（標籤、PDF、Excel、獎金）不用動；同一口徑下的子規則改變（例：T52 公益捐款基數）另用獨立戳記（`tot.charityBasis`），與管銷口徑互不牽連。
 - **遷移工具的數字要與線上同式**：離線重算的進位、二進位浮點路徑要與線上重存逐位一致（第 50 班稽核必修：`netMarginPct` 差一個尾數就翻轉 12% 警示旗標）；附平手向量與 fuzz-lite 等值測試。工具先 `report`（dry-run）、使用者核准影響報告、再 `recalc --apply`，回滾用 `rollback`。
 - **舊口徑與新口徑並存的報表**：加註記、不做口徑篩選（設計稿 §12.1）；每筆精算 summary 的 `formulaVer` 可供日後要拆時使用。
+
+### 14.6 擇一方案（M3；T57）：計入集合與鎖定規則
+- **單據層總開關**：`totalsByAlt is True`（`profit_guard.alt_active`，前端 `MotrixAltItems.active`）。沒開 ⇒ 擇一組別惰性（全部品項照一般報價單計入、無標記、無選定與鎖定規則）；任何新程式要判斷『這張單是不是擇一單』只用這一個定義，不要自己看 `altGroup`。
+- **計入集合只有一個**：`profit_guard.counted_items(q, picks=None)`（Python）＝ `static/alt-items.js::countedItems`（JS），兩邊用同一份黃金向量 `tests/data/quote_alt_vectors.json`。新增算金額／成本的地方一律走它，不要自己過濾 `altGroup`。**例外**：`quote_terms.compute_approval_reasons` 刻意逐項檢查全部品項（含未選的），不得改成計入集合（等於偷放寬簽核）。
+- **`altPicks`／`altPickedAt`／`altPickedBy`／`altTexts` 是伺服器自有欄位**：一般存檔一律不採用用戶端的值（`restore_alt_server_fields`、`stamp_alt_texts`）；只有回簽路徑（`alt_sign.sign`）能寫 `altPicks`；所有清除都走 `alt_sign.clear_signed_selection`（同交易清 `is_signed`／`altPicks`／`tot` 回暫估／SQL 四欄＋稽核；守門鏈 P8→P7→P6→P2）。
+- **鎖定比對在伺服器端、以已存值為準**（`alt_lock.changed`；P1 ①整份本文／②只鎖品項與金額；fail-closed）；不看用戶端的 `_isUnlockEdit`。新增寫 `quotations` 的函式必須登記到 `tests/data/quote_write_paths.json`（靜態守門 `test_quote_alt_write_paths`），並判斷會不會動已回簽擇一單的鎖定本文。
+- **輸出路徑禁引用成本**：PDF／列印預覽／回簽頁只經 `case.alt_view`（IP-ALT1，不含成本）；`alt_options.plan_view` 只給成本權限者的內部畫面（報價單頁用 `quote_money_visible`、案件頁用 `money_visible`，兩者不得互換）。範本文字代入一律單趟取代（不用 `str.format`／`%`），輸出端自行跳脫。
+- **政策走設定中心群組 `quote_alt`**：選項『尚未提供』（`settings_groups.UNAVAILABLE_ALT_CHOICES`）＝已登錄但不可儲存、讀取夾回預設；有消費者的那個 commit 才把它從表中移除。

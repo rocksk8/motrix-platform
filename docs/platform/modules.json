@@ -107,6 +107,7 @@
    "js:static/layout-runtime.js",
    "js:static/legal-round.js",
    "js:static/profit-rules.js",
+   "js:static/alt-items.js",
    "js:static/list-sort.js",
    "js:static/notif.js",
    "js:static/privacy-notice.js",
@@ -284,6 +285,12 @@
     "mod:case/material_payable_event",
     "mod:case/payable_calendar",
     "mod:case/profit_guard",
+    "mod:case/alt_policy",
+    "mod:case/alt_options",
+    "mod:case/alt_view",
+    "mod:case/alt_sign",
+    "mod:case/alt_lock",
+    "mod:case/api/alt_plan",
     "mod:case/api/overhead",
     "mod:case/payable_reminders",
     "mod:case/quotations",
@@ -359,6 +366,7 @@
     "quote_seq"
    ],
    "api_prefixes": [
+    "/api/alt-quote",
     "/api/approval-history",
     "/api/case-batch",
     "/api/case-changes",

@@ -33,3 +33,11 @@ C_OWNED M01 第十三班列車：題名 test_m01_*（本模組的自我代稱，
 - 出納改預定付款日：同時被登錄付款 ⇒ 409；日期沒變 ⇒ 不寫、不稽核、不通知。
 - CQ7. `GET /api/completion-notes/{note_no}/privacy-notice` 與單筆 GET 同一道讀取閘（`_readable_note`）；簽核佇列完工單卡片顯示項目數（完成項目 N 項），不是金額。
 - CQ8. 新增材料申請要不要選供應商＝設定 `material_order.supplier_required`（預設 1＝一律要選；0＝有對應採購單的新列免選）；被 `material_guard.enforce` 擋下的項目一律寫伺服器 log（編號／欄位／代碼）。
+
+
+## 行為條件（M3 擇一方案報價，2026-10-13；依據＝測試）
+
+- 『合計依方案選擇』（`totalsByAlt`）是單據層總開關：沒開 ⇒ 擇一組別惰性，輸出與一般報價單逐位元相同；開了 ⇒ 未選定的組不計入合計與毛利，客戶版稅前合計／總計兩格印設定文字，回簽須逐組選定。依據：`tests/test_quote_alt_t2_*`、`t3_*`、`t8_*`。
+- 回簽（sign）須帶涵蓋全部組別的 `picks`，同一個寫交易寫入選定、重算 `tot`、更新 SQL 四欄與稽核；取消回簽只走 `clear_signed_selection`，守門鏈 P8→P7→P6→P2 依設定決定擋下（預設全擋 409）；待審核／簽核中不可取消回簽。依據：`tests/test_quote_alt_t9_sign_*`。
+- 已回簽擇一單：本文鎖定由伺服器以已存值比對（P1），預設拒絕解鎖修改（P4）、不可改離『已送出』（P3）、拒絕結案終局保留。無擇一資料的單完全不受影響。依據：`tests/test_quote_alt_t9b_lock_*`、`test_quote_alt_write_paths_*`。
+- 內部方案比較（`plan_view`）只給成本權限者，無權限的回應不含任何成本欄位；客戶版輸出不含成本字樣。依據：`tests/test_quote_alt_t4_*`、`t8_*`。

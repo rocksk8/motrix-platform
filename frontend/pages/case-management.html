@@ -2704,6 +2704,40 @@
                       </div>
                     </template>
 
+                    <!-- M3 擇一方案：所選方案與（財務權限者）方案比較 -->
+                    <template x-if="altHasGroups()">
+                      <div data-testid="cm-alt-block" style="margin-bottom:14px;font-size:12px">
+                        <div x-show="altPickedLines().length">
+                          <template x-for="l in altPickedLines()" :key="l.group">
+                            <div data-testid="cm-alt-picked"><span style="color:var(--text-dim)">所選方案：</span><b x-text="l.group"></b> → <span x-text="l.label"></span></div>
+                          </template>
+                        </div>
+                        <div x-show="!altPickedLines().length" style="color:var(--text-dim)">客戶尚未選定擇一方案；下面的金額不含擇一品項。</div>
+                        <button class="btn btn-ghost btn-sm" style="margin-top:4px" x-show="canSeeFinancial()" data-testid="cm-alt-plan-btn" @click="toggleAltPlan()" x-text="altPlan.open ? '收合方案比較' : '方案比較（僅供參考，未採用的方案不計入）'"></button>
+                        <div x-show="altPlan.open && canSeeFinancial()">
+                          <div x-show="altPlan.loading" style="color:var(--text-dim)">計算中…</div>
+                          <div x-show="altPlan.error" style="color:var(--danger)" x-text="altPlan.error"></div>
+                          <template x-if="altPlan.data">
+                            <div>
+                              <template x-for="g in altPlan.data.groups" :key="g.group">
+                                <div style="margin-top:6px">
+                                  <b x-text="g.group"></b>
+                                  <template x-for="o in g.options" :key="o.id">
+                                    <div style="display:flex;gap:10px;flex-wrap:wrap" :style="altPlanIsPicked(g.group, o) ? '' : 'color:var(--text-dim)'">
+                                      <span style="min-width:140px" x-text="o.label + (altPlanIsPicked(g.group, o) ? '（採用）' : '（未採用）')"></span>
+                                      <span x-text="'稅前 ' + o.pretax.toLocaleString()"></span>
+                                      <span x-text="'直接毛利 ' + o.directProfit.toLocaleString() + '（' + o.directMarginPct.toFixed(1) + '%）'"></span>
+                                      <span x-text="'營業利益 ' + o.netProfit.toLocaleString()"></span>
+                                    </div>
+                                  </template>
+                                </div>
+                              </template>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+                    </template>
+
                     <!-- KPI 四格 -->
                     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px">
                       <div class="cm-kpi__pill">

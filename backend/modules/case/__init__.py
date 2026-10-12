@@ -8,7 +8,7 @@ import importlib
 
 from core.registry import ModuleSpec
 
-from modules.case import attachments, case_deadlines, gl_events, item_shipped, material_payment_cashier, material_shippable, payables, quotations
+from modules.case import alt_view, attachments, case_deadlines, gl_events, item_shipped, material_payment_cashier, material_shippable, payables, quotations
 # ⚠️ router 一律用別名：`from modules.case.api import quotations` 會把套件屬性 `modules.case.quotations`
 #    （報價單 helper）蓋成 api 那一支，`from modules.case import quotations` 就拿錯檔
 from modules.case.api import (case_action_items as _api_action_items, case_extra_expenses as _api_extra_expenses,
@@ -16,7 +16,7 @@ from modules.case.api import (case_action_items as _api_action_items, case_extra
                               material_approvals as _api_material_approvals, material_changes as _api_material_changes, material_orders as _api_material_orders,
                               material_payments as _api_material_payments,
                               material_links as _api_material_links, settlement_actuals as _api_settlement_actuals,
-                              quotations as _api_quotations, settlement_api as _api_settlement_api, overhead as _api_overhead)
+                              quotations as _api_quotations, settlement_api as _api_settlement_api, overhead as _api_overhead, alt_plan as _api_alt_plan)
 from modules.case import recycle_adapter as _recycle_adapter   # 刪除暫存區 adapter（IP-RB1）
 from modules.case import expense_notify as _expense_notify     # noqa: F401 — 載入時登記費用單據的信件類型
 from modules.case import material_approval as _material_approval  # noqa: F401 — 載入時登記簽核單據類型 material_order（叫料）
@@ -43,7 +43,7 @@ MODULE = ModuleSpec(
     migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up), (6, _m0006.up), (7, _m0007.up), (8, _m0008.up)],
     # 與搬遷前 main.py 的掛載順序相同（路由比對順序不變）
     routers=[_api_quotations.router, _api_settlement_api.router, _api_material_orders.router, _api_material_approvals.router, _api_material_changes.router, _api_material_payments.router, _api_material_links.router, _api_settlement_actuals.router, _api_extra_expenses.router, _api_expense_form_pdf.router,
-             _api_completion_notes.router, _api_action_items.router, _api_overhead.router],
+             _api_completion_notes.router, _api_action_items.router, _api_overhead.router, _api_alt_plan.router],
     providers={
         # IP-12：逐案權限與摘要（也是「M01 在不在」的唯一訊號，helpers.case_access.CASE_PRESENT）
         ("case.access", "case"): quotations._CaseAccess,
@@ -55,6 +55,8 @@ MODULE = ModuleSpec(
         # IP-91／IP-92：報價預設條款（L1 system）、PDF 版本紀錄（L1 pdf_gen）
         ("case.default_terms", "case"): quotations._default_terms,
         ("case.doc_version", "case"): quotations._record_doc_version,
+        # IP-ALT1：擇一方案客戶版輸出資料（L1 pdf_gen 取用；只含客戶看得到的內容）
+        ("case.alt_view", "case"): alt_view.view,
         # IP-11：每日到期檢查
         ("daily.check", "case_deadlines"): case_deadlines.run_daily_checks,
         # IP-10：「待我簽核」佇列上 M01 的五種單據（彙整在 L1 routers/approval_queue.py，2026-09-27）

@@ -13,6 +13,12 @@
 | `api/material_orders.py` | 叫料 |
 | `quotations.py` | 報價單熱欄位同步、驗證；提供者：`case.access`、`case.summary`、`case.locations`、`case.recognition`、`case.default_terms`、`case.doc_version` |
 | `recognition.py` | 收入認列／支出歸月／待補登（經 `case.recognition` 給 M08） |
+| `alt_policy.py` | 擇一方案報價（M3）設定讀取入口：設定中心群組 `quote_alt` 的數值、文字範本與回簽政策（『尚未提供』的選項夾回預設） |
+| `alt_sign.py` | 擇一單回簽選定／取消回簽（M3 T9）：唯一清除入口 `clear_signed_selection`＋守門鏈 P8→P7→P6→P2；整份存檔守門 `guard_update`（P1／P4）、移出已送出 `guard_move_out_of_sent`（P3） |
+| `alt_lock.py` | 已回簽擇一單的本文鎖定比對（純函式；P1 ①整份本文／②只鎖品項與金額；fail-closed） |
+| `alt_view.py` | 擇一方案客戶版輸出資料（提供者 `case.alt_view`，IP-ALT1）：哪些品項印、標記字、合計格文字、自動備註句；**不含成本**，範本代入用單趟取代、不用 `str.format` |
+| `alt_options.py` | 擇一方案內部比較（M3）：`plan_view` 純函式（假設選擇重算金額／成本／毛利／管銷／營業利益、組合列表有硬頂）；**只供成本權限者的內部畫面，輸出路徑（PDF／Excel／列印）禁引用** |
+| `api/alt_plan.py` | `GET /api/quotations/{no}/plan-view`（`quote_money_visible` 才可；唯讀） |
 | `quote_terms.py` | 報價條款預設值、送審原因 |
 | `case_deadlines.py` | 每日到期檢查（`daily.check`） |
 | `case_stage_tasks.py` | 執行進度勾選 → 每日工作事項 |

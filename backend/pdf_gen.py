@@ -244,6 +244,18 @@ def _tax_line_label(q: dict) -> str:
     return "營業稅 %s%%" % q.get("taxRate", 5)
 
 
+def _alt_view(q: dict) -> dict:
+    """擇一方案的客戶版輸出資料（提供者 `case.alt_view`，M3；只含客戶看得到的內容）。沒有擇一品項、案件模組不在、或提供者出錯 ⇒ {}（照舊全部印出）。"""
+    try:
+        from core import registry as _registry
+        f = _registry.single_provider("case.alt_view")
+        v = f(q) if f is not None else None
+    except Exception:
+        logger.exception("case.alt_view failed")
+        return {}
+    return v if isinstance(v, dict) and v.get("has_alt") else {}
+
+
 def _build_quote_html(q: dict, tot: dict, internal: bool = False,
                       show_watermark: bool = False, watermark_text: str = '未成案 · 報價單僅供瀏覽',
                       watermark_font_size: int = 30,
@@ -265,6 +277,8 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
 
     items = q.get('items', [])
     has_notes = any((it.get('notes') or '').strip() for it in items if it.get('type') != 'header')
+    av = _alt_view(q)                       # 擇一方案（沒有 ⇒ {}，以下全部走原路徑）
+    alt_rows = av.get('rows') or {}
     item_rows = ''
     real_idx = 0
     for i, item in enumerate(items):
@@ -278,16 +292,21 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
                 f'</tr>'
             )
             continue
+        info = alt_rows.get(str(item.get('id')))
+        if info and info.get('hidden'):
+            continue                        # 客戶已選定、設定不印未選項 ⇒ 這列不印也不佔項次
         real_idx += 1
         up  = item.get('unitPrice', 0)
         amt = item.get('amount', 0)
+        tr_open = '<tr style="color:#9CA3AF">' if info and info.get('state') == 'dropped' else '<tr>'
+        desc_html = esc(item.get("description", "")) + (f' <span style="font-size:10px;color:#6B7280">〔{esc(info.get("tag", ""))}：{esc(info.get("group", ""))}〕</span>' if info and info.get('state') != 'dropped' else (f' <span style="font-size:10px">〔{esc(info.get("tag", ""))}〕</span>' if info else ''))
         if internal:
             cost   = item.get('cost', 0) or 0
             margin = item.get('margin', 0) or 0
             item_rows += (
-                f'<tr>'
+                tr_open +
                 f'<td>{real_idx}</td>'
-                f'<td>{esc(item.get("description",""))}</td>'
+                f'<td>{desc_html}</td>'
                 f'<td>{esc(item.get("brand",""))}</td>'
                 f'<td class="r">{item.get("qty","")}</td>'
                 f'<td>{esc(item.get("unit",""))}</td>'
@@ -300,9 +319,9 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
             )
         else:
             item_rows += (
-                f'<tr>'
+                tr_open +
                 f'<td>{real_idx}</td>'
-                f'<td>{esc(item.get("description",""))}</td>'
+                f'<td>{desc_html}</td>'
                 f'<td>{esc(item.get("brand",""))}</td>'
                 f'<td class="r">{item.get("qty","")}</td>'
                 f'<td>{esc(item.get("unit",""))}</td>'
@@ -319,6 +338,9 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
     freight  = q.get('freight', 0) or 0
     discount = q.get('discount', 0) or 0
 
+    _alt_tt = av.get('total_text')          # 擇一未選完且勾「合計依方案選擇」⇒ 稅前合計、總計兩格改印範本文字
+    pretax_txt = esc(_alt_tt) if _alt_tt else f'NT$ {int(pretax):,}'
+    total_txt  = esc(_alt_tt) if _alt_tt else f'NT$ {int(total):,}'
     freight_row  = f'<div class="total-row"><span>運費</span><span>NT$ {int(freight):,}</span></div>' if freight else ''
     discount_row = f'<div class="total-row"><span style="color:#DC2626">折讓</span><span style="color:#DC2626">-NT$ {int(discount):,}</span></div>' if discount else ''
 
@@ -334,7 +356,10 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
     terms_html  = term_block('付款條件', q.get('paymentTerms', ''))
     terms_html += term_block('交貨條件', q.get('deliveryTerms', ''))
     terms_html += term_block('保固條件', q.get('warrantyTerms', ''))
-    terms_html += term_block('售後服務及備註說明', q.get('afterSales', ''))  # 名稱同 modules/case/quote_terms.AFTERSALES_LABEL（L1 不反向 import 模組）
+    _after = q.get('afterSales', '') or ''
+    if av.get('notes'):                     # 擇一方案自動說明句：每組一句，接在使用者自填備註之後
+        _after = (_after.rstrip() + '\n' if _after.strip() else '') + '\n'.join(av['notes'])
+    terms_html += term_block('售後服務及備註說明', _after)  # 名稱同 modules/case/quote_terms.AFTERSALES_LABEL（L1 不反向 import 模組）
     terms_html += term_block('驗收標準', q.get('acceptanceTerms', ''), span_full=True)
 
     terms_section = (
@@ -488,9 +513,9 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         f'  <div class="total-row"><span>品項小計</span><span>NT$ {int(subtotal):,}</span></div>\n'
         f'  {freight_row}\n'
         f'  {discount_row}\n'
-        f'  <div class="total-row"><span>稅前合計</span><span>NT$ {int(pretax):,}</span></div>\n'
+        f'  <div class="total-row"><span>稅前合計</span><span>{pretax_txt}</span></div>\n'
         f'  <div class="total-row"><span>{_tax_line_label(q)}</span><span>NT$ {int(tax):,}</span></div>\n'
-        f'  <div class="total-row"><span>總　計</span><span>NT$ {int(total):,}</span></div>\n'
+        f'  <div class="total-row"><span>總　計</span><span>{total_txt}</span></div>\n'
         '</div>\n'
         '</div>\n'
         f'{terms_section}\n'

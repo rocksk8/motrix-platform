@@ -64,6 +64,7 @@ from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
 from modules.case import material_guard as MG  # 叫料審核的寫入閘（31-C）
 from modules.case import profit_guard as _PG  # 第 48 班 S2：管銷分攤比率權限／伺服器重算
+from modules.case import alt_sign as _ALT_SIGN  # M3 T9：擇一方案回簽選定／取消回簽
 from modules.case import receipt_calendar as _RC  # 行事曆「收款登錄／應收到期提醒」（2026-10-05，預設關）
 from modules.case.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
 from modules.case.case_stage_tasks import daily_task_notice, delete_daily_task_for_case_stage, sync_daily_task_for_case_stage  # noqa: E402
@@ -1331,13 +1332,24 @@ def toggle_quotation_signed(quote_no: str, body: dict = Body(...), authorization
     note   = (body or {}).get("note", "")
     if action not in ("sign", "unsign"):
         raise HTTPException(400, "action 必須為 sign 或 unsign")
+    picks = (body or {}).get("picks")
     conn = get_db()
     row = conn.execute(
-        "SELECT status, is_signed, signed_log FROM quotations WHERE quote_no=?", (quote_no,)
+        "SELECT status, is_signed, signed_log, data_json FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, "報價單不存在")
+    try:
+        _alt_data = json.loads(row["data_json"] or "{}") or {}
+    except (TypeError, ValueError):
+        _alt_data = {}
+    if _ALT_SIGN.applies(_alt_data):             # M3：擇一方案單（H5：其他單完全走下面今日的路徑）
+        conn.close()
+        return _toggle_alt_signed(quote_no, action, note, picks, user, authorization)
+    if picks:
+        conn.close()
+        raise HTTPException(422, "這張報價單沒有啟用擇一方案，不需要選擇方案")
     if row["status"] != "已送出":
         conn.close()
         raise HTTPException(409, "僅已送出狀態可標記回簽")
@@ -1377,6 +1389,50 @@ def toggle_quotation_signed(quote_no: str, body: dict = Body(...), authorization
                             user.get("display_name") or user["username"], quote_no, "quotation-form.html",
                             detail=note or "")
     return {"ok": True, "is_signed": action == "sign", "signed_log": log}
+
+
+def _toggle_alt_signed(quote_no: str, action: str, note: str, picks, user: dict, authorization) -> dict:
+    """擇一方案單的回簽／取消回簽（M3 T9）：讀取、驗證、寫入、稽核在**同一個寫交易**（H1／H2）；被擋 ⇒ 不寫任何東西。
+    規則在 `modules/case/alt_sign.py`；取消回簽走唯一清除入口 `clear_signed_selection`（守門鏈 P8→P7→P6→P2）。"""
+    conn = get_db()
+    result = {}
+    with write_txn(conn):
+        row = conn.execute("SELECT status, is_signed, signed_log, data_json, deal_tag, settle_status FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        if not row:
+            raise HTTPException(404, "報價單不存在")
+        try:
+            data = json.loads(row["data_json"] or "{}") or {}
+        except (TypeError, ValueError):
+            raise HTTPException(409, "報價單資料無法解析")
+        if not _ALT_SIGN.applies(data):
+            raise HTTPException(409, "報價單內容已變更，請重新整理後再試")
+        is_signed = bool(row["is_signed"])
+        now = datetime.now().isoformat()
+        log = json.loads(row["signed_log"] or "[]")
+        log.append({"at": now, "username": user["username"], "userDisplay": user.get("display_name") or user["username"],
+                    "action": "signed" if action == "sign" else "unsigned", "note": note})
+        if action == "sign":
+            if row["status"] != "已送出":
+                raise HTTPException(409, "僅已送出狀態可標記回簽")
+            if is_signed:
+                raise HTTPException(409, "已回簽，無需重複標記")
+            result = _ALT_SIGN.sign(conn, quote_no, row, data, picks, user, log, now)
+        else:
+            if not is_signed:
+                raise HTTPException(409, "尚未回簽")
+            if row["status"] in ("待審核", "簽核中"):
+                raise HTTPException(409, _ALT_SIGN.IN_APPROVAL_MSG)
+            if row["status"] not in _ALT_SIGN.UNSIGN_STATES:
+                raise HTTPException(409, "目前狀態不能取消回簽")
+            result = _ALT_SIGN.clear_signed_selection(conn, quote_no, user, now, note, signed_log=log)
+        conn.commit()
+    conn.close()
+    _audit(_tok(authorization), f"quotation.{action}", "quotation", quote_no, quote_no, {"note": note, "alt": True})
+    notify_module_activity("報價單", "已回簽" if action == "sign" else "取消回簽",
+                           user.get("display_name") or user["username"], quote_no, "quotation-form.html", detail=note or "")
+    out = {"ok": True, "is_signed": action == "sign", "signed_log": log}
+    out.update(result)
+    return out
 
 
 #: 客戶回簽單（報價單回簽附件）可上傳的報價單狀態：完成簽核（已送出）之後——客戶把簽回的報價單寄回，通常在標記「已成案」之前或當下。
@@ -1752,6 +1808,21 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # R2（營業稅法 §7、§8）：零稅率／免稅送出（非草稿）要有依據；應稅單移除殘留依據
     validate_tax_basis(q, new_status)
 
+    # M3 T9b：已回簽擇一單的鎖定要在任何副作用（組簽核層級、寄通知）之前先擋；這裡是提早的快速檢查，
+    # 寫入交易內讀出已存列後的 `guard_update` 仍是權威（同一規則、以鎖內已存值為準）。
+    if is_unlock_edit or new_status == "待審核":
+        _pre = get_db()
+        try:
+            _pre_row = _pre.execute("SELECT is_signed, data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        finally:
+            _pre.close()
+        if _pre_row and _pre_row["is_signed"]:
+            try:
+                _pre_old = json.loads(_pre_row["data_json"] or "{}") or {}
+            except (TypeError, ValueError):
+                _pre_old = {}
+            _ALT_SIGN.guard_update(q, _pre_old, is_unlock_edit)
+
     # ── 待審核：build approval tiers from settings ─────────────────────────────
     if new_status == "待審核":
         appr = q.get("approval") or {}
@@ -1796,7 +1867,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             # location_id：`QL25` 算「離開草稿」的有效據點要用（見下方 COALESCE
             # 同一條規則：沒送 locationId 就沿用既有欄位值）。
             "SELECT id, status, deal_tag, settle_status, updated_at, sales_person_id, "
-            "sales_person, data_json, location_id "
+            "sales_person, data_json, location_id, is_signed "
             "FROM quotations WHERE quote_no=?", (quote_no,)
         ).fetchone()
         if not existing:
@@ -1820,6 +1891,16 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         except HTTPException:
             conn.close()
             raise
+        if existing["is_signed"]:                         # M3 T9b（H1／P1／P4）：已回簽的擇一單，伺服器以已存值比對本文；其他單不受影響（H5）
+            try:
+                _alt_old = json.loads(existing["data_json"] or "{}") or {}
+            except (TypeError, ValueError):
+                _alt_old = {}
+            try:
+                _ALT_SIGN.guard_update(q, _alt_old, is_unlock_edit)
+            except HTTPException:
+                conn.close()
+                raise
         if not money_visible(user):
             # 第42班：業務／管理員可編輯報價單，但看不到精算與款項期別（財務角色專屬）⇒ 被遮蔽的部分以資料庫現值補回，
             # 不可以用遮蔽後的空值蓋掉真正的資料（同 case-record 存檔的 restore）。
@@ -1981,12 +2062,18 @@ def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str
     conn = get_db()
     with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（C 組：直接 UPDATE data_json 的路徑）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
         row = conn.execute(
-            "SELECT customer_name, status, data_json, location_id "
+            "SELECT customer_name, status, data_json, location_id, is_signed "
             "FROM quotations WHERE quote_no=?", (quote_no,)
         ).fetchone()
         if not row:
             conn.close()
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        if row["is_signed"]:                              # M3 T9b（P3）：已回簽的擇一單不可被改離「已送出」（H5：其他單不受影響）
+            try:
+                _ALT_SIGN.guard_move_out_of_sent(True, json.loads(row["data_json"] or "{}") or {}, body.status)
+            except HTTPException:
+                conn.close()
+                raise
         # Block bypass: cannot force 已送出 while approval tiers are still pending
         if body.status == "已送出" and row["status"] in ("待審核", "簽核中"):
             _d    = json.loads(row["data_json"] or "{}")
@@ -2056,11 +2143,17 @@ def recall_quotation(quote_no: str, authorization: str = Header(None)):
     conn = get_db()
     with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（C 組：直接 UPDATE data_json 的路徑）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
         row = conn.execute(
-            "SELECT status, data_json, customer_name FROM quotations WHERE quote_no=?", (quote_no,)
+            "SELECT status, data_json, customer_name, is_signed FROM quotations WHERE quote_no=?", (quote_no,)
         ).fetchone()
         if not row:
             conn.close()
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        if row["is_signed"]:                              # M3 T9b（P3）
+            try:
+                _ALT_SIGN.guard_move_out_of_sent(True, json.loads(row["data_json"] or "{}") or {}, "草稿")
+            except HTTPException:
+                conn.close()
+                raise
         if row["status"] not in ("待審核", "簽核中"):
             conn.close()
             raise HTTPException(400, f"只有「待審核」或「簽核中」的報價單可以收回（目前狀態：{row['status']}）")
@@ -4989,7 +5082,7 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
     conn = get_db()
     with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（C 組：直接 UPDATE data_json 的路徑）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
         row = conn.execute(
-            "SELECT data_json, customer_name FROM quotations WHERE quote_no=? AND status IN ('待審核','簽核中')",
+            "SELECT data_json, customer_name, is_signed FROM quotations WHERE quote_no=? AND status IN ('待審核','簽核中')",
             (quote_no,)
         ).fetchone()
         if not row:
@@ -4997,6 +5090,12 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
             raise HTTPException(404, f"報價單 {quote_no} 不存在或不在待審核狀態")
         cname = row["customer_name"] or ""
         d     = json.loads(row["data_json"] or "{}")
+        if row["is_signed"]:                              # M3 T9b（P3；H7：先擋、再改單號，單號升版的 UPDATE 在後面）
+            try:
+                _ALT_SIGN.guard_move_out_of_sent(True, d, "草稿")
+            except HTTPException:
+                conn.close()
+                raise
         appr  = d.get("approval") or {}
         tiers = _active_tiers(appr)
 
@@ -6562,7 +6661,7 @@ def _append_items_to_quotation(conn, quote_no: str, header: str, items: list, no
     換成報價品項（成本＝cost，毛利 30%，售價由報價單自己算）；前面加一列區段標題 `header`。
     報價單不存在 ⇒ 404；不是草稿 ⇒ 409（原本寫在 M04 的規則，逐字搬來）。回傳 `now`。"""
     qrow = conn.execute(
-        "SELECT quote_no, status, data_json FROM quotations WHERE quote_no=?", (quote_no,)
+        "SELECT quote_no, status, data_json, is_signed FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     if not qrow:
         raise HTTPException(404, "找不到對應報價單")
@@ -6572,6 +6671,8 @@ def _append_items_to_quotation(conn, quote_no: str, header: str, items: list, no
         qdata = json.loads(qrow["data_json"] or "{}")
     except Exception:
         qdata = {}
+    if qrow["is_signed"] and _ALT_SIGN.applies(qdata):          # M3 T9b（P1，fail-closed）：已回簽的擇一單不接受外部附加品項
+        raise HTTPException(409, "已回簽，請管理員取消回簽")
     if not isinstance(qdata.get("items"), list):
         qdata["items"] = []
     qdata["items"].append({"id": str(uuid.uuid4()), "type": "header", "description": header})

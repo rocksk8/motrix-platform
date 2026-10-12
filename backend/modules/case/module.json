@@ -90,6 +90,7 @@
   "customization_note": "搬遷時沒有宣告可自訂點（CUSTOMIZATION-SPEC §5）；之後要開放欄位、頁面或輸出的自訂時在這裡加",
   "provides": {
     "api_prefixes": [
+      "/api/alt-quote",
       "/api/approval-history",
       "/api/case-batch",
       "/api/case-changes",
