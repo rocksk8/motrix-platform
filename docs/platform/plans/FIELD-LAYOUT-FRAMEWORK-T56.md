@@ -315,7 +315,7 @@ ResolvedLayout = 區塊[ 欄位[{目錄項, 標籤, 寬度檔位→實際比例,
 ## 15. 與其他設計的互通約定（98 交叉稽核＋0d；內部協調，非使用者問題）
 
 1. **單一 DocType 登錄**：文件類型的鍵與白話名稱只有一份（F7／輸出版型／版面／下載檔名／完工單共用）；下載檔名的『文件類型用語表』是同一份標籤的檢視／編輯，不另存。
-2. **設定群組代號**統一 snake_case、每個功能一個：本框架用 `doc_layout`（顯示名『版面』）；其餘建議 `completion_note`、`download_name`、`quote_alt`；欄位鍵用 `<群組>.<鍵>`（例：擇一功能總開關寫成 `quote_alt.alt_enabled`，不用 `quote.alt_enabled`）。
+2. **設定群組代號**統一 snake_case、每個功能一個：本框架用 `doc_layout`（顯示名『版面』）；其餘建議 `completion_note`、`download_name`、`quote_alt`、`project_margin`（專案毛利%，警示鍵 `project_margin.warn_pct`）、`directive`（批示）；欄位鍵用 `<群組>.<鍵>`（例：擇一功能總開關寫成 `quote_alt.alt_enabled`，不用 `quote.alt_enabled`）。
 3. **端點**：解析後版面併入既有 `GET /api/layout/{模組}`（以參數取得解析結果），不另開 `/api/layout-resolved/…`（本文 §6 先前的名稱作廢）；各功能的『我能做／看什麼』旗標長期應由 F3／F7 能力通道供應，完工單的 `can-author` 為過渡別名。所有新增路由登錄整合點並重產 route golden。
 4. **角色名單歸 F3**：『誰可以編輯版面』雖列為設定選項，其底層仍是 F3 能力（`doc_layout.edit` 之類，由 1d 命名）；設定只提供預設能力集合的切換，不另存角色字串。
 5. **底層變更集中一班過閘**：`core/customization.py` v2、`helpers/layout_resolve.py`、`helpers/download_name.py` 等 `core/**`／`helpers/**` 變更盡量同一列車，避免多次全量官方閘門。
@@ -410,7 +410,7 @@ ResolvedLayout = 區塊[ 欄位[{目錄項, 標籤, 寬度檔位→實際比例,
 | 1 功能代號 | `project_margin` ★ | `directive` | `completion_note` | `download_name` | `quote_alt` |
 | 2 欄位目錄 | `project_margin_pct`：`computed`、`isMoney=真`、`internal`、判定＝`quote_money_visible`／`money_visible`（同 `directMarginPct`）、唯讀、內部損益預設顯示於直接毛利率後 | `directive_badge`／`directive_count`／`directive_panel`（`isMoney=假`；判定＝有 `directive.write` 或為收件人） | 可帶入欄位＝目錄屬性『可帶入其他單據』且 `isMoney=假`（白名單由目錄查詢產生） | 檔名變數由目錄產生，**金額類不可成為變數**；文件類型用語＝DocType 登錄 | `altGroup`、`totalsByAlt` 目錄項；鎖定比對集合＝目錄中報價本文鍵 |
 | 3 表面 | 報價單內部損益（form）、案件清單（list，可選欄）、案件詳情摘要（page） | `module:crm.dev_log`（page）、`module:crm.dev_log_list`（list） | 完工單表單／清單 | 28 個下載端點（output） | 報價單表單、案件詳情方案比較 |
-| 4 設定 | 警示門檻 `warn_pct`（預設關、風險 `none`、只顯示不擋）。**對齊提醒**：98 文暫掛 `quote.project_margin_warn_pct`；依 §15-2 建議改 `project_margin.warn_pct`（K01 落地後再搬分組，不改鍵），請 98 與 1c 決定 | §6 十餘項（安全預設；`who`、`visible_to`、`include_text` 為 `security`＋橫幅） | 印金額、品牌併入、預設狀態、超量警告／擋（依其 r4 已走設定） | 格式範本、長度上限、顯示客戶名稱（高影響＋橫幅） | P1～P8（高影響者橫幅＋`impact_scope`） |
+| 4 設定 | 警示門檻 `warn_pct`（預設關、風險 `none`、只顯示不擋）。**群組代號已定（1c 確認）**：群組 `project_margin`、鍵 `project_margin.warn_pct`（慣例 `<群組>.<鍵>`；98 同步更新其文件；K01 落地後再搬分組，不改鍵） | §6 十餘項（安全預設；`who`、`visible_to`、`include_text` 為 `security`＋橫幅） | 印金額、品牌併入、預設狀態、超量警告／擋（依其 r4 已走設定） | 格式範本、長度上限、顯示客戶名稱（高影響＋橫幅） | P1～P8（高影響者橫幅＋`impact_scope`） |
 | 5 標籤 | 『專案毛利%』可改；說明文字註明『不扣進項稅，故高於直接毛利率』 | 按鈕『批示』可改；狀態字全走標籤 | 欄名走 relabel | 文件類型用語表＝同一份標籤 | 『依方案選擇』等 |
 | 6 能力 | 沿用既有金額判定（不新增能力） | `directive.write`、`directive.view_all` | 建立者能力（過渡別名 `can-author`） | 無新增 | sign／unsign 沿用現行 admin／superadmin |
 | 7 通知 | 無 | 站內＋信件 `annotation_received`＋三個範本文字鍵 | 待核（依其文件） | 無 | P6② 後續通知財務（尚未提供，屆時登錄） |
