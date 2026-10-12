@@ -2,7 +2,7 @@
 """設定群組登錄（L1；第 54 班 Train A）。**預設值＝上線前的程式常數**（部署零行為變更；`settings_deploy_baseline.json` 凍結）。
 
 [單位] helper:settings_groups    [層] L1    [穩定度] 契約
-[公開介面] 無
+[公開介面] UNAVAILABLE_ALT_CHOICES
 [不變式] 載入時登錄群組 change_control、retention、uploads（沒有對外名稱，只有登錄的副作用）；預設值改動＝行為變更，必須同步改凍結基準並走裁示；上下限只寫在這裡；副檔名白名單不在此可調（安全邊界）。
     畫面文字規則（零技術門檻）：問句、標籤、說明、影響說明一律白話繁中，內部鍵不顯示給使用者（守門 test_settings_ui_plain_language）。
 [契約題] backend/tests/platform/test_settings_registry_t54.py
