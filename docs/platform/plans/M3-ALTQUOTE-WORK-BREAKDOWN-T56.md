@@ -42,6 +42,7 @@ T2,T4 ─► T9 (回簽選定) ─► T10 (案件頁／下游) ─► T11 (收�
 關鍵路徑：T1→T2→T4→T9→T10→T11。T3、T7、T8 可與 T4 並行（不同檔）；T5、T6 同檔（`quotation-form.html`）須序列，同一人做。
 
 ### T1 前置核對與契約凍結（0.5 pd）
+- **寫入路徑清單（全文檢索，逐一標註「可否改品項／`altGroup`／`totalsByAlt`／`altPicks`／`tot`／`is_signed`」）**：必含 `update_quotation`（PUT）、`update_status`（PATCH，:1975）、`toggle_quotation_signed`（:1323）、`reject_quotation`（:4985，寫 `status='草稿'`，同樣不動 `is_signed`，須併入上列「移出已送出」處理）、`case_batch_assign`（:6391 起，寫 `data_json`＋`assigned_user_ids`；**僅動指派欄位**，須以測試證明不改品項／`tot`，否則併入鎖定檢查）；`recall_quotation`（:2053）只收 待審核／簽核中，**不是**已回簽單的路徑（已回簽必為 已送出）。未列入而在檢索中出現的寫入點視為遺漏。
 - 重核錨點（`profit_guard.py`、`calcTotals`、`quotations.py:1912` 存檔 SQL、`_signed_back_gate`／`toggle_quotation_signed`、`pdf_gen` 合計區、`settings_registry` 註冊樣式）。
 - 寫死「契約表」：`altGroup`／`altPick` 欄位、`totalsByAlt`、`altPicks`、`counted_items` 簽章、`plan_view` 回傳形狀、`quote_alt` 設定鍵；之後各任務不得自行加欄。
 - 產出：本文件 §5 的「契約」小節補正，並把黃金向量檔（擇一向量）先定案（T2/T3/T4 共用）。
@@ -92,13 +93,16 @@ T2,T4 ─► T9 (回簽選定) ─► T10 (案件頁／下游) ─► T11 (收�
 - **unsign（`toggle_quotation_signed` 關）**：新增守門——單據已開票、已請款（含已提請款）或已精算／結案 → **409**（白話「已請款／已開票，請先沖銷」；Q3 暫定）。通過後同交易：清空 `altPicks`（及 `altPickedAt／altPickedBy`）、重算 `tot` 回未選暫估、更新 SQL 四欄、寫稽核，**稽核內容記錄被清除的內容**（原 `altPicks` 各組→品項、清除前後 `total／pretax`、操作者）。全部或全無（中途失敗整筆回滾）。
 - **權限與前提（沿用，不變）**：`toggle_quotation_signed` 僅 admin／superadmin（:1328），且報價單狀態須為 `已送出`（:1341）；兩 action 皆然。
 - **picks 驗證對象＝伺服器已存品項**（自資料庫讀出的 `data_json`），**不採用 body 內任何品項資料**；pick 的品項 id 必須存在於已存品項且屬該組。
-- **unsign 守門的資料來源**：已開票＝`invoice_vouchers` 表（`quote_no`＋狀態欄，`db.py:1627`）；已請款＝`payment_requests` 表（`quote_no`＋`status`，`db.py:1898`）；已精算／結案＝報價 `settle_status`／`deal_tag`。「有效單據」的狀態值定義（排除草稿、已作廢／已取消／已退回）開工前自這兩張表的現行狀態集核對，不在本文寫死。
+- **unsign 守門的資料來源**：已開票＝`invoice_vouchers` 表（`quote_no`＋狀態欄）；已請款＝`payment_requests` 表（`quote_no`＋`status`）（兩表定義見 `db.py` 的 `CREATE TABLE`，以表名為準、不引行號）；已精算／結案＝報價 `settle_status`／`deal_tag`。「有效單據」的狀態值定義（排除草稿、已作廢／已取消／已退回）開工前自這兩張表的現行狀態集核對，不在本文寫死。
 - 回簽介面逐組列選項（預設不預選）。
 - **不做獨立「改選」動作**（10-12 裁示）：回簽後要換方案＝先取消回簽（清除選定、重算回暫估、寫稽核）→ 改 → 重新回簽並重選。管銷／公益金戳記沿用既有規則，只換基數。
 
 **回簽後鎖定（伺服器端；r3 依 0d 複審更正鎖定路徑）**
 - **現況事實（`case/api/quotations.py`，M2 凍結樹）**：`PUT /api/quotations/{quote_no}`（:1690）已在 `_LOCKED`（:1854-1857）對狀態 待審核／簽核中／已送出／已成案／已結案 回 403，**唯一例外是 `is_unlock_edit`**；該旗標來自用戶端 body 的 `_isUnlockEdit`（:1701 `q.pop`），僅另要求呼叫者為 superadmin（:1731-1734）。回簽（`toggle_quotation_signed`）需 status＝已送出，故回簽單在一般存檔必被 `_LOCKED` 擋下——**真正的洞是 unlock-edit 分支**。`is_signed` 是獨立欄位，存檔路徑目前**完全不讀**。
-- **新增檢查**：以 `is_signed` **欄位**（讀自既有 `SELECT`，:1795-1800 加選 `is_signed`）為鍵；`is_signed` 為真時，在 **unlock-edit 分支內**以及**任何其他可改品項的路徑**（T1 須全文檢索列出，例如批次／複製／成案轉換寫回 `data_json` 者），對「鎖定欄位集合」與**已存值**比對，不同即 422「已回簽，請先取消回簽」。不得以 `_isUnlockEdit` 或其他用戶端旗標作為放行依據。
+- **`is_signed` 會在狀態變動後殘留（r4 更正）**：`update_status`（`PATCH /api/quotations/{quote_no}/status`，superadmin，白名單 草稿／待審核／已送出／已取消／已拒絕）可把 已送出 改回 **草稿**，且不動 `is_signed`（`is_signed` 唯一寫入者是 `toggle_quotation_signed` 的 sign／unsign 兩條 UPDATE）。草稿不在 `_LOCKED`，一般 `PUT`（無 `_isUnlockEdit`）即可自由改品項，造成 `is_signed=1`＋`altPicks` 還在，但品項／`tot`／SQL `total／pretax` 已不一致。故「`_LOCKED` 擋 PUT」**不能**當作回簽鎖定的依據。
+- **新增檢查（涵蓋 `update_quotation` 全部儲存路徑）**：只要**已存列 `is_signed=1`**（讀自既有 `SELECT`，:1795-1800 加選 `is_signed`），**不論當時狀態、不論 `_isUnlockEdit`、不論是否通過 `_LOCKED`**，一律對「鎖定欄位集合」與**已存值**比對，不同即 422「已回簽，請先取消回簽」。同一檢查套用到其他可改品項的路徑（T1 grep 清單見下）。不得以任何用戶端旗標或狀態作為放行依據。
+- **`update_status` 把已回簽單移到 草稿／已取消／已拒絕（偏好做法）**：視同 unsign——同交易清除 `is_signed`（連 `signed_by／signed_at`）＋`altPicks`＋`tot` 回未選暫估＋SQL 四欄＋寫稽核（記錄被清除內容），**並套用與 unsign 相同的 409 下游守門**（已開票／已請款／已精算／結案 → 409，狀態不變）。**替代做法**：直接拒絕（409「已回簽，請先取消回簽」）。偏好做法由使用者／作者擇一，列 §7 Q11；實作前預設＝替代做法（拒絕），因為最保守、不新增清除路徑。移到 待審核 或維持 已送出 不觸發。
+- **unlock-edit 往返下 `is_signed` 的去向**：unlock-edit 會把狀態強制改為 待審核（:1752-1760 一帶，重走簽核）；重新核准後回到 已送出，而 `is_signed` 全程未被動到，仍為 1。規則：該往返期間鎖定檢查照上條持續生效（品項不可改），因此 unlock-edit 對已回簽的擇一單**實際只能改鎖定集合以外的欄位**，往返前後 `altPicks`／`tot` 不變；若使用者要在 unlock-edit 裡改品項，必須先取消回簽（Q10）。
 - **鎖定欄位集合**：品項（增、刪、改單價／數量／成本／`taxRate`）、`altGroup`、`totalsByAlt`、`altPicks`、`tot`。
 - **unlock-edit 對「已成案」報價仍可做什麼＝不確定，列為待確認（§7 Q10，作者／使用者答覆）**：本設計要求**不得破壞既有已成案解鎖修改流程，唯一例外是「已回簽的擇一單」**（無擇一組的單、未回簽的單，unlock-edit 行為逐位元不變）。答覆前實作預設＝已回簽擇一單的 unlock-edit 只能改鎖定集合以外的欄位。
 - **備註與附件是否在鎖定集合外＝§7 Q8**：預設假設可編輯，但伺服器必須明文列舉可改欄位，其餘比對拒絕。
@@ -164,7 +168,7 @@ T2,T4 ─► T9 (回簽選定) ─► T10 (案件頁／下游) ─► T11 (收�
 18. 取消回簽：`altPicks` 清空、`tot`＋SQL 四欄回未選暫估、稽核有列；已回簽狀態下改品項／組別被拒；已結案拒絕。
 
 18a. sign 驗證順序：缺任一組 pick／pick 非該組成員 → 422 且資料庫無任何變動（`altPicks`、`tot`、SQL 四欄、稽核皆不變）。
-18b. 鎖定範圍（伺服器端）：已回簽（`is_signed`＝1）時，① 一般 `PUT`（無旗標）→ 403（`_LOCKED`，既有）；② **`_isUnlockEdit=true`（superadmin）改品項／`altGroup`／`totalsByAlt`／`altPicks`／`tot` → 422**（新檢查，明確覆蓋此情境）；③ 其他可改品項的路徑同樣 422；④ 備註、附件依 Q8（參數化兩種結果）；⑤ 對照組：已成案但**未回簽**、或**無擇一組**的單，unlock-edit 行為與今日逐位元相同（Q10 預設）；⑥ 繞過前端直接打 API 同樣被拒。
+18b. 鎖定範圍（伺服器端）：已回簽（`is_signed`＝1）時，① 一般 `PUT`（無旗標）→ 403（`_LOCKED`，既有）；② **`_isUnlockEdit=true`（superadmin）改品項／`altGroup`／`totalsByAlt`／`altPicks`／`tot` → 422**（新檢查，明確覆蓋此情境）；③ 其他可改品項的路徑同樣 422；④ 備註、附件依 Q8（參數化兩種結果）；⑤ 對照組：已成案但**未回簽**、或**無擇一組**的單，unlock-edit 行為與今日逐位元相同（Q10 預設）；⑥ 繞過前端直接打 API 同樣被拒；⑦ **已回簽擇一單 → `PATCH …/status` 改 草稿 → `PUT` 改品項必須 422**（採偏好做法時：此 `PATCH` 已清除 `is_signed／altPicks／tot／SQL 四欄` 且稽核有列，或遇下游單據 409 不變；採替代做法時：此 `PATCH` 即 409）；⑧ 往返：unlock-edit→待審核→重新核准 已送出 後 `is_signed` 仍為 1、`altPicks`／`tot` 不變、品項仍被鎖。
 18c. `totalsByAlt` 與 `altGroup` 經一般存檔切換：未回簽時可切換，合計／`tot`／SQL 四欄隨之重算；已回簽時被拒；切換前後無擇一的單逐位元不變。
 18d. unsign 守門：已開票／已請款／已精算 → 409 且無變動；通過時稽核含被清除內容（原 `altPicks`、前後金額）。
 18e. 取消回簽發生在**已成案（轉案件）或已產生採購單（PO）之後**：確認行為（擋下或同步／標記下游，依 Q3／Q9 答覆）且下游金額與重算後一致，不出現報價頁與案件／PO 金額分叉。
@@ -229,6 +233,7 @@ T2,T4 ─► T9 (回簽選定) ─► T10 (案件頁／下游) ─► T11 (收�
 9. **取消回簽時，單據已成案（轉案件）或已產生 PO 的處理？**（測 18e）①擋下，需先處理下游（建議，與 Q3 同向；理由：`recognition.py:119` 與 `caseRecord.payment.items` 皆由報價金額衍生，允許取消回簽會使認列／案件付款項與報價頁數字分叉） ②允許並標記下游待更新 ③允許且不處理。
 
 10. **已成案報價的 unlock-edit（superadmin 解鎖編輯）目前可改哪些範圍、哪些流程依賴它？（作者／使用者答覆）** 本設計僅要求「已回簽的擇一單」例外鎖定、其餘不變；若已成案解鎖修改本就用於改品項金額，需決定回簽擇一單走「先取消回簽（受 Q3／Q9 守門）」是否可接受。
+11. **已回簽單被 `update_status` 移到 草稿／已取消／已拒絕（含 `reject_quotation` 退回）時：①拒絕（預設，最保守） ②視同取消回簽：同交易清除回簽與選定並寫稽核，且守 409 下游守門（偏好）。** 須使用者／作者擇一。
 
 ## 8. 不在本班範圍
 勞報單選關聯派發下拉（05）；報價單欄位標籤可由管理者在系統內改（F7，後續）；`quotation` output_template 化（M4，承接 T8 的字面實作）；組合以外的優化（最佳方案推薦等）。
