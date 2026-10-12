@@ -89,6 +89,13 @@
             <span class="sc-dot sc-dot--warn" x-show="g.status === 'planned'" :data-testid="'sc-planned-chip-' + g.group">開發中</span>
           </button>
         </template>
+        <div class="sc-help" style="margin:12px 4px 4px" x-show="plannedFeatures.length">即將推出</div>
+        <template x-for="p in plannedFeatures" :key="p.code">
+          <div class="sc-gbtn" style="opacity:.65;cursor:default;display:block" :data-testid="'sc-soon-' + p.code">
+            <span x-text="p.label"></span>
+            <div class="sc-help" :data-testid="'sc-soon-text-' + p.code" x-text="'開發中，預計 ' + p.plannedTrain + ' 版提供'"></div>
+          </div>
+        </template>
       </nav>
 
       <section x-show="detail">
@@ -309,7 +316,7 @@
 function settingsCenterPage() {
   return {
     // 清單與目前群組
-    groups: [], current: '', detail: null, search: '', showAdv: false,
+    groups: [], plannedFeatures: [], current: '', detail: null, search: '', showAdv: false,
     // 編輯狀態
     drafts: {}, preview: null, impacts: {}, reason: '', ack: false, busy: false, msg: '', err: '',
     tab: 'values',
@@ -352,7 +359,7 @@ function settingsCenterPage() {
       if (this.groups.length) await this.pick(this.groups[0].group)
     },
     async loadGroups() {
-      try { this.groups = (await this._get('/api/settings-center/groups')).groups || [] } catch (e) { this._fail(e) }
+      try { const r = await this._get('/api/settings-center/groups'); this.groups = r.groups || []; this.plannedFeatures = r.plannedFeatures || [] } catch (e) { this._fail(e) }
     },
     filteredGroups() {
       const q = this.search.trim()
