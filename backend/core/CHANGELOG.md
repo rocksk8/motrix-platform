@@ -1,5 +1,9 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-13（wip/t57-m3-registrations-r1；M3 擇一方案登錄）
+- L1（新增，只增）：`helpers.settings_groups.UNAVAILABLE_ALT_CHOICES`（M3 擇一方案設定中『尚未提供』選項表：已登錄但不可儲存、讀取夾回預設；由 `modules/case/alt_policy.py` 讀取）。
+- 設定群組（只增，預設＝今日行為）：`quote_alt`（M3 擇一方案；政策類 requires_pending）。部署基準檔 `settings_deploy_baseline.json` 同步。
+
 ## 1.129 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-n39-settings-s0s2；第 54 班 Train A：設定中心 S0＋S2）**
 - L0（新增，只增）：`core.definitions.publish_direct(conn, kind, key, scope, body, note, user, commit=True)`——不經草稿直接發布一份 body（寫鎖內驗證、有送審中版本時 409）；`commit=False` 讓呼叫端同交易寫變更明細與稽核。

@@ -15,19 +15,18 @@ from modules.case import profit_guard as PG
 router = APIRouter()
 
 
-def _plan_response(quote_no, picks, combos, authorization, gate):
-    """兩個介面共用的載入與回應；差別只在『成本權限』的判定函式（兩者語意不同，不得互換）。"""
-    user = _require_user(authorization)
-    conn = get_db()
+def _plan_row(conn, quote_no, user):
+    """(報價單列, 這位使用者能不能讀這張案件)。讀取規則與 `GET /api/quotations/{no}` 同一支 `case_page_readable`。"""
     try:
         row = conn.execute("SELECT * FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
-        readable = row is not None and case_page_readable(conn, quote_no, user)
+        return row, (row is not None and case_page_readable(conn, quote_no, user))
     except Exception:
         conn.close()
         raise
-    if not readable:
-        deny_case(conn, quote_no, user, "not_found" if row is None else "denied")
-    conn.close()
+
+
+def _plan_response(row, picks, combos, user, gate):
+    """兩個介面共用的回應；差別只在『成本權限』的判定函式（兩者語意不同，不得互換）。逐案可見性已由各路由先過 `deny_case`（被拒＝查無）。"""
     if not gate(user):
         raise HTTPException(403, "你沒有查看報價成本與毛利的權限")
     try:
@@ -50,14 +49,26 @@ def _plan_response(quote_no, picks, combos, authorization, gate):
 def get_plan_view(quote_no: str, picks: str = Query("", description="假設的選擇 JSON：{組名: 品項id}"),
                   combos: bool = Query(False), authorization: str = Header(None)):
     """報價單頁的內部成本面板：判定函式＝`quote_money_visible`（業務／管理員／財務角色）。"""
-    return _plan_response(quote_no, picks, combos, authorization, lambda u: quote_money_visible(u))
+    user = _require_user(authorization)
+    conn = get_db()
+    row, readable = _plan_row(conn, quote_no, user)
+    if not readable:
+        deny_case(conn, quote_no, user, "not_found" if row is None else "denied")      # 看不到＝不存在（同一個 404）
+    conn.close()
+    return _plan_response(row, picks, combos, user, lambda u: quote_money_visible(u))
 
 
 @router.get("/api/quotations/{quote_no}/case-plan-view")
 def get_case_plan_view(quote_no: str, picks: str = Query("", description="假設的選擇 JSON：{組名: 品項id}"),
                        combos: bool = Query(False), authorization: str = Header(None)):
     """案件頁的方案比較（唯讀、標示未採用）：判定函式＝`money_visible`（只有財務角色與最高管理者；與報價單頁不同，不得互換）。"""
-    return _plan_response(quote_no, picks, combos, authorization, lambda u: money_visible(u))
+    user = _require_user(authorization)
+    conn = get_db()
+    row, readable = _plan_row(conn, quote_no, user)
+    if not readable:
+        deny_case(conn, quote_no, user, "not_found" if row is None else "denied")      # 看不到＝不存在（同一個 404）
+    conn.close()
+    return _plan_response(row, picks, combos, user, lambda u: money_visible(u))
 
 
 @router.get("/api/alt-quote/config")
