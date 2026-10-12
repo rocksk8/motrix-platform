@@ -19,6 +19,7 @@ import re
 
 from core import registry
 from core import customization
+from core import spine
 from core import migrations as _migrations
 
 logger = logging.getLogger("motrix.loader")
@@ -127,6 +128,7 @@ def load_all(modules_dir: str = None, package: str = None,
                 raise ValueError(f"requires core {manifest.get('core')}, have {registry.CORE_VERSION}")
             customization.require_valid(manifest)   # 可自訂點格式錯誤 ⇒ 不載入（CUSTOMIZATION-SPEC P3）
             declared_settings_groups(manifest)       # settings 宣告形狀不對 ⇒ 不載入，且**不執行模組程式碼**（import 之前驗）
+            spine.parse_features(manifest, name)     # features 不是清單 ⇒ 認不出功能，整個模組不載入（單一功能的問題不擋模組，見 spine.validate_all）
             if license_check is not None:
                 licensed, why = license_check(manifest)
                 if not licensed:
@@ -147,6 +149,8 @@ def load_all(modules_dir: str = None, package: str = None,
                 raise ValueError("MODULE missing or key mismatch")
             check_migrations(spec.migrations)       # 版號不對 ⇒ 這個模組不載入（不猜要跳過哪一支）
             check_declared_settings(manifest, name)  # 宣告的設定群組 ≠ 實際登錄的 ⇒ 不載入（fail-closed）
+            for _p in spine.register_manifest(manifest, name):   # 功能層級的問題只記 log；狀態與降級在 spine.validate_all()
+                logger.warning("模組 %s 的功能宣告：%s", name, _p)
             for v, fn in spec.migrations:           # 載入才登記（CORE-SPEC §6）：停用／未授權的模組走不到這裡
                 _migrations.register(name, v, fn)
         except Exception as e:  # 單一模組壞掉不可以拖垮整台
@@ -157,6 +161,10 @@ def load_all(modules_dir: str = None, package: str = None,
         registry.register(registry.LoadedModule(key=name, manifest=manifest, spec=spec))
         registry.set_state(name, registry.STATE_LOADED, "", manifest, note=note)
         logger.info("模組 %s %s 已載入", name, manifest.get("version", "?"))
+    try:
+        spine.validate_all()                    # 所有模組都登錄完才驗：跨模組的重複、群組歸屬才算得準
+    except Exception:                           # noqa: BLE001  脊柱壞掉不可拖垮啟動（未驗證＝open，維持今天的行為）
+        logger.exception("spine.validate_all 失敗")
     return registry.loaded()
 
 

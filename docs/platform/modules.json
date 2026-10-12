@@ -162,6 +162,7 @@
    "plat:paths",
    "plat:registry",
    "plat:source_tree",
+   "plat:spine",
    "plat:txn",
    "plat:upgrade",
    "router:approval_delegates",

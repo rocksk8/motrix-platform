@@ -3,7 +3,7 @@
 
 [單位] helper:settings_registry    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, IMPACT_SCOPE_GRANDFATHERED, KIND, RISK_ORDER, SCOPE, SettingDef, SettingError, apply_profile, banner_of, clamp_value, clear_edition_bounds, confirm_period_days,
-    field_defs, field_views, get, get_group, groups, invalidate, live_impact, materialize_due, owner_groups, plan, profile_preview, profiles, publish, register_group, set_edition_bounds, show_value, unregister_owner, validate_values
+    cancel_pending_of_nonopen, field_defs, field_views, get, get_group, group_status, groups, invalidate, live_impact, materialize_due, owner_groups, plan, profile_preview, profile_skipped, profiles, publish, register_group, set_edition_bounds, show_value, unregister_owner, validate_values
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
     ④寫入口只有 `publish()`：同一交易寫定義新版本＋變更明細（config_ledger）＋稽核＋（有舊鍵時）雙寫舊鍵；⑤讀取走 15 秒行程內快取，
@@ -19,6 +19,7 @@ import time
 
 from core import definitions as D
 from core import registry as _reg
+from core import spine as _spine
 from db import get_db
 
 logger = logging.getLogger("motrix.settings")
@@ -198,6 +199,44 @@ def groups():
                 "fields": [dict(f.meta(), min=_bounds(g, f)[0], max=_bounds(g, f)[1]) for f in v["fields"].values()]} for g, v in list(_GROUPS.items())}
 
 
+def group_status(group):
+    """群組的功能狀態 `open｜planned｜hidden`（脊柱 E-b；`features[].status`）。脊柱未初始化、匯入失敗或任何例外 ⇒ `open`（保守維持今天的行為）。"""
+    try:
+        return _spine.group_status(group)
+    except Exception:                               # noqa: BLE001
+        return "open"
+
+
+_NOT_OPEN_MSG = {"planned": "這項功能還在開發中，尚未開放調整。", "hidden": "沒有這個設定群組。"}
+
+
+def cancel_pending_of_nonopen(conn=None):
+    """啟動時（`spine.validate_all()` 之後的回呼）：非 open 群組的**所有**待生效項標 `cancelled`（ledger actor＝`system`），已投的核准票隨之作廢、
+    之後翻回 open 也不復活。永不丟例外（沒有資料庫、舊庫沒有明細表都只是略過）。回取消筆數。"""
+    from helpers import config_ledger as L
+    n = 0
+    own = conn is None
+    c = None
+    try:
+        c = conn if conn is not None else get_db()
+        for g in list(_GROUPS):
+            if group_status(g) == "open":
+                continue
+            for r in L.pending(c, "setting:%s" % g):
+                if r["domain"] == "setting:%s" % g and L.cancel(c, r["id"], "system", "功能改為開發中／隱藏，待生效項自動撤銷"):
+                    n += 1
+            invalidate(g)
+        if n:
+            c.commit()
+    except Exception:                               # noqa: BLE001
+        logger.warning("settings: 取消非 open 群組的待生效項失敗", exc_info=True)
+        return 0
+    finally:
+        if own and c is not None:
+            c.close()
+    return n
+
+
 def owner_groups(owner):
     """擁有者 `owner` 登記的群組代號集合（載入器核對 module.json 宣告用）。"""
     return {g for g, v in list(_GROUPS.items()) if v["owner"] == owner}
@@ -310,6 +349,8 @@ def _stored(conn, group):
 
 
 def _due_pending(conn, group, now):
+    if group_status(group) != "open":               # 非 open 群組：待生效項不生效（即使已到時、票數已足）；讀到的永遠是已儲存的值
+        return []
     """已到時、尚未被寫進定義的待生效值（依申請先後；同欄位後者蓋前者）。只有群組含 `requires_pending` 欄位才查。"""
     g = _g(group)
     if not any(f.requires_pending or f.loosen for f in g["fields"].values()):
@@ -534,6 +575,10 @@ def plan(group, values, *, user="", conn=None):
     `kind`：`immediate`（立即生效）｜`pending`（確認期間後生效）｜`pending_approval`（確認期間後且需另一位最高管理者核准）｜`unchanged`。"""
     from datetime import datetime, timedelta
     g = _g(group)
+    st = group_status(group)
+    if st != "open":
+        return {"ok": False, "problems": [{"path": "", "message": _NOT_OPEN_MSG.get(st, "這個設定群組目前不可調整。")}], "fields": [], "warnings": [],
+                "otherSuperadmins": 0, "confirmDays": DEFAULT_CONFIRM_DAYS, "status": st}
     problems = validate_values(group, values, partial=True)
     out = {"ok": not problems, "problems": problems, "fields": [], "warnings": [], "otherSuperadmins": 0, "confirmDays": DEFAULT_CONFIRM_DAYS}
     if problems:
@@ -600,7 +645,7 @@ def live_impact(group, field, value, *, timeout=None):
     if f is None:
         raise KeyError("群組 %r 沒有欄位 %r" % (group, field))
     res = {"live": None, "static": f.impact}
-    if f.impact_fn is None or f.check(value):
+    if f.impact_fn is None or f.check(value) or group_status(group) != "open":
         return res
     ck = (_db_id(), group, field, _json.dumps(value, sort_keys=True, default=str))
     hit = _IMPACT_CACHE.get(ck)
@@ -644,6 +689,9 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
     from core.txn import begin_write
     from helpers import config_ledger as L
     g = _g(group)
+    st = group_status(group)
+    if st != "open":                                # 功能狀態（脊柱）：開發中／隱藏的群組一律不能寫——引擎層攔截，內部呼叫端（預設組、還原…）一併被擋
+        raise SettingError(_NOT_OPEN_MSG.get(st, "這個設定群組目前不可調整。"))
     problems = validate_values(group, values, partial=True)
     if problems:
         raise SettingError("設定未儲存（%d 個問題）" % len(problems), problems)
@@ -718,6 +766,11 @@ def materialize_due(conn=None, now=None):
     try:
         began = begin_write(c)
         for group in list(_GROUPS):
+            if group_status(group) != "open":
+                for r in L.pending(c, "setting:%s" % group):
+                    if r["domain"] == "setting:%s" % group:
+                        L.cancel(c, r["id"], "system", "功能改為開發中／隱藏，待生效項自動撤銷")
+                continue
             due = _due_pending(c, group, now)
             if not due:
                 continue
@@ -754,10 +807,26 @@ def materialize_due(conn=None, now=None):
 def profiles():
     """所有欄位 `presets` 裡出現過的預設組名稱 → 涵蓋的欄位數。"""
     out = {}
-    for g in list(_GROUPS.values()):
+    for gk, g in list(_GROUPS.items()):
+        if group_status(gk) != "open":              # 開發中／隱藏的群組不算在預設組裡（略過，見 profile_skipped）
+            continue
         for f in g["fields"].values():
             for name in f.presets:
                 out[name] = out.get(name, 0) + 1
+    return out
+
+
+def profile_skipped(name):
+    """預設組裡因功能狀態被略過的群組：`[{group, groupLabel, status, reason}]`（畫面／API 回報『略過 N 項』，不得說成全部套用）。"""
+    out = []
+    for gk, g in list(_GROUPS.items()):
+        st = group_status(gk)
+        if st == "open":
+            continue
+        n = sum(1 for f in g["fields"].values() if name in f.presets)
+        if n:
+            out.append({"group": gk, "groupLabel": g["label"], "status": st, "fields": n,
+                        "reason": "開發中" if st == "planned" else "隱藏"})
     return out
 
 
@@ -765,6 +834,8 @@ def profile_preview(name, *, conn=None):
     """套用預設組會改哪些欄位（目前值 → 新值）；不寫入。"""
     out = []
     for gk, g in list(_GROUPS.items()):
+        if group_status(gk) != "open":
+            continue
         cur = get_group(gk, conn=conn)
         for k, f in g["fields"].items():
             if name in f.presets and cur[k] != f.presets[name]:
@@ -810,9 +881,30 @@ def _restore(conn, key, version, actor, reason):
     return publish(key, (old.get("body") or {}).get("values", {}), note="還原自第 %s 版" % version, user=str(actor or ""), reason=reason, conn=conn)
 
 
+def _spine_check_settings(feat):
+    """脊柱驗證器：功能宣告的設定群組必須已登錄、擁有者相符；**新群組**的 money／legal／security 欄位必須有 impact_scope；選項欄位用整數代碼。"""
+    g = (feat.get("settings") or {}).get("group")
+    if not g:
+        return []
+    meta = _GROUPS.get(g)
+    if meta is None:
+        return ["設定群組 %s 沒有登錄（register_group）" % g]
+    out = []
+    if meta["owner"] != feat["owner"]:
+        out.append("設定群組 %s 的擁有者是 %s，不是本功能所屬的模組 %s" % (g, meta["owner"], feat["owner"]))
+    for f in meta["fields"].values():
+        if RISK_ORDER.index(f.risk) >= RISK_ORDER.index("money") and f.impact_scope is None and g not in IMPACT_SCOPE_GRANDFATHERED:
+            out.append("%s.%s 風險 %s，新登錄的設定必須宣告 impact_scope" % (g, f.key, f.risk))
+        if f.choices and f.type != "int":
+            out.append("%s.%s 是選項欄位，必須用整數代碼（int）" % (g, f.key))
+    return out
+
+
 def _register_once():
     _reg.on_unload(unregister_owner)                 # 模組失敗／卸載 ⇒ 它登記的群組一併移除（不留孤兒）
     _reg.register_owned("settings", owner_groups)    # 載入器用它核對 module.json 的 settings.groups 宣告
+    _spine.register_validator("settings", _spine_check_settings, covers=("settings",))   # features[].settings.group 的跨表檢查
+    _spine.on_validated(cancel_pending_of_nonopen)   # 脊柱驗證完 ⇒ 取消非 open 群組的待生效項
     if KIND not in D.kinds():
         D.register_kind(KIND, label="設定群組", validator=_kind_validator, default=_kind_default)
     from helpers import config_ledger as L

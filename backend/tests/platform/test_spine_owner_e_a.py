@@ -226,6 +226,11 @@ def _forbidden_uses(tree):
             nm = getattr(n, "id", None) or getattr(n, "attr", None)
             if nm in _FORBIDDEN_IN_MODULES["name"]:
                 hits.append((n.lineno, nm))
+        elif isinstance(n, (ast.ImportFrom, ast.Import)):                      # from core.registry import owner_scope as os_ 也算
+            for a in n.names:
+                base = a.name.split(".")[-1]
+                if base in _FORBIDDEN_IN_MODULES["call"] or base in _FORBIDDEN_IN_MODULES["name"]:
+                    hits.append((n.lineno, base))
     return hits
 
 
@@ -246,6 +251,8 @@ def test_modules_never_touch_the_owner_machinery():
     assert _forbidden_uses(ast.parse("with registry.owner_scope('core'):\n    pass")) == [(1, "owner_scope")]
     assert (1, "_register_core") in _forbidden_uses(ast.parse("settings_groups._register_core('g')"))
     assert (1, "_OWNER") in _forbidden_uses(ast.parse("registry._OWNER.set('core')"))
+    assert (1, "owner_scope") in _forbidden_uses(ast.parse("from core.registry import owner_scope as os_"))      # 改名匯入也抓得到
+    assert (1, "_register_core") in _forbidden_uses(ast.parse("from helpers.settings_groups import _register_core as rc"))
 
 
 def test_modules_never_pass_owner_to_register_group():

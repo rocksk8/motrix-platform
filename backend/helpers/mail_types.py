@@ -205,3 +205,21 @@ register("company_setup_alert", "本公司資料設定狀態告警", _S, "supera
          "請最高管理員至「公司資料設定」確認本公司資料；判定失敗時請聯絡系統負責人檢查伺服器記錄。")
 register("system_test_mail", "測試信", _S, "superadmins", "",
          "本信僅用於確認寄信設定。", "收到本信表示寄信設定正確，無需處理。")
+
+
+# ── 脊柱驗證器（E-b）：features[].mail 宣告的信件類型必須已登記、登記者相符 ───────────────────────────
+from core import spine as _spine  # noqa: E402
+
+
+def _spine_check_mail(feat):
+    out = []
+    for key in feat.get("mail") or []:
+        t = _REGISTRY.get(key)
+        if t is None:
+            out.append("信件類型 %s 沒有登記（mail_types.register）" % key)
+        elif t.owner != feat["owner"]:
+            out.append("信件類型 %s 的登記者是 %s，不是本功能所屬的模組 %s" % (key, t.owner, feat["owner"]))
+    return out
+
+
+_spine.register_validator("mail", _spine_check_mail, covers=("mail",))
