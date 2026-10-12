@@ -176,3 +176,10 @@ def test_customer_pdf_html_has_no_project_margin(client):
     for internal in (False, True):
         html = pdf_gen._build_quote_html(q, PG.server_totals(q), internal=internal)
         assert "專案毛利" not in html
+
+
+def test_exponent_form_extremes_are_invalid_on_both_sides_by_the_same_rule():
+    for p, c in ((1000, 1e-7), (1e21, 5), (1e15, 1), (1000, 1e300)):
+        assert PR.project_margin(p, c)["pct"] is None
+    assert PR.project_margin(1000, 1e-6)["pct"] == 100.0 and PR.project_margin(1e14, 5e13)["pct"] == 50.0
+    assert PR.project_margin(1000, 0)["pct"] == 100.0

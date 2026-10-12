@@ -74,6 +74,7 @@
   // 後端孿生：helpers/profit_rules.py project_margin（同一份黃金向量 tests/data/project_margin_vectors.json）。
   // 以十進位字串轉 BigInt 做精確運算，四捨五入到 0.1、平手遠離零（12.25 → 12.3、−12.25 → −12.3）；pretax ≤ 0 或輸入不是有限數字 ⇒ pct = null（不是 0）。
   function isNum(x) { return typeof x === 'number' && isFinite(x) }
+  function pmOk(x) { return isNum(x) && (x === 0 || (Math.abs(x) >= 1e-6 && Math.abs(x) < 1e15)) }      // 與後端 _pm_ok 同一條規則：極端值（指數記法）一律當無效
   function decParts(x) {
     var s = String(x)
     if (/e/i.test(s)) s = Number(x).toFixed(12)
@@ -94,7 +95,7 @@
   }
   function projectMargin(pretax, totalCost, uncosted) {
     var out = { amount: null, pct: null, uncosted_items: uncosted || 0 }
-    if (!isNum(pretax) || !isNum(totalCost)) return out
+    if (!pmOk(pretax) || !pmOk(totalCost)) return out
     var p = decParts(pretax), c = decParts(totalCost)
     var S = Math.max(p.scale, c.scale)
     var P = p.n * pow10(S - p.scale), C = c.n * pow10(S - c.scale)

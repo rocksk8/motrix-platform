@@ -107,6 +107,12 @@ def _is_number(x) -> bool:
     return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
 
 
+def _pm_ok(x) -> bool:
+    """專案毛利的輸入必須是 0 或 1e-6 ≤ |x| < 1e15 的有限數字：落在其他區間（指數記法的極端值）一律當無效（pct 為 None），
+    前後端同一條規則——JS 的 String(x) 在 |x| < 1e-6 或 ≥ 1e21 才會改用指數記法，這個範圍內兩邊的十進位展開逐位相同。"""
+    return _is_number(x) and (x == 0 or 1e-6 <= abs(x) < 1e15)
+
+
 def uncosted_items(items) -> int:
     """成本未填的品項數：非標題、且 cost 缺鍵／None／空字串／非數字。`cost = 0` 是合法的零成本（如贈品），不算未填。"""
     n = 0
@@ -123,7 +129,7 @@ def project_margin(pretax, total_cost, uncosted=0) -> dict:
     """回 `{amount, pct, uncosted_items}`。pct 為 None 的情況：pretax／total_cost 不是有限數字，或 pretax ≤ 0（None 不是 0）。虧損回負數、不補零。"""
     from fractions import Fraction
     out = {"amount": None, "pct": None, "uncosted_items": int(uncosted or 0)}
-    if not _is_number(pretax) or not _is_number(total_cost):
+    if not _pm_ok(pretax) or not _pm_ok(total_cost):
         return out
     p, c = Fraction(Decimal(repr(pretax))), Fraction(Decimal(repr(total_cost)))
     a = p - c
