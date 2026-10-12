@@ -246,9 +246,17 @@ def list_pending(authorization: str = Header(None)):
         rows = [r for r in ledger.pending(conn, "setting") if r["domain"].startswith("setting:")]
     finally:
         conn.close()
-    return {"pending": [{"id": r["id"], "group": r["key"], "field": r["field"], "old": r["old"], "new": r["new"], "reason": r["reason"],
-                         "actor": r["actor_display"] or r["actor"], "at": r["at"], "effectiveAt": r["effective_at"],
-                         "approvals": list(r.get("approvals") or []), "required": int(r.get("approvals_required") or 0)} for r in rows]}
+    meta = sr.groups()
+    out = []
+    for r in rows:
+        f = sr.field_defs(r["key"]).get(r["field"]) if r["key"] in meta else None
+        out.append({"id": r["id"], "group": r["key"], "groupLabel": meta[r["key"]]["label"] if r["key"] in meta else r["key"],
+                    "field": r["field"], "label": f.label if f else r["field"],
+                    "old": r["old"], "new": r["new"],
+                    "oldText": sr.show_value(f, r["old"]) if f else str(r["old"]), "newText": sr.show_value(f, r["new"]) if f else str(r["new"]),
+                    "reason": r["reason"], "actor": r["actor_display"] or r["actor"], "actorUser": r["actor"], "at": r["at"], "effectiveAt": r["effective_at"],
+                    "approvals": list(r.get("approvals") or []), "required": int(r.get("approvals_required") or 0)})
+    return {"pending": out}
 
 
 @router.post("/api/settings-center/pending/{change_id}/cancel")
