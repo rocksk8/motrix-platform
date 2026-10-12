@@ -37,8 +37,8 @@ def test_owner_is_core_outside_any_scope_and_module_inside(clean_registry):
     with registry.owner_scope("zz_mod"):
         assert registry.current_owner() == "zz_mod"
         _reg("zz_ea_inmod")
-        _reg("zz_ea_explicit", owner="other")                      # 顯式 owner 蓋過範圍
     assert registry.current_owner() is None
+    _reg("zz_ea_explicit", owner="other")                          # 範圍之外可顯式指定（範圍之內指定成別人會被拒，見下方 r2 題）
     owners = {g: m["owner"] for g, m in R.groups().items() if g.startswith("zz_ea")}
     assert owners == {"zz_ea_core": "core", "zz_ea_inmod": "zz_mod", "zz_ea_explicit": "other"}
     assert R.owner_groups("zz_mod") == {"zz_ea_inmod"}
@@ -131,7 +131,8 @@ def test_loader_checks_declared_settings_against_actual_registration(tmp_path, m
         "ea_plain": _mod("ea_plain", [], None),                                  # 沒有設定：不受影響
         "ea_miss": _mod("ea_miss", ["zz_ea_m1"], ["zz_ea_m1", "zz_ea_m2"]),     # 宣告了沒登記
         "ea_extra": _mod("ea_extra", ["zz_ea_x1"], None),                        # 登記了沒宣告
-        "ea_baddecl": _mod("ea_baddecl", [], ["Bad-Code"]),                      # 宣告格式不合
+        "ea_baddecl": ({"key": "ea_baddecl", "core": ">=1.0,<2.0", "settings": {"groups": ["Bad-Code"]}},
+                       "import sys\nsys._ea_baddecl_ran = True\n" + _src() % "ea_baddecl"),   # 宣告格式不合：模組程式碼不可被執行
     })
     monkeypatch.syspath_prepend(str(tmp_path))
     got = loader.load_all(str(root), pkg)
@@ -142,6 +143,7 @@ def test_loader_checks_declared_settings_against_actual_registration(tmp_path, m
         assert "登記了沒宣告" in registry.failed()["ea_extra"] and "zz_ea_x1" in registry.failed()["ea_extra"]
         owners = {g: m["owner"] for g, m in R.groups().items() if g.startswith("zz_ea")}
         assert owners == {"zz_ea_ok": "ea_ok"}                                     # 失敗模組的群組都已移除
+        assert not hasattr(sys, "_ea_baddecl_ran")                                  # 宣告形狀在 import 之前驗：壞宣告的模組程式碼沒有被執行
     finally:
         for k in list(sys.modules):
             if k.startswith(pkg):
@@ -157,3 +159,64 @@ def test_declared_settings_shape_is_checked_before_import():
             continue
         with pytest.raises(ValueError):
             loader.declared_settings_groups(bad)
+
+
+# --- 0d 稽核（E-a r2）：核心群組不被 import 範圍搶走、不准替別人登記 ---------------------------------
+
+def test_core_groups_stay_core_even_when_first_imported_inside_a_module_scope(clean_registry, monkeypatch):
+    import importlib
+    saved = dict(R._GROUPS)
+    core_names = [g for g, v in saved.items() if v["owner"] == "core" and not g.startswith("zz_")]
+    assert {"change_control", "retention", "uploads", "system_hub"} <= set(core_names)
+    old_mod = sys.modules.get("helpers.settings_groups")
+    try:
+        for g in core_names:
+            R._GROUPS.pop(g, None)
+        monkeypatch.delitem(sys.modules, "helpers.settings_groups", raising=False)
+        with registry.owner_scope("zz"):                                           # 某模組 import 期間第一次 import 本檔
+            importlib.import_module("helpers.settings_groups")
+        owners = {g: R._GROUPS[g]["owner"] for g in core_names}
+        assert set(owners.values()) == {"core"}
+        registry.mark_failed("zz", "那個模組後來載入失敗")                            # 失敗清理不可帶走核心群組
+        assert all(g in R._GROUPS for g in core_names)
+    finally:
+        R._GROUPS.update(saved)
+        if old_mod is not None:
+            sys.modules["helpers.settings_groups"] = old_mod
+        R.invalidate()
+
+
+def test_a_module_scope_cannot_register_for_another_owner(clean_registry):
+    with registry.owner_scope("zz_a"):
+        _reg("zz_ea_same", owner="zz_a")                                           # 指定成自己 ⇒ 可以
+        with pytest.raises(ValueError):
+            _reg("zz_ea_other", owner="zz_b")                                      # 替別人登記 ⇒ 拒絕
+        with pytest.raises(ValueError):
+            _reg("zz_ea_core", owner="core")                                       # 冒充 core ⇒ 拒絕
+    assert "zz_ea_other" not in R._GROUPS and "zz_ea_core" not in R._GROUPS
+    _reg("zz_ea_free", owner="zz_b")                                               # 範圍之外（測試／核心）可顯式指定
+    assert R._GROUPS["zz_ea_free"]["owner"] == "zz_b"
+
+
+def test_modules_never_pass_owner_to_register_group():
+    """靜態守門：modules/** 的程式碼不得以 owner= 呼叫 register_group（擁有者只能來自載入器的 import 範圍）。"""
+    import ast
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2] / "modules"
+    bad = []
+    for f in root.rglob("*.py"):
+        if "tests" in f.parts:
+            continue
+        try:
+            tree = ast.parse(f.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Call):
+                name = getattr(n.func, "attr", None) or getattr(n.func, "id", None)
+                if name == "register_group" and any(k.arg == "owner" for k in n.keywords):
+                    bad.append("%s:%d" % (f.relative_to(root), n.lineno))
+    assert bad == [], "模組不可自己指定設定群組的擁有者：%s" % bad
+    # 正對照：掃描器抓得到違規寫法
+    sample = ast.parse("register_group('g', 'x', [], owner='core')")
+    assert any(isinstance(n, ast.Call) and any(k.arg == "owner" for k in n.keywords) for n in ast.walk(sample))

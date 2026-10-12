@@ -7,13 +7,22 @@
     畫面文字規則（零技術門檻）：問句、標籤、說明、影響說明一律白話繁中，內部鍵不顯示給使用者（守門 test_settings_ui_plain_language）。
 [契約題] backend/tests/platform/test_settings_registry_t54.py
 """
-from helpers.settings_registry import SettingDef as S, register_group
+from core import registry as _reg
+from helpers.settings_registry import SettingDef as S
+from helpers.settings_registry import register_group as _register_group
+
+
+def _register_core(*args, **kwargs):
+    """本檔的群組一律屬於 core：本檔可能在某個模組的 import 範圍內被第一次 import（例如模組 import 了本檔），
+    不蓋 core 章的話那個模組就成了核心群組的擁有者（它載入失敗時 `unregister_owner` 會把核心群組一併刪掉）。"""
+    with _reg.owner_scope("core"):
+        return _register_group(*args, **kwargs)
 
 # 舊 PATCH /api/settings/backup-retention 的範圍：天數 1–3650、月備份 0–3650（0＝永久）、更新前快照份數 0–100。
 # 稽核紀錄保存期限另加法遵下限 365（無上限）；讀取時向上夾到 365（舊庫裡低於 365 的值不會讓稽核被提早清掉）。
 _BACKUP_IMPACT = "只影響之後的清理：超過天數的舊備份會在下一次例行清理時被刪除，已刪除的備份無法找回；改大則不會補回已刪的。調長立即生效；縮短（會更早刪除）屬放寬，須另一位最高管理者核准，並等「變更確認期間」後才生效。"
 
-register_group(
+_register_core(
     "change_control", "變更管制",
     [
         S("confirm_period_days", "int", 7, min=1, max=90, unit="天", risk="legal", loosen="down", recommended=7,
@@ -26,7 +35,7 @@ register_group(
     help="高風險設定變更要等多久才生效、是否需要第二位最高管理者核准。",
 )
 
-register_group(
+_register_core(
     "retention", "保存期限",
     [
         S("local_db_keep_days", "int", 30, min=1, max=3650, unit="天", legacy="local_db_keep_days", risk="ops", loosen="down", recommended=30,
@@ -61,7 +70,7 @@ register_group(
     help="備份、稽核紀錄、通知與操作軌跡要保存多久。",
 )
 
-register_group(
+_register_core(
     "uploads", "上傳容量",
     [
         S("max_file_mb", "int", 20, min=1, max=200, unit="MB", risk="ops", loosen="up", recommended=20,
@@ -79,7 +88,7 @@ register_group(
 )
 
 # 系統中心（第 54 班）：『沒有權限的項目要不要列出來』是『放寬可見度』的設定——走設定登錄表（版本、影響說明、稽核同交易、放寬要確認期間與第二人核准）。
-register_group(
+_register_core(
     "system_hub", "系統中心",
     [
         S("show_denied", "int", 0, min=0, max=1, risk="security", loosen="up", recommended=0,

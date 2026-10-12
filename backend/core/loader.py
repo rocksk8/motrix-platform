@@ -126,6 +126,7 @@ def load_all(modules_dir: str = None, package: str = None,
             if not ok:
                 raise ValueError(f"requires core {manifest.get('core')}, have {registry.CORE_VERSION}")
             customization.require_valid(manifest)   # 可自訂點格式錯誤 ⇒ 不載入（CUSTOMIZATION-SPEC P3）
+            declared_settings_groups(manifest)       # settings 宣告形狀不對 ⇒ 不載入，且**不執行模組程式碼**（import 之前驗）
             if license_check is not None:
                 licensed, why = license_check(manifest)
                 if not licensed:

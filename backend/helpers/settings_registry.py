@@ -179,6 +179,10 @@ def register_group(group, label, fields, *, sensitive=False, risk="ops", legacy_
     `owner`：擁有者（模組鍵）；省略 ⇒ 載入器 import 該模組期間自動帶入（`core.registry.owner_scope`），不在範圍內 ⇒ `core`。"""
     if group in _GROUPS:
         raise ValueError("設定群組已登錄：%r" % group)
+    cur = _reg.current_owner()
+    if owner is not None and cur is not None and owner != cur:
+        # 模組 import 期間只能替自己登記：不准替別人（或 core）登記，否則別人載入失敗時會連帶刪掉不是它的群組
+        raise ValueError("設定群組 %r：import 範圍的擁有者是 %r，不能指定 owner=%r" % (group, cur, owner))
     if not _zh(label) or not _zh(help):
         raise ValueError("設定群組 %r 需要繁中的名稱與說明" % group)
     names = [f.key for f in fields]
@@ -186,17 +190,17 @@ def register_group(group, label, fields, *, sensitive=False, risk="ops", legacy_
         raise ValueError("群組 %r 欄位重複" % group)
     _GROUPS[group] = {"label": label, "fields": {f.key: f for f in fields}, "sensitive": bool(sensitive), "risk": risk,
                       "legacy_key": legacy_key, "cross_check": cross_check, "help": help,
-                      "owner": owner if owner is not None else (_reg.current_owner() or "core")}
+                      "owner": owner if owner is not None else (cur or "core")}
 
 
 def groups():
     return {g: {"label": v["label"], "sensitive": v["sensitive"], "risk": v["risk"], "help": v["help"], "owner": v["owner"],
-                "fields": [dict(f.meta(), min=_bounds(g, f)[0], max=_bounds(g, f)[1]) for f in v["fields"].values()]} for g, v in _GROUPS.items()}
+                "fields": [dict(f.meta(), min=_bounds(g, f)[0], max=_bounds(g, f)[1]) for f in v["fields"].values()]} for g, v in list(_GROUPS.items())}
 
 
 def owner_groups(owner):
     """擁有者 `owner` 登記的群組代號集合（載入器核對 module.json 宣告用）。"""
-    return {g for g, v in _GROUPS.items() if v["owner"] == owner}
+    return {g for g, v in list(_GROUPS.items()) if v["owner"] == owner}
 
 
 def unregister_owner(owner):
@@ -750,7 +754,7 @@ def materialize_due(conn=None, now=None):
 def profiles():
     """所有欄位 `presets` 裡出現過的預設組名稱 → 涵蓋的欄位數。"""
     out = {}
-    for g in _GROUPS.values():
+    for g in list(_GROUPS.values()):
         for f in g["fields"].values():
             for name in f.presets:
                 out[name] = out.get(name, 0) + 1
@@ -760,7 +764,7 @@ def profiles():
 def profile_preview(name, *, conn=None):
     """套用預設組會改哪些欄位（目前值 → 新值）；不寫入。"""
     out = []
-    for gk, g in _GROUPS.items():
+    for gk, g in list(_GROUPS.items()):
         cur = get_group(gk, conn=conn)
         for k, f in g["fields"].items():
             if name in f.presets and cur[k] != f.presets[name]:
