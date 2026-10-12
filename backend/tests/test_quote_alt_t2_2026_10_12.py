@@ -202,7 +202,7 @@ def test_policy_fields_money_risk_with_banner_and_ordered_choices():
 def test_unavailable_choices_registered_but_not_selectable():
     by = _fields()
     assert set(SG.UNAVAILABLE_ALT_CHOICES) == set(_POLICIES)        # 消費者尚未落地的選項一律不可選，各任務在自己的 commit 開放
-    assert SG.UNAVAILABLE_ALT_CHOICES["cancel_after_deal"] == (2, 3)
+    assert SG.UNAVAILABLE_ALT_CHOICES["cancel_after_deal"] == (2,)          # T9：③『允許，只提醒』的消費者（取消回簽守門鏈）已落地
     for k, bad in SG.UNAVAILABLE_ALT_CHOICES.items():
         labels = {c["value"]: c["label"] for c in by[k]["choices"]}
         for b in bad:
@@ -210,6 +210,7 @@ def test_unavailable_choices_registered_but_not_selectable():
             problems = R.validate_values("quote_alt", {k: b}, partial=True)
             assert problems and problems[0]["path"] == k
     assert R.validate_values("quote_alt", {"cancel_after_deal": 1}, partial=True) == []
+    assert R.validate_values("quote_alt", {"cancel_after_deal": 3}, partial=True) == []
 
 
 def test_policy_reader_clamps_unavailable_value_to_default(monkeypatch):
@@ -217,7 +218,7 @@ def test_policy_reader_clamps_unavailable_value_to_default(monkeypatch):
     assert alt_policy.policy("cancel_after_deal") == 1
     assert alt_policy.policy("lock_scope") == 1            # 尚未提供 ⇒ 夾回預設
     monkeypatch.setattr(R, "get", lambda g, f, **kw: 3)
-    assert alt_policy.policy("cancel_after_deal") == 1
+    assert alt_policy.policy("cancel_after_deal") == 3
     with pytest.raises(KeyError):
         alt_policy.policy("total_text")
 

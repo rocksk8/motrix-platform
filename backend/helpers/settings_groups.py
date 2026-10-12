@@ -97,7 +97,7 @@ register_group(
 # 擇一方案報價（M3；T57）：文字範本、數量上限，以及回簽政策 P1～P8。政策的選項值為整數代碼（畫面只顯示中文標籤）、依序「由嚴到寬」，第一項＝使用者 2026-10-12 的定案值（預設，管理者可改）。
 # 『尚未提供』的選項照樣登錄但不可選：cross_check 擋下儲存、讀取端（modules.case.alt_policy）夾回預設；標籤自動加註『（尚未提供）』。
 # 凡是還沒有程式會用到的放寬路徑，一律先列在這裡；由實作該路徑的任務在自己的 commit 把它從表中移除（T9 起陸續開放）。
-UNAVAILABLE_ALT_CHOICES = {"lock_scope": (2,), "cancel_after_deal": (2, 3), "move_out_of_sent": (2,), "reject_final_keep": (2,),
+UNAVAILABLE_ALT_CHOICES = {"lock_scope": (2,), "cancel_after_deal": (2,), "move_out_of_sent": (2,), "reject_final_keep": (2,),
                            "unlock_edit_signed": (2,), "approval_basis": (2,), "cancel_after_export": (2,),
                            "cancel_after_invoice": (2,), "cancel_after_settle": (2,)}
 _NA = "（尚未提供）"

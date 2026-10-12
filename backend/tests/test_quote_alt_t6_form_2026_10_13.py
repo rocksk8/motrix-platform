@@ -114,3 +114,10 @@ def test_switch_off_makes_groups_inert_in_the_form():
       o.q.totalsByAlt = false; o.calcTotals()
       return { sub: o.tot.subtotal, unpicked: o.altUnpicked(), txt: o.altTotalsText(), dropped: o.altIsDropped(o.q.items[2]), notes: o.altNotePreview() }""")
     assert got == {"sub": 9000, "unpicked": 0, "txt": "", "dropped": False, "notes": []}
+
+
+def test_sign_dialog_requires_every_group_and_posts_picks():
+    assert 'data-testid="qf-alt-sign-dialog"' in FORM and "altSignReady()" in FORM
+    seg = FORM[FORM.index("async confirmAltSign()"): FORM.index("async uploadQuotationSignedFiles")]
+    assert "action: 'sign'" in seg and "picks: this.signPick.picks" in seg
+    assert "MotrixAltItems.active(this.q) && this.altGroupNames().length" in FORM        # 只有擇一方案單才走對話框

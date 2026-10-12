@@ -64,6 +64,7 @@ from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
 from modules.case import material_guard as MG  # 叫料審核的寫入閘（31-C）
 from modules.case import profit_guard as _PG  # 第 48 班 S2：管銷分攤比率權限／伺服器重算
+from modules.case import alt_sign as _ALT_SIGN  # M3 T9：擇一方案回簽選定／取消回簽
 from modules.case import receipt_calendar as _RC  # 行事曆「收款登錄／應收到期提醒」（2026-10-05，預設關）
 from modules.case.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
 from modules.case.case_stage_tasks import daily_task_notice, delete_daily_task_for_case_stage, sync_daily_task_for_case_stage  # noqa: E402
@@ -1331,13 +1332,24 @@ def toggle_quotation_signed(quote_no: str, body: dict = Body(...), authorization
     note   = (body or {}).get("note", "")
     if action not in ("sign", "unsign"):
         raise HTTPException(400, "action 必須為 sign 或 unsign")
+    picks = (body or {}).get("picks")
     conn = get_db()
     row = conn.execute(
-        "SELECT status, is_signed, signed_log FROM quotations WHERE quote_no=?", (quote_no,)
+        "SELECT status, is_signed, signed_log, data_json FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, "報價單不存在")
+    try:
+        _alt_data = json.loads(row["data_json"] or "{}") or {}
+    except (TypeError, ValueError):
+        _alt_data = {}
+    if _ALT_SIGN.applies(_alt_data):             # M3：擇一方案單（H5：其他單完全走下面今日的路徑）
+        conn.close()
+        return _toggle_alt_signed(quote_no, action, note, picks, user, authorization)
+    if picks:
+        conn.close()
+        raise HTTPException(422, "這張報價單沒有啟用擇一方案，不需要選擇方案")
     if row["status"] != "已送出":
         conn.close()
         raise HTTPException(409, "僅已送出狀態可標記回簽")
@@ -1377,6 +1389,50 @@ def toggle_quotation_signed(quote_no: str, body: dict = Body(...), authorization
                             user.get("display_name") or user["username"], quote_no, "quotation-form.html",
                             detail=note or "")
     return {"ok": True, "is_signed": action == "sign", "signed_log": log}
+
+
+def _toggle_alt_signed(quote_no: str, action: str, note: str, picks, user: dict, authorization) -> dict:
+    """擇一方案單的回簽／取消回簽（M3 T9）：讀取、驗證、寫入、稽核在**同一個寫交易**（H1／H2）；被擋 ⇒ 不寫任何東西。
+    規則在 `modules/case/alt_sign.py`；取消回簽走唯一清除入口 `clear_signed_selection`（守門鏈 P8→P7→P6→P2）。"""
+    conn = get_db()
+    result = {}
+    with write_txn(conn):
+        row = conn.execute("SELECT status, is_signed, signed_log, data_json, deal_tag, settle_status FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        if not row:
+            raise HTTPException(404, "報價單不存在")
+        try:
+            data = json.loads(row["data_json"] or "{}") or {}
+        except (TypeError, ValueError):
+            raise HTTPException(409, "報價單資料無法解析")
+        if not _ALT_SIGN.applies(data):
+            raise HTTPException(409, "報價單內容已變更，請重新整理後再試")
+        is_signed = bool(row["is_signed"])
+        now = datetime.now().isoformat()
+        log = json.loads(row["signed_log"] or "[]")
+        log.append({"at": now, "username": user["username"], "userDisplay": user.get("display_name") or user["username"],
+                    "action": "signed" if action == "sign" else "unsigned", "note": note})
+        if action == "sign":
+            if row["status"] != "已送出":
+                raise HTTPException(409, "僅已送出狀態可標記回簽")
+            if is_signed:
+                raise HTTPException(409, "已回簽，無需重複標記")
+            result = _ALT_SIGN.sign(conn, quote_no, row, data, picks, user, log, now)
+        else:
+            if not is_signed:
+                raise HTTPException(409, "尚未回簽")
+            if row["status"] in ("待審核", "簽核中"):
+                raise HTTPException(409, _ALT_SIGN.IN_APPROVAL_MSG)
+            if row["status"] not in _ALT_SIGN.UNSIGN_STATES:
+                raise HTTPException(409, "目前狀態不能取消回簽")
+            result = _ALT_SIGN.clear_signed_selection(conn, quote_no, user, now, note, signed_log=log)
+        conn.commit()
+    conn.close()
+    _audit(_tok(authorization), f"quotation.{action}", "quotation", quote_no, quote_no, {"note": note, "alt": True})
+    notify_module_activity("報價單", "已回簽" if action == "sign" else "取消回簽",
+                           user.get("display_name") or user["username"], quote_no, "quotation-form.html", detail=note or "")
+    out = {"ok": True, "is_signed": action == "sign", "signed_log": log}
+    out.update(result)
+    return out
 
 
 #: 客戶回簽單（報價單回簽附件）可上傳的報價單狀態：完成簽核（已送出）之後——客戶把簽回的報價單寄回，通常在標記「已成案」之前或當下。

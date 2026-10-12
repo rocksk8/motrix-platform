@@ -192,11 +192,11 @@ def stamp_alt_texts(q: dict, old: dict, freeze: bool) -> None:
     """`altTexts`（合計格文字、說明句範本）是**伺服器自有的存檔快照**：用戶端的值一律不採用。有擇一內容才記；
     已回簽／已精算／已結案（`freeze`）且舊單有快照 ⇒ 沿用舊快照（改設定不改歷史單），其餘存檔時取目前設定中心的值。"""
     q.pop("altTexts", None)
-    if not (alt_groups(q) and alt_active(q)):
-        return
     prev = old.get("altTexts") if isinstance(old, dict) else None
     if freeze and isinstance(prev, dict) and isinstance(prev.get("total_text"), str) and isinstance(prev.get("note_template"), str):
-        q["altTexts"] = {"total_text": prev["total_text"], "note_template": prev["note_template"]}
+        q["altTexts"] = {"total_text": prev["total_text"], "note_template": prev["note_template"]}      # 凍結的單沿用舊快照（即使開關被關也不丟）
+        return
+    if not (alt_groups(q) and alt_active(q)):
         return
     from modules.case import alt_policy
     q["altTexts"] = {"total_text": str(alt_policy.setting("total_text")), "note_template": str(alt_policy.setting("note_template"))}
@@ -217,6 +217,8 @@ def validate_alt(q: dict, max_groups: int) -> None:
             raise HTTPException(422, f"第 {n} 項的擇一組別必須是文字")
         if g.strip() and i.get("type") == "header":
             raise HTTPException(422, f"第 {n} 項是標題列，不能設為擇一方案")
+    if not alt_active(q):
+        return                                                      # 總開關沒開 ⇒ 擇一組別惰性（不計價、不鎖定）：只做上面的型別檢查，不擋組數與組內數量
     groups = alt_groups(q)
     if len(groups) > max_groups:
         raise HTTPException(422, f"擇一方案最多 {max_groups} 組，目前有 {len(groups)} 組")

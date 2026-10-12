@@ -1959,6 +1959,32 @@
         </div>
       </div>
 
+      <!-- M3 T9：擇一方案單回簽——逐組選定客戶採用的方案（預設不預選；每組都選了才能送出） -->
+      <div x-show="signPick.open" x-cloak data-testid="qf-alt-sign-dialog"
+           style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px">
+        <div style="background:#fff;border-radius:8px;max-width:560px;width:100%;max-height:90vh;overflow:auto;padding:18px 20px">
+          <div style="font-size:15px;font-weight:700;margin-bottom:4px">客戶回簽：請選擇客戶採用的方案</div>
+          <div class="form-hint" style="margin-bottom:10px">每一組都要選一個；選定後合計會改成所選方案的金額。要換方案請先取消回簽，再重新回簽。</div>
+          <template x-for="g in altPickGroups()" :key="g.group">
+            <div style="margin-bottom:10px">
+              <div style="font-weight:600;margin-bottom:4px" x-text="g.group"></div>
+              <template x-for="o in g.options" :key="o.id">
+                <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer">
+                  <input type="radio" :name="'altpick-' + g.group" :value="o.id" :checked="signPick.picks[g.group] === o.id" @change="signPick.picks[g.group] = o.id">
+                  <span style="flex:1" x-text="o.label"></span>
+                  <span style="color:var(--text-dim)" x-text="'NT$ ' + o.amount.toLocaleString()"></span>
+                </label>
+              </template>
+            </div>
+          </template>
+          <input class="form-input" type="text" x-model="signPick.note" placeholder="備註（選填）" style="margin:6px 0 12px">
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-ghost btn-sm" @click="signPick.open = false">取消</button>
+            <button class="btn btn-primary btn-sm" :disabled="!altSignReady() || signPick.busy" @click="confirmAltSign()" data-testid="qf-alt-sign-confirm">確認回簽</button>
+          </div>
+        </div>
+      </div>
+
       <!-- M3 T5：擇一方案比較（只給成本權限者；內容全由後端 plan-view 回傳，前端不自算；列印預覽不含） -->
       <div class="cost-panel alt-plan" x-show="showCostCols && altGroupNames().length && q.quoteNo" x-cloak data-testid="qf-alt-plan"
            x-init="$watch('q.quoteNo', v => { if (v && altGroupNames().length) loadPlan() })">
@@ -2435,6 +2461,7 @@
       docVersions: [],
 
       altCfg: { enabled: true, totalText: '依方案選擇', noteTemplate: '項次{items}為{group}擇一方案選擇', groupsMax: 10, comboViewMax: 24, comboViewDefaultOpen: false },   // M3：init 時由 GET /api/alt-quote/config 填入
+      signPick: { open: false, picks: {}, note: '', busy: false },     // M3 T9：回簽時逐組選定方案的對話框
       plan: { loading: false, data: null, error: '', picks: {}, combosOpen: false, sortKey: 'directMarginPct' },
       oh: { mode: 'legacy', defaultPct: 25, charityBasis: 'direct' },   // 第 48 班 S3：管銷口徑開關與全域預設（init 時由 GET /api/overhead/settings 填入）
       tot: {
@@ -3768,6 +3795,10 @@
 
       // ── 客戶回簽 ──────────────────────────────────────────────────────────
       async toggleQuotationSigned(action) {
+        if (action === 'sign' && MotrixAltItems.active(this.q) && this.altGroupNames().length) {      // M3：擇一方案單回簽要逐組選定客戶採用的方案（預設不預選）
+          this.signPick = { open: true, picks: {}, note: '', busy: false }
+          return
+        }
         const note = prompt(action === 'sign' ? '標記客戶已回簽，可填寫備註（選填）：' : '取消回簽標記，可填寫原因（選填）：')
         if (note === null) return
         try {
@@ -3779,6 +3810,26 @@
           if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
           await this.loadQuote()
         } catch (e) { alert('網路錯誤：' + e.message) }
+      },
+
+      altPickGroups() {
+        return this.altGroupNames().map(g => ({ group: g, options: (this.q.items || []).filter(i => MotrixAltItems.groupOf(i) === g)
+          .map(i => ({ id: String(i.id), label: (i.description || '').trim() || '（未命名品項）', amount: i.amount || 0 })) }))
+      },
+      altSignReady() { return this.altGroupNames().every(g => !!this.signPick.picks[g]) },
+      async confirmAltSign() {
+        if (!this.altSignReady() || this.signPick.busy) return
+        this.signPick.busy = true
+        try {
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}/signed-toggle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ action: 'sign', note: this.signPick.note || '', picks: this.signPick.picks })
+          })
+          if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
+          this.signPick.open = false
+          await this.loadQuote()
+        } catch (e) { alert('網路錯誤：' + e.message) } finally { this.signPick.busy = false }
       },
 
       async uploadQuotationSignedFiles(evt) {
