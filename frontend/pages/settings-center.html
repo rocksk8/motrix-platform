@@ -85,7 +85,8 @@
         <template x-for="g in filteredGroups()" :key="g.group">
           <button type="button" class="sc-gbtn" :class="{'is-on': g.group === current}" :data-testid="'sc-group-' + g.group" @click="pick(g.group)">
             <span x-text="g.label"></span>
-            <span class="sc-dot" x-show="g.lastChange">已調整過</span>
+            <span class="sc-dot" x-show="g.status !== 'planned' && g.lastChange">已調整過</span>
+            <span class="sc-dot sc-dot--warn" x-show="g.status === 'planned'" :data-testid="'sc-planned-chip-' + g.group">開發中</span>
           </button>
         </template>
       </nav>
@@ -94,7 +95,12 @@
         <h2 style="font-size:17px" x-text="detail ? detail.label : ''"></h2>
         <div class="sc-help" x-text="detail ? detail.help : ''"></div>
 
-        <div class="sc-tabs" role="tablist" style="margin-top:12px">
+        <div class="sc-card" x-show="isPlanned()" style="opacity:.8;margin-top:12px" data-testid="sc-planned">
+          <div class="sc-q" data-testid="sc-planned-text" x-text="plannedSentence()"></div>
+          <div class="sc-help">這項功能的設定還不能調整；功能完成後會自動開放，現在不會有任何變動。</div>
+        </div>
+
+        <div class="sc-tabs" role="tablist" style="margin-top:12px" x-show="!isPlanned()">
           <button type="button" class="sc-tab" :class="{'is-on': tab==='values'}" data-testid="sc-tab-values" @click="openTab('values')">目前設定</button>
           <button type="button" class="sc-tab" :class="{'is-on': tab==='pending'}" data-testid="sc-tab-pending" @click="openTab('pending')">待生效</button>
           <button type="button" class="sc-tab" :class="{'is-on': tab==='versions'}" data-testid="sc-tab-versions" @click="openTab('versions')">版本與變更紀錄</button>
@@ -102,7 +108,7 @@
         </div>
 
         <!-- 目前設定 -->
-        <div x-show="tab==='values'">
+        <div x-show="!isPlanned() && tab==='values'">
           <template x-for="f in fields()" :key="f.key">
             <div class="sc-card" :class="{'is-dirty': isDirty(f)}" :data-testid="'sc-field-' + f.key">
               <div class="sc-q"><span x-text="f.question"></span><span class="sc-rec" x-show="f.recommendedText && !f.choices.length">建議：<span x-text="f.recommendedText"></span></span></div>
@@ -174,7 +180,7 @@
         </div>
 
         <!-- 待生效 -->
-        <div x-show="tab==='pending'">
+        <div x-show="!isPlanned() && tab==='pending'">
           <div class="sc-note" style="margin-bottom:8px">放寬類或重要的變更不會馬上生效：要等「變更確認期間」，需要時還要另一位最高管理者核准。期間內任何最高管理者都可以撤銷。</div>
           <div class="sc-row" style="margin-bottom:10px"><input type="text" x-model="pendingNote" placeholder="核准／撤銷的備註（選填）" style="padding:7px 9px;border:1px solid var(--border-light);border-radius:6px;min-width:260px"></div>
           <table class="sc-table" data-testid="sc-pending">
@@ -199,7 +205,7 @@
         </div>
 
         <!-- 版本與變更紀錄 -->
-        <div x-show="tab==='versions'">
+        <div x-show="!isPlanned() && tab==='versions'">
           <table class="sc-table" data-testid="sc-versions">
             <thead><tr><th>版本</th><th>時間</th><th>誰發布</th><th>備註</th><th></th></tr></thead>
             <tbody>
@@ -247,7 +253,7 @@
         </div>
 
         <!-- 預設組 -->
-        <div x-show="tab==='profiles'">
+        <div x-show="!isPlanned() && tab==='profiles'">
           <div class="sc-note" style="margin-bottom:8px">預設組是一組事先配好的建議值（例如「嚴格」）。套用前會先列出會改哪些設定；放寬的項目一樣要經過確認期間與核准。</div>
           <div class="sc-row">
             <template x-for="p in profiles" :key="p.name"><button type="button" class="btn btn-ghost" :data-testid="'sc-profile-' + p.name" @click="previewProfile(p.name)"><span x-text="p.name"></span>（<span x-text="p.fieldCount"></span> 項）</button></template>
@@ -258,7 +264,8 @@
               <div class="sc-q" x-text="'套用「' + profileName + '」會改這些設定'"></div>
               <table class="sc-table"><thead><tr><th>群組</th><th>設定</th><th>目前</th><th>改成</th></tr></thead>
                 <tbody><template x-for="c in profilePv" :key="c.group + c.field"><tr><td x-text="c.groupLabel"></td><td x-text="c.label"></td><td><span x-text="c.old"></span> <span x-text="c.unit"></span></td><td><strong x-text="c.new"></strong> <span x-text="c.unit"></span></td></tr></template></tbody></table>
-              <div class="sc-note" x-show="!profilePv.length">目前的設定已經和這個預設組一致。</div>
+              <div class="sc-note" x-show="!profilePv.length && !skippedCount()">目前的設定已經和這個預設組一致。</div>
+              <div class="sc-note" x-show="skippedCount()" data-testid="sc-profile-skipped" x-text="'略過 ' + skippedCount() + ' 項（開發中，尚未開放調整）'"></div>
               <textarea x-model="profileReason" rows="2" placeholder="套用原因（必填）" style="width:100%;margin-top:8px;padding:7px 9px;border:1px solid var(--border-light);border-radius:6px"></textarea>
               <div class="sc-row" style="margin-top:8px">
                 <button type="button" class="btn btn-primary" :disabled="busy || !profileReason.trim() || !profilePv.length" data-testid="sc-profile-apply" @click="applyProfile()">確認套用</button>
@@ -309,7 +316,7 @@ function settingsCenterPage() {
     // 其他頁籤
     pending: [], pendingNote: '', versions: [], diffA: '', diffB: 'current', diff: null,
     restoreFor: null, restorePv: null, restoreReason: '',
-    profiles: [], profilePv: null, profileName: '', profileReason: '',
+    profiles: [], profilePv: null, profileName: '', profileReason: '', profileSkipped: [],
     _initDone: false, _timer: null, _seq: 0,
 
     _hdr() {
@@ -357,6 +364,7 @@ function settingsCenterPage() {
       this.drafts = {}; this.preview = null; this.impacts = {}; this.reason = ''; this.ack = false; this.msg = ''; this.err = ''
       this.diff = null; this.restoreFor = null; this.restorePv = null
       await this.loadDetail()
+      if (this.isPlanned()) { this.tab = 'values'; return }
       if (this.tab === 'versions') await this.loadVersions()
     },
     async loadDetail() {
@@ -366,6 +374,9 @@ function settingsCenterPage() {
       const all = (this.detail && this.detail.fields) || []
       return all.filter(f => !f.advanced || this.showAdv || this.isDirty(f))
     },
+    isPlanned() { return !!(this.detail && this.detail.status === 'planned') },
+    // 「開發中，預計 MSn 版提供」只由 plannedTrain 組出（不取名稱、說明、備註；不寫日期）
+    plannedSentence() { const t = this.detail && this.detail.plannedTrain; return '開發中' + (t ? '，預計 ' + t + ' 版提供' : '') },
     advancedCount() { return ((this.detail && this.detail.fields) || []).filter(f => f.advanced).length },
 
     // ── 值的呈現 ─────────────────────────────────────────────
@@ -510,17 +521,23 @@ function settingsCenterPage() {
     async loadProfiles() {
       try { this.profiles = (await this._get('/api/settings-center/profiles')).profiles || [] } catch (e) { this._fail(e) }
     },
+    skippedCount() { return (this.profileSkipped || []).reduce((a, s) => a + (s.fields || 0), 0) },
     async previewProfile(name) {
       this.profileName = name; this.profileReason = ''
-      try { this.profilePv = (await this._get('/api/settings-center/profiles/' + encodeURIComponent(name) + '/preview')).changes || [] } catch (e) { this._fail(e) }
+      try {
+        const r = await this._get('/api/settings-center/profiles/' + encodeURIComponent(name) + '/preview')
+        this.profilePv = r.changes || []; this.profileSkipped = r.skipped || []
+      } catch (e) { this._fail(e) }
     },
     async applyProfile() {
       if (!this.profileName || !this.profileReason.trim()) return
       this.busy = true
       try {
-        await this._post('/api/settings-center/profiles/' + encodeURIComponent(this.profileName) + '/apply', { reason: this.profileReason.trim() })
-        this._say('已套用「' + this.profileName + '」；放寬的項目會列入「待生效」')
-        this.profilePv = null; this.profileName = ''
+        const r = await this._post('/api/settings-center/profiles/' + encodeURIComponent(this.profileName) + '/apply', { reason: this.profileReason.trim() })
+        const sk = (r.skipped || []).reduce((a, s) => a + (s.fields || 0), 0)
+        // 只說實際做了什麼：已套用 X 項、略過 N 項（開發中）——不說成全部套用
+        this._say('已套用「' + this.profileName + '」的 ' + (this.profilePv ? this.profilePv.length : 0) + ' 項' + (sk ? '，略過 ' + sk + ' 項（開發中）' : '') + '；放寬的項目會列入「待生效」')
+        this.profilePv = null; this.profileSkipped = []; this.profileName = ''
         await this.loadGroups(); if (this.current) await this.loadDetail()
       } catch (e) { this._fail(e) } finally { this.busy = false }
     },

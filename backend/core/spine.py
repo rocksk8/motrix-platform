@@ -2,7 +2,7 @@
 """L0 脊柱功能登錄（E-b；設計 docs/platform/plans/SPINE-ENGINE-DESIGN-T57.md、FIELD-LAYOUT-FRAMEWORK-T56.md §17）。
 
 [單位] plat:spine    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] STATUSES, drop_owner, feature_enabled, feature_status, group_status, on_validated, parse_feature, parse_features, planned_train,
+[公開介面] STATUSES, drop_owner, feature_enabled, feature_status, group_status, group_info, on_validated, parse_feature, parse_features, planned_train,
     register_manifest, register_validator, report, reset, restore, snapshot, validate_all
 [不變式] ①只用標準函式庫（載入器在 import 模組之前要驗宣告）；依賴 L1 的驗證（設定、信件…）以**回呼**注入——`register_validator`／`on_validated`，
     L0 不 import L1。②宣告式：功能寫在 `module.json` 的 `features[]`，靜態可掃。③**fail-closed 的方向**：驗證失敗的功能 `feature_enabled`＝False、
@@ -274,6 +274,18 @@ def group_status(group: str) -> str:
                 return "hidden"
             return f["status"]
     return "open"
+
+
+def group_info(group: str) -> dict:
+    """設定群組的功能資訊 `{status, plannedTrain, feature}`（畫面用）：未歸屬／尚未驗證 ⇒ `{status: open, plannedTrain: None, feature: None}`；
+    功能驗證失敗 ⇒ status＝hidden。`plannedTrain` 只在 planned 時有值。"""
+    st = group_status(group)
+    code = None
+    for c in sorted(_FEATURES):
+        if _FEATURES[c]["group"] == group:
+            code = c
+            break
+    return {"status": st, "plannedTrain": planned_train(code) if (code and st == "planned") else None, "feature": code}
 
 
 def report() -> dict:

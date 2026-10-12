@@ -3,7 +3,7 @@
 
 [單位] helper:settings_registry    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, IMPACT_SCOPE_GRANDFATHERED, KIND, RISK_ORDER, SCOPE, SettingDef, SettingError, apply_profile, banner_of, clamp_value, clear_edition_bounds, confirm_period_days,
-    cancel_pending_of_nonopen, field_defs, field_views, get, get_group, group_status, groups, invalidate, live_impact, materialize_due, owner_groups, plan, profile_preview, profile_skipped, profiles, publish, register_group, set_edition_bounds, show_value, unregister_owner, validate_values
+    cancel_pending_of_nonopen, field_defs, field_views, get, get_group, group_info, group_status, groups, invalidate, live_impact, materialize_due, owner_groups, plan, profile_preview, profile_skipped, profiles, publish, register_group, set_edition_bounds, show_value, unregister_owner, validate_values
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
     ④寫入口只有 `publish()`：同一交易寫定義新版本＋變更明細（config_ledger）＋稽核＋（有舊鍵時）雙寫舊鍵；⑤讀取走 15 秒行程內快取，
@@ -205,6 +205,14 @@ def group_status(group):
         return _spine.group_status(group)
     except Exception:                               # noqa: BLE001
         return "open"
+
+
+def group_info(group):
+    """`{status, plannedTrain, feature}`（設定中心畫面用）；脊柱不可用 ⇒ open。"""
+    try:
+        return _spine.group_info(group)
+    except Exception:                               # noqa: BLE001
+        return {"status": "open", "plannedTrain": None, "feature": None}
 
 
 _NOT_OPEN_MSG = {"planned": "這項功能還在開發中，尚未開放調整。", "hidden": "沒有這個設定群組。"}

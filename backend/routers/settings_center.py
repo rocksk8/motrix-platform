@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 """設定中心（L1；第 54 班 Train A／S0）。群組由程式登錄（helpers/settings_registry），索引頁由登錄自動產生。
 
-- GET  /api/settings-center/groups                 全部群組＋目前值＋最後變更（superadmin）
+功能狀態（脊柱 E-b；`features[].status`）對每條路由的行為——**hidden ⇒ 一律 404（連 superadmin；不洩漏存在）**；**planned ⇒ 清單與單組只回名稱＋狀態（沒有欄位／值／變更明細），
+其餘群組路由 409『還在開發中』**；`/pending` 過濾非 open 群組、`approve` 對非 open 群組拒絕（hidden 404／planned 409）、`cancel` 允許（收尾用）；
+`/public` hidden 404、planned 回已儲存的值（＝預設，因為寫入被拒）；預設組 preview／apply 不會因為預設組只涵蓋 planned 群組而 404，並回 `skipped`（只列 planned，hidden 不回傳以免洩漏）。
+新增路由必須在 `tests/platform/test_settings_center_status_routes.py` 的路由表裡分類，否則該測試紅。
+
+- GET  /api/settings-center/groups                 全部群組＋目前值＋最後變更（superadmin）；每組多 `status`／`plannedTrain`
 - GET  /api/settings-center/groups/{group}         單一群組欄位定義＋目前值＋變更明細（superadmin）
 - POST /api/settings-center/groups/{group}         儲存（部分欄位即可；`reason` 必填；superadmin）；回應附 `classification`（逐欄 立即／待生效／需核准）
 - POST /api/settings-center/groups/{group}/preview 預覽（dry-run，不寫入）：逐欄分類、效果句、橫幅、驗證問題（S1-4）
@@ -36,9 +41,20 @@ def _clip(reason):
     return reason
 
 
+_PLANNED_MSG = "這項功能還在開發中，尚未開放調整。"
+
+
 def _need(group):
-    if group not in sr.groups():
+    """群組要存在且不是 hidden（hidden 對外等同不存在）。"""
+    if group not in sr.groups() or sr.group_status(group) == "hidden":
         raise HTTPException(404, "沒有這個設定群組：%s" % group)
+
+
+def _need_open(group):
+    """寫入／細節類路由用：hidden ⇒ 404、planned ⇒ 409。"""
+    _need(group)
+    if sr.group_status(group) == "planned":
+        raise HTTPException(409, _PLANNED_MSG)
 
 
 @router.get("/api/settings-center/groups")
@@ -49,8 +65,15 @@ def list_groups(authorization: str = Header(None)):
     conn = get_db()
     try:
         for g, meta in sr.groups().items():
+            info = sr.group_info(g)
+            if info["status"] == "hidden":
+                continue
+            if info["status"] == "planned":                       # 只有名稱＋狀態：沒有欄位、值、變更明細
+                out.append({"group": g, "label": meta["label"], "help": meta["help"], "sensitive": meta["sensitive"], "risk": meta["risk"],
+                            "values": {}, "fieldCount": 0, "lastChange": None, "status": "planned", "plannedTrain": info["plannedTrain"]})
+                continue
             last = ledger.history(conn, "setting:%s" % g, g, limit=1)
-            out.append({"group": g, "label": meta["label"], "help": meta["help"], "sensitive": meta["sensitive"], "risk": meta["risk"],
+            out.append({"group": g, "status": "open", "plannedTrain": None, "label": meta["label"], "help": meta["help"], "sensitive": meta["sensitive"], "risk": meta["risk"],
                         "values": sr.get_group(g), "fieldCount": len(meta["fields"]),
                         "lastChange": ({"at": last[0]["at"], "actor": last[0]["actor_display"] or last[0]["actor"], "reason": last[0]["reason"]} if last else None)})
     finally:
@@ -62,22 +85,26 @@ def list_groups(authorization: str = Header(None)):
 def get_group(group: str, authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     _need(group)
+    info = sr.group_info(group)
+    meta = sr.groups()[group]
+    if info["status"] == "planned":                               # 開發中：只回名稱與狀態（畫面顯示灰色『開發中，預計 MSn 版提供』）
+        return {"group": group, "label": meta["label"], "help": meta["help"], "sensitive": meta["sensitive"], "status": "planned",
+                "plannedTrain": info["plannedTrain"], "fields": [], "values": {}, "history": []}
     from db import get_db
     conn = get_db()
     try:
         hist = ledger.history(conn, "setting:%s" % group, group, limit=50)
     finally:
         conn.close()
-    meta = sr.groups()[group]
     values = sr.get_group(group)
-    return {"group": group, "label": meta["label"], "help": meta["help"], "sensitive": meta["sensitive"],
+    return {"group": group, "label": meta["label"], "help": meta["help"], "sensitive": meta["sensitive"], "status": "open", "plannedTrain": None,
             "fields": sr.field_views(group, values), "values": values, "history": hist}
 
 
 @router.post("/api/settings-center/groups/{group}")
 def save_group(group: str, request: Request, body: dict = Body(...), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
-    _need(group)
+    _need_open(group)
     values = body.get("values")
     reason = _clip(str(body.get("reason") or "").strip())
     if not isinstance(values, dict) or not values:
@@ -108,7 +135,7 @@ def _do_publish(group, values, reason, request, actor):
 @router.post("/api/settings-center/groups/{group}/preview")
 def preview_group(group: str, body: dict = Body(...), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
-    _need(group)
+    _need_open(group)
     values = body.get("values")
     if not isinstance(values, dict) or not values:
         raise HTTPException(400, "沒有送出任何要變更的欄位")
@@ -118,7 +145,7 @@ def preview_group(group: str, body: dict = Body(...), authorization: str = Heade
 @router.post("/api/settings-center/groups/{group}/impact")
 def impact_group(group: str, body: dict = Body(...), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
-    _need(group)
+    _need_open(group)
     field = body.get("field")
     if not isinstance(field, str) or field not in {f["key"] for f in sr.groups()[group]["fields"]}:
         raise HTTPException(404, "沒有這個設定欄位")
@@ -128,7 +155,7 @@ def impact_group(group: str, body: dict = Body(...), authorization: str = Header
 @router.post("/api/settings-center/groups/{group}/reset")
 def reset_group(group: str, request: Request, body: dict = Body(...), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
-    _need(group)
+    _need_open(group)
     reason = _clip(str(body.get("reason") or "").strip())
     fields = body.get("fields")
     known = {f["key"]: f["default"] for f in sr.groups()[group]["fields"]}
@@ -161,7 +188,7 @@ def _values_of(conn, group, which):
 @router.get("/api/settings-center/groups/{group}/versions")
 def group_versions(group: str, authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
-    _need(group)
+    _need_open(group)
     from core import definitions as D
     from db import get_db
     conn = get_db()
@@ -177,7 +204,7 @@ def group_versions(group: str, authorization: str = Header(None)):
 @router.get("/api/settings-center/groups/{group}/diff")
 def group_diff(group: str, a: str = "default", b: str = "current", authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
-    _need(group)
+    _need_open(group)
     from db import get_db
     conn = get_db()
     try:
@@ -194,7 +221,7 @@ def group_diff(group: str, a: str = "default", b: str = "current", authorization
 @router.post("/api/settings-center/groups/{group}/restore/{version}")
 def restore_group(group: str, version: int, request: Request, body: dict = Body(default={}), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
-    _need(group)
+    _need_open(group)
     from core.txn import begin_write
     from db import get_db
     conn = get_db()
@@ -239,7 +266,7 @@ def public_values(groups: str = "", authorization: str = Header(None)):
     is_admin = user.get("role") == "superadmin"
     out = {}
     for g in names:
-        if g not in meta:
+        if g not in meta or sr.group_status(g) == "hidden":        # hidden 對任何登入者都等同不存在
             raise HTTPException(404, "沒有這個設定群組：%s" % g)
         if meta[g]["sensitive"] and not is_admin:
             raise HTTPException(403, "此設定群組需要設定權限：%s" % g)
@@ -259,6 +286,8 @@ def list_pending(authorization: str = Header(None)):
     meta = sr.groups()
     out = []
     for r in rows:
+        if r["key"] in meta and sr.group_status(r["key"]) != "open":   # 非 open 群組的待生效項不列（啟動時已取消；漏網的也不顯示）
+            continue
         f = sr.field_defs(r["key"]).get(r["field"]) if r["key"] in meta else None
         out.append({"id": r["id"], "group": r["key"], "groupLabel": meta[r["key"]]["label"] if r["key"] in meta else r["key"],
                     "field": r["field"], "label": f.label if f else r["field"],
@@ -309,6 +338,11 @@ def approve_pending(change_id: int, body: dict = Body(default={}), authorization
         row = conn.execute("SELECT domain, key, field FROM config_changes WHERE id=?", (change_id,)).fetchone()
         if row is None or not row["domain"].startswith("setting:"):
             raise HTTPException(404, "找不到這筆待生效的設定變更")
+        st = sr.group_status(row["key"]) if row["key"] in sr.groups() else "open"
+        if st == "hidden":
+            raise HTTPException(404, "找不到這筆待生效的設定變更")
+        if st == "planned":
+            raise HTTPException(409, _PLANNED_MSG)
         reason = _clip(str((body or {}).get("reason") or "").strip()) or "同意放寬"
         out = ledger.approve(conn, change_id, actor, reason)
         if not out["ok"]:
@@ -332,12 +366,22 @@ def list_profiles(authorization: str = Header(None)):
     return {"profiles": [{"name": n, "fieldCount": c} for n, c in sr.profiles().items()]}
 
 
+def _skipped_planned(name):
+    """預設組裡因『開發中』被略過的群組（只列 planned；hidden 不回傳，避免洩漏存在）。"""
+    return [{"group": s["group"], "groupLabel": s["groupLabel"], "fields": s["fields"], "reason": s["reason"]}
+            for s in sr.profile_skipped(name) if s["status"] == "planned"]
+
+
+def _profile_known(name):
+    return name in sr.profiles() or bool(_skipped_planned(name))
+
+
 @router.get("/api/settings-center/profiles/{name}/preview")
 def preview_profile(name: str, authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
-    if name not in sr.profiles():
+    if not _profile_known(name):
         raise HTTPException(404, "沒有這個預設組")
-    return {"name": name, "changes": sr.profile_preview(name)}
+    return {"name": name, "changes": sr.profile_preview(name), "skipped": _skipped_planned(name)}
 
 
 @router.post("/api/settings-center/profiles/{name}/apply")
@@ -346,10 +390,12 @@ def apply_profile(name: str, request: Request, body: dict = Body(default={}), au
     reason = _clip(str((body or {}).get("reason") or "").strip())
     if not reason:
         raise HTTPException(400, "請填寫套用原因")
-    if name not in sr.profiles():
+    if not _profile_known(name):
         raise HTTPException(404, "沒有這個預設組")
-    try:
-        out = sr.apply_profile(name, reason=reason, user=actor["username"], ip=(request.client.host if request.client else ""), actor=actor)
-    except sr.SettingError as e:
-        raise HTTPException(400, {"message": str(e), "problems": e.problems})
-    return {"ok": True, "results": out}
+    out = {}
+    if name in sr.profiles():                                     # 只涵蓋開發中群組的預設組：沒有東西可套用，但不是 404
+        try:
+            out = sr.apply_profile(name, reason=reason, user=actor["username"], ip=(request.client.host if request.client else ""), actor=actor)
+        except sr.SettingError as e:
+            raise HTTPException(400, {"message": str(e), "problems": e.problems})
+    return {"ok": True, "results": out, "skipped": _skipped_planned(name)}       # 畫面要說『略過 N 項』，不可說成全部套用

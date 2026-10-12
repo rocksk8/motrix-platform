@@ -130,3 +130,31 @@ def test_choice_field_shows_each_options_impact_and_blocks_other_groups_while_di
     page.click('[data-testid="sc-discard"]')
     page.click('[data-testid="sc-group-uploads"]')
     page.locator('[data-testid="sc-input-max_file_mb"]').wait_for(timeout=10000)
+
+
+@pytest.mark.e2e
+def test_planned_group_shows_only_the_grey_card_with_the_train(live_server, make_user, e2e_browser):
+    """脊柱 E-b：planned 群組在清單裡標『開發中』，點開只有灰色卡片『開發中，預計 MSn 版提供』（句子只由 planned_train 組出），沒有欄位、分頁、儲存列。"""
+    from core import spine
+    from helpers import settings_registry as R
+    snap = spine.snapshot()
+    R.register_group("zz_e2e_plan", "尚未開放的功能群組", [R.SettingDef("n", "int", 1, min=0, max=9, question="這項要設多少？", label="測試項目", help="測試用的設定項目。", impact="影響測試用的畫面。")],
+                     help="測試用的規劃中群組。", owner="zz_e2e")
+    spine.register_manifest({"features": [{"code": "zz_e2e_plan_f", "label": "規劃中的測試功能", "status": "planned", "planned_train": "MS3", "settings": {"group": "zz_e2e_plan"}}]}, "zz_e2e")
+    spine.validate_all()
+    try:
+        sa = make_user(username="sc_e2e_p", role="superadmin")
+        page = e2e_browser.new_page()
+        inject_login(page, live_server, *sa)
+        page.goto(f"{live_server}/pages/settings-center.html")
+        page.locator('[data-testid="sc-planned-chip-zz_e2e_plan"]').wait_for(timeout=20000)
+        page.locator('[data-testid="sc-group-zz_e2e_plan"]').click()
+        page.locator('[data-testid="sc-planned"]').wait_for(timeout=10000)
+        assert page.locator('[data-testid="sc-planned-text"]').inner_text() == "開發中，預計 MS3 版提供"
+        assert not page.locator('[data-testid="sc-tab-values"]').is_visible()
+        assert not page.locator('[data-testid="sc-bar"]').is_visible()
+        assert page.locator('[data-testid="sc-field-n"]').count() == 0
+    finally:
+        spine.restore(snap)
+        R._GROUPS.pop("zz_e2e_plan", None)
+        R.invalidate()
