@@ -9,6 +9,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 from fastapi.responses import Response
 
 from db import get_db
+from helpers import download_name
 from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers import _audit, _require_user, _tok, require_any_module
 from modules.accounting.api import ledger_requests as _requests
@@ -129,9 +130,9 @@ def year_statements_export(year: int, authorization: str = Header(None)):
         conn.close()
     data = _export.statements_workbook(stm, year, source)
     _audit(_tok(authorization), "ledger.statements.export", "gl_fiscal_years", str(year), "匯出四大表（%s）" % source)
-    name = urllib.parse.quote("財務報表_%s年度%s.xlsx" % (year, "_決算" if source == "frozen" else ""))
+    name = "財務報表_%s年度%s.xlsx" % (year, "_決算" if source == "frozen" else "")
     return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    headers={"Content-Disposition": "attachment; filename*=UTF-8''" + name})
+                    headers={"Content-Disposition": download_name.content_disposition(name)})
 
 
 # ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──

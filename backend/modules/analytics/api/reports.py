@@ -20,6 +20,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, UploadFile, File
 from fastapi.responses import Response, StreamingResponse
 
 from db import get_db
+from helpers import download_name
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import (
     _require_user, _tok, _audit, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
@@ -2547,7 +2548,7 @@ def report_excel(
     return Response(
         content=xlsx,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
+        headers={"Content-Disposition": download_name.content_disposition(fname)},
     )
 
 
@@ -2586,7 +2587,7 @@ def report_pdf(
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
+        headers={"Content-Disposition": download_name.content_disposition(fname)},
     )
 
 
@@ -2825,7 +2826,7 @@ def tax_export_excel(
     return Response(
         content=xlsx,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
+        headers={"Content-Disposition": download_name.content_disposition(fname)},
     )
 
 

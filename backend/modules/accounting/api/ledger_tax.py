@@ -10,6 +10,7 @@ from fastapi.responses import Response
 
 from core import registry
 from db import get_db
+from helpers import download_name
 from helpers import _audit, _require_user, _tok, require_any_module
 from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged
 from modules.accounting.ledger import export as _export
@@ -78,9 +79,9 @@ def tax401_export(year: int, period: int, authorization: str = Header(None)):
         conn.close()
     data = _export.tax401_workbook(s)
     _audit(_tok(authorization), "ledger.tax401.export", "gl_tax_settlements", "%s-%s" % (year, period), "匯出營業稅 401 工作底稿")
-    name = urllib.parse.quote("營業稅401_%s年第%s期.xlsx" % (year, period))
+    name = "營業稅401_%s年第%s期.xlsx" % (year, period)
     return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    headers={"Content-Disposition": "attachment; filename*=UTF-8''" + name})
+                    headers={"Content-Disposition": download_name.content_disposition(name)})
 
 
 @router.post("/tax401/settlement")

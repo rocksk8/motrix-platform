@@ -14,6 +14,7 @@ from fastapi import APIRouter, Body, File, Header, HTTPException, Query, UploadF
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from db import get_db
+from helpers import download_name
 from helpers import _require_user, _tok, _audit
 from helpers import custom_modules as CM
 from helpers import custom_builder_support as SUP
@@ -310,7 +311,7 @@ def output_custom_record(key: str, record_no: str, format: str = Query("html"), 
     if format == "pdf":
         import pdf_gen
         return Response(pdf_gen.html_to_pdf_bytes(html), media_type="application/pdf",
-                        headers={"Content-Disposition": 'attachment; filename="%s.pdf"' % record_no})
+                        headers={"Content-Disposition": download_name.content_disposition("%s.pdf" % record_no)})
     return HTMLResponse(html)
 
 

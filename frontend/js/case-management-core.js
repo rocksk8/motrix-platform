@@ -398,7 +398,7 @@ window.CM_PARTS.push(() => ({
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `${this.selected.quote_no}_專案執行報告.pdf`
+        a.download = MotrixDownload.nameFrom(r, `${this.selected.quote_no}_專案執行報告.pdf`)
         a.click()
         URL.revokeObjectURL(url)
       } catch(e) {

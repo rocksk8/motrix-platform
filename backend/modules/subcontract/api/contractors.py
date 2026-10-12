@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel
 
 from db import get_db
+from helpers import download_name
 from helpers import _require_user, _tok, _audit, notify_module_activity, has_finance_access, require_any_module
 from modules.subcontract import bank_mask as _bm
 
@@ -273,7 +274,7 @@ def export_contractors(authorization: str = Header(None)):
     _audit(_tok(authorization), 'contractors.export', 'contractor', '', f"匯出外包名冊（{len(rows)} 人）")
     return Response(content=buf.getvalue(),
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    headers={"Content-Disposition": "attachment; filename*=UTF-8''contractors.xlsx"})
+                    headers={"Content-Disposition": download_name.content_disposition("contractors.xlsx")})
 
 
 def _cell(v):

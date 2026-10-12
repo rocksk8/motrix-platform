@@ -73,6 +73,7 @@ from pydantic import BaseModel
 
 from db import get_db
 from core import registry as _registry
+from helpers import download_name
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import _require_user, _tok, _audit, _get_setting, _set_setting
 #: 收款事件（銷項）的資料屬 M05 應收應付（ROADMAP A8b 已收回模組）：經 provider 取用；M05 不在 ⇒ 沒有收款事件並明說
@@ -530,7 +531,7 @@ def t100_export_vouchers(
     return Response(
         content=xlsx,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
+        headers={"Content-Disposition": download_name.content_disposition(fname)},
     )
 
 

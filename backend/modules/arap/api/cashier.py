@@ -29,6 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 import io
 from urllib.parse import quote as _url_quote
 
+from helpers import download_name
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from core import registry
 from db import get_db, spawn_bg_thread
@@ -761,7 +762,7 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
     return Response(
         content=buf.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
+        headers={"Content-Disposition": download_name.content_disposition(fname)},
     )
 
 

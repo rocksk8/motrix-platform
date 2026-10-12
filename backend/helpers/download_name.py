@@ -258,6 +258,9 @@ def _build(doc_type, quote_no, doc_no, ext, user, conn, extra, inline):
                 case_name = p
             case_name = case_name[: max(0, int(cfg["case_name_max_chars"]))].rstrip(". ")
 
+    if case_no and case_no == no:             # 報價單的單號就是案件編號：不重複寫兩次
+        case_no = ""
+
     date_s = ""
     d = str(extra.get("date") or "")
     if d and (cfg["add_date"] or doc_type == "payslip"):
