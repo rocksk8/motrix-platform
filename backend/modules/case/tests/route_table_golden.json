@@ -489,6 +489,7 @@
 ["POST", "/api/payslips/{slip_no}/unpay", "payslip_unpay_api_payslips__slip_no__unpay_post", [["header", "authorization", false], ["path", "slip_no", true]], [], []]
 ["POST", "/api/payslips/{slip_no}/unsign", "unsign_payslip_api_payslips__slip_no__unsign_post", [["header", "authorization", false], ["path", "slip_no", true]], [], []]
 ["POST", "/api/payslips/{slip_no}/void", "void_payslip_api_payslips__slip_no__void_post", [["header", "authorization", false], ["path", "slip_no", true]], [["application/json", "#/components/schemas/VoidIn"]], []]
+["GET", "/api/permmatrix/status", "permmatrix_status_api_permmatrix_status_get", [["header", "authorization", false]], [], []]
 ["GET", "/api/photo-token", "get_photo_token_api_photo_token_get", [["header", "authorization", false], ["query", "id", false], ["query", "path", true], ["query", "type", false]], [], []]
 ["POST", "/api/photo-token/batch", "get_photo_tokens_batch_api_photo_token_batch_post", [["header", "authorization", false]], [["application/json", "#/components/schemas/PhotoTokenBatchIn"]], []]
 ["GET", "/api/ping", "ping_api_ping_get", [], [], []]

@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1277,
+  "tests": 1278,
   "unmapped": 13,
   "kinds": {
-   "api": 696,
+   "api": 698,
    "e2e": 302,
-   "audit": 162,
+   "audit": 161,
    "unit": 117
   },
-  "routes": 804
+  "routes": 805
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -12341,11 +12341,37 @@
    },
    "module": "permmatrix"
   },
+  "backend/modules/permmatrix/tests/test_permmatrix_probe.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/permmatrix/",
+    "mod:permmatrix/__init__",
+    "mod:permmatrix/api",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/permmatrix/__init__.py"
+    ],
+    "api": [
+     "backend/modules/permmatrix/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/permmatrix/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "permmatrix"
+  },
   "backend/modules/permmatrix/tests/test_permmatrix_writes_unwired.py": {
-   "kind": "audit",
+   "kind": "api",
    "units": [
     "dir:backend/modules/permmatrix/",
     "mod:permmatrix/__init__",
+    "mod:permmatrix/api",
     "mod:permmatrix/service",
     "plat:__init__",
     "plat:source_tree"
@@ -12355,6 +12381,9 @@
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/modules/permmatrix/__init__.py"
+    ],
+    "api": [
+     "backend/modules/permmatrix/api.py"
     ],
     "path": [
      "backend/modules/permmatrix/__init__.py",
@@ -32062,6 +32091,7 @@
     "mod:payroll/api/bonus_correction",
     "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
+    "mod:permmatrix/api",
     "mod:recyclebin/api",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -32143,6 +32173,7 @@
      "backend/modules/payroll/api/bonus_correction.py",
      "backend/modules/payroll/api/payslip_links.py",
      "backend/modules/payroll/api/payslips.py",
+     "backend/modules/permmatrix/api.py",
      "backend/modules/recyclebin/api.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
