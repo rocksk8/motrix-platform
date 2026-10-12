@@ -123,6 +123,21 @@ _SAMPLE_VIEWS = {"invoice_voucher": _invoice_voucher_sample_view, "payslip": _pa
 _UNREVIEWED_KIND_REASON = "此類定義不走第二人審核（只有自訂模組定義有審核流程）"
 
 
+#: 受管 kind（S1-1，2026-10-13）：只能經擁有它的 L1 入口寫入——雙人核准、待生效、變更明細都在那個入口裡。
+#: 通用的 草稿／發布／還原／刪草稿 端點對它們一律 409；GET（清單、單版、差異、解析）不受影響。
+#: 之前 `setting_group` 沒有這道門：任一最高管理者可直接 PUT draft ＋ POST publish，繞過 `settings_registry.publish()`
+#: 的 放寬→待生效→第二位最高管理者核准，也不寫 `config_changes`（只留 `definitions.publish_unreviewed`）。
+_MANAGED_KINDS = {
+    "setting_group": "設定要到「系統 > 設定中心」調整：放寬類的變更需要第二位最高管理者核准，並會留下變更明細；這裡不提供直接修改。",
+}
+
+
+def _managed_guard(kind):
+    msg = _MANAGED_KINDS.get(kind)
+    if msg:
+        raise HTTPException(409, msg)
+
+
 def _audit_unreviewed(authorization, kind, key, scope, version, reason, verb="發布"):
     _audit(_tok(authorization), "definitions.publish_unreviewed", "ui_definition", "%s/%s/%s" % (kind, key, scope),
            "%s %s %s（%s）第 %d 版：未經第二人審核（%s）" % (verb, kind, key, scope, version, reason), {})
@@ -196,6 +211,7 @@ def list_definitions(kind: str, authorization: str = Header(None)):
 def delete_definition_draft(kind: str, key: str, scope: str = Query("company"), authorization: str = Header(None)):
     """刪草稿（已發布的版本不可刪；要回到舊版用 restore）。"""
     _require_user(authorization, require_superadmin=True)
+    _managed_guard(kind)
     conn = get_db()
     try:
         deleted = D.delete_draft(conn, kind, key, scope)
@@ -253,6 +269,7 @@ def get_definition_default(kind: str, key: str, authorization: str = Header(None
 def save_definition_draft(kind: str, key: str, scope: str = Query("company"), payload: dict = Body(...),
                           authorization: str = Header(None)):
     u = _require_user(authorization, require_superadmin=True)
+    _managed_guard(kind)
     _custom_module_scope_guard(kind, scope)
     base_etag = payload.get("base_etag")                                # K-2：缺 ⇒ 舊前端，照舊後寫者勝（稽核標 unguarded，盤點還有誰沒帶）
     force = payload.get("force") is True
@@ -290,6 +307,7 @@ def validate_definition(kind: str, key: str, payload: dict = Body(...), authoriz
 def publish_definition(kind: str, key: str, scope: str = Query("company"), payload: dict = Body(default={}),
                        authorization: str = Header(None)):
     u = _require_user(authorization, require_superadmin=True)
+    _managed_guard(kind)
     _custom_module_scope_guard(kind, scope)
     base_etag = (payload or {}).get("base_etag")                        # K-2：選填；缺＝照舊
     if base_etag is not None and not isinstance(base_etag, str):
@@ -376,6 +394,7 @@ def diff_definition(kind: str, key: str, scope: str = Query("company"), a: str =
 def restore_definition(kind: str, key: str, version: int, scope: str = Query("company"),
                        payload: dict = Body(default={}), authorization: str = Header(None)):
     u = _require_user(authorization, require_superadmin=True)
+    _managed_guard(kind)
     _custom_module_scope_guard(kind, scope)
     conn = get_db()
     unreviewed_reason = _UNREVIEWED_KIND_REASON
