@@ -26348,6 +26348,7 @@
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
     "file:backend/tests/_requires.py",
+    "mod:case/api/completion_notes",
     "mod:case/api/quotations",
     "page:pages/company-profile-settings.html",
     "page:pages/completion-note-form.html"
@@ -26360,6 +26361,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
+     "backend/modules/case/api/completion_notes.py",
      "backend/modules/case/api/quotations.py"
     ],
     "page": [
