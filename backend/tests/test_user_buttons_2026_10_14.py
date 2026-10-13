@@ -285,3 +285,25 @@ def test_registered_export_is_a_get_without_parameters_and_its_perm_is_declared(
     ex = UB._exports()[EXPORT_ID]                                                              # noqa: SLF001
     assert ex["endpoint"] == "GET /api/contractors/export" and ex["perm"] == "contractor_list" and ex["format"] == "xlsx"
     assert "{" not in ex["path"] and "?" not in ex["path"]
+
+
+def test_only_allow_listed_get_exports_become_button_targets(monkeypatch):
+    """module.json 登記了匯出 ≠ 可以變成按鈕：必須在 BUTTON_EXPORTS 允許清單內，且路徑是 /api/ 底下無參數的單純路徑。"""
+    from core import registry
+    from helpers import user_buttons as UB
+    base = UB._exports()                                                                         # noqa: SLF001
+    assert set(base) == {EXPORT_ID} == set(UB.BUTTON_EXPORTS)
+
+    class _M:
+        def __init__(self, key, ex):
+            self.key = key
+            self.manifest = {"customization": {"pages": [{"page": "x.html", "exports": [ex]}]}}
+    cases = [("modx", {"key": "sidefx", "label": "會改資料的 GET", "endpoint": "GET /api/x/do-something", "format": "xlsx"}),        # 不在允許清單
+             ("subcontract", {"key": "roster", "label": "外包名冊", "endpoint": "GET /api/../etc/passwd", "format": "xlsx"}),       # 路徑不合
+             ("subcontract", {"key": "roster", "label": "外包名冊", "endpoint": "GET /static/x.xlsx", "format": "xlsx"}),
+             ("subcontract", {"key": "roster", "label": "外包名冊", "endpoint": "POST /api/contractors/export", "format": "xlsx"})]
+    for mkey, ex in cases:
+        monkeypatch.setattr(registry, "loaded", lambda mkey=mkey, ex=ex: [_M(mkey, ex)])
+        assert UB._exports() == {}, ex                                                          # noqa: SLF001
+    monkeypatch.setattr(registry, "loaded", lambda: [_M("subcontract", {"key": "roster", "label": "外包名冊", "endpoint": "GET /api/contractors/export", "format": "xlsx"})])
+    assert list(UB._exports()) == [EXPORT_ID]                                                   # noqa: SLF001 正對照

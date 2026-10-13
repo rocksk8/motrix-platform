@@ -2,7 +2,7 @@
 
 ## (next) — wip/t61-s6-impl-r1（使用者自訂按鈕 S6 第一刀；旗標 `builder_actions.enabled` 預設關）
 
-- L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.user_buttons`——`ACTION_TYPES`（navigate／export）、`SLOTS`（插槽表，先導放這裡）、`MAX_PER_SLOT`／`MAX_SLOTS_PER_PAGE`／`MAX_TOTAL`、`enabled()`、`catalog()`、`definition_problems(key, body)`、`visible_buttons(conn, user, module, page)`（逐顆用檢視者的權限過濾）、`preview(conn, caller, definition, module, page, username=None)`（唯讀）。載入時以 `register_kind` 登記新定義種類 `user_buttons`（key＝`module:<模組>`，scope＝company；沒有改 `core/definitions.py`）。
+- L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.user_buttons`——`ACTION_TYPES`（navigate／export）、`BUTTON_EXPORTS`（可被按鈕執行的匯出的明確允許清單）、`SLOTS`（插槽表，先導放這裡）、`MAX_PER_SLOT`／`MAX_SLOTS_PER_PAGE`／`MAX_TOTAL`、`enabled()`、`catalog()`、`definition_problems(key, body)`、`visible_buttons(conn, user, module, page)`（逐顆用檢視者的權限過濾）、`preview(conn, caller, definition, module, page, username=None)`（唯讀）。載入時以 `register_kind` 登記新定義種類 `user_buttons`（key＝`module:<模組>`，scope＝company；沒有改 `core/definitions.py`）。
 - 新設定群組 `builder_actions`（欄位 `enabled`，預設 False；`settings_deploy_baseline.json` 已同步）。新路由 `GET /api/user-buttons/{module}/{page}`、`GET /api/user-buttons/catalog`（僅超級管理員）、`POST /api/user-buttons/{module}/{page}/preview`（僅超級管理員、唯讀）；旗標關閉時第一個回空、後兩個 404。新前端檔 `static/user-buttons.js`。
 - 按鈕不授權：開頁＝連結（目標自己驗證）、匯出＝用點擊者自己的 token 呼叫模組已登記的 GET 端點（`module.json` 的 `customization.pages[].exports`）；沒有任何會寫資料的動作。
 

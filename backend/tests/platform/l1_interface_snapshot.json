@@ -1380,6 +1380,7 @@
   },
   "helper:user_buttons": {
    "ACTION_TYPES": "const",
+   "BUTTON_EXPORTS": "const",
    "KIND": "const",
    "MAX_PER_SLOT": "const",
    "MAX_SLOTS_PER_PAGE": "const",

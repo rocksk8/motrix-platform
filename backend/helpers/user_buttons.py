@@ -2,7 +2,7 @@
 """使用者自訂按鈕（T61 S6；設計：docs/platform/plans/T61-S6-ACTION-CATALOG-DESIGN.md）。
 
 [單位] helper:user_buttons    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] ACTION_TYPES, MAX_PER_SLOT, MAX_SLOTS_PER_PAGE, MAX_TOTAL, SLOTS, catalog, definition_problems, enabled, preview, visible_buttons
+[公開介面] ACTION_TYPES, BUTTON_EXPORTS, MAX_PER_SLOT, MAX_SLOTS_PER_PAGE, MAX_TOTAL, SLOTS, catalog, definition_problems, enabled, preview, visible_buttons
 [不變式] ①旗標 `builder_actions.enabled` 關閉 ⇒ `visible_buttons()` 一律空、`preview()` 不可用；②按鈕**不授權**：
     開頁＝連結（目標頁面自己的登入／模組權限照舊）、匯出＝用點擊者自己的 token 呼叫模組已登記的 GET 端點（端點自己的權限、遮蔽、稽核照舊）；
     ③動作類型只有 navigate／export（沒有任何會寫資料的動作）；目標只來自目錄（選單上的頁面、module.json 已登記的匯出）；
@@ -30,6 +30,11 @@ _BAD_LABEL = re.compile(r"[<>&\"'`\\\x00-\x1f\x7f‪-‮⁦-⁩]")
 _BUTTON_KEYS = {"key", "slot", "label", "action"}
 #: 永遠不能當導向目標的頁面（登入、首頁，以及要帶查詢字串才有意義的明細頁）
 _NAV_EXCLUDE = frozenset({"login.html", "index.html", "customer-log.html", "supplier-log.html"})
+
+#: 可被按鈕執行的匯出（明確的允許清單）：module.json 登記了 `exports` 不代表可以變成按鈕的目標——未來若有會產生副作用的 GET 匯出，
+#: 不會悄悄變成可放的按鈕。要加一個，必須在這裡明列（程式碼審查項目）。
+BUTTON_EXPORTS = frozenset({"subcontract:roster"})
+_API_PATH = re.compile(r"^/api/[A-Za-z0-9_/.-]+$")
 
 #: 插槽表：(模組鍵, 頁面) ⇒ {插槽鍵: 白話名稱}。頁面 HTML 用 `data-button-slot="<插槽鍵>"` 標出位置（守門測試雙向檢查）。
 SLOTS = {
@@ -76,8 +81,10 @@ def _exports() -> dict:
         for pg in ((man or {}).get("customization") or {}).get("pages") or []:
             for ex in pg.get("exports") or []:
                 parts = _cz.endpoint_parts(ex.get("endpoint"))
-                if not parts or parts[0] != "GET" or any(x in parts[1] for x in ("..", "//", "?", "{", "#")):
-                    continue                                                   # 只收『GET 且無參數的單純路徑』
+                if not parts or parts[0] != "GET" or not _API_PATH.match(parts[1]) or ".." in parts[1] or "//" in parts[1]:
+                    continue                                                   # 只收『GET 且無參數的 /api/ 單純路徑』
+                if "%s:%s" % (mkey, ex.get("key")) not in BUTTON_EXPORTS:
+                    continue                                                   # 且必須在允許清單內
                 out["%s:%s" % (mkey, ex.get("key"))] = {"label": ex.get("label") or ex.get("key"), "endpoint": ex.get("endpoint"),
                                                          "path": parts[1], "format": ex.get("format"), "perm": ex.get("perm"), "module": mkey}
     return out
@@ -192,7 +199,6 @@ def _viewer(conn, user):
 
 
 def _filter(buttons, user, modules, superadmin, module, page):
-    from helpers.auth import user_has_module
     nav = _nav_pages(modules, superadmin)
     exports = _exports()
     out, hidden = [], []
@@ -208,7 +214,7 @@ def _filter(buttons, user, modules, superadmin, module, page):
                 hidden.append({"key": b.get("key"), "reason": "這位使用者打不開「%s」" % (a.get("page"),)})
         elif a.get("type") == "export":
             ex = exports.get(a.get("export"))
-            if ex and (not ex.get("perm") or user_has_module(user, ex["perm"])):
+            if ex and (not ex.get("perm") or superadmin or ex["perm"] in modules):
                 out.append(dict(base, type="export", endpoint=ex["path"], format=ex["format"], exportId=a["export"]))
             else:
                 hidden.append({"key": b.get("key"), "reason": "這位使用者沒有匯出「%s」的權限" % ((ex or {}).get("label") or a.get("export"),)})
