@@ -1,4 +1,4 @@
-# 框架化多據點／多法人設計稿（組織單位樹、資料範圍維度）— T57 r4（併入 0d 稽核與使用者答覆）
+# 框架化多據點／多法人設計稿（組織單位樹、資料範圍維度）— T57 r5（併入 0d 稽核與使用者答覆）
 
 > 本檔是 `FRAMEWORK-PERMISSION-MODEL-T57.md` 的第 14 節拆出（遵守文件 < 40KB 的拆分規則；章節編號 §14.x 沿用，文內『§4.5、§6.2、§10、§11、§12』指該主檔）。作者 hichan-98；僅文件；人日與日期皆為估計。
 
@@ -107,7 +107,7 @@
 
 **3. 序列（0d M1：不改主鍵）**：**不動** `quote_seq(month)` 的主鍵與 `ON CONFLICT(month)` 寫法（`quotations.py` 依此；改成複合鍵＝重建表、破壞加法規則，且回滾到舊程式後會無法配號）。改為**新增** `seq_by_entity(entity_id, kind, period, seq, PRIMARY KEY(entity_id, kind, period))`：**根法人永遠使用既有序列表（原樣）**，只有非根法人（功能開啟後才存在）使用新表。傳票（`YYYYMMDD-NNN`，`next_voucher_no(conn, voucher_date)`）與勞報單（`PS-YYMM-NNN`，`next_slip_no`）的計數邏輯**U0 開工時逐一讀碼確認**其取號方式（查最大值或獨立序列）；若是『查資料表最大值』，則在 U2 加上法人條件，U0 不動（UNKNOWN，需讀碼）。
 
-**4. `SELECT *` 外洩（0d S2：U0 並非零改動）**：掃描顯示約 **269 處** `SELECT *` 在 `modules/`、**85 處**在 `archive.py` 匯出、11 處在 routers、10 處在 helpers；表加欄後，`owner_unit_id` 會**洩進 API 回應、匯出檔與 `table_digests`**。U0 交付（**r4：防線放在 U0a，不等 U0b**）：①**回應鍵集**——先在 MS1c 凍結樹上**記錄基準**；U0a 含**最小回應鍵集檢查**（涵蓋 `SELECT *` 的路由與匯出路徑），**『與基準 diff 為空』是 U0a 的凍結條件**；完整金標（對約 830 路由）在 U0b 補齊；②**預設序列化時剝除**內部欄位（集中的 `strip_internal_cols`，功能開啟後才輸出給有權限者）；③`archive.py` 匯出與備份工具改為明列欄位或剝除；④`table_digests`／資料庫健檢的欄位清單基準更新。這是 U0 人日從 6～9 上修到 **9～13** 的主因。**切分**：U0a（含中央剝除 `strip_internal_cols`、`archive.py`／`table_digests` 處理、最小回應鍵集檢查）7～9 人日；U0b（完整金標＋AST 棘輪＋模組自有表補欄）2～4 人日。**U0a 套用當天欄位就不得外洩**，否則 `SELECT *`（269／85／11／10 處）會在 U0a 與 U0b 之間的數日漏出新欄位。
+**4. `SELECT *` 外洩（0d S2：U0 並非零改動）**：掃描顯示約 **269 處** `SELECT *` 在 `modules/`、**85 處**在 `archive.py` 匯出、11 處在 routers、10 處在 helpers；表加欄後，`owner_unit_id` 會**洩進 API 回應、匯出檔與 `table_digests`**。U0 交付（**r4：防線放在 U0a，不等 U0b**）：①**回應鍵集**——先在 MS1c 凍結樹（`d995e5be4ca4dc163fde5fafd11f8a0a4fc69243`；MS1c 套用後即正式機 commit）上**記錄基準**（**須涵蓋 Excel／CSV 匯出表頭，並有正對照：故意不剝除的端點必須使檢查轉紅**，否則檢查本身可能是假綠燈）；U0a 含**最小回應鍵集檢查**（涵蓋 `SELECT *` 的路由與匯出路徑），**『與基準 diff 為空』是 U0a 的凍結條件**；完整金標（對約 830 路由）在 U0b 補齊；②**預設序列化時剝除**內部欄位（集中的 `strip_internal_cols`，功能開啟後才輸出給有權限者）；③`archive.py` 匯出與備份工具改為明列欄位或剝除；④`table_digests`／資料庫健檢的欄位清單基準更新。這是 U0 人日從 6～9 上修到 **9～13** 的主因。**切分**：U0a（含中央剝除 `strip_internal_cols`、`archive.py`／`table_digests` 處理、最小回應鍵集檢查）7～9 人日；U0b（完整金標＋AST 棘輪＋模組自有表補欄）2～4 人日。**U0a 套用當天欄位就不得外洩**，否則 `SELECT *`（269／85／11／10 處）會在 U0a 與 U0b 之間的數日漏出新欄位。
 
 **5. 其他預留**：`perm_role_caps`、`perm_user_overrides` 加 `scope_json`（可為空＝全部）；新表 `user_units`（全部使用者歸根）、`system_settings_unit`（空）；設定宣告加 `scope` 屬性（預設 `global`）。
 
