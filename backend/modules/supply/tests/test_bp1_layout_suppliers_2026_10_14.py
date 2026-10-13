@@ -16,7 +16,8 @@ import pytest
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
-PAGE = ROOT / "frontend" / "pages" / "suppliers.html"
+from core import source_tree   # noqa: E402  頁面路徑一律經 source_tree（守門 test_page_paths_centralized）
+PAGE = source_tree.page_file("suppliers.html")
 EDITOR = ROOT / "frontend" / "static" / "layout-editor.js"
 RUNTIME = ROOT / "frontend" / "static" / "layout-runtime.js"
 MANIFEST = HERE.parent / "module.json"
