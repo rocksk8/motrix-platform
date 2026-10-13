@@ -1,0 +1,4197 @@
+{
+ "summary": {
+  "endpoints_total": 835,
+  "endpoints_api": 831,
+  "write_total": 456,
+  "write_api": 456,
+  "get_api": 375,
+  "distinct_paths_api": 697,
+  "write_with_body_api": 330,
+  "write_with_path_param_api": 332
+ },
+ "select_star": {
+  "modules": 276,
+  "archive": 94,
+  "routers": 11,
+  "helpers": 11,
+  "core": 5,
+  "main_db": 7
+ },
+ "endpoints": {
+  "DELETE /api/auth/webauthn/credentials/{cred_id}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/bonus/groups/{group_id}/members/{username}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/completion-notes/{note_no}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/completion-notes/{note_no}/signed-files/{file_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/contractor-dispatches/{did}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/contractor-dispatches/{did}/files/{file_id}": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "DELETE /api/contractor-dispatches/{did}/invoice-files/{file_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/contractor-dispatches/{did}/payslip-links/{slip_no}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/contractor-vouchers/{voucher_no}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/custom/{key}/files/{file_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/customers/{cid}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/daily-tasks/{task_id}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/definitions/custom_module/{key}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/definitions/{kind}/{key}/draft": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/dev-logs/{log_id}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/dev-logs/{log_id}/files/{file_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/edit-presence": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "DELETE /api/inventory/stock-items/{item_id}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/invoice-vouchers/{voucher_no}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/invoice-vouchers/{voucher_no}/issued-files/{file_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/ledger/annotations/{annotation_id}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/ledger/category-map/{category}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/lodging/records/{rid}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/module-versions/{mvid}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/network-plans/{plan_id}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/org/departments/{department_id}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/org/divisions/{division_id}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/parts/{part_id}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/payment-requests/{request_no}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/payslips/{slip_no}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/payslips/{slip_no}/dispatch-links/{dispatch_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/payslips/{slip_no}/signed-files/{file_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/quotations/{no}/materials/{idx}/files/{file_id}": {
+   "w": true,
+   "pp": 3,
+   "body": false
+  },
+  "DELETE /api/quotations/{no}/materials/{idx}/invoice-files/{file_id}": {
+   "w": true,
+   "pp": 3,
+   "body": false
+  },
+  "DELETE /api/quotations/{no}/payment/{idx}/invoice-files/{file_id}": {
+   "w": true,
+   "pp": 3,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}/action-items/{item_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}/extra-expenses/{exp_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}": {
+   "w": true,
+   "pp": 3,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}": {
+   "w": true,
+   "pp": 3,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}/material-orders/{item_id}/receive": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}/signed-files/{file_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}/stages/{stage_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}": {
+   "w": true,
+   "pp": 3,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}": {
+   "w": true,
+   "pp": 3,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}/updates/{uid}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/quotations/{quote_no}/updates/{uid}/files/{file_id}": {
+   "w": true,
+   "pp": 3,
+   "body": false
+  },
+  "DELETE /api/recycle-bin/{bin_id}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/settings/branding/{kind}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/settings/custom-roles/{rid}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/shipping-notes/{note_no}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/shipping-notes/{note_no}/signed-files/{file_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/suppliers/{sid}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/tender-radar/tenders/{case_no}/mark": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/tender-radar/watches/{watch_id}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/users/{user_id}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/vendor-contractors/{vid}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/vouchers/{voucher_id}/attachments/{file_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "DELETE /api/work-logs/{wid}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/work-logs/{wid}/photos/{photo_id}": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "GET /": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/account-items": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/alt-quote/config": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/approval-delegates": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/approval-history": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/approval-queue": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/approval-queue/count": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/approval-queue/detail": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/attachments/open": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/audit-log": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/audit-log/failures/summary": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/audit-log/tree": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/auth/login/qr-info": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/auth/login/qr-status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/auth/me": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/auth/totp/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/auth/webauthn/credentials": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/bank-accounts": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/bank-accounts/{user_id}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/bank-accounts/{user_id}/history": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/bonus/awards": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/bonus/awards/candidates": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/bonus/awards/plan/{quote_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/bonus/awards/{award_id}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/bonus/awards/{award_id}/pdf-download": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/bonus/awards/{award_id}/preview": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/bonus/base/{quote_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/bonus/cases": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/bonus/cases/settings": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/bonus/cases/voucher-accounts": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/bonus/cases/{quote_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/bonus/corrections": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/bonus/corrections/current/{quote_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/bonus/corrections/{corr_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/bonus/groups": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/bonus/insurance": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/bonus/items": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/build-info": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/case-changes/{change_id}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/cashier/bonus-queue": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/cashier/execution-history": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/cashier/export": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/cashier/export/pdf": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/cashier/payable-queue": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/cashier/payslip-queue": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/cashier/pending-payables": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/cashier/pending-payables/{source}/{key}/files/{file_id}": {
+   "w": false,
+   "pp": 3,
+   "body": false
+  },
+  "GET /api/cashier/pending-payables/{source}/{key}/payee-bank": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/cashier/receivable-queue": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/cashier/remit-reviews": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/company/search": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/company/tax/{tax_id}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/completion-notes": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/completion-notes/quote-items": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/completion-notes/{note_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/completion-notes/{note_no}/pdf-download": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/completion-notes/{note_no}/privacy-notice": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/contractor-dispatches": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/contractor-dispatches/{did}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/contractor-dispatches/{did}/payslip-links": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/contractor-vouchers": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/contractor-vouchers/last-paid-bank-account": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/contractor-vouchers/remit-fee-total": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/contractor-vouchers/settings/approval-flow": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/contractor-vouchers/settings/remit-require-payslip": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/contractor-vouchers/{voucher_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/contractor-vouchers/{voucher_no}/pdf-download": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/contractor-vouchers/{voucher_no}/personnel-links": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/contractors": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/contractors/export": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/contractors/export/pdf": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/contractors/selectable": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/contractors/{cid}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/contractors/{cid}/id-card": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/contractors/{cid}/privacy-notice": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/custom-modules": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/custom-modules/catalog": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/custom-modules/definition-review": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/custom-modules/finance/case/{case_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/custom-modules/finance/summary": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/custom-modules/templates/{tkey}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/custom-modules/{key}/definition/review": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/custom/{key}/meta": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/custom/{key}/records": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/custom/{key}/records/{record_no}": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/custom/{key}/records/{record_no}/output": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/custom/{key}/records/{record_no}/revisions": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/custom/{key}/records/{record_no}/revisions/diff": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/custom/{key}/ref-options/{field}": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/customers": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/customers/{cid}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/customers/{cid}/privacy-notice": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/daily-tasks": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/daily-tasks/{task_id}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/daily-tasks/{task_id}/edit-log": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/daily-tasks/{task_id}/history": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/daily-tasks/{task_id}/history/export": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/dashboard/activity-feed": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dashboard/expenses-monthly": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dashboard/funnel": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dashboard/monthly": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dashboard/ops-alerts": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dashboard/stats": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/definition-kinds": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/definitions/{kind}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/definitions/{kind}/{key}": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/definitions/{kind}/{key}/default": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/definitions/{kind}/{key}/diff": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/definitions/{kind}/{key}/resolve": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/definitions/{kind}/{key}/versions/{version}": {
+   "w": false,
+   "pp": 3,
+   "body": false
+  },
+  "GET /api/dev-cases": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dev-cases/{case_id}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/dev-cases/{case_id}/logs": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/dev-crm/activity-stats": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/dev-logs/pending": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/devices": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/duty-roles": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/duty-roles/changes": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/duty-roles/users": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/expense-categories": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/expense-types": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/expense-types/{code}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/extra-expenses/cases": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/extra-expenses/mine": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/extra-expenses/po-bank-block": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/filehub/search": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/inventory/batches": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/inventory/batches/last-paid-bank-account": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/inventory/batches/{batch_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/inventory/parts-summary": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/inventory/purchase-suggestions": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/inventory/stock-items": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/invoice-vouchers": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/invoice-vouchers/remaining": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/invoice-vouchers/{voucher_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/invoice-vouchers/{voucher_no}/pdf-download": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/layout/{module_key}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/ledger/accounts": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/action-requests": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/action-requests/{request_id}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/ledger/annotations": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/annotations/pending": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/balance-sheet": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/cash-flow": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/category-map": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/engine/events": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/engine/runs": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/engine/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/equity-statement": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/events/preview": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/features": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/fs-lines": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/general-ledger": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/income-statement": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/journal": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/period-log": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/periods/{period_id}/checklist": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/ledger/setup-check": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/statements/check": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/subledger": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/tax401": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/tax401/export": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/tax401/export/pdf": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/trial-balance": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/withholding": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/years": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ledger/years/{year}/closing/preview": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/ledger/years/{year}/statements": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/ledger/years/{year}/statements/export": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/ledger/years/{year}/statements/export/pdf": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/legal-params/privacy-notice": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/legal-params/privacy-notice/texts/{notice_hash}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/legal-params/tax-basis-options": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/legal-params/tax-rules": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/license/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/list-prefs/{list_key}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/lodging/compare": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/lodging/quotes": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/lodging/records": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/lodging/records/{rid}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/lodging/records/{rid}/export": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/lodging/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/mail-types": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/mail-types/receivable": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/map/config": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/map/overlays": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/map/points": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/material-payments/{pid}/privacy-notice": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/material-suppliers": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/materials-summary": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/me/bank-account": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/module-versions": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/modules/catalog": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/network-plans": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/network-plans/{plan_id}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/network-plans/{plan_id}/export/excel": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/network-plans/{plan_id}/export/pdf": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/network-plans/{plan_id}/privacy-notice": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/next-quote-no": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/next-slip-no": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/notifications/mine": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/now": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/online-users": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/org/tree": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/overhead/settings": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/parts": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/parts/categories": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/payment-requests": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/payment-requests/remaining": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/payment-requests/{request_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/payment-requests/{request_no}/pdf-download": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/payslip-person-dispatches": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/payslip-person-dispatches/by-dispatch": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/payslips": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/payslips/{slip_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/payslips/{slip_no}/approval-reveal": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/payslips/{slip_no}/archive/{idx}": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/payslips/{slip_no}/dispatch-links": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/payslips/{slip_no}/pdf-download": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/payslips/{slip_no}/signed-files/{file_id}": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/permmatrix/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/photo-token": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/ping": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/platform/catalog": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/platform/menu": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/platform/mount-points": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/platform/mounts": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/platform/prefill-sources": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/project-margin/config": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/quotations": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/quotations/gate-matrix": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/quotations/last-received-bank-account": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/quotations/stage-board": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/action-items": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/case-bundle": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/case-plan-view": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/close-gates": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/closing-report-pdf": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/extra-expenses": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/extra-expenses/{exp_id}/document": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/finance-summary": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/item-shipped": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/material-changes": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/material-coverage": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/material-link-status": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/material-order-approvals": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/material-orders": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/material-orders/{item_id}/change-proposal": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/material-orders/{item_id}/changes": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/material-payments": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/material-po-lines": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/network-plan": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/pdf-download": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/plan-view": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/privacy-notice": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/project-report-pdf": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/purchase-items": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/purchase-requests/lines": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/settlement": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/settlement-actuals": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/stages": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/updates": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/versions": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/versions/{seq}/download": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/reads": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reads/module-counts": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/recycle-bin": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/recycle-bin/impact": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/recycle-bin/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/recycle-bin/{bin_id}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/remit-kinds": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/remit-kinds/definition": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/ar-aging": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/cash-position": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/customer-history": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/expenses-monthly": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/financial": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/financial/excel": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/financial/pdf": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/ledger-diff": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/monthly-trend": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/payment-anomalies": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/receivables-monthly": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/t100-export/confirmed": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/t100-export/preview": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/t100-export/vouchers": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/t100-export/vouchers/pdf": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/tax-export": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/reports/tax-export/pdf": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/sales-orders": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/search": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings-center/groups": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings-center/groups/{group}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/settings-center/groups/{group}/diff": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/settings-center/groups/{group}/versions": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/settings-center/pending": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings-center/profiles": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings-center/profiles/{name}/preview": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/settings-center/public": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/approval-doc-types": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/approval-flow": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/approval-flow-scope": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/approval-flow/{doc_type}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/settings/backup-retention": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/branding": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/cloud-backup-target": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/company-profile": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/company-setup/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/custom-roles": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/edge-path": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/email-notify": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/google-calendar": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/google-quota": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/monthly-report-recipients": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/operating-targets": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/payment-terms": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/pdf-base-path": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/pii-archive-status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/quote-terms-defaults": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/quote-terms-presets": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/reminder-send-failures": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/role-labels": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/storage-locations": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/t100-export-config": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/webauthn-config": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/shipping-notes": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/shipping-notes/export-history": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/shipping-notes/material-shippable": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/shipping-notes/{note_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/shipping-notes/{note_no}/material-link-check": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/shipping-notes/{note_no}/pdf-download": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/shipping-notes/{note_no}/privacy-notice": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/suppliers": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/suppliers/{sid}/privacy-notice": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/system-hub": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/system/bonus-module-status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/system/branding": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/system/branding/{kind}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/system/case-roles-unmapped": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/system/deployed-version": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/system/modules": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/system/modules/availability": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/system/modules/unavailable-pages": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/system/runtime-switches": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/system/schema-status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/system/version": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/system/webauthn-config-status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/tax-rules": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/tender-radar/schedule": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/tender-radar/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/tender-radar/tenders": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/tender-radar/watches": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/uploads/{file_path:path}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/user-activity": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/user-activity/trail": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/users": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/users/sales-contact": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/users/selectable": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/users/{user_id}/privacy-notice": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/vendor-contractors": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/vendor-contractors/selectable": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/vendor-contractors/{vid}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/vendor-contractors/{vid}/passbook": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/vendor-contractors/{vid}/privacy-notice": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/vouchers": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/vouchers/by-case/{quote_no}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/vouchers/line-source-file": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/vouchers/line-source-files": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/vouchers/summary-sources": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/vouchers/{voucher_id}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/vouchers/{voucher_id}/attachments/{file_id}": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/vouchers/{voucher_id}/edit-log": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/vouchers/{voucher_id}/pdf-download": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/vouchers/{voucher_id}/preview": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/work-logs": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /map-overlays/{module_key}/{script}": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /pages/{name:path}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /static/sidebar.js": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "PATCH /api/account-items/{code}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/approval-delegates/{delegate_id}/deactivate": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "PATCH /api/auth/change-password": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PATCH /api/auth/webauthn/credentials/{cred_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/bonus/groups/{group_id}/active": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/cashier/payable-queue/{voucher_no}/planned-pay-date": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/cashier/pending-payables/{source}/{key}/planned-pay-date": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "PATCH /api/contractor-dispatches/{did}/accept": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/contractor-dispatches/{did}/invoice-date": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/contractor-vouchers/{voucher_no}/invoice": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/contractors/{cid}/active": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "PATCH /api/customers/{cid}/visits": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/daily-tasks/{task_id}/complete": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/dev-cases/{case_id}/convert": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/dev-cases/{case_id}/status": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/dev-logs/{log_id}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "PATCH /api/ledger/accounts/{code}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/ledger/fs-lines/{code}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/material-payments/{pid}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/network-plans/{plan_id}/status": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/notifications/read-all": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
+  "PATCH /api/notifications/{notif_id}/read": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "PATCH /api/quotations/{no}/payment/{idx}": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "PATCH /api/quotations/{quote_no}/action-items/{item_id}/approve": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "PATCH /api/quotations/{quote_no}/assigned-users": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/quotations/{quote_no}/case-record": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/quotations/{quote_no}/deal-tag": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/quotations/{quote_no}/extra-expenses/{exp_id}": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "PATCH /api/quotations/{quote_no}/extra-expenses/{exp_id}/dates": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "PATCH /api/quotations/{quote_no}/material-orders": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/quotations/{quote_no}/material-orders/{item_id}/invoice-date": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "PATCH /api/quotations/{quote_no}/stages/reorder": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/quotations/{quote_no}/status": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/settings/backup-retention": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PATCH /api/settings/edge-path": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PATCH /api/settings/pdf-base-path": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PATCH /api/settings/webauthn-config": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PATCH /api/suppliers/{sid}/visits": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/users/{user_id}/active": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "PATCH /api/users/{user_id}/daily-task-password": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/users/{user_id}/unlock-password": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/vendor-contractors/{vid}/active": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "PATCH /api/vendor-contractors/{vid}/visits": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/account-items": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/approval-delegates": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/approval-queue/reassign": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/audit-log/module-counts": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/auth/login": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/auth/login/qr-approve": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/auth/login/totp": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/auth/logout": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/auth/totp/disable": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/auth/totp/enable": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/auth/totp/recovery-codes/regenerate": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/auth/totp/setup": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/auth/verify-daily-task-unlock": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/auth/verify-unlock": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/auth/webauthn/login/begin": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/auth/webauthn/login/complete": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/auth/webauthn/register/begin": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/auth/webauthn/register/complete": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/bonus/awards/plan/{quote_no}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/bonus/cases/{quote_no}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/bonus/cases/{quote_no}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/bonus/cases/{quote_no}/mark-paid": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/bonus/cases/{quote_no}/preview": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/bonus/cases/{quote_no}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/bonus/cases/{quote_no}/return": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/bonus/cases/{quote_no}/submit": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/bonus/corrections": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/bonus/corrections/{corr_no}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/bonus/corrections/{corr_no}/cancel": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/bonus/corrections/{corr_no}/mark-paid": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/bonus/corrections/{corr_no}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/bonus/corrections/{corr_no}/submit": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/bonus/groups": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/bonus/groups/{group_id}/members": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/case-batch/assign": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/case-batch/export": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/case-batch/export/pdf": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/case-changes/{change_id}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/case-changes/{change_id}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/cashier/pending-payables/{source}/{key}/pay": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/cashier/remit-reviews/{source}/{key}/decision": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/completion-notes": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/completion-notes/{note_no}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/completion-notes/{note_no}/export": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/completion-notes/{note_no}/privacy-notice/ack": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/completion-notes/{note_no}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/completion-notes/{note_no}/revoke-approval": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/completion-notes/{note_no}/signed-files": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/completion-notes/{note_no}/signed-toggle": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/completion-notes/{note_no}/submit": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/contractor-dispatches": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/contractor-dispatches/{did}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/contractor-dispatches/{did}/completion/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/contractor-dispatches/{did}/completion/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/contractor-dispatches/{did}/completion/request": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/contractor-dispatches/{did}/completion/withdraw": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/contractor-dispatches/{did}/files": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/contractor-dispatches/{did}/files/{file_id}/delete-approve": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "POST /api/contractor-dispatches/{did}/files/{file_id}/delete-reject": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/contractor-dispatches/{did}/import-to-quote": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/contractor-dispatches/{did}/invoice-files": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/contractor-dispatches/{did}/payslip-links": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/contractor-dispatches/{did}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/contractor-dispatches/{did}/status": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/contractor-dispatches/{did}/submit": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/contractor-dispatches/{did}/withdraw": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/contractor-vouchers": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/contractor-vouchers/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/contractor-vouchers/{voucher_no}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/contractor-vouchers/{voucher_no}/export": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/contractor-vouchers/{voucher_no}/paid-toggle": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/contractor-vouchers/{voucher_no}/personnel-link": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/contractor-vouchers/{voucher_no}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/contractor-vouchers/{voucher_no}/revoke-approval": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/contractor-vouchers/{voucher_no}/submit": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/contractor-vouchers/{voucher_no}/void": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/contractors": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/contractors/import": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/contractors/{cid}/privacy-notice/ack": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/custom-modules/formula/check": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/custom-modules/numbering/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/custom-modules/{key}/definition/{version}/approve": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/custom-modules/{key}/definition/{version}/reject": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/custom-modules/{key}/output/preview": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/custom/{key}/compute": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/custom/{key}/files/{field}": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/custom/{key}/records": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/custom/{key}/records/{record_no}/approve": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/custom/{key}/records/{record_no}/reject": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/custom/{key}/records/{record_no}/transitions/{tkey}": {
+   "w": true,
+   "pp": 3,
+   "body": true
+  },
+  "POST /api/customers": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/customers/{cid}/contacts/{ctid}/privacy-notice/ack": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "POST /api/daily-tasks": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/definitions/output_template/{key}/preview": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/definitions/{kind}/{key}/publish": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/definitions/{kind}/{key}/restore/{version}": {
+   "w": true,
+   "pp": 3,
+   "body": true
+  },
+  "POST /api/definitions/{kind}/{key}/validate": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/dev-cases": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/dev-cases/{case_id}/approve-delete": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/dev-cases/{case_id}/approve-relink-quote": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/dev-cases/{case_id}/cancel-delete": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/dev-cases/{case_id}/cancel-relink-quote": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/dev-cases/{case_id}/logs": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/dev-cases/{case_id}/request-delete": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/dev-cases/{case_id}/request-relink-quote": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/duty-roles": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/duty-roles/bindings": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/duty-roles/bindings/remove": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/duty-roles/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/duty-roles/subtracts": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/duty-roles/subtracts/remove": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/edit-presence": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/inventory/batches": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/inventory/batches/{batch_no}/paid-toggle": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/inventory/purchase-suggestions/{part_no}/status": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/inventory/stock-items/{item_id}/adjust": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/invoice-vouchers": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/invoice-vouchers/{voucher_no}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/invoice-vouchers/{voucher_no}/export": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/invoice-vouchers/{voucher_no}/issued-files": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/invoice-vouchers/{voucher_no}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/invoice-vouchers/{voucher_no}/revoke-approval": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/invoice-vouchers/{voucher_no}/submit": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/ledger/action-requests/{request_id}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/ledger/action-requests/{request_id}/send-back": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/ledger/action-requests/{request_id}/withdraw": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/ledger/engine/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/ledger/engine/run": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/ledger/opening": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/ledger/opening/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/ledger/opening/{batch_id}/undo": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/ledger/periods/{period_id}/close": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/ledger/periods/{period_id}/lock": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/ledger/periods/{period_id}/reopen": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/ledger/periods/{period_id}/unlock": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/ledger/tax401/settlement": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/ledger/withholding/remit": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/ledger/withholding/unremit": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/ledger/years": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/ledger/years/{year}/close": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/ledger/years/{year}/closing/generate": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/ledger/years/{year}/reopen": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/lodging/quotes": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/lodging/records": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/lodging/refresh": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/lodging/search": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/material-payments/{pid}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/material-payments/{pid}/privacy-notice/ack": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/material-payments/{pid}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/material-payments/{pid}/submit": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/material-payments/{pid}/void": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/material-payments/{pid}/withdraw": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/module-versions": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/network-plans": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/network-plans-quick/pdf": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/network-plans-quick/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/network-plans/{plan_id}/import/excel": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/network-plans/{plan_id}/privacy-notice/ack": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/network-plans/{plan_id}/topology-preview": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/org/departments": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/org/divisions": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/parts": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/payment-requests": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/payment-requests/{request_no}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/payment-requests/{request_no}/export": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/payment-requests/{request_no}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/payment-requests/{request_no}/revoke-approval": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/payment-requests/{request_no}/submit": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/payslips": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/payslips/{slip_no}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/payslips/{slip_no}/archive/{orig_idx}/record": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "POST /api/payslips/{slip_no}/confirm-contractor": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/payslips/{slip_no}/dispatch-links": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/payslips/{slip_no}/export": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/payslips/{slip_no}/mark-paid": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/payslips/{slip_no}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/payslips/{slip_no}/signed-files": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/payslips/{slip_no}/submit": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/payslips/{slip_no}/unpay": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/payslips/{slip_no}/unsign": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/payslips/{slip_no}/void": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/photo-token/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/quotations": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/quotations/case-activity": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/quotations/preview-html": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/quotations/{no}/materials/{idx}/files": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{no}/materials/{idx}/invoice-files": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{no}/payment/{idx}/approve-writeoff": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{no}/payment/{idx}/cancel-writeoff": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "POST /api/quotations/{no}/payment/{idx}/invoice-files": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{no}/payment/{idx}/request-writeoff": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/action-items": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/case-lock": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/quotations/{quote_no}/case-unlock": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/quotations/{quote_no}/export": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/quotations/{quote_no}/extra-expenses": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/extra-expenses/{exp_id}/approve": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/approve": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/reject": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/submit": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "POST /api/quotations/{quote_no}/extra-expenses/{exp_id}/files": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/extra-expenses/{exp_id}/reject": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/extra-expenses/{exp_id}/submit": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "POST /api/quotations/{quote_no}/extra-expenses/{exp_id}/void": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/material-changes/{change_id}/approve": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/material-changes/{change_id}/reject": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/material-changes/{change_id}/revise": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/material-changes/{change_id}/submit": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "POST /api/quotations/{quote_no}/material-changes/{change_id}/withdraw": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "POST /api/quotations/{quote_no}/material-orders/{item_id}/approve": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/material-orders/{item_id}/cancel": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/material-orders/{item_id}/changes": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/material-orders/{item_id}/payments": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/material-orders/{item_id}/receive": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/material-orders/{item_id}/reject": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/material-orders/{item_id}/submit": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "POST /api/quotations/{quote_no}/material-orders/{item_id}/withdraw": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "POST /api/quotations/{quote_no}/privacy-notice/ack": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/recall": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/quotations/{quote_no}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/reject-final": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/settlement-actuals/preview": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/signed-files": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/signed-toggle": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/stages": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/stages/{stage_id}/assignees": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}": {
+   "w": true,
+   "pp": 3,
+   "body": false
+  },
+  "POST /api/quotations/{quote_no}/stages/{stage_id}/visits": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/updates": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/reads": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/reads/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/reads/unread": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/recycle-bin/delete-approved": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/recycle-bin/{bin_id}/restore": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/reports/bank-reconcile": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/reports/t100-export/confirm": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/reports/t100-export/unconfirm": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings-center/groups/{group}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/settings-center/groups/{group}/impact": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/settings-center/groups/{group}/preview": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/settings-center/groups/{group}/reset": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/settings-center/groups/{group}/restore/{version}": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "POST /api/settings-center/pending/{change_id}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/settings-center/pending/{change_id}/cancel": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/settings-center/profiles/{name}/apply": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/settings/custom-roles": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/settings/email-notify/test": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/settings/google-calendar/test": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/settings/storage-locations/create": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/shipping-notes": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/shipping-notes/{note_no}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/shipping-notes/{note_no}/export": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/shipping-notes/{note_no}/privacy-notice/ack": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/shipping-notes/{note_no}/reject": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/shipping-notes/{note_no}/revoke-approval": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/shipping-notes/{note_no}/signed-files": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/shipping-notes/{note_no}/signed-toggle": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/shipping-notes/{note_no}/submit": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/suppliers": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack": {
+   "w": true,
+   "pp": 2,
+   "body": false
+  },
+  "POST /api/tender-radar/scan": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/tender-radar/tenders/{case_no}/mark": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/tender-radar/watches": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/users": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/users/{user_id}/privacy-notice/ack": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/vendor-contractors": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/vendor-contractors/{vid}/privacy-notice/ack": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/vouchers": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/vouchers/{voucher_id}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/vouchers/{voucher_id}/attachments": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "POST /api/vouchers/{voucher_id}/post": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/vouchers/{voucher_id}/send-back": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/vouchers/{voucher_id}/submit": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/vouchers/{voucher_id}/void": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/work-logs": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/work-logs/{wid}/photos": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/bank-accounts/{user_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/bonus/cases/settings": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/bonus/cases/voucher-accounts": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/bonus/cases/{quote_no}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/bonus/corrections/{corr_no}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/bonus/insurance/{username}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/completion-notes/{note_no}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/contractor-dispatches/{did}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/contractor-vouchers/settings/approval-flow": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/contractor-vouchers/settings/remit-require-payslip": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/contractors/{cid}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/contractors/{cid}/id-card": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/custom-modules/definition-review": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/custom/{key}/records/{record_no}": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "PUT /api/customers/{cid}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/daily-tasks/{task_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/definitions/{kind}/{key}/draft": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "PUT /api/dev-cases/{case_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/dev-logs/{log_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/duty-roles/{role_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/extra-expenses/po-bank-block": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/inventory/batches/{batch_no}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/ledger/annotations": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/ledger/category-map": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/ledger/expense-categories": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/ledger/features/{key}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/ledger/roles": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/ledger/settings": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/legal-params/tax-rules": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/list-prefs/{list_key}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/mail-types/{key}/recipients": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/me/bank-account": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/network-plans/{plan_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/org/departments/{department_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/org/divisions/{division_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/overhead/settings": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/parts/{part_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/payment-requests/{request_no}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/payslips/{slip_no}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/quotations/{quote_no}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/quotations/{quote_no}/action-items/{item_id}": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "PUT /api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "PUT /api/quotations/{quote_no}/overhead-pct": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/quotations/{quote_no}/settlement": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/quotations/{quote_no}/stages/{stage_id}": {
+   "w": true,
+   "pp": 2,
+   "body": true
+  },
+  "PUT /api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}": {
+   "w": true,
+   "pp": 3,
+   "body": true
+  },
+  "PUT /api/recycle-bin/settings": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/approval-flow": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/approval-flow-scope": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/approval-flow/{doc_type}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/settings/branding/{kind}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/settings/cloud-backup-target": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/company-profile": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/custom-roles/{rid}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/settings/email-notify": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/google-calendar": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/google-quota": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/monthly-report-recipients": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/operating-targets": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/payment-terms": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/quote-terms-presets": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/role-labels": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/storage-locations": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/t100-export-config": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/shipping-notes/{note_no}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/suppliers/{sid}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/system/modules/{key}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/tender-radar/schedule": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/tender-radar/watches/{watch_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/users/{user_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/vendor-contractors/{vid}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/vendor-contractors/{vid}/passbook": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/vouchers/{voucher_id}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/work-logs/{wid}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  }
+ }
+}
