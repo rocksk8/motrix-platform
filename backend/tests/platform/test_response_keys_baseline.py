@@ -15,9 +15,9 @@ import pytest
 from tests.platform import _response_keys as RK
 
 BASELINE = Path(__file__).with_name("response_keys_baseline.json")
-ROUTE_FLOOR = 150            # 靜態 GET 路由記到的數量下限
+ROUTE_FLOOR = 300            # 靜態 GET 路由記到的數量下限
 ROWFUL_FLOOR = 40            # 回傳『非空鍵集』的路由下限（種子有列才有鍵）
-EXPORT_FLOOR = 3             # 狀態 200 的匯出（表頭可比）下限
+EXPORT_FLOOR = 8             # 狀態 200 的匯出（表頭可比）下限
 
 
 @pytest.fixture
@@ -35,7 +35,7 @@ def seeded(client, make_user):
 
 def _paths():
     import main
-    return RK.static_get_paths(main.app)
+    return RK.get_targets(main.app)
 
 
 def test_record_or_compare_against_baseline(client, seeded):

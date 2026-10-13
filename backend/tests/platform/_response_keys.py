@@ -63,15 +63,53 @@ def key_paths(obj, prefix="", out=None) -> list:
     return sorted(out) if top else []
 
 
-def static_get_paths(app) -> list:
-    """app 的 GET 靜態路由（不含 `{}` 參數、只取 /api/）。"""
-    out = set()
+def _is_int(field) -> bool:
+    ann = getattr(field, "annotation", None) or getattr(field, "type_", None)
+    return ann is int
+
+
+_QUERY_DEFAULTS = (
+    (re.compile(r"year", re.I), "2026"), (re.compile(r"month", re.I), "10"),
+    (re.compile(r"(from|start|begin).*|.*_(from|start)$", re.I), "2026-01-01"),
+    (re.compile(r"(to|end).*|.*_(to|end)$", re.I), "2026-12-31"),
+    (re.compile(r"date|day", re.I), "2026-10-01"),
+    (re.compile(r"^(fmt|format)$", re.I), "xlsx"),
+    (re.compile(r"(^|_)id$|^id", re.I), "1"),
+)
+
+
+def _query_default(name: str, field) -> str:
+    for rx, v in _QUERY_DEFAULTS:
+        if rx.search(name):
+            return v
+    return "1" if _is_int(field) else "x"
+
+
+def get_targets(app) -> list:
+    """[(鍵, 實際網址)]：GET 路由；路徑參數用種子值填（整數 1、字串 'x'——種子的 NOT NULL 文字欄位就是 'x'，所以字串主鍵也對得上），
+    必填查詢參數用 `_QUERY_DEFAULTS` 的合理預設。鍵是路由樣板（含 `{}`），所以基準不依賴填入的值。"""
+    from urllib.parse import quote
+    out = {}
     for r in app.routes:
         methods = getattr(r, "methods", None) or ()
-        p = getattr(r, "path", "")
-        if "GET" in methods and p.startswith("/api/") and "{" not in p:
-            out.add(p)
-    return sorted(out)
+        tpl = getattr(r, "path", "")
+        if "GET" not in methods or not tpl.startswith("/api/"):
+            continue
+        dep = getattr(r, "dependant", None)
+        url = tpl
+        for f in (getattr(dep, "path_params", None) or []):
+            url = url.replace("{%s}" % f.name, "1" if _is_int(f) else "x")
+            url = re.sub(r"\{%s:[^}]*\}" % re.escape(f.name), "1" if _is_int(f) else "x", url)
+        if "{" in url:
+            continue
+        q = ["%s=%s" % (f.name, quote(_query_default(f.name, f))) for f in (getattr(dep, "query_params", None) or []) if getattr(f, "required", False)]
+        out[tpl] = url + ("?" + "&".join(q) if q else "")
+    return sorted(out.items())
+
+
+def static_get_paths(app) -> list:
+    """舊介面：只回鍵（保留給舊呼叫者）。"""
+    return [k for k, _u in get_targets(app)]
 
 
 def export_header(content_type: str, body: bytes) -> list:
@@ -100,11 +138,12 @@ def export_header(content_type: str, body: bytes) -> list:
 def record(client, headers, paths) -> dict:
     """{路徑: {"s": 狀態碼, "k": [鍵路徑]} 或 {"s":…, "ct":…, "hdr":[表頭]}}。呼叫失敗的路由記 {"s": 0}。"""
     out = {}
-    for p in paths:
+    for item in paths:
+        p, url = item if isinstance(item, tuple) else (item, item)
         if DENY.search(p):
             continue
         try:
-            r = client.get(p, headers=headers)
+            r = client.get(url, headers=headers)
         except Exception:                                                    # noqa: BLE001
             out[p] = {"s": 0}
             continue
