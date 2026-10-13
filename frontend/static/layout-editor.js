@@ -12,7 +12,7 @@
  * 問題依位置標回面板）⇒ 版本清單可以還原任一版。右上角「以角色預覽」看某角色目前的已發布版面。
  * 行動版：面板只在桌機（≥1024px）開；發布後的版面照常在手機上顯示。
  *
- * e2e 等待點：#ml-editor 的 data-busy（'0'／'1'）與 data-state（idle／saved／problems／published／restored）。
+ * e2e 等待點：#ml-editor 的 data-busy（'0'／'1'）與 data-state（idle／saved／problems／published／restored／pending〔治理旗標開啟時放寬變更待核准〕）。
  */
 ;(function () {
   var L = window.MotrixCustomLayout
@@ -166,6 +166,14 @@
         this.askBar = null
         if (r) r(!!ok)
         else if (notice && !this.work) this.open = false          // 只是提示（還沒進入編輯）：看過就收起
+      },
+      // T60 S2：治理旗標開啟時，放寬的發布／還原不會立刻生效，後端回 {pending:true, changeId, effectiveAt, reasons}。
+      // 這時不能說「已發布」——如實說明已送出、等第二位最高管理者核准、最早何時生效、為什麼要核准。旗標關閉時後端永遠不回 pending。
+      _pendingText: function (d, what) {
+        var reasons = (d.reasons || []).map(function (x) { return typeof x === 'string' ? x : ((x && (x.message || x.text)) || '') }).filter(Boolean)
+        var at = d.effectiveAt ? String(d.effectiveAt).replace('T', ' ').slice(0, 16) : ''
+        return '已送出' + what + '，待第二位最高管理者核准（' + this.scopeLabel() + (d.version ? '，第 ' + d.version + ' 版' : '') + '）；核准前不會生效'
+          + (at ? '，生效時間 ' + at + ' 之後' : '') + (reasons.length ? '。原因：' + reasons.join('；') : '')
       },
       _key: function () { return 'module:' + ML().config().module },
       _base: function () { return '/api/definitions/layout/' + encodeURIComponent(this._key()) },
@@ -400,10 +408,12 @@
           return
         }
         this.note = ''
-        await ML().reload()
+        var pend = r.d && r.d.pending === true            // 待核准：版面還沒變，不重讀、不說已發布
+        if (!pend) await ML().reload()
         await this.loadScope()
         this.busy = false               // loadScope 不再清 busy（它用自己的 loading）⇒ 動作自己解鎖
         if (this.loadError) return      // 發布成功但重新載入失敗：狀態留在 error（已說明），不標成已發布的乾淨狀態
+        if (pend) { this.msg = this._pendingText(r.d, '發布'); this.state = 'pending'; return }
         this.msg = '已發布第 ' + r.d.version + ' 版（' + this.scopeLabel() + '）'
         this.state = 'published'
       },
@@ -417,10 +427,12 @@
                               { method: 'POST', body: JSON.stringify({}) })
         if (!r.ok) { this._mark(r.d.problems || []); this.msg = '還原失敗：' + (r.d.detail || r.status); this.busy = false; return }
         if (this.defs.draft) await this._j(this._base() + '/draft?scope=' + encodeURIComponent(this.scope), { method: 'DELETE' })
-        await ML().reload()
+        var pend = r.d && r.d.pending === true
+        if (!pend) await ML().reload()
         await this.loadScope()
         this.busy = false
         if (this.loadError) return
+        if (pend) { this.msg = this._pendingText(r.d, '還原第 ' + version + ' 版'); this.state = 'pending'; return }
         this.msg = '已把第 ' + version + ' 版還原成第 ' + r.d.version + ' 版'
         this.state = 'restored'
       },
