@@ -1,4 +1,4 @@
-# U0a 規格與回滾演練規格 — T57 r5（併入 0d 對 c7 dry run 的審查；欄位名以 c7 的 `dc233f1fa` 為準）
+# U0a 規格與回滾演練規格 — T57 r6（併入 0d 對 c7 dry run 的審查與 G5；欄位名以 c7 的 `dc233f1fa` 為準）
 
 > 作者 hichan-98（規格與演練規格）；實作：c7（核心遷移＋演練腳本，依本規格）、2b（`strip_internal_cols`＋基準回應鍵集記錄器＋`org_units` 宣告）、5e（MS1d 之後支援審查／測試、模組自有表清單）；執行演練與閘門：5c。**僅文件；人日與日期皆為估計。**
 > 依據：`FRAMEWORK-ORG-UNITS-T57.md` §14.9／§14.10（r6）、`EXECUTION-PLAN-T57.md` r9 §2.3、c7 的核心表盤點（10-13，經 1c 轉達）、0d 對 U0 的審查（M1／M2／S2／S3 與 F1～F3）、使用者 10-13 答覆（法人＝混合；U0＝是，盡快）。
@@ -45,7 +45,11 @@ accounting 34、case 4（`case_material_*`）、payroll 4、lodging 4、recycleb
 ## 5 `org_units` 功能宣告（2b）
 `core/features_l1.json` 宣告 `org_units`：`status=planned`。**啟用條件＝『已宣告且 status==open』**（不得直接用 `spine.feature_enabled`，它對未宣告回傳 True）；測試：刪除宣告後範圍過濾（目前恆真）與剝除行為不變。
 
-## 6 套用步驟檔 #12 的新預期（作為 U0a 步驟檔草稿的骨架，98；**F5：斷言精確數量**）
+## 6 套用步驟檔 #12 的新預期（
+
+**步驟 0 的唯讀預檢（補償沒有正式機複本，0d）**：套用前，在正式機以 `mode=ro` 記錄並確認——①**新表與新欄位都還不存在**（`org_units`、`org_unit_closure`、`user_units`、`system_settings_unit`、`seq_by_entity` 不存在；36 張表無 `owner_unit_id`、`audit_log`／`notifications` 無 `unit_id`、5 張法律單據表無 `legal_entity_id`、兩張權限表無 `scope_json`）；②對**這 38 張表加兩張權限表（共 40 張）與 `vouchers` VIEW** 逐一記錄 `PRAGMA table_info`（欄位清單與型別），並記錄 **`vouchers` VIEW 在 `sqlite_master` 的 SQL 原文**；**套用後 #12 一律與『這些記錄值』比對，而不是與我們的預期假設比對**（正式機的表可能被手工改過，例如 0005 的前例）；③`module_schema_versions`：`core`＝9、`permmatrix`＝1。任一項出人意料（新欄位或新表已存在、欄位清單與開發端基準不同、VIEW 定義不同）⇒ **停下回報、不套用**。
+
+（以下為套用後的預期：作為 U0a 步驟檔草稿的骨架，98；**F5：斷言精確數量**）
 - `schema_version`＝118（不變）；`db.CURRENT_VERSION／V9_BASELINE`＝118／118。
 - `module_schema_versions`：`core` **9→10**、`permmatrix` **1→2**（n→n+1），其餘列與套用前相同（兩個變動都要逐列寫出數值）。
 - `sqlite_master`：**恰好多出 5 張新表**——`org_units`、`org_unit_closure`、`user_units`、`system_settings_unit`、`seq_by_entity`（含各自的 `sqlite_autoindex_*`／主鍵索引，數量依實際 `CREATE` 結果寫死在步驟檔）；其他表名、索引、觸發器相同。
@@ -62,7 +66,7 @@ accounting 34、case 4（`case_material_*`）、payroll 4、lodging 4、recycleb
 - 回滾段落：『資料庫保留新欄位與新表、不還原；使用者要求還原資料庫才用套用前備份』。
 
 ## 7 回滾演練規格（98 寫規格，c7 寫腳本，5c 執行）
-**環境（PM 裁示：開發機永遠不複製正式機資料庫）**：①**開發機自建的 MS1c 狀態資料庫**（以 MS1c 凍結樹 `init_db`＋全部 migration 建立）＋**demo 種子資料**＋**放大的合成資料量**（例如 `audit_log`、`quotations`、`notifications` 各 10 萬列，另含傳票、薪資單、案件子資料的代表量），用來**記錄 migration 耗時與啟動耗時**；②套件暫存目錄；③**不碰正式機、不取用任何正式機資料庫複本**（因此 VR7 的資料庫快照改用上述合成資料庫）；機器靜默（HOLD 規則：RAM ≥10GB、不與閘門同時）；輸出放 D 槽暫存、用完刪除；每個檢查項輸出『項目、預期、實際、PASS／FAIL、證據路徑』。**正式機套用本身的保護**：正式機 Claude 在步驟 0 自己做套用前備份並驗證（含試還原），這是正式機端的安全網，與開發端演練分開。
+**環境（PM 裁示：開發機永遠不複製正式機資料庫）**：①**開發機自建的 MS1c 狀態資料庫**（以 MS1c 凍結樹 `init_db`＋全部 migration 建立）＋**demo 種子資料**＋**放大的合成資料量**（`audit_log` **至少 100 萬列**，才是『實測』O(1) 的 `ADD COLUMN` 而不是假設；`quotations`、`notifications` 各約 10 萬列，另含傳票、薪資單、案件子資料的代表量），用來**記錄 migration 耗時與啟動耗時**；②套件暫存目錄；③**不碰正式機、不取用任何正式機資料庫複本**（因此 VR7 的資料庫快照改用上述合成資料庫）；機器靜默（HOLD 規則：RAM ≥10GB、不與閘門同時）；輸出放 D 槽暫存、用完刪除；每個檢查項輸出『項目、預期、實際、PASS／FAIL、證據路徑』。**正式機套用本身的保護**：正式機 Claude 在步驟 0 自己做套用前備份並驗證（含試還原），這是正式機端的安全網，與開發端演練分開。
 **正式演練範圍（5c 執行；編號樹）**：
 1. 套件：用 c7 的演練腳本 `--package`，內含 P7＝`verify_package --expect-db-version 118`（D11）。
 2. 流程：`apply_update.ps1`／`rollback_update.ps1` 的真實流程（D2／D6／D9）。
@@ -83,7 +87,7 @@ accounting 34、case 4（`case_material_*`）、payroll 4、lodging 4、recycleb
 | D5 冪等重跑 | 對已升級的資料庫再跑一次 core migration | 無錯誤、無資料變動、`core` 仍 10 |
 | D6 程式回滾（不還原資料庫） | `rollback_update.ps1 -SnapshotTimestamp <時間戳> -Yes`（**不加任何資料庫參數**）回到 MS1c 程式，資料庫保持 U0a 狀態 | `commit` 回 MS1c；`/api/ping` 200；`module_states.json` 全 loaded；**舊 loader 對 `core=10` 的行為被記錄**（容忍／拒絕／警告）；log 無 Traceback；`module_schema_versions.core` 的處理依結果 |
 | D6b 回滾後再記錄基準回應鍵集（0d U-5） | 在 D6 狀態重跑基準回應鍵集記錄器 | 與 D1 基準 diff 為空（舊程式沒有新欄位可洩漏，但仍須確認匯出表頭未變） |
-| D7 回滾後功能冒煙 | 在 D6 狀態上做：**對全部 38 張帶新欄位的表做『舊式 INSERT 探針』**（不列新欄位的舊寫法必須仍成功且欄位取預設值）；用**真實的舊分配器**建立報價單取號、傳票取號、勞報單取號（`quote_seq`／`vouchers_all` MAX／`payslip_seq`）；各主要頁面 GET；一筆寫入與讀回 | 探針全過；取號成功且不撞號；舊程式忽略新欄位；匯出不含新欄位 |
+| D7 回滾後功能冒煙 | 在 D6 狀態上做：**對全部 38 張帶新欄位的表做『舊式 INSERT 探針』——必須真的插入每一張**（以改變自然鍵或 `SAVEPOINT`＋`ROLLBACK` 避開 `UNIQUE` 衝突；**`UNIQUE` 碰撞不算通過**）：不列新欄位的舊寫法必須成功、欄位取預設值 1，**5 張法律單據表的 `legal_entity_id` 落在 1**；用**真實的舊分配器**建立報價單取號、傳票取號、勞報單取號（`quote_seq`／`vouchers_all` MAX／`payslip_seq`）；各主要頁面 GET；一筆寫入與讀回 | 探針全過；取號成功且不撞號；舊程式忽略新欄位；匯出不含新欄位 |
 | D8 若舊 loader 不容忍 | 設計回滾工具在同一動作內把 `core` 還原為 9 並驗證 | 回滾工具改動寫入步驟檔回滾段落；D6／D7 重跑通過 |
 | D9 資料庫還原路徑（使用者明確要求才用） | `-IncludeDatabase -ConfirmDatabaseOverwrite` 從套用前備份還原 | 資料庫與 D1 基準逐項相同（diff 為空） |
 | D10 再前進 | 回滾後再套用 U0a | 與 D2／D3 相同結果（冪等） |
@@ -95,7 +99,7 @@ accounting 34、case 4（`case_material_*`）、payroll 4、lodging 4、recycleb
 
 ## 8 交付與移交
 - **≈10-20 交 0d（並行審查）**：核心 migration 檔、表清單（本規格 §2）、演練腳本與其自我測試、基準回應鍵集檔與記錄器、`org_units` 宣告。
-- **U0a 凍結條件**：①0d PASS；②演練 D0～D13 全 PASS（含 D6 對舊 loader 行為的實測紀錄）；③回應鍵集 diff＝空且正對照有效；④全 `tests/platform` 與預檢 A1～A8＝0；⑤步驟檔草稿（98）對凍結樹逐項核對。
+- **U0a 凍結條件**：①0d PASS；**＋（G5）凍結執行時 c7 的 core migration 與 2b 的洩漏防線**（`internal_cols`、基準回應鍵集記錄器）**一起跑（同班規則，禁止拆班）**，`test_org_units_u0a.py`（含 `internal_cols` 名稱一致性測試）在合併後 **skip 數為 0**（不得有任何被略過的題目）；②演練 D0～D13 全 PASS（含 D6 對舊 loader 行為的實測紀錄）；③回應鍵集 diff＝空且正對照有效；④全 `tests/platform` 與預檢 A1～A8＝0；⑤步驟檔草稿（98）對凍結樹逐項核對。
 - **套用**：依步驟檔（正式機 Claude 自動套用，步驟 0～1 全綠才進步驟 2；失敗即停、不自行回滾）；回滾與資料庫還原只由使用者本人決定。
 
 ## 9 待決（不阻擋規格；請 1c／c7 確認）
