@@ -1660,6 +1660,7 @@
    "CORE_FEATURES_FILE": "const",
    "STATUSES": "const",
    "TONE_ORDER": "const",
+   "declared_and_open": "def(code)",
    "drop_owner": "def(owner)",
    "feature_enabled": "def(code)",
    "feature_status": "def(code)",

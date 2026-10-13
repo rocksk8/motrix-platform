@@ -2,7 +2,7 @@
 """L0 脊柱功能登錄（E-b；設計 docs/platform/plans/SPINE-ENGINE-DESIGN-T57.md、FIELD-LAYOUT-FRAMEWORK-T56.md §17）。
 
 [單位] plat:spine    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] CORE_FEATURES_FILE, STATUSES, TONE_ORDER, drop_owner, feature_enabled, feature_status, group_info, group_status, has_kind_gate, health_badge, kind_info, kind_status,
+[公開介面] CORE_FEATURES_FILE, STATUSES, TONE_ORDER, declared_and_open, drop_owner, feature_enabled, feature_status, group_info, group_status, has_kind_gate, health_badge, kind_info, kind_status,
     managed_message, on_validated, parse_feature, parse_features, planned_cards, planned_train, register_core_declarations, register_health_source, register_kind_gate,
     register_manifest, register_managed_kind, register_validator, report, reset, restore, snapshot, surface_status, validate_all
 [不變式] ①只用標準函式庫（載入器在 import 模組之前要驗宣告）；依賴 L1 的驗證（設定、信件…）以**回呼**注入——`register_validator`／`on_validated`，
@@ -312,6 +312,13 @@ def feature_enabled(code: str) -> bool:
     if f is None:
         return True
     return f["status"] == "open" and (not _VALIDATED or _state(code) != STATE_FAILED)
+
+
+def declared_and_open(code: str) -> bool:
+    """**嚴格**啟用判斷（U0a／單位範圍強制用）：功能必須『已宣告』且狀態＝open 且（`validate_all()` 已執行）驗證沒失敗。
+    與 `feature_enabled` 相反方向：未宣告、尚未驗證、planned、hidden、失敗，一律 False——刪掉宣告或脊柱壞掉，過濾保持關閉（恆真），絕不因此打開。"""
+    f = _FEATURES.get(code)
+    return bool(f) and f["status"] == "open" and _VALIDATED and _state(code) != STATE_FAILED
 
 
 def group_status(group: str) -> str:

@@ -10,6 +10,7 @@
   {"code": "pdf_templates", "label": "自訂 PDF 版型與浮水印（先從系統內建的單據開始）", "status": "planned", "planned_train": "MS4"},
   {"code": "attachment_slots", "label": "附件與上傳資料夾設定", "status": "planned", "planned_train": "MS5"},
   {"code": "custom_notifications", "label": "自訂通知", "status": "planned", "planned_train": "MS5"},
-  {"code": "workflow_builder", "label": "調整單據流程（誰簽核、要不要簽核；放寬簽核須經最高管理者的核准流程與確認期，系統最低稽核紀錄一律保留）；先從完工單、出貨單開始", "status": "planned", "planned_train": "MS6"}
+  {"code": "workflow_builder", "label": "調整單據流程（誰簽核、要不要簽核；放寬簽核須經最高管理者的核准流程與確認期，系統最低稽核紀錄一律保留）；先從完工單、出貨單開始", "status": "planned", "planned_train": "MS6"},
+  {"code": "org_units", "label": "多據點、多法人分開管理（母公司可依設定查看子公司，平行據點預設互相看不到）", "status": "hidden", "notes": "visible from U1 (see EXECUTION-PLAN-T57)"}
  ]
 }
