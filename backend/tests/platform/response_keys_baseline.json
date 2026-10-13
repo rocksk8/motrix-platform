@@ -2504,6 +2504,24 @@
   ],
   "s": 200
  },
+ "/api/def-governance/{kind}/{key}/diff": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/def-governance/{kind}/{key}/impact": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/def-governance/{kind}/{key}/ledger": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/definition-kinds": {
   "k": [
    "kinds",
@@ -3963,8 +3981,12 @@
    "modules",
    "modules[].core",
    "modules[].coreFields",
+   "modules[].coreFields.case",
+   "modules[].coreFields.contract",
    "modules[].coreFields.schedule",
+   "modules[].coreFields.supplier",
    "modules[].coreFields.tender",
+   "modules[].coreFields.timeline",
    "modules[].coreFields.watch",
    "modules[].customizationSchema",
    "modules[].endpoints",
@@ -5700,6 +5722,7 @@
    "groups[].values.cancel_after_settle",
    "groups[].values.case_extra_expense_max_files",
    "groups[].values.case_extra_expense_max_request_mb",
+   "groups[].values.case_management",
    "groups[].values.case_name_max_chars",
    "groups[].values.case_name_source",
    "groups[].values.cloud_daily_keep_days",
@@ -5709,6 +5732,7 @@
    "groups[].values.combo_view_max",
    "groups[].values.confirm_period_days",
    "groups[].values.default_status",
+   "groups[].values.enabled",
    "groups[].values.include_headers",
    "groups[].values.label_bonus_award",
    "groups[].values.label_close_report",
@@ -5745,6 +5769,7 @@
    "groups[].values.show_denied",
    "groups[].values.show_unpicked_in_pdf",
    "groups[].values.supplier_required",
+   "groups[].values.suppliers",
    "groups[].values.total_max_chars",
    "groups[].values.total_text",
    "groups[].values.unlock_edit_signed",

@@ -190,11 +190,19 @@ def leaks(rec: dict) -> list:
     return bad
 
 
+_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _mask_dates(hdr):
+    """匯出表頭裡的日期（『截至 2026-10-13』）隨執行日變動；比對時遮掉，欄位名與結構照比。"""
+    return None if hdr is None else [_DATE.sub("YYYY-MM-DD", h) for h in hdr]
+
+
 def diff(base: dict, now: dict) -> dict:
     """{'missing': 基準有、現在沒有的路由, 'added': 現在才有的路由, 'changed': {路徑: (基準, 現在)}}（狀態類別或鍵集不同）。"""
     changed = {}
     for p in set(base) & set(now):
         b, n = base[p], now[p]
-        if (b.get("s", 0) // 100) != (n.get("s", 0) // 100) or b.get("k") != n.get("k") or b.get("hdr") != n.get("hdr"):
+        if (b.get("s", 0) // 100) != (n.get("s", 0) // 100) or b.get("k") != n.get("k") or _mask_dates(b.get("hdr")) != _mask_dates(n.get("hdr")):
             changed[p] = (b, n)
     return {"missing": sorted(set(base) - set(now)), "added": sorted(set(now) - set(base)), "changed": changed}
