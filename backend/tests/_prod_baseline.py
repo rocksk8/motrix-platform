@@ -37,6 +37,7 @@
  📌 2026-10-13 06:48：正式機已更新到 c9a2fb6a（M3 擇一方案報價班；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-m3-apply.md；套件 20261013_063629_c9a2fb6a_full；case 1.0.178→1.0.179（其餘模組版本不變）、核心 1.130、schema 維持 118、無 migration（173 表／262 索引／30 觸發器與套用前逐項相同）；套用前確認含擇一資料的報價單 0 張；manifest 563 筆；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，19 秒，步驟 3 全過）⇒ 基準改 c9a2fb6a。
  📌 2026-10-13 09:20：正式機已更新到 73910a18（MS1 班：設定中心可編輯／擁有者範圍與功能登錄（E-a／E-b）、下載檔名、報價單專案毛利%；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-ms1-apply.md；套件 20261013_090725_73910a18_full；core 1.131、case 1.0.180 等十個模組版本更新（accounting 1.1.60、analytics 1.0.38、arap 1.0.53、daily_tasks 1.0.10、lodging 1.2.6、netplan 1.0.11、payroll 1.2.18、subcontract 1.1.34、supply 1.0.27），schema 維持 118、無 migration（173 表／262 索引／30 觸發器與套用前逐項相同）；設定群組 8 組（21 個設定）；manifest 566 筆；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，19 秒，步驟 3 全過）⇒ 基準改 73910a18。
  📌 2026-10-13 12:15：正式機已更新到 b7362e09（MS1b 班：完工單從報價單帶入項目、E-b r8 功能登錄收尾；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-ms1b-apply.md；套件 20261013_120207_b7362e09_full；core 1.132、case 1.0.180→1.0.181（其餘模組版本不變），schema 維持 118、無 migration（173 表／262 索引／30 觸發器與套用前逐項相同）；套用前確認含 quoteSync 的完工單 0 張；設定群組 9 組（completion_note 新增）；manifest 567 筆；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，18 秒，步驟 3 全過）⇒ 基準改 b7362e09。
+ 📌 2026-10-13 15:17：正式機已更新到 b06d7c92（MS1c 班：材料卡片認列採購單熱修；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-ms1c-apply.md；套件 20261013_150438_b06d7c92_full；core 1.132→1.133、case 1.0.181→1.0.182、analytics 1.0.38→1.0.39（其餘模組版本不變），schema 維持 118、無 migration；manifest 568 筆；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，17 秒，步驟 3 全過；版本變化恰為 case 1.0.181→1.0.182、analytics 1.0.38→1.0.39；設定群組 10 組（material_recognition 新增，4 項）；套用前含 poLink 的報價單 0 張）⇒ 基準改 b06d7c92。
 """
 import json
 import subprocess
@@ -45,7 +46,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "b7362e09"
+BASELINE = "b06d7c92"
 
 
 def baseline_manifest():
