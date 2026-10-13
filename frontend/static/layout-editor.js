@@ -12,7 +12,7 @@
  * 問題依位置標回面板）⇒ 版本清單可以還原任一版。右上角「以角色預覽」看某角色目前的已發布版面。
  * 行動版：面板只在桌機（≥1024px）開；發布後的版面照常在手機上顯示。
  *
- * e2e 等待點：#ml-editor 的 data-busy（'0'／'1'）與 data-state（idle／saved／problems／published／restored）。
+ * e2e 等待點：#ml-editor 的 data-busy（'0'／'1'）與 data-state（idle／saved／problems／published／restored／pending〔治理旗標開啟時放寬變更待核准〕）。
  */
 ;(function () {
   var L = window.MotrixCustomLayout
@@ -53,6 +53,9 @@
 '   <span class="ml-ed__sub" x-text="startNote"></span>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-retry" x-show="loadError" @click="loadScope()">重試</button></div>' +
 '  <div class="ml-ed__banner" x-show="previewRole" x-text="previewDraft ? \'以「\' + roleLabel(previewRole) + \'」預覽編輯中的草稿（唯讀，尚未發布）\' : \'以「\' + roleLabel(previewRole) + \'」預覽已發布的版面（唯讀）\'"></div>' +
+'  <div class="ml-ed__banner" data-testid="ml-ask" role="alertdialog" x-show="askBar" x-cloak style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span x-text="askBar && askBar.text"></span>' +
+'   <button type="button" class="btn btn-primary btn-sm" data-testid="ml-ask-yes" @click="answer(true)" x-text="askBar && askBar.notice ? \'知道了\' : \'確定\'"></button>' +
+'   <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-ask-no" x-show="askBar && !askBar.notice" @click="answer(false)">取消</button></div>' +
 ' </div>' +
 ' <div class="ml-ed__body" x-show="work" x-effect="$el.inert = busy || loading" :aria-busy="String(busy || loading)">' +
 '  <template x-if="generalProblems.length"><div class="ml-ed__prob" data-testid="ml-problems"><template x-for="p in generalProblems"><div x-text="p"></div></template></div></template>' +
@@ -141,11 +144,37 @@
   function component() {
     return {
       open: false, busy: false, state: 'idle', msg: '', note: '', loadedScope: '', _scopeSeq: 0, loadsDone: 0, loading: false, loadError: '',
-      scope: 'company', roles: [], previewRole: '', previewDraft: false, startNote: '',
+      scope: 'company', roles: [], previewRole: '', previewDraft: false, startNote: '', askBar: null, _askRes: null,
       defs: { draft: null, latest: null, versions: [] },
       work: null, lastOps: [], probs: {}, generalProblems: [],
       diffShown: false, diffLines: [], sidebarGroup: [], sidebarGroupLabel: '', _drag: null,
 
+      // 兩段式確認／提示（不用原生 confirm／alert：會擋住整頁事件、不隨深色模式、e2e 只能盲接）。_ask 回傳 Promise<boolean>。
+      _ask: function (text) {
+        var self = this
+        if (this._askRes) this._askRes(false)
+        return new Promise(function (res) { self.askBar = { text: text, notice: false }; self._askRes = res })
+      },
+      _notice: function (text) {
+        this.open = true
+        this.askBar = { text: text, notice: true }
+        this._askRes = null
+      },
+      answer: function (ok) {
+        var r = this._askRes, notice = this.askBar && this.askBar.notice
+        this._askRes = null
+        this.askBar = null
+        if (r) r(!!ok)
+        else if (notice && !this.work) this.open = false          // 只是提示（還沒進入編輯）：看過就收起
+      },
+      // T60 S2：治理旗標開啟時，放寬的發布／還原不會立刻生效，後端回 {pending:true, changeId, effectiveAt, reasons}。
+      // 這時不能說「已發布」——如實說明已送出、等第二位最高管理者核准、最早何時生效、為什麼要核准。旗標關閉時後端永遠不回 pending。
+      _pendingText: function (d, what) {
+        var reasons = (d.reasons || []).map(function (x) { return typeof x === 'string' ? x : ((x && (x.message || x.text)) || '') }).filter(Boolean)
+        var at = d.effectiveAt ? String(d.effectiveAt).replace('T', ' ').slice(0, 16) : ''
+        return '已送出' + what + '，待第二位最高管理者核准（' + this.scopeLabel() + (d.version ? '，第 ' + d.version + ' 版' : '') + '）；核准前不會生效'
+          + (at ? '，生效時間 ' + at + ' 之後' : '') + (reasons.length ? '。原因：' + reasons.join('；') : '')
+      },
       _key: function () { return 'module:' + ML().config().module },
       _base: function () { return '/api/definitions/layout/' + encodeURIComponent(this._key()) },
       _pts: function () { return this.$store.layout.points },
@@ -157,8 +186,8 @@
       },
 
       async start() {
-        if (window.innerWidth < 1024) { alert('排版器只在桌機使用（畫面寬度至少 1024px）。發布後的版面在手機上照常顯示。'); return }
-        if (!this.$store.layout.ready) { alert('版面設定還沒載入完成，稍後再試。'); return }
+        if (window.innerWidth < 1024) { this._notice('排版器只在桌機使用（畫面寬度至少 1024px）。發布後的版面在手機上照常顯示。'); return }
+        if (!this.$store.layout.ready) { this._notice('版面設定還沒載入完成，稍後再試。'); return }
         // O7 第三次：start 在 loadScope 之前還有兩趟 await（角色標籤、側欄）；這段期間面板已打開、舊的 work 還在、loading 卻是 false
         // ⇒ 使用者（或 e2e）此時的編輯／範圍切換，會被稍後 start 自己的 loadScope 用伺服器版蓋掉（編輯無聲消失）。先鎖住，載入完才放開。
         this.loading = true
@@ -184,6 +213,7 @@
         await this.loadScope()      // 這一趟結束（成功或失敗）才由它清 loading；失敗時維持鎖定
       },
       close() {
+        if (this._askRes) { var r0 = this._askRes; this._askRes = null; this.askBar = null; r0(false) }
         this.open = false
         this.previewRole = ''
         this.previewDraft = false
@@ -365,7 +395,7 @@
         // 治理（builder_governance 開啟時才有）：發布前影響預覽。旗標關閉／未載入 ⇒ 完全略過，行為與先前相同。
         if (window.MotrixDefGovernance && await window.MotrixDefGovernance.available()) {
           var pv = await window.MotrixDefGovernance.preview({ kind: 'layout', key: this._key(), scope: this.scope })
-          if (pv.ok && pv.data && pv.data.changeCount && !confirm('這次發布會變更 ' + pv.data.changeCount + ' 項設定（影響預覽已記錄），確定要發布？')) {
+          if (pv.ok && pv.data && pv.data.changeCount && !(await this._ask('這次發布會變更 ' + pv.data.changeCount + ' 項設定（影響預覽已記錄），確定要發布？'))) {
             this.msg = '已取消發布'; this.busy = false; return
           }
         }
@@ -378,24 +408,32 @@
           return
         }
         this.note = ''
-        await ML().reload()
+        var pend = r.d && r.d.pending === true            // 待核准：版面還沒變，不重讀、不說已發布
+        if (!pend) await ML().reload()
         await this.loadScope()
         this.busy = false               // loadScope 不再清 busy（它用自己的 loading）⇒ 動作自己解鎖
         if (this.loadError) return      // 發布成功但重新載入失敗：狀態留在 error（已說明），不標成已發布的乾淨狀態
+        if (pend) { this.msg = this._pendingText(r.d, '發布'); this.state = 'pending'; return }
         this.msg = '已發布第 ' + r.d.version + ' 版（' + this.scopeLabel() + '）'
         this.state = 'published'
       },
       async _restore(version) {
-        if (this.defs.draft && !confirm('還原會捨棄這個範圍目前的草稿，確定要還原第 ' + version + ' 版？')) return
+        if (this.defs.draft) {
+          this.busy = true                       // 問的時候編輯區先鎖住，免得確認期間又改了草稿
+          if (!(await this._ask('還原會捨棄這個範圍目前的草稿，確定要還原第 ' + version + ' 版？'))) { this.busy = false; return }
+        }
         this.busy = true
         var r = await this._j(this._base() + '/restore/' + version + '?scope=' + encodeURIComponent(this.scope),
                               { method: 'POST', body: JSON.stringify({}) })
         if (!r.ok) { this._mark(r.d.problems || []); this.msg = '還原失敗：' + (r.d.detail || r.status); this.busy = false; return }
-        if (this.defs.draft) await this._j(this._base() + '/draft?scope=' + encodeURIComponent(this.scope), { method: 'DELETE' })
-        await ML().reload()
+        var pend = r.d && r.d.pending === true
+        // 待核准的還原：伺服器把舊內容放進待核准的版本／草稿，不能再把『草稿』刪掉（會連同待核准的內容一起刪）
+        if (!pend && this.defs.draft) await this._j(this._base() + '/draft?scope=' + encodeURIComponent(this.scope), { method: 'DELETE' })
+        if (!pend) await ML().reload()
         await this.loadScope()
         this.busy = false
         if (this.loadError) return
+        if (pend) { this.msg = this._pendingText(r.d, '還原第 ' + version + ' 版'); this.state = 'pending'; return }
         this.msg = '已把第 ' + version + ' 版還原成第 ' + r.d.version + ' 版'
         this.state = 'restored'
       },

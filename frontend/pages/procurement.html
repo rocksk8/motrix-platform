@@ -118,7 +118,42 @@
       <div class="loading-text" x-show="loading">載入中…</div>
       <template x-if="!loading">
         <div>
-          <div class="table-scroll">
+          <template x-if="layoutOn">
+            <div class="table-scroll" data-layout-list="materials" x-show="$store.layout.ready || $store.layout.failed">
+            <div class="ml-layout-note" x-show="$store.layout.failed" x-text="$store.layout.error"></div>
+            <div class="ml-layout-note" x-show="$store.layout.mode === 'preview'" x-text="'預覽中：' + $store.layout.previewLabel + '（唯讀，關閉排版器後回到自己的版面）'"></div>
+            <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才看得到。</div>
+            <table class="data-table">
+              <thead><tr>
+                <template x-for="c in $store.layout.cols('materials')" :key="c.field">
+                  <th :data-layout-col="c.field" :style="c.field === 'qty' ? 'text-align:right' : ''" x-text="$store.layout.colLabel('materials', c.field, layoutLabel(c.field))"></th>
+                </template>
+                <th>操作</th>
+              </tr></thead>
+              <tbody>
+                <template x-for="(m, idx) in filtered" :key="m.quoteNo + '_' + m.matId">
+                  <tr>
+                    <template x-for="c in $store.layout.cols('materials')" :key="c.field">
+                      <td :data-layout-cell="c.field">
+                        <template x-if="c.field === 'name'"><span style="font-size:12px;font-weight:500" x-text="m.name || '—'"></span></template>
+                        <template x-if="c.field === 'model'"><span style="font-size:12px;color:var(--text-secondary)" x-text="m.model || '—'"></span></template>
+                        <template x-if="c.field === 'qty'"><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:13px;font-weight:600" x-text="m.qty"></span></template>
+                        <template x-if="c.field === 'unit'"><span style="font-size:12px;color:var(--text-dim)" x-text="m.unit"></span></template>
+                        <template x-if="c.field === 'status'"><span class="rb" :class="m.status==='arrived' ? 'rb-arrived' : m.status==='ordered' ? 'rb-ordered' : 'rb-pending'" x-text="m.status==='arrived' ? '已到料' : m.status==='ordered' ? '已下單' : '待採購'"></span></template>
+                        <template x-if="c.field === 'quoteNo'"><a :href="'case-management.html?q=' + m.quoteNo" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none" x-text="m.quoteNo"></a></template>
+                        <template x-if="c.field === 'customer'"><span style="font-size:12px" x-text="m.customer || '—'"></span></template>
+                        <template x-if="c.field === 'dealTag'"><span class="rb" :class="m.dealTag==='已結案'?'rb-closed':'rb-case'" x-text="m.dealTag || '—'"></span></template>
+                        <template x-if="c.field === 'note'"><span style="font-size:11px;color:var(--text-dim);display:inline-block;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="m.note || '—'"></span></template>
+                      </td>
+                    </template>
+                    <td><a :href="'case-management.html?q=' + m.quoteNo" style="display:inline-flex;align-items:center;gap:3px;padding:4px 8px;border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);font-weight:500;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;text-decoration:none">材料申請 →</a></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            </div>
+          </template>
+          <div class="table-scroll" x-show="!layoutOn">
           <table class="data-table" x-show="filtered.length > 0">
             <thead>
               <tr>
@@ -178,6 +213,18 @@
   </main>
 </div>
 
+<script src="../static/custom-layout.js"></script>
+<script src="../static/layout-runtime.js"></script>
+<script src="../static/layout-editor.js"></script>
+<script src="../js/def-governance.js"></script>
+<script>
+// BP-1：管理者自訂版面（P9）。設定中心「自訂畫面版面」→ procurement 預設關閉：關閉時不發任何版面請求（deferred）、畫面不變。
+// fallback＝版面讀不到時的欄位順序（守門：必須等於 module.json 登記的順序）
+MotrixLayout.init({
+  module: 'analytics', page: 'procurement.html', deferred: true,
+  fallback: { lists: { materials: ['name', 'model', 'qty', 'unit', 'status', 'quoteNo', 'customer', 'dealTag', 'note'] } },
+})
+</script>
 <script>
 const API = '/api'
 function app() {
@@ -215,6 +262,26 @@ function app() {
     // ☠️ 後果不只是 API 發兩次：第二次的回應晚一步抵達，
     //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
     _initDone: false,
+    layoutOn: false,
+    // BP-1：旗標開啟才換成版面驅動的列表（原本的表格不動、只是隱藏）。旗標關閉／讀不到 ⇒ 什麼都不做。
+    layoutLabel(f) { return ({ name: '品名', model: '廠牌/型號', qty: '數量', unit: '單位', status: '到料狀態', quoteNo: '案件號', customer: '客戶', dealTag: '案件狀態', note: '備註' })[f] || f },
+    async initLayout() {
+      try {
+        const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+        if (!s.token) return
+        const r = await fetch('/api/settings-center/public?groups=builder_layout', { headers: { Authorization: 'Bearer ' + s.token } })
+        if (!r.ok) return
+        const d = await r.json()
+        if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.procurement !== true) return
+        const title = document.querySelector('.pg__t')
+        if (!title) return
+        title.insertAdjacentHTML('beforeend', '<span data-layout-editor-slot></span>')
+        this.layoutOn = true
+        await this.$nextTick()
+        if (window.MotrixLayoutEditor) window.MotrixLayoutEditor.mount()
+        window.MotrixLayout.start()
+      } catch (e) { /* 版面是加值功能：讀不到就維持原本的列表 */ }
+    },
 
     async init() {
       if (this._initDone) return
@@ -222,6 +289,7 @@ function app() {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) { location.href = 'login.html'; return }
       this.session = s
+      this.initLayout()
       try {
         const r = await fetch(`${API}/auth/me`, { headers: { Authorization: 'Bearer ' + s.token } })
         if (!r.ok) { location.href = 'login.html'; return }

@@ -187,8 +187,41 @@
             </div>
           </div>
         </template>
+        <template x-if="layoutOn && filtered.length > 0">
+          <div class="table-scroll" data-layout-list="devices" x-show="$store.layout.ready || $store.layout.failed">
+          <div class="ml-layout-note" x-show="$store.layout.failed" x-text="$store.layout.error"></div>
+          <div class="ml-layout-note" x-show="$store.layout.mode === 'preview'" x-text="'預覽中：' + $store.layout.previewLabel + '（唯讀，關閉排版器後回到自己的版面）'"></div>
+          <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才看得到。</div>
+          <table class="data-table">
+            <thead><tr>
+              <template x-for="c in $store.layout.cols('devices')" :key="c.field">
+                <th :data-layout-col="c.field" x-text="$store.layout.colLabel('devices', c.field, layoutLabel(c.field))"></th>
+              </template>
+            </tr></thead>
+            <tbody>
+              <template x-for="d in filtered" :key="d.id + '|' + d.quoteNo">
+                <tr @click="select(d)">
+                  <template x-for="c in $store.layout.cols('devices')" :key="c.field">
+                    <td :data-layout-cell="c.field">
+                      <template x-if="c.field === 'name'"><div><div style="font-weight:500" x-text="d.name || '(未命名)'"></div><div style="font-size:10px;color:var(--text-dim)" x-text="d.note || ''"></div></div></template>
+                      <template x-if="c.field === 'sn'"><span class="mono" x-text="d.sn || '—'"></span></template>
+                      <template x-if="c.field === 'mac'"><span class="mono" x-text="d.mac || '—'"></span></template>
+                      <template x-if="c.field === 'customer'"><span style="font-size:12px" x-text="d.customer || '—'"></span></template>
+                      <template x-if="c.field === 'quoteNo'"><a :href="'case-management.html?q=' + d.quoteNo" style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--accent);text-decoration:none" x-text="d.quoteNo" @click.stop></a></template>
+                      <template x-if="c.field === 'location'"><span style="font-size:12px" x-text="d.location || '—'"></span></template>
+                      <template x-if="c.field === 'warrantyStart'"><span style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif" x-text="(d.warrantyStart||'').slice(0,10) || '—'"></span></template>
+                      <template x-if="c.field === 'expiryDate'"><span style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif" x-text="d.expiryDate || '—'"></span></template>
+                      <template x-if="c.field === 'warrantyStatus'"><span class="wb" :class="wbCls(d)"><span x-text="wbLabel(d)"></span></span></template>
+                    </td>
+                  </template>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          </div>
+        </template>
         <template x-if="filtered.length > 0">
-          <div class="table-scroll">
+          <div class="table-scroll" x-show="!layoutOn">
           <table class="data-table">
             <thead>
               <tr>
@@ -300,6 +333,18 @@
     </template>
   </div>
 
+  <script src="../static/custom-layout.js"></script>
+  <script src="../static/layout-runtime.js"></script>
+  <script src="../static/layout-editor.js"></script>
+  <script src="../js/def-governance.js"></script>
+  <script>
+  // BP-1：管理者自訂版面（P9）。設定中心「自訂畫面版面」→ devices 預設關閉：關閉時不發任何版面請求（deferred）、畫面不變。
+  // fallback＝版面讀不到時的欄位順序（守門：必須等於 module.json 登記的順序）
+  MotrixLayout.init({
+    module: 'analytics', page: 'devices.html', deferred: true,
+    fallback: { lists: { devices: ['name', 'sn', 'mac', 'customer', 'quoteNo', 'location', 'warrantyStart', 'expiryDate', 'warrantyStatus'] } },
+  })
+  </script>
   <script>
   const API = '/api'
 
@@ -319,6 +364,26 @@
       // ☠️ 後果不只是 API 發兩次：第二次的回應晚一步抵達，
       //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
       _initDone: false,
+      layoutOn: false,
+      // BP-1：旗標開啟才換成版面驅動的列表（原本的表格不動、只是隱藏）。旗標關閉／讀不到 ⇒ 什麼都不做。
+      layoutLabel(f) { return ({ name: '設備名稱', sn: 'SN 序號', mac: 'MAC 位址', customer: '客戶', quoteNo: '案件', location: '安裝地點', warrantyStart: '保固起始', expiryDate: '保固到期', warrantyStatus: '保固狀態' })[f] || f },
+      async initLayout() {
+        try {
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          if (!s.token) return
+          const r = await fetch('/api/settings-center/public?groups=builder_layout', { headers: { Authorization: 'Bearer ' + s.token } })
+          if (!r.ok) return
+          const d = await r.json()
+          if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.devices !== true) return
+          const title = document.querySelector('.pg__t')
+          if (!title) return
+          title.insertAdjacentHTML('beforeend', '<span data-layout-editor-slot></span>')
+          this.layoutOn = true
+          await this.$nextTick()
+          if (window.MotrixLayoutEditor) window.MotrixLayoutEditor.mount()
+          window.MotrixLayout.start()
+        } catch (e) { /* 版面是加值功能：讀不到就維持原本的列表 */ }
+      },
 
       async init() {
         if (this._initDone) return
@@ -326,6 +391,7 @@
         const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
         if (!s.token) { location.href = 'login.html'; return }
         this.session = s
+        this.initLayout()
         await this.load()
         this.loading = false
       },
