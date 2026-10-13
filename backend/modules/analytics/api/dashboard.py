@@ -751,6 +751,7 @@ def list_materials_summary(
                 "unit":     mat.get("unit", "台"),
                 "ordered":  bool(mat.get("ordered")),
                 "arrived":  bool(mat.get("arrived")),
+                "recognized": bool(isinstance(mat.get("poLink"), dict) and mat["poLink"].get("key")),   # 認列採購單（沒有材料申請的到貨確認步驟）
                 "status":   s,
                 "note":     mat.get("note", ""),
             })

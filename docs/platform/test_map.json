@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1307,
+  "tests": 1310,
   "unmapped": 13,
   "kinds": {
-   "api": 716,
-   "e2e": 304,
-   "audit": 166,
+   "api": 717,
+   "e2e": 305,
+   "audit": 167,
    "unit": 121
   },
   "routes": 816
@@ -6250,6 +6250,38 @@
    },
    "module": "case"
   },
+  "backend/modules/case/tests/test_e2e_material_recognize_2026_10_13.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "mod:case/api/quotations",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02",
+    "page:pages/case-management.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
   "backend/modules/case/tests/test_e2e_pr_po_item_link_2026_10_02.py": {
    "kind": "e2e",
    "units": [
@@ -7884,6 +7916,40 @@
    },
    "module": "case"
   },
+  "backend/modules/case/tests/test_material_recognize_2026_10_13.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "mod:case/api/material_links",
+    "mod:case/api/quotations",
+    "mod:case/material_guard",
+    "mod:case/material_notify",
+    "mod:case/material_recognize",
+    "mod:case/tests/test_material_link_booking_2026_10_02",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/material_guard.py",
+     "backend/modules/case/material_notify.py",
+     "backend/modules/case/material_recognize.py",
+     "backend/modules/case/tests/test_material_link_booking_2026_10_02.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
+    ],
+    "api": [
+     "backend/modules/case/api/material_links.py",
+     "backend/modules/case/api/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
   "backend/modules/case/tests/test_material_reports_gate_2026_10_02.py": {
    "kind": "api",
    "units": [
@@ -7963,6 +8029,26 @@
      "backend/modules/case/tests/test_material_link_2026_10_02.py",
      "backend/modules/case/tests/test_material_link_booking_2026_10_02.py",
      "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_material_write_paths_2026_10_13.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/case/",
+    "mod:case/api/quotations",
+    "mod:case/material_guard",
+    "mod:case/quotations"
+   ],
+   "evidence": {
+    "path": [
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/material_guard.py",
+     "backend/modules/case/quotations.py"
     ],
     "module_dir": [
      "backend/modules/case/"

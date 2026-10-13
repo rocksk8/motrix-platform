@@ -5,6 +5,8 @@
 畫面（case-management-mlink.js）不做金額運算：數量／單位／單價／小計都由這裡（`material_coverage.coverage_snapshot`＝送審檢查用的同一個函式）給，
 所以畫面帶入的內容必然通過 `material_submit_check` 的「涵蓋」檢查（`content_not_cover_snapshot`）。已有活的材料申請的品項標 `existing`（要追加走變更申請）。
 金額看不到財務檢視者：不給單價／小計（畫面也就不能帶入）。只讀、不寫。"""
+import json
+
 from modules.case import material_coverage as MC
 from modules.case import purchase_items as PI
 
@@ -30,15 +32,41 @@ def groups(conn, quote_no, show_cost=True) -> list:
         if l["status"] != "已核准":
             key = l["quoteItemId"] or ("po:" + l["poDocCode"])
             pending[key] = pending.get(key, 0) + 1
+    vendors = _vendors(conn, quote_no)
+    claimed = _recognized(data)
     out = []
     for qid in qids:
-        out.append(_group(conn, quote_no, qid, "", plan, summary, pending.get(qid, 0), show_cost))
+        out.append(_group(conn, quote_no, qid, "", plan, summary, pending.get(qid, 0), show_cost, vendors, claimed))
     for code in extras:
-        out.append(_group(conn, quote_no, "", code, plan, summary, pending.get("po:" + code, 0), show_cost))
+        out.append(_group(conn, quote_no, "", code, plan, summary, pending.get("po:" + code, 0), show_cost, vendors, claimed))
     return [g for g in out if g]
 
 
-def _group(conn, quote_no, qid, code, plan, summary, pending_lines, show_cost):
+def _vendors(conn, quote_no) -> dict:
+    """{採購單號: 廠商名稱}（採購單資料裡的 `vendor`；不要求在供應商主檔內）。壞資料 ⇒ 空字串。"""
+    out = {}
+    for r in conn.execute("SELECT doc_code, data_json FROM case_extra_expenses WHERE quote_no=? AND kind=?", (quote_no, PI.ORD)):
+        try:
+            out[r["doc_code"]] = str((json.loads(r["data_json"] or "{}") or {}).get("vendor") or "").strip()
+        except Exception:                                                             # noqa: BLE001
+            out[r["doc_code"]] = ""
+    return out
+
+
+def _recognized(data) -> dict:
+    """{分組鍵: 卡片 id}：材料卡片已認列（`poLink`）的分組。"""
+    cr = (data or {}).get("caseRecord") if isinstance(data, dict) else None
+    mats = cr.get("materials") if isinstance(cr, dict) else None
+    out = {}
+    for m in mats if isinstance(mats, list) else []:
+        pl = m.get("poLink") if isinstance(m, dict) else None
+        k = str(pl.get("key") or "").strip() if isinstance(pl, dict) else ""
+        if k:                                                                          # 過期的認列也算占用（直到最高管理者取消認列）
+            out.setdefault(k, str(m.get("id") or ""))
+    return out
+
+
+def _group(conn, quote_no, qid, code, plan, summary, pending_lines, show_cost, vendors=None, claimed=None):
     cov = MC.coverage_snapshot(conn, quote_no, qid, code)
     lines = cov["poSnapshot"]
     if not lines:
@@ -52,7 +80,12 @@ def _group(conn, quote_no, qid, code, plan, summary, pending_lines, show_cost):
          "name": (p["description"] if p else "") or summary.get((first["poDocCode"], first["line"]), "") or (qid or code),
          "quantity": cov["quantity"], "unit": cov["unit"], "lineCount": len(lines), "docCodes": sorted({l["poDocCode"] for l in lines}),
          "pendingLines": pending_lines,
-         "existing": ({"itemId": hit["itemId"], "docCode": hit["docCode"], "status": hit["status"]} if hit else None)}
+         "existing": ({"itemId": hit["itemId"], "docCode": hit["docCode"], "status": hit["status"]} if hit else None),
+         "vendor": "、".join(sorted({(vendors or {}).get(c, "") for c in sorted({l["poDocCode"] for l in lines})} - {""}))}
+    if claimed and g["key"] in claimed:                                            # 已認列到某張材料卡片：視同已被占用（不再被帶入／候選），但標出是認列
+        g["recognized"] = claimed[g["key"]]
+        if g["existing"] is None:
+            g["existing"] = {"itemId": "", "docCode": "", "status": "已認列"}
     if show_cost:
         g.update(unitPrice=cov["unitPrice"], totalPrice=cov["totalPrice"])
     return g

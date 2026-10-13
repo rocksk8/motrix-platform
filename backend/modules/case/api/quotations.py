@@ -64,6 +64,7 @@ from helpers import (
 from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E402  CA-O4：L1
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
 from modules.case import material_guard as MG  # 叫料審核的寫入閘（31-C）
+from modules.case import material_recognize as MR  # 認列已核准採購單（T57）
 from modules.case import profit_guard as _PG  # 第 48 班 S2：管銷分攤比率權限／伺服器重算
 from helpers import profit_rules as _PR  # 專案毛利%（project_margin）
 from modules.case import alt_sign as _ALT_SIGN  # M3 T9：擇一方案回簽選定／取消回簽
@@ -3120,6 +3121,9 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
 
         # 安全審查 W3：檔案 metadata 只准是資料庫現有的那幾筆（要在排進審核之前剝，否則審核 payload 也帶著）
         _strip_foreign_file_entries(body.case_record, data.get("caseRecord") or {})
+        if "materials" in (body.case_record or {}) and MR.changes_recognition((data.get("caseRecord") or {}).get("materials"), (body.case_record or {}).get("materials"))                 and _check_case_gate(conn, quote_no):
+            conn.close()                                                                        # 已結案變更申請核准時以系統身分套用，不接受新認列 ⇒ 送出時就說清楚，免得核准了卻沒套上
+            raise HTTPException(409, "案件目前處於結案鎖定狀態，認列採購單的變更不能經變更申請套用；請先請最高管理者解除鎖定後再操作。")
         gated, change_id = _gate_case_edit(
             conn, quote_no, user, authorization, "case_record_update",
             f"{label} 更新案件記錄（材料/款項/角色/合約等）", {"case_record": body.case_record or {}},

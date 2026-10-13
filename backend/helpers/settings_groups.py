@@ -244,6 +244,39 @@ register_group(
 
 
 
+# 材料卡片認列已核准採購單（T57；MATERIAL-LINK-BUG-T57）：預設＝使用者 10-13 的話「非超級管理員自動帶入要取消、寄信通知管理員」。
+# 放寬（讓有案件權限的人也能認列、關閉通知、提高寄信上限）要另一位最高管理者核准並等確認期間；收緊立即生效。收件人在「信件與通知收件設定」維護（只有一個來源）。
+register_group(
+    "material_recognition", "材料卡片認列採購單",
+    [
+        S("who_may", "int", 1, min=1, max=2, risk="security", loosen="up", recommended=1, requires_pending=True,
+          question="誰可以把已核准的採購單「認列」到材料卡片（讓卡片能勾已申購／已到料）？", label="誰可以認列採購單",
+          help="認列不經過材料申請的審核流程，所以預設只有最高管理者可以。其他人按下「帶入並連結」時，系統會取消這次動作。",
+          impact="影響範圍：案件管理的材料卡片。放寬後，管理員與專案經理也能認列，認列後即可勾已申購與已到料（已到料會影響庫存序號）。已認列的卡片不受影響。",
+          risk_text="【高影響】放寬後，沒有走審核的人也能讓材料卡片標示為已申購、已到料，並認領庫存序號。",
+          impact_scope={"documents": ["案件材料卡片的已申購／已到料旗標", "庫存序號認領"], "roles": ["管理員", "有財務檢視權的專案經理"], "amounts": "不涉及金額。", "reversible": True, "effective": "pending"},
+          choices=[(1, "只有最高管理者（建議）", "其他人嘗試時取消，並依下一題通知管理員。"),
+                   (2, "管理員與專案經理也可以", "能編輯材料申請的人（管理員以上，或有財務檢視權的專案經理）可以認列，不需要最高管理者核准；仍會留下稽核記錄。其他角色仍不行。")]),
+        S("on_denied", "int", 1, min=1, max=2, risk="security", loosen="up", recommended=1,
+          question="有人沒有權限卻嘗試認列時，要怎麼處理？", label="被拒時要不要通知管理員",
+          help="不論選哪個，這次認列都會被取消，而且一定留下稽核記錄。",
+          impact="影響範圍：被拒時是否寄信給管理員（收件人在「信件與通知收件設定」）。信內不含金額與採購單明細。",
+          risk_text="選「只取消」後，管理員不會收到信，只能事後翻稽核記錄才知道有人嘗試。",
+          impact_scope={"documents": ["認列被拒的通知信"], "roles": ["管理員"], "amounts": "不涉及金額。", "reversible": True, "effective": "pending"},
+          choices=[(1, "取消並寄信通知管理員（建議）", "寄給管理員：案件、材料卡片、嘗試的帳號與時間。同一人同一案件同一張採購單在時間窗內只寄一次。"),
+                   (2, "只取消，不寄信", "只留稽核記錄。")]),
+        S("mail_window_minutes", "int", 60, min=1, max=1440, unit="分鐘", risk="ops", loosen="down", recommended=60, advanced=True,
+          question="同一個人對同一案件、同一張採購單重複嘗試時，隔多久才再寄一次通知？", label="重複通知的間隔",
+          help="避免有人反覆按而洗版。", impact="影響範圍：只影響通知信的頻率，不影響取消與稽核記錄。調短會讓管理員收到更多信。"),
+        S("mail_cap", "int", 10, min=1, max=200, unit="封", risk="ops", loosen="up", recommended=10, advanced=True,
+          question="上面那段時間內，這類通知信最多寄幾封？", label="通知信上限",
+          help="達到上限後不再寄信，但每次嘗試仍會留稽核記錄。", impact="影響範圍：只影響通知信的數量，不影響取消與稽核記錄。"),
+    ],
+    sensitive=True, risk="security",
+    help="材料卡片「帶入並連結」（認列已核准的採購單）的權限，以及被拒時的通知方式。",
+)
+
+
 def _download_name_check(values):
     """文件類型用語：每項 1～10 個字、不含控制字元或換行（設定中心用白話訊息擋下，而不是悄悄忽略）。"""
     problems = []

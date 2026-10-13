@@ -45,7 +45,26 @@ _mt.register("material_change_approved", "材料申請變更已核准", "approva
 _mt.register("material_change_returned", "材料申請變更被退回", "approval", "none", "申請人",
              "變更申請已退回，原已核准的材料申請不受影響；修改並重新送審之前變更不會生效。", "請登入系統依退回原因修改變更申請後重新送審。", owner="case")
 
+# 認列已核准採購單被拒（T57）：非最高管理者嘗試認列／取消認列。收件人由信件類型登記（僅最高管理者；可在「信件與通知收件設定」覆寫），不由請求資料決定。
+_mt.register("material_recognize_denied", "材料卡片認列採購單被拒", "system", "superadmins", "",
+             "有人嘗試認列採購單但沒有權限，系統已取消這次認列（資料沒有被修改）。", "請確認是否為正常操作；需要開放時到「設定中心 → 材料卡片認列採購單」調整。", owner="case")
+
 EVENTS = ("submitted", "next_tier", "approved", "returned")
+
+
+def fire_recognize_denied(info):
+    """固定範本；只放案件編號、卡片編號、嘗試者帳號、時間（不放金額、廠商、採購單明細）。寄信失敗只記 log。"""
+    try:
+        clean = lambda v: " ".join(str(v or "").split())[:60]      # noqa: E731 — split() 去掉所有換行與多餘空白，擋標頭注入
+        rows = [("案件", clean(info.get("quoteNo")) or "—"), ("材料卡片", clean(info.get("cardId")) or "—"),
+                ("嘗試者", clean(info.get("who")) or "—"), ("時間", clean(info.get("at")) or "—")]
+        return _en.send_registered("material_recognize_denied", title="材料卡片認列採購單被拒", rows=rows, to_group=True,
+                                   badge_text="已取消", badge_color="#C0392B", link=_page(info.get("quoteNo"), "case-management.html"),
+                                   button_text="前往查看", reason="材料卡片認列採購單被拒",
+                                   note="您好，有人嘗試認列採購單但沒有權限，系統已取消這次認列。")
+    except Exception:                                            # noqa: BLE001 — 附帶動作
+        logger.exception("認列被拒通知失敗")
+        return False
 
 
 def _page(quote_no, name="approval-queue.html"):
