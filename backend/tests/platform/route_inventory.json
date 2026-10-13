@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 835,
-  "endpoints_api": 831,
-  "write_total": 456,
-  "write_api": 456,
-  "get_api": 375,
-  "distinct_paths_api": 697,
-  "write_with_body_api": 330,
+  "endpoints_total": 839,
+  "endpoints_api": 835,
+  "write_total": 457,
+  "write_api": 457,
+  "get_api": 378,
+  "distinct_paths_api": 701,
+  "write_with_body_api": 331,
   "write_with_path_param_api": 332
  },
  "select_star": {
@@ -836,6 +836,21 @@
   "GET /api/dashboard/stats": {
    "w": false,
    "pp": 0,
+   "body": false
+  },
+  "GET /api/def-governance/{kind}/{key}/diff": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/def-governance/{kind}/{key}/impact": {
+   "w": false,
+   "pp": 2,
+   "body": false
+  },
+  "GET /api/def-governance/{kind}/{key}/ledger": {
+   "w": false,
+   "pp": 2,
    "body": false
   },
   "GET /api/definition-kinds": {
@@ -3339,6 +3354,11 @@
    "body": true
   },
   "POST /api/photo-token/batch": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/platform/menu/preview": {
    "w": true,
    "pp": 0,
    "body": true

@@ -287,6 +287,7 @@ WAIVE = {
     'POST /api/payslips/{slip_no}/unsign': "not yet covered (U0b freeze)",
     'POST /api/payslips/{slip_no}/void': "not yet covered (U0b freeze)",
     'POST /api/photo-token/batch': "not yet covered (U0b freeze)",
+    'POST /api/platform/menu/preview': "not yet covered (U0b freeze)",
     'POST /api/quotations': "not yet covered (U0b freeze)",
     'POST /api/quotations/case-activity': "not yet covered (U0b freeze)",
     'POST /api/quotations/preview-html': "not yet covered (U0b freeze)",
