@@ -110,6 +110,9 @@
       "/api/sales-orders"
     ]
   },
+  "features": [
+    {"code": "material_recognize_notify", "label": "材料卡片認列採購單被拒的通知信", "mail": ["material_recognize_denied"]}
+  ],
   "pages": [
     {
       "path": "quotations.html",
