@@ -89,7 +89,8 @@ def _body(conn, kind, key, scope, which):
         if r is not None and r["status"] != "published":
             r = None
     if r is None:
-        raise D.DefinitionError("找不到 %s" % (which,))
+        raise D.DefinitionError({"draft": "目前沒有草稿，沒有可比較的內容（可改比較兩個已發布的版本）", "live": "目前沒有已發布的版本（可改和程式預設 default 比較）"}
+                                .get(which, "找不到第 %s 版（已發布）" % (which,)))
     return r.get("body") or {}
 
 
