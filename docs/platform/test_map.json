@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1304,
+  "tests": 1307,
   "unmapped": 13,
   "kinds": {
-   "api": 714,
+   "api": 716,
    "e2e": 304,
    "audit": 166,
-   "unit": 120
+   "unit": 121
   },
-  "routes": 815
+  "routes": 816
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -5940,6 +5940,28 @@
    "login_fixture": true,
    "module": "case"
   },
+  "backend/modules/case/tests/test_completion_diff_dialog_t57.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/case/",
+    "page:pages/completion-note-form.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "page": [
+     "frontend/pages/completion-note-form.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
   "backend/modules/case/tests/test_completion_fixes_t57.py": {
    "kind": "api",
    "units": [
@@ -5965,6 +5987,52 @@
     ],
     "path": [
      "backend/modules/case/api/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_completion_quote_items_t57.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "helper:financial_mask",
+    "helper:settings_registry",
+    "mod:case/__init__",
+    "mod:case/api/__init__",
+    "mod:case/api/completion_notes",
+    "mod:case/api/quotations",
+    "mod:case/completion_sync",
+    "mod:case/profit_guard",
+    "page:pages/completion-note-form.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/financial_mask.py",
+     "backend/helpers/settings_registry.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/completion_sync.py",
+     "backend/modules/case/profit_guard.py"
+    ],
+    "api": [
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/quotations.py"
+    ],
+    "page": [
+     "frontend/pages/completion-note-form.html"
     ],
     "module_dir": [
      "backend/modules/case/"
@@ -20406,6 +20474,36 @@
      "backend/helpers/settings_registry.py"
     ]
    }
+  },
+  "backend/tests/platform/test_spine_r6.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "helper:settings_registry",
+    "plat:__init__",
+    "plat:definitions",
+    "plat:spine",
+    "router:definitions",
+    "router:settings_center"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/core/spine.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_registry.py",
+     "backend/routers/__init__.py",
+     "backend/routers/settings_center.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/platform/test_stage_select_2026_10_02.py": {
    "kind": "audit",

@@ -7491,6 +7491,7 @@
     "helper:email_notify",
     "helper:errors",
     "helper:expense_types",
+    "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
     "helper:mail_types",
@@ -7499,17 +7500,22 @@
     "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:privacy_notice",
+    "helper:profit_rules",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_registry",
     "helper:startup",
+    "helper:tax_calc",
     "helper:tiered_approval",
     "helper:uploads",
     "helper:validation",
+    "mod:case/alt_policy",
     "mod:case/completion_pdf",
+    "mod:case/completion_sync",
     "mod:case/expense_notify",
+    "mod:case/profit_guard",
     "mod:case/recycle_adapter"
    ],
    "imports": [
@@ -7523,10 +7529,12 @@
     "helper:errors",
     "helper:privacy_notice",
     "helper:recycle_bin",
+    "helper:settings_registry",
     "helper:tiered_approval",
     "helper:uploads",
     "helper:validation",
     "mod:case/completion_pdf",
+    "mod:case/completion_sync",
     "mod:case/expense_notify",
     "mod:case/recycle_adapter",
     "plat:txn"
@@ -7539,97 +7547,103 @@
    "routes": [
     {
      "func": "list_completion_notes",
-     "line": 224,
+     "line": 237,
      "method": "GET",
      "path": "/api/completion-notes"
     },
     {
+     "func": "completion_quote_items",
+     "line": 345,
+     "method": "GET",
+     "path": "/api/completion-notes/quote-items"
+    },
+    {
      "func": "get_completion_note",
-     "line": 266,
+     "line": 395,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}"
     },
     {
      "func": "create_completion_note",
-     "line": 276,
+     "line": 405,
      "method": "POST",
      "path": "/api/completion-notes"
     },
     {
      "func": "update_completion_note",
-     "line": 318,
+     "line": 453,
      "method": "PUT",
      "path": "/api/completion-notes/{note_no}"
     },
     {
      "func": "delete_completion_note",
-     "line": 365,
+     "line": 506,
      "method": "DELETE",
      "path": "/api/completion-notes/{note_no}"
     },
     {
      "func": "submit_completion_note",
-     "line": 398,
+     "line": 539,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/submit"
     },
     {
      "func": "approve_completion_note",
-     "line": 463,
+     "line": 604,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/approve"
     },
     {
      "func": "reject_completion_note",
-     "line": 572,
+     "line": 713,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/reject"
     },
     {
      "func": "revoke_completion_approval",
-     "line": 614,
+     "line": 755,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/revoke-approval"
     },
     {
      "func": "download_completion_pdf",
-     "line": 660,
+     "line": 801,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}/pdf-download"
     },
     {
      "func": "record_completion_export",
-     "line": 686,
+     "line": 827,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/export"
     },
     {
      "func": "toggle_completion_signed",
-     "line": 715,
+     "line": 856,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/signed-toggle"
     },
     {
      "func": "upload_completion_signed_files",
-     "line": 767,
+     "line": 908,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/signed-files"
     },
     {
      "func": "delete_completion_signed_file",
-     "line": 793,
+     "line": 934,
      "method": "DELETE",
      "path": "/api/completion-notes/{note_no}/signed-files/{file_id}"
     },
     {
      "func": "get_completion_privacy_acks",
-     "line": 830,
+     "line": 971,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}/privacy-notice"
     },
     {
      "func": "ack_completion_privacy_notice",
-     "line": 844,
+     "line": 985,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/privacy-notice/ack"
     }
@@ -9845,6 +9859,24 @@
    "kind": "mod",
    "module_key": "case",
    "path": "backend/modules/case/completion_pdf.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "completion_notes"
+   ],
+   "tables_w": []
+  },
+  "mod:case/completion_sync": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:financial_mask",
+    "mod:case/profit_guard"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/completion_sync.py",
    "role": "helper",
    "tables_ddl": [],
    "tables_named": [],
@@ -15962,16 +15994,15 @@
    "api_calls": [
     "/api/completion-notes",
     "/api/completion-notes/",
+    "/api/completion-notes/quote-items",
     "/api/completion-notes/{}",
     "/api/completion-notes/{}/pdf-download",
     "/api/completion-notes/{}/reject",
     "/api/completion-notes/{}/submit",
-    "/api/quotations/{}",
     "/api/system/branding/favicon"
    ],
    "api_prefixes": [
     "/api/completion-notes",
-    "/api/quotations",
     "/api/system"
    ],
    "api_unmatched": [],
@@ -15987,39 +16018,11 @@
    "kind": "page",
    "path": "frontend/pages/completion-note-form.html",
    "routers_called": [
-    "mod:case/api/alt_plan",
-    "mod:case/api/case_action_items",
-    "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
-    "mod:case/api/expense_form_pdf",
-    "mod:case/api/material_approvals",
-    "mod:case/api/material_changes",
-    "mod:case/api/material_links",
-    "mod:case/api/material_orders",
-    "mod:case/api/material_payments",
-    "mod:case/api/overhead",
-    "mod:case/api/quotations",
-    "mod:case/api/settlement_actuals",
-    "mod:case/api/settlement_api",
-    "mod:netplan/api",
     "router:system"
    ],
    "routers_called_effective": [
-    "mod:case/api/alt_plan",
-    "mod:case/api/case_action_items",
-    "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
-    "mod:case/api/expense_form_pdf",
-    "mod:case/api/material_approvals",
-    "mod:case/api/material_changes",
-    "mod:case/api/material_links",
-    "mod:case/api/material_orders",
-    "mod:case/api/material_payments",
-    "mod:case/api/overhead",
-    "mod:case/api/quotations",
-    "mod:case/api/settlement_actuals",
-    "mod:case/api/settlement_api",
-    "mod:netplan/api",
     "router:system"
    ],
    "tables_r": [],
@@ -19666,10 +19669,10 @@
     "helper:custom_modules",
     "helper:doc_template",
     "helper:expense_types",
-    "helper:settings_registry",
     "plat:catalog",
     "plat:definitions",
-    "plat:registry"
+    "plat:registry",
+    "plat:spine"
    ],
    "kind": "router",
    "path": "backend/routers/definitions.py",
@@ -19677,103 +19680,103 @@
    "routes": [
     {
      "func": "list_definition_kinds",
-     "line": 203,
+     "line": 196,
      "method": "GET",
      "path": "/api/definition-kinds"
     },
     {
      "func": "list_expense_types",
-     "line": 210,
+     "line": 203,
      "method": "GET",
      "path": "/api/expense-types"
     },
     {
      "func": "get_expense_type",
-     "line": 222,
+     "line": 215,
      "method": "GET",
      "path": "/api/expense-types/{code}"
     },
     {
      "func": "list_definitions",
-     "line": 237,
+     "line": 230,
      "method": "GET",
      "path": "/api/definitions/{kind}"
     },
     {
      "func": "delete_definition_draft",
-     "line": 262,
+     "line": 255,
      "method": "DELETE",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "delete_custom_module",
-     "line": 281,
+     "line": 274,
      "method": "DELETE",
      "path": "/api/definitions/custom_module/{key}"
     },
     {
      "func": "get_definition",
-     "line": 298,
+     "line": 291,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}"
     },
     {
      "func": "get_definition_default",
-     "line": 312,
+     "line": 305,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/default"
     },
     {
      "func": "save_definition_draft",
-     "line": 322,
+     "line": 315,
      "method": "PUT",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "validate_definition",
-     "line": 352,
+     "line": 345,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/validate"
     },
     {
      "func": "publish_definition",
-     "line": 361,
+     "line": 354,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/publish"
     },
     {
      "func": "get_definition_version",
-     "line": 408,
+     "line": 401,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 425,
+     "line": 418,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 450,
+     "line": 443,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 482,
+     "line": 475,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
      "func": "effective_layout",
-     "line": 496,
+     "line": 489,
      "method": "GET",
      "path": "/api/layout/{module_key}"
     },
     {
      "func": "preview_output_template",
-     "line": 522,
+     "line": 515,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }
@@ -21174,97 +21177,97 @@
    "routes": [
     {
      "func": "list_groups",
-     "line": 80,
+     "line": 71,
      "method": "GET",
      "path": "/api/settings-center/groups"
     },
     {
      "func": "get_group",
-     "line": 104,
+     "line": 95,
      "method": "GET",
      "path": "/api/settings-center/groups/{group}"
     },
     {
      "func": "save_group",
-     "line": 124,
+     "line": 115,
      "method": "POST",
      "path": "/api/settings-center/groups/{group}"
     },
     {
      "func": "preview_group",
-     "line": 155,
+     "line": 146,
      "method": "POST",
      "path": "/api/settings-center/groups/{group}/preview"
     },
     {
      "func": "impact_group",
-     "line": 165,
+     "line": 156,
      "method": "POST",
      "path": "/api/settings-center/groups/{group}/impact"
     },
     {
      "func": "reset_group",
-     "line": 175,
+     "line": 166,
      "method": "POST",
      "path": "/api/settings-center/groups/{group}/reset"
     },
     {
      "func": "group_versions",
-     "line": 208,
+     "line": 199,
      "method": "GET",
      "path": "/api/settings-center/groups/{group}/versions"
     },
     {
      "func": "group_diff",
-     "line": 224,
+     "line": 215,
      "method": "GET",
      "path": "/api/settings-center/groups/{group}/diff"
     },
     {
      "func": "restore_group",
-     "line": 241,
+     "line": 232,
      "method": "POST",
      "path": "/api/settings-center/groups/{group}/restore/{version}"
     },
     {
      "func": "public_values",
-     "line": 279,
+     "line": 270,
      "method": "GET",
      "path": "/api/settings-center/public"
     },
     {
      "func": "list_pending",
-     "line": 297,
+     "line": 288,
      "method": "GET",
      "path": "/api/settings-center/pending"
     },
     {
      "func": "cancel_pending",
-     "line": 321,
+     "line": 312,
      "method": "POST",
      "path": "/api/settings-center/pending/{change_id}/cancel"
     },
     {
      "func": "approve_pending",
-     "line": 351,
+     "line": 342,
      "method": "POST",
      "path": "/api/settings-center/pending/{change_id}/approve"
     },
     {
      "func": "list_profiles",
-     "line": 385,
+     "line": 376,
      "method": "GET",
      "path": "/api/settings-center/profiles"
     },
     {
      "func": "preview_profile",
-     "line": 401,
+     "line": 392,
      "method": "GET",
      "path": "/api/settings-center/profiles/{name}/preview"
     },
     {
      "func": "apply_profile",
-     "line": 409,
+     "line": 400,
      "method": "POST",
      "path": "/api/settings-center/profiles/{name}/apply"
     }
@@ -22751,7 +22754,8 @@
     "core:archive",
     "mod:case/api/quotations",
     "mod:case/attachments",
-    "mod:case/completion_pdf"
+    "mod:case/completion_pdf",
+    "mod:case/completion_sync"
    ],
    "tables_r": [],
    "tables_w": [],
