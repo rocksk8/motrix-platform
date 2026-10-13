@@ -34,6 +34,7 @@
     '#dg-panel .dg-tab[aria-selected=true]{background:var(--bg-hover,#eef);font-weight:600}',
     '#dg-panel .dg-row{display:flex;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-light,#eee)}',
     '#dg-panel .dg-row .dg-grow{flex:1}#dg-panel .dg-dim{color:var(--text-dim,#888);font-size:12px}',
+    '#dg-panel .dg-warn{margin:6px 0;padding:6px 8px;border:1px solid var(--warning,#c80);border-radius:6px;font-size:12px}',
     '#dg-panel .dg-live{color:var(--success,#1a7f37);font-weight:600}#dg-panel .dg-bad{color:var(--danger,#c00)}',
     '#dg-panel button.dg-btn{padding:3px 9px;border:1px solid var(--border-light,#ccc);border-radius:6px;background:var(--bg-card,#fff);color:inherit;cursor:pointer}',
     '#dg-panel pre{white-space:pre-wrap;word-break:break-all;font-size:12px;margin:4px 0}'
@@ -70,12 +71,14 @@
     var L = st.ledger
     if (!L) return '<div class="dg-dim">讀取中…</div>'
     if (!L.versions.length) return '<div class="dg-dim">還沒有發布過的版本。</div>' + (L.hasDraft ? '<div class="dg-dim">有一份草稿。</div>' : '')
-    var h = '<div class="dg-dim">目前生效：第 ' + esc(L.live) + ' 版' + (L.hasDraft ? '；另有一份草稿' : '') + (L.pendingReview ? '；有送審中的版本' : '') + '</div>'
+    var h = (L.warnings || []).map(function (w) { return '<div class="dg-warn" role="note">' + esc(w) + '</div>' }).join('')
+    h += '<div class="dg-dim">目前生效：第 ' + esc(L.live) + ' 版' + (L.hasDraft ? '；另有一份草稿' : '') + (L.pendingReview ? '；有送審中的版本' : '') + '</div>'
     L.versions.forEach(function (v) {
       h += '<div class="dg-row"><div class="dg-grow"><b>第 ' + esc(v.version) + ' 版</b> ' + (v.isLive ? '<span class="dg-live">目前生效</span>' : '') +
         '<div class="dg-dim">' + esc(v.by) + '　' + esc(v.at) + (v.note ? '　' + esc(v.note) : '') + '</div></div>' +
         '<button class="dg-btn" data-dg="cmp:' + esc(v.version) + '">與目前比較</button>' +
-        (v.restorable && !st.o.readonly ? (st.confirming === String(v.version)
+        (v.restorable && v.validNow === false ? '<span class="dg-bad" data-dg-invalid="' + esc(v.version) + '">現行驗證不通過，無法還原</span>' : '') +
+        (v.restorable && v.validNow !== false && !st.o.readonly ? (st.confirming === String(v.version)
           ? '<span class="dg-bad">還原成新的一版？</span><button class="dg-btn" data-dg="restore-yes:' + esc(v.version) + '">確定</button><button class="dg-btn" data-dg="restore-no">取消</button>'
           : '<button class="dg-btn" data-dg="restore:' + esc(v.version) + '">還原</button>') : '') + '</div>'
     })
