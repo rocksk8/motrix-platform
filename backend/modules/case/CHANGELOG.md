@@ -6,7 +6,7 @@
 - 勾『已申購』：認列有效即可；『已到料』必填到貨日，確認人與時間由伺服器記，被拒時序號一併維持原值；採購單之後被撤銷／取消 ⇒ `stale`，旗標歷史保留、不能再勾、不再占用涵蓋；分組唯一（含同一份資料內兩張搶同組）；認列中的分組不能再建立材料申請（`bad_link`）；稽核 `material.recognize`／`recognize_undo`／`recognize_arrived`／`recognize_unarrived`。
 - 0d 稽核補強：刪除持有認列的卡片＝取消認列（同樣需權限並記 `recognize_undo`；無權限／系統路徑保留卡片並記 `recognize_denied`）；過期的認列仍占著分組鍵（唯一性），採購單重新核准不會出現兩張卡片同時持有；`who_may=2` 限能編輯材料申請的角色（管理員以上或有財務檢視權的專案經理）；認列過期（採購單被撤銷後）期間，該分組對其他卡片與新的材料申請都維持占用，要等最高管理者取消認列才放行；寄信失敗另記 `material.recognize_denied_mail_failed`；已結案變更申請不能夾帶認列（送出即 409）；新增 `caseRecord.materials` 寫入點靜態守門。
 - 涵蓋檢視 `GET …/material-coverage` 的分組加 `vendor`、`recognized`；儀表板材料清單加 `recognized`。
-- 信件類型 `material_recognize_denied`（系統技術類、預設僅最高管理者）。
+- 信件類型 `material_recognize_denied`（系統技術類、預設僅最高管理者）；`module.json` 以 `features[]`（`material_recognize_notify`）宣告它。
 - 回滾注意：程式回滾後舊的涵蓋檢視不認識 `poLink`，同一組可能再被建立材料申請而重複涵蓋；建立前請先檢查案件材料卡片是否已認列同一採購單。
 - 測試：`test_material_recognize_2026_10_13.py`（19 題）、`test_material_write_paths_2026_10_13.py`、`test_e2e_material_recognize_2026_10_13.py`；`test_mat_candidates_t51.py` 改為認列語意。
 
