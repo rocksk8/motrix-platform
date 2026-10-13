@@ -13,15 +13,18 @@
   P1 基準快照    表／VIEW／索引／欄位（型別、NOT NULL、預設、主鍵）／每表列數／schema_version／module_schema_versions／各序列表內容／整庫健檢
   P2 升級        用 **新樹自己的啟動規則**（`tools/migrate_like_startup.py`：先載入模組 ⇒ `db.init_db`：V9 基準、core 與各模組 migration，含未取號的 U0a 與 permmatrix v2；
                  該工具不在的舊樹退回只跑 `db.init_db`）升級 before.db 的副本
+  P3 計時        U0a 遷移本身單獨計時（--max-migration-sec，預設 5 秒）＋啟動式升級總耗時；配合放大庫（u0a_seed_synthetic --bulk）證明 ADD COLUMN 不隨列數成長
   P3 差異檢查    只准 ① 多出 U0a 的 5 張新表 ② 既有表多出 owner_unit_id／unit_id／legal_entity_id／scope_json（型別、NOT NULL、預設＝1 與清單一致）；
                  不得有表／欄／索引／VIEW 被刪或改；既有每表列數相同；每表「原有欄位」的內容雜湊相同；`vouchers` VIEW 與 `quote_seq` 的 SQL 逐字相同；
                  schema_version 仍是 --expect-db-version；其他模組的 module_schema_versions 不變；`core` 的版號報告（未取號＝不記，取號後 9→10）
   P4 序列等價    quote_seq／payslip_seq 內容相同；各單據號碼的現存最大值（傳票日流水、PS、CN、DN…的取最大值來源）相同 ⇒ 下一個號碼不變
   P4b 全新安裝同形  新樹在空庫上跑完所有 migration ⇒ 與 P2 升級後的副本比：表集合、每表欄位（不看順序）、索引、VIEW、觸發器完全相同（D3b）
-  P5 舊程式回滾  用 **舊樹自己的 `db.init_db(path)`** 打開已升級的副本（`module_schema_versions.core` 領先舊程式所知的版號）：不得丟例外、
-                 `migrations.incomplete` 空、舊程式不得改動／降低任何版號、表欄位與升級後逐一相同；再以「舊程式的 INSERT 不帶新欄位」模擬寫入
-                 （逐表 INSERT … SELECT 既有列，容許撞唯一鍵，但不得出現新欄位的 NOT NULL 錯誤）
-  P6 重新升級    把回滾後的副本再用新樹升級一次：與 P2 的結果相同（冪等；MS1c→U0a→回滾→U0a 的完整流程）
+  P5 舊程式回滾  分 core=9（未取號）與 core=10（模擬取號後：把 module_schema_versions.core 改成 10）兩種各做一次：用 **舊樹自己的啟動規則** 打開已升級的副本——
+                 不得丟例外、`migrations.incomplete` 空、舊程式不得改動／降低任何版號、表欄位與升級後逐一相同、資料未變；
+                 **舊樹的真實配號函式**（客戶碼、完工單號、傳票號、報價單號、薪資單號）的結果與升級前相同；
+                 **舊式 INSERT（完全不帶新欄位）對每一張清單內的表真的寫入**（SAVEPOINT 內、最後 ROLLBACK），新欄位落在根單位（=1）
+  P6 重新升級    把兩種回滾後的副本各再用新樹升級一次：與 P2 的結果相同（冪等；MS1c→U0a→回滾→U0a 的完整流程）
+  P8 demo 重置   在升級後的副本上真的跑新樹的 `db.reset_demo_db()`：根單位與閉包被重種、業務表清空、新欄位與新表仍在
   P7 驗包（選）  給了 --package 才跑：新樹的 `backend/tools/verify_package.py <包> --expect-db-version N`，exit 0 才算過
 所有報告寫到 --work/report.json（或 --json-out）。純函式 `snapshot`／`diff_upgrade`／`check_old_inserts` 有單元測試（tests/platform/test_u0a_rollback_drill.py），
 含正對照：故意刪欄、改列數、漏新欄預設 ⇒ 差異檢查必須報 FAIL。
@@ -35,6 +38,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 NEW_TABLES = {"org_units", "org_unit_closure", "user_units", "system_settings_unit", "seq_by_entity"}
@@ -200,6 +204,48 @@ def parity(fresh, upgraded):
     return res
 
 
+def _seeder():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("_u0a_seed", Path(__file__).with_name("u0a_seed_synthetic.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def probe_old_style_inserts(path, tables):
+    """舊程式式 INSERT（完全不帶新欄位）真的寫進每一張表，並確認新欄位落在根單位（owner_unit_id／unit_id／legal_entity_id＝1）；在 SAVEPOINT 內做、最後 ROLLBACK。
+    與 `check_old_inserts` 不同：不靠複製既有列（會撞唯一鍵），而是依欄位定義組一列全新的值（表空著也能測）。回 [(表, 通過?, 說明)]。"""
+    seeder = _seeder()
+    out = []
+    conn = sqlite3.connect(str(path))
+    try:
+        for t in tables:
+            info = conn.execute('PRAGMA table_info("%s")' % t).fetchall()
+            if not info:
+                out.append((t, False, "表不存在"))
+                continue
+            names = [r[1] for r in info]
+            cols, vals = seeder.build_row(info, t, 987654)
+            conn.execute("SAVEPOINT p")
+            try:
+                if cols:
+                    cur = conn.execute('INSERT INTO "%s" (%s) VALUES (%s)' % (t, ",".join(cols), ",".join("?" * len(cols))), vals)
+                else:
+                    cur = conn.execute('INSERT INTO "%s" DEFAULT VALUES' % t)
+                want = [c for c in ("owner_unit_id", "unit_id", "legal_entity_id") if c in names]
+                row = conn.execute('SELECT %s FROM "%s" WHERE rowid=?' % (",".join(want), t), (cur.lastrowid,)).fetchone()
+                bad = [c for c, v in zip(want, row) if v != 1]
+                out.append((t, not bad and bool(want), ("真的寫入，%s 皆為 1" % "／".join(want)) if not bad else "欄位不是根單位：%s" % bad))
+            except sqlite3.Error as e:
+                out.append((t, False, "舊式 INSERT 被擋：%s: %s" % (type(e).__name__, e)))
+            finally:
+                conn.execute("ROLLBACK TO p")
+                conn.execute("RELEASE p")
+    finally:
+        conn.close()
+    return out
+
+
 def check_old_inserts(path, tables):
     """舊程式的 INSERT 不帶新欄位：逐表 `INSERT … SELECT`（只含原有欄位）在 SAVEPOINT 內試，撞唯一鍵可接受，但不得是新欄位的 NOT NULL 錯誤。回 [(表, 通過?, 說明)]。"""
     out = []
@@ -269,6 +315,61 @@ print("@@" + json.dumps({"owner": list(getattr(M, "U0A_OWNER_UNIT_TABLES", ())),
 """
 
 
+_ALLOC = r"""
+import json, os, sqlite3, sys
+tree, path = sys.argv[1], sys.argv[2]
+sys.path.insert(0, os.path.join(tree, "backend"))
+os.chdir(os.path.join(tree, "backend"))
+out = {}
+conn = sqlite3.connect(path)
+conn.row_factory = sqlite3.Row
+def attempt(name, fn):
+    try:
+        out[name] = fn()
+    except Exception as e:
+        out[name] = "ERROR %s: %s" % (type(e).__name__, e)
+import db
+attempt("entity_code_customers", lambda: db.next_entity_code(conn, "customers", "C"))
+attempt("entity_code_completion", lambda: db.next_entity_code(conn, "completion_notes", "CN", code_col="note_no"))
+def v():
+    from modules.accounting import voucher
+    return voucher.next_voucher_no(conn, "2026-10-14")
+attempt("voucher_no", v)
+def q():
+    from modules.case.api import quotations
+    return quotations._peek_next_no(conn, "202610")
+attempt("quote_no", q)
+def p():
+    from modules.payroll.api import payslips
+    return payslips._peek_next_slip_no(conn, "202610")
+attempt("slip_no", p)
+print("@@" + json.dumps(out, ensure_ascii=False))
+"""
+_U0A_ONLY = r"""
+import json, os, sqlite3, sys, time
+tree, path = sys.argv[1], sys.argv[2]
+sys.path.insert(0, os.path.join(tree, "backend"))
+os.chdir(os.path.join(tree, "backend"))
+from core import migrations as M
+conn = sqlite3.connect(path)
+t0 = time.perf_counter()
+res = M._core_next_org_units(conn)
+dt = time.perf_counter() - t0
+print("@@" + json.dumps({"seconds": dt, "result": res}))
+"""
+_DEMO_RESET = r"""
+import json, os, sys, time
+tree, path = sys.argv[1], sys.argv[2]
+sys.path.insert(0, os.path.join(tree, "backend"))
+os.chdir(os.path.join(tree, "backend"))
+import db
+db.DEMO_DB_PATH = path
+t0 = time.perf_counter()
+db.reset_demo_db()
+print("@@" + json.dumps({"seconds": time.perf_counter() - t0}))
+"""
+
+
 def _run(code, tree, path=None, timeout=900, license_path=None):
     args = [sys.executable, "-c", code, str(tree)] + ([str(path)] if path else []) + ([str(license_path)] if (path and license_path) else [])
     p = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
@@ -311,6 +412,7 @@ def main(argv=None):
     ap.add_argument("--package", default=None)
     ap.add_argument("--json-out", default=None)
     ap.add_argument("--license", default=None, help="授權金鑰檔（照啟動規則載入模組用；省略 ⇒ 預設位置）")
+    ap.add_argument("--max-migration-sec", type=float, default=5.0, help="U0a 遷移本身（單獨計時）的上限秒數；ADD COLUMN 不隨列數成長")
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--allow-temp-work", action="store_true", help="測試用：允許 --work 在系統暫存下")
     a = ap.parse_args(argv)
@@ -340,8 +442,11 @@ def main(argv=None):
     lists = dict(lists or {})
     lists["scope"] = list(PERM_SCOPE_TABLES)
     _copy_db(before, upgraded)
+    t0 = time.perf_counter()
     rc, info, err = _run(_UPGRADE, new_tree, upgraded, license_path=a.license)
+    startup_sec = time.perf_counter() - t0
     rep.add("P2", "新樹 init_db 升級成功（未丟例外）", rc == 0 and info is not None, err)
+    rep.add("P2", "啟動式升級總耗時 %.1f 秒（含載入模組、V9 基準檢查、所有 migration）" % startup_sec, True)
     rep.add("P2", "沒有未完成的 migration、模組都載入", bool(info) and not info["incomplete"] and not info.get("problems"),
             json.dumps({"incomplete": (info or {}).get("incomplete"), "problems": (info or {}).get("problems")}, ensure_ascii=False))
     snap1 = snapshot(upgraded, digest_cols)
@@ -350,6 +455,15 @@ def main(argv=None):
     rep.add("P3", "core 版號報告（未取號＝不記；取號後 9→10）：前 %r 後 %r（未取號 migration %s 支）" % (
         snap0["msv"].get("core"), snap1["msv"].get("core"), (info or {}).get("pending")),
         snap1["msv"].get("core") in (snap0["msv"].get("core"), (snap0["msv"].get("core") or 0) + 1))
+
+    timing_db = work / "timing.db"
+    _copy_db(before, timing_db)
+    rc, tinfo, err = _run(_U0A_ONLY, new_tree, timing_db)
+    big = sorted(((v["count"], t) for t, v in snap0["tables"].items()), reverse=True)[:3]
+    total_rows = sum(v["count"] for v in snap0["tables"].values())
+    rep.add("P3", "U0a 遷移本身單獨耗時 %.3f 秒（庫內共 %d 列；最大表 %s；上限 %.1f 秒）" % (
+        (tinfo or {}).get("seconds", -1), total_rows, big, a.max_migration_sec),
+        rc == 0 and tinfo is not None and tinfo.get("result") is None and tinfo["seconds"] <= a.max_migration_sec, err or str(tinfo))
 
     fresh = work / "fresh.db"
     for ext in ("", "-wal", "-shm"):
@@ -362,24 +476,79 @@ def main(argv=None):
     for name, ok, detail in parity(snapshot(fresh), snap1):
         rep.add("P4b", name, ok, detail)
 
-    _copy_db(upgraded, rolled)
-    rc, info2, err = _run(_UPGRADE, old_tree, rolled, license_path=a.license)
-    rep.add("P5", "舊樹 init_db 打開已升級的庫：不丟例外（core 版號領先舊程式所知）", rc == 0 and info2 is not None, err)
-    rep.add("P5", "舊樹 migrations.incomplete 為空", bool(info2) and not info2["incomplete"], json.dumps((info2 or {}).get("incomplete")))
-    snap2 = snapshot(rolled, digest_cols)
-    rep.add("P5", "舊程式沒有改動／降低任何 migration 版號", snap2["msv"] == snap1["msv"], "升級後 %r／回滾後 %r" % (snap1["msv"], snap2["msv"]))
-    rep.add("P5", "回滾後表欄位與升級後逐一相同（舊程式不刪新欄位）", {t: v["cols"] for t, v in snap2["tables"].items()} == {t: v["cols"] for t, v in snap1["tables"].items()})
-    rep.add("P5", "回滾後資料未變（列數、內容雜湊）", snap2["digests"] == snap1["digests"] and
-            {t: v["count"] for t, v in snap2["tables"].items()} == {t: v["count"] for t, v in snap1["tables"].items()})
-    for t, ok, detail in check_old_inserts(rolled, list(lists.get("owner", [])) + list(lists.get("unit", []))):
-        rep.add("P5", "舊式 INSERT（不帶新欄位）：%s" % t, ok, detail)
+    # D7：舊樹的真實配號函式在「升級前」的庫上先跑一次當基準
+    base_alloc_db = work / "alloc_base.db"
+    _copy_db(before, base_alloc_db)
+    rc, base_alloc, err = _run(_ALLOC, old_tree, base_alloc_db)
+    rep.add("P5", "舊樹配號函式在升級前的庫上可執行（基準）：%s" % json.dumps(base_alloc, ensure_ascii=False),
+            rc == 0 and base_alloc is not None and not any(str(v).startswith("ERROR") for v in (base_alloc or {}).values()), err or "")
 
-    _copy_db(rolled, again)
-    rc, info3, err = _run(_UPGRADE, new_tree, again, license_path=a.license)
-    rep.add("P6", "回滾後再升級成功", rc == 0 and info3 is not None and not info3["incomplete"], err)
-    snap3 = snapshot(again, digest_cols)
-    rep.add("P6", "再升級結果與第一次升級相同（冪等）", {t: v["cols"] for t, v in snap3["tables"].items()} == {t: v["cols"] for t, v in snap1["tables"].items()}
-            and snap3["digests"] == snap1["digests"] and snap3["seqs"] == snap1["seqs"])
+    def rollback_variant(label, core_version):
+        db_ = work / ("rolled_back_%s.db" % label)
+        _copy_db(upgraded, db_)
+        if core_version is not None:                                   # 模擬『取號後 core=10』：領先舊程式所知的版號
+            c = sqlite3.connect(str(db_))
+            c.execute("UPDATE module_schema_versions SET version=? WHERE module='core'", (core_version,))
+            c.commit()
+            c.close()
+        expect_msv = dict(snap1["msv"])
+        if core_version is not None:
+            expect_msv["core"] = core_version
+        rc_, i2, e2 = _run(_UPGRADE, old_tree, db_, license_path=a.license)
+        tag = "core=%s" % (core_version if core_version is not None else snap1["msv"].get("core"))
+        rep.add("P5", "[%s] 舊樹啟動規則打開已升級的庫：不丟例外" % tag, rc_ == 0 and i2 is not None, e2)
+        rep.add("P5", "[%s] 舊樹 migrations.incomplete 為空、模組都載入" % tag, bool(i2) and not i2["incomplete"] and not i2.get("problems"),
+                json.dumps({"incomplete": (i2 or {}).get("incomplete"), "problems": (i2 or {}).get("problems")}, ensure_ascii=False))
+        sn = snapshot(db_, digest_cols)
+        rep.add("P5", "[%s] 舊程式沒有改動／降低任何 migration 版號" % tag, sn["msv"] == expect_msv, "預期 %r／實際 %r" % (expect_msv, sn["msv"]))
+        rep.add("P5", "[%s] 回滾後表欄位與升級後逐一相同（舊程式不刪新欄位）" % tag,
+                {t: v["cols"] for t, v in sn["tables"].items()} == {t: v["cols"] for t, v in snap1["tables"].items()})
+        rep.add("P5", "[%s] 回滾後資料未變（列數、內容雜湊）" % tag, {k: v for k, v in sn["digests"].items() if k not in DIGEST_EXEMPT} ==
+                {k: v for k, v in snap1["digests"].items() if k not in DIGEST_EXEMPT} and
+                {t: v["count"] for t, v in sn["tables"].items()} == {t: v["count"] for t, v in snap1["tables"].items()})
+        rcA, alloc, eA = _run(_ALLOC, old_tree, db_)
+        rep.add("P5", "[%s] 舊樹真實配號函式（客戶碼、完工單號、傳票號、報價單號、薪資單號）與升級前相同" % tag,
+                rcA == 0 and alloc == base_alloc and not any(str(v).startswith("ERROR") for v in (alloc or {}).values()),
+                "升級前 %r／回滾後 %r %s" % (base_alloc, alloc, eA))
+        probes = probe_old_style_inserts(db_, list(lists.get("owner", [])) + list(lists.get("unit", [])))
+        bad = [(t, d) for t, ok, d in probes if not ok]
+        rep.add("P5", "[%s] 舊式 INSERT（完全不帶新欄位）逐表真的寫入，新欄位落在根單位：%d／%d 張" % (tag, len(probes) - len(bad), len(probes)),
+                not bad and len(probes) >= 38, "；".join("%s：%s" % b for b in bad[:8]))
+        return db_
+
+    rolled = rollback_variant("c9", None)
+    rolled10 = rollback_variant("c10", 10)
+
+    for label, src_ in (("c9", rolled), ("c10", rolled10)):
+        again_ = work / ("reupgraded_%s.db" % label)
+        _copy_db(src_, again_)
+        rc, info3, err = _run(_UPGRADE, new_tree, again_, license_path=a.license)
+        rep.add("P6", "[%s] 回滾後再升級成功" % label, rc == 0 and info3 is not None and not info3["incomplete"], err)
+        snap3 = snapshot(again_, digest_cols)
+        rep.add("P6", "[%s] 再升級結果與第一次升級相同（冪等）" % label, {t: v["cols"] for t, v in snap3["tables"].items()} == {t: v["cols"] for t, v in snap1["tables"].items()}
+                and {k: v for k, v in snap3["digests"].items() if k not in DIGEST_EXEMPT} == {k: v for k, v in snap1["digests"].items() if k not in DIGEST_EXEMPT}
+                and snap3["seqs"] == snap1["seqs"])
+    again = work / "reupgraded_c9.db"
+
+    # P8 展示庫重置（真的跑 db.reset_demo_db）：清單內的表被清空、根單位與閉包由 init_db 重種、欄位與新表完好
+    demo = work / "demo_reset.db"
+    _copy_db(upgraded, demo)
+    t0 = time.perf_counter()
+    rc, dinfo, err = _run(_DEMO_RESET, new_tree, demo)
+    rep.add("P8", "demo 重置（新樹 db.reset_demo_db）成功，耗時 %.1f 秒" % (time.perf_counter() - t0), rc == 0 and dinfo is not None, err)
+    sd = snapshot(demo)
+    conn = sqlite3.connect("file:%s?mode=ro" % demo.as_posix(), uri=True)
+    try:
+        root = conn.execute("SELECT id, parent_id, is_legal_entity FROM org_units").fetchall()
+        clos = conn.execute("SELECT ancestor_id, descendant_id, depth FROM org_unit_closure").fetchall()
+        n_q = conn.execute("SELECT COUNT(*) FROM quotations").fetchone()[0] if "quotations" in sd["tables"] else 0
+        n_seq = conn.execute("SELECT COUNT(*) FROM seq_by_entity").fetchone()[0]
+    finally:
+        conn.close()
+    rep.add("P8", "重置後根單位與閉包被重種（id=1、法人、(1,1,0)）", [tuple(r) for r in root] == [(1, None, 1)] and [tuple(r) for r in clos] == [(1, 1, 0)], "%r %r" % (root, clos))
+    rep.add("P8", "重置後業務表已清空、seq_by_entity 空", n_q == 0 and n_seq == 0, "quotations=%s seq_by_entity=%s" % (n_q, n_seq))
+    missing = [t for t in lists.get("owner", []) if t in sd["tables"] and "owner_unit_id" not in [c[0] for c in sd["tables"][t]["cols"]]]
+    rep.add("P8", "重置後新欄位仍在、新表仍在", not missing and NEW_TABLES <= set(sd["tables"]), "缺：%s" % missing)
 
     if a.package:
         vp = new_tree / "backend" / "tools" / "verify_package.py"
@@ -391,7 +560,7 @@ def main(argv=None):
     out.write_text(json.dumps({"ok": rep.ok, "rows": rep.rows}, ensure_ascii=False, indent=1), encoding="utf-8")
     print("\n演練結果：%s（%d 項，FAIL %d）；報告 %s" % ("全過" if rep.ok else "有紅", len(rep.rows), sum(1 for r in rep.rows if not r["ok"]), out))
     if not a.keep and rep.ok:
-        for f in (upgraded, rolled, again):
+        for f in (upgraded, rolled, rolled10, again):
             for ext in ("", "-wal", "-shm"):
                 try:
                     Path(str(f) + ext).unlink()
