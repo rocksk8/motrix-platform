@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## (next) — 2026-10-13（wip/t57-material-recognize-r2）
+- 材料進度清單（`list_materials_summary`）每列新增唯讀欄位 `recognized`（該材料卡片是否已認列採購單；認列沒有材料申請的到貨確認步驟，報表／畫面可據此區分）。其餘欄位與篩選不變。
+
 ## 1.0.38 — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）
 - 營運報表與銷項發票清單下載的 `Content-Disposition` 改用 `helpers.download_name.content_disposition()`（檔名不變，只統一編碼：latin-1 安全退路＋RFC 8187）。
 
