@@ -40,7 +40,7 @@ def test_a_broken_comparator_counts_as_loosen(monkeypatch):
     assert P.classify("custom_fields", {}, {})[0] == "loosen"
 
 
-def test_layout_classification_is_ready_but_not_active():
+def test_layout_classification():
     c = P.classify
     hide = {"op": "hide", "target": "x:y/sidebar"}
     rel = {"op": "relabel", "target": "x:y/sidebar", "label": "新"}
@@ -48,7 +48,7 @@ def test_layout_classification_is_ready_but_not_active():
     assert c("layout", {"ops": [hide]}, {"ops": []})[0] == "loosen"
     assert c("layout", {"ops": []}, {"ops": [rel]})[0] == "neutral"
     assert c("layout", {"ops": []}, {"ops": [{"op": "weird"}]})[0] == "loosen"
-    assert "layout" not in P.ACTIVE_KINDS and P.ACTIVE_KINDS == ("custom_fields",)
+    assert P.ACTIVE_KINDS == ("custom_fields", "layout")
 
 
 # ── 端點 ────────────────────────────────────────────────────────────────────────────
@@ -235,3 +235,36 @@ def test_kinds_outside_the_active_list_are_untouched(api, on):
     assert c.put(b + "/draft", headers=h["a"], json={"body": body}).status_code == 200
     r = c.post(b + "/publish", headers=h["a"], json={"note": "n"})
     assert r.status_code == 200 and r.json()["version"] == 1 and "pending" not in r.json()
+
+
+def _layout_target():
+    from core import registry
+    for m in registry.loaded():
+        for p in (m.manifest or {}).get("pages") or []:
+            if isinstance(p, dict) and p.get("menu"):
+                return m.key, "%s:%s/sidebar" % (m.key, p["path"])
+    pytest.skip("沒有宣告選單項的模組")
+
+
+def test_on_layout_publish_goes_through_the_pipeline(api, on, past):
+    """版面：新增 hide ＝收緊（立即）；移除 hide ＝放寬（待核准）；改名／搬移不變（立即）。"""
+    c, h = api
+    mod, tgt = _layout_target()
+    url = "/api/definitions/layout/module:%s" % mod
+    hide = {"op": "hide", "target": tgt}
+    assert c.put(url + "/draft", headers=h["a"], json={"body": {"ops": [hide]}}).status_code == 200
+    r = c.post(url + "/publish", headers=h["a"], json={"note": "n"})
+    assert r.status_code == 200 and r.json()["version"] == 1 and "pending" not in r.json()            # 收緊 ⇒ 立即
+    assert c.put(url + "/draft", headers=h["a"], json={"body": {"ops": []}}).status_code == 200
+    r = c.post(url + "/publish", headers=h["a"], json={"note": "n"})
+    j = r.json()
+    assert r.status_code == 200 and j["pending"] is True and j["version"] == 2 and j["effectiveAt"] and j["reasons"]   # 放寬 ⇒ 待核准（3c 的編輯器用的鍵）
+    live = c.get(url, headers=h["a"]).json()
+    assert live["latest"]["version"] == 1                                                              # 生效中的還是第 1 版
+    cid = j["changeId"]
+    assert c.post("/api/def-pipeline/changes/%d/approve" % cid, headers=h["b"], json={}).status_code == 200
+    a = c.post("/api/def-pipeline/changes/%d/activate" % cid, headers=h["b"], json={})
+    assert a.status_code == 200 and a.json()["version"] == 2
+    p = [x for x in _ledger_rows() if x["domain"] == "def:layout"]
+    assert p and p[0]["field"] == "company|module:%s" % mod and p[0]["key"] == ("module.%s" % mod)    # 帳本的 key 把 ':' 換成 '.'，真正的 key 在 field
+

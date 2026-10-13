@@ -38,8 +38,8 @@
 - 旗標 `builder_governance.enabled` 關：發布與還原與今天逐位元相同，四條新路由 404。開啟後，**名單內的 kind**（`routers/def_pipeline.py` 的 `ACTIVE_KINDS`，目前只有 `custom_fields`）：發布／還原先分類（`loosen`／`tighten`／`neutral`，**無法判斷＝放寬**）；收緊或不變立即發布並記帳本；放寬不發布、改為待核准（高風險通知其他最高管理者），需**另一位**最高管理者核准＋確認期間過後才能「套用」（才真的發布）；期間內任何最高管理者都能撤銷。申請人不能核准自己的。
 - 路由：`GET /api/def-pipeline/pending`、`POST /api/def-pipeline/changes/{id}/approve｜activate｜cancel`。
 - 比較函式（暫定規則，待使用者確認 D3）：`custom_fields`——新增欄位＝放寬、移除欄位＝收緊、只改顯示文字＝不變、`required` 取消＝放寬、改為必填＝收緊、其他屬性變動＝放寬；`layout`（已備妥、未啟用）——新增 `hide`＝收緊、移除 `hide`＝放寬、`relabel`／`move`＝不變、其他＝放寬。
-- **為什麼 layout 不在名單**：排版器（3c）與選單建構器發布 layout 時還不會處理 `pending: true` 的回應（會誤顯示成已發布）；它們改好之後把 `"layout"` 加進 `ACTIVE_KINDS`。`expense_type`／`remit_kinds`／`custom_module` 尚無比較函式（自訂模組有自己的送審）。
+- **layout 已加入名單（`ACTIVE_KINDS = ("custom_fields", "layout")`），前提是 3c 的 `wip/t60-s4-r1`（排版器遇到 `pending: true` 不說「已發布」）在同一列車**；選單編輯器（`menu-editor.js`）本分支已改成如實顯示待核准。若列車裡沒有 3c 的提交，必須把 `"layout"` 從名單拿掉，否則旗標開啟時排版器會把待核准誤報成已發布。`expense_type`／`remit_kinds`／`custom_module` 尚無比較函式（自訂模組有自己的送審）。
 - 還原到較寬鬆的版本＝把那一版放進草稿再送審；已有不同內容的草稿時回 409（不覆蓋）。取消之後那份草稿仍在，需使用者自己丟棄。
 - 沒有排程：不會「到期自動套用」，必須有人按「套用」（核准票夠且確認期間已過才成功）。這是刻意的：讀取端不必改。
-- **UI 還沒做**：待核准清單與核准／套用／撤銷按鈕沒有畫面（只有 API）；custom_fields 目前也沒有專屬編輯頁，所以今天沒有任何編輯器會碰到這個流程。
+- **S2b UI**：治理面板（`def-governance.js`）多一個「待核准變更」分頁（後端路由存在才出現）：列出全部待核准項（種類／鍵／範圍／版本／申請人／核准票數／可套用時間），核准／套用（核准票夠且期間已過才可按）／撤銷，皆畫面上兩段確認；失敗顯示伺服器原因。custom_fields 沒有專屬編輯頁，所以這個分頁是目前唯一的入口。
 
