@@ -46,6 +46,7 @@ FULL_LINT_FILES = (
     "tests/test_exception_detail_leak_2026_09_23.py", "tests/test_no_truthy_request_flags.py", "tests/test_edge_product_profile_2026_09_30.py",
     "tests/test_begin_only_via_begin_write_2026_09_25.py", "modules/case/tests/test_route_table_golden_2026_10_05.py",
     "tests/test_e2e_font_zoom_fits_viewport_2026_09_24.py",   # 靜態守門（test_fz_no_raw_vh…）：M3 的裸 90vh 只在 not_e2e 才被抓到（2026-10-13）
+    "modules/permmatrix/tests/test_permmatrix_writes_unwired.py",   # 靜態掃描：只在 not_e2e 才被抓到（MS1，2026-10-13）
 )
 FULL_LINT_WORKERS = 3
 _NOWIN = getattr(subprocess, "CREATE_NO_WINDOW", 0)                  # 背景執行不彈主控台視窗（test_no_window_guard）
