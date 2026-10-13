@@ -1,4 +1,4 @@
-# 框架化執行計劃書（範圍基線、切片、日曆、進度追蹤、風險、流程改善、待決）— T57 r8
+# 框架化執行計劃書（範圍基線、切片、日曆、進度追蹤、風險、流程改善、待決）— T57 r9
 
 > 作者 hichan-98；委託：hichan-1c（PM），使用者 2026-10-13 14:25 要求「計劃書＋執行進度，各窗口交叉核對，讓進度更穩定」。**僅文件**；延伸 `FRAMEWORK-10DAY-ROADMAP-T56.md` r21（`c96869d48`），**不取代它**：路線圖是『設計與估計的總帳』，本檔是『執行與進度的總帳』。
 > 事實來源：repo（`origin/*` 分支與 SHA）、1c 彙整的各窗口 roll-call（c7、2b、5e；5c 的閘門實測已併入 §2.5／§6.1）。**所有人日、日期都是估計，不是承諾**；凡未被第二窗口核對的狀態一律標『未核』。
@@ -71,7 +71,7 @@
 | | PM-4 財務與薪資 | 待排 | 9～12 | PM-3 | 財務查看≠編輯 |
 | | PM-5 其餘模組 | 待排 | 20～28 | PM-4 | 全模組可設 |
 | | PM-6 前端收尾 | 待排 | 4～6 | PM-5 | 畫面一致 |
-| **多單位** | **U0a** 核心遷移（core 模組 migration 9→10、`owner_unit_id` 欄位、`seq_by_entity`、`org_units`／closure／`user_units`、法律單據 `legal_entity_id` 快照欄位）＋**中央剝除 `strip_internal_cols`（序列化、匯出、`archive.py`、`table_digests` 一律不輸出新欄位）＋最小回應鍵集檢查（先在 MS1c 凍結樹（`origin/train/ms1c-int-b` `b06d7c92a`，**不是 int-a `d995e5be4`**；MS1c 套用後即正式機 commit）記錄基準，U0a 凍結條件＝與基準 diff 為空；基準檢查須有正對照〔故意不剝除的端點必須轉紅〕並涵蓋 Excel／CSV 表頭）**＋**完整回滾演練（含舊 loader 對 `core=10` 的容忍度、`verify_package`／VR7、套用步驟檔 #12 的新預期）** | **已指派（1c 10-13）：c7＝core 遷移（org_units／closure／user_units、核心表 `owner_unit_id` 與 `legal_entity_id` 快照欄位〔table-exists 守門〕、seq_by_entity）＋遷移測試，**先盤點核心表 vs 模組自有表、讀傳票／PS 計數碼**；2b＝中央 `strip_internal_cols`＋基準回應鍵集記錄器（JSON＋Excel／CSV 表頭、正對照）＋`org_units` 功能宣告（planned）；5e＝MS1d 之後支援 U0a 審查／測試＋模組自有表清單；98＝U0a 規格／步驟檔草稿＋演練腳本規格；5c＝基準執行、演練、閘門（**不寫 U0**）** | 7～9 | 0d 重審 PASS＋回滾演練通過 | 無（對使用者行為不變）；**使用者 10-13 已同意盡快** |
+| **多單位** | **U0a** 核心遷移（core 模組 migration 9→10、`owner_unit_id` 欄位、`seq_by_entity`、`org_units`／closure／`user_units`、法律單據 `legal_entity_id` 快照欄位）＋**中央剝除 `strip_internal_cols`（序列化、匯出、`archive.py`、`table_digests` 一律不輸出新欄位）＋最小回應鍵集檢查（先在 MS1c 凍結樹（`origin/train/ms1c-int-b` `b06d7c92a`，**不是 int-a `d995e5be4`**；MS1c 套用後即正式機 commit）記錄基準，U0a 凍結條件＝與基準 diff 為空；基準檢查須有正對照〔故意不剝除的端點必須轉紅〕並涵蓋 Excel／CSV 表頭）**＋**完整回滾演練（含舊 loader 對 `core=10` 的容忍度、`verify_package`／VR7、套用步驟檔 #12 的新預期）** | **已指派（1c 10-13）：c7＝core 遷移（org_units／closure／user_units、核心表 `owner_unit_id` 與 `legal_entity_id` 快照欄位〔table-exists 守門〕、seq_by_entity）＋遷移測試，**先盤點核心表 vs 模組自有表、讀傳票／PS 計數碼**；2b＝中央 `strip_internal_cols`＋基準回應鍵集記錄器（JSON＋Excel／CSV 表頭、正對照）＋`org_units` 功能宣告（planned）；5e＝MS1d 之後支援 U0a 審查／測試＋模組自有表清單；98＝U0a 規格／步驟檔草稿＋**演練腳本規格（寫成可驗收的檢查清單：舊 loader 對 `core=10`、`verify_package`／VR7、步驟檔 #12 新預期、MS1c→U0a→回滾完整流程）**；**演練腳本由 c7 依 98 的規格撰寫（與其遷移同作者，熟悉表清單），2b 協助基準記錄器部分**；5c＝基準執行、**執行**演練、閘門（**不寫 U0、不寫演練腳本**；1c 可改派）** | 7～9 | 0d 重審 PASS＋回滾演練通過 | 無（對使用者行為不變）；**使用者 10-13 已同意盡快** |
 | | **U0b** 完整回應鍵集金標（約 830 路由）＋未經範圍讀取 AST 棘輪＋模組自有表補欄 | 同 U0a（c7／2b／5e） | 2～4 | U0a | 無 |
 | | U1 單位樹＋範圍＋案件強制 | 待排 | 19～26 | U0＋PM-3 | A 分公司／B 母公司隔離 |
 | | U2 設定範圍／編號／抬頭 | 待排 | 10～14 | U1 | 各單位設定與編號 |
