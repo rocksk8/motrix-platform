@@ -234,8 +234,10 @@
         window.Alpine.store('layout', raw)
         mountPersonal()
       })
-      load()
+      if (!c.deferred) load()        // deferred：頁面先確認「這個畫面有開放自訂版面」才呼叫 start()（旗標關閉時不發任何版面請求）
     },
+    /** deferred 模式下由頁面呼叫一次：開始讀版面。 */
+    start: function () { return load() },
     personalPanel: personalPanel,
     config: function () { return cfg },
     headers: headers,
