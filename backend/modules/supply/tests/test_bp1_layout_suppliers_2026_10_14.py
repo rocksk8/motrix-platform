@@ -240,3 +240,15 @@ def test_draft_role_preview_is_opt_in_and_only_swaps_the_view():
     # 草稿只在『草稿影響得到這個角色』時才用
     assert "this.scope === 'role:' + this.previewRole" in body and "this.scope === 'company'" in body
     assert "mount: mount" in ed and "document.getElementById('ml-editor')" in ed         # 編輯器只掛一次
+
+
+def test_governance_preview_is_guarded_and_runs_before_the_publish_request():
+    """治理影響預覽（builder_governance）：只在 MotrixDefGovernance 存在且 available() 為真時才呼叫；在 publish POST 之前；
+    取消就不發布。頁面有載入 def-governance.js（沒載入＝完全略過，行為與先前相同）。"""
+    ed = EDITOR.read_text(encoding="utf-8")
+    i = ed.index("async _publish()")
+    body = ed[i:ed.index("async _restore(", i)]
+    assert body.index("MotrixDefGovernance.available()") < body.index("MotrixDefGovernance.preview(") < body.index("'/publish?scope='")
+    assert "window.MotrixDefGovernance &&" in body
+    assert re.search(r"已取消發布'; this\.busy = false; return", body)
+    assert '<script src="../js/def-governance.js"></script>' in _page()

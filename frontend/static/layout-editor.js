@@ -362,6 +362,13 @@
           this.busy = false
           return
         }
+        // 治理（builder_governance 開啟時才有）：發布前影響預覽。旗標關閉／未載入 ⇒ 完全略過，行為與先前相同。
+        if (window.MotrixDefGovernance && await window.MotrixDefGovernance.available()) {
+          var pv = await window.MotrixDefGovernance.preview({ kind: 'layout', key: this._key(), scope: this.scope })
+          if (pv.ok && pv.data && pv.data.changeCount && !confirm('這次發布會變更 ' + pv.data.changeCount + ' 項設定（影響預覽已記錄），確定要發布？')) {
+            this.msg = '已取消發布'; this.busy = false; return
+          }
+        }
         var r = await this._j(this._base() + '/publish?scope=' + encodeURIComponent(this.scope),
                               { method: 'POST', body: JSON.stringify({ note: this.note }) })
         if (!r.ok) {
