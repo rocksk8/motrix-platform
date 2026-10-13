@@ -288,3 +288,39 @@ def test_restore_pending_keeps_the_draft_and_ordinary_restore_deletes_it():
     assert not any(x.startswith("DELETE") for x in r["pendCalls"])                  # 待核准的還原：不刪草稿
     assert any(x.startswith("DELETE") and x.endswith("/draft") for x in r["okCalls"])  # 一般還原：照舊刪草稿
     assert r["state"] == "restored"
+
+
+# ── 供應商頁 ───────────────────────────────────────────────────────────────
+SUP_PAGE = source_tree.page_file("suppliers.html")
+
+
+def test_supplier_page_wiring_is_flag_guarded():
+    src = SUP_PAGE.read_text(encoding="utf-8")
+    assert '<script src="../static/custom-fields.js"></script>' in src
+    assert "MotrixCustomFields.init({ recordType: 'supplier'" in src
+    i = src.index('<div class="form-group" data-testid="cf-section"')
+    assert "$store.cf && $store.cf.enabled" in src[src.rindex("<template", 0, i):i]
+    sec = src[i:src.index('<div class="form-hint" style="color:var(--danger);margin-top:6px" x-show="formError"', i)]
+    for t in ("text", "date", "select", "checkbox"):
+        assert "f.type === '%s'" % t in sec
+    assert "number" not in sec
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_supplier_set_keeps_an_empty_object_so_a_cleared_form_sends_empty_braces():
+    """供應商是一次 PUT 整份：清空時要送 {}（伺服器才知道要清掉），而不是省略鍵（省略＝沒有要改）。"""
+    src = SUP_PAGE.read_text(encoding="utf-8")
+    i = src.index("// T61 S5：自訂欄位（供應商）。值存在 form.customFields")
+    block = src[i:src.index("blankForm() {", i)]
+    js = r"""
+const o = { form: {}, session: { role: 'superadmin' }, isDirty: false,
+  %s }
+o.cfSet('f1', '小張'); const a = JSON.stringify(o.form.customFields)
+o.cfSet('f1', ''); const b = JSON.stringify(o.form.customFields)
+o.cfSet('f4', false); const c = JSON.stringify(o.form.customFields)
+console.log(JSON.stringify({ a, b, c, dirty: o.isDirty, admin: o.cfIsAdmin(), none: o.cfGet('zz') === undefined }))
+""" % block.replace("cfIsAdmin()", "cfIsAdmin()", 1)
+    out = subprocess.run([NODE, "-e", js], capture_output=True, timeout=30)
+    assert out.returncode == 0, out.stderr.decode("utf-8", "replace")[:1500]
+    r = json.loads(out.stdout.decode("utf-8"))
+    assert r == {"a": '{"f1":"小張"}', "b": "{}", "c": "{}", "dirty": True, "admin": True, "none": True}

@@ -30,6 +30,30 @@ class SupplierIn(BaseModel):
     lead_time_days: Optional[int] = None
 
 
+def _gate_custom_fields(data, old_data):
+    """T61 S5：供應商的自訂欄位閘門（旗標 builder_custom_fields.enabled 關閉 ⇒ 不介入：送來的 customFields 不存、舊值保留）。
+    `data` 沒有 customFields 這個鍵＝沒有要改（舊頁面不知道這個欄位），帶回舊值；沒有值就不寫這個鍵。型別錯 ⇒ 400。回傳要存的 data。"""
+    from helpers import builtin_fields as _bf
+    data = dict(data or {})
+    old = (old_data or {}).get("customFields")
+    if "customFields" not in data:
+        if old:
+            data["customFields"] = old
+        return data
+    if data["customFields"] == old:
+        if not old:
+            data.pop("customFields", None)
+        return data
+    new, errors, _ignored = _bf.gate("supplier", data["customFields"], old)
+    if errors:
+        raise HTTPException(400, "自訂欄位有問題：" + "；".join(e["message"] for e in errors))
+    if new:
+        data["customFields"] = new
+    else:
+        data.pop("customFields", None)
+    return data
+
+
 @router.get("/api/suppliers")
 def list_suppliers(authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -66,6 +90,7 @@ def create_supplier(body: SupplierIn, authorization: str = Header(None)):
     # 那段是用來把 INSERT 的 IntegrityError 轉成乾淨 409 的，但它會一併吞掉
     # clean_lead_time() 丟的 422——負數前置時間會回「建立失敗」而不是說明原因。
     lead_time_days = clean_lead_time(body.lead_time_days)
+    new_data = _gate_custom_fields(body.data, None)          # 400 在 try 之外丟（不被下面的 except 吞成『建立失敗』）
     conn = get_db()
     try:
         conn.execute(
@@ -73,7 +98,7 @@ def create_supplier(body: SupplierIn, authorization: str = Header(None)):
             "created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
             (body.name.strip(), body.tax_id or '', body.phone or '',
              lead_time_days,
-             json.dumps(body.data or {}, ensure_ascii=False), now, now)
+             json.dumps(new_data, ensure_ascii=False), now, now)
         )
         conn.commit()
         sid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -99,14 +124,20 @@ def update_supplier(sid: int, body: SupplierIn, authorization: str = Header(None
     require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
     now = datetime.now().isoformat()
     conn = get_db()
-    if not conn.execute("SELECT id FROM suppliers WHERE id=?", (sid,)).fetchone():
+    _row = conn.execute("SELECT id, data_json FROM suppliers WHERE id=?", (sid,)).fetchone()
+    if not _row:
         conn.close()
         raise HTTPException(404, "供應商不存在")
+    try:
+        new_data = _gate_custom_fields(body.data, json.loads(_row["data_json"] or "{}"))
+    except HTTPException:
+        conn.close()
+        raise
     # 只有「這次真的送了 lead_time_days」才動它。沒送就保持原值——
     # 不知道有這個欄位的舊前端，不應該因為存了一次供應商就把它清掉。
     sets   = ["name=?", "tax_id=?", "phone=?", "data_json=?", "updated_at=?"]
     params = [body.name.strip(), body.tax_id or '', body.phone or '',
-              json.dumps(body.data or {}, ensure_ascii=False), now]
+              json.dumps(new_data, ensure_ascii=False), now]
     if "lead_time_days" in body.model_fields_set:
         sets.append("lead_time_days=?")
         params.append(clean_lead_time(body.lead_time_days))
