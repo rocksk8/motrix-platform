@@ -14,7 +14,7 @@ import logging
 INTERNAL_COLS = ("owner_unit_id", "unit_id", "legal_entity_id")
 _INTERNAL = frozenset(INTERNAL_COLS)
 _NEEDLES = (b"unit_id", b"legal_entity_id")                                       # owner_unit_id 與 unit_id 都含 `unit_id`
-MAX_BODY = 16 * 1024 * 1024                                                        # 緩衝上限；超過原樣通過並記錯誤（不緩衝大檔）
+_MAX_BODY = 16 * 1024 * 1024                                                        # 緩衝上限；超過原樣通過並記錯誤（不緩衝大檔）
 
 _log = logging.getLogger("motrix.internal_cols")
 
@@ -58,7 +58,7 @@ def strip_headers(columns) -> list:
 class InternalColsMiddleware:
     """純 ASGI 中介層（不是 BaseHTTPMiddleware：不吞串流、不多一層任務）。
 
-    只在 `application/json`、無 `content-encoding`、`content-length` ≤ MAX_BODY 時緩衝；快路徑＝本文裡找不到 `unit_id`／`legal_entity_id` 位元組就原樣送出，
+    只在 `application/json`、無 `content-encoding`、`content-length` ≤ _MAX_BODY 時緩衝；快路徑＝本文裡找不到 `unit_id`／`legal_entity_id` 位元組就原樣送出，
     不做 JSON 解析。命中才解析→剝除→重新序列化（與 FastAPI JSONResponse 相同的緊湊格式）→更新 content-length。解析失敗原樣送出並記錄。"""
 
     def __init__(self, app):
@@ -77,11 +77,11 @@ class InternalColsMiddleware:
                 ctype = headers.get(b"content-type", b"")
                 clen = headers.get(b"content-length")
                 if (ctype.startswith(b"application/json") and b"content-encoding" not in headers
-                        and clen is not None and clen.isdigit() and int(clen) <= MAX_BODY):
+                        and clen is not None and clen.isdigit() and int(clen) <= _MAX_BODY):
                     state["buffer"] = True
                     state["start"] = message
                     return
-                if ctype.startswith(b"application/json") and (clen is None or (clen.isdigit() and int(clen) > MAX_BODY)):
+                if ctype.startswith(b"application/json") and (clen is None or (clen.isdigit() and int(clen) > _MAX_BODY)):
                     _log.error("JSON 回應無法緩衝檢查內部欄位（無 content-length 或超過上限）：%s", scope.get("path"))
                 await send(message)
                 return

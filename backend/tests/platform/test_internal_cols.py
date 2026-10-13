@@ -93,7 +93,7 @@ def test_middleware_leaves_non_json_compressed_and_unsized_bodies_alone(kw):
 
 def test_middleware_oversize_json_is_passed_through_and_logged(monkeypatch, caplog):
     import logging
-    monkeypatch.setattr(IC, "MAX_BODY", 8)
+    monkeypatch.setattr(IC, "_MAX_BODY", 8)
     raw = b'{"owner_unit_id":1}'
     with caplog.at_level(logging.ERROR, logger="motrix.internal_cols"):
         st, h, body, _ = _run(_app([raw]))

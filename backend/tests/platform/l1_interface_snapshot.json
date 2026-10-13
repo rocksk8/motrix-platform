@@ -1489,6 +1489,15 @@
    "subscribe": "def(name, handler, subscriber)",
    "subscribers": "def(name)"
   },
+  "plat:internal_cols": {
+   "INTERNAL_COLS": "const",
+   "InternalColsMiddleware": "class",
+   "InternalColsMiddleware.__init__": "def(self, app)",
+   "is_internal": "def(name)",
+   "strip_headers": "def(columns)",
+   "strip_internal_cols": "def(obj)",
+   "strip_row": "def(row)"
+  },
   "plat:loader": {
    "ALL": "const",
    "DISABLED_REASON": "const",
