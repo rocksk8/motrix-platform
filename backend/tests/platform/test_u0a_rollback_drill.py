@@ -64,9 +64,23 @@ def _failed(res):
     return sorted(n for n, ok, _ in res if not ok)
 
 
+def test_module_version_bumps_are_allowed_only_for_the_expected_modules(pair, tmp_path):
+    _, before, after, b, _ = pair
+    cols = D.old_cols(D.snapshot(before))
+    p = tmp_path / "bump.db"
+    shutil.copyfile(after, p)
+    c = sqlite3.connect(str(p))
+    c.execute("UPDATE module_schema_versions SET version=2, applied_at='x' WHERE module='case'")
+    c.commit(); c.close()
+    s = D.snapshot(p, cols)
+    assert "其他模組的 migration 版號不變（預期前進：無）" in _failed(D.diff_upgrade(b, s, LISTS, 118, bumps={}))
+    assert not [n for n in _failed(D.diff_upgrade(b, s, LISTS, 118, bumps={"case": 2})) if n.startswith("其他模組")]
+    assert any(n.startswith("其他模組") for n in _failed(D.diff_upgrade(b, s, LISTS, 118, bumps={"case": 5})))
+
+
 def test_a_correct_additive_upgrade_passes_every_check(pair):
     _, _, _, b, a = pair
-    res = D.diff_upgrade(b, a, LISTS, 118)
+    res = D.diff_upgrade(b, a, LISTS, 118, bumps={})
     assert _failed(res) == [], [r for r in res if not r[1]]
     assert len(res) >= 15
 
