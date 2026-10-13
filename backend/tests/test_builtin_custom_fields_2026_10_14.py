@@ -455,3 +455,44 @@ def test_finance_legacy_whole_body_save_neither_writes_custom_fields_nor_gets_40
         r = client.patch("/api/quotations/%s/case-record" % qn, headers=fin, json={"case_record": body})
         assert r.status_code != 403 or "款項以外" not in r.text, (variant, r.text)
         assert _stored(qn) == {"f1": "資料庫的值"}, variant
+
+
+# ── 8. 「已用於幾筆單據」（停用欄位前的唯讀統計）──────────────────────────
+def test_usage_counts_are_read_only_flag_guarded_and_superadmin_only(client, make_user, case):
+    h, qn = case
+    _publish_def(client, h, [TEXT, SEL])
+    # 旗標關閉 ⇒ 空
+    r = client.get("/api/custom-fields/case_info/usage", headers=h)
+    assert r.status_code == 200 and r.json() == {"counts": {}, "records": 0, "recordType": "case_info", "enabled": False}
+    _flag(True)
+    assert _patch(client, h, qn, {"f1": "甲", "f2": "A"}).status_code == 200
+    before = _row_json(qn)
+    r = client.get("/api/custom-fields/case_info/usage", headers=h).json()
+    assert r["enabled"] is True and r["counts"] == {"f1": 1, "f2": 1} and r["records"] == 1
+    assert _row_json(qn) == before                                                  # 唯讀：不改任何資料
+    # 供應商
+    _publish_sup(client, h, [TEXT])
+    sid = client.post("/api/suppliers", headers=h, json={"name": "甲", "data": {"customFields": {"f1": "x"}}}).json()["id"]
+    client.post("/api/suppliers", headers=h, json={"name": "乙", "data": {}})
+    r = client.get("/api/custom-fields/supplier/usage", headers=h).json()
+    assert r["counts"] == {"f1": 1} and r["records"] == 1 and sid
+    # 只有超級管理員；未知類型 404
+    u, p = make_user("cf_adm", "Lay-Pass-123", role="admin")[:2]
+    adm = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
+    assert client.get("/api/custom-fields/case_info/usage", headers=adm).status_code == 403
+    assert client.get("/api/custom-fields/case_info/usage").status_code == 401
+    assert client.get("/api/custom-fields/nope/usage", headers=h).status_code == 404
+
+
+def test_usage_counts_ignore_bad_rows_and_unrelated_json(client, make_user, case):
+    import db
+    from helpers import builtin_fields as BF
+    h, qn = case
+    _flag(True)
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", ("not json but has \"customFields\"", qn))
+        conn.commit()
+        assert BF.usage_counts("case_info", conn) == {"counts": {}, "records": 0}
+    finally:
+        conn.close()

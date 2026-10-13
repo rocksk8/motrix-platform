@@ -324,3 +324,21 @@ console.log(JSON.stringify({ a, b, c, dirty: o.isDirty, admin: o.cfIsAdmin(), no
     assert out.returncode == 0, out.stderr.decode("utf-8", "replace")[:1500]
     r = json.loads(out.stdout.decode("utf-8"))
     assert r == {"a": '{"f1":"小張"}', "b": "{}", "c": "{}", "dirty": True, "admin": True, "none": True}
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_editor_shows_usage_and_warns_before_disabling():
+    r = _ed("""
+  c.defs = { latest: { version: 1, body: { fields: [{ key: 'f1', label: '工頭', type: 'text' }] } }, draft: null, versions: [] }
+  c.work = [{ key: 'f1', label: '工頭', type: 'text', disabled: false, help: '', optionsText: '', maxLengthText: '' }]
+  c._j = async (url) => url.indexOf('/usage') >= 0 ? { ok: true, status: 200, d: { counts: { f1: 7 }, records: 7 } } : { ok: false, status: 500, d: {} }
+  await c.loadUsage()
+  const usage = c.usage
+  c.work[0].disabled = true; c.onDisable(c.work[0])
+  const warn = c.msg
+  c._j = async () => { throw new Error('x') }
+  await c.loadUsage()
+  console.log(JSON.stringify({ usage, warn, after: c.usage }))""")
+    assert r["usage"] == {"f1": 7}
+    assert "已有 7 筆單據填了" in r["warn"] and "資料仍會保留" in r["warn"]
+    assert r["after"] == {}                                           # 讀不到 ⇒ 不顯示數字，不丟例外

@@ -2,7 +2,7 @@
 """內建畫面的自訂欄位（T61 S5；設計：docs/platform/plans/T61-S5-FIELD-CATALOG-DESIGN.md）。
 
 [單位] helper:builtin_fields    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] ALLOWED_TYPES, MAX_FIELDS, RECORD_TYPES, definition_problems, enabled, gate, public_fields
+[公開介面] ALLOWED_TYPES, MAX_FIELDS, RECORD_TYPES, definition_problems, enabled, gate, public_fields, usage_counts
 [不變式] ①旗標 `builder_custom_fields.enabled` 關閉 ⇒ `gate()` 一律回舊值（不介入任何寫入）、`public_fields()` 回空；
     ②值只放在單據 JSON 的 `customFields` 命名空間，沒有值就**不寫這個鍵**；③型別只有文字／日期／單選／勾選（沒有金額、公式、參照、必填、預設值）；
     ④停用或已不在定義裡的欄位，其值**原樣保留**（用戶端送來的改動一律忽略）；⑤任何錯誤 ⇒ 回錯誤清單，不丟例外。
@@ -31,12 +31,14 @@ _FIELD_KEYS = {"key", "label", "type", "options", "maxLength", "disabled", "help
 RECORD_TYPES = {
     "case_info": {
         "label": "案件資訊",
+        "table": "quotations", "path": ("caseRecord", "customFields"),          # 值放在哪（唯讀統計用）
         "core": ("deliveryAddress", "deliveryTerms", "contactPerson", "contactPhone", "contractNote", "startDate", "endDate",
                  "filler", "sales", "executor", "warrantyNote", "notes", "payment", "materials", "devices", "stages",
                  "contract", "roles", "projectTimeline", "materialOrders"),
     },
     "supplier": {
         "label": "供應商",
+        "table": "suppliers", "path": ("customFields",),
         "core": ("code", "name", "nameEn", "alias", "tags", "taxId", "phone", "fax", "email", "website", "address", "category",
                  "currency", "paymentTerms", "leadTimeDays", "leadTime", "active", "contacts", "visits", "note"),
     },
@@ -208,3 +210,34 @@ def gate(record_type, new_values, old_values, conn=None):
     if not errors and _bytes(out) > _MAX_JSON_BYTES:
         errors.append({"key": "", "message": "自訂欄位的內容太大（上限 %d KB）" % (_MAX_JSON_BYTES // 1024)})
     return (out or None), errors, ignored
+
+
+def usage_counts(record_type, conn=None) -> dict:
+    """唯讀統計：每個欄位 key 有幾筆單據填了值 ⇒ `{"counts": {key: n}, "records": 有任何自訂欄位值的單據數}`。
+    給編輯器在停用欄位前顯示『已有幾筆單據填了這個欄位』。不寫任何資料；只掃 JSON 裡出現 `"customFields"` 的列（LIKE 先濾，
+    不用 json_extract）；旗標關閉或單據類型不認得 ⇒ 空。永不丟例外。"""
+    out = {"counts": {}, "records": 0}
+    spec = RECORD_TYPES.get(record_type)
+    if not spec or not enabled(conn):
+        return out
+    c, own = _open(conn)
+    try:
+        # 表名來自上面的登錄（程式內常數），不是使用者輸入
+        rows = c.execute("SELECT data_json FROM %s WHERE data_json LIKE '%%\"customFields\"%%'" % spec["table"]).fetchall()
+        for r in rows:
+            try:
+                node = json.loads(r[0] or "{}")
+                for k in spec["path"]:
+                    node = node.get(k) if isinstance(node, dict) else None
+            except (TypeError, ValueError):
+                continue
+            if isinstance(node, dict) and node:
+                out["records"] += 1
+                for k in node:
+                    out["counts"][k] = out["counts"].get(k, 0) + 1
+    except Exception:                                                                    # noqa: BLE001
+        return {"counts": {}, "records": 0}
+    finally:
+        if own:
+            c.close()
+    return out

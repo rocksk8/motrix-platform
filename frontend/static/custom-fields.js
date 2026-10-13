@@ -92,13 +92,14 @@
 '    <div class="cf-row" style="margin-top:4px"><label>型別</label>' +
 '     <select data-testid="cf-type" x-model="f.type" @change="sync()" :disabled="!isNew(f)">' + typeOpts + '</select>' +
 '     <span class="cf-sub" x-show="!isNew(f)">已發布，型別不能改</span>' +
-'     <label style="margin-left:auto"><input type="checkbox" x-model="f.disabled" @change="sync()"> 停用</label>' +
+'     <label style="margin-left:auto"><input type="checkbox" x-model="f.disabled" @change="onDisable(f)"> 停用</label>' +
 '     <button type="button" class="cf-b" x-show="isNew(f)" title="移除（還沒發布過）" @click="remove(i)">移除</button></div>' +
 '    <div class="cf-row" style="margin-top:4px" x-show="f.type === \'select\'"><label>選項（一行一個）</label>' +
 '     <textarea rows="3" style="width:100%" data-testid="cf-options" x-model="f.optionsText" @input="sync()"></textarea></div>' +
 '    <div class="cf-row" style="margin-top:4px" x-show="f.type === \'text\'"><label>最多字數</label>' +
 '     <input type="text" style="max-width:70px" x-model="f.maxLengthText" @input="sync()" placeholder="200"></div>' +
 '    <div class="cf-row" style="margin-top:4px"><label>說明</label><input type="text" x-model="f.help" @input="sync()" maxlength="100" placeholder="（選填）填寫時顯示的提示"></div>' +
+'    <div class="cf-sub" data-testid="cf-usage" x-show="!isNew(f) && usage[f.key]" x-text="\'已有 \' + usage[f.key] + \' 筆單據填了這個欄位\'"></div>' +
 '    <div class="cf-prob" x-show="probs[i]" x-text="probs[i]"></div>' +
 '   </div></template>' +
 '  <div class="cf-row" style="margin-top:8px"><button type="button" class="btn btn-ghost btn-sm" data-testid="cf-add" @click="add()" :disabled="work.length >= max">＋ 新增欄位</button>' +
@@ -124,7 +125,7 @@
     return {
       open: false, busy: false, loading: false, state: 'idle', msg: '', note: '', loadError: '', max: 20,
       askBar: null, _askRes: null, defs: { draft: null, latest: null, versions: [] },
-      work: [], probs: {}, diffShown: false, diffLines: [],
+      work: [], probs: {}, diffShown: false, diffLines: [], usage: {},
 
       _key: function () { return cfg.recordType },
       _base: function () { return '/api/definitions/custom_fields/' + encodeURIComponent(this._key()) },
@@ -185,6 +186,18 @@
           return { key: f.key, label: f.label || '（未命名）', type: f.type, options: f.options, maxLength: f.maxLength, help: f.help }
         })
       },
+      // 停用前讓人知道有多少筆單據填了這個欄位（資料不會被刪，只是畫面不再顯示、也不能再改）
+      onDisable: function (f) {
+        this.sync()
+        var n = this.usage[f.key] || 0
+        if (f.disabled && n) this.msg = '「' + (f.label || f.key) + '」已有 ' + n + ' 筆單據填了；停用後畫面不再顯示、也不能再改，資料仍會保留，重新啟用就會再出現。'
+      },
+      async loadUsage() {
+        try {
+          var r = await this._j('/api/custom-fields/' + encodeURIComponent(this._key()) + '/usage')
+          this.usage = (r.ok && r.d && r.d.counts) || {}
+        } catch (e) { this.usage = {} }
+      },
       sync: function () { if (this.open) window.MotrixCustomFields.show(this._view(), 'edit', '預覽（草稿，尚未發布）') },
       add: function () {
         if (this.work.length >= this.max) return
@@ -226,6 +239,7 @@
           this.msg = r.d.draft ? '從草稿繼續' : (r.d.latest ? '從第 ' + r.d.latest.version + ' 版開始' : '還沒有欄位')
           this.loading = false
           this.sync()
+          this.loadUsage()
         } catch (e) {
           this.loadError = '讀取欄位定義失敗（' + (e && e.message || e) + '），編輯已鎖定；關閉後再打開重試'
         }
