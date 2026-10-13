@@ -87,11 +87,11 @@ def test_recognize_persists_after_reload_and_ticks_are_enabled(live_server, make
     card = page.locator(".mat-card").first
     assert "已認列採購單" in card.locator('[data-testid="mat-po-recognized"]').inner_text()
     assert card.locator('[data-testid="mat-order-oneclick"]').is_hidden()
-    boxes = card.locator('input[type="checkbox"]')
-    assert boxes.count() >= 2 and boxes.nth(0).is_checked() and boxes.nth(1).is_enabled()                    # 已申購已勾、已到料可勾
+    ordered, arrived = card.locator('[data-testid="mat-ordered"]'), card.locator('[data-testid="mat-arrived"]')
+    assert ordered.is_checked() and arrived.is_enabled()                                                       # 已申購已勾、已到料可勾
 
     card.locator('[data-testid="mat-po-arrived-on"]').fill("2026-10-13")
-    boxes.nth(1).check()
+    arrived.check()
     _wait_db(page, lambda: bool((_cr()["materials"][0].get("poLink") or {}).get("arrivedBy")), "已到料與到貨確認已存")
     pl = _cr()["materials"][0]["poLink"]
     assert pl["arrivedOn"] == "2026-10-13" and pl["arrivedBy"] == "rc_sa"

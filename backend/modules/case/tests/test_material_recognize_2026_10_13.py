@@ -237,3 +237,94 @@ def test_revoked_po_makes_the_link_stale_and_frees_coverage(W):
     assert _stored()["poLink"].get("stale") is True
     groups = {x["key"] for x in c.get("/api/quotations/%s/material-coverage" % NO, headers=h).json()["groups"]}
     assert "item:a" not in groups
+
+
+def test_deleting_a_recognized_card_needs_the_same_permission_and_is_audited(W, client, make_user, monkeypatch):
+    c, h = W
+    _mails(monkeypatch)
+    _po(c, h, [_ln("a", 3)])
+    _put(c, h, [_card(poLink={"key": "item:a"}, ordered=True), _card(id="c2")])
+    adm = _other(client, make_user)
+    r = _put(c, adm, [_card(id="c2")])                                                   # 非最高管理者把認列中的卡片從清單拿掉
+    assert "recognize_denied" in _codes(r)
+    assert _stored("c1") and _stored("c1")["poLink"]["key"] == "item:a" and _stored("c1")["ordered"]       # 卡片還在、認列還在
+    rows = _rows("SELECT detail FROM audit_log WHERE action='material.recognize_denied'")
+    assert rows and json.loads(rows[0]["detail"])["attempt"] == "remove_card"
+    r = _put(c, h, [_card(id="c2")])                                                      # 正對照：最高管理者可以，留 undo 稽核
+    assert not r.json().get("rejected") and _stored("c1") is None
+    und = _rows("SELECT detail FROM audit_log WHERE action='material.recognize_undo'")
+    assert len(und) == 1 and json.loads(und[0]["detail"])["removedWithCard"] is True
+    assert "poLink" not in (_stored("c2") or {})
+
+
+def test_system_path_never_deletes_a_recognized_card(W):
+    c, h = W
+    _po(c, h, [_ln("a", 3)])
+    _put(c, h, [_card(poLink={"key": "item:a"})])
+    cn = db.get_db()
+    try:
+        data = {"caseRecord": {"materials": []}}
+        rej = MG.enforce(cn, NO, data, actor=None)
+        cn.commit()
+    finally:
+        cn.close()
+    assert [m["id"] for m in data["caseRecord"]["materials"]] == ["c1"] and "recognize_denied" in {x["code"] for x in rej}
+
+
+def test_a_stale_claim_still_holds_the_key_so_re_approval_cannot_make_two_active_claims(W):
+    c, h = W
+    po = _po(c, h, [_ln("a", 3)])
+    _put(c, h, [_card(id="A", poLink={"key": "item:a"})])
+    _status(po["id"], "草稿")
+    _put(c, h, [_stored("A")])                                                            # A 過期
+    assert _stored("A")["poLink"].get("stale") is True
+    _status(po["id"], "已核准")                                                           # 採購單重新核准
+    r = _put(c, h, [_stored("A"), _card(id="B", poLink={"key": "item:a"})])
+    assert "bad_recognize" in _codes(r) and "poLink" not in _stored("B")                    # B 搶不到：A 還持有
+    _put(c, h, [_stored("A"), _card(id="B")])
+    active = [m for m in _cr()["materials"] if (m.get("poLink") or {}).get("key") == "item:a" and not m["poLink"].get("stale")]
+    assert [m["id"] for m in active] == ["A"]
+
+
+def test_who_may_option_two_is_limited_to_roles_that_can_edit_material_orders(W, client, make_user, monkeypatch):
+    c, h = W
+    _mails(monkeypatch)
+    _po(c, h, [_ln("a", 3)])
+    u, p = make_user(username="rc_sales", role="sales", modules=["quotation"])
+    sales = _login(client, u, p)
+    monkeypatch.setattr(MR, "_setting", lambda k, d, conn=None: {"who_may": 2}.get(k, d))
+    _put(c, sales, [_card(poLink={"key": "item:a"})])                                     # 不論端點放不放行，業務都不能認列
+    assert not (_stored() or {}).get("poLink")
+
+
+def test_two_requests_each_write_their_own_audit_row_and_rollback_leaves_no_marker(W):
+    c, h = W
+    _po(c, h, [_ln("a", 3)])
+    _put(c, h, [_card(poLink={"key": "item:a"})])
+    _put(c, h, [_card(poLink=None)])
+    _put(c, h, [_card(poLink={"key": "item:a"})])                                         # 同樣的事、另一個請求（另一條連線）⇒ 不可被去重吞掉
+    assert len(_rows("SELECT 1 FROM audit_log WHERE action='material.recognize'")) == 2
+    cn = db.get_db()
+    try:
+        cn.execute("BEGIN IMMEDIATE")
+        MG.enforce(cn, NO, {"caseRecord": {"materials": [_card(id="c9", poLink={"key": "item:a"})]}}, actor={"username": "x", "role": "superadmin"})
+        cn.rollback()
+        try:
+            left = cn.execute("SELECT COUNT(*) FROM temp._rg_seen").fetchone()[0]
+        except Exception:                                                                 # noqa: BLE001 — 表也一併回滾了
+            left = 0
+        assert left == 0
+    finally:
+        cn.close()
+
+
+def test_closed_case_change_request_cannot_carry_a_recognition(W):
+    c, h = W
+    _po(c, h, [_ln("a", 3)])
+    cn = db.get_db()
+    cn.execute("UPDATE quotations SET deal_tag='已結案', case_semi_unlocked=1 WHERE quote_no=?", (NO,))
+    cn.commit()
+    cn.close()
+    r = _put(c, h, [_card(poLink={"key": "item:a"})])
+    assert r.status_code == 409 and "認列" in r.text
+    assert not _rows("SELECT 1 FROM case_change_requests WHERE quote_no=?", NO)
