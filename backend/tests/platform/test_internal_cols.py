@@ -175,10 +175,12 @@ def sp():
     spine.restore(snap)
 
 
-def test_org_units_is_declared_planned_in_core_and_disabled(sp):
+def test_org_units_is_declared_hidden_in_core_and_disabled(sp):
+    """U1 排定前不承諾任何版本：宣告為 hidden（不顯示卡片），啟用判斷為 False。"""
     assert spine.register_core_declarations() == []
     spine.validate_all()
-    assert spine.feature_status("org_units") == "planned" and spine.declared_and_open("org_units") is False
+    assert spine.feature_status("org_units") == "hidden" and spine.declared_and_open("org_units") is False
+    assert "org_units" not in [c["code"] for c in spine.planned_cards()]
 
 
 def test_declared_and_open_is_strict_in_every_direction(sp):

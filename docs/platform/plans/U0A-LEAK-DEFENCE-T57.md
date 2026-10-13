@@ -34,7 +34,8 @@
 
 ## 4 已知缺口（非 HTTP JSON 出口，0d 2）
 `audit_log.detail` 與設定帳本快照、回收桶 `snapshot_json`／`files_manifest`（RBN12 已遮罩，需同步）、`notifications` payload、信件本文／`rows=`（`send_registered`）。U0a 目前以『整列 json.dumps 基線只准縮小』擋新增；既有 2 處與通知／稽核的明列欄位化列入下一個提交的逐處清單（strip｜keep）。
-還原相容（`archive.py` 備份還原）需雙向測試：舊備份→新結構（DEFAULT 1）、新備份→缺欄位的庫（忽略未知欄位、不崩）。
+**決定（0d M-3）**：回收桶快照（`snapshot_json`）與每日 JSON 備份**保留**單位鍵欄位——還原不可丟單位歸屬；**只有 HTTP 輸出剝除**。`archive.py` 的 JSON 備份目前沒有自動還原程式（§8.3 最後手段，人工）；真正會執行還原的是四個模組的回收桶轉接器（arap／case／payroll／subcontract），它們的『依現有欄位插入』都只放現在表裡還有的欄位，所以還原雙向相容：舊快照→新結構取 DEFAULT 1、新快照→缺欄位的庫忽略未知欄位、新快照→新結構值原樣放回。`tests/platform/test_u0a_restore.py` 逐一驗證四個轉接器。
+**demo 模式**：demo 請求走同一個 `main.app`，中介層在最外層、早於驗證與 demo 路由切換，所以不另有路徑；`test_internal_cols_middleware_is_the_last_registered_middleware` 守住這個位置。
 
 ## 5 流程
 1. 在父提交錄基準（單獨一次、約 3 分鐘）→ 2. 本分支重生 L1 快照與 CHANGELOG `(next)` → 3. 單檔測試：`test_internal_cols`、`test_u0a_sinks`、`test_response_keys_baseline`（差異必須為空）、`test_unit_cards`、L1 快照、`test_core_loader`、升級相關 → 4. U0 core 遷移（c7）後重跑基準比對，差異必須為空。
