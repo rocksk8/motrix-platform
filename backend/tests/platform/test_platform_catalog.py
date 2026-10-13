@@ -377,7 +377,9 @@ LAYOUT_NEGATIVE = [
     ("匯出換容器", {"op": "move", "target": BASE + "/export:xlsx", "to": BASE + "/menu:row"}, "[0].to"),
     ("選單換容器", {"op": "move", "target": BASE + "/menu:row", "to": BASE + "/form:doc"}, "[0].to"),
     ("側欄換群組", {"op": "move", "target": BASE + "/sidebar", "to": BASE + "/list:docs"}, "[0].to"),
-    ("側欄改名", {"op": "relabel", "target": BASE + "/sidebar", "label": "X"}, "[0].op"),
+    # BP-1：側欄可以改名（旗標 builder_menu.enabled 另管）；含標記字元／太長仍然拒絕
+    ("側欄改名含標記", {"op": "relabel", "target": BASE + "/sidebar", "label": "<b>X</b>"}, "[0].label"),
+    ("側欄改名太長", {"op": "relabel", "target": BASE + "/sidebar", "label": "X" * 21}, "[0].label"),
     ("index 為負", {"op": "move", "target": BASE + "/sidebar", "index": -1}, "[0].index"),
     # P-S2：不認得的鍵
     ("不認得的鍵", {"op": "hide", "target": BASE + "/action:save", "evil": 1}, "[0].evil"),

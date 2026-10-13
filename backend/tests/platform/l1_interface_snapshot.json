@@ -1,5 +1,5 @@
 {
- "core_version": "1.134",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1438,9 +1438,11 @@
    "OP_KEYS": "const",
    "PAGE_KINDS": "const",
    "SCHEMA_VERSIONS": "const",
+   "SIDEBAR_LABEL_MAX": "const",
    "core_fields": "def(manifest)",
    "endpoint_parts": "def(spec)",
    "require_valid": "def(manifest)",
+   "sidebar_label_problem": "def(label)",
    "validate_manifest": "def(manifest)"
   },
   "plat:definitions": {
@@ -1516,6 +1518,7 @@
    "ITEM_KEYS": "const",
    "MENU_L1": "const",
    "apply_layout": "def(groups, ops)",
+   "apply_layout_ex": "def(groups, ops, builder=…)",
    "build": "def(l1, mod_items, modules, superadmin)",
    "check_l1_pages": "def(l1, module_pages)",
    "declaration": "def(l1, mod_items)",
