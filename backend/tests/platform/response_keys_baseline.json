@@ -798,6 +798,32 @@
   ],
   "s": 200
  },
+ "/api/bank-accounts/{user_id}": {
+  "k": [
+   "account",
+   "account.status",
+   "canEdit",
+   "user",
+   "user.displayName",
+   "user.id",
+   "user.username"
+  ],
+  "s": 200
+ },
+ "/api/bank-accounts/{user_id}/history": {
+  "k": [
+   "history",
+   "history[].accountName",
+   "history[].active",
+   "history[].bankCode",
+   "history[].bankName",
+   "history[].createdAt",
+   "history[].createdBy",
+   "history[].last4",
+   "history[].replacedAt"
+  ],
+  "s": 200
+ },
  "/api/bonus/awards": {
   "k": [
    "awards",
@@ -851,6 +877,118 @@
   ],
   "s": 200
  },
+ "/api/bonus/awards/plan/{quote_no}": {
+  "k": [
+   "active_award_id",
+   "base",
+   "base.amount",
+   "base.error",
+   "base.ok",
+   "display_names",
+   "has_active_award",
+   "items",
+   "items[].bonus_item_id",
+   "items[].name",
+   "items[].note",
+   "items[].ok",
+   "items[].people",
+   "items[].person_source",
+   "pct_full",
+   "pct_unit",
+   "quote_no",
+   "settlement",
+   "settlement.adminCost",
+   "settlement.charityDonation",
+   "settlement.dispatchTotal",
+   "settlement.extraTotal",
+   "settlement.grossMarginPct",
+   "settlement.grossProfit",
+   "settlement.itemActualTotal",
+   "settlement.netMarginPct",
+   "settlement.netProfit",
+   "settlement.quotedPretax",
+   "settlement.quotedTotal",
+   "settlement.totalActualCost"
+  ],
+  "s": 200
+ },
+ "/api/bonus/awards/{award_id}": {
+  "k": [
+   "approval_json",
+   "base_amount",
+   "base_source",
+   "can_recall",
+   "created_at",
+   "created_by",
+   "customer_name",
+   "id",
+   "last_reject",
+   "lines",
+   "lines[].amount",
+   "lines[].award_id",
+   "lines[].bonus_item_id",
+   "lines[].displayName",
+   "lines[].id",
+   "lines[].item_name_snapshot",
+   "lines[].manual_basis",
+   "lines[].person_pct",
+   "lines[].person_source_snapshot",
+   "lines[].total_pct",
+   "lines[].username",
+   "paid_manually_at",
+   "paid_manually_by",
+   "paid_manually_reason",
+   "project_name",
+   "quote_no",
+   "settlement",
+   "settlement.adminCost",
+   "settlement.charityDonation",
+   "settlement.dispatchTotal",
+   "settlement.extraTotal",
+   "settlement.grossMarginPct",
+   "settlement.grossProfit",
+   "settlement.itemActualTotal",
+   "settlement.netMarginPct",
+   "settlement.netProfit",
+   "settlement.quotedPretax",
+   "settlement.quotedTotal",
+   "settlement.totalActualCost",
+   "signatures",
+   "signatures.製表",
+   "signatures.製表.at",
+   "signatures.製表.by",
+   "status",
+   "supersedes_id",
+   "template_id",
+   "template_version",
+   "updated_at",
+   "visible_total",
+   "void_reason",
+   "voided_at",
+   "voided_by",
+   "voucher_no_accrual",
+   "voucher_no_payment"
+  ],
+  "s": 200
+ },
+ "/api/bonus/awards/{award_id}/pdf-download": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "/api/bonus/awards/{award_id}/preview": {
+  "s": 200
+ },
+ "/api/bonus/base/{quote_no}": {
+  "k": [
+   "base_amount",
+   "error",
+   "ok",
+   "quote_no"
+  ],
+  "s": 200
+ },
  "/api/bonus/cases": {
   "k": [
    "items"
@@ -885,6 +1023,9 @@
   ],
   "s": 200
  },
+ "/api/bonus/cases/{quote_no}": {
+  "s": 0
+ },
  "/api/bonus/corrections": {
   "k": [
    "items",
@@ -905,6 +1046,52 @@
    "items[].status",
    "items[].supplement_total",
    "items[].voucher_notice"
+  ],
+  "s": 200
+ },
+ "/api/bonus/corrections/current/{quote_no}": {
+  "k": [
+   "awardStatus",
+   "canCreate",
+   "open",
+   "open.corr_no",
+   "open.status",
+   "people",
+   "quoteNo"
+  ],
+  "s": 200
+ },
+ "/api/bonus/corrections/{corr_no}": {
+  "k": [
+   "approval",
+   "approval.currentTier",
+   "approval.requestedBy",
+   "approval.tiers",
+   "approved_at",
+   "approved_by",
+   "clawback_total",
+   "corr_no",
+   "created_at",
+   "created_by",
+   "deductionNotice",
+   "deductions",
+   "delta",
+   "lines",
+   "log",
+   "log[].action",
+   "log[].changed_at",
+   "log[].changed_by",
+   "log[].detail_json",
+   "new_total",
+   "old_total",
+   "paid_at",
+   "paid_by",
+   "quote_no",
+   "reason",
+   "status",
+   "supplement_total",
+   "voucher_notice",
+   "vouchers"
   ],
   "s": 200
  },
@@ -965,6 +1152,24 @@
    "reload",
    "stale",
    "started_at"
+  ],
+  "s": 200
+ },
+ "/api/case-changes/{change_id}": {
+  "k": [
+   "action_type",
+   "decided_at",
+   "decided_by",
+   "id",
+   "payload_json",
+   "quote_no",
+   "reject_reason",
+   "requested_at",
+   "requested_by",
+   "requested_by_display",
+   "staged_files_json",
+   "status",
+   "summary"
   ],
   "s": 200
  },
@@ -1036,6 +1241,18 @@
   ],
   "s": 200
  },
+ "/api/cashier/pending-payables/{source}/{key}/files/{file_id}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/cashier/pending-payables/{source}/{key}/payee-bank": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/cashier/receivable-queue": {
   "k": [],
   "s": 200
@@ -1054,6 +1271,12 @@
    "detail"
   ],
   "s": 422
+ },
+ "/api/company/tax/{tax_id}": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
  },
  "/api/completion-notes": {
   "k": [
@@ -1114,6 +1337,70 @@
   ],
   "s": 422
  },
+ "/api/completion-notes/{note_no}": {
+  "k": [
+   "approval",
+   "completionDate",
+   "contactPhone",
+   "createdAt",
+   "createdBy",
+   "customerName",
+   "exportCount",
+   "exportLog",
+   "id",
+   "isSigned",
+   "itemCount",
+   "items",
+   "labelOverrides",
+   "labels",
+   "labels.itemColumn",
+   "labels.managerLabel",
+   "labels.sectionCustomer",
+   "labels.sectionItems",
+   "labels.sectionPending",
+   "labels.sectionPeriod",
+   "labels.sectionSummary",
+   "labels.sectionTest",
+   "labels.signOwner",
+   "labels.signVendor",
+   "labels.siteLabel",
+   "noteNo",
+   "notes",
+   "pendingItems",
+   "projectName",
+   "quoteNo",
+   "quoteSync",
+   "recipient",
+   "showWarranty",
+   "signedAt",
+   "signedBy",
+   "signedFiles",
+   "signedLog",
+   "siteAddress",
+   "siteManager",
+   "startDate",
+   "status",
+   "testResult",
+   "unfinishedCount",
+   "updatedAt",
+   "warrantyEnd",
+   "warrantyMonths",
+   "warrantyStart",
+   "workSummary"
+  ],
+  "s": 200
+ },
+ "/api/completion-notes/{note_no}/pdf-download": {
+  "ct": "application/pdf",
+  "hdr": [],
+  "s": 200
+ },
+ "/api/completion-notes/{note_no}/privacy-notice": {
+  "k": [
+   "acks"
+  ],
+  "s": 200
+ },
  "/api/contractor-dispatches": {
   "k": [
    "[].acceptedAt",
@@ -1157,6 +1444,73 @@
    "[].updatedAt",
    "[].vendorId",
    "[].vendorName"
+  ],
+  "s": 200
+ },
+ "/api/contractor-dispatches/{did}": {
+  "k": [
+   "acceptedAt",
+   "acceptedBy",
+   "approvalStatus",
+   "approvedAt",
+   "cancelReason",
+   "completionApprovedAt",
+   "completionRequestedAt",
+   "completionRequestedBy",
+   "completionStatus",
+   "createdAt",
+   "createdBy",
+   "dispatchDate",
+   "displayStatus",
+   "docCode",
+   "files",
+   "grandTotal",
+   "id",
+   "invoiceDate",
+   "invoiceFiles",
+   "invoiceNo",
+   "items",
+   "legacy",
+   "legacyModified",
+   "legacyModifiedAt",
+   "notes",
+   "payableDate",
+   "personnel",
+   "personnelTotal",
+   "quoteNo",
+   "scope",
+   "status",
+   "statusLabel",
+   "submittedAt",
+   "submittedBy",
+   "taxAmount",
+   "taxRate",
+   "totalAmount",
+   "totalWithTax",
+   "updatedAt",
+   "vendorId",
+   "vendorName"
+  ],
+  "s": 200
+ },
+ "/api/contractor-dispatches/{did}/payslip-links": {
+  "k": [
+   "available",
+   "byPerson",
+   "canEdit",
+   "canOpen",
+   "items",
+   "items[].contractorName",
+   "items[].dispatchId",
+   "items[].linkedAt",
+   "items[].linkedBy",
+   "items[].note",
+   "items[].slipDate",
+   "items[].slipNo",
+   "items[].status",
+   "items[].voided",
+   "notice",
+   "unconfirmedCount"
   ],
   "s": 200
  },
@@ -1233,6 +1587,69 @@
   ],
   "s": 200
  },
+ "/api/contractor-vouchers/{voucher_no}": {
+  "k": [
+   "approval",
+   "bankAccountName",
+   "bankAccountNumber",
+   "bankPassbookImage",
+   "createdAt",
+   "createdBy",
+   "dispatchId",
+   "exportCount",
+   "exportLog",
+   "grandTotal",
+   "id",
+   "invDate",
+   "invNo",
+   "invoiceFiles",
+   "isPaid",
+   "kind",
+   "kindName",
+   "paidAt",
+   "paidBankAccountCode",
+   "paidBankAccountName",
+   "paidBy",
+   "paidLog",
+   "payableAmount",
+   "payableDate",
+   "plannedPayDate",
+   "pretaxAmount",
+   "quoteNo",
+   "ratio",
+   "remitActual",
+   "remitDiff",
+   "remitFee",
+   "remitReview",
+   "remitReviewAt",
+   "remitReviewBy",
+   "remitReviewNote",
+   "seq",
+   "snapshot",
+   "status",
+   "updatedAt",
+   "vendorId",
+   "vendorName",
+   "voidReason",
+   "voidedAt",
+   "voucherNo"
+  ],
+  "s": 200
+ },
+ "/api/contractor-vouchers/{voucher_no}/pdf-download": {
+  "ct": "application/pdf",
+  "hdr": [],
+  "s": 200
+ },
+ "/api/contractor-vouchers/{voucher_no}/personnel-links": {
+  "k": [
+   "canPay",
+   "lines",
+   "providerAvailable",
+   "required"
+  ],
+  "s": 200
+ },
  "/api/contractors": {
   "k": [
    "[].active",
@@ -1276,6 +1693,49 @@
    "[].id",
    "[].name",
    "[].phone"
+  ],
+  "s": 200
+ },
+ "/api/contractors/{cid}": {
+  "k": [
+   "active",
+   "address",
+   "bank_account_name",
+   "bank_account_number",
+   "bank_branch",
+   "bank_code",
+   "bank_name",
+   "bank_passbook_image",
+   "created_at",
+   "email",
+   "has_id_card",
+   "has_passbook",
+   "has_union_insurance",
+   "id",
+   "id_card_image",
+   "id_card_image_back",
+   "id_number",
+   "line_id",
+   "name",
+   "nationality",
+   "notes",
+   "phone",
+   "updated_at"
+  ],
+  "s": 200
+ },
+ "/api/contractors/{cid}/id-card": {
+  "k": [
+   "bank_passbook",
+   "image_back",
+   "image_data",
+   "image_front"
+  ],
+  "s": 200
+ },
+ "/api/contractors/{cid}/privacy-notice": {
+  "k": [
+   "ack"
   ],
   "s": 200
  },
@@ -1757,6 +2217,18 @@
   ],
   "s": 200
  },
+ "/api/custom-modules/finance/case/{case_no}": {
+  "k": [
+   "expense",
+   "expense.items",
+   "expense.total",
+   "income",
+   "income.items",
+   "income.skippedTotal",
+   "income.total"
+  ],
+  "s": 200
+ },
  "/api/custom-modules/finance/summary": {
   "k": [
    "dupSkipped",
@@ -1765,6 +2237,66 @@
    "undated.income"
   ],
   "s": 200
+ },
+ "/api/custom-modules/templates/{tkey}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/custom-modules/{key}/definition/review": {
+  "k": [
+   "history",
+   "open",
+   "reviewEnabled"
+  ],
+  "s": 200
+ },
+ "/api/custom/{key}/meta": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/custom/{key}/records": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/custom/{key}/records/{record_no}": {
+  "k": [
+   "detail",
+   "problems"
+  ],
+  "s": 404
+ },
+ "/api/custom/{key}/records/{record_no}/output": {
+  "k": [
+   "detail",
+   "problems"
+  ],
+  "s": 404
+ },
+ "/api/custom/{key}/records/{record_no}/revisions": {
+  "k": [
+   "detail",
+   "problems"
+  ],
+  "s": 404
+ },
+ "/api/custom/{key}/records/{record_no}/revisions/diff": {
+  "k": [
+   "detail",
+   "problems"
+  ],
+  "s": 404
+ },
+ "/api/custom/{key}/ref-options/{field}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
  },
  "/api/customers": {
   "k": [
@@ -1775,6 +2307,24 @@
    "[].phone",
    "[].taxId",
    "[].updatedAt"
+  ],
+  "s": 200
+ },
+ "/api/customers/{cid}": {
+  "k": [
+   "code",
+   "createdAt",
+   "id",
+   "name",
+   "phone",
+   "taxId",
+   "updatedAt"
+  ],
+  "s": 200
+ },
+ "/api/customers/{cid}/privacy-notice": {
+  "k": [
+   "acks"
   ],
   "s": 200
  },
@@ -1805,6 +2355,50 @@
    "items[].updated_at"
   ],
   "s": 200
+ },
+ "/api/daily-tasks/{task_id}": {
+  "k": [
+   "assigned_to",
+   "assignees",
+   "case_no",
+   "category",
+   "completions",
+   "created_at",
+   "created_by",
+   "description",
+   "display_date",
+   "id",
+   "is_deleted",
+   "occurrence_date",
+   "priority",
+   "recurrence_days",
+   "recurrence_end_date",
+   "recurrence_label",
+   "recurrence_type",
+   "supervisors",
+   "supervisors_info",
+   "task_date",
+   "title",
+   "updated_at"
+  ],
+  "s": 200
+ },
+ "/api/daily-tasks/{task_id}/edit-log": {
+  "k": [
+   "items",
+   "items[].changedAt",
+   "items[].changedBy",
+   "items[].changedByDisplay",
+   "items[].changes",
+   "items[].id"
+  ],
+  "s": 200
+ },
+ "/api/daily-tasks/{task_id}/history": {
+  "s": 0
+ },
+ "/api/daily-tasks/{task_id}/history/export": {
+  "s": 0
  },
  "/api/dashboard/activity-feed": {
   "k": [
@@ -1925,6 +2519,46 @@
   ],
   "s": 200
  },
+ "/api/definitions/{kind}": {
+  "k": [
+   "detail",
+   "problems"
+  ],
+  "s": 400
+ },
+ "/api/definitions/{kind}/{key}": {
+  "k": [
+   "detail",
+   "problems"
+  ],
+  "s": 400
+ },
+ "/api/definitions/{kind}/{key}/default": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "/api/definitions/{kind}/{key}/diff": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "/api/definitions/{kind}/{key}/resolve": {
+  "k": [
+   "detail",
+   "problems"
+  ],
+  "s": 400
+ },
+ "/api/definitions/{kind}/{key}/versions/{version}": {
+  "k": [
+   "detail",
+   "problems"
+  ],
+  "s": 400
+ },
  "/api/dev-cases": {
   "k": [
    "[].caseName",
@@ -1950,6 +2584,56 @@
    "[].salesPersonNames",
    "[].status",
    "[].updatedAt"
+  ],
+  "s": 200
+ },
+ "/api/dev-cases/{case_id}": {
+  "k": [
+   "caseName",
+   "convertedQuoteNo",
+   "createdAt",
+   "createdBy",
+   "customerId",
+   "customerName",
+   "deleteReason",
+   "deleteRequestedAt",
+   "deleteRequestedBy",
+   "id",
+   "pendingDelete",
+   "pendingRelink",
+   "plannerIds",
+   "plannerNames",
+   "referrer",
+   "relinkReason",
+   "relinkRequestedAt",
+   "relinkRequestedBy",
+   "relinkTargetQuoteNo",
+   "salesPersonIds",
+   "salesPersonNames",
+   "status",
+   "updatedAt"
+  ],
+  "s": 200
+ },
+ "/api/dev-cases/{case_id}/logs": {
+  "k": [
+   "[].approvedAt",
+   "[].approvedById",
+   "[].approvedByName",
+   "[].caseId",
+   "[].channel",
+   "[].content",
+   "[].createdAt",
+   "[].createdById",
+   "[].createdByName",
+   "[].files",
+   "[].id",
+   "[].logById",
+   "[].logByName",
+   "[].logDate",
+   "[].needsApproval",
+   "[].nextAction",
+   "[].statusSnapshot"
   ],
   "s": 200
  },
@@ -2058,6 +2742,12 @@
   ],
   "s": 200
  },
+ "/api/expense-types/{code}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/extra-expenses/cases": {
   "k": [
    "[].customerName",
@@ -2118,6 +2808,12 @@
    "name"
   ],
   "s": 200
+ },
+ "/api/inventory/batches/{batch_no}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
  },
  "/api/inventory/parts-summary": {
   "k": [
@@ -2203,6 +2899,44 @@
   ],
   "s": 422
  },
+ "/api/invoice-vouchers/{voucher_no}": {
+  "k": [
+   "amount",
+   "approval",
+   "createdAt",
+   "createdBy",
+   "customerName",
+   "exportCount",
+   "exportLog",
+   "id",
+   "issuedFiles",
+   "pretaxAmount",
+   "quoteNo",
+   "scope",
+   "selectedItems",
+   "snapshot",
+   "status",
+   "taxAmount",
+   "taxBasis",
+   "taxNote",
+   "taxType",
+   "totalAmount",
+   "updatedAt",
+   "voucherNo"
+  ],
+  "s": 200
+ },
+ "/api/invoice-vouchers/{voucher_no}/pdf-download": {
+  "ct": "application/pdf",
+  "hdr": [],
+  "s": 200
+ },
+ "/api/layout/{module_key}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/ledger/accounts": {
   "s": 0
  },
@@ -2224,6 +2958,25 @@
    "requests[].result",
    "requests[].status",
    "requests[].status_label"
+  ],
+  "s": 200
+ },
+ "/api/ledger/action-requests/{request_id}": {
+  "k": [
+   "action",
+   "decided_at",
+   "decided_by",
+   "decision_note",
+   "id",
+   "label",
+   "params",
+   "request_no",
+   "requested_at",
+   "requested_by",
+   "requested_by_display",
+   "result",
+   "status",
+   "status_label"
   ],
   "s": 200
  },
@@ -2353,6 +3106,15 @@
   ],
   "s": 200
  },
+ "/api/ledger/periods/{period_id}/checklist": {
+  "k": [
+   "blockers",
+   "counts",
+   "counts.草稿",
+   "warnings"
+  ],
+  "s": 200
+ },
  "/api/ledger/setup-check": {
   "s": 0
  },
@@ -2440,6 +3202,18 @@
   ],
   "s": 200
  },
+ "/api/ledger/years/{year}/closing/preview": {
+  "s": 0
+ },
+ "/api/ledger/years/{year}/statements": {
+  "s": 0
+ },
+ "/api/ledger/years/{year}/statements/export": {
+  "s": 0
+ },
+ "/api/ledger/years/{year}/statements/export/pdf": {
+  "s": 0
+ },
  "/api/legal-params/privacy-notice": {
   "k": [
    "company",
@@ -2451,6 +3225,12 @@
    "text"
   ],
   "s": 200
+ },
+ "/api/legal-params/privacy-notice/texts/{notice_hash}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
  },
  "/api/legal-params/tax-basis-options": {
   "k": [
@@ -2528,6 +3308,14 @@
   ],
   "s": 200
  },
+ "/api/list-prefs/{list_key}": {
+  "k": [
+   "customOrder",
+   "sortDir",
+   "sortMode"
+  ],
+  "s": 200
+ },
  "/api/lodging/compare": {
   "k": [
    "detail"
@@ -2561,6 +3349,70 @@
    "records[].radiusM",
    "records[].resultCount",
    "records[].sort"
+  ],
+  "s": 200
+ },
+ "/api/lodging/records/{rid}": {
+  "k": [
+   "attribution",
+   "items",
+   "items[].address",
+   "items[].class",
+   "items[].classLabel",
+   "items[].distanceM",
+   "items[].kind",
+   "items[].lat",
+   "items[].latestQuote",
+   "items[].latestQuote.channel",
+   "items[].latestQuote.channelLabel",
+   "items[].latestQuote.enteredAt",
+   "items[].latestQuote.enteredBy",
+   "items[].latestQuote.id",
+   "items[].latestQuote.includes",
+   "items[].latestQuote.note",
+   "items[].latestQuote.price",
+   "items[].latestQuote.priceKind",
+   "items[].latestQuote.quotedOn",
+   "items[].latestQuote.roomType",
+   "items[].latestQuote.unit",
+   "items[].latestQuote.unitLabel",
+   "items[].licenseNo",
+   "items[].lng",
+   "items[].name",
+   "items[].priceHigh",
+   "items[].priceKind",
+   "items[].priceLow",
+   "items[].priceRegisteredAt",
+   "items[].priceSuspect",
+   "items[].roomInfo",
+   "items[].source",
+   "items[].sourceId",
+   "record",
+   "record.centerKind",
+   "record.centerLabel",
+   "record.centerLat",
+   "record.centerLng",
+   "record.centerPrecision",
+   "record.centerSource",
+   "record.createdAt",
+   "record.createdBy",
+   "record.datasetUpdatedAt",
+   "record.googleCenter",
+   "record.googleCenterNote",
+   "record.id",
+   "record.kinds",
+   "record.note",
+   "record.radiusM",
+   "record.resultCount",
+   "record.sort"
+  ],
+  "s": 200
+ },
+ "/api/lodging/records/{rid}/export": {
+  "ct": "text/csv",
+  "hdr": [
+   "資料來源",
+   "交通部觀光署 年份不明 旅館民宿 - 觀光資訊資料庫（觀光資料標準 V2.1）　此開放資料依政府資料開放授權條款 (Open Government Data License) 進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。　政府資料開放授權條款：https://data.gov.tw/license"
   ],
   "s": 200
  },
@@ -2642,6 +3494,12 @@
   ],
   "s": 422
  },
+ "/api/material-payments/{pid}/privacy-notice": {
+  "k": [
+   "ack"
+  ],
+  "s": 200
+ },
  "/api/material-suppliers": {
   "k": [
    "suppliers",
@@ -2711,6 +3569,52 @@
    "[].status",
    "[].updatedAt",
    "[].updatedBy"
+  ],
+  "s": 200
+ },
+ "/api/network-plans/{plan_id}": {
+  "k": [
+   "contactName",
+   "contactPhone",
+   "createdAt",
+   "createdBy",
+   "data",
+   "id",
+   "planNo",
+   "quoteNo",
+   "siteName",
+   "status",
+   "updatedAt",
+   "updatedBy"
+  ],
+  "s": 200
+ },
+ "/api/network-plans/{plan_id}/export/excel": {
+  "ct": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "hdr": [
+   "封面|網路架構規劃書",
+   "WAN 對外線路|ISP,線路類型,上行頻寬,下行頻寬,固定 IP,遮罩,Gateway,DNS1,DNS2,合約編號,狀態,備註",
+   "設備清單|項次,設備名稱,類別,型號,位置,管理 IP,管理 VLAN,角色／用途,MAC,階段,狀態,備註",
+   "VLAN 規劃|VLAN ID,名稱,中文名稱,Purpose,網段 CIDR,Gateway,DHCP 模式,DHCP 起始,DHCP 結束,DNS,用途,使用單位／樓層,階段,狀態,備註",
+   "IP 位址配置|項次,主機／設備,IP,標籤名稱,開放埠,VLAN,遮罩,Gateway,配發方式,MAC,OS／韌體,用途,狀態,備註",
+   "Port Profile 定義|Profile 名稱,Native VLAN,Native VLAN 名稱,Tagged VLAN,PoE 模式,用途說明,套用對象,狀態,備註",
+   "交換器 Port 對應|設備,位置,管理 IP,埠號,埠類型,連接對象／端點,Port Profile,Native VLAN,Tagged VLAN,PoE,配線標籤,端點位置,狀態,備註",
+   "防火牆規則|優先權,規則名稱,類型,動作,協定,來源,目的,目的 Port,啟用,備註",
+   "IP-Port 群組|類別,群組名稱,成員（IP／網段／Port）,用途,被哪些規則引用,狀態,備註",
+   "無線 SSID|編號,SSID,Profile 名稱,VLAN,加密方式,密碼／認證,頻段,AP 群組,下載限速,上傳限速,用戶端隔離,漫遊(11r),狀態,備註",
+   "線路與幹線|編號,路段,起點設備／埠,終點設備／埠,介質,規格,概估長度,標籤編號,路由路徑,狀態,備註",
+   "修訂紀錄|版本,日期,修改人,說明"
+  ],
+  "s": 200
+ },
+ "/api/network-plans/{plan_id}/export/pdf": {
+  "ct": "application/pdf",
+  "hdr": [],
+  "s": 200
+ },
+ "/api/network-plans/{plan_id}/privacy-notice": {
+  "k": [
+   "acks"
   ],
   "s": 200
  },
@@ -2845,6 +3749,43 @@
   ],
   "s": 422
  },
+ "/api/payment-requests/{request_no}": {
+  "k": [
+   "amount",
+   "approval",
+   "createdAt",
+   "createdBy",
+   "customerName",
+   "exportCount",
+   "exportLog",
+   "id",
+   "pretaxAmount",
+   "quoteNo",
+   "ratioPct",
+   "requestNo",
+   "scope",
+   "selectedItems",
+   "snapshot",
+   "stage",
+   "stageLabel",
+   "status",
+   "taxAmount",
+   "terms",
+   "totalAmount",
+   "updatedAt"
+  ],
+  "s": 200
+ },
+ "/api/payment-requests/{request_no}/pdf-download": {
+  "k": [
+   "canFix",
+   "code",
+   "detail",
+   "missing",
+   "settingsUrl"
+  ],
+  "s": 428
+ },
  "/api/payslip-person-dispatches": {
   "k": [
    "detail"
@@ -2894,6 +3835,93 @@
    "total"
   ],
   "s": 200
+ },
+ "/api/payslips/{slip_no}": {
+  "k": [
+   "approval_json",
+   "approved_at",
+   "approved_by",
+   "bankMasked",
+   "contractor_guess_id",
+   "contractor_id",
+   "contractor_name",
+   "created_at",
+   "created_by",
+   "data",
+   "export_count",
+   "export_log",
+   "gross_amount",
+   "id",
+   "income_type",
+   "net_amount",
+   "nhi_supplement",
+   "paid_at",
+   "paid_by",
+   "payment_date",
+   "payment_method",
+   "planned_pay_date",
+   "signed_at",
+   "signed_by",
+   "signed_files_json",
+   "slip_date",
+   "slip_no",
+   "status",
+   "tax_rules_version",
+   "tax_withheld",
+   "updated_at",
+   "void_reason",
+   "voided_at",
+   "voided_by",
+   "voucher_no"
+  ],
+  "s": 200
+ },
+ "/api/payslips/{slip_no}/approval-reveal": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "/api/payslips/{slip_no}/archive/{idx}": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "/api/payslips/{slip_no}/dispatch-links": {
+  "k": [
+   "items",
+   "items[].contractorName",
+   "items[].dispatch",
+   "items[].dispatch.dispatchDate",
+   "items[].dispatch.docCode",
+   "items[].dispatch.id",
+   "items[].dispatch.personnelIds",
+   "items[].dispatch.quoteNo",
+   "items[].dispatch.status",
+   "items[].dispatch.vendorName",
+   "items[].dispatchId",
+   "items[].linkedAt",
+   "items[].linkedBy",
+   "items[].note",
+   "items[].slipDate",
+   "items[].slipNo",
+   "items[].status",
+   "items[].voided",
+   "notice"
+  ],
+  "s": 200
+ },
+ "/api/payslips/{slip_no}/pdf-download": {
+  "ct": "application/pdf",
+  "hdr": [],
+  "s": 200
+ },
+ "/api/payslips/{slip_no}/signed-files/{file_id}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
  },
  "/api/permmatrix/status": {
   "k": [
@@ -3294,6 +4322,845 @@
   ],
   "s": 200
  },
+ "/api/quotations/{quote_no}": {
+  "k": [
+   "assigned_user_ids",
+   "case_semi_unlocked",
+   "case_semi_unlocked_at",
+   "case_semi_unlocked_by",
+   "cashierReadOnly",
+   "created_at",
+   "created_by",
+   "customer_name",
+   "data",
+   "data.status",
+   "deal_tag",
+   "direct_margin_pct",
+   "export_count",
+   "export_log",
+   "id",
+   "is_signed",
+   "locationId",
+   "location_id",
+   "net_margin_pct",
+   "pretax",
+   "project_name",
+   "quote_date",
+   "quote_no",
+   "sales_person",
+   "sales_person_id",
+   "settle_status",
+   "signed_at",
+   "signed_by",
+   "signed_files",
+   "signed_log",
+   "status",
+   "total",
+   "updated_at",
+   "valid_days"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/action-items": {
+  "k": [
+   "items",
+   "items[].canApproveBiz",
+   "items[].canApproveEng",
+   "items[].createdAt",
+   "items[].createdBy",
+   "items[].id",
+   "items[].quoteNo",
+   "items[].sortOrder",
+   "items[].stage1Approver",
+   "items[].stage1At",
+   "items[].stage2Approver",
+   "items[].stage2At",
+   "items[].status",
+   "items[].text",
+   "items[].updatedAt"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/case-bundle": {
+  "k": [
+   "parts",
+   "parts.completionNotes",
+   "parts.completionNotes.data",
+   "parts.completionNotes.data.items",
+   "parts.completionNotes.data.items[].approval",
+   "parts.completionNotes.data.items[].completionDate",
+   "parts.completionNotes.data.items[].contactPhone",
+   "parts.completionNotes.data.items[].createdAt",
+   "parts.completionNotes.data.items[].createdBy",
+   "parts.completionNotes.data.items[].customerName",
+   "parts.completionNotes.data.items[].exportCount",
+   "parts.completionNotes.data.items[].exportLog",
+   "parts.completionNotes.data.items[].id",
+   "parts.completionNotes.data.items[].isSigned",
+   "parts.completionNotes.data.items[].itemCount",
+   "parts.completionNotes.data.items[].labelOverrides",
+   "parts.completionNotes.data.items[].labels",
+   "parts.completionNotes.data.items[].labels.itemColumn",
+   "parts.completionNotes.data.items[].labels.managerLabel",
+   "parts.completionNotes.data.items[].labels.sectionCustomer",
+   "parts.completionNotes.data.items[].labels.sectionItems",
+   "parts.completionNotes.data.items[].labels.sectionPending",
+   "parts.completionNotes.data.items[].labels.sectionPeriod",
+   "parts.completionNotes.data.items[].labels.sectionSummary",
+   "parts.completionNotes.data.items[].labels.sectionTest",
+   "parts.completionNotes.data.items[].labels.signOwner",
+   "parts.completionNotes.data.items[].labels.signVendor",
+   "parts.completionNotes.data.items[].labels.siteLabel",
+   "parts.completionNotes.data.items[].noteNo",
+   "parts.completionNotes.data.items[].notes",
+   "parts.completionNotes.data.items[].pendingItems",
+   "parts.completionNotes.data.items[].projectName",
+   "parts.completionNotes.data.items[].quoteNo",
+   "parts.completionNotes.data.items[].quoteSync",
+   "parts.completionNotes.data.items[].recipient",
+   "parts.completionNotes.data.items[].showWarranty",
+   "parts.completionNotes.data.items[].signedAt",
+   "parts.completionNotes.data.items[].signedBy",
+   "parts.completionNotes.data.items[].signedFiles",
+   "parts.completionNotes.data.items[].signedLog",
+   "parts.completionNotes.data.items[].siteAddress",
+   "parts.completionNotes.data.items[].siteManager",
+   "parts.completionNotes.data.items[].startDate",
+   "parts.completionNotes.data.items[].status",
+   "parts.completionNotes.data.items[].testResult",
+   "parts.completionNotes.data.items[].unfinishedCount",
+   "parts.completionNotes.data.items[].updatedAt",
+   "parts.completionNotes.data.items[].warrantyEnd",
+   "parts.completionNotes.data.items[].warrantyMonths",
+   "parts.completionNotes.data.items[].warrantyStart",
+   "parts.completionNotes.data.items[].workSummary",
+   "parts.completionNotes.ok",
+   "parts.dispatches",
+   "parts.dispatches.data",
+   "parts.dispatches.data[].acceptedAt",
+   "parts.dispatches.data[].acceptedBy",
+   "parts.dispatches.data[].approvalStatus",
+   "parts.dispatches.data[].approvedAt",
+   "parts.dispatches.data[].cancelReason",
+   "parts.dispatches.data[].completionApprovedAt",
+   "parts.dispatches.data[].completionRequestedAt",
+   "parts.dispatches.data[].completionRequestedBy",
+   "parts.dispatches.data[].completionStatus",
+   "parts.dispatches.data[].createdAt",
+   "parts.dispatches.data[].createdBy",
+   "parts.dispatches.data[].dispatchDate",
+   "parts.dispatches.data[].displayStatus",
+   "parts.dispatches.data[].docCode",
+   "parts.dispatches.data[].files",
+   "parts.dispatches.data[].grandTotal",
+   "parts.dispatches.data[].id",
+   "parts.dispatches.data[].invoiceDate",
+   "parts.dispatches.data[].invoiceFiles",
+   "parts.dispatches.data[].invoiceNo",
+   "parts.dispatches.data[].items",
+   "parts.dispatches.data[].legacy",
+   "parts.dispatches.data[].legacyModified",
+   "parts.dispatches.data[].legacyModifiedAt",
+   "parts.dispatches.data[].notes",
+   "parts.dispatches.data[].payableDate",
+   "parts.dispatches.data[].personnel",
+   "parts.dispatches.data[].personnelTotal",
+   "parts.dispatches.data[].quoteNo",
+   "parts.dispatches.data[].scope",
+   "parts.dispatches.data[].status",
+   "parts.dispatches.data[].statusLabel",
+   "parts.dispatches.data[].submittedAt",
+   "parts.dispatches.data[].submittedBy",
+   "parts.dispatches.data[].taxAmount",
+   "parts.dispatches.data[].taxRate",
+   "parts.dispatches.data[].totalAmount",
+   "parts.dispatches.data[].totalWithTax",
+   "parts.dispatches.data[].updatedAt",
+   "parts.dispatches.data[].vendorId",
+   "parts.dispatches.data[].vendorName",
+   "parts.dispatches.ok",
+   "parts.extraExpenses",
+   "parts.extraExpenses.data",
+   "parts.extraExpenses.data.categories",
+   "parts.extraExpenses.data.extraOnlyAmount",
+   "parts.extraExpenses.data.itemLinkedAmount",
+   "parts.extraExpenses.data.items",
+   "parts.extraExpenses.data.items[].approval",
+   "parts.extraExpenses.data.items[].category",
+   "parts.extraExpenses.data.items[].change",
+   "parts.extraExpenses.data.items[].changeApproval",
+   "parts.extraExpenses.data.items[].changeStatus",
+   "parts.extraExpenses.data.items[].createdAt",
+   "parts.extraExpenses.data.items[].createdBy",
+   "parts.extraExpenses.data.items[].createdByInferred",
+   "parts.extraExpenses.data.items[].createdByName",
+   "parts.extraExpenses.data.items[].currency",
+   "parts.extraExpenses.data.items[].data",
+   "parts.extraExpenses.data.items[].defVersion",
+   "parts.extraExpenses.data.items[].departmentId",
+   "parts.extraExpenses.data.items[].description",
+   "parts.extraExpenses.data.items[].docCode",
+   "parts.extraExpenses.data.items[].docNo",
+   "parts.extraExpenses.data.items[].expenseDate",
+   "parts.extraExpenses.data.items[].files",
+   "parts.extraExpenses.data.items[].id",
+   "parts.extraExpenses.data.items[].invoiceDate",
+   "parts.extraExpenses.data.items[].invoiceNo",
+   "parts.extraExpenses.data.items[].kind",
+   "parts.extraExpenses.data.items[].lines",
+   "parts.extraExpenses.data.items[].note",
+   "parts.extraExpenses.data.items[].paidBy",
+   "parts.extraExpenses.data.items[].paidDate",
+   "parts.extraExpenses.data.items[].payAccountCode",
+   "parts.extraExpenses.data.items[].payMethod",
+   "parts.extraExpenses.data.items[].payTerms",
+   "parts.extraExpenses.data.items[].payeeAccount",
+   "parts.extraExpenses.data.items[].payeeBank",
+   "parts.extraExpenses.data.items[].payeeName",
+   "parts.extraExpenses.data.items[].payeeType",
+   "parts.extraExpenses.data.items[].payerName",
+   "parts.extraExpenses.data.items[].payerUsername",
+   "parts.extraExpenses.data.items[].plannedPayDate",
+   "parts.extraExpenses.data.items[].pretax",
+   "parts.extraExpenses.data.items[].qty",
+   "parts.extraExpenses.data.items[].remitActual",
+   "parts.extraExpenses.data.items[].remitDate",
+   "parts.extraExpenses.data.items[].remitFee",
+   "parts.extraExpenses.data.items[].remitReview",
+   "parts.extraExpenses.data.items[].status",
+   "parts.extraExpenses.data.items[].tax",
+   "parts.extraExpenses.data.items[].totalCost",
+   "parts.extraExpenses.data.items[].unit",
+   "parts.extraExpenses.data.items[].unitCost",
+   "parts.extraExpenses.data.items[].updatedAt",
+   "parts.extraExpenses.data.items[].updatedByName",
+   "parts.extraExpenses.data.items[].voidReason",
+   "parts.extraExpenses.data.items[].voidedAt",
+   "parts.extraExpenses.data.items[].voidedBy",
+   "parts.extraExpenses.data.maskedCount",
+   "parts.extraExpenses.data.pendingCount",
+   "parts.extraExpenses.data.quoteNo",
+   "parts.extraExpenses.data.remitFeeTotal",
+   "parts.extraExpenses.data.totalAmount",
+   "parts.extraExpenses.data.totalPending",
+   "parts.extraExpenses.data.uncountedAmount",
+   "parts.extraExpenses.ok",
+   "parts.health",
+   "parts.health.data",
+   "parts.health.data.canClose",
+   "parts.health.data.dealTag",
+   "parts.health.data.gates",
+   "parts.health.data.gates[].key",
+   "parts.health.data.gates[].label",
+   "parts.health.data.gates[].pendingApprovers",
+   "parts.health.data.gates[].pendingDocs",
+   "parts.health.data.gates[].pendingUsernames",
+   "parts.health.data.gates[].ratio",
+   "parts.health.data.gates[].reason",
+   "parts.health.data.gates[].state",
+   "parts.health.data.gates[].value",
+   "parts.health.data.quoteNo",
+   "parts.health.ok",
+   "parts.shippingNotes",
+   "parts.shippingNotes.data",
+   "parts.shippingNotes.data[].approval",
+   "parts.shippingNotes.data[].createdAt",
+   "parts.shippingNotes.data[].createdBy",
+   "parts.shippingNotes.data[].customerName",
+   "parts.shippingNotes.data[].deliveryAddress",
+   "parts.shippingNotes.data[].exportCount",
+   "parts.shippingNotes.data[].exportLog",
+   "parts.shippingNotes.data[].id",
+   "parts.shippingNotes.data[].isSigned",
+   "parts.shippingNotes.data[].itemCount",
+   "parts.shippingNotes.data[].noteNo",
+   "parts.shippingNotes.data[].notes",
+   "parts.shippingNotes.data[].projectName",
+   "parts.shippingNotes.data[].quoteNo",
+   "parts.shippingNotes.data[].recipient",
+   "parts.shippingNotes.data[].shipDate",
+   "parts.shippingNotes.data[].signedAt",
+   "parts.shippingNotes.data[].signedBy",
+   "parts.shippingNotes.data[].signedFiles",
+   "parts.shippingNotes.data[].signedLog",
+   "parts.shippingNotes.data[].status",
+   "parts.shippingNotes.data[].updatedAt",
+   "parts.shippingNotes.ok",
+   "parts.updates",
+   "parts.updates.data",
+   "parts.updates.data[].author",
+   "parts.updates.data[].authorDisplay",
+   "parts.updates.data[].canDelete",
+   "parts.updates.data[].content",
+   "parts.updates.data[].created_at",
+   "parts.updates.data[].files",
+   "parts.updates.data[].id",
+   "parts.updates.data[].important",
+   "parts.updates.data[].source",
+   "parts.updates.ok",
+   "parts.vouchers",
+   "parts.vouchers.data",
+   "parts.vouchers.data.vouchers",
+   "parts.vouchers.ok",
+   "quotation",
+   "quotation.assigned_user_ids",
+   "quotation.case_semi_unlocked",
+   "quotation.case_semi_unlocked_at",
+   "quotation.case_semi_unlocked_by",
+   "quotation.cashierReadOnly",
+   "quotation.created_at",
+   "quotation.created_by",
+   "quotation.customer_name",
+   "quotation.data",
+   "quotation.data.status",
+   "quotation.deal_tag",
+   "quotation.direct_margin_pct",
+   "quotation.export_count",
+   "quotation.export_log",
+   "quotation.id",
+   "quotation.is_signed",
+   "quotation.locationId",
+   "quotation.location_id",
+   "quotation.net_margin_pct",
+   "quotation.pretax",
+   "quotation.project_name",
+   "quotation.quote_date",
+   "quotation.quote_no",
+   "quotation.sales_person",
+   "quotation.sales_person_id",
+   "quotation.settle_status",
+   "quotation.signed_at",
+   "quotation.signed_by",
+   "quotation.signed_files",
+   "quotation.signed_log",
+   "quotation.status",
+   "quotation.total",
+   "quotation.updated_at",
+   "quotation.valid_days"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/case-plan-view": {
+  "k": [
+   "active",
+   "baseline",
+   "current",
+   "current.adminCost",
+   "current.charityDonation",
+   "current.directMarginPct",
+   "current.directProfit",
+   "current.inputVat",
+   "current.netMarginPct",
+   "current.netProfit",
+   "current.pretax",
+   "current.projectMarginPct",
+   "current.subtotal",
+   "current.tax",
+   "current.total",
+   "current.totalCost",
+   "formulaVer",
+   "groups",
+   "overheadPct",
+   "settled",
+   "unpicked"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/close-gates": {
+  "k": [
+   "canClose",
+   "dealTag",
+   "gates",
+   "gates[].key",
+   "gates[].label",
+   "gates[].pendingApprovers",
+   "gates[].pendingDocs",
+   "gates[].pendingUsernames",
+   "gates[].ratio",
+   "gates[].reason",
+   "gates[].state",
+   "gates[].value",
+   "quoteNo"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/closing-report-pdf": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "/api/quotations/{quote_no}/extra-expenses": {
+  "k": [
+   "categories",
+   "extraOnlyAmount",
+   "itemLinkedAmount",
+   "items",
+   "items[].approval",
+   "items[].category",
+   "items[].change",
+   "items[].changeApproval",
+   "items[].changeStatus",
+   "items[].createdAt",
+   "items[].createdBy",
+   "items[].createdByInferred",
+   "items[].createdByName",
+   "items[].currency",
+   "items[].data",
+   "items[].defVersion",
+   "items[].departmentId",
+   "items[].description",
+   "items[].docCode",
+   "items[].docNo",
+   "items[].expenseDate",
+   "items[].files",
+   "items[].id",
+   "items[].invoiceDate",
+   "items[].invoiceNo",
+   "items[].kind",
+   "items[].lines",
+   "items[].note",
+   "items[].paidBy",
+   "items[].paidDate",
+   "items[].payAccountCode",
+   "items[].payMethod",
+   "items[].payTerms",
+   "items[].payeeAccount",
+   "items[].payeeBank",
+   "items[].payeeName",
+   "items[].payeeType",
+   "items[].payerName",
+   "items[].payerUsername",
+   "items[].plannedPayDate",
+   "items[].pretax",
+   "items[].qty",
+   "items[].remitActual",
+   "items[].remitDate",
+   "items[].remitFee",
+   "items[].remitReview",
+   "items[].status",
+   "items[].tax",
+   "items[].totalCost",
+   "items[].unit",
+   "items[].unitCost",
+   "items[].updatedAt",
+   "items[].updatedByName",
+   "items[].voidReason",
+   "items[].voidedAt",
+   "items[].voidedBy",
+   "maskedCount",
+   "pendingCount",
+   "quoteNo",
+   "remitFeeTotal",
+   "totalAmount",
+   "totalPending",
+   "uncountedAmount"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/extra-expenses/{exp_id}/document": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/quotations/{quote_no}/finance-summary": {
+  "k": [
+   "customFinance",
+   "customFinance.expense",
+   "customFinance.expense.items",
+   "customFinance.expense.total",
+   "customFinance.income",
+   "customFinance.income.items",
+   "customFinance.income.skippedTotal",
+   "customFinance.income.total",
+   "payable",
+   "payable.approvedPaidTotal",
+   "payable.approvedUnpaidTotal",
+   "payable.pendingCount",
+   "payable.pendingTotal",
+   "payable.remitFeeTotal",
+   "payable.vouchers",
+   "payable.vouchers[].createdAt",
+   "payable.vouchers[].grandTotal",
+   "payable.vouchers[].isPaid",
+   "payable.vouchers[].paidAt",
+   "payable.vouchers[].payableDate",
+   "payable.vouchers[].status",
+   "payable.vouchers[].vendorName",
+   "payable.vouchers[].voucherNo",
+   "quoteNo",
+   "receivable",
+   "receivable.collectedTotal",
+   "receivable.feeTotal",
+   "receivable.items",
+   "receivable.netCollected",
+   "receivable.outstandingTotal",
+   "receivable.receivableTotal",
+   "relatedDocuments",
+   "relatedDocuments.invoiceVouchers",
+   "relatedDocuments.invoiceVouchers[].amount",
+   "relatedDocuments.invoiceVouchers[].createdAt",
+   "relatedDocuments.invoiceVouchers[].status",
+   "relatedDocuments.invoiceVouchers[].voucherNo",
+   "relatedDocuments.paymentRequests",
+   "relatedDocuments.paymentRequests[].amount",
+   "relatedDocuments.paymentRequests[].createdAt",
+   "relatedDocuments.paymentRequests[].requestNo",
+   "relatedDocuments.paymentRequests[].stage",
+   "relatedDocuments.paymentRequests[].status",
+   "settlementExtras",
+   "settlementExtras.items",
+   "settlementExtras.items[].category",
+   "settlementExtras.items[].createdBy",
+   "settlementExtras.items[].createdByInferred",
+   "settlementExtras.items[].description",
+   "settlementExtras.items[].docNo",
+   "settlementExtras.items[].expenseDate",
+   "settlementExtras.items[].files",
+   "settlementExtras.items[].id",
+   "settlementExtras.items[].note",
+   "settlementExtras.items[].payerName",
+   "settlementExtras.items[].pending",
+   "settlementExtras.items[].qty",
+   "settlementExtras.items[].status",
+   "settlementExtras.items[].totalCost",
+   "settlementExtras.items[].unit",
+   "settlementExtras.items[].unitCost",
+   "settlementExtras.items[].voided",
+   "settlementExtras.remitFeeTotal",
+   "settlementExtras.total"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/item-shipped": {
+  "k": [
+   "items",
+   "materialToItem",
+   "quoteNo",
+   "totals",
+   "totals.ordered",
+   "totals.reserved",
+   "totals.shipped"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/material-changes": {
+  "k": [
+   "changes",
+   "changes[].appliedAt",
+   "changes[].approvedAt",
+   "changes[].base",
+   "changes[].baseVersion",
+   "changes[].createdAt",
+   "changes[].createdBy",
+   "changes[].currentApprovers",
+   "changes[].currentTier",
+   "changes[].diff",
+   "changes[].docCode",
+   "changes[].id",
+   "changes[].itemId",
+   "changes[].itemName",
+   "changes[].proposal",
+   "changes[].quoteNo",
+   "changes[].reason",
+   "changes[].rejectReason",
+   "changes[].requestedBy",
+   "changes[].status",
+   "changes[].submittedAt",
+   "changes[].tierCount",
+   "quoteNo"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/material-coverage": {
+  "k": [
+   "groups",
+   "quoteNo"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/material-link-status": {
+  "k": [
+   "quoteNo",
+   "statuses"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/material-order-approvals": {
+  "k": [
+   "approvals",
+   "quoteNo",
+   "shipping"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/material-orders": {
+  "k": [
+   "materialOrders",
+   "paidAmount",
+   "quoteNo",
+   "supplierRequiredAlways",
+   "totalAmount"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/material-orders/{item_id}/change-proposal": {
+  "k": [
+   "after",
+   "before",
+   "diff",
+   "itemId",
+   "problems",
+   "problems[].code",
+   "problems[].message",
+   "uncoveredLines"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/material-orders/{item_id}/changes": {
+  "k": [
+   "changes",
+   "itemId",
+   "quoteNo"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/material-payments": {
+  "k": [
+   "moneyMasked",
+   "orders",
+   "quoteNo"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/material-po-lines": {
+  "k": [
+   "lines",
+   "quoteNo"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/network-plan": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/quotations/{quote_no}/pdf-download": {
+  "ct": "application/pdf",
+  "hdr": [],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/plan-view": {
+  "k": [
+   "active",
+   "baseline",
+   "current",
+   "current.adminCost",
+   "current.charityDonation",
+   "current.directMarginPct",
+   "current.directProfit",
+   "current.inputVat",
+   "current.netMarginPct",
+   "current.netProfit",
+   "current.pretax",
+   "current.projectMarginPct",
+   "current.subtotal",
+   "current.tax",
+   "current.total",
+   "current.totalCost",
+   "formulaVer",
+   "groups",
+   "overheadPct",
+   "settled",
+   "unpicked"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/privacy-notice": {
+  "k": [
+   "acks"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/project-report-pdf": {
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/purchase-items": {
+  "k": [
+   "items",
+   "quoteNo"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/purchase-requests/lines": {
+  "k": [
+   "quoteNo",
+   "requests"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/settlement": {
+  "k": [
+   "customerName",
+   "items",
+   "projectName",
+   "settlement",
+   "tot",
+   "updatedAt"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/settlement-actuals": {
+  "k": [
+   "basis",
+   "costExtras",
+   "costExtras.customExpense",
+   "costExtras.customExpense.total",
+   "costExtras.dispatch",
+   "costExtras.dispatch.cost",
+   "costExtras.dispatch.count",
+   "costExtras.dispatch.grandTotal",
+   "costExtras.dispatch.report",
+   "costExtras.dispatch.tax",
+   "costExtras.remitFee",
+   "costExtras.remitFee.contractor",
+   "costExtras.remitFee.extraExpenses",
+   "costExtras.remitFee.total",
+   "extra",
+   "extra.onlyAmount",
+   "extra.rows",
+   "finalized",
+   "frozen",
+   "items",
+   "legacySave",
+   "offsets",
+   "orphanItems",
+   "quoteNo",
+   "schemaVersion",
+   "sources",
+   "sources.extraAssigned",
+   "sources.extraUnassigned",
+   "sources.materialAssigned",
+   "sources.materialUnassigned",
+   "sources.po",
+   "taxBasis",
+   "taxBasis.customExpense",
+   "taxBasis.customExpense.basis",
+   "taxBasis.customExpense.label",
+   "taxBasis.dispatch",
+   "taxBasis.dispatch.basis",
+   "taxBasis.dispatch.label",
+   "taxBasis.estimateRate",
+   "taxBasis.extra",
+   "taxBasis.extra.basis",
+   "taxBasis.extra.label",
+   "taxBasis.itemEstimate",
+   "taxBasis.itemEstimate.basis",
+   "taxBasis.itemEstimate.label",
+   "taxBasis.itemManual",
+   "taxBasis.itemManual.basis",
+   "taxBasis.itemManual.label",
+   "taxBasis.material",
+   "taxBasis.material.basis",
+   "taxBasis.material.label",
+   "taxBasis.purchase",
+   "taxBasis.purchase.basis",
+   "taxBasis.purchase.label",
+   "taxBasis.remitFee",
+   "taxBasis.remitFee.basis",
+   "taxBasis.remitFee.label",
+   "totals",
+   "totals.customExpenseTotal",
+   "totals.dispatchAbsorbedTotal",
+   "totals.dispatchAssignedTotal",
+   "totals.dispatchBasis",
+   "totals.dispatchGrandTotal",
+   "totals.dispatchReport",
+   "totals.dispatchTax",
+   "totals.dispatchTotal",
+   "totals.dispatchUnassignedTotal",
+   "totals.extraTotal",
+   "totals.itemActualTotal",
+   "totals.itemPoUnadopted",
+   "totals.materialUnassignedTotal",
+   "totals.pendingTotal",
+   "totals.purchasedTotal",
+   "totals.remitFeeTotal",
+   "totals.taxExpense",
+   "totals.taxExpense.estimated",
+   "totals.taxExpense.exact",
+   "totals.taxExpense.unsplit",
+   "totals.totalActualCost",
+   "unadoptedMode",
+   "unassigned",
+   "unassigned.dispatches",
+   "unassigned.dispatches[].amount",
+   "unassigned.dispatches[].docCode",
+   "unassigned.dispatches[].grandTotal",
+   "unassigned.dispatches[].itemId",
+   "unassigned.dispatches[].name",
+   "unassigned.dispatches[].pending",
+   "unassigned.dispatches[].report",
+   "unassigned.dispatches[].status",
+   "unassigned.dispatches[].tax",
+   "unassigned.dispatches[].vendorName",
+   "unassigned.extras",
+   "unassigned.materials",
+   "warnings"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/stages": {
+  "k": [
+   "items",
+   "items[].assignedTo",
+   "items[].dependsOn",
+   "items[].done",
+   "items[].doneAt",
+   "items[].dueDate",
+   "items[].id",
+   "items[].label",
+   "items[].ratioBp",
+   "items[].sortOrder",
+   "items[].startDate",
+   "items[].visits",
+   "items[].visits[].id",
+   "items[].visits[].note",
+   "items[].visits[].visitDate",
+   "items[].visits[].visitPeople"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/updates": {
+  "k": [
+   "[].author",
+   "[].authorDisplay",
+   "[].canDelete",
+   "[].content",
+   "[].created_at",
+   "[].files",
+   "[].id",
+   "[].important",
+   "[].source"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/versions": {
+  "k": [
+   "history",
+   "quote_no",
+   "versions"
+  ],
+  "s": 200
+ },
+ "/api/quotations/{quote_no}/versions/{seq}/download": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/reads": {
   "k": [
    "detail"
@@ -3388,6 +5255,35 @@
    "retentionDays",
    "usedBytes",
    "warnBytes"
+  ],
+  "s": 200
+ },
+ "/api/recycle-bin/{bin_id}": {
+  "k": [
+   "adapterAvailable",
+   "bytes",
+   "daysLeft",
+   "deletedAt",
+   "deletedBy",
+   "entityId",
+   "entityType",
+   "fileCount",
+   "files",
+   "id",
+   "impact",
+   "label",
+   "parentId",
+   "parentType",
+   "purgeAfter",
+   "purgedAt",
+   "purgedBy",
+   "reason",
+   "restoreNote",
+   "restoredAt",
+   "restoredBy",
+   "snapshot",
+   "status",
+   "via"
   ],
   "s": 200
  },
@@ -3867,6 +5763,24 @@
   ],
   "s": 200
  },
+ "/api/settings-center/groups/{group}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/settings-center/groups/{group}/diff": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/settings-center/groups/{group}/versions": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/settings-center/pending": {
   "k": [
    "pending"
@@ -3878,6 +5792,12 @@
    "profiles"
   ],
   "s": 200
+ },
+ "/api/settings-center/profiles/{name}/preview": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
  },
  "/api/settings-center/public": {
   "k": [
@@ -3919,6 +5839,12 @@
    "voucher"
   ],
   "s": 200
+ },
+ "/api/settings/approval-flow/{doc_type}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
  },
  "/api/settings/branding": {
   "k": [
@@ -4253,6 +6179,51 @@
   ],
   "s": 422
  },
+ "/api/shipping-notes/{note_no}": {
+  "k": [
+   "approval",
+   "createdAt",
+   "createdBy",
+   "customerName",
+   "deliveryAddress",
+   "exportCount",
+   "exportLog",
+   "id",
+   "isSigned",
+   "itemCount",
+   "items",
+   "noteNo",
+   "notes",
+   "projectName",
+   "quoteNo",
+   "recipient",
+   "shipDate",
+   "signedAt",
+   "signedBy",
+   "signedFiles",
+   "signedLog",
+   "status",
+   "updatedAt"
+  ],
+  "s": 200
+ },
+ "/api/shipping-notes/{note_no}/material-link-check": {
+  "k": [
+   "unlinked"
+  ],
+  "s": 200
+ },
+ "/api/shipping-notes/{note_no}/pdf-download": {
+  "ct": "application/pdf",
+  "hdr": [],
+  "s": 200
+ },
+ "/api/shipping-notes/{note_no}/privacy-notice": {
+  "k": [
+   "acks"
+  ],
+  "s": 200
+ },
  "/api/suppliers": {
   "k": [
    "[].code",
@@ -4263,6 +6234,12 @@
    "[].phone",
    "[].taxId",
    "[].updatedAt"
+  ],
+  "s": 200
+ },
+ "/api/suppliers/{sid}/privacy-notice": {
+  "k": [
+   "acks"
   ],
   "s": 200
  },
@@ -4318,6 +6295,12 @@
    "taxId"
   ],
   "s": 200
+ },
+ "/api/system/branding/{kind}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
  },
  "/api/system/case-roles-unmapped": {
   "k": [
@@ -4582,6 +6565,12 @@
   ],
   "s": 200
  },
+ "/api/uploads/{file_path:path}": {
+  "k": [
+   "detail"
+  ],
+  "s": 403
+ },
  "/api/user-activity": {
   "k": [
    "end",
@@ -4659,6 +6648,12 @@
   ],
   "s": 200
  },
+ "/api/users/{user_id}/privacy-notice": {
+  "k": [
+   "ack"
+  ],
+  "s": 200
+ },
  "/api/vendor-contractors": {
   "k": [
    "[].active",
@@ -4682,6 +6677,35 @@
    "[].id",
    "[].name",
    "[].phone"
+  ],
+  "s": 200
+ },
+ "/api/vendor-contractors/{vid}": {
+  "k": [
+   "active",
+   "address",
+   "code",
+   "contactName",
+   "createdAt",
+   "email",
+   "hasPassbook",
+   "id",
+   "name",
+   "phone",
+   "taxId",
+   "updatedAt"
+  ],
+  "s": 200
+ },
+ "/api/vendor-contractors/{vid}/passbook": {
+  "k": [
+   "bank_passbook"
+  ],
+  "s": 200
+ },
+ "/api/vendor-contractors/{vid}/privacy-notice": {
+  "k": [
+   "ack"
   ],
   "s": 200
  },
@@ -4724,6 +6748,12 @@
   ],
   "s": 200
  },
+ "/api/vouchers/by-case/{quote_no}": {
+  "k": [
+   "vouchers"
+  ],
+  "s": 200
+ },
  "/api/vouchers/line-source-file": {
   "k": [
    "detail"
@@ -4754,6 +6784,126 @@
    "tabs.案件[].summary",
    "unavailable"
   ],
+  "s": 200
+ },
+ "/api/vouchers/{voucher_id}": {
+  "k": [
+   "approval",
+   "approval_json",
+   "attachment_count",
+   "attachments",
+   "attachments[].deleted_at",
+   "attachments[].deleted_by",
+   "attachments[].file_id",
+   "attachments[].filename",
+   "attachments[].id",
+   "attachments[].mergeKind",
+   "attachments[].mime",
+   "attachments[].path",
+   "attachments[].size",
+   "attachments[].source_doc_no",
+   "attachments[].source_file_id",
+   "attachments[].source_type",
+   "attachments[].uploaded_at",
+   "attachments[].uploaded_by",
+   "attachments[].voucher_id",
+   "category",
+   "category_manual",
+   "checked_at",
+   "checked_by",
+   "created_at",
+   "created_by",
+   "custom_fields",
+   "gl_event_id",
+   "id",
+   "is_backfill",
+   "kind",
+   "ledger_confirmed",
+   "lines",
+   "lines[].account_code",
+   "lines[].account_name",
+   "lines[].account_name_snapshot",
+   "lines[].case_no",
+   "lines[].counterparty",
+   "lines[].credit",
+   "lines[].debit",
+   "lines[].dept_code",
+   "lines[].dim_json",
+   "lines[].doc_no",
+   "lines[].id",
+   "lines[].line_no",
+   "lines[].party_key",
+   "lines[].source_amount_snapshot",
+   "lines[].source_id",
+   "lines[].source_key",
+   "lines[].source_type",
+   "lines[].summary",
+   "lines[].summary_template_id",
+   "lines[].summary_template_version",
+   "lines[].tax_code",
+   "lines[].voucher_id",
+   "manager_at",
+   "manager_by",
+   "my_actions",
+   "my_actions.void",
+   "my_actions.void.allowed",
+   "my_actions.void.reason",
+   "origin",
+   "posted_at",
+   "posted_by",
+   "posted_warning_snapshot",
+   "posted_with_warning",
+   "reverses_no",
+   "signatures",
+   "signatures.主管",
+   "signatures.主管.at",
+   "signatures.主管.by",
+   "signatures.製票",
+   "signatures.製票.at",
+   "signatures.製票.by",
+   "signatures.覆核",
+   "signatures.覆核.at",
+   "signatures.覆核.by",
+   "signatures.記帳",
+   "signatures.記帳.at",
+   "signatures.記帳.by",
+   "status",
+   "submitted_at",
+   "submitted_by",
+   "summary",
+   "supersedes_no",
+   "updated_at",
+   "void_reason",
+   "voided_at",
+   "voided_by",
+   "voucher_date",
+   "voucher_no"
+  ],
+  "s": 200
+ },
+ "/api/vouchers/{voucher_id}/attachments/{file_id}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/vouchers/{voucher_id}/edit-log": {
+  "k": [
+   "entries",
+   "entries[].at",
+   "entries[].by",
+   "entries[].byName",
+   "entries[].changes"
+  ],
+  "s": 200
+ },
+ "/api/vouchers/{voucher_id}/pdf-download": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "/api/vouchers/{voucher_id}/preview": {
   "s": 200
  },
  "/api/work-logs": {

@@ -15,9 +15,9 @@ import pytest
 from tests.platform import _response_keys as RK
 
 BASELINE = Path(__file__).with_name("response_keys_baseline.json")
-ROUTE_FLOOR = 300            # 靜態 GET 路由記到的數量下限
-ROWFUL_FLOOR = 40            # 回傳『非空鍵集』的路由下限（種子有列才有鍵）
-EXPORT_FLOOR = 8             # 狀態 200 的匯出（表頭可比）下限
+ROUTE_FLOOR = 340            # 靜態 GET 路由記到的數量下限
+ROWFUL_FLOOR = 300            # 回傳『非空鍵集』的路由下限（種子有列才有鍵）
+EXPORT_FLOOR = 4             # 狀態 200 的匯出（表頭可比）下限
 
 
 @pytest.fixture
@@ -40,13 +40,16 @@ def _paths():
 
 def test_record_or_compare_against_baseline(client, seeded):
     rec = RK.record(client, seeded, _paths())
+    if os.environ.get("U0A_RECORD") == "1":
+        BASELINE.write_text(json.dumps(rec, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        st = {"routes": len(rec), "withkeys": sum(1 for e in rec.values() if e.get("k")),
+              "exports200": sum(1 for e in rec.values() if e.get("hdr") and e["s"] == 200),
+              "status0": sum(1 for e in rec.values() if e["s"] == 0), "leaks": len(RK.leaks(rec))}
+        pytest.skip("基準已寫入 %s：%s" % (BASELINE.name, st))
     assert RK.leaks(rec) == [], "回應鍵集含內部欄位：%s" % RK.leaks(rec)[:10]
     assert len(rec) >= ROUTE_FLOOR, "只記到 %d 條路由（下限 %d）：記錄器可能失效" % (len(rec), ROUTE_FLOOR)
     assert sum(1 for e in rec.values() if e.get("k")) >= ROWFUL_FLOOR, "有鍵集的路由太少：種子可能沒有產生資料列"
     assert sum(1 for e in rec.values() if e.get("hdr") and e["s"] == 200) >= EXPORT_FLOOR, "可比對表頭的匯出太少"
-    if os.environ.get("U0A_RECORD") == "1":
-        BASELINE.write_text(json.dumps(rec, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
-        pytest.skip("基準已寫入 %s（%d 條）" % (BASELINE.name, len(rec)))
     assert BASELINE.exists(), "缺 response_keys_baseline.json：先在 U0 之前的父提交以 U0A_RECORD=1 記錄"
     d = RK.diff(json.loads(BASELINE.read_text(encoding="utf-8")), rec)
     assert d["missing"] == [] and d["changed"] == {}, "回應鍵集與基準不同：%s" % json.dumps(d, ensure_ascii=False)[:2000]

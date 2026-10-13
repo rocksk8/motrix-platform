@@ -63,9 +63,15 @@ def key_paths(obj, prefix="", out=None) -> list:
     return sorted(out) if top else []
 
 
+_INT_NAME = re.compile(r"^(id|year|seq|rid|month|page|limit|offset)$|_id$|_seq$", re.I)
+
+
 def _is_int(field) -> bool:
-    ann = getattr(field, "annotation", None) or getattr(field, "type_", None)
-    return ann is int
+    for ann in (getattr(field, "annotation", None), getattr(getattr(field, "field_info", None), "annotation", None),
+                getattr(field, "type_", None), getattr(field, "outer_type_", None)):
+        if ann is int:
+            return True
+    return bool(_INT_NAME.search(getattr(field, "name", "") or ""))     # 型別取不到（Path()／Annotated）時按名稱猜
 
 
 _QUERY_DEFAULTS = (
