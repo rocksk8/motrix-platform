@@ -59,6 +59,7 @@ def clear_edition_bounds():
     _EDITION_EPOCH += 1
 
 
+_UNKNOWN_STAMP = __import__("itertools").count(1)
 _EDITION_EPOCH = 0                             # 版本邊界每變一次就加一；納入 group_stamp（邊界會夾住 get_group 的結果）
 
 
@@ -633,7 +634,7 @@ def group_stamp(group, *, conn=None):
         return "%s|%s|v%s|p%s|e%s|ed%d" % (group_status(group), "d" if os.environ.get("MOTRIX_SETTINGS_DEFAULTS_ONLY") == "1" else "-",
                                            ver, ",".join(map(str, sorted(pend))), ",".join(map(str, sorted(eff_ids))), _EDITION_EPOCH)
     except Exception:                                   # noqa: BLE001
-        return "unknown:%d" % _t.monotonic_ns()
+        return "unknown:%d" % next(_UNKNOWN_STAMP)         # 遞增計數（Windows 的 monotonic_ns 解析度粗，連續兩次可能相同）
 
 
 def _split(g, eff, values):

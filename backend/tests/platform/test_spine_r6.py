@@ -294,7 +294,8 @@ def _feat(code, surfaces, **kw):
 def test_surface_status_takes_the_strictest_declaring_feature(sp):
     spine.register_manifest({"features": [
         _feat("zz_r6_f1", ["module:zz.open_s", "module:zz.shared"]),
-        _feat("zz_r6_f2", ["module:zz.plan_s", "module:zz.shared", "module:zz.plan_s"], status="planned", planned_train="MS3"),    # 同擁有者重複宣告 OK（最嚴者勝）
+        _feat("zz_r6_f2", ["module:zz.plan_s", "module:zz.shared"], status="planned", planned_train="MS3"),
+        _feat("zz_r6_f5", ["module:zz.plan_s"]),                                                                   # 同擁有者的兩個功能宣告同一表面 OK（最嚴者勝）
         _feat("zz_r6_f3", ["module:zz.hide_s"], status="hidden"),
         _feat("zz_r6_f4", ["module:zz.failed_s"], mail=["zz_r6_nomail"])]}, "zz")
     assert spine.surface_status("module:zz.plan_s") == "open"                                  # validate_all 之前 ⇒ open
