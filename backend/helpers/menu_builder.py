@@ -2,9 +2,10 @@
 """選單建構器（BP-1）：側欄項改名、換到另一個既有群組、整份選單的發布前預覽。
 
 [單位] helper:menu_builder    [層] L1    [穩定度] 實作
-[公開介面] OFF_REASON, enabled, is_builder_op, ops_hash, preview, sidebar_ops_of_all
+[公開介面] FIELD, GROUP, MAX_OPS, OFF_REASON, enabled, is_builder_op, ops_hash, preview, redact_ops, sidebar_ops_of_all
 [不變式] 設定 `builder_menu.enabled`（預設 0＝關）關著時：relabel／move.to 不被接受（發布驗證擋）、不被套用（core.menu.apply_layout builder=False），預覽端點 404；
     其餘（hide／show／群組內 move）與今天逐字相同。改名與換群組**只是顯示**：href、perm、`denied` 不變，使用者沒有權限的項目永遠不出現在選單或預覽。
+[契約題] tests/platform/test_menu_builder_bp1.py
 [注意] 只用既有的版面定義（kind=layout，key=module:<模組>）發布，不新增 kind、不碰 core/definitions.py
 """
 import hashlib
@@ -33,6 +34,19 @@ def is_builder_op(op) -> bool:
     if not isinstance(op, dict) or not str(op.get("target", "")).endswith("/sidebar"):
         return False
     return op.get("op") == "relabel" or (op.get("op") == "move" and "to" in op)
+
+
+def redact_ops(items):
+    """/api/platform/menu 回給非最高管理者的 applied／skipped／dropped：拿掉操作原文（含管理者取的名稱、看不到的目標），只留操作種類與理由。"""
+    out = []
+    for x in items or []:
+        op = x.get("op") if isinstance(x, dict) else None
+        kind = op.get("op") if isinstance(op, dict) else (op if isinstance(op, str) else None)
+        if isinstance(op, str):                              # applied：每筆本身就是操作
+            out.append({"op": kind})
+        else:                                                # skipped／dropped：{op, reason|message}
+            out.append({"op": {"op": kind}, **({"reason": x["reason"]} if isinstance(x, dict) and "reason" in x else {})})
+    return out
 
 
 def ops_hash(ops) -> str:
