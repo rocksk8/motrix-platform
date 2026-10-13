@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-13（wip/t57-eb-spine-r8；脊柱 E-b r6／r7）
+## 1.132 — 2026-10-13（wip/t57-eb-spine-r8；脊柱 E-b r6／r7）
 
 - 脊柱 E-b r6（L1 新增，只增；快照已以工具重生）：新增 `spine.register_kind_gate(kind, fn(key)->status|{status,plannedTrain})`／`kind_info`／`kind_status`（閘門丟例外或回傳不合法 ⇒ hidden）、`register_managed_kind(kind, message)`／`managed_message`（通用 /api/definitions 寫入路由不再寫死 setting_group）、`register_health_source(name, fn)`／`health_badge()`（系統中樞徽章依嚴重度合併，來源壞掉就略過）、`surface_status(surface)`（取宣告該畫面之功能中最嚴格者；失敗⇒hidden、未驗證⇒open）；`SettingDef.loosen` 新增 `"both"`（僅數值；任何方向的變更都走放寬流程）；`settings_registry.group_stamp(group)` 回傳狀態指紋（讀不到時每次不同，絕不丟例外）。
 - 脊柱 E-b r7（0d 對 r6）：`catalog.surfaces` 的表面鍵必須屬於宣告它的功能的擁有者（模組 `module:<擁有者>.<名稱>`；core `core:<名稱>`），否則該功能驗證失敗（`surface_not_owned`），`surface_status` 也不採計；`group_stamp` 納入版本邊界世代（`set/clear_edition_bounds`）；`kind_info` 閘門失敗的 log 每個 kind 每分鐘最多一筆；`register_health_source` 文件明訂 text 不得出現隱藏／規劃中名稱；靜態守門：modules/** 不得呼叫 `register_kind_gate`／`register_managed_kind`／`register_health_source`。
