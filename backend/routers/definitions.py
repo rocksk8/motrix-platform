@@ -559,7 +559,16 @@ def effective_layout(module_key: str, role: str = Query(None), authorization: st
         eff = catalog.effective_layout_ops(conn, module_key, who)   # resolve＋check_layout 唯一一份（C4：選單共用）
     finally:
         conn.close()
-    return {"module": module_key, "role": who, "source": eff["source"], "ops": eff["ops"], "dropped": eff["dropped"],
+    ops, dropped = eff["ops"], eff["dropped"]
+    if u["role"] != "superadmin":
+        # T60 S0（hichan-04 稽核）：側欄操作（含改名文字與使用者看不到的目標 id）只有 /api/platform/menu 在用（那邊已依權限過濾並遮蔽）；
+        # 頁面引擎不需要它們 ⇒ 對非最高管理者拿掉，免得從這裡讀到看不到的項目。
+        def _is_sidebar(o):
+            t = (o or {}).get("target") if isinstance(o, dict) else None
+            return isinstance(t, str) and t.endswith("/sidebar")
+        ops = [o for o in ops if not _is_sidebar(o)]
+        dropped = [d for d in dropped if not _is_sidebar((d or {}).get("op") if isinstance(d, dict) else None)]
+    return {"module": module_key, "role": who, "source": eff["source"], "ops": ops, "dropped": dropped,
             "error": eff["error"], "points": catalog.layout_points(module_key)}
 
 
