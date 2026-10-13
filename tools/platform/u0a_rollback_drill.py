@@ -184,7 +184,7 @@ def parity(fresh, upgraded):
         sorted(set(fi) - set(ui)), sorted(set(ui) - set(fi)), sorted(k for k in set(fi) & set(ui) if fi[k] != ui[k]))))
     res.append(("VIEW 相同", fresh["views"] == upgraded["views"], "不同：%s" % sorted(k for k in set(fresh["views"]) | set(upgraded["views"])
                                                                  if fresh["views"].get(k) != upgraded["views"].get(k))))
-    res.append(("觸發器相同", fresh["triggers"] == upgraded["triggers"]))
+    res.append(("觸發器相同", fresh["triggers"] == upgraded["triggers"], ""))
     return res
 
 
