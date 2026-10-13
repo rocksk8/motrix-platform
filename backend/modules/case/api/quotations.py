@@ -3042,6 +3042,23 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             raise HTTPException(409, "案件資料已被其他人更新，請重新載入後再存")
         label = f"{quote_no}（{row['customer_name'] or ''}{'／' if row['project_name'] else ''}{row['project_name'] or ''}）"
         data = json.loads(row["data_json"] or "{}")
+        if isinstance(body.case_record, dict):
+            # T61 S5：自訂欄位閘門（旗標 builder_custom_fields.enabled 關閉 ⇒ 不介入：用戶端送來的 customFields 不存、舊值原樣保留）。
+            # 沒有送這個鍵（舊的整包格式）＝沒有要改，帶回舊值，不讓整包取代把它洗掉；沒有值就不寫這個鍵。
+            _cf_old = (data.get("caseRecord") or {}).get("customFields")
+            if "customFields" not in body.case_record:
+                if _cf_old:
+                    body.case_record["customFields"] = _cf_old
+            elif body.case_record["customFields"] != _cf_old:
+                from helpers import builtin_fields as _bf
+                _cf_new, _cf_err, _cf_ignored = _bf.gate("case_info", body.case_record["customFields"], _cf_old)
+                if _cf_err:
+                    conn.close()
+                    raise HTTPException(400, "自訂欄位有問題：" + "；".join(e["message"] for e in _cf_err))
+                if _cf_new:
+                    body.case_record["customFields"] = _cf_new
+                else:
+                    body.case_record.pop("customFields", None)
         if not money_visible(user):
             # CM13（2026-09-24）：這個帳號拿到的是遮蔽過的 caseRecord，送回來的款項期別沒有金額鍵。
             # 以資料庫現值補回，不可以讓空值蓋掉真正的金額；新增／刪除／重排期別不允許（D2）。

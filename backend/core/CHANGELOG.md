@@ -1,5 +1,11 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — wip/t61-s5-impl-r1（內建畫面的自訂欄位 S5 第一刀；旗標 `builder_custom_fields.enabled` 預設關）
+
+- L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.builtin_fields`——`RECORD_TYPES`（單據類型登錄：案件資訊、供應商）、`ALLOWED_TYPES`（文字／日期／單選／勾選）、`MAX_FIELDS`（20）、`enabled()`、`public_fields(record_type)`、`definition_problems(key, body)`、`gate(record_type, new_values, old_values)`（每條寫入路徑存檔前呼叫；旗標關閉＝回舊值、完全不介入）。`helpers.custom_fields.validate_definition` 的簽章不變，只在 key 屬於 `RECORD_TYPES` 時多跑 `definition_problems`（其他 key 行為逐字相同）。
+- 新設定群組 `builder_custom_fields`（欄位 `enabled`，預設 False；`settings_deploy_baseline.json` 已同步）。新路由 `GET /api/custom-fields/{record_type}`（登入即可；旗標關閉回 `enabled:false, fields:[]`）；新前端檔 `static/custom-fields.js`。
+- 案件記錄的分段存檔多一個頂層鍵 `customFields`（只在旗標開啟且有定義時才會被存；沒有值就沒有這個鍵 ⇒ 既有單據與回應的鍵集不變）。
+
 ## (next) — wip/t59-bp1-menus-r1（BP-1 選單建構器；旗標 `builder_menu.enabled` 預設關）
 
 - L0（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：`core.customization.SIDEBAR_LABEL_MAX`／`sidebar_label_problem`（側欄顯示名稱：最長 20 字、不含標記字元）；`core.menu.apply_layout_ex(groups, ops, builder=False)`（`apply_layout` 簽章與行為不變，等同 `builder=False`）。

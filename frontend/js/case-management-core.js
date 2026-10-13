@@ -579,7 +579,7 @@ window.CM_PARTS.push(() => ({
 
     _segLabel(k) {
       return ({ payment: '收款', materials: '材料', devices: '設備', contract: '合約資訊', roles: '角色',
-        projectTimeline: '專案時程', materialOrders: '材料申請', warrantyNote: '保固備註', notes: '備註' })[k] || k
+        projectTimeline: '專案時程', materialOrders: '材料申請', warrantyNote: '保固備註', notes: '備註', customFields: '自訂欄位' })[k] || k
     },
 
     // 材料申請審核（31-C）：存檔時被審核規則拒絕的項目（其餘已存）——說明原因，並把物流項目換回伺服器現值（旗標／序號被改回）

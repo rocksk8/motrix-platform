@@ -81,7 +81,7 @@ from routers import company_lookup
 from routers import auth, customers, parts, system, module_versions, search, org_structure, list_prefs, uploads, attachments, approval_delegates, approval_queue, licensing, map_points
 from routers import item_reads
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
-from routers import definitions, custom_records, def_governance
+from routers import definitions, custom_records, def_governance, custom_fields_builtin
 from routers import modules
 from routers import legal_params
 from routers import settings_center
@@ -940,6 +940,7 @@ app.include_router(uploads.router)
 app.include_router(attachments.router)   # 附件開檔（attachments.catalog 提供者；2026-09-30 P2）
 app.include_router(definitions.router)
 app.include_router(def_governance.router)
+app.include_router(custom_fields_builtin.router)   # 內建畫面的自訂欄位（T61 S5）
 app.include_router(custom_records.router)
 app.include_router(approval_delegates.router)
 app.include_router(approval_queue.router)     # 待我簽核佇列（L1，2026-09-27 自 M01 搬入）
