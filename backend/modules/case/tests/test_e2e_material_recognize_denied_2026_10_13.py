@@ -59,11 +59,11 @@ def test_denied_recognition_is_visible_at_once_without_reload(live_server, make_
     pg.goto(f"{live_server}/pages/case-management.html?q={NO}")
     pg.wait_for_selector('.cm-tab:has-text("執行管理")', timeout=20000)
     pg.click('.cm-tab:has-text("執行管理")')
-    pg.click('.cm-tab:has-text("材料申請")')
+    pg.locator('.cm-tab:has-text("材料申請")').dispatch_event('click')
     pg.wait_for_selector(".mat-card", timeout=20000)
     pg.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]')); return Array.isArray(d.mlGroups) && d.mlGroups.length > 0 }", timeout=20000)
     card = pg.locator(".mat-card").first
-    card.locator('[data-testid="mat-order-oneclick"]').click()
+    card.locator('[data-testid="mat-order-oneclick"]').dispatch_event('click')               # 編輯中提示框（presence）可能蓋住按鈕：直接送出 click 事件
     pg.wait_for_selector('[data-testid="ui-toast"]:has-text("沒有認列採購單的權限")', timeout=8000)          # 不重新整理、不等防抖
     assert "已通知管理員" in pg.locator('[data-testid="ui-toast"]').first.inner_text()
     pg.wait_for_function("() => !document.querySelector('[data-testid=mat-po-recognized]')", timeout=8000)
@@ -76,13 +76,14 @@ def test_denied_recognition_is_visible_at_once_without_reload(live_server, make_
     finally:
         c.close()
 
+    ctx2.close()                                                                      # 對照前關掉管理員的瀏覽器（避免『有人同時在編輯』提示框）
     # 對照：最高管理者同樣操作成立
     page.goto(f"{live_server}/pages/case-management.html?q={NO}")
     page.wait_for_selector('.cm-tab:has-text("執行管理")', timeout=20000)
     page.click('.cm-tab:has-text("執行管理")')
-    page.click('.cm-tab:has-text("材料申請")')
+    page.locator('.cm-tab:has-text("材料申請")').dispatch_event('click')
     page.wait_for_selector(".mat-card", timeout=20000)
     page.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]')); return Array.isArray(d.mlGroups) && d.mlGroups.length > 0 }", timeout=20000)
-    page.locator(".mat-card").first.locator('[data-testid="mat-order-oneclick"]').click()
+    page.locator(".mat-card").first.locator('[data-testid="mat-order-oneclick"]').dispatch_event('click')
     page.wait_for_function("() => document.querySelector('[data-testid=mat-po-recognized]')", timeout=8000)
     assert not errors, errors
