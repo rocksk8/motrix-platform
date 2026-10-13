@@ -122,7 +122,7 @@ def test_one_group_cannot_be_claimed_twice_even_within_one_payload(W):
     assert "bad_recognize" in _codes(r) and "poLink" not in _stored("c3")
 
 
-def test_unknown_key_and_group_with_live_application_are_refused(W):
+def test_unknown_key_and_group_with_live_application_are_refused(W, client):
     c, h = W
     _po(c, h, [_ln("a", 3)])
     assert "bad_recognize" in _codes(_put(c, h, [_card(poLink={"key": "item:zzz"})]))
@@ -209,7 +209,7 @@ def test_non_superadmin_cannot_remove_or_alter_an_existing_link_and_unlink_rever
     assert len(_rows("SELECT 1 FROM audit_log WHERE action='material.recognize_undo'")) == 1                 # 寫入漏斗再過一次閘也只記一筆
 
 
-def test_system_path_keeps_valid_link_but_never_accepts_a_new_one(W):
+def test_system_path_keeps_valid_link_but_never_accepts_a_new_one(W, client):
     c, h = W
     _po(c, h, [_ln("a", 3), _ln("b", 1)])
     _put(c, h, [_card(poLink={"key": "item:a"})])
@@ -257,7 +257,7 @@ def test_deleting_a_recognized_card_needs_the_same_permission_and_is_audited(W, 
     assert "poLink" not in (_stored("c2") or {})
 
 
-def test_system_path_never_deletes_a_recognized_card(W):
+def test_system_path_never_deletes_a_recognized_card(W, client):
     c, h = W
     _po(c, h, [_ln("a", 3)])
     _put(c, h, [_card(poLink={"key": "item:a"})])
@@ -297,7 +297,7 @@ def test_who_may_option_two_is_limited_to_roles_that_can_edit_material_orders(W,
     assert not (_stored() or {}).get("poLink")
 
 
-def test_two_requests_each_write_their_own_audit_row_and_rollback_leaves_no_marker(W):
+def test_two_requests_each_write_their_own_audit_row_and_rollback_leaves_no_marker(W, client):
     c, h = W
     _po(c, h, [_ln("a", 3)])
     _put(c, h, [_card(poLink={"key": "item:a"})])
@@ -318,7 +318,7 @@ def test_two_requests_each_write_their_own_audit_row_and_rollback_leaves_no_mark
         cn.close()
 
 
-def test_closed_case_change_request_cannot_carry_a_recognition(W):
+def test_closed_case_change_request_cannot_carry_a_recognition(W, client):
     c, h = W
     _po(c, h, [_ln("a", 3)])
     cn = db.get_db()
