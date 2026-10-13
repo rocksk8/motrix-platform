@@ -2191,6 +2191,12 @@ def _daily_backup_tables() -> dict:
         "供應商":           "SELECT * FROM suppliers ORDER BY id",
         "料號":             "SELECT * FROM parts ORDER BY id",
         "專案":             "SELECT * FROM projects ORDER BY id",
+        # 組織單位（U0a；設定資料）
+        "組織單位":         "SELECT * FROM org_units ORDER BY id",
+        "組織單位層級":     "SELECT * FROM org_unit_closure ORDER BY ancestor_id, descendant_id",
+        "使用者單位歸屬":   "SELECT * FROM user_units ORDER BY user_id, unit_id",
+        "單位設定覆寫":     "SELECT * FROM system_settings_unit ORDER BY unit_id, key",
+        "單位序列":         "SELECT * FROM seq_by_entity ORDER BY entity_id, kind, period",
         # ── 帳號與組織（2026-09-14 補）──
         # 使用者**刻意逐欄列出、略過所有憑證欄位**：password_hash /
         # unlock_password_hash / daily_task_pw_hash 是雜湊，本身不算祕密，

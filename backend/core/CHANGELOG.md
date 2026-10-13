@@ -1,5 +1,13 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-13（wip/t57-u0a-r1：wip/t57-u0a-core-r2 組織單位預留 ＋ wip/t57-u0a-leak-defence-r1 單位鍵洩漏防線）
+
+- **步驟檔 #12 用的精確數字**：新表 5 張；新欄位共 43 個（`owner_unit_id` 36 張表、`unit_id` 2 張、`legal_entity_id` 5 張〔都在前 36 張內〕，因此被動到的既有表共 38 張）；新索引 0；`schema_version` 仍 118；`module_schema_versions.core` 9→10（取號後）。真實欄位：`org_units`(id, parent_id, code, name, is_legal_entity, parent_sees_children, status, sort_order, created_at, updated_at)；`org_unit_closure`(ancestor_id, descendant_id, depth, PK(ancestor_id, descendant_id))；`user_units`(user_id, unit_id, is_primary, role_binding NOT NULL DEFAULT '', PK(user_id, unit_id))；`system_settings_unit`(unit_id, key, value_json, updated_at, updated_by, PK(unit_id, key))；`seq_by_entity`(entity_id, kind, period, seq, PK(entity_id, kind, period))。
+- **取號預期**：`U0A_*` 常數進入 `plat:migrations` 公開介面 ⇒ core 次版號 1.133→1.134（`core_bump.py --pending` 已重產 G1 快照）；`module_schema_versions.core` 9→10；permmatrix 模組 migration 1→2。
+- 新增未取號的 core migration `_core_next_org_units`（只做加法、冪等、不建索引、不重建表）：新表 `org_units`（根單位＝今天的公司，名稱取設定頁公司名稱）、`org_unit_closure`、`user_units`（現有使用者全歸根單位）、`system_settings_unit`、`seq_by_entity`（PK entity_id, kind, period；根法人沿用既有序列，`quote_seq` 不動）；36 張核心業務表加 `owner_unit_id INTEGER NOT NULL DEFAULT 1`（含 5 張主檔），`audit_log`／`notifications` 加 `unit_id`，傳票／請款／開票／承攬商傳票／薪資單加不可變快照 `legal_entity_id`；權限矩陣兩張授權表的 `scope_json` 由 permmatrix 自己的 migration v2 補（全新安裝時 core 先於 permmatrix 執行，core 補不到）。清單常數 `U0A_*` 寫死在凍結的 migration 裡；模組自有表（accounting／lodging／payroll 自有表…）不在這支。`vouchers` 是 VIEW，欄位加在實表 `vouchers_all`。
+- 五張新表進每日 JSON 備份與 demo 重置清單（重置後 init_db 重跑 migration 會重種根單位）。回滾演練腳本 `tools/platform/u0a_rollback_drill.py`；對使用者看得見的行為不變。
+- L0（新增，只增）：`core.internal_cols`（`INTERNAL_COLS`＝owner_unit_id／unit_id／legal_entity_id、`strip_internal_cols`／`strip_row`／`strip_headers`／`is_internal`、純 ASGI `InternalColsMiddleware`）；`main.py` 以最外層中介層剝除所有 JSON 回應中的單位鍵欄位（僅 JSON、無壓縮、有 content-length ≤16 MB 才緩衝；其他原樣串流）。`core.spine.declared_and_open(code)`：嚴格啟用判斷（已宣告且 open 且已驗證；與 fail-open 的 `feature_enabled` 相反），單位範圍強制必須用它。`core/features_l1.json` 新增 planned 功能 `org_units`。`core.upgrade.table_digests` 在未明列 `columns` 時預設忽略內部欄位（明列時照明列）。行為對使用者不變。
+
 ## 1.133 — 2026-10-13（wip/t57-material-recognize-r2）
 
 - 設定中心新增群組 `material_recognition`（材料卡片認列採購單；`who_may` 預設只有最高管理者、`on_denied` 預設取消並寄信、`mail_window_minutes`、`mail_cap`；放寬走確認期間＋另一位最高管理者核准；凍結基準同步）。

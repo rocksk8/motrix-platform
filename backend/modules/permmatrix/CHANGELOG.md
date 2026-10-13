@@ -1,5 +1,8 @@
 # 權限矩陣 更新紀錄
 
+## (next) — 2026-10-13（wip/t57-u0a-core-r1；U0a 組織單位預留）
+- 新增模組 migration v2：`perm_role_caps`、`perm_user_overrides` 各加可為空的 `scope_json TEXT`（NULL＝全部＝今天的行為；共 2 欄）。只加欄位、冪等；沒有任何程式讀寫它（授權帶範圍屬 U1）。
+
 ## 1.0.2 — 2026-10-12（wip/t57-permmatrix-probe-r1）
 - 新增唯讀狀態探針 `GET /api/permmatrix/status`（登入即可；只回 `{"ok": true}`（無字串值，符合 probe「回應值不進 log」規則），不讀 `perm_*` 表、不改任何權限判斷），`module.json` 宣告 `provides.api_prefixes`／`probes`，補 D7 final_drill 的「沒有宣告 provides.probes」。寫入端點與頁面仍未接線（SPEC PMX14）。
 

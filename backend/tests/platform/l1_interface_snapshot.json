@@ -1,5 +1,5 @@
 {
- "core_version": "1.133",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1489,6 +1489,15 @@
    "subscribe": "def(name, handler, subscriber)",
    "subscribers": "def(name)"
   },
+  "plat:internal_cols": {
+   "INTERNAL_COLS": "const",
+   "InternalColsMiddleware": "class",
+   "InternalColsMiddleware.__init__": "def(self, app)",
+   "is_internal": "def(name)",
+   "strip_headers": "def(columns)",
+   "strip_internal_cols": "def(obj)",
+   "strip_row": "def(row)"
+  },
   "plat:loader": {
    "ALL": "const",
    "DISABLED_REASON": "const",
@@ -1520,6 +1529,10 @@
   },
   "plat:migrations": {
    "NEXT": "const",
+   "U0A_LEGAL_ENTITY_TABLES": "const",
+   "U0A_OWNER_UNIT_TABLES": "const",
+   "U0A_ROOT_UNIT_ID": "const",
+   "U0A_UNIT_ID_TABLES": "const",
    "current_version": "def(conn, module)",
    "incomplete": "def(db_path)",
    "register": "def(module, version, fn)",
@@ -1656,6 +1669,7 @@
    "CORE_FEATURES_FILE": "const",
    "STATUSES": "const",
    "TONE_ORDER": "const",
+   "declared_and_open": "def(code)",
    "drop_owner": "def(owner)",
    "feature_enabled": "def(code)",
    "feature_status": "def(code)",
