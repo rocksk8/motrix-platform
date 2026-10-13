@@ -91,12 +91,24 @@ def _query_default(name: str, field) -> str:
     return "1" if _is_int(field) else "x"
 
 
+def iter_routes(app):
+    """app 的所有端點路由（攤平）。新版 FastAPI（≥0.14x）的 `include_router` 不再把子路由攤進 `app.routes`，
+    而是放 `_IncludedRouter` 包裝物件（只有 `effective_route_contexts()`）；舊版是直接的 APIRoute。兩種都要能走。
+    （3.11＋FastAPI 0.133 的測試機與 3.12＋0.141 的列車機結構不同——記錄器曾因此在列車機上只看到 4 條 GET。）"""
+    for r in app.routes:
+        ctx = getattr(r, "effective_route_contexts", None)
+        if callable(ctx):
+            yield from ctx()
+        else:
+            yield r
+
+
 def get_targets(app) -> list:
     """[(鍵, 實際網址)]：GET 路由；路徑參數用種子值填（整數 1、字串 'x'——種子的 NOT NULL 文字欄位就是 'x'，所以字串主鍵也對得上），
     必填查詢參數用 `_QUERY_DEFAULTS` 的合理預設。鍵是路由樣板（含 `{}`），所以基準不依賴填入的值。"""
     from urllib.parse import quote
     out = {}
-    for r in app.routes:
+    for r in iter_routes(app):
         methods = getattr(r, "methods", None) or ()
         tpl = getattr(r, "path", "")
         if "GET" not in methods or not tpl.startswith("/api/"):
