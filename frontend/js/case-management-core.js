@@ -556,6 +556,19 @@ window.CM_PARTS.push(() => ({
 
     // 自己在頁面上經由專屬端點改了伺服器上的某一段（附件上傳／刪除、沖銷）：
     // 同一個改動要同時套在畫面與基準上，否則下一次存檔會把自己擋下（或把附件蓋掉）。
+    // 別的端點（材料申請存檔）也會讓伺服器改寫這些分段：基準換成伺服器實際存入的值。
+    // 畫面上的值只在「使用者沒動過」（＝與舊基準相同）時才一併換掉——否則存檔時會把舊清單當成改動送回去蓋掉新的
+    _adoptSavedSegments(saved) {
+      if (!saved || !this.cr?.caseRecord) return
+      for (const k of ['materials', 'materialOrders']) {
+        const v = saved[k]
+        if (v === undefined || v === null || this._segBase[k] === undefined) continue
+        const old = this._segBase[k]
+        this._segBase[k] = JSON.stringify(v)
+        if (k === 'materialOrders' && JSON.stringify(this.cr.caseRecord[k]) === old) this.cr.caseRecord[k] = v
+      }
+    },
+
     _applyToBoth(seg, fn) {
       if (this.cr.caseRecord) fn(this.cr.caseRecord)
       if (this._segBase[seg] === undefined) return
