@@ -589,11 +589,22 @@ window.CM_PARTS.push(() => ({
             // 只有認列被拒：只把被拒的那幾張卡片換回伺服器現值，其他卡片（含存檔途中新打的修改）保留；
             // 存檔基準只對這幾張卡片換成伺服器版，下一輪存檔只會送其他卡片的修改
             const ids = new Set(rec.map(x => String(x.itemId)))
-            const srvBy = new Map((srv.materials || []).map(m => [String(m.id), m]))
-            this.cr.caseRecord.materials = this.cr.caseRecord.materials.map(m => (ids.has(String(m.id)) && srvBy.has(String(m.id))) ? srvBy.get(String(m.id)) : m)
+            const srvList = srv.materials || []
+            const srvBy = new Map(srvList.map(m => [String(m.id), m]))
+            const restore = (list) => {
+              const out = list.map(m => (ids.has(String(m.id)) && srvBy.has(String(m.id))) ? srvBy.get(String(m.id)) : m)
+              const present = new Set(out.map(m => String(m.id)))
+              for (const id of ids) {                                       // 被拒的卡片在本機已不見（例：刪除持有認列的卡片被拒）⇒ 依伺服器的位置放回來
+                if (present.has(id) || !srvBy.has(id)) continue
+                const at = srvList.findIndex(m => String(m.id) === id)
+                out.splice(Math.min(at < 0 ? out.length : at, out.length), 0, srvBy.get(id))
+              }
+              return out
+            }
+            this.cr.caseRecord.materials = restore(this.cr.caseRecord.materials)
             let base = []
             try { base = JSON.parse(this._segBase.materials || '[]') } catch {}
-            this._segBase.materials = JSON.stringify(base.map(m => (ids.has(String(m.id)) && srvBy.has(String(m.id))) ? srvBy.get(String(m.id)) : m))
+            this._segBase.materials = JSON.stringify(restore(base))           // 基準也放回：否則 cr≠base，之後每次自動存檔都會再送一次刪除
           }
         }
         if (rec.length && this.mlLoadGroups) await this.mlLoadGroups(this.selected.quote_no)       // 認列分組／候選跟著伺服器現況更新（不必重新整理）
