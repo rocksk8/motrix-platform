@@ -101,7 +101,13 @@ def old_cols(snap):
 
 # ── 差異檢查（純函式；測試以合成快照驅動）──────────────────────────────────────────────
 
-def diff_upgrade(before, after, lists, expect_version=118):
+#: 這一包預期會前進的模組 migration 版號（模組 → 升級後的版號）；其餘模組不得動
+EXPECTED_MODULE_BUMPS = {"permmatrix": 2}
+#: 內容本來就會隨升級改變的表（版號與套用時間）：不比內容雜湊，版號另行檢查
+DIGEST_EXEMPT = ("module_schema_versions",)
+
+
+def diff_upgrade(before, after, lists, expect_version=118, bumps=None):
     """升級前後快照 → [(名稱, 通過?, 說明)]。`lists`＝{"owner":[…], "unit":[…], "legal":[…], "scope":[…]}（來自新樹的 U0A_*）。"""
     res = []
 
@@ -146,8 +152,9 @@ def diff_upgrade(before, after, lists, expect_version=118):
     chk("既有每表列數相同", all(after["tables"][t]["count"] == b["count"] for t, b in before["tables"].items() if t in after["tables"]),
         "；".join("%s %d→%d" % (t, b["count"], after["tables"][t]["count"]) for t, b in before["tables"].items()
                   if t in after["tables"] and after["tables"][t]["count"] != b["count"]))
-    chk("原有欄位的內容雜湊相同（排除新欄位）", before["digests"] == after["digests"] and bool(before["digests"]),
-        "不同的表：%s" % sorted(t for t in before["digests"] if before["digests"][t] != after["digests"].get(t)))
+    bd = {t: h for t, h in before["digests"].items() if t not in DIGEST_EXEMPT}
+    ad = {t: h for t, h in after["digests"].items() if t not in DIGEST_EXEMPT}
+    chk("原有欄位的內容雜湊相同（排除新欄位）", bd == ad and bool(bd), "不同的表：%s" % sorted(t for t in bd if bd[t] != ad.get(t)))
     lost_idx = {k: v for k, v in before["indexes"].items() if after["indexes"].get(k) != v}
     chk("既有索引逐字相同", not lost_idx, "變動：%s" % sorted(lost_idx))
     chk("觸發器逐字相同", all(after["triggers"].get(k) == v for k, v in before["triggers"].items()))
@@ -157,12 +164,17 @@ def diff_upgrade(before, after, lists, expect_version=118):
     chk("quote_seq 的 DDL 逐字相同", qs(before) == qs(after) and qs(before) is not None)
     chk("schema_version 不變", before["schema_version"] == after["schema_version"] == expect_version,
         "前 %r／後 %r／期待 %r" % (before["schema_version"], after["schema_version"], expect_version))
+    bumps = EXPECTED_MODULE_BUMPS if bumps is None else bumps
     other = {m: v for m, v in before["msv"].items() if m != "core"}
-    chk("其他模組的 migration 版號不變", other == {m: v for m, v in after["msv"].items() if m != "core"})
+    got = {m: v for m, v in after["msv"].items() if m != "core"}
+    unexpected = sorted(m for m in set(other) | set(got) if other.get(m) != got.get(m) and not (m in bumps and got.get(m) == bumps[m]))
+    chk("其他模組的 migration 版號不變（預期前進：%s）" % (bumps or "無"), not unexpected,
+        "非預期的變動：%s" % {m: (other.get(m), got.get(m)) for m in unexpected})
     chk("序列表內容相同（下一個號碼不變）", before["seqs"] == after["seqs"])
     chk("各單據號碼的現存最大值相同", before["numbers"] == after["numbers"],
         "不同：%s" % sorted(k for k in before["numbers"] if before["numbers"][k] != after["numbers"].get(k)))
-    chk("整庫健檢 ok、外鍵無違規", after["integrity"] == "ok" and after["fk_violations"] == 0, "%s／fk %s" % (after["integrity"], after["fk_violations"]))
+    chk("整庫健檢 ok、外鍵違規數沒有增加", after["integrity"] == "ok" and after["fk_violations"] <= before["fk_violations"],
+        "%s／fk %s（升級前 %s；合成資料本身可能有違規，只要求不增加）" % (after["integrity"], after["fk_violations"], before["fk_violations"]))
     return res
 
 
