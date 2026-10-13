@@ -89,7 +89,8 @@ def _body(conn, kind, key, scope, which):
         if r is not None and r["status"] != "published":
             r = None
     if r is None:
-        raise D.DefinitionError("找不到 %s" % (which,))
+        raise D.DefinitionError({"draft": "目前沒有草稿，沒有可比較的內容（可改比較兩個已發布的版本）", "live": "目前沒有已發布的版本（可改和程式預設 default 比較）"}
+                                .get(which, "找不到第 %s 版（已發布）" % (which,)))
     return r.get("body") or {}
 
 
@@ -128,9 +129,8 @@ def impact(conn, kind, key, scope) -> dict:
                      else "發布後立即套用到畫面；已存的單據資料不會被改動。")}
 
 
-def _gate(authorization, kind):
-    """先驗身分（未登入 ⇒ 401，與其他路由一致），再看旗標與 kind；通過回連線（呼叫端關閉）。"""
-    _require_user(authorization, require_superadmin=True)
+def _flag_gate(kind):
+    """身分已由呼叫端的 `_require_user(..., require_superadmin=True)` 驗過（未登入 ⇒ 401，與其他路由一致）；這裡再看旗標與 kind，通過回連線（呼叫端關閉）。"""
     conn = get_db()
     if not enabled(conn) or kind not in kinds():
         conn.close()
@@ -140,7 +140,8 @@ def _gate(authorization, kind):
 
 @router.get("/api/def-governance/{kind}/{key}/ledger")
 def def_ledger(kind: str, key: str, scope: str = Query("company"), authorization: str = Header(None)):
-    conn = _gate(authorization, kind)
+    _require_user(authorization, require_superadmin=True)
+    conn = _flag_gate(kind)
     try:
         return ledger(conn, kind, key, scope)
     except D.DefinitionError as e:
@@ -152,7 +153,8 @@ def def_ledger(kind: str, key: str, scope: str = Query("company"), authorization
 @router.get("/api/def-governance/{kind}/{key}/diff")
 def def_diff(kind: str, key: str, scope: str = Query("company"), a: str = Query("live"), b: str = Query("draft"),
              authorization: str = Header(None)):
-    conn = _gate(authorization, kind)
+    _require_user(authorization, require_superadmin=True)
+    conn = _flag_gate(kind)
     try:
         return version_diff(conn, kind, key, scope, a, b)
     except D.DefinitionError as e:
@@ -163,7 +165,8 @@ def def_diff(kind: str, key: str, scope: str = Query("company"), a: str = Query(
 
 @router.get("/api/def-governance/{kind}/{key}/impact")
 def def_impact(kind: str, key: str, scope: str = Query("company"), authorization: str = Header(None)):
-    conn = _gate(authorization, kind)
+    _require_user(authorization, require_superadmin=True)
+    conn = _flag_gate(kind)
     try:
         out = impact(conn, kind, key, scope)
     except D.DefinitionError as e:

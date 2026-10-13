@@ -51,7 +51,7 @@ def _audit_count(action):
         conn.close()
 
 
-def test_flag_default_is_off():
+def test_flag_default_is_off(client):
     assert G.enabled() is False
 
 
@@ -132,6 +132,16 @@ def test_diff_between_any_two_versions_and_live_vs_draft(api, flag_on):
     assert same["changes"] == []
     assert c.get(GOV + "/diff", headers=h["sa"], params={"a": "9", "b": "live"}).status_code == 400
     assert c.get(GOV + "/diff", headers=h["sa"], params={"a": "x", "b": "live"}).status_code == 400
+
+
+def test_diff_without_a_draft_or_live_version_says_so_in_plain_words(api, flag_on):
+    c, h = api
+    r = c.get(GOV + "/diff", headers=h["sa"])                                     # 預設 a=live、b=draft，什麼都還沒有
+    assert r.status_code == 400 and "目前沒有已發布的版本" in r.json()["detail"]
+    _publish(c, h, _body("甲"))
+    r = c.get(GOV + "/diff", headers=h["sa"])                                     # 有生效版、沒有草稿
+    assert r.status_code == 400 and "目前沒有草稿" in r.json()["detail"]
+    assert c.get(GOV + "/diff", headers=h["sa"], params={"a": "7", "b": "live"}).json()["detail"] == "找不到第 7 版（已發布）"
 
 
 def test_impact_preview_counts_match_and_writes_only_an_audit_line(api, flag_on):
