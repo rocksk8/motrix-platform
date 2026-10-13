@@ -1378,6 +1378,19 @@
    "upload_path_key": "def(entry, folder, depth=…)",
    "upload_readable": "def(conn, rel, user)"
   },
+  "helper:user_buttons": {
+   "ACTION_TYPES": "const",
+   "KIND": "const",
+   "MAX_PER_SLOT": "const",
+   "MAX_SLOTS_PER_PAGE": "const",
+   "MAX_TOTAL": "const",
+   "SLOTS": "const",
+   "catalog": "def(modules=…, superadmin=…)",
+   "definition_problems": "def(key, body)",
+   "enabled": "def(conn=…)",
+   "preview": "def(conn, caller, definition, module, page, username=…)",
+   "visible_buttons": "def(conn, user, module, page)"
+  },
   "helper:validation": {
    "body_flag": "def(body, key, default=…)",
    "strict_bool": "def(value, field=…)"

@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-14（wip/t61-s6-impl-r1；S6：登記外包名冊匯出）
+- module.json `customization.pages` 登記外包名冊匯出（`GET /api/contractors/export`，xlsx，`perm: contractor_list`），供自訂按鈕目錄使用。純加性宣告；端點本身（權限、證件號碼遮蔽、稽核）完全不變。
+
 ## (next) — 2026-10-14（wip/t59-bp1-governance-r1；BP-1：匯款款別設定頁接上版本帳本與發布前影響預覽）
 - 匯款款別設定頁（remit-kinds-settings）在「定義版本帳本與影響預覽」旗標（`builder_governance.enabled`，預設關）開啟時，多出版本帳本入口；關閉時畫面與先前完全相同。無 migration、無新路由、無權限變更。
 

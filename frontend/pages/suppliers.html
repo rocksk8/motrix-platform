@@ -11,6 +11,7 @@
   <script src="../static/gov-lookup.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script src="../static/custom-fields.js"></script>
+  <script src="../static/user-buttons.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/vendor/xlsx-0.18.5.full.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -123,6 +124,20 @@
   沒有可計算的前置時間天數 —— 這些供應商的料號算不出預計到貨日。
 </p>
       </div>
+      <!-- T61 S6：使用者自訂按鈕的插槽「工具列」（旗標 builder_actions.enabled 開啟才畫；按鈕只是入口，不授權：開頁＝目標頁自己驗證，匯出＝用點擊者自己的身分呼叫登記的端點） -->
+      <template x-if="$store.ub && $store.ub.enabled && ($store.ub.list('toolbar').length || $store.ub.mode !== 'live' || ubIsAdmin())">
+        <div data-button-slot="toolbar" data-testid="ub-slot-toolbar" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto;margin-right:8px">
+          <template x-for="b in $store.ub.list('toolbar')" :key="b.key">
+            <button type="button" class="btn btn-ghost" :data-ub-key="b.key" :data-ub-type="b.type"
+                    :disabled="$store.ub.busy || $store.ub.mode !== 'live'" @click="MotrixUserButtons.run(b)">
+              <span x-show="b.type === 'export'" aria-hidden="true">⬇ </span><span x-text="b.label"></span>
+            </button>
+          </template>
+          <span x-show="$store.ub.mode !== 'live'" x-text="$store.ub.previewLabel" style="font-size:11px;color:var(--warning)"></span>
+          <span x-show="$store.ub.msg" x-text="$store.ub.msg" style="font-size:11px;color:var(--danger)"></span>
+          <button type="button" class="btn btn-ghost btn-sm" data-testid="ub-edit-open" x-show="ubIsAdmin()" @click="MotrixUserButtons.openEditor()">自訂按鈕</button>
+        </div>
+      </template>
       <button class="btn btn-primary" @click="openCreate()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
         新增供應商
@@ -920,6 +935,10 @@
   // 唯一多出的動作是啟動時讀一次 GET /api/custom-fields/supplier。
   MotrixCustomFields.init({ recordType: 'supplier', label: '供應商' })
 
+  // T61 S6：自訂按鈕（供應商頁工具列）。設定中心「自訂按鈕」預設關閉：關閉時 $store.ub.enabled＝false，插槽不畫；
+  // 唯一多出的動作是啟動時讀一次 GET /api/user-buttons/supply/suppliers.html。
+  MotrixUserButtons.init({ module: 'supply', page: 'suppliers.html', slot: 'toolbar' })
+
   function suppliersPage() {
     return {
       session: {},
@@ -1210,6 +1229,7 @@
       selectSupplier(s) { this.selectedId = s.id },
 
       // T61 S5：自訂欄位（供應商）。值存在 form.customFields；整份表單是一次 PUT，所以清空時保留空物件（送 {} ＝清掉有效欄位的值）。
+      ubIsAdmin() { return !!(this.session && this.session.role === 'superadmin') },
       cfIsAdmin() { return !!(this.session && this.session.role === 'superadmin') },
       cfGet(k) { return this.form && this.form.customFields ? this.form.customFields[k] : undefined },
       cfSet(k, v) {
