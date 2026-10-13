@@ -95,6 +95,14 @@ def test_custom_module_impact_counts_records_frozen_on_the_live_version(api, fla
     assert c.get(GOV + "/impact", headers=h["sa"]).json()["frozenRecords"] is None   # 其他種類＝不適用
 
 
+def test_remit_kinds_definition_is_readable_through_the_governance_routes(api, flag_on):
+    """第三個接上面板的編輯頁（匯款款別設定）用的種類必須是已登錄的：帳本與影響預覽都能讀。"""
+    c, h = api
+    r = c.get("/api/def-governance/remit_kinds/default/ledger", headers=h["sa"])
+    assert r.status_code == 200 and r.json()["kind"] == "remit_kinds" and r.json()["live"] is None
+    assert c.get("/api/def-governance/remit_kinds/default/impact", headers=h["sa"]).status_code == 200
+
+
 def test_ledger_marks_live_and_restorable(api, flag_on):
     c, h = api
     _publish(c, h, _body("甲"), "第一版")

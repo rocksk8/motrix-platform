@@ -146,6 +146,7 @@ if (inp.stub) window.MotrixDefGovernance = { available: async () => false, open:
 for (const f of process.argv.slice(3)) (0, eval)(fs.readFileSync(f, 'utf8'))
 let page
 if (inp.which === 'et') page = expenseTypesPage()
+else if (inp.which === 'rk') page = remitKindsPage()
 else { page = moduleBuilderPage() }
 page.key = 'k1'
 const out = { govOn: page.govOn }
@@ -169,6 +170,14 @@ def test_expense_type_editor_entry_is_off_by_default_and_opens_the_read_only_pan
 
 
 @needs_node
+def test_remit_kinds_editor_entry_is_off_by_default_and_opens_the_read_only_panel_with_the_right_args():
+    r = _editor("rk", ["remit-kinds-settings.js"])
+    assert r["govOn"] is False
+    assert r["opened"] == [{"kind": "remit_kinds", "key": "default", "scope": "company", "title": "匯款款別", "tab": "impact", "readonly": True}]
+    assert _editor("rk", ["remit-kinds-settings.js"], stub=False)["opened"] == []
+
+
+@needs_node
 def test_module_builder_entry_is_off_by_default_and_opens_the_read_only_panel_with_the_right_args():
     r = _editor("mb", ["module-builder-consts.js", "module-builder-core.js", "module-builder-output.js"])
     assert r["govOn"] is False
@@ -182,7 +191,7 @@ def test_editors_do_not_fail_when_the_panel_script_is_missing():
 
 
 def test_page_entries_are_gated_by_govon_and_load_the_panel_script():
-    for page, ids in (("expense-types.html", ("et-gov-impact", "et-gov-ledger")), ("module-builder.html", ("mb-gov-impact", "mb-gov-ledger"))):
+    for page, ids in (("expense-types.html", ("et-gov-impact", "et-gov-ledger")), ("remit-kinds-settings.html", ("rk-gov-impact", "rk-gov-ledger")), ("module-builder.html", ("mb-gov-impact", "mb-gov-ledger"))):
         html = (PAGES / page).read_text(encoding="utf-8")
         for i in ids:
             m = re.search(r'<button[^>]*(?:id|data-testid)="%s"[^>]*>' % i, html)

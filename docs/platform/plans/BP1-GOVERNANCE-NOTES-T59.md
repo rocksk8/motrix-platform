@@ -4,7 +4,7 @@
 
 - 版本帳本：每一版的誰／何時／備註，標出生效版與可還原版；任兩版（或 live／draft／default）逐欄差異。
 - 發布前影響預覽：草稿對生效版的差異、現行驗證器的結果、同一定義在其他範圍（公司／角色）的版本、宣告的影響範圍；自訂模組另列「凍結在生效版的單據數」。預覽只多一筆稽核 `definitions.previewed`（不記內容）。
-- 畫面：`frontend/js/def-governance.js`（獨立面板，`MotrixDefGovernance.available／open／preview`）。已接上：費用單據類型編輯頁（`expense-types.html`，發布鈕旁）、模組建構器發布步驟（`#mb-gov-impact`／`#mb-gov-ledger`）。兩處都用唯讀面板（`readonly: true`），還原仍走各編輯器自己的流程。排版器（`layout-editor.js`）由其他列車負責，只需在發布步驟呼叫 `preview()`。
+- 畫面：`frontend/js/def-governance.js`（獨立面板，`MotrixDefGovernance.available／open／preview`）。已接上：費用單據類型編輯頁（`expense-types.html`，發布鈕旁）、模組建構器發布步驟（`#mb-gov-impact`／`#mb-gov-ledger`）。沒有真正「通用」的定義編輯頁；第三個接上的是同樣建在定義文件庫上的匯款款別設定頁（`remit-kinds-settings.html`，`rk-gov-*`）。兩處都用唯讀面板（`readonly: true`），還原仍走各編輯器自己的流程。排版器（`layout-editor.js`）由其他列車負責，只需在發布步驟呼叫 `preview()`。
 
 ## 已知缺口（誠實版）
 
