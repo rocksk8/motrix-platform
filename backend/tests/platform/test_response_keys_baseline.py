@@ -38,8 +38,21 @@ def _paths():
     return RK.get_targets(main.app)
 
 
+def _why_few_routes(targets) -> str:
+    """路由太少時的診斷：app 的路由總數、/api GET 數、載入失敗的模組與原因（模組沒掛上 ⇒ 路由不見，不是記錄器壞了）。"""
+    import main
+    from core import registry
+    try:
+        failed = registry.failed()
+    except Exception as e:                                                   # noqa: BLE001
+        failed = "registry.failed() 丟例外：%r" % (e,)
+    return "targets=%d app.routes=%d failed_modules=%s" % (len(targets), len(main.app.routes), str(failed)[:1500])
+
+
 def test_record_or_compare_against_baseline(client, seeded):
-    rec = RK.record(client, seeded, _paths())
+    targets = _paths()
+    assert len(targets) >= ROUTE_FLOOR, "GET /api 目標太少（模組可能沒載入）：" + _why_few_routes(targets)
+    rec = RK.record(client, seeded, targets)
     if os.environ.get("U0A_RECORD") == "1":
         BASELINE.write_text(json.dumps(rec, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
         st = {"routes": len(rec), "withkeys": sum(1 for e in rec.values() if e.get("k")),
