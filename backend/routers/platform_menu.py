@@ -69,6 +69,10 @@ def _layout_for(user, groups, mod_items):
         custom_error = "讀自訂模組失敗，選單暫不含自訂模組"
     if custom_error:
         errors.append({"module": None, "error": custom_error})
+    if user.get("role") != "superadmin":
+        from helpers import menu_builder as MB
+        if MB.enabled():                                      # BP-1：略過／丟棄的操作原文帶著管理者取的名稱與看不到的目標 ⇒ 非最高管理者只給操作種類與理由
+            applied, skipped, dropped = MB.redact_ops(applied), MB.redact_ops(skipped), MB.redact_ops(dropped)
     return {"groups": core_menu.merge_custom(new_groups, customs), "applied": applied, "skipped": skipped,
             "dropped": dropped, "errors": errors, "sources": sources, "role": role,
             "custom": [m["key"] for m in customs]}

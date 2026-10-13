@@ -233,3 +233,27 @@ def test_publish_validation_rejects_builder_ops_when_off(client, make_user, monk
     _on(monkeypatch, True)
     r = client.put(url, json=body, headers=h_sa)
     assert r.status_code == 200 and r.json()["problems"] == [], r.text
+
+
+def test_menu_response_does_not_leak_hidden_item_ops_to_non_superadmin(client, make_user, monkeypatch):
+    """遮蔽：管理者替『某使用者看不到的項目』取的名稱，不能從該使用者的 /api/platform/menu 的 skipped／applied／dropped 讀到（旗標開啟時）。"""
+    import db
+    from core import definitions as D
+    key, href, man = _pick()
+    perm = next(p for p in man["pages"] if p.get("path") == href)["menu"].get("perm")
+    if not (isinstance(perm, list) and perm):
+        pytest.skip("任取的項目不要模組權限 ⇒ 沒有『看不到』的對象")
+    _on(monkeypatch, True)
+    h_none = _login(client, make_user, "bp1_leak_none", "admin", modules=[])
+    tgt = "%s:%s/sidebar" % (key, href)
+    conn = db.get_db()
+    try:
+        D.save_draft(conn, "layout", "module:%s" % key, "company", {"ops": [{"op": "relabel", "target": tgt, "label": "祕密新名"}]}, user="t")
+        D.publish(conn, "layout", "module:%s" % key, "company", note="t", user="t")
+    finally:
+        conn.close()
+    d = client.get("/api/platform/menu", headers=h_none).json()
+    assert "祕密新名" not in json.dumps(d, ensure_ascii=False) and tgt not in json.dumps(d["layout"]["skipped"], ensure_ascii=False)
+    assert d["layout"]["skipped"], "仍要告訴他『有操作被略過』（只是不給內容）"
+    assert MB.redact_ops([{"op": {"op": "hide", "target": "x:y/sidebar"}, "reason": "r"}]) == [{"op": {"op": "hide"}, "reason": "r"}]
+    assert MB.redact_ops([{"op": "relabel", "target": "x:y/sidebar", "label": "z"}]) == [{"op": "relabel"}]

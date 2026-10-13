@@ -933,6 +933,18 @@
    "declared_overlays": "def()",
    "script_path": "def(module_key, script)"
   },
+  "helper:menu_builder": {
+   "FIELD": "const",
+   "GROUP": "const",
+   "MAX_OPS": "const",
+   "OFF_REASON": "const",
+   "enabled": "def(conn=…)",
+   "is_builder_op": "def(op)",
+   "ops_hash": "def(ops)",
+   "preview": "def(conn, caller, body)",
+   "redact_ops": "def(items)",
+   "sidebar_ops_of_all": "def(conn, role, mod_items)"
+  },
   "helper:module_registry": {
    "BADGE_EXCLUDE": "const",
    "BADGE_PREFIXES": "const",
