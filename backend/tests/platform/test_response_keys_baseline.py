@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pytest
 
-from core import internal_cols as IC
 from tests.platform import _response_keys as RK
 
 BASELINE = Path(__file__).with_name("response_keys_baseline.json")
@@ -58,6 +57,7 @@ def test_record_or_compare_against_baseline(client, seeded):
 # ── 正對照（記錄器本身不是假綠燈）────────────────────────────────────────────────────
 
 def test_positive_control_unstripped_json_is_detected(client, seeded, monkeypatch):
+    from core import internal_cols as IC      # 惰性匯入：基準要能在『還沒有 internal_cols』的父提交上記錄
     import db
     c = db.get_db()
     try:
