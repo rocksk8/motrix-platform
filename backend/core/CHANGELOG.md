@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — wip/t59-bp1-menus-r1（BP-1 選單建構器；旗標 `builder_menu.enabled` 預設關）
+## 1.135 — wip/t59-bp1-menus-r1（BP-1 選單建構器；旗標 `builder_menu.enabled` 預設關）
 
 - L0（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：`core.customization.SIDEBAR_LABEL_MAX`／`sidebar_label_problem`（側欄顯示名稱：最長 20 字、不含標記字元）；`core.menu.apply_layout_ex(groups, ops, builder=False)`（`apply_layout` 簽章與行為不變，等同 `builder=False`）。
 - 版面操作放寬（`OPS_BY_KIND["sidebar"]` 加 `relabel`；側欄 `move` 可帶 `to: "group:<既有群組鍵>"`）：只有設定 `builder_menu.enabled`＝1 才被後端接受與套用；關著時行為與今天逐字相同。改名／換群組只是顯示，href、perm、`denied` 不變。

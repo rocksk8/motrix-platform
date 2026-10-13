@@ -24,7 +24,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 _log = logging.getLogger("motrix.registry")
 
 #: 共用核心的契約版本；模組以 module.json 的 `core` 範圍宣告相容性。
-CORE_VERSION = "1.134"
+CORE_VERSION = "1.135"
 
 
 @dataclass

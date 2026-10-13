@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-14（wip/t59-bp1-governance-r1；BP-1：匯款款別設定頁接上版本帳本與發布前影響預覽）
+## 1.1.35 — 2026-10-14（wip/t59-bp1-governance-r1；BP-1：匯款款別設定頁接上版本帳本與發布前影響預覽）
 - 匯款款別設定頁（remit-kinds-settings）在「定義版本帳本與影響預覽」旗標（`builder_governance.enabled`，預設關）開啟時，多出版本帳本入口；關閉時畫面與先前完全相同。無 migration、無新路由、無權限變更。
 
 ## 1.1.34 — 2026-10-13（MS1 合併段：2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期） ＋ 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期））
