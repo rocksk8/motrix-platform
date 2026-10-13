@@ -106,9 +106,20 @@ def test_end_to_end_when_the_kind_is_registered(client, make_user, monkeypatch):
     for n in ("a", "b"):
         u, p = make_user(username="t61s6_" + n, role="superadmin")
         out[n] = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
-    url = "/api/definitions/user_buttons/module:supply"
-    assert client.put(url + "/draft", headers=out["a"], json={"body": _b(EXP)}).status_code == 200
+    cat = UB.catalog()
+    if not cat["exports"] or not cat["pages"] or not cat["slots"]:
+        pytest.skip("目錄裡沒有可用的匯出／頁面／插槽")
+    slot = cat["slots"][0]["id"]
+    nav = {"key": "b1", "slot": slot, "label": "去看看", "action": {"type": "navigate", "page": cat["pages"][0]["page"]}}
+    exp = {"key": "b2", "slot": slot, "label": "匯出清單", "action": {"type": "export", "export": cat["exports"][0]["id"]}}
+    url = "/api/definitions/user_buttons/module:%s" % cat["slots"][0]["module"]
+    assert client.put(url + "/draft", headers=out["a"], json={"body": _b(nav)}).status_code == 200
     r = client.post(url + "/publish", headers=out["a"], json={"note": "n"})
-    if r.status_code == 422:
-        pytest.skip("範例匯出不在目錄內：%s" % r.text[:80])
-    assert r.status_code == 200 and r.json()["pending"] is True and r.json()["reasons"]
+    assert r.status_code == 200 and "pending" not in r.json() and r.json()["version"] == 1            # 只開頁＝不變 ⇒ 立即發布
+    assert client.put(url + "/draft", headers=out["a"], json={"body": _b(nav, exp)}).status_code == 200
+    r = client.post(url + "/publish", headers=out["a"], json={"note": "加匯出"})
+    j = r.json()
+    assert r.status_code == 200 and j["pending"] is True and any("匯出清單" in x for x in j["reasons"]), r.text
+    assert client.get(url, headers=out["a"]).json()["latest"]["version"] == 1                          # 匯出按鈕還沒生效
+    tight = client.put(url + "/draft", headers=out["a"], json={"body": _b()})                          # 已有待核准版本時不可再送，要先處理
+    assert tight.status_code == 200
