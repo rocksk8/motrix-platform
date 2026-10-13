@@ -39,9 +39,26 @@ prod：`caseRecord.materialOrders` 0 列、`case_material_approvals` 全庫 0 �
 **後端（純 API，不需瀏覽器）** `modules/case/tests/test_material_recognize_*.py`：建案件＋報價品項＋一張**已核准**採購單（`case_extra_expenses`，行帶 `itemId`）；對材料卡片送 `PATCH …/case-record`（`materials[0].poLink`＝該採購單分組、`ordered=true`）；斷言：①回應無 `rejected`；②重新 `GET` 後卡片連結仍在；③`ordered` 為真；④`arrived` 在沒有到貨確認時的規則（見修法）；⑤不產生任何 `case_material_approvals` 列。
 **e2e（Edge）** 新增 `test_e2e_material_recognize_2026_10_13.py`：載入案件→按『帶入並連結』→**不按任何其他儲存**→重新整理→卡片仍顯示已對應採購單、已申購已勾、已到料可勾。
 
-## 5. 修法（實作中；見分支 `wip/t57-material-recognize-r1`）
-把『帶入並連結』改成**認列**：卡片自己持有一個**經伺服器驗證的採購單連結** `poLink`（不再建立前端草稿列、不再依賴材料申請審核列）：
-- 伺服器驗證（`_gate_materials`）：`poLink.key` 必須是該案件目前『已核准採購單涵蓋分組』之一（`material_coverage_view.groups`）、尚未被其他卡片認列、且尚未有活的材料申請；寫入時由伺服器重新填入 `poDocCode／docCodes／quoteItemId／供應商名稱（取自採購單廠商欄位）`，不信用戶端。
-- 勾選閘：`ordered`／`arrived` 由 false→true 的條件除了『連到已核准材料申請』外，新增『持有有效認列 `poLink`』；`arrived` 不需材料申請的到貨確認（沒有材料申請可確認），但記錄勾選者與時間。
-- 不繞過核准：認列只在**採購單已核准**時成立；只連結與鏡射旗標，不建立或核准任何材料申請，不產生金額。
-- 設定：`material_order.supplier_required` 語意不變（手動新增的材料申請照舊）；認列的卡片供應商取自採購單，不要求在供應商主檔內。
+## 5. 修法（r2：併入 0d 設計稽核 M1–M4／S1–S5 與使用者 10-13 加碼）
+把『帶入並連結』改成**認列**：卡片自己持有一個**經伺服器驗證的採購單連結** `poLink`（不再建立前端草稿列、不依賴材料申請審核列）。實作集中在 `modules/case/material_recognize.py`，由唯一的閘 `material_guard._gate_materials` 呼叫（端點、整份存檔漏斗、已結案變更核准三條路徑共用；漏斗對同一份資料會再過一次閘，稽核以連線專屬 TEMP 表去重）。
+
+**使用者加碼（10-13，逐字）**：「照正常流程開發即可，他能自動帶入採購單，如果非超級管理員自動帶入要把它取消，要寄信通知管理員」。
+- 誰可以認列／取消認列：預設**只有最高管理者**（設定中心群組 `material_recognition.who_may`：1＝只有最高管理者〔預設〕／2＝有案件權限的人；放寬＝高影響，確認期間＋另一位最高管理者核准）。
+- 其他人嘗試 ⇒ **整件取消**：該卡片的 `poLink` 與旗標（含序號）維持原值，同一份資料其他欄位照存；`rejected[]` 回 `recognize_denied`（白話訊息）；同交易寫稽核 `material.recognize_denied`；依 `on_denied`（1＝取消並寄信〔預設〕／2＝只取消）寄信給管理員。
+- 信：類型 `material_recognize_denied`（系統技術類、預設僅最高管理者，收件人只能在「信件與通知收件設定」覆寫——收件人只有一個來源，不另設收件人欄位）；固定範本，只有案件編號、卡片編號、嘗試者帳號、時間；沒有金額、廠商、採購單明細；欄位值去掉所有換行。去重＋上限查**稽核表**（資料庫狀態、在寫入交易內）：同 (帳號, 案件, 分組) 於 `mail_window_minutes`（預設 60）內已寄過 ⇒ 不寄；視窗內總寄信達 `mail_cap`（預設 10）⇒ 不寄；稽核每次都寫。寄信失敗只記 log，不影響拒絕。
+- `actor=None`（系統／已結案變更核准）：不接受新的或變更的 poLink（記 denied 稽核、不寄信），只保留原本有效的；不可代為翻旗標。
+
+**0d 設計稽核對應**
+| 項 | 做法 |
+|---|---|
+| M1 到貨無確認步驟 | 勾『已到料』必填到貨日（`normalize_date`）；`arrivedBy`／`arrivedAt` 由伺服器記，用戶端帶的忽略；被拒時序號（devices）維持原值；取消已到料清掉到貨記錄並記 `recognize_unarrived`（序號不自動移除，與其他取消旗標一致，稽核記序號數） |
+| M2 認列唯一 | 以已存卡片（寫入交易內重讀）＋同一份資料內逐張累計的 `taken` 判斷；同一張重送冪等；測試含正對照（第一張成立、第二張被拒） |
+| M3 雙向占用／過期 | 認列時分組不得已有活的材料申請（含草稿）；反向：認列中的分組不能再建立／連結材料申請（`claimed_conflict` 掛在 `_link_problem`）。每次存檔重新驗證，採購單不再是『已核准涵蓋』⇒ `poLink.stale=true`：旗標歷史保留、不能再勾（`recognize_stale`）、涵蓋檢視不再算占用、畫面顯示『採購單已變更』 |
+| M4 稽核 | `material.recognize`／`recognize_undo`／`recognize_arrived`／`recognize_unarrived`／`recognize_denied`，在閘內同交易寫入（`_gate_materials` 新增 actor 參數） |
+| S1 授權 | 認列＝上述設定；勾旗標＝可寫案件記錄者（同 `/receive`，端點的 `require_case`）；`poLink` 只有非金額欄位（單號、分組鍵、品名、廠商名稱、品項 id） |
+| S2 偽造 | 用戶端只有 `key` 與 `arrivedOn` 會被採用，其餘由伺服器填；沒帶 `poLink` 欄位＝舊頁面，保留伺服器值；明確 `null`＝取消認列（旗標一併取消，除非另有已核准材料申請支撐） |
+| S3 跨案件 | 分組鍵只對**該案件**的涵蓋分組驗證；訊息不洩漏其他案件 |
+| S4 消費者 | 儀表板材料清單加 `recognized`；認列不建立 `case_material_approvals`／匯款路徑（測試斷言） |
+| S5 回滾 | 見下方 |
+
+**回滾注意（發行說明）**：`poLink` 存在卡片 JSON 內，無遷移。程式回滾後舊閘不認識 `poLink`：旗標保留（舊閘只檢查 false→true），但舊的涵蓋檢視不知道已認列的分組 ⇒ 同一組可能再被建立材料申請而**重複涵蓋**。回滾後、建立材料申請前，請先檢查案件的材料卡片是否已認列同一採購單。

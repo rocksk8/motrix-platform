@@ -65,6 +65,7 @@ window.CM_PARTS.push(() => ({
     // 額外採購（沒有報價品項）以採購單為單位各一筆（N1）。已有活的申請 ⇒ 不能再帶入，要追加走變更申請。
     mlGroupChoices() { void this.mlTick; return this.mlGroups },
     mlGroupBlock(g) {
+      if (g.recognized) return '這張採購單已認列到一張材料卡片'
       if (g.existing) return `已有材料申請 ${g.existing.docCode || ''}（${g.existing.status}）→ 要追加請用變更申請`
       const dup = this.materialOrders.some(m => m._saved === false && ((g.quoteItemId && m.quoteItemId === g.quoteItemId) || (!g.quoteItemId && !m.quoteItemId && m.poDocCode === g.poDocCode)))
       return dup ? '已帶入（尚未儲存）' : ''
@@ -125,20 +126,41 @@ window.CM_PARTS.push(() => ({
       if (!mat || mat.orderItemId || !this.moCanEdit || !this.moCanEdit()) return []
       const keys = new Set([this._mlNorm(mat.name), this._mlNorm(mat.model), this._mlNorm(`${mat.name || ''} ${mat.model || ''}`)])
       keys.delete('')
-      return (this.mlGroups || []).filter(g => g && g.key && g.totalPrice != null && !g.existing && !this.mlGroupBlock(g) && keys.has(this._mlNorm(g.name)))
+      if (mat.poLink && mat.poLink.key) return []                           // 已認列：不再列候選
+      return (this.mlGroups || []).filter(g => g && g.key && !g.existing && !this.mlGroupBlock(g) && keys.has(this._mlNorm(g.name)))      // 認列不涉及金額 ⇒ 看不到金額也能認列
     },
-    mlPickCandidate(mat, groupKey) {                      // groupKey＝mlGroupKey(g)（'g:' + key）；回 true＝已帶入並連結
+    // 『帶入並連結』＝認列已核准的採購單（T57，MATERIAL-LINK-BUG-T57）：採購單本身已核准，所以不建立材料申請、不走審核；
+    // 卡片持有一個經伺服器驗證的 poLink（只有 key 是我們的主張，其餘由伺服器重填），並隨一般的案件存檔送出（立即落地）。
+    // 連結後『已申購』自動勾上（採購單已核准＝已申購），『已到料』可勾；供應商文字取自採購單廠商（不要求在供應商主檔內）。
+    mlPickCandidate(mat, groupKey) {                      // groupKey＝mlGroupKey(g)（'g:' + key）；回 true＝已認列
       const g = (this.mlGroups || []).find(x => this.mlGroupKey(x) === groupKey)
       mat.orderItemId = ''
       if (!g || !this.moCanEdit || !this.moCanEdit()) return false
       if (this.mlGroupBlock(g)) { this.mlMsg = this.mlGroupBlock(g); return false }
-      if (g.totalPrice == null) { this.mlMsg = '看不到金額的帳號不能從採購單帶入材料申請（需要財務檢視權限）'; return false }
-      mat.orderItemId = this._mlPush({ itemName: g.name, quantity: g.quantity, unit: g.unit, unitPrice: g.unitPrice, totalPrice: g.totalPrice,
-                                       quoteItemId: g.quoteItemId || '', poDocCode: g.poDocCode, poLine: g.poLine })
-      this.mlMsg = `已帶入材料申請草稿並連結到「${mat.name || g.name}」：請到「材料申請」選供應商、儲存並送審；核准後即可勾「已申購」`
+      mat.poLink = { key: g.key, poDocCode: g.poDocCode || '', docCodes: g.docCodes || [], name: g.name || '', vendor: g.vendor || '' }
+      mat.ordered = true
+      if (g.vendor && !String(mat.supplier || '').trim()) mat.supplier = g.vendor
+      this.mlMsg = `已認列採購單 ${(g.docCodes || []).join('、')} 到「${mat.name || g.name}」：已申購已勾，到料後可勾「已到料」`
       this.mlTick++
       if (this.setDirty) this.setDirty()
       return true
+    },
+    mlRecognizedText(mat) {
+      const l = mat && mat.poLink
+      if (!l || !l.key) return ''
+      const codes = (l.docCodes && l.docCodes.length ? l.docCodes : (l.poDocCode ? [l.poDocCode] : [])).join('、')
+      return `已認列採購單 ${codes}` + (l.vendor ? `（廠商：${l.vendor}）` : '') + (this.mlRecognizedStale(mat) ? '　⚠ 採購單已變更，不能再勾選' : '')
+    },
+    mlRecognizedStale(mat) {                              // 認列的採購單目前已不在『已核准涵蓋』內（撤銷／取消／改回草稿／行被移除）
+      const l = mat && mat.poLink
+      if (!l || !l.key) return false
+      return !!l.stale || (this.mlGroups && this.mlGroups.length > 0 && !this.mlGroups.some(g => g.key === l.key))
+    },
+    mlUnrecognize(mat) {                                  // 取消認列（只有最高管理者；伺服器把關）：拿掉連結並取消已申購／已到料（除非另有已核准的材料申請支撐）
+      mat.poLink = null
+      if (!mat.orderItemId) { mat.ordered = false; mat.arrived = false }
+      this.mlTick++
+      if (this.setDirty) this.setDirty()
     },
     mlOnLinkChange(mat) {                                 // 下拉變更：選到候選（g:）＝帶入並連結；其餘照舊
       if (String(mat.orderItemId || '').startsWith('g:')) { this.mlPickCandidate(mat, mat.orderItemId); return }

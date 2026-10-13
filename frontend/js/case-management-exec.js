@@ -271,6 +271,7 @@ window.CM_PARTS.push(() => ({
     // 物流旗標只能對著「已核准的材料申請」勾；已勾的可以取消勾選（後端閘同規則，這裡先反灰並說明）
     matCanTick(mat, flag) {
       if (mat[flag]) return true
+      if (mat.poLink && mat.poLink.key) return true                      // 已認列已核准的採購單：已申購／已到料可勾（採購單本身已核准）
       const a = this.moApprovals[mat.orderItemId || '']
       if (!a || a.status !== '已核准') return false
       return flag === 'ordered' || !!a.receivedOn

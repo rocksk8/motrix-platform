@@ -28,6 +28,7 @@ from helpers import recycle_bin as RB                 # 第 53 班 P1：刪除�
 from modules.case import material_approval as MA
 from modules.case import recycle_adapter as RA
 from modules.case import material_payment as MP
+from modules.case import material_recognize as MR
 
 # 已付欄位（付款只能經匯款申請寫入）
 _PAID_KEYS = ("paidStatus", "paidAmount", "paidDate")
@@ -70,7 +71,8 @@ def _supplement_only(conn, quote_no, iid, old, cand, st) -> bool:
 def _link_problem(conn, quote_no, order):
     if LINK_VALIDATOR is None or not any(order.get(k) not in (None, "") for k in _LINK_KEYS):
         return None
-    return LINK_VALIDATOR(conn, quote_no, order)
+    msg = LINK_VALIDATOR(conn, quote_no, order)
+    return msg or MR.claimed_conflict(conn, quote_no, order, _load_old(conn, quote_no)[1]) or None
 
 
 def _num(v):
@@ -211,7 +213,7 @@ def enforce(conn, quote_no: str, data: dict, actor=None) -> list:
         cr["materialOrders"] = _gate_orders(conn, quote_no, old_orders, cr.get("materialOrders"), actor, rejected)
     result_orders = cr.get("materialOrders") if has_orders else old_orders
     if has_mats:
-        cr["materials"] = _gate_materials(conn, quote_no, old_mats, cr.get("materials"), [o for o in (result_orders or []) if isinstance(o, dict)], rejected)
+        cr["materials"] = _gate_materials(conn, quote_no, old_mats, cr.get("materials"), [o for o in (result_orders or []) if isinstance(o, dict)], rejected, actor)
     return rejected
 
 
@@ -368,10 +370,11 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
     return out
 
 
-def _gate_materials(conn, quote_no, old_list, new_list, orders, rejected):
+def _gate_materials(conn, quote_no, old_list, new_list, orders, rejected, actor=None):
     rows = MA.rows_for_case(conn, quote_no)
     order_ids = {str(o.get("itemId")) for o in orders}
     old_by = {str(m.get("id")): m for m in old_list}
+    ctx = MR.Ctx(conn, quote_no, old_list, orders, actor, rows)                      # 認列（poLink）：驗證／稽核／通知都在 material_recognize
     out = []
     for nm in (new_list if isinstance(new_list, list) else []):
         if not isinstance(nm, dict):
@@ -379,6 +382,7 @@ def _gate_materials(conn, quote_no, old_list, new_list, orders, rejected):
         mid = str(nm.get("id"))
         om = old_by.get(mid)
         m = dict(nm)
+        po = MR.process(ctx, m, om, mid, rejected)
         link_new = str(m.get("orderItemId") or "")
         link_old = str((om or {}).get("orderItemId") or "")
         if link_new != link_old and link_new and link_new not in order_ids:
@@ -386,8 +390,10 @@ def _gate_materials(conn, quote_no, old_list, new_list, orders, rejected):
             m["orderItemId"] = (om or {}).get("orderItemId") or ""
             link_new = link_old
         link = link_new or link_old
-        reverted_arrival = False
+        reverted_arrival = po["reverted_arrival"]
         for flag in _FLAGS:
+            if po["has"]:                                                            # 已認列：旗標由 material_recognize 處理（到貨日、確認人、過期）
+                break
             want, had = bool(m.get(flag)), bool((om or {}).get(flag))
             if not want or had:
                 continue
@@ -404,4 +410,5 @@ def _gate_materials(conn, quote_no, old_list, new_list, orders, rejected):
         if reverted_arrival and "devices" in m:
             m["devices"] = (om or {}).get("devices") or []                       # 序號不隨被拒的到料進來（庫存認領的前一道）
         out.append(m)
+    MR.finish(ctx)
     return out

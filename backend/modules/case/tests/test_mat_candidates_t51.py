@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""第 51 班：材料卡片『對應材料申請』下拉列出『已核准採購單、尚未帶入材料申請』的候選；選取＝帶入草稿並連結（node 直接執行 mlink.js，不開瀏覽器）。"""
+"""第 51 班：材料卡片『對應材料申請』下拉列出『已核准採購單、尚未帶入材料申請』的候選；選取＝認列該採購單（T57；不再建立草稿列）（node 直接執行 mlink.js，不開瀏覽器）。"""
 import json
 import shutil
 import subprocess
@@ -26,7 +26,9 @@ for (const step of inp.steps) {
   if (step[0] === 'cands') out.cands = ctx.mlCandidatesFor(step[1]).map(g => g.key)
   if (step[0] === 'pick') out.pick = ctx.mlPickCandidate(step[1], step[2])
   if (step[0] === 'change') ctx.mlOnLinkChange(step[1])
+  if (step[0] === 'unrecognize') ctx.mlUnrecognize(step[1])
 }
+out.mat = (inp.steps.find(st => st[1] && typeof st[1] === 'object' && st[0] !== 'cands') || inp.steps[0])[1]
 out.orders = ctx.materialOrders.map(o => [o.itemId, o.itemName, o.poDocCode, o.totalPrice, o._saved])
 out.msg = ctx.mlMsg; out.dirty = ctx.dirty; out.moDirty = ctx.moDirty
 console.log(JSON.stringify(out))
@@ -70,37 +72,38 @@ def test_already_linked_or_read_only_card_has_no_candidates():
 
 
 @needs_node
-def test_no_amount_visibility_means_no_candidates():
-    # moCanEdit() 對 admin／project_manage 為真，但後端對看不到金額者回 totalPrice=null ⇒ 不顯示只會失敗的候選
-    assert _run([_g("a", "A", totalPrice=None)], [["cands", {"name": "A"}]])["cands"] == []
+def test_amount_visibility_is_not_needed_to_recognize():
+    # T57 認列：只連結、不帶金額，所以看不到金額的帳號也有候選（誰能認列由伺服器的 who_may 決定）
+    assert _run([_g("a", "A", totalPrice=None)], [["cands", {"name": "A"}]])["cands"] == ["a"]
     assert _run([_g("a", "A")], [["cands", {"name": "A"}]])["cands"] == ["a"]
 
 
 @needs_node
-def test_pick_imports_draft_and_links_card_without_touching_ordered_flags():
-    mat = {"name": "A", "ordered": False, "arrived": False, "orderItemId": "g:a"}
-    r = _run([_g("a", "A")], [["change", mat], ["cands", mat]])
-    assert r["orders"] == [["new1", "A", "PO-1", 200, False]] and r["moDirty"] is True and r["dirty"] == 1
-    r2 = _run([_g("a", "A")], [["pick", mat, "g:a"]])
-    assert r2["pick"] is True and mat["ordered"] is False
+def test_pick_recognizes_po_ticks_ordered_and_creates_no_draft_row():
+    mat = {"name": "A", "ordered": False, "arrived": False, "orderItemId": "g:a", "supplier": ""}
+    r = _run([_g("a", "A", vendor="某廠商")], [["change", mat], ["cands", mat]])
+    assert r["orders"] == [] and r["moDirty"] is False and r["dirty"] == 1                 # 不再建立前端草稿列
+    m = r["mat"]
+    assert m["poLink"]["key"] == "a" and m["poLink"]["vendor"] == "某廠商" and m["orderItemId"] == "" and m["ordered"] is True and m["supplier"] == "某廠商"
+    assert r["cands"] == []                                                                  # 已認列 ⇒ 不再有候選
+    assert "已認列" in r["msg"]
 
 
 @needs_node
-def test_pick_sets_link_to_new_item_id():
-    # 透過 harness 看不到 mat 回寫（JSON 往返），改驗：選候選後 candidates 為空＝orderItemId 已被設定
+def test_recognized_group_is_blocked_for_other_cards_and_unrecognize_clears_flags():
     mat = {"name": "A", "orderItemId": "g:a"}
-    r = _run([_g("a", "A")], [["change", mat], ["cands", mat]])
-    assert r["cands"] == []                                  # 已連結 ⇒ 不再有候選
-    assert len(r["orders"]) == 1
+    gs = [_g("a", "A", recognized="c9", existing={"itemId": "", "docCode": "", "status": "已認列"})]
+    r = _run(gs, [["cands", {"name": "A"}], ["change", mat]])
+    assert r["cands"] == [] and "poLink" not in r["mat"] and "已認列" in r["msg"]
+    m2 = {"name": "A", "poLink": {"key": "a"}, "ordered": True, "arrived": True, "orderItemId": ""}
+    r = _run([_g("a", "A")], [["unrecognize", m2]])
+    assert r["mat"]["poLink"] is None and r["mat"]["ordered"] is False and r["mat"]["arrived"] is False
 
 
 @needs_node
-def test_pick_without_amount_visibility_or_edit_right_is_refused_and_unlinks():
-    mat = {"name": "A", "orderItemId": "g:a"}
-    r = _run([_g("a", "A", totalPrice=None)], [["change", mat]])
-    assert r["orders"] == [] and "財務檢視" in r["msg"]
+def test_pick_without_edit_right_is_refused():
     r = _run([_g("a", "A")], [["change", {"name": "A", "orderItemId": "g:a"}]], can_edit=False)
-    assert r["orders"] == []
+    assert r["orders"] == [] and "poLink" not in r["mat"]
 
 
 @needs_node
