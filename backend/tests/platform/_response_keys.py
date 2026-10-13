@@ -92,15 +92,11 @@ def _query_default(name: str, field) -> str:
 
 
 def iter_routes(app):
-    """app 的所有端點路由（攤平）。新版 FastAPI（≥0.14x）的 `include_router` 不再把子路由攤進 `app.routes`，
-    而是放 `_IncludedRouter` 包裝物件（只有 `effective_route_contexts()`）；舊版是直接的 APIRoute。兩種都要能走。
-    （3.11＋FastAPI 0.133 的測試機與 3.12＋0.141 的列車機結構不同——記錄器曾因此在列車機上只看到 4 條 GET。）"""
-    for r in app.routes:
-        ctx = getattr(r, "effective_route_contexts", None)
-        if callable(ctx):
-            yield from ctx()
-        else:
-            yield r
+    """app 的所有端點路由（攤平）：委派給專案共用的 `tests/_routes.all_routes`（新舊 FastAPI 都適用；0.14x 的 `include_router`
+    放 `_IncludedRouter`，只有 `effective_route_contexts()`）。不另寫一份：這個坑 2026-09-25 就記過一次。"""
+    from tests._routes import all_routes
+    for _path, _methods, r in all_routes(app):
+        yield r
 
 
 def get_targets(app) -> list:

@@ -39,3 +39,9 @@
 
 ## 5 流程
 1. 在父提交錄基準（單獨一次、約 3 分鐘）→ 2. 本分支重生 L1 快照與 CHANGELOG `(next)` → 3. 單檔測試：`test_internal_cols`、`test_u0a_sinks`、`test_response_keys_baseline`（差異必須為空）、`test_unit_cards`、L1 快照、`test_core_loader`、升級相關 → 4. U0 core 遷移（c7）後重跑基準比對，差異必須為空。
+
+## 6 驗證直譯器：作者送審前的自查必須跑在閘門用的直譯器（2026-10-13 教訓）
+- **事實**：閘門（列車機）用 `D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe`＝Python 3.12.8、FastAPI 0.141.1、starlette 1.7.0、pydantic 2.13.5；作者視窗預設的 `python`＝3.11.15、FastAPI 0.133.1、starlette 1.0.1、pydantic 2.13.4。
+- **差異**：FastAPI ≥0.14x 的 `include_router` 不再把子路由攤進 `app.routes`，而是放 `_IncludedRouter`（沒有 `.path`，只有 `effective_route_contexts()`）；0.133 仍攤平。凡是『遍歷 app.routes』的程式在新版上會**安靜地少看**（U0a 回應鍵集記錄器就是這樣在列車機只看到 4 條 GET、記到 0 條路由而紅，作者機卻綠）。
+- **規則**：①遍歷路由一律用共用的 `tests/_routes.py::all_routes(app)`（核心程式用 starlette 公開的 `route.matches(scope)`，見 `core/loader.py::_match_owner`）；不直接讀 `app.routes[i].path`。②作者送審前的自查（單檔測試）**必須在 `.venv312` 直譯器上跑**（或兩個都跑）；只在 3.11 綠不算。③守門測試應有『路由數下限＋診斷訊息』，避免空洞（本記錄器已加）。
+- **已核對可相容**（FastAPI 0.141 閘門通過或程式自己處理）：`core/catalog.py`（處理 `_IncludedRouter`）、`core/loader.py::mount_modules/_match_owner`（用 `matches()`）、`tests/_routes.py`、`tests/platform/test_module_routes_declared.py`、`tests/test_company_setup_gate_2026_09_28.py`／`test_non_api_routes_whitelist_2026_09_28.py`（自行走 `_IncludedRouter`）、`modules/case/tests/test_route_table_golden_2026_10_05.py`（路由表金標，閘門通過）。
