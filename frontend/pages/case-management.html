@@ -29,6 +29,10 @@
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
+  <script src="../static/custom-layout.js"></script>
+  <script src="../static/layout-runtime.js"></script>
+  <script src="../static/layout-editor.js"></script>
+  <script src="../js/def-governance.js"></script>
   <script src="../static/list-sort.js"></script>
   <script src="../static/vendor/frappe-gantt-0.6.1.min.js"></script>
   <link rel="stylesheet" href="../static/vendor/frappe-gantt-0.6.1.css">
@@ -317,16 +321,16 @@
             </div>
           </template>
           <template x-for="c in filteredCases" :key="c.quote_no">
-            <div class="cm-card" :class="{selected: selected && selected.quote_no === c.quote_no}"
+            <div class="cm-card" :class="{selected: selected && selected.quote_no === c.quote_no, 'cm-card--lo': layoutOn}"
                  :style="isUnread(c) ? 'border-left-color:var(--tone-warning-solid)' : ''"
                  :data-quote-no="c.quote_no"
                  @click="selectCase(c.quote_no)">
-              <div class="cm-card__head">
+              <div class="cm-card__head" :style="loHead()">
                 <input type="checkbox" x-show="batchMode" data-testid="batch-check" :checked="isBatchSel(c)"
                        :aria-label="'選取 ' + c.quote_no" @click.stop="toggleBatch(c)" style="margin-right:6px">
                 <span class="drag-handle" x-show="caseSortPref.sortMode === 'custom'" style="cursor:grab;margin-right:4px" @click.stop>⠿</span>
-                <span class="cm-card__no" x-text="c.quote_no"></span>
-                <span class="cm-card__tag"
+                <span class="cm-card__no" :style="lo('quoteNo')" x-text="c.quote_no"></span>
+                <span class="cm-card__tag" :style="lo('dealTag')"
                       :class="c.deal_tag==='已結案' ? 'cm-card__tag--closed' : (c.deal_tag==='已成案' && c.current_stage ? 'cm-card__tag--stage' : 'cm-card__tag--active')"
                       x-text="c.deal_tag==='已成案' && c.current_stage ? '待 ' + c.current_stage : c.deal_tag"></span>
               </div>
@@ -337,17 +341,17 @@
                 <span class="cm-card__unread-tag" data-testid="case-missing-doc"
                       style="background:var(--tone-warning-bg-strong);color:var(--tone-warning-fg)" x-text="t"></span>
               </template>
-              <div class="cm-card__customer" x-text="c.customer_name || '(未填客戶)'"></div>
-              <div class="cm-card__sales" x-show="c.sales_person" x-text="'業務：' + c.sales_person"></div>
-              <div class="cm-card__footer">
-                <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
-                  <span class="cm-card__amount" x-text="c.moneyMasked ? '—' : 'NT$ ' + (c.total||0).toLocaleString()"></span>
-                  <span class="cm-card__stageprog" x-show="c.stage_total > 0"
+              <div class="cm-card__customer" x-show="lShown('customer')" :style="lo('customer')" x-text="c.customer_name || '(未填客戶)'"></div>
+              <div class="cm-card__sales" x-show="c.sales_person && lShown('sales')" :style="lo('sales')" x-text="lLabel('sales', '業務') + '：' + c.sales_person"></div>
+              <div class="cm-card__footer" x-show="lShown('amount') || lShown('stageProgress') || lShown('date')" :style="loFooter()">
+                <span style="display:flex;align-items:center;gap:6px;overflow:hidden" x-show="lShown('amount') || lShown('stageProgress')">
+                  <span class="cm-card__amount" x-show="lShown('amount')" :style="lo('amount')" x-text="c.moneyMasked ? '—' : 'NT$ ' + (c.total||0).toLocaleString()"></span>
+                  <span class="cm-card__stageprog" x-show="c.stage_total > 0 && lShown('stageProgress')" :style="lo('stageProgress')"
                         :class="{'cm-card__stageprog--danger': c.stage_overdue > 0}"
                         x-text="Math.round((c.stage_done||0) / (c.stage_total||1) * 100) + '%' + (c.stage_overdue > 0 ? ' · 逾期 ' + c.stage_overdue : '')"
                         :title="(c.stage_done||0) + '/' + (c.stage_total||0) + ' 階段完成' + (c.stage_overdue>0 ? '，' + c.stage_overdue + ' 項逾期' : '')"></span>
                 </span>
-                <span class="cm-card__date" x-text="(c.quote_date || c.created_at || '').slice(0,10)"></span>
+                <span class="cm-card__date" x-show="lShown('date')" :style="lo('date')" x-text="(c.quote_date || c.created_at || '').slice(0,10)"></span>
               </div>
             </div>
           </template>
@@ -4766,6 +4770,58 @@
 /* case-management.js を外部ファイルとして読み込み済み（head内） */
 void 0
 </script>
+<script>
+// BP-1：案件清單（卡片）可自訂版面（P9）。設定中心「自訂畫面版面」→ case_management 預設關閉：
+// 關閉時不發任何版面請求（deferred），lShown()＝true、lo()＝''，畫面與先前相同。只接版面，不含任何業務邏輯。
+MotrixLayout.init({
+  module: 'case', page: 'case-management.html', deferred: true,
+  fallback: { lists: { cases: ['quoteNo', 'dealTag', 'customer', 'sales', 'amount', 'stageProgress', 'date'] } },
+})
+window.CM_PARTS.push(() => ({
+  layoutOn: false,
+  _lcols() { return this.layoutOn ? window.Alpine.store('layout').cols('cases') : [] },
+  _lix(f) { return this._lcols().findIndex(c => c.field === f) },
+  lShown(f) { return !this.layoutOn || this._lix(f) >= 0 },
+  lo(f) { return this.layoutOn && this._lix(f) >= 0 ? 'order:' + (this._lix(f) + 1) : '' },
+  loHead() { return this.layoutOn ? 'order:-1' : '' },
+  // 底部一列（金額／進度／日期）整列的位置＝這三個欄位中最前面的那個
+  loFooter() {
+    if (!this.layoutOn) return ''
+    const ix = ['amount', 'stageProgress', 'date'].map(f => this._lix(f)).filter(i => i >= 0)
+    return ix.length ? 'order:' + (Math.min(...ix) + 1) : ''
+  },
+  lLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('cases', f, dflt) : dflt },
+  async initLayout() {
+    try {
+      const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+      if (!s.token) return
+      const r = await fetch('/api/settings-center/public?groups=builder_layout', { headers: { Authorization: 'Bearer ' + s.token } })
+      if (!r.ok) return
+      const d = await r.json()
+      if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.case_management !== true) return
+      if (!document.getElementById('cm-layout-css')) {
+        const st = document.createElement('style'); st.id = 'cm-layout-css'
+        st.textContent = '.cm-card--lo{display:flex;flex-direction:column}.cm-card--lo .cm-card__head,.cm-card--lo .cm-card__footer{width:100%}'
+        document.head.appendChild(st)
+      }
+      const host = document.querySelector('[data-testid="batch-toggle"]')
+      const hostBar = host && host.parentElement
+      if (!hostBar) return
+      hostBar.insertAdjacentHTML('beforeend', '<span data-layout-editor-slot></span>')
+      const slot = hostBar.querySelector('[data-layout-editor-slot]')
+      if (!slot) return
+      this.layoutOn = true
+      await this.$nextTick()
+      if (window.MotrixLayoutEditor) window.MotrixLayoutEditor.mount()
+      window.MotrixLayout.start()
+    } catch (e) { /* 版面是加值功能：讀不到就維持原本的清單 */ }
+  },
+}))
+document.addEventListener('alpine:initialized', () => {
+  try { window.Alpine.$data(document.body).initLayout() } catch (e) { /* 沒有就略過 */ }
+})
+</script>
+
   <script src="../static/approval-cascade.js"></script>
   <script src="../static/approval-return.js"></script>
   <script src="../static/file-preview.js"></script>
