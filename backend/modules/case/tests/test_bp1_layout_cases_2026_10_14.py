@@ -209,3 +209,73 @@ def test_restricted_role_stays_masked_even_when_layout_shows_amount(client, make
     assert client.get("/api/quotations?limit=5", headers=eng).json()["items"] == before
     # 頁面：金額的顯示仍由 moneyMasked 決定（版面綁定只管顯示與順序）
     assert "c.moneyMasked ? '—' : 'NT$ '" in _page()
+
+
+# ── 5. 案件資訊表單（合約資訊、專案期間）──────────────────────────────────
+FORM_FIELDS = {"contract": ("deliveryAddress", "deliveryTerms", "contactPerson", "contactPhone"), "timeline": ("startDate", "endDate")}
+FORM_CORE = {"contactPerson", "contactPhone", "startDate"}              # 現場聯絡人與電話（個資告知相關）、開始日期不能隱藏
+
+
+def test_form_registration_matches_page_bindings():
+    m = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    cz = m["customization"]
+    pg = [p for p in cz["pages"] if p["page"] == "case-management.html"][0]
+    assert {f["key"]: list(f["sections"][0]["fields"]) for f in pg["forms"]} == {k: list(v) for k, v in FORM_FIELDS.items()}
+    core = {f["key"] for k in FORM_FIELDS for f in cz["fields"][k] if f["core"]}
+    assert core == FORM_CORE
+    src = _page()
+    for form, fields in FORM_FIELDS.items():
+        for f in fields:
+            assert "fo('%s', '%s')" % (form, f) in src and "fLabel('%s', '%s'" % (form, f) in src, f
+            if f not in FORM_CORE:
+                assert "fShown('%s', '%s')" % (form, f) in src, f
+        assert "secLabel('%s'" % form in src
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_form_bindings_are_neutral_when_flag_off():
+    r = _node("console.log(JSON.stringify({show: o.fShown('contract', 'deliveryAddress'), fo: o.fo('contract', 'deliveryAddress'),"
+              " label: o.fLabel('contract', 'deliveryAddress', '交貨 / 安裝地址'), sec: o.secLabel('contract', '合約資訊')}))")
+    assert r == {"show": True, "fo": "", "label": "交貨 / 安裝地址", "sec": "合約資訊"}
+
+
+_FORM_STORE = r"""
+window.Alpine = { store() { return {
+  cols() { return [] }, colLabel(l, f, d) { return d },
+  fieldShown(form, f) { return f !== 'deliveryTerms' },
+  fieldOrder(form, f) { return ({deliveryAddress: 4, deliveryTerms: 3, contactPerson: 1, contactPhone: 2})[f] || 0 },
+  fieldLabel(form, f, d) { return f === 'contactPhone' ? '電話（現場）' : d },
+  sections(form) { return [{ label: form === 'contract' ? '合約' : '期間' }] },
+} }, $data() { return {} } }
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_form_bindings_follow_the_layout_when_flag_on():
+    js = _HARNESS % {"code": json.dumps(_part_source()), "cols": "[]",
+                     "body": _FORM_STORE + "const o2 = Object.assign({}, window.CM_PARTS[0]()); o2.layoutOn = true\n"
+                     "console.log(JSON.stringify({shown: ['deliveryAddress','deliveryTerms'].map(f => o2.fShown('contract', f)),"
+                     " fo: ['contactPerson','contactPhone','deliveryAddress'].map(f => o2.fo('contract', f)),"
+                     " label: o2.fLabel('contract', 'contactPhone', '聯絡電話'), keep: o2.fLabel('contract', 'contactPerson', '現場聯絡人'),"
+                     " sec: o2.secLabel('contract', '合約資訊')}))"}
+    r = _run_node(js)
+    assert r == {"shown": [True, False], "fo": ["order:1", "order:2", "order:4"], "label": "電話（現場）", "keep": "現場聯絡人", "sec": "合約"}
+
+
+@pytest.mark.parametrize("core", sorted(FORM_CORE))
+def test_form_core_fields_cannot_be_hidden(client, make_user, core):
+    h = _h(client, make_user, "bp1c_boss6" + core[:3], "superadmin")
+    form = "timeline" if core == "startDate" else "contract"
+    r = _publish(client, h, [{"op": "hide", "target": "case:case-management.html/form:%s/field:%s" % (form, core)}])
+    assert r.status_code == 422, r.text
+
+
+def test_form_noncore_field_can_be_hidden_and_renamed(client, make_user):
+    h = _h(client, make_user, "bp1c_boss7", "superadmin")
+    pts = {p["id"] for p in _eff(client, h)["points"]}
+    t = "case:case-management.html/form:contract/field:deliveryTerms"
+    assert t in pts, sorted(x for x in pts if "form:" in x)[:6]
+    ops = [{"op": "hide", "target": t},
+           {"op": "relabel", "target": "case:case-management.html/form:contract/field:deliveryAddress", "label": "施工地址"}]
+    assert _publish(client, h, ops).status_code == 200
+    assert _eff(client, h)["ops"] == ops

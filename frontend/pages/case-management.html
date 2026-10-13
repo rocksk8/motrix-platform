@@ -672,7 +672,7 @@
 
                 <fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
                 <div class="cm-section-title">
-                  合約資訊
+                  <span x-text="secLabel('contract', '合約資訊')">合約資訊</span>
                   <!-- 已存在的案件用這顆手動帶（2026-09-14）。新建案件在
                        ensureCaseRecord() 就帶過了，不會重複問。只填空欄位，
                        不覆蓋案件這邊已經改過的值。 -->
@@ -686,20 +686,20 @@
                 <!-- 四欄網格：地址與交貨條件各佔兩欄，聯絡人與電話各佔一欄
                      （內容就那麼短，給滿寬只是製造空白與框線噪音），備註跨滿。 -->
                 <div class="cm-fgrid cm-fgrid--contract">
-                  <div class="fi-group">
-                    <label class="fi-label">交貨 / 安裝地址</label>
+                  <div class="fi-group" x-show="fShown('contract', 'deliveryAddress')" :style="fo('contract', 'deliveryAddress')">
+                    <label class="fi-label" x-text="fLabel('contract', 'deliveryAddress', '交貨 / 安裝地址')">交貨 / 安裝地址</label>
                     <input class="fi" type="text" placeholder="地址" x-model="cr.caseRecord.contract.deliveryAddress" @input="setDirty()">
                   </div>
-                  <div class="fi-group">
-                    <label class="fi-label">交貨條件</label>
+                  <div class="fi-group" x-show="fShown('contract', 'deliveryTerms')" :style="fo('contract', 'deliveryTerms')">
+                    <label class="fi-label" x-text="fLabel('contract', 'deliveryTerms', '交貨條件')">交貨條件</label>
                     <input class="fi" type="text" placeholder="交期、運費、安裝條件..." x-model="cr.caseRecord.contract.deliveryTerms" @input="setDirty()">
                   </div>
-                  <div class="fi-group">
-                    <label class="fi-label">現場聯絡人</label>
+                  <div class="fi-group" :style="fo('contract', 'contactPerson')">
+                    <label class="fi-label" x-text="fLabel('contract', 'contactPerson', '現場聯絡人')">現場聯絡人</label>
                     <input class="fi" type="text" placeholder="姓名" x-model="cr.caseRecord.contract.contactPerson" @input="setDirty()">
                   </div>
-                  <div class="fi-group">
-                    <label class="fi-label">聯絡電話</label>
+                  <div class="fi-group" :style="fo('contract', 'contactPhone')">
+                    <label class="fi-label" x-text="fLabel('contract', 'contactPhone', '聯絡電話')">聯絡電話</label>
                     <input class="fi" type="text" placeholder="電話" x-model="cr.caseRecord.contract.contactPhone" @input="setDirty()">
                   </div>
                 </div>
@@ -749,14 +749,14 @@
                   </div>
                 </div>
 
-                <div class="cm-section-title">專案期間<span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span></div>
+                <div class="cm-section-title"><span x-text="secLabel('timeline', '專案期間')">專案期間</span><span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span></div>
                 <div class="cm-fgrid cm-fgrid--dates">
-                  <div class="fi-group">
-                    <label class="fi-label" for="cm-tl-start">開始日期</label>
+                  <div class="fi-group" :style="fo('timeline', 'startDate')">
+                    <label class="fi-label" for="cm-tl-start" x-text="fLabel('timeline', 'startDate', '開始日期')">開始日期</label>
                     <input class="fi" id="cm-tl-start" type="date" x-model="cr.caseRecord.projectTimeline.startDate" @input="setDirty()">
                   </div>
-                  <div class="fi-group">
-                    <label class="fi-label" for="cm-tl-end">預計結束日期</label>
+                  <div class="fi-group" x-show="fShown('timeline', 'endDate')" :style="fo('timeline', 'endDate')">
+                    <label class="fi-label" for="cm-tl-end" x-text="fLabel('timeline', 'endDate', '預計結束日期')">預計結束日期</label>
                     <input class="fi" id="cm-tl-end" type="date" x-model="cr.caseRecord.projectTimeline.endDate" @input="setDirty()">
                   </div>
                 </div>
@@ -4791,6 +4791,15 @@ window.CM_PARTS.push(() => ({
     return ix.length ? 'order:' + (Math.min(...ix) + 1) : ''
   },
   lLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('cases', f, dflt) : dflt },
+  // 案件資訊表單（合約資訊、專案期間）：欄位的顯示／順序／標題與區塊標題。旗標關閉＝中性值。
+  fShown(form, f) { return !this.layoutOn || window.Alpine.store('layout').fieldShown(form, f) },
+  fo(form, f) { return this.layoutOn ? 'order:' + window.Alpine.store('layout').fieldOrder(form, f) : '' },
+  fLabel(form, f, dflt) { return this.layoutOn ? window.Alpine.store('layout').fieldLabel(form, f, dflt) : dflt },
+  secLabel(form, dflt) {
+    if (!this.layoutOn) return dflt
+    const sec = window.Alpine.store('layout').sections(form)[0]
+    return sec && sec.label ? sec.label : dflt
+  },
   async initLayout() {
     try {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
