@@ -14,7 +14,7 @@ import sqlite3
 INTERNAL = ("owner_unit_id", "unit_id", "legal_entity_id")
 
 #: 不由記錄器呼叫的 GET（副作用或很重）；其餘靜態 GET 一律記。理由寫在旁邊。
-DENY = re.compile(r"logout|shutdown|restart|backup|restore|apply|upgrade|self.?test|health.?scan|/probe", re.I)
+DENY = re.compile(r"logout|shutdown|restart|backup|restore|apply|upgrade|self.?test|health.?scan|/probe|/map|geo|tile", re.I)
 EXPORT = re.compile(r"export|download|\.xlsx|\.csv", re.I)
 
 
