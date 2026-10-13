@@ -508,11 +508,15 @@ def test_core_declaration_file_is_valid_plain_and_all_planned(sp):
     codes = [f["code"] for f in r["features"]]
     assert len(codes) == len(set(codes)) >= 10
     for f in r["features"]:
+        if f["code"] == "org_units":                                                              # U1 排定前不承諾版本：hidden（不顯示卡片）
+            assert f["status"] == "hidden" and f["plannedTrain"] is None
+            continue
         assert f["status"] == "planned" and re.match(r"^MS[1-9][0-9]?$", f["plannedTrain"]), f
         plain = re.sub(r"Excel|CSV|PDF", "", f["label"])                                      # 使用者熟悉的產品名稱可以出現，其餘不放英文代號／數字
         assert not re.search(r"[A-Za-z0-9_]", plain), "label 要是白話（不放英文代號／數字）：%r" % f["label"]
     raw = json.loads(spine.CORE_FEATURES_FILE.read_text(encoding="utf-8"))
-    assert all(set(x) == {"code", "label", "status", "planned_train"} for x in raw["features"])      # 目前沒有設定群組＝只有狀態的卡片
+    assert all(set(x) - {"notes", "planned_train"} == {"code", "label", "status"} and ("planned_train" in x) == (x["status"] == "planned") for x in raw["features"])      # 目前沒有設定群組＝只有狀態的卡片（notes 是給維護者看的指標，不顯示在卡片上）
+    assert [x["code"] for x in raw["features"] if "notes" in x] == ["org_units"]
     assert not any("settings" in x for x in raw["features"])
 
 

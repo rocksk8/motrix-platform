@@ -2,7 +2,7 @@
 """每模組獨立版本的 migration（CORE-SPEC §6）。
 
 [單位] plat:migrations    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] NEXT, current_version, incomplete, register, registered, run_all
+[公開介面] NEXT, U0A_LEGAL_ENTITY_TABLES, U0A_OWNER_UNIT_TABLES, U0A_ROOT_UNIT_ID, U0A_UNIT_ID_TABLES, current_version, incomplete, register, registered, run_all
 [不變式] 版本從 1 起、連續、不可重複；每支**回 None** 才記版本（回原因字串＝未完成：不記、ERROR、該模組後面的這次不跑、其他模組照跑、
          不丟例外）；只准新增（加表、加欄位），不刪欄位、不改名；每支必須冪等
          core 以外的模組逐支 SAVEPOINT：**丟例外＝未完成**（原因「例外：<型別>: <訊息>」、撤回這一支的寫入、不往上丟，稽核 D PM1）；
@@ -27,6 +27,7 @@ V9 基準（db._MIGRATIONS，v1~v116）凍結不動；
 - 只准新增（加表、加欄位），不可以刪欄位或改名——回退到舊程式碼時，舊程式碼讀不到的東西它就不讀（§6）。
 - 模組沒安裝 ⇒ 它的 migration 沒登記 ⇒ 不建它的表（CORE-SPEC §6）。`core` 是 L1 自己，永遠登記。
 """
+import json
 import logging
 import os
 import sqlite3
@@ -562,3 +563,131 @@ def _core_next_config_ledger(conn):
 
 
 register("core", 9, _core_next_config_ledger)
+
+
+# ── U0a 組織單位預留（多據點／多法人；第 57 班；未取號，PLAYBOOK §G6）─────────────────────────────────────
+# 設計：docs/platform/plans/FRAMEWORK-ORG-UNITS-T57.md §14.10。**只做加法**：新表 ＋ 既有表加「帶預設值的新欄位」；不改主鍵／約束／索引、不重建表、
+# 不動 `quote_seq`（根法人沿用既有序列，非根法人才用新表 `seq_by_entity`）；舊程式遇到多出的欄位與表照常運作（INSERT 不帶新欄位 ⇒ 預設根單位）。
+# **不建任何索引**（單位過濾啟用前用不到；索引隨 U1，避免對大表做 O(n) 建索引，也讓套用步驟檔的索引清單不變）。
+# 冪等：表／欄位先檢查是否存在（欄位只加一次）；表不存在（模組沒安裝、或這個庫還沒建）⇒ 略過；任何 SQLite 錯誤 ⇒ 回原因字串（不丟例外、
+# 不讓服務起不來；已做的部分無害，下次重跑會補完）。**欄位名稱與資料表清單刻意寫死在凍結的 migration 裡**（migration 不 import 會演進的程式碼）；
+# 與 `core/internal_cols.py`（回應剝除用）的名稱一致性由 tests/platform/test_org_units_u0a.py 守住。
+# `vouchers` 是 VIEW（`SELECT * FROM vouchers_all`，查詢時展開）⇒ 欄位加在實表 `vouchers_all`，VIEW 不動。
+# 模組自有的表（accounting／lodging／payroll 自有表…）不在這支：由各模組自己的 migration 補（U1／U3；permmatrix 的 `scope_json` 已在它自己的 migration v2——全新安裝時 core 先於 permmatrix 執行，core 補不到）；本支只含核心基準表。
+U0A_ROOT_UNIT_ID = 1
+#: 加 `owner_unit_id INTEGER NOT NULL DEFAULT 1` 的核心業務表（交易 31 ＋ 主檔 5；子表由父表繼承，不加）
+U0A_OWNER_UNIT_TABLES = (
+    "quotations", "case_stages", "case_stage_visits", "case_updates", "case_action_items", "case_change_requests",
+    "case_extra_expenses", "completion_notes", "shipping_notes", "contractor_dispatches",
+    "payment_requests", "invoice_vouchers", "contractor_payment_vouchers", "vouchers_all",
+    "payslips", "bonus_awards", "bonus_case_awards",
+    "projects", "project_stages", "project_logs", "work_logs", "daily_tasks",
+    "stock_items", "stock_batches",
+    "dev_cases", "dev_logs", "tenders", "tender_hits", "tender_watches", "network_plans", "custom_records",
+    "customers", "suppliers", "contractors", "vendor_contractors", "parts",
+)
+#: 加 `unit_id INTEGER NOT NULL DEFAULT 1`（稽核、通知隨所屬記錄的單位）
+U0A_UNIT_ID_TABLES = ("audit_log", "notifications")
+#: 加 `legal_entity_id INTEGER NOT NULL DEFAULT 1`（法律單據建立當下寫成不可變快照；預設根法人）
+U0A_LEGAL_ENTITY_TABLES = ("vouchers_all", "invoice_vouchers", "contractor_payment_vouchers", "payslips", "payment_requests")
+
+
+def _u0a_is_table(conn, name):
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
+
+
+def _u0a_add_column(conn, table, column, decl):
+    """回 'added'｜'present'｜'no_table'。只在實表上動手（VIEW、不存在 ⇒ no_table）。"""
+    if not _u0a_is_table(conn, table):
+        return "no_table"
+    if column in {r[1] for r in conn.execute('PRAGMA table_info("%s")' % table).fetchall()}:
+        return "present"
+    conn.execute('ALTER TABLE "%s" ADD COLUMN %s %s' % (table, column, decl))
+    return "added"
+
+
+def _u0a_company_name(conn):
+    """根單位名稱＝設定頁的公司名稱（company_profile 的 companyName／company_name／name 第一個非空）；讀不到 ⇒ '本公司'。永不丟例外。"""
+    try:
+        if not _u0a_is_table(conn, "system_settings"):
+            return "本公司"
+        row = conn.execute("SELECT value_json FROM system_settings WHERE key='company_profile'").fetchone()
+        prof = json.loads(row[0]) if row and row[0] else {}
+        if isinstance(prof, dict):
+            for k in ("companyName", "company_name", "name"):
+                v = prof.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()[:80]
+    except (sqlite3.Error, ValueError, TypeError):
+        pass
+    return "本公司"
+
+
+def _core_next_org_units(conn):
+    try:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS org_units (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                parent_id            INTEGER REFERENCES org_units(id),
+                code                 TEXT    NOT NULL DEFAULT '',
+                name                 TEXT    NOT NULL,
+                is_legal_entity      INTEGER NOT NULL DEFAULT 0,
+                parent_sees_children INTEGER NOT NULL DEFAULT 1,
+                status               TEXT    NOT NULL DEFAULT 'active',
+                sort_order           INTEGER NOT NULL DEFAULT 0,
+                created_at           TEXT    NOT NULL DEFAULT '',
+                updated_at           TEXT    NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS org_unit_closure (
+                ancestor_id   INTEGER NOT NULL,
+                descendant_id INTEGER NOT NULL,
+                depth         INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (ancestor_id, descendant_id)
+            );
+            CREATE TABLE IF NOT EXISTS user_units (
+                user_id      INTEGER NOT NULL,
+                unit_id      INTEGER NOT NULL,
+                is_primary   INTEGER NOT NULL DEFAULT 0,
+                role_binding TEXT    NOT NULL DEFAULT '',
+                PRIMARY KEY (user_id, unit_id)
+            );
+            CREATE TABLE IF NOT EXISTS system_settings_unit (
+                unit_id    INTEGER NOT NULL,
+                key        TEXT    NOT NULL,
+                value_json TEXT    NOT NULL,
+                updated_at TEXT    NOT NULL DEFAULT '',
+                updated_by TEXT    NOT NULL DEFAULT '',
+                PRIMARY KEY (unit_id, key)
+            );
+            CREATE TABLE IF NOT EXISTS seq_by_entity (
+                entity_id INTEGER NOT NULL,
+                kind      TEXT    NOT NULL,
+                period    TEXT    NOT NULL,
+                seq       INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (entity_id, kind, period)
+            );
+        """)
+        now = datetime.now().isoformat()
+        # 根單位＝今天的公司（法人）；名稱之後在單位管理頁改。只在表是空的時候種（冪等）
+        conn.execute("INSERT OR IGNORE INTO org_units (id, parent_id, code, name, is_legal_entity, created_at, updated_at) "
+                     "VALUES (?, NULL, 'root', ?, 1, ?, ?)", (U0A_ROOT_UNIT_ID, _u0a_company_name(conn), now, now))
+        conn.execute("INSERT OR IGNORE INTO org_unit_closure (ancestor_id, descendant_id, depth) VALUES (?,?,0)",
+                     (U0A_ROOT_UNIT_ID, U0A_ROOT_UNIT_ID))
+        if _u0a_is_table(conn, "users") and conn.execute("SELECT 1 FROM user_units LIMIT 1").fetchone() is None:
+            # 所有現有使用者歸屬根單位（主要）；只在表是空的時候種（未取號期間每次啟動會重跑，不可把管理者之後改過的歸屬又寫回去）；
+            # 之後新增的使用者沒有列 ⇒ U1 一律把「沒有 user_units 列」視為根單位（例：demo 重置在 init_db 之後才建使用者）
+            conn.execute("INSERT OR IGNORE INTO user_units (user_id, unit_id, is_primary) SELECT id, ?, 1 FROM users",
+                         (U0A_ROOT_UNIT_ID,))
+        for t in U0A_OWNER_UNIT_TABLES:
+            _u0a_add_column(conn, t, "owner_unit_id", "INTEGER NOT NULL DEFAULT 1")
+        for t in U0A_UNIT_ID_TABLES:
+            _u0a_add_column(conn, t, "unit_id", "INTEGER NOT NULL DEFAULT 1")
+        for t in U0A_LEGAL_ENTITY_TABLES:
+            _u0a_add_column(conn, t, "legal_entity_id", "INTEGER NOT NULL DEFAULT 1")
+        conn.commit()
+    except sqlite3.Error as exc:
+        return "組織單位預留（U0a）未完成：%s: %s（已完成的部分無害；下次啟動會補完）" % (type(exc).__name__, exc)
+    return None
+
+
+register("core", 10, _core_next_org_units)

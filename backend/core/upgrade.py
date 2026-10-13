@@ -36,6 +36,7 @@ import tempfile
 from datetime import date, datetime, timedelta
 
 from core import paths as _p
+from core.internal_cols import INTERNAL_COLS as _INTERNAL_COLS
 
 MANIFEST_NAME = "upgrade_manifest.json"
 #: 新版認得的 V9 基準（與 db.V9_BASELINE 相同；這裡不 import db，避免拉進整個 app）
@@ -234,7 +235,7 @@ def table_digests(db_path: str, columns: dict = None) -> dict:
         for n in names:
             q = '"%s"' % n.replace('"', '""')
             cols = [r[1] for r in conn.execute("PRAGMA table_info(%s)" % q)]
-            want = list(columns[n]) if columns and n in columns else cols
+            want = list(columns[n]) if columns and n in columns else [c for c in cols if c not in _INTERNAL_COLS]    # U0a：單位鍵欄位預設不納入雜湊（加欄不改變內容雜湊）；明列 columns 時照明列（真的缺欄仍會被抓到）
             missing = sorted(set(want) - set(cols))
             if missing:
                 out[n] = {"columns": want, "rows": None, "sha256": None, "missing_columns": missing}

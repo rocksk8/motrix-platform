@@ -480,6 +480,8 @@ DEMO_CLEARED_TABLES = frozenset((
     "voucher_edit_log", "voucher_lines", "voucher_template_versions",
     "voucher_templates", "vouchers_all",
     "webauthn_credentials", "work_logs",
+    # U0a 組織單位（core 未取號 migration）：整張清；清掉 module_schema_versions 後 init_db 重跑 migration 會重種根單位、歸屬與閉包
+    "org_units", "org_unit_closure", "user_units", "system_settings_unit", "seq_by_entity",
 ))
 
 
