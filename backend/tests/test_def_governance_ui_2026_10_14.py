@@ -12,9 +12,10 @@ from pathlib import Path
 
 import pytest
 
+from core import source_tree
+
 ROOT = Path(__file__).resolve().parents[2]
 JS = ROOT / "frontend" / "js"
-PAGES = ROOT / "frontend" / "pages"
 NODE = shutil.which("node")
 needs_node = pytest.mark.skipif(not NODE, reason="需要 node")
 
@@ -192,7 +193,7 @@ def test_editors_do_not_fail_when_the_panel_script_is_missing():
 
 def test_page_entries_are_gated_by_govon_and_load_the_panel_script():
     for page, ids in (("expense-types.html", ("et-gov-impact", "et-gov-ledger")), ("remit-kinds-settings.html", ("rk-gov-impact", "rk-gov-ledger")), ("module-builder.html", ("mb-gov-impact", "mb-gov-ledger"))):
-        html = (PAGES / page).read_text(encoding="utf-8")
+        html = source_tree.page_file(page).read_text(encoding="utf-8")
         for i in ids:
             m = re.search(r'<button[^>]*(?:id|data-testid)="%s"[^>]*>' % i, html)
             assert m and 'x-show="govOn' in m.group(0), (page, i)                         # 入口一律由 govOn 把關（關＝不顯示）
