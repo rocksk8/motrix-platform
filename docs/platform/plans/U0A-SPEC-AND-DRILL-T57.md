@@ -1,4 +1,4 @@
-# U0a 規格與回滾演練規格 — T57 r2（併入 0d U-1～U-7）
+# U0a 規格與回滾演練規格 — T57 r3（併入 0d U-1～U-7 與 1c 補充）
 
 > 作者 hichan-98（規格與演練規格）；實作：c7（核心遷移＋演練腳本，依本規格）、2b（`strip_internal_cols`＋基準回應鍵集記錄器＋`org_units` 宣告）、5e（MS1d 之後支援審查／測試、模組自有表清單）；執行演練與閘門：5c。**僅文件；人日與日期皆為估計。**
 > 依據：`FRAMEWORK-ORG-UNITS-T57.md` §14.9／§14.10（r6）、`EXECUTION-PLAN-T57.md` r9 §2.3、c7 的核心表盤點（10-13，經 1c 轉達）、0d 對 U0 的審查（M1／M2／S2／S3 與 F1～F3）、使用者 10-13 答覆（法人＝混合；U0＝是，盡快）。
@@ -15,7 +15,7 @@
 - `audit_log`、`notifications`：`unit_id INTEGER NOT NULL DEFAULT 1`。
 ### 2.2 `legal_entity_id INTEGER NOT NULL DEFAULT 1`（不可變快照；建立時寫入，不在讀取時推導）
 `vouchers_all`、`invoice_vouchers`、`contractor_payment_vouchers`、`payslips`，以及 **`payment_requests`（決定：加）**——請款單印出的抬頭與匯款帳號由法人決定（`helpers/company_identity.py`），快照才能保證日後翻轉法人旗標不改變已發出的請款單。**U0a 只加欄與預設值；寫入快照的程式（建立時依單位解析法人）屬 U1／U2，U0a 期間所有列都是根法人 `1`。**
-### 2.3 五張新表（**備份涵蓋，0d U-1**：五張新表必須加入 `archive._daily_backup_tables`，或明確列入排除清單；守門測試 `test_every_table_is_either_backed_up_or_explicitly_excluded` 與 BK31 的表數計數要同步更新；否則建包前即紅）
+### 2.3 五張新表（**備份涵蓋，0d U-1；決定：五張新表皆屬設定／組織資料 ⇒ 全部納入每日備份**；`SELECT *` 的備份會帶新欄位——保留，**還原須雙向容忍**（新備份還原到舊程式、舊備份還原到新程式）：五張新表必須加入 `archive._daily_backup_tables`，或明確列入排除清單；守門測試 `test_every_table_is_either_backed_up_or_explicitly_excluded` 與 BK31 的表數計數要同步更新；否則建包前即紅）
 | 表 | 欄位（草案） | 備註 |
 |---|---|---|
 | `org_units` | `id`, `parent_id`, `name`, `code`, `is_legal_entity`（0/1）, `status`, `created_at` | 起始只有根列（id=1，`is_legal_entity=1`，名稱取今天的公司名；**公司名讀不到時的後備名稱＝『本公司』**，0d U-4） |
@@ -64,7 +64,7 @@ accounting 34、case 4（`case_material_*`）、payroll 4、lodging 4、recycleb
 | D1 基準擷取 | 在 MS1c 狀態擷取：`sqlite_master`（表／索引／觸發器）、每表欄位清單、各表筆數、`module_schema_versions`、基準回應鍵集（JSON＋Excel／CSV 表頭） | 存成基準檔（只讀） |
 | D2 升級 | 對複本套用 U0a（沿用 `apply_update.ps1` 流程，套用前備份） | `::RESULT:: … status=success …`；啟動耗時記錄；`/api/ping` 200；`module_states.json` 全部 loaded |
 | D3 結構比對 | 對升級後資料庫與 D1 比對 | 符合 §6：只多出指定表與欄位；`core` 9→10；筆數不變；`integrity_check`＝ok |
-| D3b 全新安裝一致性（0d U-5） | 以同一套件做**全新安裝**（`init_db`＋全部 migration），比對其結構與 D2 升級後的結構 | **完全相同**（表、欄位、索引、觸發器、`module_schema_versions`）；種子資料（根單位、閉包、`user_units`）一致 |
+| D3b 全新安裝一致性（0d U-5） | 以同一套件做**全新安裝**（`init_db`＋全部 migration），比對其結構與 D2 升級後的正式機複本結構 | **完全相同**（表、欄位、**索引清單**、觸發器、`module_schema_versions`）；種子資料（根單位、閉包、`user_units`）一致 |
 | D4 行為等價 | 回應鍵集與基準 diff；匯出表頭 diff | **diff 為空**；**正對照**：啟用測試用不剝除端點 ⇒ 檢查轉紅 |
 | D5 冪等重跑 | 對已升級的資料庫再跑一次 core migration | 無錯誤、無資料變動、`core` 仍 10 |
 | D6 程式回滾（不還原資料庫） | `rollback_update.ps1 -SnapshotTimestamp <時間戳> -Yes`（**不加任何資料庫參數**）回到 MS1c 程式，資料庫保持 U0a 狀態 | `commit` 回 MS1c；`/api/ping` 200；`module_states.json` 全 loaded；**舊 loader 對 `core=10` 的行為被記錄**（容忍／拒絕／警告）；log 無 Traceback；`module_schema_versions.core` 的處理依結果 |
@@ -74,7 +74,7 @@ accounting 34、case 4（`case_material_*`）、payroll 4、lodging 4、recycleb
 | D9 資料庫還原路徑（使用者明確要求才用） | `-IncludeDatabase -ConfirmDatabaseOverwrite` 從套用前備份還原 | 資料庫與 D1 基準逐項相同（diff 為空） |
 | D10 再前進 | 回滾後再套用 U0a | 與 D2／D3 相同結果（冪等） |
 | D11 驗證工具 | 對 U0a 套件跑 `verify_package`（`--expect-db-version 118`）與 VR7（資料庫快照）；更新欄位清單基準 | 皆通過；**正對照**：缺一欄位的套件必須使檢查轉紅 |
-| D12 步驟檔 #12／#15 試跑 | 在 D2 後的複本上逐字執行步驟檔 #12 與 #15 的每個命令 | 輸出與 §6 預期相符；**#15 稽核列＝0**；步驟檔文字無需臨場改寫 |
+| D12 步驟檔 #12／#15 試跑 | 在 D2 後的複本上**用真正的 `apply_update.ps1` 與步驟檔文字**逐字執行 #12 與 #15 的每個命令 | 輸出與 §6 預期相符；**#15 稽核列＝0**；步驟檔文字無需臨場改寫 |
 | D13 報告 | 彙整表＋證據；列出所有 FAIL／警告／未決 | 交 0d；任何 FAIL ⇒ U0a 不凍結 |
 **注意**：演練腳本本身要有『自我測試』（對一個故意壞掉的複本必須回報 FAIL），避免腳本假綠。演練需要一個機器時段（預留 10-20／10-21，見計劃書 §3.2）。
 
