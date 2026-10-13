@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 839,
-  "endpoints_api": 835,
-  "write_total": 457,
-  "write_api": 457,
-  "get_api": 378,
-  "distinct_paths_api": 701,
-  "write_with_body_api": 331,
-  "write_with_path_param_api": 332
+  "endpoints_total": 843,
+  "endpoints_api": 839,
+  "write_total": 460,
+  "write_api": 460,
+  "get_api": 379,
+  "distinct_paths_api": 705,
+  "write_with_body_api": 334,
+  "write_with_path_param_api": 335
  },
  "select_star": {
   "modules": 276,
@@ -851,6 +851,11 @@
   "GET /api/def-governance/{kind}/{key}/ledger": {
    "w": false,
    "pp": 2,
+   "body": false
+  },
+  "GET /api/def-pipeline/pending": {
+   "w": false,
+   "pp": 0,
    "body": false
   },
   "GET /api/definition-kinds": {
@@ -2911,6 +2916,21 @@
   "POST /api/daily-tasks": {
    "w": true,
    "pp": 0,
+   "body": true
+  },
+  "POST /api/def-pipeline/changes/{change_id}/activate": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/def-pipeline/changes/{change_id}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/def-pipeline/changes/{change_id}/cancel": {
+   "w": true,
+   "pp": 1,
    "body": true
   },
   "POST /api/definitions/output_template/{key}/preview": {

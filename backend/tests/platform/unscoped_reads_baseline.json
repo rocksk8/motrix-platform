@@ -803,6 +803,7 @@
   "routers/customers.py::update_customer::customers": "unscoped",
   "routers/customers.py::update_customer_visits::customers": "unscoped",
   "routers/def_governance.py::impact::custom_records": "unscoped",
+  "routers/definitions.py::_preview_gate::audit_log": "unscoped",
   "routers/item_reads.py::_latest_by_others::audit_log": "unscoped",
   "routers/item_reads.py::_latest_by_others::case_updates": "unscoped",
   "routers/item_reads.py::_latest_by_others::daily_tasks": "unscoped",
