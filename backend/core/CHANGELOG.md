@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-13（wip/t57-u0a-core-r1；U0a 組織單位預留）
+
+- 新增未取號的 core migration `_core_next_org_units`（只做加法、冪等、不建索引、不重建表）：新表 `org_units`（根單位＝今天的公司，名稱取設定頁公司名稱）、`org_unit_closure`、`user_units`（現有使用者全歸根單位）、`system_settings_unit`、`seq_by_entity`（PK entity_id, kind, period；根法人沿用既有序列，`quote_seq` 不動）；36 張核心業務表加 `owner_unit_id INTEGER NOT NULL DEFAULT 1`（含 5 張主檔），`audit_log`／`notifications` 加 `unit_id`，傳票／請款／開票／承攬商傳票／薪資單加不可變快照 `legal_entity_id`，permmatrix 的兩張授權表加可為空的 `scope_json`（沒安裝就略過）。清單常數 `U0A_*` 寫死在凍結的 migration 裡；模組自有表（accounting／lodging／payroll 自有表…）不在這支。`vouchers` 是 VIEW，欄位加在實表 `vouchers_all`。
+- 五張新表進每日 JSON 備份與 demo 重置清單（重置後 init_db 重跑 migration 會重種根單位）。回滾演練腳本 `tools/platform/u0a_rollback_drill.py`；對使用者看得見的行為不變。
+
 ## 1.133 — 2026-10-13（wip/t57-material-recognize-r2）
 
 - 設定中心新增群組 `material_recognition`（材料卡片認列採購單；`who_may` 預設只有最高管理者、`on_denied` 預設取消並寄信、`mail_window_minutes`、`mail_cap`；放寬走確認期間＋另一位最高管理者核准；凍結基準同步）。
