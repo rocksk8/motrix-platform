@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1318,
+  "tests": 1330,
   "unmapped": 13,
   "kinds": {
-   "api": 721,
+   "api": 731,
    "e2e": 306,
-   "audit": 169,
-   "unit": 122
+   "audit": 170,
+   "unit": 123
   },
-  "routes": 816
+  "routes": 820
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -5818,6 +5818,47 @@
    },
    "module": "case"
   },
+  "backend/modules/case/tests/test_bp1_layout_cases_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_response_keys.py",
+    "helper:settings_registry",
+    "mod:case/api/quotations",
+    "page:pages/case-management.html",
+    "plat:__init__",
+    "plat:customization",
+    "plat:source_tree",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/customization.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_registry.py",
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_response_keys.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
   "backend/modules/case/tests/test_case_mine_empty_name_2026_09_29.py": {
    "kind": "unit",
    "units": [
@@ -8845,6 +8886,39 @@
     "/api/x",
     "/api/x%03d"
    ],
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_segment_base_adopts_saved_2026_10_14.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/",
+    "dir:backend/modules/case/",
+    "dir:backend/modules/case/api/",
+    "dir:frontend/js/",
+    "js:js/case-management-core.js",
+    "js:js/case-management-exec.js",
+    "mod:case/api/material_orders",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/js/case-management-core.js",
+     "frontend/js/case-management-exec.js"
+    ],
+    "path": [
+     "backend/modules/",
+     "backend/modules/case/",
+     "backend/modules/case/api/",
+     "backend/modules/case/api/material_orders.py",
+     "backend/modules/case/api/quotations.py",
+     "frontend/js/",
+     "frontend/js/case-management-core.js",
+     "frontend/js/case-management-exec.js"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
    "module": "case"
   },
   "backend/modules/case/tests/test_settlement_actuals_2026_10_03.py": {
@@ -14864,6 +14938,59 @@
    },
    "module": "subcontract"
   },
+  "backend/modules/supply/tests/test_bp1_layout_suppliers_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/supply/",
+    "dir:frontend/static/",
+    "file:backend/helpers/__init__.py",
+    "helper:settings_registry",
+    "js:js/def-governance.js",
+    "js:static/layout-editor.js",
+    "js:static/layout-runtime.js",
+    "js:static/record-link.js",
+    "mod:supply/api/suppliers",
+    "page:pages/suppliers.html",
+    "plat:__init__",
+    "plat:customization",
+    "plat:source_tree",
+    "router:definitions",
+    "router:settings_center"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/customization.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_registry.py"
+    ],
+    "api": [
+     "backend/modules/supply/api/suppliers.py",
+     "backend/routers/definitions.py",
+     "backend/routers/settings_center.py"
+    ],
+    "page": [
+     "frontend/js/def-governance.js",
+     "frontend/pages/suppliers.html",
+     "frontend/static/layout-editor.js",
+     "frontend/static/layout-runtime.js",
+     "frontend/static/record-link.js"
+    ],
+    "path": [
+     "frontend/static/",
+     "frontend/static/layout-editor.js",
+     "frontend/static/layout-runtime.js"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "supply"
+  },
   "backend/modules/supply/tests/test_e2e_boolean_status_select_2026_09_25.py": {
    "kind": "e2e",
    "units": [
@@ -18582,6 +18709,44 @@
     ]
    }
   },
+  "backend/tests/platform/test_menu_builder_bp1.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:menu_builder",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "plat:__init__",
+    "plat:customization",
+    "plat:definitions",
+    "plat:menu",
+    "plat:registry",
+    "router:definitions",
+    "router:platform_menu",
+    "router:platform_menu_preview"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/customization.py",
+     "backend/core/definitions.py",
+     "backend/core/menu.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/menu_builder.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py",
+     "backend/routers/platform_menu.py",
+     "backend/routers/platform_menu_preview.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_menu_inject.py": {
    "kind": "api",
    "units": [
@@ -20173,6 +20338,25 @@
    },
    "login_fixture": true
   },
+  "backend/tests/platform/test_route_inventory.py": {
+   "kind": "api",
+   "units": [
+    "core:main",
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_route_inventory.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/main.py",
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_route_inventory.py"
+    ]
+   },
+   "unresolved_api": [
+    "/api/t",
+    "/api/t/{}"
+   ]
+  },
   "backend/tests/platform/test_route_ownership.py": {
    "kind": "api",
    "units": [
@@ -20673,6 +20857,23 @@
      "backend/core/features_l1.json",
      "backend/core/system_hub_l1.json",
      "backend/modules/"
+    ]
+   }
+  },
+  "backend/tests/platform/test_spine_fixture_cases.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_spine_fixtures.py",
+    "plat:__init__",
+    "plat:spine"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/spine.py",
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_spine_fixtures.py"
     ]
    }
   },
@@ -21263,6 +21464,34 @@
     ]
    }
   },
+  "backend/tests/platform/test_unit_scope_guard_t6.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "plat:__init__",
+    "plat:migrations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/migrations.py",
+     "backend/db.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_unscoped_reads_ratchet.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_unscoped_reads.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_unscoped_reads.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_upgrade_deployed_marker_2026_09_27.py": {
    "kind": "unit",
    "units": [
@@ -21405,6 +21634,49 @@
      "frontend/"
     ]
    }
+  },
+  "backend/tests/platform/test_write_golden.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_response_keys.py",
+    "file:backend/tests/platform/_write_golden.py",
+    "file:backend/tests/platform/route_inventory.json",
+    "file:backend/tests/platform/write_golden_cases/__init__.py",
+    "file:backend/tests/platform/write_golden_cases/cases_zz_rest.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_response_keys.py",
+     "backend/tests/platform/_write_golden.py",
+     "backend/tests/platform/write_golden_cases/__init__.py"
+    ],
+    "path": [
+     "backend/tests/platform/route_inventory.json",
+     "backend/tests/platform/write_golden_cases/cases_zz_rest.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_write_golden_scaffold.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_write_golden.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_write_golden.py"
+    ]
+   },
+   "unresolved_api": [
+    "/api/things",
+    "/api/things/1"
+   ]
   },
   "backend/tests/test_ac1_write_actions_2026_09_23.py": {
    "kind": "audit",
@@ -24625,6 +24897,79 @@
     ],
     "path": [
      "frontend/index.html"
+    ]
+   }
+  },
+  "backend/tests/test_def_governance_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/routers/__init__.py",
+    "plat:__init__",
+    "plat:definitions",
+    "router:def_governance",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/db.py",
+     "backend/routers/__init__.py",
+     "backend/routers/def_governance.py"
+    ],
+    "api": [
+     "backend/routers/def_governance.py",
+     "backend/routers/definitions.py"
+    ]
+   },
+   "unresolved_api": [
+    "/api/def-governance/custom_fields",
+    "/api/def-governance/custom_fields/invoice_vouchers"
+   ],
+   "login_fixture": true
+  },
+  "backend/tests/test_def_governance_ui_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "dir:frontend/js/",
+    "js:js/def-governance.js",
+    "js:js/expense-types.js",
+    "js:js/module-builder-consts.js",
+    "js:js/module-builder-core.js",
+    "js:js/module-builder-output.js",
+    "js:js/remit-kinds-settings.js",
+    "page:pages/expense-types.html",
+    "page:pages/module-builder.html",
+    "page:pages/remit-kinds-settings.html",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:def_governance",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "api": [
+     "backend/routers/def_governance.py",
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/js/def-governance.js",
+     "frontend/js/expense-types.js",
+     "frontend/js/module-builder-consts.js",
+     "frontend/js/module-builder-core.js",
+     "frontend/js/module-builder-output.js",
+     "frontend/js/remit-kinds-settings.js",
+     "frontend/pages/expense-types.html",
+     "frontend/pages/module-builder.html",
+     "frontend/pages/remit-kinds-settings.html"
+    ],
+    "path": [
+     "frontend/js/",
+     "frontend/js/def-governance.js"
     ]
    }
   },
