@@ -40,7 +40,7 @@ function expenseTypesPage() {
     FIELD_TYPES: FIELD_TYPES, COL_TYPES: COL_TYPES,
     view: 'list', rows: [], docTypes: [], loading: true,
     key: '', isNew: false, newKey: '', body: null, meta: null,
-    problems: [], msg: '', err: '', busy: false, draftEtag: null, conflict: null, note: '', changes: null, _initDone: false, _prev: null,
+    problems: [], msg: '', err: '', busy: false, draftEtag: null, conflict: null, note: '', changes: null, _initDone: false, _prev: null, govOn: false,
     defBody: null, refreshOpen: false, skipped: {}, adopted: [],
 
     _hdr: function () {
@@ -62,6 +62,8 @@ function expenseTypesPage() {
       // Alpine 3 會自動呼叫資料物件的 init()，<body> 又寫 x-init="init()" ⇒ 不守衛會跑兩遍（重複打 API）
       if (this._initDone) return
       this._initDone = true
+      var self0 = this
+      if (window.MotrixDefGovernance) window.MotrixDefGovernance.available(KIND).then(function (ok) { self0.govOn = !!ok })   // BP-1：旗標關 ⇒ false ⇒ 不出現任何東西
       if (this.fdInitSwitch) this.fdInitSwitch()
       try {
         var t = await this._call('GET', '/api/settings/approval-doc-types')
@@ -321,6 +323,7 @@ function expenseTypesPage() {
         if (this.meta && this.meta.latest) { var k = this.key; await this.open(k); this.msg = '草稿已丟棄，回到已發布版' } else this.back()
       } finally { this.busy = false }
     },
+    openGov(tab) { if (window.MotrixDefGovernance && this.key) window.MotrixDefGovernance.open({ kind: KIND, key: this.key, scope: 'company', title: '費用單據類型：' + this.key, tab: tab, readonly: true }) },
     async showChanges() {
       this.err = ''
       var r = await this._call('GET', '/api/definitions/' + KIND + '/' + encodeURIComponent(this.key) + '/diff?a=latest&b=draft')

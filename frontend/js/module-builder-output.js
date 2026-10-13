@@ -194,6 +194,7 @@
                           : '定義送審：未啟用（無第二位審核人，發布會記「未經第二人審核」）'
         },
         submittedVersion() { var v = (this.versions || []).find(function (x) { return x.status === 'submitted' }); return v ? v.version : 0 },
+        openGov(tab) { if (window.MotrixDefGovernance && this.key) window.MotrixDefGovernance.open({ kind: 'custom_module', key: this.key, scope: 'company', title: '自訂模組：' + this.key, tab: tab, readonly: true }) },
         async publish() {
           if (this.busy) return
           this.busy = true; this.publishProblems = []; this.errMsg = ''

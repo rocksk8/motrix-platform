@@ -1,8 +1,8 @@
 /* def-governance.js — BP-1 定義治理面板：版本帳本、比較任兩版、一鍵還原、發布前影響預覽。
  *
  * 獨立元件（不依賴 Alpine）；編輯器只要呼叫：
- *   MotrixDefGovernance.available()                      ⇒ Promise<boolean>（旗標關閉或不是最高管理者 ⇒ false，編輯器不顯示入口）
- *   MotrixDefGovernance.open({ kind, key, scope, title, onRestored })   ⇒ 開面板
+ *   MotrixDefGovernance.available(kind)                  ⇒ Promise<boolean>（旗標關閉或不是最高管理者 ⇒ false，編輯器不顯示入口；kind 預設 layout）
+ *   MotrixDefGovernance.open({ kind, key, scope, title, tab, readonly, onRestored })   ⇒ 開面板（tab: ledger｜impact；readonly:true ⇒ 不顯示還原，編輯器自己有還原流程時用）
  *   MotrixDefGovernance.preview({ kind, key, scope })    ⇒ Promise<{ok, hash, data}>：發布前影響預覽（編輯器的發布按鈕先呼叫、讓使用者看過）
  * 旗標 builder_governance.enabled 預設關：後端對三條 /api/def-governance/… 一律 404，本檔不出現任何畫面。
  * 還原沿用既有 POST /api/definitions/{kind}/{key}/restore/{version}（新版本、歷史不改、現行驗證器）。
@@ -75,7 +75,7 @@
       h += '<div class="dg-row"><div class="dg-grow"><b>第 ' + esc(v.version) + ' 版</b> ' + (v.isLive ? '<span class="dg-live">目前生效</span>' : '') +
         '<div class="dg-dim">' + esc(v.by) + '　' + esc(v.at) + (v.note ? '　' + esc(v.note) : '') + '</div></div>' +
         '<button class="dg-btn" data-dg="cmp:' + esc(v.version) + '">與目前比較</button>' +
-        (v.restorable ? (st.confirming === String(v.version)
+        (v.restorable && !st.o.readonly ? (st.confirming === String(v.version)
           ? '<span class="dg-bad">還原成新的一版？</span><button class="dg-btn" data-dg="restore-yes:' + esc(v.version) + '">確定</button><button class="dg-btn" data-dg="restore-no">取消</button>'
           : '<button class="dg-btn" data-dg="restore:' + esc(v.version) + '">還原</button>') : '') + '</div>'
     })
@@ -96,6 +96,7 @@
     h += '<h4>會影響哪裡</h4><div>' + esc(I.declared.screens) + (I.declared.customerVisible ? '（客戶看得到的輸出）' : '') + '</div>'
     if (I.otherScopes.length) h += '<div class="dg-dim">同一份定義另有：' + I.otherScopes.map(function (s) { return esc(s.scope) + ' 第 ' + esc(s.latestVersion) + ' 版' }).join('、') +
       (I.declared.roleOverridesPresent ? '。這些角色若有自己的版本，看到的不一定會跟著改。' : '') + '</div>'
+    if (I.frozenRecords != null) h += '<div>目前有 <b>' + esc(I.frozenRecords) + '</b> 張單據凍結在生效中的第 ' + esc(I.liveVersion) + ' 版，發布新版後它們仍用舊版。</div>'
     h += '<div class="dg-dim">' + esc(I.note) + '</div>'
     h += '<h4>變更內容</h4>' + (I.changes.length ? I.changes.map(changeLine).join('') : '<div class="dg-dim">沒有差異。</div>')
     return h
@@ -158,9 +159,9 @@
   }
 
   window.MotrixDefGovernance = {
-    async available() {
+    async available(kind) {
       try {
-        var r = await fetch('/api/def-governance/layout/_probe/ledger?scope=company', { headers: hdr() })
+        var r = await fetch('/api/def-governance/' + enc(kind || 'layout') + '/_probe/ledger?scope=company', { headers: hdr() })
         return r.status !== 404 && r.status !== 401 && r.status !== 403      // 旗標開：通過把關後 400/200 都算可用；關：404
       } catch (e) { return false }
     },
@@ -174,9 +175,10 @@
       p.id = 'dg-panel'; p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', '版本帳本與影響預覽'); p.setAttribute('data-busy', '0'); p.setAttribute('data-state', 'idle')
       p.addEventListener('click', onClick)
       document.body.appendChild(p)
-      st = { o: o, tab: 'ledger', busy: false, confirming: '', ledger: null, diff: null, impact: null, err: '' }
+      st = { o: o, tab: o.tab === 'impact' ? 'impact' : 'ledger', busy: false, confirming: '', ledger: null, diff: null, impact: null, err: '' }
       render()
-      await loadLedger()
+      if (st.tab === 'impact') await loadImpact()
+      else await loadLedger()
       render()
     },
     async preview(o) {

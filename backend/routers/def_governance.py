@@ -12,15 +12,18 @@ from core import definitions as D
 router = APIRouter()
 
 
-#: 本檔涵蓋的 kind。custom_module 有送審／審核（S4），放寬判斷屬後續的單一發布管線，不在這一刀。
-KINDS = ("layout", "output_template", "custom_fields")
+def kinds():
+    """已登錄的定義種類（唯讀檢視，所以全部可看）；寫入（發布／還原）仍走既有端點與它們各自的把關與審核。"""
+    return D.kinds()
 
 #: 影響範圍宣告（白話）：這一類定義發布後會動到哪裡。
 _SCOPE_TEXT = {
     "layout": {"screens": "該模組的頁面版面（欄位顯示、順序、按鈕與選單位置）", "customerVisible": False},
     "output_template": {"screens": "該單據的列印／PDF／預覽版型", "customerVisible": True},
     "custom_fields": {"screens": "掛載該欄位集的表單與列表", "customerVisible": False},
+    "custom_module": {"screens": "這個自訂模組的表單、列表、流程與簽核層", "customerVisible": False},
 }
+_GENERIC_SCOPE = {"screens": "使用這份定義的畫面", "customerVisible": False}
 
 
 def enabled(conn=None) -> bool:
@@ -33,8 +36,8 @@ def enabled(conn=None) -> bool:
 
 
 def _check_kind(kind):
-    if kind not in KINDS:
-        raise D.DefinitionError("治理檢視不支援這個定義種類：%r（可用：%s）" % (kind, "、".join(KINDS)))
+    if kind not in kinds():
+        raise D.DefinitionError("治理檢視不支援這個定義種類：%r（可用：%s）" % (kind, "、".join(kinds())))
 
 
 def ledger(conn, kind, key, scope) -> dict:
@@ -91,20 +94,28 @@ def impact(conn, kind, key, scope) -> dict:
     others = [{"scope": r["scope"], "latestVersion": r["latestVersion"]} for r in D.list_definitions(conn, kind)
               if r["key"] == key and r["scope"] != scope and r["latestVersion"]]
     live_v = (live or {}).get("version")
+    frozen = None
+    if kind == "custom_module" and scope == "company":
+        # 自訂模組的單據在建立時凍結定義版本（def_version）：凍結在目前生效版的單據數＝發布新版後仍用舊版的單據數
+        try:
+            frozen = conn.execute("SELECT COUNT(*) FROM custom_records WHERE module_key=? AND def_version=?", (key, live_v or 0)).fetchone()[0]
+        except Exception:                                              # noqa: BLE001  舊庫沒有此表 ⇒ 不適用
+            frozen = None
     return {"kind": kind, "key": key, "scope": scope, "hasDraft": draft is not None,
             "liveVersion": live_v, "nextVersion": ((live_v or 0) + 1) if draft else None,
             "previewHash": (draft or {}).get("etag", ""), "changes": changes, "changeCount": len(changes),
             "validation": {"ok": not problems, "problems": problems}, "otherScopes": others,
-            "declared": dict(_SCOPE_TEXT[kind], roleOverridesPresent=scope == "company" and bool(others)),
-            "frozenRecords": None,                                     # 這三種定義不在單據上凍結版本（只有自訂模組會），所以不是 0 而是「不適用」
-            "note": "這三種定義發布後立即套用到畫面；已存的單據資料不會被改動。"}
+            "declared": dict(_SCOPE_TEXT.get(kind, _GENERIC_SCOPE), roleOverridesPresent=scope == "company" and bool(others)),
+            "frozenRecords": frozen,                                   # 只有自訂模組（公司範圍）會在單據上凍結版本；其他種類 ⇒ None＝不適用（不是 0）
+            "note": ("已建立的單據維持它建立時的版本；新單據用新版。" if kind == "custom_module"
+                     else "發布後立即套用到畫面；已存的單據資料不會被改動。")}
 
 
 def _gate(authorization, kind):
     """先驗身分（未登入 ⇒ 401，與其他路由一致），再看旗標與 kind；通過回連線（呼叫端關閉）。"""
     _require_user(authorization, require_superadmin=True)
     conn = get_db()
-    if not enabled(conn) or kind not in KINDS:
+    if not enabled(conn) or kind not in kinds():
         conn.close()
         raise HTTPException(404, "Not Found")
     return conn
