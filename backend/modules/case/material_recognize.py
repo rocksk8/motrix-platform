@@ -52,11 +52,11 @@ def link_key(card) -> str:
 
 
 def claimed_keys(cards) -> dict:
-    """{分組鍵: 卡片 id}（已認列、且沒過期的卡片）。"""
+    """{分組鍵: 卡片 id}（已認列的卡片，**過期的也算**：唯一性要撐到有人取消認列；採購單重新核准後不會出現兩張卡片同時持有）。"""
     out = {}
     for c in cards or []:
         k = link_key(c)
-        if k and isinstance(c, dict) and not (c.get("poLink") or {}).get("stale"):
+        if k and isinstance(c, dict):
             out.setdefault(k, str(c.get("id") or ""))
     return out
 
@@ -92,7 +92,14 @@ class Ctx:
     @property
     def may_change(self) -> bool:
         a = self.actor
-        return a is not None and (a.get("role") == "superadmin" or self.who_may == 2)
+        if a is None:
+            return False
+        if a.get("role") == "superadmin":
+            return True
+        if self.who_may == 2:                                                         # 『有權限編輯材料的人』＝與材料申請列相同的條件（管理員以上或專案經理且有財務檢視權），不是任何能存案件的帳號
+            from modules.case import material_guard as MG
+            return MG.can_edit_orders(a)
+        return False
 
 
 def _order_conflict(ctx, g) -> bool:
@@ -217,6 +224,33 @@ def _flags(ctx, m, om, link, inc, mid, rejected, out):
                 link.pop(k, None)
 
 
+def handle_removed(ctx, om, mid, rejected) -> bool:
+    """舊卡片持有認列、但新資料裡沒有它（＝刪除卡片）。回 True＝保留舊卡片（不准刪）。
+    刪卡片等於取消認列：只有可變更認列者可以（記 `recognize_undo`）；其他人或系統路徑 ⇒ 保留並記 `recognize_denied`。"""
+    old = om.get("poLink") if isinstance(om.get("poLink"), dict) else None
+    key = _key_of(old)
+    if not key:
+        return False
+    if ctx.may_change:
+        ctx.taken.pop(key, None)
+        ctx.events.append(("material.recognize_undo", mid, {"key": key, "flagsBefore": {f: bool(om.get(f)) for f in FLAGS}, "arrivedOn": old.get("arrivedOn", ""),
+                                                               "devices": len(om.get("devices") or []), "removedWithCard": True}))
+        return False
+    ctx.events.append(("material.recognize_denied", mid, {"key": key, "attempt": "remove_card", "mailed": False}))
+    _rej(rejected, mid, "poLink", "recognize_denied", _MSG_DENIED % ("，並已通知管理員" if ctx.on_denied == 1 else "") + "（已認列的材料卡片不能刪除）")
+    return True
+
+
+def changes_recognition(old_cards, new_cards) -> bool:
+    """這份新卡片清單是否新增／變更／移除了認列（舊頁面沒帶 poLink 欄位＝不變）。已結案變更申請在核准時以系統身分套用、不接受新認列，所以送出前就要擋。"""
+    olds = {str(c.get("id")): c for c in (old_cards or []) if isinstance(c, dict)}
+    news = {str(c.get("id")): c for c in (new_cards or []) if isinstance(c, dict)}
+    for mid, c in news.items():
+        if "poLink" in c and _key_of(c.get("poLink")) != link_key(olds.get(mid)):
+            return True
+    return any(link_key(c) and mid not in news for mid, c in olds.items())
+
+
 def _unlink(ctx, m, om, old, mid):
     keep = _approved_support(ctx, m, om)
     before = {f: bool(om.get(f)) for f in FLAGS}
@@ -271,10 +305,13 @@ def finish(ctx):
             detail["mailed"] = bool(mail)
             _audit(ctx.conn, ctx.user, action, ctx.quote_no, mid, detail, ctx.now)
             if mail:
+                sent = False
                 try:
                     from modules.case import material_notify
-                    material_notify.fire_recognize_denied({"quoteNo": ctx.quote_no, "cardId": mid, "who": ctx.user.get("username", ""), "at": ctx.now})
+                    sent = bool(material_notify.fire_recognize_denied({"quoteNo": ctx.quote_no, "cardId": mid, "who": ctx.user.get("username", ""), "at": ctx.now}))
                 except Exception:                                                     # noqa: BLE001
                     logger.exception("認列被拒通知失敗")
+                if not sent:                                                          # `mailed` 是寄之前寫的（用來去重）；寄失敗另記一筆，事後查得到
+                    _audit(ctx.conn, ctx.user, "material.recognize_denied_mail_failed", ctx.quote_no, mid, {"key": detail.get("key", "")}, ctx.now)
         else:
             _audit(ctx.conn, ctx.user, action, ctx.quote_no, mid, detail, ctx.now)

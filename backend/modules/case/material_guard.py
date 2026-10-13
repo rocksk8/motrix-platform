@@ -410,5 +410,9 @@ def _gate_materials(conn, quote_no, old_list, new_list, orders, rejected, actor=
         if reverted_arrival and "devices" in m:
             m["devices"] = (om or {}).get("devices") or []                       # 序號不隨被拒的到料進來（庫存認領的前一道）
         out.append(m)
+    new_ids = {str(nm.get("id")) for nm in (new_list if isinstance(new_list, list) else []) if isinstance(nm, dict)}
+    for mid, om in old_by.items():                                                   # 被刪掉的卡片：持有認列的卡片不能被沒有權限的人（或系統路徑）刪掉
+        if mid not in new_ids and MR.handle_removed(ctx, om, mid, rejected):
+            out.append(dict(om))
     MR.finish(ctx)
     return out

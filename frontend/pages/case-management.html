@@ -1086,11 +1086,11 @@
                         </select>
                         <button type="button" class="btn btn-ghost btn-sm" x-show="mlCandidatesFor(mat).length === 1" x-cloak data-testid="mat-order-oneclick"
                                 @click="mlPickCandidate(mat, mlGroupKey(mlCandidatesFor(mat)[0]))">找到採購單 <span x-text="mlCandidatesFor(mat)[0] && mlCandidatesFor(mat)[0].docCodes.join('、')"></span>：帶入並連結</button>
-                        <span x-show="mat.poLink && mat.poLink.key" x-cloak data-testid="mat-po-recognized" style="display:inline-flex;align-items:center;gap:6px;color:var(--tone-success-fg,#15803D);font-weight:600">
+                        <template x-if="mat.poLink && mat.poLink.key"><span data-testid="mat-po-recognized" style="display:inline-flex;align-items:center;gap:6px;color:var(--tone-success-fg,#15803D);font-weight:600">
                           <span x-text="mlRecognizedText(mat)"></span>
                           <label style="font-weight:400;display:inline-flex;align-items:center;gap:4px">到貨日 <input type="date" class="fi fi--sm" x-model="mat.poLink.arrivedOn" data-testid="mat-po-arrived-on" @change="setDirty && setDirty()"></label>
                           <button type="button" class="btn btn-ghost btn-sm" @click="mlUnrecognize(mat)" data-testid="mat-po-unrecognize">取消認列</button>
-                        </span>
+                        </span></template>
                       </div>
                       <div style="display:flex;gap:16px;margin-bottom:6px">
                         <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer"
