@@ -58,7 +58,7 @@ def test_denied_recognition_is_visible_at_once_without_reload(live_server, make_
     inject_login(pg, live_server, adm, ap)
     pg.goto(f"{live_server}/pages/case-management.html?q={NO}")
     pg.wait_for_selector('.cm-tab:has-text("執行管理")', timeout=20000)
-    pg.click('.cm-tab:has-text("執行管理")')
+    pg.locator('.cm-tab:has-text("執行管理")').dispatch_event('click')
     pg.locator('.cm-tab:has-text("材料申請")').dispatch_event('click')
     pg.wait_for_selector(".mat-card", timeout=20000)
     pg.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]')); return Array.isArray(d.mlGroups) && d.mlGroups.length > 0 }", timeout=20000)
@@ -80,10 +80,39 @@ def test_denied_recognition_is_visible_at_once_without_reload(live_server, make_
     # 對照：最高管理者同樣操作成立
     page.goto(f"{live_server}/pages/case-management.html?q={NO}")
     page.wait_for_selector('.cm-tab:has-text("執行管理")', timeout=20000)
-    page.click('.cm-tab:has-text("執行管理")')
+    page.locator('.cm-tab:has-text("執行管理")').dispatch_event('click')
     page.locator('.cm-tab:has-text("材料申請")').dispatch_event('click')
     page.wait_for_selector(".mat-card", timeout=20000)
     page.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]')); return Array.isArray(d.mlGroups) && d.mlGroups.length > 0 }", timeout=20000)
     page.locator(".mat-card").first.locator('[data-testid="mat-order-oneclick"]').dispatch_event('click')
     page.wait_for_function("() => document.querySelector('[data-testid=mat-po-recognized]')", timeout=8000)
+    import time
+    t0 = time.time()
+    while time.time() - t0 < 20 and not (_cr()["materials"][0].get("poLink") or {}).get("key"):
+        page.wait_for_timeout(300)
+    assert _cr()["materials"][0]["poLink"]["key"]
+    page.close()
+
+    # 刪除已認列的卡片：非最高管理者 ⇒ 伺服器保留、畫面放回、之後自動存檔不會再送刪除（只有 1 筆 remove_card 稽核）
+    ctx3 = e2e_browser.new_context(viewport={"width": 1400, "height": 1100})
+    p3 = ctx3.new_page()
+    p3.on("pageerror", lambda e: errors.append(str(e)))
+    inject_login(p3, live_server, adm, ap)
+    p3.goto(f"{live_server}/pages/case-management.html?q={NO}")
+    p3.wait_for_selector('.cm-tab:has-text("執行管理")', timeout=20000)
+    p3.locator('.cm-tab:has-text("執行管理")').dispatch_event('click')
+    p3.locator('.cm-tab:has-text("材料申請")').dispatch_event('click')
+    p3.wait_for_selector(".mat-card", timeout=20000)
+    p3.locator(".mat-card .btn-del").first.dispatch_event('click')
+    p3.locator('[data-testid="ui-dialog-ok"]').click()
+    p3.wait_for_selector('[data-testid="ui-toast"]:has-text("不能刪除")', timeout=8000)
+    p3.wait_for_function("() => document.querySelectorAll('.mat-card').length === 1", timeout=8000)           # 畫面放回
+    p3.wait_for_timeout(3500)                                                                                 # 過一輪自動存檔
+    assert _cr()["materials"][0]["poLink"]["key"]
+    c = db.get_db()
+    try:
+        rows = [json.loads(r["detail"]) for r in c.execute("SELECT detail FROM audit_log WHERE action='material.recognize_denied' AND username='rd_adm'").fetchall()]
+    finally:
+        c.close()
+    assert len([d for d in rows if d.get("attempt") == "remove_card"]) == 1, rows                                 # 沒有每次自動存檔再送一次
     assert not errors, errors

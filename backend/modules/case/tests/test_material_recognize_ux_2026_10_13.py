@@ -93,6 +93,20 @@ def test_recognition_denial_restores_only_the_rejected_card_and_keeps_edits_on_o
 
 
 @needs_node
+def test_deleting_a_recognized_card_is_undone_in_both_the_list_and_the_base():
+    """非最高管理者刪除持有認列的卡片：本機已拿掉、伺服器拒絕並保留 ⇒ 兩邊（畫面與存檔基準）都要放回，其他修改保留，否則之後每次自動存檔都會再送一次刪除。"""
+    msg = "這個帳號沒有認列採購單的權限，這次認列已取消（已認列的材料卡片不能刪除）。"
+    c1 = {"id": "c1", "poLink": {"key": "item:a"}, "ordered": True}
+    local = [{"id": "c0", "name": "新打的字"}, {"id": "c2", "name": "尾"}]
+    base = [{"id": "c0", "name": "舊"}, {"id": "c2", "name": "尾"}]                      # 刪除之後送出的快照（已沒有 c1）
+    server = [{"id": "c0", "name": "舊"}, c1, {"id": "c2", "name": "尾"}]
+    r = _run(scenario="rejected", list=[{"itemId": "c1", "field": "poLink", "code": "recognize_denied", "message": msg}], local=local, base=base, server=server)
+    assert [m["id"] for m in r["materials"]] == ["c0", "c1", "c2"] and r["materials"][1] == c1          # 依伺服器位置放回
+    assert r["materials"][0]["name"] == "新打的字"                                                     # 其他卡片的新修改保留
+    assert r["base"] == [{"id": "c0", "name": "舊"}, c1, {"id": "c2", "name": "尾"}]                   # 基準＝送出版本＋伺服器的 c1 ⇒ cr 與基準只差 c0 的修改
+
+
+@needs_node
 def test_success_text_only_when_the_save_really_succeeded():
     for res, expect in ((False, "認列尚未儲存"), ("pending", "待最高管理員審核"), (None, "認列尚未儲存")):
         r = _run(scenario="pick", saveResult=res)
