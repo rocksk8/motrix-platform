@@ -148,7 +148,13 @@ window.CM_PARTS.push(() => ({
       const run = this.saveCaseRecord ? this.saveCaseRecord() : null
       if (run && run.then) {
         clearTimeout(this._autoSaveTimer)
-        run.then(() => { const cur = (this.cr?.caseRecord?.materials || []).find(m => m.id === mat.id) || mat; this.mlMsg = (cur.poLink && cur.poLink.key) ? okMsg : '' })     // 被拒時 poLink 已被伺服器現值取代：不顯示成功訊息，改由提示框說明
+        run.then(res => {
+          const cur = (this.cr?.caseRecord?.materials || []).find(m => m.id === mat.id) || mat
+          if (!(cur.poLink && cur.poLink.key)) { this.mlMsg = ''; return }                  // 被拒：poLink 已被伺服器現值取代，由提示框說明
+          if (res === true) this.mlMsg = okMsg                                              // 真的存成功才宣告
+          else if (res === 'pending') this.mlMsg = '認列已送出，待最高管理員審核後才會生效'
+          else this.mlMsg = '認列尚未儲存（請看畫面上方的儲存狀態，修正後會自動重試）'
+        })
       } else this.mlMsg = okMsg
       return true
     },

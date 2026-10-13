@@ -582,8 +582,19 @@ window.CM_PARTS.push(() => ({
         if (!r.ok) return
         const srv = (await r.json()).data?.caseRecord || {}
         if (this.cr.caseRecord) {
-          this.cr.caseRecord.materials = srv.materials || []
-          this._segBase.materials = JSON.stringify(srv.materials || [])
+          if (other.length || !this.cr.caseRecord.materials) {
+            this.cr.caseRecord.materials = srv.materials || []
+            this._segBase.materials = JSON.stringify(srv.materials || [])
+          } else {
+            // 只有認列被拒：只把被拒的那幾張卡片換回伺服器現值，其他卡片（含存檔途中新打的修改）保留；
+            // 存檔基準只對這幾張卡片換成伺服器版，下一輪存檔只會送其他卡片的修改
+            const ids = new Set(rec.map(x => String(x.itemId)))
+            const srvBy = new Map((srv.materials || []).map(m => [String(m.id), m]))
+            this.cr.caseRecord.materials = this.cr.caseRecord.materials.map(m => (ids.has(String(m.id)) && srvBy.has(String(m.id))) ? srvBy.get(String(m.id)) : m)
+            let base = []
+            try { base = JSON.parse(this._segBase.materials || '[]') } catch {}
+            this._segBase.materials = JSON.stringify(base.map(m => (ids.has(String(m.id)) && srvBy.has(String(m.id))) ? srvBy.get(String(m.id)) : m))
+          }
         }
         if (rec.length && this.mlLoadGroups) await this.mlLoadGroups(this.selected.quote_no)       // 認列分組／候選跟著伺服器現況更新（不必重新整理）
       } catch {}
@@ -649,14 +660,16 @@ window.CM_PARTS.push(() => ({
         return this._saveRun
       }
       this._saveRun = (async () => {
+        let last = false
         try {
           do {
             this._saveAgain = false
-            await this._saveCaseRecordOnce()
+            last = await this._saveCaseRecordOnce()
           } while (this._saveAgain)
         } finally {
           this._saveRun = null
         }
+        return last                                   // 最後一輪的結果：true＝已存；'pending'＝已排隊待審核（尚未生效）；其餘＝沒存成（呼叫端要誠實顯示）
       })()
       return this._saveRun
     },
@@ -725,7 +738,7 @@ window.CM_PARTS.push(() => ({
             this.saveStatus = 'dirty'
             this.saveMsg = '已送出，待最高管理員審核後套用'
             this.saving = false
-            return true
+            return 'pending'
           }
           for (const k of Object.keys(segments)) {
             if (sent[k] === undefined) delete this._segBase[k]
