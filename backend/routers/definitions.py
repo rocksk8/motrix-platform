@@ -68,7 +68,11 @@ def _validate_layout(body, key):
         return out + [{"path": "ops", "message": "缺 ops（排版操作清單）"}]
     if not registry.is_loaded(mod):
         return out + [{"path": "", "message": "模組 %s 未載入（停用、未授權或不存在）⇒ 沒有可排版的點" % mod}]
-    return out + [{"path": "ops" + p["path"], "message": p["message"]} for p in catalog.check_layout(mod, body["ops"])]
+    probs = out + [{"path": "ops" + p["path"], "message": p["message"]} for p in catalog.check_layout(mod, body["ops"])]
+    from helpers import menu_builder as MB                  # BP-1：關著時不接受側欄改名／換群組
+    if isinstance(body["ops"], list) and not MB.enabled():
+        probs += [{"path": "ops[%d]" % i, "message": MB.OFF_REASON} for i, op in enumerate(body["ops"]) if MB.is_builder_op(op)]
+    return probs
 
 
 def _default_layout(key):

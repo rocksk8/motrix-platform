@@ -2,7 +2,7 @@
 """選單由登錄表產生（階段 C／C3，docs/platform/STAGE-C-DESIGN.md §4）。
 
 [單位] plat:menu    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] CUSTOM_DEFAULT_GROUP, ITEM_KEYS, MENU_L1, apply_layout, build, check_l1_pages, declaration, denied, load_l1,
+[公開介面] CUSTOM_DEFAULT_GROUP, ITEM_KEYS, MENU_L1, apply_layout, apply_layout_ex, build, check_l1_pages, declaration, denied, load_l1,
     merge_custom, module_items, sidebar_point_id, validate, visible
 [不變式] 選單項只來自 core/menu_l1.json 與已載入模組的 pages[].menu；群組固定鍵、模組不可自開群組；群組顯示＝底下至少一項可見
 [契約題] tests/platform/test_menu.py
@@ -138,8 +138,20 @@ def sidebar_point_id(item):
     return "%s:%s/sidebar" % (item["module"], item["href"]) if item.get("module") else None
 
 
+def _group_dest(to, group_by_key):
+    """`group:<鍵>` ⇒ 使用者看得到的那個群組（看不到／不存在 ⇒ None）。"""
+    return group_by_key.get(to[6:]) if isinstance(to, str) and to.startswith("group:") else None
+
+
 def apply_layout(groups, ops):
+    """舊入口（簽章不變）：BP-1 之前的行為——relabel 略過、move 的 to 被忽略。"""
+    return apply_layout_ex(groups, ops, builder=False)
+
+
+def apply_layout_ex(groups, ops, builder=False):
     """build() 的結果 ＋ 角色版面操作（只認 sidebar 點的 hide／show／move{index}）⇒ (新 groups, 套用的, 略過的)。
+    - `builder`＝False（預設，設定 builder_menu.enabled 關）⇒ 與 BP-1 之前逐字相同（relabel 略過、move.to 的 to 被忽略）
+    - relabel／move.to=group:<鍵>（BP-1，builder=True）：只改顯示名稱／換到另一個**使用者看得到**的既有群組；伺服器端權限不受影響（href、perm 原樣）；目的群組看不到 ⇒ 略過並列出
     - hide：那一項不顯示（**只是顯示，不是權限**——伺服器端權限不看版面；STAGE-C L79 更正 ③）
     - move：群組內第 index 項（0 起算；超出範圍 ⇒ 放最後），不換群組（§3.9：側欄 move 不可以帶 to）
     - 不是 sidebar 點的操作、target 不在選單上的 ⇒ 略過並列出（不猜）
@@ -153,20 +165,26 @@ def apply_layout(groups, ops):
             pid = sidebar_point_id(it)
             if pid:
                 by_id[pid] = (out[-1], it)
+    group_by_key = {g["key"]: g for g in out}
     applied, skipped = [], []
     hidden = set()
     for op in ops or []:
         tgt = (op or {}).get("target")
-        if not isinstance(tgt, str) or not tgt.endswith("/sidebar") or op.get("op") not in ("hide", "show", "move"):
+        if not isinstance(tgt, str) or not tgt.endswith("/sidebar") or op.get("op") not in (("hide", "show", "move", "relabel") if builder else ("hide", "show", "move")):
             skipped.append({"op": op, "reason": "不是側欄點的操作"})
             continue
         if tgt not in by_id:
             skipped.append({"op": op, "reason": "選單上沒有這一項（模組未載入或使用者沒有權限）"})
             continue
+        if builder and op["op"] == "move" and "to" in op and not _group_dest(op["to"], group_by_key):
+            skipped.append({"op": op, "reason": "目的群組不存在，或這位使用者看不到該群組"})
+            continue
         if op["op"] == "hide":
             hidden.add(tgt)
         elif op["op"] == "show":
             hidden.discard(tgt)
+        elif op["op"] == "relabel":
+            by_id[tgt][1]["label"] = str(op.get("label") or by_id[tgt][1].get("label"))
         applied.append(op)
     for op in applied:
         if op["op"] != "move":
@@ -175,6 +193,12 @@ def apply_layout(groups, ops):
         if op["target"] in hidden:
             continue
         idx = op.get("index")
+        if builder and "to" in op:                               # BP-1：換到另一個既有群組（群組本身固定，D4）
+            dest = _group_dest(op["to"], group_by_key)
+            g["items"].remove(it)
+            dest["items"].insert(min(idx, len(dest["items"])) if isinstance(idx, int) and idx >= 0 else len(dest["items"]), it)
+            by_id[op["target"]] = (dest, it)
+            continue
         if not isinstance(idx, int) or idx < 0:
             continue
         g["items"].remove(it)

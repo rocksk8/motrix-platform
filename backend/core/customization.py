@@ -3,7 +3,7 @@
 
 [單位] plat:customization    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] EXPORT_FORMATS, MOVE_DEST_KINDS, OPS_BY_KIND, OPS_CORE_FIELD, OPS_DISPLAY_FIELD, OP_KEYS, PAGE_KINDS,
-    SCHEMA_VERSIONS, core_fields, endpoint_parts, require_valid, validate_manifest
+    SCHEMA_VERSIONS, SIDEBAR_LABEL_MAX, core_fields, endpoint_parts, require_valid, sidebar_label_problem, validate_manifest
 [不變式] customization 格式錯誤 ⇒ loader 不載入該模組（failed）；不認得的鍵一律是問題
 [契約題] tests/platform/test_platform_catalog.py
 [注意] 只用標準函式庫（loader 在 import 模組前驗 module.json）
@@ -39,7 +39,8 @@ OPS_CORE_FIELD = ("move",)
 OPS_DISPLAY_FIELD = ("move", "hide", "show", "relabel")
 OPS_BY_KIND = {
     # 側欄：個人層只能調顯示與排序（STAGE-C §8／D4；v1 不改名、不換群組 ⇒ move 不可以帶 to）
-    "sidebar": ("move", "hide", "show"),
+    # BP-1：relabel（改顯示名稱）與 move.to＝`group:<群組鍵>`（換到另一個既有群組）；兩者都只在設定 builder_menu.enabled 開啟時才被後端接受（routers/definitions、core/menu_builder）
+    "sidebar": ("move", "hide", "show", "relabel"),
     "list": ("reorder",),
     "form": ("reorder", "add_section"),
     "section": ("move", "relabel"),
@@ -427,6 +428,8 @@ def _check_ops(pts, ops) -> list:
         elif op == "relabel":
             if not isinstance(o["label"], str) or not o["label"].strip():
                 out.append(_p(path + ".label", "relabel 要給非空的 label"))
+            elif p["kind"] == "sidebar" and sidebar_label_problem(o["label"]):
+                out.append(_p(path + ".label", sidebar_label_problem(o["label"])))
         elif op == "select_template":
             choices = p.get("templates")
             if not isinstance(choices, list) or o["template"] not in choices:
@@ -452,10 +455,37 @@ def _children(p, pts):
     return [q["id"] for q in pts if q.get("parent") == p["id"]]
 
 
+#: 側欄項的顯示名稱：長度上限與不允許的字元（標記字元一律拒絕，不靠渲染端跳脫才安全）
+SIDEBAR_LABEL_MAX = 20
+_BAD_LABEL_CHARS = re.compile(r"[<>&\"'`\\\x00-\x1f\x7f]")
+
+
+def sidebar_label_problem(label):
+    """側欄顯示名稱不合法的理由；合法 ⇒ None。"""
+    if not isinstance(label, str) or not label.strip():
+        return "relabel 要給非空的 label"
+    if len(label.strip()) > SIDEBAR_LABEL_MAX:
+        return "側欄名稱最多 %d 字" % SIDEBAR_LABEL_MAX
+    if _BAD_LABEL_CHARS.search(label):
+        return "側欄名稱不可含 < > & 引號、反斜線或控制字元"
+    return None
+
+
+def _check_sidebar_group_dest(to, path, out):
+    from core import menu as _menu            # 純標準函式庫；延遲 import 避免循環
+    m = re.match(r"^group:([A-Za-z][A-Za-z0-9_:-]{0,39})$", to) if isinstance(to, str) else None
+    keys = [g.get("key") for g in _menu.load_l1().get("groups") or []]
+    if not m or m.group(1) not in keys:
+        out.append(_p(path + ".to", "側欄項只能移到既有群組（group:<群組鍵>；可選：%s）：%r" % ("、".join(keys), to)))
+
+
 def _check_move(p, o, by_id, path, out):
     if "index" in o and (not isinstance(o["index"], int) or isinstance(o["index"], bool) or o["index"] < 0):
         out.append(_p(path + ".index", "index 必須是非負整數"))
     if "to" not in o:
+        return
+    if p["kind"] == "sidebar":
+        _check_sidebar_group_dest(o["to"], path, out)
         return
     kinds = MOVE_DEST_KINDS.get(p["kind"])
     if kinds is None:

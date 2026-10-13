@@ -48,7 +48,9 @@ def _layout_for(user, groups, mod_items):
                         errors.append({"module": key, "error": eff["error"]})
             finally:
                 conn.close()
-        new_groups, applied, skipped = core_menu.apply_layout(groups, ops)
+        from helpers import menu_builder as MB                # BP-1：關著 ⇒ relabel／move.to 不套用（舊版面逐字不變）
+        new_groups, applied, skipped = (core_menu.apply_layout_ex(groups, ops, builder=True) if MB.enabled()
+                                        else core_menu.apply_layout(groups, ops))
     except Exception as e:                                   # noqa: BLE001 版面出錯 ⇒ 宣告版，自訂模組照樣給（稽核 X C4-S4）
         import logging
         logging.getLogger(__name__).warning("套用角色版面失敗 ⇒ 選單用宣告版：%s", e)
@@ -152,12 +154,17 @@ def platform_menu(authorization: str = Header(None)):
         groups = _setup_only(groups)
         if isinstance(layout, dict):
             layout = dict(layout, groups=_setup_only(layout.get("groups")))
-    return {"groups": groups,
+    resp = {"groups": groups,
             "denied": core_menu.denied(l1, mod_items, modules, sa),
             "companySetup": setup,
             "layout": layout,
             # 完整的頁面⇒模組（含已安裝未載入；登入後才給，C4-O3）：前端藏頁內連結、直接打網址的後備提示用
             "pageModules": _page_modules(PAGE_MAP)}
+    if sa:
+        from helpers import menu_builder as MB
+        if MB.enabled():
+            resp["builderMenu"] = True                    # BP-1：只有開啟時才多這個鍵（關著 ⇒ 回應與今天逐字相同）；前端據此載入 menu-editor.js
+    return resp
 
 
 @router.get("/api/platform/mounts")

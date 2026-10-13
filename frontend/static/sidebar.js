@@ -1109,6 +1109,13 @@ if (typeof module !== 'undefined' && module.exports) {
   // 狀態：送出時 `pending`，完成時 `layout`／`layout-failed` 並寫 `data-menu-seq`＝這一輪的序號。
   // 〔稽核 X C4-S1：原本 refresh() 不重設狀態 ⇒ 第一輪完成後再 refresh，等 `layout` 會立刻成立（等到的是上一輪）。
   //   等「第 N 輪」請等 `data-menu-seq="N"`〕
+  function _loadMenuEditor() {
+    if (window.MotrixMenuEditor || document.getElementById('menu-editor-js')) return
+    var sc = document.createElement('script')
+    sc.id = 'menu-editor-js'; sc.src = '/static/menu-editor.js'
+    document.head.appendChild(sc)
+  }
+
   function _applyLayout() {
     if (!s || !s.token) return
     var my = ++_menuSeq
@@ -1129,6 +1136,7 @@ if (typeof module !== 'undefined' && module.exports) {
         _showModuleNotice()
         _setMenuState('layout')
         document.documentElement.setAttribute('data-menu-seq', String(my))
+        if (d.builderMenu) _loadMenuEditor()          // BP-1：builder_menu.enabled 開啟且是最高管理者才有這個鍵（關著 ⇒ 完全不載入）
       })
       .catch(function (e) {
         if (my !== _menuSeq) return
