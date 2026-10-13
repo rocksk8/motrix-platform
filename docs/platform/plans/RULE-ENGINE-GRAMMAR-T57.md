@@ -226,6 +226,17 @@
 6. **驗證器掛鉤**：規則驗證器以 `spine.register_validator(name, fn, covers=(…))` 登記；除本文的文法檢查外，額外規則：`{"setting": …}` 指向 `planned／hidden` 群組 ⇒ 發布 **422（通用訊息『這個設定目前無法使用』，絕不說 hidden）**。
 7. **誰提供什麼（2b 估）**：`register_kind_gate`（~0.25 pd）、`spine.register_health_source`、`spine.surface_status`（~0.2 pd）、`loosen="both"`（~0.1 pd）、`settings_registry.group_stamp`——在 E-b 出貨後插入；本文不重複實作，只引用其介面。
 
+**（r5）脊柱最終簽章（2b 的 `wip/t57-eb-spine-r8` `7b455afb7`，已通過其自測）——§6.5 引用的掛鉤以此為準：**
+| 掛鉤 | 最終簽章／行為 | 對本文的影響 |
+|---|---|---|
+| `spine.register_kind_gate(kind, fn(key))` | 回 `"open"｜"planned"｜"hidden"` 或 `{"status","plannedTrain"}`；`spine.kind_info／kind_status(kind,key)`；**閘門例外或回傳值不合法 ⇒ `hidden`（fail-closed）** | `alert_rule` 的列表／讀取路由服從此閘門；注意 fail-closed 只作用於**編輯與讀取的可見性**，**不得**套用到已發布 `block` 規則的評估（§6.5-1 不變） |
+| `spine.register_managed_kind(kind, message)`／`managed_message(kind)` | 通用 `/api/definitions` 寫入對受管 kind 一律拒絕並回該訊息（hidden 的 key ⇒ 404） | `alert_rule` 登記為受管 kind，發布只走本文的高影響管線（§6.3、§6.5-3） |
+| `spine.register_health_source(name, fn())` | 回 `None｜{"text","tone"(bad｜warn｜plan｜info｜ok),"count"?}`；`spine.health_badge()` 依嚴重度合併；**text 只可含計數／通用字詞，不得出現 hidden／planned 事物的名稱** | 規則降級徽章：『N 條規則降級』用計數，不點名規則 |
+| `SettingDef(loosen="both")` | 僅數值；任何變動都走放寬（核准）流程 | §8 的 `both` 分類（本文 N2 的 `extra_directions` 仍屬規則發布管線的責任） |
+| `settings_registry.group_stamp(group, conn=None) -> str` | 狀態翻轉、`DEFAULTS_ONLY`、新版本、待生效／生效 id、版別邊界 epoch 改變時會變；**讀不到 ⇒ 永遠不同的 `unknown:N`，不丟例外** | §6.1-4 的快取鍵直接使用；`unknown:N` ⇒ 該批次不命中快取（安全方向） |
+| `spine.surface_status(surface)` | `open｜planned｜hidden`（宣告該表面的功能取最差者；失敗 ⇒ hidden；`validate_all` 之前 ⇒ open）；`catalog.surfaces` 鍵必須是 `module:<擁有者>.<名稱>`（core 為 `core:<名稱>`），否則該功能 `surface_not_owned` 失敗 | 規則發布／還原才問（§6.5-2）；規則的 `surface` 欄位格式與擁有者檢查一併受此約束 |
+| **註冊權限** | 所有 `register_*` **只能由 L1 註冊**；`modules/**` 呼叫會被 AST 守門擋下 | `alert_rule` kind、規則驗證器、健康來源由 L1 的規則引擎模組註冊，不由案件／各業務模組自己註冊 |
+
 ### 6.6 發布驗證：『不適用』不得靜默繞過非保護型阻擋（r3，0d M1）
 **風險**：非保護型 `block` 規則在『輸入欄位對檢視者不可見』時會被判『不適用』（§6.1）。於是**看不到該欄位、卻能執行該動作的角色**會**繞過這條阻擋**——規則只對看得到的人生效，反而是保護最弱的人不受保護。
 **發布驗證（每條 `block` 規則）**：
