@@ -2974,6 +2974,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
     user = _require_user(authorization)
     conn = get_db()
     adopted = {}
+    seg_keys = []
     # 分段存：比對到寫入之間不可以有別人插進來（兩人改不同分段時，後寫的那份
     # 必須是以先寫的結果為底合併），所以從讀取就持有寫鎖。
     # 2026-09-25：整包存（case_record）原本只在分段存時才拿鎖 ⇒ 整包存是交易外讀、整包寫回（lost update）；一律拿。
@@ -3018,6 +3019,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             # 不同（有人改過）就整筆拒絕，不合併、不寫入。stages 由專屬端點維護，不收。
             current_cr = (json.loads(row["data_json"] or "{}").get("caseRecord") or {})
             segments = {k: v for k, v in body.segments.items() if k != "stages"}
+            seg_keys = list(segments)
             cmp_cr = current_cr if money_visible(user) else mask_case_record(copy.deepcopy(current_cr), keep_orders=material_money_visible(user))
             conflicts = _segment_conflicts(cmp_cr, segments, body.base or {})
             if conflicts:
@@ -3167,6 +3169,13 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', quote_no,
                    f"{quote_no} 發票號碼 {_o} → {_n}（總帳 E01 將在下次引擎執行時沖轉並重建）")
         out = {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts, "adopted": adopted}
+        if seg_keys:
+            # 伺服器存檔時會改寫卡片（認列的到貨人／時間、過期標記、被拒還原…）⇒ 回傳實際存入的分段，
+            # 前端以它當新基準；只用「送出的內容」當基準，下一次存檔會被誤判成『已被他人更新』（409）。
+            _saved_cr = copy.deepcopy(data.get("caseRecord") or {})
+            if not money_visible(user):
+                mask_case_record(_saved_cr, keep_orders=material_money_visible(user))
+            out["saved"] = {k: _saved_cr.get(k) for k in seg_keys}
         if mat_rejected:
             out["rejected"] = mat_rejected          # 叫料審核（31-C）：被拒的項目（itemId／field／code／message），其餘已存
         if gl_warn:

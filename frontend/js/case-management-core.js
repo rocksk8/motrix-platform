@@ -751,8 +751,15 @@ window.CM_PARTS.push(() => ({
             this.saving = false
             return 'pending'
           }
+          // 基準＝伺服器實際存入的值（res.saved）：存檔時伺服器會改寫卡片（認列的到貨人／時間、過期標記…），
+          // 只用送出的內容當基準，下一次存檔會被擋成 409『已被他人更新』（自己改的）。
+          // 內容與送出的一致時仍用送出的字串（避免鍵順序不同造成每次存檔都重送該段）
+          const saved = res.saved || {}
+          const canon = (v) => JSON.stringify(v, (_, x) => (x && typeof x === 'object' && !Array.isArray(x))
+            ? Object.fromEntries(Object.keys(x).sort().map(i => [i, x[i]])) : x)
           for (const k of Object.keys(segments)) {
             if (sent[k] === undefined) delete this._segBase[k]
+            else if (k in saved && saved[k] != null && canon(saved[k]) !== canon(JSON.parse(sent[k]))) this._segBase[k] = JSON.stringify(saved[k])
             else this._segBase[k] = sent[k]
           }
           const adopted = res.adopted || {}
