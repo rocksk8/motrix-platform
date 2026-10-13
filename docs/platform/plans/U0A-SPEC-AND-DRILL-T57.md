@@ -78,7 +78,7 @@ accounting 34、case 4（`case_material_*`）、payroll 4、lodging 4、recycleb
 | D1 基準擷取 | 在 MS1c 狀態擷取：`sqlite_master`（表／索引／觸發器）、每表欄位清單、各表筆數、`module_schema_versions`、基準回應鍵集（JSON＋Excel／CSV 表頭） | 存成基準檔（只讀） |
 | D2 升級 | 對上述資料庫套用 U0a（沿用 `apply_update.ps1` 流程，套用前備份） | `::RESULT:: … status=success …`；**migration 耗時與啟動耗時（含放大資料量）已記錄**；`/api/ping` 200；`module_states.json` 全部 loaded |
 | D3 結構比對 | 對升級後資料庫與 D1 比對 | 符合 §6：只多出指定表與欄位；`core` 9→10；筆數不變；`integrity_check`＝ok |
-| D3b 全新安裝一致性（0d U-5） | 以同一套件做**全新安裝**（`init_db`＋全部 migration），比對其結構與 D2 升級後的正式機複本結構 | **完全相同**（表、欄位、**索引清單**、觸發器、`module_schema_versions`）；種子資料（根單位、閉包、`user_units`）一致 |
+| D3b 全新安裝一致性（0d U-5） | 以同一套件做**全新安裝**（`init_db`＋全部 migration），比對其結構與 D2 升級後（合成資料）資料庫的結構 | **完全相同**（表、欄位、**索引清單**、觸發器、`module_schema_versions`）；種子資料（根單位、閉包、`user_units`）一致 |
 | D4 行為等價 | 回應鍵集與基準 diff；匯出表頭 diff | **diff 為空**；**正對照**：啟用測試用不剝除端點 ⇒ 檢查轉紅 |
 | D5 冪等重跑 | 對已升級的資料庫再跑一次 core migration | 無錯誤、無資料變動、`core` 仍 10 |
 | D6 程式回滾（不還原資料庫） | `rollback_update.ps1 -SnapshotTimestamp <時間戳> -Yes`（**不加任何資料庫參數**）回到 MS1c 程式，資料庫保持 U0a 狀態 | `commit` 回 MS1c；`/api/ping` 200；`module_states.json` 全 loaded；**舊 loader 對 `core=10` 的行為被記錄**（容忍／拒絕／警告）；log 無 Traceback；`module_schema_versions.core` 的處理依結果 |
