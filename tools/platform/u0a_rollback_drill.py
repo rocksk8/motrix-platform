@@ -19,7 +19,7 @@
                  schema_version 仍是 --expect-db-version；其他模組的 module_schema_versions 不變；`core` 的版號報告（未取號＝不記，取號後 9→10）
   P4 序列等價    quote_seq／payslip_seq 內容相同；各單據號碼的現存最大值（傳票日流水、PS、CN、DN…的取最大值來源）相同 ⇒ 下一個號碼不變
   P4b 全新安裝同形  新樹在空庫上跑完所有 migration ⇒ 與 P2 升級後的副本比：表集合、每表欄位（不看順序）、索引、VIEW、觸發器完全相同（D3b）
-  P5 舊程式回滾  分 core=9（未取號）與 core=10（模擬取號後：把 module_schema_versions.core 改成 10）兩種各做一次：用 **舊樹自己的啟動規則** 打開已升級的副本——
+  P5 舊程式回滾  分兩種各做一次：① 照升級後原樣（未取號分支 core=9；取號後 core=10）② core 版號再領先一格（未取號時模擬 10；取號後 11；把 module_schema_versions.core 改掉）：用 **舊樹自己的啟動規則** 打開已升級的副本——
                  不得丟例外、`migrations.incomplete` 空、舊程式不得改動／降低任何版號、表欄位與升級後逐一相同、資料未變；
                  **舊樹的真實配號函式**（客戶碼、完工單號、傳票號、報價單號、薪資單號）的結果與升級前相同；
                  **舊式 INSERT（完全不帶新欄位）對每一張清單內的表真的寫入**（SAVEPOINT 內、最後 ROLLBACK），新欄位落在根單位（=1）
@@ -526,10 +526,13 @@ def main(argv=None):
                 not bad and len(probes) >= 38, "；".join("%s：%s" % b for b in bad[:8]))
         return db_
 
-    rolled = rollback_variant("c9", None)
-    rolled10 = rollback_variant("c10", 10)
+    # 兩種回滾狀態：① 照升級後原樣（未取號分支＝core 仍是 9；取號後＝core 已是 10）② core 版號再領先一格（未取號時模擬取號後的 10；取號後再 +1）
+    asis_core = snap1["msv"].get("core") or 0
+    ahead_core = 10 if (asis_core or 0) < 10 else asis_core + 1
+    rolled = rollback_variant("asis", None)
+    rolled10 = rollback_variant("ahead", ahead_core)
 
-    for label, src_ in (("c9", rolled), ("c10", rolled10)):
+    for label, src_ in (("asis", rolled), ("ahead", rolled10)):
         again_ = work / ("reupgraded_%s.db" % label)
         _copy_db(src_, again_)
         rc, info3, err = _run(_UPGRADE, new_tree, again_, license_path=a.license)
@@ -538,7 +541,7 @@ def main(argv=None):
         rep.add("P6", "[%s] 再升級結果與第一次升級相同（冪等）" % label, {t: v["cols"] for t, v in snap3["tables"].items()} == {t: v["cols"] for t, v in snap1["tables"].items()}
                 and {k: v for k, v in snap3["digests"].items() if k not in DIGEST_EXEMPT} == {k: v for k, v in snap1["digests"].items() if k not in DIGEST_EXEMPT}
                 and snap3["seqs"] == snap1["seqs"])
-    again = work / "reupgraded_c9.db"
+    again = work / "reupgraded_asis.db"
 
     # P8 展示庫重置（真的跑 db.reset_demo_db）：清單內的表被清空、根單位與閉包由 init_db 重種、欄位與新表完好
     demo = work / "demo_reset.db"
