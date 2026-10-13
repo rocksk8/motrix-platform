@@ -1,4 +1,4 @@
-# 框架化多據點／多法人設計稿（組織單位樹、資料範圍維度）— T57 r3（併入 0d 稽核與使用者答覆）
+# 框架化多據點／多法人設計稿（組織單位樹、資料範圍維度）— T57 r4（併入 0d 稽核與使用者答覆）
 
 > 本檔是 `FRAMEWORK-PERMISSION-MODEL-T57.md` 的第 14 節拆出（遵守文件 < 40KB 的拆分規則；章節編號 §14.x 沿用，文內『§4.5、§6.2、§10、§11、§12』指該主檔）。作者 hichan-98；僅文件；人日與日期皆為估計。
 
@@ -100,13 +100,14 @@
 **對步驟檔／驗證／回滾的影響（必須同班更新）**：
 - 套用步驟檔 #12：`schema_version` 仍 **118**；`module_schema_versions` 的 `core` 由 9 → **10**（若同班有模組 migration，該模組也 +1），**不再是『全部列完全相同』**；`sqlite_master` 表清單**多出**新表（`org_units`、`org_unit_closure`、`user_units`、`system_settings_unit`、`seq_by_entity`）；既有表欄位清單改為『只多出 `owner_unit_id`／`unit_id`』。
 - `verify_package`、VR7（需資料庫快照）與 `--expect-db-version`：版本仍 118；欄位清單類檢查（若有）的基準檔要同班更新；`table_digests` 要排除新欄位（見 #4）。
+- **演練範圍（交 0d 並行審查，約 10-20 提供核心遷移與演練腳本）**：回滾演練必須涵蓋 ①舊 loader 對 `module_schema_versions.core=10` 的容忍度；②`verify_package`／VR7（含 `--expect-db-version 118` 與欄位清單基準）；③套用步驟檔 #12 的新預期（`core` 9→10、新表、既有表只多出 `owner_unit_id`／`unit_id`）；④從 MS1c 狀態升級再回滾的完整流程。
 - **回滾**：舊程式忽略多出的欄位與表（加法）；但 **`module_schema_versions.core=10` 領先舊程式所知的 9**——舊 loader 是否容忍較高的已記錄版本**不得假設**，必須在建包前的**回滾演練**實測；若不容忍，回滾工具需在同一動作內把該列還原（寫進回滾步驟）。步驟檔回滾文字要明寫『資料庫保留新欄位與新表、不還原；若使用者要求還原資料庫，用套用前備份』。
 
 **2. 核心表加欄**：約 **25～30 張**核心業務表加 `owner_unit_id INTEGER NOT NULL DEFAULT 1`（SQLite `ADD COLUMN … DEFAULT` 為 O(1)、不重寫整表；索引分批補）；`audit_log`、`notifications` 加 `unit_id DEFAULT 1`。
 
 **3. 序列（0d M1：不改主鍵）**：**不動** `quote_seq(month)` 的主鍵與 `ON CONFLICT(month)` 寫法（`quotations.py` 依此；改成複合鍵＝重建表、破壞加法規則，且回滾到舊程式後會無法配號）。改為**新增** `seq_by_entity(entity_id, kind, period, seq, PRIMARY KEY(entity_id, kind, period))`：**根法人永遠使用既有序列表（原樣）**，只有非根法人（功能開啟後才存在）使用新表。傳票（`YYYYMMDD-NNN`，`next_voucher_no(conn, voucher_date)`）與勞報單（`PS-YYMM-NNN`，`next_slip_no`）的計數邏輯**U0 開工時逐一讀碼確認**其取號方式（查最大值或獨立序列）；若是『查資料表最大值』，則在 U2 加上法人條件，U0 不動（UNKNOWN，需讀碼）。
 
-**4. `SELECT *` 外洩（0d S2：U0 並非零改動）**：掃描顯示約 **269 處** `SELECT *` 在 `modules/`、**85 處**在 `archive.py` 匯出、11 處在 routers、10 處在 helpers；表加欄後，`owner_unit_id` 會**洩進 API 回應、匯出檔與 `table_digests`**。U0 交付：①**回應鍵集金標**（沿用授權金標的測試框架，對每條路由記錄前後回應鍵集合，必須相同）；②**預設序列化時剝除**內部欄位（集中的 `strip_internal_cols`，功能開啟後才輸出給有權限者）；③`archive.py` 匯出與備份工具改為明列欄位或剝除；④`table_digests`／資料庫健檢的欄位清單基準更新。這是 U0 人日從 6～9 上修到 **9～13** 的主因。
+**4. `SELECT *` 外洩（0d S2：U0 並非零改動）**：掃描顯示約 **269 處** `SELECT *` 在 `modules/`、**85 處**在 `archive.py` 匯出、11 處在 routers、10 處在 helpers；表加欄後，`owner_unit_id` 會**洩進 API 回應、匯出檔與 `table_digests`**。U0 交付（**r4：防線放在 U0a，不等 U0b**）：①**回應鍵集**——先在 MS1c 凍結樹上**記錄基準**；U0a 含**最小回應鍵集檢查**（涵蓋 `SELECT *` 的路由與匯出路徑），**『與基準 diff 為空』是 U0a 的凍結條件**；完整金標（對約 830 路由）在 U0b 補齊；②**預設序列化時剝除**內部欄位（集中的 `strip_internal_cols`，功能開啟後才輸出給有權限者）；③`archive.py` 匯出與備份工具改為明列欄位或剝除；④`table_digests`／資料庫健檢的欄位清單基準更新。這是 U0 人日從 6～9 上修到 **9～13** 的主因。**切分**：U0a（含中央剝除 `strip_internal_cols`、`archive.py`／`table_digests` 處理、最小回應鍵集檢查）7～9 人日；U0b（完整金標＋AST 棘輪＋模組自有表補欄）2～4 人日。**U0a 套用當天欄位就不得外洩**，否則 `SELECT *`（269／85／11／10 處）會在 U0a 與 U0b 之間的數日漏出新欄位。
 
 **5. 其他預留**：`perm_role_caps`、`perm_user_overrides` 加 `scope_json`（可為空＝全部）；新表 `user_units`（全部使用者歸根）、`system_settings_unit`（空）；設定宣告加 `scope` 屬性（預設 `global`）。
 
