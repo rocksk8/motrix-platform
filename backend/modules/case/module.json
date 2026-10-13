@@ -92,6 +92,16 @@
         {"key": "amount", "label": "金額", "core": false},
         {"key": "stageProgress", "label": "階段進度", "core": false},
         {"key": "date", "label": "日期", "core": false}
+      ],
+      "contract": [
+        {"key": "deliveryAddress", "label": "交貨 / 安裝地址", "core": false},
+        {"key": "deliveryTerms", "label": "交貨條件", "core": false},
+        {"key": "contactPerson", "label": "現場聯絡人", "core": true},
+        {"key": "contactPhone", "label": "聯絡電話", "core": true}
+      ],
+      "timeline": [
+        {"key": "startDate", "label": "開始日期", "core": true},
+        {"key": "endDate", "label": "預計結束日期", "core": false}
       ]
     },
     "pages": [
@@ -108,7 +118,14 @@
             {"field": "date", "visible": true}
           ]}
         ],
-        "forms": [],
+        "forms": [
+          {"key": "contract", "label": "合約資訊", "entity": "contract", "sections": [
+            {"key": "main", "label": "合約資訊", "fields": ["deliveryAddress", "deliveryTerms", "contactPerson", "contactPhone"]}
+          ]},
+          {"key": "timeline", "label": "專案期間", "entity": "timeline", "sections": [
+            {"key": "main", "label": "專案期間", "fields": ["startDate", "endDate"]}
+          ]}
+        ],
         "actions": [],
         "menus": [],
         "exports": []
