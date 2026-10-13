@@ -50,6 +50,31 @@ def _touches_service(n) -> str:
     return ""
 
 
+#: 與權限矩陣寫入函式同名、但屬於『設定帳本／定義』的模組（config_ledger.restore_version／cancel_pending 等）。
+#: 只認『該檔自己 import 進來的別名』：`from helpers import config_ledger as ledger` ⇒ `ledger.restore_version(...)` 不算；
+#: 其餘（含 getattr／字串／importlib 間接取用 permmatrix service）照舊全抓。
+LEDGER_MODULES = {"config_ledger"}
+
+
+def _ledger_imports(tree):
+    """這個檔案裡綁到 config_ledger 的名稱：(模組別名集合, 從它 import 進來的函式名集合)。"""
+    mods, names = set(), set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            for a in n.names:
+                if a.name.split(".")[-1] in LEDGER_MODULES:
+                    if a.asname or "." not in a.name:
+                        mods.add(a.asname or a.name)
+        elif isinstance(n, ast.ImportFrom):
+            if (n.module or "").split(".")[-1] in LEDGER_MODULES:
+                names |= {a.asname or a.name for a in n.names}
+            else:
+                for a in n.names:
+                    if a.name in LEDGER_MODULES:
+                        mods.add(a.asname or a.name)
+    return mods, names
+
+
 def callers(sources: dict) -> list:
     """{相對路徑: 原始碼} → 呼叫、匯入或以字串／屬性間接取用了寫入函式的檔案。
     名稱出現在 Call／Import／Attribute／Name，或字串常數等於函式名，或取用 permmatrix 的 service（匯入、字串、`xxx.permmatrix.service`）都算。"""
@@ -62,12 +87,19 @@ def callers(sources: dict) -> list:
         except SyntaxError:
             continue
         hit = set()
+        ledger_mods, ledger_names = _ledger_imports(tree)
         for n in ast.walk(tree):
             if isinstance(n, ast.Attribute) and n.attr in WRITE_FUNCS:
+                if isinstance(n.value, ast.Name) and n.value.id in ledger_mods:        # config_ledger.restore_version 等：同名但不是權限矩陣
+                    continue
                 hit.add(n.attr)
             elif isinstance(n, ast.Name) and n.id in WRITE_FUNCS and isinstance(n.ctx, ast.Load):
+                if n.id in ledger_names:
+                    continue
                 hit.add(n.id)
             elif isinstance(n, ast.ImportFrom) and any(a.name in WRITE_FUNCS for a in n.names):
+                if (n.module or "").split(".")[-1] in LEDGER_MODULES:
+                    continue
                 hit |= {a.name for a in n.names if a.name in WRITE_FUNCS}
             why = _touches_service(n)
             if why:
@@ -91,6 +123,17 @@ _BAD_SAMPLES = {
     "dict-string dispatch": "TABLE = {'role': 'set_role_cap'}\n",
     "attribute chain": "import modules\nx = modules.permmatrix.service\n",
 }
+
+
+def test_same_name_functions_of_the_settings_ledger_are_not_flagged_but_permmatrix_ones_still_are():
+    ok = "from helpers import config_ledger as ledger\nledger.restore_version(c, 'setting:x', 'x', 1, 'a')\nledger.cancel_pending(c, 1)\n"
+    assert not callers({"routers/settings_center.py": ok})
+    assert not callers({"routers/x.py": "from helpers.config_ledger import restore_version, cancel_pending\nrestore_version(c, 'd', 'k', 1, 'a')\n"})
+    assert not callers({"routers/x.py": "from helpers import config_ledger\nconfig_ledger.restore_version(c)\n"})
+    # 正對照：同一個檔案裡真正的權限矩陣呼叫仍然紅；別的別名（非帳本）呼叫同名函式也紅
+    assert callers({"routers/x.py": ok + "from modules.permmatrix import service as S\nS.restore_version(c, a, 1, 'r')\n"})
+    assert callers({"routers/x.py": "from helpers import perm as P\nP.restore_version(c, a, 1, 'r')\n"})
+    assert callers({"routers/x.py": "from helpers import config_ledger as ledger\nother.restore_version(c)\n"})
 
 
 def test_positive_control_detects_every_way_of_reaching_the_write_functions():
