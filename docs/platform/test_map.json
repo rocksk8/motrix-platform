@@ -12470,7 +12470,8 @@
     "mod:permmatrix/api",
     "mod:permmatrix/service",
     "plat:__init__",
-    "plat:source_tree"
+    "plat:source_tree",
+    "router:settings_center"
    ],
    "evidence": {
     "import": [
@@ -12483,7 +12484,8 @@
     ],
     "path": [
      "backend/modules/permmatrix/__init__.py",
-     "backend/modules/permmatrix/service.py"
+     "backend/modules/permmatrix/service.py",
+     "backend/routers/settings_center.py"
     ],
     "module_dir": [
      "backend/modules/permmatrix/"
