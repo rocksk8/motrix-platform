@@ -9,6 +9,7 @@
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../js/remit-kinds-settings.js"></script>
+  <script src="../js/def-governance.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <!--
     匯款款別設定（31-B S0；只給最高管理者）：開承攬商匯款申請時可以選的款別（訂金款、進度款、完工款、驗收款…），以及每個款別在派發的哪些狀態可以開。
@@ -128,6 +129,8 @@
           <div class="rk-actions" style="margin-top:14px">
             <input type="text" data-testid="rk-note" x-model="note" placeholder="發布說明（選填）" style="min-width:260px">
             <button class="btn btn-primary" data-testid="rk-publish" :disabled="busy" @click="publish()">發布</button>
+            <button class="btn" data-testid="rk-gov-impact" x-show="govOn" @click="openGov('impact')">發布前影響預覽</button>
+            <button class="btn" data-testid="rk-gov-ledger" x-show="govOn" @click="openGov('ledger')">版本帳本</button>
           </div>
           <div class="rk-sub" style="margin-top:6px">發布前伺服器會再驗證一次，有問題不會發布。發布後只影響之後新開的匯款申請；已發布過的款別不能移除，只能停用。</div>
         </div>

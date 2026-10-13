@@ -8,7 +8,7 @@ function remitKindsPage() {
   var CODE_RE = /^[a-z][a-z0-9_]{1,39}$/
   function clone(x) { return JSON.parse(JSON.stringify(x === undefined ? null : x)) }
   return {
-    _initDone: false, loading: true, body: { kinds: [] }, meta: null, stages: [], savedCodes: [], isDefault: true, version: 0,
+    _initDone: false, govOn: false, loading: true, body: { kinds: [] }, meta: null, stages: [], savedCodes: [], isDefault: true, version: 0,
     problems: [], msg: '', err: '', busy: false, note: '', changes: null,
 
     _hdr: function () {
@@ -30,6 +30,8 @@ function remitKindsPage() {
     async init() {
       if (this._initDone) return                       // <body> 的 x-init 與 Alpine 自動呼叫 ⇒ 不守衛會跑兩遍
       this._initDone = true
+      var self0 = this
+      if (window.MotrixDefGovernance) window.MotrixDefGovernance.available(KIND).then(function (ok) { self0.govOn = !!ok })   // BP-1：旗標關 ⇒ false ⇒ 不出現任何東西
       await this.reload()
     },
     async reload() {
@@ -123,6 +125,7 @@ function remitKindsPage() {
         this.msg = '草稿已丟棄，回到目前生效的版本'
       } finally { this.busy = false }
     },
+    openGov(tab) { if (window.MotrixDefGovernance) window.MotrixDefGovernance.open({ kind: KIND, key: KEY, scope: 'company', title: '匯款款別', tab: tab, readonly: true }) },
     async showChanges() {
       this.err = ''
       var a = (this.meta && this.meta.latest) ? 'latest' : 'default'
