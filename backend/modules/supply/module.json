@@ -45,8 +45,41 @@
   },
   "customization": {
     "schema": 1,
-    "fields": {},
-    "pages": [],
+    "fields": {
+      "supplier": [
+        {"key": "name", "label": "公司名稱", "core": true},
+        {"key": "alias", "label": "內部簡稱", "core": false},
+        {"key": "taxId", "label": "統一編號", "core": false},
+        {"key": "category", "label": "類型", "core": false},
+        {"key": "contact", "label": "主要聯絡人", "core": false},
+        {"key": "phone", "label": "電話", "core": false},
+        {"key": "currency", "label": "幣別", "core": false},
+        {"key": "paymentTerms", "label": "付款條件", "core": false},
+        {"key": "active", "label": "狀態", "core": true}
+      ]
+    },
+    "pages": [
+      {
+        "page": "suppliers.html",
+        "lists": [
+          {"key": "suppliers", "label": "供應商清單", "entity": "supplier", "columns": [
+            {"field": "name", "visible": true},
+            {"field": "alias", "visible": true},
+            {"field": "taxId", "visible": true},
+            {"field": "category", "visible": true},
+            {"field": "contact", "visible": true},
+            {"field": "phone", "visible": true},
+            {"field": "currency", "visible": true},
+            {"field": "paymentTerms", "visible": true},
+            {"field": "active", "visible": true}
+          ]}
+        ],
+        "forms": [],
+        "actions": [],
+        "menus": [],
+        "exports": []
+      }
+    ],
     "outputs": []
   },
   "customization_note": "搬遷時沒有宣告可自訂點（CUSTOMIZATION-SPEC §5）；之後要開放欄位、頁面或輸出的自訂時在這裡加",

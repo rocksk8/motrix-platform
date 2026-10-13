@@ -46,12 +46,13 @@
 '  <div class="ml-ed__row" style="justify-content:space-between"><strong>編輯版面</strong>' +
 '   <span class="ml-ed__row"><label>以角色預覽</label><select data-testid="ml-preview-role" x-model="previewRole" @change="previewAs()" :disabled="loading">' +
 '    <option value="">（編輯中的草稿）</option><template x-for="r in roles" :key="r.key"><option :value="r.key" x-text="r.label"></option></template></select>' +
+'   <label class="ml-ed__sub" title="勾選後，預覽會用目前編輯中的草稿；沒勾選時預覽的是該角色目前已發布的版面。"><input type="checkbox" data-testid="ml-preview-draft" x-model="previewDraft" @change="previewAs()" :disabled="loading || !previewRole"> 預覽草稿</label>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-close" @click="close()">關閉</button></span></div>' +
 '  <div class="ml-ed__row"><label>套用範圍</label><select data-testid="ml-scope" x-model="scope" @change="loadScope()" :disabled="busy">' +
 '   <option value="company">公司預設</option><template x-for="r in roles" :key="r.key"><option :value="\'role:\' + r.key" x-text="\'角色：\' + r.label"></option></template></select>' +
 '   <span class="ml-ed__sub" x-text="startNote"></span>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-retry" x-show="loadError" @click="loadScope()">重試</button></div>' +
-'  <div class="ml-ed__banner" x-show="previewRole" x-text="\'以「\' + roleLabel(previewRole) + \'」預覽已發布的版面（唯讀）\'"></div>' +
+'  <div class="ml-ed__banner" x-show="previewRole" x-text="previewDraft ? \'以「\' + roleLabel(previewRole) + \'」預覽編輯中的草稿（唯讀，尚未發布）\' : \'以「\' + roleLabel(previewRole) + \'」預覽已發布的版面（唯讀）\'"></div>' +
 ' </div>' +
 ' <div class="ml-ed__body" x-show="work" x-effect="$el.inert = busy || loading" :aria-busy="String(busy || loading)">' +
 '  <template x-if="generalProblems.length"><div class="ml-ed__prob" data-testid="ml-problems"><template x-for="p in generalProblems"><div x-text="p"></div></template></div></template>' +
@@ -140,7 +141,7 @@
   function component() {
     return {
       open: false, busy: false, state: 'idle', msg: '', note: '', loadedScope: '', _scopeSeq: 0, loadsDone: 0, loading: false, loadError: '',
-      scope: 'company', roles: [], previewRole: '', startNote: '',
+      scope: 'company', roles: [], previewRole: '', previewDraft: false, startNote: '',
       defs: { draft: null, latest: null, versions: [] },
       work: null, lastOps: [], probs: {}, generalProblems: [],
       diffShown: false, diffLines: [], sidebarGroup: [], sidebarGroupLabel: '', _drag: null,
@@ -185,6 +186,7 @@
       close() {
         this.open = false
         this.previewRole = ''
+        this.previewDraft = false
         document.body.classList.remove('ml-editing')
         ML().show(null)
       },
@@ -360,6 +362,13 @@
           this.busy = false
           return
         }
+        // 治理（builder_governance 開啟時才有）：發布前影響預覽。旗標關閉／未載入 ⇒ 完全略過，行為與先前相同。
+        if (window.MotrixDefGovernance && await window.MotrixDefGovernance.available()) {
+          var pv = await window.MotrixDefGovernance.preview({ kind: 'layout', key: this._key(), scope: this.scope })
+          if (pv.ok && pv.data && pv.data.changeCount && !confirm('這次發布會變更 ' + pv.data.changeCount + ' 項設定（影響預覽已記錄），確定要發布？')) {
+            this.msg = '已取消發布'; this.busy = false; return
+          }
+        }
         var r = await this._j(this._base() + '/publish?scope=' + encodeURIComponent(this.scope),
                               { method: 'POST', body: JSON.stringify({ note: this.note }) })
         if (!r.ok) {
@@ -403,21 +412,31 @@
         this.busy = true
         try {
           var d = await ML().fetchLayout(this.previewRole)
-          ML().show(L.applyOps(d.points, this._page(), d.ops).state, 'preview', this.roleLabel(this.previewRole) + '（' + d.source + '）')
-          this.msg = '預覽：' + this.roleLabel(this.previewRole) + ' 目前套用 ' + d.source
+          // 預覽草稿（BP-1）：草稿影響得到這個角色才用草稿——範圍＝這個角色，或範圍＝公司預設且這個角色目前沒有自己的角色版面；
+          // 否則該角色看到的仍是它自己已發布的版面（草稿改不到它），照實說明、顯示已發布版。草稿畫面只換 view，不碰 base，也不存任何東西。
+          var viaDraft = this.previewDraft && this.work && (this.scope === 'role:' + this.previewRole ||
+            (this.scope === 'company' && !/^role:/.test(String(d.source || ''))))
+          if (viaDraft) {
+            ML().show(L.clone(this.work), 'preview', this.roleLabel(this.previewRole) + '（草稿，尚未發布）')
+            this.msg = '預覽草稿：' + this.roleLabel(this.previewRole) + ' 發布後會看到這個樣子'
+          } else {
+            ML().show(L.applyOps(d.points, this._page(), d.ops).state, 'preview', this.roleLabel(this.previewRole) + '（' + d.source + '）')
+            this.msg = this.previewDraft
+              ? '這個角色有自己的版面（' + d.source + '），目前編輯的草稿不會影響它；顯示的是它已發布的版面'
+              : '預覽：' + this.roleLabel(this.previewRole) + ' 目前套用 ' + d.source
+          }
         } catch (e) { this.msg = '預覽失敗（' + e.message + '）' }
         this.busy = false
       },
     }
   }
 
-  window.MotrixLayoutEditor = { component: component }
-
-  document.addEventListener('alpine:init', function () {
+  // mount：Alpine 起來時掛一次；頁面是『旗標開啟後才插入編輯位置』時，插入後再呼叫一次（已掛過就不重複）。
+  function mount() {
     var sess = window.MotrixLayout && window.MotrixLayout.session()
     if (!sess || sess.role !== 'superadmin') return          // 只有超級管理員看得到（後端另外守門）
     var slot = document.querySelector('[data-layout-editor-slot]')
-    if (!slot) return
+    if (!slot || document.getElementById('ml-editor')) return
     var st = document.createElement('style')
     st.id = 'ml-editor-css'
     st.textContent = CSS
@@ -427,5 +446,8 @@
     document.body.appendChild(wrap.firstChild)
     slot.innerHTML = '<button type="button" class="btn btn-ghost btn-sm ml-edit-btn" data-testid="ml-edit-open" x-data'
       + ' x-show="$store.layout.ready" @click="Alpine.$data(document.getElementById(\'ml-editor\')).start()">編輯版面</button>'
-  })
+  }
+
+  window.MotrixLayoutEditor = { component: component, mount: mount }
+  document.addEventListener('alpine:init', mount)
 })()

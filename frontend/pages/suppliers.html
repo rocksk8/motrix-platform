@@ -800,7 +800,17 @@
 
 <script src="../static/record-link.js"></script>
   <script src="../static/notif.js"></script>
+  <script src="../static/custom-layout.js"></script>
+  <script src="../static/layout-runtime.js"></script>
+  <script src="../static/layout-editor.js"></script>
+  <script src="../js/def-governance.js"></script>
   <script>
+  // BP-1：管理者自訂版面（P9）。deferred＝設定中心的「builder_layout.suppliers」開啟之前不發任何版面請求、畫面不動；
+  // fallback＝版面讀不到時的欄位順序（守門：必須等於 module.json 登記的順序）
+  MotrixLayout.init({
+    module: 'supply', page: 'suppliers.html', deferred: true,
+    fallback: { lists: { suppliers: ['name', 'alias', 'taxId', 'category', 'contact', 'phone', 'currency', 'paymentTerms', 'active'] } },
+  })
   const API = '/api'
 
   async function fetchT(url, opts = {}, ms = 10000) {
@@ -812,6 +822,69 @@
       return r
     } catch(e) { clearTimeout(timer); throw e }
   }
+
+
+  // BP-1：版面驅動的供應商列表（旗標開啟時才插入）。欄位的顯示／順序／標題由 $store.layout 決定；第一欄（頭像）與最後一欄（操作）固定。
+  // 金額與權限不受版面影響：本列表沒有金額欄，且非管理員的 /api/suppliers 本來就回空清單。
+  const SUPPLIER_LAYOUT_TABLE = `
+      <div class="table-scroll" data-layout-list="suppliers" x-show="$store.layout.ready || $store.layout.failed">
+        <div class="ml-layout-note" x-show="$store.layout.failed" x-text="$store.layout.error"></div>
+        <div class="ml-layout-note" x-show="$store.layout.mode === 'preview'" x-text="'預覽中：' + $store.layout.previewLabel + '（唯讀，關閉排版器後回到自己的版面）'"></div>
+        <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才看得到。</div>
+        <table class="data-table">
+          <thead><tr>
+            <th style="width:32px"></th>
+            <template x-for="c in $store.layout.cols('suppliers')" :key="c.field">
+              <th :data-layout-col="c.field" x-text="$store.layout.colLabel('suppliers', c.field, layoutLabel(c.field))"></th>
+            </template>
+            <th style="width:80px"></th>
+          </tr></thead>
+          <tbody>
+            <template x-for="s in filtered" :key="s.id">
+              <tr @click="selectSupplier(s)" style="cursor:pointer">
+                <td><div style="width:30px;height:30px;border-radius:50%;background:#4B5563;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700" x-text="(s.name||'?')[0]"></div></td>
+                <template x-for="c in $store.layout.cols('suppliers')" :key="c.field">
+                  <td :data-layout-cell="c.field">
+                    <template x-if="c.field === 'name'"><div>
+                      <div style="font-weight:500" x-text="s.name"></div>
+                      <div style="display:flex;align-items:center;gap:5px;margin-top:1px">
+                        <span x-show="s.code" x-text="s.code" style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#F3F4F6;color:#6B7280;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span>
+                        <span x-show="s.nameEn" style="font-size:11px;color:var(--text-dim)" x-text="s.nameEn"></span>
+                      </div></div></template>
+                    <template x-if="c.field === 'alias'"><div>
+                      <template x-if="(s.tags&&s.tags.length) || s.alias">
+                        <div style="display:flex;flex-wrap:wrap;gap:3px">
+                          <template x-for="t in (s.tags&&s.tags.length ? s.tags : (s.alias?[s.alias]:[]))" :key="t">
+                            <span x-text="t" style="font-size:10px;background:var(--accent-light);color:var(--accent-hover);padding:1px 6px;border-radius:3px;white-space:nowrap;font-family:var(--font-zh)"></span>
+                          </template>
+                        </div>
+                      </template>
+                      <span x-show="!(s.tags&&s.tags.length) && !s.alias" style="color:var(--text-dim)">—</span></div></template>
+                    <template x-if="c.field === 'taxId'"><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="s.taxId || '—'"></span></template>
+                    <template x-if="c.field === 'category'"><span style="font-size:11px;padding:2px 8px;border-radius:3px;background:var(--accent-light);color:var(--accent-hover)" x-text="s.category || '—'"></span></template>
+                    <template x-if="c.field === 'contact'"><div>
+                      <div x-text="s.contacts?.[0]?.name || '—'"></div>
+                      <div style="font-size:11px;color:var(--text-dim)" x-text="s.contacts?.[0]?.title || ''"></div></div></template>
+                    <template x-if="c.field === 'phone'"><span style="font-size:12px" x-text="s.contacts?.[0]?.phone || s.phone || '—'"></span></template>
+                    <template x-if="c.field === 'currency'"><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="s.currency || '—'"></span></template>
+                    <template x-if="c.field === 'paymentTerms'"><span style="font-size:12px" x-text="s.paymentTerms || '—'"></span></template>
+                    <template x-if="c.field === 'active'"><span class="tag" :class="s.active !== false ? 'tag-active' : 'tag-inactive'" x-text="s.active !== false ? '往來中' : '停用'"></span></template>
+                  </td>
+                </template>
+                <td>
+                  <div class="row-actions">
+                    <button class="btn btn-ghost btn-sm" @click.stop="openEdit(s)">編輯</button>
+                    <a :href="'supplier-log.html?id=' + s.id" class="btn btn-ghost btn-sm" @click.stop style="text-decoration:none">日誌</a>
+                  </div>
+                </td>
+              </tr>
+            </template>
+            <tr x-show="filtered.length === 0">
+              <td :colspan="$store.layout.cols('suppliers').length + 2" class="empty-state"><div>尚無供應商資料</div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>`
 
   function suppliersPage() {
     return {
@@ -874,6 +947,31 @@
       // ☠️ 後果不只是 API 發兩次：第二次的回應晚一步抵達，
       //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
       _initDone: false,
+      layoutOn: false,
+
+      // BP-1：旗標開啟才換成版面驅動的列表（原本的表格不動、只是隱藏）。旗標關閉／讀不到 ⇒ 什麼都不做。
+      layoutLabel(f) {
+        return ({ name: '公司名稱', alias: '內部簡稱', taxId: '統一編號', category: '類型', contact: '主要聯絡人',
+                  phone: '電話', currency: '幣別', paymentTerms: '付款條件', active: '狀態' })[f] || f
+      },
+      async initLayout() {
+        try {
+          const r = await fetchT(`${API}/settings-center/public?groups=builder_layout`, { headers: { Authorization: 'Bearer ' + this.session.token } }, 8000)
+          if (!r.ok) return
+          const d = await r.json()
+          if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.suppliers !== true) return
+          const orig = document.querySelector('.page-main .table-scroll')
+          const title = document.querySelector('.pg__t')
+          if (!orig || !title) return
+          orig.setAttribute('hidden', '')
+          orig.insertAdjacentHTML('afterend', SUPPLIER_LAYOUT_TABLE)
+          title.insertAdjacentHTML('beforeend', '<span data-layout-editor-slot></span>')
+          this.layoutOn = true
+          await this.$nextTick()
+          if (window.MotrixLayoutEditor) window.MotrixLayoutEditor.mount()
+          window.MotrixLayout.start()
+        } catch (e) { /* 版面是加值功能：讀不到就維持原本的列表 */ }
+      },
 
       async init() {
         if (this._initDone) return
@@ -882,6 +980,7 @@
         if (!raw) { location.href = '../pages/login.html'; return }
         this.session = JSON.parse(raw)
         if (!this.session.token) { location.href = '../pages/login.html'; return }
+        this.initLayout()
         this.loadTagPresets()
         this.pnLoadNotice()     // 個資蒐集告知文字（聯絡人用；列印告知書）
         await this.fetchSuppliers()
