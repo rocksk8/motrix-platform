@@ -25,3 +25,14 @@
 - **S1（D4）**：旗標 `builder_governance.enabled` 開啟時，`POST /api/definitions/{kind}/{key}/publish` 對名單內的 kind（`expense_type`、`remit_kinds`、`custom_module`，即 `routers/definitions.py` 的 `_PREVIEW_ENFORCED_KINDS`）必須帶 `preview_hash`＝目前草稿戳，且稽核裡要有這位使用者對這個戳的 `definitions.previewed`（別人的預覽不算、只知道戳不算）；否則 409 `preview_required`／`preview_stale`，沒有繞過。旗標關、不在名單的 kind、沒有草稿 ⇒ 與今天逐字相同。三個編輯器（費用類型、匯款款別、模組建構器）旗標開時先開「審閱」面板（`MotrixDefGovernance.review()`），確認才發布。
 - **還沒涵蓋**：排版器（`layout-editor.js`，3c）與選單建構器（發布走 layout 定義）尚未送 `preview_hash`，所以 `layout`／`output_template`／`custom_fields` 還不在名單；它們接上之後把 kind 加進 `_PREVIEW_ENFORCED_KINDS`。在那之前，這些種類仍只有前端強制（選單建構器）或沒有強制。
 
+## T60 S2（wip/t60-s2-r1）：放寬分類＋單一發布管線
+
+- **無 DDL**：待核准的版本放在既有 `ui_definitions`（status='submitted'，自訂模組送審同一套）；核准票與確認期間放在既有 `config_changes`（domain `def:<kind>`，`approvals_required=1`、`effective_at`＝現在＋`change_control.confirm_period_days`，預設 7 天），`field` 存 `scope|key`。
+- 旗標 `builder_governance.enabled` 關：發布與還原與今天逐位元相同，四條新路由 404。開啟後，**名單內的 kind**（`routers/def_pipeline.py` 的 `ACTIVE_KINDS`，目前只有 `custom_fields`）：發布／還原先分類（`loosen`／`tighten`／`neutral`，**無法判斷＝放寬**）；收緊或不變立即發布並記帳本；放寬不發布、改為待核准（高風險通知其他最高管理者），需**另一位**最高管理者核准＋確認期間過後才能「套用」（才真的發布）；期間內任何最高管理者都能撤銷。申請人不能核准自己的。
+- 路由：`GET /api/def-pipeline/pending`、`POST /api/def-pipeline/changes/{id}/approve｜activate｜cancel`。
+- 比較函式（暫定規則，待使用者確認 D3）：`custom_fields`——新增欄位＝放寬、移除欄位＝收緊、只改顯示文字＝不變、`required` 取消＝放寬、改為必填＝收緊、其他屬性變動＝放寬；`layout`（已備妥、未啟用）——新增 `hide`＝收緊、移除 `hide`＝放寬、`relabel`／`move`＝不變、其他＝放寬。
+- **為什麼 layout 不在名單**：排版器（3c）與選單建構器發布 layout 時還不會處理 `pending: true` 的回應（會誤顯示成已發布）；它們改好之後把 `"layout"` 加進 `ACTIVE_KINDS`。`expense_type`／`remit_kinds`／`custom_module` 尚無比較函式（自訂模組有自己的送審）。
+- 還原到較寬鬆的版本＝把那一版放進草稿再送審；已有不同內容的草稿時回 409（不覆蓋）。取消之後那份草稿仍在，需使用者自己丟棄。
+- 沒有排程：不會「到期自動套用」，必須有人按「套用」（核准票夠且確認期間已過才成功）。這是刻意的：讀取端不必改。
+- **UI 還沒做**：待核准清單與核准／套用／撤銷按鈕沒有畫面（只有 API）；custom_fields 目前也沒有專屬編輯頁，所以今天沒有任何編輯器會碰到這個流程。
+

@@ -405,6 +405,10 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
         _gate = _preview_gate(conn, kind, key, scope, u["username"], _pv if isinstance(_pv, str) else None)
         if _gate:
             return JSONResponse({"detail": _gate[1], "code": _gate[0]}, status_code=409)
+        from routers import def_pipeline as _pl                          # T60 S2：旗標開、名單內的 kind ⇒ 放寬先待核准、收緊立即（其餘 ⇒ None，照舊）
+        _piped = _pl.handle_publish(conn, kind, key, scope, u, (payload or {}).get("note", ""), base_etag, authorization)
+        if _piped is not None:
+            return _piped
         if kind == "custom_module" and scope == "company":
             # 方案 B：掛載點頁籤數上限（要連線，所以不在 validate_module 裡）——發布／送審之前擋下
             from helpers import custom_modules as _cm
@@ -492,6 +496,10 @@ def restore_definition(kind: str, key: str, version: int, scope: str = Query("co
     conn = get_db()
     unreviewed_reason = _UNREVIEWED_KIND_REASON
     try:
+        from routers import def_pipeline as _pl                          # T60 S2：還原到較寬鬆的版本 ⇒ 待核准（其餘 ⇒ None，照舊）
+        _piped = _pl.handle_restore(conn, kind, key, scope, version, u, (payload or {}).get("note", ""), authorization)
+        if _piped is not None:
+            return _piped
         if kind == "custom_module" and scope == "company":
             from helpers import custom_def_review as _defr
             _st = _defr.review_state(conn, u["username"])
