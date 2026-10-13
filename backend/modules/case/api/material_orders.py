@@ -190,6 +190,14 @@ def update_material_orders(quote_no: str,
         }
         if rejected:
             out["rejected"] = rejected      # 只拒有問題的項目，其餘已存（itemId／field／code／message）
+        # 閘（MG.enforce）也會改寫材料卡片（認列過期標記…）：回傳實際存入的分段，前端以它更新比對基準；
+        # 否則案件記錄的下一次存檔 base≠資料庫現值 ⇒ 409『材料已被他人更新』（自己改的）。遮蔽規則與案件記錄 GET／比對一致
+        import copy as _copy
+        from helpers.financial_mask import mask_case_record
+        _cr = _copy.deepcopy(data.get("caseRecord") or {})
+        if not money_visible(user):
+            mask_case_record(_cr, keep_orders=material_money_visible(user))
+        out["saved"] = {k: _cr.get(k) for k in ("materials", "materialOrders")}
         return out
 
     finally:

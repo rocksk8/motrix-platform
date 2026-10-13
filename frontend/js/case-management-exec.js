@@ -414,6 +414,7 @@ window.CM_PARTS.push(() => ({
             this.moMsg = '已儲存'
             setTimeout(() => { if (!this.moDirty) this.moMsg = '' }, 2500)
           }
+          this._adoptSavedSegments && this._adoptSavedSegments(d.saved)
           await this.loadMaterialOrders(quoteNo)
           // 材料卡片對這些新列的連結先前被擋在自動存檔之外（見 _crForSave）；列存好了就補送一次
           if (this._mlHeldLink && !(d.rejected && d.rejected.length) && this.setDirty) { this._mlHeldLink = false; this.setDirty() }

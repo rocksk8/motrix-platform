@@ -76,3 +76,53 @@ def test_backend_returns_saved_segments():
     src = QUOTATIONS.read_text(encoding="utf-8")
     assert 'out["saved"] = {k: _saved_cr.get(k) for k in seg_keys}' in src
     assert "mask_case_record(_saved_cr" in src       # 與分段比對同一個遮蔽規則：回傳值必須等於下次 GET 看到的
+
+
+ADOPT = r"""
+const fs = require('fs')
+const inp = JSON.parse(process.argv[2])
+global.window = {}; global.MotrixLegalRound = { halfUp: (v) => Math.round(v) }
+global.MotrixUI = { toast() {} }
+global.document = { addEventListener() {}, querySelector() { return null } }
+global.alpineStub = true
+;(0, eval)(fs.readFileSync(process.argv[3], 'utf8'))
+const merged = {}
+for (const part of window.CM_PARTS) Object.defineProperties(merged, Object.getOwnPropertyDescriptors(part()))
+const ctx = merged
+ctx.cr = { caseRecord: { materials: inp.mats, materialOrders: inp.orders } }
+ctx._segBase = { materials: JSON.stringify(inp.baseMats), materialOrders: JSON.stringify(inp.baseOrders) }
+ctx._adoptSavedSegments(inp.saved)
+console.log(JSON.stringify({ baseMats: JSON.parse(ctx._segBase.materials), baseOrders: JSON.parse(ctx._segBase.materialOrders), mats: ctx.cr.caseRecord.materials, orders: ctx.cr.caseRecord.materialOrders }))
+"""
+
+
+def _adopt(**inp):
+    out = subprocess.run([NODE, "-e", ADOPT, "x", json.dumps(inp), str(CORE)],
+                         capture_output=True, text=True, encoding="utf-8", timeout=30)
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout.strip().splitlines()[-1])
+
+
+@needs_node
+def test_material_order_save_updates_bases_to_server_value():
+    m_old, m_new = [{"id": "c1"}], [{"id": "c1", "poLink": {"key": "k", "stale": True}}]
+    o_old, o_new = [{"itemId": "a"}], [{"itemId": "a"}, {"itemId": "b"}]
+    out = _adopt(mats=m_old, baseMats=m_old, orders=o_old, baseOrders=o_old, saved={"materials": m_new, "materialOrders": o_new})
+    assert out["baseMats"] == m_new and out["baseOrders"] == o_new
+    assert out["orders"] == o_new            # 使用者沒動過材料申請 ⇒ 畫面一併換新，免得下次存檔把舊清單送回去蓋掉
+    assert out["mats"] == m_old              # 材料卡片畫面不動（可能有未存的修改）
+
+
+@needs_node
+def test_material_order_save_keeps_local_unsaved_orders():
+    o_old, o_local = [{"itemId": "a"}], [{"itemId": "a", "x": 1}]
+    out = _adopt(mats=[], baseMats=[], orders=o_local, baseOrders=o_old, saved={"materialOrders": [{"itemId": "a"}, {"itemId": "b"}]})
+    assert out["orders"] == o_local
+
+
+def test_material_orders_endpoint_returns_saved_and_exec_adopts():
+    src = (ROOT / "backend" / "modules" / "case" / "api" / "material_orders.py").read_text(encoding="utf-8")
+    assert 'out["saved"] = {k: _cr.get(k) for k in ("materials", "materialOrders")}' in src
+    assert "mask_case_record(_cr" in src
+    exe = (ROOT / "frontend" / "js" / "case-management-exec.js").read_text(encoding="utf-8")
+    assert "this._adoptSavedSegments(d.saved)" in exe
