@@ -190,8 +190,14 @@ def test_a_view_is_never_altered():
     assert M._u0a_add_column(c, "vouchers", "owner_unit_id", "INTEGER") == "no_table"      # 對 VIEW 動手 ⇒ 不做
 
 
-def test_migration_is_registered_as_unnumbered_core_only():
-    assert M._core_next_org_units in M._PENDING
+def test_migration_is_registered_exactly_once_as_core_either_unnumbered_or_numbered():
+    """分支上＝未取號（register("core", NEXT, fn) ⇒ 在 _PENDING）；列車取號後＝整數版號（>= 10）。兩種狀態都要綠，且只登記一次。"""
+    fn = M._core_next_org_units
+    pending = [f for f in M._PENDING if f is fn]
+    numbered = sorted(v for v, f in M._REGISTRY.get("core", {}).items() if f is fn)
+    assert len(pending) + len(numbered) == 1, (len(pending), numbered)
+    assert all(isinstance(v, int) and v >= 10 for v in numbered), numbered
+    assert [m for m, per in M._REGISTRY.items() if m != "core" and fn in per.values()] == [], "只准登記在 core"
     assert M.U0A_ROOT_UNIT_ID == 1
 
 
