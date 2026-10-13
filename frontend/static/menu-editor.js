@@ -192,7 +192,11 @@
   function groupSelect(id) {
     var cur = groupOf(id)
     var sel = el('select', { title: '群組', onchange: function (e) { toGroup(id, e.target.value) } })
-    st.decl.forEach(function (g) { var o = el('option', { value: g.key, text: g.label }); if (g.key === cur) o.selected = true; sel.appendChild(o) })
+    st.decl.forEach(function (g) {
+      // T60：含 hub 項的群組（系統中心）導覽列會收成單一連結，搬進去看不到 ⇒ 不當目的地（項目本來就在裡面時才保留，免得下拉選不到現值）
+      if (g.items.some(function (it) { return it.hub }) && g.key !== cur) return
+      var o = el('option', { value: g.key, text: g.label }); if (g.key === cur) o.selected = true; sel.appendChild(o)
+    })
     return sel
   }
   function itemRow(id) {

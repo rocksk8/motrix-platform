@@ -474,7 +474,8 @@ def sidebar_label_problem(label):
 def _check_sidebar_group_dest(to, path, out):
     from core import menu as _menu            # 純標準函式庫；延遲 import 避免循環
     m = re.match(r"^group:([A-Za-z][A-Za-z0-9_:-]{0,39})$", to) if isinstance(to, str) else None
-    keys = [g.get("key") for g in _menu.load_l1().get("groups") or []]
+    hubs = _menu.hub_group_keys()                                         # T60：系統中心這類被收成單一連結的群組不能當目的地
+    keys = [g.get("key") for g in _menu.load_l1().get("groups") or [] if g.get("key") not in hubs]
     if not m or m.group(1) not in keys:
         out.append(_p(path + ".to", "側欄項只能移到既有群組（group:<群組鍵>；可選：%s）：%r" % ("、".join(keys), to)))
 

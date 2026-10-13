@@ -138,9 +138,21 @@ def sidebar_point_id(item):
     return "%s:%s/sidebar" % (item["module"], item["href"]) if item.get("module") else None
 
 
+def hub_group_keys(l1=None):
+    """含『系統中心入口』（`hub: true` 的項）的群組鍵：導覽列把整個群組收成一個連結（sidebar.js `_collapseHub`）。"""
+    l1 = l1 if l1 is not None else load_l1()
+    return {it.get("group") for it in (l1.get("items") or []) if isinstance(it, dict) and it.get("hub")}
+
+
 def _group_dest(to, group_by_key):
-    """`group:<鍵>` ⇒ 使用者看得到的那個群組（看不到／不存在 ⇒ None）。"""
-    return group_by_key.get(to[6:]) if isinstance(to, str) and to.startswith("group:") else None
+    """`group:<鍵>` ⇒ 使用者看得到的那個群組（看不到／不存在 ⇒ None）。
+    T60：含 hub 項的群組（例如 system）不能當目的地——導覽列會把它收成單一連結，搬進去的項目看不到（也會讓選單預覽與實際畫面不一致）。"""
+    if not (isinstance(to, str) and to.startswith("group:")):
+        return None
+    g = group_by_key.get(to[6:])
+    if g is None or to[6:] in hub_group_keys() or any(isinstance(it, dict) and it.get("hub") for it in g.get("items") or []):
+        return None
+    return g
 
 
 def apply_layout(groups, ops):

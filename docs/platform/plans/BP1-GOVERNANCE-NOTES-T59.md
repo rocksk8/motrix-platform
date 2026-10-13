@@ -20,3 +20,10 @@
 - **S1（D4）**：旗標 `builder_governance.enabled` 開啟時，`POST /api/definitions/{kind}/{key}/publish` 對名單內的 kind（`expense_type`、`remit_kinds`、`custom_module`，即 `routers/definitions.py` 的 `_PREVIEW_ENFORCED_KINDS`）必須帶 `preview_hash`＝目前草稿戳，且稽核裡要有這位使用者對這個戳的 `definitions.previewed`（別人的預覽不算、只知道戳不算）；否則 409 `preview_required`／`preview_stale`，沒有繞過。旗標關、不在名單的 kind、沒有草稿 ⇒ 與今天逐字相同。三個編輯器（費用類型、匯款款別、模組建構器）旗標開時先開「審閱」面板（`MotrixDefGovernance.review()`），確認才發布。
 - **還沒涵蓋**：排版器（`layout-editor.js`，3c）與選單建構器（發布走 layout 定義）尚未送 `preview_hash`，所以 `layout`／`output_template`／`custom_fields` 還不在名單；它們接上之後把 kind 加進 `_PREVIEW_ENFORCED_KINDS`。在那之前，這些種類仍只有前端強制（選單建構器）或沒有強制。
 
+## T60 S0b（hichan-04 對 t59 的稽核，wip/t60-s0s1-r1）
+
+- (a) `GET /api/layout/{module}` 對非最高管理者不再帶側欄操作（`ops`／`dropped` 裡 target 以 `/sidebar` 結尾的）：這些只有 `/api/platform/menu` 在用，頁面引擎不需要。`points`（模組宣告的可自訂點）不動——它與公開的選單宣告同一份。最高管理者照舊。
+- (b) 含 `hub` 項的群組（目前是 `system`）不能當 `move.to` 的目的地：執行期 `core.menu._group_dest`（略過並列在 skipped）、發布驗證 `core.customization._check_sidebar_group_dest`（可選清單不含它）、`menu-editor.js` 的下拉（只有項目本來就在裡面時才保留現值）。新增 `core.menu.hub_group_keys()`。
+- (c) `impact` 說明文字已改成與 S1 一致：開啟旗標後，費用單據類型／匯款款別／自訂模組的發布由伺服端要求「看過的」雜湊；其他種類仍不強制。
+- (d) 注意：選單整份預覽（`POST /api/platform/menu/preview`）是在伺服端算的，**早於**瀏覽器端 sidebar.js 的 hub 收合（`_collapseHub`）；所以預覽裡 hub 群組顯示的是展開的項目，實際導覽列會收成單一連結。因此現在也不讓項目搬進 hub 群組。
+
