@@ -153,7 +153,7 @@ window.CM_PARTS.push(() => ({
           if (!(cur.poLink && cur.poLink.key)) { this.mlMsg = ''; return }                  // 被拒：poLink 已被伺服器現值取代，由提示框說明
           if (res === true) this.mlMsg = okMsg                                              // 真的存成功才宣告
           else if (res === 'pending') this.mlMsg = '認列已送出，待最高管理員審核後才會生效'
-          else this.mlMsg = '認列尚未儲存（請看畫面上方的儲存狀態，修正後會自動重試）'
+          else this.mlMsg = '認列尚未儲存：請看畫面上方的儲存狀態；按「儲存」或再編輯一次會重新送出'
         })
       } else this.mlMsg = okMsg
       return true
