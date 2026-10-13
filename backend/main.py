@@ -74,6 +74,7 @@ import trail
 from helpers import licensing as license_core
 from helpers import geo as geo_core
 from core import loader as module_loader, pages as module_pages, registry as module_registry
+from core.internal_cols import InternalColsMiddleware
 _startup_step("import_core")
 # L1：GCIS 與 /api/now（M08 搬遷 ②）；註解不寫在 import 行尾（test_router_registration 以行解析 import，第六班列車全量抓到）
 from routers import company_lookup
@@ -735,6 +736,9 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("Content-Security-Policy",
                                 _CSP_MAP if request.url.path in _CSP_MAP_PATHS else _CSP)
     return response
+
+
+app.add_middleware(InternalColsMiddleware)      # U0a：單位鍵內部欄位不得出現在任何 JSON 回應（最後加＝最外層，看到的是最終本文）
 
 
 # ── Exception handlers ────────────────────────────────────────────────────────
