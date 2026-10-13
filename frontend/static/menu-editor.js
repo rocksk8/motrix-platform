@@ -143,7 +143,7 @@
     var ops = buildOps()
     var mods = Object.keys(st.mods)
     st.busy = true; st.msg = '發布中…'; st.msgBad = false; render()
-    var chain = Promise.resolve(), done = 0
+    var chain = Promise.resolve(), done = 0, pend = 0
     mods.forEach(function (m) {
       var mine = ops.filter(function (o) { return o.target.indexOf(m + ':') === 0 })
       var keep = st.mods[m].ops.filter(function (o) { return !(o && typeof o.target === 'string' && /\/sidebar$/.test(o.target) && o.target.indexOf(m + ':') === 0) })
@@ -153,12 +153,13 @@
         var url = '/api/definitions/layout/module:' + encodeURIComponent(m)
         return api('PUT', url + '/draft?scope=company', { body: { ops: next }, base_etag: st.mods[m].etag || undefined }).then(function (r) {
           return api('POST', url + '/publish?scope=company', { note: '選單建構器', base_etag: r.etag })
-        }).then(function () { done++ })
+        }).then(function (pr) { if (pr && pr.pending === true) pend++; else done++ })      // T60 S2：放寬的變更不會立刻發布，回 pending:true（需第二位最高管理者核准）
       })
     })
     chain.then(function () {
-      st.busy = false; st.msg = '已發布（' + done + ' 個模組的版面）。重新整理頁面即可看到新的側欄。'; st.msgBad = false
-      return load().then(function () { st.msg = '已發布（' + done + ' 個模組的版面）。重新整理頁面即可看到新的側欄。'; render() })
+      var pm = pend ? '；另有 ' + pend + ' 個模組的放寬變更待第二位最高管理者核准，核准前不會生效。' : ''
+      st.busy = false; st.msg = '已發布（' + done + ' 個模組的版面）。重新整理頁面即可看到新的側欄。' + pm; st.msgBad = false
+      return load().then(function () { st.msg = '已發布（' + done + ' 個模組的版面）。重新整理頁面即可看到新的側欄。' + pm; render() })
     }).catch(function (e) { st.busy = false; st.msg = '發布失敗：' + e.message + '（已發布的模組不會回復，可在版本清單還原）'; st.msgBad = true; render() })
   }
   function move(id, dir) {

@@ -5,6 +5,8 @@
  *   MotrixDefGovernance.open({ kind, key, scope, title, tab, readonly, onRestored })   ⇒ 開面板（tab: ledger｜impact；readonly:true ⇒ 不顯示還原，編輯器自己有還原流程時用）
  *   MotrixDefGovernance.preview({ kind, key, scope })    ⇒ Promise<{ok, hash, data}>：發布前影響預覽（只取資料；會留一筆『看過預覽』稽核）
  *   MotrixDefGovernance.review({ kind, key, scope, title }) ⇒ Promise<string|null>：開預覽面板讓使用者確認；按『確認並發布』⇒ 草稿戳（發布時帶 preview_hash）；取消／驗證不過 ⇒ null
+ *   待核准的放寬變更（T60 S2b）：後端 /api/def-pipeline/pending 存在（旗標開、最高管理者）⇒ 面板多一個「待核准變更」分頁，列出全部待核准項，
+ *   可核准／套用（核准票夠、確認期間已過才成功）／撤銷；每個動作都在畫面上兩段確認，不用原生對話框。
  *   （伺服端 T60 S1：旗標開、名單內的 kind，發布沒帶『看過的』preview_hash 一律 409，沒有後門）
  * 旗標 builder_governance.enabled 預設關：後端對三條 /api/def-governance/… 一律 404，本檔不出現任何畫面。
  * 還原沿用既有 POST /api/definitions/{kind}/{key}/restore/{version}（新版本、歷史不改、現行驗證器）。
@@ -45,7 +47,7 @@
   var st = null     // { o, tab, busy, state, ledger, diff, impact, err, cmp:[a,b] }
 
   function setState(s) { var p = document.getElementById('dg-panel'); if (p) p.setAttribute('data-state', s) }
-  function setBusy(b) { st.busy = b; var p = document.getElementById('dg-panel'); if (p) p.setAttribute('data-busy', b ? '1' : '0') }
+  function setBusy(b) { if (!st) return; st.busy = b; var p = document.getElementById('dg-panel'); if (p) p.setAttribute('data-busy', b ? '1' : '0') }
 
   var OPS = { add: '新增', remove: '移除', change: '修改' }
   function show(v) { return v === undefined ? '（無）' : esc(JSON.stringify(v)) }
@@ -60,10 +62,12 @@
     var h = '<div class="dg-head"><b>' + esc(st.o.title || (st.o.kind + ' / ' + st.o.key)) + '</b><button class="dg-btn" data-dg="close">關閉</button></div>'
     h += '<div class="dg-tabs" role="tablist">' +
       '<button class="dg-tab" role="tab" data-dg="tab:ledger" aria-selected="' + (st.tab === 'ledger') + '">版本帳本</button>' +
-      '<button class="dg-tab" role="tab" data-dg="tab:impact" aria-selected="' + (st.tab === 'impact') + '">發布前影響預覽</button></div>'
+      '<button class="dg-tab" role="tab" data-dg="tab:impact" aria-selected="' + (st.tab === 'impact') + '">發布前影響預覽</button>' +
+      (st.pipe ? '<button class="dg-tab" role="tab" data-dg="tab:pending" aria-selected="' + (st.tab === 'pending') + '">待核准變更' + (st.pending && st.pending.length ? '（' + st.pending.length + '）' : '') + '</button>' : '') + '</div>'
     h += '<div class="dg-body">'
     if (st.err) h += '<div class="dg-bad" role="alert">' + esc(st.err) + '</div>'
     if (st.tab === 'ledger') h += renderLedger()
+    else if (st.tab === 'pending') h += renderPending()
     else h += renderImpact()
     h += '</div>'
     if (st.o.review) {
@@ -97,6 +101,46 @@
     return h
   }
 
+  var VERBS = { approve: '核准', activate: '套用', cancel: '撤銷' }
+  function renderPending() {
+    var P = st.pending
+    if (!P) return '<div class="dg-dim">讀取中…</div>'
+    if (!P.length) return '<div class="dg-dim">目前沒有待核准的放寬變更。</div>'
+    return '<div class="dg-dim">放寬限制的變更要另一位最高管理者核准，並等確認期間過後才能套用；期間內任何最高管理者都能撤銷。</div>' + P.map(function (c) {
+      var key = String(c.id)
+      var btns = ['approve', 'activate', 'cancel'].map(function (v) {
+        if (st.pconfirm === v + ':' + key) {
+          return '<span class="dg-bad">確定' + VERBS[v] + '？</span><button class="dg-btn" data-dg="pact-yes:' + v + ':' + key + '">確定</button><button class="dg-btn" data-dg="pact-no">取消</button>'
+        }
+        var dis = v === 'activate' && !c.ready
+        return '<button class="dg-btn" data-dg="pact:' + v + ':' + key + '"' + (dis ? ' disabled title="還沒核准或確認期間未過"' : '') + '>' + VERBS[v] + '</button>'
+      }).join('')
+      return '<div class="dg-row" data-change="' + esc(c.id) + '"><div class="dg-grow"><b>' + esc(c.kind) + ' / ' + esc(c.key) + '</b>（' + esc(c.scope) + '，第 ' + esc(c.version) + ' 版）' +
+        '<div class="dg-dim">' + esc(c.by) + '　' + esc(c.at) + '　核准 ' + esc((c.approvals || []).length) + '／' + esc(c.approvalsRequired) + '　可套用時間 ' + esc(c.effectiveAt) +
+        (c.ready ? '　<span class="dg-live">可套用</span>' : '') + '</div>' + (c.reason ? '<div class="dg-dim">' + esc(c.reason) + '</div>' : '') + '<div>' + btns + '</div></div></div>'
+    }).join('')
+  }
+
+  async function loadPending() {
+    var r = await call('GET', '/api/def-pipeline/pending')
+    if (!st) return
+    if (r.ok) { st.pipe = true; st.pending = (r.data && r.data.items) || [] } else if (r.status === 404) { st.pipe = false; st.pending = null }
+    else { st.err = (r.data && r.data.detail) || ('讀取失敗（' + r.status + '）') }
+  }
+  async function pipeAct(verb, id) {
+    st.pconfirm = ''
+    setBusy(true)
+    var r = await call('POST', '/api/def-pipeline/changes/' + enc(id) + '/' + verb, {})
+    setBusy(false)
+    if (!st) return                                  // 等待期間面板已被關掉
+    if (r.ok) { st.err = ''; setState('pipeline-' + verb) } else {
+      var d = r.data || {}
+      st.err = (d.detail || (VERBS[verb] + '失敗（' + r.status + '）')) + (Array.isArray(d.problems) && d.problems.length ? '：' + d.problems.map(function (x) { return x.message }).join('；') : '')
+      setState('error')
+    }
+    await loadPending()
+  }
+
   function renderImpact() {
     var I = st.impact
     if (!I) return '<div class="dg-dim">讀取中…</div>'
@@ -117,18 +161,21 @@
     setBusy(true)
     var r = await call('GET', base(st.o, '/ledger'))
     setBusy(false)
+    if (!st) return                                  // 等待期間面板已被關掉
     if (r.ok) { st.ledger = r.data; st.err = '' } else { st.err = (r.data && r.data.detail) || ('讀取失敗（' + r.status + '）'); setState('error') }
   }
   async function loadImpact() {
     setBusy(true)
     var r = await call('GET', base(st.o, '/impact'))
     setBusy(false)
+    if (!st) return                                  // 等待期間面板已被關掉
     if (r.ok) { st.impact = r.data; st.err = '' } else { st.err = (r.data && r.data.detail) || ('讀取失敗（' + r.status + '）'); setState('error') }
   }
   async function compare(v) {
     setBusy(true)
     var r = await call('GET', base(st.o, '/diff') + '&a=' + enc(v) + '&b=live')
     setBusy(false)
+    if (!st) return                                  // 等待期間面板已被關掉
     if (r.ok) { st.diff = r.data; st.err = '' } else { st.err = (r.data && r.data.detail) || ('比較失敗（' + r.status + '）'); setState('error') }
   }
   async function restore(v) {
@@ -136,6 +183,7 @@
     setBusy(true)
     var r = await call('POST', '/api/definitions/' + enc(st.o.kind) + '/' + enc(st.o.key) + '/restore/' + enc(v) + '?scope=' + enc(st.o.scope || 'company'), { note: '還原第 ' + v + ' 版' })
     setBusy(false)
+    if (!st) return                                  // 等待期間面板已被關掉
     if (r.ok) {
       st.err = ''; st.diff = null; setState('restored')
       if (typeof st.o.onRestored === 'function') { try { st.o.onRestored(r.data) } catch (e) { /* 編輯器自己的刷新失敗不影響帳本 */ } }
@@ -167,9 +215,12 @@
     }
     if (a.indexOf('tab:') === 0) {
       st.tab = a.slice(4); render()
-      if (st.tab === 'impact') { await loadImpact() } else { await loadLedger() }
+      if (st.tab === 'impact') { await loadImpact() } else if (st.tab === 'pending') { await loadPending() } else { await loadLedger() }
       return render()
     }
+    if (a.indexOf('pact:') === 0) { st.pconfirm = a.slice(5); return render() }
+    if (a === 'pact-no') { st.pconfirm = ''; return render() }
+    if (a.indexOf('pact-yes:') === 0) { var pp = a.slice(9).split(':'); await pipeAct(pp[0], pp[1]); return render() }
     if (a.indexOf('cmp:') === 0) { await compare(a.slice(4)); return render() }
     if (a.indexOf('restore:') === 0) { st.confirming = a.slice(8); return render() }
     if (a === 'restore-no') { st.confirming = ''; return render() }
@@ -193,11 +244,12 @@
       p.id = 'dg-panel'; p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', '版本帳本與影響預覽'); p.setAttribute('data-busy', '0'); p.setAttribute('data-state', 'idle')
       p.addEventListener('click', onClick)
       document.body.appendChild(p)
-      st = { o: o, tab: o.tab === 'impact' ? 'impact' : 'ledger', busy: false, confirming: '', ledger: null, diff: null, impact: null, err: '' }
+      st = { o: o, tab: o.tab === 'impact' ? 'impact' : 'ledger', busy: false, confirming: '', pipe: false, pending: null, pconfirm: '', ledger: null, diff: null, impact: null, err: '' }
       render()
       if (st.tab === 'impact') await loadImpact()
       else await loadLedger()
       render()
+      if (!o.review) { await loadPending(); render() }                       // 待核准分頁只在有後端、且不是『發布前審閱』時出現
     },
     review(o) {
       return new Promise(function (resolve) {

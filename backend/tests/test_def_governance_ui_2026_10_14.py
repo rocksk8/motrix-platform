@@ -296,3 +296,70 @@ def test_other_editors_also_send_the_reviewed_hash():
     for name in ("expense-types.js", "module-builder-output.js"):
         src = (JS / name).read_text(encoding="utf-8")
         assert "this.govOn && window.MotrixDefGovernance" in src and "MotrixDefGovernance.review(" in src and "preview_hash = pvh" in src, name
+
+
+# ── T60 S2b：待核准變更分頁 ─────────────────────────────────────────────────────────
+PEND = {"status": 200, "body": {"items": [
+    {"id": 7, "kind": "custom_fields", "key": "invoice_vouchers", "scope": "company", "version": 3, "state": "pending", "by": "alice", "at": "2026-10-14T01:00:00",
+     "reason": "多一個欄位", "effectiveAt": "2026-10-21T01:00:00", "approvals": [], "approvalsRequired": 1, "ready": False},
+    {"id": 8, "kind": "layout", "key": "module:crm", "scope": "role:admin", "version": 2, "state": "pending", "by": "bob", "at": "2026-10-10T01:00:00",
+     "reason": "", "effectiveAt": "2026-10-11T01:00:00", "approvals": ["carol"], "approvalsRequired": 1, "ready": True}]}}
+
+
+def _post_urls(r):
+    return [c["url"] for c in r["calls"] if c["method"] == "POST"]
+
+
+@needs_node
+def test_pending_tab_is_absent_when_the_pipeline_routes_are_404():
+    r = _panel([{"do": "open", "opts": {"kind": "expense_type", "key": "travel"}}], {"/def-pipeline/pending": {"status": 404, "body": {}}})
+    assert "待核准變更" not in r["html"]
+
+
+@needs_node
+def test_pending_tab_lists_changes_and_only_enables_apply_when_ready():
+    r = _panel([{"do": "open", "opts": {"kind": "expense_type", "key": "travel"}}, {"do": "click", "act": "tab:pending"}], {"/def-pipeline/pending": PEND})
+    h = r["html"]
+    assert "待核准變更（2）" in h and 'data-change="7"' in h and 'data-change="8"' in h
+    assert "custom_fields / invoice_vouchers" in h and "核准 0／1" in h and "核准 1／1" in h
+    assert 'data-dg="pact:activate:7" disabled' in h                       # 還沒核准／期間未過 ⇒ 不能按
+    assert 'data-dg="pact:activate:8"' in h and 'data-dg="pact:activate:8" disabled' not in h and "可套用" in h
+
+
+@needs_node
+def test_review_mode_does_not_load_the_pending_list():
+    r = _panel([{"do": "panel"}], {})
+    assert r["calls"] == []
+    out = _review(IMPACT_OK, [])
+    assert "待核准變更" not in out["html"]
+
+
+@needs_node
+def test_pending_actions_need_two_clicks_and_post_the_right_route_then_reload():
+    steps = [{"do": "open", "opts": {"kind": "expense_type", "key": "travel"}}, {"do": "click", "act": "tab:pending"}, {"do": "click", "act": "pact:approve:7"}]
+    r = _panel(steps, {"/def-pipeline/pending": PEND, "/changes/7/approve": {"status": 200, "body": {"approvals": 1, "required": 1}}})
+    assert 'data-dg="pact-yes:approve:7"' in r["html"] and _post_urls(r) == []                    # 第一下只是確認
+    r = _panel(steps + [{"do": "click", "act": "pact-no"}], {"/def-pipeline/pending": PEND})
+    assert _post_urls(r) == [] and 'data-dg="pact:approve:7"' in r["html"]
+    r = _panel(steps + [{"do": "click", "act": "pact-yes:approve:7"}],
+               {"/def-pipeline/pending": PEND, "/changes/7/approve": {"status": 200, "body": {"approvals": 1, "required": 1}}})
+    assert _post_urls(r) == ["/api/def-pipeline/changes/7/approve"]
+    assert r["calls"][-1]["url"] == "/api/def-pipeline/pending"                                  # 做完重新讀清單
+    for verb in ("activate", "cancel"):
+        r = _panel([{"do": "open", "opts": {"kind": "expense_type", "key": "travel"}}, {"do": "click", "act": "tab:pending"},
+                    {"do": "click", "act": "pact:%s:8" % verb}, {"do": "click", "act": "pact-yes:%s:8" % verb}],
+                   {"/def-pipeline/pending": PEND, "/changes/8/" + verb: {"status": 200, "body": {}}})
+        assert _post_urls(r) == ["/api/def-pipeline/changes/8/%s" % verb]
+
+
+@needs_node
+def test_pending_action_failure_shows_the_server_reason():
+    r = _panel([{"do": "open", "opts": {"kind": "expense_type", "key": "travel"}}, {"do": "click", "act": "tab:pending"},
+                {"do": "click", "act": "pact:approve:7"}, {"do": "click", "act": "pact-yes:approve:7"}],
+               {"/def-pipeline/pending": PEND, "/changes/7/approve": {"status": 409, "body": {"detail": "申請人不能核准自己的變更"}}})
+    assert "申請人不能核准自己的變更" in r["html"]
+
+
+def test_menu_editor_reports_pending_publishes_instead_of_claiming_success():
+    src = (JS.parent / "static" / "menu-editor.js").read_text(encoding="utf-8")
+    assert "pr.pending === true" in src and "待第二位最高管理者核准，核准前不會生效" in src
