@@ -140,9 +140,16 @@ window.CM_PARTS.push(() => ({
       mat.poLink = { key: g.key, poDocCode: g.poDocCode || '', docCodes: g.docCodes || [], name: g.name || '', vendor: g.vendor || '' }
       mat.ordered = true
       if (g.vendor && !String(mat.supplier || '').trim()) mat.supplier = g.vendor
-      this.mlMsg = `已認列採購單 ${(g.docCodes || []).join('、')} 到「${mat.name || g.name}」：已申購已勾，到料後可勾「已到料」`
+      const okMsg = `已認列採購單 ${(g.docCodes || []).join('、')} 到「${mat.name || g.name}」：已申購已勾，到料後可勾「已到料」`
+      this.mlMsg = '認列中…'
       this.mlTick++
       if (this.setDirty) this.setDirty()
+      // 立刻存檔（不等 1.5 秒的防抖）：沿用 saveCaseRecord 的佇列／互斥——存檔途中再改的內容下一輪再送，不會遺失其他待存的修改
+      const run = this.saveCaseRecord ? this.saveCaseRecord() : null
+      if (run && run.then) {
+        clearTimeout(this._autoSaveTimer)
+        run.then(() => { const cur = (this.cr?.caseRecord?.materials || []).find(m => m.id === mat.id) || mat; this.mlMsg = (cur.poLink && cur.poLink.key) ? okMsg : '' })     // 被拒時 poLink 已被伺服器現值取代：不顯示成功訊息，改由提示框說明
+      } else this.mlMsg = okMsg
       return true
     },
     mlRecognizedText(mat) {

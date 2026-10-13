@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 GROUP = "material_recognition"
 FLAGS = ("ordered", "arrived")
 _SYSTEM = {"username": "system", "role": "system", "display_name": "系統"}
-_MSG_DENIED = "這個帳號不能認列採購單，已取消這次認列%s。"
+_MSG_DENIED = "這個帳號沒有認列採購單的權限，這次認列已取消%s。"
 
 
 def _setting(key, default, conn=None):

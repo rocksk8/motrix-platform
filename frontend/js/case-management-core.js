@@ -571,8 +571,12 @@ window.CM_PARTS.push(() => ({
 
     // 材料申請審核（31-C）：存檔時被審核規則拒絕的項目（其餘已存）——說明原因，並把物流項目換回伺服器現值（旗標／序號被改回）
     async _matRejected(list) {
-      const msgs = [...new Set(list.map(x => x.message))]
-      MotrixUI.toast('材料申請審核規則：' + msgs.join('；'), { kind: 'info', ms: 9000 })
+      // 認列採購單被拒（T57）：用白話原因直接提示（伺服器訊息已說明原因與是否通知管理員），不套『材料申請審核規則』的前綴
+      const RECOG = ['recognize_denied', 'bad_recognize', 'recognize_stale']
+      const rec = list.filter(x => RECOG.includes(x.code))
+      const other = list.filter(x => !RECOG.includes(x.code))
+      if (rec.length) MotrixUI.toast([...new Set(rec.map(x => x.message))].join('；'), { kind: 'error', ms: 9000 })
+      if (other.length) MotrixUI.toast('材料申請審核規則：' + [...new Set(other.map(x => x.message))].join('；'), { kind: 'info', ms: 9000 })
       try {
         const r = await fetch('/api/quotations/' + this.selected.quote_no, { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (!r.ok) return
@@ -581,6 +585,7 @@ window.CM_PARTS.push(() => ({
           this.cr.caseRecord.materials = srv.materials || []
           this._segBase.materials = JSON.stringify(srv.materials || [])
         }
+        if (rec.length && this.mlLoadGroups) await this.mlLoadGroups(this.selected.quote_no)       // 認列分組／候選跟著伺服器現況更新（不必重新整理）
       } catch {}
     },
 
