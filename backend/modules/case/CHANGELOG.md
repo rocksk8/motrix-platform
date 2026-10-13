@@ -1,5 +1,11 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-13（wip/t57-material-recognize-denied-ux-r1；認列被拒立即可見）
+- 材料卡片「帶入並連結」被拒（沒有認列權限）時，畫面立刻顯示白話原因：「這個帳號沒有認列採購單的權限，這次認列已取消，並已通知管理員。」（不再套「材料申請審核規則：」前綴；是否寫「已通知管理員」依設定）；卡片即時還原成未連結、已申購取消，認列分組／候選同步更新，不必重新整理。
+- 按「帶入並連結」後立刻存檔（顯示「認列中…」），不再等 1.5 秒防抖；沿用 `saveCaseRecord` 的佇列與互斥，存檔途中再改的內容下一輪再送，不會遺失其他待存修改。
+- 後端只改被拒訊息文字（`material_recognize._MSG_DENIED`）；其餘行為不變。
+- 測試：`test_material_recognize_ux_2026_10_13.py`（node harness 5 題）、`test_e2e_material_recognize_denied_2026_10_13.py`。
+
 ## 1.0.182 — 2026-10-13（wip/t57-material-recognize-r2；材料卡片『認列已核准採購單』熱修，r5）
 - 修正（prod 回報：MQ-202609-012）：「帶入並連結」過去只改畫面記憶體（草稿列＋連結），自動存檔還刻意扣住連結，所以重新載入後仍是（未連結）、已申購／已到料無法勾。改為**認列**：卡片持有伺服器驗證的 `poLink`（隨一般案件存檔立即落地）；不建立材料申請、不走審核、不產生金額與付款路徑；卡片『供應商』欄空白時才帶入採購單廠商（不必在供應商主檔內），已填的不覆蓋。設計與稽核對照見 `docs/platform/plans/MATERIAL-LINK-BUG-T57.md`。
 - 新增單元 `material_recognize`（由 `material_guard._gate_materials` 呼叫＝端點、整份存檔漏斗、已結案變更核准共用）：認列／取消認列／換組只有最高管理者（設定可放寬）；其他人嘗試 ⇒ 整件取消（poLink／旗標／序號維持原值，其他欄位照存）、`rejected` code `recognize_denied`、同交易稽核 `material.recognize_denied`、依設定寄信通知管理員（固定範本、無金額與明細、去重＋上限查稽核表）；系統路徑（actor=None）不接受新的 poLink。
