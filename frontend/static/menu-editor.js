@@ -11,7 +11,7 @@
 ;(function () {
   if (window.MotrixMenuEditor) return
   var LABEL_MAX = 20
-  var st = { open: false, busy: false, msg: '', msgBad: false, decl: [], base: {}, work: {}, order: {}, mods: {}, previewKey: '', preview: null, who: '' }
+  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, decl: [], base: {}, work: {}, order: {}, mods: {}, previewKey: '', preview: null, who: '' }
 
   function session() {
     try { return JSON.parse(localStorage.getItem('motrix_session') || 'null') || {} } catch (e) { return {} }
@@ -143,7 +143,7 @@
     var ops = buildOps()
     var mods = Object.keys(st.mods)
     st.busy = true; st.msg = '發布中…'; st.msgBad = false; render()
-    var chain = Promise.resolve(), done = 0, pend = 0
+    var chain = Promise.resolve(), done = 0, pend = []
     mods.forEach(function (m) {
       var mine = ops.filter(function (o) { return o.target.indexOf(m + ':') === 0 })
       var keep = st.mods[m].ops.filter(function (o) { return !(o && typeof o.target === 'string' && /\/sidebar$/.test(o.target) && o.target.indexOf(m + ':') === 0) })
@@ -153,14 +153,31 @@
         var url = '/api/definitions/layout/module:' + encodeURIComponent(m)
         return api('PUT', url + '/draft?scope=company', { body: { ops: next }, base_etag: st.mods[m].etag || undefined }).then(function (r) {
           return api('POST', url + '/publish?scope=company', { note: '選單建構器', base_etag: r.etag })
-        }).then(function (pr) { if (pr && pr.pending === true) pend++; else done++ })      // T60 S2：放寬的變更不會立刻發布，回 pending:true（需第二位最高管理者核准）
+        }).then(function (r2) {
+          // T60 S2：治理旗標開啟時，放寬的發布可能回 {pending:true,…}（待第二位最高管理者核准、還沒生效）——不能說「已發布」
+          if (r2 && r2.pending === true) pend.push(r2); else done++
+        })
       })
     })
     chain.then(function () {
-      var pm = pend ? '；另有 ' + pend + ' 個模組的放寬變更待第二位最高管理者核准，核准前不會生效。' : ''
-      st.busy = false; st.msg = '已發布（' + done + ' 個模組的版面）。重新整理頁面即可看到新的側欄。' + pm; st.msgBad = false
-      return load().then(function () { st.msg = '已發布（' + done + ' 個模組的版面）。重新整理頁面即可看到新的側欄。' + pm; render() })
-    }).catch(function (e) { st.busy = false; st.msg = '發布失敗：' + e.message + '（已發布的模組不會回復，可在版本清單還原）'; st.msgBad = true; render() })
+      st.busy = false; st.msgBad = false
+      var text = pend.length ? pendingText(pend, done) : '已發布（' + done + ' 個模組的版面）。重新整理頁面即可看到新的側欄。'
+      if (pend.length) { st.msg = text; st.state = 'pending'; render(); return }           // 待核准：選單沒有變，不重讀、不說已發布
+      st.state = 'published'
+      return load().then(function () { st.msg = text; st.state = 'published'; render() })
+    }).catch(function (e) { st.busy = false; st.state = 'error'; st.msg = '發布失敗：' + e.message + '（已發布的模組不會回復，可在版本清單還原）'; st.msgBad = true; render() })
+  }
+  // 待核准的白話說明：已送出、待第二位最高管理者核准、核准前不會生效、最早生效時間、原因；有部分模組已直接發布也要說
+  function pendingText(list, doneCount) {
+    var d = list[0] || {}
+    var reasons = []
+    list.forEach(function (x) {
+      ;(x.reasons || []).forEach(function (r) { var t = typeof r === 'string' ? r : ((r && (r.message || r.text)) || ''); if (t && reasons.indexOf(t) < 0) reasons.push(t) })
+    })
+    var at = d.effectiveAt ? String(d.effectiveAt).replace('T', ' ').slice(0, 16) : ''
+    return '已送出發布（' + list.length + ' 個模組的版面），待第二位最高管理者核准；核准前不會生效'
+      + (at ? '，生效時間 ' + at + ' 之後' : '') + (reasons.length ? '。原因：' + reasons.join('；') : '')
+      + (doneCount ? '。另有 ' + doneCount + ' 個模組已直接發布。' : '。') + ''
   }
   function move(id, dir) {
     var g = groupOf(id), arr = st.order[g], i = arr.indexOf(id), j = i + dir
@@ -246,7 +263,7 @@
       body.appendChild(el('div', { class: 'me-pv', 'data-testid': 'me-preview' }, [groupsList(st.preview.current), groupsList(st.preview.preview, st.preview.current)]))
     }
     var who = el('input', { type: 'text', placeholder: '預覽身分（帳號；空白＝我自己）', value: st.who, style: 'flex:1', onchange: function (e) { st.who = e.target.value; st.previewKey = ''; render() } })
-    panel = el('div', { id: 'me-panel', 'data-busy': st.busy ? '1' : '0' }, [
+    panel = el('div', { id: 'me-panel', 'data-busy': st.busy ? '1' : '0', 'data-state': st.state }, [
       el('div', { class: 'me-h' }, [el('b', { text: '調整選單' }), who, el('button', { type: 'button', text: '✕', onclick: function () { st.open = false; render() } })]),
       body,
       el('div', { class: 'me-msg' + (st.msgBad ? ' me-bad' : ''), text: st.msg }),
@@ -259,6 +276,6 @@
     document.body.appendChild(panel)
   }
 
-  window.MotrixMenuEditor = { open: function () { st.open = true; return load() }, _state: st, _buildOps: buildOps }
+  window.MotrixMenuEditor = { _pendingText: pendingText, _publish: doPublish, open: function () { st.open = true; return load() }, _state: st, _buildOps: buildOps }
   render()
 })()
