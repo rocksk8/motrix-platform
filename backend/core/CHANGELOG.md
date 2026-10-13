@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-13（wip/t57-material-recognize-r2）
+## 1.133 — 2026-10-13（wip/t57-material-recognize-r2）
 
 - 設定中心新增群組 `material_recognition`（材料卡片認列採購單；`who_may` 預設只有最高管理者、`on_denied` 預設取消並寄信、`mail_window_minutes`、`mail_cap`；放寬走確認期間＋另一位最高管理者核准；凍結基準同步）。
 
