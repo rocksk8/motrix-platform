@@ -83,8 +83,37 @@
   },
   "customization": {
     "schema": 1,
-    "fields": {},
-    "pages": [],
+    "fields": {
+      "case": [
+        {"key": "quoteNo", "label": "案號", "core": true},
+        {"key": "dealTag", "label": "狀態", "core": true},
+        {"key": "customer", "label": "客戶", "core": false},
+        {"key": "sales", "label": "業務", "core": false},
+        {"key": "amount", "label": "金額", "core": false},
+        {"key": "stageProgress", "label": "階段進度", "core": false},
+        {"key": "date", "label": "日期", "core": false}
+      ]
+    },
+    "pages": [
+      {
+        "page": "case-management.html",
+        "lists": [
+          {"key": "cases", "label": "案件清單", "entity": "case", "columns": [
+            {"field": "quoteNo", "visible": true},
+            {"field": "dealTag", "visible": true},
+            {"field": "customer", "visible": true},
+            {"field": "sales", "visible": true},
+            {"field": "amount", "visible": true},
+            {"field": "stageProgress", "visible": true},
+            {"field": "date", "visible": true}
+          ]}
+        ],
+        "forms": [],
+        "actions": [],
+        "menus": [],
+        "exports": []
+      }
+    ],
     "outputs": []
   },
   "customization_note": "搬遷時沒有宣告可自訂點（CUSTOMIZATION-SPEC §5）；之後要開放欄位、頁面或輸出的自訂時在這裡加",
