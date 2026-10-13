@@ -1,5 +1,5 @@
 {
- "core_version": "1.133",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1656,6 +1656,7 @@
    "CORE_FEATURES_FILE": "const",
    "STATUSES": "const",
    "TONE_ORDER": "const",
+   "declared_and_open": "def(code)",
    "drop_owner": "def(owner)",
    "feature_enabled": "def(code)",
    "feature_status": "def(code)",

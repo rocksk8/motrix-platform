@@ -1,5 +1,9 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-13（wip/t57-u0a-leak-defence-r1；U0a 單位鍵洩漏防線）
+
+- L0（新增，只增）：`core.internal_cols`（`INTERNAL_COLS`＝owner_unit_id／unit_id／legal_entity_id、`strip_internal_cols`／`strip_row`／`strip_headers`／`is_internal`、純 ASGI `InternalColsMiddleware`）；`main.py` 以最外層中介層剝除所有 JSON 回應中的單位鍵欄位（僅 JSON、無壓縮、有 content-length ≤16 MB 才緩衝；其他原樣串流）。`core.spine.declared_and_open(code)`：嚴格啟用判斷（已宣告且 open 且已驗證；與 fail-open 的 `feature_enabled` 相反），單位範圍強制必須用它。`core/features_l1.json` 新增 planned 功能 `org_units`。`core.upgrade.table_digests` 在未明列 `columns` 時預設忽略內部欄位（明列時照明列）。行為對使用者不變。
+
 ## 1.133 — 2026-10-13（wip/t57-material-recognize-r2）
 
 - 設定中心新增群組 `material_recognition`（材料卡片認列採購單；`who_may` 預設只有最高管理者、`on_denied` 預設取消並寄信、`mail_window_minutes`、`mail_cap`；放寬走確認期間＋另一位最高管理者核准；凍結基準同步）。

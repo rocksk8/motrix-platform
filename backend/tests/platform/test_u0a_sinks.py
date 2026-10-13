@@ -18,7 +18,9 @@ SRC = {source_tree.rel(p): p.read_text(encoding="utf-8") for p in source_tree.pr
 # ── ① 即時通道 ────────────────────────────────────────────────────────────────────────
 _REALTIME = re.compile(r"WebSocket|EventSource|text/event-stream|\.websocket\(|@websocket|sse_starlette", re.I)
 #: 允許清單：{路徑: 理由}。新增前必須先在 core/internal_cols 補上該通道的剝除並更新這裡。
-REALTIME_ALLOW = {}
+REALTIME_ALLOW = {
+    "core/loader.py": "docstring 提到 WebSocket（掛載說明），不是通道",
+}
 
 
 def realtime_hits(sources: dict) -> list:

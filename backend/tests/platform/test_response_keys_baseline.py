@@ -60,19 +60,18 @@ def test_record_or_compare_against_baseline(client, seeded):
 # ── 正對照（記錄器本身不是假綠燈）────────────────────────────────────────────────────
 
 def test_positive_control_unstripped_json_is_detected(client, seeded, monkeypatch):
-    from core import internal_cols as IC      # 惰性匯入：基準要能在『還沒有 internal_cols』的父提交上記錄
     import db
     c = db.get_db()
     try:
-        c.execute("ALTER TABLE customers ADD COLUMN owner_unit_id INTEGER NOT NULL DEFAULT 1")
-        c.execute("INSERT INTO customers (name) VALUES ('rk_ctrl')")
+        c.execute("ALTER TABLE parts ADD COLUMN owner_unit_id INTEGER NOT NULL DEFAULT 1")      # /api/parts＝SELECT * ＋ dict(r)：真的會帶出新欄位
         c.commit()
     finally:
         c.close()
-    ok = RK.record(client, seeded, ["/api/customers"])
-    assert RK.leaks(ok) == [] and ok["/api/customers"]["k"], "剝除開著 ⇒ 乾淨，且仍有鍵可比"
+    from core import internal_cols as IC      # 惰性匯入：基準要能在『還沒有 internal_cols』的父提交上記錄
+    ok = RK.record(client, seeded, ["/api/parts"])
+    assert RK.leaks(ok) == [] and ok["/api/parts"]["k"], "剝除開著 ⇒ 乾淨，且仍有鍵可比"
     monkeypatch.setattr(IC, "strip_internal_cols", lambda o: o)                           # 故意不剝除
-    bad = RK.record(client, seeded, ["/api/customers"])
+    bad = RK.record(client, seeded, ["/api/parts"])
     assert RK.leaks(bad), "不剝除時記錄器必須回報洩漏（否則整個基準是假綠燈）"
 
 

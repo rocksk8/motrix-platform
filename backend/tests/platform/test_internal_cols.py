@@ -115,28 +115,36 @@ def test_middleware_ignores_non_http_scopes():
     assert called == ["websocket"]
 
 
-def test_main_app_registers_the_middleware_last():
-    """最後加入＝最外層，看到最終本文；正對照：若被拿掉，下一題的整合測試也會紅。"""
+def test_main_app_registers_the_middleware_last(client):
+    """最後加入＝最外層，看到最終本文；正對照：若被拿掉，下一題的整合測試也會紅。（用 client 夾具，確保 main 在檔案路徑被隔離之後才匯入）"""
     import main
     assert main.app.user_middleware[0].cls is IC.InternalColsMiddleware
 
 
 def test_real_app_never_returns_internal_columns(client, make_user):
-    """整合：在測試庫的 customers 暫時加欄位，走真實路由；中介層必須把它剝掉（正對照：直接用同一庫查得到該欄）。"""
+    """整合：`/api/parts` 是 `SELECT * FROM parts` ＋ `dict(r)` 的真實路由。測試庫的 parts 暫時加欄位，中介層必須把它剝掉
+    （正對照：同一庫直接查得到該欄，且把剝除換成恆等後同一路由會洩漏）。"""
     import db
+    from tests.platform import _response_keys as RK
     u, p = make_user(username="ic_a", role="superadmin")
     tok = client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]
     h = {"Authorization": "Bearer " + tok}
     c = db.get_db()
     try:
-        c.execute("ALTER TABLE customers ADD COLUMN owner_unit_id INTEGER NOT NULL DEFAULT 1")
-        c.execute("INSERT INTO customers (name) VALUES ('洩漏測試客戶')")
+        RK.seed_every_table(c)
+        c.execute("ALTER TABLE parts ADD COLUMN owner_unit_id INTEGER NOT NULL DEFAULT 1")
         c.commit()
-        assert "owner_unit_id" in dict(c.execute("SELECT * FROM customers ORDER BY id DESC LIMIT 1").fetchone())      # 正對照：欄位真的存在
+        assert "owner_unit_id" in dict(c.execute("SELECT * FROM parts ORDER BY id DESC LIMIT 1").fetchone())      # 欄位真的存在
     finally:
         c.close()
-    r = client.get("/api/customers", headers=h)
-    assert r.status_code == 200 and "洩漏測試客戶" in r.text and "owner_unit_id" not in r.text
+    r = client.get("/api/parts", headers=h)
+    assert r.status_code == 200 and r.json() and "owner_unit_id" not in r.text
+    orig = IC.strip_internal_cols
+    IC.strip_internal_cols = lambda o: o
+    try:
+        assert "owner_unit_id" in client.get("/api/parts", headers=h).text            # 正對照：不剝除就洩漏 ⇒ 上面的乾淨是中介層的功勞
+    finally:
+        IC.strip_internal_cols = orig
 
 
 # ── table_digests ─────────────────────────────────────────────────────────────────────
