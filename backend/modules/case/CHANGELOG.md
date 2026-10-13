@@ -8,7 +8,7 @@
 - 涵蓋檢視 `GET …/material-coverage` 的分組加 `vendor`、`recognized`；儀表板材料清單加 `recognized`。
 - 信件類型 `material_recognize_denied`（系統技術類、預設僅最高管理者）。
 - 回滾注意：程式回滾後舊的涵蓋檢視不認識 `poLink`，同一組可能再被建立材料申請而重複涵蓋；建立前請先檢查案件材料卡片是否已認列同一採購單。
-- 測試：`test_material_recognize_2026_10_13.py`（18 題）、`test_material_write_paths_2026_10_13.py`、`test_e2e_material_recognize_2026_10_13.py`；`test_mat_candidates_t51.py` 改為認列語意。
+- 測試：`test_material_recognize_2026_10_13.py`（19 題）、`test_material_write_paths_2026_10_13.py`、`test_e2e_material_recognize_2026_10_13.py`；`test_mat_candidates_t51.py` 改為認列語意。
 
 ## 1.0.181 — 2026-10-13（wip/t57-completion-r5；完工單帶入報價項目）
 - 完工單「從報價單帶入項目」：新增唯讀 `GET /api/completion-notes/quote-items`（靜態路由先於 `/{note_no}`；限管理員＋報價單本體可讀；回應只有程式明列的非金額欄位 `id／type／description／brand／qty／unit`，金額鍵結構性帶不出）；報價單狀態閘（只有「已送出」可帶入，其餘 409 白話）；已完工數每次即時計算（待審核／簽核中／已核准的完工單、同一來源編號相加）；`quoteSync` 協議（指紋含非金額欄位與品牌；只在明確帶入時改變；不符 409；一般存檔不動）；超量政策（警示／擋下；檢查與寫入在同一個寫鎖交易）。新純函式 `completion_sync.py`；`CompletionNoteIn.quote_sync`；項目加性欄位 `quoteItemId`／`quoteQty`（舊單照舊）。
