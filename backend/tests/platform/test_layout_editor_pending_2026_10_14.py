@@ -96,3 +96,12 @@ def test_no_pending_handling_changes_the_flag_off_path():
     src = _src()
     assert "this.state = 'published'" in src and "this.state = 'restored'" in src
     assert re.search(r"this\.msg = '已發布第 ' \+ r\.d\.version \+ ' 版（' \+ this\.scopeLabel\(\) \+ '）'", src)
+
+
+def test_pending_restore_does_not_delete_the_draft():
+    """待核准的還原（3e：舊內容放進待核准的版本／草稿）：編輯器不可再 DELETE 草稿；一般還原照舊先刪草稿。"""
+    src = _src()
+    res = src[src.index("async _restore("):src.index("async _discard()")]
+    assert "var pend = r.d && r.d.pending === true" in res
+    assert "if (!pend && this.defs.draft) await this._j(" in res and "{ method: 'DELETE' }" in res
+    assert res.index("var pend =") < res.index("method: 'DELETE'")

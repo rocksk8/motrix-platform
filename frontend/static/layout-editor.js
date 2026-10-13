@@ -426,8 +426,9 @@
         var r = await this._j(this._base() + '/restore/' + version + '?scope=' + encodeURIComponent(this.scope),
                               { method: 'POST', body: JSON.stringify({}) })
         if (!r.ok) { this._mark(r.d.problems || []); this.msg = '還原失敗：' + (r.d.detail || r.status); this.busy = false; return }
-        if (this.defs.draft) await this._j(this._base() + '/draft?scope=' + encodeURIComponent(this.scope), { method: 'DELETE' })
         var pend = r.d && r.d.pending === true
+        // 待核准的還原：伺服器把舊內容放進待核准的版本／草稿，不能再把『草稿』刪掉（會連同待核准的內容一起刪）
+        if (!pend && this.defs.draft) await this._j(this._base() + '/draft?scope=' + encodeURIComponent(this.scope), { method: 'DELETE' })
         if (!pend) await ML().reload()
         await this.loadScope()
         this.busy = false
