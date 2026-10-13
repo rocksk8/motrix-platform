@@ -12,6 +12,7 @@
   <script src="../js/expense-types-designer.js"></script>
   <script src="../js/expense-type-refresh.js"></script>
   <script src="../js/expense-types.js"></script>
+  <script src="../js/def-governance.js"></script>
   <script src="../static/form-designer-model.js"></script>
   <script src="../static/form-designer.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -317,6 +318,8 @@
             <div class="et-actions" style="margin-top:14px">
               <input type="text" data-testid="et-note" x-model="note" placeholder="發布說明（選填）" style="min-width:260px">
               <button class="btn btn-primary" data-testid="et-publish" :disabled="busy" @click="publish()">發布</button>
+              <button class="btn" data-testid="et-gov-impact" x-show="govOn && !isNew" @click="openGov('impact')">發布前影響預覽</button>
+              <button class="btn" data-testid="et-gov-ledger" x-show="govOn && !isNew" @click="openGov('ledger')">版本帳本</button>
             </div>
             <div class="et-sub" style="margin-top:6px">發布前伺服器會再驗證一次；有問題不會發布。已開出的單據固定使用開單當時的版本。</div>
           </div>

@@ -14,7 +14,7 @@
         numExample: '', numProblems: [], _numTimer: null,
         fxProblems: {}, fxState: {}, _fxTimers: {}, whenProblems: {}, whenState: {}, _whenTimers: {},
         previewHtml: '', previewProblems: [], previewState: '', previewBusy: false,
-        diff: [], diffLoaded: false, publishNote: '', busy: false, _initDone: false, defReview: { mode: 'auto', active: false, reason: '', reviewers: [] },
+        diff: [], diffLoaded: false, publishNote: '', busy: false, _initDone: false, govOn: false, defReview: { mode: 'auto', active: false, reason: '', reviewers: [] },
         defs: [], defsLoaded: false, pdfBusy: false, pdfState: '', pdfBytes: 0,
 
         _hdr() {
@@ -41,6 +41,8 @@
           if (!cat.ok) { this.errMsg = '讀取能力目錄失敗：' + ((cat.data && cat.data.detail) || cat.status); return }
           this.catalog = cat.data
           this.defReview = cat.data.defReview || this.defReview
+          var self0 = this
+          if (window.MotrixDefGovernance) window.MotrixDefGovernance.available('custom_module').then(function (ok) { self0.govOn = !!ok })   // BP-1：旗標關 ⇒ false ⇒ 不出現任何東西
           var res = await Promise.all([this.api('GET', '/api/users'), this.api('GET', '/api/org/tree'), this.api('GET', '/api/custom-modules')])
           this.users = res[0].ok ? (res[0].data || []).filter(function (u) { return u.active !== 0 }) : []
           this.orgTree = res[1].ok ? (res[1].data || []) : []

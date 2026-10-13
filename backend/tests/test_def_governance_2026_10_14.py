@@ -75,8 +75,24 @@ def test_off_publish_and_restore_behave_as_before(api):
 
 def test_on_unsupported_kind_is_404(api, flag_on):
     c, h = api
-    assert c.get("/api/def-governance/custom_module/x/ledger", headers=h["sa"]).status_code == 404
     assert c.get("/api/def-governance/no_such_kind/x/ledger", headers=h["sa"]).status_code == 404
+
+
+def test_custom_module_impact_counts_records_frozen_on_the_live_version(api, flag_on):
+    c, h = api
+    conn = db.get_db()
+    for v, n in ((1, 3), (2, 2)):
+        conn.execute("INSERT INTO ui_definitions (kind,key,scope,version,status,body_json,published_by,published_at) "
+                     "VALUES ('custom_module','zz_mod','company',?, 'published', '{}', 'x', '2026-01-01T00:00:00')", (v,))
+        for i in range(n):
+            conn.execute("INSERT INTO custom_records (module_key,record_no,def_version) VALUES ('zz_mod',?,?)", ("R%d%d" % (v, i), v))
+    conn.execute("INSERT INTO ui_definitions (kind,key,scope,version,status,body_json) VALUES ('custom_module','zz_mod','company',0,'draft','{}')")
+    conn.commit()
+    conn.close()
+    j = c.get("/api/def-governance/custom_module/zz_mod/impact", headers=h["sa"]).json()
+    assert j["liveVersion"] == 2 and j["frozenRecords"] == 2                       # 只算凍結在目前生效版（第 2 版）的 2 張，不是全部 5 張
+    assert c.get("/api/def-governance/custom_module/zz_mod/ledger", headers=h["sa"]).json()["live"] == 2
+    assert c.get(GOV + "/impact", headers=h["sa"]).json()["frozenRecords"] is None   # 其他種類＝不適用
 
 
 def test_ledger_marks_live_and_restorable(api, flag_on):

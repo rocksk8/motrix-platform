@@ -1087,6 +1087,8 @@
               </div>
               <div class="mb-row" style="margin-top:10px">
                 <button class="btn btn-primary" id="mb-publish" @click="publish()" :disabled="busy" x-text="defReview.active ? '送審' : '發布'">發布</button>
+                <button class="btn" id="mb-gov-impact" x-show="govOn" @click="openGov('impact')">發布前影響預覽</button>
+                <button class="btn" id="mb-gov-ledger" x-show="govOn" @click="openGov('ledger')">版本帳本</button>
                 <span class="mb-hint">已建立的單據維持它建立時的版本；新單據用新版。</span>
               </div>
               <div class="mb-f" style="margin-top:8px" id="mb-review-box">
@@ -1155,6 +1157,7 @@
   <script src="../js/module-builder-elements.js"></script>
   <script src="../js/module-builder-flow.js"></script>
   <script src="../js/module-builder-output.js"></script>
+  <script src="../js/def-governance.js"></script>
   <script src="../static/form-designer-model.js"></script>
   <script src="../static/form-designer.js"></script>
   <script src="../js/module-builder-designer.js"></script>
