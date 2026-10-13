@@ -1,5 +1,5 @@
 {
- "core_version": "1.131",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1213,6 +1213,7 @@
    "get": "def(group, field, *, conn=…, now=…)",
    "get_group": "def(group, *, conn=…, now=…)",
    "group_info": "def(group)",
+   "group_stamp": "def(group, *, conn=…)",
    "group_status": "def(group)",
    "groups": "def()",
    "invalidate": "def(group=…)",
@@ -1654,23 +1655,33 @@
   "plat:spine": {
    "CORE_FEATURES_FILE": "const",
    "STATUSES": "const",
+   "TONE_ORDER": "const",
    "drop_owner": "def(owner)",
    "feature_enabled": "def(code)",
    "feature_status": "def(code)",
    "group_info": "def(group)",
    "group_status": "def(group)",
+   "has_kind_gate": "def(kind)",
+   "health_badge": "def()",
+   "kind_info": "def(kind, key)",
+   "kind_status": "def(kind, key)",
+   "managed_message": "def(kind)",
    "on_validated": "def(fn)",
    "parse_feature": "def(raw, owner, index=…)",
    "parse_features": "def(manifest, owner)",
    "planned_cards": "def()",
    "planned_train": "def(code)",
    "register_core_declarations": "def(path=…)",
+   "register_health_source": "def(name, fn)",
+   "register_kind_gate": "def(kind, fn)",
+   "register_managed_kind": "def(kind, message)",
    "register_manifest": "def(manifest, owner)",
    "register_validator": "def(name, fn, covers=…)",
    "report": "def()",
    "reset": "def()",
    "restore": "def(snap)",
    "snapshot": "def()",
+   "surface_status": "def(surface)",
    "validate_all": "def()"
   },
   "plat:system_hub": {

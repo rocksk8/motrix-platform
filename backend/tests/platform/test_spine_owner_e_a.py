@@ -211,7 +211,8 @@ def test_settings_groups_still_exposes_register_group_and_keeps_blocks_core_owne
     assert "zz_ea_appended" in R._GROUPS                                      # 其他擁有者失敗時不被帶走
 
 
-_FORBIDDEN_IN_MODULES = {"call": {"owner_scope"}, "name": {"_register_core", "_OWNER"}}
+_FORBIDDEN_IN_MODULES = {"call": {"owner_scope", "register_kind_gate", "register_managed_kind", "register_health_source"},
+                         "name": {"_register_core", "_OWNER", "register_kind_gate", "register_managed_kind", "register_health_source"}}
 
 
 def _forbidden_uses(tree):
@@ -253,6 +254,9 @@ def test_modules_never_touch_the_owner_machinery():
     assert (1, "_OWNER") in _forbidden_uses(ast.parse("registry._OWNER.set('core')"))
     assert (1, "owner_scope") in _forbidden_uses(ast.parse("from core.registry import owner_scope as os_"))      # 改名匯入也抓得到
     assert (1, "_register_core") in _forbidden_uses(ast.parse("from helpers.settings_groups import _register_core as rc"))
+    for fn in ("register_kind_gate", "register_managed_kind", "register_health_source"):         # r7：只有 L1 可登記閘門／受管 kind／健康來源
+        assert (1, fn) in _forbidden_uses(ast.parse("spine.%s('k', f)" % fn)), fn
+        assert (1, fn) in _forbidden_uses(ast.parse("from core.spine import %s as r" % fn)), fn
 
 
 def test_modules_never_pass_owner_to_register_group():

@@ -3,7 +3,7 @@
 
 [單位] helper:settings_registry    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, IMPACT_SCOPE_GRANDFATHERED, KIND, RISK_ORDER, SCOPE, SettingDef, SettingError, apply_profile, banner_of, clamp_value, clear_edition_bounds, confirm_period_days,
-    audit_spine_failures, cancel_pending_of_nonopen, field_defs, field_views, get, get_group, group_info, group_status, groups, invalidate, live_impact, materialize_due, owner_groups, plan, profile_preview, profile_skipped, profiles, publish, register_group, set_edition_bounds, show_value, unregister_owner, validate_values
+    audit_spine_failures, cancel_pending_of_nonopen, field_defs, field_views, get, get_group, group_info, group_stamp, group_status, groups, invalidate, live_impact, materialize_due, owner_groups, plan, profile_preview, profile_skipped, profiles, publish, register_group, set_edition_bounds, show_value, unregister_owner, validate_values
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
     ④寫入口只有 `publish()`：同一交易寫定義新版本＋變更明細（config_ledger）＋稽核＋（有舊鍵時）雙寫舊鍵；⑤讀取走 15 秒行程內快取，
@@ -48,11 +48,19 @@ _EDITION = {}                                  # (group, field) -> (min, max)：
 
 def set_edition_bounds(group, field, *, min=None, max=None):
     """設定販售版本的欄位邊界（與欄位自己的上下限取交集）。給授權／版本載入器呼叫；沒有任何 API 讓客戶改它。"""
+    global _EDITION_EPOCH
     _EDITION[(group, field)] = (min, max)
+    _EDITION_EPOCH += 1
 
 
 def clear_edition_bounds():
+    global _EDITION_EPOCH
     _EDITION.clear()
+    _EDITION_EPOCH += 1
+
+
+_UNKNOWN_STAMP = __import__("itertools").count(1)
+_EDITION_EPOCH = 0                             # 版本邊界每變一次就加一；納入 group_stamp（邊界會夾住 get_group 的結果）
 
 
 def _bounds(group, f):
@@ -123,8 +131,8 @@ class SettingDef:
         self.choices = [tuple(c) for c in (choices or [])]
         self.presets = dict(presets or {})
         self.impact_fn, self.effect = impact_fn, effect or DEFAULT_EFFECT
-        if loosen not in (None, "up", "down"):
-            raise ValueError("loosen 只能是 up／down／None：%r" % (loosen,))
+        if loosen not in (None, "up", "down", "both"):
+            raise ValueError("loosen 只能是 up／down／both／None：%r" % (loosen,))
         if loosen and type not in ("int", "float"):
             # 放寬判定只認數字（publish()._loosens）：bool／str 設了 loosen 不會觸發待生效，等於沒管制。選項欄位請用整數代碼（0/1、1..n）。
             raise ValueError("設定欄位 %r：loosen 只能用在數字欄位（int／float）；選項請用整數代碼" % (key,))
@@ -552,7 +560,7 @@ def banner_of(f, value, *, default=None, days=None):
         return None
     if f.loosen and isinstance(value, (int, float)) and not isinstance(value, bool):
         a, b = _rank(f, value), _rank(f, base)
-        if not ((f.loosen == "up" and a > b) or (f.loosen == "down" and a < b)):
+        if not (f.loosen == "both" or (f.loosen == "up" and a > b) or (f.loosen == "down" and a < b)):
             return None
     n = int(days or DEFAULT_CONFIRM_DAYS)
     if f.loosen:
@@ -600,12 +608,43 @@ def field_views(group, values=None, *, days=None):
     return out
 
 
+def group_stamp(group, *, conn=None):
+    """群組目前『有效值可能改變』的戳記（給規則等下游快取當鍵的一部分）：功能狀態、緊急逃生口、最新發布版本、
+    待生效項（全部 id）與其中已生效者（id）、版本邊界世代（set／clear_edition_bounds 會夾住有效值）。任何會改變 `get_group()` 結果的事件都會讓字串改變；讀不到資料庫 ⇒ 回每次都不同的字串（不讓下游快取住未知狀態）。永不丟例外。"""
+    import time as _t
+    try:
+        _g(group)
+        own = conn is None
+        c = conn if conn is not None else get_db()
+        try:
+            row = D.get(c, KIND, group, SCOPE)
+            ver = row["version"] if row else 0
+            pend, eff_ids = [], []
+            from datetime import datetime
+            from helpers import config_ledger as L
+            now = datetime.now().isoformat(timespec="seconds")
+            for r in L.pending(c, "setting:%s" % group):
+                if r["domain"] == "setting:%s" % group:
+                    pend.append(r["id"])
+                    if L.in_effect(r, now):
+                        eff_ids.append(r["id"])
+        finally:
+            if own:
+                c.close()
+        return "%s|%s|v%s|p%s|e%s|ed%d" % (group_status(group), "d" if os.environ.get("MOTRIX_SETTINGS_DEFAULTS_ONLY") == "1" else "-",
+                                           ver, ",".join(map(str, sorted(pend))), ",".join(map(str, sorted(eff_ids))), _EDITION_EPOCH)
+    except Exception:                                   # noqa: BLE001
+        return "unknown:%d" % next(_UNKNOWN_STAMP)         # 遞增計數（Windows 的 monotonic_ns 解析度粗，連續兩次可能相同）
+
+
 def _split(g, eff, values):
     """把本次送出的欄位分成 (待生效 pend, 立即 imm, 放寬 loose)。`publish()` 與 `plan()`（預覽）共用同一個分類，不得各寫一份。"""
     def _loosens(f, new_v):
         old_v = eff[f.key]
         if not (f.loosen and isinstance(new_v, (int, float)) and not isinstance(new_v, bool)):
             return False
+        if f.loosen == "both":                          # 兩個方向都算放寬（例：同一門檻被多條規則以不同方向引用）：任何變動都走放寬流程
+            return _rank(f, new_v) != _rank(f, old_v)
         a, b = _rank(f, new_v), _rank(f, old_v)
         return (f.loosen == "up" and a > b) or (f.loosen == "down" and a < b)
     pend = {k: v for k, v in values.items() if g["fields"][k].requires_pending or _loosens(g["fields"][k], v)}
@@ -960,6 +999,8 @@ def _register_once():
     _spine.register_validator("settings", _spine_check_settings, covers=("settings",))   # features[].settings.group 的跨表檢查
     _spine.on_validated(cancel_pending_of_nonopen)   # 脊柱驗證完 ⇒ 取消非 open 群組的待生效項
     _spine.on_validated(audit_spine_failures)        # 脊柱驗證完 ⇒ 驗證失敗的功能寫稽核（去重）
+    _spine.register_kind_gate(KIND, group_info)      # 通用定義路由對 setting_group 的 hidden／planned 閘門
+    _spine.register_managed_kind(KIND, "設定要到「系統 > 設定中心」調整：放寬類的變更需要第二位最高管理者核准，並會留下變更明細；這裡不提供直接修改。")
     if KIND not in D.kinds():
         D.register_kind(KIND, label="設定群組", validator=_kind_validator, default=_kind_default)
     from helpers import config_ledger as L

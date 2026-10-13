@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from db import get_db
 from helpers import _require_user, _tok, _audit
 from core import definitions as D
+from core import spine as _spine
 from helpers import expense_types as _expense_types  # noqa: F401  匯入即登記 expense_type 定義種類（A2-2）
 
 router = APIRouter()
@@ -133,25 +134,17 @@ _MANAGED_KINDS = {
 
 
 def _group_status(kind, key):
-    """kind＝setting_group 且 key 是已登錄群組 ⇒ 該群組的功能狀態（open｜planned｜hidden）；其他一律 open。脊柱不可用 ⇒ open。"""
-    if kind != "setting_group":
-        return "open"
-    try:
-        from helpers import settings_registry as sr
-        return sr.group_info(key)["status"]
-    except Exception:                                                      # noqa: BLE001
-        return "open"
+    """kind 有登記功能狀態閘門（`spine.register_kind_gate`：`setting_group`、日後的 `alert_rule`…）⇒ 該 key 的狀態（open｜planned｜hidden）；
+    沒有登記閘門 ⇒ open。閘門函式壞掉 ⇒ hidden（fail-closed）。"""
+    return _spine.kind_status(kind, key)
+
+
+def _managed_message(kind):
+    """受管 kind 的白話訊息：先看本檔的內建（`setting_group` 不依賴任何 import 順序），再看 `spine.register_managed_kind` 登記的。"""
+    return _MANAGED_KINDS.get(kind) or _spine.managed_message(kind)
 
 
 _PLANNED_MSG = "這項功能還在開發中，尚未開放調整。"
-
-
-def _group_info(key):
-    try:
-        from helpers import settings_registry as sr
-        return sr.group_info(key)
-    except Exception:                                                      # noqa: BLE001
-        return {"status": "open", "plannedTrain": None, "feature": None}
 
 
 def _group_gate(kind, key):
@@ -165,7 +158,7 @@ def _group_gate(kind, key):
 
 def _managed_guard(kind, authorization=None, key="", verb=""):
     """受管 kind 的通用寫入一律 409（hidden 群組 ⇒ 404，不洩漏存在）；並留稽核 `definitions.managed_refused`（只記 kind／key／動作，不記內容）——繞過設定中心的嘗試要看得到。"""
-    msg = _MANAGED_KINDS.get(kind)
+    msg = _managed_message(kind)
     if msg:
         try:
             _audit(_tok(authorization), "definitions.managed_refused", "ui_definition", "%s/%s" % (kind, key),
@@ -240,11 +233,11 @@ def list_definitions(kind: str, authorization: str = Header(None)):
     conn = get_db()
     try:
         rows = D.list_definitions(conn, kind)
-        if kind != "setting_group":
+        if not _spine.has_kind_gate(kind):
             return rows
-        out = []                                                           # 設定群組：hidden 不列；planned 只留名稱與狀態
+        out = []                                                           # 有功能狀態閘門的 kind：hidden 不列；planned 只留名稱與狀態
         for r in rows:
-            info = _group_info(r["key"])
+            info = _spine.kind_info(kind, r["key"])
             if info["status"] == "hidden":
                 continue
             if info["status"] == "planned":

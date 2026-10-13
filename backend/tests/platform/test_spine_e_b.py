@@ -58,7 +58,7 @@ def _group(name, owner="zz_eb1", *fields):
 
 def test_valid_feature_is_parsed_with_defaults(sp):
     assert _reg([_feat(settings={"group": "zz_eb_g"}, mail=["zz_eb_mail"], capabilities=["zz_eb.x.view"], labels=["a.b"],
-                       catalog={"fields": ["f1"], "surfaces": ["module:x.y"]}, notes="CRM-X.md")]) == []
+                       catalog={"fields": ["f1"], "surfaces": ["module:zz_eb1.y"]}, notes="CRM-X.md")]) == []
     f = spine.report()["features"][0]
     assert (f["code"], f["owner"], f["status"], f["plannedTrain"]) == ("zz_eb_f", "zz_eb1", "open", None)
 
