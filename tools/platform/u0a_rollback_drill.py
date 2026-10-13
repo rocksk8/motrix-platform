@@ -226,6 +226,16 @@ def probe_old_style_inserts(path, tables):
                 continue
             names = [r[1] for r in info]
             cols, vals = seeder.build_row(info, t, 987654)
+            # 唯一索引內的欄位（含有預設值的，例如 code DEFAULT ''）一律明給一個不會撞的值：探測的是『新欄位』，不是撞鍵
+            uniq = set()
+            for idx in conn.execute('PRAGMA index_list("%s")' % t).fetchall():
+                if idx[2]:
+                    uniq |= {r[2] for r in conn.execute('PRAGMA index_info("%s")' % idx[1]).fetchall()}
+            have = {c.strip('"') for c in cols}
+            for _, name, typ, notnull, dflt, pk in info:
+                if name in uniq and name not in have and not (pk and "INT" in (typ or "").upper()):
+                    cols.append('"%s"' % name)
+                    vals.append(987654 if ("INT" in (typ or "").upper() or "REAL" in (typ or "").upper()) else "u0a-probe-%s-%s" % (t, name))
             conn.execute("SAVEPOINT p")
             try:
                 if cols:
