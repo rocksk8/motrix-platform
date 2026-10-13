@@ -8,7 +8,25 @@
     null,
     false
    ],
+   "devices": [
+    false,
+    null,
+    null,
+    false
+   ],
+   "procurement": [
+    false,
+    null,
+    null,
+    false
+   ],
    "suppliers": [
+    false,
+    null,
+    null,
+    false
+   ],
+   "vendor_contractors": [
     false,
     null,
     null,

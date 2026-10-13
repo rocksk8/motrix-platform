@@ -111,7 +111,44 @@
 
   <!-- 列表 -->
   <div class="panel" style="padding:0;overflow:hidden">
-    <div class="table-scroll" x-show="!loading">
+    <template x-if="layoutOn">
+      <div class="table-scroll" data-layout-list="vendors" x-show="layoutOn && !loading && ($store.layout.ready || $store.layout.failed)">
+      <div class="ml-layout-note" x-show="$store.layout.failed" x-text="$store.layout.error"></div>
+      <div class="ml-layout-note" x-show="$store.layout.mode === 'preview'" x-text="'預覽中：' + $store.layout.previewLabel + '（唯讀，關閉排版器後回到自己的版面）'"></div>
+      <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才看得到。</div>
+      <table class="data-table">
+        <thead><tr>
+          <th style="width:32px"></th>
+          <template x-for="c in $store.layout.cols('vendors')" :key="c.field">
+            <th :data-layout-col="c.field" x-text="$store.layout.colLabel('vendors', c.field, layoutLabel(c.field))"></th>
+          </template>
+          <th style="width:80px"></th>
+        </tr></thead>
+        <tbody>
+          <template x-for="v in vendors" :key="v.id">
+            <tr @click="selectVendor(v)" style="cursor:pointer">
+              <td><div style="width:30px;height:30px;border-radius:50%;background:#7C3AED;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700" x-text="(v.name||'?')[0]"></div></td>
+              <template x-for="c in $store.layout.cols('vendors')" :key="c.field">
+                <td :data-layout-cell="c.field">
+                  <template x-if="c.field === 'name'"><div><div style="font-weight:500" x-text="v.name"></div><div style="display:flex;align-items:center;gap:5px;margin-top:1px"><span x-show="v.code" x-text="v.code" style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#EDE9FE;color:#7C3AED;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span><span x-show="v.category" style="font-size:11px;color:var(--text-dim)" x-text="v.category"></span></div></div></template>
+                  <template x-if="c.field === 'taxId'"><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="v.taxId || '—'"></span></template>
+                  <template x-if="c.field === 'contact'"><span x-text="v.contactName || '—'"></span></template>
+                  <template x-if="c.field === 'phone'"><span style="font-size:12px" x-text="v.phone || '—'"></span></template>
+                  <template x-if="c.field === 'email'"><span style="font-size:12px" x-text="v.email || '—'"></span></template>
+                  <template x-if="c.field === 'active'"><span class="tag" :class="v.active ? 'tag-active' : 'tag-inactive'" x-text="v.active ? '往來中' : '停用'"></span></template>
+                </td>
+              </template>
+              <td><div class="row-actions"><button class="btn btn-ghost btn-sm" @click.stop="openEdit(v)">編輯</button></div></td>
+            </tr>
+          </template>
+          <tr x-show="vendors.length === 0">
+            <td :colspan="$store.layout.cols('vendors').length + 2" class="empty-state"><div>尚無承攬商資料</div></td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+    </template>
+    <div class="table-scroll" x-show="!loading && !layoutOn">
       <table class="data-table">
         <thead>
           <tr>
@@ -573,6 +610,18 @@
 <script src="../static/record-link.js"></script>
 <script src="../static/notif.js"></script>
 <script src="../static/sidebar.js"></script>
+<script src="../static/custom-layout.js"></script>
+<script src="../static/layout-runtime.js"></script>
+<script src="../static/layout-editor.js"></script>
+<script src="../js/def-governance.js"></script>
+<script>
+// BP-1：管理者自訂版面（P9）。設定中心「自訂畫面版面」→ vendor_contractors 預設關閉：關閉時不發任何版面請求（deferred）、畫面不變。
+// fallback＝版面讀不到時的欄位順序（守門：必須等於 module.json 登記的順序）
+MotrixLayout.init({
+  module: 'subcontract', page: 'vendor-contractors.html', deferred: true,
+  fallback: { lists: { vendors: ['name', 'taxId', 'contact', 'phone', 'email', 'active'] } },
+})
+</script>
 <script>
 const API = '/api'
 
@@ -641,6 +690,26 @@ function vendorContractorsPage() {
     // ☠️ 後果不只是 API 發兩次：第二次的回應晚一步抵達，
     //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
     _initDone: false,
+    layoutOn: false,
+    // BP-1：旗標開啟才換成版面驅動的列表（原本的表格不動、只是隱藏）。旗標關閉／讀不到 ⇒ 什麼都不做。
+    layoutLabel(f) { return ({ name: '承攬商名稱', taxId: '統一編號', contact: '聯絡人', phone: '電話', email: 'Email', active: '狀態' })[f] || f },
+    async initLayout() {
+      try {
+        const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+        if (!s.token) return
+        const r = await fetch('/api/settings-center/public?groups=builder_layout', { headers: { Authorization: 'Bearer ' + s.token } })
+        if (!r.ok) return
+        const d = await r.json()
+        if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.vendor_contractors !== true) return
+        const title = document.querySelector('.pg__t')
+        if (!title) return
+        title.insertAdjacentHTML('beforeend', '<span data-layout-editor-slot></span>')
+        this.layoutOn = true
+        await this.$nextTick()
+        if (window.MotrixLayoutEditor) window.MotrixLayoutEditor.mount()
+        window.MotrixLayout.start()
+      } catch (e) { /* 版面是加值功能：讀不到就維持原本的列表 */ }
+    },
 
     async init() {
       if (this._initDone) return
@@ -651,6 +720,7 @@ function vendorContractorsPage() {
       if (!['superadmin', 'admin'].includes(this.session.role)) {
         alert('此頁面需要管理員權限'); window.history.back(); return
       }
+      this.initLayout()
       try { this.privacyNotice = await window.MotrixPrivacyNotice.load(this.session.token, 'contact') } catch(e) {}
       await this.load()
       // `MP1`：地圖「開啟單據」帶 `?id=` 進來 ⇒ 直接打開那一筆；找不到要說出來。
