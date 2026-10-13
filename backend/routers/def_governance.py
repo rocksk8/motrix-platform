@@ -40,6 +40,20 @@ def _check_kind(kind):
         raise D.DefinitionError("治理檢視不支援這個定義種類：%r（可用：%s）" % (kind, "、".join(kinds())))
 
 
+#: 還原到較寬鬆（放寬）版本的把關：設定中心的「放寬→待生效→第二位核准」只存在於設定值（SettingDef.loosen），版面／輸出版型／欄位／模組定義沒有可比較的放寬判斷，
+#: 這裡**不自創**；改為明說，並由還原端點用現行驗證器再驗一次（不過就不發布）。完整把關屬單一發布管線（架構筆記 §3.9）。
+RESTORE_WARNING = "還原不會判斷這一版比現在寬鬆還是嚴格（尚無定義的放寬判斷）；請先用「與目前比較」看過差異。系統會用現行驗證器再驗一次，不通過就不會還原。"
+
+
+def _valid_now(conn, kind, key, scope, version):
+    """舊版內容在『現行驗證器』下是否仍然合法（True／False；驗證器本身出錯 ⇒ None＝不明）。還原端點發布前會再驗一次，這裡只是提早告知。"""
+    try:
+        r = D.get(conn, kind, key, scope, int(version))
+        return not D.validate(kind, key, (r or {}).get("body") or {})
+    except Exception:                                                  # noqa: BLE001
+        return None
+
+
 def ledger(conn, kind, key, scope) -> dict:
     """版本帳本：每一版的誰／何時／備註，標出目前生效版（最新已發布）與是否有草稿、是否有送審中。"""
     _check_kind(kind)
@@ -50,11 +64,13 @@ def ledger(conn, kind, key, scope) -> dict:
     for r in rows:
         if r["version"] == 0:
             continue                                                   # 草稿另外標示
+        is_live = r["version"] == live and r["status"] == "published"
+        restorable = r["status"] == "published" and not is_live
         out.append({"version": r["version"], "status": r["status"], "note": r["note"], "by": r["published_by"] or r["created_by"],
-                    "at": r["published_at"] or r["created_at"], "isLive": r["version"] == live and r["status"] == "published",
-                    "restorable": r["status"] == "published" and r["version"] != live})
+                    "at": r["published_at"] or r["created_at"], "isLive": is_live, "restorable": restorable,
+                    "validNow": _valid_now(conn, kind, key, scope, r["version"]) if restorable else None})
     return {"kind": kind, "key": key, "scope": scope, "live": live, "hasDraft": any(r["version"] == 0 for r in rows),
-            "pendingReview": any(r["status"] == "submitted" for r in rows), "versions": out}
+            "pendingReview": any(r["status"] == "submitted" for r in rows), "versions": out, "warnings": [RESTORE_WARNING]}
 
 
 def _body(conn, kind, key, scope, which):

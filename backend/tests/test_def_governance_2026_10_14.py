@@ -106,6 +106,7 @@ def test_ledger_marks_live_and_restorable(api, flag_on):
     assert j["live"] == 2 and j["hasDraft"] is True and j["pendingReview"] is False
     assert [v["version"] for v in j["versions"]] == [2, 1]
     assert [v["isLive"] for v in j["versions"]] == [True, False]
+    assert [v["validNow"] for v in j["versions"]] == [None, True]            # 只有可還原的版本才驗
     assert [v["restorable"] for v in j["versions"]] == [False, True]
     assert j["versions"][1]["note"] == "第一版" and j["versions"][1]["by"] == "bp1_sa"
 
@@ -180,7 +181,9 @@ def test_restore_of_an_old_version_with_a_now_invalid_key_is_rejected_by_the_cur
     d2 = _publish(c, h, _body("甲"))
     assert d2["version"] == 2
     led = c.get(GOV + "/ledger", headers=h["sa"]).json()
-    assert [v["restorable"] for v in led["versions"]] == [False, True]      # 帳本說可還原，但真正的把關在還原端點
+    assert [v["restorable"] for v in led["versions"]] == [False, True]      # 可還原的版本
+    assert [v["validNow"] for v in led["versions"]] == [None, False]       # 但帳本提早告知：現行驗證器不接受這一版
+    assert led["warnings"] and "放寬" in led["warnings"][0]                # 沒有放寬判斷 ⇒ 明說，不自創
     r = c.post(BASE + "/restore/1", headers=h["sa"], json={})
     assert r.status_code == 422 and r.json()["problems"]
     assert c.get(GOV + "/ledger", headers=h["sa"]).json()["live"] == 2
