@@ -24,6 +24,7 @@
 | `case_deadlines.py` | 每日到期檢查（`daily.check`） |
 | `case_stage_tasks.py` | 執行進度勾選 → 每日工作事項 |
 | `completion_pdf.py` | 完工單 PDF |
+| `completion_sync.py` | 完工單從報價單帶入項目的純函式（白名單、累計、指紋、超量） |
 
 表：quotations、quote_seq、case_stages、case_stage_visits、case_updates、case_action_items、case_change_requests、case_extra_expenses、completion_notes（凍結 migration 建立）。
 頁面 8 頁仍在 `frontend/pages/`（模組頁面尚無服務路徑）；案件頁的 `js/case-management-*.js` 11 支同。

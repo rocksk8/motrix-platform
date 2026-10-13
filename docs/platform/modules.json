@@ -280,6 +280,7 @@
    "name": "案件",
    "units": [
     "mod:case/completion_pdf",
+    "mod:case/completion_sync",
     "mod:case/case_deadlines",
     "mod:case/attachments",
     "mod:case/case_stage_tasks",
