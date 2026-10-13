@@ -53,6 +53,9 @@
 '   <span class="ml-ed__sub" x-text="startNote"></span>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-retry" x-show="loadError" @click="loadScope()">重試</button></div>' +
 '  <div class="ml-ed__banner" x-show="previewRole" x-text="previewDraft ? \'以「\' + roleLabel(previewRole) + \'」預覽編輯中的草稿（唯讀，尚未發布）\' : \'以「\' + roleLabel(previewRole) + \'」預覽已發布的版面（唯讀）\'"></div>' +
+'  <div class="ml-ed__banner" data-testid="ml-ask" role="alertdialog" x-show="askBar" x-cloak style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span x-text="askBar && askBar.text"></span>' +
+'   <button type="button" class="btn btn-primary btn-sm" data-testid="ml-ask-yes" @click="answer(true)" x-text="askBar && askBar.notice ? \'知道了\' : \'確定\'"></button>' +
+'   <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-ask-no" x-show="askBar && !askBar.notice" @click="answer(false)">取消</button></div>' +
 ' </div>' +
 ' <div class="ml-ed__body" x-show="work" x-effect="$el.inert = busy || loading" :aria-busy="String(busy || loading)">' +
 '  <template x-if="generalProblems.length"><div class="ml-ed__prob" data-testid="ml-problems"><template x-for="p in generalProblems"><div x-text="p"></div></template></div></template>' +
@@ -141,11 +144,29 @@
   function component() {
     return {
       open: false, busy: false, state: 'idle', msg: '', note: '', loadedScope: '', _scopeSeq: 0, loadsDone: 0, loading: false, loadError: '',
-      scope: 'company', roles: [], previewRole: '', previewDraft: false, startNote: '',
+      scope: 'company', roles: [], previewRole: '', previewDraft: false, startNote: '', askBar: null, _askRes: null,
       defs: { draft: null, latest: null, versions: [] },
       work: null, lastOps: [], probs: {}, generalProblems: [],
       diffShown: false, diffLines: [], sidebarGroup: [], sidebarGroupLabel: '', _drag: null,
 
+      // 兩段式確認／提示（不用原生 confirm／alert：會擋住整頁事件、不隨深色模式、e2e 只能盲接）。_ask 回傳 Promise<boolean>。
+      _ask: function (text) {
+        var self = this
+        if (this._askRes) this._askRes(false)
+        return new Promise(function (res) { self.askBar = { text: text, notice: false }; self._askRes = res })
+      },
+      _notice: function (text) {
+        this.open = true
+        this.askBar = { text: text, notice: true }
+        this._askRes = null
+      },
+      answer: function (ok) {
+        var r = this._askRes, notice = this.askBar && this.askBar.notice
+        this._askRes = null
+        this.askBar = null
+        if (r) r(!!ok)
+        else if (notice && !this.work) this.open = false          // 只是提示（還沒進入編輯）：看過就收起
+      },
       _key: function () { return 'module:' + ML().config().module },
       _base: function () { return '/api/definitions/layout/' + encodeURIComponent(this._key()) },
       _pts: function () { return this.$store.layout.points },
@@ -157,8 +178,8 @@
       },
 
       async start() {
-        if (window.innerWidth < 1024) { alert('排版器只在桌機使用（畫面寬度至少 1024px）。發布後的版面在手機上照常顯示。'); return }
-        if (!this.$store.layout.ready) { alert('版面設定還沒載入完成，稍後再試。'); return }
+        if (window.innerWidth < 1024) { this._notice('排版器只在桌機使用（畫面寬度至少 1024px）。發布後的版面在手機上照常顯示。'); return }
+        if (!this.$store.layout.ready) { this._notice('版面設定還沒載入完成，稍後再試。'); return }
         // O7 第三次：start 在 loadScope 之前還有兩趟 await（角色標籤、側欄）；這段期間面板已打開、舊的 work 還在、loading 卻是 false
         // ⇒ 使用者（或 e2e）此時的編輯／範圍切換，會被稍後 start 自己的 loadScope 用伺服器版蓋掉（編輯無聲消失）。先鎖住，載入完才放開。
         this.loading = true
@@ -184,6 +205,7 @@
         await this.loadScope()      // 這一趟結束（成功或失敗）才由它清 loading；失敗時維持鎖定
       },
       close() {
+        if (this._askRes) { var r0 = this._askRes; this._askRes = null; this.askBar = null; r0(false) }
         this.open = false
         this.previewRole = ''
         this.previewDraft = false
@@ -365,7 +387,7 @@
         // 治理（builder_governance 開啟時才有）：發布前影響預覽。旗標關閉／未載入 ⇒ 完全略過，行為與先前相同。
         if (window.MotrixDefGovernance && await window.MotrixDefGovernance.available()) {
           var pv = await window.MotrixDefGovernance.preview({ kind: 'layout', key: this._key(), scope: this.scope })
-          if (pv.ok && pv.data && pv.data.changeCount && !confirm('這次發布會變更 ' + pv.data.changeCount + ' 項設定（影響預覽已記錄），確定要發布？')) {
+          if (pv.ok && pv.data && pv.data.changeCount && !(await this._ask('這次發布會變更 ' + pv.data.changeCount + ' 項設定（影響預覽已記錄），確定要發布？'))) {
             this.msg = '已取消發布'; this.busy = false; return
           }
         }
@@ -386,7 +408,10 @@
         this.state = 'published'
       },
       async _restore(version) {
-        if (this.defs.draft && !confirm('還原會捨棄這個範圍目前的草稿，確定要還原第 ' + version + ' 版？')) return
+        if (this.defs.draft) {
+          this.busy = true                       // 問的時候編輯區先鎖住，免得確認期間又改了草稿
+          if (!(await this._ask('還原會捨棄這個範圍目前的草稿，確定要還原第 ' + version + ' 版？'))) { this.busy = false; return }
+        }
         this.busy = true
         var r = await this._j(this._base() + '/restore/' + version + '?scope=' + encodeURIComponent(this.scope),
                               { method: 'POST', body: JSON.stringify({}) })

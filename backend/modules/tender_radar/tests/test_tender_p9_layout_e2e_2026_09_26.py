@@ -217,6 +217,8 @@ def test_layout_editor_role_override_and_restore(live_server, make_user, no_tile
     sales.wait_for_function(READY)
     assert "location" in sales.evaluate(HEADS)
     ed.locator(".ml-ed__ver[data-version='1'] button").click()
+    if boss.get_by_test_id("ml-ask-yes").is_visible():                                # S8：有草稿時會先在頁內問（不再是原生對話框）
+        boss.get_by_test_id("ml-ask-yes").click()
     boss.wait_for_function(ED_STATE, arg="restored")
     rows = _rows("company")
     assert [v for v, _ in rows] == [1, 2, 3] and rows[2][1] == rows[0][1]            # 還原＝舊版再發布成新版，不改歷史
