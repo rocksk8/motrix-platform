@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1312,
+  "tests": 1318,
   "unmapped": 13,
   "kinds": {
-   "api": 717,
+   "api": 721,
    "e2e": 306,
-   "audit": 168,
-   "unit": 121
+   "audit": 169,
+   "unit": 122
   },
   "routes": 816
  },
@@ -18205,6 +18205,40 @@
     ]
    }
   },
+  "backend/tests/platform/test_internal_cols.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:main",
+    "file:backend/core/features_l1.json",
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_response_keys.py",
+    "plat:__init__",
+    "plat:internal_cols",
+    "plat:spine",
+    "plat:upgrade",
+    "router:parts"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/internal_cols.py",
+     "backend/core/spine.py",
+     "backend/core/upgrade.py",
+     "backend/db.py",
+     "backend/main.py",
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_response_keys.py"
+    ],
+    "api": [
+     "backend/routers/parts.py"
+    ],
+    "path": [
+     "backend/core/features_l1.json"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_json_extract_ratchet.py": {
    "kind": "audit",
    "units": [
@@ -19505,6 +19539,37 @@
     ]
    }
   },
+  "backend/tests/platform/test_org_units_u0a.py": {
+   "kind": "api",
+   "units": [
+    "core:archive",
+    "core:db",
+    "dir:backend/helpers/",
+    "dir:backend/modules/",
+    "dir:backend/routers/",
+    "file:backend/tests/platform/test_u0a_sinks.py",
+    "mod:permmatrix/__init__",
+    "plat:__init__",
+    "plat:internal_cols",
+    "plat:migrations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/archive.py",
+     "backend/core/__init__.py",
+     "backend/core/internal_cols.py",
+     "backend/core/migrations.py",
+     "backend/db.py",
+     "backend/modules/permmatrix/__init__.py",
+     "backend/tests/platform/test_u0a_sinks.py"
+    ],
+    "path": [
+     "backend/helpers/",
+     "backend/modules/",
+     "backend/routers/"
+    ]
+   }
+  },
   "backend/tests/platform/test_p9_layout.py": {
    "kind": "api",
    "units": [
@@ -20079,6 +20144,34 @@
      "tools/platform/"
     ]
    }
+  },
+  "backend/tests/platform/test_response_keys_baseline.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:main",
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_response_keys.py",
+    "plat:__init__",
+    "plat:internal_cols",
+    "plat:registry",
+    "router:parts"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/internal_cols.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/main.py",
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_response_keys.py"
+    ],
+    "api": [
+     "backend/routers/parts.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/platform/test_route_ownership.py": {
    "kind": "api",
@@ -21013,6 +21106,143 @@
      "tools/platform/regen_all.py"
     ]
    }
+  },
+  "backend/tests/platform/test_u0a_restore.py": {
+   "kind": "audit",
+   "units": [
+    "dir:docs/platform/",
+    "dir:docs/platform/plans/",
+    "file:docs/platform/plans/U0A-LEAK-DEFENCE-T57.md",
+    "mod:arap/__init__",
+    "mod:arap/recycle_adapter",
+    "mod:case/__init__",
+    "mod:case/recycle_adapter",
+    "mod:payroll/__init__",
+    "mod:payroll/recycle_adapter",
+    "mod:subcontract/__init__",
+    "mod:subcontract/recycle_adapter"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/arap/__init__.py",
+     "backend/modules/arap/recycle_adapter.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/recycle_adapter.py",
+     "backend/modules/payroll/__init__.py",
+     "backend/modules/payroll/recycle_adapter.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/recycle_adapter.py"
+    ],
+    "path": [
+     "docs/platform/",
+     "docs/platform/plans/",
+     "docs/platform/plans/U0A-LEAK-DEFENCE-T57.md"
+    ]
+   }
+  },
+  "backend/tests/platform/test_u0a_rollback_drill.py": {
+   "kind": "unit",
+   "units": [
+    "dir:tools/platform/",
+    "file:tools/platform/u0a_rollback_drill.py",
+    "plat:__init__",
+    "plat:migrations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/migrations.py"
+    ],
+    "path": [
+     "tools/platform/",
+     "tools/platform/u0a_rollback_drill.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_u0a_sinks.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_response_keys.py",
+    "helper:audit",
+    "helper:custom_builder_support",
+    "helper:xlsx_out",
+    "mod:accounting/api/ledger_reports",
+    "mod:accounting/api/ledger_settings",
+    "mod:accounting/api/vouchers",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/quotations",
+    "mod:case/material_approval",
+    "mod:case/material_change",
+    "mod:case/material_payment",
+    "mod:case/payables",
+    "mod:payroll/api/payslip_approval",
+    "mod:payroll/bonus_vouchers",
+    "mod:permmatrix/migrations/0002_scope_json",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/contractors",
+    "mod:subcontract/api/dispatch_approval",
+    "mod:subcontract/dispatch_flow",
+    "mod:subcontract/remit",
+    "mod:supply/api/suppliers",
+    "plat:__init__",
+    "plat:internal_cols",
+    "plat:loader",
+    "plat:migrations",
+    "plat:source_tree",
+    "plat:spine",
+    "plat:upgrade",
+    "router:auth",
+    "router:company_lookup",
+    "router:mail_settings",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_response_keys.py"
+    ],
+    "api": [
+     "backend/routers/company_lookup.py",
+     "backend/routers/mail_settings.py",
+     "backend/routers/system.py"
+    ],
+    "path": [
+     "backend/core/internal_cols.py",
+     "backend/core/loader.py",
+     "backend/core/migrations.py",
+     "backend/core/spine.py",
+     "backend/core/upgrade.py",
+     "backend/helpers/audit.py",
+     "backend/helpers/custom_builder_support.py",
+     "backend/helpers/xlsx_out.py",
+     "backend/modules/accounting/api/ledger_reports.py",
+     "backend/modules/accounting/api/ledger_settings.py",
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/material_approval.py",
+     "backend/modules/case/material_change.py",
+     "backend/modules/case/material_payment.py",
+     "backend/modules/case/payables.py",
+     "backend/modules/payroll/api/payslip_approval.py",
+     "backend/modules/payroll/bonus_vouchers.py",
+     "backend/modules/permmatrix/migrations/0002_scope_json.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/subcontract/api/dispatch_approval.py",
+     "backend/modules/subcontract/dispatch_flow.py",
+     "backend/modules/subcontract/remit.py",
+     "backend/modules/supply/api/suppliers.py",
+     "backend/routers/auth.py",
+     "backend/routers/system.py"
+    ]
+   },
+   "unresolved_api": [
+    "/api/x/send-test"
+   ]
   },
   "backend/tests/platform/test_unit_cards.py": {
    "kind": "audit",

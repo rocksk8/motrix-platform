@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-13（wip/t57-u0a-r1：wip/t57-u0a-core-r2 組織單位預留 ＋ wip/t57-u0a-leak-defence-r1 單位鍵洩漏防線）
+## 1.134 — 2026-10-13（wip/t57-u0a-r1：wip/t57-u0a-core-r2 組織單位預留 ＋ wip/t57-u0a-leak-defence-r1 單位鍵洩漏防線）
 
 - **步驟檔 #12 用的精確數字**：新表 5 張；新欄位共 43 個（`owner_unit_id` 36 張表、`unit_id` 2 張、`legal_entity_id` 5 張〔都在前 36 張內〕，因此被動到的既有表共 38 張）；新索引 0；`schema_version` 仍 118；`module_schema_versions.core` 9→10（取號後）。真實欄位：`org_units`(id, parent_id, code, name, is_legal_entity, parent_sees_children, status, sort_order, created_at, updated_at)；`org_unit_closure`(ancestor_id, descendant_id, depth, PK(ancestor_id, descendant_id))；`user_units`(user_id, unit_id, is_primary, role_binding NOT NULL DEFAULT '', PK(user_id, unit_id))；`system_settings_unit`(unit_id, key, value_json, updated_at, updated_by, PK(unit_id, key))；`seq_by_entity`(entity_id, kind, period, seq, PK(entity_id, kind, period))。
 - **取號預期**：`U0A_*` 常數進入 `plat:migrations` 公開介面 ⇒ core 次版號 1.133→1.134（`core_bump.py --pending` 已重產 G1 快照）；`module_schema_versions.core` 9→10；permmatrix 模組 migration 1→2。

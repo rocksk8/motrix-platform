@@ -1,6 +1,6 @@
 # 權限矩陣 更新紀錄
 
-## (next) — 2026-10-13（wip/t57-u0a-core-r1；U0a 組織單位預留）
+## 1.0.3 — 2026-10-13（wip/t57-u0a-core-r1；U0a 組織單位預留）
 - 新增模組 migration v2：`perm_role_caps`、`perm_user_overrides` 各加可為空的 `scope_json TEXT`（NULL＝全部＝今天的行為；共 2 欄）。只加欄位、冪等；沒有任何程式讀寫它（授權帶範圍屬 U1）。
 
 ## 1.0.2 — 2026-10-12（wip/t57-permmatrix-probe-r1）

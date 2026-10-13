@@ -690,4 +690,4 @@ def _core_next_org_units(conn):
     return None
 
 
-register("core", NEXT, _core_next_org_units)
+register("core", 10, _core_next_org_units)
