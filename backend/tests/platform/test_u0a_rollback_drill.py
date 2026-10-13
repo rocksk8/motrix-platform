@@ -169,3 +169,35 @@ def test_old_style_inserts_are_accepted_after_a_correct_upgrade_and_refused_for_
 def test_tool_lists_match_the_migration():
     assert D.NEW_TABLES == {"org_units", "org_unit_closure", "user_units", "system_settings_unit", "seq_by_entity"}
     assert set(D.INTERNAL) == {"owner_unit_id", "unit_id", "legal_entity_id", "scope_json"}
+
+
+def test_probe_old_style_inserts_really_inserts_and_lands_on_the_root_unit(pair, tmp_path):
+    _, _, after, _, _ = pair
+    res = D.probe_old_style_inserts(after, ["quotations", "payslips", "vouchers_all"])
+    assert len(res) == 3 and all(ok for _, ok, _ in res), res
+    assert all("皆為 1" in d for _, _, d in res)
+    c = sqlite3.connect(str(after))
+    assert c.execute("SELECT COUNT(*) FROM quotations").fetchone()[0] == 2, "探測不留痕跡（SAVEPOINT 已 ROLLBACK）"
+    c.close()
+    bad = tmp_path / "badprobe.db"
+    shutil.copyfile(after, bad)
+    c = sqlite3.connect(str(bad))
+    c.executescript("ALTER TABLE users RENAME TO u_old; CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, owner_unit_id INTEGER NOT NULL);"
+                    "INSERT INTO users (id, username, owner_unit_id) SELECT id, username, 1 FROM u_old; DROP TABLE u_old;"
+                    "ALTER TABLE payslips RENAME TO p_old; CREATE TABLE payslips (id INTEGER PRIMARY KEY, slip_no TEXT UNIQUE NOT NULL, owner_unit_id INTEGER NOT NULL DEFAULT 7);"
+                    "DROP TABLE p_old;")
+    c.commit(); c.close()
+    res = dict((t, (ok, d)) for t, ok, d in D.probe_old_style_inserts(bad, ["users", "payslips"]))
+    assert not res["users"][0] and "owner_unit_id" in res["users"][0 + 1]       # 新欄位拒絕舊式 INSERT
+    assert not res["payslips"][0] and "不是根單位" in res["payslips"][1]        # 預設不是 1 ⇒ 落在別的單位
+
+
+def test_seed_tool_builds_rows_and_scales_a_table(tmp_path):
+    seed = D._seeder()
+    p = tmp_path / "s.db"
+    _build(p)
+    n = seed.bulk(p, "quotations", 120)
+    assert n == 120
+    c = sqlite3.connect(str(p))
+    assert c.execute("SELECT COUNT(DISTINCT quote_no) FROM quotations").fetchone()[0] == 120, "唯一鍵欄位要加序號"
+    c.close()
