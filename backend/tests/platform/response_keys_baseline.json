@@ -1272,12 +1272,6 @@
   ],
   "s": 422
  },
- "/api/company/tax/{tax_id}": {
-  "k": [
-   "detail"
-  ],
-  "s": 400
- },
  "/api/completion-notes": {
   "k": [
    "items",
