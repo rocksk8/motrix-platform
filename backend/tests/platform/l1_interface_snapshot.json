@@ -1,5 +1,5 @@
 {
- "core_version": "1.133",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1520,6 +1520,10 @@
   },
   "plat:migrations": {
    "NEXT": "const",
+   "U0A_LEGAL_ENTITY_TABLES": "const",
+   "U0A_OWNER_UNIT_TABLES": "const",
+   "U0A_ROOT_UNIT_ID": "const",
+   "U0A_UNIT_ID_TABLES": "const",
    "current_version": "def(conn, module)",
    "incomplete": "def(db_path)",
    "register": "def(module, version, fn)",

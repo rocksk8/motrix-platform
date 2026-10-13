@@ -2,7 +2,7 @@
 """每模組獨立版本的 migration（CORE-SPEC §6）。
 
 [單位] plat:migrations    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] NEXT, current_version, incomplete, register, registered, run_all
+[公開介面] NEXT, U0A_LEGAL_ENTITY_TABLES, U0A_OWNER_UNIT_TABLES, U0A_ROOT_UNIT_ID, U0A_UNIT_ID_TABLES, current_version, incomplete, register, registered, run_all
 [不變式] 版本從 1 起、連續、不可重複；每支**回 None** 才記版本（回原因字串＝未完成：不記、ERROR、該模組後面的這次不跑、其他模組照跑、
          不丟例外）；只准新增（加表、加欄位），不刪欄位、不改名；每支必須冪等
          core 以外的模組逐支 SAVEPOINT：**丟例外＝未完成**（原因「例外：<型別>: <訊息>」、撤回這一支的寫入、不往上丟，稽核 D PM1）；
