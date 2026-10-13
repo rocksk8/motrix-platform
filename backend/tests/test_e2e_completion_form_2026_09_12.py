@@ -77,13 +77,20 @@ def test_init_runs_exactly_once(live_server, make_user, e2e_browser):
     browser = e2e_browser
     page = browser.new_page()
     _login(page, live_server, username, password)
-    hits = []
+    hits, whole = [], []
+    # 第 57 班起，表單改讀『可帶入項目』端點（只含品名／數量，不載入整張報價單），init() 的案件請求就是它
     page.on("request", lambda r: hits.append(r.url)
-            if "/api/quotations/MQ-CNFORM-001" in r.url else None)
+            if "/api/completion-notes/quote-items" in r.url and "quote_no=MQ-CNFORM-001" in r.url else None)
+    page.on("request", lambda r: whole.append(r.url) if "/api/quotations/MQ-CNFORM-001" in r.url else None)
     page.goto(f"{live_server}{PAGE}?q=MQ-CNFORM-001")
     page.wait_for_selector("button:has-text('＋ 項目')", timeout=45000)
     page.wait_for_timeout(1200)
     assert len(hits) == 1, f"init() 應該只跑一次，實際打了 {len(hits)} 次案件 API"
+    assert not whole, f"完工單頁面不該再載入整張報價單：{whole}"
+    # 正對照：真的再跑一次 init()，計數器要看得到 2——否則上面的 ==1 可能只是過濾條件失效
+    page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).init()")
+    page.wait_for_timeout(1200)
+    assert len(hits) == 2, f"正對照失敗：第二次 init() 後應有 2 次請求，實際 {len(hits)}（計數器失效）"
 
 
 @needs_m01
