@@ -12,10 +12,11 @@ from modules.permmatrix import api, service
 
 #: 模組自己的 migration（檔名以版號開頭，不是合法的 import 名稱 ⇒ importlib）
 _m0001 = importlib.import_module("modules.permmatrix.migrations.0001_permission_matrix")
+_m0002 = importlib.import_module("modules.permmatrix.migrations.0002_scope_json")
 
 MODULE = ModuleSpec(
     key="permmatrix",
     routers=[api.router],
-    migrations=[(1, _m0001.up)],
+    migrations=[(1, _m0001.up), (2, _m0002.up)],
     providers={("perm.matrix_source", "permmatrix"): service.load_matrix},      # 字面字串：整合點登記表守門只認字面值
 )

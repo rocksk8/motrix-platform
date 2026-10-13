@@ -58,7 +58,9 @@ def real(client):
 # ── 清單本身 ─────────────────────────────────────────────────────────────────────
 
 def test_table_lists_are_well_formed():
-    lists = {"owner": M.U0A_OWNER_UNIT_TABLES, "unit": M.U0A_UNIT_ID_TABLES, "legal": M.U0A_LEGAL_ENTITY_TABLES, "scope": M.U0A_SCOPE_JSON_TABLES}
+    lists = {"owner": M.U0A_OWNER_UNIT_TABLES, "unit": M.U0A_UNIT_ID_TABLES, "legal": M.U0A_LEGAL_ENTITY_TABLES}
+    assert not hasattr(M, "U0A_SCOPE_JSON_TABLES"), "scope_json 屬 permmatrix 自己的 migration"
+    assert len(M.U0A_LEGAL_ENTITY_TABLES) == 5
     for k, v in lists.items():
         assert len(v) == len(set(v)), "%s 清單有重複" % k
     assert len(M.U0A_OWNER_UNIT_TABLES) == 36 and len(M.U0A_UNIT_ID_TABLES) == 2
@@ -88,7 +90,7 @@ def test_runs_on_a_partial_database_and_skips_missing_tables():
     assert M._core_next_org_units(c) is None
     assert "owner_unit_id" in _cols(c, "quotations") and "owner_unit_id" in _cols(c, "payslips") and "legal_entity_id" in _cols(c, "payslips")
     assert "legal_entity_id" not in _cols(c, "quotations")
-    assert "customers" not in _tables(c) and "audit_log" not in _tables(c) and "perm_role_caps" not in _tables(c)     # 沒有的表不憑空建立
+    assert "customers" not in _tables(c) and "audit_log" not in _tables(c) and "perm_role_caps" not in _tables(c)     # 沒有的表不憑空建立（含模組自有表）
     assert NEW_TABLES <= _tables(c)
     assert c.execute("SELECT owner_unit_id FROM quotations").fetchone()[0] == 1                                          # 既有列＝根單位
 
@@ -204,9 +206,6 @@ def test_real_database_gets_every_listed_column_with_default_one(real):
         info = _cols(real, table).get(col)
         assert info is not None, "%s 缺 %s" % (table, col)
         assert info["notnull"] == 1 and str(info["dflt_value"]) == "1", (table, col, tuple(info))
-    for t in M.U0A_SCOPE_JSON_TABLES:
-        if t in tabs:
-            assert "scope_json" in _cols(real, t) and _cols(real, t)["scope_json"]["notnull"] == 0
 
 
 def test_real_database_keeps_view_quote_seq_and_schema_version(real):
@@ -234,11 +233,27 @@ def test_every_table_is_classified_so_a_new_table_cannot_skip_the_unit_question(
     assert unclassified == [], "這些表還沒歸類（加 owner_unit_id，或寫進 test_org_units_u0a.py 的子表／全域／模組自有並說明）：%s" % unclassified
 
 
-def test_perm_tables_gain_scope_json_when_the_module_is_installed(real):
+def test_perm_tables_gain_scope_json_through_the_permmatrix_migration_not_core(real):
     tabs = _tables(real)
-    present = [t for t in M.U0A_SCOPE_JSON_TABLES if t in tabs]
-    for t in present:
-        assert "scope_json" in _cols(real, t)
+    for t in ("perm_role_caps", "perm_user_overrides"):
+        if t in tabs:                                                   # permmatrix 沒安裝 ⇒ 表不存在 ⇒ 略過
+            info = _cols(real, t).get("scope_json")
+            assert info is not None and info["notnull"] == 0 and info["dflt_value"] is None, t
+
+
+def test_permmatrix_v2_migration_is_additive_idempotent_and_reports_a_missing_table():
+    import importlib
+    v1 = importlib.import_module("modules.permmatrix.migrations.0001_permission_matrix")
+    v2 = importlib.import_module("modules.permmatrix.migrations.0002_scope_json")
+    c = sqlite3.connect(":memory:")
+    assert "不存在" in v2.up(c)                                          # v1 還沒跑 ⇒ 回原因，不丟例外
+    v1.up(c)
+    c.execute("INSERT INTO perm_role_caps (role, cap, granted) VALUES ('admin', 'x.y', 1)")
+    assert v2.up(c) is None and v2.up(c) is None
+    assert c.execute("SELECT scope_json FROM perm_role_caps").fetchone()[0] is None          # 既有列＝NULL＝全部
+    assert [r[1] for r in c.execute("PRAGMA table_info(perm_user_overrides)")][-1] == "scope_json"
+    import modules.permmatrix as PM
+    assert [v for v, _ in PM.MODULE.migrations] == [1, 2]
 
 
 # ── 不可從請求寫入／名稱一致 ──────────────────────────────────────────────────────

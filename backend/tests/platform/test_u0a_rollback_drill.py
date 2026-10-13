@@ -15,7 +15,7 @@ D = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(D)
 
 LISTS = {"owner": list(M.U0A_OWNER_UNIT_TABLES), "unit": list(M.U0A_UNIT_ID_TABLES), "legal": list(M.U0A_LEGAL_ENTITY_TABLES),
-         "scope": list(M.U0A_SCOPE_JSON_TABLES)}
+         "scope": list(D.PERM_SCOPE_TABLES)}
 
 
 def _build(path):

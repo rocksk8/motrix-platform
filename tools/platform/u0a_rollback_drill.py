@@ -11,7 +11,8 @@
 流程（每一步印 PASS／FAIL 一行；全部通過才 exit 0）：
   P0 預檢        來源庫可讀、兩棵樹存在、--work 不在系統暫存；複製來源庫（含 -wal/-shm）成 before.db
   P1 基準快照    表／VIEW／索引／欄位（型別、NOT NULL、預設、主鍵）／每表列數／schema_version／module_schema_versions／各序列表內容／整庫健檢
-  P2 升級        用 **新樹自己的 `db.init_db(path)`**（＝啟動路徑：V9 基準 migration ＋ core 模組 migration，含未取號的 U0a）升級 before.db 的副本
+  P2 升級        用 **新樹自己的啟動規則**（`tools/migrate_like_startup.py`：先載入模組 ⇒ `db.init_db`：V9 基準、core 與各模組 migration，含未取號的 U0a 與 permmatrix v2；
+                 該工具不在的舊樹退回只跑 `db.init_db`）升級 before.db 的副本
   P3 差異檢查    只准 ① 多出 U0a 的 5 張新表 ② 既有表多出 owner_unit_id／unit_id／legal_entity_id／scope_json（型別、NOT NULL、預設＝1 與清單一致）；
                  不得有表／欄／索引／VIEW 被刪或改；既有每表列數相同；每表「原有欄位」的內容雜湊相同；`vouchers` VIEW 與 `quote_seq` 的 SQL 逐字相同；
                  schema_version 仍是 --expect-db-version；其他模組的 module_schema_versions 不變；`core` 的版號報告（未取號＝不記，取號後 9→10）
@@ -42,6 +43,8 @@ INTERNAL = ("owner_unit_id", "unit_id", "legal_entity_id", "scope_json")
 NUMBER_SOURCES = (("vouchers_all", "voucher_no"), ("payslips", "slip_no"), ("completion_notes", "note_no"), ("shipping_notes", "note_no"),
                   ("invoice_vouchers", "voucher_no"), ("payment_requests", "request_no"), ("contractor_payment_vouchers", "voucher_no"),
                   ("quotations", "quote_no"), ("customers", "code"), ("suppliers", "code"))
+#: 授權帶範圍的欄位屬 permmatrix 自己的 migration v2（不在 core 清單裡）
+PERM_SCOPE_TABLES = ("perm_role_caps", "perm_user_overrides")
 SEQ_TABLES = ("quote_seq", "payslip_seq", "custom_record_counters")
 
 
@@ -222,15 +225,26 @@ def check_old_inserts(path, tables):
 # ── 子行程：用某一棵樹自己的程式升級／讀清單 ─────────────────────────────────────────────
 
 _UPGRADE = r"""
-import json, os, sys
+import importlib.util, json, os, sys
 tree, path = sys.argv[1], sys.argv[2]
+license_path = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
 sys.path.insert(0, os.path.join(tree, "backend"))
 os.chdir(os.path.join(tree, "backend"))
 import db
 from core import migrations
-db.init_db(path)
+problems = []
+tool = os.path.join(tree, "backend", "tools", "migrate_like_startup.py")
+if os.path.isfile(tool) and os.path.isfile(os.path.join(tree, "backend", "helpers", "module_startup.py")):
+    # 照服務啟動的規則：先載入模組（含各模組自己的 migration）、再 init_db（含 core 與模組 migration）
+    spec = importlib.util.spec_from_file_location("_mls", tool)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    problems = list(mod.run([path], license_path))
+else:
+    db.init_db(path)
 inc = migrations.incomplete(path)
-print("@@" + json.dumps({"incomplete": {k: list(v) for k, v in (inc or {}).items()}, "pending": len(getattr(migrations, "_PENDING", []))}))
+print("@@" + json.dumps({"incomplete": {k: list(v) for k, v in (inc or {}).items()}, "problems": problems,
+                         "pending": len(getattr(migrations, "_PENDING", []))}))
 """
 _LISTS = r"""
 import json, os, sys
@@ -243,8 +257,8 @@ print("@@" + json.dumps({"owner": list(getattr(M, "U0A_OWNER_UNIT_TABLES", ())),
 """
 
 
-def _run(code, tree, path=None, timeout=900):
-    args = [sys.executable, "-c", code, str(tree)] + ([str(path)] if path else [])
+def _run(code, tree, path=None, timeout=900, license_path=None):
+    args = [sys.executable, "-c", code, str(tree)] + ([str(path)] if path else []) + ([str(license_path)] if (path and license_path) else [])
     p = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     payload = None
     for line in (p.stdout or "").splitlines():
@@ -284,6 +298,7 @@ def main(argv=None):
     ap.add_argument("--expect-db-version", type=int, default=118)
     ap.add_argument("--package", default=None)
     ap.add_argument("--json-out", default=None)
+    ap.add_argument("--license", default=None, help="授權金鑰檔（照啟動規則載入模組用；省略 ⇒ 預設位置）")
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--allow-temp-work", action="store_true", help="測試用：允許 --work 在系統暫存下")
     a = ap.parse_args(argv)
@@ -310,11 +325,13 @@ def main(argv=None):
 
     rc, lists, err = _run(_LISTS, new_tree)
     rep.add("P2", "讀得到新樹的 U0A 清單", rc == 0 and bool(lists and lists["owner"]), err)
-    lists = lists or {}
+    lists = dict(lists or {})
+    lists["scope"] = list(PERM_SCOPE_TABLES)
     _copy_db(before, upgraded)
-    rc, info, err = _run(_UPGRADE, new_tree, upgraded)
+    rc, info, err = _run(_UPGRADE, new_tree, upgraded, license_path=a.license)
     rep.add("P2", "新樹 init_db 升級成功（未丟例外）", rc == 0 and info is not None, err)
-    rep.add("P2", "沒有未完成的 migration", bool(info) and not info["incomplete"], json.dumps((info or {}).get("incomplete")))
+    rep.add("P2", "沒有未完成的 migration、模組都載入", bool(info) and not info["incomplete"] and not info.get("problems"),
+            json.dumps({"incomplete": (info or {}).get("incomplete"), "problems": (info or {}).get("problems")}, ensure_ascii=False))
     snap1 = snapshot(upgraded, digest_cols)
     for name, ok, detail in diff_upgrade(snap0, snap1, lists, a.expect_db_version):
         rep.add("P3/P4", name, ok, detail)
@@ -328,13 +345,13 @@ def main(argv=None):
             Path(str(fresh) + ext).unlink()
         except OSError:
             pass
-    rc, infof, err = _run(_UPGRADE, new_tree, fresh)
+    rc, infof, err = _run(_UPGRADE, new_tree, fresh, license_path=a.license)
     rep.add("P4b", "新樹在空庫上建出全新安裝（D3b 同形檢查的對照）", rc == 0 and infof is not None and not infof["incomplete"], err)
     for name, ok, detail in parity(snapshot(fresh), snap1):
         rep.add("P4b", name, ok, detail)
 
     _copy_db(upgraded, rolled)
-    rc, info2, err = _run(_UPGRADE, old_tree, rolled)
+    rc, info2, err = _run(_UPGRADE, old_tree, rolled, license_path=a.license)
     rep.add("P5", "舊樹 init_db 打開已升級的庫：不丟例外（core 版號領先舊程式所知）", rc == 0 and info2 is not None, err)
     rep.add("P5", "舊樹 migrations.incomplete 為空", bool(info2) and not info2["incomplete"], json.dumps((info2 or {}).get("incomplete")))
     snap2 = snapshot(rolled, digest_cols)
@@ -346,7 +363,7 @@ def main(argv=None):
         rep.add("P5", "舊式 INSERT（不帶新欄位）：%s" % t, ok, detail)
 
     _copy_db(rolled, again)
-    rc, info3, err = _run(_UPGRADE, new_tree, again)
+    rc, info3, err = _run(_UPGRADE, new_tree, again, license_path=a.license)
     rep.add("P6", "回滾後再升級成功", rc == 0 and info3 is not None and not info3["incomplete"], err)
     snap3 = snapshot(again, digest_cols)
     rep.add("P6", "再升級結果與第一次升級相同（冪等）", {t: v["cols"] for t, v in snap3["tables"].items()} == {t: v["cols"] for t, v in snap1["tables"].items()}
