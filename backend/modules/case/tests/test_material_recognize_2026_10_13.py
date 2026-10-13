@@ -328,3 +328,22 @@ def test_closed_case_change_request_cannot_carry_a_recognition(W):
     r = _put(c, h, [_card(poLink={"key": "item:a"})])
     assert r.status_code == 409 and "認列" in r.text
     assert not _rows("SELECT 1 FROM case_change_requests WHERE quote_no=?", NO)
+
+
+def test_stale_claim_still_blocks_applications_for_the_group_until_cancelled(W):
+    c, h = W
+    po = _po(c, h, [_ln("a", 3)])
+    _put(c, h, [_card(poLink={"key": "item:a"})])
+    _status(po["id"], "草稿")
+    _put(c, h, [_stored()])
+    assert _stored()["poLink"].get("stale") is True
+    _status(po["id"], "已核准")                                                           # 重新核准
+    g = {x["key"]: x for x in c.get("/api/quotations/%s/material-coverage" % NO, headers=h).json()["groups"]}["item:a"]
+    assert g["recognized"] == "c1"                                                         # 過期的仍占著分組
+    order = {"itemId": "n3", "itemName": "交換器", "quantity": 3, "unit": "台", "unitPrice": 1, "totalPrice": 3, "quoteItemId": "a", "supplierId": 1,
+             "poDocCode": po["docCode"], "poLine": 1}
+    r = _put(c, h, [_stored()], materialOrders=[order])
+    assert "bad_link" in _codes(r) and not [o for o in _cr().get("materialOrders", []) if o.get("itemId") == "n3"]
+    _put(c, h, [_card(poLink=None)])                                                       # 最高管理者取消認列後才放行
+    r = _put(c, h, [_card()], materialOrders=[order])
+    assert "bad_link" not in _codes(r)

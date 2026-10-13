@@ -61,7 +61,7 @@ def _recognized(data) -> dict:
     for m in mats if isinstance(mats, list) else []:
         pl = m.get("poLink") if isinstance(m, dict) else None
         k = str(pl.get("key") or "").strip() if isinstance(pl, dict) else ""
-        if k and not pl.get("stale"):                                                  # 過期的認列不再占用分組
+        if k:                                                                          # 過期的認列也算占用（直到最高管理者取消認列）
             out.setdefault(k, str(m.get("id") or ""))
     return out
 

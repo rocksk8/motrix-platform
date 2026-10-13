@@ -66,7 +66,7 @@ def claimed_conflict(conn, quote_no, order, cards) -> str:
     qid, po = str((order or {}).get("quoteItemId") or "").strip(), str((order or {}).get("poDocCode") or "").strip()
     for c in cards or []:
         pl = c.get("poLink") if isinstance(c, dict) else None
-        if not isinstance(pl, dict) or not _key_of(pl) or pl.get("stale"):
+        if not isinstance(pl, dict) or not _key_of(pl):                              # 過期的認列也算占用：直到最高管理者取消認列為止
             continue
         if (qid and _key_of(pl) == "item:" + qid) or (not qid and po and (_key_of(pl) == "po:" + po)):
             return "這個品項已認列到材料卡片「%s」，不能再建立材料申請（請先由最高管理者取消認列）" % (c.get("name") or "")
