@@ -36,7 +36,7 @@ const bodies = []
 global.fetch = async (u, o) => { bodies.push(JSON.parse(o.body)); return { ok: true, json: async () => inp.response } }
 ;(async () => {
   await ctx._saveCaseRecordOnce()
-  console.log(JSON.stringify({ base: JSON.parse(ctx._segBase.materials), baseStr: ctx._segBase.materials, sent: bodies[0] }))
+  console.log(JSON.stringify({ local: ctx.cr.caseRecord.materials, base: ctx._segBase.materials === undefined ? null : JSON.parse(ctx._segBase.materials), baseStr: ctx._segBase.materials, sent: bodies[0] }))
 })()
 """
 
@@ -55,6 +55,7 @@ def test_base_becomes_server_stored_value_when_server_rewrote_the_card():
                "poLink": {"key": "k", "arrivedOn": "2026-10-13", "arrivedBy": "u1", "arrivedAt": "2026-10-13 10:00:00"}}]
     out = _run(local=local, base=[{"id": "c1", "name": "A"}], response={"ok": True, "saved": {"materials": stored}})
     assert out["base"] == stored          # 否則下一次存檔 base≠資料庫現值 ⇒ 409
+    assert out["local"] == stored         # 畫面還是剛送出的版本 ⇒ 一併換成伺服器版（否則之後每次存檔整段重送）
 
 
 @needs_node
@@ -63,6 +64,12 @@ def test_base_keeps_sent_string_when_server_stored_the_same_content():
     same_other_order = [{"n": 1, "name": "A", "id": "c1"}]
     out = _run(local=local, base=[], response={"ok": True, "saved": {"materials": same_other_order}})
     assert out["baseStr"] == json.dumps(local, separators=(",", ":"))   # 鍵順序不同不算改寫：不讓每次存檔都重送該段
+
+
+@needs_node
+def test_saved_null_drops_base_key():
+    out = _run(local=[{"id": "c1"}], base=[], response={"ok": True, "saved": {"materials": None}})
+    assert out["base"] is None      # 伺服器上沒有這一段：基準鍵移除（比對把缺鍵視為 null）
 
 
 @needs_node
@@ -110,7 +117,14 @@ def test_material_order_save_updates_bases_to_server_value():
     out = _adopt(mats=m_old, baseMats=m_old, orders=o_old, baseOrders=o_old, saved={"materials": m_new, "materialOrders": o_new})
     assert out["baseMats"] == m_new and out["baseOrders"] == o_new
     assert out["orders"] == o_new            # 使用者沒動過材料申請 ⇒ 畫面一併換新，免得下次存檔把舊清單送回去蓋掉
-    assert out["mats"] == m_old              # 材料卡片畫面不動（可能有未存的修改）
+    assert out["mats"] == m_new              # 使用者沒動過材料卡片 ⇒ 畫面一併換新（審查必修：否則之後每次存檔整段重送）
+
+
+@needs_node
+def test_material_order_save_keeps_local_unsaved_cards():
+    m_old, m_local = [{"id": "c1"}], [{"id": "c1", "name": "typed"}]
+    out = _adopt(mats=m_local, baseMats=m_old, orders=[], baseOrders=[], saved={"materials": [{"id": "c1", "poLink": {"key": "k"}}]})
+    assert out["mats"] == m_local and out["baseMats"] == [{"id": "c1", "poLink": {"key": "k"}}]
 
 
 @needs_node

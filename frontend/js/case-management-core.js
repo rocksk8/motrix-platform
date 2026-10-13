@@ -565,7 +565,7 @@ window.CM_PARTS.push(() => ({
         if (v === undefined || v === null || this._segBase[k] === undefined) continue
         const old = this._segBase[k]
         this._segBase[k] = JSON.stringify(v)
-        if (k === 'materialOrders' && JSON.stringify(this.cr.caseRecord[k]) === old) this.cr.caseRecord[k] = v
+        if (JSON.stringify(this.cr.caseRecord[k]) === old) this.cr.caseRecord[k] = v      // 使用者沒動過 ⇒ 畫面一併換新；動過的保留
       }
     },
 
@@ -772,7 +772,12 @@ window.CM_PARTS.push(() => ({
             ? Object.fromEntries(Object.keys(x).sort().map(i => [i, x[i]])) : x)
           for (const k of Object.keys(segments)) {
             if (sent[k] === undefined) delete this._segBase[k]
-            else if (k in saved && saved[k] != null && canon(saved[k]) !== canon(JSON.parse(sent[k]))) this._segBase[k] = JSON.stringify(saved[k])
+            else if (k in saved && saved[k] == null) delete this._segBase[k]      // 伺服器上這一段不存在（比對把缺鍵視為 null）
+            else if (k in saved && canon(saved[k]) !== canon(JSON.parse(sent[k]))) {
+              this._segBase[k] = JSON.stringify(saved[k])
+              // 畫面上的值若仍是剛送出的版本（使用者存檔途中沒再動它）⇒ 一併換成伺服器版，否則之後每次存檔都會把舊版整段重送
+              if (JSON.stringify(this.cr.caseRecord[k]) === sent[k]) this.cr.caseRecord[k] = saved[k]
+            }
             else this._segBase[k] = sent[k]
           }
           const adopted = res.adopted || {}
