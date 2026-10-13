@@ -140,9 +140,22 @@ window.CM_PARTS.push(() => ({
       mat.poLink = { key: g.key, poDocCode: g.poDocCode || '', docCodes: g.docCodes || [], name: g.name || '', vendor: g.vendor || '' }
       mat.ordered = true
       if (g.vendor && !String(mat.supplier || '').trim()) mat.supplier = g.vendor
-      this.mlMsg = `已認列採購單 ${(g.docCodes || []).join('、')} 到「${mat.name || g.name}」：已申購已勾，到料後可勾「已到料」`
+      const okMsg = `已認列採購單 ${(g.docCodes || []).join('、')} 到「${mat.name || g.name}」：已申購已勾，到料後可勾「已到料」`
+      this.mlMsg = '認列中…'
       this.mlTick++
       if (this.setDirty) this.setDirty()
+      // 立刻存檔（不等 1.5 秒的防抖）：沿用 saveCaseRecord 的佇列／互斥——存檔途中再改的內容下一輪再送，不會遺失其他待存的修改
+      const run = this.saveCaseRecord ? this.saveCaseRecord() : null
+      if (run && run.then) {
+        clearTimeout(this._autoSaveTimer)
+        run.then(res => {
+          const cur = (this.cr?.caseRecord?.materials || []).find(m => m.id === mat.id) || mat
+          if (!(cur.poLink && cur.poLink.key)) { this.mlMsg = ''; return }                  // 被拒：poLink 已被伺服器現值取代，由提示框說明
+          if (res === true) this.mlMsg = okMsg                                              // 真的存成功才宣告
+          else if (res === 'pending') this.mlMsg = '認列已送出，待最高管理員審核後才會生效'
+          else this.mlMsg = '認列尚未儲存（請看畫面上方的儲存狀態，修正後會自動重試）'
+        })
+      } else this.mlMsg = okMsg
       return true
     },
     mlRecognizedText(mat) {
