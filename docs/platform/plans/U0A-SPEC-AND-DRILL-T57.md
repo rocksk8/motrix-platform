@@ -1,4 +1,4 @@
-# U0a 規格與回滾演練規格 — T57 r3（併入 0d U-1～U-7 與 1c 補充）
+# U0a 規格與回滾演練規格 — T57 r4（併入 0d U-1～U-7、F1～F5；欄位名以 c7 的 `dc233f1fa` 為準）
 
 > 作者 hichan-98（規格與演練規格）；實作：c7（核心遷移＋演練腳本，依本規格）、2b（`strip_internal_cols`＋基準回應鍵集記錄器＋`org_units` 宣告）、5e（MS1d 之後支援審查／測試、模組自有表清單）；執行演練與閘門：5c。**僅文件；人日與日期皆為估計。**
 > 依據：`FRAMEWORK-ORG-UNITS-T57.md` §14.9／§14.10（r6）、`EXECUTION-PLAN-T57.md` r9 §2.3、c7 的核心表盤點（10-13，經 1c 轉達）、0d 對 U0 的審查（M1／M2／S2／S3 與 F1～F3）、使用者 10-13 答覆（法人＝混合；U0＝是，盡快）。
@@ -18,15 +18,15 @@
 ### 2.3 五張新表（**備份涵蓋，0d U-1；決定：五張新表皆屬設定／組織資料 ⇒ 全部納入每日備份**；`SELECT *` 的備份會帶新欄位——保留，**還原須雙向容忍**（新備份還原到舊程式、舊備份還原到新程式）：五張新表必須加入 `archive._daily_backup_tables`，或明確列入排除清單；守門測試 `test_every_table_is_either_backed_up_or_explicitly_excluded` 與 BK31 的表數計數要同步更新；否則建包前即紅）
 | 表 | 欄位（草案） | 備註 |
 |---|---|---|
-| `org_units` | `id`, `parent_id`, `name`, `code`, `is_legal_entity`（0/1）, `status`, `created_at` | 起始只有根列（id=1，`is_legal_entity=1`，名稱取今天的公司名；**公司名讀不到時的後備名稱＝『本公司』**，0d U-4） |
-| `org_unit_closure` | `ancestor`, `descendant`, `depth` | 起始只有 `(1,1,0)`；主鍵 `(ancestor, descendant)` |
-| `user_units` | `user_id`, `unit_id`, `is_primary`, `role_binding` | 起始：**所有使用者（含停用帳號）各一列** `(user, 1, 1, NULL)`；筆數＝`SELECT COUNT(*) FROM users`（0d U-4；步驟檔 #12 照此寫） |
-| `system_settings_unit` | `unit_id`, `key`, `value_json`, `updated_at` | 起始為空；主鍵 `(unit_id, key)` |
-| `seq_by_entity` | `entity_id`, `kind`, `period`, `seq`；主鍵 `(entity_id, kind, period)` | 起始為空；**根法人繼續使用既有序列表** |
-### 2.4 權限表
-`perm_role_caps`、`perm_user_overrides` 各加 `scope_json TEXT NULL`（空＝全部）。
+| `org_units` | `id` PK AUTOINCREMENT, `parent_id` REFERENCES org_units(id), `code` TEXT NOT NULL DEFAULT '', `name` TEXT NOT NULL, `is_legal_entity` INTEGER NOT NULL DEFAULT 0, `parent_sees_children` INTEGER NOT NULL DEFAULT 1, `status` TEXT NOT NULL DEFAULT 'active', `sort_order` INTEGER NOT NULL DEFAULT 0, `created_at` TEXT NOT NULL DEFAULT '', `updated_at` TEXT NOT NULL DEFAULT '' | 起始只有根列（`id=1`、`code='root'`、`is_legal_entity=1`；名稱＝`company_profile` 的 `companyName`／`company_name`／`name` 第一個非空，讀不到＝『本公司』）。`INSERT OR IGNORE`，可重跑 |
+| `org_unit_closure` | `ancestor_id`, `descendant_id`, `depth` INTEGER NOT NULL DEFAULT 0；PK `(ancestor_id, descendant_id)` | 起始只有 `(1,1,0)` |
+| `user_units` | `user_id`, `unit_id`, `is_primary` INTEGER NOT NULL DEFAULT 0, `role_binding` TEXT NOT NULL DEFAULT ''；PK `(user_id, unit_id)` | 起始：**表是空時**，為 `users` 全部列（含停用帳號）各寫一列 `(user, 1, 1, '')`；**之後新增的使用者沒有列 ⇒ 視為根單位（U1 的明確需求，見 §9）**；種子只在表為空時寫，避免未取號期間每次啟動覆蓋管理者之後的改動 |
+| `system_settings_unit` | `unit_id`, `key`, `value_json` TEXT NOT NULL, `updated_at` TEXT NOT NULL DEFAULT '', `updated_by` TEXT NOT NULL DEFAULT ''；PK `(unit_id, key)` | 起始為空 |
+| `seq_by_entity` | `entity_id`, `kind`, `period`, `seq` INTEGER NOT NULL DEFAULT 0；PK `(entity_id, kind, period)` | 起始為空；**根法人繼續使用既有序列表** |
+### 2.4 權限表（**F1：`scope_json` 由 `permmatrix` 自己的 migration 加，不在 core migration**）
+`perm_role_caps`、`perm_user_overrides` 各加 `scope_json TEXT NULL`（空＝全部）。**規則：模組自有的表一律只經該模組自己的 migration 修改。** 原因：全新安裝時 core migration 先於 `permmatrix` 執行，那兩張表此時還不存在，core 的 ALTER 會被略過，造成『全新安裝 ≠ 升級後』（演練 D3b 會抓到）。因此 `permmatrix` 的 `module_schema_versions` 由 n 升為 n+1（目前 `permmatrix`＝1 ⇒ 2），與 `core` 9→10 **同一個班一起**出。
 ### 2.5 不在 core migration 的表（由各模組自己的 migration，U0b 之後逐模組）
-accounting 34、case 4（`case_material_*`）、payroll 4、lodging 4、recyclebin 1、subcontract 1、permmatrix 5（本批只加上述兩個欄位）。
+accounting 34、case 4（`case_material_*`）、payroll 4、lodging 4、recyclebin 1、subcontract 1、permmatrix 5（本批只由 `permmatrix` 自己的 migration 加上述兩個 `scope_json`；**不在 core migration**）。
 
 ## 3 遷移機制
 1. **位置**：`core` 的模組 migration（`core/migrations.py`；`module_schema_versions` 的 `core` 由 **9 → 10**），**不碰** `db._MIGRATIONS`（`test_v9_baseline` 鎖在 118）。分支上用 `(next)` 佔位，版本號由列車重新指派。
@@ -45,15 +45,20 @@ accounting 34、case 4（`case_material_*`）、payroll 4、lodging 4、recycleb
 ## 5 `org_units` 功能宣告（2b）
 `core/features_l1.json` 宣告 `org_units`：`status=planned`。**啟用條件＝『已宣告且 status==open』**（不得直接用 `spine.feature_enabled`，它對未宣告回傳 True）；測試：刪除宣告後範圍過濾（目前恆真）與剝除行為不變。
 
-## 6 套用步驟檔 #12 的新預期（作為 U0a 步驟檔草稿的骨架，98）
+## 6 套用步驟檔 #12 的新預期（作為 U0a 步驟檔草稿的骨架，98；**F5：斷言精確數量**）
 - `schema_version`＝118（不變）；`db.CURRENT_VERSION／V9_BASELINE`＝118／118。
-- `module_schema_versions`：`core` **9→10**，其餘列與套用前相同。
-- `sqlite_master`：**多出** `org_units`、`org_unit_closure`、`user_units`、`system_settings_unit`、`seq_by_entity`（及必要索引）；其他表名、觸發器相同。
-- 既有表欄位清單：**只多出** §2.1／2.2／2.4 的欄位，欄位順序與型別其餘不變。
-- 資料筆數：全部既有表與套用前相同（或能用 `<t0>` 後的 audit 解釋）；`org_units`＝1 列、`org_unit_closure`＝1 列、`user_units`＝`users` 全部列數（含停用帳號）。
-- `vouchers` VIEW 的欄位清單**也會多出**新欄位（在 #12 的欄位比對中分開列）。
+- `module_schema_versions`：`core` **9→10**、`permmatrix` **1→2**（n→n+1），其餘列與套用前相同（兩個變動都要逐列寫出數值）。
+- `sqlite_master`：**恰好多出 5 張新表**——`org_units`、`org_unit_closure`、`user_units`、`system_settings_unit`、`seq_by_entity`（含各自的 `sqlite_autoindex_*`／主鍵索引，數量依實際 `CREATE` 結果寫死在步驟檔）；其他表名、索引、觸發器相同。
+- 既有表欄位清單：**只多出**下列欄位，其餘（順序、型別）不變——
+  - `owner_unit_id`：**36 張**（31 交易表＋5 主檔；`vouchers` 是 VIEW，其 `PRAGMA table_info` 會自動多出欄位，單獨列在下一點）；
+  - `unit_id`：**2 張**（`audit_log`、`notifications`）；
+  - `legal_entity_id`：**5 張**（`vouchers_all`、`invoice_vouchers`、`contractor_payment_vouchers`、`payslips`、`payment_requests`）；
+  - `scope_json`：**2 張**（`perm_role_caps`、`perm_user_overrides`，由 `permmatrix` migration 加）。
+  - 欄位宣告：`owner_unit_id`／`unit_id`／`legal_entity_id` 為 `INTEGER NOT NULL DEFAULT 1`；`scope_json` 為 `TEXT` 可為空。
+- `vouchers` VIEW 的欄位清單**也會多出** `owner_unit_id`、`legal_entity_id`（來自 `vouchers_all`），在 #12 的欄位比對中分開列。
+- 資料筆數：全部既有表與套用前相同（或能用 `<t0>` 後的 audit 解釋）；`org_units`＝1 列、`org_unit_closure`＝1 列、`user_units`＝`SELECT COUNT(*) FROM users` 全部列數（含停用帳號；之後新增的使用者在 U1 之前沒有列）；`system_settings_unit`、`seq_by_entity`＝0 列。
 - `CORE_VERSION` 依 core CHANGELOG 的 `(next:minor)`（預期 1.134；由列車定）。
-- 步驟 3 #15：`settings.%`、`definitions.%`、`feature.%`、`spine.%` 稽核列＝**0**（部署本身不應寫任何設定、定義或功能事件）。
+- 步驟 3 #15：`settings.%`、`definitions.%`、`feature.%`、`spine.%` 稽核列＝**0**。
 - 回滾段落：『資料庫保留新欄位與新表、不還原；使用者要求還原資料庫才用套用前備份』。
 
 ## 7 回滾演練規格（98 寫規格，c7 寫腳本，5c 執行）
@@ -92,3 +97,10 @@ accounting 34、case 4（`case_material_*`）、payroll 4、lodging 4、recycleb
 
 ## 10 r2 增補（0d U-1～U-7 對照）
 U-1 備份涵蓋＝§2.3；U-2 不在 U0a 建索引＝§3 第 3 點；U-3 本地 PRAGMA helper／缺表跳過回傳 None＝§3 第 2 點；U-4 `user_units` 全部使用者、根單位後備名、`vouchers` VIEW 多欄＝§2.3／§3／§6；U-5 D3b 全新安裝一致性、D6b 回滾後基準、#15＝0＝§7；U-6 見 ORG-UNITS §14.12（U2 需重建含內嵌 UNIQUE 的表）；U-7 36 張表。0d 已驗證：36 張表皆在 `db.py`（`custom_records` 在 core v2）、VIEW `*` 於查詢時展開、`slip_no`／`voucher_no` 為內嵌 UNIQUE、舊 loader 對 `core=10` 容忍（`run_all` 跳過版本 ≤ 起點）、回滾腳本參數存在。
+
+## 11 r4 增補（0d F1～F5、1c）
+1. **F1**：`scope_json` 屬 `permmatrix` 自己的 migration（§2.4）；`permmatrix` 版本 n→n+1 一併寫入 #12、演練 D3／D3b 預期；規則『模組自有的表一律只經該模組 migration』寫進 U0b／U1／U3 的通則。
+2. **F2**：§2.3 已改用 c7 `dc233f1fa` 的實際欄位名（`ancestor_id`／`descendant_id`；`org_units` 另有 `parent_sees_children`、`sort_order`、`updated_at`；`user_units.role_binding NOT NULL DEFAULT ''`；`system_settings_unit.updated_by`）。c7 如再調整以其程式為準，#12 在凍結時對凍結樹逐欄核對。
+3. **F3（U1 明確需求）**：**『沒有 `user_units` 列的使用者＝屬於根單位』**。理由：U0a 只在表為空時為既有使用者建列，之後新增的使用者沒有列；U1 的所有範圍判斷、單位選單、權限預覽都必須把『無列』視為根單位，並在新增使用者的寫入點補寫 `user_units`。
+4. **F4（同一班）**：2b 的洩漏防線（`strip_internal_cols`、回應鍵集記錄器）與 c7 的 core migration **必須在同一個 U0a 班**；剝除是 U0a 的凍結條件。步驟檔／manifest 的『所有畫面與資料行為不變』措辭，只有在兩者同班時才為真；拆班會使新欄位外洩，禁止。
+5. **F5**：#12 以精確數量斷言（§6）：5 張新表、36＋2＋5 欄位（加 `scope_json` 2 欄）、`core` 9→10 與 `permmatrix` n→n+1。
