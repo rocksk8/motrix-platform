@@ -71,8 +71,9 @@ def _layout_for(user, groups, mod_items):
         errors.append({"module": None, "error": custom_error})
     if user.get("role") != "superadmin":
         from helpers import menu_builder as MB
-        if MB.enabled():                                      # BP-1：略過／丟棄的操作原文帶著管理者取的名稱與看不到的目標 ⇒ 非最高管理者只給操作種類與理由
-            applied, skipped, dropped = MB.redact_ops(applied), MB.redact_ops(skipped), MB.redact_ops(dropped)
+        # 略過／丟棄的操作原文帶著管理者取的名稱與使用者看不到的目標 id ⇒ 非最高管理者只給操作種類與理由。
+        # T60 S0（D8）：不再看旗標——旗標關著時舊版面操作（hide 等）同樣會洩漏看不到的項目 id；前端沒有任何地方讀這三個欄位。
+        applied, skipped, dropped = MB.redact_ops(applied), MB.redact_ops(skipped), MB.redact_ops(dropped)
     return {"groups": core_menu.merge_custom(new_groups, customs), "applied": applied, "skipped": skipped,
             "dropped": dropped, "errors": errors, "sources": sources, "role": role,
             "custom": [m["key"] for m in customs]}
