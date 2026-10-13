@@ -3,7 +3,9 @@
  * 獨立元件（不依賴 Alpine）；編輯器只要呼叫：
  *   MotrixDefGovernance.available(kind)                  ⇒ Promise<boolean>（旗標關閉或不是最高管理者 ⇒ false，編輯器不顯示入口；kind 預設 layout）
  *   MotrixDefGovernance.open({ kind, key, scope, title, tab, readonly, onRestored })   ⇒ 開面板（tab: ledger｜impact；readonly:true ⇒ 不顯示還原，編輯器自己有還原流程時用）
- *   MotrixDefGovernance.preview({ kind, key, scope })    ⇒ Promise<{ok, hash, data}>：發布前影響預覽（編輯器的發布按鈕先呼叫、讓使用者看過）
+ *   MotrixDefGovernance.preview({ kind, key, scope })    ⇒ Promise<{ok, hash, data}>：發布前影響預覽（只取資料；會留一筆『看過預覽』稽核）
+ *   MotrixDefGovernance.review({ kind, key, scope, title }) ⇒ Promise<string|null>：開預覽面板讓使用者確認；按『確認並發布』⇒ 草稿戳（發布時帶 preview_hash）；取消／驗證不過 ⇒ null
+ *   （伺服端 T60 S1：旗標開、名單內的 kind，發布沒帶『看過的』preview_hash 一律 409，沒有後門）
  * 旗標 builder_governance.enabled 預設關：後端對三條 /api/def-governance/… 一律 404，本檔不出現任何畫面。
  * 還原沿用既有 POST /api/definitions/{kind}/{key}/restore/{version}（新版本、歷史不改、現行驗證器）。
  * e2e 等待點：#dg-panel 的 data-busy（'0'／'1'）與 data-state（idle／restored／error）。
@@ -64,6 +66,12 @@
     if (st.tab === 'ledger') h += renderLedger()
     else h += renderImpact()
     h += '</div>'
+    if (st.o.review) {
+      var I = st.impact, ok = !!(I && I.hasDraft && I.validation && I.validation.ok)
+      h += '<div class="dg-head" style="border-top:1px solid var(--border-light,#ddd);border-bottom:0"><b class="dg-dim">' + (ok ? '確認後才會發布' : '目前不能發布') + '</b>' +
+        '<button class="dg-btn" data-dg="review-cancel">取消</button>' +
+        '<button class="dg-btn" data-dg="review-ok"' + (ok ? '' : ' disabled') + '>確認並發布</button></div>'
+    }
     p.innerHTML = h
   }
 
@@ -139,17 +147,24 @@
     }
   }
 
-  function close() {
+  function close(result) {
     var p = document.getElementById('dg-panel')
     if (p) p.remove()
+    var res = st && st.o._resolve
     st = null
+    if (res) res(typeof result === 'string' ? result : null)      // 審閱模式：關掉＝取消（null）；確認＝草稿戳
   }
 
   async function onClick(ev) {
     var t = ev.target.closest && ev.target.closest('[data-dg]')
     if (!t || !st) return
     var a = t.getAttribute('data-dg')
-    if (a === 'close') return close()
+    if (a === 'close' || a === 'review-cancel') return close()
+    if (a === 'review-ok') {
+      var I = st.impact
+      if (I && I.hasDraft && I.validation && I.validation.ok && I.previewHash) return close(I.previewHash)
+      return
+    }
     if (a.indexOf('tab:') === 0) {
       st.tab = a.slice(4); render()
       if (st.tab === 'impact') { await loadImpact() } else { await loadLedger() }
@@ -183,6 +198,11 @@
       if (st.tab === 'impact') await loadImpact()
       else await loadLedger()
       render()
+    },
+    review(o) {
+      return new Promise(function (resolve) {
+        window.MotrixDefGovernance.open(Object.assign({}, o, { tab: 'impact', readonly: true, review: true, _resolve: resolve }))
+      })
     },
     async preview(o) {
       var r = await call('GET', base(o, '/impact'))

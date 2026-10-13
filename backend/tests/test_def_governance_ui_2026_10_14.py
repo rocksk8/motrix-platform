@@ -197,3 +197,102 @@ def test_page_entries_are_gated_by_govon_and_load_the_panel_script():
             m = re.search(r'<button[^>]*(?:id|data-testid)="%s"[^>]*>' % i, html)
             assert m and 'x-show="govOn' in m.group(0), (page, i)                         # 入口一律由 govOn 把關（關＝不顯示）
         assert '<script src="../js/def-governance.js"></script>' in html
+
+
+# ── T60 S1：審閱模式（發布前一定先看過預覽）─────────────────────────────────────────
+REVIEW_HARNESS = r"""
+const fs = require('fs')
+const inp = JSON.parse(process.argv[2])
+const els = {}
+function mk(tag) { return { tag, id: '', attrs: {}, innerHTML: '', listeners: {}, setAttribute(k, v) { this.attrs[k] = v }, getAttribute(k) { return this.attrs[k] },
+  addEventListener(t, f) { this.listeners[t] = f }, remove() { delete els[this.id] }, appendChild(c) { els[c.id] = c } } }
+global.window = {}
+global.localStorage = { getItem: () => JSON.stringify({ token: 'tok' }) }
+global.document = { createElement: mk, getElementById: (i) => els[i] || null, head: { appendChild(c) { els[c.id] = c } }, body: { appendChild(c) { els[c.id] = c } } }
+global.fetch = async (url) => ({ ok: true, status: 200, json: async () => inp.impact })
+;(0, eval)(fs.readFileSync(process.argv[3], 'utf8'))
+const G = window.MotrixDefGovernance
+const click = (act) => els['dg-panel'].listeners.click({ target: { closest: () => ({ getAttribute: () => act }) } })
+;(async () => {
+  const out = {}
+  const p = G.review({ kind: 'expense_type', key: 'travel', scope: 'company' })
+  await new Promise(r => setTimeout(r, 20))
+  out.html = els['dg-panel'].innerHTML
+  for (const act of inp.clicks) await click(act)
+  out.result = await Promise.race([p, new Promise(r => setTimeout(() => r('PENDING'), 50))])
+  out.panelLeft = !!els['dg-panel']
+  console.log(JSON.stringify(out))
+})()
+"""
+IMPACT_OK = {"hasDraft": True, "liveVersion": 1, "nextVersion": 2, "changeCount": 0, "changes": [], "previewHash": "H123",
+             "validation": {"ok": True, "problems": []}, "otherScopes": [], "declared": {"screens": "s", "customerVisible": False}, "frozenRecords": None, "note": "n"}
+
+
+def _review(impact, clicks):
+    out = subprocess.run([NODE, "-e", REVIEW_HARNESS, "x", json.dumps({"impact": impact, "clicks": clicks}), str(JS / "def-governance.js")],
+                         capture_output=True, text=True, encoding="utf-8", timeout=30)
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout.strip().splitlines()[-1])
+
+
+@needs_node
+def test_review_confirm_resolves_with_the_draft_hash_and_closes_the_panel():
+    r = _review(IMPACT_OK, ["review-ok"])
+    assert "確認並發布" in r["html"] and r["result"] == "H123" and r["panelLeft"] is False
+
+
+@needs_node
+def test_review_cancel_resolves_null():
+    assert _review(IMPACT_OK, ["review-cancel"])["result"] is None
+    assert _review(IMPACT_OK, ["close"])["result"] is None
+
+
+@needs_node
+def test_review_cannot_be_confirmed_when_validation_fails_or_there_is_no_draft():
+    bad = dict(IMPACT_OK, validation={"ok": False, "problems": [{"path": "a", "message": "壞"}]})
+    r = _review(bad, ["review-ok"])
+    assert 'data-dg="review-ok" disabled' in r["html"] and r["result"] == "PENDING" and r["panelLeft"] is True      # 按了也不會放行
+    nodraft = dict(IMPACT_OK, hasDraft=False, previewHash="")
+    assert _review(nodraft, ["review-ok"])["result"] == "PENDING"
+
+
+PUBLISH_HARNESS = r"""
+const fs = require('fs')
+const inp = JSON.parse(process.argv[2])
+global.window = { MotrixFormPreview: null }
+global.localStorage = { getItem: () => '{}' }
+global.document = { addEventListener() {}, querySelector() { return null }, getElementById() { return null } }
+const calls = []
+global.fetch = async (url, o) => { calls.push({ url, method: o.method, body: o.body }); return { ok: true, status: 200, json: async () => ({ version: 3, etag: 'e' }) } }
+window.MotrixDefGovernance = { review: async () => inp.review }
+;(0, eval)(fs.readFileSync(process.argv[3], 'utf8'))
+const page = remitKindsPage()
+page.govOn = inp.govOn; page.reload = async () => {}
+;(async () => { await page.publish(); console.log(JSON.stringify({ calls, msg: page.msg, err: page.err })) })()
+"""
+
+
+def _publish(govon, review):
+    out = subprocess.run([NODE, "-e", PUBLISH_HARNESS, "x", json.dumps({"govOn": govon, "review": review}), str(JS / "remit-kinds-settings.js")],
+                         capture_output=True, text=True, encoding="utf-8", timeout=30)
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout.strip().splitlines()[-1])
+
+
+@needs_node
+def test_remit_kinds_publish_sends_the_reviewed_hash_only_when_the_flag_is_on():
+    on = _publish(True, "H123")
+    pub = [c for c in on["calls"] if c["url"].endswith("/publish")]
+    assert len(pub) == 1 and json.loads(pub[0]["body"])["preview_hash"] == "H123"
+    off = _publish(False, "H123")
+    pub = [c for c in off["calls"] if c["url"].endswith("/publish")]
+    assert len(pub) == 1 and "preview_hash" not in json.loads(pub[0]["body"])             # 旗標關 ⇒ 與今天逐字相同的請求
+    cancelled = _publish(True, None)
+    assert not [c for c in cancelled["calls"] if c["url"].endswith("/publish")] and cancelled["msg"] == "已取消發布"
+
+
+def test_other_editors_also_send_the_reviewed_hash():
+    """展示用的靜態檢查（兩個編輯器的發布流程太重、不在 node 裡整段重放）：旗標開時先 review、取消就不送、有雜湊才帶 preview_hash。"""
+    for name in ("expense-types.js", "module-builder-output.js"):
+        src = (JS / name).read_text(encoding="utf-8")
+        assert "this.govOn && window.MotrixDefGovernance" in src and "MotrixDefGovernance.review(" in src and "preview_hash = pvh" in src, name

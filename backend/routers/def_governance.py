@@ -170,5 +170,5 @@ def def_impact(kind: str, key: str, scope: str = Query("company"), authorization
     finally:
         conn.close()
     _audit(_tok(authorization), "definitions.previewed", "ui_definition", "%s/%s/%s" % (kind, key, scope),
-           "看過發布前影響預覽（%s %s，草稿戳 %s）" % (kind, key, out["previewHash"] or "無草稿"), {})
+           "看過發布前影響預覽（%s %s，草稿戳 %s）" % (kind, key, out["previewHash"] or "無草稿"), {"previewHash": out["previewHash"]})
     return out

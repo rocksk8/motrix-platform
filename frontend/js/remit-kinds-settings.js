@@ -108,7 +108,13 @@ function remitKindsPage() {
       try {
         var s = await this._call({ method: 'PUT' }, BASE + '/draft', { body: this.body })
         if (!s.ok) { this._fail(s, '儲存失敗'); return }
-        var r = await this._call({ method: 'POST' }, BASE + '/publish', { note: this.note })
+        var pub = { note: this.note }
+        if (this.govOn && window.MotrixDefGovernance) {            // BP-1／T60 S1：旗標開 ⇒ 發布前一定先看過同一份草稿的影響預覽（伺服端也會檢查）
+          var pvh = await window.MotrixDefGovernance.review({ kind: KIND, key: KEY, scope: 'company', title: '發布前影響預覽：匯款款別' })
+          if (!pvh) { this.msg = '已取消發布'; return }
+          pub.preview_hash = pvh
+        }
+        var r = await this._call({ method: 'POST' }, BASE + '/publish', pub)
         if (!r.ok) { this._fail(r, '發布失敗'); return }
         this.note = ''
         await this.reload()
