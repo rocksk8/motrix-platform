@@ -35,6 +35,7 @@
  📌 2026-10-13 01:07：正式機已更新到 c87079be（M2 班；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-m2-apply.md；套件 20261013_005325_c87079be_full；核心 1.129、schema 維持 118（核心 migration 9、permmatrix 1）；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，31 秒，步驟 3 全過、職責角色等值關卡 PASS 0 差異）⇒ 基準改 c87079be。
  📌 2026-10-13 03:22：正式機已更新到 41348ee6（M2.1 熱修班；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-m21-apply.md；套件 20261013_031014_41348ee6_full；case 1.0.177→1.0.178（其餘模組版本不變）；核心 1.129、schema 維持 118、無 migration（173 表／262 索引／30 觸發器與套用前逐項相同）；manifest 561 筆；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，17 秒，步驟 3 全過）⇒ 基準改 41348ee6。
  📌 2026-10-13 06:48：正式機已更新到 c9a2fb6a（M3 擇一方案報價班；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-m3-apply.md；套件 20261013_063629_c9a2fb6a_full；case 1.0.178→1.0.179（其餘模組版本不變）、核心 1.130、schema 維持 118、無 migration（173 表／262 索引／30 觸發器與套用前逐項相同）；套用前確認含擇一資料的報價單 0 張；manifest 563 筆；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，19 秒，步驟 3 全過）⇒ 基準改 c9a2fb6a。
+ 📌 2026-10-13 09:20：正式機已更新到 73910a18（MS1 班：設定中心可編輯／擁有者範圍與功能登錄（E-a／E-b）、下載檔名、報價單專案毛利%；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-ms1-apply.md；套件 20261013_090725_73910a18_full；core 1.131、case 1.0.180 等十個模組版本更新（accounting 1.1.60、analytics 1.0.38、arap 1.0.53、daily_tasks 1.0.10、lodging 1.2.6、netplan 1.0.11、payroll 1.2.18、subcontract 1.1.34、supply 1.0.27），schema 維持 118、無 migration（173 表／262 索引／30 觸發器與套用前逐項相同）；設定群組 8 組（21 個設定）；manifest 566 筆；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，19 秒，步驟 3 全過）⇒ 基準改 73910a18。
 """
 import json
 import subprocess
@@ -43,7 +44,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "c9a2fb6a"
+BASELINE = "73910a18"
 
 
 def baseline_manifest():
