@@ -261,8 +261,7 @@ def test_permmatrix_v2_migration_is_additive_idempotent_and_reports_a_missing_ta
 def test_no_product_code_writes_the_unit_columns_yet():
     """U0a 只預留欄位：除 migration、回應剝除與測試外，沒有任何產品程式碼提到這三個欄位名（之後由 U1 的集中寫入點負責，不可由請求本文寫入）。"""
     pat = re.compile(r"\b(owner_unit_id|legal_entity_id)\b")
-    allowed = {"core/migrations.py", "core/internal_cols.py", "core/upgrade.py", "archive.py", "helpers/xlsx_out.py", "core/spine.py",
-               "core/features_l1.json", "main.py"}
+    from tests.platform.test_u0a_sinks import QUOTED_NAMES_ALLOW as allowed         # 唯一一份允許清單（與 2b 的洩漏防線守門共用）
     hits = []
     for p in list((BACKEND / "modules").rglob("*.py")) + list((BACKEND / "routers").rglob("*.py")) + list((BACKEND / "helpers").rglob("*.py")):
         rel = p.relative_to(BACKEND).as_posix()
@@ -274,8 +273,5 @@ def test_no_product_code_writes_the_unit_columns_yet():
 
 
 def test_column_names_match_the_response_stripper_when_it_exists():
-    try:
-        from core import internal_cols
-    except ImportError:
-        pytest.skip("core/internal_cols.py（2b 的回應剝除）尚未在這棵樹上")
+    from core import internal_cols
     assert set(internal_cols.INTERNAL_COLS) >= {"owner_unit_id", "unit_id", "legal_entity_id"}

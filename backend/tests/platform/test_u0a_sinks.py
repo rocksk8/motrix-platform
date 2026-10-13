@@ -131,7 +131,7 @@ def test_dynamic_update_builders_only_shrink():
 #: 唯一一份『允許在字串裡寫出內部欄位名』的檔案清單（遷移／健檢雜湊／剝除／匯出基礎設施）。c7 的 consistency 測試與本檔共用這份，不另立清單。
 QUOTED_NAMES_ALLOW = frozenset({
     "core/internal_cols.py", "core/upgrade.py", "core/migrations.py", "core/spine.py",
-    "archive.py", "helpers/xlsx_out.py",
+    "archive.py", "helpers/xlsx_out.py", "modules/permmatrix/migrations/0002_scope_json.py",
 })
 
 

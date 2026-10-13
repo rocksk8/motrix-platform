@@ -132,7 +132,8 @@ def test_real_app_never_returns_internal_columns(client, make_user):
     c = db.get_db()
     try:
         RK.seed_every_table(c)
-        c.execute("ALTER TABLE parts ADD COLUMN owner_unit_id INTEGER NOT NULL DEFAULT 1")
+        if "owner_unit_id" not in [r[1] for r in c.execute("PRAGMA table_info(parts)")]:      # U0 遷移之後的樹上已經有；之前的樹上（基準錄製）才需要補
+            c.execute("ALTER TABLE parts ADD COLUMN owner_unit_id INTEGER NOT NULL DEFAULT 1")
         c.commit()
         assert "owner_unit_id" in dict(c.execute("SELECT * FROM parts ORDER BY id DESC LIMIT 1").fetchone())      # 欄位真的存在
     finally:

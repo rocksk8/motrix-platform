@@ -63,7 +63,8 @@ def test_positive_control_unstripped_json_is_detected(client, seeded, monkeypatc
     import db
     c = db.get_db()
     try:
-        c.execute("ALTER TABLE parts ADD COLUMN owner_unit_id INTEGER NOT NULL DEFAULT 1")      # /api/parts＝SELECT * ＋ dict(r)：真的會帶出新欄位
+        if "owner_unit_id" not in [r[1] for r in c.execute("PRAGMA table_info(parts)")]:      # U0 遷移之後的樹上已經有；之前的樹上（基準錄製）才需要補
+            c.execute("ALTER TABLE parts ADD COLUMN owner_unit_id INTEGER NOT NULL DEFAULT 1")      # /api/parts＝SELECT * ＋ dict(r)：真的會帶出新欄位
         c.commit()
     finally:
         c.close()
