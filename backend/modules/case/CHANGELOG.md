@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-13（wip/t57-material-recognize-r2；材料卡片『認列已核准採購單』熱修，r4）
+## (next) — 2026-10-13（wip/t57-material-recognize-r2；材料卡片『認列已核准採購單』熱修，r5）
 - 修正（prod 回報：MQ-202609-012）：「帶入並連結」過去只改畫面記憶體（草稿列＋連結），自動存檔還刻意扣住連結，所以重新載入後仍是（未連結）、已申購／已到料無法勾。改為**認列**：卡片持有伺服器驗證的 `poLink`（隨一般案件存檔立即落地）；不建立材料申請、不走審核、不產生金額與付款路徑；供應商文字取自採購單廠商（不要求在供應商主檔）。設計與稽核對照見 `docs/platform/plans/MATERIAL-LINK-BUG-T57.md`。
 - 新增單元 `material_recognize`（由 `material_guard._gate_materials` 呼叫＝端點、整份存檔漏斗、已結案變更核准共用）：認列／取消認列／換組只有最高管理者（設定可放寬）；其他人嘗試 ⇒ 整件取消（poLink／旗標／序號維持原值，其他欄位照存）、`rejected` code `recognize_denied`、同交易稽核 `material.recognize_denied`、依設定寄信通知管理員（固定範本、無金額與明細、去重＋上限查稽核表）；系統路徑（actor=None）不接受新的 poLink。
 - 勾『已申購』：認列有效即可；『已到料』必填到貨日，確認人與時間由伺服器記，被拒時序號一併維持原值；採購單之後被撤銷／取消 ⇒ `stale`，旗標歷史保留、不能再勾、不再占用涵蓋；分組唯一（含同一份資料內兩張搶同組）；認列中的分組不能再建立材料申請（`bad_link`）；稽核 `material.recognize`／`recognize_undo`／`recognize_arrived`／`recognize_unarrived`。
