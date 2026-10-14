@@ -295,3 +295,27 @@ def test_case_page_wiring_is_flag_gated_and_registered():
     # 登記為案件頁的 action（排版器可隱藏／改名）
     acts = json.dumps(mod, ensure_ascii=False)
     assert '"applyStageTemplate"' in acts
+
+
+@needs_case
+def test_preview_endpoint_superadmin_only_and_validates(client, make_user, on):
+    h = _login(client, make_user, "st2_pv")
+    hn = _login(client, make_user, "st2_pvn", "admin", modules=["customer"])
+    url = "/api/quotations/stage-templates/preview"
+    ok = client.post(url, headers=h, json={"key": "std", "template": TPL, "baseDate": "2026-10-01"})
+    assert ok.status_code == 200 and [s["key"] for s in ok.json()["stages"]] == ["survey", "install", "accept"]
+    bad = client.post(url, headers=h, json={"key": "std", "template": {**TPL, "stages": [{**TPL["stages"][0], "ratioBp": 5000}] + TPL["stages"][1:]}})
+    assert bad.status_code == 422 and bad.json()["detail"]["problems"]
+    assert client.post(url, headers=hn, json={"key": "std", "template": TPL}).status_code in (401, 403)
+
+
+@needs_case
+def test_templates_list_endpoint_and_flag_off(client, make_user, monkeypatch):
+    h = _login(client, make_user, "st2_list")
+    _case("MQ-ST2-L")
+    monkeypatch.setattr(ST, "enabled", lambda conn=None: False)
+    assert client.get("/api/quotations/MQ-ST2-L/stages/templates", headers=h).status_code == 404
+    monkeypatch.setattr(ST, "enabled", lambda conn=None: True)
+    _publish_tpl("std", TPL)
+    items = client.get("/api/quotations/MQ-ST2-L/stages/templates", headers=h).json()["items"]
+    assert {"key": "std", "label": "標準施工案", "stageCount": 3, "hasRatio": True} in items

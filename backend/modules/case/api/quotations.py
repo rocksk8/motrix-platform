@@ -3916,6 +3916,25 @@ def list_stage_templates(quote_no: str, authorization: str = Header(None)):
     return {"items": items}
 
 
+@router.post("/api/quotations/stage-templates/preview")
+def preview_stage_template(body: dict = Body(...), authorization: str = Header(None)):
+    """階段樣板編輯器的預覽（唯讀、不寫資料）：`{key, template, baseDate?}` ⇒ 以『沒有任何階段的案件』套用時會建立的階段（名稱、日期、比例）。
+    僅最高管理者；旗標關 ⇒ 404；樣板不合法 ⇒ 422 `{problems}`。"""
+    from helpers import stage_templates as _STPL
+    from modules.case import stage_apply as _SA
+    _require_user(authorization, require_superadmin=True)
+    if not _STPL.enabled():
+        raise HTTPException(404, "Not Found")
+    tpl = body.get("template")
+    probs = _STPL.definition_problems(body.get("key"), tpl)
+    if probs:
+        raise HTTPException(422, {"problems": probs})
+    try:
+        return _SA.plan(tpl, body.get("baseDate") or datetime.now().date().isoformat(), "new", [])
+    except _SA.PlanError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/api/quotations/{quote_no}/stages/apply-template")
 def apply_stage_template(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
     """套用案件階段樣板（S-ST2；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）。

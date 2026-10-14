@@ -1077,6 +1077,8 @@
                 </button>
                 <button type="button" class="btn-add" data-testid="st-open" x-show="stOn && aShown('applyStageTemplate')" :style="aOrder('applyStageTemplate')"
                         style="margin-left:8px" @click="stOpen()"><span x-text="aLabel('applyStageTemplate', '套用階段樣板')">套用階段樣板</span></button>
+                <button type="button" class="btn-add" data-testid="st-manage" x-show="stOn && session.role === 'superadmin'" style="margin-left:8px"
+                        @click="window.MotrixStageTemplateEditor && window.MotrixStageTemplateEditor.open()">管理階段樣板</button>
                 </div>
                 </fieldset><!-- /CM14b -->
               </div>
@@ -4940,6 +4942,10 @@ window.CM_PARTS.push(() => ({
       // S-ST2：階段樣板旗標（同一次設定請求）；開啟才讀樣板清單，關閉時不多打任何請求
       this._stFlag = !!(g.builder_stage_templates && Number(g.builder_stage_templates.enabled) === 1)
       this.stOn = this._stFlag
+      // 編輯器只給最高管理者，而且旗標開啟才載入這支檔案（關著 ⇒ 不多一個請求）
+      if (this._stFlag && s.role === 'superadmin' && !document.getElementById('st-editor-js')) {
+        const sc = document.createElement('script'); sc.id = 'st-editor-js'; sc.src = '../static/stage-template-editor.js'; document.head.appendChild(sc)
+      }
       // BP-4 S3：附件種類編輯器的旗標從同一次設定請求取得（關閉時不多打任何請求）；只有最高管理者看得到入口
       if (g.builder_slots && Number(g.builder_slots.enabled) === 1 && window.MotrixAttachmentSlots
           && window.MotrixAttachmentSlots.mount({ docType: 'completion_note', label: '完工單' })) this.asOn = true
