@@ -143,7 +143,9 @@ function remitKindsPage() {
       if (this.busy) return
       this.busy = true; this.err = ''
       try {
-        var r = await this._call({ method: 'POST' }, BASE + '/restore/' + v, { note: '還原第 ' + v + ' 版' })
+        var rb = { note: '還原第 ' + v + ' 版' }
+        if (this.govOn && window.MotrixDefGovernance) { var ph = await window.MotrixDefGovernance.previewRestore({ kind: KIND, key: KEY, scope: 'company' }, v); if (ph) rb.preview_hash = ph }   // T62
+        var r = await this._call({ method: 'POST' }, BASE + '/restore/' + v, rb)
         if (!r.ok) { this._fail(r, '還原失敗'); return }
         await this.reload()
         this.msg = '已把第 ' + v + ' 版還原為第 ' + r.data.version + ' 版'
