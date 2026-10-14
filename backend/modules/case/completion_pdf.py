@@ -10,6 +10,7 @@ import tempfile
 from datetime import datetime, date
 
 import pdf_gen as _pg
+from helpers import pdf_scripts as _PS
 from helpers.doc_template import esc_quotes as _esc_q
 from db import get_db
 from helpers import _get_edge_path, run_edge_pdf
@@ -250,18 +251,7 @@ def _build_completion_html(n: dict) -> str:
         '</div>\n'
         '<div class="footer">\n'
         + _pg._identity_foot(_ident) +
-        '</div>\n'
-        '</div>\n'
-        '<script>\n'
-        'window.addEventListener("load",function(){\n'
-        '  var r=document.getElementById("root");if(!r)return;\n'
-        '  var A4H=Math.round(267/25.4*96);\n'
-        '  var h=r.scrollHeight;\n'
-        '  if(h>A4H){var s=A4H/h;if(s>=0.70){document.body.style.zoom=s.toFixed(4);}}\n'
-        '});\n'
-        '</script>\n'
-        '</body>\n'
-        '</html>'
+        ('</div>\n</div>\n' + _PS.FIT_A4_MULTI + '\n</body>\n</html>')
     )
 
 

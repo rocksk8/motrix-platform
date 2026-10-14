@@ -184,23 +184,20 @@ def _with_profile(cmd: list, d: str) -> list:
 # `<iframe src=file:///…>`／`<object>`／`<embed>` 能把伺服器本機檔案畫進 PDF，`<script>` 能對外發請求。所以在這裡統一做兩層限制：
 # ①把內容安全政策（CSP）寫進 HTML（`<meta http-equiv>`）：只准內嵌樣式、data:／file: 圖片與字型；禁 frame／object／embed／表單／連線；
 #   script 只准『頁面裡本來就有的內嵌腳本』（逐段算 SHA-256 白名單：A4 自動縮放、薪資單腳本等），注入的 script 與事件屬性一律被擋；
-# ②Edge 旗標：所有主機名稱解析都失敗（只放行 localhost）＋停用擴充功能與同步（不碰 --no-sandbox）。
+# ②Edge 旗標：所有主機名稱解析都失敗（只放行 localhost）＋停用擴充功能與同步（不碰 --no-sandbox）；
+# ③H2：script-src 只認註冊表（helpers/pdf_scripts.py）的雜湊、出入口標籤中和（_neutralize_html）、直接寫 IP 的網址一律走連不上的代理。
 _CSP_BASE = ("default-src 'none'; img-src data: file:; style-src 'unsafe-inline'; font-src data: file:; frame-src 'none'; object-src 'none'; "
              "form-action 'none'; base-uri 'none'; connect-src 'none'; media-src 'none'; worker-src 'none'")
-_HARDEN_FLAGS = ("--disable-extensions", "--disable-sync", "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE localhost")
+_HARDEN_FLAGS = ("--disable-extensions", "--disable-sync", "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE localhost",
+                 # H2-a：直接寫 IP 的網址不經名稱解析（上一行管不到）⇒ 所有 http(s) 都走一個必定連不上的代理（discard 埠）；loopback 也不繞過代理。file:／data: 不經代理。
+                 "--proxy-server=http://127.0.0.1:9", "--proxy-bypass-list=<-loopback>")
 
 
 def _csp_for_html(html: str) -> str:
-    """這份 HTML 的 CSP 字串：基本政策＋『頁面內嵌腳本』的 SHA-256 白名單（沒有內嵌腳本 ⇒ script-src 'none'）。"""
-    import base64
-    import hashlib
-    import re
-    hashes = []
-    for m in re.finditer(r"<script(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script\s*>", html, re.S | re.I):
-        h = "'sha256-%s'" % base64.b64encode(hashlib.sha256(m.group(1).encode("utf-8")).digest()).decode("ascii")
-        if h not in hashes:
-            hashes.append(h)
-    return "%s; script-src %s" % (_CSP_BASE, " ".join(hashes) if hashes else "'none'")
+    """這份 HTML 的 CSP 字串：基本政策＋**註冊表**裡已登記腳本的 SHA-256（`helpers.pdf_scripts`）。
+    H2-a：不再掃最終 HTML——頁面裡不在註冊表的 `<script>` 沒有雜湊，被 CSP 擋下（也會先被 `_neutralize_html` 移除）。`html` 參數保留給呼叫端相容。"""
+    from helpers import pdf_scripts as _ps
+    return "%s; script-src %s" % (_CSP_BASE, " ".join(_ps.allowed_hashes()))
 
 
 def _inject_csp(html: str) -> str:
@@ -213,11 +210,168 @@ def _inject_csp(html: str) -> str:
     return html[:m.end()] + meta + html[m.end():] if m else meta + html
 
 
-def _harden_cmd(cmd: list) -> list:
-    """旗標（呼叫端已經帶了同名旗標就不重複）。**插在最後面的 `file:///….html` 參數之前**（所有既有旗標的位置不變：
-    既有測試與 `_with_profile` 都假設 `--user-data-dir` 緊接在執行檔後面）。命令列沒有 `file:///` 參數（不是渲染 HTML 的呼叫）⇒ 原樣不動。"""
-    cmd = list(cmd)
+# ── H2-b：出入口標籤中和 ─────────────────────────────────────────────────────
+# CSP 擋不住頂層導航（`<meta http-equiv=refresh content="0;url=file:///…">`），也擋不住『已經在頁面裡』的腳本以外的東西。
+# 所以在寫 CSP 之前，先把 builder 本來就不會產生、攻擊者才會想放的標記中和掉（掃描測試鎖住：8 個 builder 檔案沒有任何這些標記）。
+# 用 `html.parser` 取標籤位置、只改寫命中的標籤（其餘位元組完全不動）。限制（誠實寫明）：解析器與 Chromium 的解析有差異——
+# 所以中和之後還有一道『殘留檢查』（見 `_residual_danger`），發現任何殘留就拒絕渲染；第一道防線仍是輸出逸出。
+_DROP_TAGS = frozenset({"iframe", "frame", "frameset", "object", "embed", "applet", "portal", "base", "link"})
+_DANGEROUS_URL = ("javascript:", "vbscript:", "data:text/html", "data:application/xhtml")
+_ALWAYS_DROP_ATTRS = frozenset({"srcdoc", "formaction"})
+_ATTR_RE = None
+
+
+def _attr_regex():
+    global _ATTR_RE
+    if _ATTR_RE is None:
+        import re
+        _ATTR_RE = re.compile(r"""(\s+)([^\s"'<>/=]+)(?:(\s*=\s*)("[^"]*"|'[^']*'|[^\s"'>]+))?""")
+    return _ATTR_RE
+
+
+def _bad_url(value: str) -> bool:
+    import html as _h
+    v = "".join(ch for ch in _h.unescape(value or "") if ord(ch) > 32).lower()
+    return v.startswith(_DANGEROUS_URL)
+
+
+def _scrub_start_tag(raw: str) -> str:
+    """移除一個開始標籤裡的危險屬性：`on*`、`srcdoc`、`formaction`、值是 javascript:／vbscript:／data:text/html 的任何屬性。沒有要拿掉的 ⇒ 回傳原字串（逐位元不變）。"""
+    import re
+    m = re.match(r"<\s*[A-Za-z][^\s/>]*", raw)
+    if not m:
+        return raw
+    head, rest = raw[:m.end()], raw[m.end():]
+    out, pos, changed = [], 0, False
+    for am in _attr_regex().finditer(rest):
+        name = am.group(2)
+        val = am.group(4) or ""
+        v = val[1:-1] if val[:1] in ("'", '"') else val
+        low = name.lower()
+        if low.startswith("on") or low in _ALWAYS_DROP_ATTRS or _bad_url(v):
+            out.append(rest[pos:am.start()])
+            pos = am.end()
+            changed = True
+    if not changed:
+        return raw
+    out.append(rest[pos:])
+    return head + "".join(out)
+
+
+def _neutralize_html(html: str) -> str:
+    """H2-b：中和危險標記（保留其餘內容與位元組）：
+    - `iframe／frame／frameset／object／embed／applet／portal／base／link` 的開始標籤整個拿掉；
+    - `<meta http-equiv=…>`（refresh、CSP…）整個拿掉（我們自己的 CSP meta 在這一步**之後**才插入）；
+    - `<script>`：有 `src` ⇒ 整個元素拿掉；內文的 SHA-256 不在註冊表 ⇒ 整個元素拿掉；已登記的保留；
+    - 其餘標籤：拿掉 `on*`、`srcdoc`、`formaction` 與 javascript:／vbscript:／data:text/html 值的屬性。"""
+    from html.parser import HTMLParser
+    from helpers import pdf_scripts as _ps
+    import re
+
+    allowed = set(_ps.allowed_hashes())
+    line_starts = [0]
+    for i, ch in enumerate(html):
+        if ch == "\n":
+            line_starts.append(i + 1)
+
+    def absolute(pos):
+        return line_starts[pos[0] - 1] + pos[1]
+
+    edits = []                                               # (start, end, replacement)
+
+    class _P(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=False)
+            self.script = None                               # (起點, 開始標籤結尾, 是否有 src)
+            self.inner = []
+
+        def _start(self, tag, attrs, self_closing):
+            start = absolute(self.getpos())
+            raw = self.get_starttag_text() or ""
+            end = start + len(raw)
+            tag = tag.lower()
+            names = {a[0].lower(): (a[1] or "") for a in attrs}
+            if tag == "script":
+                if self_closing:
+                    edits.append((start, end, ""))
+                else:
+                    self.script = (start, end, "src" in names)
+                    self.inner = []
+                return
+            if tag in _DROP_TAGS or (tag == "meta" and "http-equiv" in names):
+                edits.append((start, end, ""))
+                return
+            new = _scrub_start_tag(raw)
+            if new != raw:
+                edits.append((start, end, new))
+
+        def handle_starttag(self, tag, attrs):
+            self._start(tag, attrs, False)
+
+        def handle_startendtag(self, tag, attrs):
+            self._start(tag, attrs, True)
+
+        def handle_data(self, data):
+            if self.script is not None:
+                self.inner.append(data)
+
+        def handle_endtag(self, tag):
+            if tag.lower() == "script" and self.script is not None:
+                s_start, s_tag_end, has_src = self.script
+                e_start = absolute(self.getpos())
+                m = re.match(r"</\s*script\s*>", html[e_start:], re.I)
+                e_end = e_start + (m.end() if m else len("</script>"))
+                inner = "".join(self.inner)
+                if has_src or _ps.hash_of(inner) not in allowed:
+                    edits.append((s_start, e_end, ""))
+                self.script = None
+
+    p = _P()
+    p.feed(html)
+    p.close()
+    if p.script is not None:                                 # 沒有結尾標籤的 script：從起點到文件結尾都拿掉
+        edits.append((p.script[0], len(html), ""))
+    out = html
+    for start, end, rep in sorted(edits, key=lambda e: e[0], reverse=True):
+        out = out[:start] + rep + out[end:]
+    return out
+
+
+_RESIDUAL = None
+
+
+def _residual_danger(html: str):
+    """中和之後的殘留檢查（只看『標籤』，不看一般文字）：還有 iframe／object／embed／base／link／meta http-equiv／未登記的 script ⇒ 回傳該字串，否則 None。
+    解析器差異（Chromium 看得到、`html.parser` 看不到的怪寫法）會在這裡被攔下 ⇒ 呼叫端拒絕渲染。"""
+    global _RESIDUAL
+    import re
+    if _RESIDUAL is None:
+        _RESIDUAL = re.compile(r"<\s*(?:iframe|frame|frameset|object|embed|applet|portal|base|link)\b|<\s*meta\b[^>]*http-equiv|<\s*script\b", re.I)
+    from helpers import pdf_scripts as _ps
+    masked = html
+    for tag in _ps.SCRIPTS.values():                         # 已登記的腳本整段遮掉再檢查
+        masked = masked.replace(tag, "")
+    m = _RESIDUAL.search(masked)
+    return m.group(0) if m else None
+
+
+def _html_arg_index(cmd: list):
+    """要渲染的 HTML 引數的位置＝**最後一個 `file:///` 參數**，而且必須是 `.html`／`.htm`（`_harden_cmd` 與 `_harden_html_file` 共用這一支）。
+    最後一個 `file:///` 參數不是 html ⇒ 記警告並視為沒有（不做硬化）。"""
     idx = next((i for i in range(len(cmd) - 1, 0, -1) if str(cmd[i]).lower().startswith("file:///")), None)
+    if idx is None:
+        return None
+    if not str(cmd[idx]).lower().split("?")[0].split("#")[0].endswith((".html", ".htm")):
+        logger.warning("PDF 渲染：最後一個 file:/// 參數不是 .html（%s），不做硬化", str(cmd[idx])[:120])
+        return None
+    return idx
+
+
+def _harden_cmd(cmd: list) -> list:
+    """旗標（呼叫端已經帶了同名旗標就不重複）。**插在要渲染的 `file:///….html` 參數之前**（所有既有旗標的位置不變：
+    既有測試與 `_with_profile` 都假設 `--user-data-dir` 緊接在執行檔後面）。命令列沒有這樣的參數（不是渲染 HTML 的呼叫）⇒ 原樣不動。"""
+    cmd = list(cmd)
+    idx = _html_arg_index(cmd)
     if idx is None:
         return cmd
     have = {str(a).split("=", 1)[0] for a in cmd}
@@ -226,16 +380,27 @@ def _harden_cmd(cmd: list) -> list:
 
 
 def _harden_html_file(cmd: list) -> None:
-    """命令列最後面的 `file:///….html` 是要渲染的檔案：讀進來、寫入 CSP、寫回。找不到這樣的參數（不是渲染 HTML 的呼叫）⇒ 不做事。"""
-    url = next((str(a) for a in reversed(cmd) if str(a).lower().startswith("file:///") and str(a).lower().split("?")[0].endswith((".html", ".htm"))), None)
-    if not url:
+    """要渲染的 HTML 檔案：讀進來 → 中和危險標記 → 殘留檢查 → 寫入 CSP → 寫回。
+    - 路徑含 `#` 或 `?`：Edge 會把它當成網址的片段／查詢而截斷路徑（可能渲染出目錄清單）⇒ 丟例外（呼叫端中止渲染）；
+    - 檔案不存在：記 WARNING 後略過（沒有內容可硬化；渲染本身會失敗，由呼叫端既有的『沒產出就 raise』處理）；
+    - 殘留檢查發現危險標記 ⇒ 丟例外（拒絕渲染）。"""
+    idx = _html_arg_index(cmd)
+    if idx is None:
         return
-    path = url[len("file:///"):].split("?")[0].split("#")[0]            # 各 builder 組的是未編碼的路徑（不 unquote，免得路徑裡的 % 被誤解）
-    if not os.path.isfile(path):                                 # 檔案不存在（測試用的假路徑、或已被清掉）⇒ 沒有內容可硬化；渲染本身會失敗，由呼叫端既有的『沒產出就 raise』處理
+    url = str(cmd[idx])
+    path = url[len("file:///"):]                              # 各 builder 組的是未編碼的路徑（不 unquote，免得路徑裡的 % 被誤解）
+    if "#" in path or "?" in path:
+        raise ValueError("HTML 路徑含 # 或 ?，Edge 會截斷路徑：%s" % path[:120])
+    if not os.path.isfile(path):
+        logger.warning("PDF 渲染硬化略過：HTML 檔案不存在（%s）", path[:160])
         return
     with open(path, "r", encoding="utf-8") as f:
         html = f.read()
-    out = _inject_csp(html)
+    out = _neutralize_html(html)
+    bad = _residual_danger(out)
+    if bad:
+        raise ValueError("HTML 仍含危險標記，拒絕渲染：%s" % bad[:60])
+    out = _inject_csp(out)
     if out != html:
         with open(path, "w", encoding="utf-8") as f:
             f.write(out)
