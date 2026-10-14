@@ -42,7 +42,7 @@ def test_plan_append_skips_ratio_and_existing_kinds():
     assert all(s["ratioBp"] is None for s in p["stages"])                 # 附加模式不帶比例（金流）
     assert p["skipped"] == ["survey"]
     assert p["stages"][0]["existingDeps"] == [5] and p["stages"][0]["dependsOn"] == []
-    assert any("比例" in n for n in p["notes"]) and any("survey" in n for n in p["notes"])
+    assert any("比例" in n for n in p["notes"]) and any("現場勘查" in n and "survey" not in n for n in p["notes"])
 
 
 def test_plan_no_ratio_template_has_no_ratio_note():
@@ -335,7 +335,7 @@ def test_plan_wraps_broken_published_content_as_400():
 
 def test_plan_append_warns_about_same_name_manual_stage():
     p = SA.plan(TPL, "2026-10-01", "append", [{"id": 1, "stage_key": None, "label": " 驗收 "}])
-    assert any("兩個同名階段" in n and "驗收" in n for n in p["notes"])
+    assert any("兩個同名" in n and "驗收" in n for n in p["notes"])
     q = SA.plan(TPL, "2026-10-01", "append", [{"id": 1, "stage_key": "accept", "label": "驗收"}])
     assert not any("兩個同名" in n for n in q["notes"])
 
@@ -410,3 +410,13 @@ def test_default_stage_seed_is_skipped_only_when_flag_on_and_template_published_
     f = f[:f.index("async doUnlock")]
     assert f.index("if (this._stFlag)") < f.index("const labels = ['訂單確認'")
     assert "/stages/templates`" in f and "_stFlag: false" in form                                  # 旗標關 ⇒ 不送這個請求
+
+
+def test_user_facing_copy_is_plain_language_static():
+    js = _read("frontend/js/case-management-exec.js")
+    assert "stSummary()" in js and "按下「建立階段」會在這個案件新增" in js and "已有的階段不會被改動" in js
+    html = _read("frontend/pages/case-management.html")
+    assert 'data-testid="st-summary"' in html and "基準日（從哪一天開始算）" in html
+    ed = _read("frontend/static/stage-template-editor.js")
+    assert "種類鍵" not in ed[ed.index("function problems"):ed.index("function setBody")]          # 畫面上的字不用內部術語
+    assert "階段代號" in ed and "要先完成：" in ed and "持續幾天" in ed
