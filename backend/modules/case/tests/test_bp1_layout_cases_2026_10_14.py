@@ -280,3 +280,19 @@ def test_form_noncore_field_can_be_hidden_and_renamed(client, make_user):
            {"op": "relabel", "target": "case:case-management.html/form:contract/field:deliveryAddress", "label": "施工地址"}]
     assert _publish(client, h, ops).status_code == 200
     assert _eff(client, h)["ops"] == ops
+
+
+def test_layout_x_show_never_sits_on_an_element_with_static_inline_display():
+    """Alpine 的 x-show 為真時會移除行內 display，靜態 style="display:flex" 就被洗掉（旗標關閉時卡片頁尾由兩行變一行）。
+    版面引擎加上的 x-show（lShown／fShown）不得掛在帶行內 display 的元素上；要用 flex 就放進 CSS class。"""
+    html = PAGE.read_text(encoding="utf-8")
+    bad = []
+    for m in re.finditer(r"<[a-zA-Z][^<>]*?>", html, re.S):
+        tag = m.group(0)
+        xs = re.search(r'x-show="([^"]*)"', tag)
+        if not xs or not re.search(r"\b[lf]Shown\(", xs.group(1)):
+            continue
+        st = re.search(r'(?<![:\w-])style="([^"]*)"', tag)
+        if st and re.search(r"(^|;)\s*display\s*:", st.group(1)):
+            bad.append(tag[:120])
+    assert not bad, bad

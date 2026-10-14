@@ -344,7 +344,7 @@
               <div class="cm-card__customer" x-show="lShown('customer')" :style="lo('customer')" x-text="c.customer_name || '(未填客戶)'"></div>
               <div class="cm-card__sales" x-show="c.sales_person && lShown('sales')" :style="lo('sales')" x-text="lLabel('sales', '業務') + '：' + c.sales_person"></div>
               <div class="cm-card__footer" x-show="lShown('amount') || lShown('stageProgress') || lShown('date')" :style="loFooter()">
-                <span style="display:flex;align-items:center;gap:6px;overflow:hidden" x-show="lShown('amount') || lShown('stageProgress')">
+                <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
                   <span class="cm-card__amount" x-show="lShown('amount')" :style="lo('amount')" x-text="c.moneyMasked ? '—' : 'NT$ ' + (c.total||0).toLocaleString()"></span>
                   <span class="cm-card__stageprog" x-show="c.stage_total > 0 && lShown('stageProgress')" :style="lo('stageProgress')"
                         :class="{'cm-card__stageprog--danger': c.stage_overdue > 0}"
