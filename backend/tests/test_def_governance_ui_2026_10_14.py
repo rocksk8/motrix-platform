@@ -363,4 +363,5 @@ def test_pending_action_failure_shows_the_server_reason():
 
 def test_menu_editor_reports_pending_publishes_instead_of_claiming_success():
     src = (JS.parent / "static" / "menu-editor.js").read_text(encoding="utf-8")
-    assert "pr.pending === true" in src and "待第二位最高管理者核准，核准前不會生效" in src
+    # 1f 的 menu-pending 版（pend 陣列＋pendingText）取代了 S2b 當初的 pr.pending 計數版；斷言跟著現行寫法
+    assert "r2.pending === true" in src and "待第二位最高管理者核准；核准前不會生效" in src
