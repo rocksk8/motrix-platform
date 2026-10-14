@@ -29,6 +29,15 @@ def categories() -> list:
         return [dict(c) for c in PART_CATEGORIES]
 
 
+def all_category_names() -> list:
+    """有效分類名稱**含已停用的**（停用只影響新增／編輯時能不能選；舊料號與進貨批次仍用這些名稱，會計對照要有它們的鍵）。"""
+    try:
+        from helpers import option_lists as _OL
+        return [x["value"] for x in _OL.effective("part_category")]
+    except Exception:                                        # noqa: BLE001
+        return [c["name"] for c in PART_CATEGORIES]
+
+
 def prefix_for(name):
     """分類名稱 → 料號前綴（有效分類；找不到 ⇒ None）。"""
     return {c["name"]: c["prefix"] for c in categories()}.get(name)

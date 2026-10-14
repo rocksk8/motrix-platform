@@ -224,7 +224,7 @@
         <div class="field-label">類別</div>
         <select class="field-input" x-model="modal.category">
           <option value="">未分類</option>
-          <template x-for="c in categoryOptions" :key="c.name"><option :value="c.name" x-text="c.name"></option></template>
+          <template x-for="c in categorySelectOptions(modal.category)" :key="c.name"><option :value="c.name" x-text="c.label || c.name"></option></template>
         </select>
       </div>
       <div class="field-row" style="grid-column:1/-1">
@@ -384,6 +384,13 @@ function app() {
     filterCat: '',
     optVer: 0,
     // census #4：預設單位＝選項清單 part_unit 第一個未停用的（沒有自訂 ⇒ 台，與今天相同）；單位欄位仍可自由輸入，清單只是建議
+    // census #4：分類被管理者停用後，舊料號編輯時仍要顯示它目前的分類（不然儲存會把分類洗掉）；選項清單沒開 ⇒ 與今天相同
+    categorySelectOptions(cur) {
+      this.optVer
+      const base = this.categoryOptions || []
+      if (!MotrixOptions.custom('part_category') || !cur || base.some(c => c.name === cur)) return base
+      return base.concat([{ name: cur, label: cur + '（已停用）' }])
+    },
     defaultUnit() { this.optVer; return MotrixOptions.firstValue('part_unit', '台') },
     unitSuggest() { this.optVer; return MotrixOptions.custom('part_unit') ? MotrixOptions.values('part_unit', []) : [] },
     modal: { show: false, id: null, partNo: '', name: '', brandName: '', brandModel: '', unit: '台', cost: 0, listPrice: 0, safetyStock: 0, category: '', note: '', saving: false, error: '' },

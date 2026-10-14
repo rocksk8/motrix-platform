@@ -120,6 +120,7 @@ def definition_problems(key, body, live=None) -> list:
     if len(vals) > MAX_VALUES:
         out.append({"path": "values", "message": "最多 %d 個選項" % MAX_VALUES})
     seen, labels, prefixes = set(), set(), set()
+    _fold = lambda x: unicodedata.normalize("NFKC", x).casefold()          # 全形／大小寫不同的同一個字也算重複（ＶＩＰ、vip、VIP）
     for i, it in enumerate(vals):
         p = "values[%d]" % i
         if not isinstance(it, dict):
@@ -130,17 +131,17 @@ def definition_problems(key, body, live=None) -> list:
         m = _text_problem(it.get("value"), "選項")
         if m:
             out.append({"path": p + ".value", "message": m})
-        elif it["value"] in seen:
-            out.append({"path": p + ".value", "message": "選項重複：%s" % it["value"]})
+        elif _fold(it["value"]) in seen:
+            out.append({"path": p + ".value", "message": "選項重複（全形、半形、大小寫不同也算重複）：%s" % it["value"]})
         else:
-            seen.add(it["value"])
+            seen.add(_fold(it["value"]))
         m = _text_problem(it.get("label"), "顯示名稱")
         if m:
             out.append({"path": p + ".label", "message": m})
-        elif it["label"] in labels:
+        elif _fold(it["label"]) in labels:
             out.append({"path": p + ".label", "message": "顯示名稱重複：%s" % it["label"]})
         else:
-            labels.add(it["label"])
+            labels.add(_fold(it["label"]))
         if not spec["relabel"] and isinstance(it.get("value"), str) and it.get("label") != it.get("value"):
             out.append({"path": p + ".label", "message": "這份清單不能改顯示名稱（這個欄位的值同時被報表或科目對照拿來比對）"})
         if "disabled" in it and not isinstance(it["disabled"], bool):

@@ -319,3 +319,52 @@ def test_pages_wire_the_lists_and_declare_the_editor_meta_but_do_not_load_the_ed
     assert "d.optionLists" in sb and "d.builderOptionLists" in sb and "/static/option-list-editor.js" in sb
     parts = (ROOT / "frontend" / "pages" / "parts.html").read_text(encoding="utf-8")
     assert parts.count("unit: this.defaultUnit()") == 1 and "unit: '台', cost: 0, listPrice: 0, safetyStock: 0, category: '', note: '', saving: false" in parts
+
+
+# ═══ 審核（04）SHOULD 修正：值重複用 NFKC＋casefold、會計對照含新增／停用分類、匯出時標出沒有科目的分類、料號編輯顯示停用分類 ═══
+def test_duplicates_are_compared_after_nfkc_and_casefold():
+    p = _bad("customer_type", _body(DEFAULT_CT + [_v("ｖｉｐ", "別的名稱")]))
+    assert "values[3].value" in _paths(p), "全形小寫的 vip 與 VIP 算重複"
+    p = _bad("customer_type", _body(DEFAULT_CT + [_v("新", "ｖｉｐ 客戶".replace(" ", " ")), _v("新2", "VIP 客戶")]))
+    assert "values[4].label" in _paths(p) or "values[3].label" in _paths(p), "顯示名稱同理"
+    assert _bad("customer_type", _body(DEFAULT_CT + [_v("Vip2", "另一個")])) == []
+
+
+def test_accounting_mapping_keys_include_added_and_disabled_categories(monkeypatch):
+    from helpers import part_catalog as PC
+    from modules.accounting.api import accounting_export as AE
+    monkeypatch.setattr(OL, "enabled", lambda conn=None: False)
+    assert PC.all_category_names() == [c["name"] for c in PC.PART_CATEGORIES], "選項清單關著 ⇒ 與今天相同"
+    eff = [dict(d, disabled=False) for d in OL.BUILTIN["part_category"]["defaults"]]
+    eff[-1] = dict(eff[-1], disabled=True)                                             # 「其他」被停用
+    eff.append({"value": "工程服務", "label": "工程服務", "prefix": "SRV", "disabled": False})
+    monkeypatch.setattr(OL, "effective", lambda lid, conn=None: eff if lid == "part_category" else [])
+    names = PC.all_category_names()
+    assert "其他" in names and "工程服務" in names, "停用的分類仍在對照裡（舊料號與進貨批次還用它）"
+    assert "其他" not in [c["name"] for c in PC.categories()] and "工程服務" in [c["name"] for c in PC.categories()]
+    monkeypatch.setattr(AE, "_get_setting", lambda k, d=None: {"inventoryExpenseAccounts": {"網通設備": "5101"}})
+    cfg = AE._t100_config()
+    assert set(cfg["inventoryExpenseAccounts"]) >= {"網通設備", "其他", "工程服務"} and cfg["inventoryExpenseAccounts"]["網通設備"] == "5101"
+
+
+def test_t100_export_names_categories_that_have_no_account_code(client):      # 需要資料庫（匯出抬頭會讀公司資料）
+    import io
+    import openpyxl
+    from modules.accounting.api import accounting_export as AE
+    rows = [{"voucherNo": "PC0001", "date": "2026-10-14", "category": "轉", "summary": "x", "acctCode": "", "acctName": "料件設備成本（工程服務）",
+             "debit": 100, "credit": 0, "dept": "", "sourceNo": "B1", "counterparty": "甲"},
+            {"voucherNo": "PC0001", "date": "2026-10-14", "category": "轉", "summary": "x", "acctCode": "1113", "acctName": "銀行存款",
+             "debit": 0, "credit": 100, "dept": "", "sourceNo": "B1", "counterparty": "甲"},
+            {"voucherNo": "PC0002", "date": "2026-10-14", "category": "轉", "summary": "x", "acctCode": "5101", "acctName": "料件設備成本（網通設備）",
+             "debit": 5, "credit": 0, "dept": "", "sourceNo": "B2", "counterparty": "乙"}]
+    cfg = dict(AE._DEFAULT_T100_CONFIG, inventoryExpenseAccounts={"網通設備": "5101"}, bankAccounts=[{"name": "x", "acctCode": "1113"}])
+    wb = openpyxl.load_workbook(io.BytesIO(AE._build_t100_voucher_excel(rows, "2026-10-01", "2026-10-31", cfg, "2026-10-14 10:00")))
+    text = " ".join(str(c.value) for row in wb.active.iter_rows() for c in row if c.value)
+    assert "inventoryExpenseAccounts[工程服務]" in text and "inventoryExpenseAccounts[網通設備]" not in text
+
+
+def test_parts_edit_select_keeps_a_disabled_category_visible_only_with_custom_lists():
+    src = (ROOT / "frontend" / "pages" / "parts.html").read_text(encoding="utf-8")
+    assert 'x-for="c in categorySelectOptions(modal.category)"' in src and 'x-text="c.label || c.name"' in src
+    fn = src.split("categorySelectOptions(cur) {")[1].split("defaultUnit() {")[0]
+    assert "!MotrixOptions.custom('part_category')" in fn and "（已停用）" in fn, "沒開自訂清單 ⇒ 原樣回 categoryOptions（與今天相同）"
