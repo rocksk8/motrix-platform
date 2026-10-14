@@ -1178,8 +1178,8 @@
           <div class="form-group">
             <label class="form-label">有效天數 <span class="req">*</span></label>
             <input class="form-input" type="number" min="1" x-model.number="q.validDays"
-                   :class="q.validDays > 30 ? 'warn' : ''" @change="setDirty(); checkApproval()">
-            <div class="form-hint warn" x-show="q.validDays > 30">超過 30 天需主管審核</div>
+                   :class="q.validDays > pmCfg.maxValidDays ? 'warn' : ''" @change="setDirty(); checkApproval()">
+            <div class="form-hint warn" x-show="q.validDays > pmCfg.maxValidDays" x-text="'超過 ' + pmCfg.maxValidDays + ' 天需主管審核'">超過 30 天需主管審核</div>
           </div>
           <div class="form-group">
             <label class="form-label">版本</label>
@@ -2473,7 +2473,7 @@
       // 會被存檔流程整包送回後端，混進 q 會讓每次存檔都把它再寫一遍。
       docVersions: [],
 
-      pmCfg: { warnPct: 0, minItemMarginPct: 30 },          // 專案毛利提醒門檻（設定中心；0＝不提醒），init 時由 GET /api/project-margin/config 填入
+      pmCfg: { warnPct: 0, minItemMarginPct: 30, maxValidDays: 30, discountReviewAbove: 0 },          // 專案毛利提醒門檻（設定中心；0＝不提醒），init 時由 GET /api/project-margin/config 填入
       pmHideUncosted: false,
       altCfg: { enabled: true, totalText: '依方案選擇', noteTemplate: '項次{items}為{group}擇一方案選擇', groupsMax: 10, comboViewMax: 24, comboViewDefaultOpen: false },   // M3：init 時由 GET /api/alt-quote/config 填入
       signPick: { open: false, picks: {}, note: '', busy: false },     // M3 T9：回簽時逐組選定方案的對話框
@@ -2688,8 +2688,11 @@
           if (r.ok) {
             const d = await r.json()
             const min = Number(d.minItemMarginPct)
-            this.pmCfg = { warnPct: Number(d.warnPct) || 0, minItemMarginPct: Number.isFinite(min) && min >= 0 && min <= 100 ? min : 30 }
-            if (this.pmCfg.minItemMarginPct !== 30) this.checkApproval()      // 門檻與預設不同才重算一次（預設 30 ＝今天的行為，不多做任何事）
+            const days = Number(d.maxValidDays), disc = Number(d.discountReviewAbove)
+            this.pmCfg = { warnPct: Number(d.warnPct) || 0, minItemMarginPct: Number.isFinite(min) && min >= 0 && min <= 100 ? min : 30,
+                           maxValidDays: Number.isFinite(days) && days >= 1 && days <= 365 ? days : 30,
+                           discountReviewAbove: Number.isFinite(disc) && disc >= 0 && disc <= 100000000 ? disc : 0 }
+            if (this.pmCfg.minItemMarginPct !== 30 || this.pmCfg.maxValidDays !== 30 || this.pmCfg.discountReviewAbove !== 0) this.checkApproval()      // 門檻與預設不同才重算一次（預設 30 ＝今天的行為，不多做任何事）
           }
         } catch (e) { /* 取不到 ⇒ 不提醒 */ }
       },
@@ -2832,14 +2835,14 @@
           return
         }
         const reasons = []
-        if (this.q.validDays > 30)
-          reasons.push(`有效期限 ${this.q.validDays} 天（超過 30 天）`)
+        if (this.q.validDays > this.pmCfg.maxValidDays)
+          reasons.push(`有效期限 ${this.q.validDays} 天（超過 ${this.pmCfg.maxValidDays} 天）`)
         this.q.items.forEach((item, i) => {
           if (item.type === 'header') return
           if (item.cost > 0 && item.margin < this.pmCfg.minItemMarginPct / 100)
             reasons.push(`第 ${i+1} 項毛利率 ${(item.margin*100).toFixed(2)}% 低於 ${this.pmCfg.minItemMarginPct}%`)
         })
-        if (this.q.showDiscount && this.q.discount > 0)
+        if (this.q.showDiscount && this.q.discount > 0 && this.q.discount > this.pmCfg.discountReviewAbove)
           reasons.push(`含折讓（NT$${this.q.discount.toLocaleString()}）`)
         const taxRate = this.q.taxRate !== undefined ? this.q.taxRate : 5
         if (taxRate < 5) {
