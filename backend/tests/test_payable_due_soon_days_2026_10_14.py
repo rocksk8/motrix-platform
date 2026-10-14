@@ -219,4 +219,4 @@ def test_help_texts_state_the_counting_rules():
     f5 = SR._GROUPS["finance_reports"]["fields"]["settle_overdue_days"].help
     f4 = SR._GROUPS["finance_cashier"]["fields"]["receivable_grace_days"].help
     assert "最後更新日" in f5 and "重新計算" in f5
-    assert "N+1" in f4
+    assert "第 4 天才開始標逾期" in f4 and "N" not in f4.replace("NT", "")          # 白話：不出現 N 這種符號
