@@ -2,7 +2,7 @@
 """規則評估器（BP-2 R0；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §6）。
 
 [單位] helper:rule_engine    [層] L1    [穩定度] 實驗（旗標 builder_rules 關閉時沒有任何呼叫端）
-[公開介面] evaluate, Result 欄位說明見 evaluate
+[公開介面] DEFAULT_BUDGET_MS, evaluate
 [不變式] ①純函式：不碰資料庫、不寫任何東西、不 import 本專案其他模組（只用 rule_grammar 的上限與走訪）、不執行任何字串；
     ②三態：true／false／unknown；缺值＝unknown；標記型 unknown＝不標記；
     ③遮蔽優先：條件用到任何『檢視者看不到』的欄位 ⇒ 該規則對這位檢視者**不評估**（不是 false：結果裡不出現、不計命中），

@@ -2,7 +2,7 @@
 """規則的欄位目錄轉接層（BP-2 R1；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §5）。
 
 [單位] helper:rule_catalog    [層] L1    [穩定度] 實驗（旗標 builder_rules 關閉時沒有任何呼叫端）
-[公開介面] entities, all_fields, rule_fields, visible_ids, load_records, stub_in_use, PERMS
+[公開介面] ENTITIES, entities, all_fields, rule_fields, visible_ids, load_records, stub_in_use, PERMS
 [不變式] ①**唯一**對外給『規則能用哪些欄位』的入口；整合 S5 欄位目錄（`helpers/builtin_fields.py`，owner 3c）時**只改本檔的 `_catalog_for`**；
     ②目錄項不得是付款衍生旗標（`derived_from_payment` 或名稱在 `_PAYMENT_DERIVED` 內）——登錄時 ValueError；
     ③金額欄位必須帶權限（`perm`）；`internal`（S5 自訂欄位）＝只有能讀到該紀錄的人看得到；檢視者沒有該權限 ⇒ 欄位不在他的可見集合內（規則引擎據此不評估）；

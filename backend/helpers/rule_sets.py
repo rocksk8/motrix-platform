@@ -2,7 +2,7 @@
 """規則集定義種類 `rule_set`（BP-2 R1；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §3）。
 
 [單位] helper:rule_sets    [層] L1    [穩定度] 實驗（旗標 builder_rules 關閉時沒有任何呼叫端）
-[公開介面] KIND, enabled, ensure_registered, published_rules
+[公開介面] KIND, enabled, ensure_registered, published_rules, K01_ENTITY, K01_ID, k01_seed_on, k01_seed_rule, k01_warn_pct
 [不變式] ①旗標 `builder_rules.enabled` 關（預設）⇒ 不登記定義種類（`/api/definition-kinds` 與今天逐位元相同）、通用定義路由對 rule_set 一律『未知種類』或 404；
     ②**登記是懶登記**：只有旗標開時的規則路由會呼叫 `ensure_registered()`（匯入本檔不登記任何東西）；
     ③key＝規則主題（`rule_catalog.ENTITIES`），一個主題一份規則集；內容由 `rule_grammar.validate_rule_set` 驗證（同一份驗證器）；

@@ -2,7 +2,7 @@
 """規則文法與驗證器（BP-2 R0；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §4）。
 
 [單位] helper:rule_grammar    [層] L1    [穩定度] 實驗（旗標 builder_rules 關閉時沒有任何呼叫端）
-[公開介面] validate_rule_set, fields_used, OPS_BY_TYPE, LIMITS
+[公開介面] validate_rule_set, fields_used, OPS_BY_TYPE, LIMITS, LEVELS, MARK_KEYS, RULE_KEYS, SURFACES, TARGETS
 [不變式] ①宣告式：沒有運算式字串、沒有函式呼叫、沒有欄位對欄位的算式（只有『欄位 vs 常數』）；
     ②任何不在文法內的輸入一律回問題清單（不丟例外、不靜默丟掉）；
     ③本檔只 import 標準函式庫的 json／math／re／datetime，不 import 其他本專案模組（純函式，可單獨測）；
