@@ -2,7 +2,7 @@
 """案件執行階段樣板（S-ST1；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）：宣告式的階段清單（種類鍵、名稱、起迄天數、建議比例、前置階段）。
 
 [單位] helper:stage_templates    [層] L1    [穩定度] 實作（本刀只有定義、驗證、治理分類與旗標；套用端點與案件頁按鈕是 S-ST2）
-[公開介面] COMPARE_KEYS, KIND_VISIBLE_NAME, FIELD, GROUP, KIND, MAX_DAYS, MAX_STAGES, OFF_REASON, definition_problems, enabled, ensure_kind, stage_map
+[公開介面] COMPARE_KEYS, FIELD, GROUP, KIND, KIND_VISIBLE_NAME, LABEL_MAX, MAX_DAYS, MAX_STAGES, NAME_MAX, OFF_REASON, definition_problems, enabled, ensure_kind, stage_map
 [不變式] 設定 `builder_stage_templates.enabled`（預設 0＝關；且必須同時開啟 `builder_governance.enabled`）關著時：kind 不登記、定義路由 404（功能狀態閘門）、
     沒有任何程式讀這個定義——現有的階段新增／編輯／提醒／認列／結案關卡完全不受影響。
     範本只收宣告式資料：階段種類鍵 `key`（小寫英數底線，樣板內唯一，**建立後不可改**——比較函式以鍵配對，改鍵＝移除舊的＋新增新的）、
