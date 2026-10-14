@@ -7,6 +7,8 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>成本精算 — MOTRIX 專案管理系統</title>
   <script src="../static/legal-round.js"></script>
+  <script src="../static/public-flags.js"></script>
+  <script src="../static/status-chip.js"></script>
   <script src="../static/profit-rules.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
@@ -303,11 +305,11 @@
     <template x-if="settlement.status === 'finalized'">
       <span class="badge badge-finalized">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        精算完結
+        <span x-text="stLabel('finalized', 'settlement', '精算完結')">精算完結</span>
       </span>
     </template>
     <template x-if="settlement.status !== 'finalized'">
-      <span class="badge badge-draft">精算草稿</span>
+      <span class="badge badge-draft" x-text="stLabel('draft', 'settlement', '精算草稿')">精算草稿</span>
     </template>
   </div>
   <div class="stl-toolbar__right">
@@ -1193,9 +1195,15 @@ function settlementPage() {
     //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
     _initDone: false,
 
+    // S-X2：狀態顯示名稱（旗標關或沒改過 ⇒ 原字照印）；邏輯一律用原始值
+    stLabel(raw, ctx, fallback) {
+      return window.MotrixStatus ? window.MotrixStatus.label(raw, ctx, fallback) : (fallback != null ? fallback : (raw == null ? '' : raw))
+    },
+
     async init() {
       if (this._initDone) return
       this._initDone = true
+      if (window.MotrixStatus) window.MotrixStatus.init()      // 旗標關 ⇒ 什麼都不改
       const raw = localStorage.getItem('motrix_session')
       if (!raw) { location.href = 'login.html'; return }
       this.session = JSON.parse(raw)

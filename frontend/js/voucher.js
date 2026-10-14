@@ -14,6 +14,10 @@
 
 function voucherPage() {
   return {
+    // S-X2：狀態顯示名稱（旗標關或沒改過 ⇒ 原字照印）；邏輯一律用原始值
+    stLabel(raw, ctx, fallback) {
+      return window.MotrixStatus ? window.MotrixStatus.label(raw, ctx, fallback) : (fallback != null ? fallback : (raw == null ? '' : raw))
+    },
     // ── 單據 ──
     id: 0,                // 0 ＝ 尚未儲存的新單
     company: '',
@@ -139,6 +143,7 @@ function voucherPage() {
     },
 
     async init() {
+      if (window.MotrixStatus) window.MotrixStatus.init()      // S-X2：旗標關 ⇒ 什麼都不改
       // `JV28`：附件清單一換（開單、上傳、刪除）就重建縮圖。
       this.$watch('attachments', () => this.loadThumbs())
       // 🔁 日期**可選，預設今天**（使用者 2026-09-23 改裁）。

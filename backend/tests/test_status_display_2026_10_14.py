@@ -485,3 +485,33 @@ const M=require('./static/status-chip.js');
 Promise.all([M.init(),M.init()]).then(r=>console.log(JSON.stringify([r,urls])));"""
     assert node(code % "0") == [[False, False], ["flags:builder_status_display"]]                         # 旗標關：只讀旗標一次，不載入表
     assert node(code % "1") == [[False, False], ["flags:builder_status_display", "/api/status-display"]]    # 旗標開：多一個載入請求（這裡 server 回 enabled:false 所以仍是 False）
+
+
+# ── 第三批消費者：精算頁、傳票頁 ─────────────────────────────────────────────────
+def test_batch3_posted_key_is_approved_semantic_and_outside_the_chip_map_group():
+    assert S._SEMANTIC["已過帳"] == "approved" and S._GROUP["已過帳"] == "voucher" and S.defaults()["已過帳"]["tone"] == "approved"
+    assert S.compare({"statuses": {}}, {"statuses": {"已過帳": {"label": "已入帳"}}})[0] == "loosen"
+    assert v({"待審核": {"label": "已過帳"}}) and v({"待審核": {"label": "已 過 帳"}})                    # 一般狀態不能冒用
+
+
+def test_batch3_pages_wire_the_helper_without_changing_logic():
+    st = (FRONT / "pages/settlement.html").read_text(encoding="utf-8")
+    assert "stLabel('draft', 'settlement', '精算草稿')" in st and "stLabel('finalized', 'settlement', '精算完結')" in st
+    assert "settlement.status === 'finalized'" in st and "window.MotrixStatus.init()" in st and "status-chip.js" in st
+    vo = (FRONT / "pages/voucher.html").read_text(encoding="utf-8")
+    assert vo.count("stLabel(") == 2 and "v.status === '已過帳' ? 'posted'" in vo and "status === '已過帳' ? 'posted'" in vo
+    js = (FRONT / "js/voucher.js").read_text(encoding="utf-8")
+    assert "stLabel(raw, ctx, fallback)" in js and "window.MotrixStatus.init()" in js and "status==='草稿' && !voidedAt" in js.replace(" ", "")
+
+
+@pytest.mark.skipif(not NODE, reason="需要 node")
+def test_batch3_voucher_and_settlement_expressions_equal_the_old_ones_when_not_loaded():
+    code = """global.window={};const M=require('./static/status-chip.js');window.MotrixStatus=M;
+const stLabel=(raw,ctx,fb)=>window.MotrixStatus.label(raw,ctx,fb);
+const out=[];
+for (const voided of ['', null, '2026-10-01T00:00:00'])
+  for (const status of ['草稿','待審核','簽核中','已核准','已過帳','',null,undefined])
+    out.push([stLabel(voided ? '已作廢' : status), voided ? '已作廢' : status]);
+out.push([stLabel('draft','settlement','精算草稿'),'精算草稿'],[stLabel('finalized','settlement','精算完結'),'精算完結']);
+console.log(JSON.stringify(out.every(p=>(p[0]==null?'':p[0])===(p[1]==null?'':p[1]))));"""
+    assert node(code) is True
