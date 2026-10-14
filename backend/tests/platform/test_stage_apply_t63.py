@@ -180,12 +180,18 @@ def test_append_only_adds_missing_kinds_without_ratio(client, make_user, on):
 @needs_case
 def test_unknown_template_bad_date_and_permission(client, make_user, on):
     h = _login(client, make_user, "st2_perm")
-    hn = _login(client, make_user, "st2_noperm", "admin", modules=["customer"])
+    hn = _login(client, make_user, "st2_noperm", "engineer", modules=["customer"])        # 非 admin、不是業務、沒有 case_manage
+    hm = _login(client, make_user, "st2_cm", "engineer", modules=["case_manage"])
+    ha = _login(client, make_user, "st2_admin", "admin", modules=["customer"])
     _case("MQ-ST2-C")
     _publish_tpl("std", TPL)
     assert client.post(URL % "MQ-ST2-C", headers=h, json={"template": "nope", "mode": "new"}).status_code == 404
     assert client.post(URL % "MQ-ST2-C", headers=h, json={"template": "std", "mode": "new", "baseDate": "2026/10/01"}).status_code == 400
-    assert client.post(URL % "MQ-ST2-C", headers=hn, json={"template": "std", "mode": "new"}).status_code in (401, 403)
+    # 看不到＝不存在（M01-O1，_guard_case／deny_case）：沒有權限的人拿到 404，跟查無此案同一個回應；權限規則與 create_case_stage 相同
+    assert client.post(URL % "MQ-ST2-C", headers=hn, json={"template": "std", "mode": "new"}).status_code == 404
+    assert client.post(URL % "MQ-ST2-C", headers=hm, json={"template": "std", "mode": "new", "dryRun": True}).status_code == 200      # case_manage 放行（執行面）
+    assert client.post(URL % "MQ-ST2-C", headers=ha, json={"template": "std", "mode": "new", "dryRun": True}).status_code == 200      # admin+ 直通（owner scope 的 bypass），與新增階段一致
+    assert client.post("/api/quotations/MQ-ST2-C/stages", headers=hn, json={"label": "x"}).status_code == 404                        # 對照：既有端點同一個結果
     assert client.post(URL % "MQ-ST2-C", json={"template": "std", "mode": "new"}).status_code in (401, 403)
     assert _q("SELECT id FROM case_stages WHERE quote_no=?", "MQ-ST2-C") == []
 
@@ -283,8 +289,13 @@ def _read(rel):
     return (Path(__file__).resolve().parents[3] / rel).read_text(encoding="utf-8")
 
 
+def _page(name):
+    from core import source_tree
+    return source_tree.page_file(name).read_text(encoding="utf-8")
+
+
 def test_case_page_wiring_is_flag_gated_and_registered():
-    html = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
+    html = _page("case-management.html")
     js = _read("frontend/js/case-management-exec.js")
     mod = json.loads(_read("backend/modules/case/module.json"))
     # 旗標：同一次設定請求（附在名單最後面）；關著 ⇒ stOn=false ⇒ 按鈕與對話框都不顯示、不送請求
@@ -364,7 +375,7 @@ def test_write_takes_the_lock_before_reading_stages_but_preview_does_not(client,
     client.post(URL % "MQ-ST2-K", headers=h, json={"template": "std", "mode": "new", "baseDate": "2026-10-01", "dryRun": True})
     assert seen == []                                                               # 預覽不拿寫鎖
     r = client.post(URL % "MQ-ST2-K", headers=h, json={"template": "std", "mode": "new", "baseDate": "2026-10-01"})
-    assert r.status_code == 200 and seen == [1]
+    assert r.status_code == 200 and seen == [1, 1]       # 第一次＝套用前先拿寫鎖（讀現有階段之前）；第二次＝commit 後 _sync_stages_to_json 鏡像寫回自己再拿一次
     # 第二個（等同兩個同時請求裡慢的那個）看到的是第一個已寫入的階段 ⇒ 409，不會再建一組
     r2 = client.post(URL % "MQ-ST2-K", headers=h, json={"template": "std", "mode": "new", "baseDate": "2026-10-01"})
     assert r2.status_code == 409 and len(_q("SELECT id FROM case_stages WHERE quote_no=?", "MQ-ST2-K")) == 3
@@ -398,13 +409,14 @@ def test_preview_dialog_ignores_stale_responses_static():
 
 def test_default_stage_seed_is_skipped_only_when_flag_on_and_template_published_static():
     core = _read("frontend/js/case-management-core.js")
-    seed = core[core.index("async _seedDefaultStagesIfEmpty"):core.index("caseReadOnly()")]
+    a = core.index("async _seedDefaultStagesIfEmpty")
+    seed = core[a:core.index("caseReadOnly()", a)]               # 結尾要從起點之後找：第一個 caseReadOnly() 在更前面（canUploadSignedBack），切出來會是空字串
     assert "if (this._stFlag) { await this.stInit(); if (this.stTpl.length) return }" in seed        # 旗標開＋有樣板才跳過
     assert "this._stFlag === undefined && this._layoutP" in seed                                   # 旗標還沒讀完才等；讀完／關著 ⇒ 不多等
     assert seed.index("_stFlag") < seed.index("const labels = ['訂單確認'")                         # 決定在建立 5 個預設階段之前
-    html = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
-    assert "d._layoutP = d.initLayout()" in html and "已發布階段樣板時，空白案件不會再自動建立 5 個預設階段" in html
-    form = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")
+    html = _page("case-management.html")
+    assert "d._layoutP = d.initLayout()" in html and "已發布階段樣板時，沒有階段的案件不會再自動建立 5 個預設階段" in html
+    form = _page("quotation-form.html")
     assert "['builder_layout', 'builder_custom_fields', 'builder_stage_templates']" in form
     f = form[form.index("async _seedDefaultStagesIfEmpty"):]
     f = f[:f.index("async doUnlock")]
@@ -415,7 +427,7 @@ def test_default_stage_seed_is_skipped_only_when_flag_on_and_template_published_
 def test_user_facing_copy_is_plain_language_static():
     js = _read("frontend/js/case-management-exec.js")
     assert "stSummary()" in js and "按下「建立階段」會在這個案件新增" in js and "已有的階段不會被改動" in js
-    html = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
+    html = _page("case-management.html")
     assert 'data-testid="st-summary"' in html and "基準日（從哪一天開始算）" in html
     ed = _read("frontend/static/stage-template-editor.js")
     assert "種類鍵" not in ed[ed.index("function problems"):ed.index("function setBody")]          # 畫面上的字不用內部術語
