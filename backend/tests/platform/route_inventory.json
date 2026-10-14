@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 843,
-  "endpoints_api": 839,
-  "write_total": 460,
-  "write_api": 460,
-  "get_api": 379,
-  "distinct_paths_api": 705,
-  "write_with_body_api": 334,
-  "write_with_path_param_api": 335
+  "endpoints_total": 848,
+  "endpoints_api": 844,
+  "write_total": 461,
+  "write_api": 461,
+  "get_api": 383,
+  "distinct_paths_api": 710,
+  "write_with_body_api": 335,
+  "write_with_path_param_api": 336
  },
  "select_star": {
   "modules": 276,
@@ -694,6 +694,16 @@
    "body": false
   },
   "GET /api/contractors/{cid}/privacy-notice": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/custom-fields/{record_type}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/custom-fields/{record_type}/usage": {
    "w": false,
    "pp": 1,
    "body": false
@@ -2121,6 +2131,16 @@
   "GET /api/user-activity/trail": {
    "w": false,
    "pp": 0,
+   "body": false
+  },
+  "GET /api/user-buttons/catalog": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/user-buttons/{module}/{page}": {
+   "w": false,
+   "pp": 2,
    "body": false
   },
   "GET /api/users": {
@@ -3796,6 +3816,11 @@
   "POST /api/tender-radar/watches": {
    "w": true,
    "pp": 0,
+   "body": true
+  },
+  "POST /api/user-buttons/{module}/{page}/preview": {
+   "w": true,
+   "pp": 2,
    "body": true
   },
   "POST /api/users": {

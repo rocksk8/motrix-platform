@@ -203,6 +203,8 @@ def diff(base: dict, now: dict) -> dict:
     changed = {}
     for p in set(base) & set(now):
         b, n = base[p], now[p]
+        if 429 in (b.get("s"), n.get("s")):      # 被限流的回應不帶鍵集資訊；哪幾條被限流取決於本次請求順序（新增路由會挪動），不算差異
+            continue
         if (b.get("s", 0) // 100) != (n.get("s", 0) // 100) or b.get("k") != n.get("k") or _mask_dates(b.get("hdr")) != _mask_dates(n.get("hdr")):
             changed[p] = (b, n)
     return {"missing": sorted(set(base) - set(now)), "added": sorted(set(now) - set(base)), "changed": changed}
