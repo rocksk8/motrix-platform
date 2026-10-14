@@ -35870,11 +35870,15 @@
     "js:js/remit-kinds-settings.js",
     "js:static/layout-editor.js",
     "js:static/menu-editor.js",
+    "plat:__init__",
+    "plat:registry",
     "router:def_governance",
     "router:definitions"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/settings_registry.py",
@@ -35900,6 +35904,10 @@
      "frontend/static/menu-editor.js"
     ]
    },
+   "unresolved_api": [
+    "/api/def-governance/layout",
+    "/api/def-governance/layout/{}"
+   ],
    "login_fixture": true
   },
   "backend/tests/test_tax_basis_r2_2026_09_25.py": {

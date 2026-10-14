@@ -20176,25 +20176,25 @@
    "routes": [
     {
      "func": "pending_changes",
-     "line": 253,
+     "line": 254,
      "method": "GET",
      "path": "/api/def-pipeline/pending"
     },
     {
      "func": "approve_change",
-     "line": 272,
+     "line": 273,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/approve"
     },
     {
      "func": "activate_change",
-     "line": 288,
+     "line": 289,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/activate"
     },
     {
      "func": "cancel_change",
-     "line": 313,
+     "line": 314,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/cancel"
     }
