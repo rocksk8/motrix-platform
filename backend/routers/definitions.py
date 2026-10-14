@@ -391,18 +391,44 @@ def _preview_gate(conn, kind, key, scope, user, preview_hash, expect=None):
 _OPT_IN_PREVIEW_KINDS = ("layout", "custom_fields", "user_buttons", "output_template")
 
 
+def _now_iso():
+    from datetime import datetime
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def _strict_setting(conn, group, field):
+    """設定值的**嚴格**讀取（把關專用）：資料庫讀不到、內容格式不對、值不是 0／1 ⇒ 丟例外（由 `_preview_enforced` 轉成 503，不放行）。
+    不用 `settings_registry.get`：它『永不丟例外』，讀取失敗會回預設（＝關），等於悄悄打開閘門；`MOTRIX_SETTINGS_DEFAULTS_ONLY=1`
+    也會讓它回預設——安全把關不受那個逃生口影響（照管理者已儲存的值判斷）。沒有儲存過的欄位 ⇒ 程式預設（這是正常情況，不是錯誤）。"""
+    from helpers import settings_registry as SR
+    row = D.get(conn, SR.KIND, group, SR.SCOPE)                        # 資料庫錯誤在此丟出，不吞
+    val = SR._defaults(group)[field]
+    if row is not None:
+        vals = (row.get("body") or {}).get("values")
+        if not isinstance(vals, dict):
+            raise ValueError("設定群組 %s 的內容格式不對" % group)
+        if field in vals:
+            val = vals[field]
+    for r in SR._due_pending(conn, group, _now_iso()):      # 已到時的待生效值（例如放寬後的『關閉強制』）
+        if r["field"] == field:
+            val = r["new"]
+    if isinstance(val, bool) or val not in (0, 1):
+        raise ValueError("設定 %s.%s 的值不是 0／1：%r" % (group, field, val))
+    return int(val)
+
+
 def _opt_in_enforced(conn, kind) -> bool:
-    """嚴格讀取：讀不到會丟例外（由 `_preview_enforced` 轉成 503，不放行）。不在選項名單的 kind ⇒ False（不讀設定）。"""
+    """嚴格讀取（見 `_strict_setting`）。不在選項名單的 kind ⇒ False（不讀設定）。**獨立於 `builder_governance.enabled`**：
+    管理者開了某類的強制之後，關掉總開關也不會繞過它（要關強制只能關 enforce_<kind>，那是 loosen＝經確認期間與第二位核准）。"""
     if kind not in _OPT_IN_PREVIEW_KINDS:
         return False
-    from helpers import settings_registry as R
-    return int(R.get("builder_governance", "enforce_" + kind, conn=conn)) == 1
+    return _strict_setting(conn, "builder_governance", "enforce_" + kind) == 1
 
 
 def _governance_enabled(conn=None) -> bool:
-    """嚴格讀取：讀不到會丟例外（只有『可能被強制的 kind』才會走到這裡，見 `_preview_enforced`）。"""
-    from helpers import settings_registry as R
-    return int(R.get("builder_governance", "enabled", conn=conn)) == 1
+    """嚴格讀取（見 `_strict_setting`）。內建強制名單（費用單據類型／匯款款別／自訂模組）跟著總開關走——關總開關即停止強制，這是 T60 S1 的既有行為，
+    已在文件寫明（要不可繞過請改用各自的 enforce_ 開關，目前只有選項名單內的 kind 有）。"""
+    return _strict_setting(conn, "builder_governance", "enabled") == 1
 
 
 def _preview_enforced(conn, kind) -> bool:
@@ -411,9 +437,9 @@ def _preview_enforced(conn, kind) -> bool:
     if kind not in _PREVIEW_ENFORCED_KINDS and kind not in _OPT_IN_PREVIEW_KINDS:
         return False
     try:
-        if not _governance_enabled(conn):
-            return False
-        return kind in _PREVIEW_ENFORCED_KINDS or _opt_in_enforced(conn, kind)
+        if kind in _PREVIEW_ENFORCED_KINDS:
+            return _governance_enabled(conn)
+        return _opt_in_enforced(conn, kind)
     except Exception:                                                  # noqa: BLE001
         logging.getLogger(__name__).exception("preview gate: 讀不到強制預覽設定（kind=%s），發布／還原被擋下", kind)
         raise HTTPException(503, "暫時無法確認『發布前強制預覽』的設定，為安全起見已擋下這次操作，請稍後再試")
@@ -428,7 +454,8 @@ def _restore_gate(conn, kind, key, scope, user, version, preview_hash):
     if old is None or old["status"] != "published":
         return None                                                    # 讓還原自己說『找不到這一版』
     from routers import def_governance as _gv
-    return _preview_gate(conn, kind, key, scope, user, preview_hash, expect=_gv.version_stamp(version, old["body"]))
+    live = D.get(conn, kind, key, scope)                                # 戳綁定『現在生效的版本』：預覽之後又發布過別版 ⇒ 戳對不上 ⇒ 要重新預覽
+    return _preview_gate(conn, kind, key, scope, user, preview_hash, expect=_gv.version_stamp(version, old["body"], (live or {}).get("version")))
 
 
 @router.post("/api/definitions/{kind}/{key}/publish")
@@ -446,8 +473,11 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
         _gate = _preview_gate(conn, kind, key, scope, u["username"], _pv if isinstance(_pv, str) else None)
         if _gate:
             return JSONResponse({"detail": _gate[1], "code": _gate[0]}, status_code=409)
-        if base_etag is None and isinstance(_pv, str) and _pv and _preview_enforced(conn, kind):
-            base_etag = _pv                                             # T62 B：閘門比對的就是這份草稿戳 ⇒ 寫鎖內再比一次（閘門與發布之間草稿被改 ⇒ DraftConflict 409）
+        if isinstance(_pv, str) and _pv and _preview_enforced(conn, kind):
+            # T62 B：強制範圍內，寫鎖內比對的**永遠是看過預覽的那個戳**；呼叫端另外帶了不同的 base_etag ⇒ 兩邊對不上 ⇒ 409 draft_conflict（不發布）
+            if base_etag is not None and base_etag != _pv:
+                return _err(D.DraftConflict("你載入的草稿與看過預覽的草稿不是同一份，未發布", {"etag": _pv}))
+            base_etag = _pv
         from routers import def_pipeline as _pl                          # T60 S2：旗標開、名單內的 kind ⇒ 放寬先待核准、收緊立即（其餘 ⇒ None，照舊）
         _piped = _pl.handle_publish(conn, kind, key, scope, u, (payload or {}).get("note", ""), base_etag, authorization)
         if _piped is not None:

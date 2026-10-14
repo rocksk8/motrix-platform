@@ -100,11 +100,11 @@ def version_diff(conn, kind, key, scope, a, b) -> dict:
     return {"a": str(a), "b": str(b), "changes": D.diff(_body(conn, kind, key, scope, a), _body(conn, kind, key, scope, b))}
 
 
-def version_stamp(version, body) -> str:
-    """還原預覽的雜湊：`v<版本>:<該版內容的 sha256 前 16 碼>`。已發布版本不可變，所以同一版永遠同一個戳。"""
+def version_stamp(version, body, live_version=None) -> str:
+    """還原預覽的雜湊：`v<版本>@live<目前生效版>:<該版內容的 sha256 前 16 碼>`。綁定生效版：預覽之後又發布過別版，舊的預覽就不能用來還原。"""
     import hashlib
     import json
-    return "v%d:%s" % (int(version), hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()[:16])
+    return "v%d@live%s:%s" % (int(version), int(live_version or 0), hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()[:16])
 
 
 def impact_of_restore(conn, kind, key, scope, version) -> dict:
@@ -116,7 +116,7 @@ def impact_of_restore(conn, kind, key, scope, version) -> dict:
     live = D.get(conn, kind, key, scope)
     problems = D.validate(kind, key, old["body"])
     return {"kind": kind, "key": key, "scope": scope, "restoreVersion": int(version), "liveVersion": (live or {}).get("version"),
-            "previewHash": version_stamp(version, old["body"]), "changes": D.diff((live or {}).get("body") or {}, old["body"]),
+            "previewHash": version_stamp(version, old["body"], (live or {}).get("version")), "changes": D.diff((live or {}).get("body") or {}, old["body"]),
             "validation": {"ok": not problems, "problems": problems}, "warnings": [RESTORE_WARNING],
             "note": "還原會把這一版再發布成新的一版；歷史不改。"}
 
@@ -154,7 +154,14 @@ def _gate(authorization, kind):
     """先驗身分（未登入 ⇒ 401，與其他路由一致），再看旗標與 kind；通過回連線（呼叫端關閉）。"""
     _require_user(authorization, require_superadmin=True)
     conn = get_db()
-    if not enabled(conn) or kind not in kinds():
+    on = enabled(conn)
+    if not on and kind in kinds():
+        try:                                                           # T62：某類的『強制預覽』已開 ⇒ 預覽路由要能用（否則關掉總開關會讓該類無法發布）
+            from routers import definitions as _d
+            on = _d._opt_in_enforced(conn, kind)
+        except Exception:                                              # noqa: BLE001
+            on = False
+    if not on or kind not in kinds():
         conn.close()
         raise HTTPException(404, "Not Found")
     return conn

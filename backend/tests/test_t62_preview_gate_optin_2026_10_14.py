@@ -105,8 +105,8 @@ def test_restore_is_gated_with_a_version_preview(client, hdr, monkeypatch):
     r = client.post(LAYOUT + "/restore/1", headers=hdr, json={})
     assert r.status_code == 409 and r.json()["code"] == "preview_required"
     pv = client.get("/api/def-governance/layout/module:suppliers/impact?version=1", headers=hdr).json()
-    assert pv["restoreVersion"] == 1 and pv["previewHash"].startswith("v1:")
-    assert client.post(LAYOUT + "/restore/1", headers=hdr, json={"preview_hash": "v1:0000000000000000"}).status_code == 409
+    assert pv["restoreVersion"] == 1 and pv["previewHash"].startswith("v1@live")
+    assert client.post(LAYOUT + "/restore/1", headers=hdr, json={"preview_hash": "v1@live1:0000000000000000"}).status_code == 409
     assert client.post(LAYOUT + "/restore/1", headers=hdr, json={"preview_hash": pv["previewHash"]}).status_code == 200
 
 
@@ -132,16 +132,78 @@ def test_publish_is_pinned_to_the_previewed_draft_in_the_write_lock(client, hdr,
     assert seen["base_etag"] == h                                    # 發布一定帶著預覽戳進寫鎖
 
 
-def test_unreadable_enforcement_setting_blocks_instead_of_allowing(client, hdr, monkeypatch):
+def _fail_setting_reads(monkeypatch):
+    """讓『資料庫讀設定』失敗（不是換掉包裝函式）：設定群組存在定義表裡，kind＝setting_group 的讀取一律丟錯。"""
     from helpers import settings_registry as SR
-    _layout_draft(client, hdr)
+    real = R.D.get
 
-    def boom(*a, **k):
-        raise RuntimeError("settings down")
-    monkeypatch.setattr(SR, "get", boom)
+    def flaky(conn, kind, *a, **k):
+        if kind == SR.KIND:
+            raise RuntimeError("database is locked")
+        return real(conn, kind, *a, **k)
+    monkeypatch.setattr(R.D, "get", flaky)
+
+
+def test_unreadable_enforcement_setting_blocks_instead_of_allowing(client, hdr, monkeypatch):
+    _layout_draft(client, hdr)
+    _fail_setting_reads(monkeypatch)
     r = client.post(LAYOUT + "/publish", headers=hdr, json={"note": "n"})
     assert r.status_code == 503
     assert client.post(LAYOUT + "/restore/1", headers=hdr, json={}).status_code == 503
+
+
+def _enable_layout_enforcement(only_layout=True):
+    import db
+    from helpers import settings_registry as SR
+    c = db.get_db()
+    try:
+        vals = {"enforce_layout": 1} if only_layout else {"enabled": 1, "enforce_layout": 1}
+        SR.publish("builder_governance", vals, reason="t62", user="t62_sa", conn=c)
+        c.commit()
+    finally:
+        c.close()
+
+
+def test_defaults_only_escape_hatch_does_not_open_the_gate(client, hdr, monkeypatch):
+    _enable_layout_enforcement()
+    _layout_draft(client, hdr)
+    monkeypatch.setenv("MOTRIX_SETTINGS_DEFAULTS_ONLY", "1")
+    r = client.post(LAYOUT + "/publish", headers=hdr, json={"note": "n"})
+    assert r.status_code == 409 and r.json()["code"] == "preview_required"
+
+
+def test_turning_the_master_switch_off_does_not_bypass_an_enabled_enforcement(client, hdr):
+    """enforce_layout=1、builder_governance.enabled=0：仍強制；預覽路由仍可用（否則該類永遠無法發布）。"""
+    _enable_layout_enforcement()
+    _layout_draft(client, hdr)
+    assert client.post(LAYOUT + "/publish", headers=hdr, json={"note": "n"}).status_code == 409
+    j = client.get("/api/def-governance/layout/module:suppliers/impact", headers=hdr)
+    assert j.status_code == 200
+    assert client.post(LAYOUT + "/publish", headers=hdr, json={"note": "n", "preview_hash": j.json()["previewHash"]}).status_code == 200
+
+
+def test_caller_base_etag_that_differs_from_the_previewed_hash_conflicts(client, hdr, monkeypatch):
+    _enforce(monkeypatch, {"layout"})
+    _layout_draft(client, hdr)
+    h1 = client.get("/api/def-governance/layout/module:suppliers/impact", headers=hdr).json()["previewHash"]
+    r = client.post(LAYOUT + "/publish", headers=hdr, json={"note": "n", "preview_hash": h1, "base_etag": "0123456789abcdef"})
+    assert r.status_code == 409 and r.json().get("code") == "draft_conflict"
+
+
+def test_restore_preview_is_bound_to_the_live_version(client, hdr, monkeypatch):
+    """預覽之後又發布了別的版本 ⇒ 舊預覽不能再用來還原（戳含生效版）。"""
+    _enforce(monkeypatch, set())
+    for n in ("a", "b"):
+        client.put(LAYOUT + "/draft", headers=hdr, json={"body": {"ops": []}, "note": n})
+        assert client.post(LAYOUT + "/publish", headers=hdr, json={"note": n}).status_code == 200
+    _enforce(monkeypatch, {"layout"})
+    pv = client.get("/api/def-governance/layout/module:suppliers/impact?version=1", headers=hdr).json()["previewHash"]
+    monkeypatch.setattr(R, "_opt_in_enforced", lambda conn, kind: False)
+    client.put(LAYOUT + "/draft", headers=hdr, json={"body": {"ops": []}, "note": "c"})
+    assert client.post(LAYOUT + "/publish", headers=hdr, json={"note": "c"}).status_code == 200      # 生效版變成 3
+    monkeypatch.setattr(R, "_opt_in_enforced", lambda conn, kind: kind == "layout")
+    r = client.post(LAYOUT + "/restore/1", headers=hdr, json={"preview_hash": pv})
+    assert r.status_code == 409 and r.json()["code"] == "preview_stale"
 
 
 def test_unknown_kind_never_reads_the_setting(monkeypatch):

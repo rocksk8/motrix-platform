@@ -5,7 +5,7 @@
 ## 管理者出貨後可以設定什麼
 設定中心「建構器治理」多四個開關（預設全 0）：**版面（含選單）／自訂欄位／自訂按鈕／輸出版型 發布前強制先看過影響預覽**。
 - 開啟＝該類定義發布時，必須帶「看過的預覽雜湊」（同一位使用者、同一份草稿），否則 409（`preview_required`／`preview_stale`），沒有例外。
-- 前提：`builder_governance.enabled=1`；它關著時四個開關都不作用。
+- 四個 `enforce_*` 獨立於總開關：開了之後即使把 `builder_governance.enabled` 關掉也**仍然強制**（預覽路由對已強制的 kind 仍可用）；要解除只能關 `enforce_*`（loosen＝確認期間＋第二位核准）。內建三個 kind（費用單據類型／匯款款別／自訂模組）仍跟著總開關走（T60 S1 既有行為；關總開關＝停止強制，只留設定變更稽核）——這是已知且明說的缺口。
 - 選單編輯器：發布前自動把每個模組剛存的版面草稿送去影響預覽並帶回雜湊（使用者已在編輯器內看過整份選單預覽，且草稿一改就必須重預覽）。
 
 ## 為何做成逐項開關
@@ -34,6 +34,12 @@ if (window.MotrixDefGovernance && await MotrixDefGovernance.available('layout'))
 - C 讀不到設定不再放行：可能被強制的 kind（內建名單＋選項名單）若讀 `builder_governance` 失敗 ⇒ 503＋日誌，擋下發布與還原；其他 kind 完全不讀設定（與今天相同）。
 - D 四個 `enforce_*` 是 `loosen="down"`：關閉強制走確認期間＋第二位最高管理者核准，等待期間仍強制。**取捨**：緊急回退不能靠關這四項即時生效；整體即時回退仍是關 `builder_governance.enabled`（它沒有加 loosen，維持 t59 行為）。
 - 回應碼：`preview_required`／`preview_stale` 與 `draft_conflict` 同為 409，用戶端依 `code` 分辨。
+
+## 04 靜態審查後的第二輪修正
+- C（真修）：把關改用**嚴格讀取** `_strict_setting`（直接查定義表＋到時的待生效值；資料庫錯誤、格式不對、值不是 0／1 ⇒ 503，不再經 `settings_registry.get` 的『永不丟例外、回預設』）；`MOTRIX_SETTINGS_DEFAULTS_ONLY=1` 不影響把關。測試改成讓資料庫讀取失敗（不是換掉包裝函式）。
+- B：強制範圍內**一律**以 `preview_hash` 當寫鎖內比對的 `base_etag`；呼叫端另帶不同的 `base_etag` ⇒ 409 `draft_conflict`。
+- D：不替總開關加 loosen（會拖慢 t59 的即時回退）；改成讓 `enforce_*` 獨立於總開關（上節），關總開關繞不過它；內建三個 kind 的缺口明寫。
+- LOW：還原預覽的戳改成 `v<版本>@live<生效版>:<內容戳>`，預覽之後又發布過別版 ⇒ 戳對不上 ⇒ `preview_stale`。
 
 ## 已知缺口
 1. 版面／欄位／按鈕／版型的編輯器除選單外都尚未送雜湊（上節）。
