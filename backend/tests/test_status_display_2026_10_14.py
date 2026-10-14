@@ -417,3 +417,71 @@ def test_m1b_ordinary_good_names_pass():
 def test_s4_editor_escapes_attribute_values():
     src = (FRONT / "js/status-display-editor.js").read_text(encoding="utf-8")
     assert "esc(c) + ':' + esc(k)" in src and "'<option value=\"' + esc(t) + '\"'" in src
+
+
+# ── 第二批消費者：出納、請款單、報表 ─────────────────────────────────────────────────
+def test_batch2_keys_are_code_owned_display_only():
+    d = S.defaults()
+    assert d["已收款"]["tone"] == "paid" and S._SEMANTIC["已收款"] == "paid" and S._SEMANTIC["差額已核可"] == "approved"
+    assert d["待收款"]["tone"] == "pending" and d["差額待審核"]["tone"] == "pending"
+    assert S.compare({"statuses": {}}, {"statuses": {"已收款": {"label": "款已入帳"}}})[0] == "loosen"       # 付款類改名 = 放寬
+    assert S.compare({"statuses": {}}, {"statuses": {"差額已核可": {"label": "差額放行"}}})[0] == "loosen"    # 核准類改名 = 放寬
+    assert S.compare({"statuses": {}}, {"statuses": {"待收款": {"label": "等收款"}}})[0] == "neutral"
+    assert v({"待收款": {"label": "已收款"}}) and v({"差額待審核": {"label": "差額已核可"}})                   # 一般狀態不能冒用
+
+
+def test_batch2_pages_wire_the_helper_without_changing_logic():
+    cash = (FRONT / "pages/cashier.html").read_text(encoding="utf-8")
+    assert "stLabel(it.received ? '已收款' : '待收款', 'cashier')" in cash and ":class=\"it.received ? 'rb-received' : 'rb-pending'\"" in cash
+    assert "public-flags.js" in cash and "status-chip.js" in cash
+    js = (FRONT / "js/cashier.js").read_text(encoding="utf-8")
+    assert "window.MotrixStatus.init(" in js and "this.stLabel(raw, 'cashier', raw)" in js and "decision === 'approve'" in js
+    pr = (FRONT / "pages/payment-request.html").read_text(encoding="utf-8")
+    assert "MotrixStatus.label(e.status, 'cashier')" in pr and "e.status === '已核准'" in pr and "MotrixStatus.chipClass(e.status)" in pr
+    form = (FRONT / "pages/payment-request-form.html").read_text(encoding="utf-8")
+    assert "MotrixStatus.badgeClass(this.q.status, base)" in form
+    rep = (FRONT / "pages/reports.html").read_text(encoding="utf-8")
+    assert rep.count("stLabel(it.dealTag, 'report')") == 2 and rep.count("stLabel(c.dealTag, 'report')") == 2 and "stLabel(mc.dealTag, 'report')" in rep
+    assert "stLabel('finalized', 'report', '已結算')" in rep and "stLabel('finalized', 'report', '已定稿')" in rep       # 兩處今天就不同：各自保留 fallback
+    assert ":class=\"it.dealTag==='已結案'?'rb-closed':'rb-active'\"" in rep                                          # class 與判斷不動
+    assert "window.MotrixStatus.init()" in (FRONT / "js/reports.js").read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(not NODE, reason="需要 node")
+def test_batch2_expressions_equal_the_old_ones_when_the_table_is_not_loaded():
+    code = """global.window={};const M=require('./static/status-chip.js');window.MotrixStatus=M;
+const stLabel=(raw,ctx,fb)=>window.MotrixStatus.label(raw,ctx,fb);
+const out=[];
+for (const received of [true,false]) out.push([ stLabel(received ? '已收款' : '待收款','cashier'), received ? '已收款' : '待收款' ]);
+const remit=(s)=>{const raw=s==='pending'?'差額待審核':(s==='approved'?'差額已核可':'');return raw?stLabel(raw,'cashier',raw):''};
+const remitOld=(s)=>s==='pending'?'差額待審核':(s==='approved'?'差額已核可':'');
+for (const s of ['pending','approved','',null,undefined,'weird']) out.push([remit(s),remitOld(s)]);
+for (const st of ['finalized','draft','',null]) {
+  out.push([st==='finalized'?stLabel('finalized','report','已結算'):stLabel('draft','report','草稿'), st==='finalized'?'已結算':'草稿']);
+  out.push([st==='finalized'?stLabel('finalized','report','已定稿'):stLabel('draft','report','草稿'), st==='finalized'?'已定稿':'草稿']);
+}
+for (const t of ['已成案','已結案','未成案','已提供','','x']) out.push([stLabel(t,'report'), t]);
+console.log(JSON.stringify(out.every(p=>p[0]===p[1])));"""
+    assert node(code) is True
+
+
+@pytest.mark.skipif(not NODE, reason="需要 node")
+def test_batch2_loaded_table_changes_only_what_the_admin_changed():
+    table = S.effective_table({"statuses": {"待收款": {"label": "等收款"}, "差額待審核": {"names": {"cashier": "差額覆核中"}}, "已結案": {"names": {"report": "完結"}}}})
+    changed = S.changed_fields(table)
+    code = "global.window={};const M=require('./static/status-chip.js');window.MotrixStatus=M;M.apply({enabled:true,statuses:%s,changed:%s});" % (
+        json.dumps(table, ensure_ascii=False), json.dumps(changed, ensure_ascii=False)) + \
+        "console.log(JSON.stringify([M.label('待收款','cashier'),M.label('已收款','cashier'),M.label('差額待審核','cashier','差額待審核'),M.label('差額已核可','cashier','差額已核可'),M.label('已結案','report'),M.label('已結案','case'),M.label('已成案','report')]))"
+    assert node(code) == ["等收款", "已收款", "差額覆核中", "差額已核可", "完結", "已結案", "已成案"]
+
+
+@pytest.mark.skipif(not NODE, reason="需要 node")
+def test_init_reads_the_flag_once_and_loads_only_when_on():
+    code = """global.window={};global.localStorage={getItem:()=>JSON.stringify({token:'t'})};
+let urls=[];
+window.MotrixPublicFlags={read:async(g)=>{urls.push('flags:'+g.join(','));return {builder_status_display:{enabled:%s}}}};
+global.fetch=(u)=>{urls.push(u);return Promise.resolve({ok:true,json:()=>Promise.resolve({enabled:false})})};
+const M=require('./static/status-chip.js');
+Promise.all([M.init(),M.init()]).then(r=>console.log(JSON.stringify([r,urls])));"""
+    assert node(code % "0") == [[False, False], ["flags:builder_status_display"]]                         # 旗標關：只讀旗標一次，不載入表
+    assert node(code % "1") == [[False, False], ["flags:builder_status_display", "/api/status-display"]]    # 旗標開：多一個載入請求（這裡 server 回 enabled:false 所以仍是 False）

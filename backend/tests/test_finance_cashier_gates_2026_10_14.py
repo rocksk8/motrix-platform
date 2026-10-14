@@ -94,7 +94,7 @@ def test_cashier_js_defaults_and_wiring():
     assert "dueSoonDays: 7," in js and "plannedSoonDays: 3," in js
     assert "soon.setDate(soon.getDate() + this.dueSoonDays)" in js and "diff <= this.plannedSoonDays" in js
     assert "soon.getDate() + 7" not in js and "diff <= 3 ?" not in js
-    assert "custom_due_soon !== 1" in js and "/api/settings-center/public?groups=finance_cashier" in js
+    assert "custom_due_soon !== 1" in js and "MotrixPublicFlags.read(['finance_cashier', 'builder_status_display']" in js
     assert "this.loadDueSoonDays()" in js and js.count("loadDueSoonDays") == 2 + 0 or js.count("loadDueSoonDays") >= 2
     html = (FRONT / "pages/cashier.html").read_text(encoding="utf-8")
     assert html.count("plannedSoonDays + ' 天內到期'") == 2 and ">3 天內到期</div>" in html          # 預設文字仍是 3

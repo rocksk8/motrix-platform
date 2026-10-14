@@ -8,6 +8,8 @@
   <title>營運報表 — MOTRIX 專案管理系統</title>
   <script src="../static/vendor/chart-4.4.0.umd.min.js"></script>
   <script src="../static/legal-round.js"></script>
+  <script src="../static/public-flags.js"></script>
+  <script src="../static/status-chip.js"></script>
   <script src="../js/reports.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
@@ -669,7 +671,7 @@
                       <td x-text="it.customer"></td>
                       <td x-text="it.project"></td>
                       <td x-text="it.salesPerson"></td>
-                      <td class="c"><span class="rb" :class="it.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="it.dealTag"></span></td>
+                      <td class="c"><span class="rb" :class="it.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="stLabel(it.dealTag, 'report')"></span></td>
                       <td x-text="it.type"></td>
                       <td class="r mono red-txt" x-text="fmt(it.amount)"></td>
                       <td class="c mono" x-text="(it.pct||0).toFixed(1) + '%'"></td>
@@ -709,7 +711,7 @@
                         </td>
                         <td x-text="it.customer"></td>
                         <td x-text="it.project"></td>
-                        <td class="c"><span class="rb" :class="it.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="it.dealTag"></span></td>
+                        <td class="c"><span class="rb" :class="it.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="stLabel(it.dealTag, 'report')"></span></td>
                         <td x-text="it.type"></td>
                         <td class="r mono red-txt" x-text="fmt(it.amount)"></td>
                         <td class="c mono" x-text="it.wonMonth"></td>
@@ -1100,7 +1102,7 @@
                         <td x-text="c.project"></td>
                         <td x-text="c.salesPerson"></td>
                         <td class="c mono" x-text="c.quoteDate"></td>
-                        <td class="c"><span class="rb" :class="c.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="c.dealTag"></span></td>
+                        <td class="c"><span class="rb" :class="c.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="stLabel(c.dealTag, 'report')"></span></td>
                         <td class="r mono" x-text="fmt(c.total)"></td>
                         <td class="r mono" x-text="(c.netMarginPct||0).toFixed(1) + '%'"></td>
                         <td class="r mono" x-text="fmt(c.receivedAmount)"></td>
@@ -1139,7 +1141,7 @@
                       <td x-text="c.project"></td>
                       <td x-text="c.salesPerson"></td>
                       <td class="c mono" x-text="c.quoteDate"></td>
-                      <td class="c"><span class="rb" :class="c.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="c.dealTag"></span></td>
+                      <td class="c"><span class="rb" :class="c.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="stLabel(c.dealTag, 'report')"></span></td>
                       <td class="r mono" x-text="fmt(c.total)"></td>
                       <td class="r mono" x-text="(c.netMarginPct||0).toFixed(1) + '%'"></td>
                       <td class="r mono" x-text="fmt(c.receivedAmount)"></td>
@@ -1240,7 +1242,7 @@
                       <td x-text="mc.customer"></td>
                       <td x-text="mc.project"></td>
                       <td x-text="mc.salesPerson"></td>
-                      <td class="c"><span class="rb" :class="mc.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="mc.dealTag"></span></td>
+                      <td class="c"><span class="rb" :class="mc.dealTag==='已結案'?'rb-closed':'rb-active'" x-text="stLabel(mc.dealTag, 'report')"></span></td>
                       <td class="r mono" x-text="fmt(mc.pretax)"></td>
                       <td class="r mono" x-text="(mc.netMarginPct||0).toFixed(1) + '%'"></td>
                       <td class="r mono" x-text="fmt(estGrossProfit(mc))"></td>
@@ -1248,7 +1250,7 @@
                       <td class="r mono" x-text="fmt(mc.grossProfit) + (mc.actualIsGross ? '（舊精算為毛利）' : '')"></td>
                       <td class="r mono" :class="((mc.actualMarginPct||0)-(mc.netMarginPct||0))>=0?'green-txt':'red-txt'" x-text="(((mc.actualMarginPct||0)-(mc.netMarginPct||0))>=0?'+':'') + ((mc.actualMarginPct||0)-(mc.netMarginPct||0)).toFixed(1) + 'pp'"></td>
                       <td class="r mono" :class="(mc.grossProfit-estGrossProfit(mc))>=0?'green-txt':'red-txt'" x-text="fmtDiff(mc.grossProfit-estGrossProfit(mc))"></td>
-                      <td class="c"><span class="rb rb-fin" x-text="mc.settleStatus==='finalized'?'已結算':'草稿'"></span></td>
+                      <td class="c"><span class="rb rb-fin" x-text="mc.settleStatus==='finalized' ? stLabel('finalized', 'report', '已結算') : stLabel('draft', 'report', '草稿')"></span></td>
                     </tr>
                   </template>
                 </tbody>
@@ -1553,7 +1555,7 @@
                                   <span class="rb"
                                         :class="t.dealTag==='已結案'?'rb-fin':t.dealTag==='已成案'?'rb-active':t.dealTag==='未成案'?'':'rb-closed'"
                                         :style="t.dealTag==='未成案'?'background:#FEF2F2;color:#DC2626':''"
-                                        x-text="t.dealTag || t.status"></span>
+                                        x-text="stLabel(t.dealTag || t.status, 'report')"></span>
                                 </td>
                                 <td class="r mono" x-text="fmt(t.total)"></td>
                                 <td class="r mono"
@@ -2175,7 +2177,7 @@
               </div>
               <span style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif"
                     :style="stlStatus()==='finalized' ? 'background:#DCFCE7;color:#15803D' : 'background:#FEF3C7;color:#92400E'"
-                    x-text="stlStatus()==='finalized' ? '已定稿' : '草稿'"></span>
+                    x-text="stlStatus()==='finalized' ? stLabel('finalized', 'report', '已定稿') : stLabel('draft', 'report', '草稿')"></span>
             </div>
             <!-- 完結資訊 -->
             <template x-if="stlStatus()==='finalized'">
