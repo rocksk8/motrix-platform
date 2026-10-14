@@ -87,8 +87,8 @@ def _mail(kind, rows, link, ident, out=None):
     """字面 key 呼叫 send_registered（守門逐一核對）；不放金額。信件類型由 M01 登記；收件人＝財務群組。"""
     if kind == "soon":
         return _en.send_registered("payable_due_soon", title="預定付款日將到", rows=rows, to_group=True,
-                                   badge_text="3 天後到期", badge_color="#D97706", link=link, button_text="前往出納",
-                                   reason=ident, wait=True, out=out, note="您好，以下請款的預定付款日還有 3 天，請安排付款。")
+                                   badge_text="%d 天後到期" % _core.soon_days(), badge_color="#D97706", link=link, button_text="前往出納",
+                                   reason=ident, wait=True, out=out, note="您好，以下請款的預定付款日還有 %d 天，請安排付款。" % _core.soon_days())
     if kind == "overdue":
         return _en.send_registered("payable_due_overdue", title="預定付款日已逾期", rows=rows, to_group=True,
                                    badge_text="已逾期", badge_color="#7F1D1D", link=link, button_text="前往出納",

@@ -2,7 +2,7 @@
 """預定付款日提醒的共用純函式庫（第 45 班；使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）。
 
 [單位] helper:payable_due_core    [層] L1    [穩定度] 實作
-[公開介面] CALENDAR_SOURCES、EVENT_CODE、GUARD_PREFIX、INAPP_PREFIX、MAIL_KEYS、MAX_WAIT_SECONDS_PER_RUN、SOON_DAYS、candidate_planned_dates、due_kind、effective_send_day、next_working_day、notify_finance、prune_guards、run_scan、sync_event、sync_lock、sync_lock
+[公開介面] CALENDAR_SOURCES、EVENT_CODE、GUARD_PREFIX、INAPP_PREFIX、MAIL_KEYS、MAX_WAIT_SECONDS_PER_RUN、SOON_DAYS、soon_days、label、candidate_planned_dates、due_kind、effective_send_day、next_working_day、notify_finance、prune_guards、run_scan、sync_event、sync_lock、sync_lock
 [不變式] 提醒的日期規則、guard、寄送迴圈、站內通知只有這一份；各模組只查自己的待付款列、整理成 items 交進來；信件與通知內容不放金額、受款人、廠商名、付款條件，只放單號、名目、預定付款日、關聯案件；guard 先寄、結果確定才寫；每封與每次掃描都有等待上限。
 [契約題] tests/test_payable_due_core_t45.py
 [注意] 信件類型 payable_due_soon／payable_due_today／payable_due_overdue 由 M01 登記，M01 不在時寄信 fail-closed；站內通知有自己的一次性 guard（INAPP_PREFIX），不依賴信件是否寄出。
@@ -30,13 +30,35 @@ from helpers.settings import _get_setting, _set_setting
 
 logger = logging.getLogger(__name__)
 
-SOON_DAYS = 3
+SOON_DAYS = 3                           # 預設提前天數（今天的行為）。管理者開啟 finance_cashier.custom_due_soon 才改用設定值（見 soon_days()）
+
+
+def soon_days(conn=None) -> int:
+    """目前生效的『預定付款日前 N 天』提醒天數。旗標 `finance_cashier.custom_due_soon` 不是 1、設定不合法（1～60 以外）或讀不到 ⇒ 預設 3（今天的行為）。
+    與出納頁『N 天內到期』提示（F3）同一個設定，所以畫面與提醒信不會各說各話。
+    ⚠ 縮短天數後，已寄過『舊天數』那封的預定日，新的寄信日（較晚）會得到一把新的 guard ⇒ 可能多寄一封 soon；延長天數則新寄信日若已過就不補發。"""
+    try:
+        from helpers import settings_registry as SR
+        if int(SR.get("finance_cashier", "custom_due_soon", conn=conn)) != 1:
+            return SOON_DAYS
+        n = int(SR.get("finance_cashier", "due_soon_planned_days", conn=conn))
+        return n if 1 <= n <= 60 else SOON_DAYS
+    except Exception:                                                  # noqa: BLE001  讀不到一律用預設
+        return SOON_DAYS
+
 MAX_WAIT_SECONDS_PER_RUN = 120
 GUARD_PREFIX = "payable_due_notif."
 INAPP_PREFIX = "payable_due_inapp."       # 站內通知自己的一次性 guard（不依賴信件是否寄出）
 #: 寄信日種類 ⇒ 信件類型代號（類型由 M01 登記；這裡用變數取值，不是 `send_registered` 的字面 key）
 MAIL_KEYS = {"soon": "payable_due_soon", "today": "payable_due_today", "overdue": "payable_due_overdue"}
 _LABEL = {"soon": "預定付款日將到（3 天後）", "today": "預定付款日當天", "overdue": "預定付款日已逾期"}
+
+
+def label(kind: str, days: int = None) -> str:
+    """站內通知／信件用的種類名稱；soon 的天數跟著設定（預設 3 天＝原字串）。"""
+    if kind == "soon":
+        return "預定付款日將到（%d 天後）" % (SOON_DAYS if days is None else days)
+    return _LABEL[kind]
 _LIMIT = 14
 
 
@@ -60,10 +82,11 @@ def next_working_day(nominal: date, is_wd, limit: int = _LIMIT) -> date:
     return nominal
 
 
-def due_kind(planned: str, today: date, is_wd) -> tuple:
+def due_kind(planned: str, today: date, is_wd, days: int = None) -> tuple:
     """⇒ (今天要寄哪一封 '' ／soon／today／overdue, 要寫 guard 的 [(kind, 寄信日)])。soon 與 today 折到同一天 ⇒ 只回 today，但兩把 guard 都要寫。"""
     p = date.fromisoformat(planned)
-    e_soon, e_today = effective_send_day(p - timedelta(days=SOON_DAYS), is_wd), effective_send_day(p, is_wd)
+    days = soon_days() if days is None else days
+    e_soon, e_today = effective_send_day(p - timedelta(days=days), is_wd), effective_send_day(p, is_wd)
     e_over = next_working_day(p + timedelta(days=1), is_wd)
     if e_soon == e_today and e_today == today:
         return "today", [("soon", e_soon), ("today", e_today)]
@@ -76,7 +99,7 @@ def due_kind(planned: str, today: date, is_wd) -> tuple:
     return "", []
 
 
-def candidate_planned_dates(today: date, is_wd) -> list:
+def candidate_planned_dates(today: date, is_wd, days: int = None) -> list:
     """今天可能要寄的預定日（含逾期）：寄信日＝今天的名義日（今天＋其後連續的非工作日）及其 +3 天，加上「預定日之後第 1 個工作日＝今天」的那幾天。今天不是工作日 ⇒ []。"""
     if not is_wd(today):
         return []
@@ -85,7 +108,8 @@ def candidate_planned_dates(today: date, is_wd) -> list:
     while not is_wd(d) and len(span) < _LIMIT:
         span.append(d)
         d += timedelta(days=1)
-    out = {(x + timedelta(days=k)).isoformat() for x in span for k in (0, SOON_DAYS)}
+    days = soon_days() if days is None else days
+    out = {(x + timedelta(days=k)).isoformat() for x in span for k in (0, days)}
     d = today - timedelta(days=1)                       # 逾期：預定日 d 的 d+1 到今天之間沒有別的工作日
     for _ in range(_LIMIT):
         out.add(d.isoformat())
@@ -95,7 +119,7 @@ def candidate_planned_dates(today: date, is_wd) -> list:
     return sorted(out)
 
 
-def notify_finance(kind, source, key, ident, planned, link="cashier.html?tab=payreq") -> int:
+def notify_finance(kind, source, key, ident, planned, link="cashier.html?tab=payreq", days: int = None) -> int:
     """站內通知寫給財務收件人（在職的財務角色＋superadmin，尊重對該信件類型的退訂）。文字不含金額。⇒ 寫了幾則。失敗只記 log。"""
     n = 0
     try:
@@ -107,7 +131,7 @@ def notify_finance(kind, source, key, ident, planned, link="cashier.html?tab=pay
         finally:
             conn.close()
         ev = MAIL_KEYS[kind]
-        msg = "%s：%s（預定 %s）" % (_LABEL[kind], ident, planned)
+        msg = "%s：%s（預定 %s）" % (label(kind, days), ident, planned)
         for r in rows:
             if not _en._pref_enabled(r["notification_muted"], ev):
                 continue
@@ -166,10 +190,10 @@ def prune_guards(today: date) -> None:
         conn.close()
 
 
-def _scan_item(it, today, t0, *, is_wd, send, link, app_only=False) -> tuple:
+def _scan_item(it, today, t0, *, is_wd, send, link, app_only=False, days=None) -> tuple:
     """一筆的處理 ⇒ (寄出封數, 要不要停止本次掃描: None／'wait'／'unknown')。例外由呼叫端接。
     `app_only`＝本次掃描已因等待上限／SMTP 無回應而停止寄信：只補站內通知、不寄信、不寫信件 guard（信件語意不變：未寄出就不寫，下次重試）。"""
-    kind, guards = due_kind(it["planned"], today, is_wd)
+    kind, guards = due_kind(it["planned"], today, is_wd, days)
     if not kind:
         return 0, None
     tail = [(k, e) for k, e in guards]
@@ -180,7 +204,7 @@ def _scan_item(it, today, t0, *, is_wd, send, link, app_only=False) -> tuple:
     if mail_done and app_done:
         return 0, None
     # 站內通知有自己的一次性 guard，**不依賴信件是否寄出**（沒有財務信箱、SMTP 關閉、信件類型被關掉時，站內提醒照樣出現一次）
-    if not app_done and notify_finance(kind, it.get("source") or "", it.get("key") or it["guard_id"], it["ident"], it["planned"]) >= 1:
+    if not app_done and notify_finance(kind, it.get("source") or "", it.get("key") or it["guard_id"], it["ident"], it["planned"], days=days) >= 1:
         for k in app_keys:
             _set_setting(k, t0)
     if mail_done or app_only:
@@ -209,6 +233,7 @@ def run_scan(items, today: date, *, is_wd, send, monotonic=time.monotonic, link=
         max_wait = MAX_WAIT_SECONDS_PER_RUN if max_wait is None else max_wait
         link = link or "%s/pages/cashier.html" % _en._base_url()
         t0 = today.isoformat()
+        days = soon_days()                                      # 一次掃描用同一個天數（候選日期與 due_kind 一致）
         t_start = monotonic()
         items = list(items)
         rest = []                                               # 因等待上限／SMTP 無回應而沒輪到寄信的那些筆：仍要補站內通知（只有「寄信日＝今天」的候選，錯過就永遠沒有）
@@ -218,7 +243,7 @@ def run_scan(items, today: date, *, is_wd, send, monotonic=time.monotonic, link=
                 rest = items[pos:]
                 break
             try:
-                n, stop = _scan_item(it, today, t0, is_wd=is_wd, send=send, link=link)
+                n, stop = _scan_item(it, today, t0, is_wd=is_wd, send=send, link=link, days=days)
             except Exception as exc:                            # noqa: BLE001 — 一筆壞掉不能讓其餘提醒全丟
                 logger.warning("payable_due_core: %s 處理失敗（略過、繼續下一筆）：%s", it.get("guard_id"), exc)
                 continue
@@ -229,7 +254,7 @@ def run_scan(items, today: date, *, is_wd, send, monotonic=time.monotonic, link=
                 break
         for it in rest:                                         # 只補站內通知，不寄信
             try:
-                _scan_item(it, today, t0, is_wd=is_wd, send=send, link=link, app_only=True)
+                _scan_item(it, today, t0, is_wd=is_wd, send=send, link=link, app_only=True, days=days)
             except Exception as exc:                            # noqa: BLE001
                 logger.warning("payable_due_core: %s 站內通知補寫失敗（略過）：%s", it.get("guard_id"), exc)
     except Exception as exc:                                    # noqa: BLE001

@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-14（wip/t62-finance-r6；預定付款日提醒天數）
+- 承攬商匯款／勞報單的預定付款日提醒信與站內通知，『前 N 天』與信件文字跟著設定中心「出納」的自訂天數（旗標 custom_due_soon 關＝3 天，與過去逐日相同）。無 migration、無新路由、無權限變更。
+
 ## 1.1.36 — 2026-10-14（wip/t61-s6-impl-r1＋wip/t60-s4-r1；S6：登記外包名冊匯出／BP-1：承攬商管理頁可自訂版面）；t60 整合；修正：xlsx 轉義可逆
 - module.json `customization.pages` 登記外包名冊匯出（`GET /api/contractors/export`，xlsx，`perm: contractor_list`），供自訂按鈕目錄使用。純加性宣告；端點本身（權限、證件號碼遮蔽、稽核）完全不變。
 - module.json 登記承攬商管理頁（vendor-contractors.html，承攬商清單六欄）的可自訂點；承攬商名稱、統一編號、狀態為核心（不能隱藏）。純加性宣告。
