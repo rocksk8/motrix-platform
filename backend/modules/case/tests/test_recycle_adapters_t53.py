@@ -476,8 +476,8 @@ def test_quotation_put_that_fails_after_the_material_gate_leaves_the_order_and_n
     data["caseRecord"]["materialOrders"] = []
     data["caseRecord"]["materials"] = []
     appr = _q("SELECT * FROM case_material_approvals")
-    data["caseRecord"]["stages"] = [{"label": "施工", "sortOrder": 1}]                 # 有 stages 才會走到下面被打壞的同步步驟
-    monkeypatch.setattr(QA, "_sync_json_stages_to_table", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("later step failed")))
+    data["caseRecord"]["stages"] = [{"label": "施工", "sortOrder": 1}]                 # 有 stages 才會走到下面被打壞的同步步驟（S-ST4：改成把表內現況寫回 data_json 的那一步）
+    monkeypatch.setattr(QA, "_sync_stages_to_json", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("later step failed")))
     from helpers import recycle_bin as _RB
     calls = []
     _orig = _RB.delete
