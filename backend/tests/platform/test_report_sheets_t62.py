@@ -132,13 +132,13 @@ def test_comparator_tighten_loosen_neutral():
 
 # ── ④ 執行期 ───────────────────────────────────────────────────────────────
 def test_runtime_hooks_do_nothing_when_off_or_unpublished(monkeypatch):
-    monkeypatch.setattr(ET, "resolve", lambda eid, conn=None: None)
+    monkeypatch.setattr(ET, "_resolve_strict", lambda eid, conn=None: None)
     assert ET.enabled_sheets(EID) is None and ET.disabled_sheets(EID) == [] and R._off_sheets() == []
     assert ET.enabled_sheets("no:such") is None
 
 
 def test_runtime_selection_includes_required_and_reports_the_rest(monkeypatch):
-    monkeypatch.setattr(ET, "resolve", lambda eid, conn=None: _body("warranty", "aging") if eid == EID else None)
+    monkeypatch.setattr(ET, "_resolve_strict", lambda eid, conn=None: _body("warranty", "aging") if eid == EID else None)
     assert ET.enabled_sheets(EID) == frozenset({"summary", "warranty", "aging"})
     off = ET.disabled_sheets(EID)
     assert "summary" not in off and "warranty" not in off and "aging" not in off and "targets" in off and len(off) == len(ALL) - 3
@@ -147,7 +147,7 @@ def test_runtime_selection_includes_required_and_reports_the_rest(monkeypatch):
 
 def test_unreadable_template_with_flag_on_fails_closed(monkeypatch):
     """旗標開著、已發布的範本讀不到 ⇒ 只輸出必選工作表（不整份外送）；旗標關 ⇒ 全部（今天）。"""
-    monkeypatch.setattr(ET, "enabled", lambda conn=None: True)
+    monkeypatch.setattr(ET, "enabled_strict", lambda conn=None: True)
     monkeypatch.setattr(ET, "ensure_kind", lambda: True)
 
     def boom(*a, **k):
@@ -155,24 +155,33 @@ def test_unreadable_template_with_flag_on_fails_closed(monkeypatch):
     monkeypatch.setattr(ET.D, "get", boom)
     assert ET.enabled_sheets(EID) == frozenset({"summary"})
     assert R._off_sheets() == [x for x in ALL if x != "summary"]
-    monkeypatch.setattr(ET, "enabled", lambda conn=None: False)
+    monkeypatch.setattr(ET, "enabled_strict", lambda conn=None: False)
     assert ET.enabled_sheets(EID) is None and R._off_sheets() == []
 
 
+def test_flag_read_failure_also_fails_closed_not_open(monkeypatch):
+    """讀不到『旗標』本身 ⇒ 關起來（只輸出必選工作表），不是當作旗標關而整份外送。"""
+    def boom(conn=None):
+        raise RuntimeError("settings unreadable")
+    monkeypatch.setattr(ET, "enabled_strict", boom)
+    assert ET.enabled_sheets(EID) == frozenset({"summary"})
+    assert R._off_sheets() == [x for x in ALL if x != "summary"]
+
+
 def test_unpublished_with_flag_on_is_everything(monkeypatch):
-    monkeypatch.setattr(ET, "enabled", lambda conn=None: True)
+    monkeypatch.setattr(ET, "enabled_strict", lambda conn=None: True)
     monkeypatch.setattr(ET, "ensure_kind", lambda: True)
     monkeypatch.setattr(ET.D, "get", lambda *a, **k: None)
     assert ET.enabled_sheets(EID) is None and R._off_sheets() == []
 
 
 def test_audit_and_monthly_log_record_the_omitted_sheets():
-    assert SRC.count('"omittedSheets": _off_sheets()') == 2, "Excel 與 PDF 匯出稽核都要記略過的工作表"
+    assert SRC.count('"omittedSheets": _omitted') == 2, "Excel 與 PDF 匯出稽核都要記略過的工作表（同一份 _omitted）"
     assert "略過的工作表" in SRC[SRC.index("月報已寄送"):][:200]
 
 
 def test_builders_call_the_hooks_only_through_the_off_list():
-    assert "_off = _off_sheets()\n    if _off:" in SRC and "_drop_excel_sheets(wb, _off)" in SRC, "Excel：沒有關掉的工作表就完全不動"
+    assert "_off = _off_sheets() if off is None else list(off)" in SRC and "_drop_excel_sheets(wb, _off)" in SRC, "Excel：沒有關掉的工作表就完全不動"
     assert "return _drop_pdf_sections(html, _off) if _off else html" in SRC, "PDF：沒有關掉的工作表就回傳同一個字串"
     assert 'if "targets" in _off:\n        acv_html = ""' in SRC and 'if "quarter" in _off:\n        quarter_section_html = ""' in SRC
     mail = SRC[SRC.index("excel_bytes = _build_excel(mail_data"):][:600]
@@ -260,3 +269,55 @@ def test_comparator_combines_titles_and_sheets_semantics():
     assert classify("export_template", b, a)[0] == "loosen", "加回含金額的工作表＝放寬"
     assert classify("export_template", {"version": 1, "format": "pdf", "sheets": ["main", "extra"], "titles": {"a": "甲標題"}},
                     {"version": 1, "format": "pdf", "sheets": ["main"], "titles": {}})[0] == "tighten"
+
+
+# ── 04 第三輪：本季收支邊界、旗標嚴格讀取、第一次發布仍算放寬、一個請求只算一次 ──────────────────────────
+def test_quarter_section_is_not_swallowed_when_month_is_dropped():
+    """『本季收支』段落以變數插入在『當月收支』之後；它的註解只當邊界，不是可選的工作表。"""
+    html = ('<body><!-- 摘要 -->S<!-- 當月收支（2026-08-30） -->M<!-- 本季收支（2026-09-10） -->Q<!-- 今年度收支（2026-08-30） -->Y'
+            '<div class="footer">F</div></body>')
+    assert R._drop_pdf_sections(html, ["month"]) == ('<body><!-- 摘要 -->S<!-- 本季收支（2026-09-10） -->Q<!-- 今年度收支（2026-08-30） -->Y'
+                                                     '<div class="footer">F</div></body>')
+    assert R._drop_pdf_sections(html, ["month", "year"]) == '<body><!-- 摘要 -->S<!-- 本季收支（2026-09-10） -->Q<div class="footer">F</div></body>'
+    assert R.BOUNDARIES == ("本季收支",) and "quarter" not in [sid for sid, _t, m in R.REPORT_SHEETS if m]
+
+
+def test_quarter_boundary_marker_exists_in_the_source_template():
+    assert re.search(r"<!-- 本季收支", SRC), "本季收支段落的註解標記必須存在（邊界用）"
+
+
+def test_selected_quarter_without_month_keeps_the_quarter_section(monkeypatch):
+    monkeypatch.setattr(ET, "_resolve_strict", lambda eid, conn=None: _body("summary", "quarter") if eid == EID else None)
+    off = R._off_sheets()
+    assert "quarter" not in off and "month" in off and "year" in off
+    html = '<!-- 摘要 -->S<!-- 當月收支（x） -->M<!-- 本季收支（y） -->Q<!-- 今年度收支（z） -->Y<div class="footer">F</div>'
+    assert R._drop_pdf_sections(html, off) == '<!-- 摘要 -->S<!-- 本季收支（y） -->Q<div class="footer">F</div>'
+
+
+def test_enabled_strict_reads_without_swallowing_errors():
+    import inspect
+    src = inspect.getsource(ET.enabled_strict)
+    assert "_strict_setting" in src and "except" not in src, "嚴格讀取：不吞例外"
+
+
+def test_first_publish_of_columns_and_header_footer_watermark_templates_is_still_loosen():
+    """`old.get("format") not in (None, …)` 的修正只讓『格式』不再算變動；第一次發布的欄位／頁首頁尾浮水印仍是放寬（第二位核准）。"""
+    from routers.def_pipeline import classify
+    ET.register_export("t:first", label="x", formats=("xlsx",), columns=[{"id": "a", "label": "A"}, {"id": "b", "label": "B", "money": True}], sample_rows=[])
+    cols = {"version": 1, "format": "xlsx", "columns": [{"id": "a", "label": "A"}]}
+    assert classify("export_template", {}, cols)[0] == "loosen", "第一次發布：欄位對『沒有舊版』都是新增"
+    for part in ("header", "footer"):
+        withpart = dict(cols)
+        withpart[part] = {"text": "機密"}
+        assert classify("export_template", {}, withpart)[0] == "loosen", part
+    assert classify("export_template", {}, {"version": 1, "format": "pdf", "watermark": {"text": "機密"}})[0] == "loosen"
+    changed = dict(cols)
+    changed["format"] = "csv"
+    assert classify("export_template", cols, cols)[0] == "neutral" and classify("export_template", cols, changed)[0] == "loosen", "有舊版時格式變動仍算放寬"
+
+
+def test_the_omitted_list_is_computed_once_per_request_and_shared():
+    assert "def _build_excel(data: dict, period_label: str, gen_at: str, off=None)" in SRC
+    assert "def _build_report_html(data: dict, period_label: str, gen_at: str, off=None)" in SRC
+    assert SRC.count("_omitted = _off_sheets()") == 3, "Excel 路由、PDF 路由、月報各算一次"
+    assert SRC.count("off=_omitted") == 4

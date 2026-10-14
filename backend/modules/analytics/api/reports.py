@@ -862,14 +862,15 @@ _ET.register_export(
     sheets=[{"id": sid, "label": title, "required": sid == "summary", "money": sid != "warranty"} for sid, title, _m in REPORT_SHEETS])
 
 
+#: 只當 PDF 段落的『邊界』用的註解標記（不對應可選的工作表）：`本季收支` 的段落以變數插入在『當月收支』之後、『今年度收支』之前，
+#: 沒有列在目錄的註解標記裡；不把它當邊界的話，拿掉『當月收支』會連本季收支一起吞掉。
+BOUNDARIES = ("本季收支",)
+
+
 def _off_sheets() -> list:
     """沒被選到的工作表代號。旗標關／沒有已發布範本 ⇒ `[]`（全部輸出＝今天）。
-    旗標開著但範本讀不到、或這裡任何環節出錯 ⇒ **關起來**：除了必選的全部算沒選到（不能因為讀不到設定就把整份報表寄出去）。"""
-    try:
-        if not _ET.enabled():
-            return []
-    except Exception:                                              # noqa: BLE001
-        return []
+    旗標或範本**讀不到**、或這裡任何環節出錯 ⇒ **關起來**：除了必選的全部算沒選到（不能因為讀不到設定就把整份報表寄出去）。
+    一個請求只算一次：呼叫端把結果同時給建構器與稽核（`off=` 參數）。"""
     try:
         return _ET.disabled_sheets(REPORT_EXPORT_ID)
     except Exception:                                              # noqa: BLE001
@@ -895,7 +896,7 @@ def _drop_pdf_sections(html: str, off) -> str:
     """PDF／郵件附件：依段落註解標記（`<!-- 帳齡分析 -->` 等）拿掉沒被選到的段落——範圍是『這個標記到下一個**已知**標記（或頁尾）』，
     不會停在其他不相干的註解。要拿掉的段落找不到標記 ⇒ `ReportSectionError`（不產出）。以變數插入的兩段（目標達成率、本季收支）不靠標記，由呼叫端清空。"""
     marks = {sid: m for sid, _t, m in REPORT_SHEETS if m}
-    known = "|".join(re.escape(m) for m in marks.values())
+    known = "|".join(re.escape(m) for m in tuple(marks.values()) + BOUNDARIES)
     for sid in off:
         label = marks.get(sid)
         if not label:
@@ -909,7 +910,7 @@ def _drop_pdf_sections(html: str, off) -> str:
     return html
 
 
-def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
+def _build_excel(data: dict, period_label: str, gen_at: str, off=None) -> bytes:
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
@@ -1886,7 +1887,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                  aligns=[al("left")] + [al("right")] * 10, height=20)
         ws9.cell(row=ar_r, column=8).number_format = '#,##0'
 
-    _off = _off_sheets()
+    _off = _off_sheets() if off is None else list(off)             # 呼叫端算好就用呼叫端的（一個請求只算一次）
     if _off:                                                       # 旗標關／沒有範本 ⇒ 空 ⇒ 這一段完全不動（輸出逐位元相同）
         _drop_excel_sheets(wb, _off)
     buf = io.BytesIO()
@@ -1949,8 +1950,8 @@ def _pdf_ar_aging(ar: dict, tbl_hdr, fmt) -> str:
     )
 
 
-def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
-    _off = _off_sheets()
+def _build_report_html(data: dict, period_label: str, gen_at: str, off=None) -> str:
+    _off = _off_sheets() if off is None else list(off)
     s = data["summary"]
     # `AC2`：收支明細的收入欄名依口徑（權責＝未稅、階段完成日；現金＝含稅、收款日）
     _inc_cols = (("認列階段", "認列金額（未稅）", "認列日") if data.get("basis", DEFAULT_BASIS) == "accrual"
@@ -2610,12 +2611,13 @@ def report_excel(
         normalize_basis(basis), quote_money_visible(u)
     ))
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-    xlsx   = _build_excel(data, label, gen_at)
+    _omitted = _off_sheets()
+    xlsx   = _build_excel(data, label, gen_at, off=_omitted)
     safe   = label.replace(" ", "").replace("年", "Y").replace("月", "M").replace("第", "Q").replace("季", "")
     fname  = f"MOTRIX_營運報表_{safe}.xlsx"
     _audit(_tok(authorization), "reports.export", "reports", "financial",
            f"營運報表 Excel 匯出（{label}）",
-           {"format": "excel", "period": period, "departmentId": department_id, "omittedSheets": _off_sheets()})
+           {"format": "excel", "period": period, "departmentId": department_id, "omittedSheets": _omitted})
     return Response(
         content=xlsx,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -2646,15 +2648,16 @@ def report_pdf(
         normalize_basis(basis), quote_money_visible(u)
     ))
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    _omitted = _off_sheets()                                        # 一個請求只算一次：建構器與稽核用同一份
     try:
-        pdf_bytes = _html_to_pdf(_build_report_html(data, label, gen_at))
+        pdf_bytes = _html_to_pdf(_build_report_html(data, label, gen_at, off=_omitted))
     except ValueError as e:
         raise HTTPException(500, str(e))
     safe  = label.replace(" ", "").replace("年", "Y").replace("月", "M").replace("第", "Q").replace("季", "")
     fname = f"MOTRIX_營運報表_{safe}.pdf"
     _audit(_tok(authorization), "reports.export", "reports", "financial",
            f"營運報表 PDF 匯出（{label}）",
-           {"format": "pdf", "period": period, "departmentId": department_id, "omittedSheets": _off_sheets()})
+           {"format": "pdf", "period": period, "departmentId": department_id, "omittedSheets": _omitted})
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
@@ -3060,20 +3063,21 @@ def _send_monthly_report_for(period_str: str) -> None:
         # 「今年度」用該月份所屬的整年。
         mail_data.update(_build_income_expense_scopes(int(period_str[:4]), period_str))
 
+        _omitted = _off_sheets()                                     # 附件與日誌用同一份
         try:
-            excel_bytes = _build_excel(mail_data, label, gen_at)
+            excel_bytes = _build_excel(mail_data, label, gen_at, off=_omitted)
         except Exception as exc:
             _log.warning("月報 Excel 產製失敗（%s）: %s", period_str, exc)
             excel_bytes = None
 
         try:
-            pdf_bytes = _html_to_pdf(_build_report_html(mail_data, label, gen_at))
+            pdf_bytes = _html_to_pdf(_build_report_html(mail_data, label, gen_at, off=_omitted))
         except Exception as exc:
             _log.warning("月報 PDF 產製失敗（%s）: %s", period_str, exc)
             pdf_bytes = None
 
         notify_monthly_report(label, period_str, excel_bytes, pdf_bytes)
-        _log.info("月報已寄送：%s（含 %d 件本月案件；略過的工作表：%s）", period_str, len(data["casesPeriod"]), _off_sheets() or "無")
+        _log.info("月報已寄送：%s（含 %d 件本月案件；略過的工作表：%s）", period_str, len(data["casesPeriod"]), _omitted or "無")
     except Exception as exc:
         _log.warning("_send_monthly_report_for 失敗（%s）: %s", period_str, exc)
 
