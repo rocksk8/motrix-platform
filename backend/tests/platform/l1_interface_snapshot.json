@@ -815,7 +815,9 @@
    "bank_aliases": "def(conn=…)",
    "close_gate_options": "def(conn)",
    "cuts_of": "def(payload)",
-   "parse_aliases": "def(text)"
+   "parse_aliases": "def(text)",
+   "receivable_grace_days": "def(conn=…)",
+   "settle_overdue_days": "def(conn=…)"
   },
   "helper:financial_mask": {
    "HISTORY_MONEY_FIELDS": "const",
@@ -1148,13 +1150,15 @@
    "MAIL_KEYS": "const",
    "MAX_WAIT_SECONDS_PER_RUN": "const",
    "SOON_DAYS": "const",
-   "candidate_planned_dates": "def(today, is_wd)",
-   "due_kind": "def(planned, today, is_wd)",
+   "candidate_planned_dates": "def(today, is_wd, days=…)",
+   "due_kind": "def(planned, today, is_wd, days=…)",
    "effective_send_day": "def(nominal, is_wd, limit=…)",
+   "label": "def(kind, days=…)",
    "next_working_day": "def(nominal, is_wd, limit=…)",
-   "notify_finance": "def(kind, source, key, ident, planned, link=…)",
+   "notify_finance": "def(kind, source, key, ident, planned, link=…, days=…)",
    "prune_guards": "def(today)",
-   "run_scan": "def(items, today, *, is_wd, send, monotonic=…, link=…, max_wait=…)",
+   "run_scan": "def(items, today, *, is_wd, send, monotonic=…, link=…, max_wait=…, days=…)",
+   "soon_days": "def(conn=…)",
    "sync_event": "def(source, key, item=…)",
    "sync_lock": "def(source, key)"
   },
