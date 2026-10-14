@@ -190,9 +190,10 @@ def _live_body(conn, kind, key, scope):
     return (r or {}).get("body") or {}, (r or {}).get("version") or 0
 
 
-def _record(conn, kind, key, scope, user, old_v, new_v, note, **kw):
+def _record(conn, kind, key, scope, user, old_v, new_v, note, *, risk="none", effective_at=None, approvals_required=0, audit_action=None):
     return L.record(conn, "def:" + kind, _lkey(key), [{"field": "%s|%s" % (scope, key), "old": old_v, "new": new_v}], note or "", user,
-                    ref_version=new_v, target_label="%s %s（%s）" % (kind, key, scope), link="settings-center.html", **kw)
+                    ref_version=new_v, target_label="%s %s（%s）" % (kind, key, scope), link="settings-center.html",
+                    risk=risk, effective_at=effective_at, approvals_required=approvals_required, audit_action=audit_action)
 
 
 def _submit_pending(conn, kind, key, scope, user, note, reasons, old_v):

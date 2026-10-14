@@ -79,10 +79,10 @@ def _needed(*rule_lists):
     return out
 
 
-def _load(entity, user, conn, **kw):
+def _load(entity, user, conn, ids=None, limit=200, fields=None):
     """⇒ (紀錄清單｜None，是否失敗)。資料來源丟任何例外（壞資料、過深的 JSON…）都不可讓請求 500：呼叫端依用途降級。"""
     try:
-        return C.load_records(entity, user, conn, **kw), False
+        return C.load_records(entity, user, conn, ids=ids, limit=limit, fields=fields), False
     except Exception:                                              # noqa: BLE001
         import logging
         logging.getLogger(__name__).warning("rules: 資料來源 %s 載入失敗，降級", entity, exc_info=True)
