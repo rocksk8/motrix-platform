@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1364,
+  "tests": 1368,
   "unmapped": 13,
   "kinds": {
-   "api": 758,
+   "api": 761,
    "e2e": 306,
    "audit": 174,
-   "unit": 126
+   "unit": 127
   },
-  "routes": 840
+  "routes": 842
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -20111,6 +20111,90 @@
     ]
    }
   },
+  "backend/tests/platform/test_option_list_editor_t62.py": {
+   "kind": "unit",
+   "units": [
+    "dir:frontend/static/",
+    "js:static/option-list-editor.js"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/static/option-list-editor.js"
+    ],
+    "path": [
+     "frontend/static/",
+     "frontend/static/option-list-editor.js"
+    ]
+   }
+  },
+  "backend/tests/platform/test_option_lists_t62.py": {
+   "kind": "api",
+   "units": [
+    "dir:frontend/pages/",
+    "dir:frontend/static/",
+    "file:backend/helpers/__init__.py",
+    "helper:option_lists",
+    "helper:part_catalog",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "js:static/option-list-editor.js",
+    "js:static/option-lists.js",
+    "js:static/sidebar.js",
+    "mod:accounting/api/__init__",
+    "mod:accounting/api/accounting_export",
+    "page:pages/customers.html",
+    "page:pages/parts.html",
+    "page:pages/suppliers.html",
+    "plat:definitions",
+    "router:def_governance",
+    "router:def_pipeline",
+    "router:definitions",
+    "router:option_lists",
+    "router:parts",
+    "router:platform_menu"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/definitions.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/option_lists.py",
+     "backend/helpers/part_catalog.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/modules/accounting/api/__init__.py",
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/routers/def_governance.py",
+     "backend/routers/def_pipeline.py",
+     "backend/routers/definitions.py"
+    ],
+    "api": [
+     "backend/routers/def_governance.py",
+     "backend/routers/definitions.py",
+     "backend/routers/option_lists.py",
+     "backend/routers/parts.py",
+     "backend/routers/platform_menu.py"
+    ],
+    "page": [
+     "frontend/pages/customers.html",
+     "frontend/pages/parts.html",
+     "frontend/pages/suppliers.html",
+     "frontend/static/option-list-editor.js",
+     "frontend/static/option-lists.js",
+     "frontend/static/sidebar.js"
+    ],
+    "path": [
+     "frontend/pages/",
+     "frontend/pages/customers.html",
+     "frontend/pages/parts.html",
+     "frontend/pages/suppliers.html",
+     "frontend/static/",
+     "frontend/static/option-list-editor.js",
+     "frontend/static/option-lists.js",
+     "frontend/static/sidebar.js"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_org_units_u0a.py": {
    "kind": "api",
    "units": [
@@ -21105,6 +21189,53 @@
     ],
     "api": [
      "backend/routers/settings_center.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_settings_numbers_t62.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/analytics/api/",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "helper:alert_settings",
+    "helper:auth",
+    "helper:company_setup",
+    "helper:email_notify",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "helper:settings_strict",
+    "mod:analytics/api/reports",
+    "mod:case/case_deadlines",
+    "router:auth"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/alert_settings.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/company_setup.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/helpers/settings_strict.py",
+     "backend/routers/__init__.py",
+     "backend/routers/auth.py"
+    ],
+    "path": [
+     "backend/helpers/auth.py",
+     "backend/helpers/company_setup.py",
+     "backend/helpers/email_notify.py",
+     "backend/modules/analytics/",
+     "backend/modules/analytics/api/",
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/case/",
+     "backend/modules/case/case_deadlines.py",
+     "backend/routers/auth.py"
     ]
    },
    "login_fixture": true
@@ -34744,6 +34875,47 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_quote_approval_thresholds_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:frontend/pages/",
+    "file:backend/helpers/__init__.py",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "helper:settings_strict",
+    "mod:case/__init__",
+    "mod:case/api/project_margin",
+    "mod:case/quote_terms",
+    "page:pages/quotation-form.html",
+    "plat:__init__",
+    "plat:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/helpers/settings_strict.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/quote_terms.py"
+    ],
+    "api": [
+     "backend/modules/case/api/project_margin.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html"
+    ],
+    "path": [
+     "frontend/pages/",
+     "frontend/pages/quotation-form.html"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_quote_json_direct_writes_lost_update_2026_09_25.py": {
    "kind": "api",
    "units": [
@@ -37433,6 +37605,7 @@
     "router:export_templates",
     "router:item_reads",
     "router:list_prefs",
+    "router:option_lists",
     "router:platform_menu_preview",
     "router:rules",
     "router:settings_center",
@@ -37463,6 +37636,7 @@
      "backend/routers/export_templates.py",
      "backend/routers/item_reads.py",
      "backend/routers/list_prefs.py",
+     "backend/routers/option_lists.py",
      "backend/routers/platform_menu_preview.py",
      "backend/routers/rules.py",
      "backend/routers/settings_center.py",
