@@ -3873,15 +3873,16 @@
           <select class="form-input" data-testid="st-template" x-model="stDlg.key" @change="stPreview()">
             <template x-for="t in stTpl" :key="t.key"><option :value="t.key" x-text="t.label + '（' + t.stageCount + ' 個階段）'"></option></template>
           </select></label>
-        <label style="font-size:12px">基準日
+        <label style="font-size:12px" title="階段的開始日、結束日會從這一天往後推">基準日（從哪一天開始算）
           <input class="form-input" type="date" data-testid="st-base" x-model="stDlg.base" @change="stPreview()"></label>
-        <label style="font-size:12px" x-show="(cr.caseRecord?.stages || []).length">方式
+        <label style="font-size:12px" x-show="(cr.caseRecord?.stages || []).length">這個案件已有階段，要
           <select class="form-input" x-model="stDlg.mode" @change="stPreview()"><option value="append">補上缺少的階段</option></select></label>
       </div>
-      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">套用＝複製成這個案件自己的階段；之後樣板改了不影響這個案件。已存在的階段不會被改動。已發布階段樣板時，空白案件不會再自動建立 5 個預設階段。</div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">選好樣板和基準日後，下面會先列出「會建立哪些階段」，確認沒問題再按「建立階段」。已發布階段樣板時，沒有階段的案件不會再自動建立 5 個預設階段。</div>
       <div x-show="stDlg.err" data-testid="st-err" style="color:var(--danger);font-size:12px;margin-bottom:8px" x-text="stDlg.err"></div>
       <template x-if="stDlg.plan">
         <div data-testid="st-preview">
+          <div data-testid="st-summary" style="font-size:13px;margin-bottom:8px" x-text="stSummary()"></div>
           <template x-for="s in stDlg.plan.stages" :key="s.key">
             <div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--border-light);font-size:13px">
               <span style="flex:1;font-weight:600" x-text="s.label"></span>

@@ -77,7 +77,7 @@ def test_body_conversion_and_ratio_rules():
     assert r["p1"] == []
     assert any("合計必須剛好 100%" in x for x in r["p2"])
     assert all("ratioBp" not in s for s in r["b3"]["stages"]) and r["p3"] == []          # 不設比例 ⇒ 不送這個鍵
-    assert any("種類鍵" in x for x in r["p4"])
+    assert any("階段代號" in x for x in r["p4"])
 
 
 def test_publish_requires_preview_of_the_same_template_and_sends_hash():
