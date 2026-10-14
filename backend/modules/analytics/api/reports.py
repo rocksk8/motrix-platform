@@ -1792,7 +1792,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
              aligns=[al("center")], height=20)
 
     ar_r = 3
-    _ar_cuts = _finance_params.aging_cuts()         # 預設 30/60/90；旗標 finance_reports.custom_aging 開才用管理者設定
+    _ar_cuts = _finance_params.cuts_of(ar)          # 用『產生這份資料的切點』（回應有 cuts 才是自訂，沒有＝30/60/90），不重讀設定，避免資料與上色不一致
     for band in ar_bands:
         bkey = band.get("key", "")
         bg_band = C_LRED if bkey == "90+" else C_LYELLOW if bkey == "61-90" else C_LBLUE if bkey == "31-60" else C_LGREEN
@@ -1857,7 +1857,7 @@ def _pdf_ar_aging(ar: dict, tbl_hdr, fmt) -> str:
     total_amt = (ar.get("total") or {}).get("amount", 0)
     as_of     = ar.get("asOf", "")
     import html as _h
-    _cuts = _finance_params.aging_cuts()
+    _cuts = _finance_params.cuts_of(ar)             # 同上：跟著資料走，不重讀設定
     rows = ""
     for band in bands:
         for it in band.get("items") or []:
@@ -2612,7 +2612,7 @@ def _compute_ar_aging() -> dict:
     """).fetchall()
     conn.close()
 
-    bands: dict = {"0-30": [], "31-60": [], "61-90": [], "90+": []}
+    bands: dict = {k: [] for k in _finance_params.BAND_KEYS}      # 區間鍵是『位置代號』（第 1～4 區），不是天數
 
     for row in rows:
         cr = {}
@@ -2683,7 +2683,7 @@ def _compute_ar_aging() -> dict:
 @router.get("/api/reports/ar-aging")
 def get_ar_aging(authorization: str = Header(None)):
     """
-    應收帳款帳齡分析：以案件成案日為基準，將未收款項目分為 0-30/31-60/61-90/90+ 天四個區間。
+    應收帳款帳齡分析：以案件成案日為基準，將未收款項目依經過天數分為四個區間（預設切點 30／60／90 天，可在設定中心自訂；區間鍵是位置代號，不是天數）。
     注意：無顯式到期日時以報價日計算帳齡，為管理用途的近似值。
     """
     u = _require_user(authorization)

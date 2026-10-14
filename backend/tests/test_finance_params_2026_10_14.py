@@ -145,3 +145,23 @@ def test_ar_aging_still_needs_the_reports_permission(client, make_user):
     u, p = make_user(username="fin_viewer", role="viewer")[:2]
     h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
     assert client.get("/api/reports/ar-aging", headers=h).status_code in (401, 403)
+
+
+def test_cuts_of_follows_the_payload_not_the_settings(monkeypatch):
+    """Excel／PDF 的上色用『產生資料的切點』：回應有合法 cuts 才採用；沒有或不合法 ⇒ 30／60／90（即使此刻設定已改）。"""
+    _fake = {"custom_aging": 1, "aging_day1": 5, "aging_day2": 10, "aging_day3": 20}
+    from helpers import settings_registry as SR
+    monkeypatch.setattr(SR, "get", lambda g, f, conn=None, **k: _fake[f])
+    assert F.aging_cuts() == (5, 10, 20)                                                     # 設定現在是 5/10/20
+    assert F.cuts_of({}) == (30, 60, 90) and F.cuts_of(None) == (30, 60, 90)                  # 但這份資料是用預設切點產生的 ⇒ 渲染也用預設
+    assert F.cuts_of({"cuts": [45, 90, 180]}) == (45, 90, 180)
+    for bad in ([1, 1, 2], [0, 5, 9], "x", [1, 2], [True, 2, 3], 5):
+        assert F.cuts_of({"cuts": bad}) == (30, 60, 90), bad
+
+
+def test_renderers_use_cuts_of_and_the_text_no_longer_lists_day_ranges_as_keys():
+    src = (ROOT / "modules/analytics/api/reports.py").read_text(encoding="utf-8")
+    assert src.count("_finance_params.cuts_of(ar)") == 2 and "_finance_params.aging_cuts()" in src       # 渲染兩處改用 cuts_of；計算處仍讀設定
+    body = src.split("def _compute_ar_aging")[1].split('@router.get("/api/reports/ar-aging")')[0]
+    assert body.count("_finance_params.aging_cuts()") == 1
+    assert "BAND_KEYS" in body and '"0-30": []' not in body and "0-30/31-60/61-90/90+" not in src
