@@ -6,7 +6,7 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 108 個；有單位卡 57 個。
+單位 109 個；有單位卡 58 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
@@ -72,12 +72,13 @@
 | `helper:errors` | L1 | 例外訊息的去處（`EM3`）：畫面只給代碼，例外全文進 log。（無單位卡） | 1 | 11 | — |
 | `helper:expense_types` | L1 | 費用單據的「類型定義」（A2-2）：請購單／採購單／差旅費用請款單／零用金支付單各是一份 `expense_type` 定義。 | 14 | 5 | `tests/platform/test_expense_types_2026_10_01.py` |
 | `helper:export_templates` | L1 | 匯出範本（BP-3 R0/R1）：宣告式的欄位／標籤／順序（＋頁首頁尾／浮水印文字），套在『已登記的匯出』上；發布前預覽。 | 26 | 9 | `tests/platform/test_export_templates_bp3.py` |
+| `helper:finance_params` | L1 | 財務報表的可調參數（財務盤點第一個切片；設計 docs/platform/plans/FINANCE-FRAMEWORK-INVENTORY-T62.md §4）。 | 15 | 3 | `backend/tests/test_finance_params_2026_10_14.py`、`backend/tests/test_finance_cashier_gates_2026_10_14.py` |
 | `helper:financial_mask` | L1 | 案件金額欄位遮蔽（CM13，2026-09-24 使用者裁示「要，後端移除金額欄位」）。（無單位卡） | 16 | 13 | — |
 | `helper:formula` | L1 | 安全的公式（CUSTOMIZATION-SPEC §1「積木式、不能寫程式」、§8.1 ②「公式語法檢查回傳錯誤位置」）。（無單位卡） | 9 | 3 | — |
 | `helper:geo` | L1 | 地理查詢：地址 → 座標（OSM／Nominatim），以及兩點間的直線距離。（無單位卡） | 80 | 5 | — |
 | `helper:gl_status` | L1 | [單位] helper:gl_status    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版） | 2 | 4 | `tests/test_gl_source_status_2026_09_30.py` |
 | `helper:google_calendar` | L1 | Google 行事曆整合 — Phase 1（系統 → 行事曆，push only，2026-08-21）。（無單位卡） | 19 | 12 | — |
-| `helper:legal_params` | L1 | L1 法規參數服務（R1；規格 CUSTOMIZATION-SPEC §9.1）。（無單位卡） | 27 | 34 | — |
+| `helper:legal_params` | L1 | L1 法規參數服務（R1；規格 CUSTOMIZATION-SPEC §9.1）。（無單位卡） | 27 | 35 | — |
 | `helper:licensing` | L1 | 授權金鑰核心（2026-09-21，細線 1 第 1、2 步）。（無單位卡） | 13 | 4 | — |
 | `helper:mail_types` | L1 | L1 信件類型登記表（CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）。（無單位卡） | 13 | 17 | — |
 | `helper:map_overlays` | L1 | L1 地圖覆蓋層（串接點 IP-101 `map.overlay`；docs/platform/LODGING-NEARBY.md §3.6.1，D 稽核 LG-M1／LG2-S1～S3）。 | 5 | 2 | `tests/test_map_overlay_contract_2026_09_28.py`、`tests/test_e2e_map_overlay_contract_2026_09_28.py` |
@@ -87,7 +88,7 @@
 | `helper:module_switches` | L1 | CORE-SPEC §9c ③ 管理者啟停：`system_settings.modules_disabled`（模組 key 陣列）。（無單位卡） | 9 | 2 | — |
 | `helper:notification_prefs` | L1 | Per-user email notification opt-out list.（無單位卡） | 5 | 4 | — |
 | `helper:notify_matrix` | L1 | 通知矩陣（信件 × 行事曆）的對照登記（L1；MAIL-CAL 階段 1，設計 docs/platform/plans/MAIL-CAL-MERGE-DESIGN.md）。 | 10 | 2 | `tests/test_notify_matrix_2026_10_05.py` |
-| `helper:option_lists` | L1 | 選項清單（census #4）：管理者決定下拉選單有哪些選項、顯示名稱與順序；新增／改名／重排／停用，不能刪除已發布的選項。 | 14 | 5 | `tests/platform/test_option_lists_t62.py` |
+| `helper:option_lists` | L1 | 選項清單（census #4）：管理者決定下拉選單有哪些選項、顯示名稱與順序；新增／改名／重排／停用，不能刪除已發布的選項。 | 18 | 12 | `tests/platform/test_option_lists_t62.py` |
 | `helper:part_catalog` | L1 | 料件分類代碼表（L1；DEPENDENCY-MAP §3 #17）。（無單位卡） | 5 | 2 | — |
 | `helper:payable_due_core` | L1 | 預定付款日提醒的共用純函式庫（第 45 班；使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）。 | 16 | 5 | `tests/test_payable_due_core_t45.py` |
 | `helper:perm` | L1 | 權限矩陣的中央檢查（框架 P0；設計 docs/platform/plans/PERMISSION-MATRIX-DESIGN-T54.md §2–§3、§8）。 | 16 | 3 | `tests/platform/test_perm_equivalence_gate_a.py` |
@@ -106,8 +107,8 @@
 | `helper:rule_sets` | L1 | 規則集定義種類 `rule_set`（BP-2 R1；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §3）。 | 9 | 3 | `backend/tests/test_rule_catalog_2026_10_14.py` |
 | `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 52 | — |
 | `helper:settings_groups` | L1 | 設定群組登錄（L1；第 54 班 Train A）。**預設值＝上線前的程式常數**（部署零行為變更；`settings_deploy_baseline.json` 凍結）。 | 1 | 10 | `backend/tests/platform/test_settings_registry_t54.py` |
-| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 37 | 27 | `backend/tests/platform/test_settings_registry_t54.py` |
-| `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 3 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
+| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 37 | 28 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 4 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 23 | 10 | — |
 | `helper:storage_locations` | L1 | 儲存位置：雲端存檔根目錄、個資資料夾、更新交付資料夾的**唯一**解析處（CORE-SPEC 裁示表「儲存位置可設定」，2026-09-28）。 | 13 | 3 | `tests/platform/test_storage_locations_2026_09_28.py` |
 | `helper:storage_slots` | L1 | 儲存／上傳「位置代號」登錄表與插槽政策（BP-4 S1；設計 docs/platform/plans/BP4-STORAGE-NOTIFY-DESIGN.md §3）。 | 13 | 2 | `backend/tests/test_storage_slots_parity_2026_10_14.py` |
