@@ -87,7 +87,7 @@ def test_settings_failure_gives_the_defaults(monkeypatch):
 
 
 def test_reports_page_colours_by_the_returned_cuts_with_the_old_values_as_fallback():
-    html = (ROOT.parent / "frontend/pages/reports.html").read_text(encoding="utf-8")
+    html = __import__("core.source_tree", fromlist=["x"]).page_file("reports.html").read_text(encoding="utf-8")
     assert "(arAging.cuts || [30, 60, 90])[2]" in html and "(arAging.cuts || [30, 60, 90])[1]" in html
     assert "it.daysElapsed > 90" not in html and "it.daysElapsed > 60" not in html
 

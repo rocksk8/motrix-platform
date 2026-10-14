@@ -5809,7 +5809,7 @@
    "groups[].values.combo_view_default_open",
    "groups[].values.combo_view_max",
    "groups[].values.confirm_period_days",
-   "groups[].values.count_extra_expense_drafts",
+   "groups[].values.count_unfinished_extra_expenses",
    "groups[].values.custom_aging",
    "groups[].values.custom_bank_aliases",
    "groups[].values.custom_due_soon",
