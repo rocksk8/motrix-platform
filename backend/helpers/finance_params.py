@@ -2,7 +2,7 @@
 """財務報表的可調參數（財務盤點第一個切片；設計 docs/platform/plans/FINANCE-FRAMEWORK-INVENTORY-T62.md §4）。
 
 [單位] helper:finance_params    [層] L1    [穩定度] 實驗（旗標 finance_reports.custom_aging 關＝所有報表與今天逐位元相同）
-[公開介面] DEFAULT_CUTS, BAND_KEYS, GROUP, aging_cuts, cuts_of, aging_band, aging_labels, CASHIER_GROUP, DEFAULT_BANK_ALIASES, DEFAULT_DUE_SOON, parse_aliases, aliases_text, bank_aliases, CLOSE_GATE_GROUP, CLOSE_GATE_OPTIONS, close_gate_options
+[公開介面] DEFAULT_CUTS, BAND_KEYS, GROUP, aging_cuts, cuts_of, aging_band, aging_labels, settle_overdue_days, receivable_grace_days, CASHIER_GROUP, DEFAULT_BANK_ALIASES, DEFAULT_DUE_SOON, parse_aliases, aliases_text, bank_aliases, CLOSE_GATE_GROUP, CLOSE_GATE_OPTIONS, close_gate_options
 [不變式] ①應收帳齡的區間切點預設 30／60／90 天（今天寫死在 reports.py 的值）；旗標 `finance_reports.custom_aging` 為 1 才採用管理者設定的切點，
     切點不合法（非整數、不遞增、超出 1～3650）一律回預設，不丟例外；
     ②區間的 key（"0-30"／"31-60"／"61-90"／"90+"）是**位置代號**，不是天數：切點改了，key 不變（前端上色與其他消費者依 key），只有標籤與判定改變；
@@ -109,6 +109,28 @@ def bank_aliases(conn=None) -> dict:
     except Exception:                                                  # noqa: BLE001
         return {k: list(v) for k, v in DEFAULT_BANK_ALIASES.items()}
     return out
+
+
+def _int_setting(group, field, lo, hi, conn=None) -> int:
+    """設定值 ⇒ lo～hi 的整數；讀不到／不合法 ⇒ lo（＝今天的行為：0 天）。不丟例外。"""
+    try:
+        from helpers import settings_registry as SR
+        v = SR.get(group, field, conn=conn)
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or int(v) != v:
+            return lo
+        return int(v) if lo <= int(v) <= hi else lo
+    except Exception:                                                  # noqa: BLE001
+        return lo
+
+
+def settle_overdue_days(conn=None) -> int:
+    """『已結案未精算』清單的等待天數（0＝一結案就列＝今天的行為）。"""
+    return _int_setting(GROUP, "settle_overdue_days", 0, 365, conn)
+
+
+def receivable_grace_days(conn=None) -> int:
+    """應收款預計收款日之後的逾期寬限天數（0＝過了就逾期＝今天的行為）。"""
+    return _int_setting(CASHIER_GROUP, "receivable_grace_days", 0, 90, conn)
 
 
 # ── 案件結案閘門的『只收緊』選項（S-C1）──────────────────────────────────────────────────────────────────

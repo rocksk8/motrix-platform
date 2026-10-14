@@ -619,6 +619,9 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     conn3.close()
     if allowed_quote_nos is not None:
         ov_rows = [r for r in ov_rows if r["quote_no"] in allowed_quote_nos]
+    _so_days = _finance_params.settle_overdue_days()           # 0（預設）＝一結案就列＝今天的行為
+    if _so_days > 0:
+        ov_rows = [r for r in ov_rows if _settle_waited(r["updated_at"], _so_days)]
     settle_overdue = [
         {
             "quoteNo":     r["quote_no"],
@@ -2595,6 +2598,14 @@ def report_pdf(
 
 
 # ── AR Aging（應收帳款帳齡分析）────────────────────────────────────────────────
+
+def _settle_waited(updated_at, days) -> bool:
+    """該案件最後更新日距今是否已超過 `days` 天；日期讀不出來 ⇒ True（寧可列出，不隱藏）。"""
+    try:
+        return (date.today() - date.fromisoformat((updated_at or "")[:10])).days > days
+    except Exception:                                                  # noqa: BLE001
+        return True
+
 
 def _compute_ar_aging() -> dict:
     """帳齡計算 — 供 API endpoint 及 Excel/PDF 匯出共用。"""
