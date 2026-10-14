@@ -18,4 +18,11 @@ def get_project_margin_config(authorization: str = Header(None)):
         warn = float(sr.get("project_margin", "warn_pct") or 0)
     except (TypeError, ValueError):
         warn = 0.0
+    try:                                                # BP-2 K01 種子：旗標 builder_rules.k01_seed 開、且種子規則已發布 ⇒ 門檻以規則為準；否則維持上面的設定值（今天的行為）
+        from helpers import rule_sets as _rs
+        seeded = _rs.k01_warn_pct()
+        if seeded is not None:
+            warn = seeded
+    except Exception:                                   # noqa: BLE001  規則讀不到不可影響報價單
+        pass
     return {"warnPct": warn}

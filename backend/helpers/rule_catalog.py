@@ -40,6 +40,7 @@ _TEMP_STUB = {
         _f("netMarginPct", "營業利益率", "number", perm="quote_money", unit="%", money=True, internal=True),
         _f("directMarginPct", "直接毛利率", "number", perm="quote_money", unit="%", money=True, internal=True),
         _f("total", "含稅總額", "number", perm="quote_money", unit="元", money=True),
+        _f("projectMarginPct", "專案毛利%", "number", perm="quote_money", unit="%", money=True, internal=True),     # 未稅收入扣品項成本；與報價單列表／表單同一個算式
         _f("status", "狀態", "text"),
         _f("dealTag", "成案標籤", "text"),
         _f("settleStatus", "精算狀態", "text"),

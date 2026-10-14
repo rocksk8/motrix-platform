@@ -81,10 +81,10 @@ def _tri(n, vals):
     return _cmp(n, vals)
 
 
-def evaluate(rules, records, visible, *, budget_ms=DEFAULT_BUDGET_MS, clock=time.perf_counter) -> dict:
+def evaluate(rules, records, visible, *, budget_ms=DEFAULT_BUDGET_MS, clock=time.perf_counter, surface=None) -> dict:
     """`rules`＝已驗證的規則清單；`records`＝`[{"id": 識別, "values": {欄位代號: 值}}]`；`visible`＝檢視者看得到的欄位代號集合。
     ⇒ `{"marks": {紀錄id: [{ruleId, level, text, target, field?}]}, "hits": {規則id: 命中筆數}, "degraded": [{ruleId, reason}],
-        "notApplicable": [規則id]}`；`reason` ∈ timeout｜budget｜error。`notApplicable` 只供最高管理者的畫面使用（一般檢視者的 API 不回）。"""
+        "notApplicable": [規則id]}`；`surface`（list｜form）給了就只評估標示在該位置的規則（規則沒寫 `surfaces` ＝ 只在 list）；`reason` ∈ timeout｜budget｜error。`notApplicable` 只供最高管理者的畫面使用（一般檢視者的 API 不回）。"""
     out = {"marks": {}, "hits": {}, "degraded": [], "notApplicable": []}
     try:
         visible = frozenset(visible or ())
@@ -97,6 +97,8 @@ def evaluate(rules, records, visible, *, budget_ms=DEFAULT_BUDGET_MS, clock=time
             if not isinstance(rule, dict) or rule.get("enabled", True) is not True and rule.get("enabled") is not None:
                 continue
             if rule.get("enabled") is False:
+                continue
+            if surface is not None and surface not in (rule.get("surfaces") or ["list"]):
                 continue
             rid = rule["id"]
             if rule.get("mode", "mark") != "mark" or rule.get("on_failure", "degrade_loud") != "degrade_loud":

@@ -168,7 +168,7 @@
       (st.msg ? '<div class="' + (st.msgBad ? 'rb-warn rb-bad' : 'rb-warn') + '" data-rb-msg="1">' + esc(st.msg) + '</div>' : '') +
       '<div class="rb-dim">規則只做標示：不會改資料、不會擋存檔。看不到來源欄位的人（例如沒有成本權限者）不會看到由該欄位產生的標示。</div>' +
       listing + '<div style="margin-top:8px"><button class="rb-btn" data-rb="add">新增規則</button></div>' + editor() + previewBox() + '</div>' +
-      '<div class="rb-foot"><button class="rb-btn" data-rb="save"' + (st.busy || !dirty() ? ' disabled' : '') + '>儲存草稿</button>' +
+      '<div class="rb-foot">' + (st.k01 && st.ent.key === 'case' && !st.rules.some(function (r) { return r.id === 'k01_project_margin' }) ? '<button class="rb-btn" data-rb="k01">匯入現有利潤警示</button>' : '') + '<button class="rb-btn" data-rb="save"' + (st.busy || !dirty() ? ' disabled' : '') + '>儲存草稿</button>' +
       '<button class="rb-btn" data-rb="publish"' + (st.busy ? ' disabled' : '') + '>預覽並發布…</button></div>'
   }
 
@@ -195,6 +195,7 @@
   async function load() {
     var c = await call('GET', '/api/rules/config')
     if (!c.ok) throw new Error(detailText(c, '載入失敗'))
+    st.k01 = !!c.data.k01Seed
     st.ent = (c.data.entities || []).filter(function (e) { return e.key === st.o.entity })[0]
     if (!st.ent) throw new Error('未知的規則主題')
     var d = await call('GET', '/api/definitions/rule_set/' + enc(st.o.entity) + '?scope=company')
@@ -213,6 +214,14 @@
     else { st.msg = '儲存失敗：' + detailText(r, '') ; st.msgBad = true; setState('error') }
     render()
     return r.ok
+  }
+  async function seedK01() {
+    setBusy(true)
+    var r = await call('POST', '/api/rules/k01/seed')
+    if (!r.ok) { setBusy(false); st.msg = '匯入失敗：' + detailText(r, ''); st.msgBad = true; setState('error'); return render() }
+    try { await load() } catch (e) { st.msg = String(e.message || e); st.msgBad = true }
+    setBusy(false)
+    st.msg = (r.data && r.data.message) || '已匯入為草稿'; st.msgBad = false; setState('ready'); schedulePreview(); render()
   }
   async function publish() {
     if (!window.MotrixDefGovernance) { st.msg = '找不到治理面板，無法發布（發布前一定要先看過影響預覽）'; st.msgBad = true; setState('error'); return render() }
@@ -248,6 +257,7 @@
     if (a === 'del-no') { st.delConfirm = -1; return render() }
     if (a.indexOf('del-yes:') === 0) { st.rules.splice(Number(a.slice(8)), 1); st.delConfirm = -1; st.sel = -1; schedulePreview(); return render() }
     if (a === 'addval') { var w = st.rules[st.sel].when; w.values.push(w.values[0]); schedulePreview(); return render() }
+    if (a === 'k01') return seedK01()
     if (a === 'save') return save()
     if (a === 'publish') return publish()
   }

@@ -81,7 +81,7 @@ def rules_config(authorization: str = Header(None)):
             ents.append(dict(e, fields=C.rule_fields(e["key"], u, conn), sourceAvailable=_has_source(e["key"])))
         return {"entities": ents, "levels": list(G.LEVELS), "targets": list(G.TARGETS), "limits": dict(G.LIMITS),
                 "sample": {"shown": SAMPLE_SHOWN, "scanned": SCAN_MAX}, "kind": RS.KIND,
-                "modes": ["mark"], "onFailure": ["degrade_loud"]}
+                "modes": ["mark"], "onFailure": ["degrade_loud"], "k01Seed": RS.k01_seed_on(conn)}
     finally:
         conn.close()
 
@@ -89,6 +89,34 @@ def rules_config(authorization: str = Header(None)):
 def _has_source(entity):
     from core import registry
     return entity in registry.providers("rules.entity")
+
+
+@router.post("/api/rules/k01/seed")
+def rules_k01_seed(authorization: str = Header(None)):
+    """把目前的專案毛利提醒門檻轉成種子規則，**只寫成草稿**（不發布）。發布走規則頁的正常流程（預覽、治理；調低門檻屬放寬）。
+    旗標 builder_rules.k01_seed 關 ⇒ 404；規則已存在（草稿或已發布）⇒ 409；不改任何現有規則。"""
+    u = _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        _flag_gate(conn)
+        if not RS.k01_seed_on(conn):
+            raise HTTPException(404, "Not Found")
+        draft = D.get(conn, RS.KIND, RS.K01_ENTITY, "company", 0)
+        base = ((draft or D.get(conn, RS.KIND, RS.K01_ENTITY, "company")) or {}).get("body") or {}
+        rules = [r for r in (base.get("rules") or []) if isinstance(r, dict)]
+        if any(r.get("id") == RS.K01_ID for r in rules):
+            raise HTTPException(409, "這條規則已經存在（草稿或已發布），沒有重複匯入")
+        from helpers import settings_registry as SR
+        rules.append(RS.k01_seed_rule(SR.get("project_margin", "warn_pct", conn=conn)))
+        try:
+            d = D.save_draft(conn, RS.KIND, RS.K01_ENTITY, "company", {"rules": rules}, user=u["username"])
+        except D.DefinitionError as e:
+            raise HTTPException(422, {"problems": getattr(e, "problems", None) or [{"message": str(e)}]})
+        _audit(_tok(authorization), "rules.k01_seeded", "rule_set", RS.K01_ENTITY, "把專案毛利提醒門檻匯入為規則草稿（尚未發布）", {"ruleId": RS.K01_ID})
+        return {"entity": RS.K01_ENTITY, "etag": d.get("etag", ""), "ruleId": RS.K01_ID,
+                "message": "已匯入為草稿：請在規則頁預覽並發布；發布之前報價單的提醒門檻不變。"}
+    finally:
+        conn.close()
 
 
 @router.get("/api/rules/summary")
@@ -167,12 +195,14 @@ def _used_fields(body, rule_id):
 
 
 @router.get("/api/rules/marks")
-def rules_marks(entity: str = Query(...), ids: str = Query(""), authorization: str = Header(None)):
+def rules_marks(entity: str = Query(...), ids: str = Query(""), surface: str = Query("list"), authorization: str = Header(None)):
     u = _require_user(authorization)
     conn = get_db()
     try:
         _flag_gate(conn)
         _entity(entity)
+        if surface not in G.SURFACES:
+            raise HTTPException(400, "surface 只能是：%s" % "、".join(G.SURFACES))
         want = [x for x in (s.strip() for s in ids.split(",")) if x][:MARKS_MAX_IDS]
         empty = {"entity": entity, "marks": {}, "degraded": False}
         if not want:
@@ -187,7 +217,7 @@ def rules_marks(entity: str = Query(...), ids: str = Query(""), authorization: s
         rows = C.load_records(entity, u, conn, ids=want, limit=len(want))
         if not rows:
             return empty
-        out = E.evaluate(rules, rows, C.visible_ids(entity, u, conn), budget_ms=MARKS_BUDGET_MS)
+        out = E.evaluate(rules, rows, C.visible_ids(entity, u, conn), budget_ms=MARKS_BUDGET_MS, surface=surface)
         _note_degraded(authorization, entity, ver, out["degraded"])
         res = {"entity": entity, "marks": {str(k): v for k, v in out["marks"].items()}, "degraded": bool(out["degraded"])}
         if u.get("role") == "superadmin":                          # 規則 id 與原因只給最高管理者；一般檢視者只知道『部分提醒暫時無法顯示』

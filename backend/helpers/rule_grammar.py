@@ -20,7 +20,9 @@ import re
 LIMITS = {"nodes": 200, "depth": 8, "rules": 50, "name": 30, "text": 40, "in_values": 30, "str": 100, "bytes": 65536}
 LEVELS = ("red", "yellow", "info")
 TARGETS = ("row", "field")
-RULE_KEYS = ("id", "name", "enabled", "mode", "on_failure", "when", "mark")
+RULE_KEYS = ("id", "name", "enabled", "mode", "on_failure", "when", "mark", "surfaces")
+#: 標示出現在哪裡：list＝列表／卡片疊加層（預設）；form＝單筆表單內的提示（由表單自己讀門檻，例如專案毛利提醒）
+SURFACES = ("list", "form")
 MARK_KEYS = ("level", "text", "target", "field")
 _ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -190,6 +192,9 @@ def _validate(body, fields):
             out.append({"path": p + ".name", "message": "名稱要 1～%d 字" % LIMITS["name"]})
         if not isinstance(r.get("enabled", True), bool):
             out.append({"path": p + ".enabled", "message": "必須是 true／false"})
+        sf = r.get("surfaces")
+        if sf is not None and (not isinstance(sf, list) or not 1 <= len(sf) <= len(SURFACES) or len(set(map(str, sf))) != len(sf) or any(x not in SURFACES for x in sf)):
+            out.append({"path": p + ".surfaces", "message": "標示位置只能是：列表、表單（list／form），至少選一個且不重複"})
         if r.get("mode", "mark") != "mark":
             out.append({"path": p + ".mode", "message": "這一版只開放『標示』類規則，阻擋類尚未開放"})
         if r.get("on_failure", "degrade_loud") != "degrade_loud":

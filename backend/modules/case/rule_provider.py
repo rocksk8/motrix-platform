@@ -15,12 +15,13 @@
 import json
 import re
 
+from helpers import profit_rules as _PR
 from helpers import row_access
 from helpers.financial_mask import quote_money_visible
 
 _KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,39}$")
 _MAX_IDS = 200
-_COLS = "id, quote_no, project_name, customer_name, status, total, direct_margin_pct, net_margin_pct, deal_tag, settle_status, data_json"
+_COLS = "id, quote_no, project_name, customer_name, status, total, pretax, direct_margin_pct, net_margin_pct, deal_tag, settle_status, data_json"
 
 
 def _num(v):
@@ -37,6 +38,15 @@ def _custom_fields(raw):
         return {}
     return {"cf_" + k: v for k, v in cf.items()
             if isinstance(k, str) and _KEY.match(k) and (v is None or isinstance(v, (str, int, float, bool)))}
+
+
+def _project_margin(r):
+    """專案毛利%：與案件列表（quotations.py 的 project_margin_pct）同一個函式與同一組輸入（pretax 欄＋data_json.tot.totalCost）；算不出 ⇒ None（不是 0）。"""
+    try:
+        tc = ((json.loads(r["data_json"] or "{}") or {}).get("tot") or {}).get("totalCost")
+    except (TypeError, ValueError, AttributeError, RecursionError):
+        tc = None
+    return _PR.project_margin(r["pretax"], tc)["pct"]
 
 
 def provide(conn, user, ids, limit):
@@ -58,7 +68,8 @@ def provide(conn, user, ids, limit):
     for r in conn.execute(sql, args).fetchall():
         vals = {"status": r["status"], "dealTag": r["deal_tag"], "settleStatus": r["settle_status"]}
         if money:
-            vals.update(total=_num(r["total"]), directMarginPct=_num(r["direct_margin_pct"]), netMarginPct=_num(r["net_margin_pct"]))
+            vals.update(total=_num(r["total"]), directMarginPct=_num(r["direct_margin_pct"]), netMarginPct=_num(r["net_margin_pct"]),
+                        projectMarginPct=_project_margin(r))
         vals.update(_custom_fields(r["data_json"]))
         out.append({"id": r["quote_no"], "label": " ".join(x for x in (r["quote_no"], r["project_name"] or r["customer_name"] or "") if x), "values": vals})
     return out
