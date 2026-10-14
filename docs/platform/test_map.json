@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1347,
+  "tests": 1348,
   "unmapped": 13,
   "kinds": {
    "api": 744,
    "e2e": 306,
-   "audit": 172,
+   "audit": 173,
    "unit": 125
   },
   "routes": 829
@@ -33536,6 +33536,26 @@
     ],
     "path": [
      "backend/helpers/startup.py"
+    ]
+   }
+  },
+  "backend/tests/test_pdf_hardening_h1_2026_10_14.py": {
+   "kind": "audit",
+   "units": [
+    "core:pdf_gen",
+    "file:backend/helpers/__init__.py",
+    "helper:startup",
+    "mod:case/completion_pdf"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/startup.py",
+     "backend/modules/case/completion_pdf.py",
+     "backend/pdf_gen.py"
+    ],
+    "path": [
+     "backend/pdf_gen.py"
     ]
    }
   },
