@@ -44,7 +44,7 @@ def test_monthly_report_kpis_not_zeroed_when_no_new_cases_this_month(client, mon
     import modules.analytics.api.reports as reports
     captured = {}
 
-    def fake_build_excel(data, label, gen_at):
+    def fake_build_excel(data, label, gen_at, **kw):      # S-F2 B：_build_excel 多了 off= 關鍵字（略過的工作表）；假函式照樣收下
         captured["excel_data"] = data
         return b"fake-xlsx"
 
@@ -88,7 +88,7 @@ def test_monthly_report_period_received_matches_actual_month(client, monkeypatch
 
     import modules.analytics.api.reports as reports
     captured = {}
-    monkeypatch.setattr(reports, "_build_excel", lambda data, label, gen_at: captured.setdefault("excel_data", data) or b"x")
+    monkeypatch.setattr(reports, "_build_excel", lambda data, label, gen_at, **kw: captured.setdefault("excel_data", data) or b"x")
     monkeypatch.setattr(reports, "_html_to_pdf", lambda html: b"x")
     monkeypatch.setattr("helpers.email_notify.notify_monthly_report", lambda *a, **k: None)
 
