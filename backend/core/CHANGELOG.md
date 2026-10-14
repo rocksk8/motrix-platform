@@ -2,6 +2,7 @@
 
 
 ## (next) — wip/t62-bp4-s1-r1＋wip/t62-bp4-s2-r1＋wip/t62-bp4-s2-r2＋wip/t62-bp4-s3-r1（BP-4 S1／S2／S3：儲存位置代號登錄表＋附件插槽定義；旗標 `builder_slots.enabled` 預設關）；t62 整合 r8
+- 狀態顯示名稱表（`helpers/status_display.py`，旗標 `builder_status_display.enabled` 預設關）多三個只做顯示的鍵 `洽談中`／`成案`／`暫擱置`（群組 `devcase`，開發案件 CRM 用；『未成案』沿用既有鍵）。新增守門測試 `test_status_display_canonical_lint_2026_10_14.py`：後端除白名單外不得引用顯示表、前端顯示名稱不得出現在判斷／篩選／請求位置（含正對照）。無 migration、無新路由、無權限變更；旗標關＝與過去逐字相同。
 
 - S-F1（census）：選項清單新增 `payment_stage`（案件款項期別名稱：訂金款／交貨款／驗收款／進度款／完工款／收款後出貨／自訂義／其他；可新增、改顯示名稱、重排、停用，已發布的值不可刪、不可改字）與 `payment_request_stage`（請款單款項類別，代碼 full／deposit／delivery／acceptance／final 固定，**封閉清單**：只能改顯示名稱與順序）。報表、出納、儀表板、應收、行事曆事件標題、請款單 PDF 只改『顯示』（`helpers/option_lists.payment_stage_name`／`payment_stage_display`／`request_stage_label`；清單關著或沒發布 ⇒ 與過去逐字相同）；自訂義的 `customLabel` 顯示修正也在旗標後面。已入帳的收款手續費傳票說明（`receivables.py`）與報價單的訊息文字仍用原字串。
 - L0（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：`core.catalog.L1_OWNER`（`"core"`，虛擬擁有者：不是模組、不可停用／授權）、`l1_manifest()`（讀 `core/l1_customization.json`，通過 `validate_manifest` 才用，壞了＝沒有 L1 點並記 ERROR）、`owner_loaded(key)`（`key == "core"` 或 `registry.is_loaded(key)`）；`layout_points("core")` 回 L1 登記檔的點（同樣經 `_module_points` 過濾，唯一入口不變）；`layout_points(None)` 仍是「全部已載入模組」，**不含 core**。

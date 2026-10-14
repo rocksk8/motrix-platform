@@ -8,6 +8,8 @@
   <title>業務開發 - MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
+  <script src="../static/public-flags.js"></script>
+  <script src="../static/status-chip.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -476,7 +478,7 @@
     <button type="button" class="dc-funnel__s" :class="{on: filterStatus==='洽談中'}"
             @click="filterStatus = (filterStatus==='洽談中' ? '' : '洽談中')">
       <span class="dc-funnel__v" style="color:var(--warning)" x-text="caseCount('洽談中')"></span>
-      <span class="dc-funnel__l">洽談中
+      <span class="dc-funnel__l"><span x-text="stLabel('洽談中')">洽談中</span>
         <small x-text="staleCount > 0 ? staleCount + ' 件逾 30 天未更新' : '都在 30 天內更新過'"></small>
       </span>
     </button>
@@ -484,18 +486,18 @@
     <button type="button" class="dc-funnel__s won" :class="{on: filterStatus==='成案'}"
             @click="filterStatus = (filterStatus==='成案' ? '' : '成案')">
       <span class="dc-funnel__v" style="color:var(--success)" x-text="caseCount('成案')"></span>
-      <span class="dc-funnel__l">成案<small>已連結報價單</small></span>
+      <span class="dc-funnel__l"><span x-text="stLabel('成案')">成案</span><small>已連結報價單</small></span>
     </button>
     <span class="dc-funnel__arrow" aria-hidden="true">→</span>
     <button type="button" class="dc-funnel__s" :class="{on: filterStatus==='未成案'}"
             @click="filterStatus = (filterStatus==='未成案' ? '' : '未成案')">
       <span class="dc-funnel__v" style="color:var(--text-dim)" x-text="caseCount('未成案')"></span>
-      <span class="dc-funnel__l">未成案<small>已結束</small></span>
+      <span class="dc-funnel__l"><span x-text="stLabel('未成案')">未成案</span><small>已結束</small></span>
     </button>
     <button type="button" class="dc-funnel__s" :class="{on: filterStatus==='暫擱置'}"
             @click="filterStatus = (filterStatus==='暫擱置' ? '' : '暫擱置')">
       <span class="dc-funnel__v" style="color:var(--text-dim)" x-text="caseCount('暫擱置')"></span>
-      <span class="dc-funnel__l">暫擱置<small>等條件成熟</small></span>
+      <span class="dc-funnel__l"><span x-text="stLabel('暫擱置')">暫擱置</span><small>等條件成熟</small></span>
     </button>
     <div class="dc-funnel__s rate">
       <span class="dc-funnel__v" x-text="winRate"></span>
@@ -619,7 +621,7 @@
             <div class="dc-case-card__foot">
               <span class="dc-badge"
                 :class="c.status==='成案'?'dc-badge--won':c.status==='未成案'?'dc-badge--lost':c.status==='暫擱置'?'dc-badge--hold':'dc-badge--talk'"
-                x-text="c.status"></span>
+                x-text="stLabel(c.status)"></span>
               <template x-if="c.pendingDelete">
                 <span style="font-size:9px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700;margin-left:4px">待刪除審核</span>
               </template>
@@ -764,7 +766,7 @@
                 <div class="dc-detail-meta">
                   <span class="dc-badge"
                     :class="selectedCase.status==='成案'?'dc-badge--won':selectedCase.status==='未成案'?'dc-badge--lost':selectedCase.status==='暫擱置'?'dc-badge--hold':'dc-badge--talk'"
-                    x-text="selectedCase.status"></span>
+                    x-text="stLabel(selectedCase.status)"></span>
                   <span x-show="selectedCase.customerName" x-text="selectedCase.customerName"></span>
                   <span x-show="selectedCase.customerName" style="color:var(--border-light)">|</span>
                   <span x-text="'建立：' + (selectedCase.createdAt||'').slice(0,10)"></span>
@@ -932,7 +934,7 @@
                   <span class="dc-lbl">案件狀態快照（選填）</span>
                   <select data-saved-field class="dc-select" x-model="logForm.status_snapshot">
                     <option value="">不記錄</option>
-                    <option>洽談中</option><option>成案</option><option>未成案</option><option>暫擱置</option>
+                    <option value="洽談中" x-text="stLabel('洽談中')">洽談中</option><option value="成案" x-text="stLabel('成案')">成案</option><option value="未成案" x-text="stLabel('未成案')">未成案</option><option value="暫擱置" x-text="stLabel('暫擱置')">暫擱置</option>
                   </select>
                 </div>
               </div>
@@ -979,7 +981,7 @@
                   <span class="dc-log-date" x-text="log.logDate"></span>
                   <span class="dc-channel" x-show="log.channel" x-text="log.channel"></span>
                   <span style="font-size:10px;background:#F3F4F6;color:#374151;padding:2px 7px;border-radius:8px;font-weight:600"
-                    x-show="log.statusSnapshot" x-text="log.statusSnapshot"></span>
+                    x-show="log.statusSnapshot" x-text="stLabel(log.statusSnapshot)"></span>
                   <span class="dc-pending" x-show="log.needsApproval && !isAdmin">待審核</span>
                   <span class="dc-approved" x-show="!log.needsApproval && log.approvedAt">已審核</span>
                 </div>
@@ -1077,7 +1079,7 @@
                 <template x-for="hc in caseCustomerHistory" :key="hc.id">
                   <div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0;font-size:12px;color:var(--text-primary)">
                     <span x-text="hc.caseName" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-                    <span x-text="hc.status" style="flex-shrink:0;color:var(--text-dim)"></span>
+                    <span x-text="stLabel(hc.status)" style="flex-shrink:0;color:var(--text-dim)"></span>
                   </div>
                 </template>
               </div>
@@ -1085,7 +1087,7 @@
             <div class="dc-form-group">
               <label>案件狀態</label>
               <select data-saved-field class="dc-select" x-model="caseForm.status">
-                <option>洽談中</option><option>成案</option><option>未成案</option>
+                <option value="洽談中" x-text="stLabel('洽談中')">洽談中</option><option value="成案" x-text="stLabel('成案')">成案</option><option value="未成案" x-text="stLabel('未成案')">未成案</option>
               </select>
             </div>
           </div>
@@ -1474,6 +1476,9 @@ function devCrmPage() {
     mobileListOpen: false,
     toast: '',
 
+    // S-X2/T63：狀態顯示名稱（旗標關／表沒載入 ⇒ 原值照印）。只用在 x-text／選項文字；判斷、篩選、請求本文一律用原始值。
+    stLabel(raw) { return window.MotrixStatus ? window.MotrixStatus.label(raw, 'case') : (raw == null ? '' : String(raw)) },
+
     _h() {
       return { 'Authorization': 'Bearer ' + this.token, 'Content-Type': 'application/json' }
     },
@@ -1571,6 +1576,7 @@ function devCrmPage() {
     async init() {
       if (this._initDone) return
       this._initDone = true
+      if (window.MotrixStatus) window.MotrixStatus.init()      // S-X2：旗標關 ⇒ 不發請求、什麼都不改
       const raw = localStorage.getItem('motrix_session')
       if (!raw) { location.href = 'login.html'; return }
       this.session = JSON.parse(raw)
