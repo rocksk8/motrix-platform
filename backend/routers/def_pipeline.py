@@ -24,7 +24,7 @@ router = APIRouter()
 
 #: 目前受管線管的 kind（有比較函式、而且編輯器已能處理『待核准』回應的）。layout：排版器（3c，wip/t60-s4-r1）與選單編輯器
 #: 都已改成遇到 `pending: true` 不說「已發布」——**這個 kind 只能在 3c 的 wip/t60-s4-r1 已在同一列車時才可加入名單**。
-ACTIVE_KINDS = ("custom_fields", "layout")
+ACTIVE_KINDS = ("custom_fields", "layout", "user_buttons")      # user_buttons：T61 S6（3c 的 wip/t61-s6-impl-r1）；該 kind 沒登記時這個項目不起作用
 
 _COSMETIC = {"label", "placeholder", "hint", "help", "description"}     # 只影響顯示文字，不影響誰看得到／填什麼
 
@@ -81,7 +81,56 @@ def _cmp_layout(old, new):
     return ("tighten", tighten) if tighten else ("neutral", [])
 
 
-COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout}
+_BTN_KEYS = {"key", "slot", "label", "action"}
+
+
+def _cmp_user_buttons(old, new):
+    """使用者自訂按鈕（T61 S6）：新增／改成『匯出』動作＝放寬（匯出會把資料帶出系統）；新增『開頁』＝不變；拿掉任何按鈕、匯出改成開頁＝收緊；
+    只改文字或插槽＝不變；看不懂的結構或多出來的屬性＝放寬。"""
+    def parse(body):
+        if not isinstance(body, dict) or not isinstance(body.get("buttons", []), list):
+            return None
+        out = {}
+        for b in body.get("buttons", []):
+            if not isinstance(b, dict) or not isinstance(b.get("key"), str) or b["key"] in out or not isinstance(b.get("action"), dict):
+                return None
+            out[b["key"]] = b
+        return out
+    o, n = parse(old or {}), parse(new)
+    if o is None or n is None:
+        return "loosen", ["無法解析按鈕定義，視為放寬"]
+
+    def act(b):
+        a = b["action"]
+        return a.get("type"), (a.get("export") if a.get("type") == "export" else a.get("page"))
+    loosen, tighten = [], []
+    for k, b in n.items():
+        label = b.get("label") or k
+        t, target = act(b)
+        if set(b) - _BTN_KEYS:
+            loosen.append("按鈕「%s」有看不懂的屬性（%s），視為放寬" % (label, "、".join(sorted(set(b) - _BTN_KEYS))))
+        if k not in o:
+            if t == "export":
+                loosen.append("新增匯出按鈕「%s」（匯出 %s）" % (label, target))
+            elif t != "navigate":
+                loosen.append("新增按鈕「%s」的動作類型 %r 不認得，視為放寬" % (label, t))
+            continue
+        ot, otarget = act(o[k])
+        if t == "export" and (ot != "export" or otarget != target):
+            loosen.append("按鈕「%s」改為匯出（匯出 %s）" % (label, target))
+        elif t not in ("export", "navigate"):
+            loosen.append("按鈕「%s」的動作類型 %r 不認得，視為放寬" % (label, t))
+        elif t == "navigate" and ot == "export":
+            tighten.append("按鈕「%s」由匯出改為開頁" % label)
+    for k, b in o.items():
+        if k not in n:
+            tighten.append("移除按鈕「%s」" % (b.get("label") or k))
+    if loosen:
+        return "loosen", loosen + tighten
+    return ("tighten", tighten) if tighten else ("neutral", [])
+
+
+COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout, "user_buttons": _cmp_user_buttons}
 
 
 def classify(kind, old_body, new_body):
