@@ -360,9 +360,11 @@
     "router:attachments",
     "router:auth",
     "router:company_lookup",
+    "router:custom_fields_builtin",
     "router:custom_records",
     "router:customers",
     "router:def_governance",
+    "router:def_pipeline",
     "router:definitions",
     "router:duty_roles",
     "router:item_reads",
@@ -382,7 +384,8 @@
     "router:settings_center",
     "router:system",
     "router:system_hub",
-    "router:uploads"
+    "router:uploads",
+    "router:user_buttons"
    ],
    "kind": "core",
    "path": "backend/main.py",
@@ -598,6 +601,25 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:builtin_fields": {
+   "api_prefixes": [],
+   "dynamic_sql": true,
+   "imports": [
+    "core:db",
+    "helper:custom_fields",
+    "helper:settings_registry",
+    "plat:definitions"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/builtin_fields.py",
+   "tables_ddl": [],
+   "tables_named": [
+    "quotations",
+    "suppliers"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "helper:business_days": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -757,7 +779,9 @@
   "helper:custom_fields": {
    "api_prefixes": [],
    "dynamic_sql": false,
-   "imports": [],
+   "imports": [
+    "helper:builtin_fields"
+   ],
    "kind": "helper",
    "path": "backend/helpers/custom_fields.py",
    "tables_ddl": [],
@@ -1499,7 +1523,8 @@
    "path": "backend/helpers/settings_groups.py",
    "tables_ddl": [],
    "tables_named": [
-    "suppliers"
+    "suppliers",
+    "vendor_contractors"
    ],
    "tables_r": [],
    "tables_w": []
@@ -1649,6 +1674,26 @@
     "voucher_attachments"
    ],
    "tables_r": [],
+   "tables_w": []
+  },
+  "helper:user_buttons": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:auth",
+    "helper:settings_registry",
+    "plat:customization",
+    "plat:definitions",
+    "plat:menu",
+    "plat:registry"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/user_buttons.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "users"
+   ],
    "tables_w": []
   },
   "helper:validation": {
@@ -2240,10 +2285,13 @@
   "js:js/def-governance.js": {
    "api_calls": [
     "/api/def-governance/",
+    "/api/def-pipeline/changes/",
+    "/api/def-pipeline/pending",
     "/api/definitions/"
    ],
    "api_prefixes": [
     "/api/def-governance",
+    "/api/def-pipeline",
     "/api/definitions"
    ],
    "api_unmatched": [],
@@ -2252,6 +2300,7 @@
    "path": "frontend/js/def-governance.js",
    "routers_called": [
     "router:def_governance",
+    "router:def_pipeline",
     "router:definitions"
    ],
    "tables_r": [],
@@ -2738,6 +2787,26 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:static/custom-fields.js": {
+   "api_calls": [
+    "/api/custom-fields/",
+    "/api/definitions/custom_fields/"
+   ],
+   "api_prefixes": [
+    "/api/custom-fields",
+    "/api/definitions"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/custom-fields.js",
+   "routers_called": [
+    "router:custom_fields_builtin",
+    "router:definitions"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:static/custom-layout.js": {
    "api_calls": [],
    "api_prefixes": [],
@@ -2977,6 +3046,7 @@
   },
   "js:static/menu-editor.js": {
    "api_calls": [
+    "/api/def-governance/layout/module:",
     "/api/definitions/layout/module:",
     "/api/definitions/layout/module:/draft",
     "/api/definitions/layout/module:/publish",
@@ -2984,10 +3054,13 @@
     "/api/platform/menu/preview"
    ],
    "api_prefixes": [
+    "/api/def-governance",
     "/api/definitions",
     "/api/platform"
    ],
-   "api_unmatched": [],
+   "api_unmatched": [
+    "/api/def-governance/layout/module:"
+   ],
    "imports": [],
    "kind": "js",
    "path": "frontend/static/menu-editor.js",
@@ -3119,9 +3192,11 @@
     "router:attachments",
     "router:auth",
     "router:company_lookup",
+    "router:custom_fields_builtin",
     "router:custom_records",
     "router:customers",
     "router:def_governance",
+    "router:def_pipeline",
     "router:definitions",
     "router:duty_roles",
     "router:item_reads",
@@ -3141,7 +3216,8 @@
     "router:settings_center",
     "router:system",
     "router:system_hub",
-    "router:uploads"
+    "router:uploads",
+    "router:user_buttons"
    ],
    "tables_r": [],
    "tables_w": []
@@ -3174,6 +3250,23 @@
    "kind": "js",
    "path": "frontend/static/profit-rules.js",
    "routers_called": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "js:static/public-flags.js": {
+   "api_calls": [
+    "/api/settings-center/public"
+   ],
+   "api_prefixes": [
+    "/api/settings-center"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/public-flags.js",
+   "routers_called": [
+    "router:settings_center"
+   ],
    "tables_r": [],
    "tables_w": []
   },
@@ -3242,6 +3335,27 @@
    "kind": "js",
    "path": "frontend/static/ui.js",
    "routers_called": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "js:static/user-buttons.js": {
+   "api_calls": [
+    "/api/definitions/user_buttons/",
+    "/api/user-buttons/",
+    "/api/user-buttons/catalog"
+   ],
+   "api_prefixes": [
+    "/api/definitions",
+    "/api/user-buttons"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/user-buttons.js",
+   "routers_called": [
+    "router:definitions",
+    "router:user_buttons"
+   ],
    "tables_r": [],
    "tables_w": []
   },
@@ -6059,6 +6173,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:case_roles",
     "helper:company_identity",
@@ -7249,6 +7364,7 @@
     "helper:attachment_search",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
@@ -7556,6 +7672,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
@@ -7803,6 +7920,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
@@ -7917,6 +8035,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
@@ -8077,6 +8196,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
@@ -8240,6 +8360,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
@@ -8391,6 +8512,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
@@ -8552,6 +8674,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
@@ -8938,6 +9061,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:business_days",
     "helper:calendar_sync",
     "helper:case_access",
@@ -9014,6 +9138,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:case_roles",
     "helper:company_identity",
@@ -9133,331 +9258,331 @@
     },
     {
      "func": "update_quotation",
-     "line": 1771,
+     "line": 1773,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_status",
-     "line": 2080,
+     "line": 2093,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/status"
     },
     {
      "func": "recall_quotation",
-     "line": 2164,
+     "line": 2177,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/recall"
     },
     {
      "func": "case_bundle",
-     "line": 2452,
+     "line": 2465,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/case-bundle"
     },
     {
      "func": "case_close_gates",
-     "line": 2507,
+     "line": 2520,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/close-gates"
     },
     {
      "func": "update_deal_tag",
-     "line": 2546,
+     "line": 2559,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/deal-tag"
     },
     {
      "func": "delete_quotation",
-     "line": 2625,
+     "line": 2638,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "unlock_case",
-     "line": 2743,
+     "line": 2756,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-unlock"
     },
     {
      "func": "lock_case",
-     "line": 2792,
+     "line": 2805,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-lock"
     },
     {
      "func": "update_case_record",
-     "line": 2973,
+     "line": 2986,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/case-record"
     },
     {
      "func": "get_case_change_request",
-     "line": 3357,
+     "line": 3392,
      "method": "GET",
      "path": "/api/case-changes/{change_id}"
     },
     {
      "func": "approve_case_change",
-     "line": 3380,
+     "line": 3415,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/approve"
     },
     {
      "func": "reject_case_change",
-     "line": 3431,
+     "line": 3466,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/reject"
     },
     {
      "func": "list_case_stages_normalized",
-     "line": 3665,
+     "line": 3700,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "create_case_stage",
-     "line": 3683,
+     "line": 3718,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "update_case_stage",
-     "line": 3712,
+     "line": 3747,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "delete_case_stage",
-     "line": 3766,
+     "line": 3801,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "reorder_case_stages",
-     "line": 3807,
+     "line": 3842,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/stages/reorder"
     },
     {
      "func": "add_stage_assignee",
-     "line": 3831,
+     "line": 3866,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees"
     },
     {
      "func": "remove_stage_assignee",
-     "line": 3859,
+     "line": 3894,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}"
     },
     {
      "func": "toggle_stage_dependency",
-     "line": 3882,
+     "line": 3917,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}"
     },
     {
      "func": "add_stage_visit",
-     "line": 3915,
+     "line": 3950,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits"
     },
     {
      "func": "update_stage_visit",
-     "line": 3941,
+     "line": 3976,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "delete_stage_visit",
-     "line": 3972,
+     "line": 4007,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "record_export",
-     "line": 3995,
+     "line": 4030,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/export"
     },
     {
      "func": "mark_payment",
-     "line": 4084,
+     "line": 4119,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 4216,
+     "line": 4251,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 4259,
+     "line": 4294,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 4299,
+     "line": 4334,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 4338,
+     "line": 4373,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 4363,
+     "line": 4398,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 4404,
+     "line": 4439,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 4429,
+     "line": 4464,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 4461,
+     "line": 4496,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 4490,
+     "line": 4525,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_finance_summary",
-     "line": 4534,
+     "line": 4569,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "approve_quotation",
-     "line": 4990,
+     "line": 5025,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 5115,
+     "line": 5150,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 5207,
+     "line": 5242,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5273,
+     "line": 5308,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5419,
+     "line": 5454,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5505,
+     "line": 5540,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5536,
+     "line": 5571,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5567,
+     "line": 5602,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5608,
+     "line": 5643,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5664,
+     "line": 5699,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5731,
+     "line": 5766,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5770,
+     "line": 5805,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5803,
+     "line": 5838,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 6391,
+     "line": 6426,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6511,
+     "line": 6546,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6579,
+     "line": 6614,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6735,
+     "line": 6770,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6749,
+     "line": 6784,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6780,
+     "line": 6815,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -9576,6 +9701,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
@@ -9724,6 +9850,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
@@ -10953,7 +11080,7 @@
     },
     {
      "func": "complete_daily_task",
-     "line": 814,
+     "line": 815,
      "method": "PATCH",
      "path": "/api/daily-tasks/{task_id}/complete"
     }
@@ -11270,25 +11397,25 @@
     },
     {
      "func": "lodging_record_export",
-     "line": 231,
+     "line": 220,
      "method": "GET",
      "path": "/api/lodging/records/{rid}/export"
     },
     {
      "func": "lodging_compare",
-     "line": 262,
+     "line": 251,
      "method": "GET",
      "path": "/api/lodging/compare"
     },
     {
      "func": "lodging_quote_create",
-     "line": 290,
+     "line": 279,
      "method": "POST",
      "path": "/api/lodging/quotes"
     },
     {
      "func": "lodging_quote_list",
-     "line": 337,
+     "line": 326,
      "method": "GET",
      "path": "/api/lodging/quotes"
     }
@@ -11601,6 +11728,7 @@
    "imports": [
     "helper:company_identity",
     "helper:startup",
+    "helper:xlsx_out",
     "mod:netplan/topology"
    ],
    "kind": "mod",
@@ -14974,9 +15102,11 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:custom_fields",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
@@ -14996,6 +15126,7 @@
     "core:db",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:email_notify",
     "helper:errors",
     "helper:privacy_notice",
@@ -15009,43 +15140,43 @@
    "routes": [
     {
      "func": "list_suppliers",
-     "line": 34,
+     "line": 58,
      "method": "GET",
      "path": "/api/suppliers"
     },
     {
      "func": "create_supplier",
-     "line": 61,
+     "line": 85,
      "method": "POST",
      "path": "/api/suppliers"
     },
     {
      "func": "update_supplier",
-     "line": 97,
+     "line": 122,
      "method": "PUT",
      "path": "/api/suppliers/{sid}"
     },
     {
      "func": "delete_supplier",
-     "line": 123,
+     "line": 154,
      "method": "DELETE",
      "path": "/api/suppliers/{sid}"
     },
     {
      "func": "update_supplier_visits",
-     "line": 143,
+     "line": 174,
      "method": "PATCH",
      "path": "/api/suppliers/{sid}/visits"
     },
     {
      "func": "get_supplier_contact_privacy_acks",
-     "line": 196,
+     "line": 227,
      "method": "GET",
      "path": "/api/suppliers/{sid}/privacy-notice"
     },
     {
      "func": "ack_supplier_contact_privacy_notice",
-     "line": 210,
+     "line": 241,
      "method": "POST",
      "path": "/api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack"
     }
@@ -15840,13 +15971,11 @@
   "page:pages/case-management.html": {
    "api_calls": [
     "/api/quotations/",
-    "/api/settings-center/public",
     "/api/shipping-notes/",
     "/api/system/branding/favicon"
    ],
    "api_prefixes": [
     "/api/quotations",
-    "/api/settings-center",
     "/api/shipping-notes",
     "/api/system"
    ],
@@ -15869,6 +15998,7 @@
     "js:static/approval-cascade.js",
     "js:static/approval-return.js",
     "js:static/auth-guard.js",
+    "js:static/custom-fields.js",
     "js:static/custom-layout.js",
     "js:static/download.js",
     "js:static/edit-presence.js",
@@ -15881,6 +16011,7 @@
     "js:static/notif.js",
     "js:static/privacy-notice.js",
     "js:static/profit-rules.js",
+    "js:static/public-flags.js",
     "js:static/sidebar.js",
     "js:static/ui.js"
    ],
@@ -15902,7 +16033,6 @@
     "mod:case/api/settlement_api",
     "mod:netplan/api",
     "mod:supply/api/shipping_notes",
-    "router:settings_center",
     "router:system"
    ],
    "routers_called_effective": [
@@ -15938,10 +16068,10 @@
     "router:auth",
     "router:customers",
     "router:def_governance",
+    "router:def_pipeline",
     "router:definitions",
     "router:legal_params",
     "router:parts",
-    "router:settings_center",
     "router:system",
     "router:uploads"
    ],
@@ -16479,16 +16609,22 @@
    "api_calls": [
     "/api/auth/logout",
     "/api/devices",
+    "/api/settings-center/public",
     "/api/system/branding/favicon"
    ],
    "api_prefixes": [
     "/api/auth",
     "/api/devices",
+    "/api/settings-center",
     "/api/system"
    ],
    "api_unmatched": [],
    "imports": [
+    "js:js/def-governance.js",
     "js:static/auth-guard.js",
+    "js:static/custom-layout.js",
+    "js:static/layout-editor.js",
+    "js:static/layout-runtime.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -16497,11 +16633,16 @@
    "routers_called": [
     "mod:analytics/api/dashboard",
     "router:auth",
+    "router:settings_center",
     "router:system"
    ],
    "routers_called_effective": [
     "mod:analytics/api/dashboard",
     "router:auth",
+    "router:def_governance",
+    "router:def_pipeline",
+    "router:definitions",
+    "router:settings_center",
     "router:system"
    ],
    "tables_r": [],
@@ -16570,6 +16711,7 @@
    "routers_called_effective": [
     "router:custom_records",
     "router:def_governance",
+    "router:def_pipeline",
     "router:definitions",
     "router:platform_catalog",
     "router:system"
@@ -17062,6 +17204,7 @@
     "router:auth",
     "router:custom_records",
     "router:def_governance",
+    "router:def_pipeline",
     "router:definitions",
     "router:org_structure",
     "router:platform_catalog",
@@ -17604,16 +17747,22 @@
     "/api/auth/logout",
     "/api/auth/me",
     "/api/materials-summary",
+    "/api/settings-center/public",
     "/api/system/branding/favicon"
    ],
    "api_prefixes": [
     "/api/auth",
     "/api/materials-summary",
+    "/api/settings-center",
     "/api/system"
    ],
    "api_unmatched": [],
    "imports": [
+    "js:js/def-governance.js",
     "js:static/auth-guard.js",
+    "js:static/custom-layout.js",
+    "js:static/layout-editor.js",
+    "js:static/layout-runtime.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -17622,11 +17771,16 @@
    "routers_called": [
     "mod:analytics/api/dashboard",
     "router:auth",
+    "router:settings_center",
     "router:system"
    ],
    "routers_called_effective": [
     "mod:analytics/api/dashboard",
     "router:auth",
+    "router:def_governance",
+    "router:def_pipeline",
+    "router:definitions",
+    "router:settings_center",
     "router:system"
    ],
    "tables_r": [],
@@ -17840,6 +17994,7 @@
    "routers_called_effective": [
     "mod:subcontract/api/remit_kinds",
     "router:def_governance",
+    "router:def_pipeline",
     "router:definitions",
     "router:system"
    ],
@@ -18125,7 +18280,6 @@
     "/api/company/tax/{}",
     "/api/customers",
     "/api/customers/{}",
-    "/api/settings-center/public",
     "/api/suppliers",
     "/api/suppliers/{}",
     "/api/suppliers/{}/privacy-notice",
@@ -18135,7 +18289,6 @@
     "/api/auth",
     "/api/company",
     "/api/customers",
-    "/api/settings-center",
     "/api/suppliers",
     "/api/system"
    ],
@@ -18143,6 +18296,7 @@
    "imports": [
     "js:js/def-governance.js",
     "js:static/auth-guard.js",
+    "js:static/custom-fields.js",
     "js:static/custom-layout.js",
     "js:static/gov-lookup.js",
     "js:static/layout-editor.js",
@@ -18150,8 +18304,10 @@
     "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
+    "js:static/public-flags.js",
     "js:static/record-link.js",
-    "js:static/sidebar.js"
+    "js:static/sidebar.js",
+    "js:static/user-buttons.js"
    ],
    "kind": "page",
    "path": "frontend/pages/suppliers.html",
@@ -18160,7 +18316,6 @@
     "router:auth",
     "router:company_lookup",
     "router:customers",
-    "router:settings_center",
     "router:system"
    ],
    "routers_called_effective": [
@@ -18169,8 +18324,8 @@
     "router:company_lookup",
     "router:customers",
     "router:def_governance",
+    "router:def_pipeline",
     "router:definitions",
-    "router:settings_center",
     "router:system"
    ],
    "tables_r": [],
@@ -18340,6 +18495,7 @@
    "api_calls": [
     "/api/company/tax/{}",
     "/api/contractor-dispatches",
+    "/api/settings-center/public",
     "/api/system/branding/favicon",
     "/api/vendor-contractors",
     "/api/vendor-contractors/{}",
@@ -18352,13 +18508,18 @@
    "api_prefixes": [
     "/api/company",
     "/api/contractor-dispatches",
+    "/api/settings-center",
     "/api/system",
     "/api/vendor-contractors"
    ],
    "api_unmatched": [],
    "imports": [
+    "js:js/def-governance.js",
     "js:static/auth-guard.js",
+    "js:static/custom-layout.js",
     "js:static/gov-lookup.js",
+    "js:static/layout-editor.js",
+    "js:static/layout-runtime.js",
     "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
@@ -18370,11 +18531,16 @@
    "routers_called": [
     "mod:subcontract/api/vendor_contractors",
     "router:company_lookup",
+    "router:settings_center",
     "router:system"
    ],
    "routers_called_effective": [
     "mod:subcontract/api/vendor_contractors",
     "router:company_lookup",
+    "router:def_governance",
+    "router:def_pipeline",
+    "router:definitions",
+    "router:settings_center",
     "router:system"
    ],
    "tables_r": [],
@@ -19422,6 +19588,78 @@
     "user_perm_subtracts"
    ]
   },
+  "router:custom_fields_builtin": {
+   "api_prefixes": [
+    "/api/custom-fields"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:builtin_fields",
+    "helper:config_ledger",
+    "helper:custom_fields",
+    "helper:duty_roles",
+    "helper:module_registry",
+    "helper:settings",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "helper:tiered_approval"
+   ],
+   "imports": [
+    "helper:auth",
+    "helper:builtin_fields"
+   ],
+   "kind": "router",
+   "path": "backend/routers/custom_fields_builtin.py",
+   "registered": true,
+   "routes": [
+    {
+     "func": "get_custom_fields",
+     "line": 19,
+     "method": "GET",
+     "path": "/api/custom-fields/{record_type}"
+    },
+    {
+     "func": "get_custom_fields_usage",
+     "line": 28,
+     "method": "GET",
+     "path": "/api/custom-fields/{record_type}/usage"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "audit_log",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "config_change_events",
+    "config_changes",
+    "duty_roles",
+    "notifications",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
+  },
   "router:custom_records": {
    "api_prefixes": [
     "/api/custom",
@@ -19432,6 +19670,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
@@ -19845,7 +20084,8 @@
     "helper:audit",
     "helper:auth",
     "helper:settings_registry",
-    "plat:definitions"
+    "plat:definitions",
+    "router:definitions"
    ],
    "kind": "router",
    "path": "backend/routers/def_governance.py",
@@ -19853,19 +20093,19 @@
    "routes": [
     {
      "func": "def_ledger",
-     "line": 141,
+     "line": 170,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/ledger"
     },
     {
      "func": "def_diff",
-     "line": 153,
+     "line": 182,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/diff"
     },
     {
      "func": "def_impact",
-     "line": 166,
+     "line": 195,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/impact"
     }
@@ -19906,6 +20146,92 @@
     "user_perm_subtracts"
    ]
   },
+  "router:def_pipeline": {
+   "api_prefixes": [
+    "/api/def-pipeline"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:config_ledger",
+    "helper:duty_roles",
+    "helper:module_registry",
+    "helper:settings",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "helper:tiered_approval"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:config_ledger",
+    "helper:settings_registry",
+    "plat:definitions"
+   ],
+   "kind": "router",
+   "path": "backend/routers/def_pipeline.py",
+   "registered": true,
+   "routes": [
+    {
+     "func": "pending_changes",
+     "line": 253,
+     "method": "GET",
+     "path": "/api/def-pipeline/pending"
+    },
+    {
+     "func": "approve_change",
+     "line": 272,
+     "method": "POST",
+     "path": "/api/def-pipeline/changes/{change_id}/approve"
+    },
+    {
+     "func": "activate_change",
+     "line": 288,
+     "method": "POST",
+     "path": "/api/def-pipeline/changes/{change_id}/activate"
+    },
+    {
+     "func": "cancel_change",
+     "line": 313,
+     "method": "POST",
+     "path": "/api/def-pipeline/changes/{change_id}/cancel"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "audit_log",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "config_change_events",
+    "config_changes",
+    "duty_roles",
+    "notifications",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
+  },
   "router:definitions": {
    "api_prefixes": [
     "/api/definition-kinds",
@@ -19918,6 +20244,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
@@ -19962,10 +20289,13 @@
     "helper:doc_template",
     "helper:expense_types",
     "helper:menu_builder",
+    "helper:settings_registry",
     "plat:catalog",
     "plat:definitions",
     "plat:registry",
-    "plat:spine"
+    "plat:spine",
+    "router:def_governance",
+    "router:def_pipeline"
    ],
    "kind": "router",
    "path": "backend/routers/definitions.py",
@@ -19973,103 +20303,103 @@
    "routes": [
     {
      "func": "list_definition_kinds",
-     "line": 200,
+     "line": 201,
      "method": "GET",
      "path": "/api/definition-kinds"
     },
     {
      "func": "list_expense_types",
-     "line": 207,
+     "line": 208,
      "method": "GET",
      "path": "/api/expense-types"
     },
     {
      "func": "get_expense_type",
-     "line": 219,
+     "line": 220,
      "method": "GET",
      "path": "/api/expense-types/{code}"
     },
     {
      "func": "list_definitions",
-     "line": 234,
+     "line": 235,
      "method": "GET",
      "path": "/api/definitions/{kind}"
     },
     {
      "func": "delete_definition_draft",
-     "line": 259,
+     "line": 260,
      "method": "DELETE",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "delete_custom_module",
-     "line": 278,
+     "line": 279,
      "method": "DELETE",
      "path": "/api/definitions/custom_module/{key}"
     },
     {
      "func": "get_definition",
-     "line": 295,
+     "line": 296,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}"
     },
     {
      "func": "get_definition_default",
-     "line": 309,
+     "line": 310,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/default"
     },
     {
      "func": "save_definition_draft",
-     "line": 319,
+     "line": 320,
      "method": "PUT",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "validate_definition",
-     "line": 349,
+     "line": 350,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/validate"
     },
     {
      "func": "publish_definition",
-     "line": 358,
+     "line": 462,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/publish"
     },
     {
      "func": "get_definition_version",
-     "line": 405,
+     "line": 522,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 422,
+     "line": 539,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 447,
+     "line": 564,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 479,
+     "line": 604,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
      "func": "effective_layout",
-     "line": 493,
+     "line": 618,
      "method": "GET",
      "path": "/api/layout/{module_key}"
     },
     {
      "func": "preview_output_template",
-     "line": 519,
+     "line": 653,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }
@@ -20078,7 +20408,9 @@
    "tables_named": [
     "invoice_vouchers"
    ],
-   "tables_r": [],
+   "tables_r": [
+    "audit_log"
+   ],
    "tables_r_transitive": [
     "approval_delegates",
     "audit_log",
@@ -21251,6 +21583,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
@@ -21297,19 +21630,19 @@
    "routes": [
     {
      "func": "platform_menu",
-     "line": 147,
+     "line": 148,
      "method": "GET",
      "path": "/api/platform/menu"
     },
     {
      "func": "platform_mounts",
-     "line": 175,
+     "line": 176,
      "method": "GET",
      "path": "/api/platform/mounts"
     },
     {
      "func": "platform_mount_points",
-     "line": 191,
+     "line": 192,
      "method": "GET",
      "path": "/api/platform/mount-points"
     }
@@ -22448,6 +22781,84 @@
     "user_perm_subtracts"
    ]
   },
+  "router:user_buttons": {
+   "api_prefixes": [
+    "/api/user-buttons"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:config_ledger",
+    "helper:duty_roles",
+    "helper:module_registry",
+    "helper:settings",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "helper:tiered_approval",
+    "helper:user_buttons"
+   ],
+   "imports": [
+    "core:db",
+    "helper:auth",
+    "helper:user_buttons"
+   ],
+   "kind": "router",
+   "path": "backend/routers/user_buttons.py",
+   "registered": true,
+   "routes": [
+    {
+     "func": "get_catalog",
+     "line": 25,
+     "method": "GET",
+     "path": "/api/user-buttons/catalog"
+    },
+    {
+     "func": "get_buttons",
+     "line": 34,
+     "method": "GET",
+     "path": "/api/user-buttons/{module}/{page}"
+    },
+    {
+     "func": "preview_buttons",
+     "line": 47,
+     "method": "POST",
+     "path": "/api/user-buttons/{module}/{page}/preview"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "audit_log",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "config_change_events",
+    "config_changes",
+    "duty_roles",
+    "notifications",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
+  },
   "table:access_categories": {
    "api_prefixes": [],
    "imports": [],
@@ -22562,6 +22973,7 @@
     "mod:analytics/api/dashboard",
     "mod:case/api/quotations",
     "mod:case/quotations",
+    "router:definitions",
     "router:item_reads",
     "router:system"
    ],
@@ -24871,6 +25283,7 @@
     "core:archive",
     "core:trail",
     "helper:audit",
+    "helper:builtin_fields",
     "helper:system_checks",
     "mod:accounting/voucher_attachments",
     "mod:case/__init__",
@@ -25119,6 +25532,7 @@
    "named_by": [
     "core:trail",
     "helper:audit",
+    "helper:builtin_fields",
     "helper:settings_groups",
     "mod:case/api/material_payments",
     "plat:migrations",
@@ -25520,6 +25934,7 @@
     "helper:settings_registry",
     "helper:system_checks",
     "helper:tiered_approval",
+    "helper:user_buttons",
     "mod:accounting/api/ledger_requests",
     "mod:accounting/api/voucher_common",
     "mod:accounting/api/vouchers",
@@ -25565,6 +25980,7 @@
    "named_by": [
     "core:archive",
     "core:db",
+    "helper:settings_groups",
     "plat:migrations",
     "router:map_points"
    ],

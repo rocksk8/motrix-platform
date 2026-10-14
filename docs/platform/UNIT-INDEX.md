@@ -6,23 +6,23 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 96 個；有單位卡 45 個。
+單位 98 個；有單位卡 47 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
 | `plat:capabilities` | L0 | 能力登錄（權限矩陣框架 P0；設計 docs/platform/plans/PERMISSION-MATRIX-DESIGN-T54.md §2）。 | 18 | 3 | `tests/platform/test_capabilities_registry.py`、`tests/platform/test_perm_equivalence_gate_a.py` |
 | `plat:catalog` | L0 | 能力目錄（CUSTOMIZATION-SPEC P1；CORE-SPEC §7 端點登錄表的擴充）。 | 13 | 4 | `tests/platform/test_platform_catalog.py` |
-| `plat:customization` | L0 | L0 模組描述：可自訂點（CUSTOMIZATION-SPEC P3；§8.2 排版器需求）。 | 14 | 2 | `tests/platform/test_platform_catalog.py` |
-| `plat:definitions` | L0 | 定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。 | 26 | 11 | `tests/test_definitions_store_2026_09_25.py` |
+| `plat:customization` | L0 | L0 模組描述：可自訂點（CUSTOMIZATION-SPEC P3；§8.2 排版器需求）。 | 14 | 3 | `tests/platform/test_platform_catalog.py` |
+| `plat:definitions` | L0 | 定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。 | 26 | 14 | `tests/test_definitions_store_2026_09_25.py` |
 | `plat:events` | L0 | L1 事件匯流排（CUSTOMIZATION-SPEC §6，ROADMAP P6）。 | 9 | 2 | `tests/platform/test_core_events.py` |
 | `plat:internal_cols` | L0 | L0 內部欄位剝除（U0a 洩漏防線；設計 docs/platform/plans/FRAMEWORK-ORG-UNITS-T57.md §14.10 #4）。 | 6 | 2 | `backend/tests/platform/test_internal_cols.py` |
 | `plat:loader` | L0 | L0 模組載入器：掃 `modules/*/module.json`，相容且匯入成功的才登錄。 | 11 | 4 | `tests/platform/test_core_loader.py` |
-| `plat:menu` | L0 | 選單由登錄表產生（階段 C／C3，docs/platform/STAGE-C-DESIGN.md §4）。 | 15 | 5 | `tests/platform/test_menu.py` |
+| `plat:menu` | L0 | 選單由登錄表產生（階段 C／C3，docs/platform/STAGE-C-DESIGN.md §4）。 | 16 | 6 | `tests/platform/test_menu.py` |
 | `plat:migrations` | L0 | 每模組獨立版本的 migration（CORE-SPEC §6）。 | 10 | 3 | `tests/test_definitions_store_2026_09_25.py`、`tests/platform/test_migration_incomplete.py` |
 | `plat:mounts` | L0 | 內建頁面開放給自訂模組的「掛載點」（建構器方案 B；設計 docs/platform/plans/BUILDER-B-DESIGN.md）。 | 6 | 3 | `tests/test_builder_b_mounts_2026_10_01.py` |
 | `plat:pages` | L0 | 頁面對照與提供（階段 C／C1，docs/platform/STAGE-C-DESIGN.md §3）：`/pages/<檔名>` ⇒ 實體檔、提示頁或 404。 | 15 | 2 | `tests/platform/test_core_pages.py` |
 | `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 45 | 27 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
-| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 26 | 89 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
+| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 26 | 90 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
 | `plat:source_tree` | L0 | 守門測試要掃的原始碼範圍：唯一來源。 | 11 | 0 | `tests/platform/test_core_loader.py` |
 | `plat:spine` | L0 | L0 脊柱功能登錄（E-b；設計 docs/platform/plans/SPINE-ENGINE-DESIGN-T57.md、FIELD-LAYOUT-FRAMEWORK-T56.md §17）。 | 31 | 5 | `backend/tests/platform/test_spine_e_b.py` |
 | `plat:system_hub` | L0 | 系統中心（System Hub）登錄表：『系統』底下所有設定／管理／稽核入口的索引（第 54 班 P1；設計 docs/platform/plans/SYSTEM-HUB-DESIGN-T54.md）。 | 13 | 1 | `tests/platform/test_system_hub.py` |
@@ -31,7 +31,7 @@
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 24 | 9 | — |
 | `core:backup_job` | L1 | MOTRIX ERP 獨立備份腳本（無單位卡） | 1 | 0 | — |
 | `core:cloud_storage` | L1 | Pluggable cloud backup storage backend (2026-09-07, architecture map §6.4).（無單位卡） | 9 | 2 | — |
-| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 29 | 133 | — |
+| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 29 | 136 | — |
 | `core:heartbeat_job` | L1 | Independent heartbeat pinger: confirms local ERP is responding, then pings an（無單位卡） | 1 | 0 | — |
 | `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 12 | 0 | — |
 | `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 23 | 17 | — |
@@ -39,20 +39,21 @@
 | `core:trail` | L1 | 操作軌跡（`user_request_log`）的共用設定，以及把路徑翻成人話的對照表。（無單位卡） | 23 | 2 | — |
 | `helper:approval_queue` | L1 | 「待我簽核」佇列與轉簽的共用形狀（L1；M01-PLAN §3-7，2026-09-26）。（無單位卡） | 11 | 18 | — |
 | `helper:attachment_search` | L1 | 附件目錄的搜尋共用件（`attachments.catalog` 契約 v1 的 `search`／`count`；附件目錄 P3， | 10 | 9 | `tests/test_filehub_search_2026_09_30.py` |
-| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 13 | 84 | — |
-| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 110 | — |
+| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 13 | 85 | — |
+| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 114 | — |
 | `helper:branding` | L1 | 品牌圖檔（主 LOGO／深色底 LOGO／favicon）：上傳驗證、存放、讀取時回預設。 | 16 | 2 | `tests/test_branding_2026_09_27.py` |
 | `helper:build_info` | L1 | 這個**行程**載入的是哪一份程式碼（`BR1`）。（無單位卡） | 3 | 2 | — |
+| `helper:builtin_fields` | L1 | 內建畫面的自訂欄位（T61 S5；設計：docs/platform/plans/T61-S5-FIELD-CATALOG-DESIGN.md）。 | 8 | 4 | `backend/tests/test_builtin_custom_fields_2026_10_14.py` |
 | `helper:business_days` | L1 | L1 工作日／假日判斷（第44班：自 M11 標案雷達 `calendar_tw.py` 提升為 L1 共用，供任何模組用——例如 M01 預定付款日提醒、M11 不寄信日）。**純函式，不連網、不讀時鐘（日期由呼叫端給）。**（無單位卡） | 9 | 3 | — |
 | `helper:calendar_sync` | L1 | 日期型行事曆事件的每日對帳（L1；MAIL-CAL 階段 2：保固到期／區間事項結束／專案預計完成）。 | 4 | 2 | `tests/test_notify_matrix_phase2_2026_10_06.py` |
 | `helper:case_access` | L1 | L1 案件存取守門（主持裁示 2026-09-26，DEPENDENCY-MAP §3 #2「案件可見性規則 → L1 權限」）。（無單位卡） | 21 | 27 | — |
 | `helper:case_roles` | L1 | 案件角色（caseRecord.roles 的 filler／sales／executor）的兩種形狀（CM3，2026-09-24）。（無單位卡） | 5 | 3 | — |
 | `helper:company_identity` | L1 | §9 QL · 一份單據要印的「公司身分」。（無單位卡） | 19 | 14 | — |
 | `helper:company_setup` | L1 | 本公司資料設定閘門：「這個安裝的本公司資料有沒有人確認過」（docs/platform/COMPANY-SETUP-GATE.md §3、§4.3、§6）。 | 66 | 7 | `tests/test_company_setup_core_2026_09_28.py`、`tests/test_company_setup_cli_2026_09_28.py`、`tests/test_company_setup_gate_2026_09_28.py`、`tests/test_company_setup_output_gate_2026_09_28.py` |
-| `helper:config_ledger` | L1 | 設定與權限共用的「變更明細＋待生效」層（L1；第 54 班設定中心 S0；與 1d 的權限矩陣設計 §7 共同定案）。 | 18 | 2 | `backend/tests/platform/test_config_ledger_t54.py` |
+| `helper:config_ledger` | L1 | 設定與權限共用的「變更明細＋待生效」層（L1；第 54 班設定中心 S0；與 1d 的權限矩陣設計 §7 共同定案）。 | 18 | 3 | `backend/tests/platform/test_config_ledger_t54.py` |
 | `helper:custom_builder_support` | L1 | 建構器底層支援（建構器第三輪 S2.5／S3／S5，CORE 1.72，只增）。 | 21 | 5 | `tests/test_builder_support_2026_09_30.py` |
 | `helper:custom_def_review` | L1 | 自訂模組「定義」的送審流程（建構器第三輪 S4，2026-09-30；使用者：定義送審→退回→修改重送，每次 v1→v2…，退回要填原因）。 | 13 | 2 | `tests/test_builder3_def_review_2026_09_30.py` |
-| `helper:custom_fields` | L1 | 自訂欄位命名空間（P4，CUSTOMIZATION-SPEC §3.6）。（無單位卡） | 10 | 2 | — |
+| `helper:custom_fields` | L1 | 自訂欄位命名空間（P4，CUSTOMIZATION-SPEC §3.6）。（無單位卡） | 10 | 3 | — |
 | `helper:custom_files` | L1 | 自訂模組附件（file／image 欄位，建構器第三輪 S2；core migration v4 `custom_record_files`）。 | 16 | 3 | `tests/test_builder3_files_2026_09_30.py` |
 | `helper:custom_finance` | L1 | 自訂模組的金流（收入／支出）串接（建構器第三輪 S2.5；使用者 2026-09-30：「只要有收入、支出項，都需要跟營運報表或是相關模組數據串接」）。 | 10 | 6 | `tests/test_builder3_finance_2026_09_30.py` |
 | `helper:custom_history` | L1 | 自訂模組單據的送簽修訂紀錄（建構器第三輪 S5，2026-09-30；使用者：單據送簽→退回→修改重送，單號加 -R1、-R2 並保留各版內容，可比對差異）。 | 5 | 2 | `tests/test_builder3_history_2026_09_30.py` |
@@ -97,12 +98,13 @@
 | `helper:row_access` | L1 | L1 資料列權限（row-level access）：一份宣告，同時產生「單筆判斷」與「SQL 過濾」。（無單位卡） | 8 | 10 | — |
 | `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 52 | — |
 | `helper:settings_groups` | L1 | 設定群組登錄（L1；第 54 班 Train A）。**預設值＝上線前的程式常數**（部署零行為變更；`settings_deploy_baseline.json` 凍結）。 | 1 | 9 | `backend/tests/platform/test_settings_registry_t54.py` |
-| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 37 | 17 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 37 | 21 | `backend/tests/platform/test_settings_registry_t54.py` |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 23 | 10 | — |
 | `helper:storage_locations` | L1 | 儲存位置：雲端存檔根目錄、個資資料夾、更新交付資料夾的**唯一**解析處（CORE-SPEC 裁示表「儲存位置可設定」，2026-09-28）。 | 13 | 3 | `tests/platform/test_storage_locations_2026_09_28.py` |
 | `helper:system_checks` | L1 | L1 系統健康的每日檢查（2026-09-26 自 routers/daily_tasks.py 搬出，M12 搬遷前置）。（無單位卡） | 8 | 2 | — |
 | `helper:tax_calc` | L1 | 稅額純函式（L1；2026-09-26 自 M01 `helpers/quotations.py` 下沉，主持核准「T」）。（無單位卡） | 12 | 9 | — |
 | `helper:tiered_approval` | L1 | 共用的 tiers 依序簽核純邏輯（2026-08-22）。（無單位卡） | 31 | 33 | — |
 | `helper:uploads` | L1 | 通用「已開立/已回簽單據」附件上傳（2026-08-24）：報價單回簽、出貨單回簽、（無單位卡） | 21 | 31 | — |
+| `helper:user_buttons` | L1 | 使用者自訂按鈕（T61 S6；設計：docs/platform/plans/T61-S6-ACTION-CATALOG-DESIGN.md）。 | 12 | 1 | `backend/tests/test_user_buttons_2026_10_14.py` |
 | `helper:validation` | L1 | 請求本文的共用驗證（第 49 班 W1c-P2）。 | 2 | 23 | `tests/test_strict_bool_helper_t49.py` |
-| `helper:xlsx_out` | L1 | L1 輸出：Excel 樣式、公式注入防護、匯出速率限制（ROADMAP A8／DEPENDENCY-MAP §3 #10 #13）。（無單位卡） | 15 | 11 | — |
+| `helper:xlsx_out` | L1 | L1 輸出：Excel 樣式、公式注入防護、匯出速率限制（ROADMAP A8／DEPENDENCY-MAP §3 #10 #13）。（無單位卡） | 19 | 12 | — |
