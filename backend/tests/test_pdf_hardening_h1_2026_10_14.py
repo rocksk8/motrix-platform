@@ -45,12 +45,29 @@ def test_inline_scripts_are_allowed_only_by_hash_and_external_scripts_never():
     assert csp.count("sha256-") == 2 and "a.js" not in csp
 
 
-def test_inject_csp_is_placed_after_head_and_is_idempotent():
+def test_inject_csp_is_placed_after_head_and_uses_our_own_meta():
     html = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>x</body></html>'
     out = ST._inject_csp(html)
-    assert out.startswith('<!DOCTYPE html><html><head><meta http-equiv="Content-Security-Policy"') and ST._inject_csp(out) == out
-    assert ST._inject_csp("<p>no head</p>").startswith('<meta http-equiv="Content-Security-Policy"')
-    assert ST._inject_csp("<html><body>x</body></html>").startswith('<html><meta http-equiv=')
+    assert out.startswith('<!DOCTYPE html><html><head><meta id="motrix-csp" http-equiv="Content-Security-Policy"')
+    assert ST._inject_csp("<p>no head</p>").startswith('<meta id="motrix-csp"')
+    assert ST._inject_csp("<html><body>x</body></html>").startswith('<html><meta id="motrix-csp"')
+    assert ST._inject_csp('<html lang="zh"><body>x</body></html>').startswith('<html lang="zh"><meta id="motrix-csp"')
+
+
+def test_a_text_field_cannot_switch_the_csp_off():
+    """04 M1：使用者文字含 `http-equiv=Content-Security-Policy`（沒有 < > & 引號，逸出後原樣保留）不能讓整份文件跳過我們的 CSP。"""
+    for payload in ("http-equiv=Content-Security-Policy", 'http-equiv = "Content-Security-Policy" content=default-src *', "Content-Security-Policy"):
+        html = "<!DOCTYPE html><html><head></head><body><p>%s</p></body></html>" % payload.replace('"', "&quot;")
+        out = ST._inject_csp(html)
+        assert out.count('<meta id="motrix-csp"') == 1 and "default-src 'none'" in out, payload
+        assert ST._inject_csp(out).count('<meta id="motrix-csp"') == 2, "重複插入無害（政策取交集）"
+
+
+def test_head_pattern_does_not_match_header_or_headline_tags():
+    out = ST._inject_csp("<html><header>H</header><headline>x</headline><body>y</body></html>")
+    assert out.startswith("<html><meta id=\"motrix-csp\""), "沒有 <head>：插在 <html> 之後，不是 <header> 之後"
+    out2 = ST._inject_csp("<html><header>H</header><head><title>t</title></head><body></body></html>")
+    assert out2.index('<meta id="motrix-csp"') > out2.index("<head>") and out2.index('<meta id="motrix-csp"') < out2.index("<title>")
 
 
 def test_an_injected_script_does_not_get_a_hash_that_allows_the_page_scripts_only():
@@ -75,6 +92,15 @@ def test_harden_html_file_rewrites_the_html_that_the_command_points_to(tmp_path)
     ST._harden_html_file(["edge", "--print-to-pdf=x.pdf", "file:///" + str(f).replace("\\", "/")])
     assert "Content-Security-Policy" in f.read_text(encoding="utf-8")
     ST._harden_html_file(["edge", "--version"])          # 不是渲染 HTML 的命令 ⇒ 不做事
+
+
+def test_harden_html_file_works_for_a_path_with_spaces_and_chinese(tmp_path):
+    d = tmp_path / "含 空白 的 目錄"
+    d.mkdir()
+    f = d / "文件 一.html"
+    f.write_text("<html><head></head><body>x</body></html>", encoding="utf-8")
+    ST._harden_html_file(["edge", "--print-to-pdf=x.pdf", "file:///" + str(f).replace("\\", "/")])
+    assert 'id="motrix-csp"' in f.read_text(encoding="utf-8"), "各 builder 組的是未編碼路徑（含空白與中文）；硬化必須照樣找得到檔案"
 
 
 # ── ② 五個輸出點 ────────────────────────────────────────────────────────────
@@ -251,3 +277,16 @@ def test_normal_documents_render_the_same_before_and_after_hardening(name, tmp_p
     assert _text(a) == _text(b), "文字內容不同"
     assert [len(p.images) for p in ra.pages] == [len(p.images) for p in rb.pages], "圖片數不同"
     assert _text(b).strip(), "硬化後的 PDF 沒有任何文字（字型被擋？）"
+
+
+def test_hardening_also_applies_when_the_temp_path_has_spaces_and_chinese(tmp_path):
+    """各 builder 組的 file URL 不編碼：路徑含空白與中文時，硬化仍要找得到檔案並生效（否則 iframe 會把 win.ini 畫進 PDF）。"""
+    pytest.importorskip("pypdf")
+    if not os.path.exists(WININI):
+        pytest.skip("沒有 C:/Windows/win.ini（非 Windows）")
+    d = tmp_path / "含 空白 的 目錄"
+    d.mkdir()
+    html = ("<!DOCTYPE html><html><head><meta charset=\"UTF-8\"></head><body><h2>MARK-OK</h2>"
+            "<iframe src=\"file:///%s\" width=\"600\" height=\"300\"></iframe></body></html>" % WININI)
+    text = _text(_render(html, True, d, "文件 一"))
+    assert "MARK-OK" in text and "[fonts]" not in text and "[extensions]" not in text and "for 16-bit app support" not in text

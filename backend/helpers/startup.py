@@ -204,12 +204,12 @@ def _csp_for_html(html: str) -> str:
 
 
 def _inject_csp(html: str) -> str:
-    """在 `<head>` 之後（沒有就在 `<html>` 之後、再沒有就在最前面）插入 CSP `<meta>`；已經有就不重複（冪等）。"""
+    """在 `<head>` 之後（沒有就在 `<html>` 之後、再沒有就在最前面）插入我們自己的 CSP `<meta id="motrix-csp">`。
+    **不做『已經有 CSP 就跳過』的短路**：使用者文字裡若含 `http-equiv=Content-Security-Policy` 字樣（沒有 < > & 引號，逸出後原樣保留），
+    短路會讓整份文件沒有我們的 CSP。多個 CSP 政策會取交集，重複插入無害。"""
     import re
-    if re.search(r"http-equiv\s*=\s*[\"']?Content-Security-Policy", html, re.I):
-        return html
-    meta = '<meta http-equiv="Content-Security-Policy" content="%s">' % _csp_for_html(html).replace('"', "&quot;")
-    m = re.search(r"<head[^>]*>", html, re.I) or re.search(r"<html[^>]*>", html, re.I)
+    meta = '<meta id="motrix-csp" http-equiv="Content-Security-Policy" content="%s">' % _csp_for_html(html).replace('"', "&quot;")
+    m = re.search(r"<head(?:\s[^>]*)?>", html, re.I) or re.search(r"<html(?:\s[^>]*)?>", html, re.I)
     return html[:m.end()] + meta + html[m.end():] if m else meta + html
 
 
