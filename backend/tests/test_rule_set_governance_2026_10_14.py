@@ -174,7 +174,7 @@ def test_a_seen_preview_is_always_required_while_rules_are_enabled(sa):
     assert _pub(c, h["a"]).status_code == 200
 
 
-def test_enforce_rule_set_switch_is_an_independent_extra_guard(sa):
+def test_enforce_rule_set_switch_is_an_independent_extra_guard(client, sa):
     c, h = sa
     from helpers import settings_registry as SR
     conn = db.get_db()

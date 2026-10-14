@@ -100,7 +100,7 @@ def test_label_and_ids_are_plain_strings(world):
     assert r["id"] == "Q-002" and "專案Q-002" in r["label"] and isinstance(r["values"], dict)
 
 
-def test_it_is_read_only_and_parameterized(world):
+def test_it_is_read_only_and_parameterized(client, world):
     conn = db.get_db()
     try:
         before = [tuple(x) for x in conn.execute("SELECT * FROM quotations ORDER BY id").fetchall()]

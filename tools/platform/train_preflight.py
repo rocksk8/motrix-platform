@@ -592,7 +592,17 @@ def measure(repo=REPO, workers=2):
     return len(per), secs
 
 
+def _utf8_console():
+    """cp932 等非 UTF-8 主控台印報告會 UnicodeEncodeError（測試跑完才崩、結果全失）；輸出改 UTF-8＋errors=replace，不改行為。"""
+    for st in (sys.stdout, sys.stderr):
+        try:
+            st.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv=None):
+    _utf8_console()
     ap = argparse.ArgumentParser(description="列車預檢")
     ap.add_argument("cmd", nargs="?", default="run", choices=["run", "measure"])
     ap.add_argument("--base", default="origin/platform")

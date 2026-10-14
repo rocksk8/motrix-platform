@@ -352,3 +352,14 @@ def test_full_lint_targets_are_platform_dir_plus_existing_guard_files_and_use_th
     assert len(TP.FULL_LINT_FILES) == len(set(TP.FULL_LINT_FILES))
     for f in ("tests/test_system_audit_2026_09_14.py", "tests/test_write_endpoints_are_audited_2026_09_24.py", "tests/test_approval_no_freeze_2026_09_30.py"):
         assert f in TP.FULL_LINT_FILES, "T53 抓到的守門檔必須在清單內：" + f
+
+
+def test_main_prints_report_on_cp932_console(monkeypatch, capsys):
+    """非 UTF-8 主控台：報告含 '═' 也不能在印出時崩（reconfigure 成 utf-8＋replace）。"""
+    import io
+    buf = io.BytesIO()
+    monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(buf, encoding="cp932", errors="strict"))
+    monkeypatch.setattr(TP, "preflight", lambda *a, **k: (0, "═══ 列車預檢 ═══", {}))
+    assert TP.main(["--static-only"]) == 0
+    sys.stdout.flush()
+    assert "列車預檢".encode("utf-8") in buf.getvalue()
