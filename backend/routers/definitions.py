@@ -391,27 +391,11 @@ def _preview_gate(conn, kind, key, scope, user, preview_hash, expect=None):
 _OPT_IN_PREVIEW_KINDS = ("layout", "custom_fields", "user_buttons", "output_template", "rule_set")
 
 
-def _now_iso():
-    from datetime import datetime
-    return datetime.now().isoformat(timespec="seconds")
-
-
 def _strict_setting(conn, group, field):
-    """設定值的**嚴格**讀取（把關專用）：資料庫讀不到、內容格式不對、值不是 0／1 ⇒ 丟例外（由 `_preview_enforced` 轉成 503，不放行）。
-    不用 `settings_registry.get`：它『永不丟例外』，讀取失敗會回預設（＝關），等於悄悄打開閘門；`MOTRIX_SETTINGS_DEFAULTS_ONLY=1`
-    也會讓它回預設——安全把關不受那個逃生口影響（照管理者已儲存的值判斷）。沒有儲存過的欄位 ⇒ 程式預設（這是正常情況，不是錯誤）。"""
-    from helpers import settings_registry as SR
-    row = D.get(conn, SR.KIND, group, SR.SCOPE)                        # 資料庫錯誤在此丟出，不吞
-    val = SR._defaults(group)[field]
-    if row is not None:
-        vals = (row.get("body") or {}).get("values")
-        if not isinstance(vals, dict):
-            raise ValueError("設定群組 %s 的內容格式不對" % group)
-        if field in vals:
-            val = vals[field]
-    for r in SR._due_pending(conn, group, _now_iso()):      # 已到時的待生效值（例如放寬後的『關閉強制』）
-        if r["field"] == field:
-            val = r["new"]
+    """設定值的**嚴格** 0／1 讀取（把關專用）：讀不到、格式不對、值不是 0／1 ⇒ 丟例外（由 `_preview_enforced` 轉成 503，不放行）。
+    讀取本身在 `helpers/settings_strict.strict_value`（不經 `settings_registry.get`：它永不丟例外，失敗會回預設＝悄悄打開閘門）。"""
+    from helpers.settings_strict import strict_value
+    val = strict_value(conn, group, field)
     if isinstance(val, bool) or val not in (0, 1):
         raise ValueError("設定 %s.%s 的值不是 0／1：%r" % (group, field, val))
     return int(val)

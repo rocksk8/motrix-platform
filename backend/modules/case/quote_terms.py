@@ -153,31 +153,43 @@ def _text(v) -> str:
     return _js_trim(_js_str(v)) if _js_truthy(v) else ""
 
 
-DEFAULT_MIN_ITEM_MARGIN_PCT = 30.0                 # 今天的寫死值；設定讀不到／不合法時一律回到它（＝今天的行為）
+STRICTEST_MIN_ITEM_MARGIN_PCT = 100.0              # 讀不到／不合法時的收斂方向：每一個有成本的品項都列為『需審核』（寧可多送審，不可少送審）
 
 
 def min_item_margin_pct() -> float:
-    """單項毛利率低於多少要送審（%）。設定 `quote_approval.min_item_margin_pct`，預設 30＝今天寫死的值；讀不到或不合法 ⇒ 30。"""
+    """單項毛利率低於多少要送審（%）。設定 `quote_approval.min_item_margin_pct`，預設 30＝今天寫死的值。
+    **嚴格讀取**（`helpers/settings_strict`，不經 `settings_registry.get`）：資料庫讀不到、格式不對、不是有限數字、超出 0～100 ⇒ **100（最嚴）**，
+    不是 30——管理者把門檻調高到 50 之後，鎖住的資料庫或 DEFAULTS_ONLY 環境變數不可以悄悄把它降回 30（放寬）。"""
     try:
-        from helpers import settings_registry as _sr
-        v = float(_sr.get("quote_approval", "min_item_margin_pct"))
+        from db import get_db
+        from helpers.settings_strict import strict_value
+        conn = get_db()
+        try:
+            v = float(strict_value(conn, "quote_approval", "min_item_margin_pct"))
+        finally:
+            conn.close()
         if math.isfinite(v) and 0 <= v <= 100:
             return v
-    except Exception:                                              # noqa: BLE001  設定讀不到不可改變送審判定
-        pass
-    return DEFAULT_MIN_ITEM_MARGIN_PCT
+    except Exception:                                              # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning("quote_approval: 讀不到單項毛利率門檻，改用最嚴的 %s%%", STRICTEST_MIN_ITEM_MARGIN_PCT, exc_info=True)
+    return STRICTEST_MIN_ITEM_MARGIN_PCT
 
 
 def compute_approval_reasons(q: dict, presets: list, default_payment_terms: str) -> list:
     """移植 quotation-form.html::checkApproval()（不含「已核准就清空」那一段——送審時不會是已核准）。"""
     reasons = []
-    min_pct = min_item_margin_pct()                               # 預設 30＝今天的寫死值（前端 checkApproval 同源，見 project-margin/config 的 minItemMarginPct）
+    min_pct = None                                                # 第一個有成本的品項才讀（預設 30＝今天的寫死值；前端 checkApproval 同源，見 project-margin/config 的 minItemMarginPct）
     if _js_num(q.get("validDays")) > 30:
         reasons.append(f"有效期限 {_js_str(q.get('validDays'))} 天（超過 30 天）")
     for i, item in enumerate(q.get("items") or []):
         if not isinstance(item, dict) or item.get("type") == "header":
             continue
-        if _js_num(item.get("cost")) > 0 and _js_num(item.get("margin")) < min_pct / 100:
+        if _js_num(item.get("cost")) <= 0:
+            continue
+        if min_pct is None:
+            min_pct = min_item_margin_pct()
+        if _js_num(item.get("margin")) < min_pct / 100:
             reasons.append(f"第 {i + 1} 項毛利率 {_js_to_fixed(_js_num(item.get('margin')) * 100, 2)}% 低於 {_js_str(min_pct)}%")
     if _js_truthy(q.get("showDiscount")) and _js_num(q.get("discount")) > 0:
         reasons.append(f"含折讓（NT${_js_locale_number(_js_num(q.get('discount')))}）")
