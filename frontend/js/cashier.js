@@ -220,7 +220,14 @@ function cashierApp() {
       if (st.hasFee) { b.hasFee = true; b.fee = Number(st.fee) }
       return b
     },
-    remitReviewLabel(s) { return s === 'pending' ? '差額待審核' : (s === 'approved' ? '差額已核可' : '') },
+    // S-X2：狀態顯示名稱（旗標關或沒改過 ⇒ 原字照印）；決定動作與傳遞值仍是 approve／reject、pending／approved
+    stLabel(raw, ctx, fallback) {
+      return window.MotrixStatus ? window.MotrixStatus.label(raw, ctx, fallback) : (fallback != null ? fallback : (raw == null ? '' : raw))
+    },
+    remitReviewLabel(s) {
+      const raw = s === 'pending' ? '差額待審核' : (s === 'approved' ? '差額已核可' : '')
+      return raw ? this.stLabel(raw, 'cashier', raw) : ''
+    },
     kindLabel(k) { return { purchase_req: '請購單', purchase_order: '採購單', travel: '差旅費用請款單', petty_cash: '零用金支付單', material_payment: '材料申請匯款（可分次付款：實付填本次金額）' }[k] || '' },
     payreqExtra(it) {
       const k = it.source + ':' + it.key
@@ -1100,6 +1107,7 @@ function cashierApp() {
         this.ready = true
         return
       }
+      if (window.MotrixStatus) window.MotrixStatus.init()      // S-X2：旗標關 ⇒ 什麼都不改；不等它
       await this.showCashierTab()
       this.ready = true
     },

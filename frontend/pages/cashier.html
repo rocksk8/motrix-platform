@@ -9,6 +9,8 @@
   <script src="../js/cashier.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
+  <script src="../static/public-flags.js"></script>
+  <script src="../static/status-chip.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <!-- ⚠️ 下面這整塊樣式是從 `reports.html` **整段複製**過來的。
@@ -610,7 +612,7 @@
                           <td class="r mono" x-text="fmt(it.amount)"></td>
                           <td class="c mono" :class="it.overdue ? 'red-txt' : (isDueSoon(it.expectedReceiptDate) ? 'orange-txt' : '')"
                               x-text="it.expectedReceiptDate || '未指定'"></td>
-                          <td class="c"><span class="rb" :class="it.received ? 'rb-received' : 'rb-pending'" x-text="it.received ? '已收款' : '待收款'"></span></td>
+                          <td class="c"><span class="rb" :class="it.received ? 'rb-received' : 'rb-pending'" x-text="stLabel(it.received ? '已收款' : '待收款', 'cashier')"></span></td>
                           <td>
                             <template x-if="it.invoiceNo">
                               <span class="rb rb-invoiced" :style="canExecuteCashier() ? 'cursor:pointer' : ''" @click="canExecuteCashier() && openInvoiceModal(it)" x-text="it.invoiceNo"></span>

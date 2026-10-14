@@ -33,7 +33,7 @@
   }
 
   var TONE_NAME = { neutral: '中性（無色）', draft: '灰（草稿）', pending: '琥珀（待審）', signing: '藍（簽核中）', approved: '綠（已核准）', rejected: '紅（駁回）', paid: '深綠（已付款）', 'void': '淡灰（作廢）' }
-  var GROUP_NAME = { approval: '單據與簽核狀態', quote: '報價單', deal: '案件進度（deal_tag）', settle: '成本精算' }
+  var GROUP_NAME = { approval: '單據與簽核狀態', quote: '報價單', deal: '案件進度（deal_tag）', settle: '成本精算', receipt: '出納收款', remit: '匯款差額審核' }
   var CTX_NAME = { quote_list: '報價單列表', quote_form: '報價單表單', 'case': '案件管理', cashier: '出納', report: '報表', settlement: '精算頁' }
   var PREVIEW_CTX = [['quote_list', '報價單列表'], ['case', '案件卡片'], ['cashier', '出納']]
   var OFFICIAL = ['核准', '核準', '批准', '核可', '已簽核', '簽核完成', '簽核通過', '審核通過', '已通過', '通過', '生效', '確認', '已批', '批示', '已准', '准予', '承認', '認可', '同意', '已签核', '审核通过', '通过', '确认', '承认', '认可', 'OK', 'Approved']   // 僅供即時提示；伺服器才是準的（會去掉分隔、比對繁簡與英文）
@@ -97,7 +97,7 @@
     var groups = {}
     Object.keys(st.defaults).forEach(function (k) { var g = (st.meta[k] || {}).group || 'approval'; (groups[g] = groups[g] || []).push(k) })
     var html = '<div class="sde-head"><b>狀態顯示名稱與顏色</b><button class="sde-btn" data-sde="close" aria-label="關閉">關閉</button></div><div class="sde-body">'
-    html += '<div class="sde-dim">只改畫面上看到的字與色；狀態的值（資料庫裡存的字）、查詢與權限都不變。核准、付款類狀態改名或改色需要第二位最高管理者核准。「顯示名稱」是預設用字；若某個畫面有自己的簡稱（例如報價單列表的「審核中」），要改那個畫面就改它的簡稱欄，只改顯示名稱不會蓋掉它。</div>'
+    html += '<div class="sde-dim">只改畫面上看到的字與色；狀態的值（資料庫裡存的字）、查詢與權限都不變。核准、付款類狀態改名或改色需要第二位最高管理者核准。狀態欄與徽章會跟著改；按鈕與動作用字（例如「標記已收款」）、區段標題（例如「已收款明細」）和統計卡標題維持系統用語。「顯示名稱」是預設用字；若某個畫面有自己的簡稱（例如報價單列表的「審核中」），要改那個畫面就改它的簡稱欄，只改顯示名稱不會蓋掉它。</div>'
     Object.keys(GROUP_NAME).forEach(function (g) {
       if (!groups[g]) return
       html += '<div class="sde-grp">' + esc(GROUP_NAME[g]) + '</div>'

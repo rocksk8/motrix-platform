@@ -10,6 +10,8 @@
   <script src="../static/legal-round.js"></script>
   <script src="../static/download.js"></script>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/public-flags.js"></script>
+  <script src="../static/status-chip.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <style>
     .page-wrap{padding:calc(var(--topbar-h) + 20px) 28px 60px calc(var(--sidebar-w) + 28px);max-width:1140px}
@@ -87,7 +89,7 @@
       <h1 style="font-size:18px;font-weight:700;color:var(--text-main);margin-top:4px">
         <span x-text="isNew ? '新增請款單' : '編輯請款單'"></span>
         <span class="req-no" x-show="q.requestNo" x-text="'　' + q.requestNo"></span>
-        <span :class="'badge ' + statusClass()" x-show="q.status" x-text="q.status" style="margin-left:8px;vertical-align:middle"></span>
+        <span :class="'badge ' + statusClass()" x-show="q.status" x-text="MotrixStatus.label(q.status, 'cashier')" style="margin-left:8px;vertical-align:middle"></span>
       </h1>
     </div>
   </div>
@@ -392,7 +394,8 @@ function paymentRequestForm() {
     dirty() { this.isDirty = true },
 
     statusClass() {
-      return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved', '已駁回': 'badge--rejected', '已作廢': 'badge--lost' }[this.q.status] || ''
+      const base = { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved', '已駁回': 'badge--rejected', '已作廢': 'badge--lost' }[this.q.status] || ''
+      return window.MotrixStatus ? window.MotrixStatus.badgeClass(this.q.status, base) : base       // S-X2：被管理者改過色調的狀態才換 class
     },
 
     // X-VAT（2026-09-26）：試算與後端 _calc_scope_amount 同一個算式、同一套四捨五入（legal-round.js）
@@ -460,6 +463,7 @@ function paymentRequestForm() {
     _initDone: false,
 
     async init() {
+      if (window.MotrixStatus) window.MotrixStatus.init()      // S-X2：旗標關 ⇒ 什麼都不改
       if (this._initDone) return
       this._initDone = true
       const s = localStorage.getItem('motrix_session')

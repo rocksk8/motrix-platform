@@ -1249,9 +1249,15 @@ function reportsApp() {
     //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
     _initDone: false,
 
+    // S-X2：狀態顯示名稱（旗標關或沒改過 ⇒ 原字照印）；邏輯一律用原始值
+    stLabel(raw, ctx, fallback) {
+      return window.MotrixStatus ? window.MotrixStatus.label(raw, ctx, fallback) : (fallback != null ? fallback : (raw == null ? '' : raw))
+    },
+
     async init() {
       if (this._initDone) return
       this._initDone = true
+      if (window.MotrixStatus) window.MotrixStatus.init()      // 旗標關 ⇒ 什麼都不改
       // 2026-08-31：出納模組併入本頁後的准入判斷放寬——admin+ 維持原行為
       // （全部 12 個財務報表頁籤＋出納頁籤都看得到）；純 cashier/finance 模組
       // 的非管理職使用者只開放出納頁籤，其餘財務報表資料完全不載入。

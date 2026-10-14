@@ -100,7 +100,23 @@
 
   function reset() { state.table = null; state.changed = {}; state.loading = null; bump() }
 
-  var api = { chipClass: chipClass, badgeClass: badgeClass, label: label, tone: tone, load: load, apply: apply, reset: reset, MAP: MAP, BADGE: BADGE }
+  // 頁面一行啟用：讀公開旗標 builder_status_display，開了才載入表（關 ⇒ 什麼都不改；讀不到 ⇒ 維持預設）。每頁只會做一次。
+  var initOnce = null
+  function init(opts) {
+    if (initOnce) return initOnce
+    opts = opts || {}
+    initOnce = (async function () {
+      try {
+        if (typeof window === 'undefined' || !window.MotrixPublicFlags) return false
+        var g = await window.MotrixPublicFlags.read(['builder_status_display'], opts.token ? { token: opts.token } : undefined)
+        if (!g || !g.builder_status_display || g.builder_status_display.enabled !== 1) return false
+        return await load(opts)
+      } catch (e) { return false }
+    })()
+    return initOnce
+  }
+
+  var api = { chipClass: chipClass, badgeClass: badgeClass, label: label, tone: tone, load: load, init: init, apply: apply, reset: reset, MAP: MAP, BADGE: BADGE }
   if (typeof window !== 'undefined') window.MotrixStatus = api
   if (typeof module !== 'undefined' && module.exports) module.exports = api
 })()
