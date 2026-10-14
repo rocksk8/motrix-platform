@@ -16,11 +16,12 @@ from pathlib import Path
 
 import pytest
 
+from core.source_tree import page_file
 from modules.case import quote_terms as QT
 
 ROOT = Path(__file__).resolve().parents[2]
 NODE = shutil.which("node")
-PAGE = ROOT / "frontend" / "pages" / "quotation-form.html"
+PAGE = page_file("quotation-form.html")
 DAYS = [None, 0, 1, 29, 30, 30.0001, 31, "45", "abc", True, -1, 365, 366]
 DISCOUNTS = [None, 0, -5, 0.5, 1, 99, 100, 101, "100", "abc", True]
 SHOW = [True, False, None, 1, "x"]
