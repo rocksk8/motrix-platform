@@ -17,9 +17,12 @@ _STATES = [
 ]
 
 
-def _t(tid, frm, to, who, reason, guards=(), callbacks=(), log="basic"):
-    return {"id": tid, "from": list(frm), "to": to, "who": who, "reason": reason, "log": log,
-            "guards": list(guards), "callbacks": list(callbacks)}
+def _t(tid, frm, to, who, reason, guards=(), callbacks=(), log="basic", tier_role=None):
+    t = {"id": tid, "from": list(frm), "to": to, "who": who, "reason": reason, "log": log,
+         "guards": list(guards), "callbacks": list(callbacks)}
+    if tier_role:
+        t["tierRole"] = tier_role
+    return t
 
 
 def _standard(doc_type, submit_guards, approve_guards, approve_cbs, revoke_cbs):
@@ -27,12 +30,12 @@ def _standard(doc_type, submit_guards, approve_guards, approve_cbs, revoke_cbs):
         "docType": doc_type, "origin": "builtin", "version": 1,
         "states": copy.deepcopy(_STATES),
         "transitions": [
-            _t("submit", ["draft"], "pending", "admin", "none", submit_guards, [], log="none"),
-            _t("advance", ["pending", "in_approval"], "in_approval", "tier", "optional", [], ["notify_next_tier"]),
-            _t("approve", ["pending", "in_approval"], "approved", "tier", "optional", approve_guards, approve_cbs),
-            _t("reject", ["pending", "in_approval"], "draft", "tier", "required", [], ["notify_requester"]),
+            _t("submit", ["draft"], "pending", "admin", "none", submit_guards, ["notify_first_tier", "notify_org_chain"], log="basic"),
+            _t("advance", ["pending", "in_approval"], "in_approval", "tier", "optional", [], ["notify_next_tier"], tier_role="step"),
+            _t("approve", ["pending", "in_approval"], "approved", "tier", "optional", approve_guards, approve_cbs, tier_role="final"),
+            _t("reject", ["pending", "in_approval"], "draft", "tier", "required", [], ["notify_requester"], tier_role="return"),
             _t("revoke", ["approved"], "draft", "admin", "required", ["not_customer_signed"], revoke_cbs),
-            _t("signed_toggle", ["approved"], "approved", "admin", "none", ["status_is_approved"], [], log="none"),
+            _t("signed_toggle", ["approved"], "approved", "admin", "none", ["status_is_approved"], ["notify_module_activity"], log="basic"),
         ],
         "approval": {"required": True, "exemption": None},
         "editLock": {"editableIn": ["draft"]},
@@ -43,7 +46,7 @@ def _standard(doc_type, submit_guards, approve_guards, approve_cbs, revoke_cbs):
 _BUILTIN = {
     "completion": _standard("completion", ["has_items", "completion_date_required"], ["no_self_approval"],
                             ["notify_requester", "fire_expense_notify", "notify_module_activity"], ["notify_requester"]),
-    "shipping": _standard("shipping", ["has_items", "material_link_check"], ["no_self_approval", "serials_in_stock"],
+    "shipping": _standard("shipping", ["has_items", "material_link_check"], ["no_self_approval", "material_link_check", "serials_in_stock"],
                           ["stock_deduct", "gen_pdf", "calendar_push", "notify_requester"], ["stock_return", "notify_requester"]),
 }
 

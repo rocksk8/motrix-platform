@@ -18,6 +18,12 @@ from helpers import workflow_grammar as G
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _exemption_register(monkeypatch):
+    """P8 豁免登記表第一期不存在（空集合）；多數題假設登記表有 1、2、3、7 號，單獨一題驗證『不在登記表就拒絕』。"""
+    monkeypatch.setattr(G, "EXEMPTION_REGISTER", {1, 2, 3, 7})
+
+
 def base(doc="completion"):
     return W.builtin(doc)
 
@@ -64,7 +70,16 @@ def test_builtin_literals_match_the_endpoint_source():
     assert "完工日期" in comp and "至少需要一項" in comp                                                      # completion submit 守門
     assert "以下序號已不在庫" in ship and "UPDATE stock_items" in ship and "status='in_stock'" in ship.replace(" ", "").replace("\n", "") or "in_stock" in ship
     assert "_generate_shipping_pdf" in ship and "push_event_for_shipping_note" in ship                    # gen_pdf／calendar_push
-    assert "_ML.check_note" in ship                                                                         # material_link_check
+    assert ship.count("_ML.check_note") == 2                                                                # material_link_check：submit 與 approve 各一次
+    assert "material_link_check" in tr(base("shipping"), "submit")["guards"] and "material_link_check" in tr(base("shipping"), "approve")["guards"]
+    for src, doc in ((comp, "completion"), (ship, "shipping")):
+        b = base(doc)
+        assert '"%s.submit"' % doc in src and tr(b, "submit")["log"] == "basic"                             # submit 寫稽核
+        assert "notify_org_chain_notice" in src and '_notify(a["username"]' in src
+        assert {"notify_first_tier", "notify_org_chain"} <= set(tr(b, "submit")["callbacks"])
+        assert 'f"%s.{action}"' % doc in src and tr(b, "signed_toggle")["log"] == "basic"                  # 回簽／取消回簽寫稽核
+        assert "notify_module_activity" in src and "notify_module_activity" in tr(b, "signed_toggle")["callbacks"]
+        assert '"%s.reject"' % doc in src and '"%s.revoke_approval"' % doc in src and '"%s.approve"' % doc in src
     assert "stock_deduct" in tr(base("shipping"), "approve")["callbacks"] and "stock_return" in tr(base("shipping"), "revoke")["callbacks"]
     assert "stock_deduct" not in str(base("completion"))                                                    # 完工單不碰庫存（端點檔頭明寫）
 
@@ -84,13 +99,19 @@ def test_approval_off_loosen_carries_the_dependency_warnings():
     a, b = base(), base()
     b["approval"] = {"required": False, "exemption": {"policy": 1}}
     cls, why = G.compare(a, b)
-    assert cls == "loosen" and any("相依警示" in x and "已完工數" in x for x in why) and any("結案閘門" in x for x in why)
-    assert {d["id"] for d in G.DEPENDENCIES["completion"]} == {"completion_counted_statuses", "case_close_gate"}
+    assert cls == "loosen" and any("相依警示" in x and "已完工數" in x for x in why) and any("結案閘門" in x and "待審核／簽核中" in x for x in why)
+    assert {d["id"] for d in G.DEPENDENCIES["completion"]} == {"completion_counted_statuses", "case_close_gate", "pending_queue"}
+    assert {d["id"] for d in G.DEPENDENCIES["shipping"]} == {"stock_flip", "case_close_gate", "pending_queue"}
 
 
-def test_dependency_literal_matches_the_source():
+def test_dependency_literals_match_the_source():
+    """狀態值一改，相依宣告就要跟著改：結案閘門與待簽佇列都讀寫死的資料庫狀態值。"""
     src = (ROOT / "modules/case/completion_sync.py").read_text(encoding="utf-8")
-    assert 'COUNTED_NOTE_STATUSES = ("待審核", "簽核中", "已核准")' in src                                    # 狀態值一改，相依宣告就要跟著改
+    assert 'COUNTED_NOTE_STATUSES = ("待審核", "簽核中", "已核准")' in src
+    q = (ROOT / "modules/case/api/quotations.py").read_text(encoding="utf-8")
+    assert '("完工單",         "completion_notes")' in q and '("出貨單",         "shipping_notes")' in q          # 閘門的表清單
+    assert "AND status IN ('待審核','簽核中')" in q and "json_extract(data_json,'$.approval')" in q                 # 閘門讀待簽語意的資料庫值
+    assert 'ACTIVE_STATUSES = ("待審核", "簽核中")' in (ROOT / "helpers/approval_queue.py").read_text(encoding="utf-8")
 
 
 def test_money_and_ledger_documents_accept_no_company_version():
@@ -150,7 +171,7 @@ def test_write_callbacks_only_on_the_right_transitions():
 def test_write_callbacks_cannot_be_removed_against_the_builtin_baseline():
     b = base("shipping")
     tr(b, "approve")["callbacks"].remove("stock_deduct")
-    assert problems(b, "shipping") == []                                                                    # 純結構合法，但……
+    assert any("stock_deduct" in p["message"] for p in problems(b, "shipping"))                              # stock 規則（進入 approved 必帶扣庫存）第一道就擋
     assert G.removed_write_callbacks(base("shipping"), b) == [("approve", "stock_deduct")]                  # ……對照內建版被抓到
     out = WD._validator(b, "shipping")
     assert out and "stock_deduct" in out[0]["message"]
@@ -184,6 +205,7 @@ def test_every_path_to_approved_must_pass_a_tier_unless_exempt():
     assert any("不經簽核" in m for m in msgs)
     b = base()
     tr(b, "approve")["who"] = "admin"                                                                      # 把簽核層換成角色
+    tr(b, "approve").pop("tierRole")
     assert any("簽核層" in p["message"] or "不經簽核" in p["message"] for p in problems(b))
     b = base()
     b["approval"] = {"required": False, "exemption": None}                                                  # 關簽核卻沒有豁免紀錄
@@ -358,3 +380,133 @@ def test_pipeline_knows_the_workflow_kind_and_existing_entries_are_unchanged():
     tr(b, "revoke")["reason"] = "none"
     assert P.classify("workflow", base(), b)[0] == "loosen"
     assert P.classify("workflow", base(), "garbage")[0] == "loosen"
+
+
+# ── 04 審查（BP-5 P1）：必修項目 ───────────────────────────────────────────────
+def _add(b, **kw):
+    t = {"id": "extra", "from": ["pending"], "to": "pending", "who": "admin", "reason": "none", "log": "basic", "guards": [], "callbacks": []}
+    t.update(kw)
+    b["transitions"].append(t)
+    return t
+
+
+def test_stock_second_entry_into_approved_must_carry_the_deduction():
+    b = base("shipping")
+    _add(b, id="approve2", **{"from": ["pending"], "to": "approved", "who": "tier", "tierRole": "final", "guards": ["serials_in_stock"]})
+    assert any("stock_deduct" in p["message"] for p in problems(b, "shipping"))                              # 第二條進 approved 沒帶扣庫存
+    b = base("shipping")
+    _add(b, id="approve2", **{"from": ["pending"], "to": "approved", "who": "tier", "tierRole": "final", "callbacks": ["stock_deduct"]})
+    assert any("serials_in_stock" in p["message"] for p in problems(b, "shipping"))                          # 帶了扣庫存但沒保留序號守門
+
+
+def test_stock_leaving_approved_must_carry_the_return_and_serial_guard_must_stay():
+    b = base("shipping")
+    _add(b, id="unapprove", **{"from": ["approved"], "to": "draft"})
+    assert any("stock_return" in p["message"] for p in problems(b, "shipping"))
+    b = base("shipping")
+    tr(b, "approve")["guards"].remove("serials_in_stock")
+    assert any("serials_in_stock" in p["message"] for p in problems(b, "shipping"))
+    b = base("shipping")
+    tr(b, "reject")["from"] = ["pending", "approved"]                                                        # 來源同時含 approved 與待簽
+    assert problems(b, "shipping")
+
+
+def test_stock_deduct_only_when_entering_from_a_non_approved_source():
+    b = base("shipping")
+    tr(b, "signed_toggle")["callbacks"].append("stock_deduct")                                               # approved→approved
+    assert any("stock_deduct" in p["message"] for p in problems(b, "shipping"))
+
+
+@pytest.mark.parametrize("doc", ["completion", "shipping"])
+def test_edit_lock_only_in_draft_semantic_states(doc):
+    b = base(doc)
+    b["editLock"]["editableIn"] = ["draft", "approved"]
+    assert any("草稿" in p["message"] for p in problems(b, doc))
+    b["editLock"]["editableIn"] = ["pending"]
+    assert problems(b, doc)
+
+
+def test_a_tier_transition_must_start_only_from_pending_states():
+    b = base()
+    tr(b, "approve")["from"] = ["draft", "pending", "in_approval"]                                           # 一個來源是 draft 就夠了：草稿不經送審直接核准
+    assert any("所有來源" in p["message"] for p in problems(b))
+
+
+def test_tier_role_is_explicit_and_only_final_may_enter_approved():
+    b = base()
+    del tr(b, "approve")["tierRole"]
+    assert any("tierRole" in p["message"] for p in problems(b))
+    b = base()
+    tr(b, "approve")["tierRole"] = "step"                                                                     # 第一層簽完就核准
+    assert any("final" in p["message"] for p in problems(b))
+    b = base()
+    tr(b, "advance")["tierRole"] = "final"
+    assert any("final" in p["message"] for p in problems(b))
+    b = base()
+    tr(b, "reject")["tierRole"] = "return"
+    tr(b, "submit")["tierRole"] = "step"                                                                      # 非簽核層轉換不可有 tierRole
+    assert any("tierRole" in p["message"] for p in problems(b))
+    b = base()
+    tr(b, "approve")["tierRole"] = "bogus"
+    assert problems(b)
+    a, c_ = base(), base()
+    tr(c_, "advance")["tierRole"] = "return"
+    assert c(a, c_) == "loosen"                                                                               # 簽核層角色改變 ⇒ 放寬
+
+
+def test_effective_uses_the_same_validator_as_publish(monkeypatch):
+    monkeypatch.setattr(WD, "flag_on", lambda conn=None: True)
+    monkeypatch.setattr("routers.def_pipeline.enabled", lambda conn=None: True)
+    stripped = base("shipping")
+    tr(stripped, "approve")["callbacks"].remove("stock_deduct")                                              # 結構合法，但被 publish 驗證器擋下
+    monkeypatch.setattr(WD.D, "get", lambda conn, kind, key, scope: {"body": stripped})
+    assert WD.effective("shipping", conn=object()) == base("shipping")                                       # 否則就會回傳一個不扣庫存的流程
+    keep_only = base("shipping")
+    tr(keep_only, "approve")["callbacks"].remove("gen_pdf")                                                   # stock 類連非寫入回呼也不可拿掉
+    monkeypatch.setattr(WD.D, "get", lambda conn, kind, key, scope: {"body": keep_only})
+    assert WD.effective("shipping", conn=object()) == base("shipping")
+
+
+def test_unknown_keys_are_rejected_at_every_level():
+    for mut in (lambda b: b.update(hooks=[]),
+                lambda b: b["states"][0].update(condition="x"),
+                lambda b: tr(b, "submit").update(extra=1),
+                lambda b: b["approval"].update(note="x"),
+                lambda b: b["editLock"].update(extra=1)):
+        b = base()
+        mut(b)
+        assert any("不認得" in p["message"] for p in problems(b)), mut
+    b = base()
+    b["approval"] = {"required": False, "exemption": {"policy": 1, "sneaky": 1}}
+    assert any("不認得" in p["message"] for p in problems(b))
+    a, n = base(), base()
+    n["hooks"] = []
+    assert c(a, n) == "loosen"                                                                                # 比較器也不會把未知欄位當中性
+    n = base()
+    tr(n, "submit")["extra"] = 1
+    assert c(a, n) == "loosen"
+
+
+def test_exemption_policy_must_be_in_the_p8_register(monkeypatch):
+    b = base()
+    b["approval"] = {"required": False, "exemption": {"policy": 999999}}
+    assert any("登記表" in p["message"] for p in problems(b))
+    monkeypatch.setattr(G, "EXEMPTION_REGISTER", set())                                                       # 第一期：登記表不存在 ⇒ 任何豁免都拒絕
+    b["approval"]["exemption"]["policy"] = 1
+    assert any("登記表" in p["message"] for p in problems(b))
+
+
+def test_official_status_words_are_banned_on_non_approved_labels_and_approved_label_changes_loosen():
+    for word in ("已核准", "核准中", "批准", "核可", "審核通過", "簽核完成"):
+        b = base()
+        b["states"][1]["label"] = word
+        assert any("官方用語" in p["message"] for p in problems(b)), word
+    b = base()
+    b["states"][1]["label"] = "待覆核"                                                                       # 一般改名可以
+    assert problems(b) == []
+    a, n = base(), base()
+    n["states"][3]["label"] = "已通知客戶"                                                                    # 已核准語意的狀態改名 ⇒ 受管（放寬）
+    assert problems(n) == [] and c(a, n) == "loosen"
+    n = base()
+    n["states"][1]["label"] = "待覆核"
+    assert c(a, n) == "neutral"                                                                               # 其他狀態改名維持中性

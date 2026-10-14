@@ -39,6 +39,8 @@ ACTIONS = {
     "notify_next_tier": {"kind": "notify", "tx": "after", "removable": True},
     "notify_module_activity": {"kind": "notify", "tx": "after", "removable": True},
     "fire_expense_notify": {"kind": "notify", "tx": "after", "removable": True},
+    "notify_first_tier": {"kind": "notify", "tx": "in", "removable": True},        # submit：通知第 0 層簽核人（端點內、commit 之前呼叫）
+    "notify_org_chain": {"kind": "notify", "tx": "in", "removable": True},         # submit：整條簽核鏈只有申請人時的組織職權知會
     "gen_pdf": {"kind": "render", "tx": "after", "removable": True},
     "calendar_push": {"kind": "push", "tx": "after", "removable": True},
     "stock_deduct": {"kind": "write", "tx": "in", "removable": False, "only_entering": "approved"},
@@ -50,14 +52,37 @@ DEPENDENCIES = {
     "completion": [
         {"id": "completion_counted_statuses", "where": "modules/case/completion_sync.py:23 COUNTED_NOTE_STATUSES",
          "note": "已完工數統計依資料庫狀態值『待審核／簽核中／已核准』計算；狀態的資料庫值必須維持內建值，只能改顯示名稱（P2 要求）"},
-        {"id": "case_close_gate", "where": "（PM 說明：完工單核准餵給案件結案閘門；t60 基底未查到，待完工單堆疊 MS1b 併入後確認）",
-         "note": "關閉完工單簽核＝放寬，可能讓結案閘門少一道人工確認"},
+        {"id": "case_close_gate", "where": "modules/case/api/quotations.py:2230-2283 _CLOSE_DOC_TABLES＋_close_gate_facts（完工單與出貨單都在內）",
+         "note": "案件結案閘門以資料庫狀態值『待審核／簽核中』判定還有單據在簽；待簽語意的狀態若換了資料庫值就會逃過閘門、讓案件被結案。關閉完工單簽核＝單據永遠不會進入待簽，閘門也就少一道人工確認"},
+        {"id": "pending_queue", "where": "helpers/approval_queue.py:26 ACTIVE_STATUSES；modules/case/api/quotations.py 待簽佇列 SQL（約 4850、4886）",
+         "note": "待簽佇列同樣寫死『待審核／簽核中』；閘門與佇列在 P2 前都必須改成讀語意（pending），待簽語意的狀態必須對應既有資料庫值"},
     ],
     "shipping": [
         {"id": "stock_flip", "where": "modules/supply/api/shipping_notes.py approve（stock_items UPDATE，同一交易）",
          "note": "核准會把庫存序號改為已出貨；撤銷核准會歸還"},
+        {"id": "case_close_gate", "where": "modules/case/api/quotations.py:2230-2283 _CLOSE_DOC_TABLES＋_close_gate_facts",
+         "note": "同完工單：待簽語意的狀態必須對應資料庫值『待審核／簽核中』，否則逃過結案閘門"},
+        {"id": "pending_queue", "where": "helpers/approval_queue.py:26 ACTIVE_STATUSES",
+         "note": "同完工單：待簽佇列讀寫死的狀態值"},
     ],
 }
+
+# 簽核層轉換的角色（明講『最後一層才進 approved』）：step＝中間層簽完、仍在待簽；final＝最後一層簽完才進 approved；return＝簽核人退回。
+TIER_ROLES = ("step", "final", "return")
+# 各層允許的欄位；多出來的欄位一律拒絕（否則比較器會忽略它們，卻可能被日後的執行層讀到）
+_KEYS = {
+    "body": {"docType", "origin", "version", "states", "transitions", "approval", "editLock", "returnLog"},
+    "state": {"id", "label", "tone", "semantic"},
+    "transition": {"id", "from", "to", "who", "reason", "log", "guards", "callbacks", "tierRole"},
+    "approval": {"required", "exemption"},
+    "exemption": {"policy"},
+    "editLock": {"editableIn"},
+}
+# 官方狀態用語：只有 approved 語意的狀態可以用（否則一個『待審核』狀態可以掛上『已核准』的名字誤導讀者）
+OFFICIAL_WORDS = ("核准", "批准", "核可", "已簽核", "簽核完成", "審核通過")
+# P8 免簽核豁免登記表（policy 編號 → 帳本 id）。**第一期沒有這張表**：空集合＝任何豁免都不被接受（關簽核暫時不可發布）；
+# P2 以真正的登記（帳本）取代這個集合。
+EXEMPTION_REGISTER = set()
 
 _WHO_RANK = {"owner_or_admin": 0, "admin": 1, "superadmin": 2}          # 數字越大越嚴；tier 與它們不可比
 _REASON_RANK = {"none": 0, "optional": 1, "required": 2}
@@ -94,6 +119,7 @@ def _validate(body, doc_type) -> list:
         return [_p("", "金額單據的流程在第一期唯讀，不接受公司版本")]
     if not isinstance(body, dict):
         return [_p("", "流程定義必須是物件")]
+    out += _unknown_keys(body, "body", "")
     if body.get("docType") != doc_type:
         out.append(_p("docType", "docType 必須等於 %s" % doc_type))
     states, trans = body.get("states"), body.get("transitions")
@@ -110,10 +136,13 @@ def _validate(body, doc_type) -> list:
         if sid in ids:
             out.append(_p("states[%d].id" % i, "狀態代號重複：%s" % sid))
         ids[sid] = s.get("semantic")
+        out += _unknown_keys(s, "state", "states[%d]" % i)
         if s.get("semantic") not in SEMANTICS:
             out.append(_p("states[%d].semantic" % i, "語意標籤必須是 %s" % "／".join(SEMANTICS)))
         if not isinstance(s.get("label"), str) or not s["label"].strip() or len(s["label"]) > 20:
             out.append(_p("states[%d].label" % i, "狀態名稱必填且不超過 20 字"))
+        elif s.get("semantic") != "approved" and any(w in s["label"] for w in OFFICIAL_WORDS):
+            out.append(_p("states[%d].label" % i, "非『已核准』語意的狀態名稱不可使用官方用語（%s）" % "、".join(OFFICIAL_WORDS)))
         if s.get("tone") is not None and s["tone"] not in TONES:
             out.append(_p("states[%d].tone" % i, "顏色不合法"))
     sems = list(ids.values())
@@ -125,6 +154,7 @@ def _validate(body, doc_type) -> list:
     tids = set()
     for i, t in enumerate(trans):
         path = "transitions[%d]" % i
+        out += _unknown_keys(t, "transition", path)
         tid = t.get("id")
         if not isinstance(tid, str) or not _ID.match(tid):
             out.append(_p(path + ".id", "轉換代號不合法"))
@@ -143,6 +173,11 @@ def _validate(body, doc_type) -> list:
             out.append(_p(path + ".reason", "reason 必須是 %s" % "／".join(REASON)))
         if t.get("log") not in LOG:
             out.append(_p(path + ".log", "log 必須是 %s" % "／".join(LOG)))
+        if t.get("who") == "tier":
+            if t.get("tierRole") not in TIER_ROLES:
+                out.append(_p(path + ".tierRole", "簽核層轉換必須宣告 tierRole：%s" % "／".join(TIER_ROLES)))
+        elif "tierRole" in t:
+            out.append(_p(path + ".tierRole", "只有 who=tier 的轉換可以有 tierRole"))
         for key, catalog in (("guards", GUARDS), ("callbacks", ACTIONS)):
             v = t.get(key, [])
             if not _is_list(v) or len(set(map(str, v))) != len(v):
@@ -155,20 +190,60 @@ def _validate(body, doc_type) -> list:
     ap = body.get("approval")
     if not isinstance(ap, dict) or not isinstance(ap.get("required"), bool):
         out.append(_p("approval", "approval.required 必須是布林"))
-    elif not ap["required"] and cls == "stock":
-        out.append(_p("approval", "核准會異動庫存的單據不可關閉簽核"))
-    elif not ap["required"]:
-        ex = ap.get("exemption")
-        if not isinstance(ex, dict) or not isinstance(ex.get("policy"), int) or isinstance(ex.get("policy"), bool):
-            out.append(_p("approval.exemption", "關閉簽核必須有記錄在案的豁免（policy 編號）"))
+    else:
+        out += _unknown_keys(ap, "approval", "approval")
+        if not ap["required"] and cls == "stock":
+            out.append(_p("approval", "核准會異動庫存的單據不可關閉簽核"))
+        elif not ap["required"]:
+            ex = ap.get("exemption")
+            if not isinstance(ex, dict) or not isinstance(ex.get("policy"), int) or isinstance(ex.get("policy"), bool):
+                out.append(_p("approval.exemption", "關閉簽核必須有記錄在案的豁免（policy 編號）"))
+            else:
+                out += _unknown_keys(ex, "exemption", "approval.exemption")
+                if ex["policy"] not in EXEMPTION_REGISTER:
+                    out.append(_p("approval.exemption.policy", "豁免編號 %s 不在 P8 豁免登記表內（登記表第一期尚不存在 ⇒ 暫時不能關閉簽核）" % ex["policy"]))
     el = body.get("editLock")
     if not isinstance(el, dict) or not _is_list(el.get("editableIn")) or any(x not in ids for x in el["editableIn"]):
         out.append(_p("editLock.editableIn", "editableIn 必須是已存在的狀態清單"))
+    else:
+        out += _unknown_keys(el, "editLock", "editLock")
+        if any(ids[x] != "draft" for x in el["editableIn"]):
+            out.append(_p("editLock.editableIn", "只有草稿（draft 語意）狀態可編輯：簽核後改內容會讓簽核失去意義（H3）"))
     if body.get("returnLog") not in LOG:
         out.append(_p("returnLog", "returnLog 必須是 %s" % "／".join(LOG)))
     if out:
         return out
-    return analyze(body)
+    out = analyze(body)
+    if not out and cls == "stock":
+        out = _stock_rules(body)
+    return out
+
+
+def _unknown_keys(d, level, path):
+    extra = sorted(set(map(str, d)) - _KEYS[level])
+    return [_p(path, "不認得的欄位：%s（不接受未宣告的欄位）" % "、".join(extra))] if extra else []
+
+
+def _stock_rules(body):
+    """核准會動庫存的單據（stock 類）：庫存異動必須和『進入／離開 approved』一對一綁死。"""
+    out = []
+    sem = {s["id"]: s["semantic"] for s in body["states"]}
+    for i, t in enumerate(body["transitions"]):
+        path = "transitions[%d]" % i
+        src_app = [f for f in t["from"] if sem[f] == "approved"]
+        src_non = [f for f in t["from"] if sem[f] != "approved"]
+        to_app = sem[t["to"]] == "approved"
+        if src_app and src_non:
+            out.append(_p(path + ".from", "此單據的轉換來源不可同時包含已核准與其他狀態"))
+            continue
+        if src_non and to_app:
+            if "stock_deduct" not in t.get("callbacks", []):
+                out.append(_p(path + ".callbacks", "進入已核准的轉換必須帶 stock_deduct"))
+            if "serials_in_stock" not in t.get("guards", []):
+                out.append(_p(path + ".guards", "進入已核准的轉換必須保留守門 serials_in_stock"))
+        if src_app and not to_app and "stock_return" not in t.get("callbacks", []):
+            out.append(_p(path + ".callbacks", "離開已核准的轉換必須帶 stock_return"))
+    return out
 
 
 def _check_callback_placement(t, ids, path):
@@ -179,8 +254,8 @@ def _check_callback_placement(t, ids, path):
         spec = ACTIONS.get(cb)
         if not spec:
             continue
-        if spec.get("only_entering") and to_sem != spec["only_entering"]:
-            out.append(_p(path + ".callbacks", "%s 只能掛在進入 %s 的轉換" % (cb, spec["only_entering"])))
+        if spec.get("only_entering") and (to_sem != spec["only_entering"] or spec["only_entering"] in from_sems):
+            out.append(_p(path + ".callbacks", "%s 只能掛在『從其他狀態進入 %s』的轉換" % (cb, spec["only_entering"])))
         if spec.get("only_leaving") and not (from_sems == {spec["only_leaving"]} and to_sem != spec["only_leaving"]):
             out.append(_p(path + ".callbacks", "%s 只能掛在離開 %s 的轉換" % (cb, spec["only_leaving"])))
     return out
@@ -218,8 +293,19 @@ def analyze(body) -> list:
     for i, t in enumerate(trans):
         if sem[t["to"]] == "approved" and t["who"] != "tier" and ap["required"] and any(sem[f] != "approved" for f in t["from"]):
             out.append(_p("transitions[%d]" % i, "進入已核准的轉換必須由簽核層執行（who=tier）"))
-        if t["who"] == "tier" and not any(sem[f] == "pending" for f in t["from"]):
-            out.append(_p("transitions[%d]" % i, "簽核層的轉換必須從待簽狀態（pending 語意）出發"))
+        if t["who"] == "tier":
+            path = "transitions[%d]" % i
+            if not all(sem[f] == "pending" for f in t["from"]):
+                out.append(_p(path, "簽核層的轉換必須只從待簽狀態（pending 語意）出發（所有來源都要是）"))
+            role, tsem = t.get("tierRole"), sem[t["to"]]
+            if role == "final" and tsem != "approved":
+                out.append(_p(path + ".tierRole", "final（最後一層）必須進入已核准"))
+            if role == "step" and tsem != "pending":
+                out.append(_p(path + ".tierRole", "step（中間層）必須留在待簽狀態"))
+            if role == "return" and tsem != "draft":
+                out.append(_p(path + ".tierRole", "return（退回）必須回到草稿語意的狀態"))
+            if tsem == "approved" and role != "final":
+                out.append(_p(path + ".tierRole", "只有 final 的簽核層轉換可以進入已核准（不可由第一層簽核就核准）"))
     return out
 
 
@@ -260,6 +346,12 @@ def _compare(old, new):
     for sid in set(olds) & set(news):
         if olds[sid].get("semantic") != news[sid].get("semantic"):
             loose("狀態 %s 的語意標籤改變" % sid)
+        elif news[sid].get("semantic") == "approved" and olds[sid].get("label") != news[sid].get("label"):
+            loose("已核准狀態的顯示名稱改變（%s → %s）" % (olds[sid].get("label"), news[sid].get("label")))
+    for lvl, a, b in (("body", old, new), *(("state", olds.get(k), news.get(k)) for k in set(olds) & set(news))):
+        extra = (set(map(str, a or {})) | set(map(str, b or {}))) - _KEYS[lvl]
+        if extra:
+            loose("含不認得的欄位：%s" % "、".join(sorted(extra)))
     ot = {t.get("id"): t for t in old["transitions"] if isinstance(t, dict)}
     nt = {t.get("id"): t for t in new["transitions"] if isinstance(t, dict)}
     for tid in sorted(set(nt) - set(ot), key=str):
@@ -290,6 +382,11 @@ def _compare(old, new):
 
 
 def _cmp_transition(tid, o, n, loose, tight):
+    extra = (set(map(str, o)) | set(map(str, n))) - _KEYS["transition"]
+    if extra:
+        loose("轉換 %s 含不認得的欄位：%s" % (tid, "、".join(sorted(extra))))
+    if o.get("tierRole") != n.get("tierRole"):
+        loose("轉換 %s 的簽核層角色改變" % tid)
     of, nf = set(o.get("from") or []), set(n.get("from") or [])
     if nf - of:
         loose("轉換 %s 可從更多狀態觸發" % tid)

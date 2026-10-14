@@ -176,18 +176,30 @@
 | 守門測試（14 類全數分類；plain 只有完工單與出貨單；漏分類會紅；登記失敗不留半登記；突變正對照）— **已實際執行、5 題全綠** | `backend/tests/test_workflow_doc_class_2026_10_14.py` |
 | 完工單／出貨單黃金重放（編輯鎖、被擋的轉換與訊息、退回需原因且清簽核資料、核准／撤銷來回、無簽核層行為釘住、突變正對照）— **寫好未跑**（需資料庫與機器空閒） | `backend/tests/test_workflow_golden_replay_2026_10_14.py` |
 
-### 14.5 相依關係（P1 宣告，`workflow_grammar.DEPENDENCIES`）
+### 14.5 相依關係（`workflow_grammar.DEPENDENCIES`；04 審查更正：案件結案閘門**確實**讀完工單與出貨單）
 | 單據 | 相依 | 位置 | 意義 |
 |---|---|---|---|
-| 完工單 | `completion_counted_statuses` | `modules/case/completion_sync.py:23` | 已完工數統計依**資料庫狀態值**『待審核／簽核中／已核准』；因此流程定義的狀態必須把**資料庫值**固定為內建值，使用者只能改**顯示名稱**（P2 的 schema 要加 `dbValue`，改名不改 `status` 欄位） |
-| 完工單 | `case_close_gate` | PM 說明（04 轉述）：完工單核准餵給案件結案閘門 | **t60 基底查不到**（`quotations.py` 的 `_close_gate_facts`／`_case_close_gates` 沒有讀完工單）；待完工單堆疊（MS1b）併入後確認。在確認前一律當成真的，關完工單簽核的比較理由帶出警示 |
+| 完工單 | `completion_counted_statuses` | `modules/case/completion_sync.py:23` | 已完工數統計依**資料庫狀態值**『待審核／簽核中／已核准』 |
+| 完工單、出貨單 | `case_close_gate` | `modules/case/api/quotations.py:2230-2283`（`_CLOSE_DOC_TABLES` 含完工單與出貨單；`_close_gate_facts` 以 `status IN ('待審核','簽核中')` 加簽核 JSON 判定還有單據在簽） | 閘門讀的是**資料庫狀態值**，不是『核准』這個事實：待簽語意的狀態若換了資料庫值，就逃過閘門、案件可被結案。關閉簽核＝單據永遠不進入待簽，閘門也少一道人工確認（放寬，比較理由會帶出） |
+| 完工單、出貨單 | `pending_queue` | `helpers/approval_queue.py:26 ACTIVE_STATUSES`；`quotations.py` 待簽佇列 SQL（約 :4850、:4886） | 待簽佇列同樣寫死『待審核／簽核中』 |
 | 出貨單 | `stock_flip` | `shipping_notes.py` approve（同一交易 UPDATE `stock_items`） | 核准動庫存，撤銷歸還 |
-比較器：關閉簽核（放寬）時，理由清單附上該單據的相依警示；預覽介面要把它們顯示在紅色橫幅裡。
+**P2 的前置條件（先於任何公司版本生效）**：①狀態新增 `dbValue` 欄位，**待簽語意的狀態必須對應既有資料庫值**（『待審核』『簽核中』），改名只改顯示名稱；②結案閘門（`_close_gate_facts`）與待簽佇列（`approval_queue.ACTIVE_STATUSES` 與 `quotations.py` 的佇列 SQL）改成讀『語意』而不是寫死字串；③完成前，工作流程引擎不得接上端點。
+比較器：關閉簽核（放寬）時，理由清單附上該單據的相依警示；預覽介面要把它們顯示在紅色橫幅裡。（本節前一版寫『t60 基底查不到』是我的錯，已更正。）
+
+### 14.6 04 審查後新增的文法規則（P1 已實作並有測試）
+- **簽核層明講角色** `tierRole`：`step`（中間層簽完，留在待簽）／`final`（最後一層簽完才進 approved）／`return`（簽核人退回，回草稿）。`who=tier` 必須宣告，其他轉換不可有；簽核層轉換的**所有**來源都必須是待簽語意；只有 `final` 可以進 approved（不可由第一層簽核就核准）。
+- **未知欄位一律拒絕**（本體、狀態、轉換、approval、exemption、editLock 各層），比較器對未知欄位也視為放寬。
+- **官方用語保護**：非 approved 語意的狀態名稱不可含『核准／批准／核可／已簽核／簽核完成／審核通過』；已核准語意的狀態改名＝放寬（受管），其他狀態改名維持中性。
+- **編輯鎖只能是草稿語意的狀態**（簽核後改內容＝H3 破功）。
+- **豁免編號必須在 P8 豁免登記表內**：登記表第一期不存在（`EXEMPTION_REGISTER` 空集合）⇒ **第一期任何公司版本都不能關閉簽核**；P2 以帳本登記取代。
+- **stock 類**：進入 approved 的每條轉換（來源皆非 approved）必須帶 `stock_deduct` 與守門 `serials_in_stock`；離開 approved 的每條轉換必須帶 `stock_return`；來源不可混含 approved 與其他狀態；`stock_deduct` 的『只能進入』檢查加上『來源沒有 approved』。
+- **`effective()` 與發布用同一個驗證器**（含不可拿掉的回呼與 stock 規則）；已發布的壞版本不會生效。注意：讀設定失敗時會連管理者已收緊的版本一起退回內建版——這是目前接受的取捨（內建版＝今天的行為，不會比今天更鬆）。
+- **內建 v1 對齊端點**：submit 帶 `notify_first_tier`＋`notify_org_chain` 且 log=basic（端點寫 `<doc>.submit` 稽核）；signed_toggle 帶 `notify_module_activity` 且 log=basic（端點寫 `<doc>.sign/unsign` 稽核）；出貨單 approve 保留 `material_link_check`（核准時再檢查一次）。字面值對照端點原始碼的測試已擴充。
 
 ## 15. P1 交付（本分支；純函式測試已實際執行，需要資料庫的黃金重放仍未跑）
 | 項目 | 位置 | 狀態 |
 |---|---|---|
-| 文法／驗證器／靜態分析／比較器／守門與動作目錄／相依宣告 | `backend/helpers/workflow_grammar.py` | 純函式，53 題已跑全綠（含突變正對照） |
+| 文法／驗證器／靜態分析／比較器／守門與動作目錄／相依宣告 | `backend/helpers/workflow_grammar.py` | 純函式，69 題（含風險類 5 題）已跑全綠（含突變正對照） |
 | 內建 v1（完工單、出貨單） | `backend/helpers/workflow_defaults.py` | 通過同一份驗證器；字面值對照端點原始碼的題已跑 |
 | 定義種類 `workflow` 的懶登記、旗標、`effective()` 影子 | `backend/helpers/workflow_defs.py` | **沒有任何端點或路由呼叫**；`ensure_registered()` 無呼叫端 ⇒ `/api/definition-kinds` 與今天相同 |
 | `def_pipeline` 接線 | `ACTIVE_KINDS` 加 `workflow`、`COMPARATORS['workflow']` | 只多一項；kind 未登記前不會被走到 |

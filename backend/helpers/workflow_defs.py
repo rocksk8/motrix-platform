@@ -96,7 +96,7 @@ def effective(doc_type, conn=None):
                 c.close()
         r = D.get(conn, KIND, doc_type, "company")
         body = (r or {}).get("body")
-        if isinstance(body, dict) and not G.validate_workflow(body, doc_type):
+        if isinstance(body, dict) and not _validator(body, doc_type):            # 與發布同一個驗證器（含不可拿掉的回呼、stock 類規則）
             return body
     except Exception:                                                  # noqa: BLE001
         _log.warning("workflow_defs: 讀取 %s 的已發布流程失敗，使用內建版", doc_type, exc_info=True)
