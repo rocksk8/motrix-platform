@@ -1,6 +1,6 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — 2026-10-14（wip/t61-bp3-templates-r1；供應商管理頁 Excel 匯出接上匯出守門）
+## (next) — 2026-10-14（wip/t61-bp3-templates-r1；供應商管理頁 Excel 匯出接上匯出守門）；t62 整合
 - 供應商管理頁的 Excel 匯出在產檔前先過匯出守門（`MotrixExport.guard`）：自訂匯出旗標（`builder_exports.enabled`）關閉時不發任何請求、匯出結果與先前完全相同；開啟時才送一筆匯出稽核紀錄（不擋匯出）。純前端；無 migration、無新路由、無權限變更。
 
 ## 1.0.29 — 2026-10-14（wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1；S5 供應商自訂欄位／S6 供應商管理頁自訂按鈕）

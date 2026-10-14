@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — wip/t62-bp4-s1-r1＋wip/t62-bp4-s2-r1＋wip/t62-bp4-s2-r2＋wip/t62-bp4-s3-r1（BP-4 S1／S2／S3：儲存位置代號登錄表＋附件插槽定義；旗標 `builder_slots.enabled` 預設關）
+## (next) — wip/t62-bp4-s1-r1＋wip/t62-bp4-s2-r1＋wip/t62-bp4-s2-r2＋wip/t62-bp4-s3-r1（BP-4 S1／S2／S3：儲存位置代號登錄表＋附件插槽定義；旗標 `builder_slots.enabled` 預設關）；t62 整合
 
 - L0（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：`core.catalog.L1_OWNER`（`"core"`，虛擬擁有者：不是模組、不可停用／授權）、`l1_manifest()`（讀 `core/l1_customization.json`，通過 `validate_manifest` 才用，壞了＝沒有 L1 點並記 ERROR）、`owner_loaded(key)`（`key == "core"` 或 `registry.is_loaded(key)`）；`layout_points("core")` 回 L1 登記檔的點（同樣經 `_module_points` 過濾，唯一入口不變）；`layout_points(None)` 仍是「全部已載入模組」，**不含 core**。
 - `routers/definitions.py`（治理擁有的檔，最小改動）三處 `registry.is_loaded(mod)` ⇒ `catalog.owner_loaded(mod)`（版面驗證器、程式預設、`GET /api/layout/{module}`）；對一般模組行為不變，多了 `core` 可用。沒有新路由。
