@@ -85,7 +85,7 @@ def _subfolder_problem(sub, code):
     s = unicodedata.normalize("NFC", sub)
     if s != sub:
         return "子資料夾請使用標準寫法（Unicode NFC）"
-    if not _SUBFOLDER.match(s) or s.endswith((" ", ".")):
+    if not _SUBFOLDER.fullmatch(s) or s.endswith((" ", ".")):
         return "子資料夾只能是 1～40 字的單層名稱（中英文、數字、底線、連字號）"
     if s.upper() in _RESERVED:
         return "子資料夾不可使用系統保留名稱"

@@ -162,7 +162,7 @@ def definition_problems(key, body, live=None) -> list:
             out.append({"path": p + ".disabled", "message": "disabled 必須是 true／false"})
         if spec["prefix"]:
             pf = it.get("prefix")
-            if not isinstance(pf, str) or not _PREFIX_RE.match(pf):
+            if not isinstance(pf, str) or not _PREFIX_RE.fullmatch(pf):
                 out.append({"path": p + ".prefix", "message": "料號前綴必須是 2～5 個大寫英文字母"})
             elif pf in prefixes:
                 out.append({"path": p + ".prefix", "message": "料號前綴重複：%s" % pf})
