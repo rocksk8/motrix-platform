@@ -6,14 +6,14 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 110 個；有單位卡 59 個。
+單位 111 個；有單位卡 60 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
 | `plat:capabilities` | L0 | 能力登錄（權限矩陣框架 P0；設計 docs/platform/plans/PERMISSION-MATRIX-DESIGN-T54.md §2）。 | 18 | 3 | `tests/platform/test_capabilities_registry.py`、`tests/platform/test_perm_equivalence_gate_a.py` |
 | `plat:catalog` | L0 | 能力目錄（CUSTOMIZATION-SPEC P1；CORE-SPEC §7 端點登錄表的擴充）。 | 16 | 4 | `tests/platform/test_platform_catalog.py` |
 | `plat:customization` | L0 | L0 模組描述：可自訂點（CUSTOMIZATION-SPEC P3；§8.2 排版器需求）。 | 14 | 3 | `tests/platform/test_platform_catalog.py` |
-| `plat:definitions` | L0 | 定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。 | 26 | 20 | `tests/test_definitions_store_2026_09_25.py` |
+| `plat:definitions` | L0 | 定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。 | 26 | 21 | `tests/test_definitions_store_2026_09_25.py` |
 | `plat:events` | L0 | L1 事件匯流排（CUSTOMIZATION-SPEC §6，ROADMAP P6）。 | 9 | 2 | `tests/platform/test_core_events.py` |
 | `plat:internal_cols` | L0 | L0 內部欄位剝除（U0a 洩漏防線；設計 docs/platform/plans/FRAMEWORK-ORG-UNITS-T57.md §14.10 #4）。 | 6 | 2 | `backend/tests/platform/test_internal_cols.py` |
 | `plat:loader` | L0 | L0 模組載入器：掃 `modules/*/module.json`，相容且匯入成功的才登錄。 | 11 | 4 | `tests/platform/test_core_loader.py` |
@@ -24,14 +24,14 @@
 | `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 45 | 28 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
 | `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 26 | 93 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
 | `plat:source_tree` | L0 | 守門測試要掃的原始碼範圍：唯一來源。 | 11 | 0 | `tests/platform/test_core_loader.py` |
-| `plat:spine` | L0 | L0 脊柱功能登錄（E-b；設計 docs/platform/plans/SPINE-ENGINE-DESIGN-T57.md、FIELD-LAYOUT-FRAMEWORK-T56.md §17）。 | 31 | 6 | `backend/tests/platform/test_spine_e_b.py` |
+| `plat:spine` | L0 | L0 脊柱功能登錄（E-b；設計 docs/platform/plans/SPINE-ENGINE-DESIGN-T57.md、FIELD-LAYOUT-FRAMEWORK-T56.md §17）。 | 31 | 7 | `backend/tests/platform/test_spine_e_b.py` |
 | `plat:system_hub` | L0 | 系統中心（System Hub）登錄表：『系統』底下所有設定／管理／稽核入口的索引（第 54 班 P1；設計 docs/platform/plans/SYSTEM-HUB-DESIGN-T54.md）。 | 13 | 1 | `tests/platform/test_system_hub.py` |
 | `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 modules/case/quotations.py 下沉）。 | 7 | 39 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
 | `plat:upgrade` | L0 | V9 → 新版 升級轉換與回滾的核心（CORE-SPEC §9b）。L0 工具，不是業務模組。 | 50 | 0 | `tests/platform/test_core_upgrade.py` |
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 24 | 9 | — |
 | `core:backup_job` | L1 | MOTRIX ERP 獨立備份腳本（無單位卡） | 1 | 0 | — |
 | `core:cloud_storage` | L1 | Pluggable cloud backup storage backend (2026-09-07, architecture map §6.4).（無單位卡） | 9 | 2 | — |
-| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 29 | 144 | — |
+| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 29 | 145 | — |
 | `core:heartbeat_job` | L1 | Independent heartbeat pinger: confirms local ERP is responding, then pings an（無單位卡） | 1 | 0 | — |
 | `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 12 | 0 | — |
 | `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 23 | 17 | — |
@@ -42,7 +42,7 @@
 | `helper:attachment_search` | L1 | 附件目錄的搜尋共用件（`attachments.catalog` 契約 v1 的 `search`／`count`；附件目錄 P3， | 10 | 9 | `tests/test_filehub_search_2026_09_30.py` |
 | `helper:attachment_slots` | L1 | 附件插槽定義（BP-4 S2；kind `attachment_slot`，key＝`doc:<單據類型>`；設計 BP4-STORAGE-NOTIFY-DESIGN §3）。 | 16 | 3 | `backend/tests/test_attachment_slots_2026_10_14.py` |
 | `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 13 | 87 | — |
-| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 119 | — |
+| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 120 | — |
 | `helper:branding` | L1 | 品牌圖檔（主 LOGO／深色底 LOGO／favicon）：上傳驗證、存放、讀取時回預設。 | 16 | 2 | `tests/test_branding_2026_09_27.py` |
 | `helper:build_info` | L1 | 這個**行程**載入的是哪一份程式碼（`BR1`）。（無單位卡） | 3 | 2 | — |
 | `helper:builtin_fields` | L1 | 內建畫面的自訂欄位（T61 S5；設計：docs/platform/plans/T61-S5-FIELD-CATALOG-DESIGN.md）。 | 8 | 5 | `backend/tests/test_builtin_custom_fields_2026_10_14.py` |
@@ -108,9 +108,10 @@
 | `helper:rule_sets` | L1 | 規則集定義種類 `rule_set`（BP-2 R1；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §3）。 | 9 | 3 | `backend/tests/test_rule_catalog_2026_10_14.py` |
 | `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 52 | — |
 | `helper:settings_groups` | L1 | 設定群組登錄（L1；第 54 班 Train A）。**預設值＝上線前的程式常數**（部署零行為變更；`settings_deploy_baseline.json` 凍結）。 | 1 | 10 | `backend/tests/platform/test_settings_registry_t54.py` |
-| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 37 | 28 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 37 | 29 | `backend/tests/platform/test_settings_registry_t54.py` |
 | `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 4 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 23 | 10 | — |
+| `helper:status_display` | L1 | 狀態顯示名稱與顏色（S-X2）：一張受治理的表，報價／案件／出納共用。**只改『看到的字與色』，狀態的鍵（資料庫值）永遠不變。** | 18 | 2 | `backend/tests/test_status_display_2026_10_14.py` |
 | `helper:storage_locations` | L1 | 儲存位置：雲端存檔根目錄、個資資料夾、更新交付資料夾的**唯一**解析處（CORE-SPEC 裁示表「儲存位置可設定」，2026-09-28）。 | 13 | 3 | `tests/platform/test_storage_locations_2026_09_28.py` |
 | `helper:storage_slots` | L1 | 儲存／上傳「位置代號」登錄表與插槽政策（BP-4 S1；設計 docs/platform/plans/BP4-STORAGE-NOTIFY-DESIGN.md §3）。 | 13 | 2 | `backend/tests/test_storage_slots_parity_2026_10_14.py` |
 | `helper:system_checks` | L1 | L1 系統健康的每日檢查（2026-09-26 自 routers/daily_tasks.py 搬出，M12 搬遷前置）。（無單位卡） | 8 | 2 | — |

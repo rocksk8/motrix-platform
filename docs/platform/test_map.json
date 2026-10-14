@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1374,
+  "tests": 1378,
   "unmapped": 13,
   "kinds": {
-   "api": 765,
+   "api": 769,
    "e2e": 306,
    "audit": 176,
    "unit": 127
   },
-  "routes": 842
+  "routes": 843
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -14358,6 +14358,7 @@
     "router:module_versions",
     "router:parts",
     "router:search",
+    "router:status_display",
     "router:system",
     "router:system_hub",
     "router:uploads"
@@ -14403,6 +14404,7 @@
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
      "backend/routers/search.py",
+     "backend/routers/status_display.py",
      "backend/routers/system.py",
      "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
@@ -16705,7 +16707,7 @@
    },
    "login_fixture": true
   },
-  "backend/tests/platform/test_bp1_layout_quote_form_2026_10_14.py": {
+  "backend/tests/platform/test_bp1_layout_q2_2026_10_14.py": {
    "kind": "api",
    "units": [
     "dir:backend/modules/",
@@ -16719,11 +16721,77 @@
     "js:static/custom-layout.js",
     "js:static/layout-editor.js",
     "js:static/layout-runtime.js",
+    "js:static/public-flags.js",
+    "mod:case/api/quotations",
+    "mod:case/tests/__init__",
+    "mod:case/tests/test_bp1_layout_cases_2026_10_14",
+    "page:pages/case-management.html",
+    "page:pages/quotations.html",
+    "plat:__init__",
+    "plat:customization",
+    "plat:source_tree",
+    "router:definitions",
+    "router:settings_center"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/customization.py",
+     "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_registry.py",
+     "backend/modules/case/tests/__init__.py",
+     "backend/modules/case/tests/test_bp1_layout_cases_2026_10_14.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/definitions.py",
+     "backend/routers/settings_center.py"
+    ],
+    "page": [
+     "frontend/js/def-governance.js",
+     "frontend/pages/case-management.html",
+     "frontend/pages/quotations.html",
+     "frontend/static/custom-layout.js",
+     "frontend/static/layout-editor.js",
+     "frontend/static/layout-runtime.js",
+     "frontend/static/public-flags.js"
+    ],
+    "path": [
+     "backend/modules/",
+     "backend/modules/case/",
+     "backend/modules/case/module.json",
+     "frontend/static/",
+     "frontend/static/custom-layout.js",
+     "frontend/static/layout-pages.json",
+     "frontend/static/layout-runtime.js",
+     "frontend/static/public-flags.js"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_bp1_layout_quote_form_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/",
+    "dir:backend/modules/case/",
+    "dir:frontend/static/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/modules/case/module.json",
+    "file:frontend/static/layout-pages.json",
+    "helper:settings_registry",
+    "js:js/def-governance.js",
+    "js:static/custom-fields.js",
+    "js:static/custom-layout.js",
+    "js:static/layout-editor.js",
+    "js:static/layout-runtime.js",
+    "js:static/public-flags.js",
     "mod:case/api/quotations",
     "page:pages/quotation-form.html",
     "plat:__init__",
     "plat:customization",
     "plat:source_tree",
+    "router:custom_fields_builtin",
     "router:definitions",
     "router:settings_center"
    ],
@@ -16737,15 +16805,18 @@
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
+     "backend/routers/custom_fields_builtin.py",
      "backend/routers/definitions.py",
      "backend/routers/settings_center.py"
     ],
     "page": [
      "frontend/js/def-governance.js",
      "frontend/pages/quotation-form.html",
+     "frontend/static/custom-fields.js",
      "frontend/static/custom-layout.js",
      "frontend/static/layout-editor.js",
-     "frontend/static/layout-runtime.js"
+     "frontend/static/layout-runtime.js",
+     "frontend/static/public-flags.js"
     ],
     "path": [
      "backend/modules/",
@@ -16754,7 +16825,8 @@
      "frontend/static/",
      "frontend/static/custom-layout.js",
      "frontend/static/layout-pages.json",
-     "frontend/static/layout-runtime.js"
+     "frontend/static/layout-runtime.js",
+     "frontend/static/public-flags.js"
     ]
    },
    "login_fixture": true
@@ -17271,6 +17343,37 @@
      "backend/modules/"
     ]
    }
+  },
+  "backend/tests/platform/test_clause_titles_paths_t62.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
+    "helper:clause_titles",
+    "helper:export_templates",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
+    "page:pages/quotation-form.html",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/clause_titles.py",
+     "backend/helpers/export_templates.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/platform/test_clause_titles_t62.py": {
    "kind": "api",
@@ -18454,6 +18557,7 @@
     "router:module_versions",
     "router:parts",
     "router:search",
+    "router:status_display",
     "router:system",
     "router:system_hub",
     "router:uploads"
@@ -18500,6 +18604,7 @@
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
      "backend/routers/search.py",
+     "backend/routers/status_display.py",
      "backend/routers/system.py",
      "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
@@ -19844,6 +19949,7 @@
     "router:module_versions",
     "router:parts",
     "router:search",
+    "router:status_display",
     "router:system",
     "router:system_hub",
     "router:uploads"
@@ -19896,6 +20002,7 @@
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
      "backend/routers/search.py",
+     "backend/routers/status_display.py",
      "backend/routers/system.py",
      "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
@@ -23288,6 +23395,7 @@
     "router:module_versions",
     "router:parts",
     "router:search",
+    "router:status_display",
     "router:system",
     "router:system_hub",
     "router:uploads"
@@ -23335,6 +23443,7 @@
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
      "backend/routers/search.py",
+     "backend/routers/status_display.py",
      "backend/routers/system.py",
      "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
@@ -26464,6 +26573,7 @@
     "router:module_versions",
     "router:parts",
     "router:search",
+    "router:status_display",
     "router:system",
     "router:system_hub",
     "router:uploads"
@@ -26516,6 +26626,7 @@
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
      "backend/routers/search.py",
+     "backend/routers/status_display.py",
      "backend/routers/system.py",
      "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
@@ -33008,6 +33119,7 @@
     "router:module_versions",
     "router:parts",
     "router:search",
+    "router:status_display",
     "router:system",
     "router:system_hub",
     "router:uploads"
@@ -33055,6 +33167,7 @@
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
      "backend/routers/search.py",
+     "backend/routers/status_display.py",
      "backend/routers/system.py",
      "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
@@ -34391,6 +34504,7 @@
     "router:rules",
     "router:search",
     "router:settings_center",
+    "router:status_display",
     "router:system",
     "router:system_hub",
     "router:uploads",
@@ -34479,6 +34593,7 @@
      "backend/routers/rules.py",
      "backend/routers/search.py",
      "backend/routers/settings_center.py",
+     "backend/routers/status_display.py",
      "backend/routers/system.py",
      "backend/routers/system_hub.py",
      "backend/routers/uploads.py",
@@ -34834,6 +34949,32 @@
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_quotation_custom_fields_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:pdf_gen",
+    "file:backend/helpers/__init__.py",
+    "helper:settings_registry",
+    "mod:case/api/quotations",
+    "router:custom_fields_builtin",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_registry.py",
+     "backend/pdf_gen.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/custom_fields_builtin.py",
+     "backend/routers/definitions.py"
     ]
    },
    "login_fixture": true
@@ -35551,6 +35692,7 @@
     "router:module_versions",
     "router:parts",
     "router:search",
+    "router:status_display",
     "router:system",
     "router:system_hub",
     "router:uploads"
@@ -35597,6 +35739,7 @@
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
      "backend/routers/search.py",
+     "backend/routers/status_display.py",
      "backend/routers/system.py",
      "backend/routers/system_hub.py",
      "backend/routers/uploads.py"
@@ -36516,6 +36659,59 @@
      "frontend/static/status-chip.js"
     ]
    }
+  },
+  "backend/tests/test_status_display_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "helper:status_display",
+    "js:js/case-management-core.js",
+    "js:js/status-display-editor.js",
+    "js:static/public-flags.js",
+    "js:static/status-chip.js",
+    "page:pages/case-management.html",
+    "page:pages/quotations.html",
+    "router:def_governance",
+    "router:def_pipeline",
+    "router:definitions",
+    "router:status_display"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/helpers/status_display.py",
+     "backend/routers/__init__.py",
+     "backend/routers/def_pipeline.py"
+    ],
+    "api": [
+     "backend/routers/def_governance.py",
+     "backend/routers/definitions.py",
+     "backend/routers/status_display.py"
+    ],
+    "page": [
+     "frontend/js/case-management-core.js",
+     "frontend/js/status-display-editor.js",
+     "frontend/pages/case-management.html",
+     "frontend/pages/quotations.html",
+     "frontend/static/public-flags.js",
+     "frontend/static/status-chip.js"
+    ],
+    "path": [
+     "frontend/js/case-management-core.js",
+     "frontend/js/status-display-editor.js",
+     "frontend/pages/case-management.html",
+     "frontend/pages/quotations.html",
+     "frontend/static/status-chip.js"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_stock_batch_payment_2026_09_01.py": {
    "kind": "api",
