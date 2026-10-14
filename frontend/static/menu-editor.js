@@ -138,6 +138,13 @@
       render()
     }).catch(function (e) { st.busy = false; st.msg = '預覽失敗：' + e.message; st.msgBad = true; render() })
   }
+  // T62：把這個模組剛存好的版面草稿送去『影響預覽』（伺服端記一筆『看過』）⇒ 草稿戳；治理旗標關（404）或任何失敗 ⇒ null（不帶雜湊，與過去相同）
+  function previewSeen(m) {
+    var gkey = 'module:' + encodeURIComponent(m)       // 版面定義的 key；寫成樣板字串讓 V3.3 掃描器看到 /api/def-governance/{kind}/{key}/impact
+    return api('GET', `/api/def-governance/layout/${gkey}/impact?scope=company`).then(function (d) {
+      return d && typeof d.previewHash === 'string' && d.previewHash ? d.previewHash : null
+    }).catch(function () { return null })
+  }
   function doPublish() {
     if (!st.preview || st.previewKey !== dirtyKey()) { st.msg = '草稿已變更，請先重新預覽'; st.msgBad = true; return render() }
     var ops = buildOps()
@@ -152,7 +159,11 @@
       chain = chain.then(function () {
         var url = '/api/definitions/layout/module:' + encodeURIComponent(m)
         return api('PUT', url + '/draft?scope=company', { body: { ops: next }, base_etag: st.mods[m].etag || undefined }).then(function (r) {
-          return api('POST', url + '/publish?scope=company', { note: '選單建構器', base_etag: r.etag })
+          return previewSeen(m).then(function (pvh) {
+            var pub = { note: '選單建構器', base_etag: r.etag }
+            if (pvh) pub.preview_hash = pvh                       // T62：治理旗標開時才有；關＝請求與過去逐位元相同
+            return api('POST', url + '/publish?scope=company', pub)
+          })
         }).then(function (r2) {
           // T60 S2：治理旗標開啟時，放寬的發布可能回 {pending:true,…}（待第二位最高管理者核准、還沒生效）——不能說「已發布」
           if (r2 && r2.pending === true) pend.push(r2); else done++

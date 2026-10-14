@@ -181,7 +181,10 @@
   async function restore(v) {
     st.confirming = ''                                  // 不用原生 confirm()（會擋住整頁事件）；畫面上兩段式確認，歷史不改、可再還原回來
     setBusy(true)
-    var r = await call('POST', '/api/definitions/' + enc(st.o.kind) + '/' + enc(st.o.key) + '/restore/' + enc(v) + '?scope=' + enc(st.o.scope || 'company'), { note: '還原第 ' + v + ' 版' })
+    var rb = { note: '還原第 ' + v + ' 版' }
+    var rp = await call('GET', base(st.o, '/impact') + '&version=' + enc(v))             // T62：還原也要先看過『這一版』的預覽（伺服端在強制範圍內會檢查）；面板的確認就是看過的那一步
+    if (rp.ok && rp.data && rp.data.previewHash) rb.preview_hash = rp.data.previewHash
+    var r = await call('POST', '/api/definitions/' + enc(st.o.kind) + '/' + enc(st.o.key) + '/restore/' + enc(v) + '?scope=' + enc(st.o.scope || 'company'), rb)
     setBusy(false)
     if (!st) return                                  // 等待期間面板已被關掉
     if (r.ok) {
@@ -255,6 +258,10 @@
       return new Promise(function (resolve) {
         window.MotrixDefGovernance.open(Object.assign({}, o, { tab: 'impact', readonly: true, review: true, _resolve: resolve }))
       })
+    },
+    async previewRestore(o, v) {                         // T62：⇒ 還原用的預覽雜湊（沒有治理／失敗 ⇒ null，編輯器照舊送出）
+      var r = await call('GET', base(o, '/impact') + '&version=' + enc(v))
+      return r.ok && r.data && r.data.previewHash ? r.data.previewHash : null
     },
     async preview(o) {
       var r = await call('GET', base(o, '/impact'))

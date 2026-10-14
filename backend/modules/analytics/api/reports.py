@@ -55,7 +55,7 @@ def _collect_tax_invoices(year=None, month=None):
     if p is None:
         raise HTTPException(404, RECEIVABLES_MISSING)
     return p(year, month)
-from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged, set_row, xl_style
+from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged, set_row, xl_safe, xl_style
 from helpers.company_identity import company_heading, contact_line
 from helpers.recognition_basis import normalize_basis, BASIS_NOTES, DEFAULT_BASIS   # `AC2`：口徑的純標籤（L1）
 
@@ -879,7 +879,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     # banner
     ws1.merge_cells("A1:D1")
     c = ws1["A1"]
-    c.value = company_heading("營運報表")
+    c.value = xl_safe(company_heading("營運報表"))
     c.font  = mk(bold=True, size=16, color=C_WHITE)
     c.fill  = fill(C_DARK)
     c.alignment = al("center")
@@ -887,7 +887,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
 
     ws1.merge_cells("A2:D2")
     c = ws1["A2"]
-    c.value = contact_line() or None      # A8c：空白寫 None（openpyxl 空字串會產生非法 inlineStr）
+    c.value = xl_safe(contact_line()) or None      # A8c：空白寫 None（openpyxl 空字串會產生非法 inlineStr）
     c.font  = mk(size=9, color="9CA3AF")
     c.fill  = fill(C_DARK)
     c.alignment = al("center")
@@ -904,18 +904,18 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     ws1.row_dimensions[4].height = 8
 
     def kpi_block(ws, row, col_a, col_b, title, val, val_color=C_DARK, sub=None):
-        ca = ws.cell(row=row, column=col_a, value=title)
+        ca = ws.cell(row=row, column=col_a, value=xl_safe(title))
         ca.font = mk(size=9, color=C_GRAY)
         ca.fill = fill(C_LGRAY)
         ca.border = BD
         ca.alignment = al("left")
-        cv = ws.cell(row=row + 1, column=col_a, value=val)
+        cv = ws.cell(row=row + 1, column=col_a, value=xl_safe(val))      # val 可能是客戶／業務員名稱等自由文字
         cv.font = mk(bold=True, size=14, color=val_color)
         cv.fill = fill(C_LGRAY)
         cv.border = BD
         cv.alignment = al("left")
         if sub is not None:
-            cs = ws.cell(row=row + 2, column=col_a, value=sub)
+            cs = ws.cell(row=row + 2, column=col_a, value=xl_safe(sub))
             cs.font = mk(size=8, color=C_GRAY, italic=True)
             cs.fill = fill(C_LGRAY)
             cs.border = BD
@@ -988,7 +988,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
 
     ws_acv.merge_cells("A1:F1")
     c = ws_acv["A1"]
-    c.value = company_heading(f"{acv_year} 年度目標達成率")
+    c.value = xl_safe(company_heading(f"{acv_year} 年度目標達成率"))
     c.font  = mk(bold=True, size=14, color=C_WHITE)
     c.fill  = fill("7C3AED")
     c.alignment = al("center")
@@ -1233,7 +1233,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
 
     def write_income_table(ws, start_row, items, banner):
         ws.merge_cells(f"A{start_row}:{get_column_letter(len(income_hdrs))}{start_row}")
-        c = ws.cell(row=start_row, column=1, value=banner)
+        c = ws.cell(row=start_row, column=1, value=xl_safe(banner))
         c.font = mk(bold=True, size=11, color=C_WHITE)
         c.fill = fill(C_GREEN)
         c.alignment = al("center")
@@ -1267,7 +1267,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
 
     def write_expense_table(ws, start_row, items, banner):
         ws.merge_cells(f"A{start_row}:{get_column_letter(len(income_hdrs))}{start_row}")
-        c = ws.cell(row=start_row, column=1, value=banner)
+        c = ws.cell(row=start_row, column=1, value=xl_safe(banner))
         c.font = mk(bold=True, size=11, color=C_WHITE)
         c.fill = fill("7C3AED")
         c.alignment = al("center")
@@ -2760,7 +2760,7 @@ def _build_tax_export_excel(rows: list, period_label: str, gen_at: str) -> bytes
         ws.column_dimensions[get_column_letter(i)].width = w
 
     ws.merge_cells("A1:K1")
-    c = ws["A1"]; c.value = company_heading(f"銷項發票清單（{period_label}）")
+    c = ws["A1"]; c.value = xl_safe(company_heading(f"銷項發票清單（{period_label}）"))
     c.font = mk(bold=True, size=13, color="FFFFFF"); c.fill = fill("111827"); c.alignment = al("center")
     ws.row_dimensions[1].height = 28
 

@@ -2,7 +2,7 @@
 """選單由登錄表產生（階段 C／C3，docs/platform/STAGE-C-DESIGN.md §4）。
 
 [單位] plat:menu    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] CUSTOM_DEFAULT_GROUP, ITEM_KEYS, MENU_L1, apply_layout, apply_layout_ex, build, check_l1_pages, declaration, denied, load_l1,
+[公開介面] CUSTOM_DEFAULT_GROUP, ITEM_KEYS, MENU_L1, apply_layout, apply_layout_ex, build, check_l1_pages, declaration, denied, hub_group_keys, load_l1,
     merge_custom, module_items, sidebar_point_id, validate, visible
 [不變式] 選單項只來自 core/menu_l1.json 與已載入模組的 pages[].menu；群組固定鍵、模組不可自開群組；群組顯示＝底下至少一項可見
 [契約題] tests/platform/test_menu.py

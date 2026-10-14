@@ -87,6 +87,7 @@
   "helpers/audit.py::_filter_live_notifications::<arg:sql>": "dynamic",
   "helpers/audit.py::_notify::notifications": "unscoped",
   "helpers/audit.py::purge_old_notifications::notifications": "unscoped",
+  "helpers/builtin_fields.py::usage_counts::<from>": "dynamic",
   "helpers/case_access.py::case_exists::quotations": "unscoped",
   "helpers/case_access.py::case_sales_department::quotations": "unscoped",
   "helpers/company_identity.py::_location_of::quotations": "unscoped",

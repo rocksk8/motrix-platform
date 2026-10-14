@@ -784,6 +784,7 @@ def export_task_history(task_id: int, authorization: str = Header(None)):
     all_occs.sort(reverse=True)
     conn.close()
 
+    from helpers.xlsx_out import csv_safe
     _WD = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"]
     buf    = _io.StringIO()
     writer = _csv.writer(buf)
@@ -793,13 +794,13 @@ def export_task_history(task_id: int, authorization: str = Header(None)):
         wd = _WD[_date.fromisoformat(occ_date).weekday()]
         for u in assigned:
             c = next((x for x in comps if x["username"] == u), None)
-            writer.writerow([
+            writer.writerow([csv_safe(x) for x in (       # 工作事項標題、回報內容是自由文字：= + - @ Tab CR 開頭要中和（CSV 公式注入）
                 d["title"], occ_date, wd,
                 dn_map.get(u, u),
                 "已完成" if (c and c["completed"]) else "未完成",
                 (c["at"]     if c else ""),
                 (c["report"] if c else ""),
-            ])
+            )])
 
     from helpers.xlsx_out import log_export
     log_export(authorization, "csv", "daily_tasks", "task-history", {"task_id": task_id}, len(all_occs) * max(len(assigned), 1))   # 每次匯出都留紀錄（2026-09-30）

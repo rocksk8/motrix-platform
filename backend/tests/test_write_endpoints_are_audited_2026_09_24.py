@@ -41,6 +41,12 @@ AUDIT_WRAPPERS = {
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
 EXEMPT = {
+    # ── 自訂按鈕預覽（t61 S6）：POST 只為帶草稿按鈕，不寫任何資料 ──
+    ("user_buttons.py", "POST", "/api/user-buttons/{module}/{page}/preview"):
+        "preview：只在記憶體內驗證並以指定身分渲染草稿按鈕（UB.preview 不 commit、不寫任何資料）；僅最高管理者、設定 builder_actions.enabled 關閉時 404。",
+    # ── 選單建構器預覽（t59 BP-1）：POST 只為帶草稿 ops，不寫任何資料 ──
+    ("platform_menu_preview.py", "POST", "/api/platform/menu/preview"):
+        "preview：只在記憶體內驗證並渲染草稿 ops（helpers/menu_builder.preview 不開寫入、不 commit），不寫任何資料；僅最高管理者、設定 builder_menu.enabled 關著回 404",
     # ── 轉簽（第54班）：稽核與換人同一個交易（直接 INSERT audit_log，寫不進去整個轉簽回滾），掃描器只認 _audit／_system_audit 呼叫 ──
     ("approval_queue.py", "POST", "/api/approval-queue/reassign"):
         "稽核 approval.reassign 在同一個交易內由端點直接寫入 audit_log（第 54 班強制稽核：寫不進去整個轉簽回滾，不再是 commit 之後吞錯誤的 _audit）；detail 上限與欄位推導沿用 _audit 的同一份規則",

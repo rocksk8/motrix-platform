@@ -9,6 +9,7 @@
 （與搬移前相同）。測試每題重置它：`tests/conftest.py` 的 `client` fixture 指名這裡的
 `_export_times`——不在 reports 留同名 alias，否則重置的是別名、冷卻照留（〈守門守的對象被搬走〉）。
 """
+import re
 import threading
 import time
 
@@ -56,10 +57,42 @@ def xl_style(wb):
 # （見 reports._build_report_html() 的 esc()），這裡比照同樣的防禦精神，把觸發字元
 # 開頭的字串前面補一個單引號讓 openpyxl 存成純文字。
 XL_FORMULA_TRIGGERS = ("=", "+", "-", "@")
+# xlsx：openpyxl 只會把「=」開頭的字串綁成公式（其餘 + - @ 開頭仍是字串儲存格），所以 xlsx 新寫入端只補「=」——
+# 電話 +886…、備註 -VLAN10 不會多出看得見的單引號，匯出再匯入也不會被污染（netplan 匯入只需還原「'=」）。
+# csv：Excel 開 CSV 時 = + - @ Tab CR 開頭都會被當公式，所以 CSV 用完整六個字元（與原 lodging `_CSV_FORMULA_LEAD` 同一組）。
+# 三個函式都只處理 str：真正的數字（含負數）是 int／float，不會被加前綴。
+XLSX_FORMULA_TRIGGERS = ("=",)
+CSV_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
 
 
 def xl_safe(val):
     if isinstance(val, str) and val[:1] in XL_FORMULA_TRIGGERS:
+        return "'" + val
+    return val
+
+
+_ESC_RE = re.compile(r"^'*=")
+
+
+def xl_safe_xlsx(val):
+    """xlsx 儲存格的新寫入端用：只中和「=」開頭（openpyxl 唯一會綁成公式的前綴）。
+    可逆：開頭是『零個以上的單引號＋=』的字串一律再多補一個單引號（所以本來就以 '= 開頭的文字也不會在往返時被吃掉一個）；
+    讀回去用 `xlsx_unescape`。"""
+    if isinstance(val, str) and _ESC_RE.match(val):
+        return "'" + val
+    return val
+
+
+def xlsx_unescape(val):
+    """`xl_safe_xlsx` 的反運算：開頭是『一個以上的單引號＋=』就拿掉一個單引號；其餘原樣。xl_safe_xlsx → xlsx_unescape 對任何字串都是恆等。"""
+    if isinstance(val, str) and _ESC_RE.match(val) and val.startswith("'"):
+        return val[1:]
+    return val
+
+
+def csv_safe(val):
+    """CSV 儲存格用：= + - @ Tab CR 開頭都中和。"""
+    if isinstance(val, str) and val[:1] in CSV_FORMULA_TRIGGERS:
         return "'" + val
     return val
 

@@ -90,7 +90,7 @@ from pdf_gen import (
 )
 
 router = APIRouter()
-from helpers.xlsx_out import add_pdf_sibling, export_logged   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
+from helpers.xlsx_out import add_pdf_sibling, export_logged, xl_safe_xlsx   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
 
 
 # ── Approval tier helpers ─────────────────────────────────────────────────────
@@ -1568,6 +1568,8 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     user = _require_user(authorization)
     q   = body.data
     _strip_foreign_file_entries(q.get("caseRecord"), {})   # 安全審查 W3：新建沒有既有檔案，前端帶的檔案路徑一律不收
+    if isinstance(q.get("caseRecord"), dict):
+        q["caseRecord"].pop("customFields", None)   # T61 S5：自訂欄位只能經案件記錄存檔路徑的閘門寫入；新建（含複製案件）一律不帶
     validate_quote_tax(q)   # AC1：只能存法定稅別
     validate_tax_basis(q, body.status)   # R2：零稅率／免稅送出要有依據（營業稅法 §7、§8）
     if body.status == "待審核":
@@ -1950,6 +1952,17 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             _strip_foreign_file_entries(q.get("caseRecord"), (json.loads(existing["data_json"] or "{}") or {}).get("caseRecord") or {})
         except (ValueError, TypeError):
             _strip_foreign_file_entries(q.get("caseRecord"), {})
+        if isinstance(q.get("caseRecord"), dict):
+            # T61 S5：自訂欄位只能經案件記錄存檔路徑（有閘門）改。整份存檔一律以鎖內讀到的資料庫現值為準：
+            # 偽造的值無效（不經型別／大小檢查、旗標關閉時也不能寫），沒送這個鍵也不會把已存的值洗掉。
+            try:
+                _cf_db = ((json.loads(existing["data_json"] or "{}") or {}).get("caseRecord") or {}).get("customFields")
+            except (ValueError, TypeError):
+                _cf_db = None
+            if _cf_db:
+                q["caseRecord"]["customFields"] = _cf_db
+            else:
+                q["caseRecord"].pop("customFields", None)
         # 樂觀鎖（選填）：草稿階段沒有狀態鎖保護，兩人同時編輯同一張草稿會後寫覆蓋
         # 前寫且完全沒有提示。自動存檔（autoSave）跟手動存檔共用這支端點，衝突時
         # 一律回 409，讓呼叫端自行決定要不要提示使用者或重新載入。
@@ -3003,6 +3016,11 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
                 # 舊整包格式：除了 payment（與伺服器自己維護的 stages、樂觀鎖旗標）以外必須與資料庫現值**完全相同**；
                 # 有任何非款項欄位不同 ⇒ 403（同原訊息，不靜默丟掉）。一般前端整包送出的內容與資料庫一致 ⇒ 通過、款項照存。
                 _db_cr = json.loads(row["data_json"] or "{}").get("caseRecord") or {}
+                # T61 S5：自訂欄位不是款項——這個角色送來的值一律換成資料庫現值（不寫入、也不因缺鍵而被當成『改了非款項欄位』）
+                if _db_cr.get("customFields"):
+                    body.case_record["customFields"] = _db_cr["customFields"]
+                else:
+                    body.case_record.pop("customFields", None)
                 _skip = ("payment", "stages", "_expectedUpdatedAt")
                 _a = {k: v for k, v in _db_cr.items() if k not in _skip}
                 _b = {k: v for k, v in body.case_record.items() if k not in _skip}
@@ -3042,6 +3060,23 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             raise HTTPException(409, "案件資料已被其他人更新，請重新載入後再存")
         label = f"{quote_no}（{row['customer_name'] or ''}{'／' if row['project_name'] else ''}{row['project_name'] or ''}）"
         data = json.loads(row["data_json"] or "{}")
+        if isinstance(body.case_record, dict):
+            # T61 S5：自訂欄位閘門（旗標 builder_custom_fields.enabled 關閉 ⇒ 不介入：用戶端送來的 customFields 不存、舊值原樣保留）。
+            # 沒有送這個鍵（舊的整包格式）＝沒有要改，帶回舊值，不讓整包取代把它洗掉；沒有值就不寫這個鍵。
+            _cf_old = (data.get("caseRecord") or {}).get("customFields")
+            if "customFields" not in body.case_record:
+                if _cf_old:
+                    body.case_record["customFields"] = _cf_old
+            elif body.case_record["customFields"] != _cf_old:
+                from helpers import builtin_fields as _bf
+                _cf_new, _cf_err, _cf_ignored = _bf.gate("case_info", body.case_record["customFields"], _cf_old)
+                if _cf_err:
+                    conn.close()
+                    raise HTTPException(400, "自訂欄位有問題：" + "；".join(e["message"] for e in _cf_err))
+                if _cf_new:
+                    body.case_record["customFields"] = _cf_new
+                else:
+                    body.case_record.pop("customFields", None)
         if not money_visible(user):
             # CM13（2026-09-24）：這個帳號拿到的是遮蔽過的 caseRecord，送回來的款項期別沒有金額鍵。
             # 以資料庫現值補回，不可以讓空值蓋掉真正的金額；新增／刪除／重排期別不允許（D2）。
@@ -6612,7 +6647,7 @@ def case_batch_export(body: dict = Body(...), authorization: str = Header(None))
 
     def cell(v):
         # openpyxl 寫空字串會產生不合規的 inlineStr（Excel 開檔要修復）⇒ 空值一律 None
-        return v if v not in ("", None) else None
+        return xl_safe_xlsx(v) if v not in ("", None) else None      # 自由文字（客戶、專案、業務…）不能以 = + - @ 開頭變成公式
 
     for no in nos:
         r = rows.get(no)

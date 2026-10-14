@@ -236,7 +236,9 @@
           this.busy = true; this.publishProblems = []; this.errMsg = ''
           try {
             if (!(await this.flushSave())) { this.errMsg = '未還原：' + (this.errMsg || '草稿存檔失敗'); return }
-            var r = await this.api('POST', this.defUrl() + '/restore/' + v, { note: '' })
+            var rb = { note: '' }
+            if (this.govOn && window.MotrixDefGovernance) { var ph = await window.MotrixDefGovernance.previewRestore({ kind: 'custom_module', key: this.key, scope: 'company' }, v); if (ph) rb.preview_hash = ph }   // T62
+            var r = await this.api('POST', this.defUrl() + '/restore/' + v, rb)
             if (r.status === 422) { this.publishProblems = (r.data && r.data.problems) || []; return }
             if (!r.ok) { this.errMsg = '還原失敗：' + ((r.data && r.data.detail) || r.status); return }
             if (r.data.restoredToDraft) {               // 定義送審開啟時：還原＝把舊版放回草稿（再送審），不直接發布

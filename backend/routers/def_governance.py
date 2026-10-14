@@ -100,6 +100,27 @@ def version_diff(conn, kind, key, scope, a, b) -> dict:
     return {"a": str(a), "b": str(b), "changes": D.diff(_body(conn, kind, key, scope, a), _body(conn, kind, key, scope, b))}
 
 
+def version_stamp(version, body, live_version=None) -> str:
+    """還原預覽的雜湊：`v<版本>@live<目前生效版>:<該版內容的 sha256 前 16 碼>`。綁定生效版：預覽之後又發布過別版，舊的預覽就不能用來還原。"""
+    import hashlib
+    import json
+    return "v%d@live%s:%s" % (int(version), int(live_version or 0), hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()[:16])
+
+
+def impact_of_restore(conn, kind, key, scope, version) -> dict:
+    """還原前的影響預覽：要還原的那一版對目前生效版的差異與現行驗證結果。`previewHash`＝`version_stamp`（還原端點據此把關）。"""
+    _check_kind(kind)
+    old = D.get(conn, kind, key, scope, int(version))
+    if old is None or old["status"] != "published":
+        raise D.DefinitionError("找不到第 %s 版（已發布）" % (version,))
+    live = D.get(conn, kind, key, scope)
+    problems = D.validate(kind, key, old["body"])
+    return {"kind": kind, "key": key, "scope": scope, "restoreVersion": int(version), "liveVersion": (live or {}).get("version"),
+            "previewHash": version_stamp(version, old["body"], (live or {}).get("version")), "changes": D.diff((live or {}).get("body") or {}, old["body"]),
+            "validation": {"ok": not problems, "problems": problems}, "warnings": [RESTORE_WARNING],
+            "note": "還原會把這一版再發布成新的一版；歷史不改。"}
+
+
 def impact(conn, kind, key, scope) -> dict:
     """發布前影響預覽：草稿對目前生效版的差異、驗證結果、同一定義在其他範圍（公司／角色）的版本、宣告的影響範圍。
     `previewHash`＝草稿內容戳（`etag_of`）：這個戳會被記進稽核（`definitions.previewed`）。旗標開啟時，費用單據類型／匯款款別／自訂模組的發布端點要求
@@ -129,11 +150,17 @@ def impact(conn, kind, key, scope) -> dict:
                      else "發布後立即套用到畫面；已存的單據資料不會被改動。")}
 
 
-def _gate(authorization, kind):
-    """先驗身分（未登入 ⇒ 401，與其他路由一致），再看旗標與 kind；通過回連線（呼叫端關閉）。"""
-    _require_user(authorization, require_superadmin=True)
+def _flag_gate(kind):
+    """身分已由呼叫端的 `_require_user(..., require_superadmin=True)` 驗過（未登入 ⇒ 401，與其他路由一致）；這裡再看旗標與 kind，通過回連線（呼叫端關閉）。"""
     conn = get_db()
-    if not enabled(conn) or kind not in kinds():
+    on = enabled(conn)
+    if not on and kind in kinds():
+        try:                                                           # T62：某類的『強制預覽』已開 ⇒ 預覽路由要能用（否則關掉總開關會讓該類無法發布）
+            from routers import definitions as _d
+            on = _d._opt_in_enforced(conn, kind)
+        except Exception:                                              # noqa: BLE001
+            on = False
+    if not on or kind not in kinds():
         conn.close()
         raise HTTPException(404, "Not Found")
     return conn
@@ -141,7 +168,8 @@ def _gate(authorization, kind):
 
 @router.get("/api/def-governance/{kind}/{key}/ledger")
 def def_ledger(kind: str, key: str, scope: str = Query("company"), authorization: str = Header(None)):
-    conn = _gate(authorization, kind)
+    _require_user(authorization, require_superadmin=True)
+    conn = _flag_gate(kind)
     try:
         return ledger(conn, kind, key, scope)
     except D.DefinitionError as e:
@@ -153,7 +181,8 @@ def def_ledger(kind: str, key: str, scope: str = Query("company"), authorization
 @router.get("/api/def-governance/{kind}/{key}/diff")
 def def_diff(kind: str, key: str, scope: str = Query("company"), a: str = Query("live"), b: str = Query("draft"),
              authorization: str = Header(None)):
-    conn = _gate(authorization, kind)
+    _require_user(authorization, require_superadmin=True)
+    conn = _flag_gate(kind)
     try:
         return version_diff(conn, kind, key, scope, a, b)
     except D.DefinitionError as e:
@@ -163,10 +192,11 @@ def def_diff(kind: str, key: str, scope: str = Query("company"), a: str = Query(
 
 
 @router.get("/api/def-governance/{kind}/{key}/impact")
-def def_impact(kind: str, key: str, scope: str = Query("company"), authorization: str = Header(None)):
-    conn = _gate(authorization, kind)
+def def_impact(kind: str, key: str, scope: str = Query("company"), version: int = Query(None), authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    conn = _flag_gate(kind)
     try:
-        out = impact(conn, kind, key, scope)
+        out = impact(conn, kind, key, scope) if version is None else impact_of_restore(conn, kind, key, scope, version)   # T62：帶 version ⇒ 還原預覽
     except D.DefinitionError as e:
         raise HTTPException(400, str(e))
     finally:

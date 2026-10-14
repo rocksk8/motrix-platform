@@ -1,6 +1,22 @@
 {
  "_note": "部署零行為變更凍結基準（第54班 Train A）：[預設, 下限, 上限, 讀取夾值]；改動＝行為變更，須同步改本檔並走裁示。",
  "groups": {
+  "builder_actions": {
+   "enabled": [
+    false,
+    null,
+    null,
+    false
+   ]
+  },
+  "builder_custom_fields": {
+   "enabled": [
+    false,
+    null,
+    null,
+    false
+   ]
+  },
   "builder_layout": {
    "case_management": [
     false,
@@ -254,6 +270,30 @@
   },
   "builder_governance": {
    "enabled": [
+    0,
+    0,
+    1,
+    false
+   ],
+   "enforce_custom_fields": [
+    0,
+    0,
+    1,
+    false
+   ],
+   "enforce_layout": [
+    0,
+    0,
+    1,
+    false
+   ],
+   "enforce_output_template": [
+    0,
+    0,
+    1,
+    false
+   ],
+   "enforce_user_buttons": [
     0,
     0,
     1,
