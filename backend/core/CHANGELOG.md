@@ -2,7 +2,7 @@
 
 ## (next) — wip/t59-bp1-menus-r1（BP-1 選單建構器；旗標 `builder_menu.enabled` 預設關）
 
-- L1（BP-3，wip/t61-bp3-templates-r1；旗標 `builder_exports.enabled` 預設關）：新增 `helpers/export_templates.py`（匯出範本：欄位目錄、宣告式範本驗證、渲染、預覽；新 kind `export_template`）與 `routers/export_templates.py`（`GET /api/export-templates/{id}/status`、`POST /api/export-templates/{id}/preview`，後者唯讀）。治理：`def_pipeline.ACTIVE_KINDS` 與預覽雜湊強制名單加入 `export_template`（新增欄位＝放寬⇒待核准；只改標題／順序＝中性；移除欄位＝收緊）。先導：每日任務歷程 CSV（`daily_tasks:task-history`）。旗標關閉或沒有已發布範本 ⇒ 匯出檔與今天逐位元相同。生成物（L1 快照、路由盤點、設定基準）由列車重產。
+- L1（BP-3，wip/t61-bp3-templates-r1；旗標 `builder_exports.enabled` 預設關）：新增 `helpers/export_templates.py`（匯出範本：欄位目錄、宣告式範本驗證、渲染、預覽；新 kind `export_template`）與 `routers/export_templates.py`（`GET /api/export-templates/{id}/status`、`POST /api/export-templates/{id}/preview`，後者唯讀）。治理：`def_pipeline.ACTIVE_KINDS` 與預覽雜湊強制名單加入 `export_template`（新增欄位＝放寬⇒待核准；只改標題／順序＝中性；移除欄位＝收緊）。先導：每日任務歷程 CSV（`daily_tasks:task-history`）。旗標關閉或沒有已發布範本 ⇒ 匯出檔與今天逐位元相同。R3：`helpers/xlsx_out.xlsx_to_html` 讀 xlsx 的列印頁首／頁尾（沒設定＝今天所有匯出，輸出不變）；`helpers/export_templates` 加 `render_rows`／`apply_print_text`／`lock_labels`；先導 xlsx＝外包名冊。生成物（L1 快照、路由盤點、設定基準）由列車重產。
 
 - L0（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：`core.customization.SIDEBAR_LABEL_MAX`／`sidebar_label_problem`（側欄顯示名稱：最長 20 字、不含標記字元）；`core.menu.apply_layout_ex(groups, ops, builder=False)`（`apply_layout` 簽章與行為不變，等同 `builder=False`）。
 - 版面操作放寬（`OPS_BY_KIND["sidebar"]` 加 `relabel`；側欄 `move` 可帶 `to: "group:<既有群組鍵>"`）：只有設定 `builder_menu.enabled`＝1 才被後端接受與套用；關著時行為與今天逐字相同。改名／換群組只是顯示，href、perm、`denied` 不變。

@@ -13,7 +13,7 @@
   var LABEL_MAX = 20
   var cs = document.currentScript
   var EXPORT_ID = (cs && cs.getAttribute && cs.getAttribute('data-export-id')) || window.MOTRIX_EXPORT_ID || ''
-  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, cat: null, cols: [], etag: '', versions: [], previewKey: '', previewHash: '', preview: null, user: '', sample: 'sample', note: '' }
+  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, cat: null, cols: [], header: '', footer: '', etag: '', versions: [], previewKey: '', previewHash: '', preview: null, user: '', sample: 'sample', note: '' }
   var root = null
 
   function session() {
@@ -66,16 +66,34 @@
     cat.forEach(function (c) { if (!seen[c.id]) cols.push({ id: c.id, label: c.label, on: !tpl, money: c.money }) })
     return cols
   }
+  function fmt() { return (st.cat && st.cat.formats && st.cat.formats[0]) || 'csv' }
+  function caps() { return ((st.cat && st.cat.caps && st.cat.caps[fmt()]) || []) }
   function toTemplate() {
-    return { version: 1, format: (st.cat && st.cat.formats && st.cat.formats[0]) || 'csv',
-             columns: st.cols.filter(function (c) { return c.on }).map(function (c) { return { id: c.id, label: c.label.trim() } }) }
+    var catLabel = {}
+    ;((st.cat && st.cat.columns) || []).forEach(function (c) { catLabel[c.id] = c.label })
+    var t = { version: 1, format: fmt(),
+              columns: st.cols.filter(function (c) { return c.on }).map(function (c) {
+                return { id: c.id, label: (st.cat && st.cat.lockLabels && catLabel[c.id]) ? catLabel[c.id] : c.label.trim() } }) }
+    if (caps().indexOf('header') >= 0 && st.header.trim()) t.header = { text: st.header.trim() }
+    if (caps().indexOf('footer') >= 0 && st.footer.trim()) t.footer = { text: st.footer.trim() }
+    return t
+  }
+  function textProblem(v, what) {
+    if (!v.trim()) return ''
+    if (v.length > 60) return what + '最多 60 字'
+    if (/[<>&"'`\\{}\x00-\x1f\x7f]/.test(v)) return what + '不可含 < > & 引號、反斜線、花括號'
+    if (/^\s*[=+\-@]/.test(v)) return what + '不可以 = + - @ 開頭'
+    return ''
   }
   function curKey() { return JSON.stringify(toTemplate()) }
   function problems() {
     var out = [], used = {}
+    ;[['header', '頁首文字'], ['footer', '頁尾文字']].forEach(function (x) {
+      if (caps().indexOf(x[0]) >= 0) { var tp = textProblem(st[x[0]], x[1]); if (tp) out.push(tp) }
+    })
     st.cols.forEach(function (c) {
       if (!c.on) return
-      var p = labelProblem(c.label); if (p) out.push(c.id + '：' + p)
+      var p = (st.cat && st.cat.lockLabels) ? '' : labelProblem(c.label); if (p) out.push(c.id + '：' + p)
       if (used[c.label.trim()]) out.push(c.id + '：標題重複')
       used[c.label.trim()] = true
     })
@@ -88,6 +106,7 @@
     return api('GET', '/api/definitions/export_template/' + encodeURIComponent(EXPORT_ID) + '?scope=company').then(function (d) {
       var src = (d.draft && d.draft.body) || (d.latest && d.latest.body) || null
       st.cols = fromTemplate(src)
+      st.header = (src && src.header && src.header.text) || ''; st.footer = (src && src.footer && src.footer.text) || ''
       st.etag = (d.draft && d.draft.etag) || ''
       st.versions = (d.versions || []).filter(function (v) { return v.status === 'published' })
       st.busy = false; st.msg = ''; st.msgBad = false; st.state = 'idle'; render()
@@ -166,14 +185,22 @@
     var panel = el('div', { style: 'margin-top:6px;padding:10px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--bg-card,#fff);max-width:640px' })
     panel.appendChild(el('div', { text: (st.cat && st.cat.label || '匯出') + '：選擇要匯出的欄位、標題與順序（資料與權限不變；沒有權限看的欄位不會出現）', style: 'font-size:12px;margin-bottom:6px' }))
     st.cols.forEach(function (c, i) {
-      var lp = c.on ? labelProblem(c.label) : ''
+      var lp = (c.on && !(st.cat && st.cat.lockLabels)) ? labelProblem(c.label) : ''
       panel.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;margin:2px 0' }, [
         el('input', { type: 'checkbox', checked: c.on ? 'checked' : null, onchange: function (ev) { c.on = !!ev.target.checked; changed() } }),
-        el('input', { type: 'text', value: c.label, maxlength: String(LABEL_MAX), style: 'flex:1;font-size:12px', oninput: function (ev) { c.label = ev.target.value; st.preview = null; st.previewHash = ''; st.state = 'idle' } }),
+        el('input', { type: 'text', value: c.label, maxlength: String(LABEL_MAX), disabled: (st.cat && st.cat.lockLabels) ? 'disabled' : null, style: 'flex:1;font-size:12px', oninput: function (ev) { c.label = ev.target.value; st.preview = null; st.previewHash = ''; st.state = 'idle' } }),
         el('span', { text: c.money ? '（有權限條件）' : '', style: 'font-size:11px;color:var(--text-dim,#888)' }),
         el('button', { type: 'button', text: '↑', onclick: function () { move(i, -1) } }),
         el('button', { type: 'button', text: '↓', onclick: function () { move(i, 1) } }),
         lp ? el('span', { text: lp, style: 'color:#b91c1c;font-size:11px' }) : null
+      ]))
+    })
+    if (st.cat && st.cat.lockLabels) panel.appendChild(el('div', { text: '這個匯出的檔案會被匯入回來（靠表頭文字對應），所以欄位標題固定；可以選欄位與換順序。', style: 'font-size:11px;color:var(--text-dim,#888)' }))
+    ;[['header', '頁首文字（列印頁首）'], ['footer', '頁尾文字（列印頁尾）']].forEach(function (x) {
+      if (caps().indexOf(x[0]) < 0) return
+      panel.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:6px' }, [
+        el('span', { text: x[1], style: 'font-size:12px;min-width:140px' }),
+        el('input', { type: 'text', value: st[x[0]], maxlength: '60', style: 'flex:1;font-size:12px', oninput: function (ev) { st[x[0]] = ev.target.value; st.preview = null; st.previewHash = ''; st.state = 'idle' } })
       ]))
     })
     panel.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:8px' }, [
@@ -192,6 +219,8 @@
       tb.appendChild(el('tr', {}, pv.columns.map(function (h) { return el('th', { text: h, style: 'border:1px solid #ccc;padding:2px 4px' }) })))
       pv.rows.forEach(function (r) { tb.appendChild(el('tr', {}, r.map(function (v) { return el('td', { text: v === null || v === undefined ? '' : String(v), style: 'border:1px solid #ccc;padding:2px 4px' }) }))) })
       panel.appendChild(tb)
+      if (pv.header) panel.appendChild(el('div', { text: '列印頁首：' + pv.header, style: 'font-size:11px' }))
+      if (pv.footer) panel.appendChild(el('div', { text: '列印頁尾：' + pv.footer, style: 'font-size:11px' }))
       ;(pv.warnings || []).forEach(function (w) { panel.appendChild(el('div', { text: w, style: 'font-size:11px;color:#b45309' })) })
     }
     panel.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:8px' }, [

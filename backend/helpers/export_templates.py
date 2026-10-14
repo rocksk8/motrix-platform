@@ -2,7 +2,7 @@
 """匯出範本（BP-3 R0/R1）：宣告式的欄位／標籤／順序（＋頁首頁尾／浮水印文字），套在『已登記的匯出』上；發布前預覽。
 
 [單位] helper:export_templates    [層] L1    [穩定度] 實作
-[公開介面] CAPS, KIND, LABEL_MAX, MAX_COLUMNS, OFF_REASON, definition_problems, default_template, effective_columns, enabled, preview, register_export, registered, render_csv_rows, resolve
+[公開介面] CAPS, KIND, LABEL_MAX, MAX_COLUMNS, OFF_REASON, apply_print_text, definition_problems, default_template, effective_columns, enabled, preview, register_export, registered, render_csv_rows, render_rows, resolve
 [不變式] 設定 `builder_exports.enabled`（預設 0＝關）關著時：`resolve()` 一律回 None（端點走今天寫死的路徑，輸出逐位元相同）；發布驗證擋；預覽端點 404。
     範本只收宣告式資料：欄位 id 必須在該匯出的**欄位目錄**裡（模組登記，不由使用者定義）、文字是純文字（無占位符、無運算式、無控制／雙向字元），
     **範本不能新增資料**——欄位值一律來自端點今天的查詢與遮蔽；標 `money`（或有 `visible`）的欄位在輸出端再問一次權限，沒權限 ⇒ 整欄省略（遮蔽優先）。
@@ -14,7 +14,7 @@ import re
 import unicodedata
 
 from core import definitions as D
-from helpers.xlsx_out import csv_safe
+from helpers.xlsx_out import csv_safe, xl_safe_xlsx
 
 GROUP = "builder_exports"
 FIELD = "enabled"
@@ -46,8 +46,9 @@ def enabled(conn=None) -> bool:
 
 
 # ── 匯出目錄（模組登記；使用者不能新增）────────────────────────────────────
-def register_export(export_id, *, label, formats, columns, sample_rows, rows_provider=None):
+def register_export(export_id, *, label, formats, columns, sample_rows, rows_provider=None, lock_labels=False):
     """登記一個可套範本的匯出。`columns`＝有序 `[{id, label, money?, visible?}]`（順序與標籤＝今天寫死的預設）；
+    `lock_labels=True`：欄位標題必須等於目錄標題（這個匯出的檔案會被匯入回來，匯入靠表頭文字對應，不能改名；欄位仍可省略、換順序）。
     `visible(user)->bool`：有它或 `money:true` 的欄位在輸出端再驗權限（`money` 沒有 `visible` ⇒ 一律不顯示＝fail-closed）；
     `sample_rows`＝預覽用樣本列（`[{col_id: value}]`，不碰真實資料）；`rows_provider(conn, viewer, n)->[{col_id: value}]`＝『可見的真實列』。"""
     if not re.match(r"^[a-z][a-z0-9_:.\-]{0,79}$", export_id or ""):
@@ -63,12 +64,13 @@ def register_export(export_id, *, label, formats, columns, sample_rows, rows_pro
             raise ValueError("欄位目錄重複：%s" % c["id"])
         seen.add(c["id"])
     _EXPORTS[export_id] = {"label": label, "formats": tuple(formats), "columns": [dict(c) for c in columns],
-                           "sample_rows": list(sample_rows), "rows_provider": rows_provider}
+                           "sample_rows": list(sample_rows), "rows_provider": rows_provider, "lock_labels": bool(lock_labels)}
 
 
 def registered() -> dict:
     """⇒ {export_id: {label, formats, columns:[{id,label,money}]}}（不含 callable）。"""
-    return {k: {"label": v["label"], "formats": list(v["formats"]),
+    return {k: {"label": v["label"], "formats": list(v["formats"]), "lockLabels": v["lock_labels"],
+                "caps": {f: sorted(CAPS[f]) for f in v["formats"]},
                 "columns": [{"id": c["id"], "label": c["label"], "money": bool(c.get("money") or c.get("visible"))} for c in v["columns"]]}
             for k, v in sorted(_EXPORTS.items())}
 
@@ -128,6 +130,8 @@ def definition_problems(key, body) -> list:
                 out.append({"path": p + ".id", "message": "欄位重複：%s" % c["id"]})
             seen.add(c.get("id"))
             msg = _text_problem(c.get("label"), LABEL_MAX, "欄位標題")
+            if not msg and spec["lock_labels"] and c.get("id") in ids and c["label"] != next(x["label"] for x in spec["columns"] if x["id"] == c["id"]):
+                msg = "這個匯出的檔案會被匯入回來（靠表頭文字對應），欄位標題不能改名"
             if msg:
                 out.append({"path": p + ".label", "message": msg})
             elif c["label"].strip() in labels:
@@ -208,13 +212,28 @@ def effective_columns(export_id, template, user):
     return cols, omitted
 
 
-def render_csv_rows(export_id, template, rows, user):
-    """⇒ `(rows_for_csv_writer, omitted)`：第一列是標題；每個儲存格經 `csv_safe`。`rows`＝`[{col_id: value}]`（端點今天的查詢結果，已遮蔽）。"""
+def render_rows(export_id, template, rows, user):
+    """⇒ `(table, omitted)`：第一列是標題；每個儲存格經該格式的中和函式（csv ⇒ `csv_safe`；xlsx ⇒ `xl_safe_xlsx`）。
+    `rows`＝`[{col_id: value}]`（端點今天的查詢結果，已依檢視者遮蔽）。"""
+    safe = xl_safe_xlsx if template.get("format") == "xlsx" else csv_safe
     cols, omitted = effective_columns(export_id, template, user)
-    out = [[csv_safe(c["label"]) for c in cols]]
+    out = [[safe(c["label"]) for c in cols]]
     for r in rows:
-        out.append([csv_safe(r.get(c["id"])) for c in cols])
+        out.append([safe(r.get(c["id"])) for c in cols])
     return out, omitted
+
+
+def render_csv_rows(export_id, template, rows, user):
+    """CSV 版（保留既有呼叫端）；等同 `render_rows`。"""
+    return render_rows(export_id, template, rows, user)
+
+
+def apply_print_text(ws, template):
+    """xlsx 的頁首／頁尾＝列印頁首頁尾（不佔儲存格，資料區位置不變）；文字已通過驗證（無 & 等控制字元）。"""
+    for part, target in (("header", "oddHeader"), ("footer", "oddFooter")):
+        t = (template.get(part) or {}).get("text")
+        if t:
+            getattr(ws, target).center.text = t
 
 
 def preview(conn, caller, body, export_id, username=None, sample="sample", n=20):
@@ -244,8 +263,9 @@ def preview(conn, caller, body, export_id, username=None, sample="sample", n=20)
             sample = "sample"
     else:
         rows = spec["sample_rows"][:n]
-    table, omitted = render_csv_rows(export_id, body, rows, viewer)
+    table, omitted = render_rows(export_id, body, rows, viewer)
     if omitted:
         warnings.append("有 %d 個欄位因這位使用者沒有檢視權限而不會出現。" % len(omitted))
     return {"user": viewer.get("username"), "role": viewer.get("role"), "format": body["format"],
-            "columns": table[0], "rows": table[1:], "omitted": omitted, "warnings": warnings, "sample": sample}
+            "columns": table[0], "rows": table[1:], "omitted": omitted, "warnings": warnings, "sample": sample,
+            "header": (body.get("header") or {}).get("text"), "footer": (body.get("footer") or {}).get("text")}

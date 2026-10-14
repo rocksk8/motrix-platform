@@ -362,3 +362,107 @@ def test_page_declares_the_export_id_and_only_sidebar_loads_the_editor():
     assert "export-editor.js" not in html, "頁面不直接載入編輯器（關著時不能多請求）"
     sb = (root / "static" / "sidebar.js").read_text(encoding="utf-8")
     assert "d.builderExports" in sb and "/static/export-editor.js" in sb
+
+
+# ═══ R3：xlsx 範本（頁首／頁尾＝列印頁首頁尾；標題鎖定的匯出；先導＝外包名冊）═══════════════════════
+ET.register_export(
+    "t_bp3:xlsx", label="測試 XLSX", formats=("xlsx",), lock_labels=True,
+    columns=[{"id": "name", "label": "姓名"}, {"id": "phone", "label": "電話"}], sample_rows=[{"name": "甲", "phone": "+886 2"}])
+
+
+def test_lock_labels_blocks_renaming_but_allows_omit_and_reorder_and_print_text():
+    ok = {"version": 1, "format": "xlsx", "columns": [{"id": "phone", "label": "電話"}, {"id": "name", "label": "姓名"}],
+          "header": {"text": "外包名冊"}, "footer": {"text": "內部資料"}}
+    assert _bad(ok, key="t_bp3:xlsx") == []
+    assert _bad(dict(ok, columns=[{"id": "name", "label": "姓名"}]), key="t_bp3:xlsx") == []
+    renamed = dict(ok, columns=[{"id": "name", "label": "全名"}])
+    assert "columns[0].label" in _paths(_bad(renamed, key="t_bp3:xlsx")), "匯入靠表頭文字對應 ⇒ 標題不能改"
+    assert "watermark" in _paths(_bad(dict(ok, watermark={"text": "W"}), key="t_bp3:xlsx")), "xlsx 沒有浮水印"
+    assert "header.text" in _paths(_bad(dict(ok, header={"text": "a&b"}), key="t_bp3:xlsx")), "& 是列印頁首的控制字元，一律拒絕"
+
+
+def test_xlsx_cells_use_the_xlsx_neutralizer_only_equals_is_prefixed():
+    t = {"version": 1, "format": "xlsx", "columns": [{"id": "name", "label": "姓名"}, {"id": "phone", "label": "電話"}]}
+    table, _ = ET.render_rows("t_bp3:xlsx", t, [{"name": "=HYPERLINK(1)", "phone": "+886 2"}, {"name": "-VLAN10", "phone": None}], {"role": "viewer"})
+    assert table == [["姓名", "電話"], ["'=HYPERLINK(1)", "+886 2"], ["-VLAN10", None]], "xlsx 只補 '='；電話 +886 不多可見單引號"
+
+
+def test_print_header_footer_land_in_the_workbook_and_the_pdf_sibling_html_and_default_html_is_unchanged(tmp_path):
+    import io
+    import openpyxl
+    from helpers.xlsx_out import xlsx_to_html
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "名冊"
+    ws.append(["姓名"])
+    ws.append(["甲"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    plain = xlsx_to_html(buf.getvalue(), "名冊")
+    assert "class='meta'>" in plain and plain.count("class='meta'") == 1, "沒設定頁首頁尾 ⇒ 只有原本那一個 meta（匯出時間）"
+    ET.apply_print_text(ws, {"header": {"text": "外包名冊"}, "footer": {"text": "內部資料"}})
+    buf2 = io.BytesIO()
+    wb.save(buf2)
+    wb3 = openpyxl.load_workbook(io.BytesIO(buf2.getvalue()))
+    assert wb3.active.oddHeader.center.text == "外包名冊" and wb3.active.oddFooter.center.text == "內部資料"
+    html = xlsx_to_html(buf2.getvalue(), "名冊")
+    assert "外包名冊" in html and "內部資料" in html and html.count("class='meta'") == 3
+    assert wb3.active.max_row == 2, "頁首頁尾不佔儲存格，資料區位置不變"
+
+
+def _xl_rows(raw):
+    import io
+    import openpyxl
+    ws = openpyxl.load_workbook(io.BytesIO(raw)).active
+    return ws, [[c.value for c in row] for row in ws.iter_rows()]
+
+
+CID = "subcontract:contractors"
+
+
+def _seed_contractor(client, hd):
+    r = client.post("/api/contractors", json={"name": "=王小明", "id_number": "A123456789", "phone": "+886 2 1234", "bank_code": "812",
+                                               "bank_account_name": "王", "bank_account_number": "1234567890", "notes": "-備註"}, headers=hd)
+    assert r.status_code in (200, 201), r.text
+
+
+def test_roster_pilot_off_is_identical_template_picks_reorders_and_keeps_masking(client, make_user, monkeypatch):
+    _, hd = _login(client, make_user, "bp3_sa10", "superadmin")
+    _seed_contractor(client, hd)
+    _flag(monkeypatch, False)
+    base = client.get("/api/contractors/export", headers=hd)
+    assert base.status_code == 200
+    ws0, rows0 = _xl_rows(base.content)
+    assert rows0[0][:3] == ["姓名", "證件號碼", "國籍"] and len(rows0[0]) == 15
+    row = rows0[1]
+    assert row[0] == "'=王小明" and row[1].startswith("******") and row[1].endswith("6789"), "證件號碼遮成末 4 碼；姓名公式中和照舊"
+    assert row[4] == "+886 2 1234" and row[13] == "-備註", "xlsx 新寫入端只補 '='（電話 +886 不加）"
+    _flag(monkeypatch, True)
+    assert _xl_rows(client.get("/api/contractors/export", headers=hd).content)[1] == rows0, "旗標開、沒有範本 ⇒ 逐格相同"
+    tpl = {"version": 1, "format": "xlsx", "columns": [{"id": "phone", "label": "電話"}, {"id": "name", "label": "姓名"}, {"id": "id_number", "label": "證件號碼"}],
+           "header": {"text": "外包名冊（內部）"}, "footer": {"text": "請勿外流"}}
+    pub = _publish(client, hd, tpl, key=CID)
+    assert pub.status_code == 200 and not pub.json().get("pending"), pub.text
+    ws, rows = _xl_rows(client.get("/api/contractors/export", headers=hd).content)
+    assert rows[0] == ["電話", "姓名", "證件號碼"], "只匯出選的欄位、依範本順序"
+    assert rows[1] == [row[4], row[0], row[1]], "值與預設匯出同一組遮蔽（範本不能改變某人看到的值）"
+    assert ws.oddHeader.center.text == "外包名冊（內部）" and ws.oddFooter.center.text == "請勿外流"
+    _flag(monkeypatch, False)
+    assert _xl_rows(client.get("/api/contractors/export", headers=hd).content)[1] == rows0, "旗標關回去 ⇒ 範本不再套用，逐格回到預設"
+
+
+def test_roster_template_cannot_rename_headers_and_non_superadmin_preview_falls_back_to_masked_sample(client, make_user, monkeypatch):
+    _, hd = _login(client, make_user, "bp3_sa11", "superadmin")
+    other, _ = _login(client, make_user, "bp3_adm5", "admin", modules=["contractor_list"])
+    _seed_contractor(client, hd)
+    _flag(monkeypatch, True)
+    url = "/api/export-templates/%s/preview" % CID
+    renamed = {"version": 1, "format": "xlsx", "columns": [{"id": "name", "label": "全名"}]}
+    assert client.post(url, json={"template": renamed}, headers=hd).status_code == 422
+    good = {"version": 1, "format": "xlsx", "columns": [{"id": "name", "label": "姓名"}, {"id": "bank_account_number", "label": "帳號"}, {"id": "id_number", "label": "證件號碼"}]}
+    mine = client.post(url, json={"template": good, "sample": "visible"}, headers=hd).json()
+    assert mine["sample"] == "visible" and mine["columns"] == ["姓名", "帳號", "證件號碼"]
+    assert any(r[1] == "1234567890" for r in mine["rows"]), "最高管理者看得到全碼帳號"
+    assert all(r[2].startswith("******") for r in mine["rows"]), "證件號碼一律遮罩"
+    theirs = client.post(url, json={"template": good, "sample": "visible", "user": other}, headers=hd).json()
+    assert theirs["sample"] == "sample" and theirs["warnings"] and not any("1234567890" in str(r) for r in theirs["rows"]), "匯出只開放最高管理者 ⇒ 別人沒有真實列，退回樣本"

@@ -154,3 +154,19 @@ def test_server_side_preview_gate_is_explained_in_plain_words(code):
     run = _SETUP + "await E._preview(); await E._publish(); return st.msg"
     r = _run({"status": {"enabled": False}, "publishStatus": 409, "publish": {"detail": "x", "code": code}, "run": run})
     assert r["state"] == "error" and "必須先看過" in r["msg"] and r["bad"] is True
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_locked_labels_and_print_text_for_an_xlsx_export():
+    cat = dict(_CAT, formats=["xlsx"], lockLabels=True, caps={"xlsx": ["footer", "header"]})
+    run = ("const E = window.MotrixExportEditor, st = E._state; E._init(%s); " % json.dumps(cat)) + """
+      st.cols = [{id:'b',label:'被改的名字',on:true},{id:'a',label:'甲',on:true}]
+      st.header = '  外包名冊 '; st.footer = '請勿外流'
+      const t1 = E._toTemplate(), p1 = E._problems()
+      st.header = 'a&b'; const p2 = E._problems()
+      st.header = ''; st.footer = ''
+      return {t1, p1, p2, t2: E._toTemplate()}"""
+    r = _run({"status": {"enabled": False}, "run": run})["v"]
+    assert r["t1"] == {"version": 1, "format": "xlsx", "columns": [{"id": "b", "label": "乙"}, {"id": "a", "label": "甲"}],
+                       "header": {"text": "外包名冊"}, "footer": {"text": "請勿外流"}}, "標題鎖定：一律用目錄標題；頁首頁尾去頭尾空白"
+    assert r["p1"] == [] and r["p2"] and "header" not in r["t2"] and "footer" not in r["t2"]
