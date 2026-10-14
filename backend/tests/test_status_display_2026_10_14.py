@@ -321,3 +321,47 @@ def test_editor_follows_the_project_rules():
 def test_editor_script_loads_without_side_effects():
     out = node("global.window={};global.document=undefined;require('./js/status-display-editor.js');console.log(JSON.stringify([typeof window.MotrixStatusEditor.open, typeof window.MotrixStatusEditor.mountEntry]))")
     assert out == ["function", "function"]
+
+
+# ── 第一批消費者（報價單列表、案件管理）：靜態＋node 檢查 ───────────────────────────
+def test_quotations_list_goes_through_the_helper_with_the_old_function_as_base():
+    src = (FRONT / "pages/quotations.html").read_text(encoding="utf-8")
+    assert "_dealDisplayBase(q)" in src and "S.label(key, 'quote_list', r.text)" in src and "S.badgeClass(key, r.cls)" in src
+    assert "this.initStatusDisplay()" in src and "MotrixPublicFlags.read(['builder_status_display'])" in src
+    for tag in ("public-flags.js", "status-chip.js", "status-display-editor.js"):
+        assert tag in src
+    # 原本的對照一字不改（旗標關時就是它）
+    base = src.split("_dealDisplayBase(q) {")[1].split("\n      },")[0]
+    for line in ("{ text: '審核中', cls: 'badge--pending' }", "{ text: '已退回', cls: 'badge--rejected' }", "{ text: '執行中', cls: 'badge--running' }",
+                 "{ text: '待決定', cls: 'badge--sent' }", "{ text: '報價中', cls: 'badge--sent' }", "{ text: s || '—', cls: '' }"):
+        assert line in base, line
+
+
+def test_case_page_text_goes_through_stlabel_without_touching_logic():
+    src = (FRONT / "pages/case-management.html").read_text(encoding="utf-8")
+    assert src.count("stLabel(c.deal_tag, 'case')") == 2 and "stLabel('已成案', 'case')" in src
+    assert "stLabel('finalized', 'case', '已定稿')" in src and "stLabel('draft', 'case', '草稿')" in src
+    assert "c.deal_tag==='已結案' ? 'cm-card__tag--closed'" in src                                  # class／邏輯仍用原值
+    assert "'builder_layout', 'builder_custom_fields', 'builder_status_display'" in src and "this.initStatusDisplay(g.builder_status_display)" in src
+    core = (FRONT / "js/case-management-core.js").read_text(encoding="utf-8")
+    assert "stLabel(raw, ctx, fallback)" in core and "initStatusDisplay(flag)" in core and "flag.enabled !== 1" in core
+
+
+@pytest.mark.skipif(not NODE, reason="需要 node")
+def test_quotation_list_function_is_identical_off_and_overrides_only_changed_when_on():
+    import re
+    src = (FRONT / "pages/quotations.html").read_text(encoding="utf-8")
+    body = src.split("_dealDisplayBase(q) {")[1].split("\n      },")[0]
+    wrapper = src.split("dealDisplayStatus(q) {")[1].split("\n      },")[0]
+    code = "global.window={};const S=require('./static/status-chip.js');window.MotrixStatus=S;" + \
+           "const base=function(q){" + body + "\n};" + \
+           "const disp=function(q){const self={_dealDisplayBase:base};return (function(q){" + wrapper + "}).call(self,q)};" + \
+           "const cases=[{status:'草稿'},{status:'待審核'},{status:'簽核中'},{status:'已核准'},{status:'已取消'},{status:'已拒絕'},{status:'已送出',deal_tag:'已成案'},{status:'已送出',deal_tag:'已提供'},{status:'已送出',deal_tag:'未成案'},{status:'已送出',deal_tag:'已結案'},{status:'已送出'},{status:'已確認'},{status:'weird'},{}];" + \
+           "const off=cases.map(c=>JSON.stringify(disp(c))===JSON.stringify(base(c)));" + \
+           "S.apply({enabled:true,statuses:%s,changed:{'待審核':['label'],'已成案':['names.quote_list','tone']}});" % json.dumps(S.effective_table({"statuses": {"待審核": {"label": "排隊中"}, "已成案": {"names": {"quote_list": "施工中"}, "tone": "signing"}}}), ensure_ascii=False) + \
+           "console.log(JSON.stringify([off.every(Boolean), disp({status:'待審核'}), disp({status:'已送出',deal_tag:'已成案'}), disp({status:'草稿'})]))"
+    out = node(code)
+    assert out[0] is True                                                                              # 未載入表時 14 種輸入都與原函式逐字相同
+    assert out[1] == {"text": "審核中", "cls": "badge--pending"}                                       # 只改了 label、報價單列表有自己的簡稱 ⇒ 維持簡稱
+    assert out[2] == {"text": "施工中", "cls": "badge--signing"}                                       # 改了簡稱與色調 ⇒ 兩者都換
+    assert out[3] == {"text": "草稿", "cls": "badge--draft"}
