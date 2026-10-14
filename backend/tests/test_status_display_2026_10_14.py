@@ -259,7 +259,7 @@ def test_m1_waiting_and_negative_wording_is_allowed(text):
 @pytest.mark.parametrize("key,text", [("待審核", "已付款"), ("待審核", "已匯款"), ("草稿", "已完結"), ("草稿", "已結算"), ("草稿", "已定稿"),
                                      ("待審核", "已核准"), ("簽核中", "精算完結"), ("草稿", "已 付款".replace(" ", ""))])
 def test_m1_a_plain_key_cannot_take_an_approved_or_paid_meaning(key, text):
-    assert any("相同" in p["message"] or "官方用語" in p["message"] for p in v({key: {"label": text}})), (key, text)
+    assert any("含有" in p["message"] or "官方用語" in p["message"] for p in v({key: {"label": text}})), (key, text)
     assert v({key: {"names": {"case": text}}}), (key, text)
 
 
@@ -365,3 +365,55 @@ def test_quotation_list_function_is_identical_off_and_overrides_only_changed_whe
     assert out[1] == {"text": "審核中", "cls": "badge--pending"}                                       # 只改了 label、報價單列表有自己的簡稱 ⇒ 維持簡稱
     assert out[2] == {"text": "施工中", "cls": "badge--signing"}                                       # 改了簡稱與色調 ⇒ 兩者都換
     assert out[3] == {"text": "草稿", "cls": "badge--draft"}
+
+
+# ── 04 第二輪（M1 未關、M3、S4）──────────────────────────────────────────────────
+@pytest.mark.parametrize("text", [
+    "核 准", "已 核 准", "核·准", "核-准", "核.准", "核/准", "核_准",                                  # 分隔字元拆開
+    "已审核通过", "审核通过", "通过", "已签核", "确认", "已承認", "已認可", "已同意", "承认",             # 簡體、同義
+    "Approved", "APPROVED", "approve", "a p p r o v e d", "Ok", "ＯＫ", "okay", "Granted",           # 英文、全形
+])
+def test_m1b_separator_script_and_english_bypasses_are_rejected(text):
+    assert v({"已駁回": {"label": text}}), repr(text)
+    assert v({"已駁回": {"names": {"cashier": text}}}), repr(text)
+
+
+@pytest.mark.parametrize("text", ["✅", "☑", "✔已審", "✓", "😀草稿", "ОК", "ᴏᴋ", "あ", "\ud800x", "草\tx"])
+def test_m1b_characters_outside_the_allowlist_are_rejected(text):
+    assert any("看不見" in p["message"] or "只能用" in p["message"] for p in v({"已駁回": {"label": text}})), repr(text)
+
+
+@pytest.mark.parametrize("text", ["待已核准", "待審核已核准", "未知已核准", "待 已核准", "等待已確認", "待核准已核准"])
+def test_m1b_the_negator_exemption_needs_exactly_one_official_word(text):
+    assert v({"已駁回": {"label": text}}), repr(text)
+
+
+@pytest.mark.parametrize("text", ["未通過", "等待確認", "尚未生效", "不批准", "待確認", "等待 核准"])
+def test_m1b_plain_waiting_phrases_are_still_allowed(text):
+    assert v({"已駁回": {"label": text}}) == [], text
+
+
+@pytest.mark.parametrize("text", ["已 付款", "已付款.", "已付款(重)", "已匯 款", "已 匯款.", "已結清", "已付清", "已入帳", "已完結.", "精算 完結", "已 定稿"])
+def test_m1b_paid_and_settled_wording_with_separators_is_rejected_on_plain_keys(text):
+    assert v({"待審核": {"label": text}}), repr(text)
+    assert v({"簽核中": {"names": {"case": text}}}), repr(text)
+
+
+def test_m3_lone_surrogates_are_rejected_not_a_500():
+    for bad in ("\ud800x", "x\udfff", "\ud83d"):
+        assert v({"草稿": {"label": bad}})
+    body = json.loads('{"statuses": {"草稿": {"label": "\\ud800x"}}}')                                  # json.loads 會產生孤立代理字元
+    probs = S.validate_table(body)
+    assert probs
+    assert S.compare({"statuses": {}}, body)[0] == "loosen"
+    json.dumps(probs, ensure_ascii=False).encode("utf-8")                                          # 錯誤訊息本身可以編成 utf-8（回應時不會炸）
+
+
+def test_m1b_ordinary_good_names_pass():
+    for ok in ("起草中", "排隊中", "施工中", "待處理", "Draft (new)", "第一批", "A/B 測試"):
+        assert v({"草稿": {"label": ok}}) == [], ok
+
+
+def test_s4_editor_escapes_attribute_values():
+    src = (FRONT / "js/status-display-editor.js").read_text(encoding="utf-8")
+    assert "esc(c) + ':' + esc(k)" in src and "'<option value=\"' + esc(t) + '\"'" in src

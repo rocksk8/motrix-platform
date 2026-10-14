@@ -36,7 +36,7 @@
   var GROUP_NAME = { approval: '單據與簽核狀態', quote: '報價單', deal: '案件進度（deal_tag）', settle: '成本精算' }
   var CTX_NAME = { quote_list: '報價單列表', quote_form: '報價單表單', 'case': '案件管理', cashier: '出納', report: '報表', settlement: '精算頁' }
   var PREVIEW_CTX = [['quote_list', '報價單列表'], ['case', '案件卡片'], ['cashier', '出納']]
-  var OFFICIAL = ['核准', '核準', '批准', '核可', '已簽核', '簽核完成', '簽核通過', '審核通過', '已通過', '通過', '生效', '確認', '已批', '批示', '已准', '准予', 'OK']
+  var OFFICIAL = ['核准', '核準', '批准', '核可', '已簽核', '簽核完成', '簽核通過', '審核通過', '已通過', '通過', '生效', '確認', '已批', '批示', '已准', '准予', '承認', '認可', '同意', '已签核', '审核通过', '通过', '确认', '承认', '认可', 'OK', 'Approved']   // 僅供即時提示；伺服器才是準的（會去掉分隔、比對繁簡與英文）
 
   var CSS = [
     '#sde-panel{position:fixed;top:0;right:0;bottom:0;width:560px;max-width:100vw;z-index:1300;background:var(--bg-card,#fff);color:var(--text-primary,#222);',
@@ -86,7 +86,7 @@
     if (meta.semantic !== 'approved') {
       var texts = [e.label].concat(Object.keys(e.names).map(function (c) { return e.names[c] }))
       var dflt = [st.defaults[k].label].concat(Object.keys(st.defaults[k].names).map(function (c) { return st.defaults[k].names[c] }))
-      texts.forEach(function (t) { if (dflt.indexOf(t) < 0 && !/^(待|未|尚未|等待|不)/.test(t) && OFFICIAL.some(function (w) { return t.indexOf(w) >= 0 })) bad.push(t) })
+      texts.forEach(function (t) { if (dflt.indexOf(t) < 0 && !/^(待|未|尚未|等待|不)/.test(t) && OFFICIAL.some(function (w) { return t.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase().indexOf(w.toLowerCase()) >= 0 })) bad.push(t) })
     }
     return bad.length ? '「' + bad.join('、') + '」含官方用語（' + OFFICIAL.join('、') + '），這個狀態不能使用' : ''
   }
@@ -106,12 +106,12 @@
         html += '<div class="sde-row" data-key="' + esc(k) + '"><div class="sde-line"><span class="sde-key">' + esc(k) + '</span>' +
           '<span class="sde-dim">顯示名稱</span><input data-sde-in="label:' + esc(k) + '" value="' + esc(e.label) + '" maxlength="12" size="9" aria-label="' + esc(k) + ' 的顯示名稱">' +
           '<span class="sde-dim">顏色</span><select data-sde-in="tone:' + esc(k) + '" aria-label="' + esc(k) + ' 的顏色">' +
-          (meta.allowedTones || ['neutral']).map(function (t) { return '<option value="' + t + '"' + (t === e.tone ? ' selected' : '') + '>' + esc(TONE_NAME[t] || t) + '</option>' }).join('') +
+          (meta.allowedTones || ['neutral']).map(function (t) { return '<option value="' + esc(t) + '"' + (t === e.tone ? ' selected' : '') + '>' + esc(TONE_NAME[t] || t) + '</option>' }).join('') +
           '</select>' + (changed ? '<button class="sde-btn" data-sde="reset:' + esc(k) + '">還原預設</button>' : '') + '</div>'
         var ctxIn = Object.keys(d.names).concat(Object.keys(e.names).filter(function (c) { return !(c in d.names) }))
         if (ctxIn.length) {
           html += '<div class="sde-line sde-dim">各畫面簡稱：' + ctxIn.map(function (c) {
-            return esc(CTX_NAME[c] || c) + ' <input data-sde-in="names.' + c + ':' + esc(k) + '" value="' + esc(e.names[c] || '') + '" maxlength="12" size="7" aria-label="' + esc(k) + ' 在' + esc(CTX_NAME[c] || c) + '的簡稱">'
+            return esc(CTX_NAME[c] || c) + ' <input data-sde-in="names.' + esc(c) + ':' + esc(k) + '" value="' + esc(e.names[c] || '') + '" maxlength="12" size="7" aria-label="' + esc(k) + ' 在' + esc(CTX_NAME[c] || c) + '的簡稱">'
           }).join('　') + '</div>'
         }
         html += '<div class="sde-prev" data-sde-preview="' + esc(k) + '">' + PREVIEW_CTX.map(function (c) { return '<span><span class="sde-ctx">' + esc(c[1]) + '</span> ' + chip(k, c[0]) + '</span>' }).join('') + '</div>'

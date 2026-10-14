@@ -2,7 +2,7 @@
 """狀態顯示名稱與顏色（S-X2）：一張受治理的表，報價／案件／出納共用。**只改『看到的字與色』，狀態的鍵（資料庫值）永遠不變。**
 
 [單位] helper:status_display    [層] L1    [穩定度] 實驗（旗標 builder_status_display.enabled 關＝所有畫面與今天逐位元相同）
-[公開介面] KIND, KEY, TONES, CONTEXTS, OFFICIAL_WORDS, STATUS_KEYS, defaults, validate_table, compare, effective_table, changed_fields, meta, public_payload, flag_on, enabled, ensure_registered, published_body
+[公開介面] KIND, KEY, TONES, CONTEXTS, OFFICIAL_WORDS, ENGLISH_TOKENS, STATUS_KEYS, defaults, validate_table, compare, effective_table, changed_fields, meta, public_payload, flag_on, enabled, ensure_registered, published_body
 [不變式] ①**鍵集合由程式擁有**（`STATUS_KEYS`）：使用者不能新增或刪除鍵，也不能改鍵；表只存 `label`／`names`（各情境簡稱）／`tone`／`order`；
     ②顏色只能從固定調色盤選（`TONES`，對應 css `.st-chip--*` 語意 token），不收自由色碼；
     ③官方用語保護：非『已核准』語意的鍵，名稱不可含官方用語（核准／批准／核可／已簽核／簽核完成／審核通過）——預設值本身除外；
@@ -27,11 +27,22 @@ _log = logging.getLogger(__name__)
 TONES = ("neutral", "draft", "pending", "signing", "approved", "rejected", "paid", "void")
 #: 情境（各畫面用的簡稱槽）。`default` 就是 label 本身，不放在 names 裡。
 CONTEXTS = ("quote_list", "quote_form", "case", "cashier", "report", "settlement")
-OFFICIAL_WORDS = ("核准", "核準", "批准", "核可", "已簽核", "簽核完成", "簽核通過", "審核通過", "已通過", "通過", "生效", "確認", "已批", "批示", "已准", "准予", "ok")
-#: 開頭是這些否定／等待字的名稱可以含官方用語（待核准、未通過、等待確認 都是『還沒』的意思）
-_NEGATORS = ("待", "未", "尚未", "等待", "不")
-#: 這些字元在畫面上看不見或看起來像空白，用來把官方用語拆開以躲過比對：一律拒絕
-_HIDDEN = {0x3164, 0x115F, 0x1160, 0xFFA0, 0x2800, 0x034F}
+OFFICIAL_WORDS = (
+    # 繁體
+    "核准", "核準", "批准", "核可", "已簽核", "簽核完成", "簽核通過", "審核通過", "已通過", "通過", "生效", "確認", "已批", "批示", "已准", "准予", "承認", "認可", "同意",
+    # 簡體（NFKC 不會把簡體折成繁體，所以兩種寫法都列）
+    "已签核", "签核完成", "签核通过", "审核通过", "已通过", "通过", "确认", "批示", "承认", "认可",
+)
+#: 英文：整個詞比對（ok 不能用子字串，否則 book 也會中），或壓縮後（去掉分隔）包含這些長詞
+ENGLISH_TOKENS = ("ok", "okay", "pass", "passed", "approve", "approved", "grant", "granted", "accept", "accepted", "confirm", "confirmed")
+_ENGLISH_SUBSTR = ("approve", "granted", "accepted", "confirmed")
+#: 開頭是這些否定／等待字、後面『剛好是一個官方用語』的名稱可以使用（待核准、未通過、等待確認 都是『還沒』的意思）；後面多了別的字一律不行（待已核准）
+_NEGATORS = ("尚未", "等待", "待", "未", "不")
+#: 付款類語意的同義詞：一般狀態不可使用（已付款／已匯款本身另外由鍵的文字保留）
+_RESERVED_EXTRA = ("已結清", "已付清", "已入帳")
+#: 名稱允許的字元（NFKC 之後）：中日韓表意文字、ASCII 英數字，以及少數符號。看不見的字元、其他文字系統（西里爾等）、表情與符號一律不收。
+_ALLOWED_PUNCT = " ()/-_.:"
+
 _MAX_LABEL = 12
 
 #: (鍵, 群組, 語意, 預設色調)；語意決定色調與用語限制：approved＝已核准與精算完結（結果已定案）、paid＝已付款／已匯款、其餘 plain。
@@ -83,27 +94,51 @@ def _p(path, msg):
     return {"path": path, "message": msg}
 
 
-def _hidden_chars(text):
-    """文字裡有看不見／組合／格式／私用字元 ⇒ True（NFKC 與一般 strip 都不會移除它們）。"""
-    for ch in text:
-        cat = unicodedata.category(ch)
-        if cat in ("Cc", "Cf", "Co", "Cn", "Mn", "Me") or ord(ch) in _HIDDEN or (cat.startswith("Z") and ch != " "):
-            return True
-    return False
+def _chars_ok(text):
+    """NFKC 之後每個字元都在允許範圍（表意文字、ASCII 英數字、少數符號）。孤立代理字元、看不見的字元、西里爾、符號表情都會失敗。"""
+    for ch in unicodedata.normalize("NFKC", text):
+        if "\u4e00" <= ch <= "\u9fff" or "\u3400" <= ch <= "\u4dbf":
+            continue
+        if ch.isascii() and ch.isalnum():
+            continue
+        if ch in _ALLOWED_PUNCT:
+            continue
+        return False
+    return True
 
 
-def _norm(text):
-    return unicodedata.normalize("NFKC", text).lower()
+def _mk(text):
+    """比對用的鍵：NFKC＋casefold，只留字母與數字（空白、標點、符號全部丟掉，所以『核 准』『核·准』都等於『核准』）。"""
+    return "".join(ch for ch in unicodedata.normalize("NFKC", text).casefold() if ch.isalnum())
+
+
+_WORD_KEYS = tuple(dict.fromkeys(_mk(w) for w in OFFICIAL_WORDS))
+
+
+def _word_hits(text):
+    import re
+    m = _mk(text)
+    if any(w in m for w in _WORD_KEYS):
+        return True
+    low = unicodedata.normalize("NFKC", text).casefold()
+    tokens = re.findall(r"[a-z]+", low)
+    compact = "".join(tokens)
+    return any(t in ENGLISH_TOKENS for t in tokens) or compact in ENGLISH_TOKENS or any(w in compact for w in _ENGLISH_SUBSTR)
 
 
 def _banned(key, text, default_text):
-    """非核准語意的鍵，名稱不可使用官方用語（比對前先做 NFKC 與小寫；預設值本身與『待／未／等待』開頭的除外）。"""
+    """非核准語意的鍵，名稱不可使用官方用語。比對用 `_mk`（NFKC、去分隔），繁簡兩種寫法與英文都擋。
+    預設值本身除外；開頭一個『尚未／等待／待／未／不』、其後『剛好是一個官方用語』的可以（待核准、未通過）。"""
     if _SEMANTIC[key] == "approved" or text == default_text:
         return False
-    t = _norm(text)
-    if t.startswith(_NEGATORS):
+    if not _word_hits(text):
         return False
-    return any(w in t for w in OFFICIAL_WORDS)
+    m = _mk(text)
+    for neg in _NEGATORS:
+        n = _mk(neg)
+        if m.startswith(n) and m[len(n):] in _WORD_KEYS:
+            return False
+    return True
 
 
 def _texts(table, k):
@@ -116,25 +151,32 @@ def _texts(table, k):
 
 
 def _conflicts(body_table):
-    """名稱撞車：被改過的欄位，不可和『其他鍵』在同一情境顯示的字相同；非核准／付款語意的鍵更不可使用核准／付款類狀態在任何情境的字。⇒ 問題清單"""
+    """名稱撞車與冒用：被改過的欄位，①不可和『其他鍵』在同一情境顯示的字相同；②一般狀態的字不可『包含』核准／付款類狀態在任何情境的字
+    （去掉分隔後比對：『已 付款』『已付款.』『已匯 款』都算）。⇒ 問題清單"""
     base = defaults()
     out = []
-    reserved = set()
+    reserved = set(_mk(x) for x in _RESERVED_EXTRA)
     for k in STATUS_KEYS:
         if _SEMANTIC[k] in ("approved", "paid"):
-            reserved |= {_norm(t) for t in _texts(body_table, k).values()} | {_norm(t) for t in _texts(base, k).values()}
+            reserved |= {_mk(t) for t in _texts(body_table, k).values()} | {_mk(t) for t in _texts(base, k).values()}
+    reserved.discard("")
+    seen = set()
     for k in STATUS_KEYS:
         mine, dflt = _texts(body_table, k), _texts(base, k)
         for ctx, t in mine.items():
             if t == dflt[ctx]:
                 continue                                              # 沒被改過的欄位不檢查（預設值本身有重複，例如 已退回）
-            nt = _norm(t)
-            if _SEMANTIC[k] not in ("approved", "paid") and nt in reserved:
-                out.append(_p("statuses.%s" % k, "『%s』與核准／付款類狀態的名稱相同，不可使用" % t))
+            m = _mk(t)
+            if _SEMANTIC[k] not in ("approved", "paid") and any(r in m for r in reserved):
+                if (k, m, "r") not in seen:
+                    seen.add((k, m, "r"))
+                    out.append(_p("statuses.%s" % k, "『%s』含有核准／付款類狀態的名稱，一般狀態不可使用" % t))
                 continue
             for k2 in STATUS_KEYS:
-                if k2 != k and _norm(_texts(body_table, k2)[ctx]) == nt:
-                    out.append(_p("statuses.%s" % k, "『%s』在%s已被『%s』使用，名稱不可重複" % (t, "預設" if ctx == "default" else ctx, k2)))
+                if k2 != k and _mk(_texts(body_table, k2)[ctx]) == m:
+                    if (k, m, k2) not in seen:
+                        seen.add((k, m, k2))
+                        out.append(_p("statuses.%s" % k, "『%s』在%s已被『%s』使用，名稱不可重複" % (t, "預設" if ctx == "default" else ctx, k2)))
                     break
     return out
 
@@ -165,8 +207,8 @@ def _validate(body, key):
             out.append(_p(path, "每個狀態只接受 label／names／tone／order"))
             continue
         lab = v.get("label", dflt[k]["label"])
-        if not isinstance(lab, str) or not lab.strip() or len(lab.strip()) > _MAX_LABEL or lab != lab.strip() or _hidden_chars(lab):
-            out.append(_p(path + ".label", "名稱必填、不可有前後空白或看不見的字元、最多 %d 字" % _MAX_LABEL))
+        if not isinstance(lab, str) or not lab.strip() or len(lab.strip()) > _MAX_LABEL or lab != lab.strip() or not _chars_ok(lab):
+            out.append(_p(path + ".label", "名稱必填、最多 %d 字、不可有前後空白；只能用中文、英數字與少數符號（空白 ( ) / - _ . :），不可有看不見的字元" % _MAX_LABEL))
         elif _banned(k, lab, dflt[k]["label"]):
             out.append(_p(path + ".label", "非『已核准』語意的狀態不可使用官方用語（%s）" % "、".join(OFFICIAL_WORDS)))
         tone = v.get("tone", dflt[k]["tone"])
@@ -182,8 +224,8 @@ def _validate(body, key):
             out.append(_p(path + ".names", "情境簡稱只接受：%s" % "、".join(CONTEXTS)))
         else:
             for c, txt in names.items():
-                if not isinstance(txt, str) or not txt.strip() or len(txt.strip()) > _MAX_LABEL or txt != txt.strip() or _hidden_chars(txt):
-                    out.append(_p(path + ".names." + c, "簡稱必填、不可有前後空白或看不見的字元、最多 %d 字" % _MAX_LABEL))
+                if not isinstance(txt, str) or not txt.strip() or len(txt.strip()) > _MAX_LABEL or txt != txt.strip() or not _chars_ok(txt):
+                    out.append(_p(path + ".names." + c, "簡稱必填、最多 %d 字、不可有前後空白；只能用中文、英數字與少數符號（空白 ( ) / - _ . :），不可有看不見的字元" % _MAX_LABEL))
                 elif _banned(k, txt, dflt[k]["names"].get(c)):
                     out.append(_p(path + ".names." + c, "非『已核准』語意的狀態不可使用官方用語（%s）" % "、".join(OFFICIAL_WORDS)))
     if not out:
