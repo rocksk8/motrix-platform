@@ -35,6 +35,8 @@
   <script src="../js/def-governance.js"></script>
   <script src="../static/public-flags.js"></script>
   <script src="../static/custom-fields.js"></script>
+  <script src="../js/rule-marks.js"></script>
+  <script src="../js/rules-builder.js"></script>
   <script src="../static/list-sort.js"></script>
   <script src="../static/vendor/frappe-gantt-0.6.1.min.js"></script>
   <link rel="stylesheet" href="../static/vendor/frappe-gantt-0.6.1.css">
@@ -4834,10 +4836,15 @@ window.CM_PARTS.push(() => ({
     try {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
-      // 同一次設定請求取得旗標（一個請求）；某個群組讀不到時逐組重試，不拖垮其他旗標（public-flags.js）
-      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields'], { token: s.token })
+      // 同一次設定請求取得旗標（一個請求）；某個群組讀不到時逐組重試，不拖垮其他旗標（public-flags.js）。名單順序：layout、custom_fields、rules
+      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules'], { token: s.token })
       // T61 S5：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）
       if (g.builder_custom_fields && g.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
+      // BP-2：旗標 builder_rules.enabled＝1 才啟動標示規則（關＝不送任何規則請求；兩支 js 載入後是惰性的）
+      if (g.builder_rules && g.builder_rules.enabled === 1) {
+        if (window.MotrixRuleMarks) window.MotrixRuleMarks.start()
+        if (window.MotrixRulesBuilder) window.MotrixRulesBuilder.mountEntry()
+      }
       if (!g.builder_layout || g.builder_layout.case_management !== true) return
       if (!document.getElementById('cm-layout-css')) {
         const st = document.createElement('style'); st.id = 'cm-layout-css'

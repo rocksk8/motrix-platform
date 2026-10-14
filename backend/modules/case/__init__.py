@@ -19,6 +19,7 @@ from modules.case.api import (case_action_items as _api_action_items, case_extra
                               quotations as _api_quotations, settlement_api as _api_settlement_api, overhead as _api_overhead, alt_plan as _api_alt_plan,
                               project_margin as _api_project_margin)
 from modules.case import recycle_adapter as _recycle_adapter   # 刪除暫存區 adapter（IP-RB1）
+from modules.case import rule_provider as _rule_provider         # BP-2：標示規則的案件紀錄提供者（唯讀、逐筆讀取權限過濾）
 from modules.case import expense_notify as _expense_notify     # noqa: F401 — 載入時登記費用單據的信件類型
 from modules.case import material_approval as _material_approval  # noqa: F401 — 載入時登記簽核單據類型 material_order（叫料）
 from modules.case import material_change as _material_change      # noqa: E402
@@ -53,6 +54,8 @@ MODULE = ModuleSpec(
         ("case.locations", "case"): quotations._CaseLocations,
         # IP-95：收入認列、支出歸月、待補登、成案月份（M08）
         ("case.recognition", "case"): quotations._CaseRecognition,
+        # BP-2（t62）：標示規則的紀錄來源（唯讀；只有 builder_rules＋builder_governance 旗標都開時規則路由才會呼叫）
+        ("rules.entity", "case"): _rule_provider.provide,
         # IP-91／IP-92：報價預設條款（L1 system）、PDF 版本紀錄（L1 pdf_gen）
         ("case.default_terms", "case"): quotations._default_terms,
         ("case.doc_version", "case"): quotations._record_doc_version,
