@@ -27,13 +27,28 @@ from db import (
 )
 from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_case_closing_report, run_edge_pdf
 from helpers import receipt_amounts as _receipt_amounts
-from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr
+from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr, html_text as _html_text
+from helpers import export_templates as _ET     # G-A：報價單／請款單 PDF 可加頁尾／浮水印文字（預設關閉；沒有發布過範本 ⇒ 輸出逐位元相同）
 
 # 未核可紅色警示（使用者 2026-09-30）：各單據 builder 共用同一個元件與同一個字樣
 from helpers.doc_template import unapproved_banner as _unapproved_banner, inject_unapproved as _inject_unapproved
 
 from core import paths as _paths
 
+
+
+#: G-A（BP-3 R4 延伸）：頁尾／浮水印文字只能從預設清單挑（客戶可見文字，任何變更＝放寬、需第二位核准）；程式產生的『尚未核准』橫幅、公司抬頭與法定欄位不受影響。
+QUOTE_PDF_EXPORT = "case:quotation-pdf"
+PAYMENT_REQUEST_PDF_EXPORT = "arap:payment-request-pdf"
+
+
+def _decor_sample(title):
+    return ("<!doctype html><html><body style=\"font-family:sans-serif;padding:20mm\"><h2>%s（樣本頁）</h2>"
+            "<p>這一頁只用來看頁尾與浮水印文字放在哪裡；文件的內容、金額與程式產生的橫幅不受影響。</p></body></html>" % title)
+
+
+_ET.register_export(QUOTE_PDF_EXPORT, label="報價單（PDF）", formats=("pdf",), columns=[], sample_rows=[], caps=("footer", "watermark"), sample_html=_decor_sample("報價單"))
+_ET.register_export(PAYMENT_REQUEST_PDF_EXPORT, label="請款單（PDF）", formats=("pdf",), columns=[], sample_rows=[], caps=("footer", "watermark"), sample_html=_decor_sample("請款單"))
 
 
 def default_overhead_pct():
@@ -261,6 +276,16 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
                       watermark_font_size: int = 30,
                       show_notice: bool = False, notice_text: str = '',
                       unapproved_status: str = None) -> str:
+    """報價單 HTML（預覽與 PDF 共用）。G-A：旗標關／沒有已發布範本 ⇒ `decorate_pdf` 原樣回傳同一個字串。"""
+    return _ET.decorate_pdf(QUOTE_PDF_EXPORT, _build_quote_html_core(
+        q, tot, internal, show_watermark, watermark_text, watermark_font_size, show_notice, notice_text, unapproved_status))
+
+
+def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
+                           show_watermark: bool = False, watermark_text: str = '未成案 · 報價單僅供瀏覽',
+                           watermark_font_size: int = 30,
+                           show_notice: bool = False, notice_text: str = '',
+                           unapproved_status: str = None) -> str:
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
@@ -272,7 +297,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
     #    版型沒有匯款帳號欄位，`QL10` 管的是請款單那幾支，原封不動）。
     _ident = apply_snapshot(location_identity(_location_of(q)), q)
     def esc(s):
-        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
+        return _html_text(s, falsy_empty=True)
     ps = q.get('pdfShow') or {}
 
     items = q.get('items', [])
@@ -788,7 +813,7 @@ from helpers.company_identity import short_name as _short_name  # noqa: E402
 
 
 def _payslip_esc(s):
-    return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
+    return _html_text(s, falsy_empty=True)
 
 
 def _payslip_view(d: dict) -> dict:
@@ -875,7 +900,7 @@ def _payslip_reprint_note(view) -> str:
 
 def _payslip_passbook_html(d: dict) -> str:
     """附件：乙方銀行存簿影本（照抄改版前的 HTML；沒有影本 ⇒ 空字串）。"""
-    def esc(s): return _esc_q((s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br>'))
+    def esc(s): return _html_text(s, falsy_empty=True)
     cname, slip_no = d.get('contractorName', ''), d.get('slipNo', '')
     bank_code, bank_name, bank_bran, bank_no = d.get('bankCode', ''), d.get('bankName', ''), d.get('bankBranch', ''), d.get('bankAccountNumber', '')
     bank_passbook = d.get('_bank_passbook', '')
@@ -923,7 +948,7 @@ def _payslip_passbook_html(d: dict) -> str:
 
 def _payslip_id_card_html(d: dict) -> str:
     """附件：乙方身分證影本（照抄改版前的 HTML；沒有影本 ⇒ 空字串）。"""
-    def esc(s): return _esc_q((s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br>'))
+    def esc(s): return _html_text(s, falsy_empty=True)
     cname, cid_no, slip_no = d.get('contractorName', ''), d.get('contractorIdNumber', ''), d.get('slipNo', '')
     id_card_front, id_card_back = d.get('_id_card_front', ''), d.get('_id_card_back', '')
     id_card_section = ''
@@ -1196,7 +1221,7 @@ def _build_shipping_html(n: dict) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(n)), n)
     def esc(s):
-        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
+        return _html_text(s, falsy_empty=True)
 
     items = n.get('items', [])
     item_rows = ''
@@ -1523,7 +1548,7 @@ def _voucher_sign_html(appr: dict) -> str:
     """簽核歷程 HTML 區塊，出貨單 PDF 沒有這段（出貨單簽核歷程只存在系統內），
     但財務申請需要在紙本上就能看到完整簽核歷程，故獨立為共用小工具。"""
     def esc(s):
-        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
+        return _html_text(s, br=False, falsy_empty=True)
     tiers = (appr or {}).get('tiers') or []
     if not tiers:
         return ''
@@ -1569,7 +1594,7 @@ def _build_contractor_voucher_html(v: dict, mask_bank: bool = False) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(v)), v)
     def esc(s):
-        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
+        return _html_text(s, falsy_empty=True)
     def money(n):
         return f'{n:,.0f}' if isinstance(n, (int, float)) else '0'
 
@@ -2129,6 +2154,11 @@ _PAYMENT_STAGE_LABELS = {
 
 
 def _build_payment_request_html(v: dict) -> str:
+    """請款單 HTML（預覽與 PDF 共用）。G-A：旗標關／沒有已發布範本 ⇒ 原樣回傳同一個字串。"""
+    return _ET.decorate_pdf(PAYMENT_REQUEST_PDF_EXPORT, _build_payment_request_html_core(v))
+
+
+def _build_payment_request_html_core(v: dict) -> str:
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
@@ -2138,7 +2168,7 @@ def _build_payment_request_html(v: dict) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(v)), v)
     def esc(s):
-        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
+        return _html_text(s, falsy_empty=True)
     def money(n):
         return f'{n:,.0f}' if isinstance(n, (int, float)) else '0'
 
@@ -2645,7 +2675,7 @@ def _build_case_closing_html(data: dict) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(data)), data)
     def esc(s):
-        return _esc_q((str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
+        return _html_text(s)
 
     def money(n):
         return f'{n:,.0f}' if isinstance(n, (int, float)) else '0'
@@ -3166,7 +3196,7 @@ def _build_project_execution_report_html(data: dict) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(data)), data)
     def esc(s):
-        return _esc_q((str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
+        return _html_text(s)
 
     def _stage_period(st):
         if st["visitStart"] or st["visitEnd"]:

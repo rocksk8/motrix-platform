@@ -3,6 +3,8 @@
 - C3：案件頁區塊標題改名與按鈕登記（沿用旗標 `builder_layout.case_management`）：專案期間、自訂欄位的標題可改名（`bLabel`）；`actions` 只登記「從報價單帶入」一顆（可隱藏／改名／排序；不開放新增按鈕，不登記有金額、簽核或法定語意的按鈕）。排版器標出「固定位置」（健康總覽、客戶回簽單、報價單清單的全部欄位）與「改名不會改變畫面」（登錄檔 `fixedOrder`／`relabelIneffective` 支援「清單:欄位」鍵）。關閉時沒有差異。
 - C2：案件頁「執行管理」分頁的子分頁（執行進度／材料申請／設備登錄／保固備註／待辦事項／成員）接上版面引擎（list `execTabs`，沿用旗標 `builder_layout.case_management`）：可隱藏、改名、換順序，「執行進度」是核心；目前子分頁被隱藏時退回「執行進度」（`subFix()`）。隱藏只是不顯示頁籤，內容區與功能不變；`:style` 物件形式；關閉時沒有任何差異。
 - C1：案件頁「案件資訊」分頁的區塊接上版面引擎（list `bizBlocks`，7 個區塊；沿用旗標 `builder_layout.case_management`，預設關）：健康總覽、專案期間、自訂欄位可隱藏／改名；合約資訊、人員角色、個資告知、客戶回簽單是核心區塊（不可隱藏）。順序用 CSS `order`（fieldset 在旗標開啟時加 `cm-biz-lo` class 變 flex column；關閉時沒有任何差異），只有 fieldset 裡的五個區塊能換順序，健康總覽固定最上、客戶回簽單固定最下。`:style` 綁定一律物件形式。隱藏區塊只是不顯示，資料與分段存檔不變。
+- 案件完工單 PDF 的區域 `esc()` 改呼叫共用的 `helpers.doc_template.html_text`（輸出逐位元相同）；報價單／出貨單品項數量、報價有效日數、結案報表款項百分比與階段起訖日補上 HTML 逸出（原本直接內插）。無 migration、無權限變更。
+- 報價單 PDF（`_build_quote_html`）與完工單 PDF（`_build_completion_html`）可加頁尾／浮水印文字（G-A，旗標預設關）：各包一層 `decorate_pdf`，沒有已發布範本 ⇒ 輸出逐位元相同；文字只能從預設清單挑，程式產生的未核准橫幅與抬頭不動。無 migration、無權限變更。
 
 ## (next) — 2026-10-14（wip/t62-bp4-s2-r2＋wip/t62-bp2-r5-r1＋wip/t62-approval-margin-r1；BP-4 附件插槽／BP-2 標示規則／單項毛利率門檻）；t62 整合 r8
 - 案件管理頁完工單分頁加「附件種類」入口（BP-4 S3，旗標 `builder_slots.enabled` 預設關、只有最高管理者看得到）：旗標隨既有的設定請求（`groups=builder_layout,builder_slots`）取得，關閉時不多打任何請求、畫面不變；編輯器是新檔 `static/attachment-slots.js`。
