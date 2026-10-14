@@ -82,7 +82,7 @@ T100_RECEIVABLES_MISSING = "應收應付模組未安裝：T100 匯出不含收�
 def _collect_tax_invoices(year=None, month=None):
     p = _registry.single_provider("receivables.tax_invoices")
     return [] if p is None else p(year, month)
-from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged, set_row, xl_style
+from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged, set_row, xl_safe, xl_style
 from helpers.company_identity import company_heading
 from helpers.part_catalog import PART_CATEGORIES
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
@@ -446,7 +446,7 @@ def _build_t100_voucher_excel(rows: list, start: str, end: str, cfg: dict, gen_a
 
     ws.merge_cells("A1:K1")
     c = ws["A1"]
-    c.value = company_heading(f"T100 傳票批次匯出（{start} ~ {end}）")
+    c.value = xl_safe(company_heading(f"T100 傳票批次匯出（{start} ~ {end}）"))
     c.font = mk(bold=True, size=13, color="FFFFFF")
     c.fill = fill("111827")
     c.alignment = al("center")

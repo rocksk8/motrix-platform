@@ -1,6 +1,14 @@
 // 財務報表（總帳 B2：資產負債表、綜合損益表；B3、B4 會在同一頁加權益變動表、現金流量表）。設計 proposal-gl/04-reports.md。
 // 數字與對帳全由後端算；這裡只呈現、展開科目明細、匯出目前這張表為 CSV。checks.balanced=false 一律明說，不當正常。
 
+// CSV 公式注入防護（與後端 helpers/xlsx_out.xl_safe 同一組字元）：只處理字串；真正的數字（含負數）原樣輸出。
+// 科目名稱、摘要等自由文字若以 = + - @ Tab CR 開頭，Excel 開 CSV 會當公式執行 ⇒ 前置一個單引號。
+function csvSafeCell(v) {
+  if (v === null || v === undefined) return ''
+  if (typeof v === 'string' && /^[=+\-@\t\r]/.test(v)) return "'" + v
+  return v
+}
+
 function ledgerStatementsPage() {
   const today = new Date()
   const pad = n => String(n).padStart(2, '0')
@@ -148,7 +156,7 @@ function ledgerStatementsPage() {
         rows.push(['項目', '本期 ' + this.is.start + '～' + this.is.end, '年初至今'].concat(hasCmp ? ['比較期 ' + this.is.compare.start + '～' + this.is.compare.end] : []))
         for (const l of this.is.lines) rows.push([l.label, l.period, l.ytd].concat(hasCmp ? [this.compareIs(l.code)] : []))
       } else return
-      const csv = rows.map(r => r.map(c => '"' + String(c === null || c === undefined ? '' : c).replace(/"/g, '""') + '"').join(',')).join('\r\n')
+      const csv = rows.map(r => r.map(c => '"' + String(csvSafeCell(c)).replace(/"/g, '""') + '"').join(',')).join('\r\n')
       const a = document.createElement('a')
       a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }))
       a.download = 'statement-' + this.tab + '.csv'

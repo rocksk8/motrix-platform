@@ -55,7 +55,9 @@ def xl_style(wb):
 # 手法對 xlsx 一樣有效）。PDF/HTML 路徑已經用 html.escape() 處理過這類風險
 # （見 reports._build_report_html() 的 esc()），這裡比照同樣的防禦精神，把觸發字元
 # 開頭的字串前面補一個單引號讓 openpyxl 存成純文字。
-XL_FORMULA_TRIGGERS = ("=", "+", "-", "@")
+# \t \r：Excel 也會把 Tab／CR 開頭的儲存格當觸發前綴（OWASP CSV Injection）；與原 lodging `_CSV_FORMULA_LEAD`（已併入這裡）同一組字元。
+# 只處理 str：真正的數字（含負數）是 int／float，不會被加前綴。xlsx 與 csv 共用 `xl_safe`。
+XL_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
 
 
 def xl_safe(val):

@@ -90,7 +90,7 @@ from pdf_gen import (
 )
 
 router = APIRouter()
-from helpers.xlsx_out import add_pdf_sibling, export_logged   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
+from helpers.xlsx_out import add_pdf_sibling, export_logged, xl_safe   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
 
 
 # ── Approval tier helpers ─────────────────────────────────────────────────────
@@ -6612,7 +6612,7 @@ def case_batch_export(body: dict = Body(...), authorization: str = Header(None))
 
     def cell(v):
         # openpyxl 寫空字串會產生不合規的 inlineStr（Excel 開檔要修復）⇒ 空值一律 None
-        return v if v not in ("", None) else None
+        return xl_safe(v) if v not in ("", None) else None      # 自由文字（客戶、專案、業務…）不能以 = + - @ 開頭變成公式
 
     for no in nos:
         r = rows.get(no)

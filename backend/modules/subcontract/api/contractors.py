@@ -112,7 +112,7 @@ def _stamp_passbook(data_uri: str) -> str:
 
 
 router = APIRouter()
-from helpers.xlsx_out import add_pdf_sibling, export_logged   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
+from helpers.xlsx_out import add_pdf_sibling, export_logged, xl_safe   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
 
 _LIST_COLS = (
     "id, name, id_number, nationality, has_union_insurance, "
@@ -267,7 +267,7 @@ def export_contractors(authorization: str = Header(None)):
             elif col == "active":
                 v = "往來中" if v else "停用"
             # ⚠ 空字串寫進 openpyxl 會產生不合法的 inlineStr（Excel 開檔報修復）⇒ 空值寫 None
-            out.append(v if v not in ("", None) else None)
+            out.append(xl_safe(v) if v not in ("", None) else None)     # 姓名、備註等自由文字不能變成公式
         ws.append(out)
     buf = io.BytesIO()
     wb.save(buf)
