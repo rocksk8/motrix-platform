@@ -130,7 +130,8 @@ def test_plan_view_options_carry_the_same_function_result(client, world):
 
 def test_config_endpoint_requires_cost_visibility(client, world):
     r = client.get("/api/project-margin/config", headers=world["sales"])
-    assert r.status_code == 200 and r.json() == {"warnPct": 0.0}
+    # approval-thresholds r1/r2 起這支端點在 warnPct 之外也回三個報價送審門檻（預設＝今天寫死的 30%／30 天／0 元；同一個金額權限閘門）
+    assert r.status_code == 200 and r.json() == {"warnPct": 0.0, "minItemMarginPct": 30.0, "maxValidDays": 30, "discountReviewAbove": 0}
     assert client.get("/api/project-margin/config", headers=world["admin"]).status_code == 200
     r = client.get("/api/project-margin/config", headers=world["engineer"])
     assert r.status_code == 403 and "warnPct" not in r.text                      # 最小揭露

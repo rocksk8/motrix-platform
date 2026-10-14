@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """BP-2 R4：案件的標示規則紀錄提供者（modules/case/rule_provider.py）。
 - 逐筆讀取權限：擁有者只看到自己的案件、admin 看全部、別的業務看不到（看不到＝不存在）；`ids` 只是再縮小，不會放寬
-- 金額欄位只在 `quote_money_visible` 為真時才出現：持 cashier 模組的工程師看得到案件列、但拿不到金額值（縱深防禦，L1 目錄還會再裁一次）
+- 金額欄位只在 `quote_money_visible` 為真時才出現：讀得到案件列但沒有報價金額權限的人（工程師）拿不到金額值（縱深防禦，L1 目錄還會再裁一次）
 - 自訂欄位只讀已存 JSON、純量、鍵合法、以 cf_ 開頭；壞 JSON 不丟例外
 - 唯讀（資料列數與內容不變；原始碼沒有寫入語句）、參數化（含引號的 id 不會變成 SQL）
 - 旗標關：規則路由 404，提供者完全不被呼叫；已登記在 ModuleSpec（("rules.entity","case")）"""
@@ -50,7 +50,9 @@ def world(client, make_user):
     a = _user(make_user, "t62p_sales_a", "sales")
     b = _user(make_user, "t62p_sales_b", "sales")
     adm = _user(make_user, "t62p_admin", "admin")
-    cashier = _user(make_user, "t62p_cashier", "engineer", modules=["cashier"])
+    # 讀得到案件列、但沒有報價金額權限的人：工程師擁有（業務欄指向他）的案件。⚠ 不能再用『只勾出納模組的一般帳號』——第42班起出納/財務能力由財務角色決定，
+    # conftest 會把明確勾 cashier 的一般帳號換成 finance 角色（本來就看得到報價金額），惰性勾選也讀不到別人的案件。
+    cashier = _user(make_user, "t62p_eng", "engineer")
     _add("Q-001", a, net=5.0, updated="2026-10-14 09:00:00", cf={"site": "北廠", "ok": True, "lvl": "A"})
     _add("Q-002", a, net=40.0, updated="2026-10-14 11:00:00")
     _add("Q-003", b, net=8.0, updated="2026-10-14 10:00:00")
@@ -70,12 +72,15 @@ def test_row_level_read_permission(world):
 def test_money_values_only_for_quote_money_viewers(world):
     sales = {r["id"]: r for r in _provide(world["a"])}
     assert sales["Q-001"]["values"]["netMarginPct"] == 5.0 and sales["Q-001"]["values"]["total"] == 1050
-    cash = {r["id"]: r for r in _provide(world["cashier"])}
-    assert sorted(cash) == ["Q-001", "Q-002", "Q-003"]                                         # 持 cashier 讀得到案件列
-    for r in cash.values():
-        assert not ({"netMarginPct", "directMarginPct", "total"} & set(r["values"]))           # 但拿不到任何金額值
+    _add("Q-ENG", world["cashier"], net=7.0, updated="2026-10-14 08:00:00")                     # 只在這題加一列，不影響其他題的列數
+    eng = {r["id"]: r for r in _provide(world["cashier"])}
+    assert sorted(eng) == ["Q-ENG"]                                                            # 工程師只讀得到自己的案件列
+    for r in eng.values():
+        assert not ({"netMarginPct", "directMarginPct", "total", "projectMarginPct"} & set(r["values"]))      # 但拿不到任何金額值
         assert r["values"]["status"] == "草稿"
-    assert "5.0" not in json.dumps(cash["Q-001"])                                              # 位元組層級也找不到毛利數字
+    assert "7.0" not in json.dumps(eng["Q-ENG"])                                               # 位元組層級也找不到毛利數字
+    fin = {r["id"]: r for r in _provide(world["admin"])}["Q-ENG"]   # 對照：admin 看同一列有金額（證明上面是被遮蔽，不是欄位本來就沒有）
+    assert fin["values"]["netMarginPct"] == 7.0 and fin["values"]["total"] == 1050
 
 
 def test_custom_fields_are_scalar_cf_keys_only(client, make_user):
