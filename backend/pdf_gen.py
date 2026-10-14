@@ -27,7 +27,7 @@ from db import (
 )
 from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_case_closing_report, run_edge_pdf
 from helpers import receipt_amounts as _receipt_amounts
-from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr
+from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr, safe_img_src as _img_src
 
 # 未核可紅色警示（使用者 2026-09-30）：各單據 builder 共用同一個元件與同一個字樣
 from helpers.doc_template import unapproved_banner as _unapproved_banner, inject_unapproved as _inject_unapproved
@@ -908,7 +908,7 @@ def _payslip_passbook_html(d: dict) -> str:
     </tr>
   </table>
   <div style="text-align:center">
-    <img src="{_attr(bank_passbook)}" style="max-width:100%;max-height:340px;
+    <img src="{_img_src(bank_passbook)}" style="max-width:100%;max-height:340px;
          object-fit:contain;border:1px solid #ccc;border-radius:4px">
   </div>
   <div style="text-align:center;font-size:8pt;color:#888;margin-top:8px">
@@ -930,11 +930,11 @@ def _payslip_id_card_html(d: dict) -> str:
             images_html = (
                 '<div style="display:flex;gap:14px">'
                 f'<div style="flex:1;text-align:center">'
-                f'<img src="{_attr(id_card_front)}" style="max-width:100%;max-height:220px;'
+                f'<img src="{_img_src(id_card_front)}" style="max-width:100%;max-height:220px;'
                 f'object-fit:contain;border:1px solid #ccc;border-radius:4px">'
                 f'<div style="font-size:9pt;color:#666;margin-top:4px">正面</div></div>'
                 f'<div style="flex:1;text-align:center">'
-                f'<img src="{_attr(id_card_back)}" style="max-width:100%;max-height:220px;'
+                f'<img src="{_img_src(id_card_back)}" style="max-width:100%;max-height:220px;'
                 f'object-fit:contain;border:1px solid #ccc;border-radius:4px">'
                 f'<div style="font-size:9pt;color:#666;margin-top:4px">反面</div></div>'
                 '</div>'
@@ -943,7 +943,7 @@ def _payslip_id_card_html(d: dict) -> str:
             img = id_card_front or id_card_back
             images_html = (
                 f'<div style="text-align:center">'
-                f'<img src="{_attr(img)}" style="max-width:100%;max-height:300px;'
+                f'<img src="{_img_src(img)}" style="max-width:100%;max-height:300px;'
                 f'object-fit:contain;border:1px solid #ccc;border-radius:4px">'
                 f'</div>'
             )
@@ -1582,7 +1582,7 @@ def _build_contractor_voucher_html(v: dict, mask_bank: bool = False) -> str:
     def bank_card(title, name_label, name_val, tax_id, bank_code, bank_name, bank_branch,
                   account_name, account_number, passbook, amount_label='', amount_val=None):
         img_html = (
-            f'<div style="margin-top:8px"><img src="{esc(passbook)}" '
+            f'<div style="margin-top:8px"><img src="{_img_src(passbook)}" '
             f'style="max-width:260px;max-height:160px;border:1px solid #EDEAE4;border-radius:4px;display:block"></div>'
         ) if passbook else ''
         amount_row = (
@@ -1720,7 +1720,7 @@ def _build_contractor_voucher_html(v: dict, mask_bank: bool = False) -> str:
         f'    <div class="row"><span class="label">分行</span><span class="val">{esc(v.get("bankBranch",""))}</span></div>\n'
         f'    <div class="row"><span class="label">戶名</span><span class="val">{esc(v.get("bankAccountName",""))}</span></div>\n'
         f'    <div class="row"><span class="label">帳號</span><span class="val" style="font-family:Arial,sans-serif">{esc(v.get("bankAccountNumber",""))}</span></div>\n'
-        + (f'    <div style="margin-top:8px"><img src="{esc(v.get("bankPassbookImage",""))}" '
+        + (f'    <div style="margin-top:8px"><img src="{_img_src(v.get("bankPassbookImage",""))}" '
            f'style="max-width:260px;max-height:160px;border:1px solid #EDEAE4;border-radius:4px;display:block"></div>\n'
            if v.get('bankPassbookImage') else '')
         + '  </div>\n</div>\n'

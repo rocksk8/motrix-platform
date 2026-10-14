@@ -37,6 +37,18 @@ def attr_esc(s) -> str:
     return esc_quotes(s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
 
 
+_SAFE_IMG_RE = re.compile(r"data:image/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=\s]*", re.I)
+
+
+def safe_img_src(s) -> str:
+    """`<img src>` 專用：只放行 `data:image/(png|jpeg|gif|webp);base64,…`，其餘（file:／http(s):／相對路徑／svg／任何文字）一律回空字串。
+    PDF 的 CSP 為了內嵌圖與字型放行 `img-src file:`，儲存的圖片欄位（存簿／身分證）若被寫成 `file:///…` 就會把伺服器本機圖檔畫進 PDF；
+    所以渲染時再擋一道，不依賴每一條寫入路徑都檢查過。通過者回傳已跳脫的屬性值。"""
+    if not isinstance(s, str) or not _SAFE_IMG_RE.fullmatch(s.strip()):
+        return ""
+    return attr_esc(s.strip())
+
+
 def _esc(s) -> str:
     """跳脫（& < > " ' 與換行）。非字串一律先轉字串。
 
