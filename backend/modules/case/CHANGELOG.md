@@ -7,6 +7,9 @@
 - BP-2（標示型規則，旗標 `builder_rules.enabled`＋`builder_governance.enabled` 預設關）：新增唯讀的紀錄提供者 `rule_provider.provide`（登記為 `("rules.entity","case")`），供規則的『預覽現有紀錄會有哪些被標示』與列表標示使用；只讀本模組的 `quotations`、逐筆套用既有的案件讀取權限、金額欄位只在有報價金額檢視權時才給。旗標關時不會被呼叫，行為不變；無 migration、無新路由。
 - 報價送審的『單項毛利率偏低』門檻（原本寫死 30%）改為設定 `quote_approval.min_item_margin_pct`（預設 30＝與過去逐位元相同；敏感群組、風險 money；調低＝放寬需第二位最高管理者核准與確認期間，調高即時）。伺服器 `quote_terms.compute_approval_reasons` 與前端 `checkApproval()`／「需審核」徽章三處同源（前端經 `GET /api/project-margin/config` 多回的 `minItemMarginPct` 取得；讀不到一律 30）。不改簽核層與簽核規則、不改任何金額；原因文字照舊（門檻不是 30 時帶實際門檻）。
 
+## (next) — 2026-10-14（wip/t62-settings-numbers-r1；保固郵件天數）
+- 保固到期郵件的兩個階段天數（預設 7／30 天＝今天）改讀設定中心「到期預警」：提前天數 8～180、緊急天數 1～30，緊急一定小於提前。每台設備每個階段仍只寄一次；改天數後新的階段值會被當成新階段（可能再寄一次）。無 migration、無權限變更。
+
 ## 1.0.186 — 2026-10-14（wip/t61-s5-impl-r1；S5：案件資訊的自訂欄位；r2 補整份寫入路徑）；t60 整合
 - 案件資訊分頁多一個「自訂欄位」區塊（設定中心「自訂欄位（內建畫面）」開啟後才出現；預設關閉＝畫面與資料完全不變）。欄位值存在 `caseRecord.customFields`（案件記錄的一個新分段，沒有值就沒有這個鍵），只給內部人員看，不出現在報價單、客戶版文件或回簽頁。
 - `PATCH /api/quotations/{no}/case-record` 存檔前多一道自訂欄位閘門（`helpers.builtin_fields.gate`）：旗標關閉＝不介入；開啟時依已發布的欄位定義驗證型別（錯誤回 400 指名欄位）、未定義或已停用的欄位保留舊值。舊的整包格式沒有送這個鍵＝沒有要改，帶回舊值。其餘存檔邏輯不變。
