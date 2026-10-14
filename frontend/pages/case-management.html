@@ -33,6 +33,8 @@
   <script src="../static/layout-runtime.js"></script>
   <script src="../static/layout-editor.js"></script>
   <script src="../js/def-governance.js"></script>
+  <script src="../js/rule-marks.js"></script>
+  <script src="../js/rules-builder.js"></script>
   <script src="../static/list-sort.js"></script>
   <script src="../static/vendor/frappe-gantt-0.6.1.min.js"></script>
   <link rel="stylesheet" href="../static/vendor/frappe-gantt-0.6.1.css">
@@ -4804,9 +4806,14 @@ window.CM_PARTS.push(() => ({
     try {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
-      const r = await fetch('/api/settings-center/public?groups=builder_layout', { headers: { Authorization: 'Bearer ' + s.token } })
+      const r = await fetch('/api/settings-center/public?groups=builder_layout,builder_rules', { headers: { Authorization: 'Bearer ' + s.token } })
       if (!r.ok) return
       const d = await r.json()
+      // BP-2：旗標 builder_rules.enabled＝1 才啟動標示規則（關＝不送任何規則請求；兩支 js 載入後是惰性的）
+      if (d && d.groups && d.groups.builder_rules && d.groups.builder_rules.enabled === 1) {
+        if (window.MotrixRuleMarks) window.MotrixRuleMarks.start()
+        if (window.MotrixRulesBuilder) window.MotrixRulesBuilder.mountEntry()
+      }
       if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.case_management !== true) return
       if (!document.getElementById('cm-layout-css')) {
         const st = document.createElement('style'); st.id = 'cm-layout-css'

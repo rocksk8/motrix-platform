@@ -177,3 +177,10 @@ cmp  := {"op": "lt|le|gt|ge|eq|ne","field": <欄位代號>,"value": <數字|字�
 - `ACTIVE_KINDS` 加入 `rule_set`；與 t61 的 `user_buttons` 會在同一行衝突，合併時兩者都保留。
 - 新增檔案：`helpers/rule_grammar.py`、`rule_engine.py`、`rule_catalog.py`、`rule_sets.py`、`routers/rules.py`；修改：`def_pipeline.py`（比較函式）、`definitions.py`（`_OPT_IN_PREVIEW_KINDS` 加 `rule_set`）、`settings_groups.py`／基準檔（`builder_rules.enabled`、`builder_governance.enforce_rule_set`）、`main.py`、`modules.json`。
 
+## 16. 實作紀錄（R4 前端；與 §7、§8 的差異）
+- **沒有新頁面**：規則編輯器是獨立元件 `js/rules-builder.js`（右側面板，同 `def-governance.js` 的做法），不是 `rules-builder.html`。原因：新增 L1 頁面要同時改 `core/l1_pages.json`、`menu_l1.json`、`system_hub_l1.json`（旗標關時側欄與系統中心就會多一項，違反「關＝不變」），也會動 page_path 棘輪。入口＝宣告了插槽的頁面右下角的浮動按鈕「標示規則」。**旗標關時案件頁不送任何規則請求**：兩支 js 載入後是惰性的，案件頁在它本來就會送的設定請求（`/api/settings-center/public?groups=builder_layout,builder_rules`，多帶一個群組）讀到 `builder_rules.enabled === 1` 之後，才呼叫 `MotrixRuleMarks.start()` 與 `MotrixRulesBuilder.mountEntry()`（後者只對最高管理者送 `/api/rules/config` 探測）。**黃金檔**：這條設定請求的 `groups=` 清單要與 3c 的 `builder_custom_fields` 合併成同一個字串，整合時只重錄一次。
+- **標示疊加層** `js/rule-marks.js`：只在 `PAGES` 登記的頁面（目前只有 `case-management.html`：`.cm-card[data-quote-no]`）動作；只加 `data-rule-mark`／`title` 屬性（不動 class／style，Alpine 的 `:class`／`:style` 會覆蓋），不新增節點（降級提示除外，用 `textContent`）；同一組代號 30 秒內不重抓。探測回 404／401／403 ⇒ 不裝觀察器、不插樣式、不加任何屬性。
+- 頁面改動只有 `case-management.html` 兩行 `<script>`；`modules.json` 登記兩個 js 單元。
+- 前端證據：`tests/test_rules_ui_2026_10_14.py`（node 假環境，21 題，已實際執行通過）。沒有真瀏覽器 e2e。
+- 規則面板的條件編輯只支援『欄位 vs 常數』的單一比較；且／或／非只顯示與停用／刪除。
+
