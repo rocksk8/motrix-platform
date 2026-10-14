@@ -4812,18 +4812,20 @@ window.CM_PARTS.push(() => ({
   _lcols() { return this.layoutOn ? window.Alpine.store('layout').cols('cases') : [] },
   _lix(f) { return this._lcols().findIndex(c => c.field === f) },
   lShown(f) { return !this.layoutOn || this._lix(f) >= 0 },
-  lo(f) { return this.layoutOn && this._lix(f) >= 0 ? 'order:' + (this._lix(f) + 1) : '' },
-  loHead() { return this.layoutOn ? 'order:-1' : '' },
+  // 以下 :style 綁定一律回**物件**（不回 'order:N' 字串）：Alpine 的字串形式會 setAttribute('style', …) 整串覆蓋，
+  // 洗掉同一個元素上 x-show 設的 display:none（隱藏的欄位在重新求值後又跑出來）；物件形式逐項設屬性，與 x-show 並存。
+  lo(f) { return this.layoutOn && this._lix(f) >= 0 ? { order: this._lix(f) + 1 } : {} },
+  loHead() { return this.layoutOn ? { order: -1 } : {} },
   // 底部一列（金額／進度／日期）整列的位置＝這三個欄位中最前面的那個
   loFooter() {
-    if (!this.layoutOn) return ''
+    if (!this.layoutOn) return {}
     const ix = ['amount', 'stageProgress', 'date'].map(f => this._lix(f)).filter(i => i >= 0)
-    return ix.length ? 'order:' + (Math.min(...ix) + 1) : ''
+    return ix.length ? { order: Math.min(...ix) + 1 } : {}
   },
   lLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('cases', f, dflt) : dflt },
   // 案件資訊表單（合約資訊、專案期間）：欄位的顯示／順序／標題與區塊標題。旗標關閉＝中性值。
   fShown(form, f) { return !this.layoutOn || window.Alpine.store('layout').fieldShown(form, f) },
-  fo(form, f) { return this.layoutOn ? 'order:' + window.Alpine.store('layout').fieldOrder(form, f) : '' },
+  fo(form, f) { return this.layoutOn ? { order: window.Alpine.store('layout').fieldOrder(form, f) } : {} },
   fLabel(form, f, dflt) { return this.layoutOn ? window.Alpine.store('layout').fieldLabel(form, f, dflt) : dflt },
   secLabel(form, dflt) {
     if (!this.layoutOn) return dflt

@@ -123,7 +123,7 @@ def test_flag_off_every_binding_is_neutral():
     """旗標關閉（layoutOn=false）：所有綁定回中性值 ⇒ 卡片的顯示與樣式與先前相同。"""
     r = _node("console.log(JSON.stringify({show: ['quoteNo','dealTag','customer','sales','amount','stageProgress','date'].map(f => o.lShown(f)),"
               " lo: ['quoteNo','customer','amount','date'].map(f => o.lo(f)), head: o.loHead(), foot: o.loFooter(), label: o.lLabel('sales', '業務')}))")
-    assert r["show"] == [True] * 7 and r["lo"] == [""] * 4 and r["head"] == "" and r["foot"] == "" and r["label"] == "業務"
+    assert r["show"] == [True] * 7 and r["lo"] == [{}] * 4 and r["head"] == {} and r["foot"] == {} and r["label"] == "業務"
 
 
 @pytest.mark.skipif(NODE is None, reason="沒有 node")
@@ -132,8 +132,8 @@ def test_flag_on_follows_the_layout_order_and_hides():
     r = _node("o.layoutOn = true\nconsole.log(JSON.stringify({show: ['customer','sales','amount','stageProgress','date'].map(f => o.lShown(f)),"
               " lo: ['date','customer','amount'].map(f => o.lo(f)), head: o.loHead(), foot: o.loFooter()}))", cols)
     assert r["show"] == [True, False, True, False, True]
-    assert r["lo"] == ["order:3", "order:4", "order:5"] and r["head"] == "order:-1"
-    assert r["foot"] == "order:3"                                           # 底部一列＝金額／進度／日期中最前面的（日期）
+    assert r["lo"] == [{"order": 3}, {"order": 4}, {"order": 5}] and r["head"] == {"order": -1}
+    assert r["foot"] == {"order": 3}                                           # 底部一列＝金額／進度／日期中最前面的（日期）
 
 
 # ── 3. 版面：核心、發布、還原 ───────────────────────────────────────────────
@@ -237,7 +237,7 @@ def test_form_registration_matches_page_bindings():
 def test_form_bindings_are_neutral_when_flag_off():
     r = _node("console.log(JSON.stringify({show: o.fShown('contract', 'deliveryAddress'), fo: o.fo('contract', 'deliveryAddress'),"
               " label: o.fLabel('contract', 'deliveryAddress', '交貨 / 安裝地址'), sec: o.secLabel('contract', '合約資訊')}))")
-    assert r == {"show": True, "fo": "", "label": "交貨 / 安裝地址", "sec": "合約資訊"}
+    assert r == {"show": True, "fo": {}, "label": "交貨 / 安裝地址", "sec": "合約資訊"}
 
 
 _FORM_STORE = r"""
@@ -260,7 +260,7 @@ def test_form_bindings_follow_the_layout_when_flag_on():
                      " label: o2.fLabel('contract', 'contactPhone', '聯絡電話'), keep: o2.fLabel('contract', 'contactPerson', '現場聯絡人'),"
                      " sec: o2.secLabel('contract', '合約資訊')}))"}
     r = _run_node(js)
-    assert r == {"shown": [True, False], "fo": ["order:1", "order:2", "order:4"], "label": "電話（現場）", "keep": "現場聯絡人", "sec": "合約"}
+    assert r == {"shown": [True, False], "fo": [{"order": 1}, {"order": 2}, {"order": 4}], "label": "電話（現場）", "keep": "現場聯絡人", "sec": "合約"}
 
 
 @pytest.mark.parametrize("core", sorted(FORM_CORE))
@@ -296,3 +296,12 @@ def test_layout_x_show_never_sits_on_an_element_with_static_inline_display():
         if st and re.search(r"(^|;)\s*display\s*:", st.group(1)):
             bad.append(tag[:120])
     assert not bad, bad
+
+
+def test_style_bindings_are_object_form_so_they_do_not_wipe_x_show():
+    """Alpine 的 :style 字串形式是 setAttribute('style', …) 整串覆蓋，會洗掉同一個元素上 x-show 設的 display:none（04 審查）。
+    版面綁定（lo／loHead／loFooter／fo）一律回物件。"""
+    src = PAGE.read_text(encoding="utf-8")
+    assert "'order:" not in src[src.index("  lo(f)"):src.index("  lLabel(f, dflt)")]
+    assert "'order:" not in src[src.index("  fo(form, f)"):src.index("  fLabel(form, f, dflt)")]
+    assert "{ order:" in src[src.index("  lo(f)"):src.index("  lLabel(f, dflt)")]
