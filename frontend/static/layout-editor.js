@@ -67,13 +67,14 @@
 '   <div class="ml-ed__h" x-text="\'列表：\' + work.lists[lk].label"></div>' +
 '   <div class="ml-ed__drop" @dragover.prevent @drop="drop(\'list:\' + lk, work.lists[lk].columns.length)">' +
 '   <template x-for="(c, i) in work.lists[lk].columns" :key="c.id"><div>' +
-'    <div class="ml-ed__item" draggable="true" :data-point-id="c.id" :data-field="c.field" :class="{\'is-hidden\': !c.visible, \'is-bad\': prob(c.id)}"' +
+'    <div class="ml-ed__item" :draggable="!fixedPos(lk, c)" :data-point-id="c.id" :data-field="c.field" :class="{\'is-hidden\': !c.visible, \'is-bad\': prob(c.id)}"' +
 '         @dragstart="drag(\'list:\' + lk, i)" @dragover.prevent @drop.stop="drop(\'list:\' + lk, i)">' +
 '     <input type="checkbox" title="顯示" :checked="c.visible" :disabled="c.core" @change="c.visible = $event.target.checked; sync()">' +
 '     <template x-if="c.core"><span style="flex:1" x-text="c.label + \'（核心）\'"></span></template>' +
 '     <template x-if="!c.core"><input type="text" :value="c.label" @change="relabel(c, $event.target.value)"></template>' +
-'     <span class="ml-ed__sub" data-testid="ml-ineffective" x-show="ineffective(c)" x-text="\'（改名不會改變畫面）\'" :title="ineffective(c)"></span>' +
-'     <button type="button" title="上移" @click="mv(work.lists[lk].columns, i, -1)">↑</button><button type="button" title="下移" @click="mv(work.lists[lk].columns, i, 1)">↓</button></div>' +
+'     <span class="ml-ed__sub" data-testid="ml-ineffective" x-show="ineffective(c, lk)" x-text="\'（改名不會改變畫面）\'" :title="ineffective(c, lk)"></span>' +
+'     <span class="ml-ed__sub" data-testid="ml-fixed" x-show="fixedPos(lk, c)" title="這一項的位置固定，換順序不會有效果">（固定位置）</span>' +
+'     <button type="button" title="上移" x-show="!fixedPos(lk, c)" @click="mv(work.lists[lk].columns, i, -1)">↑</button><button type="button" title="下移" x-show="!fixedPos(lk, c)" @click="mv(work.lists[lk].columns, i, 1)">↓</button></div>' +
 '    <div class="ml-ed__prob" x-show="prob(c.id)" x-text="prob(c.id)"></div></div></template></div></div></template>' +
 // 表單
 '  <template x-for="fk in formKeys()" :key="fk"><div class="ml-ed__sec" :data-testid="\'ml-form-\' + fk">' +
@@ -239,7 +240,16 @@
           this.pageInfo = all.filter(function (e) { return e.page === pg && e.module === mod })[0] || { relabelIneffective: {}, notes: [] }
         } catch (e) { this.pageInfo = null }
       },
-      ineffective(c) { return (this.pageInfo && this.pageInfo.relabelIneffective && !c.core && this.pageInfo.relabelIneffective[c.field]) || '' },
+      // 改名無效：登錄檔 relabelIneffective 的鍵可以是「欄位」或「清單:欄位」（同頁多個清單有同名欄位時用後者）
+      ineffective(c, lk) {
+        var r = this.pageInfo && this.pageInfo.relabelIneffective
+        return (r && !c.core && ((lk && r[lk + ':' + c.field]) || r[c.field])) || ''
+      },
+      // 固定位置：登錄檔 fixedOrder 的鍵是清單 key，值是 'all' 或欄位陣列；這些項目換順序沒有效果（編輯器不給箭頭、不能拖）
+      fixedPos(lk, c) {
+        var f = this.pageInfo && this.pageInfo.fixedOrder && this.pageInfo.fixedOrder[lk]
+        return f === 'all' || (Array.isArray(f) && f.indexOf(c.field) >= 0)
+      },
       pageNotes() { return (this.pageInfo && this.pageInfo.notes) || [] },
       formKeys() { return this.work ? Object.keys(this.work.forms) : [] },
       itemGroups() {
