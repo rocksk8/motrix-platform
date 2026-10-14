@@ -68,6 +68,7 @@ def test_sequential_runs_reuse_the_same_profile_and_keep_the_command_intact(prod
     dirs = [_dir_of(c) for c in prod["seen"]]
     assert all(d.startswith(str(prod["root"])) for d in dirs), "profile 必須在專屬根目錄底下"
     for i, c in enumerate(prod["seen"]):
+        c = [x for x in c if x not in startup._HARDEN_FLAGS]          # H1：渲染硬化旗標（插在 file:/// 參數之前）不算『原命令』的一部分；其餘旗標與順序必須不變
         assert c[0] == "msedge.exe" and c[2:] == ["--headless", "--print-to-pdf=x%d.pdf" % i, "file:///a.html"], c
     # 依序呼叫（每次用完就歸還）⇒ 一直是同一批目錄輪流用，不是每次新開；累積的快取檔證明被重用
     assert len(set(dirs)) <= startup.EDGE_PDF_MAX_CONCURRENCY
