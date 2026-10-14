@@ -126,6 +126,14 @@
         {"key": "projectName", "label": "案件名稱", "core": true},
         {"key": "deliveryLocation", "label": "交貨地點", "core": false}
       ],
+      "subtab": [
+        {"key": "progress", "label": "執行進度", "core": true},
+        {"key": "materials", "label": "材料申請", "core": false},
+        {"key": "devices", "label": "設備登錄", "core": false},
+        {"key": "warranty", "label": "保固備註", "core": false},
+        {"key": "todos", "label": "待辦事項", "core": false},
+        {"key": "info", "label": "成員", "core": false}
+      ],
       "block": [
         {"key": "health", "label": "案件健康總覽", "core": false},
         {"key": "contract", "label": "合約資訊", "core": true},
@@ -198,6 +206,14 @@
             {"field": "customFields", "visible": true},
             {"field": "privacy", "visible": true},
             {"field": "signedBack", "visible": true}
+          ]},
+          {"key": "execTabs", "label": "執行管理子分頁", "entity": "subtab", "columns": [
+            {"field": "progress", "visible": true},
+            {"field": "materials", "visible": true},
+            {"field": "devices", "visible": true},
+            {"field": "warranty", "visible": true},
+            {"field": "todos", "visible": true},
+            {"field": "info", "visible": true}
           ]}
         ],
         "forms": [

@@ -850,13 +850,13 @@
 
               <!-- ══ 執行管理 Tab（進度／材料申請／設備／保固 子分頁） ══ -->
               <div x-show="activeTab==='exec'">
-                <div class="cm-subtabs">
-                  <button class="cm-tab" :class="{active: execSubTab==='progress'}"  @click="execSubTab='progress'">執行進度</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='materials'}" @click="execSubTab='materials'; loadMaterialOrders(selected && selected.quote_no)">材料申請</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='devices'}"   @click="execSubTab='devices'">設備登錄</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='warranty'}"  @click="execSubTab='warranty'">保固備註</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='todos'}"     @click="execSubTab='todos'; loadCaseActionItems()">待辦事項</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='info'}"      @click="execSubTab='info'">成員</button>
+                <div class="cm-subtabs" x-effect="subFix()">
+                  <button class="cm-tab" x-show="sShown('progress')" :style="sOrder('progress')" :class="{active: execSubTab==='progress'}"  @click="execSubTab='progress'"><span x-text="sLabel('progress', '執行進度')">執行進度</span></button>
+                  <button class="cm-tab" x-show="sShown('materials')" :style="sOrder('materials')" :class="{active: execSubTab==='materials'}" @click="execSubTab='materials'; loadMaterialOrders(selected && selected.quote_no)"><span x-text="sLabel('materials', '材料申請')">材料申請</span></button>
+                  <button class="cm-tab" x-show="sShown('devices')" :style="sOrder('devices')" :class="{active: execSubTab==='devices'}"   @click="execSubTab='devices'"><span x-text="sLabel('devices', '設備登錄')">設備登錄</span></button>
+                  <button class="cm-tab" x-show="sShown('warranty')" :style="sOrder('warranty')" :class="{active: execSubTab==='warranty'}"  @click="execSubTab='warranty'"><span x-text="sLabel('warranty', '保固備註')">保固備註</span></button>
+                  <button class="cm-tab" x-show="sShown('todos')" :style="sOrder('todos')" :class="{active: execSubTab==='todos'}"     @click="execSubTab='todos'; loadCaseActionItems()"><span x-text="sLabel('todos', '待辦事項')">待辦事項</span></button>
+                  <button class="cm-tab" x-show="sShown('info')" :style="sOrder('info')" :class="{active: execSubTab==='info'}"      @click="execSubTab='info'"><span x-text="sLabel('info', '成員')">成員</span></button>
                 </div>
 
               <!-- ── 執行進度 ── -->
@@ -4807,7 +4807,8 @@ MotrixLayout.init({
   module: 'case', page: 'case-management.html', deferred: true,
   fallback: { lists: { cases: ['quoteNo', 'dealTag', 'customer', 'sales', 'amount', 'stageProgress', 'date'],
                        tabs: ['biz', 'exec', 'dispatch', 'shipping', 'completion', 'feed', 'allfiles', 'fin', 'xexp'],
-                       bizBlocks: ['health', 'contract', 'roles', 'timeline', 'customFields', 'privacy', 'signedBack'] } },
+                       bizBlocks: ['health', 'contract', 'roles', 'timeline', 'customFields', 'privacy', 'signedBack'],
+                       execTabs: ['progress', 'materials', 'devices', 'warranty', 'todos', 'info'] } },
 })
 window.CM_PARTS.push(() => ({
   layoutOn: false,
@@ -4839,6 +4840,15 @@ window.CM_PARTS.push(() => ({
   bo(f, n) { return this.layoutOn && this._bix(f) >= 0 ? { order: (this._bix(f) + 1) * 10 + (n || 0) } : {} },
   // 目前分頁被版面隱藏（網址 ?tab=、記住的分頁、其他入口切過來）⇒ 退回「案件資訊」（核心分頁，隱藏不了），不要留一個沒有頁籤的內容面板
   _tabKeys: ['biz', 'exec', 'dispatch', 'shipping', 'completion', 'feed', 'allfiles', 'fin', 'xexp'],
+  // 「執行管理」分頁裡的子分頁（BP-1／C2）：list `execTabs`（顯示／標題／順序）；「執行進度」是核心。:style 一律物件形式。
+  _scols() { return this.layoutOn ? window.Alpine.store('layout').cols('execTabs') : [] },
+  _six(f) { return this._scols().findIndex(c => c.field === f) },
+  sShown(f) { return !this.layoutOn || this._six(f) >= 0 },
+  sOrder(f) { return this.layoutOn && this._six(f) >= 0 ? { order: this._six(f) + 1 } : {} },
+  sLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('execTabs', f, dflt) : dflt },
+  _subKeys: ['progress', 'materials', 'devices', 'warranty', 'todos', 'info'],
+  // 目前的子分頁被版面隱藏（其他入口切過來，例如點健康總覽的關卡）⇒ 退回「執行進度」
+  subFix() { if (this.layoutOn && this._subKeys.includes(this.execSubTab) && !this.sShown(this.execSubTab)) this.execSubTab = 'progress' },
   tabFix() { if (this.layoutOn && this._tabKeys.includes(this.activeTab) && !this.tShown(this.activeTab)) this.activeTab = 'biz' },
   tLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('tabs', f, dflt) : dflt },
   // 案件資訊表單（合約資訊、專案期間）：欄位的顯示／順序／標題與區塊標題。旗標關閉＝中性值。

@@ -1,6 +1,7 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-14（wip/t57-material-recognize-toast-r1＋wip/t58-seg-base-adopt-r1＋wip/t59-bp1-fields-r1；認列存檔失敗提示如實說明／分段基準採用伺服器存入值／BP-1 案件清單與案件資訊表單可自訂版面）＋wip/t62-quote-layout-r1＋wip/t62-quote-list-r1＋wip/t62-quote-list-r2＋wip/t62-case-blocks-r1
+## (next) — 2026-10-14（wip/t57-material-recognize-toast-r1＋wip/t58-seg-base-adopt-r1＋wip/t59-bp1-fields-r1；認列存檔失敗提示如實說明／分段基準採用伺服器存入值／BP-1 案件清單與案件資訊表單可自訂版面）＋wip/t62-quote-layout-r1＋wip/t62-quote-list-r1＋wip/t62-quote-list-r2＋wip/t62-case-blocks-r1＋C2
+- C2：案件頁「執行管理」分頁的子分頁（執行進度／材料申請／設備登錄／保固備註／待辦事項／成員）接上版面引擎（list `execTabs`，沿用旗標 `builder_layout.case_management`）：可隱藏、改名、換順序，「執行進度」是核心；目前子分頁被隱藏時退回「執行進度」（`subFix()`）。隱藏只是不顯示頁籤，內容區與功能不變；`:style` 物件形式；關閉時沒有任何差異。
 - C1：案件頁「案件資訊」分頁的區塊接上版面引擎（list `bizBlocks`，7 個區塊；沿用旗標 `builder_layout.case_management`，預設關）：健康總覽、專案期間、自訂欄位可隱藏／改名；合約資訊、人員角色、個資告知、客戶回簽單是核心區塊（不可隱藏）。順序用 CSS `order`（fieldset 在旗標開啟時加 `cm-biz-lo` class 變 flex column；關閉時沒有任何差異），只有 fieldset 裡的五個區塊能換順序，健康總覽固定最上、客戶回簽單固定最下。`:style` 綁定一律物件形式。隱藏區塊只是不顯示，資料與分段存檔不變。
 - Q2 補強（04 審查）：案件頁目前分頁被版面隱藏時退回「案件資訊」分頁（`tabFix()`）；報價單管理頁的分群標題／空狀態／載入中列 colspan 跟著可見欄數（旗標關閉恆為 12）。
 - 報價單管理頁（`quotations.html`）清單欄位與案件頁分頁列接上版面引擎（BP-1／Q2，旗標 `builder_layout.quotations`、`builder_layout.case_management` 預設關）：module.json 登記清單 `quotes`（10 欄）與案件頁 `tabs`（9 個分頁，案件資訊為核心）；報價單清單 v1 只開放顯示／隱藏與改標題（有分群與拖曳排序，欄位順序暫不支援）；金額／毛利率欄的內容仍由權限決定；額外支出分頁維持 `canSeeFinancial()`、全部附件維持 `fileCenterOn`（版面只能再收窄）。旗標關閉時綁定函式回中性值、畫面不變；`:style` 一律物件形式。改名與隱藏只作用在畫面，PDF、匯出、報表不變。
