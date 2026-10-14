@@ -1,6 +1,7 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-14（wip/t57-material-recognize-toast-r1＋wip/t58-seg-base-adopt-r1＋wip/t59-bp1-fields-r1；認列存檔失敗提示如實說明／分段基準採用伺服器存入值／BP-1 案件清單與案件資訊表單可自訂版面）＋wip/t62-quote-layout-r1
+## (next) — 2026-10-14（wip/t57-material-recognize-toast-r1＋wip/t58-seg-base-adopt-r1＋wip/t59-bp1-fields-r1；認列存檔失敗提示如實說明／分段基準採用伺服器存入值／BP-1 案件清單與案件資訊表單可自訂版面）＋wip/t62-quote-layout-r1＋wip/t62-quote-list-r1
+- 報價單管理頁（`quotations.html`）清單欄位與案件頁分頁列接上版面引擎（BP-1／Q2，旗標 `builder_layout.quotations`、`builder_layout.case_management` 預設關）：module.json 登記清單 `quotes`（10 欄）與案件頁 `tabs`（9 個分頁，案件資訊為核心）；報價單清單 v1 只開放顯示／隱藏與改標題（有分群與拖曳排序，欄位順序暫不支援）；金額／毛利率欄的內容仍由權限決定；額外支出分頁維持 `canSeeFinancial()`、全部附件維持 `fileCenterOn`（版面只能再收窄）。旗標關閉時綁定函式回中性值、畫面不變；`:style` 一律物件形式。改名與隱藏只作用在畫面，PDF、匯出、報表不變。
 - 報價單表單（`quotation-form.html`）的非金額區塊（基、客戶資訊、案件資訊、報價條件）接上版面引擎（BP-1／Q1，旗標 `builder_layout.quotation_form` 預設關）：module.json 登記四個表單（`qbasic`／`qcustomer`／`qproject`／`qterms`），核心欄位不可隱藏或改名；旗標關閉時綁定函式回中性值、不發版面請求，畫面與先前相同。改名與隱藏只作用在這張表單，PDF、匯出與報表不變；品項、合計、簽署與成本面板不在範圍。
 - 材料卡片「帶入並連結」存檔沒成功時的提示改為：「認列尚未儲存：請看畫面上方的儲存狀態；按「儲存」或再編輯一次會重新送出」。原提示寫「修正後會自動重試」不正確（失敗後不會自動重送，持續性錯誤也不應無限重試）。只改提示文字，行為不變。
 - 分段存檔（`PATCH …/case-record`）與叫料單存檔（material-orders `PATCH`）成功回應加 `saved`（本次送出的各分段、伺服器實際存入並依檢視者遮蔽的值）；前端以它當新的分段比對基準。原本只以送出內容當基準，伺服器存檔時改寫材料卡片（認列的到貨人／時間、過期標記、被拒還原）後，下一次存檔會被誤判 409「已被他人更新」。內容一致時仍沿用送出字串；舊前端忽略新欄位。測試：`test_segment_base_adopts_saved_2026_10_14.py`。
