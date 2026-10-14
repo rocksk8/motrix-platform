@@ -4,8 +4,7 @@
 - 提供者：沒有提供者 ⇒ None；提供者多給的欄位會被裁掉（縱深防禦）；筆數上限
 - 懶登記：匯入 helpers.rule_sets 不登記 `rule_set`（旗標關時 /api/definition-kinds 與今天相同）；ensure_registered 之後驗證器生效
 - 設定：builder_rules.enabled 預設 0；builder_governance.enforce_rule_set 是 loosen=down、建議值 1
-- TEMP stub 的移除提醒：S5 欄位目錄（helpers/builtin_fields.py）一出現，這裡就會失敗，要求改接 S5 並移除 stub"""
-import importlib.util
+- 內建欄位（_BUILTIN_FIELDS）與 S5 自訂欄位（cf_*）併成同一份目錄；S5 只提供自訂欄位，內建的金額／狀態欄位仍由本檔提供"""
 import subprocess
 import sys
 from pathlib import Path
@@ -25,19 +24,12 @@ def u(role):
 
 
 # ── 目錄 ───────────────────────────────────────────────────────────────────────
-def test_stub_catalog_is_well_formed_and_marked_temp():
+def test_builtin_catalog_is_well_formed():
     ids = C.all_fields("case")
     assert {"netMarginPct", "total", "status"} <= set(ids)
-    assert C.stub_in_use() is True
+    assert not hasattr(C, "_TEMP_STUB")                                    # 已改名為正式的 _BUILTIN_FIELDS
     assert ids["netMarginPct"]["money"] and ids["netMarginPct"]["internal"] and ids["netMarginPct"]["perm"] == "quote_money"
     assert C.all_fields("nope") == {}
-
-
-def test_temp_stub_is_removed_once_s5_lands():
-    """S5 欄位目錄（wip/t61-s5-impl-r4，owner 3c）合併後 helpers/builtin_fields.py 會出現。
-    出現時這題會失敗＝提醒：請把 rule_catalog._catalog_for 改接 S5 的目錄、刪除 _TEMP_STUB 與本題（並與 3c 對齊欄位代號）。"""
-    assert importlib.util.find_spec("helpers.builtin_fields") is None, \
-        "S5 已合併：請移除 rule_catalog._TEMP_STUB，改由 S5 目錄提供內建欄位，再刪除這個提醒測試"
 
 
 def test_payment_derived_fields_cannot_enter_the_catalog_positive_control():
@@ -156,14 +148,12 @@ def test_settings_defaults_and_loosen_direction(client):
 
 
 def test_catalog_s5_custom_fields_enter_as_internal_cf_ids_and_disabled_ones_are_absent(monkeypatch):
-    import types
-    fake = types.ModuleType("helpers.builtin_fields")
-    fake.public_fields = lambda rt, conn=None: [{"key": "site", "label": "工地", "type": "text"}, {"key": "lvl", "label": "等級", "type": "select", "options": ["A", "B"]},
-                                                 {"key": "ok", "label": "已確認", "type": "checkbox"}, {"key": "d", "label": "日期", "type": "date"}] if rt == "case_info" else []
-    monkeypatch.setitem(sys.modules, "helpers.builtin_fields", fake)
+    from helpers import builtin_fields as fake                                       # 真模組已匯入時 `from helpers import` 取套件屬性，不看 sys.modules ⇒ 直接換掉它的函式
+    monkeypatch.setattr(fake, "public_fields", lambda rt, conn=None: [{"key": "site", "label": "工地", "type": "text"}, {"key": "lvl", "label": "等級", "type": "select", "options": ["A", "B"]},
+                                                 {"key": "ok", "label": "已確認", "type": "checkbox"}, {"key": "d", "label": "日期", "type": "date"}] if rt == "case_info" else [])
     f = C.all_fields("case")
     assert {k: f[k]["type"] for k in ("cf_site", "cf_lvl", "cf_ok", "cf_d")} == {"cf_site": "text", "cf_lvl": "enum", "cf_ok": "bool", "cf_d": "date"}
     assert all(f[k]["internal"] and f[k]["perm"] is None and not f[k]["money"] for k in ("cf_site", "cf_lvl"))
     assert f["cf_lvl"]["options"] == ["A", "B"]
-    fake.public_fields = lambda rt, conn=None: []                                      # 欄位被停用 ⇒ 目錄裡沒有 ⇒ 引用它的已發布規則不評估（不當成故障）
+    monkeypatch.setattr(fake, "public_fields", lambda rt, conn=None: [])                # 欄位被停用 ⇒ 目錄裡沒有 ⇒ 引用它的已發布規則不評估（不當成故障）
     assert "cf_site" not in C.all_fields("case")

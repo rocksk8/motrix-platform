@@ -2,7 +2,7 @@
 """規則的欄位目錄轉接層（BP-2 R1；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §5）。
 
 [單位] helper:rule_catalog    [層] L1    [穩定度] 實驗（旗標 builder_rules 關閉時沒有任何呼叫端）
-[公開介面] ENTITIES, entities, all_fields, rule_fields, visible_ids, load_records, stub_in_use, PERMS
+[公開介面] ENTITIES, entities, all_fields, rule_fields, visible_ids, load_records, PERMS
 [不變式] ①**唯一**對外給『規則能用哪些欄位』的入口；整合 S5 欄位目錄（`helpers/builtin_fields.py`，owner 3c）時**只改本檔的 `_catalog_for`**；
     ②目錄項不得是付款衍生旗標（`derived_from_payment` 或名稱在 `_PAYMENT_DERIVED` 內）——登錄時 ValueError；
     ③金額欄位必須帶權限（`perm`）；`internal`（S5 自訂欄位）＝只有能讀到該紀錄的人看得到；檢視者沒有該權限 ⇒ 欄位不在他的可見集合內（規則引擎據此不評估）；
@@ -10,8 +10,8 @@
        提供者回傳的值再被本檔裁到只剩檢視者可見的欄位（縱深防禦：提供者多給也不會外洩）。
 [契約題] backend/tests/test_rule_catalog_2026_10_14.py
 
-⚠ TEMP：S5 欄位目錄（wip/t61-s5-impl-r4）合併前，`_TEMP_STUB` 只含『案件』一個主題的少數內建欄位，讓 R1～R3 能運作與被測。
-合併 S5 後 `test_temp_stub_is_removed_once_s5_lands` 會失敗，強制移除這個 stub、改接 S5 的目錄（見該測試的說明）。
+內建欄位在 `_BUILTIN_FIELDS`（目前只有『案件』一個主題）；S5（`helpers/builtin_fields.py`）已合併，但它只提供**自訂欄位**（`cf_<key>`，由 `_s5_fields` 併入），
+不含內建的金額／狀態欄位，所以 `_BUILTIN_FIELDS` 是這些欄位唯一的來源（原 `_BUILTIN_FIELDS`，T62 整合時改名、移除 TEMP 標記）。
 """
 from core import registry as _registry
 
@@ -34,8 +34,8 @@ def _f(fid, label, typ, *, perm=None, unit="", options=None, money=False, intern
     return d
 
 
-# ── TEMP stub（見檔頭）：欄位代號＝紀錄提供者回傳的 values 的鍵 ─────────────────────────────────────────────
-_TEMP_STUB = {
+# ── 內建欄位（見檔頭）：欄位代號＝紀錄提供者回傳的 values 的鍵 ─────────────────────────────────────────────
+_BUILTIN_FIELDS = {
     "case": [
         _f("netMarginPct", "營業利益率", "number", perm="quote_money", unit="%", money=True, internal=True),
         _f("directMarginPct", "直接毛利率", "number", perm="quote_money", unit="%", money=True, internal=True),
@@ -92,15 +92,11 @@ def _catalog_for(entity, conn=None):
     """⇒ 該主題的完整目錄（未依檢視者裁剪）。**整合 S5 時只改這裡。**"""
     if entity not in ENTITIES:
         return []
-    return _check_catalog(entity, list(_TEMP_STUB.get(entity, [])) + _s5_fields(entity, conn))
+    return _check_catalog(entity, list(_BUILTIN_FIELDS.get(entity, [])) + _s5_fields(entity, conn))
 
 
-for _e, _fs in _TEMP_STUB.items():                                    # 匯入時就檢查 stub
+for _e, _fs in _BUILTIN_FIELDS.items():                                    # 匯入時就檢查內建欄位
     _check_catalog(_e, _fs)
-
-
-def stub_in_use() -> bool:
-    return bool(_TEMP_STUB)
 
 
 def entities() -> list:

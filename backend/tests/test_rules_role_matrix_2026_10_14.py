@@ -13,6 +13,7 @@ import json
 import pytest
 
 import db
+from helpers import rule_sets as RS
 from helpers import settings_registry as SR
 
 ROLES = [("superadmin", True), ("admin", True), ("sales", True), ("finance", True), ("engineer", False), ("viewer", False)]
@@ -60,6 +61,7 @@ def world(client, make_user):
         conn.commit()
     finally:
         conn.close()
+    RS.ensure_registered()                                                    # rule_set 種類懶登記：單獨跑這個檔時沒人先登記它（整套跑只是剛好前面有別的檔登記過）
     sa = us["superadmin"]["h"]
     url = "/api/definitions/rule_set/case"
     assert client.put(url + "/draft", headers=sa, json={"body": {"rules": [LOW, DRAFT]}}).status_code == 200
@@ -77,8 +79,8 @@ def test_marks_matrix(client, world, role, sees_money):
     r = client.get("/api/rules/marks?entity=case&ids=" + _all_ids(), headers=world[role]["h"])
     assert r.status_code == 200, r.text
     marks = r.json()["marks"]
-    admin_plus = role in ("superadmin", "admin")
-    expected_rows = {"Q-" + x for x, _ in ROLES} | {FOREIGN} if admin_plus else {"Q-" + role}
+    reads_all = role in ("superadmin", "admin", "finance")                                       # admin+ 與持 cashier 的財務讀得到全部案件（row_access read_bypass_modules，CM14b）；其餘只讀自己的
+    expected_rows = {"Q-" + x for x, _ in ROLES} | {FOREIGN} if reads_all else {"Q-" + role}
     by_rule = {rid: {i for i, ms in marks.items() for m in ms if m["ruleId"] == rid} for rid in ("low_margin", "is_draft")}
     assert by_rule["is_draft"] == expected_rows                                                 # 非金額規則：每筆可讀的案件都有（逐筆權限）
     assert by_rule["low_margin"] == (expected_rows if sees_money else set())                    # 金額規則：只有看得到金額的人
@@ -139,10 +141,11 @@ def test_mutation_removing_the_permission_check_makes_masked_roles_see_marks(cli
 def test_each_defense_layer_alone_still_blocks_the_leak(client, world, monkeypatch):
     """縱深防禦：只拿掉目錄那一層（提供者仍遮蔽），或只拿掉提供者那一層（目錄仍裁剪），engineer 都看不到毛利衍生的標示。"""
     h = world["engineer"]["h"]
-    monkeypatch.setattr("helpers.rule_catalog._has_perm", lambda perm, user: True)
-    a = client.get("/api/rules/marks?entity=case&ids=Q-engineer", headers=h).json()["marks"]
-    assert not [m for ms in a.values() for m in ms if m["ruleId"] == "low_margin"]
-    monkeypatch.undo()
-    monkeypatch.setattr("modules.case.rule_provider.quote_money_visible", lambda user: True)
-    b = client.get("/api/rules/marks?entity=case&ids=Q-engineer", headers=h).json()["marks"]
-    assert not [m for ms in b.values() for m in ms if m["ruleId"] == "low_margin"]
+    with monkeypatch.context() as m:                                                            # 不用 monkeypatch.undo()：它會連 fixture 的 patch 一起撤掉（client／設定層壞掉 ⇒ 回應沒有 marks）
+        m.setattr("helpers.rule_catalog._has_perm", lambda perm, user: True)
+        a = client.get("/api/rules/marks?entity=case&ids=Q-engineer", headers=h).json()["marks"]
+    assert not [m_ for ms in a.values() for m_ in ms if m_["ruleId"] == "low_margin"]
+    with monkeypatch.context() as m:
+        m.setattr("modules.case.rule_provider.quote_money_visible", lambda user: True)
+        b = client.get("/api/rules/marks?entity=case&ids=Q-engineer", headers=h).json()["marks"]
+    assert not [m_ for ms in b.values() for m_ in ms if m_["ruleId"] == "low_margin"]

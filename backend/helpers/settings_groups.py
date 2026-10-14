@@ -506,7 +506,7 @@ register_group(
     "case_close_gates", "結案條件加嚴",
     [
         S("enabled", "int", 0, min=0, max=1, risk="ops", loosen="down", recommended=0,
-          impact_scope={"documents": ["案件結案（完結案）"], "roles": ["所有按下「結案」的人"], "amounts": "不涉及金額。", "reversible": True, "effective": "pending"},
+          impact_scope={"documents": ["案件結案"], "roles": ["所有按下「結案」的人"], "amounts": "不涉及金額。", "reversible": True, "effective": "pending"},
           question="要不要啟用結案條件加嚴？", label="啟用結案條件加嚴",
           help="開啟後，下面勾選的項目會變成結案的必要條件。關閉時結案條件與今天完全相同。",
           impact="只會讓更多案件暫時不能結案，不會改任何資料。關閉屬於放寬，需要另一位最高管理者核准並經確認期間。",
