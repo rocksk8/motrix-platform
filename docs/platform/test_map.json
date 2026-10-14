@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1387,
+  "tests": 1389,
   "unmapped": 13,
   "kinds": {
-   "api": 773,
+   "api": 774,
    "e2e": 306,
-   "audit": 179,
+   "audit": 180,
    "unit": 129
   },
   "routes": 846
@@ -31980,6 +31980,38 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_finance_f5_f4_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:finance_params",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "mod:analytics/api/__init__",
+    "mod:analytics/api/reports",
+    "mod:arap/api/cashier"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/finance_params.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/modules/analytics/api/__init__.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "path": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/cashier.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_finance_params_2026_10_14.py": {
    "kind": "api",
    "units": [
@@ -34536,6 +34568,32 @@
     ]
    }
   },
+  "backend/tests/test_payable_due_soon_days_2026_10_14.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:payable_due_core",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "mod:case/payable_reminders",
+    "mod:subcontract/payable_due"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/payable_due_core.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/modules/case/payable_reminders.py",
+     "backend/modules/subcontract/payable_due.py"
+    ],
+    "path": [
+     "backend/helpers/payable_due_core.py",
+     "backend/modules/case/payable_reminders.py",
+     "backend/modules/subcontract/payable_due.py"
+    ]
+   }
+  },
   "backend/tests/test_payment_item_and_material_uploads.py": {
    "kind": "api",
    "units": [
@@ -37003,6 +37061,7 @@
     "js:js/cashier.js",
     "js:js/reports.js",
     "js:js/status-display-editor.js",
+    "js:js/voucher.js",
     "js:static/public-flags.js",
     "js:static/status-chip.js",
     "page:pages/case-management.html",
@@ -37011,6 +37070,8 @@
     "page:pages/payment-request.html",
     "page:pages/quotations.html",
     "page:pages/reports.html",
+    "page:pages/settlement.html",
+    "page:pages/voucher.html",
     "router:def_governance",
     "router:def_pipeline",
     "router:definitions",
@@ -37036,12 +37097,15 @@
      "frontend/js/cashier.js",
      "frontend/js/reports.js",
      "frontend/js/status-display-editor.js",
+     "frontend/js/voucher.js",
      "frontend/pages/case-management.html",
      "frontend/pages/cashier.html",
      "frontend/pages/payment-request-form.html",
      "frontend/pages/payment-request.html",
      "frontend/pages/quotations.html",
      "frontend/pages/reports.html",
+     "frontend/pages/settlement.html",
+     "frontend/pages/voucher.html",
      "frontend/static/public-flags.js",
      "frontend/static/status-chip.js"
     ],
@@ -37050,12 +37114,15 @@
      "frontend/js/cashier.js",
      "frontend/js/reports.js",
      "frontend/js/status-display-editor.js",
+     "frontend/js/voucher.js",
      "frontend/pages/case-management.html",
      "frontend/pages/cashier.html",
      "frontend/pages/payment-request-form.html",
      "frontend/pages/payment-request.html",
      "frontend/pages/quotations.html",
      "frontend/pages/reports.html",
+     "frontend/pages/settlement.html",
+     "frontend/pages/voucher.html",
      "frontend/static/status-chip.js"
     ]
    },

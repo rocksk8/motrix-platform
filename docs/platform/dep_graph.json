@@ -1461,7 +1461,8 @@
     "helper:audit",
     "helper:email_notify",
     "helper:google_calendar",
-    "helper:settings"
+    "helper:settings",
+    "helper:settings_registry"
    ],
    "kind": "helper",
    "path": "backend/helpers/payable_due_core.py",
@@ -6744,67 +6745,67 @@
    "routes": [
     {
      "func": "report_json",
-     "line": 2589,
+     "line": 2592,
      "method": "GET",
      "path": "/api/reports/financial"
     },
     {
      "func": "report_excel",
-     "line": 2603,
+     "line": 2606,
      "method": "GET",
      "path": "/api/reports/financial/excel"
     },
     {
      "func": "report_pdf",
-     "line": 2640,
+     "line": 2643,
      "method": "GET",
      "path": "/api/reports/financial/pdf"
     },
     {
      "func": "get_ar_aging",
-     "line": 2765,
+     "line": 2776,
      "method": "GET",
      "path": "/api/reports/ar-aging"
     },
     {
      "func": "get_cash_position",
-     "line": 2826,
+     "line": 2837,
      "method": "GET",
      "path": "/api/reports/cash-position"
     },
     {
      "func": "tax_export_excel",
-     "line": 2894,
+     "line": 2905,
      "method": "GET",
      "path": "/api/reports/tax-export"
     },
     {
      "func": "customer_history",
-     "line": 2928,
+     "line": 2939,
      "method": "GET",
      "path": "/api/reports/customer-history"
     },
     {
      "func": "monthly_trend",
-     "line": 3204,
+     "line": 3215,
      "method": "GET",
      "path": "/api/reports/monthly-trend"
     },
     {
      "func": "report_payment_anomalies",
-     "line": 3430,
+     "line": 3441,
      "method": "GET",
      "path": "/api/reports/payment-anomalies"
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3862,
+     "line": 3873,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 4046,
+     "line": 4057,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
@@ -7007,43 +7008,43 @@
     },
     {
      "func": "get_payable_queue",
-     "line": 499,
+     "line": 500,
      "method": "GET",
      "path": "/api/cashier/payable-queue"
     },
     {
      "func": "get_receivable_queue",
-     "line": 510,
+     "line": 511,
      "method": "GET",
      "path": "/api/cashier/receivable-queue"
     },
     {
      "func": "get_payslip_queue",
-     "line": 532,
+     "line": 533,
      "method": "GET",
      "path": "/api/cashier/payslip-queue"
     },
     {
      "func": "get_bonus_queue",
-     "line": 552,
+     "line": 553,
      "method": "GET",
      "path": "/api/cashier/bonus-queue"
     },
     {
      "func": "get_execution_history",
-     "line": 611,
+     "line": 612,
      "method": "GET",
      "path": "/api/cashier/execution-history"
     },
     {
      "func": "export_execution_history",
-     "line": 626,
+     "line": 627,
      "method": "GET",
      "path": "/api/cashier/export"
     },
     {
      "func": "bank_reconcile",
-     "line": 836,
+     "line": 837,
      "method": "POST",
      "path": "/api/reports/bank-reconcile"
     }
@@ -19005,7 +19006,9 @@
     "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/profit-rules.js",
-    "js:static/sidebar.js"
+    "js:static/public-flags.js",
+    "js:static/sidebar.js",
+    "js:static/status-chip.js"
    ],
    "kind": "page",
    "path": "frontend/pages/settlement.html",
@@ -19414,7 +19417,9 @@
     "js:static/download.js",
     "js:static/file-preview.js",
     "js:static/notif.js",
-    "js:static/sidebar.js"
+    "js:static/public-flags.js",
+    "js:static/sidebar.js",
+    "js:static/status-chip.js"
    ],
    "kind": "page",
    "path": "frontend/pages/voucher.html",
