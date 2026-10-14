@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-14（wip/t61-s6-impl-r1＋wip/t60-s4-r1；S6：登記外包名冊匯出／BP-1：承攬商管理頁可自訂版面）；t60 整合
+## (next) — 2026-10-14（wip/t61-s6-impl-r1＋wip/t60-s4-r1；S6：登記外包名冊匯出／BP-1：承攬商管理頁可自訂版面）；t60 整合；修正：xlsx 轉義可逆
 - module.json `customization.pages` 登記外包名冊匯出（`GET /api/contractors/export`，xlsx，`perm: contractor_list`），供自訂按鈕目錄使用。純加性宣告；端點本身（權限、證件號碼遮蔽、稽核）完全不變。
 - module.json 登記承攬商管理頁（vendor-contractors.html，承攬商清單六欄）的可自訂點；承攬商名稱、統一編號、狀態為核心（不能隱藏）。純加性宣告。
 - 頁面接上既有的版面引擎（P9），旗標在設定中心「自訂畫面版面」→「承攬商管理頁」，**預設關閉**；關閉時不發任何版面請求、畫面與先前相同。個資告知流程不變。
