@@ -82,8 +82,25 @@ APPROVAL_DOC_TYPE_LABELS = {
 
 _BUILTIN_DOC_TYPES = tuple(APPROVAL_DOC_TYPES)   # 內建九類（固定）；其餘由 `register_doc_type()` 登記
 
+# 單據風險類（BP-5 流程建構器的前置；程式擁有、使用者不可編輯，設計見 docs/platform/plans/BP5-WORKFLOW-BUILDER-DESIGN-T62.md §2）：
+#   plain  ＝非金額單據，流程建構器可完整調整
+#   money  ＝金額單據，建構器只能加嚴（第一期唯讀）
+#   ledger ＝會計入帳／法定類型，不在任何可編輯範圍
+# 新登記而未指定者一律當 money（最嚴）。目前沒有任何執行期程式讀這張表（純登錄＋守門測試）。
+DOC_CLASSES = ("plain", "money", "ledger")
+DOC_CLASS = {
+    "quotation": "money", "shipping": "plain", "invoice_voucher": "money", "payment_request": "money",
+    "contractor_voucher": "money", "extra_expense": "money", "completion": "plain",
+    "voucher": "ledger", "bonus": "money",
+}
 
-def register_doc_type(code: str, label: str, unified: bool = False) -> None:
+
+def doc_class(code: str) -> str:
+    """單據風險類；未登記的代碼回 money（最嚴）。"""
+    return DOC_CLASS.get(code, "money")
+
+
+def register_doc_type(code: str, label: str, unified: bool = False, doc_class: str = "money") -> None:
     """登記一種新的簽核單據類型（預留鉤子：A2 的請購／採購／差旅／零用金是第一批使用者）。
     登記後它立刻出現在簽核設定頁（套用範圍＋獨立流程）、`/api/settings/approval-flow/{code}`、
     `approval_flow_setting_key`；不必再改 `routers/system.py` 的固定模型或前端清單。
@@ -97,8 +114,11 @@ def register_doc_type(code: str, label: str, unified: bool = False) -> None:
         raise ValueError("簽核單據類型已登記：%r" % code)
     if not isinstance(label, str) or not label.strip():
         raise ValueError("簽核單據類型 %r 缺少名稱" % code)
+    if doc_class not in DOC_CLASSES:     # 先驗證再寫入：失敗不留下半登記狀態
+        raise ValueError("簽核單據類型 %r 的風險類不合法：%r" % (code, doc_class))
     APPROVAL_DOC_TYPES.append(code)
     APPROVAL_DOC_TYPE_LABELS[code] = label.strip()
+    DOC_CLASS[code] = doc_class
     if unified:
         DEFAULT_UNIFIED_DOC_TYPES.add(code)
 
