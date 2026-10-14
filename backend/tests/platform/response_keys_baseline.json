@@ -5219,6 +5219,12 @@
   ],
   "s": 200
  },
+ "/api/quotations/{quote_no}/stages/templates": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/quotations/{quote_no}/updates": {
   "k": [
    "[].author",

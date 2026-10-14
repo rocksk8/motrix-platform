@@ -194,7 +194,7 @@
     root.style.display = st.open ? 'flex' : 'none'
     root.setAttribute('data-state', st.state)
     if (!st.open) return
-    var panel = el('div', { role: 'dialog', 'aria-modal': 'true', 'data-testid': 'stage-template-editor', style: 'margin:auto;background:var(--surface,#fff);border-radius:12px;width:100%;max-width:760px;max-height:88vh;overflow:auto;padding:14px 18px;box-shadow:var(--shadow-popover,0 8px 30px rgba(0,0,0,.2))' })
+    var panel = el('div', { role: 'dialog', 'aria-modal': 'true', 'data-testid': 'stage-template-editor', style: 'margin:auto;background:var(--surface,#fff);border-radius:12px;width:100%;max-width:760px;max-height:calc(88vh / var(--fz,1));overflow:auto;padding:14px 18px;box-shadow:var(--shadow-popover,0 8px 30px rgba(0,0,0,.2))' })
     panel.appendChild(el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:8px' }, [
       el('span', { text: '案件階段樣板', style: 'font-size:14px;font-weight:700;flex:1' }),
       el('button', { type: 'button', text: '×', 'aria-label': '關閉', onclick: function () { st.open = false; render() }, style: 'width:28px;height:28px;border:none;border-radius:5px;cursor:pointer' })

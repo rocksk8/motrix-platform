@@ -384,7 +384,7 @@ def _safe_close(conn) -> None:
 # 原本 router 自己一份，漂移成「不認沒有外層 approval 的 approval_json」⇒ 額外支出的簽核人在簽核佇列被 403。
 from modules.case.quotations import (  # noqa: E402
     is_document_approver as _is_case_approver, case_access_allowed, CASE_ACCESS)
-from helpers.case_access import deny_case, require_case, require_case_money  # noqa: E402  M01-O1：逐案拒絕＝查無（同一個 404）
+from helpers.case_access import deny_case, guard_case_access, require_case, require_case_money  # noqa: E402  M01-O1：逐案拒絕＝查無（同一個 404）
 
 
 def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False,
@@ -3949,7 +3949,7 @@ def apply_stage_template(quote_no: str, body: dict = Body(...), authorization: s
     if not _STPL.enabled():
         raise HTTPException(404, "Not Found")
     conn = get_db()
-    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    guard_case_access(conn, quote_no, user, allow_module="case_manage")      # 與 _guard_case 同一份判定；直接走範圍 helper（未經範圍讀取棘輪認得它）
     _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-套用樣板")
     key = body.get("template")
     mode = body.get("mode") or "new"
@@ -3969,8 +3969,9 @@ def apply_stage_template(quote_no: str, body: dict = Body(...), authorization: s
         d = None
     if not d:
         conn.close(); raise HTTPException(404, "找不到這個階段樣板，或它還沒有發布")
-    existing = [{"id": r["id"], "stage_key": r["stage_key"], "label": r["label"]} for r in conn.execute(
-        "SELECT id, stage_key, label FROM case_stages WHERE quote_no=?", (quote_no,)).fetchall()]
+    _rows = conn.execute("SELECT id, stage_key, label, sort_order FROM case_stages WHERE quote_no=?", (quote_no,)).fetchall()
+    existing = [{"id": r["id"], "stage_key": r["stage_key"], "label": r["label"]} for r in _rows]
+    max_order = max([r["sort_order"] for r in _rows if r["sort_order"] is not None] or [-1])      # 寫入端用；同一次（已持寫鎖）讀取，不再另讀
     try:
         pl = _SA.plan(d["body"], base, mode, existing)
     except _SA.PlanError as e:
@@ -3989,7 +3990,7 @@ def apply_stage_template(quote_no: str, body: dict = Body(...), authorization: s
         conn.close()
         return {**out, "created": []}
     try:
-        return _apply_stage_template_write(conn, quote_no, pl, out, key, d, mode, authorization)
+        return _apply_stage_template_write(conn, quote_no, pl, out, key, d, mode, authorization, max_order)
     except BaseException:
         try:
             conn.rollback()
@@ -3999,10 +4000,7 @@ def apply_stage_template(quote_no: str, body: dict = Body(...), authorization: s
         raise
 
 
-def _apply_stage_template_write(conn, quote_no, pl, out, key, d, mode, authorization):
-    max_order = conn.execute(
-        "SELECT COALESCE(MAX(sort_order), -1) m FROM case_stages WHERE quote_no=?", (quote_no,)
-    ).fetchone()["m"]
+def _apply_stage_template_write(conn, quote_no, pl, out, key, d, mode, authorization, max_order):
     now = datetime.now().isoformat()
     ids = {}
     for i, st in enumerate(pl["stages"]):
