@@ -112,7 +112,7 @@ def _stamp_passbook(data_uri: str) -> str:
 
 
 router = APIRouter()
-from helpers.xlsx_out import add_pdf_sibling, export_logged, xl_safe_xlsx   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
+from helpers.xlsx_out import add_pdf_sibling, export_logged, xl_safe_xlsx, xlsx_unescape   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
 
 _LIST_COLS = (
     "id, name, id_number, nationality, has_union_insurance, "
@@ -282,7 +282,7 @@ def _cell(v):
         return ""
     if isinstance(v, float) and v.is_integer():
         v = int(v)                      # Excel 把純數字的電話／帳號讀成數字
-    return str(v).strip()
+    return xlsx_unescape(v).strip() if isinstance(v, str) else str(v).strip()      # 匯出時 xl_safe_xlsx 補的單引號還原（往返不污染）
 
 
 @router.post("/api/contractors/import")

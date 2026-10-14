@@ -14,7 +14,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from helpers import _get_edge_path, run_edge_pdf
-from helpers.xlsx_out import xl_safe_xlsx
+from helpers.xlsx_out import xl_safe_xlsx, xlsx_unescape
 from helpers.company_identity import company_name, contact_line, footer_line, location_identity, name_pair
 from modules.netplan.topology import build_topology_svg, build_topology_text_summary_html
 
@@ -119,8 +119,7 @@ def _parse_cell_value(section_key, col_key, raw):
     if isinstance(raw, float) and raw.is_integer():
         return int(raw)
     if isinstance(raw, str):
-        if raw.startswith("'="):                 # 匯出時 xl_safe_xlsx 為『=』開頭的文字補的單引號：還原（只拿掉一個、只在後面接 = 時）
-            raw = raw[1:]
+        raw = xlsx_unescape(raw)                  # 匯出時 xl_safe_xlsx 補的單引號：還原（可逆，連本來就以 '= 開頭的文字也不會被吃掉）
         return raw.strip()
     return raw
 
