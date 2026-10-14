@@ -212,12 +212,9 @@ def test_residual_check_does_not_depend_on_tag_boundaries_for_http_equiv(payload
     neutral = ST._neutralize_html(_doc(payload))
     assert ("http-equiv" not in neutral.lower()) or ST._residual_danger(neutral), "要嘛中和掉，要嘛殘留檢查攔下"
     f, cmd = _page(tmp_path, _doc(payload))
-    try:
+    with pytest.raises(ValueError):                             # 輸入含 http-equiv ⇒ 一律拒絕，與解析器版本無關
         ST._harden_html_file(cmd)
-    except ValueError:
-        assert "motrix-csp" not in f.read_text(encoding="utf-8")
-    else:
-        assert "refresh" not in f.read_text(encoding="utf-8").lower()
+    assert "motrix-csp" not in f.read_text(encoding="utf-8")
 
 
 def test_slash_separated_attributes_are_scrubbed():

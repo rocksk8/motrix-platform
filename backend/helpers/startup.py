@@ -399,6 +399,9 @@ def _harden_html_file(cmd: list) -> None:
         return
     with open(path, "r", encoding="utf-8") as f:
         html = f.read()
+    import re
+    if re.search(r"http-equiv", html, re.I):                  # 輸入就有：不論解析器怎麼看（`--!>` 註解等差異隨 Python 小版本而變）一律拒絕
+        raise ValueError("HTML 含 http-equiv，拒絕渲染")
     out = _neutralize_html(html)
     bad = _residual_danger(out)
     if bad:
