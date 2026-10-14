@@ -1,12 +1,13 @@
 # 外包工班 更新紀錄
 
-## 1.1.35 — 2026-10-14（wip/t59-bp1-governance-r1；BP-1：匯款款別設定頁接上版本帳本與發布前影響預覽）
-- 匯款款別設定頁（remit-kinds-settings）在「定義版本帳本與影響預覽」旗標（`builder_governance.enabled`，預設關）開啟時，多出版本帳本入口；關閉時畫面與先前完全相同。無 migration、無新路由、無權限變更。
-
-## (next) — 2026-10-14（wip/t60-s4-r1；BP-1：承攬商管理頁可自訂版面）
+## (next) — 2026-10-14（wip/t61-s6-impl-r1＋wip/t60-s4-r1；S6：登記外包名冊匯出／BP-1：承攬商管理頁可自訂版面）
+- module.json `customization.pages` 登記外包名冊匯出（`GET /api/contractors/export`，xlsx，`perm: contractor_list`），供自訂按鈕目錄使用。純加性宣告；端點本身（權限、證件號碼遮蔽、稽核）完全不變。
 - module.json 登記承攬商管理頁（vendor-contractors.html，承攬商清單六欄）的可自訂點；承攬商名稱、統一編號、狀態為核心（不能隱藏）。純加性宣告。
 - 頁面接上既有的版面引擎（P9），旗標在設定中心「自訂畫面版面」→「承攬商管理頁」，**預設關閉**；關閉時不發任何版面請求、畫面與先前相同。個資告知流程不變。
 - 無 migration、無新路由、無權限變更；頁面仍只開放管理員。
+
+## 1.1.35 — 2026-10-14（wip/t59-bp1-governance-r1；BP-1：匯款款別設定頁接上版本帳本與發布前影響預覽）
+- 匯款款別設定頁（remit-kinds-settings）在「定義版本帳本與影響預覽」旗標（`builder_governance.enabled`，預設關）開啟時，多出版本帳本入口；關閉時畫面與先前完全相同。無 migration、無新路由、無權限變更。
 
 ## 1.1.34 — 2026-10-13（MS1 合併段：2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期） ＋ 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期））
 - **（併入）(next) — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）**

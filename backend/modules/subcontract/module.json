@@ -46,7 +46,9 @@
         "actions": [],
         "menus": [],
         "exports": []
-      }
+      },
+      {"page": "contractors.html", "lists": [], "forms": [], "actions": [], "menus": [],
+       "exports": [{"key": "roster", "label": "外包名冊", "endpoint": "GET /api/contractors/export", "format": "xlsx", "perm": "contractor_list"}]}
     ],
     "outputs": []
   },

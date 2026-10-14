@@ -358,7 +358,7 @@ def test_deferred_init_fires_nothing_until_start():
 
 
 @pytest.mark.parametrize("name,flag_page_group", [("case-management.html", "builder_layout,builder_custom_fields"),
-                                                  ("suppliers.html", "builder_layout,builder_custom_fields")])
+                                                  ("suppliers.html", "builder_layout,builder_custom_fields,builder_actions")])
 def test_pages_read_the_flag_from_the_existing_settings_request(name, flag_page_group):
     from core import source_tree
     src = source_tree.page_file(name).read_text(encoding="utf-8")
