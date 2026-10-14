@@ -196,7 +196,7 @@ def collect_income_items(d0: str, d1: str, department_id: Optional[int] = None) 
                 "customer":     row["customer_name"] or "",
                 "project":      row["project_name"]  or "",
                 "salesPerson":  row["sales_person"]  or "",
-                "type":         _stage_name(pi, idx),           # census S-F1：顯示名稱（選項清單關著／沒發布 ⇒ 與過去相同）；下面傳票說明用的 pi.get("type") 是已入帳的原字串，不改
+                "type":         _stage_name(pi, idx),           # census S-F1：顯示名稱（選項清單關著／沒發布 ⇒ 與過去相同）；選項清單開啟時，gl_events E03 新草稿傳票的摘要（memo）跟著此顯示名稱走（memo 不進 canonical_hash，不產生更正沖轉）；下面 expense_entries 的 pi.get("type") 仍是原字串，不改
                 "amount":       gross_amt,
                 "receivedAt":   rat,
                 "actualAmount": aa,
