@@ -73,6 +73,7 @@ from modules.case.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_f
 from modules.case.case_stage_tasks import daily_task_notice, delete_daily_task_for_case_stage, sync_daily_task_for_case_stage  # noqa: E402
 from modules.case.quotations import validate_tax_basis
 from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
+from helpers import clause_titles as _CT      # S-Q2：條款標題凍結（伺服器自有欄位 clauseTitles；用戶端送的一律丟掉）
 from helpers.case_roles import ROLE_KEYS, ROLE_LABELS, role_username, role_display
 from helpers.financial_mask import (
     money_visible, material_money_visible, quote_money_visible, mask_row as _mask_money_row, mask_quotation_data, mask_case_record, restore_case_record, strip_history_reasons,
@@ -1575,6 +1576,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
         q["caseRecord"].pop("customFields", None)   # T61 S5：自訂欄位只能經案件記錄存檔路徑的閘門寫入；新建（含複製案件）一律不帶
     validate_quote_tax(q)   # AC1：只能存法定稅別
     validate_tax_basis(q, body.status)   # R2：零稅率／免稅送出要有依據（營業稅法 §7、§8）
+    q.pop("clauseTitles", None)          # S-Q2：條款標題凍結值是伺服器自有欄位（複製新單、直接打 API 帶來的一律丟掉）
     if body.status == "待審核":
         _apply_server_submit_reasons(q, user)
     now = datetime.now().isoformat()
@@ -1623,6 +1625,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     # 收得到 client 直接送非「待審核」的非草稿狀態。
     if body.status != "草稿":
         q[SNAPSHOT_KEY] = snapshot_for((body.location_id or "").strip())
+        _CT.freeze(q)                      # S-Q2：離開草稿那一刻凍結條款標題（待審核已在送審原因前凍結過，這裡涵蓋其他非草稿狀態；同一份範本 ⇒ 結果相同）
 
     def _do_insert(no: str):
         q["quoteNo"] = no
@@ -1802,6 +1805,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # 寫入交易內讀到 existing 後再放回資料庫現值（避免沒帶 _expectedUpdatedAt 時蓋掉併發的伺服器追加）。
     q["quoteNo"] = quote_no
     q.pop("editHistory", None)
+    q.pop("clauseTitles", None)          # S-Q2：用戶端送的凍結值一律不採用；下面在寫入交易內依狀態轉換決定（凍結／沿用資料庫現值／清掉）
     # 款項日期一律存 YYYY-MM-DD（「2026/09/01」等寫法否則會被報表歸月靜默漏掉）
     for _pi in (((q.get("caseRecord") or {}).get("payment") or {}).get("items") or []):
         if isinstance(_pi, dict):
@@ -2025,6 +2029,20 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             q[SNAPSHOT_KEY] = snapshot_for(_eff_location_id)
         elif new_status == "草稿":
             q.pop(SNAPSHOT_KEY, None)
+        # S-Q2：條款標題——離開草稿或解鎖重簽 ⇒ 以當下範本重新凍結；回草稿 ⇒ 清掉；其餘（待審核／簽核中維持原狀）⇒ 沿用資料庫現值，不採用用戶端的
+        if (existing["status"] == "草稿" and new_status != "草稿") or is_unlock_edit:
+            _CT.freeze(q)
+        elif new_status == "草稿":
+            q.pop("clauseTitles", None)
+        else:
+            try:
+                _old_ct = (json.loads(existing["data_json"] or "{}") or {}).get("clauseTitles")
+            except (ValueError, TypeError):
+                _old_ct = None
+            if isinstance(_old_ct, dict):
+                q["clauseTitles"] = _old_ct
+            else:
+                q.pop("clauseTitles", None)
 
         MG.enforce(conn, quote_no, q, actor=user)   # 叫料審核（31-C）：整份存檔也要過閘（以資料庫現值為準；被拒的項目維持原值）
         conn.execute("""
@@ -2150,8 +2168,10 @@ def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str
                 _sd = {}
             if _leaving_draft:
                 _sd[SNAPSHOT_KEY] = snapshot_for(row["location_id"] or "")
+                _CT.freeze(_sd)              # S-Q2：直接改狀態離開草稿也要凍結條款標題
             else:
                 _sd.pop(SNAPSHOT_KEY, None)
+                _sd.pop("clauseTitles", None)
             conn.execute(
                 "UPDATE quotations SET status=?, data_json=?, updated_at=? WHERE quote_no=?",
                 (body.status, json.dumps(_sd, ensure_ascii=False),
@@ -2209,6 +2229,7 @@ def recall_quotation(quote_no: str, authorization: str = Header(None)):
         # 草稿階段仍跟著設定即時走，快照還在的話，收回之後、還沒再送審之前
         # 這段時間會印出舊抬頭（而那與「凍結生效中」長得一樣，沒有人會報修）。
         q.pop(SNAPSHOT_KEY, None)
+        q.pop("clauseTitles", None)          # S-Q2：回草稿 ⇒ 條款標題回到跟著範本走，再送審時重新凍結
         now = datetime.now().isoformat()
         deal_tag, settle_status = quote_hot_fields(q)
         conn.execute(
@@ -5265,6 +5286,7 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
         # 同 recall_quotation() 清掉據點快照——理由一樣：草稿階段要跟著
         # 設定即時走，不是印退回當下凍結的那份舊抬頭。
         d.pop(SNAPSHOT_KEY, None)
+        d.pop("clauseTitles", None)          # S-Q2：退回改版（-R）＝新草稿，不帶原單凍結的條款標題
 
         conn.execute(
             "UPDATE quotations SET quote_no=?, status='草稿', data_json=?, updated_at=? WHERE quote_no=?",
