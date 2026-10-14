@@ -161,6 +161,8 @@ def _lazy_kinds():
         _OL.ensure_kind()
         from helpers import notify_templates as _NT
         _NT.ensure_kind()
+        from helpers import stage_templates as _ST
+        _ST.ensure_kind()
     except Exception:                                                  # noqa: BLE001  登記失敗 ⇒ 該 kind 不存在（fail-closed）
         pass
 

@@ -24,7 +24,7 @@ router = APIRouter()
 
 #: 目前受管線管的 kind（有比較函式、而且編輯器已能處理『待核准』回應的）。layout：排版器（3c，wip/t60-s4-r1）與選單編輯器
 #: 都已改成遇到 `pending: true` 不說「已發布」——**這個 kind 只能在 3c 的 wip/t60-s4-r1 已在同一列車時才可加入名單**。
-ACTIVE_KINDS = ("custom_fields", "layout", "user_buttons", "rule_set", "attachment_slot", "export_template", "option_list", "status_display", "notify_template")      # user_buttons：T61 S6；rule_set：T62 BP-2；attachment_slot：T62 BP-4 S2；export_template：T61 BP-3；option_list：census #4；該 kind 沒登記時這個項目不起作用
+ACTIVE_KINDS = ("custom_fields", "layout", "user_buttons", "rule_set", "attachment_slot", "export_template", "option_list", "status_display", "notify_template", "case_stage_template")      # user_buttons：T61 S6；rule_set：T62 BP-2；attachment_slot：T62 BP-4 S2；export_template：T61 BP-3；option_list：census #4；該 kind 沒登記時這個項目不起作用
 
 _COSMETIC = {"label", "placeholder", "hint", "help", "description"}     # 只影響顯示文字，不影響誰看得到／填什麼
 
@@ -220,6 +220,42 @@ def _cmp_option_list(old, new):
     return ("tighten", tighten) if tighten else ("neutral", [])
 
 
+def _cmp_stage_template(old, new):
+    """案件階段樣板（S-ST1）：以階段種類鍵配對。
+    - 新增階段（沒有比例）＝收緊（新案件結案要多完成一項）；移除階段＝**放寬**（結案關卡變容易，權責比例的分母也變）；
+    - 任何階段的建議比例 `ratioBp` 新增、改值或拿掉＝**放寬**（影響收入認列的月份與比例，金流）；新增帶比例的階段也是放寬；
+    - 只改樣板名稱、階段名稱、`offsetDays`／`durationDays`、順序、`dependsOn`＝中性（純顯示與日期建議）；
+    - 看不懂的結構或多出來的鍵＝放寬。第一次發布（沒有舊版）以『沒有任何階段』為基準：只加階段不帶比例＝收緊。"""
+    from helpers import stage_templates as ST
+    old, new = old or {}, new or {}
+    loosen, tighten = [], []
+    for k in set(old) | set(new):
+        if k not in ("version", "label", "stages"):
+            loosen.append("未知設定 %s 變了（視為放寬）" % k)
+    if (old and not isinstance(old.get("stages"), list)) or not isinstance(new.get("stages"), list):
+        return "loosen", ["無法解析階段清單，視為放寬"] + loosen
+    om, nm = ST.stage_map(old), ST.stage_map(new)
+    if len(om) != len(old.get("stages") or []) or len(nm) != len(new["stages"]):
+        loosen.append("階段清單有看不懂的項目，視為放寬")
+    for k, st in nm.items():
+        extra = set(st) - {"key", "label", "offsetDays", "durationDays", "ratioBp", "dependsOn"}
+        if extra:
+            loosen.append("階段 %s 有看不懂的設定（%s），視為放寬" % (k, "、".join(sorted(extra))))
+        if k not in om:
+            if st.get("ratioBp") is not None:
+                loosen.append("新增階段「%s」並預設收入認列比例（影響認列，需核准）" % (st.get("label") or k))
+            else:
+                tighten.append("新增階段「%s」（新案件結案要多完成一項）" % (st.get("label") or k))
+        elif om[k].get("ratioBp") != st.get("ratioBp"):
+            loosen.append("階段「%s」的建議收入認列比例改變（影響認列，需核准）" % (st.get("label") or k))
+    for k, st in om.items():
+        if k not in nm:
+            loosen.append("移除階段「%s」（新案件結案關卡變容易、認列比例的分母改變）" % (st.get("label") or k))
+    if loosen:
+        return "loosen", loosen + tighten
+    return ("tighten", tighten) if tighten else ("neutral", [])
+
+
 # ── rule_set（BP-2 R3）：方向由『命中集合變大還是變小』決定，而不是寫死「調高＝放寬」──────────────────────────
 #: 標示的醒目程度（降低＝放寬）
 _LEVEL_RANK = {"info": 1, "yellow": 2, "red": 3}
@@ -354,7 +390,7 @@ def _cmp_status_display(old, new):
     return _SD.compare(old, new)
 
 
-COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout, "user_buttons": _cmp_user_buttons, "rule_set": _cmp_rule_set, "attachment_slot": _cmp_attachment_slot, "export_template": _cmp_export_template, "option_list": _cmp_option_list, "status_display": _cmp_status_display, "notify_template": _cmp_notify_template}
+COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout, "user_buttons": _cmp_user_buttons, "rule_set": _cmp_rule_set, "attachment_slot": _cmp_attachment_slot, "export_template": _cmp_export_template, "option_list": _cmp_option_list, "status_display": _cmp_status_display, "notify_template": _cmp_notify_template, "case_stage_template": _cmp_stage_template}
 
 
 def classify(kind, old_body, new_body):
