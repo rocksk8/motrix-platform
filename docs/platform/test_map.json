@@ -16279,6 +16279,14 @@
    "units": [
     "file:backend/tests/_requires.py",
     "file:backend/tests/e2e_on_state/_common.py",
+    "js:js/def-governance.js",
+    "js:js/status-display-editor.js",
+    "js:static/custom-fields.js",
+    "js:static/custom-layout.js",
+    "js:static/layout-editor.js",
+    "js:static/layout-runtime.js",
+    "js:static/public-flags.js",
+    "js:static/status-chip.js",
     "page:pages/quotation-form.html",
     "page:pages/quotations.html",
     "router:custom_fields_builtin",
@@ -16294,8 +16302,16 @@
      "backend/routers/definitions.py"
     ],
     "page": [
+     "frontend/js/def-governance.js",
+     "frontend/js/status-display-editor.js",
      "frontend/pages/quotation-form.html",
-     "frontend/pages/quotations.html"
+     "frontend/pages/quotations.html",
+     "frontend/static/custom-fields.js",
+     "frontend/static/custom-layout.js",
+     "frontend/static/layout-editor.js",
+     "frontend/static/layout-runtime.js",
+     "frontend/static/public-flags.js",
+     "frontend/static/status-chip.js"
     ],
     "path": [
      "frontend/pages/quotations.html"
