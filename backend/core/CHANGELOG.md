@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1＋wip/t60（T60 選單 hub 群組／T61 S5 內建畫面自訂欄位／S6 自訂按鈕；旗標預設關）
+## 1.136 — wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1＋wip/t60（T60 選單 hub 群組／T61 S5 內建畫面自訂欄位／S6 自訂按鈕；旗標預設關）
 
 - L0（新增，只增；T60）：`core.menu.hub_group_keys()`。含系統中心入口的群組（例如 system）不能當選單「移到群組」的目的地——導覽列會把整個群組收成一個連結，搬進去的項目看不到；`resolve_move_target` 與驗證同步拒絕。旗標關閉時行為不變。
 - L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.user_buttons`——`ACTION_TYPES`（navigate／export）、`BUTTON_EXPORTS`（可被按鈕執行的匯出的明確允許清單）、`SLOTS`（插槽表，先導放這裡）、`MAX_PER_SLOT`／`MAX_SLOTS_PER_PAGE`／`MAX_TOTAL`、`enabled()`、`catalog()`、`definition_problems(key, body)`、`visible_buttons(conn, user, module, page)`（逐顆用檢視者的權限過濾）、`preview(conn, caller, definition, module, page, username=None)`（唯讀）。載入時以 `register_kind` 登記新定義種類 `user_buttons`（key＝`module:<模組>`，scope＝company；沒有改 `core/definitions.py`）。

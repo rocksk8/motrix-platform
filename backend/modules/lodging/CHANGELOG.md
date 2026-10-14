@@ -1,6 +1,6 @@
 # 附近旅宿 更新紀錄
 
-## (next) — 2026-10-14（wip/t61-xl-safe-r1；匯出公式注入中和；CSV 匯出）
+## 1.2.7 — 2026-10-14（wip/t61-xl-safe-r1；匯出公式注入中和；CSV 匯出）
 - CSV 匯出的公式中和改用共用的 `helpers.xlsx_out.csv_safe`（原模組內 `_csv_cell` 移除，字元集相同：`=` `+` `-` `@` Tab CR；輸出逐格相同）。無 migration、無新路由、無權限變更。
 
 ## 1.2.6 — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）
