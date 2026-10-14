@@ -1873,7 +1873,7 @@
                             <td class="r" x-text="(it.pct||0).toFixed(1) + '%'"></td>
                             <td class="c" x-text="it.quoteDate"></td>
                             <td class="r"
-                                :style="it.daysElapsed > 90 ? 'color:#DC2626;font-weight:700' : it.daysElapsed > 60 ? 'color:#D97706' : ''"
+                                :style="it.daysElapsed > (arAging.cuts || [30, 60, 90])[2] ? 'color:#DC2626;font-weight:700' : it.daysElapsed > (arAging.cuts || [30, 60, 90])[1] ? 'color:#D97706' : ''"
                                 x-text="it.daysElapsed + ' 天'"></td>
                           </tr>
                         </template>
