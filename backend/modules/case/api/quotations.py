@@ -3790,7 +3790,8 @@ def _sync_json_stages_to_table(conn, quote_no: str, stages_from_json: list) -> N
             final_id = old_id
         else:
             _sk = st.get("stageKey")
-            _sk = _sk if (isinstance(_sk, str) and re.match(r"^[a-z][a-z0-9_]{0,29}$", _sk)) else None   # 階段樣板種類鍵；不合法 ⇒ NULL
+            from helpers.stage_templates import _KEY_RE as _STAGE_KEY_RE
+            _sk = _sk if (isinstance(_sk, str) and _STAGE_KEY_RE.fullmatch(_sk)) else None   # 階段樣板種類鍵；不合法 ⇒ NULL
             cur = conn.execute("""
                 INSERT INTO case_stages
                     (quote_no, label, sort_order, done, done_at, start_date, due_date,

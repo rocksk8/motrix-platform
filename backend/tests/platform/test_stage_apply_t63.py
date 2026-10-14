@@ -222,11 +222,11 @@ def test_whole_record_insert_branch_only_takes_valid_keys(client, make_user, on)
     try:
         q._sync_json_stages_to_table(conn, "MQ-ST2-H", [
             {"id": 9001, "label": "a", "stageKey": "survey"}, {"id": 9002, "label": "b", "stageKey": "Bad Key!"},
-            {"id": 9003, "label": "c"}, {"id": 9004, "label": "d", "stageKey": 7}])
+            {"id": 9003, "label": "c"}, {"id": 9004, "label": "d", "stageKey": 7}, {"id": 9005, "label": "e", "stageKey": "survey" + chr(10)}])
         conn.commit()
     finally:
         conn.close()
-    assert [r["stage_key"] for r in _q("SELECT stage_key FROM case_stages WHERE quote_no=? ORDER BY sort_order", "MQ-ST2-H")] == ["survey", None, None, None]
+    assert [r["stage_key"] for r in _q("SELECT stage_key FROM case_stages WHERE quote_no=? ORDER BY sort_order", "MQ-ST2-H")] == ["survey", None, None, None, None]
 
 
 # ── ⑤ 資源回收桶 ─────────────────────────────────────────────────────────
