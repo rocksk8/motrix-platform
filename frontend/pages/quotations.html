@@ -647,7 +647,26 @@
         await this.loadQuotes()
       },
 
+      // S-X2：狀態顯示名稱與顏色（旗標 builder_status_display 關或沒改過 ⇒ 與下面的 _dealDisplayBase 逐字相同）。邏輯一律用 q.status／q.deal_tag 原值。
       dealDisplayStatus(q) {
+        const r = this._dealDisplayBase(q), S = window.MotrixStatus
+        if (!S) return r
+        const s = q.status || '', tag = q.deal_tag || ''
+        let key = s
+        if (s === '已送出' || s === '已確認') key = (tag === '未成案' || tag === '已結案' || tag === '已成案' || tag === '已提供') ? tag : '已送出'
+        if (!key) return r
+        return { text: S.label(key, 'quote_list', r.text), cls: S.badgeClass(key, r.cls) }
+      },
+      async initStatusDisplay() {
+        try {
+          if (!window.MotrixPublicFlags || !window.MotrixStatus) return
+          const g = await window.MotrixPublicFlags.read(['builder_status_display'])
+          if (((g || {}).builder_status_display || {}).enabled !== 1) return
+          await window.MotrixStatus.load()
+          if (window.MotrixStatusEditor) window.MotrixStatusEditor.mountEntry()
+        } catch (e) { /* 維持預設顯示 */ }
+      },
+      _dealDisplayBase(q) {
         const s   = q.status   || ''
         const tag = q.deal_tag || ''
         if (s === '草稿')   return { text: '草稿',  cls: 'badge--draft' }
@@ -853,6 +872,7 @@
         if (!s) { window.location.href = 'login.html'; return }
         try { this.session = JSON.parse(s) } catch { window.location.href = 'login.html'; return }
         this.initLayout()
+        this.initStatusDisplay()           // S-X2：旗標 builder_status_display 關 ⇒ 什麼都不改（只多一次公開設定讀取）
 
         // Check ?view= param (one-shot: read then clear so it doesn't stick on back-navigation)
         const param = new URLSearchParams(window.location.search).get('view')
@@ -893,6 +913,9 @@
   }
   </script>
   <script src="../static/notif.js"></script>
+  <script src="../static/public-flags.js"></script>
+  <script src="../static/status-chip.js"></script>
+  <script src="../js/status-display-editor.js"></script>
   <script src="../static/sidebar.js"></script>
   <script src="../static/public-flags.js"></script>
   <script src="../static/custom-layout.js"></script>

@@ -21,6 +21,15 @@ function app() {
 
 window.CM_PARTS.push(() => ({
 
+    // S-X2：狀態顯示名稱（旗標關或沒改過 ⇒ 原值照印）。只用於『顯示』；邏輯一律用原始值。
+    stLabel(raw, ctx, fallback) {
+      return window.MotrixStatus ? window.MotrixStatus.label(raw, ctx, fallback) : (fallback != null ? fallback : (raw == null ? '' : raw))
+    },
+    initStatusDisplay(flag) {
+      if (!flag || flag.enabled !== 1 || !window.MotrixStatus) return
+      window.MotrixStatus.load().then(() => { if (window.MotrixStatusEditor) window.MotrixStatusEditor.mountEntry() }).catch(() => {})
+    },
+
     // 點一列回到既有的五頁籤詳情頁——矩陣是它的上層索引，不是取代它
     //: 據點 id -> 名字。**只有一個據點（或讀不到）時回空字串**，
     //  那一行就不顯示 —— 一個永遠一樣的標籤不是資訊，它只是佔位置。

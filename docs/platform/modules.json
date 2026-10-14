@@ -51,6 +51,7 @@
    "helper:financial_mask",
    "helper:finance_params",
    "helper:geo",
+   "helper:status_display",
    "helper:legal_params",
    "helper:profit_rules",
    "helper:recognition_basis",

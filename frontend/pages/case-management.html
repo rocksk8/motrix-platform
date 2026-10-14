@@ -10,6 +10,8 @@
   <script src="../static/ui.js"></script>
   <script src="../static/legal-round.js"></script>
   <script src="../static/profit-rules.js"></script>
+  <script src="../static/status-chip.js"></script>
+  <script src="../js/status-display-editor.js"></script>
   <script src="../js/case-management-core.js"></script>
   <script src="../js/case-management-list.js"></script>
   <script src="../js/case-management-close.js"></script>
@@ -339,7 +341,7 @@
                 <span class="cm-card__no" :style="lo('quoteNo')" x-text="c.quote_no"></span>
                 <span class="cm-card__tag" :style="lo('dealTag')"
                       :class="c.deal_tag==='已結案' ? 'cm-card__tag--closed' : (c.deal_tag==='已成案' && c.current_stage ? 'cm-card__tag--stage' : 'cm-card__tag--active')"
-                      x-text="c.deal_tag==='已成案' && c.current_stage ? '待 ' + c.current_stage : c.deal_tag"></span>
+                      x-text="c.deal_tag==='已成案' && c.current_stage ? '待 ' + c.current_stage : stLabel(c.deal_tag, 'case')"></span>
               </div>
               <template x-if="isUnread(c)">
                 <span class="cm-card__unread-tag">有新動態</span>
@@ -394,7 +396,7 @@
                     <span class="cm-card__no" x-text="c.quote_no"></span>
                     <span class="cm-card__tag"
                           :class="c.deal_tag==='已結案' ? 'cm-card__tag--closed' : (c.deal_tag==='已成案' && c.current_stage ? 'cm-card__tag--stage' : 'cm-card__tag--active')"
-                          x-text="c.deal_tag==='已成案' && c.current_stage ? '待 ' + c.current_stage : c.deal_tag"></span>
+                          x-text="c.deal_tag==='已成案' && c.current_stage ? '待 ' + c.current_stage : stLabel(c.deal_tag, 'case')"></span>
                   </div>
                   <template x-if="isUnread(c)">
                     <span class="cm-card__unread-tag">有新動態</span>
@@ -448,7 +450,7 @@
                 <template x-if="cr.dealTag === '已成案'">
                   <span class="deal-tag-badge"
                         :class="(cr.caseRecord?.stages||[]).find(s => !s.done) ? 'deal-tag-badge--stage' : 'deal-tag-badge--active'"
-                        x-text="(cr.caseRecord?.stages||[]).find(s => !s.done) ? '待 ' + (cr.caseRecord?.stages||[]).find(s => !s.done)?.label : '已成案'">
+                        x-text="(cr.caseRecord?.stages||[]).find(s => !s.done) ? '待 ' + (cr.caseRecord?.stages||[]).find(s => !s.done)?.label : stLabel('已成案', 'case')">
                   </span>
                 </template>
                 <template x-if="cr.dealTag === '已結案'">
@@ -2701,7 +2703,7 @@
                   <template x-if="caseSettleStatus()">
                     <span style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif"
                           :style="caseSettleStatus()==='finalized' ? 'background:var(--tone-success-bg-strong);color:var(--tone-success-fg)' : 'background:var(--tone-warning-bg-strong);color:var(--tone-warning-fg)'"
-                          x-text="caseSettleStatus()==='finalized' ? '已定稿' : '草稿'"></span>
+                          x-text="caseSettleStatus()==='finalized' ? stLabel('finalized', 'case', '已定稿') : stLabel('draft', 'case', '草稿')"></span>
                   </template>
                   <template x-if="cr.dealTag==='已結案'">
                     <button @click="downloadClosingReportPdf()" :disabled="closingReportDownloading"
@@ -4856,8 +4858,8 @@ window.CM_PARTS.push(() => ({
     try {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
-      // 同一次設定請求取得旗標（一個請求）；某個群組讀不到時逐組重試，不拖垮其他旗標（public-flags.js）。名單順序：layout、custom_fields、rules
-      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots'], { token: s.token })
+      // 同一次設定請求取得旗標（一個請求）；某個群組讀不到時逐組重試，不拖垮其他旗標（public-flags.js）。名單順序：layout、custom_fields、rules、slots、status_display
+      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots', 'builder_status_display'], { token: s.token })
       // T61 S5：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）
       if (g.builder_custom_fields && g.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
       // BP-2：旗標 builder_rules.enabled＝1 才啟動標示規則（關＝不送任何規則請求；兩支 js 載入後是惰性的）
@@ -4865,6 +4867,7 @@ window.CM_PARTS.push(() => ({
         if (window.MotrixRuleMarks) window.MotrixRuleMarks.start()
         if (window.MotrixRulesBuilder) window.MotrixRulesBuilder.mountEntry()
       }
+      this.initStatusDisplay(g.builder_status_display)         // S-X2：旗標關 ⇒ 什麼都不做（沒有額外請求）
       // BP-4 S3：附件種類編輯器的旗標從同一次設定請求取得（關閉時不多打任何請求）；只有最高管理者看得到入口
       if (g.builder_slots && Number(g.builder_slots.enabled) === 1 && window.MotrixAttachmentSlots
           && window.MotrixAttachmentSlots.mount({ docType: 'completion_note', label: '完工單' })) this.asOn = true

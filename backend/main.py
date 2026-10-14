@@ -86,6 +86,7 @@ from routers import rules as rules_router
 from routers import modules
 from routers import legal_params
 from routers import settings_center
+from routers import status_display as _status_display_router
 from routers import mail_settings
 # 職責角色化 R1（僅最高管理者）
 from routers import duty_roles
@@ -935,6 +936,7 @@ app.include_router(customers.router)
 app.include_router(parts.router)
 app.include_router(company_lookup.router)
 app.include_router(system.router)
+app.include_router(_status_display_router.router)
 app.include_router(module_versions.router)
 app.include_router(search.router)
 app.include_router(org_structure.router)
