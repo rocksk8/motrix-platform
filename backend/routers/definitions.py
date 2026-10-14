@@ -66,7 +66,7 @@ def _validate_layout(body, key):
     out = [{"path": k, "message": "不認得的鍵（版面只有 ops）"} for k in body if k != "ops"]
     if "ops" not in body:
         return out + [{"path": "ops", "message": "缺 ops（排版操作清單）"}]
-    if not registry.is_loaded(mod):
+    if not catalog.owner_loaded(mod):
         return out + [{"path": "", "message": "模組 %s 未載入（停用、未授權或不存在）⇒ 沒有可排版的點" % mod}]
     probs = out + [{"path": "ops" + p["path"], "message": p["message"]} for p in catalog.check_layout(mod, body["ops"])]
     from helpers import menu_builder as MB                  # BP-1：關著時不接受側欄改名／換群組
@@ -77,9 +77,9 @@ def _validate_layout(body, key):
 
 def _default_layout(key):
     """程式預設＝不做任何操作（模組 module.json 登記的原樣）。模組未載入 ⇒ 沒有預設。"""
-    from core import registry
+    from core import catalog
     mod = _layout_module(key)
-    return {"ops": []} if mod and registry.is_loaded(mod) else None
+    return {"ops": []} if mod and catalog.owner_loaded(mod) else None
 
 
 D.register_validator("layout", _validate_layout)
@@ -551,7 +551,7 @@ def effective_layout(module_key: str, role: str = Query(None), authorization: st
     u = _require_user(authorization)
     if role is not None and u["role"] != "superadmin":
         raise HTTPException(403, "只有超級管理員可以預覽其他角色的版面")
-    if not re.match(r"^[a-z][a-z0-9_]{0,39}$", module_key or "") or not registry.is_loaded(module_key):
+    if not re.match(r"^[a-z][a-z0-9_]{0,39}$", module_key or "") or not catalog.owner_loaded(module_key):
         raise HTTPException(404, "模組未載入")
     who = role if role is not None else u["role"]
     conn = get_db()

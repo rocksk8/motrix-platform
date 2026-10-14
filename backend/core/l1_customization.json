@@ -1,0 +1,125 @@
+{
+  "key": "core",
+  "_note": "L1 共用主檔頁面（不屬於任何模組）的可自訂點登記。格式同 module.json 的 pages／customization；擁有者是虛擬的 `core`（不是模組：不可停用、不可授權）。客戶頁（CORE-SPEC §209：客戶主檔下沉 L1）。核心欄位（D6）：公司名稱、統一編號、狀態。",
+  "pages": [
+    {
+      "path": "customers.html"
+    }
+  ],
+  "customization": {
+    "schema": 1,
+    "fields": {
+      "customer": [
+        {
+          "key": "name",
+          "label": "公司名稱",
+          "core": true
+        },
+        {
+          "key": "alias",
+          "label": "內部簡稱",
+          "core": false
+        },
+        {
+          "key": "taxId",
+          "label": "統一編號",
+          "core": true
+        },
+        {
+          "key": "contact",
+          "label": "主要聯絡人",
+          "core": false
+        },
+        {
+          "key": "phone",
+          "label": "電話",
+          "core": false
+        },
+        {
+          "key": "industry",
+          "label": "產業",
+          "core": false
+        },
+        {
+          "key": "owner",
+          "label": "負責業務",
+          "core": false
+        },
+        {
+          "key": "quoteCount",
+          "label": "累計報價",
+          "core": false
+        },
+        {
+          "key": "lastContact",
+          "label": "最後往來",
+          "core": false
+        },
+        {
+          "key": "status",
+          "label": "狀態",
+          "core": true
+        }
+      ]
+    },
+    "pages": [
+      {
+        "page": "customers.html",
+        "lists": [
+          {
+            "key": "customers",
+            "label": "客戶清單",
+            "entity": "customer",
+            "columns": [
+              {
+                "field": "name",
+                "visible": true
+              },
+              {
+                "field": "alias",
+                "visible": true
+              },
+              {
+                "field": "taxId",
+                "visible": true
+              },
+              {
+                "field": "contact",
+                "visible": true
+              },
+              {
+                "field": "phone",
+                "visible": true
+              },
+              {
+                "field": "industry",
+                "visible": true
+              },
+              {
+                "field": "owner",
+                "visible": true
+              },
+              {
+                "field": "quoteCount",
+                "visible": true
+              },
+              {
+                "field": "lastContact",
+                "visible": true
+              },
+              {
+                "field": "status",
+                "visible": true
+              }
+            ]
+          }
+        ],
+        "forms": [],
+        "actions": [],
+        "menus": [],
+        "exports": []
+      }
+    ],
+    "outputs": []
+  }
+}

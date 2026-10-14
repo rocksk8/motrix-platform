@@ -1,5 +1,12 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — wip/t62-customers-layout-r1（L1 共用主檔頁面的可自訂點；客戶頁接版面引擎，旗標 `builder_layout.customers` 預設關）
+
+- L0（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：`core.catalog.L1_OWNER`（`"core"`，虛擬擁有者：不是模組、不可停用／授權）、`l1_manifest()`（讀 `core/l1_customization.json`，通過 `validate_manifest` 才用，壞了＝沒有 L1 點並記 ERROR）、`owner_loaded(key)`（`key == "core"` 或 `registry.is_loaded(key)`）；`layout_points("core")` 回 L1 登記檔的點（同樣經 `_module_points` 過濾，唯一入口不變）；`layout_points(None)` 仍是「全部已載入模組」，**不含 core**。
+- `routers/definitions.py`（治理擁有的檔，最小改動）三處 `registry.is_loaded(mod)` ⇒ `catalog.owner_loaded(mod)`（版面驗證器、程式預設、`GET /api/layout/{module}`）；對一般模組行為不變，多了 `core` 可用。沒有新路由。
+- 新檔 `core/l1_customization.json`：客戶頁 `customers.html` 的清單欄位（核心欄位 D6：公司名稱、統一編號、狀態；沒有金額欄，「累計報價」是件數）。
+- 測試 `tests/platform/test_l1_layout_owner_2026_10_14.py`（14 題）。
+
 ## (next) — wip/t59-bp1-menus-r1（BP-1 選單建構器；旗標 `builder_menu.enabled` 預設關）
 
 - L0（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：`core.customization.SIDEBAR_LABEL_MAX`／`sidebar_label_problem`（側欄顯示名稱：最長 20 字、不含標記字元）；`core.menu.apply_layout_ex(groups, ops, builder=False)`（`apply_layout` 簽章與行為不變，等同 `builder=False`）。
