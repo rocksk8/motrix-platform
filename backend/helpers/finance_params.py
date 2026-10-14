@@ -2,7 +2,7 @@
 """財務報表的可調參數（財務盤點第一個切片；設計 docs/platform/plans/FINANCE-FRAMEWORK-INVENTORY-T62.md §4）。
 
 [單位] helper:finance_params    [層] L1    [穩定度] 實驗（旗標 finance_reports.custom_aging 關＝所有報表與今天逐位元相同）
-[公開介面] DEFAULT_CUTS, BAND_KEYS, GROUP, aging_cuts, aging_band, aging_labels, CASHIER_GROUP, DEFAULT_BANK_ALIASES, DEFAULT_DUE_SOON, parse_aliases, aliases_text, bank_aliases, CLOSE_GATE_GROUP, CLOSE_GATE_OPTIONS, close_gate_options
+[公開介面] DEFAULT_CUTS, BAND_KEYS, GROUP, aging_cuts, cuts_of, aging_band, aging_labels, CASHIER_GROUP, DEFAULT_BANK_ALIASES, DEFAULT_DUE_SOON, parse_aliases, aliases_text, bank_aliases, CLOSE_GATE_GROUP, CLOSE_GATE_OPTIONS, close_gate_options
 [不變式] ①應收帳齡的區間切點預設 30／60／90 天（今天寫死在 reports.py 的值）；旗標 `finance_reports.custom_aging` 為 1 才採用管理者設定的切點，
     切點不合法（非整數、不遞增、超出 1～3650）一律回預設，不丟例外；
     ②區間的 key（"0-30"／"31-60"／"61-90"／"90+"）是**位置代號**，不是天數：切點改了，key 不變（前端上色與其他消費者依 key），只有標籤與判定改變；
@@ -34,6 +34,20 @@ def aging_cuts(conn=None) -> tuple:
     except Exception:                                                  # noqa: BLE001
         return DEFAULT_CUTS
     return cuts if _valid(cuts) else DEFAULT_CUTS
+
+
+def cuts_of(payload) -> tuple:
+    """帳齡回應 `payload` 對應的切點：回應有合法的 `cuts` 才採用，否則 30／60／90。
+    Excel／PDF 用它來上色，這樣顏色一定和『產生這份資料的切點』一致（不在渲染時重讀設定）。"""
+    try:
+        c = (payload or {}).get("cuts")
+        if c is not None:
+            c = tuple(c)
+            if _valid(c):
+                return c
+    except Exception:                                                  # noqa: BLE001
+        pass
+    return DEFAULT_CUTS
 
 
 def aging_band(days, cuts=DEFAULT_CUTS) -> str:
