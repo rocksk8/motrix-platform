@@ -20481,16 +20481,19 @@
   "backend/tests/platform/test_notify_editor_t62.py": {
    "kind": "audit",
    "units": [
-    "dir:frontend/pages/",
     "dir:frontend/static/",
     "file:backend/helpers/__init__.py",
     "helper:notify_templates",
     "js:static/notify-editor.js",
     "page:pages/approval-settings.html",
+    "plat:__init__",
+    "plat:source_tree",
     "router:notify_templates"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/__init__.py",
      "backend/helpers/notify_templates.py",
      "backend/routers/notify_templates.py"
@@ -20500,8 +20503,6 @@
      "frontend/static/notify-editor.js"
     ],
     "path": [
-     "frontend/pages/",
-     "frontend/pages/approval-settings.html",
      "frontend/static/",
      "frontend/static/notify-editor.js"
     ]
@@ -38372,6 +38373,7 @@
     "router:export_templates",
     "router:item_reads",
     "router:list_prefs",
+    "router:notify_templates",
     "router:option_lists",
     "router:platform_menu_preview",
     "router:rules",
@@ -38403,6 +38405,7 @@
      "backend/routers/export_templates.py",
      "backend/routers/item_reads.py",
      "backend/routers/list_prefs.py",
+     "backend/routers/notify_templates.py",
      "backend/routers/option_lists.py",
      "backend/routers/platform_menu_preview.py",
      "backend/routers/rules.py",
