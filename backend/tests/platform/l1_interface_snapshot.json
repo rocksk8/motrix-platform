@@ -1368,6 +1368,12 @@
    "k01_warn_pct": "def(conn=…)",
    "published_rules": "def(conn, entity)"
   },
+  "helper:safe_text": {
+   "ALLOWED": "const",
+   "RESERVED": "const",
+   "RESERVED_EN": "const",
+   "problem": "def(text, limit, allow_status=…)"
+  },
   "helper:settings": {
    "_get_setting": "def(key, default=…)",
    "_set_setting": "def(key, value)"
@@ -1420,6 +1426,21 @@
   },
   "helper:settings_strict": {
    "strict_value": "def(conn, group, field)"
+  },
+  "helper:stage_templates": {
+   "COMPARE_KEYS": "const",
+   "FIELD": "const",
+   "GROUP": "const",
+   "KIND": "const",
+   "LABEL_MAX": "const",
+   "MAX_DAYS": "const",
+   "MAX_STAGES": "const",
+   "NAME_MAX": "const",
+   "OFF_REASON": "const",
+   "definition_problems": "def(key, body)",
+   "enabled": "def(conn=…)",
+   "ensure_kind": "def()",
+   "stage_map": "def(body)"
   },
   "helper:startup": {
    "DEMO_ACCOUNT_ENABLED": "const",
