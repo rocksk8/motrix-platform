@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-14（wip/t62-bp4-s2-r2＋wip/t62-bp2-r5-r1＋wip/t62-approval-margin-r1；BP-4 附件插槽／BP-2 標示規則／單項毛利率門檻）；t62 整合 r3
+## (next) — 2026-10-14（wip/t62-bp4-s2-r2＋wip/t62-bp2-r5-r1＋wip/t62-approval-margin-r1；BP-4 附件插槽／BP-2 標示規則／單項毛利率門檻）；t62 整合 r4
 - 案件管理頁完工單分頁加「附件種類」入口（BP-4 S3，旗標 `builder_slots.enabled` 預設關、只有最高管理者看得到）：旗標隨既有的設定請求（`groups=builder_layout,builder_slots`）取得，關閉時不多打任何請求、畫面不變；編輯器是新檔 `static/attachment-slots.js`。
 - 完工單附件的讀取提供者宣告 `SLOT_AWARE`（BP-4 S2）：路徑 `completion_notes/<子夾>/<完工單號>/<檔名>` 與一般完工單附件同一條讀取規則（`case_documents_readable`）；兩段路徑照舊。旗標 `builder_slots.enabled` 預設關，沒有任何現有路徑改變。
 - 案件附件目錄的『路徑屬於這張單據』檢查認得完工單 BP-4 插槽路徑 `completion_notes/<子夾>/<完工單號>/<檔名>`（`upload_path_key(depth=3, key_index=1)`）；其他形狀與其他來源類型維持 fail closed。
