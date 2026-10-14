@@ -275,7 +275,9 @@ def _case(no="Q-FIN2"):
 def test_close_gates_endpoint_follows_the_options(client, sa):
     no = _case()
     base = client.get("/api/quotations/%s/close-gates" % no, headers=sa).json()
-    assert base["canClose"] is True and all(g["state"] == "na" for g in base["gates"])
+    # 案件自己的報價單也算『相關單據』（單據關 1/1 ⇒ ok，不是 na）：這裡只要求『沒有任何關被擋』，並指出單據關是 ok
+    assert base["canClose"] is True and not any(g["state"] == "blocked" for g in base["gates"])
+    assert {g["key"]: g["state"] for g in base["gates"]}["documents"] == "ok"
     _set("case_close_gates", {"enabled": 1, "require_settlement": 1})
     j = client.get("/api/quotations/%s/close-gates" % no, headers=sa).json()
     assert j["canClose"] is False and [g["key"] for g in j["gates"] if g["state"] == "blocked"] == ["settlement"]
@@ -285,5 +287,10 @@ def test_close_gates_endpoint_follows_the_options(client, sa):
 
 def test_loosening_the_gate_option_goes_pending(client, sa):
     _set("case_close_gates", {"enabled": 1, "require_settlement": 1})
-    r = client.put("/api/settings-center/groups/case_close_gates", headers=sa, json={"values": {"require_settlement": 0}, "reason": "測試"})
-    assert r.status_code in (200, 202) and ("pending" in r.text or "待" in r.text)
+    # 設定中心儲存是 POST /api/settings-center/groups/{group}（不是 PUT）；放寬（1→0）不立即生效，回傳 pending 清單
+    r = client.post("/api/settings-center/groups/case_close_gates", headers=sa, json={"values": {"require_settlement": 0}, "reason": "測試"})
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["ok"] is True and len(j["pending"]) == 1
+    from helpers import settings_registry as SR
+    assert SR.get("case_close_gates", "require_settlement") == 1                       # 生效值沒變：還在等第二位核准與確認期間
