@@ -10,6 +10,7 @@
   <script src="../static/motrix-date.js"></script>
   <script src="../static/gov-lookup.js"></script>
   <script src="../static/privacy-notice.js"></script>
+  <script src="../static/custom-fields.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/vendor/xlsx-0.18.5.full.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -781,6 +782,35 @@
           <textarea class="form-textarea" rows="3" x-model="form.notes" placeholder="品質要求、最小訂量、特殊配合條件…"></textarea>
         </div>
 
+        <!-- T61 S5：自訂欄位（旗標 builder_custom_fields.enabled 開啟才畫；值存在 data.customFields，只給內部人員看） -->
+        <template x-if="$store.cf && $store.cf.enabled && ($store.cf.list().length || cfIsAdmin() || $store.cf.mode !== 'live')">
+          <div class="form-group" data-testid="cf-section" style="margin-top:14px">
+            <label class="form-label">自訂欄位
+              <span x-show="$store.cf.mode !== 'live'" x-text="$store.cf.previewLabel" style="color:var(--warning);font-weight:400"></span>
+              <button type="button" class="btn btn-ghost btn-sm" data-testid="cf-edit-open" x-show="cfIsAdmin()" @click="MotrixCustomFields.openEditor()" style="margin-left:8px;font-weight:400">編輯自訂欄位</button>
+            </label>
+            <div class="form-hint" x-show="!$store.cf.list().length">還沒有自訂欄位。</div>
+            <div class="form-grid form-grid-2">
+              <template x-for="f in $store.cf.list()" :key="f.key">
+                <div class="form-group" :data-cf-field="f.key" style="margin:0">
+                  <label class="form-label" x-text="f.label"></label>
+                  <template x-if="f.type === 'text'"><input class="form-input" type="text" :maxlength="f.maxLength || 200" :value="cfGet(f.key) || ''" @input="cfSet(f.key, $event.target.value)"></template>
+                  <template x-if="f.type === 'date'"><input class="form-input" type="date" :value="cfGet(f.key) || ''" @input="cfSet(f.key, $event.target.value)"></template>
+                  <template x-if="f.type === 'select'">
+                    <select class="form-select" :value="cfGet(f.key) || ''" @change="cfSet(f.key, $event.target.value)">
+                      <option value="">— 選擇 —</option>
+                      <template x-if="cfGet(f.key) && !(f.options || []).includes(cfGet(f.key))"><option :value="cfGet(f.key)" x-text="cfGet(f.key) + '（已不在選項內）'" selected></option></template>
+                      <template x-for="o in (f.options || [])" :key="o"><option :value="o" x-text="o" :selected="cfGet(f.key) === o"></option></template>
+                    </select>
+                  </template>
+                  <template x-if="f.type === 'checkbox'"><input type="checkbox" style="width:auto" :checked="cfGet(f.key) === true" @change="cfSet(f.key, $event.target.checked)"></template>
+                  <div class="form-hint" x-show="f.help" x-text="f.help"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
         <div class="form-hint" style="color:var(--danger);margin-top:6px" x-show="formError" x-text="formError"></div>
       </div>
       <div class="modal-foot">
@@ -886,6 +916,10 @@
         </table>
       </div>`
 
+  // T61 S5：自訂欄位（供應商）。設定中心「自訂欄位（內建畫面）」預設關閉：關閉時 $store.cf.enabled＝false，區塊不畫、資料不動；
+  // 旗標關閉時不多打任何請求（旗標從既有的設定請求取得，開啟才讀 GET /api/custom-fields/supplier）。
+  MotrixCustomFields.init({ recordType: 'supplier', label: '供應商', deferred: true })
+
   function suppliersPage() {
     return {
       session: {},
@@ -956,9 +990,11 @@
       },
       async initLayout() {
         try {
-          const r = await fetchT(`${API}/settings-center/public?groups=builder_layout`, { headers: { Authorization: 'Bearer ' + this.session.token } }, 8000)
+          const r = await fetchT(`${API}/settings-center/public?groups=builder_layout,builder_custom_fields`, { headers: { Authorization: 'Bearer ' + this.session.token } }, 8000)
           if (!r.ok) return
           const d = await r.json()
+          // T61 S5：自訂欄位旗標從同一次設定請求取得；開啟才去讀欄位定義（關閉時不多打任何請求）
+          if (d && d.groups && d.groups.builder_custom_fields && d.groups.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
           if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.suppliers !== true) return
           const orig = document.querySelector('.page-main .table-scroll')
           const title = document.querySelector('.pg__t')
@@ -1174,6 +1210,17 @@
       },
 
       selectSupplier(s) { this.selectedId = s.id },
+
+      // T61 S5：自訂欄位（供應商）。值存在 form.customFields；整份表單是一次 PUT，所以清空時保留空物件（送 {} ＝清掉有效欄位的值）。
+      cfIsAdmin() { return !!(this.session && this.session.role === 'superadmin') },
+      cfGet(k) { return this.form && this.form.customFields ? this.form.customFields[k] : undefined },
+      cfSet(k, v) {
+        const cur = Object.assign({}, this.form.customFields || {})
+        if (v === '' || v === null || v === undefined || v === false) delete cur[k]
+        else cur[k] = v
+        this.form.customFields = cur
+        this.isDirty = true
+      },
 
       blankForm() {
         return {

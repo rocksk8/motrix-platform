@@ -239,6 +239,16 @@
    "resolve_commit": "def()",
    "startup_line": "def()"
   },
+  "helper:builtin_fields": {
+   "ALLOWED_TYPES": "const",
+   "MAX_FIELDS": "const",
+   "RECORD_TYPES": "const",
+   "definition_problems": "def(key, body)",
+   "enabled": "def(conn=…)",
+   "gate": "def(record_type, new_values, old_values, conn=…)",
+   "public_fields": "def(record_type, conn=…)",
+   "usage_counts": "def(record_type, conn=…)"
+  },
   "helper:business_days": {
    "DATA_PATH": "const",
    "coverage": "def(data=…)",

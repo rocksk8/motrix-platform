@@ -77,6 +77,9 @@ def validate_definition(body: dict, key: str = "", core_fields=(), types=TYPES) 
             ok, _v, _msg = _coerce(f, f["default"])
             if not ok:
                 problems.append({"path": p + ".default", "message": "預設值與型別不符"})
+    # T61 S5：內建單據類型（案件資訊、供應商…）另有更嚴的規則（型別、數量、不認得的鍵、不可改型別）——只對登錄的單據類型鍵生效
+    from helpers import builtin_fields as _bf
+    problems += _bf.definition_problems(key, body)
     return problems
 
 

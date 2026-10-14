@@ -33,6 +33,7 @@
   <script src="../static/layout-runtime.js"></script>
   <script src="../static/layout-editor.js"></script>
   <script src="../js/def-governance.js"></script>
+  <script src="../static/custom-fields.js"></script>
   <script src="../static/list-sort.js"></script>
   <script src="../static/vendor/frappe-gantt-0.6.1.min.js"></script>
   <link rel="stylesheet" href="../static/vendor/frappe-gantt-0.6.1.css">
@@ -764,6 +765,34 @@
                   <span x-show="daysUntilDeadline() > 0" x-text="'剩餘 ' + daysUntilDeadline() + ' 天'"></span>
                   <span x-show="daysUntilDeadline() <= 0" x-text="'已超期 ' + Math.abs(daysUntilDeadline()) + ' 天'" style="color:var(--tone-danger-fg);background:var(--tone-danger-bg)"></span>
                 </div>
+                <!-- T61 S5：自訂欄位（旗標 builder_custom_fields.enabled 開啟才畫；欄位值存在 caseRecord.customFields，只給內部人員看） -->
+                <template x-if="$store.cf && $store.cf.enabled && ($store.cf.list().length || cfIsAdmin() || $store.cf.mode !== 'live')">
+                  <div data-testid="cf-section">
+                    <div class="cm-section-title">自訂欄位
+                      <span class="save-mode" x-show="$store.cf.mode !== 'live'" x-text="$store.cf.previewLabel" style="color:var(--tone-warning-fg)"></span>
+                      <button type="button" class="aq-sort" data-testid="cf-edit-open" x-show="cfIsAdmin()" @click="MotrixCustomFields.openEditor()" style="margin-left:auto;font-weight:400">編輯自訂欄位</button>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px" x-show="!$store.cf.list().length">還沒有自訂欄位。</div>
+                    <div class="cm-fgrid cm-fgrid--contract">
+                      <template x-for="f in $store.cf.list()" :key="f.key">
+                        <div class="fi-group" :data-cf-field="f.key">
+                          <label class="fi-label" x-text="f.label"></label>
+                          <template x-if="f.type === 'text'"><input class="fi" type="text" :maxlength="f.maxLength || 200" :value="cfGet(f.key) || ''" @input="cfSet(f.key, $event.target.value)"></template>
+                          <template x-if="f.type === 'date'"><input class="fi" type="date" :value="cfGet(f.key) || ''" @input="cfSet(f.key, $event.target.value)"></template>
+                          <template x-if="f.type === 'select'">
+                            <select class="fi" :value="cfGet(f.key) || ''" @change="cfSet(f.key, $event.target.value)">
+                              <option value="">— 選擇 —</option>
+                              <template x-if="cfGet(f.key) && !(f.options || []).includes(cfGet(f.key))"><option :value="cfGet(f.key)" x-text="cfGet(f.key) + '（已不在選項內）'" selected></option></template>
+                              <template x-for="o in (f.options || [])" :key="o"><option :value="o" x-text="o" :selected="cfGet(f.key) === o"></option></template>
+                            </select>
+                          </template>
+                          <template x-if="f.type === 'checkbox'"><input type="checkbox" style="width:auto" :checked="cfGet(f.key) === true" @change="cfSet(f.key, $event.target.checked)"></template>
+                          <div style="font-size:11px;color:var(--text-dim);margin-top:2px" x-show="f.help" x-text="f.help"></div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
                 <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：手動輸入的聯絡人也要告知） -->
                 <div data-privacy-card data-privacy-subject="case_site_contact" x-data="MotrixPrivacyNotice.subjectState('contact', s => s.selected && s.selected.quote_no ? '/api/quotations/' + encodeURIComponent(s.selected.quote_no) : null, s => s.cr && s.cr.caseRecord && s.cr.caseRecord.contract && s.cr.caseRecord.contract.contactPerson, { role: 'site' })"
                      x-init="pnLoadNotice(); pnRefresh(); $watch('selected && selected.quote_no', () => pnRefresh())"
@@ -4804,9 +4833,11 @@ window.CM_PARTS.push(() => ({
     try {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
-      const r = await fetch('/api/settings-center/public?groups=builder_layout', { headers: { Authorization: 'Bearer ' + s.token } })
+      const r = await fetch('/api/settings-center/public?groups=builder_layout,builder_custom_fields', { headers: { Authorization: 'Bearer ' + s.token } })
       if (!r.ok) return
       const d = await r.json()
+      // T61 S5：自訂欄位旗標從同一次設定請求取得；開啟才去讀欄位定義（關閉時不多打任何請求）
+      if (d && d.groups && d.groups.builder_custom_fields && d.groups.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
       if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.case_management !== true) return
       if (!document.getElementById('cm-layout-css')) {
         const st = document.createElement('style'); st.id = 'cm-layout-css'
@@ -4829,6 +4860,29 @@ window.CM_PARTS.push(() => ({
 document.addEventListener('alpine:initialized', () => {
   try { window.Alpine.$data(document.body).initLayout() } catch (e) { /* 沒有就略過 */ }
 })
+</script>
+<script>
+// T61 S5：自訂欄位（案件資訊）。設定中心「自訂欄位（內建畫面）」預設關閉：關閉時 $store.cf.enabled＝false，區塊不畫、
+// 資料不動；旗標關閉時不多打任何請求（旗標從既有的設定請求取得，開啟才讀 GET /api/custom-fields/case_info）。值存在 caseRecord.customFields（沒有值就沒有這個鍵）。
+MotrixCustomFields.init({ recordType: 'case_info', label: '案件資訊', deferred: true })
+window.CM_PARTS.push(() => ({
+  cfIsAdmin() { return !!(this.session && this.session.role === 'superadmin') },
+  cfGet(k) {
+    const cf = this.cr && this.cr.caseRecord && this.cr.caseRecord.customFields
+    return cf ? cf[k] : undefined
+  },
+  // 空值＝移除該欄位；整個物件空了＝移除 customFields 這個鍵（和伺服器一樣：沒有值就不寫鍵，存檔基準才不會對不上）
+  cfSet(k, v) {
+    const cr = this.cr && this.cr.caseRecord
+    if (!cr) return
+    const cur = Object.assign({}, cr.customFields || {})
+    if (v === '' || v === null || v === undefined || v === false) delete cur[k]
+    else cur[k] = v
+    if (Object.keys(cur).length) cr.customFields = cur
+    else delete cr.customFields
+    this.setDirty()
+  },
+}))
 </script>
 
   <script src="../static/approval-cascade.js"></script>
