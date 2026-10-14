@@ -363,7 +363,8 @@ def test_pages_read_the_flag_from_the_existing_settings_request(name, flag_page_
     from core import source_tree
     src = source_tree.page_file(name).read_text(encoding="utf-8")
     assert "MotrixCustomFields.init({" in src and "deferred: true" in src.split("MotrixCustomFields.init({")[1].split("})")[0]
-    assert "settings-center/public?groups=" + flag_page_group in src
+    names = ", ".join("'%s'" % g for g in flag_page_group.split(","))
+    assert "MotrixPublicFlags.read([" + names + "]" in src and '../static/public-flags.js' in src       # 網址由 public-flags.js 組（一個請求，失敗才逐組）
     assert "builder_custom_fields.enabled === true" in src and "MotrixCustomFields.start()" in src
     # 頁面本身不直接打 /api/custom-fields（只有程式庫在旗標開啟後才打）
     assert "/api/custom-fields" not in re.sub(r"//[^\n]*", "", src.replace("<!--", "//").replace("-->", ""))
