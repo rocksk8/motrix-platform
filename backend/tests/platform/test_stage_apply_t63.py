@@ -231,7 +231,7 @@ def test_whole_record_insert_branch_only_takes_valid_keys(client, make_user, on)
 
 # ── ⑤ 資源回收桶 ─────────────────────────────────────────────────────────
 @needs_case
-def test_recycle_roundtrip_keeps_stage_key():
+def test_recycle_roundtrip_keeps_stage_key(client):
     import db
     from modules.case import recycle_adapter as RA
     _case("MQ-ST2-R")
