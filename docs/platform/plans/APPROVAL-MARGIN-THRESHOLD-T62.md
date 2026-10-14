@@ -14,7 +14,7 @@
 `compute_approval_reasons` 使用用戶端送來的 `item.margin` 與 `item.cost`；`profit_guard.prepare()` 只重算整單損益（`server_totals`：數量×成本、稅前、管銷…），**不會**重算每個品項的 `margin`。所以直接打 API 的人仍可送一個與單價／成本不一致的 `margin` 來避開這條原因。這是門檻變成設定之前就存在的缺口；修法是在 `_apply_server_submit_reasons` 之前由伺服器依 `unitPrice`／`cost` 重算每項毛利率（會動到簽核判定，另案，需使用者知情）。
 
 ## 決定（暫定）
-D-K1：門檻調低要第二位核准——暫定是（與規則引擎一致）；使用者尚未確認。
+D-K1：門檻調低要第二位核准——使用者 2026-10-14 已確認採用（CORE-SPEC 使用者裁示表）。
 
 ---
 ## 擴充：有效天數上限與折讓門檻（hichan-1f，wip/t62-approval-thresholds-r1）
