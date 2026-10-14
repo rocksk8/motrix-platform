@@ -148,6 +148,8 @@ EXEMPT = {
         "純預覽：回編號範例，不佔用流水號、不存檔",
     ("custom_records.py", "POST", "/api/custom-modules/{key}/output/preview"):
         "純預覽：用樣本資料產生 HTML，不存檔",
+    ("attachment_slots.py", "POST", "/api/attachment-slots/{doc_type}/simulate"):
+        "純模擬（BP-4 S2）：判斷樣本檔收不收、顯示用路徑、誰能讀；不寫檔、不建資料夾、不存任何東西",
 }
 
 _VAGUE = {"", "不需要", "例外", "n/a", "na", "todo", "無", "略", "同上", "暫時"}

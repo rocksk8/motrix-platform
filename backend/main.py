@@ -81,7 +81,7 @@ from routers import company_lookup
 from routers import auth, customers, parts, system, module_versions, search, org_structure, list_prefs, uploads, attachments, approval_delegates, approval_queue, licensing, map_points
 from routers import item_reads
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
-from routers import definitions, custom_records, def_governance, def_pipeline, custom_fields_builtin, user_buttons
+from routers import definitions, custom_records, def_governance, attachment_slots, def_pipeline, custom_fields_builtin, user_buttons
 from routers import rules as rules_router
 from routers import modules
 from routers import legal_params
@@ -941,6 +941,7 @@ app.include_router(uploads.router)
 app.include_router(attachments.router)   # 附件開檔（attachments.catalog 提供者；2026-09-30 P2）
 app.include_router(definitions.router)
 app.include_router(def_governance.router)
+app.include_router(attachment_slots.router)   # 附件插槽（BP-4 S2；旗標 builder_slots.enabled）
 app.include_router(def_pipeline.router)
 app.include_router(custom_fields_builtin.router)   # 內建畫面的自訂欄位（T61 S5）
 app.include_router(user_buttons.router)            # 使用者自訂按鈕（T61 S6）

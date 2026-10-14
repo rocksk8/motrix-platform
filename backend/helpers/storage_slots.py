@@ -16,6 +16,12 @@ from helpers import uploads as _up
 
 #: 硬底線：任何插槽都不可能收這個集合以外的副檔名（= 今天各資料夾放行範圍的聯集；不含 html／svg／js／exe／壓縮檔…）。
 HARD_EXTS = frozenset({".jpg", ".jpeg", ".png", ".pdf", ".heic", ".heif", ".docx", ".xlsx", ".doc", ".xls"})
+#: 檔名中段出現這些副檔名（例：`a.exe.pdf`）一律拒絕（雙副檔名）。只套用在帶政策的上傳（`policy is not None`）。
+DANGEROUS_EXTS = frozenset({".exe", ".bat", ".cmd", ".com", ".scr", ".js", ".vbs", ".ps1", ".py", ".php", ".aspx", ".dll", ".lnk", ".html", ".htm", ".svg",
+                            ".docm", ".xlsm", ".jar", ".msi", ".hta", ".wsf", ".sh", ".reg"})
+#: 管理者宣告的插槽**可以選**的副檔名（v1）＝硬底線去掉舊版 OLE 格式（.doc／.xls，可帶巨集）與 iPhone 原檔（.heic／.heif）。
+#: 內建政策（例：傳票附件仍收 doc／xls、額外支出仍收 heic／heif）不受影響；要讓插槽也能選，得明確標示為放寬（目前決定不開放）。
+SLOT_EXTS = HARD_EXTS - frozenset({".doc", ".xls", ".heic", ".heif"})
 
 
 @dataclass(frozen=True)
@@ -70,12 +76,16 @@ DOC_CODES = {
 
 @dataclass(frozen=True)
 class SlotPolicy:
-    """解析後的不可變政策。`subfolder`／`slot` 只有管理者宣告的插槽才有（S2）；內建政策兩者皆空。"""
+    """解析後的不可變政策。`subfolder`／`slot` 只有管理者宣告的插槽才有（S2）；內建政策兩者皆空。
+
+    ⚠ 帶政策的上傳（`save_document_files(policy=...)`）會**開啟雙副檔名拒絕**（`a.exe.pdf`），`policy=None` 沒有——所以內建「簽回單」改用政策
+    上傳時比今天略嚴；同一性測試（tests/test_storage_slots_parity_2026_10_14.py）只涵蓋 `policy=None` 與內建政策在一般檔名下相同。"""
     code: str
     folder: str
     accept: frozenset
     max_files: int = 0              # 每張單據累計上限；0＝不另限（只受單檔上限）
     max_request_bytes: int = 0      # 一次請求合計；0＝不另限
+    max_file_bytes: int = 0         # 單檔上限（位元組）；0＝只受平台上限（設定中心 uploads.max_file_mb）
     subfolder: str = ""
     slot: str = ""
     builtin: bool = True
@@ -83,10 +93,11 @@ class SlotPolicy:
 
 
 def enabled(conn=None) -> bool:
-    """旗標 `builder_slots.enabled`；讀不到一律當關（與其他建構器旗標同一規則）。"""
+    """旗標 `builder_slots.enabled` **且** `builder_governance.enabled` 都開才算開（沒有治理層＝放寬沒有核准、發布沒有預覽把關，所以不開）；
+    任一個讀不到一律當關（與其他建構器旗標同一規則）。"""
     try:
         from helpers import settings_groups, settings_registry as R      # noqa: F401
-        return int(R.get("builder_slots", "enabled", conn=conn)) == 1
+        return int(R.get("builder_slots", "enabled", conn=conn)) == 1 and int(R.get("builder_governance", "enabled", conn=conn)) == 1
     except Exception:                                               # noqa: BLE001
         return False
 
@@ -110,6 +121,16 @@ def builtin_policy(code: str) -> SlotPolicy:
 
 
 def policy(doc_type: str, slot_key: str = "", conn=None) -> SlotPolicy:
-    """單據類型（＋插槽鍵）⇒ 政策。S1：永遠回內建政策（管理者插槽在 S2）；單據類型不認得 ⇒ KeyError（不猜）。"""
+    """單據類型（＋插槽鍵）⇒ 政策。旗標關閉或內建鍵 ⇒ 內建政策；單據類型不認得 ⇒ KeyError（不猜）。
+    旗標開啟且給了管理者宣告的插槽鍵 ⇒ 已發布定義的政策（找不到 ⇒ LookupError）。**不檢查上傳者權限**——要檢查請用
+    `helpers.attachment_slots.slot_policy(conn, doc_type, slot_key, user)`。"""
     code = DOC_CODES[doc_type]
-    return builtin_policy(code)
+    if slot_key in ("", "signed") or not enabled(conn):
+        if slot_key not in ("", "signed"):
+            raise LookupError("附件種類未開放：%s" % slot_key)
+        return builtin_policy(code)
+    from helpers import attachment_slots as AS
+    s = next((x for x in AS.published_slots(conn, doc_type) if x.get("key") == slot_key), None)
+    if s is None or s.get("disabled"):
+        raise LookupError("沒有這個附件種類：%s" % slot_key)
+    return AS._policy_of(doc_type, s)                                  # noqa: SLF001

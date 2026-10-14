@@ -196,6 +196,8 @@ class _CasePathAccess:
                       "case_updates": "case_update", "case_extra_expense": "extra_expense",
                       LEGACY_EXTRA_FOLDER: "extra_expense_legacy"}
     FOLDERS = tuple(_FOLDER_SOURCE) + ("completion_notes", "_pending_case_changes")
+    #: BP-4：能處理多一層子資料夾的路徑（完工單：`completion_notes/<子夾>/<完工單號>/<檔名>`）。其餘資料夾沒有子夾，維持原規則。
+    SLOT_AWARE = True
 
     @staticmethod
     def readable(conn, folder, rest, user):
@@ -209,6 +211,8 @@ class _CasePathAccess:
                 return False
             return (bool(row["requested_by"]) and row["requested_by"] == user.get("username")) \
                 or case_page_readable(conn, quote_no, user)
+        if folder == "completion_notes" and len(rest) == 3:
+            rest = rest[1:]                               # 管理者宣告的附件種類子資料夾；之後與一般完工單附件同一條讀取規則
         if len(rest) != 2:
             return False
         key = rest[0]
@@ -255,6 +259,8 @@ def _path_bound_to_doc(conn, source_type, doc_no, entry):
     額外支出＝`<案件>_<id>` 全等。"""
     from helpers.uploads import upload_path_key
     key = upload_path_key(entry, _CATALOG_FOLDER[source_type])
+    if key is None and source_type == "completion_note":
+        key = upload_path_key(entry, _CATALOG_FOLDER[source_type], depth=3, key_index=1)      # BP-4：<子夾>/<完工單號>/<檔名>
     if key is None and source_type == "extra_expense":
         legacy = upload_path_key(entry, LEGACY_EXTRA_FOLDER)          # 舊版資料夾：只綁案件
         if legacy is None:

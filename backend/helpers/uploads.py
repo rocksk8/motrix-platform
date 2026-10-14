@@ -208,7 +208,7 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
     if policy is None:
         allowed = _ALLOWED_EXTS | _EXTRA_EXTS_BY_SUBFOLDER.get(subfolder, set())
     else:
-        allowed = set(policy.accept) & _ss.HARD_EXTS          # 硬底線：政策只能縮小
+        allowed = set(policy.accept) & (_ss.HARD_EXTS if policy.builtin else _ss.SLOT_EXTS)      # 硬底線：政策只能縮小；管理者插槽另扣舊 OLE／heic
         if policy.subfolder:
             if '/' in policy.subfolder:                         # 政策子夾只能一層（深度防禦；定義驗證器另有字元規則）
                 raise HTTPException(400, "附件存放位置不正確。")
@@ -224,8 +224,14 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
         ext = os.path.splitext(upload.filename or '')[1].lower()
         if ext not in allowed:
             raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 {allowed_label}）")
+        if policy is not None:                                  # 雙副檔名（`a.exe.pdf`）：只套用在帶政策的上傳，None 路徑不變
+            inner = ['.' + x for x in (upload.filename or '').lower().split('.')[1:-1]]
+            if any(e in _ss.DANGEROUS_EXTS for e in inner):
+                raise HTTPException(400, f"檔名含不允許的雙重副檔名：{upload.filename}")
         raw = await upload.read()
         file_cap = max_file_bytes()
+        if policy is not None and policy.max_file_bytes:
+            file_cap = min(file_cap, policy.max_file_bytes)
         if len(raw) > file_cap:
             raise HTTPException(400, f"檔案過大：{upload.filename}（單檔上限 {file_cap // (1024 * 1024)}MB）")
         if not raw:
@@ -347,16 +353,17 @@ class OpenedFile(NamedTuple):
     size: int
 
 
-def upload_path_key(entry, folder, depth=2):
+def upload_path_key(entry, folder, depth=2, key_index=0):
     """metadata 一筆的 `path` ⇒ 它在 `folder` 底下的「單據鍵」（資料夾之後第一段）；不是 `folder` 底下、段數不是 `depth`
     （單據鍵＋檔名＝2；工作日誌照片 `worklog_<id>/<日期>/<檔名>`＝3）、路徑不合法 ⇒ None。demo 前綴已去掉。
+    `key_index`（選填，預設 0）：單據鍵在資料夾之後第幾段；BP-4 管理者插槽的路徑 `<資料夾>/<子夾>/<單號>/<檔名>` 用 `depth=3, key_index=1`。
     給 `attachments.catalog` 提供者用：**被提供的檔案路徑必須屬於那張單據自己的資料夾**（安全審查 W3：
     metadata 來自 JSON 欄，前端曾可在案件紀錄 PATCH 帶任意 `files`／`invoiceFiles` 路徑，不能只信它）。"""
     rel = canonical_upload_path((entry or {}).get("path")) if isinstance(entry, dict) else None
     owner = upload_owner(rel) if rel else None
     if owner is None or owner[0] != folder or len(owner[1]) != depth:
         return None
-    return owner[1][0]
+    return owner[1][key_index]
 
 
 def pick_file(files, file_id):
