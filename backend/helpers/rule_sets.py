@@ -22,10 +22,11 @@ _log = logging.getLogger(__name__)
 
 
 def enabled(conn=None) -> bool:
-    """旗標 builder_rules.enabled（預設 0）。讀不到 ⇒ 關（＝今天的行為）。"""
+    """規則功能是否有效：`builder_rules.enabled`＝1 **而且** `builder_governance.enabled`＝1（規則的放寬分類、核准、預覽都靠治理層；
+    治理層關著卻讓規則可發布，會讓放寬變更繞過第二位核准）。任一讀不到 ⇒ 關（＝今天的行為）。"""
     try:
         from helpers import settings_registry as SR
-        return int(SR.get(GROUP, FIELD, conn=conn)) == 1
+        return int(SR.get(GROUP, FIELD, conn=conn)) == 1 and int(SR.get("builder_governance", "enabled", conn=conn)) == 1
     except Exception:                                                  # noqa: BLE001
         return False
 

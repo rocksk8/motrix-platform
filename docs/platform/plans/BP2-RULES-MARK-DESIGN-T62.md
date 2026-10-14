@@ -166,3 +166,14 @@ cmp  := {"op": "lt|le|gt|ge|eq|ne","field": <欄位代號>,"value": <數字|字�
 - R4 預覽樣本大小：預設最近 200 筆、上限 1000？ 建議：同左。
 - R5 提示文字是否允許占位符（例如 `{threshold}`）？ 建議：v1 不允許；文字固定。
 - R6 `enforce_rule_set` 上線時是否直接開？ 建議：開（規則頁天生送雜湊）。
+
+## 15. 實作紀錄（R0～R3，wip/t62-bp2-impl-r1；與上文的差異）
+- **規則功能有效 ＝ `builder_rules.enabled=1` 且 `builder_governance.enabled=1`**（`rule_sets.enabled`）：放寬分類、核准、預覽都靠治理層，治理層關著卻讓規則可發布會讓放寬繞過第二位核准。
+- **定義種類懶登記**：匯入不登記 `rule_set`；只有旗標開時的規則路由呼叫 `ensure_registered()`。旗標關 ⇒ `/api/definition-kinds` 不含它、通用路由對它 404（kind 閘門 hidden）。多行程部署時，未被規則路由碰過的行程對 rule_set 回「未知種類」，直到該行程服務過一次規則路由（單行程部署無此問題）。
+- **欄位目錄**：`rule_catalog.rule_fields(entity, user)` 轉接層；S5（helpers/builtin_fields.py）合併前用 `_TEMP_STUB`（只有『案件』），`test_temp_stub_is_removed_once_s5_lands` 在 S5 出現時失敗以強制移除。S5 的自訂欄位以 `cf_<key>` 出現在目錄（已寫好轉接，S5 不在時為空）。
+- **紀錄來源**：本檔不讀業務表（L1 不可新增讀 `quotations`，有守門）。各模組以提供者 `("rules.entity", <主題>)` 登記：`fn(conn, user, ids, limit) -> [{id,label,values}]`，須自己做逐筆讀取權限過濾。**案件的提供者屬 R4（案件模組擁有者；示範頁＝案件列表）**，在那之前 marks／preview 對 `case` 回「尚未接上資料來源」。
+- **快取**：R2 不做跨請求快取（上限內的批次 ＋ 時間預算；快取鍵含檢視者維度的設計保留，待有量測證據再做）。
+- 預覽 API 不寫稽核；預覽雜湊（`definitions.previewed`）仍由通用的 `/api/def-governance/rule_set/{entity}/impact` 產生，規則頁發布時照 T62 流程帶回。
+- `ACTIVE_KINDS` 加入 `rule_set`；與 t61 的 `user_buttons` 會在同一行衝突，合併時兩者都保留。
+- 新增檔案：`helpers/rule_grammar.py`、`rule_engine.py`、`rule_catalog.py`、`rule_sets.py`、`routers/rules.py`；修改：`def_pipeline.py`（比較函式）、`definitions.py`（`_OPT_IN_PREVIEW_KINDS` 加 `rule_set`）、`settings_groups.py`／基準檔（`builder_rules.enabled`、`builder_governance.enforce_rule_set`）、`main.py`、`modules.json`。
+

@@ -53,6 +53,7 @@ def _turn_flag_on():
     from helpers import settings_registry as SR
     c = db.get_db()
     try:
+        SR.publish("builder_governance", {"enabled": 1}, reason="t62", user="t62", conn=c)        # 規則靠治理層：兩個都要開
         SR.publish("builder_rules", {"enabled": 1}, reason="t62", user="t62", conn=c)
         c.commit()
     finally:

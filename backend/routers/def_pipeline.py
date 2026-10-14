@@ -24,7 +24,7 @@ router = APIRouter()
 
 #: 目前受管線管的 kind（有比較函式、而且編輯器已能處理『待核准』回應的）。layout：排版器（3c，wip/t60-s4-r1）與選單編輯器
 #: 都已改成遇到 `pending: true` 不說「已發布」——**這個 kind 只能在 3c 的 wip/t60-s4-r1 已在同一列車時才可加入名單**。
-ACTIVE_KINDS = ("custom_fields", "layout")
+ACTIVE_KINDS = ("custom_fields", "layout", "rule_set")
 
 _COSMETIC = {"label", "placeholder", "hint", "help", "description"}     # 只影響顯示文字，不影響誰看得到／填什麼
 
@@ -81,7 +81,89 @@ def _cmp_layout(old, new):
     return ("tighten", tighten) if tighten else ("neutral", [])
 
 
-COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout}
+# ── rule_set（BP-2 R3）：方向由『命中集合變大還是變小』決定，而不是寫死「調高＝放寬」──────────────────────────
+#: 標示的醒目程度（降低＝放寬）
+_LEVEL_RANK = {"info": 1, "yellow": 2, "red": 3}
+
+
+def _num_dir(op, a, b):
+    """同一欄位、同一類比較，常數由 a 改成 b ⇒ 命中集合 `same`｜`wider`｜`narrower`。lt/le：門檻調高＝更多命中；gt/ge：調低＝更多命中。"""
+    if a == b:
+        return "same"
+    if op in ("lt", "le"):
+        return "wider" if b > a else "narrower"
+    return "wider" if b < a else "narrower"                            # gt／ge
+
+
+def _when_dir(a, b):
+    """條件 a → b ⇒ same｜wider｜narrower｜unknown。只認得『同一欄位的單一比較』的門檻／範圍／集合調整；其餘一律 unknown（＝放寬）。"""
+    if a == b:
+        return "same"
+    if not (isinstance(a, dict) and isinstance(b, dict)) or a.get("field") != b.get("field") or a.get("op") in ("and", "or", "not") or b.get("op") in ("and", "or", "not"):
+        return "unknown"
+    oa, ob = a.get("op"), b.get("op")
+    fam = {"lt": "up", "le": "up", "gt": "down", "ge": "down"}
+    if oa in fam and ob in fam and fam[oa] == fam[ob]:
+        d = _num_dir("lt" if fam[oa] == "up" else "gt", a["value"], b["value"])
+        if d == "same":                                                # 值相同、只換了 lt↔le／gt↔ge：含邊界者命中較多
+            return "wider" if ob in ("le", "ge") else "narrower"
+        return d
+    if oa == ob == "between":
+        if b["min"] <= a["min"] and b["max"] >= a["max"]:
+            return "wider"
+        if b["min"] >= a["min"] and b["max"] <= a["max"]:
+            return "narrower"
+        return "unknown"
+    if oa == ob == "in":
+        sa, sb = set(a["values"]), set(b["values"])
+        return "wider" if sb > sa else "narrower" if sb < sa else "unknown"
+    return "unknown"
+
+
+def _cmp_rule_set(old, new):
+    def keyed(body):
+        out = {}
+        for r in (body or {}).get("rules", []) or []:
+            if not isinstance(r, dict) or r.get("id") in out:
+                raise ValueError("規則集格式不對")
+            out[r["id"]] = r
+        return out
+    o, n = keyed(old), keyed(new)
+    loosen, tighten = [], []
+    for rid, r in n.items():
+        nm = r.get("name") or rid
+        if rid not in o:
+            if r.get("enabled", True):
+                tighten.append("新增規則「%s」" % nm)
+            continue
+        a = o[rid]
+        ea, eb = a.get("enabled", True), r.get("enabled", True)
+        if ea and not eb:
+            loosen.append("停用規則「%s」" % nm)
+        elif eb and not ea:
+            tighten.append("啟用規則「%s」" % nm)
+        if (a.get("mode"), a.get("on_failure")) != (r.get("mode"), r.get("on_failure")):
+            loosen.append("規則「%s」的模式或故障處理變了（無法判斷寬嚴，視為放寬）" % nm)
+        la, lb = _LEVEL_RANK.get((a.get("mark") or {}).get("level"), 0), _LEVEL_RANK.get((r.get("mark") or {}).get("level"), 0)
+        if lb < la:
+            loosen.append("規則「%s」的標示變得不那麼醒目" % nm)
+        elif lb > la:
+            tighten.append("規則「%s」的標示變得更醒目" % nm)
+        if ea and eb:                                                  # 停用中的規則改條件不影響任何畫面
+            d = _when_dir(a.get("when"), r.get("when"))
+            if d == "wider":
+                tighten.append("規則「%s」的條件放大了（會標示更多紀錄）" % nm)
+            elif d in ("narrower", "unknown"):
+                loosen.append("規則「%s」的條件縮小了（會標示較少紀錄）" % nm if d == "narrower" else "規則「%s」的條件結構變了（無法判斷寬嚴，視為放寬）" % nm)
+    for rid, a in o.items():
+        if rid not in n and a.get("enabled", True):
+            loosen.append("移除規則「%s」" % (a.get("name") or rid))
+    if loosen:
+        return "loosen", loosen + tighten
+    return ("tighten", tighten) if tighten else ("neutral", [])
+
+
+COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout, "rule_set": _cmp_rule_set}
 
 
 def classify(kind, old_body, new_body):
