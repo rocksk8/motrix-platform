@@ -14,6 +14,7 @@ from db import get_db
 from helpers import download_name
 from helpers import _require_user, _tok, _audit, notify_module_activity, has_finance_access, require_any_module
 from modules.subcontract import bank_mask as _bm
+from helpers import export_templates as _ET
 
 # 字體路徑（Windows 微軟正黑體，找不到退回預設）
 _FONT_PATH = r"C:\Windows\Fonts\msjhbd.ttc"
@@ -239,36 +240,68 @@ def _mask_id(v):
     return (_MASK + v[-4:]) if len(v) > 4 else (_MASK if v else "")
 
 
+def _roster_rows():
+    """名冊匯出與範本預覽共用的查詢（含停用的人）。"""
+    conn = get_db()
+    try:
+        return conn.execute("SELECT * FROM contractors ORDER BY name").fetchall()
+    finally:
+        conn.close()
+
+
+def _roster_cell(user, col, v):
+    """名冊一格的值（遮蔽在這裡做，匯出與預覽共用——範本只能挑欄位，不能改變某位使用者看到的值）。"""
+    if col == "id_number":
+        v = _mask_id(v)
+    elif col == "bank_account_number":
+        v = _bm.number_for(user, v)          # 只有最高管理者是全碼（使用者裁示 2026-10-01）
+    elif col == "has_union_insurance":
+        v = "是" if v else "否"
+    elif col == "active":
+        v = "往來中" if v else "停用"
+    return v
+
+
+def _roster_preview_rows(conn, viewer, n):
+    """預覽用的『可見真實列』：與匯出同一份查詢與同一組遮蔽；匯出只開放最高管理者，其他人 ⇒ 沒有（預覽退回樣本並說明）。"""
+    if viewer.get("role") != "superadmin":
+        return []
+    return [{col: _roster_cell(viewer, col, r[col]) for _h, col in _XLSX_COLS} for r in _roster_rows()[:n]]
+
+
+_ET.register_export(
+    "subcontract:contractors", label="外包名冊（Excel）", formats=("xlsx",), lock_labels=True,
+    columns=[{"id": col, "label": h} for h, col in _XLSX_COLS],
+    sample_rows=[{"name": "王小明", "id_number": "******1234", "nationality": "本國籍", "has_union_insurance": "是", "phone": "0912-000-000",
+                  "email": "sample@example.com", "address": "台北市", "line_id": "sample", "bank_code": "812", "bank_name": "台新", "bank_branch": "",
+                  "bank_account_name": "王小明", "bank_account_number": "****5678", "notes": "", "active": "往來中"}],
+    rows_provider=_roster_preview_rows)
+
+
 @router.get("/api/contractors/export")
 @export_logged("xlsx", "subcontract", "contractors")
 def export_contractors(authorization: str = Header(None)):
     """匯出外包名冊（含停用的人）。證件號碼遮成末 4 碼；分行與帳號照實（出納匯款要用）。寫稽核。"""
     import openpyxl
     user = _require_user(authorization, require_superadmin=True, module='contractor_list')
-    conn = get_db()
-    try:
-        rows = conn.execute("SELECT * FROM contractors ORDER BY name").fetchall()
-    finally:
-        conn.close()
+    rows = _roster_rows()
+    tpl = _ET.resolve("subcontract:contractors")          # BP-3：旗標關／沒有已發布範本 ⇒ None ⇒ 完全走原本的欄位與標題（逐格相同）
+    cols = _XLSX_COLS
+    if tpl is not None:                                   # 範本只能挑欄位、換順序（標題鎖定＝匯入靠表頭對應）；值仍是同一組遮蔽
+        cols = [(c["label"], c["id"]) for c in _ET.effective_columns("subcontract:contractors", tpl, user)[0]]
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "外包名冊"
-    ws.append([h for h, _ in _XLSX_COLS])
+    ws.append([h for h, _ in cols])
     for r in rows:
         out = []
-        for _h, col in _XLSX_COLS:
-            v = r[col]
-            if col == "id_number":
-                v = _mask_id(v)
-            elif col == "bank_account_number":
-                v = _bm.number_for(user, v)          # 只有最高管理者是全碼（使用者裁示 2026-10-01）
-            elif col == "has_union_insurance":
-                v = "是" if v else "否"
-            elif col == "active":
-                v = "往來中" if v else "停用"
+        for _h, col in cols:
+            v = _roster_cell(user, col, r[col])
             # ⚠ 空字串寫進 openpyxl 會產生不合法的 inlineStr（Excel 開檔報修復）⇒ 空值寫 None
             out.append(xl_safe_xlsx(v) if v not in ("", None) else None)     # 姓名、備註等自由文字不能變成公式
         ws.append(out)
+    if tpl is not None:
+        _ET.apply_print_text(ws, tpl)                     # 頁首／頁尾＝列印頁首頁尾（不佔儲存格）
     buf = io.BytesIO()
     wb.save(buf)
     _audit(_tok(authorization), 'contractors.export', 'contractor', '', f"匯出外包名冊（{len(rows)} 人）")

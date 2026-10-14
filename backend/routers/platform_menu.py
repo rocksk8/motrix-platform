@@ -165,10 +165,16 @@ def platform_menu(authorization: str = Header(None)):
             "layout": layout,
             # 完整的頁面⇒模組（含已安裝未載入；登入後才給，C4-O3）：前端藏頁內連結、直接打網址的後備提示用
             "pageModules": _page_modules(PAGE_MAP)}
+    from helpers import export_templates as _ET0
+    if _ET0.enabled():
+        resp["exportAudit"] = True                        # BP-3：給所有人（不只最高管理者）——瀏覽器端產檔的匯出據此才送一筆稽核紀錄；關著 ⇒ 沒有這個鍵、頁面不多任何請求
     if sa:
         from helpers import menu_builder as MB
         if MB.enabled():
             resp["builderMenu"] = True                    # BP-1：只有開啟時才多這個鍵（關著 ⇒ 回應與今天逐字相同）；前端據此載入 menu-editor.js
+        from helpers import export_templates as ET
+        if ET.enabled():
+            resp["builderExports"] = True                 # BP-3：同上——只有開啟＋最高管理者才多這個鍵；前端據此（且頁面有 motrix-export-id）載入 export-editor.js，關著不多任何請求
     return resp
 
 

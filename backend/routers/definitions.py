@@ -152,8 +152,18 @@ def _managed_message(kind):
 _PLANNED_MSG = "這項功能還在開發中，尚未開放調整。"
 
 
+def _lazy_kinds():
+    """惰性登記的 kind（旗標開啟才存在；關著 ⇒ `/api/definition-kinds` 與今天相同）。"""
+    try:
+        from helpers import export_templates as _ET
+        _ET.ensure_kind()
+    except Exception:                                                  # noqa: BLE001  登記失敗 ⇒ 該 kind 不存在（fail-closed）
+        pass
+
+
 def _group_gate(kind, key):
     """設定群組的任何『指名某個群組』的通用路由（讀取、驗證）：hidden ⇒ 404（連 superadmin 也不顯示）、planned ⇒ 409（只有名稱與狀態可見，細節不給）。"""
+    _lazy_kinds()
     st = _group_status(kind, key)
     if st == "hidden":
         raise HTTPException(404, "沒有這個定義")
@@ -163,6 +173,7 @@ def _group_gate(kind, key):
 
 def _managed_guard(kind, authorization=None, key="", verb=""):
     """受管 kind 的通用寫入一律 409（hidden 群組 ⇒ 404，不洩漏存在）；並留稽核 `definitions.managed_refused`（只記 kind／key／動作，不記內容）——繞過設定中心的嘗試要看得到。"""
+    _lazy_kinds()
     msg = _managed_message(kind)
     if msg:
         try:
@@ -201,6 +212,7 @@ def _err(e: D.DefinitionError, status=400):
 def list_definition_kinds(authorization: str = Header(None)):
     """定義種類清單（內建＋模組登記的）——編輯畫面用；只有超級管理員。"""
     _require_user(authorization, require_superadmin=True)
+    _lazy_kinds()
     return {"kinds": D.kinds_meta()}
 
 
@@ -358,7 +370,7 @@ def validate_definition(kind: str, key: str, payload: dict = Body(...), authoriz
 # ── T60 S1：伺服端強制「發布要先看過同一份草稿的預覽」（D4：沒有後門）；旗標 builder_governance.enabled（與 def_governance.enabled 同一個設定） ──
 #: 已經會在發布時帶 `preview_hash` 的編輯器所對應的 kind（旗標開啟時才強制）。
 #: 排版器（layout）與選單建構器（發布走 layout）尚未送雜湊 ⇒ 還不在名單；它們接上之後再加進來（見 T60 計畫 S1）。
-_PREVIEW_ENFORCED_KINDS = ("expense_type", "remit_kinds", "custom_module")
+_PREVIEW_ENFORCED_KINDS = ("expense_type", "remit_kinds", "custom_module", "export_template")
 
 
 def _preview_gate(conn, kind, key, scope, user, preview_hash, expect=None):

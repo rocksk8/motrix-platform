@@ -24,7 +24,7 @@ router = APIRouter()
 
 #: 目前受管線管的 kind（有比較函式、而且編輯器已能處理『待核准』回應的）。layout：排版器（3c，wip/t60-s4-r1）與選單編輯器
 #: 都已改成遇到 `pending: true` 不說「已發布」——**這個 kind 只能在 3c 的 wip/t60-s4-r1 已在同一列車時才可加入名單**。
-ACTIVE_KINDS = ("custom_fields", "layout", "user_buttons", "rule_set", "attachment_slot")      # user_buttons：T61 S6；rule_set：T62 BP-2；attachment_slot：T62 BP-4 S2；該 kind 沒登記時這個項目不起作用
+ACTIVE_KINDS = ("custom_fields", "layout", "user_buttons", "rule_set", "attachment_slot", "export_template")      # user_buttons：T61 S6；rule_set：T62 BP-2；attachment_slot：T62 BP-4 S2；export_template：T61 BP-3；該 kind 沒登記時這個項目不起作用
 
 _COSMETIC = {"label", "placeholder", "hint", "help", "description"}     # 只影響顯示文字，不影響誰看得到／填什麼
 
@@ -130,6 +130,42 @@ def _cmp_user_buttons(old, new):
     return ("tighten", tighten) if tighten else ("neutral", [])
 
 
+def _cmp_export_template(old, new):
+    """匯出範本：新增欄位 ＝ 匯出檔多給資料 ⇒ 放寬（金額／有權限條件的欄位明寫）；移除欄位、拿掉頁首頁尾浮水印 ⇒ 收緊；
+    新增或改變頁首／頁尾／浮水印文字 ⇒ 放寬（輸出檔上的可見文字，一律需核准）；只改欄位標題、順序 ⇒ 中性（純顯示）；格式或其他無法判斷的變動 ⇒ 放寬。"""
+    from helpers import export_templates as ET
+    old, new = old or {}, new or {}
+    oc = [c.get("id") for c in old.get("columns", []) if isinstance(c, dict)]
+    nc = [c.get("id") for c in new.get("columns", []) if isinstance(c, dict)]
+    loosen, tighten = [], []
+    gated = set()
+    for meta in ET.registered().values():
+        gated |= {c["id"] for c in meta["columns"] if c["money"]}
+    for k in nc:
+        if k not in oc:
+            loosen.append("新增匯出欄位 %s%s" % (k, "（金額／有權限條件的欄位）" if k in gated else ""))
+    for k in oc:
+        if k not in nc:
+            tighten.append("移除匯出欄位 %s" % k)
+    if old.get("format") != new.get("format"):
+        loosen.append("匯出格式變了（無法判斷寬嚴，視為放寬）")
+    for k in set(old) | set(new):
+        if k in ("columns", "format", "version", "header", "footer", "watermark"):
+            continue
+        loosen.append("未知設定 %s 變了（視為放寬）" % k)
+    for part in ("header", "footer", "watermark"):
+        name = {"header": "頁首", "footer": "頁尾", "watermark": "浮水印"}[part]
+        if part in old and part not in new:
+            tighten.append("拿掉%s" % name)
+        elif part in new and part not in old:
+            loosen.append("新增%s文字（輸出檔多了可見文字）" % name)
+        elif part in new and part in old and (old[part] or {}).get("text") != (new[part] or {}).get("text"):
+            loosen.append("%s文字改變（輸出檔上的可見文字，需核准）" % name)
+    if loosen:
+        return "loosen", loosen + tighten
+    return ("tighten", tighten) if tighten else ("neutral", [])
+
+
 # ── rule_set（BP-2 R3）：方向由『命中集合變大還是變小』決定，而不是寫死「調高＝放寬」──────────────────────────
 #: 標示的醒目程度（降低＝放寬）
 _LEVEL_RANK = {"info": 1, "yellow": 2, "red": 3}
@@ -222,7 +258,7 @@ def _cmp_attachment_slot(old, new):
     return AS.compare(old, new)
 
 
-COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout, "user_buttons": _cmp_user_buttons, "rule_set": _cmp_rule_set, "attachment_slot": _cmp_attachment_slot}
+COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout, "user_buttons": _cmp_user_buttons, "rule_set": _cmp_rule_set, "attachment_slot": _cmp_attachment_slot, "export_template": _cmp_export_template}
 
 
 def classify(kind, old_body, new_body):

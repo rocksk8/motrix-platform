@@ -283,8 +283,13 @@ def xlsx_to_html(data: bytes, title: str = "", max_rows: int = PDF_MAX_ROWS) -> 
             w = ws.column_dimensions[letter].width if letter in ws.column_dimensions else None
             widths.append(float(w) if w else 10.0)
         tot = sum(widths) or 1.0
-        parts.append("<div class='sheet'><h2>%s</h2><table><colgroup>%s</colgroup>" % (
-            esc(ws.title), "".join("<col style='width:%.1f%%'>" % (100.0 * w / tot) for w in widths)))
+        try:                                                      # BP-3：匯出範本的頁首／頁尾＝xlsx 的列印頁首頁尾；沒設定（今天所有匯出）⇒ 空字串，輸出不變
+            _hd, _ft = ws.oddHeader.center.text or "", ws.oddFooter.center.text or ""
+        except Exception:                                         # noqa: BLE001
+            _hd = _ft = ""
+        parts.append("<div class='sheet'><h2>%s</h2>%s<table><colgroup>%s</colgroup>" % (
+            esc(ws.title), ("<div class='meta'>%s</div>" % esc(_hd)) if _hd else "",
+            "".join("<col style='width:%.1f%%'>" % (100.0 * w / tot) for w in widths)))
         shown = 0
         for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
             if shown >= max_rows:
@@ -317,6 +322,8 @@ def xlsx_to_html(data: bytes, title: str = "", max_rows: int = PDF_MAX_ROWS) -> 
                                                   " style='%s'" % ";".join(st) if st else "", txt))
             parts.append("<tr>%s</tr>" % "".join(tds))
         parts.append("</table>")
+        if _ft:
+            parts.append("<div class='meta'>%s</div>" % esc(_ft))
         if shown >= max_rows and ws.max_row > max_rows:
             parts.append("<div class='trunc'>（此分頁只列前 %d 列；完整資料請下載 Excel）</div>" % max_rows)
         parts.append("</div>")
