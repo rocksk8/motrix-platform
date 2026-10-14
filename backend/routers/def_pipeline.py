@@ -150,9 +150,15 @@ def _cmp_export_template(old, new):
     if old.get("format") != new.get("format"):
         loosen.append("匯出格式變了（無法判斷寬嚴，視為放寬）")
     for k in set(old) | set(new):
-        if k in ("columns", "format", "version", "header", "footer", "watermark"):
+        if k in ("columns", "format", "version", "header", "footer", "watermark", "titles"):
             continue
         loosen.append("未知設定 %s 變了（視為放寬）" % k)
+    ot, nt = old.get("titles") or {}, new.get("titles") or {}
+    for k in sorted(set(ot) | set(nt)):                   # 條款標題：新增或更換＝放寬（客戶可見文字）；恢復成預設（拿掉）＝收緊
+        if k in nt and nt[k] != ot.get(k):
+            loosen.append("條款標題 %s 改為「%s」（客戶可見文字，需核准）" % (k, nt[k]))
+        elif k in ot and k not in nt:
+            tighten.append("條款標題 %s 恢復預設" % k)
     for part in ("header", "footer", "watermark"):
         name = {"header": "頁首", "footer": "頁尾", "watermark": "浮水印"}[part]
         if part in old and part not in new:

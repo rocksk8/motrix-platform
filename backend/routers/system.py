@@ -2394,6 +2394,14 @@ def get_quote_terms_defaults(authorization: str = Header(None)):
     terms = _quote_default_terms()
     if terms is None:
         raise HTTPException(404, QUOTE_TERMS_UNAVAILABLE)
+    try:
+        from helpers import clause_titles as _CT
+        titles = _CT.active_titles()                              # S-Q2：旗標關／沒有已發布範本 ⇒ None ⇒ 不多任何鍵
+    except Exception:                                              # noqa: BLE001
+        titles = None
+    if titles:
+        terms = dict(terms)
+        terms["titles"] = titles
     return terms
 
 

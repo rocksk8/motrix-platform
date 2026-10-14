@@ -17,6 +17,8 @@
 """
 import math
 import re
+
+from helpers import clause_titles as _CT      # S-Q2：註冊匯出代號 case:quotation-clause-titles；標題預設＝下面 TERMS_FIELD_DEFS 的字
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 
@@ -242,7 +244,7 @@ def compute_approval_reasons(q: dict, presets: list, default_payment_terms: str)
         else:
             reasons.append(f"調整營業稅額為 {_js_str(tax_rate)}%（標準 5%）")
     base = _terms_baseline(q, presets, default_payment_terms)
-    changed = [label for key, label in TERMS_FIELD_DEFS if _text(q.get(key)) != _text(base.get(key))]
+    changed = [_CT.title(key, q) for key, label in TERMS_FIELD_DEFS if _text(q.get(key)) != _text(base.get(key))]      # 標題：凍結 > 目前範本 > 預設（關著＝label）
     if changed:
         p = _preset_by_key(presets, q.get("termsPresetKey"))
         reasons.append(f"報價條件已修改，與條款組「{_js_str(p.get('name'))}」不同（{'、'.join(changed)}）" if p
