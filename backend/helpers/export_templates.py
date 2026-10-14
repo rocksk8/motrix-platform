@@ -2,7 +2,7 @@
 """匯出範本（BP-3 R0/R1）：宣告式的欄位／標籤／順序（＋頁首頁尾／浮水印文字），套在『已登記的匯出』上；發布前預覽。
 
 [單位] helper:export_templates    [層] L1    [穩定度] 實作
-[公開介面] CAPS, FIELD, GROUP, KIND, LABEL_MAX, MAX_COLUMNS, OFF_REASON, PRESET_TEXTS, RESERVED_WATERMARK, TEXT_MAX, WATERMARK_MAX, WATERMARK_PRESETS, apply_pdf_text, apply_print_text, decorate_pdf, default_template, definition_problems, effective_columns, enabled, ensure_kind, preview, register_export, registered, render_csv_rows, render_rows, resolve
+[公開介面] CAPS, FIELD, GROUP, KIND, LABEL_MAX, MAX_COLUMNS, OFF_REASON, PRESET_TEXTS, RESERVED_WATERMARK, TEXT_MAX, TemplateUnreadable, WATERMARK_MAX, WATERMARK_PRESETS, apply_pdf_text, apply_print_text, decorate_pdf, default_template, definition_problems, disabled_sheets, effective_columns, enabled, enabled_sheets, ensure_kind, preview, register_export, registered, render_csv_rows, render_rows, resolve
 [不變式] 設定 `builder_exports.enabled`（預設 0＝關）關著時：`resolve()` 一律回 None（端點走今天寫死的路徑，輸出逐位元相同）；發布驗證擋；預覽端點 404。
     範本只收宣告式資料：欄位 id 必須在該匯出的**欄位目錄**裡（模組登記，不由使用者定義）、文字是純文字（無占位符、無運算式、無控制／雙向字元），
     **範本不能新增資料**——欄位值一律來自端點今天的查詢與遮蔽；標 `money`（或有 `visible`）的欄位在輸出端再問一次權限，沒權限 ⇒ 整欄省略（遮蔽優先）。
@@ -26,7 +26,7 @@ TEXT_MAX = 60
 WATERMARK_MAX = 40
 #: 各格式能放哪些版面文字（CSV 沒有頁首頁尾／浮水印：不是『忽略』，是驗證直接拒絕，免得使用者以為有）
 CAPS = {"csv": frozenset(), "xlsx": frozenset({"header", "footer"}), "pdf": frozenset({"header", "footer", "watermark"})}
-_TOP_KEYS = {"version", "format", "columns", "header", "footer", "watermark", "titles"}
+_TOP_KEYS = {"version", "format", "columns", "header", "footer", "watermark", "titles", "sheets"}
 #: 頁首／頁尾／浮水印文字（v1）：只能從白名單挑，不收自由文字（客戶可見文件上的文字不能由一個人隨手寫）。
 PRESET_TEXTS = ("內部資料", "機密", "草稿", "僅供參考", "內部使用", "請勿外流", "僅限內部傳閱", "列印後請妥善保管")
 WATERMARK_PRESETS = ("內部資料", "機密", "草稿", "僅供參考", "內部使用")
@@ -56,11 +56,13 @@ def enabled(conn=None) -> bool:
 
 
 # ── 匯出目錄（模組登記；使用者不能新增）────────────────────────────────────
-def register_export(export_id, *, label, formats, columns, sample_rows, rows_provider=None, lock_labels=False, caps=None, sample_html=None, titles=None):
+def register_export(export_id, *, label, formats, columns, sample_rows, rows_provider=None, lock_labels=False, caps=None, sample_html=None, titles=None, sheets=None):
     """登記一個可套範本的匯出。`columns`＝有序 `[{id, label, money?, visible?}]`（順序與標籤＝今天寫死的預設）；
     `lock_labels=True`：欄位標題必須等於目錄標題（這個匯出的檔案會被匯入回來，匯入靠表頭文字對應，不能改名；欄位仍可省略、換順序）。
     `columns=[]` 只允許 pdf-only 的匯出（版面固定、只能加頁首／頁尾／浮水印文字＝decorOnly）；`caps`＝這個匯出實際允許的版面文字（預設依格式；用來縮窄，例：只開頁尾與浮水印）；
     `sample_html`＝decorOnly 預覽用的樣本頁 HTML。
+    `sheets`＝工作表目錄 `[{id, label, required?, money?}]`（營運報表這類『整份報表由多張表組成』的匯出）：範本只能選『要哪幾張』（目錄的子集、順序固定＝目錄順序、必選的不能拿掉），
+    不能改名、不能改內容；此時 `columns` 必須是空的、不允許頁首／頁尾／浮水印（caps 固定為空）。`money:true`＝含金額的工作表（把它加回來屬放寬）。
     `visible(user)->bool`：有它或 `money:true` 的欄位在輸出端再驗權限（`money` 沒有 `visible` ⇒ 一律不顯示＝fail-closed）；
     `sample_rows`＝預覽用樣本列（`[{col_id: value}]`，不碰真實資料）；`rows_provider(conn, viewer, n)->[{col_id: value}]`＝『可見的真實列』。"""
     if not re.match(r"^[a-z][a-z0-9_:.\-]{0,79}$", export_id or ""):
@@ -70,7 +72,16 @@ def register_export(export_id, *, label, formats, columns, sample_rows, rows_pro
     bad = set(formats) - set(CAPS)
     if bad:
         raise ValueError("不認得的格式：%s" % sorted(bad))
-    if not columns and tuple(formats) != ("pdf",):
+    if sheets:
+        if columns:
+            raise ValueError("工作表型的匯出不能同時有欄位目錄")
+        ids = [x["id"] for x in sheets]
+        if len(set(ids)) != len(ids) or not all(re.match(r"^[a-z][a-z0-9_]{0,29}$", i) for i in ids):
+            raise ValueError("工作表代號重複或不合法：%s" % ids)
+        if not any(x.get("required") for x in sheets):
+            raise ValueError("工作表目錄至少要有一張必選")
+        caps = ()                                                 # 工作表型不收頁首／頁尾／浮水印
+    elif not columns and tuple(formats) != ("pdf",):
         raise ValueError("只有 pdf-only 的匯出可以沒有欄位目錄")
     if caps is not None and set(caps) - CAPS[formats[0]]:
         raise ValueError("caps 超出格式能力：%s" % sorted(set(caps) - CAPS[formats[0]]))
@@ -82,21 +93,28 @@ def register_export(export_id, *, label, formats, columns, sample_rows, rows_pro
     _EXPORTS[export_id] = {"label": label, "formats": tuple(formats), "columns": [dict(c) for c in columns],
                            "sample_rows": list(sample_rows), "rows_provider": rows_provider, "lock_labels": bool(lock_labels),
                            "caps": frozenset(caps) if caps is not None else None, "sample_html": sample_html,
-                           "titles": {k: tuple(v) for k, v in (titles or {}).items()}}
+                           "titles": {k: tuple(v) for k, v in (titles or {}).items()},
+                           "sheets": [{"id": x["id"], "label": x["label"], "required": bool(x.get("required")), "money": bool(x.get("money"))} for x in (sheets or [])]}
 
 
 def registered() -> dict:
     """⇒ {export_id: {label, formats, columns:[{id,label,money}]}}（不含 callable）。"""
     return {k: {"label": v["label"], "formats": list(v["formats"]), "lockLabels": v["lock_labels"],
-                "caps": {f: sorted(v["caps"] if v["caps"] is not None else CAPS[f]) for f in v["formats"]}, "decorOnly": not v["columns"], "titles": {k: list(p) for k, p in v["titles"].items()},
+                "caps": {f: sorted(v["caps"] if v["caps"] is not None else CAPS[f]) for f in v["formats"]}, "decorOnly": not v["columns"] and not v["sheets"],
+                "titles": {k: list(p) for k, p in v["titles"].items()}, "sheets": [dict(x) for x in v["sheets"]],
                 "columns": [{"id": c["id"], "label": c["label"], "money": bool(c.get("money") or c.get("visible"))} for c in v["columns"]]}
             for k, v in sorted(_EXPORTS.items())}
 
 
 def default_template(export_id) -> dict:
     spec = _EXPORTS[export_id]
-    if spec["titles"]:
-        return {"version": 1, "format": spec["formats"][0], "titles": {}}
+    if spec["titles"] or spec["sheets"]:                           # 標題型（預設＝不改任何標題）、工作表型（預設＝全部工作表＝今天的報表）；兩者都有就兩個鍵都給
+        d = {"version": 1, "format": spec["formats"][0]}
+        if spec["sheets"]:
+            d["sheets"] = [x["id"] for x in spec["sheets"]]
+        if spec["titles"]:
+            d["titles"] = {}
+        return d
     if not spec["columns"]:
         return {"version": 1, "format": spec["formats"][0], "footer": {"text": "內部資料"}}
     return {"version": 1, "format": spec["formats"][0], "columns": [{"id": c["id"], "label": c["label"]} for c in spec["columns"]]}
@@ -151,7 +169,28 @@ def definition_problems(key, body) -> list:
         caps = spec["caps"] if spec["caps"] is not None else CAPS[fmt]
     cols = body.get("columns")
     ids = {c["id"] for c in spec["columns"]}
-    if not spec["columns"]:                                              # decorOnly：版面固定，沒有欄位可選
+    if "sheets" in body and not spec["sheets"]:
+        out.append({"path": "sheets", "message": "這個匯出沒有工作表可選"})
+    if spec["sheets"]:                                                   # 工作表型：只能選要哪幾張
+        if cols:
+            out.append({"path": "columns", "message": "這個匯出由多張工作表組成，只能選要哪幾張，沒有欄位可選"})
+        sh = body.get("sheets")
+        cat = [x["id"] for x in spec["sheets"]]
+        if not isinstance(sh, list) or not sh or not all(isinstance(x, str) for x in sh):
+            out.append({"path": "sheets", "message": "sheets 必須是不空的字串清單（工作表代號）"})
+        else:
+            bad = [x for x in sh if x not in cat]
+            if bad:
+                out.append({"path": "sheets", "message": "不在這個匯出的工作表目錄裡：%s" % "、".join(map(str, bad))})
+            elif len(set(sh)) != len(sh):
+                out.append({"path": "sheets", "message": "工作表重複"})
+            else:
+                miss = [x["label"] for x in spec["sheets"] if x["required"] and x["id"] not in sh]
+                if miss:
+                    out.append({"path": "sheets", "message": "必選的工作表不能拿掉：%s" % "、".join(miss)})
+                if sh != [c for c in cat if c in sh]:
+                    out.append({"path": "sheets", "message": "工作表順序固定（依目錄順序），不能調換"})
+    elif not spec["columns"]:                                            # decorOnly：版面固定，沒有欄位可選
         if cols:
             out.append({"path": "columns", "message": "這個匯出的版面是固定的，只能加頁首／頁尾／浮水印文字，沒有欄位可選"})
         if not any(k in body for k in ("header", "footer", "watermark", "titles")):
@@ -330,6 +369,58 @@ def _esc_html(x):
     return attr_esc(x)
 
 
+class TemplateUnreadable(Exception):
+    """旗標開著，但已發布的範本讀不到或不再合法。"""
+
+
+def _resolve_strict(export_id, conn=None):
+    """同 `resolve`，但旗標開著時『讀不到／不合法』會丟 `TemplateUnreadable`（不是回 None）。旗標關／沒有已發布 ⇒ None。"""
+    if export_id not in _EXPORTS or not enabled(conn):
+        return None
+    try:
+        ensure_kind()
+        from db import get_db
+        own = conn is None
+        c = conn if conn is not None else get_db()
+        try:
+            r = D.get(c, KIND, export_id, "company")
+        finally:
+            if own:
+                c.close()
+    except Exception as exc:                                 # noqa: BLE001
+        raise TemplateUnreadable(str(exc))
+    body = (r or {}).get("body")
+    if not body:
+        return None
+    if definition_problems(export_id, body):
+        raise TemplateUnreadable("已發布的範本不合法")
+    return body
+
+
+def enabled_sheets(export_id, conn=None):
+    """工作表型匯出的執行期掛鉤：⇒ `None`（全部工作表＝今天的輸出：旗標關／沒有已發布範本／不是工作表型／任何錯誤）或已選工作表代號的 frozenset（含必選）。"""
+    spec = _EXPORTS.get(export_id)
+    if not spec or not spec["sheets"]:
+        return None
+    required = frozenset(x["id"] for x in spec["sheets"] if x["required"])
+    try:
+        tpl = _resolve_strict(export_id, conn)
+    except TemplateUnreadable:
+        return required                                      # 旗標開著卻讀不到範本 ⇒ 關起來：只輸出必選工作表（不整份外送）
+    if tpl is None or not isinstance(tpl.get("sheets"), list):
+        return None
+    sel = {x for x in tpl["sheets"] if isinstance(x, str)}
+    return frozenset(sel | required)
+
+
+def disabled_sheets(export_id, conn=None) -> list:
+    """沒被選到的工作表代號（依目錄順序）；全部都要 ⇒ `[]`。"""
+    sel = enabled_sheets(export_id, conn)
+    if sel is None:
+        return []
+    return [x["id"] for x in _EXPORTS[export_id]["sheets"] if x["id"] not in sel]
+
+
 def preview(conn, caller, body, export_id, username=None, sample="sample", n=20):
     """草稿預覽（唯讀、不寫任何資料、不計匯出次數）：以某位使用者（預設＝呼叫者）的權限算出實際會輸出的標題與前 n 列。
     ⇒ `{user, role, format, columns, rows, omitted, warnings, sample}`；草稿不合法 ⇒ ValueError(problems)；找不到使用者 ⇒ LookupError。"""
@@ -348,6 +439,7 @@ def preview(conn, caller, body, export_id, username=None, sample="sample", n=20)
     n = max(1, min(int(n or 20), 50))
     spec = _EXPORTS[export_id]
     warnings = []
+    extra = {}
     if spec["titles"]:                                         # 條款標題：樣本頁列出五個區塊的標題（目前 vs 草稿）；條款內容不受影響
         cur = {k: p[0] for k, p in spec["titles"].items()}
         try:
@@ -361,9 +453,22 @@ def preview(conn, caller, body, export_id, username=None, sample="sample", n=20)
         html = ("<!doctype html><html><body style=\"font-family:sans-serif;padding:12mm\"><h3>條款標題（目前 → 草稿）</h3>"
                 "<table border=1 cellpadding=4 style=\"border-collapse:collapse\"><tr><th>目前</th><th>草稿</th></tr>%s</table>"
                 "<p style=\"color:#666\">條款內容與順序不受影響；已經送審的報價單沿用送審當時的標題。</p></body></html>" % rows_html)
-        return {"user": viewer.get("username"), "role": viewer.get("role"), "format": body["format"], "decorOnly": True, "html": html,
-                "columns": [], "rows": [], "omitted": [], "sample": "sample", "titlesPreview": {"current": cur, "draft": new},
-                "warnings": ["已經送審的報價單沿用送審當時的標題；草稿與之後送審的單據用新標題。"], "header": None, "footer": None, "watermark": None}
+        extra.update({"decorOnly": True, "html": html, "titlesPreview": {"current": cur, "draft": new}, "watermark": None})
+        warnings.append("已經送審的報價單沿用送審當時的標題；草稿與之後送審的單據用新標題。")
+    if spec["sheets"]:                                         # 工作表型：列出會出現哪些工作表（不產生實際檔案）
+        chosen = set(body.get("sheets") or [])
+        sheets = [{"id": x["id"], "label": x["label"], "on": x["id"] in chosen or x["required"], "required": x["required"], "money": x["money"]} for x in spec["sheets"]]
+        off = [x["label"] for x in sheets if not x["on"]]
+        if off:
+            warnings.append("以下工作表不會出現在報表（Excel、PDF、月報郵件都一樣）：%s。重新加回含金額的工作表需要第二位最高管理者核准。" % "、".join(off))
+        if any(x["required"] and x["money"] for x in sheets):
+            warnings.append("摘要永遠包含公司層級金額合計；這個設定只控制明細工作表。")
+        extra["sheets"] = sheets
+    if extra:                                                  # 標題型、工作表型（或兩者都有）：版面固定，沒有欄位可預覽
+        out = {"user": viewer.get("username"), "role": viewer.get("role"), "format": body["format"], "columns": [], "rows": [], "omitted": [],
+               "sample": "sample", "warnings": warnings, "header": None, "footer": None}
+        out.update(extra)
+        return out
     if not spec["columns"]:                                   # decorOnly（PDF）：只提供樣本頁預覽；實際文件發布後下載確認
         base = spec["sample_html"] or "<!doctype html><html><body><h2>預覽樣本頁</h2><p>實際文件的內容與版面不受這些文字影響。</p></body></html>"
         return {"user": viewer.get("username"), "role": viewer.get("role"), "format": body["format"], "decorOnly": True,
