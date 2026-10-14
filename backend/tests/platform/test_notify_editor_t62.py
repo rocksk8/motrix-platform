@@ -88,7 +88,7 @@ def test_draws_when_on_and_superadmin():
 
 
 _CASES = ["請審核 {單號}", "{單號}", "沒有單號", "{單號}{標記}（{對象}）", "{金額} {單號}", "<b>{單號}</b>", "{單號} https://x.example", "{單號}​",
-          "{單號} 已 核 准", "{單號} {", "{單號 }", "{單號}" + "字" * 120, "{單號} 已簽核完成", "{單號} A&B", "{單號} 'x'", "{單號} bit.ly/x", "{單號} a/b", "{單號} 已通過", "{單號} 批准", "{單號} 审核通过", "{單號} Final", "{單號} finally", "{單號} unpaid", "{單號} ａｐｐｒｏｖｅｄ", "{單號} v1.0", "請盡快 {單號}\\"]
+          "{單號} 已 核 准", "{單號} {", "{單號 }", "{單號}" + "字" * 120, "{單號} 已簽核完成", "{單號} A&B", "{單號} 'x'", "{單號} bit.ly/x", "{單號} a/b", "{單號} 已通過", "{單號} 批准", "{單號} 审核通过", "{單號} Final", "{單號} finally", "{單號} unpaid", "{單號} ａｐｐｒｏｖｅｄ", "{單號} v1.0", "{單號} аpproved", "{單號} ОK", "{單號} 😀", "{單號} —", "{單號} a​b", "{單號} ㅤ", "請盡快 {單號}\\"]
 
 
 def test_client_validation_matches_server_for_the_inapp_message():
@@ -126,6 +126,10 @@ def test_review_cancel_pending_and_normal_publish():
     assert not any(c.startswith("POST") and c.endswith("/publish") for c in r["calls"])
     assert r["bodies"]["PUT /api/definitions/notify_template/%s/draft" % DEF]["body"] == {"version": 1, "mail": {"badge": "請處理"}}
     assert any(c.endswith("/preview") for c in r["calls"])
+    # 空字串／undefined 也是取消（沒有治理元件才是另一回事）
+    for empty in ("", "__undef__"):
+        r = _run({"status": _cat(), "review": empty if empty == "" else None, "run": pub})
+        assert not any(c.startswith("POST") and c.endswith("/publish") for c in r["calls"]), empty
     # 待核准：如實說，不說已發布
     r = _run({"status": _cat(), "publish": {"pending": True, "reasons": ["新增自訂用語 mail.badge（收件人看到的字，需核准）"]}, "run": pub})
     assert r["state"] == "pending" and "待第二位最高管理者核准" in r["msg"] and "已發布。" not in r["msg"]

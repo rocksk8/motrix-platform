@@ -115,10 +115,10 @@ def test_validator_whitelist_and_bans():
 
 def test_money_text_in_inapp_is_masked_in_the_preview_for_non_finance(monkeypatch):
     _tpl(monkeypatch, None)
-    body = {"version": 1, "inapp": {"message": "請審核 {單號}，金額約 NT$ 1,200,000"}}
+    body = {"version": 1, "inapp": {"message": "請審核 {單號}，金額約 1,200,000 元"}}
     pv = NT.preview(None, {"username": "u", "role": "superadmin"}, body, KEY)
     row = next(r for r in pv["rows"] if r["field"] == "inapp.message")
-    assert "NT$ 1,200,000" in row["draft"] and "NT$" not in row["draftNonFinance"] and "（金額略）" in row["draftNonFinance"]
+    assert "1,200,000 元" in row["draft"] and "1,200,000" not in row["draftNonFinance"] and "（金額略）" in row["draftNonFinance"]
     assert row["current"].startswith("報價單 MQ-202610-001")
 
 
@@ -228,3 +228,15 @@ def test_only_approval_category_is_escaped_other_builders_keep_their_deliberate_
     assert "<strong>新</strong>" in biz
     appr = EN._build_html("approval_request", "標題", "徽章", "#000", [("客戶名稱", "<strong>新</strong>")], "", "https://x.example", intro="內容")
     assert "<strong>新</strong>" not in appr and "&lt;strong&gt;新&lt;/strong&gt;" in appr
+
+
+@pytest.mark.parametrize("text", ["аpproved", "ОК", "рaid", "Οk", "ｎ‌ｏ", "😀", "已通過", "—"])
+def test_r3_character_allowlist_blocks_lookalikes_before_the_reserved_check(text):
+    # 前四個含西里爾／希臘外觀相似字、後面是 emoji／破折號：都不在白名單
+    probs = _bad({"version": 1, "mail": {"intro": "您好 " + text}})
+    assert probs == {"mail.intro"}
+
+
+def test_r3_defaults_and_normal_text_pass_the_allowlist():
+    assert NT.definition_problems(KEY, NT.default_template(KEY)) == []
+    assert _bad({"version": 1, "mail": {"intro": "您好，請於 2026-10-20 前處理（急件）：謝謝！"}}) == set()

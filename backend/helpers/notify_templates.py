@@ -56,6 +56,9 @@ RESERVED = ("正本", "副本", "已核准", "已核可", "核准", "核可", "�
             "已通過", "通過", "已通过", "通过", "批准", "審核通過", "审核通过", "簽核通過", "签核通过", "已簽核", "已签核", "已批", "已生效")
 RESERVED_EN = ("approve", "approved", "passed", "paid", "original", "void", "signed", "final")
 _EN_RE = re.compile(r"(?<![a-z])(?:%s)(?![a-z])" % "|".join(RESERVED_EN))
+#: 字元白名單（NFKC 之後比對）：中日韓漢字與標點、ASCII 英數、空白與少數標點。西里爾／希臘字母等外觀相似字不在內，
+#: 所以 "аpproved"（首字是西里爾 а）、"ОК" 不能繞過官方字樣檢查。與 `frontend/static/notify-editor.js` 同一份。
+_ALLOWED = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303fA-Za-z0-9 .,:;!?()\[\]\-_~{}]*")
 _TOP = {"version", "inapp", "mail"}
 
 
@@ -83,6 +86,8 @@ def _text_problems(text, spec):
         return "不可含控制、隱形、雙向或私用字元"
     if _BAD.search(text):
         return "不可含標記字元（< > & 引號 反斜線）"
+    if not _ALLOWED.fullmatch(unicodedata.normalize("NFKC", text)):
+        return "只能使用中文、英數字與常用標點（不接受外觀相似的其他文字）"
     if _URLISH.search(unicodedata.normalize("NFKC", _PH.sub("", text))):
         return "不可含網址或連結（含斜線、網域寫法）"
     names = _PH.findall(text)

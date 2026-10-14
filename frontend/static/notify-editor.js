@@ -18,6 +18,8 @@
   var PREFIX = '【MOTRIX 系統通知】簽核－'
   var MONEY = /(?:NT\$|NTD|\$)\s*[-+]?\d[\d,]*(?:\.\d+)?|[-+]?\d[\d,]*(?:\.\d+)?\s*元(?![一-鿿])/g
   var BAD = /[<>&"'`\\\x00-\x1f\x7f​-‏‪-‮⁦-⁩﻿]/
+  var INVIS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Co}\p{Cs}\u115f\u1160\u3164\uffa0\u2800\u180e\u034f\u061c\u17b4\u17b5\u00ad\u2060]/u
+  var ALLOWED = /^[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303fA-Za-z0-9 .,:;!?()\[\]\-_~{}]*$/
   var URLISH = /https?|:\/\/|www\.|[A-Za-z0-9_]+\.[A-Za-z0-9_]{2,}|\//i
   var RESERVED = ['正本', '副本', '已核准', '已核可', '核准', '核可', '簽核完成', '签核完成', '已付款', '已收款', '已簽回', '已簽收', '作廢', '作废',
     '已通過', '通過', '已通过', '通过', '批准', '審核通過', '审核通过', '簽核通過', '签核通过', '已簽核', '已签核', '已批', '已生效']
@@ -66,7 +68,9 @@
     v = String(v || '')
     if (!v.trim()) return ''
     if (v.length > f.limit) return '最多 ' + f.limit + ' 字'
-    if (BAD.test(v)) return '不可含標記字元（< > & 引號 反斜線）或隱形字元'
+    if (INVIS.test(v)) return '不可含控制、隱形、雙向或私用字元'
+    if (BAD.test(v)) return '不可含標記字元（< > & 引號 反斜線）'
+    if (!ALLOWED.test(v.normalize('NFKC'))) return '只能使用中文、英數字與常用標點（不接受外觀相似的其他文字）'
     if (URLISH.test(v.replace(PH, '').normalize('NFKC'))) return '不可含網址或連結（含斜線、網域寫法）'
     var names = [], m
     PH.lastIndex = 0
@@ -142,9 +146,11 @@
     }).then(function () {
       st.state = 'checked'; st.msg = '檢查通過，請在右側確認影響後發布。'; render()
       var G = window.MotrixDefGovernance
-      if (!G || !G.review) return ''                      // 沒有治理面板元件 ⇒ 不帶預覽雜湊（後端強制時會擋下並提示）
+      if (!G || !G.review) return { noGovernance: true }  // 沒有治理面板元件 ⇒ 不帶預覽雜湊（後端強制時會擋下並提示）；與『使用者取消』分開
       return G.review({ kind: KIND, key: EVENT, scope: 'company', title: '發布前影響預覽：簽核通知用語' })
     }).then(function (hash) {
+      if (hash && hash.noGovernance === true) hash = ''
+      else if (!hash) hash = null                         // 任何空值（null／undefined／''）＝使用者取消
       if (hash === null) { st.busy = false; st.state = 'idle'; st.msg = '已取消發布（草稿已存）。'; render(); return }
       st.msg = '發布中…'; render()
       var body = { note: st.note || '', base_etag: st.etag || undefined }
