@@ -3,6 +3,8 @@
 > 作者 hichan-1f，2026-10-14。前置：`BP3-EXPORTS-INVENTORY-T61.md`（現況與缺口 G1–G8）；路線圖 `FRAMEWORK-10DAY-ROADMAP-T56.md` §0B.3（BP-3）、`PLATFORM-BUILDER-ARCHITECTURE-T57.md` §2.5／§2.6／§3.2／§3.9。
 > 實作約束（b4）：旗標 `builder_exports.enabled` 預設關；**關閉時所有輸出與今天逐位元相同**；實作待 02 釋放機器（~11:30）後，在 `train/t60-int` 之後的 wip 分支。
 
+> **狀態更新（10-14）**：子系統 A 的『先修漏洞』小切片已另開 `wip/t61-xl-safe-r1`（95a7b3c66，無旗標；b4 裁示）：`xl_safe` 補 Tab／CR、三個 xlsx 檔、reports.py 剩餘值格、daily_tasks 與兩支前端 CSV、lodging 併入、AST 守門＋蓄意破壞正對照。本檔 §1 的 `safe_append`／`csv_row`／`export-safe.js` 等『完整漏斗』仍是 BP-3 本體的工作；小切片刻意**不新增公開名稱**（避免 L1 快照變動），只重用 `xl_safe`。
+
 ## 0. 兩個子系統，兩種旗標語意（重要）
 | 子系統 | 是否受 `builder_exports.enabled` 管 | 理由 |
 |---|---|---|
@@ -136,3 +138,13 @@ preview(conn, caller, draft_body, exportId, username=None, sample="sample"|"real
 | U-B3 | 單元（U0a unit）範圍：匯出查詢的列範圍由端點自己處理，範本層不碰；ratchet 掃描器對新 SELECT 要小心（範本層不寫 SELECT，只吃端點傳進來的 rows） |
 | U-B4 | SheetJS 三頁（客戶／料號／供應商）改走伺服端匯出端點是另案（G7）；本班只在文件列出，不動 |
 | 需 b4/46 裁示 | ① A 不進旗標是否同意（§0）；② xlsx「逐位元」的定義（§2.7）；③ 先導匯出清單（案件批次、外包名冊、網路規劃）；④ 全形字元是否一併中和（§1.5） |
+
+### 2.10 前端 SheetJS 匯出（客戶端 xlsx；G7）
+現況：`customers.html:995`、`parts.html:619`、`suppliers.html:1064` 以 `XLSX.utils.json_to_sheet(rows)` + `XLSX.writeFile` 在瀏覽器產檔；`rows` 是頁面已載入的資料（遮蔽已在 API 層，**範本層不得因此放寬**）。
+- **公式風險**：SheetJS `json_to_sheet` 把字串存成字串儲存格（`t="s"`），不是公式，所以 xlsx 本身注入面低於 openpyxl；但同一份 rows 若被另存 CSV／貼進其他試算表仍有風險，且這三條路徑**沒有 `export.*` 稽核、沒有冷卻、不經 `require_for_output`**。
+- **做法（兩段）**：
+  1. **近程（BP-3 本班）**：三頁的 rows 組好後先過 `MotrixExport.safeRow(row)`（= 前端 `csvSafeCell` 的物件版，只處理字串）；匯出後 `POST /api/export-log {module, name, rows}` 寫一筆 `export.xlsx` 稽核（新唯讀稽核端點，限制：只記 module／name／列數，與 `log_export` 同格式、同冷卻）。
+  2. **遠程（BP-3 本體或之後）**：把三個匯出搬到伺服端端點（`export_logged` + `add_pdf_sibling` + 欄位目錄），前端只剩下載按鈕；如此才能套用 §2 的匯出範本（欄位／標籤／順序／頁首頁尾），也才能讓『每個 Excel 匯出同時有 PDF』（使用者規則 2026-09-30）涵蓋這三頁。
+- **匯入側（`XLSX.read`）**：本設計不動；匯入的展開／大小防護屬 H-J 寫死項，另案。
+- **範本層與 SheetJS 的關係**：在遠程搬遷完成前，這三頁不套匯出範本（旗標關或開都一樣）；編輯器的匯出清單只列已伺服端化的匯出，並在說明寫明『這三個匯出尚未支援自訂』。
+- **UNKNOWN**：三頁的 rows 是否含 `perm` 才看得到的欄位（客戶頁的金額、供應商的銀行帳號）——搬遷前要逐欄對照 API 遮蔽，確認前端 rows 不比伺服端匯出多。
