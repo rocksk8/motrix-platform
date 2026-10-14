@@ -28,12 +28,27 @@ from db import (
 from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_case_closing_report, run_edge_pdf
 from helpers import receipt_amounts as _receipt_amounts
 from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr, html_text as _html_text
+from helpers import export_templates as _ET     # G-A：報價單／請款單 PDF 可加頁尾／浮水印文字（預設關閉；沒有發布過範本 ⇒ 輸出逐位元相同）
 
 # 未核可紅色警示（使用者 2026-09-30）：各單據 builder 共用同一個元件與同一個字樣
 from helpers.doc_template import unapproved_banner as _unapproved_banner, inject_unapproved as _inject_unapproved
 
 from core import paths as _paths
 
+
+
+#: G-A（BP-3 R4 延伸）：頁尾／浮水印文字只能從預設清單挑（客戶可見文字，任何變更＝放寬、需第二位核准）；程式產生的『尚未核准』橫幅、公司抬頭與法定欄位不受影響。
+QUOTE_PDF_EXPORT = "case:quotation-pdf"
+PAYMENT_REQUEST_PDF_EXPORT = "arap:payment-request-pdf"
+
+
+def _decor_sample(title):
+    return ("<!doctype html><html><body style=\"font-family:sans-serif;padding:20mm\"><h2>%s（樣本頁）</h2>"
+            "<p>這一頁只用來看頁尾與浮水印文字放在哪裡；文件的內容、金額與程式產生的橫幅不受影響。</p></body></html>" % title)
+
+
+_ET.register_export(QUOTE_PDF_EXPORT, label="報價單（PDF）", formats=("pdf",), columns=[], sample_rows=[], caps=("footer", "watermark"), sample_html=_decor_sample("報價單"))
+_ET.register_export(PAYMENT_REQUEST_PDF_EXPORT, label="請款單（PDF）", formats=("pdf",), columns=[], sample_rows=[], caps=("footer", "watermark"), sample_html=_decor_sample("請款單"))
 
 
 def default_overhead_pct():
@@ -261,6 +276,16 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
                       watermark_font_size: int = 30,
                       show_notice: bool = False, notice_text: str = '',
                       unapproved_status: str = None) -> str:
+    """報價單 HTML（預覽與 PDF 共用）。G-A：旗標關／沒有已發布範本 ⇒ `decorate_pdf` 原樣回傳同一個字串。"""
+    return _ET.decorate_pdf(QUOTE_PDF_EXPORT, _build_quote_html_core(
+        q, tot, internal, show_watermark, watermark_text, watermark_font_size, show_notice, notice_text, unapproved_status))
+
+
+def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
+                           show_watermark: bool = False, watermark_text: str = '未成案 · 報價單僅供瀏覽',
+                           watermark_font_size: int = 30,
+                           show_notice: bool = False, notice_text: str = '',
+                           unapproved_status: str = None) -> str:
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
@@ -2125,6 +2150,11 @@ _PAYMENT_STAGE_LABELS = {
 
 
 def _build_payment_request_html(v: dict) -> str:
+    """請款單 HTML（預覽與 PDF 共用）。G-A：旗標關／沒有已發布範本 ⇒ 原樣回傳同一個字串。"""
+    return _ET.decorate_pdf(PAYMENT_REQUEST_PDF_EXPORT, _build_payment_request_html_core(v))
+
+
+def _build_payment_request_html_core(v: dict) -> str:
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
