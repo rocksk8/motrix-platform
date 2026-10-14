@@ -60,7 +60,7 @@ def test_c1b_block_title_relabel(live_server, make_user, new_context):
 def test_c2_top_tab_bar_hide_relabel_reorder(live_server, make_user, new_context):
     ops = [{"op": "hide", "target": _col("tabs", "dispatch")},
            {"op": "relabel", "target": _col("tabs", "feed"), "label": "進度動態"},
-           {"op": "reorder", "target": TABS, "order": [_col("tabs", f) for f in ("biz", "fin", "exec", "shipping", "completion", "feed", "allfiles", "xexp")]}]
+           {"op": "reorder", "target": TABS, "order": [_col("tabs", f) for f in ("biz", "fin", "exec", "dispatch", "shipping", "completion", "feed", "allfiles", "xexp")]}]
     u, ctx, tk, page = _boot(live_server, make_user, new_context, "MQ-ONC-003", ops)
     texts = visible_tab_texts(page, TOP_TABS)
     assert "承攬商" not in texts and "動態" not in texts and "進度動態" in texts
@@ -74,7 +74,7 @@ def test_c2_top_tab_bar_hide_relabel_reorder(live_server, make_user, new_context
 def test_c3_exec_sub_tabs(live_server, make_user, new_context):
     ops = [{"op": "hide", "target": _col("execTabs", "warranty")},
            {"op": "relabel", "target": _col("execTabs", "todos"), "label": "我的待辦"},
-           {"op": "reorder", "target": EXEC, "order": [_col("execTabs", f) for f in ("progress", "devices", "materials", "todos", "info")]}]
+           {"op": "reorder", "target": EXEC, "order": [_col("execTabs", f) for f in ("progress", "devices", "materials", "todos", "info", "warranty")]}]
     u, ctx, tk, page = _boot(live_server, make_user, new_context, "MQ-ONC-004", ops, tab="exec")
     page.locator(".cm-subtabs").first.wait_for(state="visible", timeout=10000)
     texts = visible_tab_texts(page, SUB_TABS)
@@ -97,7 +97,7 @@ def test_c4_hidden_block_data_still_autosaves(live_server, make_user, new_contex
         page.evaluate("""() => { const c = %s; c.cr.caseRecord.projectTimeline.startDate = '2026-11-01'; c.setDirty() }""" % DATA_JS)   # 被隱藏區塊的資料
     assert resp2.value.ok
     cr = stored_data("MQ-ONC-005")["caseRecord"]
-    assert cr["roles"]["executor"] == u[0], cr["roles"]
+    assert (cr["roles"]["executor"] or {}).get("username") == u[0], cr["roles"]                 # executor 存成 {username, display}
     assert cr["projectTimeline"]["startDate"] == "2026-11-01", cr["projectTimeline"]
 
 
@@ -113,4 +113,4 @@ def test_c5_core_items_cannot_be_hidden_or_renamed(live_server, make_user, new_c
                 assert s == 422, (lst, core, op["op"], s)
     page.reload()
     wait_layout_on(page)
-    assert page.locator(".cm-section-title", has_text="合約資訊").first.is_visible()
+    page.locator(".cm-section-title", has_text="合約資訊").first.wait_for(state="visible", timeout=10000)

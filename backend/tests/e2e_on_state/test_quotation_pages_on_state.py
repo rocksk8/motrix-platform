@@ -27,7 +27,8 @@ def _open_form(page, base, user, qn):
     dialogs = []
     page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
     page.goto("%s/pages/quotation-form.html?id=%s" % (base, qn))
-    page.wait_for_function("() => %s.q && %s.q.quoteNo === '%s'" % (DATA_JS, DATA_JS, qn), timeout=20000)
+    # quoteNo 來自網址、先於資料載入就有值 ⇒ 還要等報價資料真的載進來（contactFax 是種子寫進 data_json 的）
+    page.wait_for_function("() => %s.q && %s.q.quoteNo === '%s' && %s.q.contactFax === '04-1234-5678'" % (DATA_JS, DATA_JS, qn, DATA_JS), timeout=20000)
     return dialogs
 
 
@@ -45,15 +46,14 @@ def test_q1_form_sections_hide_relabel_reorder(live_server, make_user, new_conte
     publish_layout(ctx, live_server, tk, [
         {"op": "hide", "target": _fld("qcustomer", "contactFax")},
         {"op": "relabel", "target": _fld("qproject", "deliveryLocation"), "label": "施工地點"},
-        {"op": "reorder", "target": pid(FORM, "form", "qterms"),
-         "order": [_fld("qterms", f) for f in ("afterSales", "paymentTerms", "deliveryTerms", "acceptanceTerms", "warrantyTerms")]}])
+        {"op": "move", "target": _fld("qterms", "afterSales"), "to": pid(FORM, "form", "qterms") + "/section:main", "index": 0}])
     page = ctx.new_page()
     _open_form(page, live_server, u, qn)
     wait_layout_on(page)
     assert not page.get_by_text("傳真", exact=True).first.is_visible()
     assert page.get_by_text("施工地點", exact=True).first.is_visible() and page.get_by_text("交貨地點", exact=True).count() == 0
-    ya = page.get_by_text("售後服務及備註說明").first.bounding_box()["y"]
-    yp = page.get_by_text("付款條件").first.bounding_box()["y"]
+    ya = page.locator("label.form-label span:visible", has_text="售後服務及備註說明").first.bounding_box()["y"]       # 同名文字也出現在隱藏的 PDF 顯示開關區，只取看得到的表單標籤
+    yp = page.locator("label.form-label span:visible", has_text="付款條件").first.bounding_box()["y"]
     assert ya < yp, "售後服務應排在付款條件之前"
     # 核心欄位發布被擋
     for form, core in (("qcustomer", "customerName"), ("qbasic", "quoteDate"), ("qproject", "projectName")):
@@ -98,7 +98,7 @@ def test_q3_custom_field_saved_and_restored(live_server, make_user, new_context)
     _save(page)
     assert stored_data(qn).get("customFields") == {"project_code": "PC-2026-001", "urgent": True}
     page.reload()
-    page.wait_for_function("() => %s.q && %s.q.quoteNo === '%s'" % (DATA_JS, DATA_JS, qn), timeout=20000)
+    page.wait_for_function("() => %s.q && %s.q.quoteNo === '%s' && %s.q.contactFax === '04-1234-5678'" % (DATA_JS, DATA_JS, qn, DATA_JS), timeout=20000)
     page.locator("[data-testid=cf-section]").wait_for(state="visible", timeout=15000)
     assert page.locator("[data-cf-field=project_code] input").input_value() == "PC-2026-001"
     assert page.locator("[data-cf-field=urgent] input[type=checkbox]").is_checked()
@@ -108,13 +108,13 @@ def test_q3_custom_field_saved_and_restored(live_server, make_user, new_context)
     page.locator("[data-cf-field=project_code] input").fill("")
     page.locator("[data-cf-field=urgent] input[type=checkbox]").uncheck()
     _save(page)
-    assert "customFields" not in stored_data(qn)
+    assert "customFields" not in stored_data(qn), stored_data(qn).get("customFields")
     # 旗標關閉 ⇒ 區塊消失，已存的值（先寫回去再驗）不被動
     page.locator("[data-cf-field=project_code] input").fill("留著")
     _save(page)
     set_flag(ctx, live_server, tk, "builder_custom_fields", "enabled", 0)
     page.reload()
-    page.wait_for_function("() => %s.q && %s.q.quoteNo === '%s'" % (DATA_JS, DATA_JS, qn), timeout=20000)
+    page.wait_for_function("() => %s.q && %s.q.quoteNo === '%s' && %s.q.contactFax === '04-1234-5678'" % (DATA_JS, DATA_JS, qn, DATA_JS), timeout=20000)
     page.wait_for_timeout(800)
     assert page.locator("[data-testid=cf-section]").count() == 0
     assert stored_data(qn).get("customFields") == {"project_code": "留著"}
@@ -132,7 +132,9 @@ def test_q4_quotation_list_columns(live_server, make_user, new_context):
     inject_login(page, live_server, u[0], u[1])
     page.goto(live_server + "/pages/quotations.html")
     page.wait_for_function("() => %s.layoutOn === true" % DATA_JS, timeout=15000)
-    heads = page.evaluate("() => [...document.querySelectorAll('thead th')].filter(t => t.offsetParent !== null).map(t => t.textContent.trim())")
+    heads_js = "() => [...document.querySelectorAll('thead th')].filter(t => t.offsetParent !== null).map(t => t.textContent.trim())"
+    page.wait_for_function("(js) => eval(js)().includes('含稅總額') && !eval(js)().includes('案件名稱')", arg=heads_js, timeout=15000)                  # layoutOn 之後欄位才非同步套用
+    heads = page.evaluate(heads_js)
     assert "案件名稱" not in heads and "金額（含稅）" not in heads and "含稅總額" in heads, heads
     # 順序固定：隱藏／改名之外，欄位順序和預設相同
     assert heads.index("報價單號") < heads.index("客戶名稱") < heads.index("含稅總額"), heads

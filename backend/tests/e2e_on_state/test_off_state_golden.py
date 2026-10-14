@@ -23,8 +23,12 @@ RECORD = os.environ.get("MOTRIX_RECORD_GOLDEN") == "1"
 _DATE = re.compile(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?")
 
 
+_BUILD = re.compile(r"[0-9a-f]{7,12}(?= · 啟動)")
+
+
 def _norm_text(s):
     s = _DATE.sub("<日期>", s)
+    s = _BUILD.sub("<build>", s)                                     # 頁尾 build 短 hash 每個 commit 都不同
     return [ln.strip() for ln in s.splitlines() if ln.strip()]
 
 
