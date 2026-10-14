@@ -13,7 +13,7 @@
   var LABEL_MAX = 20
   var cs = document.currentScript
   var EXPORT_ID = (cs && cs.getAttribute && cs.getAttribute('data-export-id')) || window.MOTRIX_EXPORT_ID || ''
-  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, cat: null, cols: [], header: '', footer: '', watermark: '', etag: '', versions: [], previewKey: '', previewHash: '', preview: null, user: '', sample: 'sample', note: '' }
+  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, cat: null, cols: [], header: '', footer: '', watermark: '', sheets: {}, etag: '', versions: [], previewKey: '', previewHash: '', preview: null, user: '', sample: 'sample', note: '' }
   var root = null
 
   function session() {
@@ -67,9 +67,19 @@
     return cols
   }
   function fmt() { return (st.cat && st.cat.formats && st.cat.formats[0]) || 'csv' }
+  // 工作表型匯出（營運報表）：只能選要哪幾張；必選的不能取消；順序固定、不能改名
+  function hasSheets() { return !!(st.cat && st.cat.sheets && st.cat.sheets.length) }
+  function sheetsFrom(tpl) {
+    var m = {}
+    ;((st.cat && st.cat.sheets) || []).forEach(function (s) { m[s.id] = !(tpl && tpl.sheets) || tpl.sheets.indexOf(s.id) >= 0 || s.required })
+    return m
+  }
   function decorOnly() { return !!(st.cat && st.cat.decorOnly) }
   function caps() { return ((st.cat && st.cat.caps && st.cat.caps[fmt()]) || []) }
   function toTemplate() {
+    if (hasSheets()) {
+      return { version: 1, format: fmt(), sheets: st.cat.sheets.filter(function (s) { return s.required || st.sheets[s.id] !== false }).map(function (s) { return s.id }) }
+    }
     var catLabel = {}
     ;((st.cat && st.cat.columns) || []).forEach(function (c) { catLabel[c.id] = c.label })
     var t = { version: 1, format: fmt(),
@@ -89,6 +99,7 @@
   }
   function curKey() { return JSON.stringify(toTemplate()) }
   function problems() {
+    if (hasSheets()) return []                              // 工作表型：必選的固定為開，沒有其他可填的欄位
     var out = [], used = {}
     ;[['header', '頁首文字'], ['footer', '頁尾文字'], ['watermark', '浮水印文字']].forEach(function (x) {
       if (caps().indexOf(x[0]) >= 0) {
@@ -111,6 +122,7 @@
     return api('GET', '/api/definitions/export_template/' + encodeURIComponent(EXPORT_ID) + '?scope=company').then(function (d) {
       var src = (d.draft && d.draft.body) || (d.latest && d.latest.body) || null
       st.cols = fromTemplate(src)
+      st.sheets = sheetsFrom(src)
       st.header = (src && src.header && src.header.text) || ''; st.footer = (src && src.footer && src.footer.text) || ''; st.watermark = (src && src.watermark && src.watermark.text) || ''
       st.etag = (d.draft && d.draft.etag) || ''
       st.versions = (d.versions || []).filter(function (v) { return v.status === 'published' })
@@ -189,7 +201,17 @@
     if (!st.open) return
     var panel = el('div', { style: 'margin-top:6px;padding:10px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--bg-card,#fff);max-width:640px' })
     panel.appendChild(el('div', { text: (st.cat && st.cat.label || '匯出') + '：選擇要匯出的欄位、標題與順序（資料與權限不變；沒有權限看的欄位不會出現）', style: 'font-size:12px;margin-bottom:6px' }))
-    ;(decorOnly() ? [] : st.cols).forEach(function (c, i) {
+    if (hasSheets()) {
+      panel.appendChild(el('div', { text: '選擇報表要包含哪些工作表（Excel、PDF 與月報郵件都一樣；順序、名稱與內容固定，不能修改）。拿掉工作表屬收緊；重新加回含金額的工作表需要第二位最高管理者核准。', style: 'font-size:11px;color:var(--text-dim,#888)' }))
+      st.cat.sheets.forEach(function (s) {
+        panel.appendChild(el('label', { style: 'display:flex;gap:6px;align-items:center;margin:2px 0;font-size:12px', 'data-sheet': s.id }, [
+          el('input', { type: 'checkbox', checked: (s.required || st.sheets[s.id] !== false) ? 'checked' : null, disabled: s.required ? 'disabled' : null,
+                        onchange: function (ev) { st.sheets[s.id] = !!ev.target.checked; changed() } }),
+          el('span', { text: s.label + (s.required ? '（必選）' : '') + (s.money ? '（含金額）' : '') })
+        ]))
+      })
+    }
+    ;((decorOnly() || hasSheets()) ? [] : st.cols).forEach(function (c, i) {
       var lp = (c.on && !(st.cat && st.cat.lockLabels)) ? labelProblem(c.label) : ''
       panel.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;margin:2px 0' }, [
         el('input', { type: 'checkbox', checked: c.on ? 'checked' : null, onchange: function (ev) { c.on = !!ev.target.checked; changed() } }),
@@ -231,7 +253,9 @@
       var tb = el('table', { style: 'border-collapse:collapse;font-size:11px' })
       tb.appendChild(el('tr', {}, pv.columns.map(function (h) { return el('th', { text: h, style: 'border:1px solid #ccc;padding:2px 4px' }) })))
       pv.rows.forEach(function (r) { tb.appendChild(el('tr', {}, r.map(function (v) { return el('td', { text: v === null || v === undefined ? '' : String(v), style: 'border:1px solid #ccc;padding:2px 4px' }) }))) })
-      if (!pv.decorOnly) panel.appendChild(tb)
+      if (pv.sheets) {
+        pv.sheets.forEach(function (s) { panel.appendChild(el('div', { text: (s.on ? '✓ ' : '✗ ') + s.label + (s.on ? '' : '（不會出現）'), style: 'font-size:11px;' + (s.on ? '' : 'color:#b45309') })) })
+      } else if (!pv.decorOnly) panel.appendChild(tb)
       if (pv.header) panel.appendChild(el('div', { text: '列印頁首：' + pv.header, style: 'font-size:11px' }))
       if (pv.footer) panel.appendChild(el('div', { text: '列印頁尾：' + pv.footer, style: 'font-size:11px' }))
       ;(pv.warnings || []).forEach(function (w) { panel.appendChild(el('div', { text: w, style: 'font-size:11px;color:#b45309' })) })
@@ -262,7 +286,7 @@
   }
   window.MotrixExportEditor = {
     _toTemplate: toTemplate, _pendingText: pendingText, _publish: doPublish, _preview: doPreview, _restore: doRestore, _state: st,
-    _init: function (cat) { st.cat = cat; st.cols = fromTemplate(null); root = null }, _fromTemplate: fromTemplate, _problems: problems,
+    _init: function (cat) { st.cat = cat; st.cols = fromTemplate(null); st.sheets = sheetsFrom(null); root = null }, _fromTemplate: fromTemplate, _problems: problems,
     open: function () { st.open = true; return load() }
   }
   boot()

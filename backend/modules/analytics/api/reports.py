@@ -30,6 +30,7 @@ from helpers import (
 from helpers.tax_calc import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts   # T：L1
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
+from helpers import export_templates as _ET     # S-F2 B：營運報表工作表選擇（BP-3 匯出範本，工作表型）
 from helpers.financial_mask import money_visible, quote_money_visible
 from helpers.legal_params import round_half_up as _round_half_up   # 原 receivables.round_half_up_invoice（同一算法）
 from core import registry as _registry
@@ -844,6 +845,53 @@ def _compute_achievement(year: int, targets: dict, cases_all: list, name_to_id: 
 
 
 
+
+
+# ── S-F2 B：營運報表的工作表選擇（BP-3 匯出範本的『工作表型』；旗標 builder_exports 關／沒有已發布範本 ⇒ 全部工作表＝今天的報表）──
+#: 代號 ⇒ (Excel 工作表名稱, PDF 段落註解標記)。順序＝報表順序（範本只能選子集，不能換順序）。
+REPORT_SHEETS = (
+    ("summary", "執行摘要", "摘要"), ("targets", "目標達成率", None), ("payments", "本期收款明細", "本期收款"),
+    ("outstanding", "未收款清單", "未收款"), ("month", "當月收支", "當月收支"), ("quarter", "本季收支", None),
+    ("year", "今年度收支", "今年度收支"), ("cases", "案件清單", "案件清單"), ("sales", "業務員績效", "業務員績效"),
+    ("margin", "毛利分析", "毛利分析"), ("warranty", "保固到期預警", "保固預警"), ("settle", "已結案未精算", "已結案未精算"),
+    ("aging", "帳齡分析", "帳齡分析"),
+)
+REPORT_EXPORT_ID = "reports:financial"
+_ET.register_export(
+    REPORT_EXPORT_ID, label="營運報表（Excel、PDF、月報郵件）", formats=("xlsx", "pdf"), columns=[], sample_rows=[],
+    sheets=[{"id": sid, "label": title, "required": sid == "summary", "money": sid not in ("summary", "warranty")} for sid, title, _m in REPORT_SHEETS])
+
+
+def _off_sheets() -> list:
+    """沒被選到的工作表代號。旗標關／沒有已發布範本／任何錯誤 ⇒ `[]`（全部輸出＝今天）。"""
+    try:
+        return _ET.disabled_sheets(REPORT_EXPORT_ID)
+    except Exception:                                              # noqa: BLE001
+        return []
+
+
+def _drop_excel_sheets(wb, off) -> None:
+    """Excel：把沒被選到的工作表整張拿掉（其餘工作表的內容與順序不動；沒有跨表公式）。"""
+    titles = {sid: title for sid, title, _m in REPORT_SHEETS}
+    for sid in off:
+        t = titles.get(sid)
+        if t and t in wb.sheetnames and len(wb.sheetnames) > 1:
+            wb.remove(wb[t])
+    wb.active = 0
+
+
+def _drop_pdf_sections(html: str, off) -> str:
+    """PDF／郵件附件：依段落註解標記（`<!-- 帳齡分析 -->` 等）拿掉沒被選到的段落（到下一個註解或頁尾為止）。"""
+    marks = {sid: m for sid, _t, m in REPORT_SHEETS if m}
+    for sid in off:
+        label = marks.get(sid)
+        m = re.search(r"<!-- %s[^>]*-->" % re.escape(label), html) if label else None
+        if not m:
+            continue
+        nxt = re.search(r'<!-- |<div class="footer">', html[m.end():])
+        stop = m.end() + nxt.start() if nxt else len(html)
+        html = html[:m.start()] + html[stop:]
+    return html
 
 
 def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
@@ -1823,6 +1871,9 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                  aligns=[al("left")] + [al("right")] * 10, height=20)
         ws9.cell(row=ar_r, column=8).number_format = '#,##0'
 
+    _off = _off_sheets()
+    if _off:                                                       # 旗標關／沒有範本 ⇒ 空 ⇒ 這一段完全不動（輸出逐位元相同）
+        _drop_excel_sheets(wb, _off)
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -1884,6 +1935,7 @@ def _pdf_ar_aging(ar: dict, tbl_hdr, fmt) -> str:
 
 
 def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
+    _off = _off_sheets()
     s = data["summary"]
     # `AC2`：收支明細的收入欄名依口徑（權責＝未稅、階段完成日；現金＝含稅、收款日）
     _inc_cols = (("認列階段", "認列金額（未稅）", "認列日") if data.get("basis", DEFAULT_BASIS) == "accrual"
@@ -2294,6 +2346,10 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
             f"<p style='color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic'>尚未設定 {_acv_year} 年度目標，請於營運報表頁按「立即設定年度目標」配置。</p>"
         )
 
+    if "targets" in _off:
+        acv_html = ""
+    if "quarter" in _off:
+        quarter_section_html = ""
     html = f"""<!DOCTYPE html>
 <html lang="zh-Hant"><head><meta charset="UTF-8">
 <title>營運報表 {period_label}</title>
@@ -2463,7 +2519,7 @@ tr.in-period{{background:#EFF6FF}}
 
 <div class="footer">{company_heading("此報表由 MOTRIX ERP 系統自動產製，僅供內部管理參考")} ｜ {gen_at}</div>
 </body></html>"""
-    return html
+    return _drop_pdf_sections(html, _off) if _off else html
 
 
 def _html_to_pdf(html: str) -> bytes:

@@ -98,10 +98,34 @@ def _cmp_export_template(old, new):
     for k in oc:
         if k not in nc:
             tighten.append("移除匯出欄位 %s" % k)
-    if old.get("format") != new.get("format"):
+    if old.get("format") not in (None, new.get("format")):          # 沒有舊版（第一次發布）＝沒有東西可比，格式不算變動
         loosen.append("匯出格式變了（無法判斷寬嚴，視為放寬）")
+    if "sheets" in old or "sheets" in new:
+        # 工作表型（營運報表）：基準＝舊版選的；沒有舊版 ⇒ 全部工作表（沒有已發布範本＝今天的完整報表）。
+        # 關掉工作表＝收緊；加回含金額的工作表＝放寬（第二位最高管理者核准）；加回不含金額的＝中性。
+        nset, oset = new.get("sheets"), old.get("sheets")
+        cats = [m for m in ET.registered().values() if m.get("sheets")]
+        cat = None
+        if isinstance(nset, list) and (oset is None or isinstance(oset, list)):
+            for m in cats:
+                ids = {x["id"] for x in m["sheets"]}
+                if set(nset) <= ids and set(oset or []) <= ids:
+                    cat = m
+                    break
+        if cat is None:
+            loosen.append("無法解析工作表設定，視為放寬")
+        else:
+            order = [x["id"] for x in cat["sheets"]]
+            label = {x["id"]: x["label"] for x in cat["sheets"]}
+            money = {x["id"] for x in cat["sheets"] if x["money"]}
+            base = list(oset) if oset is not None else order
+            for i in order:
+                if i in base and i not in nset:
+                    tighten.append("關掉工作表「%s」" % label[i])
+                elif i in nset and i not in base and i in money:
+                    loosen.append("加回含金額的工作表「%s」（報表多給資料，需核准）" % label[i])
     for k in set(old) | set(new):
-        if k in ("columns", "format", "version", "header", "footer", "watermark"):
+        if k in ("columns", "format", "version", "header", "footer", "watermark", "sheets"):
             continue
         loosen.append("未知設定 %s 變了（視為放寬）" % k)
     for part in ("header", "footer", "watermark"):
