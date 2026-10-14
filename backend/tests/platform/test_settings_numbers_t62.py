@@ -119,11 +119,12 @@ def test_login_session_length_follows_the_setting_and_never_exceeds_thirty_days(
     import db
     from datetime import datetime
     u, pw = make_user(username="num_u1", role="viewer")[:2]
+    real_get_db = db.get_db         # `_strict()` 會把 db.get_db 換成假連線（只給嚴格讀取用）；這題自己查 sessions 表要用真的
 
     def login_expires():
         r = client.post("/api/auth/login", json={"username": u, "password": pw})
         assert r.status_code == 200, r.text
-        c = db.get_db()
+        c = real_get_db()
         try:
             row = c.execute("SELECT expires_at FROM sessions WHERE username=? ORDER BY created_at DESC LIMIT 1", (u,)).fetchone()
         finally:

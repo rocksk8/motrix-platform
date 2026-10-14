@@ -222,12 +222,15 @@ def test_approval_mails_escape_user_data_even_with_no_template(monkeypatch):
     assert "<script>" not in sent["html"] and "&lt;script&gt;x&lt;/script&gt;" in sent["html"] and "<b>" not in sent["html"].split("報價單號")[0] + sent["html"].split("客戶名稱")[1]
 
 
-def test_only_approval_category_is_escaped_other_builders_keep_their_deliberate_html(monkeypatch):
+def test_every_category_escapes_plain_text_and_only_safe_fragments_pass_through(monkeypatch):
+    # 原名 test_only_approval_category_is_escaped_other_builders_keep_their_deliberate_html：mail-escape-r2（04 稽核）之後 `_build_html` 對**所有**類別
+    # 預設逸出純文字；呼叫端刻意傳入的 HTML 必須包成 `_safe()`（其中的使用者資料自己 `_esc()`）。所以：純文字 <strong> 一律被逸出，包了 _safe 的才原樣放行。
     monkeypatch.setattr(EN, "_base_url", lambda: "https://x.example")
-    biz = EN._build_html("daily_task_completed", "標題", "徽章", "#000", [("修改後", "<strong>新</strong>")], "", "https://x.example", intro="內容")
-    assert "<strong>新</strong>" in biz
-    appr = EN._build_html("approval_request", "標題", "徽章", "#000", [("客戶名稱", "<strong>新</strong>")], "", "https://x.example", intro="內容")
-    assert "<strong>新</strong>" not in appr and "&lt;strong&gt;新&lt;/strong&gt;" in appr
+    for cat in ("daily_task_completed", "approval_request"):
+        plain = EN._build_html(cat, "標題", "徽章", "#000", [("修改後", "<strong>新</strong>")], "", "https://x.example", intro="內容")
+        assert "<strong>新</strong>" not in plain and "&lt;strong&gt;新&lt;/strong&gt;" in plain, cat
+    deliberate = EN._build_html("daily_task_completed", "標題", "徽章", "#000", [("修改後", EN._safe("<strong>新</strong>"))], "", "https://x.example", intro="內容")
+    assert "<strong>新</strong>" in deliberate
 
 
 @pytest.mark.parametrize("text", ["аpproved", "ОК", "рaid", "Οk", "ｎ‌ｏ", "😀", "已通過", "—"])
