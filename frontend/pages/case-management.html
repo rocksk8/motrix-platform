@@ -4833,9 +4833,11 @@ window.CM_PARTS.push(() => ({
     try {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
-      const r = await fetch('/api/settings-center/public?groups=builder_layout', { headers: { Authorization: 'Bearer ' + s.token } })
+      const r = await fetch('/api/settings-center/public?groups=builder_layout,builder_custom_fields', { headers: { Authorization: 'Bearer ' + s.token } })
       if (!r.ok) return
       const d = await r.json()
+      // T61 S5：自訂欄位旗標從同一次設定請求取得；開啟才去讀欄位定義（關閉時不多打任何請求）
+      if (d && d.groups && d.groups.builder_custom_fields && d.groups.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
       if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.case_management !== true) return
       if (!document.getElementById('cm-layout-css')) {
         const st = document.createElement('style'); st.id = 'cm-layout-css'
@@ -4861,8 +4863,8 @@ document.addEventListener('alpine:initialized', () => {
 </script>
 <script>
 // T61 S5：自訂欄位（案件資訊）。設定中心「自訂欄位（內建畫面）」預設關閉：關閉時 $store.cf.enabled＝false，區塊不畫、
-// 資料不動；唯一多出的動作是啟動時讀一次 GET /api/custom-fields/case_info。值存在 caseRecord.customFields（沒有值就沒有這個鍵）。
-MotrixCustomFields.init({ recordType: 'case_info', label: '案件資訊' })
+// 資料不動；旗標關閉時不多打任何請求（旗標從既有的設定請求取得，開啟才讀 GET /api/custom-fields/case_info）。值存在 caseRecord.customFields（沒有值就沒有這個鍵）。
+MotrixCustomFields.init({ recordType: 'case_info', label: '案件資訊', deferred: true })
 window.CM_PARTS.push(() => ({
   cfIsAdmin() { return !!(this.session && this.session.role === 'superadmin') },
   cfGet(k) {

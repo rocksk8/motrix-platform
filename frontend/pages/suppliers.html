@@ -917,8 +917,8 @@
       </div>`
 
   // T61 S5：自訂欄位（供應商）。設定中心「自訂欄位（內建畫面）」預設關閉：關閉時 $store.cf.enabled＝false，區塊不畫、資料不動；
-  // 唯一多出的動作是啟動時讀一次 GET /api/custom-fields/supplier。
-  MotrixCustomFields.init({ recordType: 'supplier', label: '供應商' })
+  // 旗標關閉時不多打任何請求（旗標從既有的設定請求取得，開啟才讀 GET /api/custom-fields/supplier）。
+  MotrixCustomFields.init({ recordType: 'supplier', label: '供應商', deferred: true })
 
   function suppliersPage() {
     return {
@@ -990,9 +990,11 @@
       },
       async initLayout() {
         try {
-          const r = await fetchT(`${API}/settings-center/public?groups=builder_layout`, { headers: { Authorization: 'Bearer ' + this.session.token } }, 8000)
+          const r = await fetchT(`${API}/settings-center/public?groups=builder_layout,builder_custom_fields`, { headers: { Authorization: 'Bearer ' + this.session.token } }, 8000)
           if (!r.ok) return
           const d = await r.json()
+          // T61 S5：自訂欄位旗標從同一次設定請求取得；開啟才去讀欄位定義（關閉時不多打任何請求）
+          if (d && d.groups && d.groups.builder_custom_fields && d.groups.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
           if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.suppliers !== true) return
           const orig = document.querySelector('.page-main .table-scroll')
           const title = document.querySelector('.pg__t')

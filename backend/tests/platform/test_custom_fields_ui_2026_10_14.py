@@ -342,3 +342,28 @@ def test_editor_shows_usage_and_warns_before_disabling():
     assert r["usage"] == {"f1": 7}
     assert "已有 7 筆單據填了" in r["warn"] and "資料仍會保留" in r["warn"]
     assert r["after"] == {}                                           # 讀不到 ⇒ 不顯示數字，不丟例外
+
+
+# ── 旗標關閉：整個頁面載入期間不多打任何請求（OFF 的網路清單與舊版相同） ────────────────
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_deferred_init_fires_nothing_until_start():
+    body = ("await window.MotrixCustomFields.init({ recordType: 'case_info', label: 'x', deferred: true })\n"
+            "const before = calls.fetch.length\n"
+            "await window.MotrixCustomFields.start()\n"
+            "console.log(JSON.stringify({ before, after: calls.fetch }))")
+    r = _node(body, "{ enabled: true, fields: [] }")
+    assert r["before"] == 0 and r["after"] == ["/api/custom-fields/case_info"]
+    r = _node("await window.MotrixCustomFields.start(); console.log(JSON.stringify({ n: calls.fetch.length }))", "{}")
+    assert r["n"] == 0                                                   # 沒有 init 就 start ⇒ 什麼都不做
+
+
+@pytest.mark.parametrize("name,flag_page_group", [("case-management.html", "builder_layout,builder_custom_fields"),
+                                                  ("suppliers.html", "builder_layout,builder_custom_fields")])
+def test_pages_read_the_flag_from_the_existing_settings_request(name, flag_page_group):
+    from core import source_tree
+    src = source_tree.page_file(name).read_text(encoding="utf-8")
+    assert "MotrixCustomFields.init({" in src and "deferred: true" in src.split("MotrixCustomFields.init({")[1].split("})")[0]
+    assert "settings-center/public?groups=" + flag_page_group in src
+    assert "builder_custom_fields.enabled === true" in src and "MotrixCustomFields.start()" in src
+    # 頁面本身不直接打 /api/custom-fields（只有程式庫在旗標開啟後才打）
+    assert "/api/custom-fields" not in re.sub(r"//[^\n]*", "", src.replace("<!--", "//").replace("-->", ""))
