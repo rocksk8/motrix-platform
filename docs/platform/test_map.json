@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1378,
+  "tests": 1386,
   "unmapped": 13,
   "kinds": {
-   "api": 769,
+   "api": 773,
    "e2e": 306,
-   "audit": 176,
-   "unit": 127
+   "audit": 179,
+   "unit": 128
   },
-  "routes": 843
+  "routes": 846
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -16707,6 +16707,145 @@
    },
    "login_fixture": true
   },
+  "backend/tests/platform/test_bp1_layout_c1_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/",
+    "dir:backend/modules/case/",
+    "dir:frontend/static/",
+    "file:backend/modules/case/module.json",
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_response_keys.py",
+    "file:frontend/static/layout-pages.json",
+    "js:static/custom-layout.js",
+    "js:static/layout-runtime.js",
+    "mod:case/api/quotations",
+    "mod:case/tests/__init__",
+    "mod:case/tests/test_bp1_layout_cases_2026_10_14",
+    "page:pages/case-management.html",
+    "plat:__init__",
+    "plat:customization",
+    "plat:source_tree",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/customization.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/case/tests/__init__.py",
+     "backend/modules/case/tests/test_bp1_layout_cases_2026_10_14.py",
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_response_keys.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/static/custom-layout.js",
+     "frontend/static/layout-runtime.js"
+    ],
+    "path": [
+     "backend/modules/",
+     "backend/modules/case/",
+     "backend/modules/case/module.json",
+     "frontend/static/",
+     "frontend/static/custom-layout.js",
+     "frontend/static/layout-pages.json",
+     "frontend/static/layout-runtime.js"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_bp1_layout_c2_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/",
+    "dir:backend/modules/case/",
+    "file:backend/modules/case/module.json",
+    "mod:case/tests/__init__",
+    "mod:case/tests/test_bp1_layout_cases_2026_10_14",
+    "page:pages/case-management.html",
+    "plat:__init__",
+    "plat:customization",
+    "plat:source_tree",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/customization.py",
+     "backend/core/source_tree.py",
+     "backend/modules/case/tests/__init__.py",
+     "backend/modules/case/tests/test_bp1_layout_cases_2026_10_14.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html"
+    ],
+    "path": [
+     "backend/modules/",
+     "backend/modules/case/",
+     "backend/modules/case/module.json"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_bp1_layout_c3_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/",
+    "dir:backend/modules/case/",
+    "dir:frontend/static/",
+    "file:backend/modules/case/module.json",
+    "file:frontend/static/layout-pages.json",
+    "js:static/custom-layout.js",
+    "js:static/layout-editor.js",
+    "js:static/layout-runtime.js",
+    "mod:case/tests/__init__",
+    "mod:case/tests/test_bp1_layout_cases_2026_10_14",
+    "page:pages/case-management.html",
+    "plat:__init__",
+    "plat:customization",
+    "plat:source_tree",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/customization.py",
+     "backend/core/source_tree.py",
+     "backend/modules/case/tests/__init__.py",
+     "backend/modules/case/tests/test_bp1_layout_cases_2026_10_14.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/static/custom-layout.js",
+     "frontend/static/layout-editor.js",
+     "frontend/static/layout-runtime.js"
+    ],
+    "path": [
+     "backend/modules/",
+     "backend/modules/case/",
+     "backend/modules/case/module.json",
+     "frontend/static/",
+     "frontend/static/custom-layout.js",
+     "frontend/static/layout-editor.js",
+     "frontend/static/layout-pages.json",
+     "frontend/static/layout-runtime.js"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_bp1_layout_q2_2026_10_14.py": {
    "kind": "api",
    "units": [
@@ -19030,11 +19169,11 @@
     "dir:frontend/static/",
     "file:backend/core/l1_customization.json",
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/platform/test_layout_editor_pending_2026_10_14.py",
     "file:frontend/static/layout-pages.json",
     "helper:settings_groups",
     "helper:settings_registry",
     "js:static/layout-editor.js",
-    "page:pages/case-management.html",
     "plat:__init__",
     "plat:customization",
     "plat:source_tree"
@@ -19046,10 +19185,10 @@
      "backend/core/source_tree.py",
      "backend/helpers/__init__.py",
      "backend/helpers/settings_groups.py",
-     "backend/helpers/settings_registry.py"
+     "backend/helpers/settings_registry.py",
+     "backend/tests/platform/test_layout_editor_pending_2026_10_14.py"
     ],
     "page": [
-     "frontend/pages/case-management.html",
      "frontend/static/layout-editor.js"
     ],
     "path": [
@@ -19208,6 +19347,35 @@
     "path": [
      "backend/modules/case/",
      "backend/routers/system.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_mail_double_escape_t62.py": {
+   "kind": "audit",
+   "units": [
+    "core:archive",
+    "dir:backend/modules/",
+    "file:backend/helpers/__init__.py",
+    "helper:company_setup",
+    "helper:email_notify",
+    "helper:geo",
+    "mod:payroll/__init__",
+    "mod:payroll/bonus_notify",
+    "mod:payroll/payslip_notify"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/email_notify.py",
+     "backend/modules/payroll/__init__.py",
+     "backend/modules/payroll/bonus_notify.py",
+     "backend/modules/payroll/payslip_notify.py"
+    ],
+    "path": [
+     "backend/archive.py",
+     "backend/helpers/company_setup.py",
+     "backend/helpers/geo.py",
+     "backend/modules/"
     ]
    }
   },
@@ -20310,6 +20478,77 @@
     ]
    }
   },
+  "backend/tests/platform/test_notify_editor_t62.py": {
+   "kind": "audit",
+   "units": [
+    "dir:frontend/pages/",
+    "dir:frontend/static/",
+    "file:backend/helpers/__init__.py",
+    "helper:notify_templates",
+    "js:static/notify-editor.js",
+    "page:pages/approval-settings.html",
+    "router:notify_templates"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/notify_templates.py",
+     "backend/routers/notify_templates.py"
+    ],
+    "page": [
+     "frontend/pages/approval-settings.html",
+     "frontend/static/notify-editor.js"
+    ],
+    "path": [
+     "frontend/pages/",
+     "frontend/pages/approval-settings.html",
+     "frontend/static/",
+     "frontend/static/notify-editor.js"
+    ]
+   }
+  },
+  "backend/tests/platform/test_notify_templates_t62.py": {
+   "kind": "api",
+   "units": [
+    "core:main",
+    "file:backend/helpers/__init__.py",
+    "helper:email_notify",
+    "helper:notify_templates",
+    "helper:settings_groups",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
+    "plat:__init__",
+    "plat:definitions",
+    "plat:spine",
+    "router:def_pipeline",
+    "router:definitions",
+    "router:notify_templates"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/core/spine.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/notify_templates.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/def_pipeline.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py",
+     "backend/routers/notify_templates.py"
+    ],
+    "path": [
+     "backend/helpers/notify_templates.py",
+     "backend/helpers/settings_groups.py",
+     "backend/main.py",
+     "backend/routers/notify_templates.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_nowindow_2026_10_02.py": {
    "kind": "unit",
    "units": [
@@ -21119,6 +21358,38 @@
      "docs/platform/test_map.json",
      "tools/platform/",
      "tools/platform/test_map.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_report_sheets_t62.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/",
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/analytics/api/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/test_export_editor_bp3.py",
+    "helper:clause_titles",
+    "helper:export_templates",
+    "mod:analytics/api/reports",
+    "router:def_pipeline"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/clause_titles.py",
+     "backend/helpers/export_templates.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/routers/def_pipeline.py",
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/test_export_editor_bp3.py"
+    ],
+    "path": [
+     "backend/modules/",
+     "backend/modules/analytics/",
+     "backend/modules/analytics/api/",
+     "backend/modules/analytics/api/reports.py"
     ]
    }
   },
@@ -32664,6 +32935,35 @@
     ]
    }
   },
+  "backend/tests/test_mail_escape_2026_10_14.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:email_notify",
+    "helper:mail_types",
+    "mod:accounting/__init__",
+    "mod:accounting/notify",
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/notify",
+    "page:pages/quotation-form.html",
+    "page:pages/quotations.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/mail_types.py",
+     "backend/modules/accounting/__init__.py",
+     "backend/modules/accounting/notify.py",
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/notify.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html",
+     "frontend/pages/quotations.html"
+    ]
+   }
+  },
   "backend/tests/test_map_customers_suppliers_2026_09_22.py": {
    "kind": "api",
    "units": [
@@ -34497,6 +34797,7 @@
     "router:map_points",
     "router:module_versions",
     "router:modules",
+    "router:notify_templates",
     "router:org_structure",
     "router:parts",
     "router:platform_catalog",
@@ -34586,6 +34887,7 @@
      "backend/routers/map_points.py",
      "backend/routers/module_versions.py",
      "backend/routers/modules.py",
+     "backend/routers/notify_templates.py",
      "backend/routers/org_structure.py",
      "backend/routers/parts.py",
      "backend/routers/platform_catalog.py",
@@ -36670,11 +36972,17 @@
     "helper:settings_registry",
     "helper:status_display",
     "js:js/case-management-core.js",
+    "js:js/cashier.js",
+    "js:js/reports.js",
     "js:js/status-display-editor.js",
     "js:static/public-flags.js",
     "js:static/status-chip.js",
     "page:pages/case-management.html",
+    "page:pages/cashier.html",
+    "page:pages/payment-request-form.html",
+    "page:pages/payment-request.html",
     "page:pages/quotations.html",
+    "page:pages/reports.html",
     "router:def_governance",
     "router:def_pipeline",
     "router:definitions",
@@ -36697,17 +37005,29 @@
     ],
     "page": [
      "frontend/js/case-management-core.js",
+     "frontend/js/cashier.js",
+     "frontend/js/reports.js",
      "frontend/js/status-display-editor.js",
      "frontend/pages/case-management.html",
+     "frontend/pages/cashier.html",
+     "frontend/pages/payment-request-form.html",
+     "frontend/pages/payment-request.html",
      "frontend/pages/quotations.html",
+     "frontend/pages/reports.html",
      "frontend/static/public-flags.js",
      "frontend/static/status-chip.js"
     ],
     "path": [
      "frontend/js/case-management-core.js",
+     "frontend/js/cashier.js",
+     "frontend/js/reports.js",
      "frontend/js/status-display-editor.js",
      "frontend/pages/case-management.html",
+     "frontend/pages/cashier.html",
+     "frontend/pages/payment-request-form.html",
+     "frontend/pages/payment-request.html",
      "frontend/pages/quotations.html",
+     "frontend/pages/reports.html",
      "frontend/static/status-chip.js"
     ]
    },
