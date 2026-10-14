@@ -25,20 +25,71 @@ OFF_REASON = "自訂通知用語尚未開放（設定中心：自訂通知用語
 
 #: 事件登記：代號 ⇒ {label, fields: {通道.欄位: {default, limit, placeholders, need}}}。預設字＝今天寫死的字（逐位元）。
 #: `need`＝必須出現的占位符（讓收件人能認出是哪一張單）。
+def _f(label, default, limit, placeholders=(), need=(), allow_status=False):
+    """欄位定義。`allow_status=True`：這個欄位本來就是在說明該事件的官方結果（例如『核准』事件的訊息），可以出現狀態字樣；
+    其餘事件一律不准（狀態字樣只由程式依單據真實狀態產生，所以事件鍵決定能不能說，不是文字）。
+    與預設字完全相同的值一律放行（預設字由程式碼寫死、不經使用者輸入，可能含斜線等一般不允許的字元）。"""
+    return {"label": label, "default": default, "limit": limit, "placeholders": tuple(placeholders), "need": tuple(need), "allow_status": allow_status}
+
+
+_SAMPLE = {"單號": "MQ-202610-001", "對象": "範例客戶股份有限公司", "標記": "", "層": "2", "總層": "3", "最終審核人": "王經理",
+           "原單號": "MQ-202610-001", "新單號": "MQ-202610-001-R1"}
+
 EVENTS = {
     "approval:submitted": {
         "label": "報價單送審（通知當層簽核人）",
-        "sample": {"單號": "MQ-202610-001", "對象": "範例客戶股份有限公司", "標記": ""},
+        "sample": _SAMPLE,
+        "mail_rows": (("報價單號", "單號"), ("客戶名稱", "對象")),
+        "note_sample": "",
         "fields": {
-            "inapp.message": {"label": "站內訊息", "default": "報價單 {單號}{標記}（{對象}）需要您簽核", "limit": 100,
-                              "placeholders": ("單號", "對象", "標記"), "need": ("單號",)},
-            "mail.reason": {"label": "信件主旨（事由）", "default": "報價單待審核：{單號}（{對象}）", "limit": 60,
-                            "placeholders": ("單號", "對象"), "need": ("單號",)},
-            "mail.title": {"label": "信件標題", "default": "報價單簽核申請", "limit": 30, "placeholders": (), "need": ()},
-            "mail.badge": {"label": "信件徽章字", "default": "待您審核", "limit": 12, "placeholders": (), "need": ()},
-            "mail.intro": {"label": "信件引言", "default": "您好，以下報價單已進入簽核流程，敬請於系統中完成審核作業。", "limit": 120,
-                           "placeholders": ("單號", "對象"), "need": ()},
-            "mail.button": {"label": "信件按鈕字", "default": "前往審核報價單", "limit": 20, "placeholders": (), "need": ()},
+            "inapp.message": _f("站內訊息", "報價單 {單號}{標記}（{對象}）需要您簽核", 100, ("單號", "對象", "標記"), ("單號",)),
+            "mail.reason": _f("信件主旨（事由）", "報價單待審核：{單號}（{對象}）", 60, ("單號", "對象"), ("單號",)),
+            "mail.title": _f("信件標題", "報價單簽核申請", 30),
+            "mail.badge": _f("信件徽章字", "待您審核", 12),
+            "mail.intro": _f("信件引言", "您好，以下報價單已進入簽核流程，敬請於系統中完成審核作業。", 120, ("單號", "對象")),
+            "mail.button": _f("信件按鈕字", "前往審核報價單", 20),
+        },
+    },
+    "approval:next_tier": {
+        "label": "報價單輪到下一層（通知該層簽核人）",
+        "sample": _SAMPLE,
+        "mail_rows": (("報價單號", "單號"), ("客戶名稱", "對象"), ("目前進度", "第 {層} 層審核（共 {總層} 層）")),
+        "note_sample": "",
+        "fields": {
+            "inapp.message": _f("站內訊息", "報價單 {單號}{標記}（{對象}）輪到您簽核（第 {層} 層 / 共 {總層} 層）", 100, ("單號", "對象", "標記", "層", "總層"), ("單號",)),
+            "mail.reason": _f("信件主旨（事由）", "報價單審核通知（第 {層}/{總層} 層）：{單號}（{對象}）", 60, ("單號", "對象", "層", "總層"), ("單號",)),
+            "mail.title": _f("信件標題", "報價單簽核流程通知", 30),
+            "mail.badge": _f("信件徽章字", "輪到您審核", 12),
+            "mail.intro": _f("信件引言", "您好，前層審核已完成，報價單現已進入第 {層} 層審核階段，敬請登入系統完成審核。", 120, ("單號", "對象", "層", "總層")),
+            "mail.button": _f("信件按鈕字", "前往審核報價單", 20),
+        },
+    },
+    "approval:approved": {
+        "label": "報價單核准完成（通知申請人）",
+        "sample": _SAMPLE,
+        "mail_rows": (("報價單號", "單號"), ("客戶名稱", "對象"), ("最終審核人", "最終審核人")),
+        "note_sample": "",
+        "fields": {
+            "inapp.message": _f("站內訊息", "報價單 {單號}（{對象}）已核准", 100, ("單號", "對象", "最終審核人"), ("單號",), True),
+            "mail.reason": _f("信件主旨（事由）", "報價單審核完成：{單號}（{對象}）", 60, ("單號", "對象", "最終審核人"), ("單號",), True),
+            "mail.title": _f("信件標題", "報價單審核完成", 30, (), (), True),
+            "mail.badge": _f("信件徽章字", "全數通過", 12, (), (), True),
+            "mail.intro": _f("信件引言", "您好，以下報價單已完成全部層級審核，正式生效。感謝各位審核人員配合。", 120, ("單號", "對象", "最終審核人"), (), True),
+            "mail.button": _f("信件按鈕字", "前往查看報價單", 20, (), (), True),
+        },
+    },
+    "approval:returned": {
+        "label": "報價單退回修改（通知申請人）",
+        "sample": _SAMPLE,
+        "mail_rows": (("原單號", "原單號"), ("修改版單號", "新單號"), ("客戶名稱", "對象")),
+        "note_sample": "（退回時填的備註會顯示在這裡，不能由範本修改）",
+        "fields": {
+            "inapp.message": _f("站內訊息", "報價單 {新單號}（原 {原單號}，{對象}）已退回修改，請確認後重新送審", 100, ("新單號", "原單號", "對象"), ("新單號",)),
+            "mail.reason": _f("信件主旨（事由）", "報價單退回修改：{原單號}（{對象}）", 60, ("新單號", "原單號", "對象"), ("原單號",)),
+            "mail.title": _f("信件標題", "報價單退回修改通知", 30),
+            "mail.badge": _f("信件徽章字", "請修改後重新送審", 12),
+            "mail.intro": _f("信件引言", "您好，您提交的報價單經審核後，因需要調整已退回，請參閱下方備註後完成修改，並重新送審。", 120, ("新單號", "原單號", "對象")),
+            "mail.button": _f("信件按鈕字", "前往修改報價單", 20),
         },
     },
 }
@@ -80,6 +131,8 @@ def _skeleton(v):
 def _text_problems(text, spec):
     if not isinstance(text, str) or not text.strip():
         return "必須是不空白的文字"
+    if text == spec["default"]:
+        return ""                                            # 與預設字相同＝程式碼寫死的字，放行（預設字可能含斜線、狀態字樣）
     if len(text) > spec["limit"]:
         return "最多 %d 字" % spec["limit"]
     if any(unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp", "Co", "Cs") or ch in _FILLERS for ch in text):
@@ -100,8 +153,8 @@ def _text_problems(text, spec):
         if n not in names:
             return "必須包含 {%s}（讓收件人認得是哪一張單）" % n
     flat = _PH.sub("", text)
-    hit = [w for w in RESERVED if _skeleton(w) in _skeleton(flat)]
-    hit += _EN_RE.findall(unicodedata.normalize("NFKC", flat).casefold())
+    hit = [] if spec.get("allow_status") else [w for w in RESERVED if _skeleton(w) in _skeleton(flat)]
+    hit += [] if spec.get("allow_status") else _EN_RE.findall(unicodedata.normalize("NFKC", flat).casefold())
     if hit:
         return "不可含官方狀態字樣：%s" % "、".join(hit)
     return ""

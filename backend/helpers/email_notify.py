@@ -515,17 +515,22 @@ def _send_raising(to_addrs: list, subject: str, html: str) -> None:
 
 # ── Public event functions ────────────────────────────────────────────────────
 
+def _tpl_fields(event: str, ctx: dict) -> dict:
+    """自訂通知用語（S-X3）：旗標關／沒有已發布範本／任何錯誤 ⇒ `{}`（呼叫端的每個欄位都有今天寫死的預設）。純文字。"""
+    try:
+        from . import notify_templates as _NT
+        return _NT.mail_fields(event, ctx) or {}
+    except Exception:                                      # noqa: BLE001
+        return {}
+
+
 def notify_approval_request(quote_no: str, customer: str, approver_usernames: list) -> None:
     """新報價/改版送審 → 通知當層簽核人"""
     to = _lookup_emails(approver_usernames, "approval_request")
     if not to:
         logger.warning("notify_approval_request: 簽核人 %s 皆無設定 email（quote_no=%r）", approver_usernames, quote_no)
         return
-    try:                                                   # S-X3：自訂通知用語（旗標關／沒有已發布範本 ⇒ 空 dict ⇒ 下面全部走今天的字）
-        from . import notify_templates as _NT
-        _tf = _NT.mail_fields("approval:submitted", {"單號": quote_no, "對象": customer}) or {}
-    except Exception:                                      # noqa: BLE001
-        _tf = {}
+    _tf = _tpl_fields("approval:submitted", {"單號": quote_no, "對象": customer})          # S-X3：旗標關／沒有範本 ⇒ {} ⇒ 下面全部走今天的字
     html = _build_html("approval_request", 
         _tf.get("title", "報價單簽核申請"), _tf.get("badge", "待您審核"), "#2F6FD6",
         [("報價單號", quote_no), ("客戶名稱", customer)],
@@ -543,15 +548,16 @@ def notify_next_tier(quote_no: str, customer: str, tier_no: int,
     if not to:
         logger.warning("notify_next_tier: 第 %d 層簽核人 %s 皆無設定 email（quote_no=%r）", tier_no, approver_usernames, quote_no)
         return
+    _tf = _tpl_fields("approval:next_tier", {"單號": quote_no, "對象": customer, "層": tier_no, "總層": total_tiers})
     html = _build_html("next_tier", 
-        "報價單簽核流程通知", "輪到您審核", "#2F6FD6",
+        _tf.get("title", "報價單簽核流程通知"), _tf.get("badge", "輪到您審核"), "#2F6FD6",
         [("報價單號", quote_no), ("客戶名稱", customer),
          ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
         quote_no, _base_url(),
-        intro=f"您好，前層審核已完成，報價單現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。",
-        button_text="前往審核報價單",
+        intro=_tf.get("intro", f"您好，前層審核已完成，報價單現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。"),
+        button_text=_tf.get("button", "前往審核報價單"),
     )
-    _async_send(to, _mt.subject("next_tier", f"報價單審核通知（第 {tier_no}/{total_tiers} 層）：{quote_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("next_tier", _tf.get("reason", f"報價單審核通知（第 {tier_no}/{total_tiers} 層）：{quote_no}（{customer}）")), html)
 
 
 def notify_approved(quote_no: str, customer: str,
@@ -561,14 +567,15 @@ def notify_approved(quote_no: str, customer: str,
     if not to:
         logger.warning("notify_approved: 申請人 %r 及所有管理員皆無設定 email（quote_no=%r）", requester_username, quote_no)
         return
+    _tf = _tpl_fields("approval:approved", {"單號": quote_no, "對象": customer, "最終審核人": approved_by})
     html = _build_html("approved", 
-        "報價單審核完成", "全數通過", "#16A34A",
+        _tf.get("title", "報價單審核完成"), _tf.get("badge", "全數通過"), "#16A34A",
         [("報價單號", quote_no), ("客戶名稱", customer), ("最終審核人", approved_by)],
         quote_no, _base_url(),
-        intro="您好，以下報價單已完成全部層級審核，正式生效。感謝各位審核人員配合。",
-        button_text="前往查看報價單",
+        intro=_tf.get("intro", "您好，以下報價單已完成全部層級審核，正式生效。感謝各位審核人員配合。"),
+        button_text=_tf.get("button", "前往查看報價單"),
     )
-    _async_send(to, _mt.subject("approved", f"報價單審核完成：{quote_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("approved", _tf.get("reason", f"報價單審核完成：{quote_no}（{customer}）")), html)
 
 
 def notify_returned(quote_no: str, new_quote_no: str, customer: str,
@@ -578,15 +585,16 @@ def notify_returned(quote_no: str, new_quote_no: str, customer: str,
     if not to:
         logger.warning("notify_returned: 申請人 %r 無設定 email（quote_no=%r）", requester_username, quote_no)
         return
+    _tf = _tpl_fields("approval:returned", {"原單號": quote_no, "新單號": new_quote_no, "對象": customer})
     html = _build_html("returned", 
-        "報價單退回修改通知", "請修改後重新送審", "#DC2626",
+        _tf.get("title", "報價單退回修改通知"), _tf.get("badge", "請修改後重新送審"), "#DC2626",
         [("原單號", quote_no), ("修改版單號", new_quote_no), ("客戶名稱", customer)],
         new_quote_no, _base_url(),
-        intro="您好，您提交的報價單經審核後，因需要調整已退回，請參閱下方備註後完成修改，並重新送審。",
+        intro=_tf.get("intro", "您好，您提交的報價單經審核後，因需要調整已退回，請參閱下方備註後完成修改，並重新送審。"),
         note=note,
-        button_text="前往修改報價單",
+        button_text=_tf.get("button", "前往修改報價單"),
     )
-    _async_send(to, _mt.subject("returned", f"報價單退回修改：{quote_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("returned", _tf.get("reason", f"報價單退回修改：{quote_no}（{customer}）")), html)
 
 
 def notify_shipping_submitted(note_no: str, customer: str, approver_usernames: list) -> None:
