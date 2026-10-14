@@ -161,6 +161,18 @@ def _lazy_kinds():
         pass
 
 
+def _disabled_lazy_kinds() -> set:
+    """惰性登記的 kind 一旦登記，到服務重啟前都留在 `D.kinds()`；旗標關了就不要在種類清單裡列出（與功能狀態閘門 hidden 一致）。"""
+    out = set()
+    try:
+        from helpers import stage_templates as _ST
+        if not _ST.enabled():
+            out.add(_ST.KIND)
+    except Exception:                                                  # noqa: BLE001  讀不到 ⇒ 視為關（不列出）
+        out.add("case_stage_template")
+    return out
+
+
 def _group_gate(kind, key):
     """設定群組的任何『指名某個群組』的通用路由（讀取、驗證）：hidden ⇒ 404（連 superadmin 也不顯示）、planned ⇒ 409（只有名稱與狀態可見，細節不給）。"""
     _lazy_kinds()
@@ -213,7 +225,7 @@ def list_definition_kinds(authorization: str = Header(None)):
     """定義種類清單（內建＋模組登記的）——編輯畫面用；只有超級管理員。"""
     _require_user(authorization, require_superadmin=True)
     _lazy_kinds()
-    return {"kinds": D.kinds_meta()}
+    return {"kinds": [m for m in D.kinds_meta() if m.get("kind") not in _disabled_lazy_kinds()]}
 
 
 @router.get("/api/expense-types")

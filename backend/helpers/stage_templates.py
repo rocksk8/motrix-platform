@@ -2,7 +2,7 @@
 """案件執行階段樣板（S-ST1；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）：宣告式的階段清單（種類鍵、名稱、起迄天數、建議比例、前置階段）。
 
 [單位] helper:stage_templates    [層] L1    [穩定度] 實作（本刀只有定義、驗證、治理分類與旗標；套用端點與案件頁按鈕是 S-ST2）
-[公開介面] COMPARE_KEYS, FIELD, GROUP, KIND, MAX_DAYS, MAX_STAGES, OFF_REASON, definition_problems, enabled, ensure_kind, stage_map
+[公開介面] COMPARE_KEYS, KIND_VISIBLE_NAME, FIELD, GROUP, KIND, MAX_DAYS, MAX_STAGES, OFF_REASON, definition_problems, enabled, ensure_kind, stage_map
 [不變式] 設定 `builder_stage_templates.enabled`（預設 0＝關；且必須同時開啟 `builder_governance.enabled`）關著時：kind 不登記、定義路由 404（功能狀態閘門）、
     沒有任何程式讀這個定義——現有的階段新增／編輯／提醒／認列／結案關卡完全不受影響。
     範本只收宣告式資料：階段種類鍵 `key`（小寫英數底線，樣板內唯一，**建立後不可改**——比較函式以鍵配對，改鍵＝移除舊的＋新增新的）、
@@ -14,6 +14,7 @@
 [契約題] backend/tests/platform/test_stage_templates_t62.py
 """
 import re
+import unicodedata
 
 from core import definitions as D
 from core import spine as _spine
@@ -27,11 +28,14 @@ MAX_STAGES = 30
 MAX_DAYS = 730
 LABEL_MAX = 20
 NAME_MAX = 30
-_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,29}$")
+#: 鍵一律用 `fullmatch`（Python 的 `$` 會在結尾換行前比對成功：「a\n」會被當成合法的鍵、與「a」並存）。
+#: 註：`core/definitions.py` 的通用 `_KEY_RE` 有同樣的寫法（既有，不在本刀處理；見設計文件 §3）。
+_KEY_RE = re.compile(r"[a-z][a-z0-9_]{0,29}")
 _TOP = {"version", "label", "stages"}
 _STAGE = {"key", "label", "offsetDays", "durationDays", "ratioBp", "dependsOn"}
 #: 比較函式要看的欄位（其餘鍵＝看不懂＝放寬）
 COMPARE_KEYS = ("label", "offsetDays", "durationDays", "ratioBp", "dependsOn")
+KIND_VISIBLE_NAME = "案件階段樣板"
 
 
 def enabled(conn=None) -> bool:
@@ -43,6 +47,11 @@ def enabled(conn=None) -> bool:
         return int(SR.get("builder_governance", "enabled", conn=conn)) == 1
     except Exception:                                        # noqa: BLE001
         return False
+
+
+def _fold(s) -> str:
+    """比較用：NFKC＋casefold＋去頭尾空白（全形／大小寫不同的同一個名稱視為重複）。"""
+    return unicodedata.normalize("NFKC", s).casefold().strip()
 
 
 def _int(v, lo, hi) -> bool:
@@ -72,14 +81,14 @@ def _cycle(deps: dict) -> list:
 def definition_problems(key, body) -> list:
     """發布前驗證 ⇒ `[{path, message}]`（空＝通過）。`key`＝樣板鍵（小寫英數底線）。"""
     out = []
-    if not isinstance(key, str) or not _KEY_RE.match(key):
+    if not isinstance(key, str) or not _KEY_RE.fullmatch(key):
         out.append({"path": "", "message": "樣板鍵必須是小寫英文字母開頭的英數底線（最多 30 字）"})
     if not isinstance(body, dict):
         return out + [{"path": "", "message": "樣板必須是物件"}]
     for k in body:
         if k not in _TOP:
             out.append({"path": k, "message": "不認得的設定：%s" % k})
-    if body.get("version") != 1 or isinstance(body.get("version"), bool):
+    if type(body.get("version")) is not int or body.get("version") != 1:
         out.append({"path": "version", "message": "version 必須是 1"})
     msg = _ST.problem(body.get("label"), NAME_MAX, allow_status=True)
     if msg:
@@ -99,7 +108,7 @@ def definition_problems(key, body) -> list:
             if k not in _STAGE:
                 out.append({"path": "%s.%s" % (p, k), "message": "不認得的設定：%s（階段只有 key、label、offsetDays、durationDays、ratioBp、dependsOn）" % k})
         k = st.get("key")
-        if not isinstance(k, str) or not _KEY_RE.match(k):
+        if not isinstance(k, str) or not _KEY_RE.fullmatch(k):
             out.append({"path": p + ".key", "message": "階段種類鍵必須是小寫英文字母開頭的英數底線（最多 30 字）"})
         elif k in keys:
             out.append({"path": p + ".key", "message": "階段種類鍵重複：%s" % k})
@@ -108,10 +117,10 @@ def definition_problems(key, body) -> list:
         msg = _ST.problem(st.get("label"), LABEL_MAX, allow_status=True)
         if msg:
             out.append({"path": p + ".label", "message": "階段名稱：" + msg})
-        elif st["label"].strip() in labels:
+        elif _fold(st["label"]) in labels:
             out.append({"path": p + ".label", "message": "階段名稱重複：%s" % st["label"]})
         else:
-            labels.add(st["label"].strip())
+            labels.add(_fold(st["label"]))
         for f in ("offsetDays", "durationDays"):
             if not _int(st.get(f), 0, MAX_DAYS):
                 out.append({"path": "%s.%s" % (p, f), "message": "%s 必須是 0～%d 的整數" % (f, MAX_DAYS)})
@@ -169,7 +178,7 @@ def ensure_kind():
     """惰性登記 kind（旗標關＝不登記，`/api/definition-kinds` 與今天相同）。"""
     if KIND not in D.kinds() and enabled():
         try:
-            D.register_kind(KIND, label="案件階段樣板", validator=_kind_validator)
+            D.register_kind(KIND, label=KIND_VISIBLE_NAME, validator=_kind_validator)
         except ValueError:                                   # 並行登記 ⇒ 已存在
             pass
     return KIND in D.kinds()
