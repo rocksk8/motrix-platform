@@ -9,6 +9,8 @@
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script src="../static/export-guard.js"></script>
+  <script src="../static/option-lists.js"></script>
+  <meta name="motrix-option-lists" content="customer_type">   <!-- census #4：只是宣告；選項清單開啟且是最高管理者時，sidebar.js 才載入編輯器（關著＝沒有任何額外請求） -->
   <script src="../static/gov-lookup.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -767,9 +769,7 @@
             <div class="form-group">
               <label class="form-label">客戶類型</label>
               <select class="form-select" x-model="form.type">
-                <option value="一般">一般客戶</option>
-                <option value="VIP">VIP 客戶</option>
-                <option value="潛在">潛在客戶</option>
+                <template x-for="o in typeOptions(form.type)" :key="o.value"><option :value="o.value" x-text="o.label"></option></template>
               </select>
             </div>
           </div>
@@ -955,11 +955,16 @@
         return chips
       },
       CUSTOMER_TYPES:      ['一般', 'VIP', '潛在'],
+      // census #4：選項清單（旗標關／沒發布 ⇒ 全部回到上面寫死的預設，畫面逐項相同）
+      optVer: 0,
+      get customerTypeValues() { this.optVer; return MotrixOptions.values('customer_type', this.CUSTOMER_TYPES) },
+      CUSTOMER_TYPE_ITEMS: [{ value: '一般', label: '一般客戶' }, { value: 'VIP', label: 'VIP 客戶' }, { value: '潛在', label: '潛在客戶' }],
+      typeOptions(cur) { this.optVer; return MotrixOptions.options('customer_type', this.CUSTOMER_TYPE_ITEMS, cur) },
       CUSTOMER_INDUSTRIES: ['製造業', '科技業', '流通業', '服務業', '建設業', '其他'],
       get typeChips() {
         // 「停用」不是客戶等級，是 active 旗標——原本混在同一個下拉裡，
         // 選了「已停用」等於用等級欄位去篩一個完全不同的欄位。獨立一籤。
-        const chips = this._catChips(this.customers, this.CUSTOMER_TYPES, c => c.type)
+        const chips = this._catChips(this.customers, this.customerTypeValues, c => c.type)
         const off = this.customers.filter(c => !c.active).length
         if (off) chips.push({ key: '停用', label: '已停用', count: off, orphan: false })
         return chips
@@ -1379,6 +1384,7 @@
         if (!s) { window.location.href = 'login.html'; return }
         try { this.session = JSON.parse(s) } catch(e) { window.location.href = 'login.html'; return }
         this.initLayout()
+        window.addEventListener('motrix-options', () => { this.optVer++ })     // census #4：選項清單到了（或換了）就重算
         this.loadTagPresets()
         this.pnLoadNotice()     // 個資蒐集告知文字（聯絡人用；列印告知書）
 

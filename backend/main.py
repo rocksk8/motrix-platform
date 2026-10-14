@@ -92,6 +92,7 @@ from routers import duty_roles
 from routers import platform_menu
 from routers import platform_menu_preview
 from routers import export_templates as export_templates_router
+from routers import option_lists as option_lists_router
 from routers import system_hub
 from routers import platform_catalog
 _startup_step("import_routers")
@@ -962,6 +963,7 @@ app.include_router(duty_roles.router)
 app.include_router(platform_menu.router)
 app.include_router(platform_menu_preview.router)
 app.include_router(export_templates_router.router)
+app.include_router(option_lists_router.router)
 app.include_router(system_hub.router)
 app.include_router(platform_catalog.router)
 _startup_step("include_routers")

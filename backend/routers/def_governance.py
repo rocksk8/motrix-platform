@@ -17,6 +17,8 @@ def kinds():
     try:
         from helpers import export_templates as _ET
         _ET.ensure_kind()                                              # 惰性登記（旗標關 ⇒ 不登記）
+        from helpers import option_lists as _OL
+        _OL.ensure_kind()                                              # 惰性登記（旗標關 ⇒ 不登記）
     except Exception:                                                  # noqa: BLE001
         pass
     return D.kinds()
@@ -28,6 +30,7 @@ _SCOPE_TEXT = {
     "custom_fields": {"screens": "掛載該欄位集的表單與列表", "customerVisible": False},
     "custom_module": {"screens": "這個自訂模組的表單、列表、流程與簽核層", "customerVisible": False},
     "export_template": {"screens": "該匯出檔的欄位、標題與順序（下載檔案的內容）", "customerVisible": False},
+    "option_list": {"screens": "用到這份清單的下拉選單與篩選（客戶類型、供應商類型、料件分類、料件單位）", "customerVisible": False},
 }
 _GENERIC_SCOPE = {"screens": "使用這份定義的畫面", "customerVisible": False}
 

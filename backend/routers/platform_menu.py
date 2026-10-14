@@ -168,6 +168,10 @@ def platform_menu(authorization: str = Header(None)):
     from helpers import export_templates as _ET0
     if _ET0.enabled():
         resp["exportAudit"] = True                        # BP-3：給所有人（不只最高管理者）——瀏覽器端產檔的匯出據此才送一筆稽核紀錄；關著 ⇒ 沒有這個鍵、頁面不多任何請求
+    from helpers import option_lists as _OL0
+    _ol = _OL0.lists_for_menu()
+    if _ol:
+        resp["optionLists"] = _ol                         # census #4：給所有人——頁面的下拉選單據此用管理者發布的清單；關著或沒發布 ⇒ 沒有這個鍵、頁面不發任何額外請求
     if sa:
         from helpers import menu_builder as MB
         if MB.enabled():
@@ -175,6 +179,8 @@ def platform_menu(authorization: str = Header(None)):
         from helpers import export_templates as ET
         if ET.enabled():
             resp["builderExports"] = True                 # BP-3：同上——只有開啟＋最高管理者才多這個鍵；前端據此（且頁面有 motrix-export-id）載入 export-editor.js，關著不多任何請求
+        if _OL0.enabled():
+            resp["builderOptionLists"] = True             # census #4：只有開啟＋最高管理者才多這個鍵；前端據此（且頁面宣告了 motrix-option-lists）載入 option-list-editor.js
     return resp
 
 
