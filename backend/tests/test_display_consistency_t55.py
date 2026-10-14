@@ -62,10 +62,13 @@ def test_quotation_list_empty_rows_span_all_columns_like_the_lane_header():
     src = _read("pages", "quotations.html")
     head = src[src.index("<thead>"):src.index("</thead>")]
     cols = len(re.findall(r"<th[ >]", head))              # 含 `x-show` 的拖曳欄（自訂排序時才出現）
-    lane = re.search(r'class="ql-lane"[^>]*>\s*<td colspan="(\d+)"', src)
-    empties = re.findall(r'<td colspan="(\d+)" style="text-align:center;padding:(?:40|24)px', src)
+    # BP-1 Q2 起 colspan 不再寫死 12，而是 `:colspan="colSpan()"`（版面隱藏欄位後跟著減；旗標關恆為 `<th` 總數）：
+    # 分群標題列與兩個空狀態列三處都必須走同一個函式，函式的基數必須等於表頭實際的欄數
+    lane = re.search(r'class="ql-lane"[^>]*>\s*<td :colspan="colSpan\(\)"', src)
+    empties = re.findall(r'<td :colspan="colSpan\(\)" style="text-align:center;padding:(?:40|24)px', src)
     assert lane and len(empties) == 2
-    assert {int(lane.group(1)), *map(int, empties)} == {cols}, (cols, lane.group(1), empties)
+    assert "colSpan() { return %d - " % cols in src, cols
+    assert not re.search(r'<td colspan="\d+"', src.split("<tbody")[1]), "表身不得再有寫死的 colspan"
 
 
 # ── ③ 徽章 ──
