@@ -786,6 +786,23 @@
    "render_rows": "def(export_id, template, rows, user)",
    "resolve": "def(export_id, conn=…)"
   },
+  "helper:finance_params": {
+   "BAND_KEYS": "const",
+   "CASHIER_GROUP": "const",
+   "CLOSE_GATE_GROUP": "const",
+   "CLOSE_GATE_OPTIONS": "const",
+   "DEFAULT_BANK_ALIASES": "const",
+   "DEFAULT_CUTS": "const",
+   "DEFAULT_DUE_SOON": "const",
+   "GROUP": "const",
+   "aging_band": "def(days, cuts=…)",
+   "aging_cuts": "def(conn=…)",
+   "aging_labels": "def(cuts=…)",
+   "aliases_text": "def(lst)",
+   "bank_aliases": "def(conn=…)",
+   "close_gate_options": "def(conn)",
+   "parse_aliases": "def(text)"
+  },
   "helper:financial_mask": {
    "HISTORY_MONEY_FIELDS": "const",
    "ITEM_MONEY_KEYS": "const",
