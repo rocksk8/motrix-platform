@@ -22,6 +22,7 @@ _SCOPE_TEXT = {
     "output_template": {"screens": "該單據的列印／PDF／預覽版型", "customerVisible": True},
     "custom_fields": {"screens": "掛載該欄位集的表單與列表", "customerVisible": False},
     "custom_module": {"screens": "這個自訂模組的表單、列表、流程與簽核層", "customerVisible": False},
+    "export_template": {"screens": "該匯出檔的欄位、標題與順序（下載檔案的內容）", "customerVisible": False},
 }
 _GENERIC_SCOPE = {"screens": "使用這份定義的畫面", "customerVisible": False}
 

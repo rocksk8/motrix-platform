@@ -24,7 +24,7 @@ router = APIRouter()
 
 #: 目前受管線管的 kind（有比較函式、而且編輯器已能處理『待核准』回應的）。layout：排版器（3c，wip/t60-s4-r1）與選單編輯器
 #: 都已改成遇到 `pending: true` 不說「已發布」——**這個 kind 只能在 3c 的 wip/t60-s4-r1 已在同一列車時才可加入名單**。
-ACTIVE_KINDS = ("custom_fields", "layout")
+ACTIVE_KINDS = ("custom_fields", "layout", "export_template")      # export_template：BP-3（編輯器 export-editor.js 如實顯示 pending）
 
 _COSMETIC = {"label", "placeholder", "hint", "help", "description"}     # 只影響顯示文字，不影響誰看得到／填什麼
 
@@ -81,7 +81,38 @@ def _cmp_layout(old, new):
     return ("tighten", tighten) if tighten else ("neutral", [])
 
 
-COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout}
+def _cmp_export_template(old, new):
+    """匯出範本：新增欄位 ＝ 匯出檔多給資料 ⇒ 放寬（金額／有權限條件的欄位明寫）；移除欄位、拿掉頁首頁尾浮水印 ⇒ 收緊；
+    只改標題文字、順序、頁首頁尾文字 ⇒ 中性（純顯示）；格式或其他無法判斷的變動 ⇒ 放寬。"""
+    from helpers import export_templates as ET
+    old, new = old or {}, new or {}
+    oc = [c.get("id") for c in old.get("columns", []) if isinstance(c, dict)]
+    nc = [c.get("id") for c in new.get("columns", []) if isinstance(c, dict)]
+    loosen, tighten = [], []
+    gated = set()
+    for meta in ET.registered().values():
+        gated |= {c["id"] for c in meta["columns"] if c["money"]}
+    for k in nc:
+        if k not in oc:
+            loosen.append("新增匯出欄位 %s%s" % (k, "（金額／有權限條件的欄位）" if k in gated else ""))
+    for k in oc:
+        if k not in nc:
+            tighten.append("移除匯出欄位 %s" % k)
+    if old.get("format") != new.get("format"):
+        loosen.append("匯出格式變了（無法判斷寬嚴，視為放寬）")
+    for k in set(old) | set(new):
+        if k in ("columns", "format", "version", "header", "footer", "watermark"):
+            continue
+        loosen.append("未知設定 %s 變了（視為放寬）" % k)
+    for part in ("header", "footer", "watermark"):
+        if part in old and part not in new:
+            tighten.append("拿掉%s" % {"header": "頁首", "footer": "頁尾", "watermark": "浮水印"}[part])
+    if loosen:
+        return "loosen", loosen + tighten
+    return ("tighten", tighten) if tighten else ("neutral", [])
+
+
+COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout, "export_template": _cmp_export_template}
 
 
 def classify(kind, old_body, new_body):
