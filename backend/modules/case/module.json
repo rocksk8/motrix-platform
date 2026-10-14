@@ -126,6 +126,29 @@
         {"key": "projectName", "label": "案件名稱", "core": true},
         {"key": "deliveryLocation", "label": "交貨地點", "core": false}
       ],
+      "tab": [
+        {"key": "biz", "label": "案件資訊", "core": true},
+        {"key": "exec", "label": "執行管理", "core": false},
+        {"key": "dispatch", "label": "承攬商", "core": false},
+        {"key": "shipping", "label": "出貨單", "core": false},
+        {"key": "completion", "label": "完工單", "core": false},
+        {"key": "feed", "label": "動態", "core": false},
+        {"key": "allfiles", "label": "全部附件", "core": false},
+        {"key": "fin", "label": "財務", "core": false},
+        {"key": "xexp", "label": "額外支出", "core": false}
+      ],
+      "quote": [
+        {"key": "quoteNo", "label": "報價單號", "core": true},
+        {"key": "customer", "label": "客戶名稱", "core": true},
+        {"key": "project", "label": "案件名稱", "core": false},
+        {"key": "amount", "label": "金額（含稅）", "core": false},
+        {"key": "margin", "label": "毛利率", "core": false},
+        {"key": "validDays", "label": "有效天數", "core": false},
+        {"key": "filler", "label": "填單人", "core": false},
+        {"key": "status", "label": "狀態", "core": true},
+        {"key": "dealTag", "label": "案件進度", "core": true},
+        {"key": "date", "label": "報價日期", "core": false}
+      ],
       "qterms": [
         {"key": "paymentTerms", "label": "付款條件", "core": false},
         {"key": "deliveryTerms", "label": "交貨條件", "core": false},
@@ -146,6 +169,17 @@
             {"field": "amount", "visible": true},
             {"field": "stageProgress", "visible": true},
             {"field": "date", "visible": true}
+          ]},
+          {"key": "tabs", "label": "案件分頁", "entity": "tab", "columns": [
+            {"field": "biz", "visible": true},
+            {"field": "exec", "visible": true},
+            {"field": "dispatch", "visible": true},
+            {"field": "shipping", "visible": true},
+            {"field": "completion", "visible": true},
+            {"field": "feed", "visible": true},
+            {"field": "allfiles", "visible": true},
+            {"field": "fin", "visible": true},
+            {"field": "xexp", "visible": true}
           ]}
         ],
         "forms": [
@@ -156,6 +190,27 @@
             {"key": "main", "label": "專案期間", "fields": ["startDate", "endDate"]}
           ]}
         ],
+        "actions": [],
+        "menus": [],
+        "exports": []
+      },
+      {
+        "page": "quotations.html",
+        "lists": [
+          {"key": "quotes", "label": "報價單清單", "entity": "quote", "columns": [
+            {"field": "quoteNo", "visible": true},
+            {"field": "customer", "visible": true},
+            {"field": "project", "visible": true},
+            {"field": "amount", "visible": true},
+            {"field": "margin", "visible": true},
+            {"field": "validDays", "visible": true},
+            {"field": "filler", "visible": true},
+            {"field": "status", "visible": true},
+            {"field": "dealTag", "visible": true},
+            {"field": "date", "visible": true}
+          ]}
+        ],
+        "forms": [],
         "actions": [],
         "menus": [],
         "exports": []
