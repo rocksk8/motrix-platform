@@ -27,7 +27,12 @@ def test_product_code_only_passes_the_dedicated_profile_dir():
     hits = [str(p.relative_to(BACKEND)).replace(chr(92), "/") for p in BACKEND.rglob("*.py")
             if "tests" not in p.relative_to(BACKEND).parts and p.name != "conftest.py"  # conftest.py 在 backend/ 根（2026-09-25 自 tests/ 上移），是測試設定不是產品碼
             and "--user-data-dir" in p.read_text(encoding="utf-8", errors="ignore")]
-    assert hits == ["helpers/startup.py"], "產品碼帶了 --user-data-dir 的檔案應該只有 helpers/startup.py：%s" % hits
+    # tools/check_edge_proxy_hardening.py（H2）：人工驗證用的開發工具，不被產品 import；它帶的是自己的暫存 profile（tempfile 底下），不碰使用者的 Edge profile。
+    DEV_TOOLS = {"tools/check_edge_proxy_hardening.py"}
+    assert [h for h in hits if h not in DEV_TOOLS] == ["helpers/startup.py"], "產品碼帶了 --user-data-dir 的檔案應該只有 helpers/startup.py：%s" % hits
+    for t in DEV_TOOLS & set(hits):
+        tsrc = (BACKEND / t).read_text(encoding="utf-8")
+        assert "tempfile" in tsrc and 'os.path.join(tmp, "profile_"' in tsrc, "開發工具的 profile 必須在暫存目錄底下：%s" % t
     src = (BACKEND / "helpers" / "startup.py").read_text(encoding="utf-8")
     assert src.count('"--user-data-dir=%s" % d') == 1 and "_EDGE_PROFILE_ROOT" in src
 

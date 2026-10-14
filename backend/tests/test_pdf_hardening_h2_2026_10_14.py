@@ -229,11 +229,30 @@ def _page(tmp_path, html, name="a.html"):
 
 
 def test_harden_file_neutralizes_then_injects_our_csp(tmp_path):
-    f, cmd = _page(tmp_path, _doc('<meta http-equiv="refresh" content="0;url=file:///C:/Windows/win.ini"><p>x</p><script>evil()</script>' + PS.FIT_A4_SINGLE))
+    f, cmd = _page(tmp_path, _doc('<iframe src="file:///C:/Windows/win.ini"></iframe><img src=x onerror=evil()><p>x</p><script>evil()</script>' + PS.FIT_A4_SINGLE))
     ST._harden_html_file(cmd)
     out = f.read_text(encoding="utf-8")
-    assert "refresh" not in out and "evil()" not in out and PS.FIT_A4_SINGLE in out and out.count('id="motrix-csp"') == 1
+    assert "<iframe" not in out and "onerror" not in out and "evil()" not in out and PS.FIT_A4_SINGLE in out and out.count('id="motrix-csp"') == 1
     assert "<p>x</p>" in out
+    ST._harden_html_file(cmd)                                   # r3：重複硬化同一個檔案不會被自己上一次寫的 CSP meta 擋下；結果不變、CSP 仍只有一份
+    assert f.read_text(encoding="utf-8") == out
+
+
+def test_meta_refresh_in_the_input_is_refused_and_the_file_is_untouched(tmp_path):
+    """r3：輸入含 http-equiv（meta refresh 等）一律拒絕渲染，不是中和後繼續（解析器差異下中和不可靠）。"""
+    html = _doc('<meta http-equiv="refresh" content="0;url=file:///C:/Windows/win.ini"><p>x</p>')
+    f, cmd = _page(tmp_path, html)
+    with pytest.raises(ValueError):
+        ST._harden_html_file(cmd)
+    assert f.read_text(encoding="utf-8") == html
+
+
+def test_a_foreign_csp_meta_is_not_mistaken_for_ours(tmp_path):
+    """冪等只認逐字相同的我們自己的 meta；長得像但內容不同（例如放寬的政策）仍被拒絕。"""
+    fake = ST._csp_meta().replace("default-src 'none'", "default-src *")
+    f, cmd = _page(tmp_path, _doc(fake + "<p>x</p>"))
+    with pytest.raises(ValueError):
+        ST._harden_html_file(cmd)
 
 
 def test_harden_file_refuses_to_render_when_a_dangerous_tag_survives_neutralization(tmp_path, monkeypatch):
@@ -366,6 +385,13 @@ def test_full_pipeline_removes_navigation_and_unregistered_scripts(tmp_path):
         del hits[:]
         f = tmp_path / "hard.html"
         out = tmp_path / "hard.pdf"
+        # r3：輸入含 meta refresh 的頁面整份被拒絕（不產出、不連線）；其餘危險內容（腳本、iframe、外部圖片）的中和用不含 http-equiv 的頁面驗
+        refused = tmp_path / "refused.html"
+        refused.write_text(html, encoding="utf-8")
+        ST.run_edge_pdf([_edge(), "--headless", "--disable-gpu", "--no-sandbox", "--print-to-pdf=%s" % (tmp_path / "refused.pdf"), "--no-pdf-header-footer", "file:///" + str(refused).replace("\\", "/")])
+        assert not (tmp_path / "refused.pdf").exists() and len(hits) == 0, "含 http-equiv 的輸入必須不渲染、不連線"
+        html = html.replace('<meta http-equiv="refresh" content="3;url=http://127.0.0.1:%d/nav">' % port, "")
+        assert "http-equiv" not in html
         f.write_text(html, encoding="utf-8")
         ST.run_edge_pdf([_edge(), "--headless", "--disable-gpu", "--no-sandbox", "--print-to-pdf=%s" % out, "--no-pdf-header-footer", "file:///" + str(f).replace("\\", "/")])
         text = "\n".join((p.extract_text() or "") for p in pypdf.PdfReader(io.BytesIO(out.read_bytes())).pages)

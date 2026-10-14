@@ -41,18 +41,26 @@ ESC = "&lt;b&gt;%s&amp;&#x27;&quot;&lt;/b&gt;"
 def test_csp_has_the_required_directives_and_no_unsafe_script():
     csp = ST._csp_for_html("<html><head></head><body>x</body></html>")
     for d in ("default-src 'none'", "img-src data: file:", "style-src 'unsafe-inline'", "font-src data: file:", "frame-src 'none'", "object-src 'none'",
-              "form-action 'none'", "base-uri 'none'", "connect-src 'none'", "script-src 'none'"):
+              "form-action 'none'", "base-uri 'none'", "connect-src 'none'", "script-src "):
         assert d in csp, d
-    assert "script-src 'unsafe-inline'" not in csp and "unsafe-eval" not in csp
+    # H2-a：script-src 只認註冊表的雜湊（不再有『沒有腳本就 'none'』這個特例）——只准 sha256 雜湊，沒有任何主機／協定／unsafe 來源
+    script_src = csp.split("script-src ", 1)[1].split(";")[0].split()
+    assert script_src and all(re.fullmatch(r"'sha256-[A-Za-z0-9+/]{43}='", t) for t in script_src), script_src
+    assert "script-src 'unsafe-inline'" not in csp and "unsafe-eval" not in csp and "'unsafe-hashes'" not in csp
 
 
 def test_inline_scripts_are_allowed_only_by_hash_and_external_scripts_never():
+    """H2-a：雜湊只來自註冊表（helpers.pdf_scripts）；頁面裡的 script（內嵌、外部、型別變體）都不會讓白名單多一個字。"""
+    from helpers import pdf_scripts as PS
     body1, body2 = "var x=1;", "\nvar y=2\n"
     html = '<html><head></head><body><script>%s</script><script src="a.js"></script><script type="text/javascript">%s</script></body></html>' % (body1, body2)
     csp = ST._csp_for_html(html)
+    assert csp == ST._csp_for_html("<html></html>"), "頁面內容不影響 CSP"
     for b in (body1, body2):
-        assert "'sha256-%s'" % base64.b64encode(hashlib.sha256(b.encode()).digest()).decode() in csp
-    assert csp.count("sha256-") == 2 and "a.js" not in csp
+        assert "'sha256-%s'" % base64.b64encode(hashlib.sha256(b.encode()).digest()).decode() not in csp, "頁面自帶的腳本不得進白名單"
+    for tag in PS.SCRIPTS.values():
+        assert "'sha256-%s'" % base64.b64encode(hashlib.sha256(PS.inner_text(tag).encode()).digest()).decode() in csp
+    assert csp.count("sha256-") == len(PS.SCRIPTS) and "a.js" not in csp
 
 
 def test_inject_csp_is_placed_after_head_and_uses_our_own_meta():
@@ -83,9 +91,10 @@ def test_head_pattern_does_not_match_header_or_headline_tags():
 def test_an_injected_script_does_not_get_a_hash_that_allows_the_page_scripts_only():
     page = "<html><head></head><body><script>var ok=1;</script>%s</body></html>"
     assert ST._csp_for_html(page % "") == ST._csp_for_html(page % "<p>x</p>")
-    # 攻擊者注入的 script 是另一段內容 ⇒ 雜湊不同；但注意：這份 HTML 是『最終內容』，注入的 script 若在 _inject_csp 之前就在裡面，也會被算進白名單——
-    # 所以第一道防線仍是輸出逸出（五個輸出點）；CSP 擋的是 iframe／object／embed／連線／事件屬性，以及渲染過程中動態產生的東西。
-    assert ST._csp_for_html(page % "<script>evil()</script>").count("sha256-") == 2
+    # H2-a：注入的 script 不會得到雜湊（白名單固定是註冊表那幾支）⇒ 被 CSP 擋下（_neutralize_html 也會先移除未登記的 script）
+    from helpers import pdf_scripts as PS
+    evil = ST._csp_for_html(page % "<script>evil()</script>")
+    assert evil.count("sha256-") == len(PS.SCRIPTS) and evil == ST._csp_for_html(page % "")
 
 
 def test_edge_flags_are_inserted_just_before_the_html_argument_and_existing_positions_do_not_move():

@@ -200,12 +200,17 @@ def _csp_for_html(html: str) -> str:
     return "%s; script-src %s" % (_CSP_BASE, " ".join(_ps.allowed_hashes()))
 
 
+def _csp_meta(html: str = "") -> str:
+    """我們自己的 CSP `<meta>`（逐字固定，所以能精確辨認『這是我們上一次寫進去的』）。"""
+    return '<meta id="motrix-csp" http-equiv="Content-Security-Policy" content="%s">' % _csp_for_html(html).replace('"', "&quot;")
+
+
 def _inject_csp(html: str) -> str:
     """在 `<head>` 之後（沒有就在 `<html>` 之後、再沒有就在最前面）插入我們自己的 CSP `<meta id="motrix-csp">`。
     **不做『已經有 CSP 就跳過』的短路**：使用者文字裡若含 `http-equiv=Content-Security-Policy` 字樣（沒有 < > & 引號，逸出後原樣保留），
     短路會讓整份文件沒有我們的 CSP。多個 CSP 政策會取交集，重複插入無害。"""
     import re
-    meta = '<meta id="motrix-csp" http-equiv="Content-Security-Policy" content="%s">' % _csp_for_html(html).replace('"', "&quot;")
+    meta = _csp_meta(html)
     m = re.search(r"<head(?:\s[^>]*)?>", html, re.I) or re.search(r"<html(?:\s[^>]*)?>", html, re.I)
     return html[:m.end()] + meta + html[m.end():] if m else meta + html
 
@@ -387,6 +392,10 @@ def _harden_html_file(cmd: list) -> None:
     - 路徑含 `#` 或 `?`：Edge 會把它當成網址的片段／查詢而截斷路徑（可能渲染出目錄清單）⇒ 丟例外（呼叫端中止渲染）；
     - 檔案不存在：記 WARNING 後略過（沒有內容可硬化；渲染本身會失敗，由呼叫端既有的『沒產出就 raise』處理）；
     - 殘留檢查發現危險標記 ⇒ 丟例外（拒絕渲染）。"""
+    last = next((str(a) for a in reversed(cmd[1:]) if str(a).lower().startswith("file:///")), None)
+    if last is not None and ("#" in last[len("file:///"):] or "?" in last[len("file:///"):]):
+        # 先於副檔名判斷：`…/a#b.html` 去掉片段後不是 .html，會被當成『不是渲染 HTML 的呼叫』而不硬化、Edge 卻照樣截斷路徑去渲染別的東西
+        raise ValueError("HTML 路徑含 # 或 ?，Edge 會截斷路徑：%s" % last[len("file:///"):][:120])
     idx = _html_arg_index(cmd)
     if idx is None:
         return
@@ -398,8 +407,9 @@ def _harden_html_file(cmd: list) -> None:
         logger.warning("PDF 渲染硬化略過：HTML 檔案不存在（%s）", path[:160])
         return
     with open(path, "r", encoding="utf-8") as f:
-        html = f.read()
+        orig = f.read()
     import re
+    html = orig.replace(_csp_meta(), "")                      # 上一次硬化寫進去的、逐字相同的我們自己的 CSP meta：先拿掉再重寫（重複硬化同一個檔案＝冪等）；其餘 http-equiv 照舊一律拒絕
     if re.search(r"http-equiv", html, re.I):                  # 輸入就有：不論解析器怎麼看（`--!>` 註解等差異隨 Python 小版本而變）一律拒絕
         raise ValueError("HTML 含 http-equiv，拒絕渲染")
     out = _neutralize_html(html)
@@ -407,7 +417,7 @@ def _harden_html_file(cmd: list) -> None:
     if bad:
         raise ValueError("HTML 仍含危險標記，拒絕渲染：%s" % bad[:60])
     out = _inject_csp(out)
-    if out != html:
+    if out != orig:
         with open(path, "w", encoding="utf-8") as f:
             f.write(out)
 
