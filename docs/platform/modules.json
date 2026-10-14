@@ -101,6 +101,7 @@
    "js:js/expense-types-designer.js",
    "js:js/expense-type-refresh.js",
    "js:static/custom-layout.js",
+   "js:static/public-flags.js",
    "js:static/mount-tabs.js",
    "js:static/file-preview.js",
    "js:static/attach-picker.js",

@@ -280,12 +280,13 @@ def test_loading_the_overlay_without_start_is_completely_inert():
 
 def test_case_page_starts_rules_only_after_reading_the_flag_from_its_existing_settings_request():
     html = (ROOT / "frontend" / "pages" / "case-management.html").read_text(encoding="utf-8")
-    assert "/api/settings-center/public?groups=builder_layout,builder_rules" in html            # 同一個設定請求多帶一個群組，沒有新請求
+    assert "MotrixPublicFlags.read(['builder_layout', 'builder_rules']" in html                 # 同一個設定請求多帶一個群組，沒有新請求（網址由 public-flags.js 組成）
+    assert "../static/public-flags.js" in html
     gate = re.search(r"builder_rules\.enabled === 1\) \{([\s\S]*?)\n {6}\}", html).group(1)
     assert "MotrixRuleMarks.start()" in gate and "MotrixRulesBuilder.mountEntry()" in gate
     assert html.count("MotrixRuleMarks.start()") == 1 and html.count("mountEntry()") == 1       # 沒有任何無條件的啟動點
-    # 某個群組被隱藏／不存在時整個設定請求會 404：要退回只讀版面群組，版面編輯器不能因此死掉
-    assert "if (r.status === 404) r = await fetch('/api/settings-center/public?groups=builder_layout'" in html
+    # 某個群組被隱藏／不存在時整個設定請求會 404：由 public-flags.js 逐組重試，版面編輯器不會因此死掉（讀旗標不再自己 fetch）
+    assert "/api/settings-center/public" not in html.split("async initLayout()")[1].split("}))")[0]
 
 
 @needs_node

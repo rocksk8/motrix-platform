@@ -33,6 +33,7 @@
   <script src="../static/layout-runtime.js"></script>
   <script src="../static/layout-editor.js"></script>
   <script src="../js/def-governance.js"></script>
+  <script src="../static/public-flags.js"></script>
   <script src="../js/rule-marks.js"></script>
   <script src="../js/rules-builder.js"></script>
   <script src="../static/list-sort.js"></script>
@@ -4806,17 +4807,15 @@ window.CM_PARTS.push(() => ({
     try {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
-      let r = await fetch('/api/settings-center/public?groups=builder_layout,builder_rules', { headers: { Authorization: 'Bearer ' + s.token } })
-      // 任何一個群組被隱藏／不存在時，整個請求會 404：退回只讀版面群組，版面編輯器不受其他群組影響（正常情況只有上面那一個請求）
-      if (r.status === 404) r = await fetch('/api/settings-center/public?groups=builder_layout', { headers: { Authorization: 'Bearer ' + s.token } })
-      if (!r.ok) return
-      const d = await r.json()
+      // 同一次設定請求取得旗標（一個請求）；某個群組讀不到時逐組重試，不拖垮其他旗標（public-flags.js）。
+      // 合併後的名單為 ['builder_layout', 'builder_custom_fields', 'builder_rules']（3c 的 S5 在中間）
+      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_rules'], { token: s.token })
       // BP-2：旗標 builder_rules.enabled＝1 才啟動標示規則（關＝不送任何規則請求；兩支 js 載入後是惰性的）
-      if (d && d.groups && d.groups.builder_rules && d.groups.builder_rules.enabled === 1) {
+      if (g.builder_rules && g.builder_rules.enabled === 1) {
         if (window.MotrixRuleMarks) window.MotrixRuleMarks.start()
         if (window.MotrixRulesBuilder) window.MotrixRulesBuilder.mountEntry()
       }
-      if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.case_management !== true) return
+      if (!g.builder_layout || g.builder_layout.case_management !== true) return
       if (!document.getElementById('cm-layout-css')) {
         const st = document.createElement('style'); st.id = 'cm-layout-css'
         st.textContent = '.cm-card--lo{display:flex;flex-direction:column}.cm-card--lo .cm-card__head,.cm-card--lo .cm-card__footer{width:100%}'
