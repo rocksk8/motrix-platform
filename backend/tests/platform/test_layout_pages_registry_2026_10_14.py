@@ -21,6 +21,8 @@ KEYS = {"flag", "module", "page", "pageLabel", "flagLabel", "question", "help", 
 
 
 def _manifest(e):
+    if e["module"] == "core":                              # L1 共用主檔頁面：虛擬擁有者 core（core/l1_customization.json）
+        return json.loads((ROOT / "backend" / "core" / "l1_customization.json").read_text(encoding="utf-8"))
     return json.loads((MODS / e["module"] / "module.json").read_text(encoding="utf-8"))
 
 

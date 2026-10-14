@@ -6,6 +6,7 @@
 - `routers/definitions.py`（治理擁有的檔，最小改動）三處 `registry.is_loaded(mod)` ⇒ `catalog.owner_loaded(mod)`（版面驗證器、程式預設、`GET /api/layout/{module}`）；對一般模組行為不變，多了 `core` 可用。沒有新路由。
 - 新檔 `core/l1_customization.json`：客戶頁 `customers.html` 的清單欄位（核心欄位 D6：公司名稱、統一編號、狀態；沒有金額欄，「累計報價」是件數）。
 - 測試 `tests/platform/test_l1_layout_owner_2026_10_14.py`（14 題）。
+- 客戶管理頁（`customers.html`，L1 頁面）接上版面引擎：`MotrixLayout.init({module:'core', page:'customers.html', deferred:true})`；設定中心旗標 `builder_layout.customers`（預設關，由 `frontend/static/layout-pages.json` 登錄產生；凍結基準以文字插入）。旗標關閉：原表格容器只多一個 `x-show="!layoutOn"`、不發版面請求；開啟：插入版面表格並隱藏原表格，頭像欄與操作欄固定。
 
 ## (next) — wip/t59-bp1-menus-r1（BP-1 選單建構器；旗標 `builder_menu.enabled` 預設關）
 
