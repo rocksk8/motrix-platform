@@ -117,9 +117,15 @@ def _set(group, values):
         c.close()
 
 
+
+# 端點在 warnPct 之外多回三個報價送審門檻（approval-thresholds r1/r2，預設＝今天寫死的 30%／30 天／0 元；同一個金額權限閘門，沒有任何金額）。
+# 這些測試關心的是 warnPct 怎麼跟著 K01 規則走，所以其餘三個鍵固定成預設值一起比對（預設改了這裡會紅）。
+def _cfg(warn):
+    return {"warnPct": float(warn), "minItemMarginPct": 30.0, "maxValidDays": 30, "discountReviewAbove": 0}
+
 def test_config_endpoint_flag_off_is_todays_response(client, sa):
     _set("project_margin", {"warn_pct": 18})
-    assert client.get("/api/project-margin/config", headers=sa).json() == {"warnPct": 18.0}
+    assert client.get("/api/project-margin/config", headers=sa).json() == _cfg(18.0)
 
 
 def test_seed_route_writes_a_draft_only_and_config_follows_the_published_rule(client, sa):
@@ -128,21 +134,21 @@ def test_seed_route_writes_a_draft_only_and_config_follows_the_published_rule(cl
         _set(g, v)
     j = client.post("/api/rules/k01/seed", headers=sa).json()
     assert j["ruleId"] == RS.K01_ID and "草稿" in j["message"]
-    assert client.get("/api/project-margin/config", headers=sa).json() == {"warnPct": 18.0}      # 只是草稿：行為不變
+    assert client.get("/api/project-margin/config", headers=sa).json() == _cfg(18.0)      # 只是草稿：行為不變
     assert client.post("/api/rules/k01/seed", headers=sa).status_code == 409                    # 不重複匯入
     url = "/api/definitions/rule_set/case"
     d = client.get(url, headers=sa).json()["draft"]
     assert [r["id"] for r in d["body"]["rules"]] == [RS.K01_ID] and d["body"]["rules"][0]["when"]["value"] == 18
     pv = client.get("/api/def-governance/rule_set/case/impact", headers=sa).json()["previewHash"]
     assert client.post(url + "/publish", headers=sa, json={"note": "k01", "preview_hash": pv}).status_code == 200
-    assert client.get("/api/project-margin/config", headers=sa).json() == {"warnPct": 18.0}      # 種子＝現值 ⇒ 結果相同
+    assert client.get("/api/project-margin/config", headers=sa).json() == _cfg(18.0)      # 種子＝現值 ⇒ 結果相同
     _set("project_margin", {"warn_pct": 40})                                                    # 之後設定中心的數字不再影響
-    assert client.get("/api/project-margin/config", headers=sa).json() == {"warnPct": 18.0}
+    assert client.get("/api/project-margin/config", headers=sa).json() == _cfg(18.0)
     # 在規則頁調高門檻（收緊 ⇒ 立即生效）
     client.put(url + "/draft", headers=sa, json={"body": {"rules": [RS.k01_seed_rule(30)]}})
     pv = client.get("/api/def-governance/rule_set/case/impact", headers=sa).json()["previewHash"]
     assert client.post(url + "/publish", headers=sa, json={"note": "調高", "preview_hash": pv}).status_code == 200
-    assert client.get("/api/project-margin/config", headers=sa).json() == {"warnPct": 30.0}
+    assert client.get("/api/project-margin/config", headers=sa).json() == _cfg(30.0)
 
 
 def test_seed_route_is_hidden_when_the_seed_flag_is_off(client, sa):
