@@ -10,7 +10,7 @@ import tempfile
 from datetime import datetime, date
 
 import pdf_gen as _pg
-from helpers.doc_template import esc_quotes as _esc_q
+from helpers.doc_template import esc_quotes as _esc_q, html_text as _html_text
 from db import get_db
 from helpers import export_templates as _ET     # G-A：完工單 PDF 可加頁尾／浮水印文字（預設關閉；沒有發布過範本 ⇒ 輸出逐位元相同）
 from helpers import _get_edge_path, run_edge_pdf
@@ -50,7 +50,7 @@ def _build_completion_html_core(n: dict) -> str:
     # 經 _pg 取：測試以 monkeypatch.setattr(pdf_gen, "location_identity", …) 換掉據點身分
     _ident = _pg.apply_snapshot(_pg.location_identity(_pg._location_of(n)), n)
     def esc(s):
-        return _esc_q((str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;') .replace('>', '&gt;').replace('\n', '<br>'))
+        return _html_text(s)
 
     # 可自訂標題（2026-09-12）：使用者覆寫值已在 _note_public()/_completion_note_dict()
     # 疊過預設值，這裡直接用。預設用語刻意中性——公司除了工程還有專案、零組件販售、

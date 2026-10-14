@@ -2,6 +2,7 @@
 
 ## (next) — wip/t59-bp1-menus-r1（BP-1 選單建構器；旗標 `builder_menu.enabled` 預設關）
 
+- L1（資安補強，wip/t62-pdf-escape-r1）：新增 `helpers.doc_template.html_text(s, *, br=True, falsy_empty=False)`——HTML 內文跳脫的唯一實作，兩個旗標精確重現舊寫法（換行轉 `<br>`；`(s or '')` 把 0／False 印成空字串）；`pdf_gen`（10 處）與 `completion_pdf`（1 處）複製貼上的區域 `esc()` 改成呼叫它，純文字資料輸出逐位元相同。補上五個**確認沒逸出**的輸出點（使用者可寫入、直接 f-string 內插）：報價單／出貨單品項數量（3 處）、報價有效日數、款項百分比、案件階段起訖日（結案報表與執行進度報告各一）。新增 AST 棘輪 tests/test_pdf_escape_2026_10_14.py＋基線 tests/pdf_raw_sinks_baseline.json：builder 檔案裡『直接內插字典取值又沒經 esc／格式化』的位置只能是已審過的清單。
 - L1（G-A，wip/t62-pdf-decor-r1；旗標 `builder_exports.enabled` 預設關，且需同時開 `builder_governance.enabled`）：BP-3 R4 的 PDF 頁尾／浮水印文字從開票憑據延伸到報價單、請款單、完工單——登記匯出 `case:quotation-pdf`、`arap:payment-request-pdf`、`case:completion-note-pdf`（pdf-only、decorOnly、只有頁尾與浮水印；文字只能從預設清單挑，官方狀態字樣擋；新增或更換文字＝放寬、需第二位最高管理者核准）。`pdf_gen._build_quote_html`／`_build_payment_request_html`、`completion_pdf._build_completion_html` 各包一層呼叫 `decorate_pdf`（原函式改名 `*_core`，參數與預設值不變）；旗標關／沒有已發布範本 ⇒ 回傳同一個字串，輸出逐位元相同；程式產生的『尚未核准』橫幅、公司抬頭與法定欄位不受影響。報價單列表、請款單列表、完工單表單三頁各宣告一個 `motrix-export-id`（編輯器只在旗標開且最高管理者才載入）。
 - S-F2 B r3（04 稽核）：PDF 段落移除加入『邊界標記』`BOUNDARIES=(本季收支,)`（只當停止點、不能被拿掉）——勾了本季收支卻沒勾當月收支時，本季收支不再被當月收支一起吞掉；`export_templates.enabled_strict()`（嚴格讀旗標，讀不到丟例外）＋`_resolve_strict`：旗標讀取失敗與範本讀取失敗一樣**關起來**（只輸出必選工作表），旗標明確關閉＝今天不變；一個請求只算一次略過清單（`_build_excel/_build_report_html(off=)`），建構器與稽核用同一份；測試補第一次發布的欄位／頁首頁尾浮水印仍算放寬。
 - S-F2 B r2（合併 S-Q2 標題型與 S-F2 B 工作表型；04 稽核）：`export_templates` 註冊表同時支援 `titles=` 與 `sheets=`（一個匯出可宣告其一或兩者；`default_template`／`registered`／`preview`／驗證／比較函式／編輯器都能處理兩者，兩種語意都不變）。工作表型：執行摘要含公司層級金額合計 ⇒ 標 money，預覽與編輯器明說『摘要永遠包含公司層級金額合計；這個設定只控制明細工作表』；旗標開著但已發布範本讀不到或不合法時**關起來**（只輸出必選工作表，`TemplateUnreadable`；旗標關＝今天不變）；PDF 拿掉段落時範圍止於下一個已知標記、找不到標記丟 `ReportSectionError`（不產出）；匯出稽核與月報日誌記 `omittedSheets`。
@@ -12,7 +13,6 @@ R3：`helpers/xlsx_out.xlsx_to_html` 讀 xlsx 的列印頁首／頁尾（沒設�
 
 - L0（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：`core.customization.SIDEBAR_LABEL_MAX`／`sidebar_label_problem`（側欄顯示名稱：最長 20 字、不含標記字元）；`core.menu.apply_layout_ex(groups, ops, builder=False)`（`apply_layout` 簽章與行為不變，等同 `builder=False`）。
 - 版面操作放寬（`OPS_BY_KIND["sidebar"]` 加 `relabel`；側欄 `move` 可帶 `to: "group:<既有群組鍵>"`）：只有設定 `builder_menu.enabled`＝1 才被後端接受與套用；關著時行為與今天逐字相同。改名／換群組只是顯示，href、perm、`denied` 不變。
-
 - L0（新增，只增；T60）：`core.menu.hub_group_keys()`。含系統中心入口的群組（例如 system）不能當選單「移到群組」的目的地——導覽列會把整個群組收成一個連結，搬進去的項目看不到；`resolve_move_target` 與驗證同步拒絕。旗標關閉時行為不變。
 
 ## 1.134 — 2026-10-13（wip/t57-u0a-r1：wip/t57-u0a-core-r2 組織單位預留 ＋ wip/t57-u0a-leak-defence-r1 單位鍵洩漏防線）

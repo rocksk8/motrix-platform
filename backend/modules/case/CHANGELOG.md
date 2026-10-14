@@ -4,6 +4,7 @@
 - 報價單 PDF（`_build_quote_html`）與完工單 PDF（`_build_completion_html`）可加頁尾／浮水印文字（G-A，旗標預設關）：各包一層 `decorate_pdf`，沒有已發布範本 ⇒ 輸出逐位元相同；文字只能從預設清單挑，程式產生的未核准橫幅與抬頭不動。無 migration、無權限變更。
 - S-Q2 稽核修正：`clauseTitles` 改為伺服器自有欄位——建立／整份存檔一律丟掉用戶端送的值；離開草稿（含直接改狀態）與解鎖重簽由伺服器以當下範本凍結；待審核維持原狀沿用資料庫現值；收回、退回改版、改回草稿一律清掉。表單 `buildTermsHtml` 的標題改為逸出。
 - 報價單條款標題可由匯出範本改（S-Q2，旗標預設關）：報價單 PDF（第一份版面；請款單的「請款條件」不動）、報價單表單與送審原因文字改讀 `helpers.clause_titles`；送審時把當下標題凍結進單據（`clauseTitles`），之後改範本不影響已送審單據。旗標關或沒有已發布範本 ⇒ 與今天相同。條款本文、順序、金額不變。無 migration、無新路由、無權限變更。
+- 案件完工單 PDF 的區域 `esc()` 改呼叫共用的 `helpers.doc_template.html_text`（輸出逐位元相同）；報價單／出貨單品項數量、報價有效日數、結案報表款項百分比與階段起訖日補上 HTML 逸出（原本直接內插）。無 migration、無權限變更。
 - 材料卡片「帶入並連結」存檔沒成功時的提示改為：「認列尚未儲存：請看畫面上方的儲存狀態；按「儲存」或再編輯一次會重新送出」。原提示寫「修正後會自動重試」不正確（失敗後不會自動重送，持續性錯誤也不應無限重試）。只改提示文字，行為不變。
 - 分段存檔（`PATCH …/case-record`）與叫料單存檔（material-orders `PATCH`）成功回應加 `saved`（本次送出的各分段、伺服器實際存入並依檢視者遮蔽的值）；前端以它當新的分段比對基準。原本只以送出內容當基準，伺服器存檔時改寫材料卡片（認列的到貨人／時間、過期標記、被拒還原）後，下一次存檔會被誤判 409「已被他人更新」。內容一致時仍沿用送出字串；舊前端忽略新欄位。測試：`test_segment_base_adopts_saved_2026_10_14.py`。
 - module.json 登記案件管理頁（case-management.html）的可自訂點：案件清單（卡片）七個項目，案號與狀態為核心（不能隱藏）。純加性宣告。
@@ -165,7 +166,6 @@
 - 套用點：叫料／叫料變更／叫料匯款核准的 `cascade`（驗旗標移到取資料庫之前）、報價預覽 `internal`（含成本的內部版）、案件階段 `done`、款項標記收款 `received`（`_validate_receipt_body` 先驗，`_apply_payment_mark` 用 `strict_bool`）、出納／叫料匯款的 `hasFee`（手續費）。旗標只收真布林（`helpers.validation.body_flag`）；JSON 字串 `"false"`／`"0"`／`""` 以前會被當成 true，現在回 422、什麼都不寫。前端本來就送真布林，行為不變。測試：`tests/test_strict_bool_sites_t49.py`。
 ## 1.0.164 — 2026-10-09（wip/t48-oh25-s1／s2／s2b）：利潤規則單一來源（S1，零行為變更）＋管銷分攤比率與伺服器把關（S2，新行為預設關；`/api/overhead` 前綴登記於 module.json；s2b＝獨立稽核 1d 修正）
 - `settlement_actuals`：完結比對的管銷分攤、公益金、營業利益、報價原始側後備改呼叫 `helpers.profit_rules`（口徑仍是第 47 班的 10%）。前端 `static/profit-rules.js` 與黃金向量等值測試已備，頁面第 3 步（S3）才改接。設計：`docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md`。
-
 - **獨立稽核 1d 修正（wip/t48-oh25-s2b，不含 S3 畫面）**：①`tot.formulaVer`／`overheadPct`／`_legacy`／`_recalc` 戳記只由伺服器蓋（用戶端送的一律丟掉，已結案沿用現值；遷移的 `_legacy` 不因表單存檔遺失）；②切到新口徑只能經 `PUT /api/overhead/settings`，要 `confirm=true` 且 `overhead_migration_done` 標記存在（`overhead_migrate recalc --apply` 寫）；`overhead_rule_mode=v2` 但沒有標記 ⇒ 伺服器視為 legacy（失效安全）；③`v2` 時稅前／稅額／含稅一併由伺服器依品項重算；④`PUT /api/quotations` 的比率驗證／權限檢查提前到開連線與寄簽核通知之前；⑤legacy 模式不憑空長出 `overheadPct`（只在有存值或最高管理者明確改過時才存）；⑥`overheadPct` 列入金額遮罩鍵。
 - **S2（wip/t48-oh25-s2）管銷分攤比率與伺服器把關（新行為預設關）**：新增 `profit_guard.py`＋`GET/PUT /api/overhead/settings`（全域預設比率 `overhead_default_pct`、口徑開關 `overhead_rule_mode`＝legacy｜v2；只有最高管理者能改，每次稽核 `settings.overhead.update`）。報價單 `data_json.overheadPct`（新建＝全域預設；與存值不同只有最高管理者可改，否則 403；非法值 422；稽核 `quotation.overhead_pct_change`；已精算／結案不動）。`v2` 時存檔由伺服器用 `profit_rules` 重算 `tot` 利潤欄位與 `net_margin_pct`（不信前端）；`legacy`（預設）數字完全不變，只做影子比對（不一致記 warning）。歷程欄位新增「管銷分攤比率」（金額遮罩白名單同步）。
 - **（併入）(next) — 2026-10-08（wip/t48-paydate-gap）：承攬商匯款建立視窗可填預定付款日、派發卡片顯示（預定付款日缺口 G1／G2）**
