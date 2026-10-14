@@ -1561,6 +1561,29 @@ def _apply_server_submit_reasons(q: dict, user: dict) -> None:
                                      presets, default_pt)
 
 
+def _quote_custom_fields_gate(q: dict, old):
+    """Q3：報價單頂層 `customFields` 的唯一閘門（`helpers.builtin_fields.gate("quotation", …)`）。就地改 `q`。
+    - 用戶端沒送這個鍵：有舊值就帶回舊值（整份取代不洗掉），沒有就維持沒有；
+    - 送了且與舊值相同：不介入（不重驗，免得選項被改掉後無法存其他欄位）；
+    - 送了且有變：過閘門（旗標關閉＝回舊值；型別錯 ⇒ 400 指名欄位；結果空＝移除鍵）。"""
+    from helpers import builtin_fields as _bf
+    if "customFields" not in q:
+        if old:
+            q["customFields"] = old
+        return
+    if q["customFields"] == old:
+        if not old:
+            q.pop("customFields", None)
+        return
+    new, errs, _ignored = _bf.gate("quotation", q["customFields"], old)
+    if errs:
+        raise HTTPException(400, "自訂欄位有問題：" + "；".join(e["message"] for e in errs))
+    if new:
+        q["customFields"] = new
+    else:
+        q.pop("customFields", None)
+
+
 @router.post("/api/quotations", status_code=201)
 def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     # 2026-09-10 稽核發現：本檔 45 支寫入端點裡，只有這一支沒有 _require_user()，
@@ -1574,6 +1597,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     _strip_foreign_file_entries(q.get("caseRecord"), {})   # 安全審查 W3：新建沒有既有檔案，前端帶的檔案路徑一律不收
     if isinstance(q.get("caseRecord"), dict):
         q["caseRecord"].pop("customFields", None)   # T61 S5：自訂欄位只能經案件記錄存檔路徑的閘門寫入；新建（含複製案件）一律不帶
+    _quote_custom_fields_gate(q, None)              # Q3：報價單自己的自訂欄位（頂層 customFields）過閘門；旗標關閉／沒送＝不存
     validate_quote_tax(q)   # AC1：只能存法定稅別
     validate_tax_basis(q, body.status)   # R2：零稅率／免稅送出要有依據（營業稅法 §7、§8）
     q.pop("clauseTitles", None)          # S-Q2：條款標題凍結值是伺服器自有欄位（複製新單、直接打 API 帶來的一律丟掉）
@@ -1970,6 +1994,17 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
                 q["caseRecord"]["customFields"] = _cf_db
             else:
                 q["caseRecord"].pop("customFields", None)
+        # Q3：報價單自己的自訂欄位（頂層 customFields）。這支整份取代 data_json：沒送這個鍵＝帶回資料庫現值（不洗掉）；送了且有變＝過閘門
+        # （旗標關閉＝回舊值、用戶端的不存；型別錯＝400 指名欄位）。其他寫整份文件的路徑都是『讀資料庫現值再改』，不會丟掉它。
+        try:
+            _cfq_old = (json.loads(existing["data_json"] or "{}") or {}).get("customFields")
+        except (ValueError, TypeError):
+            _cfq_old = None
+        try:
+            _quote_custom_fields_gate(q, _cfq_old)
+        except HTTPException:
+            conn.close()
+            raise
         # 樂觀鎖（選填）：草稿階段沒有狀態鎖保護，兩人同時編輯同一張草稿會後寫覆蓋
         # 前寫且完全沒有提示。自動存檔（autoSave）跟手動存檔共用這支端點，衝突時
         # 一律回 409，讓呼叫端自行決定要不要提示使用者或重新載入。

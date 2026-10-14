@@ -99,7 +99,7 @@ def test_flag_default_off(client):
 # ── 2/3. 旗標關閉／開啟（node 實跑）────────────────────────────────────────
 _HARNESS = r"""
 const fs = require('fs')
-const calls = { fetch: [], start: 0, mount: 0, slot: 0, selectors: [] }
+const calls = { fetch: [], start: 0, mount: 0, slot: 0, selectors: [], cf: 0 }
 global.window = global
 global.localStorage = { getItem(k) { return k === 'motrix_session' ? JSON.stringify({ token: 't', role: 'superadmin' }) : null } }
 global.location = { href: '', search: '' }
@@ -112,9 +112,12 @@ const stub = () => new Proxy(function () {}, { get: () => stub(), apply: () => (
 for (const n of ['MotrixPrivacyNotice','MotrixDate','LegalRound','ProfitRules','AltItems','MarginTone','Sortable','MotrixFilePreview','MotrixApprovalCascade']) window[n] = stub()
 window.MotrixLayout = { init() {}, start() { calls.start++ } }
 window.MotrixLayoutEditor = { mount() { calls.mount++ } }
+window.MotrixCustomFields = { start() { calls.cf++ } }
 let FLAG = %(flag)s
+let CF = %(cf)s
 global.fetch = async (url) => { calls.fetch.push(String(url)); if (FLAG === 'fail') throw new Error('x')
-  return { ok: FLAG !== 'http', json: async () => ({ groups: { builder_layout: { quotation_form: FLAG === true } } }) } }
+  return { ok: FLAG !== 'http', json: async () => ({ groups: { builder_layout: { quotation_form: FLAG === true }, builder_custom_fields: { enabled: CF } } }) } }
+eval(fs.readFileSync(process.argv[2], 'utf8'))          // public-flags.js
 const code = fs.readFileSync(process.argv[1], 'utf8')
 const scripts = [...code.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]).filter(s => s.includes('function quotationForm'))
 eval(scripts[scripts.length - 1] + '\n;global.__f = quotationForm')
@@ -129,8 +132,9 @@ o.session = { token: 't' }
 """
 
 
-def _node(flag):
-    out = subprocess.run([NODE, "-e", _HARNESS % dict(flag=flag), str(source_tree.page_file(PAGE_NAME))], capture_output=True, timeout=30)
+def _node(flag, cf="false"):
+    out = subprocess.run([NODE, "-e", _HARNESS % dict(flag=flag, cf=cf), str(source_tree.page_file(PAGE_NAME)), str(ROOT / "frontend/static/public-flags.js")],
+                         capture_output=True, timeout=30)
     assert out.returncode == 0, out.stderr.decode("utf-8", "replace")[:1500]
     return json.loads(out.stdout.decode("utf-8"))
 
@@ -141,7 +145,12 @@ def test_flag_off_or_unreadable_changes_nothing(flag):
     r = _node(flag)
     assert r["layoutOn"] is False and r["neutral"] == {"shown": True, "order": {}, "label": "傳真", "sec": "客戶資訊"}      # 綁定函式回中性值
     assert r["calls"]["start"] == 0 and r["calls"]["mount"] == 0 and r["calls"]["slot"] == 0
-    assert r["calls"]["fetch"] == ["/api/settings-center/public?groups=builder_layout"]
+    f = r["calls"]["fetch"]
+    assert f[0] == "/api/settings-center/public?groups=builder_layout,builder_custom_fields"                       # 一個共用 GET 取兩個旗標
+    assert all(u.startswith("/api/settings-center/public?groups=") for u in f)                                     # 失敗時才逐組重試（仍只讀設定）
+    if flag == "false":
+        assert len(f) == 1
+    assert r["calls"]["cf"] == 0                                                                                   # 自訂欄位旗標關 ⇒ 不去讀欄位定義
 
 
 @pytest.mark.skipif(NODE is None, reason="沒有 node")
@@ -317,3 +326,52 @@ def test_hide_and_reorder_in_one_publish_then_switching_preview_role_keeps_hidde
         assert v["lab"] == "保固與維護"
     assert r["live"]["addr"][1]["order"] < r["live"]["cn"][1]["order"]                  # 搬到最前面的欄位排在前
     assert r["prev"] == r["live"] == r["back"]
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_custom_fields_start_only_when_their_own_flag_is_on_independent_of_the_layout_flag():
+    r = _node("false", cf="true")
+    assert r["calls"]["cf"] == 1 and r["layoutOn"] is False and r["calls"]["start"] == 0          # 版面旗標關、自訂欄位旗標開：只起自訂欄位
+    r = _node("true", cf="true")
+    assert r["calls"]["cf"] == 1 and r["layoutOn"] is True and r["calls"]["start"] == 1
+
+
+# ── Q3：自訂欄位區塊 ──────────────────────────────────────────────────────
+def test_custom_field_block_sits_inside_the_case_info_section_and_is_flag_guarded():
+    src = _page()
+    a = src.index('<div class="section-num">二</div>')
+    b = src.index("<!-- 三、品項明細 -->")
+    sec = src[a:b]
+    assert 'data-testid="cf-section"' in sec and "$store.cf && $store.cf.enabled" in sec          # 旗標開啟才畫；在『二、案件資訊』裡
+    for t in ("text", "date", "select", "checkbox"):
+        assert "f.type === '%s'" % t in sec
+    assert 'class="form-input"' in sec and ':disabled="cfLocked()"' in sec                         # 輸入框沿用鎖定樣式；勾選框另綁鎖定
+    assert "MotrixCustomFields.init({ recordType: 'quotation'" in src and "deferred: true" in src.split("recordType: 'quotation'")[1].split("})")[0]
+    assert "/api/custom-fields" not in re.sub(r"//[^\n]*", "", src.replace("<!--", "//").replace("-->", ""))        # 頁面本身不打（只有程式庫在旗標開啟後才打）
+    for tag in ("public-flags.js", "custom-fields.js"):
+        assert tag in src
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_cf_get_set_follow_the_no_value_no_key_rule():
+    js = _HARNESS.split("const code = ")[0].replace("let FLAG = %(flag)s", "let FLAG = true").replace("let CF = %(cf)s", "let CF = false")
+    js += r"""
+const code = fs.readFileSync(process.argv[1], 'utf8')
+const scripts = [...code.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]).filter(s => s.includes('function quotationForm'))
+eval(scripts[scripts.length - 1] + '\n;global.__f = quotationForm')
+const o = global.__f()
+o.setDirty = () => { o.dirty = (o.dirty || 0) + 1 }
+const out = {}
+o.q.customFields = undefined
+o.cfSet('f1', '甲'); out.a = JSON.stringify(o.q.customFields)
+o.cfSet('f2', true); out.b = JSON.stringify(o.q.customFields)
+o.cfSet('f1', ''); out.c = JSON.stringify(o.q.customFields)
+o.cfSet('f2', false); out.d = ('customFields' in o.q); out.dirty = o.dirty
+o.q.status = '已送出'; o.unlocked = false; out.locked = o.cfLocked(); o.unlocked = true; out.unlocked = o.cfLocked()
+out.get = o.cfGet('zzz')
+console.log(JSON.stringify(out))
+"""
+    out = subprocess.run([NODE, "-e", js, str(source_tree.page_file(PAGE_NAME)), str(ROOT / "frontend/static/public-flags.js")], capture_output=True, timeout=30)
+    assert out.returncode == 0, out.stderr.decode("utf-8", "replace")[:1500]
+    r = json.loads(out.stdout.decode("utf-8"))
+    assert r["a"] == '{"f1":"甲"}' and r["c"] == '{"f2":true}' and r["d"] is False and r["locked"] is True and r["unlocked"] is False

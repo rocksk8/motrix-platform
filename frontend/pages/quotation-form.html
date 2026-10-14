@@ -1415,6 +1415,34 @@
             <input class="form-input" type="text" x-model="q.deliveryLocation" placeholder="地址或說明" @change="setDirty">
           </div>
         </div>
+        <!-- Q3：自訂欄位（旗標 builder_custom_fields.enabled 開啟才畫；值存在報價單頂層 customFields；只給能開這張報價單的內部人員，不進 PDF／預覽／回簽頁） -->
+        <template x-if="$store.cf && $store.cf.enabled && ($store.cf.list().length || cfIsAdmin() || $store.cf.mode !== 'live')">
+          <div data-testid="cf-section" style="margin-top:14px">
+            <div class="form-label" style="display:flex;align-items:center;gap:8px">自訂欄位
+              <span x-show="$store.cf.mode !== 'live'" x-text="$store.cf.previewLabel" style="color:var(--warning);font-size:11px"></span>
+              <button type="button" class="btn btn-ghost btn-sm" data-testid="cf-edit-open" x-show="cfIsAdmin()" @click="MotrixCustomFields.openEditor()" style="margin-left:auto;font-weight:400">編輯自訂欄位</button>
+            </div>
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px" x-show="!$store.cf.list().length">還沒有自訂欄位。</div>
+            <div class="form-grid form-grid-2">
+              <template x-for="f in $store.cf.list()" :key="f.key">
+                <div class="form-group" :data-cf-field="f.key">
+                  <label class="form-label" x-text="f.label"></label>
+                  <template x-if="f.type === 'text'"><input class="form-input" type="text" :maxlength="f.maxLength || 200" :value="cfGet(f.key) || ''" @input="cfSet(f.key, $event.target.value)"></template>
+                  <template x-if="f.type === 'date'"><input class="form-input" type="date" :value="cfGet(f.key) || ''" @input="cfSet(f.key, $event.target.value)"></template>
+                  <template x-if="f.type === 'select'">
+                    <select class="form-input" :value="cfGet(f.key) || ''" @change="cfSet(f.key, $event.target.value)">
+                      <option value="">— 選擇 —</option>
+                      <template x-if="cfGet(f.key) && !(f.options || []).includes(cfGet(f.key))"><option :value="cfGet(f.key)" x-text="cfGet(f.key) + '（已不在選項內）'" selected></option></template>
+                      <template x-for="o in (f.options || [])" :key="o"><option :value="o" x-text="o" :selected="cfGet(f.key) === o"></option></template>
+                    </select>
+                  </template>
+                  <template x-if="f.type === 'checkbox'"><input type="checkbox" style="width:auto" :disabled="cfLocked()" :checked="cfGet(f.key) === true" @change="cfSet(f.key, $event.target.checked)"></template>
+                  <div style="font-size:11px;color:var(--text-dim);margin-top:2px" x-show="f.help" x-text="f.help"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
       </div>
 
       <!-- 三、品項明細 -->
@@ -4151,6 +4179,18 @@
       _initDone: false,
       // BP-1／Q1：版面綁定。旗標關閉／讀不到 ⇒ layoutOn=false，下面四個函式回中性值（畫面與先前逐位元相同）。
       layoutOn: false,
+      // Q3：自訂欄位（值存在 q.customFields；空值＝移除該欄位、整個物件空了＝移除這個鍵——和伺服端一致，存檔基準才不會對不上）
+      cfIsAdmin() { return !!(this.session && this.session.role === 'superadmin') },
+      cfLocked() { return this.q.status === '已送出' && !this.unlocked },
+      cfGet(k) { const cf = this.q && this.q.customFields; return cf ? cf[k] : undefined },
+      cfSet(k, v) {
+        const cur = Object.assign({}, this.q.customFields || {})
+        if (v === '' || v === null || v === undefined || v === false) delete cur[k]
+        else cur[k] = v
+        if (Object.keys(cur).length) this.q.customFields = cur
+        else delete this.q.customFields
+        this.setDirty()
+      },
       fShown(form, f) { return !this.layoutOn || window.Alpine.store('layout').fieldShown(form, f) },
       // 回**物件**不回字串：Alpine 的 :style 字串形式會 setAttribute('style', …) 整串覆蓋，會洗掉同一個元素上 x-show 設的 display:none
       // （隱藏欄位在重新求值後又跑出來）；物件形式只逐項設屬性，與 x-show 並存。
@@ -4165,10 +4205,11 @@
         try {
           const tk = (this.session && this.session.token) || (JSON.parse(localStorage.getItem('motrix_session') || '{}').token)
           if (!tk) return
-          const r = await fetch(`${this.API}/settings-center/public?groups=builder_layout`, { headers: { Authorization: 'Bearer ' + tk } })
-          if (!r.ok) return
-          const d = await r.json()
-          if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.quotation_form !== true) return
+          // 一個共用的設定 GET 取得兩個旗標；某個群組讀不到時逐組退路（public-flags.js），不拖垮另一個
+          const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields'], { token: tk })
+          // Q3：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）
+          if (g.builder_custom_fields && g.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
+          if (!g.builder_layout || g.builder_layout.quotation_form !== true) return
           // 這頁沒有 .pg__t／h1（頂欄 #app-topbar 由 sidebar.js 填）：編輯器入口放在工具列左側 .form-toolbar__left
           const title = document.querySelector('.form-toolbar__left')
           if (!title) return
@@ -4434,10 +4475,17 @@
     }
   }
   </script>
+  <script src="../static/public-flags.js"></script>
+  <script src="../static/custom-fields.js"></script>
   <script src="../static/custom-layout.js"></script>
   <script src="../static/layout-runtime.js"></script>
   <script src="../static/layout-editor.js"></script>
   <script src="../js/def-governance.js"></script>
+  <script>
+  // Q3：報價單自己的自訂欄位（內建記錄類型 quotation；設定中心「自訂欄位（內建畫面）」預設關閉）。deferred：只登記 store、不發請求；
+  // 旗標在共用的設定 GET 裡看到開啟才 start()。值存在報價單的頂層 customFields（沒有值就沒有這個鍵）。
+  MotrixCustomFields.init({ recordType: 'quotation', label: '報價單', deferred: true })
+  </script>
   <script>
   // BP-1／Q1：報價單表單的非金額區塊（基、客戶、案件、條件）可自訂版面（P9）。設定中心「自訂畫面版面」→ quotation_form 預設關閉：
   // 關閉時不發任何版面請求（deferred）、畫面不變。fallback＝版面讀不到時的欄位順序（守門：必須等於 module.json 登記的順序）。
