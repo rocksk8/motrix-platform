@@ -202,6 +202,11 @@
             if (!(await this.flushSave())) { this.errMsg = '未發布：' + (this.errMsg || '草稿存檔失敗'); return }
             var pub = { note: this.publishNote }
             if (this.draftEtag !== null) pub.base_etag = this.draftEtag            // K-2：發布的是「我看到的那份草稿」
+            if (this.govOn && window.MotrixDefGovernance) {                        // BP-1／T60 S1：旗標開 ⇒ 發布前一定先看過同一份草稿的影響預覽（伺服端也會檢查）
+              var pvh = await window.MotrixDefGovernance.review({ kind: 'custom_module', key: this.key, scope: 'company', title: '發布前影響預覽：' + this.key })
+              if (!pvh) { this.errMsg = '已取消發布'; return }
+              pub.preview_hash = pvh
+            }
             var r = await this.api('POST', this.defUrl() + '/publish', pub)
             if (r.status === 409 && r.data && r.data.code === 'draft_conflict') {
               this.conflict = r.data.current || {}; this.conflictHeld = false; this.saveState = 'conflict'

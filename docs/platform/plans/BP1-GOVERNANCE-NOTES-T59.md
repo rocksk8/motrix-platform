@@ -18,3 +18,28 @@
 
 - **版面 `hide` 等操作的目標 id 對非最高管理者外露**：`GET /api/platform/menu` 的 `layout.skipped/applied/dropped` 帶原始操作文字，針對受限使用者看不到的側欄項目的操作會洩漏該項目的目標 id。此問題早於 BP-1，旗標全關時今天就存在，**本列車依「關閉＝逐位元不變」不改**；1f 的 886a86ad7 只在選單旗標開啟時遮蔽原始操作文字與新名稱。下一列車對非最高管理者一律遮蔽，不論旗標（計畫見 `BP1-NEXT-TRAIN-T60.md` S0，需使用者同意 D8）。
 - `GET /api/def-governance/{kind}/{key}/diff` 預設 b=draft，沒有草稿時仍回 400（狀態碼不變），但訊息已改為白話「目前沒有草稿…」。
+
+## T60 S0／S1（wip/t60-s0s1-r1）
+
+- **S0（D8）**：`GET /api/platform/menu` 對非最高管理者一律遮蔽 `layout.applied／skipped／dropped` 的操作原文（只剩操作種類與理由），**不再看旗標**；前端沒有任何地方讀這三個欄位。最高管理者照舊拿原文。測試 `test_t60_s0_menu_redact_2026_10_14.py`（含反向控制：把遮蔽函式換回原樣回傳，兩次回應除了這三個欄位完全相同）。
+- **S1（D4）**：旗標 `builder_governance.enabled` 開啟時，`POST /api/definitions/{kind}/{key}/publish` 對名單內的 kind（`expense_type`、`remit_kinds`、`custom_module`，即 `routers/definitions.py` 的 `_PREVIEW_ENFORCED_KINDS`）必須帶 `preview_hash`＝目前草稿戳，且稽核裡要有這位使用者對這個戳的 `definitions.previewed`（別人的預覽不算、只知道戳不算）；否則 409 `preview_required`／`preview_stale`，沒有繞過。旗標關、不在名單的 kind、沒有草稿 ⇒ 與今天逐字相同。三個編輯器（費用類型、匯款款別、模組建構器）旗標開時先開「審閱」面板（`MotrixDefGovernance.review()`），確認才發布。
+- **還沒涵蓋**：排版器（`layout-editor.js`，3c）與選單建構器（發布走 layout 定義）尚未送 `preview_hash`，所以 `layout`／`output_template`／`custom_fields` 還不在名單；它們接上之後把 kind 加進 `_PREVIEW_ENFORCED_KINDS`。在那之前，這些種類仍只有前端強制（選單建構器）或沒有強制。
+
+## T60 S0b（hichan-04 對 t59 的稽核，wip/t60-s0s1-r1）
+
+- (a) `GET /api/layout/{module}` 對非最高管理者不再帶側欄操作（`ops`／`dropped` 裡 target 以 `/sidebar` 結尾的）：這些只有 `/api/platform/menu` 在用，頁面引擎不需要。`points`（模組宣告的可自訂點）不動——它與公開的選單宣告同一份。最高管理者照舊。
+- (b) 含 `hub` 項的群組（目前是 `system`）不能當 `move.to` 的目的地：執行期 `core.menu._group_dest`（略過並列在 skipped）、發布驗證 `core.customization._check_sidebar_group_dest`（可選清單不含它）、`menu-editor.js` 的下拉（只有項目本來就在裡面時才保留現值）。新增 `core.menu.hub_group_keys()`。
+- (c) `impact` 說明文字已改成與 S1 一致：開啟旗標後，費用單據類型／匯款款別／自訂模組的發布由伺服端要求「看過的」雜湊；其他種類仍不強制。
+- (d) 注意：選單整份預覽（`POST /api/platform/menu/preview`）是在伺服端算的，**早於**瀏覽器端 sidebar.js 的 hub 收合（`_collapseHub`）；所以預覽裡 hub 群組顯示的是展開的項目，實際導覽列會收成單一連結。因此現在也不讓項目搬進 hub 群組。
+
+## T60 S2（wip/t60-s2-r1）：放寬分類＋單一發布管線
+
+- **無 DDL**：待核准的版本放在既有 `ui_definitions`（status='submitted'，自訂模組送審同一套）；核准票與確認期間放在既有 `config_changes`（domain `def:<kind>`，`approvals_required=1`、`effective_at`＝現在＋`change_control.confirm_period_days`，預設 7 天），`field` 存 `scope|key`。
+- 旗標 `builder_governance.enabled` 關：發布與還原與今天逐位元相同，四條新路由 404。開啟後，**名單內的 kind**（`routers/def_pipeline.py` 的 `ACTIVE_KINDS`，目前只有 `custom_fields`）：發布／還原先分類（`loosen`／`tighten`／`neutral`，**無法判斷＝放寬**）；收緊或不變立即發布並記帳本；放寬不發布、改為待核准（高風險通知其他最高管理者），需**另一位**最高管理者核准＋確認期間過後才能「套用」（才真的發布）；期間內任何最高管理者都能撤銷。申請人不能核准自己的。
+- 路由：`GET /api/def-pipeline/pending`、`POST /api/def-pipeline/changes/{id}/approve｜activate｜cancel`。
+- 比較函式（暫定規則，待使用者確認 D3）：`custom_fields`——新增欄位＝放寬、移除欄位＝收緊、只改顯示文字＝不變、`required` 取消＝放寬、改為必填＝收緊、其他屬性變動＝放寬；`layout`（已備妥、未啟用）——新增 `hide`＝收緊、移除 `hide`＝放寬、`relabel`／`move`＝不變、其他＝放寬。
+- **layout 已加入名單（`ACTIVE_KINDS = ("custom_fields", "layout")`），前提是 3c 的 `wip/t60-s4-r1`（排版器遇到 `pending: true` 不說「已發布」）在同一列車**；選單編輯器（`menu-editor.js`）本分支已改成如實顯示待核准。若列車裡沒有 3c 的提交，必須把 `"layout"` 從名單拿掉，否則旗標開啟時排版器會把待核准誤報成已發布。`expense_type`／`remit_kinds`／`custom_module` 尚無比較函式（自訂模組有自己的送審）。
+- 還原到較寬鬆的版本＝把那一版放進草稿再送審；已有不同內容的草稿時回 409（不覆蓋）。取消之後那份草稿仍在，需使用者自己丟棄。
+- 沒有排程：不會「到期自動套用」，必須有人按「套用」（核准票夠且確認期間已過才成功）。這是刻意的：讀取端不必改。
+- **S2b UI**：治理面板（`def-governance.js`）多一個「待核准變更」分頁（後端路由存在才出現）：列出全部待核准項（種類／鍵／範圍／版本／申請人／核准票數／可套用時間），核准／套用（核准票夠且期間已過才可按）／撤銷，皆畫面上兩段確認；失敗顯示伺服器原因。custom_fields 沒有專屬編輯頁，所以這個分頁是目前唯一的入口。
+

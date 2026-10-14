@@ -303,7 +303,13 @@ function expenseTypesPage() {
         if (this._isConflict(s)) { this._onConflict(s); return }
         if (!s.ok) { this._fail(s, '儲存失敗'); return }
         if (s.data && typeof s.data.etag === 'string') this.draftEtag = s.data.etag
+        var pvh = null
+        if (this.govOn && window.MotrixDefGovernance) {            // BP-1／T60 S1：旗標開 ⇒ 發布前一定先看過同一份草稿的影響預覽（伺服端也會檢查）
+          pvh = await window.MotrixDefGovernance.review({ kind: KIND, key: k, scope: 'company', title: '發布前影響預覽：' + k })
+          if (!pvh) { this.msg = '已取消發布'; return }
+        }
         var pub = { note: this.note }
+        if (pvh) pub.preview_hash = pvh
         if (this.draftEtag !== null) pub.base_etag = this.draftEtag                 // 發布的是剛存的那份
         var r = await this._call('POST', '/api/definitions/' + KIND + '/' + encodeURIComponent(k) + '/publish', pub)
         if (this._isConflict(r)) { this._onConflict(r); return }

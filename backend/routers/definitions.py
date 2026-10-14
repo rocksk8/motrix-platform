@@ -354,6 +354,42 @@ def validate_definition(kind: str, key: str, payload: dict = Body(...), authoriz
     return {"problems": D.validate(kind, key, payload.get("body"))}
 
 
+# ── T60 S1：伺服端強制「發布要先看過同一份草稿的預覽」（D4：沒有後門）；旗標 builder_governance.enabled（與 def_governance.enabled 同一個設定） ──
+#: 已經會在發布時帶 `preview_hash` 的編輯器所對應的 kind（旗標開啟時才強制）。
+#: 排版器（layout）與選單建構器（發布走 layout）尚未送雜湊 ⇒ 還不在名單；它們接上之後再加進來（見 T60 計畫 S1）。
+_PREVIEW_ENFORCED_KINDS = ("expense_type", "remit_kinds", "custom_module")
+
+
+def _preview_gate(conn, kind, key, scope, user, preview_hash):
+    """發布前的把關。⇒ None（放行）或 `(code, 白話訊息)`。
+    旗標關、kind 不在名單、目前沒有草稿（後面的發布自己會說『沒有草稿』）⇒ 放行（與今天逐字相同）。
+    旗標開且在名單：必須帶 `preview_hash`＝目前草稿戳，而且這位使用者真的『看過』（稽核裡有他對這個戳的預覽紀錄）；沒有例外。"""
+    if kind not in _PREVIEW_ENFORCED_KINDS or not _governance_enabled(conn):
+        return None
+    draft = D.get(conn, kind, key, scope, 0)
+    if draft is None:
+        return None
+    cur = draft.get("etag", "")
+    if not preview_hash:
+        return ("preview_required", "發布前必須先看過影響預覽")
+    if preview_hash != cur:
+        return ("preview_stale", "草稿在你看過預覽之後又被改了，請重新預覽")
+    seen = conn.execute("SELECT 1 FROM audit_log WHERE action='definitions.previewed' AND target_id=? AND username=? "
+                        "AND detail LIKE ? LIMIT 1", ("%s/%s/%s" % (kind, key, scope), user, '%"previewHash": "' + cur + '"%')).fetchone()
+    if not seen:
+        return ("preview_required", "發布前必須先看過影響預覽")
+    return None
+
+
+
+def _governance_enabled(conn=None) -> bool:
+    try:
+        from helpers import settings_registry as R
+        return int(R.get("builder_governance", "enabled", conn=conn)) == 1
+    except Exception:                                                  # noqa: BLE001  讀不到一律當關
+        return False
+
+
 @router.post("/api/definitions/{kind}/{key}/publish")
 def publish_definition(kind: str, key: str, scope: str = Query("company"), payload: dict = Body(default={}),
                        authorization: str = Header(None)):
@@ -365,6 +401,14 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
         raise HTTPException(400, "base_etag 必須是字串")
     conn = get_db()
     try:
+        _pv = (payload or {}).get("preview_hash")                       # T60 S1：旗標開啟時，名單內的 kind 必須帶看過的預覽雜湊（關＝放行）
+        _gate = _preview_gate(conn, kind, key, scope, u["username"], _pv if isinstance(_pv, str) else None)
+        if _gate:
+            return JSONResponse({"detail": _gate[1], "code": _gate[0]}, status_code=409)
+        from routers import def_pipeline as _pl                          # T60 S2：旗標開、名單內的 kind ⇒ 放寬先待核准、收緊立即（其餘 ⇒ None，照舊）
+        _piped = _pl.handle_publish(conn, kind, key, scope, u, (payload or {}).get("note", ""), base_etag, authorization)
+        if _piped is not None:
+            return _piped
         if kind == "custom_module" and scope == "company":
             # 方案 B：掛載點頁籤數上限（要連線，所以不在 validate_module 裡）——發布／送審之前擋下
             from helpers import custom_modules as _cm
@@ -452,6 +496,10 @@ def restore_definition(kind: str, key: str, version: int, scope: str = Query("co
     conn = get_db()
     unreviewed_reason = _UNREVIEWED_KIND_REASON
     try:
+        from routers import def_pipeline as _pl                          # T60 S2：還原到較寬鬆的版本 ⇒ 待核准（其餘 ⇒ None，照舊）
+        _piped = _pl.handle_restore(conn, kind, key, scope, version, u, (payload or {}).get("note", ""), authorization)
+        if _piped is not None:
+            return _piped
         if kind == "custom_module" and scope == "company":
             from helpers import custom_def_review as _defr
             _st = _defr.review_state(conn, u["username"])
@@ -511,7 +559,16 @@ def effective_layout(module_key: str, role: str = Query(None), authorization: st
         eff = catalog.effective_layout_ops(conn, module_key, who)   # resolve＋check_layout 唯一一份（C4：選單共用）
     finally:
         conn.close()
-    return {"module": module_key, "role": who, "source": eff["source"], "ops": eff["ops"], "dropped": eff["dropped"],
+    ops, dropped = eff["ops"], eff["dropped"]
+    if u["role"] != "superadmin":
+        # T60 S0（hichan-04 稽核）：側欄操作（含改名文字與使用者看不到的目標 id）只有 /api/platform/menu 在用（那邊已依權限過濾並遮蔽）；
+        # 頁面引擎不需要它們 ⇒ 對非最高管理者拿掉，免得從這裡讀到看不到的項目。
+        def _is_sidebar(o):
+            t = (o or {}).get("target") if isinstance(o, dict) else None
+            return isinstance(t, str) and t.endswith("/sidebar")
+        ops = [o for o in ops if not _is_sidebar(o)]
+        dropped = [d for d in dropped if not _is_sidebar((d or {}).get("op") if isinstance(d, dict) else None)]
+    return {"module": module_key, "role": who, "source": eff["source"], "ops": ops, "dropped": dropped,
             "error": eff["error"], "points": catalog.layout_points(module_key)}
 
 

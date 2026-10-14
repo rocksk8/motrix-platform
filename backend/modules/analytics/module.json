@@ -23,5 +23,74 @@
     {"path": "procurement.html",
      "menu": {"group": "supply", "label": "採購管理", "order": 60, "perm": ["procurement"], "badge": "sb-mod-procurement"}}
   ],
-  "customization": {"schema": 1, "fields": {}, "pages": [], "outputs": []}
+  "customization": {
+    "schema": 1,
+    "fields": {
+      "material": [
+        {"key": "name", "label": "品名", "core": true},
+        {"key": "model", "label": "廠牌/型號", "core": false},
+        {"key": "qty", "label": "數量", "core": false},
+        {"key": "unit", "label": "單位", "core": false},
+        {"key": "status", "label": "到料狀態", "core": true},
+        {"key": "quoteNo", "label": "案件號", "core": true},
+        {"key": "customer", "label": "客戶", "core": false},
+        {"key": "dealTag", "label": "案件狀態", "core": false},
+        {"key": "note", "label": "備註", "core": false}
+      ],
+      "device": [
+        {"key": "name", "label": "設備名稱", "core": true},
+        {"key": "sn", "label": "SN 序號", "core": false},
+        {"key": "mac", "label": "MAC 位址", "core": false},
+        {"key": "customer", "label": "客戶", "core": false},
+        {"key": "quoteNo", "label": "案件", "core": false},
+        {"key": "location", "label": "安裝地點", "core": false},
+        {"key": "warrantyStart", "label": "保固起始", "core": false},
+        {"key": "expiryDate", "label": "保固到期", "core": true},
+        {"key": "warrantyStatus", "label": "保固狀態", "core": true}
+      ]
+    },
+    "pages": [
+      {
+        "page": "procurement.html",
+        "lists": [
+          {"key": "materials", "label": "材料進度清單", "entity": "material", "columns": [
+            {"field": "name", "visible": true},
+            {"field": "model", "visible": true},
+            {"field": "qty", "visible": true},
+            {"field": "unit", "visible": true},
+            {"field": "status", "visible": true},
+            {"field": "quoteNo", "visible": true},
+            {"field": "customer", "visible": true},
+            {"field": "dealTag", "visible": true},
+            {"field": "note", "visible": true}
+          ]}
+        ],
+        "forms": [],
+        "actions": [],
+        "menus": [],
+        "exports": []
+      },
+      {
+        "page": "devices.html",
+        "lists": [
+          {"key": "devices", "label": "設備清單", "entity": "device", "columns": [
+            {"field": "name", "visible": true},
+            {"field": "sn", "visible": true},
+            {"field": "mac", "visible": true},
+            {"field": "customer", "visible": true},
+            {"field": "quoteNo", "visible": true},
+            {"field": "location", "visible": true},
+            {"field": "warrantyStart", "visible": true},
+            {"field": "expiryDate", "visible": true},
+            {"field": "warrantyStatus", "visible": true}
+          ]}
+        ],
+        "forms": [],
+        "actions": [],
+        "menus": [],
+        "exports": []
+      }
+    ],
+    "outputs": []
+  }
 }

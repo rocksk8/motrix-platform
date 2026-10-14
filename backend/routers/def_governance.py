@@ -102,7 +102,8 @@ def version_diff(conn, kind, key, scope, a, b) -> dict:
 
 def impact(conn, kind, key, scope) -> dict:
     """發布前影響預覽：草稿對目前生效版的差異、驗證結果、同一定義在其他範圍（公司／角色）的版本、宣告的影響範圍。
-    `previewHash`＝草稿內容戳（`etag_of`）：發布時帶回同一個戳 ⇒ 證明發布的是看過的那一版。"""
+    `previewHash`＝草稿內容戳（`etag_of`）：這個戳會被記進稽核（`definitions.previewed`）。旗標開啟時，費用單據類型／匯款款別／自訂模組的發布端點要求
+    帶回這個戳、而且稽核裡要有這位使用者對它的預覽紀錄（T60 S1，伺服端強制）；其他種類（版面、輸出版型、自訂欄位）目前仍不強制。"""
     _check_kind(kind)
     draft = D.get(conn, kind, key, scope, 0)
     live = D.get(conn, kind, key, scope)
@@ -173,5 +174,5 @@ def def_impact(kind: str, key: str, scope: str = Query("company"), authorization
     finally:
         conn.close()
     _audit(_tok(authorization), "definitions.previewed", "ui_definition", "%s/%s/%s" % (kind, key, scope),
-           "看過發布前影響預覽（%s %s，草稿戳 %s）" % (kind, key, out["previewHash"] or "無草稿"), {})
+           "看過發布前影響預覽（%s %s，草稿戳 %s）" % (kind, key, out["previewHash"] or "無草稿"), {"previewHash": out["previewHash"]})
     return out

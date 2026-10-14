@@ -198,3 +198,169 @@ def test_page_entries_are_gated_by_govon_and_load_the_panel_script():
             m = re.search(r'<button[^>]*(?:id|data-testid)="%s"[^>]*>' % i, html)
             assert m and 'x-show="govOn' in m.group(0), (page, i)                         # 入口一律由 govOn 把關（關＝不顯示）
         assert '<script src="../js/def-governance.js"></script>' in html
+
+
+# ── T60 S1：審閱模式（發布前一定先看過預覽）─────────────────────────────────────────
+REVIEW_HARNESS = r"""
+const fs = require('fs')
+const inp = JSON.parse(process.argv[2])
+const els = {}
+function mk(tag) { return { tag, id: '', attrs: {}, innerHTML: '', listeners: {}, setAttribute(k, v) { this.attrs[k] = v }, getAttribute(k) { return this.attrs[k] },
+  addEventListener(t, f) { this.listeners[t] = f }, remove() { delete els[this.id] }, appendChild(c) { els[c.id] = c } } }
+global.window = {}
+global.localStorage = { getItem: () => JSON.stringify({ token: 'tok' }) }
+global.document = { createElement: mk, getElementById: (i) => els[i] || null, head: { appendChild(c) { els[c.id] = c } }, body: { appendChild(c) { els[c.id] = c } } }
+global.fetch = async (url) => ({ ok: true, status: 200, json: async () => inp.impact })
+;(0, eval)(fs.readFileSync(process.argv[3], 'utf8'))
+const G = window.MotrixDefGovernance
+const click = (act) => els['dg-panel'].listeners.click({ target: { closest: () => ({ getAttribute: () => act }) } })
+;(async () => {
+  const out = {}
+  const p = G.review({ kind: 'expense_type', key: 'travel', scope: 'company' })
+  await new Promise(r => setTimeout(r, 20))
+  out.html = els['dg-panel'].innerHTML
+  for (const act of inp.clicks) await click(act)
+  out.result = await Promise.race([p, new Promise(r => setTimeout(() => r('PENDING'), 50))])
+  out.panelLeft = !!els['dg-panel']
+  console.log(JSON.stringify(out))
+})()
+"""
+IMPACT_OK = {"hasDraft": True, "liveVersion": 1, "nextVersion": 2, "changeCount": 0, "changes": [], "previewHash": "H123",
+             "validation": {"ok": True, "problems": []}, "otherScopes": [], "declared": {"screens": "s", "customerVisible": False}, "frozenRecords": None, "note": "n"}
+
+
+def _review(impact, clicks):
+    out = subprocess.run([NODE, "-e", REVIEW_HARNESS, "x", json.dumps({"impact": impact, "clicks": clicks}), str(JS / "def-governance.js")],
+                         capture_output=True, text=True, encoding="utf-8", timeout=30)
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout.strip().splitlines()[-1])
+
+
+@needs_node
+def test_review_confirm_resolves_with_the_draft_hash_and_closes_the_panel():
+    r = _review(IMPACT_OK, ["review-ok"])
+    assert "確認並發布" in r["html"] and r["result"] == "H123" and r["panelLeft"] is False
+
+
+@needs_node
+def test_review_cancel_resolves_null():
+    assert _review(IMPACT_OK, ["review-cancel"])["result"] is None
+    assert _review(IMPACT_OK, ["close"])["result"] is None
+
+
+@needs_node
+def test_review_cannot_be_confirmed_when_validation_fails_or_there_is_no_draft():
+    bad = dict(IMPACT_OK, validation={"ok": False, "problems": [{"path": "a", "message": "壞"}]})
+    r = _review(bad, ["review-ok"])
+    assert 'data-dg="review-ok" disabled' in r["html"] and r["result"] == "PENDING" and r["panelLeft"] is True      # 按了也不會放行
+    nodraft = dict(IMPACT_OK, hasDraft=False, previewHash="")
+    assert _review(nodraft, ["review-ok"])["result"] == "PENDING"
+
+
+PUBLISH_HARNESS = r"""
+const fs = require('fs')
+const inp = JSON.parse(process.argv[2])
+global.window = { MotrixFormPreview: null }
+global.localStorage = { getItem: () => '{}' }
+global.document = { addEventListener() {}, querySelector() { return null }, getElementById() { return null } }
+const calls = []
+global.fetch = async (url, o) => { calls.push({ url, method: o.method, body: o.body }); return { ok: true, status: 200, json: async () => ({ version: 3, etag: 'e' }) } }
+window.MotrixDefGovernance = { review: async () => inp.review }
+;(0, eval)(fs.readFileSync(process.argv[3], 'utf8'))
+const page = remitKindsPage()
+page.govOn = inp.govOn; page.reload = async () => {}
+;(async () => { await page.publish(); console.log(JSON.stringify({ calls, msg: page.msg, err: page.err })) })()
+"""
+
+
+def _publish(govon, review):
+    out = subprocess.run([NODE, "-e", PUBLISH_HARNESS, "x", json.dumps({"govOn": govon, "review": review}), str(JS / "remit-kinds-settings.js")],
+                         capture_output=True, text=True, encoding="utf-8", timeout=30)
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout.strip().splitlines()[-1])
+
+
+@needs_node
+def test_remit_kinds_publish_sends_the_reviewed_hash_only_when_the_flag_is_on():
+    on = _publish(True, "H123")
+    pub = [c for c in on["calls"] if c["url"].endswith("/publish")]
+    assert len(pub) == 1 and json.loads(pub[0]["body"])["preview_hash"] == "H123"
+    off = _publish(False, "H123")
+    pub = [c for c in off["calls"] if c["url"].endswith("/publish")]
+    assert len(pub) == 1 and "preview_hash" not in json.loads(pub[0]["body"])             # 旗標關 ⇒ 與今天逐字相同的請求
+    cancelled = _publish(True, None)
+    assert not [c for c in cancelled["calls"] if c["url"].endswith("/publish")] and cancelled["msg"] == "已取消發布"
+
+
+def test_other_editors_also_send_the_reviewed_hash():
+    """展示用的靜態檢查（兩個編輯器的發布流程太重、不在 node 裡整段重放）：旗標開時先 review、取消就不送、有雜湊才帶 preview_hash。"""
+    for name in ("expense-types.js", "module-builder-output.js"):
+        src = (JS / name).read_text(encoding="utf-8")
+        assert "this.govOn && window.MotrixDefGovernance" in src and "MotrixDefGovernance.review(" in src and "preview_hash = pvh" in src, name
+
+
+# ── T60 S2b：待核准變更分頁 ─────────────────────────────────────────────────────────
+PEND = {"status": 200, "body": {"items": [
+    {"id": 7, "kind": "custom_fields", "key": "invoice_vouchers", "scope": "company", "version": 3, "state": "pending", "by": "alice", "at": "2026-10-14T01:00:00",
+     "reason": "多一個欄位", "effectiveAt": "2026-10-21T01:00:00", "approvals": [], "approvalsRequired": 1, "ready": False},
+    {"id": 8, "kind": "layout", "key": "module:crm", "scope": "role:admin", "version": 2, "state": "pending", "by": "bob", "at": "2026-10-10T01:00:00",
+     "reason": "", "effectiveAt": "2026-10-11T01:00:00", "approvals": ["carol"], "approvalsRequired": 1, "ready": True}]}}
+
+
+def _post_urls(r):
+    return [c["url"] for c in r["calls"] if c["method"] == "POST"]
+
+
+@needs_node
+def test_pending_tab_is_absent_when_the_pipeline_routes_are_404():
+    r = _panel([{"do": "open", "opts": {"kind": "expense_type", "key": "travel"}}], {"/def-pipeline/pending": {"status": 404, "body": {}}})
+    assert "待核准變更" not in r["html"]
+
+
+@needs_node
+def test_pending_tab_lists_changes_and_only_enables_apply_when_ready():
+    r = _panel([{"do": "open", "opts": {"kind": "expense_type", "key": "travel"}}, {"do": "click", "act": "tab:pending"}], {"/def-pipeline/pending": PEND})
+    h = r["html"]
+    assert "待核准變更（2）" in h and 'data-change="7"' in h and 'data-change="8"' in h
+    assert "custom_fields / invoice_vouchers" in h and "核准 0／1" in h and "核准 1／1" in h
+    assert 'data-dg="pact:activate:7" disabled' in h                       # 還沒核准／期間未過 ⇒ 不能按
+    assert 'data-dg="pact:activate:8"' in h and 'data-dg="pact:activate:8" disabled' not in h and "可套用" in h
+
+
+@needs_node
+def test_review_mode_does_not_load_the_pending_list():
+    r = _panel([{"do": "panel"}], {})
+    assert r["calls"] == []
+    out = _review(IMPACT_OK, [])
+    assert "待核准變更" not in out["html"]
+
+
+@needs_node
+def test_pending_actions_need_two_clicks_and_post_the_right_route_then_reload():
+    steps = [{"do": "open", "opts": {"kind": "expense_type", "key": "travel"}}, {"do": "click", "act": "tab:pending"}, {"do": "click", "act": "pact:approve:7"}]
+    r = _panel(steps, {"/def-pipeline/pending": PEND, "/changes/7/approve": {"status": 200, "body": {"approvals": 1, "required": 1}}})
+    assert 'data-dg="pact-yes:approve:7"' in r["html"] and _post_urls(r) == []                    # 第一下只是確認
+    r = _panel(steps + [{"do": "click", "act": "pact-no"}], {"/def-pipeline/pending": PEND})
+    assert _post_urls(r) == [] and 'data-dg="pact:approve:7"' in r["html"]
+    r = _panel(steps + [{"do": "click", "act": "pact-yes:approve:7"}],
+               {"/def-pipeline/pending": PEND, "/changes/7/approve": {"status": 200, "body": {"approvals": 1, "required": 1}}})
+    assert _post_urls(r) == ["/api/def-pipeline/changes/7/approve"]
+    assert r["calls"][-1]["url"] == "/api/def-pipeline/pending"                                  # 做完重新讀清單
+    for verb in ("activate", "cancel"):
+        r = _panel([{"do": "open", "opts": {"kind": "expense_type", "key": "travel"}}, {"do": "click", "act": "tab:pending"},
+                    {"do": "click", "act": "pact:%s:8" % verb}, {"do": "click", "act": "pact-yes:%s:8" % verb}],
+                   {"/def-pipeline/pending": PEND, "/changes/8/" + verb: {"status": 200, "body": {}}})
+        assert _post_urls(r) == ["/api/def-pipeline/changes/8/%s" % verb]
+
+
+@needs_node
+def test_pending_action_failure_shows_the_server_reason():
+    r = _panel([{"do": "open", "opts": {"kind": "expense_type", "key": "travel"}}, {"do": "click", "act": "tab:pending"},
+                {"do": "click", "act": "pact:approve:7"}, {"do": "click", "act": "pact-yes:approve:7"}],
+               {"/def-pipeline/pending": PEND, "/changes/7/approve": {"status": 409, "body": {"detail": "申請人不能核准自己的變更"}}})
+    assert "申請人不能核准自己的變更" in r["html"]
+
+
+def test_menu_editor_reports_pending_publishes_instead_of_claiming_success():
+    src = (JS.parent / "static" / "menu-editor.js").read_text(encoding="utf-8")
+    assert "pr.pending === true" in src and "待第二位最高管理者核准，核准前不會生效" in src

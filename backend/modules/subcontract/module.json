@@ -17,7 +17,39 @@
     ],
     "files": []
   },
-  "customization": {"schema": 1, "fields": {}, "pages": [], "outputs": []},
+  "customization": {
+    "schema": 1,
+    "fields": {
+      "vendor": [
+        {"key": "name", "label": "承攬商名稱", "core": true},
+        {"key": "taxId", "label": "統一編號", "core": true},
+        {"key": "contact", "label": "聯絡人", "core": false},
+        {"key": "phone", "label": "電話", "core": false},
+        {"key": "email", "label": "Email", "core": false},
+        {"key": "active", "label": "狀態", "core": true}
+      ]
+    },
+    "pages": [
+      {
+        "page": "vendor-contractors.html",
+        "lists": [
+          {"key": "vendors", "label": "承攬商清單", "entity": "vendor", "columns": [
+            {"field": "name", "visible": true},
+            {"field": "taxId", "visible": true},
+            {"field": "contact", "visible": true},
+            {"field": "phone", "visible": true},
+            {"field": "email", "visible": true},
+            {"field": "active", "visible": true}
+          ]}
+        ],
+        "forms": [],
+        "actions": [],
+        "menus": [],
+        "exports": []
+      }
+    ],
+    "outputs": []
+  },
   "customization_note": "搬遷時沒有宣告可自訂點（CUSTOMIZATION-SPEC §5）；之後要開放欄位、頁面或輸出的自訂時在這裡加",
   "provides": {"api_prefixes": ["/api/contractors", "/api/vendor-contractors", "/api/contractor-dispatches", "/api/contractor-vouchers", "/api/remit-kinds"],
                "probes": ["/api/contractors", "/api/vendor-contractors", "/api/contractor-dispatches", "/api/contractor-vouchers", "/api/remit-kinds"]},

@@ -2522,6 +2522,12 @@
   ],
   "s": 404
  },
+ "/api/def-pipeline/pending": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/definition-kinds": {
   "k": [
    "kinds",
@@ -3983,10 +3989,13 @@
    "modules[].coreFields",
    "modules[].coreFields.case",
    "modules[].coreFields.contract",
+   "modules[].coreFields.device",
+   "modules[].coreFields.material",
    "modules[].coreFields.schedule",
    "modules[].coreFields.supplier",
    "modules[].coreFields.tender",
    "modules[].coreFields.timeline",
+   "modules[].coreFields.vendor",
    "modules[].coreFields.watch",
    "modules[].customizationSchema",
    "modules[].endpoints",
@@ -5732,6 +5741,7 @@
    "groups[].values.combo_view_max",
    "groups[].values.confirm_period_days",
    "groups[].values.default_status",
+   "groups[].values.devices",
    "groups[].values.enabled",
    "groups[].values.include_headers",
    "groups[].values.label_bonus_award",
@@ -5762,6 +5772,7 @@
    "groups[].values.over_qty",
    "groups[].values.payslip_show_name",
    "groups[].values.prefill_unsigned",
+   "groups[].values.procurement",
    "groups[].values.qty_mode",
    "groups[].values.reject_final_keep",
    "groups[].values.request_log_keep_days",
@@ -5773,6 +5784,7 @@
    "groups[].values.total_max_chars",
    "groups[].values.total_text",
    "groups[].values.unlock_edit_signed",
+   "groups[].values.vendor_contractors",
    "groups[].values.warn_pct",
    "groups[].values.who_may",
    "plannedFeatures",
