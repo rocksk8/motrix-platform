@@ -155,7 +155,7 @@ def test_settings_defaults_and_loosen_direction(client):
     assert f.loosen == "down" and f.recommended == 1
 
 
-def test_s5_custom_fields_enter_as_internal_cf_ids_and_disabled_ones_are_absent(monkeypatch):
+def test_catalog_s5_custom_fields_enter_as_internal_cf_ids_and_disabled_ones_are_absent(monkeypatch):
     import types
     fake = types.ModuleType("helpers.builtin_fields")
     fake.public_fields = lambda rt, conn=None: [{"key": "site", "label": "工地", "type": "text"}, {"key": "lvl", "label": "等級", "type": "select", "options": ["A", "B"]},

@@ -274,7 +274,7 @@ def test_m1_an_approved_key_cannot_be_renamed_to_a_plain_keys_name_either():
     assert v({"已核准": {"label": "草稿"}})
 
 
-def test_s2_finalized_is_approved_semantic():
+def test_status_s2_finalized_is_approved_semantic():
     assert S._SEMANTIC["finalized"] == "approved" and S.compare({"statuses": {}}, {"statuses": {"finalized": {"label": "放行"}}})[0] == "loosen"
     assert v({"finalized": {"tone": "rejected"}}) and v({"draft": {"tone": "approved"}})
 
@@ -298,7 +298,7 @@ console.log(JSON.stringify(rendered));
 
 
 @pytest.mark.skipif(not NODE, reason="需要 node")
-def test_s1_prototype_named_statuses_do_not_throw():
+def test_status_s1_prototype_named_statuses_do_not_throw():
     out = node(JS_PRELUDE + "S.apply({enabled:true,statuses:{},changed:{}});console.log(JSON.stringify(['constructor','toString','__proto__','hasOwnProperty'].map(k=>[S.label(k),S.chipClass(k),S.badgeClass(k,'x')])))")
     assert out == [[k, "st-chip", "x"] for k in ("constructor", "toString", "__proto__", "hasOwnProperty")]
 
@@ -414,7 +414,7 @@ def test_m1b_ordinary_good_names_pass():
         assert v({"草稿": {"label": ok}}) == [], ok
 
 
-def test_s4_editor_escapes_attribute_values():
+def test_status_s4_editor_escapes_attribute_values():
     src = (FRONT / "js/status-display-editor.js").read_text(encoding="utf-8")
     assert "esc(c) + ':' + esc(k)" in src and "'<option value=\"' + esc(t) + '\"'" in src
 
