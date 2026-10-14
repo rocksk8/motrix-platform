@@ -367,3 +367,30 @@ def test_pages_read_the_flag_from_the_existing_settings_request(name, flag_page_
     assert "builder_custom_fields.enabled === true" in src and "MotrixCustomFields.start()" in src
     # 頁面本身不直接打 /api/custom-fields（只有程式庫在旗標開啟後才打）
     assert "/api/custom-fields" not in re.sub(r"//[^\n]*", "", src.replace("<!--", "//").replace("-->", ""))
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_publish_sends_the_reviewed_preview_hash_only_when_governance_is_on():
+    """T62：治理旗標開 ⇒ 先 review 再帶 preview_hash 發布；審閱取消就不發布。關／未載入 ⇒ 請求本體只有 note。"""
+    body = """
+  c.defs = { latest: null, draft: null, versions: [] }
+  c.work = [{ key: 'f1', label: '工頭', type: 'text', disabled: false, help: '', optionsText: '', maxLengthText: '' }]
+  c.load = async () => { c.loadError = '' }
+  c.note = 'n1'
+  const reviewed = []
+  async function run(gov, review) {
+    const sent = []
+    c.note = 'n1'
+    c._j = async (url, opt) => { if (url.indexOf('/publish') >= 0) { sent.push(JSON.parse(opt.body)); return { ok: true, status: 200, d: { version: 9 } } }
+      if (url.indexOf('/draft') >= 0 || url.indexOf('/validate') >= 0) return { ok: true, status: 200, d: { problems: [] } }
+      return { ok: true, status: 200, d: { draft: null, latest: null, versions: [] } } }
+    window.MotrixDefGovernance = gov ? { available: async (k) => k === 'custom_fields', review: async (o) => { reviewed.push(o); return review } } : undefined
+    const pub = c.publish(); await new Promise(r => setTimeout(r, 20)); c.answer(true); await pub
+    return sent
+  }
+  const on = await run(true, 'H1'), off = await run(false, 'H1'), cancel = await run(true, null)
+  console.log(JSON.stringify({ on, off, cancel, reviewed }))"""
+    r = _ed(body)
+    assert r["on"] == [{"note": "n1", "preview_hash": "H1"}]
+    assert r["off"] == [{"note": "n1"}]
+    assert r["cancel"] == [] and r["reviewed"][0]["kind"] == "custom_fields"
