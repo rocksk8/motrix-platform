@@ -62,14 +62,17 @@ def _dir_of(cmd):
     return next(a.split("=", 1)[1] for a in cmd if str(a).startswith("--user-data-dir="))
 
 
-def test_sequential_runs_reuse_the_same_profile_and_keep_the_command_intact(prod):
+def test_sequential_runs_reuse_the_same_profile_and_keep_the_command_intact(prod, tmp_path):
+    page = tmp_path / "a.html"
+    page.write_text("<html><head></head><body>x</body></html>", encoding="utf-8")        # H2：真的存在的 HTML（不靠『檔案不存在就略過硬化』）
+    url = "file:///" + str(page).replace("\\", "/")
     for i in range(4):
-        _run(["msedge.exe", "--headless", "--print-to-pdf=x%d.pdf" % i, "file:///a.html"])
+        _run(["msedge.exe", "--headless", "--print-to-pdf=x%d.pdf" % i, url])
     dirs = [_dir_of(c) for c in prod["seen"]]
     assert all(d.startswith(str(prod["root"])) for d in dirs), "profile 必須在專屬根目錄底下"
     for i, c in enumerate(prod["seen"]):
         c = [x for x in c if x not in startup._HARDEN_FLAGS]          # H1：渲染硬化旗標（插在 file:/// 參數之前）不算『原命令』的一部分；其餘旗標與順序必須不變
-        assert c[0] == "msedge.exe" and c[2:] == ["--headless", "--print-to-pdf=x%d.pdf" % i, "file:///a.html"], c
+        assert c[0] == "msedge.exe" and c[2:] == ["--headless", "--print-to-pdf=x%d.pdf" % i, url], c
     # 依序呼叫（每次用完就歸還）⇒ 一直是同一批目錄輪流用，不是每次新開；累積的快取檔證明被重用
     assert len(set(dirs)) <= startup.EDGE_PDF_MAX_CONCURRENCY
     reused = max(set(dirs), key=dirs.count)
