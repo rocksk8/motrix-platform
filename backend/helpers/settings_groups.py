@@ -452,39 +452,20 @@ register_group(
 
 # ── BP-1（建構器 第一刀）：各畫面是否啟用「管理者自訂版面」（欄位顯示／順序／標籤）。預設全關＝上線前的畫面（部署零行為變更）。 ──
 # 一個畫面一個欄位（builder.layout.<畫面>）；啟用後該畫面才會讀版面定義（公司／角色），超級管理員才看得到「編輯版面」。
+import json as _json
+from core import paths as _paths
+
+# 版面頁面登錄（單一來源）：frontend/static/layout-pages.json。新增一頁＝在該檔加一筆（旗標欄位由此產生），不必改這裡。
+with open(_paths.FRONTEND_DIR + "/static/layout-pages.json", encoding="utf-8") as _fh:
+    _LAYOUT_PAGES = _json.load(_fh)
+
 register_group(
     "builder_layout", "自訂畫面版面",
     [
-        S("suppliers", "bool", False, risk="ops", recommended=False,
-          question="供應商管理頁，要開放管理者自訂欄位的顯示、順序與名稱嗎？", label="供應商管理頁可自訂版面",
-          help="開啟後，最高管理者可以在供應商管理頁按「編輯版面」，調整列表欄位的顯示、順序與名稱，並可預覽、發布與還原。",
-          impact="只影響供應商管理頁的列表欄位顯示。關閉時畫面與現在完全相同；開啟後，已發布的版面才會套用給對應角色。金額與權限的限制不會因版面而放寬，核心欄位不能隱藏。可隨時關閉。",
-          choices=[(False, "不開放（建議）", "供應商管理頁維持目前的欄位與順序。"),
-                   (True, "開放自訂版面", "最高管理者可編輯並發布版面，發布後所有人依角色套用。")]),
-        S("case_management", "bool", False, risk="ops", recommended=False,
-          question="案件管理頁的案件清單，要開放管理者自訂卡片欄位的顯示與順序嗎？", label="案件管理頁可自訂版面",
-          help="開啟後，最高管理者可以在案件管理頁的清單上按「編輯版面」，調整案件卡片上各項資訊的顯示、順序與名稱，並可預覽、發布與還原。",
-          impact="只影響案件管理頁左側案件清單（卡片）的顯示。關閉時畫面與現在完全相同；開啟後，已發布的版面才會套用給對應角色。金額與權限的限制不會因版面而放寬（看不到金額的人，版面顯示金額欄也只會看到「—」），案號與狀態不能隱藏。可隨時關閉。",
-          choices=[(False, "不開放（建議）", "案件清單維持目前的卡片內容與順序。"),
-                   (True, "開放自訂版面", "最高管理者可編輯並發布版面，發布後所有人依角色套用。")]),
-        S("procurement", "bool", False, risk="ops", recommended=False,
-          question="採購管理頁（材料到料清單），要開放管理者自訂欄位的顯示、順序與名稱嗎？", label="採購管理頁可自訂版面",
-          help="開啟後，最高管理者可以在採購管理頁按「編輯版面」，調整列表欄位的顯示、順序與名稱，並可預覽、發布與還原。",
-          impact="只影響採購管理頁的列表欄位顯示。關閉時畫面與現在完全相同；開啟後，已發布的版面才會套用給對應角色。權限的限制不會因版面而放寬，核心欄位不能隱藏。可隨時關閉。",
-          choices=[(False, "不開放（建議）", "採購管理頁維持目前的欄位與順序。"),
-                   (True, "開放自訂版面", "最高管理者可編輯並發布版面，發布後所有人依角色套用。")]),
-        S("devices", "bool", False, risk="ops", recommended=False,
-          question="設備登載頁（設備清單），要開放管理者自訂欄位的顯示、順序與名稱嗎？", label="設備登載頁可自訂版面",
-          help="開啟後，最高管理者可以在設備登載頁按「編輯版面」，調整列表欄位的顯示、順序與名稱，並可預覽、發布與還原。",
-          impact="只影響設備登載頁的列表欄位顯示。關閉時畫面與現在完全相同；開啟後，已發布的版面才會套用給對應角色。權限的限制不會因版面而放寬，核心欄位不能隱藏。可隨時關閉。",
-          choices=[(False, "不開放（建議）", "設備登載頁維持目前的欄位與順序。"),
-                   (True, "開放自訂版面", "最高管理者可編輯並發布版面，發布後所有人依角色套用。")]),
-        S("vendor_contractors", "bool", False, risk="ops", recommended=False,
-          question="承攬商管理頁（承攬商清單），要開放管理者自訂欄位的顯示、順序與名稱嗎？", label="承攬商管理頁可自訂版面",
-          help="開啟後，最高管理者可以在承攬商管理頁按「編輯版面」，調整列表欄位的顯示、順序與名稱，並可預覽、發布與還原。",
-          impact="只影響承攬商管理頁的列表欄位顯示。關閉時畫面與現在完全相同；開啟後，已發布的版面才會套用給對應角色。權限的限制不會因版面而放寬，核心欄位不能隱藏。可隨時關閉。",
-          choices=[(False, "不開放（建議）", "承攬商管理頁維持目前的欄位與順序。"),
-                   (True, "開放自訂版面", "最高管理者可編輯並發布版面，發布後所有人依角色套用。")]),
+        S(_p["flag"], "bool", False, risk="ops", recommended=False,
+          question=_p["question"], label=_p["flagLabel"], help=_p["help"], impact=_p["impact"],
+          choices=[(False, _p["offLabel"], _p["offText"]), (True, _p["onLabel"], _p["onText"])])
+        for _p in _LAYOUT_PAGES
     ],
     sensitive=False, risk="ops",
     help="決定哪些畫面開放管理者自訂版面：供應商管理頁、案件管理頁的案件清單與表單、採購管理頁、設備登載頁、承攬商管理頁。",
