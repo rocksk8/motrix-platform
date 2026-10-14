@@ -3645,7 +3645,7 @@ def _serialize_stage(conn, sr) -> dict:
         "WHERE stage_id=? ORDER BY id",
         (sr["id"],),
     ).fetchall()
-    return {
+    out = {
         "id":         sr["id"],
         "label":      sr["label"],
         "sortOrder":  sr["sort_order"],
@@ -3662,6 +3662,10 @@ def _serialize_stage(conn, sr) -> dict:
             for v in visit_rows
         ],
     }
+    # 階段樣板（S-ST2）：種類鍵只在由樣板建立的階段才有；沒用樣板的案件，回應和今天一模一樣
+    if "stage_key" in sr.keys() and sr["stage_key"]:
+        out["stageKey"] = sr["stage_key"]
+    return out
 
 
 def _get_stage_row(conn, quote_no: str, stage_id: int):
@@ -3721,6 +3725,7 @@ def _sync_stages_to_json(conn, quote_no: str, updated_at: str = None) -> str | N
                     {"visitDate": v["visit_date"], "visitPeople": v["visit_people"], "note": v["note"]}
                     for v in visit_rows
                 ],
+                **({"stageKey": sr["stage_key"]} if ("stage_key" in sr.keys() and sr["stage_key"]) else {}),
             })
         data.setdefault("caseRecord", {})["stages"] = stages_json
         result_ts = save_quotation_json(conn, quote_no, data, updated_at=updated_at)
@@ -3784,17 +3789,19 @@ def _sync_json_stages_to_table(conn, quote_no: str, stages_from_json: list) -> N
             ))
             final_id = old_id
         else:
+            _sk = st.get("stageKey")
+            _sk = _sk if (isinstance(_sk, str) and re.match(r"^[a-z][a-z0-9_]{0,29}$", _sk)) else None   # 階段樣板種類鍵；不合法 ⇒ NULL
             cur = conn.execute("""
                 INSERT INTO case_stages
                     (quote_no, label, sort_order, done, done_at, start_date, due_date,
-                     assigned_to, depends_on, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                     assigned_to, depends_on, created_at, updated_at, stage_key)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 quote_no, st.get("label") or "", idx,
                 1 if st.get("done") else 0, st.get("doneAt") or "",
                 st.get("startDate") or "", st.get("dueDate") or "",
                 json.dumps(st.get("assignedTo") or [], ensure_ascii=False),
-                "[]", now, now,
+                "[]", now, now, _sk,
             ))
             final_id = cur.lastrowid
             new_stages.append((final_id, st))
@@ -3883,6 +3890,73 @@ def create_case_stage(quote_no: str, body: dict = Body(...), authorization: str 
     conn.close()
     _audit(_tok(authorization), 'case_stage.create', 'case_stage', quote_no, quote_no)
     return result
+
+
+@router.post("/api/quotations/{quote_no}/stages/apply-template")
+def apply_stage_template(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """套用案件階段樣板（S-ST2；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）。
+    body：`{template, baseDate?(YYYY-MM-DD，預設今天), mode: 'new'|'append', dryRun?}`。
+    - 旗標 `builder_stage_templates`（且建構器治理）關著 ⇒ 404，和今天完全一樣；權限與已結案鎖定同 `create_case_stage`（case_manage）。
+    - 套用＝複製成這個案件自己的階段（凍結）；`dryRun` ⇒ 只回傳會建立什麼（名稱、日期、比例、說明），不寫入。
+    - 建議比例只在案件原本沒有階段時帶入；附加模式一律不帶（回應 notes 會說明）。已存在的階段不改、不刪。"""
+    from helpers import stage_templates as _STPL
+    from modules.case import stage_apply as _SA
+    user = _require_user(authorization)
+    if not _STPL.enabled():
+        raise HTTPException(404, "Not Found")
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-套用樣板")
+    key = body.get("template")
+    mode = body.get("mode") or "new"
+    base = body.get("baseDate") or datetime.now().date().isoformat()
+    _STPL.ensure_kind()
+    from core import definitions as _D
+    try:
+        d = _D.get(conn, _STPL.KIND, key, "company") if isinstance(key, str) else None
+    except _D.DefinitionError:
+        d = None
+    if not d:
+        conn.close(); raise HTTPException(404, "找不到這個階段樣板（或還沒發布）")
+    existing = [{"id": r["id"], "stage_key": r["stage_key"]} for r in conn.execute(
+        "SELECT id, stage_key FROM case_stages WHERE quote_no=?", (quote_no,)).fetchall()]
+    try:
+        pl = _SA.plan(d["body"], base, mode, existing)
+    except _SA.PlanError as e:
+        conn.close(); raise HTTPException(400 if "格式" in str(e) or "mode" in str(e) else 409, str(e))
+    out = {"template": key, "templateVersion": d.get("version"), "baseDate": base, "mode": mode, **pl}
+    if body.get("dryRun") is True:
+        conn.close()
+        return out
+    if not pl["stages"]:
+        conn.close()
+        return {**out, "created": []}
+    max_order = conn.execute(
+        "SELECT COALESCE(MAX(sort_order), -1) m FROM case_stages WHERE quote_no=?", (quote_no,)
+    ).fetchone()["m"]
+    now = datetime.now().isoformat()
+    ids = {}
+    for i, st in enumerate(pl["stages"]):
+        cur = conn.execute("""
+            INSERT INTO case_stages
+                (quote_no, label, sort_order, done, done_at, start_date, due_date,
+                 assigned_to, depends_on, created_at, updated_at, stage_key, ratio_bp)
+            VALUES (?,?,?,0,'',?,?,'[]','[]',?,?,?,?)
+        """, (quote_no, st["label"], max_order + 1 + i, st["startDate"], st["dueDate"], now, now, st["key"], st["ratioBp"]))
+        ids[st["key"]] = cur.lastrowid
+    for st in pl["stages"]:
+        deps = list(st["existingDeps"]) + [ids[k] for k in st["dependsOn"] if k in ids]
+        if deps:
+            conn.execute("UPDATE case_stages SET depends_on=? WHERE id=?", (json.dumps(deps, ensure_ascii=False), ids[st["key"]]))
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)
+    created = [_serialize_stage(conn, _get_stage_row(conn, quote_no, i)) for i in ids.values()]
+    conn.close()
+    for i in ids.values():
+        spawn_bg_thread(push_event_for_case_stage_due, args=(i,))      # 和手動填迄日一樣：推行事曆（失敗只記 log）
+    _audit(_tok(authorization), 'case_stage.apply_template', 'case_stage', quote_no, quote_no,
+           {'template': key, 'version': d.get("version"), 'mode': mode, 'count': len(ids)})
+    return {**out, "created": created}
 
 
 @router.put("/api/quotations/{quote_no}/stages/{stage_id}")
