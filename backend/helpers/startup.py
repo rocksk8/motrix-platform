@@ -214,10 +214,15 @@ def _inject_csp(html: str) -> str:
 
 
 def _harden_cmd(cmd: list) -> list:
-    """旗標（呼叫端已經帶了同名旗標就不重複）。"""
+    """旗標（呼叫端已經帶了同名旗標就不重複）。**插在最後面的 `file:///….html` 參數之前**（所有既有旗標的位置不變：
+    既有測試與 `_with_profile` 都假設 `--user-data-dir` 緊接在執行檔後面）。命令列沒有 `file:///` 參數（不是渲染 HTML 的呼叫）⇒ 原樣不動。"""
+    cmd = list(cmd)
+    idx = next((i for i in range(len(cmd) - 1, 0, -1) if str(cmd[i]).lower().startswith("file:///")), None)
+    if idx is None:
+        return cmd
     have = {str(a).split("=", 1)[0] for a in cmd}
     extra = [f for f in _HARDEN_FLAGS if f.split("=", 1)[0] not in have]
-    return [cmd[0]] + extra + list(cmd[1:]) if extra else list(cmd)
+    return cmd[:idx] + extra + cmd[idx:] if extra else cmd
 
 
 def _harden_html_file(cmd: list) -> None:
@@ -226,6 +231,8 @@ def _harden_html_file(cmd: list) -> None:
     if not url:
         return
     path = url[len("file:///"):].split("?")[0].split("#")[0]            # 各 builder 組的是未編碼的路徑（不 unquote，免得路徑裡的 % 被誤解）
+    if not os.path.isfile(path):                                 # 檔案不存在（測試用的假路徑、或已被清掉）⇒ 沒有內容可硬化；渲染本身會失敗，由呼叫端既有的『沒產出就 raise』處理
+        return
     with open(path, "r", encoding="utf-8") as f:
         html = f.read()
     out = _inject_csp(html)

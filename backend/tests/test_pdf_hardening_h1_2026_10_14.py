@@ -78,12 +78,17 @@ def test_an_injected_script_does_not_get_a_hash_that_allows_the_page_scripts_onl
     assert ST._csp_for_html(page % "<script>evil()</script>").count("sha256-") == 2
 
 
-def test_edge_flags_are_added_once_and_before_the_rest():
-    cmd = ["edge", "--headless", "--no-sandbox", "file:///x.html"]
+def test_edge_flags_are_inserted_just_before_the_html_argument_and_existing_positions_do_not_move():
+    cmd = ["edge", "--user-data-dir=P", "--headless", "--no-sandbox", "--print-to-pdf=x.pdf", "file:///x.html"]
     out = ST._harden_cmd(cmd)
-    assert out[0] == "edge" and "--no-sandbox" in out and out[-1] == "file:///x.html"
-    assert "--disable-extensions" in out and "--disable-sync" in out and "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE localhost" in out
+    assert out[:5] == cmd[:5] and out[-1] == "file:///x.html", "既有旗標的位置不變（--user-data-dir 仍在第 2 個）"
+    assert out[5:-1] == ["--disable-extensions", "--disable-sync", "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE localhost"]
     assert ST._harden_cmd(out) == out, "已經帶了就不重複"
+
+
+def test_a_command_without_a_file_url_is_left_untouched():
+    for cmd in (["msedge.exe", "--headless", "a"], ["msedge.exe", "--user-data-dir=X", "--headless", "a"], ["edge", "--version"]):
+        assert ST._harden_cmd(cmd) == cmd
 
 
 def test_harden_html_file_rewrites_the_html_that_the_command_points_to(tmp_path):
@@ -290,3 +295,7 @@ def test_hardening_also_applies_when_the_temp_path_has_spaces_and_chinese(tmp_pa
             "<iframe src=\"file:///%s\" width=\"600\" height=\"300\"></iframe></body></html>" % WININI)
     text = _text(_render(html, True, d, "文件 一"))
     assert "MARK-OK" in text and "[fonts]" not in text and "[extensions]" not in text and "for 16-bit app support" not in text
+
+
+def test_a_missing_html_file_is_skipped_not_fatal(tmp_path):
+    ST._harden_html_file(["edge", "--print-to-pdf=x.pdf", "file:///" + str(tmp_path / "nope.html").replace("\\", "/")])      # 不丟例外
