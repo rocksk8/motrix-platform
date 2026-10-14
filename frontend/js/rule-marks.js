@@ -3,7 +3,8 @@
  * 只做一件事：對「宣告了規則插槽的頁面」，把伺服器算好的標示（GET /api/rules/marks）以屬性加在列／卡片上：
  *   data-rule-mark="red|yellow|info"（顏色條，見下方 CSS）與 title（提示文字）。**不新增、不移除任何節點，不改 class／style**
  *   （Alpine 的 :class／:style 會覆蓋，所以只用屬性；樣式由獨立的 <style> 以屬性選擇器套用）。
- * 關閉時完全不動：頁面沒有登記在 PAGES、或伺服器對規則 API 回 404/401/403（旗標關、未登入、不是看得到的人）⇒ 不裝任何觀察器、不加任何東西。
+ * 關閉時完全不動：載入本檔不會做任何事（不送請求、不改畫面）；頁面在已讀到設定 builder_rules.enabled＝1 之後才呼叫 MotrixRuleMarks.start()。
+ * start() 之後若頁面沒有登記在 PAGES、或伺服器對規則 API 回 404/401/403（治理旗標沒開、未登入）⇒ 不裝任何觀察器、不加任何東西。
  * 標示是『每位檢視者』的：伺服器以本人的可見欄位評估；看不到來源欄位的人，回應裡根本沒有那條規則的痕跡。
  * 提示文字一律用 setAttribute／textContent，不經 innerHTML。
  */
@@ -113,7 +114,6 @@
     }).catch(stop)
   }
 
-  window.MotrixRuleMarks = { refresh: function () { lastKey = ''; lastRes = null; sync() }, stop: stop, _PAGES: PAGES, _apply: apply, _start: start }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start)
-  else start()
+  //: 不會自己啟動：由頁面在『已讀到設定 builder_rules.enabled＝1』之後才呼叫 start()（旗標關時這支檔案載入後完全惰性：不送請求、不裝觀察器、不改畫面）。
+  window.MotrixRuleMarks = { start: function () { if (!cfg) start() }, refresh: function () { lastKey = ''; lastRes = null; sync() }, stop: stop, _PAGES: PAGES, _apply: apply }
 })()

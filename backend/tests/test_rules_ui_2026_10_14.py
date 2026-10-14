@@ -57,6 +57,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms))
     if (s.do === 'click') await click(s.act)
     if (s.do === 'input') await input(s.key, s.value, s.i, s.checked)
     if (s.do === 'sleep') await sleep(s.ms)
+    if (s.do === 'mount') B.mountEntry()
     if (s.do === 'btn') out.btn = els['rb-btn'] ? { text: els['rb-btn'].textContent, id: els['rb-btn'].id } : null
     if (s.do === 'snap') out.snaps.push({ html: P() ? P().innerHTML : '', state: P() ? P().attrs['data-state'] : null })
   }
@@ -219,13 +220,15 @@ def test_changing_field_or_operator_resets_the_value_to_a_valid_default():
 
 @needs_node
 def test_entry_button_only_for_superadmin_on_a_declared_page_with_the_flag_on():
-    r = run([{"do": "sleep", "ms": 30}, {"do": "btn"}], path="/pages/case-management.html")
+    inert = run([{"do": "sleep", "ms": 30}, {"do": "btn"}], path="/pages/case-management.html")
+    assert inert["btn"] is None and inert["calls"] == []                                          # 只載入、沒人呼叫 mountEntry ⇒ 完全惰性（旗標關時頁面就是這個狀態）
+    r = run([{"do": "mount"}, {"do": "sleep", "ms": 30}, {"do": "btn"}], path="/pages/case-management.html")
     assert r["btn"] == {"text": "標示規則", "id": "rb-btn"} and r["calls"][0]["url"] == "/api/rules/config"
-    off = run([{"do": "sleep", "ms": 30}, {"do": "btn"}], routes(**{"GET /api/rules/config": {"status": 404, "body": {}}}), path="/pages/case-management.html")
+    off = run([{"do": "mount"}, {"do": "sleep", "ms": 30}, {"do": "btn"}], routes(**{"GET /api/rules/config": {"status": 404, "body": {}}}), path="/pages/case-management.html")
     assert off["btn"] is None and len(off["calls"]) == 1                                         # 旗標關：只有一次探測，沒有按鈕
-    other_page = run([{"do": "sleep", "ms": 30}, {"do": "btn"}], path="/pages/suppliers.html")
+    other_page = run([{"do": "mount"}, {"do": "sleep", "ms": 30}, {"do": "btn"}], path="/pages/suppliers.html")
     assert other_page["btn"] is None and other_page["calls"] == []                               # 沒宣告的頁面：連探測都不送
-    not_admin = run([{"do": "sleep", "ms": 30}, {"do": "btn"}], path="/pages/case-management.html", session={"role": "sales"})
+    not_admin = run([{"do": "mount"}, {"do": "sleep", "ms": 30}, {"do": "btn"}], path="/pages/case-management.html", session={"role": "sales"})
     assert not_admin["btn"] is None and not_admin["calls"] == []                                 # 非最高管理者：連探測都不送
 
 
@@ -251,6 +254,7 @@ global.setTimeout = (f) => { f(); return 1 }; global.clearTimeout = () => {}
 ;(0, eval)(fs.readFileSync(process.argv[3], 'utf8'))
 setTimeout2 = new Promise(r => setImmediate(r))
 ;(async () => {
+  if (!inp.inert) window.MotrixRuleMarks.start()
   await setTimeout2; await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r))
   console.log(JSON.stringify({ calls, observers, styles, state: document.documentElement.attrs['data-rule-marks-state'] || null,
     items: items.map(i => ({ attrs: i.attrs, sets: i.sets })), degraded: nodes['rm-degraded'] ? nodes['rm-degraded'].textContent : null }))
@@ -258,14 +262,28 @@ setTimeout2 = new Promise(r => setImmediate(r))
 """
 
 
-def marks_run(path, ids, responses, last=None, token=True):
-    inp = {"path": path, "ids": ids, "responses": responses, "last": last or {"status": 404, "body": {}}, "token": token}
+def marks_run(path, ids, responses, last=None, token=True, inert=False):
+    inp = {"path": path, "ids": ids, "responses": responses, "last": last or {"status": 404, "body": {}}, "token": token, "inert": inert}
     out = subprocess.run([NODE, "-e", MARKS_HARNESS, "x", json.dumps(inp), str(JS / "rule-marks.js")], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout.strip().splitlines()[-1])
 
 
 PROBE_OK = {"status": 200, "body": {"entity": "case", "marks": {}, "degraded": False}}
+
+
+@needs_node
+def test_loading_the_overlay_without_start_is_completely_inert():
+    r = marks_run("/pages/case-management.html", ["Q1"], [PROBE_OK], inert=True)
+    assert r["calls"] == [] and r["observers"] == 0 and r["styles"] == 0 and r["items"][0]["sets"] == [] and r["state"] is None
+
+
+def test_case_page_starts_rules_only_after_reading_the_flag_from_its_existing_settings_request():
+    html = (ROOT / "frontend" / "pages" / "case-management.html").read_text(encoding="utf-8")
+    assert "/api/settings-center/public?groups=builder_layout,builder_rules" in html            # 同一個設定請求多帶一個群組，沒有新請求
+    gate = re.search(r"builder_rules\.enabled === 1\) \{([\s\S]*?)\n {6}\}", html).group(1)
+    assert "MotrixRuleMarks.start()" in gate and "MotrixRulesBuilder.mountEntry()" in gate
+    assert html.count("MotrixRuleMarks.start()") == 1 and html.count("mountEntry()") == 1       # 沒有任何無條件的啟動點
 
 
 @needs_node

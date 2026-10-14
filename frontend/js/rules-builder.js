@@ -276,7 +276,7 @@
     clearTimeout(timer); st = null
   }
 
-  //: 入口：宣告了規則插槽的頁面（同 rule-marks.js 的 PAGES）。旗標關／不是最高管理者 ⇒ available() 為 false ⇒ 不加任何東西。
+  //: 入口：宣告了規則插槽的頁面（同 rule-marks.js 的 PAGES）。由頁面在『已讀到 builder_rules.enabled＝1』後呼叫 mountEntry()；不是最高管理者 ⇒ 不送任何請求。
   var ENTRY = { 'case-management.html': 'case' }
   function entryButton() {
     var ent = ENTRY[String(location.pathname || '').split('/').pop()]
@@ -321,6 +321,5 @@
     },
     _state: function () { return st }
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', entryButton)
-  else entryButton()
+  window.MotrixRulesBuilder.mountEntry = entryButton          // 不會自己執行：頁面讀到設定 builder_rules.enabled＝1 之後才呼叫（旗標關時載入本檔完全惰性）
 })()
