@@ -56,6 +56,7 @@ _RAW = (
     ("未提供", "deal", "plain", "neutral"), ("已提供", "deal", "plain", "neutral"), ("未成案", "deal", "plain", "neutral"),
     ("已成案", "deal", "plain", "neutral"), ("已結案", "deal", "plain", "neutral"),
     ("draft", "settle", "plain", "draft"), ("finalized", "settle", "approved", "approved"),
+    ("已過帳", "voucher", "approved", "approved"),                                                    # 傳票：入帳後的狀態（總帳已記），視為核准類
     ("已收款", "receipt", "paid", "paid"), ("待收款", "receipt", "plain", "pending"),             # 出納收款列：布林 received 的顯示用字（沒有資料庫狀態值）
     ("差額待審核", "remit", "plain", "pending"), ("差額已核可", "remit", "approved", "approved"),   # 匯款差額審核：remitReview 的 pending／approved 顯示用字
 )
