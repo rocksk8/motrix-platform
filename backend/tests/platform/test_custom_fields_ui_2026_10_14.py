@@ -157,17 +157,17 @@ def test_set_and_clear_keep_the_record_shape_the_server_stores():
   o.cfSet('f1', '王大明'); const a = JSON.stringify(o.cr.caseRecord.customFields)
   o.cfSet('f4', true); const b = JSON.stringify(o.cr.caseRecord.customFields)
   o.cfSet('f4', false); const c = JSON.stringify(o.cr.caseRecord.customFields)
-  o.cfSet('f1', ''); const has = 'customFields' in o.cr.caseRecord
-  console.log(JSON.stringify({ a, b, c, has, dirty, gone: o.cfGet('f1') === undefined, admin: o.cfIsAdmin() }))""")
+  o.cfSet('f1', ''); const has = 'customFields' in o.cr.caseRecord; const empty = JSON.stringify(o.cr.caseRecord.customFields)
+  console.log(JSON.stringify({ a, b, c, has, empty, dirty, gone: o.cfGet('f1') === undefined, admin: o.cfIsAdmin() }))""")
     assert r["a"] == '{"f1":"王大明"}' and r["b"] == '{"f1":"王大明","f4":true}' and r["c"] == '{"f1":"王大明"}'
-    assert r["has"] is False                          # 全部清掉 ⇒ 沒有 customFields 這個鍵（和伺服器一樣）
+    assert r["has"] is True and r["empty"] == "{}"    # 原本有值、全部清掉 ⇒ 送 {}（後端「沒送＝保留舊值」，只有 {} 才會清掉；存完伺服端把鍵拿掉）
     assert r["dirty"] == 4 and r["gone"] is True and r["admin"] is True
 
 
 @pytest.mark.skipif(NODE is None, reason="沒有 node")
 def test_set_never_creates_an_empty_object_and_keeps_disabled_fields_values():
     r = _part("""
-  o.cfSet('f1', ''); const none = 'customFields' in o.cr.caseRecord
+  o.cfSet('f1', ''); const none = o.cr.caseRecord.customFields !== undefined      // 夾具起手是 customFields: undefined（鍵在、值無）⇒ 看值不看鍵
   o.cr.caseRecord.customFields = { old: '停用欄位的值' }
   o.cfSet('f2', 'A'); const kept = JSON.stringify(o.cr.caseRecord.customFields)
   o.cfSet('f2', ''); const back = JSON.stringify(o.cr.caseRecord.customFields)

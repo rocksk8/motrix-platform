@@ -4987,10 +4987,12 @@ window.CM_PARTS.push(() => ({
   cfSet(k, v) {
     const cr = this.cr && this.cr.caseRecord
     if (!cr) return
+    const empty = v === '' || v === null || v === undefined || v === false
+    if (empty && !cr.customFields) return          // 本來就沒有這個物件、又是空值 ⇒ 什麼都不建、不標髒
     const cur = Object.assign({}, cr.customFields || {})
-    if (v === '' || v === null || v === undefined || v === false) delete cur[k]
+    if (empty) delete cur[k]
     else cur[k] = v
-    cr.customFields = cur          // 清空也送 {}：後端「沒送這個鍵＝保留舊值」，只有 {} 才會清掉
+    cr.customFields = cur          // 原本有物件、清到沒有值也留 {}：後端「沒送這個鍵＝保留舊值」，只有 {} 才會清掉
     this.setDirty()
   },
 }))
