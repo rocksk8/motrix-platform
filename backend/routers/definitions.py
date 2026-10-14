@@ -364,7 +364,7 @@ def _preview_gate(conn, kind, key, scope, user, preview_hash):
     """發布前的把關。⇒ None（放行）或 `(code, 白話訊息)`。
     旗標關、kind 不在名單、目前沒有草稿（後面的發布自己會說『沒有草稿』）⇒ 放行（與今天逐字相同）。
     旗標開且在名單：必須帶 `preview_hash`＝目前草稿戳，而且這位使用者真的『看過』（稽核裡有他對這個戳的預覽紀錄）；沒有例外。"""
-    if kind not in _PREVIEW_ENFORCED_KINDS or not _governance_enabled(conn):
+    if not _governance_enabled(conn) or not (kind in _PREVIEW_ENFORCED_KINDS or _opt_in_enforced(conn, kind)):
         return None
     draft = D.get(conn, kind, key, scope, 0)
     if draft is None:
@@ -380,6 +380,20 @@ def _preview_gate(conn, kind, key, scope, user, preview_hash):
         return ("preview_required", "發布前必須先看過影響預覽")
     return None
 
+
+
+#: T62：可由最高管理者在設定中心逐一選擇要不要強制的 kind（預設都不強制＝與今天相同）。欄位名＝builder_governance.enforce_<kind>。
+_OPT_IN_PREVIEW_KINDS = ("layout", "custom_fields", "user_buttons", "output_template")
+
+
+def _opt_in_enforced(conn, kind) -> bool:
+    if kind not in _OPT_IN_PREVIEW_KINDS:
+        return False
+    try:
+        from helpers import settings_registry as R
+        return int(R.get("builder_governance", "enforce_" + kind, conn=conn)) == 1
+    except Exception:                                                  # noqa: BLE001  讀不到一律當不強制（與旗標同樣 fail-closed 於『維持今天』）
+        return False
 
 
 def _governance_enabled(conn=None) -> bool:
