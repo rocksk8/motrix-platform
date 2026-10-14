@@ -3892,6 +3892,30 @@ def create_case_stage(quote_no: str, body: dict = Body(...), authorization: str 
     return result
 
 
+@router.get("/api/quotations/{quote_no}/stages/templates")
+def list_stage_templates(quote_no: str, authorization: str = Header(None)):
+    """案件頁「套用階段樣板」的選單：已發布的樣板 `[{key, label, stageCount, hasRatio}]`。旗標關 ⇒ 404；權限同新增階段（case_manage）。"""
+    from helpers import stage_templates as _STPL
+    from core import definitions as _D
+    user = _require_user(authorization)
+    if not _STPL.enabled():
+        raise HTTPException(404, "Not Found")
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    _STPL.ensure_kind()
+    items = []
+    for it in _D.list_definitions(conn, _STPL.KIND):
+        if it["scope"] != "company" or not it["latestVersion"]:
+            continue
+        d = _D.get(conn, _STPL.KIND, it["key"], "company")
+        b = (d or {}).get("body") or {}
+        sts = b.get("stages") if isinstance(b.get("stages"), list) else []
+        items.append({"key": it["key"], "label": b.get("label") or it["key"], "stageCount": len(sts),
+                      "hasRatio": any(isinstance(x, dict) and x.get("ratioBp") is not None for x in sts)})
+    conn.close()
+    return {"items": items}
+
+
 @router.post("/api/quotations/{quote_no}/stages/apply-template")
 def apply_stage_template(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
     """套用案件階段樣板（S-ST2；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）。

@@ -6,6 +6,10 @@ window.CM_PARTS.push(() => ({
     _openStageDetail: {},
     _newStageAssignee: {},
     stageView: 'list',
+    // 套用階段樣板（S-ST2；旗標 builder_stage_templates 關 ⇒ stOn 恆為 false，這些狀態與方法都不會被呼叫、不送請求）
+    stOn: false,
+    stTpl: [],
+    stDlg: { open: false, key: '', base: '', mode: 'new', plan: null, busy: false, err: '' },
     _ganttInstance: null,
     showImportModal: false,
     importMode: 'materials',
@@ -562,6 +566,56 @@ window.CM_PARTS.push(() => ({
       return h
     },
 
+    // 按下「套用階段樣板」才讀已發布的樣板清單（旗標開啟才看得到按鈕；失敗＝說明沒有樣板）
+    async stInit() {
+      if (!this.selected) return
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/templates`, { headers: this._authHeaders() })
+        if (!r.ok) { this.stTpl = []; return }
+        this.stTpl = (await r.json()).items || []
+      } catch (e) { this.stTpl = [] }
+    },
+    async stOpen() {
+      await this.stInit()
+      if (!this.stTpl.length) { MotrixUI.toast('目前沒有已發布的階段樣板', {kind: 'info'}); return }
+      const has = (this.cr.caseRecord?.stages || []).length > 0
+      const t = new Date()
+      this.stDlg = { open: true, key: (this.stTpl[0] || {}).key || '', base: t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'),
+                     mode: has ? 'append' : 'new', plan: null, busy: false, err: '' }
+      this.stPreview()
+    },
+    // 即時預覽：dryRun，不寫入。每次選樣板／改基準日／改模式都重算
+    async stPreview() {
+      const d = this.stDlg
+      if (!d.open || !d.key || !/^\d{4}-\d{2}-\d{2}$/.test(d.base || '')) { d.plan = null; return }
+      d.busy = true; d.err = ''
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/apply-template`, {
+          method: 'POST', headers: this._authHeaders(true),
+          body: JSON.stringify({ template: d.key, baseDate: d.base, mode: d.mode, dryRun: true })
+        })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) { d.plan = null; d.err = j.detail || '無法預覽'; return }
+        d.plan = j
+      } catch (e) { d.plan = null; d.err = e.message } finally { d.busy = false }
+    },
+    async stApply() {
+      const d = this.stDlg
+      if (!d.plan || !d.plan.stages.length || d.busy) return
+      d.busy = true; d.err = ''
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/apply-template`, {
+          method: 'POST', headers: this._authHeaders(true),
+          body: JSON.stringify({ template: d.key, baseDate: d.base, mode: d.mode })
+        })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) { d.err = j.detail || '套用失敗'; return }
+        await this.ensureCaseRecord()
+        for (const st of (j.created || [])) this.cr.caseRecord.stages.push(st)
+        d.open = false
+        MotrixUI.toast('已建立 ' + (j.created || []).length + ' 個階段', {kind: 'success'})
+      } catch (e) { d.err = e.message } finally { d.busy = false }
+    },
     async addStage() {
       if (!this.selected) return
       await this.ensureCaseRecord()

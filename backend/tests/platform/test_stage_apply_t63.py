@@ -275,3 +275,23 @@ def test_migration_is_idempotent_and_leaves_old_rows_null():
 def test_migration_reports_missing_table_instead_of_raising():
     c = sqlite3.connect(":memory:")
     assert isinstance(_migration().up(c), str)
+
+
+# ── ⑦ 案件頁（靜態）──────────────────────────────────────────────────────
+def _read(rel):
+    from pathlib import Path
+    return (Path(__file__).resolve().parents[3] / rel).read_text(encoding="utf-8")
+
+
+def test_case_page_wiring_is_flag_gated_and_registered():
+    html = _read("frontend/pages/case-management.html")
+    js = _read("frontend/js/case-management-exec.js")
+    mod = json.loads(_read("backend/modules/case/module.json"))
+    # 旗標：同一次設定請求（附在名單最後面）；關著 ⇒ stOn=false ⇒ 按鈕與對話框都不顯示、不送請求
+    assert "'builder_status_display', 'builder_stage_templates'], { token: s.token })" in html
+    assert 'x-show="stOn && aShown(\'applyStageTemplate\')"' in html and "stOn: false," in js
+    assert "stInit()" in js and "/templates`" in js                      # 樣板清單只在按下按鈕時才讀
+    assert "confirm(" not in js[js.index("async stOpen"):js.index("async addStage")]   # 不用原生對話框
+    # 登記為案件頁的 action（排版器可隱藏／改名）
+    acts = json.dumps(mod, ensure_ascii=False)
+    assert '"applyStageTemplate"' in acts
