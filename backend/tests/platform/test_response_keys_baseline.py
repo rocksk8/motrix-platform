@@ -130,6 +130,6 @@ def test_diff_tolerates_rate_limit_flip_only_on_listed_routes():
     rl, ok = {"s": 429, "k": ["detail"]}, {"s": 200}
     assert RK.diff({r: rl}, {r: ok})["changed"] == {} and RK.diff({r: ok}, {r: rl})["changed"] == {}
     assert RK.diff({r: ok}, {r: {"s": 403, "k": ["detail"]}})["changed"], "200→403 必須報"
-    assert RK.diff({r: rl}, {r: {"s": 404, "k": ["detail"]}})["changed"], "429→404 必須報"
+    assert RK.diff({r: rl}, {r: {"s": 500, "k": ["detail"]}})["changed"], "429→500 必須報"
     other = "/api/not-rate-limited"
     assert RK.diff({other: rl}, {other: ok})["changed"], "清單外的 429↔200 必須報"
