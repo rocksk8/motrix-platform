@@ -17,6 +17,8 @@ key、名稱、分類（業務／簽核／系統技術）、預設收件人、�
 - 個人的通知設定只能退訂自己收得到的類型（`notification_muted`），不能把自己加進受限的類型。
 - 沒有登記的 key：執行時記 ERROR、只寄超級管理員（fail closed）；守門在靜態掃描時就擋下。
 """
+
+import re
 from dataclasses import dataclass, field
 
 CATEGORIES = {"business": "業務", "approval": "簽核", "system": "系統技術"}
@@ -84,6 +86,9 @@ def subject(key, reason):
     """主旨：【MOTRIX 系統通知】分類－事由。未登記 ⇒ 分類寫「未登記」（執行時另記 ERROR）。"""
     t = _REGISTRY.get(key)
     cat = CATEGORIES[t.category] if t else "未登記"
+    # 主旨是 ASCII 標頭：事由裡的換行／控制字元（客戶名稱、單號、備註由使用者輸入）會讓寄信直接拋例外、通知無聲遺失 ⇒ 每一段連續的控制字元收成一個空白。
+    # 沒有控制字元的主旨與原本逐位元相同。
+    reason = re.sub(r"[\x00-\x1f\x7f\u2028\u2029\x85]+", " ", str(reason))
     return "%s%s－%s" % (SUBJECT_PREFIX, cat, reason)
 
 

@@ -243,3 +243,32 @@ def test_tender_found_keeps_its_markup_and_escapes_titles_and_watch_names(monkey
 def test_urls_keep_ampersands_so_plain_mail_stays_byte_identical_but_cannot_break_out_of_the_attribute(monkeypatch):
     out = EN._build_html("approval_request", "t", "b", "#000", [], "", 'https://x.example/p?a=1&b=2" onclick="x')
     assert 'href="https://x.example/p?a=1&b=2&quot; onclick=&quot;x"' in out
+
+
+# ── 04 should-fix：主旨控制字元、連結協定 ───────────────────────────────────────────────
+def test_subject_collapses_control_characters_and_keeps_plain_subjects_identical():
+    from helpers import mail_types as MT
+    assert MT.subject("approval_request", "報價單待審核：MQ-1（甲公司）") == "【MOTRIX 系統通知】簽核－報價單待審核：MQ-1（甲公司）"
+    s = MT.subject("approval_request", "報價單待審核：MQ-1（甲\r\n乙\x00\x1f丙 丁）")
+    assert "\r" not in s and "\n" not in s and "\x00" not in s and s.endswith("（甲 乙 丙 丁）")
+    s.encode("ascii", "ignore")
+
+
+def test_a_customer_name_with_newlines_still_sends_the_mail(monkeypatch):
+    sent = []
+    monkeypatch.setattr(EN, "_lookup_emails", lambda n, k=None: ["a@example.com"])
+    monkeypatch.setattr(EN, "_base_url", lambda: "https://x.example")
+    monkeypatch.setattr(EN, "_async_send", lambda to, subject, html: sent.append(subject))
+    EN.notify_approval_request("MQ-9", "甲\r\nBcc: z@example.com", ["u"])
+    assert len(sent) == 1 and "\n" not in sent[0] and "\r" not in sent[0]
+
+
+def test_link_must_be_http_and_the_number_is_url_encoded_without_changing_normal_numbers():
+    ok = EN._build_html("approval_request", "t", "b", "#000", [], "MQ-202610-001-R1", "https://x.example")
+    assert 'href="https://x.example/pages/quotation-form.html?no=MQ-202610-001-R1"' in ok, "一般單號編碼後不變"
+    evil = EN._build_html("approval_request", "t", "b", "#000", [], "A&B C\"", "https://x.example")
+    assert "?no=A%26B%20C%22" in evil
+    js = EN._build_html("approval_request", "t", "b", "#000", [], "", "javascript:alert(1)")
+    assert 'href="javascript:' not in js and 'href="#"' in js
+    js2 = EN._build_html("approval_request", "t", "b", "#000", [], "", " JavaScript:alert(1)")
+    assert 'href="#"' in js2

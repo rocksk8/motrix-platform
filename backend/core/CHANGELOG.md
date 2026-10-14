@@ -120,6 +120,7 @@
 - **本段涉及的 core 檔案只有三個**：`helpers/recycle_bin.py`、`helpers/audit.py`（`__l1_public__`）、`main.py`（上述中介層）＋ `core/CHANGELOG.md`、`tests/platform/l1_interface_snapshot.json`（`core_bump --pending`）；本檔只有這一個 `## (next)` 段落，列車取號（`train_number.py assign`）可直接指派。
 
 ## 1.126 — 2026-10-10（wip/t53-ab-recyclebin-p0）
+- L1（wip/t62-mail-escape-r2，04 建議）：`mail_types.subject()` 把事由裡連續的控制字元（含換行）收成一個空白——客戶名稱／單號含換行時 ASCII 主旨標頭會讓寄信拋例外、通知無聲遺失；沒有控制字元的主旨逐位元相同。`_build_html` 的連結：單號 URL 編碼（一般單號不變）、非 http(s) 一律退回 base_url（再不行用 #），不可能變成 javascript: 連結。
 - L1（資安補強，wip/t62-mail-escape-r1）：`helpers/email_notify._build_html` 改為**預設逸出**——標題、徽章、明細列、備註、引言、按鈕、影響、建議處理一律當純文字逸出（& < > " '）；刻意帶標記的呼叫端用 `_safe()` 包起來、其中的使用者資料自己 `_esc()`（備份停擺、憑證到期、磁碟空間、標案雷達、每日任務回報修改／編輯、模組異動）。連結與來源網址只擋引號與尖括號（`&` 維持原樣）。純文字且不含這五個字元的資料，寄出的主旨與內文與逸出前逐位元相同（黃金題 tests/test_mail_escape_2026_10_14.py 對每一支 notify_* 驗證，含會計與標案雷達）。獎金分潤層外核准、勞報單層外代核不再自己逸出（避免雙重逸出）。主旨是純文字，不逸出。
 - L1（新增，向下相容）：`helpers/recycle_bin.py`——刪除暫存區契約（`CAP_ADAPTER`／`CAP_DELETE`、`Adapter`、`RestoreContext`、`BinError`、`delete()`、`adapters()`、`mask_obj()`；`Adapter.after_commit(event, entity_id, snap, result)`＝commit 之後的後續動作 hook）；`reserved_ids(conn, entity_type)`＝暫存區保留中的單號（單號產生器跳過用）、`CAP_RESERVED`、`MAX_SNAPSHOT_BYTES_ADMIN`；擁有單據的模組提供 adapter、刪除端點呼叫 `delete()`，模組不在時回 None（照舊硬刪並明說）。串接點 IP-RB1／IP-RB2（暫定號）。
 - `archive._F2_FIELDS` 宣告 `recycle_bin.snapshot_json`／`files_manifest_json` 整欄為 F2（一般 JSON 備份排除、完整列只進個資資料夾）。

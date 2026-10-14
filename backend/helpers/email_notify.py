@@ -10,6 +10,7 @@ __l1_public__ = (
 )
 
 import html as _html
+from urllib.parse import quote as _urlquote
 import logging
 from datetime import datetime   # notify_backup_stale 用；缺它是執行期 NameError
 import os
@@ -152,7 +153,9 @@ def _build_html(mail_key: str, title: str, badge_text: str, badge_color: str,
     reason = intro or title
     note_html  = f'<div class="note">{note}</div>' if note else ""
     # href 屬性只擋會跳出屬性或標記的字元（引號、尖括號）；`&` 維持原樣，查詢字串（?a=1&b=2）的輸出才與逸出前逐位元相同
-    link = (f"{base_url}/pages/quotation-form.html?no={quote_no}" if quote_no else base_url)
+    link = (f"{base_url}/pages/quotation-form.html?no={_urlquote(str(quote_no), safe='')}" if quote_no else base_url)      # 單號編碼：一般單號（MQ-202610-001）編碼後不變
+    if not str(link).lower().startswith(("http://", "https://")):                                                        # 只准 http(s)：日後有人傳進 javascript: 之類也不會變成連結
+        link = base_url if str(base_url).lower().startswith(("http://", "https://")) else "#"
     link = _url_esc(link)
     sent_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     source = "MOTRIX 系統（%s）／信件類型：%s" % (_url_esc(base_url), _esc(t.name if t else mail_key))
