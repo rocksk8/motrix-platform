@@ -36,6 +36,8 @@
     '.ml-ed__drop{min-height:10px;border:1px dashed transparent;border-radius:6px;padding:2px}.ml-ed__drop.is-over{border-color:var(--accent,#2563eb)}',
     '.ml-ed__diff li{margin:2px 0}.ml-ed__ver{display:flex;justify-content:space-between;gap:6px;padding:3px 0;border-bottom:1px dashed var(--border-light,#eee)}',
     '.ml-ed__banner{background:var(--warning-light,#fffbeb);color:var(--warning,#b45309);padding:6px 8px;border-radius:6px}',
+    // x-show 為真時 Alpine 會移除行內 display：flex 要放在 class（OFF 守門 test_xshow_inline_display）
+    '.ml-ed__banner[data-testid=ml-ask]{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ml-ed__banner[data-testid=ml-ask][x-cloak]{display:none}',
     'body.ml-editing .app-shell{margin-right:380px}',
   ].join('')
 
@@ -53,11 +55,12 @@
 '   <span class="ml-ed__sub" x-text="startNote"></span>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-retry" x-show="loadError" @click="loadScope()">重試</button></div>' +
 '  <div class="ml-ed__banner" x-show="previewRole" x-text="previewDraft ? \'以「\' + roleLabel(previewRole) + \'」預覽編輯中的草稿（唯讀，尚未發布）\' : \'以「\' + roleLabel(previewRole) + \'」預覽已發布的版面（唯讀）\'"></div>' +
-'  <div class="ml-ed__banner" data-testid="ml-ask" role="alertdialog" x-show="askBar" x-cloak style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span x-text="askBar && askBar.text"></span>' +
+'  <div class="ml-ed__banner" data-testid="ml-ask" role="alertdialog" x-show="askBar" x-cloak><span x-text="askBar && askBar.text"></span>' +
 '   <button type="button" class="btn btn-primary btn-sm" data-testid="ml-ask-yes" @click="answer(true)" x-text="askBar && askBar.notice ? \'知道了\' : \'確定\'"></button>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-ask-no" x-show="askBar && !askBar.notice" @click="answer(false)">取消</button></div>' +
 ' </div>' +
 ' <div class="ml-ed__body" x-show="work" x-effect="$el.inert = busy || loading" :aria-busy="String(busy || loading)">' +
+'  <template x-if="pageNotes().length"><div class="ml-ed__sub" data-testid="ml-page-notes"><template x-for="n in pageNotes()"><div x-text="\'・\' + n"></div></template></div></template>' +
 '  <template x-if="generalProblems.length"><div class="ml-ed__prob" data-testid="ml-problems"><template x-for="p in generalProblems"><div x-text="p"></div></template></div></template>' +
 // 列表
 '  <template x-for="lk in listKeys()" :key="lk"><div class="ml-ed__sec" :data-testid="\'ml-list-\' + lk">' +
@@ -69,6 +72,7 @@
 '     <input type="checkbox" title="顯示" :checked="c.visible" :disabled="c.core" @change="c.visible = $event.target.checked; sync()">' +
 '     <template x-if="c.core"><span style="flex:1" x-text="c.label + \'（核心）\'"></span></template>' +
 '     <template x-if="!c.core"><input type="text" :value="c.label" @change="relabel(c, $event.target.value)"></template>' +
+'     <span class="ml-ed__sub" data-testid="ml-ineffective" x-show="ineffective(c)" x-text="\'（改名不會改變畫面）\'" :title="ineffective(c)"></span>' +
 '     <button type="button" title="上移" @click="mv(work.lists[lk].columns, i, -1)">↑</button><button type="button" title="下移" @click="mv(work.lists[lk].columns, i, 1)">↓</button></div>' +
 '    <div class="ml-ed__prob" x-show="prob(c.id)" x-text="prob(c.id)"></div></div></template></div></div></template>' +
 // 表單
@@ -202,6 +206,7 @@
             this.roles = Object.keys(labels).map(function (k) { return { key: k, label: labels[k] } })
           }
           await this.loadSidebar()
+          if (this.pageInfo === null) await this._loadPageInfo()
         } catch (e) {
           // 讀不到角色／側欄（斷線）⇒ 不放開鎖：明說並維持鎖定，讓使用者關掉重開（與 loadScope 失敗同一個處理）
           this.state = 'error'
@@ -224,6 +229,18 @@
       scopeLabel() { return this.scope === 'company' ? '公司預設' : '角色：' + this.roleLabel(this.scope.slice(5)) },
       published() { return (this.defs.versions || []).filter(function (v) { return v.status === 'published' }) },
       listKeys() { return this.work ? Object.keys(this.work.lists) : [] },
+      // 版面頁面登錄（static/layout-pages.json，與設定中心旗標同一份）：哪些項目改名沒有可見效果、這一頁的已知限制。讀不到＝不顯示提示。
+      pageInfo: null,
+      async _loadPageInfo() {
+        try {
+          var r = await fetch('/static/layout-pages.json')
+          var all = r.ok ? await r.json() : []
+          var pg = this._page(), mod = ML().config().module
+          this.pageInfo = all.filter(function (e) { return e.page === pg && e.module === mod })[0] || { relabelIneffective: {}, notes: [] }
+        } catch (e) { this.pageInfo = null }
+      },
+      ineffective(c) { return (this.pageInfo && this.pageInfo.relabelIneffective && !c.core && this.pageInfo.relabelIneffective[c.field]) || '' },
+      pageNotes() { return (this.pageInfo && this.pageInfo.notes) || [] },
       formKeys() { return this.work ? Object.keys(this.work.forms) : [] },
       itemGroups() {
         return [{ key: 'actions', title: '按鈕', empty: '這一頁沒有登記按鈕。' },

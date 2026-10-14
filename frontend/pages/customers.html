@@ -258,7 +258,65 @@
 
     <!-- 列表 -->
     <div class="panel" style="padding:0;overflow:hidden">
-      <div class="table-scroll">
+      <!-- BP-1／S3：管理者自訂版面（P9）。設定中心「自訂畫面版面」→ customers 預設關閉；關閉時下面這個 x-if 不畫、原表格原封不動。
+           固定不動：第一欄頭像、最後一欄操作；欄位的顯示／順序／標題依版面（核心：公司名稱、統一編號、狀態不能隱藏）。 -->
+      <template x-if="layoutOn">
+        <div class="table-scroll" data-layout-list="customers" x-show="$store.layout.ready || $store.layout.failed">
+          <div class="ml-layout-note" x-show="$store.layout.failed" x-text="$store.layout.error"></div>
+          <div class="ml-layout-note" x-show="$store.layout.mode === 'preview'" x-text="'預覽中：' + $store.layout.previewLabel + '（唯讀，關閉排版器後回到自己的版面）'"></div>
+          <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才看得到。</div>
+          <table class="data-table">
+            <thead><tr>
+              <th style="width:32px"></th>
+              <template x-for="c in $store.layout.cols('customers')" :key="c.field">
+                <th :data-layout-col="c.field" x-text="$store.layout.colLabel('customers', c.field, layoutLabel(c.field))"></th>
+              </template>
+              <th style="width:120px"></th>
+            </tr></thead>
+            <tbody>
+              <template x-for="c in filtered" :key="c.id">
+                <tr @click="selectCustomer(c)" style="cursor:pointer">
+                  <td><div style="width:30px;height:30px;border-radius:50%;background:var(--black);color:var(--white);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700" x-text="(c.name||'?')[0]"></div></td>
+                  <template x-for="col in $store.layout.cols('customers')" :key="col.field">
+                    <td :data-layout-cell="col.field" :style="col.field === 'quoteCount' ? 'text-align:right' : ''">
+                      <template x-if="col.field === 'name'"><div><div style="font-weight:500" x-text="c.name"></div><div style="display:flex;align-items:center;gap:5px;margin-top:1px"><span x-show="c.code" x-text="c.code" style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#F3F4F6;color:#6B7280;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span><span x-show="c.nameEn" style="font-size:11px;color:var(--text-dim)" x-text="c.nameEn"></span></div></div></template>
+                      <template x-if="col.field === 'alias'"><div>
+                        <template x-if="(c.tags&&c.tags.length) || c.alias"><div style="display:flex;flex-wrap:wrap;gap:3px"><template x-for="t in (c.tags&&c.tags.length ? c.tags : (c.alias?[c.alias]:[]))" :key="t"><span x-text="t" style="font-size:10px;background:var(--accent-light);color:var(--accent-hover);padding:1px 6px;border-radius:3px;white-space:nowrap;font-family:var(--font-zh)"></span></template></div></template>
+                        <span x-show="!(c.tags&&c.tags.length) && !c.alias" style="color:var(--text-dim)">—</span></div></template>
+                      <template x-if="col.field === 'taxId'"><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="c.taxId || '—'"></span></template>
+                      <template x-if="col.field === 'contact'"><div><div x-text="c.contacts?.[0]?.name || '—'"></div><div style="font-size:11px;color:var(--text-dim)" x-text="c.contacts?.[0]?.title || ''"></div></div></template>
+                      <template x-if="col.field === 'phone'"><span style="font-size:12px" x-text="c.contacts?.[0]?.phone || c.phone || '—'"></span></template>
+                      <template x-if="col.field === 'industry'"><span style="font-size:12px;padding:2px 8px;border-radius:3px;background:#F3F4F6;color:#4B5563" x-text="c.industry || '—'"></span></template>
+                      <template x-if="col.field === 'owner'"><span style="font-size:12px" x-text="c.ownerName || '—'"></span></template>
+                      <template x-if="col.field === 'quoteCount'"><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="c.quoteCount ? c.quoteCount + ' 份' : '—'"></span></template>
+                      <template x-if="col.field === 'lastContact'"><span style="font-size:11px;color:var(--text-dim)" x-text="c.lastContact || '—'"></span></template>
+                      <template x-if="col.field === 'status'"><span class="tag" :class="c.type==='VIP' ? 'tag-vip' : c.active ? 'tag-active' : 'tag-inactive'" x-text="c.type==='VIP' ? '⭐ VIP' : c.active ? '往來中' : '停用'"></span></template>
+                    </td>
+                  </template>
+                  <td>
+                    <div class="row-actions">
+                      <button class="btn btn-ghost btn-sm" @click.stop="openEdit(c)">編輯</button>
+                      <a :href="'quotations.html?customer=' + c.id" class="btn btn-ghost btn-sm" @click.stop style="text-decoration:none">報價</a>
+                      <a :href="'customer-log.html?id=' + c.id" class="btn btn-ghost btn-sm" @click.stop style="text-decoration:none;display:inline-flex;align-items:center;gap:3px">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                        日誌
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="filtered.length === 0">
+                <td :colspan="$store.layout.cols('customers').length + 2" class="empty-state">
+                  <div class="empty-icon">🏢</div>
+                  <div>尚無客戶資料</div>
+                  <button class="btn btn-primary" @click="openCreate()" style="margin-top:12px">新增第一筆客戶</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+      <div class="table-scroll" x-show="!layoutOn">
       <table class="data-table">
         <thead>
           <tr>
@@ -1295,6 +1353,24 @@
       // ☠️ 後果不只是 API 發兩次：第二次的回應晚一步抵達，
       //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
       _initDone: false,
+      layoutOn: false,
+      // BP-1／S3：旗標開啟才換成版面驅動的列表（原本的表格不動、只是隱藏）。旗標關閉／讀不到 ⇒ 什麼都不做。
+      layoutLabel(f) { return ({ name: '公司名稱', alias: '內部簡稱', taxId: '統一編號', contact: '主要聯絡人', phone: '電話', industry: '產業', owner: '負責業務', quoteCount: '累計報價', lastContact: '最後往來', status: '狀態' })[f] || f },
+      async initLayout() {
+        try {
+          const r = await fetchT(`${API}/settings-center/public?groups=builder_layout`, { headers: { Authorization: 'Bearer ' + this.session.token } }, 8000)
+          if (!r.ok) return
+          const d = await r.json()
+          if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.customers !== true) return
+          const title = document.querySelector('.pg__t')
+          if (!title) return
+          title.insertAdjacentHTML('beforeend', '<span data-layout-editor-slot></span>')
+          this.layoutOn = true
+          await this.$nextTick()
+          if (window.MotrixLayoutEditor) window.MotrixLayoutEditor.mount()
+          window.MotrixLayout.start()
+        } catch (e) { /* 版面是加值功能：讀不到就維持原本的列表 */ }
+      },
 
       async init() {
         if (this._initDone) return
@@ -1302,6 +1378,7 @@
         const s = localStorage.getItem('motrix_session')
         if (!s) { window.location.href = 'login.html'; return }
         try { this.session = JSON.parse(s) } catch(e) { window.location.href = 'login.html'; return }
+        this.initLayout()
         this.loadTagPresets()
         this.pnLoadNotice()     // 個資蒐集告知文字（聯絡人用；列印告知書）
 
@@ -1358,6 +1435,18 @@
       }
     }
   }
+  </script>
+  <script src="../static/custom-layout.js"></script>
+  <script src="../static/layout-runtime.js"></script>
+  <script src="../static/layout-editor.js"></script>
+  <script src="../js/def-governance.js"></script>
+  <script>
+  // BP-1／S3：管理者自訂版面（P9）。擁有者是 L1 虛擬擁有者 `core`（core/l1_customization.json）。設定中心「自訂畫面版面」→ customers 預設關閉：
+  // 關閉時不發任何版面請求（deferred）、畫面不變。fallback＝版面讀不到時的欄位順序（守門：必須等於登記檔的順序）
+  MotrixLayout.init({
+    module: 'core', page: 'customers.html', deferred: true,
+    fallback: { lists: { customers: ['name', 'alias', 'taxId', 'contact', 'phone', 'industry', 'owner', 'quoteCount', 'lastContact', 'status'] } },
+  })
   </script>
   <script src="../static/record-link.js"></script>
   <script src="../static/notif.js"></script>

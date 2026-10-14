@@ -2,8 +2,8 @@
 """能力目錄（CUSTOMIZATION-SPEC P1；CORE-SPEC §7 端點登錄表的擴充）。
 
 [單位] plat:catalog    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] CATALOG_VERSION, EXPECTED_SECTIONS, build, check_layout, effective_layout_ops, endpoint_problems, layout_points, module_endpoints,
-    output_problems, register_section, restore, section, snapshot
+[公開介面] CATALOG_VERSION, EXPECTED_SECTIONS, L1_OWNER, build, check_layout, effective_layout_ops, endpoint_problems, l1_manifest, layout_points,
+    module_endpoints, output_problems, owner_loaded, register_section, restore, section, snapshot
 [不變式] 目錄不擁有清單，只收集（模組路由、module.json 可自訂點、registry 提供者、事件宣告）
 [契約題] tests/platform/test_platform_catalog.py
 [注意] 建構器與排版器只從這裡挑
@@ -25,7 +25,9 @@
 引用不存在端點／版型的點、選單裡被藏起的按鈕、未載入的模組。目錄 `build()`、排版守門 `check_layout()`
 （P5 layout 驗證器與 P9 都必須呼叫它）都只經過這一處；`customization._raw_points` 不准在別處呼叫（守門）。
 """
+import json
 import threading
+from pathlib import Path
 from typing import Callable, Dict, Tuple
 
 from core import customization, events, registry
@@ -169,10 +171,50 @@ def _module_points(m, templates, eps=None):
     return kept, problems
 
 
-def layout_points(module_key=None) -> list:
-    """可自訂點的**唯一入口**（目錄與排版守門同一份）。`module_key=None` ⇒ 全部已載入模組。
+#: L1 共用主檔頁面（不屬於任何模組，例：客戶頁）的可自訂點擁有者。**虛擬的、不是模組**：不可停用、不可授權、不在 `registry.loaded()`。
+#: 登記檔 `core/l1_customization.json`（格式同 module.json 的 pages／customization，key＝`core`）。
+L1_OWNER = "core"
+_L1_CUSTOMIZATION = Path(__file__).with_name("l1_customization.json")
+_l1_cache = []
+_l1_last_error = [0.0]
 
-    未載入（停用／未授權／載入失敗／不存在）的模組 ⇒ 沒有任何點。"""
+
+def l1_manifest() -> dict:
+    """L1 登記檔（已過 `customization.validate_manifest`）。檔案壞了／驗證不過 ⇒ `{}`（沒有任何 L1 點，記 ERROR；不讓頁面壞）。
+    **只快取成功的結果**：暫時性的讀取失敗（檔案被鎖、半寫入）下一次呼叫會重試；失敗的 ERROR 日誌每分鐘最多一則。"""
+    if not _l1_cache:
+        import logging
+        import time
+        try:
+            m = json.loads(_L1_CUSTOMIZATION.read_text(encoding="utf-8"))
+            problems = customization.validate_manifest(m)
+            if problems:
+                raise ValueError("; ".join(str(p) for p in problems[:3]))
+        except Exception as e:                                   # noqa: BLE001
+            now = time.monotonic()
+            if now - _l1_last_error[0] > 60:
+                _l1_last_error[0] = now
+                logging.getLogger(__name__).error("core/l1_customization.json 無法使用，L1 頁面沒有可自訂點（下次呼叫會重試）：%s", e)
+            return {}
+        _l1_cache.append(m)
+    return _l1_cache[0]
+
+
+def owner_loaded(key) -> bool:
+    """這個可自訂點擁有者在不在：已載入的模組，或虛擬的 L1 擁有者 `core`。版面端點與驗證器用這支取代 `registry.is_loaded`。"""
+    return key == L1_OWNER or registry.is_loaded(key)
+
+
+def layout_points(module_key=None) -> list:
+    """可自訂點的**唯一入口**（目錄與排版守門同一份）。`module_key=None` ⇒ 全部已載入模組（**不含** L1 擁有者）。
+
+    未載入（停用／未授權／載入失敗／不存在）的模組 ⇒ 沒有任何點。`module_key="core"` ⇒ L1 登記檔的點（沒有端點／輸出點，不需要過濾）。"""
+    if module_key == L1_OWNER:
+        m = l1_manifest()
+        if not m:
+            return []
+        from types import SimpleNamespace                       # 虛擬擁有者：過同一個 `_module_points`（過濾只在那一處）；沒有路由 ⇒ eps=[]
+        return _module_points(SimpleNamespace(key=L1_OWNER, manifest=m, spec=None), None, eps=[])[0]
     templates = _templates_of(_outputs_entry())
     out = []
     for m in sorted(registry.loaded(), key=lambda x: x.key):

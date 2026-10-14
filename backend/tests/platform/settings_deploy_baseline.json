@@ -24,6 +24,12 @@
     null,
     false
    ],
+   "customers": [
+    false,
+    null,
+    null,
+    false
+   ],
    "devices": [
     false,
     null,
