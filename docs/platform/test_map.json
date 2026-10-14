@@ -7,8 +7,8 @@
   "kinds": {
    "api": 776,
    "e2e": 309,
-   "audit": 184,
-   "unit": 131
+   "audit": 183,
+   "unit": 132
   },
   "routes": 849
  },
@@ -17059,6 +17059,7 @@
     "js:static/custom-layout.js",
     "js:static/layout-editor.js",
     "js:static/layout-runtime.js",
+    "js:static/option-lists.js",
     "mod:analytics/api/dashboard",
     "mod:subcontract/api/vendor_contractors",
     "page:pages/customer-log.html",
@@ -17097,12 +17098,14 @@
      "frontend/pages/vendor-contractors.html",
      "frontend/static/custom-layout.js",
      "frontend/static/layout-editor.js",
-     "frontend/static/layout-runtime.js"
+     "frontend/static/layout-runtime.js",
+     "frontend/static/option-lists.js"
     ],
     "path": [
      "backend/core/",
      "backend/core/l1_customization.json",
-     "backend/modules/"
+     "backend/modules/",
+     "frontend/static/option-lists.js"
     ]
    },
    "login_fixture": true
@@ -20937,20 +20940,23 @@
    }
   },
   "backend/tests/platform/test_pdf_decor_t62.py": {
-   "kind": "audit",
+   "kind": "unit",
    "units": [
     "core:pdf_gen",
-    "dir:frontend/pages/",
     "file:backend/helpers/__init__.py",
     "helper:export_templates",
     "mod:case/completion_pdf",
     "page:pages/completion-note-form.html",
     "page:pages/payment-request.html",
     "page:pages/quotations.html",
+    "plat:__init__",
+    "plat:source_tree",
     "router:def_pipeline"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/__init__.py",
      "backend/helpers/export_templates.py",
      "backend/modules/case/completion_pdf.py",
@@ -20961,9 +20967,6 @@
      "frontend/pages/completion-note-form.html",
      "frontend/pages/payment-request.html",
      "frontend/pages/quotations.html"
-    ],
-    "path": [
-     "frontend/pages/"
     ]
    }
   },
@@ -22283,8 +22286,6 @@
      "backend/modules/case/module.json",
      "frontend/js/case-management-core.js",
      "frontend/js/case-management-exec.js",
-     "frontend/pages/case-management.html",
-     "frontend/pages/quotation-form.html",
      "frontend/static/stage-template-editor.js"
     ]
    },
@@ -22792,6 +22793,7 @@
     "router:auth",
     "router:company_lookup",
     "router:mail_settings",
+    "router:notify_templates",
     "router:system"
    ],
    "evidence": {
@@ -22804,6 +22806,7 @@
     "api": [
      "backend/routers/company_lookup.py",
      "backend/routers/mail_settings.py",
+     "backend/routers/notify_templates.py",
      "backend/routers/system.py"
     ],
     "path": [

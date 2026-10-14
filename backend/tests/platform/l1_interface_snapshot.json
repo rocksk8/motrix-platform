@@ -1455,6 +1455,7 @@
    "MAX_STAGES": "const",
    "NAME_MAX": "const",
    "OFF_REASON": "const",
+   "_KEY_RE": "const",
    "definition_problems": "def(key, body)",
    "enabled": "def(conn=…)",
    "ensure_kind": "def()",
