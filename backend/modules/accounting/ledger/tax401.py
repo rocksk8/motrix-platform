@@ -17,6 +17,7 @@ import datetime as _dt
 import sqlite3
 
 from core.txn import begin_write
+from helpers.legal_params import round_half_up   # 金額進位唯一來源（與 arap/gl_events._i 同一口徑）
 
 from modules.accounting.ledger import periods as _periods
 from modules.accounting.ledger import roles as _roles
@@ -68,6 +69,12 @@ class TaxError(ValueError):
 class TaxConflict(TaxError):
     """狀態衝突（前期未過帳、並行重建）⇒ API 回 409，不是 400。"""
 
+
+
+def _invoice_sum(invoices, key) -> int:
+    """發票明細某金額欄位的合計（逐張 round_half_up 成整數，與 arap/gl_events._i 同口徑）。
+    以前用 Python 內建的捨入函式（銀行家捨入）：x.5 且 x 為偶數時比總帳少 1，對帳檢查會誤紅。"""
+    return sum(int(round_half_up(i.get(key) or 0)) for i in invoices)
 
 def ensure_map(conn):
     # 早期（未對照官方前）種下的錯誤預設列：OUT-5 的零稅率欄 7、OUT-0 落在電子發票列、OUT-ADJ 的零稅率欄 19 ⇒ 校正（使用者自己改過的列不動）
@@ -203,7 +210,7 @@ def summarize(conn, year, n, invoices=None):
         checks.append({"key": "invoices", "label": "與應收應付模組發票逐項對比", "left": None, "right": None, "ok": None, "note": "應收應付模組未安裝或未提供發票明細：未對比"})
     else:
         inv = [i for i in invoices if lo <= (i.get("invoiceDate") or "")[:10] <= hi]
-        pre, tax = sum(int(round(float(i.get("amountPretax") or 0))) for i in inv), sum(int(round(float(i.get("taxAmount") or 0))) for i in inv)
+        pre, tax = _invoice_sum(inv, "amountPretax"), _invoice_sum(inv, "taxAmount")
         led_pre = sum(r["amount"] + r["zero_amount"] for r in rows if r["tax_code"] in ("OUT-5", "OUT-0", "OUT-LEGACY"))
         led_tax = sum(r["tax"] for r in rows if r["tax_code"] in ("OUT-5", "OUT-0", "OUT-LEGACY"))          # 發票明細只有開立（不含退回折讓），對比用毛額
         checks.append({"key": "invoices_pretax", "label": "銷售額 ＝ 發票未稅合計（%d 張）" % len(inv), "left": led_pre, "right": pre, "ok": led_pre == pre})
