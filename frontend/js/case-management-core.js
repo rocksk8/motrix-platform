@@ -498,6 +498,10 @@ window.CM_PARTS.push(() => ({
     async _seedDefaultStagesIfEmpty() {
       if (!this.selected || !this.cr.caseRecord) return
       if ((this.cr.caseRecord.stages || []).length > 0) return
+      // 階段樣板（S-ST2）：旗標開啟且已有發布的樣板 ⇒ 不自動建立 5 個預設階段（空案件從「套用階段樣板」開始）。
+      // 旗標還沒讀完才等一下 initLayout；旗標關／沒有樣板 ⇒ 和過去一模一樣。
+      if (this._stFlag === undefined && this._layoutP) { try { await this._layoutP } catch (e) { /* 讀不到 ⇒ 當作沒開 */ } }
+      if (this._stFlag) { await this.stInit(); if (this.stTpl.length) return }
       const live = this._selectLive()
       const labels = ['訂單確認', '材料申請出貨', '施工安裝', '客戶驗收', '尾款結清']
       for (const label of labels) {

@@ -225,7 +225,8 @@
           ]}
         ],
         "actions": [
-          {"key": "fillContract", "label": "從報價單帶入"}
+          {"key": "fillContract", "label": "從報價單帶入"},
+          {"key": "applyStageTemplate", "label": "套用階段樣板"}
         ],
         "menus": [],
         "exports": []

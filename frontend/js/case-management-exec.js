@@ -6,6 +6,21 @@ window.CM_PARTS.push(() => ({
     _openStageDetail: {},
     _newStageAssignee: {},
     stageView: 'list',
+    // 套用階段樣板（S-ST2；旗標 builder_stage_templates 關 ⇒ stOn 恆為 false，這些狀態與方法都不會被呼叫、不送請求）
+    stOn: false,
+    _stFlag: undefined,      // undefined＝設定還沒讀完；true／false＝旗標 builder_stage_templates
+    _layoutP: null,          // initLayout() 的 promise（預設階段 seed 要在旗標讀完之後才決定）
+    stTpl: [],
+    // 按下「建立階段」會發生什麼，用白話說清楚（預覽上方的摘要）
+    stSummary() {
+      const p = this.stDlg.plan
+      if (!p) return ''
+      if (!p.stages.length) return '按下去不會新增任何階段。'
+      const hasRatio = p.stages.some(s => s.ratioBp !== null)
+      return '按下「建立階段」會在這個案件新增 ' + p.stages.length + ' 個階段（開始與結束日由基準日往後推算），已有的階段不會被改動。' +
+        (hasRatio ? '階段會帶入建議的收入認列比例（合計 100%），建立後可以在各階段上修改。' : '') + '建立後可以再改名稱、日期、負責人，樣板之後的修改不會影響這個案件。'
+    },
+    stDlg: { open: false, key: '', base: '', mode: 'new', plan: null, busy: false, err: '' },
     _ganttInstance: null,
     showImportModal: false,
     importMode: 'materials',
@@ -562,6 +577,62 @@ window.CM_PARTS.push(() => ({
       return h
     },
 
+    // 按下「套用階段樣板」才讀已發布的樣板清單（旗標開啟才看得到按鈕；失敗＝說明沒有樣板）
+    async stInit() {
+      if (!this.selected) return
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/templates`, { headers: this._authHeaders() })
+        if (!r.ok) { this.stTpl = []; return }
+        this.stTpl = (await r.json()).items || []
+      } catch (e) { this.stTpl = [] }
+    },
+    async stOpen() {
+      await this.stInit()
+      if (!this.stTpl.length) { MotrixUI.toast('還沒有已發布的階段樣板，請最高管理者先到「管理階段樣板」建立並發布', {kind: 'info'}); return }
+      const has = (this.cr.caseRecord?.stages || []).length > 0
+      const t = new Date()
+      this.stDlg = { open: true, key: (this.stTpl[0] || {}).key || '', base: t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'),
+                     mode: has ? 'append' : 'new', plan: null, busy: false, err: '' }
+      this.stPreview()
+    },
+    // 即時預覽：dryRun，不寫入。每次選樣板／改基準日／改模式都重算
+    async stPreview() {
+      const d = this.stDlg
+      if (!d.open || !d.key || !/^\d{4}-\d{2}-\d{2}$/.test(d.base || '')) { d.plan = null; return }
+      // 請求序號：較舊的回應晚到時不能蓋掉較新的預覽（按下「建立階段」用的是目前的樣板／基準日）
+      const seq = d._seq = (d._seq || 0) + 1
+      d.busy = true; d.err = ''
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/apply-template`, {
+          method: 'POST', headers: this._authHeaders(true),
+          body: JSON.stringify({ template: d.key, baseDate: d.base, mode: d.mode, dryRun: true })
+        })
+        const j = await r.json().catch(() => ({}))
+        if (seq !== d._seq) return
+        if (!r.ok) { d.plan = null; d.err = j.detail || '無法預覽'; return }
+        d.plan = j
+      } catch (e) { if (seq === d._seq) { d.plan = null; d.err = e.message } } finally { if (seq === d._seq) d.busy = false }
+    },
+    async stApply() {
+      const d = this.stDlg
+      if (!d.plan || !d.plan.stages.length || d.busy) return
+      // 畫面上的預覽必須就是現在選的樣板／基準日／方式；不是（有請求還沒回來）⇒ 重新預覽，不寫入
+      if (d.plan.template !== d.key || d.plan.baseDate !== d.base || d.plan.mode !== d.mode) { this.stPreview(); return }
+      const seq = d._seq = (d._seq || 0) + 1                  // 套用期間，晚到的預覽回應一律作廢
+      d.busy = true; d.err = ''
+      try {
+        const r = await fetch(`${this._stagesApiBase()}/apply-template`, {
+          method: 'POST', headers: this._authHeaders(true),
+          body: JSON.stringify({ template: d.key, baseDate: d.base, mode: d.mode, dryRun: false })
+        })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) { d.err = j.detail || '套用失敗'; return }
+        await this.ensureCaseRecord()
+        for (const st of (j.created || [])) this.cr.caseRecord.stages.push(st)
+        d.open = false
+        MotrixUI.toast('已建立 ' + (j.created || []).length + ' 個階段', {kind: 'success'})
+      } catch (e) { d.err = e.message } finally { d.busy = false }
+    },
     async addStage() {
       if (!this.selected) return
       await this.ensureCaseRecord()

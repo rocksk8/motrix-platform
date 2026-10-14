@@ -9,7 +9,7 @@ import shutil
 import sqlite3
 import uuid
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import copy
 from typing import List, Optional
@@ -3645,7 +3645,7 @@ def _serialize_stage(conn, sr) -> dict:
         "WHERE stage_id=? ORDER BY id",
         (sr["id"],),
     ).fetchall()
-    return {
+    out = {
         "id":         sr["id"],
         "label":      sr["label"],
         "sortOrder":  sr["sort_order"],
@@ -3662,6 +3662,10 @@ def _serialize_stage(conn, sr) -> dict:
             for v in visit_rows
         ],
     }
+    # 階段樣板（S-ST2）：種類鍵只在由樣板建立的階段才有；沒用樣板的案件，回應和今天一模一樣
+    if "stage_key" in sr.keys() and sr["stage_key"]:
+        out["stageKey"] = sr["stage_key"]
+    return out
 
 
 def _get_stage_row(conn, quote_no: str, stage_id: int):
@@ -3721,6 +3725,7 @@ def _sync_stages_to_json(conn, quote_no: str, updated_at: str = None) -> str | N
                     {"visitDate": v["visit_date"], "visitPeople": v["visit_people"], "note": v["note"]}
                     for v in visit_rows
                 ],
+                **({"stageKey": sr["stage_key"]} if ("stage_key" in sr.keys() and sr["stage_key"]) else {}),
             })
         data.setdefault("caseRecord", {})["stages"] = stages_json
         result_ts = save_quotation_json(conn, quote_no, data, updated_at=updated_at)
@@ -3784,17 +3789,20 @@ def _sync_json_stages_to_table(conn, quote_no: str, stages_from_json: list) -> N
             ))
             final_id = old_id
         else:
+            _sk = st.get("stageKey")
+            from helpers.stage_templates import _KEY_RE as _STAGE_KEY_RE
+            _sk = _sk if (isinstance(_sk, str) and _STAGE_KEY_RE.fullmatch(_sk)) else None   # 階段樣板種類鍵；不合法 ⇒ NULL
             cur = conn.execute("""
                 INSERT INTO case_stages
                     (quote_no, label, sort_order, done, done_at, start_date, due_date,
-                     assigned_to, depends_on, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                     assigned_to, depends_on, created_at, updated_at, stage_key)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 quote_no, st.get("label") or "", idx,
                 1 if st.get("done") else 0, st.get("doneAt") or "",
                 st.get("startDate") or "", st.get("dueDate") or "",
                 json.dumps(st.get("assignedTo") or [], ensure_ascii=False),
-                "[]", now, now,
+                "[]", now, now, _sk,
             ))
             final_id = cur.lastrowid
             new_stages.append((final_id, st))
@@ -3883,6 +3891,141 @@ def create_case_stage(quote_no: str, body: dict = Body(...), authorization: str 
     conn.close()
     _audit(_tok(authorization), 'case_stage.create', 'case_stage', quote_no, quote_no)
     return result
+
+
+@router.get("/api/quotations/{quote_no}/stages/templates")
+def list_stage_templates(quote_no: str, authorization: str = Header(None)):
+    """案件頁「套用階段樣板」的選單：已發布的樣板 `[{key, label, stageCount, hasRatio}]`。旗標關 ⇒ 404；權限同新增階段（case_manage）。"""
+    from helpers import stage_templates as _STPL
+    from core import definitions as _D
+    user = _require_user(authorization)
+    if not _STPL.enabled():
+        raise HTTPException(404, "Not Found")
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    _STPL.ensure_kind()
+    items = []
+    for it in _D.list_definitions(conn, _STPL.KIND):
+        if it["scope"] != "company" or not it["latestVersion"]:
+            continue
+        d = _D.get(conn, _STPL.KIND, it["key"], "company")
+        b = (d or {}).get("body") or {}
+        sts = b.get("stages") if isinstance(b.get("stages"), list) else []
+        items.append({"key": it["key"], "label": b.get("label") or it["key"], "stageCount": len(sts),
+                      "hasRatio": any(isinstance(x, dict) and x.get("ratioBp") is not None for x in sts)})
+    conn.close()
+    return {"items": items}
+
+
+@router.post("/api/quotations/stage-templates/preview")
+def preview_stage_template(body: dict = Body(...), authorization: str = Header(None)):
+    """階段樣板編輯器的預覽（唯讀、不寫資料）：`{key, template, baseDate?}` ⇒ 以『沒有任何階段的案件』套用時會建立的階段（名稱、日期、比例）。
+    僅最高管理者；旗標關 ⇒ 404；樣板不合法 ⇒ 422 `{problems}`。"""
+    from helpers import stage_templates as _STPL
+    from modules.case import stage_apply as _SA
+    _require_user(authorization, require_superadmin=True)
+    if not _STPL.enabled():
+        raise HTTPException(404, "Not Found")
+    tpl = body.get("template")
+    probs = _STPL.definition_problems(body.get("key"), tpl)
+    if probs:
+        raise HTTPException(422, {"problems": probs})
+    try:
+        return _SA.plan(tpl, body.get("baseDate") or datetime.now().date().isoformat(), "new", [])
+    except _SA.PlanError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/api/quotations/{quote_no}/stages/apply-template")
+def apply_stage_template(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """套用案件階段樣板（S-ST2；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）。
+    body：`{template, baseDate?(YYYY-MM-DD，預設今天), mode: 'new'|'append', dryRun?}`。
+    - 旗標 `builder_stage_templates`（且建構器治理）關著 ⇒ 404，和今天完全一樣；權限與已結案鎖定同 `create_case_stage`（case_manage）。
+    - 套用＝複製成這個案件自己的階段（凍結）；`dryRun` ⇒ 只回傳會建立什麼（名稱、日期、比例、說明），不寫入。
+    - 建議比例只在案件原本沒有階段時帶入；附加模式一律不帶（回應 notes 會說明）。已存在的階段不改、不刪。"""
+    from helpers import stage_templates as _STPL
+    from modules.case import stage_apply as _SA
+    user = _require_user(authorization)
+    if not _STPL.enabled():
+        raise HTTPException(404, "Not Found")
+    conn = get_db()
+    _guard_case(conn, quote_no, user, allow_module="case_manage")
+    _deny_if_case_locked_unsupported(conn, quote_no, authorization, op="案件階段-套用樣板")
+    key = body.get("template")
+    mode = body.get("mode") or "new"
+    base = body.get("baseDate") or datetime.now().date().isoformat()
+    # S1：dryRun 只認布林；其他型別（'true'、1、'1'…）一律 400，不會把「看起來像預覽」的請求當成真的寫入
+    dry = body.get("dryRun")
+    if dry is not None and not isinstance(dry, bool):
+        conn.close(); raise HTTPException(400, "dryRun 必須是 true 或 false")
+    if not dry:
+        # S2：會寫入 ⇒ 讀「現有階段」之前先拿寫鎖；兩個同時套用的請求不會都看到 0 個階段而各建一組（比例合計變 200%）
+        begin_write(conn)
+    _STPL.ensure_kind()
+    from core import definitions as _D
+    try:
+        d = _D.get(conn, _STPL.KIND, key, "company") if isinstance(key, str) else None
+    except _D.DefinitionError:
+        d = None
+    if not d:
+        conn.close(); raise HTTPException(404, "找不到這個階段樣板，或它還沒有發布")
+    existing = [{"id": r["id"], "stage_key": r["stage_key"], "label": r["label"]} for r in conn.execute(
+        "SELECT id, stage_key, label FROM case_stages WHERE quote_no=?", (quote_no,)).fetchall()]
+    try:
+        pl = _SA.plan(d["body"], base, mode, existing)
+    except _SA.PlanError as e:
+        conn.close(); raise HTTPException(e.status, str(e))
+    # S3：到期提醒是既有行為（case_deadlines：已成案、階段未完成、迄日是今天或 3 天後 ⇒ 通知負責人；沒有負責人 ⇒ 業務與部門主管）。
+    # 新階段沒有負責人，所以套用前先講清楚會通知誰
+    _soon = {datetime.now().date().isoformat(), (datetime.now().date() + timedelta(days=3)).isoformat()}
+    _n_soon = sum(1 for x in pl["stages"] if x["dueDate"] in _soon)
+    if _n_soon:
+        pl["notes"] = list(pl["notes"]) + ["其中 %d 個階段的結束日是今天或 3 天後。這些階段還沒有負責人，案件已成案時，系統會照原本的到期提醒規則通知業務與部門主管" % _n_soon]
+    out = {"template": key, "templateVersion": d.get("version"), "baseDate": base, "mode": mode, **pl}
+    if dry:
+        conn.close()
+        return out
+    if not pl["stages"]:
+        conn.close()
+        return {**out, "created": []}
+    try:
+        return _apply_stage_template_write(conn, quote_no, pl, out, key, d, mode, authorization)
+    except BaseException:
+        try:
+            conn.rollback()
+        except Exception:   # noqa: BLE001
+            pass
+        _safe_close(conn)
+        raise
+
+
+def _apply_stage_template_write(conn, quote_no, pl, out, key, d, mode, authorization):
+    max_order = conn.execute(
+        "SELECT COALESCE(MAX(sort_order), -1) m FROM case_stages WHERE quote_no=?", (quote_no,)
+    ).fetchone()["m"]
+    now = datetime.now().isoformat()
+    ids = {}
+    for i, st in enumerate(pl["stages"]):
+        cur = conn.execute("""
+            INSERT INTO case_stages
+                (quote_no, label, sort_order, done, done_at, start_date, due_date,
+                 assigned_to, depends_on, created_at, updated_at, stage_key, ratio_bp)
+            VALUES (?,?,?,0,'',?,?,'[]','[]',?,?,?,?)
+        """, (quote_no, st["label"], max_order + 1 + i, st["startDate"], st["dueDate"], now, now, st["key"], st["ratioBp"]))
+        ids[st["key"]] = cur.lastrowid
+    for st in pl["stages"]:
+        deps = list(st["existingDeps"]) + [ids[k] for k in st["dependsOn"] if k in ids]
+        if deps:
+            conn.execute("UPDATE case_stages SET depends_on=? WHERE id=?", (json.dumps(deps, ensure_ascii=False), ids[st["key"]]))
+    conn.commit()
+    _sync_stages_to_json(conn, quote_no)           # 同時把案件的 updated_at 往前推（鏡像寫回會更新它）
+    created = [_serialize_stage(conn, _get_stage_row(conn, quote_no, i)) for i in ids.values()]
+    conn.close()
+    for i in ids.values():
+        spawn_bg_thread(push_event_for_case_stage_due, args=(i,))      # 和手動填迄日一樣：推行事曆（失敗只記 log）
+    _audit(_tok(authorization), 'case_stage.apply_template', 'case_stage', quote_no, quote_no,
+           {'template': key, 'version': d.get("version"), 'mode': mode, 'count': len(ids)})
+    return {**out, "created": created}
 
 
 @router.put("/api/quotations/{quote_no}/stages/{stage_id}")
