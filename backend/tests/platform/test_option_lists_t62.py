@@ -280,7 +280,9 @@ def test_part_category_list_drives_the_parts_endpoint_and_prefix(client, make_us
     items = client.get("/api/parts/categories", headers=h).json()["items"]
     assert items[-1] == {"name": "工程服務", "prefix": "SRV"} and len(items) == 7
     r = client.post("/api/parts", json={"name": "顧問費", "category": "工程服務"}, headers=h)
-    assert r.status_code == 201 and r.json()["part_no"].startswith("SRV-"), r.text
+    assert r.status_code == 201, r.text
+    made = [x for x in client.get("/api/parts", headers=h).json()["items"] if x["id"] == r.json()["id"]]       # 建立回應只有 {id, ok}；料號從清單取
+    assert made and made[0]["part_no"].startswith("SRV-"), made
     dis = _body([dict(x, disabled=True) if x["value"] == "其他" else x for x in new["values"]])
     assert _publish(client, h, "part_category", dis).status_code == 200
     names = [c["name"] for c in client.get("/api/parts/categories", headers=h).json()["items"]]
