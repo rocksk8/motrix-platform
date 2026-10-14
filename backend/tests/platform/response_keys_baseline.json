@@ -3685,6 +3685,19 @@
   ],
   "s": 200
  },
+ "/api/notify-templates/status": {
+  "k": [
+   "canEdit",
+   "enabled"
+  ],
+  "s": 200
+ },
+ "/api/notify-templates/{event}/status": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/now": {
   "k": [
    "iso",
@@ -4023,6 +4036,7 @@
    "modules",
    "modules[].core",
    "modules[].coreFields",
+   "modules[].coreFields.block",
    "modules[].coreFields.case",
    "modules[].coreFields.contract",
    "modules[].coreFields.device",
@@ -4033,6 +4047,7 @@
    "modules[].coreFields.qterms",
    "modules[].coreFields.quote",
    "modules[].coreFields.schedule",
+   "modules[].coreFields.subtab",
    "modules[].coreFields.supplier",
    "modules[].coreFields.tab",
    "modules[].coreFields.tender",

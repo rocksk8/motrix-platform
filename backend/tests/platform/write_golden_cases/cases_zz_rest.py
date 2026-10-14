@@ -270,6 +270,7 @@ WAIVE = {
     'POST /api/network-plans/{plan_id}/import/excel': "not yet covered (U0b freeze)",
     'POST /api/network-plans/{plan_id}/privacy-notice/ack': "not yet covered (U0b freeze)",
     'POST /api/network-plans/{plan_id}/topology-preview': "not yet covered (U0b freeze)",
+    'POST /api/notify-templates/{event}/preview': "not yet covered (U0b freeze)",
     'POST /api/option-lists/{list_id}/preview': "not yet covered (U0b freeze)",
     'POST /api/org/departments': "not yet covered (U0b freeze)",
     'POST /api/org/divisions': "not yet covered (U0b freeze)",

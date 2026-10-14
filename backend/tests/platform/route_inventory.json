@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 862,
-  "endpoints_api": 858,
-  "write_total": 467,
-  "write_api": 467,
-  "get_api": 391,
-  "distinct_paths_api": 724,
-  "write_with_body_api": 340,
-  "write_with_path_param_api": 339
+  "endpoints_total": 865,
+  "endpoints_api": 861,
+  "write_total": 468,
+  "write_api": 468,
+  "get_api": 393,
+  "distinct_paths_api": 727,
+  "write_with_body_api": 341,
+  "write_with_path_param_api": 340
  },
  "select_star": {
   "modules": 276,
@@ -1371,6 +1371,16 @@
   "GET /api/notifications/mine": {
    "w": false,
    "pp": 0,
+   "body": false
+  },
+  "GET /api/notify-templates/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/notify-templates/{event}/status": {
+   "w": false,
+   "pp": 1,
    "body": false
   },
   "GET /api/now": {
@@ -3334,6 +3344,11 @@
    "body": true
   },
   "POST /api/network-plans/{plan_id}/topology-preview": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/notify-templates/{event}/preview": {
    "w": true,
    "pp": 1,
    "body": true
