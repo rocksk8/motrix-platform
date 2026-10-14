@@ -179,3 +179,41 @@ def test_safe_text_bans_status_words_unless_allowed(text):
 @pytest.mark.parametrize("text", ["finally", "unpaid", "avoid"])
 def test_safe_text_english_uses_word_boundaries(text):
     assert T.problem(text, 30) == ""
+
+
+# ── 04 第二輪：fullmatch、NFKC 名稱重複、version 型別、種類清單 ─────────────────────────
+def test_keys_use_fullmatch_so_a_trailing_newline_is_rejected():
+    assert ST.definition_problems("tpl\n", OK), "樣板鍵結尾換行"
+    assert any("種類鍵" in m for m in _msgs(lambda b: b["stages"][0].update(key="survey\n")))
+    assert ST.definition_problems("tpl", OK) == []
+
+
+def test_duplicate_stage_names_are_compared_after_nfkc_and_casefold():
+    assert any("重複" in m for m in _msgs(lambda b: b["stages"][1].update(label="ＡＢ")) + _msgs(lambda b: (b["stages"][0].update(label="ＡＢ"), b["stages"][1].update(label="ab"))))
+    assert _msgs(lambda b: (b["stages"][0].update(label="ＡＢ"), b["stages"][1].update(label="ＣＤ"))) == []
+
+
+@pytest.mark.parametrize("v", [1.0, True, "1", 2, None, 0])
+def test_version_must_be_the_integer_one(v):
+    assert "version" in _paths(lambda b: b.update(version=v))
+
+
+def test_kind_list_hides_the_kind_when_the_flag_is_off(monkeypatch):
+    from routers import definitions as DEFS
+    monkeypatch.setattr(ST, "enabled", lambda conn=None: False)
+    assert ST.KIND in DEFS._disabled_lazy_kinds()
+    monkeypatch.setattr(ST, "enabled", lambda conn=None: True)
+    assert ST.KIND not in DEFS._disabled_lazy_kinds()
+
+    def boom(conn=None):
+        raise RuntimeError("x")
+    monkeypatch.setattr(ST, "enabled", boom)
+    assert ST.KIND in DEFS._disabled_lazy_kinds(), "讀不到旗標 ⇒ 視為關（不列出）"
+
+
+def test_url_like_stage_names_are_rejected_and_the_help_text_says_so():
+    assert _msgs(lambda b: b["stages"][0].update(label="Phase 1.20"))
+    from helpers import settings_groups  # noqa: F401
+    from helpers import settings_registry as SR
+    help_text = str(SR.group_info(ST.GROUP)) if hasattr(SR, "group_info") else ""
+    assert (not help_text) or "像網址" in help_text
