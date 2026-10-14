@@ -19,7 +19,7 @@ from fastapi.responses import Response
 from db import get_db
 from helpers import download_name
 from helpers import _audit, _tok
-from helpers.xlsx_out import log_export, xl_safe
+from helpers.xlsx_out import log_export, csv_safe
 # 走模組：測試要換得掉 geo.locate_cached
 from helpers import geo
 from modules.lodging import attribution as lodging_attr
@@ -210,7 +210,7 @@ def lodging_record_delete(rid: int, authorization: str = Header(None)):
     return {"ok": True}
 
 
-#: CSV 公式注入（D 稽核 E2-S2）改由 helpers.xlsx_out.xl_safe 統一中和（BP-3 小切片）
+#: CSV 公式注入（D 稽核 E2-S2）改由 helpers.xlsx_out.csv_safe 統一中和（BP-3 小切片）
 _EXPORT_COLS = (("name", "名稱"), ("classLabel", "類別"), ("licenseNo", "登記證號"), ("address", "地址"),
                 ("distanceM", "直線距離（公尺）"), ("priceLow", "官方參考最低房價"), ("priceHigh", "官方參考最高房價"),
                 ("priceRegisteredAt", "業者登記時間"))
@@ -236,12 +236,12 @@ def lodging_record_export(rid: int, format: str = "csv", authorization: str = He
                         headers={"Content-Disposition": download_name.content_disposition("lodging-%d.json" % rid)})
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["資料來源", xl_safe(attr)])
+    w.writerow(["資料來源", csv_safe(attr)])
     if d["record"]["googleCenter"]:
-        w.writerow(["說明", xl_safe(d["record"]["googleCenterNote"])])
+        w.writerow(["說明", csv_safe(d["record"]["googleCenterNote"])])
     w.writerow([label for _k, label in _EXPORT_COLS])
     for it in d["items"]:
-        w.writerow([xl_safe(it[k]) for k, _l in _EXPORT_COLS])
+        w.writerow([csv_safe(it[k]) for k, _l in _EXPORT_COLS])
     log_export(authorization, "csv", "lodging", "lodging-record", {"format": format, "rid": rid}, len(d["items"]))
     return Response("﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": download_name.content_disposition("lodging-%d.csv" % rid)})

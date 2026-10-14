@@ -55,13 +55,31 @@ def xl_style(wb):
 # 手法對 xlsx 一樣有效）。PDF/HTML 路徑已經用 html.escape() 處理過這類風險
 # （見 reports._build_report_html() 的 esc()），這裡比照同樣的防禦精神，把觸發字元
 # 開頭的字串前面補一個單引號讓 openpyxl 存成純文字。
-# \t \r：Excel 也會把 Tab／CR 開頭的儲存格當觸發前綴（OWASP CSV Injection）；與原 lodging `_CSV_FORMULA_LEAD`（已併入這裡）同一組字元。
-# 只處理 str：真正的數字（含負數）是 int／float，不會被加前綴。xlsx 與 csv 共用 `xl_safe`。
-XL_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
+XL_FORMULA_TRIGGERS = ("=", "+", "-", "@")
+# xlsx：openpyxl 只會把「=」開頭的字串綁成公式（其餘 + - @ 開頭仍是字串儲存格），所以 xlsx 新寫入端只補「=」——
+# 電話 +886…、備註 -VLAN10 不會多出看得見的單引號，匯出再匯入也不會被污染（netplan 匯入只需還原「'=」）。
+# csv：Excel 開 CSV 時 = + - @ Tab CR 開頭都會被當公式，所以 CSV 用完整六個字元（與原 lodging `_CSV_FORMULA_LEAD` 同一組）。
+# 三個函式都只處理 str：真正的數字（含負數）是 int／float，不會被加前綴。
+XLSX_FORMULA_TRIGGERS = ("=",)
+CSV_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
 
 
 def xl_safe(val):
     if isinstance(val, str) and val[:1] in XL_FORMULA_TRIGGERS:
+        return "'" + val
+    return val
+
+
+def xl_safe_xlsx(val):
+    """xlsx 儲存格的新寫入端用：只中和「=」開頭（openpyxl 唯一會綁成公式的前綴）。"""
+    if isinstance(val, str) and val[:1] in XLSX_FORMULA_TRIGGERS:
+        return "'" + val
+    return val
+
+
+def csv_safe(val):
+    """CSV 儲存格用：= + - @ Tab CR 開頭都中和。"""
+    if isinstance(val, str) and val[:1] in CSV_FORMULA_TRIGGERS:
         return "'" + val
     return val
 

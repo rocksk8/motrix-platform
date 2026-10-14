@@ -1,15 +1,26 @@
 # -*- coding: utf-8 -*-
 """試算表公式注入守門（BP-3 小切片；FRAMEWORK §0B.3 BP-3「集中輸出＋公式中和」）。
 
-規則：任何把『非字面值』寫進 xlsx／csv 儲存格的函式（`ws.append(...)`、`ws.cell(..., value=…)`、`x.value = …`、`ws["A1"] = …`、
-`writer.writerow(...)`），整個最外層函式必須經過 `helpers.xlsx_out.xl_safe`（或 `set_row`）。openpyxl 會把 `=` 開頭的字串存成真公式，
-CSV 在 Excel 開啟時 `= + - @ \\t \\r` 開頭都會被當公式 ⇒ 自由文字一律要中和。**只處理 str：真正的數字（含負數）不加前綴。**
+三個中和函式（`helpers.xlsx_out`）：
+- `xl_safe`      既有呼叫端（= + - @），行為不變；
+- `xl_safe_xlsx` xlsx 新寫入端，**只有 `=`**：openpyxl 只會把 `=` 開頭的字串綁成公式，其餘前綴仍是字串儲存格；
+                 所以電話 +886…、備註 -VLAN10 不會多出可見的單引號，匯出再匯入也不被污染（netplan 匯入還原 `'=`）；
+- `csv_safe`     CSV：Excel 開 CSV 時 = + - @ Tab CR 開頭都會被當公式 ⇒ 完整六個字元。
+三者都只處理 str：真正的數字（含負數）不加前綴。
 
-粒度刻意粗（與 unscoped_reads 棘輪同）：管的是『有沒有人想過中和』，不是證明每一格都包了。
-正對照：(1) 合成原始碼必須被抓到；(2) 把真實檔案裡的 `xl_safe(` 拿掉，掃描器必須抓到（證明它看得懂真實程式碼，不只看合成的）。
+規則：任何把『非字面值』寫進 xlsx／csv 儲存格的函式（`ws.append(...)`、`ws.cell(..., value=…)`、`x.value = …`、`ws["A1"] = …`、
+`writer.writerow(...)`），整個最外層函式必須參照上述函式之一（或 `set_row`）。
+
+⚠ 粒度刻意粗：掃描是『整個最外層函式』——函式裡只要有任何一處參照中和函式，其他寫入都算過關。它管『有沒有人想過』，不證明每一格都包了。
+⚠ `_NUMERIC_CALLS` 只收一定回數字的呼叫（len／sum／round／int／float／abs／bool）；`min`／`max` 對文字會回字串，所以**不在**清單內
+   （寫文字必須中和）。
+⚠ 掃描只看名稱有沒有出現；另有一題確認用到的中和函式在同一檔案真的有 import（避免函式內漏 import、執行時才 NameError）。
+
+正對照：(1) 合成原始碼必須被抓到；(2) 把真實檔案裡的中和函式拿掉，掃描器必須抓到（證明它看得懂真實程式碼，不只看合成的）。
 前端兩支 CSV 匯出（ledger-reports.js／ledger-statements.js）用同一組向量以 node 互驗。
 """
 import ast
+import json
 import re
 import shutil
 import subprocess
@@ -20,9 +31,11 @@ import pytest
 BACKEND = Path(__file__).resolve().parents[2]
 FRONTEND_JS = BACKEND.parent / "frontend" / "js"
 
-SAFE_NAMES = frozenset({"xl_safe", "set_row", "neutralize_cell"})
+NEUTRALIZERS = frozenset({"xl_safe", "xl_safe_xlsx", "csv_safe"})
+SAFE_NAMES = NEUTRALIZERS | {"set_row"}
+_NEUTRALIZER_RE = r"\b(xl_safe_xlsx|csv_safe|xl_safe)\b"
 _WS_NAME = re.compile(r"^(ws|sheet|wsheet)\w*$|^(ws|sh)_\w+$")
-_NUMERIC_CALLS = frozenset({"len", "sum", "round", "int", "float", "abs", "min", "max", "bool", "count"})
+_NUMERIC_CALLS = frozenset({"len", "sum", "round", "int", "float", "abs", "bool"})
 _FILE_HINT = re.compile(r"openpyxl|csv\.writer|_csv\.writer")
 SKIP_FILES = ("helpers/xlsx_out.py",)
 
@@ -49,7 +62,7 @@ def _is_literal_or_numeric(e) -> bool:
         f = e.func
         n = f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else None
         return n in _NUMERIC_CALLS or n in SAFE_NAMES
-    if isinstance(e, (ast.Compare,)):
+    if isinstance(e, ast.Compare):
         return True
     return False
 
@@ -64,7 +77,7 @@ def _value_exprs(arg):
 
 
 def _sink_values(node):
-    """⇒ 該節點若是寫儲存格／csv 的敘述，回傳被寫入的值運算式清單。"""
+    """⇒ 該節點若是寫儲存格／csv 的敘述，回傳被寫入的值運算式清單；否則 None。"""
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
         a = node.func.attr
         if a in ("writerow", "writerows") and node.args:
@@ -87,7 +100,7 @@ def _sink_values(node):
 
 
 def scan_source(rel: str, source: str) -> set:
-    """⇒ {id}：最外層函式含非字面值的寫入、卻沒有任何 xl_safe／set_row 參照。"""
+    """⇒ {id}：最外層函式含非字面值的寫入、卻沒有任何中和函式／set_row 參照。"""
     if not _FILE_HINT.search(source):
         return set()
     try:
@@ -105,8 +118,7 @@ def scan_source(rel: str, source: str) -> set:
                     units.append(("%s.%s" % (n.name, m.name), m))
         else:
             mod_nodes.append(n)
-    wrapper = ast.Module(body=mod_nodes, type_ignores=[])
-    units.append(("<module>", wrapper))
+    units.append(("<module>", ast.Module(body=mod_nodes, type_ignores=[])))
     bad = set()
     for qual, unit in units:
         dirty = False
@@ -128,7 +140,7 @@ def _product_files():
     for p in sorted(BACKEND.rglob("*.py")):
         rel = p.relative_to(BACKEND).as_posix()
         parts = rel.split("/")
-        if "tests" in parts or rel.startswith(("tools/", "conftest")) or "/tests/" in rel or rel in SKIP_FILES or ".venv" in rel or "site-packages" in rel:
+        if "tests" in parts or rel.startswith(("tools/", "conftest")) or rel in SKIP_FILES or ".venv" in rel or "site-packages" in rel:
             continue
         yield rel, p
 
@@ -145,11 +157,11 @@ def scan_all() -> set:
 
 
 # ── 真實樹 ───────────────────────────────────────────────────────────────
-def test_every_spreadsheet_writer_goes_through_xl_safe():
+def test_every_spreadsheet_writer_goes_through_a_neutralizer():
     cur = scan_all()
     new = sorted(cur - set(KNOWN_PROGRAM_TEXT_ONLY))
-    assert not new, ("這些函式把非字面值寫進 xlsx／csv 卻沒有經過 helpers.xlsx_out.xl_safe／set_row（公式注入）：%s\n"
-                     "⇒ 自由文字欄位用 xl_safe(v) 包起來；真的只寫程式自己產生的文字才列 KNOWN_PROGRAM_TEXT_ONLY 並寫原因。" % new)
+    assert not new, ("這些函式把非字面值寫進 xlsx／csv 卻沒有經過 helpers.xlsx_out 的 xl_safe／xl_safe_xlsx／csv_safe／set_row（公式注入）：%s\n"
+                     "⇒ 自由文字欄位包起來；真的只寫程式自己產生的文字才列 KNOWN_PROGRAM_TEXT_ONLY 並寫原因。" % new)
 
 
 def test_known_program_text_only_entries_are_justified_and_still_exist():
@@ -160,13 +172,28 @@ def test_known_program_text_only_entries_are_justified_and_still_exist():
     assert not vague, "豁免原因太空泛：%s" % vague
 
 
+def test_every_file_that_uses_a_neutralizer_imports_or_defines_it():
+    bad = []
+    for rel, p in _product_files():
+        src = p.read_text(encoding="utf-8")
+        if not re.search(_NEUTRALIZER_RE, src) or not _FILE_HINT.search(src):
+            continue
+        tree = ast.parse(src)
+        bound = {a.asname or a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names}
+        bound |= {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id in NEUTRALIZERS and node.id not in bound:
+                bad.append("%s:%s" % (rel, node.id))
+                break
+    assert not bad, "用了中和函式卻沒有 import：%s" % bad
+
+
 def test_the_scanner_actually_sees_the_real_export_files():
     """守門的對象沒被搬走：這幾個檔案必須仍含寫入敘述（否則掃描器是在掃空氣）。"""
     for rel in ("modules/case/api/quotations.py", "modules/subcontract/api/contractors.py", "modules/netplan/export.py",
                 "modules/daily_tasks/api.py", "modules/analytics/api/reports.py"):
         src = (BACKEND / rel).read_text(encoding="utf-8")
-        tree = ast.parse(src)
-        n = sum(1 for node in ast.walk(tree) if _sink_values(node))
+        n = sum(1 for node in ast.walk(ast.parse(src)) if _sink_values(node))
         assert n >= 1, "%s 掃不到任何寫入敘述（檔案改了結構？）" % rel
 
 
@@ -178,7 +205,7 @@ def export(rows):
     for r in rows:
         ws.append([r["customer"], r["total"]])
 """
-_SAFE = _UNSAFE.replace('r["customer"]', 'xl_safe(r["customer"])').replace("import openpyxl", "import openpyxl\nfrom helpers.xlsx_out import xl_safe")
+_SAFE = _UNSAFE.replace('r["customer"]', 'xl_safe_xlsx(r["customer"])').replace("import openpyxl", "import openpyxl\nfrom helpers.xlsx_out import xl_safe_xlsx")
 
 
 @pytest.mark.parametrize("src,expect_bad", [
@@ -186,13 +213,16 @@ _SAFE = _UNSAFE.replace('r["customer"]', 'xl_safe(r["customer"])').replace("impo
     (_SAFE, False),
     ("import openpyxl\ndef f(ws, name):\n    ws.cell(row=1, column=1, value=name)\n", True),
     ("import openpyxl\ndef f(ws, name):\n    ws.cell(row=1, column=1, value=xl_safe(name))\n", False),
+    ("import openpyxl\ndef f(ws, name):\n    ws.cell(row=1, column=1, value=xl_safe_xlsx(name))\n", False),
     ("import openpyxl\ndef f(ws):\n    ws.cell(row=1, column=1, value='標題')\n    ws.append(['a', 1, 2.5])\n", False),     # 純字面值
+    ("import openpyxl\ndef f(ws, a, b):\n    ws.append([max(a, b)])\n", True),                                              # max 對文字回字串 ⇒ 不算數字
+    ("import openpyxl\ndef f(ws, a):\n    ws.append([len(a), round(a, 2)])\n", False),
     ("import csv\ndef f(buf, title):\n    w = csv.writer(buf)\n    w.writerow([title, 1])\n", True),
-    ("import csv\ndef f(buf, title):\n    w = csv.writer(buf)\n    w.writerow([xl_safe(title), 1])\n", False),
+    ("import csv\ndef f(buf, title):\n    w = csv.writer(buf)\n    w.writerow([csv_safe(title), 1])\n", False),
     ("import openpyxl\ndef f(ws, name):\n    c = ws['A1']\n    c.value = name\n", True),
     ("import openpyxl\ndef f(ws, y):\n    c = ws['A1']\n    c.value = f'報表 {y}'\n", False),                                    # 開頭是字面文字
     ("import openpyxl\ndef f(ws, y):\n    ws['A1'] = y\n", True),
-    ("import openpyxl\ndef outer(ws, rows):\n    def inner(r):\n        ws.append([r])\n    for r in rows:\n        inner(xl_safe(r))\n", False),   # 外層有中和 ⇒ 內層算數
+    ("import openpyxl\ndef outer(ws, rows):\n    def inner(r):\n        ws.append([r])\n    for r in rows:\n        inner(xl_safe(r))\n", False),   # 外層有中和 ⇒ 內層算數（粗粒度，已知）
     ("import openpyxl\nclass K:\n    def m(self, ws, v):\n        ws.append([v])\n", True),
     ("def f(lst, v):\n    lst.append(v)\n", False),                                                                           # 不是試算表：沒有 openpyxl／csv 線索
     ("import openpyxl\ndef f(items, v):\n    items.append(v)\n", False),                                                      # list.append 不是儲存格
@@ -201,54 +231,87 @@ def test_scanner_positive_and_negative_controls(src, expect_bad):
     assert bool(scan_source("synthetic.py", src)) is expect_bad
 
 
-# ── 正對照：真實檔案拿掉 xl_safe 必須被抓到 ───────────────────────────────
+# ── 正對照：真實檔案拿掉中和函式必須被抓到 ─────────────────────────────────
 @pytest.mark.parametrize("rel", [
     "modules/case/api/quotations.py",
     "modules/subcontract/api/contractors.py",
     "modules/netplan/export.py",
     "modules/daily_tasks/api.py",
+    "modules/lodging/api_records.py",
 ])
-def test_deliberate_break_removing_xl_safe_from_a_real_file_is_caught(rel):
+def test_deliberate_break_removing_the_neutralizer_from_a_real_file_is_caught(rel):
     src = (BACKEND / rel).read_text(encoding="utf-8")
-    assert "xl_safe" in src, "%s 沒有用 xl_safe（這個切片應該已經接上）" % rel
-    assert not scan_source(rel, src) or all(k in KNOWN_PROGRAM_TEXT_ONLY for k in scan_source(rel, src))
-    broken = re.sub(r"\bxl_safe\b", "str", src)             # 蓄意破壞：中和函式換成恆等轉換
-    assert scan_source(rel, broken), "拿掉 xl_safe 後掃描器沒有抓到 ⇒ 守門失效：%s" % rel
+    assert re.search(_NEUTRALIZER_RE, src), "%s 沒有用中和函式（這個切片應該已經接上）" % rel
+    assert not (scan_source(rel, src) - set(KNOWN_PROGRAM_TEXT_ONLY))
+    broken = re.sub(_NEUTRALIZER_RE, "str", src)             # 蓄意破壞：中和函式換成恆等轉換
+    assert scan_source(rel, broken), "拿掉中和函式後掃描器沒有抓到 ⇒ 守門失效：%s" % rel
 
 
-# ── xl_safe 行為向量 ─────────────────────────────────────────────────────
-def test_xl_safe_vectors_strings_prefixed_numbers_untouched():
-    from helpers.xlsx_out import XL_FORMULA_TRIGGERS, xl_safe
-    assert set(XL_FORMULA_TRIGGERS) == {"=", "+", "-", "@", "\t", "\r"}
-    for bad in ("=HYPERLINK(\"http://x\",\"y\")", "+1+1", "-2+3", "@SUM(1)", "\t=1", "\r=1", "=", "-"):
-        assert xl_safe(bad) == "'" + bad, bad
-    for ok in ("", "abc", "客戶 A", " =1", "a=b", "'=1", "1+1"):
-        assert xl_safe(ok) == ok, ok
-    for num in (0, 5, -5, 3.14, -0.5, True, None):
-        assert xl_safe(num) is num or xl_safe(num) == num, num
-    assert isinstance(xl_safe(-5), int) and xl_safe(-5) == -5          # 真正的負數保持數字
+# ── 中和函式行為向量 ──────────────────────────────────────────────────────
+def test_neutralizer_vectors_strings_prefixed_numbers_untouched():
+    from helpers.xlsx_out import CSV_FORMULA_TRIGGERS, XL_FORMULA_TRIGGERS, XLSX_FORMULA_TRIGGERS, csv_safe, xl_safe, xl_safe_xlsx
+    assert set(XL_FORMULA_TRIGGERS) == {"=", "+", "-", "@"}               # 既有呼叫端的行為不變
+    assert set(XLSX_FORMULA_TRIGGERS) == {"="}
+    assert set(CSV_FORMULA_TRIGGERS) == {"=", "+", "-", "@", "\t", "\r"}
+    eq = '=HYPERLINK("http://x","y")'
+    assert xl_safe_xlsx(eq) == "'" + eq and xl_safe(eq) == "'" + eq and csv_safe(eq) == "'" + eq
+    for ph in ("+886 Telecom", "-VLAN10", "@home", "\t=1", "\r=1"):         # xlsx 新寫入端：不加可見單引號
+        assert xl_safe_xlsx(ph) == ph, ph
+    for ph in ("+886 Telecom", "-VLAN10", "@home"):                       # 既有 xl_safe：照舊
+        assert xl_safe(ph) == "'" + ph, ph
+    for bad in ("=", "+1+1", "-2+3", "@SUM(1)", "\t=1", "\r=1", "-"):       # csv：完整六個字元
+        assert csv_safe(bad) == "'" + bad, bad
+    for fn in (xl_safe, xl_safe_xlsx, csv_safe):
+        for ok in ("", "abc", "客戶 A", " =1", "a=b", "'=1", "1+1"):
+            assert fn(ok) == ok, (fn.__name__, ok)
+        for num in (0, 5, -5, 3.14, -0.5, True, None):
+            assert fn(num) is num or fn(num) == num, (fn.__name__, num)
+        assert isinstance(fn(-5), int) and fn(-5) == -5                    # 真正的負數保持數字
 
 
 def test_openpyxl_round_trip_free_text_is_not_a_formula(tmp_path):
     import openpyxl
-    from helpers.xlsx_out import xl_safe
+    from helpers.xlsx_out import xl_safe_xlsx
     wb = openpyxl.Workbook()
     ws = wb.active
     vals = ['=HYPERLINK("http://evil","x")', "+cmd|' /C calc'!A0", "-1+1", "@SUM(1,1)", "\t=1", "\r=1", "正常文字", -5, 12.5]
-    ws.append([xl_safe(v) for v in vals])
+    ws.append([xl_safe_xlsx(v) for v in vals])
     p = tmp_path / "t.xlsx"
     wb.save(p)
-    ws2 = openpyxl.load_workbook(p).active
-    row = [c for c in ws2[1]]
+    row = list(openpyxl.load_workbook(p).active[1])
     assert all(c.data_type != "f" for c in row)
     assert row[7].value == -5 and row[7].data_type == "n"             # 數字仍是數字
     assert row[0].value.startswith("'=")
+    assert row[1].value == vals[1] and row[4].value == vals[4]        # xlsx 只補 '='：其餘前綴仍是字串，不多可見單引號
     # 對照：沒中和的 '=' 字串會被存成真公式（證明上面的斷言有意義）
     wb3 = openpyxl.Workbook()
     wb3.active.append(['=1+1'])
     p3 = tmp_path / "raw.xlsx"
     wb3.save(p3)
     assert openpyxl.load_workbook(p3).active["A1"].data_type == "f"
+
+
+# ── netplan：build_plan_excel → parse_plan_excel 往返（3c 非作者審查 MUST-FIX）────────────────
+def test_netplan_excel_round_trip_does_not_corrupt_text(client):
+    from modules.netplan.export import build_plan_excel, parse_plan_excel
+    notes = ["=SUM(A1)", "-VLAN10", "+886 Telecom", "@home", "一般備註", "'=本來就以單引號等號開頭"]
+    plan = {"siteName": "S", "data": {"wanLines": [{"isp": "ISP%d" % i, "note": n} for i, n in enumerate(notes)]}}
+    out = parse_plan_excel(build_plan_excel(plan))
+    got = [row.get("note") for row in out["sections"]["wanLines"]]
+    assert got == notes, got            # '=' 開頭匯出補一個 '、匯入還原一個；其餘原樣往返，不多不少
+
+
+def test_netplan_formula_never_reaches_the_workbook_as_a_formula(client):
+    import io
+    import openpyxl
+    from modules.netplan.export import build_plan_excel
+    plan = {"siteName": "=S", "data": {"wanLines": [{"isp": "=1+1", "note": '=HYPERLINK("http://evil","x")'}],
+                                        "revisionLog": [{"version": "=v", "date": "2026-10-14T10:00", "editor": "=cmd", "note": "=x"}]}}
+    wb = openpyxl.load_workbook(io.BytesIO(build_plan_excel(plan)))
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for c in row:
+                assert c.data_type != "f", (ws.title, c.coordinate, c.value)
 
 
 # ── 前端 CSV：同一組向量以 node 互驗 ──────────────────────────────────────
@@ -279,9 +342,46 @@ console.log(JSON.stringify(out));
     p.write_text(js, encoding="utf-8")
     r = subprocess.run([_NODE, str(p)], capture_output=True, text=True, timeout=30, encoding="utf-8")
     assert r.returncode == 0, r.stderr
-    import json
     o = json.loads(r.stdout)
     assert o["bad"] == ["'" + x for x in ['=HYPERLINK("x")', "+1+1", "-2+3", "@SUM(1)", "\t=1", "\r=1"]]
     assert o["ok"] == ["", "abc", "客戶", " =1", "a=b"]
     assert o["nums"] == [0, 5, -5, 3.5]                                # 數字（含負數）原樣
     assert o["nul"] == ["", ""]
+
+
+# ── 抽查：帳簿金額在最終回應裡是數字（csvSafeCell 只動字串，數字若變成字串會被誤加前綴）──────────
+def test_ledger_amounts_are_numeric_in_the_final_response(client, make_user):
+    import db
+    from core import registry
+    Y = 2196
+    u, pw = make_user(username="csvnum%d" % id(client), role="superadmin")
+    hd = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
+    conn = db.get_db()
+    try:
+        mk = registry.single_provider("voucher.draft")
+        vid = mk(conn, voucher_date="%d-03-22" % Y, summary="=不該被當公式", created_by="t", now="%d-03-22T00:00:00" % Y, origin="manual",
+                 lines=[{"account_code": "6111", "summary": "-x", "debit": 5000, "credit": 0},
+                        {"account_code": "2191", "summary": "+y", "debit": 0, "credit": 5000}])["id"]
+        conn.commit()
+    finally:
+        conn.close()
+    for act in ("submit", "approve", "approve", "post"):
+        r = client.post("/api/vouchers/%d/%s" % (vid, act), headers=hd, json={})
+        assert r.status_code == 200, (act, r.text)
+    q = "start=%d-01-01&end=%d-03-31&include_drafts=false" % (Y, Y)
+    d = client.get("/api/ledger/trial-balance?" + q, headers=hd)
+    assert d.status_code == 200, d.text
+    d = d.json()
+    keys = ("opening_debit", "opening_credit", "period_debit", "period_credit", "closing_debit", "closing_credit")
+    assert d["rows"], "試算表沒有資料（種子失敗？）"
+    for row in d["rows"]:
+        for k in keys:
+            assert isinstance(row[k], (int, float)) and not isinstance(row[k], bool), (row.get("code"), k, row[k])
+    for k in keys:
+        assert isinstance(d["totals"][k], (int, float)), (k, d["totals"][k])
+    gl = client.get("/api/ledger/general-ledger?account=6111&" + q, headers=hd)
+    assert gl.status_code == 200, gl.text
+    assert gl.json()["lines"], "總分類帳沒有資料"
+    for line in gl.json()["lines"]:
+        for k in ("debit", "credit", "balance"):
+            assert isinstance(line[k], (int, float)), (k, line[k])

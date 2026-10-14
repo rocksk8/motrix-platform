@@ -640,7 +640,6 @@ def get_task_history(
     offset   = (page - 1) * per_page
     page_occs = all_occs[offset: offset + per_page]
 
-    from helpers.xlsx_out import xl_safe
     _WD = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"]
     occurrences = []
     for occ_date in page_occs:
@@ -785,6 +784,7 @@ def export_task_history(task_id: int, authorization: str = Header(None)):
     all_occs.sort(reverse=True)
     conn.close()
 
+    from helpers.xlsx_out import csv_safe
     _WD = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"]
     buf    = _io.StringIO()
     writer = _csv.writer(buf)
@@ -794,7 +794,7 @@ def export_task_history(task_id: int, authorization: str = Header(None)):
         wd = _WD[_date.fromisoformat(occ_date).weekday()]
         for u in assigned:
             c = next((x for x in comps if x["username"] == u), None)
-            writer.writerow([xl_safe(x) for x in (       # 工作事項標題、回報內容是自由文字：= + - @ Tab CR 開頭要中和（CSV 公式注入）
+            writer.writerow([csv_safe(x) for x in (       # 工作事項標題、回報內容是自由文字：= + - @ Tab CR 開頭要中和（CSV 公式注入）
                 d["title"], occ_date, wd,
                 dn_map.get(u, u),
                 "已完成" if (c and c["completed"]) else "未完成",
