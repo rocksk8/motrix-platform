@@ -74,7 +74,7 @@ def test_surfaces_validation_and_filtering():
     assert "x" in E.evaluate([plain], rec, vis, surface="list")["marks"] and E.evaluate([plain], rec, vis, surface="form")["marks"] == {}   # 沒寫 surfaces ＝ 只在列表
 
 
-def test_k01_warn_pct_semantics(monkeypatch):
+def test_seed_k01_warn_pct_semantics(monkeypatch):
     monkeypatch.setattr(RS, "k01_seed_on", lambda conn=None: True)
 
     def pub(rules):
@@ -94,7 +94,7 @@ def test_k01_warn_pct_semantics(monkeypatch):
     assert RS.k01_warn_pct(conn=object()) is None                                               # 種子旗標關 ⇒ 一律 None
 
 
-def test_k01_warn_pct_never_raises(monkeypatch):
+def test_seed_k01_warn_pct_never_raises(monkeypatch):
     monkeypatch.setattr(RS, "k01_seed_on", lambda conn=None: True)
     monkeypatch.setattr(RS, "published_rules", lambda conn, entity: (_ for _ in ()).throw(RuntimeError("boom")))
     assert RS.k01_warn_pct(conn=object()) is None
