@@ -47,7 +47,7 @@ def test_hash_expression_and_allowed_list():
     h = PS.hash_of("x")
     assert h == "'sha256-%s'" % base64.b64encode(hashlib.sha256(b"x").digest()).decode()
     allowed = PS.allowed_hashes()
-    assert len(allowed) == 4 and allowed == sorted(allowed, key=lambda e: 0) or True
+    assert len(allowed) == 4 and len(set(allowed)) == 4
     assert set(allowed) == {PS.hash_of(PS.inner_text(t)) for t in PS.SCRIPTS.values()}
 
 
@@ -286,7 +286,7 @@ def _listener(host="127.0.0.1"):
             try:
                 c.settimeout(0.4)
                 hits.append(c.recv(200))
-                c.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 18\r\nConnection: close\r\n\r\n<html>NAVIGATED</html>"[:0] or b"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n")
+                c.sendall(b"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n")
             except OSError:
                 pass
             finally:
@@ -338,7 +338,6 @@ def test_full_pipeline_removes_navigation_and_unregistered_scripts(tmp_path):
         body = ('<h2>MARK-OK</h2><script>document.write("INJECTED-RAN")</script>'
                 '<iframe src="http://127.0.0.1:%d/frame"></iframe><img src="http://127.0.0.1:%d/i.png">' % (port, port))
         html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="refresh" content="3;url=http://127.0.0.1:%d/nav"></head><body>%s</body></html>' % (port, body)
-        ctl_path = tmp_path / "ctl.html"
         _raw_render(html, tmp_path, "ctl")
         ctl_text = "\n".join((p.extract_text() or "") for p in pypdf.PdfReader(str(tmp_path / "ctl.pdf")).pages)
         control_hits = len(hits)
@@ -351,7 +350,6 @@ def test_full_pipeline_removes_navigation_and_unregistered_scripts(tmp_path):
         assert "INJECTED-RAN" in ctl_text and control_hits >= 1, "對照組沒有重現（無法證明硬化有效）"
         assert "MARK-OK" in text and "INJECTED-RAN" not in text
         assert len(hits) == 0, "硬化後仍有連線：%r" % hits[:2]
-        assert ctl_path is not None
     finally:
         stop.set()
         t.join(2)
