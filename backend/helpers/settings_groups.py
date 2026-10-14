@@ -398,6 +398,33 @@ register_group(
     help="報價單「專案毛利%」的提醒門檻；算式本身固定，不在此調整。",
 )
 
+# 財務報表參數（財務盤點第一個切片；設計 docs/platform/plans/FINANCE-FRAMEWORK-INVENTORY-T62.md §4）：
+# 應收帳齡的區間切點。預設關＝報表與今天逐位元相同（30／60／90 天）。只改報表怎麼分組與標色，不改任何金額，也不改誰看得到報表。
+register_group(
+    "finance_reports", "財務報表",
+    [
+        S("custom_aging", "int", 0, min=0, max=1, risk="none", recommended=0,
+          question="應收帳齡要不要改用自訂的天數區間？", label="自訂帳齡區間",
+          help="關閉時，應收帳齡固定分成 0–30、31–60、61–90、90 天以上四組。開啟後，下面三個天數決定各組的分界。",
+          impact="只改帳齡報表（畫面、Excel、PDF）怎麼分組與標色；不改任何金額，也不改誰看得到這份報表。立即生效。",
+          choices=[(0, "關閉（預設）", "維持 30／60／90 天。"), (1, "開啟", "採用下面三個天數。")]),
+        S("aging_day1", "int", 30, min=1, max=3650, unit="天", risk="none", recommended=30,
+          question="第一組帳齡到第幾天為止？", label="帳齡第一個分界",
+          help="經過天數不超過這個值的款項歸第一組。必須小於第二個分界。只有「自訂帳齡區間」開啟時才採用。",
+          impact="三個分界必須由小到大；填得不合理時報表自動退回 30／60／90 天。"),
+        S("aging_day2", "int", 60, min=1, max=3650, unit="天", risk="none", recommended=60,
+          question="第二組帳齡到第幾天為止？", label="帳齡第二個分界",
+          help="超過第一個分界、不超過這個值的款項歸第二組；超過這個值的款項在 Excel 與 PDF 以橘字標出。",
+          impact="必須大於第一個分界、小於第三個分界。"),
+        S("aging_day3", "int", 90, min=1, max=3650, unit="天", risk="none", recommended=90,
+          question="超過第幾天的款項要列為「逾期很久」？", label="帳齡第三個分界",
+          help="超過這個值的款項歸最後一組，並在 Excel 與 PDF 以紅字標出。",
+          impact="必須大於第二個分界。"),
+    ],
+    sensitive=False, risk="none",
+    help="財務報表的顯示參數。金額、稅額與捨入不在這裡調整。",
+)
+
 # 完工單「從報價單帶入項目」（第 57 班；設計 COMPLETION-NOTE-QUOTE-ITEMS-T56 §5）：預設值＝使用者 2026-10-12 的表單裁示。
 # 全部是『之後新建／重新帶入』的行為選項，不改任何既有完工單。金額永遠不進完工單（結構性不變式，不在此調整）。
 register_group(

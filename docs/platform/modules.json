@@ -48,6 +48,7 @@
    "helper:email_notify",
    "helper:errors",
    "helper:financial_mask",
+   "helper:finance_params",
    "helper:geo",
    "helper:legal_params",
    "helper:profit_rules",
