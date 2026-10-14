@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-PAGES = ROOT / "frontend" / "pages"
+from core import source_tree   # noqa: E402  頁面路徑一律經 source_tree（守門 test_page_paths_centralized）
 MODS = ROOT / "backend" / "modules"
 NODE = shutil.which("node")
 
@@ -39,7 +39,7 @@ PARAMS = sorted(CFG)
 
 
 def _page(name):
-    return (PAGES / name).read_text(encoding="utf-8")
+    return source_tree.page_file(name).read_text(encoding="utf-8")
 
 
 def _manifest(cfg):
@@ -136,7 +136,7 @@ o.$nextTick = async () => {}
 def _node(name, flag_value):
     cfg = CFG[name]
     js = _HARNESS % dict(flag=cfg["flag"], factory=cfg["factory"], flag_value=flag_value)
-    out = subprocess.run([NODE, "-e", js, str(PAGES / name)], capture_output=True, timeout=30)
+    out = subprocess.run([NODE, "-e", js, str(source_tree.page_file(name))], capture_output=True, timeout=30)
     assert out.returncode == 0, out.stderr.decode("utf-8", "replace")[:1500]
     return json.loads(out.stdout.decode("utf-8"))
 
