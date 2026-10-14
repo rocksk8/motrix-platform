@@ -308,7 +308,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
                 f'<td>{real_idx}</td>'
                 f'<td>{desc_html}</td>'
                 f'<td>{esc(item.get("brand",""))}</td>'
-                f'<td class="r">{item.get("qty","")}</td>'
+                f'<td class="r">{esc(str(item.get("qty","")))}</td>'
                 f'<td>{esc(item.get("unit",""))}</td>'
                 f'<td class="r cost-cell">{("NT$ " + f"{int(cost):,}") if cost else ""}</td>'
                 f'<td class="r cost-cell">{f"{margin*100:.1f}%" if margin else ""}</td>'
@@ -323,7 +323,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
                 f'<td>{real_idx}</td>'
                 f'<td>{desc_html}</td>'
                 f'<td>{esc(item.get("brand",""))}</td>'
-                f'<td class="r">{item.get("qty","")}</td>'
+                f'<td class="r">{esc(str(item.get("qty","")))}</td>'
                 f'<td>{esc(item.get("unit",""))}</td>'
                 f'<td class="r">{("NT$ " + f"{int(up):,}") if up else ""}</td>'
                 f'<td class="r">{("NT$ " + f"{int(amt):,}") if amt else ""}</td>'
@@ -468,7 +468,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         '<div class="meta">\n'
         f'  <div><span>報價編號：</span><strong style="font-family:Arial,sans-serif">{esc(q.get("quoteNo",""))}</strong></div>\n'
         f'  <div><span>報價日期：</span>{esc(q.get("quoteDate",""))}</div>\n'
-        f'  <div><span>有效期限：</span>{q.get("validDays",30)} 日內</div>\n'
+        f'  <div><span>有效期限：</span>{esc(str(q.get("validDays",30)))} 日內</div>\n'
         f'  <div><span>報　價　人：</span>{esc(q.get("salesPerson",""))}</div>\n'
         f'  <div><span>電　　　話：</span>{esc(q.get("salesPhone",""))}</div>\n'
         f'  <div><span>E-mail：</span>{esc(q.get("salesEmail",""))}</div>\n'
@@ -1217,7 +1217,7 @@ def _build_shipping_html(n: dict) -> str:
             f'<td>{real_idx}</td>'
             f'<td>{esc(item.get("description",""))}</td>'
             f'<td>{esc(item.get("brand",""))}</td>'
-            f'<td class="r">{item.get("qty","")}</td>'
+            f'<td class="r">{esc(str(item.get("qty","")))}</td>'
             f'<td>{esc(item.get("unit",""))}</td>'
             f'<td>{esc(item.get("notes",""))}</td>'
             f'</tr>'
@@ -2662,7 +2662,7 @@ def _build_case_closing_html(data: dict) -> str:
         net_amt  = _receipt_amounts(pr["amount"], pr["actualAmount"], pr["feeAmount"])[0]   # 銀行入帳（2026-09-30：實收已扣手續費，不再減一次）
         pay_rows_html += (
             f'<tr><td>{esc(pr["type"])}</td>'
-            f'<td class="r">{pr["pct"]}%</td>'
+            f'<td class="r">{esc(str(pr["pct"]))}%</td>'
             f'<td class="r">{money(pr["amount"])}</td>'
             f'<td class="c" style="color:{recv_cls};font-weight:600">{recv_txt}</td>'
             f'<td class="c">{esc(pr["receivedAt"]) or "—"}</td>'
@@ -2813,7 +2813,7 @@ def _build_case_closing_html(data: dict) -> str:
             return f'{st["startDate"] or "—"} ～ {st["dueDate"] or "—"}'
         return "—"
     stage_rows_html = "".join(
-        f'<tr><td>{esc(st["label"])}</td><td>{_stage_period(st)}</td>'
+        f'<tr><td>{esc(st["label"])}</td><td>{esc(_stage_period(st))}</td>'
         f'<td class="c">{esc(st["doneAt"]) or "—"}</td>'
         f'<td class="c" style="color:{"#15803D" if st["done"] else "#DC2626" if st["overdue"] else "#9CA3AF"};font-weight:600">'
         f'{"✓ 已完成" if st["done"] else "⚠ 逾期" if st["overdue"] else "進行中"}</td>'
@@ -3177,7 +3177,7 @@ def _build_project_execution_report_html(data: dict) -> str:
         return "—"
 
     stage_rows_html = "".join(
-        f'<tr><td>{esc(st["label"])}</td><td>{_stage_period(st)}</td>'
+        f'<tr><td>{esc(st["label"])}</td><td>{esc(_stage_period(st))}</td>'
         f'<td class="c">{esc(st["doneAt"]) or "—"}</td>'
         f'<td class="c" style="color:{"#15803D" if st["done"] else "#DC2626" if st["overdue"] else "#9CA3AF"};font-weight:600">'
         f'{"✓ 已完成" if st["done"] else "⚠ 逾期" if st["overdue"] else "進行中"}</td>'
