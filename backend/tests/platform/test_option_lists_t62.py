@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from core.source_tree import page_file
 from helpers import option_lists as OL
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -39,8 +40,8 @@ def _paths(p):
 # ── OFF = 今天寫死的清單（逐項對照前端／後端原始碼）────────────────────────────────
 def test_builtin_defaults_equal_the_hard_coded_lists_in_the_pages_and_backend():
     from helpers.part_catalog import PART_CATEGORIES
-    cust = (ROOT / "frontend" / "pages" / "customers.html").read_text(encoding="utf-8")
-    sup = (ROOT / "frontend" / "pages" / "suppliers.html").read_text(encoding="utf-8")
+    cust = page_file("customers.html").read_text(encoding="utf-8")
+    sup = page_file("suppliers.html").read_text(encoding="utf-8")
     ct = re.search(r"CUSTOMER_TYPES:\s*\[([^\]]*)\]", cust).group(1)
     assert [x.strip().strip("'") for x in ct.split(",")] == [d["value"] for d in OL.BUILTIN["customer_type"]["defaults"]]
     sc = re.search(r"SUPPLIER_CATEGORIES:\s*\[([^\]]*)\]", sup).group(1)
@@ -310,14 +311,14 @@ def test_motrix_options_returns_the_page_defaults_when_there_is_no_published_lis
 
 def test_pages_wire_the_lists_and_declare_the_editor_meta_but_do_not_load_the_editor_script():
     for page, ids in (("customers", "customer_type"), ("suppliers", "supplier_category"), ("parts", "part_category,part_unit")):
-        src = (ROOT / "frontend" / "pages" / (page + ".html")).read_text(encoding="utf-8")
+        src = page_file(page + ".html").read_text(encoding="utf-8")
         assert '<script src="../static/option-lists.js"></script>' in src, page
         assert '<meta name="motrix-option-lists" content="%s">' % ids in src, page
         assert "option-list-editor.js" not in src, "頁面不直接載入編輯器（關著時不能多請求）"
         assert "motrix-options" in src and "optVer" in src
     sb = (ROOT / "frontend" / "static" / "sidebar.js").read_text(encoding="utf-8")
     assert "d.optionLists" in sb and "d.builderOptionLists" in sb and "/static/option-list-editor.js" in sb
-    parts = (ROOT / "frontend" / "pages" / "parts.html").read_text(encoding="utf-8")
+    parts = page_file("parts.html").read_text(encoding="utf-8")
     assert parts.count("unit: this.defaultUnit()") == 1 and "unit: '台', cost: 0, listPrice: 0, safetyStock: 0, category: '', note: '', saving: false" in parts
 
 
@@ -364,7 +365,7 @@ def test_t100_export_names_categories_that_have_no_account_code(client):      # 
 
 
 def test_parts_edit_select_keeps_a_disabled_category_visible_only_with_custom_lists():
-    src = (ROOT / "frontend" / "pages" / "parts.html").read_text(encoding="utf-8")
+    src = page_file("parts.html").read_text(encoding="utf-8")
     assert 'x-for="c in categorySelectOptions(modal.category)"' in src and 'x-text="c.label || c.name"' in src
     fn = src.split("categorySelectOptions(cur) {")[1].split("defaultUnit() {")[0]
     assert "!MotrixOptions.custom('part_category')" in fn and "（已停用）" in fn, "沒開自訂清單 ⇒ 原樣回 categoryOptions（與今天相同）"
