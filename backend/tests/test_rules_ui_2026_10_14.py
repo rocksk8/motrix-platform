@@ -281,7 +281,7 @@ def test_loading_the_overlay_without_start_is_completely_inert():
 def test_case_page_starts_rules_only_after_reading_the_flag_from_its_existing_settings_request():
     from core import source_tree
     html = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
-    assert "MotrixPublicFlags.read(['builder_layout', 'builder_rules']" in html                 # 同一個設定請求多帶一個群組，沒有新請求（網址由 public-flags.js 組成）
+    assert "MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots', 'builder_status_display'" in html                 # 同一個設定請求多帶一個群組，沒有新請求（網址由 public-flags.js 組成）
     assert "../static/public-flags.js" in html
     gate = re.search(r"builder_rules\.enabled === 1\) \{([\s\S]*?)\n {6}\}", html).group(1)
     assert "MotrixRuleMarks.start()" in gate and "MotrixRulesBuilder.mountEntry()" in gate

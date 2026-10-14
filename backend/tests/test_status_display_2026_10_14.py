@@ -342,7 +342,7 @@ def test_case_page_text_goes_through_stlabel_without_touching_logic():
     assert src.count("stLabel(c.deal_tag, 'case')") == 2 and "stLabel('已成案', 'case')" in src
     assert "stLabel('finalized', 'case', '已定稿')" in src and "stLabel('draft', 'case', '草稿')" in src
     assert "c.deal_tag==='已結案' ? 'cm-card__tag--closed'" in src                                  # class／邏輯仍用原值
-    assert "'builder_layout', 'builder_custom_fields', 'builder_status_display'" in src and "this.initStatusDisplay(g.builder_status_display)" in src
+    assert "'builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots', 'builder_status_display'" in src and "this.initStatusDisplay(g.builder_status_display)" in src
     core = (FRONT / "js/case-management-core.js").read_text(encoding="utf-8")
     assert "stLabel(raw, ctx, fallback)" in core and "initStatusDisplay(flag)" in core and "flag.enabled !== 1" in core
 

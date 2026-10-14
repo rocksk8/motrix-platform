@@ -36,8 +36,8 @@ def test_no_native_dialogs_and_labels_never_become_html():
 def test_case_page_wiring_reads_the_flag_from_the_existing_settings_request():
     src = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
     assert '<script src="../static/attachment-slots.js"></script>' in src
-    assert "settings-center/public?groups=builder_layout,builder_slots" in src                  # 同一個請求，只多一個群組名
-    assert "Number(d.groups.builder_slots.enabled) === 1" in src and "MotrixAttachmentSlots.mount(" in src
+    assert "'builder_rules', 'builder_slots'" in src                                            # 同一個請求（MotrixPublicFlags 名單），只多一個群組名
+    assert "Number(g.builder_slots.enabled) === 1" in src and "MotrixAttachmentSlots.mount(" in src
     assert "asOn: false," in src                                                               # 預設關
     i = src.index('data-testid="as-edit-open"')
     tag = src[src.rindex("<button", 0, i):src.index(">", i)]
