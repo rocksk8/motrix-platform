@@ -26,4 +26,5 @@ def get_project_margin_config(authorization: str = Header(None)):
     except Exception:                                   # noqa: BLE001  規則讀不到不可影響報價單
         pass
     from modules.case.quote_terms import min_item_margin_pct         # 單項毛利率送審門檻（設定 quote_approval.min_item_margin_pct，預設 30＝今天）；表單的 checkApproval 與伺服器同源
-    return {"warnPct": warn, "minItemMarginPct": min_item_margin_pct()}
+    from modules.case.quote_terms import discount_review_above, max_valid_days      # 送審門檻（設定 quote_approval.*）：表單的 checkApproval 與伺服端重算同源
+    return {"warnPct": warn, "minItemMarginPct": min_item_margin_pct(), "maxValidDays": max_valid_days(), "discountReviewAbove": discount_review_above()}

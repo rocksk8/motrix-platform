@@ -47,6 +47,8 @@ def legacy(q):
 def thr(monkeypatch):
     def set_(v):
         monkeypatch.setattr(QT, "min_item_margin_pct", lambda: v)
+        monkeypatch.setattr(QT, "max_valid_days", lambda: 30)           # 其他兩個門檻（max_valid_days／discount_review_above）固定為預設，這份測試不碰資料庫
+        monkeypatch.setattr(QT, "discount_review_above", lambda: 0)
     return set_
 
 
@@ -103,6 +105,8 @@ def test_a_read_failure_converges_to_the_strictest(monkeypatch):
 def test_the_setting_is_not_read_when_no_item_has_a_cost(monkeypatch):
     called = []
     monkeypatch.setattr(QT, "min_item_margin_pct", lambda: called.append(1) or 30)
+    monkeypatch.setattr(QT, "max_valid_days", lambda: 30)
+    monkeypatch.setattr(QT, "discount_review_above", lambda: 0)
     QT.compute_approval_reasons({"validDays": 30, "taxRate": 5, "items": [{"type": "header"}, {"cost": 0, "margin": 0.1}]}, [], "")
     assert called == []                                                                         # 沒有成本品項就不讀設定（與今天一樣不碰資料庫）
 
@@ -137,7 +141,7 @@ def test_page_has_no_hard_coded_030_and_defaults_to_30():
     html = PAGE.read_text(encoding="utf-8")
     assert "0.30" not in html.split("checkApproval() {")[1].split("showDiscount")[0]
     assert 'item.margin < pmCfg.minItemMarginPct / 100 && item.cost > 0' in html and "minItemMarginPct: 30" in html
-    assert "if (this.pmCfg.minItemMarginPct !== 30) this.checkApproval()" in html                    # 預設不多做任何事
+    assert "if (this.pmCfg.minItemMarginPct !== 30 || this.pmCfg.maxValidDays !== 30 || this.pmCfg.discountReviewAbove !== 0) this.checkApproval()" in html      # 預設不多做任何事（三個門檻都是預設才不重算）
 
 
 # ── 設定與端點（需要資料庫） ─────────────────────────────────────────────────────────────────────────────

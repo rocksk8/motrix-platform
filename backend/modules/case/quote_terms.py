@@ -176,12 +176,50 @@ def min_item_margin_pct() -> float:
     return STRICTEST_MIN_ITEM_MARGIN_PCT
 
 
+STRICTEST_MAX_VALID_DAYS = 1                       # 讀不到／不合法時的收斂方向：幾乎每張報價單都列為『有效期限過長』（寧可多送審，不悄悄放寬）
+STRICTEST_DISCOUNT_REVIEW_ABOVE = 0                # 讀不到／不合法時：任何折讓（>0）都列為『含折讓』（＝今天的規則，也是最嚴的）
+
+
+def _strict_number(field, lo, hi, strictest, integer=False):
+    """`quote_approval.<field>` 的**嚴格讀取**（同 `min_item_margin_pct`）：資料庫讀不到、格式不對、不是有限數字、超出 [lo, hi]
+    ⇒ `strictest`（不是預設——管理者把門檻調寬之後，鎖住的資料庫或 DEFAULTS_ONLY 環境變數不可以悄悄把它降回較嚴或較鬆的預設）。"""
+    try:
+        from db import get_db
+        from helpers.settings_strict import strict_value
+        conn = get_db()
+        try:
+            raw = strict_value(conn, "quote_approval", field)
+        finally:
+            conn.close()
+        if isinstance(raw, bool):
+            raise ValueError("布林值不是數字")
+        v = float(raw)
+        if math.isfinite(v) and lo <= v <= hi:
+            return int(v) if integer else v
+    except Exception:                                              # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning("quote_approval: 讀不到 %s，改用最嚴的 %s", field, strictest, exc_info=True)
+    return strictest
+
+
+def max_valid_days() -> int:
+    """報價單有效天數超過多少要送審。設定 `quote_approval.max_valid_days`，預設 30＝今天寫死的值；範圍 1～365；讀不到／不合法 ⇒ 1（最嚴）。"""
+    return _strict_number("max_valid_days", 1, 365, STRICTEST_MAX_VALID_DAYS, integer=True)
+
+
+def discount_review_above() -> int:
+    """折讓金額（NT$）超過多少要列為『含折讓』審核原因。設定 `quote_approval.discount_review_above`，預設 0＝今天的規則（任何大於 0 的折讓都列）；
+    範圍 0～100,000,000；讀不到／不合法 ⇒ 0（最嚴）。"""
+    return _strict_number("discount_review_above", 0, 100_000_000, STRICTEST_DISCOUNT_REVIEW_ABOVE, integer=True)
+
+
 def compute_approval_reasons(q: dict, presets: list, default_payment_terms: str) -> list:
     """移植 quotation-form.html::checkApproval()（不含「已核准就清空」那一段——送審時不會是已核准）。"""
     reasons = []
     min_pct = None                                                # 第一個有成本的品項才讀（預設 30＝今天的寫死值；前端 checkApproval 同源，見 project-margin/config 的 minItemMarginPct）
-    if _js_num(q.get("validDays")) > 30:
-        reasons.append(f"有效期限 {_js_str(q.get('validDays'))} 天（超過 30 天）")
+    _max_days = max_valid_days()                                  # 預設 30＝今天寫死的值（設定 quote_approval.max_valid_days；前端 checkApproval 同源）
+    if _js_num(q.get("validDays")) > _max_days:
+        reasons.append(f"有效期限 {_js_str(q.get('validDays'))} 天（超過 {_max_days} 天）")
     for i, item in enumerate(q.get("items") or []):
         if not isinstance(item, dict) or item.get("type") == "header":
             continue
@@ -192,7 +230,8 @@ def compute_approval_reasons(q: dict, presets: list, default_payment_terms: str)
         if _js_num(item.get("margin")) < min_pct / 100:
             reasons.append(f"第 {i + 1} 項毛利率 {_js_to_fixed(_js_num(item.get('margin')) * 100, 2)}% 低於 {_js_str(min_pct)}%")
     if _js_truthy(q.get("showDiscount")) and _js_num(q.get("discount")) > 0:
-        reasons.append(f"含折讓（NT${_js_locale_number(_js_num(q.get('discount')))}）")
+        if _js_num(q.get("discount")) > discount_review_above():   # 預設 0＝今天的規則（設定 quote_approval.discount_review_above）；只有真的有折讓才讀設定
+            reasons.append(f"含折讓（NT${_js_locale_number(_js_num(q.get('discount')))}）")
     tax_rate = q["taxRate"] if "taxRate" in q else 5
     if _js_num(tax_rate) < 5:
         # AC1：零稅率／免稅是法定稅別，原因寫稅別；舊 1～4% 單維持原文字（前端同一份，parity 題守）。

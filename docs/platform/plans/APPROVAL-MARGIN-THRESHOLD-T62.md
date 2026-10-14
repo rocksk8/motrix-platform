@@ -15,3 +15,20 @@
 
 ## 決定（暫定）
 D-K1：門檻調低要第二位核准——暫定是（與規則引擎一致）；使用者尚未確認。
+
+---
+## 擴充：有效天數上限與折讓門檻（hichan-1f，wip/t62-approval-thresholds-r1）
+同一個群組 `quote_approval`、同一套做法（預設＝今天、嚴格讀取、伺服器送審重算、表單經 `GET /api/project-margin/config` 取數字）：
+
+| 門檻 | 設定 | 預設（＝今天） | 範圍 | 放寬方向 | 讀不到時 | 判準（`compute_approval_reasons`） |
+|---|---|---|---|---|---|---|
+| 單項毛利率 | `min_item_margin_pct` | 30 % | 0～100 | 調低 | 100（最嚴） | 有成本的品項，毛利率 `<` 門檻 |
+| 有效天數上限 | `max_valid_days` | 30 天 | 1～365 | 調大 | **1**（最嚴） | `validDays > 上限`；文字「有效期限 N 天（超過 上限 天）」 |
+| 折讓門檻 | `discount_review_above` | 0 元 | 0～1 億 | 調高 | **0**（最嚴＝今天的規則） | 有折讓、`discount > 門檻`；0 ＝任何折讓都列 |
+
+- 三個都是『嚴格讀取』：資料庫讀不到、格式不對、非有限數字、超出範圍 ⇒ 最嚴值，**不是預設**；`MOTRIX_SETTINGS_DEFAULTS_ONLY` 不會把管理者調過的值悄悄換回預設。
+- 折讓門檻是**絕對金額（元）**，不是百分比；選這個是因為今天的規則（`discount > 0`）本來就是金額判斷，預設 0 完全等價。若之後要「占總額幾 % 以上才列」，另開欄位（需要先確認總額口徑：含稅／未稅）。
+- **非 5% 的稅別不開放設定**：`_js_num(tax_rate) < 5` 與「非應稅 5%」「標準 5%」是營業稅法的法定稅別判斷（零稅率／免稅有法條依據，見 AC1／R2），留在程式裡；測試 `test_non_five_percent_tax_is_a_statutory_rule_and_stays_hard_coded` 鎖住群組只有這三個欄位。
+- 測試：`backend/tests/test_quote_approval_thresholds_2026_10_14.py`——預設格子與過去寫死版逐項相同（有效天數 × 折讓 × showDiscount）、門檻×值格子（含邊界）、**突變控制**（載入 `>` 改 `>=` 的變異模組，邊界格必須翻面）、頁面實際原始碼片段用 node 與後端逐格比對、讀不到／不合法 ⇒ 最嚴、設定預設與放寬方向、端點多回的鍵（沒有金額權限者仍 403）、鎖住的資料庫與 DEFAULTS_ONLY 下調嚴的值不被放回。
+- 順手修：群組 `quote_approval` 的 `min_item_margin_pct.help` 原本含「N」「X」，會讓『設定畫面不得露出代碼』守門測試（`test_settings_ui_plain_language`）紅燈，改成白話。
+
