@@ -24,7 +24,7 @@ router = APIRouter()
 
 #: 目前受管線管的 kind（有比較函式、而且編輯器已能處理『待核准』回應的）。layout：排版器（3c，wip/t60-s4-r1）與選單編輯器
 #: 都已改成遇到 `pending: true` 不說「已發布」——**這個 kind 只能在 3c 的 wip/t60-s4-r1 已在同一列車時才可加入名單**。
-ACTIVE_KINDS = ("custom_fields", "layout")
+ACTIVE_KINDS = ("custom_fields", "layout", "user_buttons")      # user_buttons：T61 S6（3c 的 wip/t61-s6-impl-r1）；該 kind 沒登記時這個項目不起作用
 
 _COSMETIC = {"label", "placeholder", "hint", "help", "description"}     # 只影響顯示文字，不影響誰看得到／填什麼
 
@@ -81,7 +81,56 @@ def _cmp_layout(old, new):
     return ("tighten", tighten) if tighten else ("neutral", [])
 
 
-COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout}
+_BTN_KEYS = {"key", "slot", "label", "action"}
+
+
+def _cmp_user_buttons(old, new):
+    """使用者自訂按鈕（T61 S6）：新增／改成『匯出』動作＝放寬（匯出會把資料帶出系統）；新增『開頁』＝不變；拿掉任何按鈕、匯出改成開頁＝收緊；
+    只改文字或插槽＝不變；看不懂的結構或多出來的屬性＝放寬。"""
+    def parse(body):
+        if not isinstance(body, dict) or not isinstance(body.get("buttons", []), list):
+            return None
+        out = {}
+        for b in body.get("buttons", []):
+            if not isinstance(b, dict) or not isinstance(b.get("key"), str) or b["key"] in out or not isinstance(b.get("action"), dict):
+                return None
+            out[b["key"]] = b
+        return out
+    o, n = parse(old or {}), parse(new)
+    if o is None or n is None:
+        return "loosen", ["無法解析按鈕定義，視為放寬"]
+
+    def act(b):
+        a = b["action"]
+        return a.get("type"), (a.get("export") if a.get("type") == "export" else a.get("page"))
+    loosen, tighten = [], []
+    for k, b in n.items():
+        label = b.get("label") or k
+        t, target = act(b)
+        if set(b) - _BTN_KEYS:
+            loosen.append("按鈕「%s」有看不懂的屬性（%s），視為放寬" % (label, "、".join(sorted(set(b) - _BTN_KEYS))))
+        if k not in o:
+            if t == "export":
+                loosen.append("新增匯出按鈕「%s」（匯出 %s）" % (label, target))
+            elif t != "navigate":
+                loosen.append("新增按鈕「%s」的動作類型 %r 不認得，視為放寬" % (label, t))
+            continue
+        ot, otarget = act(o[k])
+        if t == "export" and (ot != "export" or otarget != target):
+            loosen.append("按鈕「%s」改為匯出（匯出 %s）" % (label, target))
+        elif t not in ("export", "navigate"):
+            loosen.append("按鈕「%s」的動作類型 %r 不認得，視為放寬" % (label, t))
+        elif t == "navigate" and ot == "export":
+            tighten.append("按鈕「%s」由匯出改為開頁" % label)
+    for k, b in o.items():
+        if k not in n:
+            tighten.append("移除按鈕「%s」" % (b.get("label") or k))
+    if loosen:
+        return "loosen", loosen + tighten
+    return ("tighten", tighten) if tighten else ("neutral", [])
+
+
+COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout, "user_buttons": _cmp_user_buttons}
 
 
 def classify(kind, old_body, new_body):
@@ -103,9 +152,10 @@ def _live_body(conn, kind, key, scope):
     return (r or {}).get("body") or {}, (r or {}).get("version") or 0
 
 
-def _record(conn, kind, key, scope, user, old_v, new_v, note, **kw):
+def _record(conn, kind, key, scope, user, old_v, new_v, note, *, risk="none", effective_at=None, approvals_required=0, audit_action=None):
     return L.record(conn, "def:" + kind, _lkey(key), [{"field": "%s|%s" % (scope, key), "old": old_v, "new": new_v}], note or "", user,
-                    ref_version=new_v, target_label="%s %s（%s）" % (kind, key, scope), link="settings-center.html", **kw)
+                    ref_version=new_v, target_label="%s %s（%s）" % (kind, key, scope), link="settings-center.html",
+                    risk=risk, effective_at=effective_at, approvals_required=approvals_required, audit_action=audit_action)
 
 
 def _submit_pending(conn, kind, key, scope, user, note, reasons, old_v):
@@ -171,13 +221,13 @@ def handle_restore(conn, kind, key, scope, version, user, note, authorization):
 
 
 # ── 路由：待核准清單、核准、套用、撤銷（旗標關 ⇒ 404）──────────────────────────────────────────────
-def _gate(authorization):
-    u = _require_user(authorization, require_superadmin=True)
+def _flag_gate():
+    """身分已由呼叫端的 `_require_user(..., require_superadmin=True)` 驗過（未登入 ⇒ 401）；這裡只看旗標，關 ⇒ 404；通過回連線（呼叫端關閉）。"""
     conn = get_db()
     if not enabled(conn):
         conn.close()
         raise HTTPException(404, "Not Found")
-    return u, conn
+    return conn
 
 
 def _change(conn, change_id):
@@ -202,7 +252,8 @@ def _view(r):
 
 @router.get("/api/def-pipeline/pending")
 def pending_changes(authorization: str = Header(None)):
-    _u, conn = _gate(authorization)
+    _require_user(authorization, require_superadmin=True)
+    conn = _flag_gate()
     try:
         return {"items": [_view(r) for r in L.history(conn, "def", None, limit=1000) if r["state"] == "pending"]}
     finally:
@@ -220,7 +271,8 @@ def _pending_row(conn, change_id):
 
 @router.post("/api/def-pipeline/changes/{change_id}/approve")
 def approve_change(change_id: int, payload: dict = Body(default={}), authorization: str = Header(None)):
-    u, conn = _gate(authorization)
+    u = _require_user(authorization, require_superadmin=True)
+    conn = _flag_gate()
     try:
         _pending_row(conn, change_id)
         res = L.approve(conn, change_id, u, (payload or {}).get("reason", ""))
@@ -236,7 +288,8 @@ def approve_change(change_id: int, payload: dict = Body(default={}), authorizati
 @router.post("/api/def-pipeline/changes/{change_id}/activate")
 def activate_change(change_id: int, payload: dict = Body(default={}), authorization: str = Header(None)):
     """核准票夠、確認期間已過 ⇒ 真的發布這個送審版本；任何一項不滿足 ⇒ 409，什麼都不做。"""
-    u, conn = _gate(authorization)
+    u = _require_user(authorization, require_superadmin=True)
+    conn = _flag_gate()
     try:
         r = _pending_row(conn, change_id)
         if len(r["approvals"]) < int(r["approvals_required"] or 0):
@@ -260,7 +313,8 @@ def activate_change(change_id: int, payload: dict = Body(default={}), authorizat
 @router.post("/api/def-pipeline/changes/{change_id}/cancel")
 def cancel_change(change_id: int, payload: dict = Body(default={}), authorization: str = Header(None)):
     """確認期間內任何最高管理者都能撤銷：待核准的版本標為 rejected（保留、不可變），帳本記撤銷。"""
-    u, conn = _gate(authorization)
+    u = _require_user(authorization, require_superadmin=True)
+    conn = _flag_gate()
     try:
         r = _pending_row(conn, change_id)
         kind, key, scope, ver = _target(r)

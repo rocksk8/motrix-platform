@@ -1733,6 +1733,18 @@
   ],
   "s": 200
  },
+ "/api/custom-fields/{record_type}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/custom-fields/{record_type}/usage": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/custom-modules": {
   "k": [],
   "s": 200
@@ -4016,6 +4028,7 @@
    "modules[].points[].endpoint",
    "modules[].points[].entity",
    "modules[].points[].field",
+   "modules[].points[].format",
    "modules[].points[].id",
    "modules[].points[].items",
    "modules[].points[].kind",
@@ -5743,6 +5756,10 @@
    "groups[].values.default_status",
    "groups[].values.devices",
    "groups[].values.enabled",
+   "groups[].values.enforce_custom_fields",
+   "groups[].values.enforce_layout",
+   "groups[].values.enforce_output_template",
+   "groups[].values.enforce_user_buttons",
    "groups[].values.include_headers",
    "groups[].values.label_bonus_award",
    "groups[].values.label_close_report",
@@ -6643,6 +6660,18 @@
    "note"
   ],
   "s": 200
+ },
+ "/api/user-buttons/catalog": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/user-buttons/{module}/{page}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
  },
  "/api/users": {
   "k": [

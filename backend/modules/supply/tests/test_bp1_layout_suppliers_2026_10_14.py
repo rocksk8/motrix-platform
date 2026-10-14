@@ -16,7 +16,8 @@ import pytest
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
-PAGE = ROOT / "frontend" / "pages" / "suppliers.html"
+from core import source_tree   # noqa: E402  頁面路徑一律經 source_tree（守門 test_page_paths_centralized）
+PAGE = source_tree.page_file("suppliers.html")
 EDITOR = ROOT / "frontend" / "static" / "layout-editor.js"
 RUNTIME = ROOT / "frontend" / "static" / "layout-runtime.js"
 MANIFEST = HERE.parent / "module.json"
@@ -248,7 +249,7 @@ def test_governance_preview_is_guarded_and_runs_before_the_publish_request():
     ed = EDITOR.read_text(encoding="utf-8")
     i = ed.index("async _publish()")
     body = ed[i:ed.index("async _restore(", i)]
-    assert body.index("MotrixDefGovernance.available()") < body.index("MotrixDefGovernance.preview(") < body.index("'/publish?scope='")
+    assert body.index("MotrixDefGovernance.available('layout')") < body.index("MotrixDefGovernance.review(") < body.index("'/publish?scope='")
     assert "window.MotrixDefGovernance &&" in body
     assert re.search(r"已取消發布'; this\.busy = false; return", body)
     assert '<script src="../js/def-governance.js"></script>' in _page()

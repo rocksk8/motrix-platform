@@ -17,7 +17,8 @@ import pytest
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[3]
-PAGE = ROOT / "frontend" / "pages" / "case-management.html"
+from core import source_tree   # noqa: E402  頁面路徑一律經 source_tree（守門 test_page_paths_centralized）
+PAGE = source_tree.page_file("case-management.html")
 MANIFEST = HERE.parent / "module.json"
 
 KEY = "module:case"

@@ -51,7 +51,7 @@ def _audit_count(action):
         conn.close()
 
 
-def test_flag_default_is_off():
+def test_flag_default_is_off(client):
     assert G.enabled() is False
 
 

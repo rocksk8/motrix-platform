@@ -198,11 +198,17 @@ def _mask_dates(hdr):
     return None if hdr is None else [_DATE.sub("YYYY-MM-DD", h) for h in hdr]
 
 
+# 有套限流的匯出／PDF 路由（基準裡記到 429 的那幾條）；新增項目要有證據（基準裡真的記到 429）
+RATE_LIMITED = frozenset({"/api/contractors/export/pdf", "/api/reports/financial/pdf", "/api/reports/tax-export", "/api/reports/tax-export/pdf"})
+
+
 def diff(base: dict, now: dict) -> dict:
     """{'missing': 基準有、現在沒有的路由, 'added': 現在才有的路由, 'changed': {路徑: (基準, 現在)}}（狀態類別或鍵集不同）。"""
     changed = {}
     for p in set(base) & set(now):
         b, n = base[p], now[p]
+        if p in RATE_LIMITED and {b.get("s"), n.get("s")} == {429, 200}:      # 限流器的命中順序隨請求順序挪動（新增路由會挪動）；只放行清單內路由的 429↔200，其餘（403／404／500、鍵集變動）照報
+            continue
         if (b.get("s", 0) // 100) != (n.get("s", 0) // 100) or b.get("k") != n.get("k") or _mask_dates(b.get("hdr")) != _mask_dates(n.get("hdr")):
             changed[p] = (b, n)
     return {"missing": sorted(set(base) - set(now)), "added": sorted(set(now) - set(base)), "changed": changed}

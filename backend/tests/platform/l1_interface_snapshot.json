@@ -1,5 +1,5 @@
 {
- "core_version": "next",
+ "core_version": "1.136",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -238,6 +238,16 @@
    "build_info": "def()",
    "resolve_commit": "def()",
    "startup_line": "def()"
+  },
+  "helper:builtin_fields": {
+   "ALLOWED_TYPES": "const",
+   "MAX_FIELDS": "const",
+   "RECORD_TYPES": "const",
+   "definition_problems": "def(key, body)",
+   "enabled": "def(conn=…)",
+   "gate": "def(record_type, new_values, old_values, conn=…)",
+   "public_fields": "def(record_type, conn=…)",
+   "usage_counts": "def(record_type, conn=…)"
   },
   "helper:business_days": {
    "DATA_PATH": "const",
@@ -1368,26 +1378,45 @@
    "upload_path_key": "def(entry, folder, depth=…)",
    "upload_readable": "def(conn, rel, user)"
   },
+  "helper:user_buttons": {
+   "ACTION_TYPES": "const",
+   "BUTTON_EXPORTS": "const",
+   "KIND": "const",
+   "MAX_PER_SLOT": "const",
+   "MAX_SLOTS_PER_PAGE": "const",
+   "MAX_TOTAL": "const",
+   "SLOTS": "const",
+   "catalog": "def(modules=…, superadmin=…)",
+   "definition_problems": "def(key, body)",
+   "enabled": "def(conn=…)",
+   "preview": "def(conn, caller, definition, module, page, username=…)",
+   "visible_buttons": "def(conn, user, module, page)"
+  },
   "helper:validation": {
    "body_flag": "def(body, key, default=…)",
    "strict_bool": "def(value, field=…)"
   },
   "helper:xlsx_out": {
+   "CSV_FORMULA_TRIGGERS": "const",
    "EXCEL_COOLDOWN": "const",
    "PDF_COOLDOWN": "const",
    "PDF_MAX_ROWS": "const",
+   "XLSX_FORMULA_TRIGGERS": "const",
    "XLSX_MEDIA": "const",
    "XL_FORMULA_TRIGGERS": "const",
    "add_pdf_sibling": "def(router, path, handler, *, module, name, title=…, method=…)",
    "check_export_rate": "def(user_id, fmt)",
    "count_xlsx_rows": "def(data)",
+   "csv_safe": "def(val)",
    "export_logged": "def(fmt, module, name, label=…)",
    "log_export": "def(authorization, fmt, module, name, filters=…, rows=…, label=…)",
    "set_row": "def(ws, row_idx, values, font=…, fill=…, border=…, aligns=…, height=…)",
    "summarize_filters": "def(params)",
    "xl_safe": "def(val)",
+   "xl_safe_xlsx": "def(val)",
    "xl_style": "def(wb)",
-   "xlsx_to_html": "def(data, title=…, max_rows=…)"
+   "xlsx_to_html": "def(data, title=…, max_rows=…)",
+   "xlsx_unescape": "def(val)"
   },
   "plat:capabilities": {
    "ACTIONS": "const",
