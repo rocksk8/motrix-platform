@@ -240,7 +240,7 @@ def test_deferred_init_fires_nothing_until_start():
 def test_suppliers_page_reads_all_three_flags_from_the_one_settings_request():
     from core import source_tree
     src = source_tree.page_file("suppliers.html").read_text(encoding="utf-8")
-    assert "settings-center/public?groups=builder_layout,builder_custom_fields,builder_actions" in src
+    assert "MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_actions']" in src
     assert "builder_actions.enabled === true" in src and "MotrixUserButtons.start()" in src
     assert "deferred: true" in src.split("MotrixUserButtons.init({")[1].split("})")[0]
     assert "deferred: true" in src.split("MotrixCustomFields.init({")[1].split("})")[0]
