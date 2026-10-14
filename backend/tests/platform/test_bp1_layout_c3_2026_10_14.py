@@ -29,10 +29,12 @@ def test_actions_are_register_only_and_just_one_button():
     m = _manifest()
     assert customization.validate_manifest(m) == []
     pg = [p for p in m["customization"]["pages"] if p["page"] == PAGE][0]
-    assert [a["key"] for a in pg["actions"]] == ["fillContract"] and "endpoint" not in pg["actions"][0]
+    # S-ST2（階段樣板，旗標預設關）起多登記一顆『套用階段樣板』：同樣只登記、不帶端點（可隱藏／改名／排序）
+    assert [a["key"] for a in pg["actions"]] == ["fillContract", "applyStageTemplate"] and all("endpoint" not in a for a in pg["actions"])
     src = _page()
     assert "aShown('fillContract')" in src and "aOrder('fillContract')" in src and "aLabel('fillContract'," in src
-    assert len(re.findall(r"\baShown\(", src)) == 2                                          # 定義一次＋使用一次：沒有其他按鈕被綁定
+    assert "aShown('applyStageTemplate')" in src                                             # S-ST2 登記的第二顆
+    assert len(re.findall(r"\baShown\(", src)) == 3                                          # 定義一次＋兩顆已登記按鈕各用一次：沒有其他按鈕被綁定
     for forbidden in ("列印告知書", "刪除", "結案", "核准"):                                      # 法定／金額／流程語意的按鈕不登記
         assert forbidden not in json.dumps(pg["actions"], ensure_ascii=False)
 

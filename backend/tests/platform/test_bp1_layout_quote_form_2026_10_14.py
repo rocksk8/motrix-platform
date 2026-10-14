@@ -146,7 +146,7 @@ def test_flag_off_or_unreadable_changes_nothing(flag):
     assert r["layoutOn"] is False and r["neutral"] == {"shown": True, "order": {}, "label": "傳真", "sec": "客戶資訊"}      # 綁定函式回中性值
     assert r["calls"]["start"] == 0 and r["calls"]["mount"] == 0 and r["calls"]["slot"] == 0
     f = r["calls"]["fetch"]
-    assert f[0] == "/api/settings-center/public?groups=builder_layout,builder_custom_fields"                       # 一個共用 GET 取兩個旗標
+    assert f[0] == "/api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates"      # 一個共用 GET 取三個旗標（S-ST2 起多 builder_stage_templates，同一個請求）
     assert all(u.startswith("/api/settings-center/public?groups=") for u in f)                                     # 失敗時才逐組重試（仍只讀設定）
     if flag == "false":
         assert len(f) == 1

@@ -43,7 +43,7 @@ def test_case_page_wiring_is_flag_guarded():
     src = PAGE.read_text(encoding="utf-8")
     assert '<script src="../static/custom-fields.js"></script>' in src
     assert "MotrixCustomFields.init({ recordType: 'case_info'" in src
-    i = src.index('<div data-testid="cf-section">')
+    i = src.index('<div data-testid="cf-section"')      # C1 起區塊多了 :style 排序綁定，不再是閉合的 '>' 
     before = src[src.rindex("<template", 0, i):i]
     assert "$store.cf && $store.cf.enabled" in before                     # 區塊只在旗標開啟時畫
     sec = src[i:src.index("<!-- 個資蒐集告知（個資法 §8 I", i)]
@@ -357,7 +357,7 @@ def test_deferred_init_fires_nothing_until_start():
     assert r["n"] == 0                                                   # 沒有 init 就 start ⇒ 什麼都不做
 
 
-@pytest.mark.parametrize("name,flag_page_group", [("case-management.html", "builder_layout,builder_custom_fields,builder_status_display"),
+@pytest.mark.parametrize("name,flag_page_group", [("case-management.html", "builder_layout,builder_custom_fields,builder_rules,builder_slots,builder_status_display,builder_stage_templates"),
                                                   ("suppliers.html", "builder_layout,builder_custom_fields,builder_actions")])
 def test_pages_read_the_flag_from_the_existing_settings_request(name, flag_page_group):
     from core import source_tree
