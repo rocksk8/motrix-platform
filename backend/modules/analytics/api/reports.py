@@ -21,6 +21,7 @@ from fastapi.responses import Response, StreamingResponse
 
 from db import get_db
 from helpers import download_name
+from helpers import finance_params as _finance_params   # 帳齡區間切點（旗標關＝30/60/90，與過去相同）
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import (
     _require_user, _tok, _audit, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
@@ -1797,6 +1798,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
              aligns=[al("center")], height=20)
 
     ar_r = 3
+    _ar_cuts = _finance_params.aging_cuts()         # 預設 30/60/90；旗標 finance_reports.custom_aging 開才用管理者設定
     for band in ar_bands:
         bkey = band.get("key", "")
         bg_band = C_LRED if bkey == "90+" else C_LYELLOW if bkey == "61-90" else C_LBLUE if bkey == "31-60" else C_LGREEN
@@ -1814,7 +1816,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
             ws9.cell(row=ar_r, column=8).number_format = '#,##0'
             days_cell = ws9.cell(row=ar_r, column=11)
             days_cell.font = mk(bold=True, size=9,
-                                color=C_RED if days > 90 else C_ORANGE if days > 60 else C_DARK)
+                                color=C_RED if days > _ar_cuts[2] else C_ORANGE if days > _ar_cuts[1] else C_DARK)
             ar_r += 1
 
     if ar_r == 3:
@@ -1861,12 +1863,13 @@ def _pdf_ar_aging(ar: dict, tbl_hdr, fmt) -> str:
     total_amt = (ar.get("total") or {}).get("amount", 0)
     as_of     = ar.get("asOf", "")
     import html as _h
+    _cuts = _finance_params.aging_cuts()
     rows = ""
     for band in bands:
         for it in band.get("items") or []:
             d = it["daysElapsed"]
-            color = "red" if d > 90 else "orange" if d > 60 else ""
-            color_style = f' style="color:#DC2626;font-weight:700"' if d > 90 else f' style="color:#D97706"' if d > 60 else ''
+            color = "red" if d > _cuts[2] else "orange" if d > _cuts[1] else ""
+            color_style = f' style="color:#DC2626;font-weight:700"' if d > _cuts[2] else f' style="color:#D97706"' if d > _cuts[1] else ''
             rows += (
                 f"<tr><td class='c'>{_h.escape(band['label'])}</td>"
                 f"<td>{_h.escape(it['quoteNo'])}</td><td>{_h.escape(it['customer'])}</td>"
@@ -2601,6 +2604,7 @@ def report_pdf(
 
 def _compute_ar_aging() -> dict:
     """帳齡計算 — 供 API endpoint 及 Excel/PDF 匯出共用。"""
+    _cuts = _finance_params.aging_cuts()
     today = date.today()
     conn = get_db()
     rows = conn.execute("""
@@ -2642,7 +2646,7 @@ def _compute_ar_aging() -> dict:
             amt  = amounts[idx]
             days = (today - anchor).days
 
-            band = "90+" if days > 90 else "61-90" if days > 60 else "31-60" if days > 30 else "0-30"
+            band = _finance_params.aging_band(days, _cuts)
             bands[band].append({
                 "quoteNo":     row["quote_no"],
                 "customer":    row["customer_name"] or "",
@@ -2657,7 +2661,8 @@ def _compute_ar_aging() -> dict:
             })
 
     result_bands = []
-    for key, label in [("0-30", "0–30 天"), ("31-60", "31–60 天"), ("61-90", "61–90 天"), ("90+", "90+ 天")]:
+    _labels = _finance_params.aging_labels(_cuts)
+    for key, label in [(k, _labels[k]) for k in _finance_params.BAND_KEYS]:
         items = bands[key]
         result_bands.append({
             "label":  label,
