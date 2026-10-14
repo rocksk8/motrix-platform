@@ -1968,7 +1968,9 @@ def _build_invoice_voucher_html(v: dict, template: dict = None) -> str:
     }
     html = _dt.render(template or _published_output_template("invoice_voucher", v), view, parts)
     # 核可狀態由程式決定、不由版型決定：未核准一律有紅色警示（冪等；版型自己的 banner 積木照舊保留）
-    return html if v.get("status") == "已核准" else _inject_unapproved(html, v.get("status"), "此為開票申請預覽稿，尚未正式核准", doc_no=v.get("voucherNo", ""))
+    out = html if v.get("status") == "已核准" else _inject_unapproved(html, v.get("status"), "此為開票申請預覽稿，尚未正式核准", doc_no=v.get("voucherNo", ""))
+    from helpers import export_templates as _ET     # BP-3：旗標關／沒有已發布範本 ⇒ 原樣回傳同一個字串（輸出逐位元相同）；程式的橫幅已在上面注入，這裡只加固定樣式的頁尾／浮水印文字
+    return _ET.decorate_pdf("arap:invoice-voucher-pdf", out)
 
 
 def _published_output_template(key: str, doc: dict = None) -> dict:

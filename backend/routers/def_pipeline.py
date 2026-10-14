@@ -83,7 +83,7 @@ def _cmp_layout(old, new):
 
 def _cmp_export_template(old, new):
     """匯出範本：新增欄位 ＝ 匯出檔多給資料 ⇒ 放寬（金額／有權限條件的欄位明寫）；移除欄位、拿掉頁首頁尾浮水印 ⇒ 收緊；
-    只改標題文字、順序、頁首頁尾文字 ⇒ 中性（純顯示）；格式或其他無法判斷的變動 ⇒ 放寬。"""
+    新增頁首／頁尾／浮水印文字 ⇒ 放寬（輸出檔多了可見文字）；只改標題文字、順序、既有頁首頁尾文字 ⇒ 中性（純顯示）；格式或其他無法判斷的變動 ⇒ 放寬。"""
     from helpers import export_templates as ET
     old, new = old or {}, new or {}
     oc = [c.get("id") for c in old.get("columns", []) if isinstance(c, dict)]
@@ -105,8 +105,11 @@ def _cmp_export_template(old, new):
             continue
         loosen.append("未知設定 %s 變了（視為放寬）" % k)
     for part in ("header", "footer", "watermark"):
+        name = {"header": "頁首", "footer": "頁尾", "watermark": "浮水印"}[part]
         if part in old and part not in new:
-            tighten.append("拿掉%s" % {"header": "頁首", "footer": "頁尾", "watermark": "浮水印"}[part])
+            tighten.append("拿掉%s" % name)
+        elif part in new and part not in old:
+            loosen.append("新增%s文字（輸出檔多了可見文字）" % name)
     if loosen:
         return "loosen", loosen + tighten
     return ("tighten", tighten) if tighten else ("neutral", [])

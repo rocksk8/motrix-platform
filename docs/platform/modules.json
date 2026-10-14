@@ -120,6 +120,7 @@
    "js:static/sidebar.js",
    "js:static/menu-editor.js",
    "js:static/export-editor.js",
+   "js:static/export-guard.js",
    "js:static/status-chip.js",
    "js:static/users-duty.js",
    "js:static/ui.js",

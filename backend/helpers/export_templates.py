@@ -2,7 +2,7 @@
 """匯出範本（BP-3 R0/R1）：宣告式的欄位／標籤／順序（＋頁首頁尾／浮水印文字），套在『已登記的匯出』上；發布前預覽。
 
 [單位] helper:export_templates    [層] L1    [穩定度] 實作
-[公開介面] CAPS, KIND, LABEL_MAX, MAX_COLUMNS, OFF_REASON, apply_print_text, definition_problems, default_template, effective_columns, enabled, preview, register_export, registered, render_csv_rows, render_rows, resolve
+[公開介面] CAPS, KIND, LABEL_MAX, MAX_COLUMNS, OFF_REASON, apply_pdf_text, apply_print_text, decorate_pdf, definition_problems, default_template, effective_columns, enabled, preview, register_export, registered, render_csv_rows, render_rows, resolve
 [不變式] 設定 `builder_exports.enabled`（預設 0＝關）關著時：`resolve()` 一律回 None（端點走今天寫死的路徑，輸出逐位元相同）；發布驗證擋；預覽端點 404。
     範本只收宣告式資料：欄位 id 必須在該匯出的**欄位目錄**裡（模組登記，不由使用者定義）、文字是純文字（無占位符、無運算式、無控制／雙向字元），
     **範本不能新增資料**——欄位值一律來自端點今天的查詢與遮蔽；標 `money`（或有 `visible`）的欄位在輸出端再問一次權限，沒權限 ⇒ 整欄省略（遮蔽優先）。
@@ -46,9 +46,11 @@ def enabled(conn=None) -> bool:
 
 
 # ── 匯出目錄（模組登記；使用者不能新增）────────────────────────────────────
-def register_export(export_id, *, label, formats, columns, sample_rows, rows_provider=None, lock_labels=False):
+def register_export(export_id, *, label, formats, columns, sample_rows, rows_provider=None, lock_labels=False, caps=None, sample_html=None):
     """登記一個可套範本的匯出。`columns`＝有序 `[{id, label, money?, visible?}]`（順序與標籤＝今天寫死的預設）；
     `lock_labels=True`：欄位標題必須等於目錄標題（這個匯出的檔案會被匯入回來，匯入靠表頭文字對應，不能改名；欄位仍可省略、換順序）。
+    `columns=[]` 只允許 pdf-only 的匯出（版面固定、只能加頁首／頁尾／浮水印文字＝decorOnly）；`caps`＝這個匯出實際允許的版面文字（預設依格式；用來縮窄，例：只開頁尾與浮水印）；
+    `sample_html`＝decorOnly 預覽用的樣本頁 HTML。
     `visible(user)->bool`：有它或 `money:true` 的欄位在輸出端再驗權限（`money` 沒有 `visible` ⇒ 一律不顯示＝fail-closed）；
     `sample_rows`＝預覽用樣本列（`[{col_id: value}]`，不碰真實資料）；`rows_provider(conn, viewer, n)->[{col_id: value}]`＝『可見的真實列』。"""
     if not re.match(r"^[a-z][a-z0-9_:.\-]{0,79}$", export_id or ""):
@@ -58,25 +60,32 @@ def register_export(export_id, *, label, formats, columns, sample_rows, rows_pro
     bad = set(formats) - set(CAPS)
     if bad:
         raise ValueError("不認得的格式：%s" % sorted(bad))
+    if not columns and tuple(formats) != ("pdf",):
+        raise ValueError("只有 pdf-only 的匯出可以沒有欄位目錄")
+    if caps is not None and set(caps) - CAPS[formats[0]]:
+        raise ValueError("caps 超出格式能力：%s" % sorted(set(caps) - CAPS[formats[0]]))
     seen = set()
     for c in columns:
         if c["id"] in seen:
             raise ValueError("欄位目錄重複：%s" % c["id"])
         seen.add(c["id"])
     _EXPORTS[export_id] = {"label": label, "formats": tuple(formats), "columns": [dict(c) for c in columns],
-                           "sample_rows": list(sample_rows), "rows_provider": rows_provider, "lock_labels": bool(lock_labels)}
+                           "sample_rows": list(sample_rows), "rows_provider": rows_provider, "lock_labels": bool(lock_labels),
+                           "caps": frozenset(caps) if caps is not None else None, "sample_html": sample_html}
 
 
 def registered() -> dict:
     """⇒ {export_id: {label, formats, columns:[{id,label,money}]}}（不含 callable）。"""
     return {k: {"label": v["label"], "formats": list(v["formats"]), "lockLabels": v["lock_labels"],
-                "caps": {f: sorted(CAPS[f]) for f in v["formats"]},
+                "caps": {f: sorted(v["caps"] if v["caps"] is not None else CAPS[f]) for f in v["formats"]}, "decorOnly": not v["columns"],
                 "columns": [{"id": c["id"], "label": c["label"], "money": bool(c.get("money") or c.get("visible"))} for c in v["columns"]]}
             for k, v in sorted(_EXPORTS.items())}
 
 
 def default_template(export_id) -> dict:
     spec = _EXPORTS[export_id]
+    if not spec["columns"]:
+        return {"version": 1, "format": spec["formats"][0], "footer": {"text": "內部資料"}}
     return {"version": 1, "format": spec["formats"][0], "columns": [{"id": c["id"], "label": c["label"]} for c in spec["columns"]]}
 
 
@@ -108,10 +117,15 @@ def definition_problems(key, body) -> list:
         out.append({"path": "format", "message": "這個匯出只支援：%s" % "、".join(spec["formats"])})
         caps = frozenset()
     else:
-        caps = CAPS[fmt]
+        caps = spec["caps"] if spec["caps"] is not None else CAPS[fmt]
     cols = body.get("columns")
     ids = {c["id"] for c in spec["columns"]}
-    if not isinstance(cols, list) or not cols:
+    if not spec["columns"]:                                              # decorOnly：版面固定，沒有欄位可選
+        if cols:
+            out.append({"path": "columns", "message": "這個匯出的版面是固定的，只能加頁首／頁尾／浮水印文字，沒有欄位可選"})
+        if not any(k in body for k in ("header", "footer", "watermark")):
+            out.append({"path": "", "message": "至少要設定一項：頁首、頁尾或浮水印文字"})
+    elif not isinstance(cols, list) or not cols:
         out.append({"path": "columns", "message": "columns 必須是不空的清單"})
     else:
         if len(cols) > MAX_COLUMNS:
@@ -143,7 +157,7 @@ def definition_problems(key, body) -> list:
             continue
         v = body[part]
         if part not in caps and fmt in spec["formats"]:
-            out.append({"path": part, "message": "%s格式沒有%s" % (fmt.upper(), {"header": "頁首", "footer": "頁尾", "watermark": "浮水印"}[part])})
+            out.append({"path": part, "message": "%s沒有%s" % (("%s格式" % fmt.upper()) if spec["caps"] is None else "這個匯出", {"header": "頁首", "footer": "頁尾", "watermark": "浮水印"}[part])})
             continue
         if not isinstance(v, dict):
             out.append({"path": part, "message": "%s必須是物件（只有 text）" % part})
@@ -236,6 +250,33 @@ def apply_print_text(ws, template):
             getattr(ws, target).center.text = t
 
 
+_PDF_CSS = ("<style>.mx-wm,.mx-ft,.mx-hd{position:fixed;left:0;width:100%;text-align:center;pointer-events:none}"
+            ".mx-wm{top:42%;font-size:64pt;font-weight:bold;color:rgba(0,0,0,.08);transform:rotate(-30deg);white-space:nowrap;z-index:0}"
+            ".mx-hd,.mx-ft{font-size:8pt;color:#666;z-index:1}.mx-hd{top:1mm}.mx-ft{bottom:1mm}</style>")
+
+
+def apply_pdf_text(html, template):
+    """PDF 的頁首／頁尾／浮水印：只收已通過驗證的純文字，輸出一律跳脫；浮水印在內容下層、淺灰、透明度固定 ≤ 20%、角度固定；
+    程式產生的『尚未核准』橫幅、公司抬頭與法定欄位由各 builder 自己負責，不受這裡影響（這裡只插入固定樣式的小區塊）。"""
+    from helpers.doc_template import attr_esc
+    parts = []
+    for key, cls in (("watermark", "mx-wm"), ("header", "mx-hd"), ("footer", "mx-ft")):
+        t = (template.get(key) or {}).get("text")
+        if t:
+            parts.append('<div class="%s">%s</div>' % (cls, attr_esc(t)))
+    if not parts:
+        return html
+    block = _PDF_CSS + "".join(parts)
+    m = re.search(r"<body[^>]*>", html, re.I)
+    return html[:m.end()] + block + html[m.end():] if m else block + html
+
+
+def decorate_pdf(export_id, html, conn=None):
+    """PDF builder 的掛鉤：旗標關／沒有已發布範本 ⇒ 原樣回傳同一個字串物件（輸出逐位元相同）。"""
+    tpl = resolve(export_id, conn)
+    return html if tpl is None else apply_pdf_text(html, tpl)
+
+
 def preview(conn, caller, body, export_id, username=None, sample="sample", n=20):
     """草稿預覽（唯讀、不寫任何資料、不計匯出次數）：以某位使用者（預設＝呼叫者）的權限算出實際會輸出的標題與前 n 列。
     ⇒ `{user, role, format, columns, rows, omitted, warnings, sample}`；草稿不合法 ⇒ ValueError(problems)；找不到使用者 ⇒ LookupError。"""
@@ -254,6 +295,13 @@ def preview(conn, caller, body, export_id, username=None, sample="sample", n=20)
     n = max(1, min(int(n or 20), 50))
     spec = _EXPORTS[export_id]
     warnings = []
+    if not spec["columns"]:                                   # decorOnly（PDF）：只提供樣本頁預覽；實際文件發布後下載確認
+        base = spec["sample_html"] or "<!doctype html><html><body><h2>預覽樣本頁</h2><p>實際文件的內容與版面不受這些文字影響。</p></body></html>"
+        return {"user": viewer.get("username"), "role": viewer.get("role"), "format": body["format"], "decorOnly": True,
+                "html": apply_pdf_text(base, body), "columns": [], "rows": [], "omitted": [], "sample": "sample",
+                "warnings": ["PDF 只提供樣本頁預覽（證明文字放在哪裡）；實際文件請在發布後下載確認。程式產生的橫幅與法定欄位不受影響。"],
+                "header": (body.get("header") or {}).get("text"), "footer": (body.get("footer") or {}).get("text"),
+                "watermark": (body.get("watermark") or {}).get("text")}
     if sample == "visible":
         prov = spec["rows_provider"]
         rows = list(prov(conn, viewer, n))[:n] if prov else []

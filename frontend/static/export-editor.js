@@ -13,7 +13,7 @@
   var LABEL_MAX = 20
   var cs = document.currentScript
   var EXPORT_ID = (cs && cs.getAttribute && cs.getAttribute('data-export-id')) || window.MOTRIX_EXPORT_ID || ''
-  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, cat: null, cols: [], header: '', footer: '', etag: '', versions: [], previewKey: '', previewHash: '', preview: null, user: '', sample: 'sample', note: '' }
+  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, cat: null, cols: [], header: '', footer: '', watermark: '', etag: '', versions: [], previewKey: '', previewHash: '', preview: null, user: '', sample: 'sample', note: '' }
   var root = null
 
   function session() {
@@ -67,6 +67,7 @@
     return cols
   }
   function fmt() { return (st.cat && st.cat.formats && st.cat.formats[0]) || 'csv' }
+  function decorOnly() { return !!(st.cat && st.cat.decorOnly) }
   function caps() { return ((st.cat && st.cat.caps && st.cat.caps[fmt()]) || []) }
   function toTemplate() {
     var catLabel = {}
@@ -76,6 +77,8 @@
                 return { id: c.id, label: (st.cat && st.cat.lockLabels && catLabel[c.id]) ? catLabel[c.id] : c.label.trim() } }) }
     if (caps().indexOf('header') >= 0 && st.header.trim()) t.header = { text: st.header.trim() }
     if (caps().indexOf('footer') >= 0 && st.footer.trim()) t.footer = { text: st.footer.trim() }
+    if (caps().indexOf('watermark') >= 0 && st.watermark.trim()) t.watermark = { text: st.watermark.trim() }
+    if (decorOnly()) delete t.columns
     return t
   }
   function textProblem(v, what) {
@@ -88,9 +91,14 @@
   function curKey() { return JSON.stringify(toTemplate()) }
   function problems() {
     var out = [], used = {}
-    ;[['header', '頁首文字'], ['footer', '頁尾文字']].forEach(function (x) {
-      if (caps().indexOf(x[0]) >= 0) { var tp = textProblem(st[x[0]], x[1]); if (tp) out.push(tp) }
+    ;[['header', '頁首文字'], ['footer', '頁尾文字'], ['watermark', '浮水印文字']].forEach(function (x) {
+      if (caps().indexOf(x[0]) >= 0) {
+        var tp = textProblem(st[x[0]], x[1]); if (tp) out.push(tp)
+        if (x[0] === 'watermark' && st.watermark.length > 40) out.push('浮水印文字最多 40 字')
+        if (x[0] === 'watermark' && /正本|已核准|已核可|已付款|已簽回|作廢/.test(st.watermark.replace(/\s+/g, ''))) out.push('浮水印不可含官方狀態字樣（正本、已核准、已付款、已簽回、作廢…）')
+      }
     })
+    if (decorOnly()) { if (!st.header.trim() && !st.footer.trim() && !st.watermark.trim()) out.push('至少要設定頁尾或浮水印文字其中一項'); return out }
     st.cols.forEach(function (c) {
       if (!c.on) return
       var p = (st.cat && st.cat.lockLabels) ? '' : labelProblem(c.label); if (p) out.push(c.id + '：' + p)
@@ -106,7 +114,7 @@
     return api('GET', '/api/definitions/export_template/' + encodeURIComponent(EXPORT_ID) + '?scope=company').then(function (d) {
       var src = (d.draft && d.draft.body) || (d.latest && d.latest.body) || null
       st.cols = fromTemplate(src)
-      st.header = (src && src.header && src.header.text) || ''; st.footer = (src && src.footer && src.footer.text) || ''
+      st.header = (src && src.header && src.header.text) || ''; st.footer = (src && src.footer && src.footer.text) || ''; st.watermark = (src && src.watermark && src.watermark.text) || ''
       st.etag = (d.draft && d.draft.etag) || ''
       st.versions = (d.versions || []).filter(function (v) { return v.status === 'published' })
       st.busy = false; st.msg = ''; st.msgBad = false; st.state = 'idle'; render()
@@ -184,7 +192,7 @@
     if (!st.open) return
     var panel = el('div', { style: 'margin-top:6px;padding:10px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--bg-card,#fff);max-width:640px' })
     panel.appendChild(el('div', { text: (st.cat && st.cat.label || '匯出') + '：選擇要匯出的欄位、標題與順序（資料與權限不變；沒有權限看的欄位不會出現）', style: 'font-size:12px;margin-bottom:6px' }))
-    st.cols.forEach(function (c, i) {
+    ;(decorOnly() ? [] : st.cols).forEach(function (c, i) {
       var lp = (c.on && !(st.cat && st.cat.lockLabels)) ? labelProblem(c.label) : ''
       panel.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;margin:2px 0' }, [
         el('input', { type: 'checkbox', checked: c.on ? 'checked' : null, onchange: function (ev) { c.on = !!ev.target.checked; changed() } }),
@@ -196,7 +204,7 @@
       ]))
     })
     if (st.cat && st.cat.lockLabels) panel.appendChild(el('div', { text: '這個匯出的檔案會被匯入回來（靠表頭文字對應），所以欄位標題固定；可以選欄位與換順序。', style: 'font-size:11px;color:var(--text-dim,#888)' }))
-    ;[['header', '頁首文字（列印頁首）'], ['footer', '頁尾文字（列印頁尾）']].forEach(function (x) {
+    ;[['header', '頁首文字（列印頁首）'], ['footer', '頁尾文字（列印頁尾）'], ['watermark', '浮水印文字（內容下層、淺灰）']].forEach(function (x) {
       if (caps().indexOf(x[0]) < 0) return
       panel.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:6px' }, [
         el('span', { text: x[1], style: 'font-size:12px;min-width:140px' }),
@@ -215,10 +223,15 @@
     if (st.preview) {
       var pv = st.preview
       panel.appendChild(el('div', { text: '預覽（' + pv.user + '，' + (pv.sample === 'visible' ? '真實資料' : '樣本資料') + '；實際輸出的前幾列）', style: 'font-size:12px;margin-top:8px' }))
+      if (pv.decorOnly) {
+        var fr = el('iframe', { sandbox: '', style: 'width:100%;height:220px;border:1px solid #ccc;background:#fff' })
+        fr.srcdoc = pv.html
+        panel.appendChild(fr)
+      }
       var tb = el('table', { style: 'border-collapse:collapse;font-size:11px' })
       tb.appendChild(el('tr', {}, pv.columns.map(function (h) { return el('th', { text: h, style: 'border:1px solid #ccc;padding:2px 4px' }) })))
       pv.rows.forEach(function (r) { tb.appendChild(el('tr', {}, r.map(function (v) { return el('td', { text: v === null || v === undefined ? '' : String(v), style: 'border:1px solid #ccc;padding:2px 4px' }) }))) })
-      panel.appendChild(tb)
+      if (!pv.decorOnly) panel.appendChild(tb)
       if (pv.header) panel.appendChild(el('div', { text: '列印頁首：' + pv.header, style: 'font-size:11px' }))
       if (pv.footer) panel.appendChild(el('div', { text: '列印頁尾：' + pv.footer, style: 'font-size:11px' }))
       ;(pv.warnings || []).forEach(function (w) { panel.appendChild(el('div', { text: w, style: 'font-size:11px;color:#b45309' })) })
