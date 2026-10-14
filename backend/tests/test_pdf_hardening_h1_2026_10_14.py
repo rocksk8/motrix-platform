@@ -23,6 +23,16 @@ import pytest
 
 from helpers import startup as ST
 
+
+@pytest.fixture(autouse=True)
+def _isolated_edge_profile_state(monkeypatch, tmp_path_factory):
+    """本檔會真的渲染（經 run_edge_pdf）：產品的專屬 profile 池與根目錄是模組層級的狀態，不隔離的話，
+    本檔跑完會留下『已用真實根目錄初始化』的池，讓後面的 tests/test_edge_profile_2026_09_25.py 看到真實的 backend/logs/edge_profiles（順序相依的紅燈）。
+    ⇒ 每個測試用獨立的根目錄與全新的池／狀態，monkeypatch 結束時全部還原。"""
+    monkeypatch.setattr(ST, "_EDGE_PROFILE_ROOT", str(tmp_path_factory.mktemp("h1_edge_profiles")))
+    monkeypatch.setattr(ST, "_EDGE_PROFILE_POOL", [])
+    monkeypatch.setattr(ST, "_EDGE_PROFILE_STATE", {"init": False, "runs": 0})
+
 EVIL = "<b>%s&'\"</b>"
 ESC = "&lt;b&gt;%s&amp;&#x27;&quot;&lt;/b&gt;"
 
