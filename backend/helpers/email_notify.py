@@ -120,6 +120,11 @@ def _esc(x) -> str:
     return _html.escape(str(x), quote=True)
 
 
+def _url_esc(u) -> str:
+    """伺服器自己組出來的網址（連結、來源）：只擋會跳出屬性或標記的字元（引號、尖括號）；`&` 維持原樣，查詢字串（?a=1&b=2）才與逸出前逐位元相同。"""
+    return str(u).replace('"', "&quot;").replace("'", "&#x27;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def _build_html(mail_key: str, title: str, badge_text: str, badge_color: str,
                 rows: list, quote_no: str, base_url: str,
                 note: str = "", intro: str = "",
@@ -146,9 +151,11 @@ def _build_html(mail_key: str, title: str, badge_text: str, badge_color: str,
     )
     reason = intro or title
     note_html  = f'<div class="note">{note}</div>' if note else ""
-    link = _esc(f"{base_url}/pages/quotation-form.html?no={quote_no}" if quote_no else base_url)
+    # href 屬性只擋會跳出屬性或標記的字元（引號、尖括號）；`&` 維持原樣，查詢字串（?a=1&b=2）的輸出才與逸出前逐位元相同
+    link = (f"{base_url}/pages/quotation-form.html?no={quote_no}" if quote_no else base_url)
+    link = _url_esc(link)
     sent_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-    source = _esc("MOTRIX 系統（%s）／信件類型：%s" % (base_url, t.name if t else mail_key))
+    source = "MOTRIX 系統（%s）／信件類型：%s" % (_url_esc(base_url), _esc(t.name if t else mail_key))
 
     def _sec(label, body):
         return (f'<div class="lbl" style="margin-top:14px;font-weight:700">{label}</div>'
@@ -1273,8 +1280,8 @@ def notify_daily_task_completed(task_id: int, title: str, task_date: str,
         html = _build_html(
             "daily_task_completed", "工作事項回報已修改", "已修改", "#D97706",
             [("執行日期", task_date), ("工作事項", title), ("修改人員", name),
-             ("修改前", f'<span style="color:#9CA3AF;text-decoration:line-through;white-space:pre-wrap">{old_text}</span>'),
-             ("修改後", f'<strong style="white-space:pre-wrap">{new_text}</strong>')],
+             ("修改前", _safe(f'<span style="color:#9CA3AF;text-decoration:line-through;white-space:pre-wrap">{_esc(old_text)}</span>')),
+             ("修改後", _safe(f'<strong style="white-space:pre-wrap">{_esc(new_text)}</strong>'))],
             "", task_page,
             intro=f"{name} 修改了工作事項「{title}」的回報內容。",
             button_text="前往查看回報")
@@ -1526,14 +1533,14 @@ def notify_daily_task_edited(
         return
     task_page = f"{_base_url()}/pages/daily-tasks.html"
     name = editor_display or editor_username
-    change_lines = "".join(
-        f'<div class="lbl">{c["label"]}</div>'
-        f'<div class="val"><span style="text-decoration:line-through;color:#999">{c["old"]}</span>'
-        f' → <strong>{c["new"]}</strong></div>'
+    change_lines = _safe("".join(
+        f'<div class="lbl">{_esc(c["label"])}</div>'
+        f'<div class="val"><span style="text-decoration:line-through;color:#999">{_esc(c["old"])}</span>'
+        f' → <strong>{_esc(c["new"])}</strong></div>'
         for c in (changes or [])
-    )
+    ))
     if not change_lines:
-        change_lines = '<div class="val">（無欄位變更）</div>'
+        change_lines = _safe('<div class="val">（無欄位變更）</div>')
     html = _build_html(
         "daily_task_edited", "工作事項已編輯", "已修改", "#7C3AED",
         [("執行日期", task_date), ("工作事項", title), ("編輯人員", name), ("異動欄位", change_lines)],
@@ -1853,13 +1860,13 @@ def notify_module_activity(module_label: str, action_label: str,
         return
     base = _base_url()
     link = f"{base}/pages/{page_path}" if page_path else base
-    rows = [("項目", _html.escape(item_label))]
+    rows = [("項目", item_label)]
     if detail and detail.strip():
-        rows.append(("內容", _html.escape(detail.strip()).replace(chr(10), "<br>")))
+        rows.append(("內容", _safe(_esc(detail.strip()).replace(chr(10), "<br>"))))       # 換行轉 <br> 是刻意的標記；文字本身已逸出
     html = _build_html(
-        "module_activity", "模組新增與異動", _html.escape(module_label), "#2563EB",
+        "module_activity", "模組新增與異動", module_label, "#2563EB",
         rows, "", link,
-        intro=f"{_html.escape(actor)} 在「{_html.escape(module_label)}」執行了「{_html.escape(action_label)}」。")
+        intro=f"{actor} 在「{module_label}」執行了「{action_label}」。")
     _async_send(to, _mt.subject("module_activity", f"{module_label}：{action_label}"), html)
 
 
@@ -1959,7 +1966,7 @@ def notify_cert_expiry(
             ("憑證檔", cert_path),
         ],
         "", _base_url(),
-        note=f"{impact}<br><br>{howto}",
+        note=_safe(f"{impact}<br><br>{howto}"),            # impact／howto 都是寫死的說明（含刻意的 <b>、<br>、<code>）
         intro=intro,
         button_text="前往系統",
     )
@@ -1990,11 +1997,11 @@ def notify_backup_stale(stale: list, threshold_hours: int) -> None:
             hours = int((datetime.now() - ts).total_seconds() / 3600)
             rows.append((label, f"{ts.strftime('%Y-%m-%d %H:%M')}（{hours} 小時前）"))
 
-    intro = (
+    intro = _safe(
         f"系統已超過 {threshold_hours} 小時沒有完成備份。"
         "本通知與「備份嚴重錯誤」不同，表示<b>備份未被執行</b>，或執行後未留下成功紀錄。"
     )
-    note = (
+    note = _safe(
         "<b>現在的風險</b>：從最後一次成功備份到現在的所有異動，"
         "目前<b>沒有副本</b>；此期間若資料庫損毀或誤刪，這些資料將無法還原。"
         "<br><br><b>請依序檢查（正式機）</b>："
@@ -2009,8 +2016,8 @@ def notify_backup_stale(stale: list, threshold_hours: int) -> None:
         "<code>python backend\\backup_job.py</code> 手動觸發一次。"
     )
     if never:
-        note = ("<b>其中一項查無任何成功紀錄</b>：若為新安裝或剛還原的環境，"
-                "代表該層備份從未成功執行過，請優先確認排程與雲端碟設定。<br><br>") + note
+        note = _safe(("<b>其中一項查無任何成功紀錄</b>：若為新安裝或剛還原的環境，"
+                      "代表該層備份從未成功執行過，請優先確認排程與雲端碟設定。<br><br>") + note)
 
     html = _build_html("backup_stale", 
         "備份已停止運作", "需要立即處理", "#DC2626",
@@ -2052,7 +2059,7 @@ def notify_disk_space_low(problems: list, temp_bloat: list = None,
             rows, "", _base_url(),
             intro=("測試與打包留下的暫存目錄已累積至需要清理的程度；"
                    "磁碟剩餘空間目前仍在安全範圍，本通知為預先提醒。"),
-            note=("<b>這些目錄清掉一律安全</b>：它們是 pytest 每次執行的暫存"
+            note=_safe("<b>這些目錄清掉一律安全</b>：它們是 pytest 每次執行的暫存"
                   "（`--basetemp`），名字帶時間戳或標籤，所以每跑一次就多一份、"
                   "不會被覆蓋也沒有任何機制會清。"
                   "<br><br>清除方式：<code>rd /s /q \"%TEMP%\\motrix-pytest-*\"</code>"
@@ -2073,7 +2080,7 @@ def notify_disk_space_low(problems: list, temp_bloat: list = None,
         "磁碟空間不足", f"最低剩餘 {worst} GB", "#D97706" if worst > 5 else "#DC2626",
         rows, "", _base_url(),
         intro="正式機的磁碟剩餘空間已低於安全水位。",
-        note=(
+        note=_safe(
             "<b>處理時機</b>：磁碟空間耗盡時，最先受影響的是<b>備份</b>"
             "（無法寫入，且可能僅留下一行記錄），其次為 PDF 產生與檔案上傳。"
             "症狀出現時，可能已缺漏數日的備份。"

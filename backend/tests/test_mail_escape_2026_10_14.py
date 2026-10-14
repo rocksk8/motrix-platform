@@ -64,7 +64,7 @@ class _Clock(_dt.datetime):
 
 
 def _tok(name, evil):
-    return "<b>%s&'</b>" % name if evil else "T_%s" % name
+    return "<b>%s&'</b>" % name if evil else "T_%s_E" % name
 
 
 def _args(fn, evil, variant):
@@ -198,9 +198,48 @@ def test_special_characters_in_every_user_field_are_escaped(monkeypatch, name, f
     names = [n for n in inspect.signature(fn).parameters] + ["l", "o", "n", "stale_label", "stale_label2", "plabel", "ppath", "bname", "bpath",
                                                              "tname", "torg", "tloc", "tpt", "ttm", "reasons", "watch_names"]
     for (_s1, html_plain), (_s2, html_evil) in zip(plain, evil):
+        import re as _re
+        html_plain = _re.sub(r'href="[^"]*"', "", html_plain)
+        html_plain = _re.sub(r'https://x\.example[^<"\s）]*', '', html_plain)                 # 連結裡的值是網址編碼，另有安全性；這裡只看內文
         for n in names:
-            if "T_%s" % n not in html_plain:
+            if "T_%s_E" % n not in html_plain:
                 continue                                           # 這個欄位沒有進內文（只進主旨或不顯示）
             raw = "<b>%s&'</b>" % n
             assert raw not in html_evil, "%s 的欄位 %s 沒有逸出" % (name, n)
             assert "&lt;b&gt;%s&amp;&#x27;&lt;/b&gt;" % n in html_evil, "%s 的欄位 %s 逸出後的字串沒有出現在內文" % (name, n)
+
+
+# ── C. 刻意帶標記的版面，在含特殊字元的資料下仍保留標記，且使用者資料已逸出 ───────────────────────────
+def _one(monkeypatch, fn, evil=True, **variant):
+    out = _render(monkeypatch, fn.__name__, fn, evil, EN.__dict__["_build_html"], variant)
+    assert out
+    return out[-1][1]
+
+
+def test_deliberate_markup_is_kept_and_user_data_inside_it_is_escaped(monkeypatch):
+    html = _one(monkeypatch, EN.notify_backup_stale)
+    assert "<b>備份未被執行</b>" in html and "<br>1. 排程工作" in html and "&lt;b&gt;stale_label&amp;&#x27;&lt;/b&gt;" in html
+    html = _one(monkeypatch, EN.notify_cert_expiry, is_acme=True)
+    assert "<b>影響範圍</b>：<br>" in html and "<code>" in html and "letsencrypt_renew.ps1" in html and "&lt;b&gt;cert_path&amp;&#x27;&lt;/b&gt;" in html
+    html = _one(monkeypatch, EN.notify_disk_space_low)
+    assert "<b>處理時機</b>" in html and "&lt;b&gt;ppath&amp;&#x27;&lt;/b&gt;" in html
+    html = _one(monkeypatch, EN.notify_daily_task_completed, is_edit=True)
+    assert '<span style="color:#9CA3AF;text-decoration:line-through;white-space:pre-wrap">&lt;b&gt;old_report&amp;' in html
+    assert '<strong style="white-space:pre-wrap">&lt;b&gt;report&amp;' in html
+    html = _one(monkeypatch, EN.notify_daily_task_edited)
+    assert '<span style="text-decoration:line-through;color:#999">&lt;b&gt;o&amp;' in html and "<strong>&lt;b&gt;n&amp;" in html and "&lt;b&gt;l&amp;" in html
+    html = _one(monkeypatch, EN.notify_module_activity, detail="第一行<b>\n第二行")
+    assert "第一行&lt;b&gt;<br>第二行" in html
+
+
+def test_tender_found_keeps_its_markup_and_escapes_titles_and_watch_names(monkeypatch):
+    from modules.tender_radar import notify as TN
+    html = _one(monkeypatch, TN.notify_tender_found, watch_names=["<b>w&'</b>"])
+    assert "<b>共 1 筆</b>" in html and "<br>" in html
+    assert "&lt;b&gt;tname&amp;&#x27;&lt;/b&gt;" in html and "&lt;b&gt;torg&amp;&#x27;&lt;/b&gt;" in html and "&lt;b&gt;w&amp;&#x27;&lt;/b&gt;" in html
+    assert "<b>tname" not in html and "<b>w&" not in html
+
+
+def test_urls_keep_ampersands_so_plain_mail_stays_byte_identical_but_cannot_break_out_of_the_attribute(monkeypatch):
+    out = EN._build_html("approval_request", "t", "b", "#000", [], "", 'https://x.example/p?a=1&b=2" onclick="x')
+    assert 'href="https://x.example/p?a=1&b=2&quot; onclick=&quot;x"' in out
