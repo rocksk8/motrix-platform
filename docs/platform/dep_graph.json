@@ -3046,7 +3046,7 @@
   },
   "js:static/menu-editor.js": {
    "api_calls": [
-    "/api/def-governance/layout/module:",
+    "/api/def-governance/layout/{}/impact",
     "/api/definitions/layout/module:",
     "/api/definitions/layout/module:/draft",
     "/api/definitions/layout/module:/publish",
@@ -3058,13 +3058,12 @@
     "/api/definitions",
     "/api/platform"
    ],
-   "api_unmatched": [
-    "/api/def-governance/layout/module:"
-   ],
+   "api_unmatched": [],
    "imports": [],
    "kind": "js",
    "path": "frontend/static/menu-editor.js",
    "routers_called": [
+    "router:def_governance",
     "router:definitions",
     "router:platform_menu",
     "router:platform_menu_preview"
