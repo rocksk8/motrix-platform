@@ -126,7 +126,7 @@
         <div class="card">
           <div class="card-title">二、款項類別 <span style="color:var(--danger);text-transform:none">*</span></div>
           <div class="pill-row">
-            <template x-for="s in STAGES" :key="s.value">
+            <template x-for="s in stageItems()" :key="s.value">
               <button type="button" class="pill-btn wide" :class="q.stage === s.value ? 'active' : ''"
                       :disabled="!editable" @click="q.stage = s.value; dirty()" x-text="s.label"></button>
             </template>
@@ -345,6 +345,8 @@
 <script src="../static/approval-return.js"></script>
 <script src="../static/notif.js"></script>
 <script src="../static/edit-presence.js"></script>
+  <script src="../static/option-lists.js"></script>
+  <meta name="motrix-option-lists" content="payment_request_stage">   <!-- census S-F1：只是宣告；選項清單開啟且是最高管理者時，sidebar.js 才載入編輯器（關著＝沒有任何額外請求） -->
   <script src="../static/sidebar.js"></script>
 <script>
 const API = '/api'
@@ -372,6 +374,9 @@ function paymentRequestForm() {
     previewFetching: false,
     previewIframeReady: false,
 
+    optVer: 0,
+    // census S-F1：款項類別按鈕（代碼固定；顯示名稱可由選項清單改，沒開／沒發布 ⇒ 下面寫死的標籤）
+    stageItems() { this.optVer; return MotrixOptions.items('payment_request_stage', this.STAGES) },
     STAGES: [
       { value: 'full',       label: '全額' },
       { value: 'deposit',    label: '訂金款' },
@@ -460,6 +465,7 @@ function paymentRequestForm() {
     _initDone: false,
 
     async init() {
+      window.addEventListener('motrix-options', () => { this.optVer++ })     // census S-F1：選項清單到了（或換了）就重算
       if (this._initDone) return
       this._initDone = true
       const s = localStorage.getItem('motrix_session')

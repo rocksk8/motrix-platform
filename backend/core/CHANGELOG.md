@@ -2,6 +2,8 @@
 
 ## (next) — wip/t62-option-lists-r1（census #4 選項清單；旗標 `builder_option_lists.enabled` 預設關，且必須同時開啟 `builder_governance.enabled`）
 
+- S-F1（census）：選項清單新增 `payment_stage`（案件款項期別名稱：訂金款／交貨款／驗收款／進度款／完工款／收款後出貨／自訂義／其他；可新增、改顯示名稱、重排、停用，已發布的值不可刪、不可改字）與 `payment_request_stage`（請款單款項類別，代碼 full／deposit／delivery／acceptance／final 固定，**封閉清單**：只能改顯示名稱與順序）。報表、出納、儀表板、應收、行事曆事件標題、請款單 PDF 只改『顯示』（`helpers/option_lists.payment_stage_name`／`payment_stage_display`／`request_stage_label`；清單關著或沒發布 ⇒ 與過去逐字相同）；自訂義的 `customLabel` 顯示修正也在旗標後面。已入帳的收款手續費傳票說明（`receivables.py`）與報價單的訊息文字仍用原字串。
+
 - L1（新增，只增；快照由列車重產）：`helpers/option_lists.py`（kind `option_list`：客戶類型、供應商類型、料件分類、料件單位；新增／改顯示名稱／重排／停用，已發布的選項不能刪除、不能改字；惰性登記）、`routers/option_lists.py`（`GET /api/option-lists/{id}/status`、`POST /api/option-lists/{id}/preview`，後者唯讀）、`helpers/part_catalog.categories()`／`prefix_for()`（旗標關 ⇒ 與 `PART_CATEGORIES` 逐項相同）。
 - `/api/platform/menu` 多兩個鍵，都只在開啟時才出現：`optionLists`（所有人；只含已發布的清單，頁面據此不另發請求）、`builderOptionLists`（僅最高管理者；載入編輯器）。治理：`option_list` 加入 `def_pipeline.ACTIVE_KINDS`（新增選項、改名、重排＝中性；停用＝收緊）與預覽雜湊強制名單。
 - 新設定群組 `builder_option_lists`（`enabled`，預設 0）。生成物（L1 快照、路由盤點、設定基準）由列車重產。
