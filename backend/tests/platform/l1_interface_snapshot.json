@@ -1363,7 +1363,7 @@
    "opened_upload_file": "def(entry)",
    "pick_file": "def(files, file_id)",
    "purge_document_files": "def(existing_files)",
-   "save_document_files": "async def(subfolder, doc_no, files, uploaded_by, watermark_by=…, existing_count=…)",
+   "save_document_files": "async def(subfolder, doc_no, files, uploaded_by, watermark_by=…, existing_count=…, policy=…)",
    "upload_owner": "def(rel)",
    "upload_path_key": "def(entry, folder, depth=…)",
    "upload_readable": "def(conn, rel, user)"

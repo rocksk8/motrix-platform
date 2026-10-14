@@ -1,5 +1,11 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — wip/t62-bp4-s1-r1（BP-4 S1：儲存／上傳位置代號登錄表；旗標 `builder_slots.enabled` 預設關）
+
+- L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新 helper `helpers/storage_slots.py`（`HARD_EXTS`、`LOCATION_CODES`、`SlotPolicy`、`builtin_policy`、`policy`、`enabled`、`resolve_code`）；`helpers.uploads.save_document_files` 加**選填**參數 `policy=None`（None＝先前行為逐位元相同；給了才套用政策：副檔名∩硬底線、上限、子夾、metadata `slot`）。
+- 設定中心新群組 `builder_slots`（`enabled`，預設 0；凍結基準以文字插入）。S1 沒有任何呼叫端傳 `policy`；管理者插槽（`attachment_slot` 定義）在 S2。
+- 測試 `tests/test_storage_slots_parity_2026_10_14.py`（56 題）：內建政策＝獨立寫死的今天常數；全 repo 呼叫點都在登錄表；路徑黃金表；`policy=None` 與內建政策逐碼存檔結果／拒絕情況相同。
+
 ## (next) — wip/t59-bp1-menus-r1（BP-1 選單建構器；旗標 `builder_menu.enabled` 預設關）
 
 - L0（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：`core.customization.SIDEBAR_LABEL_MAX`／`sidebar_label_problem`（側欄顯示名稱：最長 20 字、不含標記字元）；`core.menu.apply_layout_ex(groups, ops, builder=False)`（`apply_layout` 簽章與行為不變，等同 `builder=False`）。

@@ -168,7 +168,7 @@ def _safe_save_dir(subfolder: str, doc_no: str) -> str:
 
 
 async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFile],
-                              uploaded_by: str, watermark_by: str = '', existing_count: int = 0) -> list:
+                              uploaded_by: str, watermark_by: str = '', existing_count: int = 0, policy=None) -> list:
     """存檔 files 到 uploads/{subfolder}/{doc_no}/{uuid}{ext}（demo 帳號會被
     導向 uploads/_demo_uploads/{subfolder}/{doc_no}/，見 _effective_subfolder()），
     回傳新增檔案的 metadata 陣列（呼叫端負責把這份陣列追加進資料庫的 JSON
@@ -186,17 +186,33 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
     載入 Pillow 相依。放在用到的分支裡，沒傳 watermark_by 的呼叫端行為與相依
     完全不變。
 
+    `policy`（選填，BP-4；`helpers.storage_slots.SlotPolicy`）：**None＝先前的行為，逐位元相同**。給了才套用政策：副檔名＝政策 accept ∩ 硬底線、
+    數量／合計上限取政策、路徑多一層政策子夾、metadata 多 `slot`。政策的位置代號必須與 `subfolder` 對得上（對不上＝程式錯誤，ValueError）。
+
     `existing_count`（選填，預設 0）：這張單據目前已有幾個附件；該資料夾在 `UPLOAD_LIMITS_BY_SUBFOLDER` 有 `max_files` 時用來檢查累計數量。
     **整批要嘛全存、要嘛全不存**：先把每個檔案驗完（副檔名、單檔大小、空檔、檔頭、整次請求合計大小、累計數量）才開始寫入，
     任何一個不合格就整批擋下，磁碟上不留任何檔案或空目錄（原本會留下前面幾個已寫的檔，成為沒有任何單據引用的孤兒檔）。"""
     if not files:
         raise HTTPException(400, "請至少選擇一個檔案")
 
-    limits = limits_for(subfolder)
+    if policy is None:
+        limits = limits_for(subfolder)
+    else:
+        from helpers import storage_slots as _ss
+        if policy.code != _ss.resolve_code(subfolder):
+            raise ValueError("上傳政策的位置代號 %r 與資料夾 %r 不符" % (policy.code, subfolder))
+        limits = {k: v for k, v in (('max_files', policy.max_files), ('max_request_bytes', policy.max_request_bytes)) if v}
     max_files = limits.get('max_files')
     if max_files and int(existing_count or 0) + len(files) > max_files:
         raise HTTPException(400, f"每張單據最多 {max_files} 個附件（目前已有 {int(existing_count or 0)} 個，這次要加 {len(files)} 個）")
-    allowed = _ALLOWED_EXTS | _EXTRA_EXTS_BY_SUBFOLDER.get(subfolder, set())
+    if policy is None:
+        allowed = _ALLOWED_EXTS | _EXTRA_EXTS_BY_SUBFOLDER.get(subfolder, set())
+    else:
+        allowed = set(policy.accept) & _ss.HARD_EXTS          # 硬底線：政策只能縮小
+        if policy.subfolder:
+            if '/' in policy.subfolder:                         # 政策子夾只能一層（深度防禦；定義驗證器另有字元規則）
+                raise HTTPException(400, "附件存放位置不正確。")
+            subfolder = '%s/%s' % (subfolder, policy.subfolder)
     allowed_label = 'jpg/png/pdf' + ''.join('/' + e[1:] for e in sorted(allowed - _ALLOWED_EXTS))
     subfolder = _effective_subfolder(subfolder)
     save_dir = _safe_save_dir(subfolder, doc_no)
@@ -245,6 +261,7 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
             "mime":       upload.content_type or '',
             "uploadedBy": uploaded_by,
             "uploadedAt": now,
+            **({"slot": policy.slot} if policy is not None and policy.slot else {}),
         })
     return saved
 
