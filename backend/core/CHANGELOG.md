@@ -17,14 +17,9 @@ R3：`helpers/xlsx_out.xlsx_to_html` 讀 xlsx 的列印頁首／頁尾（沒設�
 - L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新 helper `helpers/storage_slots.py`（`HARD_EXTS`、`LOCATION_CODES`、`SlotPolicy`、`builtin_policy`、`policy`、`enabled`、`resolve_code`）；`helpers.uploads.save_document_files` 加**選填**參數 `policy=None`（None＝先前行為逐位元相同；給了才套用政策：副檔名∩硬底線、上限、子夾、metadata `slot`）。
 - 設定中心新群組 `builder_slots`（`enabled`，預設 0；凍結基準以文字插入）。S1 沒有任何呼叫端傳 `policy`；管理者插槽（`attachment_slot` 定義）在 S2。
 - 測試 `tests/test_storage_slots_parity_2026_10_14.py`（56 題）：內建政策＝獨立寫死的今天常數；全 repo 呼叫點都在登錄表；路徑黃金表；`policy=None` 與內建政策逐碼存檔結果／拒絕情況相同。
-
-## (next) — wip/t62-option-lists-r1（census #4 選項清單；旗標 `builder_option_lists.enabled` 預設關，且必須同時開啟 `builder_governance.enabled`）
-
 - L1（新增，只增；快照由列車重產）：`helpers/option_lists.py`（kind `option_list`：客戶類型、供應商類型、料件分類、料件單位；新增／改顯示名稱／重排／停用，已發布的選項不能刪除、不能改字；惰性登記）、`routers/option_lists.py`（`GET /api/option-lists/{id}/status`、`POST /api/option-lists/{id}/preview`，後者唯讀）、`helpers/part_catalog.categories()`／`prefix_for()`（旗標關 ⇒ 與 `PART_CATEGORIES` 逐項相同）。
 - `/api/platform/menu` 多兩個鍵，都只在開啟時才出現：`optionLists`（所有人；只含已發布的清單，頁面據此不另發請求）、`builderOptionLists`（僅最高管理者；載入編輯器）。治理：`option_list` 加入 `def_pipeline.ACTIVE_KINDS`（新增選項、改名、重排＝中性；停用＝收緊）與預覽雜湊強制名單。
 - 新設定群組 `builder_option_lists`（`enabled`，預設 0）。生成物（L1 快照、路由盤點、設定基準）由列車重產。
-
-## (next) — 2026-10-14（wip/t62-settings-numbers-r1；settings numbers）
 - L1（新增，只增；快照由列車重產）：`helpers/settings_strict.py`（與 `wip/t62-approval-margin-r1` 相同檔案，合併時內容一致）、`helpers/alert_settings.py`（`warranty_report_days`／`warranty_mail_days`／`cert_warn_days`／`min_password_len`／`login_days`；讀不到設定＝今天的數字；安全類底線寫死：密碼最短 8 碼、登入最長 30 天）。新設定群組 `alerts`（到期預警，4 項）與 `account_security`（登入與密碼：密碼最短長度只能往上、登入有效天數只能往下；放寬方向走『待核准＋確認期間』）。`routers/auth.py` 設定／更改密碼的 8 處長度檢查與 session 期限（登入時的 `helpers/auth.is_weak_password` 維持常數 8，調高門檻不會把既有使用者鎖在門外；安全兩項是嚴格讀取：密碼規則讀不到 ⇒ 設定密碼回 503，登入天數讀不到 ⇒ 最後讀到的值或 7 天）、`helpers/company_setup` 的確認檔到期提醒、`helpers/email_notify.notify_warranty_expiry` 標題改讀這些設定（預設值下逐字相同）。
 
 ## 1.136 — wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1＋wip/t60（T60 選單 hub 群組／T61 S5 內建畫面自訂欄位／S6 自訂按鈕；旗標預設關）
