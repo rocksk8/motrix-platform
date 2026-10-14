@@ -36242,6 +36242,7 @@
     "router:duty_roles",
     "router:item_reads",
     "router:list_prefs",
+    "router:platform_menu_preview",
     "router:settings_center",
     "router:system",
     "router:uploads"
@@ -36267,6 +36268,7 @@
      "backend/routers/duty_roles.py",
      "backend/routers/item_reads.py",
      "backend/routers/list_prefs.py",
+     "backend/routers/platform_menu_preview.py",
      "backend/routers/settings_center.py",
      "backend/routers/system.py",
      "backend/routers/uploads.py"
