@@ -126,6 +126,15 @@
         {"key": "projectName", "label": "案件名稱", "core": true},
         {"key": "deliveryLocation", "label": "交貨地點", "core": false}
       ],
+      "block": [
+        {"key": "health", "label": "案件健康總覽", "core": false},
+        {"key": "contract", "label": "合約資訊", "core": true},
+        {"key": "roles", "label": "人員角色", "core": true},
+        {"key": "timeline", "label": "專案期間", "core": false},
+        {"key": "customFields", "label": "自訂欄位", "core": false},
+        {"key": "privacy", "label": "個資蒐集告知", "core": true},
+        {"key": "signedBack", "label": "客戶回簽單", "core": true}
+      ],
       "tab": [
         {"key": "biz", "label": "案件資訊", "core": true},
         {"key": "exec", "label": "執行管理", "core": false},
@@ -180,6 +189,15 @@
             {"field": "allfiles", "visible": true},
             {"field": "fin", "visible": true},
             {"field": "xexp", "visible": true}
+          ]},
+          {"key": "bizBlocks", "label": "案件資訊區塊", "entity": "block", "columns": [
+            {"field": "health", "visible": true},
+            {"field": "contract", "visible": true},
+            {"field": "roles", "visible": true},
+            {"field": "timeline", "visible": true},
+            {"field": "customFields", "visible": true},
+            {"field": "privacy", "visible": true},
+            {"field": "signedBack", "visible": true}
           ]}
         ],
         "forms": [
