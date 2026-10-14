@@ -243,3 +243,25 @@ def test_registry_entries_say_what_layout_does_not_change():
     txt = " ".join(q["notes"]) + q["impact"]
     assert "PDF" in txt and "順序" in txt and "金額" in txt
     assert any("分頁" in n for n in reg["case_management"]["notes"])
+
+
+def test_quotations_colspans_follow_the_visible_column_count():
+    src = _page("quotations.html")
+    assert 'colspan="12"' not in src and src.count(':colspan="colSpan()"') == 3
+    assert "colSpan() { return 12 - (this.layoutOn ?" in src                  # 關閉時恆為 12（與先前相同）
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_hidden_active_tab_falls_back_to_the_case_info_tab():
+    """04：目前分頁被版面隱藏（?tab=、記住的分頁…）⇒ 退回案件資訊，不留一個沒有頁籤的內容面板。"""
+    from modules.case.tests import test_bp1_layout_cases_2026_10_14 as T
+    cols = json.dumps([{"field": f} for f in TABS if f != "feed"])
+    r = T._node("o.layoutOn = true\n"
+                "const out = {}\n"
+                "o.activeTab = 'feed'; o.tabFix(); out.hidden = o.activeTab\n"
+                "o.activeTab = 'exec'; o.tabFix(); out.visible = o.activeTab\n"
+                "o.activeTab = 'zzz'; o.tabFix(); out.unknown = o.activeTab\n"
+                "o.layoutOn = false; o.activeTab = 'feed'; o.tabFix(); out.off = o.activeTab\n"
+                "console.log(JSON.stringify(out))", cols)
+    assert r == {"hidden": "biz", "visible": "exec", "unknown": "zzz", "off": "feed"}
+    assert 'class="cm-tabs" x-effect="tabFix()"' in _page("case-management.html")

@@ -594,7 +594,7 @@
             <!-- Tabs -->
             <!-- CU8：窄螢幕分頁列會超出寬度 ⇒ 右緣淡出＋提示可左右滑動 -->
             <div class="cm-tabs-hint" data-testid="cm-tabs-hint">← 左右滑動看更多分頁 →</div>
-            <div class="cm-tabs">
+            <div class="cm-tabs" x-effect="tabFix()">
               <button class="cm-tab" x-show="tShown('biz')" :style="tOrder('biz')" :class="{active: activeTab==='biz'}"      @click="activeTab='biz'"><span x-text="tLabel('biz', '案件資訊')">案件資訊</span></button>
               <button class="cm-tab" x-show="tShown('exec')" :style="tOrder('exec')" :class="{active: activeTab==='exec'}"     @click="activeTab='exec'"><span x-text="tLabel('exec', '執行管理')">執行管理</span></button>
               <button class="cm-tab" x-show="tShown('dispatch')" :style="tOrder('dispatch')" :class="{active: activeTab==='dispatch'}" @click="activeTab='dispatch'"><span x-text="tLabel('dispatch', '承攬商')">承攬商</span><span class="cm-tab__n" x-show="dispatches.length > 0" x-text="dispatches.length"></span></button>
@@ -4799,6 +4799,9 @@ window.CM_PARTS.push(() => ({
   tShown(f) { return !this.layoutOn || this._tix(f) >= 0 },
   tOrder(f) { return this.layoutOn && this._tix(f) >= 0 ? { order: this._tix(f) + 1 } : {} },
   tTail() { return this.layoutOn ? { order: 999 } : {} },
+  // 目前分頁被版面隱藏（網址 ?tab=、記住的分頁、其他入口切過來）⇒ 退回「案件資訊」（核心分頁，隱藏不了），不要留一個沒有頁籤的內容面板
+  _tabKeys: ['biz', 'exec', 'dispatch', 'shipping', 'completion', 'feed', 'allfiles', 'fin', 'xexp'],
+  tabFix() { if (this.layoutOn && this._tabKeys.includes(this.activeTab) && !this.tShown(this.activeTab)) this.activeTab = 'biz' },
   tLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('tabs', f, dflt) : dflt },
   // 案件資訊表單（合約資訊、專案期間）：欄位的顯示／順序／標題與區塊標題。旗標關閉＝中性值。
   fShown(form, f) { return !this.layoutOn || window.Alpine.store('layout').fieldShown(form, f) },
