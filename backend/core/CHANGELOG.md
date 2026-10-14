@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+
+## (next) — wip/t62-pdf-escape-r1（PDF／HTML 輸出逸出稽核）
+
+- L1（資安補強，wip/t62-pdf-escape-r1）：新增 `helpers.doc_template.html_text(s, *, br=True, falsy_empty=False)`——HTML 內文跳脫的唯一實作，兩個旗標精確重現舊寫法（換行轉 `<br>`；`(s or '')` 把 0／False 印成空字串）；`pdf_gen`（10 處）與 `completion_pdf`（1 處）複製貼上的區域 `esc()` 改成呼叫它，純文字資料輸出逐位元相同。補上五個**確認沒逸出**的輸出點（使用者可寫入、直接 f-string 內插）：報價單／出貨單品項數量（3 處）、報價有效日數、款項百分比、案件階段起訖日（結案報表與執行進度報告各一）。新增 AST 棘輪 tests/test_pdf_escape_2026_10_14.py＋基線 tests/pdf_raw_sinks_baseline.json：builder 檔案裡『直接內插字典取值又沒經 esc／格式化』的位置只能是已審過的清單。
+
 ## 1.136 — wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1＋wip/t60（T60 選單 hub 群組／T61 S5 內建畫面自訂欄位／S6 自訂按鈕；旗標預設關）
 
 - L0（新增，只增；T60）：`core.menu.hub_group_keys()`。含系統中心入口的群組（例如 system）不能當選單「移到群組」的目的地——導覽列會把整個群組收成一個連結，搬進去的項目看不到；`resolve_move_target` 與驗證同步拒絕。旗標關閉時行為不變。
