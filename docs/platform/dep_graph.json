@@ -1685,6 +1685,17 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:safe_text": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "helper",
+   "path": "backend/helpers/safe_text.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "helper:settings": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -1749,6 +1760,22 @@
    ],
    "kind": "helper",
    "path": "backend/helpers/settings_strict.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "helper:stage_templates": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:safe_text",
+    "helper:settings_registry",
+    "plat:definitions",
+    "plat:spine"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/stage_templates.py",
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [],
@@ -21016,10 +21043,12 @@
     "helper:rule_catalog",
     "helper:rule_grammar",
     "helper:rule_sets",
+    "helper:safe_text",
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:stage_templates",
     "helper:tiered_approval",
     "helper:xlsx_out"
    ],
@@ -21032,6 +21061,7 @@
     "helper:option_lists",
     "helper:rule_sets",
     "helper:settings_registry",
+    "helper:stage_templates",
     "plat:definitions",
     "router:definitions"
    ],
@@ -21041,19 +21071,19 @@
    "routes": [
     {
      "func": "def_ledger",
-     "line": 189,
+     "line": 192,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/ledger"
     },
     {
      "func": "def_diff",
-     "line": 201,
+     "line": 204,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/diff"
     },
     {
      "func": "def_impact",
-     "line": 214,
+     "line": 217,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/impact"
     }
@@ -21117,10 +21147,12 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:safe_text",
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:stage_templates",
     "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
@@ -21135,6 +21167,7 @@
     "helper:config_ledger",
     "helper:export_templates",
     "helper:settings_registry",
+    "helper:stage_templates",
     "helper:status_display",
     "plat:definitions"
    ],
@@ -21144,25 +21177,25 @@
    "routes": [
     {
      "func": "pending_changes",
-     "line": 478,
+     "line": 514,
      "method": "GET",
      "path": "/api/def-pipeline/pending"
     },
     {
      "func": "approve_change",
-     "line": 497,
+     "line": 533,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/approve"
     },
     {
      "func": "activate_change",
-     "line": 513,
+     "line": 549,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/activate"
     },
     {
      "func": "cancel_change",
-     "line": 538,
+     "line": 574,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/cancel"
     }
@@ -21245,10 +21278,12 @@
     "helper:option_lists",
     "helper:prefill_sources",
     "helper:row_access",
+    "helper:safe_text",
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:stage_templates",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads",
@@ -21270,6 +21305,7 @@
     "helper:notify_templates",
     "helper:option_lists",
     "helper:settings_strict",
+    "helper:stage_templates",
     "plat:catalog",
     "plat:definitions",
     "plat:registry",
@@ -21283,103 +21319,103 @@
    "routes": [
     {
      "func": "list_definition_kinds",
-     "line": 216,
+     "line": 218,
      "method": "GET",
      "path": "/api/definition-kinds"
     },
     {
      "func": "list_expense_types",
-     "line": 224,
+     "line": 226,
      "method": "GET",
      "path": "/api/expense-types"
     },
     {
      "func": "get_expense_type",
-     "line": 236,
+     "line": 238,
      "method": "GET",
      "path": "/api/expense-types/{code}"
     },
     {
      "func": "list_definitions",
-     "line": 251,
+     "line": 253,
      "method": "GET",
      "path": "/api/definitions/{kind}"
     },
     {
      "func": "delete_definition_draft",
-     "line": 276,
+     "line": 278,
      "method": "DELETE",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "delete_custom_module",
-     "line": 295,
+     "line": 297,
      "method": "DELETE",
      "path": "/api/definitions/custom_module/{key}"
     },
     {
      "func": "get_definition",
-     "line": 312,
+     "line": 314,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}"
     },
     {
      "func": "get_definition_default",
-     "line": 326,
+     "line": 328,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/default"
     },
     {
      "func": "save_definition_draft",
-     "line": 336,
+     "line": 338,
      "method": "PUT",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "validate_definition",
-     "line": 366,
+     "line": 368,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/validate"
     },
     {
      "func": "publish_definition",
-     "line": 464,
+     "line": 466,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/publish"
     },
     {
      "func": "get_definition_version",
-     "line": 524,
+     "line": 526,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 541,
+     "line": 543,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 566,
+     "line": 568,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 606,
+     "line": 608,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
      "func": "effective_layout",
-     "line": 620,
+     "line": 622,
      "method": "GET",
      "path": "/api/layout/{module_key}"
     },
     {
      "func": "preview_output_template",
-     "line": 655,
+     "line": 657,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }

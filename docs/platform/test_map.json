@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1386,
+  "tests": 1387,
   "unmapped": 13,
   "kinds": {
    "api": 773,
    "e2e": 306,
    "audit": 179,
-   "unit": 128
+   "unit": 129
   },
   "routes": 846
  },
@@ -22118,6 +22118,33 @@
      "tools/platform/modtest.py",
      "tools/platform/scope_gate.py",
      "tools/platform/stage_select.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_stage_templates_t62.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:safe_text",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "helper:stage_templates",
+    "plat:__init__",
+    "plat:definitions",
+    "plat:spine",
+    "router:def_pipeline"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/core/spine.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/safe_text.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/helpers/stage_templates.py",
+     "backend/routers/def_pipeline.py"
     ]
    }
   },
