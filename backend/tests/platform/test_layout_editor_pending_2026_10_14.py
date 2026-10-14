@@ -130,3 +130,23 @@ def test_publish_sends_the_reviewed_preview_hash_only_when_governance_is_on():
     assert r["off"]["pub"] == [{"note": "n1"}]                                  # 旗標關 ⇒ 請求本體不變
     assert r["cancel"]["pub"] == [] and r["cancel"]["msg"] == "已取消發布"
     assert r["reviewed"][0]["kind"] == "layout" and r["reviewed"][0]["key"].startswith("module:")
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_restore_sends_the_reviewed_hash_only_when_governance_is_on():
+    """T62：治理旗標開 ⇒ 先 previewRestore 再帶 preview_hash 還原。旗標關／未載入／取不到雜湊 ⇒ 請求本體仍是 {}。"""
+    body = """
+  async function run(gov, hash) {
+    c.defs = { draft: null, latest: null, versions: [] }
+    c.scope = 'company'; c.loadScope = async () => { c.loadError = '' }; c._mark = () => {}
+    const sent = [], asked = []
+    c._j = async (url, opt) => { sent.push({ url, body: opt && opt.body }); return { ok: true, status: 200, d: { version: 8 } } }
+    window.MotrixDefGovernance = gov ? { available: async (k) => k === 'layout', previewRestore: async (o, v) => { asked.push([o.kind, o.scope, v]); return hash } } : undefined
+    await c._restore(3)
+    return { body: JSON.parse(sent.filter(x => x.url.indexOf('/restore/3') >= 0)[0].body), asked }
+  }
+  console.log(JSON.stringify({ on: await run(true, 'v3:H'), off: await run(false, 'v3:H'), none: await run(true, null) }))"""
+    r = _node(body)
+    assert r["on"]["body"] == {"preview_hash": "v3:H"} and r["on"]["asked"] == [["layout", "company", 3]]
+    assert r["off"]["body"] == {} and r["off"]["asked"] == []                  # 旗標關 ⇒ 與先前逐位元相同
+    assert r["none"]["body"] == {}

@@ -424,8 +424,14 @@
           if (!(await this._ask('還原會捨棄這個範圍目前的草稿，確定要還原第 ' + version + ' 版？'))) { this.busy = false; return }
         }
         this.busy = true
+        // T62：治理旗標開時，還原也要帶『看過這一版內容』的預覽雜湊（強制範圍內沒帶會 409）。沒有治理／取不到 ⇒ 不帶，請求本體與先前相同（{}）。
+        var restBody = {}
+        if (window.MotrixDefGovernance && await window.MotrixDefGovernance.available('layout')) {
+          var rvh = await window.MotrixDefGovernance.previewRestore({ kind: 'layout', key: this._key(), scope: this.scope }, version)
+          if (rvh) restBody.preview_hash = rvh
+        }
         var r = await this._j(this._base() + '/restore/' + version + '?scope=' + encodeURIComponent(this.scope),
-                              { method: 'POST', body: JSON.stringify({}) })
+                              { method: 'POST', body: JSON.stringify(restBody) })
         if (!r.ok) { this._mark(r.d.problems || []); this.msg = '還原失敗：' + (r.d.detail || r.status); this.busy = false; return }
         var pend = r.d && r.d.pending === true
         // 待核准的還原：伺服器把舊內容放進待核准的版本／草稿，不能再把『草稿』刪掉（會連同待核准的內容一起刪）
