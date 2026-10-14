@@ -290,8 +290,16 @@ def test_selected_quarter_without_month_keeps_the_quarter_section(monkeypatch):
     monkeypatch.setattr(ET, "_resolve_strict", lambda eid, conn=None: _body("summary", "quarter") if eid == EID else None)
     off = R._off_sheets()
     assert "quarter" not in off and "month" in off and "year" in off
-    html = '<!-- 摘要 -->S<!-- 當月收支（x） -->M<!-- 本季收支（y） -->Q<!-- 今年度收支（z） -->Y<div class="footer">F</div>'
-    assert R._drop_pdf_sections(html, off) == '<!-- 摘要 -->S<!-- 本季收支（y） -->Q<div class="footer">F</div>'
+    # 真實報表有全部標記；要拿掉的段落找不到標記會丟 ReportSectionError，所以測試用的 HTML 也要帶齊每個可選工作表的標記
+    parts = ['<!-- 摘要 -->S']
+    for sid, _t, marker in R.REPORT_SHEETS:
+        if marker and sid != "summary":
+            parts.append('<!-- %s（x） -->%s' % (marker, sid))
+        if sid == "month":
+            parts.append('<!-- 本季收支（y） -->QUARTER')       # 以變數插入的本季收支：只有邊界註解
+    html = "".join(parts) + '<div class="footer">F</div>'
+    out = R._drop_pdf_sections(html, off)
+    assert out == '<!-- 摘要 -->S<!-- 本季收支（y） -->QUARTER<div class="footer">F</div>'
 
 
 def test_enabled_strict_reads_without_swallowing_errors():
