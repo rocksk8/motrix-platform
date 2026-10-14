@@ -179,6 +179,61 @@ def _with_profile(cmd: list, d: str) -> list:
     return [cmd[0], "--user-data-dir=%s" % d] + list(cmd[1:])
 
 
+# ── PDF 渲染硬化（H1 熱修）────────────────────────────────────────────────
+# 所有 HTML→PDF 都經過 `run_edge_pdf`（單一出入口）。使用者可寫入的欄位若漏逸出，會在無頭瀏覽器裡以 file:// 來源渲染：
+# `<iframe src=file:///…>`／`<object>`／`<embed>` 能把伺服器本機檔案畫進 PDF，`<script>` 能對外發請求。所以在這裡統一做兩層限制：
+# ①把內容安全政策（CSP）寫進 HTML（`<meta http-equiv>`）：只准內嵌樣式、data:／file: 圖片與字型；禁 frame／object／embed／表單／連線；
+#   script 只准『頁面裡本來就有的內嵌腳本』（逐段算 SHA-256 白名單：A4 自動縮放、薪資單腳本等），注入的 script 與事件屬性一律被擋；
+# ②Edge 旗標：所有主機名稱解析都失敗（只放行 localhost）＋停用擴充功能與同步（不碰 --no-sandbox）。
+_CSP_BASE = ("default-src 'none'; img-src data: file:; style-src 'unsafe-inline'; font-src data: file:; frame-src 'none'; object-src 'none'; "
+             "form-action 'none'; base-uri 'none'; connect-src 'none'; media-src 'none'; worker-src 'none'")
+_HARDEN_FLAGS = ("--disable-extensions", "--disable-sync", "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE localhost")
+
+
+def _csp_for_html(html: str) -> str:
+    """這份 HTML 的 CSP 字串：基本政策＋『頁面內嵌腳本』的 SHA-256 白名單（沒有內嵌腳本 ⇒ script-src 'none'）。"""
+    import base64
+    import hashlib
+    import re
+    hashes = []
+    for m in re.finditer(r"<script(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script\s*>", html, re.S | re.I):
+        h = "'sha256-%s'" % base64.b64encode(hashlib.sha256(m.group(1).encode("utf-8")).digest()).decode("ascii")
+        if h not in hashes:
+            hashes.append(h)
+    return "%s; script-src %s" % (_CSP_BASE, " ".join(hashes) if hashes else "'none'")
+
+
+def _inject_csp(html: str) -> str:
+    """在 `<head>` 之後（沒有就在 `<html>` 之後、再沒有就在最前面）插入 CSP `<meta>`；已經有就不重複（冪等）。"""
+    import re
+    if re.search(r"http-equiv\s*=\s*[\"']?Content-Security-Policy", html, re.I):
+        return html
+    meta = '<meta http-equiv="Content-Security-Policy" content="%s">' % _csp_for_html(html).replace('"', "&quot;")
+    m = re.search(r"<head[^>]*>", html, re.I) or re.search(r"<html[^>]*>", html, re.I)
+    return html[:m.end()] + meta + html[m.end():] if m else meta + html
+
+
+def _harden_cmd(cmd: list) -> list:
+    """旗標（呼叫端已經帶了同名旗標就不重複）。"""
+    have = {str(a).split("=", 1)[0] for a in cmd}
+    extra = [f for f in _HARDEN_FLAGS if f.split("=", 1)[0] not in have]
+    return [cmd[0]] + extra + list(cmd[1:]) if extra else list(cmd)
+
+
+def _harden_html_file(cmd: list) -> None:
+    """命令列最後面的 `file:///….html` 是要渲染的檔案：讀進來、寫入 CSP、寫回。找不到這樣的參數（不是渲染 HTML 的呼叫）⇒ 不做事。"""
+    url = next((str(a) for a in reversed(cmd) if str(a).lower().startswith("file:///") and str(a).lower().split("?")[0].endswith((".html", ".htm"))), None)
+    if not url:
+        return
+    path = url[len("file:///"):].split("?")[0].split("#")[0]            # 各 builder 組的是未編碼的路徑（不 unquote，免得路徑裡的 % 被誤解）
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    out = _inject_csp(html)
+    if out != html:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(out)
+
+
 def run_edge_pdf(cmd: list) -> None:
     """跑一次 Edge headless 產 PDF：拿 semaphore、限時、逾時不往外丟例外。
 
@@ -190,6 +245,12 @@ def run_edge_pdf(cmd: list) -> None:
     竄到全域 exception handler 變成「伺服器發生內部錯誤，請聯絡管理員」＋一份
     traceback，使用者與 log 都看不出是渲染逾時。現在 log 裡會有明確的一行。
     """
+    try:
+        _harden_html_file(cmd)                                  # H1：硬化失敗 ⇒ 不渲染（呼叫端既有的『沒產出就 raise』會報錯），不能退回沒有 CSP 的渲染
+        cmd = _harden_cmd(cmd)
+    except Exception:                                           # noqa: BLE001
+        logger.exception("PDF 渲染硬化失敗，已中止這次渲染（不產出）")
+        return
     with EDGE_PDF_SEMAPHORE:
         already = any(str(a).startswith("--user-data-dir") for a in cmd)
         profile = None if already else _edge_profile_acquire()
