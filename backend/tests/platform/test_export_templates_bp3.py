@@ -533,24 +533,47 @@ def test_pdf_comparator_adding_visible_text_is_a_loosening():
     assert classify("export_template", {"version": 1, "format": "pdf", "footer": {"text": "a"}}, {"version": 1, "format": "pdf", "footer": {"text": "a"}, "header": {"text": "H"}})[0] == "loosen"
 
 
-# ═══ SheetJS 三頁（客戶／料號／供應商）：先過伺服器稽核與冷卻 ═════════════════════════════════════
-def test_client_export_log_audits_rate_limits_and_validates(client, make_user):
+# ═══ SheetJS 三頁（客戶／料號／供應商）：builder_exports 開啟時送稽核紀錄（只記錄，不擋）═════════════════════════════════════
+def _client_log_rows(target):
     import db
+    c = db.get_db()
+    try:
+        return c.execute("SELECT detail FROM audit_log WHERE action='export.xlsx' AND target_id=? ORDER BY id", (target,)).fetchall()
+    finally:
+        c.close()
+
+
+def test_client_export_log_is_off_by_default_logs_when_on_never_blocks_and_validates(client, make_user, monkeypatch):
     _, hd = _login(client, make_user, "bp3_sa14", "superadmin")
     url = "/api/exports/client-log"
     assert client.post(url, json={"name": "customers", "rows": 3}).status_code in (401, 403)
     assert client.post(url, json={"name": "nope", "rows": 3}, headers=hd).status_code == 422
     for bad in (-1, 200001, "3", True, None, 1.5):
         assert client.post(url, json={"name": "customers", "rows": bad}, headers=hd).status_code == 422, bad
+    _flag(monkeypatch, False)
+    n0 = len(_client_log_rows("customers"))
     r = client.post(url, json={"name": "customers", "rows": 12}, headers=hd)
-    assert r.status_code == 200 and r.json() == {"ok": True}
-    c = db.get_db()
-    try:
-        row = c.execute("SELECT detail FROM audit_log WHERE action='export.xlsx' AND target_id='customers' ORDER BY id DESC LIMIT 1").fetchone()
-    finally:
-        c.close()
-    assert row is not None and '"rows": 12' in row[0] and '"client": true' in row[0] and "crm" in row[0]
-    assert client.post(url, json={"name": "customers", "rows": 12}, headers=hd).status_code == 429, "冷卻中 ⇒ 429（前端不產檔）"
+    assert r.status_code == 200 and r.json() == {"ok": True, "logged": False}
+    assert len(_client_log_rows("customers")) == n0, "旗標關：什麼都不寫（今天的行為）"
+    _flag(monkeypatch, True)
+    for i in range(3):                                                      # 連點三次：每次都記錄、永遠不 429、不碰伺服端 Excel 的冷卻
+        r = client.post(url, json={"name": "customers", "rows": 12}, headers=hd)
+        assert r.status_code == 200 and r.json() == {"ok": True, "logged": True}
+    rows = _client_log_rows("customers")
+    assert len(rows) == n0 + 3 and '"rows": 12' in rows[-1][0] and '"client": true' in rows[-1][0] and "crm" in rows[-1][0]
+    from helpers import xlsx_out
+    assert xlsx_out._export_times == {}, "client-log 不動伺服端 Excel 匯出的冷卻"
+
+
+def test_menu_response_gains_export_audit_for_everyone_only_when_on(client, make_user, monkeypatch):
+    _, h_sa = _login(client, make_user, "bp3_sa15", "superadmin")
+    _, h_ad = _login(client, make_user, "bp3_ad6", "admin", modules=["daily_task"])
+    _flag(monkeypatch, False)
+    assert "exportAudit" not in client.get("/api/platform/menu", headers=h_ad).json()
+    _flag(monkeypatch, True)
+    for h in (h_sa, h_ad):
+        assert client.get("/api/platform/menu", headers=h).json().get("exportAudit") is True
+    assert "builderExports" not in client.get("/api/platform/menu", headers=h_ad).json(), "編輯器的鍵仍只給最高管理者"
 
 
 def test_the_three_sheetjs_pages_call_the_guard_before_writing_the_file():

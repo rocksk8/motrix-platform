@@ -617,7 +617,7 @@ function app() {
           '備註': p.note || ''
         }
       })
-      if (!(await MotrixExport.guard('parts', rows.length))) return   // BP-3：先過伺服器稽核與匯出冷卻（429 ⇒ 不產檔）
+      if (!(await MotrixExport.guard('parts', rows.length))) return   // BP-3：builder_exports 開啟時送一筆稽核紀錄（fire-and-forget，不擋匯出；關著＝不發請求）
       const ws = XLSX.utils.json_to_sheet(rows)
       ws['!cols'] = [12,24,12,20,10,8,12,12,24].map(w=>({wch:w}))
       const wb = XLSX.utils.book_new()

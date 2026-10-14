@@ -165,6 +165,9 @@ def platform_menu(authorization: str = Header(None)):
             "layout": layout,
             # 完整的頁面⇒模組（含已安裝未載入；登入後才給，C4-O3）：前端藏頁內連結、直接打網址的後備提示用
             "pageModules": _page_modules(PAGE_MAP)}
+    from helpers import export_templates as _ET0
+    if _ET0.enabled():
+        resp["exportAudit"] = True                        # BP-3：給所有人（不只最高管理者）——瀏覽器端產檔的匯出據此才送一筆稽核紀錄；關著 ⇒ 沒有這個鍵、頁面不多任何請求
     if sa:
         from helpers import menu_builder as MB
         if MB.enabled():

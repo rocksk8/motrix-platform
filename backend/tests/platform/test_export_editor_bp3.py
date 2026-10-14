@@ -190,28 +190,31 @@ def test_pdf_decor_only_editor_has_no_columns_and_checks_the_watermark_words():
 
 
 @pytest.mark.skipif(NODE is None, reason="沒有 node")
-def test_export_guard_returns_false_only_when_the_server_says_429():
+def test_export_guard_sends_nothing_when_off_and_never_blocks_when_on():
     guard = Path(__file__).resolve().parents[3] / "frontend" / "static" / "export-guard.js"
     h = r"""
     const fs = require('fs'); global.window = global
     global.localStorage = { getItem: () => JSON.stringify({ token: 'tok' }) }
-    global.document = { createElement: () => ({ setAttribute() {}, remove() {} }), body: { appendChild() {} } }
     const sent = []
-    let mode = process.argv[1]
-    global.fetch = async (url, o) => {
+    const mode = process.argv[1], audit = process.argv[2] === 'on'
+    if (audit) window.MOTRIX_EXPORT_AUDIT = true
+    global.fetch = (url, o) => {
       sent.push([url, o.method, o.headers.Authorization, o.body])
-      if (mode === 'net') throw new Error('down')
-      return { status: mode === '429' ? 429 : mode === '500' ? 500 : 200, json: async () => ({ detail: '請等待 3 秒後再次匯出' }) }
+      if (mode === 'net') return Promise.reject(new Error('down'))
+      if (mode === 'throw') throw new Error('sync boom')
+      return Promise.resolve({ status: mode === '429' ? 429 : mode === '500' ? 500 : 200, json: async () => ({}) })
     }
-    eval(fs.readFileSync(process.argv[2], 'utf8'))
-    window.MotrixExport.guard('parts', 7.9).then(v => console.log(JSON.stringify({ v, sent })))
+    eval(fs.readFileSync(process.argv[3], 'utf8'))
+    window.MotrixExport.guard('parts', 7.9).then(v => setTimeout(() => console.log(JSON.stringify({ v, sent })), 20))
     """
-    def go(mode):
-        out = subprocess.run([NODE, "-e", h, mode, str(guard)], capture_output=True, timeout=30)
+    def go(mode, audit):
+        out = subprocess.run([NODE, "-e", h, mode, audit, str(guard)], capture_output=True, timeout=30)
         assert out.returncode == 0, out.stderr.decode("utf-8", "replace")[:800]
         return json.loads(out.stdout.decode("utf-8"))
-    ok = go("200")
-    assert ok["v"] is True and ok["sent"][0][0] == "/api/exports/client-log" and ok["sent"][0][2] == "Bearer tok"
-    assert json.loads(ok["sent"][0][3]) == {"name": "parts", "rows": 7}
-    assert go("429")["v"] is False, "冷卻中 ⇒ 不產檔"
-    assert go("500")["v"] is True and go("net")["v"] is True, "稽核端點故障不擋匯出（只寫 console）"
+    off = go("200", "off")
+    assert off["v"] is True and off["sent"] == [], "旗標關（沒有 exportAudit）⇒ 完全不發請求，行為與今天相同"
+    on = go("200", "on")
+    assert on["v"] is True and on["sent"][0][0] == "/api/exports/client-log" and on["sent"][0][2] == "Bearer tok"
+    assert json.loads(on["sent"][0][3]) == {"name": "parts", "rows": 7}
+    for mode in ("429", "500", "net", "throw"):
+        assert go(mode, "on")["v"] is True, "任何回應或錯誤都不擋匯出（%s）" % mode

@@ -993,7 +993,7 @@
           '聯絡人電話': c.contacts?.[0]?.phone||'', '聯絡人Email': c.contacts?.[0]?.email||'',
           '備註': c.notes||''
         }))
-        if (!(await MotrixExport.guard('customers', rows.length))) return   // BP-3：先過伺服器稽核與匯出冷卻（429 ⇒ 不產檔）
+        if (!(await MotrixExport.guard('customers', rows.length))) return   // BP-3：builder_exports 開啟時送一筆稽核紀錄（fire-and-forget，不擋匯出；關著＝不發請求）
         const ws = XLSX.utils.json_to_sheet(rows)
         ws['!cols'] = [20,16,10,14,14,22,22,24,22,10,10,10,14,18,10,10,14,22,20].map(w=>({wch:w}))
         const wb = XLSX.utils.book_new()

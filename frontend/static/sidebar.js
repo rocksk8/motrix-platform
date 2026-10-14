@@ -1147,6 +1147,7 @@ if (typeof module !== 'undefined' && module.exports) {
         _showModuleNotice()
         _setMenuState('layout')
         document.documentElement.setAttribute('data-menu-seq', String(my))
+        window.MOTRIX_EXPORT_AUDIT = d.exportAudit === true      // BP-3：builder_exports 開啟時（所有人）瀏覽器端產檔的匯出才送稽核紀錄；關著 ⇒ 不發請求
         if (d.builderExports) _loadExportEditor()      // BP-3
         if (d.builderMenu) _loadMenuEditor()          // BP-1：builder_menu.enabled 開啟且是最高管理者才有這個鍵（關著 ⇒ 完全不載入）
       })

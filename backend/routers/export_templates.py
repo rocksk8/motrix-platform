@@ -6,15 +6,15 @@
 - `POST /api/export-templates/{export_id}/preview` 僅最高管理者、唯讀 ⇒ `{user, role, format, columns, rows, omitted, warnings, sample}`；
   不寫任何資料、不計匯出次數、不留 `export.*` 稽核。草稿不合法 ⇒ 422；找不到使用者 ⇒ 404。
 發布走既有的 `/api/definitions/export_template/{export_id}/*`（版本／差異／還原／帳本／發布前預覽雜湊全部沿用）。
-- `POST /api/exports/client-log {name, rows}`（登入即可）：瀏覽器端產檔的匯出（客戶、料號、供應商三頁的 SheetJS）先呼叫這支，**寫一筆 `export.xlsx` 稽核並套用匯出冷卻**
-  （與伺服端 Excel 匯出同一個 5 秒冷卻）。名稱只能是白名單；rows 是 0～200000 的整數。冷卻中 ⇒ 429（前端不產檔）。
-  這是『自報』的紀錄（伺服器無法證明檔案真的產生），但補上了這三頁原本沒有稽核、沒有冷卻的缺口（使用者規則 2026-09-30：每一次匯出都要留紀錄）。
+- `POST /api/exports/client-log {name, rows}`（登入即可）：瀏覽器端產檔的匯出（客戶、料號、供應商三頁的 SheetJS）**在 builder_exports 開啟時**送一筆 `export.xlsx` 稽核。
+  **只記錄，不擋**：沒有冷卻、永不回 429（也不碰伺服端 Excel 匯出的冷卻）；前端 fire-and-forget。旗標關 ⇒ 什麼都不寫、回 `{ok:true, logged:false}`（前端本來就不會送）。
+  名稱只能是白名單；rows 是 0～200000 的整數。這是『自報』的紀錄（伺服器無法證明檔案真的產生）。
 """
 from fastapi import APIRouter, Body, Header, HTTPException
 
 from db import get_db
 from helpers import _audit, _require_user, _tok
-from helpers.xlsx_out import check_export_rate, summarize_filters
+from helpers.xlsx_out import summarize_filters
 from helpers import export_templates as ET
 
 router = APIRouter()
@@ -72,8 +72,9 @@ def client_export_log(body: dict = Body(default={}), authorization: str = Header
     rows = b.get("rows")
     if isinstance(rows, bool) or not isinstance(rows, int) or not 0 <= rows <= 200000:
         raise HTTPException(422, "rows 必須是 0～200000 的整數")
-    check_export_rate(u["id"], "xlsx")                       # 冷卻中 ⇒ 429（與伺服端 Excel 匯出共用同一個冷卻）
+    if not ET.enabled():
+        return {"ok": True, "logged": False}                  # 旗標關：今天的行為（不記錄）
     _audit(_tok(authorization), "export.xlsx", "export", name, name,
            {"module": CLIENT_EXPORTS[name], "format": "xlsx", "filters": summarize_filters({}), "rows": rows, "client": True})
-    return {"ok": True}
+    return {"ok": True, "logged": True}
 
