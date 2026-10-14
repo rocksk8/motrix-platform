@@ -26,7 +26,8 @@
   var RESERVED_EN = /(?<![a-z])(?:approve|approved|passed|paid|original|void|signed|final)(?![a-z])/
   var PH = /\{([^{}]{1,12})\}/g
 
-  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, cat: null, vals: {}, etag: '', note: '' }
+  // st.cat＝目前選的事件描述（欄位、預設字、樣本、信件明細列）；st.events＝全部事件；st.store＝各事件各自的編輯副本（切換不遺失）
+  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, cat: null, events: [], cur: 0, store: {}, loaded: {}, vals: {}, etag: '', note: '' }
   var root = null
 
   function session() { try { return JSON.parse(localStorage.getItem('motrix_session') || 'null') || {} } catch (e) { return {} } }
@@ -67,6 +68,7 @@
     var f = fieldOf(path); if (!f) return ''
     v = String(v || '')
     if (!v.trim()) return ''
+    if (v === f.default) return ''                        // 與預設字相同＝程式碼寫死的字，放行（可能含斜線、狀態字樣）
     if (v.length > f.limit) return '最多 ' + f.limit + ' 字'
     if (INVIS.test(v)) return '不可含控制、隱形、雙向或私用字元'
     if (BAD.test(v)) return '不可含標記字元（< > & 引號 反斜線）'
@@ -79,6 +81,7 @@
     var rest = v.replace(PH, '')
     if (rest.indexOf('{') >= 0 || rest.indexOf('}') >= 0) return '大括號只能用在占位符'
     if (f.need && f.need.length) for (var j = 0; j < f.need.length; j++) if (names.indexOf(f.need[j]) < 0) return '必須包含 {' + f.need[j] + '}（讓收件人認得是哪一張單）'
+    if (f.allowStatus) return ''                          // 這個欄位本來就是在說明該事件的官方結果（例如核准事件）：事件鍵決定能不能說
     var sk = skeleton(rest)
     for (var k = 0; k < RESERVED.length; k++) if (sk.indexOf(skeleton(RESERVED[k])) >= 0) return '不可含官方狀態字樣：' + RESERVED[k]
     var en = RESERVED_EN.exec(rest.normalize('NFKC').toLowerCase()); if (en) return '不可含官方狀態字樣：' + en[0]
@@ -114,7 +117,19 @@
     return vals
   }
 
+  // 切換事件（報價單送審／輪到下一層／核准／退回）：先把目前這一個的編輯內容收進 st.store，再還原要看的那個；沒讀過就向後端讀一次
+  function selectEvent(i) {
+    if (i === st.cur && st.loaded[EVENT]) return Promise.resolve()
+    st.store[EVENT] = { vals: st.vals, etag: st.etag }
+    st.cur = i; st.cat = st.events[i]; EVENT = st.cat.event
+    st.msg = ''; st.msgBad = false; st.state = 'idle'
+    var s = st.store[EVENT]
+    if (s) { st.vals = s.vals; st.etag = s.etag; render(); return Promise.resolve() }
+    st.vals = fromTemplate(null); st.etag = ''
+    return load()
+  }
   function load() {
+    st.loaded[EVENT] = true
     st.busy = true; st.msg = '讀取中…'; render()
     return api('GET', '/api/definitions/' + KIND + '/' + encodeURIComponent(EVENT) + '?scope=company').then(function (d) {
       var src = (d.draft && d.draft.body) || (d.latest && d.latest.body) || null
@@ -158,8 +173,8 @@
       return api('POST', '/api/definitions/' + KIND + '/' + encodeURIComponent(EVENT) + '/publish?scope=company', body).then(function (r) {
         st.busy = false
         if (r && r.pending === true) { st.state = 'pending'; st.msg = pendingText(r); st.msgBad = false; render(); return }
-        st.state = 'published'; st.msg = '已發布。之後的送審通知依這份用語。'; st.msgBad = false
-        return load().then(function () { st.msg = '已發布。之後的送審通知依這份用語。'; st.state = 'published'; render() })
+        st.state = 'published'; st.msg = '已發布。之後的「' + st.cat.label + '」通知依這份用語。'; st.msgBad = false
+        return load().then(function () { st.msg = '已發布。之後的「' + st.cat.label + '」通知依這份用語。'; st.state = 'published'; render() })
       })
     }).catch(function (e) {
       var code = e.body && e.body.code
@@ -180,6 +195,7 @@
     var msg = expand(eff('inapp.message'), ctxShow)
     var masked = msg.replace(MONEY, '（金額略）')
     var reason = expand(eff('mail.reason'), ctxShow)
+    var mailRows = st.cat.mailRows || []
     var box = el('div', { style: 'margin-top:10px;padding:8px;border:1px dashed var(--border,#bbb);border-radius:8px', 'data-role': 'preview' })
     box.appendChild(el('div', { text: '即時預覽（樣本單據：' + (ctx['單號'] || '') + '／' + (ctx['對象'] || '') + '）', style: 'font-size:12px;font-weight:600' }))
     box.appendChild(el('div', { text: '站內訊息（簽核人看到）', style: 'font-size:11px;color:var(--text-dim,#888);margin-top:6px' }))
@@ -198,8 +214,10 @@
       ]),
       el('div', { text: '事由', style: 'font-weight:700;margin-top:8px' }),
       el('div', { text: expand(eff('mail.intro'), ctxShow), 'data-role': 'pv-intro' }),
-      el('div', { text: '報價單號', style: 'color:#666;margin-top:6px' }), el('div', { text: ctx['單號'] || '' }),
-      el('div', { text: '客戶名稱', style: 'color:#666;margin-top:4px' }), el('div', { text: ctx['對象'] || '' }),
+      el('div', {}, mailRows.map(function (r) {              // 信件明細列（固定，不由範本決定）：標籤＋樣本值
+        return el('div', {}, [el('div', { text: r[0], style: 'color:#666;margin-top:6px' }), el('div', { text: r[1].indexOf('{') >= 0 ? expand(r[1], ctxShow) : (ctx[r[1]] || '') })])
+      })),
+      st.cat.noteSample ? el('div', { text: st.cat.noteSample, style: 'margin-top:8px;padding:6px 8px;background:#FFF8E1;border-radius:6px;color:#7A5A00' }) : null,
       el('div', { text: expand(eff('mail.button'), ctxShow), style: 'display:inline-block;margin-top:10px;padding:6px 14px;background:#1D4ED8;color:#fff;border-radius:6px', 'data-role': 'pv-button' })
     ]))
     box.appendChild(el('div', { text: '主旨前綴與分類、信件版型、收件人與寄送時機都不能改；信件沒有金額欄位。', style: 'font-size:11px;color:var(--text-dim,#888);margin-top:4px' }))
@@ -210,10 +228,17 @@
     if (!root) return
     while (root.firstChild) root.removeChild(root.firstChild)
     root.setAttribute('data-state', st.state); root.setAttribute('data-busy', st.busy ? '1' : '0')
-    root.appendChild(el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'toggle', text: st.open ? '收起簽核通知用語' : '簽核通知用語', onclick: function () { st.open = !st.open; if (st.open) load(); else render() } }))
+    root.appendChild(el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'toggle', text: st.open ? '收起簽核通知用語' : '簽核通知用語', onclick: function () { st.open = !st.open; if (st.open && !st.loaded[EVENT]) load(); else render() } }))
     if (!st.open || !st.cat) return
     var panel = el('div', { style: 'margin-top:6px;padding:12px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--bg-card,#fff);max-width:720px' })
-    panel.appendChild(el('div', { text: st.cat.label + '：調整簽核人收到的訊息與通知信文字（留空＝用系統預設字）', style: 'font-size:13px;font-weight:600;margin-bottom:6px' }))
+    if (st.events.length > 1) {                           // 事件分頁：報價單送審／輪到下一層／核准／退回
+      panel.appendChild(el('div', { style: 'display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px', 'data-role': 'tabs' }, st.events.map(function (ev, i) {
+        return el('button', { type: 'button', class: 'btn btn-sm ' + (i === st.cur ? 'btn-primary' : 'btn-ghost'), 'data-event': ev.event, text: ev.label.replace(/（.*$/, ''),
+                              disabled: st.busy ? 'disabled' : null, onclick: function () { selectEvent(i) } })
+      })))
+    }
+    panel.appendChild(el('div', { text: st.cat.label + '：調整收到的訊息與通知信文字（留空＝用系統預設字）', style: 'font-size:13px;font-weight:600;margin-bottom:6px' }))
+    panel.appendChild(el('div', { text: '文字只能用中文、英數字與常用標點；不能使用 $ 與 /（金額請寫成「1,200 元」這類說法），也不能放網址或標記。', style: 'font-size:11px;color:var(--text-dim,#888);margin-bottom:6px', 'data-role': 'help' }))
     fields().forEach(function (f) {
       var prob = problemOf(f.field, st.vals[f.field])
       var input = el('input', { type: 'text', 'data-path': f.field, value: st.vals[f.field] || '', placeholder: f.default, maxlength: String(f.limit + 20), style: 'flex:1;font-size:12px', oninput: function (ev) { st.vals[f.field] = ev.target.value; st.state = 'idle'; refreshLive() } })
@@ -248,9 +273,9 @@
   }
 
   function boot(mount) {
-    api('GET', '/api/notify-templates/' + encodeURIComponent(EVENT) + '/status').then(function (s) {
-      if (!s || !s.enabled || !s.canEdit) return                      // 旗標關／治理沒開／不是最高管理者 ⇒ 完全不畫
-      st.cat = s
+    api('GET', '/api/notify-templates/status').then(function (s) {
+      if (!s || !s.enabled || !s.canEdit || !s.events || !s.events.length) return   // 旗標關／治理沒開／不是最高管理者 ⇒ 完全不畫
+      st.events = s.events; st.cur = 0; st.cat = s.events[0]; EVENT = st.cat.event
       root = el('div', { id: 'notify-editor-root', style: 'margin:12px 0' })
       ;(mount || document.body).appendChild(root)
       render()
@@ -258,7 +283,9 @@
   }
   window.MotrixNotifyEditor = {
     _toTemplate: toTemplate, _problems: allProblems, _problemOf: problemOf, _pendingText: pendingText, publish: doPublish, _expand: expand, _state: st,
-    _init: function (cat) { st.cat = cat; st.vals = fromTemplate(null) },
+    _init: function (cat) { st.events = [cat]; st.cur = 0; st.cat = cat; EVENT = cat.event || EVENT; st.store = {}; st.loaded = {}; st.vals = fromTemplate(null) },
+    _initAll: function (events) { st.events = events; st.cur = 0; st.cat = events[0]; EVENT = events[0].event; st.store = {}; st.loaded = {}; st.vals = fromTemplate(null) },
+    _select: selectEvent,
     start: function () { boot(document.getElementById('notify-editor-mount')) }
   }
 })()

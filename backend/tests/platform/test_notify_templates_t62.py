@@ -240,3 +240,82 @@ def test_r3_character_allowlist_blocks_lookalikes_before_the_reserved_check(text
 def test_r3_defaults_and_normal_text_pass_the_allowlist():
     assert NT.definition_problems(KEY, NT.default_template(KEY)) == []
     assert _bad({"version": 1, "mail": {"intro": "您好，請於 2026-10-20 前處理（急件）：謝謝！"}}) == set()
+
+
+# ── N 刀：輪到下一層／核准／退回（報價單家族）──────────────────────────────────────────
+NT_CTX = {"單號": "MQ-9", "對象": "丙公司", "標記": "", "層": 2, "總層": 3, "最終審核人": "王經理", "原單號": "MQ-9", "新單號": "MQ-9-R1"}
+
+
+def test_all_events_defaults_are_valid_and_exempt_from_the_character_rules():
+    for k in NT.EVENTS:
+        assert NT.definition_problems(k, NT.default_template(k)) == [], k
+    assert "/" in NT.EVENTS["approval:next_tier"]["fields"]["inapp.message"]["default"], "預設字含斜線，仍要放行"
+    assert _bad_for("approval:next_tier", {"version": 1, "inapp": {"message": "輪到您 {單號} 第 {層}/{總層} 層"}}) == {"inapp.message"}
+
+
+def _bad_for(key, body):
+    return {p["path"] for p in NT.definition_problems(key, body)}
+
+
+def test_allow_status_only_on_the_approved_event():
+    assert _bad_for("approval:approved", {"version": 1, "mail": {"badge": "已核准", "intro": "全數通過 批准 approved"}}) == set()
+    assert _bad_for("approval:approved", {"version": 1, "mail": {"badge": "аpproved"}}) == {"mail.badge"}, "外觀相似字仍擋"
+    for k in ("approval:submitted", "approval:next_tier", "approval:returned"):
+        assert _bad_for(k, {"version": 1, "mail": {"badge": "已核准"}}) == {"mail.badge"}, k
+
+
+def test_quote_family_inapp_helpers_are_byte_identical_when_off_and_use_the_template_when_published(monkeypatch):
+    from modules.case.api import quotations as QA
+    _tpl_ev(monkeypatch, {})
+    assert QA._tier_msg("MQ-1", "（退回改版）", "乙", 2, 3) == "報價單 MQ-1（退回改版）（乙）輪到您簽核（第 2 層 / 共 3 層）"
+    assert QA._tier_msg("MQ-1", "", "乙", 2, 3) == "報價單 MQ-1（乙）輪到您簽核（第 2 層 / 共 3 層）"
+    assert QA._approved_msg("MQ-1", "乙", "王") == "報價單 MQ-1（乙）已核准"
+    assert QA._returned_msg("MQ-1-R1", "MQ-1", "乙") == "報價單 MQ-1-R1（原 MQ-1，乙）已退回修改，請確認後重新送審"
+    _tpl_ev(monkeypatch, {"approval:next_tier": {"version": 1, "inapp": {"message": "輪到您 {單號} 第 {層} 層"}},
+                          "approval:approved": {"version": 1, "inapp": {"message": "{單號} 已核准完成"}},
+                          "approval:returned": {"version": 1, "inapp": {"message": "{新單號} 請修改"}}})
+    assert QA._tier_msg("MQ-1", "", "乙", 2, 3) == "輪到您 MQ-1 第 2 層"
+    assert QA._approved_msg("MQ-1", "乙", "王") == "MQ-1 已核准完成"
+    assert QA._returned_msg("MQ-1-R1", "MQ-1", "乙") == "MQ-1-R1 請修改"
+
+
+def _tpl_ev(monkeypatch, by_event):
+    monkeypatch.setattr(NT, "resolve", lambda key, conn=None: by_event.get(key))
+
+
+def test_quote_family_mails_are_byte_identical_when_off_and_change_only_the_template_fields(monkeypatch):
+    sent = _capture_mail(monkeypatch)
+    calls = [lambda: EN.notify_next_tier("MQ-9", "丙公司", 2, 3, ["u"]),
+             lambda: EN.notify_approved("MQ-9", "丙公司", "王經理", "u"),
+             lambda: EN.notify_returned("MQ-9", "MQ-9-R1", "丙公司", "請補資料", "u")]
+    monkeypatch.setattr(EN, "_admin_emails", lambda k=None: [])
+    _tpl_ev(monkeypatch, {})
+    off = []
+    for c in calls:
+        c()
+        off.append((sent["subject"], sent["html"]))
+    assert off[0][0] == "【MOTRIX 系統通知】簽核－報價單審核通知（第 2/3 層）：MQ-9（丙公司）"
+    assert off[1][0] == "【MOTRIX 系統通知】簽核－報價單審核完成：MQ-9（丙公司）"
+    assert off[2][0] == "【MOTRIX 系統通知】簽核－報價單退回修改：MQ-9（丙公司）"
+    # 發布範本但沒有任何欄位對上 ⇒ 仍與關閉時相同（沒設定的欄位維持預設）
+    _tpl_ev(monkeypatch, {"approval:next_tier": {"version": 1, "mail": {}}, "approval:approved": {"version": 1, "mail": {}}, "approval:returned": {"version": 1, "mail": {}}})
+    for c, (subj, html) in zip(calls, off):
+        c()
+        assert (sent["subject"], sent["html"]) == (subj, html)
+    _tpl_ev(monkeypatch, {"approval:next_tier": {"version": 1, "mail": {"reason": "輪到您 {單號}", "badge": "請處理", "intro": "第 {層} 層"}},
+                          "approval:approved": {"version": 1, "mail": {"badge": "已核准", "reason": "完成 {單號} {最終審核人}"}},
+                          "approval:returned": {"version": 1, "mail": {"reason": "退回 {原單號} {新單號}", "button": "去修改"}}})
+    calls[0]()
+    assert sent["subject"] == "【MOTRIX 系統通知】簽核－輪到您 MQ-9" and "請處理" in sent["html"] and "第 2 層" in sent["html"] and "報價單簽核流程通知" in sent["html"]
+    calls[1]()
+    assert sent["subject"] == "【MOTRIX 系統通知】簽核－完成 MQ-9 王經理" and "已核准" in sent["html"]
+    calls[2]()
+    assert sent["subject"] == "【MOTRIX 系統通知】簽核－退回 MQ-9 MQ-9-R1" and "去修改" in sent["html"] and "請補資料" in sent["html"]
+
+
+def test_defaults_in_the_senders_equal_the_event_defaults():
+    import inspect
+    for fn, key in ((EN.notify_next_tier, "approval:next_tier"), (EN.notify_approved, "approval:approved"), (EN.notify_returned, "approval:returned")):
+        src = inspect.getsource(fn)
+        for f in ("title", "badge", "button"):
+            assert NT.EVENTS[key]["fields"]["mail." + f]["default"] in src, (key, f)

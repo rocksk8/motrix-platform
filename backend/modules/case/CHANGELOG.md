@@ -3,6 +3,7 @@
 
 ## (next) — wip/t62-notify-wording-r1（S-X3 報價單送審通知用語；旗標預設關）
 
+- 報價單輪到下一層、核准完成、退回修改的站內訊息可由通知用語範本改（S-X3，旗標預設關）：`quotations._tier_msg／_approved_msg／_returned_msg`；沒有範本 ⇒ 與今天同一個字串。無 migration、無新資料表、無權限變更。
 - 報價單送審的簽核人站內訊息可由通知用語範本改（S-X3，旗標預設關）：`_build_approval_tiers_and_notify` 兩處（第一層、無簽核層退回最高管理者）改走 `_submitted_msg`，沒有範本 ⇒ 與今天同一個字串。輪到下一層、核准、退回等其他訊息不動。無 migration、無新資料表、無權限變更。
 
 ## 1.0.186 — 2026-10-14（wip/t61-s5-impl-r1；S5：案件資訊的自訂欄位；r2 補整份寫入路徑）；t60 整合

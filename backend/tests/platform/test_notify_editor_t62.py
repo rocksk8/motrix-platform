@@ -23,11 +23,15 @@ KEY = "approval:submitted"
 DEF = "approval%3Asubmitted"
 
 
+def _view(key):
+    from routers.notify_templates import _event_view
+    return _event_view(key, NT.EVENTS[key])
+
+
 def _cat():
-    ev = NT.EVENTS[KEY]
-    return {"enabled": True, "canEdit": True, "event": KEY, "label": ev["label"], "sample": ev["sample"],
-            "fields": [{"field": p, "label": s["label"], "default": s["default"], "limit": s["limit"],
-                        "placeholders": list(s["placeholders"]), "need": list(s["need"])} for p, s in ev["fields"].items()]}
+    """GET /api/notify-templates/status（全部事件）的回應。"""
+    from routers.notify_templates import _event_view
+    return {"enabled": True, "canEdit": True, "events": [_event_view(k, v) for k, v in NT.EVENTS.items()]}
 
 
 _HARNESS = r"""
@@ -72,7 +76,7 @@ def _run(scen):
     return json.loads(out.stdout.decode("utf-8"))
 
 
-_SETUP = "const E = window.MotrixNotifyEditor, st = E._state; E._init(%s); " % json.dumps(_cat())
+_SETUP = "const E = window.MotrixNotifyEditor, st = E._state; E._init(%s); " % json.dumps(_view(KEY))
 pytestmark = pytest.mark.skipif(NODE is None, reason="沒有 node")
 
 
@@ -80,7 +84,7 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="沒有 node")
 def test_nothing_is_drawn_when_off_or_not_superadmin(status):
     r = _run({"status": status, "start": True})
     assert r["drawn"] == 0
-    assert r["calls"] == ["GET /api/notify-templates/%s/status" % DEF]
+    assert r["calls"] == ["GET /api/notify-templates/status"]
 
 
 def test_draws_when_on_and_superadmin():
@@ -148,3 +152,42 @@ def test_source_hygiene_and_page_wiring():
     assert 'id="notify-editor-mount"' in page and "MotrixPublicFlags.read(['builder_notify']" in page
     assert "notify-editor.js" in page and "s.role !== 'superadmin'" in page
     assert '<script src="../static/notify-editor.js"' not in page, "只能在旗標開啟時動態載入"
+
+
+# ── 其餘三個事件（輪到下一層／核准／退回）：欄位、預設字例外、狀態字樣允許、事件切換 ──────────────────────
+EVENT_KEYS = list(NT.EVENTS)
+
+
+def test_every_event_field_validation_matches_the_server_including_default_exemption_and_allow_status():
+    for key in EVENT_KEYS:
+        view = _view(key)
+        setup = "const E = window.MotrixNotifyEditor, st = E._state; E._init(%s); " % json.dumps(view)
+        for path, spec in NT.EVENTS[key]["fields"].items():
+            texts = ["正常文字", "含 {單號}", "含 {新單號}", "含 {原單號}", "x" * (spec["limit"] + 1), "<i>x</i>", "已核准通知", "批准", "paid", "{未知}",
+                     "第 {層} 層 / 共 {總層} 層", "a/b", spec["default"], "аpproved"]
+            r = _run({"status": _cat(), "run": setup + "return " + json.dumps(texts) + ".map(t => !!E._problemOf(%s, t))" % json.dumps(path)})
+            server = [bool(NT._text_problems(t, spec)) for t in texts]
+            assert r["v"] == server, (key, path, list(zip(texts, r["v"], server)))
+
+
+def test_help_text_says_dollar_and_slash_are_not_allowed():
+    js = EDITOR.read_text(encoding="utf-8")
+    assert "不能使用 $ 與 /" in js and "「1,200 元」" in js
+
+
+def test_tabs_switch_keep_each_events_edits_and_publish_uses_the_selected_event():
+    run = ("const E = window.MotrixNotifyEditor, st = E._state; E._initAll(%s); st.open = true;"
+           " st.vals['mail.badge'] = '請處理'; st.loaded['approval:submitted'] = true;"
+           " await E._select(1); const ev1 = st.cat.event; st.vals['mail.button'] = '前往處理'; "
+           " await E._select(0); const back = st.vals['mail.badge']; await E._select(1); const keep = st.vals['mail.button'];"
+           " await E.publish(); return [ev1, back, keep]") % json.dumps(_cat()["events"])
+    r = _run({"status": _cat(), "publish": {"pending": True}, "run": run})
+    assert r["v"] == ["approval:next_tier", "請處理", "前往處理"]
+    puts = [c for c in r["calls"] if c.startswith("PUT ")]
+    assert puts and puts[-1].endswith("/notify_template/approval%3Anext_tier/draft"), r["calls"]
+    assert r["bodies"]["PUT /api/definitions/notify_template/approval%3Anext_tier/draft"]["body"] == {"version": 1, "mail": {"button": "前往處理"}}
+
+
+def test_editor_status_all_endpoint_is_used_once_on_boot():
+    r = _run({"status": _cat(), "start": True})
+    assert r["calls"] == ["GET /api/notify-templates/status"]
