@@ -19,7 +19,7 @@ v2（2026-08-31 同日）：receivables.html（應收帳款）獨有的發票登
 import json
 import logging
 import re
-from datetime import date
+from datetime import date, timedelta
 
 import csv
 from typing import Optional
@@ -433,6 +433,7 @@ def _receivable_queue(conn, status: str = "unreceived") -> list:
     """status: unreceived（預設，出納待辦用）／received／all（比照
     dashboard.py 原 list_receivables() 的完整歷史，供併入的應收帳款查詢用）。"""
     today = date.today()
+    _overdue_before = (today - timedelta(days=_finance_params.receivable_grace_days())).isoformat()    # 寬限 0 天（預設）＝ today.isoformat()＝今天的行為
     rows = conn.execute("""
         SELECT quote_no, customer_name, project_name, sales_person,
                total, pretax, quote_date,
@@ -475,7 +476,7 @@ def _receivable_queue(conn, status: str = "unreceived") -> list:
                 "amount":              amounts[idx],
                 "quoteDate":           row["quote_date"] or "",
                 "expectedReceiptDate": expected,
-                "overdue":             bool(expected) and not received and expected < today.isoformat(),
+                "overdue":             bool(expected) and not received and expected < _overdue_before,
                 "received":            received,
                 "receivedAt":          pi.get("receivedAt") or "",
                 "receivedBy":          pi.get("receivedBy") or "",

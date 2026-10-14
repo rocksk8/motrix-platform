@@ -86,9 +86,10 @@ def fire(voucher_no) -> None:
 def _mail(kind, rows, link, ident, out=None):
     """字面 key 呼叫 send_registered（守門逐一核對）；不放金額。信件類型由 M01 登記；收件人＝財務群組。"""
     if kind == "soon":
+        _days = (out or {}).get("soonDays") or _core.soon_days()      # 掃描傳來的天數（與日期同一個數字）；直接呼叫時才自己讀
         return _en.send_registered("payable_due_soon", title="預定付款日將到", rows=rows, to_group=True,
-                                   badge_text="%d 天後到期" % _core.soon_days(), badge_color="#D97706", link=link, button_text="前往出納",
-                                   reason=ident, wait=True, out=out, note="您好，以下請款的預定付款日還有 %d 天，請安排付款。" % _core.soon_days())
+                                   badge_text="%d 天後到期" % _days, badge_color="#D97706", link=link, button_text="前往出納",
+                                   reason=ident, wait=True, out=out, note="您好，以下請款的預定付款日還有 %d 天，請安排付款。" % _days)
     if kind == "overdue":
         return _en.send_registered("payable_due_overdue", title="預定付款日已逾期", rows=rows, to_group=True,
                                    badge_text="已逾期", badge_color="#7F1D1D", link=link, button_text="前往出納",
@@ -104,7 +105,8 @@ def run_reminders(today=None) -> int:
         from helpers import business_days as _bd
         today = today or date.today()
         is_wd = _bd.is_working_day
-        cands = _core.candidate_planned_dates(today, is_wd)
+        d = _core.soon_days()                                   # 整次掃描只讀一次設定：候選日期與 run_scan 用同一個數字
+        cands = _core.candidate_planned_dates(today, is_wd, d)
         if not cands:
             _core.prune_guards(today)
             return 0
@@ -125,7 +127,7 @@ def run_reminders(today=None) -> int:
                 info.append(("關聯案件", r["quote_no"]))
             items.append({"guard_id": "%s.%s" % (SOURCE, no), "planned": planned, "ident": "%s %s" % (no, _what(r)), "rows": info,
                           "source": SOURCE, "key": no})
-        return _core.run_scan(items, today, is_wd=is_wd, send=_mail)
+        return _core.run_scan(items, today, is_wd=is_wd, send=_mail, days=d)
     except Exception as exc:                                              # noqa: BLE001
         logger.warning("subcontract.payable_due.run_reminders failed: %s", exc)
         return 0
