@@ -1,6 +1,6 @@
 # 應收應付 更新紀錄
 
-## (next) — 2026-10-15（wip/t62-fix-arap-r2；T62 audit A nit：僅註解）
+## 1.0.55 — 2026-10-15（wip/t62-fix-arap-r2；T62 audit A nit：僅註解）
 - `receivables.py` 的註解寫明收款品項 `type` 為顯示名稱：選項清單開啟時，gl_events E03 新草稿傳票的摘要跟著顯示名稱走（摘要不進 canonical_hash，不產生更正沖轉）。只改註解，無行為變更、無 migration、無新路由、無權限變更。
 
 ## 1.0.54 — 2026-10-14（wip/t61-bp3-templates-r1；BP-3：開票申請憑據 PDF 可加頁尾／浮水印文字）；t62 整合 r8
