@@ -105,6 +105,21 @@ body{font-family:Arial,sans-serif;background:#F5F5F0;margin:0;padding:24px}
 """
 
 
+class _Safe(str):
+    """已經是安全 HTML 的片段（呼叫端刻意傳入的標記；其中的使用者資料必須先 `_esc()`）。`_build_html` 對它不再逸出。"""
+
+
+def _safe(s) -> "_Safe":
+    return _Safe(s)
+
+
+def _esc(x) -> str:
+    """純文字 ⇒ HTML 逸出（& < > " '）；`_Safe` 原樣放行。純文字不含這五個字元時回傳值與輸入相同。"""
+    if isinstance(x, _Safe):
+        return x
+    return _html.escape(str(x), quote=True)
+
+
 def _build_html(mail_key: str, title: str, badge_text: str, badge_color: str,
                 rows: list, quote_no: str, base_url: str,
                 note: str = "", intro: str = "",
@@ -119,15 +134,21 @@ def _build_html(mail_key: str, title: str, badge_text: str, badge_color: str,
         logger.error("信件類型 %r 未登記（_build_html）", mail_key)
     impact = impact if impact is not None else (t.impact if t else "")
     action = action if action is not None else (t.action if t else "")
+    # 預設逸出（2026-10-14，04 稽核）：除了包成 `_safe()` 的片段（呼叫端刻意傳入的 HTML，其中的使用者資料要自己 `_esc()`），所有文字欄位都當純文字逸出。
+    # 純文字且不含 & < > " ' 時，輸出與逸出前逐位元相同（守門：tests/test_mail_escape_2026_10_14.py）。
+    title, badge_text, button_text, impact, action = _esc(title), _esc(badge_text), _esc(button_text), _esc(impact), _esc(action)
+    rows = [(_esc(k), _esc(v)) for k, v in rows]
+    note = _esc(note) if note else note
+    intro = _esc(intro) if intro else intro
     row_html = "".join(
         f'<div class="lbl">{k}</div><div class="val">{v}</div>'
         for k, v in rows
     )
     reason = intro or title
     note_html  = f'<div class="note">{note}</div>' if note else ""
-    link = f"{base_url}/pages/quotation-form.html?no={quote_no}" if quote_no else base_url
+    link = _esc(f"{base_url}/pages/quotation-form.html?no={quote_no}" if quote_no else base_url)
     sent_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-    source = "MOTRIX 系統（%s）／信件類型：%s" % (base_url, t.name if t else mail_key)
+    source = _esc("MOTRIX 系統（%s）／信件類型：%s" % (base_url, t.name if t else mail_key))
 
     def _sec(label, body):
         return (f'<div class="lbl" style="margin-top:14px;font-weight:700">{label}</div>'
