@@ -14,6 +14,11 @@ router = APIRouter()
 
 def kinds():
     """已登錄的定義種類（唯讀檢視，所以全部可看）；寫入（發布／還原）仍走既有端點與它們各自的把關與審核。"""
+    try:
+        from helpers import stage_templates as _ST
+        _ST.ensure_kind()                                              # 惰性登記（旗標關 ⇒ 不登記）
+    except Exception:                                                  # noqa: BLE001
+        pass
     return D.kinds()
 
 #: 影響範圍宣告（白話）：這一類定義發布後會動到哪裡。
@@ -22,6 +27,7 @@ _SCOPE_TEXT = {
     "output_template": {"screens": "該單據的列印／PDF／預覽版型", "customerVisible": True},
     "custom_fields": {"screens": "掛載該欄位集的表單與列表", "customerVisible": False},
     "custom_module": {"screens": "這個自訂模組的表單、列表、流程與簽核層", "customerVisible": False},
+    "case_stage_template": {"screens": "套用這個樣板時，新案件預填的執行階段（名稱、日期建議、收入認列比例建議）；已套用的案件不受影響", "customerVisible": False},
 }
 _GENERIC_SCOPE = {"screens": "使用這份定義的畫面", "customerVisible": False}
 

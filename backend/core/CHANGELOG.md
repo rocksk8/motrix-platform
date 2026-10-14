@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+
+## (next) — wip/t62-stage-template-r1（S-ST1 案件階段樣板：定義與治理分類；旗標預設關）
+
+- L1（S-ST1，wip/t62-stage-template-r1；旗標 `builder_stage_templates.enabled` 預設關，且需同時開 `builder_governance.enabled`；kind 惰性登記、功能狀態閘門）：新增 `helpers/stage_templates.py`（案件階段樣板定義：階段種類鍵、名稱、`offsetDays`／`durationDays`、選填 `ratioBp`、`dependsOn`；驗證含前置階段防環、有設比例就全設且合計 10000）與 `helpers/safe_text.py`（使用者可編輯短文字的共用安全檢查：字元白名單、相似字、網址斜線、官方狀態字樣）。治理：`def_pipeline.ACTIVE_KINDS` 加入 `case_stage_template`，比較函式依階段種類鍵配對——新增階段（無比例）＝收緊；移除階段、任何比例變動＝放寬；改名／工期／順序／前置＝中性。**本刀沒有套用端點、沒有 migration、沒有任何程式讀這個定義**：案件頁既有的階段新增、編輯、提醒、收入認列與結案關卡完全不變。
+
 ## 1.136 — wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1＋wip/t60（T60 選單 hub 群組／T61 S5 內建畫面自訂欄位／S6 自訂按鈕；旗標預設關）
 
 - L0（新增，只增；T60）：`core.menu.hub_group_keys()`。含系統中心入口的群組（例如 system）不能當選單「移到群組」的目的地——導覽列會把整個群組收成一個連結，搬進去的項目看不到；`resolve_move_target` 與驗證同步拒絕。旗標關閉時行為不變。
