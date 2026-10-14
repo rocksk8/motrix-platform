@@ -499,9 +499,9 @@ def test_batch3_pages_wire_the_helper_without_changing_logic():
     assert "stLabel('draft', 'settlement', '精算草稿')" in st and "stLabel('finalized', 'settlement', '精算完結')" in st
     assert "settlement.status === 'finalized'" in st and "window.MotrixStatus.init()" in st and "status-chip.js" in st
     vo = (FRONT / "pages/voucher.html").read_text(encoding="utf-8")
-    assert vo.count("stLabel(") == 2 and "v.status === '已過帳' ? 'posted'" in vo and "status === '已過帳' ? 'posted'" in vo
+    assert vo.count("stLabel(") == 3 and "v.status === '已過帳' ? 'posted'" in vo and "status === '已過帳' ? 'posted'" in vo
     js = (FRONT / "js/voucher.js").read_text(encoding="utf-8")
-    assert "stLabel(raw, ctx, fallback)" in js and "window.MotrixStatus.init()" in js and "status==='草稿' && !voidedAt" in js.replace(" ", "")
+    assert "stLabel(raw, ctx, fallback)" in js and "window.MotrixStatus.init()" in js and "get canEdit() { return this.status === '草稿' && !this.voidedAt }" in js
 
 
 @pytest.mark.skipif(not NODE, reason="需要 node")
