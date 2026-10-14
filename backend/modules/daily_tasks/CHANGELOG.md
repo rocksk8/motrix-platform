@@ -1,6 +1,6 @@
 # 每日任務 更新紀錄
 
-## (next) — 2026-10-14（wip/t61-bp3-templates-r1；每日任務歷程 CSV 可套用匯出範本）；t62 整合
+## (next) — 2026-10-14（wip/t61-bp3-templates-r1；每日任務歷程 CSV 可套用匯出範本）；t62 整合（終）
 - 每日任務歷程 CSV（`GET /api/daily-tasks/{id}/history/export`）可套用匯出範本（設定中心「自訂匯出」`builder_exports.enabled`，**預設關閉**）：最高管理者可選要匯出的欄位、標題與順序，發布前先預覽；沒有權限看的欄位不會出現。關閉或沒有已發布範本時，匯出檔與今天逐位元相同。頁面多載入 `export-editor.js`（旗標關／不是最高管理者時什麼都不畫）。無 migration、無權限變更。
 
 ## 1.0.11 — 2026-10-14（wip/t61-xl-safe-r1；匯出公式注入中和；歷程 CSV）
