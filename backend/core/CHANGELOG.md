@@ -1,5 +1,9 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — wip/t62-quote-cf-r1（Q3 報價單自訂欄位）
+
+- L1（Q3）：`helpers.builtin_fields.RECORD_TYPES` 新增記錄類型 `quotation`（報價單頂層 `customFields`；核心欄位清單＝報價單文件鍵，自訂欄位 key 不可同名）。沒有新路由、沒有介面變動；旗標沿用 `builder_custom_fields.enabled`（預設關）。
+
 ## 1.136 — wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1＋wip/t60（T60 選單 hub 群組／T61 S5 內建畫面自訂欄位／S6 自訂按鈕；旗標預設關）
 
 - L0（新增，只增；T60）：`core.menu.hub_group_keys()`。含系統中心入口的群組（例如 system）不能當選單「移到群組」的目的地——導覽列會把整個群組收成一個連結，搬進去的項目看不到；`resolve_move_target` 與驗證同步拒絕。旗標關閉時行為不變。

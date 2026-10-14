@@ -1,6 +1,7 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-14（wip/t57-material-recognize-toast-r1＋wip/t58-seg-base-adopt-r1＋wip/t59-bp1-fields-r1；認列存檔失敗提示如實說明／分段基準採用伺服器存入值／BP-1 案件清單與案件資訊表單可自訂版面）＋wip/t62-quote-layout-r1
+## (next) — 2026-10-14（wip/t57-material-recognize-toast-r1＋wip/t58-seg-base-adopt-r1＋wip/t59-bp1-fields-r1；認列存檔失敗提示如實說明／分段基準採用伺服器存入值／BP-1 案件清單與案件資訊表單可自訂版面）＋wip/t62-quote-layout-r1＋wip/t62-quote-cf-r1
+- Q3 報價單自己的自訂欄位（內建記錄類型 `quotation`，沿用 S5 的旗標 `builder_custom_fields.enabled`，預設關）：值存在報價單 data_json 頂層 `customFields`（沒有值就沒有這個鍵）。`POST /api/quotations`、`PUT /api/quotations/{no}`（唯二會收用戶端整份文件的路徑）都過閘門 `_quote_custom_fields_gate`：沒送這個鍵＝帶回舊值（整份取代不洗掉）、送了且有變＝過 `builtin_fields.gate("quotation", …)`（旗標關閉＝回舊值、型別錯 400 指名欄位）。報價單表單「二、案件資訊」最下方多一個「自訂欄位」區塊（旗標開啟才畫）。PDF、預覽、內部列印不含自訂欄位（測試含正對照）。
 - 報價單表單（`quotation-form.html`）的非金額區塊（基、客戶資訊、案件資訊、報價條件）接上版面引擎（BP-1／Q1，旗標 `builder_layout.quotation_form` 預設關）：module.json 登記四個表單（`qbasic`／`qcustomer`／`qproject`／`qterms`），核心欄位不可隱藏或改名；旗標關閉時綁定函式回中性值、不發版面請求，畫面與先前相同。改名與隱藏只作用在這張表單，PDF、匯出與報表不變；品項、合計、簽署與成本面板不在範圍。
 
 ## 1.0.186 — 2026-10-14（wip/t61-s5-impl-r1；S5：案件資訊的自訂欄位；r2 補整份寫入路徑）；t60 整合

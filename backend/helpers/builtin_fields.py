@@ -36,6 +36,17 @@ RECORD_TYPES = {
                  "filler", "sales", "executor", "warrantyNote", "notes", "payment", "materials", "devices", "stages",
                  "contract", "roles", "projectTimeline", "materialOrders"),
     },
+    # Q3：報價單本身（不是案件記錄）。值放在報價單 data_json 的頂層 `customFields`；寫入只有 create_quotation／update_quotation 兩條會收用戶端整份文件，
+    # 兩條都過閘門。只給看得到這張報價單的內部人員，不進客戶輸出（PDF／預覽／回簽頁）。
+    "quotation": {
+        "label": "報價單",
+        "table": "quotations", "path": ("customFields",),
+        "core": ("quoteNo", "quoteDate", "validDays", "status", "version", "locationId", "salesPerson", "salesPersonUsername", "salesPhone", "salesEmail",
+                 "customerId", "customerName", "customerTaxId", "contactName", "contactPhone", "contactEmail", "contactFax", "deliveryAddress",
+                 "deliveryLocation", "projectName", "supplierId", "items", "tot", "tax", "taxMode", "taxBasis", "taxBasisNote", "shipping", "discount",
+                 "paymentTerms", "deliveryTerms", "acceptanceTerms", "warrantyTerms", "afterSales", "termsPresetKey", "pdfShow", "approval",
+                 "dealTag", "settlement", "caseRecord", "editHistory", "overhead", "altGroups", "customFields"),
+    },
     "supplier": {
         "label": "供應商",
         "table": "suppliers", "path": ("customFields",),
