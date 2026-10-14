@@ -28,6 +28,13 @@ if (window.MotrixDefGovernance && await MotrixDefGovernance.available('layout'))
 ```
 自訂欄位、按鈕、版型編輯器同樣。接上並驗證後才在正式機開對應的 `enforce_*`。
 
+## 3c 審查後的修正（r1 之後的新提交）
+- A 還原也把關：`POST …/restore/{version}` 在強制範圍內需帶 `preview_hash`＝`v<版本>:<內容戳>`，由 `GET /api/def-governance/{kind}/{key}/impact?version=N` 取得並留『看過』稽核（沿用同一個把關函式，已發布版本不可變）。面板與三個編輯器已送；`layout-editor.js` 的還原（3c）仍需另行接，否則開啟 `enforce_layout` 後版面還原會 409。
+- B 發布以預覽戳進寫鎖：強制範圍內且呼叫端沒給 `base_etag` 時，以 `preview_hash` 當 `base_etag` ⇒ 閘門與發布之間草稿被改 ⇒ `D.publish` 丟 DraftConflict（409，`code=draft_conflict`）。
+- C 讀不到設定不再放行：可能被強制的 kind（內建名單＋選項名單）若讀 `builder_governance` 失敗 ⇒ 503＋日誌，擋下發布與還原；其他 kind 完全不讀設定（與今天相同）。
+- D 四個 `enforce_*` 是 `loosen="down"`：關閉強制走確認期間＋第二位最高管理者核准，等待期間仍強制。**取捨**：緊急回退不能靠關這四項即時生效；整體即時回退仍是關 `builder_governance.enabled`（它沒有加 loosen，維持 t59 行為）。
+- 回應碼：`preview_required`／`preview_stale` 與 `draft_conflict` 同為 409，用戶端依 `code` 分辨。
+
 ## 已知缺口
 1. 版面／欄位／按鈕／版型的編輯器除選單外都尚未送雜湊（上節）。
 2. 選單編輯器的「看過」＝整份選單預覽＋自動影響預覽；使用者不一定逐模組讀過影響預覽內容。

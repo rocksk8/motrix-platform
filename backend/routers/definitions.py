@@ -5,6 +5,7 @@
 例外：`GET /api/layout/{module}`（P9 執行時套用，§3.10）任何登入者可讀**自己角色**的版面（唯讀、只有 layout）。
 """
 import json
+import logging
 import re
 
 from fastapi import APIRouter, Body, Header, HTTPException, Query
@@ -360,20 +361,24 @@ def validate_definition(kind: str, key: str, payload: dict = Body(...), authoriz
 _PREVIEW_ENFORCED_KINDS = ("expense_type", "remit_kinds", "custom_module")
 
 
-def _preview_gate(conn, kind, key, scope, user, preview_hash):
+def _preview_gate(conn, kind, key, scope, user, preview_hash, expect=None):
     """發布前的把關。⇒ None（放行）或 `(code, 白話訊息)`。
     旗標關、kind 不在名單、目前沒有草稿（後面的發布自己會說『沒有草稿』）⇒ 放行（與今天逐字相同）。
-    旗標開且在名單：必須帶 `preview_hash`＝目前草稿戳，而且這位使用者真的『看過』（稽核裡有他對這個戳的預覽紀錄）；沒有例外。"""
-    if not _governance_enabled(conn) or not (kind in _PREVIEW_ENFORCED_KINDS or _opt_in_enforced(conn, kind)):
+    旗標開且在名單：必須帶 `preview_hash`＝目前草稿戳，而且這位使用者真的『看過』（稽核裡有他對這個戳的預覽紀錄）；沒有例外。
+    `expect`（還原用）：不看草稿，改以呼叫端算好的『要還原那一版的戳』當期望值（見 `_restore_gate`）。"""
+    if not _preview_enforced(conn, kind):
         return None
-    draft = D.get(conn, kind, key, scope, 0)
-    if draft is None:
-        return None
-    cur = draft.get("etag", "")
+    if expect is None:
+        draft = D.get(conn, kind, key, scope, 0)
+        if draft is None:
+            return None
+        cur = draft.get("etag", "")
+    else:
+        cur = expect
     if not preview_hash:
         return ("preview_required", "發布前必須先看過影響預覽")
     if preview_hash != cur:
-        return ("preview_stale", "草稿在你看過預覽之後又被改了，請重新預覽")
+        return ("preview_stale", "預覽的內容已經不是現在要發布的這一份，請重新預覽")
     seen = conn.execute("SELECT 1 FROM audit_log WHERE action='definitions.previewed' AND target_id=? AND username=? "
                         "AND detail LIKE ? LIMIT 1", ("%s/%s/%s" % (kind, key, scope), user, '%"previewHash": "' + cur + '"%')).fetchone()
     if not seen:
@@ -387,21 +392,43 @@ _OPT_IN_PREVIEW_KINDS = ("layout", "custom_fields", "user_buttons", "output_temp
 
 
 def _opt_in_enforced(conn, kind) -> bool:
+    """嚴格讀取：讀不到會丟例外（由 `_preview_enforced` 轉成 503，不放行）。不在選項名單的 kind ⇒ False（不讀設定）。"""
     if kind not in _OPT_IN_PREVIEW_KINDS:
         return False
-    try:
-        from helpers import settings_registry as R
-        return int(R.get("builder_governance", "enforce_" + kind, conn=conn)) == 1
-    except Exception:                                                  # noqa: BLE001  讀不到一律當不強制（與旗標同樣 fail-closed 於『維持今天』）
-        return False
+    from helpers import settings_registry as R
+    return int(R.get("builder_governance", "enforce_" + kind, conn=conn)) == 1
 
 
 def _governance_enabled(conn=None) -> bool:
-    try:
-        from helpers import settings_registry as R
-        return int(R.get("builder_governance", "enabled", conn=conn)) == 1
-    except Exception:                                                  # noqa: BLE001  讀不到一律當關
+    """嚴格讀取：讀不到會丟例外（只有『可能被強制的 kind』才會走到這裡，見 `_preview_enforced`）。"""
+    from helpers import settings_registry as R
+    return int(R.get("builder_governance", "enabled", conn=conn)) == 1
+
+
+def _preview_enforced(conn, kind) -> bool:
+    """這個 kind 現在要不要強制預覽。不是『可能被強制』的 kind ⇒ False（連設定都不讀，與今天相同）。
+    可能被強制的 kind 若設定讀不到 ⇒ 不知道管理者有沒有開 ⇒ **擋下**（503、寫日誌），不放行。"""
+    if kind not in _PREVIEW_ENFORCED_KINDS and kind not in _OPT_IN_PREVIEW_KINDS:
         return False
+    try:
+        if not _governance_enabled(conn):
+            return False
+        return kind in _PREVIEW_ENFORCED_KINDS or _opt_in_enforced(conn, kind)
+    except Exception:                                                  # noqa: BLE001
+        logging.getLogger(__name__).exception("preview gate: 讀不到強制預覽設定（kind=%s），發布／還原被擋下", kind)
+        raise HTTPException(503, "暫時無法確認『發布前強制預覽』的設定，為安全起見已擋下這次操作，請稍後再試")
+
+
+def _restore_gate(conn, kind, key, scope, user, version, preview_hash):
+    """還原前的把關：同一個強制名單。還原沒有草稿，所以『預覽』＝針對要還原的那一版做的影響預覽，雜湊＝`v<版本>:<該版內容戳>`
+    （`GET /api/def-governance/{kind}/{key}/impact?version=N` 會回傳並留一筆『看過』）。已發布版本不可變，所以沒有 TOCTOU。⇒ None 或 (code, 訊息)。"""
+    if not _preview_enforced(conn, kind):
+        return None
+    old = D.get(conn, kind, key, scope, int(version))
+    if old is None or old["status"] != "published":
+        return None                                                    # 讓還原自己說『找不到這一版』
+    from routers import def_governance as _gv
+    return _preview_gate(conn, kind, key, scope, user, preview_hash, expect=_gv.version_stamp(version, old["body"]))
 
 
 @router.post("/api/definitions/{kind}/{key}/publish")
@@ -419,6 +446,8 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
         _gate = _preview_gate(conn, kind, key, scope, u["username"], _pv if isinstance(_pv, str) else None)
         if _gate:
             return JSONResponse({"detail": _gate[1], "code": _gate[0]}, status_code=409)
+        if base_etag is None and isinstance(_pv, str) and _pv and _preview_enforced(conn, kind):
+            base_etag = _pv                                             # T62 B：閘門比對的就是這份草稿戳 ⇒ 寫鎖內再比一次（閘門與發布之間草稿被改 ⇒ DraftConflict 409）
         from routers import def_pipeline as _pl                          # T60 S2：旗標開、名單內的 kind ⇒ 放寬先待核准、收緊立即（其餘 ⇒ None，照舊）
         _piped = _pl.handle_publish(conn, kind, key, scope, u, (payload or {}).get("note", ""), base_etag, authorization)
         if _piped is not None:
@@ -510,6 +539,10 @@ def restore_definition(kind: str, key: str, version: int, scope: str = Query("co
     conn = get_db()
     unreviewed_reason = _UNREVIEWED_KIND_REASON
     try:
+        _pv = (payload or {}).get("preview_hash")                        # T62 A：還原也要先看過『這一版』的預覽（旗標關／kind 不在強制範圍 ⇒ 放行，與今天相同）
+        _gate = _restore_gate(conn, kind, key, scope, u["username"], version, _pv if isinstance(_pv, str) else None)
+        if _gate:
+            return JSONResponse({"detail": _gate[1], "code": _gate[0]}, status_code=409)
         from routers import def_pipeline as _pl                          # T60 S2：還原到較寬鬆的版本 ⇒ 待核准（其餘 ⇒ None，照舊）
         _piped = _pl.handle_restore(conn, kind, key, scope, version, u, (payload or {}).get("note", ""), authorization)
         if _piped is not None:

@@ -100,6 +100,27 @@ def version_diff(conn, kind, key, scope, a, b) -> dict:
     return {"a": str(a), "b": str(b), "changes": D.diff(_body(conn, kind, key, scope, a), _body(conn, kind, key, scope, b))}
 
 
+def version_stamp(version, body) -> str:
+    """還原預覽的雜湊：`v<版本>:<該版內容的 sha256 前 16 碼>`。已發布版本不可變，所以同一版永遠同一個戳。"""
+    import hashlib
+    import json
+    return "v%d:%s" % (int(version), hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()[:16])
+
+
+def impact_of_restore(conn, kind, key, scope, version) -> dict:
+    """還原前的影響預覽：要還原的那一版對目前生效版的差異與現行驗證結果。`previewHash`＝`version_stamp`（還原端點據此把關）。"""
+    _check_kind(kind)
+    old = D.get(conn, kind, key, scope, int(version))
+    if old is None or old["status"] != "published":
+        raise D.DefinitionError("找不到第 %s 版（已發布）" % (version,))
+    live = D.get(conn, kind, key, scope)
+    problems = D.validate(kind, key, old["body"])
+    return {"kind": kind, "key": key, "scope": scope, "restoreVersion": int(version), "liveVersion": (live or {}).get("version"),
+            "previewHash": version_stamp(version, old["body"]), "changes": D.diff((live or {}).get("body") or {}, old["body"]),
+            "validation": {"ok": not problems, "problems": problems}, "warnings": [RESTORE_WARNING],
+            "note": "還原會把這一版再發布成新的一版；歷史不改。"}
+
+
 def impact(conn, kind, key, scope) -> dict:
     """發布前影響預覽：草稿對目前生效版的差異、驗證結果、同一定義在其他範圍（公司／角色）的版本、宣告的影響範圍。
     `previewHash`＝草稿內容戳（`etag_of`）：這個戳會被記進稽核（`definitions.previewed`）。旗標開啟時，費用單據類型／匯款款別／自訂模組的發布端點要求
@@ -163,10 +184,10 @@ def def_diff(kind: str, key: str, scope: str = Query("company"), a: str = Query(
 
 
 @router.get("/api/def-governance/{kind}/{key}/impact")
-def def_impact(kind: str, key: str, scope: str = Query("company"), authorization: str = Header(None)):
+def def_impact(kind: str, key: str, scope: str = Query("company"), version: int = Query(None), authorization: str = Header(None)):
     conn = _gate(authorization, kind)
     try:
-        out = impact(conn, kind, key, scope)
+        out = impact(conn, kind, key, scope) if version is None else impact_of_restore(conn, kind, key, scope, version)   # T62：帶 version ⇒ 還原預覽
     except D.DefinitionError as e:
         raise HTTPException(400, str(e))
     finally:
