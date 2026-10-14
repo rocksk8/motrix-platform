@@ -1,7 +1,8 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-14（wip/t57-material-recognize-toast-r1＋wip/t58-seg-base-adopt-r1＋wip/t59-bp1-fields-r1；認列存檔失敗提示如實說明／分段基準採用伺服器存入值／BP-1 案件清單與案件資訊表單可自訂版面）＋wip/t62-bp4-s2-r1
+## (next) — 2026-10-14（wip/t57-material-recognize-toast-r1＋wip/t58-seg-base-adopt-r1＋wip/t59-bp1-fields-r1；認列存檔失敗提示如實說明／分段基準採用伺服器存入值／BP-1 案件清單與案件資訊表單可自訂版面）＋wip/t62-bp4-s2-r1＋wip/t62-bp4-s2-r2
 - 完工單附件的讀取提供者宣告 `SLOT_AWARE`（BP-4 S2）：路徑 `completion_notes/<子夾>/<完工單號>/<檔名>` 與一般完工單附件同一條讀取規則（`case_documents_readable`）；兩段路徑照舊。旗標 `builder_slots.enabled` 預設關，沒有任何現有路徑改變。
+- 案件附件目錄的『路徑屬於這張單據』檢查認得完工單 BP-4 插槽路徑 `completion_notes/<子夾>/<完工單號>/<檔名>`（`upload_path_key(depth=3, key_index=1)`）；其他形狀與其他來源類型維持 fail closed。
 - 材料卡片「帶入並連結」存檔沒成功時的提示改為：「認列尚未儲存：請看畫面上方的儲存狀態；按「儲存」或再編輯一次會重新送出」。原提示寫「修正後會自動重試」不正確（失敗後不會自動重送，持續性錯誤也不應無限重試）。只改提示文字，行為不變。
 - 分段存檔（`PATCH …/case-record`）與叫料單存檔（material-orders `PATCH`）成功回應加 `saved`（本次送出的各分段、伺服器實際存入並依檢視者遮蔽的值）；前端以它當新的分段比對基準。原本只以送出內容當基準，伺服器存檔時改寫材料卡片（認列的到貨人／時間、過期標記、被拒還原）後，下一次存檔會被誤判 409「已被他人更新」。內容一致時仍沿用送出字串；舊前端忽略新欄位。測試：`test_segment_base_adopts_saved_2026_10_14.py`。
 - module.json 登記案件管理頁（case-management.html）的可自訂點：案件清單（卡片）七個項目，案號與狀態為核心（不能隱藏）。純加性宣告。

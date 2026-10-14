@@ -259,6 +259,8 @@ def _path_bound_to_doc(conn, source_type, doc_no, entry):
     額外支出＝`<案件>_<id>` 全等。"""
     from helpers.uploads import upload_path_key
     key = upload_path_key(entry, _CATALOG_FOLDER[source_type])
+    if key is None and source_type == "completion_note":
+        key = upload_path_key(entry, _CATALOG_FOLDER[source_type], depth=3, key_index=1)      # BP-4：<子夾>/<完工單號>/<檔名>
     if key is None and source_type == "extra_expense":
         legacy = upload_path_key(entry, LEGACY_EXTRA_FOLDER)          # 舊版資料夾：只綁案件
         if legacy is None:
