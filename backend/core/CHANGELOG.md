@@ -1,5 +1,11 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — wip/t62-option-lists-r1（census #4 選項清單；旗標 `builder_option_lists.enabled` 預設關，且必須同時開啟 `builder_governance.enabled`）
+
+- L1（新增，只增；快照由列車重產）：`helpers/option_lists.py`（kind `option_list`：客戶類型、供應商類型、料件分類、料件單位；新增／改顯示名稱／重排／停用，已發布的選項不能刪除、不能改字；惰性登記）、`routers/option_lists.py`（`GET /api/option-lists/{id}/status`、`POST /api/option-lists/{id}/preview`，後者唯讀）、`helpers/part_catalog.categories()`／`prefix_for()`（旗標關 ⇒ 與 `PART_CATEGORIES` 逐項相同）。
+- `/api/platform/menu` 多兩個鍵，都只在開啟時才出現：`optionLists`（所有人；只含已發布的清單，頁面據此不另發請求）、`builderOptionLists`（僅最高管理者；載入編輯器）。治理：`export`／`option_list` 加入 `def_pipeline.ACTIVE_KINDS`（新增選項、改名、重排＝中性；停用＝收緊）與預覽雜湊強制名單。
+- 新設定群組 `builder_option_lists`（`enabled`，預設 0）。生成物（L1 快照、路由盤點、設定基準）由列車重產。
+
 ## 1.136 — wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1＋wip/t60（T60 選單 hub 群組／T61 S5 內建畫面自訂欄位／S6 自訂按鈕；旗標預設關）
 
 - L0（新增，只增；T60）：`core.menu.hub_group_keys()`。含系統中心入口的群組（例如 system）不能當選單「移到群組」的目的地——導覽列會把整個群組收成一個連結，搬進去的項目看不到；`resolve_move_target` 與驗證同步拒絕。旗標關閉時行為不變。

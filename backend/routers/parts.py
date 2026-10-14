@@ -12,7 +12,7 @@ from helpers.procurement import clean_lead_time
 router = APIRouter()
 
 # 分類代碼表在 L1（helpers/part_catalog.py；DEPENDENCY-MAP §3 #17）
-from helpers.part_catalog import PART_CATEGORIES, PART_CATEGORY_PREFIX  # noqa: E402
+from helpers.part_catalog import PART_CATEGORIES, PART_CATEGORY_PREFIX, categories as _part_categories, prefix_for as _prefix_for  # noqa: E402
 
 
 def _next_part_no(conn, prefix: str) -> str:
@@ -37,7 +37,7 @@ def list_part_categories(authorization: str = Header(None)):
     # auth_middleware 擋未登入），所以也就沒有任何模組檢查。補上參數才有 user 可判斷。
     require_any_module(_require_user(authorization), ('procurement', 'case_manage', 'inventory'),
                        "供應商／料號／採購")
-    return {"items": PART_CATEGORIES}
+    return {"items": _part_categories()}      # census #4：選項清單關著／沒發布 ⇒ 與 PART_CATEGORIES 逐項相同
 
 
 @router.get("/api/parts")
@@ -71,7 +71,7 @@ def create_part(body: dict = Body(...), authorization: str = Header(None)):
         category = (body.get("category") or "").strip()
         part_no = (body.get("partNo") or body.get("part_no") or "").strip()
         if not part_no:
-            prefix = PART_CATEGORY_PREFIX.get(category)
+            prefix = _prefix_for(category)
             if not prefix:
                 raise HTTPException(400, "請輸入料號，或選擇有對應前綴的類別以自動產生")
             part_no = _next_part_no(conn, prefix)

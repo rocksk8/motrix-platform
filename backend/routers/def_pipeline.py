@@ -24,7 +24,7 @@ router = APIRouter()
 
 #: 目前受管線管的 kind（有比較函式、而且編輯器已能處理『待核准』回應的）。layout：排版器（3c，wip/t60-s4-r1）與選單編輯器
 #: 都已改成遇到 `pending: true` 不說「已發布」——**這個 kind 只能在 3c 的 wip/t60-s4-r1 已在同一列車時才可加入名單**。
-ACTIVE_KINDS = ("custom_fields", "layout", "user_buttons")      # user_buttons：T61 S6（3c 的 wip/t61-s6-impl-r1）；該 kind 沒登記時這個項目不起作用
+ACTIVE_KINDS = ("custom_fields", "layout", "user_buttons", "option_list")      # user_buttons：T61 S6（3c 的 wip/t61-s6-impl-r1）；該 kind 沒登記時這個項目不起作用
 
 _COSMETIC = {"label", "placeholder", "hint", "help", "description"}     # 只影響顯示文字，不影響誰看得到／填什麼
 
@@ -130,7 +130,31 @@ def _cmp_user_buttons(old, new):
     return ("tighten", tighten) if tighten else ("neutral", [])
 
 
-COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout, "user_buttons": _cmp_user_buttons}
+def _cmp_option_list(old, new):
+    """選項清單：新增選項、改顯示名稱、重排、重新啟用 ⇒ 中性（只影響下拉怎麼列）；停用選項 ⇒ 收緊；無法判斷的變動 ⇒ 放寬。
+    （已發布的選項不能刪除、不能改字——驗證器擋；這裡不會看到。）"""
+    old, new = old or {}, new or {}
+    ov = {x.get("value"): x for x in old.get("values", []) if isinstance(x, dict)}
+    nv = {x.get("value"): x for x in new.get("values", []) if isinstance(x, dict)}
+    loosen, tighten = [], []
+    for k in set(old) | set(new):
+        if k not in ("values", "version"):
+            loosen.append("未知設定 %s 變了（視為放寬）" % k)
+    for v in ov:
+        if v not in nv:
+            loosen.append("選項 %s 被移除（不應發生，視為放寬）" % v)
+    for v, x in nv.items():
+        o = ov.get(v)
+        if o is not None and bool(x.get("disabled")) and not bool(o.get("disabled")):
+            tighten.append("停用選項 %s" % v)
+        if o is not None and x.get("prefix") != o.get("prefix"):
+            loosen.append("選項 %s 的料號前綴變了（視為放寬）" % v)
+    if loosen:
+        return "loosen", loosen + tighten
+    return ("tighten", tighten) if tighten else ("neutral", [])
+
+
+COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout, "user_buttons": _cmp_user_buttons, "option_list": _cmp_option_list}
 
 
 def classify(kind, old_body, new_body):

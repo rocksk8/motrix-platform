@@ -41,6 +41,9 @@ AUDIT_WRAPPERS = {
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
 EXEMPT = {
+    # ── 選項清單預覽（census #4）：POST 只為帶草稿清單，不寫任何資料 ──
+    ("option_lists.py", "POST", "/api/option-lists/{list_id}/preview"):
+        "preview：只在記憶體內驗證草稿清單並回傳合併結果與用途說明，不開寫入、不 commit；僅最高管理者、設定 builder_option_lists 與建構器治理未同時開啟回 404",
     # ── 自訂按鈕預覽（t61 S6）：POST 只為帶草稿按鈕，不寫任何資料 ──
     ("user_buttons.py", "POST", "/api/user-buttons/{module}/{page}/preview"):
         "preview：只在記憶體內驗證並以指定身分渲染草稿按鈕（UB.preview 不 commit、不寫任何資料）；僅最高管理者、設定 builder_actions.enabled 關閉時 404。",

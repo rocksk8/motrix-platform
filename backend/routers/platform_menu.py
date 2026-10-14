@@ -165,10 +165,16 @@ def platform_menu(authorization: str = Header(None)):
             "layout": layout,
             # 完整的頁面⇒模組（含已安裝未載入；登入後才給，C4-O3）：前端藏頁內連結、直接打網址的後備提示用
             "pageModules": _page_modules(PAGE_MAP)}
+    from helpers import option_lists as _OL0
+    _ol = _OL0.lists_for_menu()
+    if _ol:
+        resp["optionLists"] = _ol                         # census #4：給所有人——頁面的下拉選單據此用管理者發布的清單；關著或沒發布 ⇒ 沒有這個鍵、頁面不發任何額外請求
     if sa:
         from helpers import menu_builder as MB
         if MB.enabled():
             resp["builderMenu"] = True                    # BP-1：只有開啟時才多這個鍵（關著 ⇒ 回應與今天逐字相同）；前端據此載入 menu-editor.js
+        if _OL0.enabled():
+            resp["builderOptionLists"] = True             # census #4：只有開啟＋最高管理者才多這個鍵；前端據此（且頁面宣告了 motrix-option-lists）載入 option-list-editor.js
     return resp
 
 
