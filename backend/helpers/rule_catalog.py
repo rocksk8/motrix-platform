@@ -2,7 +2,7 @@
 """規則的欄位目錄轉接層（BP-2 R1；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §5）。
 
 [單位] helper:rule_catalog    [層] L1    [穩定度] 實驗（旗標 builder_rules 關閉時沒有任何呼叫端）
-[公開介面] ENTITIES, entities, all_fields, rule_fields, visible_ids, load_records, PERMS
+[公開介面] ENTITIES, entities, all_fields, rule_fields, visible_ids, load_records, stub_in_use, PERMS
 [不變式] ①**唯一**對外給『規則能用哪些欄位』的入口；整合 S5 欄位目錄（`helpers/builtin_fields.py`，owner 3c）時**只改本檔的 `_catalog_for`**；
     ②目錄項不得是付款衍生旗標（`derived_from_payment` 或名稱在 `_PAYMENT_DERIVED` 內）——登錄時 ValueError；
     ③金額欄位必須帶權限（`perm`）；`internal`（S5 自訂欄位）＝只有能讀到該紀錄的人看得到；檢視者沒有該權限 ⇒ 欄位不在他的可見集合內（規則引擎據此不評估）；
@@ -11,7 +11,7 @@
 [契約題] backend/tests/test_rule_catalog_2026_10_14.py
 
 內建欄位在 `_BUILTIN_FIELDS`（目前只有『案件』一個主題）；S5（`helpers/builtin_fields.py`）已合併，但它只提供**自訂欄位**（`cf_<key>`，由 `_s5_fields` 併入），
-不含內建的金額／狀態欄位，所以 `_BUILTIN_FIELDS` 是這些欄位唯一的來源（原 `_BUILTIN_FIELDS`，T62 整合時改名、移除 TEMP 標記）。
+不含內建的金額／狀態欄位，所以 `_BUILTIN_FIELDS` 是這些欄位唯一的來源（原 `_TEMP_STUB`，T62 整合時改名、移除 TEMP 標記）。
 """
 from core import registry as _registry
 
@@ -97,6 +97,11 @@ def _catalog_for(entity, conn=None):
 
 for _e, _fs in _BUILTIN_FIELDS.items():                                    # 匯入時就檢查內建欄位
     _check_catalog(_e, _fs)
+
+
+def stub_in_use() -> bool:
+    """已棄用（自 T62 起）：TEMP stub 已改名為正式的 `_BUILTIN_FIELDS`，永遠回 False。保留名稱只為不刪公開介面（刪除＝CORE 大版升）。"""
+    return False
 
 
 def entities() -> list:
