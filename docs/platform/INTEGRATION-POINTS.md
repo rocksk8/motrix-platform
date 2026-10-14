@@ -1093,3 +1093,18 @@ L1 的中央檢查 `perm.can()` 需要「種子 ⊕ 管理者的覆寫」＋有�
 | 對方不在時 | 提供者不在、例外或沒有擇一品項 ⇒ `pdf_gen` 照舊全部印出（記 log），不影響 PDF 產生 |
 | 契約版本 | 1 |
 | 守門 | `backend/tests/test_quote_alt_t8_2026_10_13.py`（有／無提供者的無擇一單輸出逐字相同；客戶版不含成本字樣與數字；`pdf_gen` 不引用 `plan_view`） |
+
+---
+
+## IP-RULES1　`rules.entity`：標示型規則的紀錄來源（各擁有模組 → L1 `helpers/rule_catalog.py`／`routers/rules.py`；多提供者，名稱＝規則主題；暫定號，列車定號；2026-10-14，BP-2 R4）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`modules/case/rule_provider.py::provide`（名稱 `case`；唯讀；逐筆套用案件讀取權限；金額欄位只在有報價金額檢視權時才給） |
+| 使用方 | L1 `helpers/rule_catalog.py::load_records`（規則頁的預覽、列表標示、命中數）；只有旗標 `builder_rules.enabled` 與 `builder_governance.enabled` 都開時，規則路由才會呼叫 |
+| 形式 | provider，多提供者（名稱＝規則主題） |
+| 語法 | `registry.providers("rules.entity")[主題](conn, user, ids, limit) -> [{"id": str, "label": str, "values": {欄位代號: 值}}]`；`ids` 為 None ⇒ 最近 `limit` 筆；最新的在前；**看不到的紀錄不回** |
+| 對方不在時 | 沒有該主題的提供者 ⇒ 規則預覽回 `available: false`（「尚未接上資料來源」），標示 API 回空；不丟例外、不影響任何畫面 |
+| 契約版本 | 1 |
+| 守門 | `backend/modules/case/tests/test_rule_provider_2026_10_14.py`（逐筆權限、金額遮蔽、旗標關不被呼叫、唯讀） |
+
