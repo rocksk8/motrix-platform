@@ -2,7 +2,7 @@
 """狀態顯示名稱與顏色（S-X2）：一張受治理的表，報價／案件／出納共用。**只改『看到的字與色』，狀態的鍵（資料庫值）永遠不變。**
 
 [單位] helper:status_display    [層] L1    [穩定度] 實驗（旗標 builder_status_display.enabled 關＝所有畫面與今天逐位元相同）
-[公開介面] KIND, KEY, TONES, CONTEXTS, OFFICIAL_WORDS, STATUS_KEYS, defaults, validate_table, compare, effective_table, changed_fields, public_payload, flag_on, enabled, ensure_registered, published_body
+[公開介面] KIND, KEY, TONES, CONTEXTS, OFFICIAL_WORDS, STATUS_KEYS, defaults, validate_table, compare, effective_table, changed_fields, meta, public_payload, flag_on, enabled, ensure_registered, published_body
 [不變式] ①**鍵集合由程式擁有**（`STATUS_KEYS`）：使用者不能新增或刪除鍵，也不能改鍵；表只存 `label`／`names`（各情境簡稱）／`tone`／`order`；
     ②顏色只能從固定調色盤選（`TONES`，對應 css `.st-chip--*` 語意 token），不收自由色碼；
     ③官方用語保護：非『已核准』語意的鍵，名稱不可含官方用語（核准／批准／核可／已簽核／簽核完成／審核通過）——預設值本身除外；
@@ -13,6 +13,7 @@
 [契約題] backend/tests/test_status_display_2026_10_14.py
 """
 import logging
+import unicodedata
 
 from core import definitions as D
 from core import spine as _spine
@@ -26,10 +27,14 @@ _log = logging.getLogger(__name__)
 TONES = ("neutral", "draft", "pending", "signing", "approved", "rejected", "paid", "void")
 #: 情境（各畫面用的簡稱槽）。`default` 就是 label 本身，不放在 names 裡。
 CONTEXTS = ("quote_list", "quote_form", "case", "cashier", "report", "settlement")
-OFFICIAL_WORDS = ("核准", "批准", "核可", "已簽核", "簽核完成", "審核通過")
+OFFICIAL_WORDS = ("核准", "核準", "批准", "核可", "已簽核", "簽核完成", "簽核通過", "審核通過", "已通過", "通過", "生效", "確認", "已批", "批示", "已准", "准予", "ok")
+#: 開頭是這些否定／等待字的名稱可以含官方用語（待核准、未通過、等待確認 都是『還沒』的意思）
+_NEGATORS = ("待", "未", "尚未", "等待", "不")
+#: 這些字元在畫面上看不見或看起來像空白，用來把官方用語拆開以躲過比對：一律拒絕
+_HIDDEN = {0x3164, 0x115F, 0x1160, 0xFFA0, 0x2800, 0x034F}
 _MAX_LABEL = 12
 
-#: (鍵, 群組, 語意, 預設色調)；語意決定色調與用語限制：approved＝已核准、paid＝已付款／已匯款、其餘 plain。
+#: (鍵, 群組, 語意, 預設色調)；語意決定色調與用語限制：approved＝已核准與精算完結（結果已定案）、paid＝已付款／已匯款、其餘 plain。
 _RAW = (
     ("草稿", "approval", "plain", "draft"), ("待審核", "approval", "plain", "pending"), ("待核准", "approval", "plain", "pending"),
     ("簽核中", "approval", "plain", "signing"), ("已核准", "approval", "approved", "approved"),
@@ -39,7 +44,7 @@ _RAW = (
     ("已送出", "quote", "plain", "neutral"),
     ("未提供", "deal", "plain", "neutral"), ("已提供", "deal", "plain", "neutral"), ("未成案", "deal", "plain", "neutral"),
     ("已成案", "deal", "plain", "neutral"), ("已結案", "deal", "plain", "neutral"),
-    ("draft", "settle", "plain", "draft"), ("finalized", "settle", "plain", "approved"),
+    ("draft", "settle", "plain", "draft"), ("finalized", "settle", "approved", "approved"),
 )
 STATUS_KEYS = tuple(r[0] for r in _RAW)
 _SEMANTIC = {r[0]: r[2] for r in _RAW}
@@ -63,7 +68,7 @@ def _tone_allowed(key, tone):
         return tone == "approved"
     if sem == "paid":
         return tone in ("paid", "approved")
-    return tone not in ("approved", "paid") or tone == _TONE0[key]
+    return tone not in ("approved", "paid")
 
 
 def defaults() -> dict:
@@ -78,8 +83,60 @@ def _p(path, msg):
     return {"path": path, "message": msg}
 
 
+def _hidden_chars(text):
+    """文字裡有看不見／組合／格式／私用字元 ⇒ True（NFKC 與一般 strip 都不會移除它們）。"""
+    for ch in text:
+        cat = unicodedata.category(ch)
+        if cat in ("Cc", "Cf", "Co", "Cn", "Mn", "Me") or ord(ch) in _HIDDEN or (cat.startswith("Z") and ch != " "):
+            return True
+    return False
+
+
+def _norm(text):
+    return unicodedata.normalize("NFKC", text).lower()
+
+
 def _banned(key, text, default_text):
-    return _SEMANTIC[key] != "approved" and text != default_text and any(w in text for w in OFFICIAL_WORDS)
+    """非核准語意的鍵，名稱不可使用官方用語（比對前先做 NFKC 與小寫；預設值本身與『待／未／等待』開頭的除外）。"""
+    if _SEMANTIC[key] == "approved" or text == default_text:
+        return False
+    t = _norm(text)
+    if t.startswith(_NEGATORS):
+        return False
+    return any(w in t for w in OFFICIAL_WORDS)
+
+
+def _texts(table, k):
+    """某鍵在每個情境實際顯示的字：{'default': label, ctx: names[ctx] or label}。"""
+    e = table[k]
+    out = {"default": e["label"]}
+    for c in CONTEXTS:
+        out[c] = e["names"].get(c) or e["label"]
+    return out
+
+
+def _conflicts(body_table):
+    """名稱撞車：被改過的欄位，不可和『其他鍵』在同一情境顯示的字相同；非核准／付款語意的鍵更不可使用核准／付款類狀態在任何情境的字。⇒ 問題清單"""
+    base = defaults()
+    out = []
+    reserved = set()
+    for k in STATUS_KEYS:
+        if _SEMANTIC[k] in ("approved", "paid"):
+            reserved |= {_norm(t) for t in _texts(body_table, k).values()} | {_norm(t) for t in _texts(base, k).values()}
+    for k in STATUS_KEYS:
+        mine, dflt = _texts(body_table, k), _texts(base, k)
+        for ctx, t in mine.items():
+            if t == dflt[ctx]:
+                continue                                              # 沒被改過的欄位不檢查（預設值本身有重複，例如 已退回）
+            nt = _norm(t)
+            if _SEMANTIC[k] not in ("approved", "paid") and nt in reserved:
+                out.append(_p("statuses.%s" % k, "『%s』與核准／付款類狀態的名稱相同，不可使用" % t))
+                continue
+            for k2 in STATUS_KEYS:
+                if k2 != k and _norm(_texts(body_table, k2)[ctx]) == nt:
+                    out.append(_p("statuses.%s" % k, "『%s』在%s已被『%s』使用，名稱不可重複" % (t, "預設" if ctx == "default" else ctx, k2)))
+                    break
+    return out
 
 
 def validate_table(body, key=KEY) -> list:
@@ -108,8 +165,8 @@ def _validate(body, key):
             out.append(_p(path, "每個狀態只接受 label／names／tone／order"))
             continue
         lab = v.get("label", dflt[k]["label"])
-        if not isinstance(lab, str) or not lab.strip() or len(lab.strip()) > _MAX_LABEL or lab != lab.strip():
-            out.append(_p(path + ".label", "名稱必填、不可有前後空白、最多 %d 字" % _MAX_LABEL))
+        if not isinstance(lab, str) or not lab.strip() or len(lab.strip()) > _MAX_LABEL or lab != lab.strip() or _hidden_chars(lab):
+            out.append(_p(path + ".label", "名稱必填、不可有前後空白或看不見的字元、最多 %d 字" % _MAX_LABEL))
         elif _banned(k, lab, dflt[k]["label"]):
             out.append(_p(path + ".label", "非『已核准』語意的狀態不可使用官方用語（%s）" % "、".join(OFFICIAL_WORDS)))
         tone = v.get("tone", dflt[k]["tone"])
@@ -125,10 +182,12 @@ def _validate(body, key):
             out.append(_p(path + ".names", "情境簡稱只接受：%s" % "、".join(CONTEXTS)))
         else:
             for c, txt in names.items():
-                if not isinstance(txt, str) or not txt.strip() or len(txt.strip()) > _MAX_LABEL or txt != txt.strip():
-                    out.append(_p(path + ".names." + c, "簡稱必填、不可有前後空白、最多 %d 字" % _MAX_LABEL))
+                if not isinstance(txt, str) or not txt.strip() or len(txt.strip()) > _MAX_LABEL or txt != txt.strip() or _hidden_chars(txt):
+                    out.append(_p(path + ".names." + c, "簡稱必填、不可有前後空白或看不見的字元、最多 %d 字" % _MAX_LABEL))
                 elif _banned(k, txt, dflt[k]["names"].get(c)):
                     out.append(_p(path + ".names." + c, "非『已核准』語意的狀態不可使用官方用語（%s）" % "、".join(OFFICIAL_WORDS)))
+    if not out:
+        out += _conflicts(effective_table(body))
     return out
 
 
@@ -152,6 +211,11 @@ def effective_table(body) -> dict:
                 merged.update({c: t for c, t in v["names"].items() if c in CONTEXTS and isinstance(t, str)})
                 cur["names"] = merged
     return out
+
+
+def meta() -> dict:
+    """編輯器用：每個鍵的群組、語意、允許的色調（與驗證器同一份規則）。不含任何金額或權限資訊。"""
+    return {k: {"group": _GROUP[k], "semantic": _SEMANTIC[k], "allowedTones": [t for t in TONES if _tone_allowed(k, t)]} for k in STATUS_KEYS}
 
 
 def changed_fields(table) -> dict:
@@ -236,7 +300,7 @@ def published_body(conn) -> dict:
 
 
 def public_payload(conn=None) -> dict:
-    """給前端的內容：旗標關 ⇒ `{"enabled": false}`（不帶表）；開 ⇒ `{"enabled": true, "tones": [...], "contexts": [...], "statuses": 完整表, "changed": {鍵: [有差異的欄位]}}`。永不丟例外。"""
+    """給前端的內容：旗標關 ⇒ `{"enabled": false}`（不帶表）；開 ⇒ `{"enabled": true, "tones": [...], "contexts": [...], "statuses": 完整表, "changed": {鍵: [有差異的欄位]}, "meta": {鍵: {group, semantic, allowedTones}}, "defaults": 預設表}`。永不丟例外。"""
     try:
         if not enabled(conn):
             return {"enabled": False}
@@ -249,6 +313,6 @@ def public_payload(conn=None) -> dict:
                 c.close()
         ensure_registered()
         tbl = effective_table(published_body(conn))
-        return {"enabled": True, "tones": list(TONES), "contexts": list(CONTEXTS), "statuses": tbl, "changed": changed_fields(tbl)}
+        return {"enabled": True, "tones": list(TONES), "contexts": list(CONTEXTS), "statuses": tbl, "changed": changed_fields(tbl), "meta": meta(), "defaults": defaults()}
     except Exception:                                                # noqa: BLE001
         return {"enabled": False}

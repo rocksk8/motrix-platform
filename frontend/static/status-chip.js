@@ -20,12 +20,19 @@
 
   var state = { table: null, changed: {}, ver: 0, loading: null }
 
+  // 反應式持有者：Alpine 存在時就建立（腳本載入時、alpine:init、以及第一次被讀取時——讀取發生在 Alpine 的 effect 裡，所以第一次繪製就會登記相依，
+  // 載入完成後同一個位置會重畫）。沒有 Alpine（node 測試、舊頁面）就退回普通計數。
+  function ensureReactive() {
+    try { if (!state._r && typeof window !== 'undefined' && window.Alpine && window.Alpine.reactive) state._r = window.Alpine.reactive({ v: state.ver }) } catch (e) { /* 維持普通計數 */ }
+  }
   function bump() {
     state.ver++
-    try { if (typeof window !== 'undefined' && window.Alpine && window.Alpine.reactive && !state._r) { state._r = window.Alpine.reactive({ v: 0 }) } } catch (e) { /* 沒有 Alpine 就不做反應式 */ }
+    ensureReactive()
     if (state._r) state._r.v = state.ver
   }
-  function dep() { return state._r ? state._r.v : state.ver }    // 讀取就登記相依：載入完成後用到的地方會重畫
+  function dep() { ensureReactive(); return state._r ? state._r.v : state.ver }    // 讀取就登記相依
+  ensureReactive()
+  if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('alpine:init', ensureReactive)
 
   function key(status) { return String(status == null ? '' : status).trim() }
 
@@ -34,8 +41,9 @@
     return Object.prototype.hasOwnProperty.call(MAP, k) ? MAP[k] : ''
   }
 
-  function changedFields(k) { dep(); return (state.changed && state.changed[k]) || [] }
-  function entry(k) { return state.table && state.table[k] ? state.table[k] : null }
+  function own(o, k) { return !!o && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k) }
+  function changedFields(k) { dep(); return own(state.changed, k) && Array.isArray(state.changed[k]) ? state.changed[k] : [] }
+  function entry(k) { dep(); return own(state.table, k) ? state.table[k] : null }
 
   // 覆寫後的色調（沒有被改過 ⇒ null，呼叫端用自己原本的）
   function overrideTone(status) {

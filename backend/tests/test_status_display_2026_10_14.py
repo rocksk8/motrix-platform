@@ -115,9 +115,10 @@ def test_compare_directions():
 
 
 def test_compare_mutation_control(monkeypatch):
-    assert c({}, {"已核准": {"label": "已確認"}}) == "loosen"
+    assert c({}, {"已核准": {"label": "放行"}}) == "loosen"
     monkeypatch.setitem(S._SEMANTIC, "已核准", "plain")                           # 把語意拿掉 ⇒ 結果翻面，證明比較器真的看語意
-    assert c({}, {"已核准": {"label": "已確認"}}) == "neutral"
+    monkeypatch.setitem(S._TONE0, "已核准", "neutral")                            # （語意改成一般後預設色調也要跟著不是綠，否則驗證器先擋）
+    assert c({}, {"已核准": {"label": "放行"}}) == "neutral"
 
 
 def test_changed_fields_lists_only_differences():
@@ -238,3 +239,85 @@ def test_endpoint_with_flag_on_serves_the_published_table_and_loosening_goes_pen
     pv = client.get("/api/def-governance/status_display/default/impact", headers=sa).json()["previewHash"]
     r = client.post(url + "/publish", headers=sa, json={"note": "t", "preview_hash": pv}).json()
     assert r.get("pending") is True                                                      # 核准類改名：放寬 ⇒ 待第二位核准
+
+
+# ── 04 審查（S-X2 commit 1）：M1 官方用語繞過、M2 反應式、S1 原型鍵、S2 精算完結 ─────────────────────────────
+@pytest.mark.parametrize("text", [
+    "核​准", "核­准", "核⁠准", "核͏准", "核ㅤ准",                      # 看不見的字元拆開官方用語
+    "核準", "已通過", "通過", "已批示", "已准", "准予", "已確認", "已生效", "簽核通過", "OK", "ｏｋ", "Ｏk",   # 變體、近義、全形
+])
+def test_m1_official_wording_bypasses_are_rejected(text):
+    assert v({"待審核": {"label": text}}), repr(text)
+    assert v({"草稿": {"names": {"case": text}}}), repr(text)
+
+
+@pytest.mark.parametrize("text", ["待確認", "未通過", "等待核准", "尚未生效"])
+def test_m1_waiting_and_negative_wording_is_allowed(text):
+    assert v({"草稿": {"label": text}}) == [], text
+
+
+@pytest.mark.parametrize("key,text", [("待審核", "已付款"), ("待審核", "已匯款"), ("草稿", "已完結"), ("草稿", "已結算"), ("草稿", "已定稿"),
+                                     ("待審核", "已核准"), ("簽核中", "精算完結"), ("草稿", "已 付款".replace(" ", ""))])
+def test_m1_a_plain_key_cannot_take_an_approved_or_paid_meaning(key, text):
+    assert any("相同" in p["message"] or "官方用語" in p["message"] for p in v({key: {"label": text}})), (key, text)
+    assert v({key: {"names": {"case": text}}}), (key, text)
+
+
+def test_m1_names_cannot_collide_within_a_context():
+    assert any("重複" in p["message"] for p in v({"草稿": {"label": "待審核"}}))                        # 草稿 顯示成 待審核（預設情境撞到）
+    assert any("重複" in p["message"] for p in v({"待審核": {"names": {"case": "簽核中"}}}))            # 案件情境撞到 簽核中
+    assert v({"草稿": {"label": "起草中"}}) == []                                                       # 沒撞就過
+    assert v({"待審核": {}}) == [] and v({"已拒絕": {}}) == []                                         # 沒改的欄位不檢查（預設值本身有 已退回 重複）
+
+
+def test_m1_an_approved_key_cannot_be_renamed_to_a_plain_keys_name_either():
+    assert v({"已核准": {"label": "草稿"}})
+
+
+def test_s2_finalized_is_approved_semantic():
+    assert S._SEMANTIC["finalized"] == "approved" and S.compare({"statuses": {}}, {"statuses": {"finalized": {"label": "放行"}}})[0] == "loosen"
+    assert v({"finalized": {"tone": "rejected"}}) and v({"draft": {"tone": "approved"}})
+
+
+@pytest.mark.skipif(not NODE, reason="需要 node")
+def test_m2_first_render_before_load_updates_after_apply():
+    """模擬 Alpine：effect 裡讀 label()，之後 apply() 載入表 ⇒ effect 必須重跑。反應式持有者要在第一次讀取時就存在。"""
+    code = """
+global.window={};
+const subs=new Set(); let cur=null;
+window.Alpine={reactive:(o)=>new Proxy(o,{get(t,k){ if(cur) subs.add(cur); return t[k] }, set(t,k,v){ t[k]=v; subs.forEach(f=>f()); return true }})};
+const S=require('./static/status-chip.js');
+let rendered=[];
+function effect(){ cur=effect; rendered.push(S.label('草稿')+'|'+S.chipClass('草稿')); cur=null }
+effect();
+S.apply({enabled:true,statuses:%s,changed:{'草稿':['label','tone']}});
+console.log(JSON.stringify(rendered));
+""" % json.dumps(S.effective_table({"statuses": {"草稿": {"label": "起草", "tone": "pending"}}}), ensure_ascii=False)
+    out = node(code)
+    assert out == ["草稿|st-chip st-chip--draft", "起草|st-chip st-chip--pending"]
+
+
+@pytest.mark.skipif(not NODE, reason="需要 node")
+def test_s1_prototype_named_statuses_do_not_throw():
+    out = node(JS_PRELUDE + "S.apply({enabled:true,statuses:{},changed:{}});console.log(JSON.stringify(['constructor','toString','__proto__','hasOwnProperty'].map(k=>[S.label(k),S.chipClass(k),S.badgeClass(k,'x')])))")
+    assert out == [[k, "st-chip", "x"] for k in ("constructor", "toString", "__proto__", "hasOwnProperty")]
+
+
+# ── 編輯面板（靜態檢查；沒有 DOM 的環境不跑互動）─────────────────────────────────
+def test_editor_follows_the_project_rules():
+    import re
+    src = (FRONT / "js/status-display-editor.js").read_text(encoding="utf-8")
+    assert not re.search(r"(?<![\w.])(confirm|alert|prompt)\(", src), "不用原生對話框"
+    assert "MotrixDefGovernance.review" in src and "preview_hash: pvh" in src                      # 發布一定經影響預覽
+    assert "r.data.pending === true" in src and "核准前不會生效" in src                             # 放寬如實說待核准
+    assert "role !== 'superadmin'" in src and "available()" in src                                  # 其他人連探測都不送
+    assert "data-state" in src and "data-busy" in src
+    assert src.count("esc(") > 10 and "innerHTML" in src                                            # 所有插入的文字都轉義
+    assert "各畫面有自己的簡稱" in src or "只改顯示名稱不會蓋掉它" in src                                # 簡稱優先於顯示名稱：面板明說
+    assert "#" + "ff" not in src and "color:#" not in src.replace("var(--text-dim,#888)", "").replace("var(--danger,#c00)", "").replace("var(--success,#1a7f37)", "")  # 沒有自由色碼輸入
+
+
+@pytest.mark.skipif(not NODE, reason="需要 node")
+def test_editor_script_loads_without_side_effects():
+    out = node("global.window={};global.document=undefined;require('./js/status-display-editor.js');console.log(JSON.stringify([typeof window.MotrixStatusEditor.open, typeof window.MotrixStatusEditor.mountEntry]))")
+    assert out == ["function", "function"]
