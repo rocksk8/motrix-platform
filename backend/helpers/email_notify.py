@@ -119,6 +119,15 @@ def _build_html(mail_key: str, title: str, badge_text: str, badge_color: str,
         logger.error("信件類型 %r 未登記（_build_html）", mail_key)
     impact = impact if impact is not None else (t.impact if t else "")
     action = action if action is not None else (t.action if t else "")
+    if t is not None and t.category == "approval":
+        # 簽核類信件的每個欄位都是純文字（客戶名稱、備註、原因由使用者輸入）⇒ 一律逸出，避免 '<' 被當成標記（2026-10-14，04 稽核）。
+        # 其他類別的呼叫端有刻意傳入 HTML（回報修改前後、憑證說明…），維持原樣。
+        _e = lambda x: _html.escape(str(x), quote=True)               # noqa: E731
+        title, badge_text, button_text, impact, action = _e(title), _e(badge_text), _e(button_text), _e(impact), _e(action)
+        rows = [(k, _e(v)) for k, v in rows]
+        note = _e(note) if note else note
+        intro = _e(intro) if intro else intro
+        quote_no = _e(quote_no) if quote_no else quote_no
     row_html = "".join(
         f'<div class="lbl">{k}</div><div class="val">{v}</div>'
         for k, v in rows

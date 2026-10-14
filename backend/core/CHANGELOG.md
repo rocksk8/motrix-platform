@@ -3,6 +3,7 @@
 
 ## (next) — wip/t62-notify-wording-r1（S-X3 簽核通知用語；旗標 `builder_notify.enabled` 預設關）
 
+- S-X3 r2（04 稽核）：信件主旨事由改為純文字（只展開占位符、去換行、上限 200 字；不再 HTML 逸出）；`notify_template` 登記功能狀態閘門（旗標或治理關閉 ⇒ 定義路由 404）；官方狀態字樣擴充（已通過／批准／審核通過／已簽核／已生效、簡體、英文 approve／passed…，英文用字界比對）；網址禁令擴充（任何 英數.英數 網域寫法與斜線）。既有問題（旗標關也成立）：`email_notify._build_html` 對簽核類信件（分類＝簽核）的標題、徽章、明細、備註、引言、按鈕、影響、建議處理一律 HTML 逸出——原本客戶名稱／備註含 `<` 會被當成標記；其他類別的呼叫端有刻意傳入 HTML，維持原樣。
 - L1（S-X3 第一刀，wip/t62-notify-wording-r1；旗標 `builder_notify.enabled` 預設關，且必須同時開啟 `builder_governance.enabled`；kind 惰性登記）：新增 `helpers/notify_templates.py`（簽核事件通知用語範本；先導事件 `approval:submitted`＝報價單送審：站內訊息、信件事由／標題／徽章／引言／按鈕字）與 `routers/notify_templates.py`（`GET /api/notify-templates/{event}/status`、`POST …/preview` 唯讀，含沒有財務權限收件人的遮蔽視角）。範本只收純文字與白名單占位符（`{單號}` `{對象}` `{標記}`），無標記、網址、隱形字元、官方狀態字樣，且必須含 `{單號}`；信件主旨前綴與分類、版型、收件人、寄送時機不可改；信件展開後 HTML 逸出，信件沒有金額占位符，站內訊息仍由 `_notify` 逐收件人遮蔽金額。治理：`def_pipeline.ACTIVE_KINDS` 加入 `notify_template`（新增或改變用語＝放寬⇒待核准；拿掉＝收緊）。`email_notify.notify_approval_request` 與 `quotations._submitted_msg` 掛鉤；旗標關／沒有已發布範本 ⇒ 站內訊息與信件主旨、內文與今天逐位元相同。
 
 ## 1.136 — wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1＋wip/t60（T60 選單 hub 群組／T61 S5 內建畫面自訂欄位／S6 自訂按鈕；旗標預設關）

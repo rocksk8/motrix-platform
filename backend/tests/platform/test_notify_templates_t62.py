@@ -167,3 +167,64 @@ def test_client_status_and_preview_are_closed_when_off(client, make_user):
     assert client.get("/api/notify-templates/no:such/status", headers=h).status_code == 404
     kinds = [k["kind"] if isinstance(k, dict) else k for k in client.get("/api/definition-kinds", headers=h).json()["kinds"]]
     assert NT.KIND not in kinds, "旗標關 ⇒ kind 不出現（與今天相同）"
+
+
+# ── 04 審查 M1／S1／S2／S3 ─────────────────────────────────────────────────
+def test_m1_mail_subject_is_plain_text_and_body_is_escaped(monkeypatch):
+    sent = _capture_mail(monkeypatch)
+    _tpl(monkeypatch, {"version": 1, "mail": {"reason": "請審核 {單號}（{對象}）", "intro": "客戶 {對象} 的單"}})
+    EN.notify_approval_request("MQ-9", "A&B <工程> 'x'\r\nBcc: z", ["u"])
+    subj = sent["subject"]
+    assert "A&B <工程> 'x' Bcc: z" in subj and "&amp;" not in subj and "&lt;" not in subj and "\n" not in subj and "\r" not in subj
+    assert "A&amp;B &lt;工程&gt; &#x27;x&#x27;" in sent["html"], "內文欄位逐字逸出"
+    assert "A&B <工程>" not in sent["html"].split("事由")[1].split("報價單號")[0]
+
+
+def test_m1_subject_length_is_capped(monkeypatch):
+    _tpl(monkeypatch, {"version": 1, "mail": {"reason": "審 {單號} {對象}"}})
+    f = NT.mail_fields(KEY, {"單號": "M", "對象": "長" * 500})
+    assert len(f["reason"]) <= NT.EVENTS_LIMIT_REASON
+
+
+def test_s1_kind_gate_hides_the_kind_when_off(monkeypatch):
+    from core import spine
+    monkeypatch.setattr(NT, "enabled", lambda conn=None: False)
+    assert spine.kind_info(NT.KIND, KEY)["status"] == "hidden"
+    monkeypatch.setattr(NT, "enabled", lambda conn=None: True)
+    assert spine.kind_info(NT.KIND, KEY)["status"] == "open"
+
+
+@pytest.mark.parametrize("text", ["已通過", "通過審核", "批准", "審核通過", "簽核通過", "已簽核", "已批", "已生效", "签核完成", "审核通过", "通过", "已签核",
+                                  "approve", "Approved", "PASSED", "Paid", "ａｐｐｒｏｖｅｄ", "final", "已 通 過", "void"])
+def test_s2_more_official_words_are_banned(text):
+    assert _bad({"version": 1, "mail": {"intro": "您好 " + text}}) == {"mail.intro"}
+
+
+@pytest.mark.parametrize("text", ["finally", "unpaid", "avoid", "originality", "signedness", "passage", "approval"])
+def test_s2_english_words_use_word_boundaries(text):
+    assert _bad({"version": 1, "mail": {"intro": "您好 " + text}}) == set()
+
+
+@pytest.mark.parametrize("text", ["bit.ly/x", "line.me/ti/p/abc", "example.com", "a.tw", "x.io", "a/b", "http://x", "www.x", "ｅｘａｍｐｌｅ．ｃｏｍ", "ｘ／ｙ"])
+def test_s3_urls_and_slashes_are_banned(text):
+    assert _bad({"version": 1, "mail": {"intro": "請見 " + text}}) == {"mail.intro"}
+
+
+# ── 既有問題（旗標關也成立）：簽核類信件的使用者資料要逸出 ──────────────────────
+def test_approval_mails_escape_user_data_even_with_no_template(monkeypatch):
+    sent = _capture_mail(monkeypatch)
+    _tpl(monkeypatch, None)
+    EN.notify_approval_request("MQ-9", "<img src=x onerror=1>公司", ["u"])
+    assert "<img" not in sent["html"] and "&lt;img src=x onerror=1&gt;公司" in sent["html"]
+    assert sent["subject"].endswith("報價單待審核：MQ-9（<img src=x onerror=1>公司）"), "主旨是純文字，維持原樣"
+    monkeypatch.setattr(EN, "_lookup_emails", lambda names, key: ["a@example.com"])
+    EN.notify_returned("MQ-9", "MQ-9-R1", "甲<b>", "備註 <script>x</script>", "u")
+    assert "<script>" not in sent["html"] and "&lt;script&gt;x&lt;/script&gt;" in sent["html"] and "<b>" not in sent["html"].split("報價單號")[0] + sent["html"].split("客戶名稱")[1]
+
+
+def test_only_approval_category_is_escaped_other_builders_keep_their_deliberate_html(monkeypatch):
+    monkeypatch.setattr(EN, "_base_url", lambda: "https://x.example")
+    biz = EN._build_html("daily_task_completed", "標題", "徽章", "#000", [("修改後", "<strong>新</strong>")], "", "https://x.example", intro="內容")
+    assert "<strong>新</strong>" in biz
+    appr = EN._build_html("approval_request", "標題", "徽章", "#000", [("客戶名稱", "<strong>新</strong>")], "", "https://x.example", intro="內容")
+    assert "<strong>新</strong>" not in appr and "&lt;strong&gt;新&lt;/strong&gt;" in appr
