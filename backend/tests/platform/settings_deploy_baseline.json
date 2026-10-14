@@ -284,6 +284,7 @@
     false
    ]
   },
+  "quote_approval": {"min_item_margin_pct": [30, 0, 100, false]},
   "builder_rules": {
    "enabled": [
     0,
