@@ -36,13 +36,15 @@ _m0005 = importlib.import_module("modules.case.migrations.0005_material_payments
 _m0006 = importlib.import_module("modules.case.migrations.0006_material_changes")
 _m0007 = importlib.import_module("modules.case.migrations.0007_planned_pay_date")
 _m0008 = importlib.import_module("modules.case.migrations.0008_material_payment_planned_pay_date")
+_m0009 = importlib.import_module("modules.case.migrations.0009_stage_key")
 
 MODULE = ModuleSpec(
     key="case",
     # v6：case_material_changes（材料申請變更申請覆核表，33-M2a，2026-10-03）
+    # v9：case_stages.stage_key（階段樣板 S-ST2，2026-10-14；NULL＝手動階段）
     # v7：case_extra_expenses.planned_pay_date（預定付款日，2026-10-05；提醒信＋行事曆「付款待辦」）
     # v1：case_extra_expenses.invoice_no（請款流程，2026-09-27）；v2：匯款實付／手續費／差額審核欄位（W1，2026-09-30）
-    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up), (6, _m0006.up), (7, _m0007.up), (8, _m0008.up)],
+    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up), (6, _m0006.up), (7, _m0007.up), (8, _m0008.up), (9, _m0009.up)],
     # 與搬遷前 main.py 的掛載順序相同（路由比對順序不變）
     routers=[_api_quotations.router, _api_settlement_api.router, _api_material_orders.router, _api_material_approvals.router, _api_material_changes.router, _api_material_payments.router, _api_material_links.router, _api_settlement_actuals.router, _api_extra_expenses.router, _api_expense_form_pdf.router,
              _api_completion_notes.router, _api_action_items.router, _api_overhead.router, _api_alt_plan.router, _api_project_margin.router],
