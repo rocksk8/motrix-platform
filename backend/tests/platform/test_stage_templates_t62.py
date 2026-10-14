@@ -215,5 +215,7 @@ def test_url_like_stage_names_are_rejected_and_the_help_text_says_so():
     assert _msgs(lambda b: b["stages"][0].update(label="Phase 1.20"))
     from helpers import settings_groups  # noqa: F401
     from helpers import settings_registry as SR
-    help_text = str(SR.group_info(ST.GROUP)) if hasattr(SR, "group_info") else ""
-    assert (not help_text) or "像網址" in help_text
+    # 設定中心畫面上的說明文字來自群組定義（SR.groups()），不是 group_info（那只回功能狀態 {status, plannedTrain, feature}）
+    g = SR.groups()[ST.GROUP]
+    help_text = g["help"] + " ".join(str(f.get("help", "")) for f in g["fields"])
+    assert "像網址" in help_text, "使用者要在設定說明看到『像網址的名稱會被拒絕』"
