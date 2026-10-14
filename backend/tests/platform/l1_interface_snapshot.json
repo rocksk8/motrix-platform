@@ -324,6 +324,15 @@
    "role_display": "def(v)",
    "role_username": "def(v)"
   },
+  "helper:clause_titles": {
+   "CLAUSE_KEYS": "const",
+   "CLAUSE_PRESETS": "const",
+   "EXPORT_ID": "const",
+   "active_titles": "def(conn=…)",
+   "freeze": "def(q)",
+   "title": "def(key, data=…, conn=…)",
+   "titles_for": "def(data=…, conn=…)"
+  },
   "helper:company_identity": {
    "CODE_BANK_REQUIRED": "const",
    "DEFAULT_IDENTITY": "const",
@@ -780,7 +789,7 @@
    "enabled": "def(conn=…)",
    "ensure_kind": "def()",
    "preview": "def(conn, caller, body, export_id, username=…, sample=…, n=…)",
-   "register_export": "def(export_id, *, label, formats, columns, sample_rows, rows_provider=…, lock_labels=…, caps=…, sample_html=…)",
+   "register_export": "def(export_id, *, label, formats, columns, sample_rows, rows_provider=…, lock_labels=…, caps=…, sample_html=…, titles=…)",
    "registered": "def()",
    "render_csv_rows": "def(export_id, template, rows, user)",
    "render_rows": "def(export_id, template, rows, user)",
