@@ -499,9 +499,9 @@ def test_batch3_pages_wire_the_helper_without_changing_logic():
     assert "stLabel('draft', 'settlement', '精算草稿')" in st and "stLabel('finalized', 'settlement', '精算完結')" in st
     assert "settlement.status === 'finalized'" in st and "window.MotrixStatus.init()" in st and "status-chip.js" in st
     vo = (FRONT / "pages/voucher.html").read_text(encoding="utf-8")
-    assert vo.count("stLabel(") == 2 and "v.status === '已過帳' ? 'posted'" in vo and "status === '已過帳' ? 'posted'" in vo
+    assert vo.count("stLabel(") == 3 and "v.status === '已過帳' ? 'posted'" in vo and "status === '已過帳' ? 'posted'" in vo
     js = (FRONT / "js/voucher.js").read_text(encoding="utf-8")
-    assert "stLabel(raw, ctx, fallback)" in js and "window.MotrixStatus.init()" in js and "status==='草稿' && !voidedAt" in js.replace(" ", "")
+    assert "stLabel(raw, ctx, fallback)" in js and "window.MotrixStatus.init()" in js and "get canEdit() { return this.status === '草稿' && !this.voidedAt }" in js
 
 
 @pytest.mark.skipif(not NODE, reason="需要 node")
@@ -515,3 +515,12 @@ for (const voided of ['', null, '2026-10-01T00:00:00'])
 out.push([stLabel('draft','settlement','精算草稿'),'精算草稿'],[stLabel('finalized','settlement','精算完結'),'精算完結']);
 console.log(JSON.stringify(out.every(p=>(p[0]==null?'':p[0])===(p[1]==null?'':p[1]))));"""
     assert node(code) is True
+
+
+def test_batch3_voucher_filter_options_show_the_label_but_keep_the_raw_value():
+    vo = (FRONT / "pages/voucher.html").read_text(encoding="utf-8")
+    assert '<option :value="st" x-text="stLabel(st)"></option>' in vo and 'x-model="filterStatus"' in vo
+    assert vo.count("stLabel(") == 3                                                              # 列表、標題、篩選選項
+    src = (FRONT / "pages/case-management.html").read_text(encoding="utf-8")
+    rep = (FRONT / "pages/reports.html").read_text(encoding="utf-8")
+    assert "stLabel('finalized', 'case', '已定稿')" in src and "stLabel('finalized', 'report', '已定稿')" in rep and "stLabel('finalized', 'report', '已結算')" in rep

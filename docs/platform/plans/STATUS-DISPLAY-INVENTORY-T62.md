@@ -93,3 +93,7 @@
 - `cashier.html`、`reports.html`、`payment-request.html` 目前都沒有讀 `builder_status_display`：每頁要用 `MotrixPublicFlags.read` 讀一次旗標（旗標關也會有一次請求）；`cashier.js` 另有 F3（`wip/t62-finance-r2`）的 `finance_cashier` 讀取——兩者合併時應改成**同一個請求**（`groups=finance_cashier,builder_status_display`），由整合者處理。
 - 旗標開才呼叫 `MotrixStatus.load()`（多一個 `GET /api/status-display`）。
 - 黃金對照：這三頁沒有現成的黃金檔；OFF 的證明用 node 測試把每個改過的運算式在『表未載入』時與原運算式逐字比較（同報價單列表那一題的做法）。
+
+### 7.5 第三批（精算頁、傳票頁）：已接與未接（04 審查後）
+- **已接**：`settlement.html` 草稿徽章與完結徽章（完結字包在 span 裡，DOM 結構與版面不變）；`voucher.html` 列表狀態欄、編輯頁標題、**狀態篩選下拉的選項文字**（`:value` 維持原始狀態字，所以篩選邏輯不變）；`case-management.html:2701`（精算徽章字，後備『已定稿』）；`reports.html:1253`、`:2180`（精算字，後備『已結算』『已定稿』）。
+- **本批不接**：`case-management.html:2727`、`reports.html:2183`（`x-if="…==='finalized'"`，是判斷）；`case-management.html:2731` 的句子『精算完結 · 精算日期：…』（含日期與人員的整句，不是狀態徽章）；`settlement.html` 約 40 處 `status==='finalized'` 判斷與 `:964` 的『已完結（凍結）』『草稿（未凍結）』稽核列說明；`js/ledger-hub.js:191` `statusLabel`（總帳**引擎事件**狀態：drafted／posted／drift／reversed…，英文鍵，是另一個領域，與傳票單據狀態不同鍵；其中 `posted→已過帳` 的字不跟傳票的『已過帳』顯示名連動）；`ledger-reports.html:155` 的『未過帳』字尾；`js/voucher.js` 其餘的狀態字面值（判斷用）。
