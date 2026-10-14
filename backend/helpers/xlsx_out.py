@@ -9,6 +9,7 @@
 （與搬移前相同）。測試每題重置它：`tests/conftest.py` 的 `client` fixture 指名這裡的
 `_export_times`——不在 reports 留同名 alias，否則重置的是別名、冷卻照留（〈守門守的對象被搬走〉）。
 """
+import re
 import threading
 import time
 
@@ -70,10 +71,22 @@ def xl_safe(val):
     return val
 
 
+_ESC_RE = re.compile(r"^'*=")
+
+
 def xl_safe_xlsx(val):
-    """xlsx 儲存格的新寫入端用：只中和「=」開頭（openpyxl 唯一會綁成公式的前綴）。"""
-    if isinstance(val, str) and val[:1] in XLSX_FORMULA_TRIGGERS:
+    """xlsx 儲存格的新寫入端用：只中和「=」開頭（openpyxl 唯一會綁成公式的前綴）。
+    可逆：開頭是『零個以上的單引號＋=』的字串一律再多補一個單引號（所以本來就以 '= 開頭的文字也不會在往返時被吃掉一個）；
+    讀回去用 `xlsx_unescape`。"""
+    if isinstance(val, str) and _ESC_RE.match(val):
         return "'" + val
+    return val
+
+
+def xlsx_unescape(val):
+    """`xl_safe_xlsx` 的反運算：開頭是『一個以上的單引號＋=』就拿掉一個單引號；其餘原樣。xl_safe_xlsx → xlsx_unescape 對任何字串都是恆等。"""
+    if isinstance(val, str) and _ESC_RE.match(val) and val.startswith("'"):
+        return val[1:]
     return val
 
 

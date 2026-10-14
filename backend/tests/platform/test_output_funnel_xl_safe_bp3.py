@@ -262,11 +262,20 @@ def test_neutralizer_vectors_strings_prefixed_numbers_untouched():
     for bad in ("=", "+1+1", "-2+3", "@SUM(1)", "\t=1", "\r=1", "-"):       # csv：完整六個字元
         assert csv_safe(bad) == "'" + bad, bad
     for fn in (xl_safe, xl_safe_xlsx, csv_safe):
-        for ok in ("", "abc", "客戶 A", " =1", "a=b", "'=1", "1+1"):
+        for ok in ("", "abc", "客戶 A", " =1", "a=b", "1+1"):
             assert fn(ok) == ok, (fn.__name__, ok)
         for num in (0, 5, -5, 3.14, -0.5, True, None):
             assert fn(num) is num or fn(num) == num, (fn.__name__, num)
         assert isinstance(fn(-5), int) and fn(-5) == -5                    # 真正的負數保持數字
+
+
+def test_xlsx_escape_is_reversible_for_every_string():
+    """xl_safe_xlsx → xlsx_unescape 對任何字串都是恆等（含本來就以單引號開頭的 '= …）；否則匯出再匯入會悄悄改掉資料。"""
+    from helpers.xlsx_out import xl_safe_xlsx, xlsx_unescape
+    for v in ("", "a", "=a", "'=a", "''=a", "'''=x", "'a", "'", "''", "+886", "-V", "@h", "a=b", " =x", "=", "'=", "\t=1", "\r=1", "客戶='x'"):
+        assert xlsx_unescape(xl_safe_xlsx(v)) == v, (v, xl_safe_xlsx(v))
+    assert xl_safe_xlsx("=a") == "'=a" and xl_safe_xlsx("'=a") == "''=a", "本來就以 '= 開頭的也補一個，這樣才分得出來"
+    assert xl_safe_xlsx("'a") == "'a" and xlsx_unescape("'a") == "'a", "不是 '=… 的單引號開頭不動"
 
 
 def test_openpyxl_round_trip_free_text_is_not_a_formula(tmp_path):
