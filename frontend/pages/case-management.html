@@ -33,6 +33,7 @@
   <script src="../static/layout-runtime.js"></script>
   <script src="../static/layout-editor.js"></script>
   <script src="../js/def-governance.js"></script>
+  <script src="../static/public-flags.js"></script>
   <script src="../static/custom-fields.js"></script>
   <script src="../static/list-sort.js"></script>
   <script src="../static/vendor/frappe-gantt-0.6.1.min.js"></script>
@@ -4833,12 +4834,11 @@ window.CM_PARTS.push(() => ({
     try {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
-      const r = await fetch('/api/settings-center/public?groups=builder_layout,builder_custom_fields', { headers: { Authorization: 'Bearer ' + s.token } })
-      if (!r.ok) return
-      const d = await r.json()
-      // T61 S5：自訂欄位旗標從同一次設定請求取得；開啟才去讀欄位定義（關閉時不多打任何請求）
-      if (d && d.groups && d.groups.builder_custom_fields && d.groups.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
-      if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.case_management !== true) return
+      // 同一次設定請求取得旗標（一個請求）；某個群組讀不到時逐組重試，不拖垮其他旗標（public-flags.js）
+      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields'], { token: s.token })
+      // T61 S5：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）
+      if (g.builder_custom_fields && g.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
+      if (!g.builder_layout || g.builder_layout.case_management !== true) return
       if (!document.getElementById('cm-layout-css')) {
         const st = document.createElement('style'); st.id = 'cm-layout-css'
         st.textContent = '.cm-card--lo{display:flex;flex-direction:column}.cm-card--lo .cm-card__head,.cm-card--lo .cm-card__footer{width:100%}'
