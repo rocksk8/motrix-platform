@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-14（wip/t59-cm-flexfix-r1；案件清單卡片頁尾版面修正）
+## 1.0.185 — 2026-10-14（wip/t59-cm-flexfix-r1；案件清單卡片頁尾版面修正）
 - 修正：案件清單卡片頁尾容器移除多餘的 `x-show`（會洗掉行內 `display:flex`，旗標關閉時卡片頁尾由兩行變成一行）；加靜態守門測試。純畫面；無 migration、無新路由、無權限變更。
 
 ## 1.0.184 — 2026-10-14（wip/t57-material-recognize-toast-r1＋wip/t58-seg-base-adopt-r1＋wip/t59-bp1-fields-r1；認列存檔失敗提示如實說明／分段基準採用伺服器存入值／BP-1 案件清單與案件資訊表單可自訂版面）
