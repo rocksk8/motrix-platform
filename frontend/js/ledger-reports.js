@@ -1,6 +1,14 @@
 // 帳簿報表（總帳 P1：試算表、總分類帳、明細分類帳、序時帳簿；設計 proposal-gl/04-reports.md）。
 // 數字全由後端算；這裡只負責篩選條件、呈現、逐層點入（試算表→總分類帳）與匯出目前這張表為 CSV。
 
+// CSV 公式注入防護（與後端 helpers/xlsx_out.xl_safe 同一組字元）：只處理字串；真正的數字（含負數）原樣輸出。
+// 科目名稱、摘要等自由文字若以 = + - @ Tab CR 開頭，Excel 開 CSV 會當公式執行 ⇒ 前置一個單引號。
+function csvSafeCell(v) {
+  if (v === null || v === undefined) return ''
+  if (typeof v === 'string' && /^[=+\-@\t\r]/.test(v)) return "'" + v
+  return v
+}
+
 function ledgerReportsPage() {
   const today = new Date()
   const pad = n => String(n).padStart(2, '0')
@@ -99,7 +107,7 @@ function ledgerReportsPage() {
         rows.push([this.dimLabel(this.sub.dimension), '期初', '本期借', '本期貸', '期末'])
         for (const r of this.sub.rows) rows.push([r.key, r.opening, r.period_debit, r.period_credit, r.closing])
       } else return
-      const csv = rows.map(r => r.map(c => '"' + String(c === null || c === undefined ? '' : c).replace(/"/g, '""') + '"').join(',')).join('\r\n')
+      const csv = rows.map(r => r.map(c => '"' + String(csvSafeCell(c)).replace(/"/g, '""') + '"').join(',')).join('\r\n')
       const a = document.createElement('a')
       a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }))
       a.download = 'ledger-' + this.tab + '-' + this.start + '_' + this.end + '.csv'

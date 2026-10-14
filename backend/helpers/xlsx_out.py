@@ -56,10 +56,30 @@ def xl_style(wb):
 # （見 reports._build_report_html() 的 esc()），這裡比照同樣的防禦精神，把觸發字元
 # 開頭的字串前面補一個單引號讓 openpyxl 存成純文字。
 XL_FORMULA_TRIGGERS = ("=", "+", "-", "@")
+# xlsx：openpyxl 只會把「=」開頭的字串綁成公式（其餘 + - @ 開頭仍是字串儲存格），所以 xlsx 新寫入端只補「=」——
+# 電話 +886…、備註 -VLAN10 不會多出看得見的單引號，匯出再匯入也不會被污染（netplan 匯入只需還原「'=」）。
+# csv：Excel 開 CSV 時 = + - @ Tab CR 開頭都會被當公式，所以 CSV 用完整六個字元（與原 lodging `_CSV_FORMULA_LEAD` 同一組）。
+# 三個函式都只處理 str：真正的數字（含負數）是 int／float，不會被加前綴。
+XLSX_FORMULA_TRIGGERS = ("=",)
+CSV_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
 
 
 def xl_safe(val):
     if isinstance(val, str) and val[:1] in XL_FORMULA_TRIGGERS:
+        return "'" + val
+    return val
+
+
+def xl_safe_xlsx(val):
+    """xlsx 儲存格的新寫入端用：只中和「=」開頭（openpyxl 唯一會綁成公式的前綴）。"""
+    if isinstance(val, str) and val[:1] in XLSX_FORMULA_TRIGGERS:
+        return "'" + val
+    return val
+
+
+def csv_safe(val):
+    """CSV 儲存格用：= + - @ Tab CR 開頭都中和。"""
+    if isinstance(val, str) and val[:1] in CSV_FORMULA_TRIGGERS:
         return "'" + val
     return val
 

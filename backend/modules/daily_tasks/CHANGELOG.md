@@ -1,5 +1,8 @@
 # 每日任務 更新紀錄
 
+## (next) — 2026-10-14（wip/t61-xl-safe-r1；匯出公式注入中和；歷程 CSV）
+- 匯出公式注入中和（資安小切片，無旗標）：每日任務歷程 CSV（工作事項標題、指派人員、回報內容）開頭是 `=` `+` `-` `@` Tab CR 的 CSV 儲存格前面補一個單引號（`helpers.xlsx_out.csv_safe`），Excel 開啟 CSV 時當文字、不再當公式（CWE-1236）；真正的數字（含負數）不受影響，其餘儲存格逐格相同。無 migration、無新路由、無權限變更。
+
 ## 1.0.10 — 2026-10-13（wip/t57-download-name-p2-r1；A7 下載檔名第二期）
 - 每日任務歷程 csv 下載的 `Content-Disposition` 改用 `content_disposition()`（檔名不變）。
 

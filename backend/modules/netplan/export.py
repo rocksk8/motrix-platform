@@ -14,6 +14,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from helpers import _get_edge_path, run_edge_pdf
+from helpers.xlsx_out import xl_safe_xlsx
 from helpers.company_identity import company_name, contact_line, footer_line, location_identity, name_pair
 from modules.netplan.topology import build_topology_svg, build_topology_text_summary_html
 
@@ -118,6 +119,8 @@ def _parse_cell_value(section_key, col_key, raw):
     if isinstance(raw, float) and raw.is_integer():
         return int(raw)
     if isinstance(raw, str):
+        if raw.startswith("'="):                 # 匯出時 xl_safe_xlsx 為『=』開頭的文字補的單引號：還原（只拿掉一個、只在後面接 = 時）
+            raw = raw[1:]
         return raw.strip()
     return raw
 
@@ -194,9 +197,9 @@ def build_plan_excel(plan: dict) -> bytes:
     ws.column_dimensions["A"].width = 20
     ws.column_dimensions["B"].width = 44
     # 公司名空白時寫 None 不寫 ""：openpyxl 的空字串會產生非法的空 inlineStr（Excel 開檔要修復）
-    ws["A1"] = company_name() or None
+    ws["A1"] = xl_safe_xlsx(company_name()) or None
     ws["A1"].font = Font(bold=True, size=14)
-    ws["A2"] = location_identity()["company_name_en"] or None   # A8c：空白寫 None（openpyxl 空字串會產生非法 inlineStr）
+    ws["A2"] = xl_safe_xlsx(location_identity()["company_name_en"]) or None   # A8c：空白寫 None（openpyxl 空字串會產生非法 inlineStr）
     ws["A2"].font = Font(size=9, color="6B7280")
     ws["A3"] = "網路架構規劃書"
     ws["A3"].font = Font(bold=True, size=12)
@@ -213,7 +216,7 @@ def build_plan_excel(plan: dict) -> bytes:
     r = 5
     for label, val in cover_rows:
         ws.cell(row=r, column=1, value=label).font = Font(color="6B7280", size=10)
-        ws.cell(row=r, column=2, value=val or None)
+        ws.cell(row=r, column=2, value=xl_safe_xlsx(val) or None)
         r += 1
 
     for key, title, columns in SECTIONS:
@@ -226,7 +229,7 @@ def build_plan_excel(plan: dict) -> bytes:
             c.alignment = Alignment(vertical="center")
         for r_i, item in enumerate(items, start=2):
             for c_i, (k, _) in enumerate(columns, start=1):
-                sheet.cell(row=r_i, column=c_i, value=_cell_text(item.get(k)))
+                sheet.cell(row=r_i, column=c_i, value=xl_safe_xlsx(_cell_text(item.get(k))))
         for i in range(1, len(columns) + 1):
             sheet.column_dimensions[get_column_letter(i)].width = 16
         sheet.freeze_panes = "A2"
@@ -237,10 +240,10 @@ def build_plan_excel(plan: dict) -> bytes:
         c.font = header_font
         c.fill = header_fill
     for r_i, log in enumerate(data.get("revisionLog") or [], start=2):
-        ws.cell(row=r_i, column=1, value=log.get("version"))
-        ws.cell(row=r_i, column=2, value=(log.get("date") or "")[:16].replace("T", " "))
-        ws.cell(row=r_i, column=3, value=log.get("editor"))
-        ws.cell(row=r_i, column=4, value=log.get("note"))
+        ws.cell(row=r_i, column=1, value=xl_safe_xlsx(log.get("version")))
+        ws.cell(row=r_i, column=2, value=xl_safe_xlsx((log.get("date") or "")[:16].replace("T", " ")))
+        ws.cell(row=r_i, column=3, value=xl_safe_xlsx(log.get("editor")))
+        ws.cell(row=r_i, column=4, value=xl_safe_xlsx(log.get("note")))
     for col, w in zip("ABCD", [8, 18, 14, 50]):
         ws.column_dimensions[col].width = w
 
