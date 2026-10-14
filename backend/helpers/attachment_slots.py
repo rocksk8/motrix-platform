@@ -9,6 +9,7 @@
     ④插槽的 `uploaders` 只能收窄（實際權限＝端點既有守門 ∧ uploaders）；讀取授權仍是 `uploads.path_access` 提供者。
 [契約題] backend/tests/test_attachment_slots_2026_10_14.py
 """
+import os
 import re
 import unicodedata
 
@@ -30,13 +31,16 @@ _KEYS = {"key", "label", "accept", "maxFileMb", "maxFiles", "maxRequestMb", "sub
 _SLOT_KEY = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
 _SUBFOLDER = re.compile(r"^[A-Za-z0-9_\-一-鿿]{1,40}$")
 _RESERVED = {"CON", "PRN", "AUX", "NUL", *("COM%d" % i for i in range(1, 10)), *("LPT%d" % i for i in range(1, 10))}
-_BAD_LABEL = re.compile(r"[<>&\"'\\\x00-\x1f]")
+_BAD_LABEL = re.compile("[<>&\"'\\\\\\x00-\\x1f\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2069\\ufeff]")      # 含控制字元、雙向控制與零寬字元
 #: 插槽標籤不得出現的詞（附件種類不是金額欄位；也避免把成本／毛利等字樣放進任何人都看得到的上傳區）
 _MONEY_WORDS = ("金額", "成本", "毛利", "利潤", "報價", "單價", "薪資", "獎金")
 
 
 def enabled(conn=None) -> bool:
-    return SS.enabled(conn)
+    """旗標（`builder_slots` 且 `builder_governance` 都開，見 `storage_slots.enabled`）。同時讓定義種類登記跟著旗標走（`_sync_kind`）。"""
+    on = SS.enabled(conn)
+    _sync_kind(on)
+    return on
 
 
 def _doc_type_of(key):
@@ -127,9 +131,9 @@ def definition_problems(key, body) -> list:
         if not isinstance(acc, list) or not acc or not all(isinstance(e, str) for e in acc):
             out.append({"path": p + ".accept", "message": "accept 必須是副檔名清單（至少一項）"})
         else:
-            bad = sorted({e for e in acc if e not in SS.HARD_EXTS})
+            bad = sorted({e for e in acc if e not in SS.SLOT_EXTS})
             if bad:
-                out.append({"path": p + ".accept", "message": "這些副檔名不在系統允許範圍：%s（只能從 %s 挑）" % ("、".join(bad), " ".join(sorted(SS.HARD_EXTS)))})
+                out.append({"path": p + ".accept", "message": "這些副檔名不在系統允許範圍：%s（只能從 %s 挑）" % ("、".join(bad), " ".join(sorted(SS.SLOT_EXTS)))})
             if len(set(acc)) != len(acc):
                 out.append({"path": p + ".accept", "message": "副檔名重複"})
         for fld, lo, hi in (("maxFileMb", 1, fmb), ("maxFiles", 1, MAX_FILES_CAP), ("maxRequestMb", 1, MAX_REQUEST_MB_CAP)):
@@ -165,8 +169,18 @@ def _kind_validator(body, key):
     return definition_problems(key, body)
 
 
-if KIND not in D.kinds():
-    D.register_kind(KIND, label="附件插槽", validator=_kind_validator)
+def _sync_kind(on) -> None:
+    """定義種類跟旗標走：開 ⇒ 登記（`/api/definition-kinds` 才會多出 `attachment_slot`）；關 ⇒ 撤掉，**旗標關閉時種類清單與先前逐位元相同**。
+    登記發生在 `enabled()` 被呼叫時（本檔所有執行路徑與路由都會呼叫）；啟動時旗標若已開，import 當下會先登記一次（讀不到資料庫 ⇒ 當關，
+    之後第一次進入本檔的路由時補登記——編輯器載入時會先打 catalog，早於任何草稿寫入）。"""
+    if on and KIND not in D.kinds():
+        D.register_kind(KIND, label="附件插槽", validator=_kind_validator)
+    elif not on and KIND in D._EXTRA_KINDS:                          # noqa: SLF001  core.definitions 沒有 unregister；只動自己登記的這一種
+        D._EXTRA_KINDS.pop(KIND, None)                               # noqa: SLF001
+        D._VALIDATORS.pop(KIND, None)                                # noqa: SLF001
+
+
+_sync_kind(SS.enabled())
 
 
 # ── 寬嚴比較（`routers/def_pipeline.COMPARATORS` 使用）──────────────────────────────────
@@ -255,7 +269,7 @@ def _may_upload(conn, user, slot) -> bool:
 def _policy_of(doc_type, slot) -> "SS.SlotPolicy":
     code = SS.DOC_CODES[doc_type]
     n = _norm(slot)
-    return SS.SlotPolicy(code=code, folder=code, accept=frozenset(n["accept"]) & SS.HARD_EXTS, max_files=int(n["files"]),
+    return SS.SlotPolicy(code=code, folder=code, accept=frozenset(n["accept"]) & SS.SLOT_EXTS, max_files=int(n["files"]),
                          max_request_bytes=int(n["req"]) * 1024 * 1024, max_file_bytes=int(n["file"]) * 1024 * 1024,
                          subfolder=n["sub"], slot=slot.get("key") or "", builtin=False)
 
@@ -295,7 +309,7 @@ def catalog() -> dict:
     return {"docTypes": [{"docType": t, "label": lbl, "code": SS.DOC_CODES[t], "owner": SS.LOCATION_CODES[SS.DOC_CODES[t]].owner,
                           "subfolderSupported": _provider_slot_aware(SS.DOC_CODES[t]), "key": "doc:%s" % t}
                          for t, lbl in sorted(SLOTTED_DOC_TYPES.items())],
-            "hardExts": sorted(SS.HARD_EXTS), "platform": {"maxFileMb": _platform_file_mb(), "maxFiles": MAX_FILES_CAP,
+            "hardExts": sorted(SS.HARD_EXTS), "slotExts": sorted(SS.SLOT_EXTS), "platform": {"maxFileMb": _platform_file_mb(), "maxFiles": MAX_FILES_CAP,
                                                            "maxRequestMb": MAX_REQUEST_MB_CAP, "maxSlots": MAX_SLOTS},
             "builtinSlot": BUILTIN_SLOT, "roles": list(_roles())}
 
@@ -343,13 +357,14 @@ def simulate(conn, definition, doc_type, slot_key, sample, doc_no=""):
     name = str((sample or {}).get("filename") or "")
     size = int((sample or {}).get("size") or 0)
     existing = int((sample or {}).get("existing") or 0)
-    ext = ("." + name.rsplit(".", 1)[1].lower()) if "." in name else ""
+    ext = os.path.splitext(name)[1].lower()                      # 與上傳端同一支（".pdf" 這種隱藏檔名＝沒有副檔名）
     reasons = []
     inner = ["." + x for x in name.lower().split(".")[1:-1]]
     if any(e in SS.DANGEROUS_EXTS for e in inner):
         reasons.append("檔名含危險的雙重副檔名")
-    if ext not in (set(pol.accept) & SS.HARD_EXTS):
-        reasons.append("這種附件不收「%s」檔（可收：%s）" % (ext or "沒有副檔名", " ".join(sorted(set(pol.accept) & SS.HARD_EXTS))))
+    allowed_now = set(pol.accept) & (SS.HARD_EXTS if pol.builtin else SS.SLOT_EXTS)
+    if ext not in allowed_now:
+        reasons.append("這種附件不收「%s」檔（可收：%s）" % (ext or "沒有副檔名", " ".join(sorted(allowed_now))))
     if size <= 0:
         reasons.append("檔案是空的")
     elif size > max_file:

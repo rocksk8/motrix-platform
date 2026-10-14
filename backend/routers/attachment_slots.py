@@ -3,7 +3,7 @@
 
 - `GET  /api/attachment-slots/catalog`                 僅最高管理者：單據類型、位置代號（唯讀）、硬底線、平台上限（編輯器的下拉）。旗標關閉 ⇒ 404。
 - `GET  /api/attachment-slots/{doc_type}`              登入者：這種單據、這位使用者可選的附件種類（已發布定義，依 uploaders 過濾）。
-                                                        旗標關閉 ⇒ `{enabled:false, slots:[內建簽回單]}`；不是可宣告的單據類型 ⇒ 404。
+                                                        旗標關閉 ⇒ 404（頁面用設定旗標 `MotrixPublicFlags` 判斷，不靠這支）；不是可宣告的單據類型 ⇒ 404。
 - `POST /api/attachment-slots/{doc_type}/simulate`     僅最高管理者、**唯讀**：`{definition, slot, sample:{filename,size,headerHex?,existing?}, docNo?}`
                                                         ⇒ 收不收、存哪（顯示用路徑）、誰能讀（逐角色人數）。不寫檔、不建資料夾。旗標關閉 ⇒ 404。
 定義的編輯、發布、還原走既有 `/api/definitions/attachment_slot/doc:<單據類型>/…`（僅最高管理者）。插槽不授權：讀取一律是位置代號的提供者。
@@ -34,9 +34,11 @@ def get_catalog(authorization: str = Header(None)):
 def get_slots(doc_type: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     _doc_or_404(doc_type)
+    if not AS.enabled():
+        raise HTTPException(404, "未開放")
     conn = get_db()
     try:
-        return {"enabled": AS.enabled(conn), "slots": AS.effective_slots(conn, doc_type, user)}
+        return {"enabled": True, "slots": AS.effective_slots(conn, doc_type, user)}
     finally:
         conn.close()
 

@@ -37,10 +37,18 @@ def hdr(client, make_user):
     return {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
 
 
+@pytest.fixture(autouse=True)
+def _kind_clean():
+    """旗標跟著測試開關：測試結束把 attachment_slot 種類登記撤掉，不污染別的測試的 /api/definition-kinds。"""
+    yield
+    AS._sync_kind(False)                                                      # noqa: SLF001
+
+
 @pytest.fixture()
 def on(monkeypatch):
     monkeypatch.setattr(SS, "enabled", lambda conn=None: True)
     monkeypatch.setattr(AS, "_provider_slot_aware", lambda code: True)
+    AS.enabled()                                                              # 旗標開 ⇒ 種類登記（編輯器載入時先打 catalog 也是這個效果）
 
 
 def _msgs(body, key=KEY):
@@ -90,18 +98,15 @@ def test_flag_off_routes_are_inert(client, hdr, monkeypatch):
     assert SS.enabled() is False
     assert client.get("/api/attachment-slots/catalog", headers=hdr).status_code == 404
     assert client.post("/api/attachment-slots/completion_note/simulate", headers=hdr, json={"definition": B(), "sample": {}}).status_code == 404
-    r = client.get("/api/attachment-slots/completion_note", headers=hdr)
-    assert r.status_code == 200 and r.json()["enabled"] is False and [s["key"] for s in r.json()["slots"]] == ["signed"]
+    assert client.get("/api/attachment-slots/completion_note", headers=hdr).status_code == 404       # 新路由 OFF ⇒ 404（不是回內建）
     assert client.get("/api/attachment-slots/no_such", headers=hdr).status_code == 404
     assert client.get("/api/attachment-slots/completion_note").status_code == 401
 
 
-def test_flag_off_even_a_published_definition_changes_nothing(client, hdr, monkeypatch):
+def test_flag_off_the_kind_does_not_exist_so_nothing_can_be_stored_or_read(client, hdr, monkeypatch):
     monkeypatch.setattr(AS, "_provider_slot_aware", lambda code: True)
-    assert client.put(BASE + "/draft", headers=hdr, json={"body": B(S())}).status_code == 200
-    assert client.post(BASE + "/publish", headers=hdr, json={"note": "n"}).status_code == 200
-    r = client.get("/api/attachment-slots/completion_note", headers=hdr).json()
-    assert r["enabled"] is False and [s["key"] for s in r["slots"]] == ["signed"]
+    assert client.put(BASE + "/draft", headers=hdr, json={"body": B(S())}).status_code == 400            # 種類未登記 ⇒ 存不了草稿
+    assert client.get(BASE, headers=hdr).status_code in (400, 404)
     from db import get_db
     conn = get_db()
     try:
@@ -314,3 +319,72 @@ def test_policy_upload_refuses_double_extensions_but_none_path_is_unchanged(tmp_
     with pytest.raises(HTTPException) as e:
         asyncio.run(U.save_document_files("completion_notes", "N-3", [up("a.pdf")], "t", policy=tiny))
     assert e.value.status_code == 400 and "單檔上限" in e.value.detail
+
+
+# ── 04 靜態審查後補強 ────────────────────────────────────────────────────────
+def test_flag_needs_governance_too_and_unreadable_means_off(monkeypatch):
+    from helpers import settings_registry as R
+    vals = {("builder_slots", "enabled"): 1, ("builder_governance", "enabled"): 1}
+    monkeypatch.setattr(R, "get", lambda g, f, conn=None: vals[(g, f)])
+    assert SS.enabled() is True
+    vals[("builder_governance", "enabled")] = 0
+    assert SS.enabled() is False                                              # 沒有治理層＝放寬沒有核准、發布沒有預覽把關 ⇒ 不開
+    vals[("builder_governance", "enabled")], vals[("builder_slots", "enabled")] = 1, 0
+    assert SS.enabled() is False
+    monkeypatch.setattr(R, "get", lambda g, f, conn=None: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert SS.enabled() is False                                              # 讀不到 ⇒ 關
+
+
+def test_kind_is_registered_only_while_the_flag_is_on(client, hdr, monkeypatch):
+    kinds = lambda: [k["kind"] for k in client.get("/api/definition-kinds", headers=hdr).json()["kinds"]]      # noqa: E731
+    before = kinds()
+    assert "attachment_slot" not in before                                    # OFF：種類清單與先前相同
+    monkeypatch.setattr(SS, "enabled", lambda conn=None: True)
+    assert AS.enabled() is True and "attachment_slot" in kinds()              # ON：登記
+    monkeypatch.setattr(SS, "enabled", lambda conn=None: False)
+    assert AS.enabled() is False and kinds() == before                        # 關回去：撤掉
+
+
+def test_slots_cannot_pick_ole_or_heic_but_builtin_policies_keep_them(on):
+    for ext in (".doc", ".xls", ".heic", ".heif"):
+        assert "不在系統允許範圍" in _msgs(B(S(accept=[ext]))), ext
+    assert ".doc" not in SS.SLOT_EXTS and {".docx", ".xlsx"} <= SS.SLOT_EXTS and SS.SLOT_EXTS < SS.HARD_EXTS
+    assert {".doc", ".xls"} <= set(SS.builtin_policy("voucher_attachments").accept)                      # 傳票附件內建不變
+    assert {".heic", ".heif"} <= set(SS.builtin_policy("case_extra_expense").accept)
+    pol = AS._policy_of("completion_note", S(accept=[".pdf"]))                                        # noqa: SLF001
+    assert set(pol.accept) == {".pdf"}
+    assert ".doc" not in set(AS._policy_of("completion_note", dict(S(), accept=[".pdf", ".doc"])).accept)  # noqa: SLF001  即使硬塞也被扣掉
+
+
+def test_labels_reject_bidi_and_zero_width_characters(on):
+    for bad in ("現場‮照片", "現場​照片", "現場﻿照片", "現場⁦照片"):
+        assert "不可含" in _msgs(B(S(label=bad))), repr(bad)
+
+
+def test_dangerous_extension_list_covers_macro_and_script_types():
+    assert {".docm", ".xlsm", ".jar", ".msi", ".hta", ".wsf", ".sh", ".reg", ".exe", ".ps1"} <= SS.DANGEROUS_EXTS
+
+
+@pytest.mark.upload_magic
+def test_simulate_treats_a_leading_dot_name_as_having_no_extension(client, hdr, on):
+    r = _sim(client, hdr, B(S(accept=[".pdf"])), filename=".pdf").json()
+    assert r["ok"] is False and any("沒有副檔名" in x for x in r["reasons"])
+
+
+def test_completion_note_slot_paths_are_reachable_through_the_attachment_catalog():
+    """附件目錄的『路徑必須屬於這張單據』檢查（W3）要認得 BP-4 的 <子夾>/<單號>/<檔名>；其他形狀仍 fail closed。"""
+    from helpers.uploads import upload_path_key
+    from modules.case import attachments as CA
+    e = lambda p: {"path": p}                                                                          # noqa: E731
+    assert upload_path_key(e("completion_notes/N-1/a.pdf"), "completion_notes") == "N-1"                   # 既有形狀不變
+    assert upload_path_key(e("completion_notes/驗收單/N-1/a.pdf"), "completion_notes") is None            # 預設深度仍是 2
+    assert upload_path_key(e("completion_notes/驗收單/N-1/a.pdf"), "completion_notes", depth=3, key_index=1) == "N-1"
+    bound = lambda p, doc: CA._path_bound_to_doc(None, "completion_note", doc, e(p))                    # noqa: E731,SLF001
+    assert bound("completion_notes/N-1/a.pdf", "N-1") is True
+    assert bound("completion_notes/驗收單/N-1/a.pdf", "N-1") is True
+    assert bound("completion_notes/驗收單/N-2/a.pdf", "N-1") is False                                    # 別張單據
+    assert bound("completion_notes/a/b/N-1/c.pdf", "N-1") is False                                       # 四段不收
+    assert bound("quotations/驗收單/N-1/a.pdf", "N-1") is False                                          # 別的資料夾
+    assert bound("completion_notes/../N-1/a.pdf", "N-1") is False                                        # 穿越
+    # 其他來源類型沒有因此放寬：報價單回簽的三段路徑仍不屬於單據
+    assert CA._path_bound_to_doc(None, "quotation_signed", "N-1", e("quotations/驗收單/N-1/a.pdf")) is False  # noqa: SLF001

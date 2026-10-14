@@ -1,6 +1,8 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — wip/t62-bp4-s1-r1＋wip/t62-bp4-s2-r1（BP-4 S1／S2：儲存位置代號登錄表＋附件插槽定義；旗標 `builder_slots.enabled` 預設關）
+## (next) — wip/t62-bp4-s1-r1＋wip/t62-bp4-s2-r1＋wip/t62-bp4-s2-r2（BP-4 S1／S2：儲存位置代號登錄表＋附件插槽定義；旗標 `builder_slots.enabled` 預設關）
+
+- 04 靜態審查後補強（s2-r2）：①旗標要 `builder_slots` **且** `builder_governance` 都開才算開（讀不到＝關）；②管理者插槽不可選 `.doc／.xls／.heic／.heif`（`SLOT_EXTS`；內建政策不變）；③`helpers.uploads.upload_path_key` 加選填 `key_index`（預設 0，只增），案件附件目錄認得完工單 `<子夾>/<單號>/<檔名>`；④`attachment_slot` 種類隨旗標登記／撤掉（OFF 時 `/api/definition-kinds` 與先前相同、存不了草稿），`GET /api/attachment-slots/{doc_type}` OFF ⇒ 404；⑤`DANGEROUS_EXTS` 加 docm／xlsm／jar／msi／hta／wsf／sh／reg，標籤擋雙向控制與零寬字元，模擬上傳用 `os.path.splitext`；⑥註明帶政策的上傳（含內建「簽回單」走政策）會開啟雙副檔名拒絕，比 `policy=None` 略嚴。
 
 - L1（新增，只增；S2）：`helpers/attachment_slots.py`（kind `attachment_slot`，key `doc:<單據類型>`：驗證器、寬嚴比較、有效插槽、插槽政策、唯讀「模擬上傳」）；路由 `GET /api/attachment-slots/catalog`、`GET /api/attachment-slots/{doc_type}`、`POST /api/attachment-slots/{doc_type}/simulate`（旗標關 ⇒ 404／內建；simulate 唯讀）；`routers/def_pipeline.ACTIVE_KINDS` 加 `attachment_slot`（放寬＝加副檔名／加大上限／擴大上傳者／改子夾／重新啟用）；`SlotPolicy.max_file_bytes`；帶政策的上傳拒絕雙副檔名（`policy=None` 路徑不變）。
 
