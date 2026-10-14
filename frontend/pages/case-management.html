@@ -601,20 +601,20 @@
             <!-- Tabs -->
             <!-- CU8：窄螢幕分頁列會超出寬度 ⇒ 右緣淡出＋提示可左右滑動 -->
             <div class="cm-tabs-hint" data-testid="cm-tabs-hint">← 左右滑動看更多分頁 →</div>
-            <div class="cm-tabs">
-              <button class="cm-tab" :class="{active: activeTab==='biz'}"      @click="activeTab='biz'">案件資訊</button>
-              <button class="cm-tab" :class="{active: activeTab==='exec'}"     @click="activeTab='exec'">執行管理</button>
-              <button class="cm-tab" :class="{active: activeTab==='dispatch'}" @click="activeTab='dispatch'">承攬商<span class="cm-tab__n" x-show="dispatches.length > 0" x-text="dispatches.length"></span></button>
-              <button class="cm-tab" :class="{active: activeTab==='shipping'}" @click="activeTab='shipping'; loadShippingNotes(selected.quote_no)">出貨單<span class="cm-tab__n" x-show="shippingNotes.length > 0" x-text="shippingNotes.length"></span></button>
+            <div class="cm-tabs" x-effect="tabFix()">
+              <button class="cm-tab" x-show="tShown('biz')" :style="tOrder('biz')" :class="{active: activeTab==='biz'}"      @click="activeTab='biz'"><span x-text="tLabel('biz', '案件資訊')">案件資訊</span></button>
+              <button class="cm-tab" x-show="tShown('exec')" :style="tOrder('exec')" :class="{active: activeTab==='exec'}"     @click="activeTab='exec'"><span x-text="tLabel('exec', '執行管理')">執行管理</span></button>
+              <button class="cm-tab" x-show="tShown('dispatch')" :style="tOrder('dispatch')" :class="{active: activeTab==='dispatch'}" @click="activeTab='dispatch'"><span x-text="tLabel('dispatch', '承攬商')">承攬商</span><span class="cm-tab__n" x-show="dispatches.length > 0" x-text="dispatches.length"></span></button>
+              <button class="cm-tab" x-show="tShown('shipping')" :style="tOrder('shipping')" :class="{active: activeTab==='shipping'}" @click="activeTab='shipping'; loadShippingNotes(selected.quote_no)"><span x-text="tLabel('shipping', '出貨單')">出貨單</span><span class="cm-tab__n" x-show="shippingNotes.length > 0" x-text="shippingNotes.length"></span></button>
               <!-- 完工單（2026-09-12）：比照出貨單，放在它右邊——出貨之後才有完工，
                    順序跟實際流程一致。切分頁時載入，形狀同出貨單。 -->
-              <button class="cm-tab" :class="{active: activeTab==='completion'}"
-                      @click="activeTab='completion'; loadCompletionNotes(selected.quote_no)">完工單<span class="cm-tab__n" x-show="completionNotes.length > 0" x-text="completionNotes.length"></span></button>
-              <button class="cm-tab" :class="{active: activeTab==='feed'}" @click="activeTab='feed'; loadCaseUpdates(selected.quote_no)">動態<span class="cm-tab__n" x-show="caseUpdates.length > 0" x-text="caseUpdates.length"></span></button>
+              <button class="cm-tab" x-show="tShown('completion')" :style="tOrder('completion')" :class="{active: activeTab==='completion'}"
+                      @click="activeTab='completion'; loadCompletionNotes(selected.quote_no)"><span x-text="tLabel('completion', '完工單')">完工單</span><span class="cm-tab__n" x-show="completionNotes.length > 0" x-text="completionNotes.length"></span></button>
+              <button class="cm-tab" x-show="tShown('feed')" :style="tOrder('feed')" :class="{active: activeTab==='feed'}" @click="activeTab='feed'; loadCaseUpdates(selected.quote_no)"><span x-text="tLabel('feed', '動態')">動態</span><span class="cm-tab__n" x-show="caseUpdates.length > 0" x-text="caseUpdates.length"></span></button>
               <!-- 附件目錄 P3：檔案中心（filehub）在才出現；不在就不顯示頁籤（不是空表）。同一支 /api/filehub/search、固定本案件 -->
-              <button class="cm-tab" x-show="fileCenterOn" data-testid="cm-tab-allfiles" :class="{active: activeTab==='allfiles'}" @click="activeTab='allfiles'">全部附件<span class="cm-tab__n" x-show="caseFilesFor === selected.quote_no && caseFiles.length > 0" x-text="caseFiles.length"></span></button>
+              <button class="cm-tab" x-show="fileCenterOn && tShown('allfiles')" :style="tOrder('allfiles')" data-testid="cm-tab-allfiles" :class="{active: activeTab==='allfiles'}" @click="activeTab='allfiles'"><span x-text="tLabel('allfiles', '全部附件')">全部附件</span><span class="cm-tab__n" x-show="caseFilesFor === selected.quote_no && caseFiles.length > 0" x-text="caseFiles.length"></span></button>
               <!-- CU5：收款搬進財務分頁 ⇒ 分頁本身人人看得到（收款以外的財務區塊仍只給 canSeeFinancial） -->
-              <button class="cm-tab" :class="{active: activeTab==='fin'}" @click="activeTab='fin'">財務</button>
+              <button class="cm-tab" x-show="tShown('fin')" :style="tOrder('fin')" :class="{active: activeTab==='fin'}" @click="activeTab='fin'"><span x-text="tLabel('fin', '財務')">財務</span></button>
               <!-- 額外支出（2026-09-11）：從精算頁搬過來，獨立成一個分頁而不是塞進財務
                    分頁——使用者說的是「案件管理的案件內選單」，而案件內選單就是這排分頁。 -->
               <!-- 切分頁刻意不重載：selectCase() 選到案件時就已經載過了。兩邊都載會
@@ -623,16 +623,16 @@
                    （負載較高、時序被拉開）時穩定重現。
                    ⚠️ 註解一定要放在標籤外面：HTML 不允許 <tag> 內出現註解，放進去
                    整個 @click 都不會綁上，分頁點了完全沒反應（本次踩過）。 -->
-              <button class="cm-tab" x-show="canSeeFinancial()" :class="{active: activeTab==='xexp'}"
+              <button class="cm-tab" x-show="canSeeFinancial() && tShown('xexp')" :style="tOrder('xexp')" :class="{active: activeTab==='xexp'}"
                       @click="activeTab='xexp'">
-                額外支出
+                <span x-text="tLabel('xexp', '額外支出')">額外支出</span>
                 <span x-show="xe.pendingCount > 0"
                       style="display:inline-block;margin-left:4px;padding:0 5px;border-radius:8px;background:var(--tone-warning-bg-strong);color:var(--tone-warning-fg);font-size:11px;font-weight:700"
                       x-text="xe.pendingCount"></span>
               </button>
               <!-- 精算入口（2026-10-03）：原本只有財務分頁裡一個小連結，使用者找不到；放在額外支出右邊。
                    精算是獨立頁面，所以是連結不是分頁內容（刻意不用 .cm-tab：逐分頁點擊的 golden／主題 e2e 會點到它而離開本頁）；權限同精算頁（canSeeFinancial）。 -->
-              <a class="cm-tab-link" x-show="canSeeFinancial()" data-testid="cm-tab-settlement"
+              <a class="cm-tab-link" x-show="canSeeFinancial()" :style="tTail()" data-testid="cm-tab-settlement"
                  :href="'settlement.html?no=' + (selected?.quote_no||'')">精算 ▶</a>
             </div>
 
@@ -4812,7 +4812,8 @@ void 0
 // 關閉時不發任何版面請求（deferred），lShown()＝true、lo()＝''，畫面與先前相同。只接版面，不含任何業務邏輯。
 MotrixLayout.init({
   module: 'case', page: 'case-management.html', deferred: true,
-  fallback: { lists: { cases: ['quoteNo', 'dealTag', 'customer', 'sales', 'amount', 'stageProgress', 'date'] } },
+  fallback: { lists: { cases: ['quoteNo', 'dealTag', 'customer', 'sales', 'amount', 'stageProgress', 'date'],
+                       tabs: ['biz', 'exec', 'dispatch', 'shipping', 'completion', 'feed', 'allfiles', 'fin', 'xexp'] } },
 })
 window.CM_PARTS.push(() => ({
   asOn: false,                       // BP-4 S3：附件種類編輯器入口（旗標開＋最高管理者才為真；關閉時永遠是 false）
@@ -4831,6 +4832,17 @@ window.CM_PARTS.push(() => ({
     return ix.length ? { order: Math.min(...ix) + 1 } : {}
   },
   lLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('cases', f, dflt) : dflt },
+  // 分頁列（BP-1／Q2）：每個分頁是 list `tabs` 的一欄（顯示／順序／標題）。旗標隨 case_management；關閉＝中性值。
+  // 金額與權限永遠優先：額外支出分頁維持 canSeeFinancial() 且（版面隱藏）；版面只能再收窄，不能放寬。:style 一律回物件（見 lo()）。
+  _tcols() { return this.layoutOn ? window.Alpine.store('layout').cols('tabs') : [] },
+  _tix(f) { return this._tcols().findIndex(c => c.field === f) },
+  tShown(f) { return !this.layoutOn || this._tix(f) >= 0 },
+  tOrder(f) { return this.layoutOn && this._tix(f) >= 0 ? { order: this._tix(f) + 1 } : {} },
+  tTail() { return this.layoutOn ? { order: 999 } : {} },
+  // 目前分頁被版面隱藏（網址 ?tab=、記住的分頁、其他入口切過來）⇒ 退回「案件資訊」（核心分頁，隱藏不了），不要留一個沒有頁籤的內容面板
+  _tabKeys: ['biz', 'exec', 'dispatch', 'shipping', 'completion', 'feed', 'allfiles', 'fin', 'xexp'],
+  tabFix() { if (this.layoutOn && this._tabKeys.includes(this.activeTab) && !this.tShown(this.activeTab)) this.activeTab = 'biz' },
+  tLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('tabs', f, dflt) : dflt },
   // 案件資訊表單（合約資訊、專案期間）：欄位的顯示／順序／標題與區塊標題。旗標關閉＝中性值。
   fShown(form, f) { return !this.layoutOn || window.Alpine.store('layout').fieldShown(form, f) },
   fo(form, f) { return this.layoutOn ? { order: window.Alpine.store('layout').fieldOrder(form, f) } : {} },

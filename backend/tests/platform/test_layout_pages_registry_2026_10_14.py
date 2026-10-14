@@ -52,7 +52,8 @@ def test_each_entry_is_wired(e):
     m = _manifest(e)
     assert customization.validate_manifest(m) == []
     pg = _page_entry(e)
-    fields = {f["key"]: f for f in sum(m["customization"]["fields"].values(), [])}
+    ents = {lst["entity"] for lst in pg["lists"]}                    # 只看這一頁的清單用到的實體（不同頁可有同名欄位）
+    fields = {f["key"]: f for e in ents for f in m["customization"]["fields"][e]}
     listed = {c["field"] for lst in pg["lists"] for c in lst["columns"]}
     for k in e["relabelIneffective"]:
         assert k in listed, "%s 不是這頁列表的欄位" % k
