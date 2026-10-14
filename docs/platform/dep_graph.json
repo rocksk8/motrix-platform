@@ -419,6 +419,7 @@
     "helper:export_templates",
     "helper:legal_params",
     "helper:option_lists",
+    "helper:pdf_scripts",
     "helper:privacy_notice",
     "helper:settings",
     "helper:startup",
@@ -1019,6 +1020,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:pdf_scripts",
     "plat:paths"
    ],
    "kind": "helper",
@@ -1475,6 +1477,17 @@
     "system_settings"
    ]
   },
+  "helper:pdf_scripts": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "helper",
+   "path": "backend/helpers/pdf_scripts.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "helper:perm": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -1788,6 +1801,7 @@
    "imports": [
     "core:db",
     "helper:auth",
+    "helper:pdf_scripts",
     "helper:settings",
     "plat:paths"
    ],
@@ -3775,6 +3789,30 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:static/stage-template-editor.js": {
+   "api_calls": [
+    "/api/def-governance/case_stage_template/",
+    "/api/definitions/case_stage_template",
+    "/api/definitions/case_stage_template/",
+    "/api/quotations/stage-templates/preview"
+   ],
+   "api_prefixes": [
+    "/api/def-governance",
+    "/api/definitions",
+    "/api/quotations"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/stage-template-editor.js",
+   "routers_called": [
+    "mod:case/api/quotations",
+    "router:def_governance",
+    "router:definitions"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:static/status-chip.js": {
    "api_calls": [
     "/api/status-display"
@@ -4470,6 +4508,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
@@ -5313,6 +5352,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
@@ -5589,6 +5629,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
@@ -6698,6 +6739,7 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:option_lists",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:row_access",
@@ -7120,6 +7162,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
@@ -7930,6 +7973,7 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:payable_due_core",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:recycle_bin",
@@ -8219,6 +8263,7 @@
     "helper:auth",
     "helper:builtin_fields",
     "helper:case_access",
+    "helper:clause_titles",
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
@@ -8236,6 +8281,7 @@
     "helper:email_notify",
     "helper:errors",
     "helper:expense_types",
+    "helper:export_templates",
     "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
@@ -8244,6 +8290,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:privacy_notice",
     "helper:profit_rules",
@@ -8259,6 +8306,7 @@
     "helper:tiered_approval",
     "helper:uploads",
     "helper:validation",
+    "helper:xlsx_out",
     "mod:case/alt_policy",
     "mod:case/completion_pdf",
     "mod:case/completion_sync",
@@ -8494,6 +8542,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:row_access",
     "helper:settings",
@@ -8617,6 +8666,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:recycle_bin",
@@ -8786,6 +8836,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:recycle_bin",
@@ -8958,6 +9009,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:recycle_bin",
@@ -9118,6 +9170,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:recycle_bin",
@@ -9290,6 +9343,7 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:payable_due_core",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:privacy_notice",
     "helper:recognition_basis",
@@ -9610,6 +9664,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:recycle_bin",
@@ -9776,16 +9831,19 @@
     "helper:notify_templates",
     "helper:option_lists",
     "helper:payable_due_core",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:privacy_notice",
     "helper:profit_rules",
     "helper:recognition_basis",
     "helper:recycle_bin",
     "helper:row_access",
+    "helper:safe_text",
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:stage_templates",
     "helper:storage_slots",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -9814,7 +9872,8 @@
     "mod:case/quote_terms",
     "mod:case/receipt_calendar",
     "mod:case/recognition",
-    "mod:case/recycle_adapter"
+    "mod:case/recycle_adapter",
+    "mod:case/stage_apply"
    ],
    "imports": [
     "core:archive",
@@ -9844,6 +9903,7 @@
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
+    "helper:stage_templates",
     "helper:tax_calc",
     "helper:tiered_approval",
     "helper:uploads",
@@ -9862,6 +9922,8 @@
     "mod:case/receipt_calendar",
     "mod:case/recognition",
     "mod:case/recycle_adapter",
+    "mod:case/stage_apply",
+    "plat:definitions",
     "plat:registry",
     "plat:txn",
     "router:item_reads"
@@ -10024,253 +10086,271 @@
     },
     {
      "func": "list_case_stages_normalized",
-     "line": 3842,
+     "line": 3850,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "create_case_stage",
-     "line": 3860,
+     "line": 3868,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
+     "func": "list_stage_templates",
+     "line": 3897,
+     "method": "GET",
+     "path": "/api/quotations/{quote_no}/stages/templates"
+    },
+    {
+     "func": "preview_stage_template",
+     "line": 3921,
+     "method": "POST",
+     "path": "/api/quotations/stage-templates/preview"
+    },
+    {
+     "func": "apply_stage_template",
+     "line": 3940,
+     "method": "POST",
+     "path": "/api/quotations/{quote_no}/stages/apply-template"
+    },
+    {
      "func": "update_case_stage",
-     "line": 3889,
+     "line": 4032,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "delete_case_stage",
-     "line": 3943,
+     "line": 4086,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "reorder_case_stages",
-     "line": 3984,
+     "line": 4127,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/stages/reorder"
     },
     {
      "func": "add_stage_assignee",
-     "line": 4008,
+     "line": 4151,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees"
     },
     {
      "func": "remove_stage_assignee",
-     "line": 4036,
+     "line": 4179,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}"
     },
     {
      "func": "toggle_stage_dependency",
-     "line": 4059,
+     "line": 4202,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}"
     },
     {
      "func": "add_stage_visit",
-     "line": 4092,
+     "line": 4235,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits"
     },
     {
      "func": "update_stage_visit",
-     "line": 4118,
+     "line": 4261,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "delete_stage_visit",
-     "line": 4149,
+     "line": 4292,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "record_export",
-     "line": 4172,
+     "line": 4315,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/export"
     },
     {
      "func": "mark_payment",
-     "line": 4261,
+     "line": 4404,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 4393,
+     "line": 4536,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 4436,
+     "line": 4579,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 4476,
+     "line": 4619,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 4515,
+     "line": 4658,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 4540,
+     "line": 4683,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 4581,
+     "line": 4724,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 4606,
+     "line": 4749,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 4638,
+     "line": 4781,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 4667,
+     "line": 4810,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_finance_summary",
-     "line": 4711,
+     "line": 4854,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "approve_quotation",
-     "line": 5167,
+     "line": 5310,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 5292,
+     "line": 5435,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 5384,
+     "line": 5527,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5450,
+     "line": 5593,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5596,
+     "line": 5739,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5682,
+     "line": 5825,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5713,
+     "line": 5856,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5744,
+     "line": 5887,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5785,
+     "line": 5928,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5841,
+     "line": 5984,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5908,
+     "line": 6051,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5947,
+     "line": 6090,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5980,
+     "line": 6123,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 6568,
+     "line": 6711,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6688,
+     "line": 6831,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6756,
+     "line": 6899,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6912,
+     "line": 7055,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6926,
+     "line": 7069,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6957,
+     "line": 7100,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -10418,6 +10498,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:profit_rules",
     "helper:recognition_basis",
@@ -10575,6 +10656,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:profit_rules",
     "helper:recognition_basis",
@@ -10789,6 +10871,8 @@
     "core:db",
     "core:pdf_gen",
     "helper:doc_template",
+    "helper:export_templates",
+    "helper:pdf_scripts",
     "helper:startup",
     "mod:case/api/completion_notes"
    ],
@@ -11446,6 +11530,19 @@
    ],
    "tables_w": []
   },
+  "mod:case/stage_apply": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/stage_apply.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "mod:crm/__init__": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -11744,6 +11841,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
@@ -12310,6 +12408,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:privacy_notice",
     "helper:row_access",
     "helper:settings",
@@ -12477,6 +12576,7 @@
    "dynamic_sql": false,
    "imports": [
     "helper:company_identity",
+    "helper:pdf_scripts",
     "helper:startup",
     "helper:xlsx_out",
     "mod:netplan/topology"
@@ -14548,6 +14648,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:privacy_notice",
     "helper:row_access",
     "helper:settings",
@@ -18625,6 +18726,7 @@
     "/api/quotations/{}/reject",
     "/api/quotations/{}/reject-final",
     "/api/quotations/{}/stages",
+    "/api/quotations/{}/stages/templates",
     "/api/system/branding/favicon"
    ],
    "api_prefixes": [
@@ -20150,6 +20252,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:privacy_notice",
     "helper:settings",
     "helper:settings_groups",
@@ -20644,6 +20747,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:row_access",
     "helper:settings",
@@ -21045,6 +21149,7 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:option_lists",
+    "helper:pdf_scripts",
     "helper:rule_catalog",
     "helper:rule_grammar",
     "helper:rule_sets",
@@ -21152,6 +21257,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:safe_text",
     "helper:settings",
     "helper:settings_groups",
@@ -21281,6 +21387,7 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:option_lists",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:row_access",
     "helper:safe_text",
@@ -21324,103 +21431,103 @@
    "routes": [
     {
      "func": "list_definition_kinds",
-     "line": 218,
+     "line": 230,
      "method": "GET",
      "path": "/api/definition-kinds"
     },
     {
      "func": "list_expense_types",
-     "line": 226,
+     "line": 238,
      "method": "GET",
      "path": "/api/expense-types"
     },
     {
      "func": "get_expense_type",
-     "line": 238,
+     "line": 250,
      "method": "GET",
      "path": "/api/expense-types/{code}"
     },
     {
      "func": "list_definitions",
-     "line": 253,
+     "line": 265,
      "method": "GET",
      "path": "/api/definitions/{kind}"
     },
     {
      "func": "delete_definition_draft",
-     "line": 278,
+     "line": 290,
      "method": "DELETE",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "delete_custom_module",
-     "line": 297,
+     "line": 309,
      "method": "DELETE",
      "path": "/api/definitions/custom_module/{key}"
     },
     {
      "func": "get_definition",
-     "line": 314,
+     "line": 326,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}"
     },
     {
      "func": "get_definition_default",
-     "line": 328,
+     "line": 340,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/default"
     },
     {
      "func": "save_definition_draft",
-     "line": 338,
+     "line": 350,
      "method": "PUT",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "validate_definition",
-     "line": 368,
+     "line": 380,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/validate"
     },
     {
      "func": "publish_definition",
-     "line": 466,
+     "line": 478,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/publish"
     },
     {
      "func": "get_definition_version",
-     "line": 526,
+     "line": 538,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 543,
+     "line": 555,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 568,
+     "line": 580,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 608,
+     "line": 620,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
      "func": "effective_layout",
-     "line": 622,
+     "line": 634,
      "method": "GET",
      "path": "/api/layout/{module_key}"
     },
     {
      "func": "preview_output_template",
-     "line": 657,
+     "line": 669,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }
@@ -21624,6 +21731,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_registry",
@@ -22270,6 +22378,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_registry",
@@ -22795,6 +22904,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:settings",
     "helper:settings_groups",
@@ -22897,6 +23007,7 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:option_lists",
+    "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:row_access",
     "helper:settings",
@@ -23508,6 +23619,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:pdf_scripts",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
