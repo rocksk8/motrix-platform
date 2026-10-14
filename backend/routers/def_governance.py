@@ -155,7 +155,13 @@ def _gate(authorization, kind):
     _require_user(authorization, require_superadmin=True)
     conn = get_db()
     on = enabled(conn)
-    if not on and kind in kinds():
+    if kind == "rule_set":                                             # 與 rule_sets._gate 一致：規則功能（兩個旗標都開）沒有效就一律 404，就算種類還登記在記憶體裡
+        try:
+            from helpers import rule_sets as _rs
+            on = _rs.enabled(conn)
+        except Exception:                                              # noqa: BLE001
+            on = False
+    elif not on and kind in kinds():
         try:                                                           # T62：某類的『強制預覽』已開 ⇒ 預覽路由要能用（否則關掉總開關會讓該類無法發布）
             from routers import definitions as _d
             on = _d._opt_in_enforced(conn, kind)

@@ -72,7 +72,11 @@ def test_adding_removing_enabling_disabling():
 def test_level_text_and_name_changes():
     red, yellow = lt(15), dict(lt(15), mark={"level": "yellow", "text": "毛利偏低", "target": "row"})
     assert c(b(red), b(yellow)) == "loosen" and c(b(yellow), b(red)) == "tighten"
-    assert c(b(red), b(dict(red, name="改個名", mark={"level": "red", "text": "請留意", "target": "row"}))) == "neutral"
+    assert c(b(red), b(dict(red, name="改個名"))) == "neutral"                                    # 改名不影響畫面
+    assert c(b(red), b(dict(red, mark={"level": "red", "text": "請留意", "target": "row"}))) == "loosen"       # 紅色提示文字改了：意思可能變，視為放寬
+    assert c(b(yellow), b(dict(yellow, mark={"level": "yellow", "text": "別的字", "target": "row"}))) == "neutral"   # 非紅色改字：中性
+    assert c(b(red), b(dict(red, mark={"level": "red", "text": "毛利偏低", "target": "field", "field": "total"}))) == "loosen"   # 標示位置變了
+    assert c(b(red), b(dict(red, surfaces=["form"]))) == "loosen" and c(b(red), b(dict(red, surfaces=["list"]))) == "neutral"
 
 
 def test_anything_hard_to_compare_counts_as_loosen():
@@ -121,6 +125,13 @@ def sa(client, make_user):
 URL = "/api/definitions/rule_set/case"
 
 
+def _pub(c, h, note="n"):
+    """規則功能開著時發布一定要帶『看過的預覽』：先取影響預覽的雜湊再發布。"""
+    pv = c.get("/api/def-governance/rule_set/case/impact", headers=h)
+    assert pv.status_code == 200, pv.text
+    return c.post(URL + "/publish", headers=h, json={"note": note, "preview_hash": pv.json()["previewHash"]})
+
+
 def _save(c, h, *rules):
     r = c.put(URL + "/draft", headers=h, json={"body": b(*rules)})
     assert r.status_code == 200, r.text
@@ -130,12 +141,12 @@ def _save(c, h, *rules):
 def test_tighten_is_immediate_and_loosen_is_pending(sa):
     c, h = sa
     _save(c, h["a"], lt(15))
-    r = c.post(URL + "/publish", headers=h["a"], json={"note": "初版"})
+    r = _pub(c, h["a"], "初版")
     assert r.status_code == 200 and "pending" not in r.json() and r.json()["version"] == 1       # 第一次發布＝收緊 ⇒ 立即
     _save(c, h["a"], lt(30))
-    assert c.post(URL + "/publish", headers=h["a"], json={"note": "調高"}).json()["version"] == 2    # 調高門檻＝更多標示＝收緊
+    assert _pub(c, h["a"], "調高").json()["version"] == 2    # 調高門檻＝更多標示＝收緊
     _save(c, h["a"], lt(10))
-    j = c.post(URL + "/publish", headers=h["a"], json={"note": "調低"}).json()
+    j = _pub(c, h["a"], "調低").json()
     assert j["pending"] is True and j["effectiveAt"] and any("低毛利" in x for x in j["reasons"]) and j["status"] == "submitted"
     assert c.get(URL, headers=h["a"]).json()["latest"]["version"] == 2                             # 生效版沒有變
     pend = c.get("/api/def-pipeline/pending", headers=h["b"])
@@ -146,12 +157,24 @@ def test_restore_to_a_narrower_version_goes_through_the_pipeline(sa):
     c, h = sa
     for v in (lt(15), lt(30)):
         _save(c, h["a"], v)
-        assert c.post(URL + "/publish", headers=h["a"], json={"note": "n"}).status_code == 200
-    r = c.post(URL + "/restore/1", headers=h["a"], json={})                                        # v2(<30) → v1(<15)：標示變少＝放寬
+        assert _pub(c, h["a"]).status_code == 200
+    pv = c.get("/api/def-governance/rule_set/case/impact?version=1", headers=h["a"]).json()["previewHash"]
+    r = c.post(URL + "/restore/1", headers=h["a"], json={"preview_hash": pv})                                        # v2(<30) → v1(<15)：標示變少＝放寬
     assert r.status_code == 200 and r.json().get("pending") is True
 
 
-def test_enforce_rule_set_needs_a_seen_preview(sa):
+def test_a_seen_preview_is_always_required_while_rules_are_enabled(sa):
+    """規則功能開著（builder_rules.enabled＝1）就一律強制預覽——不必另外開 enforce_rule_set（它預設 0）。"""
+    c, h = sa
+    from helpers import settings_registry as SR
+    assert SR.get("builder_governance", "enforce_rule_set") == 0
+    _save(c, h["a"], lt(15))
+    r = c.post(URL + "/publish", headers=h["a"], json={"note": "n"})
+    assert r.status_code == 409 and r.json()["code"] == "preview_required"
+    assert _pub(c, h["a"]).status_code == 200
+
+
+def test_enforce_rule_set_switch_is_an_independent_extra_guard(sa):
     c, h = sa
     from helpers import settings_registry as SR
     conn = db.get_db()
@@ -161,11 +184,16 @@ def test_enforce_rule_set_needs_a_seen_preview(sa):
     finally:
         conn.close()
     _save(c, h["a"], lt(15))
-    r = c.post(URL + "/publish", headers=h["a"], json={"note": "n"})
-    assert r.status_code == 409 and r.json()["code"] == "preview_required"
-    seen = c.get("/api/def-governance/rule_set/case/impact", headers=h["a"])
-    assert seen.status_code == 200
-    assert c.post(URL + "/publish", headers=h["a"], json={"note": "n", "preview_hash": seen.json()["previewHash"]}).status_code == 200
+    assert c.post(URL + "/publish", headers=h["a"], json={"note": "n"}).status_code == 409
+    assert _pub(c, h["a"]).status_code == 200
+
+
+def test_governance_routes_for_rule_set_are_404_when_rules_are_not_effective(sa, monkeypatch):
+    c, h = sa
+    assert c.get("/api/def-governance/rule_set/case/ledger", headers=h["a"]).status_code == 200
+    monkeypatch.setattr("helpers.rule_sets.enabled", lambda conn=None: False)
+    for tail in ("ledger", "impact", "diff"):
+        assert c.get("/api/def-governance/rule_set/case/" + tail, headers=h["a"]).status_code == 404       # 種類還登記在記憶體裡也一樣
 
 
 def test_rules_turned_off_means_the_generic_routes_are_hidden(sa, monkeypatch):

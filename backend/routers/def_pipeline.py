@@ -144,7 +144,12 @@ def _cmp_rule_set(old, new):
             tighten.append("啟用規則「%s」" % nm)
         if (a.get("mode"), a.get("on_failure")) != (r.get("mode"), r.get("on_failure")):
             loosen.append("規則「%s」的模式或故障處理變了（無法判斷寬嚴，視為放寬）" % nm)
-        la, lb = _LEVEL_RANK.get((a.get("mark") or {}).get("level"), 0), _LEVEL_RANK.get((r.get("mark") or {}).get("level"), 0)
+        ma, mb = a.get("mark") or {}, r.get("mark") or {}
+        if (ma.get("target"), ma.get("field")) != (mb.get("target"), mb.get("field")) or sorted(a.get("surfaces") or ["list"]) != sorted(r.get("surfaces") or ["list"]):
+            loosen.append("規則「%s」的標示位置變了（無法判斷寬嚴，視為放寬）" % nm)
+        elif ma.get("text") != mb.get("text") and ma.get("level") == "red":
+            loosen.append("規則「%s」的紅色提示文字改了（提示的意思可能變了，視為放寬）" % nm)
+        la, lb = _LEVEL_RANK.get(ma.get("level"), 0), _LEVEL_RANK.get(mb.get("level"), 0)
         if lb < la:
             loosen.append("規則「%s」的標示變得不那麼醒目" % nm)
         elif lb > la:

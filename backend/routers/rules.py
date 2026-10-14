@@ -66,6 +66,29 @@ def _note_degraded(authorization, entity, version, degraded):
                 pass
 
 
+def _needed(*rule_lists):
+    """這些規則實際用到的欄位代號（含標示到欄位的目標）；給資料來源省掉用不到的欄位。"""
+    out = set()
+    for rules in rule_lists:
+        for r in rules or []:
+            if isinstance(r, dict):
+                out |= G.fields_used(r.get("when"))
+                mk = r.get("mark") or {}
+                if mk.get("target") == "field" and mk.get("field"):
+                    out.add(mk["field"])
+    return out
+
+
+def _load(entity, user, conn, **kw):
+    """⇒ (紀錄清單｜None，是否失敗)。資料來源丟任何例外（壞資料、過深的 JSON…）都不可讓請求 500：呼叫端依用途降級。"""
+    try:
+        return C.load_records(entity, user, conn, **kw), False
+    except Exception:                                              # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning("rules: 資料來源 %s 載入失敗，降級", entity, exc_info=True)
+        return None, True
+
+
 def _flagged(out):
     return set(out["marks"])
 
@@ -127,12 +150,13 @@ def rules_summary(entity: str = Query(...), authorization: str = Header(None)):
         _flag_gate(conn)
         _entity(entity)
         body, ver = _live(conn, entity)
-        rows = C.load_records(entity, u, conn, limit=SCAN_MAX)
         rules = body.get("rules") if isinstance(body.get("rules"), list) else []
+        rows, failed = _load(entity, u, conn, limit=SCAN_MAX, fields=_needed(rules))
         base = {"entity": entity, "version": ver, "rules": [{"id": r.get("id"), "name": r.get("name"), "enabled": r.get("enabled", True),
                                                              "level": (r.get("mark") or {}).get("level")} for r in rules if isinstance(r, dict)]}
         if rows is None:
-            return dict(base, available=False, message="這個主題還沒有接上資料來源，無法計算命中數", sampled=0, hits={})
+            return dict(base, available=False, sampled=0, hits={},
+                        message="資料來源暫時讀取失敗，無法計算命中數" if failed else "這個主題還沒有接上資料來源，無法計算命中數")
         out = E.evaluate(rules, rows, C.visible_ids(entity, u, conn), budget_ms=PREVIEW_BUDGET_MS)
         _note_degraded(authorization, entity, ver, out["degraded"])
         return dict(base, available=True, sampled=len(rows), hits=out["hits"], degraded=out["degraded"], notApplicable=out["notApplicable"])
@@ -161,12 +185,13 @@ def rules_preview(payload: dict = Body(default={}), authorization: str = Header(
             limit = max(1, min(int((payload or {}).get("limit") or SCAN_MAX), SCAN_MAX))
         except (TypeError, ValueError):
             raise HTTPException(400, "limit 必須是整數")
-        rows = C.load_records(entity, u, conn, limit=limit)
         live_body, ver = _live(conn, entity)
+        rows, failed = _load(entity, u, conn, limit=limit, fields=_needed(live_body.get("rules"), body.get("rules")))
         from routers import def_pipeline as P
         direction, reasons = P.classify(RS.KIND, live_body, body)
         if rows is None:
-            return {"entity": entity, "available": False, "message": "這個主題還沒有接上資料來源，無法預覽命中的紀錄", "direction": direction, "reasons": reasons}
+            return {"entity": entity, "available": False, "direction": direction, "reasons": reasons,
+                    "message": "資料來源暫時讀取失敗，無法預覽命中的紀錄" if failed else "這個主題還沒有接上資料來源，無法預覽命中的紀錄"}
         vis = C.visible_ids(entity, u, conn)
         cur = E.evaluate(live_body.get("rules") or [], rows, vis, budget_ms=PREVIEW_BUDGET_MS)
         new = E.evaluate(body.get("rules") or [], rows, vis, budget_ms=PREVIEW_BUDGET_MS)
@@ -214,7 +239,7 @@ def rules_marks(entity: str = Query(...), ids: str = Query(""), surface: str = Q
         rules = body.get("rules") if isinstance(body.get("rules"), list) else []
         if not any(isinstance(r, dict) and r.get("enabled", True) is True for r in rules):
             return empty
-        rows = C.load_records(entity, u, conn, ids=want, limit=len(want))
+        rows, _failed = _load(entity, u, conn, ids=want, limit=len(want), fields=_needed(rules))
         if not rows:
             return empty
         out = E.evaluate(rules, rows, C.visible_ids(entity, u, conn), budget_ms=MARKS_BUDGET_MS, surface=surface)

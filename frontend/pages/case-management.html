@@ -4806,7 +4806,9 @@ window.CM_PARTS.push(() => ({
     try {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
-      const r = await fetch('/api/settings-center/public?groups=builder_layout,builder_rules', { headers: { Authorization: 'Bearer ' + s.token } })
+      let r = await fetch('/api/settings-center/public?groups=builder_layout,builder_rules', { headers: { Authorization: 'Bearer ' + s.token } })
+      // 任何一個群組被隱藏／不存在時，整個請求會 404：退回只讀版面群組，版面編輯器不受其他群組影響（正常情況只有上面那一個請求）
+      if (r.status === 404) r = await fetch('/api/settings-center/public?groups=builder_layout', { headers: { Authorization: 'Bearer ' + s.token } })
       if (!r.ok) return
       const d = await r.json()
       // BP-2：旗標 builder_rules.enabled＝1 才啟動標示規則（關＝不送任何規則請求；兩支 js 載入後是惰性的）

@@ -158,9 +158,10 @@ def test_seeded_rule_never_shows_on_the_list_overlay(client, sa, monkeypatch):
     url = "/api/definitions/rule_set/case"
     RS.ensure_registered()
     client.put(url + "/draft", headers=sa, json={"body": {"rules": [RS.k01_seed_rule(90)]}})
-    assert client.post(url + "/publish", headers=sa, json={"note": "k01"}).status_code in (200,)
+    pv = client.get("/api/def-governance/rule_set/case/impact", headers=sa).json()["previewHash"]
+    assert client.post(url + "/publish", headers=sa, json={"note": "k01", "preview_hash": pv}).status_code == 200
     real = registry.providers
-    monkeypatch.setattr(registry, "providers", lambda cap: dict(real(cap), case=lambda c, u, ids, lim: [{"id": "Q", "label": "Q", "values": {"projectMarginPct": 1.0}}]) if cap == "rules.entity" else real(cap))
+    monkeypatch.setattr(registry, "providers", lambda cap: dict(real(cap), case=lambda c, u, ids, lim, fields=None: [{"id": "Q", "label": "Q", "values": {"projectMarginPct": 1.0}}]) if cap == "rules.entity" else real(cap))
     assert client.get("/api/rules/marks?entity=case&ids=Q", headers=sa).json()["marks"] == {}                       # 預設 surface=list
     assert client.get("/api/rules/marks?entity=case&ids=Q&surface=form", headers=sa).json()["marks"]               # 表單位置才有
     assert client.get("/api/rules/marks?entity=case&ids=Q&surface=bad", headers=sa).status_code == 400

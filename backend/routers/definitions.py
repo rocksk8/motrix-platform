@@ -439,6 +439,8 @@ def _preview_enforced(conn, kind) -> bool:
     try:
         if kind in _PREVIEW_ENFORCED_KINDS:
             return _governance_enabled(conn)
+        if kind == "rule_set" and _strict_setting(conn, "builder_rules", "enabled") == 1:
+            return True                                                # 規則功能有效（開著）就一律要先預覽——收緊的規則也會標紅真實案件，不能沒看過就發；enforce_rule_set 只是額外的獨立保險
         return _opt_in_enforced(conn, kind)
     except Exception:                                                  # noqa: BLE001
         logging.getLogger(__name__).exception("preview gate: 讀不到強制預覽設定（kind=%s），發布／還原被擋下", kind)

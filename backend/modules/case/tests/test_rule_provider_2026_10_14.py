@@ -37,10 +37,10 @@ def _add(quote_no, owner, *, net=12.5, direct=20.0, total=1050, status="草稿",
         conn.close()
 
 
-def _provide(user, ids=None, limit=200):
+def _provide(user, ids=None, limit=200, fields=None):
     conn = db.get_db()
     try:
-        return RP.provide(conn, user, ids, limit)
+        return RP.provide(conn, user, ids, limit, fields)
     finally:
         conn.close()
 
@@ -133,3 +133,54 @@ def test_flag_off_routes_never_call_the_provider(client, make_user, monkeypatch)
                             ("post", "/api/rules/preview", {"json": {"entity": "case", "body": {"rules": []}}})):
         assert getattr(client, method)(url, headers=h, **kw).status_code == 404
     assert called == []
+
+
+def _add_raw(quote_no, owner, deal_tag, settle, data_json, updated="2026-10-14 13:00:00"):
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, direct_margin_pct, net_margin_pct, sales_person_id, "
+                     "sales_person, data_json, updated_at, deal_tag, settle_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                     (quote_no, "草稿", "客戶", "專案", 100, 100, 1, 1, owner["id"], owner["username"], data_json, updated, deal_tag, settle))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_legacy_rows_get_deal_tag_and_settle_status_from_data_json(client, make_user):
+    """舊資料（v6 之前）欄位是空的、值還在 data_json：與 SQL_DEAL_TAG／SQL_SETTLE_STATUS 同語意（直接讀欄位會把已結案的舊案件當成未結案）。"""
+    a = _user(make_user, "t62p_legacy", "sales")
+    _add_raw("L-OLD", a, "", "", json.dumps({"dealTag": "已結案", "settlement": {"status": "已完結"}}, ensure_ascii=False))
+    _add_raw("L-NEW", a, "已成案", "進行中", json.dumps({"dealTag": "已結案", "settlement": {"status": "已完結"}}, ensure_ascii=False))     # 欄位有值 ⇒ 以欄位為準
+    _add_raw("L-NONE", a, None, None, "{}")
+    _add_raw("L-BAD", a, "", "", "{not json")
+    got = {r["id"]: r["values"] for r in _provide(a)}
+    assert (got["L-OLD"]["dealTag"], got["L-OLD"]["settleStatus"]) == ("已結案", "已完結")
+    assert (got["L-NEW"]["dealTag"], got["L-NEW"]["settleStatus"]) == ("已成案", "進行中")
+    assert (got["L-NONE"]["dealTag"], got["L-NONE"]["settleStatus"]) == ("", "")
+    assert (got["L-BAD"]["dealTag"], got["L-BAD"]["settleStatus"]) == ("", "")                     # 壞 JSON 只影響這一列，不丟例外
+
+
+def test_deeply_nested_json_does_not_break_the_request(client, make_user):
+    a = _user(make_user, "t62p_deep", "sales")
+    _add_raw("D-1", a, "已成案", "x", "[" * 60000 + "]" * 60000, updated="2026-10-14 14:00:00")
+    _add_raw("D-2", a, "", "", "{" * 60000, updated="2026-10-14 13:30:00")
+    rows = _provide(a)
+    assert {r["id"] for r in rows} == {"D-1", "D-2"}                                              # 過深的 JSON（RecursionError）→ 該列照常回來
+    assert all(r["values"]["status"] == "草稿" for r in rows)
+
+
+def test_data_json_is_only_parsed_when_the_caller_needs_it(client, make_user, monkeypatch):
+    a = _user(make_user, "t62p_lazy", "sales")
+    _add_raw("P-1", a, "已成案", "進行中", "{}")
+    n = []
+    real = RP._parse
+    monkeypatch.setattr(RP, "_parse", lambda raw: (n.append(1), real(raw))[1])
+    _provide(a, fields={"status", "total"})
+    assert n == []                                                                                 # 沒有人要 cf_／專案毛利，欄位也都有值 ⇒ 完全不解析
+    _provide(a, fields={"cf_site"})
+    assert n                                                                                       # 要自訂欄位 ⇒ 才解析
+    n.clear()
+    _add_raw("P-2", a, "", "進行中", "{}", updated="2026-10-14 15:00:00")
+    _provide(a, fields={"status"})
+    assert n                                                                                       # 舊資料要靠 data_json 補結案標籤 ⇒ 仍會解析
+

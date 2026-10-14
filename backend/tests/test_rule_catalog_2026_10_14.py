@@ -90,12 +90,14 @@ def test_provider_values_are_trimmed_to_the_viewers_visible_fields(monkeypatch):
     monkeypatch.setattr("helpers.auth.finance_duty_person", lambda user: False)
     seen = {}
 
-    def provider(conn, user, ids, limit):
-        seen.update(ids=ids, limit=limit)
+    def provider(conn, user, ids, limit, fields=None):
+        seen.update(ids=ids, limit=limit, fields=fields)
         return [{"id": "Q1", "label": "甲案", "values": {"netMarginPct": 3, "total": 100, "status": "草稿", "secretColumn": 1}}] * 3
     monkeypatch.setattr(registry, "providers", lambda cap: {"case": provider} if cap == "rules.entity" else {})
     rows = C.load_records("case", u("engineer"), None, ids=["Q1"], limit=99999)
-    assert seen == {"ids": ["Q1"], "limit": 1000} and len(rows) == 3
+    assert seen == {"ids": ["Q1"], "limit": 1000, "fields": None} and len(rows) == 3
+    C.load_records("case", u("engineer"), None, fields={"status", "total"})
+    assert seen["fields"] == frozenset({"status", "total"})                            # 呼叫端需要的欄位集合原樣傳給提供者
     assert rows[0]["values"] == {"status": "草稿"}                                    # 成本／總額／未登錄欄位都被裁掉
     assert C.load_records("case", u("sales"), None)[0]["values"] == {"netMarginPct": 3, "total": 100, "status": "草稿"}
 

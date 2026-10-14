@@ -27,7 +27,7 @@ DRAFTS = {"id": "is_draft", "name": "草稿", "enabled": True, "mode": "mark", "
 ROLES = [("superadmin", True), ("admin", True), ("sales", True), ("finance", True), ("engineer", False), ("viewer", False)]
 
 
-def provider(conn, user, ids, limit):
+def provider(conn, user, ids, limit, fields=None):
     rows = [r for r in RECORDS if ids is None or r["id"] in ids]
     return [dict(r, values=dict(r["values"])) for r in rows][:limit]
 
@@ -63,7 +63,8 @@ def _turn_flag_on():
 def _publish_rules(client, h, rules):
     url = "/api/definitions/rule_set/" + ENT
     assert client.put(url + "/draft", headers=h, json={"body": {"rules": rules}}).status_code == 200
-    r = client.post(url + "/publish", headers=h, json={"note": "t"})
+    pv = client.get("/api/def-governance/rule_set/" + ENT + "/impact", headers=h).json()["previewHash"]      # 規則功能開著時發布一定要先預覽
+    r = client.post(url + "/publish", headers=h, json={"note": "t", "preview_hash": pv})
     assert r.status_code == 200, r.text
 
 
@@ -223,3 +224,36 @@ def test_evaluator_failure_degrades_loudly_but_never_breaks_the_page(client, use
     finally:
         c.close()
     assert n == 1                                                                              # 5 分鐘內同一規則同一版只記一筆
+
+
+def test_a_failing_data_source_degrades_every_endpoint_instead_of_500(client, users, monkeypatch):
+    _turn_flag_on()
+    _publish_rules(client, users["superadmin"], [LOW_MARGIN])
+    real = registry.providers
+
+    def boom(conn, user, ids, limit, fields=None):
+        raise RecursionError("maximum recursion depth exceeded")
+    monkeypatch.setattr(registry, "providers", lambda cap: dict(real(cap), case=boom) if cap == "rules.entity" else real(cap))
+    assert client.get("/api/rules/marks?entity=case&ids=Q1", headers=users["sales"]).json() == {"entity": ENT, "marks": {}, "degraded": False}
+    s = client.get("/api/rules/summary?entity=case", headers=users["superadmin"])
+    assert s.status_code == 200 and s.json()["available"] is False and "失敗" in s.json()["message"]
+    p = client.post("/api/rules/preview", headers=users["superadmin"], json={"entity": ENT, "body": {"rules": [LOW_MARGIN]}})
+    assert p.status_code == 200 and p.json()["available"] is False and "失敗" in p.json()["message"]
+
+
+def test_the_data_source_is_told_which_fields_are_needed(client, users, monkeypatch):
+    _turn_flag_on()
+    _publish_rules(client, users["superadmin"], [LOW_MARGIN])
+    seen = []
+    real = registry.providers
+
+    def spy(conn, user, ids, limit, fields=None):
+        seen.append(fields)
+        return provider(conn, user, ids, limit, fields)
+    monkeypatch.setattr(registry, "providers", lambda cap: dict(real(cap), case=spy) if cap == "rules.entity" else real(cap))
+    client.get("/api/rules/marks?entity=case&ids=Q1", headers=users["sales"])
+    assert seen[-1] == frozenset({"netMarginPct"})
+    draft = dict(LOW_MARGIN, when={"op": "lt", "field": "total", "value": 5})
+    client.post("/api/rules/preview", headers=users["superadmin"], json={"entity": ENT, "body": {"rules": [draft]}})
+    assert seen[-1] == frozenset({"netMarginPct", "total"})                                       # 預覽＝草稿 ∪ 已發布
+

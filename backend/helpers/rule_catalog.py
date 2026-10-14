@@ -133,14 +133,15 @@ def rule_fields(entity, user, conn=None) -> list:
     return [dict(f, ops=list(OPS_BY_TYPE[f["type"]])) for f in _catalog_for(entity, conn) if f["id"] in vis]
 
 
-def load_records(entity, user, conn, *, ids=None, limit=200):
+def load_records(entity, user, conn, *, ids=None, limit=200, fields=None):
     """從該主題的提供者載入紀錄 ⇒ `[{"id", "label", "values"}]`（已裁到檢視者可見的欄位）；沒有提供者 ⇒ None（呼叫端回『尚未接上資料來源』）。
-    提供者契約：`fn(conn, user, ids, limit) -> [{"id": str, "label": str, "values": {欄位代號: 值}}]`，**須自己做逐筆讀取權限過濾**（看不到的紀錄不回），最新的在前。"""
+    提供者契約：`fn(conn, user, ids, limit, fields) -> [{"id": str, "label": str, "values": {欄位代號: 值}}]`，**須自己做逐筆讀取權限過濾**（看不到的紀錄不回），最新的在前。
+    `fields`＝呼叫端實際需要的欄位代號集合（None＝全部）；提供者可據此省掉用不到的昂貴欄位（例如解析自訂欄位）。提供者丟例外 ⇒ 本函式不吞（由呼叫端決定降級方式）。"""
     fn = _registry.providers("rules.entity").get(entity)
     if fn is None:
         return None
     limit = max(1, min(int(limit), 1000))
-    rows = fn(conn, user, list(ids) if ids is not None else None, limit) or []
+    rows = fn(conn, user, list(ids) if ids is not None else None, limit, None if fields is None else frozenset(fields)) or []
     vis = visible_ids(entity, user, conn)
     out = []
     for r in rows[:limit]:

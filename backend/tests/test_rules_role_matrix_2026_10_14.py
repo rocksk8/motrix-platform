@@ -63,7 +63,8 @@ def world(client, make_user):
     sa = us["superadmin"]["h"]
     url = "/api/definitions/rule_set/case"
     assert client.put(url + "/draft", headers=sa, json={"body": {"rules": [LOW, DRAFT]}}).status_code == 200
-    assert client.post(url + "/publish", headers=sa, json={"note": "t"}).status_code == 200
+    pv = client.get("/api/def-governance/rule_set/case/impact", headers=sa).json()["previewHash"]
+    assert client.post(url + "/publish", headers=sa, json={"note": "t", "preview_hash": pv}).status_code == 200
     return us
 
 

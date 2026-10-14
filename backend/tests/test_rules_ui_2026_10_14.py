@@ -284,6 +284,8 @@ def test_case_page_starts_rules_only_after_reading_the_flag_from_its_existing_se
     gate = re.search(r"builder_rules\.enabled === 1\) \{([\s\S]*?)\n {6}\}", html).group(1)
     assert "MotrixRuleMarks.start()" in gate and "MotrixRulesBuilder.mountEntry()" in gate
     assert html.count("MotrixRuleMarks.start()") == 1 and html.count("mountEntry()") == 1       # 沒有任何無條件的啟動點
+    # 某個群組被隱藏／不存在時整個設定請求會 404：要退回只讀版面群組，版面編輯器不能因此死掉
+    assert "if (r.status === 404) r = await fetch('/api/settings-center/public?groups=builder_layout'" in html
 
 
 @needs_node
