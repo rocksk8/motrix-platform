@@ -64,6 +64,8 @@ def test_payslip_image_sources_are_attribute_escaped():
     import pdf_gen
     html = pdf_gen._payslip_passbook_html({"_bank_passbook": 'x" onerror="alert(1)'})
     assert '" onerror="' not in html and "onerror" not in html      # T63：非 data:image 的來源整個丟掉（不只是逸出）
+    from helpers.doc_template import attr_esc
+    assert attr_esc('x" onerror="alert(1)') == "x&quot; onerror=&quot;alert(1)"       # 逸出本身仍有直接斷言（img 來源另由白名單丟掉）
     ok = "data:image/png;base64,iVBOR=="
     assert 'src="%s"' % ok in pdf_gen._payslip_passbook_html({"_bank_passbook": ok})
     assert pdf_gen._payslip_esc(PAYLOAD).count('"') == 0

@@ -19,6 +19,7 @@ from helpers.dates import normalize_date  # `AC2`（L1）
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 from modules.subcontract.api.contractors import _stamp_passbook
+from helpers.doc_template import is_safe_img_value
 from helpers.auth import has_finance_access, finance_duty_person  # 第42班（Q5）；R2 D5 縫
 
 router = APIRouter()
@@ -287,10 +288,19 @@ def get_vendor_contractor(vid: int, authorization: str = Header(None)):
 
 
 def _check_passbook_data(data):
-    """data.bankPassbookImage 只准 data:image/ URI（與 /passbook 端點同一規則）；T63：一般 POST/PUT 的 data 原樣存，不擋會存進 file:///…。"""
-    pb = (data or {}).get("bankPassbookImage")
-    if pb and not (isinstance(pb, str) and pb.startswith("data:image/")):
-        raise HTTPException(400, "無效的圖片格式，需為 data URI")
+    """T63：POST/PUT 的 data 原樣存，不擋會存進 file:///…。整個結構走一遍，鍵名含 image（不分大小寫，例如 bankPassbookImage、
+    personnel[*].bankPassbookImage）的值只准空字串／None／`data:image/(png|jpeg|gif|webp);base64,…`（與渲染同一個判斷）；其他（含非字串）⇒ 400。"""
+    def walk(x):
+        if isinstance(x, dict):
+            for k, v in x.items():
+                if "image" in str(k).lower():
+                    if v not in ("", None) and not is_safe_img_value(v):
+                        raise HTTPException(400, "無效的圖片格式，需為 data URI")
+                walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+    walk(data)
 
 
 @router.post("/api/vendor-contractors", status_code=201)
