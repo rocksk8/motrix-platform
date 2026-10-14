@@ -33,6 +33,12 @@ def _defaults() -> dict:
     return {k: v[0] for k, v in CLAUSE_PRESETS.items()}
 
 
+def _merged(base: dict, over: dict) -> dict:
+    out = dict(base)
+    out.update(over)
+    return out
+
+
 def _clean(raw) -> dict:
     """只收『在預設清單裡』的標題（其餘忽略）。"""
     out = {}
@@ -48,14 +54,14 @@ def active_titles(conn=None):
     tpl = ET.resolve(EXPORT_ID, conn)
     if tpl is None:
         return None
-    return dict(_defaults(), **_clean(tpl.get("titles")))
+    return _merged(_defaults(), _clean(tpl.get("titles")))
 
 
 def titles_for(data=None, conn=None) -> dict:
     """某張報價單該用的五個標題：已凍結（`data.clauseTitles`）> 目前範本 > 程式預設。"""
     frozen = _clean((data or {}).get("clauseTitles")) if isinstance(data, dict) else {}
     if frozen:
-        return dict(_defaults(), **frozen)
+        return _merged(_defaults(), frozen)
     return active_titles(conn) or _defaults()
 
 

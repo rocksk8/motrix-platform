@@ -355,7 +355,8 @@ def preview(conn, caller, body, export_id, username=None, sample="sample", n=20)
             cur = _CT.active_titles(conn) or cur
         except Exception:                                      # noqa: BLE001
             pass
-        new = dict(cur, **{k: v for k, v in (body.get("titles") or {}).items()})
+        new = dict(cur)
+        new.update(body.get("titles") or {})
         rows_html = "".join("<tr><td>%s</td><td>%s</td></tr>" % (_esc_html(cur[k]), _esc_html(new[k])) for k in spec["titles"])
         html = ("<!doctype html><html><body style=\"font-family:sans-serif;padding:12mm\"><h3>條款標題（目前 → 草稿）</h3>"
                 "<table border=1 cellpadding=4 style=\"border-collapse:collapse\"><tr><th>目前</th><th>草稿</th></tr>%s</table>"

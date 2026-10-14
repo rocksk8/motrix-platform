@@ -353,14 +353,16 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
 
     # 雙欄排版（2026-08-26 視覺優化）：付款/交貨一排、保固/售後一排，篇幅通常
     # 最長的驗收標準獨立跨欄滿版，避免跟另一欄長度差太多造成版面失衡。
-    terms_html  = term_block('付款條件', q.get('paymentTerms', ''))
-    terms_html += term_block('交貨條件', q.get('deliveryTerms', ''))
-    terms_html += term_block('保固條件', q.get('warrantyTerms', ''))
+    from helpers.clause_titles import titles_for as _titles_for      # S-Q2：條款標題＝送審時凍結的 > 目前範本 > 預設（旗標關 ⇒ 與過去寫死的字相同）
+    _ct = _titles_for(q)
+    terms_html  = term_block(_ct['paymentTerms'], q.get('paymentTerms', ''))
+    terms_html += term_block(_ct['deliveryTerms'], q.get('deliveryTerms', ''))
+    terms_html += term_block(_ct['warrantyTerms'], q.get('warrantyTerms', ''))
     _after = q.get('afterSales', '') or ''
     if av.get('notes'):                     # 擇一方案自動說明句：每組一句，接在使用者自填備註之後
         _after = (_after.rstrip() + '\n' if _after.strip() else '') + '\n'.join(av['notes'])
-    terms_html += term_block('售後服務及備註說明', _after)  # 名稱同 modules/case/quote_terms.AFTERSALES_LABEL（L1 不反向 import 模組）
-    terms_html += term_block('驗收標準', q.get('acceptanceTerms', ''), span_full=True)
+    terms_html += term_block(_ct['afterSales'], _after)  # 名稱同 modules/case/quote_terms.AFTERSALES_LABEL（L1 不反向 import 模組）
+    terms_html += term_block(_ct['acceptanceTerms'], q.get('acceptanceTerms', ''), span_full=True)
 
     terms_section = (
         '<div class="terms"><div class="section-label" style="margin-bottom:8px">五、報價條件</div>'

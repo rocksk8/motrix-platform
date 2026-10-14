@@ -1547,6 +1547,8 @@ def _apply_server_submit_reasons(q: dict, user: dict) -> None:
     不能由送件人決定（原本直接打 API 不帶 reasons 就能讓簽核人看不到低毛利）。"""
     from modules.case.quote_terms import DEFAULT_TERMS, submit_reasons
     from helpers.settings import _get_setting
+    from helpers import clause_titles as _CT
+    _CT.freeze(q)                                                  # S-Q2：送審當下把條款標題凍結進單據（範本生效時）；沒生效 ⇒ 清掉舊的凍結值。要在算原因之前。
     raw = _get_setting("quote_terms_presets", {}) or {}
     presets = raw.get("presets") if isinstance(raw, dict) else None
     presets = presets if isinstance(presets, list) else []

@@ -1765,7 +1765,7 @@
         <div class="form-grid" style="gap:14px">
           <div class="form-group">
             <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-              付款條件
+              <span x-text="ct('paymentTerms')">付款條件</span>
               <button x-show="session.role === 'superadmin'" type="button"
                       class="btn btn-ghost btn-sm" @click="saveDefaultPaymentTerms()"
                       title="將目前這段文字存為之後所有新增報價單的預設付款條件">
@@ -1776,19 +1776,19 @@
           </div>
           <div class="form-grid form-grid-2" style="gap:14px">
             <div class="form-group">
-              <label class="form-label">交貨條件</label>
+              <label class="form-label" x-text="ct('deliveryTerms')">交貨條件</label>
               <textarea class="form-textarea" rows="2" x-model="q.deliveryTerms" @input="setDirty(); checkApproval()"></textarea>
             </div>
             <div class="form-group">
-              <label class="form-label">驗收標準</label>
+              <label class="form-label" x-text="ct('acceptanceTerms')">驗收標準</label>
               <textarea class="form-textarea" rows="2" x-model="q.acceptanceTerms" @input="setDirty(); checkApproval()"></textarea>
             </div>
             <div class="form-group">
-              <label class="form-label">保固條件</label>
+              <label class="form-label" x-text="ct('warrantyTerms')">保固條件</label>
               <textarea class="form-textarea" rows="2" x-model="q.warrantyTerms" @input="setDirty(); checkApproval()"></textarea>
             </div>
             <div class="form-group">
-              <label class="form-label">售後服務及備註說明</label>
+              <label class="form-label" x-text="ct('afterSales')">售後服務及備註說明</label>
               <textarea class="form-textarea" rows="2" x-model="q.afterSales" @input="setDirty(); checkApproval()"></textarea>
             </div>
           </div>
@@ -2473,6 +2473,9 @@
       // 會被存檔流程整包送回後端，混進 q 會讓每次存檔都把它再寫一遍。
       docVersions: [],
 
+      // S-Q2：條款標題。優先序：這張單據送審時凍結的（q.clauseTitles）> 目前範本（clauseTitles）> 預設（過去寫死的字）
+      clauseTitles: null,
+      ct(key) { const f = (this.q && this.q.clauseTitles) || {}; const c = this.clauseTitles || {}; return f[key] || c[key] || ({ paymentTerms: '付款條件', deliveryTerms: '交貨條件', acceptanceTerms: '驗收標準', warrantyTerms: '保固條件', afterSales: AFTERSALES_LABEL })[key] },
       pmCfg: { warnPct: 0 },          // 專案毛利提醒門檻（設定中心；0＝不提醒），init 時由 GET /api/project-margin/config 填入
       pmHideUncosted: false,
       altCfg: { enabled: true, totalText: '依方案選擇', noteTemplate: '項次{items}為{group}擇一方案選擇', groupsMax: 10, comboViewMax: 24, comboViewDefaultOpen: false },   // M3：init 時由 GET /api/alt-quote/config 填入
@@ -2914,9 +2917,9 @@
           return block(a) + block(b)
         }
         let html = ''
-        if ((this.q.paymentTerms||'').trim()) html += block({ title: '付款條件', text: this.q.paymentTerms })
-        html += pair({ title: '交貨條件', text: this.q.deliveryTerms }, { title: '驗收標準', text: this.q.acceptanceTerms })
-        html += pair({ title: '保固條件', text: this.q.warrantyTerms }, { title: AFTERSALES_LABEL, text: this.q.afterSales })
+        if ((this.q.paymentTerms||'').trim()) html += block({ title: this.ct('paymentTerms'), text: this.q.paymentTerms })
+        html += pair({ title: this.ct('deliveryTerms'), text: this.q.deliveryTerms }, { title: this.ct('acceptanceTerms'), text: this.q.acceptanceTerms })
+        html += pair({ title: this.ct('warrantyTerms'), text: this.q.warrantyTerms }, { title: this.ct('afterSales'), text: this.q.afterSales })
         return html
       },
 
@@ -4211,6 +4214,7 @@
           const rd = await fetch(`${this.API}/settings/quote-terms-defaults`, { headers: { Authorization: 'Bearer ' + this.session.token } })
           if (rd.ok) {
             const d = await rd.json()
+            if (d.titles && typeof d.titles === 'object') this.clauseTitles = d.titles      // S-Q2：條款標題（只在範本生效時才有這個鍵）
             for (const k of Object.keys(DEFAULT_TERMS)) if (typeof d[k] === 'string') DEFAULT_TERMS[k] = d[k]
             this._termsDefaultsLoaded = true
             if (!this._defaultPaymentTerms) this._defaultPaymentTerms = DEFAULT_TERMS.paymentTerms
@@ -4395,6 +4399,7 @@
   <script src="../static/file-preview.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/edit-presence.js"></script>
+  <meta name="motrix-export-id" content="case:quotation-clause-titles">   <!-- S-Q2：只是宣告；builder_exports 開啟且是最高管理者時，sidebar.js 才載入匯出範本編輯器（關著＝沒有任何額外請求） -->
   <script src="../static/sidebar.js"></script>
 </body>
 </html>
