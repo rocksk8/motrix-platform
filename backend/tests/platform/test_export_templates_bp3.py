@@ -319,7 +319,9 @@ def test_governance_tightening_publishes_immediately_and_restore_goes_through_th
     r = client.post(url + "/publish?scope=company", json={"note": "收緊", "preview_hash": h}, headers=hd)
     assert r.status_code == 200 and not r.json().get("pending"), r.text           # 移除欄位＝收緊 ⇒ 立即生效（照舊）
     assert _rows(_export(client, hd, tid))[0] == ["事項", "日期"]
-    back = client.post(url + "/restore/1?scope=company", json={}, headers=hd)       # 還原到三欄版＝放寬 ⇒ 待核准，不立即生效
+    # t62：名單內的 kind 還原前也要先看過『要還原的那一版』的影響預覽（impact?version=N 回傳還原戳並留一筆『看過』）；較舊的基底沒有這道閘門，帶著也無妨
+    rh = client.get("/api/def-governance/export_template/%s/impact?scope=company&version=1" % EID, headers=hd).json().get("previewHash", "")
+    back = client.post(url + "/restore/1?scope=company", json={"preview_hash": rh}, headers=hd)       # 還原到三欄版＝放寬 ⇒ 待核准，不立即生效
     assert back.status_code == 200 and back.json().get("pending") is True, back.text
     assert _rows(_export(client, hd, tid))[0] == ["事項", "日期"]
 
