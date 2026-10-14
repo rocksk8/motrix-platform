@@ -1415,7 +1415,8 @@
    "xl_safe": "def(val)",
    "xl_safe_xlsx": "def(val)",
    "xl_style": "def(wb)",
-   "xlsx_to_html": "def(data, title=…, max_rows=…)"
+   "xlsx_to_html": "def(data, title=…, max_rows=…)",
+   "xlsx_unescape": "def(val)"
   },
   "plat:capabilities": {
    "ACTIONS": "const",
