@@ -91,6 +91,7 @@
    "helper:xlsx_out",
    "js:static/approval-cascade.js",
    "js:static/approval-return.js",
+   "js:static/attachment-slots.js",
    "js:static/auth-guard.js",
    "js:static/motrix-date.js",
    "js:js/module-builder-consts.js",

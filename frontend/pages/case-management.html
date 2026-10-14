@@ -37,6 +37,7 @@
   <script src="../static/custom-fields.js"></script>
   <script src="../js/rule-marks.js"></script>
   <script src="../js/rules-builder.js"></script>
+  <script src="../static/attachment-slots.js"></script>
   <script src="../static/list-sort.js"></script>
   <script src="../static/vendor/frappe-gantt-0.6.1.min.js"></script>
   <link rel="stylesheet" href="../static/vendor/frappe-gantt-0.6.1.css">
@@ -3430,6 +3431,8 @@
                   <div style="flex:1">
                     <span class="cm-section-title" style="margin-bottom:0">完工單管理</span><span class="save-mode save-mode--manual" data-save-mode="manual" title="在完工單視窗裡按儲存">按儲存</span>
                   </div>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="as-edit-open" x-show="asOn" @click="MotrixAttachmentSlots.openEditor()"
+                          title="為完工單設定附件種類（可收的檔案類型、大小、可上傳的人）；只有最高管理者看得到">附件種類</button>
                   <!-- 比照報價單：清單在這裡，填寫在獨立頁面（completion-note-form.html）。
                        2026-09-12 使用者指定「用報價單的方式去建立，一個頁面做填寫」。 -->
                   <a x-show="['superadmin','admin'].includes(session.role)"
@@ -4810,6 +4813,7 @@ MotrixLayout.init({
   fallback: { lists: { cases: ['quoteNo', 'dealTag', 'customer', 'sales', 'amount', 'stageProgress', 'date'] } },
 })
 window.CM_PARTS.push(() => ({
+  asOn: false,                       // BP-4 S3：附件種類編輯器入口（旗標開＋最高管理者才為真；關閉時永遠是 false）
   layoutOn: false,
   _lcols() { return this.layoutOn ? window.Alpine.store('layout').cols('cases') : [] },
   _lix(f) { return this._lcols().findIndex(c => c.field === f) },
@@ -4837,7 +4841,7 @@ window.CM_PARTS.push(() => ({
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
       // 同一次設定請求取得旗標（一個請求）；某個群組讀不到時逐組重試，不拖垮其他旗標（public-flags.js）。名單順序：layout、custom_fields、rules
-      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules'], { token: s.token })
+      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots'], { token: s.token })
       // T61 S5：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）
       if (g.builder_custom_fields && g.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
       // BP-2：旗標 builder_rules.enabled＝1 才啟動標示規則（關＝不送任何規則請求；兩支 js 載入後是惰性的）
@@ -4845,6 +4849,9 @@ window.CM_PARTS.push(() => ({
         if (window.MotrixRuleMarks) window.MotrixRuleMarks.start()
         if (window.MotrixRulesBuilder) window.MotrixRulesBuilder.mountEntry()
       }
+      // BP-4 S3：附件種類編輯器的旗標從同一次設定請求取得（關閉時不多打任何請求）；只有最高管理者看得到入口
+      if (g.builder_slots && Number(g.builder_slots.enabled) === 1 && window.MotrixAttachmentSlots
+          && window.MotrixAttachmentSlots.mount({ docType: 'completion_note', label: '完工單' })) this.asOn = true
       if (!g.builder_layout || g.builder_layout.case_management !== true) return
       if (!document.getElementById('cm-layout-css')) {
         const st = document.createElement('style'); st.id = 'cm-layout-css'
