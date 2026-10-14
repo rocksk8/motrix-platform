@@ -125,6 +125,7 @@ window.MotrixLayout = { init() {}, start() { calls.start++ } }
 window.MotrixLayoutEditor = { mount() { calls.mount++ } }
 window.MotrixGovLookup = { alpineState() { return {} } }          // 承攬商頁在建立元件時展開它
 window.MotrixPrivacyNotice = { subjectState() { return {} }, contactsState() { return {} }, load: async () => null }
+eval(fs.readFileSync(process.argv[2], 'utf8'))                   // 真的頁面在 <head> 載入 static/option-lists.js（客戶頁的類型選單用 MotrixOptions）；沒有 MOTRIX_OPTION_LISTS ⇒ 全部回頁面自己的預設
 let FLAG = %(flag_value)s
 global.fetch = async (url) => { calls.fetch.push(String(url)); if (FLAG === 'fail') throw new Error('x')
   return { ok: FLAG !== 'http', json: async () => ({ groups: { builder_layout: { %(flag)s: FLAG === true } } }) } }
@@ -143,7 +144,7 @@ o.$nextTick = async () => {}
 def _node(name, flag_value):
     cfg = CFG[name]
     js = _HARNESS % dict(flag=cfg["flag"], factory=cfg["factory"], flag_value=flag_value)
-    out = subprocess.run([NODE, "-e", js, str(source_tree.page_file(name))], capture_output=True, timeout=30)
+    out = subprocess.run([NODE, "-e", js, str(source_tree.page_file(name)), str(Path(source_tree.page_file(name)).parent.parent / "static" / "option-lists.js")], capture_output=True, timeout=30)
     assert out.returncode == 0, out.stderr.decode("utf-8", "replace")[:1500]
     return json.loads(out.stdout.decode("utf-8"))
 
