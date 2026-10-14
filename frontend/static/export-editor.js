@@ -81,21 +81,18 @@
     if (decorOnly()) delete t.columns
     return t
   }
-  function textProblem(v, what) {
+  // 頁首／頁尾／浮水印文字只能從預設清單挑（伺服端同一份白名單；不收自由文字）
+  function presetsFor(part) { return (part === 'watermark' ? (st.cat && st.cat.watermarkPresets) : (st.cat && st.cat.presets)) || [] }
+  function textProblem(v, what, part) {
     if (!v.trim()) return ''
-    if (v.length > 60) return what + '最多 60 字'
-    if (/[<>&"'`\\{}\x00-\x1f\x7f]/.test(v)) return what + '不可含 < > & 引號、反斜線、花括號'
-    if (/^\s*[=+\-@]/.test(v)) return what + '不可以 = + - @ 開頭'
-    return ''
+    return presetsFor(part).indexOf(v.trim()) >= 0 ? '' : what + '請從清單挑選'
   }
   function curKey() { return JSON.stringify(toTemplate()) }
   function problems() {
     var out = [], used = {}
     ;[['header', '頁首文字'], ['footer', '頁尾文字'], ['watermark', '浮水印文字']].forEach(function (x) {
       if (caps().indexOf(x[0]) >= 0) {
-        var tp = textProblem(st[x[0]], x[1]); if (tp) out.push(tp)
-        if (x[0] === 'watermark' && st.watermark.length > 40) out.push('浮水印文字最多 40 字')
-        if (x[0] === 'watermark' && /正本|已核准|已核可|已付款|已簽回|作廢/.test(st.watermark.replace(/\s+/g, ''))) out.push('浮水印不可含官方狀態字樣（正本、已核准、已付款、已簽回、作廢…）')
+        var tp = textProblem(st[x[0]], x[1], x[0]); if (tp) out.push(tp)
       }
     })
     if (decorOnly()) { if (!st.header.trim() && !st.footer.trim() && !st.watermark.trim()) out.push('至少要設定頁尾或浮水印文字其中一項'); return out }
@@ -208,9 +205,12 @@
       if (caps().indexOf(x[0]) < 0) return
       panel.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:6px' }, [
         el('span', { text: x[1], style: 'font-size:12px;min-width:140px' }),
-        el('input', { type: 'text', value: st[x[0]], maxlength: '60', style: 'flex:1;font-size:12px', oninput: function (ev) { st[x[0]] = ev.target.value; st.preview = null; st.previewHash = ''; st.state = 'idle' } })
+        el('select', { style: 'flex:1;font-size:12px', onchange: function (ev) { st[x[0]] = ev.target.value; st.preview = null; st.previewHash = ''; st.state = 'idle'; render() } },
+          [el('option', { value: '', text: '（不設定）', selected: st[x[0]] ? null : 'selected' })].concat(presetsFor(x[0]).map(function (t) {
+            return el('option', { value: t, text: t, selected: st[x[0]] === t ? 'selected' : null }) })))
       ]))
     })
+    panel.appendChild(el('div', { text: '頁首／頁尾／浮水印只能從預設文字挑選（內容會出現在輸出檔上，所以不開放自由輸入）；新增或更換文字需要第二位最高管理者核准。', style: 'font-size:11px;color:var(--text-dim,#888);margin-top:4px' }))
     panel.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:8px' }, [
       el('span', { text: '以誰的身分預覽', style: 'font-size:12px' }),
       el('input', { type: 'text', placeholder: '帳號（空白＝我自己）', value: st.user, style: 'font-size:12px', oninput: function (ev) { st.user = ev.target.value; st.preview = null; st.state = 'idle' } }),

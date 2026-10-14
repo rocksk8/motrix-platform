@@ -79,16 +79,16 @@ def test_validator_rejects_unknown_export_and_non_object():
 
 def test_header_footer_watermark_only_where_the_format_has_them_and_reserved_words_are_refused():
     base = {"version": 1, "format": "pdf", "columns": [{"id": "a", "label": "甲"}]}
-    assert _bad(dict(base, header={"text": "內部資料"}, footer={"text": "第一頁"}, watermark={"text": "內部使用"}), key="t_bp3:pdf") == []
-    xl = dict(base, format="xlsx", header={"text": "H"})
+    assert _bad(dict(base, header={"text": "內部資料"}, footer={"text": "機密"}, watermark={"text": "內部使用"}), key="t_bp3:pdf") == []
+    xl = dict(base, format="xlsx", header={"text": "內部資料"})
     assert _bad(xl, key="t_bp3:pdf") == []
-    assert "watermark" in _paths(_bad(dict(xl, watermark={"text": "W"}), key="t_bp3:pdf")), "xlsx 沒有浮水印"
+    assert "watermark" in _paths(_bad(dict(xl, watermark={"text": "內部資料"}), key="t_bp3:pdf")), "xlsx 沒有浮水印"
     for w in ("正本", "已核准", "已 付 款", "已簽回", "作廢", "已核可"):
         assert "watermark.text" in _paths(_bad(dict(base, watermark={"text": w}), key="t_bp3:pdf")), w
     assert "watermark.text" in _paths(_bad(dict(base, watermark={"text": "已核准"}), key="t_bp3:pdf")), "全形／近似也擋（NFKC）"
     assert "watermark.text" in _paths(_bad(dict(base, watermark={"text": "ｗ" * 41}), key="t_bp3:pdf"))
     assert "header.text" in _paths(_bad(dict(base, header={"text": "{x}"}), key="t_bp3:pdf"))
-    assert "header.x" in _paths(_bad(dict(base, header={"text": "H", "x": 1}), key="t_bp3:pdf"))
+    assert "header.x" in _paths(_bad(dict(base, header={"text": "內部資料", "x": 1}), key="t_bp3:pdf"))
 
 
 # ── 遮蔽優先 ──────────────────────────────────────────────────────────────
@@ -272,6 +272,7 @@ def test_definition_is_admin_only_and_rejected_while_off(client, make_user, monk
     _, h_ad = _login(client, make_user, "bp3_ad3", "admin", modules=["daily_task"])
     d = "/api/definitions/export_template/%s" % EID
     _flag(monkeypatch, True)
+    client.get("/api/definition-kinds", headers=h_sa)                    # 惰性登記 kind（旗標開之後第一次碰到定義介面）
     for who in (h_ad,):
         assert client.get(d + "?scope=company", headers=who).status_code in (401, 403)
         assert client.put(d + "/draft?scope=company", json={"body": ET.default_template(EID)}, headers=who).status_code in (401, 403)
@@ -372,12 +373,12 @@ ET.register_export(
 
 def test_lock_labels_blocks_renaming_but_allows_omit_and_reorder_and_print_text():
     ok = {"version": 1, "format": "xlsx", "columns": [{"id": "phone", "label": "電話"}, {"id": "name", "label": "姓名"}],
-          "header": {"text": "外包名冊"}, "footer": {"text": "內部資料"}}
+          "header": {"text": "內部資料"}, "footer": {"text": "請勿外流"}}
     assert _bad(ok, key="t_bp3:xlsx") == []
     assert _bad(dict(ok, columns=[{"id": "name", "label": "姓名"}]), key="t_bp3:xlsx") == []
     renamed = dict(ok, columns=[{"id": "name", "label": "全名"}])
     assert "columns[0].label" in _paths(_bad(renamed, key="t_bp3:xlsx")), "匯入靠表頭文字對應 ⇒ 標題不能改"
-    assert "watermark" in _paths(_bad(dict(ok, watermark={"text": "W"}), key="t_bp3:xlsx")), "xlsx 沒有浮水印"
+    assert "watermark" in _paths(_bad(dict(ok, watermark={"text": "機密"}), key="t_bp3:xlsx")), "xlsx 沒有浮水印"
     assert "header.text" in _paths(_bad(dict(ok, header={"text": "a&b"}), key="t_bp3:xlsx")), "& 是列印頁首的控制字元，一律拒絕"
 
 
@@ -400,13 +401,13 @@ def test_print_header_footer_land_in_the_workbook_and_the_pdf_sibling_html_and_d
     wb.save(buf)
     plain = xlsx_to_html(buf.getvalue(), "名冊")
     assert "class='meta'>" in plain and plain.count("class='meta'") == 1, "沒設定頁首頁尾 ⇒ 只有原本那一個 meta（匯出時間）"
-    ET.apply_print_text(ws, {"header": {"text": "外包名冊"}, "footer": {"text": "內部資料"}})
+    ET.apply_print_text(ws, {"header": {"text": "內部資料"}, "footer": {"text": "請勿外流"}})
     buf2 = io.BytesIO()
     wb.save(buf2)
     wb3 = openpyxl.load_workbook(io.BytesIO(buf2.getvalue()))
-    assert wb3.active.oddHeader.center.text == "外包名冊" and wb3.active.oddFooter.center.text == "內部資料"
+    assert wb3.active.oddHeader.center.text == "內部資料" and wb3.active.oddFooter.center.text == "請勿外流"
     html = xlsx_to_html(buf2.getvalue(), "名冊")
-    assert "外包名冊" in html and "內部資料" in html and html.count("class='meta'") == 3
+    assert "請勿外流" in html and "內部資料" in html and html.count("class='meta'") == 3
     assert wb3.active.max_row == 2, "頁首頁尾不佔儲存格，資料區位置不變"
 
 
@@ -440,13 +441,13 @@ def test_roster_pilot_off_is_identical_template_picks_reorders_and_keeps_masking
     _flag(monkeypatch, True)
     assert _xl_rows(client.get("/api/contractors/export", headers=hd).content)[1] == rows0, "旗標開、沒有範本 ⇒ 逐格相同"
     tpl = {"version": 1, "format": "xlsx", "columns": [{"id": "phone", "label": "電話"}, {"id": "name", "label": "姓名"}, {"id": "id_number", "label": "證件號碼"}],
-           "header": {"text": "外包名冊（內部）"}, "footer": {"text": "請勿外流"}}
+           "header": {"text": "內部資料"}, "footer": {"text": "請勿外流"}}
     pub = _publish(client, hd, tpl, key=CID)
     assert pub.status_code == 200 and not pub.json().get("pending"), pub.text
     ws, rows = _xl_rows(client.get("/api/contractors/export", headers=hd).content)
     assert rows[0] == ["電話", "姓名", "證件號碼"], "只匯出選的欄位、依範本順序"
     assert rows[1] == [row[4], row[0], row[1]], "值與預設匯出同一組遮蔽（範本不能改變某人看到的值）"
-    assert ws.oddHeader.center.text == "外包名冊（內部）" and ws.oddFooter.center.text == "請勿外流"
+    assert ws.oddHeader.center.text == "內部資料" and ws.oddFooter.center.text == "請勿外流"
     _flag(monkeypatch, False)
     assert _xl_rows(client.get("/api/contractors/export", headers=hd).content)[1] == rows0, "旗標關回去 ⇒ 範本不再套用，逐格回到預設"
 
@@ -478,7 +479,7 @@ def test_pdf_decor_only_validator():
     assert _bad(ok, key=PDFID) == []
     assert "" in _paths(_bad({"version": 1, "format": "pdf"}, key=PDFID)), "至少一項"
     assert "columns" in _paths(_bad(dict(ok, columns=[{"id": "a", "label": "b"}]), key=PDFID)), "版面固定，沒有欄位可選"
-    assert "header" in _paths(_bad(dict(ok, header={"text": "H"}), key=PDFID)), "這個匯出只開頁尾與浮水印（頁首會壓到憑據抬頭）"
+    assert "header" in _paths(_bad(dict(ok, header={"text": "機密"}), key=PDFID)), "這個匯出只開頁尾與浮水印（頁首會壓到憑據抬頭）"
     for w in ("正本", "已核准", "已 付 款", "作廢", "已簽回"):
         assert "watermark.text" in _paths(_bad(dict(ok, watermark={"text": w}), key=PDFID)), w
     assert "watermark.text" in _paths(_bad(dict(ok, watermark={"text": "x" * 41}), key=PDFID))
@@ -526,11 +527,12 @@ def test_invoice_voucher_builder_decorates_only_after_the_programs_own_banner():
 def test_pdf_comparator_adding_visible_text_is_a_loosening():
     from routers.def_pipeline import classify
     base = {"version": 1, "format": "pdf", "footer": {"text": "內部資料"}}
-    assert classify("export_template", base, dict(base, footer={"text": "改過的文字"}))[0] == "neutral"
+    assert classify("export_template", base, dict(base, footer={"text": "機密"}))[0] == "loosen", "改文字也要核准（客戶可見文字）"
+    assert classify("export_template", base, dict(base))[0] == "neutral"
     c, why = classify("export_template", base, dict(base, watermark={"text": "內部使用"}))
     assert c == "loosen" and any("浮水印" in x for x in why)
     assert classify("export_template", base, {"version": 1, "format": "pdf"})[0] == "tighten"
-    assert classify("export_template", {"version": 1, "format": "pdf", "footer": {"text": "a"}}, {"version": 1, "format": "pdf", "footer": {"text": "a"}, "header": {"text": "H"}})[0] == "loosen"
+    assert classify("export_template", {"version": 1, "format": "pdf", "footer": {"text": "機密"}}, {"version": 1, "format": "pdf", "footer": {"text": "機密"}, "header": {"text": "機密"}})[0] == "loosen"
 
 
 # ═══ SheetJS 三頁（客戶／料號／供應商）：builder_exports 開啟時送稽核紀錄（只記錄，不擋）═════════════════════════════════════
@@ -556,7 +558,10 @@ def test_client_export_log_is_off_by_default_logs_when_on_never_blocks_and_valid
     assert r.status_code == 200 and r.json() == {"ok": True, "logged": False}
     assert len(_client_log_rows("customers")) == n0, "旗標關：什麼都不寫（今天的行為）"
     _flag(monkeypatch, True)
-    for i in range(3):                                                      # 連點三次：每次都記錄、永遠不 429、不碰伺服端 Excel 的冷卻
+    import routers.export_templates as RT
+    monkeypatch.setattr(RT, "CLIENT_LOG_MIN_INTERVAL", 0.0)               # 間隔節流另有一題（test_export_templates_review_bp3）；這裡驗『每次都記錄、永遠不 429』
+    RT._last_client_log.clear()
+    for i in range(3):
         r = client.post(url, json={"name": "customers", "rows": 12}, headers=hd)
         assert r.status_code == 200 and r.json() == {"ok": True, "logged": True}
     rows = _client_log_rows("customers")

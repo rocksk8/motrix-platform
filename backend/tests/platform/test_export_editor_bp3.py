@@ -158,23 +158,23 @@ def test_server_side_preview_gate_is_explained_in_plain_words(code):
 
 @pytest.mark.skipif(NODE is None, reason="沒有 node")
 def test_locked_labels_and_print_text_for_an_xlsx_export():
-    cat = dict(_CAT, formats=["xlsx"], lockLabels=True, caps={"xlsx": ["footer", "header"]})
+    cat = dict(_CAT, formats=["xlsx"], lockLabels=True, caps={"xlsx": ["footer", "header"]}, presets=["內部資料", "請勿外流"], watermarkPresets=["內部資料"])
     run = ("const E = window.MotrixExportEditor, st = E._state; E._init(%s); " % json.dumps(cat)) + """
       st.cols = [{id:'b',label:'被改的名字',on:true},{id:'a',label:'甲',on:true}]
-      st.header = '  外包名冊 '; st.footer = '請勿外流'
+      st.header = '  內部資料 '; st.footer = '請勿外流'
       const t1 = E._toTemplate(), p1 = E._problems()
       st.header = 'a&b'; const p2 = E._problems()
       st.header = ''; st.footer = ''
       return {t1, p1, p2, t2: E._toTemplate()}"""
     r = _run({"status": {"enabled": False}, "run": run})["v"]
     assert r["t1"] == {"version": 1, "format": "xlsx", "columns": [{"id": "b", "label": "乙"}, {"id": "a", "label": "甲"}],
-                       "header": {"text": "外包名冊"}, "footer": {"text": "請勿外流"}}, "標題鎖定：一律用目錄標題；頁首頁尾去頭尾空白"
+                       "header": {"text": "內部資料"}, "footer": {"text": "請勿外流"}}, "標題鎖定：一律用目錄標題；頁首頁尾去頭尾空白"
     assert r["p1"] == [] and r["p2"] and "header" not in r["t2"] and "footer" not in r["t2"]
 
 
 @pytest.mark.skipif(NODE is None, reason="沒有 node")
 def test_pdf_decor_only_editor_has_no_columns_and_checks_the_watermark_words():
-    cat = dict(_CAT, formats=["pdf"], columns=[], decorOnly=True, caps={"pdf": ["footer", "watermark"]})
+    cat = dict(_CAT, formats=["pdf"], columns=[], decorOnly=True, caps={"pdf": ["footer", "watermark"]}, presets=["內部資料", "機密"], watermarkPresets=["內部使用", "機密"])
     run = ("const E = window.MotrixExportEditor, st = E._state; E._init(%s); " % json.dumps(cat)) + """
       const none = E._problems()
       st.footer = ' 內部資料 '; st.watermark = '內部使用'
@@ -185,7 +185,7 @@ def test_pdf_decor_only_editor_has_no_columns_and_checks_the_watermark_words():
     r = _run({"status": {"enabled": False}, "run": run})["v"]
     assert r["none"] and "至少" in r["none"][0], "至少要設定一項"
     assert r["ok"] == [] and r["t"] == {"version": 1, "format": "pdf", "footer": {"text": "內部資料"}, "watermark": {"text": "內部使用"}}, "沒有 columns 鍵"
-    assert r["bad"] and "官方狀態" in r["bad"][0]
+    assert r["bad"] and "清單" in r["bad"][0], "自由文字（含官方狀態字樣）一律要求從清單挑"
     assert r["long"]
 
 

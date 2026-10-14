@@ -14,6 +14,11 @@ router = APIRouter()
 
 def kinds():
     """已登錄的定義種類（唯讀檢視，所以全部可看）；寫入（發布／還原）仍走既有端點與它們各自的把關與審核。"""
+    try:
+        from helpers import export_templates as _ET
+        _ET.ensure_kind()                                              # 惰性登記（旗標關 ⇒ 不登記）
+    except Exception:                                                  # noqa: BLE001
+        pass
     return D.kinds()
 
 #: 影響範圍宣告（白話）：這一類定義發布後會動到哪裡。

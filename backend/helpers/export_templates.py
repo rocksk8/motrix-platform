@@ -2,7 +2,7 @@
 """匯出範本（BP-3 R0/R1）：宣告式的欄位／標籤／順序（＋頁首頁尾／浮水印文字），套在『已登記的匯出』上；發布前預覽。
 
 [單位] helper:export_templates    [層] L1    [穩定度] 實作
-[公開介面] CAPS, KIND, LABEL_MAX, MAX_COLUMNS, OFF_REASON, apply_pdf_text, apply_print_text, decorate_pdf, definition_problems, default_template, effective_columns, enabled, preview, register_export, registered, render_csv_rows, render_rows, resolve
+[公開介面] CAPS, KIND, PRESET_TEXTS, WATERMARK_PRESETS, ensure_kind, LABEL_MAX, MAX_COLUMNS, OFF_REASON, apply_pdf_text, apply_print_text, decorate_pdf, definition_problems, default_template, effective_columns, enabled, preview, register_export, registered, render_csv_rows, render_rows, resolve
 [不變式] 設定 `builder_exports.enabled`（預設 0＝關）關著時：`resolve()` 一律回 None（端點走今天寫死的路徑，輸出逐位元相同）；發布驗證擋；預覽端點 404。
     範本只收宣告式資料：欄位 id 必須在該匯出的**欄位目錄**裡（模組登記，不由使用者定義）、文字是純文字（無占位符、無運算式、無控制／雙向字元），
     **範本不能新增資料**——欄位值一律來自端點今天的查詢與遮蔽；標 `money`（或有 `visible`）的欄位在輸出端再問一次權限，沒權限 ⇒ 整欄省略（遮蔽優先）。
@@ -27,20 +27,30 @@ WATERMARK_MAX = 40
 #: 各格式能放哪些版面文字（CSV 沒有頁首頁尾／浮水印：不是『忽略』，是驗證直接拒絕，免得使用者以為有）
 CAPS = {"csv": frozenset(), "xlsx": frozenset({"header", "footer"}), "pdf": frozenset({"header", "footer", "watermark"})}
 _TOP_KEYS = {"version", "format", "columns", "header", "footer", "watermark"}
+#: 頁首／頁尾／浮水印文字（v1）：只能從白名單挑，不收自由文字（客戶可見文件上的文字不能由一個人隨手寫）。
+PRESET_TEXTS = ("內部資料", "機密", "草稿", "僅供參考", "內部使用", "請勿外流", "僅限內部傳閱", "列印後請妥善保管")
+WATERMARK_PRESETS = ("內部資料", "機密", "草稿", "僅供參考", "內部使用")
+#: 看起來是空白或會被隱形的字元（Hangul filler、Braille blank 等；其餘 Cc/Cf/Zl/Zp/Co/Cs 以字元類別擋）
+_FILLERS = frozenset("\u115f\u1160\u3164\uffa0\u2800\u180e\u034f\u061c\u17b4\u17b5\u00ad\u2060")
 #: 控制字元、雙向覆寫／隔離、零寬、BOM；尖括號、&、引號、反斜線、花括號（占位符）一律不收
 _BAD_CHARS = re.compile("[<>&\"'`\\\\{}\x00-\x1f\x7f​-‏‪-‮⁦-⁩﻿]")
 _TRIGGERS = ("=", "+", "-", "@")
-#: 官方狀態詞：浮水印不得含（狀態字樣只由程式依單據真實狀態產生）
-RESERVED_WATERMARK = ("正本", "已核准", "已核可", "已付款", "已簽回", "作廢", "副本正本")
+#: 官方狀態詞：頁首／頁尾／浮水印都不得含（狀態字樣只由程式依單據真實狀態產生）。比對在『只留字母與數字的骨架』上（NFKC＋casefold），
+#: 所以插空白、全形、隱形字元都繞不過。
+RESERVED_WATERMARK = ("正本", "副本", "已核准", "已核可", "核准", "核可", "簽核完成", "已付款", "已收款", "已簽回", "已簽收", "作廢", "作废",
+                      "approved", "paid", "original", "void", "signed", "final")
 
 _EXPORTS: dict = {}
 
 
 def enabled(conn=None) -> bool:
-    """fail-closed：讀不到設定 ⇒ 關。"""
+    """fail-closed：讀不到設定 ⇒ 關。**自訂匯出必須同時開啟『建構器治理』（`builder_governance.enabled`）才生效**——
+    放寬（新增欄位、新增或改變頁首頁尾浮水印文字）要靠治理管線的第二位最高管理者核准與發布前預覽雜湊；治理沒開就沒有這兩道把關，所以不讓它生效。"""
     try:
         from helpers import settings_registry as SR
-        return bool(int(SR.get(GROUP, FIELD, conn=conn)))
+        if not bool(int(SR.get(GROUP, FIELD, conn=conn))):
+            return False
+        return int(SR.get("builder_governance", "enabled", conn=conn)) == 1
     except Exception:                                        # noqa: BLE001
         return False
 
@@ -90,15 +100,33 @@ def default_template(export_id) -> dict:
 
 
 # ── 驗證 ──────────────────────────────────────────────────────────────────
-def _text_problem(v, limit, what):
+def _skeleton(v):
+    return "".join(ch for ch in unicodedata.normalize("NFKC", v).casefold() if ch.isalnum())
+
+
+def _reserved_hit(v):
+    sk = _skeleton(v)
+    return [w for w in RESERVED_WATERMARK if _skeleton(w) in sk]
+
+
+def _text_problem(v, limit, what, presets=None):
+    """欄位標題（自由文字，`presets=None`）與頁首／頁尾／浮水印（`presets`＝白名單，只能挑）共用。"""
     if not isinstance(v, str) or not v.strip():
         return "%s必須是不空白的文字" % what
     if len(v) > limit:
         return "%s最多 %d 字" % (what, limit)
+    if any(unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp", "Co", "Cs") or ch in _FILLERS for ch in v):
+        return "%s不可含控制、隱形、雙向或私用字元" % what
     if _BAD_CHARS.search(v):
         return "%s不可含 < > & 引號、反斜線、花括號（不支援占位符）或控制／雙向字元" % what
     if v.lstrip()[:1] in _TRIGGERS:
         return "%s不可以 = + - @ 開頭" % what
+    if presets is not None:
+        hit = _reserved_hit(v)
+        if hit:
+            return "%s不可含官方狀態字樣：%s（狀態字樣只由系統依單據真實狀態產生）" % (what, "、".join(hit))
+        if v not in presets:
+            return "%s請從預設清單挑選：%s" % (what, "、".join(presets))
     return ""
 
 
@@ -163,14 +191,10 @@ def definition_problems(key, body) -> list:
             out.append({"path": part, "message": "%s必須是物件（只有 text）" % part})
             continue
         out.extend({"path": "%s.%s" % (part, k), "message": "不認得的鍵：%s" % k} for k in v if k != "text")
-        msg = _text_problem(v.get("text"), limit, {"header": "頁首文字", "footer": "頁尾文字", "watermark": "浮水印文字"}[part])
+        msg = _text_problem(v.get("text"), limit, {"header": "頁首文字", "footer": "頁尾文字", "watermark": "浮水印文字"}[part],
+                            WATERMARK_PRESETS if part == "watermark" else PRESET_TEXTS)
         if msg:
             out.append({"path": part + ".text", "message": msg})
-        elif part == "watermark":
-            norm = re.sub(r"\s+", "", unicodedata.normalize("NFKC", v["text"]))
-            hit = [w for w in RESERVED_WATERMARK if w in norm]
-            if hit:
-                out.append({"path": "watermark.text", "message": "浮水印不可含官方狀態字樣：%s（狀態字樣只由系統依單據真實狀態產生）" % "、".join(hit)})
     return out
 
 
@@ -180,8 +204,14 @@ def _kind_validator(body, key):
     return definition_problems(key, body)
 
 
-if KIND not in D.kinds():
-    D.register_kind(KIND, label="匯出範本", validator=_kind_validator)
+def ensure_kind():
+    """惰性登記 kind（旗標關＝不登記，`/api/definition-kinds` 與今天相同）。旗標開啟後，第一次有人碰到定義介面時才登記（definitions／治理路由會呼叫）。"""
+    if KIND not in D.kinds() and enabled():
+        try:
+            D.register_kind(KIND, label="匯出範本", validator=_kind_validator)
+        except ValueError:                                   # 並行登記 ⇒ 已存在
+            pass
+    return KIND in D.kinds()
 
 
 # ── 執行期 ────────────────────────────────────────────────────────────────
@@ -189,6 +219,7 @@ def resolve(export_id, conn=None):
     """⇒ 已發布且仍合法的範本，或 None（旗標關、沒有已發布、不合法、任何錯誤 ⇒ None＝端點走今天寫死的路徑）。"""
     if export_id not in _EXPORTS or not enabled(conn):
         return None
+    ensure_kind()
     try:
         from db import get_db
         own = conn is None

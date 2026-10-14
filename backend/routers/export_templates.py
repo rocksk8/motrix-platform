@@ -7,13 +7,16 @@
   不寫任何資料、不計匯出次數、不留 `export.*` 稽核。草稿不合法 ⇒ 422；找不到使用者 ⇒ 404。
 發布走既有的 `/api/definitions/export_template/{export_id}/*`（版本／差異／還原／帳本／發布前預覽雜湊全部沿用）。
 - `POST /api/exports/client-log {name, rows}`（登入即可）：瀏覽器端產檔的匯出（客戶、料號、供應商三頁的 SheetJS）**在 builder_exports 開啟時**送一筆 `export.xlsx` 稽核。
-  **只記錄，不擋**：沒有冷卻、永不回 429（也不碰伺服端 Excel 匯出的冷卻）；前端 fire-and-forget。旗標關 ⇒ 什麼都不寫、回 `{ok:true, logged:false}`（前端本來就不會送）。
+  **只記錄，不擋**：永不回 429（也不碰伺服端 Excel 匯出的冷卻）；前端 fire-and-forget。需要該頁清單的模組權限（與清單 API 同一組，否則 403）；
+  同一位使用者、同一個名稱 5 秒內只記一筆，過快的靜默丟掉（`logged:false`）。旗標關 ⇒ 什麼都不寫、回 `{ok:true, logged:false}`（前端本來就不會送）。
   名稱只能是白名單；rows 是 0～200000 的整數。這是『自報』的紀錄（伺服器無法證明檔案真的產生）。
 """
 from fastapi import APIRouter, Body, Header, HTTPException
 
 from db import get_db
-from helpers import _audit, _require_user, _tok
+import time
+
+from helpers import _audit, _require_user, _tok, require_any_module
 from helpers.xlsx_out import summarize_filters
 from helpers import export_templates as ET
 
@@ -30,7 +33,7 @@ def export_template_status(export_id: str, authorization: str = Header(None)):
         return {"enabled": False, "canEdit": False}
     out = {"enabled": True, "canEdit": u.get("role") == "superadmin"}
     if out["canEdit"]:
-        out.update(reg[export_id], exportId=export_id)
+        out.update(reg[export_id], exportId=export_id, presets=list(ET.PRESET_TEXTS), watermarkPresets=list(ET.WATERMARK_PRESETS))
     return out
 
 
@@ -59,7 +62,13 @@ def export_template_preview(export_id: str, body: dict = Body(default={}), autho
 
 
 #: 瀏覽器端產檔的匯出名稱白名單（名稱 → 稽核用的模組標籤）
-CLIENT_EXPORTS = {"customers": "crm", "parts": "parts", "suppliers": "supply"}
+#: 名稱 → (稽核用的模組標籤, 能匯出這份清單的模組：與各頁清單 API 的把關相同, 白話名稱)
+CLIENT_EXPORTS = {"customers": ("crm", ("customer", "case_manage", "dev_crm", "procurement"), "客戶管理"),
+                  "parts": ("parts", ("procurement", "case_manage", "inventory"), "料號管理"),
+                  "suppliers": ("supply", ("customer", "procurement", "inventory"), "供應商管理")}
+#: 同一位使用者、同一個名稱的最短記錄間隔（秒）；太快的靜默丟掉（logged:false），不回 429、不擋匯出
+CLIENT_LOG_MIN_INTERVAL = 5.0
+_last_client_log: dict = {}
 
 
 @router.post("/api/exports/client-log")
@@ -74,7 +83,14 @@ def client_export_log(body: dict = Body(default={}), authorization: str = Header
         raise HTTPException(422, "rows 必須是 0～200000 的整數")
     if not ET.enabled():
         return {"ok": True, "logged": False}                  # 旗標關：今天的行為（不記錄）
+    label, mods, what = CLIENT_EXPORTS[name]
+    require_any_module(u, mods, what)                         # 沒有這份清單的權限 ⇒ 403（與清單 API 同一組模組）
+    now = time.monotonic()
+    key = (u["id"], name)
+    if now - _last_client_log.get(key, -1e9) < CLIENT_LOG_MIN_INTERVAL:
+        return {"ok": True, "logged": False}                  # 太快 ⇒ 靜默丟掉（不灌爆稽核；也不擋匯出）
+    _last_client_log[key] = now
     _audit(_tok(authorization), "export.xlsx", "export", name, name,
-           {"module": CLIENT_EXPORTS[name], "format": "xlsx", "filters": summarize_filters({}), "rows": rows, "client": True})
+           {"module": label, "format": "xlsx", "filters": summarize_filters({}), "rows": rows, "client": True})
     return {"ok": True, "logged": True}
 
