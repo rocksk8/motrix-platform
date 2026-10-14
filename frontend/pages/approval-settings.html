@@ -438,6 +438,8 @@
       </div>
     </div>
 
+    <!-- S-X3：簽核通知用語編輯器的掛載點（旗標 builder_notify.enabled 開啟且是最高管理者才會載入；關著＝空的 div） -->
+    <div id="notify-editor-mount"></div>
   </main>
 
   <script>
@@ -951,6 +953,23 @@
         },
       }
     }
+  </script>
+  <script>
+    // S-X3：簽核通知用語編輯器。只有最高管理者才讀一次旗標（MotrixPublicFlags）；旗標關著 ⇒ 不載入任何編輯器程式、不發其他請求。
+    ;(function () {
+      var s = {}
+      try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') || {} } catch (e) { s = {} }
+      if (s.role !== 'superadmin' || !s.token) return
+      function load(src) { return new Promise(function (ok, no) { var t = document.createElement('script'); t.src = src; t.onload = ok; t.onerror = no; document.head.appendChild(t) }) }
+      load('../static/public-flags.js')
+        .then(function () { return window.MotrixPublicFlags.read(['builder_notify'], { token: s.token, timeoutMs: 8000 }) })
+        .then(function (g) {
+          var f = g && g.builder_notify
+          if (!f || (f.enabled !== true && f.enabled !== 1)) return
+          return load('../js/def-governance.js').then(function () { return load('../static/notify-editor.js') }).then(function () { window.MotrixNotifyEditor.start() })
+        })
+        .catch(function () { /* 載入失敗 ⇒ 當作未開放 */ })
+    })()
   </script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>

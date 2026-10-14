@@ -26,7 +26,7 @@ def notify_template_status(event: str, authorization: str = Header(None)):
     if out["canEdit"]:
         out.update(event=event, label=ev["label"], sample=ev["sample"],
                    fields=[{"field": p, "label": s["label"], "default": s["default"], "limit": s["limit"],
-                            "placeholders": list(s["placeholders"])} for p, s in ev["fields"].items()])
+                            "placeholders": list(s["placeholders"]), "need": list(s["need"])} for p, s in ev["fields"].items()])
     return out
 
 
