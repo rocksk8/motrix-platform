@@ -125,9 +125,9 @@ def test_custom_record_output_injects_even_with_a_template_without_banner():
 
 #: 登記表：每一個「會簽核又出 PDF」的 builder ⇒ 原始碼裡必須用到共用元件。新增的 builder 要加一列（或在 EXEMPT 說明為何不需要）。
 BUILDERS = {
-    "pdf_gen.py": ["_build_shipping_html", "_build_contractor_voucher_html", "_build_payment_request_html",
+    "pdf_gen.py": ["_build_shipping_html", "_build_contractor_voucher_html", "_build_payment_request_html_core",
                    "_build_invoice_voucher_html", "_build_quote_html"],
-    "modules/case/completion_pdf.py": ["_build_completion_html"],
+    "modules/case/completion_pdf.py": ["_build_completion_html_core"],
     "modules/accounting/voucher_pdf.py": ["watermark_html"],
     # 2026-10-01（A2-0 #7，769d65a7）：自訂單據與 A2 費用單據的輸出都經 L1 `helpers.doc_render.render_document`——警示元件現在在這裡；
     # `custom_modules.render_view` 只是委派（見下方 test_render_view_still_goes_through_the_guarded_component），不再自己呼叫元件。
@@ -159,6 +159,17 @@ def test_every_approvable_builder_uses_the_shared_component(rel, fn):
     seg = _src_of(rel, fn)
     assert seg is not None, "%s 找不到 %s —— 登記表過期或 builder 被改名" % (rel, fn)
     assert any(u in seg for u in _USES), "%s::%s 沒有用未核可警示元件（helpers.doc_template.unapproved_banner／inject_unapproved）" % (rel, fn)
+
+
+# G-A 之後這兩個公開 builder 只是 decorate_pdf 外殼，警示元件在 *_core 裡；外殼必須真的委派給 core，守門才算數
+WRAPPERS = {("pdf_gen.py", "_build_payment_request_html"): "_build_payment_request_html_core",
+            ("modules/case/completion_pdf.py", "_build_completion_html"): "_build_completion_html_core"}
+
+
+@pytest.mark.parametrize("key,core", list(WRAPPERS.items()))
+def test_decor_wrapper_delegates_to_the_guarded_core(key, core):
+    seg = _src_of(*key)
+    assert seg is not None and core + "(" in seg, "%s::%s 沒有委派 %s —— 警示會被繞過" % (key[0], key[1], core)
 
 
 def test_render_view_still_goes_through_the_guarded_component():

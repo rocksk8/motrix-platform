@@ -39,8 +39,21 @@ def _router_modules():
     }
 
 
+def _import_aliases():
+    """`from routers import x as y` -> {y: x}；沒改名的 x -> x。"""
+    aliases = {}
+    for m in re.finditer(r'^from routers import (.+)$', _main_src(), re.M):
+        for part in m.group(1).split(","):
+            bits = part.strip().split(" as ")
+            aliases[bits[-1].strip()] = bits[0].strip()
+    return aliases
+
+
 def _included():
-    return set(re.findall(r'app\.include_router\(\s*(\w+)\.router', _main_src()))
+    """include_router 的物件名稱（含 `import x as y` 的別名）還原成 routers/ 的模組名。"""
+    aliases = _import_aliases()
+    names = re.findall(r'app\.include_router\(\s*(\w+)\.router', _main_src())
+    return {aliases.get(n, n) for n in names}
 
 
 def test_every_router_file_is_registered_or_explicitly_retired():
@@ -72,9 +85,6 @@ def test_retired_router_files_still_exist_or_are_delisted():
 
 def test_imported_routers_are_all_included():
     """import 進來卻沒 include 的中間狀態最容易漏（改到一半忘了收尾）。"""
-    imported = set()
-    for m in re.finditer(r'^from routers import (.+)$', _main_src(), re.M):
-        for name in m.group(1).split(","):
-            imported.add(name.strip())
+    imported = set(_import_aliases().values())
     missing = imported - _included()
     assert not missing, f"這些 router 被 import 但沒有 include_router：{sorted(missing)}"
