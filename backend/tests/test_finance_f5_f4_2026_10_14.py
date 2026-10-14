@@ -124,30 +124,58 @@ def test_settle_overdue_list_waits_n_days(client, sa, monkeypatch):
     # 調大是放寬（待生效、需第二位核准），所以這裡直接讓讀取回 14，驗證的是『清單怎麼用這個數字』
     from helpers import settings_registry as SR
     _real = SR.get
-    monkeypatch.setattr(SR, "get", lambda g, f, conn=None: 14 if (g, f) == ("finance_reports", "settle_overdue_days") else _real(g, f, conn=conn))
+    monkeypatch.setattr(SR, "get", lambda g, f, **kw: 14 if (g, f) == ("finance_reports", "settle_overdue_days") else _real(g, f, **kw))
     got = nos()
     assert "Q-F5-OLD" in got and "Q-F5-NEW" not in got
 
 
-def test_raising_the_receivable_grace_goes_pending(client):
+# ── D-K1：這兩個設定調大＝放寬（待生效、需第二位最高管理者核准）；調小＝立即 ────────────────────────────────
+_LOOSEN_CASES = [("finance_cashier", "receivable_grace_days", 5, 2), ("finance_reports", "settle_overdue_days", 14, 7)]
+
+
+def _cleanup(c, group, field):
+    """還原：撤銷這個欄位留下的待生效列、把儲存值放回預設（往預設調小是立即），讓重複使用的測試庫不被污染。"""
+    from helpers import config_ledger as L
+    from helpers import settings_registry as SR
+    for r in L.pending(c, "setting:%s" % group):
+        if r["field"] == field:
+            L.cancel(c, r["id"], "t62", "測試清理")
+    SR.publish(group, {field: 0}, reason="t62 cleanup", user="t62", conn=c)
+    c.commit()
+
+
+@pytest.mark.parametrize("group,field,big,small", _LOOSEN_CASES)
+def test_raise_is_pending_lower_is_immediate_and_second_superadmin_path(client, make_user, group, field, big, small):
     import db
+    from datetime import datetime, timedelta
+    from helpers import config_ledger as L
     from helpers import settings_registry as SR
     c = db.get_db()
     try:
-        up = SR.publish("finance_cashier", {"receivable_grace_days": 5}, reason="t", user="t62", conn=c)
+        # (b) 另有一位最高管理者 ⇒ 調大走『另一位核准』的路
+        make_user(username="dk1_other_" + field[:6], role="superadmin")
+        pv = SR.plan(group, {field: big}, user="t62", conn=c)
+        assert pv["otherSuperadmins"] >= 1 and [x["kind"] for x in pv["fields"]] == ["pending_approval"]
+        up = SR.publish(group, {field: big}, reason="t", user="t62", conn=c)
         c.commit()
-        assert up["pending"] and SR.get("finance_cashier", "receivable_grace_days", conn=c) == 0, "調大＝放寬＝待生效，現值不變"
-    finally:
-        c.close()
-
-
-def test_raising_the_settle_wait_goes_pending(client):
-    import db
-    from helpers import settings_registry as SR
-    c = db.get_db()
-    try:
-        up = SR.publish("finance_reports", {"settle_overdue_days": 14}, reason="t", user="t62", conn=c)
+        assert up["pending"] and SR.get(group, field, conn=c) == 0, "調大＝放寬＝待生效，現值不變"
+        rows = [r for r in L.pending(c, "setting:%s" % group) if r["field"] == field]
+        assert len(rows) == 1 and rows[0]["approvals_required"] == 1, "需要一位不同於申請人的最高管理者核准"
+        # (a) 調小＝立即：先讓大的值生效，再調小
+        later = (datetime.now() + timedelta(days=400)).isoformat(timespec="seconds")
+        assert SR.get_group(group, conn=c, now=later)[field] == 0, "沒有核准，到期也不生效"
+        L.approve(c, rows[0]["id"], "dk1_other_" + field[:6], "核准")
         c.commit()
-        assert up["pending"] and SR.get("finance_reports", "settle_overdue_days", conn=c) == 0, "調大＝放寬＝待生效，現值不變"
+        assert SR.get_group(group, conn=c, now=later)[field] == big, "核准且過了確認期間才生效"
+        SR.materialize_due(c, now=later)
+        c.commit()
+        assert SR.get(group, field, conn=c) == big
+        assert SR.plan(group, {field: small}, user="t62", conn=c)["fields"][0]["kind"] == "immediate"
+        down = SR.publish(group, {field: small}, reason="t", user="t62", conn=c)
+        c.commit()
+        assert not down["pending"] and SR.get(group, field, conn=c) == small
     finally:
-        c.close()
+        try:
+            _cleanup(c, group, field)
+        finally:
+            c.close()
