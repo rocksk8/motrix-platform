@@ -193,6 +193,7 @@ def prune_guards(today: date) -> None:
 def _scan_item(it, today, t0, *, is_wd, send, link, app_only=False, days=None) -> tuple:
     """一筆的處理 ⇒ (寄出封數, 要不要停止本次掃描: None／'wait'／'unknown')。例外由呼叫端接。
     `app_only`＝本次掃描已因等待上限／SMTP 無回應而停止寄信：只補站內通知、不寄信、不寫信件 guard（信件語意不變：未寄出就不寫，下次重試）。"""
+    days = soon_days() if days is None else days                # 這一筆從頭到尾用同一個數字（日期、站內通知、信件文字）
     kind, guards = due_kind(it["planned"], today, is_wd, days)
     if not kind:
         return 0, None
@@ -209,7 +210,7 @@ def _scan_item(it, today, t0, *, is_wd, send, link, app_only=False, days=None) -
             _set_setting(k, t0)
     if mail_done or app_only:
         return 0, None
-    res = {}
+    res = {"soonDays": days}                                    # 信件文字用的天數跟著這個數字，不再另外讀設定
     if send(kind, it["rows"], link, it["ident"], res):
         for k in mail_keys:                                     # 先寄、結果確定才寫 guard（SENT／UNKNOWN／PERMANENT_FAIL）
             _set_setting(k, t0)
@@ -219,7 +220,7 @@ def _scan_item(it, today, t0, *, is_wd, send, link, app_only=False, days=None) -
     return (1 if res.get("outcome") == _en.SEND_SENT else 0), stop
 
 
-def run_scan(items, today: date, *, is_wd, send, monotonic=time.monotonic, link=None, max_wait=None) -> int:
+def run_scan(items, today: date, *, is_wd, send, monotonic=time.monotonic, link=None, max_wait=None, days=None) -> int:
     """對 `items` 逐筆判斷今天該不該寄、寄、寫 guard、寫站內通知。⇒ 這次寄出幾封（測試用）。
     每一筆各自隔離（一筆出錯只記 log、繼續下一筆）；清舊 guard 一定會做。
 
@@ -233,7 +234,7 @@ def run_scan(items, today: date, *, is_wd, send, monotonic=time.monotonic, link=
         max_wait = MAX_WAIT_SECONDS_PER_RUN if max_wait is None else max_wait
         link = link or "%s/pages/cashier.html" % _en._base_url()
         t0 = today.isoformat()
-        days = soon_days()                                      # 一次掃描用同一個天數（候選日期與 due_kind 一致）
+        days = soon_days() if days is None else days            # 一次掃描用同一個數字；呼叫端（候選日期那一步）已經讀過就傳進來，不再另外讀；#（候選日期與 due_kind 一致）
         t_start = monotonic()
         items = list(items)
         rest = []                                               # 因等待上限／SMTP 無回應而沒輪到寄信的那些筆：仍要補站內通知（只有「寄信日＝今天」的候選，錯過就永遠沒有）

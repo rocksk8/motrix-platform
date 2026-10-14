@@ -127,7 +127,8 @@ def test_label_and_mail_text():
     assert C.label("soon", 5) == "預定付款日將到（5 天後）" and C.label("today") == "預定付款日當天" and C.label("overdue") == "預定付款日已逾期"
     for rel in ("modules/case/payable_reminders.py", "modules/subcontract/payable_due.py"):
         src = (ROOT / rel).read_text(encoding="utf-8")
-        assert '"%d 天後到期" % _core.soon_days()' in src and "還有 %d 天" in src and 'badge_text="3 天後到期"' not in src, rel
+        assert '"%d 天後到期" % _days' in src and "還有 %d 天" in src and 'badge_text="3 天後到期"' not in src, rel
+        assert '(out or {}).get("soonDays") or _core.soon_days()' in src, rel                          # 信件文字用掃描傳來的天數
     assert "預定付款日將到（3 天前）" in (ROOT / "modules/case/payable_reminders.py").read_text(encoding="utf-8")     # 信件類型的清單標題不變
 
 
@@ -135,3 +136,87 @@ def test_core_no_longer_does_date_math_with_the_constant():
     src = (ROOT / "helpers/payable_due_core.py").read_text(encoding="utf-8")
     assert "timedelta(days=SOON_DAYS)" not in src and "(0, SOON_DAYS)" not in src
     assert "timedelta(days=days)" in src and "(0, days)" in src
+
+
+# ── 04 should-fix S1／S2：一次掃描只讀一次設定，日期與信件文字同一個數字 ──────────────────────
+def _items(n=3, base=date(2026, 11, 2)):
+    return [{"guard_id": "g%d" % i, "planned": (base + timedelta(days=5)).isoformat(), "ident": "X%d" % i, "rows": [], "source": "t", "key": "k%d" % i} for i in range(n)]
+
+
+def _quiet_core(monkeypatch):
+    monkeypatch.setattr(C, "notify_finance", lambda *a, **k: 1)
+    monkeypatch.setattr(C, "_get_setting", lambda k, d=None: None)
+    monkeypatch.setattr(C, "_set_setting", lambda k, v: None)
+    monkeypatch.setattr(C, "prune_guards", lambda t: None)
+
+
+def test_run_scan_reads_the_setting_at_most_once_and_hands_the_number_to_send(monkeypatch):
+    _quiet_core(monkeypatch)
+    calls = []
+    monkeypatch.setattr(C, "soon_days", lambda conn=None: calls.append(1) or 5)
+    seen = []
+
+    def send(kind, rows, link, ident, out):
+        seen.append((kind, out.get("soonDays")))
+        out["outcome"] = C._en.SEND_SENT
+        return True
+    today = date(2026, 11, 2)
+    assert C.run_scan(_items(3), today, is_wd=wd, send=send, link="x") == 3
+    assert len(calls) == 1 and seen == [("soon", 5)] * 3                       # 3 筆、整次掃描只讀 1 次；每封信拿到同一個 5
+    calls.clear()
+    seen.clear()
+    C.run_scan(_items(2), today, is_wd=wd, send=send, link="x", days=5)           # 呼叫端已經讀過 ⇒ 掃描內完全不再讀
+    assert calls == [] and seen == [("soon", 5)] * 2
+
+
+def test_a_setting_change_between_candidates_and_scan_cannot_split_the_number(monkeypatch):
+    """呼叫端讀一次 d，候選日期與 run_scan 都用 d；之後設定怎麼變都不影響這一輪。"""
+    _quiet_core(monkeypatch)
+    values = iter([5, 3, 3, 3])
+    monkeypatch.setattr(C, "soon_days", lambda conn=None: next(values))
+    d = C.soon_days()                                                          # 呼叫端讀到 5
+    today = date(2026, 11, 2)
+    cands = C.candidate_planned_dates(today, wd, d)
+    assert (today + timedelta(days=5)).isoformat() in cands                     # 候選含 +5 的預定日
+    sent = []
+
+    def send(kind, rows, link, ident, out):
+        sent.append((kind, out["soonDays"]))
+        out["outcome"] = C._en.SEND_SENT
+        return True
+    C.run_scan(_items(1), today, is_wd=wd, send=send, link="x", days=d)
+    assert sent == [("soon", 5)]                                                # 後續讀到 3 也不影響
+
+
+@pytest.mark.parametrize("mod", ["modules.case.payable_reminders", "modules.subcontract.payable_due"])
+def test_mail_text_uses_the_scans_number_without_reading_the_setting(monkeypatch, mod):
+    import importlib
+    M = importlib.import_module(mod)
+    got = {}
+    monkeypatch.setattr(M._en, "send_registered", lambda key, **kw: got.update(key=key, **kw) or True)
+    monkeypatch.setattr(M._core, "soon_days", lambda conn=None: (_ for _ in ()).throw(AssertionError("不該再讀設定")))
+    M._mail("soon", [], "x", "ID1", {"soonDays": 5})
+    assert got["key"] == "payable_due_soon" and got["badge_text"] == "5 天後到期" and "還有 5 天" in got["note"]
+    M._mail("today", [], "x", "ID1", {"soonDays": 5})
+    assert got["key"] == "payable_due_today"                                    # 其他種類不受影響
+    monkeypatch.setattr(M._core, "soon_days", lambda conn=None: 3)
+    M._mail("soon", [], "x", "ID1")                                              # 直接呼叫（沒有 out）才自己讀；預設 3
+    assert got["badge_text"] == "3 天後到期" and "還有 3 天" in got["note"]
+
+
+def test_callers_read_once_and_pass_the_number_to_both_steps():
+    a = (ROOT / "modules/case/payable_reminders.py").read_text(encoding="utf-8")
+    assert a.count("d = _core.soon_days()") == 1 and "_candidate_planned_dates(today, d)" in a and "max_wait=MAX_WAIT_SECONDS_PER_RUN, days=d)" in a
+    b = (ROOT / "modules/subcontract/payable_due.py").read_text(encoding="utf-8")
+    assert b.count("d = _core.soon_days()") == 1 and "candidate_planned_dates(today, is_wd, d)" in b and "send=_mail, days=d)" in b
+    core = (ROOT / "helpers/payable_due_core.py").read_text(encoding="utf-8")
+    assert 'res = {"soonDays": days}' in core and "days=None) -> int:" in core
+
+
+def test_help_texts_state_the_counting_rules():
+    from helpers import settings_registry as SR
+    import helpers.settings_groups  # noqa: F401
+    f5 = SR._GROUPS["finance_reports"]["fields"]["settle_overdue_days"].help
+    f4 = SR._GROUPS["finance_cashier"]["fields"]["receivable_grace_days"].help
+    assert "最後更新日" in f5 and "重新計算" in f5
+    assert "N+1" in f4

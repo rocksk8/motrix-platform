@@ -69,16 +69,17 @@ def due_kind(planned: str, today: date) -> tuple:
     return _core.due_kind(planned, today, _wd)
 
 
-def _candidate_planned_dates(today: date) -> list:
-    return _core.candidate_planned_dates(today, _wd)
+def _candidate_planned_dates(today: date, days: int = None) -> list:
+    return _core.candidate_planned_dates(today, _wd, days)
 
 
 def _mail(kind, rows, link, ident, out=None):
     """字面 key 呼叫 send_registered（守門逐一核對）；不放金額。收件人＝財務群組（見檔頭〔收件人〕），不另帶 usernames。"""
     if kind == "soon":
+        _days = (out or {}).get("soonDays") or _core.soon_days()      # 掃描傳來的天數（與日期同一個數字）；直接呼叫時才自己讀
         return _en.send_registered("payable_due_soon", title="預定付款日將到", rows=rows, to_group=True,
-                                   badge_text="%d 天後到期" % _core.soon_days(), badge_color="#D97706", link=link, button_text="前往出納",
-                                   reason=ident, wait=True, out=out, note="您好，以下請款的預定付款日還有 %d 天，請安排付款。" % _core.soon_days())
+                                   badge_text="%d 天後到期" % _days, badge_color="#D97706", link=link, button_text="前往出納",
+                                   reason=ident, wait=True, out=out, note="您好，以下請款的預定付款日還有 %d 天，請安排付款。" % _days)
     if kind == "overdue":
         return _en.send_registered("payable_due_overdue", title="預定付款日已逾期", rows=rows, to_group=True,
                                    badge_text="已逾期", badge_color="#7F1D1D", link=link, button_text="前往出納",
@@ -136,7 +137,8 @@ def run(today=None) -> int:
     """⇒ 這次寄出幾封（測試用）。任何例外只記 log，不影響其他每日檢查。"""
     try:
         today = today or date.today()
-        cands = _candidate_planned_dates(today)
+        d = _core.soon_days()                                   # 整次掃描只讀一次設定：候選日期與 run_scan 用同一個數字
+        cands = _candidate_planned_dates(today, d)
         if not cands:
             _core.prune_guards(today)
             return 0
@@ -146,7 +148,7 @@ def run(today=None) -> int:
         finally:
             conn.close()
         return _core.run_scan(items, today, is_wd=_wd, monotonic=lambda: _monotonic(), send=_mail,
-                              max_wait=MAX_WAIT_SECONDS_PER_RUN)
+                              max_wait=MAX_WAIT_SECONDS_PER_RUN, days=d)
     except Exception as exc:
         logger.warning("payable_reminders.run failed: %s", exc)
         return 0
