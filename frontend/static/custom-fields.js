@@ -319,13 +319,14 @@
           return
         }
         if (!(await this._ask('發布後，所有內部人員在這個畫面就會看到這些欄位。確定要發布嗎？'))) { this.busy = false; return }
-        if (window.MotrixDefGovernance && await window.MotrixDefGovernance.available()) {
-          var pv = await window.MotrixDefGovernance.preview({ kind: 'custom_fields', key: this._key(), scope: 'company' })
-          if (pv.ok && pv.data && pv.data.changeCount && !(await this._ask('這次發布會變更 ' + pv.data.changeCount + ' 項設定（影響預覽已記錄），確定要發布？'))) {
-            this.msg = '已取消發布'; this.busy = false; return
-          }
+        // T62：治理旗標開時，看過的影響預覽雜湊 preview_hash 隨發布送出（管理者開啟強制時沒帶會被擋）；旗標關／未載入 ⇒ 請求本體只有 note，與先前相同
+        var pubBody = { note: this.note }
+        if (window.MotrixDefGovernance && await window.MotrixDefGovernance.available('custom_fields')) {
+          var pvh = await window.MotrixDefGovernance.review({ kind: 'custom_fields', key: this._key(), scope: 'company', title: '發布前影響預覽' })
+          if (!pvh) { this.msg = '已取消發布'; this.busy = false; return }
+          pubBody.preview_hash = pvh
         }
-        var r = await this._j(this._base() + '/publish?scope=company', { method: 'POST', body: JSON.stringify({ note: this.note }) })
+        var r = await this._j(this._base() + '/publish?scope=company', { method: 'POST', body: JSON.stringify(pubBody) })
         if (!r.ok) { this._mark(r.d.problems || []); this.msg = '發布失敗：' + (r.d.detail || r.status); this.busy = false; return }
         this.note = ''
         var pend = r.d && r.d.pending === true

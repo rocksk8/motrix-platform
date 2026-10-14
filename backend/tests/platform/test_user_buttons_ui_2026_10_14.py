@@ -246,3 +246,30 @@ def test_suppliers_page_reads_all_three_flags_from_the_one_settings_request():
     assert "deferred: true" in src.split("MotrixCustomFields.init({")[1].split("})")[0]
     code = re.sub(r"//[^\n]*", "", src.replace("<!--", "//").replace("-->", ""))
     assert "/api/custom-fields" not in code and "/api/user-buttons" not in code      # 只有程式庫在旗標開啟後才打
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_publish_sends_the_reviewed_preview_hash_only_when_governance_is_on():
+    """T62：治理旗標開 ⇒ 先 review 再帶 preview_hash 發布；審閱取消就不發布。關／未載入 ⇒ 請求本體只有 note。"""
+    body = """
+  c.defs = { latest: null, draft: null, versions: [] }
+  c.work = [{ key: 'b1', slot: 'suppliers.html/toolbar', label: '名冊', type: 'export', target: 'subcontract:roster' }]
+  c.load = async () => { c.loadError = '' }
+  c.note = 'n1'
+  const reviewed = []
+  async function run(gov, review) {
+    const sent = []
+    c.note = 'n1'
+    c._j = async (url, opt) => { if (url.indexOf('/publish') >= 0) { sent.push(JSON.parse(opt.body)); return { ok: true, status: 200, d: { version: 9 } } }
+      if (url.indexOf('/draft') >= 0 || url.indexOf('/validate') >= 0) return { ok: true, status: 200, d: { problems: [] } }
+      return { ok: true, status: 200, d: { draft: null, latest: null, versions: [] } } }
+    window.MotrixDefGovernance = gov ? { available: async (k) => k === 'user_buttons', review: async (o) => { reviewed.push(o); return review } } : undefined
+    const pub = c.publish(); await new Promise(r => setTimeout(r, 20)); c.answer(true); await pub
+    return sent
+  }
+  const on = await run(true, 'H1'), off = await run(false, 'H1'), cancel = await run(true, null)
+  console.log(JSON.stringify({ on, off, cancel, reviewed }))"""
+    r = _ed(body)
+    assert r["on"] == [{"note": "n1", "preview_hash": "H1"}]
+    assert r["off"] == [{"note": "n1"}]
+    assert r["cancel"] == [] and r["reviewed"][0]["kind"] == "user_buttons"
