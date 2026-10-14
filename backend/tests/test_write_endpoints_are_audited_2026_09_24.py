@@ -41,6 +41,9 @@ AUDIT_WRAPPERS = {
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
 EXEMPT = {
+    # ── 通知用語預覽（t62 S-X3）：POST 只為帶草稿範本，不寫任何資料 ──
+    ("notify_templates.py", "POST", "/api/notify-templates/{event}/preview"):
+        "preview：只在記憶體內驗證草稿範本並以樣本值渲染（NT.preview 不 commit、不寫任何資料）；僅最高管理者、builder_notify 旗標關閉時 404。",
     # ── 標示型規則預覽（t62 BP-2）：POST 只為帶草稿規則，不寫任何業務資料 ──
     ("rules.py", "POST", "/api/rules/preview"):
         "preview：只在記憶體內驗證草稿規則並對最近 N 筆唯讀評估（不 commit、不寫業務資料）；規則故障只走限頻的 rules.degraded 稽核（_note_degraded）；僅最高管理者、builder_rules／builder_governance 旗標關閉時 404。",

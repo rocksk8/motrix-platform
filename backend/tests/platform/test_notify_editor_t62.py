@@ -17,7 +17,8 @@ from helpers import notify_templates as NT
 
 ROOT = Path(__file__).resolve().parents[3]
 EDITOR = ROOT / "frontend" / "static" / "notify-editor.js"
-PAGE = ROOT / "frontend" / "pages" / "approval-settings.html"
+from core import source_tree      # noqa: E402
+PAGE = source_tree.page_file("approval-settings.html")
 NODE = shutil.which("node")
 KEY = "approval:submitted"
 DEF = "approval%3Asubmitted"
