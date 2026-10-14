@@ -112,3 +112,10 @@
 
 ## 6. 實作狀態（S-ST1，2026-10-14）
 已完成純函式部分（程式碼，未接任何執行路徑）：`helpers/stage_templates.py`（定義、驗證、旗標、功能狀態閘門）、`helpers/safe_text.py`（共用文字檢查）、`def_pipeline._cmp_stage_template`（依階段種類鍵配對的放寬／收緊分類）、`def_governance` 影響範圍白話、`definitions` 惰性登記、設定群組 `builder_stage_templates`（預設關）。**沒有**套用端點、migration、案件頁按鈕（S-ST2）。3c 的審閱意見到達後再修訂本文件。
+
+## 7. 審閱後的修正（04，S-ST1 r3）
+- 鍵（樣板鍵、階段種類鍵）一律 `fullmatch`：Python 的 `$` 會在結尾換行前比對成功，「a
+」會被當成合法的鍵並與「a」並存。`core/definitions.py` 的通用 `_KEY_RE` 有同樣的寫法（既有，不在本刀處理；之後可一併改成 `fullmatch`）。
+- 階段名稱重複以 NFKC＋casefold 比較（「ＡＢ」與「AB」算同一個）。`version` 必須是整數 1（1.0、true 一律拒絕）。
+- 惰性登記的 kind 登記後到重啟前都會留在 `D.kinds()`；`GET /api/definition-kinds` 在旗標關時把「案件階段樣板」濾掉（只有最高管理者看得到這個端點，這是避免旗標關了還列出一個用不了的種類）。
+- 階段名稱的字元規則會擋「像網址」的寫法（含斜線，或英數字夾小數點，例如 `Phase 1.20`）；已寫進設定說明。
