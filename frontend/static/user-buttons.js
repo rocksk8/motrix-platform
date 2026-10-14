@@ -377,7 +377,13 @@
       async _restore(version) {
         this.busy = true
         if (!(await this._ask('要還原第 ' + version + ' 版嗎？' + (this.defs.draft ? '目前的草稿會被捨棄。' : '')))) { this.busy = false; return }
-        var r = await this._j(this._base() + '/restore/' + version + '?scope=company', { method: 'POST', body: JSON.stringify({}) })
+        // T62：治理旗標開時，還原也要帶『看過這一版內容』的預覽雜湊（強制範圍內沒帶會 409）；沒有治理／取不到 ⇒ 請求本體仍是 {}
+        var restBody = {}
+        if (window.MotrixDefGovernance && window.MotrixDefGovernance.previewRestore && await window.MotrixDefGovernance.available('user_buttons')) {
+          var rvh = await window.MotrixDefGovernance.previewRestore({ kind: 'user_buttons', key: this._key(), scope: 'company' }, version)
+          if (rvh) restBody.preview_hash = rvh
+        }
+        var r = await this._j(this._base() + '/restore/' + version + '?scope=company', { method: 'POST', body: JSON.stringify(restBody) })
         if (!r.ok) { this._mark(r.d.problems || []); this.msg = '還原失敗：' + (r.d.detail || r.status); this.busy = false; return }
         var pend = r.d && r.d.pending === true
         if (!pend && this.defs.draft) await this._j(this._base() + '/draft?scope=company', { method: 'DELETE' })

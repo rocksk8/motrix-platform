@@ -273,3 +273,23 @@ def test_publish_sends_the_reviewed_preview_hash_only_when_governance_is_on():
     assert r["on"] == [{"note": "n1", "preview_hash": "H1"}]
     assert r["off"] == [{"note": "n1"}]
     assert r["cancel"] == [] and r["reviewed"][0]["kind"] == "user_buttons"
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_restore_sends_the_reviewed_hash_only_when_governance_is_on():
+    """T62：治理旗標開 ⇒ previewRestore 後帶 preview_hash 還原；旗標關／取不到雜湊 ⇒ 請求本體仍是 {}。"""
+    body = """
+  c.defs = { latest: null, draft: null, versions: [] }
+  c.work = [{ key: 'b1', slot: 'suppliers.html/toolbar', label: '名冊', type: 'export', target: 'subcontract:roster' }]
+  c.load = async () => { c.loadError = '' }
+  async function run(gov, hash) {
+    const sent = [], asked = []
+    c._j = async (url, opt) => { sent.push({ url, body: opt && opt.body }); return { ok: true, status: 200, d: { version: 8, draft: null, latest: null, versions: [] } } }
+    window.MotrixDefGovernance = gov ? { available: async (k) => k === 'user_buttons', previewRestore: async (o, v) => { asked.push([o.kind, o.scope, v]); return hash } } : undefined
+    const p = c.restore(2); await new Promise(r => setTimeout(r, 20)); c.answer(true); await p
+    return { body: JSON.parse(sent.filter(x => x.url.indexOf('/restore/2') >= 0)[0].body), asked }
+  }
+  console.log(JSON.stringify({ on: await run(true, 'v2:H'), off: await run(false, 'v2:H'), none: await run(true, null) }))"""
+    r = _ed(body)
+    assert r["on"]["body"] == {"preview_hash": "v2:H"} and r["on"]["asked"] == [["user_buttons", "company", 2]]
+    assert r["off"]["body"] == {} and r["off"]["asked"] == [] and r["none"]["body"] == {}
