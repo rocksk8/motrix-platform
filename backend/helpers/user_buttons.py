@@ -2,7 +2,7 @@
 """使用者自訂按鈕（T61 S6；設計：docs/platform/plans/T61-S6-ACTION-CATALOG-DESIGN.md）。
 
 [單位] helper:user_buttons    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] ACTION_TYPES, BUTTON_EXPORTS, MAX_PER_SLOT, MAX_SLOTS_PER_PAGE, MAX_TOTAL, SLOTS, catalog, definition_problems, enabled, preview, visible_buttons
+[公開介面] ACTION_TYPES, BUTTON_EXPORTS, KIND, MAX_PER_SLOT, MAX_SLOTS_PER_PAGE, MAX_TOTAL, SLOTS, catalog, definition_problems, enabled, preview, visible_buttons
 [不變式] ①旗標 `builder_actions.enabled` 關閉 ⇒ `visible_buttons()` 一律空、`preview()` 不可用；②按鈕**不授權**：
     開頁＝連結（目標頁面自己的登入／模組權限照舊）、匯出＝用點擊者自己的 token 呼叫模組已登記的 GET 端點（端點自己的權限、遮蔽、稽核照舊）；
     ③動作類型只有 navigate／export（沒有任何會寫資料的動作）；目標只來自目錄（選單上的頁面、module.json 已登記的匯出）；
