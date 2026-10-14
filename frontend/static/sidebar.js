@@ -1116,6 +1116,17 @@ if (typeof module !== 'undefined' && module.exports) {
     document.head.appendChild(sc)
   }
 
+  // BP-3：builder_exports 開啟且是最高管理者時（/api/platform/menu 才有 builderExports），頁面若宣告了 <meta name="motrix-export-id">，才載入匯出範本編輯器。
+  // 關著 ⇒ 不載入、不多任何請求（頁面的網路請求與今天逐一相同）。
+  function _loadExportEditor() {
+    var m = document.querySelector('meta[name="motrix-export-id"]')
+    if (!m || window.MotrixExportEditor || document.getElementById('export-editor-js')) return
+    window.MOTRIX_EXPORT_ID = m.getAttribute('content')
+    var sc = document.createElement('script')
+    sc.id = 'export-editor-js'; sc.src = '/static/export-editor.js'
+    document.head.appendChild(sc)
+  }
+
   function _applyLayout() {
     if (!s || !s.token) return
     var my = ++_menuSeq
@@ -1136,6 +1147,7 @@ if (typeof module !== 'undefined' && module.exports) {
         _showModuleNotice()
         _setMenuState('layout')
         document.documentElement.setAttribute('data-menu-seq', String(my))
+        if (d.builderExports) _loadExportEditor()      // BP-3
         if (d.builderMenu) _loadMenuEditor()          // BP-1：builder_menu.enabled 開啟且是最高管理者才有這個鍵（關著 ⇒ 完全不載入）
       })
       .catch(function (e) {

@@ -1,7 +1,8 @@
 /* export-editor.js — 匯出範本編輯器（BP-3）：決定匯出檔有哪些欄位、標題文字與順序；發布前預覽實際輸出
  *
- * 載入方式：頁面放 <script src="/static/export-editor.js" data-export-id="daily_tasks:task-history" defer>。
- * 先問 GET /api/export-templates/{id}/status：旗標關（builder_exports.enabled）或不是最高管理者 ⇒ 什麼都不畫（頁面只多一個 GET）。
+ * 載入方式：頁面只宣告 <meta name="motrix-export-id" content="匯出代號">；sidebar.js 在 /api/platform/menu 回 builderExports:true
+ * （builder_exports.enabled 開啟 ＋ 最高管理者才有這個鍵）時才載入本檔。關著 ⇒ 本檔根本不會被載入，頁面沒有任何額外請求。
+ * 載入後再問 GET /api/export-templates/{id}/status 取得欄位目錄；不是可編輯 ⇒ 什麼都不畫。
  * 發布走既有的定義端點（kind=export_template，key=匯出代號，scope=company）：版本／還原／稽核／治理（發布前預覽雜湊、待核准）全部沿用。
  *
  * 只是『匯出哪些欄位、叫什麼名字、什麼順序』：資料仍是端點今天的查詢結果；沒有權限的欄位預覽會標示「不會出現」；範本不能新增資料。

@@ -169,6 +169,9 @@ def platform_menu(authorization: str = Header(None)):
         from helpers import menu_builder as MB
         if MB.enabled():
             resp["builderMenu"] = True                    # BP-1：只有開啟時才多這個鍵（關著 ⇒ 回應與今天逐字相同）；前端據此載入 menu-editor.js
+        from helpers import export_templates as ET
+        if ET.enabled():
+            resp["builderExports"] = True                 # BP-3：同上——只有開啟＋最高管理者才多這個鍵；前端據此（且頁面有 motrix-export-id）載入 export-editor.js，關著不多任何請求
     return resp
 
 

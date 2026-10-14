@@ -341,3 +341,24 @@ def test_setting_default_is_off_and_registered():
     f = {x["key"]: x for x in SR.groups()["builder_exports"]["fields"]}["enabled"]
     assert f["default"] == 0 and (f["min"], f["max"]) == (0, 1)
     assert ET.enabled() is False, "預設關"
+
+
+def test_menu_response_gains_builder_exports_only_when_on_and_superadmin(client, make_user, monkeypatch):
+    """OFF 時頁面不載入編輯器、不多任何請求：旗標由已經會發的 /api/platform/menu 帶（鍵只在開啟＋最高管理者時才出現）。"""
+    _, h_sa = _login(client, make_user, "bp3_sa9", "superadmin")
+    _, h_ad = _login(client, make_user, "bp3_ad4", "admin", modules=["daily_task"])
+    _flag(monkeypatch, False)
+    assert "builderExports" not in client.get("/api/platform/menu", headers=h_sa).json()
+    _flag(monkeypatch, True)
+    assert client.get("/api/platform/menu", headers=h_sa).json().get("builderExports") is True
+    assert "builderExports" not in client.get("/api/platform/menu", headers=h_ad).json()
+
+
+def test_page_declares_the_export_id_and_only_sidebar_loads_the_editor():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[3] / "frontend"
+    html = (root / "pages" / "daily-tasks.html").read_text(encoding="utf-8")
+    assert '<meta name="motrix-export-id" content="daily_tasks:task-history">' in html
+    assert "export-editor.js" not in html, "頁面不直接載入編輯器（關著時不能多請求）"
+    sb = (root / "static" / "sidebar.js").read_text(encoding="utf-8")
+    assert "d.builderExports" in sb and "/static/export-editor.js" in sb
