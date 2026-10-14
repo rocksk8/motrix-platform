@@ -44,7 +44,9 @@ def _ident(it):
 
 
 def _label(it):
-    return str(it.get("type") or it.get("label") or "")
+    base = str(it.get("type") or it.get("label") or "")
+    from helpers.option_lists import payment_stage_display       # census S-F1：選項清單關著／沒發布 ⇒ 原字串；事件標題在該筆款項下次被存檔時才用新名稱（簽章比對前後都用目前的名稱，改名本身不觸發重送）
+    return payment_stage_display(base, it)
 
 
 def _receipt_sig(it):
@@ -94,7 +96,7 @@ def events_for_change(old_items, new_items) -> list:
 
 def _compose(code, quote_no, customer, project, it):
     """⇒ (標題, 說明, 日期)。**不放任何金額**（見檔頭③）。"""
-    label = it.get("type") or it.get("label") or "款項"
+    label = _label(it) or "款項"                                  # census S-F1：選項清單關著／沒發布 ⇒ 與過去相同（type 或 label 或「款項」）
     head = "\n".join(["案件：%s" % quote_no, "客戶：%s" % customer, "專案：%s" % project, "款項：%s" % label])
     if code == RECEIPT:
         day = _ymd(it.get("receivedAt"))

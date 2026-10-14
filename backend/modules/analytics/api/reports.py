@@ -38,6 +38,7 @@ from core import registry as _registry
 RECEIVABLES_MISSING = "應收應付模組未安裝：收款與銷項發票資料不提供（現金口徑收入、銷項發票匯出需要它）"
 
 
+from helpers.option_lists import payment_stage_name as _stage_name      # census S-F1：款項期別顯示名稱（選項清單關著／沒發布 ⇒ 與過去逐字相同）
 def _custom_income(conn, d0, d1, basis, department_id=None):
     """自訂模組（建構器）的收入逐筆（L1 `helpers.custom_finance`；沒有入帳單據 ⇒ []）。
     關聯到內建案件的略過（內建報價單自己認列，不重複計入）。"""
@@ -440,7 +441,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
                     "quoteDate":    row["quote_date"]    or "",
                     "dealTag":      row["deal_tag"]      or "",
                     "idx":          idx,
-                    "type":         pi.get("type", f"第{idx+1}期"),
+                    "type":         _stage_name(pi, idx),
                     "pct":          pi.get("pct") or 0,
                     "amount":       amt,
                     "received":     rcvd,
@@ -2643,7 +2644,7 @@ def _compute_ar_aging() -> dict:
                 "project":     row["project_name"]  or "",
                 "salesPerson": row["sales_person"]  or "",
                 "dealTag":     row["deal_tag"]       or "",
-                "type":        pi.get("type", f"第{idx+1}期"),
+                "type":        _stage_name(pi, idx),
                 "pct":         pi.get("pct") or 0,
                 "amount":      amt,
                 "quoteDate":   row["quote_date"] or "",
@@ -3236,7 +3237,7 @@ def _collect_unreceived_items(d0: str, d1: str, department_id: Optional[int] = N
                 "customer":      row["customer_name"] or "",
                 "project":       row["project_name"]  or "",
                 "salesPerson":   row["sales_person"]  or "",
-                "type":          pi.get("type", f"第{idx+1}期"),
+                "type":          _stage_name(pi, idx),
                 "amount":        amt,
                 "expectedDate":  exp_date,
                 "invoiceNo":     pi.get("invoiceNo", ""),
@@ -3325,7 +3326,7 @@ def _collect_payment_anomalies(department_id: Optional[int] = None) -> list:
                 "customer":    row["customer_name"] or "",
                 "project":     row["project_name"]  or "",
                 "salesPerson": row["sales_person"]  or "",
-                "type":        pi.get("type", f"第{idx+1}期"),
+                "type":        _stage_name(pi, idx),
                 "amount":      receipt_amounts(amounts[idx], aa, pi.get("feeAmount"))[1] if aa is not None else amounts[idx],
                 "receivedAt":  rat,
                 "received":    rcvd,

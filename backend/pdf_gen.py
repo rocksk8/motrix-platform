@@ -2147,7 +2147,8 @@ def _build_payment_request_html(v: dict) -> str:
     quote_items = v.get('quoteItems') or []
     # 請款範圍：客戶端只需要看業務語意分類（全額/訂金款/交貨款/驗收款/尾款），
     # scope（amount/items）純粹是內部金額計算方式，不對外顯示。
-    scope_label = _PAYMENT_STAGE_LABELS.get(v.get('stage') or '', '未分類')
+    from helpers.option_lists import request_stage_label as _rsl      # census S-F1：產生 PDF 當下的名稱（已送出的檔案不改）；選項清單關著 ⇒ 上面的字典
+    scope_label = _rsl(v.get('stage') or '', _PAYMENT_STAGE_LABELS.get(v.get('stage') or '', '未分類'))
 
     if scope == 'items':
         sel_rows = ''

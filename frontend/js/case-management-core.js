@@ -91,7 +91,13 @@ window.CM_PARTS.push(() => ({
       })
     },
 
+    // census S-F1：款項類型下拉（選項清單 payment_stage；沒開／沒發布 ⇒ 下面寫死的八個，畫面逐項相同；值就是存進資料的字，顯示名稱可由管理者改）
+    optVer: 0,
+    STAGE_ITEMS: ['訂金款', '交貨款', '驗收款', '進度款', '完工款', '收款後出貨', '自訂義', '其他'].map(v => ({ value: v, label: v })),
+    stageOptions(cur) { this.optVer; return MotrixOptions.options('payment_stage', this.STAGE_ITEMS, cur) },
+
     async init() {
+      window.addEventListener('motrix-options', () => { this.optVer++ })     // census S-F1：選項清單到了（或換了）就重算
       // 2026-09-24：離頁警告（sidebar.js）跟著主表單的 dirty 走：setDirty() 設 true，
       // 存檔成功（dirty 轉 false）時清掉。
       window.motrixDirtyProbe = () => !!this.moDirty     // sidebar.js 的「任一請求成功就清離頁警告」不得清掉材料申請的未存列
