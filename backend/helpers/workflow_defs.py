@@ -49,7 +49,15 @@ def _validator(body, key):
     if problems:
         return problems
     removed = G.removed_write_callbacks(W.builtin(key), body)
-    return [{"path": "transitions", "message": "不可拿掉寫入類回呼：轉換 %s 的 %s" % x} for x in removed]
+    out = [{"path": "transitions", "message": "不可拿掉寫入類回呼：轉換 %s 的 %s" % x} for x in removed]
+    from helpers import tiered_approval as T
+    if T.doc_class(key) == "stock":                                   # 核准會動庫存的單據：所有回呼都只能保留（可以加，不能拿掉）
+        have = {t["id"]: set(t.get("callbacks") or []) for t in body.get("transitions") or []}
+        for t in W.builtin(key)["transitions"]:
+            for cb in t["callbacks"]:
+                if cb not in have.get(t["id"], set()) and (t["id"], cb) not in removed:
+                    out.append({"path": "transitions", "message": "此單據的核准會異動庫存，回呼只能保留：轉換 %s 的 %s" % (t["id"], cb)})
+    return out
 
 
 def _default(key):

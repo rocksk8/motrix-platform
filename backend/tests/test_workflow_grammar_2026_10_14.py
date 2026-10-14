@@ -33,6 +33,8 @@ def tr(body, tid):
 # ── 內建 v1 ───────────────────────────────────────────────────────────────────
 def test_builtin_definitions_are_valid_and_only_for_plain_documents():
     assert W.doc_types() == ("completion", "shipping")
+    from helpers import tiered_approval as T
+    assert [T.doc_class(d) for d in W.doc_types()] == ["plain", "stock"]
     for d in W.doc_types():
         assert problems(base(d), d) == [], d
     assert W.builtin("quotation") is None and W.builtin("nope") is None
@@ -68,6 +70,29 @@ def test_builtin_literals_match_the_endpoint_source():
 
 
 # ── 驗證器 ────────────────────────────────────────────────────────────────────
+def test_stock_class_cannot_switch_approval_off_but_plain_can_with_an_exemption():
+    s = base("shipping")
+    s["approval"] = {"required": False, "exemption": {"policy": 3}}
+    assert any("庫存" in p["message"] for p in problems(s, "shipping"))
+    c_ = base()
+    c_["approval"] = {"required": False, "exemption": {"policy": 3}}
+    c_["transitions"].append({"id": "direct", "from": ["draft"], "to": "approved", "who": "admin", "reason": "none", "log": "basic", "guards": [], "callbacks": []})
+    assert problems(c_) == []
+
+
+def test_approval_off_loosen_carries_the_dependency_warnings():
+    a, b = base(), base()
+    b["approval"] = {"required": False, "exemption": {"policy": 1}}
+    cls, why = G.compare(a, b)
+    assert cls == "loosen" and any("相依警示" in x and "已完工數" in x for x in why) and any("結案閘門" in x for x in why)
+    assert {d["id"] for d in G.DEPENDENCIES["completion"]} == {"completion_counted_statuses", "case_close_gate"}
+
+
+def test_dependency_literal_matches_the_source():
+    src = (ROOT / "modules/case/completion_sync.py").read_text(encoding="utf-8")
+    assert 'COUNTED_NOTE_STATUSES = ("待審核", "簽核中", "已核准")' in src                                    # 狀態值一改，相依宣告就要跟著改
+
+
 def test_money_and_ledger_documents_accept_no_company_version():
     b = base()
     for doc in ("quotation", "payment_request", "invoice_voucher", "contractor_voucher", "bonus", "extra_expense"):
@@ -130,8 +155,14 @@ def test_write_callbacks_cannot_be_removed_against_the_builtin_baseline():
     out = WD._validator(b, "shipping")
     assert out and "stock_deduct" in out[0]["message"]
     b2 = base("shipping")
-    tr(b2, "approve")["callbacks"].remove("gen_pdf")                                                        # 非寫入類可以拿掉
-    assert WD._validator(b2, "shipping") == []
+    tr(b2, "approve")["callbacks"].remove("gen_pdf")                                                        # stock 類：連非寫入類回呼也只能保留
+    assert any("只能保留" in x["message"] for x in WD._validator(b2, "shipping"))
+    b3 = base()
+    tr(b3, "approve")["callbacks"].remove("notify_module_activity")                                         # plain 類：非寫入類可以拿掉
+    assert WD._validator(b3, "completion") == []
+    b4 = base("shipping")
+    tr(b4, "approve")["callbacks"].append("notify_module_activity")                                          # stock 類可以加
+    assert WD._validator(b4, "shipping") == []
     assert WD._validator(base(), "quotation")                                                              # 沒有內建版的單據 ⇒ 不開放
 
 

@@ -83,13 +83,14 @@ APPROVAL_DOC_TYPE_LABELS = {
 _BUILTIN_DOC_TYPES = tuple(APPROVAL_DOC_TYPES)   # 內建九類（固定）；其餘由 `register_doc_type()` 登記
 
 # 單據風險類（BP-5 流程建構器的前置；程式擁有、使用者不可編輯，設計見 docs/platform/plans/BP5-WORKFLOW-BUILDER-DESIGN-T62.md §2）：
-#   plain  ＝非金額單據，流程建構器可完整調整
+#   plain  ＝非金額單據，流程建構器可完整調整（仍受寫入類回呼／相依關係的警示約束）
+#   stock  ＝核准會異動庫存（同一交易內）的單據：不可關閉簽核，回呼只能保留不能拿掉（04 審查 10-14，PM 暫定）
 #   money  ＝金額單據，建構器只能加嚴（第一期唯讀）
 #   ledger ＝會計入帳／法定類型，不在任何可編輯範圍
 # 新登記而未指定者一律當 money（最嚴）。目前沒有任何執行期程式讀這張表（純登錄＋守門測試）。
-DOC_CLASSES = ("plain", "money", "ledger")
+DOC_CLASSES = ("plain", "stock", "money", "ledger")
 DOC_CLASS = {
-    "quotation": "money", "shipping": "plain", "invoice_voucher": "money", "payment_request": "money",
+    "quotation": "money", "shipping": "stock", "invoice_voucher": "money", "payment_request": "money",
     "contractor_voucher": "money", "extra_expense": "money", "completion": "plain",
     "voucher": "ledger", "bonus": "money",
 }

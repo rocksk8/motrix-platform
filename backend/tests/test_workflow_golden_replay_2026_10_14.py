@@ -9,17 +9,17 @@ import json
 import pytest
 
 import db
-from tests._requires import requires_module
+from tests._requires import _installed, requires_module
 
 pytestmark = requires_module("case", "BP-5 黃金重放打 M01（案件）／供應（出貨單）端點")
 
 SPECS = {
-    "completion": dict(base="/api/completion-notes", pk="note_no", table="completion_notes", act="completion",
+    "completion": dict(need="case", base="/api/completion-notes", pk="note_no", table="completion_notes", act="completion",
                        payload=lambda: {"quote_no": "MQ-GR-001", "site_address": "台中", "start_date": "2026-08-01",
                                         "completion_date": "2026-09-10", "recipient": "陳經理", "warranty_months": 12,
                                         "items": [{"description": "監控主機安裝", "qty": 1, "unit": "式", "status": "完成"}],
                                         "work_summary": "完成", "test_result": "正常"}),
-    "shipping": dict(base="/api/shipping-notes", pk="note_no", table="shipping_notes", act="shipping",
+    "shipping": dict(need="supply", base="/api/shipping-notes", pk="note_no", table="shipping_notes", act="shipping",
                      payload=lambda: {"quote_no": "MQ-GR-001", "ship_date": "2026-09-10", "recipient": "陳經理",
                                       "delivery_address": "台中", "items": [{"description": "攝影機", "qty": 1, "unit": "台"}]}),
 }
@@ -66,7 +66,8 @@ def _row(spec, no):
 def _audits(no):
     c = db.get_db()
     try:
-        return [r["action"] for r in c.execute("SELECT action FROM audit_log WHERE target_id=? ORDER BY id", (no,)).fetchall()]
+        # 排除背景 PDF 執行緒寫的 pdf.auto_generate（出貨單核准後 spawn_bg_thread 產生，與請求執行緒競態）：它不是流程轉換的一部分
+        return [r["action"] for r in c.execute("SELECT action FROM audit_log WHERE target_id=? AND action<>'pdf.auto_generate' ORDER BY id", (no,)).fetchall()]
     finally:
         c.close()
 
@@ -81,6 +82,8 @@ def _detail(r):
 @pytest.fixture(params=sorted(SPECS))
 def world(request, client, make_user):
     spec = SPECS[request.param]
+    if not _installed(spec["need"]):                                  # 每個參數各自檢查它需要的模組（出貨單在 supply，完工單在 case）
+        pytest.skip("需要模組 %s：%s 的端點在那裡" % (spec["need"], request.param))
     _, author = _login(client, make_user, "gr_a_" + request.param, "admin")
     ap_name, approver = _login(client, make_user, "gr_s_" + request.param, "superadmin")
     _, other = _login(client, make_user, "gr_o_" + request.param, "admin")
@@ -144,6 +147,16 @@ def test_approve_then_revoke_round_trip(world):
     assert c.post("%s/%s/revoke-approval" % (s["base"], no), headers=approver, json={"note": "更正"}).status_code == 200
     st, d = _row(s, no)
     assert st == "草稿" and "approval" not in d and _audits(no)[-1] == s["act"] + ".revoke_approval"
+
+
+def test_known_gap_any_admin_can_revoke_an_approval(world):
+    """已知缺口（04 審查，PM 要求原樣釘住、不在 BP-5 修）：撤銷核准只要 _require_admin＋狀態已核准＋未回簽＋有原因，
+    『不是簽核人的一般 admin』也能撤銷別人的核准。預設流程定義 revoke.who＝admin 就是在登記這個現況。"""
+    c, s, no, author, approver, other = world
+    c.post("%s/%s/submit" % (s["base"], no), headers=author)
+    assert c.post("%s/%s/approve" % (s["base"], no), headers=approver, json={}).status_code == 200
+    r = c.post("%s/%s/revoke-approval" % (s["base"], no), headers=other, json={"note": "我不是簽核人"})
+    assert r.status_code == 200 and _row(s, no)[0] == "草稿"
 
 
 def test_no_tiers_behaviour_is_pinned_superadmin_only(world):

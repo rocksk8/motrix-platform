@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """BP-5 P0：單據風險類登錄（plain／money／ledger）與守門。
 - 每一個簽核單據類型（含各模組登記的）都必須有合法的風險類；新增類型而漏分類 ⇒ 預設 money（最嚴），且此測試會抓到顯式缺漏
-- 流程建構器可完整調整的只有 plain：目前只有完工單與出貨單；傳票是 ledger；其餘一律 money
+- 流程建構器可完整調整的只有 plain（完工單）；出貨單是 stock（核准動庫存：不可關簽核、回呼只能保留）；傳票是 ledger；其餘一律 money
 - 登記失敗不留下半登記狀態"""
 import importlib
 
@@ -27,7 +27,8 @@ def test_every_registered_doc_type_is_classified():
 
 def test_builtin_classes_are_pinned():
     plain = {c for c in T._BUILTIN_DOC_TYPES if T.doc_class(c) == "plain"}
-    assert plain == {"completion", "shipping"}                           # 放寬這個集合＝擴大建構器範圍，必須有人明確改測試
+    assert plain == {"completion"}                                       # 放寬這個集合＝擴大建構器範圍，必須有人明確改測試
+    assert {c for c in T._BUILTIN_DOC_TYPES if T.doc_class(c) == "stock"} == {"shipping"}      # 核准會動庫存（04 審查）
     assert T.doc_class("voucher") == "ledger"
     for c in ("quotation", "invoice_voucher", "payment_request", "contractor_voucher", "extra_expense", "bonus"):
         assert T.doc_class(c) == "money", c

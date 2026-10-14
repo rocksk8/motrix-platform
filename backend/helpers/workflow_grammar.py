@@ -3,8 +3,9 @@
 
 [單位] helper:workflow_grammar    [層] L0（純函式，不碰資料庫／FastAPI）    [穩定度] 實驗（沒有任何執行期呼叫端）
 [公開介面] GUARDS, ACTIONS, validate_workflow, analyze, compare
-[不變式] ①定義是資料：守門只能從 GUARDS 挑、回呼只能從 ACTIONS 挑，建構器不能新增任何一項（沒有任意程式／運算式）；
-    ②金額類（money）與會計入帳類（ledger）單據在第一期一律不接受任何公司版本（D-W1：唯讀）；plain 才可發布；
+[不變式] ⓪單據風險類（tiered_approval.DOC_CLASS）：plain 可完整調整；stock（核准會動庫存）不可關簽核、回呼只能保留；money／ledger 第一期不接受公司版本；
+    ①定義是資料：守門只能從 GUARDS 挑、回呼只能從 ACTIONS 挑，建構器不能新增任何一項（沒有任意程式／運算式）；
+    ②金額類（money）與會計入帳類（ledger）單據在第一期一律不接受任何公司版本（D-W1：唯讀）；plain／stock 才可發布；
     ③`approved` 語意只能經簽核（who=tier）進入，或在 approval.exemption 有記錄在案的豁免時才可不經簽核；
     ④寫入類回呼（write）只能掛在對的轉換（扣庫存只在進入 approved、還庫存只在離開 approved），而且不可被拿掉（比較器視為放寬、驗證器對照內建版擋下）；
     ⑤比較器：無法判斷一律放寬；方向由內容決定，不寫死「增加＝收緊」。
@@ -44,6 +45,20 @@ ACTIONS = {
     "stock_return": {"kind": "write", "tx": "in", "removable": False, "only_leaving": "approved"},
 }
 
+# 已知的相依關係：改這些單據的簽核／狀態名稱會牽動別處（宣告出來，比較器與介面據此警示；不是新的守門）。
+DEPENDENCIES = {
+    "completion": [
+        {"id": "completion_counted_statuses", "where": "modules/case/completion_sync.py:23 COUNTED_NOTE_STATUSES",
+         "note": "已完工數統計依資料庫狀態值『待審核／簽核中／已核准』計算；狀態的資料庫值必須維持內建值，只能改顯示名稱（P2 要求）"},
+        {"id": "case_close_gate", "where": "（PM 說明：完工單核准餵給案件結案閘門；t60 基底未查到，待完工單堆疊 MS1b 併入後確認）",
+         "note": "關閉完工單簽核＝放寬，可能讓結案閘門少一道人工確認"},
+    ],
+    "shipping": [
+        {"id": "stock_flip", "where": "modules/supply/api/shipping_notes.py approve（stock_items UPDATE，同一交易）",
+         "note": "核准會把庫存序號改為已出貨；撤銷核准會歸還"},
+    ],
+}
+
 _WHO_RANK = {"owner_or_admin": 0, "admin": 1, "superadmin": 2}          # 數字越大越嚴；tier 與它們不可比
 _REASON_RANK = {"none": 0, "optional": 1, "required": 2}
 _LOG_RANK = {"none": 0, "basic": 1, "full": 2}
@@ -75,7 +90,7 @@ def _validate(body, doc_type) -> list:
     cls = _doc_class(doc_type)
     if cls == "ledger":
         return [_p("", "會計入帳／法定類型的單據不在可編輯範圍")]
-    if cls == "money":
+    if cls not in ("plain", "stock"):
         return [_p("", "金額單據的流程在第一期唯讀，不接受公司版本")]
     if not isinstance(body, dict):
         return [_p("", "流程定義必須是物件")]
@@ -140,6 +155,8 @@ def _validate(body, doc_type) -> list:
     ap = body.get("approval")
     if not isinstance(ap, dict) or not isinstance(ap.get("required"), bool):
         out.append(_p("approval", "approval.required 必須是布林"))
+    elif not ap["required"] and cls == "stock":
+        out.append(_p("approval", "核准會異動庫存的單據不可關閉簽核"))
     elif not ap["required"]:
         ex = ap.get("exemption")
         if not isinstance(ex, dict) or not isinstance(ex.get("policy"), int) or isinstance(ex.get("policy"), bool):
@@ -230,6 +247,8 @@ def _compare(old, new):
     oa, na = old.get("approval") or {}, new.get("approval") or {}
     if oa.get("required") is True and na.get("required") is False:
         loose("關閉簽核（豁免）")
+        for dep in DEPENDENCIES.get(new.get("docType"), []):
+            loose("相依警示：%s" % dep["note"])
     elif oa.get("required") is False and na.get("required") is True:
         tight("開啟簽核")
     elif oa.get("required") is False and na.get("required") is False and oa.get("exemption") != na.get("exemption"):
