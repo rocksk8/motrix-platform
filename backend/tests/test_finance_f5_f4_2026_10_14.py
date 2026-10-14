@@ -79,6 +79,7 @@ def test_settings_are_registered_with_zero_defaults():
     g = SR._GROUPS["finance_cashier"]["fields"]["receivable_grace_days"]
     assert (f.min, f.max, g.min, g.max) == (0, 365, 0, 90)
     # D-K1（使用者裁示 2026-10-14）：寬限天數調大＝逾期標示更晚＝放寬，要第二位最高管理者核准與確認期間；風險等級 money
+    assert (f.risk, f.loosen) == ("money", "up") and f.impact_scope and f.impact_scope["effective"] == "pending" and f.risk_text
     assert (g.risk, g.loosen) == ("money", "up") and g.impact_scope and g.impact_scope["effective"] == "pending" and g.risk_text
 
 
@@ -112,7 +113,7 @@ def _closed_case(no, updated):
         c.close()
 
 
-def test_settle_overdue_list_waits_n_days(client, sa):
+def test_settle_overdue_list_waits_n_days(client, sa, monkeypatch):
     today = date.today()
     _closed_case("Q-F5-OLD", (today - timedelta(days=30)).isoformat() + "T00:00:00")
     _closed_case("Q-F5-NEW", (today - timedelta(days=2)).isoformat() + "T00:00:00")
@@ -120,7 +121,10 @@ def test_settle_overdue_list_waits_n_days(client, sa):
         j = client.get("/api/reports/financial", headers=sa).json()
         return {x["quoteNo"] for x in j.get("settleOverdue", [])}
     assert {"Q-F5-OLD", "Q-F5-NEW"} <= nos()                               # 預設 0：一結案就列
-    _set("finance_reports", {"settle_overdue_days": 14})
+    # 調大是放寬（待生效、需第二位核准），所以這裡直接讓讀取回 14，驗證的是『清單怎麼用這個數字』
+    from helpers import settings_registry as SR
+    _real = SR.get
+    monkeypatch.setattr(SR, "get", lambda g, f, conn=None: 14 if (g, f) == ("finance_reports", "settle_overdue_days") else _real(g, f, conn=conn))
     got = nos()
     assert "Q-F5-OLD" in got and "Q-F5-NEW" not in got
 
@@ -133,5 +137,17 @@ def test_raising_the_receivable_grace_goes_pending(client):
         up = SR.publish("finance_cashier", {"receivable_grace_days": 5}, reason="t", user="t62", conn=c)
         c.commit()
         assert up["pending"] and SR.get("finance_cashier", "receivable_grace_days", conn=c) == 0, "調大＝放寬＝待生效，現值不變"
+    finally:
+        c.close()
+
+
+def test_raising_the_settle_wait_goes_pending(client):
+    import db
+    from helpers import settings_registry as SR
+    c = db.get_db()
+    try:
+        up = SR.publish("finance_reports", {"settle_overdue_days": 14}, reason="t", user="t62", conn=c)
+        c.commit()
+        assert up["pending"] and SR.get("finance_reports", "settle_overdue_days", conn=c) == 0, "調大＝放寬＝待生效，現值不變"
     finally:
         c.close()
