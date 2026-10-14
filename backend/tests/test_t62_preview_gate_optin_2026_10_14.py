@@ -17,7 +17,22 @@ from routers import definitions as R
 
 NODE = shutil.which("node")
 ROOT = Path(__file__).resolve().parents[2]
-LAYOUT = "/api/definitions/layout/module:suppliers"
+LAYOUT = None          # 由 autouse 夾具在每題開頭依『實際載入的模組』填入（寫死 suppliers 在 t60 基底不存在 ⇒ 版面驗證 422）
+MOD = None
+
+
+@pytest.fixture(autouse=True)
+def _layout_target(client):
+    """版面發布的驗證器要求模組真的存在：挑第一個有宣告選單項的已載入模組，不寫死名稱。"""
+    global LAYOUT, MOD
+    from core import registry
+    for m in registry.loaded():
+        if any(isinstance(p, dict) and p.get("menu") for p in (m.manifest or {}).get("pages") or []):
+            MOD = "module:" + m.key
+            break
+    else:
+        pytest.skip("沒有宣告選單項的模組")
+    LAYOUT = "/api/definitions/layout/" + MOD
 
 
 @pytest.fixture()
@@ -48,10 +63,20 @@ def test_all_off_publish_without_hash_works_as_before(client, hdr):
     assert client.post(LAYOUT + "/publish", headers=hdr, json={"note": "n"}).status_code == 200
 
 
-def test_governance_flag_off_ignores_the_per_kind_switch(client, hdr, monkeypatch):
-    _enforce(monkeypatch, {"layout"}, gov=False)
+def test_governance_flag_off_alone_does_not_enforce_an_opt_in_kind(client, hdr, monkeypatch):
+    """總開關關著、而且沒有任何 enforce_<kind> 開著 ⇒ 不強制（與今天相同）。
+    （舊版這題寫成『總開關關 ⇒ 忽略 enforce_layout』，與已定案的設計相反：enforce_<kind> 獨立於總開關，
+    開了就不會因為關總開關而被繞過，見 test_turning_the_master_switch_off_does_not_bypass_an_enabled_enforcement。）"""
+    _enforce(monkeypatch, set(), gov=False)
     _layout_draft(client, hdr)
     assert client.post(LAYOUT + "/publish", headers=hdr, json={"note": "n"}).status_code == 200
+
+
+def test_enabled_enforcement_is_not_bypassed_by_a_disabled_master_switch(client, hdr, monkeypatch):
+    _enforce(monkeypatch, {"layout"}, gov=False)
+    _layout_draft(client, hdr)
+    r = client.post(LAYOUT + "/publish", headers=hdr, json={"note": "n"})
+    assert r.status_code == 409 and r.json()["code"] == "preview_required"
 
 
 def test_layout_enforced_requires_a_seen_preview(client, hdr, monkeypatch):
@@ -59,7 +84,7 @@ def test_layout_enforced_requires_a_seen_preview(client, hdr, monkeypatch):
     _layout_draft(client, hdr)
     r = client.post(LAYOUT + "/publish", headers=hdr, json={"note": "n"})
     assert r.status_code == 409 and r.json()["code"] == "preview_required"
-    seen = client.get("/api/def-governance/layout/module:suppliers/impact", headers=hdr).json()["previewHash"]
+    seen = client.get("/api/def-governance/layout/" + MOD + "/impact", headers=hdr).json()["previewHash"]
     r = client.post(LAYOUT + "/publish", headers=hdr, json={"note": "n", "preview_hash": seen})
     assert r.status_code == 200
 
@@ -98,13 +123,13 @@ def test_real_settings_layer_turns_enforcement_on_and_off(client, hdr):
 def test_restore_is_gated_with_a_version_preview(client, hdr, monkeypatch):
     _enforce(monkeypatch, {"layout"})
     _layout_draft(client, hdr)
-    h = client.get("/api/def-governance/layout/module:suppliers/impact", headers=hdr).json()["previewHash"]
+    h = client.get("/api/def-governance/layout/" + MOD + "/impact", headers=hdr).json()["previewHash"]
     assert client.post(LAYOUT + "/publish", headers=hdr, json={"note": "n", "preview_hash": h}).status_code == 200
     _layout_draft(client, hdr)
     client.put(LAYOUT + "/draft", headers=hdr, json={"body": {"ops": []}, "note": "x"})
     r = client.post(LAYOUT + "/restore/1", headers=hdr, json={})
     assert r.status_code == 409 and r.json()["code"] == "preview_required"
-    pv = client.get("/api/def-governance/layout/module:suppliers/impact?version=1", headers=hdr).json()
+    pv = client.get("/api/def-governance/layout/" + MOD + "/impact?version=1", headers=hdr).json()
     assert pv["restoreVersion"] == 1 and pv["previewHash"].startswith("v1@live")
     assert client.post(LAYOUT + "/restore/1", headers=hdr, json={"preview_hash": "v1@live1:0000000000000000"}).status_code == 409
     assert client.post(LAYOUT + "/restore/1", headers=hdr, json={"preview_hash": pv["previewHash"]}).status_code == 200
@@ -120,7 +145,7 @@ def test_publish_is_pinned_to_the_previewed_draft_in_the_write_lock(client, hdr,
     """TOCTOU：閘門通過後、寫鎖內草稿被改 ⇒ D.publish 以預覽戳比對 ⇒ 409 DraftConflict，不發布。"""
     _enforce(monkeypatch, {"layout"})
     _layout_draft(client, hdr)
-    h = client.get("/api/def-governance/layout/module:suppliers/impact", headers=hdr).json()["previewHash"]
+    h = client.get("/api/def-governance/layout/" + MOD + "/impact", headers=hdr).json()["previewHash"]
     seen = {}
     real = R.D.publish
 
@@ -177,7 +202,7 @@ def test_turning_the_master_switch_off_does_not_bypass_an_enabled_enforcement(cl
     _enable_layout_enforcement()
     _layout_draft(client, hdr)
     assert client.post(LAYOUT + "/publish", headers=hdr, json={"note": "n"}).status_code == 409
-    j = client.get("/api/def-governance/layout/module:suppliers/impact", headers=hdr)
+    j = client.get("/api/def-governance/layout/" + MOD + "/impact", headers=hdr)
     assert j.status_code == 200
     assert client.post(LAYOUT + "/publish", headers=hdr, json={"note": "n", "preview_hash": j.json()["previewHash"]}).status_code == 200
 
@@ -185,7 +210,7 @@ def test_turning_the_master_switch_off_does_not_bypass_an_enabled_enforcement(cl
 def test_caller_base_etag_that_differs_from_the_previewed_hash_conflicts(client, hdr, monkeypatch):
     _enforce(monkeypatch, {"layout"})
     _layout_draft(client, hdr)
-    h1 = client.get("/api/def-governance/layout/module:suppliers/impact", headers=hdr).json()["previewHash"]
+    h1 = client.get("/api/def-governance/layout/" + MOD + "/impact", headers=hdr).json()["previewHash"]
     r = client.post(LAYOUT + "/publish", headers=hdr, json={"note": "n", "preview_hash": h1, "base_etag": "0123456789abcdef"})
     assert r.status_code == 409 and r.json().get("code") == "draft_conflict"
 
@@ -197,7 +222,7 @@ def test_restore_preview_is_bound_to_the_live_version(client, hdr, monkeypatch):
         client.put(LAYOUT + "/draft", headers=hdr, json={"body": {"ops": []}, "note": n})
         assert client.post(LAYOUT + "/publish", headers=hdr, json={"note": n}).status_code == 200
     _enforce(monkeypatch, {"layout"})
-    pv = client.get("/api/def-governance/layout/module:suppliers/impact?version=1", headers=hdr).json()["previewHash"]
+    pv = client.get("/api/def-governance/layout/" + MOD + "/impact?version=1", headers=hdr).json()["previewHash"]
     monkeypatch.setattr(R, "_opt_in_enforced", lambda conn, kind: False)
     client.put(LAYOUT + "/draft", headers=hdr, json={"body": {"ops": []}, "note": "c"})
     assert client.post(LAYOUT + "/publish", headers=hdr, json={"note": "c"}).status_code == 200      # 生效版變成 3
@@ -233,7 +258,7 @@ def test_menu_editor_sends_the_hash_only_when_the_preview_gives_one():
 (async()=>{var out=[];mode='ok';out.push(await previewSeen('suppliers'));mode='no';out.push(await previewSeen('suppliers'));
 console.log(JSON.stringify([out,calls[0]]))})()"""
     out = subprocess.run([NODE, "-e", harness], capture_output=True, text=True, encoding="utf-8", timeout=30)
-    assert json.loads(out.stdout.strip()) == [["h1", None], "/api/def-governance/layout/module:suppliers/impact?scope=company"]
+    assert json.loads(out.stdout.strip()) == [["h1", None], "/api/def-governance/layout/module:suppliers/impact?scope=company"]   # 前端腳本的輸入就是 suppliers（與後端夾具無關）
 
 
 def test_every_restore_caller_that_has_governance_sends_the_version_preview():
