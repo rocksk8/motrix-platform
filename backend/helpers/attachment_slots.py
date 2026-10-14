@@ -2,7 +2,8 @@
 """附件插槽定義（BP-4 S2；kind `attachment_slot`，key＝`doc:<單據類型>`；設計 BP4-STORAGE-NOTIFY-DESIGN §3）。
 
 [單位] helper:attachment_slots    [層] L1    [穩定度] 契約
-[公開介面] KIND, SLOTTED_DOC_TYPES, catalog, compare, definition_problems, effective_slots, enabled, simulate, slot_policy
+[公開介面] BUILTIN_SLOT, DEFAULT_MAX_FILES, DEFAULT_MAX_REQUEST_MB, KIND, MAX_FILES_CAP, MAX_REQUEST_MB_CAP, MAX_SLOTS, SLOTTED_DOC_TYPES,
+    catalog, compare, definition_problems, effective_slots, enabled, published_slots, simulate, slot_policy
 [不變式] ①旗標 `builder_slots.enabled` 關閉 ⇒ 沒有任何東西讀這份定義：`slot_policy` 只回內建政策、端點 404（定義文件庫本身仍可存草稿，
     但完全不起作用）。②插槽只能**縮小**：副檔名 ⊂ `storage_slots.HARD_EXTS`、單檔上限 ≤ 平台 `uploads.max_file_mb`、件數／合計有硬上限；
     位置代號由單據類型決定（`storage_slots.DOC_CODES`），不接受輸入。③子資料夾只在該位置代號的讀取提供者宣告 `SLOT_AWARE` 時才准用。
