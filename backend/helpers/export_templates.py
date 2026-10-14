@@ -2,7 +2,7 @@
 """匯出範本（BP-3 R0/R1）：宣告式的欄位／標籤／順序（＋頁首頁尾／浮水印文字），套在『已登記的匯出』上；發布前預覽。
 
 [單位] helper:export_templates    [層] L1    [穩定度] 實作
-[公開介面] CAPS, KIND, PRESET_TEXTS, WATERMARK_PRESETS, ensure_kind, LABEL_MAX, MAX_COLUMNS, OFF_REASON, apply_pdf_text, apply_print_text, decorate_pdf, definition_problems, default_template, effective_columns, enabled, preview, register_export, registered, render_csv_rows, render_rows, resolve
+[公開介面] CAPS, FIELD, GROUP, KIND, LABEL_MAX, MAX_COLUMNS, OFF_REASON, PRESET_TEXTS, RESERVED_WATERMARK, TEXT_MAX, WATERMARK_MAX, WATERMARK_PRESETS, apply_pdf_text, apply_print_text, decorate_pdf, default_template, definition_problems, effective_columns, enabled, ensure_kind, preview, register_export, registered, render_csv_rows, render_rows, resolve
 [不變式] 設定 `builder_exports.enabled`（預設 0＝關）關著時：`resolve()` 一律回 None（端點走今天寫死的路徑，輸出逐位元相同）；發布驗證擋；預覽端點 404。
     範本只收宣告式資料：欄位 id 必須在該匯出的**欄位目錄**裡（模組登記，不由使用者定義）、文字是純文字（無占位符、無運算式、無控制／雙向字元），
     **範本不能新增資料**——欄位值一律來自端點今天的查詢與遮蔽；標 `money`（或有 `visible`）的欄位在輸出端再問一次權限，沒權限 ⇒ 整欄省略（遮蔽優先）。
