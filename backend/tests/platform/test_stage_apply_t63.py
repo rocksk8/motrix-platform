@@ -394,3 +394,19 @@ def test_preview_dialog_ignores_stale_responses_static():
     assert "d._seq" in js[a:b] and js[a:b].count("seq !== d._seq") >= 1 and "seq === d._seq" in js[a:b]
     ap = js[b:js.index("async addStage")]
     assert "d.plan.template !== d.key" in ap and "dryRun: false" in ap
+
+
+def test_default_stage_seed_is_skipped_only_when_flag_on_and_template_published_static():
+    core = _read("frontend/js/case-management-core.js")
+    seed = core[core.index("async _seedDefaultStagesIfEmpty"):core.index("caseReadOnly()")]
+    assert "if (this._stFlag) { await this.stInit(); if (this.stTpl.length) return }" in seed        # 旗標開＋有樣板才跳過
+    assert "this._stFlag === undefined && this._layoutP" in seed                                   # 旗標還沒讀完才等；讀完／關著 ⇒ 不多等
+    assert seed.index("_stFlag") < seed.index("const labels = ['訂單確認'")                         # 決定在建立 5 個預設階段之前
+    html = _read("frontend/pages/case-management.html")
+    assert "d._layoutP = d.initLayout()" in html and "已發布階段樣板時，空白案件不會再自動建立 5 個預設階段" in html
+    form = _read("frontend/pages/quotation-form.html")
+    assert "['builder_layout', 'builder_custom_fields', 'builder_stage_templates']" in form
+    f = form[form.index("async _seedDefaultStagesIfEmpty"):]
+    f = f[:f.index("async doUnlock")]
+    assert f.index("if (this._stFlag)") < f.index("const labels = ['訂單確認'")
+    assert "/stages/templates`" in f and "_stFlag: false" in form                                  # 旗標關 ⇒ 不送這個請求

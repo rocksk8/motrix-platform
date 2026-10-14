@@ -8,6 +8,8 @@ window.CM_PARTS.push(() => ({
     stageView: 'list',
     // 套用階段樣板（S-ST2；旗標 builder_stage_templates 關 ⇒ stOn 恆為 false，這些狀態與方法都不會被呼叫、不送請求）
     stOn: false,
+    _stFlag: undefined,      // undefined＝設定還沒讀完；true／false＝旗標 builder_stage_templates
+    _layoutP: null,          // initLayout() 的 promise（預設階段 seed 要在旗標讀完之後才決定）
     stTpl: [],
     stDlg: { open: false, key: '', base: '', mode: 'new', plan: null, busy: false, err: '' },
     _ganttInstance: null,

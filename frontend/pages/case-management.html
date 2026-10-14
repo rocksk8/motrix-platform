@@ -3878,7 +3878,7 @@
         <label style="font-size:12px" x-show="(cr.caseRecord?.stages || []).length">方式
           <select class="form-input" x-model="stDlg.mode" @change="stPreview()"><option value="append">補上缺少的階段</option></select></label>
       </div>
-      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">套用＝複製成這個案件自己的階段；之後樣板改了不影響這個案件。已存在的階段不會被改動。</div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">套用＝複製成這個案件自己的階段；之後樣板改了不影響這個案件。已存在的階段不會被改動。已發布階段樣板時，空白案件不會再自動建立 5 個預設階段。</div>
       <div x-show="stDlg.err" data-testid="st-err" style="color:var(--danger);font-size:12px;margin-bottom:8px" x-text="stDlg.err"></div>
       <template x-if="stDlg.plan">
         <div data-testid="st-preview">
@@ -4969,7 +4969,7 @@ window.CM_PARTS.push(() => ({
   },
 }))
 document.addEventListener('alpine:initialized', () => {
-  try { window.Alpine.$data(document.body).initLayout() } catch (e) { /* 沒有就略過 */ }
+  try { const d = window.Alpine.$data(document.body); d._layoutP = d.initLayout() } catch (e) { /* 沒有就略過 */ }   // _layoutP：預設階段 seed 要等旗標讀完（S-ST2）
 })
 </script>
 <script>

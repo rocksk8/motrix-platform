@@ -4094,6 +4094,12 @@
       async _seedDefaultStagesIfEmpty() {
         if (!this.q.quoteNo || !this.q.caseRecord) return
         if ((this.q.caseRecord.stages || []).length > 0) return
+        if (this._stFlag) {          // 階段樣板（S-ST2）：旗標開啟且已有發布的樣板 ⇒ 不自動建立預設階段（旗標關 ⇒ 沒有這個請求）
+          try {
+            const r = await fetch(`/api/quotations/${this.q.quoteNo}/stages/templates`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+            if (r.ok && ((await r.json()).items || []).length) return
+          } catch {}
+        }
         const labels = ['訂單確認', '材料申請出貨', '施工安裝', '客戶驗收', '尾款結清']
         for (const label of labels) {
           try {
@@ -4179,6 +4185,7 @@
       _initDone: false,
       // BP-1／Q1：版面綁定。旗標關閉／讀不到 ⇒ layoutOn=false，下面四個函式回中性值（畫面與先前逐位元相同）。
       layoutOn: false,
+      _stFlag: false,
       // Q3：自訂欄位（值存在 q.customFields；空值＝移除該欄位、整個物件空了＝移除這個鍵——和伺服端一致，存檔基準才不會對不上）
       cfIsAdmin() { return !!(this.session && this.session.role === 'superadmin') },
       cfLocked() { return this.q.status === '已送出' && !this.unlocked },
@@ -4206,7 +4213,8 @@
           const tk = (this.session && this.session.token) || (JSON.parse(localStorage.getItem('motrix_session') || '{}').token)
           if (!tk) return
           // 一個共用的設定 GET 取得兩個旗標；某個群組讀不到時逐組退路（public-flags.js），不拖垮另一個
-          const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields'], { token: tk })
+          const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_stage_templates'], { token: tk })
+          this._stFlag = !!(g.builder_stage_templates && Number(g.builder_stage_templates.enabled) === 1)   // S-ST2：開啟且有發布樣板 ⇒ 不自動建立預設階段
           // Q3：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）
           if (g.builder_custom_fields && g.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
           if (!g.builder_layout || g.builder_layout.quotation_form !== true) return
