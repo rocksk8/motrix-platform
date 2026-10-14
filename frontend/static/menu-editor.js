@@ -140,7 +140,8 @@
   }
   // T62：把這個模組剛存好的版面草稿送去『影響預覽』（伺服端記一筆『看過』）⇒ 草稿戳；治理旗標關（404）或任何失敗 ⇒ null（不帶雜湊，與過去相同）
   function previewSeen(m) {
-    return api('GET', '/api/def-governance/layout/module:' + encodeURIComponent(m) + '/impact?scope=company').then(function (d) {
+    var gkey = 'module:' + encodeURIComponent(m)       // 版面定義的 key；寫成樣板字串讓 V3.3 掃描器看到 /api/def-governance/{kind}/{key}/impact
+    return api('GET', `/api/def-governance/layout/${gkey}/impact?scope=company`).then(function (d) {
       return d && typeof d.previewHash === 'string' && d.previewHash ? d.previewHash : null
     }).catch(function () { return null })
   }
