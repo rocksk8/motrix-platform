@@ -24,18 +24,14 @@ R3：`helpers/xlsx_out.xlsx_to_html` 讀 xlsx 的列印頁首／頁尾（沒設�
 - `/api/platform/menu` 多兩個鍵，都只在開啟時才出現：`optionLists`（所有人；只含已發布的清單，頁面據此不另發請求）、`builderOptionLists`（僅最高管理者；載入編輯器）。治理：`option_list` 加入 `def_pipeline.ACTIVE_KINDS`（新增選項、改名、重排＝中性；停用＝收緊）與預覽雜湊強制名單。
 - 新設定群組 `builder_option_lists`（`enabled`，預設 0）。生成物（L1 快照、路由盤點、設定基準）由列車重產。
 - L1（新增，只增；快照由列車重產）：`helpers/settings_strict.py`（與 `wip/t62-approval-margin-r1` 相同檔案，合併時內容一致）、`helpers/alert_settings.py`（`warranty_report_days`／`warranty_mail_days`／`cert_warn_days`／`min_password_len`／`login_days`；讀不到設定＝今天的數字；安全類底線寫死：密碼最短 8 碼、登入最長 30 天）。新設定群組 `alerts`（到期預警，4 項）與 `account_security`（登入與密碼：密碼最短長度只能往上、登入有效天數只能往下；放寬方向走『待核准＋確認期間』）。`routers/auth.py` 設定／更改密碼的 8 處長度檢查與 session 期限（登入時的 `helpers/auth.is_weak_password` 維持常數 8，調高門檻不會把既有使用者鎖在門外；安全兩項是嚴格讀取：密碼規則讀不到 ⇒ 設定密碼回 503，登入天數讀不到 ⇒ 最後讀到的值或 7 天）、`helpers/company_setup` 的確認檔到期提醒、`helpers/email_notify.notify_warranty_expiry` 標題改讀這些設定（預設值下逐字相同）。
-
-## (next) — wip/t62-quote-cf-r1（Q3 報價單自訂欄位）
-
 - L1（Q3）：`helpers.builtin_fields.RECORD_TYPES` 新增記錄類型 `quotation`（報價單頂層 `customFields`；核心欄位清單＝報價單文件鍵，自訂欄位 key 不可同名）。沒有新路由、沒有介面變動；旗標沿用 `builder_custom_fields.enabled`（預設關）。
-
-## (next) — wip/t62-notify-wording-r1（S-X3 簽核通知用語；旗標 `builder_notify.enabled` 預設關）
-
 - S-X3 N 刀（wip/t62-notify-wording-r4）：報價單家族加三個通知事件——`approval:next_tier`（輪到下一層）、`approval:approved`（核准完成）、`approval:returned`（退回修改），各含站內訊息與信件事由／標題／徽章／引言／按鈕字；占位符新增 `{層}` `{總層}` `{最終審核人}` `{原單號}` `{新單號}`。與預設字完全相同的值一律放行（預設字可能含斜線、狀態字樣）；核准事件的欄位允許狀態字樣（事件鍵決定能不能說），其餘事件仍禁。編輯器改為事件分頁（一次 `GET /api/notify-templates/status` 取得全部事件；各事件各自的草稿、預覽、發布），說明文字註明不能使用 $ 與 /。`quotations._tier_msg／_approved_msg／_returned_msg` 與 `email_notify.notify_next_tier／notify_approved／notify_returned` 掛鉤；旗標關／沒有已發布範本 ⇒ 與今天逐位元相同。
 - S-X3 r3（04 稽核）：通知用語加字元白名單（NFKC 之後只接受中文、英數字與常用標點；西里爾／希臘外觀相似字、emoji 一律擋，官方字樣檢查不再能被繞過），編輯器鏡像同步（含 Cs／Co／Cf 與填充字元）；編輯器把任何空值的預覽結果視為取消（與『沒有治理元件』分開）；兩個過去自己逸出的簽核信呼叫端（獎金層外核准、勞報單層外代核）改由共用建構器統一逸出，避免雙重逸出。
 - S-X3 編輯器：`frontend/static/notify-editor.js`（簽核通知用語面板：占位符按鈕、即時預覽站內訊息／沒有財務權限視角／通知信，檢查→影響預覽→發布，待核准如實說明）；掛在 `approval-settings.html` 底部的載入器——只有最高管理者才讀一次 `builder_notify` 旗標（`MotrixPublicFlags`），旗標關著 ⇒ 不載入編輯器程式、不發其他請求。`GET /api/notify-templates/{event}/status` 多回 `need`（必含占位符）。
 - S-X3 r2（04 稽核）：信件主旨事由改為純文字（只展開占位符、去換行、上限 200 字；不再 HTML 逸出）；`notify_template` 登記功能狀態閘門（旗標或治理關閉 ⇒ 定義路由 404）；官方狀態字樣擴充（已通過／批准／審核通過／已簽核／已生效、簡體、英文 approve／passed…，英文用字界比對）；網址禁令擴充（任何 英數.英數 網域寫法與斜線）。既有問題（旗標關也成立）：`email_notify._build_html` 對簽核類信件（分類＝簽核）的標題、徽章、明細、備註、引言、按鈕、影響、建議處理一律 HTML 逸出——原本客戶名稱／備註含 `<` 會被當成標記；其他類別的呼叫端有刻意傳入 HTML，維持原樣。
 - L1（S-X3 第一刀，wip/t62-notify-wording-r1；旗標 `builder_notify.enabled` 預設關，且必須同時開啟 `builder_governance.enabled`；kind 惰性登記）：新增 `helpers/notify_templates.py`（簽核事件通知用語範本；先導事件 `approval:submitted`＝報價單送審：站內訊息、信件事由／標題／徽章／引言／按鈕字）與 `routers/notify_templates.py`（`GET /api/notify-templates/{event}/status`、`POST …/preview` 唯讀，含沒有財務權限收件人的遮蔽視角）。範本只收純文字與白名單占位符（`{單號}` `{對象}` `{標記}`），無標記、網址、隱形字元、官方狀態字樣，且必須含 `{單號}`；信件主旨前綴與分類、版型、收件人、寄送時機不可改；信件展開後 HTML 逸出，信件沒有金額占位符，站內訊息仍由 `_notify` 逐收件人遮蔽金額。治理：`def_pipeline.ACTIVE_KINDS` 加入 `notify_template`（新增或改變用語＝放寬⇒待核准；拿掉＝收緊）。`email_notify.notify_approval_request` 與 `quotations._submitted_msg` 掛鉤；旗標關／沒有已發布範本 ⇒ 站內訊息與信件主旨、內文與今天逐位元相同。
+- L1（wip/t62-mail-escape-r2，04 建議）：`mail_types.subject()` 把事由裡連續的控制字元（含換行）收成一個空白——客戶名稱／單號含換行時 ASCII 主旨標頭會讓寄信拋例外、通知無聲遺失；沒有控制字元的主旨逐位元相同。`_build_html` 的連結：單號 URL 編碼（一般單號不變）、非 http(s) 一律退回 base_url（再不行用 #），不可能變成 javascript: 連結。
+- L1（資安補強，wip/t62-mail-escape-r1）：`helpers/email_notify._build_html` 改為**預設逸出**——標題、徽章、明細列、備註、引言、按鈕、影響、建議處理一律當純文字逸出（& < > " '）；刻意帶標記的呼叫端用 `_safe()` 包起來、其中的使用者資料自己 `_esc()`（備份停擺、憑證到期、磁碟空間、標案雷達、每日任務回報修改／編輯、模組異動）。連結與來源網址只擋引號與尖括號（`&` 維持原樣）。純文字且不含這五個字元的資料，寄出的主旨與內文與逸出前逐位元相同（黃金題 tests/test_mail_escape_2026_10_14.py 對每一支 notify_* 驗證，含會計與標案雷達）。獎金分潤層外核准、勞報單層外代核不再自己逸出（避免雙重逸出）。主旨是純文字，不逸出。
 
 ## 1.136 — wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1＋wip/t60（T60 選單 hub 群組／T61 S5 內建畫面自訂欄位／S6 自訂按鈕；旗標預設關）
 
@@ -157,8 +153,6 @@ R3：`helpers/xlsx_out.xlsx_to_html` 讀 xlsx 的列印頁首／頁尾（沒設�
 - **本段涉及的 core 檔案只有三個**：`helpers/recycle_bin.py`、`helpers/audit.py`（`__l1_public__`）、`main.py`（上述中介層）＋ `core/CHANGELOG.md`、`tests/platform/l1_interface_snapshot.json`（`core_bump --pending`）；本檔只有這一個 `## (next)` 段落，列車取號（`train_number.py assign`）可直接指派。
 
 ## 1.126 — 2026-10-10（wip/t53-ab-recyclebin-p0）
-- L1（wip/t62-mail-escape-r2，04 建議）：`mail_types.subject()` 把事由裡連續的控制字元（含換行）收成一個空白——客戶名稱／單號含換行時 ASCII 主旨標頭會讓寄信拋例外、通知無聲遺失；沒有控制字元的主旨逐位元相同。`_build_html` 的連結：單號 URL 編碼（一般單號不變）、非 http(s) 一律退回 base_url（再不行用 #），不可能變成 javascript: 連結。
-- L1（資安補強，wip/t62-mail-escape-r1）：`helpers/email_notify._build_html` 改為**預設逸出**——標題、徽章、明細列、備註、引言、按鈕、影響、建議處理一律當純文字逸出（& < > " '）；刻意帶標記的呼叫端用 `_safe()` 包起來、其中的使用者資料自己 `_esc()`（備份停擺、憑證到期、磁碟空間、標案雷達、每日任務回報修改／編輯、模組異動）。連結與來源網址只擋引號與尖括號（`&` 維持原樣）。純文字且不含這五個字元的資料，寄出的主旨與內文與逸出前逐位元相同（黃金題 tests/test_mail_escape_2026_10_14.py 對每一支 notify_* 驗證，含會計與標案雷達）。獎金分潤層外核准、勞報單層外代核不再自己逸出（避免雙重逸出）。主旨是純文字，不逸出。
 - L1（新增，向下相容）：`helpers/recycle_bin.py`——刪除暫存區契約（`CAP_ADAPTER`／`CAP_DELETE`、`Adapter`、`RestoreContext`、`BinError`、`delete()`、`adapters()`、`mask_obj()`；`Adapter.after_commit(event, entity_id, snap, result)`＝commit 之後的後續動作 hook）；`reserved_ids(conn, entity_type)`＝暫存區保留中的單號（單號產生器跳過用）、`CAP_RESERVED`、`MAX_SNAPSHOT_BYTES_ADMIN`；擁有單據的模組提供 adapter、刪除端點呼叫 `delete()`，模組不在時回 None（照舊硬刪並明說）。串接點 IP-RB1／IP-RB2（暫定號）。
 - `archive._F2_FIELDS` 宣告 `recycle_bin.snapshot_json`／`files_manifest_json` 整欄為 F2（一般 JSON 備份排除、完整列只進個資資料夾）。
 - **（併入）(next) — 2026-10-10（wip/t53-ab-recyclebin-p0）；next_entity_code 跳過暫存區保留號**
