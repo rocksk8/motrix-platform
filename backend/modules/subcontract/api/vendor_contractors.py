@@ -286,12 +286,20 @@ def get_vendor_contractor(vid: int, authorization: str = Header(None)):
     return _vendor_row(row, user)
 
 
+def _check_passbook_data(data):
+    """data.bankPassbookImage 只准 data:image/ URI（與 /passbook 端點同一規則）；T63：一般 POST/PUT 的 data 原樣存，不擋會存進 file:///…。"""
+    pb = (data or {}).get("bankPassbookImage")
+    if pb and not (isinstance(pb, str) and pb.startswith("data:image/")):
+        raise HTTPException(400, "無效的圖片格式，需為 data URI")
+
+
 @router.post("/api/vendor-contractors", status_code=201)
 def create_vendor_contractor(body: VendorContractorIn, authorization: str = Header(None)):
     user = _require_user(authorization)
     require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     if user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "需要管理員權限")
+    _check_passbook_data(body.data)
     now = datetime.now().isoformat()
     conn = get_db()
     cur = conn.execute(
@@ -320,6 +328,7 @@ def update_vendor_contractor(vid: int, body: VendorContractorIn, authorization: 
     require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     if user["role"] not in ("superadmin", "admin"):
         raise HTTPException(403, "需要管理員權限")
+    _check_passbook_data(body.data)
     now = datetime.now().isoformat()
     conn = get_db()
     existing = conn.execute("SELECT data_json FROM vendor_contractors WHERE id=?", (vid,)).fetchone()
