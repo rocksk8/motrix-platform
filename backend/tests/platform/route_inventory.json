@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 861,
-  "endpoints_api": 857,
+  "endpoints_total": 862,
+  "endpoints_api": 858,
   "write_total": 467,
   "write_api": 467,
-  "get_api": 390,
-  "distinct_paths_api": 723,
+  "get_api": 391,
+  "distinct_paths_api": 724,
   "write_with_body_api": 340,
   "write_with_path_param_api": 339
  },
@@ -2051,6 +2051,11 @@
   "GET /api/shipping-notes/{note_no}/privacy-notice": {
    "w": false,
    "pp": 1,
+   "body": false
+  },
+  "GET /api/status-display": {
+   "w": false,
+   "pp": 0,
    "body": false
   },
   "GET /api/suppliers": {

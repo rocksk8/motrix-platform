@@ -4031,8 +4031,10 @@
    "modules[].coreFields.qinfo",
    "modules[].coreFields.qproject",
    "modules[].coreFields.qterms",
+   "modules[].coreFields.quote",
    "modules[].coreFields.schedule",
    "modules[].coreFields.supplier",
+   "modules[].coreFields.tab",
    "modules[].coreFields.tender",
    "modules[].coreFields.timeline",
    "modules[].coreFields.vendor",
@@ -5862,6 +5864,7 @@
    "groups[].values.procurement",
    "groups[].values.qty_mode",
    "groups[].values.quotation_form",
+   "groups[].values.quotations",
    "groups[].values.reject_final_keep",
    "groups[].values.request_log_keep_days",
    "groups[].values.require_payment_items",
@@ -6346,6 +6349,12 @@
  "/api/shipping-notes/{note_no}/privacy-notice": {
   "k": [
    "acks"
+  ],
+  "s": 200
+ },
+ "/api/status-display": {
+  "k": [
+   "enabled"
   ],
   "s": 200
  },

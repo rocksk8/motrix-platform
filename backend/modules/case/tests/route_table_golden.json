@@ -768,6 +768,7 @@
 ["DELETE", "/api/shipping-notes/{note_no}/signed-files/{file_id}", "delete_shipping_signed_file_api_shipping_notes__note_no__signed_files__file_id__delete", [["header", "authorization", false], ["path", "file_id", true], ["path", "note_no", true]], [], []]
 ["POST", "/api/shipping-notes/{note_no}/signed-toggle", "toggle_signed_api_shipping_notes__note_no__signed_toggle_post", [["header", "authorization", false], ["path", "note_no", true]], [["application/json", ""]], []]
 ["POST", "/api/shipping-notes/{note_no}/submit", "submit_shipping_note_api_shipping_notes__note_no__submit_post", [["header", "authorization", false], ["path", "note_no", true]], [], []]
+["GET", "/api/status-display", "get_status_display_api_status_display_get", [["header", "authorization", false]], [], []]
 ["GET", "/api/suppliers", "list_suppliers_api_suppliers_get", [["header", "authorization", false]], [], []]
 ["POST", "/api/suppliers", "create_supplier_api_suppliers_post", [["header", "authorization", false]], [["application/json", "#/components/schemas/SupplierIn"]], []]
 ["DELETE", "/api/suppliers/{sid}", "delete_supplier_api_suppliers__sid__delete", [["header", "authorization", false], ["path", "sid", true]], [], []]

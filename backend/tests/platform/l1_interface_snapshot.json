@@ -1422,6 +1422,26 @@
    "run_edge_pdf": "def(cmd)",
    "version_sort_key": "def(version)"
   },
+  "helper:status_display": {
+   "CONTEXTS": "const",
+   "ENGLISH_TOKENS": "const",
+   "KEY": "const",
+   "KIND": "const",
+   "OFFICIAL_WORDS": "const",
+   "STATUS_KEYS": "const",
+   "TONES": "const",
+   "changed_fields": "def(table)",
+   "compare": "def(old, new)",
+   "defaults": "def()",
+   "effective_table": "def(body)",
+   "enabled": "def(conn=…)",
+   "ensure_registered": "def()",
+   "flag_on": "def(conn=…)",
+   "meta": "def()",
+   "public_payload": "def(conn=…)",
+   "published_body": "def(conn)",
+   "validate_table": "def(body, key=…)"
+  },
   "helper:storage_locations": {
    "KINDS": "const",
    "LABELS": "const",
