@@ -1093,8 +1093,12 @@
    "enabled": "def(conn=…)",
    "ensure_kind": "def()",
    "lists_for_menu": "def(conn=…)",
+   "payment_stage_display": "def(value, item=…)",
+   "payment_stage_labels": "def(list_id=…, conn=…)",
+   "payment_stage_name": "def(item, idx)",
    "preview": "def(list_id, body)",
-   "registered": "def()"
+   "registered": "def()",
+   "request_stage_label": "def(code, fallback=…)"
   },
   "helper:part_catalog": {
    "PART_CATEGORIES": "const",
