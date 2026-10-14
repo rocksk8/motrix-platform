@@ -16,6 +16,8 @@ from helpers import uploads as _up
 
 #: 硬底線：任何插槽都不可能收這個集合以外的副檔名（= 今天各資料夾放行範圍的聯集；不含 html／svg／js／exe／壓縮檔…）。
 HARD_EXTS = frozenset({".jpg", ".jpeg", ".png", ".pdf", ".heic", ".heif", ".docx", ".xlsx", ".doc", ".xls"})
+#: 檔名中段出現這些副檔名（例：`a.exe.pdf`）一律拒絕（雙副檔名）。只套用在帶政策的上傳（`policy is not None`）。
+DANGEROUS_EXTS = frozenset({".exe", ".bat", ".cmd", ".com", ".scr", ".js", ".vbs", ".ps1", ".py", ".php", ".aspx", ".dll", ".lnk", ".html", ".htm", ".svg"})
 
 
 @dataclass(frozen=True)
@@ -76,6 +78,7 @@ class SlotPolicy:
     accept: frozenset
     max_files: int = 0              # 每張單據累計上限；0＝不另限（只受單檔上限）
     max_request_bytes: int = 0      # 一次請求合計；0＝不另限
+    max_file_bytes: int = 0         # 單檔上限（位元組）；0＝只受平台上限（設定中心 uploads.max_file_mb）
     subfolder: str = ""
     slot: str = ""
     builtin: bool = True
@@ -110,6 +113,16 @@ def builtin_policy(code: str) -> SlotPolicy:
 
 
 def policy(doc_type: str, slot_key: str = "", conn=None) -> SlotPolicy:
-    """單據類型（＋插槽鍵）⇒ 政策。S1：永遠回內建政策（管理者插槽在 S2）；單據類型不認得 ⇒ KeyError（不猜）。"""
+    """單據類型（＋插槽鍵）⇒ 政策。旗標關閉或內建鍵 ⇒ 內建政策；單據類型不認得 ⇒ KeyError（不猜）。
+    旗標開啟且給了管理者宣告的插槽鍵 ⇒ 已發布定義的政策（找不到 ⇒ LookupError）。**不檢查上傳者權限**——要檢查請用
+    `helpers.attachment_slots.slot_policy(conn, doc_type, slot_key, user)`。"""
     code = DOC_CODES[doc_type]
-    return builtin_policy(code)
+    if slot_key in ("", "signed") or not enabled(conn):
+        if slot_key not in ("", "signed"):
+            raise LookupError("附件種類未開放：%s" % slot_key)
+        return builtin_policy(code)
+    from helpers import attachment_slots as AS
+    s = next((x for x in AS.published_slots(conn, doc_type) if x.get("key") == slot_key), None)
+    if s is None or s.get("disabled"):
+        raise LookupError("沒有這個附件種類：%s" % slot_key)
+    return AS._policy_of(doc_type, s)                                  # noqa: SLF001

@@ -224,8 +224,14 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
         ext = os.path.splitext(upload.filename or '')[1].lower()
         if ext not in allowed:
             raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 {allowed_label}）")
+        if policy is not None:                                  # 雙副檔名（`a.exe.pdf`）：只套用在帶政策的上傳，None 路徑不變
+            inner = ['.' + x for x in (upload.filename or '').lower().split('.')[1:-1]]
+            if any(e in _ss.DANGEROUS_EXTS for e in inner):
+                raise HTTPException(400, f"檔名含不允許的雙重副檔名：{upload.filename}")
         raw = await upload.read()
         file_cap = max_file_bytes()
+        if policy is not None and policy.max_file_bytes:
+            file_cap = min(file_cap, policy.max_file_bytes)
         if len(raw) > file_cap:
             raise HTTPException(400, f"檔案過大：{upload.filename}（單檔上限 {file_cap // (1024 * 1024)}MB）")
         if not raw:

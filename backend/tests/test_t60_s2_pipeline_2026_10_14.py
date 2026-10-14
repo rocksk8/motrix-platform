@@ -48,7 +48,7 @@ def test_layout_classification():
     assert c("layout", {"ops": [hide]}, {"ops": []})[0] == "loosen"
     assert c("layout", {"ops": []}, {"ops": [rel]})[0] == "neutral"
     assert c("layout", {"ops": []}, {"ops": [{"op": "weird"}]})[0] == "loosen"
-    assert P.ACTIVE_KINDS == ("custom_fields", "layout")
+    assert P.ACTIVE_KINDS == ("custom_fields", "layout", "attachment_slot")
 
 
 # ── 端點 ────────────────────────────────────────────────────────────────────────────
