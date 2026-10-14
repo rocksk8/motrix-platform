@@ -3708,6 +3708,12 @@
   ],
   "s": 200
  },
+ "/api/option-lists/{list_id}/status": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/org/tree": {
   "k": [
    "[].departments",
@@ -4322,6 +4328,8 @@
  },
  "/api/project-margin/config": {
   "k": [
+   "discountReviewAbove",
+   "maxValidDays",
    "minItemMarginPct",
    "warnPct"
   ],
@@ -5784,14 +5792,17 @@
    "groups[].values.case_management",
    "groups[].values.case_name_max_chars",
    "groups[].values.case_name_source",
+   "groups[].values.cert_warn_days",
    "groups[].values.cloud_daily_keep_days",
    "groups[].values.cloud_monthly_keep_days",
    "groups[].values.cloud_weekly_keep_days",
    "groups[].values.combo_view_default_open",
    "groups[].values.combo_view_max",
    "groups[].values.confirm_period_days",
+   "groups[].values.customers",
    "groups[].values.default_status",
    "groups[].values.devices",
+   "groups[].values.discount_review_above",
    "groups[].values.enabled",
    "groups[].values.enforce_custom_fields",
    "groups[].values.enforce_layout",
@@ -5816,9 +5827,11 @@
    "groups[].values.local_db_keep_days",
    "groups[].values.local_pre_update_keep",
    "groups[].values.lock_scope",
+   "groups[].values.login_days",
    "groups[].values.mail_cap",
    "groups[].values.mail_window_minutes",
    "groups[].values.max_file_mb",
+   "groups[].values.max_valid_days",
    "groups[].values.min_item_margin_pct",
    "groups[].values.move_out_of_sent",
    "groups[].values.name_layout",
@@ -5827,6 +5840,7 @@
    "groups[].values.notification_keep_days",
    "groups[].values.on_denied",
    "groups[].values.over_qty",
+   "groups[].values.password_min_len",
    "groups[].values.payslip_show_name",
    "groups[].values.prefill_unsigned",
    "groups[].values.procurement",
@@ -5843,6 +5857,9 @@
    "groups[].values.unlock_edit_signed",
    "groups[].values.vendor_contractors",
    "groups[].values.warn_pct",
+   "groups[].values.warranty_mail_early_days",
+   "groups[].values.warranty_mail_urgent_days",
+   "groups[].values.warranty_report_days",
    "groups[].values.who_may",
    "plannedFeatures",
    "plannedFeatures[].code",

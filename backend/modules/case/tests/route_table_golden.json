@@ -454,6 +454,8 @@
 ["PATCH", "/api/notifications/{notif_id}/read", "mark_notification_read_api_notifications__notif_id__read_patch", [["header", "authorization", false], ["path", "notif_id", true]], [], []]
 ["GET", "/api/now", "server_now_api_now_get", [], [], []]
 ["GET", "/api/online-users", "list_online_users_api_online_users_get", [["header", "authorization", false]], [], []]
+["POST", "/api/option-lists/{list_id}/preview", "option_list_preview_api_option_lists__list_id__preview_post", [["header", "authorization", false], ["path", "list_id", true]], [["application/json", ""]], []]
+["GET", "/api/option-lists/{list_id}/status", "option_list_status_api_option_lists__list_id__status_get", [["header", "authorization", false], ["path", "list_id", true]], [], []]
 ["POST", "/api/org/departments", "create_department_api_org_departments_post", [["header", "authorization", false]], [["application/json", "#/components/schemas/DepartmentIn"]], []]
 ["DELETE", "/api/org/departments/{department_id}", "delete_department_api_org_departments__department_id__delete", [["header", "authorization", false], ["path", "department_id", true]], [], []]
 ["PUT", "/api/org/departments/{department_id}", "update_department_api_org_departments__department_id__put", [["header", "authorization", false], ["path", "department_id", true]], [["application/json", "#/components/schemas/DepartmentIn"]], []]
