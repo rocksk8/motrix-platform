@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1373,
+  "tests": 1374,
   "unmapped": 13,
   "kinds": {
-   "api": 764,
+   "api": 765,
    "e2e": 306,
    "audit": 176,
    "unit": 127
@@ -17272,6 +17272,55 @@
     ]
    }
   },
+  "backend/tests/platform/test_clause_titles_t62.py": {
+   "kind": "api",
+   "units": [
+    "core:pdf_gen",
+    "dir:backend/modules/",
+    "dir:backend/modules/case/",
+    "dir:backend/modules/case/api/",
+    "dir:backend/routers/",
+    "file:backend/helpers/__init__.py",
+    "helper:clause_titles",
+    "helper:export_templates",
+    "js:static/export-editor.js",
+    "mod:case/__init__",
+    "mod:case/api/quotations",
+    "mod:case/quote_terms",
+    "page:pages/quotation-form.html",
+    "plat:source_tree",
+    "router:def_pipeline",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/clause_titles.py",
+     "backend/helpers/export_templates.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/quote_terms.py",
+     "backend/routers/def_pipeline.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html",
+     "frontend/static/export-editor.js"
+    ],
+    "path": [
+     "backend/modules/",
+     "backend/modules/case/",
+     "backend/modules/case/api/",
+     "backend/modules/case/api/quotations.py",
+     "backend/pdf_gen.py",
+     "backend/routers/",
+     "backend/routers/system.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_config_ledger_t54.py": {
    "kind": "api",
    "units": [
@@ -31530,10 +31579,12 @@
     "helper:settings_groups",
     "helper:settings_registry",
     "mod:analytics/api/reports",
-    "page:pages/reports.html"
+    "page:pages/reports.html",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/finance_params.py",
@@ -31547,8 +31598,7 @@
      "frontend/pages/reports.html"
     ],
     "path": [
-     "backend/modules/analytics/api/reports.py",
-     "frontend/pages/reports.html"
+     "backend/modules/analytics/api/reports.py"
     ]
    },
    "login_fixture": true
