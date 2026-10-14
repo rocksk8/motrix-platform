@@ -44,7 +44,8 @@ def test_template_has_the_ask_bar_and_publish_restore_use_it():
     for tid in ("ml-ask", "ml-ask-yes", "ml-ask-no"):
         assert 'data-testid="%s"' % tid in src
     pub = src[src.index("async _publish()"):src.index("async _restore(")]
-    assert "await this._ask(" in pub and pub.index("await this._ask(") < pub.index("'/publish?scope='")     # 取消就不送發布請求
+    # 取消就不送發布請求：發布前的把關是頁內審閱面板（T62：MotrixDefGovernance.review，不是原生對話框）
+    assert "MotrixDefGovernance.review(" in pub and pub.index("MotrixDefGovernance.review(") < pub.index("'/publish?scope='")
     res = src[src.index("async _restore("):]
     res = res[:res.index("this._j(")]
     assert "await this._ask(" in res                                                                       # 先問，才送還原請求

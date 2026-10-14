@@ -392,15 +392,16 @@
           this.busy = false
           return
         }
-        // 治理（builder_governance 開啟時才有）：發布前影響預覽。旗標關閉／未載入 ⇒ 完全略過，行為與先前相同。
-        if (window.MotrixDefGovernance && await window.MotrixDefGovernance.available()) {
-          var pv = await window.MotrixDefGovernance.preview({ kind: 'layout', key: this._key(), scope: this.scope })
-          if (pv.ok && pv.data && pv.data.changeCount && !(await this._ask('這次發布會變更 ' + pv.data.changeCount + ' 項設定（影響預覽已記錄），確定要發布？'))) {
-            this.msg = '已取消發布'; this.busy = false; return
-          }
+        // 治理（builder_governance 開啟時才有）：發布前影響預覽（T62：看過的雜湊 preview_hash 隨發布送出；管理者開啟
+        // 「版面發布前強制先看預覽」時，沒帶雜湊會被後端擋下）。旗標關閉／未載入 ⇒ 完全略過，發布請求與先前逐位元相同。
+        var pubBody = { note: this.note }
+        if (window.MotrixDefGovernance && await window.MotrixDefGovernance.available('layout')) {
+          var pvh = await window.MotrixDefGovernance.review({ kind: 'layout', key: this._key(), scope: this.scope, title: '發布前影響預覽：版面' })
+          if (!pvh) { this.msg = '已取消發布'; this.busy = false; return }
+          pubBody.preview_hash = pvh
         }
         var r = await this._j(this._base() + '/publish?scope=' + encodeURIComponent(this.scope),
-                              { method: 'POST', body: JSON.stringify({ note: this.note }) })
+                              { method: 'POST', body: JSON.stringify(pubBody) })
         if (!r.ok) {
           this._mark(r.d.problems || [])
           this.msg = '發布失敗：' + (r.d.detail || r.status)
