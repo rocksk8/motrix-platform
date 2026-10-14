@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from db import get_db, spawn_bg_thread
 from helpers import download_name
+from helpers import export_templates as _ET
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_daily_task_assigned, notify_daily_task_completed, notify_daily_task_overdue,
@@ -728,11 +729,13 @@ def get_task_edit_log(task_id: int, authorization: str = Header(None)):
     return {"items": result}
 
 
-@router.get("/api/daily-tasks/{task_id}/history/export")
-def export_task_history(task_id: int, authorization: str = Header(None)):
-    """Stream all occurrences + completions as UTF-8-BOM CSV (Excel-compatible)."""
-    user = _require_user(authorization)
-    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
+# ── BP-3：歷程 CSV 可套匯出範本（builder_exports.enabled 預設關；沒有已發布範本 ⇒ 完全走原本的欄位與標題）──────────────────
+_HISTORY_COLS = ("title", "date", "weekday", "assignee", "status", "at", "report")
+
+
+def _history_load(user, task_id):
+    """歷程匯出的資料載入與存取規則（匯出端點與範本預覽共用——預覽的『可見真實列』就是這位使用者真的匯得出來的列，遮蔽優先）。
+    ⇒ (task_row, assigned, dn_map, comp_map, all_occs)；工作事項不存在 ⇒ 404、非最高管理者且未被指派 ⇒ 403。"""
     conn = get_db()
     row = conn.execute("SELECT * FROM daily_tasks WHERE id=?", (task_id,)).fetchone()
     if not row:
@@ -783,24 +786,78 @@ def export_task_history(task_id: int, authorization: str = Header(None)):
             cur += _timedelta(days=1)
     all_occs.sort(reverse=True)
     conn.close()
+    return d, assigned, dn_map, comp_map, all_occs
 
-    from helpers.xlsx_out import csv_safe
+
+def _history_vals(d, assigned, dn_map, comp_map, all_occs):
+    """逐列（每個日期 × 每位指派人員）產出 7 個欄位值，順序＝`_HISTORY_COLS`。"""
     _WD = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"]
-    buf    = _io.StringIO()
-    writer = _csv.writer(buf)
-    writer.writerow(["工作事項", "日期", "星期", "指派人員", "完成狀態", "完成時間", "回報內容"])
     for occ_date in all_occs:
         comps = comp_map.get(occ_date, [])
         wd = _WD[_date.fromisoformat(occ_date).weekday()]
         for u in assigned:
             c = next((x for x in comps if x["username"] == u), None)
-            writer.writerow([csv_safe(x) for x in (       # 工作事項標題、回報內容是自由文字：= + - @ Tab CR 開頭要中和（CSV 公式注入）
+            yield (
                 d["title"], occ_date, wd,
                 dn_map.get(u, u),
                 "已完成" if (c and c["completed"]) else "未完成",
                 (c["at"]     if c else ""),
                 (c["report"] if c else ""),
-            )])
+            )
+
+
+def _history_preview_rows(conn, viewer, n):
+    """預覽用的『可見真實列』：只含這位使用者用匯出端點真的匯得出來的工作事項（同一個 `_history_load`，含 403／404 規則）。唯讀。"""
+    try:
+        require_any_module(viewer, ('daily_task', 'case_manage'), "每日工作事項")
+    except HTTPException:
+        return []
+    out = []
+    for r in conn.execute("SELECT DISTINCT task_id FROM daily_task_completions ORDER BY task_id DESC LIMIT 50").fetchall():
+        try:
+            parts = _history_load(viewer, r["task_id"])
+        except HTTPException:
+            continue
+        for vals in _history_vals(*parts):
+            out.append(dict(zip(_HISTORY_COLS, vals)))
+            if len(out) >= n:
+                return out
+    return out
+
+
+_ET.register_export(
+    "daily_tasks:task-history", label="每日任務歷程（CSV）", formats=("csv",),
+    columns=[{"id": "title", "label": "工作事項"}, {"id": "date", "label": "日期"}, {"id": "weekday", "label": "星期"},
+             {"id": "assignee", "label": "指派人員"}, {"id": "status", "label": "完成狀態"}, {"id": "at", "label": "完成時間"},
+             {"id": "report", "label": "回報內容"}],
+    sample_rows=[{"title": "每週設備巡檢", "date": "2026-10-12", "weekday": "週一", "assignee": "王小明", "status": "已完成",
+                  "at": "2026-10-12T17:30:00", "report": "三台已檢查，無異常"},
+                 {"title": "每週設備巡檢", "date": "2026-10-05", "weekday": "週一", "assignee": "王小明", "status": "未完成", "at": "", "report": ""}],
+    rows_provider=_history_preview_rows)
+
+
+@router.get("/api/daily-tasks/{task_id}/history/export")
+def export_task_history(task_id: int, authorization: str = Header(None)):
+    """Stream all occurrences + completions as UTF-8-BOM CSV (Excel-compatible)."""
+    user = _require_user(authorization)
+    require_any_module(user, ('daily_task', 'case_manage'), "每日工作事項")
+    d, assigned, dn_map, comp_map, all_occs = _history_load(user, task_id)
+
+    from helpers.xlsx_out import csv_safe
+    tpl = _ET.resolve("daily_tasks:task-history")        # BP-3：旗標關／沒有已發布範本 ⇒ None ⇒ 下面走原本的欄位與標題（逐位元相同）
+    buf    = _io.StringIO()
+    writer = _csv.writer(buf)
+    if tpl is None:
+        writer.writerow(["工作事項", "日期", "星期", "指派人員", "完成狀態", "完成時間", "回報內容"])
+    recs = []
+    for vals in _history_vals(d, assigned, dn_map, comp_map, all_occs):
+        if tpl is None:
+            writer.writerow([csv_safe(x) for x in vals])     # 工作事項標題、回報內容是自由文字：= + - @ Tab CR 開頭要中和（CSV 公式注入）
+        else:
+            recs.append(dict(zip(_HISTORY_COLS, vals)))
+    if tpl is not None:
+        for row in _ET.render_csv_rows("daily_tasks:task-history", tpl, recs, user)[0]:      # 欄位／標題／順序依範本；每格仍經 csv_safe；money／權限欄位再驗一次
+            writer.writerow(row)
 
     from helpers.xlsx_out import log_export
     log_export(authorization, "csv", "daily_tasks", "task-history", {"task_id": task_id}, len(all_occs) * max(len(assigned), 1))   # 每次匯出都留紀錄（2026-09-30）

@@ -1141,7 +1141,7 @@
       <div class="form-section">
         <div class="section-title">
           <div class="section-num">基</div>
-          報價資訊
+          <span x-text="secLabel('qbasic', '報價資訊')">報價資訊</span>
           <div style="margin-left:auto;display:flex;gap:6px">
             <button class="toggle-btn" :class="{active:showCostCols}" @click="showCostCols=!showCostCols">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
@@ -1150,8 +1150,8 @@
           </div>
         </div>
         <div class="form-grid form-grid-4">
-          <div class="form-group">
-            <label class="form-label">報價單號</label>
+          <div class="form-group" x-show="fShown('qbasic', 'quoteNo')" :style="fo('qbasic', 'quoteNo')">
+            <label class="form-label"><span x-text="fLabel('qbasic', 'quoteNo', '報價單號')">報價單號</span></label>
             <input class="form-input readonly" :value="q.quoteNo" readonly>
           </div>
           <!-- QL13/QL14：據點選擇器。
@@ -1160,8 +1160,8 @@
                QL14：`locations.length > 1` 才顯示。
                一個只有一個選項的下拉選單，**是在問一個沒有選擇的問題**，
                而既有安裝（只有一個據點、或根本沒設過）什麼都不會看到。 -->
-          <div class="form-group" x-show="locations.length > 1">
-            <label class="form-label">開立據點</label>
+          <div class="form-group" x-show="(locations.length > 1) && fShown('qbasic', 'locationId')" :style="fo('qbasic', 'locationId')">
+            <label class="form-label"><span x-text="fLabel('qbasic', 'locationId', '開立據點')">開立據點</span></label>
             <select class="form-input" x-model="q.locationId" @change="setDirty">
               <template x-for="loc in locations" :key="loc.id">
                 <option :value="loc.id" x-text="loc.name"></option>
@@ -1171,25 +1171,25 @@
               決定這張單印出來的抬頭、統編與匯款帳號。
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">報價日期</label>
+          <div class="form-group" x-show="fShown('qbasic', 'quoteDate')" :style="fo('qbasic', 'quoteDate')">
+            <label class="form-label"><span x-text="fLabel('qbasic', 'quoteDate', '報價日期')">報價日期</span></label>
             <input class="form-input" type="date" x-model="q.quoteDate" @change="setDirty">
           </div>
-          <div class="form-group">
-            <label class="form-label">有效天數 <span class="req">*</span></label>
+          <div class="form-group" x-show="fShown('qbasic', 'validDays')" :style="fo('qbasic', 'validDays')">
+            <label class="form-label"><span x-text="fLabel('qbasic', 'validDays', '有效天數')">有效天數</span> <span class="req">*</span></label>
             <input class="form-input" type="number" min="1" x-model.number="q.validDays"
-                   :class="q.validDays > 30 ? 'warn' : ''" @change="setDirty(); checkApproval()">
-            <div class="form-hint warn" x-show="q.validDays > 30">超過 30 天需主管審核</div>
+                   :class="q.validDays > pmCfg.maxValidDays ? 'warn' : ''" @change="setDirty(); checkApproval()">
+            <div class="form-hint warn" x-show="q.validDays > pmCfg.maxValidDays" x-text="'超過 ' + pmCfg.maxValidDays + ' 天需主管審核'">超過 30 天需主管審核</div>
           </div>
-          <div class="form-group">
-            <label class="form-label">版本</label>
+          <div class="form-group" x-show="fShown('qbasic', 'version')" :style="fo('qbasic', 'version')">
+            <label class="form-label"><span x-text="fLabel('qbasic', 'version', '版本')">版本</span></label>
             <input class="form-input readonly" :value="FORM_VERSION" readonly>
           </div>
         </div>
         <div class="form-grid form-grid-3" style="margin-top:12px">
-          <div class="form-group">
+          <div class="form-group" x-show="fShown('qbasic', 'salesPerson')" :style="fo('qbasic', 'salesPerson')">
             <label class="form-label">
-              報價人
+              <span x-text="fLabel('qbasic', 'salesPerson', '報價人')">報價人</span>
               <template x-if="isSalesPersonChanged">
                 <span style="margin-left:5px;font-size:10px;font-weight:600;color:#d97706;background:#fef3c7;border-radius:3px;padding:1px 5px">代理</span>
               </template>
@@ -1205,12 +1205,12 @@
               <input class="form-input readonly" x-model="q.salesPerson" readonly>
             </template>
           </div>
-          <div class="form-group">
-            <label class="form-label">聯繫電話</label>
+          <div class="form-group" x-show="fShown('qbasic', 'salesPhone')" :style="fo('qbasic', 'salesPhone')">
+            <label class="form-label"><span x-text="fLabel('qbasic', 'salesPhone', '聯繫電話')">聯繫電話</span></label>
             <input class="form-input readonly" x-model="q.salesPhone" readonly>
           </div>
-          <div class="form-group">
-            <label class="form-label">E-MAIL</label>
+          <div class="form-group" x-show="fShown('qbasic', 'salesEmail')" :style="fo('qbasic', 'salesEmail')">
+            <label class="form-label"><span x-text="fLabel('qbasic', 'salesEmail', 'E-MAIL')">E-MAIL</span></label>
             <input class="form-input readonly" x-model="q.salesEmail" readonly>
           </div>
         </div>
@@ -1220,11 +1220,11 @@
       <div class="form-section">
         <div class="section-title">
           <div class="section-num">一</div>
-          客戶資訊
+          <span x-text="secLabel('qcustomer', '客戶資訊')">客戶資訊</span>
         </div>
         <div class="form-grid form-grid-2" style="margin-bottom:12px">
-          <div class="form-group">
-            <label class="form-label">公司名稱 <span class="req">*</span></label>
+          <div class="form-group" x-show="fShown('qcustomer', 'customerName')" :style="fo('qcustomer', 'customerName')">
+            <label class="form-label"><span x-text="fLabel('qcustomer', 'customerName', '公司名稱')">公司名稱</span> <span class="req">*</span></label>
             <div style="position:relative">
               <input class="form-input" type="text" x-model="q.customerName"
                      placeholder="輸入或搜尋客戶…" autocomplete="off"
@@ -1277,8 +1277,8 @@
               </template>
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">統一編號</label>
+          <div class="form-group" x-show="fShown('qcustomer', 'customerTaxId')" :style="fo('qcustomer', 'customerTaxId')">
+            <label class="form-label"><span x-text="fLabel('qcustomer', 'customerTaxId', '統一編號')">統一編號</span></label>
             <div style="display:flex;gap:6px;align-items:center">
               <input class="form-input" type="text" x-model="q.customerTaxId" placeholder="00000000" @change="setDirty" style="flex:1">
               <button type="button" @click="q.pdfShow.taxId=!q.pdfShow.taxId;setDirty()"
@@ -1320,8 +1320,8 @@
         </template>
 
         <div class="form-grid form-grid-2" style="margin-bottom:12px">
-          <div class="form-group">
-            <label class="form-label">聯絡人</label>
+          <div class="form-group" x-show="fShown('qcustomer', 'contactName')" :style="fo('qcustomer', 'contactName')">
+            <label class="form-label"><span x-text="fLabel('qcustomer', 'contactName', '聯絡人')">聯絡人</span></label>
             <div style="display:flex;gap:6px;align-items:center">
               <input class="form-input" type="text" x-model="q.contactName" placeholder="姓名" @change="setDirty" style="flex:1">
               <button type="button" @click="q.pdfShow.contactName=!q.pdfShow.contactName;setDirty()"
@@ -1330,8 +1330,8 @@
                       x-text="q.pdfShow.contactName ? '顯示' : '隱藏'"></button>
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">電話 / 分機</label>
+          <div class="form-group" x-show="fShown('qcustomer', 'contactPhone')" :style="fo('qcustomer', 'contactPhone')">
+            <label class="form-label"><span x-text="fLabel('qcustomer', 'contactPhone', '電話 / 分機')">電話 / 分機</span></label>
             <div style="display:flex;gap:6px;align-items:center">
               <input class="form-input" type="text" x-model="q.contactPhone" placeholder="04-XXXX-XXXX" @change="setDirty" style="flex:1">
               <button type="button" @click="q.pdfShow.contactPhone=!q.pdfShow.contactPhone;setDirty()"
@@ -1342,8 +1342,8 @@
           </div>
         </div>
         <div class="form-grid form-grid-2" style="margin-bottom:12px">
-          <div class="form-group">
-            <label class="form-label">E-mail</label>
+          <div class="form-group" x-show="fShown('qcustomer', 'contactEmail')" :style="fo('qcustomer', 'contactEmail')">
+            <label class="form-label"><span x-text="fLabel('qcustomer', 'contactEmail', 'E-mail')">E-mail</span></label>
             <div style="display:flex;gap:6px;align-items:center">
               <input class="form-input" type="email" x-model="q.contactEmail" placeholder="xxx@company.com" @change="setDirty" style="flex:1">
               <button type="button" @click="q.pdfShow.contactEmail=!q.pdfShow.contactEmail;setDirty()"
@@ -1352,8 +1352,8 @@
                       x-text="q.pdfShow.contactEmail ? '顯示' : '隱藏'"></button>
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">傳真</label>
+          <div class="form-group" x-show="fShown('qcustomer', 'contactFax')" :style="fo('qcustomer', 'contactFax')">
+            <label class="form-label"><span x-text="fLabel('qcustomer', 'contactFax', '傳真')">傳真</span></label>
             <div style="display:flex;gap:6px;align-items:center">
               <input class="form-input" type="text" x-model="q.contactFax" placeholder="04-XXXX-XXXX" @change="setDirty" style="flex:1">
               <button type="button" @click="q.pdfShow.contactFax=!q.pdfShow.contactFax;setDirty()"
@@ -1390,8 +1390,8 @@
                style="margin-top:6px;font-size:11px;color:var(--warning)">尚未記錄個資告知</div>
           <div x-show="privacyErr" data-privacy-error style="margin-top:6px;font-size:11px;color:var(--danger)" x-text="privacyErr"></div>
         </div>
-        <div class="form-group">
-          <label class="form-label">送貨地址 / 發票地址</label>
+        <div class="form-group" x-show="fShown('qcustomer', 'deliveryAddress')" :style="fo('qcustomer', 'deliveryAddress')">
+          <label class="form-label"><span x-text="fLabel('qcustomer', 'deliveryAddress', '送貨地址 / 發票地址')">送貨地址 / 發票地址</span></label>
           <div style="display:flex;gap:6px;align-items:center">
             <input class="form-input" type="text" x-model="q.deliveryAddress" placeholder="縣市區路段號" @change="setDirty" style="flex:1">
             <button type="button" @click="q.pdfShow.deliveryAddress=!q.pdfShow.deliveryAddress;setDirty()"
@@ -1404,17 +1404,45 @@
 
       <!-- 二、案件資訊-->
       <div class="form-section">
-        <div class="section-title"><div class="section-num">二</div>案件資訊</div>
+        <div class="section-title"><div class="section-num">二</div><span x-text="secLabel('qproject', '案件資訊')">案件資訊</span></div>
         <div class="form-grid form-grid-2">
-          <div class="form-group">
-            <label class="form-label">案件名稱 <span class="req">*</span></label>
+          <div class="form-group" x-show="fShown('qproject', 'projectName')" :style="fo('qproject', 'projectName')">
+            <label class="form-label"><span x-text="fLabel('qproject', 'projectName', '案件名稱')">案件名稱</span> <span class="req">*</span></label>
             <input class="form-input" type="text" x-model="q.projectName" placeholder="如：unifi 網路架設，全棟別墅" @change="setDirty">
           </div>
-          <div class="form-group">
-            <label class="form-label">交貨地點</label>
+          <div class="form-group" x-show="fShown('qproject', 'deliveryLocation')" :style="fo('qproject', 'deliveryLocation')">
+            <label class="form-label"><span x-text="fLabel('qproject', 'deliveryLocation', '交貨地點')">交貨地點</span></label>
             <input class="form-input" type="text" x-model="q.deliveryLocation" placeholder="地址或說明" @change="setDirty">
           </div>
         </div>
+        <!-- Q3：自訂欄位（旗標 builder_custom_fields.enabled 開啟才畫；值存在報價單頂層 customFields；只給能開這張報價單的內部人員，不進 PDF／預覽／回簽頁） -->
+        <template x-if="$store.cf && $store.cf.enabled && ($store.cf.list().length || cfIsAdmin() || $store.cf.mode !== 'live')">
+          <div data-testid="cf-section" style="margin-top:14px">
+            <div class="form-label" style="display:flex;align-items:center;gap:8px">自訂欄位
+              <span x-show="$store.cf.mode !== 'live'" x-text="$store.cf.previewLabel" style="color:var(--warning);font-size:11px"></span>
+              <button type="button" class="btn btn-ghost btn-sm" data-testid="cf-edit-open" x-show="cfIsAdmin()" @click="MotrixCustomFields.openEditor()" style="margin-left:auto;font-weight:400">編輯自訂欄位</button>
+            </div>
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px" x-show="!$store.cf.list().length">還沒有自訂欄位。</div>
+            <div class="form-grid form-grid-2">
+              <template x-for="f in $store.cf.list()" :key="f.key">
+                <div class="form-group" :data-cf-field="f.key">
+                  <label class="form-label" x-text="f.label"></label>
+                  <template x-if="f.type === 'text'"><input class="form-input" type="text" :maxlength="f.maxLength || 200" :value="cfGet(f.key) || ''" @input="cfSet(f.key, $event.target.value)"></template>
+                  <template x-if="f.type === 'date'"><input class="form-input" type="date" :value="cfGet(f.key) || ''" @input="cfSet(f.key, $event.target.value)"></template>
+                  <template x-if="f.type === 'select'">
+                    <select class="form-input" :value="cfGet(f.key) || ''" @change="cfSet(f.key, $event.target.value)">
+                      <option value="">— 選擇 —</option>
+                      <template x-if="cfGet(f.key) && !(f.options || []).includes(cfGet(f.key))"><option :value="cfGet(f.key)" x-text="cfGet(f.key) + '（已不在選項內）'" selected></option></template>
+                      <template x-for="o in (f.options || [])" :key="o"><option :value="o" x-text="o" :selected="cfGet(f.key) === o"></option></template>
+                    </select>
+                  </template>
+                  <template x-if="f.type === 'checkbox'"><input type="checkbox" style="width:auto" :disabled="cfLocked()" :checked="cfGet(f.key) === true" @change="cfSet(f.key, $event.target.checked)"></template>
+                  <div style="font-size:11px;color:var(--text-dim);margin-top:2px" x-show="f.help" x-text="f.help"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
       </div>
 
       <!-- 三、品項明細 -->
@@ -1530,7 +1558,7 @@
                                style="width:62px">
                         <span style="font-size:11px;color:var(--text-dim)">%</span>
                       </div>
-                      <div x-show="item.margin < 0.30 && item.cost > 0"
+                      <div x-show="item.margin < pmCfg.minItemMarginPct / 100 && item.cost > 0"
                            style="font-size:9px;color:var(--danger);font-weight:600;text-align:center">需審核</div>
                     </td>
                   </template>
@@ -1728,7 +1756,7 @@
 
       <!-- 五、報價條件 -->
       <div class="form-section">
-        <div class="section-title"><div class="section-num">五</div>報價條件</div>
+        <div class="section-title"><div class="section-num">五</div><span x-text="secLabel('qterms', '報價條件')">報價條件</span></div>
 
         <!-- 條款組（2026-09-14）：不同性質的案子有各自的付款/驗收/保固條件，
              例如「純購料」跟「工程」差很多。點方塊整組套用，superadmin 可建立
@@ -1763,9 +1791,9 @@
         </div>
 
         <div class="form-grid" style="gap:14px">
-          <div class="form-group">
+          <div class="form-group" x-show="fShown('qterms', 'paymentTerms')" :style="fo('qterms', 'paymentTerms')">
             <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-              付款條件
+              <span x-text="fLabel('qterms', 'paymentTerms', ct('paymentTerms'))">付款條件</span>
               <button x-show="session.role === 'superadmin'" type="button"
                       class="btn btn-ghost btn-sm" @click="saveDefaultPaymentTerms()"
                       title="將目前這段文字存為之後所有新增報價單的預設付款條件">
@@ -1775,20 +1803,20 @@
             <textarea class="form-textarea" rows="5" x-model="q.paymentTerms" @input="setDirty(); checkApproval()" style="min-height:100px"></textarea>
           </div>
           <div class="form-grid form-grid-2" style="gap:14px">
-            <div class="form-group">
-              <label class="form-label">交貨條件</label>
+            <div class="form-group" x-show="fShown('qterms', 'deliveryTerms')" :style="fo('qterms', 'deliveryTerms')">
+              <label class="form-label"><span x-text="fLabel('qterms', 'deliveryTerms', ct('deliveryTerms'))">交貨條件</span></label>
               <textarea class="form-textarea" rows="2" x-model="q.deliveryTerms" @input="setDirty(); checkApproval()"></textarea>
             </div>
-            <div class="form-group">
-              <label class="form-label">驗收標準</label>
+            <div class="form-group" x-show="fShown('qterms', 'acceptanceTerms')" :style="fo('qterms', 'acceptanceTerms')">
+              <label class="form-label"><span x-text="fLabel('qterms', 'acceptanceTerms', ct('acceptanceTerms'))">驗收標準</span></label>
               <textarea class="form-textarea" rows="2" x-model="q.acceptanceTerms" @input="setDirty(); checkApproval()"></textarea>
             </div>
-            <div class="form-group">
-              <label class="form-label">保固條件</label>
+            <div class="form-group" x-show="fShown('qterms', 'warrantyTerms')" :style="fo('qterms', 'warrantyTerms')">
+              <label class="form-label"><span x-text="fLabel('qterms', 'warrantyTerms', ct('warrantyTerms'))">保固條件</span></label>
               <textarea class="form-textarea" rows="2" x-model="q.warrantyTerms" @input="setDirty(); checkApproval()"></textarea>
             </div>
-            <div class="form-group">
-              <label class="form-label">售後服務及備註說明</label>
+            <div class="form-group" x-show="fShown('qterms', 'afterSales')" :style="fo('qterms', 'afterSales')">
+              <label class="form-label"><span x-text="fLabel('qterms', 'afterSales', ct('afterSales'))">售後服務及備註說明</span></label>
               <textarea class="form-textarea" rows="2" x-model="q.afterSales" @input="setDirty(); checkApproval()"></textarea>
             </div>
           </div>
@@ -2473,7 +2501,10 @@
       // 會被存檔流程整包送回後端，混進 q 會讓每次存檔都把它再寫一遍。
       docVersions: [],
 
-      pmCfg: { warnPct: 0 },          // 專案毛利提醒門檻（設定中心；0＝不提醒），init 時由 GET /api/project-margin/config 填入
+      // S-Q2：條款標題。優先序：這張單據送審時凍結的（q.clauseTitles）> 目前範本（clauseTitles）> 預設（過去寫死的字）
+      clauseTitles: null,
+      ct(key) { const f = (this.q && this.q.clauseTitles) || {}; const c = this.clauseTitles || {}; return f[key] || c[key] || ({ paymentTerms: '付款條件', deliveryTerms: '交貨條件', acceptanceTerms: '驗收標準', warrantyTerms: '保固條件', afterSales: AFTERSALES_LABEL })[key] },
+      pmCfg: { warnPct: 0, minItemMarginPct: 30, maxValidDays: 30, discountReviewAbove: 0 },          // 專案毛利提醒門檻（設定中心；0＝不提醒），init 時由 GET /api/project-margin/config 填入
       pmHideUncosted: false,
       altCfg: { enabled: true, totalText: '依方案選擇', noteTemplate: '項次{items}為{group}擇一方案選擇', groupsMax: 10, comboViewMax: 24, comboViewDefaultOpen: false },   // M3：init 時由 GET /api/alt-quote/config 填入
       signPick: { open: false, picks: {}, note: '', busy: false },     // M3 T9：回簽時逐組選定方案的對話框
@@ -2685,7 +2716,15 @@
       async loadProjectMarginCfg() {
         try {
           const r = await fetch(`${this.API}/project-margin/config`, { headers: { Authorization: 'Bearer ' + this.session.token } })
-          if (r.ok) { const d = await r.json(); this.pmCfg = { warnPct: Number(d.warnPct) || 0 } }
+          if (r.ok) {
+            const d = await r.json()
+            const min = Number(d.minItemMarginPct)
+            const days = Number(d.maxValidDays), disc = Number(d.discountReviewAbove)
+            this.pmCfg = { warnPct: Number(d.warnPct) || 0, minItemMarginPct: Number.isFinite(min) && min >= 0 && min <= 100 ? min : 30,
+                           maxValidDays: Number.isFinite(days) && days >= 1 && days <= 365 ? days : 30,
+                           discountReviewAbove: Number.isFinite(disc) && disc >= 0 && disc <= 100000000 ? disc : 0 }
+            if (this.pmCfg.minItemMarginPct !== 30 || this.pmCfg.maxValidDays !== 30 || this.pmCfg.discountReviewAbove !== 0) this.checkApproval()      // 門檻與預設不同才重算一次（預設 30 ＝今天的行為，不多做任何事）
+          }
         } catch (e) { /* 取不到 ⇒ 不提醒 */ }
       },
       altGroupOf(item) { return MotrixAltItems.groupOf(item) },
@@ -2827,14 +2866,14 @@
           return
         }
         const reasons = []
-        if (this.q.validDays > 30)
-          reasons.push(`有效期限 ${this.q.validDays} 天（超過 30 天）`)
+        if (this.q.validDays > this.pmCfg.maxValidDays)
+          reasons.push(`有效期限 ${this.q.validDays} 天（超過 ${this.pmCfg.maxValidDays} 天）`)
         this.q.items.forEach((item, i) => {
           if (item.type === 'header') return
-          if (item.cost > 0 && item.margin < 0.30)
-            reasons.push(`第 ${i+1} 項毛利率 ${(item.margin*100).toFixed(2)}% 低於 30%`)
+          if (item.cost > 0 && item.margin < this.pmCfg.minItemMarginPct / 100)
+            reasons.push(`第 ${i+1} 項毛利率 ${(item.margin*100).toFixed(2)}% 低於 ${this.pmCfg.minItemMarginPct}%`)
         })
-        if (this.q.showDiscount && this.q.discount > 0)
+        if (this.q.showDiscount && this.q.discount > 0 && this.q.discount > this.pmCfg.discountReviewAbove)
           reasons.push(`含折讓（NT$${this.q.discount.toLocaleString()}）`)
         const taxRate = this.q.taxRate !== undefined ? this.q.taxRate : 5
         if (taxRate < 5) {
@@ -2902,7 +2941,7 @@
         const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')
         const ts = 'font-size:10px;color:#999;font-weight:600;margin-bottom:3px'
         const vs = 'font-size:11px;color:#555;line-height:1.7'
-        const block = t => `<div style="margin-bottom:10px"><div style="${ts}">${t.title}</div><div style="${vs}">${esc(t.text)}</div></div>`
+        const block = t => `<div style="margin-bottom:10px"><div style="${ts}">${esc(t.title)}</div><div style="${vs}">${esc(t.text)}</div></div>`
         const pair = (a, b) => {
           const aOk = (a.text||'').trim(), bOk = (b.text||'').trim()
           if (!aOk && !bOk) return ''
@@ -2914,9 +2953,9 @@
           return block(a) + block(b)
         }
         let html = ''
-        if ((this.q.paymentTerms||'').trim()) html += block({ title: '付款條件', text: this.q.paymentTerms })
-        html += pair({ title: '交貨條件', text: this.q.deliveryTerms }, { title: '驗收標準', text: this.q.acceptanceTerms })
-        html += pair({ title: '保固條件', text: this.q.warrantyTerms }, { title: AFTERSALES_LABEL, text: this.q.afterSales })
+        if ((this.q.paymentTerms||'').trim()) html += block({ title: this.ct('paymentTerms'), text: this.q.paymentTerms })
+        html += pair({ title: this.ct('deliveryTerms'), text: this.q.deliveryTerms }, { title: this.ct('acceptanceTerms'), text: this.q.acceptanceTerms })
+        html += pair({ title: this.ct('warrantyTerms'), text: this.q.warrantyTerms }, { title: this.ct('afterSales'), text: this.q.afterSales })
         return html
       },
 
@@ -4138,6 +4177,49 @@
       // ☠️ 後果不只是 API 發兩次：第二次的回應晚一步抵達，
       //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
       _initDone: false,
+      // BP-1／Q1：版面綁定。旗標關閉／讀不到 ⇒ layoutOn=false，下面四個函式回中性值（畫面與先前逐位元相同）。
+      layoutOn: false,
+      // Q3：自訂欄位（值存在 q.customFields；空值＝移除該欄位、整個物件空了＝移除這個鍵——和伺服端一致，存檔基準才不會對不上）
+      cfIsAdmin() { return !!(this.session && this.session.role === 'superadmin') },
+      cfLocked() { return this.q.status === '已送出' && !this.unlocked },
+      cfGet(k) { const cf = this.q && this.q.customFields; return cf ? cf[k] : undefined },
+      cfSet(k, v) {
+        const cur = Object.assign({}, this.q.customFields || {})
+        if (v === '' || v === null || v === undefined || v === false) delete cur[k]
+        else cur[k] = v
+        if (Object.keys(cur).length) this.q.customFields = cur
+        else delete this.q.customFields
+        this.setDirty()
+      },
+      fShown(form, f) { return !this.layoutOn || window.Alpine.store('layout').fieldShown(form, f) },
+      // 回**物件**不回字串：Alpine 的 :style 字串形式會 setAttribute('style', …) 整串覆蓋，會洗掉同一個元素上 x-show 設的 display:none
+      // （隱藏欄位在重新求值後又跑出來）；物件形式只逐項設屬性，與 x-show 並存。
+      fo(form, f) { return this.layoutOn ? { order: window.Alpine.store('layout').fieldOrder(form, f) } : {} },
+      fLabel(form, f, dflt) { return this.layoutOn ? window.Alpine.store('layout').fieldLabel(form, f, dflt) : dflt },
+      secLabel(form, dflt) {
+        if (!this.layoutOn) return dflt
+        const sec = window.Alpine.store('layout').sections(form)[0]
+        return sec && sec.label ? sec.label : dflt
+      },
+      async initLayout() {
+        try {
+          const tk = (this.session && this.session.token) || (JSON.parse(localStorage.getItem('motrix_session') || '{}').token)
+          if (!tk) return
+          // 一個共用的設定 GET 取得兩個旗標；某個群組讀不到時逐組退路（public-flags.js），不拖垮另一個
+          const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields'], { token: tk })
+          // Q3：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）
+          if (g.builder_custom_fields && g.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
+          if (!g.builder_layout || g.builder_layout.quotation_form !== true) return
+          // 這頁沒有 .pg__t／h1（頂欄 #app-topbar 由 sidebar.js 填）：編輯器入口放在工具列左側 .form-toolbar__left
+          const title = document.querySelector('.form-toolbar__left')
+          if (!title) return
+          title.insertAdjacentHTML('beforeend', '<span data-layout-editor-slot></span>')
+          this.layoutOn = true
+          await this.$nextTick()
+          if (window.MotrixLayoutEditor) window.MotrixLayoutEditor.mount()
+          window.MotrixLayout.start()
+        } catch (e) { /* 版面是加值功能：讀不到就維持原本的表單 */ }
+      },
       // init 整段（含新單套用預設條款組、取號）跑完 ⇒ true。給 e2e 等「載入完成」這個終點，不必猜哪一支請求最後回來。
       _initSettled: false,
       _termsAtStart: null,
@@ -4154,6 +4236,7 @@
         try {
           this.session = JSON.parse(s)
         } catch(e) { window.location.href = 'login.html'; return }
+        this.initLayout()
 
         // QL13：據點清單。放在這裡而不是更後面，是因為新單要用 locations[0]
         // 當預設值，而那要在既有單的資料載入**之前**決定 —— 否則會覆蓋掉
@@ -4211,6 +4294,7 @@
           const rd = await fetch(`${this.API}/settings/quote-terms-defaults`, { headers: { Authorization: 'Bearer ' + this.session.token } })
           if (rd.ok) {
             const d = await rd.json()
+            if (d.titles && typeof d.titles === 'object') this.clauseTitles = d.titles      // S-Q2：條款標題（只在範本生效時才有這個鍵）
             for (const k of Object.keys(DEFAULT_TERMS)) if (typeof d[k] === 'string') DEFAULT_TERMS[k] = d[k]
             this._termsDefaultsLoaded = true
             if (!this._defaultPaymentTerms) this._defaultPaymentTerms = DEFAULT_TERMS.paymentTerms
@@ -4391,10 +4475,36 @@
     }
   }
   </script>
+  <script src="../static/public-flags.js"></script>
+  <script src="../static/custom-fields.js"></script>
+  <script src="../static/custom-layout.js"></script>
+  <script src="../static/layout-runtime.js"></script>
+  <script src="../static/layout-editor.js"></script>
+  <script src="../js/def-governance.js"></script>
+  <script>
+  // Q3：報價單自己的自訂欄位（內建記錄類型 quotation；設定中心「自訂欄位（內建畫面）」預設關閉）。deferred：只登記 store、不發請求；
+  // 旗標在共用的設定 GET 裡看到開啟才 start()。值存在報價單的頂層 customFields（沒有值就沒有這個鍵）。
+  MotrixCustomFields.init({ recordType: 'quotation', label: '報價單', deferred: true })
+  </script>
+  <script>
+  // BP-1／Q1：報價單表單的非金額區塊（基、客戶、案件、條件）可自訂版面（P9）。設定中心「自訂畫面版面」→ quotation_form 預設關閉：
+  // 關閉時不發任何版面請求（deferred）、畫面不變。fallback＝版面讀不到時的欄位順序（守門：必須等於 module.json 登記的順序）。
+  // 品項、合計、簽署、成本面板不在範圍（金額與簽核語意）。
+  MotrixLayout.init({
+    module: 'case', page: 'quotation-form.html', deferred: true,
+    fallback: { forms: {
+      qbasic: ['quoteNo', 'locationId', 'quoteDate', 'validDays', 'version', 'salesPerson', 'salesPhone', 'salesEmail'],
+      qcustomer: ['customerName', 'customerTaxId', 'contactName', 'contactPhone', 'contactEmail', 'contactFax', 'deliveryAddress'],
+      qproject: ['projectName', 'deliveryLocation'],
+      qterms: ['paymentTerms', 'deliveryTerms', 'acceptanceTerms', 'warrantyTerms', 'afterSales'],
+    } },
+  })
+  </script>
   <script src="../static/approval-cascade.js"></script>
   <script src="../static/file-preview.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/edit-presence.js"></script>
+  <meta name="motrix-export-id" content="case:quotation-clause-titles">   <!-- S-Q2：只是宣告；builder_exports 開啟且是最高管理者時，sidebar.js 才載入匯出範本編輯器（關著＝沒有任何額外請求） -->
   <script src="../static/sidebar.js"></script>
 </body>
 </html>

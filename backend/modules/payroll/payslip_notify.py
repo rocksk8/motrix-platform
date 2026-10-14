@@ -154,8 +154,7 @@ def fire_bypass(slip_no, slip_date, actor, sole_approver, reason, recipients) ->
             _inapp(r, "payslip_approver_bypass", slip_no, text)
         except Exception:                                        # noqa: BLE001
             logger.exception("勞報單層外代核站內通知失敗（%s → %s）", slip_no, r)
-    import html
-    e = lambda v: html.escape(str(v or ""), quote=True)       # noqa: E731 — 原因是自由文字，信件模板不跳脫列值
+    e = lambda v: str(v or "")       # noqa: E731 — 純文字：共用的 `email_notify._build_html` 對簽核類信件統一逸出（這裡不要再逸出，否則會雙重逸出）
     try:
         return _en.send_registered("payslip_approver_bypass", title="勞報單層外代核", reason="%s 層外代核" % ident(slip_no), usernames=who,
                                    rows=[("單號", e(slip_no) or "—"), ("開單日期", e(slip_date) or "—"), ("核准人", e(actor) or "—"), ("原簽核人", e(sole_approver) or "—"), ("原因", e(reason) or "—")],

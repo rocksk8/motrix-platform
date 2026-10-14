@@ -9,6 +9,8 @@
   <script src="../js/cashier.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
+  <script src="../static/public-flags.js"></script>
+  <script src="../static/status-chip.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <!-- ⚠️ 下面這整塊樣式是從 `reports.html` **整段複製**過來的。
@@ -367,7 +369,7 @@
                                    @change="saveVoucherPlannedPayDate(v, $event.target.value)" :data-testid="'cashier-payable-planned-input-' + v.voucherNo">
                             <span x-show="!canExecuteCashier()" class="mono" x-text="v.plannedPayDate || '—'"></span>
                             <div style="font-size:11px;color:var(--tone-danger-fg)" x-show="plannedState(v) === 'overdue'">已逾預定日</div>
-                            <div style="font-size:11px;color:var(--tone-warning-fg)" x-show="plannedState(v) === 'soon'">3 天內到期</div>
+                            <div style="font-size:11px;color:var(--tone-warning-fg)" x-show="plannedState(v) === 'soon'" x-text="plannedSoonDays + ' 天內到期'">3 天內到期</div>
                           </td>
                           <td class="c">
                             <button x-show="canExecuteCashier()" class="action-btn pay" @click="openPayVoucherModal(v)">標記已匯款</button>
@@ -500,7 +502,7 @@
                                    @change="savePlannedPayDate(it, $event.target.value)" :data-testid="'cashier-payreq-planned-input-' + it.source + '-' + it.key">
                             <span x-show="!payreqQueue.canPay" class="mono" x-text="it.plannedPayDate || '—'"></span>
                             <div style="font-size:11px;color:#b91c1c" x-show="plannedState(it) === 'overdue'">已逾預定日</div>
-                            <div style="font-size:11px;color:#b45309" x-show="plannedState(it) === 'soon'">3 天內到期</div>
+                            <div style="font-size:11px;color:#b45309" x-show="plannedState(it) === 'soon'" x-text="plannedSoonDays + ' 天內到期'">3 天內到期</div>
                           </td>
                           <td class="c">
                             <div x-text="(it.invoiceNo || '—') + (it.invoiceFiles ? '（' + it.invoiceFiles + ' 檔）' : '')"></div>
@@ -610,7 +612,7 @@
                           <td class="r mono" x-text="fmt(it.amount)"></td>
                           <td class="c mono" :class="it.overdue ? 'red-txt' : (isDueSoon(it.expectedReceiptDate) ? 'orange-txt' : '')"
                               x-text="it.expectedReceiptDate || '未指定'"></td>
-                          <td class="c"><span class="rb" :class="it.received ? 'rb-received' : 'rb-pending'" x-text="it.received ? '已收款' : '待收款'"></span></td>
+                          <td class="c"><span class="rb" :class="it.received ? 'rb-received' : 'rb-pending'" x-text="stLabel(it.received ? '已收款' : '待收款', 'cashier')"></span></td>
                           <td>
                             <template x-if="it.invoiceNo">
                               <span class="rb rb-invoiced" :style="canExecuteCashier() ? 'cursor:pointer' : ''" @click="canExecuteCashier() && openInvoiceModal(it)" x-text="it.invoiceNo"></span>

@@ -10,6 +10,8 @@
   <script src="../static/ui.js"></script>
   <script src="../static/legal-round.js"></script>
   <script src="../static/profit-rules.js"></script>
+  <script src="../static/status-chip.js"></script>
+  <script src="../js/status-display-editor.js"></script>
   <script src="../js/case-management-core.js"></script>
   <script src="../js/case-management-list.js"></script>
   <script src="../js/case-management-close.js"></script>
@@ -26,6 +28,8 @@
   <script src="../static/download.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
+  <script src="../static/option-lists.js"></script>
+  <meta name="motrix-option-lists" content="payment_stage">   <!-- census S-F1：只是宣告；選項清單開啟且是最高管理者時，sidebar.js 才載入編輯器（關著＝沒有任何額外請求） -->
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
@@ -35,6 +39,9 @@
   <script src="../js/def-governance.js"></script>
   <script src="../static/public-flags.js"></script>
   <script src="../static/custom-fields.js"></script>
+  <script src="../js/rule-marks.js"></script>
+  <script src="../js/rules-builder.js"></script>
+  <script src="../static/attachment-slots.js"></script>
   <script src="../static/list-sort.js"></script>
   <script src="../static/vendor/frappe-gantt-0.6.1.min.js"></script>
   <link rel="stylesheet" href="../static/vendor/frappe-gantt-0.6.1.css">
@@ -334,7 +341,7 @@
                 <span class="cm-card__no" :style="lo('quoteNo')" x-text="c.quote_no"></span>
                 <span class="cm-card__tag" :style="lo('dealTag')"
                       :class="c.deal_tag==='已結案' ? 'cm-card__tag--closed' : (c.deal_tag==='已成案' && c.current_stage ? 'cm-card__tag--stage' : 'cm-card__tag--active')"
-                      x-text="c.deal_tag==='已成案' && c.current_stage ? '待 ' + c.current_stage : c.deal_tag"></span>
+                      x-text="c.deal_tag==='已成案' && c.current_stage ? '待 ' + c.current_stage : stLabel(c.deal_tag, 'case')"></span>
               </div>
               <template x-if="isUnread(c)">
                 <span class="cm-card__unread-tag">有新動態</span>
@@ -389,7 +396,7 @@
                     <span class="cm-card__no" x-text="c.quote_no"></span>
                     <span class="cm-card__tag"
                           :class="c.deal_tag==='已結案' ? 'cm-card__tag--closed' : (c.deal_tag==='已成案' && c.current_stage ? 'cm-card__tag--stage' : 'cm-card__tag--active')"
-                          x-text="c.deal_tag==='已成案' && c.current_stage ? '待 ' + c.current_stage : c.deal_tag"></span>
+                          x-text="c.deal_tag==='已成案' && c.current_stage ? '待 ' + c.current_stage : stLabel(c.deal_tag, 'case')"></span>
                   </div>
                   <template x-if="isUnread(c)">
                     <span class="cm-card__unread-tag">有新動態</span>
@@ -443,7 +450,7 @@
                 <template x-if="cr.dealTag === '已成案'">
                   <span class="deal-tag-badge"
                         :class="(cr.caseRecord?.stages||[]).find(s => !s.done) ? 'deal-tag-badge--stage' : 'deal-tag-badge--active'"
-                        x-text="(cr.caseRecord?.stages||[]).find(s => !s.done) ? '待 ' + (cr.caseRecord?.stages||[]).find(s => !s.done)?.label : '已成案'">
+                        x-text="(cr.caseRecord?.stages||[]).find(s => !s.done) ? '待 ' + (cr.caseRecord?.stages||[]).find(s => !s.done)?.label : stLabel('已成案', 'case')">
                   </span>
                 </template>
                 <template x-if="cr.dealTag === '已結案'">
@@ -596,20 +603,20 @@
             <!-- Tabs -->
             <!-- CU8：窄螢幕分頁列會超出寬度 ⇒ 右緣淡出＋提示可左右滑動 -->
             <div class="cm-tabs-hint" data-testid="cm-tabs-hint">← 左右滑動看更多分頁 →</div>
-            <div class="cm-tabs">
-              <button class="cm-tab" :class="{active: activeTab==='biz'}"      @click="activeTab='biz'">案件資訊</button>
-              <button class="cm-tab" :class="{active: activeTab==='exec'}"     @click="activeTab='exec'">執行管理</button>
-              <button class="cm-tab" :class="{active: activeTab==='dispatch'}" @click="activeTab='dispatch'">承攬商<span class="cm-tab__n" x-show="dispatches.length > 0" x-text="dispatches.length"></span></button>
-              <button class="cm-tab" :class="{active: activeTab==='shipping'}" @click="activeTab='shipping'; loadShippingNotes(selected.quote_no)">出貨單<span class="cm-tab__n" x-show="shippingNotes.length > 0" x-text="shippingNotes.length"></span></button>
+            <div class="cm-tabs" x-effect="tabFix()">
+              <button class="cm-tab" x-show="tShown('biz')" :style="tOrder('biz')" :class="{active: activeTab==='biz'}"      @click="activeTab='biz'"><span x-text="tLabel('biz', '案件資訊')">案件資訊</span></button>
+              <button class="cm-tab" x-show="tShown('exec')" :style="tOrder('exec')" :class="{active: activeTab==='exec'}"     @click="activeTab='exec'"><span x-text="tLabel('exec', '執行管理')">執行管理</span></button>
+              <button class="cm-tab" x-show="tShown('dispatch')" :style="tOrder('dispatch')" :class="{active: activeTab==='dispatch'}" @click="activeTab='dispatch'"><span x-text="tLabel('dispatch', '承攬商')">承攬商</span><span class="cm-tab__n" x-show="dispatches.length > 0" x-text="dispatches.length"></span></button>
+              <button class="cm-tab" x-show="tShown('shipping')" :style="tOrder('shipping')" :class="{active: activeTab==='shipping'}" @click="activeTab='shipping'; loadShippingNotes(selected.quote_no)"><span x-text="tLabel('shipping', '出貨單')">出貨單</span><span class="cm-tab__n" x-show="shippingNotes.length > 0" x-text="shippingNotes.length"></span></button>
               <!-- 完工單（2026-09-12）：比照出貨單，放在它右邊——出貨之後才有完工，
                    順序跟實際流程一致。切分頁時載入，形狀同出貨單。 -->
-              <button class="cm-tab" :class="{active: activeTab==='completion'}"
-                      @click="activeTab='completion'; loadCompletionNotes(selected.quote_no)">完工單<span class="cm-tab__n" x-show="completionNotes.length > 0" x-text="completionNotes.length"></span></button>
-              <button class="cm-tab" :class="{active: activeTab==='feed'}" @click="activeTab='feed'; loadCaseUpdates(selected.quote_no)">動態<span class="cm-tab__n" x-show="caseUpdates.length > 0" x-text="caseUpdates.length"></span></button>
+              <button class="cm-tab" x-show="tShown('completion')" :style="tOrder('completion')" :class="{active: activeTab==='completion'}"
+                      @click="activeTab='completion'; loadCompletionNotes(selected.quote_no)"><span x-text="tLabel('completion', '完工單')">完工單</span><span class="cm-tab__n" x-show="completionNotes.length > 0" x-text="completionNotes.length"></span></button>
+              <button class="cm-tab" x-show="tShown('feed')" :style="tOrder('feed')" :class="{active: activeTab==='feed'}" @click="activeTab='feed'; loadCaseUpdates(selected.quote_no)"><span x-text="tLabel('feed', '動態')">動態</span><span class="cm-tab__n" x-show="caseUpdates.length > 0" x-text="caseUpdates.length"></span></button>
               <!-- 附件目錄 P3：檔案中心（filehub）在才出現；不在就不顯示頁籤（不是空表）。同一支 /api/filehub/search、固定本案件 -->
-              <button class="cm-tab" x-show="fileCenterOn" data-testid="cm-tab-allfiles" :class="{active: activeTab==='allfiles'}" @click="activeTab='allfiles'">全部附件<span class="cm-tab__n" x-show="caseFilesFor === selected.quote_no && caseFiles.length > 0" x-text="caseFiles.length"></span></button>
+              <button class="cm-tab" x-show="fileCenterOn && tShown('allfiles')" :style="tOrder('allfiles')" data-testid="cm-tab-allfiles" :class="{active: activeTab==='allfiles'}" @click="activeTab='allfiles'"><span x-text="tLabel('allfiles', '全部附件')">全部附件</span><span class="cm-tab__n" x-show="caseFilesFor === selected.quote_no && caseFiles.length > 0" x-text="caseFiles.length"></span></button>
               <!-- CU5：收款搬進財務分頁 ⇒ 分頁本身人人看得到（收款以外的財務區塊仍只給 canSeeFinancial） -->
-              <button class="cm-tab" :class="{active: activeTab==='fin'}" @click="activeTab='fin'">財務</button>
+              <button class="cm-tab" x-show="tShown('fin')" :style="tOrder('fin')" :class="{active: activeTab==='fin'}" @click="activeTab='fin'"><span x-text="tLabel('fin', '財務')">財務</span></button>
               <!-- 額外支出（2026-09-11）：從精算頁搬過來，獨立成一個分頁而不是塞進財務
                    分頁——使用者說的是「案件管理的案件內選單」，而案件內選單就是這排分頁。 -->
               <!-- 切分頁刻意不重載：selectCase() 選到案件時就已經載過了。兩邊都載會
@@ -618,16 +625,16 @@
                    （負載較高、時序被拉開）時穩定重現。
                    ⚠️ 註解一定要放在標籤外面：HTML 不允許 <tag> 內出現註解，放進去
                    整個 @click 都不會綁上，分頁點了完全沒反應（本次踩過）。 -->
-              <button class="cm-tab" x-show="canSeeFinancial()" :class="{active: activeTab==='xexp'}"
+              <button class="cm-tab" x-show="canSeeFinancial() && tShown('xexp')" :style="tOrder('xexp')" :class="{active: activeTab==='xexp'}"
                       @click="activeTab='xexp'">
-                額外支出
+                <span x-text="tLabel('xexp', '額外支出')">額外支出</span>
                 <span x-show="xe.pendingCount > 0"
                       style="display:inline-block;margin-left:4px;padding:0 5px;border-radius:8px;background:var(--tone-warning-bg-strong);color:var(--tone-warning-fg);font-size:11px;font-weight:700"
                       x-text="xe.pendingCount"></span>
               </button>
               <!-- 精算入口（2026-10-03）：原本只有財務分頁裡一個小連結，使用者找不到；放在額外支出右邊。
                    精算是獨立頁面，所以是連結不是分頁內容（刻意不用 .cm-tab：逐分頁點擊的 golden／主題 e2e 會點到它而離開本頁）；權限同精算頁（canSeeFinancial）。 -->
-              <a class="cm-tab-link" x-show="canSeeFinancial()" data-testid="cm-tab-settlement"
+              <a class="cm-tab-link" x-show="canSeeFinancial()" :style="tTail()" data-testid="cm-tab-settlement"
                  :href="'settlement.html?no=' + (selected?.quote_no||'')">精算 ▶</a>
             </div>
 
@@ -638,7 +645,7 @@
               <div x-show="activeTab==='biz'">
 
                 <!-- 案件健康總覽（2026-09-24）：五關＋逾期應收＋待簽核；點關卡切到要處理的分頁 -->
-                <template x-if="caseHealth.quoteNo === selected?.quote_no">
+                <template x-if="caseHealth.quoteNo === selected?.quote_no && bShown('health')">
                   <div data-testid="case-health" :data-health-quote="caseHealth.quoteNo"
                        style="border:1px solid var(--border-light);border-radius:8px;padding:10px 12px;margin-bottom:14px">
                     <div style="display:flex;flex-wrap:wrap;gap:6px">
@@ -672,22 +679,22 @@
                   </div>
                 </template>
 
-                <fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
-                <div class="cm-section-title">
+                <fieldset class="cm-ro" :class="{'cm-biz-lo': layoutOn}" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
+                <div class="cm-section-title" :style="bo('contract', 0)">
                   <span x-text="secLabel('contract', '合約資訊')">合約資訊</span>
                   <!-- 已存在的案件用這顆手動帶（2026-09-14）。新建案件在
                        ensureCaseRecord() 就帶過了，不會重複問。只填空欄位，
                        不覆蓋案件這邊已經改過的值。 -->
-                  <button type="button" class="aq-sort" x-show="quoteContractAvailable"
-                          @click="pullContractFromQuote()"
+                  <button type="button" class="aq-sort" x-show="quoteContractAvailable && aShown('fillContract')"
+                          :style="aOrder('fillContract')" @click="pullContractFromQuote()"
                           style="margin-left:auto;font-weight:400"
                           title="從這張報價單帶入交貨地址、交貨條件與聯絡人——只填空白欄位，不覆蓋已經有的值">
-                    從報價單帶入
+                    <span x-text="aLabel('fillContract', '從報價單帶入')">從報價單帶入</span>
                   </button>
                 </div>
                 <!-- 四欄網格：地址與交貨條件各佔兩欄，聯絡人與電話各佔一欄
                      （內容就那麼短，給滿寬只是製造空白與框線噪音），備註跨滿。 -->
-                <div class="cm-fgrid cm-fgrid--contract">
+                <div class="cm-fgrid cm-fgrid--contract" :style="bo('contract', 1)">
                   <div class="fi-group" x-show="fShown('contract', 'deliveryAddress')" :style="fo('contract', 'deliveryAddress')">
                     <label class="fi-label" x-text="fLabel('contract', 'deliveryAddress', '交貨 / 安裝地址')">交貨 / 安裝地址</label>
                     <input class="fi" type="text" placeholder="地址" x-model="cr.caseRecord.contract.deliveryAddress" @input="setDirty()">
@@ -705,14 +712,14 @@
                     <input class="fi" type="text" placeholder="電話" x-model="cr.caseRecord.contract.contactPhone" @input="setDirty()">
                   </div>
                 </div>
-                <div class="fi-group" style="margin-bottom:18px">
+                <div class="fi-group" style="margin-bottom:18px" :style="bo('contract', 2)">
                   <label class="fi-label">合約備註</label>
                   <textarea class="fi" rows="2" placeholder="合約特殊條款、注意事項..." x-model="cr.caseRecord.contract.contractNote" @input="setDirty()" style="resize:vertical;line-height:1.6"></textarea>
                 </div>
 
-                <div class="cm-section-title">人員角色<span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span></div>
+                <div class="cm-section-title" :style="bo('roles', 0)">人員角色<span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span></div>
                 <!-- 三個下拉裝的是人名，給 1fr 會各撐到 500px；上限 240px 就夠 -->
-                <div class="cm-fgrid cm-fgrid--people">
+                <div class="cm-fgrid cm-fgrid--people" :style="bo('roles', 1)">
                   <div class="fi-group">
                     <label class="fi-label" for="cm-role-filler">填單人</label>
                     <select class="fi" id="cm-role-filler" x-model="roleSel.filler">
@@ -751,8 +758,8 @@
                   </div>
                 </div>
 
-                <div class="cm-section-title"><span x-text="secLabel('timeline', '專案期間')">專案期間</span><span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span></div>
-                <div class="cm-fgrid cm-fgrid--dates">
+                <div class="cm-section-title" x-show="bShown('timeline')" :style="bo('timeline', 0)"><span x-text="bLabel('timeline', secLabel('timeline', '專案期間'))">專案期間</span><span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span></div>
+                <div class="cm-fgrid cm-fgrid--dates" x-show="bShown('timeline')" :style="bo('timeline', 1)">
                   <div class="fi-group" :style="fo('timeline', 'startDate')">
                     <label class="fi-label" for="cm-tl-start" x-text="fLabel('timeline', 'startDate', '開始日期')">開始日期</label>
                     <input class="fi" id="cm-tl-start" type="date" x-model="cr.caseRecord.projectTimeline.startDate" @input="setDirty()">
@@ -762,14 +769,14 @@
                     <input class="fi" id="cm-tl-end" type="date" x-model="cr.caseRecord.projectTimeline.endDate" @input="setDirty()">
                   </div>
                 </div>
-                <div x-show="cr.caseRecord.projectTimeline.endDate && cr.dealTag !== '已結案'" style="font-size:12px;padding:10px;background:var(--tone-success-bg);border-radius:var(--radius);color:var(--tone-success-fg);margin-bottom:12px">
+                <div x-show="bShown('timeline') && cr.caseRecord.projectTimeline.endDate && cr.dealTag !== '已結案'" :style="bo('timeline', 2)" style="font-size:12px;padding:10px;background:var(--tone-success-bg);border-radius:var(--radius);color:var(--tone-success-fg);margin-bottom:12px">
                   <span x-show="daysUntilDeadline() > 0" x-text="'剩餘 ' + daysUntilDeadline() + ' 天'"></span>
                   <span x-show="daysUntilDeadline() <= 0" x-text="'已超期 ' + Math.abs(daysUntilDeadline()) + ' 天'" style="color:var(--tone-danger-fg);background:var(--tone-danger-bg)"></span>
                 </div>
                 <!-- T61 S5：自訂欄位（旗標 builder_custom_fields.enabled 開啟才畫；欄位值存在 caseRecord.customFields，只給內部人員看） -->
-                <template x-if="$store.cf && $store.cf.enabled && ($store.cf.list().length || cfIsAdmin() || $store.cf.mode !== 'live')">
-                  <div data-testid="cf-section">
-                    <div class="cm-section-title">自訂欄位
+                <template x-if="bShown('customFields') && $store.cf && $store.cf.enabled && ($store.cf.list().length || cfIsAdmin() || $store.cf.mode !== 'live')">
+                  <div data-testid="cf-section" :style="bo('customFields', 0)">
+                    <div class="cm-section-title"><span x-text="bLabel('customFields', '自訂欄位')">自訂欄位</span>
                       <span class="save-mode" x-show="$store.cf.mode !== 'live'" x-text="$store.cf.previewLabel" style="color:var(--tone-warning-fg)"></span>
                       <button type="button" class="aq-sort" data-testid="cf-edit-open" x-show="cfIsAdmin()" @click="MotrixCustomFields.openEditor()" style="margin-left:auto;font-weight:400">編輯自訂欄位</button>
                     </div>
@@ -795,7 +802,7 @@
                   </div>
                 </template>
                 <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：手動輸入的聯絡人也要告知） -->
-                <div data-privacy-card data-privacy-subject="case_site_contact" x-data="MotrixPrivacyNotice.subjectState('contact', s => s.selected && s.selected.quote_no ? '/api/quotations/' + encodeURIComponent(s.selected.quote_no) : null, s => s.cr && s.cr.caseRecord && s.cr.caseRecord.contract && s.cr.caseRecord.contract.contactPerson, { role: 'site' })"
+                <div data-privacy-card data-privacy-subject="case_site_contact" :style="bo('privacy', 0)" x-data="MotrixPrivacyNotice.subjectState('contact', s => s.selected && s.selected.quote_no ? '/api/quotations/' + encodeURIComponent(s.selected.quote_no) : null, s => s.cr && s.cr.caseRecord && s.cr.caseRecord.contract && s.cr.caseRecord.contract.contactPerson, { role: 'site' })"
                      x-init="pnLoadNotice(); pnRefresh(); $watch('selected && selected.quote_no', () => pnRefresh())"
                      style="margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border-light);border-radius:6px">
                   <div style="font-size:12px;font-weight:600;margin-bottom:4px">個資蒐集告知</div>
@@ -850,13 +857,13 @@
 
               <!-- ══ 執行管理 Tab（進度／材料申請／設備／保固 子分頁） ══ -->
               <div x-show="activeTab==='exec'">
-                <div class="cm-subtabs">
-                  <button class="cm-tab" :class="{active: execSubTab==='progress'}"  @click="execSubTab='progress'">執行進度</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='materials'}" @click="execSubTab='materials'; loadMaterialOrders(selected && selected.quote_no)">材料申請</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='devices'}"   @click="execSubTab='devices'">設備登錄</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='warranty'}"  @click="execSubTab='warranty'">保固備註</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='todos'}"     @click="execSubTab='todos'; loadCaseActionItems()">待辦事項</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='info'}"      @click="execSubTab='info'">成員</button>
+                <div class="cm-subtabs" x-effect="subFix()">
+                  <button class="cm-tab" x-show="sShown('progress')" :style="sOrder('progress')" :class="{active: execSubTab==='progress'}"  @click="execSubTab='progress'"><span x-text="sLabel('progress', '執行進度')">執行進度</span></button>
+                  <button class="cm-tab" x-show="sShown('materials')" :style="sOrder('materials')" :class="{active: execSubTab==='materials'}" @click="execSubTab='materials'; loadMaterialOrders(selected && selected.quote_no)"><span x-text="sLabel('materials', '材料申請')">材料申請</span></button>
+                  <button class="cm-tab" x-show="sShown('devices')" :style="sOrder('devices')" :class="{active: execSubTab==='devices'}"   @click="execSubTab='devices'"><span x-text="sLabel('devices', '設備登錄')">設備登錄</span></button>
+                  <button class="cm-tab" x-show="sShown('warranty')" :style="sOrder('warranty')" :class="{active: execSubTab==='warranty'}"  @click="execSubTab='warranty'"><span x-text="sLabel('warranty', '保固備註')">保固備註</span></button>
+                  <button class="cm-tab" x-show="sShown('todos')" :style="sOrder('todos')" :class="{active: execSubTab==='todos'}"     @click="execSubTab='todos'; loadCaseActionItems()"><span x-text="sLabel('todos', '待辦事項')">待辦事項</span></button>
+                  <button class="cm-tab" x-show="sShown('info')" :style="sOrder('info')" :class="{active: execSubTab==='info'}"      @click="execSubTab='info'"><span x-text="sLabel('info', '成員')">成員</span></button>
                 </div>
 
               <!-- ── 執行進度 ── -->
@@ -1868,7 +1875,7 @@
                       <span style="font-size:11px;font-weight:700;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;width:16px;flex-shrink:0" x-text="idx+1"></span>
                       <select class="fi" x-model="item.type" @change="setDirty()"
                               style="width:90px;flex-shrink:0;padding:5px 6px;font-size:12px">
-                        <option>訂金款</option><option>交貨款</option><option>驗收款</option><option>進度款</option><option>完工款</option><option>收款後出貨</option><option>自訂義</option><option>其他</option>
+                        <template x-for="o in stageOptions(item.type)" :key="o.value"><option :value="o.value" x-text="o.label"></option></template>
                       </select>
                       <input x-show="item.type==='自訂義'" class="fi" type="text" placeholder="輸入名稱..."
                              x-model="item.customLabel" @input="setDirty()"
@@ -2696,7 +2703,7 @@
                   <template x-if="caseSettleStatus()">
                     <span style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif"
                           :style="caseSettleStatus()==='finalized' ? 'background:var(--tone-success-bg-strong);color:var(--tone-success-fg)' : 'background:var(--tone-warning-bg-strong);color:var(--tone-warning-fg)'"
-                          x-text="caseSettleStatus()==='finalized' ? '已定稿' : '草稿'"></span>
+                          x-text="caseSettleStatus()==='finalized' ? stLabel('finalized', 'case', '已定稿') : stLabel('draft', 'case', '草稿')"></span>
                   </template>
                   <template x-if="cr.dealTag==='已結案'">
                     <button @click="downloadClosingReportPdf()" :disabled="closingReportDownloading"
@@ -3428,6 +3435,8 @@
                   <div style="flex:1">
                     <span class="cm-section-title" style="margin-bottom:0">完工單管理</span><span class="save-mode save-mode--manual" data-save-mode="manual" title="在完工單視窗裡按儲存">按儲存</span>
                   </div>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="as-edit-open" x-show="asOn" @click="MotrixAttachmentSlots.openEditor()"
+                          title="為完工單設定附件種類（可收的檔案類型、大小、可上傳的人）；只有最高管理者看得到">附件種類</button>
                   <!-- 比照報價單：清單在這裡，填寫在獨立頁面（completion-note-form.html）。
                        2026-09-12 使用者指定「用報價單的方式去建立，一個頁面做填寫」。 -->
                   <a x-show="['superadmin','admin'].includes(session.role)"
@@ -4805,25 +4814,64 @@ void 0
 // 關閉時不發任何版面請求（deferred），lShown()＝true、lo()＝''，畫面與先前相同。只接版面，不含任何業務邏輯。
 MotrixLayout.init({
   module: 'case', page: 'case-management.html', deferred: true,
-  fallback: { lists: { cases: ['quoteNo', 'dealTag', 'customer', 'sales', 'amount', 'stageProgress', 'date'] } },
+  fallback: { lists: { cases: ['quoteNo', 'dealTag', 'customer', 'sales', 'amount', 'stageProgress', 'date'],
+                       tabs: ['biz', 'exec', 'dispatch', 'shipping', 'completion', 'feed', 'allfiles', 'fin', 'xexp'],
+                       bizBlocks: ['health', 'contract', 'roles', 'timeline', 'customFields', 'privacy', 'signedBack'],
+                       execTabs: ['progress', 'materials', 'devices', 'warranty', 'todos', 'info'] } },
 })
 window.CM_PARTS.push(() => ({
+  asOn: false,                       // BP-4 S3：附件種類編輯器入口（旗標開＋最高管理者才為真；關閉時永遠是 false）
   layoutOn: false,
   _lcols() { return this.layoutOn ? window.Alpine.store('layout').cols('cases') : [] },
   _lix(f) { return this._lcols().findIndex(c => c.field === f) },
   lShown(f) { return !this.layoutOn || this._lix(f) >= 0 },
-  lo(f) { return this.layoutOn && this._lix(f) >= 0 ? 'order:' + (this._lix(f) + 1) : '' },
-  loHead() { return this.layoutOn ? 'order:-1' : '' },
+  // 以下 :style 綁定一律回**物件**（不回 'order:N' 字串）：Alpine 的字串形式會 setAttribute('style', …) 整串覆蓋，
+  // 洗掉同一個元素上 x-show 設的 display:none（隱藏的欄位在重新求值後又跑出來）；物件形式逐項設屬性，與 x-show 並存。
+  lo(f) { return this.layoutOn && this._lix(f) >= 0 ? { order: this._lix(f) + 1 } : {} },
+  loHead() { return this.layoutOn ? { order: -1 } : {} },
   // 底部一列（金額／進度／日期）整列的位置＝這三個欄位中最前面的那個
   loFooter() {
-    if (!this.layoutOn) return ''
+    if (!this.layoutOn) return {}
     const ix = ['amount', 'stageProgress', 'date'].map(f => this._lix(f)).filter(i => i >= 0)
-    return ix.length ? 'order:' + (Math.min(...ix) + 1) : ''
+    return ix.length ? { order: Math.min(...ix) + 1 } : {}
   },
   lLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('cases', f, dflt) : dflt },
+  // 分頁列（BP-1／Q2）：每個分頁是 list `tabs` 的一欄（顯示／順序／標題）。旗標隨 case_management；關閉＝中性值。
+  // 金額與權限永遠優先：額外支出分頁維持 canSeeFinancial() 且（版面隱藏）；版面只能再收窄，不能放寬。:style 一律回物件（見 lo()）。
+  _tcols() { return this.layoutOn ? window.Alpine.store('layout').cols('tabs') : [] },
+  _tix(f) { return this._tcols().findIndex(c => c.field === f) },
+  tShown(f) { return !this.layoutOn || this._tix(f) >= 0 },
+  tOrder(f) { return this.layoutOn && this._tix(f) >= 0 ? { order: this._tix(f) + 1 } : {} },
+  tTail() { return this.layoutOn ? { order: 999 } : {} },
+  // 「案件資訊」分頁的區塊（BP-1／C1）：list `bizBlocks`。顯示／標題／順序；順序用 CSS order（fieldset 在 ON 時是 flex column，見 .cm-biz-lo）：
+  // 只有 fieldset 裡的五個區塊（合約資訊、人員角色、專案期間、自訂欄位、個資告知）能換順序；健康總覽固定在最上、客戶回簽單固定在最下。
+  // 區塊隱藏只是不顯示（x-show／x-if）：輸入框的資料與存檔內容不變。每個區塊的子元素 order＝(位置+1)*10+序號，保持區塊內相對順序。
+  _bcols() { return this.layoutOn ? window.Alpine.store('layout').cols('bizBlocks') : [] },
+  _bix(f) { return this._bcols().findIndex(c => c.field === f) },
+  bShown(f) { return !this.layoutOn || this._bix(f) >= 0 },
+  // 區塊標題改名（沒改 ⇒ 預設字）。健康總覽卡沒有標題文字，所以它的改名不會有畫面（登錄檔 relabelIneffective 標明）。
+  bLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('bizBlocks', f, dflt) : dflt },
+  // 按鈕（BP-1／C3）：只登記了「從報價單帶入」一顆（actions）；不開放使用者新增按鈕，也不登記有金額／簽核語意或法定的按鈕。
+  aShown(k) { return !this.layoutOn || window.Alpine.store('layout').shown('action', k) },
+  aOrder(k) { return this.layoutOn ? { order: window.Alpine.store('layout').order('action', k) } : {} },
+  aLabel(k, dflt) { return this.layoutOn ? window.Alpine.store('layout').label('action', k, dflt) : dflt },
+  bo(f, n) { return this.layoutOn && this._bix(f) >= 0 ? { order: (this._bix(f) + 1) * 10 + (n || 0) } : {} },
+  // 目前分頁被版面隱藏（網址 ?tab=、記住的分頁、其他入口切過來）⇒ 退回「案件資訊」（核心分頁，隱藏不了），不要留一個沒有頁籤的內容面板
+  _tabKeys: ['biz', 'exec', 'dispatch', 'shipping', 'completion', 'feed', 'allfiles', 'fin', 'xexp'],
+  // 「執行管理」分頁裡的子分頁（BP-1／C2）：list `execTabs`（顯示／標題／順序）；「執行進度」是核心。:style 一律物件形式。
+  _scols() { return this.layoutOn ? window.Alpine.store('layout').cols('execTabs') : [] },
+  _six(f) { return this._scols().findIndex(c => c.field === f) },
+  sShown(f) { return !this.layoutOn || this._six(f) >= 0 },
+  sOrder(f) { return this.layoutOn && this._six(f) >= 0 ? { order: this._six(f) + 1 } : {} },
+  sLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('execTabs', f, dflt) : dflt },
+  _subKeys: ['progress', 'materials', 'devices', 'warranty', 'todos', 'info'],
+  // 目前的子分頁被版面隱藏（其他入口切過來，例如點健康總覽的關卡）⇒ 退回「執行進度」
+  subFix() { if (this.layoutOn && this._subKeys.includes(this.execSubTab) && !this.sShown(this.execSubTab)) this.execSubTab = 'progress' },
+  tabFix() { if (this.layoutOn && this._tabKeys.includes(this.activeTab) && !this.tShown(this.activeTab)) this.activeTab = 'biz' },
+  tLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('tabs', f, dflt) : dflt },
   // 案件資訊表單（合約資訊、專案期間）：欄位的顯示／順序／標題與區塊標題。旗標關閉＝中性值。
   fShown(form, f) { return !this.layoutOn || window.Alpine.store('layout').fieldShown(form, f) },
-  fo(form, f) { return this.layoutOn ? 'order:' + window.Alpine.store('layout').fieldOrder(form, f) : '' },
+  fo(form, f) { return this.layoutOn ? { order: window.Alpine.store('layout').fieldOrder(form, f) } : {} },
   fLabel(form, f, dflt) { return this.layoutOn ? window.Alpine.store('layout').fieldLabel(form, f, dflt) : dflt },
   secLabel(form, dflt) {
     if (!this.layoutOn) return dflt
@@ -4834,14 +4882,23 @@ window.CM_PARTS.push(() => ({
     try {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
-      // 同一次設定請求取得旗標（一個請求）；某個群組讀不到時逐組重試，不拖垮其他旗標（public-flags.js）
-      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields'], { token: s.token })
+      // 同一次設定請求取得旗標（一個請求）；某個群組讀不到時逐組重試，不拖垮其他旗標（public-flags.js）。名單順序：layout、custom_fields、rules、slots、status_display
+      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots', 'builder_status_display'], { token: s.token })
       // T61 S5：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）
       if (g.builder_custom_fields && g.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
+      // BP-2：旗標 builder_rules.enabled＝1 才啟動標示規則（關＝不送任何規則請求；兩支 js 載入後是惰性的）
+      if (g.builder_rules && g.builder_rules.enabled === 1) {
+        if (window.MotrixRuleMarks) window.MotrixRuleMarks.start()
+        if (window.MotrixRulesBuilder) window.MotrixRulesBuilder.mountEntry()
+      }
+      this.initStatusDisplay(g.builder_status_display)         // S-X2：旗標關 ⇒ 什麼都不做（沒有額外請求）
+      // BP-4 S3：附件種類編輯器的旗標從同一次設定請求取得（關閉時不多打任何請求）；只有最高管理者看得到入口
+      if (g.builder_slots && Number(g.builder_slots.enabled) === 1 && window.MotrixAttachmentSlots
+          && window.MotrixAttachmentSlots.mount({ docType: 'completion_note', label: '完工單' })) this.asOn = true
       if (!g.builder_layout || g.builder_layout.case_management !== true) return
       if (!document.getElementById('cm-layout-css')) {
         const st = document.createElement('style'); st.id = 'cm-layout-css'
-        st.textContent = '.cm-card--lo{display:flex;flex-direction:column}.cm-card--lo .cm-card__head,.cm-card--lo .cm-card__footer{width:100%}'
+        st.textContent = '.cm-card--lo{display:flex;flex-direction:column}.cm-card--lo .cm-card__head,.cm-card--lo .cm-card__footer{width:100%}.cm-biz-lo{display:flex;flex-direction:column}'
         document.head.appendChild(st)
       }
       const host = document.querySelector('[data-testid="batch-toggle"]')

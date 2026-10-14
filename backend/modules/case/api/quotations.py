@@ -73,6 +73,7 @@ from modules.case.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_f
 from modules.case.case_stage_tasks import daily_task_notice, delete_daily_task_for_case_stage, sync_daily_task_for_case_stage  # noqa: E402
 from modules.case.quotations import validate_tax_basis
 from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
+from helpers import clause_titles as _CT      # S-Q2：條款標題凍結（伺服器自有欄位 clauseTitles；用戶端送的一律丟掉）
 from helpers.case_roles import ROLE_KEYS, ROLE_LABELS, role_username, role_display
 from helpers.financial_mask import (
     money_visible, material_money_visible, quote_money_visible, mask_row as _mask_money_row, mask_quotation_data, mask_case_record, restore_case_record, strip_history_reasons,
@@ -535,6 +536,47 @@ def _exclude_requester(tiers: list, requester: str) -> list:
     return result
 
 
+def _submitted_msg(quote_no, label, cname) -> str:
+    """送審站內訊息（S-X3）：有已發布的自訂用語就用它（旗標關／沒有範本 ⇒ None ⇒ 今天寫死的字，逐字相同）。金額遮蔽仍由 `_notify` 逐收件人處理。"""
+    try:
+        from helpers import notify_templates as _NT
+        t = _NT.render_inapp("approval:submitted", {"單號": quote_no, "對象": cname, "標記": label})
+    except Exception:                                                  # noqa: BLE001
+        t = None
+    return t or f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+
+
+def _tier_msg(quote_no, label, cname, tier_no, total_tiers) -> str:
+    """輪到下一層的站內訊息（S-X3；送審時從中間層開始、簽核推進到下一層共用）。沒有範本 ⇒ 今天寫死的字。"""
+    try:
+        from helpers import notify_templates as _NT
+        t = _NT.render_inapp("approval:next_tier", {"單號": quote_no, "對象": cname, "標記": label, "層": tier_no, "總層": total_tiers})
+    except Exception:                                                  # noqa: BLE001
+        t = None
+    return t or (f"報價單 {quote_no}{label}（{cname}）"
+                 f"輪到您簽核（第 {tier_no} 層 / 共 {total_tiers} 層）")
+
+
+def _approved_msg(quote_no, cname, approved_by="") -> str:
+    """核准完成的站內訊息（S-X3）。沒有範本 ⇒ 今天寫死的字。"""
+    try:
+        from helpers import notify_templates as _NT
+        t = _NT.render_inapp("approval:approved", {"單號": quote_no, "對象": cname, "最終審核人": approved_by})
+    except Exception:                                                  # noqa: BLE001
+        t = None
+    return t or "報價單 %s（%s）已核准" % (quote_no, cname)
+
+
+def _returned_msg(new_no, quote_no, cname) -> str:
+    """退回修改的站內訊息（S-X3）。沒有範本 ⇒ 今天寫死的字。"""
+    try:
+        from helpers import notify_templates as _NT
+        t = _NT.render_inapp("approval:returned", {"新單號": new_no, "原單號": quote_no, "對象": cname})
+    except Exception:                                                  # noqa: BLE001
+        t = None
+    return t or f"報價單 {new_no}（原 {quote_no}，{cname}）已退回修改，請確認後重新送審"
+
+
 def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_submission: bool) -> dict:
     """Attach approval tiers built from global settings (requester excluded) if not
     already present on `appr`, then send approval-request notifications for a
@@ -582,22 +624,21 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
             pending = [a for a in (tiers[ct_idx].get("approvers") or [])
                        if a.get("status") != "approved"]
             if ct_idx == 0:
-                msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+                msg = _submitted_msg(quote_no, label, cname)
                 for a in pending:
                     _notify(a["username"], "approval_request", quote_no, quote_no, msg)
                     _appr_names.append(a["username"])
                     _appr_labels.append(a.get("displayName") or a["username"])
                 notify_approval_request(quote_no, cname, _appr_names)
             else:
-                msg = (f"報價單 {quote_no}{label}（{cname}）"
-                       f"輪到您簽核（第 {ct_idx + 1} 層 / 共 {len(tiers)} 層）")
+                msg = _tier_msg(quote_no, label, cname, ct_idx + 1, len(tiers))
                 for a in pending:
                     _notify(a["username"], "approval_request", quote_no, quote_no, msg)
                     _appr_names.append(a["username"])
                     _appr_labels.append(a.get("displayName") or a["username"])
                 notify_next_tier(quote_no, cname, ct_idx + 1, len(tiers), _appr_names)
         elif not tiers:
-            msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+            msg = _submitted_msg(quote_no, label, cname)
             _conn = get_db()
             admins = _conn.execute(
                 "SELECT username FROM users WHERE role='superadmin' AND active=1"
@@ -1221,7 +1262,8 @@ def gate_matrix(authorization: str = Header(None)):
 
     # CM6b：五關與到期資訊都批次取（原本每件約 17 句 SQL）
     nos = [r["quote_no"] for r in rows]
-    all_facts = _close_gate_facts(conn, nos)
+    _opts = _close_gate_opts(conn)
+    all_facts = _close_gate_facts(conn, nos, xe_drafts=bool(_opts and _opts.get("count_unfinished_extra_expenses")))
     overdue_by, next_by = {}, {}
     for i in range(0, len(nos), _GATE_CHUNK):
         ch = nos[i:i + _GATE_CHUNK]
@@ -1243,7 +1285,7 @@ def gate_matrix(authorization: str = Header(None)):
             d = json.loads(r["data_json"] or "{}")
         except Exception:
             d = {}
-        gates = _gates_from_facts(all_facts[r["quote_no"]], d)
+        gates = _gates_from_facts(all_facts[r["quote_no"]], d, _opts)
         blocked = [g for g in gates if g["state"] == "blocked"]
 
         # 階段到期：逾期數與下一個未完成階段的到期日（批次取回，見上）
@@ -1547,6 +1589,8 @@ def _apply_server_submit_reasons(q: dict, user: dict) -> None:
     不能由送件人決定（原本直接打 API 不帶 reasons 就能讓簽核人看不到低毛利）。"""
     from modules.case.quote_terms import DEFAULT_TERMS, submit_reasons
     from helpers.settings import _get_setting
+    from helpers import clause_titles as _CT
+    _CT.freeze(q)                                                  # S-Q2：送審當下把條款標題凍結進單據（範本生效時）；沒生效 ⇒ 清掉舊的凍結值。要在算原因之前。
     raw = _get_setting("quote_terms_presets", {}) or {}
     presets = raw.get("presets") if isinstance(raw, dict) else None
     presets = presets if isinstance(presets, list) else []
@@ -1555,6 +1599,29 @@ def _apply_server_submit_reasons(q: dict, user: dict) -> None:
     q["approval"] = appr
     appr["reasons"] = submit_reasons(q, user.get("display_name") or user["username"],
                                      presets, default_pt)
+
+
+def _quote_custom_fields_gate(q: dict, old):
+    """Q3：報價單頂層 `customFields` 的唯一閘門（`helpers.builtin_fields.gate("quotation", …)`）。就地改 `q`。
+    - 用戶端沒送這個鍵：有舊值就帶回舊值（整份取代不洗掉），沒有就維持沒有；
+    - 送了且與舊值相同：不介入（不重驗，免得選項被改掉後無法存其他欄位）；
+    - 送了且有變：過閘門（旗標關閉＝回舊值；型別錯 ⇒ 400 指名欄位；結果空＝移除鍵）。"""
+    from helpers import builtin_fields as _bf
+    if "customFields" not in q:
+        if old:
+            q["customFields"] = old
+        return
+    if q["customFields"] == old:
+        if not old:
+            q.pop("customFields", None)
+        return
+    new, errs, _ignored = _bf.gate("quotation", q["customFields"], old)
+    if errs:
+        raise HTTPException(400, "自訂欄位有問題：" + "；".join(e["message"] for e in errs))
+    if new:
+        q["customFields"] = new
+    else:
+        q.pop("customFields", None)
 
 
 @router.post("/api/quotations", status_code=201)
@@ -1570,8 +1637,10 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     _strip_foreign_file_entries(q.get("caseRecord"), {})   # 安全審查 W3：新建沒有既有檔案，前端帶的檔案路徑一律不收
     if isinstance(q.get("caseRecord"), dict):
         q["caseRecord"].pop("customFields", None)   # T61 S5：自訂欄位只能經案件記錄存檔路徑的閘門寫入；新建（含複製案件）一律不帶
+    _quote_custom_fields_gate(q, None)              # Q3：報價單自己的自訂欄位（頂層 customFields）過閘門；旗標關閉／沒送＝不存
     validate_quote_tax(q)   # AC1：只能存法定稅別
     validate_tax_basis(q, body.status)   # R2：零稅率／免稅送出要有依據（營業稅法 §7、§8）
+    q.pop("clauseTitles", None)          # S-Q2：條款標題凍結值是伺服器自有欄位（複製新單、直接打 API 帶來的一律丟掉）
     if body.status == "待審核":
         _apply_server_submit_reasons(q, user)
     now = datetime.now().isoformat()
@@ -1620,6 +1689,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     # 收得到 client 直接送非「待審核」的非草稿狀態。
     if body.status != "草稿":
         q[SNAPSHOT_KEY] = snapshot_for((body.location_id or "").strip())
+        _CT.freeze(q)                      # S-Q2：離開草稿那一刻凍結條款標題（待審核已在送審原因前凍結過，這裡涵蓋其他非草稿狀態；同一份範本 ⇒ 結果相同）
 
     def _do_insert(no: str):
         q["quoteNo"] = no
@@ -1799,6 +1869,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # 寫入交易內讀到 existing 後再放回資料庫現值（避免沒帶 _expectedUpdatedAt 時蓋掉併發的伺服器追加）。
     q["quoteNo"] = quote_no
     q.pop("editHistory", None)
+    q.pop("clauseTitles", None)          # S-Q2：用戶端送的凍結值一律不採用；下面在寫入交易內依狀態轉換決定（凍結／沿用資料庫現值／清掉）
     # 款項日期一律存 YYYY-MM-DD（「2026/09/01」等寫法否則會被報表歸月靜默漏掉）
     for _pi in (((q.get("caseRecord") or {}).get("payment") or {}).get("items") or []):
         if isinstance(_pi, dict):
@@ -1963,6 +2034,17 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
                 q["caseRecord"]["customFields"] = _cf_db
             else:
                 q["caseRecord"].pop("customFields", None)
+        # Q3：報價單自己的自訂欄位（頂層 customFields）。這支整份取代 data_json：沒送這個鍵＝帶回資料庫現值（不洗掉）；送了且有變＝過閘門
+        # （旗標關閉＝回舊值、用戶端的不存；型別錯＝400 指名欄位）。其他寫整份文件的路徑都是『讀資料庫現值再改』，不會丟掉它。
+        try:
+            _cfq_old = (json.loads(existing["data_json"] or "{}") or {}).get("customFields")
+        except (ValueError, TypeError):
+            _cfq_old = None
+        try:
+            _quote_custom_fields_gate(q, _cfq_old)
+        except HTTPException:
+            conn.close()
+            raise
         # 樂觀鎖（選填）：草稿階段沒有狀態鎖保護，兩人同時編輯同一張草稿會後寫覆蓋
         # 前寫且完全沒有提示。自動存檔（autoSave）跟手動存檔共用這支端點，衝突時
         # 一律回 409，讓呼叫端自行決定要不要提示使用者或重新載入。
@@ -2022,6 +2104,20 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             q[SNAPSHOT_KEY] = snapshot_for(_eff_location_id)
         elif new_status == "草稿":
             q.pop(SNAPSHOT_KEY, None)
+        # S-Q2：條款標題——離開草稿或解鎖重簽 ⇒ 以當下範本重新凍結；回草稿 ⇒ 清掉；其餘（待審核／簽核中維持原狀）⇒ 沿用資料庫現值，不採用用戶端的
+        if (existing["status"] == "草稿" and new_status != "草稿") or is_unlock_edit:
+            _CT.freeze(q)
+        elif new_status == "草稿":
+            q.pop("clauseTitles", None)
+        else:
+            try:
+                _old_ct = (json.loads(existing["data_json"] or "{}") or {}).get("clauseTitles")
+            except (ValueError, TypeError):
+                _old_ct = None
+            if isinstance(_old_ct, dict):
+                q["clauseTitles"] = _old_ct
+            else:
+                q.pop("clauseTitles", None)
 
         MG.enforce(conn, quote_no, q, actor=user)   # 叫料審核（31-C）：整份存檔也要過閘（以資料庫現值為準；被拒的項目維持原值）
         conn.execute("""
@@ -2147,8 +2243,10 @@ def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str
                 _sd = {}
             if _leaving_draft:
                 _sd[SNAPSHOT_KEY] = snapshot_for(row["location_id"] or "")
+                _CT.freeze(_sd)              # S-Q2：直接改狀態離開草稿也要凍結條款標題
             else:
                 _sd.pop(SNAPSHOT_KEY, None)
+                _sd.pop("clauseTitles", None)
             conn.execute(
                 "UPDATE quotations SET status=?, data_json=?, updated_at=? WHERE quote_no=?",
                 (body.status, json.dumps(_sd, ensure_ascii=False),
@@ -2206,6 +2304,7 @@ def recall_quotation(quote_no: str, authorization: str = Header(None)):
         # 草稿階段仍跟著設定即時走，快照還在的話，收回之後、還沒再送審之前
         # 這段時間會印出舊抬頭（而那與「凍結生效中」長得一樣，沒有人會報修）。
         q.pop(SNAPSHOT_KEY, None)
+        q.pop("clauseTitles", None)          # S-Q2：回草稿 ⇒ 條款標題回到跟著範本走，再送審時重新凍結
         now = datetime.now().isoformat()
         deal_tag, settle_status = quote_hot_fields(q)
         conn.execute(
@@ -2255,7 +2354,7 @@ _CLOSE_DOC_TABLES = [
 _GATE_CHUNK = 300   # IN 清單每批上限（舊版 SQLite 參數上限 999）
 
 
-def _close_gate_facts(conn, quote_nos: list) -> dict:
+def _close_gate_facts(conn, quote_nos: list, xe_drafts: bool = False) -> dict:
     """CM6b（2026-09-24）：五關需要的資料庫事實，一次批次取回（GROUP BY），與案件數無關地
     只跑固定幾句 SQL。回傳 {quote_no: facts}；判定本身在 _gates_from_facts()（純計算）。
     關卡矩陣原本每件 ~17 句，40 件就是 681 句。
@@ -2304,15 +2403,35 @@ def _close_gate_facts(conn, quote_nos: list) -> dict:
     except Exception:
         for no in nos:
             facts[no]["xe"] = None    # 舊環境還沒有這張表（DB v75 之前）
+    if xe_drafts:                      # 只在『結案條件加嚴』的草稿選項開啟時才多這一句（關閉時 SQL 與過去完全相同）
+        try:
+            for ch in chunks:
+                ph = ",".join("?" * len(ch))
+                for r in conn.execute(
+                        f"SELECT quote_no, SUM(CASE WHEN status='草稿' THEN 1 ELSE 0 END) d, SUM(CASE WHEN status='簽核中' THEN 1 ELSE 0 END) m "
+                        f"FROM case_extra_expenses WHERE quote_no IN ({ph}) AND status IN ('草稿','簽核中') GROUP BY quote_no", ch):
+                    facts[r["quote_no"]]["xe_draft"] = r["d"] or 0         # 草稿（尚未送審）
+                    facts[r["quote_no"]]["xe_mid"] = r["m"] or 0           # 簽核中（多層簽核簽到一半；今天不擋結案，見 FINANCE 文件 §5.1）
+        except Exception:
+            pass
     return facts
+
+
+def _close_gate_opts(conn):
+    """『結案條件加嚴』選項（設定群組 case_close_gates，預設全關）。全關 ⇒ None（走過去的路徑）；讀不到 ⇒ 全部開（往嚴的一邊，見 finance_params）。"""
+    from helpers import finance_params as _FP
+    o = _FP.close_gate_options(conn)
+    return o if any(o.values()) else None
 
 
 def _case_close_gates(conn, quote_no: str, d: dict) -> list:
     """單一案件的五關（擋結案、close-gates 用）。與關卡矩陣走同一條：批次取數＋_gates_from_facts()。"""
-    return _gates_from_facts(_close_gate_facts(conn, [quote_no])[quote_no], d)
+    opts = _close_gate_opts(conn)
+    facts = _close_gate_facts(conn, [quote_no], xe_drafts=bool(opts and opts.get("count_unfinished_extra_expenses")))
+    return _gates_from_facts(facts[quote_no], d, opts)
 
 
-def _gates_from_facts(facts: dict, d: dict) -> list:
+def _gates_from_facts(facts: dict, d: dict, opts: dict = None) -> list:
     """完結案前置條件，回傳五個關卡的結構化狀態（順序＝結案檢查順序）。**唯一的判定**。
 
     每個關卡：{key, label, state, value, ratio, reason, pendingUsernames}
@@ -2324,7 +2443,11 @@ def _gates_from_facts(facts: dict, d: dict) -> list:
 
     # ① 執行管理進度 100%（沒有任何階段視為「無需檢查」，不算未達成）
     total, done = facts["stages"]
-    if total == 0:
+    if total == 0 and opts and opts.get("require_stages"):
+        gates.append({"key": "progress", "label": "進度", "state": "blocked",
+                      "value": "無階段", "ratio": 0.0, "reason": "尚未建立執行管理階段（結案條件加嚴）",
+                      "pendingUsernames": []})
+    elif total == 0:
         gates.append({"key": "progress", "label": "進度", "state": "na",
                       "value": "無階段", "ratio": None, "reason": None,
                       "pendingUsernames": []})
@@ -2340,7 +2463,11 @@ def _gates_from_facts(facts: dict, d: dict) -> list:
 
     # ② 款項明細全部收齊（沒有任何期別視為「無需檢查」）
     items = ((d.get("caseRecord") or {}).get("payment") or {}).get("items") or []
-    if not items:
+    if not items and opts and opts.get("require_payment_items"):
+        gates.append({"key": "payment", "label": "收款", "state": "blocked",
+                      "value": "無款項", "ratio": 0.0, "reason": "尚未建立款項明細（結案條件加嚴）",
+                      "pendingUsernames": []})
+    elif not items:
         gates.append({"key": "payment", "label": "收款", "state": "na",
                       "value": "無款項", "ratio": None, "reason": None,
                       "pendingUsernames": []})
@@ -2400,7 +2527,11 @@ def _gates_from_facts(facts: dict, d: dict) -> list:
     # 精算還停在草稿等於把一張永遠算不完的帳鎖進去。判斷沿用既有熱路徑欄位口徑
     # （data_json.settlement.status），完全沒有精算資料的案件視為「無需檢查」。
     settlement = (d.get("settlement") or {})
-    if not settlement:
+    if not settlement and opts and opts.get("require_settlement"):
+        gates.append({"key": "settlement", "label": "精算", "state": "blocked",
+                      "value": "未建", "ratio": 0.0, "reason": "尚未建立成本精算（結案條件加嚴）",
+                      "pendingUsernames": []})
+    elif not settlement:
         gates.append({"key": "settlement", "label": "精算", "state": "na",
                       "value": "未建", "ratio": None, "reason": None,
                       "pendingUsernames": []})
@@ -2418,7 +2549,18 @@ def _gates_from_facts(facts: dict, d: dict) -> list:
     # ⑤ 額外支出不可停在送審中（2026-09-13 一併補上）：那是還沒定案的成本，
     # 結案後才核准會讓已結案案件的成本事後改變。
     xe_total, xe_pending = facts["xe"] if facts["xe"] is not None else (None, None)
-    if xe_total is None or xe_total == 0:
+    _unfinished = bool(opts and opts.get("count_unfinished_extra_expenses"))
+    xe_draft = (facts.get("xe_draft") or 0) if _unfinished else 0
+    xe_mid = (facts.get("xe_mid") or 0) if _unfinished else 0
+    if xe_draft or xe_mid:
+        parts = ([f"額外支出尚有 {xe_pending} 筆送審中"] if xe_pending else []) \
+            + ([f"額外支出尚有 {xe_draft} 筆草稿未送審"] if xe_draft else []) \
+            + ([f"額外支出尚有 {xe_mid} 筆簽核尚未完成"] if xe_mid else [])
+        parts[-1] += "（結案條件加嚴）"
+        gates.append({"key": "extraExpense", "label": "變更", "state": "blocked",
+                      "value": f"{xe_pending + xe_draft + xe_mid} 未完成", "ratio": 0.0,
+                      "reason": "；".join(parts), "pendingUsernames": []})
+    elif xe_total is None or xe_total == 0:
         gates.append({"key": "extraExpense", "label": "變更", "state": "na",
                       "value": "無", "ratio": None, "reason": None,
                       "pendingUsernames": []})
@@ -5072,7 +5214,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
                         #    使用者回報簽核時整個系統卡住 3 秒；通知還可能因為等滿 busy timeout 而遺失）⇒ commit 之後才做。
                         after_commit.append(functools.partial(
                             _notify, na["username"], "approval_request", quote_no, quote_no,
-                            f"報價單 {quote_no}（{cname}）輪到您簽核（第 {landed + 1} 層 / 共 {len(tiers)} 層）"))
+                            _tier_msg(quote_no, "", cname, landed + 1, len(tiers))))
                         _next_names.append(na["username"])
                     after_commit.append(functools.partial(notify_next_tier, quote_no, cname, landed + 1, len(tiers), _next_names))
             else:
@@ -5129,7 +5271,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             if appr.get("requestedBy"):                       # 第44班：申請人在系統內也要看到核准通知（點了開報價單；訊息不含金額）
                 after_commit.append(functools.partial(
                     _notify, appr["requestedBy"], "quotation_approved", quote_no, quote_no,
-                    "報價單 %s（%s）已核准" % (quote_no, cname), "quotation-form.html?id=" + urlquote(quote_no, safe="")))
+                    _approved_msg(quote_no, cname, approver_name), "quotation-form.html?id=" + urlquote(quote_no, safe="")))
             detail_status = "已送出"
         else:
             d["approval"] = appr
@@ -5219,6 +5361,7 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
         # 同 recall_quotation() 清掉據點快照——理由一樣：草稿階段要跟著
         # 設定即時走，不是印退回當下凍結的那份舊抬頭。
         d.pop(SNAPSHOT_KEY, None)
+        d.pop("clauseTitles", None)          # S-Q2：退回改版（-R）＝新草稿，不帶原單凍結的條款標題
 
         conn.execute(
             "UPDATE quotations SET quote_no=?, status='草稿', data_json=?, updated_at=? WHERE quote_no=?",
@@ -5228,8 +5371,7 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
 
         requester = appr.get("requestedBy")
         if requester:
-            _notify(requester, "approval_returned", new_no, new_no,
-                    f"報價單 {new_no}（原 {quote_no}，{cname}）已退回修改，請確認後重新送審")
+            _notify(requester, "approval_returned", new_no, new_no, _returned_msg(new_no, quote_no, cname))
             notify_returned(quote_no, new_no, cname, note, requester)
         conn.close()
         _audit(_tok(authorization), "quotation.return", "quotation", new_no,

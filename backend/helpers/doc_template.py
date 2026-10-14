@@ -28,6 +28,23 @@ def esc_quotes(text) -> str:
     return text.replace('"', '&quot;').replace("'", '&#x27;')
 
 
+def html_text(s, *, br: bool = True, falsy_empty: bool = False) -> str:
+    """HTML 內文用的**唯一**跳脫實作（& < > " '；`br=True` 時換行轉 `<br>`）。取代 pdf_gen／completion_pdf 各處區域 `esc()` 的複製貼上。
+
+    兩個旗標精確重現各 builder 過去的行為（純文字資料輸出逐位元相同）：
+    - `br`：`\n` → `<br>`（預設；唯一不轉換行的舊版是 `_voucher_sign_html`）；
+    - `falsy_empty`：舊版 `(s or '')` 的寫法——`0`／`False`／空字串／`None` 一律印成空字串（舊版 `str(s) if s is not None else ''` 則 `0` 印成 "0"）。
+    非字串先轉字串（舊版 `(s or '')` 對數字會丟 AttributeError，現在改成跳脫後的文字）；`None` ⇒ 空字串。"""
+    if falsy_empty and not s:
+        s = ""
+    if s is None:
+        s = ""
+    if not isinstance(s, str):
+        s = str(s)
+    t = esc_quotes(s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
+    return t.replace('\n', '<br>') if br else t
+
+
 def attr_esc(s) -> str:
     """HTML 屬性值／單行文字用的完整跳脫（`& < > " '`；不轉換行）。非字串先轉字串，None ⇒ 空字串。"""
     if s is None:
@@ -41,11 +58,7 @@ def _esc(s) -> str:
     """跳脫（& < > " ' 與換行）。非字串一律先轉字串。
 
     引號也要跳脫（W3 #2 儲存型 XSS）：版型的 class／width 等值會落在 HTML 屬性內，`"` 沒跳脫就能跳出屬性塞 onmouseover 等事件。"""
-    if s is None:
-        s = ""
-    if not isinstance(s, str):
-        s = str(s)
-    return esc_quotes(s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')).replace('\n', '<br>')
+    return html_text(s)
 
 
 #: 版型作者可填、會落進屬性的值：一律白名單驗證（不是只跳脫）

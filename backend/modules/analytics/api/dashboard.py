@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
+from helpers.option_lists import payment_stage_display as _stage_display      # census S-F1
+
+
 @router.get("/api/dashboard/stats")
 def dashboard_stats(department_id: Optional[int] = Query(None), authorization: str = Header(None)):
     u = _require_user(authorization)
@@ -132,7 +135,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
                 payment_items.append({
                     "quoteNo":  r["quote_no"],
                     "customer": r["customer_name"] or "",
-                    "label":    p.get("type", ""),
+                    "label":    _stage_display(p.get("type", ""), p),
                     "pct":      p.get("pct", 0),
                     "amount":   amount,
                 })

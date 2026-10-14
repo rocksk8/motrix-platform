@@ -19,7 +19,7 @@ v2（2026-08-31 同日）：receivables.html（應收帳款）獨有的發票登
 import json
 import logging
 import re
-from datetime import date
+from datetime import date, timedelta
 
 import csv
 from typing import Optional
@@ -30,6 +30,7 @@ import io
 from urllib.parse import quote as _url_quote
 
 from helpers import download_name
+from helpers import finance_params as _finance_params   # 銀行對帳單欄位別名（預設逐字等於下面三個常數）
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from core import registry
 from db import get_db, spawn_bg_thread
@@ -42,6 +43,7 @@ from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged, 
 _log = logging.getLogger(__name__)
 
 
+from helpers.option_lists import payment_stage_name as _stage_name      # census S-F1：款項期別顯示名稱（選項清單關著／沒發布 ⇒ 與過去逐字相同）
 def _call_hook(hook, arg, what):
     """commit 之後的串接點呼叫（行事曆對齊等）：出任何錯只記 log，**絕不**讓已經完成的付款／改期回 500（稽核 S3）。"""
     try:
@@ -431,6 +433,7 @@ def _receivable_queue(conn, status: str = "unreceived") -> list:
     """status: unreceived（預設，出納待辦用）／received／all（比照
     dashboard.py 原 list_receivables() 的完整歷史，供併入的應收帳款查詢用）。"""
     today = date.today()
+    _overdue_before = (today - timedelta(days=_finance_params.receivable_grace_days())).isoformat()    # 寬限 0 天（預設）＝ today.isoformat()＝今天的行為
     rows = conn.execute("""
         SELECT quote_no, customer_name, project_name, sales_person,
                total, pretax, quote_date,
@@ -469,11 +472,11 @@ def _receivable_queue(conn, status: str = "unreceived") -> list:
                 "project":             row["project_name"] or "",
                 "salesPerson":         row["sales_person"] or "",
                 "dealTag":             row["deal_tag"] or "",
-                "type":                pi.get("type", f"第{idx+1}期"),
+                "type":                _stage_name(pi, idx),
                 "amount":              amounts[idx],
                 "quoteDate":           row["quote_date"] or "",
                 "expectedReceiptDate": expected,
-                "overdue":             bool(expected) and not received and expected < today.isoformat(),
+                "overdue":             bool(expected) and not received and expected < _overdue_before,
                 "received":            received,
                 "receivedAt":          pi.get("receivedAt") or "",
                 "receivedBy":          pi.get("receivedBy") or "",
@@ -804,9 +807,10 @@ def _parse_bank_csv(raw: bytes) -> list:
 
     reader = csv.DictReader(io.StringIO(text))
     fieldnames = reader.fieldnames or []
-    date_col = _pick_csv_header(fieldnames, _BANK_DATE_ALIASES)
-    amt_col  = _pick_csv_header(fieldnames, _BANK_AMOUNT_ALIASES)
-    desc_col = _pick_csv_header(fieldnames, _BANK_DESC_ALIASES)
+    _al = _finance_params.bank_aliases()        # 旗標 finance_cashier.custom_bank_aliases 關＝內建三個常數
+    date_col = _pick_csv_header(fieldnames, _al["date"])
+    amt_col  = _pick_csv_header(fieldnames, _al["amount"])
+    desc_col = _pick_csv_header(fieldnames, _al["desc"])
     if not amt_col:
         raise HTTPException(400, f"CSV 找不到可辨識的金額欄位，偵測到的欄位為：{'、'.join(fieldnames) or '（無）'}")
 

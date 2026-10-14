@@ -127,13 +127,14 @@ def test_audit_write_failure_rolls_the_whole_approval_back(client, people, sa3, 
 
 
 def test_mail_rows_escape_free_text_reason_and_names(client, people, sa3, monkeypatch):
-    sent = []
+    """信件內文的跳脫由共用的 `email_notify._build_html` 負責（簽核類統一逸出）；呼叫端不再自己逸出，所以這裡看最後寄出的 HTML：只逸出一次。"""
+    html_sent = []
     import modules.payroll.bonus_notify as bn
-    monkeypatch.setattr(bn._en, "send_registered", lambda key, **kw: sent.append((key, kw)) or True)
+    monkeypatch.setattr(bn._en, "_lookup_emails", lambda names, key=None: ["a@example.com"])
+    monkeypatch.setattr(bn._en, "_async_send", lambda to, subject, html: html_sent.append(html) or None)
     _submitted(client, people, "MQ-BY52-008", [["bc_sa2"]])
     r = _approve(client, sa3, "MQ-BY52-008", reason="<script>alert(1)</script> & 急件")
     assert r.status_code == 200, r.text
-    kw = [kw for key, kw in sent if key == "bonus_approver_bypass"][0]
-    why = dict(kw["rows"])["原因"]
-    assert "<script>" not in why and "&lt;script&gt;" in why and "&amp;" in why
-    assert all("<" not in str(v) for _k, v in kw["rows"]) and "<" not in kw["note"]
+    body = [h for h in html_sent if "層外核准" in h][0]
+    assert "<script>alert(1)</script>" not in body and "&lt;script&gt;alert(1)&lt;/script&gt; &amp; 急件" in body
+    assert "&amp;amp;" not in body and "&amp;lt;" not in body

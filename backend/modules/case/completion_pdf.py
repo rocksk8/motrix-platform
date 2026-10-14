@@ -10,8 +10,9 @@ import tempfile
 from datetime import datetime, date
 
 import pdf_gen as _pg
-from helpers.doc_template import esc_quotes as _esc_q
+from helpers.doc_template import esc_quotes as _esc_q, html_text as _html_text
 from db import get_db
+from helpers import export_templates as _ET     # G-A：完工單 PDF 可加頁尾／浮水印文字（預設關閉；沒有發布過範本 ⇒ 輸出逐位元相同）
 from helpers import _get_edge_path, run_edge_pdf
 
 
@@ -25,7 +26,20 @@ from helpers import _get_edge_path, run_edge_pdf
 # **遺留事項**）。遺留事項那塊刻意做成紅框顯眼樣式：完工不等於零缺失，這一欄被
 # 忽略正是日後驗收爭議的來源。
 
+#: 頁尾／浮水印文字只能從預設清單挑（客戶可見文字，任何變更＝放寬、需第二位核准）；『尚未核准』橫幅與法定欄位不受影響。
+COMPLETION_PDF_EXPORT = "case:completion-note-pdf"
+_ET.register_export(
+    COMPLETION_PDF_EXPORT, label="完工單（PDF）", formats=("pdf",), columns=[], sample_rows=[], caps=("footer", "watermark"),
+    sample_html=("<!doctype html><html><body style=\"font-family:sans-serif;padding:20mm\"><h2>完工單（樣本頁）</h2>"
+                 "<p>這一頁只用來看頁尾與浮水印文字放在哪裡；文件的內容與程式產生的橫幅不受影響。</p></body></html>"))
+
+
 def _build_completion_html(n: dict) -> str:
+    """完工單 HTML（預覽與 PDF 共用）。G-A：旗標關／沒有已發布範本 ⇒ 原樣回傳同一個字串。"""
+    return _ET.decorate_pdf(COMPLETION_PDF_EXPORT, _build_completion_html_core(n))
+
+
+def _build_completion_html_core(n: dict) -> str:
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
@@ -36,7 +50,7 @@ def _build_completion_html(n: dict) -> str:
     # 經 _pg 取：測試以 monkeypatch.setattr(pdf_gen, "location_identity", …) 換掉據點身分
     _ident = _pg.apply_snapshot(_pg.location_identity(_pg._location_of(n)), n)
     def esc(s):
-        return _esc_q((str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;') .replace('>', '&gt;').replace('\n', '<br>'))
+        return _html_text(s)
 
     # 可自訂標題（2026-09-12）：使用者覆寫值已在 _note_public()/_completion_note_dict()
     # 疊過預設值，這裡直接用。預設用語刻意中性——公司除了工程還有專案、零組件販售、

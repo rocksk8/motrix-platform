@@ -67,7 +67,7 @@ def _validate_layout(body, key):
     out = [{"path": k, "message": "不認得的鍵（版面只有 ops）"} for k in body if k != "ops"]
     if "ops" not in body:
         return out + [{"path": "ops", "message": "缺 ops（排版操作清單）"}]
-    if not registry.is_loaded(mod):
+    if not catalog.owner_loaded(mod):
         return out + [{"path": "", "message": "模組 %s 未載入（停用、未授權或不存在）⇒ 沒有可排版的點" % mod}]
     probs = out + [{"path": "ops" + p["path"], "message": p["message"]} for p in catalog.check_layout(mod, body["ops"])]
     from helpers import menu_builder as MB                  # BP-1：關著時不接受側欄改名／換群組
@@ -78,9 +78,9 @@ def _validate_layout(body, key):
 
 def _default_layout(key):
     """程式預設＝不做任何操作（模組 module.json 登記的原樣）。模組未載入 ⇒ 沒有預設。"""
-    from core import registry
+    from core import catalog
     mod = _layout_module(key)
-    return {"ops": []} if mod and registry.is_loaded(mod) else None
+    return {"ops": []} if mod and catalog.owner_loaded(mod) else None
 
 
 D.register_validator("layout", _validate_layout)
@@ -152,8 +152,36 @@ def _managed_message(kind):
 _PLANNED_MSG = "這項功能還在開發中，尚未開放調整。"
 
 
+def _lazy_kinds():
+    """惰性登記的 kind（旗標開啟才存在；關著 ⇒ `/api/definition-kinds` 與今天相同）。"""
+    try:
+        from helpers import export_templates as _ET
+        _ET.ensure_kind()
+        from helpers import option_lists as _OL
+        _OL.ensure_kind()
+        from helpers import notify_templates as _NT
+        _NT.ensure_kind()
+        from helpers import stage_templates as _ST
+        _ST.ensure_kind()
+    except Exception:                                                  # noqa: BLE001  登記失敗 ⇒ 該 kind 不存在（fail-closed）
+        pass
+
+
+def _disabled_lazy_kinds() -> set:
+    """惰性登記的 kind 一旦登記，到服務重啟前都留在 `D.kinds()`；旗標關了就不要在種類清單裡列出（與功能狀態閘門 hidden 一致）。"""
+    out = set()
+    try:
+        from helpers import stage_templates as _ST
+        if not _ST.enabled():
+            out.add(_ST.KIND)
+    except Exception:                                                  # noqa: BLE001  讀不到 ⇒ 視為關（不列出）
+        out.add("case_stage_template")
+    return out
+
+
 def _group_gate(kind, key):
     """設定群組的任何『指名某個群組』的通用路由（讀取、驗證）：hidden ⇒ 404（連 superadmin 也不顯示）、planned ⇒ 409（只有名稱與狀態可見，細節不給）。"""
+    _lazy_kinds()
     st = _group_status(kind, key)
     if st == "hidden":
         raise HTTPException(404, "沒有這個定義")
@@ -163,6 +191,7 @@ def _group_gate(kind, key):
 
 def _managed_guard(kind, authorization=None, key="", verb=""):
     """受管 kind 的通用寫入一律 409（hidden 群組 ⇒ 404，不洩漏存在）；並留稽核 `definitions.managed_refused`（只記 kind／key／動作，不記內容）——繞過設定中心的嘗試要看得到。"""
+    _lazy_kinds()
     msg = _managed_message(kind)
     if msg:
         try:
@@ -201,7 +230,8 @@ def _err(e: D.DefinitionError, status=400):
 def list_definition_kinds(authorization: str = Header(None)):
     """定義種類清單（內建＋模組登記的）——編輯畫面用；只有超級管理員。"""
     _require_user(authorization, require_superadmin=True)
-    return {"kinds": D.kinds_meta()}
+    _lazy_kinds()
+    return {"kinds": [m for m in D.kinds_meta() if m.get("kind") not in _disabled_lazy_kinds()]}
 
 
 @router.get("/api/expense-types")
@@ -358,7 +388,7 @@ def validate_definition(kind: str, key: str, payload: dict = Body(...), authoriz
 # ── T60 S1：伺服端強制「發布要先看過同一份草稿的預覽」（D4：沒有後門）；旗標 builder_governance.enabled（與 def_governance.enabled 同一個設定） ──
 #: 已經會在發布時帶 `preview_hash` 的編輯器所對應的 kind（旗標開啟時才強制）。
 #: 排版器（layout）與選單建構器（發布走 layout）尚未送雜湊 ⇒ 還不在名單；它們接上之後再加進來（見 T60 計畫 S1）。
-_PREVIEW_ENFORCED_KINDS = ("expense_type", "remit_kinds", "custom_module")
+_PREVIEW_ENFORCED_KINDS = ("expense_type", "remit_kinds", "custom_module", "export_template", "option_list")
 
 
 def _preview_gate(conn, kind, key, scope, user, preview_hash, expect=None):
@@ -388,30 +418,14 @@ def _preview_gate(conn, kind, key, scope, user, preview_hash, expect=None):
 
 
 #: T62：可由最高管理者在設定中心逐一選擇要不要強制的 kind（預設都不強制＝與今天相同）。欄位名＝builder_governance.enforce_<kind>。
-_OPT_IN_PREVIEW_KINDS = ("layout", "custom_fields", "user_buttons", "output_template")
-
-
-def _now_iso():
-    from datetime import datetime
-    return datetime.now().isoformat(timespec="seconds")
+_OPT_IN_PREVIEW_KINDS = ("layout", "custom_fields", "user_buttons", "output_template", "rule_set")
 
 
 def _strict_setting(conn, group, field):
-    """設定值的**嚴格**讀取（把關專用）：資料庫讀不到、內容格式不對、值不是 0／1 ⇒ 丟例外（由 `_preview_enforced` 轉成 503，不放行）。
-    不用 `settings_registry.get`：它『永不丟例外』，讀取失敗會回預設（＝關），等於悄悄打開閘門；`MOTRIX_SETTINGS_DEFAULTS_ONLY=1`
-    也會讓它回預設——安全把關不受那個逃生口影響（照管理者已儲存的值判斷）。沒有儲存過的欄位 ⇒ 程式預設（這是正常情況，不是錯誤）。"""
-    from helpers import settings_registry as SR
-    row = D.get(conn, SR.KIND, group, SR.SCOPE)                        # 資料庫錯誤在此丟出，不吞
-    val = SR._defaults(group)[field]
-    if row is not None:
-        vals = (row.get("body") or {}).get("values")
-        if not isinstance(vals, dict):
-            raise ValueError("設定群組 %s 的內容格式不對" % group)
-        if field in vals:
-            val = vals[field]
-    for r in SR._due_pending(conn, group, _now_iso()):      # 已到時的待生效值（例如放寬後的『關閉強制』）
-        if r["field"] == field:
-            val = r["new"]
+    """設定值的**嚴格** 0／1 讀取（把關專用）：讀不到、格式不對、值不是 0／1 ⇒ 丟例外（由 `_preview_enforced` 轉成 503，不放行）。
+    讀取本身在 `helpers/settings_strict.strict_value`（不經 `settings_registry.get`：它永不丟例外，失敗會回預設＝悄悄打開閘門）。"""
+    from helpers.settings_strict import strict_value
+    val = strict_value(conn, group, field)
     if isinstance(val, bool) or val not in (0, 1):
         raise ValueError("設定 %s.%s 的值不是 0／1：%r" % (group, field, val))
     return int(val)
@@ -439,6 +453,8 @@ def _preview_enforced(conn, kind) -> bool:
     try:
         if kind in _PREVIEW_ENFORCED_KINDS:
             return _governance_enabled(conn)
+        if kind == "rule_set" and _strict_setting(conn, "builder_rules", "enabled") == 1:
+            return True                                                # 規則功能有效（開著）就一律要先預覽——收緊的規則也會標紅真實案件，不能沒看過就發；enforce_rule_set 只是額外的獨立保險
         return _opt_in_enforced(conn, kind)
     except Exception:                                                  # noqa: BLE001
         logging.getLogger(__name__).exception("preview gate: 讀不到強制預覽設定（kind=%s），發布／還原被擋下", kind)
@@ -628,7 +644,7 @@ def effective_layout(module_key: str, role: str = Query(None), authorization: st
     u = _require_user(authorization)
     if role is not None and u["role"] != "superadmin":
         raise HTTPException(403, "只有超級管理員可以預覽其他角色的版面")
-    if not re.match(r"^[a-z][a-z0-9_]{0,39}$", module_key or "") or not registry.is_loaded(module_key):
+    if not re.match(r"^[a-z][a-z0-9_]{0,39}$", module_key or "") or not catalog.owner_loaded(module_key):
         raise HTTPException(404, "模組未載入")
     who = role if role is not None else u["role"]
     conn = get_db()

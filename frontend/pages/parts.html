@@ -8,6 +8,9 @@
   <title>料號主檔 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
+  <script src="../static/export-guard.js"></script>
+  <script src="../static/option-lists.js"></script>
+  <meta name="motrix-option-lists" content="part_category,part_unit">   <!-- census #4：只是宣告；選項清單開啟且是最高管理者時，sidebar.js 才載入編輯器（關著＝沒有任何額外請求） -->
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/vendor/xlsx-0.18.5.full.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -222,7 +225,7 @@
         <div class="field-label">類別</div>
         <select class="field-input" x-model="modal.category">
           <option value="">未分類</option>
-          <template x-for="c in categoryOptions" :key="c.name"><option :value="c.name" x-text="c.name"></option></template>
+          <template x-for="c in categorySelectOptions(modal.category)" :key="c.name"><option :value="c.name" x-text="c.label || c.name"></option></template>
         </select>
       </div>
       <div class="field-row" style="grid-column:1/-1">
@@ -285,7 +288,8 @@
       </div>
       <div class="field-row">
         <div class="field-label">單位</div>
-        <input class="field-input" type="text" placeholder="台 / 套 / 個…" x-model="modal.unit">
+        <input class="field-input" type="text" placeholder="台 / 套 / 個…" x-model="modal.unit" list="unit-suggest">
+        <template x-if="unitSuggest().length"><datalist id="unit-suggest"><template x-for="u in unitSuggest()" :key="u"><option :value="u"></option></template></datalist></template>
       </div>
       <div class="field-row">
         <div class="field-label">成本（未稅）</div>
@@ -379,6 +383,17 @@ function app() {
     stockMap: {},
     search: '',
     filterCat: '',
+    optVer: 0,
+    // census #4：預設單位＝選項清單 part_unit 第一個未停用的（沒有自訂 ⇒ 台，與今天相同）；單位欄位仍可自由輸入，清單只是建議
+    // census #4：分類被管理者停用後，舊料號編輯時仍要顯示它目前的分類（不然儲存會把分類洗掉）；選項清單沒開 ⇒ 與今天相同
+    categorySelectOptions(cur) {
+      this.optVer
+      const base = this.categoryOptions || []
+      if (!MotrixOptions.custom('part_category') || !cur || base.some(c => c.name === cur)) return base
+      return base.concat([{ name: cur, label: cur + '（已停用）' }])
+    },
+    defaultUnit() { this.optVer; return MotrixOptions.firstValue('part_unit', '台') },
+    unitSuggest() { this.optVer; return MotrixOptions.custom('part_unit') ? MotrixOptions.values('part_unit', []) : [] },
     modal: { show: false, id: null, partNo: '', name: '', brandName: '', brandModel: '', unit: '台', cost: 0, listPrice: 0, safetyStock: 0, category: '', note: '', saving: false, error: '' },
     brandPresets: [],
     showAddBrand: false,
@@ -477,6 +492,7 @@ function app() {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) { location.href = 'login.html'; return }
       this.session = s
+      window.addEventListener('motrix-options', () => { this.optVer++ })     // census #4：選項清單到了（或換了）就重算
       // 排序偏好跟著帳號（user_list_prefs），不是瀏覽器
       if (typeof loadListPref === 'function') {
         const pf = await loadListPref(s.token, 'parts')
@@ -578,7 +594,7 @@ function app() {
         const [bn, ...rest] = (part.brand || '').split('/')
         this.modal = { show: true, id: part.id, partNo: part.part_no, name: part.name, brandName: (bn || '').trim(), brandModel: rest.join('/').trim(), unit: part.unit || '台', cost: part.cost || 0, listPrice: part.list_price || 0, safetyStock: part.safety_stock || 0, category: part.category || '', note: part.note || '', saving: false, error: '' }
       } else {
-        this.modal = { show: true, id: null, partNo: '', name: '', brandName: '', brandModel: '', unit: '台', cost: 0, listPrice: 0, safetyStock: 0, category: '', note: '', saving: false, error: '' }
+        this.modal = { show: true, id: null, partNo: '', name: '', brandName: '', brandModel: '', unit: this.defaultUnit(), cost: 0, listPrice: 0, safetyStock: 0, category: '', note: '', saving: false, error: '' }
       }
     },
 
@@ -605,7 +621,7 @@ function app() {
       this.modal.saving = false
     },
 
-    exportExcel() {
+    async exportExcel() {
       const rows = this.items.map(p => {
         const [bn, ...rest] = (p.brand || '').split('/')
         return {
@@ -616,6 +632,7 @@ function app() {
           '備註': p.note || ''
         }
       })
+      if (!(await MotrixExport.guard('parts', rows.length))) return   // BP-3：builder_exports 開啟時送一筆稽核紀錄（fire-and-forget，不擋匯出；關著＝不發請求）
       const ws = XLSX.utils.json_to_sheet(rows)
       ws['!cols'] = [12,24,12,20,10,8,12,12,24].map(w=>({wch:w}))
       const wb = XLSX.utils.book_new()

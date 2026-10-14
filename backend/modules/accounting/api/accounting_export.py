@@ -84,7 +84,7 @@ def _collect_tax_invoices(year=None, month=None):
     return [] if p is None else p(year, month)
 from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged, set_row, xl_safe, xl_style
 from helpers.company_identity import company_heading
-from helpers.part_catalog import PART_CATEGORIES
+from helpers.part_catalog import PART_CATEGORIES, all_category_names
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 
@@ -131,8 +131,8 @@ def _t100_config() -> dict:
     # 使用者還沒存過任何值；分類名稱之後若新增，重新 GET 一次就會自動補上
     # 空白鍵，不需要額外 migration 或手動同步。
     filled = dict(cfg.get("inventoryExpenseAccounts") or {})
-    for c in PART_CATEGORIES:
-        filled.setdefault(c["name"], "")
+    for name in all_category_names():                     # census #4：含管理者新增與已停用的分類（選項清單關著 ⇒ 與 PART_CATEGORIES 相同）
+        filled.setdefault(name, "")
     cfg["inventoryExpenseAccounts"] = filled
     return cfg
 
@@ -439,6 +439,10 @@ def _build_t100_voucher_excel(rows: list, start: str, end: str, cfg: dict, gen_a
         missing_codes.append("bankAccounts（尚未設定任何銀行帳戶）")
     if not any((cfg.get("inventoryExpenseAccounts") or {}).values()):
         missing_codes.append("inventoryExpenseAccounts（料件分類科目代號皆未設定）")
+    _blank_cats = sorted({str(r.get("acctName") or "")[len("料件設備成本（"):-1] for r in rows
+                          if str(r.get("acctName") or "").startswith("料件設備成本（") and not r.get("acctCode")})
+    for _c in _blank_cats:                                   # census #4：新增的分類還沒到會計設定補科目 ⇒ 匯出時明講（不再讓傳票悄悄帶空科目）
+        missing_codes.append("inventoryExpenseAccounts[%s]（這個料件分類沒有科目代號）" % _c)
 
     widths = [10, 12, 8, 30, 10, 12, 12, 12, 8, 14, 16]
     for i, w in enumerate(widths, 1):

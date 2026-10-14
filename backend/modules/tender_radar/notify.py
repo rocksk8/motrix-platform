@@ -94,10 +94,10 @@ def notify_tender_found(tenders: list, watch_names: list = None,
         # 七個欄位（D9）：標案名稱／機關／地點／採購性質／招標方式／預算／截止日
         rows.append((
             _dash(t.get("name")),
-            f"機關 {_dash(t.get('org'))}　地點 {_dash(t.get('location'))}<br>"
-            f"採購性質 {_dash(t.get('procurement_type'))}　"
-            f"招標方式 {_dash(t.get('tender_method'))}<br>"
-            f"預算 {budget_s}　截止 {_dash(deadline)}",
+            _en._safe(f"機關 {_en._esc(_dash(t.get('org')))}　地點 {_en._esc(_dash(t.get('location')))}<br>"
+                      f"採購性質 {_en._esc(_dash(t.get('procurement_type')))}　"
+                      f"招標方式 {_en._esc(_dash(t.get('tender_method')))}<br>"
+                      f"預算 {_en._esc(budget_s)}　截止 {_en._esc(_dash(deadline))}"),
         ))
     more = len(tenders or []) - len(rows)
     if no_watches:
@@ -122,7 +122,7 @@ def notify_tender_found(tenders: list, watch_names: list = None,
     if more > 0:
         intro += f"（信中只列前 {len(rows)} 筆，其餘 {more} 筆請進系統查看）"
     if watch_names:
-        intro += "　命中條件：" + "、".join(sorted(set(watch_names)))
+        intro += "　命中條件：" + "、".join(_en._esc(w) for w in sorted(set(watch_names)))      # 使用者設定的條件名稱：逸出（intro 整段之後包成刻意的標記）
     note = _TENDER_SOURCE_NOTE
     if announce_quiet_period:
         note = (
@@ -133,7 +133,7 @@ def notify_tender_found(tenders: list, watch_names: list = None,
         )
     html = _en._build_html(
         "tender_found", "標案雷達：新標案", f"{len(tenders or [])} 筆", "#1D4ED8",
-        rows, "", _en._base_url(), note=note, intro=intro,
+        rows, "", _en._base_url(), note=_en._safe(note), intro=_en._safe(intro),
         button_text="前往標案雷達",
     )
     _en._send_raising(to, _mt.subject("tender_found", f"標案雷達新標案 {len(tenders or [])} 筆"), html)

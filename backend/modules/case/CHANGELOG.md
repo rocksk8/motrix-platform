@@ -1,5 +1,32 @@
 # 案件 更新紀錄
 
+- C3：案件頁區塊標題改名與按鈕登記（沿用旗標 `builder_layout.case_management`）：專案期間、自訂欄位的標題可改名（`bLabel`）；`actions` 只登記「從報價單帶入」一顆（可隱藏／改名／排序；不開放新增按鈕，不登記有金額、簽核或法定語意的按鈕）。排版器標出「固定位置」（健康總覽、客戶回簽單、報價單清單的全部欄位）與「改名不會改變畫面」（登錄檔 `fixedOrder`／`relabelIneffective` 支援「清單:欄位」鍵）。關閉時沒有差異。
+- C2：案件頁「執行管理」分頁的子分頁（執行進度／材料申請／設備登錄／保固備註／待辦事項／成員）接上版面引擎（list `execTabs`，沿用旗標 `builder_layout.case_management`）：可隱藏、改名、換順序，「執行進度」是核心；目前子分頁被隱藏時退回「執行進度」（`subFix()`）。隱藏只是不顯示頁籤，內容區與功能不變；`:style` 物件形式；關閉時沒有任何差異。
+- C1：案件頁「案件資訊」分頁的區塊接上版面引擎（list `bizBlocks`，7 個區塊；沿用旗標 `builder_layout.case_management`，預設關）：健康總覽、專案期間、自訂欄位可隱藏／改名；合約資訊、人員角色、個資告知、客戶回簽單是核心區塊（不可隱藏）。順序用 CSS `order`（fieldset 在旗標開啟時加 `cm-biz-lo` class 變 flex column；關閉時沒有任何差異），只有 fieldset 裡的五個區塊能換順序，健康總覽固定最上、客戶回簽單固定最下。`:style` 綁定一律物件形式。隱藏區塊只是不顯示，資料與分段存檔不變。
+- 案件完工單 PDF 的區域 `esc()` 改呼叫共用的 `helpers.doc_template.html_text`（輸出逐位元相同）；報價單／出貨單品項數量、報價有效日數、結案報表款項百分比與階段起訖日補上 HTML 逸出（原本直接內插）。無 migration、無權限變更。
+- 報價單 PDF（`_build_quote_html`）與完工單 PDF（`_build_completion_html`）可加頁尾／浮水印文字（G-A，旗標預設關）：各包一層 `decorate_pdf`，沒有已發布範本 ⇒ 輸出逐位元相同；文字只能從預設清單挑，程式產生的未核准橫幅與抬頭不動。無 migration、無權限變更。
+
+## (next) — 2026-10-14（wip/t62-bp4-s2-r2＋wip/t62-bp2-r5-r1＋wip/t62-approval-margin-r1；BP-4 附件插槽／BP-2 標示規則／單項毛利率門檻）；t62 整合 r8
+- 案件管理頁完工單分頁加「附件種類」入口（BP-4 S3，旗標 `builder_slots.enabled` 預設關、只有最高管理者看得到）：旗標隨既有的設定請求（`groups=builder_layout,builder_slots`）取得，關閉時不多打任何請求、畫面不變；編輯器是新檔 `static/attachment-slots.js`。
+- 完工單附件的讀取提供者宣告 `SLOT_AWARE`（BP-4 S2）：路徑 `completion_notes/<子夾>/<完工單號>/<檔名>` 與一般完工單附件同一條讀取規則（`case_documents_readable`）；兩段路徑照舊。旗標 `builder_slots.enabled` 預設關，沒有任何現有路徑改變。
+- 案件附件目錄的『路徑屬於這張單據』檢查認得完工單 BP-4 插槽路徑 `completion_notes/<子夾>/<完工單號>/<檔名>`（`upload_path_key(depth=3, key_index=1)`）；其他形狀與其他來源類型維持 fail closed。
+- BP-2（標示型規則，旗標 `builder_rules.enabled`＋`builder_governance.enabled` 預設關）：新增唯讀的紀錄提供者 `rule_provider.provide`（登記為 `("rules.entity","case")`），供規則的『預覽現有紀錄會有哪些被標示』與列表標示使用；只讀本模組的 `quotations`、逐筆套用既有的案件讀取權限、金額欄位只在有報價金額檢視權時才給。旗標關時不會被呼叫，行為不變；無 migration、無新路由。
+- 報價送審的『單項毛利率偏低』門檻（原本寫死 30%）改為設定 `quote_approval.min_item_margin_pct`（預設 30＝與過去逐位元相同；敏感群組、風險 money；調低＝放寬需第二位最高管理者核准與確認期間，調高即時）。伺服器 `quote_terms.compute_approval_reasons` 與前端 `checkApproval()`／「需審核」徽章三處同源（前端經 `GET /api/project-margin/config` 多回的 `minItemMarginPct` 取得；讀不到一律 30）。不改簽核層與簽核規則、不改任何金額；原因文字照舊（門檻不是 30 時帶實際門檻）。
+- 保固到期郵件的兩個階段天數（預設 7／30 天＝今天）改讀設定中心「到期預警」：提前天數 8～180、緊急天數 1～30，緊急一定小於提前。每台設備每個階段仍只寄一次；改天數後新的階段值會被當成新階段（可能再寄一次）。無 migration、無權限變更。
+- 報價送審的另外兩個門檻也改成設定中心「報價送審門檻」：報價單有效天數上限（`quote_approval.max_valid_days`，預設 30＝今天；1～365；調大＝放寬、需第二位最高管理者核准）、折讓審核門檻（`quote_approval.discount_review_above`，預設 0＝今天：任何折讓都列；0～1 億元；調高＝放寬）。讀不到設定時往最嚴的一邊收（上限 1 天、折讓門檻 0）。伺服器送審時重算原因（覆蓋前端送來的），表單經 `GET /api/project-margin/config` 取同一組數字。非 5% 的稅別是法定稅別，**不開放設定**。無 migration、無權限變更。
+- 案件頁版面綁定修正（04 審查）：`lo()`／`loHead()`／`loFooter()`／`fo()` 改回**物件**（`{ order: N }`／`{}`），不再回 `'order:N'` 字串——Alpine 的 `:style` 字串形式會 `setAttribute('style', …)` 整串覆蓋，洗掉同一元素上 `x-show` 設的 `display:none`（旗標開啟時被隱藏的欄位在重新求值後又出現）。旗標關閉的畫面不變。
+- Q2 補強（04 審查）：案件頁目前分頁被版面隱藏時退回「案件資訊」分頁（`tabFix()`）；報價單管理頁的分群標題／空狀態／載入中列 colspan 跟著可見欄數（旗標關閉恆為 12）。
+- 報價單管理頁（`quotations.html`）清單欄位與案件頁分頁列接上版面引擎（BP-1／Q2，旗標 `builder_layout.quotations`、`builder_layout.case_management` 預設關）：module.json 登記清單 `quotes`（10 欄）與案件頁 `tabs`（9 個分頁，案件資訊為核心）；報價單清單 v1 只開放顯示／隱藏與改標題（有分群與拖曳排序，欄位順序暫不支援）；金額／毛利率欄的內容仍由權限決定；額外支出分頁維持 `canSeeFinancial()`、全部附件維持 `fileCenterOn`（版面只能再收窄）。旗標關閉時綁定函式回中性值、畫面不變；`:style` 一律物件形式。改名與隱藏只作用在畫面，PDF、匯出、報表不變。
+- 報價單表單（`quotation-form.html`）的非金額區塊（基、客戶資訊、案件資訊、報價條件）接上版面引擎（BP-1／Q1，旗標 `builder_layout.quotation_form` 預設關）：module.json 登記四個表單（`qbasic`／`qcustomer`／`qproject`／`qterms`），核心欄位不可隱藏或改名；旗標關閉時綁定函式回中性值、不發版面請求，畫面與先前相同。改名與隱藏只作用在這張表單，PDF、匯出與報表不變；品項、合計、簽署與成本面板不在範圍。
+- S-Q2 稽核修正：`clauseTitles` 改為伺服器自有欄位——建立／整份存檔一律丟掉用戶端送的值；離開草稿（含直接改狀態）與解鎖重簽由伺服器以當下範本凍結；待審核維持原狀沿用資料庫現值；收回、退回改版、改回草稿一律清掉。表單 `buildTermsHtml` 的標題改為逸出。
+- 報價單條款標題可由匯出範本改（S-Q2，旗標預設關）：報價單 PDF（第一份版面；請款單的「請款條件」不動）、報價單表單與送審原因文字改讀 `helpers.clause_titles`；送審時把當下標題凍結進單據（`clauseTitles`），之後改範本不影響已送審單據。旗標關或沒有已發布範本 ⇒ 與今天相同。條款本文、順序、金額不變。無 migration、無新路由、無權限變更。
+- Q3 報價單自己的自訂欄位（內建記錄類型 `quotation`，沿用 S5 的旗標 `builder_custom_fields.enabled`，預設關）：值存在報價單 data_json 頂層 `customFields`（沒有值就沒有這個鍵）。`POST /api/quotations`、`PUT /api/quotations/{no}`（唯二會收用戶端整份文件的路徑）都過閘門 `_quote_custom_fields_gate`：沒送這個鍵＝帶回舊值（整份取代不洗掉）、送了且有變＝過 `builtin_fields.gate("quotation", …)`（旗標關閉＝回舊值、型別錯 400 指名欄位）。報價單表單「二、案件資訊」最下方多一個「自訂欄位」區塊（旗標開啟才畫）。PDF、預覽、內部列印不含自訂欄位（測試含正對照）。
+- 報價單輪到下一層、核准完成、退回修改的站內訊息可由通知用語範本改（S-X3，旗標預設關）：`quotations._tier_msg／_approved_msg／_returned_msg`；沒有範本 ⇒ 與今天同一個字串。無 migration、無新資料表、無權限變更。
+- 報價單送審的簽核人站內訊息可由通知用語範本改（S-X3，旗標預設關）：`_build_approval_tiers_and_notify` 兩處（第一層、無簽核層退回最高管理者）改走 `_submitted_msg`，沒有範本 ⇒ 與今天同一個字串。輪到下一層、核准、退回等其他訊息不動。無 migration、無新資料表、無權限變更。
+- 結案閘門多一組『只收緊』選項（設定中心「結案條件加嚴」，主開關與四個選項預設全關＝結案條件與過去逐項相同；收款／單據／精算／額外支出四關沒有任何關閉選項）。選項開啟時，沒有執行階段／款項明細／精算資料、或額外支出停在草稿或簽核中的案件不能結案；讀不到設定時一律當全部開啟（往嚴）。
+- 預定付款日提醒信（案件額外支出）的『前 N 天』與信件文字跟著設定中心「出納」的自訂天數（旗標關＝3 天，與過去相同）。
+- 案件管理頁的狀態文字（卡片標籤、頁首、精算徽章）可由設定中心「狀態顯示名稱與顏色」改顯示字（旗標關＝與過去相同）；狀態值與判斷不變。無 migration、無新路由、無權限變更。
+
 ## 1.0.186 — 2026-10-14（wip/t61-s5-impl-r1；S5：案件資訊的自訂欄位；r2 補整份寫入路徑）；t60 整合
 - 案件資訊分頁多一個「自訂欄位」區塊（設定中心「自訂欄位（內建畫面）」開啟後才出現；預設關閉＝畫面與資料完全不變）。欄位值存在 `caseRecord.customFields`（案件記錄的一個新分段，沒有值就沒有這個鍵），只給內部人員看，不出現在報價單、客戶版文件或回簽頁。
 - `PATCH /api/quotations/{no}/case-record` 存檔前多一道自訂欄位閘門（`helpers.builtin_fields.gate`）：旗標關閉＝不介入；開啟時依已發布的欄位定義驗證型別（錯誤回 400 指名欄位）、未定義或已停用的欄位保留舊值。舊的整包格式沒有送這個鍵＝沒有要改，帶回舊值。其餘存檔邏輯不變。

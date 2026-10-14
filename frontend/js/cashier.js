@@ -42,6 +42,9 @@ function cashierApp() {
     // ── 頁面狀態 ───────────────────────────────────────────
     ready: false,
     error: '',
+    // 即將到期天數：預設 7／3（與過去寫死的值相同）；管理者在設定中心開啟 finance_cashier.custom_due_soon 才會換成自訂值
+    dueSoonDays: 7,
+    plannedSoonDays: 3,
 
     // ── 出納（2026-08-31 併入營運報表，原獨立的 cashier.html/cashier.js 頁面
     // 退役成頁內「出納」頁籤，內容/邏輯完全比照原本，只有跟本檔案既有狀態
@@ -199,7 +202,7 @@ function cashierApp() {
     isDueSoon(dateStr) {
       if (!dateStr || this.isOverdue(dateStr)) return false
       const soon = new Date()
-      soon.setDate(soon.getDate() + 7)
+      soon.setDate(soon.getDate() + this.dueSoonDays)
       return dateStr <= this._localDateStr(soon)
     },
 
@@ -220,7 +223,14 @@ function cashierApp() {
       if (st.hasFee) { b.hasFee = true; b.fee = Number(st.fee) }
       return b
     },
-    remitReviewLabel(s) { return s === 'pending' ? '差額待審核' : (s === 'approved' ? '差額已核可' : '') },
+    // S-X2：狀態顯示名稱（旗標關或沒改過 ⇒ 原字照印）；決定動作與傳遞值仍是 approve／reject、pending／approved
+    stLabel(raw, ctx, fallback) {
+      return window.MotrixStatus ? window.MotrixStatus.label(raw, ctx, fallback) : (fallback != null ? fallback : (raw == null ? '' : raw))
+    },
+    remitReviewLabel(s) {
+      const raw = s === 'pending' ? '差額待審核' : (s === 'approved' ? '差額已核可' : '')
+      return raw ? this.stLabel(raw, 'cashier', raw) : ''
+    },
     kindLabel(k) { return { purchase_req: '請購單', purchase_order: '採購單', travel: '差旅費用請款單', petty_cash: '零用金支付單', material_payment: '材料申請匯款（可分次付款：實付填本次金額）' }[k] || '' },
     payreqExtra(it) {
       const k = it.source + ':' + it.key
@@ -357,7 +367,7 @@ function cashierApp() {
       const t0 = new Date(); t0.setHours(0, 0, 0, 0)
       const dd = new Date(d + 'T00:00:00')
       const diff = Math.round((dd - t0) / 86400000)
-      return diff < 0 ? 'overdue' : (diff <= 3 ? 'soon' : '')
+      return diff < 0 ? 'overdue' : (diff <= this.plannedSoonDays ? 'soon' : '')
     },
 
     // 出納在待付款清單直接補登／改期預定付款日：PATCH /api/cashier/pending-payables/{來源}/{key}/planned-pay-date {plannedPayDate}（'' ＝清除；各來源共用，不經案件守門）
@@ -1100,8 +1110,26 @@ function cashierApp() {
         this.ready = true
         return
       }
+      this.loadDueSoonDays()          // 不等它：失敗或旗標關就維持預設 7／3
       await this.showCashierTab()
       this.ready = true
+    },
+
+    // 讀公開設定群組 finance_cashier（登入即可讀、非敏感）。任何失敗都靜默維持預設，不影響出納頁。
+    // 同一次請求（MotrixPublicFlags.read）也帶 builder_status_display，交給 MotrixStatus.init（S-X2；整頁只有這一個設定請求）。
+    async loadDueSoonDays() {
+      let all = null
+      try {
+        all = window.MotrixPublicFlags ? await window.MotrixPublicFlags.read(['finance_cashier', 'builder_status_display'], { token: this._token() }) : null
+      } catch (e) { all = null }
+      if (window.MotrixStatus) window.MotrixStatus.init({ token: this._token(), flags: all || {} })      // S-X2：旗標關 ⇒ 什麼都不改
+      try {
+        const g = (all && all.finance_cashier) || {}
+        if (g.custom_due_soon !== 1) return
+        const a = Number(g.due_soon_payable_days), b = Number(g.due_soon_planned_days)
+        if (Number.isInteger(a) && a >= 1 && a <= 60) this.dueSoonDays = a
+        if (Number.isInteger(b) && b >= 1 && b <= 60) this.plannedSoonDays = b
+      } catch (e) { /* 維持預設 */ }
     },
   }
 }

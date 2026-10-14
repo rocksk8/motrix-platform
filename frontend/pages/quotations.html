@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>報價單管理 — MOTRIX 專案管理系統</title>
+  <meta name="motrix-export-id" content="case:quotation-pdf">   <!-- G-A：builder_exports 開啟且是最高管理者時，sidebar.js 才載入匯出範本編輯器（PDF 頁尾／浮水印文字，只能從預設清單挑）；關著＝沒有任何額外請求 -->
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script src="../static/margin-tone.js"></script>
@@ -225,23 +226,23 @@
         <thead>
           <tr>
             <th x-show="sortPref.sortMode === 'custom'" style="width:24px"></th>
-            <th>報價單號</th>
-            <th>客戶名稱</th>
-            <th>案件名稱</th>
-            <th style="text-align:right">金額（含稅）</th>
-            <th style="text-align:right">毛利率</th>
-            <th>有效天數</th>
-            <th>填單人</th>
-            <th>狀態</th>
-            <th>案件進度</th>
-            <th>報價日期</th>
+            <th x-show="cShown('quoteNo')"><span x-text="cLabel('quoteNo', '報價單號')">報價單號</span></th>
+            <th x-show="cShown('customer')"><span x-text="cLabel('customer', '客戶名稱')">客戶名稱</span></th>
+            <th x-show="cShown('project')"><span x-text="cLabel('project', '案件名稱')">案件名稱</span></th>
+            <th x-show="cShown('amount')" style="text-align:right"><span x-text="cLabel('amount', '金額（含稅）')">金額（含稅）</span></th>
+            <th x-show="cShown('margin')" style="text-align:right"><span x-text="cLabel('margin', '毛利率')">毛利率</span></th>
+            <th x-show="cShown('validDays')"><span x-text="cLabel('validDays', '有效天數')">有效天數</span></th>
+            <th x-show="cShown('filler')"><span x-text="cLabel('filler', '填單人')">填單人</span></th>
+            <th x-show="cShown('status')"><span x-text="cLabel('status', '狀態')">狀態</span></th>
+            <th x-show="cShown('dealTag')"><span x-text="cLabel('dealTag', '案件進度')">案件進度</span></th>
+            <th x-show="cShown('date')"><span x-text="cLabel('date', '報價日期')">報價日期</span></th>
             <th>操作</th>
           </tr>
         </thead>
         <template x-for="lane in displayLanes" :key="lane.key">
         <tbody x-ref="quotesTbody">
           <tr class="ql-lane" x-show="lane.header">
-            <td colspan="12">
+            <td :colspan="colSpan()">
               <div class="ql-lane__in">
                 <span class="ql-lane__t" :style="'color:' + lane.color" x-text="lane.label"></span>
                 <span class="ql-lane__d" x-text="lane.desc"></span>
@@ -252,7 +253,7 @@
           <template x-for="q in lane.items" :key="q.quote_no">
             <tr class="ql-row" :data-quote-no="q.quote_no" :style="'--ql-spine:' + lane.color">
               <td x-show="sortPref.sortMode === 'custom'" class="drag-handle" style="cursor:grab;text-align:center;color:var(--text-dim)">⠿</td>
-              <td>
+              <td x-show="cShown('quoteNo')">
                 <div style="display:flex;align-items:center;gap:6px">
                   <a :href="'quotation-form.html?id=' + q.quote_no"
                      style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"
@@ -271,27 +272,27 @@
                   </div>
                 </template>
               </td>
-              <td>
+              <td x-show="cShown('customer')">
                 <div style="font-weight:500;font-size:12px" x-text="q.customer_name || '—'"></div>
               </td>
-              <td style="font-size:12px;max-width:180px" x-text="q.project_name || '—'"></td>
-              <td class="num" style="font-weight:600" x-text="q.total > 0 ? 'NT$ ' + Math.round(q.total).toLocaleString() : '—'"></td>
-              <td class="num">
+              <td x-show="cShown('project')" style="font-size:12px;max-width:180px" x-text="q.project_name || '—'"></td>
+              <td x-show="cShown('amount')" class="num" style="font-weight:600" x-text="q.total > 0 ? 'NT$ ' + Math.round(q.total).toLocaleString() : '—'"></td>
+              <td x-show="cShown('margin')" class="num">
                 <span :style="MotrixMargin.style(q.direct_margin_pct)"
                       x-text="q.direct_margin_pct ? q.direct_margin_pct.toFixed(1) + '%' : '—'"></span>
               </td>
-              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px">
+              <td x-show="cShown('validDays')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px">
                 <span x-text="(q.valid_days || 30) + ' 天'"></span>
                 <span x-show="q.valid_days > 30" style="color:var(--danger);font-size:9px;font-weight:600;display:block">需審核</span>
               </td>
-              <td style="font-size:12px;color:var(--text-secondary)" x-text="q.sales_person || '—'"></td>
-              <td>
+              <td x-show="cShown('filler')" style="font-size:12px;color:var(--text-secondary)" x-text="q.sales_person || '—'"></td>
+              <td x-show="cShown('status')">
                 <span class="badge" :class="dealDisplayStatus(q).cls" x-text="dealDisplayStatus(q).text"></span>
                 <template x-if="agingOf(q)">
                   <span class="ql-age" :class="agingOf(q).cls" x-text="agingOf(q).text"></span>
                 </template>
               </td>
-              <td>
+              <td x-show="cShown('dealTag')">
                 <!-- 已成案/已結案：鎖定顯示，不可在此頁修改 -->
                 <template x-if="q.deal_tag === '已成案' || q.deal_tag === '已結案'">
                   <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600"
@@ -313,7 +314,7 @@
                   </select>
                 </template>
               </td>
-              <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-dim)" x-text="(q.quote_date || q.created_at || '').slice(0,10)"></td>
+              <td x-show="cShown('date')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-dim)" x-text="(q.quote_date || q.created_at || '').slice(0,10)"></td>
               <td>
                 <div class="row-actions">
                   <a :href="'quotation-form.html?id=' + q.quote_no" class="icon-btn" title="編輯">
@@ -335,7 +336,7 @@
         </template>
         <tbody>
           <tr x-show="filtered.length === 0 && !loading && !retrying">
-            <td colspan="12" style="text-align:center;padding:40px;color:var(--text-dim)">
+            <td :colspan="colSpan()" style="text-align:center;padding:40px;color:var(--text-dim)">
               <div style="font-size:32px;opacity:.3;margin-bottom:8px">📄</div>
               <div x-show="!loadErr">尚無報價單紀錄</div>
               <div x-show="loadErr" style="color:var(--danger);font-size:13px">資料載入失敗，請確認後端連線</div>
@@ -349,7 +350,7 @@
             </td>
           </tr>
           <tr x-show="loading || retrying">
-            <td colspan="12" style="text-align:center;padding:24px;color:var(--text-dim);font-size:12px">
+            <td :colspan="colSpan()" style="text-align:center;padding:24px;color:var(--text-dim);font-size:12px">
               <span x-show="loading && !retrying">載入中…</span>
               <span x-show="retrying">資料為空，自動重試中…</span>
             </td>
@@ -647,7 +648,26 @@
         await this.loadQuotes()
       },
 
+      // S-X2：狀態顯示名稱與顏色（旗標 builder_status_display 關或沒改過 ⇒ 與下面的 _dealDisplayBase 逐字相同）。邏輯一律用 q.status／q.deal_tag 原值。
       dealDisplayStatus(q) {
+        const r = this._dealDisplayBase(q), S = window.MotrixStatus
+        if (!S) return r
+        const s = q.status || '', tag = q.deal_tag || ''
+        let key = s
+        if (s === '已送出' || s === '已確認') key = (tag === '未成案' || tag === '已結案' || tag === '已成案' || tag === '已提供') ? tag : '已送出'
+        if (!key) return r
+        return { text: S.label(key, 'quote_list', r.text), cls: S.badgeClass(key, r.cls) }
+      },
+      async initStatusDisplay() {
+        try {
+          if (!window.MotrixPublicFlags || !window.MotrixStatus) return
+          const g = await window.MotrixPublicFlags.read(['builder_status_display'])
+          if (((g || {}).builder_status_display || {}).enabled !== 1) return
+          await window.MotrixStatus.load()
+          if (window.MotrixStatusEditor) window.MotrixStatusEditor.mountEntry()
+        } catch (e) { /* 維持預設顯示 */ }
+      },
+      _dealDisplayBase(q) {
         const s   = q.status   || ''
         const tag = q.deal_tag || ''
         if (s === '草稿')   return { text: '草稿',  cls: 'badge--draft' }
@@ -821,6 +841,29 @@
       // ☠️ 後果不只是 API 發兩次：第二次的回應晚一步抵達，
       //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
       _initDone: false,
+      // BP-1／Q2：列表欄位的顯示與標題可自訂（P9）。旗標關閉／讀不到 ⇒ layoutOn=false，綁定函式回中性值（畫面與先前相同）。
+      // 這頁的列表有分群與拖曳排序，v1 只開放顯示／隱藏與改標題；欄位順序暫不支援（編輯器會明說）。
+      layoutOn: false,
+      _qcols() { return this.layoutOn ? window.Alpine.store('layout').cols('quotes') : [] },
+      cShown(f) { return !this.layoutOn || this._qcols().some(c => c.field === f) },
+      // 分群標題列／空狀態／載入中的 colspan＝表格實際的欄數（版面隱藏欄位後要跟著減；關閉時恆為 12，與先前相同）
+      colSpan() { return 12 - (this.layoutOn ? ['quoteNo', 'customer', 'project', 'amount', 'margin', 'validDays', 'filler', 'status', 'dealTag', 'date'].filter(k => !this.cShown(k)).length : 0) },
+      cLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('quotes', f, dflt) : dflt },
+      async initLayout() {
+        try {
+          const tk = (this.session && this.session.token) || (JSON.parse(localStorage.getItem('motrix_session') || '{}').token)
+          if (!tk) return
+          const g = await window.MotrixPublicFlags.read(['builder_layout'], { token: tk })
+          if (!g.builder_layout || g.builder_layout.quotations !== true) return
+          const title = document.querySelector('.page-header__title')
+          if (!title) return
+          title.insertAdjacentHTML('beforeend', '<span data-layout-editor-slot></span>')
+          this.layoutOn = true
+          await this.$nextTick()
+          if (window.MotrixLayoutEditor) window.MotrixLayoutEditor.mount()
+          window.MotrixLayout.start()
+        } catch (e) { /* 版面是加值功能：讀不到就維持原本的列表 */ }
+      },
 
       async init() {
         if (this._initDone) return
@@ -829,6 +872,8 @@
         const s = localStorage.getItem('motrix_session')
         if (!s) { window.location.href = 'login.html'; return }
         try { this.session = JSON.parse(s) } catch { window.location.href = 'login.html'; return }
+        this.initLayout()
+        this.initStatusDisplay()           // S-X2：旗標 builder_status_display 關 ⇒ 什麼都不改（只多一次公開設定讀取）
 
         // Check ?view= param (one-shot: read then clear so it doesn't stick on back-navigation)
         const param = new URLSearchParams(window.location.search).get('view')
@@ -869,7 +914,23 @@
   }
   </script>
   <script src="../static/notif.js"></script>
+  <script src="../static/public-flags.js"></script>
+  <script src="../static/status-chip.js"></script>
+  <script src="../js/status-display-editor.js"></script>
   <script src="../static/sidebar.js"></script>
+  <script src="../static/public-flags.js"></script>
+  <script src="../static/custom-layout.js"></script>
+  <script src="../static/layout-runtime.js"></script>
+  <script src="../static/layout-editor.js"></script>
+  <script src="../js/def-governance.js"></script>
+  <script>
+  // BP-1／Q2：報價單列表欄位可自訂（顯示／標題）。設定中心「自訂畫面版面」→ quotations 預設關閉：關閉時不發任何版面請求（deferred）、畫面不變。
+  // fallback＝版面讀不到時的欄位順序（守門：必須等於 module.json 登記的順序）。金額與毛利率欄的資料遮蔽仍由伺服端與原本的判斷決定（版面不改資料）。
+  MotrixLayout.init({
+    module: 'case', page: 'quotations.html', deferred: true,
+    fallback: { lists: { quotes: ['quoteNo', 'customer', 'project', 'amount', 'margin', 'validDays', 'filler', 'status', 'dealTag', 'date'] } },
+  })
+  </script>
   <script src="../static/list-sort.js"></script>
 </body>
 </html>

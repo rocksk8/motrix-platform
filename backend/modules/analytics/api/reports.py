@@ -21,6 +21,7 @@ from fastapi.responses import Response, StreamingResponse
 
 from db import get_db
 from helpers import download_name
+from helpers import finance_params as _finance_params   # 帳齡區間切點（旗標關＝30/60/90，與過去相同）
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import (
     _require_user, _tok, _audit, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
@@ -30,6 +31,7 @@ from helpers import (
 from helpers.tax_calc import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts   # T：L1
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
+from helpers import export_templates as _ET     # S-F2 B：營運報表工作表選擇（BP-3 匯出範本，工作表型）
 from helpers.financial_mask import money_visible, quote_money_visible
 from helpers.legal_params import round_half_up as _round_half_up   # 原 receivables.round_half_up_invoice（同一算法）
 from core import registry as _registry
@@ -37,6 +39,12 @@ from core import registry as _registry
 # 收款／銷項發票資料屬 M05 應收應付（ROADMAP A8b 已收回模組），經 provider 取用；M05 不在 ⇒ 明說，不回空表
 RECEIVABLES_MISSING = "應收應付模組未安裝：收款與銷項發票資料不提供（現金口徑收入、銷項發票匯出需要它）"
 
+
+from helpers.option_lists import payment_stage_name as _stage_name      # census S-F1：款項期別顯示名稱（選項清單關著／沒發布 ⇒ 與過去逐字相同）
+
+def _warranty_days() -> int:
+    from helpers.alert_settings import warranty_report_days
+    return warranty_report_days()
 
 def _custom_income(conn, d0, d1, basis, department_id=None):
     """自訂模組（建構器）的收入逐筆（L1 `helpers.custom_finance`；沒有入帳單據 ⇒ []）。
@@ -440,7 +448,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
                     "quoteDate":    row["quote_date"]    or "",
                     "dealTag":      row["deal_tag"]      or "",
                     "idx":          idx,
-                    "type":         pi.get("type", f"第{idx+1}期"),
+                    "type":         _stage_name(pi, idx),
                     "pct":          pi.get("pct") or 0,
                     "amount":       amt,
                     "received":     rcvd,
@@ -586,12 +594,13 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     conn2.close()
     if allowed_quote_nos is not None:
         wrows = [r for r in wrows if r["quote_no"] in allowed_quote_nos]
+    _WARR_DAYS = _warranty_days()        # census #7：設定中心『保固報表天數』（預設 90＝今天）
     for r in wrows:
         try:
             cr2 = json.loads(r["cr_json"])
             for dev in cr2.get("devices") or []:
                 exp, dl = _warranty_expiry(dev.get("warrantyStart",""), dev.get("warrantyMonths"))
-                if exp and dl <= 90:
+                if exp and dl <= _WARR_DAYS:
                     warr.append({
                         "quoteNo":  r["quote_no"],
                         "customer": r["customer_name"] or "",
@@ -618,6 +627,9 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     conn3.close()
     if allowed_quote_nos is not None:
         ov_rows = [r for r in ov_rows if r["quote_no"] in allowed_quote_nos]
+    _so_days = _finance_params.settle_overdue_days()           # 0（預設）＝一結案就列＝今天的行為
+    if _so_days > 0:
+        ov_rows = [r for r in ov_rows if _settle_waited(r["updated_at"], _so_days)]
     settle_overdue = [
         {
             "quoteNo":     r["quote_no"],
@@ -846,7 +858,70 @@ def _compute_achievement(year: int, targets: dict, cases_all: list, name_to_id: 
 
 
 
-def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
+# ── S-F2 B：營運報表的工作表選擇（BP-3 匯出範本的『工作表型』；旗標 builder_exports 關／沒有已發布範本 ⇒ 全部工作表＝今天的報表）──
+#: 代號 ⇒ (Excel 工作表名稱, PDF 段落註解標記)。順序＝報表順序（範本只能選子集，不能換順序）。
+REPORT_SHEETS = (
+    ("summary", "執行摘要", "摘要"), ("targets", "目標達成率", None), ("payments", "本期收款明細", "本期收款"),
+    ("outstanding", "未收款清單", "未收款"), ("month", "當月收支", "當月收支"), ("quarter", "本季收支", None),
+    ("year", "今年度收支", "今年度收支"), ("cases", "案件清單", "案件清單"), ("sales", "業務員績效", "業務員績效"),
+    ("margin", "毛利分析", "毛利分析"), ("warranty", "保固到期預警", "保固預警"), ("settle", "已結案未精算", "已結案未精算"),
+    ("aging", "帳齡分析", "帳齡分析"),
+)
+REPORT_EXPORT_ID = "reports:financial"
+_ET.register_export(
+    REPORT_EXPORT_ID, label="營運報表（Excel、PDF、月報郵件）：摘要永遠包含公司層級金額合計，這個設定只控制明細工作表", formats=("xlsx", "pdf"), columns=[], sample_rows=[],
+    sheets=[{"id": sid, "label": title, "required": sid == "summary", "money": sid != "warranty"} for sid, title, _m in REPORT_SHEETS])
+
+
+#: 只當 PDF 段落的『邊界』用的註解標記（不對應可選的工作表）：`本季收支` 的段落以變數插入在『當月收支』之後、『今年度收支』之前，
+#: 沒有列在目錄的註解標記裡；不把它當邊界的話，拿掉『當月收支』會連本季收支一起吞掉。
+BOUNDARIES = ("本季收支",)
+
+
+def _off_sheets() -> list:
+    """沒被選到的工作表代號。旗標關／沒有已發布範本 ⇒ `[]`（全部輸出＝今天）。
+    旗標或範本**讀不到**、或這裡任何環節出錯 ⇒ **關起來**：除了必選的全部算沒選到（不能因為讀不到設定就把整份報表寄出去）。
+    一個請求只算一次：呼叫端把結果同時給建構器與稽核（`off=` 參數）。"""
+    try:
+        return _ET.disabled_sheets(REPORT_EXPORT_ID)
+    except Exception:                                              # noqa: BLE001
+        _log.warning("營運報表工作表設定讀取失敗，只輸出必選工作表", exc_info=True)
+        return [sid for sid, _t, _m in REPORT_SHEETS if sid != "summary"]
+
+
+class ReportSectionError(RuntimeError):
+    """PDF 要拿掉的段落找不到註解標記（報表版面被改過但沒同步更新）——寧可不產出，也不要把沒選到的段落送出去。"""
+
+
+def _drop_excel_sheets(wb, off) -> None:
+    """Excel：把沒被選到的工作表整張拿掉（其餘工作表的內容與順序不動；沒有跨表公式）。"""
+    titles = {sid: title for sid, title, _m in REPORT_SHEETS}
+    for sid in off:
+        t = titles.get(sid)
+        if t and t in wb.sheetnames and len(wb.sheetnames) > 1:
+            wb.remove(wb[t])
+    wb.active = 0
+
+
+def _drop_pdf_sections(html: str, off) -> str:
+    """PDF／郵件附件：依段落註解標記（`<!-- 帳齡分析 -->` 等）拿掉沒被選到的段落——範圍是『這個標記到下一個**已知**標記（或頁尾）』，
+    不會停在其他不相干的註解。要拿掉的段落找不到標記 ⇒ `ReportSectionError`（不產出）。以變數插入的兩段（目標達成率、本季收支）不靠標記，由呼叫端清空。"""
+    marks = {sid: m for sid, _t, m in REPORT_SHEETS if m}
+    known = "|".join(re.escape(m) for m in tuple(marks.values()) + BOUNDARIES)
+    for sid in off:
+        label = marks.get(sid)
+        if not label:
+            continue
+        m = re.search(r"<!-- %s[^>]*-->" % re.escape(label), html)
+        if not m:
+            raise ReportSectionError("PDF 段落標記不存在：%s" % label)
+        nxt = re.search(r'<!-- (?:%s)|<div class="footer">' % known, html[m.end():])
+        stop = m.end() + nxt.start() if nxt else len(html)
+        html = html[:m.start()] + html[stop:]
+    return html
+
+
+def _build_excel(data: dict, period_label: str, gen_at: str, off=None) -> bytes:
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
@@ -959,7 +1034,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         ("已結案件",            s["closedCases"],          ""),
         ("本期新成案",          s["periodCases"],          ""),
         ("在製訂單 (Backlog)",  _fmt(s["backlog"]),        "進行中案件未收款合計"),
-        ("保固到期預警",        s["warrantyAlerts"],       "90天內"),
+        ("保固到期預警",        s["warrantyAlerts"],       "%d天內" % _warranty_days()),
         ("已結案未精算",        f"{s['settleOverdueCount']} 件", "待補精算" if s["settleOverdueCount"] > 0 else "無"),
     ]
     for label, val, note in case_rows:
@@ -1694,7 +1769,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
 
     ws7.merge_cells(f"A1:{get_column_letter(len(hdrs7))}1")
     c = ws7["A1"]
-    c.value = f"保固到期預警（90 天內，共 {len(data['warranty'])} 筆）"
+    c.value = f"保固到期預警（{_warranty_days()} 天內，共 {len(data['warranty'])} 筆）"
     c.font  = mk(bold=True, size=12, color=C_WHITE)
     c.fill  = fill(C_ORANGE)
     c.alignment = al("center")
@@ -1791,6 +1866,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
              aligns=[al("center")], height=20)
 
     ar_r = 3
+    _ar_cuts = _finance_params.cuts_of(ar)          # 用『產生這份資料的切點』（回應有 cuts 才是自訂，沒有＝30/60/90），不重讀設定，避免資料與上色不一致
     for band in ar_bands:
         bkey = band.get("key", "")
         bg_band = C_LRED if bkey == "90+" else C_LYELLOW if bkey == "61-90" else C_LBLUE if bkey == "31-60" else C_LGREEN
@@ -1808,7 +1884,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
             ws9.cell(row=ar_r, column=8).number_format = '#,##0'
             days_cell = ws9.cell(row=ar_r, column=11)
             days_cell.font = mk(bold=True, size=9,
-                                color=C_RED if days > 90 else C_ORANGE if days > 60 else C_DARK)
+                                color=C_RED if days > _ar_cuts[2] else C_ORANGE if days > _ar_cuts[1] else C_DARK)
             ar_r += 1
 
     if ar_r == 3:
@@ -1823,6 +1899,9 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                  aligns=[al("left")] + [al("right")] * 10, height=20)
         ws9.cell(row=ar_r, column=8).number_format = '#,##0'
 
+    _off = _off_sheets() if off is None else list(off)             # 呼叫端算好就用呼叫端的（一個請求只算一次）
+    if _off:                                                       # 旗標關／沒有範本 ⇒ 空 ⇒ 這一段完全不動（輸出逐位元相同）
+        _drop_excel_sheets(wb, _off)
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -1855,12 +1934,13 @@ def _pdf_ar_aging(ar: dict, tbl_hdr, fmt) -> str:
     total_amt = (ar.get("total") or {}).get("amount", 0)
     as_of     = ar.get("asOf", "")
     import html as _h
+    _cuts = _finance_params.cuts_of(ar)             # 同上：跟著資料走，不重讀設定
     rows = ""
     for band in bands:
         for it in band.get("items") or []:
             d = it["daysElapsed"]
-            color = "red" if d > 90 else "orange" if d > 60 else ""
-            color_style = f' style="color:#DC2626;font-weight:700"' if d > 90 else f' style="color:#D97706"' if d > 60 else ''
+            color = "red" if d > _cuts[2] else "orange" if d > _cuts[1] else ""
+            color_style = f' style="color:#DC2626;font-weight:700"' if d > _cuts[2] else f' style="color:#D97706"' if d > _cuts[1] else ''
             rows += (
                 f"<tr><td class='c'>{_h.escape(band['label'])}</td>"
                 f"<td>{_h.escape(it['quoteNo'])}</td><td>{_h.escape(it['customer'])}</td>"
@@ -1883,7 +1963,8 @@ def _pdf_ar_aging(ar: dict, tbl_hdr, fmt) -> str:
     )
 
 
-def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
+def _build_report_html(data: dict, period_label: str, gen_at: str, off=None) -> str:
+    _off = _off_sheets() if off is None else list(off)
     s = data["summary"]
     # `AC2`：收支明細的收入欄名依口徑（權責＝未稅、階段完成日；現金＝含稅、收款日）
     _inc_cols = (("認列階段", "認列金額（未稅）", "認列日") if data.get("basis", DEFAULT_BASIS) == "accrual"
@@ -2294,6 +2375,10 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
             f"<p style='color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic'>尚未設定 {_acv_year} 年度目標，請於營運報表頁按「立即設定年度目標」配置。</p>"
         )
 
+    if "targets" in _off:
+        acv_html = ""
+    if "quarter" in _off:
+        quarter_section_html = ""
     html = f"""<!DOCTYPE html>
 <html lang="zh-Hant"><head><meta charset="UTF-8">
 <title>營運報表 {period_label}</title>
@@ -2342,7 +2427,7 @@ tr.in-period{{background:#EFF6FF}}
   <div class="kpi"><div class="kpi-label">本期新收款</div><div class="kpi-val blue">{fmt(s["periodReceived"])}</div><div class="kpi-sub">淨 {fmt(s["periodNet"])}</div></div>
   <div class="kpi"><div class="kpi-label">合約總案數</div><div class="kpi-val">{s["totalCases"]}</div><div class="kpi-sub">進行中 {s["activeCases"]}　已結案 {s["closedCases"]}</div></div>
   <div class="kpi"><div class="kpi-label">本期新成案</div><div class="kpi-val blue">{s["periodCases"]}</div></div>
-  <div class="kpi"><div class="kpi-label">保固到期預警</div><div class="kpi-val orange">{s["warrantyAlerts"]}</div><div class="kpi-sub">90 天內到期</div></div>
+  <div class="kpi"><div class="kpi-label">保固到期預警</div><div class="kpi-val orange">{s["warrantyAlerts"]}</div><div class="kpi-sub">{_warranty_days()} 天內到期</div></div>
   <div class="kpi"><div class="kpi-label">精算實際營業利益合計</div><div class="kpi-val" style="color:#7C3AED">{fmt(s["totalActualGrossProfit"])}</div><div class="kpi-sub">已精算 {s["settledCases"]} 件</div></div>
   <div class="kpi"><div class="kpi-label">精算覆蓋率</div><div class="kpi-val" style="color:#7C3AED">{s["settleCoverage"]}%</div><div class="kpi-sub">已結案 {s["closedCases"]} 件中 {s["settledCases"]} 件完成精算</div></div>
   <div class="kpi"><div class="kpi-label">在製訂單 (Backlog)</div><div class="kpi-val blue">{fmt(s["backlog"])}</div><div class="kpi-sub">進行中案件未收款合計</div></div>
@@ -2463,7 +2548,7 @@ tr.in-period{{background:#EFF6FF}}
 
 <div class="footer">{company_heading("此報表由 MOTRIX ERP 系統自動產製，僅供內部管理參考")} ｜ {gen_at}</div>
 </body></html>"""
-    return html
+    return _drop_pdf_sections(html, _off) if _off else html
 
 
 def _html_to_pdf(html: str) -> bytes:
@@ -2539,12 +2624,13 @@ def report_excel(
         normalize_basis(basis), quote_money_visible(u)
     ))
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-    xlsx   = _build_excel(data, label, gen_at)
+    _omitted = _off_sheets()
+    xlsx   = _build_excel(data, label, gen_at, off=_omitted)
     safe   = label.replace(" ", "").replace("年", "Y").replace("月", "M").replace("第", "Q").replace("季", "")
     fname  = f"MOTRIX_營運報表_{safe}.xlsx"
     _audit(_tok(authorization), "reports.export", "reports", "financial",
            f"營運報表 Excel 匯出（{label}）",
-           {"format": "excel", "period": period, "departmentId": department_id})
+           {"format": "excel", "period": period, "departmentId": department_id, "omittedSheets": _omitted})
     return Response(
         content=xlsx,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -2575,15 +2661,16 @@ def report_pdf(
         normalize_basis(basis), quote_money_visible(u)
     ))
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    _omitted = _off_sheets()                                        # 一個請求只算一次：建構器與稽核用同一份
     try:
-        pdf_bytes = _html_to_pdf(_build_report_html(data, label, gen_at))
+        pdf_bytes = _html_to_pdf(_build_report_html(data, label, gen_at, off=_omitted))
     except ValueError as e:
         raise HTTPException(500, str(e))
     safe  = label.replace(" ", "").replace("年", "Y").replace("月", "M").replace("第", "Q").replace("季", "")
     fname = f"MOTRIX_營運報表_{safe}.pdf"
     _audit(_tok(authorization), "reports.export", "reports", "financial",
            f"營運報表 PDF 匯出（{label}）",
-           {"format": "pdf", "period": period, "departmentId": department_id})
+           {"format": "pdf", "period": period, "departmentId": department_id, "omittedSheets": _omitted})
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
@@ -2593,8 +2680,17 @@ def report_pdf(
 
 # ── AR Aging（應收帳款帳齡分析）────────────────────────────────────────────────
 
+def _settle_waited(updated_at, days) -> bool:
+    """該案件最後更新日距今是否已超過 `days` 天；日期讀不出來 ⇒ True（寧可列出，不隱藏）。"""
+    try:
+        return (date.today() - date.fromisoformat((updated_at or "")[:10])).days > days
+    except Exception:                                                  # noqa: BLE001
+        return True
+
+
 def _compute_ar_aging() -> dict:
     """帳齡計算 — 供 API endpoint 及 Excel/PDF 匯出共用。"""
+    _cuts = _finance_params.aging_cuts()
     today = date.today()
     conn = get_db()
     rows = conn.execute("""
@@ -2608,7 +2704,7 @@ def _compute_ar_aging() -> dict:
     """).fetchall()
     conn.close()
 
-    bands: dict = {"0-30": [], "31-60": [], "61-90": [], "90+": []}
+    bands: dict = {k: [] for k in _finance_params.BAND_KEYS}      # 區間鍵是『位置代號』（第 1～4 區），不是天數
 
     for row in rows:
         cr = {}
@@ -2636,14 +2732,14 @@ def _compute_ar_aging() -> dict:
             amt  = amounts[idx]
             days = (today - anchor).days
 
-            band = "90+" if days > 90 else "61-90" if days > 60 else "31-60" if days > 30 else "0-30"
+            band = _finance_params.aging_band(days, _cuts)
             bands[band].append({
                 "quoteNo":     row["quote_no"],
                 "customer":    row["customer_name"] or "",
                 "project":     row["project_name"]  or "",
                 "salesPerson": row["sales_person"]  or "",
                 "dealTag":     row["deal_tag"]       or "",
-                "type":        pi.get("type", f"第{idx+1}期"),
+                "type":        _stage_name(pi, idx),
                 "pct":         pi.get("pct") or 0,
                 "amount":      amt,
                 "quoteDate":   row["quote_date"] or "",
@@ -2651,7 +2747,8 @@ def _compute_ar_aging() -> dict:
             })
 
     result_bands = []
-    for key, label in [("0-30", "0–30 天"), ("31-60", "31–60 天"), ("61-90", "61–90 天"), ("90+", "90+ 天")]:
+    _labels = _finance_params.aging_labels(_cuts)
+    for key, label in [(k, _labels[k]) for k in _finance_params.BAND_KEYS]:
         items = bands[key]
         result_bands.append({
             "label":  label,
@@ -2661,7 +2758,7 @@ def _compute_ar_aging() -> dict:
             "items":  items,
         })
 
-    return {
+    out = {
         "asOf":  today.isoformat(),
         "note":  "帳齡以案件報價日為基準計算，不含已收款項目",
         "bands": result_bands,
@@ -2670,12 +2767,15 @@ def _compute_ar_aging() -> dict:
             "amount": sum(b["amount"] for b in result_bands),
         },
     }
+    if _cuts != _finance_params.DEFAULT_CUTS:        # 只有自訂切點生效時才多這個鍵（預設時回應與過去逐鍵相同）；畫面用它決定超期上色
+        out["cuts"] = list(_cuts)
+    return out
 
 
 @router.get("/api/reports/ar-aging")
 def get_ar_aging(authorization: str = Header(None)):
     """
-    應收帳款帳齡分析：以案件成案日為基準，將未收款項目分為 0-30/31-60/61-90/90+ 天四個區間。
+    應收帳款帳齡分析：以案件成案日為基準，將未收款項目依經過天數分為四個區間（預設切點 30／60／90 天，可在設定中心自訂；區間鍵是位置代號，不是天數）。
     注意：無顯式到期日時以報價日計算帳齡，為管理用途的近似值。
     """
     u = _require_user(authorization)
@@ -2989,20 +3089,21 @@ def _send_monthly_report_for(period_str: str) -> None:
         # 「今年度」用該月份所屬的整年。
         mail_data.update(_build_income_expense_scopes(int(period_str[:4]), period_str))
 
+        _omitted = _off_sheets()                                     # 附件與日誌用同一份
         try:
-            excel_bytes = _build_excel(mail_data, label, gen_at)
+            excel_bytes = _build_excel(mail_data, label, gen_at, off=_omitted)
         except Exception as exc:
             _log.warning("月報 Excel 產製失敗（%s）: %s", period_str, exc)
             excel_bytes = None
 
         try:
-            pdf_bytes = _html_to_pdf(_build_report_html(mail_data, label, gen_at))
+            pdf_bytes = _html_to_pdf(_build_report_html(mail_data, label, gen_at, off=_omitted))
         except Exception as exc:
             _log.warning("月報 PDF 產製失敗（%s）: %s", period_str, exc)
             pdf_bytes = None
 
         notify_monthly_report(label, period_str, excel_bytes, pdf_bytes)
-        _log.info("月報已寄送：%s（含 %d 件本月案件）", period_str, len(data["casesPeriod"]))
+        _log.info("月報已寄送：%s（含 %d 件本月案件；略過的工作表：%s）", period_str, len(data["casesPeriod"]), _omitted or "無")
     except Exception as exc:
         _log.warning("_send_monthly_report_for 失敗（%s）: %s", period_str, exc)
 
@@ -3236,7 +3337,7 @@ def _collect_unreceived_items(d0: str, d1: str, department_id: Optional[int] = N
                 "customer":      row["customer_name"] or "",
                 "project":       row["project_name"]  or "",
                 "salesPerson":   row["sales_person"]  or "",
-                "type":          pi.get("type", f"第{idx+1}期"),
+                "type":          _stage_name(pi, idx),
                 "amount":        amt,
                 "expectedDate":  exp_date,
                 "invoiceNo":     pi.get("invoiceNo", ""),
@@ -3325,7 +3426,7 @@ def _collect_payment_anomalies(department_id: Optional[int] = None) -> list:
                 "customer":    row["customer_name"] or "",
                 "project":     row["project_name"]  or "",
                 "salesPerson": row["sales_person"]  or "",
-                "type":        pi.get("type", f"第{idx+1}期"),
+                "type":        _stage_name(pi, idx),
                 "amount":      receipt_amounts(amounts[idx], aa, pi.get("feeAmount"))[1] if aa is not None else amounts[idx],
                 "receivedAt":  rat,
                 "received":    rcvd,

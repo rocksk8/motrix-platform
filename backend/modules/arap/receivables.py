@@ -25,6 +25,7 @@ from helpers.tax_calc import norm_ymd, quote_tax_type, tax_split, LEGACY_TAX_NOT
 __all__ = ["collect_income_items", "collect_tax_invoices", "round_half_up_invoice"]
 
 
+from helpers.option_lists import payment_stage_name as _stage_name
 def round_half_up_invoice(n) -> int:
     """財政部統一發票金額計算慣例是「四捨五入」（.5 一律進位），Python 內建
     `round()` 是「銀行家捨入」（.5 進位到最近偶數）——兩者只在剛好卡在 .5
@@ -195,7 +196,7 @@ def collect_income_items(d0: str, d1: str, department_id: Optional[int] = None) 
                 "customer":     row["customer_name"] or "",
                 "project":      row["project_name"]  or "",
                 "salesPerson":  row["sales_person"]  or "",
-                "type":         pi.get("type", f"第{idx+1}期"),
+                "type":         _stage_name(pi, idx),           # census S-F1：顯示名稱（選項清單關著／沒發布 ⇒ 與過去相同）；下面傳票說明用的 pi.get("type") 是已入帳的原字串，不改
                 "amount":       gross_amt,
                 "receivedAt":   rat,
                 "actualAmount": aa,

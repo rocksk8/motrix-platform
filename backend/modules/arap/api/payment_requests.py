@@ -105,6 +105,8 @@ PAYMENT_STAGES = {
     "final":      "尾款",
 }
 
+from helpers.option_lists import request_stage_label as _request_stage_label      # census S-F1：代碼固定、顯示名稱可由選項清單改（關著 ⇒ 上面的字典）
+
 class RequestItemIn(BaseModel):
     itemId: int
     qty:    float
@@ -156,7 +158,7 @@ def _request_public(row, include_snapshot: bool = True) -> dict:
         "quoteNo":       d["quote_no"],
         "scope":         d["scope"] or "amount",
         "stage":         d.get("stage") or "",
-        "stageLabel":    PAYMENT_STAGES.get(d.get("stage") or "", ""),
+        "stageLabel":    _request_stage_label(d.get("stage") or "", PAYMENT_STAGES.get(d.get("stage") or "", "")),
         "customerName":  snap.get("customerName", ""),
         "status":        d["status"] or "草稿",
         "amount":        amount,          # 含稅

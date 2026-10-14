@@ -490,7 +490,8 @@ def observe_expiry(conn, root=None, now=None) -> None:
             if is_permanent_doc(doc):
                 return                       # 永久確認檔不到期、不提醒
             expires = datetime.fromisoformat(str(doc["expires"])).date()
-            if (expires - now.date()).days <= SIGNED_EXPIRY_WARN_DAYS:
+            from helpers.alert_settings import cert_warn_days      # census #7：設定中心『確認檔到期提醒天數』（預設 30＝今天）
+            if (expires - now.date()).days <= cert_warn_days():
                 alert(conn, "signed_file_expiring",
                       "開發者簽章確認檔將於 %s 到期，請聯絡開發者換發（過期後輸出暫停，可用暫時放行撐到新檔到位）" % expires)
     except Exception:  # noqa: BLE001

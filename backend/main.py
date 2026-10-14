@@ -81,15 +81,20 @@ from routers import company_lookup
 from routers import auth, customers, parts, system, module_versions, search, org_structure, list_prefs, uploads, attachments, approval_delegates, approval_queue, licensing, map_points
 from routers import item_reads
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
-from routers import definitions, custom_records, def_governance, def_pipeline, custom_fields_builtin, user_buttons
+from routers import definitions, custom_records, def_governance, attachment_slots, def_pipeline, custom_fields_builtin, user_buttons
+from routers import rules as rules_router
+from routers import notify_templates as notify_templates_router
 from routers import modules
 from routers import legal_params
 from routers import settings_center
+from routers import status_display as _status_display_router
 from routers import mail_settings
 # 職責角色化 R1（僅最高管理者）
 from routers import duty_roles
 from routers import platform_menu
 from routers import platform_menu_preview
+from routers import export_templates as export_templates_router
+from routers import option_lists as option_lists_router
 from routers import system_hub
 from routers import platform_catalog
 _startup_step("import_routers")
@@ -932,6 +937,7 @@ app.include_router(customers.router)
 app.include_router(parts.router)
 app.include_router(company_lookup.router)
 app.include_router(system.router)
+app.include_router(_status_display_router.router)
 app.include_router(module_versions.router)
 app.include_router(search.router)
 app.include_router(org_structure.router)
@@ -940,9 +946,12 @@ app.include_router(uploads.router)
 app.include_router(attachments.router)   # 附件開檔（attachments.catalog 提供者；2026-09-30 P2）
 app.include_router(definitions.router)
 app.include_router(def_governance.router)
+app.include_router(attachment_slots.router)   # 附件插槽（BP-4 S2；旗標 builder_slots.enabled）
 app.include_router(def_pipeline.router)
 app.include_router(custom_fields_builtin.router)   # 內建畫面的自訂欄位（T61 S5）
 app.include_router(user_buttons.router)            # 使用者自訂按鈕（T61 S6）
+app.include_router(rules_router.router)
+app.include_router(notify_templates_router.router)   # 通知用語範本（S-X3）
 app.include_router(custom_records.router)
 app.include_router(approval_delegates.router)
 app.include_router(approval_queue.router)     # 待我簽核佇列（L1，2026-09-27 自 M01 搬入）
@@ -957,6 +966,8 @@ app.include_router(mail_settings.router)
 app.include_router(duty_roles.router)
 app.include_router(platform_menu.router)
 app.include_router(platform_menu_preview.router)
+app.include_router(export_templates_router.router)
+app.include_router(option_lists_router.router)
 app.include_router(system_hub.router)
 app.include_router(platform_catalog.router)
 _startup_step("include_routers")

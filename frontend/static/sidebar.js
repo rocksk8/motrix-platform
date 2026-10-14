@@ -1116,6 +1116,27 @@ if (typeof module !== 'undefined' && module.exports) {
     document.head.appendChild(sc)
   }
 
+  // BP-3：builder_exports 開啟且是最高管理者時（/api/platform/menu 才有 builderExports），頁面若宣告了 <meta name="motrix-export-id">，才載入匯出範本編輯器。
+  // 關著 ⇒ 不載入、不多任何請求（頁面的網路請求與今天逐一相同）。
+  function _loadExportEditor() {
+    var m = document.querySelector('meta[name="motrix-export-id"]')
+    if (!m || window.MotrixExportEditor || document.getElementById('export-editor-js')) return
+    window.MOTRIX_EXPORT_ID = m.getAttribute('content')
+    var sc = document.createElement('script')
+    sc.id = 'export-editor-js'; sc.src = '/static/export-editor.js'
+    document.head.appendChild(sc)
+  }
+
+  // census #4：builder_option_lists 開啟（且治理開啟、是最高管理者）時（/api/platform/menu 才有 builderOptionLists），頁面若宣告了
+  // <meta name="motrix-option-lists" content="id,id">，才載入選項清單編輯器；關著 ⇒ 不載入、不多任何請求。
+  function _loadOptionListEditor() {
+    var m = document.querySelector('meta[name="motrix-option-lists"]')
+    if (!m || window.MotrixOptionListEditor || document.getElementById('option-list-editor-js')) return
+    var sc = document.createElement('script')
+    sc.id = 'option-list-editor-js'; sc.src = '/static/option-list-editor.js'
+    document.head.appendChild(sc)
+  }
+
   function _applyLayout() {
     if (!s || !s.token) return
     var my = ++_menuSeq
@@ -1136,6 +1157,10 @@ if (typeof module !== 'undefined' && module.exports) {
         _showModuleNotice()
         _setMenuState('layout')
         document.documentElement.setAttribute('data-menu-seq', String(my))
+        window.MOTRIX_EXPORT_AUDIT = d.exportAudit === true      // BP-3：builder_exports 開啟時（所有人）瀏覽器端產檔的匯出才送稽核紀錄；關著 ⇒ 不發請求
+        if (d.builderExports) _loadExportEditor()      // BP-3
+        if (d.optionLists) { window.MOTRIX_OPTION_LISTS = d.optionLists; window.dispatchEvent(new Event('motrix-options')) }   // census #4：選項清單（只在開啟且有發布版本時才有這個鍵）
+        if (d.builderOptionLists) _loadOptionListEditor()      // census #4
         if (d.builderMenu) _loadMenuEditor()          // BP-1：builder_menu.enabled 開啟且是最高管理者才有這個鍵（關著 ⇒ 完全不載入）
       })
       .catch(function (e) {

@@ -8,6 +8,8 @@
   <title>傳票 - MOTRIX 專案管理系統</title>
   <script src="../static/approval-return.js"></script>
   <script src="../js/voucher.js"></script>
+  <script src="../static/public-flags.js"></script>
+  <script src="../static/status-chip.js"></script>
   <script src="../static/download.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -236,7 +238,7 @@
             <select class="vc-input vc-filter" data-testid="voucher-filter-status" x-model="filterStatus">
               <option value="">全部狀態</option>
               <template x-for="st in ['草稿', '待審核', '簽核中', '已核准', '已過帳', '已作廢']" :key="st">
-                <option :value="st" x-text="st"></option>
+                <option :value="st" x-text="stLabel(st)"></option>
               </template>
             </select>
           </div>
@@ -246,7 +248,7 @@
               <span class="vc-row__no" x-text="v.voucher_no"></span>
               <span class="vc-status"
                     :class="v.voided_at ? 'voided' : (v.status === '已過帳' ? 'posted' : '')"
-                    x-text="v.voided_at ? '已作廢' : v.status"></span>
+                    x-text="stLabel(v.voided_at ? '已作廢' : v.status)"></span>
               <span class="vc-row__sum" x-text="v.summary || shortDate(v.voucher_date)"></span>
             </div>
           </template>
@@ -316,7 +318,7 @@
               </select></div>
             <div><label>狀態</label><span class="vc-status" data-testid="voucher-status"
                  :class="voidedAt ? 'voided' : (status === '已過帳' ? 'posted' : '')"
-                 x-text="voidedAt ? '已作廢' : status"></span></div>
+                 x-text="stLabel(voidedAt ? '已作廢' : status)"></span></div>
           </div>
 
           <datalist id="vc-accounts">

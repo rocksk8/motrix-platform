@@ -41,12 +41,24 @@ AUDIT_WRAPPERS = {
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
 EXEMPT = {
+    # ── 通知用語預覽（t62 S-X3）：POST 只為帶草稿範本，不寫任何資料 ──
+    ("notify_templates.py", "POST", "/api/notify-templates/{event}/preview"):
+        "preview：只在記憶體內驗證草稿範本並以樣本值渲染（NT.preview 不 commit、不寫任何資料）；僅最高管理者、builder_notify 旗標關閉時 404。",
+    # ── 標示型規則預覽（t62 BP-2）：POST 只為帶草稿規則，不寫任何業務資料 ──
+    ("rules.py", "POST", "/api/rules/preview"):
+        "preview：只在記憶體內驗證草稿規則並對最近 N 筆唯讀評估（不 commit、不寫業務資料）；規則故障只走限頻的 rules.degraded 稽核（_note_degraded）；僅最高管理者、builder_rules／builder_governance 旗標關閉時 404。",
+    # ── 選項清單預覽（census #4）：POST 只為帶草稿清單，不寫任何資料 ──
+    ("option_lists.py", "POST", "/api/option-lists/{list_id}/preview"):
+        "preview：只在記憶體內驗證草稿清單並回傳合併結果與用途說明，不開寫入、不 commit；僅最高管理者、設定 builder_option_lists 與建構器治理未同時開啟回 404",
     # ── 自訂按鈕預覽（t61 S6）：POST 只為帶草稿按鈕，不寫任何資料 ──
     ("user_buttons.py", "POST", "/api/user-buttons/{module}/{page}/preview"):
         "preview：只在記憶體內驗證並以指定身分渲染草稿按鈕（UB.preview 不 commit、不寫任何資料）；僅最高管理者、設定 builder_actions.enabled 關閉時 404。",
     # ── 選單建構器預覽（t59 BP-1）：POST 只為帶草稿 ops，不寫任何資料 ──
     ("platform_menu_preview.py", "POST", "/api/platform/menu/preview"):
         "preview：只在記憶體內驗證並渲染草稿 ops（helpers/menu_builder.preview 不開寫入、不 commit），不寫任何資料；僅最高管理者、設定 builder_menu.enabled 關著回 404",
+    # ── 匯出範本預覽（BP-3）：POST 只為帶草稿範本，不寫任何資料 ──
+    ("export_templates.py", "POST", "/api/export-templates/{export_id}/preview"):
+        "preview：只在記憶體內驗證草稿範本並渲染前幾列，不開寫入、不 commit、不計匯出次數、不留 export 稽核；僅最高管理者、設定 builder_exports.enabled 關著回 404",
     # ── 轉簽（第54班）：稽核與換人同一個交易（直接 INSERT audit_log，寫不進去整個轉簽回滾），掃描器只認 _audit／_system_audit 呼叫 ──
     ("approval_queue.py", "POST", "/api/approval-queue/reassign"):
         "稽核 approval.reassign 在同一個交易內由端點直接寫入 audit_log（第 54 班強制稽核：寫不進去整個轉簽回滾，不再是 commit 之後吞錯誤的 _audit）；detail 上限與欄位推導沿用 _audit 的同一份規則",
@@ -148,6 +160,8 @@ EXEMPT = {
         "純預覽：回編號範例，不佔用流水號、不存檔",
     ("custom_records.py", "POST", "/api/custom-modules/{key}/output/preview"):
         "純預覽：用樣本資料產生 HTML，不存檔",
+    ("attachment_slots.py", "POST", "/api/attachment-slots/{doc_type}/simulate"):
+        "純模擬（BP-4 S2）：判斷樣本檔收不收、顯示用路徑、誰能讀；不寫檔、不建資料夾、不存任何東西",
 }
 
 _VAGUE = {"", "不需要", "例外", "n/a", "na", "todo", "無", "略", "同上", "暫時"}

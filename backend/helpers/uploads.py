@@ -168,7 +168,7 @@ def _safe_save_dir(subfolder: str, doc_no: str) -> str:
 
 
 async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFile],
-                              uploaded_by: str, watermark_by: str = '', existing_count: int = 0) -> list:
+                              uploaded_by: str, watermark_by: str = '', existing_count: int = 0, policy=None) -> list:
     """存檔 files 到 uploads/{subfolder}/{doc_no}/{uuid}{ext}（demo 帳號會被
     導向 uploads/_demo_uploads/{subfolder}/{doc_no}/，見 _effective_subfolder()），
     回傳新增檔案的 metadata 陣列（呼叫端負責把這份陣列追加進資料庫的 JSON
@@ -186,17 +186,33 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
     載入 Pillow 相依。放在用到的分支裡，沒傳 watermark_by 的呼叫端行為與相依
     完全不變。
 
+    `policy`（選填，BP-4；`helpers.storage_slots.SlotPolicy`）：**None＝先前的行為，逐位元相同**。給了才套用政策：副檔名＝政策 accept ∩ 硬底線、
+    數量／合計上限取政策、路徑多一層政策子夾、metadata 多 `slot`。政策的位置代號必須與 `subfolder` 對得上（對不上＝程式錯誤，ValueError）。
+
     `existing_count`（選填，預設 0）：這張單據目前已有幾個附件；該資料夾在 `UPLOAD_LIMITS_BY_SUBFOLDER` 有 `max_files` 時用來檢查累計數量。
     **整批要嘛全存、要嘛全不存**：先把每個檔案驗完（副檔名、單檔大小、空檔、檔頭、整次請求合計大小、累計數量）才開始寫入，
     任何一個不合格就整批擋下，磁碟上不留任何檔案或空目錄（原本會留下前面幾個已寫的檔，成為沒有任何單據引用的孤兒檔）。"""
     if not files:
         raise HTTPException(400, "請至少選擇一個檔案")
 
-    limits = limits_for(subfolder)
+    if policy is None:
+        limits = limits_for(subfolder)
+    else:
+        from helpers import storage_slots as _ss
+        if policy.code != _ss.resolve_code(subfolder):
+            raise ValueError("上傳政策的位置代號 %r 與資料夾 %r 不符" % (policy.code, subfolder))
+        limits = {k: v for k, v in (('max_files', policy.max_files), ('max_request_bytes', policy.max_request_bytes)) if v}
     max_files = limits.get('max_files')
     if max_files and int(existing_count or 0) + len(files) > max_files:
         raise HTTPException(400, f"每張單據最多 {max_files} 個附件（目前已有 {int(existing_count or 0)} 個，這次要加 {len(files)} 個）")
-    allowed = _ALLOWED_EXTS | _EXTRA_EXTS_BY_SUBFOLDER.get(subfolder, set())
+    if policy is None:
+        allowed = _ALLOWED_EXTS | _EXTRA_EXTS_BY_SUBFOLDER.get(subfolder, set())
+    else:
+        allowed = set(policy.accept) & (_ss.HARD_EXTS if policy.builtin else _ss.SLOT_EXTS)      # 硬底線：政策只能縮小；管理者插槽另扣舊 OLE／heic
+        if policy.subfolder:
+            if '/' in policy.subfolder:                         # 政策子夾只能一層（深度防禦；定義驗證器另有字元規則）
+                raise HTTPException(400, "附件存放位置不正確。")
+            subfolder = '%s/%s' % (subfolder, policy.subfolder)
     allowed_label = 'jpg/png/pdf' + ''.join('/' + e[1:] for e in sorted(allowed - _ALLOWED_EXTS))
     subfolder = _effective_subfolder(subfolder)
     save_dir = _safe_save_dir(subfolder, doc_no)
@@ -208,8 +224,14 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
         ext = os.path.splitext(upload.filename or '')[1].lower()
         if ext not in allowed:
             raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 {allowed_label}）")
+        if policy is not None:                                  # 雙副檔名（`a.exe.pdf`）：只套用在帶政策的上傳，None 路徑不變
+            inner = ['.' + x for x in (upload.filename or '').lower().split('.')[1:-1]]
+            if any(e in _ss.DANGEROUS_EXTS for e in inner):
+                raise HTTPException(400, f"檔名含不允許的雙重副檔名：{upload.filename}")
         raw = await upload.read()
         file_cap = max_file_bytes()
+        if policy is not None and policy.max_file_bytes:
+            file_cap = min(file_cap, policy.max_file_bytes)
         if len(raw) > file_cap:
             raise HTTPException(400, f"檔案過大：{upload.filename}（單檔上限 {file_cap // (1024 * 1024)}MB）")
         if not raw:
@@ -245,6 +267,7 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
             "mime":       upload.content_type or '',
             "uploadedBy": uploaded_by,
             "uploadedAt": now,
+            **({"slot": policy.slot} if policy is not None and policy.slot else {}),
         })
     return saved
 
@@ -330,16 +353,17 @@ class OpenedFile(NamedTuple):
     size: int
 
 
-def upload_path_key(entry, folder, depth=2):
+def upload_path_key(entry, folder, depth=2, key_index=0):
     """metadata 一筆的 `path` ⇒ 它在 `folder` 底下的「單據鍵」（資料夾之後第一段）；不是 `folder` 底下、段數不是 `depth`
     （單據鍵＋檔名＝2；工作日誌照片 `worklog_<id>/<日期>/<檔名>`＝3）、路徑不合法 ⇒ None。demo 前綴已去掉。
+    `key_index`（選填，預設 0）：單據鍵在資料夾之後第幾段；BP-4 管理者插槽的路徑 `<資料夾>/<子夾>/<單號>/<檔名>` 用 `depth=3, key_index=1`。
     給 `attachments.catalog` 提供者用：**被提供的檔案路徑必須屬於那張單據自己的資料夾**（安全審查 W3：
     metadata 來自 JSON 欄，前端曾可在案件紀錄 PATCH 帶任意 `files`／`invoiceFiles` 路徑，不能只信它）。"""
     rel = canonical_upload_path((entry or {}).get("path")) if isinstance(entry, dict) else None
     owner = upload_owner(rel) if rel else None
     if owner is None or owner[0] != folder or len(owner[1]) != depth:
         return None
-    return owner[1][0]
+    return owner[1][key_index]
 
 
 def pick_file(files, file_id):

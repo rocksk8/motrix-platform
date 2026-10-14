@@ -30,6 +30,10 @@ CFG = {
     "devices.html": dict(module="analytics", key="devices", entity="device", flag="devices",
                          core={"name", "expiryDate", "warrantyStatus"}, factory="devicesPage", orig='<div class="table-scroll" x-show="!layoutOn">',
                          api="/api/devices", restricted=dict(role="sales", modules=[])),
+    # BP-1／S3：客戶頁（L1 共用主檔頁面；擁有者是虛擬的 core，登記檔 core/l1_customization.json）。核心欄位 D6：公司名稱、統一編號、狀態
+    "customers.html": dict(module="core", key="customers", entity="customer", flag="customers",
+                           core={"name", "taxId", "status"}, factory="customersPage", orig='<div class="table-scroll" x-show="!layoutOn">',
+                           api="/api/customers", restricted=dict(role="engineer", modules=[])),
     "vendor-contractors.html": dict(module="subcontract", key="vendors", entity="vendor", flag="vendor_contractors",
                                     core={"name", "taxId", "active"}, factory="vendorContractorsPage",
                                     orig='<div class="table-scroll" x-show="!loading && !layoutOn">',
@@ -43,6 +47,8 @@ def _page(name):
 
 
 def _manifest(cfg):
+    if cfg["module"] == "core":
+        return json.loads((ROOT / "backend" / "core" / "l1_customization.json").read_text(encoding="utf-8"))
     return json.loads((MODS / cfg["module"] / "module.json").read_text(encoding="utf-8"))
 
 
@@ -75,14 +81,15 @@ def test_fallback_labels_and_cells_match_registration(name):
     assert lbl
     assert dict(re.findall(r"(\w+):\s*'([^']+)'", lbl.group(1))) == {f["key"]: f["label"] for f in fields}
     for c in cols:
-        assert "c.field === '%s'" % c in src, "%s 欄沒有畫法（登記了卻是空白）" % c
+        assert ("c.field === '%s'" % c in src) or ("col.field === '%s'" % c in src), "%s 欄沒有畫法（登記了卻是空白）" % c
 
 
 @pytest.mark.parametrize("name", PARAMS)
 def test_no_money_columns_are_registered(name):
     _, fields = _registered(name, CFG[name])
     money = re.compile(r"price|amount|cost|fee|total|金額|價|成本|費|薪|款")
-    assert [f["key"] for f in fields if money.search(f["key"]) or money.search(f["label"])] == []
+    exempt = {"quoteCount"}                  # 客戶頁「累計報價」是**件數**（顯示「N 份」），不是金額；下面有專題鎖住
+    assert [f["key"] for f in fields if (money.search(f["key"]) or money.search(f["label"])) and f["key"] not in exempt] == []
 
 
 # ── 2. 旗標關閉 ────────────────────────────────────────────────────────────
@@ -117,7 +124,7 @@ global.document = { addEventListener() {}, querySelector() { return { insertAdja
 window.MotrixLayout = { init() {}, start() { calls.start++ } }
 window.MotrixLayoutEditor = { mount() { calls.mount++ } }
 window.MotrixGovLookup = { alpineState() { return {} } }          // 承攬商頁在建立元件時展開它
-window.MotrixPrivacyNotice = { subjectState() { return {} }, load: async () => null }
+window.MotrixPrivacyNotice = { subjectState() { return {} }, contactsState() { return {} }, load: async () => null }
 let FLAG = %(flag_value)s
 global.fetch = async (url) => { calls.fetch.push(String(url)); if (FLAG === 'fail') throw new Error('x')
   return { ok: FLAG !== 'http', json: async () => ({ groups: { builder_layout: { %(flag)s: FLAG === true } } }) } }
@@ -235,3 +242,18 @@ def test_restricted_role_gets_the_same_api_answer_before_and_after_a_layout(clie
     assert _publish(client, boss, cfg, ops).status_code == 200
     after = client.get(cfg["api"], headers=low)
     assert (after.status_code, after.json()) == (before.status_code, before.json())
+
+
+def test_customers_quote_count_is_a_count_not_money():
+    src = _page("customers.html")
+    cell = src[src.index("<template x-if=\"col.field === 'quoteCount'\">"):].split("</template>")[0]
+    assert "c.quoteCount + ' 份'" in cell and not re.search(r"total|amount|toLocaleString|NT\$", cell)
+
+
+def test_customers_layout_table_keeps_the_original_empty_state_alignment_and_log_icon():
+    """ON 的版面表格與原表格的細節一致（04 審查）：空狀態有圖示與『新增第一筆客戶』鈕、累計報價靠右、日誌鈕有 SVG 圖示。"""
+    src = _page("customers.html")
+    layout = src[src.index('data-layout-list="customers"'):src.index('<div class="table-scroll" x-show="!layoutOn">')]
+    assert "新增第一筆客戶" in layout and 'class="empty-icon"' in layout and 'openCreate()' in layout
+    assert "col.field === 'quoteCount' ? 'text-align:right'" in layout
+    assert "customer-log.html" in layout and "<svg" in layout[layout.index("customer-log.html"):]

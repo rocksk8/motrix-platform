@@ -14,6 +14,17 @@ router = APIRouter()
 
 def kinds():
     """已登錄的定義種類（唯讀檢視，所以全部可看）；寫入（發布／還原）仍走既有端點與它們各自的把關與審核。"""
+    try:
+        from helpers import export_templates as _ET
+        _ET.ensure_kind()                                              # 惰性登記（旗標關 ⇒ 不登記）
+        from helpers import option_lists as _OL
+        _OL.ensure_kind()                                              # 惰性登記（旗標關 ⇒ 不登記）
+        from helpers import notify_templates as _NT
+        _NT.ensure_kind()                                              # 惰性登記（旗標關 ⇒ 不登記）
+        from helpers import stage_templates as _ST
+        _ST.ensure_kind()                                              # 惰性登記（旗標關 ⇒ 不登記）
+    except Exception:                                                  # noqa: BLE001
+        pass
     return D.kinds()
 
 #: 影響範圍宣告（白話）：這一類定義發布後會動到哪裡。
@@ -22,6 +33,11 @@ _SCOPE_TEXT = {
     "output_template": {"screens": "該單據的列印／PDF／預覽版型", "customerVisible": True},
     "custom_fields": {"screens": "掛載該欄位集的表單與列表", "customerVisible": False},
     "custom_module": {"screens": "這個自訂模組的表單、列表、流程與簽核層", "customerVisible": False},
+    "export_template": {"screens": "該匯出檔的欄位、標題與順序（下載檔案的內容）", "customerVisible": False},
+    "option_list": {"screens": "用到這份清單的下拉選單與篩選（客戶類型、供應商類型、料件分類、料件單位）", "customerVisible": False},
+    "status_display": {"screens": "報價單、案件、出納等畫面上狀態的顯示名稱與顏色（只改看到的字與色，不改任何狀態值或權限）", "customerVisible": False},
+    "notify_template": {"screens": "該簽核事件的站內訊息與通知信的文字（收件人看到的字）", "customerVisible": False},
+    "case_stage_template": {"screens": "套用這個樣板時，新案件預填的執行階段（名稱、日期建議、收入認列比例建議）；已套用的案件不受影響", "customerVisible": False},
 }
 _GENERIC_SCOPE = {"screens": "使用這份定義的畫面", "customerVisible": False}
 
@@ -154,7 +170,13 @@ def _flag_gate(kind):
     """身分已由呼叫端的 `_require_user(..., require_superadmin=True)` 驗過（未登入 ⇒ 401，與其他路由一致）；這裡再看旗標與 kind，通過回連線（呼叫端關閉）。"""
     conn = get_db()
     on = enabled(conn)
-    if not on and kind in kinds():
+    if kind == "rule_set":                                             # 與 rule_sets._gate 一致：規則功能（兩個旗標都開）沒有效就一律 404，就算種類還登記在記憶體裡
+        try:
+            from helpers import rule_sets as _rs
+            on = _rs.enabled(conn)
+        except Exception:                                              # noqa: BLE001
+            on = False
+    elif not on and kind in kinds():
         try:                                                           # T62：某類的『強制預覽』已開 ⇒ 預覽路由要能用（否則關掉總開關會讓該類無法發布）
             from routers import definitions as _d
             on = _d._opt_in_enforced(conn, kind)

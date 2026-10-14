@@ -107,6 +107,8 @@ def _verify_pw(password: str, stored: str) -> bool:
 # ── Weak-password policy ──────────────────────────────────────────────────────
 
 def is_weak_password(password: str) -> bool:
+    # 這裡維持常數 8：登入時用來決定要不要強迫改密碼——設定中心把最短長度調高，不可以把既有使用者鎖在門外。
+    # 設定／更改密碼的長度檢查（可調高）在 routers/auth.py 的 _min_pw()。
     if not password or len(password) < MIN_PASSWORD_LEN:
         return True
     low = password.lower().strip()

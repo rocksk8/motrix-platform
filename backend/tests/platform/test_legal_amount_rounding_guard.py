@@ -179,6 +179,7 @@ def test_legal_amounts_are_rounded_only_by_the_legal_params_service():
 MONEY_PY_FILES = (
     "modules/arap/api/invoice_vouchers.py", "modules/arap/api/payment_requests.py", "modules/case/quotations.py",   # 2026-09-26 應收應付搬進模組
     "modules/subcontract/api/contractor_vouchers.py", "modules/subcontract/api/vendor_contractors.py",   # 2026-09-26 外包工班搬進模組
+    "modules/accounting/ledger/tax401.py",   # 2026-10-14 401 對帳檢查的發票合計（原用內建 round()，已改 round_half_up）
 )
 MONEY_JS_FILES = (
     "pages/quotation-form.html", "pages/payment-request-form.html", "pages/settlement.html",

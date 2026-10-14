@@ -21,6 +21,15 @@ function app() {
 
 window.CM_PARTS.push(() => ({
 
+    // S-X2：狀態顯示名稱（旗標關或沒改過 ⇒ 原值照印）。只用於『顯示』；邏輯一律用原始值。
+    stLabel(raw, ctx, fallback) {
+      return window.MotrixStatus ? window.MotrixStatus.label(raw, ctx, fallback) : (fallback != null ? fallback : (raw == null ? '' : raw))
+    },
+    initStatusDisplay(flag) {
+      if (!flag || flag.enabled !== 1 || !window.MotrixStatus) return
+      window.MotrixStatus.load().then(() => { if (window.MotrixStatusEditor) window.MotrixStatusEditor.mountEntry() }).catch(() => {})
+    },
+
     // 點一列回到既有的五頁籤詳情頁——矩陣是它的上層索引，不是取代它
     //: 據點 id -> 名字。**只有一個據點（或讀不到）時回空字串**，
     //  那一行就不顯示 —— 一個永遠一樣的標籤不是資訊，它只是佔位置。
@@ -91,7 +100,13 @@ window.CM_PARTS.push(() => ({
       })
     },
 
+    // census S-F1：款項類型下拉（選項清單 payment_stage；沒開／沒發布 ⇒ 下面寫死的八個，畫面逐項相同；值就是存進資料的字，顯示名稱可由管理者改）
+    optVer: 0,
+    STAGE_ITEMS: ['訂金款', '交貨款', '驗收款', '進度款', '完工款', '收款後出貨', '自訂義', '其他'].map(v => ({ value: v, label: v })),
+    stageOptions(cur) { this.optVer; return MotrixOptions.options('payment_stage', this.STAGE_ITEMS, cur) },
+
     async init() {
+      window.addEventListener('motrix-options', () => { this.optVer++ })     // census S-F1：選項清單到了（或換了）就重算
       // 2026-09-24：離頁警告（sidebar.js）跟著主表單的 dirty 走：setDirty() 設 true，
       // 存檔成功（dirty 轉 false）時清掉。
       window.motrixDirtyProbe = () => !!this.moDirty     // sidebar.js 的「任一請求成功就清離頁警告」不得清掉材料申請的未存列
