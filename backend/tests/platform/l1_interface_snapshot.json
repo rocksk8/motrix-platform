@@ -90,6 +90,8 @@
    "slow_request_log": "async def(request, call_next)"
   },
   "core:pdf_gen": {
+   "PAYMENT_REQUEST_PDF_EXPORT": "const",
+   "QUOTE_PDF_EXPORT": "const",
    "_PDF_BASE_DEFAULT": "const",
    "_generate_case_closing_pdf": "def(quote_no, actor=…, action_type=…)",
    "_generate_contractor_voucher_pdf": "def(voucher_no, actor=…, action_type=…)",
@@ -625,6 +627,7 @@
    "UNAPPROVED_TEXT": "const",
    "attr_esc": "def(s)",
    "esc_quotes": "def(text)",
+   "html_text": "def(s, *, br=…, falsy_empty=…)",
    "inject_unapproved": "def(html, status=…, detail=…, doc_no=…, wm_text=…)",
    "load_default": "def(key)",
    "problems": "def(template, sample_view=…)",
@@ -1162,6 +1165,16 @@
    "sync_event": "def(source, key, item=…)",
    "sync_lock": "def(source, key)"
   },
+  "helper:pdf_scripts": {
+   "FIT_A4_MULTI": "const",
+   "FIT_A4_SINGLE": "const",
+   "NETPLAN_FIT": "const",
+   "PAYSLIP": "const",
+   "SCRIPTS": "const",
+   "allowed_hashes": "def()",
+   "hash_of": "def(inner)",
+   "inner_text": "def(tag)"
+  },
   "helper:perm": {
    "Delegation": "class",
    "Delegation.caps": "field=…",
@@ -1436,6 +1449,7 @@
    "FIELD": "const",
    "GROUP": "const",
    "KIND": "const",
+   "KIND_VISIBLE_NAME": "const",
    "LABEL_MAX": "const",
    "MAX_DAYS": "const",
    "MAX_STAGES": "const",
