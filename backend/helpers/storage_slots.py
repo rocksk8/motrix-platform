@@ -2,7 +2,8 @@
 """儲存／上傳「位置代號」登錄表與插槽政策（BP-4 S1；設計 docs/platform/plans/BP4-STORAGE-NOTIFY-DESIGN.md §3）。
 
 [單位] helper:storage_slots    [層] L1    [穩定度] 契約
-[公開介面] HARD_EXTS, LOCATION_CODES, SlotPolicy, builtin_policy, enabled, policy, resolve_code
+[公開介面] DANGEROUS_EXTS, DOC_CODES, HARD_EXTS, LEGACY_READONLY, LOCATION_CODES, Location, SLOT_EXTS, STAGING_PREFIX, SlotPolicy,
+    builtin_policy, enabled, policy, resolve_code
 [不變式] ①旗標 `builder_slots.enabled`（設定中心，預設 0）關閉時，`policy()` 只回**內建政策**＝由 `helpers.uploads` 今天的常數導出；
     `save_document_files(policy=None)` 的行為與路徑與先前逐位元相同（守門：tests/test_storage_slots_parity_2026_10_14.py）。
     ②位置代號由程式登錄，管理者不能新增；副檔名只能落在 `HARD_EXTS` 之內（硬底線，插槽只能縮小）。
