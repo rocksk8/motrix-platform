@@ -9,7 +9,7 @@
 - 案件完工單 PDF 的區域 `esc()` 改呼叫共用的 `helpers.doc_template.html_text`（輸出逐位元相同）；報價單／出貨單品項數量、報價有效日數、結案報表款項百分比與階段起訖日補上 HTML 逸出（原本直接內插）。無 migration、無權限變更。
 - 報價單 PDF（`_build_quote_html`）與完工單 PDF（`_build_completion_html`）可加頁尾／浮水印文字（G-A，旗標預設關）：各包一層 `decorate_pdf`，沒有已發布範本 ⇒ 輸出逐位元相同；文字只能從預設清單挑，程式產生的未核准橫幅與抬頭不動。無 migration、無權限變更。
 
-## (next) — 2026-10-14（wip/t62-bp4-s2-r2＋wip/t62-bp2-r5-r1＋wip/t62-approval-margin-r1；BP-4 附件插槽／BP-2 標示規則／單項毛利率門檻）；t62 整合 r8
+## 1.0.187 — 2026-10-14（wip/t62-bp4-s2-r2＋wip/t62-bp2-r5-r1＋wip/t62-approval-margin-r1；BP-4 附件插槽／BP-2 標示規則／單項毛利率門檻）；t62 整合 r8
 - 案件管理頁完工單分頁加「附件種類」入口（BP-4 S3，旗標 `builder_slots.enabled` 預設關、只有最高管理者看得到）：旗標隨既有的設定請求（`groups=builder_layout,builder_slots`）取得，關閉時不多打任何請求、畫面不變；編輯器是新檔 `static/attachment-slots.js`。
 - 完工單附件的讀取提供者宣告 `SLOT_AWARE`（BP-4 S2）：路徑 `completion_notes/<子夾>/<完工單號>/<檔名>` 與一般完工單附件同一條讀取規則（`case_documents_readable`）；兩段路徑照舊。旗標 `builder_slots.enabled` 預設關，沒有任何現有路徑改變。
 - 案件附件目錄的『路徑屬於這張單據』檢查認得完工單 BP-4 插槽路徑 `completion_notes/<子夾>/<完工單號>/<檔名>`（`upload_path_key(depth=3, key_index=1)`）；其他形狀與其他來源類型維持 fail closed。
