@@ -678,11 +678,11 @@
                   <!-- 已存在的案件用這顆手動帶（2026-09-14）。新建案件在
                        ensureCaseRecord() 就帶過了，不會重複問。只填空欄位，
                        不覆蓋案件這邊已經改過的值。 -->
-                  <button type="button" class="aq-sort" x-show="quoteContractAvailable"
-                          @click="pullContractFromQuote()"
+                  <button type="button" class="aq-sort" x-show="quoteContractAvailable && aShown('fillContract')"
+                          :style="aOrder('fillContract')" @click="pullContractFromQuote()"
                           style="margin-left:auto;font-weight:400"
                           title="從這張報價單帶入交貨地址、交貨條件與聯絡人——只填空白欄位，不覆蓋已經有的值">
-                    從報價單帶入
+                    <span x-text="aLabel('fillContract', '從報價單帶入')">從報價單帶入</span>
                   </button>
                 </div>
                 <!-- 四欄網格：地址與交貨條件各佔兩欄，聯絡人與電話各佔一欄
@@ -751,7 +751,7 @@
                   </div>
                 </div>
 
-                <div class="cm-section-title" x-show="bShown('timeline')" :style="bo('timeline', 0)"><span x-text="secLabel('timeline', '專案期間')">專案期間</span><span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span></div>
+                <div class="cm-section-title" x-show="bShown('timeline')" :style="bo('timeline', 0)"><span x-text="bLabel('timeline', secLabel('timeline', '專案期間'))">專案期間</span><span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span></div>
                 <div class="cm-fgrid cm-fgrid--dates" x-show="bShown('timeline')" :style="bo('timeline', 1)">
                   <div class="fi-group" :style="fo('timeline', 'startDate')">
                     <label class="fi-label" for="cm-tl-start" x-text="fLabel('timeline', 'startDate', '開始日期')">開始日期</label>
@@ -769,7 +769,7 @@
                 <!-- T61 S5：自訂欄位（旗標 builder_custom_fields.enabled 開啟才畫；欄位值存在 caseRecord.customFields，只給內部人員看） -->
                 <template x-if="bShown('customFields') && $store.cf && $store.cf.enabled && ($store.cf.list().length || cfIsAdmin() || $store.cf.mode !== 'live')">
                   <div data-testid="cf-section" :style="bo('customFields', 0)">
-                    <div class="cm-section-title">自訂欄位
+                    <div class="cm-section-title"><span x-text="bLabel('customFields', '自訂欄位')">自訂欄位</span>
                       <span class="save-mode" x-show="$store.cf.mode !== 'live'" x-text="$store.cf.previewLabel" style="color:var(--tone-warning-fg)"></span>
                       <button type="button" class="aq-sort" data-testid="cf-edit-open" x-show="cfIsAdmin()" @click="MotrixCustomFields.openEditor()" style="margin-left:auto;font-weight:400">編輯自訂欄位</button>
                     </div>
@@ -4837,6 +4837,12 @@ window.CM_PARTS.push(() => ({
   _bcols() { return this.layoutOn ? window.Alpine.store('layout').cols('bizBlocks') : [] },
   _bix(f) { return this._bcols().findIndex(c => c.field === f) },
   bShown(f) { return !this.layoutOn || this._bix(f) >= 0 },
+  // 區塊標題改名（沒改 ⇒ 預設字）。健康總覽卡沒有標題文字，所以它的改名不會有畫面（登錄檔 relabelIneffective 標明）。
+  bLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('bizBlocks', f, dflt) : dflt },
+  // 按鈕（BP-1／C3）：只登記了「從報價單帶入」一顆（actions）；不開放使用者新增按鈕，也不登記有金額／簽核語意或法定的按鈕。
+  aShown(k) { return !this.layoutOn || window.Alpine.store('layout').shown('action', k) },
+  aOrder(k) { return this.layoutOn ? { order: window.Alpine.store('layout').order('action', k) } : {} },
+  aLabel(k, dflt) { return this.layoutOn ? window.Alpine.store('layout').label('action', k, dflt) : dflt },
   bo(f, n) { return this.layoutOn && this._bix(f) >= 0 ? { order: (this._bix(f) + 1) * 10 + (n || 0) } : {} },
   // 目前分頁被版面隱藏（網址 ?tab=、記住的分頁、其他入口切過來）⇒ 退回「案件資訊」（核心分頁，隱藏不了），不要留一個沒有頁籤的內容面板
   _tabKeys: ['biz', 'exec', 'dispatch', 'shipping', 'completion', 'feed', 'allfiles', 'fin', 'xexp'],

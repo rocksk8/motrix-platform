@@ -224,7 +224,9 @@
             {"key": "main", "label": "專案期間", "fields": ["startDate", "endDate"]}
           ]}
         ],
-        "actions": [],
+        "actions": [
+          {"key": "fillContract", "label": "從報價單帶入"}
+        ],
         "menus": [],
         "exports": []
       },
