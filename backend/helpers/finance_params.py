@@ -56,7 +56,7 @@ DEFAULT_BANK_ALIASES = {
     "desc": ["摘要", "備註", "說明", "對方戶名", "附言", "memo", "Description", "Memo"],
 }
 DEFAULT_DUE_SOON = {"payable": 7, "planned": 3}
-_MAX_ALIASES, _MAX_ALIAS_LEN = 20, 30
+_MAX_ALIASES, _MAX_ALIAS_LEN, _MIN_ALIAS_LEN = 20, 30, 2
 
 
 def parse_aliases(text):
@@ -69,7 +69,7 @@ def parse_aliases(text):
         a = part.strip()
         if not a:
             continue
-        if len(a) > _MAX_ALIAS_LEN:
+        if len(a) > _MAX_ALIAS_LEN or len(a) < _MIN_ALIAS_LEN:      # 太短的別名在「包含比對」會誤配到不相干的欄位
             return None
         if a not in out:
             out.append(a)
@@ -99,7 +99,7 @@ def bank_aliases(conn=None) -> dict:
 
 # ── 案件結案閘門的『只收緊』選項（S-C1）──────────────────────────────────────────────────────────────────
 CLOSE_GATE_GROUP = "case_close_gates"
-CLOSE_GATE_OPTIONS = ("require_stages", "require_payment_items", "require_settlement", "count_extra_expense_drafts")
+CLOSE_GATE_OPTIONS = ("require_stages", "require_payment_items", "require_settlement", "count_unfinished_extra_expenses")
 
 
 def _strict(conn, group, field):

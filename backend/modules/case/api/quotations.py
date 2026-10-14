@@ -1222,7 +1222,7 @@ def gate_matrix(authorization: str = Header(None)):
     # CM6b：五關與到期資訊都批次取（原本每件約 17 句 SQL）
     nos = [r["quote_no"] for r in rows]
     _opts = _close_gate_opts(conn)
-    all_facts = _close_gate_facts(conn, nos, xe_drafts=bool(_opts and _opts.get("count_extra_expense_drafts")))
+    all_facts = _close_gate_facts(conn, nos, xe_drafts=bool(_opts and _opts.get("count_unfinished_extra_expenses")))
     overdue_by, next_by = {}, {}
     for i in range(0, len(nos), _GATE_CHUNK):
         ch = nos[i:i + _GATE_CHUNK]
@@ -2310,8 +2310,10 @@ def _close_gate_facts(conn, quote_nos: list, xe_drafts: bool = False) -> dict:
             for ch in chunks:
                 ph = ",".join("?" * len(ch))
                 for r in conn.execute(
-                        f"SELECT quote_no, COUNT(*) c FROM case_extra_expenses WHERE quote_no IN ({ph}) AND status = '草稿' GROUP BY quote_no", ch):
-                    facts[r["quote_no"]]["xe_draft"] = r["c"] or 0
+                        f"SELECT quote_no, SUM(CASE WHEN status='草稿' THEN 1 ELSE 0 END) d, SUM(CASE WHEN status='簽核中' THEN 1 ELSE 0 END) m "
+                        f"FROM case_extra_expenses WHERE quote_no IN ({ph}) AND status IN ('草稿','簽核中') GROUP BY quote_no", ch):
+                    facts[r["quote_no"]]["xe_draft"] = r["d"] or 0         # 草稿（尚未送審）
+                    facts[r["quote_no"]]["xe_mid"] = r["m"] or 0           # 簽核中（多層簽核簽到一半；今天不擋結案，見 FINANCE 文件 §5.1）
         except Exception:
             pass
     return facts
@@ -2327,7 +2329,7 @@ def _close_gate_opts(conn):
 def _case_close_gates(conn, quote_no: str, d: dict) -> list:
     """單一案件的五關（擋結案、close-gates 用）。與關卡矩陣走同一條：批次取數＋_gates_from_facts()。"""
     opts = _close_gate_opts(conn)
-    facts = _close_gate_facts(conn, [quote_no], xe_drafts=bool(opts and opts.get("count_extra_expense_drafts")))
+    facts = _close_gate_facts(conn, [quote_no], xe_drafts=bool(opts and opts.get("count_unfinished_extra_expenses")))
     return _gates_from_facts(facts[quote_no], d, opts)
 
 
@@ -2449,11 +2451,16 @@ def _gates_from_facts(facts: dict, d: dict, opts: dict = None) -> list:
     # ⑤ 額外支出不可停在送審中（2026-09-13 一併補上）：那是還沒定案的成本，
     # 結案後才核准會讓已結案案件的成本事後改變。
     xe_total, xe_pending = facts["xe"] if facts["xe"] is not None else (None, None)
-    xe_draft = (facts.get("xe_draft") or 0) if (opts and opts.get("count_extra_expense_drafts")) else 0
-    if xe_draft:
-        parts = ([f"額外支出尚有 {xe_pending} 筆送審中"] if xe_pending else []) + [f"額外支出尚有 {xe_draft} 筆草稿未送審（結案條件加嚴）"]
+    _unfinished = bool(opts and opts.get("count_unfinished_extra_expenses"))
+    xe_draft = (facts.get("xe_draft") or 0) if _unfinished else 0
+    xe_mid = (facts.get("xe_mid") or 0) if _unfinished else 0
+    if xe_draft or xe_mid:
+        parts = ([f"額外支出尚有 {xe_pending} 筆送審中"] if xe_pending else []) \
+            + ([f"額外支出尚有 {xe_draft} 筆草稿未送審"] if xe_draft else []) \
+            + ([f"額外支出尚有 {xe_mid} 筆簽核尚未完成"] if xe_mid else [])
+        parts[-1] += "（結案條件加嚴）"
         gates.append({"key": "extraExpense", "label": "變更", "state": "blocked",
-                      "value": f"{xe_pending} 送審" if xe_pending else f"{xe_draft} 草稿", "ratio": 0.0,
+                      "value": f"{xe_pending + xe_draft + xe_mid} 未完成", "ratio": 0.0,
                       "reason": "；".join(parts), "pendingUsernames": []})
     elif xe_total is None or xe_total == 0:
         gates.append({"key": "extraExpense", "label": "變更", "state": "na",

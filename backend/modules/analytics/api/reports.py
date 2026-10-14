@@ -2666,7 +2666,7 @@ def _compute_ar_aging() -> dict:
             "items":  items,
         })
 
-    return {
+    out = {
         "asOf":  today.isoformat(),
         "note":  "帳齡以案件報價日為基準計算，不含已收款項目",
         "bands": result_bands,
@@ -2675,6 +2675,9 @@ def _compute_ar_aging() -> dict:
             "amount": sum(b["amount"] for b in result_bands),
         },
     }
+    if _cuts != _finance_params.DEFAULT_CUTS:        # 只有自訂切點生效時才多這個鍵（預設時回應與過去逐鍵相同）；畫面用它決定超期上色
+        out["cuts"] = list(_cuts)
+    return out
 
 
 @router.get("/api/reports/ar-aging")

@@ -114,6 +114,10 @@
 | ① 進度 | **可考慮做成選配（唯一候選）** | 不碰金額；有些案件沒有階段管理 | 現況＝必要；改成『選配』是**放寬**（第二位核准＋確認期間）；收緊＝『沒有階段也視為未達成』 |
 實作位置：判定本體只有 `_gates_from_facts` 一處，設定讀取應在它之前一次取得（不要逐關讀）。**BP-5 P2 前置條件已寫明**：待簽語意的資料庫值（`待審核`／`簽核中`）不可改，閘門與簽核佇列在流程建構器上線前要改成讀語意。
 
+### 5.1 基礎缺口（04 查出；**行為未改，列為需要使用者決定**）
+`_close_gate_facts` 判定第 5 關只數 `case_extra_expenses.status='待審核'`（`pending`），但**多層簽核簽到一半的額外支出狀態是『簽核中』**（`case_extra_expenses.py:1059`：`status = "已核准" if done else "簽核中"`）。所以：①只有一層簽核、剛送出的額外支出會擋結案；②**簽到一半的（簽核中）和草稿都不會擋結案**。關卡文字寫的是「不可停在送審中」，與實際（只擋待審核）有落差。本次**沒有悄悄改基礎行為**：預設結果與過去逐項相同；只在『結案條件加嚴』的選項 `count_unfinished_extra_expenses`（原 `count_extra_expense_drafts`，已改名並加入『簽核中』）開啟時，才把草稿與簽核中也算進去。
+**請使用者決定**：結案時，還有額外支出「簽核到一半」的案件，應不應該能結案？（建議：不應該——那是還沒定案的成本，結案後才核准會改已結案案件的成本；若同意，可把基礎行為改成把『簽核中』也算擋，屬於收緊，不需第二位核准，但會讓目前能結案的少數案件暫時不能結。）已駁回（`已駁回`）的額外支出可編輯後重送，目前也不擋，這次同樣未列入選項。
+
 ## 6. 需要使用者決定（只列影響範圍者）
 1. 帳齡區間可自訂是否同意（本切片，預設關，不影響金額）。
 2. 款項類別清單（F4）：key 是否可由管理者新增（建議：只能改 label／排序／停用，不新增 key，因為 key 進請款單 JSON）。
@@ -123,5 +127,9 @@
 ## 7. 第二批切片（F2／F3／S-C1，旗標預設關；本節為實作紀錄）
 - **F3 出納即將到期天數**：設定群組 `finance_cashier`（`custom_due_soon`、`due_soon_payable_days` 7、`due_soon_planned_days` 3）。`frontend/js/cashier.js` 預設仍是 7／3；頁面載入時**多一次** `GET /api/settings-center/public?groups=finance_cashier`（登入即可讀、非敏感；失敗或旗標關就維持預設，不影響頁面）。這是出納頁唯一多出來的請求（OFF 時也會有，回應內容不影響畫面）。
 - **F2 銀行對帳單欄位別名**：同一個群組（`custom_bank_aliases`、`bank_alias_date/amount/desc`，逗號分隔、順序即優先序，最多 20 個、每個 30 字）。`cashier.py::_parse_bank_csv` 改讀 `finance_params.bank_aliases()`；旗標關＝逐字等於原本三個常數（測試對照）；不合法的欄退回該欄預設；找不到金額欄**一樣 400，不猜**。
-- **S-C1 結案條件加嚴**：設定群組 `case_close_gates`（`enabled` 主開關＋四個選項：`require_stages`、`require_payment_items`、`require_settlement`、`count_extra_expense_drafts`），**只能讓更多案件不能結案**；沒有任何選項能關閉收款／單據／精算／額外支出任何一關（測試鎖住選項清單）。每個欄位 `loosen="down"`：關閉主開關或任一選項＝放寬，要第二位最高管理者核准並經確認期間。實作點：`quotations.py::_gates_from_facts(facts, d, opts=None)`（opts 缺省＝過去的路徑，逐項相同）、`_close_gate_facts(..., xe_drafts=False)`（草稿計數只在該選項開啟時才多一句 SQL）、`_close_gate_opts(conn)`。擋結案、`/close-gates`、`gate-matrix`、`case-bundle` 都走同一份判定。**讀不到設定 ⇒ 全部當作開啟（往嚴）**：嚴格讀取優先用 `helpers.settings_strict`，尚未合併時用 `routers.definitions._strict_setting`。
+- **S-C1 結案條件加嚴**：設定群組 `case_close_gates`（`enabled` 主開關＋四個選項：`require_stages`、`require_payment_items`、`require_settlement`、`count_unfinished_extra_expenses`，草稿與簽核中都算），**只能讓更多案件不能結案**；沒有任何選項能關閉收款／單據／精算／額外支出任何一關（測試鎖住選項清單）。每個欄位 `loosen="down"`：關閉主開關或任一選項＝放寬，要第二位最高管理者核准並經確認期間。實作點：`quotations.py::_gates_from_facts(facts, d, opts=None)`（opts 缺省＝過去的路徑，逐項相同）、`_close_gate_facts(..., xe_drafts=False)`（草稿計數只在該選項開啟時才多一句 SQL）、`_close_gate_opts(conn)`。擋結案、`/close-gates`、`gate-matrix`、`case-bundle` 都走同一份判定。**讀不到設定 ⇒ 全部當作開啟（往嚴）**：嚴格讀取優先用 `helpers.settings_strict`，尚未合併時用 `routers.definitions._strict_setting`。
 - **測試**：`test_finance_cashier_gates_2026_10_14.py` 純函式 17 題已用 `--noconftest` 執行全綠（含 OFF 逐項相同、**單調性**〔任何選項組合下被擋關卡只增不減〕、每個選項只翻自己那關且只從『無需檢查』翻、讀不到＝全開、草稿計數 SQL 只在開啟時出現）；需要資料庫的 3 題（端點跟著選項、擋結案訊息、放寬走待核准）寫好未跑。
+
+### 7.1 審查後修正（04，r3）
+- 帳齡：自訂切點生效（與預設不同）時，`/api/reports/ar-aging` 才多回一個 `cuts: [d1,d2,d3]`（預設時回應鍵與過去相同）；`reports.html` 的超期上色改讀 `arAging.cuts`，沒有就退回 `[30,60,90]`。
+- 銀行對帳單別名：每個別名至少 2 個字（單字會在『包含比對』誤配到不相干的欄位），不合法整欄退回預設。

@@ -86,6 +86,12 @@ def test_settings_failure_gives_the_defaults(monkeypatch):
     assert F.aging_cuts() == (30, 60, 90)
 
 
+def test_reports_page_colours_by_the_returned_cuts_with_the_old_values_as_fallback():
+    html = (ROOT.parent / "frontend/pages/reports.html").read_text(encoding="utf-8")
+    assert "(arAging.cuts || [30, 60, 90])[2]" in html and "(arAging.cuts || [30, 60, 90])[1]" in html
+    assert "it.daysElapsed > 90" not in html and "it.daysElapsed > 60" not in html
+
+
 def test_the_group_is_registered_with_the_status_quo_defaults():
     from helpers import settings_registry as SR
     import helpers.settings_groups  # noqa: F401
@@ -130,7 +136,9 @@ def test_ar_aging_api_follows_the_saved_cuts_but_keeps_keys(client, sa):
     _set({"custom_aging": 1, "aging_day1": 45, "aging_day2": 90, "aging_day3": 180})
     j = client.get("/api/reports/ar-aging", headers=sa).json()
     assert [b["label"] for b in j["bands"]] == ["0–45 天", "46–90 天", "91–180 天", "180+ 天"]
-    assert [b["key"] for b in j["bands"]] == list(F.BAND_KEYS) and set(j) == {"asOf", "note", "bands", "total"}
+    assert [b["key"] for b in j["bands"]] == list(F.BAND_KEYS) and set(j) == {"asOf", "note", "bands", "total", "cuts"} and j["cuts"] == [45, 90, 180]
+    _set({"custom_aging": 1, "aging_day1": 30, "aging_day2": 60, "aging_day3": 90})            # 自訂值剛好等於預設 ⇒ 不多 cuts 鍵
+    assert "cuts" not in client.get("/api/reports/ar-aging", headers=sa).json()
 
 
 def test_ar_aging_still_needs_the_reports_permission(client, make_user):

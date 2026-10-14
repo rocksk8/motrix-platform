@@ -34,8 +34,8 @@ def test_the_group_defaults_are_the_joined_default_lists():
 
 
 def test_parse_aliases():
-    assert F.parse_aliases("a, b，c、 a\n d") == ["a", "b", "c", "d"]
-    for bad in ("", "  ,, ", None, 5, "x" * 31, ",".join("a%d" % i for i in range(21))):
+    assert F.parse_aliases("ab, bc，cd、 ab\n de") == ["ab", "bc", "cd", "de"]
+    for bad in ("", "  ,, ", None, 5, "x" * 31, "ab, c", "金", ",".join("a%d" % i for i in range(21))):          # 單字別名（包含比對會誤配）整欄拒絕
         assert F.parse_aliases(bad) is None, bad
 
 
@@ -118,7 +118,7 @@ def _scenarios():
     pay = [None, [{"received": True}], [{"received": False}]]
     sett = [None, {"status": "finalized"}, {"status": "draft"}]
     for st, dc, xe, p, se, dr in itertools.product(stages, [docs_ok, docs_pend], xes, pay, sett, [0, 2]):
-        facts = {"stages": st, "docs": dc, "xe": xe, "xe_draft": dr}
+        facts = {"stages": st, "docs": dc, "xe": xe, "xe_draft": dr, "xe_mid": dr}
         d = {"caseRecord": {"payment": {"items": p}} if p else {}, "settlement": se} if (p or se) else {}
         if se:
             d["settlement"] = se
@@ -154,8 +154,8 @@ def test_options_only_tighten_never_unblock():
 
 def test_each_option_flips_only_its_own_gate_and_only_from_na():
     Q = _q()
-    want = {"require_stages": "progress", "require_payment_items": "payment", "require_settlement": "settlement", "count_extra_expense_drafts": "extraExpense"}
-    empty = {"stages": (0, 0), "docs": [], "xe": (3, 0), "xe_draft": 3}
+    want = {"require_stages": "progress", "require_payment_items": "payment", "require_settlement": "settlement", "count_unfinished_extra_expenses": "extraExpense"}
+    empty = {"stages": (0, 0), "docs": [], "xe": (3, 0), "xe_draft": 3, "xe_mid": 0}
     for opt, key in want.items():
         o = dict(ALL_OFF, **{opt: True})
         before = {g["key"]: g["state"] for g in Q._gates_from_facts(empty, {})}
@@ -163,22 +163,35 @@ def test_each_option_flips_only_its_own_gate_and_only_from_na():
         changed = {k for k in before if before[k] != after[k]}
         assert changed == {key}, (opt, changed)
         assert after[key] == "blocked"
-    done = {"stages": (4, 4), "docs": [], "xe": (3, 0), "xe_draft": 0}                # 資料俱全時，選項不會多擋
+    done = {"stages": (4, 4), "docs": [], "xe": (3, 0), "xe_draft": 0, "xe_mid": 0}                # 資料俱全時，選項不會多擋
     d = {"caseRecord": {"payment": {"items": [{"received": True}]}}, "settlement": {"status": "finalized"}}
     assert all(g["state"] == "ok" or g["state"] == "na" for g in Q._gates_from_facts(done, d, ALL_ON))
     assert not any(g["state"] == "blocked" for g in Q._gates_from_facts(done, d, ALL_ON))
 
 
+def test_mid_approval_extra_expenses_are_counted_only_with_the_option():
+    """基礎缺口（見 FINANCE 文件 §5.1）：多層簽核簽到一半的額外支出狀態是『簽核中』，今天不擋結案；選項開啟才擋。"""
+    Q = _q()
+    facts = {"stages": (0, 0), "docs": [], "xe": (4, 0), "xe_draft": 0, "xe_mid": 2}
+    off = {x["key"]: x for x in Q._gates_from_facts(facts, {})}
+    assert off["extraExpense"]["state"] == "ok"                                                      # 今天的行為：不擋
+    on = {x["key"]: x for x in Q._gates_from_facts(facts, {}, dict(ALL_OFF, count_unfinished_extra_expenses=True))}
+    assert on["extraExpense"]["state"] == "blocked" and "2 筆簽核尚未完成" in on["extraExpense"]["reason"] and "結案條件加嚴" in on["extraExpense"]["reason"]
+    both = {x["key"]: x for x in Q._gates_from_facts(dict(facts, xe=(6, 1), xe_draft=1), {}, dict(ALL_OFF, count_unfinished_extra_expenses=True))}
+    r = both["extraExpense"]["reason"]
+    assert "1 筆送審中" in r and "1 筆草稿未送審" in r and "2 筆簽核尚未完成" in r and both["extraExpense"]["value"] == "4 未完成"
+
+
 def test_extra_expense_drafts_combine_with_pending_in_one_reason():
     Q = _q()
-    g = {x["key"]: x for x in Q._gates_from_facts({"stages": (0, 0), "docs": [], "xe": (5, 2), "xe_draft": 3}, {}, dict(ALL_OFF, count_extra_expense_drafts=True))}
+    g = {x["key"]: x for x in Q._gates_from_facts({"stages": (0, 0), "docs": [], "xe": (5, 2), "xe_draft": 3}, {}, dict(ALL_OFF, count_unfinished_extra_expenses=True))}
     assert g["extraExpense"]["state"] == "blocked" and "2 筆送審中" in g["extraExpense"]["reason"] and "3 筆草稿" in g["extraExpense"]["reason"]
     off = {x["key"]: x for x in Q._gates_from_facts({"stages": (0, 0), "docs": [], "xe": (5, 2), "xe_draft": 3}, {})}
     assert "草稿" not in off["extraExpense"]["reason"]
 
 
 def test_there_is_no_option_that_switches_a_money_gate_off():
-    assert F.CLOSE_GATE_OPTIONS == ("require_stages", "require_payment_items", "require_settlement", "count_extra_expense_drafts")
+    assert F.CLOSE_GATE_OPTIONS == ("require_stages", "require_payment_items", "require_settlement", "count_unfinished_extra_expenses")
     from helpers import settings_registry as SR
     import helpers.settings_groups  # noqa: F401
     meta = SR._GROUPS["case_close_gates"]["fields"]
@@ -188,9 +201,9 @@ def test_there_is_no_option_that_switches_a_money_gate_off():
 
 
 def test_option_reading(monkeypatch):
-    vals = {"enabled": 1, "require_stages": 1, "require_payment_items": 0, "require_settlement": 0, "count_extra_expense_drafts": 1}
+    vals = {"enabled": 1, "require_stages": 1, "require_payment_items": 0, "require_settlement": 0, "count_unfinished_extra_expenses": 1}
     monkeypatch.setattr(F, "_strict", lambda conn, g, f: vals[f])
-    assert F.close_gate_options(None) == {"require_stages": True, "require_payment_items": False, "require_settlement": False, "count_extra_expense_drafts": True}
+    assert F.close_gate_options(None) == {"require_stages": True, "require_payment_items": False, "require_settlement": False, "count_unfinished_extra_expenses": True}
     vals["enabled"] = 0
     assert F.close_gate_options(None) == ALL_OFF                               # 主開關關 ⇒ 全關（即使選項是 1）
     vals["enabled"] = 1
@@ -221,11 +234,11 @@ def test_facts_query_adds_the_draft_count_only_when_asked():
     c.row_factory = sqlite3.Row
     c.executescript("""CREATE TABLE case_stages (quote_no TEXT, done INTEGER);
         CREATE TABLE case_extra_expenses (quote_no TEXT, status TEXT);
-        INSERT INTO case_extra_expenses VALUES ('Q1','草稿'),('Q1','草稿'),('Q1','待審核'),('Q1','已作廢'),('Q2','已核准');""")
+        INSERT INTO case_extra_expenses VALUES ('Q1','草稿'),('Q1','草稿'),('Q1','待審核'),('Q1','簽核中'),('Q1','已作廢'),('Q2','已核准');""")
     plain = Q._close_gate_facts(c, ["Q1", "Q2"])
-    assert "xe_draft" not in plain["Q1"] and plain["Q1"]["xe"] == (3, 1) and plain["Q2"]["xe"] == (1, 0)
+    assert "xe_draft" not in plain["Q1"] and plain["Q1"]["xe"] == (4, 1) and plain["Q2"]["xe"] == (1, 0)
     withd = Q._close_gate_facts(c, ["Q1", "Q2"], xe_drafts=True)
-    assert withd["Q1"]["xe_draft"] == 2 and "xe_draft" not in withd["Q2"] and withd["Q1"]["xe"] == plain["Q1"]["xe"]
+    assert withd["Q1"]["xe_draft"] == 2 and withd["Q1"]["xe_mid"] == 1 and "xe_draft" not in withd["Q2"] and withd["Q1"]["xe"] == plain["Q1"]["xe"]
 
 
 # ── 需要資料庫（寫好未跑）─────────────────────────────────────────────────────
