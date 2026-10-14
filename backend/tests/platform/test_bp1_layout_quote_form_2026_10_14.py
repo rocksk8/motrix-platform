@@ -366,7 +366,7 @@ o.q.customFields = undefined
 o.cfSet('f1', '甲'); out.a = JSON.stringify(o.q.customFields)
 o.cfSet('f2', true); out.b = JSON.stringify(o.q.customFields)
 o.cfSet('f1', ''); out.c = JSON.stringify(o.q.customFields)
-o.cfSet('f2', false); out.d = ('customFields' in o.q); out.dirty = o.dirty
+o.cfSet('f2', false); out.d = ('customFields' in o.q); out.e = JSON.stringify(o.q.customFields); out.dirty = o.dirty
 o.q.status = '已送出'; o.unlocked = false; out.locked = o.cfLocked(); o.unlocked = true; out.unlocked = o.cfLocked()
 out.get = o.cfGet('zzz')
 console.log(JSON.stringify(out))
@@ -374,4 +374,4 @@ console.log(JSON.stringify(out))
     out = subprocess.run([NODE, "-e", js, str(source_tree.page_file(PAGE_NAME)), str(ROOT / "frontend/static/public-flags.js")], capture_output=True, timeout=30)
     assert out.returncode == 0, out.stderr.decode("utf-8", "replace")[:1500]
     r = json.loads(out.stdout.decode("utf-8"))
-    assert r["a"] == '{"f1":"甲"}' and r["c"] == '{"f2":true}' and r["d"] is False and r["locked"] is True and r["unlocked"] is False
+    assert r["a"] == '{"f1":"甲"}' and r["c"] == '{"f2":true}' and r["d"] is True and r["e"] == "{}" and r["locked"] is True and r["unlocked"] is False
