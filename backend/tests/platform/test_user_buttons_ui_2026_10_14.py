@@ -232,7 +232,7 @@ def test_deferred_init_fires_nothing_until_start():
             "await window.MotrixUserButtons.start()\n"
             "console.log(JSON.stringify({ before, after: calls.fetch }))")
     r = _node(body, "{ enabled: false, buttons: [] }")
-    assert r["before"] == 0 and r["after"] == ["/api/user-buttons/supply/suppliers.html"]
+    assert r["before"] == 0 and [c["url"] for c in r["after"]] == ["/api/user-buttons/supply/suppliers.html"]
     r = _node("await window.MotrixUserButtons.start(); console.log(JSON.stringify({ n: calls.fetch.length }))", "{}")
     assert r["n"] == 0
 
