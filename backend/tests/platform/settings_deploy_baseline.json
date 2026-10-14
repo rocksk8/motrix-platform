@@ -241,6 +241,7 @@
   "material_recognition": {"who_may": [1, 1, 2, false], "on_denied": [1, 1, 2, false], "mail_window_minutes": [60, 1, 1440, false], "mail_cap": [10, 1, 200, false]},
   "builder_menu": {"enabled": [0, 0, 1, false]},
   "builder_slots": {"enabled": [0, 0, 1, false]},
+  "builder_exports": {"enabled": [0, 0, 1, false]},
   "project_margin": {"warn_pct": [0, 0, 100, false]},
   "system_hub": {"show_denied": [0, 0, 1, false]},
   "uploads": {

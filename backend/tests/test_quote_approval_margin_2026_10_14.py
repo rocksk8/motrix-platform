@@ -19,7 +19,8 @@ from modules.case import quote_terms as QT
 
 ROOT = Path(__file__).resolve().parents[2]
 NODE = shutil.which("node")
-PAGE = ROOT / "frontend" / "pages" / "quotation-form.html"
+from core import source_tree      # noqa: E402
+PAGE = source_tree.page_file("quotation-form.html")
 MARGINS = [None, 0, 0.1, 0.2, 0.25, 0.2999, 0.3, 0.30001, 0.31, 0.5, 1, -0.1, "0.2", True]
 THRESHOLDS = [30, 20, 29.5, 0, 100, 12.25]
 

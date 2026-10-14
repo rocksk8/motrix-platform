@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 848,
-  "endpoints_api": 844,
-  "write_total": 461,
-  "write_api": 461,
-  "get_api": 383,
-  "distinct_paths_api": 710,
-  "write_with_body_api": 335,
-  "write_with_path_param_api": 336
+  "endpoints_total": 859,
+  "endpoints_api": 855,
+  "write_total": 466,
+  "write_api": 466,
+  "get_api": 389,
+  "distinct_paths_api": 721,
+  "write_with_body_api": 339,
+  "write_with_path_param_api": 338
  },
  "select_star": {
   "modules": 276,
@@ -361,6 +361,16 @@
   "GET /api/approval-queue/detail": {
    "w": false,
    "pp": 0,
+   "body": false
+  },
+  "GET /api/attachment-slots/catalog": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/attachment-slots/{doc_type}": {
+   "w": false,
+   "pp": 1,
    "body": false
   },
   "GET /api/attachments/open": {
@@ -959,6 +969,11 @@
    "body": false
   },
   "GET /api/expense-types/{code}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/export-templates/{export_id}/status": {
    "w": false,
    "pp": 1,
    "body": false
@@ -1803,6 +1818,21 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/rules/config": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/rules/marks": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/rules/summary": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/sales-orders": {
    "w": false,
    "pp": 0,
@@ -2488,6 +2518,11 @@
    "pp": 0,
    "body": true
   },
+  "POST /api/attachment-slots/{doc_type}/simulate": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
   "POST /api/audit-log/module-counts": {
    "w": true,
    "pp": 0,
@@ -3044,6 +3079,16 @@
    "body": true
   },
   "POST /api/edit-presence": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/export-templates/{export_id}/preview": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/exports/client-log": {
    "w": true,
    "pp": 0,
    "body": true
@@ -3684,6 +3729,16 @@
    "body": true
   },
   "POST /api/reports/t100-export/unconfirm": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/rules/k01/seed": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/rules/preview": {
    "w": true,
    "pp": 0,
    "body": true

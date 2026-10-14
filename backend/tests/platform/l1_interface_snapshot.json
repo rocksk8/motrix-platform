@@ -1,5 +1,5 @@
 {
- "core_version": "1.136",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -748,6 +748,34 @@
    "validate_expense_type": "def(body, key=…)",
    "validate_values": "def(conn, defn, data, lines, *, viewer, prior=…, case=…, type_code=…)"
   },
+  "helper:export_templates": {
+   "CAPS": "const",
+   "FIELD": "const",
+   "GROUP": "const",
+   "KIND": "const",
+   "LABEL_MAX": "const",
+   "MAX_COLUMNS": "const",
+   "OFF_REASON": "const",
+   "PRESET_TEXTS": "const",
+   "RESERVED_WATERMARK": "const",
+   "TEXT_MAX": "const",
+   "WATERMARK_MAX": "const",
+   "WATERMARK_PRESETS": "const",
+   "apply_pdf_text": "def(html, template)",
+   "apply_print_text": "def(ws, template)",
+   "decorate_pdf": "def(export_id, html, conn=…)",
+   "default_template": "def(export_id)",
+   "definition_problems": "def(key, body)",
+   "effective_columns": "def(export_id, template, user)",
+   "enabled": "def(conn=…)",
+   "ensure_kind": "def()",
+   "preview": "def(conn, caller, body, export_id, username=…, sample=…, n=…)",
+   "register_export": "def(export_id, *, label, formats, columns, sample_rows, rows_provider=…, lock_labels=…, caps=…, sample_html=…)",
+   "registered": "def()",
+   "render_csv_rows": "def(export_id, template, rows, user)",
+   "render_rows": "def(export_id, template, rows, user)",
+   "resolve": "def(export_id, conn=…)"
+  },
   "helper:financial_mask": {
    "HISTORY_MONEY_FIELDS": "const",
    "ITEM_MONEY_KEYS": "const",
@@ -1221,6 +1249,42 @@
    "rule_for": "def(kind)",
    "visible": "def(kind, user, row, scope=…)"
   },
+  "helper:rule_catalog": {
+   "ENTITIES": "const",
+   "PERMS": "const",
+   "all_fields": "def(entity, conn=…)",
+   "entities": "def()",
+   "load_records": "def(entity, user, conn, *, ids=…, limit=…, fields=…)",
+   "rule_fields": "def(entity, user, conn=…)",
+   "stub_in_use": "def()",
+   "visible_ids": "def(entity, user, conn=…)"
+  },
+  "helper:rule_engine": {
+   "DEFAULT_BUDGET_MS": "const",
+   "evaluate": "def(rules, records, visible, *, budget_ms=…, clock=…, surface=…)"
+  },
+  "helper:rule_grammar": {
+   "LEVELS": "const",
+   "LIMITS": "const",
+   "MARK_KEYS": "const",
+   "OPS_BY_TYPE": "const",
+   "RULE_KEYS": "const",
+   "SURFACES": "const",
+   "TARGETS": "const",
+   "fields_used": "def(when)",
+   "validate_rule_set": "def(body, fields)"
+  },
+  "helper:rule_sets": {
+   "K01_ENTITY": "const",
+   "K01_ID": "const",
+   "KIND": "const",
+   "enabled": "def(conn=…)",
+   "ensure_registered": "def()",
+   "k01_seed_on": "def(conn=…)",
+   "k01_seed_rule": "def(warn_pct)",
+   "k01_warn_pct": "def(conn=…)",
+   "published_rules": "def(conn, entity)"
+  },
   "helper:settings": {
    "_get_setting": "def(key, default=…)",
    "_set_setting": "def(key, value)"
@@ -1270,6 +1334,9 @@
    "show_value": "def(f, v)",
    "unregister_owner": "def(owner)",
    "validate_values": "def(group, values, *, partial=…)"
+  },
+  "helper:settings_strict": {
+   "strict_value": "def(conn, group, field)"
   },
   "helper:startup": {
    "DEMO_ACCOUNT_ENABLED": "const",

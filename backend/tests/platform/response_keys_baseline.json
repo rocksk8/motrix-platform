@@ -687,6 +687,18 @@
   ],
   "s": 422
  },
+ "/api/attachment-slots/catalog": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/attachment-slots/{doc_type}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/attachments/open": {
   "k": [
    "detail"
@@ -2778,6 +2790,12 @@
   ],
   "s": 404
  },
+ "/api/export-templates/{export_id}/status": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/extra-expenses/cases": {
   "k": [
    "[].customerName",
@@ -4304,6 +4322,7 @@
  },
  "/api/project-margin/config": {
   "k": [
+   "minItemMarginPct",
    "warnPct"
   ],
   "s": 200
@@ -5705,6 +5724,24 @@
   ],
   "s": 429
  },
+ "/api/rules/config": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/rules/marks": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
+ "/api/rules/summary": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
  "/api/sales-orders": {
   "k": [
    "items",
@@ -5759,8 +5796,10 @@
    "groups[].values.enforce_custom_fields",
    "groups[].values.enforce_layout",
    "groups[].values.enforce_output_template",
+   "groups[].values.enforce_rule_set",
    "groups[].values.enforce_user_buttons",
    "groups[].values.include_headers",
+   "groups[].values.k01_seed",
    "groups[].values.label_bonus_award",
    "groups[].values.label_close_report",
    "groups[].values.label_completion",
@@ -5780,6 +5819,7 @@
    "groups[].values.mail_cap",
    "groups[].values.mail_window_minutes",
    "groups[].values.max_file_mb",
+   "groups[].values.min_item_margin_pct",
    "groups[].values.move_out_of_sent",
    "groups[].values.name_layout",
    "groups[].values.no_access",

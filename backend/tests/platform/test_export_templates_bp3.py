@@ -358,7 +358,8 @@ def test_menu_response_gains_builder_exports_only_when_on_and_superadmin(client,
 def test_page_declares_the_export_id_and_only_sidebar_loads_the_editor():
     from pathlib import Path
     root = Path(__file__).resolve().parents[3] / "frontend"
-    html = (root / "pages" / "daily-tasks.html").read_text(encoding="utf-8")
+    from core import source_tree
+    html = source_tree.page_file("daily-tasks.html").read_text(encoding="utf-8")
     assert '<meta name="motrix-export-id" content="daily_tasks:task-history">' in html
     assert "export-editor.js" not in html, "頁面不直接載入編輯器（關著時不能多請求）"
     sb = (root / "static" / "sidebar.js").read_text(encoding="utf-8")
@@ -583,9 +584,9 @@ def test_menu_response_gains_export_audit_for_everyone_only_when_on(client, make
 
 def test_the_three_sheetjs_pages_call_the_guard_before_writing_the_file():
     from pathlib import Path
-    pages = Path(__file__).resolve().parents[3] / "frontend" / "pages"
+    from core import source_tree
     for page, name in (("customers", "customers"), ("parts", "parts"), ("suppliers", "suppliers")):
-        src = (pages / (page + ".html")).read_text(encoding="utf-8")
+        src = source_tree.page_file(page + ".html").read_text(encoding="utf-8")
         assert '<script src="../static/export-guard.js"></script>' in src, page
         g = "await MotrixExport.guard('%s', rows.length)" % name
         assert src.count(g) == 1, page

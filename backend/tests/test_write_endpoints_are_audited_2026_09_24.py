@@ -41,6 +41,9 @@ AUDIT_WRAPPERS = {
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
 EXEMPT = {
+    # ── 標示型規則預覽（t62 BP-2）：POST 只為帶草稿規則，不寫任何業務資料 ──
+    ("rules.py", "POST", "/api/rules/preview"):
+        "preview：只在記憶體內驗證草稿規則並對最近 N 筆唯讀評估（不 commit、不寫業務資料）；規則故障只走限頻的 rules.degraded 稽核（_note_degraded）；僅最高管理者、builder_rules／builder_governance 旗標關閉時 404。",
     # ── 自訂按鈕預覽（t61 S6）：POST 只為帶草稿按鈕，不寫任何資料 ──
     ("user_buttons.py", "POST", "/api/user-buttons/{module}/{page}/preview"):
         "preview：只在記憶體內驗證並以指定身分渲染草稿按鈕（UB.preview 不 commit、不寫任何資料）；僅最高管理者、設定 builder_actions.enabled 關閉時 404。",
