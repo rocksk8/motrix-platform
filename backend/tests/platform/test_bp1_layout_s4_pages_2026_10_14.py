@@ -246,5 +246,14 @@ def test_restricted_role_gets_the_same_api_answer_before_and_after_a_layout(clie
 
 def test_customers_quote_count_is_a_count_not_money():
     src = _page("customers.html")
-    cell = src[src.index("col.field === 'quoteCount'"):].split("</template>")[0]
+    cell = src[src.index("<template x-if=\"col.field === 'quoteCount'\">"):].split("</template>")[0]
     assert "c.quoteCount + ' 份'" in cell and not re.search(r"total|amount|toLocaleString|NT\$", cell)
+
+
+def test_customers_layout_table_keeps_the_original_empty_state_alignment_and_log_icon():
+    """ON 的版面表格與原表格的細節一致（04 審查）：空狀態有圖示與『新增第一筆客戶』鈕、累計報價靠右、日誌鈕有 SVG 圖示。"""
+    src = _page("customers.html")
+    layout = src[src.index('data-layout-list="customers"'):src.index('<div class="table-scroll" x-show="!layoutOn">')]
+    assert "新增第一筆客戶" in layout and 'class="empty-icon"' in layout and 'openCreate()' in layout
+    assert "col.field === 'quoteCount' ? 'text-align:right'" in layout
+    assert "customer-log.html" in layout and "<svg" in layout[layout.index("customer-log.html"):]

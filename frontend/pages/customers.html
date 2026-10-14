@@ -277,7 +277,7 @@
                 <tr @click="selectCustomer(c)" style="cursor:pointer">
                   <td><div style="width:30px;height:30px;border-radius:50%;background:var(--black);color:var(--white);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700" x-text="(c.name||'?')[0]"></div></td>
                   <template x-for="col in $store.layout.cols('customers')" :key="col.field">
-                    <td :data-layout-cell="col.field">
+                    <td :data-layout-cell="col.field" :style="col.field === 'quoteCount' ? 'text-align:right' : ''">
                       <template x-if="col.field === 'name'"><div><div style="font-weight:500" x-text="c.name"></div><div style="display:flex;align-items:center;gap:5px;margin-top:1px"><span x-show="c.code" x-text="c.code" style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#F3F4F6;color:#6B7280;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span><span x-show="c.nameEn" style="font-size:11px;color:var(--text-dim)" x-text="c.nameEn"></span></div></div></template>
                       <template x-if="col.field === 'alias'"><div>
                         <template x-if="(c.tags&&c.tags.length) || c.alias"><div style="display:flex;flex-wrap:wrap;gap:3px"><template x-for="t in (c.tags&&c.tags.length ? c.tags : (c.alias?[c.alias]:[]))" :key="t"><span x-text="t" style="font-size:10px;background:var(--accent-light);color:var(--accent-hover);padding:1px 6px;border-radius:3px;white-space:nowrap;font-family:var(--font-zh)"></span></template></div></template>
@@ -296,12 +296,21 @@
                     <div class="row-actions">
                       <button class="btn btn-ghost btn-sm" @click.stop="openEdit(c)">編輯</button>
                       <a :href="'quotations.html?customer=' + c.id" class="btn btn-ghost btn-sm" @click.stop style="text-decoration:none">報價</a>
-                      <a :href="'customer-log.html?id=' + c.id" class="btn btn-ghost btn-sm" @click.stop style="text-decoration:none;display:inline-flex;align-items:center;gap:3px">日誌</a>
+                      <a :href="'customer-log.html?id=' + c.id" class="btn btn-ghost btn-sm" @click.stop style="text-decoration:none;display:inline-flex;align-items:center;gap:3px">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                        日誌
+                      </a>
                     </div>
                   </td>
                 </tr>
               </template>
-              <tr x-show="filtered.length === 0"><td :colspan="$store.layout.cols('customers').length + 2" class="empty-state"><div>尚無客戶資料</div></td></tr>
+              <tr x-show="filtered.length === 0">
+                <td :colspan="$store.layout.cols('customers').length + 2" class="empty-state">
+                  <div class="empty-icon">🏢</div>
+                  <div>尚無客戶資料</div>
+                  <button class="btn btn-primary" @click="openCreate()" style="margin-top:12px">新增第一筆客戶</button>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>

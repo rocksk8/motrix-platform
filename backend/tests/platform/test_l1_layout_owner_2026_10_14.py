@@ -101,3 +101,36 @@ def test_core_is_not_a_module_so_it_cannot_be_disabled_or_licensed(client, hdr):
     for enabled in (False, True):
         assert client.put("/api/system/modules/core", headers=sa, json={"enabled": enabled}).status_code == 404       # 沒有開關可關
     assert catalog.owner_loaded("core") is True and catalog.layout_points("core")      # 照樣可用
+
+
+def test_no_module_may_take_the_reserved_owner_key_core():
+    """`owner_loaded("core")` 對 core 永遠為真：若真有模組叫 core，它會被虛擬擁有者無聲蓋掉。登記表與已載入模組都不准出現這個鍵。"""
+    from core import registry, source_tree
+    keys = []
+    for d in source_tree.module_dirs():
+        keys.append(json.loads((d / "module.json").read_text(encoding="utf-8")).get("key"))
+    assert keys and "core" not in keys and "core" not in {d.name for d in source_tree.module_dirs()}
+    assert "core" not in {m.key for m in registry.loaded()}
+
+
+def test_l1_manifest_does_not_cache_a_transient_failure(monkeypatch, tmp_path):
+    good = (ROOT / "backend" / "core" / "l1_customization.json")
+    monkeypatch.setattr(catalog, "_l1_cache", [])
+    monkeypatch.setattr(catalog, "_l1_last_error", [0.0])
+    monkeypatch.setattr(catalog, "_L1_CUSTOMIZATION", tmp_path / "missing.json")
+    assert catalog.l1_manifest() == {} and catalog.layout_points("core") == []         # 讀不到 ⇒ 沒有點，但不快取
+    assert catalog._l1_cache == []                                                    # noqa: SLF001
+    monkeypatch.setattr(catalog, "_L1_CUSTOMIZATION", good)
+    assert catalog.l1_manifest()["key"] == "core" and len(catalog.layout_points("core")) == 11   # 下一次呼叫就恢復
+    monkeypatch.setattr(catalog, "_L1_CUSTOMIZATION", tmp_path / "missing.json")
+    assert catalog.l1_manifest()["key"] == "core"                                      # 成功之後才快取
+
+
+def test_throttled_error_log_for_a_broken_registry(monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(catalog, "_l1_cache", [])
+    monkeypatch.setattr(catalog, "_l1_last_error", [0.0])
+    monkeypatch.setattr(catalog, "_L1_CUSTOMIZATION", tmp_path / "missing.json")
+    with caplog.at_level("ERROR"):
+        for _ in range(5):
+            catalog.l1_manifest()
+    assert len([r for r in caplog.records if "l1_customization" in r.getMessage()]) == 1

@@ -176,20 +176,26 @@ def _module_points(m, templates, eps=None):
 L1_OWNER = "core"
 _L1_CUSTOMIZATION = Path(__file__).with_name("l1_customization.json")
 _l1_cache = []
+_l1_last_error = [0.0]
 
 
 def l1_manifest() -> dict:
-    """L1 登記檔（已過 `customization.validate_manifest`）。檔案壞了／驗證不過 ⇒ `{}`（沒有任何 L1 點，記 ERROR；不讓頁面壞）。"""
+    """L1 登記檔（已過 `customization.validate_manifest`）。檔案壞了／驗證不過 ⇒ `{}`（沒有任何 L1 點，記 ERROR；不讓頁面壞）。
+    **只快取成功的結果**：暫時性的讀取失敗（檔案被鎖、半寫入）下一次呼叫會重試；失敗的 ERROR 日誌每分鐘最多一則。"""
     if not _l1_cache:
         import logging
+        import time
         try:
             m = json.loads(_L1_CUSTOMIZATION.read_text(encoding="utf-8"))
             problems = customization.validate_manifest(m)
             if problems:
                 raise ValueError("; ".join(str(p) for p in problems[:3]))
         except Exception as e:                                   # noqa: BLE001
-            logging.getLogger(__name__).error("core/l1_customization.json 無法使用，L1 頁面沒有可自訂點：%s", e)
-            m = {}
+            now = time.monotonic()
+            if now - _l1_last_error[0] > 60:
+                _l1_last_error[0] = now
+                logging.getLogger(__name__).error("core/l1_customization.json 無法使用，L1 頁面沒有可自訂點（下次呼叫會重試）：%s", e)
+            return {}
         _l1_cache.append(m)
     return _l1_cache[0]
 
