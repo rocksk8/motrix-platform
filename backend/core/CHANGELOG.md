@@ -1,7 +1,7 @@
 # L0／L1 底層 更新紀錄
 
 ## (next) — 2026-10-14（wip/t62-settings-numbers-r1；settings numbers）
-- L1（新增，只增；快照由列車重產）：`helpers/alert_settings.py`（`warranty_report_days`／`warranty_mail_days`／`cert_warn_days`／`min_password_len`／`login_days`；讀不到設定＝今天的數字；安全類底線寫死：密碼最短 8 碼、登入最長 30 天）。新設定群組 `alerts`（到期預警，4 項）與 `account_security`（登入與密碼：密碼最短長度只能往上、登入有效天數只能往下；放寬方向走『待核准＋確認期間』）。`helpers/auth.is_weak_password`、`routers/auth.py` 的 8 處長度檢查與 session 期限、`helpers/company_setup` 的確認檔到期提醒、`helpers/email_notify.notify_warranty_expiry` 標題改讀這些設定（預設值下逐字相同）。
+- L1（新增，只增；快照由列車重產）：`helpers/settings_strict.py`（與 `wip/t62-approval-margin-r1` 相同檔案，合併時內容一致）、`helpers/alert_settings.py`（`warranty_report_days`／`warranty_mail_days`／`cert_warn_days`／`min_password_len`／`login_days`；讀不到設定＝今天的數字；安全類底線寫死：密碼最短 8 碼、登入最長 30 天）。新設定群組 `alerts`（到期預警，4 項）與 `account_security`（登入與密碼：密碼最短長度只能往上、登入有效天數只能往下；放寬方向走『待核准＋確認期間』）。`routers/auth.py` 設定／更改密碼的 8 處長度檢查與 session 期限（登入時的 `helpers/auth.is_weak_password` 維持常數 8，調高門檻不會把既有使用者鎖在門外；安全兩項是嚴格讀取：密碼規則讀不到 ⇒ 設定密碼回 503，登入天數讀不到 ⇒ 最後讀到的值或 7 天）、`helpers/company_setup` 的確認檔到期提醒、`helpers/email_notify.notify_warranty_expiry` 標題改讀這些設定（預設值下逐字相同）。
 
 ## 1.136 — wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1＋wip/t60（T60 選單 hub 群組／T61 S5 內建畫面自訂欄位／S6 自訂按鈕；旗標預設關）
 

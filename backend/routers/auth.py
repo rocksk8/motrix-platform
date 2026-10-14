@@ -49,9 +49,13 @@ _rl_state: dict = {}
 
 
 def _min_pw() -> int:
-    """census #8：密碼最短長度（設定中心可往上調，下限寫死 8）；舊名稱 MIN_PASSWORD_LEN 保留給外部匯入。"""
-    from helpers.alert_settings import min_password_len
-    return min_password_len()
+    """census #8：設定／更改密碼時的最短長度（設定中心可往上調，下限寫死 8）；讀不到設定 ⇒ 503（不放行、不寫入新密碼）。
+    只用在『設定密碼』的端點；登入時的弱密碼判斷維持常數（`helpers.auth.is_weak_password`）。舊名稱 MIN_PASSWORD_LEN 保留給外部匯入。"""
+    from helpers.alert_settings import PolicyUnreadable, min_password_len
+    try:
+        return min_password_len()
+    except PolicyUnreadable:
+        raise HTTPException(503, "密碼規則暫時讀不到，為了安全暫時無法設定密碼，請稍後再試")
 
 def _client_ip(request: Request) -> str:
     xff = request.headers.get("X-Forwarded-For", "")

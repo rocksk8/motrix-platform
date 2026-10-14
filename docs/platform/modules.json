@@ -53,6 +53,7 @@
    "helper:profit_rules",
    "helper:recognition_basis",
    "helper:settings_groups",
+   "helper:settings_strict",
    "helper:menu_builder",
    "helper:alert_settings",
    "helper:settings_registry",
