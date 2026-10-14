@@ -4141,7 +4141,9 @@
       // BP-1／Q1：版面綁定。旗標關閉／讀不到 ⇒ layoutOn=false，下面四個函式回中性值（畫面與先前逐位元相同）。
       layoutOn: false,
       fShown(form, f) { return !this.layoutOn || window.Alpine.store('layout').fieldShown(form, f) },
-      fo(form, f) { return this.layoutOn ? 'order:' + window.Alpine.store('layout').fieldOrder(form, f) : '' },
+      // 回**物件**不回字串：Alpine 的 :style 字串形式會 setAttribute('style', …) 整串覆蓋，會洗掉同一個元素上 x-show 設的 display:none
+      // （隱藏欄位在重新求值後又跑出來）；物件形式只逐項設屬性，與 x-show 並存。
+      fo(form, f) { return this.layoutOn ? { order: window.Alpine.store('layout').fieldOrder(form, f) } : {} },
       fLabel(form, f, dflt) { return this.layoutOn ? window.Alpine.store('layout').fieldLabel(form, f, dflt) : dflt },
       secLabel(form, dflt) {
         if (!this.layoutOn) return dflt
@@ -4156,7 +4158,8 @@
           if (!r.ok) return
           const d = await r.json()
           if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.quotation_form !== true) return
-          const title = document.querySelector('.pg__t, h1')
+          // 這頁沒有 .pg__t／h1（頂欄 #app-topbar 由 sidebar.js 填）：編輯器入口放在工具列左側 .form-toolbar__left
+          const title = document.querySelector('.form-toolbar__left')
           if (!title) return
           title.insertAdjacentHTML('beforeend', '<span data-layout-editor-slot></span>')
           this.layoutOn = true

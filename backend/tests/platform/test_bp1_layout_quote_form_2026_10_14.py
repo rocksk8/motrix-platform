@@ -99,11 +99,15 @@ def test_flag_default_off(client):
 # ── 2/3. 旗標關閉／開啟（node 實跑）────────────────────────────────────────
 _HARNESS = r"""
 const fs = require('fs')
-const calls = { fetch: [], start: 0, mount: 0, slot: 0 }
+const calls = { fetch: [], start: 0, mount: 0, slot: 0, selectors: [] }
 global.window = global
 global.localStorage = { getItem(k) { return k === 'motrix_session' ? JSON.stringify({ token: 't', role: 'superadmin' }) : null } }
 global.location = { href: '', search: '' }
-global.document = { addEventListener() {}, getElementById() { return null }, querySelector() { return { insertAdjacentHTML() { calls.slot++ } } } }
+const PAGE_SRC = fs.readFileSync(process.argv[1], 'utf8')
+const exists = (sel) => sel.split(',').map(x => x.trim()).some(t => t.startsWith('.') ? new RegExp('class="[^"]*\\b' + t.slice(1) + '\\b[^"]*"').test(PAGE_SRC)
+  : t.startsWith('#') ? PAGE_SRC.includes('id="' + t.slice(1) + '"') : new RegExp('<' + t + '[\\s>]').test(PAGE_SRC))
+global.document = { addEventListener() {}, getElementById() { return null },
+  querySelector(sel) { calls.selectors.push(sel); return exists(sel) ? { insertAdjacentHTML() { calls.slot++ } } : null } }
 const stub = () => new Proxy(function () {}, { get: () => stub(), apply: () => ({}) })
 for (const n of ['MotrixPrivacyNotice','MotrixDate','LegalRound','ProfitRules','AltItems','MarginTone','Sortable','MotrixFilePreview','MotrixApprovalCascade']) window[n] = stub()
 window.MotrixLayout = { init() {}, start() { calls.start++ } }
@@ -135,7 +139,7 @@ def _node(flag):
 @pytest.mark.parametrize("flag", ["false", "'http'", "'fail'"])
 def test_flag_off_or_unreadable_changes_nothing(flag):
     r = _node(flag)
-    assert r["layoutOn"] is False and r["neutral"] == {"shown": True, "order": "", "label": "傳真", "sec": "客戶資訊"}      # 綁定函式回中性值
+    assert r["layoutOn"] is False and r["neutral"] == {"shown": True, "order": {}, "label": "傳真", "sec": "客戶資訊"}      # 綁定函式回中性值
     assert r["calls"]["start"] == 0 and r["calls"]["mount"] == 0 and r["calls"]["slot"] == 0
     assert r["calls"]["fetch"] == ["/api/settings-center/public?groups=builder_layout"]
 
@@ -232,3 +236,84 @@ def test_registry_entry_and_notes_are_in_the_single_registry():
     assert (e["module"], e["page"]) == ("case", PAGE_NAME)
     text = " ".join(e["notes"]) + e["impact"]
     assert "PDF" in text and "照樣" in text and "金額" in text                                  # 編輯器會明講：改名／隱藏不改 PDF、金額不在範圍
+
+
+def test_toolbar_anchor_really_exists_in_the_page_and_style_binding_is_object_form():
+    """04 審查：這頁沒有 .pg__t／h1；編輯器入口必須用頁面真的有的錨點。:style 一律用物件形式（字串形式會整串覆蓋，洗掉 x-show 的 display:none）。"""
+    src = _page()
+    assert "document.querySelector('.form-toolbar__left')" in src and 'class="form-toolbar__left"' in src
+    assert "querySelector('.pg__t" not in src and "querySelector('h1" not in src
+    assert re.search(r"fo\(form, f\) \{ return this\.layoutOn \? \{ order:", src)
+    assert not re.search(r"'order:'", src[src.index("fShown(form, f)"):src.index("async initLayout()")])      # 不再回 'order:N' 字串
+    for m in re.finditer(r':style="fo\(', src):
+        tag = src[src.rfind("<div", 0, m.start()):m.start()]
+        assert 'x-show="' in tag                                                                            # 每個 :style="fo(..)" 都和 x-show 同一個元素（物件形式才安全）
+
+
+_RUNTIME = r"""
+const fs = require('fs')
+const payloads = JSON.parse(fs.readFileSync(process.argv[4], 'utf8'))
+global.window = global
+const listeners = []
+global.localStorage = { getItem(k) { return k === 'motrix_session' ? JSON.stringify({ token: 't', role: 'superadmin' }) : null } }
+global.document = { addEventListener(n, f) { if (n === 'alpine:init') listeners.push(f) }, getElementById() { return null }, head: { appendChild() {} },
+  documentElement: { setAttribute() {} }, querySelectorAll() { return [] }, createElement() { return { id: '', textContent: '' } } }
+const stores = {}
+global.Alpine = { store(n, v) { if (v !== undefined) stores[n] = v; return stores[n] } }
+global.fetch = async (url) => { const u = String(url); const key = u.indexOf('role=') >= 0 ? 'preview' : 'live'
+  return { ok: true, json: async () => payloads[key] } }
+const stub = () => new Proxy(function () {}, { get: () => stub(), apply: () => ({}) })
+for (const n of ['MotrixPrivacyNotice','MotrixDate','LegalRound','ProfitRules','AltItems','MarginTone','Sortable','MotrixFilePreview','MotrixApprovalCascade']) window[n] = stub()
+eval(fs.readFileSync(process.argv[2], 'utf8'))          // custom-layout.js
+eval(fs.readFileSync(process.argv[3], 'utf8'))          // layout-runtime.js
+MotrixLayout.init({ module: 'case', page: 'quotation-form.html', deferred: true, fallback: { forms: {} } })
+listeners.forEach(f => f())
+const code = fs.readFileSync(process.argv[1], 'utf8')
+const scripts = [...code.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]).filter(s => s.includes('function quotationForm'))
+eval(scripts[scripts.length - 1] + '\n;global.__f = quotationForm')
+const o = Object.assign({}, global.__f())
+o.layoutOn = true
+const view = () => ({ cf: [o.fShown('qcustomer', 'contactFax'), o.fo('qcustomer', 'contactFax')],
+  addr: [o.fShown('qcustomer', 'deliveryAddress'), o.fo('qcustomer', 'deliveryAddress')],
+  cn: [o.fShown('qcustomer', 'customerName'), o.fo('qcustomer', 'customerName')],
+  lab: o.fLabel('qterms', 'warrantyTerms', '保固條件') })
+;(async () => {
+  await MotrixLayout.start()
+  const live = view()
+  const fl = await MotrixLayout.fetchLayout('sales')
+  const st = MotrixCustomLayout.applyOps(fl.points, 'quotation-form.html', fl.ops).state
+  MotrixLayout.show(st, 'preview', 'sales')
+  const prev = view()
+  MotrixLayout.show(null)
+  const back = view()
+  console.log(JSON.stringify({ live, prev, back }))
+})().catch(e => { console.error(String(e)); process.exit(1) })
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_hide_and_reorder_in_one_publish_then_switching_preview_role_keeps_hidden_hidden(client, make_user, tmp_path):
+    """04 的 ON 狀態提醒：同一次發布『隱藏一個欄位＋重排其他欄位』，再切換預覽角色／回到自己的版面——隱藏的要一直是隱藏，順序是物件形式的 order。"""
+    boss = _h(client, make_user, "qf_boss4", "superadmin")
+    sec = "case:%s/form:qcustomer/section:main" % PAGE_NAME
+    ops = [{"op": "hide", "target": _fld("qcustomer", "contactFax")},
+           {"op": "relabel", "target": _fld("qterms", "warrantyTerms"), "label": "保固與維護"},
+           {"op": "move", "target": _fld("qcustomer", "deliveryAddress"), "to": sec, "index": 0}]
+    assert _publish(client, boss, ops).status_code == 200
+    live = client.get("/api/layout/case", headers=boss).json()
+    prev = client.get("/api/layout/case?role=sales", headers=boss).json()
+    assert prev["ops"] == live["ops"]                                                   # 公司層版面：各角色看到同一份
+    pf = tmp_path / "payloads.json"
+    pf.write_text(json.dumps({"live": live, "preview": prev}), encoding="utf-8")
+    out = subprocess.run([NODE, "-e", _RUNTIME, str(source_tree.page_file(PAGE_NAME)), str(ROOT / "frontend/static/custom-layout.js"),
+                          str(ROOT / "frontend/static/layout-runtime.js"), str(pf)], capture_output=True, timeout=30)
+    assert out.returncode == 0, out.stderr.decode("utf-8", "replace")[:1500]
+    r = json.loads(out.stdout.decode("utf-8"))
+    for phase in ("live", "prev", "back"):
+        v = r[phase]
+        assert v["cf"][0] is False, phase                                               # 隱藏的欄位在每個階段都是隱藏（含切換預覽角色之後）
+        assert v["cn"][0] is True and v["addr"][0] is True
+        assert isinstance(v["addr"][1], dict) and isinstance(v["cn"][1], dict) and "order" in v["addr"][1]    # 物件形式，不是 'order:N' 字串
+        assert v["lab"] == "保固與維護"
+    assert r["live"]["addr"][1]["order"] < r["live"]["cn"][1]["order"]                  # 搬到最前面的欄位排在前
+    assert r["prev"] == r["live"] == r["back"]
