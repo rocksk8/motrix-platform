@@ -38,6 +38,11 @@ from core import registry as _registry
 RECEIVABLES_MISSING = "應收應付模組未安裝：收款與銷項發票資料不提供（現金口徑收入、銷項發票匯出需要它）"
 
 
+
+def _warranty_days() -> int:
+    from helpers.alert_settings import warranty_report_days
+    return warranty_report_days()
+
 def _custom_income(conn, d0, d1, basis, department_id=None):
     """自訂模組（建構器）的收入逐筆（L1 `helpers.custom_finance`；沒有入帳單據 ⇒ []）。
     關聯到內建案件的略過（內建報價單自己認列，不重複計入）。"""
@@ -586,12 +591,13 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     conn2.close()
     if allowed_quote_nos is not None:
         wrows = [r for r in wrows if r["quote_no"] in allowed_quote_nos]
+    _WARR_DAYS = _warranty_days()        # census #7：設定中心『保固報表天數』（預設 90＝今天）
     for r in wrows:
         try:
             cr2 = json.loads(r["cr_json"])
             for dev in cr2.get("devices") or []:
                 exp, dl = _warranty_expiry(dev.get("warrantyStart",""), dev.get("warrantyMonths"))
-                if exp and dl <= 90:
+                if exp and dl <= _WARR_DAYS:
                     warr.append({
                         "quoteNo":  r["quote_no"],
                         "customer": r["customer_name"] or "",
@@ -959,7 +965,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         ("已結案件",            s["closedCases"],          ""),
         ("本期新成案",          s["periodCases"],          ""),
         ("在製訂單 (Backlog)",  _fmt(s["backlog"]),        "進行中案件未收款合計"),
-        ("保固到期預警",        s["warrantyAlerts"],       "90天內"),
+        ("保固到期預警",        s["warrantyAlerts"],       "%d天內" % _warranty_days()),
         ("已結案未精算",        f"{s['settleOverdueCount']} 件", "待補精算" if s["settleOverdueCount"] > 0 else "無"),
     ]
     for label, val, note in case_rows:
@@ -1694,7 +1700,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
 
     ws7.merge_cells(f"A1:{get_column_letter(len(hdrs7))}1")
     c = ws7["A1"]
-    c.value = f"保固到期預警（90 天內，共 {len(data['warranty'])} 筆）"
+    c.value = f"保固到期預警（{_warranty_days()} 天內，共 {len(data['warranty'])} 筆）"
     c.font  = mk(bold=True, size=12, color=C_WHITE)
     c.fill  = fill(C_ORANGE)
     c.alignment = al("center")
@@ -2342,7 +2348,7 @@ tr.in-period{{background:#EFF6FF}}
   <div class="kpi"><div class="kpi-label">本期新收款</div><div class="kpi-val blue">{fmt(s["periodReceived"])}</div><div class="kpi-sub">淨 {fmt(s["periodNet"])}</div></div>
   <div class="kpi"><div class="kpi-label">合約總案數</div><div class="kpi-val">{s["totalCases"]}</div><div class="kpi-sub">進行中 {s["activeCases"]}　已結案 {s["closedCases"]}</div></div>
   <div class="kpi"><div class="kpi-label">本期新成案</div><div class="kpi-val blue">{s["periodCases"]}</div></div>
-  <div class="kpi"><div class="kpi-label">保固到期預警</div><div class="kpi-val orange">{s["warrantyAlerts"]}</div><div class="kpi-sub">90 天內到期</div></div>
+  <div class="kpi"><div class="kpi-label">保固到期預警</div><div class="kpi-val orange">{s["warrantyAlerts"]}</div><div class="kpi-sub">{_warranty_days()} 天內到期</div></div>
   <div class="kpi"><div class="kpi-label">精算實際營業利益合計</div><div class="kpi-val" style="color:#7C3AED">{fmt(s["totalActualGrossProfit"])}</div><div class="kpi-sub">已精算 {s["settledCases"]} 件</div></div>
   <div class="kpi"><div class="kpi-label">精算覆蓋率</div><div class="kpi-val" style="color:#7C3AED">{s["settleCoverage"]}%</div><div class="kpi-sub">已結案 {s["closedCases"]} 件中 {s["settledCases"]} 件完成精算</div></div>
   <div class="kpi"><div class="kpi-label">在製訂單 (Backlog)</div><div class="kpi-val blue">{fmt(s["backlog"])}</div><div class="kpi-sub">進行中案件未收款合計</div></div>

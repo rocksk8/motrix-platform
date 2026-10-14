@@ -1,5 +1,8 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-14（wip/t62-settings-numbers-r1；settings numbers）
+- L1（新增，只增；快照由列車重產）：`helpers/alert_settings.py`（`warranty_report_days`／`warranty_mail_days`／`cert_warn_days`／`min_password_len`／`login_days`；讀不到設定＝今天的數字；安全類底線寫死：密碼最短 8 碼、登入最長 30 天）。新設定群組 `alerts`（到期預警，4 項）與 `account_security`（登入與密碼：密碼最短長度只能往上、登入有效天數只能往下；放寬方向走『待核准＋確認期間』）。`helpers/auth.is_weak_password`、`routers/auth.py` 的 8 處長度檢查與 session 期限、`helpers/company_setup` 的確認檔到期提醒、`helpers/email_notify.notify_warranty_expiry` 標題改讀這些設定（預設值下逐字相同）。
+
 ## 1.136 — wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1＋wip/t60（T60 選單 hub 群組／T61 S5 內建畫面自訂欄位／S6 自訂按鈕；旗標預設關）
 
 - L0（新增，只增；T60）：`core.menu.hub_group_keys()`。含系統中心入口的群組（例如 system）不能當選單「移到群組」的目的地——導覽列會把整個群組收成一個連結，搬進去的項目看不到；`resolve_move_target` 與驗證同步拒絕。旗標關閉時行為不變。

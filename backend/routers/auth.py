@@ -47,6 +47,12 @@ _rl_lock = threading.Lock()
 _rl_state: dict = {}
 
 
+
+def _min_pw() -> int:
+    """census #8：密碼最短長度（設定中心可往上調，下限寫死 8）；舊名稱 MIN_PASSWORD_LEN 保留給外部匯入。"""
+    from helpers.alert_settings import min_password_len
+    return min_password_len()
+
 def _client_ip(request: Request) -> str:
     xff = request.headers.get("X-Forwarded-For", "")
     if xff:
@@ -536,7 +542,8 @@ def _issue_session(conn, row, must_change: bool) -> dict:
     commits/closes `conn` and clears the IP rate limit afterward."""
     now        = datetime.now().isoformat()
     token      = secrets.token_hex(32)
-    expires_at = (datetime.now() + timedelta(days=30)).isoformat()
+    from helpers.alert_settings import login_days      # census #8：設定中心只能縮短（上限寫死 30）
+    expires_at = (datetime.now() + timedelta(days=login_days())).isoformat()
     conn.execute(
         "INSERT INTO sessions (token, user_id, username, created_at, expires_at, last_active) VALUES (?,?,?,?,?,?)",
         (token, row["id"], row["username"], now, expires_at, now)
@@ -1451,8 +1458,8 @@ def change_password(body: ChangePasswordIn, authorization: str = Header(None)):
             raise HTTPException(401, "Session 已過期，請重新登入")
         if not _verify_pw(body.current_password, row["password_hash"]):
             raise HTTPException(400, "目前密碼不正確")
-        if len(body.new_password) < MIN_PASSWORD_LEN:
-            raise HTTPException(400, f"新密碼至少需要 {MIN_PASSWORD_LEN} 碼")
+        if len(body.new_password) < _min_pw():
+            raise HTTPException(400, f"新密碼至少需要 {_min_pw()} 碼")
         if is_weak_password(body.new_password):
             raise HTTPException(400, "新密碼過於簡單或為已知弱密碼，請改用更強的密碼")
         if body.new_password == body.current_password:
@@ -1516,8 +1523,8 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     if not body.username or not body.password:
         raise HTTPException(400, "缺少帳號或密碼")
-    if len(body.password) < MIN_PASSWORD_LEN:
-        raise HTTPException(400, f"密碼至少 {MIN_PASSWORD_LEN} 碼")
+    if len(body.password) < _min_pw():
+        raise HTTPException(400, f"密碼至少 {_min_pw()} 碼")
     if is_weak_password(body.password):
         raise HTTPException(400, "密碼過於簡單或為已知弱密碼，請改用更強的密碼")
     now = datetime.now().isoformat()
@@ -1629,9 +1636,9 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
         sets.append("department_id=?")
         params.append(body.department_id or None)   # 0 -> 未分類（清空 NULL）
     if body.password:
-        if len(body.password) < MIN_PASSWORD_LEN:
+        if len(body.password) < _min_pw():
             conn.close()
-            raise HTTPException(400, f"密碼至少 {MIN_PASSWORD_LEN} 碼")
+            raise HTTPException(400, f"密碼至少 {_min_pw()} 碼")
         if is_weak_password(body.password):
             conn.close()
             raise HTTPException(400, "密碼過於簡單或為已知弱密碼，請改用更強的密碼")
@@ -1796,8 +1803,8 @@ def verify_unlock(body: VerifyUnlockIn, authorization: str = Header(None)):
 @router.patch("/api/users/{user_id}/unlock-password")
 def set_unlock_password(user_id: int, body: SetUnlockPasswordIn, authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
-    if len(body.unlock_password) < MIN_PASSWORD_LEN:
-        raise HTTPException(400, f"解鎖密碼至少 {MIN_PASSWORD_LEN} 碼")
+    if len(body.unlock_password) < _min_pw():
+        raise HTTPException(400, f"解鎖密碼至少 {_min_pw()} 碼")
     if is_weak_password(body.unlock_password):
         raise HTTPException(400, "解鎖密碼過於簡單或為已知弱密碼，請改用更強的密碼")
     conn = get_db()
@@ -1845,8 +1852,8 @@ def verify_daily_task_unlock(body: VerifyDailyTaskUnlockIn, authorization: str =
 def set_daily_task_password(user_id: int, body: SetDailyTaskPasswordIn,
                              authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
-    if len(body.daily_task_password) < MIN_PASSWORD_LEN:
-        raise HTTPException(400, f"密碼至少 {MIN_PASSWORD_LEN} 碼")
+    if len(body.daily_task_password) < _min_pw():
+        raise HTTPException(400, f"密碼至少 {_min_pw()} 碼")
     if is_weak_password(body.daily_task_password):
         raise HTTPException(400, "密碼過於簡單，請改用更強的密碼")
     conn = get_db()

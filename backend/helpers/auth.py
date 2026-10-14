@@ -107,7 +107,8 @@ def _verify_pw(password: str, stored: str) -> bool:
 # ── Weak-password policy ──────────────────────────────────────────────────────
 
 def is_weak_password(password: str) -> bool:
-    if not password or len(password) < MIN_PASSWORD_LEN:
+    from helpers.alert_settings import min_password_len        # census #8：設定中心可往上調（下限寫死 8）
+    if not password or len(password) < min_password_len():
         return True
     low = password.lower().strip()
     if low in {p.lower() for p in _LEGACY_WEAK_PASSWORDS}:

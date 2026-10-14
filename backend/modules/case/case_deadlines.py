@@ -222,6 +222,8 @@ def _check_warranty_expiry() -> None:
     """Scan active-case devices; send email once per device × threshold crossing."""
     today     = _date.today()
     today_str = today.isoformat()
+    from helpers.alert_settings import warranty_mail_days
+    _urgent, _early = warranty_mail_days()      # census #7：設定中心『保固郵件天數』（預設 7／30＝今天）
     try:
         conn = get_db()
         rows = conn.execute("""
@@ -245,10 +247,10 @@ def _check_warranty_expiry() -> None:
                 if not ws or not wm:
                     continue
                 expiry, days_left = _warranty_expiry(ws, wm)
-                if expiry is None or days_left > 30:
+                if expiry is None or days_left > _early:
                     continue
 
-                threshold = 7 if days_left <= 7 else 30
+                threshold = _urgent if days_left <= _urgent else _early
                 sn = (dev.get("sn") or dev.get("mac") or dev.get("name") or "")[:32]
                 guard_key = f"warranty_notif.{row['quote_no']}_{sn}_{threshold}"
                 if _get_setting(guard_key):

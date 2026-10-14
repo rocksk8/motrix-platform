@@ -577,3 +577,50 @@ register_group(
     sensitive=False, risk="ops",
     help="決定是否開放管理者在畫面上放自己的「開頁」「匯出」按鈕（目前只有供應商管理頁的工具列）。",
 )
+
+
+# ── 到期預警天數（census #7）：預設＝今天寫死的數字（保固報表 90 天、保固郵件 7／30 天、確認檔到期提醒 30 天） ──
+register_group(
+    "alerts", "到期預警",
+    [
+        S("warranty_report_days", "int", 90, min=30, max=365, unit="天", risk="ops", loosen="down", recommended=90,
+          question="營運報表的「保固到期預警」要列出幾天內到期的設備？", label="保固報表預警天數",
+          help="營運報表裡的保固到期預警，會列出這個天數以內就要到期的設備。",
+          impact="只影響報表的呈現與統計：天數調短，報表看到的預警會變少（設備與保固資料本身不變）；調短須另一位最高管理者核准並等確認期間後才生效，調長立即生效。"),
+        S("warranty_mail_early_days", "int", 30, min=8, max=180, unit="天", risk="ops", loosen="down", recommended=30,
+          question="保固到期前幾天，要先寄第一封提醒信？", label="保固提醒信（提前）天數",
+          help="設備保固到期前這麼多天，系統會寄第一封提醒信給負責人。",
+          impact="只影響之後的提醒：每台設備、每個階段只寄一次。調短會晚一點才提醒，須另一位最高管理者核准並等確認期間；調長立即生效（可能讓已寄過的設備再收到一次新階段的信）。"),
+        S("warranty_mail_urgent_days", "int", 7, min=1, max=30, unit="天", risk="ops", loosen="down", recommended=7,
+          question="保固到期前幾天，要再寄一封「緊急」提醒信？", label="保固提醒信（緊急）天數",
+          help="設備保固快到期時，系統會再寄一封標示緊急的提醒信；這個天數一定比「提前」天數小。",
+          impact="只影響之後的提醒，每台設備只寄一次。調短會更晚才緊急提醒，須另一位最高管理者核准並等確認期間；調長立即生效。"),
+        S("cert_warn_days", "int", 30, min=7, max=90, unit="天", risk="ops", loosen="down", recommended=30,
+          question="開發者簽章確認檔到期前幾天，要開始在系統中心提醒？", label="確認檔到期提醒天數",
+          help="確認檔過期後輸出會暫停；到期前這麼多天起，系統中心會出現換發提醒。",
+          impact="只影響提醒出現的時間，不影響確認檔本身是否有效。調短會晚一點才提醒，須另一位最高管理者核准並等確認期間；調長立即生效。"),
+    ],
+    sensitive=False, risk="ops",
+    help="各種「快到期了」提醒的提前天數。",
+)
+
+
+# ── 登入與密碼（census #8）：只准加嚴，不准放寬到預設以下 ──
+register_group(
+    "account_security", "登入與密碼",
+    [
+        S("password_min_len", "int", 8, min=8, max=64, unit="碼", risk="security", loosen="down", recommended=8,
+          question="密碼最少要幾碼？（最少 8 碼，只能往上調）", label="密碼最短長度",
+          help="新設或更改密碼時，長度至少要這麼多碼。系統規定最少 8 碼，這裡只能調得更嚴。",
+          impact="只影響之後新設或更改的密碼，已經設好的密碼不受影響；調高立即生效，調回較低的數字須另一位最高管理者核准並等確認期間。",
+          risk_text="調低會讓密碼比較容易被猜到；系統規定最少 8 碼，不能再低。"),
+        S("login_days", "int", 30, min=1, max=30, unit="天", risk="security", loosen="up", recommended=30,
+          question="登入後最久可以不重新登入幾天？（最多 30 天，只能往下調）", label="登入有效天數",
+          help="登入之後，超過這個天數就要重新輸入帳號密碼。系統規定最長 30 天，這裡只能縮短。",
+          impact="只影響之後新登入的人，已經登入的人維持原來的期限；縮短立即生效，調回較長的天數須另一位最高管理者核准並等確認期間。",
+          risk_text="登入有效期越長，電腦被他人使用或遺失時帳號被冒用的時間越長；系統規定最長 30 天。"),
+    ],
+    sensitive=False, risk="security",
+    help="登入與密碼的規則：只能調得更嚴，不能放寬到系統規定的底線以下。",
+)
+

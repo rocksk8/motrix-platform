@@ -1535,8 +1535,10 @@ def notify_warranty_expiry(
     if not to:
         logger.warning("notify_warranty_expiry: 無有效收件人（quote_no=%r）", quote_no)
         return
-    color  = "#DC2626" if days_left <= 7 else "#D97706"
-    label  = "緊急預警：7天內到期" if days_left <= 7 else "30天到期預警"
+    from helpers.alert_settings import warranty_mail_days
+    _urgent, _early = warranty_mail_days()          # census #7：預設 7／30＝今天的字
+    color  = "#DC2626" if days_left <= _urgent else "#D97706"
+    label  = f"緊急預警：{_urgent}天內到期" if days_left <= _urgent else f"{_early}天到期預警"
     html = _build_html("warranty_expiry", 
         "設備保固即將到期", label, color,
         [
