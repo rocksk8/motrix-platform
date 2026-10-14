@@ -133,16 +133,44 @@
 | P3 | 簽核豁免（P8）與回簽開關、動作目錄的回呼編輯；出貨單 | 中高 |
 | P4 | 其餘 plain 類；money 類只讀基準 | 中 |
 
-## 12. 需要使用者決定（只列不可逆／影響範圍者）
+## 12. 需要使用者決定（只列不可逆／影響範圍者；**PM 暫定答覆 10-14，使用者尚未確認：不得在正式機開啟 builder_workflow**）
 
-1. **D-W1**：`money` 類在第一期是否完全唯讀（建議：是）。
-2. **D-W2**：「關閉簽核」對 `plain` 類是否允許（P8 已有暫定同意，需使用者確認；與 D-K1 同類：放寬要第二位核准）。
-3. **D-W3**：是否授權新表 `workflow_transitions`（DDL＋觸發器）；不授權則 `log` 只能映射既有紀錄，等級受限。
+1. **D-W1**：`money` 類在第一期是否完全唯讀（建議：是）。**暫定：是。**
+2. **D-W2**：「關閉簽核」對 `plain` 類是否允許（與 D-K1 同類：放寬要第二位核准＋確認期間）。**暫定：允許，但屬放寬；預設定義不變。**
+3. **D-W3**：新表 `workflow_transitions`（DDL＋觸發器）。**暫定：不授權；`log` 等級映射到既有 `audit_log`（見 §14 的限制）。**
 4. **D-W4**：「無簽核層」今天三種不一致行為（僅超管／自動核准／孤兒單）是否在預設定義中保留各自行為（建議：保留，黃金重放以現況為準）。
-5. 三項盤點 UNKNOWN 未補完前，不開 P2。
+5. 三項盤點 UNKNOWN 已於 P0 查完（§14）；其結論改變了 §8 的 H2 做法。
 
 ## 13. 靜態檢查清單（實作前）
 
 - 守門：`doc_class` 未分類測試；`ACTIVE_STATUSES` 與待簽佇列覆蓋守門改讀語意標籤後仍綠。
 - OFF 狀態：端點不呼叫引擎、頁面不多請求、`route_inventory`／`response_keys` 不變（由 46 重建的基準以旗標關為準）。
 - 不改 `layout-editor.js`；不碰 `modules/case` 的金額守門檔（`alt_lock`／`alt_sign`／`profit_guard`）。
+
+## 14. P0 查證結果（三項 UNKNOWN；讀程式得出，未執行）
+
+### 14.1 資料庫觸發器
+- **有** BEFORE UPDATE／DELETE 保護的：`config_changes`、`config_change_events`、`permission_changes`（`core/migrations.py:482-558`）、獎金編修紀錄與傳票編修紀錄（`db.py:4634-4661`）、法定科目（`db.py:4362-4371`）。
+- **沒有**：`audit_log`（`db.py:589`）。而且它**會被改、會被刪**：保留期清理 `archive.py:1670 DELETE FROM audit_log WHERE at < ?`；失敗嘗試的累加計數 `helpers/audit.py:375,414 UPDATE audit_log SET detail`；遷移 `core/migrations.py:406`。
+- **簽核軌跡不在 `audit_log`**：每張單據的簽核資料（各層誰簽、何時）存在該單據 `data_json["approval"]`（獎金類另有 `approval_json` 欄）；`signed_log` 欄是『客戶回簽』紀錄，不是簽核歷史（更正盤點的措辭）。單據列本身沒有觸發器。
+
+### 14.2 退回草稿時各端點留了什麼
+- 完工單、出貨單、請款單、開票申請、承攬商匯款申請、報價單退回：**`d.pop("approval")` 把整份簽核軌跡從單據刪掉**（`completion_notes.py:739,782`；`shipping_notes.py:657,714`；`payment_requests.py:783,829`；`invoice_vouchers.py:691,737`；`contractor_vouchers.py:833,881`；`quotations.py:5182`），獎金與獎金更正清成 `approval_json='{}'`（`bonus.py:1961`、`bonus_correction.py:358`）。**之後唯一的證據是 `_audit` 寫的那一筆**（動作、人、單號、原因 `{"note":…}`；出貨單撤銷另帶 `stockReturned`）。
+- `_audit` 的特性：在 `conn.commit()`／`conn.close()` **之後**才呼叫、用另一條連線、內部包 try/except（`helpers/audit.py:285-`）。⇒ **不與狀態變更同交易**：提交後、稽核前當機＝狀態已改而無紀錄；稽核失敗也不會讓退回失敗。
+- 被擋的嘗試：另有 `_audit_failure`（`helpers/audit.py:333`，只記方法／路由／單號／狀態碼／原因碼，同人同路由 60 秒限流）— 這是 H2『被拒嘗試』的現成一半，但沒有『從→到』欄位。
+- 結論：今天**所有類型**退回草稿都是『清掉軌跡＋一筆盡力而為的稽核』。`returnLog` 的 `basic|full` 兩檔在不新增資料表的前提下只能這樣映射：`basic`＝維持現狀（一筆 `<doc>.reject`／`.revoke_approval`，帶原因）；`full`＝同一筆稽核的 `detail` 另帶**被清掉的簽核軌跡快照**（各層簽核人與時間）。**限制要告知使用者**：`audit_log` 可被保留期清理刪除、不是不可改；因此本期的 `log` 等級不構成 H2 的『不可改』保證——金額類的不可改保證仍需 D-W3（現在不授權）。
+- 對 §8 的修正：『第一期沿用各端點現有紀錄』成立；但**進入 `workflow` 引擎後仍不得關閉這一筆稽核**（最低等級＝今天的行為；`none` 選項只有 plain 類才給，且屬放寬）。
+
+### 14.3 核准後回呼在交易內或交易後
+以出貨單 `shipping_notes.py:469-624` 為準，其餘四類形式相同：
+- **交易內**（同一個 `commit` 之前）：狀態寫入、簽核資料寫入、**庫存扣減**（`stock_items` UPDATE，`:590-596`）。序號不在庫在寫入之前檢查，失敗＝409，不改任何東西。
+- **commit 之後**：背景 PDF（`spawn_bg_thread(_generate_*_pdf)`）、行事曆推送、通知、`notify_*`、`_audit`。這些各自失敗不影響核准結果。
+- 報價單已用 `after_commit` 清單明文化（`quotations.py:5030-5119`）；其餘四類是直接內嵌呼叫，順序相同。
+- 設計含意：動作目錄的 `write` 類＝交易內、失敗關閉；`notify|render|push`＝commit 之後、失敗不回滾——與 §5 一致，**不需要改引擎設計**。要注意：『commit 後才 `_audit`』使 `_audit` 也屬 commit 之後的一員，不能被當成交易內的證據。
+
+### 14.4 P0 交付物（本分支）
+| 項目 | 位置 |
+|---|---|
+| 單據風險類登錄 `DOC_CLASS`／`doc_class()`／`register_doc_type(…, doc_class="money")`（目前沒有任何執行期讀取者） | `backend/helpers/tiered_approval.py` |
+| 守門測試（14 類全數分類；plain 只有完工單與出貨單；漏分類會紅；登記失敗不留半登記；突變正對照）— **已實際執行、5 題全綠** | `backend/tests/test_workflow_doc_class_2026_10_14.py` |
+| 完工單／出貨單黃金重放（編輯鎖、被擋的轉換與訊息、退回需原因且清簽核資料、核准／撤銷來回、無簽核層行為釘住、突變正對照）— **寫好未跑**（需資料庫與機器空閒） | `backend/tests/test_workflow_golden_replay_2026_10_14.py` |
