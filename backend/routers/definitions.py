@@ -388,7 +388,7 @@ def _preview_gate(conn, kind, key, scope, user, preview_hash, expect=None):
 
 
 #: T62：可由最高管理者在設定中心逐一選擇要不要強制的 kind（預設都不強制＝與今天相同）。欄位名＝builder_governance.enforce_<kind>。
-_OPT_IN_PREVIEW_KINDS = ("layout", "custom_fields", "user_buttons", "output_template")
+_OPT_IN_PREVIEW_KINDS = ("layout", "custom_fields", "user_buttons", "output_template", "rule_set")
 
 
 def _now_iso():

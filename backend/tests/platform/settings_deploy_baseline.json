@@ -271,7 +271,21 @@
     1,
     false
    ],
+   "enforce_rule_set": [
+    0,
+    0,
+    1,
+    false
+   ],
    "enforce_user_buttons": [
+    0,
+    0,
+    1,
+    false
+   ]
+  },
+  "builder_rules": {
+   "enabled": [
     0,
     0,
     1,
