@@ -7,7 +7,7 @@
     ②不經 `settings_registry.get`：它『永不丟例外』，讀取失敗會回快取或程式預設，等於悄悄換掉管理者設定的值；
        `MOTRIX_SETTINGS_DEFAULTS_ONLY=1` 也不影響本函式（照管理者已儲存的值判斷）；
     ③沒有儲存過的欄位 ⇒ 程式預設（這是正常情況，不是錯誤）；已到時的待生效值（例如放寬後的新值）會套上。
-[契約題] backend/tests/test_t62_preview_gate_optin_2026_10_14.py、test_quote_approval_margin_2026_10_14.py
+[契約題] backend/tests/test_t62_preview_gate_optin_2026_10_14.py、backend/tests/test_quote_approval_margin_2026_10_14.py
 """
 from datetime import datetime
 
