@@ -1,6 +1,6 @@
 # 網路規劃 更新紀錄
 
-## (next) — 2026-10-14（wip/h2-pdf-hardening-r1；PDF 渲染硬化第二輪）
+## 1.0.13 — 2026-10-14（wip/h2-pdf-hardening-r1；PDF 渲染硬化第二輪）
 - 拓樸圖 PDF 匯出頁（`export.py`）的內嵌腳本字面值改成引用 `helpers/pdf_scripts` 註冊表常數；輸出逐位元相同（H2：CSP `script-src` 只認註冊表雜湊）。
 
 ## 1.0.12 — 2026-10-14（wip/t61-xl-safe-r1；匯出公式注入中和；網路規劃書匯出）；修正：xlsx 轉義可逆
