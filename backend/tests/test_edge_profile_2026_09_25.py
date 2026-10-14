@@ -57,13 +57,16 @@ def test_every_import_site_uses_the_wrapper_and_the_product_function_uses_the_de
     assert stale == [], "這些模組仍綁著原函式（產 PDF 時會用新 profile）：%s" % stale
     seen = _capture(monkeypatch)
     monkeypatch.setattr(startup, "_EDGE_PROFILE_ROOT", str(tmp_path / "product_profiles"))
-    w(["msedge.exe", "--headless", "file:///x.html"])
-    w.__wrapped__(["msedge.exe", "--headless", "file:///x.html"])
+    page = tmp_path / "x.html"
+    page.write_text("<html><head></head><body>x</body></html>", encoding="utf-8")        # H2：真的存在的 HTML
+    url = "file:///" + str(page).replace("\\", "/")
+    w(["msedge.exe", "--headless", url])
+    w.__wrapped__(["msedge.exe", "--headless", url])
     assert seen[0][0] == "msedge.exe" and seen[0][1].startswith("--user-data-dir="), seen[0]
     assert "edge_profiles" in seen[0][1], "profile 不在測試暫存底下：%s" % seen[0][1]
     # 產品函式本身（2026-09-30 起）自己帶專屬 profile，且是專屬根目錄底下的路徑
     seen1 = [x for x in seen[1] if x not in startup._HARDEN_FLAGS]        # H1：渲染硬化旗標不算『原命令』的一部分；其餘旗標與順序必須不變
-    assert seen1[0] == "msedge.exe" and seen1[1].startswith("--user-data-dir=") and seen1[2:] == ["--headless", "file:///x.html"], seen[1]
+    assert seen1[0] == "msedge.exe" and seen1[1].startswith("--user-data-dir=") and seen1[2:] == ["--headless", url], seen[1]
     assert seen[1][1].split("=", 1)[1].startswith(str(tmp_path / "product_profiles")), seen[1]
 
 

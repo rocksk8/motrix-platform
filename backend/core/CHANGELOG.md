@@ -42,6 +42,10 @@ R3：`helpers/xlsx_out.xlsx_to_html` 讀 xlsx 的列印頁首／頁尾（沒設�
 - L1（G-A，wip/t62-pdf-decor-r1；旗標 `builder_exports.enabled` 預設關，且需同時開 `builder_governance.enabled`）：BP-3 R4 的 PDF 頁尾／浮水印文字從開票憑據延伸到報價單、請款單、完工單——登記匯出 `case:quotation-pdf`、`arap:payment-request-pdf`、`case:completion-note-pdf`（pdf-only、decorOnly、只有頁尾與浮水印；文字只能從預設清單挑，官方狀態字樣擋；新增或更換文字＝放寬、需第二位最高管理者核准）。`pdf_gen._build_quote_html`／`_build_payment_request_html`、`completion_pdf._build_completion_html` 各包一層呼叫 `decorate_pdf`（原函式改名 `*_core`，參數與預設值不變）；旗標關／沒有已發布範本 ⇒ 回傳同一個字串，輸出逐位元相同；程式產生的『尚未核准』橫幅、公司抬頭與法定欄位不受影響。報價單列表、請款單列表、完工單表單三頁各宣告一個 `motrix-export-id`（編輯器只在旗標開且最高管理者才載入）。
 - L1（資安補強，wip/t62-pdf-escape-r1）：新增 `helpers.doc_template.html_text(s, *, br=True, falsy_empty=False)`——HTML 內文跳脫的唯一實作，兩個旗標精確重現舊寫法（換行轉 `<br>`；`(s or '')` 把 0／False 印成空字串）；`pdf_gen`（10 處）與 `completion_pdf`（1 處）複製貼上的區域 `esc()` 改成呼叫它，純文字資料輸出逐位元相同。補上五個**確認沒逸出**的輸出點（使用者可寫入、直接 f-string 內插）：報價單／出貨單品項數量（3 處）、報價有效日數、款項百分比、案件階段起訖日（結案報表與執行進度報告各一）。新增 AST 棘輪 tests/test_pdf_escape_2026_10_14.py＋基線 tests/pdf_raw_sinks_baseline.json：builder 檔案裡『直接內插字典取值又沒經 esc／格式化』的位置只能是已審過的清單。
 
+## (next) — wip/h2-pdf-hardening-r1（PDF 渲染硬化第二輪）
+
+- L1（熱修第二輪 H2，wip/h2-pdf-hardening-r1）：新增 `helpers/pdf_scripts.py`（PDF 內嵌腳本註冊表：四種走 Edge 的靜態腳本的文字常數與預先算好的 SHA-256；builder 的內嵌腳本字面值改成引用常數，輸出逐位元相同）。`helpers/startup.run_edge_pdf` 的渲染硬化：CSP `script-src` 只認註冊表的雜湊（不再掃最終 HTML）；渲染前出入口標籤中和（meta refresh／base／link／iframe／frame／object／embed／applet／portal、`on*`／`srcdoc`／`formaction`／javascript: 屬性、未登記或有 src 的 script）＋殘留檢查（仍有危險標籤 ⇒ 拒絕渲染）；Edge 旗標新增 `--proxy-server=http://127.0.0.1:9` 與 `--proxy-bypass-list=<-loopback>`（直接寫 IP 的網址也連不出去）；HTML 引數的選擇共用一支（最後一個 `.html` 的 `file:///` 參數）；路徑含 `#`／`?` 拒絕渲染、檔案不存在記警告略過。不動 `--no-sandbox`。
+
 ## 1.136 — wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1＋wip/t60（T60 選單 hub 群組／T61 S5 內建畫面自訂欄位／S6 自訂按鈕；旗標預設關）
 
 - L0（新增，只增；T60）：`core.menu.hub_group_keys()`。含系統中心入口的群組（例如 system）不能當選單「移到群組」的目的地——導覽列會把整個群組收成一個連結，搬進去的項目看不到；`resolve_move_target` 與驗證同步拒絕。旗標關閉時行為不變。

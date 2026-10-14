@@ -92,7 +92,7 @@ def test_edge_flags_are_inserted_just_before_the_html_argument_and_existing_posi
     cmd = ["edge", "--user-data-dir=P", "--headless", "--no-sandbox", "--print-to-pdf=x.pdf", "file:///x.html"]
     out = ST._harden_cmd(cmd)
     assert out[:5] == cmd[:5] and out[-1] == "file:///x.html", "既有旗標的位置不變（--user-data-dir 仍在第 2 個）"
-    assert out[5:-1] == ["--disable-extensions", "--disable-sync", "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE localhost"]
+    assert out[5:-1] == list(ST._HARDEN_FLAGS) and "--proxy-server=http://127.0.0.1:9" in out and "--proxy-bypass-list=<-loopback>" in out
     assert ST._harden_cmd(out) == out, "已經帶了就不重複"
 
 

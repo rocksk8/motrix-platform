@@ -28,6 +28,7 @@ from db import (
 from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_case_closing_report, run_edge_pdf
 from helpers import receipt_amounts as _receipt_amounts
 from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr, html_text as _html_text
+from helpers import pdf_scripts as _PS
 from helpers import export_templates as _ET     # G-A：報價單／請款單 PDF 可加頁尾／浮水印文字（預設關閉；沒有發布過範本 ⇒ 輸出逐位元相同）
 
 # 未核可紅色警示（使用者 2026-09-30）：各單據 builder 共用同一個元件與同一個字樣
@@ -555,18 +556,7 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         '</div>\n'
         '<div class="footer">\n'
         + _identity_foot(_ident) +
-        '</div>\n'
-        '</div>\n'
-        '<script>\n'
-        'window.addEventListener("load",function(){\n'
-        '  var r=document.getElementById("root");if(!r)return;\n'
-        '  var A4H=Math.round(267/25.4*96);\n'
-        '  var h=r.scrollHeight;\n'
-        '  if(h>A4H){var s=A4H/h;if(s>=0.70){document.body.style.zoom=s.toFixed(4);}}\n'
-        '});\n'
-        '</script>\n'
-        '</body>\n'
-        '</html>'
+        ('</div>\n</div>\n' + _PS.FIT_A4_MULTI + '\n</body>\n</html>')
     )
 
 
@@ -1384,18 +1374,7 @@ def _build_shipping_html(n: dict) -> str:
         '</div>\n'
         '<div class="footer">\n'
         + _identity_foot(_ident) +
-        '</div>\n'
-        '</div>\n'
-        '<script>\n'
-        'window.addEventListener("load",function(){\n'
-        '  var r=document.getElementById("root");if(!r)return;\n'
-        '  var A4H=Math.round(267/25.4*96);\n'
-        '  var h=r.scrollHeight;\n'
-        '  if(h>A4H){var s=A4H/h;if(s>=0.70){document.body.style.zoom=s.toFixed(4);}}\n'
-        '});\n'
-        '</script>\n'
-        '</body>\n'
-        '</html>'
+        ('</div>\n</div>\n' + _PS.FIT_A4_MULTI + '\n</body>\n</html>')
     )
 
 
@@ -1772,12 +1751,7 @@ def _build_contractor_voucher_html(v: dict, mask_bank: bool = False) -> str:
         '</div>\n'
         '<div class="footer">\n'
         + _identity_foot(_ident) +
-        '</div>\n'
-        '</div>\n'
-        '<script>window.addEventListener("load",function(){var r=document.getElementById("root");if(!r)return;'
-        'var A4H=Math.round(267/25.4*96);var h=r.scrollHeight;'
-        'if(h>A4H){var s=A4H/h;if(s>=0.70){document.body.style.zoom=s.toFixed(4);}}});</script>\n'
-        '</body>\n</html>'
+        ('</div>\n</div>\n' + _PS.FIT_A4_SINGLE + '\n</body>\n</html>')
     )
 
 
@@ -2363,12 +2337,7 @@ def _build_payment_request_html_core(v: dict) -> str:
         f'{terms_section}\n'
         '<div class="footer">\n'
         + _identity_foot(_ident) +
-        '</div>\n'
-        '</div>\n'
-        '<script>window.addEventListener("load",function(){var r=document.getElementById("root");if(!r)return;'
-        'var A4H=Math.round(267/25.4*96);var h=r.scrollHeight;'
-        'if(h>A4H){var s=A4H/h;if(s>=0.70){document.body.style.zoom=s.toFixed(4);}}});</script>\n'
-        '</body>\n</html>'
+        ('</div>\n</div>\n' + _PS.FIT_A4_SINGLE + '\n</body>\n</html>')
     )
 
 

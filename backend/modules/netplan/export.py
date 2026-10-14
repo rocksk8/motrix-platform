@@ -5,6 +5,7 @@
 兩邊 key/欄位順序需保持一致——改其中一邊記得同步改另一邊。
 """
 import io
+from helpers import pdf_scripts as _PS
 import os
 import tempfile
 from datetime import datetime
@@ -519,26 +520,7 @@ def build_topology_only_html(data: dict, title: str = "", floor_tag: str = "", f
         f"{summary_block}"
         f'<footer>{_esc(footer_text)}</footer>\n'
         "</div>\n"
-        "<script>\n"
-        "function fitPageToContent() {\n"
-        '  var board = document.querySelector(".board");\n'
-        '  var wrap = document.querySelector(".wrap");\n'
-        "  if (board && wrap) {\n"
-        '    wrap.style.maxWidth = Math.ceil(board.getBoundingClientRect().width) + "px";\n'
-        "  }\n"
-        "  var w = Math.ceil(document.documentElement.scrollWidth);\n"
-        "  var h = Math.ceil(document.documentElement.scrollHeight) + 16;\n"
-        '  var style = document.createElement("style");\n'
-        '  style.textContent = "@page { size: " + w + "px " + h + "px; margin: 0; } body { margin: 0; }";\n'
-        "  document.head.appendChild(style);\n"
-        "}\n"
-        "var loaded = new Promise(function (res) {\n"
-        '  if (document.readyState === "complete") res();\n'
-        '  else window.addEventListener("load", res);\n'
-        "});\n"
-        "var fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();\n"
-        "Promise.all([loaded, fontsReady]).then(fitPageToContent);\n"
-        "</script>\n"
+        + _PS.NETPLAN_FIT + "\n"
         "</body>\n</html>"
     )
 
