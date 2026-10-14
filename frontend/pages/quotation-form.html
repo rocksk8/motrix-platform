@@ -4195,10 +4195,12 @@
       cfLocked() { return this.q.status === '已送出' && !this.unlocked },
       cfGet(k) { const cf = this.q && this.q.customFields; return cf ? cf[k] : undefined },
       cfSet(k, v) {
+        const empty = v === '' || v === null || v === undefined || v === false
+        if (empty && !this.q.customFields) return      // 本來就沒有這個物件、又是空值 ⇒ 什麼都不建、不標髒
         const cur = Object.assign({}, this.q.customFields || {})
-        if (v === '' || v === null || v === undefined || v === false) delete cur[k]
+        if (empty) delete cur[k]
         else cur[k] = v
-        this.q.customFields = cur      // 清空也送 {}：後端「沒送這個鍵＝保留舊值」（防過期用戶端），只有 {} 才會清掉；伺服端存完會把空物件拿掉
+        this.q.customFields = cur      // 原本有物件、清到沒有值也留 {}：後端「沒送這個鍵＝保留舊值」（防過期用戶端），只有 {} 才會清掉；伺服端存完會把空物件拿掉
         this.setDirty()
       },
       fShown(form, f) { return !this.layoutOn || window.Alpine.store('layout').fieldShown(form, f) },
