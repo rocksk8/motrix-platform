@@ -285,6 +285,12 @@
   },
   {
    "file": "modules/case/api/quotations.py",
+   "path": "/api/quotations/{quote_no}/stages/templates",
+   "handler": "list_stage_templates",
+   "scope": "row_access"
+  },
+  {
+   "file": "modules/case/api/quotations.py",
    "path": "/api/quotations/{quote_no}/updates",
    "handler": "list_case_updates",
    "scope": "row_access"

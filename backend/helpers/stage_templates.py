@@ -20,6 +20,9 @@ from core import definitions as D
 from core import spine as _spine
 from helpers import safe_text as _ST
 
+#: G1（MODULE-GUIDE §2）：底線開頭但屬於 L1 公開介面的名稱——`modules/case/api/quotations.py` 用同一個階段種類鍵格式檢查（改它＝介面變更，升版）。
+__l1_public__ = ("_KEY_RE",)
+
 GROUP = "builder_stage_templates"
 FIELD = "enabled"
 KIND = "case_stage_template"

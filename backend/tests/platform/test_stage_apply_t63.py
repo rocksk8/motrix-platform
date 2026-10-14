@@ -284,7 +284,7 @@ def _read(rel):
 
 
 def test_case_page_wiring_is_flag_gated_and_registered():
-    html = _read("frontend/pages/case-management.html")
+    html = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
     js = _read("frontend/js/case-management-exec.js")
     mod = json.loads(_read("backend/modules/case/module.json"))
     # 旗標：同一次設定請求（附在名單最後面）；關著 ⇒ stOn=false ⇒ 按鈕與對話框都不顯示、不送請求
@@ -402,9 +402,9 @@ def test_default_stage_seed_is_skipped_only_when_flag_on_and_template_published_
     assert "if (this._stFlag) { await this.stInit(); if (this.stTpl.length) return }" in seed        # 旗標開＋有樣板才跳過
     assert "this._stFlag === undefined && this._layoutP" in seed                                   # 旗標還沒讀完才等；讀完／關著 ⇒ 不多等
     assert seed.index("_stFlag") < seed.index("const labels = ['訂單確認'")                         # 決定在建立 5 個預設階段之前
-    html = _read("frontend/pages/case-management.html")
+    html = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
     assert "d._layoutP = d.initLayout()" in html and "已發布階段樣板時，空白案件不會再自動建立 5 個預設階段" in html
-    form = _read("frontend/pages/quotation-form.html")
+    form = source_tree.page_file("quotation-form.html").read_text(encoding="utf-8")
     assert "['builder_layout', 'builder_custom_fields', 'builder_stage_templates']" in form
     f = form[form.index("async _seedDefaultStagesIfEmpty"):]
     f = f[:f.index("async doUnlock")]
@@ -415,7 +415,7 @@ def test_default_stage_seed_is_skipped_only_when_flag_on_and_template_published_
 def test_user_facing_copy_is_plain_language_static():
     js = _read("frontend/js/case-management-exec.js")
     assert "stSummary()" in js and "按下「建立階段」會在這個案件新增" in js and "已有的階段不會被改動" in js
-    html = _read("frontend/pages/case-management.html")
+    html = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
     assert 'data-testid="st-summary"' in html and "基準日（從哪一天開始算）" in html
     ed = _read("frontend/static/stage-template-editor.js")
     assert "種類鍵" not in ed[ed.index("function problems"):ed.index("function setBody")]          # 畫面上的字不用內部術語

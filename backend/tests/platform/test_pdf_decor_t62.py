@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 import pdf_gen
+from core import source_tree
 import modules.case.completion_pdf as CP
 from helpers import export_templates as ET
 
@@ -88,6 +89,6 @@ def test_comparator_new_or_changed_text_is_loosen_and_removal_is_tighten():
 
 @pytest.mark.parametrize("page,eid", [("quotations.html", IDS[0]), ("payment-request.html", IDS[1]), ("completion-note-form.html", IDS[2])])
 def test_pages_declare_exactly_one_export_id(page, eid):
-    src = (ROOT / "frontend" / "pages" / page).read_text(encoding="utf-8")
+    src = source_tree.page_file(page).read_text(encoding="utf-8")
     metas = re.findall(r'<meta name="motrix-export-id" content="([^"]+)"', src)
     assert metas == [eid], "每頁只能宣告一個匯出代號（編輯器一次只處理一個）"

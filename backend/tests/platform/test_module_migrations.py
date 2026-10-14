@@ -138,7 +138,7 @@ def test_case_v1_is_registered_by_the_real_loader_and_its_column_exists(client):
         assert "invoice_no" in cols and {"remit_actual", "remit_fee", "remit_review"} <= cols
         assert {"kind", "doc_code", "lines_json", "void_reason"} <= cols                      # v3
         assert "planned_pay_date" in cols                                                    # v7（第42班：預定付款日）
-        assert migrations.current_version(conn, "case") == 8
+        assert migrations.current_version(conn, "case") == 9
     finally:
         conn.close()
 
