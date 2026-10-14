@@ -4189,7 +4189,7 @@
       layoutOn: false,
       _stFlag: false,
       _layoutP: null,          // initLayout() 的 promise（預設階段 seed 要在旗標讀完之後才決定）
-      // Q3：自訂欄位（值存在 q.customFields；空值＝移除該欄位、整個物件空了＝移除這個鍵——和伺服端一致，存檔基準才不會對不上）
+      // Q3：自訂欄位（值存在 q.customFields；空值＝移除該欄位；整個物件空了＝送 {}（伺服端據此移除這個鍵）。
       cfIsAdmin() { return !!(this.session && this.session.role === 'superadmin') },
       cfLocked() { return this.q.status === '已送出' && !this.unlocked },
       cfGet(k) { const cf = this.q && this.q.customFields; return cf ? cf[k] : undefined },
@@ -4197,8 +4197,7 @@
         const cur = Object.assign({}, this.q.customFields || {})
         if (v === '' || v === null || v === undefined || v === false) delete cur[k]
         else cur[k] = v
-        if (Object.keys(cur).length) this.q.customFields = cur
-        else delete this.q.customFields
+        this.q.customFields = cur      // 清空也送 {}：後端「沒送這個鍵＝保留舊值」（防過期用戶端），只有 {} 才會清掉；伺服端存完會把空物件拿掉
         this.setDirty()
       },
       fShown(form, f) { return !this.layoutOn || window.Alpine.store('layout').fieldShown(form, f) },

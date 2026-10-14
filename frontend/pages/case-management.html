@@ -4983,15 +4983,14 @@ window.CM_PARTS.push(() => ({
     const cf = this.cr && this.cr.caseRecord && this.cr.caseRecord.customFields
     return cf ? cf[k] : undefined
   },
-  // 空值＝移除該欄位；整個物件空了＝移除 customFields 這個鍵（和伺服器一樣：沒有值就不寫鍵，存檔基準才不會對不上）
+  // 空值＝移除該欄位；整個物件空了＝送 {}（伺服端據此移除 customFields 這個鍵）
   cfSet(k, v) {
     const cr = this.cr && this.cr.caseRecord
     if (!cr) return
     const cur = Object.assign({}, cr.customFields || {})
     if (v === '' || v === null || v === undefined || v === false) delete cur[k]
     else cur[k] = v
-    if (Object.keys(cur).length) cr.customFields = cur
-    else delete cr.customFields
+    cr.customFields = cur          // 清空也送 {}：後端「沒送這個鍵＝保留舊值」，只有 {} 才會清掉
     this.setDirty()
   },
 }))

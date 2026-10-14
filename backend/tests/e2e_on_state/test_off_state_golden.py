@@ -23,7 +23,7 @@ RECORD = os.environ.get("MOTRIX_RECORD_GOLDEN") == "1"
 _DATE = re.compile(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?")
 
 
-_BUILD = re.compile(r"[0-9a-f]{7,12}(?= · 啟動)")
+_BUILD = re.compile(r"(?<![0-9a-f])[0-9a-f]{7,12}(?= · 啟動)")
 
 
 def _norm_text(s):
@@ -36,6 +36,22 @@ def _norm_reqs(items):
     return [re.sub(r"(token|_)=[^&]*", r"\1=<x>", i) for i in items]
 
 
+# T62 在旗標【關閉】時多出來的請求，逐條列出（PM 裁示 2026-10-15：允許清單，不做延後載入重構）。
+# 理由：全是「讀旗標」的 GET 與靜態資源（頁面載入版面／自訂欄位／狀態顯示的腳本），旗標關閉時不呈現任何東西、使用者看到的畫面與 platform 相同。
+# 任何不在這份清單裡的新請求都會讓測試失敗；寫入（非 GET）一律不准。
+_JS = ["GET /js/def-governance.js", "GET /static/custom-layout.js", "GET /static/layout-editor.js", "GET /static/layout-runtime.js", "GET /static/public-flags.js"]
+ALLOWED_EXTRA = {
+    "quotation_form_off": set(_JS + [
+        "GET /api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates",
+        "GET /static/custom-fields.js"]),
+    "quotations_list_off": set(_JS + [
+        "GET /api/settings-center/public?groups=builder_layout",
+        "GET /api/settings-center/public?groups=builder_status_display",
+        "GET /js/status-display-editor.js",
+        "GET /static/status-chip.js"]),
+}
+
+
 def _compare(name, snap):
     f = GOLDEN / (name + ".json")
     if RECORD:
@@ -44,8 +60,14 @@ def _compare(name, snap):
         return
     assert f.exists(), "還沒有 golden：先用 MOTRIX_RECORD_GOLDEN=1 錄一份（%s）" % f
     want = json.loads(f.read_text(encoding="utf-8"))
-    assert snap["requests"] == want["requests"], "OFF 狀態的請求清單變了"
-    assert snap["text"] == want["text"], "OFF 狀態的畫面文字變了"
+    from collections import Counter
+    got_c, want_c = Counter(snap["requests"]), Counter(want["requests"])
+    missing = want_c - got_c
+    extra = got_c - want_c
+    assert not missing, "platform 有的請求在 T62 關閉狀態消失了：%s" % sorted(missing)                       # (b) 資料端點的請求一個都不能少
+    assert set(extra) <= ALLOWED_EXTRA[name], "不在允許清單的新請求：%s" % sorted(set(extra) - ALLOWED_EXTRA[name])   # (a)
+    assert all(r.startswith("GET ") for r in extra), "多出來的請求有寫入：%s" % sorted(r for r in extra if not r.startswith("GET "))   # (c)
+    assert snap["text"] == want["text"], "OFF 狀態的畫面文字變了"                                           # (b) 畫面文字與 platform 逐項相同
 
 
 def _snapshot(page, reqs, ready_js):
