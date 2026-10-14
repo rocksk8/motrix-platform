@@ -1618,15 +1618,13 @@
    "dynamic_sql": false,
    "imports": [
     "helper:settings_registry",
+    "plat:paths",
     "plat:registry"
    ],
    "kind": "helper",
    "path": "backend/helpers/settings_groups.py",
    "tables_ddl": [],
-   "tables_named": [
-    "suppliers",
-    "vendor_contractors"
-   ],
+   "tables_named": [],
    "tables_r": [],
    "tables_w": []
   },
@@ -2951,6 +2949,27 @@
    "kind": "js",
    "path": "frontend/static/attach-picker.js",
    "routers_called": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "js:static/attachment-slots.js": {
+   "api_calls": [
+    "/api/attachment-slots/",
+    "/api/attachment-slots/catalog",
+    "/api/definitions/attachment_slot/"
+   ],
+   "api_prefixes": [
+    "/api/attachment-slots",
+    "/api/definitions"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/attachment-slots.js",
+   "routers_called": [
+    "router:attachment_slots",
+    "router:definitions"
+   ],
    "tables_r": [],
    "tables_w": []
   },
@@ -16395,6 +16414,7 @@
     "js:js/rules-builder.js",
     "js:static/approval-cascade.js",
     "js:static/approval-return.js",
+    "js:static/attachment-slots.js",
     "js:static/auth-guard.js",
     "js:static/custom-fields.js",
     "js:static/custom-layout.js",
@@ -16865,6 +16885,7 @@
     "/api/customers",
     "/api/customers/{}",
     "/api/customers/{}/privacy-notice",
+    "/api/settings-center/public",
     "/api/suppliers",
     "/api/suppliers/{}",
     "/api/system/branding/favicon",
@@ -16874,15 +16895,20 @@
     "/api/auth",
     "/api/company",
     "/api/customers",
+    "/api/settings-center",
     "/api/suppliers",
     "/api/system",
     "/api/users"
    ],
    "api_unmatched": [],
    "imports": [
+    "js:js/def-governance.js",
     "js:static/auth-guard.js",
+    "js:static/custom-layout.js",
     "js:static/export-guard.js",
     "js:static/gov-lookup.js",
+    "js:static/layout-editor.js",
+    "js:static/layout-runtime.js",
     "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
@@ -16896,6 +16922,7 @@
     "router:auth",
     "router:company_lookup",
     "router:customers",
+    "router:settings_center",
     "router:system"
    ],
    "routers_called_effective": [
@@ -16903,6 +16930,10 @@
     "router:auth",
     "router:company_lookup",
     "router:customers",
+    "router:def_governance",
+    "router:def_pipeline",
+    "router:definitions",
+    "router:settings_center",
     "router:system"
    ],
    "tables_r": [],
@@ -26281,7 +26312,6 @@
     "core:trail",
     "helper:audit",
     "helper:builtin_fields",
-    "helper:settings_groups",
     "mod:case/api/material_payments",
     "plat:migrations",
     "router:export_templates",
@@ -26731,7 +26761,6 @@
    "named_by": [
     "core:archive",
     "core:db",
-    "helper:settings_groups",
     "plat:migrations",
     "router:map_points"
    ],

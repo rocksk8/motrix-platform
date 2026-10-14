@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1361,
+  "tests": 1364,
   "unmapped": 13,
   "kinds": {
-   "api": 756,
+   "api": 758,
    "e2e": 306,
-   "audit": 173,
+   "audit": 174,
    "unit": 126
   },
   "routes": 840
@@ -16528,6 +16528,36 @@
    },
    "login_fixture": true
   },
+  "backend/tests/platform/test_attachment_slots_ui_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "dir:frontend/static/",
+    "js:static/attachment-slots.js",
+    "page:pages/case-management.html",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:attachment_slots",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "api": [
+     "backend/routers/attachment_slots.py",
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/static/attachment-slots.js"
+    ],
+    "path": [
+     "frontend/static/",
+     "frontend/static/attachment-slots.js"
+    ]
+   }
+  },
   "backend/tests/platform/test_attachments_providers.py": {
    "kind": "api",
    "units": [
@@ -16678,7 +16708,9 @@
   "backend/tests/platform/test_bp1_layout_s4_pages_2026_10_14.py": {
    "kind": "api",
    "units": [
+    "dir:backend/core/",
     "dir:backend/modules/",
+    "file:backend/core/l1_customization.json",
     "file:backend/helpers/__init__.py",
     "helper:settings_registry",
     "js:js/def-governance.js",
@@ -16687,12 +16719,15 @@
     "js:static/layout-runtime.js",
     "mod:analytics/api/dashboard",
     "mod:subcontract/api/vendor_contractors",
+    "page:pages/customer-log.html",
+    "page:pages/customers.html",
     "page:pages/devices.html",
     "page:pages/procurement.html",
     "page:pages/vendor-contractors.html",
     "plat:__init__",
     "plat:customization",
     "plat:source_tree",
+    "router:customers",
     "router:definitions",
     "router:settings_center"
    ],
@@ -16707,11 +16742,14 @@
     "api": [
      "backend/modules/analytics/api/dashboard.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/customers.py",
      "backend/routers/definitions.py",
      "backend/routers/settings_center.py"
     ],
     "page": [
      "frontend/js/def-governance.js",
+     "frontend/pages/customer-log.html",
+     "frontend/pages/customers.html",
      "frontend/pages/devices.html",
      "frontend/pages/procurement.html",
      "frontend/pages/vendor-contractors.html",
@@ -16720,6 +16758,8 @@
      "frontend/static/layout-runtime.js"
     ],
     "path": [
+     "backend/core/",
+     "backend/core/l1_customization.json",
      "backend/modules/"
     ]
    },
@@ -18703,6 +18743,47 @@
     ]
    }
   },
+  "backend/tests/platform/test_l1_layout_owner_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/core/",
+    "dir:backend/modules/",
+    "file:backend/core/l1_customization.json",
+    "file:backend/routers/__init__.py",
+    "page:pages/customers.html",
+    "plat:__init__",
+    "plat:catalog",
+    "plat:customization",
+    "plat:registry",
+    "plat:source_tree",
+    "router:definitions",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/catalog.py",
+     "backend/core/customization.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/routers/__init__.py",
+     "backend/routers/definitions.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py",
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/customers.html"
+    ],
+    "path": [
+     "backend/core/",
+     "backend/core/l1_customization.json",
+     "backend/modules/"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_layout_editor_no_native_dialogs_2026_10_14.py": {
    "kind": "audit",
    "units": [
@@ -18732,6 +18813,46 @@
     "path": [
      "frontend/static/",
      "frontend/static/layout-editor.js"
+    ]
+   }
+  },
+  "backend/tests/platform/test_layout_pages_registry_2026_10_14.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/core/",
+    "dir:backend/modules/",
+    "dir:frontend/static/",
+    "file:backend/core/l1_customization.json",
+    "file:backend/helpers/__init__.py",
+    "file:frontend/static/layout-pages.json",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "js:static/layout-editor.js",
+    "page:pages/case-management.html",
+    "plat:__init__",
+    "plat:customization",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/customization.py",
+     "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/static/layout-editor.js"
+    ],
+    "path": [
+     "backend/core/",
+     "backend/core/l1_customization.json",
+     "backend/modules/",
+     "frontend/static/",
+     "frontend/static/layout-editor.js",
+     "frontend/static/layout-pages.json"
     ]
    }
   },
