@@ -319,3 +319,78 @@ def test_templates_list_endpoint_and_flag_off(client, make_user, monkeypatch):
     _publish_tpl("std", TPL)
     items = client.get("/api/quotations/MQ-ST2-L/stages/templates", headers=h).json()["items"]
     assert {"key": "std", "label": "標準施工案", "stageCount": 3, "hasRatio": True} in items
+
+
+# ── 04 審查修正（r4）──────────────────────────────────────────────────────
+def test_plan_wraps_broken_published_content_as_400():
+    for bad in ({"stages": [{"key": "a"}]}, {"stages": [{"key": "a", "label": "x", "offsetDays": "x", "durationDays": 1}]},
+                {"stages": "nope"}, {"stages": [None]}, {"stages": [{"key": "a", "label": "x", "offsetDays": 1, "durationDays": 1, "dependsOn": 5}]}):
+        with pytest.raises(SA.PlanError) as e:
+            SA.plan(bad, "2026-10-01", "new", [])
+        assert e.value.status == 400
+    with pytest.raises(SA.PlanError) as e:
+        SA.plan(TPL, "2026-10-01", "new", [{"id": 1, "stage_key": None, "label": "x"}])
+    assert e.value.status == 409
+
+
+def test_plan_append_warns_about_same_name_manual_stage():
+    p = SA.plan(TPL, "2026-10-01", "append", [{"id": 1, "stage_key": None, "label": " 驗收 "}])
+    assert any("兩個同名階段" in n and "驗收" in n for n in p["notes"])
+    q = SA.plan(TPL, "2026-10-01", "append", [{"id": 1, "stage_key": "accept", "label": "驗收"}])
+    assert not any("兩個同名" in n for n in q["notes"])
+
+
+@needs_case
+@pytest.mark.parametrize("val", ["true", 1, "1", "false", 0, [], {}])
+def test_dry_run_must_be_a_boolean(client, make_user, on, val):
+    h = _login(client, make_user, "st2_dry%s" % abs(hash(str(val)) % 1000))
+    _case("MQ-ST2-D%d" % (abs(hash(str(val))) % 100000))
+    no = "MQ-ST2-D%d" % (abs(hash(str(val))) % 100000)
+    _publish_tpl("std", TPL)
+    r = client.post(URL % no, headers=h, json={"template": "std", "mode": "new", "baseDate": "2026-10-01", "dryRun": val})
+    assert r.status_code == 400
+    assert _q("SELECT id FROM case_stages WHERE quote_no=?", no) == []             # 非布林 ⇒ 什麼都沒寫
+
+
+@needs_case
+def test_write_takes_the_lock_before_reading_stages_but_preview_does_not(client, make_user, on, monkeypatch):
+    from modules.case.api import quotations as q
+    h = _login(client, make_user, "st2_lock")
+    _case("MQ-ST2-K")
+    _publish_tpl("std", TPL)
+    seen = []
+    real = q.begin_write
+    monkeypatch.setattr(q, "begin_write", lambda c: (seen.append(1), real(c))[1])
+    client.post(URL % "MQ-ST2-K", headers=h, json={"template": "std", "mode": "new", "baseDate": "2026-10-01", "dryRun": True})
+    assert seen == []                                                               # 預覽不拿寫鎖
+    r = client.post(URL % "MQ-ST2-K", headers=h, json={"template": "std", "mode": "new", "baseDate": "2026-10-01"})
+    assert r.status_code == 200 and seen == [1]
+    # 第二個（等同兩個同時請求裡慢的那個）看到的是第一個已寫入的階段 ⇒ 409，不會再建一組
+    r2 = client.post(URL % "MQ-ST2-K", headers=h, json={"template": "std", "mode": "new", "baseDate": "2026-10-01"})
+    assert r2.status_code == 409 and len(_q("SELECT id FROM case_stages WHERE quote_no=?", "MQ-ST2-K")) == 3
+    assert sum(x["ratio_bp"] or 0 for x in _q("SELECT ratio_bp FROM case_stages WHERE quote_no=?", "MQ-ST2-K")) == 10000
+
+
+@needs_case
+def test_note_about_reminders_and_updated_at_bump(client, make_user, on):
+    from datetime import date, timedelta
+    h = _login(client, make_user, "st2_soon")
+    _case("MQ-ST2-S")
+    _publish_tpl("std", TPL)
+    base = date.today().isoformat()
+    d = client.post(URL % "MQ-ST2-S", headers=h, json={"template": "std", "mode": "new", "baseDate": base, "dryRun": True}).json()
+    assert any("到期提醒" in n for n in d["notes"])                                  # survey 的迄日是 base+3 ⇒ 會被提醒
+    far = (date.today() + timedelta(days=60)).isoformat()
+    d2 = client.post(URL % "MQ-ST2-S", headers=h, json={"template": "std", "mode": "new", "baseDate": far, "dryRun": True}).json()
+    assert not any("到期提醒" in n for n in d2["notes"])
+    before = _q("SELECT updated_at FROM quotations WHERE quote_no=?", "MQ-ST2-S")[0]["updated_at"]
+    assert client.post(URL % "MQ-ST2-S", headers=h, json={"template": "std", "mode": "new", "baseDate": far}).status_code == 200
+    assert _q("SELECT updated_at FROM quotations WHERE quote_no=?", "MQ-ST2-S")[0]["updated_at"] > before    # N4：鏡像寫回推進案件的 updated_at
+
+
+def test_preview_dialog_ignores_stale_responses_static():
+    js = _read("frontend/js/case-management-exec.js")
+    a = js.index("async stPreview"); b = js.index("async stApply")
+    assert "d._seq" in js[a:b] and js[a:b].count("seq !== d._seq") >= 1 and "seq === d._seq" in js[a:b]
+    ap = js[b:js.index("async addStage")]
+    assert "d.plan.template !== d.key" in ap and "dryRun: false" in ap

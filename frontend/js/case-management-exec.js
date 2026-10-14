@@ -588,6 +588,8 @@ window.CM_PARTS.push(() => ({
     async stPreview() {
       const d = this.stDlg
       if (!d.open || !d.key || !/^\d{4}-\d{2}-\d{2}$/.test(d.base || '')) { d.plan = null; return }
+      // 請求序號：較舊的回應晚到時不能蓋掉較新的預覽（按下「建立階段」用的是目前的樣板／基準日）
+      const seq = d._seq = (d._seq || 0) + 1
       d.busy = true; d.err = ''
       try {
         const r = await fetch(`${this._stagesApiBase()}/apply-template`, {
@@ -595,18 +597,22 @@ window.CM_PARTS.push(() => ({
           body: JSON.stringify({ template: d.key, baseDate: d.base, mode: d.mode, dryRun: true })
         })
         const j = await r.json().catch(() => ({}))
+        if (seq !== d._seq) return
         if (!r.ok) { d.plan = null; d.err = j.detail || '無法預覽'; return }
         d.plan = j
-      } catch (e) { d.plan = null; d.err = e.message } finally { d.busy = false }
+      } catch (e) { if (seq === d._seq) { d.plan = null; d.err = e.message } } finally { if (seq === d._seq) d.busy = false }
     },
     async stApply() {
       const d = this.stDlg
       if (!d.plan || !d.plan.stages.length || d.busy) return
+      // 畫面上的預覽必須就是現在選的樣板／基準日／方式；不是（有請求還沒回來）⇒ 重新預覽，不寫入
+      if (d.plan.template !== d.key || d.plan.baseDate !== d.base || d.plan.mode !== d.mode) { this.stPreview(); return }
+      const seq = d._seq = (d._seq || 0) + 1                  // 套用期間，晚到的預覽回應一律作廢
       d.busy = true; d.err = ''
       try {
         const r = await fetch(`${this._stagesApiBase()}/apply-template`, {
           method: 'POST', headers: this._authHeaders(true),
-          body: JSON.stringify({ template: d.key, baseDate: d.base, mode: d.mode })
+          body: JSON.stringify({ template: d.key, baseDate: d.base, mode: d.mode, dryRun: false })
         })
         const j = await r.json().catch(() => ({}))
         if (!r.ok) { d.err = j.detail || '套用失敗'; return }

@@ -9,7 +9,7 @@ import shutil
 import sqlite3
 import uuid
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import copy
 from typing import List, Optional
@@ -3954,6 +3954,13 @@ def apply_stage_template(quote_no: str, body: dict = Body(...), authorization: s
     key = body.get("template")
     mode = body.get("mode") or "new"
     base = body.get("baseDate") or datetime.now().date().isoformat()
+    # S1：dryRun 只認布林；其他型別（'true'、1、'1'…）一律 400，不會把「看起來像預覽」的請求當成真的寫入
+    dry = body.get("dryRun")
+    if dry is not None and not isinstance(dry, bool):
+        conn.close(); raise HTTPException(400, "dryRun 必須是 true 或 false")
+    if not dry:
+        # S2：會寫入 ⇒ 讀「現有階段」之前先拿寫鎖；兩個同時套用的請求不會都看到 0 個階段而各建一組（比例合計變 200%）
+        begin_write(conn)
     _STPL.ensure_kind()
     from core import definitions as _D
     try:
@@ -3962,19 +3969,37 @@ def apply_stage_template(quote_no: str, body: dict = Body(...), authorization: s
         d = None
     if not d:
         conn.close(); raise HTTPException(404, "找不到這個階段樣板（或還沒發布）")
-    existing = [{"id": r["id"], "stage_key": r["stage_key"]} for r in conn.execute(
-        "SELECT id, stage_key FROM case_stages WHERE quote_no=?", (quote_no,)).fetchall()]
+    existing = [{"id": r["id"], "stage_key": r["stage_key"], "label": r["label"]} for r in conn.execute(
+        "SELECT id, stage_key, label FROM case_stages WHERE quote_no=?", (quote_no,)).fetchall()]
     try:
         pl = _SA.plan(d["body"], base, mode, existing)
     except _SA.PlanError as e:
-        conn.close(); raise HTTPException(400 if "格式" in str(e) or "mode" in str(e) else 409, str(e))
+        conn.close(); raise HTTPException(e.status, str(e))
+    # S3：到期提醒是既有行為（case_deadlines：已成案、階段未完成、迄日是今天或 3 天後 ⇒ 通知負責人；沒有負責人 ⇒ 業務與部門主管）。
+    # 新階段沒有負責人，所以套用前先講清楚會通知誰
+    _soon = {datetime.now().date().isoformat(), (datetime.now().date() + timedelta(days=3)).isoformat()}
+    _n_soon = sum(1 for x in pl["stages"] if x["dueDate"] in _soon)
+    if _n_soon:
+        pl["notes"] = list(pl["notes"]) + ["%d 個階段的迄日是今天或 3 天後；這個案件已成案時，系統會依既有的到期提醒通知業務與部門主管（新階段還沒有負責人）" % _n_soon]
     out = {"template": key, "templateVersion": d.get("version"), "baseDate": base, "mode": mode, **pl}
-    if body.get("dryRun") is True:
+    if dry:
         conn.close()
         return out
     if not pl["stages"]:
         conn.close()
         return {**out, "created": []}
+    try:
+        return _apply_stage_template_write(conn, quote_no, pl, out, key, d, mode, authorization)
+    except BaseException:
+        try:
+            conn.rollback()
+        except Exception:   # noqa: BLE001
+            pass
+        _safe_close(conn)
+        raise
+
+
+def _apply_stage_template_write(conn, quote_no, pl, out, key, d, mode, authorization):
     max_order = conn.execute(
         "SELECT COALESCE(MAX(sort_order), -1) m FROM case_stages WHERE quote_no=?", (quote_no,)
     ).fetchone()["m"]
@@ -3993,7 +4018,7 @@ def apply_stage_template(quote_no: str, body: dict = Body(...), authorization: s
         if deps:
             conn.execute("UPDATE case_stages SET depends_on=? WHERE id=?", (json.dumps(deps, ensure_ascii=False), ids[st["key"]]))
     conn.commit()
-    _sync_stages_to_json(conn, quote_no)
+    _sync_stages_to_json(conn, quote_no)           # 同時把案件的 updated_at 往前推（鏡像寫回會更新它）
     created = [_serialize_stage(conn, _get_stage_row(conn, quote_no, i)) for i in ids.values()]
     conn.close()
     for i in ids.values():

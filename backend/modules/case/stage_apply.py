@@ -16,25 +16,38 @@ MODES = ("new", "append")      # new：案件目前沒有任何階段才可用�
 
 
 class PlanError(ValueError):
-    pass
+    """`status`：400＝請求本身不合法（日期、mode）或樣板內容壞掉；409＝這個案件目前的狀態不能這樣套用。"""
+
+    def __init__(self, msg, status=409):
+        super().__init__(msg)
+        self.status = status
 
 
 def _d(s):
     try:
         return date.fromisoformat(s)
     except (TypeError, ValueError):
-        raise PlanError("基準日格式必須是 YYYY-MM-DD")
+        raise PlanError("基準日格式必須是 YYYY-MM-DD", 400)
 
 
 def plan(body, base_date, mode, existing):
     """body：已發布的樣板內容；existing：`[{id, stage_key}]`（本案現有階段）。
     ⇒ `{"stages": [{key,label,startDate,dueDate,ratioBp,dependsOn:[key…],existingDeps:[id…]}], "notes": [str], "skipped": [key…]}`。
-    不合法 ⇒ PlanError（訊息可直接給使用者看）。"""
+    不合法 ⇒ PlanError（訊息可直接給使用者看）。已發布的內容是資料庫裡的 JSON（可能被手改過）：任何結構錯誤都變成 PlanError(400)，不是 500。"""
     if mode not in MODES:
-        raise PlanError("mode 必須是 new 或 append")
+        raise PlanError("mode 必須是 new 或 append", 400)
+    try:
+        return _plan(body, base_date, mode, existing)
+    except PlanError:
+        raise
+    except (KeyError, TypeError, ValueError, AttributeError, IndexError, OverflowError):
+        raise PlanError("這個樣板的已發布內容無法解析，請最高管理者在樣板編輯器重新檢查並發布", 400)
+
+
+def _plan(body, base_date, mode, existing):
     stages = (body or {}).get("stages")
     if not isinstance(stages, list) or not stages:
-        raise PlanError("樣板沒有階段")
+        raise PlanError("樣板沒有階段", 400)
     base = _d(base_date)
     have = {e["stage_key"]: e["id"] for e in existing if e.get("stage_key")}
     if mode == "new" and existing:
@@ -64,6 +77,12 @@ def plan(body, base_date, mode, existing):
         })
     if skipped:
         notes.append("本案已有的階段種類不會重複建立：" + "、".join(skipped))
+    if mode == "append":
+        # 附加以「階段種類」比對；手動建立的階段沒有種類，即使名稱相同也不算已有 ⇒ 會出現兩個同名階段，先講清楚
+        have_labels = {(e.get("label") or "").strip().casefold(): e.get("label") for e in existing if not e.get("stage_key")}
+        dup = [o["label"] for o in out if o["label"].casefold() in have_labels]
+        if dup:
+            notes.append("本案已有同名但不是由樣板建立的階段：" + "、".join(dup) + "；附加後會出現兩個同名階段（附加只比對階段種類，不比對名稱）")
     if not out:
         notes.append("沒有需要補上的階段")
     return {"stages": out, "notes": notes, "skipped": skipped}
