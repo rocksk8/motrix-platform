@@ -5,7 +5,7 @@
 [公開介面] entities, all_fields, rule_fields, visible_ids, load_records, stub_in_use, PERMS
 [不變式] ①**唯一**對外給『規則能用哪些欄位』的入口；整合 S5 欄位目錄（`helpers/builtin_fields.py`，owner 3c）時**只改本檔的 `_catalog_for`**；
     ②目錄項不得是付款衍生旗標（`derived_from_payment` 或名稱在 `_PAYMENT_DERIVED` 內）——登錄時 ValueError；
-    ③金額／內部欄位必須帶權限（`perm`）；檢視者沒有該權限 ⇒ 欄位不在他的可見集合內（規則引擎據此不評估）；
+    ③金額欄位必須帶權限（`perm`）；`internal`（S5 自訂欄位）＝只有能讀到該紀錄的人看得到；檢視者沒有該權限 ⇒ 欄位不在他的可見集合內（規則引擎據此不評估）；
     ④紀錄來源由各模組以 `("rules.entity", <主題>)` 提供者登記（`registry.providers`），**本檔不讀任何業務表**；
        提供者回傳的值再被本檔裁到只剩檢視者可見的欄位（縱深防禦：提供者多給也不會外洩）。
 [契約題] backend/tests/test_rule_catalog_2026_10_14.py
@@ -61,8 +61,8 @@ def _check_catalog(entity, fields):
             raise ValueError("%s.%s：型別不在 %s" % (entity, fid, _TYPES))
         if f.get("derived_from_payment") or fid in _PAYMENT_DERIVED:
             raise ValueError("%s.%s：付款衍生旗標不得作為規則輸入" % (entity, fid))
-        if (f.get("money") or f.get("internal")) and f.get("perm") not in PERMS:
-            raise ValueError("%s.%s：金額／內部欄位必須帶權限" % (entity, fid))
+        if f.get("money") and f.get("perm") not in PERMS:
+            raise ValueError("%s.%s：金額欄位必須帶權限" % (entity, fid))            # internal 單獨成立時＝能讀到該紀錄的人才看得到（S5 自訂欄位即是）
         if f.get("perm") is not None and f["perm"] not in PERMS:
             raise ValueError("%s.%s：未知的權限代號 %r" % (entity, fid, f["perm"]))
     return fields
@@ -83,7 +83,7 @@ def _s5_fields(entity, conn):
     for f in pub or []:
         t = kind.get(f.get("type"))
         if t and f.get("key"):
-            out.append(_f("cf_" + str(f["key"]), str(f.get("label") or f["key"]), t, options=f.get("options") if t == "enum" else None))
+            out.append(_f("cf_" + str(f["key"]), str(f.get("label") or f["key"]), t, options=f.get("options") if t == "enum" else None, internal=True))
     return out
 
 

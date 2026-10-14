@@ -49,11 +49,10 @@ def test_payment_derived_fields_cannot_enter_the_catalog_positive_control():
     C._check_catalog("case", [C._f("x_flag", "旗標", "bool")])                      # 對照：沒有衍生標記的正常欄位通過
 
 
-def test_money_and_internal_fields_must_carry_a_permission():
+def test_money_fields_must_carry_a_permission():
     with pytest.raises(ValueError):
         C._check_catalog("case", [C._f("cost", "成本", "number", money=True)])
-    with pytest.raises(ValueError):
-        C._check_catalog("case", [C._f("memo", "內部備註", "text", internal=True)])
+    C._check_catalog("case", [C._f("memo", "內部備註", "text", internal=True)])          # internal 單獨成立：能讀到紀錄的人才看得到（S5 自訂欄位）
     with pytest.raises(ValueError):
         C._check_catalog("case", [C._f("a", "A", "number"), C._f("a", "B", "number")])      # 代號重複
     with pytest.raises(ValueError):
@@ -152,3 +151,17 @@ def test_settings_defaults_and_loosen_direction(client):
     assert SR.get("builder_governance", "enforce_rule_set") == 0
     f = SR._g("builder_governance")["fields"]["enforce_rule_set"]
     assert f.loosen == "down" and f.recommended == 1
+
+
+def test_s5_custom_fields_enter_as_internal_cf_ids_and_disabled_ones_are_absent(monkeypatch):
+    import types
+    fake = types.ModuleType("helpers.builtin_fields")
+    fake.public_fields = lambda rt, conn=None: [{"key": "site", "label": "工地", "type": "text"}, {"key": "lvl", "label": "等級", "type": "select", "options": ["A", "B"]},
+                                                 {"key": "ok", "label": "已確認", "type": "checkbox"}, {"key": "d", "label": "日期", "type": "date"}] if rt == "case_info" else []
+    monkeypatch.setitem(sys.modules, "helpers.builtin_fields", fake)
+    f = C.all_fields("case")
+    assert {k: f[k]["type"] for k in ("cf_site", "cf_lvl", "cf_ok", "cf_d")} == {"cf_site": "text", "cf_lvl": "enum", "cf_ok": "bool", "cf_d": "date"}
+    assert all(f[k]["internal"] and f[k]["perm"] is None and not f[k]["money"] for k in ("cf_site", "cf_lvl"))
+    assert f["cf_lvl"]["options"] == ["A", "B"]
+    fake.public_fields = lambda rt, conn=None: []                                      # 欄位被停用 ⇒ 目錄裡沒有 ⇒ 引用它的已發布規則不評估（不當成故障）
+    assert "cf_site" not in C.all_fields("case")
