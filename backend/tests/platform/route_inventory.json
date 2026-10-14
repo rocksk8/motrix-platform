@@ -1,16 +1,16 @@
 {
  "summary": {
-  "endpoints_total": 865,
-  "endpoints_api": 861,
-  "write_total": 468,
-  "write_api": 468,
-  "get_api": 393,
-  "distinct_paths_api": 727,
-  "write_with_body_api": 341,
-  "write_with_path_param_api": 340
+  "endpoints_total": 868,
+  "endpoints_api": 864,
+  "write_total": 470,
+  "write_api": 470,
+  "get_api": 394,
+  "distinct_paths_api": 730,
+  "write_with_body_api": 343,
+  "write_with_path_param_api": 341
  },
  "select_star": {
-  "modules": 276,
+  "modules": 277,
   "archive": 94,
   "routers": 11,
   "helpers": 11,
@@ -1689,6 +1689,11 @@
    "body": false
   },
   "GET /api/quotations/{quote_no}/stages": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/quotations/{quote_no}/stages/templates": {
    "w": false,
    "pp": 1,
    "body": false
@@ -3493,6 +3498,11 @@
    "pp": 0,
    "body": true
   },
+  "POST /api/quotations/stage-templates/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/quotations/{no}/materials/{idx}/files": {
    "w": true,
    "pp": 2,
@@ -3699,6 +3709,11 @@
    "body": true
   },
   "POST /api/quotations/{quote_no}/stages": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/stages/apply-template": {
    "w": true,
    "pp": 1,
    "body": true

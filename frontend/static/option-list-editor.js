@@ -158,7 +158,7 @@
     root.setAttribute('data-state', st.state)
     root.appendChild(el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: st.open ? '收起選項清單' : '編輯選項清單', onclick: function () { st.open = !st.open; if (st.open) load(); else render() } }))
     if (!st.open) return
-    var panel = el('div', { style: 'margin-top:6px;padding:10px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--bg-card,#fff);max-width:680px;max-height:70vh;overflow:auto' })
+    var panel = el('div', { style: 'margin-top:6px;padding:10px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--bg-card,#fff);max-width:680px;max-height:calc(70vh / var(--fz,1));overflow:auto' })
     if (IDS.length > 1) {
       panel.appendChild(el('select', { style: 'margin-bottom:6px', onchange: function (ev) { st.id = ev.target.value; load() } }, IDS.map(function (id) { return el('option', { value: id, text: id, selected: id === st.id ? 'selected' : null }) })))
     }

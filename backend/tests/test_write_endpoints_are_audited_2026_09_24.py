@@ -37,6 +37,8 @@ AUDIT_WRAPPERS = {
     "dispatch_review_withdraw": ("modules/subcontract/api/dispatch_approval.py", "撤回成功寫 …withdraw"),
     # `/accept` 與 `/status`：作業狀態改變成功才寫 vendor.dispatch.<target>
     "dispatch_status_audited": ("modules/subcontract/api/vendor_contractors.py", "作業狀態改變成功寫 vendor.dispatch.<target>"),
+    # S-ST2 套用階段樣板：實際寫入在 `_apply_stage_template_write`，commit 後寫 case_stage.apply_template（預覽 dryRun 與「沒有可建立的階段」都不寫入、不稽核）
+    "_apply_stage_template_write": ("modules/case/api/quotations.py", "套用成功（階段已建立）寫 case_stage.apply_template"),
 }
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
@@ -59,6 +61,9 @@ EXEMPT = {
     # ── 匯出範本預覽（BP-3）：POST 只為帶草稿範本，不寫任何資料 ──
     ("export_templates.py", "POST", "/api/export-templates/{export_id}/preview"):
         "preview：只在記憶體內驗證草稿範本並渲染前幾列，不開寫入、不 commit、不計匯出次數、不留 export 稽核；僅最高管理者、設定 builder_exports.enabled 關著回 404",
+    # ── 階段樣板預覽（t62 S-ST2）：POST 只為帶草稿樣板，不寫任何資料 ──
+    ("modules/case/api/quotations.py", "POST", "/api/quotations/stage-templates/preview"):
+        "preview：只在記憶體內驗證草稿樣板（definition_problems）並以純函式 plan() 算出會建立哪些階段，不開寫入、不 commit、不碰任何案件；僅最高管理者、builder_stage_templates 旗標關閉時 404。真正套用的 apply-template 另有稽核。",
     # ── 轉簽（第54班）：稽核與換人同一個交易（直接 INSERT audit_log，寫不進去整個轉簽回滾），掃描器只認 _audit／_system_audit 呼叫 ──
     ("approval_queue.py", "POST", "/api/approval-queue/reassign"):
         "稽核 approval.reassign 在同一個交易內由端點直接寫入 audit_log（第 54 班強制稽核：寫不進去整個轉簽回滾，不再是 commit 之後吞錯誤的 _audit）；detail 上限與欄位推導沿用 _audit 的同一份規則",
