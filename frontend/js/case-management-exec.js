@@ -11,6 +11,15 @@ window.CM_PARTS.push(() => ({
     _stFlag: undefined,      // undefined＝設定還沒讀完；true／false＝旗標 builder_stage_templates
     _layoutP: null,          // initLayout() 的 promise（預設階段 seed 要在旗標讀完之後才決定）
     stTpl: [],
+    // 按下「建立階段」會發生什麼，用白話說清楚（預覽上方的摘要）
+    stSummary() {
+      const p = this.stDlg.plan
+      if (!p) return ''
+      if (!p.stages.length) return '按下去不會新增任何階段。'
+      const hasRatio = p.stages.some(s => s.ratioBp !== null)
+      return '按下「建立階段」會在這個案件新增 ' + p.stages.length + ' 個階段（開始與結束日由基準日往後推算），已有的階段不會被改動。' +
+        (hasRatio ? '階段會帶入建議的收入認列比例（合計 100%），建立後可以在各階段上修改。' : '') + '建立後可以再改名稱、日期、負責人，樣板之後的修改不會影響這個案件。'
+    },
     stDlg: { open: false, key: '', base: '', mode: 'new', plan: null, busy: false, err: '' },
     _ganttInstance: null,
     showImportModal: false,
@@ -579,7 +588,7 @@ window.CM_PARTS.push(() => ({
     },
     async stOpen() {
       await this.stInit()
-      if (!this.stTpl.length) { MotrixUI.toast('目前沒有已發布的階段樣板', {kind: 'info'}); return }
+      if (!this.stTpl.length) { MotrixUI.toast('還沒有已發布的階段樣板，請最高管理者先到「管理階段樣板」建立並發布', {kind: 'info'}); return }
       const has = (this.cr.caseRecord?.stages || []).length > 0
       const t = new Date()
       this.stDlg = { open: true, key: (this.stTpl[0] || {}).key || '', base: t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'),

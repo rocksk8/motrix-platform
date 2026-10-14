@@ -41,7 +41,7 @@ def plan(body, base_date, mode, existing):
     except PlanError:
         raise
     except (KeyError, TypeError, ValueError, AttributeError, IndexError, OverflowError):
-        raise PlanError("這個樣板的已發布內容無法解析，請最高管理者在樣板編輯器重新檢查並發布", 400)
+        raise PlanError("這個樣板的內容有問題，暫時無法套用。請最高管理者在「管理階段樣板」裡重新檢查並發布", 400)
 
 
 def _plan(body, base_date, mode, existing):
@@ -51,13 +51,13 @@ def _plan(body, base_date, mode, existing):
     base = _d(base_date)
     have = {e["stage_key"]: e["id"] for e in existing if e.get("stage_key")}
     if mode == "new" and existing:
-        raise PlanError("這個案件已經有階段了；要補上缺少的階段請選「附加」")
+        raise PlanError("這個案件已經有階段了。要把樣板裡還沒有的階段補進來，請選「補上缺少的階段」；已有的階段不會被改動")
     ratios = [s.get("ratioBp") for s in stages]
     has_ratio = any(r is not None for r in ratios)
     use_ratio = has_ratio and not existing
     notes, skipped, out = [], [], []
     if has_ratio and existing:
-        notes.append("這個案件已經有階段，樣板的建議收入認列比例不會帶入（避免合計不是 100%）；需要的話請在階段上自行設定比例")
+        notes.append("這個案件已經有階段，所以樣板的建議收入認列比例不會帶入（否則合計會不是 100%）。需要的話，請在各階段上自己設定比例")
     for s in stages:
         k = s["key"]
         if k in have:
@@ -76,13 +76,14 @@ def _plan(body, base_date, mode, existing):
             "existingDeps": [have[d] for d in (s.get("dependsOn") or []) if d in have],
         })
     if skipped:
-        notes.append("本案已有的階段種類不會重複建立：" + "、".join(skipped))
+        lab = {s["key"]: s["label"].strip() for s in stages}
+        notes.append("這個案件已經有這些樣板階段，不會重複建立：" + "、".join(lab.get(k, k) for k in skipped))
     if mode == "append":
         # 附加以「階段種類」比對；手動建立的階段沒有種類，即使名稱相同也不算已有 ⇒ 會出現兩個同名階段，先講清楚
         have_labels = {(e.get("label") or "").strip().casefold(): e.get("label") for e in existing if not e.get("stage_key")}
         dup = [o["label"] for o in out if o["label"].casefold() in have_labels]
         if dup:
-            notes.append("本案已有同名但不是由樣板建立的階段：" + "、".join(dup) + "；附加後會出現兩個同名階段（附加只比對階段種類，不比對名稱）")
+            notes.append("這個案件已經有手動建立的同名階段：" + "、".join(dup) + "。補上之後會有兩個同名的階段（系統只用樣板的階段代號判斷「已經有了」，不比對名稱），需要的話請自己刪掉其中一個")
     if not out:
-        notes.append("沒有需要補上的階段")
+        notes.append("樣板裡的階段這個案件都已經有了，沒有需要補上的")
     return {"stages": out, "notes": notes, "skipped": skipped}
