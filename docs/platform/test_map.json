@@ -23076,6 +23076,7 @@
     "file:backend/tests/platform/_response_keys.py",
     "file:backend/tests/platform/_write_golden.py",
     "file:backend/tests/platform/route_inventory.json",
+    "file:backend/tests/platform/write_golden_baseline.json",
     "file:backend/tests/platform/write_golden_cases/__init__.py",
     "file:backend/tests/platform/write_golden_cases/cases_zz_rest.py"
    ],
@@ -23089,6 +23090,7 @@
     ],
     "path": [
      "backend/tests/platform/route_inventory.json",
+     "backend/tests/platform/write_golden_baseline.json",
      "backend/tests/platform/write_golden_cases/cases_zz_rest.py"
     ]
    },
