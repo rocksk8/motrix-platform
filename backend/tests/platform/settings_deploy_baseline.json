@@ -241,6 +241,8 @@
   "material_recognition": {"who_may": [1, 1, 2, false], "on_denied": [1, 1, 2, false], "mail_window_minutes": [60, 1, 1440, false], "mail_cap": [10, 1, 200, false]},
   "builder_menu": {"enabled": [0, 0, 1, false]},
   "finance_reports": {"custom_aging": [0, 0, 1, false], "aging_day1": [30, 1, 3650, false], "aging_day2": [60, 1, 3650, false], "aging_day3": [90, 1, 3650, false]},
+  "finance_cashier": {"custom_due_soon": [0, 0, 1, false], "due_soon_payable_days": [7, 1, 60, false], "due_soon_planned_days": [3, 1, 60, false], "custom_bank_aliases": [0, 0, 1, false], "bank_alias_date": ["交易日期,日期,過帳日,轉帳日期,交易日,date,Date", null, null, false], "bank_alias_amount": ["金額,提出金額,支出金額,轉出金額,付款金額,提款金額,amount,Amount,Debit,withdrawal", null, null, false], "bank_alias_desc": ["摘要,備註,說明,對方戶名,附言,memo,Description,Memo", null, null, false]},
+  "case_close_gates": {"enabled": [0, 0, 1, false], "require_stages": [0, 0, 1, false], "require_payment_items": [0, 0, 1, false], "require_settlement": [0, 0, 1, false], "count_extra_expense_drafts": [0, 0, 1, false]},
   "project_margin": {"warn_pct": [0, 0, 100, false]},
   "system_hub": {"show_denied": [0, 0, 1, false]},
   "uploads": {

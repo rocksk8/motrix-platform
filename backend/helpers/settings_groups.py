@@ -425,6 +425,75 @@ register_group(
     help="財務報表的顯示參數。金額、稅額與捨入不在這裡調整。",
 )
 
+# 出納顯示與對帳參數（財務盤點 F2／F3）：即將到期提醒天數、銀行對帳單欄位別名。各自有開關，預設關＝與今天逐位元相同。
+# 都不是金額；只影響出納頁怎麼標色，以及對帳單 CSV 怎麼找欄位（找不到金額欄一樣會被擋下）。
+register_group(
+    "finance_cashier", "出納",
+    [
+        S("custom_due_soon", "int", 0, min=0, max=1, risk="none", recommended=0,
+          question="出納頁的「即將到期」要不要改用自訂天數？", label="自訂即將到期天數",
+          help="關閉時，待付款的應付日 7 天內、預定付款日 3 天內會標成「即將到期」。開啟後改用下面兩個天數。",
+          impact="只改出納頁的標色與提示文字，不改任何金額或單據狀態。立即生效。",
+          choices=[(0, "關閉（預設）", "維持 7 天與 3 天。"), (1, "開啟", "採用下面兩個天數。")]),
+        S("due_soon_payable_days", "int", 7, min=1, max=60, unit="天", risk="none", recommended=7,
+          question="應付日幾天內要標成「即將到期」？", label="應付即將到期天數",
+          help="待付款與應收清單的日期在今天起這個天數內，會用橘字標示。", impact="只影響顏色。"),
+        S("due_soon_planned_days", "int", 3, min=1, max=60, unit="天", risk="none", recommended=3,
+          question="預定付款日幾天內要提示「即將到期」？", label="預定付款日提示天數",
+          help="預定付款日在今天起這個天數內，會顯示「幾天內到期」的提示。", impact="只影響提示文字。"),
+        S("custom_bank_aliases", "int", 0, min=0, max=1, risk="none", recommended=0,
+          question="匯入銀行對帳單時，要不要改用自訂的欄位名稱清單？", label="自訂對帳單欄位名稱",
+          help="各家銀行匯出的欄位名稱不同。關閉時使用內建清單；開啟後使用下面三欄的清單（用逗號分隔，越前面越優先）。",
+          impact="只影響對帳單檔案怎麼找出日期、金額、摘要欄；找不到金額欄時一樣會擋下，不會猜。立即生效。",
+          choices=[(0, "關閉（預設）", "使用內建清單。"), (1, "開啟", "使用下面的清單；寫得不合理的欄位會退回內建清單。")]),
+        S("bank_alias_date", "str", "交易日期,日期,過帳日,轉帳日期,交易日,date,Date", risk="none", recommended="交易日期,日期,過帳日,轉帳日期,交易日,date,Date",
+          question="哪些欄位名稱代表交易日期？", label="對帳單日期欄名稱", help="用逗號分隔，最多 20 個、每個最多 30 字。", impact="只影響對帳單匯入。"),
+        S("bank_alias_amount", "str", "金額,提出金額,支出金額,轉出金額,付款金額,提款金額,amount,Amount,Debit,withdrawal", risk="none", recommended="金額,提出金額,支出金額,轉出金額,付款金額,提款金額,amount,Amount,Debit,withdrawal",
+          question="哪些欄位名稱代表金額？", label="對帳單金額欄名稱", help="用逗號分隔，最多 20 個、每個最多 30 字。", impact="只影響對帳單匯入。"),
+        S("bank_alias_desc", "str", "摘要,備註,說明,對方戶名,附言,memo,Description,Memo", risk="none", recommended="摘要,備註,說明,對方戶名,附言,memo,Description,Memo",
+          question="哪些欄位名稱代表摘要？", label="對帳單摘要欄名稱", help="用逗號分隔，最多 20 個、每個最多 30 字。", impact="只影響對帳單匯入。"),
+    ],
+    sensitive=False, risk="none",
+    help="出納頁的顯示天數與銀行對帳單欄位名稱；金額、權限與單據狀態不在這裡調整。",
+)
+
+# 案件結案閘門的『只收緊』選項（財務盤點 S-C1；設計 FINANCE-FRAMEWORK-INVENTORY-T62.md §5）：預設全關＝與今天相同。
+# 這裡只能讓更多案件「不能結案」，不能拿掉任何一關；關掉主開關或任一選項都是放寬，要第二位最高管理者核准並經確認期間。
+# 收款、單據、精算、額外支出四關永遠存在（結案後案件鎖定，收入與成本必須先確定）。
+register_group(
+    "case_close_gates", "結案條件加嚴",
+    [
+        S("enabled", "int", 0, min=0, max=1, risk="ops", loosen="down", recommended=0,
+          impact_scope={"documents": ["案件結案（完結案）"], "roles": ["所有按下「結案」的人"], "amounts": "不涉及金額。", "reversible": True, "effective": "pending"},
+          question="要不要啟用結案條件加嚴？", label="啟用結案條件加嚴",
+          help="開啟後，下面勾選的項目會變成結案的必要條件。關閉時結案條件與今天完全相同。",
+          impact="只會讓更多案件暫時不能結案，不會改任何資料。關閉屬於放寬，需要另一位最高管理者核准並經確認期間。",
+          choices=[(0, "關閉（預設）", "結案條件與今天相同。"), (1, "啟用", "下面勾選的加嚴項目生效。")]),
+        S("require_stages", "int", 0, min=0, max=1, risk="ops", loosen="down", recommended=0,
+          impact_scope={"documents": ["案件結案"], "roles": ["所有按下「結案」的人"], "amounts": "不涉及金額。", "reversible": True, "effective": "pending"},
+          question="沒有建立執行管理階段的案件，要不要也不能結案？", label="結案需有執行階段",
+          help="今天沒有任何階段的案件，進度這一關視為「無需檢查」。啟用後，沒有階段就不能結案。", impact="只影響結案檢查。關閉屬於放寬。",
+          choices=[(0, "不要（預設）", "沒有階段的案件照舊可結案。"), (1, "要加嚴", "沒有階段的案件不能結案。")]),
+        S("require_payment_items", "int", 0, min=0, max=1, risk="ops", loosen="down", recommended=0,
+          impact_scope={"documents": ["案件結案"], "roles": ["所有按下「結案」的人"], "amounts": "不涉及金額。", "reversible": True, "effective": "pending"},
+          question="沒有建立款項明細的案件，要不要也不能結案？", label="結案需有款項明細",
+          help="今天沒有任何款項期別的案件，收款這一關視為「無需檢查」。啟用後，沒有款項明細就不能結案。", impact="只影響結案檢查。關閉屬於放寬。",
+          choices=[(0, "不要（預設）", "沒有款項明細的案件照舊可結案。"), (1, "要加嚴", "沒有款項明細的案件不能結案。")]),
+        S("require_settlement", "int", 0, min=0, max=1, risk="ops", loosen="down", recommended=0,
+          impact_scope={"documents": ["案件結案"], "roles": ["所有按下「結案」的人"], "amounts": "不涉及金額。", "reversible": True, "effective": "pending"},
+          question="還沒建立成本精算的案件，要不要也不能結案？", label="結案需已建立精算",
+          help="今天完全沒有精算資料的案件，精算這一關視為「無需檢查」。啟用後，沒有精算就不能結案。", impact="只影響結案檢查。關閉屬於放寬。",
+          choices=[(0, "不要（預設）", "沒有精算資料的案件照舊可結案。"), (1, "要加嚴", "沒有精算資料的案件不能結案。")]),
+        S("count_extra_expense_drafts", "int", 0, min=0, max=1, risk="ops", loosen="down", recommended=0,
+          impact_scope={"documents": ["案件結案"], "roles": ["所有按下「結案」的人"], "amounts": "不涉及金額。", "reversible": True, "effective": "pending"},
+          question="額外支出還停在草稿（尚未送審）時，要不要也不能結案？", label="草稿額外支出也擋結案",
+          help="今天只有「送審中」的額外支出會擋結案。啟用後，草稿狀態的額外支出也會擋。", impact="只影響結案檢查。關閉屬於放寬。",
+          choices=[(0, "不要（預設）", "只擋送審中的額外支出。"), (1, "要加嚴", "草稿的額外支出也擋結案。")]),
+    ],
+    sensitive=False, risk="ops",
+    help="結案檢查的加嚴選項。只能讓結案更嚴，不能拿掉收款、單據、精算、額外支出任何一關。",
+)
+
 # 完工單「從報價單帶入項目」（第 57 班；設計 COMPLETION-NOTE-QUOTE-ITEMS-T56 §5）：預設值＝使用者 2026-10-12 的表單裁示。
 # 全部是『之後新建／重新帶入』的行為選項，不改任何既有完工單。金額永遠不進完工單（結構性不變式，不在此調整）。
 register_group(

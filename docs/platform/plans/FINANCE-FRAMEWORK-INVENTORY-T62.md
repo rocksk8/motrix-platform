@@ -119,3 +119,9 @@
 2. 款項類別清單（F4）：key 是否可由管理者新增（建議：只能改 label／排序／停用，不新增 key，因為 key 進請款單 JSON）。
 3. 結案閘門：①進度可否做成選配（放寬，需第二位核准）；其餘四關是否同意『永不可關、只可收緊』。
 4. `tax401.py:206` 的捨入口徑疑點是否交會計線確認。
+
+## 7. 第二批切片（F2／F3／S-C1，旗標預設關；本節為實作紀錄）
+- **F3 出納即將到期天數**：設定群組 `finance_cashier`（`custom_due_soon`、`due_soon_payable_days` 7、`due_soon_planned_days` 3）。`frontend/js/cashier.js` 預設仍是 7／3；頁面載入時**多一次** `GET /api/settings-center/public?groups=finance_cashier`（登入即可讀、非敏感；失敗或旗標關就維持預設，不影響頁面）。這是出納頁唯一多出來的請求（OFF 時也會有，回應內容不影響畫面）。
+- **F2 銀行對帳單欄位別名**：同一個群組（`custom_bank_aliases`、`bank_alias_date/amount/desc`，逗號分隔、順序即優先序，最多 20 個、每個 30 字）。`cashier.py::_parse_bank_csv` 改讀 `finance_params.bank_aliases()`；旗標關＝逐字等於原本三個常數（測試對照）；不合法的欄退回該欄預設；找不到金額欄**一樣 400，不猜**。
+- **S-C1 結案條件加嚴**：設定群組 `case_close_gates`（`enabled` 主開關＋四個選項：`require_stages`、`require_payment_items`、`require_settlement`、`count_extra_expense_drafts`），**只能讓更多案件不能結案**；沒有任何選項能關閉收款／單據／精算／額外支出任何一關（測試鎖住選項清單）。每個欄位 `loosen="down"`：關閉主開關或任一選項＝放寬，要第二位最高管理者核准並經確認期間。實作點：`quotations.py::_gates_from_facts(facts, d, opts=None)`（opts 缺省＝過去的路徑，逐項相同）、`_close_gate_facts(..., xe_drafts=False)`（草稿計數只在該選項開啟時才多一句 SQL）、`_close_gate_opts(conn)`。擋結案、`/close-gates`、`gate-matrix`、`case-bundle` 都走同一份判定。**讀不到設定 ⇒ 全部當作開啟（往嚴）**：嚴格讀取優先用 `helpers.settings_strict`，尚未合併時用 `routers.definitions._strict_setting`。
+- **測試**：`test_finance_cashier_gates_2026_10_14.py` 純函式 17 題已用 `--noconftest` 執行全綠（含 OFF 逐項相同、**單調性**〔任何選項組合下被擋關卡只增不減〕、每個選項只翻自己那關且只從『無需檢查』翻、讀不到＝全開、草稿計數 SQL 只在開啟時出現）；需要資料庫的 3 題（端點跟著選項、擋結案訊息、放寬走待核准）寫好未跑。

@@ -30,6 +30,7 @@ import io
 from urllib.parse import quote as _url_quote
 
 from helpers import download_name
+from helpers import finance_params as _finance_params   # 銀行對帳單欄位別名（預設逐字等於下面三個常數）
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from core import registry
 from db import get_db, spawn_bg_thread
@@ -804,9 +805,10 @@ def _parse_bank_csv(raw: bytes) -> list:
 
     reader = csv.DictReader(io.StringIO(text))
     fieldnames = reader.fieldnames or []
-    date_col = _pick_csv_header(fieldnames, _BANK_DATE_ALIASES)
-    amt_col  = _pick_csv_header(fieldnames, _BANK_AMOUNT_ALIASES)
-    desc_col = _pick_csv_header(fieldnames, _BANK_DESC_ALIASES)
+    _al = _finance_params.bank_aliases()        # 旗標 finance_cashier.custom_bank_aliases 關＝內建三個常數
+    date_col = _pick_csv_header(fieldnames, _al["date"])
+    amt_col  = _pick_csv_header(fieldnames, _al["amount"])
+    desc_col = _pick_csv_header(fieldnames, _al["desc"])
     if not amt_col:
         raise HTTPException(400, f"CSV 找不到可辨識的金額欄位，偵測到的欄位為：{'、'.join(fieldnames) or '（無）'}")
 

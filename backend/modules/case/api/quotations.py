@@ -1221,7 +1221,8 @@ def gate_matrix(authorization: str = Header(None)):
 
     # CM6b：五關與到期資訊都批次取（原本每件約 17 句 SQL）
     nos = [r["quote_no"] for r in rows]
-    all_facts = _close_gate_facts(conn, nos)
+    _opts = _close_gate_opts(conn)
+    all_facts = _close_gate_facts(conn, nos, xe_drafts=bool(_opts and _opts.get("count_extra_expense_drafts")))
     overdue_by, next_by = {}, {}
     for i in range(0, len(nos), _GATE_CHUNK):
         ch = nos[i:i + _GATE_CHUNK]
@@ -1243,7 +1244,7 @@ def gate_matrix(authorization: str = Header(None)):
             d = json.loads(r["data_json"] or "{}")
         except Exception:
             d = {}
-        gates = _gates_from_facts(all_facts[r["quote_no"]], d)
+        gates = _gates_from_facts(all_facts[r["quote_no"]], d, _opts)
         blocked = [g for g in gates if g["state"] == "blocked"]
 
         # 階段到期：逾期數與下一個未完成階段的到期日（批次取回，見上）
@@ -2255,7 +2256,7 @@ _CLOSE_DOC_TABLES = [
 _GATE_CHUNK = 300   # IN 清單每批上限（舊版 SQLite 參數上限 999）
 
 
-def _close_gate_facts(conn, quote_nos: list) -> dict:
+def _close_gate_facts(conn, quote_nos: list, xe_drafts: bool = False) -> dict:
     """CM6b（2026-09-24）：五關需要的資料庫事實，一次批次取回（GROUP BY），與案件數無關地
     只跑固定幾句 SQL。回傳 {quote_no: facts}；判定本身在 _gates_from_facts()（純計算）。
     關卡矩陣原本每件 ~17 句，40 件就是 681 句。
@@ -2304,15 +2305,33 @@ def _close_gate_facts(conn, quote_nos: list) -> dict:
     except Exception:
         for no in nos:
             facts[no]["xe"] = None    # 舊環境還沒有這張表（DB v75 之前）
+    if xe_drafts:                      # 只在『結案條件加嚴』的草稿選項開啟時才多這一句（關閉時 SQL 與過去完全相同）
+        try:
+            for ch in chunks:
+                ph = ",".join("?" * len(ch))
+                for r in conn.execute(
+                        f"SELECT quote_no, COUNT(*) c FROM case_extra_expenses WHERE quote_no IN ({ph}) AND status = '草稿' GROUP BY quote_no", ch):
+                    facts[r["quote_no"]]["xe_draft"] = r["c"] or 0
+        except Exception:
+            pass
     return facts
+
+
+def _close_gate_opts(conn):
+    """『結案條件加嚴』選項（設定群組 case_close_gates，預設全關）。全關 ⇒ None（走過去的路徑）；讀不到 ⇒ 全部開（往嚴的一邊，見 finance_params）。"""
+    from helpers import finance_params as _FP
+    o = _FP.close_gate_options(conn)
+    return o if any(o.values()) else None
 
 
 def _case_close_gates(conn, quote_no: str, d: dict) -> list:
     """單一案件的五關（擋結案、close-gates 用）。與關卡矩陣走同一條：批次取數＋_gates_from_facts()。"""
-    return _gates_from_facts(_close_gate_facts(conn, [quote_no])[quote_no], d)
+    opts = _close_gate_opts(conn)
+    facts = _close_gate_facts(conn, [quote_no], xe_drafts=bool(opts and opts.get("count_extra_expense_drafts")))
+    return _gates_from_facts(facts[quote_no], d, opts)
 
 
-def _gates_from_facts(facts: dict, d: dict) -> list:
+def _gates_from_facts(facts: dict, d: dict, opts: dict = None) -> list:
     """完結案前置條件，回傳五個關卡的結構化狀態（順序＝結案檢查順序）。**唯一的判定**。
 
     每個關卡：{key, label, state, value, ratio, reason, pendingUsernames}
@@ -2324,7 +2343,11 @@ def _gates_from_facts(facts: dict, d: dict) -> list:
 
     # ① 執行管理進度 100%（沒有任何階段視為「無需檢查」，不算未達成）
     total, done = facts["stages"]
-    if total == 0:
+    if total == 0 and opts and opts.get("require_stages"):
+        gates.append({"key": "progress", "label": "進度", "state": "blocked",
+                      "value": "無階段", "ratio": 0.0, "reason": "尚未建立執行管理階段（結案條件加嚴）",
+                      "pendingUsernames": []})
+    elif total == 0:
         gates.append({"key": "progress", "label": "進度", "state": "na",
                       "value": "無階段", "ratio": None, "reason": None,
                       "pendingUsernames": []})
@@ -2340,7 +2363,11 @@ def _gates_from_facts(facts: dict, d: dict) -> list:
 
     # ② 款項明細全部收齊（沒有任何期別視為「無需檢查」）
     items = ((d.get("caseRecord") or {}).get("payment") or {}).get("items") or []
-    if not items:
+    if not items and opts and opts.get("require_payment_items"):
+        gates.append({"key": "payment", "label": "收款", "state": "blocked",
+                      "value": "無款項", "ratio": 0.0, "reason": "尚未建立款項明細（結案條件加嚴）",
+                      "pendingUsernames": []})
+    elif not items:
         gates.append({"key": "payment", "label": "收款", "state": "na",
                       "value": "無款項", "ratio": None, "reason": None,
                       "pendingUsernames": []})
@@ -2400,7 +2427,11 @@ def _gates_from_facts(facts: dict, d: dict) -> list:
     # 精算還停在草稿等於把一張永遠算不完的帳鎖進去。判斷沿用既有熱路徑欄位口徑
     # （data_json.settlement.status），完全沒有精算資料的案件視為「無需檢查」。
     settlement = (d.get("settlement") or {})
-    if not settlement:
+    if not settlement and opts and opts.get("require_settlement"):
+        gates.append({"key": "settlement", "label": "精算", "state": "blocked",
+                      "value": "未建", "ratio": 0.0, "reason": "尚未建立成本精算（結案條件加嚴）",
+                      "pendingUsernames": []})
+    elif not settlement:
         gates.append({"key": "settlement", "label": "精算", "state": "na",
                       "value": "未建", "ratio": None, "reason": None,
                       "pendingUsernames": []})
@@ -2418,7 +2449,13 @@ def _gates_from_facts(facts: dict, d: dict) -> list:
     # ⑤ 額外支出不可停在送審中（2026-09-13 一併補上）：那是還沒定案的成本，
     # 結案後才核准會讓已結案案件的成本事後改變。
     xe_total, xe_pending = facts["xe"] if facts["xe"] is not None else (None, None)
-    if xe_total is None or xe_total == 0:
+    xe_draft = (facts.get("xe_draft") or 0) if (opts and opts.get("count_extra_expense_drafts")) else 0
+    if xe_draft:
+        parts = ([f"額外支出尚有 {xe_pending} 筆送審中"] if xe_pending else []) + [f"額外支出尚有 {xe_draft} 筆草稿未送審（結案條件加嚴）"]
+        gates.append({"key": "extraExpense", "label": "變更", "state": "blocked",
+                      "value": f"{xe_pending} 送審" if xe_pending else f"{xe_draft} 草稿", "ratio": 0.0,
+                      "reason": "；".join(parts), "pendingUsernames": []})
+    elif xe_total is None or xe_total == 0:
         gates.append({"key": "extraExpense", "label": "變更", "state": "na",
                       "value": "無", "ratio": None, "reason": None,
                       "pendingUsernames": []})
