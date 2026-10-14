@@ -380,8 +380,11 @@
       cfg = c
       raw.recordType = c.recordType
       document.addEventListener('alpine:init', function () { window.Alpine.store('cf', raw) })
-      return load()
+      // deferred：只登記 store，不發任何請求；旗標開啟時由頁面（已經在讀設定的那一次請求裡看到旗標）呼叫 start()。
+      // 旗標關閉 ⇒ 整個頁面載入期間不多打任何一個請求（OFF 的網路清單與舊版相同）。
+      return c.deferred ? Promise.resolve() : load()
     },
+    start: function () { return cfg ? load() : Promise.resolve() },
     reload: load,
     config: function () { return cfg },
     _state: function () { return S() },          // 測試用

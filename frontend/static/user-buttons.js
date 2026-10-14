@@ -417,8 +417,10 @@
       raw.module = c.module
       raw.page = c.page
       document.addEventListener('alpine:init', function () { window.Alpine.store('ub', raw) })
-      return load()
+      // deferred：只登記 store，不發任何請求；旗標開啟時由頁面（已在讀設定的那一次請求裡看到旗標）呼叫 start()。
+      return c.deferred ? Promise.resolve() : load()
     },
+    start: function () { return cfg ? load() : Promise.resolve() },
     reload: load,
     run: run,
     config: function () { return cfg },

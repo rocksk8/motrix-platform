@@ -222,3 +222,27 @@ def test_editor_preview_as_user_lists_visible_and_hidden_and_never_runs_anything
     assert json.loads(r["calls"][0]["body"])["user"] == "ub_low"                                       # 帳號去頭尾空白
     assert r["res"]["hidden"][0]["label"] == "名冊" and "沒有匯出" in r["res"]["hidden"][0]["reason"]
     assert "沒有執行任何動作" in r["msg"]
+
+
+# ── 旗標關閉：整個頁面載入期間不多打任何請求 ──────────────────────────────────
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_deferred_init_fires_nothing_until_start():
+    body = ("await window.MotrixUserButtons.init({ module: 'supply', page: 'suppliers.html', slot: 'toolbar', deferred: true })\n"
+            "const before = calls.fetch.length\n"
+            "await window.MotrixUserButtons.start()\n"
+            "console.log(JSON.stringify({ before, after: calls.fetch }))")
+    r = _node(body, "{ enabled: false, buttons: [] }")
+    assert r["before"] == 0 and r["after"] == ["/api/user-buttons/supply/suppliers.html"]
+    r = _node("await window.MotrixUserButtons.start(); console.log(JSON.stringify({ n: calls.fetch.length }))", "{}")
+    assert r["n"] == 0
+
+
+def test_suppliers_page_reads_all_three_flags_from_the_one_settings_request():
+    from core import source_tree
+    src = source_tree.page_file("suppliers.html").read_text(encoding="utf-8")
+    assert "settings-center/public?groups=builder_layout,builder_custom_fields,builder_actions" in src
+    assert "builder_actions.enabled === true" in src and "MotrixUserButtons.start()" in src
+    assert "deferred: true" in src.split("MotrixUserButtons.init({")[1].split("})")[0]
+    assert "deferred: true" in src.split("MotrixCustomFields.init({")[1].split("})")[0]
+    code = re.sub(r"//[^\n]*", "", src.replace("<!--", "//").replace("-->", ""))
+    assert "/api/custom-fields" not in code and "/api/user-buttons" not in code      # 只有程式庫在旗標開啟後才打
