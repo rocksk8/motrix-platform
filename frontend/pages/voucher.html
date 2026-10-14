@@ -238,7 +238,7 @@
             <select class="vc-input vc-filter" data-testid="voucher-filter-status" x-model="filterStatus">
               <option value="">全部狀態</option>
               <template x-for="st in ['草稿', '待審核', '簽核中', '已核准', '已過帳', '已作廢']" :key="st">
-                <option :value="st" x-text="st"></option>
+                <option :value="st" x-text="stLabel(st)"></option>
               </template>
             </select>
           </div>
