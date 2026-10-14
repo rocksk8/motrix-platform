@@ -173,15 +173,15 @@
         el('span', { text: x.value, style: 'min-width:90px;font-size:12px', title: st.locked[x.value] ? '已發布，不能改字' : '新選項' }),
         fixedLabel ? null : el('input', { type: 'text', value: x.label, maxlength: String(LABEL_MAX), style: 'flex:1;font-size:12px', oninput: function (ev) { x.label = ev.target.value; st.preview = null; st.previewHash = ''; st.state = 'idle' } }),
         (st.meta && st.meta.prefix) ? el('input', { type: 'text', value: x.prefix, maxlength: '5', placeholder: '料號前綴', disabled: st.locked[x.value] ? 'disabled' : null, style: 'width:80px;font-size:12px', oninput: function (ev) { x.prefix = ev.target.value; st.preview = null; st.previewHash = ''; st.state = 'idle' } }) : null,
-        el('label', { style: 'font-size:11px' }, [el('input', { type: 'checkbox', checked: x.disabled ? 'checked' : null, onchange: function (ev) { x.disabled = !!ev.target.checked; changed() } }), el('span', { text: ' 停用' })]),
+        (st.meta && st.meta.closed) ? null : el('label', { style: 'font-size:11px' }, [el('input', { type: 'checkbox', checked: x.disabled ? 'checked' : null, onchange: function (ev) { x.disabled = !!ev.target.checked; changed() } }), el('span', { text: ' 停用' })]),
         el('button', { type: 'button', text: '↑', onclick: function () { move(i, -1) } }),
         el('button', { type: 'button', text: '↓', onclick: function () { move(i, 1) } }),
         st.locked[x.value] ? null : el('button', { type: 'button', text: '移除', onclick: function () { st.items.splice(i, 1); changed() } })
       ]))
     })
     panel.appendChild(el('div', { style: 'display:flex;gap:6px;margin-top:6px' }, [
-      el('input', { type: 'text', value: st.newValue, placeholder: '新增選項', maxlength: String(LABEL_MAX), style: 'font-size:12px', oninput: function (ev) { st.newValue = ev.target.value } }),
-      el('button', { type: 'button', class: 'btn btn-sm', text: '＋ 新增選項', onclick: addItem }),
+      (st.meta && st.meta.closed) ? null : el('input', { type: 'text', value: st.newValue, placeholder: '新增選項', maxlength: String(LABEL_MAX), style: 'font-size:12px', oninput: function (ev) { st.newValue = ev.target.value } }),
+      (st.meta && st.meta.closed) ? null : el('button', { type: 'button', class: 'btn btn-sm', text: '＋ 新增選項', onclick: addItem }),
       el('button', { type: 'button', class: 'btn btn-sm', text: '預覽', disabled: st.busy ? 'disabled' : null, onclick: doPreview })
     ]))
     if (st.preview) {

@@ -43,6 +43,7 @@ from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged, 
 _log = logging.getLogger(__name__)
 
 
+from helpers.option_lists import payment_stage_name as _stage_name      # census S-F1：款項期別顯示名稱（選項清單關著／沒發布 ⇒ 與過去逐字相同）
 def _call_hook(hook, arg, what):
     """commit 之後的串接點呼叫（行事曆對齊等）：出任何錯只記 log，**絕不**讓已經完成的付款／改期回 500（稽核 S3）。"""
     try:
@@ -470,7 +471,7 @@ def _receivable_queue(conn, status: str = "unreceived") -> list:
                 "project":             row["project_name"] or "",
                 "salesPerson":         row["sales_person"] or "",
                 "dealTag":             row["deal_tag"] or "",
-                "type":                pi.get("type", f"第{idx+1}期"),
+                "type":                _stage_name(pi, idx),
                 "amount":              amounts[idx],
                 "quoteDate":           row["quote_date"] or "",
                 "expectedReceiptDate": expected,

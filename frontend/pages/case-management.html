@@ -26,6 +26,8 @@
   <script src="../static/download.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
+  <script src="../static/option-lists.js"></script>
+  <meta name="motrix-option-lists" content="payment_stage">   <!-- census S-F1：只是宣告；選項清單開啟且是最高管理者時，sidebar.js 才載入編輯器（關著＝沒有任何額外請求） -->
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
@@ -1871,7 +1873,7 @@
                       <span style="font-size:11px;font-weight:700;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;width:16px;flex-shrink:0" x-text="idx+1"></span>
                       <select class="fi" x-model="item.type" @change="setDirty()"
                               style="width:90px;flex-shrink:0;padding:5px 6px;font-size:12px">
-                        <option>訂金款</option><option>交貨款</option><option>驗收款</option><option>進度款</option><option>完工款</option><option>收款後出貨</option><option>自訂義</option><option>其他</option>
+                        <template x-for="o in stageOptions(item.type)" :key="o.value"><option :value="o.value" x-text="o.label"></option></template>
                       </select>
                       <input x-show="item.type==='自訂義'" class="fi" type="text" placeholder="輸入名稱..."
                              x-model="item.customLabel" @input="setDirty()"

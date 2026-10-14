@@ -2,7 +2,7 @@
 """選項清單（census #4）：管理者決定下拉選單有哪些選項、顯示名稱與順序；新增／改名／重排／停用，不能刪除已發布的選項。
 
 [單位] helper:option_lists    [層] L1    [穩定度] 實作
-[公開介面] BUILTIN, FIELD, GROUP, KIND, LABEL_MAX, MAX_VALUES, OFF_REASON, definition_problems, effective, enabled, ensure_kind, lists_for_menu, preview, registered
+[公開介面] BUILTIN, FIELD, GROUP, KIND, LABEL_MAX, MAX_VALUES, OFF_REASON, definition_problems, effective, enabled, ensure_kind, lists_for_menu, payment_stage_display, payment_stage_labels, payment_stage_name, preview, registered, request_stage_label
 [不變式] 設定 `builder_option_lists.enabled`（預設 0＝關）**且** `builder_governance.enabled`=1 才生效；關著 ⇒ `effective()` 回程式預設（與今天寫死的清單逐項相同）、
     選單回應不帶 `optionLists`、頁面不多任何請求。清單裡的 `value` 是**存進資料裡的字**（客戶類型 VIP、料件分類 網通設備…）：發布後不可刪除、不可改字，
     只能「停用」（停用＝新資料不能再選，舊資料照常顯示）或改 `label`（顯示名稱；`relabel:false` 的清單不允許改 label，因為該欄位的值同時被報表／科目對照拿來比對）。
@@ -13,6 +13,7 @@
     本版**不統計各選項被多少筆資料使用**（客戶／供應商／料號都是單位表，統計需要走各自的範圍化讀取，另案）；預覽只列『哪些畫面用這份清單』並標出被停用的選項。
 """
 import re
+import time
 import unicodedata
 
 from core import definitions as D
@@ -54,6 +55,16 @@ BUILTIN = {
                     "會計匯出的「存貨費用科目」對照（新分類要到會計設定補科目）", "營運報表的設備／材料分桶（新分類預設算材料）"],
         "defaults": [_b("網通設備", prefix="NET"), _b("監控設備", prefix="CCTV"), _b("交換器", prefix="SW"),
                      _b("伺服器/工控", prefix="SVR"), _b("線材配件", prefix="CAB"), _b("其他", prefix="OTH")]},
+    "payment_stage": {
+        "label": "案件款項期別名稱", "relabel": True, "prefix": False,
+        "used_by": ["案件管理頁：款項明細每一期的「款項類型」下拉", "營運報表與出納收款明細的「款項類型」欄", "儀表板的待收款清單",
+                    "案件款項的收款／到期行事曆事件標題（顯示名稱改了之後，事件標題在該筆款項下次被存檔時才更新；不會重複建立事件）"],
+        "defaults": [_b(v) for v in ("訂金款", "交貨款", "驗收款", "進度款", "完工款", "收款後出貨", "自訂義", "其他")]},
+    "payment_request_stage": {
+        "label": "請款單款項類別", "relabel": True, "prefix": False, "closed": True,
+        "used_by": ["請款單表單：款項類別按鈕", "客戶端請款單 PDF 上的款項類別（產生 PDF 當下的名稱；已經送出的 PDF 檔不會被改）",
+                    "請款單清單與詳情的款項類別文字"],
+        "defaults": [_b("full", "全額"), _b("deposit", "訂金款"), _b("delivery", "交貨款"), _b("acceptance", "驗收款"), _b("final", "尾款")]},
     "part_unit": {
         "label": "料件單位", "relabel": False, "prefix": False,
         "used_by": ["料號管理頁：新增料號時的預設單位（清單第一個未停用的）與單位的建議選項"],
@@ -73,7 +84,7 @@ def enabled(conn=None) -> bool:
 
 
 def registered() -> dict:
-    return {k: {"label": v["label"], "relabel": v["relabel"], "prefix": v["prefix"], "usedBy": list(v["used_by"]),
+    return {k: {"label": v["label"], "relabel": v["relabel"], "prefix": v["prefix"], "closed": bool(v.get("closed")), "usedBy": list(v["used_by"]),
                 "defaults": [dict(x) for x in v["defaults"]]} for k, v in BUILTIN.items()}
 
 
@@ -159,6 +170,13 @@ def definition_problems(key, body, live=None) -> list:
                 prefixes.add(pf)
     if all(isinstance(it, dict) and it.get("disabled") for it in vals):
         out.append({"path": "values", "message": "至少要有一個未停用的選項"})
+    if spec.get("closed"):                                       # 選項對應程式裡的代碼（例：請款單 stage）：只能改顯示名稱與順序，不能新增、不能停用
+        dv = {d["value"] for d in spec["defaults"]}
+        for i, it in enumerate(vals):
+            if isinstance(it, dict) and it.get("value") not in dv:
+                out.append({"path": "values[%d].value" % i, "message": "這份清單的選項對應程式裡的代碼，不能新增：%s" % it.get("value")})
+            if isinstance(it, dict) and it.get("disabled"):
+                out.append({"path": "values[%d].disabled" % i, "message": "這份清單的選項對應程式裡的代碼，不能停用"})
     # 與程式預設、已發布版本的關係（不可刪除、不可改前綴）
     have = {it.get("value"): it for it in vals if isinstance(it, dict)}
     for d in spec["defaults"]:
@@ -251,3 +269,63 @@ def preview(list_id, body):
             "disabled": [x["value"] for x in items if x.get("disabled")],
             "warnings": (["停用的選項：既有資料仍會顯示這些值，只是新增／編輯時不能再選。"] if any(x.get("disabled") for x in items) else [])
                         + ["本版不統計各選項被多少筆資料使用。"]}
+
+
+# ── 款項期別名稱的顯示（census S-F1）：報表／出納／儀表板／行事曆共用 ─────────────────────────────
+_STAGE_CACHE = {}               # list_id -> (monotonic, labels|None)；3 秒，避免報表迴圈每一列都讀資料庫
+_STAGE_TTL = 3.0
+
+
+def _published_body(list_id, conn=None):
+    try:
+        from db import get_db
+        own = conn is None
+        c = conn if conn is not None else get_db()
+        try:
+            r = D.get(c, KIND, list_id, "company")
+        finally:
+            if own:
+                c.close()
+        body = (r or {}).get("body")
+        return body if body and not definition_problems(list_id, body, live={}) else None
+    except Exception:                                        # noqa: BLE001
+        return None
+
+
+def payment_stage_labels(list_id="payment_stage", conn=None):
+    """⇒ `{value: label}`；選項清單關著／沒有已發布版本 ⇒ None（呼叫端走過去逐字相同的路徑）。"""
+    if list_id not in BUILTIN or not enabled(conn):
+        return None
+    now = time.monotonic()
+    hit = _STAGE_CACHE.get(list_id)
+    if hit and now - hit[0] < _STAGE_TTL:
+        return hit[1]
+    body = _published_body(list_id, conn)
+    labels = {x["value"]: x["label"] for x in body["values"]} if body else None
+    _STAGE_CACHE[list_id] = (now, labels)
+    return labels
+
+
+def payment_stage_display(value, item=None):
+    """案件款項期別（`type` 字串）的顯示名稱。選項清單沒開／沒發布 ⇒ 原字串（逐字相同）。
+    開了：值是「自訂義」且使用者填了 `customLabel` ⇒ 顯示 customLabel（過去報表／出納只會顯示『自訂義』三個字）；否則查清單的顯示名稱，查不到 ⇒ 原字串。"""
+    labels = payment_stage_labels()
+    if labels is None:
+        return value
+    if value == "自訂義" and isinstance(item, dict) and str(item.get("customLabel") or "").strip():
+        return str(item["customLabel"]).strip()
+    return labels.get(value, value)
+
+
+def payment_stage_name(item, idx):
+    """報表／出納用：`item.get("type", 第N期)` 的選項清單版。缺 `type` 鍵 ⇒ 第N期（同過去）。"""
+    if "type" not in item:
+        return "第%d期" % (idx + 1)
+    return payment_stage_display(item.get("type"), item)
+
+
+def request_stage_label(code, fallback=""):
+    """請款單款項類別（代碼固定）的顯示名稱；清單沒開／沒發布／查不到 ⇒ fallback（呼叫端傳程式裡原本的標籤）。"""
+    labels = payment_stage_labels("payment_request_stage")
+    return fallback if labels is None else labels.get(code, fallback)
+
