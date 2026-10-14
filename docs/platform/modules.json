@@ -111,6 +111,7 @@
    "js:static/layout-editor.js",
    "js:static/custom-fields.js",
    "js:static/user-buttons.js",
+   "js:static/public-flags.js",
    "js:static/layout-runtime.js",
    "js:static/legal-round.js",
    "js:static/download.js",

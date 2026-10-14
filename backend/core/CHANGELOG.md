@@ -1,14 +1,11 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — wip/t61-s6-impl-r1（使用者自訂按鈕 S6 第一刀；旗標 `builder_actions.enabled` 預設關）
+## (next) — wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1＋wip/t60（T60 選單 hub 群組／T61 S5 內建畫面自訂欄位／S6 自訂按鈕；旗標預設關）
 
 - L0（新增，只增；T60）：`core.menu.hub_group_keys()`。含系統中心入口的群組（例如 system）不能當選單「移到群組」的目的地——導覽列會把整個群組收成一個連結，搬進去的項目看不到；`resolve_move_target` 與驗證同步拒絕。旗標關閉時行為不變。
 - L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.user_buttons`——`ACTION_TYPES`（navigate／export）、`BUTTON_EXPORTS`（可被按鈕執行的匯出的明確允許清單）、`SLOTS`（插槽表，先導放這裡）、`MAX_PER_SLOT`／`MAX_SLOTS_PER_PAGE`／`MAX_TOTAL`、`enabled()`、`catalog()`、`definition_problems(key, body)`、`visible_buttons(conn, user, module, page)`（逐顆用檢視者的權限過濾）、`preview(conn, caller, definition, module, page, username=None)`（唯讀）。載入時以 `register_kind` 登記新定義種類 `user_buttons`（key＝`module:<模組>`，scope＝company；沒有改 `core/definitions.py`）。
 - 新設定群組 `builder_actions`（欄位 `enabled`，預設 False；`settings_deploy_baseline.json` 已同步）。新路由 `GET /api/user-buttons/{module}/{page}`、`GET /api/user-buttons/catalog`（僅超級管理員）、`POST /api/user-buttons/{module}/{page}/preview`（僅超級管理員、唯讀）；旗標關閉時第一個回空、後兩個 404。新前端檔 `static/user-buttons.js`。
 - 按鈕不授權：開頁＝連結（目標自己驗證）、匯出＝用點擊者自己的 token 呼叫模組已登記的 GET 端點（`module.json` 的 `customization.pages[].exports`）；沒有任何會寫資料的動作。
-
-## (next) — wip/t61-s5-impl-r1（內建畫面的自訂欄位 S5 第一刀；旗標 `builder_custom_fields.enabled` 預設關）
-
 - L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.builtin_fields`——`RECORD_TYPES`（單據類型登錄：案件資訊、供應商）、`ALLOWED_TYPES`（文字／日期／單選／勾選）、`MAX_FIELDS`（20）、`enabled()`、`public_fields(record_type)`、`definition_problems(key, body)`、`gate(record_type, new_values, old_values)`（每條寫入路徑存檔前呼叫；旗標關閉＝回舊值、完全不介入）、`usage_counts(record_type)`（唯讀統計：每個欄位有幾筆單據填了值）。`helpers.custom_fields.validate_definition` 的簽章不變，只在 key 屬於 `RECORD_TYPES` 時多跑 `definition_problems`（其他 key 行為逐字相同）。
 - 新設定群組 `builder_custom_fields`（欄位 `enabled`，預設 False；`settings_deploy_baseline.json` 已同步）。新路由 `GET /api/custom-fields/{record_type}`（登入即可；旗標關閉回 `enabled:false, fields:[]`）、`GET /api/custom-fields/{record_type}/usage`（僅超級管理員、唯讀）；新前端檔 `static/custom-fields.js`。
 - 案件記錄的分段存檔多一個頂層鍵 `customFields`（只在旗標開啟且有定義時才會被存；沒有值就沒有這個鍵 ⇒ 既有單據與回應的鍵集不變）。
