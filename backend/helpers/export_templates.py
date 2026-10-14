@@ -2,7 +2,7 @@
 """匯出範本（BP-3 R0/R1）：宣告式的欄位／標籤／順序（＋頁首頁尾／浮水印文字），套在『已登記的匯出』上；發布前預覽。
 
 [單位] helper:export_templates    [層] L1    [穩定度] 實作
-[公開介面] CAPS, FIELD, GROUP, KIND, LABEL_MAX, MAX_COLUMNS, OFF_REASON, PRESET_TEXTS, RESERVED_WATERMARK, TEXT_MAX, TemplateUnreadable, WATERMARK_MAX, WATERMARK_PRESETS, apply_pdf_text, apply_print_text, decorate_pdf, default_template, definition_problems, disabled_sheets, effective_columns, enabled, enabled_sheets, ensure_kind, preview, register_export, registered, render_csv_rows, render_rows, resolve
+[公開介面] CAPS, FIELD, GROUP, KIND, LABEL_MAX, MAX_COLUMNS, OFF_REASON, PRESET_TEXTS, RESERVED_WATERMARK, TEXT_MAX, TemplateUnreadable, WATERMARK_MAX, WATERMARK_PRESETS, apply_pdf_text, apply_print_text, decorate_pdf, default_template, definition_problems, disabled_sheets, effective_columns, enabled, enabled_sheets, enabled_strict, ensure_kind, preview, register_export, registered, render_csv_rows, render_rows, resolve
 [不變式] 設定 `builder_exports.enabled`（預設 0＝關）關著時：`resolve()` 一律回 None（端點走今天寫死的路徑，輸出逐位元相同）；發布驗證擋；預覽端點 404。
     範本只收宣告式資料：欄位 id 必須在該匯出的**欄位目錄**裡（模組登記，不由使用者定義）、文字是純文字（無占位符、無運算式、無控制／雙向字元），
     **範本不能新增資料**——欄位值一律來自端點今天的查詢與遮蔽；標 `money`（或有 `visible`）的欄位在輸出端再問一次權限，沒權限 ⇒ 整欄省略（遮蔽優先）。
@@ -53,6 +53,20 @@ def enabled(conn=None) -> bool:
         return int(SR.get("builder_governance", "enabled", conn=conn)) == 1
     except Exception:                                        # noqa: BLE001
         return False
+
+
+def enabled_strict(conn=None) -> bool:
+    """同 `enabled`，但**讀不到設定就丟例外**（不是回 False）。給『把資料外送』的執行期掛鉤用（營運報表工作表選擇）：
+    讀不到旗標時不能當作『關』而把整份報表寄出去。讀法與發布把關相同（`routers.definitions._strict_setting`：直接讀定義庫，不吞資料庫錯誤）。"""
+    from routers.definitions import _strict_setting
+    from db import get_db
+    own = conn is None
+    c = conn if conn is not None else get_db()
+    try:
+        return (_strict_setting(c, GROUP, FIELD) == 1) and (_strict_setting(c, "builder_governance", "enabled") == 1)
+    finally:
+        if own:
+            c.close()
 
 
 # ── 匯出目錄（模組登記；使用者不能新增）────────────────────────────────────
@@ -375,9 +389,11 @@ class TemplateUnreadable(Exception):
 
 def _resolve_strict(export_id, conn=None):
     """同 `resolve`，但旗標開著時『讀不到／不合法』會丟 `TemplateUnreadable`（不是回 None）。旗標關／沒有已發布 ⇒ None。"""
-    if export_id not in _EXPORTS or not enabled(conn):
+    if export_id not in _EXPORTS:
         return None
     try:
+        if not enabled_strict(conn):                         # 旗標關 ⇒ None（今天）；讀不到旗標 ⇒ 例外 ⇒ 關起來
+            return None
         ensure_kind()
         from db import get_db
         own = conn is None
