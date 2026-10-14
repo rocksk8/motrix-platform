@@ -512,14 +512,19 @@ def notify_approval_request(quote_no: str, customer: str, approver_usernames: li
     if not to:
         logger.warning("notify_approval_request: 簽核人 %s 皆無設定 email（quote_no=%r）", approver_usernames, quote_no)
         return
+    try:                                                   # S-X3：自訂通知用語（旗標關／沒有已發布範本 ⇒ 空 dict ⇒ 下面全部走今天的字）
+        from . import notify_templates as _NT
+        _tf = _NT.mail_fields("approval:submitted", {"單號": quote_no, "對象": customer}) or {}
+    except Exception:                                      # noqa: BLE001
+        _tf = {}
     html = _build_html("approval_request", 
-        "報價單簽核申請", "待您審核", "#2F6FD6",
+        _tf.get("title", "報價單簽核申請"), _tf.get("badge", "待您審核"), "#2F6FD6",
         [("報價單號", quote_no), ("客戶名稱", customer)],
         quote_no, _base_url(),
-        intro="您好，以下報價單已進入簽核流程，敬請於系統中完成審核作業。",
-        button_text="前往審核報價單",
+        intro=_tf.get("intro", "您好，以下報價單已進入簽核流程，敬請於系統中完成審核作業。"),
+        button_text=_tf.get("button", "前往審核報價單"),
     )
-    _async_send(to, _mt.subject("approval_request", f"報價單待審核：{quote_no}（{customer}）"), html)
+    _async_send(to, _mt.subject("approval_request", _tf.get("reason", f"報價單待審核：{quote_no}（{customer}）")), html)
 
 
 def notify_next_tier(quote_no: str, customer: str, tier_no: int,

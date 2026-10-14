@@ -535,6 +535,16 @@ def _exclude_requester(tiers: list, requester: str) -> list:
     return result
 
 
+def _submitted_msg(quote_no, label, cname) -> str:
+    """送審站內訊息（S-X3）：有已發布的自訂用語就用它（旗標關／沒有範本 ⇒ None ⇒ 今天寫死的字，逐字相同）。金額遮蔽仍由 `_notify` 逐收件人處理。"""
+    try:
+        from helpers import notify_templates as _NT
+        t = _NT.render_inapp("approval:submitted", {"單號": quote_no, "對象": cname, "標記": label})
+    except Exception:                                                  # noqa: BLE001
+        t = None
+    return t or f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+
+
 def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_submission: bool) -> dict:
     """Attach approval tiers built from global settings (requester excluded) if not
     already present on `appr`, then send approval-request notifications for a
@@ -582,7 +592,7 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
             pending = [a for a in (tiers[ct_idx].get("approvers") or [])
                        if a.get("status") != "approved"]
             if ct_idx == 0:
-                msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+                msg = _submitted_msg(quote_no, label, cname)
                 for a in pending:
                     _notify(a["username"], "approval_request", quote_no, quote_no, msg)
                     _appr_names.append(a["username"])
@@ -597,7 +607,7 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
                     _appr_labels.append(a.get("displayName") or a["username"])
                 notify_next_tier(quote_no, cname, ct_idx + 1, len(tiers), _appr_names)
         elif not tiers:
-            msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+            msg = _submitted_msg(quote_no, label, cname)
             _conn = get_db()
             admins = _conn.execute(
                 "SELECT username FROM users WHERE role='superadmin' AND active=1"
