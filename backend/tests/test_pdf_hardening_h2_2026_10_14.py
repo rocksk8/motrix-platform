@@ -200,6 +200,31 @@ def test_residual_check_flags_what_the_parser_could_have_missed_and_masks_regist
     assert ST._residual_danger("文字 javascript: iframe link base") is None, "只看標籤，不看一般文字"
 
 
+_M1_PAYLOADS = [
+    '<!-- --!><meta foo=">" http-equiv=refresh content="0;url=file:///C:/Windows/win.ini"> -->',
+    '<![CDATA[ x > <meta foo=">" http-equiv=refresh content="0;url=file:///C:/Windows/win.ini"> ]]>',
+    '<svg><style><meta foo=">" http-equiv=refresh content="0;url=file:///C:/Windows/win.ini"></style></svg>',
+]
+
+
+@pytest.mark.parametrize("payload", _M1_PAYLOADS)
+def test_residual_check_does_not_depend_on_tag_boundaries_for_http_equiv(payload, tmp_path):
+    neutral = ST._neutralize_html(_doc(payload))
+    assert ("http-equiv" not in neutral.lower()) or ST._residual_danger(neutral), "要嘛中和掉，要嘛殘留檢查攔下"
+    f, cmd = _page(tmp_path, _doc(payload))
+    try:
+        ST._harden_html_file(cmd)
+    except ValueError:
+        assert "motrix-csp" not in f.read_text(encoding="utf-8")
+    else:
+        assert "refresh" not in f.read_text(encoding="utf-8").lower()
+
+
+def test_slash_separated_attributes_are_scrubbed():
+    out = ST._neutralize_html("<img/onerror=alert(1) alt=a><svg/onload=alert(1)>")
+    assert "onerror" not in out and "onload" not in out and "alt=a" in out
+
+
 def _page(tmp_path, html, name="a.html"):
     f = tmp_path / name
     f.write_text(html, encoding="utf-8")

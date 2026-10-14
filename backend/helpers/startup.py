@@ -225,7 +225,7 @@ def _attr_regex():
     global _ATTR_RE
     if _ATTR_RE is None:
         import re
-        _ATTR_RE = re.compile(r"""(\s+)([^\s"'<>/=]+)(?:(\s*=\s*)("[^"]*"|'[^']*'|[^\s"'>]+))?""")
+        _ATTR_RE = re.compile(r"""([\s/]+)([^\s"'<>/=]+)(?:(\s*=\s*)("[^"]*"|'[^']*'|[^\s"'>]+))?""")
     return _ATTR_RE
 
 
@@ -341,12 +341,15 @@ _RESIDUAL = None
 
 
 def _residual_danger(html: str):
-    """中和之後的殘留檢查（只看『標籤』，不看一般文字）：還有 iframe／object／embed／base／link／meta http-equiv／未登記的 script ⇒ 回傳該字串，否則 None。
+    """中和之後的殘留檢查：還有 iframe／object／embed／base／link／未登記的 script 標籤，或**任何** `http-equiv` 字樣 ⇒ 回傳該字串，否則 None。
+    `http-equiv` 不看標籤邊界（屬性值裡的 `>`、`--!>` 結束註解、CDATA、svg／style 內的 meta 會讓『標籤邊界』在 Chromium 與 html.parser 之間不一致）：
+    正常 builder 輸出沒有這個字樣，使用者文字剛好含有它就拒絕渲染（接受的代價）。檢查本身不依賴 html.parser（Python 小版本之間解析行為會變）。
+    註：`_scrub_start_tag` 凡名稱以 on 開頭的屬性一律移除（含不存在的事件名；保守，builder 不產生這類屬性）。
     解析器差異（Chromium 看得到、`html.parser` 看不到的怪寫法）會在這裡被攔下 ⇒ 呼叫端拒絕渲染。"""
     global _RESIDUAL
     import re
     if _RESIDUAL is None:
-        _RESIDUAL = re.compile(r"<\s*(?:iframe|frame|frameset|object|embed|applet|portal|base|link)\b|<\s*meta\b[^>]*http-equiv|<\s*script\b", re.I)
+        _RESIDUAL = re.compile(r"<\s*(?:iframe|frame|frameset|object|embed|applet|portal|base|link)\b|http-equiv|<\s*script\b", re.I)
     from helpers import pdf_scripts as _ps
     masked = html
     for tag in _ps.SCRIPTS.values():                         # 已登記的腳本整段遮掉再檢查
