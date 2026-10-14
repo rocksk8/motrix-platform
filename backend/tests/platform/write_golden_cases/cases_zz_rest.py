@@ -374,6 +374,7 @@ WAIVE = {
     'POST /api/tender-radar/scan': "not yet covered (U0b freeze)",
     'POST /api/tender-radar/tenders/{case_no}/mark': "not yet covered (U0b freeze)",
     'POST /api/tender-radar/watches': "not yet covered (U0b freeze)",
+    'POST /api/user-buttons/{module}/{page}/preview': "not yet covered (U0b freeze)",
     'POST /api/users': "not yet covered (U0b freeze)",
     'POST /api/users/{user_id}/privacy-notice/ack': "not yet covered (U0b freeze)",
     'POST /api/vendor-contractors': "not yet covered (U0b freeze)",
