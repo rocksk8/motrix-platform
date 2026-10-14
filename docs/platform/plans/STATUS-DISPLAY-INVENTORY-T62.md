@@ -54,3 +54,36 @@
 3. 批次二：案件頁六個 `_*StatusClass/_*StatusLabel`（四份相同對照合併）。
 4. 批次三：報價單列表／表單（含『審核中／執行中』這類別名保留為預設表值）。
 5. 批次四：出納、報表、傳票、精算頁。
+
+## 7. 第二批消費點：出納與報表（逐行；2026-10-14，基底 99cadb75d；行號為該基底，(V)＝我讀過）
+> 原則同前：只換『看到的字』（與已有 `badge--*`／`st-chip` 色調的 class），**所有判斷仍用原始值**；旗標關或沒改過 ⇒ 回呼叫端給的 fallback，與今天逐字相同。判斷依據是盤點 §1 的出納／報表列與我這次逐行重讀。
+
+### 7.1 要接的點
+| # | 位置 | 今天 | 顯示用的鍵／情境 | 改法 | 備註 |
+|---|---|---|---|---|---|
+| C1 | `cashier.html:613`（V） | `it.received ? 'rb-received' : 'rb-pending'`，字 `'已收款' : '待收款'` | 新鍵 `已收款`（付款語意）、`待收款`（一般）／cashier | 只換字：`stLabel(it.received ? '已收款' : '待收款', 'cashier')`，class 不動 | 這是布林欄位 `received`，不是資料庫狀態字串；新增鍵由程式登錄，邏輯仍用 `it.received` |
+| C2 | `cashier.html:586-587, 317, 638-639`（V） | 分頁／摘要的『未收款／已收款／待收款』靜態字 | 同上 | 只換字（分頁鍵 `receivableFilterTab` 是 UI 鍵，不動） | 摘要 `已收/未收` 一併 |
+| C3 | `js/cashier.js:223` `remitReviewLabel`（V） | `pending→差額待審核`、`approved→差額已核可` | 新鍵 `差額待審核`（一般）、`差額已核可`（核准語意）／cashier | 函式內改成 `MotrixStatus.label(…, 'cashier', 原字)`；`cashier.html:732` 已經走這個函式 | 決定動作仍用 `approve`／`reject`（js/cashier.js:276-286 不動） |
+| C4 | `cashier.html:542` | `it.signedBack ? '已簽回' : '未簽回…'` | 暫不接 | — | 布林＋說明文字混在一起，價值低 |
+| C5 | `cashier.html:369-370, 502-503` | `已逾預定日`、`N 天內到期`（衍生狀態，不是資料庫值） | **不接** | — | 不是狀態值；兩處顏色不一致（`--tone-*` vs `#b91c1c`）另案統一 |
+| C6 | `payment-request.html:315, 361, 703, 724`（S） | 列表狀態 `e.status` 原值＋`chipClass` | 既有鍵／cashier | 字：`MotrixStatus.label(e.status, 'cashier')`；色已走 `chipClass` | 這頁已載入 `status-chip.js`；判斷（361、703、724）不動 |
+| C7 | `payment-request-form.html:395`（S） | `statusClass()` 的 `badge--*` 對照 | 既有鍵 | `MotrixStatus.badgeClass(raw, 今天的 class)` | 只有被改色的鍵才換 |
+| R1 | `reports.html:672, 712, 1103, 1142, 1243`（V） | `:class="X.dealTag==='已結案'?'rb-closed':'rb-active'"`，字 `X.dealTag` | 既有鍵 已成案／已結案／未成案…／report | 只換字：`stLabel(X.dealTag, 'report')`，class 不動 | 5 處同一運算式 |
+| R2 | `reports.html:1554-1556`（V） | 另一種映射（已結案→rb-fin、已成案→rb-active、未成案→紅、其他→rb-closed），字 `dealTag \|\| status` | 同上 | 只換字 | 同值不同色的不一致保留（色不接） |
+| R3 | `reports.html:1251`（V） | `settleStatus==='finalized'?'已結算':'草稿'` | `finalized`／`draft`／report | `stLabel('finalized','report','已結算')`／`stLabel('draft','report','草稿')` | 預設情境簡稱＝已結算 |
+| R4 | `reports.html:2177-2178`（V） | `stlStatus()==='finalized' ? '已定稿' : '草稿'`，行內色 | 同上 | 只換字，fallback 傳 `'已定稿'`（與 R3 今天就不同，保留不統一；管理者設 report 簡稱後兩處才一致） | 行內色不動 |
+| R5 | `js/reports.js:974-984`（S） | 圖表／KPI 標籤 `進行中`、`已結案` | `已結案`／report | 只換 `已結案` 字（`進行中` 不是狀態鍵） | 低優先 |
+| R6 | `reports.html` 其他 `已結案`、`待匯款` 說明文字 | 靜態說明 | **不接** | — | 敘述文字，不是狀態徽章 |
+
+### 7.2 不接（理由）
+- 伺服器端產生的 Excel／PDF／HTML 報表文字（`reports.py` 內的『已結案 N 件』等）、郵件、錯誤訊息：第二期（固定語彙，客服與稽核要對得上）。
+- 衍生狀態（逾期、即將到期）、布林旗標的說明句、UI 內部鍵（分頁鍵、`remitReview` 的 pending/approved 傳遞值、決定動作 approve/reject）。
+- 顏色（`rb-*`、行內色）本批只有 C7 與 C6 走既有 `st-chip`／`badge--*`；`rb-*` 與行內色的色調映射留到下一批（需要先決定 `rb-*` 對應哪個色調）。
+
+### 7.3 新增鍵（程式登錄，仍是 display-only）
+`已收款`（paid 語意，預設色調 paid）、`待收款`（plain，pending）、`差額待審核`（plain，pending）、`差額已核可`（approved 語意，approved）。四個都不改任何資料庫值；`remit` 的 `pending`／`approved` 仍是傳遞用的英文值。
+
+### 7.4 載入與請求
+- `cashier.html`、`reports.html`、`payment-request.html` 目前都沒有讀 `builder_status_display`：每頁要用 `MotrixPublicFlags.read` 讀一次旗標（旗標關也會有一次請求）；`cashier.js` 另有 F3（`wip/t62-finance-r2`）的 `finance_cashier` 讀取——兩者合併時應改成**同一個請求**（`groups=finance_cashier,builder_status_display`），由整合者處理。
+- 旗標開才呼叫 `MotrixStatus.load()`（多一個 `GET /api/status-display`）。
+- 黃金對照：這三頁沒有現成的黃金檔；OFF 的證明用 node 測試把每個改過的運算式在『表未載入』時與原運算式逐字比較（同報價單列表那一題的做法）。
