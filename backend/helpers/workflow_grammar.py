@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """流程定義的文法、驗證器、靜態分析與寬嚴比較（BP-5 P1；設計 docs/platform/plans/BP5-WORKFLOW-BUILDER-DESIGN-T62.md §3、§5、§6）。
 
-[單位] helper:workflow_grammar    [層] L0（純函式，不碰資料庫／FastAPI）    [穩定度] 實驗（沒有任何執行期呼叫端）
-[公開介面] GUARDS, ACTIONS, validate_workflow, analyze, compare
+[單位] helper:workflow_grammar    [層] L1 （純函式，不碰資料庫／FastAPI）    [穩定度] 實驗（沒有任何執行期呼叫端）
+[公開介面] GUARDS, ACTIONS, SEMANTICS, REQUIRED_SEMANTICS, WHO, REASON, LOG, TONES, TIER_ROLES, OFFICIAL_WORDS, EXEMPTION_REGISTER, DEPENDENCIES, validate_workflow, analyze, compare, removed_write_callbacks
 [不變式] ⓪單據風險類（tiered_approval.DOC_CLASS）：plain 可完整調整；stock（核准會動庫存）不可關簽核、回呼只能保留；money／ledger 第一期不接受公司版本；
     ①定義是資料：守門只能從 GUARDS 挑、回呼只能從 ACTIONS 挑，建構器不能新增任何一項（沒有任意程式／運算式）；
     ②金額類（money）與會計入帳類（ledger）單據在第一期一律不接受任何公司版本（D-W1：唯讀）；plain／stock 才可發布；

@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """內建流程定義 v1（BP-5 P1）：完工單與出貨單的『現行流程』原樣登記（設計 BP5-WORKFLOW-BUILDER-DESIGN-T62.md §4）。
 
-[單位] helper:workflow_defaults    [層] L0（純資料）    [穩定度] 實驗（端點尚未呼叫流程引擎；旗標 builder_workflow 關＝今天的行為）
+[單位] helper:workflow_defaults    [層] L1    [穩定度] 實驗（端點尚未呼叫流程引擎；旗標 builder_workflow 關＝今天的行為）
+[公開介面] doc_types, builtin
 [不變式] ①每個值對應盤點 BP5-FLOW-INVENTORY-T62.md §2.1 讀到的字面值（狀態名稱、誰可、守門、回呼）；改這裡＝改『基準』，必須同時改黃金重放；
     ②內建版是唯讀基準：`builtin()` 每次回傳深拷貝，呼叫端改不到模組內的資料；
-    ③只有 plain 類單據有內建流程定義；金額類在第一期不登記（唯讀基準另案）。
+    ③只有 plain／stock 類單據有內建流程定義；金額類在第一期不登記（唯讀基準另案）。
 [契約題] backend/tests/test_workflow_grammar_2026_10_14.py
 """
 import copy

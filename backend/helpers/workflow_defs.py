@@ -2,7 +2,7 @@
 """流程定義種類 `workflow` 與『有效定義』解析（BP-5 P1；設計 BP5-WORKFLOW-BUILDER-DESIGN-T62.md §3、§4、§10）。
 
 [單位] helper:workflow_defs    [層] L1    [穩定度] 實驗（第一期：沒有任何端點呼叫 `effective()`；沒有路由呼叫 `ensure_registered()`）
-[公開介面] KIND, enabled, ensure_registered, effective
+[公開介面] KIND, flag_on, enabled, ensure_registered, effective
 [不變式] ①旗標 `builder_workflow.enabled` 的設定群組在第一期**尚未登記**（登記時機＝第一個會呼叫引擎的路由，P2）⇒ `enabled()` 一律 False，
     不會有一個『開了也沒作用』的開關出現在設定中心，設定基準檔與 API 回應都與今天逐位元相同；
     ②登記是懶登記（匯入本檔不登記任何東西）；key＝單據類型，只收有內建定義的 plain 類單據；
