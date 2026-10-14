@@ -78,6 +78,8 @@ def test_settings_are_registered_with_zero_defaults():
     f = SR._GROUPS["finance_reports"]["fields"]["settle_overdue_days"]
     g = SR._GROUPS["finance_cashier"]["fields"]["receivable_grace_days"]
     assert (f.min, f.max, g.min, g.max) == (0, 365, 0, 90)
+    # D-K1（使用者裁示 2026-10-14）：寬限天數調大＝逾期標示更晚＝放寬，要第二位最高管理者核准與確認期間；風險等級 money
+    assert (g.risk, g.loosen) == ("money", "up") and g.impact_scope and g.impact_scope["effective"] == "pending" and g.risk_text
 
 
 # ── 需要資料庫（寫好未跑）─────────────────────────────────────────────────────
@@ -121,3 +123,15 @@ def test_settle_overdue_list_waits_n_days(client, sa):
     _set("finance_reports", {"settle_overdue_days": 14})
     got = nos()
     assert "Q-F5-OLD" in got and "Q-F5-NEW" not in got
+
+
+def test_raising_the_receivable_grace_goes_pending(client):
+    import db
+    from helpers import settings_registry as SR
+    c = db.get_db()
+    try:
+        up = SR.publish("finance_cashier", {"receivable_grace_days": 5}, reason="t", user="t62", conn=c)
+        c.commit()
+        assert up["pending"] and SR.get("finance_cashier", "receivable_grace_days", conn=c) == 0, "調大＝放寬＝待生效，現值不變"
+    finally:
+        c.close()
