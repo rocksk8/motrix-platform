@@ -171,13 +171,13 @@ def handle_restore(conn, kind, key, scope, version, user, note, authorization):
 
 
 # ── 路由：待核准清單、核准、套用、撤銷（旗標關 ⇒ 404）──────────────────────────────────────────────
-def _gate(authorization):
-    u = _require_user(authorization, require_superadmin=True)
+def _flag_gate():
+    """身分已由呼叫端的 `_require_user(..., require_superadmin=True)` 驗過（未登入 ⇒ 401）；這裡只看旗標，關 ⇒ 404；通過回連線（呼叫端關閉）。"""
     conn = get_db()
     if not enabled(conn):
         conn.close()
         raise HTTPException(404, "Not Found")
-    return u, conn
+    return conn
 
 
 def _change(conn, change_id):
@@ -202,7 +202,8 @@ def _view(r):
 
 @router.get("/api/def-pipeline/pending")
 def pending_changes(authorization: str = Header(None)):
-    _u, conn = _gate(authorization)
+    _require_user(authorization, require_superadmin=True)
+    conn = _flag_gate()
     try:
         return {"items": [_view(r) for r in L.history(conn, "def", None, limit=1000) if r["state"] == "pending"]}
     finally:
@@ -220,7 +221,8 @@ def _pending_row(conn, change_id):
 
 @router.post("/api/def-pipeline/changes/{change_id}/approve")
 def approve_change(change_id: int, payload: dict = Body(default={}), authorization: str = Header(None)):
-    u, conn = _gate(authorization)
+    u = _require_user(authorization, require_superadmin=True)
+    conn = _flag_gate()
     try:
         _pending_row(conn, change_id)
         res = L.approve(conn, change_id, u, (payload or {}).get("reason", ""))
@@ -236,7 +238,8 @@ def approve_change(change_id: int, payload: dict = Body(default={}), authorizati
 @router.post("/api/def-pipeline/changes/{change_id}/activate")
 def activate_change(change_id: int, payload: dict = Body(default={}), authorization: str = Header(None)):
     """核准票夠、確認期間已過 ⇒ 真的發布這個送審版本；任何一項不滿足 ⇒ 409，什麼都不做。"""
-    u, conn = _gate(authorization)
+    u = _require_user(authorization, require_superadmin=True)
+    conn = _flag_gate()
     try:
         r = _pending_row(conn, change_id)
         if len(r["approvals"]) < int(r["approvals_required"] or 0):
@@ -260,7 +263,8 @@ def activate_change(change_id: int, payload: dict = Body(default={}), authorizat
 @router.post("/api/def-pipeline/changes/{change_id}/cancel")
 def cancel_change(change_id: int, payload: dict = Body(default={}), authorization: str = Header(None)):
     """確認期間內任何最高管理者都能撤銷：待核准的版本標為 rejected（保留、不可變），帳本記撤銷。"""
-    u, conn = _gate(authorization)
+    u = _require_user(authorization, require_superadmin=True)
+    conn = _flag_gate()
     try:
         r = _pending_row(conn, change_id)
         kind, key, scope, ver = _target(r)
