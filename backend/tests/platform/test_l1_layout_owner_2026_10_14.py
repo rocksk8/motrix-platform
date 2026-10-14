@@ -75,3 +75,29 @@ def test_default_layout_for_core_exists_and_unknown_module_has_none():
     from routers import definitions as R
     assert R._default_layout("module:core") == {"ops": []}
     assert R._default_layout("module:no_such_mod") is None
+
+
+def test_full_catalog_points_are_exactly_the_loaded_modules_and_never_core(client):
+    """OFF 同一性：『全部模組』的點＝各已載入模組自己的點串起來；虛擬擁有者 core 不混進去，build() 也沒有 core 區段。"""
+    from core import registry
+    mods = sorted(registry.loaded(), key=lambda x: x.key)
+    assert mods, "測試環境沒有載入任何模組（這題會是空轉）"
+    expect = []
+    for m in mods:
+        expect += catalog.layout_points(m.key)
+    assert catalog.layout_points() == expect and expect
+    assert not any(p["id"].startswith("core:") for p in expect)
+    built = catalog.build()
+    assert "core" not in {m["key"] for m in built["modules"]}
+    assert not any(p["id"].startswith("core:") for m in built["modules"] for p in m["points"])
+
+
+def test_core_is_not_a_module_so_it_cannot_be_disabled_or_licensed(client, hdr):
+    from core import registry
+    sa = hdr("l1_sa2", "superadmin")
+    assert registry.is_loaded("core") is False                                       # 不是模組
+    assert not (ROOT / "backend" / "modules" / "core").exists()
+    assert "core" not in {r["key"] for r in client.get("/api/system/modules", headers=sa).json()["modules"]}
+    for enabled in (False, True):
+        assert client.put("/api/system/modules/core", headers=sa, json={"enabled": enabled}).status_code == 404       # 沒有開關可關
+    assert catalog.owner_loaded("core") is True and catalog.layout_points("core")      # 照樣可用
