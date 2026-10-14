@@ -2,7 +2,7 @@
 """選項清單（census #4）：管理者決定下拉選單有哪些選項、顯示名稱與順序；新增／改名／重排／停用，不能刪除已發布的選項。
 
 [單位] helper:option_lists    [層] L1    [穩定度] 實作
-[公開介面] BUILTIN, KIND, LABEL_MAX, MAX_VALUES, OFF_REASON, definition_problems, effective, enabled, ensure_kind, lists_for_menu, preview, registered
+[公開介面] BUILTIN, FIELD, GROUP, KIND, LABEL_MAX, MAX_VALUES, OFF_REASON, definition_problems, effective, enabled, ensure_kind, lists_for_menu, preview, registered
 [不變式] 設定 `builder_option_lists.enabled`（預設 0＝關）**且** `builder_governance.enabled`=1 才生效；關著 ⇒ `effective()` 回程式預設（與今天寫死的清單逐項相同）、
     選單回應不帶 `optionLists`、頁面不多任何請求。清單裡的 `value` 是**存進資料裡的字**（客戶類型 VIP、料件分類 網通設備…）：發布後不可刪除、不可改字，
     只能「停用」（停用＝新資料不能再選，舊資料照常顯示）或改 `label`（顯示名稱；`relabel:false` 的清單不允許改 label，因為該欄位的值同時被報表／科目對照拿來比對）。
@@ -31,8 +31,11 @@ _TRIGGERS = ("=", "+", "-", "@")
 _PREFIX_RE = re.compile(r"^[A-Z]{2,5}$")
 
 
-def _b(value, label=None, **kw):
-    return dict({"value": value, "label": label if label is not None else value}, **kw)
+def _b(value, label=None, prefix=None):
+    d = {"value": value, "label": label if label is not None else value}
+    if prefix is not None:
+        d["prefix"] = prefix
+    return d
 
 
 #: 程式預設（＝今天寫死在畫面／程式裡的清單；`used_by` 是白話說明，預覽時顯示）。
@@ -223,6 +226,13 @@ def lists_for_menu(conn=None):
     return out or None
 
 
+def _preview_item(x, with_prefix):
+    d = {"value": x["value"], "label": x["label"], "disabled": bool(x.get("disabled"))}
+    if with_prefix:
+        d["prefix"] = x["prefix"]
+    return d
+
+
 def preview(list_id, body):
     """草稿預覽（唯讀）：合併後的清單、哪些畫面用它、被停用的選項（既有資料仍會顯示、新資料不能選）、新增的選項。
     不合法 ⇒ ValueError(problems)；不認得的清單 ⇒ LookupError。"""
@@ -236,8 +246,7 @@ def preview(list_id, body):
     live = _live_values(list_id) or {d["value"]: d for d in spec["defaults"]}
     items = body["values"]
     return {"id": list_id, "label": spec["label"], "usedBy": list(spec["used_by"]),
-            "values": [{"value": x["value"], "label": x["label"], "disabled": bool(x.get("disabled")),
-                        **({"prefix": x["prefix"]} if spec["prefix"] else {})} for x in items],
+            "values": [_preview_item(x, spec["prefix"]) for x in items],
             "added": [x["value"] for x in items if x["value"] not in live and x["value"] not in dflt],
             "disabled": [x["value"] for x in items if x.get("disabled")],
             "warnings": (["停用的選項：既有資料仍會顯示這些值，只是新增／編輯時不能再選。"] if any(x.get("disabled") for x in items) else [])
