@@ -24,7 +24,7 @@ HERE = Path(__file__).parent
 BASELINE = HERE / "write_golden_baseline.json"
 INVENTORY = HERE / "route_inventory.json"
 REST = HERE / "write_golden_cases" / "cases_zz_rest.py"
-WAIVE_CAP = 470          # 整合者在凍結時設成實際數字;之後只准降低（470＝468＋cases_stage_templates.py 的 2 條有理由豁免，S-ST2 凍結後新增的路由）
+WAIVE_CAP = 468          # 整合者在凍結時設成實際數字;之後只准降低
 CASES_FLOOR = 0              # 同上：整合者設成實際案例數，防止案例檔整批消失
 
 
