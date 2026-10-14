@@ -466,3 +466,99 @@ def test_roster_template_cannot_rename_headers_and_non_superadmin_preview_falls_
     assert all(r[2].startswith("******") for r in mine["rows"]), "證件號碼一律遮罩"
     theirs = client.post(url, json={"template": good, "sample": "visible", "user": other}, headers=hd).json()
     assert theirs["sample"] == "sample" and theirs["warnings"] and not any("1234567890" in str(r) for r in theirs["rows"]), "匯出只開放最高管理者 ⇒ 別人沒有真實列，退回樣本"
+
+
+# ═══ R4：PDF 頁尾／浮水印文字（版面固定的匯出＝decorOnly；先導＝開票申請憑據 PDF）═══════════════════
+PDFID = "arap:invoice-voucher-pdf"
+
+
+def test_pdf_decor_only_validator():
+    import modules.arap.api.invoice_vouchers  # noqa: F401  註冊匯出目錄
+    ok = {"version": 1, "format": "pdf", "footer": {"text": "內部資料"}, "watermark": {"text": "內部使用"}}
+    assert _bad(ok, key=PDFID) == []
+    assert "" in _paths(_bad({"version": 1, "format": "pdf"}, key=PDFID)), "至少一項"
+    assert "columns" in _paths(_bad(dict(ok, columns=[{"id": "a", "label": "b"}]), key=PDFID)), "版面固定，沒有欄位可選"
+    assert "header" in _paths(_bad(dict(ok, header={"text": "H"}), key=PDFID)), "這個匯出只開頁尾與浮水印（頁首會壓到憑據抬頭）"
+    for w in ("正本", "已核准", "已 付 款", "作廢", "已簽回"):
+        assert "watermark.text" in _paths(_bad(dict(ok, watermark={"text": w}), key=PDFID)), w
+    assert "watermark.text" in _paths(_bad(dict(ok, watermark={"text": "x" * 41}), key=PDFID))
+    assert _bad(dict(ok, footer={"text": "<script>alert(1)</script>"}), key=PDFID), "尖括號一律拒絕"
+
+
+def test_apply_pdf_text_escapes_places_the_watermark_below_and_is_identity_without_text():
+    html = "<html><body class='a'><div id='root'>內容</div></body></html>"
+    assert ET.apply_pdf_text(html, {"version": 1, "format": "pdf"}) is html
+    out = ET.apply_pdf_text(html, {"footer": {"text": "a<b>&"}, "watermark": {"text": "內部使用"}})
+    assert out.index("<body") < out.index("mx-wm") < out.index("id='root'"), "插在 body 開頭、內容之前（浮水印在內容下層：z-index 0；頁尾 1）"
+    assert "a&lt;b&gt;&amp;" in out and "a<b>" not in out, "文字一律跳脫"
+    assert "rgba(0,0,0,.08)" in out and "z-index:0" in out
+    assert out.replace(ET._PDF_CSS, "").count("<div") == 3 and "內容" in out, "原內容原樣保留"
+    assert ET.apply_pdf_text("<p>no body tag</p>", {"footer": {"text": "F"}}).endswith("<p>no body tag</p>")
+
+
+def test_decorate_pdf_returns_the_same_object_when_off_or_without_a_published_template(client, make_user, monkeypatch):
+    import modules.arap.api.invoice_vouchers  # noqa: F401
+    h = "<html><body>x</body></html>"
+    _flag(monkeypatch, False)
+    assert ET.decorate_pdf(PDFID, h) is h
+    _flag(monkeypatch, True)
+    assert ET.decorate_pdf(PDFID, h) is h, "旗標開但沒有已發布範本 ⇒ 仍是同一個字串"
+    assert ET.decorate_pdf("no:such", h) is h
+    _, hd = _login(client, make_user, "bp3_sa12", "superadmin")
+    assert _publish(client, hd, {"version": 1, "format": "pdf", "footer": {"text": "內部資料"}}, key=PDFID).status_code == 200
+    out = ET.decorate_pdf(PDFID, h)
+    assert out != h and "內部資料" in out
+    _flag(monkeypatch, False)
+    assert ET.decorate_pdf(PDFID, h) is h, "旗標關回去 ⇒ 不再套用"
+
+
+def test_invoice_voucher_builder_decorates_only_after_the_programs_own_banner():
+    """掛鉤的位置（靜態）：『尚未核准』橫幅由程式先注入，範本文字（頁尾／浮水印）最後才加，不會蓋掉它；
+    行為（OFF 同一個字串、ON 才加）由 test_decorate_pdf_returns_the_same_object… 證明。"""
+    import pdf_gen
+    src = open(pdf_gen.__file__, encoding="utf-8").read()
+    hook = 'decorate_pdf("arap:invoice-voucher-pdf", out)'
+    assert src.count(hook) == 1
+    assert src.index("_inject_unapproved(html") < src.index(hook)
+    assert "out = html if v.get(" in src
+
+
+def test_pdf_comparator_adding_visible_text_is_a_loosening():
+    from routers.def_pipeline import classify
+    base = {"version": 1, "format": "pdf", "footer": {"text": "內部資料"}}
+    assert classify("export_template", base, dict(base, footer={"text": "改過的文字"}))[0] == "neutral"
+    c, why = classify("export_template", base, dict(base, watermark={"text": "內部使用"}))
+    assert c == "loosen" and any("浮水印" in x for x in why)
+    assert classify("export_template", base, {"version": 1, "format": "pdf"})[0] == "tighten"
+    assert classify("export_template", {"version": 1, "format": "pdf", "footer": {"text": "a"}}, {"version": 1, "format": "pdf", "footer": {"text": "a"}, "header": {"text": "H"}})[0] == "loosen"
+
+
+# ═══ SheetJS 三頁（客戶／料號／供應商）：先過伺服器稽核與冷卻 ═════════════════════════════════════
+def test_client_export_log_audits_rate_limits_and_validates(client, make_user):
+    import db
+    _, hd = _login(client, make_user, "bp3_sa14", "superadmin")
+    url = "/api/exports/client-log"
+    assert client.post(url, json={"name": "customers", "rows": 3}).status_code in (401, 403)
+    assert client.post(url, json={"name": "nope", "rows": 3}, headers=hd).status_code == 422
+    for bad in (-1, 200001, "3", True, None, 1.5):
+        assert client.post(url, json={"name": "customers", "rows": bad}, headers=hd).status_code == 422, bad
+    r = client.post(url, json={"name": "customers", "rows": 12}, headers=hd)
+    assert r.status_code == 200 and r.json() == {"ok": True}
+    c = db.get_db()
+    try:
+        row = c.execute("SELECT detail FROM audit_log WHERE action='export.xlsx' AND target_id='customers' ORDER BY id DESC LIMIT 1").fetchone()
+    finally:
+        c.close()
+    assert row is not None and '"rows": 12' in row[0] and '"client": true' in row[0] and "crm" in row[0]
+    assert client.post(url, json={"name": "customers", "rows": 12}, headers=hd).status_code == 429, "冷卻中 ⇒ 429（前端不產檔）"
+
+
+def test_the_three_sheetjs_pages_call_the_guard_before_writing_the_file():
+    from pathlib import Path
+    pages = Path(__file__).resolve().parents[3] / "frontend" / "pages"
+    for page, name in (("customers", "customers"), ("parts", "parts"), ("suppliers", "suppliers")):
+        src = (pages / (page + ".html")).read_text(encoding="utf-8")
+        assert '<script src="../static/export-guard.js"></script>' in src, page
+        g = "await MotrixExport.guard('%s', rows.length)" % name
+        assert src.count(g) == 1, page
+        assert src.index("async exportExcel()") < src.index(g) < src.index("XLSX.writeFile"), "%s：守門要在產檔之前" % page

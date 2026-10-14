@@ -8,6 +8,7 @@
   <title>客戶管理 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
+  <script src="../static/export-guard.js"></script>
   <script src="../static/gov-lookup.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -980,7 +981,7 @@
         this.lookupOk  = true
       },
 
-      exportExcel() {
+      async exportExcel() {
         const rows = this.customers.map(c => ({
           '公司名稱': c.name||'', '英文名稱': c.nameEn||'', '統一編號': c.taxId||'',
           '電話': c.phone||'', '傳真': c.fax||'', 'Email': c.email||'', '網站': c.website||'',
@@ -992,6 +993,7 @@
           '聯絡人電話': c.contacts?.[0]?.phone||'', '聯絡人Email': c.contacts?.[0]?.email||'',
           '備註': c.notes||''
         }))
+        if (!(await MotrixExport.guard('customers', rows.length))) return   // BP-3：先過伺服器稽核與匯出冷卻（429 ⇒ 不產檔）
         const ws = XLSX.utils.json_to_sheet(rows)
         ws['!cols'] = [20,16,10,14,14,22,22,24,22,10,10,10,14,18,10,10,14,22,20].map(w=>({wch:w}))
         const wb = XLSX.utils.book_new()

@@ -170,3 +170,48 @@ def test_locked_labels_and_print_text_for_an_xlsx_export():
     assert r["t1"] == {"version": 1, "format": "xlsx", "columns": [{"id": "b", "label": "乙"}, {"id": "a", "label": "甲"}],
                        "header": {"text": "外包名冊"}, "footer": {"text": "請勿外流"}}, "標題鎖定：一律用目錄標題；頁首頁尾去頭尾空白"
     assert r["p1"] == [] and r["p2"] and "header" not in r["t2"] and "footer" not in r["t2"]
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_pdf_decor_only_editor_has_no_columns_and_checks_the_watermark_words():
+    cat = dict(_CAT, formats=["pdf"], columns=[], decorOnly=True, caps={"pdf": ["footer", "watermark"]})
+    run = ("const E = window.MotrixExportEditor, st = E._state; E._init(%s); " % json.dumps(cat)) + """
+      const none = E._problems()
+      st.footer = ' 內部資料 '; st.watermark = '內部使用'
+      const ok = E._problems(), t = E._toTemplate()
+      st.watermark = '已 核准'; const bad = E._problems()
+      st.watermark = 'x'.repeat(41); const long = E._problems()
+      return {none, ok, t, bad, long}"""
+    r = _run({"status": {"enabled": False}, "run": run})["v"]
+    assert r["none"] and "至少" in r["none"][0], "至少要設定一項"
+    assert r["ok"] == [] and r["t"] == {"version": 1, "format": "pdf", "footer": {"text": "內部資料"}, "watermark": {"text": "內部使用"}}, "沒有 columns 鍵"
+    assert r["bad"] and "官方狀態" in r["bad"][0]
+    assert r["long"]
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_export_guard_returns_false_only_when_the_server_says_429():
+    guard = Path(__file__).resolve().parents[3] / "frontend" / "static" / "export-guard.js"
+    h = r"""
+    const fs = require('fs'); global.window = global
+    global.localStorage = { getItem: () => JSON.stringify({ token: 'tok' }) }
+    global.document = { createElement: () => ({ setAttribute() {}, remove() {} }), body: { appendChild() {} } }
+    const sent = []
+    let mode = process.argv[1]
+    global.fetch = async (url, o) => {
+      sent.push([url, o.method, o.headers.Authorization, o.body])
+      if (mode === 'net') throw new Error('down')
+      return { status: mode === '429' ? 429 : mode === '500' ? 500 : 200, json: async () => ({ detail: '請等待 3 秒後再次匯出' }) }
+    }
+    eval(fs.readFileSync(process.argv[2], 'utf8'))
+    window.MotrixExport.guard('parts', 7.9).then(v => console.log(JSON.stringify({ v, sent })))
+    """
+    def go(mode):
+        out = subprocess.run([NODE, "-e", h, mode, str(guard)], capture_output=True, timeout=30)
+        assert out.returncode == 0, out.stderr.decode("utf-8", "replace")[:800]
+        return json.loads(out.stdout.decode("utf-8"))
+    ok = go("200")
+    assert ok["v"] is True and ok["sent"][0][0] == "/api/exports/client-log" and ok["sent"][0][2] == "Bearer tok"
+    assert json.loads(ok["sent"][0][3]) == {"name": "parts", "rows": 7}
+    assert go("429")["v"] is False, "冷卻中 ⇒ 不產檔"
+    assert go("500")["v"] is True and go("net")["v"] is True, "稽核端點故障不擋匯出（只寫 console）"
