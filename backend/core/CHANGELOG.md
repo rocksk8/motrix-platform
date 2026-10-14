@@ -15,7 +15,6 @@
 - L0（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：`core.customization.SIDEBAR_LABEL_MAX`／`sidebar_label_problem`（側欄顯示名稱：最長 20 字、不含標記字元）；`core.menu.apply_layout_ex(groups, ops, builder=False)`（`apply_layout` 簽章與行為不變，等同 `builder=False`）。
 - 版面操作放寬（`OPS_BY_KIND["sidebar"]` 加 `relabel`；側欄 `move` 可帶 `to: "group:<既有群組鍵>"`）：只有設定 `builder_menu.enabled`＝1 才被後端接受與套用；關著時行為與今天逐字相同。改名／換群組只是顯示，href、perm、`denied` 不變。
 
-
 ## 1.134 — 2026-10-13（wip/t57-u0a-r1：wip/t57-u0a-core-r2 組織單位預留 ＋ wip/t57-u0a-leak-defence-r1 單位鍵洩漏防線）
 
 - **步驟檔 #12 用的精確數字**：新表 5 張；新欄位共 43 個（`owner_unit_id` 36 張表、`unit_id` 2 張、`legal_entity_id` 5 張〔都在前 36 張內〕，因此被動到的既有表共 38 張）；新索引 0；`schema_version` 仍 118；`module_schema_versions.core` 9→10（取號後）。真實欄位：`org_units`(id, parent_id, code, name, is_legal_entity, parent_sees_children, status, sort_order, created_at, updated_at)；`org_unit_closure`(ancestor_id, descendant_id, depth, PK(ancestor_id, descendant_id))；`user_units`(user_id, unit_id, is_primary, role_binding NOT NULL DEFAULT '', PK(user_id, unit_id))；`system_settings_unit`(unit_id, key, value_json, updated_at, updated_by, PK(unit_id, key))；`seq_by_entity`(entity_id, kind, period, seq, PK(entity_id, kind, period))。
