@@ -1,0 +1,49 @@
+{
+ "POST /api/quotations/stage-templates/preview": {
+  "k": [
+   "notes",
+   "skipped",
+   "stages",
+   "stages[].dependsOn",
+   "stages[].dueDate",
+   "stages[].existingDeps",
+   "stages[].key",
+   "stages[].label",
+   "stages[].ratioBp",
+   "stages[].startDate"
+  ],
+  "s": 200
+ },
+ "POST /api/quotations/{quote_no}/stages/apply-template": {
+  "k": [
+   "baseDate",
+   "created",
+   "created[].assignedTo",
+   "created[].dependsOn",
+   "created[].done",
+   "created[].doneAt",
+   "created[].dueDate",
+   "created[].id",
+   "created[].label",
+   "created[].ratioBp",
+   "created[].sortOrder",
+   "created[].stageKey",
+   "created[].startDate",
+   "created[].visits",
+   "mode",
+   "notes",
+   "skipped",
+   "stages",
+   "stages[].dependsOn",
+   "stages[].dueDate",
+   "stages[].existingDeps",
+   "stages[].key",
+   "stages[].label",
+   "stages[].ratioBp",
+   "stages[].startDate",
+   "template",
+   "templateVersion"
+  ],
+  "s": 200
+ }
+}
