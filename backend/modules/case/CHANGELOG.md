@@ -1,5 +1,6 @@
 # 案件 更新紀錄
 
+
 ## (next) — 2026-10-14（wip/t62-bp4-s2-r2＋wip/t62-bp2-r5-r1＋wip/t62-approval-margin-r1；BP-4 附件插槽／BP-2 標示規則／單項毛利率門檻）；t62 整合 r5
 - 案件管理頁完工單分頁加「附件種類」入口（BP-4 S3，旗標 `builder_slots.enabled` 預設關、只有最高管理者看得到）：旗標隨既有的設定請求（`groups=builder_layout,builder_slots`）取得，關閉時不多打任何請求、畫面不變；編輯器是新檔 `static/attachment-slots.js`。
 - 完工單附件的讀取提供者宣告 `SLOT_AWARE`（BP-4 S2）：路徑 `completion_notes/<子夾>/<完工單號>/<檔名>` 與一般完工單附件同一條讀取規則（`case_documents_readable`）；兩段路徑照舊。旗標 `builder_slots.enabled` 預設關，沒有任何現有路徑改變。
@@ -15,6 +16,11 @@
 - S-Q2 稽核修正：`clauseTitles` 改為伺服器自有欄位——建立／整份存檔一律丟掉用戶端送的值；離開草稿（含直接改狀態）與解鎖重簽由伺服器以當下範本凍結；待審核維持原狀沿用資料庫現值；收回、退回改版、改回草稿一律清掉。表單 `buildTermsHtml` 的標題改為逸出。
 - 報價單條款標題可由匯出範本改（S-Q2，旗標預設關）：報價單 PDF（第一份版面；請款單的「請款條件」不動）、報價單表單與送審原因文字改讀 `helpers.clause_titles`；送審時把當下標題凍結進單據（`clauseTitles`），之後改範本不影響已送審單據。旗標關或沒有已發布範本 ⇒ 與今天相同。條款本文、順序、金額不變。無 migration、無新路由、無權限變更。
 - Q3 報價單自己的自訂欄位（內建記錄類型 `quotation`，沿用 S5 的旗標 `builder_custom_fields.enabled`，預設關）：值存在報價單 data_json 頂層 `customFields`（沒有值就沒有這個鍵）。`POST /api/quotations`、`PUT /api/quotations/{no}`（唯二會收用戶端整份文件的路徑）都過閘門 `_quote_custom_fields_gate`：沒送這個鍵＝帶回舊值（整份取代不洗掉）、送了且有變＝過 `builtin_fields.gate("quotation", …)`（旗標關閉＝回舊值、型別錯 400 指名欄位）。報價單表單「二、案件資訊」最下方多一個「自訂欄位」區塊（旗標開啟才畫）。PDF、預覽、內部列印不含自訂欄位（測試含正對照）。
+
+## (next) — wip/t62-notify-wording-r1（S-X3 報價單送審通知用語；旗標預設關）
+
+- 報價單輪到下一層、核准完成、退回修改的站內訊息可由通知用語範本改（S-X3，旗標預設關）：`quotations._tier_msg／_approved_msg／_returned_msg`；沒有範本 ⇒ 與今天同一個字串。無 migration、無新資料表、無權限變更。
+- 報價單送審的簽核人站內訊息可由通知用語範本改（S-X3，旗標預設關）：`_build_approval_tiers_and_notify` 兩處（第一層、無簽核層退回最高管理者）改走 `_submitted_msg`，沒有範本 ⇒ 與今天同一個字串。輪到下一層、核准、退回等其他訊息不動。無 migration、無新資料表、無權限變更。
 
 ## 1.0.186 — 2026-10-14（wip/t61-s5-impl-r1；S5：案件資訊的自訂欄位；r2 補整份寫入路徑）；t60 整合
 - 案件資訊分頁多一個「自訂欄位」區塊（設定中心「自訂欄位（內建畫面）」開啟後才出現；預設關閉＝畫面與資料完全不變）。欄位值存在 `caseRecord.customFields`（案件記錄的一個新分段，沒有值就沒有這個鍵），只給內部人員看，不出現在報價單、客戶版文件或回簽頁。

@@ -159,6 +159,8 @@ def _lazy_kinds():
         _ET.ensure_kind()
         from helpers import option_lists as _OL
         _OL.ensure_kind()
+        from helpers import notify_templates as _NT
+        _NT.ensure_kind()
     except Exception:                                                  # noqa: BLE001  登記失敗 ⇒ 該 kind 不存在（fail-closed）
         pass
 

@@ -24,7 +24,7 @@ router = APIRouter()
 
 #: 目前受管線管的 kind（有比較函式、而且編輯器已能處理『待核准』回應的）。layout：排版器（3c，wip/t60-s4-r1）與選單編輯器
 #: 都已改成遇到 `pending: true` 不說「已發布」——**這個 kind 只能在 3c 的 wip/t60-s4-r1 已在同一列車時才可加入名單**。
-ACTIVE_KINDS = ("custom_fields", "layout", "user_buttons", "rule_set", "attachment_slot", "export_template", "option_list", "status_display")      # user_buttons：T61 S6；rule_set：T62 BP-2；attachment_slot：T62 BP-4 S2；export_template：T61 BP-3；option_list：census #4；該 kind 沒登記時這個項目不起作用
+ACTIVE_KINDS = ("custom_fields", "layout", "user_buttons", "rule_set", "attachment_slot", "export_template", "option_list", "status_display", "notify_template")      # user_buttons：T61 S6；rule_set：T62 BP-2；attachment_slot：T62 BP-4 S2；export_template：T61 BP-3；option_list：census #4；該 kind 沒登記時這個項目不起作用
 
 _COSMETIC = {"label", "placeholder", "hint", "help", "description"}     # 只影響顯示文字，不影響誰看得到／填什麼
 
@@ -283,6 +283,42 @@ def _cmp_rule_set(old, new):
     return ("tighten", tighten) if tighten else ("neutral", [])
 
 
+def _cmp_notify_template(old, new):
+    """通知用語範本：新增或改變任何欄位的文字 ⇒ 放寬（收件人看到的字，需第二位最高管理者核准）；拿掉欄位（回到系統預設字）⇒ 收緊；
+    內容相同 ⇒ 中性；未知的頂層設定變動或看不懂的結構 ⇒ 放寬。"""
+    def flat(b):
+        if not isinstance(b, dict):
+            return None
+        out = {}
+        for chan in ("inapp", "mail"):
+            sec = b.get(chan)
+            if sec is None:
+                continue
+            if not isinstance(sec, dict):
+                return None
+            for f, v in sec.items():
+                out["%s.%s" % (chan, f)] = v
+        return out
+    o, n = flat(old or {}), flat(new)
+    if o is None or n is None:
+        return "loosen", ["無法解析通知用語範本，視為放寬"]
+    loosen, tighten = [], []
+    for k, v in n.items():
+        if k not in o:
+            loosen.append("新增自訂用語 %s（收件人看到的字，需核准）" % k)
+        elif o[k] != v:
+            loosen.append("用語 %s 改變（收件人看到的字，需核准）" % k)
+    for k in o:
+        if k not in n:
+            tighten.append("拿掉自訂用語 %s（回到系統預設字）" % k)
+    for k in set(old or {}) | set(new or {}):
+        if k not in ("inapp", "mail", "version") and (old or {}).get(k) != (new or {}).get(k):
+            loosen.append("未知設定 %s 變了（視為放寬）" % k)
+    if loosen:
+        return "loosen", loosen + tighten
+    return ("tighten", tighten) if tighten else ("neutral", [])
+
+
 def _cmp_attachment_slot(old, new):
     from helpers import attachment_slots as AS            # 延遲載入（避免 import 循環）
     return AS.compare(old, new)
@@ -294,7 +330,7 @@ def _cmp_status_display(old, new):
     return _SD.compare(old, new)
 
 
-COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout, "user_buttons": _cmp_user_buttons, "rule_set": _cmp_rule_set, "attachment_slot": _cmp_attachment_slot, "export_template": _cmp_export_template, "option_list": _cmp_option_list, "status_display": _cmp_status_display}
+COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout, "user_buttons": _cmp_user_buttons, "rule_set": _cmp_rule_set, "attachment_slot": _cmp_attachment_slot, "export_template": _cmp_export_template, "option_list": _cmp_option_list, "status_display": _cmp_status_display, "notify_template": _cmp_notify_template}
 
 
 def classify(kind, old_body, new_body):

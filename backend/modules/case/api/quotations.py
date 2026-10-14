@@ -536,6 +536,47 @@ def _exclude_requester(tiers: list, requester: str) -> list:
     return result
 
 
+def _submitted_msg(quote_no, label, cname) -> str:
+    """送審站內訊息（S-X3）：有已發布的自訂用語就用它（旗標關／沒有範本 ⇒ None ⇒ 今天寫死的字，逐字相同）。金額遮蔽仍由 `_notify` 逐收件人處理。"""
+    try:
+        from helpers import notify_templates as _NT
+        t = _NT.render_inapp("approval:submitted", {"單號": quote_no, "對象": cname, "標記": label})
+    except Exception:                                                  # noqa: BLE001
+        t = None
+    return t or f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+
+
+def _tier_msg(quote_no, label, cname, tier_no, total_tiers) -> str:
+    """輪到下一層的站內訊息（S-X3；送審時從中間層開始、簽核推進到下一層共用）。沒有範本 ⇒ 今天寫死的字。"""
+    try:
+        from helpers import notify_templates as _NT
+        t = _NT.render_inapp("approval:next_tier", {"單號": quote_no, "對象": cname, "標記": label, "層": tier_no, "總層": total_tiers})
+    except Exception:                                                  # noqa: BLE001
+        t = None
+    return t or (f"報價單 {quote_no}{label}（{cname}）"
+                 f"輪到您簽核（第 {tier_no} 層 / 共 {total_tiers} 層）")
+
+
+def _approved_msg(quote_no, cname, approved_by="") -> str:
+    """核准完成的站內訊息（S-X3）。沒有範本 ⇒ 今天寫死的字。"""
+    try:
+        from helpers import notify_templates as _NT
+        t = _NT.render_inapp("approval:approved", {"單號": quote_no, "對象": cname, "最終審核人": approved_by})
+    except Exception:                                                  # noqa: BLE001
+        t = None
+    return t or "報價單 %s（%s）已核准" % (quote_no, cname)
+
+
+def _returned_msg(new_no, quote_no, cname) -> str:
+    """退回修改的站內訊息（S-X3）。沒有範本 ⇒ 今天寫死的字。"""
+    try:
+        from helpers import notify_templates as _NT
+        t = _NT.render_inapp("approval:returned", {"新單號": new_no, "原單號": quote_no, "對象": cname})
+    except Exception:                                                  # noqa: BLE001
+        t = None
+    return t or f"報價單 {new_no}（原 {quote_no}，{cname}）已退回修改，請確認後重新送審"
+
+
 def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_submission: bool) -> dict:
     """Attach approval tiers built from global settings (requester excluded) if not
     already present on `appr`, then send approval-request notifications for a
@@ -583,22 +624,21 @@ def _build_approval_tiers_and_notify(q: dict, appr: dict, quote_no: str, is_new_
             pending = [a for a in (tiers[ct_idx].get("approvers") or [])
                        if a.get("status") != "approved"]
             if ct_idx == 0:
-                msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+                msg = _submitted_msg(quote_no, label, cname)
                 for a in pending:
                     _notify(a["username"], "approval_request", quote_no, quote_no, msg)
                     _appr_names.append(a["username"])
                     _appr_labels.append(a.get("displayName") or a["username"])
                 notify_approval_request(quote_no, cname, _appr_names)
             else:
-                msg = (f"報價單 {quote_no}{label}（{cname}）"
-                       f"輪到您簽核（第 {ct_idx + 1} 層 / 共 {len(tiers)} 層）")
+                msg = _tier_msg(quote_no, label, cname, ct_idx + 1, len(tiers))
                 for a in pending:
                     _notify(a["username"], "approval_request", quote_no, quote_no, msg)
                     _appr_names.append(a["username"])
                     _appr_labels.append(a.get("displayName") or a["username"])
                 notify_next_tier(quote_no, cname, ct_idx + 1, len(tiers), _appr_names)
         elif not tiers:
-            msg = f"報價單 {quote_no}{label}（{cname}）需要您簽核"
+            msg = _submitted_msg(quote_no, label, cname)
             _conn = get_db()
             admins = _conn.execute(
                 "SELECT username FROM users WHERE role='superadmin' AND active=1"
@@ -5174,7 +5214,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
                         #    使用者回報簽核時整個系統卡住 3 秒；通知還可能因為等滿 busy timeout 而遺失）⇒ commit 之後才做。
                         after_commit.append(functools.partial(
                             _notify, na["username"], "approval_request", quote_no, quote_no,
-                            f"報價單 {quote_no}（{cname}）輪到您簽核（第 {landed + 1} 層 / 共 {len(tiers)} 層）"))
+                            _tier_msg(quote_no, "", cname, landed + 1, len(tiers))))
                         _next_names.append(na["username"])
                     after_commit.append(functools.partial(notify_next_tier, quote_no, cname, landed + 1, len(tiers), _next_names))
             else:
@@ -5231,7 +5271,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             if appr.get("requestedBy"):                       # 第44班：申請人在系統內也要看到核准通知（點了開報價單；訊息不含金額）
                 after_commit.append(functools.partial(
                     _notify, appr["requestedBy"], "quotation_approved", quote_no, quote_no,
-                    "報價單 %s（%s）已核准" % (quote_no, cname), "quotation-form.html?id=" + urlquote(quote_no, safe="")))
+                    _approved_msg(quote_no, cname, approver_name), "quotation-form.html?id=" + urlquote(quote_no, safe="")))
             detail_status = "已送出"
         else:
             d["approval"] = appr
@@ -5331,8 +5371,7 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
 
         requester = appr.get("requestedBy")
         if requester:
-            _notify(requester, "approval_returned", new_no, new_no,
-                    f"報價單 {new_no}（原 {quote_no}，{cname}）已退回修改，請確認後重新送審")
+            _notify(requester, "approval_returned", new_no, new_no, _returned_msg(new_no, quote_no, cname))
             notify_returned(quote_no, new_no, cname, note, requester)
         conn.close()
         _audit(_tok(authorization), "quotation.return", "quotation", new_no,

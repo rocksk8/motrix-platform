@@ -78,6 +78,7 @@
    "helper:module_switches",
    "helper:notification_prefs",
    "helper:notify_matrix",
+   "helper:notify_templates",
    "helper:part_catalog",
    "helper:privacy_notice",
    "helper:procurement",

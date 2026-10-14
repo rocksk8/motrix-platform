@@ -1,5 +1,6 @@
 # L0／L1 底層 更新紀錄
 
+
 ## (next) — wip/t62-bp4-s1-r1＋wip/t62-bp4-s2-r1＋wip/t62-bp4-s2-r2＋wip/t62-bp4-s3-r1（BP-4 S1／S2／S3：儲存位置代號登錄表＋附件插槽定義；旗標 `builder_slots.enabled` 預設關）；t62 整合 r5
 
 - S-F1（census）：選項清單新增 `payment_stage`（案件款項期別名稱：訂金款／交貨款／驗收款／進度款／完工款／收款後出貨／自訂義／其他；可新增、改顯示名稱、重排、停用，已發布的值不可刪、不可改字）與 `payment_request_stage`（請款單款項類別，代碼 full／deposit／delivery／acceptance／final 固定，**封閉清單**：只能改顯示名稱與順序）。報表、出納、儀表板、應收、行事曆事件標題、請款單 PDF 只改『顯示』（`helpers/option_lists.payment_stage_name`／`payment_stage_display`／`request_stage_label`；清單關著或沒發布 ⇒ 與過去逐字相同）；自訂義的 `customLabel` 顯示修正也在旗標後面。已入帳的收款手續費傳票說明（`receivables.py`）與報價單的訊息文字仍用原字串。
@@ -27,6 +28,14 @@ R3：`helpers/xlsx_out.xlsx_to_html` 讀 xlsx 的列印頁首／頁尾（沒設�
 ## (next) — wip/t62-quote-cf-r1（Q3 報價單自訂欄位）
 
 - L1（Q3）：`helpers.builtin_fields.RECORD_TYPES` 新增記錄類型 `quotation`（報價單頂層 `customFields`；核心欄位清單＝報價單文件鍵，自訂欄位 key 不可同名）。沒有新路由、沒有介面變動；旗標沿用 `builder_custom_fields.enabled`（預設關）。
+
+## (next) — wip/t62-notify-wording-r1（S-X3 簽核通知用語；旗標 `builder_notify.enabled` 預設關）
+
+- S-X3 N 刀（wip/t62-notify-wording-r4）：報價單家族加三個通知事件——`approval:next_tier`（輪到下一層）、`approval:approved`（核准完成）、`approval:returned`（退回修改），各含站內訊息與信件事由／標題／徽章／引言／按鈕字；占位符新增 `{層}` `{總層}` `{最終審核人}` `{原單號}` `{新單號}`。與預設字完全相同的值一律放行（預設字可能含斜線、狀態字樣）；核准事件的欄位允許狀態字樣（事件鍵決定能不能說），其餘事件仍禁。編輯器改為事件分頁（一次 `GET /api/notify-templates/status` 取得全部事件；各事件各自的草稿、預覽、發布），說明文字註明不能使用 $ 與 /。`quotations._tier_msg／_approved_msg／_returned_msg` 與 `email_notify.notify_next_tier／notify_approved／notify_returned` 掛鉤；旗標關／沒有已發布範本 ⇒ 與今天逐位元相同。
+- S-X3 r3（04 稽核）：通知用語加字元白名單（NFKC 之後只接受中文、英數字與常用標點；西里爾／希臘外觀相似字、emoji 一律擋，官方字樣檢查不再能被繞過），編輯器鏡像同步（含 Cs／Co／Cf 與填充字元）；編輯器把任何空值的預覽結果視為取消（與『沒有治理元件』分開）；兩個過去自己逸出的簽核信呼叫端（獎金層外核准、勞報單層外代核）改由共用建構器統一逸出，避免雙重逸出。
+- S-X3 編輯器：`frontend/static/notify-editor.js`（簽核通知用語面板：占位符按鈕、即時預覽站內訊息／沒有財務權限視角／通知信，檢查→影響預覽→發布，待核准如實說明）；掛在 `approval-settings.html` 底部的載入器——只有最高管理者才讀一次 `builder_notify` 旗標（`MotrixPublicFlags`），旗標關著 ⇒ 不載入編輯器程式、不發其他請求。`GET /api/notify-templates/{event}/status` 多回 `need`（必含占位符）。
+- S-X3 r2（04 稽核）：信件主旨事由改為純文字（只展開占位符、去換行、上限 200 字；不再 HTML 逸出）；`notify_template` 登記功能狀態閘門（旗標或治理關閉 ⇒ 定義路由 404）；官方狀態字樣擴充（已通過／批准／審核通過／已簽核／已生效、簡體、英文 approve／passed…，英文用字界比對）；網址禁令擴充（任何 英數.英數 網域寫法與斜線）。既有問題（旗標關也成立）：`email_notify._build_html` 對簽核類信件（分類＝簽核）的標題、徽章、明細、備註、引言、按鈕、影響、建議處理一律 HTML 逸出——原本客戶名稱／備註含 `<` 會被當成標記；其他類別的呼叫端有刻意傳入 HTML，維持原樣。
+- L1（S-X3 第一刀，wip/t62-notify-wording-r1；旗標 `builder_notify.enabled` 預設關，且必須同時開啟 `builder_governance.enabled`；kind 惰性登記）：新增 `helpers/notify_templates.py`（簽核事件通知用語範本；先導事件 `approval:submitted`＝報價單送審：站內訊息、信件事由／標題／徽章／引言／按鈕字）與 `routers/notify_templates.py`（`GET /api/notify-templates/{event}/status`、`POST …/preview` 唯讀，含沒有財務權限收件人的遮蔽視角）。範本只收純文字與白名單占位符（`{單號}` `{對象}` `{標記}`），無標記、網址、隱形字元、官方狀態字樣，且必須含 `{單號}`；信件主旨前綴與分類、版型、收件人、寄送時機不可改；信件展開後 HTML 逸出，信件沒有金額占位符，站內訊息仍由 `_notify` 逐收件人遮蔽金額。治理：`def_pipeline.ACTIVE_KINDS` 加入 `notify_template`（新增或改變用語＝放寬⇒待核准；拿掉＝收緊）。`email_notify.notify_approval_request` 與 `quotations._submitted_msg` 掛鉤；旗標關／沒有已發布範本 ⇒ 站內訊息與信件主旨、內文與今天逐位元相同。
 
 ## 1.136 — wip/t61-s5-impl-r1＋wip/t61-s6-impl-r1＋wip/t60（T60 選單 hub 群組／T61 S5 內建畫面自訂欄位／S6 自訂按鈕；旗標預設關）
 

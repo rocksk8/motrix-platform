@@ -19,6 +19,8 @@ def kinds():
         _ET.ensure_kind()                                              # 惰性登記（旗標關 ⇒ 不登記）
         from helpers import option_lists as _OL
         _OL.ensure_kind()                                              # 惰性登記（旗標關 ⇒ 不登記）
+        from helpers import notify_templates as _NT
+        _NT.ensure_kind()                                              # 惰性登記（旗標關 ⇒ 不登記）
     except Exception:                                                  # noqa: BLE001
         pass
     return D.kinds()
@@ -32,6 +34,7 @@ _SCOPE_TEXT = {
     "export_template": {"screens": "該匯出檔的欄位、標題與順序（下載檔案的內容）", "customerVisible": False},
     "option_list": {"screens": "用到這份清單的下拉選單與篩選（客戶類型、供應商類型、料件分類、料件單位）", "customerVisible": False},
     "status_display": {"screens": "報價單、案件、出納等畫面上狀態的顯示名稱與顏色（只改看到的字與色，不改任何狀態值或權限）", "customerVisible": False},
+    "notify_template": {"screens": "該簽核事件的站內訊息與通知信的文字（收件人看到的字）", "customerVisible": False},
 }
 _GENERIC_SCOPE = {"screens": "使用這份定義的畫面", "customerVisible": False}
 

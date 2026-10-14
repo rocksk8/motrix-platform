@@ -9,7 +9,6 @@
 用語（t44 申請人通知統一規範）：識別＝「獎金分潤 {單號}」＋結果字「已核准」；主旨與信件事由是同一句「獎金分潤 {單號} 已核准」。
 🔴 **信內不放金額**（只放單號與客戶名稱，與既有獎金信一致）。寄信是附帶動作：任何例外只記 log，不可以讓簽核失敗——對外入口自己包 try。
 """
-import html
 import logging
 from urllib.parse import quote
 
@@ -108,7 +107,7 @@ def fire_bypass(quote_no, customer, actor, sole_approver, reason, recipients) ->
             _notice_in_app(quote_no, r, type_="bonus_approver_bypass", message=text)
         except Exception:                                        # noqa: BLE001 — 附帶動作
             logger.exception("獎金分潤層外核准站內通知失敗（%s → %s）", quote_no, r)
-    e = lambda v: html.escape(str(v or ""), quote=True)       # 信件模板不跳脫列值：原因是自由文字 ⇒ 在這裡跳脫（站內通知照原文，前端以文字顯示）
+    e = lambda v: str(v or "")       # 純文字：共用的 `email_notify._build_html` 對簽核類信件統一逸出（這裡不要再逸出，否則會雙重逸出）
     try:
         return _en.send_registered(
             "bonus_approver_bypass", title="獎金分潤層外核准", reason="%s 層外核准" % ident(quote_no), usernames=who,
