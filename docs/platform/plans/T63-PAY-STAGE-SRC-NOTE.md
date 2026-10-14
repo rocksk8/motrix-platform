@@ -25,10 +25,11 @@
 - PDF：`pdf_gen._build_payment_request_html_core` 款項類別（C）；已送出的檔案不改。
 - 報表／出納：用的是案件款項期別 `payment_stage`（`reports.py`、`cashier.py`、`receivables.py`、`dashboard.py`、`receipt_calendar.py`），**不同清單，不受影響**。
 - 簽核／傳票／總帳：不讀這份清單。
-- 路由登記：新增 1 條 GET ⇒ `tests/platform/route_inventory.json`、`modules/case/tests/route_table_golden.json`、`tests/platform/response_keys_baseline.json` 需同提交加列（本批手寫；**整合者以 `U0B_RECORD=1`／`U0A_RECORD=1` 重錄對照**）；`docs/platform/dep_graph.json`、`case_read_scope.json` 由整合者 regen。
+- 路由登記：新增 1 條 GET `/api/payment-requests/stages` ⇒ **本分支不手寫任何基準列**，整合者需重錄：①`tests/platform/route_inventory.json`（`U0B_RECORD=1 pytest tests/platform/test_route_inventory.py`）；②`modules/case/tests/route_table_golden.json`（該檔的重錄方式）；③`tests/platform/response_keys_baseline.json`（`U0A_RECORD=1 pytest tests/platform/test_response_keys_baseline.py`；預期新增鍵 `items[].disabled／label／value`、`source`）；④`docs/platform/dep_graph.json`、`UNIT-INDEX.md`、`case_read_scope.json` 由 `regen_all` 產生。重錄前這些守門題會紅（只因為多一條路由）。
+- **為什麼要新路由**：已檢查現有可用的端點——`GET /api/option-lists/{id}/status`（旗標關回 `{enabled:false,canEdit:false}`、非最高管理者回 `{enabled:true,canEdit:false}`，兩者有測試逐字比對，不能加鍵；且旗標關時沒有清單內容）；`/api/platform/menu` 的 `optionLists`（只含『已發布且與預設不同』的清單，旗標關時沒有，要放預設會改動既有 payload）。都不適合，所以新增一條只讀端點。
 
 ## 4. 守門（新增 `backend/tests/test_payment_stage_single_source_2026_10_14.py`）
 ①B、C 的內容逐項等於 A；②端點在旗標關時回 A（靜態＋函式層）；③前端後備 `STAGES` 與 `case-management-core.js` 的 `STAGE_ITEMS` 等於後端預設（node 讀頁面抽出）；④舊值按鈕邏輯 node 黃金對照（清單內 ⇒ 不多畫；清單外 ⇒ 多一顆）；⑤頁面不再有第二份驗證用的寫死集合。本批不跑 pytest，以直接呼叫＋node 驗。
 
 ## 5. 風險
-低：預設內容逐項不變、只新增唯讀端點與前端讀取；失敗退回現有後備。最大風險是**手寫的路由基準檔列**與實際不符（整合者重錄即可）。
+低：預設內容逐項不變、只新增唯讀端點與前端讀取；失敗退回現有後備。已知代價：多一條路由 ⇒ 四個基準檔要重錄（見 §3）。本批沒有跑任何測試（T62 閘門靜默期），`test_payment_stage_single_source_2026_10_14.py` 待放行後第一個跑。

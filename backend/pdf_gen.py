@@ -2118,13 +2118,8 @@ def _generate_invoice_voucher_pdf(voucher_no: str, actor: str = '', action_type:
 
 # ── 請款單 ────────────────────────────────────────────────────────────────────
 
-_PAYMENT_STAGE_LABELS = {
-    "full":       "全額",
-    "deposit":    "訂金款",
-    "delivery":   "交貨款",
-    "acceptance": "驗收款",
-    "final":      "尾款",
-}
+from helpers.option_lists import request_stage_names as _request_stage_names      # F4：款項類別代碼清單的唯一來源（helpers/option_lists.BUILTIN）
+_PAYMENT_STAGE_LABELS = _request_stage_names()
 
 
 def _build_payment_request_html(v: dict) -> str:
