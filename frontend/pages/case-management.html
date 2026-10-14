@@ -33,6 +33,7 @@
   <script src="../static/layout-runtime.js"></script>
   <script src="../static/layout-editor.js"></script>
   <script src="../js/def-governance.js"></script>
+  <script src="../static/attachment-slots.js"></script>
   <script src="../static/list-sort.js"></script>
   <script src="../static/vendor/frappe-gantt-0.6.1.min.js"></script>
   <link rel="stylesheet" href="../static/vendor/frappe-gantt-0.6.1.css">
@@ -3398,6 +3399,8 @@
                   <div style="flex:1">
                     <span class="cm-section-title" style="margin-bottom:0">完工單管理</span><span class="save-mode save-mode--manual" data-save-mode="manual" title="在完工單視窗裡按儲存">按儲存</span>
                   </div>
+                  <button type="button" class="btn btn-ghost btn-sm" data-testid="as-edit-open" x-show="asOn" @click="MotrixAttachmentSlots.openEditor()"
+                          title="為完工單設定附件種類（可收的檔案類型、大小、可上傳的人）；只有最高管理者看得到">附件種類</button>
                   <!-- 比照報價單：清單在這裡，填寫在獨立頁面（completion-note-form.html）。
                        2026-09-12 使用者指定「用報價單的方式去建立，一個頁面做填寫」。 -->
                   <a x-show="['superadmin','admin'].includes(session.role)"
@@ -4778,6 +4781,7 @@ MotrixLayout.init({
   fallback: { lists: { cases: ['quoteNo', 'dealTag', 'customer', 'sales', 'amount', 'stageProgress', 'date'] } },
 })
 window.CM_PARTS.push(() => ({
+  asOn: false,                       // BP-4 S3：附件種類編輯器入口（旗標開＋最高管理者才為真；關閉時永遠是 false）
   layoutOn: false,
   _lcols() { return this.layoutOn ? window.Alpine.store('layout').cols('cases') : [] },
   _lix(f) { return this._lcols().findIndex(c => c.field === f) },
@@ -4804,9 +4808,12 @@ window.CM_PARTS.push(() => ({
     try {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
-      const r = await fetch('/api/settings-center/public?groups=builder_layout', { headers: { Authorization: 'Bearer ' + s.token } })
+      const r = await fetch('/api/settings-center/public?groups=builder_layout,builder_slots', { headers: { Authorization: 'Bearer ' + s.token } })
       if (!r.ok) return
       const d = await r.json()
+      // BP-4 S3：附件種類編輯器的旗標從同一次設定請求取得（關閉時不多打任何請求）；只有最高管理者看得到入口
+      if (d && d.groups && d.groups.builder_slots && Number(d.groups.builder_slots.enabled) === 1 && window.MotrixAttachmentSlots
+          && window.MotrixAttachmentSlots.mount({ docType: 'completion_note', label: '完工單' })) this.asOn = true
       if (!d || !d.groups || !d.groups.builder_layout || d.groups.builder_layout.case_management !== true) return
       if (!document.getElementById('cm-layout-css')) {
         const st = document.createElement('style'); st.id = 'cm-layout-css'
