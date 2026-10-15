@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1407,
+  "tests": 1413,
   "unmapped": 13,
   "kinds": {
-   "api": 781,
+   "api": 782,
    "e2e": 309,
-   "audit": 185,
-   "unit": 132
+   "audit": 189,
+   "unit": 133
   },
-  "routes": 852
+  "routes": 853
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -16285,6 +16285,8 @@
     "js:static/custom-layout.js",
     "js:static/layout-editor.js",
     "js:static/layout-runtime.js",
+    "js:static/motrix-format.js",
+    "js:static/profit-warning.js",
     "js:static/public-flags.js",
     "js:static/status-chip.js",
     "page:pages/quotation-form.html",
@@ -16310,6 +16312,8 @@
      "frontend/static/custom-layout.js",
      "frontend/static/layout-editor.js",
      "frontend/static/layout-runtime.js",
+     "frontend/static/motrix-format.js",
+     "frontend/static/profit-warning.js",
      "frontend/static/public-flags.js",
      "frontend/static/status-chip.js"
     ],
@@ -18760,6 +18764,64 @@
     ]
    }
   },
+  "backend/tests/platform/test_field_catalog_t64.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/modules/case/module.json",
+    "helper:clause_titles",
+    "helper:export_templates",
+    "helper:field_catalog",
+    "helper:financial_mask",
+    "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
+    "mod:arap/api/invoice_vouchers",
+    "mod:case/api/quotations",
+    "mod:case/completion_pdf",
+    "mod:daily_tasks/api",
+    "mod:subcontract/api/contractors"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/clause_titles.py",
+     "backend/helpers/export_templates.py",
+     "backend/helpers/field_catalog.py",
+     "backend/helpers/financial_mask.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/completion_pdf.py",
+     "backend/modules/daily_tasks/api.py",
+     "backend/modules/subcontract/api/contractors.py"
+    ],
+    "path": [
+     "backend/modules/case/",
+     "backend/modules/case/module.json"
+    ]
+   }
+  },
+  "backend/tests/platform/test_field_policy_t65.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "helper:field_catalog",
+    "helper:field_policy",
+    "helper:financial_mask"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/field_catalog.py",
+     "backend/helpers/field_policy.py",
+     "backend/helpers/financial_mask.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_file_open_ratchet_2026_09_30.py": {
    "kind": "audit",
    "units": [
@@ -20622,6 +20684,59 @@
     ]
    }
   },
+  "backend/tests/platform/test_notify_action_editor_labels_t64.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/platform/test_notify_action_editor_t64.py",
+    "helper:custom_modules",
+    "helper:notify_actions",
+    "plat:__init__",
+    "plat:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/custom_modules.py",
+     "backend/helpers/notify_actions.py",
+     "backend/tests/platform/test_notify_action_editor_t64.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_notify_action_editor_t64.py": {
+   "kind": "audit",
+   "units": [
+    "dir:frontend/static/",
+    "file:backend/helpers/__init__.py",
+    "helper:notify_actions",
+    "helper:notify_templates",
+    "js:static/notify-action-editor.js",
+    "page:pages/approval-settings.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/notify_actions.py",
+     "backend/helpers/notify_templates.py"
+    ],
+    "page": [
+     "frontend/pages/approval-settings.html",
+     "frontend/static/notify-action-editor.js"
+    ],
+    "path": [
+     "frontend/static/",
+     "frontend/static/notify-action-editor.js"
+    ]
+   }
+  },
   "backend/tests/platform/test_notify_actions_t63.py": {
    "kind": "api",
    "units": [
@@ -21454,6 +21569,55 @@
     "path": [
      "backend/helpers/profit_rules.py",
      "frontend/static/profit-rules.js"
+    ]
+   }
+  },
+  "backend/tests/platform/test_profit_warning_t64.py": {
+   "kind": "audit",
+   "units": [
+    "core:pdf_gen",
+    "dir:backend/modules/case/",
+    "dir:backend/modules/case/api/",
+    "file:backend/helpers/__init__.py",
+    "helper:profit_warning",
+    "helper:settings_groups",
+    "helper:settings_groups_profit",
+    "helper:settings_registry",
+    "js:static/profit-warning.js",
+    "mod:case/api/project_margin",
+    "mod:case/api/quotations",
+    "page:pages/case-management.html",
+    "page:pages/quotation-form.html",
+    "page:pages/reports.html",
+    "page:pages/settlement.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/profit_warning.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_groups_profit.py",
+     "backend/helpers/settings_registry.py",
+     "backend/pdf_gen.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/quotation-form.html",
+     "frontend/pages/reports.html",
+     "frontend/pages/settlement.html",
+     "frontend/static/profit-warning.js"
+    ],
+    "path": [
+     "backend/modules/case/",
+     "backend/modules/case/api/",
+     "backend/modules/case/api/project_margin.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/pdf_gen.py",
+     "frontend/pages/case-management.html",
+     "frontend/pages/quotation-form.html",
+     "frontend/pages/reports.html",
+     "frontend/pages/settlement.html",
+     "frontend/static/profit-warning.js"
     ]
    }
   },
@@ -25430,13 +25594,17 @@
     "dir:frontend/static/",
     "js:js/case-management-core.js",
     "js:static/motrix-date.js",
+    "js:static/motrix-format.js",
+    "js:static/profit-warning.js",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "page": [
      "frontend/js/case-management-core.js",
      "frontend/pages/case-management.html",
-     "frontend/static/motrix-date.js"
+     "frontend/static/motrix-date.js",
+     "frontend/static/motrix-format.js",
+     "frontend/static/profit-warning.js"
     ],
     "path": [
      "frontend/js/",
@@ -34173,6 +34341,60 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_motrix_format_t64.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "js:js/case-management-dispatch.js",
+    "js:js/case-management-exec.js",
+    "js:js/case-management-fin.js",
+    "js:js/case-management-mchange.js",
+    "js:js/case-management-xexp.js",
+    "js:js/cashier.js",
+    "js:static/motrix-format.js",
+    "page:pages/case-management.html",
+    "page:pages/cashier.html",
+    "page:pages/quotation-form.html",
+    "page:pages/quotations.html",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py"
+    ],
+    "page": [
+     "frontend/js/case-management-dispatch.js",
+     "frontend/js/case-management-exec.js",
+     "frontend/js/case-management-fin.js",
+     "frontend/js/case-management-mchange.js",
+     "frontend/js/case-management-xexp.js",
+     "frontend/js/cashier.js",
+     "frontend/pages/case-management.html",
+     "frontend/pages/cashier.html",
+     "frontend/pages/quotation-form.html",
+     "frontend/pages/quotations.html",
+     "frontend/static/motrix-format.js"
+    ],
+    "path": [
+     "frontend/js/case-management-dispatch.js",
+     "frontend/js/case-management-exec.js",
+     "frontend/js/case-management-fin.js",
+     "frontend/js/case-management-mchange.js",
+     "frontend/js/case-management-xexp.js",
+     "frontend/js/cashier.js",
+     "frontend/pages/case-management.html",
+     "frontend/pages/cashier.html",
+     "frontend/pages/quotation-form.html",
+     "frontend/pages/quotations.html",
+     "frontend/static/motrix-format.js"
+    ]
+   }
+  },
   "backend/tests/test_mp0_map_popup_escapes_external_text_2026_09_24.py": {
    "kind": "e2e",
    "units": [
@@ -35589,9 +35811,14 @@
     "dir:backend/modules/accounting/",
     "file:backend/data/account_items_112.json",
     "file:backend/data/profit_labels_t48.json",
+    "file:backend/helpers/__init__.py",
+    "helper:field_catalog",
     "helper:financial_mask",
     "helper:legal_params",
     "helper:profit_rules",
+    "helper:profit_warning",
+    "helper:settings_groups",
+    "helper:settings_registry",
     "mod:case/api/__init__",
     "mod:case/api/quotations",
     "page:pages/quotation-form.html",
@@ -35603,7 +35830,11 @@
     "import": [
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
      "backend/helpers/financial_mask.py",
+     "backend/helpers/profit_warning.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
      "backend/modules/case/api/__init__.py",
      "backend/modules/case/api/quotations.py",
      "backend/pdf_gen.py"
@@ -35615,7 +35846,7 @@
      "backend/data/account_items_112.json",
      "backend/data/profit_labels_t48.json",
      "backend/db.py",
-     "backend/helpers/financial_mask.py",
+     "backend/helpers/field_catalog.py",
      "backend/helpers/legal_params.py",
      "backend/helpers/profit_rules.py",
      "backend/modules/accounting/",
@@ -36189,6 +36420,7 @@
     "helper:settings_groups",
     "helper:settings_registry",
     "helper:settings_strict",
+    "js:static/motrix-format.js",
     "mod:case/__init__",
     "mod:case/api/project_margin",
     "mod:case/quote_terms",
@@ -36214,7 +36446,8 @@
      "backend/modules/case/api/project_margin.py"
     ],
     "page": [
-     "frontend/pages/quotation-form.html"
+     "frontend/pages/quotation-form.html",
+     "frontend/static/motrix-format.js"
     ]
    },
    "login_fixture": true
