@@ -2141,17 +2141,13 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             (body.location_id or "").strip() or None,
             quote_no,
         ))
-        # caseRecord.stages 正規化 Phase 3a（2026-08-23）：quotation-form.html::apiSave()
-        # 走的是這支整包存檔端點，跟 update_case_record() 是完全分開的路徑，一樣可能
-        # 挾帶 caseRecord.stages（例如它自己那份較舊、欄位不全的 ensureCaseRecord()
-        # 產生的階段）。邏輯與 update_case_record() 完全比照：送了 stages 就整批同步
-        # 回 case_stages/case_stage_visits，沒送這個 key 才維持表內現有值不動。
+        # caseRecord.stages：階段的唯一寫入者是階段專屬端點（case_stages 表是權威）。quotation-form.html::apiSave() 帶來的是
+        # 表單載入時的那份舊 stages（表單沒有任何階段編輯畫面）；過去這裡把它整批同步回表，舊分頁存檔會蓋掉別人改過的完成狀態／日期、
+        # 讓被刪的階段復活、刪掉別人新增的階段（docs/platform/plans/CASE-STAGE-STALE-SAVE-ANALYSIS-T63.md）。
+        # 現在比照 update_case_record()（2026-08-24 起）：忽略用戶端的 stages，把 data_json 裡的 caseRecord.stages 換回表內現況。
+        # 用戶端沒送 stages 這個鍵 ⇒ 完全不動（和過去相同）。updated_at 沿用上面 UPDATE 的 now，樂觀鎖不受影響。
         cr = q.get("caseRecord")
         if isinstance(cr, dict) and isinstance(cr.get("stages"), list):
-            _sync_json_stages_to_table(conn, quote_no, cr["stages"])
-            # 3b 收尾追加修正（2026-08-23）：合併後有些階段可能拿到新的真實 id，立刻
-            # 寫回 data_json，前端下一次讀到的 id 才會跟 case_stages 表一致。updated_at
-            # 沿用上面 UPDATE 已經用掉的同一個 now，不產生第二個時間戳，樂觀鎖不受影響。
             _sync_stages_to_json(conn, quote_no, updated_at=now)
         conn.commit()
     except BaseException:
