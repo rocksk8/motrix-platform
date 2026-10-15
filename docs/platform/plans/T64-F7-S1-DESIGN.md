@@ -92,3 +92,17 @@ S1 是純重構，**沒有新的使用者決定**。唯一要確認的工程判�
 | S1d | 1.5 | 擋門／遮蔽分類錯 ⇒ 每個點標註並覆核 |
 | S1e | 2 | 匯出登記改產生；PDF 例外路徑 |
 合計約 8.5 pd；每步可單獨上線，任何一步紅了只回滾該步。
+
+## 9. 2026-10-15 使用者裁示對 S1 的影響（只改文件，S1a 程式不變）
+
+承接 `T64-F7-FIELD-POLICY-DESIGN.md` §11（受保護層）與 §12（單位維度）。對 S1 的約束：
+
+1. **S1 不實作受保護層**，但**不得寫死任何會擋住它的東西**：
+   - 目錄 `moneyClass` 值域保留 `protected`（S1a 的 54 筆全是 `money`；P0 盤點前不新增 `protected` 條目）；程式與測試裡不得出現 `hardlock`。
+   - `tier_allowed(ceiling, user)` 維持『一個天花板 → 一支既有函式』的單一對映處。P1 要在這裡加讀 `protected_grant`（只對 `protected` 欄位），所以 S1b–S1e 的出口**一律只呼叫 `visible()`／`mask_flags()`，不得自己呼叫 `financial_mask.*_visible`**——否則 P1 的授權層會被旁路。S1 的金標加一題守門（S1b 起）：出口檔案內不得再直接 import 那四支角色函式（白名單：`field_policy.py`、`financial_mask.py` 本體、擋整支端點的 `_require_user`）。
+   - 受保護欄位在 P0 盤點出的出口，**不在 S1 遷移範圍**；P1 時才接 `visible()`。S1 完成後它們仍走今天的函式，行為不變。
+2. **求值順序的終態**（寫在 `field_policy` 檔頭，S1 不實作）：`可見 = (原天花板 ∨〔僅 protected〕授權受眾命中) ∧ 政策`；錯誤一律 fail-closed。
+3. **目錄新增欄位屬性的位置已預留**：`kind`（S1a 已加）、`exceptions`（S1a 已加）；P0 再加 `protectedSurfaces`（該欄位出現的出口清單）。
+4. **單位**：S1 不碰。`owner_unit_id` 等單位鍵留在 `core/internal_cols.py` 的剝除，不進目錄的 `api` 鍵名（S1a 的 `problems()` 已擋非 key 種類有 API 名；單位鍵將以 `protected` 條目登記，且 `api=None`）。
+5. **工量**：S1 本身不變（約 8.5 pd）；P0／P1／P2／S5a／S5b 見 F7 設計 §8，**不併入 S1**。
+6. **順序建議**：S1（純重構）→ S2（政策）→ P0 → P1/P2 → S5a。P0 的盤點結果可能改變 S1c/S1d 的出口清單（若發現受保護欄位與金額欄位同一端點），屆時回頭補註即可，不影響 S1a。
