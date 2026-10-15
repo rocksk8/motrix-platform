@@ -4,11 +4,12 @@ import pathlib
 import re
 
 from helpers import settings_groups  # noqa: F401
+from core import source_tree
 from helpers import settings_registry as SR
 
 FRONT = pathlib.Path(__file__).resolve().parents[3] / "frontend"
 LIST = (FRONT / "js" / "case-management-list.js").read_text(encoding="utf-8")
-PAGE = (FRONT / "pages" / "case-management.html").read_text(encoding="utf-8")
+PAGE = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
 OPTS = ("cases_personal_default_tab", "cases_personal_page_size", "cases_merge_won_tab")
 
 

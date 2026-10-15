@@ -9,10 +9,11 @@ import subprocess
 import pytest
 
 from helpers import settings_groups  # noqa: F401
+from core import source_tree
 from helpers import settings_registry as SR
 
 FRONT = pathlib.Path(__file__).resolve().parents[3] / "frontend"
-PAGE = (FRONT / "pages" / "quotations.html").read_text(encoding="utf-8")
+PAGE = source_tree.page_file("quotations.html").read_text(encoding="utf-8")
 JS = FRONT / "static" / "list-view-prefs.js"
 OPTS = ("quotes_personal_columns", "quotes_personal_default_tab", "quotes_personal_page_size")
 
