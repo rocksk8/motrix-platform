@@ -348,6 +348,7 @@
     "helper:licensing",
     "helper:map_overlays",
     "helper:module_startup",
+    "helper:notify_actions",
     "helper:recycle_bin",
     "helper:startup",
     "plat:internal_cols",
@@ -377,6 +378,7 @@
     "router:map_points",
     "router:module_versions",
     "router:modules",
+    "router:notify_actions",
     "router:notify_templates",
     "router:option_lists",
     "router:org_structure",
@@ -411,6 +413,7 @@
    "dynamic_sql": false,
    "imports": [
     "core:db",
+    "helper:builtin_fields",
     "helper:clause_titles",
     "helper:company_identity",
     "helper:company_setup",
@@ -421,6 +424,7 @@
     "helper:option_lists",
     "helper:pdf_scripts",
     "helper:privacy_notice",
+    "helper:quote_output",
     "helper:settings",
     "helper:startup",
     "helper:tax_calc",
@@ -662,7 +666,9 @@
     "quotations",
     "suppliers"
    ],
-   "tables_r": [],
+   "tables_r": [
+    "quotations"
+   ],
    "tables_w": []
   },
   "helper:business_days": {
@@ -1397,6 +1403,34 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:notify_actions": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:email_notify",
+    "helper:mail_types",
+    "helper:notification_prefs",
+    "helper:notify_templates",
+    "plat:definitions",
+    "plat:events",
+    "plat:spine",
+    "router:def_pipeline"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/notify_actions.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "notifications",
+    "quotations",
+    "users"
+   ],
+   "tables_w": []
+  },
   "helper:notify_matrix": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -1587,6 +1621,35 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:quote_output": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:settings_registry",
+    "plat:catalog"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/quote_output.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "helper:quote_privacy": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:settings_registry",
+    "plat:catalog"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/quote_privacy.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "helper:receivables": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -1729,6 +1792,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "plat:paths",
     "plat:registry"
@@ -1739,6 +1803,21 @@
    "tables_named": [],
    "tables_r": [
     "users"
+   ],
+   "tables_w": []
+  },
+  "helper:settings_groups_q0": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:quote_privacy"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/settings_groups_q0.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "quotations"
    ],
    "tables_w": []
   },
@@ -3621,6 +3700,7 @@
     "router:map_points",
     "router:module_versions",
     "router:modules",
+    "router:notify_actions",
     "router:notify_templates",
     "router:option_lists",
     "router:org_structure",
@@ -3926,8 +4006,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -4022,9 +4104,11 @@
     "helper:notify_templates",
     "helper:option_lists",
     "helper:part_catalog",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval",
@@ -4141,8 +4225,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval",
     "mod:accounting/ledger/features"
@@ -4236,8 +4322,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval",
     "helper:validation",
@@ -4355,9 +4443,11 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval",
@@ -4509,9 +4599,11 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:pdf_scripts",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
@@ -4667,8 +4759,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval",
     "helper:validation",
@@ -4831,8 +4925,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval",
     "mod:accounting/ledger/fs_lines",
@@ -4972,8 +5068,10 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval",
@@ -5109,8 +5207,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval",
     "helper:validation",
@@ -5220,8 +5320,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval",
     "mod:accounting/ledger/cashflow",
@@ -5353,9 +5455,11 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:pdf_scripts",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
@@ -5630,9 +5734,11 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:pdf_scripts",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
@@ -6504,9 +6610,11 @@
     "helper:legal_params",
     "helper:module_registry",
     "helper:option_lists",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tax_calc",
     "helper:tiered_approval"
@@ -6639,9 +6747,11 @@
     "helper:duty_roles",
     "helper:financial_mask",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:recognition_basis",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -6741,10 +6851,12 @@
     "helper:option_lists",
     "helper:pdf_scripts",
     "helper:prefill_sources",
+    "helper:quote_privacy",
     "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
@@ -6950,13 +7062,16 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
+    "helper:clause_titles",
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
     "helper:dates",
+    "helper:doc_template",
     "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
+    "helper:export_templates",
     "helper:finance_params",
     "helper:google_calendar",
     "helper:legal_params",
@@ -6967,9 +7082,12 @@
     "helper:notify_templates",
     "helper:option_lists",
     "helper:payable_due_core",
+    "helper:pdf_scripts",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tax_calc",
@@ -6984,6 +7102,7 @@
     "helper:dates",
     "helper:download_name",
     "helper:email_notify",
+    "helper:export_templates",
     "helper:finance_params",
     "helper:google_calendar",
     "helper:legal_params",
@@ -7002,91 +7121,91 @@
    "routes": [
     {
      "func": "get_pending_payables",
-     "line": 96,
+     "line": 97,
      "method": "GET",
      "path": "/api/cashier/pending-payables"
     },
     {
      "func": "get_payee_bank",
-     "line": 116,
+     "line": 117,
      "method": "GET",
      "path": "/api/cashier/pending-payables/{source}/{key}/payee-bank"
     },
     {
      "func": "get_pending_payable_file",
-     "line": 171,
+     "line": 172,
      "method": "GET",
      "path": "/api/cashier/pending-payables/{source}/{key}/files/{file_id}"
     },
     {
      "func": "pay_pending_payable",
-     "line": 194,
+     "line": 195,
      "method": "POST",
      "path": "/api/cashier/pending-payables/{source}/{key}/pay"
     },
     {
      "func": "set_pending_payable_planned_pay_date",
-     "line": 256,
+     "line": 257,
      "method": "PATCH",
      "path": "/api/cashier/pending-payables/{source}/{key}/planned-pay-date"
     },
     {
      "func": "set_payable_queue_planned_pay_date",
-     "line": 294,
+     "line": 295,
      "method": "PATCH",
      "path": "/api/cashier/payable-queue/{voucher_no}/planned-pay-date"
     },
     {
      "func": "get_remit_reviews",
-     "line": 365,
+     "line": 366,
      "method": "GET",
      "path": "/api/cashier/remit-reviews"
     },
     {
      "func": "decide_remit_review",
-     "line": 384,
+     "line": 385,
      "method": "POST",
      "path": "/api/cashier/remit-reviews/{source}/{key}/decision"
     },
     {
      "func": "get_payable_queue",
-     "line": 500,
+     "line": 501,
      "method": "GET",
      "path": "/api/cashier/payable-queue"
     },
     {
      "func": "get_receivable_queue",
-     "line": 511,
+     "line": 512,
      "method": "GET",
      "path": "/api/cashier/receivable-queue"
     },
     {
      "func": "get_payslip_queue",
-     "line": 533,
+     "line": 534,
      "method": "GET",
      "path": "/api/cashier/payslip-queue"
     },
     {
      "func": "get_bonus_queue",
-     "line": 553,
+     "line": 554,
      "method": "GET",
      "path": "/api/cashier/bonus-queue"
     },
     {
      "func": "get_execution_history",
-     "line": 612,
+     "line": 613,
      "method": "GET",
      "path": "/api/cashier/execution-history"
     },
     {
      "func": "export_execution_history",
-     "line": 627,
+     "line": 644,
      "method": "GET",
      "path": "/api/cashier/export"
     },
     {
      "func": "bank_reconcile",
-     "line": 837,
+     "line": 860,
      "method": "POST",
      "path": "/api/reports/bank-reconcile"
     }
@@ -7163,10 +7282,12 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:pdf_scripts",
+    "helper:quote_privacy",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -7352,10 +7473,12 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:option_lists",
+    "helper:quote_privacy",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval",
@@ -7390,73 +7513,79 @@
    "routes": [
     {
      "func": "list_payment_requests",
-     "line": 315,
+     "line": 310,
      "method": "GET",
      "path": "/api/payment-requests"
     },
     {
      "func": "get_payment_request_remaining",
-     "line": 338,
+     "line": 333,
      "method": "GET",
      "path": "/api/payment-requests/remaining"
     },
     {
+     "func": "list_payment_request_stages",
+     "line": 350,
+     "method": "GET",
+     "path": "/api/payment-requests/stages"
+    },
+    {
      "func": "get_payment_request",
-     "line": 355,
+     "line": 361,
      "method": "GET",
      "path": "/api/payment-requests/{request_no}"
     },
     {
      "func": "create_payment_request",
-     "line": 368,
+     "line": 374,
      "method": "POST",
      "path": "/api/payment-requests"
     },
     {
      "func": "update_payment_request",
-     "line": 460,
+     "line": 466,
      "method": "PUT",
      "path": "/api/payment-requests/{request_no}"
     },
     {
      "func": "delete_payment_request",
-     "line": 558,
+     "line": 564,
      "method": "DELETE",
      "path": "/api/payment-requests/{request_no}"
     },
     {
      "func": "submit_payment_request",
-     "line": 593,
+     "line": 599,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/submit"
     },
     {
      "func": "approve_payment_request",
-     "line": 654,
+     "line": 660,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/approve"
     },
     {
      "func": "revoke_payment_request_approval",
-     "line": 763,
+     "line": 769,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/revoke-approval"
     },
     {
      "func": "reject_payment_request",
-     "line": 804,
+     "line": 810,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/reject"
     },
     {
      "func": "download_payment_request_pdf",
-     "line": 851,
+     "line": 857,
      "method": "GET",
      "path": "/api/payment-requests/{request_no}/pdf-download"
     },
     {
      "func": "record_payment_request_export",
-     "line": 875,
+     "line": 881,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/export"
     }
@@ -7741,9 +7870,11 @@
     "helper:legal_params",
     "helper:module_registry",
     "helper:profit_rules",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -7839,9 +7970,11 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval"
@@ -7975,11 +8108,13 @@
     "helper:payable_due_core",
     "helper:pdf_scripts",
     "helper:prefill_sources",
+    "helper:quote_privacy",
     "helper:recognition_basis",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -8288,16 +8423,19 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_actions",
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:privacy_notice",
     "helper:profit_rules",
+    "helper:quote_privacy",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
@@ -8323,6 +8461,7 @@
     "helper:download_name",
     "helper:email_notify",
     "helper:errors",
+    "helper:notify_actions",
     "helper:privacy_notice",
     "helper:recycle_bin",
     "helper:settings_registry",
@@ -8343,103 +8482,103 @@
    "routes": [
     {
      "func": "list_completion_notes",
-     "line": 237,
+     "line": 251,
      "method": "GET",
      "path": "/api/completion-notes"
     },
     {
      "func": "completion_quote_items",
-     "line": 345,
+     "line": 359,
      "method": "GET",
      "path": "/api/completion-notes/quote-items"
     },
     {
      "func": "get_completion_note",
-     "line": 395,
+     "line": 409,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}"
     },
     {
      "func": "create_completion_note",
-     "line": 405,
+     "line": 419,
      "method": "POST",
      "path": "/api/completion-notes"
     },
     {
      "func": "update_completion_note",
-     "line": 453,
+     "line": 467,
      "method": "PUT",
      "path": "/api/completion-notes/{note_no}"
     },
     {
      "func": "delete_completion_note",
-     "line": 506,
+     "line": 520,
      "method": "DELETE",
      "path": "/api/completion-notes/{note_no}"
     },
     {
      "func": "submit_completion_note",
-     "line": 539,
+     "line": 553,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/submit"
     },
     {
      "func": "approve_completion_note",
-     "line": 604,
+     "line": 619,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/approve"
     },
     {
      "func": "reject_completion_note",
-     "line": 713,
+     "line": 731,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/reject"
     },
     {
      "func": "revoke_completion_approval",
-     "line": 755,
+     "line": 774,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/revoke-approval"
     },
     {
      "func": "download_completion_pdf",
-     "line": 801,
+     "line": 821,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}/pdf-download"
     },
     {
      "func": "record_completion_export",
-     "line": 827,
+     "line": 847,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/export"
     },
     {
      "func": "toggle_completion_signed",
-     "line": 856,
+     "line": 876,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/signed-toggle"
     },
     {
      "func": "upload_completion_signed_files",
-     "line": 908,
+     "line": 928,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/signed-files"
     },
     {
      "func": "delete_completion_signed_file",
-     "line": 934,
+     "line": 955,
      "method": "DELETE",
      "path": "/api/completion-notes/{note_no}/signed-files/{file_id}"
     },
     {
      "func": "get_completion_privacy_acks",
-     "line": 971,
+     "line": 992,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}/privacy-notice"
     },
     {
      "func": "ack_completion_privacy_notice",
-     "line": 985,
+     "line": 1006,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/privacy-notice/ack"
     }
@@ -8464,6 +8603,7 @@
     "dev_cases",
     "divisions",
     "duty_roles",
+    "notifications",
     "projects",
     "quotations",
     "recycle_bin",
@@ -8544,9 +8684,11 @@
     "helper:notify_templates",
     "helper:pdf_scripts",
     "helper:prefill_sources",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -8668,11 +8810,13 @@
     "helper:notify_templates",
     "helper:pdf_scripts",
     "helper:prefill_sources",
+    "helper:quote_privacy",
     "helper:recognition_basis",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -8838,11 +8982,13 @@
     "helper:notify_templates",
     "helper:pdf_scripts",
     "helper:prefill_sources",
+    "helper:quote_privacy",
     "helper:recognition_basis",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -9011,11 +9157,13 @@
     "helper:notify_templates",
     "helper:pdf_scripts",
     "helper:prefill_sources",
+    "helper:quote_privacy",
     "helper:recognition_basis",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -9172,11 +9320,13 @@
     "helper:notify_templates",
     "helper:pdf_scripts",
     "helper:prefill_sources",
+    "helper:quote_privacy",
     "helper:recognition_basis",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -9346,11 +9496,13 @@
     "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:privacy_notice",
+    "helper:quote_privacy",
     "helper:recognition_basis",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -9549,8 +9701,10 @@
     "helper:legal_params",
     "helper:module_registry",
     "helper:profit_rules",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -9666,6 +9820,7 @@
     "helper:notify_templates",
     "helper:pdf_scripts",
     "helper:prefill_sources",
+    "helper:quote_privacy",
     "helper:recognition_basis",
     "helper:recycle_bin",
     "helper:row_access",
@@ -9674,6 +9829,7 @@
     "helper:rule_sets",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -9827,6 +9983,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_actions",
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:option_lists",
@@ -9835,12 +9992,14 @@
     "helper:prefill_sources",
     "helper:privacy_notice",
     "helper:profit_rules",
+    "helper:quote_privacy",
     "helper:recognition_basis",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:safe_text",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:stage_templates",
@@ -9893,6 +10052,7 @@
     "helper:email_notify",
     "helper:errors",
     "helper:expense_types",
+    "helper:export_templates",
     "helper:finance_params",
     "helper:financial_mask",
     "helper:gl_status",
@@ -9936,421 +10096,421 @@
    "routes": [
     {
      "func": "next_quote_no",
-     "line": 781,
+     "line": 782,
      "method": "GET",
      "path": "/api/next-quote-no"
     },
     {
      "func": "list_quotations",
-     "line": 842,
+     "line": 843,
      "method": "GET",
      "path": "/api/quotations"
     },
     {
      "func": "stage_board",
-     "line": 1038,
+     "line": 1039,
      "method": "GET",
      "path": "/api/quotations/stage-board"
     },
     {
      "func": "case_activity",
-     "line": 1143,
+     "line": 1144,
      "method": "POST",
      "path": "/api/quotations/case-activity"
     },
     {
      "func": "get_last_received_bank_account",
-     "line": 1184,
+     "line": 1185,
      "method": "GET",
      "path": "/api/quotations/last-received-bank-account"
     },
     {
      "func": "gate_matrix",
-     "line": 1232,
+     "line": 1233,
      "method": "GET",
      "path": "/api/quotations/gate-matrix"
     },
     {
      "func": "get_quotation",
-     "line": 1326,
+     "line": 1327,
      "method": "GET",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_case_assigned_users",
-     "line": 1367,
+     "line": 1368,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/assigned-users"
     },
     {
      "func": "toggle_quotation_signed",
-     "line": 1390,
+     "line": 1391,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/signed-toggle"
     },
     {
      "func": "upload_quotation_signed_files",
-     "line": 1526,
+     "line": 1527,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/signed-files"
     },
     {
      "func": "delete_quotation_signed_file",
-     "line": 1551,
+     "line": 1552,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/signed-files/{file_id}"
     },
     {
      "func": "create_quotation",
-     "line": 1628,
+     "line": 1629,
      "method": "POST",
      "path": "/api/quotations"
     },
     {
      "func": "update_quotation",
-     "line": 1843,
+     "line": 1844,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_status",
-     "line": 2189,
+     "line": 2186,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/status"
     },
     {
      "func": "recall_quotation",
-     "line": 2275,
+     "line": 2272,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/recall"
     },
     {
      "func": "case_bundle",
-     "line": 2607,
+     "line": 2604,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/case-bundle"
     },
     {
      "func": "case_close_gates",
-     "line": 2662,
+     "line": 2659,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/close-gates"
     },
     {
      "func": "update_deal_tag",
-     "line": 2701,
+     "line": 2698,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/deal-tag"
     },
     {
      "func": "delete_quotation",
-     "line": 2780,
+     "line": 2777,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "unlock_case",
-     "line": 2898,
+     "line": 2895,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-unlock"
     },
     {
      "func": "lock_case",
-     "line": 2947,
+     "line": 2944,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-lock"
     },
     {
      "func": "update_case_record",
-     "line": 3128,
+     "line": 3125,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/case-record"
     },
     {
      "func": "get_case_change_request",
-     "line": 3534,
+     "line": 3531,
      "method": "GET",
      "path": "/api/case-changes/{change_id}"
     },
     {
      "func": "approve_case_change",
-     "line": 3557,
+     "line": 3554,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/approve"
     },
     {
      "func": "reject_case_change",
-     "line": 3608,
+     "line": 3605,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/reject"
     },
     {
      "func": "list_case_stages_normalized",
-     "line": 3850,
+     "line": 3847,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "create_case_stage",
-     "line": 3868,
+     "line": 3865,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "list_stage_templates",
-     "line": 3897,
+     "line": 3894,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/stages/templates"
     },
     {
      "func": "preview_stage_template",
-     "line": 3921,
+     "line": 3918,
      "method": "POST",
      "path": "/api/quotations/stage-templates/preview"
     },
     {
      "func": "apply_stage_template",
-     "line": 3940,
+     "line": 3937,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/apply-template"
     },
     {
      "func": "update_case_stage",
-     "line": 4030,
+     "line": 4027,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "delete_case_stage",
-     "line": 4084,
+     "line": 4081,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "reorder_case_stages",
-     "line": 4125,
+     "line": 4122,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/stages/reorder"
     },
     {
      "func": "add_stage_assignee",
-     "line": 4149,
+     "line": 4146,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees"
     },
     {
      "func": "remove_stage_assignee",
-     "line": 4177,
+     "line": 4174,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}"
     },
     {
      "func": "toggle_stage_dependency",
-     "line": 4200,
+     "line": 4197,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}"
     },
     {
      "func": "add_stage_visit",
-     "line": 4233,
+     "line": 4230,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits"
     },
     {
      "func": "update_stage_visit",
-     "line": 4259,
+     "line": 4256,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "delete_stage_visit",
-     "line": 4290,
+     "line": 4287,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "record_export",
-     "line": 4313,
+     "line": 4310,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/export"
     },
     {
      "func": "mark_payment",
-     "line": 4402,
+     "line": 4399,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 4534,
+     "line": 4531,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 4577,
+     "line": 4574,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 4617,
+     "line": 4614,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 4656,
+     "line": 4653,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 4681,
+     "line": 4678,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 4722,
+     "line": 4719,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 4747,
+     "line": 4744,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 4779,
+     "line": 4776,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 4808,
+     "line": 4805,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_finance_summary",
-     "line": 4852,
+     "line": 4849,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "approve_quotation",
-     "line": 5308,
+     "line": 5305,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 5433,
+     "line": 5430,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 5525,
+     "line": 5522,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5591,
+     "line": 5588,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5737,
+     "line": 5734,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5823,
+     "line": 5820,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5854,
+     "line": 5851,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5885,
+     "line": 5882,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5926,
+     "line": 5923,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5982,
+     "line": 5979,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 6049,
+     "line": 6046,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 6088,
+     "line": 6085,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 6121,
+     "line": 6118,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 6709,
+     "line": 6706,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6829,
+     "line": 6826,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6897,
+     "line": 6905,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 7053,
+     "line": 7074,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 7067,
+     "line": 7088,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 7098,
+     "line": 7119,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -10406,6 +10566,7 @@
     "duty_roles",
     "expense_categories",
     "invoice_vouchers",
+    "notifications",
     "payment_requests",
     "projects",
     "quotations",
@@ -10501,11 +10662,13 @@
     "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:profit_rules",
+    "helper:quote_privacy",
     "helper:recognition_basis",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -10659,11 +10822,13 @@
     "helper:pdf_scripts",
     "helper:prefill_sources",
     "helper:profit_rules",
+    "helper:quote_privacy",
     "helper:recognition_basis",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -10824,6 +10989,7 @@
     "helper:calendar_sync",
     "helper:dates",
     "helper:email_notify",
+    "helper:notify_actions",
     "helper:settings",
     "mod:case/payable_reminders",
     "plat:registry"
@@ -11581,9 +11747,11 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -11842,9 +12010,11 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:pdf_scripts",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval",
@@ -12001,9 +12171,11 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:storage_slots",
     "helper:tiered_approval",
@@ -12091,8 +12263,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval",
     "mod:lodging/attribution",
@@ -12180,9 +12354,11 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval",
@@ -12410,9 +12586,11 @@
     "helper:notify_templates",
     "helper:pdf_scripts",
     "helper:privacy_notice",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
@@ -12648,8 +12826,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval",
     "mod:payroll/bank_account"
@@ -12765,9 +12945,11 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval",
@@ -13073,8 +13255,10 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval",
@@ -13228,8 +13412,10 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval",
@@ -13332,8 +13518,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval",
     "mod:payroll/payslip_links"
@@ -13458,10 +13646,12 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:privacy_notice",
+    "helper:quote_privacy",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -14036,8 +14226,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -14156,9 +14348,11 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:quote_privacy",
     "helper:recycle_bin",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:storage_locations",
     "helper:storage_slots",
@@ -14389,10 +14583,12 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:payable_due_core",
+    "helper:quote_privacy",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval",
@@ -14650,9 +14846,11 @@
     "helper:notify_templates",
     "helper:pdf_scripts",
     "helper:privacy_notice",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval",
@@ -14803,9 +15001,11 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:quote_privacy",
     "helper:recycle_bin",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval",
@@ -14933,9 +15133,11 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -15021,8 +15223,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval",
     "mod:subcontract/remit_kinds"
@@ -15115,9 +15319,11 @@
     "helper:notify_templates",
     "helper:payable_due_core",
     "helper:privacy_notice",
+    "helper:quote_privacy",
     "helper:recycle_bin",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -15626,8 +15832,10 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:procurement",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval"
@@ -15790,10 +15998,12 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:privacy_notice",
+    "helper:quote_privacy",
     "helper:recycle_bin",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -16013,8 +16223,10 @@
     "helper:notify_templates",
     "helper:privacy_notice",
     "helper:procurement",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval"
@@ -16229,8 +16441,10 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval",
@@ -17508,7 +17722,9 @@
     "js:static/list-sort.js",
     "js:static/motrix-date.js",
     "js:static/notif.js",
-    "js:static/sidebar.js"
+    "js:static/public-flags.js",
+    "js:static/sidebar.js",
+    "js:static/status-chip.js"
    ],
    "kind": "page",
    "path": "frontend/pages/dev-crm.html",
@@ -18416,6 +18632,7 @@
    "api_calls": [
     "/api/payment-requests",
     "/api/payment-requests/remaining",
+    "/api/payment-requests/stages",
     "/api/payment-requests/{}",
     "/api/payment-requests/{}/approve",
     "/api/payment-requests/{}/export",
@@ -19908,8 +20125,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -19992,9 +20211,11 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -20088,8 +20309,10 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:storage_slots",
     "helper:tiered_approval",
@@ -20170,8 +20393,10 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:storage_slots",
     "helper:tiered_approval",
@@ -20254,8 +20479,10 @@
     "helper:notify_templates",
     "helper:pdf_scripts",
     "helper:privacy_notice",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
@@ -20574,8 +20801,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -20652,8 +20881,10 @@
     "helper:custom_fields",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -20749,9 +20980,11 @@
     "helper:notify_templates",
     "helper:pdf_scripts",
     "helper:prefill_sources",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -21019,8 +21252,10 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:privacy_notice",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval"
@@ -21133,6 +21368,7 @@
     "helper:audit",
     "helper:auth",
     "helper:builtin_fields",
+    "helper:case_access",
     "helper:clause_titles",
     "helper:company_identity",
     "helper:company_setup",
@@ -21146,16 +21382,20 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_actions",
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:option_lists",
     "helper:pdf_scripts",
+    "helper:quote_privacy",
+    "helper:row_access",
     "helper:rule_catalog",
     "helper:rule_grammar",
     "helper:rule_sets",
     "helper:safe_text",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:stage_templates",
@@ -21167,6 +21407,7 @@
     "helper:audit",
     "helper:auth",
     "helper:export_templates",
+    "helper:notify_actions",
     "helper:notify_templates",
     "helper:option_lists",
     "helper:rule_sets",
@@ -21181,19 +21422,19 @@
    "routes": [
     {
      "func": "def_ledger",
-     "line": 192,
+     "line": 195,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/ledger"
     },
     {
      "func": "def_diff",
-     "line": 204,
+     "line": 207,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/diff"
     },
     {
      "func": "def_impact",
-     "line": 217,
+     "line": 220,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/impact"
     }
@@ -21212,6 +21453,7 @@
     "dev_cases",
     "divisions",
     "duty_roles",
+    "notifications",
     "projects",
     "quotations",
     "sessions",
@@ -21244,6 +21486,7 @@
     "helper:attachment_slots",
     "helper:audit",
     "helper:auth",
+    "helper:case_access",
     "helper:clause_titles",
     "helper:company_identity",
     "helper:company_setup",
@@ -21255,12 +21498,16 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_actions",
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:pdf_scripts",
+    "helper:quote_privacy",
+    "helper:row_access",
     "helper:safe_text",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:stage_templates",
@@ -21277,6 +21524,7 @@
     "helper:auth",
     "helper:config_ledger",
     "helper:export_templates",
+    "helper:notify_actions",
     "helper:settings_registry",
     "helper:stage_templates",
     "helper:status_display",
@@ -21288,25 +21536,25 @@
    "routes": [
     {
      "func": "pending_changes",
-     "line": 514,
+     "line": 520,
      "method": "GET",
      "path": "/api/def-pipeline/pending"
     },
     {
      "func": "approve_change",
-     "line": 533,
+     "line": 539,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/approve"
     },
     {
      "func": "activate_change",
-     "line": 549,
+     "line": 555,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/activate"
     },
     {
      "func": "cancel_change",
-     "line": 574,
+     "line": 580,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/cancel"
     }
@@ -21322,6 +21570,7 @@
     "dev_cases",
     "divisions",
     "duty_roles",
+    "notifications",
     "projects",
     "quotations",
     "sessions",
@@ -21384,15 +21633,18 @@
     "helper:menu_builder",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_actions",
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:option_lists",
     "helper:pdf_scripts",
     "helper:prefill_sources",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:safe_text",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:stage_templates",
@@ -21414,6 +21666,7 @@
     "helper:expense_types",
     "helper:export_templates",
     "helper:menu_builder",
+    "helper:notify_actions",
     "helper:notify_templates",
     "helper:option_lists",
     "helper:settings_strict",
@@ -21431,103 +21684,103 @@
    "routes": [
     {
      "func": "list_definition_kinds",
-     "line": 230,
+     "line": 238,
      "method": "GET",
      "path": "/api/definition-kinds"
     },
     {
      "func": "list_expense_types",
-     "line": 238,
+     "line": 246,
      "method": "GET",
      "path": "/api/expense-types"
     },
     {
      "func": "get_expense_type",
-     "line": 250,
+     "line": 258,
      "method": "GET",
      "path": "/api/expense-types/{code}"
     },
     {
      "func": "list_definitions",
-     "line": 265,
+     "line": 273,
      "method": "GET",
      "path": "/api/definitions/{kind}"
     },
     {
      "func": "delete_definition_draft",
-     "line": 290,
+     "line": 298,
      "method": "DELETE",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "delete_custom_module",
-     "line": 309,
+     "line": 317,
      "method": "DELETE",
      "path": "/api/definitions/custom_module/{key}"
     },
     {
      "func": "get_definition",
-     "line": 326,
+     "line": 334,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}"
     },
     {
      "func": "get_definition_default",
-     "line": 340,
+     "line": 348,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/default"
     },
     {
      "func": "save_definition_draft",
-     "line": 350,
+     "line": 358,
      "method": "PUT",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "validate_definition",
-     "line": 380,
+     "line": 388,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/validate"
     },
     {
      "func": "publish_definition",
-     "line": 478,
+     "line": 486,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/publish"
     },
     {
      "func": "get_definition_version",
-     "line": 538,
+     "line": 546,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 555,
+     "line": 563,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 580,
+     "line": 588,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 620,
+     "line": 628,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
      "func": "effective_layout",
-     "line": 634,
+     "line": 642,
      "method": "GET",
      "path": "/api/layout/{module_key}"
     },
     {
      "func": "preview_output_template",
-     "line": 669,
+     "line": 677,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }
@@ -21552,6 +21805,7 @@
     "dev_cases",
     "divisions",
     "duty_roles",
+    "notifications",
     "projects",
     "quotations",
     "sessions",
@@ -21595,8 +21849,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -21732,8 +21988,10 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:pdf_scripts",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval",
@@ -21817,9 +22075,11 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -21934,8 +22194,10 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:privacy_notice",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval"
@@ -22028,8 +22290,10 @@
     "helper:duty_roles",
     "helper:licensing",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -22092,8 +22356,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -22172,8 +22438,10 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval"
@@ -22272,9 +22540,11 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval"
@@ -22379,8 +22649,10 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:pdf_scripts",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
@@ -22466,8 +22738,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -22519,6 +22793,91 @@
     "user_perm_subtracts"
    ]
   },
+  "router:notify_actions": {
+   "api_prefixes": [
+    "/api/notify-actions"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:alert_settings",
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:config_ledger",
+    "helper:duty_roles",
+    "helper:email_notify",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:notify_actions",
+    "helper:notify_matrix",
+    "helper:notify_templates",
+    "helper:quote_privacy",
+    "helper:row_access",
+    "helper:settings",
+    "helper:settings_groups",
+    "helper:settings_groups_q0",
+    "helper:settings_registry",
+    "helper:settings_strict",
+    "helper:tiered_approval"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:notify_actions"
+   ],
+   "kind": "router",
+   "path": "backend/routers/notify_actions.py",
+   "registered": false,
+   "routes": [
+    {
+     "func": "notify_actions_status",
+     "line": 18,
+     "method": "GET",
+     "path": "/api/notify-actions/status"
+    },
+    {
+     "func": "notify_actions_preview",
+     "line": 30,
+     "method": "POST",
+     "path": "/api/notify-actions/{key}/preview"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "audit_log",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "notifications",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "config_change_events",
+    "config_changes",
+    "duty_roles",
+    "notifications",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
+  },
   "router:notify_templates": {
    "api_prefixes": [
     "/api/notify-templates"
@@ -22531,8 +22890,10 @@
     "helper:duty_roles",
     "helper:module_registry",
     "helper:notify_templates",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -22609,8 +22970,10 @@
     "helper:duty_roles",
     "helper:module_registry",
     "helper:option_lists",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -22679,8 +23042,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -22796,8 +23161,10 @@
     "helper:option_lists",
     "helper:part_catalog",
     "helper:procurement",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval"
@@ -22906,8 +23273,10 @@
     "helper:notify_templates",
     "helper:pdf_scripts",
     "helper:prefill_sources",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:tiered_approval"
@@ -23009,9 +23378,11 @@
     "helper:option_lists",
     "helper:pdf_scripts",
     "helper:prefill_sources",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:storage_slots",
@@ -23112,8 +23483,10 @@
     "helper:duty_roles",
     "helper:menu_builder",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -23180,12 +23553,14 @@
     "helper:duty_roles",
     "helper:financial_mask",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:rule_catalog",
     "helper:rule_engine",
     "helper:rule_grammar",
     "helper:rule_sets",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -23281,9 +23656,11 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -23361,8 +23738,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -23525,8 +23904,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:status_display",
     "helper:tiered_approval"
@@ -23620,9 +24001,11 @@
     "helper:notify_matrix",
     "helper:notify_templates",
     "helper:pdf_scripts",
+    "helper:quote_privacy",
     "helper:row_access",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
@@ -24225,8 +24608,10 @@
     "helper:duty_roles",
     "helper:module_registry",
     "helper:perm",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval"
    ],
@@ -24302,8 +24687,10 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:storage_slots",
     "helper:tiered_approval",
@@ -24384,8 +24771,10 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:quote_privacy",
     "helper:settings",
     "helper:settings_groups",
+    "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:tiered_approval",
     "helper:user_buttons"
@@ -26562,7 +26951,8 @@
    ],
    "path": "backend/db.py:608",
    "readers": [
-    "core:archive"
+    "core:archive",
+    "helper:notify_actions"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -26900,9 +27290,12 @@
     "core:archive",
     "core:pdf_gen",
     "helper:audit",
+    "helper:builtin_fields",
     "helper:case_access",
     "helper:company_identity",
     "helper:google_calendar",
+    "helper:notify_actions",
+    "helper:settings_groups_q0",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
     "mod:arap/api/cashier",
@@ -27535,6 +27928,7 @@
     "helper:export_templates",
     "helper:google_calendar",
     "helper:menu_builder",
+    "helper:notify_actions",
     "helper:payable_due_core",
     "helper:perm",
     "helper:prefill_sources",

@@ -1,5 +1,5 @@
 {
- "core_version": "next",
+ "core_version": "1.138",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1090,6 +1090,27 @@
    "MODULE_GROUP_LABEL": "const",
    "ensure_event": "def(key, desc)",
    "is_enabled": "def(muted_json, event_key)"
+  },
+  "helper:notify_actions": {
+   "CAPS": "const",
+   "CHANNELS": "const",
+   "EVENTS": "const",
+   "GROUP": "const",
+   "KIND": "const",
+   "MAIL_KEY": "const",
+   "NOTIF_TYPE": "const",
+   "OFF_REASON": "const",
+   "PREVIEW_ROLES": "const",
+   "SUBSCRIBER": "const",
+   "compare": "def(old, new)",
+   "definition_problems": "def(key, body)",
+   "dispatch": "def(event, payload, conn=…)",
+   "emit": "def(name, payload)",
+   "enabled": "def(conn=…)",
+   "ensure_kind": "def()",
+   "event_catalog": "def()",
+   "preview": "def(conn, caller, key, body, payload=…)",
+   "resolve_actions": "def(conn, event)"
   },
   "helper:notify_matrix": {
    "CALENDAR_DISABLED_SPECIAL": "const",

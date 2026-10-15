@@ -1,6 +1,6 @@
 # 業務開發 更新紀錄
 
-## (next) — wip/t63-status-labels-r1（狀態顯示尾巴：dev-crm）
+## 1.0.17 — wip/t63-status-labels-r1（狀態顯示尾巴：dev-crm）
 - 開發案件頁（`dev-crm.html`）的案件狀態徽章、漏斗標籤、歷史列、記錄狀態快照與兩個狀態下拉的選項文字，可由設定中心「狀態顯示名稱與顏色」改顯示字（旗標 `builder_status_display.enabled` 預設關＝與過去逐字相同）；只換字：徽章樣式、篩選、狀態更新請求與 SQL 一律用原始狀態值。無 migration、無新路由、無權限變更。
 
 ## 1.0.16 — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）

@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1400,
+  "tests": 1407,
   "unmapped": 13,
   "kinds": {
-   "api": 776,
+   "api": 781,
    "e2e": 309,
-   "audit": 183,
+   "audit": 185,
    "unit": 132
   },
-  "routes": 849
+  "routes": 852
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -18536,6 +18536,39 @@
    },
    "login_fixture": true
   },
+  "backend/tests/platform/test_export_columns_t63.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/",
+    "dir:backend/modules/arap/",
+    "dir:backend/modules/arap/api/",
+    "dir:backend/modules/case/",
+    "dir:backend/modules/case/api/",
+    "file:backend/helpers/__init__.py",
+    "helper:export_templates",
+    "helper:user_buttons",
+    "mod:arap/api/cashier",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/export_templates.py",
+     "backend/helpers/user_buttons.py",
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/quotations.py"
+    ],
+    "path": [
+     "backend/modules/",
+     "backend/modules/arap/",
+     "backend/modules/arap/api/",
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/",
+     "backend/modules/case/api/",
+     "backend/modules/case/api/quotations.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_export_editor_bp3.py": {
    "kind": "api",
    "units": [
@@ -20589,6 +20622,60 @@
     ]
    }
   },
+  "backend/tests/platform/test_notify_actions_t63.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "helper:audit",
+    "helper:custom_modules",
+    "helper:email_notify",
+    "helper:mail_types",
+    "helper:notification_prefs",
+    "helper:notify_actions",
+    "page:pages/case-management.html",
+    "plat:__init__",
+    "plat:definitions",
+    "plat:events",
+    "router:def_governance",
+    "router:def_pipeline",
+    "router:definitions",
+    "router:notify_actions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/core/events.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/audit.py",
+     "backend/helpers/custom_modules.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/mail_types.py",
+     "backend/helpers/notification_prefs.py",
+     "backend/helpers/notify_actions.py",
+     "backend/routers/__init__.py",
+     "backend/routers/def_governance.py",
+     "backend/routers/def_pipeline.py",
+     "backend/routers/definitions.py"
+    ],
+    "api": [
+     "backend/routers/def_governance.py",
+     "backend/routers/definitions.py",
+     "backend/routers/notify_actions.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html"
+    ]
+   },
+   "unresolved_api": [
+    "/api/notify-actions/demo_notice/preview/draft",
+    "/api/notify-actions/demo_notice/preview/publish"
+   ],
+   "login_fixture": true
+  },
   "backend/tests/platform/test_notify_editor_t62.py": {
    "kind": "audit",
    "units": [
@@ -21390,6 +21477,31 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/platform/test_q0_settings_t63.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:pdf_gen",
+    "file:backend/helpers/__init__.py",
+    "helper:builtin_fields",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "plat:__init__",
+    "plat:catalog"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/catalog.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/builtin_fields.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/pdf_gen.py"
+    ]
+   }
   },
   "backend/tests/platform/test_queue_items_malformed_json.py": {
    "kind": "api",
@@ -22384,6 +22496,30 @@
      "backend/routers/definitions.py"
     ]
    }
+  },
+  "backend/tests/platform/test_stale_stages_s_st4_t63.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/api/quotations",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ],
+    "path": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/platform/test_startup_timing_2026_09_29.py": {
    "kind": "api",
@@ -26159,6 +26295,35 @@
     ],
     "path": [
      "backend/tools/company_setup_cli.py"
+    ]
+   }
+  },
+  "backend/tests/test_completion_note_events_t63.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/test_completion_notes_2026_09_12.py",
+    "helper:notify_actions",
+    "mod:case/__init__",
+    "mod:case/api/__init__",
+    "mod:case/api/completion_notes",
+    "mod:case/case_deadlines",
+    "plat:__init__",
+    "plat:events"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/events.py",
+     "backend/db.py",
+     "backend/helpers/notify_actions.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/case_deadlines.py",
+     "backend/tests/_requires.py",
+     "backend/tests/test_completion_notes_2026_09_12.py"
     ]
    }
   },
@@ -34895,6 +35060,40 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_payment_stage_single_source_2026_10_14.py": {
+   "kind": "api",
+   "units": [
+    "core:pdf_gen",
+    "file:backend/helpers/__init__.py",
+    "helper:option_lists",
+    "js:js/case-management-core.js",
+    "mod:arap/api/__init__",
+    "mod:arap/api/payment_requests",
+    "page:pages/payment-request-form.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/option_lists.py",
+     "backend/modules/arap/api/__init__.py",
+     "backend/modules/arap/api/payment_requests.py",
+     "backend/pdf_gen.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/payment_requests.py"
+    ],
+    "page": [
+     "frontend/js/case-management-core.js",
+     "frontend/pages/payment-request-form.html"
+    ],
+    "path": [
+     "backend/modules/arap/api/payment_requests.py",
+     "frontend/js/case-management-core.js",
+     "frontend/pages/payment-request-form.html"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_pbkdf2_test_only_t51.py": {
    "kind": "api",
    "units": [
@@ -35222,6 +35421,7 @@
     "router:map_points",
     "router:module_versions",
     "router:modules",
+    "router:notify_actions",
     "router:notify_templates",
     "router:org_structure",
     "router:parts",
@@ -35312,6 +35512,7 @@
      "backend/routers/map_points.py",
      "backend/routers/module_versions.py",
      "backend/routers/modules.py",
+     "backend/routers/notify_actions.py",
      "backend/routers/notify_templates.py",
      "backend/routers/org_structure.py",
      "backend/routers/parts.py",
@@ -37470,6 +37671,41 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_status_display_canonical_lint_2026_10_14.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:settings_groups",
+    "helper:status_display",
+    "js:static/public-flags.js",
+    "js:static/status-chip.js",
+    "page:pages/dev-crm.html",
+    "router:def_governance",
+    "router:def_pipeline",
+    "router:status_display"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/status_display.py"
+    ],
+    "page": [
+     "frontend/pages/dev-crm.html",
+     "frontend/static/public-flags.js",
+     "frontend/static/status-chip.js"
+    ],
+    "path": [
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/status_display.py",
+     "backend/routers/def_governance.py",
+     "backend/routers/def_pipeline.py",
+     "backend/routers/status_display.py",
+     "frontend/pages/dev-crm.html",
+     "frontend/static/public-flags.js",
+     "frontend/static/status-chip.js"
+    ]
+   }
   },
   "backend/tests/test_stock_batch_payment_2026_09_01.py": {
    "kind": "api",

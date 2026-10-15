@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-15（wip/t63-paystage-r1；請款單款項類別代碼單一來源 F4）
+## 1.138 — 2026-10-15（wip/t63-paystage-r1；請款單款項類別代碼單一來源 F4）
 - L1（只增）：`helpers/option_lists` 新增公開名稱 `REQUEST_STAGE_LIST`、`request_stage_defaults()`、`request_stage_codes()`、`request_stage_names()`——請款單款項類別（full／deposit／delivery／acceptance／final）的代碼清單單一來源（`BUILTIN["payment_request_stage"]`）；`arap.PAYMENT_STAGES` 與 `pdf_gen._PAYMENT_STAGE_LABELS` 改由它衍生（內容與順序與過去寫死的字典逐項相同）。無 migration、無權限變更、不碰金額。
 - **（併入）(next) — 2026-10-15（wip/t63-bp4-s1-r1；BP-4 S4：額外通知動作；旗標沿用 `builder_notify.enabled`＋`builder_governance.enabled`，預設關）**
 - 額外通知審查補強（只收緊，f0）：時間預算（2 秒）在收件人迴圈裡也檢查，超時只送已處理的人並寫稽核 `notify_action.degraded`（只記人數與原因）；信件超過每小時上限時，站內通知照送、超過的信件數寫進同一筆降級稽核；去重鍵改為事件登記的 `ref` 欄位（階段到期含階段、狀態改變含新狀態，避免『送審後馬上核准』被去重吃掉）；每日則數與試跑的每日估算改用精確前綴比對（動作代號含底線，LIKE 會把它當萬用字元）。
