@@ -128,6 +128,12 @@ def _require_admin(user: dict):
         raise HTTPException(403, "需要管理員權限")
 
 
+def _emit_state(note_no, qno, frm, to, user):
+    """BP-4 S4：完工單狀態改變事件（commit 之後呼叫；沒有訂閱者做事＝旗標關＝今天）。"""
+    from helpers.notify_actions import emit as _emit_event
+    _emit_event("completion_note.state_changed", {"noteNo": note_no, "quoteNo": qno or "", "from": frm, "to": to, "by": user["username"]})
+
+
 def _warranty_range(completion_date: str, months: int) -> tuple:
     """保固起訖。起算日＝完工日，迄日＝完工日 + N 個月（同日、月底溢位往前收）。
 
@@ -543,7 +549,7 @@ def submit_completion_note(note_no: str, authorization: str = Header(None)):
     _require_admin(user)
     conn = get_db()
     row = conn.execute(
-        "SELECT status, data_json, customer_name, items_json, completion_date "
+        "SELECT status, data_json, customer_name, items_json, completion_date, quote_no "
         "FROM completion_notes WHERE note_no=?", (note_no,)
     ).fetchone()
     if not row:
@@ -597,6 +603,7 @@ def submit_completion_note(note_no: str, authorization: str = Header(None)):
     conn.close()
     _audit(_tok(authorization), "completion.submit", "completion_note", note_no,
            f"{note_no}（{cname}）", {"tierCount": len(active_tiers)})
+    _emit_state(note_no, row["quote_no"], "草稿", "待審核", user)
     return {"ok": True, "status": "待審核"}
 
 
@@ -610,7 +617,7 @@ def approve_completion_note(note_no: str, body: dict = Body(default={}),
     _cascade = body_flag(body, "cascade")          # 第50班 W1c-P2b：先驗旗標（字串 "false" 以前會替簽核人自動簽完剩下的層）
     conn = get_db()
     row = conn.execute(
-        "SELECT data_json, customer_name, quote_no FROM completion_notes "
+        "SELECT data_json, customer_name, quote_no, status FROM completion_notes "
         "WHERE note_no=? AND status IN ('待審核','簽核中')", (note_no,)
     ).fetchone()
     if not row:
@@ -706,6 +713,9 @@ def approve_completion_note(note_no: str, body: dict = Body(default={}),
     conn.close()
     _audit(_tok(authorization), "completion.approve", "completion_note", note_no,
            f"{note_no}（{cname}）", {"allDone": all_done, "status": detail_status})
+    _to = "已核准" if all_done else new_status
+    if _to != row["status"]:
+        _emit_state(note_no, qno, row["status"], _to, user)
     return {"ok": True, "allDone": all_done, "signedTiers": _signed_tier_nos}
 
 
@@ -717,7 +727,7 @@ def reject_completion_note(note_no: str, body: dict = Body(default={}),
     note = (body or {}).get("note", "")
     conn = get_db()
     row = conn.execute(
-        "SELECT data_json, customer_name FROM completion_notes "
+        "SELECT data_json, customer_name, quote_no, status FROM completion_notes "
         "WHERE note_no=? AND status IN ('待審核','簽核中')", (note_no,)
     ).fetchone()
     if not row:
@@ -748,6 +758,7 @@ def reject_completion_note(note_no: str, body: dict = Body(default={}),
                 + (f"：{note}" if note else ""))
     _audit(_tok(authorization), "completion.reject", "completion_note", note_no,
            f"{note_no}（{cname}）", {"note": note})
+    _emit_state(note_no, row["quote_no"], row["status"], "草稿", user)
     return {"ok": True}
 
 
@@ -766,7 +777,7 @@ def revoke_completion_approval(note_no: str, body: dict = Body(default={}),
     note = (body or {}).get("note", "")
     conn = get_db()
     row = conn.execute(
-        "SELECT data_json, customer_name, is_signed FROM completion_notes "
+        "SELECT data_json, customer_name, is_signed, quote_no FROM completion_notes "
         "WHERE note_no=? AND status='已核准'", (note_no,)
     ).fetchone()
     if not row:
@@ -792,6 +803,7 @@ def revoke_completion_approval(note_no: str, body: dict = Body(default={}),
                 + (f"：{note}" if note else ""))
     _audit(_tok(authorization), "completion.revoke_approval", "completion_note", note_no,
            f"{note_no}（{cname}）", {"note": note})
+    _emit_state(note_no, row["quote_no"], "已核准", "草稿", user)
     return {"ok": True}
 
 
