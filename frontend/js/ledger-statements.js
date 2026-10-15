@@ -52,7 +52,7 @@ function ledgerStatementsPage() {
       if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : (r.status === 403 ? '沒有權限查看財務報表' : '查詢失敗（' + r.status + '）'))
       return data
     },
-    fmt(n) { return (n || 0).toLocaleString('zh-TW') },
+    fmt(n) { return MotrixFormat.num(n || 0, {locale:'zh-TW'}) },
     setTab(t) { this.tab = t; this.run() },
     toggle(code) { this.open = Object.assign({}, this.open, { [code]: !this.open[code] }) },
 

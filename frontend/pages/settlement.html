@@ -2,6 +2,8 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script src="../static/motrix-format.js"></script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',typeof s==='object'&&s?s:S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
@@ -373,7 +375,7 @@
           <div>
             <div style="font-size:12px;font-weight:600;color:#15803D">精算已完結・唯讀</div>
             <div style="font-size:11px;color:#16a34a;margin-top:1px"
-                 x-text="'完結時間：' + (settlement.finalizedAt ? new Date(settlement.finalizedAt).toLocaleString('zh-TW') : '') + '　完結人：' + (settlement.finalizedBy || '')"></div>
+                 x-text="'完結時間：' + (settlement.finalizedAt ? MotrixFormat.dt(new Date(settlement.finalizedAt), 'plain') : '') + '　完結人：' + (settlement.finalizedBy || '')"></div>
           </div>
         </div>
       </template>
@@ -965,8 +967,8 @@
           <div><div style="color:var(--text-secondary)">金額口徑</div><b>報價／原始成本為未稅；精算後成本一律含稅（派發成本＝未稅承攬費＋稅額＋外包人員）</b></div>
           <div><div style="color:var(--text-secondary)">認列基礎</div><b>待審核單據照計；已取消、草稿、已退回不計</b></div>
           <div><div style="color:var(--text-secondary)">狀態</div><b data-testid="stl-audit-status" x-text="settlement.status === 'finalized' ? '已完結（凍結）' : '草稿（未凍結）'"></b></div>
-          <div><div style="color:var(--text-secondary)">凍結時間／人員</div><b data-testid="stl-audit-frozen" x-text="settlement.status === 'finalized' ? (settlement.finalizedAt ? new Date(settlement.finalizedAt).toLocaleString('zh-TW') : '') + '／' + (settlement.finalizedBy || '') : '—'"></b></div>
-          <div><div style="color:var(--text-secondary)">資料截至</div><b x-text="_loadedAt.toLocaleString('zh-TW', { hour12: false })"></b></div>
+          <div><div style="color:var(--text-secondary)">凍結時間／人員</div><b data-testid="stl-audit-frozen" x-text="settlement.status === 'finalized' ? (settlement.finalizedAt ? MotrixFormat.dt(new Date(settlement.finalizedAt), 'plain') : '') + '／' + (settlement.finalizedBy || '') : '—'"></b></div>
+          <div><div style="color:var(--text-secondary)">資料截至</div><b x-text="MotrixFormat.dt(_loadedAt, { hour12: false })"></b></div>
           <div><div style="color:var(--text-secondary)">精算日期</div>
             <input type="date" class="stl-input" x-model="settlement.settlementDate" :disabled="settlement.status === 'finalized'" style="max-width:160px"></div>
           <div><div style="color:var(--text-secondary)">管銷分攤／公益</div><b data-testid="stl-audit-admin-how" x-text="adminHow(summary) + '；' + charityHow(summary) + '；營業利益只在總結區顯示'"></b>
@@ -1188,7 +1190,7 @@ function settlementPage() {
     },
 
     fmt(n) {
-      return MotrixLegalRound.halfUp(n || 0).toLocaleString()
+      return MotrixFormat.num(MotrixLegalRound.halfUp(n || 0))
     },
 
     // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，

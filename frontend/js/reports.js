@@ -8,7 +8,7 @@ function _shortMoney(v) {
   if (!v) return ''
   if (v >= 100000000) return (v / 100000000).toFixed(2) + ' 億'
   if (v >= 10000)     return (v / 10000).toFixed(1) + ' 萬'
-  return Math.round(v).toLocaleString()
+  return MotrixFormat.num(Math.round(v))
 }
 
 function reportsApp() {
@@ -362,12 +362,12 @@ function reportsApp() {
     },
 
     fmt(n) {
-      return 'NT$ ' + (Math.round(n || 0)).toLocaleString()
+      return 'NT$ ' + MotrixFormat.num(Math.round(n || 0))
     },
     fmtDiff(n) {
       if (n == null) return '—'
       const v = Math.round(n)
-      return (v >= 0 ? '+NT$ ' : '-NT$ ') + Math.abs(v).toLocaleString()
+      return (v >= 0 ? '+NT$ ' : '-NT$ ') + MotrixFormat.num(Math.abs(v))
     },
     estGrossProfit(mc) {
       return MotrixLegalRound.halfUp((mc.pretax || 0) * (mc.netMarginPct || 0) / 100)   // X-VAT：金額四捨五入（legal-round.js）
@@ -612,7 +612,7 @@ function reportsApp() {
       sm = sm || {}
       return (orig ? sm.origCharityBasis : sm.charityBasis) === 'total' ? '公益捐款（報價含稅 1%）' : '公益捐款（直接毛利 1%）'
     },
-    stlFmt(n) { return 'NT$ ' + (Math.round(n || 0)).toLocaleString() },
+    stlFmt(n) { return 'NT$ ' + MotrixFormat.num(Math.round(n || 0)) },
     stlSummary() { return (this.settlement && this.settlement.settlement && this.settlement.settlement.summary) || {} },
     stlItems()   { return (this.settlement && this.settlement.settlement && this.settlement.settlement.items)   || [] },
     // 第 39 班契約：settlement.schemaVersion>=2 ⇒ 數字（含 0）＝有填，null／空＝未填；舊存檔（沒有標記）0＝未填（顯示不變）
@@ -749,9 +749,9 @@ function reportsApp() {
       target: { cols: [], colors: [], rows: [] },
       margin: { cols: [], colors: [], rows: [] },
     },
-    _fmtMoney(v) { return (v == null) ? '—' : 'NT$ ' + Math.round(v).toLocaleString() },
+    _fmtMoney(v) { return (v == null) ? '—' : 'NT$ ' + MotrixFormat.num(Math.round(v)) },
     _fmtPct(v)   { return (v == null) ? '—' : (Math.round(v * 10) / 10) + '%' },
-    _fmtInt(v)   { return (v == null) ? '—' : Math.round(v).toLocaleString() },
+    _fmtInt(v)   { return (v == null) ? '—' : MotrixFormat.num(Math.round(v)) },
 
     // ── Charts (圖表分析) ──────────────────────────────────────────────────────
     // Chart.js 實例故意用模組層級的 _reportCharts（見檔案最上方），不放進這個
@@ -917,7 +917,7 @@ function reportsApp() {
               callbacks: {
                 label: function(ctx) {
                   if (ctx.dataset.label === '成案件數') return '成案數：' + ctx.raw + ' 件'
-                  return ctx.dataset.label + '：NT$ ' + Math.round(ctx.raw || 0).toLocaleString()
+                  return ctx.dataset.label + '：NT$ ' + MotrixFormat.num(Math.round(ctx.raw || 0))
                 }
               }
             }
@@ -1075,7 +1075,7 @@ function reportsApp() {
             tooltip: {
               callbacks: {
                 label: function(ctx) {
-                  return ctx.dataset.label + '：NT$ ' + Math.round(ctx.raw || 0).toLocaleString()
+                  return ctx.dataset.label + '：NT$ ' + MotrixFormat.num(Math.round(ctx.raw || 0))
                 }
               }
             }
@@ -1574,7 +1574,7 @@ function reportsApp() {
 
     custAmtFmt(n) {
       if (!n) return '—'
-      return 'NT$ ' + Math.round(n).toLocaleString()
+      return 'NT$ ' + MotrixFormat.num(Math.round(n))
     },
 
     // Called by the 圖表分析 tab button. $nextTick waits for Alpine to finish

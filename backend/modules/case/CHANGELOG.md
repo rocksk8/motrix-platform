@@ -5,6 +5,8 @@
 - 家族二（報價單讀單／清單／案件匯出）：`api/quotations.py` 的 `GET` 單筆讀取遮蔽（保留 `money` 整份短路）、清單金額遮蔽、案件批次匯出的金額欄，旗標改由 `mask_flags()` 產生；行為不變。
 - 家族三（報價單寫入路徑）：存檔時被遮蔽部分的補回、案件記錄分段存檔的比對基準與回傳、修改紀錄理由的剝除，旗標改由 `mask_flags()`／`tier_allowed()` 產生（保留 `money` 整份短路）；單一旗標處用 `tier_allowed()`，避免多算角色函式。新增真實出口證明 `tests/platform/test_field_policy_exits_real_t65.py`。行為不變。
 - 寫入路徑嚴格模式：`helpers.field_policy.mask_flags(user, strict=True)` 只給寫入路徑用（`update_quotation` 補回、`update_case_record` 的比對／補回／回傳）；求值出錯照今天丟出（500、不寫入），讀取路徑維持 fail-closed 遮蔽。測試 `tests/platform/test_field_policy_exits_quotation_t65.py`（真打 GET／PUT：角色×旗標模式×授予 對照舊規則表）。
+- **（併入）(next) — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器；報價單表單 V3.28）**
+- `pages/quotation-form.html` 三處 `toLocaleTimeString` 改呼叫 `MotrixFormat.dt(d, {hour,minute})`，並更新內嵌後備（接受選項物件）；輸出逐字相同；`FORM_VERSION` V3.27→V3.28（報價單表單內容有變就要升版，守門已登記）。
 
 ## 1.0.198 — 2026-10-15（wip/t65-c2-r2；f0 審查小修）
 - `pages/case-management.html` 個人檢視面板：「已成案」選項改用 `<template x-if>`（`<option>` 上的 `x-show` 在 Safari／iOS 無效），合併頁籤後不會再選到。`js/case-management-list.js`：每次載入件數預設 100 抽成單一常數 `CM_LIST_PAGE_DEFAULT`。無 migration、無新路由、無權限變更。

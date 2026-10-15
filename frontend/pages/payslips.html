@@ -2,6 +2,8 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
+  <script src="../static/motrix-format.js"></script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',typeof s==='object'&&s?s:S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>勞報單 — MOTRIX ERP</title>
@@ -135,8 +137,8 @@
                 </div>
               </td>
               <td><span class="itype" x-text="p.income_type"></span></td>
-              <td class="amt" x-text="'NT$ ' + (p.gross_amount||0).toLocaleString()"></td>
-              <td class="amt" style="font-weight:600" x-text="'NT$ ' + (p.net_amount||0).toLocaleString()"></td>
+              <td class="amt" x-text="'NT$ ' + MotrixFormat.num(p.gross_amount||0)"></td>
+              <td class="amt" style="font-weight:600" x-text="'NT$ ' + MotrixFormat.num(p.net_amount||0)"></td>
               <td style="font-size:12px;font-family:LINE Seed TW_OTF, monospace" x-text="p.slip_date || '—'"></td>
               <td>
                 <span class="tag" :class="statusCls(p.status)"
@@ -229,20 +231,20 @@
         <div style="background:#FAFAF8;border-radius:var(--radius);padding:12px 14px">
           <div class="amount-row">
             <span style="color:var(--text-secondary)">應付總額</span>
-            <span style="font-family:LINE Seed TW_OTF, monospace" x-text="'NT$ ' + (selectedSlip.gross_amount||0).toLocaleString()"></span>
+            <span style="font-family:LINE Seed TW_OTF, monospace" x-text="'NT$ ' + MotrixFormat.num(selectedSlip.gross_amount||0)"></span>
           </div>
           <div class="amount-row">
             <span style="color:var(--text-secondary)">代扣所得稅</span>
-            <span style="font-family:LINE Seed TW_OTF, monospace;color:var(--danger)" x-text="'－ NT$ ' + (selectedSlip.tax_withheld||0).toLocaleString()"></span>
+            <span style="font-family:LINE Seed TW_OTF, monospace;color:var(--danger)" x-text="'－ NT$ ' + MotrixFormat.num(selectedSlip.tax_withheld||0)"></span>
           </div>
           <div class="amount-row">
             <span style="color:var(--text-secondary)">二代健保</span>
-            <span style="font-family:LINE Seed TW_OTF, monospace;color:var(--danger)" x-text="'－ NT$ ' + (selectedSlip.nhi_supplement||0).toLocaleString()"></span>
+            <span style="font-family:LINE Seed TW_OTF, monospace;color:var(--danger)" x-text="'－ NT$ ' + MotrixFormat.num(selectedSlip.nhi_supplement||0)"></span>
           </div>
           <div style="border-top:1px solid var(--border-light);margin:8px 0 6px"></div>
           <div class="amount-row amount-row--total">
             <span>實發金額</span>
-            <span style="font-family:LINE Seed TW_OTF, monospace;color:var(--accent)" x-text="'NT$ ' + (selectedSlip.net_amount||0).toLocaleString()"></span>
+            <span style="font-family:LINE Seed TW_OTF, monospace;color:var(--accent)" x-text="'NT$ ' + MotrixFormat.num(selectedSlip.net_amount||0)"></span>
           </div>
         </div>
 

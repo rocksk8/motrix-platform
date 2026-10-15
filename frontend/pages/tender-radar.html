@@ -2,6 +2,8 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script src="../static/motrix-format.js"></script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',typeof s==='object'&&s?s:S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
@@ -339,8 +341,8 @@
               <template x-if="c.field === 'excludes'"><span><template x-for="x in w.excludes" :key="x"><span class="badge badge--danger" x-text="'排除 ' + x"></span></template></span></template>
               <template x-if="c.field === 'org'"><span x-text="$store.layout.colLabel('watches', 'org', '機關') + '：' + (w.org || '不篩')"></span></template>
               <!-- ⚠️ 預算用 === null：0 元是合法金額 -->
-              <template x-if="c.field === 'budgetMin'"><span x-text="$store.layout.colLabel('watches', 'budgetMin', '預算下限') + '：' + (w.budgetMin === null ? '不設下限' : w.budgetMin.toLocaleString())"></span></template>
-              <template x-if="c.field === 'budgetMax'"><span x-text="$store.layout.colLabel('watches', 'budgetMax', '預算上限') + '：' + (w.budgetMax === null ? '不設上限' : w.budgetMax.toLocaleString())"></span></template>
+              <template x-if="c.field === 'budgetMin'"><span x-text="$store.layout.colLabel('watches', 'budgetMin', '預算下限') + '：' + (w.budgetMin === null ? '不設下限' : MotrixFormat.num(w.budgetMin))"></span></template>
+              <template x-if="c.field === 'budgetMax'"><span x-text="$store.layout.colLabel('watches', 'budgetMax', '預算上限') + '：' + (w.budgetMax === null ? '不設上限' : MotrixFormat.num(w.budgetMax))"></span></template>
             </span>
           </template>
         </div>
@@ -561,7 +563,7 @@ function tenderRadarPage() {
           ? '<span>' + this._esc(t.tenderMethod) + '</span>'
           : '<span><span data-method-missing="1" style="color:var(--text-secondary)" title="詳細頁尚未取得（來源網站可能要求驗證碼）">未取得</span>' + this._captchaHelp() + '</span>'
         // ⚠️ 預算用 === null 判斷：0 元是合法金額
-        case 'budget': return '<span>' + this._esc(t.budget === null ? '未公告' : t.budget.toLocaleString()) + '</span>'
+        case 'budget': return '<span>' + this._esc(t.budget === null ? '未公告' : MotrixFormat.num(t.budget)) + '</span>'
         case 'publishedAt': return '<span>' + this._esc(t.publishedAt || '—') + '</span>'
         case 'deadline': return '<span>' + this._esc(t.deadline || '未公告') + '</span>'
         // ⚠️ 刻意不寫 `!t.matchedWatches ||`：後端保證沒命中是空陣列（P2），多一道防呆會把「後端漏鍵」變成看不見

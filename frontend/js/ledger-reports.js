@@ -50,8 +50,8 @@ function ledgerReportsPage() {
       if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : (r.status === 403 ? '沒有權限查看總帳' : '查詢失敗（' + r.status + '）'))
       return data
     },
-    fmt(n) { return (n || 0).toLocaleString('zh-TW') },
-    dash(n) { return n ? (n).toLocaleString('zh-TW') : '' },
+    fmt(n) { return MotrixFormat.num(n || 0, {locale:'zh-TW'}) },
+    dash(n) { return n ? MotrixFormat.num(n, {locale:'zh-TW'}) : '' },
     q() { return 'start=' + this.start + '&end=' + this.end + '&include_drafts=' + this.drafts },
     setTab(t) { this.tab = t; this.run() },
 

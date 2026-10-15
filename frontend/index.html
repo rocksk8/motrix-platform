@@ -2,6 +2,8 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script src="static/motrix-format.js"></script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',typeof s==='object'&&s?s:S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
@@ -668,7 +670,7 @@
             <span style="flex:1;font-weight:500;color:var(--text-primary)" x-text="q.customer || '—'"></span>
             <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-dim);font-size:10px" x-text="q.quoteNo"></span>
             <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;color:var(--warning)" x-text="q.daysSinceSent + ' 天未回應'"></span>
-            <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary);font-size:10px" x-text="'NT$ ' + Math.round(q.total).toLocaleString()"></span>
+            <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary);font-size:10px" x-text="'NT$ ' + MotrixFormat.num(Math.round(q.total))"></span>
           </div>
         </template>
         <div x-show="followUpQuotes.length > 4"
@@ -1009,7 +1011,7 @@ feedCount(key) {
         const d = new Date()
         const days = ['日','一','二','三','四','五','六']
         this.today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} 週${days[d.getDay()]}`
-        this.now   = this.today + ' ' + d.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})
+        this.now   = this.today + ' ' + MotrixFormat.dt(d, {hour:'2-digit',minute:'2-digit'})
 
         this.onboardingDismissed = !!localStorage.getItem('motrix_onboarding_banner_dismissed')
         await Promise.all([this.loadStats(), this.loadApprovalMine()])
@@ -1177,19 +1179,19 @@ feedCount(key) {
         if (diffMin < 1)   return '剛剛'
         if (diffMin < 60)  return diffMin + ' 分鐘前'
         if (diffMin < 1440) return Math.floor(diffMin / 60) + ' 小時前'
-        return d.toLocaleDateString('zh-TW', {month:'2-digit', day:'2-digit'})
+        return MotrixFormat.dt(d, {month:'2-digit', day:'2-digit'})
       },
 
       fmtAmount(n) {
         if (!n) return '—'
         if (n >= 1000000) return 'NT$ ' + (n/1000000).toFixed(2) + 'M'
         if (n >= 1000)    return 'NT$ ' + Math.round(n/1000) + 'K'
-        return 'NT$ ' + n.toLocaleString()
+        return 'NT$ ' + MotrixFormat.num(n)
       },
 
       fmtAmountFull(n) {
         if (!n) return '—'
-        return 'NT$ ' + Math.round(n).toLocaleString()
+        return 'NT$ ' + MotrixFormat.num(Math.round(n))
       },
 
       warrantyColor(w) {

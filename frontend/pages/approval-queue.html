@@ -2,6 +2,8 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script src="../static/motrix-format.js"></script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',typeof s==='object'&&s?s:S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
@@ -713,7 +715,7 @@
             <div class="aq-info-row" style="grid-column:1/-1">
               <span class="aq-info-label">申請時間</span>
               <span class="aq-info-value" style="font-family:LINE Seed TW_OTF, sans-serif"
-                    x-text="selected?.requestedAt ? new Date(selected.requestedAt).toLocaleString('zh-TW') : '—'"></span>
+                    x-text="selected?.requestedAt ? MotrixFormat.dt(new Date(selected.requestedAt), 'plain') : '—'"></span>
             </div>
           </div>
         </div>
@@ -823,7 +825,7 @@
                   <td style="padding:5px 8px;text-align:right;white-space:nowrap"
                       x-text="(it.qty ?? it.quantity ?? '') + (it.unit ? ' ' + it.unit : '')"></td>
                   <td style="padding:5px 8px;text-align:right;white-space:nowrap;font-family:LINE Seed TW_OTF, sans-serif"
-                      x-text="it.amount != null ? Number(it.amount).toLocaleString() : (it.subtotal != null ? Number(it.subtotal).toLocaleString() : '')"></td>
+                      x-text="it.amount != null ? MotrixFormat.num(Number(it.amount)) : (it.subtotal != null ? MotrixFormat.num(Number(it.subtotal)) : '')"></td>
                 </tr>
               </template>
             </table>
@@ -1119,7 +1121,7 @@
               ? new Date(String(item.requestedAt).replace(' ', 'T'))
               : null
             return t && !isNaN(t)
-              ? '今日 ' + t.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })
+              ? '今日 ' + MotrixFormat.dt(t, { hour: '2-digit', minute: '2-digit', hour12: false })
               : '今日'
           }
           return '停留 ' + d + ' 天'
@@ -1364,7 +1366,7 @@
           if (item?.type === 'case_change') return item.projectName || ''
           if (item?.type === 'custom_record') return item.statusLabel || ''
           if (item?.type === 'custom_module_def') return '第 ' + (item.definitionVersion || '') + ' 版'
-          return 'NT$ ' + (item?.total || 0).toLocaleString()
+          return 'NT$ ' + MotrixFormat.num(item?.total || 0)
         },
 
         dateLabel(item) {
@@ -1714,7 +1716,7 @@
           // 自簽層（組織流程判定這一關歸他管，2026-09-15）標出來，才看得懂
           // 為什麼申請人自己出現在簽核鏈上
           const selfTag = a.selfApproval ? '（本人．組織職權）' : ''
-          if (a.status === 'approved') return '已簽核' + selfTag + '　' + new Date(a.approvedAt).toLocaleString('zh-TW')
+          if (a.status === 'approved') return '已簽核' + selfTag + '　' + MotrixFormat.dt(new Date(a.approvedAt), 'plain')
           if (tierIdx < currentTier) return '已完成'
           if (tierIdx > currentTier) return '尚未輪到' + selfTag
           // 系統規定的最終關卡（最高管理者／會計主管）：同層任一位都可以核准，不是一位一位循序——不要寫「等待前一位完成」

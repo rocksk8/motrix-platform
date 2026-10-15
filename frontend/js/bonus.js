@@ -170,7 +170,7 @@ function bonusPage() {
       const hit = this.users.find(x => x.username === u)
       return hit ? (hit.displayName || u) + '（' + u + '）' : u
     },
-    money(n) { return 'NT$ ' + Number(n || 0).toLocaleString() },
+    money(n) { return 'NT$ ' + MotrixFormat.num(Number(n || 0)) },
     pct(bp) { return bnPct(bp) },
     badgeClass(st) {
       return { '未精算': 'st-gray', '已精算': 'st-blue', '草稿': 'st-amber', '待審核': 'st-orange',
@@ -407,9 +407,9 @@ function bonusPage() {
       if (!p) return ''
       const pct = x => (Math.round(x * 10000) / 100) + '%'
       return '法規參數 ' + (d.version || '—') + '：扣繳 ' + pct(p.withholding_rate) + '（每次給付達 ' +
-        Number(p.withholding_threshold).toLocaleString() + ' 起扣）・補充保費 ' + pct(p.nhi_rate) +
+        MotrixFormat.num(Number(p.withholding_threshold)) + ' 起扣）・補充保費 ' + pct(p.nhi_rate) +
         '（全年累計超過投保金額 ' + p.nhi_bonus_multiple + ' 倍的部分，單次上限 ' +
-        Number(p.nhi_max_single_payment).toLocaleString() + '）'
+        MotrixFormat.num(Number(p.nhi_max_single_payment)) + '）'
     },
     async toggleInsurance() {
       this.insuranceOpen = !this.insuranceOpen

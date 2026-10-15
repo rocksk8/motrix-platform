@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## (next) — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
+- `pages/settlement.html`、`pages/payment-request{,-form}.html`、`static/definition-form.js` 的數字／時間顯示改呼叫 `MotrixFormat`（預設輸出逐字相同）。
+
 ## 1.0.57 — 2026-10-15（wip/t64-slice-b-r1；T64 切片 B／D2：出納頁數字改走共用格式器；含 f0 審查修正）
 - `pages/cashier.html`、`js/cashier.js` 的 3 處 `toLocaleString()` 改呼叫 `static/motrix-format.js` 的 `MotrixFormat.num()`（設定全預設時輸出逐字相同；格式器沒載入時頁面內嵌後備印原值，含日期與時間格式）。僅前端；無 migration、無新路由、無權限變更。
 

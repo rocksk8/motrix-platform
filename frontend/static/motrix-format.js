@@ -4,7 +4,7 @@
  *   MotrixFormat.num(x, {locale:'en-US', maxFrac:4})   ⇒ x.toLocaleString('en-US', {maximumFractionDigits:4})
  *   MotrixFormat.money(x)               ⇒ 同 num（幣別字首 'NT$ ' 仍由呼叫端寫，避免改動既有版面）
  *   MotrixFormat.date(d)                ⇒ d.toLocaleDateString('zh-TW')
- *   MotrixFormat.dt(d, 'plain'|'full'|'short'|'sec') ⇒ d.toLocaleString('zh-TW'[, 四種既有選項之一])
+ *   MotrixFormat.dt(d, 'plain'|'full'|'short'|'sec'|{選項物件}) ⇒ d.toLocaleString('zh-TW'[, 四種既有選項之一或呼叫端給的選項物件；僅時間或僅月日的舊寫法等價])
  *   MotrixFormat.status(v)              ⇒ 預設原值；有 setStatusLabels(map) 才換顯示名（邏輯一律用原值）
  *
  * 設定（設定中心群組 ui_format：enabled／thousands／decimals／date_style 皆整數、0＝照目前；**全部預設＝今天的輸出**；讀不到／旗標關／值不認得 ⇒ 預設）。下面是格式器內部的字串寫法：
@@ -75,7 +75,7 @@
 
   function dt(d, shape) {
     if (d == null) return ''
-    try { return d.toLocaleString('zh-TW', shape === 'plain' ? undefined : (DT[shape] || DT.full)) } catch (e) { return String(d) }
+    try { return d.toLocaleString('zh-TW', shape && typeof shape === 'object' ? shape : shape === 'plain' ? undefined : (DT[shape] || DT.full)) } catch (e) { return String(d) }
   }
 
   function status(v) { return Object.prototype.hasOwnProperty.call(labels, v) ? labels[v] : v }
