@@ -175,7 +175,7 @@ def test_raw_sites_formatter_is_request_free_and_pages_use_their_existing_read()
     for name, needle in (("quotation-form.html", "'builder_stage_templates', 'ui_format']"), ("case-management.html", "'builder_stage_templates', 'ui_format']")):
         html = page_file(name).read_text(encoding="utf-8")
         assert needle in html and "MotrixFormat.apply(g.ui_format)" in html, name
+        assert not re.search(r"read\(\['ui_format'\]", html), "%s：不可另發只讀 ui_format 的請求" % name
     # 報價單清單頁維持單一群組的讀取（既有測試釘住『旗標關／讀不到 ⇒ 只有一個請求』）：靠其他頁寫入的快取，不讀 ui_format
     ql = page_file("quotations.html").read_text(encoding="utf-8")
     assert "read(['builder_layout'], { token: tk })" in ql and "ui_format" not in ql
-        assert not re.search(r"read\(\['ui_format'\]", html), "%s：不可另發只讀 ui_format 的請求" % name
