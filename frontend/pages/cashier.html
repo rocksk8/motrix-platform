@@ -2,6 +2,8 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script src="../static/motrix-format.js"></script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat={num:function(x){try{return x==null?'':x.toLocaleString.apply(x,[])}catch(e){return String(x)}},money:function(x){return window.MotrixFormat.num(x)},date:function(d){try{return d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d){try{return d.toLocaleString('zh-TW')}catch(e){return String(d)}},status:function(v){return v}})</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
