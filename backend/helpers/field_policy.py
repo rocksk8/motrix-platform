@@ -18,6 +18,7 @@
 [契約題] backend/tests/platform/test_field_policy_t65.py
 """
 import logging
+from collections.abc import Mapping
 
 from helpers import field_catalog as FC
 
@@ -70,18 +71,42 @@ def visible_many(field_ids, user) -> dict:
     return out
 
 
+_MASK_TIERS = (("keep_quote", "quote_money"), ("keep_orders", "material_money"), ("money", "finance_money"))
+
+
+class _LazyStrictFlags(Mapping):
+    """strict 寫入路徑用：旗標第一次被讀才問角色函式（舊行為：只有走到的分支才求值），結果記住，同一請求不重算。
+    讀不到的旗標照舊把例外丟出去（端點 500、什麼都沒寫入）。"""
+
+    def __init__(self, user):
+        self._user, self._memo = user, {}
+
+    def __getitem__(self, name):
+        if name not in self._memo:
+            ceiling = dict(_MASK_TIERS)[name]               # 未知旗標 ⇒ KeyError
+            self._memo[name] = tier_allowed(ceiling, self._user)
+        return self._memo[name]
+
+    def __iter__(self):
+        return iter(n for n, _ in _MASK_TIERS)
+
+    def __len__(self):
+        return len(_MASK_TIERS)
+
+
 def mask_flags(user, strict=False) -> dict:
     """給 `financial_mask.mask_*` 既有旗標參數用：`keep_quote`（報價單層級不遮）、`keep_orders`（叫料不遮）、`money`（財務層級可見）。
     讀取路徑：任何一個算不出來 ⇒ 該旗標 False（＝遮，fail-closed）。
-    `strict=True` 只給**寫入路徑**用：算不出來就**把例外丟出去**（今天的行為——端點 500、什麼都沒寫入）。寫入路徑若 fail-closed 成『遮』，
+    `strict=True` 只給**寫入路徑**用：回傳惰性對映——旗標被讀到才求值（保留舊的短路：有財務權限的人存檔不會因為沒用到的層級算不出來而 500），
+    算不出來就**把例外丟出去**（今天的行為——端點 500、什麼都沒寫入）。寫入路徑若 fail-closed 成『遮』，
     有權限的人存檔時會被靜默地用資料庫現值取代（款項／精算／叫料的修改消失）卻回成功，比 500 更糟。"""
+    if strict:
+        return _LazyStrictFlags(user)
     flags = {}
-    for name, ceiling in (("keep_quote", "quote_money"), ("keep_orders", "material_money"), ("money", "finance_money")):
+    for name, ceiling in _MASK_TIERS:
         try:
             flags[name] = tier_allowed(ceiling, user)
-        except Exception:                                   # noqa: BLE001 — 讀取 fail-closed；strict 寫入照舊丟出
-            if strict:
-                raise
+        except Exception:                                   # noqa: BLE001 — 讀取 fail-closed
             _log.warning("field_policy.mask_flags failed for %s; masking", ceiling, exc_info=True)
             flags[name] = False
     return flags

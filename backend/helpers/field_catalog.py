@@ -81,6 +81,9 @@ FIELDS = (
     _f("settlement.amounts", "精算金額（整段，只留狀態）", "payment", "finance_money", kind="subtree"),
     _f("payment.received_legacy", "款項已收金額（舊形狀：數字）", "payment", "finance_money", kind="subtree"),
     _f("edit_history.reason", "修改紀錄的理由（自由文字）", "note", "quote_money", kind="text"),
+    # 注意：重新開啟理由與一般修改理由實際存在**同一個鍵 "reason"**（settlement_api 寫入、strip_history_reasons 以鍵名一律移除）。
+    # 兩種遮蔽門檻因端點而異：整份報價單 GET（mask_quotation_data）＝not keep_quote（quote_money）；歷史端點＝not money_visible（finance_money）。
+    # 下列天花板是歷史端點的門檻；S2 改為依目錄執行時，須先處理這個共用鍵：不可只依其中一列放寬可見度，也不可拆成兩個鍵而漏遮其一。
     _f("edit_history.reopen_reason", "重新開啟精算的理由（自由文字）", "note", "finance_money", kind="text"),
     _f("edit_history.changes", "修改紀錄的金額變動（前後值）", "price", "quote_money", kind="text", history=()),
     _f("approval.reasons", "需審核原因（含毛利／金額／折讓者）", "note", "quote_money", kind="text"),

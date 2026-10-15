@@ -196,6 +196,7 @@ def update_material_orders(quote_no: str,
         import copy as _copy
         from helpers.financial_mask import mask_case_record
         _cr = _copy.deepcopy(data.get("caseRecord") or {})
+        # 此處是寫入已 commit 之後的回應回顯：用非 strict（算不出來 ⇒ 遮，fail-closed）。strict 會讓已寫入的請求回 500、前端誤以為沒存；遮蔽只影響回顯、不影響已存資料（docstring 規則⑥）
         _flags = mask_flags(user)
         if not _flags["money"]:
             mask_case_record(_cr, keep_orders=_flags["keep_orders"])

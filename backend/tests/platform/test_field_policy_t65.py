@@ -123,7 +123,7 @@ def test_errors_fail_closed_never_open(finance_env, monkeypatch):
     assert FP.visible_many(["quote_item.cost", "payment.amount"], u)["quote_item.cost"] is False
     assert FP.mask_flags(u)["keep_quote"] is False
     with pytest.raises(RuntimeError):                       # 寫入路徑用 strict：照今天丟出，不 fail-closed
-        FP.mask_flags(u, strict=True)
+        FP.mask_flags(u, strict=True)["keep_quote"]           # 惰性：讀到壞掉的層級才丟；沒讀到的層級不求值
     monkeypatch.setattr(FC, "by_id", boom)
     assert FP.visible("payment.amount", u) is False
 
@@ -225,3 +225,35 @@ def test_exit_level_cells_old_calls_equal_flags_from_the_policy(finance_env):
                     a = _exit_masks(old, copy.deepcopy(_SAMPLE))
                     b = _exit_masks(FP.mask_flags(u), copy.deepcopy(_SAMPLE))
                     assert json.dumps(a, ensure_ascii=False, sort_keys=True) == json.dumps(b, ensure_ascii=False, sort_keys=True)
+
+
+def test_reopen_reason_shares_the_stored_key_with_edit_reason():
+    """釘住：重新開啟理由與修改理由實際存在同一個鍵 "reason"，遮蔽函式以鍵名一律移除（目錄的兩列只是兩個端點的門檻）。
+    S2 若把天花板改成依目錄執行，必須先處理這個共用鍵，否則可見度會被放寬。"""
+    from helpers.financial_mask import strip_history_reasons
+    h = [{"event": "x", "reason": "r1"}, {"event": "reopen", "reason": "r2", "from": "finalized"}]
+    strip_history_reasons(h)
+    assert all("reason" not in e for e in h) and h[1]["from"] == "finalized"
+    assert FC.by_id("edit_history.reason")["ceiling"] == "quote_money"
+    assert FC.by_id("edit_history.reopen_reason")["ceiling"] == "finance_money"
+
+
+def test_strict_mask_flags_are_lazy_and_memoized():
+    """寫入路徑旗標：只求值被讀到的層級（保留舊短路），同一旗標只問一次，算不出來照舊丟例外。"""
+    from unittest import mock
+    from helpers import field_policy as FP
+    calls = []
+
+    def fake(ceiling, user):
+        calls.append(ceiling)
+        if ceiling == "material_money":
+            raise RuntimeError("boom")
+        return True
+
+    with mock.patch.object(FP, "tier_allowed", fake):
+        fl = FP.mask_flags({}, strict=True)
+        assert calls == []
+        assert fl["money"] and fl["money"] and calls == ["finance_money"]
+        with pytest.raises(RuntimeError):
+            fl["keep_orders"]
+        assert FP.mask_flags({}, strict=False)["keep_orders"] is False
