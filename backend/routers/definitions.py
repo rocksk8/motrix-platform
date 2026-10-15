@@ -165,6 +165,8 @@ def _lazy_kinds():
         _ST.ensure_kind()
         from helpers import notify_actions as _NA
         _NA.ensure_kind()
+        from helpers import list_pref_policy as _LP
+        _LP.ensure_kind()
     except Exception:                                                  # noqa: BLE001  登記失敗 ⇒ 該 kind 不存在（fail-closed）
         pass
 
@@ -184,6 +186,12 @@ def _disabled_lazy_kinds() -> set:
             out.add(_NA.KIND)
     except Exception:                                                  # noqa: BLE001
         out.add("notify_action")
+    try:
+        from helpers import list_pref_policy as _LP
+        if not _LP.enabled():
+            out.add(_LP.KIND)
+    except Exception:                                                  # noqa: BLE001
+        out.add("list_pref_policy")
     return out
 
 

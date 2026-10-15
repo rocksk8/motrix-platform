@@ -1,5 +1,5 @@
 {
- "core_version": "1.141",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1024,6 +1024,34 @@
    "module_licensed": "def(manifest, status, gate_enabled)",
    "sign_license": "def(payload, private_key_pem)",
    "verify_license": "def(blob=…)"
+  },
+  "helper:list_catalog": {
+   "MAX_PAGE_SIZE_CEILING": "const",
+   "SECTION_NAME": "const",
+   "by_id": "def(list_id)",
+   "columns_of": "def(list_id)",
+   "is_money_column": "def(col)",
+   "list_problems": "def(list_id, spec)",
+   "lists": "def()",
+   "money_column_ids": "def(list_id)",
+   "problems": "def()",
+   "register_list": "def(list_id, owner, spec)",
+   "restore": "def(state)",
+   "section_payload": "def()",
+   "snapshot": "def()"
+  },
+  "helper:list_pref_policy": {
+   "DEFAULT_ALLOW_USER_PREFS": "const",
+   "FIELD": "const",
+   "GLOBAL_KEY": "const",
+   "GROUP": "const",
+   "KIND": "const",
+   "OFF_REASON": "const",
+   "compare": "def(old, new)",
+   "definition_problems": "def(key, body)",
+   "enabled": "def(conn=…)",
+   "ensure_kind": "def()",
+   "policy_for": "def(conn, list_id, role=…)"
   },
   "helper:mail_types": {
    "CATEGORIES": "const",

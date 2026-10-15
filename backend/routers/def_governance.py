@@ -25,6 +25,8 @@ def kinds():
         _ST.ensure_kind()                                              # 惰性登記（旗標關 ⇒ 不登記）
         from helpers import notify_actions as _NA
         _NA.ensure_kind()                                              # 惰性登記（旗標關 ⇒ 不登記）
+        from helpers import list_pref_policy as _LP
+        _LP.ensure_kind()                                              # 惰性登記（旗標關 ⇒ 不登記）
     except Exception:                                                  # noqa: BLE001
         pass
     return D.kinds()
@@ -36,6 +38,7 @@ _SCOPE_TEXT = {
     "custom_fields": {"screens": "掛載該欄位集的表單與列表", "customerVisible": False},
     "custom_module": {"screens": "這個自訂模組的表單、列表、流程與簽核層", "customerVisible": False},
     "export_template": {"screens": "該匯出檔的欄位、標題與順序（下載檔案的內容）", "customerVisible": False},
+    "list_pref_policy": {"screens": "該清單頁面上每個人可以自己調整的欄位、排序與每頁筆數的範圍（只改個人能選的範圍；金額欄位是否看得到仍由欄位可見政策決定）", "customerVisible": False},
     "option_list": {"screens": "用到這份清單的下拉選單與篩選（客戶類型、供應商類型、料件分類、料件單位）", "customerVisible": False},
     "status_display": {"screens": "報價單、案件、出納等畫面上狀態的顯示名稱與顏色（只改看到的字與色，不改任何狀態值或權限）", "customerVisible": False},
     "notify_template": {"screens": "該簽核事件的站內訊息與通知信的文字（收件人看到的字）", "customerVisible": False},
