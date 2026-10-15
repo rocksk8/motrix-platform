@@ -947,3 +947,8 @@ register_group(
 from helpers import settings_groups_q0 as _q0  # noqa: E402
 
 _q0.register(S, _register_core)
+
+# T64 A：利潤提醒色帶／報價單預設值（拆檔，同屬 core）
+from helpers import settings_groups_profit as _profit  # noqa: E402
+
+_profit.register(S, _register_core)

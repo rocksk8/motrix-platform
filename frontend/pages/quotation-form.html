@@ -9,6 +9,7 @@
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
   <script src="../static/legal-round.js"></script>
   <script src="../static/profit-rules.js"></script>
+  <script src="../static/profit-warning.js"></script>
   <script src="../static/alt-items.js"></script>
   <script src="../static/margin-tone.js"></script>
   <script src="../static/auth-guard.js"></script>
@@ -1989,12 +1990,12 @@
 
         <div class="net-profit">
           <div class="net-profit__val"
-               :style="altUnpicked() ? 'color:#9CA3AF' : tot.netMarginPct < 12 ? 'color:#F87171' : tot.netMarginPct < 20 ? 'color:#FCD34D' : 'color:#4ADE80'"
+               :style="altUnpicked() ? 'color:#9CA3AF' : tot.netMarginPct < pw.quote_form_low ? 'color:#F87171' : tot.netMarginPct < pw.quote_form_good ? 'color:#FCD34D' : 'color:#4ADE80'"
                x-text="tot.netMarginPct.toFixed(1) + '%'"></div>
           <div class="net-profit__label">
             營業利益率
-            <span :style="altUnpicked() ? 'color:#9CA3AF' : tot.netMarginPct < 12 ? 'color:#F87171' : 'color:#4ADE80'"
-                  x-text="altUnpicked() ? '（暫估，尚未選定方案）' : tot.netMarginPct < 12 ? '⚠ 低於目標 12%' : '✓ 達標'"></span>
+            <span :style="altUnpicked() ? 'color:#9CA3AF' : tot.netMarginPct < pw.quote_form_low ? 'color:#F87171' : 'color:#4ADE80'"
+                  x-text="altUnpicked() ? '（暫估，尚未選定方案）' : tot.netMarginPct < pw.quote_form_low ? '⚠ 低於目標 ' + pw.quote_form_low + '%' : '✓ 達標'"></span>
           </div>
         </div>
       </div>
@@ -2506,7 +2507,8 @@
       // S-Q2：條款標題。優先序：這張單據送審時凍結的（q.clauseTitles）> 目前範本（clauseTitles）> 預設（過去寫死的字）
       clauseTitles: null,
       ct(key) { const f = (this.q && this.q.clauseTitles) || {}; const c = this.clauseTitles || {}; return f[key] || c[key] || ({ paymentTerms: '付款條件', deliveryTerms: '交貨條件', acceptanceTerms: '驗收標準', warrantyTerms: '保固條件', afterSales: AFTERSALES_LABEL })[key] },
-      pmCfg: { warnPct: 0, minItemMarginPct: 30, maxValidDays: 30, discountReviewAbove: 0 },          // 專案毛利提醒門檻（設定中心；0＝不提醒），init 時由 GET /api/project-margin/config 填入
+      pw: MotrixProfitWarning.defaults(),          // T64 A：利潤顏色門檻（設定 profit_warning.*；預設＝原本的 12／20）
+      pmCfg: { warnPct: 0, minItemMarginPct: 30, maxValidDays: 30, discountReviewAbove: 0, defaultValidDays: 30 },          // 專案毛利提醒門檻（設定中心；0＝不提醒），init 時由 GET /api/project-margin/config 填入
       pmHideUncosted: false,
       altCfg: { enabled: true, totalText: '依方案選擇', noteTemplate: '項次{items}為{group}擇一方案選擇', groupsMax: 10, comboViewMax: 24, comboViewDefaultOpen: false },   // M3：init 時由 GET /api/alt-quote/config 填入
       signPick: { open: false, picks: {}, note: '', busy: false },     // M3 T9：回簽時逐組選定方案的對話框
@@ -2716,15 +2718,17 @@
       projectMarginText() { const p = this.projectMarginObj().pct; return p === null ? '—' : p.toFixed(1) + '%' },
       projectMarginWarn() { const p = this.projectMarginObj().pct; return Number(this.pmCfg.warnPct) > 0 && p !== null && p < Number(this.pmCfg.warnPct) },
       async loadProjectMarginCfg() {
+        MotrixProfitWarning.load().then(b => { this.pw = b })      // T64 A：利潤顏色門檻（取不到＝原本的數字）
         try {
           const r = await fetch(`${this.API}/project-margin/config`, { headers: { Authorization: 'Bearer ' + this.session.token } })
           if (r.ok) {
             const d = await r.json()
             const min = Number(d.minItemMarginPct)
-            const days = Number(d.maxValidDays), disc = Number(d.discountReviewAbove)
+            const days = Number(d.maxValidDays), disc = Number(d.discountReviewAbove), dvd = Number(d.defaultValidDays)
             this.pmCfg = { warnPct: Number(d.warnPct) || 0, minItemMarginPct: Number.isFinite(min) && min >= 0 && min <= 100 ? min : 30,
                            maxValidDays: Number.isFinite(days) && days >= 1 && days <= 365 ? days : 30,
-                           discountReviewAbove: Number.isFinite(disc) && disc >= 0 && disc <= 100000000 ? disc : 0 }
+                           discountReviewAbove: Number.isFinite(disc) && disc >= 0 && disc <= 100000000 ? disc : 0,
+                           defaultValidDays: Number.isInteger(dvd) && dvd >= 1 && dvd <= 365 ? dvd : 30 }
             if (this.pmCfg.minItemMarginPct !== 30 || this.pmCfg.maxValidDays !== 30 || this.pmCfg.discountReviewAbove !== 0) this.checkApproval()      // 門檻與預設不同才重算一次（預設 30 ＝今天的行為，不多做任何事）
           }
         } catch (e) { /* 取不到 ⇒ 不提醒 */ }
@@ -4410,6 +4414,7 @@
           // ── 新增模式：每次由 API 派發單號 ──
           await this._peekQuoteNo()
           this.isNewRecord = true
+          this.q.validDays = this.pmCfg.defaultValidDays      // T64 A Q7：新報價單預設有效天數（設定 quote_defaults.valid_days，預設 30＝原本的值；取不到＝30）
           // 預設條款組（2026-09-14）。**一定要在這個分支裡**：原本這裡是
           // 無條件 `q.paymentTerms = _defaultPaymentTerms`，把稍早套用的整組
           // 條款又蓋回去——實測時 `termsPresetKey` 有設好、付款條件卻還是舊的，

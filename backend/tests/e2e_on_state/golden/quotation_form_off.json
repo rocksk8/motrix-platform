@@ -211,6 +211,7 @@
   "GET /api/online-users",
   "GET /api/overhead/settings",
   "GET /api/platform/menu",
+  "GET /api/profit-warning/config",
   "GET /api/project-margin/config",
   "GET /api/quotations/x",
   "GET /api/quotations/x/privacy-notice?role=contact",

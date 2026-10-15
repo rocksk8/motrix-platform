@@ -290,6 +290,7 @@
       "/api/next-quote-no",
       "/api/overhead",
       "/api/project-margin",
+      "/api/profit-warning",
       "/api/quotations",
       "/api/sales-orders"
     ],

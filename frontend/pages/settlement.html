@@ -10,6 +10,7 @@
   <script src="../static/public-flags.js"></script>
   <script src="../static/status-chip.js"></script>
   <script src="../static/profit-rules.js"></script>
+  <script src="../static/profit-warning.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -1018,7 +1019,7 @@
       <b>真實營業利益：NT$ <span x-text="fmt(summary.netProfit)"
                           :style="summary.netProfit >= 0 ? 'color:#15803D' : 'color:#DC2626'"></span>
       （<span x-text="summary.netMarginPct.toFixed(1) + '%'"
-              :style="summary.netMarginPct >= 20 ? 'color:#15803D;font-weight:600' : 'color:#DC2626;font-weight:600'"></span>）</b>
+              :style="summary.netMarginPct >= pw.settlement_good ? 'color:#15803D;font-weight:600' : 'color:#DC2626;font-weight:600'"></span>）</b>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-ghost btn-sm" @click="showFinalizeModal=false">取消</button>
@@ -1159,6 +1160,7 @@ function settlementPage() {
     _finalizing: false,   // 完結送出中：此刻狀態已是 finalized 但 _frozenSummary 還沒有——新完結一律是新口徑（未稅），不可誤判成舊口徑
     _frozenSummary: null,  // 精算完結當下寫入 data_json 的 summary 快照，供比對是否已過期
     oh: { mode: 'legacy', defaultPct: 25, charityBasis: 'direct' },
+    pw: MotrixProfitWarning.defaults(),      // T64 A：利潤顏色門檻（設定 profit_warning.*；預設＝原本的數字）
     ohEdit: { busy: false, val: '' },         // 第 52 班：精算頁調整管銷比率（僅最高管理者）   // 第 48 班 S3：管銷口徑開關與全域預設（init 時由 GET /api/overhead/settings 填入）
 
     summary: {
@@ -1208,6 +1210,7 @@ function settlementPage() {
       if (!raw) { location.href = 'login.html'; return }
       this.session = JSON.parse(raw)
       if (!this.session?.token) { location.href = 'login.html'; return }
+      MotrixProfitWarning.load().then(b => { this.pw = b })      // T64 A：取不到＝原本的數字
       try {                                   // 第 48 班 S3：管銷口徑與全域預設（取不到＝legacy）
         const r = await fetch(`${API}/overhead/settings`, { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (r.ok) { const d = await r.json(); this.oh = { mode: d.ruleMode === 'v2' ? 'v2' : 'legacy', defaultPct: d.defaultPct, charityBasis: d.charityBasis === 'total' ? 'total' : 'direct' } }
