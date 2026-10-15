@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-15（wip/t63-fix-pf2-r1；T63 預檢修正：僅改寫法）
+## 1.0.189 — 2026-10-15（wip/t63-fix-pf2-r1；T63 預檢修正：僅改寫法）
 - `api/quotations.py` 的案件批次匯出登記（`_ET.register_export(...)`）欄位清單改成不用 `**` 展開（守門『禁止 ** 傳參數』），內容逐項相同；無行為變更、無 migration、無新路由、無權限變更。
 
 ## 1.0.188 — 2026-10-14（wip/t62-bp4-s2-r2＋wip/t62-bp2-r5-r1＋wip/t62-approval-margin-r1；BP-4 附件插槽／BP-2 標示規則／單項毛利率門檻）＋wip/t63 S-ST2 階段樣板套用＋wip/t62 C1／C2／C3 案件頁版面＋wip/t62-pdf-escape-r1＋wip/t62-pdf-decor-r1；t62 整合 r8＋wip/t63-export-cols-r1＋wip/t63-bp4-s1-r1（發佈行）＋審查補強
