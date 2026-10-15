@@ -113,8 +113,19 @@ def test_list_shows_pending_status_honestly_in_the_three_stages():
 def test_list_still_loads_when_the_pending_route_is_unavailable():
     defs = {"na_a": {"draft": None, "latest": {"body": _live("甲")}}}
     r = _run({"status": _status(), "list": [{"key": "na_a"}], "defs": defs, "pendingStatus": 404,
-              "run": _SETUP + "await E._loadList(); return [byRole('item').length, byRole('pending').length]"})
-    assert r["v"] == [1, 0]
+              "run": _SETUP + "await E._loadList(); return [byRole('item').length, byRole('pending').length, byRole('pending-error').map(n => n.textContent)]"})
+    assert r["v"][:2] == [1, 0]
+    assert len(r["v"][2]) == 1 and "無法讀取待核准狀態" in r["v"][2][0], "讀不到時不可以看起來像『沒有待核准』"
+    ok = _run({"status": _status(), "list": [{"key": "na_a"}], "defs": defs, "run": _SETUP + "await E._loadList(); return byRole('pending-error').length"})
+    assert ok["v"] == 0
+
+
+def test_two_pending_changes_for_one_action_both_show_and_other_scopes_do_not():
+    defs = {"na_a": {"draft": None, "latest": {"body": _live("甲")}}}
+    other = dict(_pend("na_a", 0, 1), scope="user")
+    r = _run({"status": _status(), "list": [{"key": "na_a"}], "defs": defs, "pending": [_pend("na_a", 0, 1), _pend("na_a", 1, 1, True), other],
+              "run": _SETUP + "await E._loadList(); return byRole('pending').map(n => n.textContent)"})
+    assert len(r["v"]) == 2 and any("待第二位" in t for t in r["v"]) and any("可以套用" in t for t in r["v"])
 
 
 def test_disable_with_an_unpublished_draft_asks_twice_and_does_not_overwrite_silently():
@@ -123,7 +134,7 @@ def test_disable_with_an_unpublished_draft_asks_twice_and_does_not_overwrite_sil
            "await new Promise(r => setTimeout(r, 30)); return first")
     r = _run({"status": _status(), "preview": _TIGHT, "list": [{"key": "na_live"}], "defs": defs, "run": run})
     msg, label = r["v"]
-    assert "尚未發布的修改" in msg and "丟掉" in msg and label == "再按一次確認停用"
+    assert "尚未發布的修改" in msg and "丟掉" in msg and label == "確認停用" and "再按一次這顆按鈕" in msg and "再按一次「再按一次" not in msg
     assert not any(c.startswith("PUT ") for c in r["calls"]), "第一次按不可以改草稿"
     run2 = _SETUP + "await E._loadList(); click('disable'); click('disable'); await new Promise(r => setTimeout(r, 80)); return 1"
     r = _run({"status": _status(), "preview": _TIGHT, "list": [{"key": "na_live"}], "defs": defs, "publish": {}, "run": run2})

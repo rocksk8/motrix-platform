@@ -29,7 +29,7 @@
   var LIMIT = { label: 30, title: 60, body: 400 }
   var DEFAULT_THROTTLE = { dedupe: 60, perDay: 5 }
 
-  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, cat: null, list: [], f: null, preview: null, previewRole: 'admin', etag: '', note: '', pending: {}, confirmDisable: '' }
+  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, cat: null, list: [], f: null, preview: null, previewRole: 'admin', etag: '', note: '', pending: {}, pendingError: false, confirmDisable: '' }
   var root = null
 
   function session() { try { return JSON.parse(localStorage.getItem('motrix_session') || 'null') || {} } catch (e) { return {} } }
@@ -162,9 +162,9 @@
       }))
     }).then(function (items) {                                       // 待核准的變更（治理管線）：讀不到 ⇒ 當作沒有，不擋清單
       return api('GET', '/api/def-pipeline/pending').then(function (p) {
-        var m = {}; ;(p.items || []).forEach(function (x) { if (x.kind === KIND) m[x.key] = x })
-        st.pending = m; return items
-      }).catch(function () { st.pending = {}; return items })
+        var m = {}; ;(p.items || []).forEach(function (x) { if (x.kind === KIND && (x.scope || 'company') === 'company') (m[x.key] = m[x.key] || []).push(x) })
+        st.pending = m; st.pendingError = false; return items
+      }).catch(function () { st.pending = {}; st.pendingError = true; return items })
     }).then(function (items) {
       st.list = items; st.busy = false; st.confirmDisable = ''; setMsg('', false, 'idle'); render()
     }).catch(function (e) {
@@ -172,8 +172,7 @@
       st.busy = false; setMsg('讀取失敗：' + e.message, true, 'error'); render()
     })
   }
-  function pendingLine(it) {
-    var p = st.pending[it.key]; if (!p) return ''
+  function pendingLine(p) {
     var a = Array.isArray(p.approvals) ? p.approvals.length : (Number(p.approvals) || 0), need = Number(p.approvalsRequired) || 1
     var at = p.effectiveAt ? String(p.effectiveAt).replace('T', ' ').slice(0, 16) : ''
     if (p.ready) return '有一項變更已核准、確認期間已過，可以套用（請到「版本與還原」的待核准變更分頁套用）；套用前不會生效。'
@@ -285,7 +284,7 @@
   function disableNow(it) {                                              // 一鍵停用＝收緊，立即生效（走同一條發布管線）
     if (it.hasDraft && st.confirmDisable !== it.key) {                   // 停用會把這個設定的草稿換成『停用後的已發布版本』：先警告，再按一次才做
       st.confirmDisable = it.key
-      setMsg('「' + it.label + '」有尚未發布的修改；停用會把這些修改丟掉（草稿會被換成停用後的版本）。確定要停用請再按一次「再按一次確認停用」；想保留修改請先按「編輯」。', true); render(); return Promise.resolve()
+      setMsg('「' + it.label + '」有尚未發布的修改；停用會把這些修改丟掉（草稿會被換成停用後的版本）。要繼續停用，請再按一次這顆按鈕（現在已改成「確認停用」）；想保留修改，請先按「編輯」。', true); render(); return Promise.resolve()
     }
     st.confirmDisable = ''
     var f = fromBody(it.key, it.liveBody || it.draftBody); f.enabled = false
@@ -311,6 +310,7 @@
   }
   function listView() {
     var box = el('div', { 'data-role': 'list' })
+    if (st.pendingError) box.appendChild(el('div', { 'data-role': 'pending-error', text: '無法讀取待核准狀態：清單上沒有顯示的「待核准」不代表真的沒有，請到「版本與還原」的待核准變更分頁確認。', style: 'font-size:12px;color:#b91c1c;margin:4px 0' }))
     if (!st.list.length) box.appendChild(el('div', { text: '還沒有額外通知。按「新增通知」建立第一個。', style: 'font-size:12px;color:var(--text-dim,#888);margin:6px 0' }))
     st.list.forEach(function (it) {
       var ev = eventOf(it.event)
@@ -318,9 +318,9 @@
         el('div', { style: 'flex:1;min-width:200px' }, [
           el('div', { text: it.label, style: 'font-size:13px;font-weight:600' }),
           el('div', { text: (ev ? '當「' + ev.label + '」時通知　' : '') + '｜' + statusText(it), style: 'font-size:11px;color:var(--text-dim,#888)' }),
-          st.pending[it.key] ? el('div', { text: '待核准：' + pendingLine(it), 'data-role': 'pending', style: 'font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:2px 6px;margin-top:2px' }) : null]),
+          el('div', {}, (st.pending[it.key] || []).map(function (p) { return el('div', { text: '待核准：' + pendingLine(p), 'data-role': 'pending', style: 'font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:2px 6px;margin-top:2px' }) }))]),
         el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'edit', text: '編輯', disabled: st.busy ? 'disabled' : null, onclick: function () { startEdit(it) } }),
-        it.published && it.enabled ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'disable', text: st.confirmDisable === it.key ? '再按一次確認停用' : '停用', disabled: st.busy ? 'disabled' : null, onclick: function () { disableNow(it) } }) : null,
+        it.published && it.enabled ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'disable', text: st.confirmDisable === it.key ? '確認停用' : '停用', disabled: st.busy ? 'disabled' : null, onclick: function () { disableNow(it) } }) : null,
         el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '版本與還原', onclick: function () { if (window.MotrixDefGovernance) window.MotrixDefGovernance.open({ kind: KIND, key: it.key, scope: 'company', title: '額外通知「' + it.label + '」的版本與還原', onRestored: loadList }) } })
       ]))
     })
