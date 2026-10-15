@@ -11,7 +11,7 @@
  "modules/case/api/material_orders.py": 1,
  "modules/case/api/material_payments.py": 2,
  "modules/case/api/project_margin.py": 2,
- "modules/case/api/quotations.py": 22,
+ "modules/case/api/quotations.py": 14,
  "modules/case/material_guard.py": 1,
  "modules/case/rule_provider.py": 1,
  "modules/payroll/api/payslips.py": 1,
