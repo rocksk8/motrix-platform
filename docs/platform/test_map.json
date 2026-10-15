@@ -16285,6 +16285,8 @@
     "js:static/custom-layout.js",
     "js:static/layout-editor.js",
     "js:static/layout-runtime.js",
+    "js:static/motrix-format.js",
+    "js:static/profit-warning.js",
     "js:static/public-flags.js",
     "js:static/status-chip.js",
     "page:pages/quotation-form.html",
@@ -16310,6 +16312,8 @@
      "frontend/static/custom-layout.js",
      "frontend/static/layout-editor.js",
      "frontend/static/layout-runtime.js",
+     "frontend/static/motrix-format.js",
+     "frontend/static/profit-warning.js",
      "frontend/static/public-flags.js",
      "frontend/static/status-chip.js"
     ],
