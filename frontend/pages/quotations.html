@@ -397,7 +397,7 @@
     </div>
 
     <div style="margin-top:12px;font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
-         x-text="'共 ' + filtered.length + ' 筆 · 顯示 ' + filtered.length + ' / ' + quotes.length + ' 筆'"></div>
+         x-text="'共 ' + filtered.length + ' 筆 · 顯示 ' + pagedFiltered.length + ' / ' + quotes.length + ' 筆'"></div>
     <div x-show="pageSize > 0 && filtered.length > pageSize" x-cloak data-testid="lv-pager" style="margin-top:8px;display:flex;gap:10px;align-items:center;font-size:12px">
       <button class="action-btn action-btn--ghost" :disabled="pvPage <= 0" @click="pvPage = Math.max(0, Math.min(pvPage, pageCount - 1) - 1)">上一頁</button>
       <span x-text="'第 ' + (Math.min(pvPage, pageCount - 1) + 1) + ' / ' + pageCount + ' 頁（每頁 ' + pageSize + ' 筆）'"></span>
