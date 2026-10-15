@@ -1,5 +1,5 @@
 {
- "core_version": "1.139",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1318,6 +1318,12 @@
    "settlement_profit": "def(pretax, actual_cost, pct=…, ver=…, frozen_charity=…, quoted_total=…, charity_basis=…)",
    "uncosted_items": "def(items)"
   },
+  "helper:profit_warning": {
+   "DEFAULTS": "const",
+   "DEFAULT_VALID_DAYS": "const",
+   "bands": "def(conn=…)",
+   "default_valid_days": "def(conn=…)"
+  },
   "helper:quote_output": {
    "TERMS": "const",
    "hidden_terms": "def(conn=…)"
@@ -1437,6 +1443,9 @@
   },
   "helper:settings_groups": {
    "UNAVAILABLE_ALT_CHOICES": "const"
+  },
+  "helper:settings_groups_profit": {
+   "register": "def(S, _register_core)"
   },
   "helper:settings_groups_q0": {
    "quote_cf_scan": "def(conn)",

@@ -1533,6 +1533,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/profit-warning/config": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/project-margin/config": {
    "w": false,
    "pp": 0,

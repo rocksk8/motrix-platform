@@ -11,6 +11,7 @@
   <script src="../static/legal-round.js"></script>
   <script src="../static/public-flags.js"></script>
   <script src="../static/status-chip.js"></script>
+  <script src="../static/profit-warning.js"></script>
   <script src="../js/reports.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
@@ -1563,7 +1564,7 @@
                                     :class="t.collectedAmount > 0 ? 'green-txt' : ''"
                                     x-text="t.collectedAmount > 0 ? fmt(t.collectedAmount) : '—'"></td>
                                 <td class="r mono"
-                                    :class="t.netMarginPct !== null ? (t.netMarginPct >= 20 ? 'green-txt' : t.netMarginPct >= 10 ? 'orange-txt' : 'red-txt') : ''"
+                                    :class="t.netMarginPct !== null ? (t.netMarginPct >= pw.report_good ? 'green-txt' : t.netMarginPct >= pw.report_low ? 'orange-txt' : 'red-txt') : ''"
                                     x-text="t.netMarginPct !== null ? t.netMarginPct + '%' : '—'"></td>
                               </tr>
                             </template>
@@ -2205,7 +2206,7 @@
               <div class="stl-kpi">
                 <div class="stl-kpi__lbl">真實營業利益率</div>
                 <div class="stl-kpi__val"
-                     :style="(stlSummary().netMarginPct||0)>=20?'color:#15803D':(stlSummary().netMarginPct||0)>=0?'color:#B45309':'color:#DC2626'"
+                     :style="(stlSummary().netMarginPct||0)>=pw.case_good?'color:#15803D':(stlSummary().netMarginPct||0)>=pw.case_floor?'color:#B45309':'color:#DC2626'"
                      x-text="(stlSummary().netMarginPct||0).toFixed(1)+'%'"></div>
                 <div style="font-size:10px;color:var(--text-dim)" x-text="'營業利益 ' + stlFmt(stlSummary().netProfit)"></div>
               </div>
@@ -2242,7 +2243,7 @@
                           x-text="stlFmt(stlSummary().origNetProfit)"></td></tr>
                   <tr><td style="padding:4px 0;font-weight:600;color:var(--text-dim);font-family:var(--font-zh)">原始預估營業利益率</td>
                       <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600"
-                          :style="(stlSummary().origNetMarginPct||0)>=20?'color:#15803D':(stlSummary().origNetMarginPct||0)>=0?'color:#B45309':'color:#DC2626'"
+                          :style="(stlSummary().origNetMarginPct||0)>=pw.case_good?'color:#15803D':(stlSummary().origNetMarginPct||0)>=pw.case_floor?'color:#B45309':'color:#DC2626'"
                           x-text="(stlSummary().origNetMarginPct||0).toFixed(1)+'%'"></td></tr>
                 </table>
               </div>
@@ -2280,7 +2281,7 @@
                           x-text="stlFmt(stlSummary().netProfit)"></td></tr>
                   <tr><td style="padding:4px 0;font-weight:600;color:var(--text-dim);font-family:var(--font-zh)">真實營業利益率</td>
                       <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"
-                          :style="(stlSummary().netMarginPct||0)>=20?'color:#15803D':(stlSummary().netMarginPct||0)>=0?'color:#B45309':'color:#DC2626'"
+                          :style="(stlSummary().netMarginPct||0)>=pw.case_good?'color:#15803D':(stlSummary().netMarginPct||0)>=pw.case_floor?'color:#B45309':'color:#DC2626'"
                           x-text="(stlSummary().netMarginPct||0).toFixed(1)+'%'"></td></tr>
                 </table>
               </div>

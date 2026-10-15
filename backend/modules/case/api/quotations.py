@@ -67,6 +67,7 @@ from modules.case import material_guard as MG  # 叫料審核的寫入閘（31-C
 from modules.case import material_recognize as MR  # 認列已核准採購單（T57）
 from modules.case import profit_guard as _PG  # 第 48 班 S2：管銷分攤比率權限／伺服器重算
 from helpers import profit_rules as _PR  # 專案毛利%（project_margin）
+from helpers import profit_warning as _pw  # T64 A：新報價單預設有效天數（設定 quote_defaults.valid_days，預設 30）
 from modules.case import alt_sign as _ALT_SIGN  # M3 T9：擇一方案回簽選定／取消回簽
 from modules.case import receipt_calendar as _RC  # 行事曆「收款登錄／應收到期提醒」（2026-10-05，預設關）
 from modules.case.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
@@ -1708,7 +1709,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             q.get("customerName"), q.get("projectName"),
             tot.get("total", 0), tot.get("pretax", 0),
             tot.get("directMarginPct", 0), tot.get("netMarginPct", 0),
-            q.get("salesPerson"), sp_id, q.get("quoteDate"), q.get("validDays", 30),
+            q.get("salesPerson"), sp_id, q.get("quoteDate"), q.get("validDays", _pw.default_valid_days()),
             json.dumps(q, ensure_ascii=False),
             now, now, user["username"], deal_tag, settle_status,
             # 沒送 ⇒ 留空，由 DB 的 trigger 補成當下的主要據點。
@@ -2134,7 +2135,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             q.get("customerName"), q.get("projectName"),
             tot.get("total", 0), tot.get("pretax", 0),
             tot.get("directMarginPct", 0), tot.get("netMarginPct", 0),
-            q.get("salesPerson"), sp_id, q.get("quoteDate"), q.get("validDays", 30),
+            q.get("salesPerson"), sp_id, q.get("quoteDate"), q.get("validDays", _pw.default_valid_days()),
             json.dumps(q, ensure_ascii=False), now, deal_tag, settle_status,
             # QL13：沒送 `locationId` 時傳 `None` => `COALESCE` 保持原值。
             # 一個只改了金額的 PUT 不應該把這張單的據點清掉 —— 那會讓它的抬頭
