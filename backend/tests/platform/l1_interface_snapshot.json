@@ -1,5 +1,5 @@
 {
- "core_version": "1.141",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1464,6 +1464,9 @@
   },
   "helper:settings_groups": {
    "UNAVAILABLE_ALT_CHOICES": "const"
+  },
+  "helper:settings_groups_list_view": {
+   "register": "def(S, _register_core)"
   },
   "helper:settings_groups_profit": {
    "register": "def(S, _register_core)"

@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.194 — 2026-10-15（wip/t65-c1-r1；T65 C1 報價單清單個人檢視偏好）
+- `pages/quotations.html`、新檔 `static/list-view-prefs.js`：設定中心新群組 `list_view`（預設全關）開啟後，使用者可在清單自訂自己的欄位顯示／順序、預設頁籤、每頁筆數（25／50／100／200，預設不分頁）；一律限在公司版面允許的範圍內，必要欄位不可隱藏，金額與毛利率欄只能隱藏或調順序（被遮蔽者仍看到「—」）。偏好存既有 `/api/list-prefs/quotations.view`；總開關是「自訂畫面版面」的 quotations 旗標，關閉時不多任何請求或腳本。無 migration、無新路由、無權限變更。
+
 ## 1.0.193 — 2026-10-15（wip/t64-fix-g4-r1；T64 閘門修正 g4）
 - `GET /api/profit-warning/config` 對登入但看不到報價毛利的人改回 200＋今天的預設門檻（門檻不是機密、不含毛利），不再回 403，頁面主控台不再出現錯誤；看得到毛利的人行為不變。`static/profit-warning.js` 的 `load()` 同一頁面只發一次請求。e2e 允許清單／案件頁 golden 補 T64 A／B 的靜態腳本與 `ui_format` 讀取。無 migration、無新路由、無權限變更。
 
