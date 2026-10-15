@@ -2,6 +2,8 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script src="../static/motrix-format.js"></script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',typeof s==='object'&&s?s:S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
@@ -188,8 +190,8 @@
                   </td>
                   <td style="font-size:12px;color:var(--text-dim)" x-text="p.unit || '台'"></td>
                   <td style="text-align:right"><span class="stock-badge" :class="stockCount(p.part_no) > 0 ? 'ok' : 'zero'" x-text="stockCount(p.part_no)"></span></td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="p.cost ? 'NT$ ' + Math.round(p.cost).toLocaleString() : '—'"></td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600" x-text="p.list_price ? 'NT$ ' + Math.round(p.list_price).toLocaleString() : '—'"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="p.cost ? 'NT$ ' + MotrixFormat.num(Math.round(p.cost)) : '—'"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600" x-text="p.list_price ? 'NT$ ' + MotrixFormat.num(Math.round(p.list_price)) : '—'"></td>
                   <td style="font-size:11px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="p.note || '—'"></td>
                   <td style="white-space:nowrap">
                     <button class="action-btn edit" @click.stop="openModal(p)">編輯</button>

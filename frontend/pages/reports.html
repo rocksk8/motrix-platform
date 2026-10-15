@@ -2,6 +2,8 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script src="../static/motrix-format.js"></script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',typeof s==='object'&&s?s:S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
@@ -2015,7 +2017,7 @@
                             <td x-text="it.customer"></td>
                             <td x-text="it.vendorName || '（外包人員點工）'"></td>
                             <td class="r mono" x-text="fmt(it.amount)"></td>
-                            <td class="c" x-text="it.approvedAt ? new Date(it.approvedAt).toLocaleString('zh-TW') : ''"></td>
+                            <td class="c" x-text="it.approvedAt ? MotrixFormat.dt(new Date(it.approvedAt), 'plain') : ''"></td>
                           </tr>
                         </template>
                       </tbody>
@@ -2291,8 +2293,8 @@
                  style="border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px;font-family:var(--font-zh)"
                  :style="(stlSummary().profitDiff||0)>=0?'background:#F0FDF4;border:1px solid #86EFAC;color:#15803D':'background:#FFF1F2;border:1px solid #FECACA;color:#DC2626'">
               <span x-text="(stlSummary().profitDiff||0)>=0
-                ? '真實營業利益比原始預估高 NT$ '+Math.abs(Math.round(stlSummary().profitDiff||0)).toLocaleString()+'（+'+(((stlSummary().netMarginPct||0)-(stlSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'
-                : '真實營業利益比原始預估低 NT$ '+Math.abs(Math.round(stlSummary().profitDiff||0)).toLocaleString()+'（'+(((stlSummary().netMarginPct||0)-(stlSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'">
+                ? '真實營業利益比原始預估高 NT$ '+MotrixFormat.num(Math.abs(Math.round(stlSummary().profitDiff||0)))+'（+'+(((stlSummary().netMarginPct||0)-(stlSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'
+                : '真實營業利益比原始預估低 NT$ '+MotrixFormat.num(Math.abs(Math.round(stlSummary().profitDiff||0)))+'（'+(((stlSummary().netMarginPct||0)-(stlSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'">
               </span>
             </div>
 

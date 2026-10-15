@@ -55,7 +55,7 @@
     if (field.type === 'daterange') return { from: '', to: '' }
     return ''
   }
-  function formatMoney(n) { return Math.round(Number(n) || 0).toLocaleString('zh-TW') }
+  function formatMoney(n) { return MotrixFormat.num(Math.round(Number(n) || 0), {locale:'zh-TW'}) }
   function linesField(def) {
     var fs = (def && def.fields) || []
     for (var i = 0; i < fs.length; i++) if (fs[i].type === 'table' && fs[i].key === 'lines') return fs[i]

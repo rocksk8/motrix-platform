@@ -1319,7 +1319,7 @@ function voucherPage() {
 
     fmt(n) {
       if (n === undefined || n === null) return ''
-      return Math.round(n).toLocaleString()
+      return MotrixFormat.num(Math.round(n))
     },
 
     shortDate(s) { return (s || '').slice(0, 10) },

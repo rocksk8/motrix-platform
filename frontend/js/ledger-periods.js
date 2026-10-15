@@ -65,7 +65,7 @@ function ledgerPeriodsPage() {
       } catch (e) { this.error = e.message }
     },
     statusLabel(s) { return ({ open: '開放', closed: '已結帳', locked: '已鎖定' })[s] || s },
-    fmt(n) { return (n || 0).toLocaleString('zh-TW') },
+    fmt(n) { return MotrixFormat.num(n || 0, {locale:'zh-TW'}) },
 
     async load() {
       this.error = ''

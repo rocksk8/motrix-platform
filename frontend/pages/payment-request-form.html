@@ -2,6 +2,8 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script src="../static/motrix-format.js"></script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',typeof s==='object'&&s?s:S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>請款單開立 — MOTRIX ERP</title>
@@ -154,7 +156,7 @@
                        placeholder="輸入比例自動換算金額，或留空改用下方自訂金額">
               </div>
               <div x-show="ratioInput > 0" style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
-                換算請款金額（含稅）約 NT$ <span x-text="ratioToAmount().toLocaleString()"></span>
+                換算請款金額（含稅）約 NT$ <span x-text="MotrixFormat.num(ratioToAmount())"></span>
               </div>
               <div x-show="remaining && ratioInput > remaining.remainingRatioPct" style="font-size:11px;color:var(--danger);margin-bottom:10px">超過剩餘可請款比例</div>
 
@@ -412,7 +414,7 @@ function paymentRequestForm() {
 
     get editable() { return this.q.status === '草稿' },
 
-    fmt(n) { return 'NT$ ' + (MotrixLegalRound.halfUp(n || 0)).toLocaleString() },
+    fmt(n) { return 'NT$ ' + MotrixFormat.num(MotrixLegalRound.halfUp(n || 0)) },
     dirty() { this.isDirty = true },
 
     statusClass() {

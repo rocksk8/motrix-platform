@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <script src="../static/motrix-format.js"></script>
-  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',typeof s==='object'&&s?s:S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
@@ -3188,7 +3188,7 @@
           if (ok) {
             this.isNewRecord = false
             this.isDirty = false
-            this.lastSaved = new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})
+            this.lastSaved = MotrixFormat.dt(new Date(), {hour:'2-digit',minute:'2-digit'})
           }
         })
       },
@@ -3416,7 +3416,7 @@
         this.isDirty = false
         if (this.unlocked) this.unlocked = false
         const now = new Date()
-        this.lastSaved = now.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})
+        this.lastSaved = MotrixFormat.dt(now, {hour:'2-digit',minute:'2-digit'})
         const msg = document.createElement('div')
         msg.textContent = wasUnlocked ? '✓ 報價單已修改儲存，重新鎖定' : '✓ 草稿已儲存'
         msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#0A0A0A;color:#F5F4F0;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3);letter-spacing:.02em'
@@ -4452,7 +4452,7 @@
 
         if (this.lastSaved) {
           const now = new Date()
-          this.lastSaved = now.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})
+          this.lastSaved = MotrixFormat.dt(now, {hour:'2-digit',minute:'2-digit'})
         }
 
         // 預覽：切換對外／內部就重取一次；iframe 內容以 postMessage 回報高度
