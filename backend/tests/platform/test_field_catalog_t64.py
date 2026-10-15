@@ -60,12 +60,17 @@ def test_margin_fields_depend_on_cost():
             assert f["derivedFrom"], f["id"]
 
 
+def _prod_registered():
+    """真實登記表；排除其他測試檔註冊的假匯出（`t:`／`t_…:` 開頭，例如 `t_bp3:csv`），避免整批測試時被它們污染。"""
+    return {k: v for k, v in ET.registered().items() if not k.startswith("t:") and not k.startswith("t_")}
+
+
 def test_export_registry_and_catalog_agree_both_directions():
-    assert FC.export_problems(ET.registered()) == []
+    assert FC.export_problems(_prod_registered()) == []
 
 
 def test_positive_control_export_check_catches_both_directions():
-    reg = ET.registered()
+    reg = _prod_registered()
     missing_entry = {k: dict(v) for k, v in reg.items()}
     missing_entry["x:new"] = {"columns": [{"id": "cost", "label": "成本", "money": True}], "sheets": []}
     assert any("沒有登記在欄位目錄" in m for m in FC.export_problems(missing_entry))

@@ -378,7 +378,7 @@ def _who(kind, value) -> str:
         return PEOPLE_LABELS[kind]
     if kind == "role":
         return "角色「%s」的所有人" % ROLE_LABELS.get(value, value)
-    if kind == "group":
+    if kind in _GROUP_KINDS:
         return "群組「%s」" % GROUP_LABELS.get(value, value)
     if kind == "user":
         return "指定帳號 %s" % value
