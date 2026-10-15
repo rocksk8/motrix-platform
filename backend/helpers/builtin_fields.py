@@ -2,7 +2,7 @@
 """內建畫面的自訂欄位（T61 S5；設計：docs/platform/plans/T61-S5-FIELD-CATALOG-DESIGN.md）。
 
 [單位] helper:builtin_fields    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] ALLOWED_TYPES, MAX_FIELDS, RECORD_TYPES, OUTPUT_OPTIONS, definition_problems, enabled, gate, output_rows, public_fields, type_enabled, usage_counts
+[公開介面] ALLOWED_TYPES, MAX_FIELDS, RECORD_TYPES, OUTPUT_OPTIONS, definition_problems, enabled, finance_rows, gate, output_rows, public_fields, type_enabled, usage_counts
 [不變式] ①旗標 `builder_custom_fields.enabled` 關閉 ⇒ `gate()` 一律回舊值（不介入任何寫入）、`public_fields()` 回空；
     ②值只放在單據 JSON 的 `customFields` 命名空間，沒有值就**不寫這個鍵**；③型別只有文字／日期／單選／勾選（沒有金額、公式、參照、必填、預設值）；
     ④停用或已不在定義裡的欄位，其值**原樣保留**（用戶端送來的改動一律忽略）；⑤任何錯誤 ⇒ 回錯誤清單，不丟例外。
@@ -125,19 +125,25 @@ def public_fields(record_type, conn=None) -> list:
 OUTPUT_OPTIONS = ("quote_in_customer_output", "quote_on_finance_docs")
 
 
+def _option_on(option, conn=None) -> bool:
+    """總開關、報價單開關、該文件類型的選項三個都開才算開；任何讀取失敗 ⇒ 關閉。"""
+    try:
+        if option not in OUTPUT_OPTIONS or not type_enabled("quotation", conn):
+            return False
+        from helpers import settings_registry as _SR
+        return int(_SR.get("builder_custom_fields", option, conn=conn) or 0) == 1
+    except Exception:                                                                    # noqa: BLE001
+        return False
+
+
 def output_rows(quote, option, conn=None) -> list:
     """報價單自訂欄位要印在某類文件上的列：`[(標籤, 顯示文字)]`（只含已發布且未停用、有值的欄位，依定義順序）。
     ⚠ 三個條件**同時**成立才有內容：總開關開、報價單開關開、該文件類型的選項開（引擎的第一道檢查看不到已存的相依值，所以使用端一定要自己再查）。
     讀不到任何一個設定、定義讀不到、值不是物件 ⇒ 空清單（＝今天的輸出）。永不丟例外。"""
     customs = quote.get("customFields") if isinstance(quote, dict) else None
-    if option not in OUTPUT_OPTIONS or not isinstance(customs, dict) or not customs:
+    if not isinstance(customs, dict) or not customs or not _option_on(option, conn):
         return []
     try:
-        if not type_enabled("quotation", conn):
-            return []
-        from helpers import settings_registry as _SR
-        if int(_SR.get("builder_custom_fields", option, conn=conn) or 0) != 1:
-            return []
         rows = []
         for f in public_fields("quotation", conn):
             v = customs.get(f["key"])
@@ -151,6 +157,24 @@ def output_rows(quote, option, conn=None) -> list:
         return rows
     except Exception:                                                                    # noqa: BLE001
         return []
+
+
+def finance_rows(quote_no, conn=None) -> list:
+    """財務單據（請款單、開票申請）要附的報價單自訂欄位；渲染當下從報價單讀（唯讀，不複製進財務資料）。
+    選項沒開就**不查資料庫**。查不到報價單、JSON 壞掉 ⇒ 空清單。永不丟例外。"""
+    if not quote_no or not _option_on("quote_on_finance_docs", conn):
+        return []
+    c, own = None, False
+    try:
+        c, own = _open(conn)
+        row = c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        q = json.loads(row[0] or "{}") if row else None
+        return output_rows(q, "quote_on_finance_docs", c)
+    except Exception:                                                                    # noqa: BLE001
+        return []
+    finally:
+        if own and c is not None:
+            c.close()
 
 
 def definition_problems(key, body) -> list:

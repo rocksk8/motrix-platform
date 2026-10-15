@@ -1985,6 +1985,14 @@ def _build_invoice_voucher_html(v: dict, template: dict = None) -> str:
     html = _dt.render(template or _published_output_template("invoice_voucher", v), view, parts)
     # 核可狀態由程式決定、不由版型決定：未核准一律有紅色警示（冪等；版型自己的 banner 積木照舊保留）
     out = html if v.get("status") == "已核准" else _inject_unapproved(html, v.get("status"), "此為開票申請預覽稿，尚未正式核准", doc_no=v.get("voucherNo", ""))
+    # T63 Q0 c3：報價單自訂欄位附在開票申請憑據最後（唯讀；三個開關都開才有內容；預設 ⇒ 空 ⇒ 輸出逐位元相同）。
+    from helpers.builtin_fields import finance_rows as _fin_rows
+    _fr = _fin_rows(v.get("quoteNo"))
+    if _fr and "</body>" in out:
+        _blk = ('<div style="margin:14px 0 0;font-size:11px"><div style="font-weight:700;margin-bottom:4px">其他資訊（報價單）</div>'
+                + ''.join(f'<div><span style="color:#666">{_html_text(lb, falsy_empty=True)}：</span>{_html_text(val, falsy_empty=True)}</div>' for lb, val in _fr)
+                + '</div>')
+        out = out.replace("</body>", _blk + "</body>", 1)
     from helpers import export_templates as _ET     # BP-3：旗標關／沒有已發布範本 ⇒ 原樣回傳同一個字串（輸出逐位元相同）；程式的橫幅已在上面注入，這裡只加固定樣式的頁尾／浮水印文字
     return _ET.decorate_pdf("arap:invoice-voucher-pdf", out)
 
@@ -2266,6 +2274,15 @@ def _build_payment_request_html_core(v: dict) -> str:
     terms_section = (
         f'<div class="section-label">{"六" if bank_rows else "五"}、請款條件</div>' + terms_html
     ) if terms_html.strip() else ''
+
+    # T63 Q0 c3：報價單自訂欄位附在請款單後面（唯讀、渲染當下從報價單讀；總開關＋報價單開關＋『可帶入財務單據』都開才有內容）。不編章號，不動任何金額。
+    from helpers.builtin_fields import finance_rows as _fin_rows
+    _fr = _fin_rows(v.get('quoteNo'))
+    if _fr:
+        terms_section += (
+            '<div class="section-label">其他資訊（報價單）</div>'
+            + ''.join(term_block(lb, val) for lb, val in _fr)
+        )
 
     is_final = v.get('status') == '已核准'
     watermark_html = '' if is_final else (

@@ -719,6 +719,16 @@ def _quote_cf_customer_impact(conn, new_value):
             "sentence": "目前有%s %d 張報價單填了自訂欄位；%s" % ("至少" if capped else "", n, "開放後，這些內容會印在它們的報價單 PDF、預覽與內部列印上。" if new_value else "改回只給內部人員後，報價單文件不再出現自訂欄位。")}
 
 
+def _quote_cf_finance_impact(conn, new_value):
+    from helpers.settings_groups_q0 import quote_cf_scan
+    r = quote_cf_scan(conn)
+    if r is None:
+        raise RuntimeError("count failed")
+    n, capped = r
+    return {"numbers": {"quotationsWithCustomFields": n, "atLeast": capped},
+            "sentence": "目前有%s %d 張報價單填了自訂欄位；%s" % ("至少" if capped else "", n, "開放後，這些內容會附在由它們產生的請款單與開票申請憑據上。" if new_value else "改回不附後，財務文件不再出現自訂欄位。")}
+
+
 def _quote_cf_cross_check(values):
     """報價單自訂欄位的相依：要先開放總開關與『開放報價單自訂欄位』。回問題清單（空＝通過）。
     ⚠ 引擎的第一道檢查是『只帶改動的欄位、其餘補預設』，看不到已存的值——所以相依欄位沒帶時改讀目前已存的設定（讀不到 ⇒ 不擋）。
@@ -735,6 +745,8 @@ def _quote_cf_cross_check(values):
         out.append("要先開放「內建畫面的自訂欄位」，報價單才能使用自訂欄位。")
     if values.get("quote_in_customer_output") and not quote_on:
         out.append("要先開放「報價單自訂欄位」，才能設定它印在報價單上。")
+    if values.get("quote_on_finance_docs") and not quote_on:
+        out.append("要先開放「報價單自訂欄位」，才能設定它附在財務文件上。")
     return out
 
 
@@ -765,6 +777,15 @@ register_group(
           choices=[(0, "只給內部人員（建議）", "報價單 PDF、預覽與內部列印都不出現自訂欄位。"),
                    (1, "印在報價單上", "報價單 PDF、預覽與內部列印會多印「其他資訊」區。")],
           impact_fn=_quote_cf_customer_impact),
+        S("quote_on_finance_docs", "int", 0, min=0, max=1, risk="money", loosen="up", recommended=0,
+          risk_text="【高影響】開放後，報價單自訂欄位的名稱與內容會附在請款單與開票申請憑據上，可能讓不該出現在財務文件上的內容被帶出。",
+          impact_scope={"documents": ["請款單 PDF", "開票申請憑據 PDF"], "roles": ["出納", "財務", "業務"], "amounts": "不改任何金額、稅額、單號或單據狀態；只決定自訂欄位的文字會不會附在財務文件上。", "reversible": True, "effective": "pending"},
+          question="報價單的自訂欄位，可以附在請款單與開票申請憑據上嗎？", label="報價單自訂欄位可附在財務文件上",
+          help="預設不附。開放後，請款單 PDF 與開票申請憑據 PDF 會多一個「其他資訊（報價單）」區，列出該報價單目前有填的自訂欄位；內容是印出當下從報價單讀取，不會複製進財務資料。應收清單、出納列表、會計傳票與報表不受影響。需要先開放「報價單自訂欄位」。",
+          impact="只影響之後產生或重新開啟的請款單與開票申請憑據文件；已經寄出的文件不會改，金額、稅額與單據狀態完全不變。開放屬於放寬，需要第二位最高管理者核准並經確認期間；改回不附立即生效。",
+          choices=[(0, "不附（建議）", "請款單與開票申請憑據不出現自訂欄位。"),
+                   (1, "附在財務文件上", "請款單與開票申請憑據會多印「其他資訊（報價單）」區。")],
+          impact_fn=_quote_cf_finance_impact),
     ],
     sensitive=False, risk="ops", cross_check=_quote_cf_cross_check,
     help="決定內建畫面（案件資訊、供應商）是否開放管理者新增自己的欄位，以及報價單是否開放自訂欄位。",

@@ -11,13 +11,12 @@ from helpers import settings_registry as SR
 NEW = {
     "quote_output": {"hidden_terms_pdf_mode": 0},
     "quote_privacy": {"contact_email_hideable": 1, "contact_fax_hideable": 1},
-    "builder_custom_fields": {"quote_enabled": 0, "quote_in_customer_output": 0},
+    "builder_custom_fields": {"quote_enabled": 0, "quote_in_customer_output": 0, "quote_on_finance_docs": 0},
 }
-LOOSEN = {("quote_output", "hidden_terms_pdf_mode"): "up", ("builder_custom_fields", "quote_in_customer_output"): "up"}
-RISK = {("quote_output", "hidden_terms_pdf_mode"): "legal", ("builder_custom_fields", "quote_in_customer_output"): "legal"}
+LOOSEN = {("quote_output", "hidden_terms_pdf_mode"): "up", ("builder_custom_fields", "quote_in_customer_output"): "up", ("builder_custom_fields", "quote_on_finance_docs"): "up"}
+RISK = {("quote_output", "hidden_terms_pdf_mode"): "legal", ("builder_custom_fields", "quote_in_customer_output"): "legal", ("builder_custom_fields", "quote_on_finance_docs"): "money"}
 #: 還沒有使用端的選項（切片 3 才登錄）：登錄了卻什麼都不做的設定不准出貨。
-NOT_YET = [("quote_output", "hidden_terms_editor_warning"), ("quote_privacy", "notice_flow_when_hidden"),
-           ("builder_custom_fields", "quote_on_finance_docs")]
+NOT_YET = [("quote_output", "hidden_terms_editor_warning"), ("quote_privacy", "notice_flow_when_hidden")]
 
 
 def _fields(group):
@@ -109,7 +108,8 @@ def test_impact_functions_count_quotes_and_never_write(client):
     finally:
         c.close()
     for g, k, num in (("quote_output", "hidden_terms_pdf_mode", "quotationsWithTerms"), ("quote_privacy", "contact_email_hideable", "quotationsWithContacts"),
-                      ("builder_custom_fields", "quote_in_customer_output", "quotationsWithCustomFields")):
+                      ("builder_custom_fields", "quote_in_customer_output", "quotationsWithCustomFields"),
+                      ("builder_custom_fields", "quote_on_finance_docs", "quotationsWithCustomFields")):
         out = SR.live_impact(g, k, 1)
         assert out["live"] and out["live"]["numbers"][num] >= 1 and "張" in out["live"]["sentence"]
 
@@ -243,11 +243,11 @@ FIELDS = [{"key": "project_code", "label": "內部案號", "type": "text"}, {"ke
           {"key": "note", "label": "備註欄", "type": "text"}]
 
 
-def _cf_env(monkeypatch, master=1, quote=1, out=1, fields=FIELDS):
+def _cf_env(monkeypatch, master=1, quote=1, out=1, fields=FIELDS, fin=0):
     from helpers import builtin_fields as BF
     real = SR.get
     vals = {("builder_custom_fields", "enabled"): bool(master), ("builder_custom_fields", "quote_enabled"): quote,
-            ("builder_custom_fields", "quote_in_customer_output"): out}
+            ("builder_custom_fields", "quote_in_customer_output"): out, ("builder_custom_fields", "quote_on_finance_docs"): fin}
     monkeypatch.setattr(SR, "get", lambda g, f, **kw: vals[(g, f)] if (g, f) in vals else real(g, f, **kw))
     monkeypatch.setattr(BF, "public_fields", lambda rt, conn=None: [dict(f) for f in fields] if rt == "quotation" else [])
 
@@ -307,3 +307,94 @@ def test_c2_dependency_message_and_pending_loosening(client):
         assert r["pending"] and SR.get("builder_custom_fields", "quote_in_customer_output", conn=c) == 0
     finally:
         c.close()
+
+
+# ── c3：財務文件（請款單、開票申請憑據） ──────────────────────────────────
+
+def _seed_quote(quote_no="T63-Q0-FIN", customs=None):
+    import db
+    c = db.get_db()
+    try:
+        c.execute("INSERT OR REPLACE INTO quotations (quote_no, data_json) VALUES (?,?)", (quote_no, json.dumps({"customFields": customs if customs is not None else CF}, ensure_ascii=False)))
+        c.commit()
+    finally:
+        c.close()
+    return quote_no
+
+
+def _fin_docs(qn):
+    import pdf_gen
+    pr = pdf_gen._build_payment_request_html({"requestNo": "PR-1", "status": "已核准", "quoteNo": qn, "amount": 100})
+    iv = pdf_gen._build_invoice_voucher_html({"voucherNo": "IV-1", "status": "已核准", "scope": "amount", "amount": 100, "quoteNo": qn,
+                                              "approval": {"requestedByDisplay": "", "requestedAt": ""}, "createdBy": "x", "createdAt": ""})
+    return pr, iv
+
+
+def test_c3_default_changes_neither_finance_document(client, monkeypatch):
+    qn = _seed_quote()
+    base = _fin_docs("NO-SUCH-QUOTE")
+    _cf_env(monkeypatch, fin=0)
+    pr, iv = _fin_docs(qn)
+    assert "其他資訊（報價單）" not in pr and "其他資訊（報價單）" not in iv
+    assert pr == base[0].replace("NO-SUCH-QUOTE", qn) and iv == base[1].replace("NO-SUCH-QUOTE", qn)
+
+
+@pytest.mark.parametrize("master,quote,out,fin", [(0, 1, 1, 1), (1, 0, 1, 1), (1, 1, 1, 0)])
+def test_c3_needs_all_three_switches(client, monkeypatch, master, quote, out, fin):
+    qn = _seed_quote()
+    _cf_env(monkeypatch, master, quote, out, fin=fin)
+    pr, iv = _fin_docs(qn)
+    assert "其他資訊（報價單）" not in pr and "其他資訊（報價單）" not in iv
+
+
+def test_c3_all_on_appends_escaped_read_only_rows_and_leaves_money_alone(client, monkeypatch):
+    qn = _seed_quote()
+    off = _fin_docs(qn)
+    _cf_env(monkeypatch, fin=1)
+    pr, iv = _fin_docs(qn)
+    for html in (pr, iv):
+        assert "其他資訊（報價單）" in html and "內部案號" in html and "急件" in html
+        assert "A<b>1</b>" not in html and "A&lt;b&gt;1&lt;/b&gt;" in html
+        assert "備註欄" not in html and "舊值" not in html
+    import re
+    for a, b in zip(off, (pr, iv)):
+        money_a, money_b = re.findall(r"NT\$ [\d,]+", a), re.findall(r"NT\$ [\d,]+", b)
+        assert money_a and money_a == money_b, "金額列逐項不變"
+
+
+def test_c3_unknown_quote_or_broken_json_or_read_failure_adds_nothing(client, monkeypatch):
+    _cf_env(monkeypatch, fin=1)
+    assert all("其他資訊（報價單）" not in h for h in _fin_docs("NO-SUCH-QUOTE"))
+    import db
+    c = db.get_db()
+    try:
+        c.execute("INSERT OR REPLACE INTO quotations (quote_no, data_json) VALUES (?,?)", ("T63-Q0-BAD", "{not json"))
+        c.commit()
+    finally:
+        c.close()
+    assert all("其他資訊（報價單）" not in h for h in _fin_docs("T63-Q0-BAD"))
+    from helpers import builtin_fields as BF
+    monkeypatch.setattr(BF, "public_fields", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert all("其他資訊（報價單）" not in h for h in _fin_docs(_seed_quote()))
+
+
+def test_c3_does_not_query_the_database_when_the_option_is_off(client, monkeypatch):
+    from helpers import builtin_fields as BF
+    _cf_env(monkeypatch, fin=0)
+    monkeypatch.setattr(BF, "_open", lambda conn: (_ for _ in ()).throw(AssertionError("選項沒開不該查資料庫")))
+    assert BF.finance_rows("ANY") == []
+
+
+def test_c3_dependency_message_and_money_pending(client):
+    bad = _msgs("builder_custom_fields", {"quote_on_finance_docs": 1})
+    assert bad and "報價單自訂欄位" in bad[0]
+    _set("builder_custom_fields", {"enabled": True, "quote_enabled": 1})
+    import db
+    c = db.get_db()
+    try:
+        r = SR.publish("builder_custom_fields", {"quote_on_finance_docs": 1}, reason="t", user="t63", conn=c)
+        c.commit()
+        assert r["pending"] and SR.get("builder_custom_fields", "quote_on_finance_docs", conn=c) == 0
+    finally:
+        c.close()
+    assert _fields("builder_custom_fields")["quote_on_finance_docs"].risk == "money"
