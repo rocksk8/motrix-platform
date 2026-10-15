@@ -98,6 +98,7 @@ _NOT_IN_JSON_BACKUP = {
                         "整庫複製那層仍然有",
     "user_activity_daily": "時數統計，同 user_request_log",
     "user_list_prefs": "每個人的排序偏好，重設一次就好",
+    "user_list_view_prefs": "每個人的清單每頁筆數偏好（T66），重設一次就好",
     "tender_fetch_log":
         "標案雷達的抓取軌跡。它回答的是「雷達瞎了沒」，而還原之後要看的是"
         "「現在會不會動」，下一次抓取就會重新長出來。⚠️ 同一批的 tender_watches／"
@@ -707,6 +708,8 @@ _DELETE_OWNERSHIP_VERIFIED = {
     ("auth.py", "/api/auth/webauthn/credentials/{cred_id}"),
     # 釋放自己的編輯鎖（edit_presence）
     ("system.py", "/api/edit-presence"),
+    # 清單檢視偏好回預設（T66）：只刪登入者自己的那一列（鍵＝token 的帳號，路徑沒有帳號參數）
+    ("list_view_prefs.py", "/api/list-views/{list_id}"),
     # 報價單刪除走**狀態**把關而不是角色——§5.1「僅草稿可刪；其他狀態回 403」
     ("modules/case/api/quotations.py", "/api/quotations/{quote_no}"),   # M01 ②：模組檔以相對路徑為名
     # 自訂模組附件暫存檔：只有上傳者能刪、且只限尚未綁單的（`custom_files.remove_staged` 條件含 uploaded_by＝自己），不是角色把關

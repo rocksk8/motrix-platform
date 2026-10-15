@@ -691,3 +691,24 @@ def _core_next_org_units(conn):
 
 
 register("core", 10, _core_next_org_units)
+
+
+# ── 清單檢視偏好（T66 L2；未取號，PLAYBOOK §G6）──────────────────────────────────────────
+# `user_list_view_prefs`：每人每清單一列的個人偏好（目前只有每頁筆數；欄位與排序仍在既有 `user_list_prefs`）。純新增、冪等；
+# 帶 owner_unit_id（單位守門 test_unit_scope_guard_t6 的要求，預設 1）。不 import 會演進的程式碼（凍住的歷史）。
+def _core_next_list_view_prefs(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_list_view_prefs (
+            username      TEXT    NOT NULL,
+            list_id       TEXT    NOT NULL,
+            prefs_json    TEXT    NOT NULL DEFAULT '{}',
+            updated_at    TEXT    NOT NULL DEFAULT '',
+            owner_unit_id INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (username, list_id)
+        )
+    """)
+    conn.commit()
+    return None
+
+
+register("core", NEXT, _core_next_list_view_prefs)

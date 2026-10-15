@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 871,
-  "endpoints_api": 867,
-  "write_total": 471,
-  "write_api": 471,
-  "get_api": 396,
-  "distinct_paths_api": 733,
-  "write_with_body_api": 344,
-  "write_with_path_param_api": 342
+  "endpoints_total": 875,
+  "endpoints_api": 871,
+  "write_total": 473,
+  "write_api": 473,
+  "get_api": 398,
+  "distinct_paths_api": 735,
+  "write_with_body_api": 345,
+  "write_with_path_param_api": 344
  },
  "select_star": {
   "modules": 277,
@@ -124,6 +124,11 @@
    "body": false
   },
   "DELETE /api/ledger/category-map/{category}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/list-views/{list_id}": {
    "w": true,
    "pp": 1,
    "body": false
@@ -1244,6 +1249,16 @@
    "body": false
   },
   "GET /api/list-prefs/{list_key}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/list-views": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/list-views/{list_id}": {
    "w": false,
    "pp": 1,
    "body": false
@@ -4154,6 +4169,11 @@
    "body": true
   },
   "PUT /api/list-prefs/{list_key}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/list-views/{list_id}": {
    "w": true,
    "pp": 1,
    "body": true
