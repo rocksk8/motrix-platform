@@ -2,7 +2,7 @@
 """共用欄位目錄（T64 切片 D／F7 的 S0：只登記、不改行為）。
 
 [單位] helper:field_catalog    [層] L1    [穩定度] 實驗（唯讀登記；沒有旗標、沒有路由、沒有資料表）
-[公開介面] API_GROUPS, CEILINGS, FAMILIES, FIELDS, api_keys, by_id, export_problems, fields, history_labels, problems, screen_problems
+[公開介面] API_GROUPS, CEILINGS, FAMILIES, FIELDS, KINDS, api_keys, by_id, export_problems, fields, history_labels, problems, screen_problems
 [不變式] ①純資料＋純函式，只 import 標準函式庫 `types`（`financial_mask` 反過來從這裡取鍵名，不可形成環）。
     ②`financial_mask` 的 6 份金額鍵清單由本目錄衍生，鍵名與順序與切片前逐字相同（守門：tests/platform/test_field_catalog_t64.py 內寫死今天的清單）。
     ③匯出的金額欄位／工作表與版面的欄位點由本目錄登記並與真實登記表互相核對（兩個方向都驗）；S0 只核對，不改它們的登記方式。
@@ -15,18 +15,21 @@
 from types import MappingProxyType
 
 #: 家族：同一家族一起判斷（成本藏了、毛利露出來＝可以反推成本）。
-FAMILIES = ("cost", "margin", "price", "payment")
+FAMILIES = ("cost", "margin", "price", "payment", "note")
 #: 天花板（後端遮蔽的種類）：quote_money＝報價單層級金額；finance_money＝精算／款項／財務總覽；material_money＝叫料體系；cashier＝出納。
 CEILINGS = ("quote_money", "finance_money", "material_money", "cashier")
+
+#: 遮蔽動作的種類：key＝dict 鍵剝除／置空（API_GROUPS 那五組）；subtree＝整段清空；text＝內容式文字替換或剝除；document＝整份輸出（例：內部 PDF）。
+KINDS = ("key", "subtree", "text", "document")
 
 #: API 回應裡的鍵名分組（對應 financial_mask 的 6 份清單中的 5 份；第 6 份是修改紀錄的顯示名稱，見 `history`）。
 API_GROUPS = ("quotation_cols", "quote_item", "quote_top", "payment", "material_order")
 
 
-def _f(fid, label, family, ceiling, api=None, history=None, derived_from=(), screen=(), export=None):
+def _f(fid, label, family, ceiling, api=None, history=None, derived_from=(), screen=(), export=None, kind="key", exceptions=()):
     return MappingProxyType({"id": fid, "label": label, "family": family, "moneyClass": "money", "ceiling": ceiling,
                              "api": api, "history": tuple(history or ()), "derivedFrom": tuple(derived_from),
-                             "screen": tuple(screen), "export": export})
+                             "screen": tuple(screen), "export": export, "kind": kind, "exceptions": tuple(exceptions)})
 
 
 def _sheet(export_id, sheet_id, label, ceiling):
@@ -74,6 +77,14 @@ FIELDS = (
     _f("material_order.totalPrice", "材料申請總價", "cost", "material_money", api=("material_order", "totalPrice")),
     _f("material_order.paidAmount", "材料申請已付金額", "payment", "material_money", api=("material_order", "paidAmount")),
     _f("material_order.totalAmount", "材料申請合計金額", "cost", "material_money", api=("material_order", "totalAmount")),
+    # ── 非『鍵』的遮蔽（S1a 補登記：今天寫死在 financial_mask／端點函式裡的規則；行為不變，只是變成目錄上的資料）──
+    _f("settlement.amounts", "精算金額（整段，只留狀態）", "payment", "finance_money", kind="subtree"),
+    _f("payment.received_legacy", "款項已收金額（舊形狀：數字）", "payment", "finance_money", kind="subtree"),
+    _f("edit_history.reason", "修改紀錄的理由（自由文字）", "note", "quote_money", kind="text"),
+    _f("edit_history.reopen_reason", "重新開啟精算的理由（自由文字）", "note", "finance_money", kind="text"),
+    _f("edit_history.changes", "修改紀錄的金額變動（前後值）", "price", "quote_money", kind="text", history=()),
+    _f("approval.reasons", "需審核原因（含毛利／金額／折讓者）", "note", "quote_money", kind="text"),
+    _f("quote_pdf.internal", "含成本／毛利的內部報價 PDF", "cost", "quote_money", kind="document", exceptions=("case_approver",)),
     # ── 版面欄位點＋匯出欄位（同一個『金額』欄位在三個地方登記的那一個）──
     _f("case_list.amount", "案件清單金額", "price", "quote_money", screen=(("case", "case", "amount"),), export=("case:case-batch", "amount")),
     _f("quote_list.amount", "報價單清單金額（含稅）", "price", "quote_money", screen=(("case", "quote", "amount"),)),
@@ -129,6 +140,10 @@ def problems() -> list:
         if fid in ids:
             out.append("欄位代號重複：%s" % fid)
         ids.add(fid)
+        if f["kind"] not in KINDS:
+            out.append("%s：遮蔽種類不在清單內：%s" % (fid, f["kind"]))
+        if f["kind"] != "key" and f["api"]:
+            out.append("%s：非 key 種類不可有 API 鍵名" % fid)
         if f["family"] not in FAMILIES:
             out.append("%s：家族不在清單內：%s" % (fid, f["family"]))
         if f["ceiling"] not in CEILINGS:

@@ -41,6 +41,7 @@
    "helper:custom_module_delete",
    "helper:formula",
    "helper:field_catalog",
+   "helper:field_policy",
    "helper:prefill_sources",
    "helper:dates",
    "helper:doc_template",
