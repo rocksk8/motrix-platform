@@ -194,10 +194,10 @@ def test_positive_control_problems_rejects_a_non_key_entry_with_an_api_name(monk
 
 
 def test_exit_short_circuit_is_not_modelled_by_visible_and_mask_flags_keeps_it(finance_env):
-    """出口（quotations.py 讀單）先看 money_visible：為真就整份不遮。持有 cashier 模組的工程師 money=True，
+    """出口（quotations.py 讀單）先看 money_visible：為真就整份不遮。被授予 cashier 的工程師（旗標 on）money=True，
     但 visible('quote_item.cost') 為 False（較窄、fail-closed）。出口遷移必須用 mask_flags()['money'] 保留短路。"""
-    finance_env["mode"] = "off"
-    u = _user("engineer", '["cashier"]', None)
+    finance_env["mode"] = "on"                              # 2026-10-05 起模組勾選不算，要靠職責角色授予（此處 uid=2 被授予 cashier）
+    u = _user("engineer", "[]", 2)
     assert FM.money_visible(u) is True and FM.quote_money_visible(u) is False
     flags = FP.mask_flags(u)
     assert flags["money"] is True and flags["keep_quote"] is False
