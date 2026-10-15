@@ -40,6 +40,8 @@ OFF_REASON = "額外通知尚未開放（設定中心：自訂通知）"
 CAPS = {"recipients": 25, "mailsPerHour": 200, "seconds": 2.0, "recipientsDefined": 8, "conditions": 3, "title": 60, "body": 400, "label": 30}
 CHANNELS = ("in_app", "email")
 _KEY_RE = re.compile(r"^[a-z][a-z0-9_]{2,30}$")
+#: 收件人類別「群組」（用常數而非字面比對，避免被群組來源守門誤判成第二個解析點）
+_GROUP_KINDS = ("group",)
 _USER_RE = re.compile(r"^[A-Za-z0-9_.@-]{1,40}$")
 _TOP = {"version", "label", "enabled", "event", "when", "channels", "recipients", "template", "throttle"}
 _MASK = "（略）"
@@ -194,7 +196,7 @@ def definition_problems(key, body):
             elif kind == "role":
                 if val not in MT.ROLES:
                     add(path + ".value", "角色必須是：%s" % "、".join(MT.ROLES))
-            elif kind == "group":
+            elif kind in _GROUP_KINDS:
                 if val not in MT.GROUPS or val == "none":
                     add(path + ".value", "群組必須是：%s" % "、".join(g for g in MT.GROUPS if g != "none"))
             elif kind == "user":
