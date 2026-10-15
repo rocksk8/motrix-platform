@@ -47,6 +47,8 @@ def test_company_layout_still_wins_over_personal_hide():
     # 個人只能再隱藏：cShown ＝ 公司版面允許 AND 不在個人隱藏名單
     assert re.search(r"cShown\(f\) \{ return \(!this\.layoutOn \|\| this\._qcols\(\)\.some\(c => c\.field === f\)\) && !\(this\.lvOn\.columns && this\.pv\.hidden\.includes\(f\)\)", PAGE)
     assert PAGE.count('data-col="') == 20
+    assert chr(92) + chr(39) not in "".join(re.findall(r"cShown\([^)]*\)", PAGE)), "cShown 的引號被多跳脫（x-show 變成語法錯誤）"
+    assert PAGE.count("x-show=\"cShown('") == 20
     for k in ("quoteNo", "customer", "project", "amount", "margin", "validDays", "filler", "status", "dealTag", "date"):
         assert PAGE.count('data-col="%s"' % k) == 2, k      # 表頭一格、資料列一格
 

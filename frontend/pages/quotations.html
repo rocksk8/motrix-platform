@@ -262,16 +262,16 @@
         <thead>
           <tr>
             <th x-show="sortPref.sortMode === 'custom'" style="width:24px"></th>
-            <th data-col="quoteNo" x-show="cShown(\'quoteNo\')"><span x-text="cLabel('quoteNo', '報價單號')">報價單號</span></th>
-            <th data-col="customer" x-show="cShown(\'customer\')"><span x-text="cLabel('customer', '客戶名稱')">客戶名稱</span></th>
-            <th data-col="project" x-show="cShown(\'project\')"><span x-text="cLabel('project', '案件名稱')">案件名稱</span></th>
-            <th data-col="amount" x-show="cShown(\'amount\')" style="text-align:right"><span x-text="cLabel('amount', '金額（含稅）')">金額（含稅）</span></th>
-            <th data-col="margin" x-show="cShown(\'margin\')" style="text-align:right"><span x-text="cLabel('margin', '毛利率')">毛利率</span></th>
-            <th data-col="validDays" x-show="cShown(\'validDays\')"><span x-text="cLabel('validDays', '有效天數')">有效天數</span></th>
-            <th data-col="filler" x-show="cShown(\'filler\')"><span x-text="cLabel('filler', '填單人')">填單人</span></th>
-            <th data-col="status" x-show="cShown(\'status\')"><span x-text="cLabel('status', '狀態')">狀態</span></th>
-            <th data-col="dealTag" x-show="cShown(\'dealTag\')"><span x-text="cLabel('dealTag', '案件進度')">案件進度</span></th>
-            <th data-col="date" x-show="cShown(\'date\')"><span x-text="cLabel('date', '報價日期')">報價日期</span></th>
+            <th data-col="quoteNo" x-show="cShown('quoteNo')"><span x-text="cLabel('quoteNo', '報價單號')">報價單號</span></th>
+            <th data-col="customer" x-show="cShown('customer')"><span x-text="cLabel('customer', '客戶名稱')">客戶名稱</span></th>
+            <th data-col="project" x-show="cShown('project')"><span x-text="cLabel('project', '案件名稱')">案件名稱</span></th>
+            <th data-col="amount" x-show="cShown('amount')" style="text-align:right"><span x-text="cLabel('amount', '金額（含稅）')">金額（含稅）</span></th>
+            <th data-col="margin" x-show="cShown('margin')" style="text-align:right"><span x-text="cLabel('margin', '毛利率')">毛利率</span></th>
+            <th data-col="validDays" x-show="cShown('validDays')"><span x-text="cLabel('validDays', '有效天數')">有效天數</span></th>
+            <th data-col="filler" x-show="cShown('filler')"><span x-text="cLabel('filler', '填單人')">填單人</span></th>
+            <th data-col="status" x-show="cShown('status')"><span x-text="cLabel('status', '狀態')">狀態</span></th>
+            <th data-col="dealTag" x-show="cShown('dealTag')"><span x-text="cLabel('dealTag', '案件進度')">案件進度</span></th>
+            <th data-col="date" x-show="cShown('date')"><span x-text="cLabel('date', '報價日期')">報價日期</span></th>
             <th>操作</th>
           </tr>
         </thead>
@@ -289,7 +289,7 @@
           <template x-for="q in lane.items" :key="q.quote_no">
             <tr class="ql-row" :data-quote-no="q.quote_no" :style="'--ql-spine:' + lane.color">
               <td x-show="sortPref.sortMode === 'custom'" class="drag-handle" style="cursor:grab;text-align:center;color:var(--text-dim)">⠿</td>
-              <td data-col="quoteNo" x-show="cShown(\'quoteNo\')">
+              <td data-col="quoteNo" x-show="cShown('quoteNo')">
                 <div style="display:flex;align-items:center;gap:6px">
                   <a :href="'quotation-form.html?id=' + q.quote_no"
                      style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"
@@ -308,27 +308,27 @@
                   </div>
                 </template>
               </td>
-              <td data-col="customer" x-show="cShown(\'customer\')">
+              <td data-col="customer" x-show="cShown('customer')">
                 <div style="font-weight:500;font-size:12px" x-text="q.customer_name || '—'"></div>
               </td>
-              <td data-col="project" x-show="cShown(\'project\')" style="font-size:12px;max-width:180px" x-text="q.project_name || '—'"></td>
-              <td data-col="amount" x-show="cShown(\'amount\')" class="num" style="font-weight:600" x-text="q.total > 0 ? 'NT$ ' + MotrixFormat.num(Math.round(q.total)) : '—'"></td>
-              <td data-col="margin" x-show="cShown(\'margin\')" class="num">
+              <td data-col="project" x-show="cShown('project')" style="font-size:12px;max-width:180px" x-text="q.project_name || '—'"></td>
+              <td data-col="amount" x-show="cShown('amount')" class="num" style="font-weight:600" x-text="q.total > 0 ? 'NT$ ' + MotrixFormat.num(Math.round(q.total)) : '—'"></td>
+              <td data-col="margin" x-show="cShown('margin')" class="num">
                 <span :style="MotrixMargin.style(q.direct_margin_pct)"
                       x-text="q.direct_margin_pct ? q.direct_margin_pct.toFixed(1) + '%' : '—'"></span>
               </td>
-              <td data-col="validDays" x-show="cShown(\'validDays\')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px">
+              <td data-col="validDays" x-show="cShown('validDays')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px">
                 <span x-text="(q.valid_days || 30) + ' 天'"></span>
                 <span x-show="q.valid_days > 30" style="color:var(--danger);font-size:9px;font-weight:600;display:block">需審核</span>
               </td>
-              <td data-col="filler" x-show="cShown(\'filler\')" style="font-size:12px;color:var(--text-secondary)" x-text="q.sales_person || '—'"></td>
-              <td data-col="status" x-show="cShown(\'status\')">
+              <td data-col="filler" x-show="cShown('filler')" style="font-size:12px;color:var(--text-secondary)" x-text="q.sales_person || '—'"></td>
+              <td data-col="status" x-show="cShown('status')">
                 <span class="badge" :class="dealDisplayStatus(q).cls" x-text="dealDisplayStatus(q).text"></span>
                 <template x-if="agingOf(q)">
                   <span class="ql-age" :class="agingOf(q).cls" x-text="agingOf(q).text"></span>
                 </template>
               </td>
-              <td data-col="dealTag" x-show="cShown(\'dealTag\')">
+              <td data-col="dealTag" x-show="cShown('dealTag')">
                 <!-- 已成案/已結案：鎖定顯示，不可在此頁修改 -->
                 <template x-if="q.deal_tag === '已成案' || q.deal_tag === '已結案'">
                   <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600"
@@ -350,7 +350,7 @@
                   </select>
                 </template>
               </td>
-              <td data-col="date" x-show="cShown(\'date\')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-dim)" x-text="(q.quote_date || q.created_at || '').slice(0,10)"></td>
+              <td data-col="date" x-show="cShown('date')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-dim)" x-text="(q.quote_date || q.created_at || '').slice(0,10)"></td>
               <td>
                 <div class="row-actions">
                   <a :href="'quotation-form.html?id=' + q.quote_no" class="icon-btn" title="編輯">
