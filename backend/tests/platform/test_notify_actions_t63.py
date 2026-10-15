@@ -266,7 +266,7 @@ def test_dispatch_writes_in_app_notifications_for_readers_only(live):
     assert n["ref_label"] == "單據 D-7 已送出" and n["message"] == "na_actor 把 D-7 從 草稿 改成 已送出" and n["ref_id"].startswith("demo_notice:D-7")
 
 
-def test_dropped_count_goes_to_the_summary_audit_without_names(live):
+def test_dropped_count_goes_to_the_summary_audit_without_names(live, client):
     import db
     live["actions"][0][1]["recipients"] = [{"kind": "role", "value": "viewer"}, {"kind": "role", "value": "admin"}]
     NA.dispatch(EVENT, PAY)
@@ -399,3 +399,52 @@ def test_link_comes_from_the_event_not_the_definition(live):
     from helpers.audit import _LINK_RE
     assert _LINK_RE.match("case-management.html?q=MQ-1")
     assert "link" not in NA._TOP                                              # noqa: SLF001  動作定義不能指定連結
+
+
+# ── 6. 走既有治理管線（發布前預覽、放寬進待核准、收緊立即生效）──────────────────────────
+def _gov(monkeypatch, on, governance=False):
+    monkeypatch.setattr(NA, "enabled", lambda conn=None: on)
+    import routers.def_governance as G
+    import routers.def_pipeline as P
+    import routers.definitions as DF
+    monkeypatch.setattr(G, "enabled", lambda conn=None: governance)
+    monkeypatch.setattr(P, "enabled", lambda conn=None: governance)
+    monkeypatch.setattr(DF, "_governance_enabled", lambda conn=None: governance)
+
+
+def _sa(client, make_user, name):
+    u, pw = make_user(username=name, role="superadmin")[:2]
+    return {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
+
+
+def test_off_means_hidden_kind_and_no_drafts(client, make_user, monkeypatch):
+    hd = _sa(client, make_user, "na_gov0")
+    _gov(monkeypatch, False)
+    assert NA.KIND not in [k["kind"] if isinstance(k, dict) else k for k in client.get("/api/definition-kinds", headers=hd).json()]
+    assert client.put("/api/definitions/notify_action/demo_notice/draft?scope=company", json={"body": A()}, headers=hd).status_code in (400, 404)
+
+
+def test_governance_makes_a_new_action_pending_and_disabling_immediate(client, make_user, monkeypatch):
+    hd = _sa(client, make_user, "na_gov1")
+    url = "/api/definitions/notify_action/demo_notice"
+    _gov(monkeypatch, True, governance=True)
+    assert client.put(url + "/draft?scope=company", json={"body": A()}, headers=hd).status_code == 200
+    no_hash = client.post(url + "/publish?scope=company", json={"note": "x"}, headers=hd)
+    assert no_hash.status_code == 409 and no_hash.json()["code"] == "preview_required", "額外通知＝資訊揭露面：發布前必須先看過影響預覽"
+    im = client.get("/api/def-governance/notify_action/demo_notice/impact?scope=company", headers=hd)
+    assert im.status_code == 200 and im.json()["previewHash"], im.text
+    r = client.post(url + "/publish?scope=company", json={"note": "x", "preview_hash": im.json()["previewHash"]}, headers=hd).json()
+    assert r["pending"] is True and any("新增通知動作" in x for x in r["reasons"]), r            # 放寬：第二位最高管理者核准前不生效
+    import db
+    conn = db.get_db()
+    try:
+        assert D.get(conn, NA.KIND, "demo_notice", "company") is None                          # 還沒有已發布版本 ⇒ 派發不會用到它
+    finally:
+        conn.close()
+
+
+def test_scope_text_and_lists_know_the_new_kind(client, make_user, monkeypatch):
+    from routers import def_governance as G, def_pipeline as P, definitions as DF
+    assert NA.KIND in G._SCOPE_TEXT and NA.KIND in P.ACTIVE_KINDS and NA.KIND in DF._PREVIEW_ENFORCED_KINDS      # noqa: SLF001
+    monkeypatch.setattr(NA, "enabled", lambda conn=None: False)
+    assert NA.KIND in DF._disabled_lazy_kinds()                                                                 # noqa: SLF001
