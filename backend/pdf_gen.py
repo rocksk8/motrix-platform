@@ -398,6 +398,18 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         f'<div class="terms-grid">{terms_html}</div></div>'
     ) if terms_html.strip() else ''
 
+    # T63 Q0：報價單自訂欄位（總開關＋報價單開關＋『印在報價單上』都開才有內容；預設 ⇒ 空 ⇒ 與過去逐位元相同）。
+    # 預覽、PDF、內部列印共用這支 builder，所以三者一致。
+    from helpers.builtin_fields import output_rows as _cf_rows
+    _cf = _cf_rows(q, 'quote_in_customer_output')      # 整張報價單交給 helper 取值：本檔不直接碰自訂欄位的鍵（守門 test_customer_facing_renderers…）
+    if _cf:
+        terms_section += (
+            '<div class="terms"><div class="section-label" style="margin-bottom:8px">其他資訊</div>'
+            '<div class="terms-grid">'
+            + ''.join(f'<div class="term-item"><div class="term-title">{esc(lb)}</div><div class="term-block">{esc(val)}</div></div>' for lb, val in _cf)
+            + '</div></div>'
+        )
+
     return (
         '<!DOCTYPE html>\n'
         '<html lang="zh-Hant">\n'

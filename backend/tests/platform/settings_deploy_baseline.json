@@ -9,7 +9,7 @@
     false
    ]
   },
-  "builder_custom_fields": {"enabled": [false, null, null, false], "quote_enabled": [0, 0, 1, false]},
+  "builder_custom_fields": {"enabled": [false, null, null, false], "quote_enabled": [0, 0, 1, false], "quote_in_customer_output": [0, 0, 1, false]},
   "builder_layout": {
    "case_management": [
     false,

@@ -86,3 +86,9 @@ Q0 (this spec) → implement after the T62 gate: register groups + `cross_check`
 - Live impact counts scan at most 5000 rows and say 「至少 N」 when the cap is hit.
 - Behavior note: with `quote_enabled` default 0, turning on only the master flag no longer enables quote custom fields (Q3 is unreleased in `train/t62-int`, so no deployed behavior changes); e2e on-state fixtures set both switches.
 - Verified: `pdfShow` toggles apply to customer/contact lines only; the terms blocks never consulted it.
+
+## 10. Slice 3 decisions (PM, 2026-10-15)
+- **c2 `quote_in_customer_output` shipped** with its consumer: `builtin_fields.output_rows(customs, "quote_in_customer_output")` renders a 「其他資訊」 block after 五、報價條件 in `pdf_gen._build_quote_html_core`. That one renderer serves the PDF, the screen preview and the **internal print copy**, so all three show it (stated in the option's impact text). Requires master AND `quote_enabled` AND the option; unreadable setting/definition => no block; values html-escaped; only published, non-disabled fields with a value are printed.
+- **Sign-back page**: there is no separate customer page. 客戶回簽單 is an uploaded signed attachment; 六、確認簽署 is inside the quote PDF, so it is covered by the renderer above.
+- **c3 `quote_on_finance_docs`** (approved scope): payment-request PDF/form (`_build_payment_request_html_core`, data in `arap/api/payment_requests.py`) and invoice-voucher PDF (`_build_invoice_voucher_html`, data in `arap/api/invoice_vouchers.py`), read-only at render time from the quotation. Excluded: receivables/cashier rows, GL events, accounting, reports.
+- **Dropped (no hook = no setting)**: a2 `hidden_terms_editor_warning` (layout-pages.json notes are static) and b2 `notice_flow_when_hidden` (no PII notice step is tied to hidden fields today). Future items; each needs a named hook (a dynamic editor note, or the specific PII notice step) before it can be registered.

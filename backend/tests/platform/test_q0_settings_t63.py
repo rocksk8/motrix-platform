@@ -11,13 +11,13 @@ from helpers import settings_registry as SR
 NEW = {
     "quote_output": {"hidden_terms_pdf_mode": 0},
     "quote_privacy": {"contact_email_hideable": 1, "contact_fax_hideable": 1},
-    "builder_custom_fields": {"quote_enabled": 0},
+    "builder_custom_fields": {"quote_enabled": 0, "quote_in_customer_output": 0},
 }
-LOOSEN = {("quote_output", "hidden_terms_pdf_mode"): "up"}
-RISK = {("quote_output", "hidden_terms_pdf_mode"): "legal"}
+LOOSEN = {("quote_output", "hidden_terms_pdf_mode"): "up", ("builder_custom_fields", "quote_in_customer_output"): "up"}
+RISK = {("quote_output", "hidden_terms_pdf_mode"): "legal", ("builder_custom_fields", "quote_in_customer_output"): "legal"}
 #: 還沒有使用端的選項（切片 3 才登錄）：登錄了卻什麼都不做的設定不准出貨。
 NOT_YET = [("quote_output", "hidden_terms_editor_warning"), ("quote_privacy", "notice_flow_when_hidden"),
-           ("builder_custom_fields", "quote_in_customer_output"), ("builder_custom_fields", "quote_on_finance_docs")]
+           ("builder_custom_fields", "quote_on_finance_docs")]
 
 
 def _fields(group):
@@ -103,12 +103,13 @@ def test_impact_functions_count_quotes_and_never_write(client):
     import db
     c = db.get_db()
     try:
-        c.execute("INSERT INTO quotations (quote_no, data_json) VALUES (?,?)", ("T63Q0-1", json.dumps({"paymentTerms": "月結", "contactEmail": "a@b.c"}, ensure_ascii=False)))
+        c.execute("INSERT INTO quotations (quote_no, data_json) VALUES (?,?)", ("T63Q0-1", json.dumps({"paymentTerms": "月結", "contactEmail": "a@b.c", "customFields": {"x": "1"}}, ensure_ascii=False)))
         c.execute("INSERT INTO quotations (quote_no, data_json) VALUES (?,?)", ("T63Q0-2", json.dumps({"customerName": "甲"}, ensure_ascii=False)))
         c.commit()
     finally:
         c.close()
-    for g, k, num in (("quote_output", "hidden_terms_pdf_mode", "quotationsWithTerms"), ("quote_privacy", "contact_email_hideable", "quotationsWithContacts")):
+    for g, k, num in (("quote_output", "hidden_terms_pdf_mode", "quotationsWithTerms"), ("quote_privacy", "contact_email_hideable", "quotationsWithContacts"),
+                      ("builder_custom_fields", "quote_in_customer_output", "quotationsWithCustomFields")):
         out = SR.live_impact(g, k, 1)
         assert out["live"] and out["live"]["numbers"][num] >= 1 and "張" in out["live"]["sentence"]
 
@@ -233,3 +234,76 @@ def _set(group, values):
     finally:
         c.close()
     SR.invalidate(group)
+
+
+# ── c2：報價單自訂欄位印在報價單上 ────────────────────────────────────────
+
+CF = {"project_code": "A<b>1</b>", "urgent": True, "note": "", "gone": "舊值"}
+FIELDS = [{"key": "project_code", "label": "內部案號", "type": "text"}, {"key": "urgent", "label": "急件", "type": "checkbox"},
+          {"key": "note", "label": "備註欄", "type": "text"}]
+
+
+def _cf_env(monkeypatch, master=1, quote=1, out=1, fields=FIELDS):
+    from helpers import builtin_fields as BF
+    real = SR.get
+    vals = {("builder_custom_fields", "enabled"): bool(master), ("builder_custom_fields", "quote_enabled"): quote,
+            ("builder_custom_fields", "quote_in_customer_output"): out}
+    monkeypatch.setattr(SR, "get", lambda g, f, **kw: vals[(g, f)] if (g, f) in vals else real(g, f, **kw))
+    monkeypatch.setattr(BF, "public_fields", lambda rt, conn=None: [dict(f) for f in fields] if rt == "quotation" else [])
+
+
+def test_c2_default_prints_nothing_even_when_the_quote_has_custom_values(client):
+    import pdf_gen
+    a = pdf_gen._build_quote_html(_quote(), TOT)
+    b = pdf_gen._build_quote_html(_quote(customFields=CF), TOT)
+    assert a == b and "其他資訊" not in b
+
+
+@pytest.mark.parametrize("master,quote,out", [(0, 1, 1), (1, 0, 1), (1, 1, 0), (0, 0, 0)])
+def test_c2_needs_master_and_quote_switch_and_the_option(client, monkeypatch, master, quote, out):
+    import pdf_gen
+    _cf_env(monkeypatch, master, quote, out)
+    assert "其他資訊" not in pdf_gen._build_quote_html(_quote(customFields=CF), TOT)
+
+
+def test_c2_all_on_prints_filled_active_fields_escaped_in_pdf_preview_and_internal(client, monkeypatch):
+    import pdf_gen
+    base = pdf_gen._build_quote_html(_quote(), TOT)
+    _cf_env(monkeypatch)
+    for html in (pdf_gen._build_quote_html(_quote(customFields=CF), TOT), pdf_gen._build_quote_html(_quote(customFields=CF), TOT, internal=True),
+                 pdf_gen.build_quote_preview_html(_quote(customFields=CF, tot=TOT), "草稿", "")):
+        assert "其他資訊" in html and "內部案號" in html and "急件" in html and "是" in html
+        assert "A<b>1</b>" not in html and "A&lt;b&gt;1&lt;/b&gt;" in html, "值要跳脫"
+        assert "備註欄" not in html, "沒填的欄位不印"
+        assert "舊值" not in html, "不在已發布定義裡（已移除／停用）的欄位不印"
+        assert "NT$ 210" in html, "金額不變"
+    assert "其他資訊" not in base
+
+
+def test_c2_without_any_filled_value_adds_no_block(client, monkeypatch):
+    import pdf_gen
+    _cf_env(monkeypatch)
+    assert "其他資訊" not in pdf_gen._build_quote_html(_quote(customFields={"note": ""}), TOT)
+    assert "其他資訊" not in pdf_gen._build_quote_html(_quote(customFields="oops"), TOT)
+
+
+def test_c2_read_failure_means_no_block(client, monkeypatch):
+    import pdf_gen
+    _cf_env(monkeypatch)
+    from helpers import builtin_fields as BF
+    monkeypatch.setattr(BF, "public_fields", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert "其他資訊" not in pdf_gen._build_quote_html(_quote(customFields=CF), TOT)
+
+
+def test_c2_dependency_message_and_pending_loosening(client):
+    bad = _msgs("builder_custom_fields", {"quote_in_customer_output": 1})
+    assert bad and "報價單自訂欄位" in bad[0]
+    _set("builder_custom_fields", {"enabled": True, "quote_enabled": 1})
+    import db
+    c = db.get_db()
+    try:
+        r = SR.publish("builder_custom_fields", {"quote_in_customer_output": 1}, reason="t", user="t63", conn=c)
+        c.commit()
+        assert r["pending"] and SR.get("builder_custom_fields", "quote_in_customer_output", conn=c) == 0
+    finally:
+        c.close()

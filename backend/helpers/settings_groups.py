@@ -709,6 +709,16 @@ register_group(
 )
 
 
+def _quote_cf_customer_impact(conn, new_value):
+    from helpers.settings_groups_q0 import quote_cf_scan
+    r = quote_cf_scan(conn)
+    if r is None:
+        raise RuntimeError("count failed")
+    n, capped = r
+    return {"numbers": {"quotationsWithCustomFields": n, "atLeast": capped},
+            "sentence": "目前有%s %d 張報價單填了自訂欄位；%s" % ("至少" if capped else "", n, "開放後，這些內容會印在它們的報價單 PDF、預覽與內部列印上。" if new_value else "改回只給內部人員後，報價單文件不再出現自訂欄位。")}
+
+
 def _quote_cf_cross_check(values):
     """報價單自訂欄位的相依：要先開放總開關與『開放報價單自訂欄位』。回問題清單（空＝通過）。
     ⚠ 引擎的第一道檢查是『只帶改動的欄位、其餘補預設』，看不到已存的值——所以相依欄位沒帶時改讀目前已存的設定（讀不到 ⇒ 不擋）。
@@ -719,9 +729,12 @@ def _quote_cf_cross_check(values):
     except Exception:                                                                    # noqa: BLE001 — 讀不到已存值 ⇒ 不擋（使用端仍會把關）
         stored = {"enabled": True, "quote_enabled": 1}
     master = bool(values.get("enabled") or stored.get("enabled"))
+    quote_on = bool(values.get("quote_enabled") or stored.get("quote_enabled"))
     out = []
     if values.get("quote_enabled") and not master:
         out.append("要先開放「內建畫面的自訂欄位」，報價單才能使用自訂欄位。")
+    if values.get("quote_in_customer_output") and not quote_on:
+        out.append("要先開放「報價單自訂欄位」，才能設定它印在報價單上。")
     return out
 
 
@@ -743,6 +756,15 @@ register_group(
           impact="只影響報價單表單多出「自訂欄位」區塊；報價單的既有欄位、金額與計算完全不變。關閉後，已經存的值仍保留在資料裡，但畫面不再顯示、也不能再改。",
           choices=[(0, "不開放（建議）", "報價單表單維持目前的樣子。"),
                    (1, "開放", "最高管理者可以為報價單新增並發布自訂欄位，發布前先預覽。")]),
+        S("quote_in_customer_output", "int", 0, min=0, max=1, risk="legal", loosen="up", recommended=0,
+          risk_text="【高影響】開放後，報價單自訂欄位的名稱與內容會印在客戶拿到的報價單上，填錯或不該公開的內容會被客戶看到。",
+          impact_scope={"documents": ["報價單 PDF", "報價單預覽", "報價單內部列印"], "roles": ["客戶", "業務"], "amounts": "不改任何金額；只決定自訂欄位的文字會不會印在報價單上。", "reversible": True, "effective": "pending"},
+          question="報價單的自訂欄位，可以印在報價單上嗎？", label="報價單自訂欄位可印在報價單上",
+          help="預設只給內部人員在表單上看。開放後，報價單 PDF、畫面預覽與內部列印（三者共用同一份版面）會在報價條件後面多印一個「其他資訊」區，列出有填的自訂欄位。客戶回簽單是客戶簽回的附件，沒有另外的畫面。需要先開放「報價單自訂欄位」。",
+          impact="只影響之後產生或重新開啟的報價單文件，內部列印也會一起多印這個區；已經寄出的文件不會改，也不會動到任何已存的內容。開放屬於放寬，需要第二位最高管理者核准並經確認期間；改回只給內部人員立即生效。",
+          choices=[(0, "只給內部人員（建議）", "報價單 PDF、預覽與內部列印都不出現自訂欄位。"),
+                   (1, "印在報價單上", "報價單 PDF、預覽與內部列印會多印「其他資訊」區。")],
+          impact_fn=_quote_cf_customer_impact),
     ],
     sensitive=False, risk="ops", cross_check=_quote_cf_cross_check,
     help="決定內建畫面（案件資訊、供應商）是否開放管理者新增自己的欄位，以及報價單是否開放自訂欄位。",

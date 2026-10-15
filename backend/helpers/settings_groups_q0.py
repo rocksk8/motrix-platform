@@ -2,7 +2,7 @@
 """T63 Q0 設定群組：報價單輸出（quote_output）與報價單個資（quote_privacy）。**預設值＝上線前的行為**（部署零行為變更）。
 
 [單位] helper:settings_groups_q0    [層] L1    [穩定度] 實驗
-[公開介面] register
+[公開介面] quote_cf_scan, register
 [不變式] ①預設值與今天的報價單 PDF／表單完全相同；②放寬方向（印得更少、少一道告知）走『待核准＋第二位最高管理者＋確認期間』（沿用 settings_registry）；
     ③設定讀不到時（引擎退回快取或預設）：條款照印、個資欄位維持可隱藏（今天的行為）；使用端另外要求總開關與報價單開關都開才算開（見 builtin_fields.type_enabled）。
 設計：docs/platform/plans/T63-Q0-SETTINGS-SPEC.md。
@@ -43,6 +43,23 @@ def _contacts_scan(conn):
             except (TypeError, ValueError):
                 continue
             if isinstance(q, dict) and (str(q.get("contactEmail") or "").strip() or str(q.get("contactFax") or "").strip()):
+                n += 1
+        return n, len(rows) >= _CAP
+    except Exception:                                                                    # noqa: BLE001
+        return None
+
+
+def quote_cf_scan(conn):
+    """唯讀：(有自訂欄位值的報價單張數, 是否只掃了上限內的列)；失敗 ⇒ None。只掃 JSON 裡出現 customFields 的列。"""
+    try:
+        n = 0
+        rows = conn.execute("SELECT data_json FROM quotations WHERE data_json LIKE '%%\"customFields\"%%' LIMIT %d" % _CAP).fetchall()
+        for r in rows:
+            try:
+                cf = (_json.loads(r[0] or "{}") or {}).get("customFields")
+            except (TypeError, ValueError):
+                continue
+            if isinstance(cf, dict) and cf:
                 n += 1
         return n, len(rows) >= _CAP
     except Exception:                                                                    # noqa: BLE001
