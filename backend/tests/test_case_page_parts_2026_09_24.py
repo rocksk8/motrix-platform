@@ -29,6 +29,9 @@ for (const f of process.argv.slice(1)) {
   // 2026-10-01：分檔直接引用全域 MotrixDate（static/motrix-date.js）⇒ 沙盒先載入它
   vm.runInContext(fs.readFileSync(__MOTRIX_DATE__, 'utf8'), ctx)
   vm.runInContext('var MotrixDate = window.MotrixDate', ctx)
+  // T64：分檔直接引用全域 MotrixProfitWarning／MotrixFormat ⇒ 沙盒一併載入
+  for (const n of ['profit-warning.js', 'motrix-format.js']) vm.runInContext(fs.readFileSync(__MOTRIX_DATE__.replace(/motrix-date\.js$/, n), 'utf8'), ctx)
+  vm.runInContext('var MotrixProfitWarning = window.MotrixProfitWarning; var MotrixFormat = window.MotrixFormat', ctx)
   vm.runInContext(fs.readFileSync(f, 'utf8'), ctx, { filename: f })
   const parts = ctx.window.CM_PARTS || []
   out[f] = parts.flatMap(p => Object.getOwnPropertyNames(p()))

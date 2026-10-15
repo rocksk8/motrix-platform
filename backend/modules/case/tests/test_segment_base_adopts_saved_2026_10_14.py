@@ -19,6 +19,7 @@ HARNESS = r"""
 const fs = require('fs')
 const inp = JSON.parse(process.argv[2])
 global.window = {}; global.MotrixLegalRound = { halfUp: (v) => Math.round(v) }
+global.MotrixProfitWarning = { defaults: () => ({}), load: async () => ({}) }; global.MotrixFormat = { num: (x) => (x == null ? '' : x.toLocaleString()), money: (x) => (x == null ? '' : x.toLocaleString()), date: (d) => String(d), dt: (d) => String(d), status: (v) => v, apply() {} }
 global.MotrixUI = { toast() {} }
 global.document = { addEventListener() {}, querySelector() { return null } }
 global.alpineStub = true
@@ -89,6 +90,7 @@ ADOPT = r"""
 const fs = require('fs')
 const inp = JSON.parse(process.argv[2])
 global.window = {}; global.MotrixLegalRound = { halfUp: (v) => Math.round(v) }
+global.MotrixProfitWarning = { defaults: () => ({}), load: async () => ({}) }; global.MotrixFormat = { num: (x) => (x == null ? '' : x.toLocaleString()), money: (x) => (x == null ? '' : x.toLocaleString()), date: (d) => String(d), dt: (d) => String(d), status: (v) => v, apply() {} }
 global.MotrixUI = { toast() {} }
 global.document = { addEventListener() {}, querySelector() { return null } }
 global.alpineStub = true
