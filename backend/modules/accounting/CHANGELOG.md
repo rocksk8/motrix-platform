@@ -1,6 +1,6 @@
 # 會計 更新紀錄
 
-## (next) — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
+## 1.1.63 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/voucher.html`、`js/voucher.js`、`pages/ledger-{hub,periods,reports,statements}.html` 與對應 js 的數字顯示改呼叫 `MotrixFormat.num()`（`toLocaleString`→共用格式器；預設輸出逐字相同；voucher 兩處 `sv-SE` 是產生 YYYY-MM-DD 的值，保留）。
 
 ## 1.1.62 — 2026-10-14（wip/t62-option-lists-r1；選項清單：料件分類）；t62 整合 r8

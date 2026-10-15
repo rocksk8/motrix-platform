@@ -1,6 +1,6 @@
 # 營運分析 更新紀錄
 
-## (next) — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
+## 1.0.43 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/reports.html`、`js/reports.js` 的數字與時間顯示改呼叫 `MotrixFormat`（預設輸出逐字相同；圖表提示框同）。
 
 ## 1.0.42 — 2026-10-15（wip/t64-slice-a-r1；T64 A）

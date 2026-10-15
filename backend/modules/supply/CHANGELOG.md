@@ -1,6 +1,6 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
+## 1.0.31 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/inventory.html`、`pages/parts.html` 的金額顯示改呼叫 `MotrixFormat.num()`（預設輸出逐字相同）。
 
 ## 1.0.30 — 2026-10-14（wip/t61-bp3-templates-r1；供應商管理頁 Excel 匯出接上匯出守門）；t62 整合 r8

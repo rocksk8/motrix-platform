@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-15（wip/t65-f7-s1b-r1；T65 F7 S1b 家族一至三：遮蔽旗標改由欄位政策產生；讀取 fail-closed、寫入求值出錯照舊丟出）
+## 1.0.199 — 2026-10-15（wip/t65-f7-s1b-r1；T65 F7 S1b 家族一至三：遮蔽旗標改由欄位政策產生；讀取 fail-closed、寫入求值出錯照舊丟出）
 - 純重構、行為不變：`api/material_orders.py`（清單回傳的金額剝除、存檔後回傳的分段遮蔽）與 `api/material_changes.py`（變更紀錄／試算的金額遮蔽）的『看不看得到金額』旗標改由 `helpers.field_policy.mask_flags()` 產生（等同原本的 `money_visible`／`material_money_visible`）；擋整支端點的 403 閘門不動。測試 `tests/platform/test_field_policy_exits_t65.py`。
 - 家族二（報價單讀單／清單／案件匯出）：`api/quotations.py` 的 `GET` 單筆讀取遮蔽（保留 `money` 整份短路）、清單金額遮蔽、案件批次匯出的金額欄，旗標改由 `mask_flags()` 產生；行為不變。
 - 家族三（報價單寫入路徑）：存檔時被遮蔽部分的補回、案件記錄分段存檔的比對基準與回傳、修改紀錄理由的剝除，旗標改由 `mask_flags()`／`tier_allowed()` 產生（保留 `money` 整份短路）；單一旗標處用 `tier_allowed()`，避免多算角色函式。新增真實出口證明 `tests/platform/test_field_policy_exits_real_t65.py`。行為不變。

@@ -1,6 +1,6 @@
 # 應收應付 更新紀錄
 
-## (next) — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
+## 1.0.58 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/settlement.html`、`pages/payment-request{,-form}.html`、`static/definition-form.js` 的數字／時間顯示改呼叫 `MotrixFormat`（預設輸出逐字相同）。
 
 ## 1.0.57 — 2026-10-15（wip/t64-slice-b-r1；T64 切片 B／D2：出納頁數字改走共用格式器；含 f0 審查修正）

@@ -1,6 +1,6 @@
 # 標案雷達 更新紀錄
 
-## (next) — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
+## 1.5.10 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/tender-radar.html` 的預算顯示改呼叫 `MotrixFormat.num()`（預設輸出逐字相同）。
 
 ## 1.5.9 — 2026-10-14（wip/t62-mail-escape-r2；通知信預設逸出）；t62 整合 r8
