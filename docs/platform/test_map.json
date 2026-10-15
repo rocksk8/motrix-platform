@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1412,
+  "tests": 1421,
   "unmapped": 13,
   "kinds": {
-   "api": 782,
-   "e2e": 309,
-   "audit": 189,
-   "unit": 132
+   "api": 785,
+   "e2e": 311,
+   "audit": 191,
+   "unit": 134
   },
   "routes": 853
  },
@@ -16274,6 +16274,48 @@
     ]
    }
   },
+  "backend/tests/e2e_on_state/test_list_view_c1_on_state.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/e2e_on_state/_common.py",
+    "page:pages/quotations.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_requires.py",
+     "backend/tests/e2e_on_state/_common.py"
+    ],
+    "page": [
+     "frontend/pages/quotations.html"
+    ],
+    "path": [
+     "frontend/pages/quotations.html"
+    ]
+   }
+  },
+  "backend/tests/e2e_on_state/test_list_view_c2_on_state.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/e2e_on_state/_common.py",
+    "page:pages/case-management.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_requires.py",
+     "backend/tests/e2e_on_state/_common.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html"
+    ],
+    "path": [
+     "frontend/pages/case-management.html"
+    ]
+   }
+  },
   "backend/tests/e2e_on_state/test_off_state_golden.py": {
    "kind": "e2e",
    "units": [
@@ -18803,6 +18845,96 @@
     ]
    }
   },
+  "backend/tests/platform/test_field_policy_exits_quotation_t65.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/platform/test_field_policy_t65.py",
+    "file:backend/tests/test_case_money_mask_2026_09_24.py",
+    "helper:auth",
+    "helper:financial_mask",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/financial_mask.py",
+     "backend/tests/_requires.py",
+     "backend/tests/platform/test_field_policy_t65.py",
+     "backend/tests/test_case_money_mask_2026_09_24.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_field_policy_exits_real_t65.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/tests/platform/test_field_policy_t65.py",
+    "mod:case/__init__",
+    "mod:case/api/__init__",
+    "mod:case/api/material_changes",
+    "mod:case/api/material_orders",
+    "mod:case/material_change"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/material_changes.py",
+     "backend/modules/case/api/material_orders.py",
+     "backend/modules/case/material_change.py",
+     "backend/tests/platform/test_field_policy_t65.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_field_policy_exits_t65.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_exit_scan_t65.py",
+    "mod:case/api/material_changes",
+    "mod:case/api/material_orders",
+    "mod:case/api/material_payments",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_exit_scan_t65.py"
+    ],
+    "path": [
+     "backend/modules/case/api/material_changes.py",
+     "backend/modules/case/api/material_orders.py",
+     "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/quotations.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_field_policy_t65.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "helper:field_catalog",
+    "helper:field_policy",
+    "helper:financial_mask"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/field_catalog.py",
+     "backend/helpers/field_policy.py",
+     "backend/helpers/financial_mask.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_file_open_ratchet_2026_09_30.py": {
    "kind": "audit",
    "units": [
@@ -19461,6 +19593,66 @@
     ],
     "path": [
      "backend/helpers/legal_params.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_list_view_c1_t65.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "js:static/list-view-prefs.js",
+    "page:pages/quotations.html",
+    "router:list_prefs"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py"
+    ],
+    "api": [
+     "backend/routers/list_prefs.py"
+    ],
+    "page": [
+     "frontend/pages/quotations.html",
+     "frontend/static/list-view-prefs.js"
+    ],
+    "path": [
+     "frontend/pages/quotations.html",
+     "frontend/static/list-view-prefs.js"
+    ]
+   }
+  },
+  "backend/tests/platform/test_list_view_c2_t65.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "js:js/case-management-list.js",
+    "js:static/list-view-prefs.js",
+    "page:pages/case-management.html",
+    "router:list_prefs"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py"
+    ],
+    "api": [
+     "backend/routers/list_prefs.py"
+    ],
+    "page": [
+     "frontend/js/case-management-list.js",
+     "frontend/pages/case-management.html",
+     "frontend/static/list-view-prefs.js"
+    ],
+    "path": [
+     "frontend/js/case-management-list.js",
+     "frontend/pages/case-management.html"
     ]
    }
   },
@@ -34373,6 +34565,70 @@
      "frontend/pages/quotation-form.html",
      "frontend/pages/quotations.html",
      "frontend/static/motrix-format.js"
+    ]
+   }
+  },
+  "backend/tests/test_motrix_format_t65.py": {
+   "kind": "audit",
+   "units": [
+    "js:js/bonus.js",
+    "js:js/ledger-hub.js",
+    "js:js/ledger-periods.js",
+    "js:js/ledger-reports.js",
+    "js:js/ledger-statements.js",
+    "js:js/reports.js",
+    "js:js/voucher.js",
+    "js:static/definition-form.js",
+    "js:static/motrix-format.js",
+    "page:index.html",
+    "page:pages/bonus.html",
+    "page:pages/ledger-hub.html",
+    "page:pages/ledger-periods.html",
+    "page:pages/ledger-reports.html",
+    "page:pages/ledger-statements.html",
+    "page:pages/payment-request.html",
+    "page:pages/quotation-form.html",
+    "page:pages/reports.html",
+    "page:pages/settlement.html",
+    "page:pages/voucher.html",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/source_tree.py"
+    ],
+    "page": [
+     "frontend/index.html",
+     "frontend/js/bonus.js",
+     "frontend/js/ledger-hub.js",
+     "frontend/js/ledger-periods.js",
+     "frontend/js/ledger-reports.js",
+     "frontend/js/ledger-statements.js",
+     "frontend/js/reports.js",
+     "frontend/js/voucher.js",
+     "frontend/pages/bonus.html",
+     "frontend/pages/ledger-hub.html",
+     "frontend/pages/ledger-periods.html",
+     "frontend/pages/ledger-reports.html",
+     "frontend/pages/ledger-statements.html",
+     "frontend/pages/payment-request.html",
+     "frontend/pages/quotation-form.html",
+     "frontend/pages/reports.html",
+     "frontend/pages/settlement.html",
+     "frontend/pages/voucher.html",
+     "frontend/static/definition-form.js",
+     "frontend/static/motrix-format.js"
+    ],
+    "path": [
+     "frontend/js/bonus.js",
+     "frontend/js/ledger-hub.js",
+     "frontend/js/ledger-periods.js",
+     "frontend/js/ledger-reports.js",
+     "frontend/js/ledger-statements.js",
+     "frontend/js/reports.js",
+     "frontend/js/voucher.js",
+     "frontend/pages/settlement.html",
+     "frontend/static/definition-form.js"
     ]
    }
   },
