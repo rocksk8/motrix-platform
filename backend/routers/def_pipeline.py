@@ -384,13 +384,19 @@ def _cmp_attachment_slot(old, new):
     return AS.compare(old, new)
 
 
+def _cmp_notify_action(old, new):
+    """額外通知動作（BP-4 S4）：比較邏輯在純函式 `helpers/notify_actions.compare`（新增動作／擴大收件人／加信件通道／放寬節流＝放寬；看不懂＝放寬）。"""
+    from helpers import notify_actions as _NA
+    return _NA.compare(old, new)
+
+
 def _cmp_status_display(old, new):
     """狀態顯示表（S-X2）：比較邏輯在純函式 `helpers/status_display.compare`（核准／付款類改名改色＝放寬；看不懂＝放寬）。"""
     from helpers import status_display as _SD
     return _SD.compare(old, new)
 
 
-COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout, "user_buttons": _cmp_user_buttons, "rule_set": _cmp_rule_set, "attachment_slot": _cmp_attachment_slot, "export_template": _cmp_export_template, "option_list": _cmp_option_list, "status_display": _cmp_status_display, "notify_template": _cmp_notify_template, "case_stage_template": _cmp_stage_template}
+COMPARATORS = {"custom_fields": _cmp_custom_fields, "layout": _cmp_layout, "user_buttons": _cmp_user_buttons, "rule_set": _cmp_rule_set, "attachment_slot": _cmp_attachment_slot, "export_template": _cmp_export_template, "option_list": _cmp_option_list, "status_display": _cmp_status_display, "notify_template": _cmp_notify_template, "case_stage_template": _cmp_stage_template, "notify_action": _cmp_notify_action}
 
 
 def classify(kind, old_body, new_body):

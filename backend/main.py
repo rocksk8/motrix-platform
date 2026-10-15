@@ -84,6 +84,7 @@ from routers import item_reads
 from routers import definitions, custom_records, def_governance, attachment_slots, def_pipeline, custom_fields_builtin, user_buttons
 from routers import rules as rules_router
 from routers import notify_templates as notify_templates_router
+from helpers import notify_actions as _notify_actions   # noqa: F401  額外通知動作（BP-4 S4）：訂閱事件匯流排；旗標 builder_notify 關＝什麼都不做
 from routers import modules
 from routers import legal_params
 from routers import settings_center

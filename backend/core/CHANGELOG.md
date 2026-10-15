@@ -1,5 +1,11 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-15（wip/t63-bp4-s1-r1；BP-4 S4：額外通知動作；旗標沿用 `builder_notify.enabled`＋`builder_governance.enabled`，預設關）
+- L1（只增）：新檔 `helpers/notify_actions.py`——kind `notify_action`（管理者宣告「當事件 E 發生，額外通知 R，內容 T」；惰性登記，旗標關＝不登記）、派發器 `dispatch`（訂閱事件匯流排；逐人讀取權限過濾、金額占位符逐收件人遮蔽、節流、每次 ≤25 人、每動作每小時 ≤200 封、整次 ≤2 秒、例外不外拋、不連鎖）、寬嚴比較 `compare`（新增動作／擴大收件人／加信件通道／放寬節流／範本新增占位符／放寬條件＝放寬）。事件首批 4 個：`completion_note.attachment_added`、`completion_note.state_changed`、`case.deadline_near`（本檔只**宣告**，發佈那一行由各模組另提小改）與既有的 `custom_module.transitioned`。S4 沒有路由與編輯器（S5）。
+- L1：`helpers/mail_types.py` 登記信件類型 `user_notice`（業務類、預設只寄事件收件人；主旨前綴與分類固定、按鈕只回首頁）；`helpers/notification_prefs.py` 的固定清單加 `user_notice`（個人可在通知偏好退訂；各動作另有 `na:<動作代號>` 個別退訂）。
+- `routers/def_pipeline.py`：`COMPARATORS` 加 `notify_action`（沒有比較函式的種類本來就視為放寬）；`main.py`：匯入 `helpers.notify_actions`（訂閱事件；旗標關＝什麼都不做）。
+- 旗標關閉時行為與今天逐位元相同：種類清單不變、派發不寫 `notifications`／稽核、不寄信；內建信件類型與其他通知偏好原樣。測試 `tests/platform/test_notify_actions_t63.py`（71 題）。
+
 
 ## 1.137 — wip/t62-bp4-s1-r1＋wip/t62-bp4-s2-r1＋wip/t62-bp4-s2-r2＋wip/t62-bp4-s3-r1（BP-4 S1／S2／S3：儲存位置代號登錄表＋附件插槽定義；旗標 `builder_slots.enabled` 預設關）；t62 整合 r8＋wip/t62-pdf-decor-r1＋wip/t62-pdf-escape-r1＋wip/h2-pdf-hardening-r1（PDF 頁尾浮水印／輸出逸出稽核／渲染硬化第二輪；一班一個版本，三段併成一段）
 
