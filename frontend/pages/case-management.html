@@ -231,7 +231,7 @@
             <label x-show="lvOn.tab" style="display:block;margin-bottom:6px">預設頁籤
               <select class="cm-list__search-input" x-model="pv.tab" style="width:auto;padding-left:10px;margin-left:6px;cursor:pointer">
                 <option value="">進行中（預設）</option>
-                <option value="已成案" x-show="showWonTab()">已成案</option>
+                <template x-if="showWonTab()"><option value="已成案">已成案</option></template>
                 <option value="已結案">已結案</option>
                 <option value="待精算">待精算</option>
               </select>

@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.198 — 2026-10-15（wip/t65-c2-r2；f0 審查小修）
+- `pages/case-management.html` 個人檢視面板：「已成案」選項改用 `<template x-if>`（`<option>` 上的 `x-show` 在 Safari／iOS 無效），合併頁籤後不會再選到。`js/case-management-list.js`：每次載入件數預設 100 抽成單一常數 `CM_LIST_PAGE_DEFAULT`。無 migration、無新路由、無權限變更。
+
 ## 1.0.197 — 2026-10-15（wip/t65-c2-r2；T65 C2 案件清單檢視偏好）
 - `pages/case-management.html`、`js/case-management-list.js`：設定中心 `list_view` 新增三項（預設全關＝與今天相同）：案件清單個人預設頁籤、個人每次載入筆數（25／50／100／200，預設 100）、公司層「合併重複的『已成案』頁籤」（「進行中」與「已成案」查詢完全相同；預設兩個都保留）。偏好存既有 `/api/list-prefs/case_list.view`，沿用 `static/list-view-prefs.js`；總開關是「自訂畫面版面」的 case_management 旗標：旗標關閉時不多任何請求或腳本，開啟時每次開頁多一次 `groups=list_view` 的公開設定讀取。無 migration、無新路由、無權限變更。
 

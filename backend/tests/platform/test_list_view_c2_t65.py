@@ -35,7 +35,10 @@ def test_default_keeps_all_four_tabs_and_the_same_queries():
     for t in ("all", "已成案", "已結案", "待精算"):
         assert "@click=\"setListTab('%s')\"" % t in PAGE, t
     assert re.search(r"x-show=\"showWonTab\(\)\" :class=\"\{active: listTab==='已成案'\}\"", PAGE)
-    assert "casePageSize: 100," in LIST and "qs.set('deal_tag', '已成案')" in LIST       # 查詢與預設筆數不變
+    assert "casePageSize: CM_LIST_PAGE_DEFAULT," in LIST and "const CM_LIST_PAGE_DEFAULT = 100" in LIST      # 預設件數只寫一處
+    assert re.findall(r"(?<![\w-])100(?![\w%])", LIST.replace("CM_LIST_PAGE_DEFAULT = 100", "")) == []
+    assert "qs.set('deal_tag', '已成案')" in LIST                                                           # 查詢不變
+    assert '<template x-if="showWonTab()"><option value="已成案">已成案</option></template>' in PAGE         # <option> 上的 x-show 在 Safari 無效
 
 
 def test_personal_choices_stay_inside_the_displayed_tabs_and_fixed_sizes():
