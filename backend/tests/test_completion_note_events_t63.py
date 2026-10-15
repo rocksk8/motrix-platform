@@ -108,3 +108,41 @@ def test_stage_deadline_scan_publishes_once_per_stage_and_assignee(client, make_
         EV.restore(state)
     mine = [p for p in got if p["quoteNo"] == "MQ-CN-DL1"]
     assert mine == [{"quoteNo": "MQ-CN-DL1", "stage": "施工", "dueDate": due, "daysLeft": 3, "assignee": "cne_dl"}]
+
+
+# ── 匯入失敗也不能讓已完成的動作回 500 ──────────────────────────────────────────────
+def test_event_import_failure_never_breaks_the_action(client, make_user, monkeypatch):
+    import sys
+    from modules.case.api import completion_notes as CN
+    monkeypatch.setitem(sys.modules, "helpers.notify_actions", None)           # `from helpers.notify_actions import …` ⇒ ImportError
+    CN._emit_event("completion_note.state_changed", {"noteNo": "CN-1"})        # 不丟例外
+    CN._emit_state("CN-1", "MQ-1", "草稿", "待審核", {"username": "x"})
+
+
+def test_deadline_scan_survives_an_event_import_failure(client, make_user, monkeypatch):
+    import json
+    import sys
+    from datetime import date, timedelta
+    import db
+    from modules.case import case_deadlines as CD
+    make_user(username="cne_dl2", role="admin")
+    _make_case("MQ-CN-DL2")
+    due = (date.today() + timedelta(days=3)).isoformat()
+    conn = db.get_db()
+    try:
+        for label in ("施工", "驗收"):
+            conn.execute("INSERT INTO case_stages (quote_no, label, due_date, assigned_to, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+                         ("MQ-CN-DL2", label, due, json.dumps(["cne_dl2"]), "2026-01-01T00:00:00", "2026-01-01T00:00:00"))
+        conn.commit()
+    finally:
+        conn.close()
+    monkeypatch.setattr(CD, "notify_case_stage_deadline", lambda *a, **k: None)
+    monkeypatch.setattr(CD, "notify_case_stage_deadline_manager", lambda *a, **k: None)
+    monkeypatch.setitem(sys.modules, "helpers.notify_actions", None)
+    CD._check_case_stage_deadline()
+    conn = db.get_db()
+    try:
+        n = conn.execute("SELECT COUNT(*) c FROM notifications WHERE username='cne_dl2' AND type='case_stage_deadline'").fetchone()["c"]
+    finally:
+        conn.close()
+    assert n == 2, "事件匯入失敗不可以中斷掃描：兩個階段的原本通知都要送出"

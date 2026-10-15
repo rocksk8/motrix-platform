@@ -305,7 +305,8 @@ def test_throttle_dedupes_and_caps_per_day(live):
     assert len(_notes("na_admin1")) == 5                                     # 每天最多 5 則（maxPerRecipientPerDay）
 
 
-def test_recipient_cap(live, make_user):
+def test_recipient_cap(live, make_user, monkeypatch):
+    monkeypatch.setitem(NA.CAPS, "seconds", 1e9)                              # 這題只驗人數上限；時間預算另有測試（慢機器上 25 人可能超過 2 秒）
     for i in range(30):
         make_user(username="na_bulk%02d" % i, role="admin")
     live["actions"][0][1]["recipients"] = [{"kind": "role", "value": "admin"}]
@@ -544,5 +545,77 @@ def test_preview_is_read_only(client, make_user, monkeypatch):
         assert snap() == before and sent == [] and published == []
         last = conn.execute("SELECT action FROM audit_log ORDER BY id DESC LIMIT 1").fetchone()["action"]
         assert last == "notify_action.previewed"                             # 預覽只留一筆稽核
+    finally:
+        conn.close()
+
+
+# ── 10. 審查補強（f0）：預算在迴圈內檢查、信件上限留稽核、去重鍵含階段／新狀態、LIKE 萬用字元 ───────────────
+def _audits(action):
+    import db
+    conn = db.get_db()
+    try:
+        return [r["detail"] for r in conn.execute("SELECT detail FROM audit_log WHERE action=? ORDER BY id", (action,)).fetchall()]
+    finally:
+        conn.close()
+
+
+def test_time_budget_is_checked_inside_the_recipient_loop(live, monkeypatch):
+    live["actions"][0][1]["recipients"] = [{"kind": "role", "value": "admin"}]
+    import types
+    ticks = iter([0, 0, 0])                                                  # t0、動作層檢查、第一位收件人之前：都在預算內
+    monkeypatch.setattr(NA, "time", types.SimpleNamespace(monotonic=lambda: next(ticks, 100.0)))   # 之後一律超時（只換本檔的 time，不碰全域）
+    assert NA.dispatch(EVENT, PAY) == 1                                      # 只送出第一位
+    d = _audits("notify_action.degraded")
+    assert d and '"timeBudgetExceeded": true' in d[-1] and '"notNotified": ' in d[-1] and "na_admin" not in d[-1]
+
+
+def test_mail_over_the_hourly_cap_is_audited_and_in_app_still_goes_out(live, monkeypatch):
+    from helpers import email_notify as EN
+    live["actions"][0][1].update(channels=["in_app", "email"], recipients=[{"kind": "role", "value": "admin"}])
+    real = NA._user_row
+    monkeypatch.setattr(NA, "_user_row", lambda conn, u: dict(real(conn, u) or {}, email=u + "@example.com") if real(conn, u) else None)
+    sent = []
+    monkeypatch.setattr(EN, "_async_send", lambda *a: sent.append(a))
+    monkeypatch.setattr(EN, "_mail_off", lambda key: False)
+    NA._mail_times.clear()
+    NA._mail_times["demo_notice"] = __import__("collections").deque([__import__("time").monotonic()] * NA.CAPS["mailsPerHour"])
+    n = NA.dispatch(EVENT, PAY)
+    NA._mail_times.clear()
+    assert n >= 2 and sent == []                                             # 站內通知照送、信件一封都沒寄
+    d = _audits("notify_action.degraded")
+    assert d and '"mailOverHourlyCap": %d' % n in d[-1]
+
+
+def test_dedupe_key_includes_stage_and_new_status(live, monkeypatch):
+    monkeypatch.setattr(NA, "_readable", lambda *a, **k: True)
+    tpl = {"title": "單 {單號} 的階段 {階段}", "body": "還剩 {剩餘天數} 天"}
+    live["actions"][0] = ("demo_notice", A(event="case.deadline_near", when=[], recipients=[{"kind": "user", "value": "na_admin1"}], template=tpl,
+                                           throttle={"dedupeMinutes": 60, "maxPerRecipientPerDay": 20}))
+    base = {"quoteNo": "MQ-9", "dueDate": "2026-10-20", "daysLeft": 3, "assignee": "na_admin1"}
+    assert NA.dispatch("case.deadline_near", dict(base, stage="施工")) == 1
+    assert NA.dispatch("case.deadline_near", dict(base, stage="驗收")) == 1      # 同一案件的另一個階段：另一件事，不被去重吃掉
+    assert NA.dispatch("case.deadline_near", dict(base, stage="施工")) == 0      # 同階段：去重
+    live["actions"][0] = ("demo_notice", A(event="completion_note.state_changed", when=[], recipients=[{"kind": "user", "value": "na_admin1"}],
+                                           template={"title": "完工單 {完工單號}", "body": "{原狀態} 到 {新狀態}"}, throttle={"dedupeMinutes": 60, "maxPerRecipientPerDay": 20}))
+    s = {"noteNo": "CN-9", "quoteNo": "MQ-9", "by": "x"}
+    assert NA.dispatch("completion_note.state_changed", dict(s, **{"from": "草稿", "to": "待審核"})) == 1
+    assert NA.dispatch("completion_note.state_changed", dict(s, **{"from": "待審核", "to": "已核准"})) == 1   # 送審後馬上核准：不同的新狀態
+
+
+def test_every_event_has_a_dedupe_ref_made_of_declared_fields():
+    for name, ev in NA.EVENTS.items():
+        assert ev["ref"] and set(ev["ref"]) <= set(ev["fields"]), name
+
+
+def test_per_day_count_does_not_treat_underscore_as_a_wildcard(live):
+    import db
+    from helpers.audit import _notify
+    _notify("na_admin1", NA.NOTIF_TYPE, "naXx1:Q1", "t", "m")                 # 另一個動作（代號只在第 3 個字不同）的通知
+    conn = db.get_db()
+    try:
+        th = {"dedupeMinutes": 10, "maxPerRecipientPerDay": 1}
+        assert NA._throttled(conn, "na_admin1", "na_x1", "na_x1:Q2", th) is False
+        _notify("na_admin1", NA.NOTIF_TYPE, "na_x1:Q1", "t", "m")
+        assert NA._throttled(conn, "na_admin1", "na_x1", "na_x1:Q2", th) is True
     finally:
         conn.close()
