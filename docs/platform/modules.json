@@ -142,6 +142,7 @@
    "js:static/profit-rules.js",
    "js:static/alt-items.js",
    "js:static/list-sort.js",
+   "js:static/motrix-format.js",
    "js:static/notif.js",
    "js:static/privacy-notice.js",
    "js:static/record-link.js",
