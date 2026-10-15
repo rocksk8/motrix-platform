@@ -6,6 +6,10 @@
 - 純顯示／預設值：不擋存檔、送審、審核與任何金額，故沒有放寬／收緊之分；讀不到或不合法 ⇒ 整組回今天的數字。測試 `tests/platform/test_profit_warning_t64.py`。
 - **（併入）(next) — 2026-10-15（wip/t64-slice-b-r1；T64 切片 B／D2：設定群組 `ui_format`）**
 - 設定中心新群組 `ui_format`（非敏感、公開可讀）：`enabled`（預設 0＝關）、`thousands`、`decimals`、`date_style`（皆預設 0＝照目前）。前端共用格式器 `static/motrix-format.js` 只在 `enabled=1` 時讀這四項（整數 0＝照目前），旗標關／讀不到／值不認得 ⇒ 與今天逐字相同的輸出。僅顯示：儲存的金額與法定四捨五入、PDF、匯出都不變；百分比／多位小數單價／變更紀錄的值不套用（`num(x,{raw:true})`）。頁面用自己原有的公開設定請求（名單多加 `ui_format`）取得後呼叫 `MotrixFormat.apply()`，不另發請求。`tests/platform/settings_deploy_baseline.json` 文字插入新群組。無 migration、無新路由、無權限變更。
+- **（併入）(next) — 2026-10-15（wip/t64-bp4-s5-editor-r1；T64 BP-4 S5：額外通知動作編輯器；旗標沿用 `builder_notify.enabled`，預設關）**
+- T64 S5 複審補強（白話）：事件目錄多 `hint`（白話說明，取代開發者口吻的 `desc`）、`labels`／`choices`（欄位的白話值與封閉範圍：附件種類、完工單狀態、自訂模組的模組／狀態／動作）；編輯器的條件對封閉範圍改用勾選白話名稱，通知文字與試跑也把內部值換成白話；清單顯示治理管線裡的待核准狀態（三階段如實說明）；停用時若有未發布的草稿，先警告、再按一次才做；沒有顯示名稱的帳號在挑選器顯示『未設定名稱的帳號 N』，不顯示帳號（可能是 email）。
+- T64 S5 編輯器前端（新檔 `frontend/static/notify-action-editor.js`）：設定頁（`approval-settings.html`）新增掛載點 `notify-action-editor-mount`，與簽核通知用語編輯器共用旗標 `builder_notify.enabled`（關著＝不載入任何程式、不多打請求；只有最高管理者）。白話畫面：清單（名稱、事件、狀態）、新增／編輯、事件挑選、條件、收件人挑選器（固定目錄，不收 email）、通道、節流、占位符按鈕、『用建議內容填入』一鍵預設、『試跑看看』（約幾人／每天幾則／逐角色文字）、放寬紅框（原因＋範圍）、檢查並發布（存草稿→後端檢查→影響預覽→發布；待核准如實顯示）、一鍵停用、版本與還原（沿用治理面板）。不用 innerHTML／原生對話框；畫面不出現代號或列舉值。測試 `tests/platform/test_notify_action_editor_t64.py`（31 題，node 假 DOM）。
+- T64 S5 編輯器的後端目錄（只增）：`notify_actions.picker_catalog`（收件人挑選器的固定目錄：角色、群組、現有啟用帳號，不含 email）與每個事件的 `suggest`（一鍵建議內容，皆通過驗證）；`GET /api/notify-actions/status` 對最高管理者多回 `picker`；放寬原因改為白話（收件人、通道、事件都用中文名稱，不出現代號）。
 
 ## 1.139 — 2026-10-15（wip/t63-fix-pf2-r1；T63 預檢修正：L1 讀 quotations 一律經 case_access）
 - L1（只增）：`helpers/case_access` 新增 `case_data_json()`、`case_owner_username()`、`case_row_for_access()`、`case_data_json_rows()`（皆唯讀、原樣丟資料庫錯誤）。`helpers/builtin_fields`、`helpers/notify_actions`、`helpers/settings_groups_q0` 原本直接 SELECT quotations，改走這四個函式；行為與回傳內容不變。`notify_actions._link` 改用 `string.Formatter().vformat`（去掉 `**` 呼叫，語意相同）。無 migration、無新路由、無權限變更。

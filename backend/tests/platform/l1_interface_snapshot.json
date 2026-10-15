@@ -1113,6 +1113,8 @@
    "enabled": "def(conn=…)",
    "ensure_kind": "def()",
    "event_catalog": "def()",
+   "event_labels": "def(conn, event, payload=…)",
+   "picker_catalog": "def(conn)",
    "preview": "def(conn, caller, key, body, payload=…)",
    "resolve_actions": "def(conn, event)"
   },

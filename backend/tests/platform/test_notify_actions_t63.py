@@ -549,6 +549,48 @@ def test_preview_is_read_only(client, make_user, monkeypatch):
         conn.close()
 
 
+# ── 9. 編輯器用的目錄與白話（T64 S5 前端）─────────────────────────────────────────
+def test_every_event_suggestion_is_a_valid_definition():
+    for name, ev in NA.EVENTS.items():
+        sg = ev["suggest"]
+        body = {"version": 1, "label": sg["label"], "enabled": True, "event": name, "when": [], "channels": ["in_app"], "recipients": sg["recipients"],
+                "template": {"title": sg["title"], "body": sg["body"]}, "throttle": {"dedupeMinutes": 60, "maxPerRecipientPerDay": 5}}
+        assert NA.definition_problems("sugg_ok", body) == [], name
+
+
+def test_picker_catalog_has_only_fixed_directories_and_no_email(client, make_user):
+    import db
+    make_user(username="na_pk1", role="admin")
+    conn = db.get_db()
+    try:
+        pk = NA.picker_catalog(conn)
+    finally:
+        conn.close()
+    assert [r["value"] for r in pk["roles"]] == list(MT.ROLES) and all(r["label"] and r["label"] != r["value"] for r in pk["roles"])
+    assert [g["value"] for g in pk["groups"]] == ["admins", "superadmins", "finance"] and all(g["label"] for g in pk["groups"])
+    assert [p["value"] for p in pk["people"]] == ["requester", "owner"]
+    assert any(u["username"] == "na_pk1" for u in pk["users"]) and all(set(u) == {"username", "displayName"} for u in pk["users"])
+
+
+def test_status_gives_the_picker_only_to_superadmin(client, make_user, monkeypatch):
+    monkeypatch.setattr(NA, "enabled", lambda conn=None: True)
+    sa, adm = _hd(client, make_user, "na_st_sa"), _hd(client, make_user, "na_st_adm", "admin")
+    d = client.get("/api/notify-actions/status", headers=sa).json()
+    assert set(d["picker"]) == {"roles", "groups", "people", "users"} and all(e["suggest"] for e in d["events"])
+    assert "picker" not in client.get("/api/notify-actions/status", headers=adm).json()
+
+
+def test_loosening_reasons_are_plain_chinese_without_raw_codes():
+    new = copy.deepcopy(A())
+    new["recipients"] = [{"kind": "role", "value": "admin"}, {"kind": "group", "value": "finance"}, {"kind": "owner"}]
+    new["channels"] = ["in_app", "email"]
+    new["event"] = "case.deadline_near"
+    cls, reasons = NA.compare(A(), new)
+    text = " ".join(reasons)
+    assert cls == "loosen" and "群組「財務角色與最高管理者」" in text and "案件負責業務" in text and "電子郵件" in text and "案件階段即將到期" in text
+    for raw in ("in_app", "email", "finance", "case.deadline_near", "owner", "kind"):
+        assert raw not in text, raw
+    assert NA.compare(A(), dict(A(), recipients=[{"kind": "role", "value": "admin"}, {"kind": "role", "value": "sales"}]))[1][0] == "新增收件人：角色「業務」的所有人"
 # ── 10. 審查補強（f0）：預算在迴圈內檢查、信件上限留稽核、去重鍵含階段／新狀態、LIKE 萬用字元 ───────────────
 def _audits(action):
     import db
