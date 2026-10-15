@@ -1,5 +1,8 @@
 # 標案雷達 更新紀錄
 
+## (next) — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
+- `pages/tender-radar.html` 的預算顯示改呼叫 `MotrixFormat.num()`（預設輸出逐字相同）。
+
 ## 1.5.9 — 2026-10-14（wip/t62-mail-escape-r2；通知信預設逸出）；t62 整合 r8
 - 標案通知信（`notify.py`）的文字欄位改走通知信預設逸出（所有類別一律逸出；刻意帶標記的片段用 `_safe`）：純文字且不含 & < > " ' 時輸出與先前逐位元相同。無 migration、無新路由、無權限變更。
 

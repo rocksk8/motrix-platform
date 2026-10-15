@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
+- `pages/quotation-form.html` 三處 `toLocaleTimeString` 改呼叫 `MotrixFormat.dt(d, {hour,minute})`，並更新內嵌後備（接受選項物件）；輸出逐字相同。
+
 ## 1.0.193 — 2026-10-15（wip/t64-fix-g4-r1；T64 閘門修正 g4）
 - `GET /api/profit-warning/config` 對登入但看不到報價毛利的人改回 200＋今天的預設門檻（門檻不是機密、不含毛利），不再回 403，頁面主控台不再出現錯誤；看得到毛利的人行為不變。`static/profit-warning.js` 的 `load()` 同一頁面只發一次請求。e2e 允許清單／案件頁 golden 補 T64 A／B 的靜態腳本與 `ui_format` 讀取。無 migration、無新路由、無權限變更。
 

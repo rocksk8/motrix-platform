@@ -1,6 +1,9 @@
 # 薪資獎金 更新紀錄
 
 
+## (next) — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
+- `pages/payslips.html`、`payslip-form.html`、`bonus.html`／`js/bonus.js`、`bonus-corrections.html` 的金額顯示改呼叫 `MotrixFormat.num()`（預設輸出逐字相同）。
+
 ## 1.2.19 — wip/t62-notify-wording-r3（簽核信件雙重逸出修正）；t62 整合 r8
 
 - 獎金分潤層外核准、勞報單層外代核的通知信不再自己 HTML 逸出（共用的信件建構器對簽核類信件統一逸出；原本會雙重逸出，A&B 顯示成 A&amp;B）。站內通知與資料不變。無 migration、無權限變更。

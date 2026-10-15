@@ -1,5 +1,8 @@
 # 附近旅宿 更新紀錄
 
+## (next) — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
+- `pages/lodging-records.html` 的價格顯示改呼叫 `MotrixFormat.num(…, {locale:'zh-TW'})`（輸出逐字相同）。
+
 ## 1.2.7 — 2026-10-14（wip/t61-xl-safe-r1；匯出公式注入中和；CSV 匯出）
 - CSV 匯出的公式中和改用共用的 `helpers.xlsx_out.csv_safe`（原模組內 `_csv_cell` 移除，字元集相同：`=` `+` `-` `@` Tab CR；輸出逐格相同）。無 migration、無新路由、無權限變更。
 

@@ -1,5 +1,8 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
+- `static/motrix-format.js`：`dt(d, shape)` 的 shape 也可傳選項物件（直接當 `toLocaleString('zh-TW', 選項)`；只時間／只月日的舊寫法等價）；`index.html`、`pages/approval-queue.html` 的數字／時間顯示改呼叫 `MotrixFormat`（預設輸出逐字相同）。無新增 L1 名稱。
+
 ## 1.141 — 2026-10-15（wip/t64-fix-pf2-r1：T64 預檢修正）
 - 只改文字與登記，無行為變更：`helpers/field_catalog` 叫料體系四個欄位的白話名稱改用「材料申請」（全站用字守門）；`helpers/notify_actions` 單位卡 [公開介面] 補上六個已公開的名稱；`docs/platform/modules.json` 補登 `js:static/notify-action-editor.js` 歸屬。
 
