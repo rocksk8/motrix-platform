@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-15（wip/t64-slice-a-r1；T64 A）
+## 1.0.190 — 2026-10-15（wip/t64-slice-a-r1；T64 A）
 - 新端點 `GET /api/profit-warning/config`（可見度同報價單毛利數字：`quote_money_visible`）回各畫面利潤顏色門檻；`GET /api/project-margin/config` 多回 `defaultValidDays`。報價單表單的營業利益率顏色／「低於目標」字樣、新報價單預設有效天數改讀設定（設定中心「利潤提醒色帶」「報價單預設值」），案件頁與結算頁的顏色同；預設＝原本的數字（12／20、0／20、20、30），畫面零變更。
 - `api/quotations.py` 新增／更新報價單沒帶 `validDays` 時的後備值由寫死 30 改為 `quote_defaults.valid_days`（讀不到 ⇒ 30）；送審的『有效期限過長』仍由伺服器依 `quote_approval.max_valid_days` 重算。結算 PDF（`pdf_gen`）的營業利益率顏色同讀設定。表單 `pw` 狀態、`static/profit-warning.js`。
 - **（併入）(next) — 2026-10-15（wip/t64-slice-b-r1；T64 切片 B／D2：報價單／報價單清單／案件頁數字與日期改走共用格式器；含 f0 審查修正）**
