@@ -6,6 +6,15 @@
 - 家族三（報價單寫入路徑）：存檔時被遮蔽部分的補回、案件記錄分段存檔的比對基準與回傳、修改紀錄理由的剝除，旗標改由 `mask_flags()`／`tier_allowed()` 產生（保留 `money` 整份短路）；單一旗標處用 `tier_allowed()`，避免多算角色函式。新增真實出口證明 `tests/platform/test_field_policy_exits_real_t65.py`。行為不變。
 - 寫入路徑嚴格模式：`helpers.field_policy.mask_flags(user, strict=True)` 只給寫入路徑用（`update_quotation` 補回、`update_case_record` 的比對／補回／回傳）；求值出錯照今天丟出（500、不寫入），讀取路徑維持 fail-closed 遮蔽。測試 `tests/platform/test_field_policy_exits_quotation_t65.py`（真打 GET／PUT：角色×旗標模式×授予 對照舊規則表）。
 
+## 1.0.196 — 2026-10-15（wip/t65-c1-r1；4e 審查小修）
+- `pages/quotations.html` 頁尾「顯示 N / 全部」的 N 改用實際顯示的筆數（分頁時為本頁筆數；未分頁時與先前相同）。1.0.194 條目補明：版面旗標開啟時每次開頁多一次 `groups=list_view` 的公開設定讀取。無 migration、無新路由、無權限變更。
+
+## 1.0.195 — 2026-10-15（wip/t65-c1-r1；T65 C1 修正）
+- `pages/quotations.html`：欄位 `x-show` 的引號跳脫修正（`cShown('欄位')`）；新增 ON 狀態 e2e `tests/e2e_on_state/test_list_view_c1_on_state.py`，並更新 BP-1 Q2 的釘字（表頭／儲存格多了 `data-col`，`colSpan()` 改為只看 `cShown`，關閉時仍恆為 12）。無 migration、無新路由、無權限變更。
+
+## 1.0.194 — 2026-10-15（wip/t65-c1-r1；T65 C1 報價單清單個人檢視偏好）
+- `pages/quotations.html`、新檔 `static/list-view-prefs.js`：設定中心新群組 `list_view`（預設全關）開啟後，使用者可在清單自訂自己的欄位顯示／順序、預設頁籤、每頁筆數（25／50／100／200，預設不分頁）；一律限在公司版面允許的範圍內，必要欄位不可隱藏，金額與毛利率欄只能隱藏或調順序（被遮蔽者仍看到「—」）。偏好存既有 `/api/list-prefs/quotations.view`；總開關是「自訂畫面版面」的 quotations 旗標：旗標關閉時不多任何請求或腳本；旗標開啟時每次開頁多一次 `GET /api/settings-center/public?groups=list_view`（三項都是 0 也一樣），任一項開啟才另載偏好腳本並讀自己的偏好。無 migration、無新路由、無權限變更。
+
 ## 1.0.193 — 2026-10-15（wip/t64-fix-g4-r1；T64 閘門修正 g4）
 - `GET /api/profit-warning/config` 對登入但看不到報價毛利的人改回 200＋今天的預設門檻（門檻不是機密、不含毛利），不再回 403，頁面主控台不再出現錯誤；看得到毛利的人行為不變。`static/profit-warning.js` 的 `load()` 同一頁面只發一次請求。e2e 允許清單／案件頁 golden 補 T64 A／B 的靜態腳本與 `ui_format` 讀取。無 migration、無新路由、無權限變更。
 

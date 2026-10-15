@@ -983,3 +983,8 @@ _q0.register(S, _register_core)
 from helpers import settings_groups_profit as _profit  # noqa: E402
 
 _profit.register(S, _register_core)
+
+# T65 C1：清單檢視個人偏好（拆檔，同屬 core）
+from helpers import settings_groups_list_view as _list_view  # noqa: E402
+
+_list_view.register(S, _register_core)
