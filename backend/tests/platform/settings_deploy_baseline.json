@@ -9,14 +9,7 @@
     false
    ]
   },
-  "builder_custom_fields": {
-   "enabled": [
-    false,
-    null,
-    null,
-    false
-   ]
-  },
+  "builder_custom_fields": {"enabled": [false, null, null, false], "quote_enabled": [0, 0, 1, false], "quote_in_customer_output": [0, 0, 1, false], "quote_on_finance_docs": [0, 0, 1, false]},
   "builder_layout": {
    "case_management": [
     false,
@@ -324,6 +317,8 @@
     false
    ]
   },
+  "quote_output": {"hidden_terms_pdf_mode": [0, 0, 1, false], "hidden_terms_editor_warning": [1, 0, 1, false]},
+  "quote_privacy": {"contact_email_hideable": [1, 0, 1, false], "contact_fax_hideable": [1, 0, 1, false], "notice_flow_when_hidden": [1, 0, 1, false]},
   "quote_approval": {"min_item_margin_pct": [30, 0, 100, false], "max_valid_days": [30, 1, 365, false], "discount_review_above": [0, 0, 100000000, false]},
   "builder_option_lists": {"enabled": [0, 0, 1, false]},
   "builder_stage_templates": {"enabled": [0, 0, 1, false]},
