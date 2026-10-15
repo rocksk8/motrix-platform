@@ -370,9 +370,12 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
     freight_row  = f'<div class="total-row"><span>運費</span><span>NT$ {int(freight):,}</span></div>' if freight else ''
     discount_row = f'<div class="total-row"><span style="color:#DC2626">折讓</span><span style="color:#DC2626">-NT$ {int(discount):,}</span></div>' if discount else ''
 
-    def term_block(title, text, span_full=False):
+    from helpers.quote_output import hidden_terms as _hidden_terms      # T63 Q0：管理者隱藏的條件欄位，設定選「不印」時才拿掉（預設 ⇒ 空集合 ⇒ 與過去相同）
+    _hid_terms = _hidden_terms()
+
+    def term_block(title, text, span_full=False, key=None):
         t = (text or '').strip()
-        if not t:
+        if not t or (key and key in _hid_terms):
             return ''
         cls = 'term-item term-item--full' if span_full else 'term-item'
         return f'<div class="{cls}"><div class="term-title">{esc(title)}</div><div class="term-block">{esc(t)}</div></div>'
@@ -381,14 +384,14 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
     # 最長的驗收標準獨立跨欄滿版，避免跟另一欄長度差太多造成版面失衡。
     from helpers.clause_titles import titles_for as _titles_for      # S-Q2：條款標題＝送審時凍結的 > 目前範本 > 預設（旗標關 ⇒ 與過去寫死的字相同）
     _ct = _titles_for(q)
-    terms_html  = term_block(_ct['paymentTerms'], q.get('paymentTerms', ''))
-    terms_html += term_block(_ct['deliveryTerms'], q.get('deliveryTerms', ''))
-    terms_html += term_block(_ct['warrantyTerms'], q.get('warrantyTerms', ''))
-    _after = q.get('afterSales', '') or ''
+    terms_html  = term_block(_ct['paymentTerms'], q.get('paymentTerms', ''), key='paymentTerms')
+    terms_html += term_block(_ct['deliveryTerms'], q.get('deliveryTerms', ''), key='deliveryTerms')
+    terms_html += term_block(_ct['warrantyTerms'], q.get('warrantyTerms', ''), key='warrantyTerms')
+    _after = '' if 'afterSales' in _hid_terms else (q.get('afterSales', '') or '')   # 隱藏且設定不印 ⇒ 只剩擇一方案的自動說明句（那是結構資訊，不是使用者填的條款）
     if av.get('notes'):                     # 擇一方案自動說明句：每組一句，接在使用者自填備註之後
         _after = (_after.rstrip() + '\n' if _after.strip() else '') + '\n'.join(av['notes'])
     terms_html += term_block(_ct['afterSales'], _after)  # 名稱同 modules/case/quote_terms.AFTERSALES_LABEL（L1 不反向 import 模組）
-    terms_html += term_block(_ct['acceptanceTerms'], q.get('acceptanceTerms', ''), span_full=True)
+    terms_html += term_block(_ct['acceptanceTerms'], q.get('acceptanceTerms', ''), span_full=True, key='acceptanceTerms')
 
     terms_section = (
         '<div class="terms"><div class="section-label" style="margin-bottom:8px">五、報價條件</div>'

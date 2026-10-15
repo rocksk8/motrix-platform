@@ -719,46 +719,11 @@ def _quote_cf_cross_check(values):
     except Exception:                                                                    # noqa: BLE001 — 讀不到已存值 ⇒ 不擋（使用端仍會把關）
         stored = {"enabled": True, "quote_enabled": 1}
     master = bool(values.get("enabled") or stored.get("enabled"))
-    quote_on = bool(values.get("quote_enabled") or stored.get("quote_enabled"))
     out = []
     if values.get("quote_enabled") and not master:
         out.append("要先開放「內建畫面的自訂欄位」，報價單才能使用自訂欄位。")
-    if (values.get("quote_in_customer_output") or values.get("quote_on_finance_docs")) and not quote_on:
-        out.append("要先開放「報價單自訂欄位」，才能設定它出現在客戶版文件或財務單據。")
     return out
 
-
-def _quote_cf_scan(conn):
-    """唯讀：有自訂欄位值的報價單張數（只掃 JSON 裡出現 customFields 的列，上限 5000 列；失敗 ⇒ None）。"""
-    try:
-        rows = conn.execute("SELECT data_json FROM quotations WHERE data_json LIKE '%\"customFields\"%' LIMIT 5000").fetchall()
-        n = 0
-        for r in rows:
-            try:
-                cf = (_json.loads(r[0] or "{}") or {}).get("customFields")
-            except (TypeError, ValueError):
-                continue
-            if isinstance(cf, dict) and cf:
-                n += 1
-        return n
-    except Exception:                                                                    # noqa: BLE001 — 影響預覽失敗只顯示靜態說明
-        return None
-
-
-def _quote_cf_customer_impact(conn, new_value):
-    n = _quote_cf_scan(conn)
-    if n is None:
-        raise RuntimeError("count failed")
-    return {"numbers": {"quotationsWithCustomFields": n},
-            "sentence": ("目前有 %d 張報價單填了自訂欄位；%s" % (n, "開放後，這些內容會出現在它們的 PDF、預覽與客戶回簽頁。" if new_value else "改回只給內部人員後，客戶版文件不再出現自訂欄位。"))}
-
-
-def _quote_cf_finance_impact(conn, new_value):
-    n = _quote_cf_scan(conn)
-    if n is None:
-        raise RuntimeError("count failed")
-    return {"numbers": {"quotationsWithCustomFields": n},
-            "sentence": ("目前有 %d 張報價單填了自訂欄位；%s" % (n, "開放後，這些內容可能帶到由它們產生的請款、開票與應收單據。" if new_value else "改回不帶入後，財務單據不再出現自訂欄位。"))}
 
 
 # ── 內建畫面的自訂欄位（T61 S5）：管理者在內建單據畫面加自己的欄位。預設關閉＝上線前的畫面與資料（部署零行為變更）。 ──
@@ -778,27 +743,9 @@ register_group(
           impact="只影響報價單表單多出「自訂欄位」區塊；報價單的既有欄位、金額與計算完全不變。關閉後，已經存的值仍保留在資料裡，但畫面不再顯示、也不能再改。",
           choices=[(0, "不開放（建議）", "報價單表單維持目前的樣子。"),
                    (1, "開放", "最高管理者可以為報價單新增並發布自訂欄位，發布前先預覽。")]),
-        S("quote_in_customer_output", "int", 0, min=0, max=1, risk="legal", loosen="up", recommended=0,
-          risk_text="【高影響】開放後，報價單自訂欄位的內容會出現在客戶拿到的文件上，欄位名稱與內容客戶都看得到，填錯或不該公開的內容會被客戶看到。",
-          impact_scope={"documents": ["報價單 PDF", "報價單預覽", "客戶回簽頁"], "roles": ["客戶", "業務"], "amounts": "不改任何金額；只決定自訂欄位的文字會不會印在客戶版文件上。", "reversible": True, "effective": "pending"},
-          question="報價單的自訂欄位，可以印在客戶看得到的文件上嗎？", label="報價單自訂欄位可出現在客戶版文件",
-          help="預設只給內部人員看。開放後，報價單 PDF、預覽與客戶回簽頁會多印自訂欄位的名稱與內容。需要先開放「報價單自訂欄位」。",
-          impact="只影響之後產生或重新開啟的客戶版文件；已經寄出的文件不會改。開放屬於放寬，需要第二位最高管理者核准並經確認期間；改回不開放立即生效。",
-          choices=[(0, "只給內部人員（建議）", "客戶版文件完全不出現自訂欄位。"),
-                   (1, "可出現在客戶版文件", "報價單 PDF、預覽與客戶回簽頁會多印自訂欄位。")],
-          impact_fn=_quote_cf_customer_impact),
-        S("quote_on_finance_docs", "int", 0, min=0, max=1, risk="money", loosen="up", recommended=0,
-          risk_text="【高影響】開放後，報價單自訂欄位的內容會帶到請款、開票、應收這類財務單據，可能讓不該出現在財務文件上的內容被帶出。",
-          impact_scope={"documents": ["請款單", "開票申請", "應收清單"], "roles": ["出納", "財務", "業務"], "amounts": "不改任何金額、稅額或單據狀態；只決定自訂欄位的文字會不會帶到財務單據。", "reversible": True, "effective": "pending"},
-          question="報價單的自訂欄位，可以帶到請款、開票等財務單據嗎？", label="報價單自訂欄位可帶入財務單據",
-          help="預設不帶入。開放後，由報價單產生的財務單據可以顯示自訂欄位的名稱與內容。需要先開放「報價單自訂欄位」。",
-          impact="只影響之後產生或重新開啟的財務單據；金額、稅額、單號與單據狀態不變。開放屬於放寬，需要第二位最高管理者核准並經確認期間；改回不帶入立即生效。",
-          choices=[(0, "不帶入（建議）", "財務單據完全不出現自訂欄位。"),
-                   (1, "可帶入財務單據", "財務單據會顯示自訂欄位的名稱與內容。")],
-          impact_fn=_quote_cf_finance_impact),
     ],
     sensitive=False, risk="ops", cross_check=_quote_cf_cross_check,
-    help="決定內建畫面（案件資訊、供應商）是否開放管理者新增自己的欄位，以及報價單自訂欄位的開放範圍。",
+    help="決定內建畫面（案件資訊、供應商）是否開放管理者新增自己的欄位，以及報價單是否開放自訂欄位。",
 )
 
 

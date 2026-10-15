@@ -2,7 +2,7 @@
 """內建畫面的自訂欄位（T61 S5；設計：docs/platform/plans/T61-S5-FIELD-CATALOG-DESIGN.md）。
 
 [單位] helper:builtin_fields    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] ALLOWED_TYPES, MAX_FIELDS, RECORD_TYPES, definition_problems, enabled, gate, public_fields, usage_counts
+[公開介面] ALLOWED_TYPES, MAX_FIELDS, RECORD_TYPES, definition_problems, enabled, gate, public_fields, type_enabled, usage_counts
 [不變式] ①旗標 `builder_custom_fields.enabled` 關閉 ⇒ `gate()` 一律回舊值（不介入任何寫入）、`public_fields()` 回空；
     ②值只放在單據 JSON 的 `customFields` 命名空間，沒有值就**不寫這個鍵**；③型別只有文字／日期／單選／勾選（沒有金額、公式、參照、必填、預設值）；
     ④停用或已不在定義裡的欄位，其值**原樣保留**（用戶端送來的改動一律忽略）；⑤任何錯誤 ⇒ 回錯誤清單，不丟例外。
@@ -65,6 +65,24 @@ def enabled(conn=None) -> bool:
         return False
 
 
+#: 單據類型自己的開關（設定 `builder_custom_fields.<欄位>`；T63 Q0）。沒列在這裡的類型只看總開關（案件資訊、供應商＝今天的行為）。
+_TYPE_SWITCH = {"quotation": "quote_enabled"}
+
+
+def type_enabled(record_type, conn=None) -> bool:
+    """總開關開、而且該單據類型自己的開關（若有）也開才算開。永不丟例外；任何讀取失敗 ⇒ 關閉（最嚴）。"""
+    if not enabled(conn):
+        return False
+    field = _TYPE_SWITCH.get(record_type)
+    if not field:
+        return True
+    try:
+        from helpers import settings_registry as _SR
+        return bool(_SR.get("builder_custom_fields", field, conn=conn))
+    except Exception:                                                                    # noqa: BLE001
+        return False
+
+
 def _published(conn, record_type):
     """該單據類型最新發布的定義 body；沒有／讀不到 ⇒ None。"""
     try:
@@ -92,7 +110,7 @@ def _active_fields(body):
 
 def public_fields(record_type, conn=None) -> list:
     """頁面要畫的欄位（已發布、未停用）：`[{key,label,type,options?,maxLength?,help?}]`；旗標關閉或沒有定義 ⇒ []。"""
-    if record_type not in RECORD_TYPES or not enabled(conn):
+    if record_type not in RECORD_TYPES or not type_enabled(record_type, conn):
         return []
     c, own = _open(conn)
     try:
@@ -182,7 +200,7 @@ def gate(record_type, new_values, old_values, conn=None):
     - 不補預設值、不改寫值（除了型別正規化：日期＝YYYY-MM-DD、單選必須在選項內）——用戶端送什麼、存什麼，
       免得『存檔後的值與畫面的基準不同』讓下一次存檔誤判成別人改過。"""
     old = old_values if isinstance(old_values, dict) else {}
-    if record_type not in RECORD_TYPES or not enabled(conn):
+    if record_type not in RECORD_TYPES or not type_enabled(record_type, conn):
         return (old or None), [], sorted(k for k in (new_values or {}) if isinstance(new_values, dict))
     c, own = _open(conn)
     try:
@@ -229,7 +247,7 @@ def usage_counts(record_type, conn=None) -> dict:
     不用 json_extract）；旗標關閉或單據類型不認得 ⇒ 空。永不丟例外。"""
     out = {"counts": {}, "records": 0}
     spec = RECORD_TYPES.get(record_type)
-    if not spec or not enabled(conn):
+    if not spec or not type_enabled(record_type, conn):
         return out
     c, own = _open(conn)
     try:

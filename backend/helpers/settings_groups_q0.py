@@ -4,7 +4,7 @@
 [單位] helper:settings_groups_q0    [層] L1    [穩定度] 實驗
 [公開介面] register
 [不變式] ①預設值與今天的報價單 PDF／表單完全相同；②放寬方向（印得更少、少一道告知）走『待核准＋第二位最高管理者＋確認期間』（沿用 settings_registry）；
-    ③讀不到設定 ⇒ 取最嚴格的值（照印條款、保留告知、欄位維持可隱藏的今天預設以外一律不放寬）。
+    ③設定讀不到時（引擎退回快取或預設）：條款照印、個資欄位維持可隱藏（今天的行為）；使用端另外要求總開關與報價單開關都開才算開（見 builtin_fields.type_enabled）。
 設計：docs/platform/plans/T63-Q0-SETTINGS-SPEC.md。
 """
 import json as _json
@@ -12,53 +12,60 @@ import json as _json
 _TERMS = ("paymentTerms", "deliveryTerms", "acceptanceTerms", "warrantyTerms", "afterSales")
 
 
+_CAP = 5000
+
+
 def _terms_scan(conn):
-    """唯讀：有填任何條款文字的報價單張數（上限 5000 列；失敗 ⇒ None）。"""
+    """唯讀：(有填任何條款文字的報價單張數, 是否只掃了上限內的列)；失敗 ⇒ None。"""
     try:
         n = 0
-        for r in conn.execute("SELECT data_json FROM quotations LIMIT 5000").fetchall():
+        rows = conn.execute("SELECT data_json FROM quotations LIMIT %d" % _CAP).fetchall()
+        for r in rows:
             try:
                 q = _json.loads(r[0] or "{}") or {}
             except (TypeError, ValueError):
                 continue
             if isinstance(q, dict) and any(str(q.get(k) or "").strip() for k in _TERMS):
                 n += 1
-        return n
+        return n, len(rows) >= _CAP
     except Exception:                                                                    # noqa: BLE001
         return None
 
 
 def _contacts_scan(conn):
-    """唯讀：填了電子郵件或傳真的報價單張數（失敗 ⇒ None）。"""
+    """唯讀：(填了電子郵件或傳真的報價單張數, 是否只掃了上限內的列)；失敗 ⇒ None。"""
     try:
         n = 0
-        for r in conn.execute("SELECT data_json FROM quotations LIMIT 5000").fetchall():
+        rows = conn.execute("SELECT data_json FROM quotations LIMIT %d" % _CAP).fetchall()
+        for r in rows:
             try:
                 q = _json.loads(r[0] or "{}") or {}
             except (TypeError, ValueError):
                 continue
             if isinstance(q, dict) and (str(q.get("contactEmail") or "").strip() or str(q.get("contactFax") or "").strip()):
                 n += 1
-        return n
+        return n, len(rows) >= _CAP
     except Exception:                                                                    # noqa: BLE001
         return None
 
 
 def _terms_impact(conn, new_value):
-    n = _terms_scan(conn)
-    if n is None:
+    r = _terms_scan(conn)
+    if r is None:
         raise RuntimeError("count failed")
-    return {"numbers": {"quotationsWithTerms": n},
-            "sentence": ("目前有 %d 張報價單填了報價條件。%s" % (n, "改成不印後，被隱藏的條件欄位不會出現在這些報價單的 PDF 與預覽。" if new_value
+    n, capped = r
+    return {"numbers": {"quotationsWithTerms": n, "atLeast": capped},
+            "sentence": ("目前有%s %d 張報價單填了報價條件。%s" % ("至少" if capped else "", n, "改成不印後，被隱藏的條件欄位不會出現在這些報價單的 PDF 與預覽。" if new_value
                                                              else "維持照印：隱藏欄位只是不顯示輸入框，已存的條件仍印在 PDF。"))}
 
 
 def _contacts_impact(conn, new_value):
-    n = _contacts_scan(conn)
-    if n is None:
+    r = _contacts_scan(conn)
+    if r is None:
         raise RuntimeError("count failed")
-    return {"numbers": {"quotationsWithContacts": n},
-            "sentence": "目前有 %d 張報價單填了電子郵件或傳真。隱藏只影響表單上是否顯示輸入框，已存的內容不會被刪除。" % n}
+    n, capped = r
+    return {"numbers": {"quotationsWithContacts": n, "atLeast": capped},
+            "sentence": "目前有%s %d 張報價單填了電子郵件或傳真。隱藏只影響表單上是否顯示輸入框，已存的內容不會被刪除。" % ("至少" if capped else "", n)}
 
 
 def register(S, _register_core):
@@ -75,11 +82,6 @@ def register(S, _register_core):
               choices=[(0, "照印（建議）", "隱藏欄位只是不顯示輸入框，已存的條件仍印在 PDF。"),
                        (1, "不印被隱藏的條件", "被隱藏的條件欄位不會出現在 PDF 與預覽。")],
               impact_fn=_terms_impact),
-            S("hidden_terms_editor_warning", "int", 1, min=0, max=1, risk="none", recommended=1,
-              question="管理者隱藏報價條件欄位時，要不要在排版器提醒 PDF 的處理方式？", label="隱藏條件時顯示提醒",
-              help="開啟時，排版器隱藏報價條件欄位會附上一句白話提醒，說明目前 PDF 會不會照印。",
-              impact="只影響排版器裡的提醒文字，不影響任何單據。立即生效。",
-              choices=[(1, "顯示提醒（建議）", "隱藏條件欄位時會看到提醒。"), (0, "不顯示", "不顯示提醒。")]),
         ],
         sensitive=False, risk="legal",
         help="報價單 PDF 與預覽如何處理被管理者隱藏的報價條件；金額與稅務不在這裡調整。",
@@ -91,7 +93,7 @@ def register(S, _register_core):
             S("contact_email_hideable", "int", 1, min=0, max=1, risk="legal", recommended=1,
               risk_text="改成不可隱藏後，管理者不能再把客戶電子郵件欄位從報價單表單隱藏；已經隱藏的會恢復顯示。",
               impact_scope={"documents": ["報價單表單"], "roles": ["業務", "最高管理者"], "amounts": "不改任何金額；只決定客戶電子郵件欄位能不能被隱藏。", "reversible": True, "effective": "immediate"},
-          question="客戶電子郵件欄位可以讓管理者從報價單表單隱藏嗎？", label="客戶電子郵件 可隱藏",
+              question="客戶電子郵件欄位可以讓管理者從報價單表單隱藏嗎？", label="客戶電子郵件可隱藏",
               help="電子郵件屬於個人資料。預設可以隱藏；隱藏只是不顯示輸入框，不會刪掉已存的內容，個資告知流程也不變。",
               impact="只影響報價單表單與排版器；不改已存的內容、PDF 或任何金額。改成不可隱藏立即生效（收緊）。",
               choices=[(1, "可隱藏（目前做法）", "管理者可以在排版器隱藏這個欄位。"), (0, "不可隱藏", "這個欄位固定顯示。")],
@@ -99,19 +101,12 @@ def register(S, _register_core):
             S("contact_fax_hideable", "int", 1, min=0, max=1, risk="legal", recommended=1,
               risk_text="改成不可隱藏後，管理者不能再把客戶傳真欄位從報價單表單隱藏；已經隱藏的會恢復顯示。",
               impact_scope={"documents": ["報價單表單"], "roles": ["業務", "最高管理者"], "amounts": "不改任何金額；只決定客戶傳真欄位能不能被隱藏。", "reversible": True, "effective": "immediate"},
-          question="客戶傳真欄位可以讓管理者從報價單表單隱藏嗎？", label="客戶傳真可隱藏",
+              question="客戶傳真欄位可以讓管理者從報價單表單隱藏嗎？", label="客戶傳真可隱藏",
               help="預設可以隱藏；隱藏只是不顯示輸入框，不會刪掉已存的內容，個資告知流程也不變。",
               impact="只影響報價單表單與排版器；不改已存的內容、PDF 或任何金額。改成不可隱藏立即生效（收緊）。",
               choices=[(1, "可隱藏（目前做法）", "管理者可以在排版器隱藏這個欄位。"), (0, "不可隱藏", "這個欄位固定顯示。")],
               impact_fn=_contacts_impact),
-            S("notice_flow_when_hidden", "int", 1, min=0, max=1, risk="legal", loosen="down", recommended=1,
-              risk_text="【高影響】改成「不做告知」後，個人資料欄位被隱藏時就不再走個資告知流程，可能少了對客戶的告知紀錄，有法遵風險。",
-              impact_scope={"documents": ["報價單", "案件個資告知"], "roles": ["業務", "最高管理者"], "amounts": "不改任何金額；只決定隱藏個人資料欄位時，個資告知流程要不要照走。", "reversible": True, "effective": "pending"},
-              question="隱藏了客戶的個人資料欄位（電子郵件、傳真）時，個資告知流程還要照走嗎？", label="隱藏個資欄位時的告知流程",
-              help="預設照走：隱藏欄位只是不顯示輸入框，告知流程不變。",
-              impact="只影響之後的告知流程；已有的告知紀錄不會刪。改成不做告知屬於放寬，需要第二位最高管理者核准並經確認期間；改回照走立即生效。金額單據的不可竄改稽核不受影響，永遠照寫。",
-              choices=[(1, "照走（建議）", "告知流程不因欄位隱藏而改變。"), (0, "不做告知", "欄位隱藏時略過個資告知。")]),
         ],
         sensitive=False, risk="legal",
-        help="報價單上客戶個人資料欄位（電子郵件、傳真）能不能被隱藏，以及隱藏時個資告知流程怎麼處理。",
+        help="報價單上客戶個人資料欄位（電子郵件、傳真）能不能被管理者隱藏。",
     )

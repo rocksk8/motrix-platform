@@ -20,7 +20,7 @@ def get_custom_fields(record_type: str, authorization: str = Header(None)):
     _require_user(authorization)
     if record_type not in BF.RECORD_TYPES:
         raise HTTPException(404, "沒有這種單據類型")
-    on = BF.enabled()
+    on = BF.type_enabled(record_type)
     return {"recordType": record_type, "enabled": on, "fields": BF.public_fields(record_type) if on else []}
 
 
@@ -29,5 +29,5 @@ def get_custom_fields_usage(record_type: str, authorization: str = Header(None))
     _require_user(authorization, require_superadmin=True)
     if record_type not in BF.RECORD_TYPES:
         raise HTTPException(404, "沒有這種單據類型")
-    on = BF.enabled()
+    on = BF.type_enabled(record_type)
     return dict(BF.usage_counts(record_type), recordType=record_type, enabled=on)

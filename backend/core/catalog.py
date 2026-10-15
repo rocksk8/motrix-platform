@@ -219,8 +219,18 @@ def layout_points(module_key=None) -> list:
     out = []
     for m in sorted(registry.loaded(), key=lambda x: x.key):
         if module_key is None or m.key == module_key:
-            out += _module_points(m, templates)[0]
+            out += _apply_privacy_core(m.key, _module_points(m, templates)[0])
     return out
+
+
+def _apply_privacy_core(module_key, pts):
+    """T63 Q0：設定 `quote_privacy.*` 選『不可隱藏』的個人資料欄位 ⇒ 該點視為核心欄位（只剩 move）。預設不動任何點。"""
+    from helpers.quote_privacy import forced_core
+    for p in pts:
+        if p.get("kind") == "field" and not p.get("core") and forced_core(module_key, p.get("entity"), p.get("field")):
+            p["core"] = True
+            p["ops"] = list(customization.OPS_CORE_FIELD)
+    return pts
 
 
 def check_layout(module_key, ops) -> list:
