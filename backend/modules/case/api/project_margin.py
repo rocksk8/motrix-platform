@@ -35,8 +35,8 @@ def get_project_margin_config(authorization: str = Header(None)):
 @router.get("/api/profit-warning/config")
 def get_profit_warning_config(authorization: str = Header(None)):
     """各畫面利潤顏色的門檻（設定 profit_warning.*；預設＝各畫面今天寫死的數字；讀不到／不合法 ⇒ 整組回今天的數字）。
-    可見度同報價單的毛利數字（quote_money_visible）：只有看得到毛利的人用得到這組數字。純顯示，不阻擋任何動作。"""
+    登入者都回 200：看不到毛利的人回今天的預設數字（門檻不是機密、不含任何毛利；他們畫面上也沒有毛利數字可上色），避免頁面主控台出現 403。純顯示，不阻擋任何動作。"""
     user = _require_user(authorization)
     if not quote_money_visible(user):
-        raise HTTPException(403, "你沒有查看報價成本與毛利的權限")
+        return dict(_pw.DEFAULTS)
     return _pw.bands()

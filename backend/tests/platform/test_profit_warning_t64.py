@@ -132,4 +132,4 @@ def test_settlement_pdf_colours_follow_the_settings():
 
 def test_config_endpoint_is_registered_with_the_same_gate():
     src = (BACK / "modules" / "case" / "api" / "project_margin.py").read_text(encoding="utf-8")
-    assert '"/api/profit-warning/config"' in src and src.count("quote_money_visible(user)") == 2
+    assert '"/api/profit-warning/config"' in src and src.count("quote_money_visible(user)") == 2 and "raise HTTPException(403" not in src.split("def get_profit_warning_config")[1].split("@router")[0]

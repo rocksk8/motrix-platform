@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.193 — 2026-10-15（wip/t64-fix-g4-r1；T64 閘門修正 g4）
+- `GET /api/profit-warning/config` 對登入但看不到報價毛利的人改回 200＋今天的預設門檻（門檻不是機密、不含毛利），不再回 403，頁面主控台不再出現錯誤；看得到毛利的人行為不變。`static/profit-warning.js` 的 `load()` 同一頁面只發一次請求。e2e 允許清單／案件頁 golden 補 T64 A／B 的靜態腳本與 `ui_format` 讀取。無 migration、無新路由、無權限變更。
+
 ## 1.0.192 — 2026-10-15（wip/t64-fix-g1-r1；T64 閘門修正：報價單表單 V3.27）
 - `pages/quotation-form.html` 的 `FORM_VERSION` 由 V3.26 升 V3.27（利潤顏色門檻改讀設定、金額日期走共用格式器；預設輸出不變），登記進 `tests/test_form_version_bumped_2026_09_24.py` 的 LEDGER 與 `docs/quick/changelog.md`。測試沙盒補載 `profit-warning.js`／`motrix-format.js`。無 migration、無新路由、無權限變更。
 

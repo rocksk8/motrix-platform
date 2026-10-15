@@ -13,7 +13,8 @@
     for (const [lo, hi] of PAIRS) if (out[lo] > out[hi]) return Object.assign({}, DEF)
     return out
   }
-  async function load() {
+  let _p = null
+  async function _fetch() {
     try {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return Object.assign({}, DEF)
@@ -22,5 +23,6 @@
       return normalise(await r.json())
     } catch (e) { return Object.assign({}, DEF) }
   }
+  function load() { return _p || (_p = _fetch().then(b => Object.assign({}, b))) }      // 同一頁面只打一次 API（頁面 init 可能跑兩次）；每次回傳獨立副本
   window.MotrixProfitWarning = { defaults: () => Object.assign({}, DEF), normalise, load }
 })()
