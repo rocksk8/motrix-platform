@@ -16,7 +16,7 @@ from helpers import _notify, _require_user
 from helpers.approval_queue import approval_raw_of as _approval_raw_of, tier_fields as _queue_tier_fields
 from helpers.case_access import require_case
 from helpers.financial_mask import money_visible, material_money_visible
-from helpers.field_policy import mask_flags  # F7 S1b：欄位遮蔽的旗標統一由欄位政策產生
+from helpers.field_policy import tier_allowed  # F7 S1b：欄位遮蔽的旗標統一由欄位政策產生
 from modules.case import material_approval as MA
 from modules.case import material_change as MC
 from modules.case import material_notify as MN
@@ -106,7 +106,7 @@ def list_case_changes(quote_no: str, authorization: str = Header(None)):
     try:
         q = _load_case(conn, quote_no)
         require_case(user, q, quote_no)
-        money = mask_flags(user)["keep_orders"]
+        money = tier_allowed("material_money", user)
         return {"quoteNo": quote_no, "changes": [_view(c, money) | {"itemName": _order_name(q, c["item_id"])} for c in MC.list_for_case(conn, quote_no)]}
     finally:
         conn.close()
@@ -120,7 +120,7 @@ def list_changes(quote_no: str, item_id: str, authorization: str = Header(None))
     try:
         q = _load_case(conn, quote_no)
         require_case(user, q, quote_no)
-        money = mask_flags(user)["keep_orders"]
+        money = tier_allowed("material_money", user)
         return {"quoteNo": quote_no, "itemId": item_id, "changes": [_view(c, money) for c in MC.list_for_item(conn, quote_no, item_id)]}
     finally:
         conn.close()
@@ -139,7 +139,7 @@ def preview_proposal(quote_no: str, item_id: str, quantity: float = None, notes:
             cp = MC.proposal(conn, quote_no, item_id, proposed)
         except MC.MaterialChangeError as e:
             raise _http(e)
-        money = mask_flags(user)["keep_orders"]
+        money = tier_allowed("material_money", user)
         if not money:
             cp = {**cp, "before": _mask(cp.get("before"), False), "after": _mask(cp.get("after"), False), "diff": _mask_diff(cp.get("diff"), False),
                   "uncoveredLines": _mask(cp.get("uncoveredLines"), False),

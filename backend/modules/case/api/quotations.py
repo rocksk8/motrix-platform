@@ -93,7 +93,7 @@ from pdf_gen import (
 
 router = APIRouter()
 from helpers.xlsx_out import add_pdf_sibling, export_logged, xl_safe_xlsx   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
-from helpers.field_policy import mask_flags as _mask_flags   # F7 S1b：欄位遮蔽的旗標統一由欄位政策產生（出口保留自己的 money 短路）
+from helpers.field_policy import mask_flags as _mask_flags, tier_allowed as _tier_allowed   # F7 S1b：欄位遮蔽的旗標統一由欄位政策產生（出口保留自己的 money 短路）
 from helpers import export_templates as _ET   # noqa: E402  BP-3 匯出範本（T63：案件批次匯出的欄位目錄）
 
 
@@ -940,7 +940,7 @@ def list_quotations(
             where_sql += " AND " + quick[key][0]
             params.extend(quick[key][1])
     # CM13（2026-09-24 使用者裁示）：沒有財務檢視權的帳號不回金額與毛利率
-    masked = not _mask_flags(user)["keep_quote"]          # 第42班：報價單總額維持業務／管理員可見（精算／款項另由財務角色專屬）
+    masked = not _tier_allowed("quote_money", user)          # 第42班：報價單總額維持業務／管理員可見（精算／款項另由財務角色專屬）
     # CM6：排序白名單；看不到金額的帳號不可依金額排序（順序本身會洩漏金額大小）⇒ 忽略
     sort_cols = {"quote_date": "COALESCE(NULLIF(quote_date,''), created_at)",
                  "customer_name": "customer_name", "total": "total"}
@@ -1319,7 +1319,7 @@ def gate_matrix(authorization: str = Header(None)):
             "nextDueLabel": next_label,
         })
     conn.close()
-    if not _mask_flags(user)["keep_quote"]:   # CM13（第42班：改用報價單層級條件）
+    if not _tier_allowed("quote_money", user):   # CM13（第42班：改用報價單層級條件）
         for it in items:
             _mask_money_row(it, ("total",))
     return {"items": items, "today": today}
@@ -2002,7 +2002,8 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             except HTTPException:
                 conn.close()
                 raise
-        if not money_visible(user):
+        _fl = _mask_flags(user)
+        if not _fl["money"]:
             # 第42班：業務／管理員可編輯報價單，但看不到精算與款項期別（財務角色專屬）⇒ 被遮蔽的部分以資料庫現值補回，
             # 不可以用遮蔽後的空值蓋掉真正的資料（同 case-record 存檔的 restore）。
             try:
@@ -2016,7 +2017,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             if "caseRecord" in q:
                 try:
                     q["caseRecord"] = restore_case_record(q.get("caseRecord") or {}, _db_data.get("caseRecord") or {},
-                                                          keep_orders=material_money_visible(user))
+                                                          keep_orders=_fl["keep_orders"])
                 except PaymentStructureChange:
                     conn.close()
                     raise HTTPException(403, "此帳號沒有財務檢視權限，不可新增、刪除或調整款項期別")
@@ -3180,7 +3181,8 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             current_cr = (json.loads(row["data_json"] or "{}").get("caseRecord") or {})
             segments = {k: v for k, v in body.segments.items() if k != "stages"}
             seg_keys = list(segments)
-            cmp_cr = current_cr if money_visible(user) else mask_case_record(copy.deepcopy(current_cr), keep_orders=material_money_visible(user))
+            _fl = _mask_flags(user)
+            cmp_cr = current_cr if _fl["money"] else mask_case_record(copy.deepcopy(current_cr), keep_orders=_fl["keep_orders"])
             conflicts = _segment_conflicts(cmp_cr, segments, body.base or {})
             if conflicts:
                 conn.close()
@@ -3219,11 +3221,12 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
                     body.case_record["customFields"] = _cf_new
                 else:
                     body.case_record.pop("customFields", None)
-        if not money_visible(user):
+        _fl = _mask_flags(user)
+        if not _fl["money"]:
             # CM13（2026-09-24）：這個帳號拿到的是遮蔽過的 caseRecord，送回來的款項期別沒有金額鍵。
             # 以資料庫現值補回，不可以讓空值蓋掉真正的金額；新增／刪除／重排期別不允許（D2）。
             try:
-                body.case_record = restore_case_record(body.case_record or {}, data.get("caseRecord") or {}, keep_orders=material_money_visible(user))
+                body.case_record = restore_case_record(body.case_record or {}, data.get("caseRecord") or {}, keep_orders=_fl["keep_orders"])
             except PaymentStructureChange:
                 conn.close()
                 raise HTTPException(403, "此帳號沒有財務檢視權限，不可新增、刪除或調整款項期別")
@@ -3350,8 +3353,9 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             # 伺服器存檔時會改寫卡片（認列的到貨人／時間、過期標記、被拒還原…）⇒ 回傳實際存入的分段，
             # 前端以它當新基準；只用「送出的內容」當基準，下一次存檔會被誤判成『已被他人更新』（409）。
             _saved_cr = copy.deepcopy(data.get("caseRecord") or {})
-            if not money_visible(user):
-                mask_case_record(_saved_cr, keep_orders=material_money_visible(user))
+            _fl = _mask_flags(user)
+            if not _fl["money"]:
+                mask_case_record(_saved_cr, keep_orders=_fl["keep_orders"])
             out["saved"] = {k: _saved_cr.get(k) for k in seg_keys}
         if mat_rejected:
             out["rejected"] = mat_rejected          # 叫料審核（31-C）：被拒的項目（itemId／field／code／message），其餘已存
@@ -6021,7 +6025,7 @@ def list_quotation_versions(quote_no: str, authorization: str = Header(None)):
         })
 
     history = [h for h in (data.get("editHistory") or []) if isinstance(h, dict)]
-    if not money_visible(user):                       # 重新開啟精算的理由是自由文字：沒有財務檢視的帳號只看誰／何時／事件
+    if not _tier_allowed("finance_money", user):                       # 重新開啟精算的理由是自由文字：沒有財務檢視的帳號只看誰／何時／事件
         strip_history_reasons(history)
     return {"quote_no": quote_no, "versions": versions, "history": history}
 
@@ -6933,7 +6937,7 @@ def case_batch_export(body: dict = Body(...), authorization: str = Header(None))
                  for r in conn.execute("SELECT id, username, display_name FROM users")}
     finally:
         conn.close()
-    show_money = _mask_flags(user)["keep_quote"]          # 第42班：案件匯出的「金額」欄＝報價總額（報價單層級）
+    show_money = _tier_allowed("quote_money", user)          # 第42班：案件匯出的「金額」欄＝報價總額（報價單層級）
     wb = Workbook()
     ws = wb.active
     ws.title = "案件"

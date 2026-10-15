@@ -36,7 +36,7 @@ def test_baseline_is_not_stale():
 def test_migrated_families_use_mask_flags():
     for rel, n in MIGRATED.items():
         src = (S.ROOT / rel).read_text(encoding="utf-8")
-        assert src.count("mask_flags(") >= n, rel
+        assert src.count("mask_flags(") + src.count("tier_allowed(") >= n, rel
 
 
 def test_positive_control_scanner_counts_name_and_attribute_calls_but_not_imports():

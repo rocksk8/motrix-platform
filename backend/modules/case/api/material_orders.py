@@ -32,7 +32,7 @@ from helpers import (
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
 from modules.case.quotations import SQL_DEAL_TAG, save_quotation_json  # noqa: E402
 from helpers.financial_mask import MATERIAL_ORDER_MONEY_KEYS, material_money_visible
-from helpers.field_policy import mask_flags  # F7 S1b：欄位遮蔽的旗標統一由欄位政策產生
+from helpers.field_policy import mask_flags, tier_allowed  # F7 S1b：欄位遮蔽的旗標統一由欄位政策產生
 from modules.case.recognition import normalize_date  # `AC2`
 from modules.case import material_approval as MA   # 叫料審核（31-C）
 from modules.case import material_guard as MG
@@ -270,7 +270,7 @@ def get_material_orders(quote_no: str, authorization: str = Header(None)):
 
         data = json.loads(q["data_json"] or "{}")
         orders = data.get("caseRecord", {}).get("materialOrders", [])
-        if not mask_flags(user)["keep_orders"]:
+        if not tier_allowed("material_money", user):
             # CM13（2026-09-24 使用者裁示）：單價、小計、已付金額不回
             for o in orders:
                 for k in MATERIAL_ORDER_MONEY_KEYS:
