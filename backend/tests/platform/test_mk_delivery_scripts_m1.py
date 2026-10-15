@@ -72,12 +72,34 @@ def test_push_baseline_is_fast_forward_only_and_parameterised():
         M.render_push(54, G, "zz", "x")
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="沒有 bash")
+def _real_bash():
+    """找一支真的 POSIX bash：Windows 上 System32 的 bash.exe 是 WSL 啟動器（沒裝發行版就一律失敗），
+    CreateProcess 又先找 System32，所以不能直接用 "bash"。先 Git for Windows（git 旁的 bin/bash.exe），
+    再 PATH 上的 bash（必須 `bash -c true` 成功）。都找不到 ⇒ 回 None，由測試明確失敗（不跳過：跳過會削弱閘門）。"""
+    cands = []
+    git = shutil.which("git")
+    if git:
+        gd = Path(git).resolve().parent                    # …/Git/cmd 或 …/Git/bin
+        cands += [gd.parent / "bin" / "bash.exe", gd.parent / "usr" / "bin" / "bash.exe"]
+    cands.append(shutil.which("bash"))
+    for c in cands:
+        if not c or not Path(c).exists():
+            continue
+        try:
+            if subprocess.run([str(c), "-c", "true"], capture_output=True, timeout=20).returncode == 0:
+                return str(c)
+        except (OSError, subprocess.SubprocessError):
+            continue
+    return None
+
+
 def test_rendered_scripts_parse_with_bash(tmp_path):
+    bash = _real_bash()
+    assert bash, "找不到可用的 POSIX bash（Git for Windows 的 bash.exe 或 PATH 上能執行 `bash -c true` 的 bash）；此題不可跳過"
     for name, text in (("p.sh", _pub()), ("q.sh", M.render_push(54, G, OLD, "train/t54-int"))):
         f = tmp_path / name
         f.write_text(text, encoding="utf-8", newline="\n")
-        r = subprocess.run(["bash", "-n", name], cwd=str(tmp_path), capture_output=True, text=True)
+        r = subprocess.run([bash, "-n", name], cwd=str(tmp_path), capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
 
 
