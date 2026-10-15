@@ -5,6 +5,14 @@
 
 > 修正：我在 `reports/ui-coverage-20261016.md` 第 3 項把資源回收筒設定寫成「保留天數／啟用」，實際 `PUT /api/recycle-bin/settings` 只設**隔離目錄路徑**（`modules/recyclebin/api.py:172`）；保留天數是程式常數 `RB.RETENTION_DAYS=30`（`service.py:33`）。另外 `PUT /api/ledger/settings` 只有 `fiscal_year_start_month`（建年度後鎖死，`ledger_periods.py:87`），`PUT /api/ledger/roles` 才是角色→科目對應（`ledger_reports.py:179`）。以下以此為準。
 
+## PM 裁示（2026-10-16，r2 記錄）
+重新劃分已接受。**引擎只新增兩項**：`overhead.default_pct`（SO-S1）、`recycle_bin.retention_days`（SO-S2）。**不加任何引擎鉤子**。其餘落在各自既有頁面的面板：
+- 管銷口徑切換（ruleMode／charityMode）：維持 `PUT /api/overhead/settings`，面板放在設定中心的 `overhead` 群組說明區（唯讀狀態＋連結）或 `settlement.html` 既有位置——不重做切換流程。
+- 回收筒隔離目錄：面板放 `recycle-bin.html`（SO-S3 採案 1；案 2 不做）。
+- 總帳角色對應／起始月：`ledger-settings.html`（SO-S4）。
+- 提醒寄送失敗：`notification-settings.html`（SO-S5）。
+實作等 T65 出貨之後。
+
 ## 逐項適配判斷
 | 項目 | 資料形狀 | 適合設定中心？ | 建議落點 |
 |---|---|---|---|
@@ -32,7 +40,7 @@ PM 的原假設「四項都進設定中心群組」只有 A、B' 成立。其餘
 - 與使用者 10-10 裁示「僅超管復原、30 天、第一期 10 類單據」相容：預設仍 30。
 
 ## SO-S3 回收筒隔離目錄
-兩案（PM 擇一）：
+兩案（**PM 已裁示採案 1**，案 2 不做）：
 1. **面板放 `recycle-bin.html`**：頁面已是超管限定、已有 `status` 回傳 `dir/defaultDir`；新增表單呼叫既有 `PUT /api/recycle-bin/settings`。成本 S，零引擎改動。缺點：設定面分散。
 2. **引擎加 `precondition(values, conn)->[問題]` 鉤子**＋群組 `recycle_bin.dir`：成本 M（引擎改動屬 L1 契約，需升版、全部群組的守門重驗）。優點：一個設定面、版本帳本與還原。風險：還原到舊路徑可能指向已不存在的資料夾。
 建議案 1（路徑屬部署環境事實、不是政策；與 `storage-settings.html` 同類，後者也是專頁）。
@@ -58,7 +66,7 @@ PM 的原假設「四項都進設定中心群組」只有 A、B' 成立。其餘
 - F7 欄位政策：無直接相依；若 F7 加「受保護欄位確認期」群組，沿用同一 `confirm_period_days`。
 - T65 閘門：本片全部在 T65 之後。
 
-## 待 PM 裁示
-1. 範圍是否改寫為「A、B' 進設定中心；B 走面板；C/C'/D 走既有頁面」？
+## 待 PM 裁示（第 1 項已裁示：接受重新劃分）
+1. ~~範圍是否改寫為「A、B' 進設定中心；B 走面板；C/C'/D 走既有頁面」？~~ 已接受。
 2. 管銷％調低是否算放寬（需第二位超管）？
 3. 回收筒保留天數下限（建議 7）。
