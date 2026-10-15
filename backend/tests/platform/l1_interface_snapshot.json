@@ -815,6 +815,7 @@
    "CEILINGS": "const",
    "FAMILIES": "const",
    "FIELDS": "const",
+   "KINDS": "const",
    "api_keys": "def(group)",
    "by_id": "def(fid)",
    "export_problems": "def(registered)",
@@ -822,6 +823,12 @@
    "history_labels": "def()",
    "problems": "def()",
    "screen_problems": "def(points)"
+  },
+  "helper:field_policy": {
+   "mask_flags": "def(user)",
+   "tier_allowed": "def(ceiling, user)",
+   "visible": "def(field_id, user)",
+   "visible_many": "def(field_ids, user)"
   },
   "helper:finance_params": {
    "BAND_KEYS": "const",
