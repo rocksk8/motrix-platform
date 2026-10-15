@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <script src="../static/motrix-format.js"></script>
-  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat={num:function(x){try{return x==null?'':x.toLocaleString.apply(x,[])}catch(e){return String(x)}},money:function(x){return window.MotrixFormat.num(x)},date:function(d){try{return d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d){try{return d.toLocaleString('zh-TW')}catch(e){return String(d)}},status:function(v){return v}})</script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
@@ -855,7 +855,8 @@
         try {
           const tk = (this.session && this.session.token) || (JSON.parse(localStorage.getItem('motrix_session') || '{}').token)
           if (!tk) return
-          const g = await window.MotrixPublicFlags.read(['builder_layout'], { token: tk })
+          const g = await window.MotrixPublicFlags.read(['builder_layout', 'ui_format'], { token: tk })
+          if (window.MotrixFormat && window.MotrixFormat.apply) window.MotrixFormat.apply(g.ui_format)      // T64-B：旗標關 ⇒ 清掉快取（沒有額外請求）
           if (!g.builder_layout || g.builder_layout.quotations !== true) return
           const title = document.querySelector('.page-header__title')
           if (!title) return

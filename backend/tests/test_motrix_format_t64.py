@@ -106,8 +106,14 @@ def test_inline_fallback_in_every_migrated_page_prints_the_raw_value_when_the_sc
         code = ("global.window={};" + m.group(1) + ";const F=window.MotrixFormat;"
                 "const d=new Date(2026,0,5,3,4,5);"
                 "console.log(JSON.stringify([F.num(1234567),F.num(null),F.num({toLocaleString(){throw 1},toString(){return 'RAW'}}),"
-                "F.date(d)===d.toLocaleDateString('zh-TW'),F.dt(d,'full')===d.toLocaleString('zh-TW'),F.status('x')]))")
-        assert _node(code) == [expect, "", "RAW", True, True, "x"], name
+                "F.date(d)===d.toLocaleDateString('zh-TW'),F.dt(d,'plain')===d.toLocaleString('zh-TW'),F.status('x'),"
+                "F.date(null),F.dt(undefined,'full'),"
+                "F.dt(d,'short')===d.toLocaleString('zh-TW',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}),"
+                "F.dt(d,'full')===d.toLocaleString('zh-TW',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}),"
+                "F.dt(d,'sec')===d.toLocaleString('zh-TW',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}),"
+                "F.num(1234.56789,{locale:'en-US',maxFrac:4})===(1234.56789).toLocaleString('en-US',{maximumFractionDigits:4}),"
+                "typeof F.apply]))")
+        assert _node(code) == [expect, "", "RAW", True, True, "x", "", "", True, True, True, True, "function"], name
 
 
 def test_migrated_files_have_no_raw_tolocale_calls_and_the_lint_sees_them():
@@ -126,8 +132,48 @@ def test_every_migrated_page_loads_the_formatter_before_its_own_scripts():
 
 
 def test_ui_format_group_is_registered_with_defaults_equal_to_today():
+    from helpers import settings_groups  # noqa: F401  載入時登錄群組
     from helpers import settings_registry as SR
     g = SR.groups()["ui_format"]
     assert not g["sensitive"]
     got = {f["key"]: (f["default"], f["min"], f["max"]) for f in g["fields"]}
     assert got == {"enabled": (0, 0, 1), "thousands": (0, 0, 1), "decimals": (0, 0, 2), "date_style": (0, 0, 2)}
+
+
+@pytest.mark.skipif(not NODE, reason="需要 node")
+def test_raw_option_is_exempt_from_thousands_and_decimals_and_apply_follows_the_enabled_convention():
+    code = _PRE + """
+const out={};
+F._configure({thousands:'none',decimals:'2'});
+out.pct=F.num(87.5,{raw:true})===(87.5).toLocaleString();
+out.big=F.num(1234.5678,{locale:'en-US',maxFrac:4,raw:true})===(1234.5678).toLocaleString('en-US',{maximumFractionDigits:4});
+out.money=F.num(1234567);                                   // 非 raw：照設定
+const on=(g)=>{F.apply(g); return F._config();};
+out.off0=on({enabled:0,thousands:1,decimals:2,date_style:1});
+out.missing=on(undefined);
+out.one=on({enabled:1,thousands:1,decimals:2,date_style:2});
+out.tru=on({enabled:true,thousands:1,decimals:1,date_style:1});
+out.cache=localStorage.getItem('motrix_ui_format');
+F.apply({enabled:0}); out.cleared=localStorage.getItem('motrix_ui_format');
+console.log(JSON.stringify(out));"""
+    r = _node(code)
+    assert r["pct"] and r["big"] and r["money"] == "1234567.00"
+    # apply 只寫快取（設定在下次載入生效）：本頁的設定值不變
+    assert r["off0"] == r["missing"] == r["one"] == r["tru"] == {"thousands": "none", "decimals": "2", "dateStyle": "default"}
+    assert json.loads(r["cache"]) == {"thousands": "none", "decimals": "0", "dateStyle": "iso"} and r["cleared"] is None
+
+
+def test_raw_sites_formatter_is_request_free_and_pages_use_their_existing_read():
+    src = (FRONT / "static/motrix-format.js").read_text(encoding="utf-8")
+    assert "fetch(" not in src and "MotrixPublicFlags.read" not in src, "格式器不可自己發請求（旗標關 ⇒ 沒有額外請求）"
+    assert "init" not in re.findall(r"window\.MotrixFormat = \{.*?\}", src, re.S)[0]
+    exec_js = (FRONT / "js/case-management-exec.js").read_text(encoding="utf-8")
+    assert "MotrixFormat.num((total / 100), {raw: true})" in exec_js, "百分比不可套用金額格式"
+    assert "maxFrac: 4, raw: true" in (FRONT / "js/case-management-mchange.js").read_text(encoding="utf-8")
+    qf = page_file("quotation-form.html").read_text(encoding="utf-8")
+    assert "MotrixFormat.num(unit, {raw: true})" in qf and "MotrixFormat.num(d, {raw: true})" in qf
+    for name, needle in (("quotation-form.html", "'builder_stage_templates', 'ui_format']"), ("quotations.html", "['builder_layout', 'ui_format']"),
+                         ("case-management.html", "'builder_stage_templates', 'ui_format']")):
+        html = page_file(name).read_text(encoding="utf-8")
+        assert needle in html and "MotrixFormat.apply(g.ui_format)" in html, name
+        assert not re.search(r"read\(\['ui_format'\]", html), "%s：不可另發只讀 ui_format 的請求" % name

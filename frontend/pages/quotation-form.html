@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <script src="../static/motrix-format.js"></script>
-  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat={num:function(x){try{return x==null?'':x.toLocaleString.apply(x,[])}catch(e){return String(x)}},money:function(x){return window.MotrixFormat.num(x)},date:function(d){try{return d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d){try{return d.toLocaleString('zh-TW')}catch(e){return String(d)}},status:function(v){return v}})</script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
@@ -3800,7 +3800,7 @@
             for (const it of (d.items || [])) {
               const unit = Number(it.unitPrice) || (Number(it.qty) ? (Number(it.amount) || 0) / Number(it.qty) : 0)
               out.push({ key: d.id + ':' + it.id, unitPrice: MotrixLegalRound.halfUp(unit * 100) / 100,
-                         label: (d.vendorName || '承攬商') + '｜' + (it.description || '（無說明）') + '｜單價 ' + MotrixFormat.num(unit) })
+                         label: (d.vendorName || '承攬商') + '｜' + (it.description || '（無說明）') + '｜單價 ' + MotrixFormat.num(unit, {raw: true}) })
             }
           }
           this.vendorQuoteOpts = out
@@ -3817,7 +3817,7 @@
       vendorQuoteDiffText(item) {
         const d = this.vendorQuoteDiff(item)
         if (d === null || d === 0) return ''
-        return '與承攬商報價差 ' + (d > 0 ? '+' : '') + MotrixFormat.num(d) + ' 元（未稅，單價差 × 數量 ' + (item.qty || 0) + '）'
+        return '與承攬商報價差 ' + (d > 0 ? '+' : '') + MotrixFormat.num(d, {raw: true}) + ' 元（未稅，單價差 × 數量 ' + (item.qty || 0) + '）'
       },
       // 報價成本與所帶入承攬商報價的**總差額**（沒帶入 ⇒ null；一致 ⇒ 0）＝（成本單價 − 承攬商未稅單價）× 報價品項數量。
       // 口徑：報價單成本欄是未稅單位成本（毛利公式另外加 5% 不可扣抵進項稅），承攬商報價品項單價也是未稅（稅另在派工單稅率）⇒ 兩邊同為未稅，可直接相減。
@@ -4220,7 +4220,8 @@
           const tk = (this.session && this.session.token) || (JSON.parse(localStorage.getItem('motrix_session') || '{}').token)
           if (!tk) return
           // 一個共用的設定 GET 取得兩個旗標；某個群組讀不到時逐組退路（public-flags.js），不拖垮另一個
-          const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_stage_templates'], { token: tk })
+          const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_stage_templates', 'ui_format'], { token: tk })
+          if (window.MotrixFormat && window.MotrixFormat.apply) window.MotrixFormat.apply(g.ui_format)      // T64-B：旗標關 ⇒ 清掉快取（沒有額外請求）
           this._stFlag = !!(g.builder_stage_templates && Number(g.builder_stage_templates.enabled) === 1)   // S-ST2：開啟且有發布樣板 ⇒ 不自動建立預設階段
           // Q3：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）
           if (g.builder_custom_fields && g.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()

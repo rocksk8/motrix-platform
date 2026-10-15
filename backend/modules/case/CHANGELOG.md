@@ -1,7 +1,7 @@
 # 案件 更新紀錄
 
 ## (next) — 2026-10-15（wip/t64-slice-b-r1；T64 切片 B／D2：報價單／報價單清單／案件頁數字與日期改走共用格式器）
-- `pages/quotation-form.html`、`pages/quotations.html`、`pages/case-management.html` 與 `js/case-management-{dispatch,exec,fin,mchange,xexp}.js` 共 105 處 `toLocaleString()`／`toLocaleDateString('zh-TW')` 改呼叫 `static/motrix-format.js`（`MotrixFormat.num／date／dt`；`MotrixLegalRound.halfUp` 不動，格式器只印不算）。設定全預設時輸出逐字相同；格式器沒載入時頁面內嵌後備印原值。新增共用格式器的選項（千分位／固定小數位／日期樣式）待後續設定群組 `ui_format` 開放，目前不影響任何畫面。僅前端；無 migration、無新路由、無權限變更。
+- `pages/quotation-form.html`、`pages/quotations.html`、`pages/case-management.html` 與 `js/case-management-{dispatch,exec,fin,mchange,xexp}.js` 共 105 處 `toLocaleString()`／`toLocaleDateString('zh-TW')` 改呼叫 `static/motrix-format.js`（`MotrixFormat.num／date／dt`；`MotrixLegalRound.halfUp` 不動，格式器只管顯示）。設定全預設時輸出逐字相同；格式器沒載入時頁面內嵌後備印原值。百分比、多位小數單價與差額、變更紀錄的值一律不受格式選項影響（`{raw:true}`）。新增共用格式器的選項（千分位／固定小數位／日期樣式）待後續設定群組 `ui_format` 開放，目前不影響任何畫面。僅前端；無 migration、無新路由、無權限變更。
 
 ## 1.0.189 — 2026-10-15（wip/t63-fix-pf2-r1；T63 預檢修正：僅改寫法）
 - `api/quotations.py` 的案件批次匯出登記（`_ET.register_export(...)`）欄位清單改成不用 `**` 展開（守門『禁止 ** 傳參數』），內容逐項相同；無行為變更、無 migration、無新路由、無權限變更。

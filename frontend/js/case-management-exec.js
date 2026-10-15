@@ -684,7 +684,7 @@ window.CM_PARTS.push(() => ({
       const set = ss.filter(s => s.ratioBp !== null && s.ratioBp !== undefined)
       if (!set.length) return { warn: false, text: '收入比例未設定：權責口徑於全部階段完成的月份一次認列。' }
       const total = set.reduce((a, s) => a + s.ratioBp, 0)
-      const pct = MotrixFormat.num((total / 100))
+      const pct = MotrixFormat.num((total / 100), {raw: true})
       return total === 10000
         ? { warn: false, text: '收入比例合計 100%：各階段於完成月份依比例認列（未稅）。' }
         : { warn: true, text: '收入比例合計 ' + pct + '%，不等於 100%：報表照比例認列、不補差，並列入待補登。' }

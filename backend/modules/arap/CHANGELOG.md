@@ -1,7 +1,7 @@
 # 應收應付 更新紀錄
 
 ## (next) — 2026-10-15（wip/t64-slice-b-r1；T64 切片 B／D2：出納頁數字改走共用格式器）
-- `pages/cashier.html`、`js/cashier.js` 的 3 處 `toLocaleString()` 改呼叫 `static/motrix-format.js` 的 `MotrixFormat.num()`（設定全預設時輸出逐字相同；格式器沒載入時頁面內嵌後備印原值）。僅前端；無 migration、無新路由、無權限變更。
+- `pages/cashier.html`、`js/cashier.js` 的 3 處 `toLocaleString()` 改呼叫 `static/motrix-format.js` 的 `MotrixFormat.num()`（設定全預設時輸出逐字相同；格式器沒載入時頁面內嵌後備印原值，含日期與時間格式）。僅前端；無 migration、無新路由、無權限變更。
 
 ## 1.0.56 — 2026-10-15（wip/t63-export-cols-r1＋wip/t63-pay-stage-src-r1；T63 出納執行紀錄匯出可選工作表／請款單款項類別代碼單一來源）
 - 出納執行紀錄下載（`GET /api/cashier/export`，Excel 與 PDF 姊妹）登記為可自訂匯出 `arap:cashier-history`（T63，工作表型）：最高管理者可在設定中心「自訂匯出」（旗標**預設關閉**）選要哪幾張明細工作表（已匯款明細必選；加回含金額的工作表屬放寬，治理開啟時需第二位最高管理者核准）。讀不到設定時只輸出必選工作表；獎金發放表仍只在有獎金檢視權時才產生。關閉或沒有已發布範本時輸出逐位元相同。無 migration、無新路由、無權限變更。

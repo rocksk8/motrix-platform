@@ -11,8 +11,10 @@
  *   thousands : 'default' | 'none'          千分位（none ⇒ 不加逗號）
  *   decimals  : 'default' | '0' | '2'       固定小數位（只套在 num／money，不改被格式化的數值本身；四捨五入仍是 MotrixLegalRound.halfUp 的事）
  *   dateStyle : 'default' | 'iso' | 'slash' 日期（default ⇒ zh-TW；iso ⇒ YYYY-MM-DD；slash ⇒ YYYY/MM/DD）
- * 設定在頁面載入時從 localStorage 快取同步取得，`init()` 再讀一次公開設定並更新快取（下次載入生效；本頁不重畫）。
+ * 設定在頁面載入時從 localStorage 快取同步取得；頁面用自己原本的公開設定請求取得 `ui_format` 後呼叫 `apply(group)` 更新快取（下次載入生效；本頁不重畫；本檔不自己發請求）。
+ * `num(x, {raw:true})`：不受千分位／小數位設定影響（百分比、多位小數的單價與差額、變更紀錄的值）。
  * 輸入值是 null／undefined ⇒ 回空字串（過去會丟 TypeError，畫面等同空白）；格式化途中出錯 ⇒ 回原值的字串（絕不空白）。永不丟例外。
+ * 本檔只決定怎麼『印』：儲存的值與法定四捨五入（MotrixLegalRound.halfUp）不在這裡，也不會被改變；選項只影響畫面顯示。
  */
 ;(function () {
   var KEY = 'motrix_ui_format'
@@ -49,7 +51,7 @@
     if (x == null) return ''
     try {
       opt = opt || {}
-      if (isDefaultNum() || typeof x !== 'number' && typeof x !== 'bigint') {
+      if (opt.raw || isDefaultNum() || typeof x !== 'number' && typeof x !== 'bigint') {
         return opt.locale || opt.maxFrac != null
           ? x.toLocaleString(opt.locale, opt.maxFrac != null ? { maximumFractionDigits: opt.maxFrac } : undefined)
           : x.toLocaleString()
@@ -78,12 +80,11 @@
 
   function status(v) { return Object.prototype.hasOwnProperty.call(labels, v) ? labels[v] : v }
 
-  async function init() {
+  // 頁面用自己原本的公開設定請求（名單多加 'ui_format'）取得群組後呼叫；**不自己發請求**（旗標關＝沒有任何額外請求）。
+  // 慣例：enabled 為 true 或 1 才算開；其他（含沒有這個群組）⇒ 清掉快取、回到預設。本頁已畫的內容不重畫，下次載入生效。
+  function apply(grp) {
     try {
-      if (!window.MotrixPublicFlags) return
-      var g = await window.MotrixPublicFlags.read(['ui_format'])
-      var grp = (g || {}).ui_format
-      if (!grp || grp.enabled !== 1) { localStorage.removeItem(KEY); return }
+      if (!grp || !(grp.enabled === true || grp.enabled === 1)) { localStorage.removeItem(KEY); return }
       var pick = function (v, names) { return names[v] != null ? names[v] : 'default' }   // 設定中心存整數：0＝照目前
       localStorage.setItem(KEY, JSON.stringify(clean({
         thousands: pick(grp.thousands, { 1: 'none' }),
@@ -93,10 +94,8 @@
     } catch (e) { /* 讀不到 ⇒ 維持目前設定 */ }
   }
 
-  try { window.addEventListener('load', function () { init() }) } catch (e) { /* 非瀏覽器環境（測試） */ }
-
   window.MotrixFormat = {
-    num: num, money: num, date: date, dt: dt, status: status, init: init,
+    num: num, money: num, date: date, dt: dt, status: status, apply: apply,
     setStatusLabels: function (m) { labels = m && typeof m === 'object' ? m : {} },
     _config: function () { return Object.assign({}, cfg) },
     _configure: function (raw) { cfg = clean(raw) }            // 測試用
