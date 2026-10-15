@@ -4,6 +4,26 @@
 > User ruling: each user may set list columns, default sort, default page size and rows-per-page, **inside a company-allowed range**. Amount columns may only be **hidden / reordered, never exposed**. Framework-first: no hardcoded lists/columns/ranges; modules register, admins configure.
 > Related: `T64-F7-FIELD-POLICY-DESIGN.md` (§2 catalog, §3 policy, §11 protected tier), `T63-EXPORT-COLUMNS-DESIGN.md` (same "can only subtract" pattern), `T61-S6-ACTION-CATALOG-DESIGN.md` (registry+kind pattern), `helpers/settings_registry.py`, `core/definitions.py`.
 
+## Revision 2026-10-16 (L2) — supersedes §1.3, §2 and §3 where they conflict
+
+Found while implementing L2: **a per-user list-preference feature already exists** and is used in production.
+- Table `user_list_prefs(username, list_key, sort_mode, sort_dir, custom_order, updated_at)` (`db.py::_m056_user_list_prefs`) and routes `GET/PUT /api/list-prefs/{list_key}` (`routers/list_prefs.py`), consumed by `list-sort.js`, system-hub, dev-crm and the P9 layout engine.
+- The layout engine (`frontend/static/layout-runtime.js`, `custom-layout.js`) already implements the **personal column layer**: key `layout-cols.<module>.<list>`, `sortMode='columns'`, `customOrder` = column keys in order with a `-` prefix for hidden; upper layers (company/role `layout` kind) bound it, core columns can't be hidden.
+
+Decision (PM, 2026-10-16): **one source of truth, no parallel column layer.**
+1. The layout engine + `user_list_prefs` stay the owner of personal column hide/reorder and sort. T66 does **not** copy them.
+2. T66 adds only: (a) **per-user page size** (`user_list_view_prefs`, one row per user+list, `prefs_json={"v":1,"pageSize":N}`); (b) the **company policy** `list_pref_policy` as a filter/clamp applied *on top of* the layout-engine output; (c) the **F7 money-column rules** (hide/reorder only, never added back; sort only on visible, allowed columns).
+3. Names (no collision): table `user_list_view_prefs` (core migration, registered `NEXT`; has `owner_unit_id INTEGER NOT NULL DEFAULT 1` to satisfy the unit-scope guard); routes `/api/list-views` and `/api/list-views/{list_id}` (GET/PUT/DELETE); helper `helpers/list_view_prefs.py`; router `routers/list_view_prefs.py`. Old route/table untouched.
+4. What the API returns is therefore the **constraint set**, not a column preference: `columns[]` (only columns that pass F7 ∩ policy; `money`, `pinned`, `defaultVisible`, `canShow`), `sort{allowed, default}`, `pageSize{value, source, options}`, `custom`, `etag`. Money columns that are not visible by default are **not listed at all** (never exposed, existence not confirmed). The client (or a later server-side caller) applies `clamp_columns()` / `clamp_sort()` to what the layout engine produced: unlisted columns dropped, pinned/required forced visible, `canShow=false` columns forced hidden, sort restricted to allowed+visible columns.
+5. `PUT /api/list-views/{list_id}` body is `{"pageSize": N}` only (unknown keys 422); `If-Match` etag; 403 when the company policy disallows personal settings; flag off ⇒ 404 on all four routes. `DELETE` resets to the company default.
+
+## Migration question (not now): fold the old table in later?
+Options for a later slice, **no decision requested now**:
+- **A. Keep two tables forever.** `user_list_prefs` = presentation (sort/columns, opaque key); `user_list_view_prefs` = bounded, policy-checked settings. Cost: two places to look; benefit: zero migration risk.
+- **B. Fold column/sort into T66.** One-time migration of `layout-cols.*` rows (`customOrder` with `-` prefix) into a typed `prefs_json` (`hidden/order/sort`), layout engine reads via `/api/list-views`, old route kept as a read-only shim for one release. Cost: touches P9 runtime + 4 frontend files + a data migration; benefit: server-side validation of personal columns (today the client alone decides what is hidden; harmless for money because masking is server-side, but policy `pinned/allowed` is only enforced by `clamp_*`).
+- **C. Fold T66 into the old table** (add `page_size` column). Rejected: opaque `list_key` has no list catalog, no etag, and mixes unrelated keys (system-hub recents).
+Recommendation: A now, revisit B only if a list needs server-side column enforcement (e.g. a policy `pinned` column that must not be hideable via a hand-crafted request).
+
 ## 0. Summary
 
 1. **Three layers, each reusing an existing mechanism; one new table only for the per-user values.**
@@ -48,6 +68,8 @@ Resolution: `definitions.resolve(conn,"list_pref_policy",list_id,role)` → fall
 - Setting-center group `list_prefs` (settings_registry) holds only the flag and one number: `max_saved_lists_per_user` (default 200, clamp), both `risk=ops`. The *range* lives in the policy kind, not in settings (ranges are structured data, versioning/diff wanted).
 
 ### 1.3 Per-user values: new table, not a definition
+
+> **Superseded by the L2 revision above**: table name is `user_list_view_prefs`; it stores only `pageSize` (columns/sort stay in `user_list_prefs`). The reasons for not using definitions scope `user:*` below still hold.
 `definitions` scope regex is `company|role:*`; adding `user:*` would create a version row + validator + submission machinery **per click** for thousands of tiny, self-service, non-governed writes, and `list_definitions` would scan them. So:
 ```
 CREATE TABLE IF NOT EXISTS user_list_prefs (
@@ -60,6 +82,8 @@ CREATE TABLE IF NOT EXISTS user_list_prefs (
 - Not in the recycle bin / not a business record; included in user-deletion cleanup and in the account-export for the user (privacy).
 
 ## 2. Effective-view algorithm (single function `list_prefs.effective(conn, user, list_id)`; never raises)
+
+> **Superseded in part**: the column order/hide/show and sort are computed by the layout engine; this function becomes `constraints()` + `clamp_columns()/clamp_sort()` (see revision). Order of precedence is unchanged: F7 ∩ company policy ∩ personal choice.
 
 ```
 cols  = catalog.columns
@@ -76,6 +100,8 @@ pageSize = user.pageSize if ∈ policy.allowed else policy.default (≤ ceiling)
 Rules: unknown ids dropped silently; new columns shipped later appear per policy default (not auto-shown if `defaultHidden`); any exception ⇒ return catalog/policy defaults (flag-off shape). Response includes `source` per setting (`user|policy|default`) and `clamped:[...]` so UI can say "your setting was adjusted by company policy".
 
 ## 3. API (new router `routers/list_prefs.py`, all behind flag; auth = logged-in user, own prefs only)
+
+> **Superseded by the L2 revision above**: routes are `/api/list-views[/{list_id}]`; PUT stores only `pageSize`; GET returns constraints. The admin read and `max_saved_lists_per_user` are dropped (nothing unbounded to cap).
 | Method + path | Purpose |
 |---|---|
 | `GET /api/list-prefs/{list_id}` | Effective view + the *choosable* range (allowed columns with `locked/money/pinned` marks, pageSize menu, sortable cols) + `etag`. Body contains **no column the viewer cannot see** (F7-filtered before serialization). |
@@ -101,6 +127,8 @@ Rules: unknown ids dropped silently; new columns shipped later appear per policy
 9. **Org-unit dimension (F7 §12)**: not used in v1; `effective()` takes a `viewer` object so units can be added to F7 without touching prefs.
 
 ## 5. Company-level settings screen (settings center → "Lists"), top-admin only
+
+> L2 note: the card edits `list_pref_policy` (column allowed/pinned/defaultHidden, sort, page sizes, allowUserPrefs) which now acts as a clamp on the layout-engine output; usage counts come from `user_list_view_prefs` (page size) only — column customizations live in `user_list_prefs` and are counted there if wanted.
 Plain-language per-list card: "Which columns may people use? (checkbox list, money ones tagged 'amount — hide/reorder only')", "Page sizes people may pick", "Default sort", "Let people customize this list (on/off)". Preview: "N users currently customized; this change would reset M of them" (counts via `user_list_prefs`, no names). Writes through the definition draft→publish pipeline (loosening ⇒ second approver). Zero technical jargon (CORE-SPEC zero-tech-barrier).
 
 ## 6. Slices (each independently shippable; flag OFF = zero change)
