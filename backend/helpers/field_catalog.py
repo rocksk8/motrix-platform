@@ -3,14 +3,16 @@
 
 [單位] helper:field_catalog    [層] L1    [穩定度] 實驗（唯讀登記；沒有旗標、沒有路由、沒有資料表）
 [公開介面] API_GROUPS, CEILINGS, FAMILIES, FIELDS, api_keys, by_id, export_problems, fields, history_labels, problems, screen_problems
-[不變式] ①純資料＋純函式，不 import 任何其他模組（`financial_mask` 反過來從這裡取鍵名，不可形成環）。
+[不變式] ①純資料＋純函式，只 import 標準函式庫 `types`（`financial_mask` 反過來從這裡取鍵名，不可形成環）。
     ②`financial_mask` 的 6 份金額鍵清單由本目錄衍生，鍵名與順序與切片前逐字相同（守門：tests/platform/test_field_catalog_t64.py 內寫死今天的清單）。
     ③匯出的金額欄位／工作表與版面的欄位點由本目錄登記並與真實登記表互相核對（兩個方向都驗）；S0 只核對，不改它們的登記方式。
     ④`ceiling` 是**登記值**（說明這個欄位今天由哪一種後端遮蔽把關），S0 不用它做任何判斷；S1 才用出口矩陣金標驗證它與實際出口一致。
-    ⑤欄位 `id` 發布後不改名（之後的政策會引用它）；改名＝新增一筆＋舊的停用。
+    ⑤`FIELDS` 是唯讀的：每筆是 `MappingProxyType`、內容全是不可變型別（元組／字串）；`fields()`／`by_id()` 回傳複本。
+    ⑥欄位 `id` 發布後不改名（之後的政策會引用它）；改名＝新增一筆＋舊的停用。
 設計：docs/platform/plans/T64-F7-FIELD-POLICY-DESIGN.md §2、§8 S0。
 [契約題] backend/tests/platform/test_field_catalog_t64.py
 """
+from types import MappingProxyType
 
 #: 家族：同一家族一起判斷（成本藏了、毛利露出來＝可以反推成本）。
 FAMILIES = ("cost", "margin", "price", "payment")
@@ -22,9 +24,9 @@ API_GROUPS = ("quotation_cols", "quote_item", "quote_top", "payment", "material_
 
 
 def _f(fid, label, family, ceiling, api=None, history=None, derived_from=(), screen=(), export=None):
-    return {"id": fid, "label": label, "family": family, "moneyClass": "money", "ceiling": ceiling,
-            "api": api, "history": tuple(history or ()), "derivedFrom": tuple(derived_from),
-            "screen": tuple(screen), "export": export}
+    return MappingProxyType({"id": fid, "label": label, "family": family, "moneyClass": "money", "ceiling": ceiling,
+                             "api": api, "history": tuple(history or ()), "derivedFrom": tuple(derived_from),
+                             "screen": tuple(screen), "export": export})
 
 
 def _sheet(export_id, sheet_id, label, ceiling):

@@ -100,3 +100,14 @@ def test_returned_fields_are_copies():
     a[0]["api"] = None
     assert FC.fields()[0]["label"] == "含稅總額" and FC.api_keys("quotation_cols") == TODAY_QUOTATION_MONEY_COLS
     assert FC.by_id("nope") is None and FC.by_id("quote_item.cost")["family"] == "cost"
+
+
+def test_the_catalog_is_frozen():
+    import pytest
+    assert isinstance(FC.FIELDS, tuple)
+    for f in FC.FIELDS:
+        with pytest.raises(TypeError):
+            f["label"] = "被改了"
+        for v in f.values():
+            assert not isinstance(v, (list, dict, set)), f["id"]
+    assert FC.by_id("quote_item.cost")["label"] == "品項成本"
