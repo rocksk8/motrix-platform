@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-15（wip/t64-fix-pf2-r1：T64 預檢修正）
+## 1.141 — 2026-10-15（wip/t64-fix-pf2-r1：T64 預檢修正）
 - 只改文字與登記，無行為變更：`helpers/field_catalog` 叫料體系四個欄位的白話名稱改用「材料申請」（全站用字守門）；`helpers/notify_actions` 單位卡 [公開介面] 補上六個已公開的名稱；`docs/platform/modules.json` 補登 `js:static/notify-action-editor.js` 歸屬。
 
 ## 1.140 — 2026-10-15（wip/t64-slice-a-r1：T64 A 利潤顏色門檻／報價單預設有效天數）

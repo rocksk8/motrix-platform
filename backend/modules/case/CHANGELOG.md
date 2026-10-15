@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-15（wip/t64-fix-pf1-r1；T64 預檢修正：報價單清單不讀 ui_format）
+## 1.0.191 — 2026-10-15（wip/t64-fix-pf1-r1；T64 預檢修正：報價單清單不讀 ui_format）
 - `pages/quotations.html` 取消對公開設定 `ui_format` 的讀取（維持原本單一群組 `builder_layout` 的請求，旗標關或讀不到時請求數與過去相同）；格式選項靠報價單／案件頁讀到後寫入的本機快取生效。畫面預設輸出不變。無 migration、無新路由、無權限變更。
 
 ## 1.0.190 — 2026-10-15（wip/t64-slice-a-r1；T64 A）
