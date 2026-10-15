@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
+## (next) — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器；報價單表單 V3.28）
 - `pages/quotation-form.html` 三處 `toLocaleTimeString` 改呼叫 `MotrixFormat.dt(d, {hour,minute})`，並更新內嵌後備（接受選項物件）；輸出逐字相同；`FORM_VERSION` V3.27→V3.28（報價單表單內容有變就要升版，守門已登記）。
 
 ## 1.0.193 — 2026-10-15（wip/t64-fix-g4-r1；T64 閘門修正 g4）
