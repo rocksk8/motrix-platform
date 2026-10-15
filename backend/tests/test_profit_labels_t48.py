@@ -27,7 +27,7 @@ HISTORICAL_COMMENTS = {
     "backend/helpers/profit_rules.py": "ab：docstring「營業利益（舊稱淨利）」",
     "backend/db.py": "bonus_case_awards DDL 註解（凍住的歷史）",
     "backend/routers/system.py": "舊設計說明註解",
-    "backend/helpers/financial_mask.py": "修改紀錄欄位名稱：舊紀錄存「淨利率」，新舊並列（test_history_labels_keep_old_and_new）",
+    "backend/helpers/field_catalog.py": "修改紀錄欄位名稱（T64 F7 S0 由 financial_mask 搬來）：舊紀錄存「淨利率」，新舊並列（test_history_labels_keep_old_and_new）",
     "backend/modules/case/api/quotations.py": "改名註解（舊紀錄存「淨利率」）",
 }
 

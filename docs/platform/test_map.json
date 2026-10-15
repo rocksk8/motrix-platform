@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1407,
+  "tests": 1408,
   "unmapped": 13,
   "kinds": {
    "api": 781,
    "e2e": 309,
-   "audit": 185,
+   "audit": 186,
    "unit": 132
   },
   "routes": 852
@@ -18760,6 +18760,45 @@
     ]
    }
   },
+  "backend/tests/platform/test_field_catalog_t64.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/modules/case/module.json",
+    "helper:clause_titles",
+    "helper:export_templates",
+    "helper:field_catalog",
+    "helper:financial_mask",
+    "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
+    "mod:arap/api/invoice_vouchers",
+    "mod:case/api/quotations",
+    "mod:case/completion_pdf",
+    "mod:daily_tasks/api",
+    "mod:subcontract/api/contractors"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/clause_titles.py",
+     "backend/helpers/export_templates.py",
+     "backend/helpers/field_catalog.py",
+     "backend/helpers/financial_mask.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/completion_pdf.py",
+     "backend/modules/daily_tasks/api.py",
+     "backend/modules/subcontract/api/contractors.py"
+    ],
+    "path": [
+     "backend/modules/case/",
+     "backend/modules/case/module.json"
+    ]
+   }
+  },
   "backend/tests/platform/test_file_open_ratchet_2026_09_30.py": {
    "kind": "audit",
    "units": [
@@ -35589,6 +35628,7 @@
     "dir:backend/modules/accounting/",
     "file:backend/data/account_items_112.json",
     "file:backend/data/profit_labels_t48.json",
+    "helper:field_catalog",
     "helper:financial_mask",
     "helper:legal_params",
     "helper:profit_rules",
@@ -35615,7 +35655,7 @@
      "backend/data/account_items_112.json",
      "backend/data/profit_labels_t48.json",
      "backend/db.py",
-     "backend/helpers/financial_mask.py",
+     "backend/helpers/field_catalog.py",
      "backend/helpers/legal_params.py",
      "backend/helpers/profit_rules.py",
      "backend/modules/accounting/",

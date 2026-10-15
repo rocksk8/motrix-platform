@@ -1,5 +1,8 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-15（wip/t64-f7-s0-r1；T64 切片 D／F7 S0：共用欄位目錄，只登記、不改行為）
+- L1（只增）：新檔 `helpers/field_catalog.py`——共用欄位目錄（唯讀登記：欄位代號、白話名稱、家族、金額等級、天花板、API 鍵名、版面欄位點、匯出欄位／工作表參照）與核對函式 `export_problems`／`screen_problems`／`problems`。`helpers/financial_mask.py` 的 6 份金額清單（`QUOTATION_MONEY_COLS`、`ITEM_MONEY_KEYS`、`QUOTE_MONEY_KEYS`、`PAYMENT_MONEY_KEYS`、`MATERIAL_ORDER_MONEY_KEYS`、`HISTORY_MONEY_FIELDS`）改由目錄衍生，鍵名、順序與型別與切片前逐字相同（守門測試寫死今天的字面值）。無旗標、無新路由、無 migration、無權限變更；行為與今天相同。設計 `docs/platform/plans/T64-F7-FIELD-POLICY-DESIGN.md`；測試 `tests/platform/test_field_catalog_t64.py`。
+
 ## 1.139 — 2026-10-15（wip/t63-fix-pf2-r1；T63 預檢修正：L1 讀 quotations 一律經 case_access）
 - L1（只增）：`helpers/case_access` 新增 `case_data_json()`、`case_owner_username()`、`case_row_for_access()`、`case_data_json_rows()`（皆唯讀、原樣丟資料庫錯誤）。`helpers/builtin_fields`、`helpers/notify_actions`、`helpers/settings_groups_q0` 原本直接 SELECT quotations，改走這四個函式；行為與回傳內容不變。`notify_actions._link` 改用 `string.Formatter().vformat`（去掉 `**` 呼叫，語意相同）。無 migration、無新路由、無權限變更。
 
