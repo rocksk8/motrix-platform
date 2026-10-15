@@ -1,5 +1,8 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-15（wip/t64-slice-b-r1；T64 切片 B／D2：設定群組 `ui_format`）
+- 設定中心新群組 `ui_format`（非敏感、公開可讀）：`enabled`（預設 0＝關）、`thousands`、`decimals`、`date_style`（皆預設 0＝照目前）。前端共用格式器 `static/motrix-format.js` 只在 `enabled=1` 時讀這四項（整數 0＝照目前），旗標關／讀不到／值不認得 ⇒ 與今天逐字相同的輸出。純顯示：不改金額計算與四捨五入、儲存的值、PDF、匯出。`tests/platform/settings_deploy_baseline.json` 文字插入新群組。無 migration、無新路由、無權限變更。
+
 ## 1.139 — 2026-10-15（wip/t63-fix-pf2-r1；T63 預檢修正：L1 讀 quotations 一律經 case_access）
 - L1（只增）：`helpers/case_access` 新增 `case_data_json()`、`case_owner_username()`、`case_row_for_access()`、`case_data_json_rows()`（皆唯讀、原樣丟資料庫錯誤）。`helpers/builtin_fields`、`helpers/notify_actions`、`helpers/settings_groups_q0` 原本直接 SELECT quotations，改走這四個函式；行為與回傳內容不變。`notify_actions._link` 改用 `string.Formatter().vformat`（去掉 `**` 呼叫，語意相同）。無 migration、無新路由、無權限變更。
 

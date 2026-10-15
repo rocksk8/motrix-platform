@@ -123,3 +123,11 @@ def test_every_migrated_page_loads_the_formatter_before_its_own_scripts():
         html = page_file(name).read_text(encoding="utf-8")
         first_script = html.index("<script")
         assert html.index("static/motrix-format.js") - first_script < 50, "%s：格式器應是 head 的第一支 script" % name
+
+
+def test_ui_format_group_is_registered_with_defaults_equal_to_today():
+    from helpers import settings_registry as SR
+    g = SR.groups()["ui_format"]
+    assert not g["sensitive"]
+    got = {f["key"]: (f["default"], f["min"], f["max"]) for f in g["fields"]}
+    assert got == {"enabled": (0, 0, 1), "thousands": (0, 0, 1), "decimals": (0, 0, 2), "date_style": (0, 0, 2)}

@@ -7,7 +7,7 @@
  *   MotrixFormat.dt(d, 'plain'|'full'|'short'|'sec') ⇒ d.toLocaleString('zh-TW'[, 四種既有選項之一])
  *   MotrixFormat.status(v)              ⇒ 預設原值；有 setStatusLabels(map) 才換顯示名（邏輯一律用原值）
  *
- * 設定（設定中心群組 ui_format，**全部預設＝今天的輸出**；讀不到／旗標關／值不認得 ⇒ 預設）：
+ * 設定（設定中心群組 ui_format：enabled／thousands／decimals／date_style 皆整數、0＝照目前；**全部預設＝今天的輸出**；讀不到／旗標關／值不認得 ⇒ 預設）。下面是格式器內部的字串寫法：
  *   thousands : 'default' | 'none'          千分位（none ⇒ 不加逗號）
  *   decimals  : 'default' | '0' | '2'       固定小數位（只套在 num／money，不改被格式化的數值本身；四捨五入仍是 MotrixLegalRound.halfUp 的事）
  *   dateStyle : 'default' | 'iso' | 'slash' 日期（default ⇒ zh-TW；iso ⇒ YYYY-MM-DD；slash ⇒ YYYY/MM/DD）
@@ -84,7 +84,12 @@
       var g = await window.MotrixPublicFlags.read(['ui_format'])
       var grp = (g || {}).ui_format
       if (!grp || grp.enabled !== 1) { localStorage.removeItem(KEY); return }
-      localStorage.setItem(KEY, JSON.stringify(clean(grp)))
+      var pick = function (v, names) { return names[v] != null ? names[v] : 'default' }   // 設定中心存整數：0＝照目前
+      localStorage.setItem(KEY, JSON.stringify(clean({
+        thousands: pick(grp.thousands, { 1: 'none' }),
+        decimals: pick(grp.decimals, { 1: '0', 2: '2' }),
+        dateStyle: pick(grp.date_style, { 1: 'iso', 2: 'slash' })
+      })))
     } catch (e) { /* 讀不到 ⇒ 維持目前設定 */ }
   }
 

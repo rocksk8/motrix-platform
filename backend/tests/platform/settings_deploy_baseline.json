@@ -318,6 +318,7 @@
    ]
   },
   "quote_output": {"hidden_terms_pdf_mode": [0, 0, 1, false]},
+  "ui_format": {"enabled": [0, 0, 1, false], "thousands": [0, 0, 1, false], "decimals": [0, 0, 2, false], "date_style": [0, 0, 2, false]},
   "quote_privacy": {"contact_email_hideable": [1, 0, 1, false], "contact_fax_hideable": [1, 0, 1, false]},
   "quote_approval": {"min_item_margin_pct": [30, 0, 100, false], "max_valid_days": [30, 1, 365, false], "discount_review_above": [0, 0, 100000000, false]},
   "builder_option_lists": {"enabled": [0, 0, 1, false]},
