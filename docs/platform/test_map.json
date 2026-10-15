@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1413,
+  "tests": 1412,
   "unmapped": 13,
   "kinds": {
    "api": 782,
    "e2e": 309,
    "audit": 189,
-   "unit": 133
+   "unit": 132
   },
   "routes": 853
  },
@@ -18800,25 +18800,6 @@
     "path": [
      "backend/modules/case/",
      "backend/modules/case/module.json"
-    ]
-   }
-  },
-  "backend/tests/platform/test_field_policy_t65.py": {
-   "kind": "unit",
-   "units": [
-    "file:backend/helpers/__init__.py",
-    "helper:auth",
-    "helper:field_catalog",
-    "helper:field_policy",
-    "helper:financial_mask"
-   ],
-   "evidence": {
-    "import": [
-     "backend/helpers/__init__.py",
-     "backend/helpers/auth.py",
-     "backend/helpers/field_catalog.py",
-     "backend/helpers/field_policy.py",
-     "backend/helpers/financial_mask.py"
     ]
    }
   },

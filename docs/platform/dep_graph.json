@@ -1182,21 +1182,6 @@
    "tables_r": [],
    "tables_w": []
   },
-  "helper:field_policy": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "helper:auth",
-    "helper:field_catalog",
-    "helper:financial_mask"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/field_policy.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_w": []
-  },
   "helper:finance_params": {
    "api_prefixes": [],
    "dynamic_sql": false,
