@@ -184,6 +184,40 @@
               @click="toggleSortDir()" title="切換正序/倒序">
         <span x-text="sortPref.sortDir === 'asc' ? '↑ 由小到大' : '↓ 由大到小'"></span>
       </button>
+      <button class="action-btn action-btn--ghost" x-show="lvAny" x-cloak data-testid="lv-toggle" @click="lvOpen = !lvOpen" title="自訂欄位、預設頁籤、每頁筆數（只影響你自己）">檢視設定</button>
+    </div>
+
+    <!-- T65 C1：個人檢視設定（設定中心 list_view 開啟才出現；只能在公司允許的範圍內調整，金額欄位只能隱藏或調順序） -->
+    <div class="panel" x-show="lvAny && lvOpen" x-cloak data-testid="lv-panel" style="padding:12px 14px;margin-bottom:12px;font-size:12px">
+      <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+        <label x-show="lvOn.tab">預設頁籤
+          <select class="search-input" x-model="pv.tab" style="max-width:140px;margin-left:6px">
+            <option value="">進行中（預設）</option>
+            <template x-for="t in tabs.filter(t => t.key !== 'all')" :key="t.key"><option :value="t.key" x-text="t.label"></option></template>
+          </select>
+        </label>
+        <label x-show="lvOn.size">每頁筆數
+          <select class="search-input" :value="pv.size" @change="pv = { ...pv, size: parseInt($event.target.value, 10) || 0 }" style="max-width:120px;margin-left:6px">
+            <option value="0">全部（預設）</option>
+            <template x-for="n in [25, 50, 100, 200]" :key="n"><option :value="n" x-text="n + ' 筆'"></option></template>
+          </select>
+        </label>
+        <div x-show="lvOn.columns" style="min-width:260px">
+          <div style="font-weight:600;margin-bottom:4px">欄位（勾選＝顯示；報價單號、客戶名稱、狀態、案件進度固定顯示）</div>
+          <template x-for="k in lvCols()" :key="k">
+            <div style="display:flex;align-items:center;gap:8px;padding:2px 0">
+              <input type="checkbox" :checked="!pv.hidden.includes(k)" :disabled="['quoteNo','customer','status','dealTag'].includes(k)" @change="lvToggle(k)">
+              <span style="min-width:110px" x-text="cLabel(k, LV_LABELS[k])"></span>
+              <button type="button" class="action-btn action-btn--ghost" style="padding:0 6px" @click="lvMove(k, -1)" title="上移">↑</button>
+              <button type="button" class="action-btn action-btn--ghost" style="padding:0 6px" @click="lvMove(k, 1)" title="下移">↓</button>
+            </div>
+          </template>
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <button class="action-btn action-btn--primary" data-testid="lv-save" @click="lvSave(false)">儲存</button>
+        <button class="action-btn action-btn--ghost" @click="lvSave(true)">還原預設</button>
+      </div>
     </div>
 
     <!-- ── 生命週期壓力帶（2026-09-14，比照簽核佇列的跑道）────────────────
@@ -228,16 +262,16 @@
         <thead>
           <tr>
             <th x-show="sortPref.sortMode === 'custom'" style="width:24px"></th>
-            <th x-show="cShown('quoteNo')"><span x-text="cLabel('quoteNo', '報價單號')">報價單號</span></th>
-            <th x-show="cShown('customer')"><span x-text="cLabel('customer', '客戶名稱')">客戶名稱</span></th>
-            <th x-show="cShown('project')"><span x-text="cLabel('project', '案件名稱')">案件名稱</span></th>
-            <th x-show="cShown('amount')" style="text-align:right"><span x-text="cLabel('amount', '金額（含稅）')">金額（含稅）</span></th>
-            <th x-show="cShown('margin')" style="text-align:right"><span x-text="cLabel('margin', '毛利率')">毛利率</span></th>
-            <th x-show="cShown('validDays')"><span x-text="cLabel('validDays', '有效天數')">有效天數</span></th>
-            <th x-show="cShown('filler')"><span x-text="cLabel('filler', '填單人')">填單人</span></th>
-            <th x-show="cShown('status')"><span x-text="cLabel('status', '狀態')">狀態</span></th>
-            <th x-show="cShown('dealTag')"><span x-text="cLabel('dealTag', '案件進度')">案件進度</span></th>
-            <th x-show="cShown('date')"><span x-text="cLabel('date', '報價日期')">報價日期</span></th>
+            <th data-col="quoteNo" x-show="cShown(\'quoteNo\')"><span x-text="cLabel('quoteNo', '報價單號')">報價單號</span></th>
+            <th data-col="customer" x-show="cShown(\'customer\')"><span x-text="cLabel('customer', '客戶名稱')">客戶名稱</span></th>
+            <th data-col="project" x-show="cShown(\'project\')"><span x-text="cLabel('project', '案件名稱')">案件名稱</span></th>
+            <th data-col="amount" x-show="cShown(\'amount\')" style="text-align:right"><span x-text="cLabel('amount', '金額（含稅）')">金額（含稅）</span></th>
+            <th data-col="margin" x-show="cShown(\'margin\')" style="text-align:right"><span x-text="cLabel('margin', '毛利率')">毛利率</span></th>
+            <th data-col="validDays" x-show="cShown(\'validDays\')"><span x-text="cLabel('validDays', '有效天數')">有效天數</span></th>
+            <th data-col="filler" x-show="cShown(\'filler\')"><span x-text="cLabel('filler', '填單人')">填單人</span></th>
+            <th data-col="status" x-show="cShown(\'status\')"><span x-text="cLabel('status', '狀態')">狀態</span></th>
+            <th data-col="dealTag" x-show="cShown(\'dealTag\')"><span x-text="cLabel('dealTag', '案件進度')">案件進度</span></th>
+            <th data-col="date" x-show="cShown(\'date\')"><span x-text="cLabel('date', '報價日期')">報價日期</span></th>
             <th>操作</th>
           </tr>
         </thead>
@@ -255,7 +289,7 @@
           <template x-for="q in lane.items" :key="q.quote_no">
             <tr class="ql-row" :data-quote-no="q.quote_no" :style="'--ql-spine:' + lane.color">
               <td x-show="sortPref.sortMode === 'custom'" class="drag-handle" style="cursor:grab;text-align:center;color:var(--text-dim)">⠿</td>
-              <td x-show="cShown('quoteNo')">
+              <td data-col="quoteNo" x-show="cShown(\'quoteNo\')">
                 <div style="display:flex;align-items:center;gap:6px">
                   <a :href="'quotation-form.html?id=' + q.quote_no"
                      style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"
@@ -274,27 +308,27 @@
                   </div>
                 </template>
               </td>
-              <td x-show="cShown('customer')">
+              <td data-col="customer" x-show="cShown(\'customer\')">
                 <div style="font-weight:500;font-size:12px" x-text="q.customer_name || '—'"></div>
               </td>
-              <td x-show="cShown('project')" style="font-size:12px;max-width:180px" x-text="q.project_name || '—'"></td>
-              <td x-show="cShown('amount')" class="num" style="font-weight:600" x-text="q.total > 0 ? 'NT$ ' + MotrixFormat.num(Math.round(q.total)) : '—'"></td>
-              <td x-show="cShown('margin')" class="num">
+              <td data-col="project" x-show="cShown(\'project\')" style="font-size:12px;max-width:180px" x-text="q.project_name || '—'"></td>
+              <td data-col="amount" x-show="cShown(\'amount\')" class="num" style="font-weight:600" x-text="q.total > 0 ? 'NT$ ' + MotrixFormat.num(Math.round(q.total)) : '—'"></td>
+              <td data-col="margin" x-show="cShown(\'margin\')" class="num">
                 <span :style="MotrixMargin.style(q.direct_margin_pct)"
                       x-text="q.direct_margin_pct ? q.direct_margin_pct.toFixed(1) + '%' : '—'"></span>
               </td>
-              <td x-show="cShown('validDays')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px">
+              <td data-col="validDays" x-show="cShown(\'validDays\')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px">
                 <span x-text="(q.valid_days || 30) + ' 天'"></span>
                 <span x-show="q.valid_days > 30" style="color:var(--danger);font-size:9px;font-weight:600;display:block">需審核</span>
               </td>
-              <td x-show="cShown('filler')" style="font-size:12px;color:var(--text-secondary)" x-text="q.sales_person || '—'"></td>
-              <td x-show="cShown('status')">
+              <td data-col="filler" x-show="cShown(\'filler\')" style="font-size:12px;color:var(--text-secondary)" x-text="q.sales_person || '—'"></td>
+              <td data-col="status" x-show="cShown(\'status\')">
                 <span class="badge" :class="dealDisplayStatus(q).cls" x-text="dealDisplayStatus(q).text"></span>
                 <template x-if="agingOf(q)">
                   <span class="ql-age" :class="agingOf(q).cls" x-text="agingOf(q).text"></span>
                 </template>
               </td>
-              <td x-show="cShown('dealTag')">
+              <td data-col="dealTag" x-show="cShown(\'dealTag\')">
                 <!-- 已成案/已結案：鎖定顯示，不可在此頁修改 -->
                 <template x-if="q.deal_tag === '已成案' || q.deal_tag === '已結案'">
                   <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600"
@@ -316,7 +350,7 @@
                   </select>
                 </template>
               </td>
-              <td x-show="cShown('date')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-dim)" x-text="(q.quote_date || q.created_at || '').slice(0,10)"></td>
+              <td data-col="date" x-show="cShown(\'date\')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-dim)" x-text="(q.quote_date || q.created_at || '').slice(0,10)"></td>
               <td>
                 <div class="row-actions">
                   <a :href="'quotation-form.html?id=' + q.quote_no" class="icon-btn" title="編輯">
@@ -364,6 +398,11 @@
 
     <div style="margin-top:12px;font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
          x-text="'共 ' + filtered.length + ' 筆 · 顯示 ' + filtered.length + ' / ' + quotes.length + ' 筆'"></div>
+    <div x-show="pageSize > 0 && filtered.length > pageSize" x-cloak data-testid="lv-pager" style="margin-top:8px;display:flex;gap:10px;align-items:center;font-size:12px">
+      <button class="action-btn action-btn--ghost" :disabled="pvPage <= 0" @click="pvPage = Math.max(0, Math.min(pvPage, pageCount - 1) - 1)">上一頁</button>
+      <span x-text="'第 ' + (Math.min(pvPage, pageCount - 1) + 1) + ' / ' + pageCount + ' 頁（每頁 ' + pageSize + ' 筆）'"></span>
+      <button class="action-btn action-btn--ghost" :disabled="Math.min(pvPage, pageCount - 1) >= pageCount - 1" @click="pvPage = Math.min(pageCount - 1, Math.min(pvPage, pageCount - 1) + 1)">下一頁</button>
+    </div>
 
     </div><!-- end view==='list' -->
   </main>
@@ -490,13 +529,13 @@
         if (!this.useLanes) {
           const only = this.LIFECYCLES.find(p => p.key === this.phaseFilter)
           return [{
-            key: 'flat', header: false, items: this.filtered,
+            key: 'flat', header: false, items: this.pagedFiltered,
             color: only ? only.color : 'transparent',
             label: '', desc: '',
           }]
         }
         return this.LIFECYCLES
-          .map(ph => ({ ...ph, header: true, items: this.filtered.filter(q => this.lifecycleOf(q) === ph.key) }))
+          .map(ph => ({ ...ph, header: true, items: this.pagedFiltered.filter(q => this.lifecycleOf(q) === ph.key) }))
           .filter(l => l.items.length > 0)
       },
 
@@ -846,10 +885,57 @@
       // BP-1／Q2：列表欄位的顯示與標題可自訂（P9）。旗標關閉／讀不到 ⇒ layoutOn=false，綁定函式回中性值（畫面與先前相同）。
       // 這頁的列表有分群與拖曳排序，v1 只開放顯示／隱藏與改標題；欄位順序暫不支援（編輯器會明說）。
       layoutOn: false,
+      // ═══ T65 C1：清單檢視的個人偏好（設定中心 list_view；預設全關＝與今天相同；只在版面旗標開啟時才讀設定）═══
+      lvOn: { columns: false, tab: false, size: false },
+      pv: { hidden: [], order: ['quoteNo', 'customer', 'project', 'amount', 'margin', 'validDays', 'filler', 'status', 'dealTag', 'date'], tab: '', size: 0 },
+      lvOpen: false, pvPage: 0, _restoredTab: false, _stopOrder: null,
+      LV_LABELS: { quoteNo: '報價單號', customer: '客戶名稱', project: '案件名稱', amount: '金額（含稅）', margin: '毛利率', validDays: '有效天數', filler: '填單人', status: '狀態', dealTag: '案件進度', date: '報價日期' },
+      get lvAny() { return this.lvOn.columns || this.lvOn.tab || this.lvOn.size },
+      get pageSize() { return (this.lvOn.size && this.sortPref.sortMode !== 'custom' && [25, 50, 100, 200].includes(this.pv.size)) ? this.pv.size : 0 },
+      get pageCount() { return this.pageSize ? Math.max(1, Math.ceil(this.filtered.length / this.pageSize)) : 1 },
+      get pagedFiltered() {
+        if (!this.pageSize) return this.filtered
+        const p = Math.min(this.pvPage, this.pageCount - 1)
+        return this.filtered.slice(p * this.pageSize, (p + 1) * this.pageSize)
+      },
+      lvCols() { return this.pv.order.filter(k => (!this.layoutOn || this._qcols().some(c => c.field === k))) },     // 公司版面允許的欄位（個人只能在其中隱藏／移動）
+      lvMove(k, d) {
+        const o = this.pv.order.slice(), i = o.indexOf(k), shown = this.lvCols(), j = o.indexOf(shown[shown.indexOf(k) + d])
+        if (i < 0 || j < 0) return
+        o.splice(i, 1); o.splice(j, 0, k); this.pv = { ...this.pv, order: o }
+      },
+      lvToggle(k) {
+        if (window.MotrixListView.FIXED.includes(k)) return
+        const h = this.pv.hidden.includes(k) ? this.pv.hidden.filter(x => x !== k) : [...this.pv.hidden, k]
+        this.pv = { ...this.pv, hidden: h }
+      },
+      async lvSave(reset) {
+        const LV = window.MotrixListView
+        this.pv = reset ? LV.empty() : LV.sanitize(this.pv, { tabs: this.tabs.map(t => t.key) })
+        this.pvPage = 0
+        const ok = await LV.save(this.session.token, 'quotations.view', this.pv)
+        this.toast(ok ? (reset ? '已還原預設檢視' : '已儲存檢視設定') : '儲存失敗，下次開啟會恢復', ok ? '#15803D' : '#DC2626')
+      },
+      async initListView(tk) {
+        const g = await window.MotrixPublicFlags.read(['list_view'], { token: tk })
+        const lv = g.list_view || {}
+        this.lvOn = { columns: lv.quotes_personal_columns === 1, tab: lv.quotes_personal_default_tab === 1, size: lv.quotes_personal_page_size === 1 }
+        if (!this.lvAny) return
+        await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = '../static/list-view-prefs.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc) })
+        const LV = window.MotrixListView
+        this.pv = LV.sanitize(await LV.load(tk, 'quotations.view'), { tabs: this.tabs.map(t => t.key) })
+        if (this.lvOn.tab && this.pv.tab && this.activeTab === 'all' && !this._restoredTab) this.activeTab = this.pv.tab
+        if (this.lvOn.size) ['activeTab', 'search', 'filterSales', 'filterMonth', 'filterDealTag', 'phaseFilter'].forEach(k => this.$watch(k, () => { this.pvPage = 0 }))
+        if (this.lvOn.columns) {
+          await this.$nextTick()
+          this._stopOrder = LV.watchOrder(document.querySelector('table.data-table'), () => this.pv.order)
+          this.$watch('pv', () => { if (this._stopOrder) { this._stopOrder(); this._stopOrder = LV.watchOrder(document.querySelector('table.data-table'), () => this.pv.order) } })
+        }
+      },
       _qcols() { return this.layoutOn ? window.Alpine.store('layout').cols('quotes') : [] },
-      cShown(f) { return !this.layoutOn || this._qcols().some(c => c.field === f) },
+      cShown(f) { return (!this.layoutOn || this._qcols().some(c => c.field === f)) && !(this.lvOn.columns && this.pv.hidden.includes(f)) },      // T65 C1：個人偏好只能再隱藏公司版面允許的欄位
       // 分群標題列／空狀態／載入中的 colspan＝表格實際的欄數（版面隱藏欄位後要跟著減；關閉時恆為 12，與先前相同）
-      colSpan() { return 12 - (this.layoutOn ? ['quoteNo', 'customer', 'project', 'amount', 'margin', 'validDays', 'filler', 'status', 'dealTag', 'date'].filter(k => !this.cShown(k)).length : 0) },
+      colSpan() { return 12 - ['quoteNo', 'customer', 'project', 'amount', 'margin', 'validDays', 'filler', 'status', 'dealTag', 'date'].filter(k => !this.cShown(k)).length },
       cLabel(f, dflt) { return this.layoutOn ? window.Alpine.store('layout').colLabel('quotes', f, dflt) : dflt },
       async initLayout() {
         try {
@@ -864,6 +950,7 @@
           await this.$nextTick()
           if (window.MotrixLayoutEditor) window.MotrixLayoutEditor.mount()
           window.MotrixLayout.start()
+          try { await this.initListView(tk) } catch (e) { /* 個人偏好是加值：失敗就維持公司版面 */ }
         } catch (e) { /* 版面是加值功能：讀不到就維持原本的列表 */ }
       },
 
@@ -893,6 +980,7 @@
           if (saved && typeof saved === 'object') {
             _FIELDS.forEach(k => { if (typeof saved[k] === 'string') this[k] = saved[k] })
             if (!this.tabs.some(t => t.key === this.activeTab)) this.activeTab = 'all'
+            if (typeof saved.activeTab === 'string') this._restoredTab = true      // 同一分頁剛篩選過的條件優先於個人預設頁籤
           }
         } catch (e) {}
         const _saveFilters = () => {
