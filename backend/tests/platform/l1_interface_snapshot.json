@@ -810,6 +810,19 @@
    "render_rows": "def(export_id, template, rows, user)",
    "resolve": "def(export_id, conn=…)"
   },
+  "helper:field_catalog": {
+   "API_GROUPS": "const",
+   "CEILINGS": "const",
+   "FAMILIES": "const",
+   "FIELDS": "const",
+   "api_keys": "def(group)",
+   "by_id": "def(fid)",
+   "export_problems": "def(registered)",
+   "fields": "def()",
+   "history_labels": "def()",
+   "problems": "def()",
+   "screen_problems": "def(points)"
+  },
   "helper:finance_params": {
    "BAND_KEYS": "const",
    "CASHIER_GROUP": "const",

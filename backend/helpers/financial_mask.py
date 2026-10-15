@@ -10,20 +10,21 @@
 """
 import copy
 
+from helpers import field_catalog as _FC     # T64 F7 S0：金額鍵名的單一來源（鍵名與順序與切片前逐字相同；守門測試寫死今天的清單）
+
 #: quotations 表上的金額欄位（清單、結案檢核、單筆 GET 的頂層）
-QUOTATION_MONEY_COLS = ("total", "pretax", "direct_margin_pct", "net_margin_pct", "project_margin_pct")
+QUOTATION_MONEY_COLS = _FC.api_keys("quotation_cols")
 
 #: 報價品項
-ITEM_MONEY_KEYS = ("cost", "margin", "unitPrice", "amount")
+ITEM_MONEY_KEYS = _FC.api_keys("quote_item")
 #: 報價單頂層
-QUOTE_MONEY_KEYS = ("discount", "freight", "indirectLogistics", "indirectInstallation",
-                    "indirectTravel", "indirectWarranty", "indirectOther", "tot", "overheadPct")
+QUOTE_MONEY_KEYS = _FC.api_keys("quote_top")
 #: 款項期別（invoicePretax／invoiceTax：發票記載的未稅與稅額，AC1 由 hichan-bf 新增）
-PAYMENT_MONEY_KEYS = ("amount", "pct", "actualAmount", "feeAmount", "feeNote", "invoicePretax", "invoiceTax")
+PAYMENT_MONEY_KEYS = _FC.api_keys("payment")
 #: 叫料品項
-MATERIAL_ORDER_MONEY_KEYS = ("unitPrice", "totalPrice", "paidAmount", "totalAmount")
+MATERIAL_ORDER_MONEY_KEYS = _FC.api_keys("material_order")
 #: 修改紀錄裡的金額欄位（modules/case/api/quotations.py::_TRACKED_QUOTE_FIELDS 的顯示名稱）
-HISTORY_MONEY_FIELDS = {"含稅總額", "未稅金額", "直接毛利率", "淨利率", "營業利益率", "管銷分攤比率"}   # 第 48 班改名：舊紀錄「淨利率」與新「營業利益率」並列
+HISTORY_MONEY_FIELDS = _FC.history_labels()   # 第 48 班改名：新舊名稱並列（舊名稱登記在 field_catalog）
 #: 需審核原因裡帶金額或毛利的（modules/case/quote_terms.py::compute_approval_reasons）
 _REASON_MONEY_MARKS = ("毛利", "NT$", "折讓")
 MASKED_REASON = "（涉及金額，無財務檢視權限）"
