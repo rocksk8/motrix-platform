@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## (next) — wip/t63-pay-stage-src-r1（請款單款項類別代碼單一來源）
+- 請款單「款項類別」的代碼清單單一來源（F4）：驗證集合 `PAYMENT_STAGES` 與請款單 PDF 後備字改由 `helpers/option_lists` 的程式預設衍生（內容、順序與過去相同）；新增唯讀端點 `GET /api/payment-requests/stages`（登入即可、只有代碼與名稱），請款單表單取它畫「款項類別」按鈕（取不到 ⇒ 原本的後備清單；目前這張單的代碼不在清單內 ⇒ 多畫一顆『代碼（舊值）』按鈕）。驗證規則、金額、狀態、單號、PDF 版面不變；無 migration、無權限變更。路由基準檔待整合者重錄。
+
 ## 1.0.55 — 2026-10-15（wip/t62-fix-arap-r2；T62 audit A nit：僅註解）
 - `receivables.py` 的註解寫明收款品項 `type` 為顯示名稱：選項清單開啟時，gl_events E03 新草稿傳票的摘要跟著顯示名稱走（摘要不進 canonical_hash，不產生更正沖轉）。只改註解，無行為變更、無 migration、無新路由、無權限變更。
 

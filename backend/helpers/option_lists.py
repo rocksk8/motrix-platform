@@ -2,7 +2,7 @@
 """選項清單（census #4）：管理者決定下拉選單有哪些選項、顯示名稱與順序；新增／改名／重排／停用，不能刪除已發布的選項。
 
 [單位] helper:option_lists    [層] L1    [穩定度] 實作
-[公開介面] BUILTIN, FIELD, GROUP, KIND, LABEL_MAX, MAX_VALUES, OFF_REASON, definition_problems, effective, enabled, ensure_kind, lists_for_menu, payment_stage_display, payment_stage_labels, payment_stage_name, preview, registered, request_stage_label
+[公開介面] BUILTIN, FIELD, GROUP, KIND, LABEL_MAX, MAX_VALUES, OFF_REASON, definition_problems, effective, enabled, ensure_kind, lists_for_menu, payment_stage_display, payment_stage_labels, payment_stage_name, preview, registered, request_stage_codes, request_stage_defaults, request_stage_label, request_stage_names, REQUEST_STAGE_LIST
 [不變式] 設定 `builder_option_lists.enabled`（預設 0＝關）**且** `builder_governance.enabled`=1 才生效；關著 ⇒ `effective()` 回程式預設（與今天寫死的清單逐項相同）、
     選單回應不帶 `optionLists`、頁面不多任何請求。清單裡的 `value` 是**存進資料裡的字**（客戶類型 VIP、料件分類 網通設備…）：發布後不可刪除、不可改字，
     只能「停用」（停用＝新資料不能再選，舊資料照常顯示）或改 `label`（顯示名稱；`relabel:false` 的清單不允許改 label，因為該欄位的值同時被報表／科目對照拿來比對）。
@@ -322,6 +322,23 @@ def payment_stage_name(item, idx):
     if "type" not in item:
         return "第%d期" % (idx + 1)
     return payment_stage_display(item.get("type"), item)
+
+
+REQUEST_STAGE_LIST = "payment_request_stage"
+
+
+def request_stage_defaults() -> list:
+    """請款單款項類別的程式預設 `[{value, label}]`（順序固定）。**代碼清單的唯一來源**：請款單驗證集合、PDF 後備字、前端按鈕後備都由它衍生或被測試鎖定等於它。"""
+    return [{"value": d["value"], "label": d["label"]} for d in BUILTIN[REQUEST_STAGE_LIST]["defaults"]]
+
+
+def request_stage_codes() -> tuple:
+    return tuple(d["value"] for d in BUILTIN[REQUEST_STAGE_LIST]["defaults"])
+
+
+def request_stage_names() -> dict:
+    """`{代碼: 預設名稱}`（順序同預設）。"""
+    return {d["value"]: d["label"] for d in BUILTIN[REQUEST_STAGE_LIST]["defaults"]}
 
 
 def request_stage_label(code, fallback=""):
