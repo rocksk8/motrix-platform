@@ -58,6 +58,7 @@ def _gate_custom_fields(data, old_data):
 # T66 L0：供應商清單登記到清單目錄（先導；沒有金額欄。排序／筆數目前由前端處理，個人偏好之後才接）。
 list_catalog.register_list("supply:suppliers", "supply", {
     "label": "供應商清單",
+    "modules": ["customer", "procurement", "inventory"],      # 與 /api/suppliers 的 require_any_module 相同
     "columns": [
         {"id": "name", "label": "公司名稱", "sortable": True, "required": True},
         {"id": "alias", "label": "內部簡稱", "sortable": True},

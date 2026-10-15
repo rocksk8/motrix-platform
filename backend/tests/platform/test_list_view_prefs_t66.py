@@ -14,8 +14,9 @@ from helpers import list_view_prefs as LV
 import modules.supply.api.suppliers  # noqa: F401  登記先導清單
 
 LID = "supply:suppliers"
-U1 = {"username": "u1", "role": "admin"}
-U2 = {"username": "u2", "role": "admin"}
+U1 = {"username": "u1", "role": "admin", "modules": '["procurement"]'}      # 有清單登記的模組之一
+U2 = {"username": "u2", "role": "admin", "modules": '["customer"]'}
+U_NOMOD = {"username": "u3", "role": "admin", "modules": '["case_manage"]'}      # 沒有供應商清單的任何模組
 
 
 @pytest.fixture()
@@ -291,3 +292,105 @@ def test_routes_flow_when_flag_on(client, auth):
     assert again.status_code == 200
     d = client.delete("/api/list-views/" + LID, headers=auth)
     assert d.status_code == 200 and d.json()["custom"] is False
+
+
+# ── 模組權限（與清單資料端點同一套規則）──
+def test_no_module_user_gets_403_and_empty_summary(db, no_policy):
+    for fn in (lambda: LV.check_access(U_NOMOD, LID), lambda: LV.save_page_size(db, U_NOMOD, LID, {"pageSize": 20}), lambda: LV.reset(db, U_NOMOD, LID)):
+        with pytest.raises(LV.ViewError) as e:
+            fn()
+        assert e.value.status == 403
+    assert LV.list_summaries(db, U_NOMOD) == []
+    assert db.execute("SELECT COUNT(*) FROM user_list_view_prefs").fetchone()[0] == 0
+    assert [x["id"] for x in LV.list_summaries(db, U1)] == [LID]                   # 正對照：有模組的人看得到
+    LV.check_access(U1, LID)
+    LV.check_access({"username": "s", "role": "superadmin", "modules": "[]"}, LID)    # 超級管理者直通
+    with pytest.raises(LV.ViewError) as e:
+        LV.check_access(U1, "no:such")
+    assert e.value.status == 404
+
+
+def test_list_without_modules_is_superadmin_only(db, no_policy, clean_catalog):
+    spec = copy.deepcopy(MONEY_SPEC)
+    spec.pop("modules", None)
+    assert LC.register_list("t:nomods", "t", {k: v for k, v in spec.items() if k != "modules"}) == []
+    with pytest.raises(LV.ViewError) as e:
+        LV.check_access(U1, "t:nomods")
+    assert e.value.status == 403
+    LV.check_access({"username": "s", "role": "superadmin", "modules": "[]"}, "t:nomods")
+
+
+def test_route_no_module_user_403(client, make_user):
+    import db as _db
+    from helpers import settings_registry as SR
+    c = _db.get_db()
+    try:
+        SR.publish("builder_governance", {"enabled": 1}, user="t", reason="t", conn=c)
+        SR.publish("list_prefs", {"enabled": 1}, user="t", reason="t", conn=c)
+        SR.invalidate()
+    finally:
+        c.close()
+    u, p = make_user(username="lv_nomod", role="admin", modules=["case_manage"])
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
+    assert client.get("/api/list-views", headers=h).json()["lists"] == []
+    for m, kw in (("get", {}), ("put", {"json": {"pageSize": 20}}), ("delete", {})):
+        assert getattr(client, m)("/api/list-views/" + LID, headers=h, **kw).status_code == 403, m
+
+
+# ── 同時存檔：只有一個贏，另一個 409 ──
+def test_concurrent_put_only_one_wins(tmp_path):
+    import threading
+    path = str(tmp_path / "cc.db")
+    c0 = sqlite3.connect(path)
+    M._core_next_list_view_prefs(c0)
+    c0.close()
+    results, barrier = [], threading.Barrier(2)
+
+    def worker(size):
+        conn = sqlite3.connect(path, timeout=10)
+        conn.row_factory = sqlite3.Row
+        try:
+            barrier.wait()
+            LV.save_page_size(conn, U1, LID, {"pageSize": size}, "")        # 兩邊都以『沒有舊值』的 etag 存
+            results.append(("ok", size))
+        except LV.ViewError as e:
+            results.append((e.status, size))
+        finally:
+            conn.close()
+
+    ts = [threading.Thread(target=worker, args=(n,)) for n in (20, 100)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert sorted(r[0] if r[0] == "ok" else str(r[0]) for r in results) == ["409", "ok"], results
+    c = sqlite3.connect(path)
+    rows = c.execute("SELECT prefs_json FROM user_list_view_prefs").fetchall()
+    c.close()
+    assert len(rows) == 1 and json_size(rows[0][0]) in (20, 100)
+
+
+def json_size(raw):
+    import json
+    return json.loads(raw)["pageSize"]
+
+
+# ── 全域政策 `*` 的遞補 ──
+def test_global_policy_fallback_and_per_list_override(db, monkeypatch):
+    from core import definitions as D
+    monkeypatch.setattr(LP, "enabled", lambda conn=None: True)
+    glob = {"version": 1, "allowUserPrefs": False, "pageSize": {"allowed": [20, 50], "default": 20}}
+    own = {"version": 1, "pageSize": {"default": 50}}
+    table = {}
+    monkeypatch.setattr(D, "resolve", lambda conn, kind, key, role=None: (copy.deepcopy(table.get(key)), "t") if kind == LP.KIND else (None, ""))
+    assert LP.policy_for(db, LID) is None                                          # 都沒有 ⇒ 今天的行為
+    table["*"] = glob
+    p = LP.policy_for(db, LID)
+    assert p["allowUserPrefs"] is False and p["pageSize"]["default"] == 20
+    v = LV.constraints(db, U1, LID)
+    assert v["allowUserPrefs"] is False and v["pageSize"]["options"] == [20] and v["pageSize"]["value"] == 20
+    with pytest.raises(LV.ViewError) as e:
+        LV.save_page_size(db, U1, LID, {"pageSize": 50})
+    assert e.value.status == 403
+    table[LID] = {"version": 1, "allowUserPrefs": True, "pageSize": {"default": 50}}
+    p = LP.policy_for(db, LID)
+    assert p["allowUserPrefs"] is True and p["pageSize"] == {"allowed": [20, 50], "default": 50}     # 專屬優先、缺的用 * 補
+    assert LV.save_page_size(db, U1, LID, {"pageSize": 20})["pageSize"]["value"] == 20

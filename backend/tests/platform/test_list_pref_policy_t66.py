@@ -223,4 +223,4 @@ def test_flag_group_registered_default_off():
     from pathlib import Path
     from helpers import settings_groups  # noqa: F401  載入時登錄群組
     base = json.loads((Path(__file__).resolve().parent / "settings_deploy_baseline.json").read_text(encoding="utf-8"))
-    assert base["list_prefs"] == {"enabled": [0, 0, 1, False]}
+    assert base["groups"]["list_prefs"] == {"enabled": [0, 0, 1, False]}
