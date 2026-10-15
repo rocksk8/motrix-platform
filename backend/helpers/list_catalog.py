@@ -55,6 +55,9 @@ def list_problems(list_id, spec) -> list:
         cat = c.get("catalogId")
         if cat is not None and _FC.by_id(cat) is None:
             out.append("%s.%s：catalogId 不在欄位目錄：%s" % (list_id, cid, cat))
+    mods = spec.get("modules")
+    if mods is not None and (not isinstance(mods, (list, tuple)) or not mods or any(not isinstance(m, str) or not m.strip() for m in mods)):
+        out.append("%s：modules 必須是非空的模組鍵清單（清單的存取權限；不填＝只有超級管理者）" % list_id)
     d = spec.get("defaults")
     if not isinstance(d, dict):
         return out + ["%s：沒有 defaults" % list_id]
@@ -116,6 +119,7 @@ def by_id(list_id):
         c.setdefault("required", False)
         c["money"] = is_money_column(c)
     spec["id"], spec["owner"] = list_id, owner
+    spec["modules"] = list(spec.get("modules") or [])
     return spec
 
 

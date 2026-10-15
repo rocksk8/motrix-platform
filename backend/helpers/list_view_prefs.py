@@ -2,7 +2,7 @@
 """清單檢視偏好（T66 L2）：每人每清單的「每頁筆數」，以及公司政策＋欄位可見（F7）對版面引擎輸出的限制。設計：docs/platform/plans/T66-LIST-PREFS-DESIGN.md §1.3、§3、§5。
 
 [單位] helper:list_view_prefs    [層] L1    [穩定度] 實驗（旗標 `list_prefs.enabled` 預設關；表 `user_list_view_prefs`）
-[公開介面] MAX_BYTES, TABLE, ViewError, clamp_columns, clamp_sort, column_visible, constraints, enabled, etag_of, list_summaries, reset, save_page_size
+[公開介面] MAX_BYTES, TABLE, ViewError, can_access, check_access, clamp_columns, clamp_sort, column_visible, constraints, enabled, etag_of, list_summaries, reset, save_page_size
 [不變式] ①單一來源：個人的欄位顯示／順序與排序仍由版面引擎（`user_list_prefs`、`/api/list-prefs`）負責；本檔**只存每頁筆數**，不複製欄位或排序。
     ②本檔對版面引擎輸出只做『限制』：欄位必須通過欄位可見（F7）∩ 公司政策允許；金額欄只能隱藏／重排、**不可加回**（預設就不顯示的金額欄根本不列出）；排序欄位必須是看得到、允許排序的欄位。
     ③每次讀取都重算（不存授權）：政策收緊或權限變動立即生效；存的值只是偏好，超出現行範圍時讀取回到預設，不報錯。
@@ -44,6 +44,7 @@ def etag_of(prefs_json) -> str:
 
 
 # ── 欄位可見（F7）：S0 用欄位目錄登記的天花板函式；F7 S1 之後換成 field_policy.visible，只改這一處 ──
+# TODO(T66/F7 S1)：F7 S1 落地後這張天花板對照表整個換成 `field_policy.visible`；目前沒有測試釘住這張表的內容（只驗未知天花板 fail closed）。
 def _ceiling_ok(ceiling, user) -> bool:
     try:
         from helpers import financial_mask as FM
@@ -132,16 +133,38 @@ def constraints(conn, user, list_id):
             "custom": raw is not None, "etag": etag_of(raw)}
 
 
+def can_access(user, spec) -> bool:
+    """與清單資料端點同一套規則（`auth.user_has_module`：超級管理者直通，其餘須持有清單登記的任一模組鍵）；清單沒登記模組鍵 ⇒ 只有超級管理者（fail closed）。"""
+    try:
+        from helpers import auth
+        return any(auth.user_has_module(user, m) for m in (spec.get("modules") or [])) or (user or {}).get("role") == "superadmin"
+    except Exception:                                        # noqa: BLE001
+        logger.warning("清單存取判斷失敗：%s", spec.get("id"), exc_info=True)
+        return False
+
+
+def check_access(user, list_id) -> None:
+    """清單存在但呼叫者沒有對應模組權限 ⇒ ViewError(403)；清單不存在 ⇒ ViewError(404)。"""
+    spec = LC.by_id(list_id)
+    if spec is None:
+        raise ViewError(404, "沒有這份清單")
+    if not can_access(user, spec):
+        raise ViewError(403, "沒有這份清單的使用權限")
+
+
 def list_summaries(conn, user) -> list:
-    """登入者看得到的清單摘要（只有代號、名稱、是否有個人設定）。"""
+    """登入者看得到的清單摘要（只有代號、名稱、是否有個人設定）；沒有對應模組權限的清單不列出。"""
     out = []
     for e in LC.lists():
+        if not can_access(user, e):
+            continue
         out.append({"id": e["id"], "label": e["label"], "hasCustom": _load(conn, (user or {}).get("username", ""), e["id"]) is not None})
     return out
 
 
 def save_page_size(conn, user, list_id, body, if_match=None) -> dict:
     """存自己的每頁筆數。回新的限制與設定；不合法 ⇒ ViewError。"""
+    check_access(user, list_id)
     view = constraints(conn, user, list_id)
     if view is None:
         raise ViewError(404, "沒有這份清單")
@@ -181,8 +204,7 @@ def save_page_size(conn, user, list_id, body, if_match=None) -> dict:
 
 def reset(conn, user, list_id) -> dict:
     """回到公司預設（刪掉自己的那一列）。"""
-    if LC.by_id(list_id) is None:
-        raise ViewError(404, "沒有這份清單")
+    check_access(user, list_id)
     conn.execute("DELETE FROM user_list_view_prefs WHERE username=? AND list_id=?", (user["username"], list_id))
     conn.commit()
     return constraints(conn, user, list_id)

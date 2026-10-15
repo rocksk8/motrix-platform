@@ -160,3 +160,9 @@ Order: L0 → L1 → L2 → L4(pilot) → L3 (money lists) → L5. Money-bearing
 2. Server **rejects** invalid saves (422) instead of silently clamping. Default: reject (clamp only on read after policy tightening).
 3. Pilot list: suppliers (no money). Default: yes; money lists follow only after L3.
 4. Default `allowUserPrefs` for lists with **no** policy row: on (flag itself is OFF by default, so nothing changes until an admin turns the feature on). Setting-ified in policy `*`.
+
+## Status and follow-ups (L3 revision, 2026-10-16, PM decisions)
+- **Shipped = API-only slice.** L3 (per-endpoint sort/limit enforcement) and L4 (frontend) are **pending**; `clamp_columns` / `clamp_sort` have **no consumer yet**. Only `supply:suppliers` (no money column) is registered, so the "money list needs sortGuard" rule is not yet exercised.
+- **Access rule (added):** a catalog entry may declare `modules` (module keys; same set as the list's data endpoint, suppliers = customer/procurement/inventory). `GET /api/list-views[/{id}]`, PUT and DELETE use `auth.user_has_module` (superadmin passes; others need one key). No `modules` declared => superadmin only (fail closed). No access: summary omits the list, routes return 403.
+- **Deferred, not implemented (follow-ups):** (1) `max_saved_lists_per_user` cap - moot, one small row per user+list; (2) admin catalog/usage read (counts of users with a custom page size); (3) cleanup/export of `user_list_view_prefs` on user delete/rename (same hook as other per-user tables); (4) swap `_ceiling_ok` map for `field_policy.visible` when F7 S1 lands (TODO in code; no test pins the map).
+- Tests added: no-module 403/empty, list without `modules` superadmin-only, concurrent PUT (one wins, one 409), `*` fallback and per-list override.

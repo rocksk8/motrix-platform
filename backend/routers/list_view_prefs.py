@@ -45,6 +45,10 @@ def get_list_view(list_id: str, authorization: str = Header(None)):
     try:
         if not LV.enabled(conn):
             _off()
+        try:
+            LV.check_access(user, list_id)
+        except LV.ViewError as e:
+            _fail(e)
         view = LV.constraints(conn, user, list_id)
         if view is None:
             raise HTTPException(404, "沒有這份清單")
