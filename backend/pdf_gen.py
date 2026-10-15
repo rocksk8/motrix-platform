@@ -370,9 +370,12 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
     freight_row  = f'<div class="total-row"><span>運費</span><span>NT$ {int(freight):,}</span></div>' if freight else ''
     discount_row = f'<div class="total-row"><span style="color:#DC2626">折讓</span><span style="color:#DC2626">-NT$ {int(discount):,}</span></div>' if discount else ''
 
-    def term_block(title, text, span_full=False):
+    from helpers.quote_output import hidden_terms as _hidden_terms      # T63 Q0：管理者隱藏的條件欄位，設定選「不印」時才拿掉（預設 ⇒ 空集合 ⇒ 與過去相同）
+    _hid_terms = _hidden_terms()
+
+    def term_block(title, text, span_full=False, key=None):
         t = (text or '').strip()
-        if not t:
+        if not t or (key and key in _hid_terms):
             return ''
         cls = 'term-item term-item--full' if span_full else 'term-item'
         return f'<div class="{cls}"><div class="term-title">{esc(title)}</div><div class="term-block">{esc(t)}</div></div>'
@@ -381,19 +384,31 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
     # 最長的驗收標準獨立跨欄滿版，避免跟另一欄長度差太多造成版面失衡。
     from helpers.clause_titles import titles_for as _titles_for      # S-Q2：條款標題＝送審時凍結的 > 目前範本 > 預設（旗標關 ⇒ 與過去寫死的字相同）
     _ct = _titles_for(q)
-    terms_html  = term_block(_ct['paymentTerms'], q.get('paymentTerms', ''))
-    terms_html += term_block(_ct['deliveryTerms'], q.get('deliveryTerms', ''))
-    terms_html += term_block(_ct['warrantyTerms'], q.get('warrantyTerms', ''))
-    _after = q.get('afterSales', '') or ''
+    terms_html  = term_block(_ct['paymentTerms'], q.get('paymentTerms', ''), key='paymentTerms')
+    terms_html += term_block(_ct['deliveryTerms'], q.get('deliveryTerms', ''), key='deliveryTerms')
+    terms_html += term_block(_ct['warrantyTerms'], q.get('warrantyTerms', ''), key='warrantyTerms')
+    _after = '' if 'afterSales' in _hid_terms else (q.get('afterSales', '') or '')   # 隱藏且設定不印 ⇒ 只剩擇一方案的自動說明句（那是結構資訊，不是使用者填的條款）
     if av.get('notes'):                     # 擇一方案自動說明句：每組一句，接在使用者自填備註之後
         _after = (_after.rstrip() + '\n' if _after.strip() else '') + '\n'.join(av['notes'])
     terms_html += term_block(_ct['afterSales'], _after)  # 名稱同 modules/case/quote_terms.AFTERSALES_LABEL（L1 不反向 import 模組）
-    terms_html += term_block(_ct['acceptanceTerms'], q.get('acceptanceTerms', ''), span_full=True)
+    terms_html += term_block(_ct['acceptanceTerms'], q.get('acceptanceTerms', ''), span_full=True, key='acceptanceTerms')
 
     terms_section = (
         '<div class="terms"><div class="section-label" style="margin-bottom:8px">五、報價條件</div>'
         f'<div class="terms-grid">{terms_html}</div></div>'
     ) if terms_html.strip() else ''
+
+    # T63 Q0：報價單自訂欄位（總開關＋報價單開關＋『印在報價單上』都開才有內容；預設 ⇒ 空 ⇒ 與過去逐位元相同）。
+    # 預覽、PDF、內部列印共用這支 builder，所以三者一致。
+    from helpers.builtin_fields import output_rows as _cf_rows
+    _cf = _cf_rows(q, 'quote_in_customer_output')      # 整張報價單交給 helper 取值：本檔不直接碰自訂欄位的鍵（守門 test_customer_facing_renderers…）
+    if _cf:
+        terms_section += (
+            '<div class="terms"><div class="section-label" style="margin-bottom:8px">其他資訊</div>'
+            '<div class="terms-grid">'
+            + ''.join(f'<div class="term-item"><div class="term-title">{esc(lb)}</div><div class="term-block">{esc(val)}</div></div>' for lb, val in _cf)
+            + '</div></div>'
+        )
 
     return (
         '<!DOCTYPE html>\n'
@@ -1970,6 +1985,14 @@ def _build_invoice_voucher_html(v: dict, template: dict = None) -> str:
     html = _dt.render(template or _published_output_template("invoice_voucher", v), view, parts)
     # 核可狀態由程式決定、不由版型決定：未核准一律有紅色警示（冪等；版型自己的 banner 積木照舊保留）
     out = html if v.get("status") == "已核准" else _inject_unapproved(html, v.get("status"), "此為開票申請預覽稿，尚未正式核准", doc_no=v.get("voucherNo", ""))
+    # T63 Q0 c3：報價單自訂欄位附在開票申請憑據最後（唯讀；三個開關都開才有內容；預設 ⇒ 空 ⇒ 輸出逐位元相同）。
+    from helpers.builtin_fields import finance_rows as _fin_rows
+    _fr = _fin_rows(v.get("quoteNo"))
+    if _fr and "</body>" in out:
+        _blk = ('<div style="margin:14px 0 0;font-size:11px"><div style="font-weight:700;margin-bottom:4px">其他資訊（報價單）</div>'
+                + ''.join(f'<div><span style="color:#666">{_html_text(lb, falsy_empty=True)}：</span>{_html_text(val, falsy_empty=True)}</div>' for lb, val in _fr)
+                + '</div>')
+        out = out.replace("</body>", _blk + "</body>", 1)
     from helpers import export_templates as _ET     # BP-3：旗標關／沒有已發布範本 ⇒ 原樣回傳同一個字串（輸出逐位元相同）；程式的橫幅已在上面注入，這裡只加固定樣式的頁尾／浮水印文字
     return _ET.decorate_pdf("arap:invoice-voucher-pdf", out)
 
@@ -2246,6 +2269,15 @@ def _build_payment_request_html_core(v: dict) -> str:
     terms_section = (
         f'<div class="section-label">{"六" if bank_rows else "五"}、請款條件</div>' + terms_html
     ) if terms_html.strip() else ''
+
+    # T63 Q0 c3：報價單自訂欄位附在請款單後面（唯讀、渲染當下從報價單讀；總開關＋報價單開關＋『可帶入財務單據』都開才有內容）。不編章號，不動任何金額。
+    from helpers.builtin_fields import finance_rows as _fin_rows
+    _fr = _fin_rows(v.get('quoteNo'))
+    if _fr:
+        terms_section += (
+            '<div class="section-label">其他資訊（報價單）</div>'
+            + ''.join(term_block(lb, val) for lb, val in _fr)
+        )
 
     is_final = v.get('status') == '已核准'
     watermark_html = '' if is_final else (

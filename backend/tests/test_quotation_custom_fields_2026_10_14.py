@@ -31,7 +31,7 @@ def _flag(on):
     from helpers import settings_registry as SR
     conn = db.get_db()
     try:
-        SR.publish("builder_custom_fields", {"enabled": on}, reason="測試", user="qcf_test", conn=conn)
+        SR.publish("builder_custom_fields", {"enabled": on, "quote_enabled": 1 if on else 0}, reason="測試", user="qcf_test", conn=conn)
         conn.commit()
     finally:
         conn.close()

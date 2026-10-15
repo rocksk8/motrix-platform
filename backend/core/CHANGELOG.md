@@ -8,6 +8,11 @@
 - L1：`helpers/mail_types.py` 登記信件類型 `user_notice`（業務類、預設只寄事件收件人；主旨前綴與分類固定、按鈕只回首頁）；`helpers/notification_prefs.py` 的固定清單加 `user_notice`（個人可在通知偏好退訂；各動作另有 `na:<動作代號>` 個別退訂）。
 - 治理接線：`routers/def_pipeline.py` 的 `ACTIVE_KINDS`／`COMPARATORS` 加 `notify_action`（放寬進待核准、收緊立即生效）；`routers/definitions.py` 的 `_PREVIEW_ENFORCED_KINDS`（發布前必須先看過影響預覽）與惰性登記／旗標關時從種類清單隱藏；`routers/def_governance.py` 的影響範圍白話與 kind 惰性登記。`main.py`：匯入 `helpers.notify_actions`（訂閱事件；旗標關＝什麼都不做）。
 - 旗標關閉時行為與今天逐位元相同：種類清單不變、派發不寫 `notifications`／稽核、不寄信；內建信件類型與其他通知偏好原樣。測試 `tests/platform/test_notify_actions_t63.py`（71 題）。
+- **（併入）(next) — 2026-10-15（wip/t63-q0-r1：T63 Q0 報價單輸出／個資／自訂欄位開放設定）**
+
+- L0（新增，只增）：`core.catalog.register_privacy_core_provider(fn)`——L1 登記『哪些欄位現在不可隱藏』的提供者 `fn(module_key, entity, field)->bool`（L0 不 import L1；重複登記只算一次；提供者丟例外視為 False）。`layout_points` 用私有的 `_apply_privacy_core` 套用：被指定的欄位點視為核心欄位（只剩 move）；沒有提供者或全回 False ⇒ 不動任何點（預設＝今天）。
+- L1（只增）：`helpers/quote_output.hidden_terms`、`helpers/quote_privacy.forced_core`（新檔，載入時向上面的 hook 登記）；`helpers/builtin_fields.type_enabled`／`output_rows`／`finance_rows`／`OUTPUT_OPTIONS`（總開關＋單據類型自己的開關＋輸出選項）；設定群組 `quote_output`、`quote_privacy`、`builder_custom_fields.quote_enabled`。預設＝今天的行為。
+- 設計：docs/platform/plans/T63-Q0-SETTINGS-SPEC.md。測試：tests/platform/test_q0_settings_t63.py。
 
 ## 1.137 — wip/t62-bp4-s1-r1＋wip/t62-bp4-s2-r1＋wip/t62-bp4-s2-r2＋wip/t62-bp4-s3-r1（BP-4 S1／S2／S3：儲存位置代號登錄表＋附件插槽定義；旗標 `builder_slots.enabled` 預設關）；t62 整合 r8＋wip/t62-pdf-decor-r1＋wip/t62-pdf-escape-r1＋wip/h2-pdf-hardening-r1（PDF 頁尾浮水印／輸出逸出稽核／渲染硬化第二輪；一班一個版本，三段併成一段）
 - 狀態顯示名稱表（`helpers/status_display.py`，旗標 `builder_status_display.enabled` 預設關）多三個只做顯示的鍵 `洽談中`／`成案`／`暫擱置`（群組 `devcase`，開發案件 CRM 用；『未成案』沿用既有鍵）。新增守門測試 `test_status_display_canonical_lint_2026_10_14.py`：後端除白名單外不得引用顯示表、前端顯示名稱不得出現在判斷／篩選／請求位置（含正對照）。無 migration、無新路由、無權限變更；旗標關＝與過去逐字相同。
