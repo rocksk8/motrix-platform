@@ -2,12 +2,15 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script src="../static/motrix-format.js"></script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>案件管理 — MOTRIX 專案管理系統</title>
   <!-- CM12：案件管理頁分檔（core 先載：定義 app() 與 CM_PARTS），其餘順序不影響（成員名不重複） -->
   <script src="../static/ui.js"></script>
+  <script src="../static/profit-warning.js"></script>
   <script src="../static/legal-round.js"></script>
   <script src="../static/profit-rules.js"></script>
   <script src="../static/status-chip.js"></script>
@@ -134,7 +137,7 @@
                        style="font-size:11px;color:var(--text-dim);margin-top:2px"
                        x-text="'據點：' + locationName(row.locationId)"></div>
                 </td>
-                <td class="cm-mtx__amt" x-text="canSeeFinancial() ? (row.total||0).toLocaleString() : '—'"></td>
+                <td class="cm-mtx__amt" x-text="canSeeFinancial() ? MotrixFormat.num((row.total||0)) : '—'"></td>
                 <td>
                   <span class="vm-person" x-show="row.salesPerson">
                     <span class="vm-person__av" x-text="(row.salesPerson||'').charAt(0)"></span>
@@ -354,7 +357,7 @@
               <div class="cm-card__sales" x-show="c.sales_person && lShown('sales')" :style="lo('sales')" x-text="lLabel('sales', '業務') + '：' + c.sales_person"></div>
               <div class="cm-card__footer" x-show="lShown('amount') || lShown('stageProgress') || lShown('date')" :style="loFooter()">
                 <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
-                  <span class="cm-card__amount" x-show="lShown('amount')" :style="lo('amount')" x-text="c.moneyMasked ? '—' : 'NT$ ' + (c.total||0).toLocaleString()"></span>
+                  <span class="cm-card__amount" x-show="lShown('amount')" :style="lo('amount')" x-text="c.moneyMasked ? '—' : 'NT$ ' + MotrixFormat.num((c.total||0))"></span>
                   <span class="cm-card__stageprog" x-show="c.stage_total > 0 && lShown('stageProgress')" :style="lo('stageProgress')"
                         :class="{'cm-card__stageprog--danger': c.stage_overdue > 0}"
                         x-text="Math.round((c.stage_done||0) / (c.stage_total||1) * 100) + '%' + (c.stage_overdue > 0 ? ' · 逾期 ' + c.stage_overdue : '')"
@@ -404,7 +407,7 @@
                   <div class="cm-card__customer" x-text="c.customer_name || '(未填客戶)'"></div>
                   <div class="cm-card__footer">
                     <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
-                      <span class="cm-card__amount" x-text="c.moneyMasked ? '—' : 'NT$ ' + (c.total||0).toLocaleString()"></span>
+                      <span class="cm-card__amount" x-text="c.moneyMasked ? '—' : 'NT$ ' + MotrixFormat.num((c.total||0))"></span>
                       <span class="cm-card__stageprog" x-show="c.stage_total > 0"
                             :class="{'cm-card__stageprog--danger': c.stage_overdue > 0}"
                             x-text="Math.round((c.stage_done||0) / (c.stage_total||1) * 100) + '%' + (c.stage_overdue > 0 ? ' · 逾期 ' + c.stage_overdue : '')"
@@ -526,7 +529,7 @@
               <div class="cm-headline">
               <div class="cm-kpi">
                 <div class="cm-kpi__pill" x-show="canSeeFinancial()">
-                  <span class="cm-kpi__val" x-text="'NT$ ' + (totalWithTax()||0).toLocaleString()"></span>
+                  <span class="cm-kpi__val" x-text="'NT$ ' + MotrixFormat.num((totalWithTax()||0))"></span>
                   <span class="cm-kpi__lbl">合約金額</span>
                 </div>
                 <div class="cm-kpi__gauge" x-show="canSeeFinancial()">
@@ -535,7 +538,7 @@
                     <span class="cm-kpi__gpct" :style="receivedPct()>=100 ? 'color:var(--success)' : ''"
                           x-text="receivedPct() + '%'"></span>
                     <span class="cm-kpi__gsub"
-                          x-text="'已收 ' + receivedTotal().toLocaleString() + '　未收 ' + outstandingTotal().toLocaleString()"></span>
+                          x-text="'已收 ' + MotrixFormat.num(receivedTotal()) + '　未收 ' + MotrixFormat.num(outstandingTotal())"></span>
                   </div>
                   <span class="vm-bar">
                     <i class="vm-bar__fill" :class="receivedPct()>=100 ? 'vm-bar__fill--ok' : 'vm-bar__fill--warn'"
@@ -1830,7 +1833,7 @@
                 <div class="pay-strip" x-show="!moneyMasked()">
                   <span class="pay-strip__item">
                     <span class="pay-strip__lbl">未稅金額</span>
-                    <span class="pay-strip__val num" x-text="'NT$ ' + totalPretax().toLocaleString()"></span>
+                    <span class="pay-strip__val num" x-text="'NT$ ' + MotrixFormat.num(totalPretax())"></span>
                   </span>
                   <span class="pay-strip__bar">
                     <span class="prog"><span class="prog__fill prog__fill--green" :style="'width:' + Math.min(receivedPct(),100) + '%'"></span></span>
@@ -1842,11 +1845,11 @@
                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:-6px;margin-bottom:14px">
                     <div class="pay-kpi">
                       <div class="pay-kpi__lbl">手續費 / 扣款合計</div>
-                      <div class="pay-kpi__val pay-kpi__val--danger" x-text="'NT$ ' + feeTotal().toLocaleString()"></div>
+                      <div class="pay-kpi__val pay-kpi__val--danger" x-text="'NT$ ' + MotrixFormat.num(feeTotal())"></div>
                     </div>
                     <div class="pay-kpi">
                       <div class="pay-kpi__lbl">實際淨收</div>
-                      <div class="pay-kpi__val pay-kpi__val--success" x-text="'NT$ ' + netReceivedTotal().toLocaleString()"></div>
+                      <div class="pay-kpi__val pay-kpi__val--success" x-text="'NT$ ' + MotrixFormat.num(netReceivedTotal())"></div>
                     </div>
                   </div>
                 </template>
@@ -1922,7 +1925,7 @@
                         </div>
                         <div style="text-align:right">
                           <div style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:1px">稅額</div>
-                          <div style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-dim)" x-text="'NT$ ' + itemAmountTax(idx).toLocaleString()"></div>
+                          <div style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-dim)" x-text="'NT$ ' + MotrixFormat.num(itemAmountTax(idx))"></div>
                         </div>
                       </div>
                       <label style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;cursor:pointer;flex-shrink:0;transition:background .12s"
@@ -2133,8 +2136,8 @@
                       <span style="font-size:11px;color:var(--text-dim)" x-text="v.scope==='items' ? '自訂品項' : '自訂金額'"></span>
                       <span :class="'badge ' + _ivStatusClass(v.status)" x-text="_ivStatusLabel(v.status)"
                             style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
-                      <span style="font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + (v.totalAmount||0).toLocaleString() + '（含稅）'"></span>
-                      <span style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="'未稅 NT$ ' + (v.pretaxAmount||0).toLocaleString()"></span>
+                      <span style="font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + MotrixFormat.num((v.totalAmount||0)) + '（含稅）'"></span>
+                      <span style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="'未稅 NT$ ' + MotrixFormat.num((v.pretaxAmount||0))"></span>
 
                       <div x-show="canFinanceRole()" style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
                         <template x-if="v.status==='草稿'">
@@ -2199,8 +2202,8 @@
                       <span style="font-size:11px;color:var(--text-dim)" x-text="v.stageLabel || '未分類'"></span>
                       <span :class="'badge ' + _prStatusClass(v.status)" x-text="_prStatusLabel(v.status)"
                             style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
-                      <span style="font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + (v.totalAmount||0).toLocaleString() + '（含稅）'"></span>
-                      <span style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="'未稅 NT$ ' + (v.pretaxAmount||0).toLocaleString()"></span>
+                      <span style="font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + MotrixFormat.num((v.totalAmount||0)) + '（含稅）'"></span>
+                      <span style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="'未稅 NT$ ' + MotrixFormat.num((v.pretaxAmount||0))"></span>
 
                       <div x-show="canFinanceRole()" style="margin-left:auto">
                         <a :href="'payment-request-form.html?id=' + encodeURIComponent(v.requestNo)"
@@ -2737,7 +2740,7 @@
                       <div style="background:var(--tone-success-bg);border:1px solid var(--tone-success-border);border-radius:8px;padding:9px 14px;margin-bottom:14px;font-size:12px;color:var(--tone-success-fg);display:flex;align-items:center;gap:8px">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:var(--tone-success-fg)" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                         <span style="font-family:var(--font-zh)"
-                              x-text="'精算完結 · 精算日期：' + (caseSettlement().settlementDate || '—') + '　完結人：' + (caseSettlement().finalizedBy || '—') + (caseSettlement().finalizedAt ? '　' + new Date(caseSettlement().finalizedAt).toLocaleString('zh-TW') : '')"></span>
+                              x-text="'精算完結 · 精算日期：' + (caseSettlement().settlementDate || '—') + '　完結人：' + (caseSettlement().finalizedBy || '—') + (caseSettlement().finalizedAt ? '　' + MotrixFormat.dt(new Date(caseSettlement().finalizedAt), 'plain') : '')"></span>
                       </div>
                     </template>
                     <template x-if="caseSettleStatus()!=='finalized' && caseSettlement().settlementDate">
@@ -2751,7 +2754,7 @@
                       <div data-testid="fin-dispatch-stale" style="background:var(--tone-warning-bg);border:1px solid var(--tone-warning-border);border-radius:8px;padding:9px 14px;margin-bottom:14px;font-size:12px;color:var(--tone-warning-fg);display:flex;align-items:center;gap:8px">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:var(--tone-warning-fg)" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
                         <span style="font-family:var(--font-zh)"
-                              x-text="'下方精算數字為完結當下快照，承攬商成本之後已異動（快照 NT$' + financeDispatchStale().frozen.toLocaleString() + ' → 目前 NT$' + financeDispatchStale().live.toLocaleString() + '），如需更新請至精算頁面重新開啟並完結'"></span>
+                              x-text="'下方精算數字為完結當下快照，承攬商成本之後已異動（快照 NT$' + MotrixFormat.num(financeDispatchStale().frozen) + ' → 目前 NT$' + MotrixFormat.num(financeDispatchStale().live) + '），如需更新請至精算頁面重新開啟並完結'"></span>
                       </div>
                     </template>
 
@@ -2783,9 +2786,9 @@
                                   <template x-for="o in g.options" :key="o.id">
                                     <div style="display:flex;gap:10px;flex-wrap:wrap" :style="altPlanIsPicked(g.group, o) ? '' : 'color:var(--text-dim)'">
                                       <span style="min-width:140px" x-text="o.label + (altPlanIsPicked(g.group, o) ? '（採用）' : '（未採用）')"></span>
-                                      <span x-text="'稅前 ' + o.pretax.toLocaleString()"></span>
-                                      <span x-text="'直接毛利 ' + o.directProfit.toLocaleString() + '（' + o.directMarginPct.toFixed(1) + '%）'"></span>
-                                      <span x-text="'營業利益 ' + o.netProfit.toLocaleString()"></span>
+                                      <span x-text="'稅前 ' + MotrixFormat.num(o.pretax)"></span>
+                                      <span x-text="'直接毛利 ' + MotrixFormat.num(o.directProfit) + '（' + o.directMarginPct.toFixed(1) + '%）'"></span>
+                                      <span x-text="'營業利益 ' + MotrixFormat.num(o.netProfit)"></span>
                                     </div>
                                   </template>
                                 </div>
@@ -2810,7 +2813,7 @@
                         <span class="cm-kpi__val" x-text="caseSettleFmt(caseSettleSummary().grossProfit)"></span>
                         <span class="cm-kpi__lbl">真實毛利（<span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="((caseSettleSummary().grossMarginPct)||0).toFixed(1) + '%'"></span>）</span>
                       </div>
-                      <div class="cm-kpi__pill" :class="(caseSettleSummary().netMarginPct||0) >= 0 ? 'success' : 'danger'">
+                      <div class="cm-kpi__pill" :class="(caseSettleSummary().netMarginPct||0) >= pw.case_floor ? 'success' : 'danger'">
                         <span class="cm-kpi__val" x-text="((caseSettleSummary().netMarginPct)||0).toFixed(1) + '%'"></span>
                         <span class="cm-kpi__lbl">營業利益率（營業利益 <span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="caseSettleFmt(caseSettleSummary().netProfit)"></span>）</span>
                       </div>
@@ -2849,7 +2852,7 @@
                                     x-text="caseSettleFmt(caseSettleSummary().origNetProfit)"></td></tr>
                             <tr><td style="padding:4px 0;font-weight:600;color:var(--text-dim);font-family:var(--font-zh)">原始預估營業利益率</td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600"
-                                    :style="(caseSettleSummary().origNetMarginPct||0)>=20?'color:var(--tone-success-fg)':(caseSettleSummary().origNetMarginPct||0)>=0?'color:var(--tone-warning-fg)':'color:var(--tone-danger-fg)'"
+                                    :style="(caseSettleSummary().origNetMarginPct||0)>=pw.case_good?'color:var(--tone-success-fg)':(caseSettleSummary().origNetMarginPct||0)>=pw.case_floor?'color:var(--tone-warning-fg)':'color:var(--tone-danger-fg)'"
                                     x-text="((caseSettleSummary().origNetMarginPct)||0).toFixed(1)+'%'"></td></tr>
                           </table>
                         </div>
@@ -2890,7 +2893,7 @@
                                     x-text="caseSettleFmt(caseSettleSummary().netProfit)"></td></tr>
                             <tr><td style="padding:4px 0;font-weight:600;color:var(--text-dim);font-family:var(--font-zh)">真實營業利益率</td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"
-                                    :style="(caseSettleSummary().netMarginPct||0)>=20?'color:var(--tone-success-fg)':(caseSettleSummary().netMarginPct||0)>=0?'color:var(--tone-warning-fg)':'color:var(--tone-danger-fg)'"
+                                    :style="(caseSettleSummary().netMarginPct||0)>=pw.case_good?'color:var(--tone-success-fg)':(caseSettleSummary().netMarginPct||0)>=pw.case_floor?'color:var(--tone-warning-fg)':'color:var(--tone-danger-fg)'"
                                     x-text="((caseSettleSummary().netMarginPct)||0).toFixed(1)+'%'"></td></tr>
                           </table>
                         </div>
@@ -2901,8 +2904,8 @@
                              ? 'background:var(--tone-success-bg);border:1px solid var(--tone-success-border);color:var(--tone-success-fg)'
                              : 'background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);color:var(--tone-danger-fg)'">
                         <span x-text="(caseSettleSummary().profitDiff||0)>=0
-                          ? '真實營業利益比原始預估高 NT$ '+Math.abs(Math.round(caseSettleSummary().profitDiff||0)).toLocaleString()+'（+'+(((caseSettleSummary().netMarginPct||0)-(caseSettleSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'
-                          : '真實營業利益比原始預估低 NT$ '+Math.abs(Math.round(caseSettleSummary().profitDiff||0)).toLocaleString()+'（'+(((caseSettleSummary().netMarginPct||0)-(caseSettleSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'">
+                          ? '真實營業利益比原始預估高 NT$ '+MotrixFormat.num(Math.abs(Math.round(caseSettleSummary().profitDiff||0)))+'（+'+(((caseSettleSummary().netMarginPct||0)-(caseSettleSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'
+                          : '真實營業利益比原始預估低 NT$ '+MotrixFormat.num(Math.abs(Math.round(caseSettleSummary().profitDiff||0)))+'（'+(((caseSettleSummary().netMarginPct||0)-(caseSettleSummary().origNetMarginPct||0)).toFixed(1))+' ppts）'">
                         </span>
                       </div>
                     </div>
@@ -2976,11 +2979,11 @@
                   <div style="font-size:12px;color:var(--text-secondary)">
                     外包總成本：
                     <strong style="color:var(--text-main);font-family:LINE Seed TW_OTF, sans-serif"
-                            x-text="'NT$ ' + dispatchTotalCost().toLocaleString()" data-testid="dispatch-total-cost"></strong>
+                            x-text="'NT$ ' + MotrixFormat.num(dispatchTotalCost())" data-testid="dispatch-total-cost"></strong>
                     <span x-show="dispatchTaxCost() > 0" data-testid="dispatch-tax-note" style="font-size:11px;color:var(--text-dim)"
-                          x-text="'（含稅：未稅承攬費＋稅額＋外包人員；其中稅額 NT$ ' + dispatchTaxCost().toLocaleString() + '）'"></span>
+                          x-text="'（含稅：未稅承攬費＋稅額＋外包人員；其中稅額 NT$ ' + MotrixFormat.num(dispatchTaxCost()) + '）'"></span>
                     <span x-show="dispatchTaxExcludedCost() > 0" data-testid="dispatch-tax-excluded-note" style="font-size:11px;color:var(--text-dim)"
-                          x-text="'（2026-10-01 前的派發照舊未稅計入，其稅額 NT$ ' + dispatchTaxExcludedCost().toLocaleString() + ' 不計成本）'"></span>
+                          x-text="'（2026-10-01 前的派發照舊未稅計入，其稅額 NT$ ' + MotrixFormat.num(dispatchTaxExcludedCost()) + ' 不計成本）'"></span>
                     <span x-show="dispatchPendingNote()" x-text="'（' + dispatchPendingNote() + '）'" data-testid="dispatch-pending-note"
                           style="color:var(--tone-warning-fg);font-size:11px"></span>
                   </div>
@@ -3023,7 +3026,7 @@
                             style="font-size:11px;padding:2px 6px;border-radius:4px">舊單已修改</span>
                       <span x-show="d.docCode" x-text="d.docCode" style="font-size:11px;color:var(--text-dim)"></span>
                       <div style="font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-main)">
-                        NT$ <span x-text="(d.grandTotal||0).toLocaleString()"></span>
+                        NT$ <span x-text="MotrixFormat.num((d.grandTotal||0))"></span>
                       </div>
                       <!-- 31-A：審核與作業狀態操作（狀態只由這些按鈕改） -->
                       <button x-show="d.status!=='cancelled' && ['草稿','已退回'].includes(d.approvalStatus)" @click="submitDispatch(d)" data-testid="dispatch-submit"
@@ -3078,9 +3081,9 @@
                               <td style="text-align:right;padding:5px 6px;font-family:LINE Seed TW_OTF, sans-serif" x-text="it.qty"></td>
                               <td style="padding:5px 0;color:var(--text-dim)" x-text="it.unit"></td>
                               <td style="text-align:right;padding:5px 6px;font-family:LINE Seed TW_OTF, sans-serif"
-                                  x-text="'NT$ ' + (it.unitPrice||0).toLocaleString()"></td>
+                                  x-text="'NT$ ' + MotrixFormat.num((it.unitPrice||0))"></td>
                               <td style="text-align:right;padding:5px 0;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif"
-                                  x-text="'NT$ ' + (it.amount||0).toLocaleString()"></td>
+                                  x-text="'NT$ ' + MotrixFormat.num((it.amount||0))"></td>
                             </tr>
                           </template>
                         </tbody>
@@ -3096,7 +3099,7 @@
                               <td style="padding:5px 0;font-family:var(--font-zh)" x-text="p.name"></td>
                               <td style="padding:5px 0;color:var(--text-dim)" x-text="p.note || ''"></td>
                               <td style="text-align:right;padding:5px 0;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif"
-                                  x-text="'NT$ ' + (p.amount||0).toLocaleString()"></td>
+                                  x-text="'NT$ ' + MotrixFormat.num((p.amount||0))"></td>
                             </tr>
                           </template>
                         </tbody>
@@ -3137,10 +3140,10 @@
                     </div>
                     <!-- Tax summary -->
                     <div style="display:flex;justify-content:flex-end;gap:14px;padding:5px 16px 6px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary);background:var(--surface-muted);border-top:1px solid var(--border-light)">
-                      <span x-show="d.items && d.items.length > 0">小計 NT$ <span x-text="(d.totalAmount||0).toLocaleString()"></span></span>
-                      <span x-show="(d.taxRate||0)>0 && d.items && d.items.length > 0">稅額（<span x-text="Math.round((d.taxRate||0)*100)"></span>%）NT$ <span x-text="(d.taxAmount||0).toLocaleString()"></span></span>
-                      <span x-show="(d.personnel||[]).length > 0">外包人員 NT$ <span x-text="(d.personnelTotal||0).toLocaleString()"></span></span>
-                      <span style="font-weight:700;color:var(--text-main)">總成本 NT$ <span x-text="(d.grandTotal||0).toLocaleString()"></span></span>
+                      <span x-show="d.items && d.items.length > 0">小計 NT$ <span x-text="MotrixFormat.num((d.totalAmount||0))"></span></span>
+                      <span x-show="(d.taxRate||0)>0 && d.items && d.items.length > 0">稅額（<span x-text="Math.round((d.taxRate||0)*100)"></span>%）NT$ <span x-text="MotrixFormat.num((d.taxAmount||0))"></span></span>
+                      <span x-show="(d.personnel||[]).length > 0">外包人員 NT$ <span x-text="MotrixFormat.num((d.personnelTotal||0))"></span></span>
+                      <span style="font-weight:700;color:var(--text-main)">總成本 NT$ <span x-text="MotrixFormat.num((d.grandTotal||0))"></span></span>
                     </div>
                     <div x-show="d.invoiceNo" style="padding:6px 16px 0;font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
                          x-text="'發票號碼：' + d.invoiceNo"></div>
@@ -3215,7 +3218,7 @@
                       <template x-for="v in _dispatchVouchers(d)" :key="v.voucherNo">
                         <div :style="'display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%' + (v.voidedAt ? ';opacity:.55' : '')">
                           <span style="font-size:11px;font-weight:600;color:var(--tone-warning-fg)" :style="v.voidedAt ? 'text-decoration:line-through' : ''" x-text="v.voucherNo"></span>
-                          <span x-show="v.kind" data-testid="cv-kind-label" style="font-size:11px;font-weight:600;color:var(--text-secondary)" x-text="_cvKindLabel(v) + (v.pretaxAmount != null ? '　稅前 ' + Number(v.pretaxAmount).toLocaleString() : '')"></span>
+                          <span x-show="v.kind" data-testid="cv-kind-label" style="font-size:11px;font-weight:600;color:var(--text-secondary)" x-text="_cvKindLabel(v) + (v.pretaxAmount != null ? '　稅前 ' + MotrixFormat.num(Number(v.pretaxAmount)) : '')"></span>
                           <span :class="'badge ' + _cvStatusClass(v.status)" x-text="_cvStatusLabel(v.status)"
                                 style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
                           <span x-show="v.plannedPayDate && !v.voidedAt" :data-testid="'cv-planned-' + v.voucherNo" style="font-size:11px;color:var(--text-dim)"
@@ -3249,7 +3252,7 @@
                         </div>
                       </template>
                       <div x-show="_dispatchOpenVouchers(d).some(x => x.kind)" data-testid="cv-progress" style="font-size:11px;color:var(--text-secondary);font-family:var(--font-zh)"
-                           x-text="'已申請 稅前 ' + _cvIssuedPretax(d).toLocaleString() + ' ／ ' + (d.totalAmount || 0).toLocaleString() + '（剩餘 ' + _cvRemaining(d).toLocaleString() + '）'"></div>
+                           x-text="'已申請 稅前 ' + MotrixFormat.num(_cvIssuedPretax(d)) + ' ／ ' + MotrixFormat.num((d.totalAmount || 0)) + '（剩餘 ' + MotrixFormat.num(_cvRemaining(d)) + '）'"></div>
                       <!-- CM8：匯款憑據改成點進這個分頁才載入；載入完之前不可以顯示「產生匯款申請」（會重複建立） -->
                       <template x-if="!contractorVouchersLoading && _cvCanCreate(d)">
                         <button @click="createContractorVoucher(d)" data-testid="cv-create-btn"
@@ -4049,7 +4052,7 @@
                        style="width:100%;padding:5px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;text-align:right;outline:none;box-sizing:border-box">
               </td>
               <td style="padding:4px 6px;text-align:right;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-main)"
-                  x-text="(it.amount || 0).toLocaleString()"></td>
+                  x-text="MotrixFormat.num((it.amount || 0))"></td>
               <td style="padding:4px 0;text-align:center">
                 <button @click="removeDispatchItem(ii)"
                         style="width:22px;height:22px;border:none;background:none;cursor:pointer;color:var(--danger);font-size:14px;line-height:1">×</button>
@@ -4066,7 +4069,7 @@
         <span style="flex:1"></span>
         <span style="font-size:12px;color:var(--text-secondary)">小計：</span>
         <span style="font-size:13px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif"
-              x-text="'NT$ ' + _dispatchSubtotal().toLocaleString()"></span>
+              x-text="'NT$ ' + MotrixFormat.num(_dispatchSubtotal())"></span>
       </div>
       <div style="display:flex;align-items:center;justify-content:flex-end;gap:16px;padding:8px 0;border-top:1px solid var(--border-light)">
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)">
@@ -4078,10 +4081,10 @@
           </select>
         </label>
         <span x-show="+(dispatchForm.tax_rate)>0" style="font-size:12px;color:var(--text-secondary)">
-          稅額：NT$ <span x-text="_dispatchTaxAmount().toLocaleString()"></span>
+          稅額：NT$ <span x-text="MotrixFormat.num(_dispatchTaxAmount())"></span>
         </span>
         <span style="font-size:13px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)">
-          承攬商含稅合計：NT$ <span x-text="_dispatchTotalWithTax().toLocaleString()"></span>
+          承攬商含稅合計：NT$ <span x-text="MotrixFormat.num(_dispatchTotalWithTax())"></span>
         </span>
       </div>
 
@@ -4125,12 +4128,12 @@
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:8px" x-show="(dispatchForm.personnel||[]).length">
         <span style="font-size:13px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)">
-          外包人員小計：NT$ <span x-text="_dispatchPersonnelTotal().toLocaleString()"></span>
+          外包人員小計：NT$ <span x-text="MotrixFormat.num(_dispatchPersonnelTotal())"></span>
         </span>
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:6px;padding-top:8px;border-top:1px solid var(--border-light)">
         <span style="font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--accent)">
-          派發總成本：NT$ <span x-text="_dispatchGrandTotal().toLocaleString()"></span>
+          派發總成本：NT$ <span x-text="MotrixFormat.num(_dispatchGrandTotal())"></span>
         </span>
       </div>
 
@@ -4520,12 +4523,12 @@
         <div style="font-size:11px;font-weight:500;color:var(--text-secondary);margin-bottom:4px">個人外包人員 ↔ 勞報單<span x-show="payLinks && payLinks.required">（必須先關聯）</span></div>
         <template x-for="l in (payLinks ? payLinks.lines : [])" :key="l.name + l.id">
           <div style="border:1px solid var(--border-light);border-radius:6px;padding:6px 8px;margin-bottom:6px" :data-testid="'cm-pay-link-row-' + l.id">
-            <div style="display:flex;justify-content:space-between"><b x-text="l.name"></b><span x-text="'匯款 NT$ ' + Number(l.amount).toLocaleString()"></span></div>
+            <div style="display:flex;justify-content:space-between"><b x-text="l.name"></b><span x-text="'匯款 NT$ ' + MotrixFormat.num(Number(l.amount))"></span></div>
             <select :value="l.payslipNo" @change="linkPayslip(l, $event.target.value)" :data-testid="'cm-pay-link-select-' + l.id"
                     style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-top:4px">
               <option value="">— 未關聯 —</option>
               <template x-if="l.payslipNo && !l.candidates.some(c => c.slipNo === l.payslipNo)"><option :value="l.payslipNo" selected x-text="l.payslipNo + '（已關聯）'"></option></template>
-              <template x-for="c in l.candidates" :key="c.slipNo"><option :value="c.slipNo" :selected="c.slipNo === l.payslipNo" x-text="c.slipNo + '　實付 ' + Number(c.net).toLocaleString() + (Math.abs(c.net - l.amount) > 0.005 ? '　⚠ 與匯款金額不符' : '')"></option></template>
+              <template x-for="c in l.candidates" :key="c.slipNo"><option :value="c.slipNo" :selected="c.slipNo === l.payslipNo" x-text="c.slipNo + '　實付 ' + MotrixFormat.num(Number(c.net)) + (Math.abs(c.net - l.amount) > 0.005 ? '　⚠ 與匯款金額不符' : '')"></option></template>
             </select>
             <div x-show="l.error" x-text="l.error" style="color:var(--danger);margin-top:4px" :data-testid="'cm-pay-link-error-' + l.id"></div>
             <div x-show="l.ok && l.payslipNo" style="color:var(--success);margin-top:4px">✓ 金額相符，匯款時勞報單一併記為已付款</div>
@@ -4535,7 +4538,7 @@
       <div x-show="payLinksError" x-text="payLinksError" style="color:var(--danger);font-size:12px;margin-bottom:8px" data-testid="cm-pay-links-error"></div>
       <div style="display:flex;gap:10px;margin-bottom:8px;font-family:var(--font-zh);font-size:12px">
         <div style="flex:1"><div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">應付金額</div>
-          <div style="padding:7px 0;font-family:'LINE Seed TW_OTF',sans-serif" x-text="'NT$ ' + Number(payVoucherTarget ? payVoucherTarget.grandTotal : 0).toLocaleString()"></div></div>
+          <div style="padding:7px 0;font-family:'LINE Seed TW_OTF',sans-serif" x-text="'NT$ ' + MotrixFormat.num(Number(payVoucherTarget ? payVoucherTarget.grandTotal : 0))"></div></div>
         <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">實付金額</label>
           <input type="number" min="0" step="0.01" x-model="payRemit.actual" data-testid="cm-pay-actual"
                  style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;outline:none;box-sizing:border-box"></div>
@@ -4649,15 +4652,15 @@
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;background:var(--surface-muted);border:1px solid var(--border-light);border-radius:6px;padding:10px 12px">
             <div>
               <div style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:2px">合約總額</div>
-              <div style="font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + ivRemaining.quoteTotal.toLocaleString()"></div>
+              <div style="font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + MotrixFormat.num(ivRemaining.quoteTotal)"></div>
             </div>
             <div>
               <div style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:2px">已申請（含草稿）</div>
-              <div style="font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="'NT$ ' + ivRemaining.requestedAmount.toLocaleString()"></div>
+              <div style="font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="'NT$ ' + MotrixFormat.num(ivRemaining.requestedAmount)"></div>
             </div>
             <div>
               <div style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:2px">剩餘可申請</div>
-              <div style="font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-success-solid)" x-text="'NT$ ' + ivRemaining.remainingAmount.toLocaleString()"></div>
+              <div style="font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-success-solid)" x-text="'NT$ ' + MotrixFormat.num(ivRemaining.remainingAmount)"></div>
             </div>
           </div>
 
@@ -4697,8 +4700,8 @@
                      style="padding-left:36px;font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif">
             </div>
             <div x-show="ivAmountInput > 0" style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;padding:2px 0">
-              <span>未稅 NT$ <span x-text="ivAmountPretax().toLocaleString()"></span></span>
-              <span>營業稅 NT$ <span x-text="ivAmountTax().toLocaleString()"></span></span>
+              <span>未稅 NT$ <span x-text="MotrixFormat.num(ivAmountPretax())"></span></span>
+              <span>營業稅 NT$ <span x-text="MotrixFormat.num(ivAmountTax())"></span></span>
             </div>
             <div x-show="ivAmountInput > ivRemaining.remainingAmount" style="font-size:11px;color:var(--danger)">超過剩餘可申請金額</div>
           </div>
@@ -4730,15 +4733,15 @@
             <div style="font-size:12px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-light)">
               <div style="display:flex;justify-content:space-between;color:var(--text-dim);margin-bottom:3px">
                 <span>未稅小計</span>
-                <span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + ivSelectedTotal().toLocaleString()"></span>
+                <span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + MotrixFormat.num(ivSelectedTotal())"></span>
               </div>
               <div style="display:flex;justify-content:space-between;color:var(--text-dim);margin-bottom:3px">
                 <span>營業稅</span>
-                <span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + ivSelectedTax().toLocaleString()"></span>
+                <span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + MotrixFormat.num(ivSelectedTax())"></span>
               </div>
               <div style="display:flex;justify-content:space-between;font-weight:700">
                 <span>含稅小計</span>
-                <span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + ivSelectedGrossTotal().toLocaleString()"></span>
+                <span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + MotrixFormat.num(ivSelectedGrossTotal())"></span>
               </div>
             </div>
             <div x-show="ivSelectedGrossTotal() > ivRemaining.remainingAmount" style="font-size:11px;color:var(--danger);margin-top:4px">超過剩餘可申請金額</div>
@@ -4931,7 +4934,8 @@ window.CM_PARTS.push(() => ({
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) return
       // 同一次設定請求取得旗標（一個請求）；某個群組讀不到時逐組重試，不拖垮其他旗標（public-flags.js）。名單順序：layout、custom_fields、rules、slots、status_display
-      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots', 'builder_status_display', 'builder_stage_templates'], { token: s.token })
+      const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_rules', 'builder_slots', 'builder_status_display', 'builder_stage_templates', 'ui_format'], { token: s.token })
+      if (window.MotrixFormat && window.MotrixFormat.apply) window.MotrixFormat.apply(g.ui_format)      // T64-B：旗標關 ⇒ 清掉快取（沒有額外請求）
       // T61 S5：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）
       if (g.builder_custom_fields && g.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
       // BP-2：旗標 builder_rules.enabled＝1 才啟動標示規則（關＝不送任何規則請求；兩支 js 載入後是惰性的）

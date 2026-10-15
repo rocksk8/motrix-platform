@@ -25,6 +25,7 @@ function reportsApp() {
 
     // ── UI state ──────────────────────────────────────────────────────────────
     loading:    false,
+    pw:         MotrixProfitWarning.defaults(),      // T64 A：利潤顏色門檻（設定 profit_warning.*；預設＝原本的數字）
     exporting:  false,
     exportType: '',
     error:      '',
@@ -1257,6 +1258,7 @@ function reportsApp() {
     async init() {
       if (this._initDone) return
       this._initDone = true
+      MotrixProfitWarning.load().then(b => { this.pw = b })      // T64 A：取不到＝原本的數字
       if (window.MotrixStatus) window.MotrixStatus.init()      // 旗標關 ⇒ 什麼都不改
       // 2026-08-31：出納模組併入本頁後的准入判斷放寬——admin+ 維持原行為
       // （全部 12 個財務報表頁籤＋出納頁籤都看得到）；純 cashier/finance 模組

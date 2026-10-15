@@ -2,6 +2,8 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script src="../static/motrix-format.js"></script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
@@ -9,6 +11,7 @@
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
   <script src="../static/legal-round.js"></script>
   <script src="../static/profit-rules.js"></script>
+  <script src="../static/profit-warning.js"></script>
   <script src="../static/alt-items.js"></script>
   <script src="../static/margin-tone.js"></script>
   <script src="../static/auth-guard.js"></script>
@@ -1001,7 +1004,7 @@
             </div>
             <div style="font-size:11px;color:#9A3412;line-height:1.8;flex-wrap:wrap;display:flex;gap:0 16px">
               <span>退回人：<b x-text="q.returnInfo?.returnedByDisplay || q.returnInfo?.returnedBy || '—'"></b></span>
-              <span>時間：<b x-text="q.returnInfo?.returnedAt ? new Date(q.returnInfo.returnedAt).toLocaleString('zh-TW') : '—'"></b></span>
+              <span>時間：<b x-text="q.returnInfo?.returnedAt ? MotrixFormat.dt(new Date(q.returnInfo.returnedAt), 'plain') : '—'"></b></span>
               <span>原始單號：<b x-text="q.returnInfo?.originalQuoteNo || '—'"></b></span>
             </div>
             <template x-if="q.returnInfo?.note">
@@ -1035,7 +1038,7 @@
                           <td style="padding:5px 8px;color:#555;font-size:10px" x-text="item.brand || ''"></td>
                           <td style="padding:5px 8px;text-align:right;color:#1a1a1a" x-text="item.type !== 'header' ? (item.qty ?? '') : ''"></td>
                           <td style="padding:5px 8px;color:#555" x-text="item.type !== 'header' ? (item.unit || '') : ''"></td>
-                          <td style="padding:5px 8px;text-align:right;color:#1a1a1a" x-text="item.type !== 'header' && item.unitPrice != null ? Number(item.unitPrice).toLocaleString() : ''"></td>
+                          <td style="padding:5px 8px;text-align:right;color:#1a1a1a" x-text="item.type !== 'header' && item.unitPrice != null ? MotrixFormat.num(Number(item.unitPrice)) : ''"></td>
                         </tr>
                       </template>
                     </tbody>
@@ -1054,7 +1057,7 @@
         <div style="flex:1">
           <div style="font-size:12px;font-weight:600;color:#15803D">報價單已送出 · 唯讀模式</div>
           <div style="font-size:11px;color:#15803D;margin-top:2px"
-               x-text="q.approval?.approvedAt ? '簽核人：' + (q.approval.approvedByDisplay||q.approval.approvedBy) + '　' + new Date(q.approval.approvedAt).toLocaleString('zh-TW') : ''"></div>
+               x-text="q.approval?.approvedAt ? '簽核人：' + (q.approval.approvedByDisplay||q.approval.approvedBy) + '　' + MotrixFormat.dt(new Date(q.approval.approvedAt), 'plain') : ''"></div>
         </div>
         <button class="btn btn-sm" style="background:#fff;color:#15803D;border:1px solid #86EFAC;pointer-events:auto !important"
                 @click.stop="copyToNew()">
@@ -1572,13 +1575,13 @@
                   </td>
                   <td>
                     <div class="cell-display" x-show="item.type !== 'header'"
-                         x-text="item.amount > 0 ? item.amount.toLocaleString() : ''"></div>
+                         x-text="item.amount > 0 ? MotrixFormat.num(item.amount) : ''"></div>
                   </td>
                   <template x-if="showCostCols && item.type !== 'header'">
                     <td class="internal">
                       <div class="cell-display internal"
                            :style="(item.amount - (item.qty||0)*(item.cost||0)*1.05) < 0 ? 'color:var(--danger)' : 'color:#15803D'"
-                           x-text="item.cost > 0 && item.amount > 0 ? MotrixLegalRound.halfUp(item.amount - (item.qty||0)*(item.cost||0)*1.05).toLocaleString() : ''">
+                           x-text="item.cost > 0 && item.amount > 0 ? MotrixFormat.num(MotrixLegalRound.halfUp(item.amount - (item.qty||0)*(item.cost||0)*1.05)) : ''">
                       </div>
                     </td>
                   </template>
@@ -1716,34 +1719,34 @@
             <div class="total-row">
               <span class="total-label">品項小計</span>
               <span class="total-currency">NTD</span>
-              <span class="total-amount" x-text="tot.subtotal.toLocaleString()"></span>
+              <span class="total-amount" x-text="MotrixFormat.num(tot.subtotal)"></span>
             </div>
             <div class="total-row" x-show="q.discount > 0">
               <span class="total-label" style="color:var(--danger)">折讓</span>
               <span class="total-currency">NTD</span>
-              <span class="total-amount" style="color:var(--danger)" x-text="'－' + q.discount.toLocaleString()"></span>
+              <span class="total-amount" style="color:var(--danger)" x-text="'－' + MotrixFormat.num(q.discount)"></span>
             </div>
             <div class="total-row" x-show="q.freight > 0">
               <span class="total-label">運費</span>
               <span class="total-currency">NTD</span>
-              <span class="total-amount" x-text="q.freight.toLocaleString()"></span>
+              <span class="total-amount" x-text="MotrixFormat.num(q.freight)"></span>
             </div>
             <div class="total-row">
               <span class="total-label">稅前合計</span>
               <span class="total-currency">NTD</span>
-              <span class="total-amount" x-text="altTotalsText() || tot.pretax.toLocaleString()"></span>
+              <span class="total-amount" x-text="altTotalsText() || MotrixFormat.num(tot.pretax)"></span>
             </div>
             <div class="total-row">
               <span class="total-label"
                     x-text="taxLineLabel() + ((q.taxRate??5)<5 ? (q.approval?.status==='approved' ? ' ✓' : ' ⚠') : '')"
                     :style="(q.taxRate??5)<5 ? (q.approval?.status==='approved' ? 'color:var(--success)' : 'color:var(--warning)') : ''"></span>
               <span class="total-currency">NTD</span>
-              <span class="total-amount" x-text="tot.tax.toLocaleString()"></span>
+              <span class="total-amount" x-text="MotrixFormat.num(tot.tax)"></span>
             </div>
             <div class="total-row grand">
               <span>總　計</span>
               <span>NTD</span>
-              <span x-text="altTotalsText() || tot.total.toLocaleString()"></span>
+              <span x-text="altTotalsText() || MotrixFormat.num(tot.total)"></span>
             </div>
           </div>
           <div x-show="altNotePreview().length" style="margin-top:8px;font-size:11px;color:var(--text-dim)" data-testid="qf-alt-note-preview">
@@ -1862,7 +1865,7 @@
           審核紀錄
         </div>
         <div><b>申請人：</b><span x-text="q.approval?.requestedByDisplay || q.approval?.requestedBy || ''"></span></div>
-        <div><b>申請時間：</b><span x-text="q.approval?.requestedAt ? new Date(q.approval.requestedAt).toLocaleString('zh-TW') : ''"></span></div>
+        <div><b>申請時間：</b><span x-text="q.approval?.requestedAt ? MotrixFormat.dt(new Date(q.approval.requestedAt), 'plain') : ''"></span></div>
         <div x-show="q.approval?.reasons?.length">
           <b>審核品項</b>
           <ul style="margin:2px 0 0 14px;padding:0">
@@ -1881,7 +1884,7 @@
               已核准
             </div>
             <div><b>核准者：</b><span x-text="q.approval?.approvedByDisplay || q.approval?.approvedBy || ''"></span></div>
-            <div><b>核准時間：</b><span x-text="q.approval?.approvedAt ? new Date(q.approval.approvedAt).toLocaleString('zh-TW') : ''"></span></div>
+            <div><b>核准時間：</b><span x-text="q.approval?.approvedAt ? MotrixFormat.dt(new Date(q.approval.approvedAt), 'plain') : ''"></span></div>
           </div>
         </template>
       </div>
@@ -1899,19 +1902,19 @@
 
         <div class="cost-row">
           <span class="cost-row__label">銷售收入（未稅額）</span>
-          <span class="cost-row__val" x-text="'NT$ ' + tot.pretax.toLocaleString()"></span>
+          <span class="cost-row__val" x-text="'NT$ ' + MotrixFormat.num(tot.pretax)"></span>
         </div>
         <div class="cost-row">
           <span class="cost-row__label">直接成本（未稅額）</span>
-          <span class="cost-row__val" x-text="'NT$ ' + tot.totalCost.toLocaleString()"></span>
+          <span class="cost-row__val" x-text="'NT$ ' + MotrixFormat.num(tot.totalCost)"></span>
         </div>
         <div class="cost-row">
           <span class="cost-row__label">進項稅額 5%</span>
-          <span class="cost-row__val" x-text="'NT$ ' + tot.inputVat.toLocaleString()"></span>
+          <span class="cost-row__val" x-text="'NT$ ' + MotrixFormat.num(tot.inputVat)"></span>
         </div>
         <div class="cost-row">
           <span class="cost-row__label">直接毛利</span>
-          <span class="cost-row__val success" x-text="'NT$ ' + tot.directProfit.toLocaleString()"></span>
+          <span class="cost-row__val success" x-text="'NT$ ' + MotrixFormat.num(tot.directProfit)"></span>
         </div>
         <div class="cost-row" style="border-bottom:none">
           <span class="cost-row__label">直接毛利率</span>
@@ -1937,7 +1940,7 @@
 
         <div class="cost-row" x-show="ohVer() !== 2">
           <span class="cost-row__label">管銷分攤（10%，固定）</span>
-          <span class="cost-row__val warning" x-text="'NT$ ' + tot.adminCost.toLocaleString()"></span>
+          <span class="cost-row__val warning" x-text="'NT$ ' + MotrixFormat.num(tot.adminCost)"></span>
         </div>
         <!-- 第 48 班 S3：管銷分攤＝直接毛利 × 比率（每張可調，預設取全域設定；只有最高管理者能改，偏離預設要警示）。口徑開關 off（legacy）時整塊不顯示 -->
         <div class="cost-row" x-show="ohVer() === 2" x-cloak style="flex-wrap:wrap" data-testid="qf-overhead-row">
@@ -1952,7 +1955,7 @@
             </template>
             %）
           </span>
-          <span class="cost-row__val warning" x-text="'NT$ ' + tot.adminCost.toLocaleString()"></span>
+          <span class="cost-row__val warning" x-text="'NT$ ' + MotrixFormat.num(tot.adminCost)"></span>
           <span x-show="ohDeviates()" x-cloak data-testid="qf-overhead-warning" style="flex-basis:100%;font-size:11px;color:var(--warning)">
             ⚠ 管銷比率已調整為 <span x-text="ohPct()"></span>%（預設 <span x-text="oh.defaultPct"></span>%）——將影響營業利益與獎金基數
             <button type="button" class="btn btn-ghost btn-sm" style="margin-left:6px" @click="resetOhPct()" data-testid="qf-overhead-reset">還原預設</button>
@@ -1964,18 +1967,18 @@
             <span data-testid="qf-charity-label" x-text="charityBasis() === 'total' ? '公益捐款（報價含稅 1%）' : '公益捐款（直接毛利 1%）'"></span>
             <span style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#1A1A1A;color:#888;padding:1px 5px;border-radius:3px;letter-spacing:.04em">不可修改</span>
           </span>
-          <span class="cost-row__val warning" x-text="'NT$ ' + tot.charityDonation.toLocaleString()" data-testid="qf-charity-value"></span>
+          <span class="cost-row__val warning" x-text="'NT$ ' + MotrixFormat.num(tot.charityDonation)" data-testid="qf-charity-value"></span>
           <span x-show="tot.directProfit < 0 && charityBasis() !== 'total'" x-cloak data-testid="qf-charity-floor-note" style="flex-basis:100%;font-size:11px;color:var(--warning)">虧損案公益金以 0 計</span>
         </div>
         <!-- 第 48 班（使用者 2026-10-09）：運輸物流／安裝施工／差異項／保固預估／其他費用 五個輸入拿掉——所有費用一律走請款申請。
              舊口徑（未切換前、已精算／結案單）的既有值仍計入間接成本合計，改成唯讀一列；新口徑一律不計。 -->
         <div class="cost-row" x-show="ohVer() === 1 && legacyIndirectSum() !== 0" x-cloak data-testid="qf-legacy-indirect">
           <span class="cost-row__label">既有間接成本（運輸／安裝／差異／保固／其他；舊單，不再可編輯）</span>
-          <span class="cost-row__val warning" x-text="'NT$ ' + legacyIndirectSum().toLocaleString()"></span>
+          <span class="cost-row__val warning" x-text="'NT$ ' + MotrixFormat.num(legacyIndirectSum())"></span>
         </div>
         <div class="cost-row" style="border-bottom:none">
           <span class="cost-row__label">間接成本合計</span>
-          <span class="cost-row__val warning" x-text="'NT$ ' + tot.totalIndirect.toLocaleString()"></span>
+          <span class="cost-row__val warning" x-text="'NT$ ' + MotrixFormat.num(tot.totalIndirect)"></span>
         </div>
 
         <hr class="cost-divider">
@@ -1984,17 +1987,17 @@
         <div class="cost-row">
           <span class="cost-row__label">營業利益</span>
           <span class="cost-row__val" :class="tot.netProfit < 0 ? 'danger' : 'success'"
-                x-text="'NT$ ' + tot.netProfit.toLocaleString()"></span>
+                x-text="'NT$ ' + MotrixFormat.num(tot.netProfit)"></span>
         </div>
 
         <div class="net-profit">
           <div class="net-profit__val"
-               :style="altUnpicked() ? 'color:#9CA3AF' : tot.netMarginPct < 12 ? 'color:#F87171' : tot.netMarginPct < 20 ? 'color:#FCD34D' : 'color:#4ADE80'"
+               :style="altUnpicked() ? 'color:#9CA3AF' : tot.netMarginPct < pw.quote_form_low ? 'color:#F87171' : tot.netMarginPct < pw.quote_form_good ? 'color:#FCD34D' : 'color:#4ADE80'"
                x-text="tot.netMarginPct.toFixed(1) + '%'"></div>
           <div class="net-profit__label">
             營業利益率
-            <span :style="altUnpicked() ? 'color:#9CA3AF' : tot.netMarginPct < 12 ? 'color:#F87171' : 'color:#4ADE80'"
-                  x-text="altUnpicked() ? '（暫估，尚未選定方案）' : tot.netMarginPct < 12 ? '⚠ 低於目標 12%' : '✓ 達標'"></span>
+            <span :style="altUnpicked() ? 'color:#9CA3AF' : tot.netMarginPct < pw.quote_form_low ? 'color:#F87171' : 'color:#4ADE80'"
+                  x-text="altUnpicked() ? '（暫估，尚未選定方案）' : tot.netMarginPct < pw.quote_form_low ? '⚠ 低於目標 ' + pw.quote_form_low + '%' : '✓ 達標'"></span>
           </div>
         </div>
       </div>
@@ -2012,7 +2015,7 @@
                 <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer">
                   <input type="radio" :name="'altpick-' + g.group" :value="o.id" :checked="signPick.picks[g.group] === o.id" @change="signPick.picks[g.group] = o.id">
                   <span style="flex:1" x-text="o.label"></span>
-                  <span style="color:var(--text-dim)" x-text="'NT$ ' + o.amount.toLocaleString()"></span>
+                  <span style="color:var(--text-dim)" x-text="'NT$ ' + MotrixFormat.num(o.amount)"></span>
                 </label>
               </template>
             </div>
@@ -2051,11 +2054,11 @@
                     <template x-for="o in g.options" :key="o.id">
                       <tr>
                         <td x-text="o.label"></td>
-                        <td :data-l="'稅前'" x-text="o.pretax.toLocaleString()"></td>
-                        <td :data-l="'成本'" x-text="o.totalCost.toLocaleString()"></td>
-                        <td :data-l="'直接毛利'" x-text="o.directProfit.toLocaleString()"></td>
+                        <td :data-l="'稅前'" x-text="MotrixFormat.num(o.pretax)"></td>
+                        <td :data-l="'成本'" x-text="MotrixFormat.num(o.totalCost)"></td>
+                        <td :data-l="'直接毛利'" x-text="MotrixFormat.num(o.directProfit)"></td>
                         <td :data-l="'毛利率'" :class="MotrixMargin.tone(o.directMarginPct)" x-text="o.directMarginPct.toFixed(1) + '%'"></td>
-                        <td :data-l="'營業利益'" x-text="o.netProfit.toLocaleString()"></td>
+                        <td :data-l="'營業利益'" x-text="MotrixFormat.num(o.netProfit)"></td>
                         <td :data-l="'營業利益率'" x-text="o.netMarginPct.toFixed(1) + '%'"></td>
                       </tr>
                     </template>
@@ -2078,10 +2081,10 @@
                     <template x-for="(r, ri) in comboRows()" :key="ri">
                       <tr>
                         <td x-text="comboLabel(r)"></td>
-                        <td :data-l="'稅前'" x-text="r.figures.pretax.toLocaleString()"></td>
-                        <td :data-l="'直接毛利'" x-text="r.figures.directProfit.toLocaleString()"></td>
+                        <td :data-l="'稅前'" x-text="MotrixFormat.num(r.figures.pretax)"></td>
+                        <td :data-l="'直接毛利'" x-text="MotrixFormat.num(r.figures.directProfit)"></td>
                         <td :data-l="'毛利率'" :class="MotrixMargin.tone(r.figures.directMarginPct)" x-text="r.figures.directMarginPct.toFixed(1) + '%'"></td>
-                        <td :data-l="'營業利益'" x-text="r.figures.netProfit.toLocaleString()"></td>
+                        <td :data-l="'營業利益'" x-text="MotrixFormat.num(r.figures.netProfit)"></td>
                       </tr>
                     </template>
                   </tbody>
@@ -2123,7 +2126,7 @@
                   <span style="font-weight:400;color:var(--text-secondary)" x-text="v.by ? ' · ' + v.by : ''"></span>
                 </div>
                 <div style="font-size:10px;color:var(--text-dim);margin-top:1px"
-                     x-text="(v.at ? new Date(v.at).toLocaleString('zh-TW',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '') + (v.size ? ' · ' + Math.round(v.size/1024 /* 非金額 */) + ' KB' : '')"></div>
+                     x-text="(v.at ? MotrixFormat.dt(new Date(v.at), 'full') : '') + (v.size ? ' · ' + Math.round(v.size/1024 /* 非金額 */) + ' KB' : '')"></div>
               </div>
               <button x-show="v.available" @click="downloadVersion(v)"
                       style="flex-shrink:0;padding:4px 10px;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;background:#fff;color:#065F46;border:1px solid #A7F3D0;border-radius:5px;cursor:pointer">
@@ -2152,7 +2155,7 @@
                      所以改用 editTypeLabel() 具名對照，未知值顯示原字串而不是猜。 -->
                 <div style="font-size:11px;font-weight:600;color:var(--text-primary)" x-text="editTypeLabel(h.type)"></div>
                 <div style="font-size:10px;color:var(--text-secondary);margin-top:1px" x-text="h.byDisplay || h.by"></div>
-                <div style="font-size:10px;color:var(--text-dim);margin-top:1px" x-text="h.at ? new Date(h.at).toLocaleString('zh-TW',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''"></div>
+                <div style="font-size:10px;color:var(--text-dim);margin-top:1px" x-text="h.at ? MotrixFormat.dt(new Date(h.at), 'short') : ''"></div>
                 <template x-if="h.changes && h.changes.length">
                   <div style="margin-top:4px;display:flex;flex-direction:column;gap:2px">
                     <template x-for="(c, ci) in h.changes" :key="ci">
@@ -2326,7 +2329,7 @@
             <div style="flex:1;min-width:0">
               <div style="font-size:12px;font-weight:600;color:#111" x-text="entry.userDisplay || entry.by || '—'"></div>
               <div style="font-size:11px;color:#888;font-family:LINE Seed TW_OTF, sans-serif;margin-top:1px"
-                   x-text="entry.at ? new Date(entry.at).toLocaleString('zh-TW', {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—'"></div>
+                   x-text="entry.at ? MotrixFormat.dt(new Date(entry.at), 'sec') : '—'"></div>
             </div>
             <div style="font-size:10px;padding:2px 8px;border-radius:3px;background:#F0F9FF;color:#0369A1;font-weight:600;flex-shrink:0">PDF</div>
           </div>
@@ -2359,7 +2362,8 @@
   // V3.24（2026-10-13）：內部損益區新增「專案毛利%」（未稅營業收入 − 未稅品項成本，不扣進項稅／管銷／公益；static/profit-rules.js projectMargin）、未填成本提醒、可選的低於門檻提醒
   // V3.25（2026-10-15，S-ST2）：新單載入時，空白案件的預設階段 seed 會先等版面／旗標讀完；已發布階段樣板時不再自動建立 5 個預設階段（旗標關＝與過去相同）
   // V3.26（2026-10-15，T62 e2e）：自訂欄位清空時送 {}（後端『沒送這個鍵＝保留舊值』，只有 {} 才會清掉）。
-  const FORM_VERSION = 'V3.26'
+  // V3.27（2026-10-15，T64 A／B）：利潤顏色門檻改讀設定（MotrixProfitWarning，預設＝原本的 12／20）；金額、日期改走共用顯示格式器 MotrixFormat（預設輸出逐字相同）。
+  const FORM_VERSION = 'V3.27'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -2506,7 +2510,8 @@
       // S-Q2：條款標題。優先序：這張單據送審時凍結的（q.clauseTitles）> 目前範本（clauseTitles）> 預設（過去寫死的字）
       clauseTitles: null,
       ct(key) { const f = (this.q && this.q.clauseTitles) || {}; const c = this.clauseTitles || {}; return f[key] || c[key] || ({ paymentTerms: '付款條件', deliveryTerms: '交貨條件', acceptanceTerms: '驗收標準', warrantyTerms: '保固條件', afterSales: AFTERSALES_LABEL })[key] },
-      pmCfg: { warnPct: 0, minItemMarginPct: 30, maxValidDays: 30, discountReviewAbove: 0 },          // 專案毛利提醒門檻（設定中心；0＝不提醒），init 時由 GET /api/project-margin/config 填入
+      pw: MotrixProfitWarning.defaults(),          // T64 A：利潤顏色門檻（設定 profit_warning.*；預設＝原本的 12／20）
+      pmCfg: { warnPct: 0, minItemMarginPct: 30, maxValidDays: 30, discountReviewAbove: 0, defaultValidDays: 30 },          // 專案毛利提醒門檻（設定中心；0＝不提醒），init 時由 GET /api/project-margin/config 填入
       pmHideUncosted: false,
       altCfg: { enabled: true, totalText: '依方案選擇', noteTemplate: '項次{items}為{group}擇一方案選擇', groupsMax: 10, comboViewMax: 24, comboViewDefaultOpen: false },   // M3：init 時由 GET /api/alt-quote/config 填入
       signPick: { open: false, picks: {}, note: '', busy: false },     // M3 T9：回簽時逐組選定方案的對話框
@@ -2716,15 +2721,17 @@
       projectMarginText() { const p = this.projectMarginObj().pct; return p === null ? '—' : p.toFixed(1) + '%' },
       projectMarginWarn() { const p = this.projectMarginObj().pct; return Number(this.pmCfg.warnPct) > 0 && p !== null && p < Number(this.pmCfg.warnPct) },
       async loadProjectMarginCfg() {
+        MotrixProfitWarning.load().then(b => { this.pw = b })      // T64 A：利潤顏色門檻（取不到＝原本的數字）
         try {
           const r = await fetch(`${this.API}/project-margin/config`, { headers: { Authorization: 'Bearer ' + this.session.token } })
           if (r.ok) {
             const d = await r.json()
             const min = Number(d.minItemMarginPct)
-            const days = Number(d.maxValidDays), disc = Number(d.discountReviewAbove)
+            const days = Number(d.maxValidDays), disc = Number(d.discountReviewAbove), dvd = Number(d.defaultValidDays)
             this.pmCfg = { warnPct: Number(d.warnPct) || 0, minItemMarginPct: Number.isFinite(min) && min >= 0 && min <= 100 ? min : 30,
                            maxValidDays: Number.isFinite(days) && days >= 1 && days <= 365 ? days : 30,
-                           discountReviewAbove: Number.isFinite(disc) && disc >= 0 && disc <= 100000000 ? disc : 0 }
+                           discountReviewAbove: Number.isFinite(disc) && disc >= 0 && disc <= 100000000 ? disc : 0,
+                           defaultValidDays: Number.isInteger(dvd) && dvd >= 1 && dvd <= 365 ? dvd : 30 }
             if (this.pmCfg.minItemMarginPct !== 30 || this.pmCfg.maxValidDays !== 30 || this.pmCfg.discountReviewAbove !== 0) this.checkApproval()      // 門檻與預設不同才重算一次（預設 30 ＝今天的行為，不多做任何事）
           }
         } catch (e) { /* 取不到 ⇒ 不提醒 */ }
@@ -2876,7 +2883,7 @@
             reasons.push(`第 ${i+1} 項毛利率 ${(item.margin*100).toFixed(2)}% 低於 ${this.pmCfg.minItemMarginPct}%`)
         })
         if (this.q.showDiscount && this.q.discount > 0 && this.q.discount > this.pmCfg.discountReviewAbove)
-          reasons.push(`含折讓（NT$${this.q.discount.toLocaleString()}）`)
+          reasons.push(`含折讓（NT$${MotrixFormat.num(this.q.discount)}）`)
         const taxRate = this.q.taxRate !== undefined ? this.q.taxRate : 5
         if (taxRate < 5) {
           const kind = this.taxKind()
@@ -3798,7 +3805,7 @@
             for (const it of (d.items || [])) {
               const unit = Number(it.unitPrice) || (Number(it.qty) ? (Number(it.amount) || 0) / Number(it.qty) : 0)
               out.push({ key: d.id + ':' + it.id, unitPrice: MotrixLegalRound.halfUp(unit * 100) / 100,
-                         label: (d.vendorName || '承攬商') + '｜' + (it.description || '（無說明）') + '｜單價 ' + unit.toLocaleString() })
+                         label: (d.vendorName || '承攬商') + '｜' + (it.description || '（無說明）') + '｜單價 ' + MotrixFormat.num(unit, {raw: true}) })
             }
           }
           this.vendorQuoteOpts = out
@@ -3815,7 +3822,7 @@
       vendorQuoteDiffText(item) {
         const d = this.vendorQuoteDiff(item)
         if (d === null || d === 0) return ''
-        return '與承攬商報價差 ' + (d > 0 ? '+' : '') + d.toLocaleString() + ' 元（未稅，單價差 × 數量 ' + (item.qty || 0) + '）'
+        return '與承攬商報價差 ' + (d > 0 ? '+' : '') + MotrixFormat.num(d, {raw: true}) + ' 元（未稅，單價差 × 數量 ' + (item.qty || 0) + '）'
       },
       // 報價成本與所帶入承攬商報價的**總差額**（沒帶入 ⇒ null；一致 ⇒ 0）＝（成本單價 − 承攬商未稅單價）× 報價品項數量。
       // 口徑：報價單成本欄是未稅單位成本（毛利公式另外加 5% 不可扣抵進項稅），承攬商報價品項單價也是未稅（稅另在派工單稅率）⇒ 兩邊同為未稅，可直接相減。
@@ -4218,7 +4225,8 @@
           const tk = (this.session && this.session.token) || (JSON.parse(localStorage.getItem('motrix_session') || '{}').token)
           if (!tk) return
           // 一個共用的設定 GET 取得兩個旗標；某個群組讀不到時逐組退路（public-flags.js），不拖垮另一個
-          const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_stage_templates'], { token: tk })
+          const g = await window.MotrixPublicFlags.read(['builder_layout', 'builder_custom_fields', 'builder_stage_templates', 'ui_format'], { token: tk })
+          if (window.MotrixFormat && window.MotrixFormat.apply) window.MotrixFormat.apply(g.ui_format)      // T64-B：旗標關 ⇒ 清掉快取（沒有額外請求）
           this._stFlag = !!(g.builder_stage_templates && Number(g.builder_stage_templates.enabled) === 1)   // S-ST2：開啟且有發布樣板 ⇒ 不自動建立預設階段
           // Q3：自訂欄位旗標；開啟才去讀欄位定義（關閉時不多打任何請求）
           if (g.builder_custom_fields && g.builder_custom_fields.enabled === true && window.MotrixCustomFields) window.MotrixCustomFields.start()
@@ -4410,6 +4418,7 @@
           // ── 新增模式：每次由 API 派發單號 ──
           await this._peekQuoteNo()
           this.isNewRecord = true
+          this.q.validDays = this.pmCfg.defaultValidDays      // T64 A Q7：新報價單預設有效天數（設定 quote_defaults.valid_days，預設 30＝原本的值；取不到＝30）
           // 預設條款組（2026-09-14）。**一定要在這個分支裡**：原本這裡是
           // 無條件 `q.paymentTerms = _defaultPaymentTerms`，把稍早套用的整組
           // 條款又蓋回去——實測時 `termsPresetKey` 有設好、付款條件卻還是舊的，

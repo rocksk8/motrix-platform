@@ -96,8 +96,12 @@ def _page_text(name):
 
 def test_threshold_stays_12_in_quotation_form():
     s = _page_text("quotation-form.html")
-    assert "netMarginPct < 12" in s and "12%" in s
+    assert "netMarginPct < pw.quote_form_low" in s                   # T64 A：門檻改讀設定 profit_warning.quote_form_low（不再寫死 12）
     assert TABLE["threshold_pct"] == 12
+    from helpers import profit_warning as PW
+    from helpers import settings_groups  # noqa: F401
+    from helpers import settings_registry as SR
+    assert SR._g("profit_warning")["fields"]["quote_form_low"].default == 12 and PW.DEFAULTS["quote_form_low"] == 12      # 預設仍是 12
 
 
 #: 「管銷分攤（10%」寫死的字面只能出現在還沒改的檔（S3：報價單／精算頁）；其餘一律走口徑感知的標籤函式（admin_cost_label／*AdminLabel）

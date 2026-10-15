@@ -5,6 +5,7 @@ from fastapi import APIRouter, Header, HTTPException
 from helpers import _require_user
 from helpers import settings_registry as sr
 from helpers.financial_mask import quote_money_visible
+from helpers import profit_warning as _pw
 
 router = APIRouter()
 
@@ -27,4 +28,15 @@ def get_project_margin_config(authorization: str = Header(None)):
         pass
     from modules.case.quote_terms import min_item_margin_pct         # 單項毛利率送審門檻（設定 quote_approval.min_item_margin_pct，預設 30＝今天）；表單的 checkApproval 與伺服器同源
     from modules.case.quote_terms import discount_review_above, max_valid_days      # 送審門檻（設定 quote_approval.*）：表單的 checkApproval 與伺服端重算同源
-    return {"warnPct": warn, "minItemMarginPct": min_item_margin_pct(), "maxValidDays": max_valid_days(), "discountReviewAbove": discount_review_above()}
+    return {"warnPct": warn, "minItemMarginPct": min_item_margin_pct(), "maxValidDays": max_valid_days(), "discountReviewAbove": discount_review_above(),
+            "defaultValidDays": _pw.default_valid_days()}          # 新報價單預設有效天數（設定 quote_defaults.valid_days，預設 30＝今天）
+
+
+@router.get("/api/profit-warning/config")
+def get_profit_warning_config(authorization: str = Header(None)):
+    """各畫面利潤顏色的門檻（設定 profit_warning.*；預設＝各畫面今天寫死的數字；讀不到／不合法 ⇒ 整組回今天的數字）。
+    登入者都回 200：看不到毛利的人回今天的預設數字（門檻不是機密、不含任何毛利；他們畫面上也沒有毛利數字可上色），避免頁面主控台出現 403。純顯示，不阻擋任何動作。"""
+    user = _require_user(authorization)
+    if not quote_money_visible(user):
+        return dict(_pw.DEFAULTS)
+    return _pw.bands()

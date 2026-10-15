@@ -440,6 +440,8 @@
 
     <!-- S-X3：簽核通知用語編輯器的掛載點（旗標 builder_notify.enabled 開啟且是最高管理者才會載入；關著＝空的 div） -->
     <div id="notify-editor-mount"></div>
+    <!-- BP-4 S5：額外通知編輯器的掛載點（同一個旗標 builder_notify.enabled；關著＝空的 div，不載入任何程式） -->
+    <div id="notify-action-editor-mount"></div>
   </main>
 
   <script>
@@ -966,7 +968,7 @@
         .then(function (g) {
           var f = g && g.builder_notify
           if (!f || (f.enabled !== true && f.enabled !== 1)) return
-          return load('../js/def-governance.js').then(function () { return load('../static/notify-editor.js') }).then(function () { window.MotrixNotifyEditor.start() })
+          return load('../js/def-governance.js').then(function () { return load('../static/notify-editor.js') }).then(function () { window.MotrixNotifyEditor.start(); return load('../static/notify-action-editor.js') }).then(function () { window.MotrixNotifyActionEditor.start() })
         })
         .catch(function () { /* 載入失敗 ⇒ 當作未開放 */ })
     })()

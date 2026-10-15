@@ -102,6 +102,7 @@ window.CM_PARTS.push(() => ({
 
     // census S-F1：款項類型下拉（選項清單 payment_stage；沒開／沒發布 ⇒ 下面寫死的八個，畫面逐項相同；值就是存進資料的字，顯示名稱可由管理者改）
     optVer: 0,
+    pw: MotrixProfitWarning.defaults(),      // T64 A：利潤顏色門檻（設定 profit_warning.*；預設＝原本的數字）
     STAGE_ITEMS: ['訂金款', '交貨款', '驗收款', '進度款', '完工款', '收款後出貨', '自訂義', '其他'].map(v => ({ value: v, label: v })),
     stageOptions(cur) { this.optVer; return MotrixOptions.options('payment_stage', this.STAGE_ITEMS, cur) },
 
@@ -117,6 +118,7 @@ window.CM_PARTS.push(() => ({
       // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，
       // 而這一頁的主體（案件矩陣）不應該等它。
       this.loadLocations()
+      MotrixProfitWarning.load().then(b => { this.pw = b })      // T64 A：取不到＝原本的數字
       this.detectFileCenter()
       // Alpine 3 會自動呼叫資料物件上的 init()，而 case-management.html 的
       // <body> 又寫了一次 x-init="init()"，所以整個 init() 每次開頁都跑兩遍：

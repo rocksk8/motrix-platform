@@ -414,7 +414,7 @@ register_group(
           impact_scope={"documents": ["報價單送審"], "roles": ["業務", "簽核人"], "amounts": "不改任何金額；只影響『有效期限過長』是否被列為審核原因", "reversible": True, "effective": "pending"},
           question="報價單的有效期限最多可以幾天，超過就要列為『需審核』原因？", label="報價單有效天數上限",
           help="報價單的有效天數超過這個數字，送審時會多一條「有效期限過長（超過上限天數）」的審核原因。",
-          impact="調大＝更少報價單被列出這條原因（放寬，需第二位最高管理者核准並經確認期間）；調小＝更多（立即生效）。不改任何已送出的報價單；只影響之後送審時列出的原因。"),
+          impact="調大＝更少報價單被列出這條原因（放寬，需第二位最高管理者核准並經確認期間）；調小＝更多（立即生效）。不改任何已送出的報價單；只影響之後送審時列出的原因。注意：上限調到低於「新報價單預設有效天數」（報價單預設值）時，每張新報價單一開始就會被列為『有效期限過長』。"),
         S("discount_review_above", "int", 0, min=0, max=100000000, unit="元", risk="money", loosen="up", recommended=0,
           risk_text="【高影響】調高後，金額不大的折讓不再被列出『含折讓』這條審核原因，可能讓需要主管看的折讓沒被注意到。",
           impact_scope={"documents": ["報價單送審"], "roles": ["業務", "簽核人"], "amounts": "不改任何金額；只影響『含折讓』是否被列為審核原因", "reversible": True, "effective": "pending"},
@@ -550,6 +550,37 @@ register_group(
     ],
     sensitive=False, risk="ops",
     help="狀態的顯示名稱與顏色是否開放自訂；狀態本身的值與規則不在這裡調整。",
+)
+
+# 數字與日期顯示格式（T64 切片 B／D2；前端 static/motrix-format.js）：預設關＝所有畫面與今天逐字相同。
+# 只改畫面上數字與日期怎麼印（顯示用）；儲存的金額、法定四捨五入（MotrixLegalRound.halfUp）、PDF 與匯出都不變。百分比、多位小數的單價與變更紀錄的值不套用。
+register_group(
+    "ui_format", "數字與日期顯示格式",
+    [
+        S("enabled", "int", 0, min=0, max=1, risk="ops", recommended=0,
+          question="要不要開放自訂畫面上數字與日期的顯示方式？", label="開放自訂數字與日期顯示",
+          help="開啟後，下面三項才會生效。關閉時所有畫面照目前的方式顯示。",
+          impact="只改報價單、報價單清單、案件管理、出納等畫面上數字與日期怎麼印（僅顯示）；儲存的金額與法定四捨五入都不變，也不改 PDF 或匯出檔。百分比、多位小數的單價與變更紀錄的值不受影響。換頁或重新整理後生效。",
+          choices=[(0, "關閉（預設）", "畫面與今天完全一樣。"), (1, "開啟", "下面三項的設定會套用到畫面。")]),
+        S("thousands", "int", 0, min=0, max=1, risk="ops", recommended=0,
+          question="數字要不要加千分位逗號？", label="千分位",
+          help="只在上面開啟後生效。",
+          impact="只改畫面上數字的樣子（例如 1,234,567 或 1234567）；金額本身不變。",
+          choices=[(0, "照目前（有逗號）", "維持現在的顯示。"), (1, "不加逗號", "數字連在一起顯示。")]),
+        S("decimals", "int", 0, min=0, max=2, risk="ops", recommended=0,
+          question="畫面上的金額固定顯示幾位小數？", label="小數位數",
+          help="只在上面開啟後生效。僅改畫面顯示，儲存的金額與法定四捨五入不變；單價、差額與百分比不套用。",
+          impact="僅畫面顯示；例如選「兩位」時 1,234 會顯示成 1,234.00。儲存的金額與計算結果不變。",
+          choices=[(0, "照目前", "維持現在的顯示。"), (1, "整數（不顯示小數）", "小數會依顯示規則進位到整數，僅畫面如此。"),
+                   (2, "固定兩位", "一律顯示到小數第二位。")]),
+        S("date_style", "int", 0, min=0, max=2, risk="ops", recommended=0,
+          question="日期要用哪種寫法顯示？", label="日期寫法",
+          help="只在上面開啟後生效；只套用在只有日期的欄位，含時間的欄位維持目前的寫法。",
+          impact="只改畫面顯示，不改儲存的日期。",
+          choices=[(0, "照目前", "維持現在的顯示。"), (1, "年-月-日（2026-01-05）", "用減號分隔。"), (2, "年/月/日（2026/01/05）", "用斜線分隔。")]),
+    ],
+    sensitive=False, risk="ops",
+    help="畫面上數字與日期的顯示方式（僅顯示）；金額計算與法定四捨五入不在這裡調整。",
 )
 
 # 完工單「從報價單帶入項目」（第 57 班；設計 COMPLETION-NOTE-QUOTE-ITEMS-T56 §5）：預設值＝使用者 2026-10-12 的表單裁示。
@@ -947,3 +978,8 @@ register_group(
 from helpers import settings_groups_q0 as _q0  # noqa: E402
 
 _q0.register(S, _register_core)
+
+# T64 A：利潤提醒色帶／報價單預設值（拆檔，同屬 core）
+from helpers import settings_groups_profit as _profit  # noqa: E402
+
+_profit.register(S, _register_core)

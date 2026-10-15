@@ -1,5 +1,5 @@
 {
- "core_version": "next",
+ "core_version": "1.141",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1116,15 +1116,21 @@
    "is_enabled": "def(muted_json, event_key)"
   },
   "helper:notify_actions": {
+   "BUILTIN_ACTION_LABELS": "const",
    "CAPS": "const",
    "CHANNELS": "const",
+   "CHANNEL_LABELS": "const",
+   "COMPLETION_STATES": "const",
    "EVENTS": "const",
    "GROUP": "const",
+   "GROUP_LABELS": "const",
    "KIND": "const",
    "MAIL_KEY": "const",
    "NOTIF_TYPE": "const",
    "OFF_REASON": "const",
+   "PEOPLE_LABELS": "const",
    "PREVIEW_ROLES": "const",
+   "ROLE_LABELS": "const",
    "SUBSCRIBER": "const",
    "compare": "def(old, new)",
    "definition_problems": "def(key, body)",
@@ -1132,7 +1138,9 @@
    "emit": "def(name, payload)",
    "enabled": "def(conn=…)",
    "ensure_kind": "def()",
-   "event_catalog": "def()",
+   "event_catalog": "def(conn=…)",
+   "event_labels": "def(conn, event, payload=…)",
+   "picker_catalog": "def(conn)",
    "preview": "def(conn, caller, key, body, payload=…)",
    "resolve_actions": "def(conn, event)"
   },
@@ -1338,6 +1346,12 @@
    "settlement_profit": "def(pretax, actual_cost, pct=…, ver=…, frozen_charity=…, quoted_total=…, charity_basis=…)",
    "uncosted_items": "def(items)"
   },
+  "helper:profit_warning": {
+   "DEFAULTS": "const",
+   "DEFAULT_VALID_DAYS": "const",
+   "bands": "def(conn=…)",
+   "default_valid_days": "def(conn=…)"
+  },
   "helper:quote_output": {
    "TERMS": "const",
    "hidden_terms": "def(conn=…)"
@@ -1457,6 +1471,9 @@
   },
   "helper:settings_groups": {
    "UNAVAILABLE_ALT_CHOICES": "const"
+  },
+  "helper:settings_groups_profit": {
+   "register": "def(S, _register_core)"
   },
   "helper:settings_groups_q0": {
    "quote_cf_scan": "def(conn)",

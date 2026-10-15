@@ -101,7 +101,7 @@ window.CM_PARTS.push(() => ({
     caseSettleItemCost(item) { return this.caseSettleItemFilled(item) ? this.caseSettleFmt(item.actualTotalCost) : '未填寫' },
     caseSettleExtras()  { return this.caseSettlement()?.extraItems || [] },
     caseSettleMemo()    { return this.caseSettlement()?.memo || '' },
-    caseSettleFmt(n)    { return 'NT$ ' + (MotrixLegalRound.halfUp(n || 0)).toLocaleString() },
+    caseSettleFmt(n)    { return 'NT$ ' + MotrixFormat.num((MotrixLegalRound.halfUp(n || 0))) },
 
     // ── 應收應付總覽（2026-09-09）──────────────────────────────────────────
     async loadFinanceSummary(quoteNo) {
@@ -188,8 +188,8 @@ window.CM_PARTS.push(() => ({
       if (this._invoiceEmpty(item.invoicePretax) || this._invoiceEmpty(item.invoiceTax)) return ''
       const sum = (+item.invoicePretax || 0) + (+item.invoiceTax || 0)
       const due = MotrixLegalRound.halfUp(this.itemAmountReceivable(idx))
-      return sum === due ? '' : '發票合計 NT$ ' + sum.toLocaleString() + ' 與這一期金額 NT$ '
-        + due.toLocaleString() + ' 不同，請確認（不影響存檔）。'
+      return sum === due ? '' : '發票合計 NT$ ' + MotrixFormat.num(sum) + ' 與這一期金額 NT$ '
+        + MotrixFormat.num(due) + ' 不同，請確認（不影響存檔）。'
     },
 
     totalWithTax()  { return this.selected?.total    || 0 },

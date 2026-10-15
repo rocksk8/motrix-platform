@@ -174,7 +174,7 @@ window.CM_PARTS.push(() => ({
     dispatchPendingNote() {
       const p = this.dispatches.filter(d => this._dispatchCounts(d) && ['待審核', '簽核中'].includes(d.approvalStatus || ''))
       if (!p.length) return ''
-      return `含待審核 ${p.length} 筆 NT$ ${p.reduce((s, d) => s + this._dispatchCost(d), 0).toLocaleString()}`
+      return `含待審核 ${p.length} 筆 NT$ ${MotrixFormat.num(p.reduce((s, d) => s + this._dispatchCost(d), 0))}`
     },
 
     // 可往下推進作業狀態：已核准或舊單（後端同一道閘）
@@ -513,7 +513,7 @@ window.CM_PARTS.push(() => ({
     cvPlanSummary() {
       const p = this.cvPlan && this.cvPlan.plan
       if (!p) return ''
-      const money = n => Number(n || 0).toLocaleString()
+      const money = n => MotrixFormat.num(Number(n || 0))
       let t = `第 ${this.cvPlan.seq} 期　稅前 ${money(p.pretax)}　稅額 ${money(p.tax)}　`
       t += p.is_last ? '（最後一期，補到與整筆一致）' : `（剩餘額度 ${money(p.remaining_after)}）`
       return t

@@ -239,6 +239,11 @@ vm.runInContext('var MotrixProfitRules = window.MotrixProfitRules;', ctx)
 // M3：calcTotals 走 static/alt-items.js 的 countedItems（沒有擇一組別 ⇒ 全部品項）
 vm.runInContext(fs.readFileSync(lr.replace(/legal-round\.js$/, 'alt-items.js'), 'utf8'), ctx)
 vm.runInContext('var MotrixAltItems = window.MotrixAltItems;', ctx)
+// T64：利潤顏色門檻（static/profit-warning.js → MotrixProfitWarning）與共用顯示格式器（static/motrix-format.js → MotrixFormat）
+vm.runInContext(fs.readFileSync(lr.replace(/legal-round\.js$/, 'profit-warning.js'), 'utf8'), ctx)
+vm.runInContext('var MotrixProfitWarning = window.MotrixProfitWarning;', ctx)
+vm.runInContext(fs.readFileSync(lr.replace(/legal-round\.js$/, 'motrix-format.js'), 'utf8'), ctx)
+vm.runInContext('var MotrixFormat = window.MotrixFormat;', ctx)
 let o
 if (kind === 'js') {
   vm.runInContext(fs.readFileSync(target, 'utf8'), ctx, { filename: target })

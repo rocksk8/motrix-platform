@@ -3,7 +3,20 @@
 ## (next) — 2026-10-15（wip/t65-f7-s1a-r1；T65 F7 S1a：欄位可見求值 `visible()`＋目錄補登記，沒有任何出口改動）
 - L1（只增）：新檔 `helpers/field_policy.py`——`visible(field_id, user)`、`visible_many`、`tier_allowed`、`mask_flags`。求值＝欄位 `ceiling` 對應到**既有**角色函式（`financial_mask.quote_money_visible／money_visible／material_money_visible`、`auth.has_cashier_access`），一對一、不複製角色集合，財務旗標 `finance_via_effective` 自動繼承；未知欄位／天花板／任何例外一律回 False（fail-closed）。`helpers/field_catalog` 新增遮蔽種類 `KINDS`（key／subtree／text／document）、家族 `note`、欄位屬性 `kind`／`exceptions`，並補登記 7 筆今天寫死在函式裡的非『鍵』遮蔽（精算金額整段、舊形狀已收金額、修改紀錄理由／重新開啟理由／金額變動、需審核原因、內部報價 PDF）。**沒有任何出口呼叫新函式**，行為與今天相同；無旗標、無新路由、無 migration、無權限變更。設計 `docs/platform/plans/T64-F7-S1-DESIGN.md`；金標 `tests/platform/test_field_policy_t65.py`（角色 × 模組勾選 × 財務旗標三態 × 授予／扣項情境 × 目錄全部欄位，對照測試裡手寫的舊規則表）。
 
-## (next) — 2026-10-15（wip/t64-f7-s0-r1；T64 切片 D／F7 S0：共用欄位目錄，只登記、不改行為）
+## 1.141 — 2026-10-15（wip/t64-fix-pf2-r1：T64 預檢修正）
+- 只改文字與登記，無行為變更：`helpers/field_catalog` 叫料體系四個欄位的白話名稱改用「材料申請」（全站用字守門）；`helpers/notify_actions` 單位卡 [公開介面] 補上六個已公開的名稱；`docs/platform/modules.json` 補登 `js:static/notify-action-editor.js` 歸屬。
+
+## 1.140 — 2026-10-15（wip/t64-slice-a-r1：T64 A 利潤顏色門檻／報價單預設有效天數）
+- L1（只增）：新檔 `helpers/profit_warning.py`（`bands()`、`default_valid_days()`、`DEFAULTS`）與 `helpers/settings_groups_profit.py`（`register`，由 `settings_groups` 載入時呼叫，群組屬 core）。新設定群組 `profit_warning`（七個利潤顏色門檻，預設＝各畫面原本寫死的 12／20、10／20、0／20、20）與 `quote_defaults`（`valid_days`，預設 30；不可超過 `quote_approval.max_valid_days`）。部署基準檔 `settings_deploy_baseline.json` 同步。
+- 審查修正（f0）：結算 PDF 的營業利益率顏色改用 `case_good`／`case_floor`（與設定說明一致，仍是 20／0）；`quote_defaults.valid_days` 與 `quote_approval.max_valid_days` 的影響說明互相提醒『上限低於預設有效天數時，每張新報價單都會被列為有效期限過長』（只改文字，跨欄檢查語意不變）。
+- 純顯示／預設值：不擋存檔、送審、審核與任何金額，故沒有放寬／收緊之分；讀不到或不合法 ⇒ 整組回今天的數字。測試 `tests/platform/test_profit_warning_t64.py`。
+- **（併入）(next) — 2026-10-15（wip/t64-slice-b-r1；T64 切片 B／D2：設定群組 `ui_format`）**
+- 設定中心新群組 `ui_format`（非敏感、公開可讀）：`enabled`（預設 0＝關）、`thousands`、`decimals`、`date_style`（皆預設 0＝照目前）。前端共用格式器 `static/motrix-format.js` 只在 `enabled=1` 時讀這四項（整數 0＝照目前），旗標關／讀不到／值不認得 ⇒ 與今天逐字相同的輸出。僅顯示：儲存的金額與法定四捨五入、PDF、匯出都不變；百分比／多位小數單價／變更紀錄的值不套用（`num(x,{raw:true})`）。頁面用自己原有的公開設定請求（名單多加 `ui_format`）取得後呼叫 `MotrixFormat.apply()`，不另發請求。`tests/platform/settings_deploy_baseline.json` 文字插入新群組。無 migration、無新路由、無權限變更。
+- **（併入）(next) — 2026-10-15（wip/t64-bp4-s5-editor-r1；T64 BP-4 S5：額外通知動作編輯器；旗標沿用 `builder_notify.enabled`，預設關）**
+- T64 S5 複審補強（白話）：事件目錄多 `hint`（白話說明，取代開發者口吻的 `desc`）、`labels`／`choices`（欄位的白話值與封閉範圍：附件種類、完工單狀態、自訂模組的模組／狀態／動作）；編輯器的條件對封閉範圍改用勾選白話名稱，通知文字與試跑也把內部值換成白話；清單顯示治理管線裡的待核准狀態（三階段如實說明）；停用時若有未發布的草稿，先警告、再按一次才做；沒有顯示名稱的帳號在挑選器顯示『未設定名稱的帳號 N』，不顯示帳號（可能是 email）。
+- T64 S5 編輯器前端（新檔 `frontend/static/notify-action-editor.js`）：設定頁（`approval-settings.html`）新增掛載點 `notify-action-editor-mount`，與簽核通知用語編輯器共用旗標 `builder_notify.enabled`（關著＝不載入任何程式、不多打請求；只有最高管理者）。白話畫面：清單（名稱、事件、狀態）、新增／編輯、事件挑選、條件、收件人挑選器（固定目錄，不收 email）、通道、節流、占位符按鈕、『用建議內容填入』一鍵預設、『試跑看看』（約幾人／每天幾則／逐角色文字）、放寬紅框（原因＋範圍）、檢查並發布（存草稿→後端檢查→影響預覽→發布；待核准如實顯示）、一鍵停用、版本與還原（沿用治理面板）。不用 innerHTML／原生對話框；畫面不出現代號或列舉值。測試 `tests/platform/test_notify_action_editor_t64.py`（31 題，node 假 DOM）。
+- T64 S5 編輯器的後端目錄（只增）：`notify_actions.picker_catalog`（收件人挑選器的固定目錄：角色、群組、現有啟用帳號，不含 email）與每個事件的 `suggest`（一鍵建議內容，皆通過驗證）；`GET /api/notify-actions/status` 對最高管理者多回 `picker`；放寬原因改為白話（收件人、通道、事件都用中文名稱，不出現代號）。
+- **（併入）(next) — 2026-10-15（wip/t64-f7-s0-r1；T64 切片 D／F7 S0：共用欄位目錄，只登記、不改行為）**
 - L1（只增）：新檔 `helpers/field_catalog.py`——共用欄位目錄（唯讀登記：欄位代號、白話名稱、家族、金額等級、天花板、API 鍵名、版面欄位點、匯出欄位／工作表參照）與核對函式 `export_problems`／`screen_problems`／`problems`。`helpers/financial_mask.py` 的 6 份金額清單（`QUOTATION_MONEY_COLS`、`ITEM_MONEY_KEYS`、`QUOTE_MONEY_KEYS`、`PAYMENT_MONEY_KEYS`、`MATERIAL_ORDER_MONEY_KEYS`、`HISTORY_MONEY_FIELDS`）改由目錄衍生，鍵名、順序與型別與切片前逐字相同（守門測試寫死今天的字面值）。無旗標、無新路由、無 migration、無權限變更；行為與今天相同。設計 `docs/platform/plans/T64-F7-FIELD-POLICY-DESIGN.md`；測試 `tests/platform/test_field_catalog_t64.py`。
 
 ## 1.139 — 2026-10-15（wip/t63-fix-pf2-r1；T63 預檢修正：L1 讀 quotations 一律經 case_access）

@@ -357,7 +357,7 @@ def test_deferred_init_fires_nothing_until_start():
     assert r["n"] == 0                                                   # 沒有 init 就 start ⇒ 什麼都不做
 
 
-@pytest.mark.parametrize("name,flag_page_group", [("case-management.html", "builder_layout,builder_custom_fields,builder_rules,builder_slots,builder_status_display,builder_stage_templates"),
+@pytest.mark.parametrize("name,flag_page_group", [("case-management.html", "builder_layout,builder_custom_fields,builder_rules,builder_slots,builder_status_display,builder_stage_templates,ui_format"),
                                                   ("suppliers.html", "builder_layout,builder_custom_fields,builder_actions")])
 def test_pages_read_the_flag_from_the_existing_settings_request(name, flag_page_group):
     from core import source_tree

@@ -20,7 +20,7 @@ def test_calc_totals_goes_through_counted_items():
 
 
 def test_totals_cells_use_template_text_only_when_flagged_and_unpicked():
-    assert "altTotalsText() || tot.pretax.toLocaleString()" in FORM and "altTotalsText() || tot.total.toLocaleString()" in FORM
+    assert "altTotalsText() || MotrixFormat.num(tot.pretax)" in FORM and "altTotalsText() || MotrixFormat.num(tot.total)" in FORM
     assert "altTotalsText() { return this.altUnpicked() > 0" in FORM
     assert 'type="checkbox" :checked="q.totalsByAlt === true"' in FORM         # 使用者 2026-10-11 裁示的總開關
     assert "勾選「合計依方案選擇」後，擇一品項才會依客戶選定的方案計入合計" in FORM

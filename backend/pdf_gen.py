@@ -2715,6 +2715,8 @@ def _build_case_closing_html(data: dict) -> str:
         prof_diff = int(summary.get("profitDiff", 0) or 0)
         diff_clr  = "#15803D" if prof_diff >= 0 else "#DC2626"
         diff_ppts = round(float(summary.get("netMarginPct") or 0) - float(summary.get("origNetMarginPct") or 0), 1)
+        from helpers import profit_warning as _pw      # T64 A：利潤顏色門檻（設定 profit_warning.case_good／case_floor；預設 20／0＝今天）
+        _pw_b = _pw.bands()
         settle_date = s.get("settlementDate", "") or ""
         settle_by   = s.get("finalizedBy", "") or ""
         # 35c：新完結案（稅基 B、dispatchBasis＝pretax）加一行稅額說明；舊完結案（沒有標記）維持原樣，一個位元組都不加
@@ -2755,7 +2757,7 @@ def _build_case_closing_html(data: dict) -> str:
       <tr><td>{admin_cost_label(summary, hide_default=True)}</td><td class="r red">− {money(summary.get("adminCost"))}</td></tr>
       <tr><td>{charity_cost_label(summary)}</td><td class="r red">− {money(summary.get("charityDonation"))}</td></tr>
       <tr class="bold-row"><td>真實營業利益</td><td class="r {'green' if int(summary.get('netProfit',0) or 0)>=0 else 'red'}">{money(summary.get("netProfit"))}</td></tr>
-      <tr><td>真實營業利益率</td><td class="r bold" style="color:{'#15803D' if float(summary.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(summary.get('netMarginPct',0) or 0)>=0 else '#DC2626'}">{float(summary.get("netMarginPct") or 0):.1f}%</td></tr>
+      <tr><td>真實營業利益率</td><td class="r bold" style="color:{'#15803D' if float(summary.get('netMarginPct',0) or 0)>=_pw_b['case_good'] else '#B45309' if float(summary.get('netMarginPct',0) or 0)>=_pw_b['case_floor'] else '#DC2626'}">{float(summary.get("netMarginPct") or 0):.1f}%</td></tr>
     </tbody>
   </table>
 </div>

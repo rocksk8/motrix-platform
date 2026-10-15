@@ -46,7 +46,7 @@
  "modules/netplan/topology.py::g[\"body_w\"]-2*PAD": 1,
  "pdf_gen.py::\"#15803D\" if st[\"done\"] else \"#DC2626\" if st[\"overdue\"] else \"#9CA3AF\"": 2,
  "pdf_gen.py::\"✓ 已完成\" if st[\"done\"] else \"⚠ 逾期\" if st[\"overdue\"] else \"進行中\"": 2,
- "pdf_gen.py::'#15803D' if float(summary.get('netMarginPct',0) or 0)>=20 else '#B45309' if float(summary.get('netMarginPct',0) or 0)>=0 else '#DC2626'": 1,
+ "pdf_gen.py::'#15803D' if float(summary.get('netMarginPct',0) or 0)>=_pw_b['case_good'] else '#B45309' if float(summary.get('netMarginPct',0) or 0)>=_pw_b['case_floor'] else '#DC2626'": 1,
  "pdf_gen.py::_voucher_sign_html(v.get(\"approval\") or {})": 1,
  "pdf_gen.py::p.get(\"name\",\"\")": 1,
  "pdf_gen.py::st[\"dueDate\"] or \"—\"": 2,

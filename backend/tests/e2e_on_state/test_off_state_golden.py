@@ -43,8 +43,12 @@ _JS = ["GET /js/def-governance.js", "GET /static/custom-layout.js", "GET /static
 ALLOWED_EXTRA = {
     "quotation_form_off": set(_JS + [
         "GET /api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates",
+        "GET /api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates,ui_format",     # T64 B：既有的公開讀取多帶 ui_format 群組
+        "GET /static/profit-warning.js", "GET /static/motrix-format.js",                                                   # T64 A／B：靜態腳本載入
         "GET /static/custom-fields.js"]),
     "quotations_list_off": set(_JS + [
+        "GET /static/profit-warning.js", "GET /static/motrix-format.js",
+        "GET /api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates,ui_format",
         "GET /api/settings-center/public?groups=builder_layout",
         "GET /api/settings-center/public?groups=builder_status_display",
         "GET /js/status-display-editor.js",

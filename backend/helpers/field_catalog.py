@@ -73,10 +73,10 @@ FIELDS = (
     _f("payment.invoicePretax", "發票未稅金額", "payment", "finance_money", api=("payment", "invoicePretax")),
     _f("payment.invoiceTax", "發票稅額", "payment", "finance_money", api=("payment", "invoiceTax")),
     # ── 叫料品項 ──
-    _f("material_order.unitPrice", "叫料單價", "cost", "material_money", api=("material_order", "unitPrice")),
-    _f("material_order.totalPrice", "叫料總價", "cost", "material_money", api=("material_order", "totalPrice")),
-    _f("material_order.paidAmount", "叫料已付金額", "payment", "material_money", api=("material_order", "paidAmount")),
-    _f("material_order.totalAmount", "叫料合計金額", "cost", "material_money", api=("material_order", "totalAmount")),
+    _f("material_order.unitPrice", "材料申請單價", "cost", "material_money", api=("material_order", "unitPrice")),
+    _f("material_order.totalPrice", "材料申請總價", "cost", "material_money", api=("material_order", "totalPrice")),
+    _f("material_order.paidAmount", "材料申請已付金額", "payment", "material_money", api=("material_order", "paidAmount")),
+    _f("material_order.totalAmount", "材料申請合計金額", "cost", "material_money", api=("material_order", "totalAmount")),
     # ── 非『鍵』的遮蔽（S1a 補登記：今天寫死在 financial_mask／端點函式裡的規則；行為不變，只是變成目錄上的資料）──
     _f("settlement.amounts", "精算金額（整段，只留狀態）", "payment", "finance_money", kind="subtree"),
     _f("payment.received_legacy", "款項已收金額（舊形狀：數字）", "payment", "finance_money", kind="subtree"),

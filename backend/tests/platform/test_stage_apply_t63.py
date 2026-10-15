@@ -299,7 +299,7 @@ def test_case_page_wiring_is_flag_gated_and_registered():
     js = _read("frontend/js/case-management-exec.js")
     mod = json.loads(_read("backend/modules/case/module.json"))
     # 旗標：同一次設定請求（附在名單最後面）；關著 ⇒ stOn=false ⇒ 按鈕與對話框都不顯示、不送請求
-    assert "'builder_status_display', 'builder_stage_templates'], { token: s.token })" in html
+    assert "'builder_status_display', 'builder_stage_templates', 'ui_format'], { token: s.token })" in html
     assert 'x-show="stOn && aShown(\'applyStageTemplate\')"' in html and "stOn: false," in js
     assert "stInit()" in js and "/templates`" in js                      # 樣板清單只在按下按鈕時才讀
     assert "confirm(" not in js[js.index("async stOpen"):js.index("async addStage")]   # 不用原生對話框
@@ -417,7 +417,7 @@ def test_default_stage_seed_is_skipped_only_when_flag_on_and_template_published_
     html = _page("case-management.html")
     assert "d._layoutP = d.initLayout()" in html and "已發布階段樣板時，沒有階段的案件不會再自動建立 5 個預設階段" in html
     form = _page("quotation-form.html")
-    assert "['builder_layout', 'builder_custom_fields', 'builder_stage_templates']" in form
+    assert "['builder_layout', 'builder_custom_fields', 'builder_stage_templates', 'ui_format']" in form
     f = form[form.index("async _seedDefaultStagesIfEmpty"):]
     f = f[:f.index("async doUnlock")]
     assert f.index("if (this._stFlag)") < f.index("const labels = ['訂單確認'")

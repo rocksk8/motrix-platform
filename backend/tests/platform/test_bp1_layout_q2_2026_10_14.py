@@ -58,7 +58,7 @@ def test_quotes_page_binds_every_column_and_keeps_money_cells_untouched():
         assert "<th x-show=\"cShown('%s')\"" % f in src and "cLabel('%s'," % f in src, f
         assert "<td x-show=\"cShown('%s')\"" % f in src, f
     # 金額與毛利率儲存格的運算式不變（沒有權限＝後端不給值＝顯示「—」）；版面只加 x-show
-    assert """<td x-show="cShown('amount')" class="num" style="font-weight:600" x-text="q.total > 0 ? 'NT$ ' + Math.round(q.total).toLocaleString() : '—'"></td>""" in src
+    assert """<td x-show="cShown('amount')" class="num" style="font-weight:600" x-text="q.total > 0 ? 'NT$ ' + MotrixFormat.num(Math.round(q.total)) : '—'"></td>""" in src
     assert """x-text="q.direct_margin_pct ? q.direct_margin_pct.toFixed(1) + '%' : '—'\"""" in src
     fb = re.search(r"fallback:\s*\{\s*lists:\s*\{\s*quotes:\s*\[([^\]]*)\]", src).group(1)
     assert re.findall(r"'([^']+)'", fb) == QUOTES

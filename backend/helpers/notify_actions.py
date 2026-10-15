@@ -2,7 +2,7 @@
 """額外通知動作（BP-4 S4；設計 docs/platform/plans/BP4-STORAGE-NOTIFY-DESIGN.md §4）：管理者宣告「當事件 E 發生，額外通知 R，內容 T」。
 
 [單位] helper:notify_actions    [層] L1    [穩定度] 實驗（旗標關＝完全沒有這個功能）
-[公開介面] CAPS, CHANNELS, EVENTS, GROUP, KIND, MAIL_KEY, NOTIF_TYPE, OFF_REASON, PREVIEW_ROLES, SUBSCRIBER, compare, definition_problems, dispatch, emit, enabled, ensure_kind, event_catalog, preview, resolve_actions
+[公開介面] BUILTIN_ACTION_LABELS, CAPS, CHANNELS, CHANNEL_LABELS, COMPLETION_STATES, EVENTS, GROUP, GROUP_LABELS, KIND, MAIL_KEY, NOTIF_TYPE, OFF_REASON, PEOPLE_LABELS, PREVIEW_ROLES, ROLE_LABELS, SUBSCRIBER, compare, definition_problems, dispatch, emit, enabled, ensure_kind, event_catalog, event_labels, picker_catalog, preview, resolve_actions
 [不變式] ①沿用 S-X3 的設定群組 `builder_notify.enabled`，且必須同時開啟 `builder_governance.enabled`（`helpers.notify_templates.enabled`，同一個函式）；
     旗標關著、沒有已發布動作、動作不合法或任何錯誤 ⇒ `dispatch()` 什麼都不做（不寫 `notifications`、不寄信、不拋例外）。
     ②這裡新增的是**額外**通知：不能關掉或改寫任何內建信件、系統技術類或稽核類通知（內建收件人仍用「信件與通知收件設定」）。
@@ -16,6 +16,7 @@
 [注意] 新增一個 kind `notify_action`（key＝動作代號，scope＝company），惰性登記（旗標關 ⇒ 不登記）。S4 只有後端（kind、派發器、事件宣告）；編輯器與試跑預覽是 S5。
     事件宣告在這裡（`events.declare`），**發佈那一行屬各模組的小改**（flag-off、獨立 commit）；沒有發佈者的事件只是目錄，不會有任何通知。
 """
+import copy
 import logging
 import re
 import string
@@ -60,7 +61,10 @@ EVENTS = {
         "people": {"requester": "by", "owner": "case_owner"}, "case_key": "quoteNo",
         "link": "case-management.html?q={quoteNo}", "ref": ("noteNo",),
         "sample": {"noteNo": "CN-202610-001", "quoteNo": "MQ-202610-001", "slot": "signed", "by": "王小明"},
+        "suggest": {"label": "完工單有新附件", "recipients": [{"kind": "owner"}], "title": "完工單 {完工單號} 有新附件",
+                    "body": "{操作人} 為完工單 {完工單號} 上傳了新附件（案件 {單號}）"},
         "desc": "完工單的附件上傳成功（payload 的 slot 是附件種類代號）",
+        "hint": "有人替完工單上傳了附件（例如客戶簽回的掃描檔）時通知。",
     },
     "completion_note.state_changed": {
         "label": "完工單狀態改變", "owner": "case", "declare": True, "version": 1,
@@ -70,7 +74,10 @@ EVENTS = {
         "people": {"requester": "by", "owner": "case_owner"}, "case_key": "quoteNo",
         "link": "case-management.html?q={quoteNo}", "ref": ("noteNo", "to"),
         "sample": {"noteNo": "CN-202610-001", "quoteNo": "MQ-202610-001", "from": "草稿", "to": "已送出", "by": "王小明"},
+        "suggest": {"label": "完工單狀態改變", "recipients": [{"kind": "owner"}], "title": "完工單 {完工單號} 狀態改變",
+                    "body": "{操作人} 把完工單 {完工單號} 從「{原狀態}」改成「{新狀態}」（案件 {單號}）"},
         "desc": "完工單的狀態改變（草稿、送出、核准、退回…）",
+        "hint": "完工單被送審、核准、退回或撤銷核准時通知。",
     },
     "custom_module.transitioned": {
         "label": "自訂模組的單據狀態改變", "owner": "L1:custom_modules", "declare": False, "version": 1,
@@ -79,7 +86,10 @@ EVENTS = {
         "money": (), "internal": (), "filterable": ("模組", "原狀態", "新狀態", "動作"),
         "people": {"requester": "by"}, "module_key": "module", "link": "", "ref": ("recordNo", "to"),
         "sample": {"module": "demo", "recordNo": "DEMO-001", "from": "草稿", "to": "已送出", "action": "submit", "by": "王小明"},
+        "suggest": {"label": "自訂模組單據狀態改變", "recipients": [{"kind": "requester"}], "title": "單據 {單據號} 狀態改變",
+                    "body": "{操作人} 把單據 {單據號} 從「{原狀態}」改成「{新狀態}」"},
         "desc": "自訂模組的單據狀態轉換（既有事件，已有發佈者）",
+        "hint": "自訂模組裡的單據換了狀態（送出、核准、退回…）時通知。",
     },
     "case.deadline_near": {
         "label": "案件階段即將到期", "owner": "case", "declare": True, "version": 1,
@@ -89,7 +99,10 @@ EVENTS = {
         "people": {"owner": "case_owner", "requester": "assignee"}, "case_key": "quoteNo",
         "link": "case-management.html?q={quoteNo}", "ref": ("quoteNo", "stage"),
         "sample": {"quoteNo": "MQ-202610-001", "stage": "施工", "dueDate": "2026-10-20", "daysLeft": "3", "assignee": "王小明"},
+        "suggest": {"label": "案件階段快到期", "recipients": [{"kind": "owner"}, {"kind": "requester"}], "title": "案件階段「{階段}」快到期",
+                    "body": "案件 {單號} 的階段「{階段}」將於 {到期日} 到期，還剩 {剩餘天數} 天"},
         "desc": "案件階段離到期日只剩幾天（重用 case_deadlines 的掃描）",
+        "hint": "案件的執行階段快要到期（到期前 3 天與當天）時通知。",
     },
 }
 
@@ -104,10 +117,92 @@ def _declare_events():
 _declare_events()
 
 
-def event_catalog() -> list:
-    """給編輯器（S5）與測試用：每個事件的說明、占位符、可篩選欄位、可用收件人類別。"""
-    return [{"event": k, "label": v["label"], "placeholders": list(v["ph"]), "money": list(v["money"]), "internal": list(v["internal"]),
-             "filterable": list(v["filterable"]), "people": sorted(v["people"]), "sample": dict(v["sample"])} for k, v in EVENTS.items()]
+#: 收件人類別的白話名稱（編輯器只顯示這些，不顯示代號）
+PEOPLE_LABELS = {"requester": "操作人／申請人", "owner": "案件負責業務"}
+ROLE_LABELS = {"superadmin": "最高管理者", "admin": "管理員", "sales": "業務", "engineer": "工程師", "viewer": "檢視者", "finance": "財務"}
+GROUP_LABELS = {"admins": "管理員與最高管理者", "superadmins": "僅最高管理者", "finance": "財務角色與最高管理者"}
+
+
+COMPLETION_STATES = ("草稿", "待審核", "簽核中", "已核准")
+BUILTIN_ACTION_LABELS = {"approve": "核准", "reject": "退回", "auto_approve": "自動核准"}
+
+
+def _join_labels(a, b):
+    return a if a == b or b in a.split("／") else a + "／" + b
+
+
+def event_labels(conn, event, payload=None) -> dict:
+    """事件欄位的白話值：`{"labels": {占位符: {內部值: 白話名稱}}, "choices": {占位符: [內部值…]}}`。
+    `choices` 只給『值的範圍是封閉的』欄位（編輯器改用勾選，不讓人打內部代號）；`labels` 同時用在通知文字與試跑（收件人看到白話，不是代號）。
+    `payload` 給了就只取那一筆事件所屬的模組的名稱（自訂模組的狀態代號每個模組不同）。讀不到 ⇒ 空（呼叫端照原值）。"""
+    labels, choices = {}, {}
+    try:
+        if event == "completion_note.attachment_added":
+            lab = {"signed": "簽回檔"}
+            from helpers import attachment_slots as AS
+            if conn is not None and AS.enabled(conn):
+                for sl in AS.published_slots(conn, "completion_note"):
+                    if isinstance(sl, dict) and sl.get("key") and sl["key"] != AS.BUILTIN_SLOT:
+                        lab[sl["key"]] = str(sl.get("label") or "未命名的附件種類")
+            labels["附件種類"], choices["附件種類"] = lab, list(lab)
+        elif event == "completion_note.state_changed":
+            for ph in ("原狀態", "新狀態"):
+                labels[ph] = {x: x for x in COMPLETION_STATES}
+                choices[ph] = list(COMPLETION_STATES)
+        elif event == "custom_module.transitioned" and conn is not None:
+            from helpers import custom_modules as CM
+            only = (payload or {}).get("module")
+            mods, st_lab, act_lab = {}, {}, dict(BUILTIN_ACTION_LABELS)
+            for m in CM.published_modules(conn):
+                if only and m["key"] != only:
+                    continue
+                mods[m["key"]] = str(m.get("name") or "未命名的模組")
+                wf = (CM._load_def(conn, m["key"], m["version"])["body"].get("workflow")) or {}          # noqa: SLF001
+                for x in wf.get("states", []):
+                    if isinstance(x, dict) and x.get("key"):
+                        lb = str(x.get("label") or "未命名的狀態")
+                        st_lab[x["key"]] = _join_labels(st_lab[x["key"]], lb) if x["key"] in st_lab else lb
+                for x in wf.get("transitions", []):
+                    if isinstance(x, dict) and x.get("key"):
+                        lb = str(x.get("label") or "未命名的動作")
+                        act_lab[x["key"]] = _join_labels(act_lab[x["key"]], lb) if x["key"] in act_lab else lb
+            labels["模組"] = mods
+            for ph in ("原狀態", "新狀態"):
+                labels[ph] = dict(st_lab)
+            labels["動作"] = act_lab
+            if not only:
+                choices["模組"] = list(mods)
+                choices["原狀態"] = choices["新狀態"] = list(st_lab)
+                choices["動作"] = list(act_lab)
+    except Exception:                                        # noqa: BLE001  讀不到 ⇒ 沒有白話名稱，照原值
+        _log.warning("notify_actions: 讀取事件欄位的白話名稱失敗", exc_info=True)
+    return {"labels": labels, "choices": choices}
+
+
+def event_catalog(conn=None) -> list:
+    """給編輯器（S5）與測試用：每個事件的白話說明（`hint`）、占位符、可篩選欄位、可用收件人類別、一鍵建議內容、範例、欄位的白話值（`labels`）與封閉值範圍（`choices`）。"""
+    out = []
+    for k, v in EVENTS.items():
+        el = event_labels(conn, k)
+        out.append({"event": k, "label": v["label"], "hint": v["hint"], "placeholders": list(v["ph"]), "money": list(v["money"]), "internal": list(v["internal"]),
+                    "filterable": list(v["filterable"]), "people": sorted(v["people"]), "sample": dict(v["sample"]), "suggest": copy.deepcopy(v.get("suggest")),
+                    "labels": el["labels"], "choices": el["choices"]})
+    return out
+
+
+def picker_catalog(conn) -> dict:
+    """收件人挑選器的固定目錄（只給最高管理者）：角色、群組、現有啟用帳號（帳號＋顯示名稱，不含 email）。"""
+    from helpers import mail_types as MT
+    users, unnamed = [], 0
+    for r in conn.execute("SELECT username, display_name FROM users WHERE active=1 ORDER BY display_name, username").fetchall():
+        name = (r["display_name"] or "").strip()
+        if not name or "@" in name:                          # 沒有顯示名稱（或名稱本身像 email）⇒ 不顯示帳號，用中性名稱
+            unnamed += 1
+            name = "未設定名稱的帳號 %d" % unnamed
+        users.append({"username": r["username"], "displayName": name})
+    return {"roles": [{"value": r, "label": ROLE_LABELS.get(r, r)} for r in MT.ROLES],
+            "groups": [{"value": g, "label": GROUP_LABELS.get(g, MT.GROUPS[g])} for g in MT.GROUPS if g != "none"],
+            "people": [{"value": k, "label": v} for k, v in PEOPLE_LABELS.items()], "users": users}
 
 
 def enabled(conn=None) -> bool:
@@ -274,6 +369,22 @@ def _norm(b):
             "dedupe": th.get("dedupeMinutes") or 0, "perDay": th.get("maxPerRecipientPerDay") or 0}
 
 
+CHANNEL_LABELS = {"in_app": "站內通知", "email": "電子郵件"}
+
+
+def _who(kind, value) -> str:
+    """收件人 ⇒ 白話（給放寬原因與編輯器用，不顯示代號）。"""
+    if kind in PEOPLE_LABELS:
+        return PEOPLE_LABELS[kind]
+    if kind == "role":
+        return "角色「%s」的所有人" % ROLE_LABELS.get(value, value)
+    if kind in _GROUP_KINDS:
+        return "群組「%s」" % GROUP_LABELS.get(value, value)
+    if kind == "user":
+        return "指定帳號 %s" % value
+    return str(kind)
+
+
 def compare(old, new):
     """old_body → new_body ⇒ (`loosen`｜`tighten`｜`neutral`, reasons)。無法判斷 ⇒ 放寬。
     放寬＝讓更多人在更多情況收到更多東西；改文字（不新增占位符）、縮小、停用＝收緊或中性。"""
@@ -293,15 +404,15 @@ def compare(old, new):
     if a["enabled"] and not b["enabled"]:
         tighten.append("停用")
     if a["event"] != b["event"]:
-        loosen.append("改了觸發事件")
+        loosen.append("改了觸發事件（%s → %s）" % ((EVENTS.get(a["event"]) or {}).get("label", "未知"), (EVENTS.get(b["event"]) or {}).get("label", "未知")))
     for r in sorted(b["rec"] - a["rec"], key=str):
-        loosen.append("新增收件人：%s%s" % (r[0], "（%s）" % r[1] if r[1] else ""))
+        loosen.append("新增收件人：%s" % _who(r[0], r[1]))
     if a["rec"] - b["rec"]:
         tighten.append("縮小收件人")
     if b["ch"] - a["ch"]:
-        loosen.append("新增通道：%s" % "、".join(sorted(b["ch"] - a["ch"])))
+        loosen.append("新增通道：%s" % "、".join(CHANNEL_LABELS.get(c, c) for c in sorted(b["ch"] - a["ch"])))
     if a["ch"] - b["ch"]:
-        tighten.append("拿掉通道")
+        tighten.append("拿掉通道：%s" % "、".join(CHANNEL_LABELS.get(c, c) for c in sorted(a["ch"] - b["ch"])))
     if b["ph"] - a["ph"]:
         loosen.append("範本新增占位符：%s" % "、".join("{%s}" % x for x in sorted(b["ph"] - a["ph"])))
     for f in a["when"]:                                      # 條件放寬：拿掉條件、或同一欄位的值變多
@@ -407,8 +518,8 @@ def _readable(conn, ev, payload, user) -> bool:
     return False
 
 
-def _expand_text(text, ev, payload, user) -> str:
-    """逐收件人展開：金額／內部占位符，沒有權限的收件人看到「（略）」。"""
+def _expand_text(text, ev, payload, user, labels=None) -> str:
+    """逐收件人展開：金額／內部占位符，沒有權限的收件人看到「（略）」；有白話名稱的值（附件種類、模組、動作…）換成白話。"""
     from helpers.auth import has_finance_access
     ok_money = has_finance_access(user)
 
@@ -419,7 +530,9 @@ def _expand_text(text, ev, payload, user) -> str:
             return ""
         if name in ev["internal"] or (name in ev["money"] and not ok_money):
             return _MASK
-        return str(payload.get(key, ""))
+        v = payload.get(key, "")
+        lab = (labels or {}).get(name)
+        return str(lab.get(str(v), v)) if lab else str(v)
     return _PH.sub(sub, text)
 
 
@@ -503,6 +616,7 @@ def dispatch(event, payload, conn=None) -> int:
 def _dispatch(conn, event, ev, payload, actions) -> int:
     from helpers.audit import _audit, _notify
     t0, sent = time.monotonic(), 0
+    labels = event_labels(conn, event, payload)["labels"]
     for aid, body in actions:
         if time.monotonic() - t0 > CAPS["seconds"]:
             _audit("", "notify_action.degraded", "notify_action", aid, body.get("label", ""), {"event": event, "reason": "超過時間預算，後面的動作略過"})
@@ -529,8 +643,8 @@ def _dispatch(conn, event, ev, payload, actions) -> int:
                 continue
             if _throttled(conn, n, aid, ref, body["throttle"]):
                 continue
-            title = _expand_text(body["template"]["title"], ev, payload, user)
-            text = _expand_text(body["template"]["body"], ev, payload, user)
+            title = _expand_text(body["template"]["title"], ev, payload, user, labels)
+            text = _expand_text(body["template"]["body"], ev, payload, user, labels)
             _notify(n, NOTIF_TYPE, ref, title, text, _link(ev, payload) or None)
             n_sent += 1
             if "email" in body["channels"]:
@@ -552,7 +666,6 @@ def _dispatch(conn, event, ev, payload, actions) -> int:
 
 # ── 試跑預覽（S5 的後端：唯讀；不寄信、不寫 notifications、不發事件）──────────────────────────
 PREVIEW_ROLES = ("superadmin", "admin", "sales", "engineer", "viewer", "finance")
-_ROLE_NAMES = {"superadmin": "最高管理者", "admin": "管理員", "sales": "業務", "engineer": "工程師", "viewer": "檢視者", "finance": "財務"}
 
 
 def _sample_payload(ev, payload):
@@ -579,7 +692,8 @@ def preview(conn, caller, key, body, payload=None) -> dict:
     conds = []
     for c in body.get("when") or []:
         got = str(pay.get(ev["ph"][c["field"]], ""))
-        conds.append({"field": c["field"], "value": got, "in": list(c["in"]), "ok": got in c["in"]})
+        lab = event_labels(conn, body["event"], pay)["labels"].get(c["field"]) or {}
+        conds.append({"field": c["field"], "value": lab.get(got, got), "in": [lab.get(x, x) for x in c["in"]], "ok": got in c["in"]})
     matches = all(c["ok"] for c in conds)
     recs, total, unknown = [], 0, 0
     names = []
@@ -595,10 +709,11 @@ def preview(conn, caller, key, body, payload=None) -> dict:
     shown_over = max(0, total - CAPS["recipients"])
     # 逐角色渲染：看看沒有權限的人會看到什麼（金額／內部占位符 ⇒「（略）」）
     renders = []
+    labels = event_labels(conn, body["event"], pay)["labels"]
     for role in PREVIEW_ROLES:
         u = {"role": role, "modules": "[]", "username": "", "id": 0}
-        renders.append({"role": role, "roleName": _ROLE_NAMES[role], "title": _expand_text(body["template"]["title"], ev, pay, u),
-                        "body": _expand_text(body["template"]["body"], ev, pay, u)})
+        renders.append({"role": role, "roleName": ROLE_LABELS[role], "title": _expand_text(body["template"]["title"], ev, pay, u, labels),
+                        "body": _expand_text(body["template"]["body"], ev, pay, u, labels)})
     # 最近 30 天這個動作實際寄出的則數 ⇒ 每日大約幾則（新動作 ⇒ 0）
     since = (datetime.now() - timedelta(days=30)).isoformat()
     try:
