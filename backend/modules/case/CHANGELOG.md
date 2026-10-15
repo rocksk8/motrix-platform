@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-15（wip/t64-fix-g1-r1；T64 閘門修正：報價單表單 V3.27）
+## 1.0.192 — 2026-10-15（wip/t64-fix-g1-r1；T64 閘門修正：報價單表單 V3.27）
 - `pages/quotation-form.html` 的 `FORM_VERSION` 由 V3.26 升 V3.27（利潤顏色門檻改讀設定、金額日期走共用格式器；預設輸出不變），登記進 `tests/test_form_version_bumped_2026_09_24.py` 的 LEDGER 與 `docs/quick/changelog.md`。測試沙盒補載 `profit-warning.js`／`motrix-format.js`。無 migration、無新路由、無權限變更。
 
 ## 1.0.191 — 2026-10-15（wip/t64-fix-pf1-r1；T64 預檢修正：報價單清單不讀 ui_format）

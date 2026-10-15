@@ -25571,13 +25571,17 @@
     "dir:frontend/static/",
     "js:js/case-management-core.js",
     "js:static/motrix-date.js",
+    "js:static/motrix-format.js",
+    "js:static/profit-warning.js",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "page": [
      "frontend/js/case-management-core.js",
      "frontend/pages/case-management.html",
-     "frontend/static/motrix-date.js"
+     "frontend/static/motrix-date.js",
+     "frontend/static/motrix-format.js",
+     "frontend/static/profit-warning.js"
     ],
     "path": [
      "frontend/js/",
@@ -35784,10 +35788,14 @@
     "dir:backend/modules/accounting/",
     "file:backend/data/account_items_112.json",
     "file:backend/data/profit_labels_t48.json",
+    "file:backend/helpers/__init__.py",
     "helper:field_catalog",
     "helper:financial_mask",
     "helper:legal_params",
     "helper:profit_rules",
+    "helper:profit_warning",
+    "helper:settings_groups",
+    "helper:settings_registry",
     "mod:case/api/__init__",
     "mod:case/api/quotations",
     "page:pages/quotation-form.html",
@@ -35799,7 +35807,11 @@
     "import": [
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
      "backend/helpers/financial_mask.py",
+     "backend/helpers/profit_warning.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
      "backend/modules/case/api/__init__.py",
      "backend/modules/case/api/quotations.py",
      "backend/pdf_gen.py"
@@ -36385,6 +36397,7 @@
     "helper:settings_groups",
     "helper:settings_registry",
     "helper:settings_strict",
+    "js:static/motrix-format.js",
     "mod:case/__init__",
     "mod:case/api/project_margin",
     "mod:case/quote_terms",
@@ -36410,7 +36423,8 @@
      "backend/modules/case/api/project_margin.py"
     ],
     "page": [
-     "frontend/pages/quotation-form.html"
+     "frontend/pages/quotation-form.html",
+     "frontend/static/motrix-format.js"
     ]
    },
    "login_fixture": true
