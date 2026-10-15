@@ -3,7 +3,7 @@
 
 [單位] plat:catalog    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] CATALOG_VERSION, EXPECTED_SECTIONS, L1_OWNER, build, check_layout, effective_layout_ops, endpoint_problems, l1_manifest, layout_points,
-    module_endpoints, output_problems, owner_loaded, register_section, restore, section, snapshot
+    module_endpoints, output_problems, owner_loaded, register_privacy_core_provider, register_section, restore, section, snapshot
 [不變式] 目錄不擁有清單，只收集（模組路由、module.json 可自訂點、registry 提供者、事件宣告）
 [契約題] tests/platform/test_platform_catalog.py
 [注意] 建構器與排版器只從這裡挑
@@ -223,11 +223,33 @@ def layout_points(module_key=None) -> list:
     return out
 
 
+_PRIVACY_CORE_PROVIDERS = []
+
+
+def register_privacy_core_provider(fn):
+    """T63 Q0：登記一個『哪些欄位現在要當核心欄位（不可隱藏）』的提供者 `fn(module_key, entity, field) -> bool`。
+    L1 在載入時登記（L0 不 import L1）；同一支函式重複登記只算一次；提供者丟例外 ⇒ 視為 False（沿用登記的樣子）。"""
+    if fn not in _PRIVACY_CORE_PROVIDERS:
+        _PRIVACY_CORE_PROVIDERS.append(fn)
+    return fn
+
+
+def _forced_core(module_key, p) -> bool:
+    for fn in list(_PRIVACY_CORE_PROVIDERS):
+        try:
+            if fn(module_key, p.get("entity"), p.get("field")):
+                return True
+        except Exception:                                                    # noqa: BLE001 — 提供者壞了不可以讓可自訂點消失
+            continue
+    return False
+
+
 def _apply_privacy_core(module_key, pts):
-    """T63 Q0：設定 `quote_privacy.*` 選『不可隱藏』的個人資料欄位 ⇒ 該點視為核心欄位（只剩 move）。預設不動任何點。"""
-    from helpers.quote_privacy import forced_core
+    """T63 Q0：被提供者指定為『不可隱藏』的欄位點視為核心欄位（只剩 move）。沒有提供者／預設 ⇒ 不動任何點。"""
+    if not _PRIVACY_CORE_PROVIDERS:
+        return pts
     for p in pts:
-        if p.get("kind") == "field" and not p.get("core") and forced_core(module_key, p.get("entity"), p.get("field")):
+        if p.get("kind") == "field" and not p.get("core") and _forced_core(module_key, p):
             p["core"] = True
             p["ops"] = list(customization.OPS_CORE_FIELD)
     return pts

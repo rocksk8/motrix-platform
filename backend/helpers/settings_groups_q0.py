@@ -9,6 +9,8 @@
 """
 import json as _json
 
+from helpers import quote_privacy as _quote_privacy  # noqa: F401  載入時向 core.catalog 登記『個資欄位不可隱藏』提供者
+
 _TERMS = ("paymentTerms", "deliveryTerms", "acceptanceTerms", "warrantyTerms", "afterSales")
 
 
@@ -112,7 +114,7 @@ def register(S, _register_core):
               impact_scope={"documents": ["報價單表單"], "roles": ["業務", "最高管理者"], "amounts": "不改任何金額；只決定客戶電子郵件欄位能不能被隱藏。", "reversible": True, "effective": "immediate"},
               question="客戶電子郵件欄位可以讓管理者從報價單表單隱藏嗎？", label="客戶電子郵件可隱藏",
               help="電子郵件屬於個人資料。預設可以隱藏；隱藏只是不顯示輸入框，不會刪掉已存的內容，個資告知流程也不變。",
-              impact="只影響報價單表單與排版器；不改已存的內容、PDF 或任何金額。改成不可隱藏立即生效（收緊）。",
+              impact="只影響報價單表單與排版器；不改已存的內容、PDF 或任何金額。改成不可隱藏立即生效（收緊）：先前被隱藏的欄位會立刻對所有人重新顯示，資料不變；改回可隱藏後，原本的隱藏設定會恢復。",
               choices=[(1, "可隱藏（目前做法）", "管理者可以在排版器隱藏這個欄位。"), (0, "不可隱藏", "這個欄位固定顯示。")],
               impact_fn=_contacts_impact),
             S("contact_fax_hideable", "int", 1, min=0, max=1, risk="legal", recommended=1,
@@ -120,7 +122,7 @@ def register(S, _register_core):
               impact_scope={"documents": ["報價單表單"], "roles": ["業務", "最高管理者"], "amounts": "不改任何金額；只決定客戶傳真欄位能不能被隱藏。", "reversible": True, "effective": "immediate"},
               question="客戶傳真欄位可以讓管理者從報價單表單隱藏嗎？", label="客戶傳真可隱藏",
               help="預設可以隱藏；隱藏只是不顯示輸入框，不會刪掉已存的內容，個資告知流程也不變。",
-              impact="只影響報價單表單與排版器；不改已存的內容、PDF 或任何金額。改成不可隱藏立即生效（收緊）。",
+              impact="只影響報價單表單與排版器；不改已存的內容、PDF 或任何金額。改成不可隱藏立即生效（收緊）：先前被隱藏的欄位會立刻對所有人重新顯示，資料不變；改回可隱藏後，原本的隱藏設定會恢復。",
               choices=[(1, "可隱藏（目前做法）", "管理者可以在排版器隱藏這個欄位。"), (0, "不可隱藏", "這個欄位固定顯示。")],
               impact_fn=_contacts_impact),
         ],

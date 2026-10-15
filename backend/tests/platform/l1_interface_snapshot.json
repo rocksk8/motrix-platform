@@ -1,5 +1,5 @@
 {
- "core_version": "1.137",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -272,11 +272,15 @@
   "helper:builtin_fields": {
    "ALLOWED_TYPES": "const",
    "MAX_FIELDS": "const",
+   "OUTPUT_OPTIONS": "const",
    "RECORD_TYPES": "const",
    "definition_problems": "def(key, body)",
    "enabled": "def(conn=…)",
+   "finance_rows": "def(quote_no, conn=…)",
    "gate": "def(record_type, new_values, old_values, conn=…)",
+   "output_rows": "def(quote, option, conn=…)",
    "public_fields": "def(record_type, conn=…)",
+   "type_enabled": "def(record_type, conn=…)",
    "usage_counts": "def(record_type, conn=…)"
   },
   "helper:business_days": {
@@ -1285,6 +1289,13 @@
    "settlement_profit": "def(pretax, actual_cost, pct=…, ver=…, frozen_charity=…, quoted_total=…, charity_basis=…)",
    "uncosted_items": "def(items)"
   },
+  "helper:quote_output": {
+   "TERMS": "const",
+   "hidden_terms": "def(conn=…)"
+  },
+  "helper:quote_privacy": {
+   "forced_core": "def(module_key, entity, field)"
+  },
   "helper:receivables": {
    "RECEIVABLES_MISSING": "const",
    "collect_income_items": "def(d0, d1, department_id=…)",
@@ -1397,6 +1408,10 @@
   },
   "helper:settings_groups": {
    "UNAVAILABLE_ALT_CHOICES": "const"
+  },
+  "helper:settings_groups_q0": {
+   "quote_cf_scan": "def(conn)",
+   "register": "def(S, _register_core)"
   },
   "helper:settings_registry": {
    "DEFAULT_CONFIRM_DAYS": "const",
@@ -1726,6 +1741,7 @@
    "module_endpoints": "def(spec)",
    "output_problems": "def(pts, templates)",
    "owner_loaded": "def(key)",
+   "register_privacy_core_provider": "def(fn)",
    "register_section": "def(name, owner, fn)",
    "restore": "def(state)",
    "section": "def(name)",

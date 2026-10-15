@@ -3,8 +3,8 @@
 
 ## (next) — 2026-10-15（wip/t63-q0-r1：T63 Q0 報價單輸出／個資／自訂欄位開放設定）
 
-- 內部行為（無公開介面變動；不升版號）：`core.catalog.layout_points` 對 case 的個人資料欄位（客戶電子郵件／傳真）套用私有的 `_apply_privacy_core`——設定 `quote_privacy.contact_*_hideable` 選『不可隱藏』才把該點視為核心欄位；預設（可隱藏）不動任何點。
-- L1（只增）：`helpers/quote_output.hidden_terms`、`helpers/quote_privacy.forced_core`（新檔）；`helpers/builtin_fields.type_enabled`（總開關＋單據類型自己的開關）；設定群組 `quote_output`、`quote_privacy`、`builder_custom_fields.quote_enabled`。預設＝今天的行為。
+- L0（新增，只增）：`core.catalog.register_privacy_core_provider(fn)`——L1 登記『哪些欄位現在不可隱藏』的提供者 `fn(module_key, entity, field)->bool`（L0 不 import L1；重複登記只算一次；提供者丟例外視為 False）。`layout_points` 用私有的 `_apply_privacy_core` 套用：被指定的欄位點視為核心欄位（只剩 move）；沒有提供者或全回 False ⇒ 不動任何點（預設＝今天）。
+- L1（只增）：`helpers/quote_output.hidden_terms`、`helpers/quote_privacy.forced_core`（新檔，載入時向上面的 hook 登記）；`helpers/builtin_fields.type_enabled`／`output_rows`／`finance_rows`／`OUTPUT_OPTIONS`（總開關＋單據類型自己的開關＋輸出選項）；設定群組 `quote_output`、`quote_privacy`、`builder_custom_fields.quote_enabled`。預設＝今天的行為。
 - 設計：docs/platform/plans/T63-Q0-SETTINGS-SPEC.md。測試：tests/platform/test_q0_settings_t63.py。
 
 ## 1.137 — wip/t62-bp4-s1-r1＋wip/t62-bp4-s2-r1＋wip/t62-bp4-s2-r2＋wip/t62-bp4-s3-r1（BP-4 S1／S2／S3：儲存位置代號登錄表＋附件插槽定義；旗標 `builder_slots.enabled` 預設關）；t62 整合 r8＋wip/t62-pdf-decor-r1＋wip/t62-pdf-escape-r1＋wip/h2-pdf-hardening-r1（PDF 頁尾浮水印／輸出逸出稽核／渲染硬化第二輪；一班一個版本，三段併成一段）
