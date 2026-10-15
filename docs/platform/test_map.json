@@ -19604,10 +19604,14 @@
     "helper:settings_registry",
     "js:static/list-view-prefs.js",
     "page:pages/quotations.html",
+    "plat:__init__",
+    "plat:source_tree",
     "router:list_prefs"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/__init__.py",
      "backend/helpers/settings_groups.py",
      "backend/helpers/settings_registry.py"
@@ -19620,7 +19624,6 @@
      "frontend/static/list-view-prefs.js"
     ],
     "path": [
-     "frontend/pages/quotations.html",
      "frontend/static/list-view-prefs.js"
     ]
    }
@@ -19634,10 +19637,14 @@
     "js:js/case-management-list.js",
     "js:static/list-view-prefs.js",
     "page:pages/case-management.html",
+    "plat:__init__",
+    "plat:source_tree",
     "router:list_prefs"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/__init__.py",
      "backend/helpers/settings_groups.py",
      "backend/helpers/settings_registry.py"
@@ -19651,8 +19658,7 @@
      "frontend/static/list-view-prefs.js"
     ],
     "path": [
-     "frontend/js/case-management-list.js",
-     "frontend/pages/case-management.html"
+     "frontend/js/case-management-list.js"
     ]
    }
   },
