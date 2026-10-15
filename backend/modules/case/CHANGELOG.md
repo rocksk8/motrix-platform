@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.195 — 2026-10-15（wip/t65-c1-r1；T65 C1 修正）
+- `pages/quotations.html`：欄位 `x-show` 的引號跳脫修正（`cShown('欄位')`）；新增 ON 狀態 e2e `tests/e2e_on_state/test_list_view_c1_on_state.py`，並更新 BP-1 Q2 的釘字（表頭／儲存格多了 `data-col`，`colSpan()` 改為只看 `cShown`，關閉時仍恆為 12）。無 migration、無新路由、無權限變更。
+
 ## 1.0.194 — 2026-10-15（wip/t65-c1-r1；T65 C1 報價單清單個人檢視偏好）
 - `pages/quotations.html`、新檔 `static/list-view-prefs.js`：設定中心新群組 `list_view`（預設全關）開啟後，使用者可在清單自訂自己的欄位顯示／順序、預設頁籤、每頁筆數（25／50／100／200，預設不分頁）；一律限在公司版面允許的範圍內，必要欄位不可隱藏，金額與毛利率欄只能隱藏或調順序（被遮蔽者仍看到「—」）。偏好存既有 `/api/list-prefs/quotations.view`；總開關是「自訂畫面版面」的 quotations 旗標，關閉時不多任何請求或腳本。無 migration、無新路由、無權限變更。
 

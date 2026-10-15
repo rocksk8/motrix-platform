@@ -55,10 +55,10 @@ def test_manifest_valid_order_and_core():
 def test_quotes_page_binds_every_column_and_keeps_money_cells_untouched():
     src = _page("quotations.html")
     for f in QUOTES:
-        assert "<th x-show=\"cShown('%s')\"" % f in src and "cLabel('%s'," % f in src, f
-        assert "<td x-show=\"cShown('%s')\"" % f in src, f
+        assert "<th data-col=\"%s\" x-show=\"cShown('%s')\"" % (f, f) in src and "cLabel('%s'," % f in src, f
+        assert "<td data-col=\"%s\" x-show=\"cShown('%s')\"" % (f, f) in src, f
     # 金額與毛利率儲存格的運算式不變（沒有權限＝後端不給值＝顯示「—」）；版面只加 x-show
-    assert """<td x-show="cShown('amount')" class="num" style="font-weight:600" x-text="q.total > 0 ? 'NT$ ' + MotrixFormat.num(Math.round(q.total)) : '—'"></td>""" in src
+    assert """<td data-col="amount" x-show="cShown('amount')" class="num" style="font-weight:600" x-text="q.total > 0 ? 'NT$ ' + MotrixFormat.num(Math.round(q.total)) : '—'"></td>""" in src
     assert """x-text="q.direct_margin_pct ? q.direct_margin_pct.toFixed(1) + '%' : '—'\"""" in src
     fb = re.search(r"fallback:\s*\{\s*lists:\s*\{\s*quotes:\s*\[([^\]]*)\]", src).group(1)
     assert re.findall(r"'([^']+)'", fb) == QUOTES
@@ -248,7 +248,7 @@ def test_registry_entries_say_what_layout_does_not_change():
 def test_quotations_colspans_follow_the_visible_column_count():
     src = _page("quotations.html")
     assert 'colspan="12"' not in src and src.count(':colspan="colSpan()"') == 3
-    assert "colSpan() { return 12 - (this.layoutOn ?" in src                  # 關閉時恆為 12（與先前相同）
+    assert "colSpan() { return 12 - ['quoteNo'," in src and "filter(k => !this.cShown(k)).length }" in src      # 關閉時 cShown 恆真 ⇒ 恆為 12（與先前相同；T65 C1 起個人隱藏也會減）
 
 
 @pytest.mark.skipif(NODE is None, reason="沒有 node")
