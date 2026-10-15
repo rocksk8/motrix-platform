@@ -405,7 +405,7 @@ def _readable(conn, ev, payload, user) -> bool:
     return False
 
 
-def _render(text, ev, payload, user) -> str:
+def _expand_text(text, ev, payload, user) -> str:
     """逐收件人展開：金額／內部占位符，沒有權限的收件人看到「（略）」。"""
     from helpers.auth import has_finance_access
     ok_money = has_finance_access(user)
@@ -527,8 +527,8 @@ def _dispatch(conn, event, ev, payload, actions) -> int:
                 continue
             if _throttled(conn, n, aid, ref, body["throttle"]):
                 continue
-            title = _render(body["template"]["title"], ev, payload, user)
-            text = _render(body["template"]["body"], ev, payload, user)
+            title = _expand_text(body["template"]["title"], ev, payload, user)
+            text = _expand_text(body["template"]["body"], ev, payload, user)
             _notify(n, NOTIF_TYPE, ref, title, text, _link(ev, payload) or None)
             n_sent += 1
             if "email" in body["channels"]:
@@ -595,8 +595,8 @@ def preview(conn, caller, key, body, payload=None) -> dict:
     renders = []
     for role in PREVIEW_ROLES:
         u = {"role": role, "modules": "[]", "username": "", "id": 0}
-        renders.append({"role": role, "roleName": _ROLE_NAMES[role], "title": _render(body["template"]["title"], ev, pay, u),
-                        "body": _render(body["template"]["body"], ev, pay, u)})
+        renders.append({"role": role, "roleName": _ROLE_NAMES[role], "title": _expand_text(body["template"]["title"], ev, pay, u),
+                        "body": _expand_text(body["template"]["body"], ev, pay, u)})
     # 最近 30 天這個動作實際寄出的則數 ⇒ 每日大約幾則（新動作 ⇒ 0）
     since = (datetime.now() - timedelta(days=30)).isoformat()
     try:
