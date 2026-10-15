@@ -8,6 +8,7 @@
     財務權限旗標 `finance_via_effective`（off／shadow／on）因此自動繼承，不會出現第二套答案。
     ②fail-closed：未知欄位、未知天花板、目錄或角色函式丟例外 ⇒ `False`（絕不因錯誤回 True）。
     ③`financial_mask` 不 import 本檔（避免環）；本檔只在呼叫當下才 import `financial_mask`／`auth`。
+    ⑥寫入路徑用 `mask_flags(user, strict=True)`：求值錯誤要像今天一樣丟出（500、不寫入），不可 fail-closed 成『遮』後靜默以現值覆蓋使用者的修改。
     ⑤`visible()` 回答的是**欄位自己的天花板層級**（報價單層級＝`quote_money_visible`），**不是出口的整套短路**：今天的出口（例：quotations.py 讀單）先看
     `money_visible(user)`——為真（例如旗標 `finance_via_effective=on` 時被授予 `cashier` 的工程師）就**整份不遮**，連報價單層級欄位也看得到；`visible('quote_item.cost', 該使用者)` 則為 False
     （比出口窄、fail-closed）。遷移出口時**必須保留出口的短路**：用 `mask_flags(user)["money"]` 判斷是否整份跳過遮蔽，再用 `keep_quote`／`keep_orders` 傳給 `mask_*`，
@@ -69,14 +70,18 @@ def visible_many(field_ids, user) -> dict:
     return out
 
 
-def mask_flags(user) -> dict:
+def mask_flags(user, strict=False) -> dict:
     """給 `financial_mask.mask_*` 既有旗標參數用：`keep_quote`（報價單層級不遮）、`keep_orders`（叫料不遮）、`money`（財務層級可見）。
-    任何一個算不出來 ⇒ 該旗標 False（＝遮）。"""
+    讀取路徑：任何一個算不出來 ⇒ 該旗標 False（＝遮，fail-closed）。
+    `strict=True` 只給**寫入路徑**用：算不出來就**把例外丟出去**（今天的行為——端點 500、什麼都沒寫入）。寫入路徑若 fail-closed 成『遮』，
+    有權限的人存檔時會被靜默地用資料庫現值取代（款項／精算／叫料的修改消失）卻回成功，比 500 更糟。"""
     flags = {}
     for name, ceiling in (("keep_quote", "quote_money"), ("keep_orders", "material_money"), ("money", "finance_money")):
         try:
             flags[name] = tier_allowed(ceiling, user)
-        except Exception:                                   # noqa: BLE001 — fail-closed
+        except Exception:                                   # noqa: BLE001 — 讀取 fail-closed；strict 寫入照舊丟出
+            if strict:
+                raise
             _log.warning("field_policy.mask_flags failed for %s; masking", ceiling, exc_info=True)
             flags[name] = False
     return flags

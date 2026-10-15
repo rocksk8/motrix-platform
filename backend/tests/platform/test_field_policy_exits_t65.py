@@ -14,6 +14,7 @@ BASELINE = Path(__file__).with_name("field_policy_exits_baseline.json")
 MIGRATED = {
     "modules/case/api/material_orders.py": 2,
     "modules/case/api/material_changes.py": 3,
+    "modules/case/api/quotations.py": 9,
 }
 
 

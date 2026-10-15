@@ -4,6 +4,7 @@
 - 純重構、行為不變：`api/material_orders.py`（清單回傳的金額剝除、存檔後回傳的分段遮蔽）與 `api/material_changes.py`（變更紀錄／試算的金額遮蔽）的『看不看得到金額』旗標改由 `helpers.field_policy.mask_flags()` 產生（等同原本的 `money_visible`／`material_money_visible`）；擋整支端點的 403 閘門不動。測試 `tests/platform/test_field_policy_exits_t65.py`。
 - 家族二（報價單讀單／清單／案件匯出）：`api/quotations.py` 的 `GET` 單筆讀取遮蔽（保留 `money` 整份短路）、清單金額遮蔽、案件批次匯出的金額欄，旗標改由 `mask_flags()` 產生；行為不變。
 - 家族三（報價單寫入路徑）：存檔時被遮蔽部分的補回、案件記錄分段存檔的比對基準與回傳、修改紀錄理由的剝除，旗標改由 `mask_flags()`／`tier_allowed()` 產生（保留 `money` 整份短路）；單一旗標處用 `tier_allowed()`，避免多算角色函式。新增真實出口證明 `tests/platform/test_field_policy_exits_real_t65.py`。行為不變。
+- 寫入路徑嚴格模式：`helpers.field_policy.mask_flags(user, strict=True)` 只給寫入路徑用（`update_quotation` 補回、`update_case_record` 的比對／補回／回傳）；求值出錯照今天丟出（500、不寫入），讀取路徑維持 fail-closed 遮蔽。測試 `tests/platform/test_field_policy_exits_quotation_t65.py`（真打 GET／PUT：角色×旗標模式×授予 對照舊規則表）。
 
 ## 1.0.193 — 2026-10-15（wip/t64-fix-g4-r1；T64 閘門修正 g4）
 - `GET /api/profit-warning/config` 對登入但看不到報價毛利的人改回 200＋今天的預設門檻（門檻不是機密、不含毛利），不再回 403，頁面主控台不再出現錯誤；看得到毛利的人行為不變。`static/profit-warning.js` 的 `load()` 同一頁面只發一次請求。e2e 允許清單／案件頁 golden 補 T64 A／B 的靜態腳本與 `ui_format` 讀取。無 migration、無新路由、無權限變更。

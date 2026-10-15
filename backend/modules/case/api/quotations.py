@@ -2002,7 +2002,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             except HTTPException:
                 conn.close()
                 raise
-        _fl = _mask_flags(user)
+        _fl = _mask_flags(user, strict=True)
         if not _fl["money"]:
             # 第42班：業務／管理員可編輯報價單，但看不到精算與款項期別（財務角色專屬）⇒ 被遮蔽的部分以資料庫現值補回，
             # 不可以用遮蔽後的空值蓋掉真正的資料（同 case-record 存檔的 restore）。
@@ -3181,7 +3181,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             current_cr = (json.loads(row["data_json"] or "{}").get("caseRecord") or {})
             segments = {k: v for k, v in body.segments.items() if k != "stages"}
             seg_keys = list(segments)
-            _fl = _mask_flags(user)
+            _fl = _mask_flags(user, strict=True)
             cmp_cr = current_cr if _fl["money"] else mask_case_record(copy.deepcopy(current_cr), keep_orders=_fl["keep_orders"])
             conflicts = _segment_conflicts(cmp_cr, segments, body.base or {})
             if conflicts:
@@ -3221,7 +3221,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
                     body.case_record["customFields"] = _cf_new
                 else:
                     body.case_record.pop("customFields", None)
-        _fl = _mask_flags(user)
+        _fl = _mask_flags(user, strict=True)
         if not _fl["money"]:
             # CM13（2026-09-24）：這個帳號拿到的是遮蔽過的 caseRecord，送回來的款項期別沒有金額鍵。
             # 以資料庫現值補回，不可以讓空值蓋掉真正的金額；新增／刪除／重排期別不允許（D2）。
@@ -3353,7 +3353,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             # 伺服器存檔時會改寫卡片（認列的到貨人／時間、過期標記、被拒還原…）⇒ 回傳實際存入的分段，
             # 前端以它當新基準；只用「送出的內容」當基準，下一次存檔會被誤判成『已被他人更新』（409）。
             _saved_cr = copy.deepcopy(data.get("caseRecord") or {})
-            _fl = _mask_flags(user)
+            _fl = _mask_flags(user, strict=True)
             if not _fl["money"]:
                 mask_case_record(_saved_cr, keep_orders=_fl["keep_orders"])
             out["saved"] = {k: _saved_cr.get(k) for k in seg_keys}
