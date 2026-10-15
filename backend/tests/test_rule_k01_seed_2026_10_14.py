@@ -118,10 +118,10 @@ def _set(group, values):
 
 
 
-# 端點在 warnPct 之外多回三個報價送審門檻（approval-thresholds r1/r2，預設＝今天寫死的 30%／30 天／0 元；同一個金額權限閘門，沒有任何金額）。
+# 端點在 warnPct 之外多回三個報價送審門檻（另有新報價單預設有效天數 defaultValidDays，T64 A，預設 30；approval-thresholds r1/r2，預設＝今天寫死的 30%／30 天／0 元；同一個金額權限閘門，沒有任何金額）。
 # 這些測試關心的是 warnPct 怎麼跟著 K01 規則走，所以其餘三個鍵固定成預設值一起比對（預設改了這裡會紅）。
 def _cfg(warn):
-    return {"warnPct": float(warn), "minItemMarginPct": 30.0, "maxValidDays": 30, "discountReviewAbove": 0}
+    return {"warnPct": float(warn), "minItemMarginPct": 30.0, "maxValidDays": 30, "discountReviewAbove": 0, "defaultValidDays": 30}
 
 def test_config_endpoint_flag_off_is_todays_response(client, sa):
     _set("project_margin", {"warn_pct": 18})

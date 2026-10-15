@@ -168,6 +168,7 @@ def test_page_snippets_match_the_server_on_the_grid(lim):
     sd, sc = _snippets()
     harness = """
 const [sd, sc, inp] = [process.argv[2], process.argv[3], JSON.parse(process.argv[4])]
+globalThis.MotrixFormat = { num: x => x.toLocaleString() }      // T64 B：頁面片段改呼叫共用格式器；預設輸出＝toLocaleString（見 static/motrix-format.js），這裡只驗『列或不列』與文字
 const fd = new Function('reasons', sd), fc = new Function('reasons', sc)
 const out = inp.map(([kind, cfg, q]) => { const reasons = []; (kind === 'days' ? fd : fc).call({ q, pmCfg: cfg }, reasons); return reasons })
 console.log(JSON.stringify(out))
