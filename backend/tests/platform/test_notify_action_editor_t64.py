@@ -30,10 +30,21 @@ PICKER = {"roles": [{"value": r, "label": NA.ROLE_LABELS[r]} for r in ("superadm
           "users": [{"username": "u_wang", "displayName": "王小明"}, {"username": "u_lee", "displayName": "李大華"}]}
 
 
+def _catalog():
+    """事件目錄；自訂模組事件的白話值需要資料庫，這裡用假資料（一個叫『示範模組』的模組）。"""
+    cat = NA.event_catalog()
+    for e in cat:
+        if e["event"] == "custom_module.transitioned":
+            e["labels"] = {"模組": {"demo": "示範模組"}, "原狀態": {"draft": "草稿中", "submitted": "已送出"}, "新狀態": {"draft": "草稿中", "submitted": "已送出"},
+                           "動作": {"submit": "送出", "approve": "核准", "reject": "退回", "auto_approve": "自動核准"}}
+            e["choices"] = {"模組": ["demo"], "原狀態": ["draft", "submitted"], "新狀態": ["draft", "submitted"], "動作": ["submit", "approve", "reject", "auto_approve"]}
+    return cat
+
+
 def _status(enabled=True, can_edit=True):
     if not enabled or not can_edit:
         return {"enabled": enabled, "canEdit": can_edit}
-    return {"enabled": True, "canEdit": True, "events": NA.event_catalog(), "caps": dict(NA.CAPS), "picker": PICKER}
+    return {"enabled": True, "canEdit": True, "events": _catalog(), "caps": dict(NA.CAPS), "picker": PICKER}
 
 
 PREVIEW_LOOSEN = {
@@ -83,6 +94,7 @@ global.fetch = async (url, opt) => {
   let status = 200, body = {}
   if (/api\/notify-actions\/status$/.test(path)) body = scen.status
   else if (/api\/notify-actions\/[^/]+\/preview$/.test(path)) { status = scen.previewStatus || 200; body = scen.preview || {} }
+  else if (/api\/def-pipeline\/pending$/.test(path)) { status = scen.pendingStatus || 200; body = { items: scen.pending || [] } }
   else if (m === 'GET' && /api\/definitions\/notify_action$/.test(path)) body = scen.list || []
   else if (m === 'GET' && /api\/definitions\/notify_action\//.test(path)) { const k = decodeURIComponent(path.split('/').pop()); body = (scen.defs || {})[k] || { draft: null, latest: null } }
   else if (m === 'PUT') body = { etag: 'e1' }
@@ -116,7 +128,7 @@ def _run(scen):
     return json.loads(out.stdout.decode("utf-8"))
 
 
-_SETUP = "E._init(%s); E._render(); " % json.dumps({"events": NA.event_catalog(), "picker": PICKER, "caps": dict(NA.CAPS)})
+_SETUP = "E._init(%s); E._render(); " % json.dumps({"events": _catalog(), "picker": PICKER, "caps": dict(NA.CAPS)})
 _EV = "completion_note.state_changed"
 _OPEN_NEW = _SETUP + "E._startNew(); const sel = byRole('event')[0]; change(sel, '%s'); " % _EV
 _FILL = _OPEN_NEW + "click('suggest'); "
@@ -191,14 +203,14 @@ def test_switching_event_drops_recipients_the_new_event_cannot_provide_and_says_
 
 
 def test_conditions_email_channel_and_throttle_round_trip_into_the_body():
-    r = _run({"status": _status(), "run": _FILL + "const f = E._state.f; f.when.push({field: '新狀態', values: '待審核、已核准'}); f.email = true; f.dedupe = '30'; f.perDay = '3'; f.enabled = false; return [E._toBody(f), E._problems(f)]"})
+    r = _run({"status": _status(), "run": _FILL + "const f = E._state.f; f.when.push({field: '新狀態', values: '', picked: ['待審核', '已核准']}); f.email = true; f.dedupe = '30'; f.perDay = '3'; f.enabled = false; return [E._toBody(f), E._problems(f)]"})
     body, problems = r["v"]
     assert problems == [] and body["when"] == [{"field": "新狀態", "in": ["待審核", "已核准"]}] and body["channels"] == ["in_app", "email"]
     assert body["throttle"] == {"dedupeMinutes": 30, "maxPerRecipientPerDay": 3} and body["enabled"] is False
     assert NA.definition_problems("na_ok2", body) == []
     # 反向：定義 → 表單
     r = _run({"status": _status(), "run": _SETUP + "const f = E._fromBody('na_x', %s); return [f.when, f.email, f.recipients, f.dedupe]" % json.dumps(body)})
-    assert r["v"][0] == [{"field": "新狀態", "values": "待審核、已核准"}] and r["v"][1] is True and r["v"][3] == 30
+    assert r["v"][0] == [{"field": "新狀態", "values": "", "picked": ["待審核", "已核准"]}] and r["v"][1] is True and r["v"][3] == 30
 
 
 @pytest.mark.parametrize("mut,frag", [
@@ -209,8 +221,8 @@ def test_conditions_email_channel_and_throttle_round_trip_into_the_body():
     ("f.body = '已核准的單'", "官方狀態字樣"),
     ("f.dedupe = '0'", "分鐘"),
     ("f.perDay = '21'", "每人每天"),
-    ("f.when.push({field: '', values: ''})", "還沒選欄位"),
-    ("f.when.push({field: '新狀態', values: ''})", "1～10 個值"),
+    ("f.when.push({field: '', values: '', picked: null})", "還沒選欄位"),
+    ("f.when.push({field: '新狀態', values: '', picked: []})", "1～10 個值"),
 ])
 def test_client_side_problems_are_plain_chinese(mut, frag):
     r = _run({"status": _status(), "run": _FILL + "const f = E._state.f; %s; return E._problems(f)" % mut})
@@ -310,7 +322,7 @@ RAW = ("completion_note", "custom_module", "case.deadline", "in_app", "requester
 
 
 def test_no_raw_codes_in_the_rendered_form_or_preview():
-    run = _FILL + "E._addRecipient('role:admin'); E._addRecipient('group:finance'); E._addRecipient('user:u_wang'); E._state.f.email = true; E._state.f.when.push({field: '新狀態', values: '已核准'}); E._render(); await E._preview(); return allText() + ' ' + optionTexts().join(' ')"
+    run = _FILL + "E._addRecipient('role:admin'); E._addRecipient('group:finance'); E._addRecipient('user:u_wang'); E._state.f.email = true; E._state.f.when.push({field: '新狀態', values: '', picked: ['已核准']}); E._render(); await E._preview(); return allText() + ' ' + optionTexts().join(' ')"
     r = _run({"status": _status(), "preview": PREVIEW_LOOSEN, "run": run})
     text = r["v"]
     for raw in RAW:

@@ -29,7 +29,7 @@
   var LIMIT = { label: 30, title: 60, body: 400 }
   var DEFAULT_THROTTLE = { dedupe: 60, perDay: 5 }
 
-  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, cat: null, list: [], f: null, preview: null, previewRole: 'admin', etag: '', note: '' }
+  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, cat: null, list: [], f: null, preview: null, previewRole: 'admin', etag: '', note: '', pending: {}, confirmDisable: '' }
   var root = null
 
   function session() { try { return JSON.parse(localStorage.getItem('motrix_session') || 'null') || {} } catch (e) { return {} } }
@@ -86,7 +86,7 @@
   function toBody(f) {
     return {
       version: 1, label: (f.label || '').trim(), enabled: !!f.enabled, event: f.event,
-      when: f.when.filter(function (c) { return c.field }).map(function (c) { return { field: c.field, in: splitValues(c.values) } }),
+      when: f.when.filter(function (c) { return c.field }).map(function (c) { return { field: c.field, in: c.picked ? c.picked.slice() : splitValues(c.values) } }),
       channels: f.email ? ['in_app', 'email'] : ['in_app'],
       recipients: f.recipients.map(function (r) { var o = { kind: r.kind }; if (r.value !== undefined && r.value !== null && r.value !== '') o.value = r.value; return o }),
       template: { title: (f.title || '').trim(), body: (f.body || '').trim() },
@@ -97,7 +97,7 @@
     b = b || {}
     var t = b.template || {}, th = b.throttle || {}
     return { key: key, isNew: false, label: b.label || '', enabled: b.enabled !== false, event: b.event || '',
-             when: (b.when || []).map(function (c) { return { field: c.field, values: (c.in || []).join('、') } }),
+             when: (b.when || []).map(function (c) { var ev = eventOf(b.event), closed = !!(ev && ev.choices && ev.choices[c.field]); return { field: c.field, values: closed ? '' : (c.in || []).join('、'), picked: closed ? (c.in || []).slice() : null } }),
              email: (b.channels || []).indexOf('email') >= 0, recipients: (b.recipients || []).map(function (r) { return { kind: r.kind, value: r.value } }),
              title: t.title || '', body: t.body || '', dedupe: th.dedupeMinutes || DEFAULT_THROTTLE.dedupe, perDay: th.maxPerRecipientPerDay || DEFAULT_THROTTLE.perDay }
   }
@@ -133,7 +133,7 @@
       if (!c.field) { out.push('有一條條件還沒選欄位'); return }
       if (seen[c.field]) out.push('同一個欄位只能設一條條件（' + c.field + '）')
       seen[c.field] = 1
-      var vals = splitValues(c.values)
+      var vals = c.picked ? c.picked : splitValues(c.values)
       if (!vals.length || vals.length > 10 || vals.some(function (x) { return x.length > 40 })) out.push('條件「' + c.field + '」要填 1～10 個值（每個最多 40 字）')
     })
     if (!f.recipients.length) out.push('請至少加入一位要通知的對象')
@@ -160,12 +160,25 @@
                    hasDraft: !!(d.draft && d.draft.body), draftBody: d.draft && d.draft.body, etag: (d.draft && d.draft.etag) || '', liveBody: live || null }
         }).catch(function () { return { key: r.key, label: '（讀取失敗）', event: '', enabled: false, published: false, hasDraft: false } })
       }))
+    }).then(function (items) {                                       // 待核准的變更（治理管線）：讀不到 ⇒ 當作沒有，不擋清單
+      return api('GET', '/api/def-pipeline/pending').then(function (p) {
+        var m = {}; ;(p.items || []).forEach(function (x) { if (x.kind === KIND) m[x.key] = x })
+        st.pending = m; return items
+      }).catch(function () { st.pending = {}; return items })
     }).then(function (items) {
-      st.list = items; st.busy = false; setMsg('', false, 'idle'); render()
+      st.list = items; st.busy = false; st.confirmDisable = ''; setMsg('', false, 'idle'); render()
     }).catch(function (e) {
       if (e.status === 404 || e.status === 400) { st.list = []; st.busy = false; setMsg('', false, 'idle'); render(); return }
       st.busy = false; setMsg('讀取失敗：' + e.message, true, 'error'); render()
     })
+  }
+  function pendingLine(it) {
+    var p = st.pending[it.key]; if (!p) return ''
+    var a = Array.isArray(p.approvals) ? p.approvals.length : (Number(p.approvals) || 0), need = Number(p.approvalsRequired) || 1
+    var at = p.effectiveAt ? String(p.effectiveAt).replace('T', ' ').slice(0, 16) : ''
+    if (p.ready) return '有一項變更已核准、確認期間已過，可以套用（請到「版本與還原」的待核准變更分頁套用）；套用前不會生效。'
+    if (a >= need) return '有一項變更已核准，要等確認期間結束' + (at ? '（' + at + ' 之後）' : '') + '才能套用；套用前不會生效。'
+    return '有一項變更待第二位最高管理者核准（目前 ' + a + '/' + need + ' 位核准）；核准前不會生效。'
   }
   function statusText(it) {
     if (!it.published) return '還沒發布（只有草稿）'
@@ -175,8 +188,9 @@
 
   // ── 編輯動作 ────────────────────────────────────────────────────────────────
   function touch() { st.preview = null; if (st.state !== 'error') st.state = 'idle' }
-  function startNew() { st.f = blank(); st.etag = ''; st.preview = null; setMsg('', false, 'idle'); render() }
+  function startNew() { st.confirmDisable = ''; st.f = blank(); st.etag = ''; st.preview = null; setMsg('', false, 'idle'); render() }
   function startEdit(it) {
+    st.confirmDisable = ''
     st.f = fromBody(it.key, it.draftBody || it.liveBody); st.etag = it.etag || ''; st.preview = null; setMsg('', false, 'idle'); render()
   }
   function setEvent(name) {
@@ -269,6 +283,11 @@
     })
   }
   function disableNow(it) {                                              // 一鍵停用＝收緊，立即生效（走同一條發布管線）
+    if (it.hasDraft && st.confirmDisable !== it.key) {                   // 停用會把這個設定的草稿換成『停用後的已發布版本』：先警告，再按一次才做
+      st.confirmDisable = it.key
+      setMsg('「' + it.label + '」有尚未發布的修改；停用會把這些修改丟掉（草稿會被換成停用後的版本）。確定要停用請再按一次「再按一次確認停用」；想保留修改請先按「編輯」。', true); render(); return Promise.resolve()
+    }
+    st.confirmDisable = ''
     var f = fromBody(it.key, it.liveBody || it.draftBody); f.enabled = false
     st.f = f; st.etag = it.etag || ''; return doPublish()
   }
@@ -298,9 +317,10 @@
       box.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border-light,#eee)', 'data-role': 'item' }, [
         el('div', { style: 'flex:1;min-width:200px' }, [
           el('div', { text: it.label, style: 'font-size:13px;font-weight:600' }),
-          el('div', { text: (ev ? '當「' + ev.label + '」時通知　' : '') + '｜' + statusText(it), style: 'font-size:11px;color:var(--text-dim,#888)' })]),
+          el('div', { text: (ev ? '當「' + ev.label + '」時通知　' : '') + '｜' + statusText(it), style: 'font-size:11px;color:var(--text-dim,#888)' }),
+          st.pending[it.key] ? el('div', { text: '待核准：' + pendingLine(it), 'data-role': 'pending', style: 'font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:2px 6px;margin-top:2px' }) : null]),
         el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'edit', text: '編輯', disabled: st.busy ? 'disabled' : null, onclick: function () { startEdit(it) } }),
-        it.published && it.enabled ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'disable', text: '停用', disabled: st.busy ? 'disabled' : null, onclick: function () { disableNow(it) } }) : null,
+        it.published && it.enabled ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'disable', text: st.confirmDisable === it.key ? '再按一次確認停用' : '停用', disabled: st.busy ? 'disabled' : null, onclick: function () { disableNow(it) } }) : null,
         el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '版本與還原', onclick: function () { if (window.MotrixDefGovernance) window.MotrixDefGovernance.open({ kind: KIND, key: it.key, scope: 'company', title: '額外通知「' + it.label + '」的版本與還原', onRestored: loadList }) } })
       ]))
     })
@@ -346,21 +366,41 @@
     var panel = el('div', { 'data-role': 'form', style: 'margin-top:6px;padding:12px;border:1px solid var(--border,#ccc);border-radius:8px' })
     panel.appendChild(el('div', { text: f.isNew ? '新增額外通知' : '編輯額外通知', style: 'font-size:13px;font-weight:600' }))
     var evSel = select([{ value: '', label: '請選擇…' }].concat(st.cat.events.map(function (e) { return { value: e.event, label: e.label } })), f.event, setEvent, { 'data-role': 'event' })
-    panel.appendChild(field('什麼事發生時要通知？', evSel, ev ? ev.desc : '只能選系統已經準備好的事件。'))
+    panel.appendChild(field('什麼事發生時要通知？', evSel, ev ? ev.hint : '只能選系統已經準備好的事件。'))
     if (!ev) return panel
     panel.appendChild(el('div', { style: 'margin:4px 0' }, [el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'suggest', text: '用建議內容填入（名稱、對象、文字一次帶入）', onclick: applySuggest })]))
     panel.appendChild(field('這個通知叫什麼名字？（只給管理者看）', el('input', { type: 'text', 'data-path': 'label', value: f.label, maxlength: String(LIMIT.label + 10), style: 'width:100%;font-size:12px', oninput: function (e) { f.label = e.target.value; touch() } })))
     // 條件
     var condHost = el('div', { 'data-role': 'conditions' })
     f.when.forEach(function (c, i) {
+      var closed = c.field && ev.choices && ev.choices[c.field]
+      var valueNode
+      if (closed) {                                                    // 值的範圍是封閉的：勾選白話名稱（內部代號只存在資料裡，不顯示）
+        var labs = (ev.labels && ev.labels[c.field]) || {}, codes = ev.choices[c.field].slice()
+        ;(c.picked || []).forEach(function (x) { if (codes.indexOf(x) < 0) codes.push(x) })
+        valueNode = el('div', { 'data-role': 'choices', style: 'display:flex;gap:8px;flex-wrap:wrap;flex:1' }, codes.map(function (code) {
+          var inList = ev.choices[c.field].indexOf(code) >= 0
+          return el('label', { style: 'font-size:12px' }, [
+            el('input', { type: 'checkbox', 'data-choice': code, checked: (c.picked || []).indexOf(code) >= 0 ? 'checked' : null, onchange: function (e) {
+              c.picked = c.picked || []
+              var at = c.picked.indexOf(code)
+              if (e.target.checked && at < 0) c.picked.push(code)
+              if (!e.target.checked && at >= 0) c.picked.splice(at, 1)
+              touch() } }),
+            el('span', { text: ' ' + (inList ? (labs[code] || '（未命名）') : '（已不存在的選項）') })])
+        }))
+      } else {
+        valueNode = el('input', { type: 'text', value: c.values, placeholder: '值（多個用頓號分隔）', style: 'flex:1;min-width:160px;font-size:12px', oninput: function (e) { c.values = e.target.value; touch() } })
+      }
       condHost.appendChild(el('div', { style: 'display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin:3px 0' }, [
-        select([{ value: '', label: '選擇欄位…' }].concat(ev.filterable.map(function (n) { return { value: n, label: n } })), c.field, function (v) { c.field = v; touch(); render() }),
+        select([{ value: '', label: '選擇欄位…' }].concat(ev.filterable.map(function (n) { return { value: n, label: n } })), c.field, function (v) {
+          c.field = v; c.values = ''; c.picked = (v && ev.choices && ev.choices[v]) ? [] : null; touch(); render() }),
         el('span', { text: '是', style: 'font-size:12px' }),
-        el('input', { type: 'text', value: c.values, placeholder: '值（多個用頓號分隔）', style: 'flex:1;min-width:160px;font-size:12px', oninput: function (e) { c.values = e.target.value; touch() } }),
+        valueNode,
         el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '移除', onclick: function () { f.when.splice(i, 1); touch(); render() } })]))
     })
-    if (ev.filterable.length && f.when.length < 3) condHost.appendChild(el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'add-cond', text: '＋ 加一條條件', onclick: function () { f.when.push({ field: '', values: '' }); touch(); render() } }))
-    panel.appendChild(field('只在符合這些情況時才通知（可以不設，最多 3 條）', condHost, ev.filterable.length ? '例如：' + ev.filterable[0] + ' 是「' + (ev.sample[ev.placeholders.length ? '' : ''] || '') + '」'.replace('「」', '') : '這個事件沒有可設的條件。'))
+    if (ev.filterable.length && f.when.length < 3) condHost.appendChild(el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'add-cond', text: '＋ 加一條條件', onclick: function () { f.when.push({ field: '', values: '', picked: null }); touch(); render() } }))
+    panel.appendChild(field('只在符合這些情況時才通知（可以不設，最多 3 條）', condHost, ev.filterable.length ? '可以不設；每一條裡勾選（或填寫）的值，只要符合其中一個就算符合；有設多條時要全部符合。' : '這個事件沒有可設的條件。'))
     // 收件人
     var chips = el('div', { 'data-role': 'chips', style: 'display:flex;gap:4px;flex-wrap:wrap;margin:3px 0' }, f.recipients.map(function (r, i) {
       return el('span', { 'data-role': 'chip', style: 'display:inline-flex;gap:4px;align-items:center;padding:2px 8px;border:1px solid var(--border,#bbb);border-radius:10px;font-size:12px' }, [

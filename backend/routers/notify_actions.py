@@ -21,10 +21,10 @@ def notify_actions_status(authorization: str = Header(None)):
         return {"enabled": False, "canEdit": False}
     out = {"enabled": True, "canEdit": u.get("role") == "superadmin"}
     if out["canEdit"]:
-        out["events"] = NA.event_catalog()
         out["caps"] = dict(NA.CAPS)
         conn = get_db()
         try:
+            out["events"] = NA.event_catalog(conn)
             out["picker"] = NA.picker_catalog(conn)
         finally:
             conn.close()
