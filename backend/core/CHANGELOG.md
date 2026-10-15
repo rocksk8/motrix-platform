@@ -2,6 +2,7 @@
 
 
 ## 1.137 — wip/t62-bp4-s1-r1＋wip/t62-bp4-s2-r1＋wip/t62-bp4-s2-r2＋wip/t62-bp4-s3-r1（BP-4 S1／S2／S3：儲存位置代號登錄表＋附件插槽定義；旗標 `builder_slots.enabled` 預設關）；t62 整合 r8＋wip/t62-pdf-decor-r1＋wip/t62-pdf-escape-r1＋wip/h2-pdf-hardening-r1（PDF 頁尾浮水印／輸出逸出稽核／渲染硬化第二輪；一班一個版本，三段併成一段）
+- 狀態顯示名稱表（`helpers/status_display.py`，旗標 `builder_status_display.enabled` 預設關）多三個只做顯示的鍵 `洽談中`／`成案`／`暫擱置`（群組 `devcase`，開發案件 CRM 用；『未成案』沿用既有鍵）。新增守門測試 `test_status_display_canonical_lint_2026_10_14.py`：後端除白名單外不得引用顯示表、前端顯示名稱不得出現在判斷／篩選／請求位置（含正對照）。無 migration、無新路由、無權限變更；旗標關＝與過去逐字相同。
 
 - L1（只增；T62 預檢）：`helpers/stage_templates` 加 `__l1_public__ = ("_KEY_RE",)`——`modules/case/api/quotations.py` 用同一個階段種類鍵格式檢查，改為正式宣告的公開名稱（快照已重產）。
 - S-F1（census）：選項清單新增 `payment_stage`（案件款項期別名稱：訂金款／交貨款／驗收款／進度款／完工款／收款後出貨／自訂義／其他；可新增、改顯示名稱、重排、停用，已發布的值不可刪、不可改字）與 `payment_request_stage`（請款單款項類別，代碼 full／deposit／delivery／acceptance／final 固定，**封閉清單**：只能改顯示名稱與順序）。報表、出納、儀表板、應收、行事曆事件標題、請款單 PDF 只改『顯示』（`helpers/option_lists.payment_stage_name`／`payment_stage_display`／`request_stage_label`；清單關著或沒發布 ⇒ 與過去逐字相同）；自訂義的 `customLabel` 顯示修正也在旗標後面。已入帳的收款手續費傳票說明（`receivables.py`）與報價單的訊息文字仍用原字串。
