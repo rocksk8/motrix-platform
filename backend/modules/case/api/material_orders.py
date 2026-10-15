@@ -31,7 +31,8 @@ from helpers import (
 )
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
 from modules.case.quotations import SQL_DEAL_TAG, save_quotation_json  # noqa: E402
-from helpers.financial_mask import MATERIAL_ORDER_MONEY_KEYS, money_visible, material_money_visible
+from helpers.financial_mask import MATERIAL_ORDER_MONEY_KEYS, material_money_visible
+from helpers.field_policy import mask_flags, tier_allowed  # F7 S1b：欄位遮蔽的旗標統一由欄位政策產生
 from modules.case.recognition import normalize_date  # `AC2`
 from modules.case import material_approval as MA   # 叫料審核（31-C）
 from modules.case import material_guard as MG
@@ -195,8 +196,9 @@ def update_material_orders(quote_no: str,
         import copy as _copy
         from helpers.financial_mask import mask_case_record
         _cr = _copy.deepcopy(data.get("caseRecord") or {})
-        if not money_visible(user):
-            mask_case_record(_cr, keep_orders=material_money_visible(user))
+        _flags = mask_flags(user)
+        if not _flags["money"]:
+            mask_case_record(_cr, keep_orders=_flags["keep_orders"])
         out["saved"] = {k: _cr.get(k) for k in ("materials", "materialOrders")}
         return out
 
@@ -268,7 +270,7 @@ def get_material_orders(quote_no: str, authorization: str = Header(None)):
 
         data = json.loads(q["data_json"] or "{}")
         orders = data.get("caseRecord", {}).get("materialOrders", [])
-        if not material_money_visible(user):
+        if not tier_allowed("material_money", user):
             # CM13（2026-09-24 使用者裁示）：單價、小計、已付金額不回
             for o in orders:
                 for k in MATERIAL_ORDER_MONEY_KEYS:

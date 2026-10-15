@@ -122,6 +122,8 @@ def test_errors_fail_closed_never_open(finance_env, monkeypatch):
     assert FP.visible("quote_item.cost", u) is False
     assert FP.visible_many(["quote_item.cost", "payment.amount"], u)["quote_item.cost"] is False
     assert FP.mask_flags(u)["keep_quote"] is False
+    with pytest.raises(RuntimeError):                       # 寫入路徑用 strict：照今天丟出，不 fail-closed
+        FP.mask_flags(u, strict=True)
     monkeypatch.setattr(FC, "by_id", boom)
     assert FP.visible("payment.amount", u) is False
 
