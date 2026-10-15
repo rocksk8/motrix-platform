@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-15（wip/t63-fix-pf2-r1；T63 預檢修正：僅改寫法）
+- `api/quotations.py` 的案件批次匯出登記（`_ET.register_export(...)`）欄位清單改成不用 `**` 展開（守門『禁止 ** 傳參數』），內容逐項相同；無行為變更、無 migration、無新路由、無權限變更。
+
 ## 1.0.188 — 2026-10-14（wip/t62-bp4-s2-r2＋wip/t62-bp2-r5-r1＋wip/t62-approval-margin-r1；BP-4 附件插槽／BP-2 標示規則／單項毛利率門檻）＋wip/t63 S-ST2 階段樣板套用＋wip/t62 C1／C2／C3 案件頁版面＋wip/t62-pdf-escape-r1＋wip/t62-pdf-decor-r1；t62 整合 r8＋wip/t63-export-cols-r1＋wip/t63-bp4-s1-r1（發佈行）＋審查補強
 - 額外通知事件發佈行的保護（審查補強）：完工單與階段到期掃描發佈事件時，連 `helpers.notify_actions` 匯入失敗都只記 log，不再可能讓已完成的動作回 500，也不會中斷整輪到期掃描。無行為變更、無 migration、無新路由、無權限變更。
 - 額外通知事件的發佈行（BP-4 S4；`helpers.notify_actions.emit`，commit 之後、錯誤不外拋）：完工單附件上傳後發佈 `completion_note.attachment_added`（目前只有簽回附件，slot＝`signed`）；完工單送審／核准（含簽核中）／退回／撤銷核准後發佈 `completion_note.state_changed`（含 from／to）；案件階段到期掃描在同一個 guard 之內發佈 `case.deadline_near`。事件只有在最高管理者於設定中心開啟「額外通知」並發布動作後才會產生通知；旗標關＝沒有任何訂閱者做事，行為與今天相同。完工單 SELECT 多取 `quote_no`／`status` 兩欄（只讀）。無 migration、無新路由、無權限變更。

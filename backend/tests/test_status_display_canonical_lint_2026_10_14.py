@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from core.source_tree import page_file, page_files
 from helpers import status_display as S
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -95,7 +96,9 @@ def lint_text(text):
 
 
 def _frontend_files():
-    for sub in ("pages", "js", "static"):
+    for p in page_files():
+        yield p
+    for sub in ("js", "static"):
         for p in (FRONT / sub).rglob("*"):
             if p.suffix in (".html", ".js") and "vendor" not in p.parts:
                 yield p
@@ -139,7 +142,7 @@ def test_negative_control_display_positions_are_allowed(sample):
 
 
 # ── dev-crm ────────────────────────────────────────────────────────────────────
-DEVCRM = FRONT / "pages" / "dev-crm.html"
+DEVCRM = page_file("dev-crm.html")
 DEV_STATUSES = ["洽談中", "成案", "未成案", "暫擱置"]
 
 

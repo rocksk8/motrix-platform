@@ -1,5 +1,8 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-15（wip/t63-fix-pf2-r1；T63 預檢修正：L1 讀 quotations 一律經 case_access）
+- L1（只增）：`helpers/case_access` 新增 `case_data_json()`、`case_owner_username()`、`case_row_for_access()`、`case_data_json_rows()`（皆唯讀、原樣丟資料庫錯誤）。`helpers/builtin_fields`、`helpers/notify_actions`、`helpers/settings_groups_q0` 原本直接 SELECT quotations，改走這四個函式；行為與回傳內容不變。`notify_actions._link` 改用 `string.Formatter().vformat`（去掉 `**` 呼叫，語意相同）。無 migration、無新路由、無權限變更。
+
 ## 1.138 — 2026-10-15（wip/t63-paystage-r1；請款單款項類別代碼單一來源 F4）
 - L1（只增）：`helpers/option_lists` 新增公開名稱 `REQUEST_STAGE_LIST`、`request_stage_defaults()`、`request_stage_codes()`、`request_stage_names()`——請款單款項類別（full／deposit／delivery／acceptance／final）的代碼清單單一來源（`BUILTIN["payment_request_stage"]`）；`arap.PAYMENT_STAGES` 與 `pdf_gen._PAYMENT_STAGE_LABELS` 改由它衍生（內容與順序與過去寫死的字典逐項相同）。無 migration、無權限變更、不碰金額。
 - **（併入）(next) — 2026-10-15（wip/t63-bp4-s1-r1；BP-4 S4：額外通知動作；旗標沿用 `builder_notify.enabled`＋`builder_governance.enabled`，預設關）**

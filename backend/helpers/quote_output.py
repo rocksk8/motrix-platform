@@ -6,6 +6,7 @@
 [不變式] ①設定 `quote_output.hidden_terms_pdf_mode`＝0（預設）⇒ 回空集合，**完全不讀版面**（今天的行為）；②任何讀取失敗 ⇒ 空集合（照印＝最嚴）；
     ③只看公司層級的版面（不分角色）：PDF 是給客戶的同一份文件，不能因為誰按下列印而不同；④只決定『印不印』，不刪除、不改任何已存的內容。
 設計：docs/platform/plans/T63-Q0-SETTINGS-SPEC.md。
+[契約題] backend/tests/platform/test_q0_settings_t63.py
 """
 import logging
 

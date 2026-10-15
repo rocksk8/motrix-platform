@@ -234,6 +234,33 @@ def case_sales_department(conn, quote_no: str):
         return None
     return r["d"] if r else None
 
+def case_data_json(conn, quote_no: str):
+    """案件（quotations）的 data_json 原文（查無 ⇒ None）。給 L1 唯讀渲染用（例如財務單據附報價單自訂欄位）；不做權限過濾，呼叫端自負。
+    表不存在等資料庫錯誤原樣丟出（呼叫端自行吞）。"""
+    r = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    return None if r is None else r[0]
+
+
+def case_owner_username(conn, quote_no: str):
+    """案件業務（仍在職）的帳號名稱；查無案件／業務已停用 ⇒ None。資料庫錯誤原樣丟出。"""
+    r = conn.execute("SELECT u.username FROM quotations q JOIN users u ON u.id=q.sales_person_id WHERE q.quote_no=? AND u.active=1",
+                     (quote_no,)).fetchone()
+    return r["username"] if r else None
+
+
+def case_row_for_access(conn, quote_no: str):
+    """`case_access_allowed` 需要的那一列（sales_person_id、sales_person、assigned_user_ids、data_json）；查無 ⇒ None。"""
+    return conn.execute("SELECT sales_person_id, sales_person, assigned_user_ids, data_json FROM quotations WHERE quote_no=?",
+                        (quote_no,)).fetchone()
+
+
+def case_data_json_rows(conn, limit: int, customfields_only: bool = False) -> list:
+    """最多 `limit` 張案件的 data_json 原文清單（唯讀統計用，給設定中心『目前影響幾張』）。`customfields_only` ⇒ 只取 JSON 裡出現 customFields 的列。"""
+    sql = "SELECT data_json FROM quotations"
+    if customfields_only:
+        sql += " WHERE data_json LIKE '%\"customFields\"%'"
+    return [r[0] for r in conn.execute(sql + " LIMIT ?", (int(limit),)).fetchall()]
+
 
 def case_page_readable(conn, quote_no: str, user: dict) -> bool:
     """案件頁（報價單本體）的**讀取規則**：row_access `case`／scope="read"（擁有者、admin+，或持 cashier，CM14b；

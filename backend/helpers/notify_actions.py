@@ -2,7 +2,7 @@
 """額外通知動作（BP-4 S4；設計 docs/platform/plans/BP4-STORAGE-NOTIFY-DESIGN.md §4）：管理者宣告「當事件 E 發生，額外通知 R，內容 T」。
 
 [單位] helper:notify_actions    [層] L1    [穩定度] 實驗（旗標關＝完全沒有這個功能）
-[公開介面] EVENTS, GROUP, KIND, MAIL_KEY, CAPS, compare, definition_problems, dispatch, emit, enabled, ensure_kind, event_catalog, preview, resolve_actions
+[公開介面] CAPS, CHANNELS, EVENTS, GROUP, KIND, MAIL_KEY, NOTIF_TYPE, OFF_REASON, PREVIEW_ROLES, SUBSCRIBER, compare, definition_problems, dispatch, emit, enabled, ensure_kind, event_catalog, preview, resolve_actions
 [不變式] ①沿用 S-X3 的設定群組 `builder_notify.enabled`，且必須同時開啟 `builder_governance.enabled`（`helpers.notify_templates.enabled`，同一個函式）；
     旗標關著、沒有已發布動作、動作不合法或任何錯誤 ⇒ `dispatch()` 什麼都不做（不寫 `notifications`、不寄信、不拋例外）。
     ②這裡新增的是**額外**通知：不能關掉或改寫任何內建信件、系統技術類或稽核類通知（內建收件人仍用「信件與通知收件設定」）。
@@ -18,6 +18,7 @@
 """
 import logging
 import re
+import string
 import threading
 import time
 from collections import deque
@@ -352,8 +353,8 @@ def _matches(body, ev, payload) -> bool:
 
 def _case_owner(conn, quote_no):
     try:
-        r = conn.execute("SELECT u.username FROM quotations q JOIN users u ON u.id=q.sales_person_id WHERE q.quote_no=? AND u.active=1", (quote_no,)).fetchone()
-        return r["username"] if r else None
+        from helpers.case_access import case_owner_username
+        return case_owner_username(conn, quote_no)
     except Exception:                                        # noqa: BLE001
         return None
 
@@ -392,13 +393,13 @@ def _readable(conn, ev, payload, user) -> bool:
     try:
         ck = ev.get("case_key")
         if ck:
-            from helpers.case_access import case_access_allowed
-            q = conn.execute("SELECT sales_person_id, sales_person, assigned_user_ids, data_json FROM quotations WHERE quote_no=?", (payload.get(ck),)).fetchone()
+            from helpers.case_access import case_access_allowed, case_row_for_access
+            q = case_row_for_access(conn, payload.get(ck))
             return bool(q) and bool(case_access_allowed(conn, q, user))
         mk = ev.get("module_key")
         if mk:
             from helpers.auth import user_has_module
-            return user.get("role") in ("superadmin", "admin") or bool(user_has_module(user, str(payload.get(mk))))
+            return user.get("role") in ("superadmin", "admin") or user_has_module(user, str(payload.get(mk))) is True
     except Exception:                                        # noqa: BLE001  驗權限出錯 ⇒ 不通知
         return False
     return False
@@ -422,7 +423,7 @@ def _render(text, ev, payload, user) -> str:
 
 def _link(ev, payload) -> str:
     try:
-        return ev["link"].format(**{k: payload.get(k, "") for k in ev["fields"]}) if ev.get("link") else ""
+        return string.Formatter().vformat(ev["link"], (), {k: payload.get(k, "") for k in ev["fields"]}) if ev.get("link") else ""
     except Exception:                                        # noqa: BLE001
         return ""
 
