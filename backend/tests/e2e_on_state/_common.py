@@ -42,9 +42,9 @@ def api(ctx, base, method, path, token, body=None, params=None):
     return r.status, j
 
 
-def set_flag(ctx, base, token, group, field, value=1):
+def set_flag(ctx, base, token, group, field, value=1, as_int=False):
     """設定中心存一個旗標（立即生效的欄位）。⇒ 回應 JSON。"""
-    s, j = api(ctx, base, "POST", "/api/settings-center/groups/" + group, token, {"values": {field: bool(value)}, "reason": "e2e on-state"})
+    s, j = api(ctx, base, "POST", "/api/settings-center/groups/" + group, token, {"values": {field: (int(value) if as_int else bool(value))}, "reason": "e2e on-state"})
     assert s == 200, (group, field, s, j)
     return j
 

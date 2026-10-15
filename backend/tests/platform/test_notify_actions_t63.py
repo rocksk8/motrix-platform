@@ -333,7 +333,7 @@ def test_internal_placeholder_is_always_masked(live, monkeypatch):
     ev["internal"] = ("動作",)
     monkeypatch.setitem(NA.EVENTS, EVENT, ev)
     assert "不認得的占位符" in _msgs(A(template={"title": "x {單據號}", "body": "{動作}"}))
-    out = NA._render("{動作}/{單據號}", ev, PAY, {"role": "superadmin", "modules": "[]"})          # noqa: SLF001
+    out = NA._expand_text("{動作}/{單據號}", ev, PAY, {"role": "superadmin", "modules": "[]"})          # noqa: SLF001
     assert out == "（略）/D-7"
 
 

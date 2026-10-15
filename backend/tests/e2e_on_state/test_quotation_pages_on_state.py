@@ -87,6 +87,7 @@ def test_q3_custom_field_saved_and_restored(live_server, make_user, new_context)
     tk = token_of(ctx, live_server, u)
     qn = seed_draft_quote()
     set_flag(ctx, live_server, tk, "builder_custom_fields", "enabled", 1)
+    set_flag(ctx, live_server, tk, "builder_custom_fields", "quote_enabled", 1, as_int=True)    # T63 Q0：報價單自己的開關
     publish_definition(ctx, live_server, tk, "custom_fields", "quotation",
                        {"fields": [{"key": "project_code", "label": "內部案號", "type": "text"}, {"key": "urgent", "label": "急件", "type": "checkbox"}]})
     page = ctx.new_page()
@@ -112,6 +113,7 @@ def test_q3_custom_field_saved_and_restored(live_server, make_user, new_context)
     # 旗標關閉 ⇒ 區塊消失，已存的值（先寫回去再驗）不被動
     page.locator("[data-cf-field=project_code] input").fill("留著")
     _save(page)
+    set_flag(ctx, live_server, tk, "builder_custom_fields", "quote_enabled", 0, as_int=True)
     set_flag(ctx, live_server, tk, "builder_custom_fields", "enabled", 0)
     page.reload()
     page.wait_for_function("() => %s.q && %s.q.quoteNo === '%s' && %s.q.contactFax === '04-1234-5678'" % (DATA_JS, DATA_JS, qn, DATA_JS), timeout=20000)

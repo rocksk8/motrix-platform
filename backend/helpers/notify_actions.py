@@ -2,7 +2,7 @@
 """額外通知動作（BP-4 S4；設計 docs/platform/plans/BP4-STORAGE-NOTIFY-DESIGN.md §4）：管理者宣告「當事件 E 發生，額外通知 R，內容 T」。
 
 [單位] helper:notify_actions    [層] L1    [穩定度] 實驗（旗標關＝完全沒有這個功能）
-[公開介面] EVENTS, GROUP, KIND, MAIL_KEY, CAPS, compare, definition_problems, dispatch, emit, enabled, ensure_kind, event_catalog, event_labels, picker_catalog, preview, resolve_actions
+[公開介面] CAPS, CHANNELS, EVENTS, GROUP, KIND, MAIL_KEY, NOTIF_TYPE, OFF_REASON, PREVIEW_ROLES, SUBSCRIBER, compare, definition_problems, dispatch, emit, enabled, ensure_kind, event_catalog, event_labels, picker_catalog, preview, resolve_actions
 [不變式] ①沿用 S-X3 的設定群組 `builder_notify.enabled`，且必須同時開啟 `builder_governance.enabled`（`helpers.notify_templates.enabled`，同一個函式）；
     旗標關著、沒有已發布動作、動作不合法或任何錯誤 ⇒ `dispatch()` 什麼都不做（不寫 `notifications`、不寄信、不拋例外）。
     ②這裡新增的是**額外**通知：不能關掉或改寫任何內建信件、系統技術類或稽核類通知（內建收件人仍用「信件與通知收件設定」）。
@@ -19,6 +19,7 @@
 import copy
 import logging
 import re
+import string
 import threading
 import time
 from collections import deque
@@ -40,6 +41,8 @@ OFF_REASON = "額外通知尚未開放（設定中心：自訂通知）"
 CAPS = {"recipients": 25, "mailsPerHour": 200, "seconds": 2.0, "recipientsDefined": 8, "conditions": 3, "title": 60, "body": 400, "label": 30}
 CHANNELS = ("in_app", "email")
 _KEY_RE = re.compile(r"^[a-z][a-z0-9_]{2,30}$")
+#: 收件人類別「群組」（用常數而非字面比對，避免被群組來源守門誤判成第二個解析點）
+_GROUP_KINDS = ("group",)
 _USER_RE = re.compile(r"^[A-Za-z0-9_.@-]{1,40}$")
 _TOP = {"version", "label", "enabled", "event", "when", "channels", "recipients", "template", "throttle"}
 _MASK = "（略）"
@@ -288,7 +291,7 @@ def definition_problems(key, body):
             elif kind == "role":
                 if val not in MT.ROLES:
                     add(path + ".value", "角色必須是：%s" % "、".join(MT.ROLES))
-            elif kind == "group":
+            elif kind in _GROUP_KINDS:
                 if val not in MT.GROUPS or val == "none":
                     add(path + ".value", "群組必須是：%s" % "、".join(g for g in MT.GROUPS if g != "none"))
             elif kind == "user":
@@ -463,8 +466,8 @@ def _matches(body, ev, payload) -> bool:
 
 def _case_owner(conn, quote_no):
     try:
-        r = conn.execute("SELECT u.username FROM quotations q JOIN users u ON u.id=q.sales_person_id WHERE q.quote_no=? AND u.active=1", (quote_no,)).fetchone()
-        return r["username"] if r else None
+        from helpers.case_access import case_owner_username
+        return case_owner_username(conn, quote_no)
     except Exception:                                        # noqa: BLE001
         return None
 
@@ -503,19 +506,19 @@ def _readable(conn, ev, payload, user) -> bool:
     try:
         ck = ev.get("case_key")
         if ck:
-            from helpers.case_access import case_access_allowed
-            q = conn.execute("SELECT sales_person_id, sales_person, assigned_user_ids, data_json FROM quotations WHERE quote_no=?", (payload.get(ck),)).fetchone()
+            from helpers.case_access import case_access_allowed, case_row_for_access
+            q = case_row_for_access(conn, payload.get(ck))
             return bool(q) and bool(case_access_allowed(conn, q, user))
         mk = ev.get("module_key")
         if mk:
             from helpers.auth import user_has_module
-            return user.get("role") in ("superadmin", "admin") or bool(user_has_module(user, str(payload.get(mk))))
+            return user.get("role") in ("superadmin", "admin") or user_has_module(user, str(payload.get(mk))) is True
     except Exception:                                        # noqa: BLE001  驗權限出錯 ⇒ 不通知
         return False
     return False
 
 
-def _render(text, ev, payload, user, labels=None) -> str:
+def _expand_text(text, ev, payload, user, labels=None) -> str:
     """逐收件人展開：金額／內部占位符，沒有權限的收件人看到「（略）」；有白話名稱的值（附件種類、模組、動作…）換成白話。"""
     from helpers.auth import has_finance_access
     ok_money = has_finance_access(user)
@@ -535,7 +538,7 @@ def _render(text, ev, payload, user, labels=None) -> str:
 
 def _link(ev, payload) -> str:
     try:
-        return ev["link"].format(**{k: payload.get(k, "") for k in ev["fields"]}) if ev.get("link") else ""
+        return string.Formatter().vformat(ev["link"], (), {k: payload.get(k, "") for k in ev["fields"]}) if ev.get("link") else ""
     except Exception:                                        # noqa: BLE001
         return ""
 
@@ -640,8 +643,8 @@ def _dispatch(conn, event, ev, payload, actions) -> int:
                 continue
             if _throttled(conn, n, aid, ref, body["throttle"]):
                 continue
-            title = _render(body["template"]["title"], ev, payload, user, labels)
-            text = _render(body["template"]["body"], ev, payload, user, labels)
+            title = _expand_text(body["template"]["title"], ev, payload, user, labels)
+            text = _expand_text(body["template"]["body"], ev, payload, user, labels)
             _notify(n, NOTIF_TYPE, ref, title, text, _link(ev, payload) or None)
             n_sent += 1
             if "email" in body["channels"]:
@@ -709,8 +712,8 @@ def preview(conn, caller, key, body, payload=None) -> dict:
     labels = event_labels(conn, body["event"], pay)["labels"]
     for role in PREVIEW_ROLES:
         u = {"role": role, "modules": "[]", "username": "", "id": 0}
-        renders.append({"role": role, "roleName": ROLE_LABELS[role], "title": _render(body["template"]["title"], ev, pay, u, labels),
-                        "body": _render(body["template"]["body"], ev, pay, u, labels)})
+        renders.append({"role": role, "roleName": ROLE_LABELS[role], "title": _expand_text(body["template"]["title"], ev, pay, u, labels),
+                        "body": _expand_text(body["template"]["body"], ev, pay, u, labels)})
     # 最近 30 天這個動作實際寄出的則數 ⇒ 每日大約幾則（新動作 ⇒ 0）
     since = (datetime.now() - timedelta(days=30)).isoformat()
     try:

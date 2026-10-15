@@ -97,13 +97,8 @@ def _visible_rows(rows, user, conn):
 
 # 「款項類別」：客戶端請款單 PDF 與整頁編輯介面上手動選擇的業務語意分類
 # （2026-08-24），跟 scope（amount/items，決定金額計算方式）並存、互不影響。
-PAYMENT_STAGES = {
-    "full":       "全額",
-    "deposit":    "訂金款",
-    "delivery":   "交貨款",
-    "acceptance": "驗收款",
-    "final":      "尾款",
-}
+from helpers.option_lists import request_stage_names as _request_stage_names      # F4：款項類別代碼清單的唯一來源在 helpers/option_lists.BUILTIN（驗證集合與這裡的字典由它衍生）
+PAYMENT_STAGES = _request_stage_names()
 
 from helpers.option_lists import request_stage_label as _request_stage_label      # census S-F1：代碼固定、顯示名稱可由選項清單改（關著 ⇒ 上面的字典）
 
@@ -349,6 +344,17 @@ def get_payment_request_remaining(quote_no: str, exclude: Optional[str] = None, 
     if info is None:
         raise HTTPException(404, "找不到關聯的報價單")
     return info
+
+
+@router.get("/api/payment-requests/stages")
+def list_payment_request_stages(authorization: str = Header(None)):
+    """請款單表單的『款項類別』按鈕清單（F4：代碼清單單一來源）。內容＝`option_lists.effective("payment_request_stage")`：
+    選項清單關著／沒發布 ⇒ 程式預設的 5 個（與過去寫死的清單逐項相同）；已發布 ⇒ 該版（代碼固定，只有名稱與順序可改）。
+    只有代碼與名稱，沒有任何金額。必須註冊在 /{request_no} 之前，否則 'stages' 會被當成 request_no 吃掉。"""
+    _require_user(authorization)
+    from helpers import option_lists as _OL
+    items = [{"value": x["value"], "label": x["label"], "disabled": bool(x.get("disabled"))} for x in _OL.effective(_OL.REQUEST_STAGE_LIST)]
+    return {"items": items, "source": "published" if _OL.enabled() and items != [dict(d, disabled=False) for d in _OL.request_stage_defaults()] else "default"}
 
 
 @router.get("/api/payment-requests/{request_no}")

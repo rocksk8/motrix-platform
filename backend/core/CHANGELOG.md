@@ -1,17 +1,29 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-15（wip/t63-bp4-s1-r1；BP-4 S4：額外通知動作；旗標沿用 `builder_notify.enabled`＋`builder_governance.enabled`，預設關）
+## (next) — 2026-10-15（wip/t64-bp4-s5-editor-r1；T64 BP-4 S5：額外通知動作編輯器；旗標沿用 `builder_notify.enabled`，預設關）
 - T64 S5 複審補強（白話）：事件目錄多 `hint`（白話說明，取代開發者口吻的 `desc`）、`labels`／`choices`（欄位的白話值與封閉範圍：附件種類、完工單狀態、自訂模組的模組／狀態／動作）；編輯器的條件對封閉範圍改用勾選白話名稱，通知文字與試跑也把內部值換成白話；清單顯示治理管線裡的待核准狀態（三階段如實說明）；停用時若有未發布的草稿，先警告、再按一次才做；沒有顯示名稱的帳號在挑選器顯示『未設定名稱的帳號 N』，不顯示帳號（可能是 email）。
 - T64 S5 編輯器前端（新檔 `frontend/static/notify-action-editor.js`）：設定頁（`approval-settings.html`）新增掛載點 `notify-action-editor-mount`，與簽核通知用語編輯器共用旗標 `builder_notify.enabled`（關著＝不載入任何程式、不多打請求；只有最高管理者）。白話畫面：清單（名稱、事件、狀態）、新增／編輯、事件挑選、條件、收件人挑選器（固定目錄，不收 email）、通道、節流、占位符按鈕、『用建議內容填入』一鍵預設、『試跑看看』（約幾人／每天幾則／逐角色文字）、放寬紅框（原因＋範圍）、檢查並發布（存草稿→後端檢查→影響預覽→發布；待核准如實顯示）、一鍵停用、版本與還原（沿用治理面板）。不用 innerHTML／原生對話框；畫面不出現代號或列舉值。測試 `tests/platform/test_notify_action_editor_t64.py`（31 題，node 假 DOM）。
 - T64 S5 編輯器的後端目錄（只增）：`notify_actions.picker_catalog`（收件人挑選器的固定目錄：角色、群組、現有啟用帳號，不含 email）與每個事件的 `suggest`（一鍵建議內容，皆通過驗證）；`GET /api/notify-actions/status` 對最高管理者多回 `picker`；放寬原因改為白話（收件人、通道、事件都用中文名稱，不出現代號）。
+
+## 1.139 — 2026-10-15（wip/t63-fix-pf2-r1；T63 預檢修正：L1 讀 quotations 一律經 case_access）
+- L1（只增）：`helpers/case_access` 新增 `case_data_json()`、`case_owner_username()`、`case_row_for_access()`、`case_data_json_rows()`（皆唯讀、原樣丟資料庫錯誤）。`helpers/builtin_fields`、`helpers/notify_actions`、`helpers/settings_groups_q0` 原本直接 SELECT quotations，改走這四個函式；行為與回傳內容不變。`notify_actions._link` 改用 `string.Formatter().vformat`（去掉 `**` 呼叫，語意相同）。無 migration、無新路由、無權限變更。
+
+## 1.138 — 2026-10-15（wip/t63-paystage-r1；請款單款項類別代碼單一來源 F4）
+- L1（只增）：`helpers/option_lists` 新增公開名稱 `REQUEST_STAGE_LIST`、`request_stage_defaults()`、`request_stage_codes()`、`request_stage_names()`——請款單款項類別（full／deposit／delivery／acceptance／final）的代碼清單單一來源（`BUILTIN["payment_request_stage"]`）；`arap.PAYMENT_STAGES` 與 `pdf_gen._PAYMENT_STAGE_LABELS` 改由它衍生（內容與順序與過去寫死的字典逐項相同）。無 migration、無權限變更、不碰金額。
+- **（併入）(next) — 2026-10-15（wip/t63-bp4-s1-r1；BP-4 S4：額外通知動作；旗標沿用 `builder_notify.enabled`＋`builder_governance.enabled`，預設關）**
 - 額外通知審查補強（只收緊，f0）：時間預算（2 秒）在收件人迴圈裡也檢查，超時只送已處理的人並寫稽核 `notify_action.degraded`（只記人數與原因）；信件超過每小時上限時，站內通知照送、超過的信件數寫進同一筆降級稽核；去重鍵改為事件登記的 `ref` 欄位（階段到期含階段、狀態改變含新狀態，避免『送審後馬上核准』被去重吃掉）；每日則數與試跑的每日估算改用精確前綴比對（動作代號含底線，LIKE 會把它當萬用字元）。
 - L1（只增）：新檔 `helpers/notify_actions.py`——kind `notify_action`（管理者宣告「當事件 E 發生，額外通知 R，內容 T」；惰性登記，旗標關＝不登記）、派發器 `dispatch`（訂閱事件匯流排；逐人讀取權限過濾、金額占位符逐收件人遮蔽、節流、每次 ≤25 人、每動作每小時 ≤200 封、整次 ≤2 秒、例外不外拋、不連鎖）、寬嚴比較 `compare`（新增動作／擴大收件人／加信件通道／放寬節流／範本新增占位符／放寬條件＝放寬）。事件首批 4 個：`completion_note.attachment_added`、`completion_note.state_changed`、`case.deadline_near`（本檔只**宣告**，發佈那一行由各模組另提小改）與既有的 `custom_module.transitioned`。S5 後端（唯讀試跑）：`notify_actions.preview`＋新路由 `routers/notify_actions.py`（`GET /api/notify-actions/status` 登入即可、只有最高管理者拿到事件目錄；`POST /api/notify-actions/{key}/preview` 僅最高管理者、旗標關＝404）——回命中與否、收件人人數與類別（不含姓名）、逐角色渲染（金額／內部占位符對無權者顯示「（略）」）、每日大約則數、與已發布版本的寬嚴分級；不寄信、不寫通知、不發事件、不計節流，只留一筆稽核 `notify_action.previewed`。編輯器前端另列。發佈方用 `notify_actions.emit(name, payload)` 一行（commit 之後呼叫；照匯流排語意一律發佈、錯誤只記 log 不外拋）。
 - L1：`helpers/mail_types.py` 登記信件類型 `user_notice`（業務類、預設只寄事件收件人；主旨前綴與分類固定、按鈕只回首頁）；`helpers/notification_prefs.py` 的固定清單加 `user_notice`（個人可在通知偏好退訂；各動作另有 `na:<動作代號>` 個別退訂）。
 - 治理接線：`routers/def_pipeline.py` 的 `ACTIVE_KINDS`／`COMPARATORS` 加 `notify_action`（放寬進待核准、收緊立即生效）；`routers/definitions.py` 的 `_PREVIEW_ENFORCED_KINDS`（發布前必須先看過影響預覽）與惰性登記／旗標關時從種類清單隱藏；`routers/def_governance.py` 的影響範圍白話與 kind 惰性登記。`main.py`：匯入 `helpers.notify_actions`（訂閱事件；旗標關＝什麼都不做）。
 - 旗標關閉時行為與今天逐位元相同：種類清單不變、派發不寫 `notifications`／稽核、不寄信；內建信件類型與其他通知偏好原樣。測試 `tests/platform/test_notify_actions_t63.py`（71 題）。
+- **（併入）(next) — 2026-10-15（wip/t63-q0-r1：T63 Q0 報價單輸出／個資／自訂欄位開放設定）**
 
+- L0（新增，只增）：`core.catalog.register_privacy_core_provider(fn)`——L1 登記『哪些欄位現在不可隱藏』的提供者 `fn(module_key, entity, field)->bool`（L0 不 import L1；重複登記只算一次；提供者丟例外視為 False）。`layout_points` 用私有的 `_apply_privacy_core` 套用：被指定的欄位點視為核心欄位（只剩 move）；沒有提供者或全回 False ⇒ 不動任何點（預設＝今天）。
+- L1（只增）：`helpers/quote_output.hidden_terms`、`helpers/quote_privacy.forced_core`（新檔，載入時向上面的 hook 登記）；`helpers/builtin_fields.type_enabled`／`output_rows`／`finance_rows`／`OUTPUT_OPTIONS`（總開關＋單據類型自己的開關＋輸出選項）；設定群組 `quote_output`、`quote_privacy`、`builder_custom_fields.quote_enabled`。預設＝今天的行為。
+- 設計：docs/platform/plans/T63-Q0-SETTINGS-SPEC.md。測試：tests/platform/test_q0_settings_t63.py。
 
 ## 1.137 — wip/t62-bp4-s1-r1＋wip/t62-bp4-s2-r1＋wip/t62-bp4-s2-r2＋wip/t62-bp4-s3-r1（BP-4 S1／S2／S3：儲存位置代號登錄表＋附件插槽定義；旗標 `builder_slots.enabled` 預設關）；t62 整合 r8＋wip/t62-pdf-decor-r1＋wip/t62-pdf-escape-r1＋wip/h2-pdf-hardening-r1（PDF 頁尾浮水印／輸出逸出稽核／渲染硬化第二輪；一班一個版本，三段併成一段）
+- 狀態顯示名稱表（`helpers/status_display.py`，旗標 `builder_status_display.enabled` 預設關）多三個只做顯示的鍵 `洽談中`／`成案`／`暫擱置`（群組 `devcase`，開發案件 CRM 用；『未成案』沿用既有鍵）。新增守門測試 `test_status_display_canonical_lint_2026_10_14.py`：後端除白名單外不得引用顯示表、前端顯示名稱不得出現在判斷／篩選／請求位置（含正對照）。無 migration、無新路由、無權限變更；旗標關＝與過去逐字相同。
 
 - L1（只增；T62 預檢）：`helpers/stage_templates` 加 `__l1_public__ = ("_KEY_RE",)`——`modules/case/api/quotations.py` 用同一個階段種類鍵格式檢查，改為正式宣告的公開名稱（快照已重產）。
 - S-F1（census）：選項清單新增 `payment_stage`（案件款項期別名稱：訂金款／交貨款／驗收款／進度款／完工款／收款後出貨／自訂義／其他；可新增、改顯示名稱、重排、停用，已發布的值不可刪、不可改字）與 `payment_request_stage`（請款單款項類別，代碼 full／deposit／delivery／acceptance／final 固定，**封閉清單**：只能改顯示名稱與順序）。報表、出納、儀表板、應收、行事曆事件標題、請款單 PDF 只改『顯示』（`helpers/option_lists.payment_stage_name`／`payment_stage_display`／`request_stage_label`；清單關著或沒發布 ⇒ 與過去逐字相同）；自訂義的 `customLabel` 顯示修正也在旗標後面。已入帳的收款手續費傳票說明（`receivables.py`）與報價單的訊息文字仍用原字串。

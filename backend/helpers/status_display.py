@@ -59,6 +59,7 @@ _RAW = (
     ("已過帳", "voucher", "approved", "approved"),                                                    # 傳票：入帳後的狀態（總帳已記），視為核准類
     ("已收款", "receipt", "paid", "paid"), ("待收款", "receipt", "plain", "pending"),             # 出納收款列：布林 received 的顯示用字（沒有資料庫狀態值）
     ("差額待審核", "remit", "plain", "pending"), ("差額已核可", "remit", "approved", "approved"),   # 匯款差額審核：remitReview 的 pending／approved 顯示用字
+    ("洽談中", "devcase", "plain", "neutral"), ("成案", "devcase", "plain", "neutral"), ("暫擱置", "devcase", "plain", "neutral"),   # 開發案件 CRM（dev-crm）的案件狀態；『未成案』沿用上面 deal 群組的同名鍵
 )
 STATUS_KEYS = tuple(r[0] for r in _RAW)
 _SEMANTIC = {r[0]: r[2] for r in _RAW}

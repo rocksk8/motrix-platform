@@ -157,9 +157,9 @@ def test_event_labels_static_sets_and_render_uses_plain_values():
     assert st["choices"]["新狀態"] == list(NA.COMPLETION_STATES)
     assert NA.event_labels(None, "case.deadline_near") == {"labels": {}, "choices": {}}
     ev = NA.EVENTS[_SLOT_EV]
-    out = NA._render("{操作人} 上傳了{附件種類}", ev, {"noteNo": "N", "quoteNo": "Q", "slot": "signed", "by": "王"}, {"role": "admin", "modules": "[]"}, lab["labels"])     # noqa: SLF001
+    out = NA._expand_text("{操作人} 上傳了{附件種類}", ev, {"noteNo": "N", "quoteNo": "Q", "slot": "signed", "by": "王"}, {"role": "admin", "modules": "[]"}, lab["labels"])     # noqa: SLF001
     assert out == "王 上傳了簽回檔"
-    assert NA._render("{附件種類}", ev, {"slot": "unknown_x"}, {"role": "admin", "modules": "[]"}, lab["labels"]) == "unknown_x"                                      # noqa: SLF001  沒有白話名稱 ⇒ 原值
+    assert NA._expand_text("{附件種類}", ev, {"slot": "unknown_x"}, {"role": "admin", "modules": "[]"}, lab["labels"]) == "unknown_x"                                      # noqa: SLF001  沒有白話名稱 ⇒ 原值
 
 
 def test_custom_module_labels_come_from_the_published_definitions_and_scope_to_the_event_module(monkeypatch):

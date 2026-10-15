@@ -2,7 +2,7 @@
 """內建畫面的自訂欄位（T61 S5；設計：docs/platform/plans/T61-S5-FIELD-CATALOG-DESIGN.md）。
 
 [單位] helper:builtin_fields    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] ALLOWED_TYPES, MAX_FIELDS, RECORD_TYPES, definition_problems, enabled, gate, public_fields, usage_counts
+[公開介面] ALLOWED_TYPES, MAX_FIELDS, RECORD_TYPES, OUTPUT_OPTIONS, definition_problems, enabled, finance_rows, gate, output_rows, public_fields, type_enabled, usage_counts
 [不變式] ①旗標 `builder_custom_fields.enabled` 關閉 ⇒ `gate()` 一律回舊值（不介入任何寫入）、`public_fields()` 回空；
     ②值只放在單據 JSON 的 `customFields` 命名空間，沒有值就**不寫這個鍵**；③型別只有文字／日期／單選／勾選（沒有金額、公式、參照、必填、預設值）；
     ④停用或已不在定義裡的欄位，其值**原樣保留**（用戶端送來的改動一律忽略）；⑤任何錯誤 ⇒ 回錯誤清單，不丟例外。
@@ -65,6 +65,24 @@ def enabled(conn=None) -> bool:
         return False
 
 
+#: 單據類型自己的開關（設定 `builder_custom_fields.<欄位>`；T63 Q0）。沒列在這裡的類型只看總開關（案件資訊、供應商＝今天的行為）。
+_TYPE_SWITCH = {"quotation": "quote_enabled"}
+
+
+def type_enabled(record_type, conn=None) -> bool:
+    """總開關開、而且該單據類型自己的開關（若有）也開才算開。永不丟例外；任何讀取失敗 ⇒ 關閉（最嚴）。"""
+    if not enabled(conn):
+        return False
+    field = _TYPE_SWITCH.get(record_type)
+    if not field:
+        return True
+    try:
+        from helpers import settings_registry as _SR
+        return bool(_SR.get("builder_custom_fields", field, conn=conn))
+    except Exception:                                                                    # noqa: BLE001
+        return False
+
+
 def _published(conn, record_type):
     """該單據類型最新發布的定義 body；沒有／讀不到 ⇒ None。"""
     try:
@@ -92,7 +110,7 @@ def _active_fields(body):
 
 def public_fields(record_type, conn=None) -> list:
     """頁面要畫的欄位（已發布、未停用）：`[{key,label,type,options?,maxLength?,help?}]`；旗標關閉或沒有定義 ⇒ []。"""
-    if record_type not in RECORD_TYPES or not enabled(conn):
+    if record_type not in RECORD_TYPES or not type_enabled(record_type, conn):
         return []
     c, own = _open(conn)
     try:
@@ -101,6 +119,63 @@ def public_fields(record_type, conn=None) -> list:
         if own:
             c.close()
     return [{k: v for k, v in f.items() if k in ("key", "label", "type", "options", "maxLength", "help")} for f in fields]
+
+
+#: 報價單自訂欄位可以出現在哪裡（設定 `builder_custom_fields.<欄位>`；T63 Q0）
+OUTPUT_OPTIONS = ("quote_in_customer_output", "quote_on_finance_docs")
+
+
+def _option_on(option, conn=None) -> bool:
+    """總開關、報價單開關、該文件類型的選項三個都開才算開；任何讀取失敗 ⇒ 關閉。"""
+    try:
+        if option not in OUTPUT_OPTIONS or not type_enabled("quotation", conn):
+            return False
+        from helpers import settings_registry as _SR
+        return int(_SR.get("builder_custom_fields", option, conn=conn) or 0) == 1
+    except Exception:                                                                    # noqa: BLE001
+        return False
+
+
+def output_rows(quote, option, conn=None) -> list:
+    """報價單自訂欄位要印在某類文件上的列：`[(標籤, 顯示文字)]`（只含已發布且未停用、有值的欄位，依定義順序）。
+    ⚠ 三個條件**同時**成立才有內容：總開關開、報價單開關開、該文件類型的選項開（引擎的第一道檢查看不到已存的相依值，所以使用端一定要自己再查）。
+    讀不到任何一個設定、定義讀不到、值不是物件 ⇒ 空清單（＝今天的輸出）。永不丟例外。"""
+    customs = quote.get("customFields") if isinstance(quote, dict) else None
+    if not isinstance(customs, dict) or not customs or not _option_on(option, conn):
+        return []
+    try:
+        rows = []
+        for f in public_fields("quotation", conn):
+            v = customs.get(f["key"])
+            if v is None or v == "":
+                continue
+            if isinstance(v, bool):
+                v = "是" if v else "否"
+            elif not isinstance(v, (str, int, float)):
+                continue
+            rows.append((str(f.get("label") or f["key"]), str(v)))
+        return rows
+    except Exception:                                                                    # noqa: BLE001
+        return []
+
+
+def finance_rows(quote_no, conn=None) -> list:
+    """財務單據（請款單、開票申請）要附的報價單自訂欄位；渲染當下從報價單讀（唯讀，不複製進財務資料）。
+    選項沒開就**不查資料庫**。查不到報價單、JSON 壞掉 ⇒ 空清單。永不丟例外。"""
+    if not quote_no or not _option_on("quote_on_finance_docs", conn):
+        return []
+    c, own = None, False
+    try:
+        c, own = _open(conn)
+        from helpers.case_access import case_data_json
+        raw = case_data_json(c, quote_no)
+        q = json.loads(raw or "{}") if raw is not None else None
+        return output_rows(q, "quote_on_finance_docs", c)
+    except Exception:                                                                    # noqa: BLE001
+        return []
+    finally:
+        if own and c is not None:
+            c.close()
 
 
 def definition_problems(key, body) -> list:
@@ -182,7 +257,7 @@ def gate(record_type, new_values, old_values, conn=None):
     - 不補預設值、不改寫值（除了型別正規化：日期＝YYYY-MM-DD、單選必須在選項內）——用戶端送什麼、存什麼，
       免得『存檔後的值與畫面的基準不同』讓下一次存檔誤判成別人改過。"""
     old = old_values if isinstance(old_values, dict) else {}
-    if record_type not in RECORD_TYPES or not enabled(conn):
+    if record_type not in RECORD_TYPES or not type_enabled(record_type, conn):
         return (old or None), [], sorted(k for k in (new_values or {}) if isinstance(new_values, dict))
     c, own = _open(conn)
     try:
@@ -229,7 +304,7 @@ def usage_counts(record_type, conn=None) -> dict:
     不用 json_extract）；旗標關閉或單據類型不認得 ⇒ 空。永不丟例外。"""
     out = {"counts": {}, "records": 0}
     spec = RECORD_TYPES.get(record_type)
-    if not spec or not enabled(conn):
+    if not spec or not type_enabled(record_type, conn):
         return out
     c, own = _open(conn)
     try:

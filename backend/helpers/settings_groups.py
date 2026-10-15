@@ -709,6 +709,48 @@ register_group(
 )
 
 
+def _quote_cf_customer_impact(conn, new_value):
+    from helpers.settings_groups_q0 import quote_cf_scan
+    r = quote_cf_scan(conn)
+    if r is None:
+        raise RuntimeError("count failed")
+    n, capped = r
+    return {"numbers": {"quotationsWithCustomFields": n, "atLeast": capped},
+            "sentence": "目前有%s %d 張報價單填了自訂欄位；%s" % ("至少" if capped else "", n, "開放後，這些內容會印在它們的報價單 PDF、預覽與內部列印上。" if new_value else "改回只給內部人員後，報價單文件不再出現自訂欄位。")}
+
+
+def _quote_cf_finance_impact(conn, new_value):
+    from helpers.settings_groups_q0 import quote_cf_scan
+    r = quote_cf_scan(conn)
+    if r is None:
+        raise RuntimeError("count failed")
+    n, capped = r
+    return {"numbers": {"quotationsWithCustomFields": n, "atLeast": capped},
+            "sentence": "目前有%s %d 張報價單填了自訂欄位；%s" % ("至少" if capped else "", n, "開放後，這些內容會附在由它們產生的請款單與開票申請憑據上。" if new_value else "改回不附後，財務文件不再出現自訂欄位。")}
+
+
+def _quote_cf_cross_check(values):
+    """報價單自訂欄位的相依：要先開放總開關與『開放報價單自訂欄位』。回問題清單（空＝通過）。
+    ⚠ 引擎的第一道檢查是『只帶改動的欄位、其餘補預設』，看不到已存的值——所以相依欄位沒帶時改讀目前已存的設定（讀不到 ⇒ 不擋）。
+    這道檢查只是提早講清楚原因；真正的相依由使用端把關（`builtin_fields.quote_enabled`：總開關與報價單開關都開才算開）。"""
+    try:
+        from helpers import settings_registry as _SR
+        stored = _SR.get_group("builder_custom_fields")
+    except Exception:                                                                    # noqa: BLE001 — 讀不到已存值 ⇒ 不擋（使用端仍會把關）
+        stored = {"enabled": True, "quote_enabled": 1}
+    master = bool(values.get("enabled") or stored.get("enabled"))
+    quote_on = bool(values.get("quote_enabled") or stored.get("quote_enabled"))
+    out = []
+    if values.get("quote_enabled") and not master:
+        out.append("要先開放「內建畫面的自訂欄位」，報價單才能使用自訂欄位。")
+    if values.get("quote_in_customer_output") and not quote_on:
+        out.append("要先開放「報價單自訂欄位」，才能設定它印在報價單上。")
+    if values.get("quote_on_finance_docs") and not quote_on:
+        out.append("要先開放「報價單自訂欄位」，才能設定它附在財務文件上。")
+    return out
+
+
+
 # ── 內建畫面的自訂欄位（T61 S5）：管理者在內建單據畫面加自己的欄位。預設關閉＝上線前的畫面與資料（部署零行為變更）。 ──
 register_group(
     "builder_custom_fields", "自訂欄位（內建畫面）",
@@ -719,9 +761,34 @@ register_group(
           impact="開啟後，畫面多出「自訂欄位」區塊，單據可以多存這些欄位的值；既有欄位、金額與計算完全不變。關閉後，已經存的值仍保留在資料裡，但畫面不再顯示、也不能再改。可隨時關閉。",
           choices=[(False, "不開放（建議）", "畫面與資料維持目前的樣子。"),
                    (True, "開放自訂欄位", "最高管理者可新增並發布自訂欄位，發布後所有內部人員在對應畫面看得到並可填寫。")]),
+        # ── T63 Q0：報價單自己的自訂欄位怎麼開放（預設全關＝與今天相同；先要開上面的總開關）。 ──
+        S("quote_enabled", "int", 0, min=0, max=1, risk="ops", recommended=0,
+          question="要開放管理者在報價單表單加自己的欄位嗎？", label="開放報價單自訂欄位",
+          help="需要先開放上面的「內建畫面的自訂欄位」。開啟後，最高管理者可以在報價單表單新增文字、日期、單選、勾選欄位；欄位只給能開啟這張報價單的內部人員看。",
+          impact="只影響報價單表單多出「自訂欄位」區塊；報價單的既有欄位、金額與計算完全不變。關閉後，已經存的值仍保留在資料裡，但畫面不再顯示、也不能再改。",
+          choices=[(0, "不開放（建議）", "報價單表單維持目前的樣子。"),
+                   (1, "開放", "最高管理者可以為報價單新增並發布自訂欄位，發布前先預覽。")]),
+        S("quote_in_customer_output", "int", 0, min=0, max=1, risk="legal", loosen="up", recommended=0,
+          risk_text="【高影響】開放後，報價單自訂欄位的名稱與內容會印在客戶拿到的報價單上，填錯或不該公開的內容會被客戶看到。",
+          impact_scope={"documents": ["報價單 PDF", "報價單預覽", "報價單內部列印"], "roles": ["客戶", "業務"], "amounts": "不改任何金額；只決定自訂欄位的文字會不會印在報價單上。", "reversible": True, "effective": "pending"},
+          question="報價單的自訂欄位，可以印在報價單上嗎？", label="報價單自訂欄位可印在報價單上",
+          help="預設只給內部人員在表單上看。開放後，報價單 PDF、畫面預覽與內部列印（三者共用同一份版面）會在報價條件後面多印一個「其他資訊」區，列出有填的自訂欄位。客戶回簽單是客戶簽回的附件，沒有另外的畫面。需要先開放「報價單自訂欄位」。",
+          impact="只影響之後產生或重新開啟的報價單文件，內部列印也會一起多印這個區；已經寄出的文件不會改，也不會動到任何已存的內容。開放屬於放寬，需要第二位最高管理者核准並經確認期間；改回只給內部人員立即生效。",
+          choices=[(0, "只給內部人員（建議）", "報價單 PDF、預覽與內部列印都不出現自訂欄位。"),
+                   (1, "印在報價單上", "報價單 PDF、預覽與內部列印會多印「其他資訊」區。")],
+          impact_fn=_quote_cf_customer_impact),
+        S("quote_on_finance_docs", "int", 0, min=0, max=1, risk="money", loosen="up", recommended=0,
+          risk_text="【高影響】開放後，報價單自訂欄位的名稱與內容會附在請款單與開票申請憑據上；任何有權下載那張請款單或憑據的人都會看到，即使他的角色沒有權限開啟那張報價單。自由輸入的欄位也可能被填進金額。",
+          impact_scope={"documents": ["請款單 PDF", "開票申請憑據 PDF"], "roles": ["出納", "財務", "業務"], "amounts": "不改任何金額、稅額、單號或單據狀態；只決定自訂欄位的文字會不會附在財務文件上。", "reversible": True, "effective": "pending"},
+          question="報價單的自訂欄位，可以附在請款單與開票申請憑據上嗎？", label="報價單自訂欄位可附在財務文件上",
+          help="預設不附。開放後，請款單 PDF 與開票申請憑據 PDF 會多一個「其他資訊（報價單）」區，列出該報價單目前有填的自訂欄位；內容是印出當下從報價單讀取，不會複製進財務資料。有權下載該請款單或憑據的人都看得到這些內容，就算他的角色不能開啟那張報價單；自由輸入的文字欄位也可能被填進金額，請先確認欄位用途。應收清單、出納列表、會計傳票與報表不受影響。需要先開放「報價單自訂欄位」。",
+          impact="只影響之後產生或重新開啟的請款單與開票申請憑據文件；已經寄出的文件不會改，金額、稅額與單據狀態完全不變。開放屬於放寬，需要第二位最高管理者核准並經確認期間；改回不附立即生效。",
+          choices=[(0, "不附（建議）", "請款單與開票申請憑據不出現自訂欄位。"),
+                   (1, "附在財務文件上", "請款單與開票申請憑據會多印「其他資訊（報價單）」區。")],
+          impact_fn=_quote_cf_finance_impact),
     ],
-    sensitive=False, risk="ops",
-    help="決定內建畫面（案件資訊、供應商）是否開放管理者新增自己的欄位。",
+    sensitive=False, risk="ops", cross_check=_quote_cf_cross_check,
+    help="決定內建畫面（案件資訊、供應商）是否開放管理者新增自己的欄位，以及報價單是否開放自訂欄位。",
 )
 
 
@@ -875,3 +942,8 @@ register_group(
     sensitive=False, risk="ops",
     help="決定是否開放管理者定義案件執行階段的樣板；預設關閉。",
 )
+
+# T63 Q0：報價單輸出／個資群組（拆檔以免本檔再變大；同樣屬於 core）
+from helpers import settings_groups_q0 as _q0  # noqa: E402
+
+_q0.register(S, _register_core)

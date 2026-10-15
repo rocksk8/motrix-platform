@@ -1,5 +1,5 @@
 {
- "core_version": "next",
+ "core_version": "1.139",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -272,11 +272,15 @@
   "helper:builtin_fields": {
    "ALLOWED_TYPES": "const",
    "MAX_FIELDS": "const",
+   "OUTPUT_OPTIONS": "const",
    "RECORD_TYPES": "const",
    "definition_problems": "def(key, body)",
    "enabled": "def(conn=…)",
+   "finance_rows": "def(quote_no, conn=…)",
    "gate": "def(record_type, new_values, old_values, conn=…)",
+   "output_rows": "def(quote, option, conn=…)",
    "public_fields": "def(record_type, conn=…)",
+   "type_enabled": "def(record_type, conn=…)",
    "usage_counts": "def(record_type, conn=…)"
   },
   "helper:business_days": {
@@ -304,13 +308,17 @@
    "SUMMARY_PURPOSE_MODULES": "const",
    "SYSTEM": "const",
    "case_access_allowed": "def(conn, q, user, *, allow_approver=…, allow_module=…)",
+   "case_data_json": "def(conn, quote_no)",
+   "case_data_json_rows": "def(conn, limit, customfields_only=…)",
    "case_documents_readable": "def(conn, quote_no, user)",
    "case_download_label": "def(conn, quote_no, user)",
    "case_exists": "def(conn, quote_no)",
    "case_module_present": "def()",
    "case_not_found_message": "def(quote_no)",
    "case_owner_readable": "def(conn, quote_no, user)",
+   "case_owner_username": "def(conn, quote_no)",
    "case_page_readable": "def(conn, quote_no, user)",
+   "case_row_for_access": "def(conn, quote_no)",
    "case_sales_department": "def(conn, quote_no)",
    "case_summary_scope": "def(user, purpose=…)",
    "deny_case": "def(conn, quote_no, user, reason)",
@@ -1087,6 +1095,29 @@
    "ensure_event": "def(key, desc)",
    "is_enabled": "def(muted_json, event_key)"
   },
+  "helper:notify_actions": {
+   "CAPS": "const",
+   "CHANNELS": "const",
+   "EVENTS": "const",
+   "GROUP": "const",
+   "KIND": "const",
+   "MAIL_KEY": "const",
+   "NOTIF_TYPE": "const",
+   "OFF_REASON": "const",
+   "PREVIEW_ROLES": "const",
+   "SUBSCRIBER": "const",
+   "compare": "def(old, new)",
+   "definition_problems": "def(key, body)",
+   "dispatch": "def(event, payload, conn=…)",
+   "emit": "def(name, payload)",
+   "enabled": "def(conn=…)",
+   "ensure_kind": "def()",
+   "event_catalog": "def()",
+   "event_labels": "def(conn, event, payload=…)",
+   "picker_catalog": "def(conn)",
+   "preview": "def(conn, caller, key, body, payload=…)",
+   "resolve_actions": "def(conn, event)"
+  },
   "helper:notify_matrix": {
    "CALENDAR_DISABLED_SPECIAL": "const",
    "EVENT_LINKS": "const",
@@ -1126,6 +1157,7 @@
    "LABEL_MAX": "const",
    "MAX_VALUES": "const",
    "OFF_REASON": "const",
+   "REQUEST_STAGE_LIST": "const",
    "definition_problems": "def(key, body, live=…)",
    "effective": "def(list_id, conn=…)",
    "enabled": "def(conn=…)",
@@ -1136,7 +1168,10 @@
    "payment_stage_name": "def(item, idx)",
    "preview": "def(list_id, body)",
    "registered": "def()",
-   "request_stage_label": "def(code, fallback=…)"
+   "request_stage_codes": "def()",
+   "request_stage_defaults": "def()",
+   "request_stage_label": "def(code, fallback=…)",
+   "request_stage_names": "def()"
   },
   "helper:part_catalog": {
    "PART_CATEGORIES": "const",
@@ -1285,6 +1320,13 @@
    "settlement_profit": "def(pretax, actual_cost, pct=…, ver=…, frozen_charity=…, quoted_total=…, charity_basis=…)",
    "uncosted_items": "def(items)"
   },
+  "helper:quote_output": {
+   "TERMS": "const",
+   "hidden_terms": "def(conn=…)"
+  },
+  "helper:quote_privacy": {
+   "forced_core": "def(module_key, entity, field)"
+  },
   "helper:receivables": {
    "RECEIVABLES_MISSING": "const",
    "collect_income_items": "def(d0, d1, department_id=…)",
@@ -1397,6 +1439,10 @@
   },
   "helper:settings_groups": {
    "UNAVAILABLE_ALT_CHOICES": "const"
+  },
+  "helper:settings_groups_q0": {
+   "quote_cf_scan": "def(conn)",
+   "register": "def(S, _register_core)"
   },
   "helper:settings_registry": {
    "DEFAULT_CONFIRM_DAYS": "const",
@@ -1726,6 +1772,7 @@
    "module_endpoints": "def(spec)",
    "output_problems": "def(pts, templates)",
    "owner_loaded": "def(key)",
+   "register_privacy_core_provider": "def(fn)",
    "register_section": "def(name, owner, fn)",
    "restore": "def(state)",
    "section": "def(name)",

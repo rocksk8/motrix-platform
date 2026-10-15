@@ -211,6 +211,7 @@ SIDE_EFFECT_GET_CLASSIFIED = {
     "/api/settings/email-notify": "read",
     "/api/settings/reminder-send-failures": "read",
     # S-X3：名稱含 notify，但兩支都只讀設定回 {enabled, canEdit}（最高管理者另得欄位清單與預設字）；不寄信、不對外連線、不寫資料 ⇒ read
+    "/api/notify-actions/status": "read",
     "/api/notify-templates/status": "read",
     "/api/notify-templates/{event}/status": "read",
 }

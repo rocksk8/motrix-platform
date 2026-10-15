@@ -39,6 +39,7 @@
  📌 2026-10-13 12:15：正式機已更新到 b7362e09（MS1b 班：完工單從報價單帶入項目、E-b r8 功能登錄收尾；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-ms1b-apply.md；套件 20261013_120207_b7362e09_full；core 1.132、case 1.0.180→1.0.181（其餘模組版本不變），schema 維持 118、無 migration（173 表／262 索引／30 觸發器與套用前逐項相同）；套用前確認含 quoteSync 的完工單 0 張；設定群組 9 組（completion_note 新增）；manifest 567 筆；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，18 秒，步驟 3 全過）⇒ 基準改 b7362e09。
  📌 2026-10-13 15:17：正式機已更新到 b06d7c92（MS1c 班：材料卡片認列採購單熱修；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-ms1c-apply.md；套件 20261013_150438_b06d7c92_full；core 1.132→1.133、case 1.0.181→1.0.182、analytics 1.0.38→1.0.39（其餘模組版本不變），schema 維持 118、無 migration；manifest 568 筆；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，17 秒，步驟 3 全過；版本變化恰為 case 1.0.181→1.0.182、analytics 1.0.38→1.0.39；設定群組 10 組（material_recognition 新增，4 項）；套用前含 poLink 的報價單 0 張）⇒ 基準改 b06d7c92。
  📌 2026-10-13 16:44：正式機已更新到 6bccb489（MS1d 班：材料認列被拒提示立即可見、刪除已認列卡片被拒時畫面與存檔基準放回；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-ms1d-apply.md；套件 20261013_163101_6bccb489_full；case 1.0.182→1.0.183（其餘模組與核心 1.133 不變），schema 維持 118、無 migration；manifest 569 筆；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，18 秒，步驟 3 全過；唯一版本變化 case 1.0.182→1.0.183（analytics 維持 1.0.39）；設定群組 10 組；套用前含 poLink 的報價單 0 張）⇒ 基準改 6bccb489。
+📌 2026-10-15 09:59：正式機已更新到 85c0c436（第六十二班：客製化功能與 PDF 防護——建構器各項新功能旗標全關、簽核門檻／等待天數可設定（預設不變）、通知信預設逸出、PDF 渲染硬化第二輪；套件 20261015_094302_85c0c436_full；schema 維持 118；正式機 Claude 依步驟檔執行 apply_update，成功、無回滾，步驟 3 全過）⇒ 基準改 85c0c436。
 """
 import json
 import subprocess
@@ -47,7 +48,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "7651d384"
+BASELINE = "85c0c436"
 
 
 def baseline_manifest():

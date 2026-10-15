@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 870,
-  "endpoints_api": 866,
+  "endpoints_total": 871,
+  "endpoints_api": 867,
   "write_total": 471,
   "write_api": 471,
-  "get_api": 395,
-  "distinct_paths_api": 732,
+  "get_api": 396,
+  "distinct_paths_api": 733,
   "write_with_body_api": 344,
   "write_with_path_param_api": 342
  },
@@ -1429,6 +1429,11 @@
    "body": false
   },
   "GET /api/payment-requests/remaining": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/payment-requests/stages": {
    "w": false,
    "pp": 0,
    "body": false
