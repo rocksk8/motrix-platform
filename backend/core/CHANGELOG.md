@@ -2,7 +2,12 @@
 
 ## (next) — 2026-10-15（wip/t63-paystage-r1；請款單款項類別代碼單一來源 F4）
 - L1（只增）：`helpers/option_lists` 新增公開名稱 `REQUEST_STAGE_LIST`、`request_stage_defaults()`、`request_stage_codes()`、`request_stage_names()`——請款單款項類別（full／deposit／delivery／acceptance／final）的代碼清單單一來源（`BUILTIN["payment_request_stage"]`）；`arap.PAYMENT_STAGES` 與 `pdf_gen._PAYMENT_STAGE_LABELS` 改由它衍生（內容與順序與過去寫死的字典逐項相同）。無 migration、無權限變更、不碰金額。
-
+- **（併入）(next) — 2026-10-15（wip/t63-bp4-s1-r1；BP-4 S4：額外通知動作；旗標沿用 `builder_notify.enabled`＋`builder_governance.enabled`，預設關）**
+- 額外通知審查補強（只收緊，f0）：時間預算（2 秒）在收件人迴圈裡也檢查，超時只送已處理的人並寫稽核 `notify_action.degraded`（只記人數與原因）；信件超過每小時上限時，站內通知照送、超過的信件數寫進同一筆降級稽核；去重鍵改為事件登記的 `ref` 欄位（階段到期含階段、狀態改變含新狀態，避免『送審後馬上核准』被去重吃掉）；每日則數與試跑的每日估算改用精確前綴比對（動作代號含底線，LIKE 會把它當萬用字元）。
+- L1（只增）：新檔 `helpers/notify_actions.py`——kind `notify_action`（管理者宣告「當事件 E 發生，額外通知 R，內容 T」；惰性登記，旗標關＝不登記）、派發器 `dispatch`（訂閱事件匯流排；逐人讀取權限過濾、金額占位符逐收件人遮蔽、節流、每次 ≤25 人、每動作每小時 ≤200 封、整次 ≤2 秒、例外不外拋、不連鎖）、寬嚴比較 `compare`（新增動作／擴大收件人／加信件通道／放寬節流／範本新增占位符／放寬條件＝放寬）。事件首批 4 個：`completion_note.attachment_added`、`completion_note.state_changed`、`case.deadline_near`（本檔只**宣告**，發佈那一行由各模組另提小改）與既有的 `custom_module.transitioned`。S5 後端（唯讀試跑）：`notify_actions.preview`＋新路由 `routers/notify_actions.py`（`GET /api/notify-actions/status` 登入即可、只有最高管理者拿到事件目錄；`POST /api/notify-actions/{key}/preview` 僅最高管理者、旗標關＝404）——回命中與否、收件人人數與類別（不含姓名）、逐角色渲染（金額／內部占位符對無權者顯示「（略）」）、每日大約則數、與已發布版本的寬嚴分級；不寄信、不寫通知、不發事件、不計節流，只留一筆稽核 `notify_action.previewed`。編輯器前端另列。發佈方用 `notify_actions.emit(name, payload)` 一行（commit 之後呼叫；照匯流排語意一律發佈、錯誤只記 log 不外拋）。
+- L1：`helpers/mail_types.py` 登記信件類型 `user_notice`（業務類、預設只寄事件收件人；主旨前綴與分類固定、按鈕只回首頁）；`helpers/notification_prefs.py` 的固定清單加 `user_notice`（個人可在通知偏好退訂；各動作另有 `na:<動作代號>` 個別退訂）。
+- 治理接線：`routers/def_pipeline.py` 的 `ACTIVE_KINDS`／`COMPARATORS` 加 `notify_action`（放寬進待核准、收緊立即生效）；`routers/definitions.py` 的 `_PREVIEW_ENFORCED_KINDS`（發布前必須先看過影響預覽）與惰性登記／旗標關時從種類清單隱藏；`routers/def_governance.py` 的影響範圍白話與 kind 惰性登記。`main.py`：匯入 `helpers.notify_actions`（訂閱事件；旗標關＝什麼都不做）。
+- 旗標關閉時行為與今天逐位元相同：種類清單不變、派發不寫 `notifications`／稽核、不寄信；內建信件類型與其他通知偏好原樣。測試 `tests/platform/test_notify_actions_t63.py`（71 題）。
 
 ## 1.137 — wip/t62-bp4-s1-r1＋wip/t62-bp4-s2-r1＋wip/t62-bp4-s2-r2＋wip/t62-bp4-s3-r1（BP-4 S1／S2／S3：儲存位置代號登錄表＋附件插槽定義；旗標 `builder_slots.enabled` 預設關）；t62 整合 r8＋wip/t62-pdf-decor-r1＋wip/t62-pdf-escape-r1＋wip/h2-pdf-hardening-r1（PDF 頁尾浮水印／輸出逸出稽核／渲染硬化第二輪；一班一個版本，三段併成一段）
 - 狀態顯示名稱表（`helpers/status_display.py`，旗標 `builder_status_display.enabled` 預設關）多三個只做顯示的鍵 `洽談中`／`成案`／`暫擱置`（群組 `devcase`，開發案件 CRM 用；『未成案』沿用既有鍵）。新增守門測試 `test_status_display_canonical_lint_2026_10_14.py`：後端除白名單外不得引用顯示表、前端顯示名稱不得出現在判斷／篩選／請求位置（含正對照）。無 migration、無新路由、無權限變更；旗標關＝與過去逐字相同。
