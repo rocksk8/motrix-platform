@@ -1,5 +1,5 @@
 {
- "core_version": "1.137",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1126,6 +1126,7 @@
    "LABEL_MAX": "const",
    "MAX_VALUES": "const",
    "OFF_REASON": "const",
+   "REQUEST_STAGE_LIST": "const",
    "definition_problems": "def(key, body, live=…)",
    "effective": "def(list_id, conn=…)",
    "enabled": "def(conn=…)",
@@ -1136,7 +1137,10 @@
    "payment_stage_name": "def(item, idx)",
    "preview": "def(list_id, body)",
    "registered": "def()",
-   "request_stage_label": "def(code, fallback=…)"
+   "request_stage_codes": "def()",
+   "request_stage_defaults": "def()",
+   "request_stage_label": "def(code, fallback=…)",
+   "request_stage_names": "def()"
   },
   "helper:part_catalog": {
    "PART_CATEGORIES": "const",
