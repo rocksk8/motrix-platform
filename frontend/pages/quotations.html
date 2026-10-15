@@ -2,6 +2,8 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script src="../static/motrix-format.js"></script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat={num:function(x){try{return x==null?'':x.toLocaleString.apply(x,[])}catch(e){return String(x)}},money:function(x){return window.MotrixFormat.num(x)},date:function(d){try{return d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d){try{return d.toLocaleString('zh-TW')}catch(e){return String(d)}},status:function(v){return v}})</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
@@ -129,7 +131,7 @@
       </div>
       <div class="summary-item" style="border-left:1px solid var(--border-light);padding-left:24px">
         <div class="summary-item__label" title="依成案標記計算：本月報價中標記為「已成案」或「已結案」的合計金額">本月金額（已成案）</div>
-        <div class="summary-item__val" x-text="'NT$ ' + summaryData.thisMonthTotal.toLocaleString()"></div>
+        <div class="summary-item__val" x-text="'NT$ ' + MotrixFormat.num(summaryData.thisMonthTotal)"></div>
       </div>
       <div class="summary-item" style="border-left:1px solid var(--border-light);padding-left:24px">
         <div class="summary-item__label">待審核</div>
@@ -276,7 +278,7 @@
                 <div style="font-weight:500;font-size:12px" x-text="q.customer_name || '—'"></div>
               </td>
               <td x-show="cShown('project')" style="font-size:12px;max-width:180px" x-text="q.project_name || '—'"></td>
-              <td x-show="cShown('amount')" class="num" style="font-weight:600" x-text="q.total > 0 ? 'NT$ ' + Math.round(q.total).toLocaleString() : '—'"></td>
+              <td x-show="cShown('amount')" class="num" style="font-weight:600" x-text="q.total > 0 ? 'NT$ ' + MotrixFormat.num(Math.round(q.total)) : '—'"></td>
               <td x-show="cShown('margin')" class="num">
                 <span :style="MotrixMargin.style(q.direct_margin_pct)"
                       x-text="q.direct_margin_pct ? q.direct_margin_pct.toFixed(1) + '%' : '—'"></span>
