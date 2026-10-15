@@ -6,7 +6,7 @@
 [不變式] ①擁有模組以 `register_list()` 登記一份清單；核心不寫死任何清單／欄位。②「金額欄」由欄位的 `catalogId` 對 `field_catalog` 的 `moneyClass != none` 衍生，
     不在這裡再宣告一份（單一來源）。③登記有問題 ⇒ 該清單**不登記**（fail closed）並記 warning，不丟例外（不讓一個模組的筆誤拖垮載入）；守門測試逐一確認先導清單無問題。
     ④回傳值一律是複本；目錄是登記資料，不含任何使用者資料。⑤同一個 `list_id` 只准同一個擁有者重複登記（重新匯入），不同擁有者搶 ⇒ ValueError。
-    ⑥L0 不接 `core.catalog` 的區段（`SECTION_NAME` 只是預留名稱，接線在 L1 一併更新能力目錄金標）。
+    ⑥載入時向 `core.catalog` 登記區段 `listCatalog`（擁有者 `helpers.list_catalog`；不列入 `EXPECTED_SECTIONS`，所以沒載入時不算缺口）。
 [契約題] backend/tests/platform/test_list_catalog_t66.py
 """
 import copy
@@ -14,6 +14,7 @@ import logging
 import re
 import threading
 
+from core import catalog as _catalog
 from helpers import field_catalog as _FC
 
 logger = logging.getLogger("motrix.list_catalog")
@@ -147,7 +148,7 @@ def problems() -> list:
 
 
 def section_payload() -> dict:
-    """給能力目錄區段用的內容（L1 才接線）。"""
+    """給能力目錄區段 `listCatalog` 用的內容。"""
     return {"lists": lists()}
 
 
@@ -160,3 +161,6 @@ def restore(state):
     with _lock:
         _LISTS.clear()
         _LISTS.update(copy.deepcopy(state))
+
+
+_catalog.register_section(SECTION_NAME, "helpers.list_catalog", section_payload)

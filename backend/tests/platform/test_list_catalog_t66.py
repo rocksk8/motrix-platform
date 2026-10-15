@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""T66 L0：清單目錄（`helpers/list_catalog.py`）——登記驗證、金額欄衍生、先導清單（供應商）與版面登記互核。零行為變更。"""
+"""T66 L0／L1：清單目錄（`helpers/list_catalog.py`）——登記驗證、金額欄衍生、先導清單（供應商）與版面登記互核。零行為變更。"""
 import copy
 import json
 from pathlib import Path
@@ -121,7 +121,8 @@ def test_section_payload_lists_everything_sorted(clean):
     assert ids == sorted(ids) and {"t:a1", "t:b2", "supply:suppliers"} <= set(ids)
 
 
-def test_core_catalog_not_wired_in_l0():
+def test_core_catalog_section_is_wired_but_not_expected():
     from core import catalog
-    assert LC.SECTION_NAME not in catalog.EXPECTED_SECTIONS
-    assert LC.SECTION_NAME not in catalog.snapshot()
+    assert LC.SECTION_NAME not in catalog.EXPECTED_SECTIONS         # 沒載入時不算缺口
+    owner, fn = catalog.snapshot()[LC.SECTION_NAME]
+    assert owner == "helpers.list_catalog" and fn is LC.section_payload

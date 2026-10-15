@@ -73,6 +73,8 @@
    "helper:menu_builder",
    "helper:export_templates",
    "helper:option_lists",
+   "helper:list_catalog",
+   "helper:list_pref_policy",
    "helper:alert_settings",
    "helper:clause_titles",
    "helper:settings_registry",
