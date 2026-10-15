@@ -1,6 +1,7 @@
 # L0／L1 底層 更新紀錄
 
 ## 1.142 — 2026-10-15（wip/t65-f7-s1a-r1；T65 F7 S1a：欄位可見求值 `visible()`＋目錄補登記，沒有任何出口改動）
+- 預審修正（3f）：`helpers.field_policy.mask_flags(strict=True)` 改回傳惰性對映（旗標被讀到才求值並記住；求值出錯照舊丟出），還原寫入路徑舊的短路；`helpers/field_catalog` 補註解：`edit_history.reason`／`reopen_reason` 實際共用同一個儲存鍵 `reason`。釘測 `tests/platform/test_field_policy_t65.py`。行為不變。
 - L1（只增）：新檔 `helpers/field_policy.py`——`visible(field_id, user)`、`visible_many`、`tier_allowed`、`mask_flags`。求值＝欄位 `ceiling` 對應到**既有**角色函式（`financial_mask.quote_money_visible／money_visible／material_money_visible`、`auth.has_cashier_access`），一對一、不複製角色集合，財務旗標 `finance_via_effective` 自動繼承；未知欄位／天花板／任何例外一律回 False（fail-closed）。`helpers/field_catalog` 新增遮蔽種類 `KINDS`（key／subtree／text／document）、家族 `note`、欄位屬性 `kind`／`exceptions`，並補登記 7 筆今天寫死在函式裡的非『鍵』遮蔽（精算金額整段、舊形狀已收金額、修改紀錄理由／重新開啟理由／金額變動、需審核原因、內部報價 PDF）。**沒有任何出口呼叫新函式**，行為與今天相同；無旗標、無新路由、無 migration、無權限變更。設計 `docs/platform/plans/T64-F7-S1-DESIGN.md`；金標 `tests/platform/test_field_policy_t65.py`（角色 × 模組勾選 × 財務旗標三態 × 授予／扣項情境 × 目錄全部欄位，對照測試裡手寫的舊規則表）。
 - L1（只增，相容擴充）：`helpers.field_policy.mask_flags(user, strict=False)` 新增 `strict`——只給寫入路徑用，求值出錯照今天丟出（讀取仍 fail-closed）。
 - **（併入）(next) — 2026-10-15（wip/t65-c1-r1：T65 C1 報價單清單個人檢視偏好）**
