@@ -1,6 +1,7 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-15（wip/t65-c1-r1：T65 C1 報價單清單個人檢視偏好）
+## (next) — 2026-10-15（wip/t65-c1-r1：T65 C1 報價單清單個人檢視偏好；wip/t65-c2-r2：C2 案件清單）
+- C2：`list_view` 群組再加 `cases_personal_default_tab`、`cases_personal_page_size`（個人偏好）與 `cases_merge_won_tab`（公司層：合併案件清單重複的「已成案」頁籤），預設全 0＝與今天相同。
 - L1（只增）：新檔 `helpers/settings_groups_list_view.py`（`register`，由 `settings_groups` 載入時呼叫，群組屬 core）。新設定群組 `list_view`（`quotes_personal_columns`／`quotes_personal_default_tab`／`quotes_personal_page_size`，預設全 0＝與今天相同）；偏好沿用既有 `/api/list-prefs/{key}`，不新增路由。部署基準檔 `settings_deploy_baseline.json` 同步。
 - 純顯示：個人只能在公司版面允許的範圍內隱藏／重排欄位、選預設頁籤與每頁筆數；金額欄位遮蔽仍由伺服端決定。測試 `tests/platform/test_list_view_c1_t65.py`。
 

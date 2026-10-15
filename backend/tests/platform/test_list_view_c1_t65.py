@@ -19,8 +19,8 @@ OPTS = ("quotes_personal_columns", "quotes_personal_default_tab", "quotes_person
 
 def test_group_defaults_are_off_and_core_owned():
     g = SR._g("list_view")
-    assert set(g["fields"]) == set(OPTS)
-    for k in OPTS:
+    assert set(g["fields"]) == set(OPTS) | {"cases_personal_default_tab", "cases_personal_page_size", "cases_merge_won_tab"}
+    for k in g["fields"]:
         f = g["fields"][k]
         assert f.default == 0 and f.type == "int" and f.risk == "none" and not f.loosen
         for txt in (f.question, f.label, f.help, f.impact):
