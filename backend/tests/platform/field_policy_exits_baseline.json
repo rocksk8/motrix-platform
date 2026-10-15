@@ -1,0 +1,21 @@
+{
+ "helpers/expense_types.py": 1,
+ "helpers/rule_catalog.py": 1,
+ "modules/analytics/api/ledger_diff.py": 1,
+ "modules/analytics/api/reports.py": 3,
+ "modules/arap/api/cashier.py": 3,
+ "modules/case/api/alt_plan.py": 2,
+ "modules/case/api/case_extra_expenses.py": 2,
+ "modules/case/api/material_approvals.py": 1,
+ "modules/case/api/material_changes.py": 1,
+ "modules/case/api/material_orders.py": 1,
+ "modules/case/api/material_payments.py": 2,
+ "modules/case/api/project_margin.py": 2,
+ "modules/case/api/quotations.py": 22,
+ "modules/case/material_guard.py": 1,
+ "modules/case/rule_provider.py": 1,
+ "modules/payroll/api/payslips.py": 1,
+ "modules/subcontract/api/contractor_vouchers.py": 4,
+ "modules/supply/api/inventory.py": 1,
+ "tools/duty_roles_equivalence.py": 4
+}
