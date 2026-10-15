@@ -11,6 +11,7 @@ from db import get_db, next_entity_code, spawn_bg_thread
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 from helpers.procurement import clean_lead_time
 from helpers.errors import trace_id
+from helpers import list_catalog
 from archive import _backup_suppliers
 
 router = APIRouter()
@@ -52,6 +53,26 @@ def _gate_custom_fields(data, old_data):
     else:
         data.pop("customFields", None)
     return data
+
+
+# T66 L0：供應商清單登記到清單目錄（先導；沒有金額欄。排序／筆數目前由前端處理，個人偏好之後才接）。
+list_catalog.register_list("supply:suppliers", "supply", {
+    "label": "供應商清單",
+    "columns": [
+        {"id": "name", "label": "公司名稱", "sortable": True, "required": True},
+        {"id": "alias", "label": "內部簡稱", "sortable": True},
+        {"id": "taxId", "label": "統一編號", "sortable": True},
+        {"id": "category", "label": "類型", "sortable": True},
+        {"id": "contact", "label": "主要聯絡人", "sortable": True},
+        {"id": "phone", "label": "電話"},
+        {"id": "currency", "label": "幣別", "sortable": True},
+        {"id": "paymentTerms", "label": "付款條件"},
+        {"id": "active", "label": "狀態", "sortable": True},
+    ],
+    "defaults": {"columns": ["name", "alias", "taxId", "category", "contact", "phone", "currency", "paymentTerms", "active"],
+                 "sort": {"col": "name", "dir": "asc"}, "pageSize": 50},
+    "pageSizeCeiling": 200, "pageSizeMenu": [20, 50, 100, 200],
+})
 
 
 @router.get("/api/suppliers")
