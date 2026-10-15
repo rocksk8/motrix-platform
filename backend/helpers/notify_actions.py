@@ -2,7 +2,7 @@
 """額外通知動作（BP-4 S4；設計 docs/platform/plans/BP4-STORAGE-NOTIFY-DESIGN.md §4）：管理者宣告「當事件 E 發生，額外通知 R，內容 T」。
 
 [單位] helper:notify_actions    [層] L1    [穩定度] 實驗（旗標關＝完全沒有這個功能）
-[公開介面] EVENTS, GROUP, KIND, MAIL_KEY, CAPS, compare, definition_problems, dispatch, enabled, ensure_kind, event_catalog, resolve_actions
+[公開介面] EVENTS, GROUP, KIND, MAIL_KEY, CAPS, compare, definition_problems, dispatch, emit, enabled, ensure_kind, event_catalog, resolve_actions
 [不變式] ①沿用 S-X3 的設定群組 `builder_notify.enabled`，且必須同時開啟 `builder_governance.enabled`（`helpers.notify_templates.enabled`，同一個函式）；
     旗標關著、沒有已發布動作、動作不合法或任何錯誤 ⇒ `dispatch()` 什麼都不做（不寫 `notifications`、不寄信、不拋例外）。
     ②這裡新增的是**額外**通知：不能關掉或改寫任何內建信件、系統技術類或稽核類通知（內建收件人仍用「信件與通知收件設定」）。
@@ -533,6 +533,16 @@ def _dispatch(conn, event, ev, payload, actions) -> int:
         _audit("", "notify_action.dispatch", "notify_action", aid, body.get("label", ""),
                {"event": event, "recipients": n_sent, "droppedNoAccess": dropped, "overCap": capped, "channels": body["channels"]})
     return sent
+
+
+def emit(name, payload) -> int:
+    """發佈方的一行：在**自己的 commit 之後**呼叫。照事件匯流排的語意一律發佈（別的訂閱者也聽得到）；任何錯誤只記 log、絕不外拋（通知壞了不可以影響業務）。
+    旗標關 ⇒ 本檔的訂閱者什麼都不做（沒有訂閱者也是正常情況）。⇒ 送達的訂閱者數。"""
+    try:
+        return _events.publish(name, payload)
+    except Exception:                                        # noqa: BLE001
+        _log.error("notify_actions: 發佈 %s 失敗", name, exc_info=True)
+        return 0
 
 
 def _on_event(name):

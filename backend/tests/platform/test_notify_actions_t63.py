@@ -448,3 +448,26 @@ def test_scope_text_and_lists_know_the_new_kind(client, make_user, monkeypatch):
     assert NA.KIND in G._SCOPE_TEXT and NA.KIND in P.ACTIVE_KINDS and NA.KIND in DF._PREVIEW_ENFORCED_KINDS      # noqa: SLF001
     monkeypatch.setattr(NA, "enabled", lambda conn=None: False)
     assert NA.KIND in DF._disabled_lazy_kinds()                                                                 # noqa: SLF001
+
+
+# ── 7. 發佈方的一行（emit）──────────────────────────────────────────────────────
+def test_emit_publishes_to_the_bus_and_never_raises(monkeypatch):
+    got = []
+    EV.subscribe("case.deadline_near", lambda p: got.append(p), "test_emit")
+    payload = {"quoteNo": "MQ-1", "stage": "施工", "dueDate": "2026-10-20", "daysLeft": 3, "assignee": "x"}
+    assert NA.emit("case.deadline_near", payload) >= 1 and got and got[-1]["stage"] == "施工"
+    assert NA.emit("no.such.event", {}) >= 0                                  # 沒宣告的事件：記 log，不丟例外
+    monkeypatch.setattr(EV, "publish", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert NA.emit("case.deadline_near", payload) == 0
+
+
+def test_emit_with_the_flag_off_writes_nothing(client, make_user):
+    import db
+    make_user(username="na_emit", role="admin")
+    conn = db.get_db()
+    try:
+        n0 = conn.execute("SELECT COUNT(*) c FROM notifications").fetchone()["c"]
+        NA.emit("completion_note.state_changed", {"noteNo": "CN-1", "quoteNo": "MQ-1", "from": "草稿", "to": "待審核", "by": "na_emit"})
+        assert conn.execute("SELECT COUNT(*) c FROM notifications").fetchone()["c"] == n0
+    finally:
+        conn.close()
