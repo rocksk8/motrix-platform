@@ -78,3 +78,33 @@ def test_publishing_with_the_flag_off_creates_no_notifications(client, make_user
         assert conn.execute("SELECT COUNT(*) c FROM notifications WHERE type='notify_action'").fetchone()["c"] == n0
     finally:
         conn.close()
+
+
+# ── case.deadline_near（案件階段到期掃描）──────────────────────────────────────────
+def test_stage_deadline_scan_publishes_once_per_stage_and_assignee(client, make_user, monkeypatch):
+    import json
+    from datetime import date, timedelta
+    import db
+    from modules.case import case_deadlines as CD
+    make_user(username="cne_dl", role="admin")
+    _make_case("MQ-CN-DL1")
+    due = (date.today() + timedelta(days=3)).isoformat()
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO case_stages (quote_no, label, due_date, assigned_to, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+                     ("MQ-CN-DL1", "施工", due, json.dumps(["cne_dl"]), "2026-01-01T00:00:00", "2026-01-01T00:00:00"))
+        conn.commit()
+    finally:
+        conn.close()
+    monkeypatch.setattr(CD, "notify_case_stage_deadline", lambda *a, **k: None)
+    monkeypatch.setattr(CD, "notify_case_stage_deadline_manager", lambda *a, **k: None)
+    got = []
+    state = EV.snapshot()
+    EV.subscribe("case.deadline_near", lambda p: got.append(p), "test_cn_events")
+    try:
+        CD._check_case_stage_deadline()
+        CD._check_case_stage_deadline()                        # 同一天再掃一次：guard 擋住，不重複發
+    finally:
+        EV.restore(state)
+    mine = [p for p in got if p["quoteNo"] == "MQ-CN-DL1"]
+    assert mine == [{"quoteNo": "MQ-CN-DL1", "stage": "施工", "dueDate": due, "daysLeft": 3, "assignee": "cne_dl"}]
