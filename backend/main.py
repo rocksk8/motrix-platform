@@ -84,6 +84,7 @@ from routers import item_reads
 from routers import definitions, custom_records, def_governance, attachment_slots, def_pipeline, custom_fields_builtin, user_buttons
 from routers import rules as rules_router
 from routers import notify_templates as notify_templates_router
+from routers import notify_actions as notify_actions_router
 from helpers import notify_actions as _notify_actions   # noqa: F401  額外通知動作（BP-4 S4）：訂閱事件匯流排；旗標 builder_notify 關＝什麼都不做
 from routers import modules
 from routers import legal_params
@@ -953,6 +954,7 @@ app.include_router(custom_fields_builtin.router)   # 內建畫面的自訂欄位
 app.include_router(user_buttons.router)            # 使用者自訂按鈕（T61 S6）
 app.include_router(rules_router.router)
 app.include_router(notify_templates_router.router)   # 通知用語範本（S-X3）
+app.include_router(notify_actions_router.router)   # 額外通知動作（BP-4 S4／S5 後端；旗標 builder_notify 關＝404）
 app.include_router(custom_records.router)
 app.include_router(approval_delegates.router)
 app.include_router(approval_queue.router)     # 待我簽核佇列（L1，2026-09-27 自 M01 搬入）

@@ -2,7 +2,7 @@
 """額外通知動作（BP-4 S4；設計 docs/platform/plans/BP4-STORAGE-NOTIFY-DESIGN.md §4）：管理者宣告「當事件 E 發生，額外通知 R，內容 T」。
 
 [單位] helper:notify_actions    [層] L1    [穩定度] 實驗（旗標關＝完全沒有這個功能）
-[公開介面] EVENTS, GROUP, KIND, MAIL_KEY, CAPS, compare, definition_problems, dispatch, emit, enabled, ensure_kind, event_catalog, resolve_actions
+[公開介面] EVENTS, GROUP, KIND, MAIL_KEY, CAPS, compare, definition_problems, dispatch, emit, enabled, ensure_kind, event_catalog, preview, resolve_actions
 [不變式] ①沿用 S-X3 的設定群組 `builder_notify.enabled`，且必須同時開啟 `builder_governance.enabled`（`helpers.notify_templates.enabled`，同一個函式）；
     旗標關著、沒有已發布動作、動作不合法或任何錯誤 ⇒ `dispatch()` 什麼都不做（不寫 `notifications`、不寄信、不拋例外）。
     ②這裡新增的是**額外**通知：不能關掉或改寫任何內建信件、系統技術類或稽核類通知（內建收件人仍用「信件與通知收件設定」）。
@@ -533,6 +533,83 @@ def _dispatch(conn, event, ev, payload, actions) -> int:
         _audit("", "notify_action.dispatch", "notify_action", aid, body.get("label", ""),
                {"event": event, "recipients": n_sent, "droppedNoAccess": dropped, "overCap": capped, "channels": body["channels"]})
     return sent
+
+
+# ── 試跑預覽（S5 的後端：唯讀；不寄信、不寫 notifications、不發事件）──────────────────────────
+PREVIEW_ROLES = ("superadmin", "admin", "sales", "engineer", "viewer", "finance")
+_ROLE_NAMES = {"superadmin": "最高管理者", "admin": "管理員", "sales": "業務", "engineer": "工程師", "viewer": "檢視者", "finance": "財務"}
+
+
+def _sample_payload(ev, payload):
+    """試跑用的事件內容：沒給 ⇒ 範例；給了 ⇒ 只收事件宣告的欄位、值必須是文字或數字（其餘欄位用範例補）。"""
+    out = dict(ev["sample"])
+    for k, v in (payload or {}).items():
+        if k not in ev["fields"]:
+            raise ValueError("事件沒有「%s」這個欄位" % k)
+        if isinstance(v, bool) or not isinstance(v, (str, int, float)):
+            raise ValueError("欄位「%s」必須是文字或數字" % k)
+        out[k] = v
+    return out
+
+
+def preview(conn, caller, key, body, payload=None) -> dict:
+    """試跑：「這個動作（草稿）對這筆事件會發生什麼事」。**唯讀**：不寄信、不寫 `notifications`、不發事件、不計入任何節流。
+    ⇒ `{event, label, sample, usesSample, matches, conditions, recipients, readable, renders, estimate, classification, warnings}`。
+    只有最高管理者呼叫得到（路由把關）；收件人只回人數與類別，不回姓名。草稿不合法 ⇒ ValueError(problems)；找不到事件 ⇒ LookupError。"""
+    problems = definition_problems(key, body)
+    if problems:
+        raise ValueError(problems)
+    ev = EVENTS[body["event"]]
+    pay = _sample_payload(ev, payload)
+    conds = []
+    for c in body.get("when") or []:
+        got = str(pay.get(ev["ph"][c["field"]], ""))
+        conds.append({"field": c["field"], "value": got, "in": list(c["in"]), "ok": got in c["in"]})
+    matches = all(c["ok"] for c in conds)
+    recs, total, unknown = [], 0, 0
+    names = []
+    for r in body["recipients"]:
+        who = _people(conn, ev, pay, r) if r["kind"] in ("role", "group", "user") else None
+        if who is None:
+            unknown += 1                                       # requester／owner：要看實際事件才知道是誰
+            recs.append({"kind": r["kind"], "value": r.get("value"), "count": None})
+        else:
+            recs.append({"kind": r["kind"], "value": r.get("value"), "count": len(who)})
+            names += [n for n in who if n not in names]
+    total = len(names)
+    shown_over = max(0, total - CAPS["recipients"])
+    # 逐角色渲染：看看沒有權限的人會看到什麼（金額／內部占位符 ⇒「（略）」）
+    renders = []
+    for role in PREVIEW_ROLES:
+        u = {"role": role, "modules": "[]", "username": "", "id": 0}
+        renders.append({"role": role, "roleName": _ROLE_NAMES[role], "title": _render(body["template"]["title"], ev, pay, u),
+                        "body": _render(body["template"]["body"], ev, pay, u)})
+    # 最近 30 天這個動作實際寄出的則數 ⇒ 每日大約幾則（新動作 ⇒ 0）
+    since = (datetime.now() - timedelta(days=30)).isoformat()
+    try:
+        n30 = conn.execute("SELECT COUNT(*) c FROM notifications WHERE type=? AND ref_id LIKE ? AND created_at>=?",
+                           (NOTIF_TYPE, key + ":%", since)).fetchone()["c"]
+    except Exception:                                          # noqa: BLE001
+        n30 = 0
+    published = None
+    try:
+        r0 = D.get(conn, KIND, key, "company") if ensure_kind() else None
+        published = (r0 or {}).get("body")
+    except Exception:                                          # noqa: BLE001
+        published = None
+    from routers.def_pipeline import classify
+    cls, reasons = classify(KIND, published or {}, body)
+    warnings = ["試跑不寄信、不寫通知、不發事件。", "收件人只顯示人數與類別；實際收到的人還要通過『讀得到那張單據』的檢查。"]
+    if "email" in body["channels"]:
+        warnings.append("信件通道：每動作每小時最多 %d 封，主旨前綴【MOTRIX 系統通知】與分類固定。" % CAPS["mailsPerHour"])
+    if shown_over:
+        warnings.append("預計收件人 %d 人，超過每次上限 %d 人，多的不會收到。" % (total, CAPS["recipients"]))
+    return {"user": caller.get("username"), "role": caller.get("role"), "event": body["event"], "label": ev["label"], "sample": pay,
+            "usesSample": not payload, "matches": matches, "conditions": conds, "recipients": recs, "knownRecipientCount": total,
+            "eventDependentRecipients": unknown, "overCap": shown_over,
+            "readable": "未檢查：試跑用的不是真實單據，實際派發時每位收件人都要讀得到那張單據才會收到" if not payload else "未檢查：試跑只看人數與文字",
+            "renders": renders, "estimate": {"last30DaysSent": n30, "perDay": round(n30 / 30.0, 1)},
+            "classification": {"class": cls, "reasons": reasons}, "warnings": warnings}
 
 
 def emit(name, payload) -> int:

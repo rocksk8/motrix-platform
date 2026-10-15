@@ -471,3 +471,78 @@ def test_emit_with_the_flag_off_writes_nothing(client, make_user):
         assert conn.execute("SELECT COUNT(*) c FROM notifications").fetchone()["c"] == n0
     finally:
         conn.close()
+
+
+# ── 8. 試跑預覽（唯讀）────────────────────────────────────────────────────────
+def _hd(client, make_user, name, role="superadmin"):
+    u, pw = make_user(username=name, role=role)[:2]
+    return {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
+
+
+def test_preview_route_is_404_when_off_403_for_others_422_when_invalid(client, make_user, monkeypatch):
+    sa, adm = _hd(client, make_user, "na_pv_sa"), _hd(client, make_user, "na_pv_adm", "admin")
+    url = "/api/notify-actions/demo_notice/preview"
+    assert client.get("/api/notify-actions/status", headers=sa).json() == {"enabled": False, "canEdit": False}
+    assert client.post(url, json={"template": A()}, headers=sa).status_code == 404
+    monkeypatch.setattr(NA, "enabled", lambda conn=None: True)
+    assert client.post(url, json={"template": A()}, headers=adm).status_code == 403
+    r = client.post(url, json={"template": A(event="no.such")}, headers=sa)
+    assert r.status_code == 422 and r.json()["detail"]["problems"]
+    assert client.post(url, json={"template": A(), "payload": {"nope": 1}}, headers=sa).status_code == 422
+    st = client.get("/api/notify-actions/status", headers=sa).json()
+    assert st["enabled"] and st["canEdit"] and {e["event"] for e in st["events"]} == set(NA.EVENTS) and st["caps"]["recipients"] == 25
+    assert "events" not in client.get("/api/notify-actions/status", headers=adm).json()
+
+
+def test_preview_reports_match_recipient_counts_renders_and_classification(client, make_user, monkeypatch):
+    sa = _hd(client, make_user, "na_pv_sa2")
+    make_user(username="na_pv_a1", role="admin")
+    monkeypatch.setattr(NA, "enabled", lambda conn=None: True)
+    r = client.post("/api/notify-actions/demo_notice/preview", json={"template": A(recipients=[{"kind": "role", "value": "admin"}, {"kind": "requester"}])}, headers=sa)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["usesSample"] is True and d["matches"] is True                  # 範例是 草稿→已送出，條件是 新狀態∈{已送出} ⇒ 命中
+    assert d["classification"]["class"] == "loosen" and any("新增通知動作" in x for x in d["classification"]["reasons"])
+    by = {(x["kind"], x["value"]): x["count"] for x in d["recipients"]}
+    assert by[("role", "admin")] >= 1 and by[("requester", None)] is None and d["eventDependentRecipients"] == 1
+    assert [x["role"] for x in d["renders"]] == list(NA.PREVIEW_ROLES) and "readable" in d and "estimate" in d
+    assert "na_pv_a1" not in r.text                                          # 只回人數，不回姓名
+
+
+def test_preview_with_matching_payload_matches_and_masks_money_per_role(client, make_user, monkeypatch):
+    sa = _hd(client, make_user, "na_pv_sa3")
+    ev = copy.deepcopy(NA.EVENTS[EVENT])
+    ev["ph"]["金額"], ev["money"], ev["fields"] = "amount", ("金額",), ev["fields"] + ("amount",)
+    ev["sample"] = dict(ev["sample"], amount="NT$ 5,000")
+    monkeypatch.setitem(NA.EVENTS, EVENT, ev)
+    monkeypatch.setattr(NA, "enabled", lambda conn=None: True)
+    body = A(template={"title": "單據 {單據號}", "body": "金額 {金額}"})
+    d = client.post("/api/notify-actions/demo_notice/preview", json={"template": body, "payload": {"新狀態": "x"}}, headers=sa)
+    assert d.status_code == 422                                              # payload 的鍵是 payload 欄位名（to），不是占位符名
+    d = client.post("/api/notify-actions/demo_notice/preview", json={"template": body, "payload": {"to": "已送出"}}, headers=sa).json()
+    assert d["matches"] is True and d["usesSample"] is False
+    by_role = {x["role"]: x["body"] for x in d["renders"]}
+    assert by_role["superadmin"] == "金額 NT$ 5,000" and by_role["finance"] == "金額 NT$ 5,000"
+    assert by_role["admin"] == by_role["sales"] == by_role["viewer"] == "金額 （略）"
+
+
+def test_preview_is_read_only(client, make_user, monkeypatch):
+    import db
+    sa = _hd(client, make_user, "na_pv_sa4")
+    monkeypatch.setattr(NA, "enabled", lambda conn=None: True)
+    sent = []
+    from helpers import email_notify as EN
+    monkeypatch.setattr(EN, "_async_send", lambda *a: sent.append(a))
+    published = []
+    EV.subscribe(EVENT, lambda p: published.append(p), "test_pv")
+    conn = db.get_db()
+    try:
+        snap = lambda: [conn.execute("SELECT COUNT(*) c FROM %s" % t).fetchone()["c"] for t in ("notifications", "ui_definitions")]     # noqa: E731
+        before = snap()
+        r = client.post("/api/notify-actions/demo_notice/preview", json={"template": A(channels=["in_app", "email"])}, headers=sa)
+        assert r.status_code == 200
+        assert snap() == before and sent == [] and published == []
+        last = conn.execute("SELECT action FROM audit_log ORDER BY id DESC LIMIT 1").fetchone()["action"]
+        assert last == "notify_action.previewed"                             # 預覽只留一筆稽核
+    finally:
+        conn.close()
