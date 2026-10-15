@@ -1,5 +1,5 @@
 {
- "core_version": "1.138",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -308,13 +308,17 @@
    "SUMMARY_PURPOSE_MODULES": "const",
    "SYSTEM": "const",
    "case_access_allowed": "def(conn, q, user, *, allow_approver=…, allow_module=…)",
+   "case_data_json": "def(conn, quote_no)",
+   "case_data_json_rows": "def(conn, limit, customfields_only=…)",
    "case_documents_readable": "def(conn, quote_no, user)",
    "case_download_label": "def(conn, quote_no, user)",
    "case_exists": "def(conn, quote_no)",
    "case_module_present": "def()",
    "case_not_found_message": "def(quote_no)",
    "case_owner_readable": "def(conn, quote_no, user)",
+   "case_owner_username": "def(conn, quote_no)",
    "case_page_readable": "def(conn, quote_no, user)",
+   "case_row_for_access": "def(conn, quote_no)",
    "case_sales_department": "def(conn, quote_no)",
    "case_summary_scope": "def(user, purpose=…)",
    "deny_case": "def(conn, quote_no, user, reason)",

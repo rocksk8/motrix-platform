@@ -6895,7 +6895,7 @@ _CASE_BATCH_COLS = [("quote_no", "單號"), ("customer", "客戶"), ("project", 
                     ("members", "成員"), ("amount", "金額")]
 _ET.register_export(
     CASE_BATCH_EXPORT_ID, label="案件批次匯出（Excel、PDF）", formats=("xlsx",),
-    columns=[dict({"id": i, "label": h}, **({"money": True, "visible": quote_money_visible} if i == "amount" else {})) for i, h in _CASE_BATCH_COLS],
+    columns=[({"id": i, "label": h, "money": True, "visible": quote_money_visible} if i == "amount" else {"id": i, "label": h}) for i, h in _CASE_BATCH_COLS],
     sample_rows=[{"quote_no": "MQ-202610-001", "customer": "範例客戶", "project": "範例專案", "tag": "已成案", "stage": "施工", "progress": "2/5",
                   "overdue": 1, "sales": "王小明", "executor": "李大華", "members": "王小明、李大華", "amount": 120000}])
 

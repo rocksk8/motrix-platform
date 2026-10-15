@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from core.source_tree import page_file
 from helpers import option_lists as OL
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -37,7 +38,7 @@ def test_no_second_hard_coded_code_set_in_backend():
 
 
 def _html():
-    return (FRONT / "pages" / "payment-request-form.html").read_text(encoding="utf-8")
+    return page_file("payment-request-form.html").read_text(encoding="utf-8")
 
 
 def test_frontend_fallback_equals_backend_defaults():

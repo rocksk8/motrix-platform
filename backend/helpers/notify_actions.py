@@ -18,6 +18,7 @@
 """
 import logging
 import re
+import string
 import threading
 import time
 from collections import deque
@@ -352,8 +353,8 @@ def _matches(body, ev, payload) -> bool:
 
 def _case_owner(conn, quote_no):
     try:
-        r = conn.execute("SELECT u.username FROM quotations q JOIN users u ON u.id=q.sales_person_id WHERE q.quote_no=? AND u.active=1", (quote_no,)).fetchone()
-        return r["username"] if r else None
+        from helpers.case_access import case_owner_username
+        return case_owner_username(conn, quote_no)
     except Exception:                                        # noqa: BLE001
         return None
 
@@ -392,8 +393,8 @@ def _readable(conn, ev, payload, user) -> bool:
     try:
         ck = ev.get("case_key")
         if ck:
-            from helpers.case_access import case_access_allowed
-            q = conn.execute("SELECT sales_person_id, sales_person, assigned_user_ids, data_json FROM quotations WHERE quote_no=?", (payload.get(ck),)).fetchone()
+            from helpers.case_access import case_access_allowed, case_row_for_access
+            q = case_row_for_access(conn, payload.get(ck))
             return bool(q) and bool(case_access_allowed(conn, q, user))
         mk = ev.get("module_key")
         if mk:
@@ -422,7 +423,7 @@ def _render(text, ev, payload, user) -> str:
 
 def _link(ev, payload) -> str:
     try:
-        return ev["link"].format(**{k: payload.get(k, "") for k in ev["fields"]}) if ev.get("link") else ""
+        return string.Formatter().vformat(ev["link"], (), {k: payload.get(k, "") for k in ev["fields"]}) if ev.get("link") else ""
     except Exception:                                        # noqa: BLE001
         return ""
 

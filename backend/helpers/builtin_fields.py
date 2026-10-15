@@ -167,8 +167,9 @@ def finance_rows(quote_no, conn=None) -> list:
     c, own = None, False
     try:
         c, own = _open(conn)
-        row = c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
-        q = json.loads(row[0] or "{}") if row else None
+        from helpers.case_access import case_data_json
+        raw = case_data_json(c, quote_no)
+        q = json.loads(raw or "{}") if raw is not None else None
         return output_rows(q, "quote_on_finance_docs", c)
     except Exception:                                                                    # noqa: BLE001
         return []

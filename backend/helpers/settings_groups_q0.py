@@ -9,6 +9,7 @@
 """
 import json as _json
 
+from helpers.case_access import case_data_json_rows
 from helpers import quote_privacy as _quote_privacy  # noqa: F401  載入時向 core.catalog 登記『個資欄位不可隱藏』提供者
 
 _TERMS = ("paymentTerms", "deliveryTerms", "acceptanceTerms", "warrantyTerms", "afterSales")
@@ -21,10 +22,10 @@ def _terms_scan(conn):
     """唯讀：(有填任何條款文字的報價單張數, 是否只掃了上限內的列)；失敗 ⇒ None。"""
     try:
         n = 0
-        rows = conn.execute("SELECT data_json FROM quotations LIMIT %d" % _CAP).fetchall()
+        rows = case_data_json_rows(conn, _CAP)
         for r in rows:
             try:
-                q = _json.loads(r[0] or "{}") or {}
+                q = _json.loads(r or "{}") or {}
             except (TypeError, ValueError):
                 continue
             if isinstance(q, dict) and any(str(q.get(k) or "").strip() for k in _TERMS):
@@ -38,10 +39,10 @@ def _contacts_scan(conn):
     """唯讀：(填了電子郵件或傳真的報價單張數, 是否只掃了上限內的列)；失敗 ⇒ None。"""
     try:
         n = 0
-        rows = conn.execute("SELECT data_json FROM quotations LIMIT %d" % _CAP).fetchall()
+        rows = case_data_json_rows(conn, _CAP)
         for r in rows:
             try:
-                q = _json.loads(r[0] or "{}") or {}
+                q = _json.loads(r or "{}") or {}
             except (TypeError, ValueError):
                 continue
             if isinstance(q, dict) and (str(q.get("contactEmail") or "").strip() or str(q.get("contactFax") or "").strip()):
@@ -55,10 +56,10 @@ def quote_cf_scan(conn):
     """唯讀：(有自訂欄位值的報價單張數, 是否只掃了上限內的列)；失敗 ⇒ None。只掃 JSON 裡出現 customFields 的列。"""
     try:
         n = 0
-        rows = conn.execute("SELECT data_json FROM quotations WHERE data_json LIKE '%%\"customFields\"%%' LIMIT %d" % _CAP).fetchall()
+        rows = case_data_json_rows(conn, _CAP, customfields_only=True)
         for r in rows:
             try:
-                cf = (_json.loads(r[0] or "{}") or {}).get("customFields")
+                cf = (_json.loads(r or "{}") or {}).get("customFields")
             except (TypeError, ValueError):
                 continue
             if isinstance(cf, dict) and cf:
