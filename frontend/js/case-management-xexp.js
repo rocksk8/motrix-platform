@@ -155,7 +155,7 @@ window.CM_PARTS.push(() => ({
     async xeSubmit(i) {
       const x = this.xe.items[i]
       if (!x.id) { this._xeFail('請先儲存再送審'); return }
-      if (!(await MotrixUI.confirm(`確定送審這筆額外支出？\n\n${x.description}　NT$ ${MotrixLegalRound.halfUp(x.totalCost || 0).toLocaleString()}\n\n送審後在簽核完成前不能修改。`))) return
+      if (!(await MotrixUI.confirm(`確定送審這筆額外支出？\n\n${x.description}　NT$ ${MotrixFormat.num(MotrixLegalRound.halfUp(x.totalCost || 0))}\n\n送審後在簽核完成前不能修改。`))) return
       const quoteNo = this.selected?.quote_no
       this.xe.busy = true; this.xe.msg = ''
       try {
@@ -348,8 +348,8 @@ window.CM_PARTS.push(() => ({
       const c = x.change || {}
       if (x._changeDirty) { this._xeFail('請先儲存變更申請再送審'); return }
       if (!x.changeStatus) { this._xeFail('請先儲存變更申請再送審'); return }
-      const oldA = MotrixLegalRound.halfUp(x.totalCost || 0).toLocaleString()
-      const newA = MotrixLegalRound.halfUp(c.totalCost || 0).toLocaleString()
+      const oldA = MotrixFormat.num(MotrixLegalRound.halfUp(x.totalCost || 0))
+      const newA = MotrixFormat.num(MotrixLegalRound.halfUp(c.totalCost || 0))
       if (!(await MotrixUI.confirm(`確定送審這筆變更申請？\n\n${c.description}\nNT$ ${oldA} → NT$ ${newA}\n\n`
                  + `核准之前，這筆額外支出維持原本的 NT$ ${oldA}，報表數字不會變動。`))) return
       this.xe.busy = true; this.xe.msg = ''

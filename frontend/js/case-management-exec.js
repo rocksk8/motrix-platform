@@ -684,7 +684,7 @@ window.CM_PARTS.push(() => ({
       const set = ss.filter(s => s.ratioBp !== null && s.ratioBp !== undefined)
       if (!set.length) return { warn: false, text: '收入比例未設定：權責口徑於全部階段完成的月份一次認列。' }
       const total = set.reduce((a, s) => a + s.ratioBp, 0)
-      const pct = (total / 100).toLocaleString()
+      const pct = MotrixFormat.num((total / 100))
       return total === 10000
         ? { warn: false, text: '收入比例合計 100%：各階段於完成月份依比例認列（未稅）。' }
         : { warn: true, text: '收入比例合計 ' + pct + '%，不等於 100%：報表照比例認列、不補差，並列入待補登。' }
@@ -994,7 +994,7 @@ window.CM_PARTS.push(() => ({
         ctx.font = '11px "LINE Seed TW_OTF", system-ui, sans-serif'
         const modeLabel = { Day: '日', Week: '週', Month: '月' }[this.ganttEffectiveMode] || ''
         ctx.fillText('執行進度甘特圖・' + modeLabel + '檔位'
-                     + '・匯出於 ' + new Date().toLocaleString('zh-TW'), 16, 39)
+                     + '・匯出於 ' + MotrixFormat.dt(new Date(), 'plain'), 16, 39)
 
         // 只畫裁切範圍那一段（來源 x 從 cropX 起算）
         ctx.drawImage(img, cropX, 0, cropW, cropH, 0, TITLE_H, cropW, cropH)
@@ -1450,7 +1450,7 @@ window.CM_PARTS.push(() => ({
       if (!start || !months) return ''
       const d = new Date(start)
       d.setMonth(d.getMonth() + (+months))
-      return d.toLocaleDateString('zh-TW')
+      return MotrixFormat.date(d)
     },
     warrantyStatus(start, months) {
       if (!start || !months) return 'active'
