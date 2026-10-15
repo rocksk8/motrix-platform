@@ -300,6 +300,7 @@
    "/api/option-lists",
    "/api/status-display",
    "/api/notify-templates",
+   "/api/notify-actions",
    "/api/export-templates",
    "/api/exports",
    "/api/definition-kinds",

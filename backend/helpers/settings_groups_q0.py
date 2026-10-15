@@ -6,6 +6,7 @@
 [不變式] ①預設值與今天的報價單 PDF／表單完全相同；②放寬方向（印得更少、少一道告知）走『待核准＋第二位最高管理者＋確認期間』（沿用 settings_registry）；
     ③設定讀不到時（引擎退回快取或預設）：條款照印、個資欄位維持可隱藏（今天的行為）；使用端另外要求總開關與報價單開關都開才算開（見 builtin_fields.type_enabled）。
 設計：docs/platform/plans/T63-Q0-SETTINGS-SPEC.md。
+[契約題] backend/tests/platform/test_q0_settings_t63.py
 """
 import json as _json
 
