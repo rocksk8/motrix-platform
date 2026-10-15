@@ -41,6 +41,7 @@
  📌 2026-10-13 16:44：正式機已更新到 6bccb489（MS1d 班：材料認列被拒提示立即可見、刪除已認列卡片被拒時畫面與存檔基準放回；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261013-ms1d-apply.md；套件 20261013_163101_6bccb489_full；case 1.0.182→1.0.183（其餘模組與核心 1.133 不變），schema 維持 118、無 migration；manifest 569 筆；正式機 Claude 依步驟檔「自動套用」執行，success、無回滾，18 秒，步驟 3 全過；唯一版本變化 case 1.0.182→1.0.183（analytics 維持 1.0.39）；設定群組 10 組；套用前含 poLink 的報價單 0 張）⇒ 基準改 6bccb489。
 📌 2026-10-15 09:59：正式機已更新到 85c0c436（第六十二班：客製化功能與 PDF 防護——建構器各項新功能旗標全關、簽核門檻／等待天數可設定（預設不變）、通知信預設逸出、PDF 渲染硬化第二輪；套件 20261015_094302_85c0c436_full；schema 維持 118；正式機 Claude 依步驟檔執行 apply_update，成功、無回滾，步驟 3 全過）⇒ 基準改 85c0c436。
 📌 2026-10-15 17:09：正式機已更新到 26a0a07d（第六十三班：案件階段修正、匯出欄位、款項類別單一來源、狀態用語、報價單輸出選項與額外通知框架化，建構器各旗標仍全關；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261015-t63-apply.md；套件 20261015_165232_26a0a07d_full；core 1.137→1.139、arap 1.0.56、case 1.0.189、crm 1.0.17，schema 維持 118、無 migration；manifest 582 筆；設定群組 30 組）⇒ 基準改 26a0a07d。
+📌 2026-10-15 20:55：正式機已更新到 0dafc339（第六十四班：獲利警示色帶、報價單預設有效天數、數字與日期顯示格式、額外通知編輯器、欄位可見度目錄；預設值皆等於今天的行為、各旗標仍全關；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261015-t64-apply.md；套件 20261015_203717_0dafc339_full；core 1.139→1.141、arap 1.0.57、case 1.0.193、analytics 1.0.42（其餘模組版本不變），schema 維持 118、無 migration；manifest 583 筆；設定群組 33 組）⇒ 基準改 0dafc339。
 """
 import json
 import subprocess
@@ -49,7 +50,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "26a0a07d"
+BASELINE = "0dafc339"
 
 
 def baseline_manifest():
