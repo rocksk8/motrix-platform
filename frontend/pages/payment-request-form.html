@@ -378,7 +378,24 @@ function paymentRequestForm() {
 
     optVer: 0,
     // census S-F1：款項類別按鈕（代碼固定；顯示名稱可由選項清單改，沒開／沒發布 ⇒ 下面寫死的標籤）
-    stageItems() { this.optVer; return MotrixOptions.items('payment_request_stage', this.STAGES) },
+    // F4：清單由後端單一來源提供（GET /api/payment-requests/stages）；取不到才用下面的 STAGES 後備（內容由 backend 守門測試鎖定等於後端預設）。
+    // 目前這張單的 q.stage 若不在清單裡（歷史資料／未知代碼）⇒ 多畫一顆『代碼（舊值）』按鈕，不洗掉、不改存檔值。
+    stageList: null,
+    stageItems() {
+      this.optVer
+      let base = this.stageList || MotrixOptions.items('payment_request_stage', this.STAGES)
+      const cur = this.q && this.q.stage
+      if (cur && !base.some(x => x.value === cur)) base = base.concat([{ value: cur, label: cur + '（舊值）' }])
+      return base
+    },
+    async loadStages() {
+      try {
+        const r = await fetch(`${API}/payment-requests/stages`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) return
+        const d = await r.json()
+        if (d && Array.isArray(d.items) && d.items.length) this.stageList = d.items
+      } catch (e) { /* 取不到 ⇒ 維持後備清單 */ }
+    },
     STAGES: [
       { value: 'full',       label: '全額' },
       { value: 'deposit',    label: '訂金款' },
@@ -475,6 +492,7 @@ function paymentRequestForm() {
       const s = localStorage.getItem('motrix_session')
       if (!s) { window.location.href = 'login.html'; return }
       this.session = JSON.parse(s)
+      this.loadStages()      // F4：不阻塞載入；失敗維持後備清單
 
       const params = new URLSearchParams(window.location.search)
       const editId = params.get('id')

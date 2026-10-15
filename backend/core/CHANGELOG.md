@@ -1,5 +1,8 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-15（wip/t63-paystage-r1；請款單款項類別代碼單一來源 F4）
+- L1（只增）：`helpers/option_lists` 新增公開名稱 `REQUEST_STAGE_LIST`、`request_stage_defaults()`、`request_stage_codes()`、`request_stage_names()`——請款單款項類別（full／deposit／delivery／acceptance／final）的代碼清單單一來源（`BUILTIN["payment_request_stage"]`）；`arap.PAYMENT_STAGES` 與 `pdf_gen._PAYMENT_STAGE_LABELS` 改由它衍生（內容與順序與過去寫死的字典逐項相同）。無 migration、無權限變更、不碰金額。
+
 
 ## 1.137 — wip/t62-bp4-s1-r1＋wip/t62-bp4-s2-r1＋wip/t62-bp4-s2-r2＋wip/t62-bp4-s3-r1（BP-4 S1／S2／S3：儲存位置代號登錄表＋附件插槽定義；旗標 `builder_slots.enabled` 預設關）；t62 整合 r8＋wip/t62-pdf-decor-r1＋wip/t62-pdf-escape-r1＋wip/h2-pdf-hardening-r1（PDF 頁尾浮水印／輸出逸出稽核／渲染硬化第二輪；一班一個版本，三段併成一段）
 - 狀態顯示名稱表（`helpers/status_display.py`，旗標 `builder_status_display.enabled` 預設關）多三個只做顯示的鍵 `洽談中`／`成案`／`暫擱置`（群組 `devcase`，開發案件 CRM 用；『未成案』沿用既有鍵）。新增守門測試 `test_status_display_canonical_lint_2026_10_14.py`：後端除白名單外不得引用顯示表、前端顯示名稱不得出現在判斷／篩選／請求位置（含正對照）。無 migration、無新路由、無權限變更；旗標關＝與過去逐字相同。
