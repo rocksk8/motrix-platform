@@ -3816,6 +3816,16 @@
   ],
   "s": 422
  },
+ "/api/payment-requests/stages": {
+  "k": [
+   "items",
+   "items[].disabled",
+   "items[].label",
+   "items[].value",
+   "source"
+  ],
+  "s": 200
+ },
  "/api/payment-requests/{request_no}": {
   "k": [
    "amount",
