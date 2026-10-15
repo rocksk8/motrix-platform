@@ -158,6 +158,7 @@
    "js:static/option-list-editor.js",
    "js:js/status-display-editor.js",
    "js:static/notify-editor.js",
+   "js:static/notify-action-editor.js",
    "js:static/stage-template-editor.js",
    "js:static/status-chip.js",
    "js:static/users-duty.js",

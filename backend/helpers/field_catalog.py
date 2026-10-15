@@ -70,10 +70,10 @@ FIELDS = (
     _f("payment.invoicePretax", "發票未稅金額", "payment", "finance_money", api=("payment", "invoicePretax")),
     _f("payment.invoiceTax", "發票稅額", "payment", "finance_money", api=("payment", "invoiceTax")),
     # ── 叫料品項 ──
-    _f("material_order.unitPrice", "叫料單價", "cost", "material_money", api=("material_order", "unitPrice")),
-    _f("material_order.totalPrice", "叫料總價", "cost", "material_money", api=("material_order", "totalPrice")),
-    _f("material_order.paidAmount", "叫料已付金額", "payment", "material_money", api=("material_order", "paidAmount")),
-    _f("material_order.totalAmount", "叫料合計金額", "cost", "material_money", api=("material_order", "totalAmount")),
+    _f("material_order.unitPrice", "材料申請單價", "cost", "material_money", api=("material_order", "unitPrice")),
+    _f("material_order.totalPrice", "材料申請總價", "cost", "material_money", api=("material_order", "totalPrice")),
+    _f("material_order.paidAmount", "材料申請已付金額", "payment", "material_money", api=("material_order", "paidAmount")),
+    _f("material_order.totalAmount", "材料申請合計金額", "cost", "material_money", api=("material_order", "totalAmount")),
     # ── 版面欄位點＋匯出欄位（同一個『金額』欄位在三個地方登記的那一個）──
     _f("case_list.amount", "案件清單金額", "price", "quote_money", screen=(("case", "case", "amount"),), export=("case:case-batch", "amount")),
     _f("quote_list.amount", "報價單清單金額（含稅）", "price", "quote_money", screen=(("case", "quote", "amount"),)),
