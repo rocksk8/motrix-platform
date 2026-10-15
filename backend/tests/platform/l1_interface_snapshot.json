@@ -825,7 +825,7 @@
    "screen_problems": "def(points)"
   },
   "helper:field_policy": {
-   "mask_flags": "def(user)",
+   "mask_flags": "def(user, strict=…)",
    "tier_allowed": "def(ceiling, user)",
    "visible": "def(field_id, user)",
    "visible_many": "def(field_ids, user)"
