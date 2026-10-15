@@ -607,7 +607,7 @@ def test_every_event_has_a_dedupe_ref_made_of_declared_fields():
         assert ev["ref"] and set(ev["ref"]) <= set(ev["fields"]), name
 
 
-def test_per_day_count_does_not_treat_underscore_as_a_wildcard(live):
+def test_per_day_count_does_not_treat_underscore_as_a_wildcard(live, client):
     import db
     from helpers.audit import _notify
     _notify("na_admin1", NA.NOTIF_TYPE, "naXx1:Q1", "t", "m")                 # 另一個動作（代號只在第 3 個字不同）的通知
