@@ -39,6 +39,7 @@ from modules.arap.receivables import collect_income_items as _collect_income_ite
 from helpers.legal_params import round_half_up          # bank-reconcile（金額四捨五入唯一來源）
 from helpers import _audit, _tok                         # bank-reconcile 的稽核
 from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged, set_row, xl_style
+from helpers import export_templates as _ET   # noqa: E402  BP-3 匯出範本（T63：出納執行紀錄的工作表選擇）
 
 _log = logging.getLogger(__name__)
 
@@ -622,6 +623,22 @@ def get_execution_history(start: str = Query(None), end: str = Query(None), auth
         conn.close()
 
 
+CASHIER_EXPORT_ID = "arap:cashier-history"
+#: （工作表代號, 試算表分頁名稱）；順序＝活頁簿內順序＝目錄順序。已匯款明細必選；其餘可由範本拿掉（含金額 ⇒ 加回算放寬）。
+_CASHIER_SHEETS = (("outgoing", "已匯款明細"), ("payreq", "支出申請付款明細"), ("incoming", "已收款明細"), ("bonus", "獎金發放明細"))
+_ET.register_export(
+    CASHIER_EXPORT_ID, label="出納執行紀錄（Excel、PDF）：只控制要哪幾張明細工作表", formats=("xlsx",), columns=[], sample_rows=[],
+    sheets=[{"id": sid, "label": title, "required": sid == "outgoing", "money": True} for sid, title in _CASHIER_SHEETS])
+
+
+def _cashier_off_sheets() -> list:
+    """沒被選到的工作表代號；旗標關／沒有已發布範本 ⇒ []（全部輸出＝今天）。讀不到旗標或範本 ⇒ 關起來：只留必選。"""
+    try:
+        return _ET.disabled_sheets(CASHIER_EXPORT_ID)
+    except Exception:                                              # noqa: BLE001
+        return [sid for sid, _t in _CASHIER_SHEETS if sid != "outgoing"]
+
+
 @router.get("/api/cashier/export")
 @export_logged("xlsx", "arap", "cashier-history")
 def export_execution_history(start: str = Query(None), end: str = Query(None), authorization: str = Header(None)):
@@ -758,6 +775,12 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
                 aligns=[al("left")], height=20)
         ws3.cell(row=r, column=4).number_format = '#,##0'
 
+    off = _cashier_off_sheets()
+    titles = dict(_CASHIER_SHEETS)
+    for sid in off:                                                 # T63：沒被選到的工作表整張拿掉（其餘不動；沒有跨表公式）
+        t = titles.get(sid)
+        if t in wb.sheetnames:
+            wb.remove(wb[t])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
