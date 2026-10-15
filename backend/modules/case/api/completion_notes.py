@@ -128,9 +128,17 @@ def _require_admin(user: dict):
         raise HTTPException(403, "需要管理員權限")
 
 
+def _emit_event(name, payload):
+    """BP-4 S4：額外通知的事件（commit 之後呼叫）。連匯入失敗也只記 log，**絕不**讓已經完成的動作回 500；沒有訂閱者做事＝旗標關＝今天。"""
+    try:
+        from helpers.notify_actions import emit
+        emit(name, payload)
+    except Exception:                                      # noqa: BLE001
+        logger.warning("額外通知事件 %s 發佈失敗", name, exc_info=True)
+
+
 def _emit_state(note_no, qno, frm, to, user):
-    """BP-4 S4：完工單狀態改變事件（commit 之後呼叫；沒有訂閱者做事＝旗標關＝今天）。"""
-    from helpers.notify_actions import emit as _emit_event
+    """完工單狀態改變事件。"""
     _emit_event("completion_note.state_changed", {"noteNo": note_no, "quoteNo": qno or "", "from": frm, "to": to, "by": user["username"]})
 
 
@@ -939,7 +947,6 @@ async def upload_completion_signed_files(note_no: str, files: List[UploadFile] =
         conn.close()
     _audit(_tok(authorization), "completion.upload_signed_files", "completion_note", note_no,
            f"{note_no}（{len(new_files)} 個檔案）")
-    from helpers.notify_actions import emit as _emit_event          # BP-4 S4：額外通知的事件（commit 之後；沒有訂閱者做事＝旗標關＝今天）
     _emit_event("completion_note.attachment_added", {"noteNo": note_no, "quoteNo": row["quote_no"] or "", "slot": "signed", "by": user["username"]})
     return {"ok": True, "added": len(new_files), "files": new_files}
 

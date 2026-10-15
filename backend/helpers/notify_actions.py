@@ -56,7 +56,7 @@ EVENTS = {
         "ph": {"完工單號": "noteNo", "單號": "quoteNo", "附件種類": "slot", "操作人": "by"},
         "money": (), "internal": (), "filterable": ("附件種類",),
         "people": {"requester": "by", "owner": "case_owner"}, "case_key": "quoteNo",
-        "link": "case-management.html?q={quoteNo}",
+        "link": "case-management.html?q={quoteNo}", "ref": ("noteNo",),
         "sample": {"noteNo": "CN-202610-001", "quoteNo": "MQ-202610-001", "slot": "signed", "by": "王小明"},
         "suggest": {"label": "完工單有新附件", "recipients": [{"kind": "owner"}], "title": "完工單 {完工單號} 有新附件",
                     "body": "{操作人} 為完工單 {完工單號} 上傳了新附件（案件 {單號}）"},
@@ -68,7 +68,7 @@ EVENTS = {
         "ph": {"完工單號": "noteNo", "單號": "quoteNo", "原狀態": "from", "新狀態": "to", "操作人": "by"},
         "money": (), "internal": (), "filterable": ("原狀態", "新狀態"),
         "people": {"requester": "by", "owner": "case_owner"}, "case_key": "quoteNo",
-        "link": "case-management.html?q={quoteNo}",
+        "link": "case-management.html?q={quoteNo}", "ref": ("noteNo", "to"),
         "sample": {"noteNo": "CN-202610-001", "quoteNo": "MQ-202610-001", "from": "草稿", "to": "已送出", "by": "王小明"},
         "suggest": {"label": "完工單狀態改變", "recipients": [{"kind": "owner"}], "title": "完工單 {完工單號} 狀態改變",
                     "body": "{操作人} 把完工單 {完工單號} 從「{原狀態}」改成「{新狀態}」（案件 {單號}）"},
@@ -79,7 +79,7 @@ EVENTS = {
         "fields": ("module", "recordNo", "from", "to", "action", "by"),
         "ph": {"模組": "module", "單據號": "recordNo", "原狀態": "from", "新狀態": "to", "動作": "action", "操作人": "by"},
         "money": (), "internal": (), "filterable": ("模組", "原狀態", "新狀態", "動作"),
-        "people": {"requester": "by"}, "module_key": "module", "link": "",
+        "people": {"requester": "by"}, "module_key": "module", "link": "", "ref": ("recordNo", "to"),
         "sample": {"module": "demo", "recordNo": "DEMO-001", "from": "草稿", "to": "已送出", "action": "submit", "by": "王小明"},
         "suggest": {"label": "自訂模組單據狀態改變", "recipients": [{"kind": "requester"}], "title": "單據 {單據號} 狀態改變",
                     "body": "{操作人} 把單據 {單據號} 從「{原狀態}」改成「{新狀態}」"},
@@ -91,7 +91,7 @@ EVENTS = {
         "ph": {"單號": "quoteNo", "階段": "stage", "到期日": "dueDate", "剩餘天數": "daysLeft"},
         "money": (), "internal": (), "filterable": ("階段",),
         "people": {"owner": "case_owner", "requester": "assignee"}, "case_key": "quoteNo",
-        "link": "case-management.html?q={quoteNo}",
+        "link": "case-management.html?q={quoteNo}", "ref": ("quoteNo", "stage"),
         "sample": {"quoteNo": "MQ-202610-001", "stage": "施工", "dueDate": "2026-10-20", "daysLeft": "3", "assignee": "王小明"},
         "suggest": {"label": "案件階段快到期", "recipients": [{"kind": "owner"}, {"kind": "requester"}], "title": "案件階段「{階段}」快到期",
                     "body": "案件 {單號} 的階段「{階段}」將於 {到期日} 到期，還剩 {剩餘天數} 天"},
@@ -493,23 +493,25 @@ def _throttled(conn, username, action_id, ref, th) -> bool:
     if conn.execute("SELECT 1 FROM notifications WHERE username=? AND type=? AND ref_id=? AND created_at>=?", (username, NOTIF_TYPE, ref, since)).fetchone():
         return True
     day = datetime.now().strftime("%Y-%m-%d")
-    n = conn.execute("SELECT COUNT(*) c FROM notifications WHERE username=? AND type=? AND ref_id LIKE ? AND created_at>=?",
-                     (username, NOTIF_TYPE, action_id + ":%", day)).fetchone()["c"]
+    prefix = action_id + ":"                                 # 精確前綴比對（動作代號含底線，LIKE 會把它當萬用字元）
+    n = conn.execute("SELECT COUNT(*) c FROM notifications WHERE username=? AND type=? AND substr(ref_id, 1, ?) = ? AND created_at>=?",
+                     (username, NOTIF_TYPE, len(prefix), prefix, day)).fetchone()["c"]
     return n >= th["maxPerRecipientPerDay"]
 
 
-def _send_mail(user, action_id, title, text) -> None:
+def _send_mail(user, action_id, title, text) -> str:
     from helpers import email_notify as EN
     from helpers import mail_types as MT
     from helpers import notification_prefs as NP
     if not user.get("email") or EN._mail_off(MAIL_KEY):
-        return
+        return "skipped"
     if not (NP.is_enabled(user.get("notification_muted"), MAIL_KEY) and NP.is_enabled(user.get("notification_muted"), "na:" + action_id)):
-        return
+        return "muted"
     if not _mail_budget(action_id):
-        return
+        return "over_budget"                                 # 呼叫端計數並寫稽核（站內通知照樣送出）
     html = EN._build_html("user_notice", title, "額外通知", "#1D4ED8", [], None, EN._base_url(), intro=text, button_text="前往系統")
     EN._async_send([user["email"]], MT.subject("user_notice", title), html)
+    return "sent"
 
 
 def dispatch(event, payload, conn=None) -> int:
@@ -553,9 +555,13 @@ def _dispatch(conn, event, ev, payload, actions) -> int:
                     names.append(n)
         capped = max(0, len(names) - CAPS["recipients"])
         names = names[:CAPS["recipients"]]
-        dropped = n_sent = 0
-        ref = "%s:%s" % (aid, payload.get("recordNo") or payload.get("noteNo") or payload.get("quoteNo") or event)
+        dropped = n_sent = mail_over = 0
+        degraded = False
+        ref = aid + ":" + ":".join(str(payload.get(k, "")) for k in ev["ref"])         # 去重鍵＝動作＋這件事的識別（事件登記的 ref 欄位；階段到期含階段、狀態改變含新狀態）
         for n in names:
+            if time.monotonic() - t0 > CAPS["seconds"]:             # 時間預算也要在收件人迴圈裡檢查（一個動作 25 人也可能超時）
+                degraded = True
+                break
             user = _user_row(conn, n)
             if user is None or not _readable(conn, ev, payload, user):
                 dropped += 1
@@ -568,12 +574,18 @@ def _dispatch(conn, event, ev, payload, actions) -> int:
             n_sent += 1
             if "email" in body["channels"]:
                 try:
-                    _send_mail(user, aid, title, text)
+                    if _send_mail(user, aid, title, text) == "over_budget":
+                        mail_over += 1
                 except Exception:                            # noqa: BLE001  信件失敗不影響站內通知與其他人
                     _log.warning("notify_actions: 寄信失敗（%s）", aid, exc_info=True)
         sent += n_sent
         _audit("", "notify_action.dispatch", "notify_action", aid, body.get("label", ""),
                {"event": event, "recipients": n_sent, "droppedNoAccess": dropped, "overCap": capped, "channels": body["channels"]})
+        if mail_over or degraded:                            # 降級一律留稽核（只記人數與原因，不記姓名）
+            _audit("", "notify_action.degraded", "notify_action", aid, body.get("label", ""),
+                   {"event": event, "mailOverHourlyCap": mail_over, "timeBudgetExceeded": degraded, "notNotified": max(0, len(names) - n_sent - dropped) if degraded else 0})
+        if degraded:
+            break
     return sent
 
 
@@ -628,8 +640,8 @@ def preview(conn, caller, key, body, payload=None) -> dict:
     # 最近 30 天這個動作實際寄出的則數 ⇒ 每日大約幾則（新動作 ⇒ 0）
     since = (datetime.now() - timedelta(days=30)).isoformat()
     try:
-        n30 = conn.execute("SELECT COUNT(*) c FROM notifications WHERE type=? AND ref_id LIKE ? AND created_at>=?",
-                           (NOTIF_TYPE, key + ":%", since)).fetchone()["c"]
+        n30 = conn.execute("SELECT COUNT(*) c FROM notifications WHERE type=? AND substr(ref_id, 1, ?) = ? AND created_at>=?",
+                           (NOTIF_TYPE, len(key) + 1, key + ":", since)).fetchone()["c"]
     except Exception:                                          # noqa: BLE001
         n30 = 0
     published = None

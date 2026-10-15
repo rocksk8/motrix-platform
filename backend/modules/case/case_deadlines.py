@@ -103,9 +103,12 @@ def _check_case_stage_deadline() -> None:
                         f"{row['quote_no']} · {row['label'] or ''}",
                         "案件執行進度「" + (row["label"] or "") + "」" +
                         ("今日到期" if days_ahead == 0 else f"{days_ahead} 天後到期"))
-                from helpers.notify_actions import emit as _emit_event       # BP-4 S4：額外通知的事件（同一個 guard 之內只發一次；旗標關＝沒有訂閱者做事＝今天）
-                _emit_event("case.deadline_near", {"quoteNo": row["quote_no"], "stage": row["label"] or "", "dueDate": check_date,
-                                                   "daysLeft": days_ahead, "assignee": username})
+                try:                                                         # BP-4 S4：額外通知的事件（同一個 guard 之內只發一次；連匯入失敗也不能中斷這一輪掃描）
+                    from helpers.notify_actions import emit as _emit_event
+                    _emit_event("case.deadline_near", {"quoteNo": row["quote_no"], "stage": row["label"] or "", "dueDate": check_date,
+                                                       "daysLeft": days_ahead, "assignee": username})
+                except Exception:                                            # noqa: BLE001
+                    _logger.warning("案件階段到期事件發佈失敗", exc_info=True)
                 # 案件/專案管理延伸（2026-08-22）：額外通知負責人所屬部門的主管，
                 # 跟指派人自己收到的 case_stage_deadline 是兩條獨立路徑
                 dept_id = dept_map.get(username)
