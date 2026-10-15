@@ -109,7 +109,7 @@ const exists = (sel) => sel.split(',').map(x => x.trim()).some(t => t.startsWith
 global.document = { addEventListener() {}, getElementById() { return null },
   querySelector(sel) { calls.selectors.push(sel); return exists(sel) ? { insertAdjacentHTML() { calls.slot++ } } : null } }
 const stub = () => new Proxy(function () {}, { get: () => stub(), apply: () => ({}) })
-for (const n of ['MotrixPrivacyNotice','MotrixDate','LegalRound','ProfitRules','AltItems','MarginTone','Sortable','MotrixFilePreview','MotrixApprovalCascade']) window[n] = stub()
+for (const n of ['MotrixPrivacyNotice','MotrixDate','LegalRound','ProfitRules','AltItems','MarginTone','Sortable','MotrixFilePreview','MotrixApprovalCascade','MotrixProfitWarning']) window[n] = stub()
 window.MotrixLayout = { init() {}, start() { calls.start++ } }
 window.MotrixLayoutEditor = { mount() { calls.mount++ } }
 window.MotrixCustomFields = { start() { calls.cf++ } }
@@ -146,7 +146,7 @@ def test_flag_off_or_unreadable_changes_nothing(flag):
     assert r["layoutOn"] is False and r["neutral"] == {"shown": True, "order": {}, "label": "傳真", "sec": "客戶資訊"}      # 綁定函式回中性值
     assert r["calls"]["start"] == 0 and r["calls"]["mount"] == 0 and r["calls"]["slot"] == 0
     f = r["calls"]["fetch"]
-    assert f[0] == "/api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates"      # 一個共用 GET 取三個旗標（S-ST2 起多 builder_stage_templates，同一個請求）
+    assert f[0] == "/api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates,ui_format"      # 一個共用 GET 取四個旗標（S-ST2 起多 builder_stage_templates、T64-B 起多 ui_format，同一個請求）
     assert all(u.startswith("/api/settings-center/public?groups=") for u in f)                                     # 失敗時才逐組重試（仍只讀設定）
     if flag == "false":
         assert len(f) == 1
@@ -272,7 +272,7 @@ global.Alpine = { store(n, v) { if (v !== undefined) stores[n] = v; return store
 global.fetch = async (url) => { const u = String(url); const key = u.indexOf('role=') >= 0 ? 'preview' : 'live'
   return { ok: true, json: async () => payloads[key] } }
 const stub = () => new Proxy(function () {}, { get: () => stub(), apply: () => ({}) })
-for (const n of ['MotrixPrivacyNotice','MotrixDate','LegalRound','ProfitRules','AltItems','MarginTone','Sortable','MotrixFilePreview','MotrixApprovalCascade']) window[n] = stub()
+for (const n of ['MotrixPrivacyNotice','MotrixDate','LegalRound','ProfitRules','AltItems','MarginTone','Sortable','MotrixFilePreview','MotrixApprovalCascade','MotrixProfitWarning']) window[n] = stub()
 eval(fs.readFileSync(process.argv[2], 'utf8'))          // custom-layout.js
 eval(fs.readFileSync(process.argv[3], 'utf8'))          // layout-runtime.js
 MotrixLayout.init({ module: 'case', page: 'quotation-form.html', deferred: true, fallback: { forms: {} } })

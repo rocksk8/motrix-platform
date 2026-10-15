@@ -855,8 +855,7 @@
         try {
           const tk = (this.session && this.session.token) || (JSON.parse(localStorage.getItem('motrix_session') || '{}').token)
           if (!tk) return
-          const g = await window.MotrixPublicFlags.read(['builder_layout', 'ui_format'], { token: tk })
-          if (window.MotrixFormat && window.MotrixFormat.apply) window.MotrixFormat.apply(g.ui_format)      // T64-B：旗標關 ⇒ 清掉快取（沒有額外請求）
+          const g = await window.MotrixPublicFlags.read(['builder_layout'], { token: tk })
           if (!g.builder_layout || g.builder_layout.quotations !== true) return
           const title = document.querySelector('.page-header__title')
           if (!title) return
