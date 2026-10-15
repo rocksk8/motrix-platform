@@ -56,6 +56,15 @@ ALLOWED_EXTRA = {
 }
 
 
+_QDATE = re.compile(r"(?<=[?&]date=)\d{4}-\d{2}-\d{2}")
+
+
+def _norm_query_dates(items):
+    """只把查詢值 `date=YYYY-MM-DD` 換成 `<D>`（頁面用『今天』當參數，golden 錄在哪天就寫死哪天，跨午夜就紅）；
+    方法／路徑／其他查詢（含使用者名稱）一律維持嚴格。比對時兩邊都套用。"""
+    return [_QDATE.sub("<D>", i) for i in items]
+
+
 def _compare(name, snap):
     f = GOLDEN / (name + ".json")
     if RECORD:
@@ -65,7 +74,7 @@ def _compare(name, snap):
     assert f.exists(), "還沒有 golden：先用 MOTRIX_RECORD_GOLDEN=1 錄一份（%s）" % f
     want = json.loads(f.read_text(encoding="utf-8"))
     from collections import Counter
-    got_c, want_c = Counter(snap["requests"]), Counter(want["requests"])
+    got_c, want_c = Counter(_norm_query_dates(snap["requests"])), Counter(_norm_query_dates(want["requests"]))
     missing = want_c - got_c
     extra = got_c - want_c
     assert not missing, "platform 有的請求在 T62 關閉狀態消失了：%s" % sorted(missing)                       # (b) 資料端點的請求一個都不能少
@@ -112,3 +121,16 @@ def test_quotations_list_off_golden(live_server, make_user, new_context):
     assert heads[:4] == ["報價單號", "客戶名稱", "案件名稱", "金額（含稅）"], heads                   # 預設欄位與順序
     assert not any("/api/layout" in r for r in snap["requests"]), snap["requests"]
     _compare("quotations_list_off", snap)
+
+
+def test_query_date_normalization_is_narrow():
+    """反向對照：只有 date= 的日期值被正規化；缺請求、不同路徑、不同使用者名稱仍要紅，日期不同的一對要過。"""
+    from collections import Counter
+    base = ["GET /api/auth/me", "GET /api/daily-tasks?date=2026-10-15&username=off_qf"]
+    a, b = Counter(_norm_query_dates(base)), Counter(_norm_query_dates(["GET /api/auth/me", "GET /api/daily-tasks?date=2026-10-16&username=off_qf"]))
+    assert not (a - b) and not (b - a)                                                      # 只差日期 ⇒ 相同
+    for bad in (["GET /api/auth/me"],                                                        # 缺請求
+                ["GET /api/auth/me", "GET /api/daily-task?date=2026-10-15&username=off_qf"],   # 不同路徑
+                ["GET /api/auth/me", "GET /api/daily-tasks?date=2026-10-15&username=other"],   # 不同使用者
+                ["GET /api/auth/me", "GET /api/daily-tasks?username=off_qf&x=date=2026-10-15"]):   # date 不在查詢鍵位置
+        assert Counter(_norm_query_dates(base)) - Counter(_norm_query_dates(bad)), bad
