@@ -1,6 +1,7 @@
 # 案件 更新紀錄
 
 ## (next) — 2026-10-14（wip/t62-bp4-s2-r2＋wip/t62-bp2-r5-r1＋wip/t62-approval-margin-r1；BP-4 附件插槽／BP-2 標示規則／單項毛利率門檻）＋wip/t63 S-ST2 階段樣板套用＋wip/t62 C1／C2／C3 案件頁版面＋wip/t62-pdf-escape-r1＋wip/t62-pdf-decor-r1；t62 整合 r8
+- 案件批次匯出（`POST /api/case-batch/export`，Excel 與 PDF 姊妹）登記為可自訂匯出 `case:case-batch`（T63）：最高管理者可在設定中心「自訂匯出」（`builder_exports.enabled`＋`builder_governance.enabled`，**預設關閉**）挑欄位、換順序、改標題、加列印頁首頁尾；`金額` 欄沒有報價金額檢視權者整欄省略。關閉或沒有已發布範本時走原本程式，輸出逐格相同。稽核、案件可見範圍、公式中和不變。無 migration、無新路由、無權限變更。
 - S-ST4（正確性修正，無旗標）：報價單整包存檔（`PUT /api/quotations/{no}`，報價單表單）不再把用戶端手上的 `caseRecord.stages` 同步回 `case_stages`——舊分頁存檔過去會蓋掉別人改過的完成狀態／日期、讓被刪的階段復活、刪掉別人新增的階段。現在比照 `update_case_record()`：忽略用戶端的 stages，`data_json` 裡的階段換回表內現況（用戶端沒送 stages 鍵 ⇒ 不動）；樂觀鎖（`_expectedUpdatedAt` 409）不變；案件頁存檔路徑完全不動。分析見 `docs/platform/plans/CASE-STAGE-STALE-SAVE-ANALYSIS-T63.md`。測試 `tests/platform/test_stale_stages_s_st4_t63.py`（已寫、未跑）。
 - S-ST2：旗標 `builder_stage_templates` 開啟且已有發布的樣板時，案件頁與報價單表單打開 0 階段的案件**不再自動建立 5 個預設階段**（空案件從「套用階段樣板」開始，『新建』模式與建議比例才用得上）；旗標關或沒有樣板 ⇒ 和過去一模一樣。報價單表單的設定請求群組名單最後加 `builder_stage_templates`（golden 要重錄）。
 - S-ST2 審查修正（04）：`dryRun` 只認布林（其他型別 400）；寫入前先拿寫鎖再讀現有階段（兩個同時套用不會各建一組）；預覽說明會提示『N 個階段迄日在今天或 3 天後，已成案時會通知業務與部門主管』與『附加不比對名稱，同名手動階段會重複』；樣板已發布內容壞掉 ⇒ 400 而不是 500；預覽對話框用請求序號，晚到的舊回應不覆蓋新預覽，且按下建立前要求預覽與目前選擇一致。

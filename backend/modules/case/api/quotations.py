@@ -92,6 +92,7 @@ from pdf_gen import (
 
 router = APIRouter()
 from helpers.xlsx_out import add_pdf_sibling, export_logged, xl_safe_xlsx   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
+from helpers import export_templates as _ET   # noqa: E402  BP-3 匯出範本（T63：案件批次匯出的欄位目錄）
 
 
 # ── Approval tier helpers ─────────────────────────────────────────────────────
@@ -6888,6 +6889,17 @@ def case_batch_assign(body: dict = Body(...), authorization: str = Header(None))
     return {"updated": updated, "skipped": skipped}
 
 
+CASE_BATCH_EXPORT_ID = "case:case-batch"
+_CASE_BATCH_COLS = [("quote_no", "單號"), ("customer", "客戶"), ("project", "專案"), ("tag", "狀態"), ("stage", "目前階段"),
+                    ("progress", "階段進度"), ("overdue", "逾期階段"), ("sales", "業務"), ("executor", "執行負責"),
+                    ("members", "成員"), ("amount", "金額")]
+_ET.register_export(
+    CASE_BATCH_EXPORT_ID, label="案件批次匯出（Excel、PDF）", formats=("xlsx",),
+    columns=[dict({"id": i, "label": h}, **({"money": True, "visible": quote_money_visible} if i == "amount" else {})) for i, h in _CASE_BATCH_COLS],
+    sample_rows=[{"quote_no": "MQ-202610-001", "customer": "範例客戶", "project": "範例專案", "tag": "已成案", "stage": "施工", "progress": "2/5",
+                  "overdue": 1, "sales": "王小明", "executor": "李大華", "members": "王小明、李大華", "amount": 120000}])
+
+
 @router.post("/api/case-batch/export")
 @export_logged("xlsx", "case", "case-batch")
 def case_batch_export(body: dict = Body(...), authorization: str = Header(None)):
@@ -6922,7 +6934,13 @@ def case_batch_export(body: dict = Body(...), authorization: str = Header(None))
     wb = Workbook()
     ws = wb.active
     ws.title = "案件"
-    ws.append(["單號", "客戶", "專案", "狀態", "目前階段", "階段進度", "逾期階段", "業務", "執行負責", "成員", "金額"])
+    tpl = _ET.resolve(CASE_BATCH_EXPORT_ID)          # T63：旗標關／沒有已發布範本 ⇒ None ⇒ 完全走原本的欄位與標題（逐格相同）
+    tcols = None
+    if tpl is None:
+        ws.append(["單號", "客戶", "專案", "狀態", "目前階段", "階段進度", "逾期階段", "業務", "執行負責", "成員", "金額"])
+    else:                                            # 範本只能挑欄位、換順序、改標題；沒有金額權限的人金額欄整欄省略（遮蔽優先）
+        tcols = _ET.effective_columns(CASE_BATCH_EXPORT_ID, tpl, user)[0]
+        ws.append([c["label"] for c in tcols])
 
     def cell(v):
         # openpyxl 寫空字串會產生不合規的 inlineStr（Excel 開檔要修復）⇒ 空值一律 None
@@ -6935,14 +6953,21 @@ def case_batch_export(body: dict = Body(...), authorization: str = Header(None))
         d = json.loads(r["data_json"] or "{}")
         roles = ((d.get("caseRecord") or {}).get("roles") or {})
         members = "、".join(names.get(int(m), str(m)) for m in json.loads(r["assigned_user_ids"] or "[]"))
-        ws.append([
+        vals = [
             r["quote_no"], cell(r["customer_name"]), cell(r["project_name"]), cell(r["tag"]),
             cell(r["current_stage"]),
             f"{r['stage_done']}/{r['stage_total']}" if r["stage_total"] else None,
             r["stage_overdue"] or None, cell(r["sales_person"]),
             cell(role_display(roles.get("executor"))), cell(members),
             (r["total"] if show_money else None),
-        ])
+        ]
+        if tcols is None:
+            ws.append(vals)
+        else:
+            byid = dict(zip([i for i, _h in _CASE_BATCH_COLS], vals))
+            ws.append([byid[c["id"]] for c in tcols])       # 值仍是同一份查詢與同一個 cell()；範本只決定取哪幾欄
+    if tpl is not None:
+        _ET.apply_print_text(ws, tpl)                        # 頁首／頁尾＝列印頁首頁尾（不佔儲存格）
     buf = io.BytesIO()
     wb.save(buf)
     fname = f"案件匯出_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
