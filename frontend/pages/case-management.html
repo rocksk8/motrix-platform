@@ -224,13 +224,33 @@
             </select>
             <button class="btn-add" style="padding:0 10px" x-show="caseSortPref.sortMode && caseSortPref.sortMode !== 'custom'"
                     @click="toggleCaseSortDir()" x-text="caseSortPref.sortDir === 'asc' ? '↑' : '↓'"></button>
+            <button class="btn-add" style="padding:0 10px" x-show="lvAny" x-cloak data-testid="lv-toggle" @click="lvOpen = !lvOpen" title="自訂預設頁籤、每次載入筆數（只影響你自己）">檢視設定</button>
+          </div>
+          <!-- T65 C2：個人檢視設定（設定中心 list_view 開啟才出現；只能在目前顯示的頁籤與固定檔位中選） -->
+          <div x-show="lvAny && lvOpen" x-cloak data-testid="lv-panel" style="padding:8px 10px;margin-bottom:10px;border:1px solid var(--border-light);border-radius:6px;font-size:12px">
+            <label x-show="lvOn.tab" style="display:block;margin-bottom:6px">預設頁籤
+              <select class="cm-list__search-input" x-model="pv.tab" style="width:auto;padding-left:10px;margin-left:6px;cursor:pointer">
+                <option value="">進行中（預設）</option>
+                <template x-if="showWonTab()"><option value="已成案">已成案</option></template>
+                <option value="已結案">已結案</option>
+                <option value="待精算">待精算</option>
+              </select>
+            </label>
+            <label x-show="lvOn.size" style="display:block;margin-bottom:6px">每次載入筆數
+              <select class="cm-list__search-input" :value="pv.size" @change="pv = { ...pv, size: parseInt($event.target.value, 10) || 0 }" style="width:auto;padding-left:10px;margin-left:6px;cursor:pointer">
+                <option value="0">100 件（預設）</option>
+                <template x-for="n in [25, 50, 100, 200]" :key="n"><option :value="n" x-text="n + ' 件'"></option></template>
+              </select>
+            </label>
+            <button type="button" class="aq-sort" data-testid="lv-save" @click="lvSave(false)">儲存</button>
+            <button type="button" class="aq-sort" style="margin-left:4px" @click="lvSave(true)">還原預設</button>
           </div>
           <div class="cm-list__tabs" x-show="caseViewMode==='list'">
             <button class="cm-list__tab" :class="{active: listTab==='all'}" @click="setListTab('all')">
               進行中
               <span class="cm-list__tab-badge" x-show="summaryActive()" x-text="summaryActive()"></span>
             </button>
-            <button class="cm-list__tab" :class="{active: listTab==='已成案'}" @click="setListTab('已成案')">
+            <button class="cm-list__tab" x-show="showWonTab()" :class="{active: listTab==='已成案'}" @click="setListTab('已成案')">
               已成案
               <span class="cm-list__tab-badge" x-show="summaryWon()" x-text="summaryWon()"></span>
             </button>
@@ -4970,6 +4990,7 @@ window.CM_PARTS.push(() => ({
       await this.$nextTick()
       if (window.MotrixLayoutEditor) window.MotrixLayoutEditor.mount()
       window.MotrixLayout.start()
+      try { await this.initListView(s.token) } catch (e) { /* 個人偏好是加值：失敗就維持公司版面 */ }
     } catch (e) { /* 版面是加值功能：讀不到就維持原本的清單 */ }
   },
 }))

@@ -1,6 +1,7 @@
 // case-management-list.js — 案件管理頁：左側清單：清單／看板／矩陣、篩選、分頁、多選、未讀
 // CM12 P1（2026-09-24）：由 case-management.js 原樣搬出，成員文字未改；組合見 case-management-core.js 的 app()。
 window.CM_PARTS = window.CM_PARTS || []
+const CM_LIST_PAGE_DEFAULT = 100      // 案件清單每次載入件數的預設（casePageSize 的起始值與「還原預設」共用這一個數字）
 window.CM_PARTS.push(() => ({
       isMobileView: window.innerWidth <= 767,
     session: {},
@@ -160,7 +161,38 @@ window.CM_PARTS.push(() => ({
     // 原本一次拉 limit=500 在前端篩 ⇒ 第 501 件以後看不到也搜不到。現在頁籤、搜尋、排序都送到
     // 伺服器，一頁 casePageSize 件，「載入更多」往後接；摘要數字另打一次 counts（全部案件）。
     // 「只看有新動態」與「自訂（拖曳）排序」仍只作用在已載入的案件上。
-    casePageSize: 100,
+    casePageSize: CM_LIST_PAGE_DEFAULT,
+    // T65 C2：案件清單的個人檢視偏好／頁籤組合（設定中心 list_view；預設全關＝與今天相同；只在版面旗標開啟時才讀設定）
+    lvOn: { tab: false, size: false, mergeWon: false },
+    pv: { hidden: [], order: [], tab: '', size: 0 },
+    lvOpen: false,
+    get lvAny() { return this.lvOn.tab || this.lvOn.size },
+    get lvTabs() { return this.lvOn.mergeWon ? ['all', '已結案', '待精算'] : ['all', '已成案', '已結案', '待精算'] },
+    showWonTab() { return !this.lvOn.mergeWon },
+    async initListView(tk) {
+      const g = await window.MotrixPublicFlags.read(['list_view'], { token: tk })
+      const lv = g.list_view || {}
+      this.lvOn = { tab: lv.cases_personal_default_tab === 1, size: lv.cases_personal_page_size === 1, mergeWon: lv.cases_merge_won_tab === 1 }
+      if (!(this.lvAny || this.lvOn.mergeWon)) return
+      let reload = false
+      if (this.lvOn.mergeWon && this.listTab === '已成案') { this.listTab = 'all'; reload = true }
+      if (this.lvAny) {
+        await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = '../static/list-view-prefs.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc) })
+        const LV = window.MotrixListView
+        this.pv = LV.sanitize(await LV.load(tk, 'case_list.view'), { tabs: this.lvTabs })
+        if (this.lvOn.tab && this.pv.tab && this.listTab === 'all' && this.pv.tab !== 'all') { this.listTab = this.pv.tab; reload = true }
+        if (this.lvOn.size && this.pv.size && this.pv.size !== this.casePageSize) { this.casePageSize = this.pv.size; reload = true }
+      }
+      if (reload) await this.loadCases()
+    },
+    async lvSave(reset) {
+      const LV = window.MotrixListView
+      this.pv = reset ? LV.empty() : LV.sanitize(this.pv, { tabs: this.lvTabs })
+      const size = (this.lvOn.size && this.pv.size) ? this.pv.size : CM_LIST_PAGE_DEFAULT
+      const ok = await LV.save(this.session.token, 'case_list.view', this.pv)
+      if (size !== this.casePageSize) { this.casePageSize = size; await this.loadCases() }
+      if (window.MotrixUI) window.MotrixUI.toast(ok ? (reset ? '已還原預設檢視' : '已儲存檢視設定') : '儲存失敗，下次開啟會恢復', ok ? {} : { kind: 'error' })
+    },
     // CM7：常用篩選（可疊加，送伺服器）
     caseQuick: { mine: false, stage_overdue: false, recv_overdue: false, missing_docs: false },
     quickFilterDefs: [

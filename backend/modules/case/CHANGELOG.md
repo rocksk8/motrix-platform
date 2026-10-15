@@ -6,6 +6,12 @@
 - 家族三（報價單寫入路徑）：存檔時被遮蔽部分的補回、案件記錄分段存檔的比對基準與回傳、修改紀錄理由的剝除，旗標改由 `mask_flags()`／`tier_allowed()` 產生（保留 `money` 整份短路）；單一旗標處用 `tier_allowed()`，避免多算角色函式。新增真實出口證明 `tests/platform/test_field_policy_exits_real_t65.py`。行為不變。
 - 寫入路徑嚴格模式：`helpers.field_policy.mask_flags(user, strict=True)` 只給寫入路徑用（`update_quotation` 補回、`update_case_record` 的比對／補回／回傳）；求值出錯照今天丟出（500、不寫入），讀取路徑維持 fail-closed 遮蔽。測試 `tests/platform/test_field_policy_exits_quotation_t65.py`（真打 GET／PUT：角色×旗標模式×授予 對照舊規則表）。
 
+## 1.0.198 — 2026-10-15（wip/t65-c2-r2；f0 審查小修）
+- `pages/case-management.html` 個人檢視面板：「已成案」選項改用 `<template x-if>`（`<option>` 上的 `x-show` 在 Safari／iOS 無效），合併頁籤後不會再選到。`js/case-management-list.js`：每次載入件數預設 100 抽成單一常數 `CM_LIST_PAGE_DEFAULT`。無 migration、無新路由、無權限變更。
+
+## 1.0.197 — 2026-10-15（wip/t65-c2-r2；T65 C2 案件清單檢視偏好）
+- `pages/case-management.html`、`js/case-management-list.js`：設定中心 `list_view` 新增三項（預設全關＝與今天相同）：案件清單個人預設頁籤、個人每次載入筆數（25／50／100／200，預設 100）、公司層「合併重複的『已成案』頁籤」（「進行中」與「已成案」查詢完全相同；預設兩個都保留）。偏好存既有 `/api/list-prefs/case_list.view`，沿用 `static/list-view-prefs.js`；總開關是「自訂畫面版面」的 case_management 旗標：旗標關閉時不多任何請求或腳本，開啟時每次開頁多一次 `groups=list_view` 的公開設定讀取。無 migration、無新路由、無權限變更。
+
 ## 1.0.196 — 2026-10-15（wip/t65-c1-r1；4e 審查小修）
 - `pages/quotations.html` 頁尾「顯示 N / 全部」的 N 改用實際顯示的筆數（分頁時為本頁筆數；未分頁時與先前相同）。1.0.194 條目補明：版面旗標開啟時每次開頁多一次 `groups=list_view` 的公開設定讀取。無 migration、無新路由、無權限變更。
 
