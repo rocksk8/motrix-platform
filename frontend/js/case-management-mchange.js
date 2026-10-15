@@ -61,7 +61,7 @@ window.CM_PARTS.push(() => ({
     mcFmt(v) {
       if (v === null || v === undefined || v === '') return '—'
       const n = Number(v)
-      return Number.isFinite(n) ? n.toLocaleString('en-US', { maximumFractionDigits: 4 }) : String(v)
+      return Number.isFinite(n) ? MotrixFormat.num(n, {locale: 'en-US', maxFrac: 4, raw: true}) : String(v)
     },
     mcLines(v) { return (v || []).map(x => `${x.poDocCode} 第${x.line}列`).join('、') || '—' },
     // 差異一列的文字：數字去掉多餘小數；涵蓋行列出單號；被財務遮蔽的金額欄顯示「（金額已遮蔽）」

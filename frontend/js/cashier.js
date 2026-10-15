@@ -136,7 +136,7 @@ function cashierApp() {
     bankPaySaving:   false,
 
     fmt(n) {
-      return 'NT$ ' + (Math.round(n || 0)).toLocaleString()
+      return 'NT$ ' + MotrixFormat.num((Math.round(n || 0)))
     },
     _token() {
       var s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
@@ -527,9 +527,9 @@ function cashierApp() {
       if (!p) return ''
       const pct = x => (Math.round(x * 10000) / 100) + '%'
       return '法規參數 ' + (d.version || '—') + '：扣繳 ' + pct(p.withholding_rate) + '（每次給付達 ' +
-        Number(p.withholding_threshold).toLocaleString() + ' 起扣）・補充保費 ' + pct(p.nhi_rate) +
+        MotrixFormat.num(Number(p.withholding_threshold)) + ' 起扣）・補充保費 ' + pct(p.nhi_rate) +
         '（全年累計超過投保金額 ' + p.nhi_bonus_multiple + ' 倍的部分，單次上限 ' +
-        Number(p.nhi_max_single_payment).toLocaleString() + '）'
+        MotrixFormat.num(Number(p.nhi_max_single_payment)) + '）'
     },
     bonusPayRows() {
       const d = this.bonusPay.detail || {}

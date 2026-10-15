@@ -3,6 +3,8 @@
 ## (next) — 2026-10-15（wip/t64-slice-a-r1；T64 A）
 - 新端點 `GET /api/profit-warning/config`（可見度同報價單毛利數字：`quote_money_visible`）回各畫面利潤顏色門檻；`GET /api/project-margin/config` 多回 `defaultValidDays`。報價單表單的營業利益率顏色／「低於目標」字樣、新報價單預設有效天數改讀設定（設定中心「利潤提醒色帶」「報價單預設值」），案件頁與結算頁的顏色同；預設＝原本的數字（12／20、0／20、20、30），畫面零變更。
 - `api/quotations.py` 新增／更新報價單沒帶 `validDays` 時的後備值由寫死 30 改為 `quote_defaults.valid_days`（讀不到 ⇒ 30）；送審的『有效期限過長』仍由伺服器依 `quote_approval.max_valid_days` 重算。結算 PDF（`pdf_gen`）的營業利益率顏色同讀設定。表單 `pw` 狀態、`static/profit-warning.js`。
+- **（併入）(next) — 2026-10-15（wip/t64-slice-b-r1；T64 切片 B／D2：報價單／報價單清單／案件頁數字與日期改走共用格式器；含 f0 審查修正）**
+- `pages/quotation-form.html`、`pages/quotations.html`、`pages/case-management.html` 與 `js/case-management-{dispatch,exec,fin,mchange,xexp}.js` 共 105 處 `toLocaleString()`／`toLocaleDateString('zh-TW')` 改呼叫 `static/motrix-format.js`（`MotrixFormat.num／date／dt`；`MotrixLegalRound.halfUp` 不動，格式器只管顯示）。設定全預設時輸出逐字相同；格式器沒載入時頁面內嵌後備印原值。百分比、多位小數單價與差額、變更紀錄的值一律不受格式選項影響（`{raw:true}`）。新增共用格式器的選項（千分位／固定小數位／日期樣式）待後續設定群組 `ui_format` 開放，目前不影響任何畫面。僅前端；無 migration、無新路由、無權限變更。
 
 ## 1.0.189 — 2026-10-15（wip/t63-fix-pf2-r1；T63 預檢修正：僅改寫法）
 - `api/quotations.py` 的案件批次匯出登記（`_ET.register_export(...)`）欄位清單改成不用 `**` 展開（守門『禁止 ** 傳參數』），內容逐項相同；無行為變更、無 migration、無新路由、無權限變更。

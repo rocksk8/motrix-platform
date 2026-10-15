@@ -4,6 +4,8 @@
 - L1（只增）：新檔 `helpers/profit_warning.py`（`bands()`、`default_valid_days()`、`DEFAULTS`）與 `helpers/settings_groups_profit.py`（`register`，由 `settings_groups` 載入時呼叫，群組屬 core）。新設定群組 `profit_warning`（七個利潤顏色門檻，預設＝各畫面原本寫死的 12／20、10／20、0／20、20）與 `quote_defaults`（`valid_days`，預設 30；不可超過 `quote_approval.max_valid_days`）。部署基準檔 `settings_deploy_baseline.json` 同步。
 - 審查修正（f0）：結算 PDF 的營業利益率顏色改用 `case_good`／`case_floor`（與設定說明一致，仍是 20／0）；`quote_defaults.valid_days` 與 `quote_approval.max_valid_days` 的影響說明互相提醒『上限低於預設有效天數時，每張新報價單都會被列為有效期限過長』（只改文字，跨欄檢查語意不變）。
 - 純顯示／預設值：不擋存檔、送審、審核與任何金額，故沒有放寬／收緊之分；讀不到或不合法 ⇒ 整組回今天的數字。測試 `tests/platform/test_profit_warning_t64.py`。
+- **（併入）(next) — 2026-10-15（wip/t64-slice-b-r1；T64 切片 B／D2：設定群組 `ui_format`）**
+- 設定中心新群組 `ui_format`（非敏感、公開可讀）：`enabled`（預設 0＝關）、`thousands`、`decimals`、`date_style`（皆預設 0＝照目前）。前端共用格式器 `static/motrix-format.js` 只在 `enabled=1` 時讀這四項（整數 0＝照目前），旗標關／讀不到／值不認得 ⇒ 與今天逐字相同的輸出。僅顯示：儲存的金額與法定四捨五入、PDF、匯出都不變；百分比／多位小數單價／變更紀錄的值不套用（`num(x,{raw:true})`）。頁面用自己原有的公開設定請求（名單多加 `ui_format`）取得後呼叫 `MotrixFormat.apply()`，不另發請求。`tests/platform/settings_deploy_baseline.json` 文字插入新群組。無 migration、無新路由、無權限變更。
 
 ## 1.139 — 2026-10-15（wip/t63-fix-pf2-r1；T63 預檢修正：L1 讀 quotations 一律經 case_access）
 - L1（只增）：`helpers/case_access` 新增 `case_data_json()`、`case_owner_username()`、`case_row_for_access()`、`case_data_json_rows()`（皆唯讀、原樣丟資料庫錯誤）。`helpers/builtin_fields`、`helpers/notify_actions`、`helpers/settings_groups_q0` 原本直接 SELECT quotations，改走這四個函式；行為與回傳內容不變。`notify_actions._link` 改用 `string.Formatter().vformat`（去掉 `**` 呼叫，語意相同）。無 migration、無新路由、無權限變更。
