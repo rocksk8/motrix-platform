@@ -30,6 +30,11 @@ def test_settings_defaults_equal_legacy():
     assert SR.groups()["profit_warning"]["owner"] == "core" and SR.groups()["quote_defaults"]["owner"] == "core"
 
 
+def test_valid_days_impact_text_warns_about_a_lower_cap_and_the_cap_text_warns_back():
+    assert "上限" in _f("quote_defaults")["valid_days"].impact and "有效期限過長" in _f("quote_defaults")["valid_days"].impact
+    assert "新報價單預設有效天數" in _f("quote_approval")["max_valid_days"].impact
+
+
 def test_valid_days_default_does_not_exceed_the_approval_cap_default():
     assert _f("quote_defaults")["valid_days"].default <= _f("quote_approval")["max_valid_days"].default
 
@@ -111,7 +116,7 @@ def test_no_hardcoded_margin_thresholds_remain_in_the_pages():
         hits = [m.group(0) for m in pat.finditer(txt) if "pw." not in m.group(0) and "||0))>=0" not in m.group(0) and "netProfit" not in m.group(0)]       # 「實際 − 預估 ≥ 0」是差額正負，不是門檻
         assert not hits, (p, hits)
     pdf = (BACK / "pdf_gen.py").read_text(encoding="utf-8")
-    assert "get('netMarginPct',0) or 0)>=20" not in pdf and "_pw_b['settlement_good']" in pdf and "_pw_b['case_floor']" in pdf
+    assert "get('netMarginPct',0) or 0)>=20" not in pdf and "_pw_b['case_good']" in pdf and "_pw_b['case_floor']" in pdf
 
 
 def test_pages_load_the_shared_script_before_their_app():
