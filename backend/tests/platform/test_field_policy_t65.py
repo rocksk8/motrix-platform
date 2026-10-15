@@ -191,3 +191,35 @@ def test_positive_control_problems_rejects_a_non_key_entry_with_an_api_name(monk
     bad = dict(FC.by_id("settlement.amounts"), api=("payment", "amount2"))
     monkeypatch.setattr(FC, "FIELDS", tuple(FC.FIELDS) + (bad,))
     assert any("非 key 種類不可有 API 鍵名" in m for m in FC.problems())
+
+
+def test_exit_short_circuit_is_not_modelled_by_visible_and_mask_flags_keeps_it(finance_env):
+    """出口（quotations.py 讀單）先看 money_visible：為真就整份不遮。被授予 cashier 的工程師（旗標 on）money=True，
+    但 visible('quote_item.cost') 為 False（較窄、fail-closed）。出口遷移必須用 mask_flags()['money'] 保留短路。"""
+    finance_env["mode"] = "on"                              # 2026-10-05 起模組勾選不算，要靠職責角色授予（此處 uid=2 被授予 cashier）
+    u = _user("engineer", "[]", 2)
+    assert FM.money_visible(u) is True and FM.quote_money_visible(u) is False
+    flags = FP.mask_flags(u)
+    assert flags["money"] is True and flags["keep_quote"] is False
+    assert FP.visible("quote_item.cost", u) is False
+
+
+def _exit_masks(flags, doc):
+    """出口今天的流程（quotations.py:1357-1360）：money 為真就不遮；否則 mask_quotation_data(keep_orders, keep_quote)。"""
+    if not flags["money"]:
+        FM.mask_quotation_data(doc, keep_orders=flags["keep_orders"], keep_quote=flags["keep_quote"])
+    return doc
+
+
+def test_exit_level_cells_old_calls_equal_flags_from_the_policy(finance_env):
+    """出口層級格子：同一個流程，旗標一邊來自四支舊函式、一邊來自 mask_flags，整份輸出逐位元相同（含 money 短路的帳號）。"""
+    for mode in MODES:
+        finance_env["mode"] = mode
+        for role in ROLES:
+            for modules in MODULES:
+                for uid in GRANTS:
+                    u = _user(role, modules, uid)
+                    old = {"money": FM.money_visible(u), "keep_orders": FM.material_money_visible(u), "keep_quote": FM.quote_money_visible(u)}
+                    a = _exit_masks(old, copy.deepcopy(_SAMPLE))
+                    b = _exit_masks(FP.mask_flags(u), copy.deepcopy(_SAMPLE))
+                    assert json.dumps(a, ensure_ascii=False, sort_keys=True) == json.dumps(b, ensure_ascii=False, sort_keys=True)

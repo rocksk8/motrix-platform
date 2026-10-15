@@ -8,8 +8,12 @@
     財務權限旗標 `finance_via_effective`（off／shadow／on）因此自動繼承，不會出現第二套答案。
     ②fail-closed：未知欄位、未知天花板、目錄或角色函式丟例外 ⇒ `False`（絕不因錯誤回 True）。
     ③`financial_mask` 不 import 本檔（避免環）；本檔只在呼叫當下才 import `financial_mask`／`auth`。
+    ⑤`visible()` 回答的是**欄位自己的天花板層級**（報價單層級＝`quote_money_visible`），**不是出口的整套短路**：今天的出口（例：quotations.py 讀單）先看
+    `money_visible(user)`——為真（例如旗標 `finance_via_effective=on` 時被授予 `cashier` 的工程師）就**整份不遮**，連報價單層級欄位也看得到；`visible('quote_item.cost', 該使用者)` 則為 False
+    （比出口窄、fail-closed）。遷移出口時**必須保留出口的短路**：用 `mask_flags(user)["money"]` 判斷是否整份跳過遮蔽，再用 `keep_quote`／`keep_orders` 傳給 `mask_*`，
+    不可改成逐欄位 `visible()` 取代短路（會讓這類帳號突然看不到，行為變更）。金標以 `test_exit_short_circuit_*` 釘住這個差異。
     ④資料相關的例外（例：本單簽核人可下載內部 PDF）不在這裡——`visible()` 只回答『使用者層級』，例外留在呼叫端（目錄以 `exceptions` 標示）。
-設計：docs/platform/plans/T64-F7-S1-DESIGN.md §3。
+設計：docs/platform/plans/T64-F7-S1-DESIGN.md §3（與 T64-F7-FIELD-POLICY-DESIGN.md 同目錄）。
 [契約題] backend/tests/platform/test_field_policy_t65.py
 """
 import logging
