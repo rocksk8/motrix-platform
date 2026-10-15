@@ -2,6 +2,9 @@
 
 基底：origin/train/t65-int @4de2ac1f8。來源需求：使用者 2026-10-10／10-13（每模組每動作獨立可設、勾選制、不寫死）。母設計稿：`wip/t54-1d-permmatrix-design`（`docs/platform/plans/PERMISSION-MATRIX-DESIGN-T54.md`，不在本基底，需併入或引用）。
 
+## PM 裁示（2026-10-16，r2 記錄）
+PM-S0～S4 順序**核准為設計**；PM-S0 為第一片；**實作等 T65 出貨之後才開始**。簽核流程放寬管制（D-K1 延伸）併入 workflow_builder MS6，與本稿 PM-S0 共用 `config_ledger` 雙人核准層；簽核代理人上限（F-G3）可與 PM-S4 合併（見 `T67-APPROVAL-WRITEPATH-DK1-AUDIT.md`）。
+
 ## 0. 現況（靜態讀碼，已驗證）
 | 項目 | 現況 | 證據 |
 |---|---|---|
