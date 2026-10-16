@@ -75,3 +75,44 @@ def test_unreadable_setting_falls_back_and_bad_values_are_ignored(monkeypatch):
     assert lp._reminder_start() == (10, 1), "月份超出 1–12 ⇒ 後備"
     monkeypatch.setattr(SR, "get", lambda g, f, **k: 3 if f == "start_month" else 15)
     assert lp._reminder_start() == (3, 15)
+
+
+# ── r2：真實設定 → 行為（不 monkeypatch 讀設定那層）、跨年邊界 ──────────────────
+@pytest.fixture()
+def real_conn(client):
+    from db import get_db
+    c = get_db()
+    SR.invalidate()
+    yield c
+    c.close()
+    SR.invalidate()
+
+
+def test_published_setting_really_changes_year_status(real_conn):
+    assert lp.year_status(V, date(2026, 10, 5))["nextYearMissing"] is True
+    SR.publish("legal_params_reminder", {"start_month": 12, "start_day": 1}, reason="測試", user="admin", conn=real_conn)
+    SR.invalidate()
+    assert lp._reminder_start() == (12, 1)
+    assert lp.year_status(V, date(2026, 10, 5))["nextYearMissing"] is False, "起算日設成 12/1 ⇒ 10 月不再提醒（與舊行為相同）"
+    assert lp.year_status(V, date(2026, 12, 1))["nextYearMissing"] is True
+    SR.publish("legal_params_reminder", {"start_month": 11, "start_day": 15}, reason="測試", user="admin", conn=real_conn)
+    SR.invalidate()
+    assert lp.year_status(V, date(2026, 11, 14))["nextYearMissing"] is False
+    assert lp.year_status(V, date(2026, 11, 15))["nextYearMissing"] is True
+
+
+def test_setting_is_immediate_not_a_pending_loosening():
+    f = {x["key"]: x for x in SR.groups()["legal_params_reminder"]["fields"]}
+    assert not f["start_month"].get("loosen") and not f["start_day"].get("loosen"), "提示時間不是風險變更：立即生效"
+
+
+@pytest.mark.parametrize("today,missing", [
+    (date(2026, 12, 31), True),          # 提醒一直到年底
+    (date(2027, 1, 1), False),           # 跨年：今年＝2027，下一年 2028 要到 10/1 才提醒
+    (date(2027, 9, 30), False),
+    (date(2027, 10, 1), True),
+])
+def test_year_rollover_boundary(today, missing):
+    st = lp.year_status(V, today)
+    assert st["nextYearMissing"] is missing
+    assert st["nextYear"] == today.year + 1

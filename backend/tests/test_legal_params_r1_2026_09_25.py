@@ -6,7 +6,7 @@
 ② 單據凍結：修改舊單沿用建立時的快照；只有 `recalcTaxRules: true` 才依日期重挑；前端送來的快照不採用。
 ③ 守門：每一版「兼職薪資補充保費門檻＝當年最低工資」（預設值、db.py 種子、PUT 驗證）。
 ④ 已生效的版本不能改、不能刪；未生效的可以。
-⑤ 跨年提示：12 月且下一年沒有任何版本 ⇒ nextYearMissing。
+⑤ 跨年提示：已到提醒起算日（T68 起為設定，預設 10/1；本檔以 12/1 鎖住原行為）且下一年沒有任何版本 ⇒ nextYearMissing。
 ⑥ 116 年（2027）不預設（最低工資尚待行政院核定）。
 
 ⚠️ 本檔的 2027 版是**測試資料**（30,900 為勞動部審議數字，尚未核定），不是產品預設。
@@ -162,7 +162,7 @@ def test_a_future_version_can_be_corrected(client, make_user, frozen_today):
     (date(2026, 12, 1), [], True),
     (date(2026, 12, 1), [_v2027()], False),
 ])
-def test_next_year_missing_from_december(today, extra, missing, monkeypatch):
+def test_next_year_missing_with_december_start(today, extra, missing, monkeypatch):
     monkeypatch.setattr(lp, "_reminder_start", lambda conn=None: (12, 1))      # T68：起算日改成設定後，原本的『12 月』＝設成 12／1
     st = lp.year_status(lp.DEFAULT_TAX_RULE_VERSIONS + extra, today)
     assert st["nextYearMissing"] is missing
