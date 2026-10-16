@@ -60,6 +60,7 @@
         <button class="ls-tab" :class="{on: tab==='accounts'}" @click="tab='accounts'" data-testid="ls-tab-accounts">科目歸屬與分類</button>
         <button class="ls-tab" :class="{on: tab==='lines'}" @click="tab='lines'" data-testid="ls-tab-lines">報表列</button>
         <button class="ls-tab" :class="{on: tab==='catmap'}" @click="tab='catmap'" data-testid="ls-tab-catmap">費用類別科目對應</button>
+        <button class="ls-tab" :class="{on: tab==='roles'}" @click="tab='roles'" data-testid="ls-tab-roles">科目角色對應</button>
       </div>
 
       <template x-if="tab==='accounts'">
@@ -163,6 +164,60 @@
           </div>
         </div>
       </template>
+
+      <template x-if="tab==='roles'">
+        <div x-data="glRoleMap()" x-init="load()" data-testid="ls-roles">
+          <div class="ls-note">「角色」決定系統自動產生傳票時各筆金額記到哪個會計科目（例如銀行存款、銷項稅額）。這影響金流，所以<b>變更要由另一位最高管理者核准後才生效</b>（申請人不能核准自己的申請）；核准時會立即套用，全程留有稽核紀錄。</div>
+          <div class="ls-err" x-show="error" x-text="error" data-testid="ls-roles-error"></div>
+          <div class="ls-ok" x-show="notice" x-text="notice" data-testid="ls-roles-notice"></div>
+          <div class="ls-warn" x-show="pending.length" x-text="'待核准的變更：' + pending.length + ' 筆'" data-testid="ls-roles-pending-count"></div>
+          <div class="ls-bar" x-show="pending.length && isSuper"><input class="ls-input" type="text" placeholder="撤銷原因（要撤銷申請時必填）" x-model="cr" data-testid="ls-roles-cancel-reason"></div>
+          <table class="ls-table" x-show="pending.length" data-testid="ls-roles-pending">
+            <thead><tr><th>角色</th><th>範圍／生效日</th><th>原科目</th><th>申請改為</th><th>申請人</th><th>原因</th><th></th></tr></thead>
+            <tbody>
+              <template x-for="p in pending" :key="p.id">
+                <tr :data-testid="'ls-roles-pending-' + p.id">
+                  <td class="ls-code" x-text="p.role"></td>
+                  <td x-text="scopeText(p)"></td>
+                  <td x-text="p.old_account_code || '（無）'"></td>
+                  <td x-text="p.account_code"></td>
+                  <td x-text="p.requested_by"></td>
+                  <td x-text="p.reason"></td>
+                  <td>
+                    <button class="ls-tab" style="border:1px solid var(--border-light)" :disabled="!isSuper || p.requested_by === me" :title="p.requested_by === me ? '申請人不能核准自己的申請' : ''" @click="approve(p)" data-testid="ls-roles-approve">核准並套用</button>
+                    <button class="ls-tab" style="border:1px solid var(--border-light)" :disabled="!isSuper" @click="cancel(p)" data-testid="ls-roles-cancel">撤銷</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <table class="ls-table" style="margin-top:12px">
+            <thead><tr><th>角色</th><th>範圍／生效日</th><th>會計科目</th></tr></thead>
+            <tbody>
+              <template x-for="r in roles" :key="r.role + '|' + r.scope_type + '|' + r.scope_key + '|' + r.effective_from">
+                <tr>
+                  <td class="ls-code" x-text="r.role"></td>
+                  <td x-text="scopeText(r)"></td>
+                  <td x-text="r.account_code + ' ' + (r.account_name || '')"></td>
+                </tr>
+              </template>
+              <tr x-show="!roles.length"><td colspan="3" data-testid="ls-roles-empty">尚無角色對應。</td></tr>
+            </tbody>
+          </table>
+          <div class="ls-bar" style="margin-top:12px" x-show="isSuper" data-testid="ls-roles-form">
+            <select class="ls-select" x-model="nr.role" data-testid="ls-roles-new-role">
+              <option value="">（選擇角色）</option>
+              <template x-for="k in roleNames" :key="k"><option :value="k" x-text="k"></option></template>
+            </select>
+            <select class="ls-select" x-model="nr.account_code" data-testid="ls-roles-new-account">
+              <option value="">（選擇會計科目）</option>
+              <template x-for="a in accounts" :key="a.code"><option :value="a.code" x-text="a.code + ' ' + (a.display_name || a.name)"></option></template>
+            </select>
+            <input class="ls-input" type="text" placeholder="變更原因（必填）" x-model="nr.reason" data-testid="ls-roles-new-reason">
+            <button class="ls-tab" style="border:1px solid var(--border-light)" :disabled="!nr.role || !nr.account_code || !nr.reason.trim()" @click="request()" data-testid="ls-roles-request">申請變更（待另一位最高管理者核准）</button>
+          </div>
+        </div>
+      </template>
     </main>
   </div>
   <!-- notif.js 必須與 sidebar.js 成對、放在 sidebar.js 之前（見 account-items.html 註解；守門 test_page_shell_scripts_2026_09_30.py） -->
@@ -214,6 +269,65 @@
             await this._api('PUT', '/api/ledger/expense-categories', { code: this.nc.code, name: this.nc.name, default_tax: this.nc.default_tax })
             this.notice = '已新增費用類別「' + this.nc.name + '」，請接著設定會計科目。'
             this.nc = { code: '', name: '', default_tax: '' }
+            await this.load()
+          } catch (e) { this.error = e.message }
+        },
+      }
+    }
+  </script>
+  <script>
+    // 科目角色對應（T69；行內元件，只打 /api/ledger/roles*；判斷與核准規則都在後端）
+    function glRoleMap() {
+      return {
+        roles: [], pending: [], accounts: [], error: '', notice: '', isSuper: false, me: '', nr: { role: '', account_code: '', reason: '' }, cr: '',
+        get roleNames() { return Array.from(new Set(this.roles.map(r => r.role))).sort() },
+        _s() { try { return JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { return {} } },
+        scopeText(r) { return (r.scope_type ? r.scope_type + '=' + r.scope_key : '預設') + (r.effective_from ? '（' + r.effective_from + ' 起）' : '') },
+        async _api(method, path, body) {
+          const opt = { method, headers: { Authorization: 'Bearer ' + (this._s().token || ''), 'Content-Type': 'application/json' } }
+          if (body !== undefined) opt.body = JSON.stringify(body)
+          const r = await fetch(path, opt)
+          let d = {}
+          try { d = await r.json() } catch (e) { d = {} }
+          if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : '操作失敗（' + r.status + '）')
+          return d
+        },
+        async load() {
+          const s = this._s()
+          this.isSuper = s.role === 'superadmin'
+          this.me = s.username || ''
+          try {
+            const [d, a] = await Promise.all([this._api('GET', '/api/ledger/roles'), this._api('GET', '/api/ledger/accounts?only_postable=true')])
+            this.roles = d.roles || []
+            this.pending = d.pending || []
+            this.accounts = a.accounts || []
+          } catch (e) { this.error = e.message }
+        },
+        async request() {
+          this.error = ''; this.notice = ''
+          try {
+            await this._api('PUT', '/api/ledger/roles', { role: this.nr.role, account_code: this.nr.account_code, reason: this.nr.reason.trim() })
+            this.notice = '已送出申請，等另一位最高管理者核准後才會生效。'
+            this.nr = { role: '', account_code: '', reason: '' }
+            await this.load()
+          } catch (e) { this.error = e.message }
+        },
+        async approve(p) {
+          this.error = ''; this.notice = ''
+          try {
+            await this._api('POST', '/api/ledger/roles/pending/' + p.id + '/approve', {})
+            this.notice = '已核准並套用：' + p.role + ' → ' + p.account_code
+            await this.load()
+          } catch (e) { this.error = e.message }
+        },
+        async cancel(p) {
+          const why = (this.cr || '').trim()
+          if (!why) { this.error = '撤銷請先在上方填寫撤銷原因。'; return }
+          this.error = ''; this.notice = ''
+          try {
+            await this._api('POST', '/api/ledger/roles/pending/' + p.id + '/cancel', { reason: why })
+            this.cr = ''
+            this.notice = '已撤銷這筆申請。'
             await this.load()
           } catch (e) { this.error = e.message }
         },

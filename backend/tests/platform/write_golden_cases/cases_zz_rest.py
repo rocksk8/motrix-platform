@@ -421,8 +421,6 @@ WAIVE = {
     'PUT /api/ledger/category-map': "not yet covered (U0b freeze)",
     'PUT /api/ledger/expense-categories': "not yet covered (U0b freeze)",
     'PUT /api/ledger/features/{key}': "not yet covered (U0b freeze)",
-    'PUT /api/ledger/roles': "not yet covered (U0b freeze)",
-    'PUT /api/ledger/settings': "not yet covered (U0b freeze)",
     'PUT /api/legal-params/tax-rules': "not yet covered (U0b freeze)",
     'PUT /api/list-prefs/{list_key}': "not yet covered (U0b freeze)",
     'PUT /api/mail-types/{key}/recipients': "not yet covered (U0b freeze)",

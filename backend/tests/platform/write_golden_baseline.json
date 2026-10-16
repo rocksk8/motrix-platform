@@ -33,6 +33,18 @@
   ],
   "s": 400
  },
+ "POST /api/ledger/roles/pending/{pid}/approve": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "POST /api/ledger/roles/pending/{pid}/cancel": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "POST /api/notify-actions/{key}/preview": {
   "k": [
    "classification",
@@ -170,6 +182,18 @@
    "templateVersion"
   ],
   "s": 200
+ },
+ "PUT /api/ledger/roles": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "PUT /api/ledger/settings": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
  },
  "PUT /api/list-views/{list_id}": {
   "k": [

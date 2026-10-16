@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 891,
-  "endpoints_api": 887,
-  "write_total": 482,
-  "write_api": 482,
-  "get_api": 405,
-  "distinct_paths_api": 750,
-  "write_with_body_api": 352,
-  "write_with_path_param_api": 347
+  "endpoints_total": 894,
+  "endpoints_api": 890,
+  "write_total": 484,
+  "write_api": 484,
+  "get_api": 406,
+  "distinct_paths_api": 752,
+  "write_with_body_api": 354,
+  "write_with_path_param_api": 349
  },
  "select_star": {
   "modules": 274,
@@ -1161,6 +1161,11 @@
   "GET /api/ledger/periods/{period_id}/checklist": {
    "w": false,
    "pp": 1,
+   "body": false
+  },
+  "GET /api/ledger/roles": {
+   "w": false,
+   "pp": 0,
    "body": false
   },
   "GET /api/ledger/setup-check": {
@@ -3294,6 +3299,16 @@
    "body": true
   },
   "POST /api/ledger/periods/{period_id}/unlock": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/ledger/roles/pending/{pid}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/ledger/roles/pending/{pid}/cancel": {
    "w": true,
    "pp": 1,
    "body": true

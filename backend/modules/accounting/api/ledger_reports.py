@@ -7,7 +7,9 @@ import datetime as _dt
 
 from fastapi import APIRouter, Body, Header, HTTPException, Query
 
+from core.txn import begin_write
 from db import get_db
+from helpers import config_ledger as _L
 from helpers import _audit, _require_user, _tok, require_any_module
 from modules.accounting.ledger import fs_lines as _fs
 from modules.accounting.ledger import reports as _reports
@@ -176,29 +178,165 @@ def patch_account(code: str, body: dict = Body(...), authorization: str = Header
     return {"ok": True}
 
 
-@router.put("/roles")
-def put_role(body: dict = Body(...), authorization: str = Header(None)):
-    """設定角色→科目（可帶 scope 與生效日）。科目必須存在；停用中的科目不可作為角色科目。"""
-    _require_super(authorization, "設定角色對應的科目")                # B：角色→科目對應只有最高管理者
-    b = body or {}
-    role, code = str(b.get("role") or "").strip(), str(b.get("account_code") or "").strip()
-    if not role or not code:
-        raise HTTPException(400, "需要 role 與 account_code。")
+# ── 角色→科目對應（金流）：變更要第二位最高管理者核准（T69 使用者裁示 a）────────────────────────────
+# 走設定帳本 config_ledger：申請＝寫一筆 pending 明細（risk=money、approvals_required=1、通知其他最高管理者），
+# 另一位最高管理者核准後**立即**套用到 gl_account_roles（沒有確認期間）；申請人不能核准自己的。
+# 沒有第二位在職最高管理者 ⇒ 擋下（409）並說明，不自動放行（待使用者裁示，見 t69-ledger-notes.md）。
+_ROLE_DOMAIN = "ledger:role"
+
+
+def _role_key(p):
+    return "|".join((p["role"], p["scope_type"], p["scope_key"], p["effective_from"]))
+
+
+def _check_role_target(conn, code):
+    m = conn.execute("SELECT postable, is_active FROM gl_account_meta WHERE code=?", (code,)).fetchone()
+    if m is None:
+        raise HTTPException(400, "科目 %s 不存在。" % code)
+    if not m["is_active"]:
+        raise HTTPException(400, "科目 %s 已停用。" % code)
+    if not m["postable"]:
+        raise HTTPException(400, "科目 %s 底下還有子科目，不能直接過帳；請選最底層科目。" % code)
+
+
+def _current_role_code(conn, p):
+    r = conn.execute("SELECT account_code FROM gl_account_roles WHERE role=? AND scope_type=? AND scope_key=? AND effective_from=?",
+                     (p["role"], p["scope_type"], p["scope_key"], p["effective_from"])).fetchone()
+    return r[0] if r else None
+
+
+def _role_pending_row(conn, pid):
+    for r in _L.history(conn, _ROLE_DOMAIN, None, limit=1000):
+        if r["id"] == pid and r["domain"] == _ROLE_DOMAIN:
+            return r
+    raise HTTPException(404, "找不到這筆待核准的角色對應變更。")
+
+
+def _pending_view(r):
+    p = r["new"] if isinstance(r["new"], dict) else {}
+    return {"id": r["id"], "role": p.get("role"), "scope_type": p.get("scope_type", ""), "scope_key": p.get("scope_key", ""),
+            "effective_from": p.get("effective_from", ""), "account_code": p.get("account_code"), "old_account_code": r["old"],
+            "reason": r["reason"], "requested_by": r["actor"], "requested_at": r["at"], "state": r["state"],
+            "approvals": list(r.get("approvals") or []), "approvals_required": int(r.get("approvals_required") or 0)}
+
+
+@router.get("/roles")
+def list_roles(authorization: str = Header(None)):
+    """唯讀：現行角色→科目對應，與待第二位最高管理者核准的變更。"""
+    _require_read(authorization)
     conn = get_db()
     try:
         _roles.ensure_meta(conn)
-        m = conn.execute("SELECT postable, is_active FROM gl_account_meta WHERE code=?", (code,)).fetchone()
-        if m is None:
-            raise HTTPException(400, "科目 %s 不存在。" % code)
-        if not m["is_active"]:
-            raise HTTPException(400, "科目 %s 已停用。" % code)
-        if not m["postable"]:
-            raise HTTPException(400, "科目 %s 底下還有子科目，不能直接過帳；請選最底層科目。" % code)
-        conn.execute("INSERT INTO gl_account_roles(role,scope_type,scope_key,account_code,effective_from) VALUES(?,?,?,?,?)"
-                     " ON CONFLICT(role,scope_type,scope_key,effective_from) DO UPDATE SET account_code=excluded.account_code",
-                     (role, str(b.get("scope_type") or ""), str(b.get("scope_key") or ""), code, str(b.get("effective_from") or "")))
+        _roles.ensure_default_roles(conn)
         conn.commit()
+        roles = conn.execute("SELECT r.role, r.scope_type, r.scope_key, r.account_code, r.effective_from, a.name AS account_name"
+                             " FROM gl_account_roles r LEFT JOIN account_items a ON a.code=r.account_code"
+                             " ORDER BY r.role, r.scope_type, r.scope_key, r.effective_from").fetchall()
+        pend = [_pending_view(r) for r in _L.history(conn, _ROLE_DOMAIN, None, limit=1000)
+                if r["domain"] == _ROLE_DOMAIN and r["state"] == "pending"]
+        return {"roles": [dict(r) for r in roles], "pending": pend}
     finally:
         conn.close()
-    _audit(_tok(authorization), "ledger.role.put", "gl_account_roles", role, "角色 %s → %s" % (role, code))
+
+
+@router.put("/roles", status_code=202)
+def put_role(body: dict = Body(...), authorization: str = Header(None)):
+    """申請設定角色→科目（可帶 scope 與生效日）；**不會立刻生效**，要另一位最高管理者核准。科目必須存在；停用中的科目不可作為角色科目。"""
+    user = _require_super(authorization, "設定角色對應的科目")                # B：角色→科目對應只有最高管理者
+    b = body or {}
+    p = {"role": str(b.get("role") or "").strip(), "account_code": str(b.get("account_code") or "").strip(),
+         "scope_type": str(b.get("scope_type") or ""), "scope_key": str(b.get("scope_key") or ""),
+         "effective_from": str(b.get("effective_from") or "")}
+    reason = str(b.get("reason") or "").strip()
+    if not p["role"] or not p["account_code"]:
+        raise HTTPException(400, "需要 role 與 account_code。")
+    if len(reason) < 2:
+        raise HTTPException(400, "請填寫變更原因（角色對應影響金流，另一位最高管理者要看得到原因）。")
+    conn = get_db()
+    try:
+        begin_write(conn)
+        _roles.ensure_meta(conn)
+        _check_role_target(conn, p["account_code"])
+        others = [r[0] for r in conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' AND username<>?", (user["username"],))]
+        if not others:
+            raise HTTPException(409, "角色對應的變更需要另一位在職的最高管理者核准；目前沒有第二位最高管理者，無法申請。")
+        key = _role_key(p)
+        for r in _L.pending(conn, _ROLE_DOMAIN):
+            if r["domain"] == _ROLE_DOMAIN and r["key"] == key:
+                _L.supersede(conn, r["id"], user, "被較新的申請取代")
+        rec = _L.record(conn, _ROLE_DOMAIN, key, [{"field": "account_code", "old": _current_role_code(conn, p), "new": p}], reason, user,
+                        risk="money", effective_at=_dt.datetime.now().isoformat(timespec="seconds"), approvals_required=1,
+                        audit_action="ledger.role.request", target_label="角色 %s → %s（待核准）" % (p["role"], p["account_code"]),
+                        link="ledger-settings.html")
+        if not rec["ids"]:
+            raise HTTPException(409, "這個角色目前已經是這個科目，不需要變更。")
+        conn.commit()
+    except BaseException:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
+    finally:
+        conn.close()
+    return {"ok": True, "pending": True, "id": rec["ids"][0], "approvals_required": 1}
+
+
+@router.post("/roles/pending/{pid}/approve")
+def approve_role(pid: int, body: dict = Body(default={}), authorization: str = Header(None)):
+    """另一位最高管理者核准 ⇒ 立刻套用到 gl_account_roles。申請人不能核准自己的；核准時再驗一次科目（可能已被停用）。"""
+    user = _require_super(authorization, "核准角色對應的變更")
+    why = str((body or {}).get("reason") or "")
+    conn = get_db()
+    try:
+        begin_write(conn)
+        row = _role_pending_row(conn, int(pid))
+        if row["state"] != "pending":
+            raise HTTPException(409, "這筆已不是待核准狀態（%s）。" % row["state"])
+        p = row["new"] if isinstance(row["new"], dict) else {}
+        try:
+            _check_role_target(conn, str(p.get("account_code") or ""))
+        except HTTPException as e:                       # 申請後科目被停用／改成非葉節點：不核准，維持待核准（可撤銷）
+            raise HTTPException(409, "申請後科目狀態已改變，無法核准：" + str(e.detail))
+        res = _L.approve(conn, int(pid), user, why)
+        if not res["ok"]:
+            raise HTTPException(409, res["why"])
+        _L.audit_event(conn, user, "ledger.role.approve", pid, {"id": int(pid), "role": p.get("role"), "account_code": p.get("account_code"),
+                                                                  "reason": why}, target_label="核准角色對應 #%s" % pid)
+        conn.execute("INSERT INTO gl_account_roles(role,scope_type,scope_key,account_code,effective_from) VALUES(?,?,?,?,?)"
+                     " ON CONFLICT(role,scope_type,scope_key,effective_from) DO UPDATE SET account_code=excluded.account_code",
+                     (p["role"], p.get("scope_type", ""), p.get("scope_key", ""), p["account_code"], p.get("effective_from", "")))
+        _L.audit_event(conn, user, "ledger.role.put", p["role"], {"role": p["role"], "account_code": p["account_code"], "old": row["old"],
+                                                                    "requested_by": row["actor"], "approved_by": user["username"], "id": int(pid)},
+                       target_label="角色 %s → %s" % (p["role"], p["account_code"]))
+        _L._append(conn, int(pid), "activated", user, "核准後套用")
+        conn.commit()
+    except BaseException:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
+    finally:
+        conn.close()
+    return {"ok": True, "applied": True}
+
+
+@router.post("/roles/pending/{pid}/cancel")
+def cancel_role(pid: int, body: dict = Body(default={}), authorization: str = Header(None)):
+    """撤銷待核准的角色對應變更：任一最高管理者（含申請人）皆可，需原因。"""
+    user = _require_super(authorization, "撤銷角色對應的待核准變更")
+    reason = str((body or {}).get("reason") or "").strip()
+    if len(reason) < 2:
+        raise HTTPException(400, "撤銷請填寫原因。")
+    conn = get_db()
+    try:
+        begin_write(conn)
+        row = _role_pending_row(conn, int(pid))
+        if not _L.cancel(conn, int(pid), user, reason):
+            raise HTTPException(409, "這筆已不是待核准狀態（%s）。" % row["state"])
+        _L.audit_event(conn, user, "ledger.role.cancel", pid, {"id": int(pid), "reason": reason}, target_label="撤銷角色對應 #%s" % pid)
+        conn.commit()
+    except BaseException:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
+    finally:
+        conn.close()
     return {"ok": True}

@@ -86,24 +86,31 @@ def create_year(body: dict = Body(...), authorization: str = Header(None)):
 
 @router.put("/settings")
 def put_settings(body: dict = Body(...), authorization: str = Header(None)):
-    """目前只有 fiscal_year_start_month；已建立任何年度後不可再改（避免期間對不上）。"""
-    _require_write(authorization)
+    """目前只有 fiscal_year_start_month；已建立任何年度後不可再改（避免期間對不上）。
+    T69（使用者裁示）：只有最高管理者能改、立即生效、稽核記舊值→新值。"""
+    user = _require_superadmin(authorization, "修改會計年度起始月份")
+    old = new = None
     conn = get_db()
     try:
         if "fiscal_year_start_month" in (body or {}):
+            raw = body["fiscal_year_start_month"]
+            if isinstance(raw, bool) or not isinstance(raw, (int, str)):
+                raise HTTPException(400, "起始月份要是 1～12。")
             try:
-                m = int(body["fiscal_year_start_month"])
-            except (TypeError, ValueError):
+                m = int(raw)
+            except ValueError:
                 raise HTTPException(400, "起始月份要是 1～12。")
             if not 1 <= m <= 12:
                 raise HTTPException(400, "起始月份要是 1～12。")
             if conn.execute("SELECT 1 FROM gl_fiscal_years").fetchone():
                 raise HTTPException(409, "已經建立過會計年度，不能再改起始月份。")
+            old, new = _periods.fiscal_start_month(conn), m
             _periods.set_setting(conn, "fiscal_year_start_month", m)
         conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), "ledger.settings.update", "gl_settings", "fiscal_year_start_month", "更新總帳設定：%s" % ", ".join(sorted((body or {}).keys())))
+    _audit(_tok(authorization), "ledger.settings.update", "gl_settings", "fiscal_year_start_month",
+           "更新總帳設定：%s（%s → %s）" % (", ".join(sorted((body or {}).keys())), old, new), {"old": old, "new": new})
     return {"ok": True}
 
 
