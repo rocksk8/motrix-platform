@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — wip/t68-labor-dropdown-r2（T68 A4：新提供者 dispatch.search，原第 55 班）
+## 1.1.40 — wip/t68-labor-dropdown-r2（T68 A4：新提供者 dispatch.search，原第 55 班）
 - 新提供者 `dispatch.search`（IP-116，暫定；第 55 班）：可搜尋、分頁的派發清單供勞報單下拉用（不含草稿／已取消、不含金額；案件名稱只給通過案件守門者）。`dispatches_for_person` 的每列組裝與案件可見性抽成共用函式，輸出不變。派發頁 `POST …/payslip-links` 新增勞報單關聯時一併傳人員名單給 `payslip.dispatch_links.link`（名單外 400）。無 migration。
 
 ## 1.1.39 — 2026-10-16（wip/t66-format-fix-r1；T66 剩餘 toLocale* 顯示處遷移到共用格式器）
