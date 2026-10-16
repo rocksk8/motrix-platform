@@ -70,6 +70,25 @@ EXEMPT = {
     # ── 刪除暫存區（第53班）：稽核與刪除同一個交易，經 service.audit_tx 寫入（掃描器只認 _audit／_system_audit 呼叫）──
     ("modules/recyclebin/api.py", "POST", "/api/recycle-bin/delete-approved"):
         "稽核 recyclebin.delete_approved 在同一個交易內由 service.audit_tx 寫入（寫不進去整筆回滾，附件搬回）；端點本身不再另呼叫 _audit",
+    # ── 權限矩陣（T67 PM-S3）：稽核與資料變更同一交易，由服務層寫入（掃描器只認端點本體的 _audit／_system_audit 呼叫）──
+    ("modules/permmatrix/api.py", "POST", "/api/permmatrix/role-cap/preview"):
+        "預覽端點只算影響面、不寫任何資料（服務層 preview_role_cap 唯讀），沒有東西可稽核",
+    ("modules/permmatrix/api.py", "POST", "/api/permmatrix/user-override/preview"):
+        "預覽端點只算影響面、不寫任何資料（服務層 preview_user_override 唯讀），沒有東西可稽核",
+    ("modules/permmatrix/api.py", "POST", "/api/permmatrix/role-cap"):
+        "稽核 permmatrix.role_cap.set 在同一個交易內由 service._audit_tx 寫入（寫不進去整筆回滾；高風險放寬走待生效時由設定帳本寫 permmatrix.pending.request）；端點本身不再另呼叫 _audit",
+    ("modules/permmatrix/api.py", "POST", "/api/permmatrix/user-override"):
+        "稽核 permmatrix.user_override.set 在同一個交易內由 service._audit_tx 寫入（寫不進去整筆回滾）；端點本身不再另呼叫 _audit",
+    ("modules/permmatrix/api.py", "DELETE", "/api/permmatrix/user-override"):
+        "稽核 permmatrix.user_override.clear 在同一個交易內由 service._audit_tx 寫入（寫不進去整筆回滾）；端點本身不再另呼叫 _audit",
+    ("modules/permmatrix/api.py", "POST", "/api/permmatrix/pending/{pid}/cancel"):
+        "稽核 permmatrix.pending.cancel 在同一個交易內由 service 經 L.audit_event 寫入（寫不進去整筆回滾）；端點本身不再另呼叫 _audit",
+    ("modules/permmatrix/api.py", "POST", "/api/permmatrix/pending/{pid}/approve"):
+        "稽核 permmatrix.pending.approve 在同一個交易內由 service 經 L.audit_event 寫入（寫不進去整筆回滾）；端點本身不再另呼叫 _audit",
+    ("modules/permmatrix/api.py", "POST", "/api/permmatrix/versions/{version_id}/restore"):
+        "稽核 permmatrix.version.restore 在同一個交易內由 service._audit_tx 寫入（寫不進去整筆回滾）；端點本身不再另呼叫 _audit",
+    ("modules/permmatrix/api.py", "POST", "/api/permmatrix/undo"):
+        "稽核由 service.undo_last_change 回溯到上一版時在同一個交易內經 _audit_tx 寫入（寫不進去整筆回滾）；端點本身不再另呼叫 _audit",
     # ── 職責角色（R2 第2步 8a）：稽核改在 helper 的同一交易內寫入 ──────────
     ("duty_roles.py", "POST", "/api/duty-roles"):
         "稽核在同一個交易內由 helpers/duty_roles._record→_write_audit 寫入（R2 第2步 8a：audit_log 與 permission_changes 同交易、audit_id 回填），端點本身不再另呼叫 _audit；失敗整筆回滾",
