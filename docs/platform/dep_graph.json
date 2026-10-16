@@ -20097,6 +20097,7 @@
     "/api/recycle-bin/",
     "/api/recycle-bin/delete-approved",
     "/api/recycle-bin/impact",
+    "/api/recycle-bin/settings",
     "/api/recycle-bin/status",
     "/api/system/branding/favicon"
    ],
