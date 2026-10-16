@@ -118,7 +118,7 @@ def _require_reports_access(u: dict) -> None:
         return
     if user_has_module(u, "reports"):
         raise HTTPException(403, "營運報表的金額僅財務角色可看；您的帳號有『營運報表』模組，但沒有財務檢視權限")
-    raise HTTPException(403, "僅財務角色可存取報表金額")
+    raise HTTPException(403, "僅財務角色、或具『營運報表』模組的使用者可存取報表")
 
 
 

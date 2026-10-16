@@ -12,6 +12,8 @@
 """
 import pytest
 
+from core.source_tree import page_file
+
 #: (名稱, 網址)——11 支端點；匯出類帶最小參數。
 ENDPOINTS = [
     ("financial", "/api/reports/financial?period=2026-09"),
@@ -89,7 +91,7 @@ _MSG = "需要財務或金額可見權限才能查看報表"
 
 
 def test_reports_page_shows_the_explanation_instead_of_a_blank_or_raw_error():
-    html = (_FRONT / "pages" / "reports.html").read_text(encoding="utf-8")
+    html = page_file("reports.html").read_text(encoding="utf-8")
     js = (_FRONT / "js" / "reports.js").read_text(encoding="utf-8")
     assert 'data-testid="reports-no-access"' in html and 'x-show="noAccess"' in html
     assert 'x-show="!noAccess"' in html and 'data-testid="reports-body"' in html   # 其餘內容在同一個旗標下整塊隱藏

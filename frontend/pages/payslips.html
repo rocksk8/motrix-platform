@@ -270,7 +270,7 @@
             <div x-show="!dlinks.items.length && !dlinks.notice" style="color:var(--text-dim)">尚未關聯派發</div>
             <div x-show="selectedSlip.status !== '已作廢'" style="position:relative;margin-top:4px" @click.outside="dpClose()" data-testid="ps-dlink-dp">
               <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
-                <input type="text" :placeholder="dpLabels.placeholder" x-model="dp.q" @focus="dpOpen()" @input="dp.open = true; dpTyping()" data-testid="ps-dlink-dp-input" autocomplete="off" style="min-width:220px;flex:1;font-size:12px">
+                <input type="text" class="search" :placeholder="dpLabels.placeholder" x-model="dp.q" @focus="dpOpen()" @input="dp.open = true; dpTyping()" data-testid="ps-dlink-dp-input" autocomplete="off" style="min-width:220px;flex:1;font-size:12px">
                 <button type="button" class="btn btn-ghost btn-sm" @click="dpToggleAll()" data-testid="ps-dlink-dp-all" x-text="dp.includeAll ? dpLabels.showRoster : dpLabels.showAll" x-show="selectedSlip.contractor_id"></button>
               </div>
               <div x-show="dp.open" style="position:absolute;z-index:20;left:0;right:0;max-height:260px;overflow:auto;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:6px;margin-top:2px;box-shadow:0 4px 12px rgba(0,0,0,.12)" data-testid="ps-dlink-dp-list">
