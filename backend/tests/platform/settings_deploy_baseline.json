@@ -1,6 +1,9 @@
 {
  "_note": "部署零行為變更凍結基準（第54班 Train A）：[預設, 下限, 上限, 讀取夾值]；改動＝行為變更，須同步改本檔並走裁示。",
  "groups": {
+  "lodging_labels": {"per_night": ["每晚", null, null, false], "per_person": ["每人", null, null, false], "phone": ["電話", null, null, false], "website": ["官網", null, null, false], "onsite": ["現場", null, null, false], "other": ["其他", null, null, false]},
+  "netplan_labels": {"planning": ["規劃中", null, null, false], "confirmed": ["已確認", null, null, false], "delivered": ["已交付", null, null, false]},
+  "procurement_labels": {"suggested": ["待下單", null, null, false], "ordered": ["已下單", null, null, false], "received": ["已到貨", null, null, false]},
   "builder_actions": {
    "enabled": [
     false,

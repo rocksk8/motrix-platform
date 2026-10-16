@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>網路架構規劃書 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/display-labels.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -91,23 +92,23 @@
       <button type="button" class="vm-andon__seg np-seg" :class="{on: statusTab==='規劃中'}"
               @click="statusTab = (statusTab==='規劃中' ? '' : '規劃中')">
         <span class="vm-andon__val" style="color:var(--warning)" x-text="statusCount('規劃中')"></span>
-        <span class="vm-andon__lbl">規劃中<small>尚未定案</small></span>
+        <span class="vm-andon__lbl"><span x-text="lb.netplan_labels.planning">規劃中</span><small>尚未定案</small></span>
       </button>
       <span class="np-arrow" aria-hidden="true">→</span>
       <button type="button" class="vm-andon__seg np-seg" :class="{on: statusTab==='已確認'}"
               @click="statusTab = (statusTab==='已確認' ? '' : '已確認')">
         <span class="vm-andon__val" style="color:var(--orange)" x-text="statusCount('已確認')"></span>
-        <span class="vm-andon__lbl">已確認<small>待交付</small></span>
+        <span class="vm-andon__lbl"><span x-text="lb.netplan_labels.confirmed">已確認</span><small>待交付</small></span>
       </button>
       <span class="np-arrow" aria-hidden="true">→</span>
       <button type="button" class="vm-andon__seg np-seg" :class="{on: statusTab==='已交付'}"
               @click="statusTab = (statusTab==='已交付' ? '' : '已交付')">
         <span class="vm-andon__val" style="color:var(--success)" x-text="statusCount('已交付')"></span>
-        <span class="vm-andon__lbl">已交付<small>已完成</small></span>
+        <span class="vm-andon__lbl"><span x-text="lb.netplan_labels.delivered">已交付</span><small>已完成</small></span>
       </button>
       <div class="vm-andon__bar">
         <span class="vm-andon__track"
-              :title="'規劃中 ' + statusCount('規劃中') + '／已確認 ' + statusCount('已確認') + '／已交付 ' + statusCount('已交付')">
+              :title="lb.netplan_labels.planning + ' ' + statusCount('規劃中') + '／' + lb.netplan_labels.confirmed + ' ' + statusCount('已確認') + '／' + lb.netplan_labels.delivered + ' ' + statusCount('已交付')">
           <i :style="'width:' + statusPct('規劃中') + '%;background:var(--warning)'"></i>
           <i :style="'width:' + statusPct('已確認') + '%;background:var(--orange)'"></i>
           <i :style="'width:' + statusPct('已交付') + '%;background:var(--success)'"></i>
@@ -154,7 +155,7 @@
                        x-text="p.quoteNo" @click.stop></a>
                     <span x-show="!p.quoteNo" style="color:var(--text-dim)">獨立建立</span>
                   </td>
-                  <td><span class="st" :class="stCls(p.status)" x-text="p.status"></span></td>
+                  <td><span class="st" :class="stCls(p.status)" x-text="stText(p.status)"></span></td>
                   <td style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif" x-text="(p.updatedAt||'').replace('T',' ').slice(0,16)"></td>
                   <td style="font-size:12px" x-text="p.updatedBy || '—'"></td>
                 </tr>
@@ -299,6 +300,7 @@
         const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
         if (!s.token) { location.href = 'login.html'; return }
         this.session = s
+        MotrixLabels.load().then(m => { this.lb = m })
         await this.load()
         this.loading = false
       },
@@ -332,6 +334,9 @@
         if (!this.statusTab) return this.plans
         return this.plans.filter(p => p.status === this.statusTab)
       },
+
+      lb: MotrixLabels.defaults(),                     // C7：狀態顯示名稱（設定中心『網路規劃：狀態名稱』；預設＝原本的字）
+      stText(status) { return MotrixLabels.netplan(this.lb, status) },
 
       stCls(status) {
         return { '規劃中': 'st-plan', '已確認': 'st-confirmed', '已交付': 'st-delivered' }[status] || 'st-plan'

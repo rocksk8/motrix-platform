@@ -30,6 +30,7 @@ from fastapi import APIRouter, Body, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
 
 from db import get_db, next_entity_code
+from helpers import display_labels as _dl
 from helpers import download_name
 from helpers import (_require_user, _tok, _audit, notify_module_activity,
                      require_any_module)
@@ -278,7 +279,7 @@ def delete_network_plan(plan_id: int, authorization: str = Header(None)):
         raise HTTPException(404, "規劃書不存在")
     if row["status"] != "規劃中":
         conn.close()
-        raise HTTPException(409, "僅「規劃中」狀態可刪除")
+        raise HTTPException(409, "僅「%s」狀態可刪除" % _dl.status_text("規劃中"))
     conn.execute("DELETE FROM network_plans WHERE id=?", (plan_id,))
     conn.commit()
     conn.close()

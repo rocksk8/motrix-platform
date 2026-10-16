@@ -9,6 +9,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>旅宿檔案更新 - MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/display-labels.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -144,8 +145,8 @@
             <label>詢價日期<input type="date" x-model="quote.quotedOn" data-q="quotedOn"></label>
             <label>房型<input type="text" maxlength="100" x-model="quote.roomType" data-q="roomType"></label>
             <label>金額（元）<input type="number" min="1" step="1" x-model.number="quote.price" data-q="price"></label>
-            <label>計價<select x-model="quote.unit" data-q="unit"><option value="per_night">每晚</option><option value="per_person">每人</option></select></label>
-            <label>管道<select x-model="quote.channel" data-q="channel"><option value="phone">電話</option><option value="website">官網</option><option value="onsite">現場</option><option value="other">其他</option></select></label>
+            <label>計價<select x-model="quote.unit" data-q="unit"><option value="per_night" x-text="lb.lodging_labels.per_night">每晚</option><option value="per_person" x-text="lb.lodging_labels.per_person">每人</option></select></label>
+            <label>管道<select x-model="quote.channel" data-q="channel"><option value="phone" x-text="lb.lodging_labels.phone">電話</option><option value="website" x-text="lb.lodging_labels.website">官網</option><option value="onsite" x-text="lb.lodging_labels.onsite">現場</option><option value="other" x-text="lb.lodging_labels.other">其他</option></select></label>
             <label>包含<input type="text" maxlength="100" x-model="quote.includes" data-q="includes"></label>
             <label>備註<input type="text" maxlength="500" x-model="quote.remark" data-q="remark"></label>
           </div>
@@ -202,6 +203,7 @@ function lodgingRecordsPage() {
     quoteFor: null, quote: {}, quoteMsg: '', savingQuote: false,
     _initDone: false,
 
+    lb: MotrixLabels.defaults(),                     // C7：計價單位與詢價管道顯示名稱（設定中心『住宿紀錄』；預設＝原本的字）
     _h() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token } },
 
     async init() {
@@ -211,6 +213,7 @@ function lodgingRecordsPage() {
       if (!raw) { location.href = 'login.html'; return }
       this.session = JSON.parse(raw)
       this.token = this.session.token || ''
+      MotrixLabels.load().then(m => { this.lb = m })
       await Promise.all([this.loadStatus(), this.loadRecords()])
     },
 

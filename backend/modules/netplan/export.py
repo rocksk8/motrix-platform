@@ -5,6 +5,7 @@
 兩邊 key/欄位順序需保持一致——改其中一邊記得同步改另一邊。
 """
 import io
+from helpers import display_labels as _dl
 from helpers import pdf_scripts as _PS
 import os
 import tempfile
@@ -209,7 +210,7 @@ def build_plan_excel(plan: dict) -> bytes:
         ("綁定案件", plan.get("quoteNo") or "（獨立建立）"),
         ("聯絡人", plan.get("contactName", "")),
         ("聯絡電話", plan.get("contactPhone", "")),
-        ("狀態", plan.get("status", "")),
+        ("狀態", _dl.status_text(plan.get("status", ""))),
         ("最後更新", (plan.get("updatedAt") or "")[:16].replace("T", " ")),
         ("產製時間", datetime.now().strftime("%Y-%m-%d %H:%M")),
     ]

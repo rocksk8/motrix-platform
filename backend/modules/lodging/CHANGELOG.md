@@ -1,5 +1,8 @@
 # 附近旅宿 更新紀錄
 
+## (next) — 2026-10-16（wip/t68-c7-r1；C7 計價單位與詢價管道顯示名稱）
+- `search.py` 的 `unitLabel`／`channelLabel` 與 `pages/lodging-records.html` 的下拉選項文字改讀設定中心『住宿紀錄：計價單位與詢價管道』（預設＝每晚／每人／電話／官網／現場／其他，逐字相同）；`unit`／`channel` 的值不變。
+
 ## 1.2.8 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/lodging-records.html` 的價格顯示改呼叫 `MotrixFormat.num(…, {locale:'zh-TW'})`（輸出逐字相同）。
 
