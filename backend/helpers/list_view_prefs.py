@@ -15,6 +15,7 @@ import json
 import logging
 from datetime import datetime
 
+from core.txn import begin_write
 from helpers import field_catalog as _FC
 from helpers import list_catalog as LC
 from helpers import list_pref_policy as LP
@@ -184,11 +185,12 @@ def save_page_size(conn, user, list_id, body, if_match=None) -> dict:
     if len(new_json.encode("utf-8")) > MAX_BYTES:
         raise ViewError(422, "內容太大", ["內容太大"])
     username = user["username"]
-    conn.execute("BEGIN IMMEDIATE")
+    began = begin_write(conn)                                # 先拿寫鎖再讀（etag 比對與寫入同一個交易；不手寫 BEGIN）
     try:
         cur = _load(conn, username, list_id)
         if etag_of(cur) != (if_match or ""):
-            conn.rollback()
+            if began:
+                conn.rollback()
             raise ViewError(409, "設定在你開啟之後被改過（可能在另一個視窗），請重新載入")
         conn.execute("INSERT INTO user_list_view_prefs (username, list_id, prefs_json, updated_at) VALUES (?,?,?,?) "
                      "ON CONFLICT(username, list_id) DO UPDATE SET prefs_json=excluded.prefs_json, updated_at=excluded.updated_at",
@@ -197,7 +199,8 @@ def save_page_size(conn, user, list_id, body, if_match=None) -> dict:
     except ViewError:
         raise
     except Exception:
-        conn.rollback()
+        if began and conn.in_transaction:
+            conn.rollback()
         raise
     return constraints(conn, user, list_id)
 
