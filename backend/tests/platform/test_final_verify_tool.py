@@ -281,7 +281,7 @@ def test_deployed_parity(tmp_path):
 
 SUMMARY_B = ("# T66 套用成功報告（b4db46376）\n\n- `::RESULT:: v=2 status=success rolled_back=applied service=up exit=0`（log：apply_t66.log）\n"
              "- 前 commit {old} → 後 {new}；deploy_manifest 與 .build_commit 一致。\n\napi_version 2026-10-09b\n")
-SUMMARY_C = ("# T65 套用成功：{old} → {new}\n\n::RESULT:: v=2 status=success rolled_back=applied service=up exit=0\n"
+SUMMARY_C = ("﻿# T65 套用成功：{old} → {new}\n\n::RESULT:: v=2 status=success rolled_back=applied service=up exit=0\n"
              "- #10 deployed_commit 相符，api_version 2026-10-09b ✅\n")
 
 
