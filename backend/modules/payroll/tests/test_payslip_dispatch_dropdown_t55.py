@@ -223,3 +223,20 @@ def test_page_size_comes_from_the_setting_and_falls_back_when_unreadable(client,
         raise RuntimeError("設定層壞了")
     monkeypatch.setattr(SR, "get", _boom)
     assert set(_ids(_opts(client, sa, q="MQ-DD55-PS", include_all="true"))) == {d1, d2}      # 後備 30 筆
+
+
+def test_empty_roster_dispatch_blocks_a_slip_that_has_a_contractor_on_both_entrances(client, make_user):
+    """邊界：派發的人員名單是空的（沒有任何人）。有受領人的勞報單一律擋（名單裡沒有他）；沒選名冊人員的勞報單照舊不檢查。
+    伺服器自己判斷，不靠前端把名單外的項目停用。"""
+    sa = _su(client, make_user, "dd_sa_empty")
+    a = _person("壬")
+    empty = _dispatch(client, sa, [], quote="MQ-DD55-002")
+    _slip("PS-DD55-020", a)
+    _slip("PS-DD55-021", None)
+    r = client.post("/api/payslips/PS-DD55-020/dispatch-links", headers=sa, json={"dispatchId": empty})
+    assert r.status_code == 400 and "沒有這張勞報單的受領人" in r.text, r.text
+    r = client.post("/api/contractor-dispatches/%d/payslip-links" % empty, headers=sa, json={"slipNo": "PS-DD55-020"})
+    assert r.status_code == 400 and "沒有這張勞報單的受領人" in r.text, r.text
+    assert _q("SELECT 1 FROM payslip_dispatch_links WHERE slip_no='PS-DD55-020'") == []
+    assert empty not in _ids(_opts(client, sa, contractor_id=a))                           # 預設清單也不列
+    assert client.post("/api/payslips/PS-DD55-021/dispatch-links", headers=sa, json={"dispatchId": empty}).status_code == 201   # 正對照：沒選名冊人員不檢查

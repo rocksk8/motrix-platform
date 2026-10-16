@@ -1,5 +1,11 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-17（wip/t68-labor-dropdown-r2；T68 A4 勞報單選派發下拉與選項清單）
+- 新設定群組 `payslip_dispatch_picker`（`page_size` 10–100 預設 30＝上線前的程式常數；風險 ops、立即生效；只影響「選派發」下拉一次載入幾筆，不改誰看得到哪些派發）；`settings_deploy_baseline.json` 已同步。
+- 選項清單新增 4 組（`helpers/option_lists.py` 預設值＝今日畫面上寫死的選項）：`payslip_nationality`（國籍）與 `payslip_income_type`（所得類別）為 **closed**——只能改顯示名稱，不能新增、停用，代碼不變所以扣繳判斷不變；`payslip_payment_method`（付款方式）與 `payslip_income_subtype`（執行業務細項，僅建議值）為開放清單。
+- L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.settings_groups_payslip_picker`（無公開介面；載入時由 `settings_groups` 檔尾兩行登錄群組）。`helpers.option_lists` 只增資料項，函式簽章不變。
+- 測試：`modules/payroll/tests/test_payslip_dispatch_dropdown_t55.py`、`test_payslip_option_lists_t68.py`。
+
 ## 1.144 — 2026-10-16（wip/t66-lp-r2；T66 清單個人偏好 L0～L2）
 - T66 L0＋L1＋L2（清單個人偏好的目錄、公司政策與個人每頁筆數，旗標 `list_prefs.enabled` 預設關）：
 - L1（只增）：新檔 `helpers/list_catalog.py`（清單目錄：`register_list`、`by_id`、`lists`、`is_money_column`…；金額欄由欄位目錄 `moneyClass` 衍生；有問題的登記不生效）與 `helpers/list_pref_policy.py`（定義種類 `list_pref_policy`＋寬嚴比較＋`policy_for`；惰性登記，旗標關或沒開建構器治理 ⇒ 不登記）。能力目錄多一個區段 `listCatalog`（擁有者 `helpers.list_catalog`，不列入 `EXPECTED_SECTIONS`）。設定群組 `list_prefs`（`enabled`，預設 0）。先導清單：供應商（`supply:suppliers`，無金額欄）。無新路由、無資料表、無權限變更；旗標關＝清單與今天相同。設計 `docs/platform/plans/T66-LIST-PREFS-DESIGN.md`；測試 `tests/platform/test_list_catalog_t66.py`、`test_list_pref_policy_t66.py`。
