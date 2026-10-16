@@ -528,7 +528,7 @@ def parse_summary(text: str):
     h = r"([0-9a-f]{7,40})"
     m = (re.search(r"前後 commit：" + h + r"\s*[→\->]+\s*" + h, text)
          or re.search(r"前 commit\s*" + h + r"\s*[→\->]+\s*後\s*" + h, text)
-         or re.search(r"^#[^\n]*?\b" + h + r"\s*[→\->]+\s*" + h + r"\b", text, re.M))
+         or re.search(r"^﻿?#[^\n]*?\b" + h + r"\s*[→\->]+\s*" + h + r"\b", text, re.M))
     if m:
         d["old_commit"], d["new_commit"] = m.group(1), m.group(2)
     m = re.search(r"api_version[^0-9]*(\d{4}-\d{2}-\d{2}[a-z]{0,2})", text)
