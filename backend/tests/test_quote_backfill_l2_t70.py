@@ -11,9 +11,18 @@ import pytest
 import db
 
 MONTH = "202607"
-TODAY = datetime.now().strftime("%Y-%m-%d")
-PAST = (datetime.now() - timedelta(days=40)).strftime("%Y-%m-%d")
-SOON = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
+
+
+def _today():
+    return datetime.now().strftime("%Y-%m-%d")      # 執行期才取時鐘（收集期取會跨午夜偶發失敗）
+
+
+def _past():
+    return (datetime.now() - timedelta(days=40)).strftime("%Y-%m-%d")      # 執行期才取時鐘（收集期取會跨午夜偶發失敗）
+
+
+def _soon():
+    return (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")      # 執行期才取時鐘（收集期取會跨午夜偶發失敗）
 
 
 def _login(client, make_user, name, role="superadmin"):
@@ -50,9 +59,9 @@ def _body(date="2026-07-15", extra=None, reason="補登 7 月舊案件，紙本�
 
 
 def _case_record():
-    return {"stages": [{"label": "施工", "dueDate": SOON, "done": False, "assignedTo": ["bf2_boss"]}],
-            "projectTimeline": {"endDate": PAST},
-            "payment": {"items": [{"id": "p1", "label": "頭期款", "ratio": 100, "expectedReceiptDate": PAST, "received": False}]}}
+    return {"stages": [{"label": "施工", "dueDate": _soon(), "done": False, "assignedTo": ["bf2_boss"]}],
+            "projectTimeline": {"endDate": _past()},
+            "payment": {"items": [{"id": "p1", "label": "頭期款", "ratio": 100, "expectedReceiptDate": _past(), "received": False}]}}
 
 
 def _hist(client, boss, extra=None):
@@ -117,7 +126,7 @@ def test_next_no_preview_matches_the_number_actually_assigned(client, boss, flag
     assert client.get("/api/quotations/historical/next-no", headers=boss, params={"date": "2026-07-20"}).json()["quote_no"] == "MQ-%s-002" % MONTH
 
 
-@pytest.mark.parametrize("date", [TODAY, "2099-01-01", "2019-12-31", "abc", ""])
+@pytest.mark.parametrize("date", [_today(), "2099-01-01", "2019-12-31", "abc", ""])
 def test_next_no_preview_applies_the_same_date_rules(client, boss, flag_on, date):
     assert client.get("/api/quotations/historical/next-no", headers=boss, params={"date": date}).status_code == 400
 
@@ -214,7 +223,7 @@ def test_receipt_calendar_push_skips_backfilled_cases(client, boss, flag_on, mon
     monkeypatch.setattr(helpers, "push_event_delete_for_module", lambda *a, **k: None)
     h = _hist(client, boss)
     n = _normal_won(client, boss)
-    items = [{"id": "p9", "label": "尾款", "expectedReceiptDate": SOON, "received": False}]
+    items = [{"id": "p9", "label": "尾款", "expectedReceiptDate": _soon(), "received": False}]
     RC.push_after_commit(n, [], items)
     assert calls, "正對照：一般案件會推行事曆提醒"
     calls.clear()
@@ -228,7 +237,7 @@ def test_case_list_overdue_tabs_and_counts_skip_backfilled_cases(client, boss, f
     for flt in ("recv_overdue", "stage_overdue"):
         c = db.get_db()
         try:                                                    # 階段逾期需要一個已過期未完成的階段：兩張單都補上
-            c.execute("UPDATE case_stages SET due_date=? WHERE quote_no IN (?,?)", (PAST, h, n))
+            c.execute("UPDATE case_stages SET due_date=? WHERE quote_no IN (?,?)", (_past(), h, n))
             c.commit()
         finally:
             c.close()
@@ -298,7 +307,7 @@ def _plant(no, nested):
         d = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()[0])
         d["notes_x"] = nested
         c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), no))
-        c.execute("UPDATE case_stages SET due_date=? WHERE quote_no=?", (PAST, no))
+        c.execute("UPDATE case_stages SET due_date=? WHERE quote_no=?", (_past(), no))
         c.commit()
     finally:
         c.close()
@@ -390,7 +399,7 @@ def test_edit_paths_keep_the_document_start_and_the_mute(client, boss, flag_on):
     h = _hist(client, boss)
     c = db.get_db()
     try:
-        c.execute("UPDATE case_stages SET due_date=? WHERE quote_no=?", (PAST, h))
+        c.execute("UPDATE case_stages SET due_date=? WHERE quote_no=?", (_past(), h))
         sid = c.execute("SELECT id FROM case_stages WHERE quote_no=?", (h,)).fetchone()[0]
         c.commit()
     finally:
