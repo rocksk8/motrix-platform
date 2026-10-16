@@ -170,6 +170,7 @@
    "js:static/notify-action-editor.js",
    "js:static/stage-template-editor.js",
    "js:static/status-chip.js",
+   "js:static/display-labels.js",
    "js:static/users-duty.js",
    "js:static/ui.js",
    "page:index.html",
