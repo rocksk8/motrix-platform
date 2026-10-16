@@ -19085,6 +19085,7 @@
     "/api/settings/email-notify",
     "/api/settings/email-notify/test",
     "/api/settings/monthly-report-recipients",
+    "/api/settings/reminder-send-failures",
     "/api/system/branding/favicon",
     "/api/users/selectable"
    ],
