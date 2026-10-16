@@ -42,6 +42,7 @@ from pydantic import BaseModel, Field
 from db import get_db, spawn_bg_thread
 from db import db_conn  # /api/sales-orders（M08 搬遷移入）
 from modules.case.quotations import payment_item_amounts  # 同上
+from modules.case.quotations import is_historical_json, sql_hist_hint, sql_not_historical  # T70 補登單標示／靜音
 from helpers import download_name
 from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers.gl_status import gl_posted_warning
@@ -818,6 +819,7 @@ _CASE_MINE_SQL = (
 _CASE_STAGE_OVERDUE_SQL = (
     "EXISTS (SELECT 1 FROM case_stages cs WHERE cs.quote_no=quotations.quote_no"
     " AND cs.done=0 AND cs.due_date != '' AND cs.due_date < ?)"
+    f" AND {sql_not_historical('quotations.data_json')}"          # T70：補登的歷史案件不進「階段逾期」
 )
 # 款項期別：received 是 JSON 布林（json_extract 取出 1／0）；預計收款日當日不算逾期
 _CASE_RECV_OVERDUE_SQL = (
@@ -825,6 +827,7 @@ _CASE_RECV_OVERDUE_SQL = (
     " WHERE COALESCE(json_extract(p.value,'$.received'),0) = 0"
     " AND COALESCE(json_extract(p.value,'$.expectedReceiptDate'),'') != ''"
     " AND json_extract(p.value,'$.expectedReceiptDate') < ?)"
+    f" AND {sql_not_historical('quotations.data_json')}"          # T70：補登的歷史案件不進「應收逾期」
 )
 # 缺單據（2026-09-24 使用者裁示 ④，同日更正）：缺發票（已收款卻沒登錄發票號碼），或執行階段全部完成
 # 而完工單與出貨單**兩張都沒有**（有些案件只需其中一張，只缺一張不算，避免誤報）。清單每筆回傳原因旗標
@@ -893,10 +896,11 @@ def list_quotations(
         "(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no) as stage_total, "
         "(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no AND done=1) as stage_done, "
         "(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no AND done=0 "
-        " AND due_date != '' AND due_date < ?) as stage_overdue, "
+        " AND due_date != '' AND due_date < ? AND " + sql_not_historical("quotations.data_json") + ") as stage_overdue, "
         # CM7：缺單據的原因（畫面標出缺哪一種）
         f"{_CASE_MISSING_INVOICE_SQL} as missing_invoice, "
-        f"{_CASE_MISSING_NOTES_SQL} as missing_notes"
+        f"{_CASE_MISSING_NOTES_SQL} as missing_notes, "
+        + sql_hist_hint("quotations.data_json", "hist_dj")           # T70：補登單標示（只有疑似補登單的列才帶回 data_json）
     )
     # select_params 只服務上面 SELECT 子句裡的相關子查詢（stage_overdue 的 today），跟
     # where_sql 的 params 分開放——SELECT 子句在 SQL 字串裡排在 WHERE 之前，它的 ? 佔位
@@ -1016,6 +1020,7 @@ def list_quotations(
     items = []
     for r in rows:
         row = dict(r)
+        row["historical"] = is_historical_json(row.pop("hist_dj", None))
         if masked:
             _mask_money_row(row)
         elif include_project_margin:                         # 專案毛利%：判定式與 direct_margin_pct 相同；看不到者／沒要求者鍵不存在（不是 None）
@@ -1870,13 +1875,48 @@ def _backfill_deny(authorization: str, code: int, why: str):
     raise HTTPException(code, why)
 
 
-def _backfill_flag_on() -> bool:
-    """旗標讀取失敗＝視為關（同 status_display.flag_on）。"""
+def _backfill_now():
+    return datetime.now()
+
+
+def _backfill_state() -> dict:
+    """補登開關的有效狀態：`enabled`（設定值）＋自動關閉（`auto_off_hours`，0＝不自動關；從最近一次「開啟」的時間起算）。
+    讀取失敗、查不到開啟時間 ⇒ 一律視為關（fail-closed）。回 {on, enabled, auto_off, expires_at, hours}。"""
+    out = {"on": False, "enabled": False, "auto_off": False, "expires_at": "", "hours": 24}
     try:
         from helpers import settings_registry as _SR
-        return int(_SR.get("quote_backfill", "enabled") or 0) == 1
+        out["enabled"] = int(_SR.get("quote_backfill", "enabled") or 0) == 1
+        hours = int(_SR.get("quote_backfill", "auto_off_hours") if _SR.get("quote_backfill", "auto_off_hours") is not None else 24)
+        out["hours"] = hours
+        if not out["enabled"]:
+            return out
+        if hours <= 0:
+            out["on"] = True
+            return out
+        from helpers import config_ledger as _L
+        conn = get_db()
+        try:
+            rows = _L.history(conn, "setting:quote_backfill", "quote_backfill", limit=50)
+        finally:
+            conn.close()
+        since = next((r["at"] for r in rows if r["field"] == "enabled" and r["state"] in ("immediate", "activated") and r["new"] in (1, "1", True)), None)
+        if not since:
+            out["auto_off"] = True            # 找不到「何時開啟」⇒ 不信任這個開啟狀態
+            return out
+        exp = datetime.fromisoformat(since) + timedelta(hours=hours)
+        out["expires_at"] = exp.isoformat(timespec="seconds")
+        if _backfill_now() >= exp:
+            out["auto_off"] = True
+            return out
+        out["on"] = True
+        return out
     except Exception:                       # noqa: BLE001 — 讀不到就當關
-        return False
+        out["on"] = False
+        return out
+
+
+def _backfill_flag_on() -> bool:
+    return _backfill_state()["on"]
 
 
 def _backfill_earliest() -> str:
@@ -1887,23 +1927,10 @@ def _backfill_earliest() -> str:
         return "202001"
 
 
-@router.post("/api/quotations/historical", status_code=201)
-def create_historical_quotation(body: HistoricalQuotationIn, authorization: str = Header(None)):
-    from helpers import perm as _perm
-    from helpers import recycle_bin as _rb
-    user = _require_user(authorization)
-    if user.get("role") != "superadmin" or not _perm.can(user, "case.quote_backfill.create"):
-        _backfill_deny(authorization, 403, "補登歷史案件僅限最高管理者")
-    if not _backfill_flag_on():
-        _backfill_deny(authorization, 403, "補登歷史案件的開關目前是關閉的（設定中心 → 補登歷史案件）")
-    reason = (body.reason or "").strip()
-    if len(reason) < 5:
-        raise HTTPException(400, "請填補登原因（至少 5 個字）")
-
-    q = body.data
-    # 報價日期：必須是真實日期、過去月份（不含本月與未來）、不早於最早可補登月份
+def _backfill_check_date(raw):
+    """報價日期：必須是真實日期、過去月份（不含本月與未來）、不早於最早可補登月份。回 (datetime, 'YYYYMM')，否則 400。"""
     try:
-        qdate = datetime.strptime(str(q.get("quoteDate") or "").strip(), "%Y-%m-%d")
+        qdate = datetime.strptime(str(raw or "").strip(), "%Y-%m-%d")
     except ValueError:
         raise HTTPException(400, "請填正確的報價日期（YYYY-MM-DD）")
     month = qdate.strftime("%Y%m")
@@ -1912,6 +1939,78 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
     earliest = _backfill_earliest()
     if month < earliest:
         raise HTTPException(400, "報價日期早於最早可補登月份（%s）" % earliest)
+    return qdate, month
+
+
+def _next_backfill_no(conn, month, reserved):
+    """該月下一個可用單號：接續最大號＋1，跳過暫存區保留中的號碼（單號不回收）；用盡 ⇒ 409。補登與號碼預覽共用。"""
+    qno = _peek_next_no(conn, month)
+    while int(qno.rsplit("-", 1)[1]) <= 999 and qno in reserved:
+        qno = "MQ-%s-%03d" % (month, int(qno.rsplit("-", 1)[1]) + 1)
+    if int(qno.rsplit("-", 1)[1]) > 999:      # 先比整數再格式化：:03d 會把 1000 排成 4 碼
+        raise HTTPException(409, "該月份單號已用盡（001–999）")
+    return qno
+
+
+def _backfill_super_and_flag(authorization):
+    """畫面用端點的共同守門：登入＋最高管理者＋開關有效（否則 403，並說明原因）。"""
+    from helpers import perm as _perm
+    user = _require_user(authorization)
+    if user.get("role") != "superadmin" or not _perm.can(user, "case.quote_backfill.create"):
+        raise HTTPException(403, "補登歷史案件僅限最高管理者")
+    st = _backfill_state()
+    if not st["on"]:
+        raise HTTPException(403, ("補登歷史案件已超過 %d 小時自動關閉，請到設定中心重新開啟" % st["hours"]) if (st["enabled"] and st["auto_off"])
+                            else "補登歷史案件的開關目前是關閉的（設定中心 → 補登歷史案件）")
+    return user
+
+
+@router.get("/api/quotations/historical/config")
+def historical_config(authorization: str = Header(None)):
+    """畫面用：這個人現在能不能看到「補登歷史案件」入口（僅最高管理者且開關有效），以及日期範圍。非最高管理者一律回 available=false（不是 403，畫面免處理錯誤）。"""
+    from helpers import perm as _perm
+    user = _require_user(authorization)
+    st = _backfill_state()
+    is_super = user.get("role") == "superadmin" and _perm.can(user, "case.quote_backfill.create")
+    earliest = _backfill_earliest()
+    last_prev = datetime.now().replace(day=1) - timedelta(days=1)
+    return {"available": bool(is_super and st["on"]), "auto_off": bool(is_super and st["enabled"] and st["auto_off"]),
+            "expires_at": st["expires_at"] if is_super else "", "auto_off_hours": st["hours"] if is_super else None,
+            "earliest_month": int(earliest), "min_date": "%s-%s-01" % (earliest[:4], earliest[4:6]),
+            "max_date": last_prev.strftime("%Y-%m-%d")}
+
+
+@router.get("/api/quotations/historical/next-no")
+def historical_next_no(date: str = "", authorization: str = Header(None)):
+    """畫面用：依報價日期預覽將取得的單號（不保留；與送出時的派號同一個函式）。規則同補登端點。"""
+    from helpers import recycle_bin as _rb
+    _backfill_super_and_flag(authorization)
+    _qd, month = _backfill_check_date(date)
+    conn = get_db()
+    try:
+        qno = _next_backfill_no(conn, month, _rb.reserved_ids(conn, "quotation"))
+    finally:
+        conn.close()
+    return {"quote_no": qno, "month": month}
+
+
+@router.post("/api/quotations/historical", status_code=201)
+def create_historical_quotation(body: HistoricalQuotationIn, authorization: str = Header(None)):
+    from helpers import perm as _perm
+    from helpers import recycle_bin as _rb
+    user = _require_user(authorization)
+    if user.get("role") != "superadmin" or not _perm.can(user, "case.quote_backfill.create"):
+        _backfill_deny(authorization, 403, "補登歷史案件僅限最高管理者")
+    _st = _backfill_state()
+    if not _st["on"]:
+        _backfill_deny(authorization, 403, ("補登歷史案件已超過 %d 小時自動關閉，請到設定中心重新開啟" % _st["hours"]) if (_st["enabled"] and _st["auto_off"])
+                       else "補登歷史案件的開關目前是關閉的（設定中心 → 補登歷史案件）")
+    reason = (body.reason or "").strip()
+    if len(reason) < 5:
+        raise HTTPException(400, "請填補登原因（至少 5 個字）")
+
+    q = body.data
+    qdate, month = _backfill_check_date(q.get("quoteDate"))
     q["quoteDate"] = qdate.strftime("%Y-%m-%d")
 
     # 單號：選填；填了就嚴格驗證（月份 01–12、年份 2000–2099、序號 001–999、與報價日期同月），格式不對一律 400，不改派
@@ -1957,11 +2056,7 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
                 raise HTTPException(409, "單號 %s 已被使用（或在暫存區保留中），不會改派其他號碼" % client_no)
             qno = client_no          # 已被使用 ⇒ 下面 INSERT 的 IntegrityError（quote_no 唯一）轉 409，不另外 SELECT
         else:
-            qno = _peek_next_no(conn, month)
-            while int(qno.rsplit("-", 1)[1]) <= 999 and qno in reserved:
-                qno = "MQ-%s-%03d" % (month, int(qno.rsplit("-", 1)[1]) + 1)
-            if int(qno.rsplit("-", 1)[1]) > 999:      # 先比整數再格式化：:03d 會把 1000 排成 4 碼
-                raise HTTPException(409, "該月份單號已用盡（001–999）")
+            qno = _next_backfill_no(conn, month, reserved)
         q["quoteNo"] = qno
         sp_name = (q.get("salesPerson") or "").strip()
         sp_row = conn.execute("SELECT id FROM users WHERE display_name=? AND active=1 LIMIT 1", (sp_name,)).fetchone() if sp_name else None
@@ -2958,12 +3053,11 @@ def _pin_backfill_marker(q: dict, old: dict, real_approval: bool = False) -> Non
         if isinstance(old.get("historical"), dict):
             q["historical"] = old["historical"]
     elif was:
-        if not isinstance(q.get("approval"), dict):
-            q["approval"] = {}
-        q["approval"]["historical"] = True
+        rest = {k: v for k, v in (q.get("approval") if isinstance(q.get("approval"), dict) else {}).items() if k != "historical"}
         for k in ("recordedBy", "recordedByDisplay", "recordedAt", "reason", "note"):
             if k in old_ap:
-                q["approval"].setdefault(k, old_ap[k])
+                rest.setdefault(k, old_ap[k])
+        q["approval"] = dict({"historical": True}, **rest)       # historical 必須是第一個鍵：SQL 端的靜音提示靠這個序列化形狀（見 modules.case.quotations.HIST_APPROVAL_PREFIX）
         if isinstance(old.get("historical"), dict):
             q["historical"] = old["historical"]
 

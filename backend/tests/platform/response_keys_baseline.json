@@ -4553,6 +4553,7 @@
    "items[].direct_margin_pct",
    "items[].edit_count",
    "items[].edit_last",
+   "items[].historical",
    "items[].id",
    "items[].missing_invoice",
    "items[].missing_notes",
@@ -4580,6 +4581,24 @@
    "today"
   ],
   "s": 200
+ },
+ "/api/quotations/historical/config": {
+  "k": [
+   "auto_off",
+   "auto_off_hours",
+   "available",
+   "earliest_month",
+   "expires_at",
+   "max_date",
+   "min_date"
+  ],
+  "s": 200
+ },
+ "/api/quotations/historical/next-no": {
+  "k": [
+   "detail"
+  ],
+  "s": 403
  },
  "/api/quotations/last-received-bank-account": {
   "k": [

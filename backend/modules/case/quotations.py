@@ -264,6 +264,33 @@ def quote_won_month_map(conn) -> dict:
     return result
 
 
+#: 補登單（T69）的標記在 data_json 裡一律是 `"approval": {"historical": true, …`（`historical` 永遠是 approval 的第一個鍵：
+#: 補登端點這樣建、`_pin_backfill_marker` 編輯時也維持）。SQL 端只用這個前綴做**提示**（`instr`，不是 json_extract：
+#: json_extract 的 ratchet 只准變少），需要精確判斷的地方再用 `is_historical_json()` 解析。
+HIST_APPROVAL_PREFIX = '"approval": {"historical": true'
+
+
+def sql_not_historical(col: str = "data_json") -> str:
+    """SQL 片段：這一列不是補登單（用於提醒／逾期的排除；補登單 ⇒ 該列不納入）。"""
+    return "instr(%s, '%s') = 0" % (col, HIST_APPROVAL_PREFIX)
+
+
+def sql_hist_hint(col: str = "data_json", alias: str = "hist_dj") -> str:
+    """SQL 選取欄：只有疑似補登單的列才把 data_json 帶回來（其餘為 NULL），再用 `is_historical_json()` 精確判斷。"""
+    return "CASE WHEN instr(%s, '%s') > 0 THEN %s END AS %s" % (col, HIST_APPROVAL_PREFIX, col, alias)
+
+
+def is_historical_json(text) -> bool:
+    """精確判斷：data_json 的 approval.historical 是否為 True（None／壞資料 ⇒ False）。"""
+    if not text:
+        return False
+    try:
+        d = json.loads(text) if isinstance(text, (str, bytes)) else text
+        return ((d or {}).get("approval") or {}).get("historical") is True
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
 def quote_hot_fields(q: dict) -> tuple:
     """Return (deal_tag, settle_status) from a quotation data dict."""
     if not isinstance(q, dict):

@@ -550,6 +550,8 @@
 ["POST", "/api/quotations/case-activity", "case_activity_api_quotations_case_activity_post", [["header", "authorization", false]], [["application/json", ""]], []]
 ["GET", "/api/quotations/gate-matrix", "gate_matrix_api_quotations_gate_matrix_get", [["header", "authorization", false]], [], []]
 ["POST", "/api/quotations/historical", "create_historical_quotation_api_quotations_historical_post", [["header", "authorization", false]], [["application/json", "#/components/schemas/HistoricalQuotationIn"]], []]
+["GET", "/api/quotations/historical/config", "historical_config_api_quotations_historical_config_get", [["header", "authorization", false]], [], []]
+["GET", "/api/quotations/historical/next-no", "historical_next_no_api_quotations_historical_next_no_get", [["header", "authorization", false], ["query", "date", false]], [], []]
 ["GET", "/api/quotations/last-received-bank-account", "get_last_received_bank_account_api_quotations_last_received_bank_account_get", [["header", "authorization", false], ["query", "customerName", false]], [], []]
 ["POST", "/api/quotations/preview-html", "preview_quotation_html_api_quotations_preview_html_post", [["header", "authorization", false]], [["application/json", ""]], []]
 ["GET", "/api/quotations/stage-board", "stage_board_api_quotations_stage_board_get", [["header", "authorization", false], ["query", "department_id", false]], [], []]

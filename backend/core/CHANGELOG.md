@@ -2,6 +2,7 @@
 
 ## (next) — 2026-10-17 00:18（wip/t69-backfill-l0-r1；補登歷史案件 L0）
 - 設定群組（只增，預設＝今日行為）：`quote_backfill`（`enabled` 預設 0＝沒有補登入口、立即生效僅稽核；`earliest_month` 預設 202001，跨欄位檢查月份須為 01–12）。部署基準檔 `settings_deploy_baseline.json` 同步。無 L1 介面變動。
+- 設定群組 `quote_backfill` 新欄位 `auto_off_hours`（T70-1；預設 24 小時、0＝不自動關、上限 720；風險 none、立即生效並稽核；基準檔已同步）。補登開關預設仍為關。
 
 ## 1.144 — 2026-10-16（wip/t66-lp-r2；T66 清單個人偏好 L0～L2）
 - T66 L0＋L1＋L2（清單個人偏好的目錄、公司政策與個人每頁筆數，旗標 `list_prefs.enabled` 預設關）：
