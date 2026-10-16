@@ -502,8 +502,8 @@ def _charity_rate_pct():
 
 def _tot_rate_pct(tot):
     """報價單自己的公益比率（`tot.charityRatePct` 戳記）；舊單據沒有戳記＝當時是 1，**不是**目前設定。"""
-    v = (tot or {}).get("charityRatePct")
-    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 10 else 1.0
+    from modules.case import profit_guard as PG
+    return PG.doc_charity_rate_pct(tot)
 
 
 def _profit_basis(tot):

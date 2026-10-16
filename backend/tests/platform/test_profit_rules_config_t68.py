@@ -234,3 +234,27 @@ def test_legacy_quote_recompute_uses_one_percent_not_the_live_rate(monkeypatch):
     assert SA._tot_rate_pct({"charityRatePct": 2}) == 2.0
     for bad in (True, "2", -1, 11, None):
         assert SA._tot_rate_pct({"charityRatePct": bad}) == 1.0
+
+
+def test_customer_signback_recompute_keeps_the_documents_own_rate(monkeypatch):
+    """回簽（alt_sign.recompute_tot）不吃目前設定：1% 的單據在設定改成 2% 後回簽，公益金仍是 1%，戳記不被重蓋。"""
+    from modules.case import alt_sign
+    monkeypatch.setattr(SR, "get", lambda g, f, **kw: 2 if (g, f) == ("profit_rules", "charity_rate_pct") else None)
+    base = {"items": [{"qty": 1, "unitPrice": 100000, "cost": 60000}], "taxRate": 5, "overheadPct": 25,
+            "tot": {"formulaVer": 2, "overheadPct": 25}}
+    import copy
+    d1 = copy.deepcopy(base)
+    t1 = alt_sign.recompute_tot(d1)
+    assert t1["charityDonation"] == max(0, _hu(t1["directProfit"], "0.01")) and "charityRatePct" not in t1, "無戳記 ⇒ 1%，不是目前的 2%"
+    d2 = copy.deepcopy(base)
+    d2["tot"]["charityRatePct"] = 2.0
+    t2 = alt_sign.recompute_tot(d2)
+    assert t2["charityDonation"] == max(0, _hu(t2["directProfit"], "0.02")) and t2["charityRatePct"] == 2.0
+
+
+def test_plan_view_uses_the_documents_rate_when_settled(monkeypatch):
+    from modules.case import alt_options
+    monkeypatch.setattr(SR, "get", lambda g, f, **kw: 3 if (g, f) == ("profit_rules", "charity_rate_pct") else None)
+    assert alt_options.rate_of({"tot": {}}, settled=True) == 1.0
+    assert alt_options.rate_of({"tot": {"charityRatePct": 2}}, settled=True) == 2.0
+    assert alt_options.rate_of({"tot": {}}, settled=False) == 3.0, "未精算 ⇒ 目前設定"

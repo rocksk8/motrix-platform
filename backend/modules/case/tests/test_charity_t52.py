@@ -467,3 +467,17 @@ def test_client_cannot_forge_the_rate_stamp(W):
     assert c.put(URL, json={"settlement": p}, headers=h).status_code == 200
     saved = _saved_summary()
     assert "charityRatePct" not in saved and "origCharityRatePct" not in saved, "比率戳記只由伺服器蓋（用戶端值一律丟棄）"
+
+
+# ── T68 Q1 r3：已存檔單據的重算一律用單據自己的公益比率 ─────────────────────────
+def test_overhead_pct_change_keeps_the_documents_own_charity_rate(client, who, monkeypatch):
+    from helpers import profit_warning as PW
+    su, ad = who
+    qno = _v2_quote(client, su)                                           # 以預設 1% 存檔 ⇒ 無戳記
+    before = _row(qno)[0]["tot"]
+    assert "charityRatePct" not in before
+    monkeypatch.setattr(PW, "charity_rate_pct", lambda conn=None: 2.0)    # 之後設定改成 2%
+    assert client.put("/api/quotations/%s/overhead-pct" % qno, json={"pct": 20, "confirm": True}, headers=su).status_code == 200
+    after = _row(qno)[0]["tot"]
+    assert after["charityDonation"] == before["charityDonation"], "只換管銷比率：公益金不因目前設定而變"
+    assert "charityRatePct" not in after, "不重蓋戳記"

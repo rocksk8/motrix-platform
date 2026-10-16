@@ -280,8 +280,15 @@ def server_totals(q: dict, stored_tot=None) -> dict:
     return {"subtotal": _clean(subtotal), "pretax": _clean(pretax), "tax": tax, "total": _clean(pretax + tax)}
 
 
-def server_profit(q: dict, pct, ver: int, pretax=None, total=None, charity_basis=None) -> dict:
-    """依報價單內容重算利潤欄位（與 quotation-form `calcTotals` 同式同進位）。`pretax` 沒給 ⇒ 沿用 `tot.pretax`（影子比對用）。"""
+def doc_charity_rate_pct(tot) -> float:
+    """這張單據自己的公益比率（`tot.charityRatePct` 戳記）；舊單據沒有戳記＝當時是 1，**不是**目前設定。已存檔單據的任何重算都用這個。"""
+    v = (tot or {}).get("charityRatePct") if isinstance(tot, dict) else None
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 10 else 1.0
+
+
+def server_profit(q: dict, pct, ver: int, pretax=None, total=None, charity_basis=None, charity_rate_pct=None) -> dict:
+    """依報價單內容重算利潤欄位（與 quotation-form `calcTotals` 同式同進位）。`pretax` 沒給 ⇒ 沿用 `tot.pretax`（影子比對用）。
+    `charity_rate_pct`：沒給 ⇒ 目前設定（草稿存檔／新單）；**已存檔單據的重算（回簽、改管銷比率…）必須傳單據自己的比率**（`doc_charity_rate_pct`）。"""
     tot = q.get("tot") if isinstance(q.get("tot"), dict) else {}
     pretax = _num(tot.get("pretax")) if pretax is None else pretax
     total_cost = 0
@@ -290,7 +297,7 @@ def server_profit(q: dict, pct, ver: int, pretax=None, total=None, charity_basis
     input_vat = round_half_up(total_cost, 0.05)
     from helpers import profit_warning as _pw                     # T68 Q1：公益比率與管銷後備值走設定（預設 1／25＝今天）
     r = PR.quote_profit(pretax, total_cost, input_vat, [_num(q.get(k)) for k in INDIRECT_KEYS], pct, ver, total, charity_basis,
-                        _pw.charity_rate_pct(), default_pct())
+                        _pw.charity_rate_pct() if charity_rate_pct is None else charity_rate_pct, default_pct())
     return {"totalCost": total_cost, "inputVat": input_vat, "directProfit": r["directProfit"],
             "directMarginPct": round_half_up(r["directMarginPct"], 10) / 10, "adminCost": r["adminCost"],
             "charityDonation": r["charityDonation"], "totalIndirect": r["totalIndirect"],
@@ -447,8 +454,8 @@ def change_pct(conn, quote_no: str, raw_pct, user: dict, confirm=False, now: str
     tot_total = tot.get("total") if tot.get("total") is not None else server_totals(q, tot)["total"]
     q["overheadPct"] = new
     tot["overheadPct"] = new
-    tot.update(server_profit(q, new, PR.FORMULA_VER, pretax=tot.get("pretax"), total=tot_total, charity_basis=basis))
-    _stamp_charity_rate(tot)
+    tot.update(server_profit(q, new, PR.FORMULA_VER, pretax=tot.get("pretax"), total=tot_total, charity_basis=basis,
+                             charity_rate_pct=doc_charity_rate_pct(tot)))                  # 只換管銷比率：公益比率沿用這張單據自己的（不重蓋戳記、不吃目前設定）
     tot["formulaVer"] = PR.FORMULA_VER
     q["tot"] = tot
     conn.execute("UPDATE quotations SET data_json=?, net_margin_pct=?, updated_at=? WHERE quote_no=?",

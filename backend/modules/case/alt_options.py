@@ -31,22 +31,30 @@ def stamps(q: dict, settled: bool = False):
     return pct, ver, basis
 
 
-def _figures(q: dict, picks: dict, st) -> dict:
+def rate_of(q: dict, settled: bool = False) -> float:
+    """公益比率：已精算／結案（回簽也用）⇒ 單據自己的戳記（沒有＝1）；其餘 ⇒ 目前設定。"""
+    if settled:
+        return PG.doc_charity_rate_pct(q.get("tot"))
+    from helpers import profit_warning as _pw
+    return _pw.charity_rate_pct()
+
+
+def _figures(q: dict, picks: dict, st, rate=None) -> dict:
     pct, ver, basis = st
     qq = dict(q, altPicks=picks, totalsByAlt=True)          # 比較視圖永遠假設『依方案選擇』已開（單據本身沒開時它只是試算）
     t = PG.server_totals(qq, q.get("tot") if isinstance(q.get("tot"), dict) else None)
-    p = PG.server_profit(dict(qq, tot=t), pct, ver, pretax=t["pretax"], total=t["total"], charity_basis=basis)
+    p = PG.server_profit(dict(qq, tot=t), pct, ver, pretax=t["pretax"], total=t["total"], charity_basis=basis, charity_rate_pct=rate)
     out = dict(t)
     out.update(p)
     out["projectMarginPct"] = PR.project_margin(t["pretax"], p["totalCost"])["pct"]      # 專案毛利%：與詳情同一個函式
     return {k: out[k] for k in FIGURE_KEYS}
 
 
-def _figures_actual(q: dict, st) -> dict:
+def _figures_actual(q: dict, st, rate=None) -> dict:
     """單據目前實際的數字（總開關沒開 ⇒ 全部品項；開了 ⇒ 依已存選定）。"""
     pct, ver, basis = st
     t = PG.server_totals(q, q.get("tot") if isinstance(q.get("tot"), dict) else None)
-    p = PG.server_profit(dict(q, tot=t), pct, ver, pretax=t["pretax"], total=t["total"], charity_basis=basis)
+    p = PG.server_profit(dict(q, tot=t), pct, ver, pretax=t["pretax"], total=t["total"], charity_basis=basis, charity_rate_pct=rate)
     out = dict(t)
     out.update(p)
     out["projectMarginPct"] = PR.project_margin(t["pretax"], p["totalCost"])["pct"]      # 專案毛利%：與詳情同一個函式
@@ -67,6 +75,7 @@ def plan_view(q: dict, selection=None, *, settled: bool = False, combos: bool = 
     `combos`（只有 `combos=True` 才計算：`total` 組合數、`rows`（依直接毛利率高→低、最多 `combo_max` 種）、`truncated`）。"""
     groups = PG.alt_groups(q)
     st = stamps(q, settled)
+    rate = rate_of(q, settled)                                  # 已精算／結案：單據自己的公益比率；其餘：目前設定
     sel = {str(k).strip(): str(v) for k, v in (selection or {}).items()} if isinstance(selection, dict) else {}
     baseline = {}
     for g, members in groups.items():
@@ -77,13 +86,13 @@ def plan_view(q: dict, selection=None, *, settled: bool = False, combos: bool = 
     out = {
         "groups": [], "baseline": baseline, "active": active,
         "unpicked": sum(1 for g in groups if str(stored.get(g, "")) == "") if active else 0,
-        "current": _figures_actual(q, st), "formulaVer": st[1], "overheadPct": st[0], "settled": bool(settled),
+        "current": _figures_actual(q, st, rate), "formulaVer": st[1], "overheadPct": st[0], "settled": bool(settled),
     }
     for g, members in groups.items():
         opts = []
         for m in members:
             picks = dict(baseline, **{g: str(m.get("id"))})
-            opts.append(dict(_figures(q, picks, st), id=str(m.get("id")), label=_label(m)))
+            opts.append(dict(_figures(q, picks, st, rate), id=str(m.get("id")), label=_label(m)))
         out["groups"].append({"group": g, "options": opts})
     if combos:
         counts = [len(m) for m in groups.values()]
@@ -99,7 +108,7 @@ def plan_view(q: dict, selection=None, *, settled: bool = False, combos: bool = 
             rows = []
             for combo in itertools.product(*[[str(m.get("id")) for m in groups[g]] for g in names]):
                 picks = dict(zip(names, combo))
-                rows.append({"picks": picks, "figures": _figures(q, picks, st)})
+                rows.append({"picks": picks, "figures": _figures(q, picks, st, rate)})
             rows.sort(key=lambda r: (-r["figures"]["directMarginPct"], -r["figures"]["directProfit"]))
             c["truncated"] = len(rows) > cap
             c["rows"] = rows[:cap]

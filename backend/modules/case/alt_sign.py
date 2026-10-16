@@ -60,7 +60,8 @@ def recompute_tot(data: dict) -> dict:
     pct, ver, basis = alt_options.stamps(dict(data, tot=tot), settled=True)
     t = PG.server_totals(data, tot)
     tot.update(t)
-    tot.update(PG.server_profit(data, pct, ver, pretax=t["pretax"], total=t["total"], charity_basis=basis))
+    tot.update(PG.server_profit(data, pct, ver, pretax=t["pretax"], total=t["total"], charity_basis=basis,
+                                charity_rate_pct=PG.doc_charity_rate_pct(tot)))       # 回簽：公益比率沿用單據自己的戳記（沒有＝1），不吃目前設定；戳記不重蓋
     data["tot"] = tot
     return tot
 
