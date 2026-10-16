@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 from core import registry
 from db import get_db
 from helpers import _audit, _require_user, _tok
+from helpers import perm
 from modules.payroll import payslip_links as PL
 
 router = APIRouter()
@@ -19,7 +20,8 @@ def _brief(conn, dispatch_id):
 
 @router.get("/api/payslips/{slip_no}/dispatch-links")
 def list_links(slip_no: str, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module="payslip")
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.view")
     conn = get_db()
     try:
         if conn.execute("SELECT 1 FROM payslips WHERE slip_no=?", (slip_no,)).fetchone() is None:
@@ -36,7 +38,8 @@ def list_links(slip_no: str, authorization: str = Header(None)):
 
 @router.post("/api/payslips/{slip_no}/dispatch-links", status_code=201)
 def add_link(slip_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
-    user = _require_user(authorization, require_superadmin=True, module="payslip")
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.edit")
     try:
         did = int((body or {}).get("dispatchId"))
     except (TypeError, ValueError):
@@ -60,7 +63,8 @@ def add_link(slip_no: str, body: dict = Body(default={}), authorization: str = H
 
 @router.delete("/api/payslips/{slip_no}/dispatch-links/{dispatch_id}")
 def remove_link(slip_no: str, dispatch_id: int, authorization: str = Header(None)):
-    user = _require_user(authorization, require_superadmin=True, module="payslip")
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.edit")
     conn = get_db()
     try:
         try:
@@ -77,7 +81,8 @@ def remove_link(slip_no: str, dispatch_id: int, authorization: str = Header(None
 @router.get("/api/payslip-person-dispatches")
 def person_dispatches(contractor_id: int, authorization: str = Header(None)):
     """第 48 班：這位外包名冊人員被排進哪些派發（勞報單表單勾選用）。最高管理者＋勞報單模組；**不含金額**。"""
-    user = _require_user(authorization, require_superadmin=True, module="payslip")
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.view")
     fn = registry.single_provider("dispatch.by_person")
     if fn is None:
         return {"items": [], "notice": DISPATCH_MISSING}
@@ -99,7 +104,8 @@ def person_dispatches(contractor_id: int, authorization: str = Header(None)):
 def person_dispatch_roster(dispatch_id: int, authorization: str = Header(None)):
     """第 51 班：從派發頁『新增勞報單』（?dispatchId=）進來時，預填受領人用——該派發名單裡的外包名冊人員（id、姓名）。
     最高管理者＋勞報單模組；不含金額、身分證、銀行資料。派發不存在或沒有名單人員 ⇒ 空清單。"""
-    _require_user(authorization, require_superadmin=True, module="payslip")
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.view")
     fn = registry.single_provider("dispatch.brief")
     if fn is None:
         return {"persons": [], "notice": DISPATCH_MISSING}
@@ -121,7 +127,8 @@ def person_dispatch_roster(dispatch_id: int, authorization: str = Header(None)):
 def confirm_contractor(slip_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
     """第 48 班：確認舊勞報單「靠姓名推測」的外包名冊對應——把 `contractor_guess_id`（或 body.contractorId 指定的人）升格成權威的 `contractor_id`。
     只有最高管理者＋勞報單模組。已簽回／已付款／已作廢的單不給確認（升格會改變已入帳分錄的對象鍵）。單一條件式 UPDATE（競態安全）；稽核。"""
-    user = _require_user(authorization, require_superadmin=True, module="payslip")
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.edit")
     new_id = (body or {}).get("contractorId")
     conn = get_db()
     try:
