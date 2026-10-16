@@ -76,7 +76,8 @@ def test_undetermined_passes_general_api_but_refuses_output(client, boss, clerk,
     assert client.get("/api/customers", headers=clerk).status_code == 200            # 第一道放行（Q7＝C）
     for url, params in (("/api/legal-params/privacy-notice", {"purpose": "contractor"}),
                         ("/api/reports/financial/excel", {"period": "2026-08"})):
-        r = client.get(url, params=params, headers=clerk)
+        # T68：營運報表金額閘——只有營運報表模組的 clerk 會先吃 403；這一支用最高管理者驗「判定失敗 ⇒ 428」
+        r = client.get(url, params=params, headers=boss if url.startswith("/api/reports/") else clerk)
         assert r.status_code == 428, (url, r.status_code, r.text[:200])
         d = r.json()
         assert d["code"] == cs.CODE_UNDETERMINED and d["detail"] == cs.MSG_UNDETERMINED, d

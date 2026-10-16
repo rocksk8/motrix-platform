@@ -48,7 +48,7 @@ def test_frontend_label_helpers_exist_with_the_same_strings():
     for rel, fn in (("frontend/js/case-management-fin.js", "caseSettleCharityLabel"), ("frontend/js/reports.js", "stlCharityLabel")):
         s = _read(rel)
         i = s.index(fn + "(sm, orig)")
-        body = s[i:i + 420]
+        body = s[i:i + 760]   # T68 Q1：公益比率看單據戳記，函式本體比原本長
         assert NEW in body and OLD in body and "origCharityBasis" in body and "charityBasis" in body, rel
     st = _page("settlement.html")
     assert re.search(r"charityLbl\(sm, orig\)", st) and NEW in st and OLD in st
