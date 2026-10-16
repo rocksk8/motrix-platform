@@ -12,6 +12,7 @@ from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm
                      require_any_module, _get_setting, _set_setting)
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import financial_mask as _FM
+from helpers.approval_queue import approval_json_of
 from helpers import row_access
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
@@ -568,7 +569,7 @@ def dashboard_funnel(authorization: str = Header(None)):
             SELECT quote_no, status, customer_name, total, quote_date, sales_person,
                    COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
                    json_extract(data_json,'$.validDays') AS valid_days,
-                   json_extract(data_json,'$.approval') AS approval_json
+                   data_json AS data_json_raw
             FROM quotations
             WHERE status NOT IN ('草稿')
             ORDER BY quote_date DESC
@@ -587,8 +588,9 @@ def dashboard_funnel(authorization: str = Header(None)):
     def _total_of(r):
         """V1：沒有報價金額可視權限、又不是送審人／簽核鏈上的人 ⇒ 總額不回（null）。"""
         if not money_view:
+            # 逐筆 Python 解析（json_extract 只准變少：壞的一筆不能讓整個查詢丟例外）；解析不了 ⇒ 當成沒有簽核資訊 ⇒ 遮蔽（安全側）
             try:
-                appr = json.loads(r["approval_json"] or "{}")
+                appr = json.loads(approval_json_of(r["data_json_raw"], "quotation", r["quote_no"]) or "{}")
             except Exception:
                 appr = {}
             if not _quote_money_ok(u, appr, money_view):
