@@ -762,7 +762,91 @@ if (typeof module !== 'undefined' && module.exports) {
       a.textContent = '\u2190 \u7cfb\u7d71'
       a.style.cssText = 'display:inline-block;margin:0 0 10px;font-size:12px;color:var(--text-secondary);text-decoration:none'
       host.insertBefore(a, host.firstChild)
+      _systemRail(a)
     } catch (e) { /* 麵包屑是附帶功能：失敗不影響頁面 */ }
+  }
+
+  // 系統中心左側分類欄（T67）：系統群組底下的子頁保留系統中心的『分類清單』，目前分類反白；點分類 ⇒ 回系統中心並預選該分類（#分類鍵）。
+  // 分類／數量全來自 /api/system-hub（與系統中心同一個來源、伺服器已依權限過濾），這裡不寫死任何分類。
+  // 窄螢幕（≤ 900px）不畫欄，改把麵包屑變成『系統 › 分類』並連回該分類。被嵌入／預覽的頁面在檔頭就整支略過，不會走到這裡。
+  var RAIL_W = 208, RAIL_NARROW = 900, RAIL_LAST = 'motrix_system_hub_group'
+  function _pageOf(h) { return String(h || '').split('#')[0].split('?')[0].split('/').pop() }
+  // 這一頁屬於哪個分類：href 檔名等於本頁的卡片；多個分類都有它 ⇒ 先取帶 ? 且完整相符的，再取最近在系統中心選的分類，最後取第一個。
+  function _railCurrent(sections) {
+    var last = ''
+    try { last = sessionStorage.getItem(RAIL_LAST) || '' } catch (e) { last = '' }
+    var qs = window.location.search
+    var hits = []
+    ;(sections || []).forEach(function (sec) {
+      ;(sec.items || []).forEach(function (it) {
+        if (it.href && _pageOf(it.href) === file) hits.push({ key: sec.key, exact: !!qs && String(it.href).indexOf(qs) > -1 })
+      })
+    })
+    if (!hits.length) return ''
+    var ex = hits.filter(function (h) { return h.exact })
+    if (ex.length) return ex[0].key
+    var lastHit = hits.filter(function (h) { return h.key === last })
+    return (lastHit[0] || hits[0]).key
+  }
+  function _railData(cb) {
+    var CK = 'motrix_sys_rail_cache'
+    try {
+      var c = JSON.parse(sessionStorage.getItem(CK) || 'null')
+      if (c && c.tk === s.token && Date.now() - c.t < 60000 && Array.isArray(c.sections)) { cb(c.sections); return }
+    } catch (e) { /* 快取壞了就重抓 */ }
+    fetch('/api/system-hub', { headers: { Authorization: 'Bearer ' + s.token } })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
+      .then(function (d) {
+        var secs = ((d && d.sections) || []).map(function (x) {
+          return { key: x.key, title: x.title, count: x.count, pending: !!x.pending, items: (x.items || []).map(function (i) { return { href: i.href } }) }
+        })
+        try { sessionStorage.setItem(CK, JSON.stringify({ tk: s.token, t: Date.now(), sections: secs })) } catch (e) { /* 無痕：不快取 */ }
+        cb(secs)
+      })
+      .catch(function () { /* 抓不到 ⇒ 維持原本的『← 系統』麵包屑 */ })
+  }
+  function _systemRail(crumb) {
+    if (document.getElementById('sys-rail') || !s.token || document.body.hasAttribute('data-no-sys-rail')) return // 整頁寬度即功能的編輯器頁（設計器／模組產生器）在 <body> 標 data-no-sys-rail 自行略過
+    _railData(function (sections) {
+      try {
+        if (!sections.length || document.getElementById('sys-rail')) return
+        var cur = _railCurrent(sections)
+        var hubUrl = pg('system-hub.html')
+        var curSec = sections.filter(function (x) { return x.key === cur })[0]
+        if (!document.getElementById('sys-rail-css')) {
+          var st = document.createElement('style')
+          st.id = 'sys-rail-css'
+          st.textContent =
+            '#sys-rail{position:fixed;left:var(--sidebar-w,0px);top:var(--topbar-h,56px);bottom:0;width:' + RAIL_W + 'px;box-sizing:border-box;overflow-y:auto;padding:12px 10px;background:var(--surface,#fff);border-right:1px solid var(--border-light,#e5e7eb);z-index:30;font-family:var(--font-zh,inherit)}' +
+            '#sys-rail .sr-t{display:block;padding:6px 8px 10px;font-size:13px;font-weight:800;color:var(--text-primary,#111);text-decoration:none}' +
+            '#sys-rail a.sr-i{display:flex;align-items:center;gap:8px;padding:8px 10px;margin:1px 0;border-left:3px solid transparent;border-radius:var(--radius,6px);font-size:13px;color:var(--text-primary,#111);text-decoration:none}' +
+            '#sys-rail a.sr-i:hover{background:var(--surface-sunken,#f3f4f6)}' +
+            '#sys-rail a.sr-i[aria-current="page"]{background:var(--accent-light,#eef2ff);border-left-color:var(--accent,#4f46e5);color:var(--accent,#4f46e5);font-weight:700}' +
+            '#sys-rail .sr-c{margin-left:auto;font-size:11px;color:var(--text-dim,#9ca3af)}' +
+            '#sys-rail .sr-d{width:8px;height:8px;border-radius:50%;background:var(--tone-warning-fg,#d97706);flex:0 0 8px}' +
+            '#sys-crumb .sr-n{display:none}' +
+            '@media (min-width:' + (RAIL_NARROW + 1) + 'px){body.sys-rail-on{padding-left:' + RAIL_W + 'px}body.sys-rail-on #sys-crumb{display:none}}' +
+            '@media (max-width:' + RAIL_NARROW + 'px){#sys-rail{display:none}#sys-crumb .sr-w{display:none}#sys-crumb .sr-n{display:inline}}'
+          document.head.appendChild(st)
+        }
+        var nav = document.createElement('nav')
+        nav.id = 'sys-rail'
+        nav.setAttribute('aria-label', '系統分類')
+        nav.setAttribute('data-testid', 'sys-rail')
+        var html = '<a class="sr-t" href="' + esc(hubUrl) + '">系統</a>'
+        sections.forEach(function (x) {
+          html += '<a class="sr-i" data-testid="sys-rail-' + esc(x.key) + '" href="' + esc(hubUrl + '#' + encodeURIComponent(x.key)) + '"' + (x.key === cur ? ' aria-current="page"' : '') + '>' +
+            '<span>' + esc(x.title) + '</span>' + (x.pending ? '<i class="sr-d" role="status" aria-label="有待處理項目"></i>' : '') +
+            '<span class="sr-c">' + esc(x.count) + '</span></a>'
+        })
+        nav.innerHTML = html
+        document.body.appendChild(nav)
+        document.body.classList.add('sys-rail-on')
+        // 窄螢幕的麵包屑：『系統 › 分類』，連回該分類；找不到所屬分類 ⇒ 維持『← 系統』
+        crumb.innerHTML = '<span class="sr-w">← 系統</span><span class="sr-n">' + (curSec ? '系統 › ' + esc(curSec.title) : '← 系統') + '</span>'
+        if (curSec) crumb.href = hubUrl + '#' + encodeURIComponent(curSec.key)
+      } catch (e) { /* 分類欄是附帶功能：失敗不影響頁面 */ }
+    })
   }
 
   function buildSidebar() {

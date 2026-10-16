@@ -521,16 +521,38 @@ def latest_report(folder: Path):
 
 def parse_summary(text: str):
     d = {}
-    m = re.search(r"::RESULT::\s*(.*)", text)
+    m = re.search(r"::RESULT::[^\n]*", text)
     if m:
-        d.update(dict(kv.split("=", 1) for kv in m.group(1).split() if "=" in kv))
-    m = re.search(r"前後 commit：([0-9a-f]{7,40})\s*[→\->]+\s*([0-9a-f]{7,40})", text)
+        # 只取 key=token；token 遇到第一個非 token 字元即止（"exit=0`（log：…" 讀成 0）
+        d.update(dict(re.findall(r"(\w+)=([A-Za-z0-9_.\-]+)", m.group(0))))
+    h = r"([0-9a-f]{7,40})"
+    m = (re.search(r"前後 commit：" + h + r"\s*[→\->]+\s*" + h, text)
+         or re.search(r"前 commit\s*" + h + r"\s*[→\->]+\s*後\s*" + h, text)
+         or re.search(r"^﻿?#[^\n]*?\b" + h + r"\s*[→\->]+\s*" + h + r"\b", text, re.M))
     if m:
         d["old_commit"], d["new_commit"] = m.group(1), m.group(2)
     m = re.search(r"api_version[^0-9]*(\d{4}-\d{2}-\d{2}[a-z]{0,2})", text)
     if m:
         d["api_version"] = m.group(1)
     return d
+
+
+def _check_commit_baseline(root: Path, new: str, baseline_ref: str):
+    """V5.2：批次 commit 是基準的祖先（或等於）且 tag prod/<sha8> 指向它；不要求基準尖端＝該批 commit（基準會隨後續班前進）。"""
+    title = "部署的 commit 在基準 %s 之內、tag prod/<sha8> 指向它" % baseline_ref
+    if not re.fullmatch(r"[0-9a-f]{7,40}", new or ""):
+        return Result("V5.2", title, FAIL, "摘要裡解析不到部署 commit（%r）" % new)
+    r = _git(root, "rev-parse", "--verify", new + "^{commit}")
+    full = r.stdout.strip() if r.returncode == 0 else ""
+    rb = _git(root, "rev-parse", "--verify", baseline_ref + "^{commit}")
+    base = rb.stdout.strip() if rb.returncode == 0 else ""
+    if not full or not base:
+        return Result("V5.2", title, FAIL, "部署 commit 解析=%r；基準解析=%r（%s）" % (full[:12], base[:12], (r.stderr or rb.stderr).strip()[:80]))
+    anc = _git(root, "merge-base", "--is-ancestor", full, base).returncode == 0
+    rt = _git(root, "rev-parse", "--verify", "refs/tags/prod/%s^{commit}" % full[:8])
+    tag = rt.stdout.strip() if rt.returncode == 0 else ""
+    return Result("V5.2", title, PASS if (anc and tag == full) else FAIL,
+                  "部署 %s；基準 %s；是祖先=%s；tag prod/%s→%s" % (full[:12], base[:12], anc, full[:8], tag[:12] or "（無）"))
 
 
 def check_deployed(root: Path, prod_report: Path, baseline_ref="origin/platform"):
@@ -545,13 +567,7 @@ def check_deployed(root: Path, prod_report: Path, baseline_ref="origin/platform"
     out.append(Result("V5.1", "最新套用結果成功且服務在（%s）" % f.parent.name, PASS if ok_run else FAIL,
                       "status=%s service=%s exit=%s rolled_back=%s" % (s.get("status"), s.get("service"), s.get("exit"), s.get("rolled_back"))))
     new = s.get("new_commit", "")
-    r = _git(root, "rev-parse", "--verify", baseline_ref + "^{commit}")
-    base = r.stdout.strip() if r.returncode == 0 else ""
-    if not new or not base:
-        out.append(Result("V5.2", "部署的 commit ＝ 基準 %s" % baseline_ref, FAIL, "部署 commit=%r；基準解析=%r（%s）" % (new, base, r.stderr.strip()[:80])))
-    else:
-        same = base.startswith(new) or new.startswith(base)
-        out.append(Result("V5.2", "部署的 commit ＝ 基準 %s" % baseline_ref, PASS if same else FAIL, "部署 %s；基準 %s" % (new[:12], base[:12])))
+    out.append(_check_commit_baseline(root, new, baseline_ref))
     try:
         manifest = json.loads(_read(root / "backend/version_manifest.json"))
         latest = latest_manifest_version(manifest)

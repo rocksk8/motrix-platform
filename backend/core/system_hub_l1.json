@@ -79,14 +79,13 @@
    "id": "permission-matrix",
    "section": "identity",
    "title": "權限設定",
-   "desc": "角色 × 模組 × 動作的矩陣檢視與調整（設計中）",
+   "desc": "角色 × 功能 × 動作的矩陣檢視：誰能做什麼、為什麼",
    "impact": "影響：調整後，相關人員能看到與能做的事會立刻改變。",
    "href": "permission-matrix.html",
    "perm": "superadmin",
    "order": 30,
    "keywords": "權限 矩陣 授權 角色",
-   "icon": "shield",
-   "planned": true
+   "icon": "shield"
   },
   {
    "id": "org-structure",
