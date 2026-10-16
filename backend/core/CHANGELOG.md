@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-17（wip/t68-labor-dropdown-r2；T68 A4 勞報單選派發下拉與選項清單）
+## (next) — 2026-10-17（wip/t68-labor-dropdown-r3；T68 A4 勞報單選派發下拉與選項清單）
 - 新設定群組 `payslip_dispatch_picker`（`page_size` 10–100 預設 30＝上線前的程式常數；風險 ops、立即生效；只影響「選派發」下拉一次載入幾筆，不改誰看得到哪些派發）；`settings_deploy_baseline.json` 已同步。
 - 選項清單新增 4 組（`helpers/option_lists.py` 預設值＝今日畫面上寫死的選項）：`payslip_nationality`（國籍）與 `payslip_income_type`（所得類別）為 **closed**——只能改顯示名稱，不能新增、停用，代碼不變所以扣繳判斷不變；`payslip_payment_method`（付款方式）與 `payslip_income_subtype`（執行業務細項，僅建議值）為開放清單。
 - L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.settings_groups_payslip_picker`（無公開介面；載入時由 `settings_groups` 檔尾兩行登錄群組）。`helpers.option_lists` 只增資料項，函式簽章不變。
