@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>權限設定 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!--
+    權限設定（L2 模組 permmatrix；T67 PM-S2 唯讀檢視）：角色 × 功能 × 動作的矩陣、某人的有效權限與理由、待生效清單、版本紀錄。
+    - 只有最高管理者看得到（選單 perm=superadmin；所有 /api/permmatrix 端點也是）。
+    - 格子內容全部來自各模組的能力宣告：沒宣告就沒有格子；還沒接上實際端點的格子標「未接入」。畫面不顯示能力代碼，只顯示中文名稱與一句話說明。
+    - 本版只能看，不能改；編輯（勾選、個人允許／禁止、復原）在 PM-S3。
+  -->
+  <style>
+    .pm-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 24px 32px 60px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .pm-wrap { max-width: 1280px; }
+    .pm-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0; }
+    .pm-tab { padding: 6px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; cursor: pointer; font-size: 13px; font-family: inherit; }
+    .pm-tab.on { background: var(--border-light); font-weight: 600; }
+    .pm-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin: 10px 0; font-size: 13px; background: #fff; }
+    .pm-err { padding: 8px 12px; border-radius: var(--radius); background: #fee2e2; color: #b91c1c; font-size: 13px; margin: 8px 0; }
+    .pm-note { padding: 8px 12px; border-radius: var(--radius); background: #fef3c7; color: #92400e; font-size: 13px; margin: 8px 0; }
+    table.pm-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.pm-t th, table.pm-t td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border-light); vertical-align: top; }
+    table.pm-t td.c, table.pm-t th.c { text-align: center; }
+    .pm-tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: var(--border-light); }
+    .pm-tag.hi { background: #fee2e2; color: #b91c1c; }
+    .pm-tag.off { background: #e5e7eb; color: #6b7280; }
+    .pm-sub { color: var(--text-secondary); font-size: 12px; }
+    .pm-chg { color: #6d28d9; font-size: 11px; }
+    select.pm-sel { padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; font-family: inherit; background: #fff; }
+    @media (max-width: 900px) { .pm-main { margin-left: 0; padding: 16px; } .pm-scroll { overflow-x: auto; } }
+  </style>
+</head>
+<body x-data="permMatrixPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="pm-main">
+    <div class="pm-wrap">
+      <div class="pg">
+        <div class="pg__l">
+          <div class="pg__eyebrow">系統</div>
+          <h1 class="pg__t">權限設定</h1>
+          <p class="pg__s">看每個角色、每個人能做哪些事，以及為什麼。只有最高管理者看得到。目前只能檢視，不能修改。</p>
+        </div>
+      </div>
+
+      <div class="pm-err" data-testid="pm-error" x-show="err" x-text="err"></div>
+
+      <div class="pm-tabs">
+        <template x-for="t in tabs" :key="t.id">
+          <button class="pm-tab" :class="{ on: tab === t.id }" :data-testid="'pm-tab-' + t.id" @click="go(t.id)" x-text="t.label"></button>
+        </template>
+      </div>
+
+      <section x-show="tab === 'matrix'" data-testid="pm-matrix">
+        <div class="pm-note" x-show="m && !m.caps.length" data-testid="pm-empty">目前還沒有任何功能宣告可調整的權限項目；各功能接入後會出現在這裡。</div>
+        <div class="pm-sub" x-show="m && m.caps.length">最高管理者永遠可以做所有事，不列在表中。標「已調整」的格子與預設不同。標「未接入」的項目還沒有實際生效。</div>
+        <template x-for="g in groups()" :key="g.name">
+          <div class="pm-scroll">
+            <table class="pm-t" style="margin-top:12px">
+              <thead><tr><th x-text="g.name"></th><template x-for="r in m.roles" :key="r.role"><th class="c" x-text="r.label"></th></template></tr></thead>
+              <tbody>
+                <template x-for="c in g.caps" :key="c.key">
+                  <tr :data-testid="'pm-row-' + c.key">
+                    <td>
+                      <b x-text="c.label"></b>
+                      <span class="pm-tag hi" x-show="c.risk === 'high'">高風險</span>
+                      <span class="pm-tag off" x-show="!c.wired">未接入</span>
+                      <div class="pm-sub" x-text="c.desc"></div>
+                    </td>
+                    <template x-for="r in m.roles" :key="r.role">
+                      <td class="c">
+                        <span x-text="c.cells[r.role].granted ? '✓' : '—'"></span>
+                        <div class="pm-chg" x-show="c.cells[r.role].changed">已調整</div>
+                      </td>
+                    </template>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </template>
+      </section>
+
+      <section x-show="tab === 'effective'" data-testid="pm-effective">
+        <select class="pm-sel" x-model="uid" @change="loadEffective()" data-testid="pm-user-select">
+          <option value="">選擇使用者…</option>
+          <template x-for="u in users" :key="u.id"><option :value="u.id" x-text="u.name + '（' + u.roleLabel + '）'"></option></template>
+        </select>
+        <div class="pm-card" x-show="eff">
+          <b x-text="eff && eff.user.name"></b> <span class="pm-sub" x-text="eff && eff.user.roleLabel"></span>
+          <table class="pm-t" style="margin-top:8px">
+            <thead><tr><th>項目</th><th>能不能做</th><th>為什麼</th></tr></thead>
+            <tbody>
+              <template x-for="c in (eff ? eff.caps : [])" :key="c.key">
+                <tr><td x-text="c.label"></td><td x-text="c.allowed ? '可以' : '不行'"></td><td class="pm-sub" x-text="c.why"></td></tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        <h3 style="margin-top:18px">目前的個人調整</h3>
+        <div class="pm-sub" x-show="!hasOverrides()">沒有任何個人調整。</div>
+        <template x-for="u in users.filter(x => x.overrides.length)" :key="u.id">
+          <div class="pm-card">
+            <b x-text="u.name"></b>
+            <template x-for="o in u.overrides" :key="o.key">
+              <div class="pm-sub" x-text="o.label + '：' + (o.effect === 'allow' ? '個別允許' : '個別禁止') + (o.reason ? '（' + o.reason + '）' : '')"></div>
+            </template>
+          </div>
+        </template>
+      </section>
+
+      <section x-show="tab === 'pending'" data-testid="pm-pending">
+        <div class="pm-sub" x-show="!pending.length">目前沒有待生效的變更。</div>
+        <template x-for="p in pending" :key="p.id">
+          <div class="pm-card" :data-testid="'pm-pending-' + p.id">
+            <b x-text="'變更 #' + p.id"></b>
+            <div x-text="'申請人：' + p.requested_by + '　預定生效：' + (p.effective_at || '').slice(0, 16).replace('T', ' ')"></div>
+            <div class="pm-sub" x-text="'原因：' + (p.reason || '—') + '　核准 ' + p.approvals.length + '／' + p.approvalsRequired"></div>
+          </div>
+        </template>
+      </section>
+
+      <section x-show="tab === 'versions'" data-testid="pm-versions">
+        <div class="pm-sub" x-show="!versions.length">還沒有任何調整紀錄。</div>
+        <table class="pm-t" x-show="versions.length">
+          <thead><tr><th>時間</th><th>操作者</th><th>原因</th></tr></thead>
+          <tbody>
+            <template x-for="v in versions" :key="v.id">
+              <tr><td x-text="(v.created_at || '').slice(0, 16).replace('T', ' ')"></td><td x-text="v.created_by"></td><td x-text="v.reason || '—'"></td></tr>
+            </template>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    function permMatrixPage() {
+      return {
+        _initDone: false,
+        tab: 'matrix', err: '', m: null, users: [], uid: '', eff: null, pending: [], versions: [],
+        tabs: [{ id: 'matrix', label: '角色與功能' }, { id: 'effective', label: '個人' }, { id: 'pending', label: '待生效' }, { id: 'versions', label: '調整紀錄' }],
+        _hdr() {
+          let s = {}
+          try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {}
+          return { Authorization: 'Bearer ' + (s.token || ''), 'Content-Type': 'application/json' }
+        },
+        async _json(url, opt) {
+          const r = await fetch(url, Object.assign({ headers: this._hdr() }, opt || {}))
+          const d = await r.json().catch(() => null)
+          if (!r.ok) throw new Error((d && d.detail) ? (typeof d.detail === 'string' ? d.detail : JSON.stringify(d.detail)) : ('失敗（' + r.status + '）'))
+          return d
+        },
+        init() {
+          if (this._initDone) return
+          this._initDone = true
+          this.go('matrix')
+        },
+        async go(t) {
+          this.tab = t; this.err = ''
+          try {
+            if (t === 'matrix') this.m = await this._json('/api/permmatrix/matrix')
+            else if (t === 'effective') this.users = (await this._json('/api/permmatrix/users')).users
+            else if (t === 'pending') this.pending = (await this._json('/api/permmatrix/pending')).items
+            else if (t === 'versions') this.versions = (await this._json('/api/permmatrix/versions')).items
+          } catch (e) { this.err = String(e.message || e) }
+        },
+        groups() {
+          const out = [], idx = {}
+          for (const c of (this.m ? this.m.caps : [])) {
+            const name = c.unitLabel
+            if (!(name in idx)) { idx[name] = out.length; out.push({ name, caps: [] }) }
+            out[idx[name]].caps.push(c)
+          }
+          return out
+        },
+        hasOverrides() { return this.users.some(u => u.overrides.length) },
+        async loadEffective() {
+          this.eff = null
+          if (!this.uid) return
+          try { this.eff = await this._json('/api/permmatrix/users/' + this.uid + '/effective') } catch (e) { this.err = String(e.message || e) }
+        },
+      }
+    }
+  </script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/ui.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

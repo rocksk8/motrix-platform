@@ -10,7 +10,8 @@ from core import source_tree
 WRITE_FUNCS = {"set_role_cap", "set_user_override", "clear_user_override", "create_delegation", "revoke_delegation",
                "restore_version", "undo_last_change", "cancel_pending", "approve_pending", "activate_due", "kick_activation"}
 OWNER = "modules/permmatrix/service.py"       # 定義處與它自己的內部呼叫（restore 內部用 set_*、load_matrix 啟動背景轉態）
-OWN_PACKAGE = {OWNER, "modules/permmatrix/__init__.py"}      # 模組宣告檔：匯入 service 登記提供者（只取 load_matrix）
+#: 模組自己的檔案：宣告檔（登記提供者，只取 load_matrix）、PM-S2 起的端點層 api.py 與唯讀檢視 views.py。其他產品碼一律不得取用 service。
+OWN_PACKAGE = {OWNER, "modules/permmatrix/__init__.py", "modules/permmatrix/api.py", "modules/permmatrix/views.py"}
 PKG = "modules.permmatrix"
 
 
@@ -155,9 +156,20 @@ def test_no_product_code_calls_the_permmatrix_write_functions():
     assert not bad, "P0 寫入函式是過渡實作，帳本接上前不得有人呼叫（SPEC PMX14）：\n  " + "\n  ".join(bad)
 
 
-def test_permmatrix_module_declares_only_the_status_probe_route():
-    """1.0.2：只有唯讀狀態探針（D7 要求 provides.probes）；沒有任何寫入端點。"""
+def test_views_module_is_read_only():
+    """PM-S2：`views.py` 只讀——不得出現任何寫入函式名（守門放行它取用 service 的前提）。"""
+    src = (Path(__file__).resolve().parents[1] / "views.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    names = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)} | {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    assert not (names & WRITE_FUNCS), names & WRITE_FUNCS
+
+
+def test_permmatrix_module_declares_only_read_routes_until_pm_s3():
+    """PM-S2：狀態探針＋唯讀檢視端點；沒有任何寫入端點（寫入端點屬 PM-S3，屆時改這份清單並走寫入端點稽核）。"""
     import modules.permmatrix as PM
     assert len(PM.MODULE.routers) == 1
-    routes = [(sorted(r.methods), r.path) for r in PM.MODULE.routers[0].routes]
-    assert routes == [(["GET"], "/api/permmatrix/status")]
+    routes = sorted((m, r.path) for r in PM.MODULE.routers[0].routes for m in r.methods)
+    assert all(m == "GET" for m, _ in routes), routes
+    assert [p for _, p in routes] == sorted([
+        "/api/permmatrix/status", "/api/permmatrix/matrix", "/api/permmatrix/users", "/api/permmatrix/users/{user_id}/effective",
+        "/api/permmatrix/pending", "/api/permmatrix/versions", "/api/permmatrix/delegations"])

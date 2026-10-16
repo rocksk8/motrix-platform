@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 876,
-  "endpoints_api": 872,
+  "endpoints_total": 882,
+  "endpoints_api": 878,
   "write_total": 473,
   "write_api": 473,
-  "get_api": 399,
-  "distinct_paths_api": 736,
+  "get_api": 405,
+  "distinct_paths_api": 742,
   "write_with_body_api": 345,
   "write_with_path_param_api": 344
  },
@@ -1508,7 +1508,37 @@
    "pp": 2,
    "body": false
   },
+  "GET /api/permmatrix/delegations": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/permmatrix/matrix": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/permmatrix/pending": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/permmatrix/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/permmatrix/users": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/permmatrix/users/{user_id}/effective": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/permmatrix/versions": {
    "w": false,
    "pp": 0,
    "body": false
