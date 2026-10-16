@@ -977,7 +977,9 @@
    "units": [
     "mod:permmatrix/__init__",
     "mod:permmatrix/api",
-    "mod:permmatrix/service"
+    "mod:permmatrix/service",
+    "mod:permmatrix/views",
+    "page:pages/permission-matrix.html"
    ],
    "tables": [
     "perm_delegations",

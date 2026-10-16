@@ -1,5 +1,11 @@
 # 薪資獎金 更新紀錄
 
+## 1.2.21 — 2026-10-16（train/t67-int；T68 PM-S1 勞報單）
+- 新增勞報單的權限能力宣告（`module.json` `capabilities`，6 項：`payroll.payslip.view｜create｜edit｜export｜void｜attach`）；`legacy` ＝ 今天的閘（最高管理者或持有『勞報單』功能勾選），種子矩陣不給任何角色預設勾選 ⇒ 行為與今天逐位元相同。
+- `api/payslips.py`（14 支）與 `api/payslip_links.py`（6 支）的第一道閘由 `_require_user(…, module="payslip")` 改為 `_require_user(authorization)` ＋ `perm.require(user, <能力鍵>)`；本體不動。被擋時的 403 訊息改為『權限不足：需要「…」』（狀態碼不變）。
+- 刻意不接：送審／刪除／核准／退回（只有最高管理者；核准／退回本體再檢查 `role==superadmin`）、付款與出納（隨財務模式 D5）、獎金、銀行帳號（資料範圍規則）。見 `docs/platform/plans/T68-PMS1-STEP-NOTES.md` 第 7 節。
+- 測試：`test_payslip_perm_wiring_t68.py`（結構＋純函式等價）、`test_payslip_perm_wiring_http_t68.py`（HTTP 等價關卡，整合者閘門跑）。
+
 
 ## 1.2.20 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/payslips.html`、`payslip-form.html`、`bonus.html`／`js/bonus.js`、`bonus-corrections.html` 的金額顯示改呼叫 `MotrixFormat.num()`（預設輸出逐字相同）。

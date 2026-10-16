@@ -27,6 +27,12 @@
   ],
   "s": 200
  },
+ "DELETE /api/permmatrix/user-override": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "POST /api/notify-actions/{key}/preview": {
   "k": [
    "classification",
@@ -69,6 +75,54 @@
    "warnings"
   ],
   "s": 200
+ },
+ "POST /api/permmatrix/pending/{pid}/approve": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "POST /api/permmatrix/pending/{pid}/cancel": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "POST /api/permmatrix/role-cap": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/permmatrix/role-cap/preview": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/permmatrix/undo": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/permmatrix/user-override": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/permmatrix/user-override/preview": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "POST /api/permmatrix/versions/{version_id}/restore": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
  },
  "POST /api/quotations/stage-templates/preview": {
   "k": [

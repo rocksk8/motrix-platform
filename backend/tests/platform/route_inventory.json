@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 876,
-  "endpoints_api": 872,
-  "write_total": 473,
-  "write_api": 473,
-  "get_api": 399,
-  "distinct_paths_api": 736,
-  "write_with_body_api": 345,
-  "write_with_path_param_api": 344
+  "endpoints_total": 891,
+  "endpoints_api": 887,
+  "write_total": 482,
+  "write_api": 482,
+  "get_api": 405,
+  "distinct_paths_api": 750,
+  "write_with_body_api": 352,
+  "write_with_path_param_api": 347
  },
  "select_star": {
   "modules": 274,
@@ -181,6 +181,11 @@
   "DELETE /api/payslips/{slip_no}/signed-files/{file_id}": {
    "w": true,
    "pp": 2,
+   "body": false
+  },
+  "DELETE /api/permmatrix/user-override": {
+   "w": true,
+   "pp": 0,
    "body": false
   },
   "DELETE /api/quotations/{no}/materials/{idx}/files/{file_id}": {
@@ -1508,7 +1513,37 @@
    "pp": 2,
    "body": false
   },
+  "GET /api/permmatrix/delegations": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/permmatrix/matrix": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/permmatrix/pending": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/permmatrix/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/permmatrix/users": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/permmatrix/users/{user_id}/effective": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/permmatrix/versions": {
    "w": false,
    "pp": 0,
    "body": false
@@ -3504,6 +3539,46 @@
    "body": false
   },
   "POST /api/payslips/{slip_no}/void": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/permmatrix/pending/{pid}/approve": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/permmatrix/pending/{pid}/cancel": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/permmatrix/role-cap": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/permmatrix/role-cap/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/permmatrix/undo": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
+  "POST /api/permmatrix/user-override": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/permmatrix/user-override/preview": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/permmatrix/versions/{version_id}/restore": {
    "w": true,
    "pp": 1,
    "body": true

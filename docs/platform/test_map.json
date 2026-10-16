@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1427,
+  "tests": 1431,
   "unmapped": 13,
   "kinds": {
-   "api": 787,
+   "api": 791,
    "e2e": 311,
    "audit": 193,
    "unit": 136
   },
-  "routes": 857
+  "routes": 872
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -12281,6 +12281,62 @@
    },
    "module": "payroll"
   },
+  "backend/modules/payroll/tests/test_payslip_perm_wiring_http_t68.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "mod:payroll/api/payslip_links",
+    "mod:payroll/api/payslips"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslip_links.py",
+     "backend/modules/payroll/api/payslips.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_payslip_perm_wiring_t68.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "helper:module_registry",
+    "helper:perm",
+    "mod:permmatrix/api",
+    "plat:__init__",
+    "plat:capabilities"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/capabilities.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/module_registry.py",
+     "backend/helpers/perm.py"
+    ],
+    "api": [
+     "backend/modules/permmatrix/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
   "backend/modules/payroll/tests/test_payslip_person_link_repair_t48.py": {
    "kind": "api",
    "units": [
@@ -12779,6 +12835,94 @@
    "login_fixture": true,
    "module": "permmatrix"
   },
+  "backend/modules/permmatrix/tests/test_permmatrix_s2_views.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/permmatrix/",
+    "file:backend/core/system_hub_l1.json",
+    "file:backend/helpers/__init__.py",
+    "file:backend/modules/permmatrix/module.json",
+    "helper:auth",
+    "helper:perm",
+    "mod:permmatrix/__init__",
+    "mod:permmatrix/api",
+    "mod:permmatrix/service",
+    "page:pages/permission-matrix.html",
+    "plat:__init__",
+    "plat:capabilities",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/capabilities.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/perm.py",
+     "backend/modules/permmatrix/__init__.py",
+     "backend/modules/permmatrix/service.py"
+    ],
+    "api": [
+     "backend/modules/permmatrix/api.py"
+    ],
+    "page": [
+     "frontend/pages/permission-matrix.html"
+    ],
+    "path": [
+     "backend/core/system_hub_l1.json",
+     "backend/modules/permmatrix/module.json"
+    ],
+    "module_dir": [
+     "backend/modules/permmatrix/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "permmatrix"
+  },
+  "backend/modules/permmatrix/tests/test_permmatrix_s3_writes.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/permmatrix/",
+    "file:backend/helpers/__init__.py",
+    "helper:auth",
+    "helper:perm",
+    "mod:permmatrix/__init__",
+    "mod:permmatrix/api",
+    "mod:permmatrix/service",
+    "page:pages/permission-matrix.html",
+    "plat:__init__",
+    "plat:capabilities",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/capabilities.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/perm.py",
+     "backend/modules/permmatrix/__init__.py",
+     "backend/modules/permmatrix/service.py"
+    ],
+    "api": [
+     "backend/modules/permmatrix/api.py"
+    ],
+    "page": [
+     "frontend/pages/permission-matrix.html"
+    ],
+    "module_dir": [
+     "backend/modules/permmatrix/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "permmatrix"
+  },
   "backend/modules/permmatrix/tests/test_permmatrix_writes_unwired.py": {
    "kind": "api",
    "units": [
@@ -12786,6 +12930,7 @@
     "mod:permmatrix/__init__",
     "mod:permmatrix/api",
     "mod:permmatrix/service",
+    "mod:permmatrix/views",
     "plat:__init__",
     "plat:source_tree",
     "router:settings_center"
@@ -12801,7 +12946,9 @@
     ],
     "path": [
      "backend/modules/permmatrix/__init__.py",
+     "backend/modules/permmatrix/api.py",
      "backend/modules/permmatrix/service.py",
+     "backend/modules/permmatrix/views.py",
      "backend/routers/settings_center.py"
     ],
     "module_dir": [
@@ -39689,6 +39836,7 @@
     "mod:lodging/api_records",
     "mod:netplan/api",
     "mod:payroll/api/bonus",
+    "mod:permmatrix/api",
     "mod:recyclebin/api",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/dispatch_approval",
@@ -39725,6 +39873,7 @@
      "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/lodging/api_records.py",
      "backend/modules/netplan/api.py",
+     "backend/modules/permmatrix/api.py",
      "backend/modules/recyclebin/api.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/routers/approval_delegates.py",
@@ -39754,6 +39903,7 @@
      "backend/modules/lodging/api_records.py",
      "backend/modules/netplan/api.py",
      "backend/modules/payroll/api/bonus.py",
+     "backend/modules/permmatrix/api.py",
      "backend/modules/recyclebin/api.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/dispatch_approval.py",
