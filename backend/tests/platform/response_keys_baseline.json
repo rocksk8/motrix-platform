@@ -4019,9 +4019,79 @@
   ],
   "s": 404
  },
+ "/api/permmatrix/delegations": {
+  "k": [
+   "items",
+   "items[].delegate",
+   "items[].delegator",
+   "items[].effective_at",
+   "items[].id",
+   "items[].legacy_id",
+   "items[].reason",
+   "items[].requested_at",
+   "items[].requested_by",
+   "items[].revoke_reason",
+   "items[].revoked_at",
+   "items[].revoked_by",
+   "items[].scope",
+   "items[].scope_kind",
+   "items[].state",
+   "items[].valid_from",
+   "items[].valid_to"
+  ],
+  "s": 200
+ },
+ "/api/permmatrix/matrix": {
+  "k": [
+   "actions",
+   "actions[].action",
+   "actions[].desc",
+   "actions[].highRisk",
+   "actions[].label",
+   "caps",
+   "roles",
+   "roles[].label",
+   "roles[].role",
+   "signature"
+  ],
+  "s": 200
+ },
+ "/api/permmatrix/pending": {
+  "k": [
+   "items"
+  ],
+  "s": 200
+ },
  "/api/permmatrix/status": {
   "k": [
    "ok"
+  ],
+  "s": 200
+ },
+ "/api/permmatrix/users": {
+  "k": [
+   "users"
+  ],
+  "s": 200
+ },
+ "/api/permmatrix/users/{user_id}/effective": {
+  "k": [
+   "caps",
+   "user",
+   "user.id",
+   "user.name",
+   "user.roleLabel"
+  ],
+  "s": 200
+ },
+ "/api/permmatrix/versions": {
+  "k": [
+   "items",
+   "items[].action",
+   "items[].created_at",
+   "items[].created_by",
+   "items[].id",
+   "items[].reason"
   ],
   "s": 200
  },
@@ -4312,6 +4382,9 @@
    "pageModules.payslips.html",
    "pageModules.payslips.html.key",
    "pageModules.payslips.html.name",
+   "pageModules.permission-matrix.html",
+   "pageModules.permission-matrix.html.key",
+   "pageModules.permission-matrix.html.name",
    "pageModules.procurement.html",
    "pageModules.procurement.html.key",
    "pageModules.procurement.html.name",
@@ -5677,7 +5750,7 @@
    "執行摘要|營運報表",
    "目標達成率|2026 年度目標達成率",
    "本期收款明細|本期收款明細 — 2026 年 10 月",
-   "未收款清單|未收款清單 — 截至 2026-10-13",
+   "未收款清單|未收款清單 — 截至 2026-10-16",
    "當月收支|2026-10 當月收支明細",
    "今年度收支|2026年度收支總表",
    "案件清單|全部案件清單（本期新成案：0 件）",
@@ -5685,7 +5758,7 @@
    "毛利分析|利潤分析 — 精算利潤對照（已結案案件）",
    "保固到期預警|保固到期預警（90 天內，共 0 筆）",
    "已結案未精算|已結案未完成精算（共 0 件）",
-   "帳齡分析|應收帳款帳齡分析（截至 2026-10-13，合計未收 NT$ 0）"
+   "帳齡分析|應收帳款帳齡分析（截至 2026-10-16，合計未收 NT$ 0）"
   ],
   "s": 200
  },
