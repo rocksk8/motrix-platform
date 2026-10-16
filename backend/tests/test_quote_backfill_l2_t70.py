@@ -368,3 +368,59 @@ def test_warranty_reminders_are_not_muted_for_backfilled_cases():
     for fn in (D._check_warranty_expiry, D._sync_warranty_calendar):
         src = inspect.getsource(fn)
         assert "historical" not in src and "_hist" not in src, fn.__name__
+
+
+def _raw(no):
+    c = db.get_db()
+    try:
+        return c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()[0]
+    finally:
+        c.close()
+
+
+def _in_overdue_tab(client, boss, no):
+    r = client.get("/api/quotations", headers=boss, params={"stage_overdue": 1, "counts": 1}).json()
+    return no in [i["quote_no"] for i in r["items"]]
+
+
+def test_edit_paths_keep_the_document_start_and_the_mute(client, boss, flag_on):
+    """T70 稽核 8f：補登後經 PUT 編輯／案件資料 PATCH／階段更新，data_json 仍以補登標記開頭、仍被靜音；
+    鍵序被弄壞的文件會回到逾期分頁（安全方向的失敗：多提醒，不會漏提醒）。"""
+    from modules.case.quotations import HIST_APPROVAL_PREFIX
+    h = _hist(client, boss)
+    c = db.get_db()
+    try:
+        c.execute("UPDATE case_stages SET due_date=? WHERE quote_no=?", (PAST, h))
+        sid = c.execute("SELECT id FROM case_stages WHERE quote_no=?", (h,)).fetchone()[0]
+        c.commit()
+    finally:
+        c.close()
+    assert _raw(h).startswith(HIST_APPROVAL_PREFIX) and not _in_overdue_tab(client, boss, h)
+
+    d = json.loads(_raw(h))
+    d["projectName"] = "編輯後"
+    r = client.put("/api/quotations/" + h, headers=boss, json={"status": "已送出", "data": d})
+    assert r.status_code in (200, 403, 409), r.text                 # 已送出為鎖定狀態：不論放行與否，文件都不可壞
+    assert _raw(h).startswith(HIST_APPROVAL_PREFIX) and not _in_overdue_tab(client, boss, h)
+
+    cr = json.loads(_raw(h)).get("caseRecord") or {}
+    cr["note_t70"] = "x"
+    r = client.patch("/api/quotations/%s/case-record" % h, headers=boss, json={"case_record": cr})
+    assert r.status_code == 200, r.text                              # 真的寫入了（不是被擋才通過）
+    assert _raw(h).startswith(HIST_APPROVAL_PREFIX) and not _in_overdue_tab(client, boss, h)
+
+    r = client.put("/api/quotations/%s/stages/%d" % (h, sid), headers=boss, json={"label": "改名"})
+    assert r.status_code == 200, r.text
+    assert _raw(h).startswith(HIST_APPROVAL_PREFIX) and not _in_overdue_tab(client, boss, h)
+
+    d = json.loads(_raw(h))                                          # 鍵序被弄壞（approval 不在第一個）⇒ 不再靜音 ⇒ 回到逾期分頁
+    ap = d.pop("approval")
+    d["approval"] = ap
+    c = db.get_db()
+    try:
+        c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), h))
+        c.commit()
+    finally:
+        c.close()
+    assert not _raw(h).startswith(HIST_APPROVAL_PREFIX)
+    assert _in_overdue_tab(client, boss, h), "安全失敗：鍵序壞掉的補登單回到逾期分頁（多提醒，不漏提醒）"
