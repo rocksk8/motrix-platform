@@ -57,18 +57,16 @@ def put_quotation_overhead_pct(quote_no: str, body: dict = Body(...), authorizat
 @router.put("/api/overhead/settings")
 def put_overhead_settings(body: dict = Body(...), authorization: str = Header(None)):
     """全域預設比率與口徑開關（回滾用）。只有最高管理者；只影響『之後新建』的報價單與口徑開關，不回改既有單。"""
-    _require_user(authorization, require_superadmin=True)
+    user = _require_user(authorization, require_superadmin=True)
     changes, detail = [], {}
+    pending, warnings = [], []
+    want_default = None
     if "defaultPct" in body:
         try:
             new = PG.parse_pct(body["defaultPct"])
         except ValueError as e:
             raise HTTPException(422, str(e))
-        old = PG.default_pct()
-        if new != old:
-            _set_setting(PG.DEFAULT_KEY, new)
-            detail["defaultPct"] = {"old": old, "new": new}
-            changes.append("預設比率 %s%% → %s%%" % (old, new))
+        want_default = new          # T69：先驗證；實際發布排到其他欄位都驗證完之後（publish 會立刻提交，後面欄位 422 時不留下半套）
     if "ruleMode" in body:
         if body["ruleMode"] not in PG.MODES:
             raise HTTPException(422, "ruleMode 只能是 legacy 或 v2")
@@ -110,6 +108,22 @@ def put_overhead_settings(body: dict = Body(...), authorization: str = Header(No
             _set_setting(PG.CHARITY_MODE_KEY, want)
             detail["charityMode"] = {"old": old, "new": want}
             changes.append("公益基數 %s → %s" % (old, want))
+    if want_default is not None:
+        old = PG.default_pct()
+        if want_default != old:
+            # T69：預設比率是設定中心的 `overhead.default_pct`；舊入口也走同一條 publish（調低＝放寬 ⇒ 待核准＋確認期間；調高立即生效；舊鍵同步雙寫），
+            # 不可繞過第二位最高管理者核准（D-K1）。publish 自己寫稽核（settings.overhead.update／.pending），這裡不再重複記。
+            from helpers import settings_registry as _SR
+            from core.definitions import DefinitionConflict
+            try:
+                res = _SR.publish("overhead", {"default_pct": want_default}, user=user["username"], actor=user,
+                                  reason=str(body.get("reason") or "").strip() or "管銷預設比率調整（管銷設定入口）", ip="")
+            except _SR.SettingError as e:
+                raise HTTPException(422, str(e))
+            except DefinitionConflict as e:
+                raise HTTPException(409, str(e))
+            pending, warnings = res.get("pending") or [], res.get("warnings") or []
     if changes:
         _audit(_tok(authorization), "settings.overhead.update", "settings", "overhead", "；".join(changes), detail)
-    return {"ok": True, "ruleMode": PG.rule_mode(), "defaultPct": PG.default_pct(), "charityBasis": PG.charity_basis(), "charityMode": PG.charity_mode()}
+    return {"ok": True, "ruleMode": PG.rule_mode(), "defaultPct": PG.default_pct(), "charityBasis": PG.charity_basis(), "charityMode": PG.charity_mode(),
+            "pending": pending, "warnings": warnings}

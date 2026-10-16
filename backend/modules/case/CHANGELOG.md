@@ -15,6 +15,8 @@
 - 防偽造：補登標記（`approval.historical`、頂層 `historical`）只由補登端點寫入；一般新增一律丟掉用戶端帶來的，編輯（整份取代）以資料庫現值為準（現值是補登單則保留、不是則丟掉）。所以偽造標記無法讓一般單被當成補登單作廢。
 - 稽核跟進（hichan-49）：作廢補登單的 `DELETE` 須帶查詢參數 `?reason=`（≥5 字，進暫存區紀錄與稽核）；月份序號到 999 後回 409（不再排出 4 碼單號）；補登單一旦**由伺服器判定**進入真正的簽核（解鎖編輯或轉待審核；不看用戶端送的 approval 內容，避免被偽造洗掉標記），補登標記不再放回（回到一般規則，來歷區塊保留）；重號改由 INSERT 唯一鍵轉 409（不另做查詢）。
 - 不在 L1：畫面／列表與 PDF 標示、階段到期與應收提醒排除、通知靜音的其餘部分（L2）；非根法人（`seq_by_entity`）補登；選用的「24 小時自動關閉」。
+- **（併入）(next) — 2026-10-17（wip/t69-overhead-pct-r1 審查後，疊在 wip/t68-q1-profit-r4 之上；T68 Q1：公益比率與管銷後備值走設定；T69：管銷預設比率走設定）**
+- 管銷分攤預設比率成為設定 `overhead.default_pct`（設定中心「管銷分攤比率」，預設 25＝今天）：`PG.default_pct()` 先讀設定（沒發布過 ⇒ 沿用舊鍵 `overhead_default_pct` 的既有值 ⇒ 25）、PDF／Excel 的「和預設不同才印百分比」同源。**調高立即生效；調低＝放寬，需要第二位最高管理者核准並經確認期間**（使用者 2026-10-17 裁示）；`PUT /api/overhead/settings` 的 `defaultPct` 改走 `settings_registry.publish`（不可繞過核准；可選帶 `reason`；回應多 `pending`／`warnings`），舊鍵與設定同值雙寫。只影響之後新建的報價單，不回改既有單；口徑切換（`ruleMode`／`charityMode`）流程不變。原本「調低立即生效」的舊入口行為因此改變（刻意）。`PUT /api/overhead/settings` 先驗證所有欄位，預設比率最後才發布（後面欄位 422 時不留下已提交的半套）；已知：核准的調低在確認期間到期時 `SR.get` 立即套用，舊鍵要等每日 `materialize_due` 才同步，一次性工具 `tools/overhead_migrate.py` 直接讀舊鍵，在這個時間窗內讀到較高的舊值（偏保守，僅該工具）。測試 `tests/test_overhead_default_pct_t69.py`；`test_overhead_s2_t48.py` 的兩題改用調高驗證。
 
 ## 1.0.201 — 2026-10-16（wip/t66-quote-copy-sortable-r1；複製為新報價單後拖曳排序失效修復；報價單表單 V3.29）
 - 修正：報價單清單或表單按「複製為新報價單」後，新單的項目拖曳排序（拖曳把手）失效。原因是 `quotation-form.html` 的 `init()` 複製分支在中途 `return`，漏掉編輯／新增共用的尾巴（`Sortable` 建立、預覽模式 `$watch`、預覽高度 `message` 監聽）。尾巴抽成 `_bindLateHooks()`，複製分支與一般路徑都呼叫，可重複呼叫不重複綁定；`initSortable()` 重建前先銷毀舊實例、`$watch` 只登記一次。複製分支再保險一次：status 缺值或誤帶「已送出」時改為草稿並取消解鎖。無資料庫變動、無後端變動；`FORM_VERSION` V3.28→V3.29。守門測試 `tests/platform/test_quote_copy_binds_sortable_t66.py`。

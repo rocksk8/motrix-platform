@@ -26,6 +26,8 @@
 - 測試：`modules/recyclebin/tests/test_recyclebin_retention_t69.py`（真實帳號＋HTTP：預設等值、延長立即、縮短需第二位最高管理者核准與確認期間、範圍檢查、非最高管理者被擋）。
 - **（併入）(next) — 2026-10-17 00:18（wip/t69-backfill-l0-r1；補登歷史案件 L0）**
 - 設定群組（只增，預設＝今日行為）：`quote_backfill`（`enabled` 預設 0＝沒有補登入口、立即生效僅稽核；`earliest_month` 預設 202001，跨欄位檢查月份須為 01–12）。部署基準檔 `settings_deploy_baseline.json` 同步。無 L1 介面變動。
+- **（併入）(next) — 2026-10-17（wip/t69-overhead-pct-r1，疊在 wip/t68-q1-profit-r4 之上；含 T68 Q1 利潤口徑單一來源收尾）**
+- L1（只增，相容擴充）：`helpers.settings_registry` 新增公開常數 `SCALAR_LEGACY`（欄位 `legacy="="` ⇒ 舊鍵是純量、整個舊鍵就是該欄位的值；讀取與雙寫都支援）；新單位 `helpers.settings_groups_overhead`（由 `settings_groups` 檔尾兩行登錄群組 `overhead`：`default_pct`，預設 25＝今天、0～100、調低＝放寬需第二位最高管理者核准、調高立即；舊鍵 `overhead_default_pct` 雙寫）。快照已以 `core_bump.py --pending` 重產，**未取號**。部署基準檔 `settings_deploy_baseline.json` 同步（零行為變更）。
 
 ## 1.144 — 2026-10-16（wip/t66-lp-r2；T66 清單個人偏好 L0～L2）
 - T66 L0＋L1＋L2（清單個人偏好的目錄、公司政策與個人每頁筆數，旗標 `list_prefs.enabled` 預設關）：

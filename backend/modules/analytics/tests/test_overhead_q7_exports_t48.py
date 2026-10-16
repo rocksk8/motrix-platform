@@ -26,6 +26,8 @@ def _set_default(value):
         c.commit()
     finally:
         c.close()
+    from helpers import settings_registry as _sr            # T69：預設比率讀設定中心（有快取）；測試直接寫舊鍵後要讓快取失效
+    _sr.invalidate("overhead")
 
 
 def test_label_hides_pct_only_when_equal_to_default_for_pdf_but_not_on_screen(client):

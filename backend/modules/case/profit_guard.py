@@ -62,6 +62,13 @@ def rule_mode() -> str:
 
 
 def default_pct():
+    """全域預設管銷比率：設定 `overhead.default_pct`（設定中心；沒發布過 ⇒ 沿用舊鍵 `overhead_default_pct`，再沒有 ⇒ 25）。
+    讀不到／壞值 ⇒ 25（今天的行為）。待生效的調低在核准且到期前不會出現在這裡（`settings_registry.get` 只套用已到時的待生效值）。"""
+    try:
+        from helpers import settings_registry as _sr
+        return parse_pct(_sr.get("overhead", "default_pct"))
+    except Exception:                                             # noqa: BLE001 — 設定層任何問題都不能讓報價單算不出來
+        pass
     from helpers.settings import _get_setting
     try:
         return parse_pct(_get_setting(DEFAULT_KEY, PR.DEFAULT_OVERHEAD_PCT))

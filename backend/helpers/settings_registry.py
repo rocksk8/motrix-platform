@@ -2,7 +2,7 @@
 """設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。
 
 [單位] helper:settings_registry    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, IMPACT_SCOPE_GRANDFATHERED, KIND, RISK_ORDER, SCOPE, SettingDef, SettingError, apply_profile, banner_of, clamp_value, clear_edition_bounds, confirm_period_days,
+[公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, IMPACT_SCOPE_GRANDFATHERED, KIND, RISK_ORDER, SCALAR_LEGACY, SCOPE, SettingDef, SettingError, apply_profile, banner_of, clamp_value, clear_edition_bounds, confirm_period_days,
     audit_spine_failures, cancel_pending_of_nonopen, field_defs, field_views, get, get_group, group_info, group_stamp, group_status, groups, invalidate, live_impact, materialize_due, owner_groups, plan, profile_preview, profile_skipped, profiles, publish, register_group, set_edition_bounds, show_value, unregister_owner, validate_values
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
@@ -58,6 +58,9 @@ def clear_edition_bounds():
     _EDITION.clear()
     _EDITION_EPOCH += 1
 
+
+#: 欄位的 `legacy` 設成這個值 ⇒ 舊鍵是純量（整個舊鍵就是該欄位的值），不是 dict（T69 管銷預設％：overhead_default_pct）
+SCALAR_LEGACY = "="
 
 _UNKNOWN_STAMP = __import__("itertools").count(1)
 _EDITION_EPOCH = 0                             # 版本邊界每變一次就加一；納入 group_stamp（邊界會夾住 get_group 的結果）
@@ -389,8 +392,9 @@ def _legacy_values(conn, group):
         logger.warning("settings: 舊鍵 %s 不是合法 JSON，忽略", g["legacy_key"])
         return {}
     if not isinstance(raw, dict):
-        return {}
-    return {k: raw[f.legacy] for k, f in g["fields"].items() if f.legacy and f.legacy in raw}
+        # 純量舊鍵（T69）：欄位的 `legacy` 為 SCALAR_LEGACY ⇒ 舊鍵本身就是這個欄位的值（例：overhead_default_pct＝25）
+        return {k: raw for k, f in g["fields"].items() if f.legacy == SCALAR_LEGACY and not isinstance(raw, bool)}
+    return {k: raw[f.legacy] for k, f in g["fields"].items() if f.legacy and f.legacy != SCALAR_LEGACY and f.legacy in raw}
 
 
 def _stored(conn, group):
@@ -504,6 +508,13 @@ def _write_legacy(conn, group, values):
     g = _g(group)
     if not g["legacy_key"]:
         return
+    from datetime import datetime
+    for k, f in g["fields"].items():                  # 純量舊鍵：整個舊鍵就是這個欄位的值（寫純量，不是 dict）
+        if f.legacy == SCALAR_LEGACY and k in values:
+            conn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) "
+                         "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
+                         (g["legacy_key"], json.dumps(values[k], ensure_ascii=False), datetime.now().isoformat()))
+            return
     row = conn.execute("SELECT value_json FROM system_settings WHERE key=?", (g["legacy_key"],)).fetchone()
     try:
         cur = json.loads(row[0]) if row else {}
@@ -512,7 +523,7 @@ def _write_legacy(conn, group, values):
     if not isinstance(cur, dict):
         cur = {}
     for k, f in g["fields"].items():
-        if f.legacy and k in values:
+        if f.legacy and f.legacy != SCALAR_LEGACY and k in values:
             cur[f.legacy] = values[k]
     from datetime import datetime
     conn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) "
