@@ -75,7 +75,7 @@ def add_payslip_link(did: int, body: dict = Body(default={}), authorization: str
             raise HTTPException(404, "派發紀錄不存在")
         try:
             res = prov.link(conn, slip_no, did, user, (body or {}).get("note") or "",
-                            personnel_ids=_personnel_ids(conn.execute("SELECT personnel_json FROM contractor_dispatches WHERE id=?", (did,)).fetchone()["personnel_json"]))
+                            personnel_ids=(dispatch_brief(conn, did) or {}).get("personnelIds") or [])
         except ValueError as e:
             raise HTTPException(getattr(e, "status", 409), str(e))
         conn.commit()
@@ -126,36 +126,35 @@ def _personnel_ids(raw) -> list:
 _PERSON_LIST_EXCLUDED_STATUS = ("draft", "cancelled")
 
 
-_PERSON_SELECT = ("SELECT d.id, d.doc_code, d.quote_no, d.status, d.dispatch_date, d.personnel_json, d.scope, d.items_json, v.name AS vendor_name,"
-                  " q.project_name AS project_name, q.customer_name AS customer_name"
-                  " FROM contractor_dispatches d LEFT JOIN vendor_contractors v ON v.id = d.vendor_id"
-                  " LEFT JOIN quotations q ON q.quote_no = d.quote_no")
-
-
-def _case_visible(r, visible, user) -> bool:
-    """案件名稱能不能給這位呼叫者看（`guard_case_access`；結果依案件單號快取在 `visible`）。沒給 `user` 或沒通過 ⇒ False。"""
-    qn = r["quote_no"] or ""
-    if qn not in visible:
-        ok = False
-        if user is not None and qn and (r["project_name"] is not None or r["customer_name"] is not None):
-            gconn = get_db()          # guard_case_access 拒絕時會把傳進去的連線關掉 ⇒ 用自己的短連線，不影響外面這條
-            try:
-                guard_case_access(gconn, qn, user, allow_module="case_manage")
-                ok = True
-            except HTTPException:
-                ok = False
-            finally:
+def _person_rows(conn, where_sql, args, user):
+    """派發列（含廠商名、案件名稱）逐列產出 `(row, caseVisible)`。案件名稱**只給通過案件讀取守門的人**（`guard_case_access`；
+    結果依案件單號快取）；沒給 `user` 或沒通過 ⇒ False。SQL 與案件守門在同一個函式裡，讀取範圍一眼看得到。"""
+    visible = {}
+    for r in conn.execute("SELECT d.id, d.doc_code, d.quote_no, d.status, d.dispatch_date, d.personnel_json, d.scope, d.items_json, v.name AS vendor_name,"
+                          " q.project_name AS project_name, q.customer_name AS customer_name"
+                          " FROM contractor_dispatches d LEFT JOIN vendor_contractors v ON v.id = d.vendor_id"
+                          " LEFT JOIN quotations q ON q.quote_no = d.quote_no" + where_sql, args).fetchall():
+        qn = r["quote_no"] or ""
+        if qn not in visible:
+            ok = False
+            if user is not None and qn and (r["project_name"] is not None or r["customer_name"] is not None):
+                gconn = get_db()          # guard_case_access 拒絕時會把傳進去的連線關掉 ⇒ 用自己的短連線，不影響外面這條
                 try:
-                    gconn.close()
-                except Exception:                                   # noqa: BLE001
-                    pass
-        visible[qn] = ok
-    return visible[qn]
+                    guard_case_access(gconn, qn, user, allow_module="case_manage")
+                    ok = True
+                except HTTPException:
+                    ok = False
+                finally:
+                    try:
+                        gconn.close()
+                    except Exception:                                   # noqa: BLE001
+                        pass
+            visible[qn] = ok
+        yield r, visible[qn]
 
 
-def _dispatch_view(r, visible, user) -> dict:
+def _dispatch_view(r, vis) -> dict:
     """派發一列 → 勞報單頁用的簡要樣子（**不含金額**）。`dispatches_for_person` 與 `dispatch_search` 共用，欄位一致。"""
-    vis = _case_visible(r, visible, user)
     try:
         items = json.loads(r["items_json"] or "[]")
     except (TypeError, ValueError):
@@ -177,11 +176,11 @@ def dispatches_for_person(conn, contractor_id, limit=200, user=None) -> list:
         cid = int(contractor_id)
     except (TypeError, ValueError):
         return []
-    out, visible = [], {}
-    for r in conn.execute(_PERSON_SELECT + " WHERE d.personnel_json LIKE ? ORDER BY d.id DESC", ("%" + str(cid) + "%",)).fetchall():
+    out = []
+    for r, vis in _person_rows(conn, " WHERE d.personnel_json LIKE ? ORDER BY d.id DESC", ("%" + str(cid) + "%",), user):
         if (r["status"] or "") in _PERSON_LIST_EXCLUDED_STATUS or cid not in _personnel_ids(r["personnel_json"]):
             continue
-        out.append(_dispatch_view(r, visible, user))
+        out.append(_dispatch_view(r, vis))
         if len(out) >= limit:
             break
     return out
@@ -231,10 +230,10 @@ def dispatch_search(conn, q="", contractor_id=None, include_all=False, limit=Non
         where.append("(lower(d.doc_code) LIKE ? ESCAPE '!' OR lower(d.quote_no) LIKE ? ESCAPE '!' OR lower(v.name) LIKE ? ESCAPE '!'"
                      " OR lower(q.project_name) LIKE ? ESCAPE '!' OR lower(q.customer_name) LIKE ? ESCAPE '!')")
         args += [like] * 5
-    visible, out, skipped, hasMore = {}, [], 0, False
-    for r in conn.execute(_PERSON_SELECT + " WHERE " + " AND ".join(where) + " ORDER BY d.id DESC", args).fetchall():
-        v = _dispatch_view(r, visible, user)
-        if term and not _case_visible(r, visible, user):
+    out, skipped, hasMore = [], 0, False
+    for r, vis in _person_rows(conn, " WHERE " + " AND ".join(where) + " ORDER BY d.id DESC", args, user):
+        v = _dispatch_view(r, vis)
+        if term and not vis:
             # 案件名稱欄位只有看得到該案的人才能拿來比對：看不到案件的人，只能靠編號／單號／廠商名命中
             if not any(term in str(x or "").lower() for x in (r["doc_code"], r["quote_no"], r["vendor_name"])):
                 continue

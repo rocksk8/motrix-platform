@@ -47,8 +47,7 @@ def link_flags(conn, dispatch_ids, slip_no=None) -> dict:
         return {}
     q = ",".join("?" * len(ids))
     out = {i: {"linked": False, "linkedToThis": False} for i in ids}
-    for r in conn.execute("SELECT l.dispatch_id, l.slip_no, p.status FROM payslip_dispatch_links l JOIN payslips p ON p.slip_no = l.slip_no"
-                          " WHERE l.dispatch_id IN (%s)" % q, ids).fetchall():
+    for r in conn.execute(_SELECT + " WHERE l.dispatch_id IN (%s)" % q, ids).fetchall():
         if (r["status"] or "") != "已作廢":
             out[r["dispatch_id"]]["linked"] = True
         if slip_no and r["slip_no"] == slip_no:

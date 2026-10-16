@@ -3,7 +3,7 @@
 ## 1.145 — 2026-10-16（wip/t68-c7-r1；C7 小模組狀態／單位顯示名稱）
 - L1（只增）：新檔 `helpers/display_labels.py`（`label`、`labels`、`status_text`、`register`、`DEFAULTS`、`GROUPS`、`NETPLAN_KEY`；設定群組 `netplan_labels`／`procurement_labels`／`lodging_labels`，屬 core，由 `settings_groups` 載入時呼叫 `register`）。前端新檔 `static/display-labels.js` 經既有 `/api/settings-center/public` 取值，沒有新路由。
 - 純顯示：只換畫面上看到的名稱，狀態值、轉換順序、查詢、權限一律用原值；名稱規則同狀態顯示表（最多 12 字、同組不重複、非預設值不可含官方用語）。預設＝各畫面今天的字（等值測試 `tests/platform/test_display_labels_c7.py`）。
-- **（併入）(next) — 2026-10-17（wip/t68-labor-dropdown-r2；T68 A4 勞報單選派發下拉與選項清單）**
+- **（併入）(next) — 2026-10-17（wip/t68-labor-dropdown-r3；T68 A4 勞報單選派發下拉與選項清單）**
 - 新設定群組 `payslip_dispatch_picker`（`page_size` 10–100 預設 30＝上線前的程式常數；風險 ops、立即生效；只影響「選派發」下拉一次載入幾筆，不改誰看得到哪些派發）；`settings_deploy_baseline.json` 已同步。
 - 選項清單新增 4 組（`helpers/option_lists.py` 預設值＝今日畫面上寫死的選項）：`payslip_nationality`（國籍）與 `payslip_income_type`（所得類別）為 **closed**——只能改顯示名稱，不能新增、停用，代碼不變所以扣繳判斷不變；`payslip_payment_method`（付款方式）與 `payslip_income_subtype`（執行業務細項，僅建議值）為開放清單。
 - L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.settings_groups_payslip_picker`（無公開介面；載入時由 `settings_groups` 檔尾兩行登錄群組）。`helpers.option_lists` 只增資料項，函式簽章不變。
