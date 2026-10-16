@@ -806,7 +806,7 @@ if (typeof module !== 'undefined' && module.exports) {
       .catch(function () { /* 抓不到 ⇒ 維持原本的『← 系統』麵包屑 */ })
   }
   function _systemRail(crumb) {
-    if (document.getElementById('sys-rail') || !s.token) return
+    if (document.getElementById('sys-rail') || !s.token || document.body.hasAttribute('data-no-sys-rail')) return // 整頁寬度即功能的編輯器頁（設計器／模組產生器）在 <body> 標 data-no-sys-rail 自行略過
     _railData(function (sections) {
       try {
         if (!sections.length || document.getElementById('sys-rail')) return
@@ -817,7 +817,7 @@ if (typeof module !== 'undefined' && module.exports) {
           var st = document.createElement('style')
           st.id = 'sys-rail-css'
           st.textContent =
-            '#sys-rail{position:fixed;left:0;top:var(--topbar-h,56px);bottom:0;width:' + RAIL_W + 'px;box-sizing:border-box;overflow-y:auto;padding:12px 10px;background:var(--surface,#fff);border-right:1px solid var(--border-light,#e5e7eb);z-index:30;font-family:var(--font-zh,inherit)}' +
+            '#sys-rail{position:fixed;left:var(--sidebar-w,0px);top:var(--topbar-h,56px);bottom:0;width:' + RAIL_W + 'px;box-sizing:border-box;overflow-y:auto;padding:12px 10px;background:var(--surface,#fff);border-right:1px solid var(--border-light,#e5e7eb);z-index:30;font-family:var(--font-zh,inherit)}' +
             '#sys-rail .sr-t{display:block;padding:6px 8px 10px;font-size:13px;font-weight:800;color:var(--text-primary,#111);text-decoration:none}' +
             '#sys-rail a.sr-i{display:flex;align-items:center;gap:8px;padding:8px 10px;margin:1px 0;border-left:3px solid transparent;border-radius:var(--radius,6px);font-size:13px;color:var(--text-primary,#111);text-decoration:none}' +
             '#sys-rail a.sr-i:hover{background:var(--surface-sunken,#f3f4f6)}' +
