@@ -1953,15 +1953,15 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
         seq_before = row["seq"] if row else 0
         reserved = _rb.reserved_ids(conn, "quotation")      # 暫存區裡的單號不可再發（單號不回收）
         if client_no:
-            if conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (client_no,)).fetchone() or client_no in reserved:
+            if client_no in reserved:
                 raise HTTPException(409, "單號 %s 已被使用（或在暫存區保留中），不會改派其他號碼" % client_no)
-            qno = client_no
+            qno = client_no          # 已被使用 ⇒ 下面 INSERT 的 IntegrityError（quote_no 唯一）轉 409，不另外 SELECT
         else:
             qno = _peek_next_no(conn, month)
-            while qno in reserved:
-                qno = "MQ-%s-%03d" % (month, int(qno[-3:]) + 1)
-        if int(qno[-3:]) > 999:
-            raise HTTPException(409, "該月份單號已用盡")
+            while int(qno.rsplit("-", 1)[1]) <= 999 and qno in reserved:
+                qno = "MQ-%s-%03d" % (month, int(qno.rsplit("-", 1)[1]) + 1)
+            if int(qno.rsplit("-", 1)[1]) > 999:      # 先比整數再格式化：:03d 會把 1000 排成 4 碼
+                raise HTTPException(409, "該月份單號已用盡（001–999）")
         q["quoteNo"] = qno
         sp_name = (q.get("salesPerson") or "").strip()
         sp_row = conn.execute("SELECT id FROM users WHERE display_name=? AND active=1 LIMIT 1", (sp_name,)).fetchone() if sp_name else None
@@ -1979,9 +1979,9 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
                   q.get("validDays", _pw.default_valid_days()), json.dumps(q, ensure_ascii=False),
                   now, now, user["username"], deal_tag, settle_status, (body.location_id or "").strip() or None))
         except sqlite3.IntegrityError:
-            raise HTTPException(409, "報價單號衝突，請重試")
+            raise HTTPException(409, ("單號 %s 已被使用（或在暫存區保留中），不會改派其他號碼" % qno) if client_no else "報價單號衝突，請重試")
         conn.execute("INSERT INTO quote_seq (month, seq) VALUES (?, ?) ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)",
-                     (month, int(qno[-3:])))
+                     (month, int(qno.rsplit("-", 1)[1])))
         cr = q.get("caseRecord")
         if isinstance(cr, dict) and isinstance(cr.get("stages"), list):
             _sync_json_stages_to_table(conn, qno, cr["stages"])
@@ -2943,14 +2943,20 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
 
 def _pin_backfill_marker(q: dict, old: dict) -> None:
     """補登標記（approval.historical、頂層 historical）只由 POST /api/quotations/historical 寫入。
-    其他寫入路徑（一般新增、整份取代的編輯）一律以資料庫現值為準：現值沒有 ⇒ 用戶端帶的丟掉；現值有 ⇒ 放回（編輯不會洗掉補登標記）。"""
+    其他寫入路徑（一般新增、整份取代的編輯）一律以資料庫現值為準：現值沒有 ⇒ 用戶端帶的丟掉；現值有 ⇒ 放回（編輯不會洗掉補登標記）。
+    例外（稽核 hichan-49 SF4）：編輯送來的是**真正的簽核**（解鎖編輯＝`approval.isEditApproval`，伺服器端才會設）⇒ 這張單已離開「補登，無簽核」狀態，
+    補登標記不再放回（作廢權也回到一般規則）；頂層 `historical` 區塊（補登來歷、口徑註記）保留。"""
     old_ap = (old or {}).get("approval") if isinstance((old or {}).get("approval"), dict) else {}
     was = old_ap.get("historical") is True
     ap = q.get("approval")
+    real_approval = isinstance(ap, dict) and (ap.get("isEditApproval") is True or bool(ap.get("tiers")))
     if isinstance(ap, dict):
         ap.pop("historical", None)
     q.pop("historical", None)
-    if was:
+    if was and real_approval:
+        if isinstance(old.get("historical"), dict):
+            q["historical"] = old["historical"]
+    elif was:
         if not isinstance(q.get("approval"), dict):
             q["approval"] = {}
         q["approval"]["historical"] = True
@@ -2961,22 +2967,22 @@ def _pin_backfill_marker(q: dict, old: dict) -> None:
             q["historical"] = old["historical"]
 
 
-def _is_historical_quote(conn, quote_no: str) -> bool:
-    """data_json.approval.historical 為真＝補登單（只由 POST /api/quotations/historical 寫入）。"""
-    r = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+def _doc_is_historical(data_json) -> bool:
+    """data_json.approval.historical 為真＝補登單（只由 POST /api/quotations/historical 寫入；見 _pin_backfill_marker）。"""
     try:
-        return bool(((json.loads(r["data_json"] or "{}") if r else {}).get("approval") or {}).get("historical") is True)
+        return (((json.loads(data_json or "{}") or {}).get("approval") or {}).get("historical")) is True
     except (ValueError, AttributeError, TypeError):
         return False
 
 
 @router.delete("/api/quotations/{quote_no}")
-def delete_quotation(quote_no: str, authorization: str = Header(None)):
+def delete_quotation(quote_no: str, authorization: str = Header(None), body: Optional[dict] = Body(None)):
     user = _require_user(authorization)
     conn = get_db()
     _hist_void = False
+    _void_reason = ""
     row = conn.execute(
-        "SELECT customer_name, status, sales_person_id, sales_person FROM quotations WHERE quote_no=?",
+        "SELECT customer_name, status, sales_person_id, sales_person, data_json FROM quotations WHERE quote_no=?",
         (quote_no,)
     ).fetchone()
     if not row:
@@ -2989,10 +2995,14 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
         raise
     if row["status"] != "草稿":
         # T69 L1（使用者裁示 2026-10-16 #3）：補登單僅最高管理者可作廢，走暫存區（可復原）；單號不回收（quote_seq 不回減）。
-        if not (user.get("role") == "superadmin" and _is_historical_quote(conn, quote_no)):
+        if not (user.get("role") == "superadmin" and _doc_is_historical(row["data_json"])):
             conn.close()
             raise HTTPException(403, f"只有草稿狀態的報價單可以刪除（目前狀態：{row['status']}）")
         _hist_void = True        # 走暫存區的「刪除已核可」規則：底下有其他單據／已結案仍會被擋
+        _void_reason = str((body or {}).get("reason") or "").strip()
+        if len(_void_reason) < 5:      # 稽核 SF5：作廢補登單要寫原因（進暫存區紀錄與稽核）
+            conn.close()
+            raise HTTPException(400, "作廢補登單請填原因（至少 5 個字）")
     cname = row['customer_name'] or ''
     from helpers import recycle_bin                  # 第 53 班 P1：刪除先進暫存區（IP-RB2）
     from modules.case import recycle_adapter as _ra
@@ -3000,7 +3010,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
     with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
         try:
             try:
-                res = recycle_bin.delete(conn, "quotation", quote_no, user, **({"reason": "補登單作廢", "approved": True} if _hist_void else {}))   # 報價單＋名下階段／拜訪／進度更新／行動事項＋附件一併進暫存區
+                res = recycle_bin.delete(conn, "quotation", quote_no, user, **({"reason": _void_reason, "approved": True} if _hist_void else {}))   # 報價單＋名下階段／拜訪／進度更新／行動事項＋附件一併進暫存區
             except recycle_bin.BinError as e:
                 conn.rollback()
                 conn.close()
@@ -3022,7 +3032,8 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
     conn.close()
     _purge_notifications(quote_no, ['approval_request', 'approval_returned',
                                      'approval_rejected', 'case_stage_deadline', 'approval_reminder'])
-    _audit(_tok(authorization), 'quotation.delete', 'quotation', quote_no, f"{quote_no}（{cname}）" + ("（已進暫存區）" if res else "（暫存區未安裝，已直接刪除）"))
+    _audit(_tok(authorization), 'quotation.delete', 'quotation', quote_no, f"{quote_no}（{cname}）" + ("（已進暫存區）" if res else "（暫存區未安裝，已直接刪除）"),
+           {"reason": _void_reason, "historical": True} if _hist_void else None)
     for c in orphaned:
         _audit(_tok(authorization), 'dev_case.unlink_deleted_quote', 'dev_case', str(c['id']),
                f"{c['case_name']}：連結的報價單 {quote_no} 已刪除，自動解除連結")

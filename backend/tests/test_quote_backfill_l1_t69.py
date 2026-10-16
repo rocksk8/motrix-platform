@@ -84,6 +84,10 @@ def _row(no):
         conn.close()
 
 
+def _void(client, h, no, reason="年度結算前更正：補登重複，作廢重補"):
+    return client.request("DELETE", "/api/quotations/" + no, headers=h, json={"reason": reason} if reason is not None else None)
+
+
 def _audits(action):
     import db, json
     conn = db.get_db()
@@ -242,14 +246,37 @@ def test_refusals_are_audited(client, boss, make_user):
     assert [x for x in _audits("quotation.historical_denied") if x["username"] == "bf1_boss"]
 
 
-# ── 7. 不發通知 ─────────────────────────────────────────────────────────────
-def test_no_activity_notification_is_sent(client, boss, flag_on, monkeypatch):
-    from modules.case.api import quotations as Q
+# ── 7. 不發通知（真實資料列：不 patch 任何函式）────────────────────────────────
+def _note_count():
+    import db
+    conn = db.get_db()
+    try:
+        return conn.execute("SELECT COUNT(*) FROM notifications").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_backfill_sends_nothing_at_the_real_delivery_layers_while_normal_create_does(client, boss, make_user, flag_on, monkeypatch):
+    """監看最底層的送出點（不是端點自己 import 的名稱）：email 實際寄送、站內通知寫入；一般新增是正對照。"""
+    import db
+    from helpers import email_notify as EN
+    conn = db.get_db()
+    try:                                                    # 讓「通知管理員」真的有收件人，否則一般新增也不會走到寄送層
+        conn.execute("UPDATE users SET email='bf1_boss@example.com' WHERE username='bf1_boss'")
+        conn.commit()
+    finally:
+        conn.close()
     sent = []
-    monkeypatch.setattr(Q, "notify_module_activity", lambda *a, **k: sent.append(a))
-    monkeypatch.setattr(Q, "_notify", lambda *a, **k: sent.append(a))
+    monkeypatch.setattr(EN, "_async_send", lambda *a, **k: sent.append(("mail", a[:1])))
+    b0 = _note_count()
+    r = client.post("/api/quotations", headers=boss, json={"status": "草稿", "data": {"customerName": "對照", "items": []}})
+    assert r.status_code in (200, 201), r.text
+    assert sent or _note_count() > b0, "正對照：一般新增會產生通知（寄信或站內列）；否則這題沒有鑑別力"
+    sent.clear()
+    b1 = _note_count()
     assert _post(client, boss).status_code == 201
-    assert sent == []
+    import time; time.sleep(0.5)                            # 背景備份執行緒也跑完
+    assert sent == [] and _note_count() == b1               # 補登：沒有寄信、沒有新增站內通知列
 
 
 # ── 8. 回收（rollback）覆蓋 ─────────────────────────────────────────────────
@@ -300,7 +327,7 @@ def _bin_id(no):
 
 def test_superadmin_can_delete_backfilled_quote_to_bin_and_number_is_not_reused(client, boss, flag_on):
     no = _post(client, boss).json()["quote_no"]
-    r = client.delete("/api/quotations/" + no, headers=boss)
+    r = _void(client, boss, no)
     assert r.status_code == 200, r.text
     assert _row(no)[0] is None and _bin_id(no)
     assert [x for x in _audits("quotation.delete") if x["target_id"] == no]
@@ -313,8 +340,84 @@ def test_superadmin_can_delete_backfilled_quote_to_bin_and_number_is_not_reused(
 def test_non_superadmin_cannot_delete_backfilled_quote(client, boss, make_user, flag_on):
     no = _post(client, boss).json()["quote_no"]
     adm = _login(client, make_user, "bf1_adm", role="admin")
-    assert client.delete("/api/quotations/" + no, headers=adm).status_code == 403
+    assert _void(client, adm, no).status_code == 403
     assert _row(no)[0] is not None
+
+
+def test_void_requires_a_reason_and_records_it(client, boss, flag_on):
+    no = _post(client, boss).json()["quote_no"]
+    for bad in (None, "", "短"):
+        assert _void(client, boss, no, bad).status_code == 400
+    assert _row(no)[0] is not None
+    assert _void(client, boss, no, "客戶改單，原補登作廢重補").status_code == 200
+    a = [x for x in _audits("quotation.delete") if x["target_id"] == no]
+    assert a and a[-1]["detail"]["reason"] == "客戶改單，原補登作廢重補" and a[-1]["detail"]["historical"] is True
+    import db
+    conn = db.get_db()
+    try:
+        assert "客戶改單" in str(dict(conn.execute("SELECT * FROM recycle_bin WHERE entity_id=?", (no,)).fetchone()))
+    finally:
+        conn.close()
+
+
+def test_void_is_refused_when_downstream_documents_exist(client, boss, flag_on):
+    import db
+    no = _post(client, boss).json()["quote_no"]
+    conn = db.get_db()
+    try:                                                    # 底下掛一張其他單據（承攬商派發）——以 PRAGMA 補齊必填欄位
+        cols = [c for c in conn.execute("PRAGMA table_info(completion_notes)").fetchall()]
+        vals = {}
+        for c in cols:
+            if c["name"] == "quote_no":
+                vals["quote_no"] = no
+            elif c["notnull"] and c["dflt_value"] is None and not c["pk"]:
+                vals[c["name"]] = 0 if "INT" in (c["type"] or "").upper() else "x"
+        conn.execute("INSERT INTO completion_notes (%s) VALUES (%s)" % (",".join(vals), ",".join("?" * len(vals))), tuple(vals.values()))
+        conn.commit()
+    finally:
+        conn.close()
+    r = _void(client, boss, no)
+    assert r.status_code == 409 and "其他單據" in r.text, r.text
+    assert _row(no)[0] is not None and not _bin_id(no)
+
+
+def test_void_is_refused_when_the_case_is_finalized(client, boss, flag_on):
+    import db
+    no = _post(client, boss).json()["quote_no"]
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE quotations SET deal_tag='已結案' WHERE quote_no=?", (no,))
+        conn.commit()
+    finally:
+        conn.close()
+    r = _void(client, boss, no)
+    assert r.status_code == 409 and "已結案" in r.text, r.text
+    assert _row(no)[0] is not None and not _bin_id(no)
+
+
+def test_number_overflow_at_999_is_a_409_not_a_four_digit_number(client, boss, flag_on):
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quote_seq (month, seq) VALUES (?, 999) ON CONFLICT(month) DO UPDATE SET seq=999", ("202605",))
+        conn.commit()
+    finally:
+        conn.close()
+    n = _count()
+    r = _post(client, boss, date="2026-05-10")
+    assert r.status_code == 409, r.text
+    assert _count() == n and _seq("202605") == 999
+
+
+def test_edit_approval_ends_the_backfilled_state_but_plain_edit_keeps_it():
+    from modules.case.api.quotations import _pin_backfill_marker
+    old = {"approval": {"historical": True, "recordedBy": "boss", "reason": "原因原因"}, "historical": {"basisNote": "n"}}
+    q = {"approval": {"isEditApproval": True, "status": "pending", "historical": True}}
+    _pin_backfill_marker(q, old)                           # 真正的簽核開始 ⇒ 不再是「補登，無簽核」
+    assert "historical" not in q["approval"] and q["historical"] == {"basisNote": "n"}
+    q = {"approval": {"tiers": [{"approver": "x"}]}}
+    _pin_backfill_marker(q, old)
+    assert "historical" not in q["approval"]
 
 
 def test_ordinary_non_draft_quote_still_cannot_be_deleted(client, boss):
@@ -323,7 +426,7 @@ def test_ordinary_non_draft_quote_still_cannot_be_deleted(client, boss):
         r = client.post("/api/quotations", headers=boss, json={"status": "已送出", "data": {"customerName": "一般", "items": []}})
     assert r.status_code in (200, 201), r.text
     no = r.json()["quote_no"]
-    assert client.delete("/api/quotations/" + no, headers=boss).status_code == 403
+    assert _void(client, boss, no).status_code == 403
     assert _row(no)[0] is not None
 
 
@@ -362,8 +465,8 @@ def test_update_drops_client_marker_on_ordinary_draft(client, make_user):
 def test_pin_marker_keeps_real_marker_and_drops_forged_one():
     from modules.case.api.quotations import _pin_backfill_marker
     old = {"approval": {"historical": True, "recordedBy": "boss", "reason": "原因原因"}, "historical": {"basisNote": "n"}}
-    q = {"approval": {"isEditApproval": True}}
-    _pin_backfill_marker(q, old)                           # 現值是補登單 ⇒ 編輯後仍是
+    q = {"approval": {"note": "一般編輯"}}
+    _pin_backfill_marker(q, old)                           # 現值是補登單、沒有真正簽核 ⇒ 編輯後仍是
     assert q["approval"]["historical"] is True and q["approval"]["recordedBy"] == "boss" and q["historical"] == {"basisNote": "n"}
     q2 = dict(FORGED, approval=dict(FORGED["approval"]))
     _pin_backfill_marker(q2, {"approval": {"status": "pending"}})   # 現值不是 ⇒ 丟掉
