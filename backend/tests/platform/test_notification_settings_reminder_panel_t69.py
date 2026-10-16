@@ -9,13 +9,14 @@
 ⑤ 沒有破壞 AL1：init() 只有一個守衛、頁面沒有第二個 x-init
 """
 import re
-from pathlib import Path
 
-PAGE = Path(__file__).resolve().parents[3] / "frontend" / "pages" / "notification-settings.html"
+from core import source_tree
+
+PAGE = "notification-settings.html"
 
 
 def _page():
-    return PAGE.read_text(encoding="utf-8")
+    return source_tree.page_file(PAGE).read_text(encoding="utf-8")
 
 
 def test_page_reads_the_existing_endpoint_and_explains_empty_and_denied():

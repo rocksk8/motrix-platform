@@ -8,13 +8,14 @@
 ⑤ 沒破壞 AL1：只有一個 x-init、_initDone 守衛仍在
 """
 import re
-from pathlib import Path
 
-PAGE = Path(__file__).resolve().parents[3] / "frontend" / "pages" / "recycle-bin.html"
+from core import source_tree
+
+PAGE = "recycle-bin.html"
 
 
 def _page():
-    return PAGE.read_text(encoding="utf-8")
+    return source_tree.page_file(PAGE).read_text(encoding="utf-8")
 
 
 def test_page_calls_the_existing_settings_endpoint_and_explains_the_lock():
