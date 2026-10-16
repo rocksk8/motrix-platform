@@ -610,7 +610,8 @@ function reportsApp() {
     },
     stlCharityLabel(sm, orig) {   // 第 52 班：公益列標籤依基數戳記（同式 pdf_gen.charity_cost_label）
       sm = sm || {}
-      return (orig ? sm.origCharityBasis : sm.charityBasis) === 'total' ? '公益捐款（報價含稅 1%）' : '公益捐款（直接毛利 1%）'
+      const rp = Number(orig ? sm.origCharityRatePct : sm.charityRatePct), rt = Number.isFinite(rp) && rp >= 0 && rp !== 1 ? String(Math.round(rp * 1e6) / 1e6) : '1'      // T68 Q1：比率看單據自己的戳記（沒有＝1）
+      return ((orig ? sm.origCharityBasis : sm.charityBasis) === 'total' ? '公益捐款（報價含稅 1%）' : '公益捐款（直接毛利 1%）').replace('1%', rt + '%')
     },
     stlFmt(n) { return 'NT$ ' + MotrixFormat.num(Math.round(n || 0)) },
     stlSummary() { return (this.settlement && this.settlement.settlement && this.settlement.settlement.summary) || {} },

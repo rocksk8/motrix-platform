@@ -500,6 +500,12 @@ def _charity_rate_pct():
     return _pw.charity_rate_pct()
 
 
+def _tot_rate_pct(tot):
+    """報價單自己的公益比率（`tot.charityRatePct` 戳記）；舊單據沒有戳記＝當時是 1，**不是**目前設定。"""
+    v = (tot or {}).get("charityRatePct")
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 10 else 1.0
+
+
 def _profit_basis(tot):
     """精算的利潤口徑：`(ver, 比率)`。legacy 模式 ⇒ (1, None)；v2 ⇒ (2, 報價單 tot.overheadPct，沒有就用全域預設)——與精算頁同一規則。"""
     from modules.case import profit_guard as PG
@@ -596,7 +602,7 @@ def original_side(conn, quote_no, summ) -> dict:
     # 預留（totalIndirect − 管銷 − 公益）隨之重算——原始營業利益（tot.netProfit）不變，對帳式仍成立。已凍結的舊 summary 不改寫。
     _ctotal = tot.get("formulaVer") == profit_rules.FORMULA_VER and tot.get("charityBasis") == profit_rules.CHARITY_TOTAL     # 第 52 班：報價單自己戳記的公益基數
     charity = max(0, _num(tot["charityDonation"])) if tot.get("charityDonation") is not None else (
-        profit_rules.charity(direct, _num(tot.get("total")), profit_rules.CHARITY_TOTAL, _charity_rate_pct()) if _ctotal else profit_rules.charity(direct, None, profit_rules.CHARITY_DIRECT, _charity_rate_pct()))
+        profit_rules.charity(direct, _num(tot.get("total")), profit_rules.CHARITY_TOTAL, _tot_rate_pct(tot)) if _ctotal else profit_rules.charity(direct, None, profit_rules.CHARITY_DIRECT, _tot_rate_pct(tot)))
     net = _num(tot["netProfit"]) if tot.get("netProfit") is not None else direct - admin - charity
     net_pct = _num(tot["netMarginPct"]) if tot.get("netMarginPct") is not None else (net / pretax * 100 if pretax > 0 else 0.0)
     # 第 39 班：報價預留的間接成本（運費／安裝／差旅／保固／其他五項；`tot.totalIndirect` 含管銷分攤與公益金，扣掉這兩項後的餘額）——原始營業利益已扣掉它、
@@ -609,6 +615,9 @@ def original_side(conn, quote_no, summ) -> dict:
         out["origFormulaVer"], out["origOverheadPct"] = profit_rules.FORMULA_VER, tot.get("overheadPct")
         if tot.get("charityBasis") == profit_rules.CHARITY_TOTAL:     # 第 52 班：原始側的公益基數來自報價單自己的戳記（與實際側的目前模式分開標示）
             out["origCharityBasis"] = profit_rules.CHARITY_TOTAL
+    _cr = tot.get("charityRatePct")
+    if isinstance(_cr, (int, float)) and not isinstance(_cr, bool) and _cr != 1:           # T68 Q1：報價當時的公益比率戳記（沒有＝1）；標籤看這個
+        out["origCharityRatePct"] = tot["charityRatePct"]
     return out
 
 
@@ -648,11 +657,17 @@ def fill_downstream(conn, quote_no, settlement):
         summ.pop("formulaVer", None)
         summ.pop("overheadPct", None)
         summ.pop("charityBasis", None)
+    from helpers import profit_warning as _pw
+    _rate = _pw.charity_rate_stamp()                                  # T68 Q1：公益比率戳記隨 summary 凍結（預設 1 ⇒ 不帶鍵；之後改比率不影響這份完結精算的標籤）
+    if _rate is None:
+        summ.pop("charityRatePct", None)
+    else:
+        summ["charityRatePct"] = _rate
     put("taxExpense", d["totals"]["taxExpense"])                  # 稅額（含在成本內）：伺服器重算值，隨 summary 凍結
     _orig = original_side(conn, quote_no, summ)
     for k, v in _orig.items():                                     # 38（稽核 S-1）：「原始側」欄位也由伺服器依報價單重算，不凍結用戶端偽造的值
         put(k, v)
-    for k in ("origFormulaVer", "origOverheadPct", "origCharityBasis"):                # 第 48 班：原始側口徑戳記只由伺服器依報價單蓋（報價是舊口徑 ⇒ 不帶）
+    for k in ("origFormulaVer", "origOverheadPct", "origCharityBasis", "origCharityRatePct"):                # 第 48 班：原始側口徑戳記只由伺服器依報價單蓋（報價是舊口徑 ⇒ 不帶）
         if k not in _orig:
             summ.pop(k, None)
     for k in ("dispatchAssignedTotal", "dispatchUnassignedTotal", "dispatchAbsorbedTotal"):          # 36／38：派發對應拆分隨 summary 凍結

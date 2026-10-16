@@ -87,8 +87,8 @@ def charity_cost_label(summary, orig=False) -> str:
     """公益捐款列標籤（第 52 班）：`charityBasis=total`（orig 側看 `origCharityBasis`）＝「公益捐款（報價含稅 1%）」，其餘（無戳記／舊基）＝「公益捐款（直接毛利 1%）」。
     前端同式：reports.js stlCharityLabel、case-management-fin.js caseSettleCharityLabel、settlement.html charityLbl；守門 tests/test_profit_labels_t52.py。"""
     s = summary or {}
-    from helpers.profit_warning import charity_rate_text        # T68 Q1：比率走設定（預設 1＝今天的字樣）
-    r = charity_rate_text()
+    from helpers.profit_warning import rate_text               # T68 Q1：已存檔的單據看自己的比率戳記（沒有＝當時是 1），不看目前設定
+    r = rate_text(s.get("origCharityRatePct" if orig else "charityRatePct", 1))
     return "公益捐款（報價含稅 %s%%）" % r if s.get("origCharityBasis" if orig else "charityBasis") == "total" else "公益捐款（直接毛利 %s%%）" % r
 
 

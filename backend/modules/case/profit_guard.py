@@ -33,7 +33,7 @@ CHARITY_MODE_KEY, CHARITY_MIGRATION_KEY = "charity_basis_mode", "charity_migrati
 CHARITY_MODES = (PR.CHARITY_DIRECT, PR.CHARITY_TOTAL)
 # 已精算／結案單沿用資料庫現值的管銷與利潤衍生欄位
 SETTLED_PROFIT_KEYS = ("adminCost", "charityDonation", "totalIndirect", "netProfit", "netMarginPct")
-STAMP_KEYS = ("formulaVer", "overheadPct", "_legacy", "_recalc", "charityBasis", "_legacyCharity")
+STAMP_KEYS = ("formulaVer", "overheadPct", "_legacy", "_recalc", "charityBasis", "_legacyCharity", "charityRatePct")
 _ONLY_SUPERADMIN = "只有最高管理者可調整管銷分攤比率"
 
 
@@ -297,6 +297,16 @@ def server_profit(q: dict, pct, ver: int, pretax=None, total=None, charity_basis
             "netProfit": round_half_up(r["netProfit"]), "netMarginPct": round_half_up(r["netMarginPct"], 10) / 10}
 
 
+def _stamp_charity_rate(tot: dict) -> None:
+    """tot.charityRatePct＝這次重算用的公益比率（等於預設 1 ⇒ 移除鍵）。只由伺服器蓋；已精算／結案單走 `_restore_stamps` 沿用現值。"""
+    from helpers import profit_warning as _pw
+    r = _pw.charity_rate_stamp()
+    if r is None:
+        tot.pop("charityRatePct", None)
+    else:
+        tot["charityRatePct"] = r
+
+
 def _restore_stamps(tot: dict, old_tot, keys=STAMP_KEYS):
     """戳記欄位一律不採用用戶端的值：先清掉，再把資料庫現值放回（沒有就維持沒有）。"""
     for k in keys:
@@ -374,6 +384,7 @@ def prepare(q: dict, user: dict, existing_row=None, quote_no: str = ""):
     _restore_stamps(tot, old_tot, keys=("_legacy", "_recalc", "_legacyCharity"))   # 遷移留下的回滾依據沿用現值
     tot.pop("formulaVer", None)
     tot.pop("charityBasis", None)                                 # 公益基數戳記只由伺服器依目前模式重蓋（用戶端值一律丟棄）
+    _stamp_charity_rate(tot)                                      # T68 Q1：公益比率戳記（預設 1 ⇒ 不帶鍵；標籤看這個，不看目前設定）
     tot.pop("overheadPct", None)
     if "overheadPct" in q:
         tot["overheadPct"] = q["overheadPct"]                    # 精算頁／伺服器重算都從 tot 讀比率（單一讀法）
@@ -437,6 +448,7 @@ def change_pct(conn, quote_no: str, raw_pct, user: dict, confirm=False, now: str
     q["overheadPct"] = new
     tot["overheadPct"] = new
     tot.update(server_profit(q, new, PR.FORMULA_VER, pretax=tot.get("pretax"), total=tot_total, charity_basis=basis))
+    _stamp_charity_rate(tot)
     tot["formulaVer"] = PR.FORMULA_VER
     q["tot"] = tot
     conn.execute("UPDATE quotations SET data_json=?, net_margin_pct=?, updated_at=? WHERE quote_no=?",

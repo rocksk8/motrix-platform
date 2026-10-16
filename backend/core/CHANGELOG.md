@@ -2,7 +2,7 @@
 
 ## (next) — 2026-10-16（wip/t68-q1-profit-r1；T68 Q1 利潤口徑單一來源收尾）
 - L1（只增，相容擴充）：`helpers.profit_rules` 的 `admin_cost`／`charity`／`quote_profit`／`settlement_profit` 各加選用參數 `default_pct`（管銷比率後備值）、`rate_pct`／`charity_rate_pct`（公益比率百分數）；不傳＝內建 25／1，與今天逐位相同。檔仍是純函式，不讀設定。
-- L1（只增）：`helpers.profit_warning` 新增 `charity_rate_pct()`、`charity_rate_text()`、`rules_config()`、`CHARITY_RATE_PCT_DEFAULT`；設定群組 `profit_rules`（欄位 `charity_rate_pct`，預設 1，0～10，money 風險）寫在既有的 `helpers/settings_groups_profit.py`（`settings_deploy_baseline.json` 已同步）。
+- L1（只增）：`helpers.profit_warning` 新增 `charity_rate_pct()`、`charity_rate_text()`、`charity_rate_stamp()`、`rate_text()`、`rules_config()`、`CHARITY_RATE_PCT_DEFAULT`；設定群組 `profit_rules`（欄位 `charity_rate_pct`，預設 1，0～10，money 風險）寫在既有的 `helpers/settings_groups_profit.py`（`settings_deploy_baseline.json` 已同步）。
 - **放寬方向**：公益比率**調低**＝少扣公益金、營業利益變高 ⇒ 放寬（`loosen=down`），走確認期間＋第二位最高管理者核准（D-K1）；**調高**＝多扣＝收緊，立即生效。讀不到／不合法一律回 1（今天的值）。已完結精算的存檔公益金不回頭改寫。
 - 前端 `static/profit-rules.js` 新增 `configure()`／`charityRateText()`；三個數字（管銷後備 25、公益 1%、目標利潤率 12）可由 `GET /api/overhead/settings` 帶入，沒呼叫＝內建值。
 

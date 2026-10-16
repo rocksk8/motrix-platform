@@ -168,12 +168,33 @@ def test_labels_keep_todays_wording_by_default():
     assert bonus.row_label("charityDonation", "公益捐款（1%）", {"charityBasis": "total"}) == "公益捐款（報價含稅 1%）"
 
 
-def test_labels_follow_the_setting(monkeypatch):
+def test_labels_follow_the_documents_own_stamp_not_the_current_setting(monkeypatch):
+    """完結後改比率：標籤仍是單據當時的比率（沒有戳記＝當時是 1），不看目前設定。"""
     import pdf_gen
     from modules.payroll import bonus
-    monkeypatch.setattr(SR, "get", lambda g, f, **kw: 0.5)
-    assert pdf_gen.charity_cost_label({}) == "公益捐款（直接毛利 0.5%）"
-    assert bonus.row_label("charityDonation", "公益捐款（1%）", {"charityBasis": "total"}) == "公益捐款（報價含稅 0.5%）"
+    monkeypatch.setattr(SR, "get", lambda g, f, **kw: 0.5)                               # 目前設定 0.5%
+    assert pdf_gen.charity_cost_label({}) == "公益捐款（直接毛利 1%）", "舊單據沒有戳記 ⇒ 當時是 1%"
+    assert pdf_gen.charity_cost_label({"charityRatePct": 2}) == "公益捐款（直接毛利 2%）"
+    assert pdf_gen.charity_cost_label({"charityRatePct": 2.5, "charityBasis": "total"}) == "公益捐款（報價含稅 2.5%）"
+    assert pdf_gen.charity_cost_label({"charityRatePct": 2, "origCharityRatePct": 3}, orig=True) == "公益捐款（直接毛利 3%）"
+    assert pdf_gen.charity_cost_label({"charityRatePct": 2}, orig=True) == "公益捐款（直接毛利 1%）"
+    assert bonus.row_label("charityDonation", "公益捐款（1%）", {"charityRatePct": 2, "charityBasis": "total"}) == "公益捐款（報價含稅 2%）"
+    assert bonus.row_label("charityDonation", "公益捐款（1%）", {}) == "公益捐款（直接毛利 1%）"
+    for bad in (None, -1, True, "2", float("nan")):
+        assert PW.rate_text(bad) == "1"
+
+
+def test_rate_stamp_is_absent_at_the_default_and_present_otherwise(monkeypatch):
+    from modules.case import profit_guard as PG
+    monkeypatch.setattr(SR, "get", lambda g, f, **kw: 1)
+    assert PW.charity_rate_stamp() is None
+    tot = {"charityRatePct": 9}                                                           # 用戶端送的值一律丟棄
+    PG._stamp_charity_rate(tot)
+    assert "charityRatePct" not in tot
+    monkeypatch.setattr(SR, "get", lambda g, f, **kw: 2)
+    PG._stamp_charity_rate(tot)
+    assert tot["charityRatePct"] == 2.0
+    assert "charityRatePct" in PG.STAMP_KEYS, "已精算／結案單沿用資料庫現值"
 
 
 def test_no_literal_charity_rate_left_in_the_call_sites():
@@ -203,3 +224,13 @@ def test_lowering_charity_rate_is_pending_with_a_second_approver_and_raising_is_
         assert PW.charity_rate_pct(c) == 2.0
     finally:
         c.close()
+
+
+def test_legacy_quote_recompute_uses_one_percent_not_the_live_rate(monkeypatch):
+    """沒有戳記的舊報價單（當時是 1%）：補算原始側公益金時用 1%，不用目前設定。"""
+    from modules.case import settlement_actuals as SA
+    monkeypatch.setattr(SR, "get", lambda g, f, **kw: 3)
+    assert SA._tot_rate_pct({}) == 1.0 and SA._tot_rate_pct(None) == 1.0
+    assert SA._tot_rate_pct({"charityRatePct": 2}) == 2.0
+    for bad in (True, "2", -1, 11, None):
+        assert SA._tot_rate_pct({"charityRatePct": bad}) == 1.0

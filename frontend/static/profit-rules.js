@@ -122,12 +122,10 @@
   }
 
   // 標籤用：目前公益比率的字樣（'1'、'0.5'；整數不帶小數點）。CHARITY_RATE 是費率字串（'0.01'）⇒ 小數點右移兩位、去尾零
-  function charityRateText() {
-    var s = String(CHARITY_RATE), n = Number(s) * 100
-    return String(Math.round(n * 1e6) / 1e6)
-  }
+  function charityRatePct() { return Math.round(Number(String(CHARITY_RATE)) * 100 * 1e6) / 1e6 }
+  function charityRateText() { return String(charityRatePct()) }
 
-  var api = { charityRateText: charityRateText, configure: configure, LEGACY_VER: LEGACY_VER, FORMULA_VER: FORMULA_VER, ACTIVE_VER: ACTIVE_VER, DEFAULT_OVERHEAD_PCT: DEFAULT_OVERHEAD_PCT,
+  var api = { charityRatePct: charityRatePct, charityRateText: charityRateText, configure: configure, LEGACY_VER: LEGACY_VER, FORMULA_VER: FORMULA_VER, ACTIVE_VER: ACTIVE_VER, DEFAULT_OVERHEAD_PCT: DEFAULT_OVERHEAD_PCT,
               TARGET_MARGIN_PCT: TARGET_MARGIN_PCT, CHARITY_DIRECT: CHARITY_DIRECT, CHARITY_TOTAL: CHARITY_TOTAL, ACTIVE_CHARITY_BASIS: ACTIVE_CHARITY_BASIS, basisOf: basisOf, pctRate: pctRate, adminCost: adminCost, charity: charity, quote: quote, settlement: settlement, projectMargin: projectMargin, uncostedItems: uncostedItems }
   if (typeof window !== 'undefined') window.MotrixProfitRules = api
   if (typeof module !== 'undefined' && module.exports) module.exports = api

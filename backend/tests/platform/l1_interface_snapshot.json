@@ -1398,8 +1398,10 @@
    "DEFAULT_VALID_DAYS": "const",
    "bands": "def(conn=…)",
    "charity_rate_pct": "def(conn=…)",
+   "charity_rate_stamp": "def(conn=…)",
    "charity_rate_text": "def(conn=…)",
    "default_valid_days": "def(conn=…)",
+   "rate_text": "def(pct)",
    "rules_config": "def(conn=…)"
   },
   "helper:quote_output": {
