@@ -1004,3 +1004,23 @@ _profit.register(S, _register_core)
 from helpers import settings_groups_list_view as _list_view  # noqa: E402
 
 _list_view.register(S, _register_core)
+
+# T69 補登歷史案件 L0（設計 D:/Claude-pm/reports/design-backfill-quote-t69.md §9 裁示 4）：預設關＝今天的行為（沒有任何補登入口）。
+# 使用者裁示：開關**立即生效、僅強制稽核**（不經第二位最高管理者核准、不設確認期間），所以不設 `loosen`。
+# 真正的限制在『最高管理者專屬、不可委派』的能力 case.quote_backfill.create 與預設關；L0 只登記開關，端點在 L1。
+register_group(
+    "quote_backfill", "補登歷史案件",
+    [
+        S("enabled", "int", 0, min=0, max=1, risk="none", recommended=0,
+          question="要開放最高管理者補登過去月份的已成案報價單嗎？", label="開放補登歷史案件",
+          help="開啟後，只有最高管理者可以補登過去月份（不含本月）的已成案報價單，單號依該單所屬月份編列（例如補登 7 月的案件，單號就是 7 月的號碼）。補登一定要填原因，並留下稽核紀錄。補登完請記得關閉。",
+          impact="只開放最高管理者的補登入口；一般新增報價單的編號與流程完全不變。開啟與關閉立即生效，並留下稽核紀錄。補登的案件不發成案通知、不觸發提醒，利潤與公益金以現行口徑計算並註明。",
+          choices=[(0, "關閉（預設）", "沒有補登入口。"), (1, "開啟", "最高管理者可補登過去月份的已成案報價單。")]),
+        S("earliest_month", "int", 202001, min=200001, max=209912, risk="none", recommended=202001,
+          question="最早可以補登到哪一個月？（填年月，例如 202001）", label="最早可補登月份",
+          help="補登的報價日期不得早於這個月份；也不得是本月或未來。",
+          impact="只限制補登時可選的月份範圍，不影響已存在的報價單。"),
+    ],
+    sensitive=False, risk="ops",
+    help="最高管理者補登過去月份已成案報價單的開關與可補登的最早月份；預設關閉。",
+)

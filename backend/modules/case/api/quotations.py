@@ -759,6 +759,11 @@ class ApprovalActionBody(BaseModel):
 _QUOTE_NO_RE = re.compile(r"^MQ-\d{6}-\d{3}$")
 
 
+def _month_of_no(no: str) -> str:
+    """合法單號 MQ-YYYYMM-NNN → YYYYMM。序號永遠記在**單號自己的月份**（補登舊月份單號時不可墊高本月；T69 L0）。"""
+    return no[3:9]
+
+
 def _peek_next_no(conn, month: str) -> str:
     """Compute next available quote number without reserving it in quote_seq.
     Reservation only happens on actual INSERT (create_quotation)."""
@@ -1743,7 +1748,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
         conn.execute(
             "INSERT INTO quote_seq (month, seq) VALUES (?, ?) "
             "ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)",
-            (month, seq_no)
+            (_month_of_no(qno), seq_no)
         )
     # caseRecord.stages 正規化 Phase 3a（2026-08-23）：新建報價單也可能挾帶
     # caseRecord.stages（例如複製既有案件、或 quotation-form.html 自己的
@@ -1793,7 +1798,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
                     "  SELECT COALESCE(MAX(CAST(SUBSTR(quote_no, 11, 3) AS INTEGER)), 0)"
                     "  FROM quotations WHERE quote_no GLOB ? AND LENGTH(quote_no) = 13"
                     ") WHERE month = ?",
-                    (f"MQ-{month}-???", month)
+                    (f"MQ-{_month_of_no(qno)}-???", _month_of_no(qno))
                 )
                 _cleanup.commit()
                 _cleanup.close()
