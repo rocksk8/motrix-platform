@@ -1215,7 +1215,7 @@ function settlementPage() {
       MotrixProfitWarning.load().then(b => { this.pw = b })      // T64 A：取不到＝原本的數字
       try {                                   // 第 48 班 S3：管銷口徑與全域預設（取不到＝legacy）
         const r = await fetch(`${API}/overhead/settings`, { headers: { Authorization: 'Bearer ' + this.session.token } })
-        if (r.ok) { const d = await r.json(); this.oh = { mode: d.ruleMode === 'v2' ? 'v2' : 'legacy', defaultPct: d.defaultPct, charityBasis: d.charityBasis === 'total' ? 'total' : 'direct' } }
+        if (r.ok) { const d = await r.json(); this.oh = { mode: d.ruleMode === 'v2' ? 'v2' : 'legacy', defaultPct: d.defaultPct, charityBasis: d.charityBasis === 'total' ? 'total' : 'direct' }; MotrixProfitRules.configure(d) }      // T68 Q1：公益比率／管銷後備值／目標利潤率由設定帶入
       } catch (e) { /* 維持 legacy */ }
 
       const params = new URLSearchParams(location.search)
@@ -1978,7 +1978,8 @@ function settlementPage() {
       return sm.overheadPct == null ? '管銷分攤（直接毛利）' : '管銷分攤（直接毛利 ' + sm.overheadPct + '%）'
     },
     charityLbl(sm, orig) {                           // 第 52 班：公益捐款標籤（新基＝報價含稅 1%；舊基＝直接毛利 1%）。orig＝原始（報價）側，看 origCharityBasis
-      return ((orig ? sm && sm.origCharityBasis : sm && sm.charityBasis) === 'total') ? '公益捐款（報價含稅 1%）' : '公益捐款（直接毛利 1%）'
+      const base = ((orig ? sm && sm.origCharityBasis : sm && sm.charityBasis) === 'total') ? '公益捐款（報價含稅 1%）' : '公益捐款（直接毛利 1%）'
+      return base.replace('1%', MotrixProfitRules.charityRateText() + '%')          // T68 Q1：比率走設定（預設 1 ⇒ 字樣不變；字面保留給守門題比對）
     },
     charityHow(sm) {
       return (sm && sm.charityBasis === 'total') ? '公益＝報價含稅金額×1%（與毛利無關）' : '公益＝毛利×1%（毛利為負時以 0 計）'

@@ -5,6 +5,7 @@
 [公開介面] register
 [不變式] ①利潤提醒只改顏色／提示字，不擋存檔、不改金額、不改送審；故無放寬／收緊之分（立即生效）。
     ②預設有效天數不得高於 quote_approval.max_valid_days（否則每張新單一開始就要送審）；送審判斷仍由伺服器重算。
+    ③（T68 Q1）profit_rules.charity_rate_pct 會改金額（公益金）⇒ risk=money；調低＝放寬（營業利益變高），走確認期間＋第二位最高管理者核准（D-K1）；調高立即生效。
 [契約題] backend/tests/platform/test_profit_warning_t64.py
 """
 
@@ -85,4 +86,20 @@ def register(S, _register_core):
         ],
         sensitive=False, risk="none", cross_check=_valid_days_cross_check,
         help="新增報價單時預先帶入的值；業務可逐張修改。",
+    )
+
+    _register_core(
+        "profit_rules", "利潤口徑",
+        [
+            S("charity_rate_pct", "float", 1, min=0, max=10, unit="%", risk="money", loosen="down", recommended=1,
+              risk_text="【高影響】調低公益捐款比率後，新算的報價單與精算會少扣公益金、營業利益變高，並影響獎金基數與營運報表；已完結精算的存檔公益金不會被改寫。",
+              impact_scope={"documents": ["報價單", "精算", "營運報表", "結案精算"], "roles": ["業務", "最高管理者", "財務"],
+                            "amounts": "改變之後新算的公益金與營業利益（報價 PDF「公益捐款」列、精算頁、營運報表同步）；不改已完結精算的存檔值。",
+                            "reversible": True, "effective": "pending"},
+              question="公益捐款要扣報價（或直接毛利）的百分之幾？", label="公益捐款比率",
+              help="報價單與精算的「公益捐款」＝基數 × 這個比率（基數是直接毛利或報價含稅金額，由既有的公益基數開關決定）。預設 1％（＝目前的做法）。",
+              impact="調高＝多扣公益金（立即生效）；調低＝少扣公益金、營業利益變高（放寬，需第二位最高管理者核准並經確認期間）。只影響之後新算的數字；已完結精算的存檔公益金不回頭改寫。"),
+        ],
+        sensitive=True, risk="money",
+        help="報價單與精算的公益捐款比率；管銷比率另在精算頁／管銷設定調整，營業利益率目標沿用「利潤提醒色帶」的報價單紅線。",
     )

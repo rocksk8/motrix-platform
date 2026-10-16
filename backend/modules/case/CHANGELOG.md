@@ -1,5 +1,11 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-16（wip/t68-q1-profit-r1；T68 Q1：公益比率與管銷後備值走設定）
+- 新設定 `profit_rules.charity_rate_pct`（設定中心「利潤口徑」，預設 1％＝今天）：報價單（伺服器重算／影子比對）、精算頁、精算下游驗算、報價原始側的公益金都改用它；調低＝放寬（確認期間＋第二位最高管理者核准），調高立即生效。管銷比率的後備值改取 `overhead_default_pct`（預設 25），不再有第二份寫死的 25。
+- `GET /api/overhead/settings` 多回 `charityRatePct`、`targetMarginPct`（目標利潤率＝報價單紅線，預設 12）；`quotation-form.html`、`settlement.html` 載入後呼叫 `MotrixProfitRules.configure()`，「公益捐款（… 1%）」標籤跟著比率。
+- 已知範圍外：`reports.js`、`case-management-fin.js` 的結算標籤仍寫「1%」（這兩頁沒有載入設定）；比率沒改過（預設）時與今天完全相同。
+
+
 ## 1.0.201 — 2026-10-16（wip/t66-quote-copy-sortable-r1；複製為新報價單後拖曳排序失效修復；報價單表單 V3.29）
 - 修正：報價單清單或表單按「複製為新報價單」後，新單的項目拖曳排序（拖曳把手）失效。原因是 `quotation-form.html` 的 `init()` 複製分支在中途 `return`，漏掉編輯／新增共用的尾巴（`Sortable` 建立、預覽模式 `$watch`、預覽高度 `message` 監聽）。尾巴抽成 `_bindLateHooks()`，複製分支與一般路徑都呼叫，可重複呼叫不重複綁定；`initSortable()` 重建前先銷毀舊實例、`$watch` 只登記一次。複製分支再保險一次：status 缺值或誤帶「已送出」時改為草稿並取消解鎖。無資料庫變動、無後端變動；`FORM_VERSION` V3.28→V3.29。守門測試 `tests/platform/test_quote_copy_binds_sortable_t66.py`。
 

@@ -15,6 +15,10 @@
 - `CHARITY_TOTAL = "total"`：公益捐款 ＝ 報價**含稅**金額（`tot.total`＝稅前＋稅額）× 1%，四捨五入到元；下限只在『含稅金額』上（負的金額不可變成收入：`max(0, …)`），**不看直接毛利、虧損案照扣**（只在 ver 2 生效）。
   含稅金額由呼叫端傳入（`total`／`quoted_total`）；基數是 total 卻沒給金額 ⇒ ValueError（不悄悄當 0）。
 
+**可設定的三個數字**（T68 Q1）：公益捐款比率（`charity_rate_pct`，設定中心 `profit_rules.charity_rate_pct`，預設 1）、管銷比率後備值（`default_pct`，
+`overhead_default_pct`，預設 25）、營業利益率目標（`profit_warning.quote_form_low`，預設 12）。本檔仍是**純函式**——不讀設定；呼叫端把目前的值傳進來，
+不傳＝內建預設（`CHARITY_RATE`／`DEFAULT_OVERHEAD_PCT`／`TARGET_MARGIN_PCT`，與今天逐位相同）。前端 `profit-rules.js` 的 `configure()` 是同一件事。
+
 **S1（本班第一步）零行為變更**：`ACTIVE_VER` 仍是 1；呼叫端不傳 `ver` 就走舊口徑。S2 才把 `ACTIVE_VER` 換成 2 並接資料模型。
 回傳的數字都是**未四捨五入的原始值**（與舊 `calcTotals`／`calcSummary` 同）；顯示用的進位由呼叫端照舊處理。
 """
@@ -39,12 +43,13 @@ def pct_rate(pct) -> str:
     return format(Decimal(str(pct).strip()).scaleb(-2), "f")
 
 
-def admin_cost(pretax, direct_profit, pct=None, ver=None) -> int:
-    """管銷分攤。ver 1：稅前 × 10%；ver 2：max(直接毛利,0) × pct%（直接毛利為負 ⇒ 0）。"""
+def admin_cost(pretax, direct_profit, pct=None, ver=None, default_pct=None) -> int:
+    """管銷分攤。ver 1：稅前 × 10%；ver 2：max(直接毛利,0) × pct%（直接毛利為負 ⇒ 0）。
+    `pct` 沒給時的後備值＝`default_pct`（呼叫端傳目前的全域預設）；兩者都沒給才用程式內建的 `DEFAULT_OVERHEAD_PCT`（25）。"""
     ver = ACTIVE_VER if ver is None else ver
     if ver == LEGACY_VER:
         return round_half_up(pretax, LEGACY_ADMIN_RATE)
-    p = DEFAULT_OVERHEAD_PCT if pct is None else pct
+    p = (DEFAULT_OVERHEAD_PCT if default_pct is None else default_pct) if pct is None else pct
     return round_half_up(max(direct_profit, 0), pct_rate(p))
 
 
@@ -57,22 +62,29 @@ def _basis(ver, basis):
     return b if (b == CHARITY_TOTAL and ver != LEGACY_VER) else CHARITY_DIRECT
 
 
-def charity(direct_profit, total=None, basis=CHARITY_DIRECT) -> int:
-    """公益捐款。`direct`（預設，舊算法）＝直接毛利 × 1%，不為負（虧損案以 0 計）；
-    `total`＝報價含稅金額 × 1%（只在含稅金額上設下限 0；`total` 必填）。"""
+def _charity_rate(rate_pct):
+    """公益捐款比率：沒給（None）＝內建 1%（`CHARITY_RATE`）；給了＝百分比（例 0.5 ⇒ 0.005，不經浮點）。"""
+    return CHARITY_RATE if rate_pct is None else pct_rate(rate_pct)
+
+
+def charity(direct_profit, total=None, basis=CHARITY_DIRECT, rate_pct=None) -> int:
+    """公益捐款。`direct`（預設，舊算法）＝直接毛利 × 比率（預設 1%），不為負（虧損案以 0 計）；
+    `total`＝報價含稅金額 × 比率（只在含稅金額上設下限 0；`total` 必填）。`rate_pct`＝比率的百分數（None＝1）。"""
+    rate = _charity_rate(rate_pct)
     if basis == CHARITY_TOTAL:
         if total is None:
             raise ValueError("公益捐款基數 total 需要報價含稅金額")
-        return max(0, round_half_up(total, CHARITY_RATE))        # 以收入為基：不看直接毛利；含稅金額為負 ⇒ 0（不可變成收入）
-    return max(0, round_half_up(direct_profit, CHARITY_RATE))
+        return max(0, round_half_up(total, rate))        # 以收入為基：不看直接毛利；含稅金額為負 ⇒ 0（不可變成收入）
+    return max(0, round_half_up(direct_profit, rate))
 
 
-def quote_profit(pretax, total_cost, input_vat, indirect_items, pct=None, ver=None, total=None, charity_basis=None) -> dict:
+def quote_profit(pretax, total_cost, input_vat, indirect_items, pct=None, ver=None, total=None, charity_basis=None,
+                 charity_rate_pct=None, default_pct=None) -> dict:
     """報價單損益：`indirect_items`＝運輸物流、安裝施工、差異項、保固預估、其他費用（依序，缺＝0）；**只有舊口徑（ver 1）計入**，新口徑（ver 2）一律忽略。"""
     direct = pretax - total_cost - input_vat
     direct_pct = direct / pretax * 100 if pretax > 0 else 0
-    admin = admin_cost(pretax, direct, pct, ver)
-    ch = charity(direct, total, _basis(ver, charity_basis))
+    admin = admin_cost(pretax, direct, pct, ver, default_pct)
+    ch = charity(direct, total, _basis(ver, charity_basis), charity_rate_pct)
     total_indirect = admin + ch
     if (ACTIVE_VER if ver is None else ver) == LEGACY_VER:          # 新口徑不再計入五項間接成本（使用者 2026-10-09：費用一律走請款申請）；舊口徑照舊
         for x in indirect_items:
@@ -83,13 +95,14 @@ def quote_profit(pretax, total_cost, input_vat, indirect_items, pct=None, ver=No
             "totalIndirect": total_indirect, "netProfit": net, "netMarginPct": net_pct}
 
 
-def settlement_profit(pretax, actual_cost, pct=None, ver=None, frozen_charity=None, quoted_total=None, charity_basis=None) -> dict:
+def settlement_profit(pretax, actual_cost, pct=None, ver=None, frozen_charity=None, quoted_total=None, charity_basis=None,
+                      charity_rate_pct=None, default_pct=None) -> dict:
     """精算損益（實際側）：毛利＝稅前 − 實際總成本；`frozen_charity`＝已完結精算的存檔公益金（不回頭改寫）；
     `quoted_total`＝報價含稅金額（公益基數 total 時用，不隨實際成本變動）。"""
     gross = pretax - actual_cost
     gross_pct = gross / pretax * 100 if pretax > 0 else 0
-    admin = admin_cost(pretax, gross, pct, ver)
-    ch = frozen_charity if frozen_charity is not None else charity(gross, quoted_total, _basis(ver, charity_basis))
+    admin = admin_cost(pretax, gross, pct, ver, default_pct)
+    ch = frozen_charity if frozen_charity is not None else charity(gross, quoted_total, _basis(ver, charity_basis), charity_rate_pct)
     net = gross - admin - ch
     net_pct = net / pretax * 100 if pretax > 0 else 0
     return {"grossProfit": gross, "grossMarginPct": gross_pct, "adminCost": admin, "charityDonation": ch,

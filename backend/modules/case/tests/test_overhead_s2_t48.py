@@ -143,7 +143,8 @@ def test_settled_quote_pct_and_numbers_are_frozen(client, who):
 def test_settings_endpoint_authz_audit_and_default_applies_to_new_quotes(client, who):
     su, ad = who
     assert client.get("/api/overhead/settings", headers=ad).json() == {"ruleMode": "legacy", "defaultPct": 25, "ver": 1, "migrationDone": False,
-                                                                                         "charityBasis": "direct", "charityMode": "direct", "charityMigrationDone": False}   # 第 52 班：加性欄位
+                                                                                         "charityBasis": "direct", "charityMode": "direct", "charityMigrationDone": False,
+                                                                                         "charityRatePct": 1.0, "targetMarginPct": 12.0}   # 第 52 班：加性欄位；T68 Q1：公益比率／目標利潤率（預設＝今天）
     assert client.put("/api/overhead/settings", json={"defaultPct": 20}, headers=ad).status_code == 403
     assert client.put("/api/overhead/settings", json={"defaultPct": 120}, headers=su).status_code == 422
     assert client.put("/api/overhead/settings", json={"ruleMode": "x"}, headers=su).status_code == 422

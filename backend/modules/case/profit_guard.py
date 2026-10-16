@@ -288,7 +288,9 @@ def server_profit(q: dict, pct, ver: int, pretax=None, total=None, charity_basis
     for i in counted_items(q):                      # 成本與進項稅同樣只算計入集合
         total_cost = total_cost + _num(i.get("qty")) * _num(i.get("cost"))
     input_vat = round_half_up(total_cost, 0.05)
-    r = PR.quote_profit(pretax, total_cost, input_vat, [_num(q.get(k)) for k in INDIRECT_KEYS], pct, ver, total, charity_basis)
+    from helpers import profit_warning as _pw                     # T68 Q1：公益比率與管銷後備值走設定（預設 1／25＝今天）
+    r = PR.quote_profit(pretax, total_cost, input_vat, [_num(q.get(k)) for k in INDIRECT_KEYS], pct, ver, total, charity_basis,
+                        _pw.charity_rate_pct(), default_pct())
     return {"totalCost": total_cost, "inputVat": input_vat, "directProfit": r["directProfit"],
             "directMarginPct": round_half_up(r["directMarginPct"], 10) / 10, "adminCost": r["adminCost"],
             "charityDonation": r["charityDonation"], "totalIndirect": r["totalIndirect"],

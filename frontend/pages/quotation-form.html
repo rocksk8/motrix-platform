@@ -1964,7 +1964,7 @@
         </div>
         <div class="cost-row" style="flex-wrap:wrap">
           <span class="cost-row__label" style="display:flex;align-items:center;gap:6px">
-            <span data-testid="qf-charity-label" x-text="charityBasis() === 'total' ? '公益捐款（報價含稅 1%）' : '公益捐款（直接毛利 1%）'"></span>
+            <span data-testid="qf-charity-label" x-text="(charityBasis() === 'total' ? '公益捐款（報價含稅 1%）' : '公益捐款（直接毛利 1%）').replace('1%', MotrixProfitRules.charityRateText() + '%')"></span>
             <span style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#1A1A1A;color:#888;padding:1px 5px;border-radius:3px;letter-spacing:.04em">不可修改</span>
           </span>
           <span class="cost-row__val warning" x-text="'NT$ ' + MotrixFormat.num(tot.charityDonation)" data-testid="qf-charity-value"></span>
@@ -2709,7 +2709,7 @@
       async loadOverheadSettings() {
         try {
           const r = await fetch(`${this.API}/overhead/settings`, { headers: { Authorization: 'Bearer ' + this.session.token } })
-          if (r.ok) { const d = await r.json(); this.oh = { mode: d.ruleMode === 'v2' ? 'v2' : 'legacy', defaultPct: d.defaultPct, charityBasis: d.charityBasis === 'total' ? 'total' : 'direct' } }
+          if (r.ok) { const d = await r.json(); this.oh = { mode: d.ruleMode === 'v2' ? 'v2' : 'legacy', defaultPct: d.defaultPct, charityBasis: d.charityBasis === 'total' ? 'total' : 'direct' }; MotrixProfitRules.configure(d) }      // T68 Q1：公益比率／管銷後備值／目標利潤率由設定帶入
         } catch (e) { /* 取不到 ⇒ 維持舊口徑（legacy），與後端預設一致 */ }
       },
 

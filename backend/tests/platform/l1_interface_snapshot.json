@@ -1,5 +1,5 @@
 {
- "core_version": "1.144",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1384,19 +1384,23 @@
    "LEGACY_ADMIN_RATE": "const",
    "LEGACY_VER": "const",
    "TARGET_MARGIN_PCT": "const",
-   "admin_cost": "def(pretax, direct_profit, pct=…, ver=…)",
-   "charity": "def(direct_profit, total=…, basis=…)",
+   "admin_cost": "def(pretax, direct_profit, pct=…, ver=…, default_pct=…)",
+   "charity": "def(direct_profit, total=…, basis=…, rate_pct=…)",
    "pct_rate": "def(pct)",
    "project_margin": "def(pretax, total_cost, uncosted=…)",
-   "quote_profit": "def(pretax, total_cost, input_vat, indirect_items, pct=…, ver=…, total=…, charity_basis=…)",
-   "settlement_profit": "def(pretax, actual_cost, pct=…, ver=…, frozen_charity=…, quoted_total=…, charity_basis=…)",
+   "quote_profit": "def(pretax, total_cost, input_vat, indirect_items, pct=…, ver=…, total=…, charity_basis=…, charity_rate_pct=…, default_pct=…)",
+   "settlement_profit": "def(pretax, actual_cost, pct=…, ver=…, frozen_charity=…, quoted_total=…, charity_basis=…, charity_rate_pct=…, default_pct=…)",
    "uncosted_items": "def(items)"
   },
   "helper:profit_warning": {
+   "CHARITY_RATE_PCT_DEFAULT": "const",
    "DEFAULTS": "const",
    "DEFAULT_VALID_DAYS": "const",
    "bands": "def(conn=…)",
-   "default_valid_days": "def(conn=…)"
+   "charity_rate_pct": "def(conn=…)",
+   "charity_rate_text": "def(conn=…)",
+   "default_valid_days": "def(conn=…)",
+   "rules_config": "def(conn=…)"
   },
   "helper:quote_output": {
    "TERMS": "const",

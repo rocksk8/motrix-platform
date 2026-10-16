@@ -2,9 +2,11 @@
 """T64 A：利潤提醒色帶與報價單預設有效天數的讀取（只讀設定；預設＝各畫面今天寫死的數字）。
 
 [單位] helper:profit_warning    [層] L1    [穩定度] 實驗
-[公開介面] DEFAULTS, bands, default_valid_days, DEFAULT_VALID_DAYS
+[公開介面] DEFAULTS, bands, default_valid_days, DEFAULT_VALID_DAYS, CHARITY_RATE_PCT_DEFAULT, charity_rate_pct, charity_rate_text, rules_config
 [不變式] ①只影響畫面／PDF 的顏色與新報價單的預設有效天數；不擋存檔、不改金額、不改送審判斷（送審門檻是 quote_approval.*，伺服器重算）。
     ②設定讀不到、不是有限數字、超出範圍、或「紅線 > 達標線」⇒ 整組回今天的數字（不是半套）。
+    ③（T68 Q1）公益捐款比率 `profit_rules.charity_rate_pct`：讀不到／不是有限數字／超出 0～10 ⇒ 1（今天的值）；它會改金額（報價單與精算的公益金），
+       所以放寬（調低）走『確認期間＋第二位最高管理者核准』（D-K1），調高立即生效；已完結精算的存檔公益金不回頭改寫。
 設計：設定群組在 helpers/settings_groups_profit.py。
 [契約題] backend/tests/platform/test_profit_warning_t64.py
 """
@@ -52,3 +54,31 @@ def default_valid_days(conn=None) -> int:
     except Exception:                                                                    # noqa: BLE001
         pass
     return DEFAULT_VALID_DAYS
+
+
+CHARITY_RATE_PCT_DEFAULT = 1.0                         # 公益捐款比率（百分數）；1＝今天寫死的 1%
+_CHARITY_RATE_MAX = 10.0
+
+
+def charity_rate_pct(conn=None) -> float:
+    """公益捐款比率（百分數，預設 1）。任何讀取失敗／不合法 ⇒ 1（與 profit_rules.CHARITY_RATE 同值，今天的行為）。"""
+    try:
+        from helpers import settings_registry as sr
+        v = sr.get("profit_rules", "charity_rate_pct", conn=conn)
+        if not isinstance(v, bool) and isinstance(v, (int, float)) and math.isfinite(float(v)) and 0 <= float(v) <= _CHARITY_RATE_MAX:
+            return float(v)
+    except Exception:                                                                    # noqa: BLE001
+        pass
+    return CHARITY_RATE_PCT_DEFAULT
+
+
+def charity_rate_text(conn=None) -> str:
+    """公益捐款比率的標籤字樣（'1'、'0.5'…；整數不帶小數點）。標籤用，例：「公益捐款（直接毛利 1%）」。"""
+    v = charity_rate_pct(conn)
+    return str(int(v)) if v == int(v) else ("%g" % v)
+
+
+def rules_config(conn=None) -> dict:
+    """前端 `MotrixProfitRules.configure()` 要的後兩個數字：公益比率、營業利益率目標（＝報價單紅線，預設 12）。
+    第三個（管銷後備值）是既有的 `defaultPct`（`overhead_default_pct`），端點本來就回。"""
+    return {"charityRatePct": charity_rate_pct(conn), "targetMarginPct": bands(conn)["quote_form_low"]}
