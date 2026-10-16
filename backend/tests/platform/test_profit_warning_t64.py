@@ -106,7 +106,7 @@ def test_default_valid_days_fallbacks(monkeypatch):
 
 def test_quotations_fallback_uses_the_setting_not_a_literal():
     src = (BACK / "modules" / "case" / "api" / "quotations.py").read_text(encoding="utf-8")
-    assert 'q.get("validDays", 30)' not in src and src.count('q.get("validDays", _pw.default_valid_days())') == 2
+    assert 'q.get("validDays", 30)' not in src and src.count('q.get("validDays", _pw.default_valid_days())') == 3   # 3：新增、複製、補登（L1）三條 INSERT 都走設定
 
 
 def test_no_hardcoded_margin_thresholds_remain_in_the_pages():
