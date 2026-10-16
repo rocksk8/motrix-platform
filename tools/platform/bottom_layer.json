@@ -4,6 +4,7 @@
  "_global_tests_doc": "全域釘子：不靠 import、掃整個母體（sqlite_master 全部的表、所有 module.json、所有頁面、權限目錄）的測試。改任何模組都可能讓它們紅，而 modtest 的相依選題選不到（稽核 W4 M1）。module／page 規則以 \"@global_tests\" 引用；scope_gate.global_test_candidates() 掃到的檔都必須列在這裡（守門 test_scope_gate_2026_09_30）。",
  "global_tests": [
   "backend/modules/payroll/tests/test_payslip_perm_wiring_t68.py",
+  "backend/modules/supply/tests/test_supplier_perm_wiring_t70.py",
   "backend/tests/test_status_display_canonical_lint_2026_10_14.py",
   "backend/tests/test_quote_alt_t4_2026_10_13.py",
   "backend/tests/test_duty_roles_equivalence_2026_10_06.py",
