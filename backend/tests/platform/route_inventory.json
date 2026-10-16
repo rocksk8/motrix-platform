@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 896,
-  "endpoints_api": 892,
+  "endpoints_total": 898,
+  "endpoints_api": 894,
   "write_total": 485,
   "write_api": 485,
-  "get_api": 407,
-  "distinct_paths_api": 754,
+  "get_api": 409,
+  "distinct_paths_api": 756,
   "write_with_body_api": 355,
   "write_with_path_param_api": 349
  },
@@ -1609,6 +1609,16 @@
    "body": false
   },
   "GET /api/quotations/gate-matrix": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/quotations/historical/config": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/quotations/historical/next-no": {
    "w": false,
    "pp": 0,
    "body": false

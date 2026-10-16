@@ -6152,6 +6152,7 @@
    "groups[].values.settlement_good",
    "groups[].values.show_denied",
    "groups[].values.show_unpicked_in_pdf",
+   "groups[].values.stale_days",
    "groups[].values.start_day",
    "groups[].values.start_month",
    "groups[].values.suggested",
