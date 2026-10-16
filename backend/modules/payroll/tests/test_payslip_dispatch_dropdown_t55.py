@@ -240,3 +240,44 @@ def test_empty_roster_dispatch_blocks_a_slip_that_has_a_contractor_on_both_entra
     assert _q("SELECT 1 FROM payslip_dispatch_links WHERE slip_no='PS-DD55-020'") == []
     assert empty not in _ids(_opts(client, sa, contractor_id=a))                           # 預設清單也不列
     assert client.post("/api/payslips/PS-DD55-021/dispatch-links", headers=sa, json={"dispatchId": empty}).status_code == 201   # 正對照：沒選名冊人員不檢查
+
+
+def test_person_list_does_not_write_case_denial_audit_for_rows_it_skips(client, make_user):
+    """r3 審查 S1：`dispatches_for_person` 只對『會列出的列』做案件守門。被略過的列（已取消、草稿、LIKE 粗篩誤中）不可替呼叫者多寫『案件被拒』稽核。
+    每個略過情境各用一個不同案件單號，看得出多寫；只有真正列出的那一列（案件 D）應該有一筆。"""
+    import time
+    from helpers.auth import _require_user
+    sa = _su(client, make_user, "dd_sa_aud")
+    a = _person("甲審")
+    b = _person("乙審")                                                         # 另一個人：讓 LIKE 粗篩對 a 的 id 誤中
+    fn = registry.single_provider("dispatch.by_person")
+    d_ok = _dispatch(client, sa, [{"id": a, "name": "甲審"}], quote="MQ-DD55-AUD-D")
+    d_cancel = _dispatch(client, sa, [{"id": a, "name": "甲審"}], quote="MQ-DD55-AUD-A")
+    d_draft = _dispatch(client, sa, [{"id": a, "name": "甲審"}], quote="MQ-DD55-AUD-B")
+    _x("UPDATE contractor_dispatches SET status='cancelled' WHERE id=?", (d_cancel,))
+    _x("UPDATE contractor_dispatches SET status='draft' WHERE id=?", (d_draft,))
+    d_like = _dispatch(client, sa, [{"id": b, "name": "乙審"}], quote="MQ-DD55-AUD-C")
+    # personnel_json 含 a 的數字字串當子字串（LIKE 會中），但名單精確比對不含 a
+    _x("UPDATE contractor_dispatches SET personnel_json=? WHERE id=?", (json.dumps([{"id": 9000000 + a, "name": "別人"}]), d_like))
+    u, p = make_user(username="dd_nocase", role="user", modules=["contractor_list"], legacy_finance_flag=False)
+    h = _auth(_login(client, u, p))
+    user = _require_user(h["Authorization"])
+
+    def denials():
+        return [r["target_id"] for r in _q("SELECT target_id FROM audit_log WHERE action='case.access_denied' AND target_id LIKE 'MQ-DD55-AUD-%'")]
+    before = denials()
+    import db
+    c = db.get_db()
+    try:
+        rows = fn(c, a, user=user)
+    finally:
+        c.close()
+    assert [r["id"] for r in rows] == [d_ok] and rows[0]["caseVisible"] is False        # 前提：真的列出一列，且該呼叫者看不到案件
+    for _ in range(40):                                                               # audit 在背景執行緒寫
+        new = [x for x in denials() if x not in before]
+        if new:
+            break
+        time.sleep(0.05)
+    time.sleep(0.3)
+    new = [x for x in denials() if x not in before]
+    assert sorted(set(new)) == ["MQ-DD55-AUD-D"], new                                 # 取消／草稿／誤中的列沒有替呼叫者多寫拒絕稽核
