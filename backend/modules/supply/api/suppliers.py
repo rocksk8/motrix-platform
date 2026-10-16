@@ -8,7 +8,8 @@ from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
-from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
+from helpers import _require_user, _tok, _audit, notify_module_activity
+from helpers import perm
 from helpers.procurement import clean_lead_time
 from helpers.errors import trace_id
 from helpers import list_catalog
@@ -58,7 +59,7 @@ def _gate_custom_fields(data, old_data):
 # T66 L0：供應商清單登記到清單目錄（先導；沒有金額欄。排序／筆數目前由前端處理，個人偏好之後才接）。
 list_catalog.register_list("supply:suppliers", "supply", {
     "label": "供應商清單",
-    "modules": ["customer", "procurement", "inventory"],      # 與 /api/suppliers 的 require_any_module 相同
+    "modules": ["customer", "procurement", "inventory"],      # 與 /api/suppliers 的 legacy 閘相同（supply.supplier.* 的 legacy 宣告）
     "columns": [
         {"id": "name", "label": "公司名稱", "sortable": True, "required": True},
         {"id": "alias", "label": "內部簡稱", "sortable": True},
@@ -79,7 +80,7 @@ list_catalog.register_list("supply:suppliers", "supply", {
 @router.get("/api/suppliers")
 def list_suppliers(authorization: str = Header(None)):
     user = _require_user(authorization)
-    require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
+    perm.require(user, "supply.supplier.view")
     if user["role"] not in ("superadmin", "admin"):
         return []
     conn = get_db()
@@ -106,7 +107,7 @@ def list_suppliers(authorization: str = Header(None)):
 @router.post("/api/suppliers")
 def create_supplier(body: SupplierIn, authorization: str = Header(None)):
     user = _require_user(authorization)
-    require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
+    perm.require(user, "supply.supplier.create")
     now = datetime.now().isoformat()
     # ⚠️ 驗證要在下面那個 `except Exception` **之外**做。
     # 那段是用來把 INSERT 的 IntegrityError 轉成乾淨 409 的，但它會一併吞掉
@@ -143,7 +144,7 @@ def create_supplier(body: SupplierIn, authorization: str = Header(None)):
 @router.put("/api/suppliers/{sid}")
 def update_supplier(sid: int, body: SupplierIn, authorization: str = Header(None)):
     user = _require_user(authorization)
-    require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
+    perm.require(user, "supply.supplier.edit")
     now = datetime.now().isoformat()
     conn = get_db()
     _row = conn.execute("SELECT id, data_json FROM suppliers WHERE id=?", (sid,)).fetchone()
@@ -175,7 +176,7 @@ def update_supplier(sid: int, body: SupplierIn, authorization: str = Header(None
 @router.delete("/api/suppliers/{sid}")
 def delete_supplier(sid: int, authorization: str = Header(None)):
     user = _require_user(authorization)
-    require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
+    perm.require(user, "supply.supplier.delete")
     conn = get_db()
     row = conn.execute("SELECT name FROM suppliers WHERE id=?", (sid,)).fetchone()
     if not row:
@@ -195,7 +196,7 @@ def delete_supplier(sid: int, authorization: str = Header(None)):
 @router.patch("/api/suppliers/{sid}/visits")
 def update_supplier_visits(sid: int, body: dict, authorization: str = Header(None)):
     user = _require_user(authorization)
-    require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
+    perm.require(user, "supply.supplier.edit")
     conn = get_db()
     row = conn.execute(
         "SELECT name, data_json, updated_at FROM suppliers WHERE id=?", (sid,)
@@ -250,7 +251,7 @@ def get_supplier_contact_privacy_acks(sid: int, authorization: str = Header(None
     """每一位聯絡人的「已告知」紀錄：{"acks": {聯絡人id: 紀錄}}（沒有紀錄的不列）。"""
     from helpers import privacy_notice as _pn
     user = _require_user(authorization)
-    require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
+    perm.require(user, "supply.supplier.view")
     conn = get_db()
     name, _ = _privacy_contacts(conn, sid)
     conn.close()
@@ -264,7 +265,7 @@ def ack_supplier_contact_privacy_notice(sid: int, ctid: str, authorization: str 
     """記錄「已告知這位聯絡人」：時間與人員由伺服器決定；已記錄的不覆蓋。聯絡人要先存進供應商資料。"""
     from helpers import privacy_notice as _pn
     user = _require_user(authorization)
-    require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
+    perm.require(user, "supply.supplier.edit")
     conn = get_db()
     name, contacts = _privacy_contacts(conn, sid)
     conn.close()

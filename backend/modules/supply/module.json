@@ -129,5 +129,23 @@
       "keywords": "出貨 匯出 歷史",
       "icon": "log"
     }
+  ],
+  "capabilities": [
+    {"key": "supply.supplier.view", "label": "查看供應商", "legacy": {"any": [{"module": "customer"}, {"module": "procurement"}, {"module": "inventory"}]},
+     "desc": "可以打開供應商清單與單一供應商（含聯絡人、統一編號與付款條件），以及聯絡人的個資告知紀錄。",
+     "impact": "勾選後，這個角色（或這個人）可以看到所有供應商的資料與聯絡人；原本沒有「客戶／採購／庫存」功能勾選的人也會看得到。",
+     "question": "{who}可以查看供應商嗎？"},
+    {"key": "supply.supplier.create", "label": "新增供應商", "legacy": {"any": [{"module": "customer"}, {"module": "procurement"}, {"module": "inventory"}]},
+     "desc": "可以建立新的供應商資料。",
+     "impact": "勾選後，可以新增供應商與聯絡人；新增的資料全公司有權查看的人都看得到。",
+     "question": "{who}可以新增供應商嗎？"},
+    {"key": "supply.supplier.edit", "label": "修改供應商", "legacy": {"any": [{"module": "customer"}, {"module": "procurement"}, {"module": "inventory"}]},
+     "desc": "可以修改供應商資料、更新拜訪紀錄，以及登記聯絡人已收到個資告知。",
+     "impact": "勾選後，可以更動供應商的內容與聯絡人；修改會留下紀錄，但不會自動通知供應商。",
+     "question": "{who}可以修改供應商嗎？"},
+    {"key": "supply.supplier.delete", "label": "刪除供應商", "legacy": {"any": [{"module": "customer"}, {"module": "procurement"}, {"module": "inventory"}]},
+     "desc": "可以刪除供應商（進入刪除暫存區或依既有規則處理）。",
+     "impact": "勾選後，可以刪除供應商資料；放寬這一項需要填原因、等確認期間，並由另一位最高管理者核准。",
+     "question": "{who}可以刪除供應商嗎？"}
   ]
 }
