@@ -24,6 +24,8 @@
 - 只影響設定生效**之後**才被刪除的項目（到期日 `purge_after` 在刪除當下就寫定，不回頭改寫）；每日清理、狀態頁的「保存 N 天」、通知文字、刪除已核可的提示都跟著設定走。`helpers.recycle_bin.RETENTION_DAYS`（30）保留，作為讀不到／不合法時的後備值。
 - L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.settings_groups_recycle_bin`（無公開介面；載入時由 `settings_groups` 檔尾兩行登錄群組）。
 - 測試：`modules/recyclebin/tests/test_recyclebin_retention_t69.py`（真實帳號＋HTTP：預設等值、延長立即、縮短需第二位最高管理者核准與確認期間、範圍檢查、非最高管理者被擋）。
+- **（併入）(next) — 2026-10-17 00:18（wip/t69-backfill-l0-r1；補登歷史案件 L0）**
+- 設定群組（只增，預設＝今日行為）：`quote_backfill`（`enabled` 預設 0＝沒有補登入口、立即生效僅稽核；`earliest_month` 預設 202001，跨欄位檢查月份須為 01–12）。部署基準檔 `settings_deploy_baseline.json` 同步。無 L1 介面變動。
 
 ## 1.144 — 2026-10-16（wip/t66-lp-r2；T66 清單個人偏好 L0～L2）
 - T66 L0＋L1＋L2（清單個人偏好的目錄、公司政策與個人每頁筆數，旗標 `list_prefs.enabled` 預設關）：

@@ -6051,6 +6051,7 @@
    "groups[].values.discount_review_above",
    "groups[].values.due_soon_payable_days",
    "groups[].values.due_soon_planned_days",
+   "groups[].values.earliest_month",
    "groups[].values.enabled",
    "groups[].values.enforce_custom_fields",
    "groups[].values.enforce_layout",

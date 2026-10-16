@@ -124,6 +124,12 @@
   ],
   "s": 404
  },
+ "POST /api/quotations/historical": {
+  "k": [
+   "detail"
+  ],
+  "s": 403
+ },
  "POST /api/quotations/stage-templates/preview": {
   "k": [
    "notes",

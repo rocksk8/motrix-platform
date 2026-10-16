@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 891,
-  "endpoints_api": 887,
-  "write_total": 482,
-  "write_api": 482,
+  "endpoints_total": 892,
+  "endpoints_api": 888,
+  "write_total": 483,
+  "write_api": 483,
   "get_api": 405,
-  "distinct_paths_api": 750,
-  "write_with_body_api": 352,
+  "distinct_paths_api": 751,
+  "write_with_body_api": 353,
   "write_with_path_param_api": 347
  },
  "select_star": {
@@ -3604,6 +3604,11 @@
    "body": true
   },
   "POST /api/quotations/case-activity": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/quotations/historical": {
    "w": true,
    "pp": 0,
    "body": true

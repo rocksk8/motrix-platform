@@ -81,6 +81,13 @@
     ],
     "files": []
   },
+  "capabilities": [
+    {"key": "case.quote_backfill.create", "label": "補登歷史報價單", "legacy": {"superadmin": true},
+     "risk": "high", "delegable": false, "reserved": true, "recommended": [],
+     "desc": "可以補登過去月份的已成案報價單，單號依該單所屬月份編列。只有最高管理者，不能轉給別人。",
+     "impact": "最高管理者可以建立不經簽核的歷史案件（需填原因並留下稽核紀錄）；補登案件不發通知、不觸發提醒。此項目不能勾選給其他角色或個人。",
+     "question": "{who}可以補登歷史報價單嗎？"}
+  ],
   "customization": {
     "schema": 1,
     "fields": {
