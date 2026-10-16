@@ -1871,7 +1871,7 @@ def _backfill_deny(authorization: str, code: int, why: str):
 
 
 def _backfill_flag_on() -> bool:
-    """旗標讀取失敗＝視為關（同 status_display.flag_on）。"""
+    """旗標讀取失敗＝視為關（同其他功能旗標的讀法）。"""
     try:
         from helpers import settings_registry as _SR
         return int(_SR.get("quote_backfill", "enabled") or 0) == 1
@@ -3011,7 +3011,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None), reason: O
     with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
         try:
             try:
-                res = recycle_bin.delete(conn, "quotation", quote_no, user, **({"reason": _void_reason, "approved": True} if _hist_void else {}))   # 報價單＋名下階段／拜訪／進度更新／行動事項＋附件一併進暫存區
+                res = recycle_bin.delete(conn, "quotation", quote_no, user, reason=(_void_reason if _hist_void else ""), approved=bool(_hist_void))   # 報價單＋名下階段／拜訪／進度更新／行動事項＋附件一併進暫存區
             except recycle_bin.BinError as e:
                 conn.rollback()
                 conn.close()
