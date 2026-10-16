@@ -430,6 +430,17 @@ def _payable_queue(conn) -> list:
     return items
 
 
+def _is_historical(text) -> bool:
+    """補登單（T69/T70）：data_json 的 approval.historical 為 True。SQL 端只用 `"approval": {"historical": true` 前綴做提示（instr，非 json_extract），
+    這裡精確解析；前綴與 modules.case.quotations.HIST_APPROVAL_PREFIX 相同（測試鎖定一致）。arap 不 import case，所以在這裡自帶一份。"""
+    if not text:
+        return False
+    try:
+        return ((json.loads(text) or {}).get("approval") or {}).get("historical") is True
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
 def _receivable_queue(conn, status: str = "unreceived") -> list:
     """status: unreceived（預設，出納待辦用）／received／all（比照
     dashboard.py 原 list_receivables() 的完整歷史，供併入的應收帳款查詢用）。"""
@@ -439,7 +450,8 @@ def _receivable_queue(conn, status: str = "unreceived") -> list:
         SELECT quote_no, customer_name, project_name, sales_person,
                total, pretax, quote_date,
                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
-               json_extract(data_json,'$.caseRecord') AS cr_json
+               json_extract(data_json,'$.caseRecord') AS cr_json,
+               CASE WHEN instr(data_json, '"approval": {"historical": true') > 0 THEN data_json END AS hist_dj
         FROM quotations
         WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
         ORDER BY quote_date DESC
@@ -447,6 +459,7 @@ def _receivable_queue(conn, status: str = "unreceived") -> list:
 
     items = []
     for row in rows:
+        hist = _is_historical(row["hist_dj"])        # T70：補登的歷史案件——待辦（未收）不列、不算逾期；查詢全部時標示
         cr = {}
         if row["cr_json"]:
             try:
@@ -460,7 +473,7 @@ def _receivable_queue(conn, status: str = "unreceived") -> list:
         amounts = payment_item_amounts(total, pay, row["pretax"])
         for idx, pi in enumerate(pay):
             received = bool(pi.get("received"))
-            if status == "unreceived" and received:
+            if status == "unreceived" and (received or hist):
                 continue
             if status == "received" and not received:
                 continue
@@ -477,7 +490,8 @@ def _receivable_queue(conn, status: str = "unreceived") -> list:
                 "amount":              amounts[idx],
                 "quoteDate":           row["quote_date"] or "",
                 "expectedReceiptDate": expected,
-                "overdue":             bool(expected) and not received and expected < _overdue_before,
+                "overdue":             bool(expected) and not received and not hist and expected < _overdue_before,
+                "historical":          hist,
                 "received":            received,
                 "receivedAt":          pi.get("receivedAt") or "",
                 "receivedBy":          pi.get("receivedBy") or "",

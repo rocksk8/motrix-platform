@@ -20,6 +20,8 @@ import logging
 import re
 from datetime import date
 
+from modules.case.quotations import is_historical_json as _is_hist, sql_hist_hint as _hist_hint  # T70 補登單靜音
+
 logger = logging.getLogger(__name__)
 
 RECEIPT = "receipt_logged"
@@ -120,15 +122,16 @@ def push_after_commit(quote_no, old_items, new_items) -> None:
         if not events:
             return
         customer = project = ""
-        if any(op == "upsert" for op, *_ in events):
-            conn = get_db()
-            try:
-                r = conn.execute("SELECT customer_name, project_name FROM quotations WHERE quote_no=?",
-                                 (quote_no,)).fetchone()
-            finally:
-                conn.close()
-            if r:
-                customer, project = r["customer_name"] or "", r["project_name"] or ""
+        conn = get_db()
+        try:
+            r = conn.execute("SELECT customer_name, project_name, " + _hist_hint() + " FROM quotations WHERE quote_no=?",
+                             (quote_no,)).fetchone()
+        finally:
+            conn.close()
+        if r and _is_hist(r["hist_dj"]):
+            return                                        # T70：補登的歷史案件不推應收到期／收款登錄的行事曆提醒
+        if r:
+            customer, project = r["customer_name"] or "", r["project_name"] or ""
         for op, code, ident, it in events:
             key = "%s::%s" % (quote_no, ident)
             if op == "delete":

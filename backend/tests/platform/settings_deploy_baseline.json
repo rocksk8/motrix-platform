@@ -263,7 +263,7 @@
   "case_close_gates": {"enabled": [0, 0, 1, false], "require_stages": [0, 0, 1, false], "require_payment_items": [0, 0, 1, false], "require_settlement": [0, 0, 1, false], "count_unfinished_extra_expenses": [0, 0, 1, false]},
   "builder_status_display": {"enabled": [0, 0, 1, false]},
   "project_margin": {"warn_pct": [0, 0, 100, false]},
-  "quote_backfill": {"enabled": [0, 0, 1, false], "earliest_month": [202001, 200001, 209912, false]},
+  "quote_backfill": {"enabled": [0, 0, 1, false], "earliest_month": [202001, 200001, 209912, false], "auto_off_hours": [24, 0, 720, false]},
   "system_hub": {"show_denied": [0, 0, 1, false]},
   "uploads": {
    "case_extra_expense_max_files": [

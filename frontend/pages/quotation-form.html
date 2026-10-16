@@ -916,7 +916,7 @@
           重新鎖定
         </button>
       </template>
-      <button class="btn btn-ghost btn-sm" @click="saveDraft()" x-show="q.status !== '已送出' || unlocked">
+      <button class="btn btn-ghost btn-sm" @click="saveDraft()" x-show="(q.status !== '已送出' || unlocked) && !hb.on">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
         <span x-text="unlocked ? '儲存修改' : '儲存草稿'"></span>
       </button>
@@ -946,7 +946,7 @@
               style="background:#E5E3DE;border-radius:3px;padding:1px 5px;font-size:9px;font-family:LINE Seed TW_OTF, sans-serif"
               x-text="q.exportCount"></span>
       </button>
-      <template x-if="q.status !== '待審核' && q.status !== '簽核中' && q.status !== '已送出'">
+      <template x-if="q.status !== '待審核' && q.status !== '簽核中' && q.status !== '已送出' && !hb.on">
         <button class="btn btn-sm" @click="submitQuote()"
                 :class="needsApproval ? 'btn-warning' : 'btn-primary'">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
@@ -1174,9 +1174,28 @@
               決定這張單印出來的抬頭、統編與匯款帳號。
             </div>
           </div>
+          <div class="form-group" x-show="hb.available && isNewRecord" style="grid-column:1/-1" data-testid="qf-backfill">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600">
+              <input type="checkbox" :checked="hb.on" @change="toggleBackfill($event.target.checked)" data-testid="qf-backfill-toggle">
+              補登歷史案件（過去月份、已成案）
+            </label>
+            <div x-show="hb.on" style="margin-top:8px;padding:10px 12px;border:1px solid #FDE68A;background:#FFFBEB;border-radius:6px;font-size:12px;line-height:1.7">
+              <div>只有最高管理者可使用。報價日期須在 <b x-text="hb.min"></b> 到 <b x-text="hb.max"></b> 之間（不含本月）；單號依報價日期的月份編列，不發任何通知，利潤與公益金以<b>現行口徑</b>計算並在單上註明。補登完請到設定中心關閉此開關<span x-show="hb.expires">（預計 <span x-text="hb.expires.replace('T', ' ')"></span> 自動關閉）</span>。</div>
+              <div style="margin-top:6px">將取得的單號：<b x-text="hb.preview || '（請先選擇報價日期）'" data-testid="qf-backfill-no"></b>
+                <span x-show="hb.previewErr" style="color:#DC2626" x-text="hb.previewErr"></span></div>
+              <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
+                <input class="form-input" style="max-width:220px" type="text" placeholder="原始單號（選填，例：MQ-202607-012）" x-model="hb.origNo" data-testid="qf-backfill-orig">
+                <input class="form-input" style="flex:1;min-width:240px" type="text" placeholder="補登原因（必填，至少 5 個字）" x-model="hb.reason" data-testid="qf-backfill-reason">
+              </div>
+              <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+                <button class="btn btn-primary btn-sm" :disabled="hb.busy" @click="submitBackfill()" data-testid="qf-backfill-submit">補登送出（已成案）</button>
+                <span style="color:#DC2626" x-text="hb.err" data-testid="qf-backfill-err"></span>
+              </div>
+            </div>
+          </div>
           <div class="form-group" x-show="fShown('qbasic', 'quoteDate')" :style="fo('qbasic', 'quoteDate')">
             <label class="form-label"><span x-text="fLabel('qbasic', 'quoteDate', '報價日期')">報價日期</span></label>
-            <input class="form-input" type="date" x-model="q.quoteDate" @change="setDirty">
+            <input class="form-input" type="date" x-model="q.quoteDate" :min="hb.on ? hb.min : null" :max="hb.on ? hb.max : null" @change="setDirty(); hb.on && previewBackfillNo()" data-testid="qf-date">
           </div>
           <div class="form-group" x-show="fShown('qbasic', 'validDays')" :style="fo('qbasic', 'validDays')">
             <label class="form-label"><span x-text="fLabel('qbasic', 'validDays', '有效天數')">有效天數</span> <span class="req">*</span></label>
@@ -2364,7 +2383,8 @@
   // V3.26（2026-10-15，T62 e2e）：自訂欄位清空時送 {}（後端『沒送這個鍵＝保留舊值』，只有 {} 才會清掉）。
   // V3.28（2026-10-15，T65）：三處儲存時間顯示改走共用格式器（輸出不變）
   // V3.27（2026-10-15，T64 A／B）：利潤顏色門檻改讀設定（MotrixProfitWarning，預設＝原本的 12／20）；金額、日期改走共用顯示格式器 MotrixFormat（預設輸出逐字相同）。
-  const FORM_VERSION = 'V3.30'
+  // V3.31（2026-10-17，T70-1）：新增模式多一個「補登歷史案件」區塊（僅最高管理者且設定中心開關有效時出現；日期限過去月份、預覽單號、原因必填、走專用補登端點）
+  const FORM_VERSION = 'V3.31'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -2384,6 +2404,8 @@
       vendorQuoteOpts: [],    // N1：該案承攬商報價品項（派工單），供成本欄逐項帶入
       _lastUpdatedAt: null,   // 樂觀鎖：loadQuote() 讀入、apiSave() 送出比對、成功後更新
       _saveConflict: false,  // apiSave() 收到 409 時設 true，saveDraft() 據此提示使用者
+      // 補登歷史案件（T70-1）：只有最高管理者且設定中心開關有效時 available 才會是 true；on＝本次新增改走補登端點
+      hb: { available: false, on: false, min: '', max: '', reason: '', origNo: '', preview: '', previewErr: '', busy: false, err: '', expires: '' },
       previewMode: null,
       previewHtml: '',        // 伺服器產生的預覽 HTML（與 PDF 同一份版面）
       previewLoading: false,
@@ -2987,6 +3009,7 @@
       },
 
       async apiSave(isNew) {
+        if (this.hb.on) return false                        // 補登模式：只能用「補登送出」，不走一般存檔／自動存檔
         if (Object.keys(this.badNum).length) return false   // 解析不了的數字不送（自動存檔靜默略過）
         if (this.taxKind() === '') return false             // AC1：已停用稅率要先改選（後端同樣會擋）
         if ((this.q.status || '草稿') !== '草稿' && this.taxBasisError()) return false   // R2：後端同樣會擋
@@ -3182,6 +3205,63 @@
         } catch(e) {
           alert('儲存失敗，請確認後端伺服器是否在線')
         }
+      },
+
+      // ── 補登歷史案件（T70-1）：判斷全在後端（日期範圍、單號、原因、權限、開關）；這裡只負責呈現與送出 ──
+      async _loadBackfillConfig() {
+        try {
+          if (this.session.role !== 'superadmin') return
+          const r = await fetch(`${this.API}/quotations/historical/config`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) return
+          const c = await r.json()
+          this.hb.available = !!c.available
+          this.hb.min = c.min_date || ''
+          this.hb.max = c.max_date || ''
+          this.hb.expires = c.expires_at || ''
+        } catch {}
+      },
+      toggleBackfill(on) {
+        this.hb.on = !!on
+        this.hb.err = ''
+        if (on) {
+          if (!this.q.quoteDate || this.q.quoteDate > this.hb.max || this.q.quoteDate < this.hb.min) this.q.quoteDate = this.hb.max
+          this.previewBackfillNo()
+        } else {
+          this.hb.preview = ''; this.hb.previewErr = ''
+          this.q.quoteDate = MotrixDate.today()
+        }
+      },
+      async previewBackfillNo() {
+        this.hb.preview = ''; this.hb.previewErr = ''
+        const d = this.q.quoteDate
+        const seq = (this._hbSeq = (this._hbSeq || 0) + 1)
+        try {
+          const r = await fetch(`${this.API}/quotations/historical/next-no?date=${encodeURIComponent(d || '')}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          const j = await r.json().catch(() => ({}))
+          if (seq !== this._hbSeq) return
+          if (r.ok) this.hb.preview = j.quote_no || ''
+          else this.hb.previewErr = typeof j.detail === 'string' ? j.detail : '無法預覽單號'
+        } catch { if (seq === this._hbSeq) this.hb.previewErr = '無法預覽單號，請確認後端連線' }
+      },
+      async submitBackfill() {
+        this.hb.err = ''
+        if ((this.hb.reason || '').trim().length < 5) { this.hb.err = '請填補登原因（至少 5 個字）'; return }
+        if (!this.q.customerName) { this.hb.err = '請先填客戶名稱'; return }
+        if (this.hb.busy) return
+        if (!confirm('確定要補登這張歷史報價單嗎？\n單號：' + (this.hb.origNo.trim() || this.hb.preview) + '\n補登後狀態為「已送出・已成案」，不經簽核，並會留下稽核紀錄。')) return
+        this.hb.busy = true
+        try {
+          const data = { ...this.q, tot: this.tot }
+          const body = { data, reason: this.hb.reason.trim(), locationId: this.q.locationId || '' }
+          if (this.hb.origNo.trim()) body.quote_no = this.hb.origNo.trim()
+          const r = await fetch(`${this.API}/quotations/historical`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify(body) })
+          const j = await r.json().catch(() => ({}))
+          if (!r.ok) { this.hb.err = typeof j.detail === 'string' ? j.detail : '補登失敗（' + r.status + '）'; return }
+          this.isDirty = false
+          window.motrixIsDirty = false
+          location.href = 'quotation-form.html?id=' + encodeURIComponent(j.quote_no)
+        } catch { this.hb.err = '補登失敗，請確認後端連線' }
+        finally { this.hb.busy = false }
       },
 
       autoSave() {
@@ -4422,6 +4502,7 @@
           }
         } else {
           // ── 新增模式：每次由 API 派發單號 ──
+          this._loadBackfillConfig()           // T70-1：最高管理者且補登開關有效時才會出現「補登歷史案件」
           await this._peekQuoteNo()
           this.isNewRecord = true
           this.q.validDays = this.pmCfg.defaultValidDays      // T64 A Q7：新報價單預設有效天數（設定 quote_defaults.valid_days，預設 30＝原本的值；取不到＝30）

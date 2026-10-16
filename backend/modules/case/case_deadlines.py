@@ -36,6 +36,7 @@ _logger = _log.getLogger(__name__)
 # 頂層 import：提醒信的兩個信件類型（payable_due_soon／today）在 import 時登記；原本等到第一次每日檢查才 import，
 # 在那之前通知矩陣（與收件設定頁）看不到這兩列、也配不到行事曆「付款待辦」。
 from modules.case import payable_reminders  # noqa: E402
+from modules.case.quotations import is_historical_json as _is_hist, sql_hist_hint as _hist_hint  # noqa: E402  T70 補登單靜音
 
 
 def _check_case_stage_deadline() -> None:
@@ -68,7 +69,8 @@ def _check_case_stage_deadline() -> None:
         date_to_type = {check_date_3d: (3, "3d"), check_date_0: (0, "deadline")}
         rows = conn.execute("""
             SELECT q.quote_no, q.customer_name, q.project_name, q.sales_person_id,
-                   cs.id AS stage_id, cs.label, cs.due_date, cs.assigned_to
+                   cs.id AS stage_id, cs.label, cs.due_date, cs.assigned_to,
+                   """ + _hist_hint("q.data_json") + """
             FROM case_stages cs
             JOIN quotations q ON q.quote_no = cs.quote_no
             WHERE COALESCE(NULLIF(q.deal_tag,''), json_extract(q.data_json,'$.dealTag'), '') = '已成案'
@@ -78,6 +80,8 @@ def _check_case_stage_deadline() -> None:
         conn.close()
 
         for row in rows:
+            if _is_hist(row["hist_dj"]):          # T70：補登的歷史案件不發階段到期提醒
+                continue
             days_ahead, notif_type = date_to_type[row["due_date"]]
             check_date = row["due_date"]
             assignees = list(json.loads(row["assigned_to"] or "[]"))
@@ -177,7 +181,8 @@ def _check_case_project_timeline_deadline() -> None:
         conn = get_db()
         rows = conn.execute("""
             SELECT quote_no, customer_name, project_name,
-                   json_extract(data_json, '$.caseRecord.projectTimeline.endDate') AS end_date_json
+                   json_extract(data_json, '$.caseRecord.projectTimeline.endDate') AS end_date_json,
+                   """ + _hist_hint() + """
             FROM quotations
             WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') != '已結案'
               AND json_extract(data_json, '$.caseRecord.projectTimeline.endDate') IS NOT NULL
@@ -185,6 +190,8 @@ def _check_case_project_timeline_deadline() -> None:
         conn.close()
 
         for row in rows:
+            if _is_hist(row["hist_dj"]):          # T70：補登的歷史案件不發專案逾期提醒
+                continue
             try:
                 end_date_str = (row["end_date_json"] or "").strip('"')
                 if not end_date_str:
@@ -348,7 +355,7 @@ def _sync_project_end_calendar() -> None:
             end_date = _date.fromisoformat(str(((data.get("caseRecord") or {}).get("projectTimeline") or {}).get("endDate") or ""))
         except Exception:
             continue
-        if _deal_tag(row, data) == "已結案":
+        if _deal_tag(row, data) == "已結案" or (data.get("approval") or {}).get("historical") is True:      # T70：補登的歷史案件不進「專案預計完成」行事曆
             continue
         label = row["project_name"] or row["quote_no"]
         current[row["quote_no"]] = (

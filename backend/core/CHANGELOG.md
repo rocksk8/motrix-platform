@@ -1,5 +1,12 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-17（wip/t70-lodging-stale-r1；T70-3：附近旅宿資料過舊提示天數改成設定）
+- 新設定群組 `lodging_freshness`（設定中心「附近旅宿：資料新舊提示」），欄位 `stale_days`：整數，**預設 30（＝上線前寫死的 30 天，行為不變）**、範圍 7～365；風險 none、立即生效（只影響「資料日期已超過 N 天，內容可能過舊」這行提示，不自動去抓資料、不改任何查詢結果）。`settings_deploy_baseline.json` 已同步。
+- L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.settings_groups_lodging_freshness`（無公開介面；載入時由 `settings_groups` 檔尾兩行登錄群組）。
+- 測試：`modules/lodging/tests/test_lodging_stale_days_t70.py`（預設等值與 29／31 天邊界、改設定後提示門檻跟著動、範圍檢查、非最高管理者被擋、讀不到用 30）。
+- **（併入）(next) — 2026-10-17（wip/t70-backfill-l2-r1；T70-1 補登歷史案件 L2）**
+- 設定群組 `quote_backfill` 新欄位 `auto_off_hours`（T70-1；預設 24 小時、0＝不自動關、上限 720；風險 none、立即生效並稽核；基準檔已同步）。補登開關預設仍為關。
+
 ## 1.146 — 2026-10-17（wip/t69-retention-r1；T69 SO-S2：刪除暫存區保留天數改成設定）
 - 新設定群組 `recycle_bin`（設定中心「刪除暫存區」），欄位 `retention_days`：整數，**預設 30（＝上線前寫死的 30 天，行為不變）**、下限 7、上限 365；風險 legal、`loosen="down"`：**縮短＝放寬（更快永久刪除、無法找回）⇒ 須等確認期間（預設 7 天）並由另一位最高管理者核准（只有一位時改為原因＋確認期間＋警告＋通知）；延長立即生效**。`settings_deploy_baseline.json` 已同步。
 - 只影響設定生效**之後**才被刪除的項目（到期日 `purge_after` 在刪除當下就寫定，不回頭改寫）；每日清理、狀態頁的「保存 N 天」、通知文字、刪除已核可的提示都跟著設定走。`helpers.recycle_bin.RETENTION_DAYS`（30）保留，作為讀不到／不合法時的後備值。
@@ -28,11 +35,6 @@
 - L1（只增）：`helpers.profit_warning` 新增 `charity_rate_pct()`、`charity_rate_text()`、`charity_rate_stamp()`、`rate_text()`、`rules_config()`、`CHARITY_RATE_PCT_DEFAULT`；設定群組 `profit_rules`（欄位 `charity_rate_pct`，預設 1，0～10，money 風險）寫在既有的 `helpers/settings_groups_profit.py`（`settings_deploy_baseline.json` 已同步）。
 - **放寬方向**：公益比率**調低**＝少扣公益金、營業利益變高 ⇒ 放寬（`loosen=down`），走確認期間＋第二位最高管理者核准（D-K1）；**調高**＝多扣＝收緊，立即生效。讀不到／不合法一律回 1（今天的值）。已完結精算的存檔公益金不回頭改寫。
 - 前端 `static/profit-rules.js` 新增 `configure()`／`charityRateText()`；三個數字（管銷後備 25、公益 1%、目標利潤率 12）可由 `GET /api/overhead/settings` 帶入，沒呼叫＝內建值。
-
-## (next) — 2026-10-17（wip/t70-lodging-stale-r1；T70-3：附近旅宿資料過舊提示天數改成設定）
-- 新設定群組 `lodging_freshness`（設定中心「附近旅宿：資料新舊提示」），欄位 `stale_days`：整數，**預設 30（＝上線前寫死的 30 天，行為不變）**、範圍 7～365；風險 none、立即生效（只影響「資料日期已超過 N 天，內容可能過舊」這行提示，不自動去抓資料、不改任何查詢結果）。`settings_deploy_baseline.json` 已同步。
-- L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.settings_groups_lodging_freshness`（無公開介面；載入時由 `settings_groups` 檔尾兩行登錄群組）。
-- 測試：`modules/lodging/tests/test_lodging_stale_days_t70.py`（預設等值與 29／31 天邊界、改設定後提示門檻跟著動、範圍檢查、非最高管理者被擋、讀不到用 30）。
 
 ## 1.144 — 2026-10-16（wip/t66-lp-r2；T66 清單個人偏好 L0～L2）
 - T66 L0＋L1＋L2（清單個人偏好的目錄、公司政策與個人每頁筆數，旗標 `list_prefs.enabled` 預設關）：

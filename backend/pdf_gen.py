@@ -497,6 +497,10 @@ def _build_quote_html_core(q: dict, tot: dict, internal: bool = False,
         + '<div id="root">\n'
         + (_unapproved_banner(unapproved_status, doc_no=(q.get('quoteNo') or ''), wm_text='報價單預覽稿・\n尚未正式生效')
            if unapproved_status is not None else '')
+        + ('<div class="hist-badge" data-historical="1" style="margin:0 0 8px;padding:5px 10px;border:1px solid #94A3B8;border-radius:4px;'
+           'background:#F1F5F9;color:#334155;font-size:11px;font-weight:700;font-family:Arial,sans-serif">'
+           '歷史補登案件（無簽核軌跡；利潤與公益金以現行口徑計算）</div>\n'
+           if (isinstance(q.get('approval'), dict) and q['approval'].get('historical') is True) else '')
         + '<div class="accent-bar"></div>\n'
         + (
         f'<div class="notice-bar">'
