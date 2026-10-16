@@ -67,7 +67,10 @@ def test_create_without_case_record_is_unchanged(client, make_user):
 
 
 def test_a_failing_create_does_not_leak_the_write_lock(client, make_user, monkeypatch):
-    """create 中途出錯 ⇒ 連線 rollback 並關閉；下一個建立馬上成功（沒有被前一次漏出去的寫鎖卡住）。"""
+    """create 中途出錯 ⇒ 連線 rollback 並關閉。決定性的探針：失敗之後、例外物件（含它的堆疊框，也就是舊程式裡漏出去的連線）還活著的時候，
+    另開一條連線用 timeout=0 要寫鎖（BEGIN IMMEDIATE）必須拿得到；舊程式（沒有 begin_write、中途例外不 rollback）連線仍握著寫鎖 ⇒ database is locked。
+    之後的建立也要成功，且失敗那次什麼都沒留下。"""
+    import sqlite3
     from modules.case.api import quotations as Q
     h = _login(client, make_user)
     real = Q._peek_next_no
@@ -79,8 +82,15 @@ def test_a_failing_create_does_not_leak_the_write_lock(client, make_user, monkey
             raise RuntimeError("模擬中途失敗")
         return real(conn, month)
     monkeypatch.setattr(Q, "_peek_next_no", flaky)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError) as excinfo:                 # excinfo 讓失敗請求的堆疊框（與連線）在探針執行時仍然活著
         client.post("/api/quotations", headers=h, json=_body())
+    probe = sqlite3.connect(db.DB_PATH, timeout=0)
+    try:
+        probe.execute("BEGIN IMMEDIATE")                         # 拿不到 ⇒ OperationalError: database is locked
+        probe.rollback()
+    finally:
+        probe.close()
+    assert excinfo.value is not None
     r = client.post("/api/quotations", headers=h, json=_body(stages=[{"label": "後續", "done": False}]))
     assert r.status_code in (200, 201), r.text
     c = db.get_db()
