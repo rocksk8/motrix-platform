@@ -125,6 +125,12 @@ EXEMPT = {
         "純試算：獎金分潤改比例／人員時即時重算（BN22），與存檔同一個 allocate()，不寫任何資料表",
     ("modules/netplan/api.py", "POST", "/api/network-plans-quick/pdf"):
         "即時產生 PDF 回傳下載，沒有資料表也不歸檔",
+    ("modules/accounting/api/ledger_reports.py", "PUT", "/roles"):
+        "T69：稽核在同一個交易內由 helpers/config_ledger.record 寫入（動作 ledger.role.request；變更明細＋稽核＋通知其他最高管理者同交易、寫不進去整筆回滾），端點本身不再另呼叫 _audit；此時尚未動 gl_account_roles",
+    ("modules/accounting/api/ledger_reports.py", "POST", "/roles/pending/{pid}/approve"):
+        "T69：稽核在同一個交易內由 helpers/config_ledger.audit_event 寫入（核准票 ledger.role.approve＋套用 ledger.role.put 與 gl_account_roles 變更同交易、失敗整筆回滾），端點本身不再另呼叫 _audit",
+    ("modules/accounting/api/ledger_reports.py", "POST", "/roles/pending/{pid}/cancel"):
+        "T69：稽核在同一個交易內由 helpers/config_ledger.audit_event 寫入（撤銷與 ledger.role.cancel 同交易、失敗整筆回滾），端點本身不再另呼叫 _audit",
     ("settings_center.py", "POST", "/api/settings-center/profiles/{name}/apply"):
         "稽核在同一個交易內由 helpers/config_ledger.record 寫入（每個群組各一次 publish，動作 settings.<group>.update／.pending），端點本身不再另呼叫 _audit；失敗整筆回滾",
     ("settings_center.py", "POST", "/api/settings-center/groups/{group}"):

@@ -316,7 +316,8 @@ def test_api_accounts_and_role_validation(client, make_user, conn):
     assert r.status_code == 200 and any(a["code"] == "1113" for a in r.json()["accounts"]) and r.json()["roles"]
     assert client.put("/api/ledger/roles", headers=hdr, json={"role": "BANK", "account_code": "111"}).status_code == 400   # 非葉節點
     assert client.put("/api/ledger/roles", headers=hdr, json={"role": "BANK", "account_code": "0000"}).status_code == 400
-    assert client.put("/api/ledger/roles", headers=hdr, json={"role": "BANK", "account_code": "1113"}).status_code == 200
+    # T69：角色對應的變更要另一位最高管理者核准（完整流程見 test_ledger_settings_t69.py）；這裡只驗申請被接受（202、尚未生效）
+    assert client.put("/api/ledger/roles", headers=hdr, json={"role": "BANK", "account_code": "1112", "reason": "測試申請"}).status_code == 202
     assert client.patch("/api/ledger/accounts/1199", headers=hdr, json={"display_name": "備抵損失—應收款項"}).status_code == 200
     assert client.patch("/api/ledger/accounts/1199", headers=hdr, json={"acct_type": "revenue"}).status_code == 400     # 類別不開放
     assert client.patch("/api/ledger/accounts/0000", headers=hdr, json={"note": "x"}).status_code == 404
