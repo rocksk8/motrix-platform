@@ -670,7 +670,7 @@
             <span style="flex:1;font-weight:500;color:var(--text-primary)" x-text="q.customer || '—'"></span>
             <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-dim);font-size:10px" x-text="q.quoteNo"></span>
             <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;color:var(--warning)" x-text="q.daysSinceSent + ' 天未回應'"></span>
-            <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary);font-size:10px" x-text="'NT$ ' + MotrixFormat.num(Math.round(q.total))"></span>
+            <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary);font-size:10px" x-text="q.total == null ? '—' : 'NT$ ' + MotrixFormat.num(Math.round(q.total))"></span>
           </div>
         </template>
         <div x-show="followUpQuotes.length > 4"

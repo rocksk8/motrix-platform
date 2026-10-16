@@ -1,7 +1,7 @@
 # 營運分析 更新紀錄
 
 ## (next) — 2026-10-16（wip/t68-v1-mask-r1；V1 首頁待審核清單金額遮蔽）
-- `/api/dashboard/stats` 的 `pendingList`：沒有報價金額可視權限、又不是送審人或該單簽核鏈上的人，`total` 回 null、帶金額的審核原因換成「（涉及金額，無財務檢視權限）」（規則重用 `helpers/financial_mask`，與 `/api/quotations` 同一份）；簽核人／送審人／業務／管理員照舊。回應鍵不變，哪些列會出現不變。
+- `/api/dashboard/stats` 的 `pendingList`：沒有報價金額可視權限、又不是送審人或該單簽核鏈上的人，`total` 回 null、帶金額的審核原因換成「（涉及金額，無財務檢視權限）」（規則重用 `helpers/financial_mask`，與 `/api/quotations` 同一份）；簽核人／送審人／業務／管理員照舊。同一規則也套用到 `/api/dashboard/funnel` 的 `followUpQuotes`／`expiringQuotes`（首頁「待追蹤報價」該列的金額沒有權限時顯示「—」）。回應鍵不變，哪些列會出現不變。
 
 ## 1.0.43 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/reports.html`、`js/reports.js` 的數字與時間顯示改呼叫 `MotrixFormat`（預設輸出逐字相同；圖表提示框同）。

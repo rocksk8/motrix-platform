@@ -18,6 +18,18 @@ from helpers.legal_params import round_half_up
 from modules.analytics.api import reports as R
 
 router = APIRouter()
+
+
+def _quote_money_ok(u, appr, money_view) -> bool:
+    """V1：這個人能不能看這張報價單的金額（總額、帶金額的審核原因）。沒有報價金額可視權限（quote_money_visible）的人，
+    除非本人是送審人或在這張單的簽核鏈上（簽核人看得到金額是設計）；規則與 /api/quotations 同一份。"""
+    if money_view:
+        return True
+    me = u["username"]
+    appr = appr if isinstance(appr, dict) else {}
+    return appr.get("requestedBy") == me or any(
+        a.get("username") == me
+        for tier in (appr.get("tiers") or []) if isinstance(tier, dict) for a in (tier.get("approvers") or []) if isinstance(a, dict))
 logger = logging.getLogger(__name__)
 
 # ── GCIS（統編／公司名稱查詢）與 /api/now：2026-09-26 拆到 L1 routers/company_lookup.py（M08 搬遷 ②）──
@@ -114,9 +126,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
         # V1：金額層——沒有報價金額可視權限（quote_money_visible）的人，除非本人是送審人或在這張單的簽核鏈上
         # （簽核人看得到金額是設計：看不到就沒辦法判斷該不該簽），總額與帶金額的審核原因一律遮蔽，規則與 /api/quotations 同一份。
         # 只動金額；哪些列會出現（逐案可見）不變（T40 釘住）。
-        money_ok = money_view or appr.get("requestedBy") == my_username or any(
-            a.get("username") == my_username
-            for tier in (appr.get("tiers") or []) if isinstance(tier, dict) for a in (tier.get("approvers") or []) if isinstance(a, dict))
+        money_ok = _quote_money_ok(u, appr, money_view)
         reasons = appr.get("reasons") or []
         if not money_ok:
             reasons = _FM.mask_quotation_data({"approval": {"reasons": list(reasons)}})["approval"]["reasons"] if isinstance(reasons, list) else []
@@ -557,7 +567,8 @@ def dashboard_funnel(authorization: str = Header(None)):
         rows = conn.execute("""
             SELECT quote_no, status, customer_name, total, quote_date, sales_person,
                    COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag,
-                   json_extract(data_json,'$.validDays') AS valid_days
+                   json_extract(data_json,'$.validDays') AS valid_days,
+                   json_extract(data_json,'$.approval') AS approval_json
             FROM quotations
             WHERE status NOT IN ('草稿')
             ORDER BY quote_date DESC
@@ -571,6 +582,18 @@ def dashboard_funnel(authorization: str = Header(None)):
     follow_up_quotes = []
     expiring_quotes = []
     seen_expiring = set()
+    money_view = _FM.quote_money_visible(u)
+
+    def _total_of(r):
+        """V1：沒有報價金額可視權限、又不是送審人／簽核鏈上的人 ⇒ 總額不回（null）。"""
+        if not money_view:
+            try:
+                appr = json.loads(r["approval_json"] or "{}")
+            except Exception:
+                appr = {}
+            if not _quote_money_ok(u, appr, money_view):
+                return None
+        return r["total"] or 0
 
     for r in rows:
         deal_tag = r["deal_tag"] or ""
@@ -599,7 +622,7 @@ def dashboard_funnel(authorization: str = Header(None)):
                 follow_up_quotes.append({
                     "quoteNo":       r["quote_no"],
                     "customer":      r["customer_name"] or "",
-                    "total":         r["total"] or 0,
+                    "total":         _total_of(r),
                     "salesPerson":   r["sales_person"] or "",
                     "quoteDate":     r["quote_date"] or "",
                     "daysSinceSent": days_since,
@@ -610,7 +633,7 @@ def dashboard_funnel(authorization: str = Header(None)):
                 expiring_quotes.append({
                     "quoteNo":      r["quote_no"],
                     "customer":     r["customer_name"] or "",
-                    "total":        r["total"] or 0,
+                    "total":        _total_of(r),
                     "salesPerson":  r["sales_person"] or "",
                     "quoteDate":    r["quote_date"] or "",
                     "validDaysLeft": valid_days_left,

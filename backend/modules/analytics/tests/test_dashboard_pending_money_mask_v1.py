@@ -78,3 +78,57 @@ def test_chain_requester_and_money_roles_still_see_the_amounts(client, world, na
 def test_masking_does_not_change_counts_or_row_set(client, world):
     j = client.get("/api/dashboard/stats", headers=world["outsider"]).json()
     assert j["pendingQuotes"] >= 1 and QN in {i["quoteNo"] for i in j["pendingList"]}
+
+
+# ── /api/dashboard/funnel（同一個出口的兄弟端點）──────────────────────────────
+
+FQ, EQ = "V1-F1", "V1-F2"           # 待追蹤（送出 20 天）、快到期（送出 28 天、有效 30 天 ⇒ 剩 2 天）
+
+
+def _insert_sent(quote_no, owner_id, days_ago, valid_days, chain=()):
+    import db
+    from datetime import date, timedelta
+    qd = (date.today() - timedelta(days=days_ago)).isoformat()
+    appr = {"requestedBy": "v1_requester", "tiers": [{"approvers": [{"username": u, "status": "approved"} for u in chain]}]}
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, "
+            "updated_at, deal_tag, quote_date, sales_person_id, sales_person, net_margin_pct) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (quote_no, "已送出", "客戶" + quote_no, "專案", 105000, 100000,
+             json.dumps({"validDays": valid_days, "approval": appr}, ensure_ascii=False),
+             qd + "T00:00:00", qd + "T00:00:00", "", qd, owner_id, "開單者", 20.0))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@pytest.fixture()
+def funnel_world(world):
+    _insert_sent(FQ, _uid("v1_owner"), 20, 90, chain=["v1_chain"])
+    _insert_sent(EQ, _uid("v1_owner"), 28, 30, chain=["v1_chain"])
+    return world
+
+
+def _funnel_totals(client, h):
+    j = client.get("/api/dashboard/funnel", headers=h).json()
+    fu = {i["quoteNo"]: i["total"] for i in j["followUpQuotes"]}
+    ex = {i["quoteNo"]: i["total"] for i in j["expiringQuotes"]}
+    assert FQ in fu and EQ in ex
+    return fu[FQ], ex[EQ]
+
+
+def test_funnel_hides_totals_from_a_viewer_outside_the_chain(client, funnel_world):
+    assert _funnel_totals(client, funnel_world["outsider"]) == (None, None)
+
+
+@pytest.mark.parametrize("name", ["chain", "requester", "sales", "owner"])
+def test_funnel_still_shows_totals_to_chain_requester_and_money_roles(client, funnel_world, name):
+    assert _funnel_totals(client, funnel_world[name]) == (105000, 105000)
+
+
+def test_index_renders_a_null_total_as_a_dash():
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parents[4] / "frontend" / "index.html").read_text(encoding="utf-8")
+    assert "q.total == null ? '—' : 'NT$ ' + MotrixFormat.num(Math.round(q.total))" in src
+    assert "MotrixFormat.num(Math.round(q.total))\"" not in src.replace("q.total == null ? '—' : 'NT$ ' + MotrixFormat.num(Math.round(q.total))", "")
