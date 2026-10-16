@@ -1,5 +1,11 @@
 # 營運分析 更新紀錄
 
+## (next) — wip/t68-reports-money-r1（T68；營運報表金額閘）
+- **金額可見度變更（需使用者確認）**：只勾了「營運報表」模組、但不是財務角色／最高管理者的帳號，**不再能**打 `/api/reports/*` 這 11 支（財務報表＋Excel＋PDF、應收帳齡、資金水位、稅務匯出、客戶歷史、月趨勢、收款異常、月支出、應收月報），改回 403 並說明原因；財務角色、最高管理者、持有出納／財務檢視（`money_visible`）者**完全不變**。
+- 原因：這 11 支回的都是全公司金額（報價總額、毛利、收款、精算摘要、發票），而同一批金額在報價單清單與首頁財務卡片本來就只給財務檢視權限者看；報表出口過去只認模組勾選，兩邊不一致。
+- 閘門仍是同一個 `_require_reports_access`（11 支都已經走它），規則改成 `has_finance_access or money_visible`；報表頁面本身與側欄入口不變，無權限者在頁面上會看到載入失敗與 403 說明。沒有 schema 變更、沒有 migration、沒有新設定。
+- 測試：`tests/platform/test_reports_money_gate_t68.py`（11 支端點全表；正對照＝財務角色皆 200；viewer／engineer／sales／admin＋reports 皆 403 且回應不含金額鍵；財務與最高管理者仍有 casesAll；未登入仍 401）。
+
 ## 1.0.43 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/reports.html`、`js/reports.js` 的數字與時間顯示改呼叫 `MotrixFormat`（預設輸出逐字相同；圖表提示框同）。
 
