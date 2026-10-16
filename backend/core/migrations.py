@@ -711,4 +711,4 @@ def _core_next_list_view_prefs(conn):
     return None
 
 
-register("core", NEXT, _core_next_list_view_prefs)
+register("core", 11, _core_next_list_view_prefs)

@@ -254,6 +254,7 @@
     "user_activity_daily",
     "user_duty_roles",
     "user_list_prefs",
+    "user_list_view_prefs",
     "user_perm_subtracts",
     "user_request_log",
     "user_units",
@@ -374,6 +375,7 @@
     "router:legal_params",
     "router:licensing",
     "router:list_prefs",
+    "router:list_view_prefs",
     "router:mail_settings",
     "router:map_points",
     "router:module_versions",
@@ -1321,6 +1323,54 @@
    "tables_named": [],
    "tables_r": [],
    "tables_w": []
+  },
+  "helper:list_catalog": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:field_catalog",
+    "plat:catalog"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/list_catalog.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "helper:list_pref_policy": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:list_catalog",
+    "helper:settings_registry",
+    "plat:definitions"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/list_pref_policy.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "helper:list_view_prefs": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:auth",
+    "helper:field_catalog",
+    "helper:financial_mask",
+    "helper:list_catalog",
+    "helper:list_pref_policy"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/list_view_prefs.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": [
+    "user_list_view_prefs"
+   ]
   },
   "helper:mail_types": {
    "api_prefixes": [],
@@ -3793,6 +3843,7 @@
     "router:legal_params",
     "router:licensing",
     "router:list_prefs",
+    "router:list_view_prefs",
     "router:mail_settings",
     "router:map_points",
     "router:module_versions",
@@ -16597,6 +16648,8 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
+    "helper:field_catalog",
+    "helper:list_catalog",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -16624,6 +16677,7 @@
     "helper:builtin_fields",
     "helper:email_notify",
     "helper:errors",
+    "helper:list_catalog",
     "helper:privacy_notice",
     "helper:procurement"
    ],
@@ -16635,43 +16689,43 @@
    "routes": [
     {
      "func": "list_suppliers",
-     "line": 58,
+     "line": 80,
      "method": "GET",
      "path": "/api/suppliers"
     },
     {
      "func": "create_supplier",
-     "line": 85,
+     "line": 107,
      "method": "POST",
      "path": "/api/suppliers"
     },
     {
      "func": "update_supplier",
-     "line": 122,
+     "line": 144,
      "method": "PUT",
      "path": "/api/suppliers/{sid}"
     },
     {
      "func": "delete_supplier",
-     "line": 154,
+     "line": 176,
      "method": "DELETE",
      "path": "/api/suppliers/{sid}"
     },
     {
      "func": "update_supplier_visits",
-     "line": 174,
+     "line": 196,
      "method": "PATCH",
      "path": "/api/suppliers/{sid}/visits"
     },
     {
      "func": "get_supplier_contact_privacy_acks",
-     "line": 227,
+     "line": 249,
      "method": "GET",
      "path": "/api/suppliers/{sid}/privacy-notice"
     },
     {
      "func": "ack_supplier_contact_privacy_notice",
-     "line": 241,
+     "line": 263,
      "method": "POST",
      "path": "/api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack"
     }
@@ -17364,6 +17418,7 @@
    "imports": [
     "js:static/auth-guard.js",
     "js:static/motrix-date.js",
+    "js:static/motrix-format.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -17699,6 +17754,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/motrix-format.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -18014,6 +18070,7 @@
     "js:static/layout-editor.js",
     "js:static/layout-runtime.js",
     "js:static/motrix-date.js",
+    "js:static/motrix-format.js",
     "js:static/notif.js",
     "js:static/option-lists.js",
     "js:static/privacy-notice.js",
@@ -19660,6 +19717,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/motrix-format.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -20113,6 +20171,7 @@
     "js:static/layout-editor.js",
     "js:static/layout-runtime.js",
     "js:static/motrix-date.js",
+    "js:static/motrix-format.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
     "js:static/record-link.js",
@@ -21849,6 +21908,8 @@
     "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
+    "helper:list_catalog",
+    "helper:list_pref_policy",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -21883,6 +21944,7 @@
     "helper:audit",
     "helper:auth",
     "helper:export_templates",
+    "helper:list_pref_policy",
     "helper:notify_actions",
     "helper:notify_templates",
     "helper:option_lists",
@@ -21898,19 +21960,19 @@
    "routes": [
     {
      "func": "def_ledger",
-     "line": 195,
+     "line": 198,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/ledger"
     },
     {
      "func": "def_diff",
-     "line": 207,
+     "line": 210,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/diff"
     },
     {
      "func": "def_impact",
-     "line": 220,
+     "line": 223,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/impact"
     }
@@ -21991,8 +22053,11 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:export_templates",
+    "helper:field_catalog",
     "helper:formula",
     "helper:legal_params",
+    "helper:list_catalog",
+    "helper:list_pref_policy",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -22026,6 +22091,7 @@
     "helper:auth",
     "helper:config_ledger",
     "helper:export_templates",
+    "helper:list_pref_policy",
     "helper:notify_actions",
     "helper:settings_registry",
     "helper:stage_templates",
@@ -22038,25 +22104,25 @@
    "routes": [
     {
      "func": "pending_changes",
-     "line": 520,
+     "line": 525,
      "method": "GET",
      "path": "/api/def-pipeline/pending"
     },
     {
      "func": "approve_change",
-     "line": 539,
+     "line": 544,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/approve"
     },
     {
      "func": "activate_change",
-     "line": 555,
+     "line": 560,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/activate"
     },
     {
      "func": "cancel_change",
-     "line": 580,
+     "line": 585,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/cancel"
     }
@@ -22141,8 +22207,11 @@
     "helper:email_notify",
     "helper:expense_types",
     "helper:export_templates",
+    "helper:field_catalog",
     "helper:formula",
     "helper:legal_params",
+    "helper:list_catalog",
+    "helper:list_pref_policy",
     "helper:mail_types",
     "helper:menu_builder",
     "helper:module_registry",
@@ -22182,6 +22251,7 @@
     "helper:doc_template",
     "helper:expense_types",
     "helper:export_templates",
+    "helper:list_pref_policy",
     "helper:menu_builder",
     "helper:notify_actions",
     "helper:notify_templates",
@@ -22201,103 +22271,103 @@
    "routes": [
     {
      "func": "list_definition_kinds",
-     "line": 238,
+     "line": 246,
      "method": "GET",
      "path": "/api/definition-kinds"
     },
     {
      "func": "list_expense_types",
-     "line": 246,
+     "line": 254,
      "method": "GET",
      "path": "/api/expense-types"
     },
     {
      "func": "get_expense_type",
-     "line": 258,
+     "line": 266,
      "method": "GET",
      "path": "/api/expense-types/{code}"
     },
     {
      "func": "list_definitions",
-     "line": 273,
+     "line": 281,
      "method": "GET",
      "path": "/api/definitions/{kind}"
     },
     {
      "func": "delete_definition_draft",
-     "line": 298,
+     "line": 306,
      "method": "DELETE",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "delete_custom_module",
-     "line": 317,
+     "line": 325,
      "method": "DELETE",
      "path": "/api/definitions/custom_module/{key}"
     },
     {
      "func": "get_definition",
-     "line": 334,
+     "line": 342,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}"
     },
     {
      "func": "get_definition_default",
-     "line": 348,
+     "line": 356,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/default"
     },
     {
      "func": "save_definition_draft",
-     "line": 358,
+     "line": 366,
      "method": "PUT",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "validate_definition",
-     "line": 388,
+     "line": 396,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/validate"
     },
     {
      "func": "publish_definition",
-     "line": 486,
+     "line": 494,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/publish"
     },
     {
      "func": "get_definition_version",
-     "line": 546,
+     "line": 554,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 563,
+     "line": 571,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 588,
+     "line": 596,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 628,
+     "line": 636,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
      "func": "effective_layout",
-     "line": 642,
+     "line": 650,
      "method": "GET",
      "path": "/api/layout/{module_key}"
     },
     {
      "func": "preview_output_template",
-     "line": 677,
+     "line": 685,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }
@@ -22963,6 +23033,103 @@
     "system_settings",
     "user_duty_roles",
     "user_list_prefs",
+    "user_perm_subtracts"
+   ]
+  },
+  "router:list_view_prefs": {
+   "api_prefixes": [
+    "/api/list-views"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:config_ledger",
+    "helper:duty_roles",
+    "helper:field_catalog",
+    "helper:financial_mask",
+    "helper:list_catalog",
+    "helper:list_pref_policy",
+    "helper:list_view_prefs",
+    "helper:module_registry",
+    "helper:profit_warning",
+    "helper:quote_privacy",
+    "helper:row_access",
+    "helper:settings",
+    "helper:settings_groups",
+    "helper:settings_groups_list_view",
+    "helper:settings_groups_profit",
+    "helper:settings_groups_q0",
+    "helper:settings_registry",
+    "helper:tiered_approval"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:list_view_prefs"
+   ],
+   "kind": "router",
+   "path": "backend/routers/list_view_prefs.py",
+   "registered": true,
+   "routes": [
+    {
+     "func": "list_views",
+     "line": 30,
+     "method": "GET",
+     "path": "/api/list-views"
+    },
+    {
+     "func": "get_list_view",
+     "line": 42,
+     "method": "GET",
+     "path": "/api/list-views/{list_id}"
+    },
+    {
+     "func": "put_list_view",
+     "line": 61,
+     "method": "PUT",
+     "path": "/api/list-views/{list_id}"
+    },
+    {
+     "func": "delete_list_view",
+     "line": 78,
+     "method": "DELETE",
+     "path": "/api/list-views/{list_id}"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "audit_log",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "config_change_events",
+    "config_changes",
+    "duty_roles",
+    "notifications",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_list_view_prefs",
     "user_perm_subtracts"
    ]
   },
@@ -28500,6 +28667,21 @@
    "tables_w": [],
    "writers": [
     "router:list_prefs"
+   ]
+  },
+  "table:user_list_view_prefs": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [
+    "core:db"
+   ],
+   "path": "backend/core/migrations.py:701",
+   "readers": [],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "helper:list_view_prefs"
    ]
   },
   "table:user_perm_subtracts": {

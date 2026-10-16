@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next:minor) — 2026-10-16（wip/t66-lp-r2；T66 清單個人偏好 L0～L2）
+## 1.144 — 2026-10-16（wip/t66-lp-r2；T66 清單個人偏好 L0～L2）
 - T66 L0＋L1＋L2（清單個人偏好的目錄、公司政策與個人每頁筆數，旗標 `list_prefs.enabled` 預設關）：
 - L1（只增）：新檔 `helpers/list_catalog.py`（清單目錄：`register_list`、`by_id`、`lists`、`is_money_column`…；金額欄由欄位目錄 `moneyClass` 衍生；有問題的登記不生效）與 `helpers/list_pref_policy.py`（定義種類 `list_pref_policy`＋寬嚴比較＋`policy_for`；惰性登記，旗標關或沒開建構器治理 ⇒ 不登記）。能力目錄多一個區段 `listCatalog`（擁有者 `helpers.list_catalog`，不列入 `EXPECTED_SECTIONS`）。設定群組 `list_prefs`（`enabled`，預設 0）。先導清單：供應商（`supply:suppliers`，無金額欄）。無新路由、無資料表、無權限變更；旗標關＝清單與今天相同。設計 `docs/platform/plans/T66-LIST-PREFS-DESIGN.md`；測試 `tests/platform/test_list_catalog_t66.py`、`test_list_pref_policy_t66.py`。
 - L1（只增，T66 L2）：新檔 `helpers/list_view_prefs.py`（個人每頁筆數＋欄位可見(F7)∩公司政策的限制：`constraints`、`save_page_size`、`reset`、`clamp_columns`、`clamp_sort`、`column_visible`）與路由 `routers/list_view_prefs.py`（`GET /api/list-views`、`GET/PUT/DELETE /api/list-views/{list_id}`；旗標關＝404）。core migration（`register("core", NEXT, …)`）新表 `user_list_view_prefs`（純新增、冪等、帶 `owner_unit_id`）。個人欄位顯示／順序／排序仍在既有 `user_list_prefs`＋版面引擎，不動。無權限變更；旗標 `list_prefs.enabled` 關＝與今天相同。測試 `tests/platform/test_list_view_prefs_t66.py`。

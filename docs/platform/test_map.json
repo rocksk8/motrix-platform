@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1421,
+  "tests": 1427,
   "unmapped": 13,
   "kinds": {
-   "api": 785,
+   "api": 787,
    "e2e": 311,
-   "audit": 191,
-   "unit": 134
+   "audit": 194,
+   "unit": 135
   },
-  "routes": 853
+  "routes": 857
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -14354,6 +14354,7 @@
     "router:definitions",
     "router:duty_roles",
     "router:item_reads",
+    "router:list_view_prefs",
     "router:mail_settings",
     "router:module_versions",
     "router:parts",
@@ -14400,6 +14401,7 @@
      "backend/routers/definitions.py",
      "backend/routers/duty_roles.py",
      "backend/routers/item_reads.py",
+     "backend/routers/list_view_prefs.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
@@ -18996,6 +18998,7 @@
     "router:definitions",
     "router:duty_roles",
     "router:item_reads",
+    "router:list_view_prefs",
     "router:mail_settings",
     "router:module_versions",
     "router:parts",
@@ -19043,6 +19046,7 @@
      "backend/routers/definitions.py",
      "backend/routers/duty_roles.py",
      "backend/routers/item_reads.py",
+     "backend/routers/list_view_prefs.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
@@ -19596,6 +19600,89 @@
     ]
    }
   },
+  "backend/tests/platform/test_list_catalog_t66.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/supply/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/modules/supply/module.json",
+    "helper:field_catalog",
+    "helper:list_catalog",
+    "mod:supply/api/suppliers",
+    "plat:__init__",
+    "plat:catalog"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/catalog.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/field_catalog.py",
+     "backend/helpers/list_catalog.py",
+     "backend/modules/supply/api/suppliers.py"
+    ],
+    "path": [
+     "backend/modules/supply/",
+     "backend/modules/supply/module.json"
+    ]
+   }
+  },
+  "backend/tests/platform/test_list_enforce_t66.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:list_catalog",
+    "helper:list_pref_policy",
+    "helper:list_view_prefs",
+    "plat:__init__",
+    "plat:migrations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/migrations.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/list_catalog.py",
+     "backend/helpers/list_pref_policy.py",
+     "backend/helpers/list_view_prefs.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_list_pref_policy_t66.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "file:backend/tests/platform/settings_deploy_baseline.json",
+    "helper:list_catalog",
+    "helper:list_pref_policy",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "mod:supply/api/suppliers",
+    "plat:__init__",
+    "plat:catalog",
+    "plat:definitions",
+    "router:def_pipeline"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/catalog.py",
+     "backend/core/definitions.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/list_catalog.py",
+     "backend/helpers/list_pref_policy.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/modules/supply/api/suppliers.py",
+     "backend/routers/__init__.py",
+     "backend/routers/def_pipeline.py"
+    ],
+    "path": [
+     "backend/tests/platform/settings_deploy_baseline.json"
+    ]
+   }
+  },
   "backend/tests/platform/test_list_view_c1_t65.py": {
    "kind": "api",
    "units": [
@@ -19661,6 +19748,42 @@
      "frontend/js/case-management-list.js"
     ]
    }
+  },
+  "backend/tests/platform/test_list_view_prefs_t66.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:financial_mask",
+    "helper:list_catalog",
+    "helper:list_pref_policy",
+    "helper:list_view_prefs",
+    "helper:settings_registry",
+    "mod:supply/api/suppliers",
+    "plat:__init__",
+    "plat:definitions",
+    "plat:migrations",
+    "router:list_view_prefs"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/core/migrations.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/financial_mask.py",
+     "backend/helpers/list_catalog.py",
+     "backend/helpers/list_pref_policy.py",
+     "backend/helpers/list_view_prefs.py",
+     "backend/helpers/settings_registry.py",
+     "backend/modules/supply/api/suppliers.py"
+    ],
+    "api": [
+     "backend/routers/list_view_prefs.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/platform/test_m01_l1_providers.py": {
    "kind": "api",
@@ -20498,6 +20621,7 @@
     "router:definitions",
     "router:duty_roles",
     "router:item_reads",
+    "router:list_view_prefs",
     "router:mail_settings",
     "router:module_versions",
     "router:parts",
@@ -20551,6 +20675,7 @@
      "backend/routers/definitions.py",
      "backend/routers/duty_roles.py",
      "backend/routers/item_reads.py",
+     "backend/routers/list_view_prefs.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
@@ -21870,6 +21995,25 @@
     ],
     "page": [
      "frontend/pages/approval-queue.html"
+    ]
+   }
+  },
+  "backend/tests/platform/test_quote_copy_binds_sortable_t66.py": {
+   "kind": "unit",
+   "units": [
+    "page:pages/quotation-form.html",
+    "page:pages/quotations.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html",
+     "frontend/pages/quotations.html"
     ]
    }
   },
@@ -24412,6 +24556,7 @@
     "router:definitions",
     "router:duty_roles",
     "router:item_reads",
+    "router:list_view_prefs",
     "router:mail_settings",
     "router:module_versions",
     "router:parts",
@@ -24460,6 +24605,7 @@
      "backend/routers/definitions.py",
      "backend/routers/duty_roles.py",
      "backend/routers/item_reads.py",
+     "backend/routers/list_view_prefs.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
@@ -27623,6 +27769,7 @@
     "router:definitions",
     "router:duty_roles",
     "router:item_reads",
+    "router:list_view_prefs",
     "router:mail_settings",
     "router:module_versions",
     "router:parts",
@@ -27676,6 +27823,7 @@
      "backend/routers/definitions.py",
      "backend/routers/duty_roles.py",
      "backend/routers/item_reads.py",
+     "backend/routers/list_view_prefs.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
@@ -34234,6 +34382,7 @@
     "router:definitions",
     "router:duty_roles",
     "router:item_reads",
+    "router:list_view_prefs",
     "router:mail_settings",
     "router:module_versions",
     "router:parts",
@@ -34282,6 +34431,7 @@
      "backend/routers/definitions.py",
      "backend/routers/duty_roles.py",
      "backend/routers/item_reads.py",
+     "backend/routers/list_view_prefs.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
@@ -34635,6 +34785,21 @@
      "frontend/js/voucher.js",
      "frontend/pages/settlement.html",
      "frontend/static/definition-form.js"
+    ]
+   }
+  },
+  "backend/tests/test_motrix_format_t66.py": {
+   "kind": "audit",
+   "units": [
+    "dir:frontend/pages/",
+    "js:static/motrix-format.js"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/static/motrix-format.js"
+    ],
+    "path": [
+     "frontend/pages/"
     ]
    }
   },
@@ -35885,6 +36050,7 @@
     "router:legal_params",
     "router:licensing",
     "router:list_prefs",
+    "router:list_view_prefs",
     "router:mail_settings",
     "router:map_points",
     "router:module_versions",
@@ -35976,6 +36142,7 @@
      "backend/routers/legal_params.py",
      "backend/routers/licensing.py",
      "backend/routers/list_prefs.py",
+     "backend/routers/list_view_prefs.py",
      "backend/routers/mail_settings.py",
      "backend/routers/map_points.py",
      "backend/routers/module_versions.py",
@@ -37095,6 +37262,7 @@
     "router:definitions",
     "router:duty_roles",
     "router:item_reads",
+    "router:list_view_prefs",
     "router:mail_settings",
     "router:module_versions",
     "router:parts",
@@ -37142,6 +37310,7 @@
      "backend/routers/definitions.py",
      "backend/routers/duty_roles.py",
      "backend/routers/item_reads.py",
+     "backend/routers/list_view_prefs.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
@@ -38327,6 +38496,7 @@
     "router:auth",
     "router:company_lookup",
     "router:custom_records",
+    "router:list_view_prefs",
     "router:system"
    ],
    "evidence": {
@@ -38341,6 +38511,7 @@
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
      "backend/routers/custom_records.py",
+     "backend/routers/list_view_prefs.py",
      "backend/routers/system.py"
     ],
     "path": [
