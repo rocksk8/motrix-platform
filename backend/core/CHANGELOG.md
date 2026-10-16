@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-17（wip/t69-retention-r1；T69 SO-S2：刪除暫存區保留天數改成設定）
+## 1.146 — 2026-10-17（wip/t69-retention-r1；T69 SO-S2：刪除暫存區保留天數改成設定）
 - 新設定群組 `recycle_bin`（設定中心「刪除暫存區」），欄位 `retention_days`：整數，**預設 30（＝上線前寫死的 30 天，行為不變）**、下限 7、上限 365；風險 legal、`loosen="down"`：**縮短＝放寬（更快永久刪除、無法找回）⇒ 須等確認期間（預設 7 天）並由另一位最高管理者核准（只有一位時改為原因＋確認期間＋警告＋通知）；延長立即生效**。`settings_deploy_baseline.json` 已同步。
 - 只影響設定生效**之後**才被刪除的項目（到期日 `purge_after` 在刪除當下就寫定，不回頭改寫）；每日清理、狀態頁的「保存 N 天」、通知文字、刪除已核可的提示都跟著設定走。`helpers.recycle_bin.RETENTION_DAYS`（30）保留，作為讀不到／不合法時的後備值。
 - L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.settings_groups_recycle_bin`（無公開介面；載入時由 `settings_groups` 檔尾兩行登錄群組）。
