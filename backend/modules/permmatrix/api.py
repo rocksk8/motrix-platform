@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-"""權限矩陣 API：唯讀狀態探針＋（PM-S2）唯讀檢視端點。全部端點限最高管理者（SPEC PMX14／設計稿 §4）。
+"""權限矩陣 API：唯讀狀態探針＋（PM-S2）唯讀檢視端點＋（PM-S3）寫入端點。除探針外全部限最高管理者（SPEC PMX14／PMX16／PMX17、設計稿 §4）。
 
-寫入端點（PM-S3）另段；服務層錯誤 `PermError` 一律轉成帶中文訊息的 HTTP 錯誤。
+寫入端點只做「驗證輸入 → 呼叫服務層 → 轉錯誤」：高風險放寬走設定帳本待生效（確認期間＋第二位最高管理者核准）、原因必填、稽核與資料同交易，全部在服務層（`service.py`）。
+服務層錯誤 `PermError` 一律轉成帶中文訊息的 HTTP 錯誤。
 """
 from fastapi import APIRouter, Header, HTTPException
+from pydantic import BaseModel, StrictBool, StrictInt
 
 from db import get_db
 from helpers import _require_user
@@ -18,7 +20,7 @@ def _su(authorization):
 
 
 def _run(fn):
-    """開唯讀連線跑 fn(conn)；PermError ⇒ HTTPException（訊息為中文，不含內部細節）。"""
+    """開連線跑 fn(conn)（服務層的寫入函式自己 begin_write／commit）；PermError ⇒ HTTPException（訊息為中文，不含內部細節）。"""
     conn = get_db()
     try:
         return fn(conn)
@@ -69,3 +71,76 @@ def permmatrix_versions(authorization: str = Header(None)):
 def permmatrix_delegations(authorization: str = Header(None)):
     _su(authorization)
     return _run(lambda c: {"items": S.list_delegations(c)})
+
+
+# ── PM-S3 寫入端點 ─────────────────────────────────────────────────────────────────
+class RoleCapIn(BaseModel):
+    role: str
+    cap: str
+    granted: StrictBool
+    reason: str = ""
+
+
+class UserOverrideIn(BaseModel):
+    user_id: StrictInt
+    cap: str
+    effect: str
+    reason: str = ""
+
+
+class ReasonIn(BaseModel):
+    reason: str = ""
+
+
+@router.post("/api/permmatrix/role-cap/preview")
+def permmatrix_role_cap_preview(body: RoleCapIn, authorization: str = Header(None)):
+    _su(authorization)
+    return _run(lambda c: S.preview_role_cap(c, body.role, body.cap, body.granted))
+
+
+@router.post("/api/permmatrix/role-cap")
+def permmatrix_role_cap(body: RoleCapIn, authorization: str = Header(None)):
+    actor = _su(authorization)
+    return _run(lambda c: S.set_role_cap(c, actor, body.role, body.cap, body.granted, body.reason))
+
+
+@router.post("/api/permmatrix/user-override/preview")
+def permmatrix_user_override_preview(body: UserOverrideIn, authorization: str = Header(None)):
+    _su(authorization)
+    return _run(lambda c: S.preview_user_override(c, body.user_id, body.cap, body.effect))
+
+
+@router.post("/api/permmatrix/user-override")
+def permmatrix_user_override(body: UserOverrideIn, authorization: str = Header(None)):
+    actor = _su(authorization)
+    return _run(lambda c: S.set_user_override(c, actor, body.user_id, body.cap, body.effect, body.reason))
+
+
+@router.delete("/api/permmatrix/user-override")
+def permmatrix_user_override_clear(user_id: int, cap: str, reason: str = "", authorization: str = Header(None)):
+    actor = _su(authorization)
+    return _run(lambda c: S.clear_user_override(c, actor, user_id, cap, reason))
+
+
+@router.post("/api/permmatrix/pending/{pid}/cancel")
+def permmatrix_pending_cancel(pid: int, body: ReasonIn, authorization: str = Header(None)):
+    actor = _su(authorization)
+    return _run(lambda c: S.cancel_pending(c, actor, pid, body.reason))
+
+
+@router.post("/api/permmatrix/pending/{pid}/approve")
+def permmatrix_pending_approve(pid: int, body: ReasonIn, authorization: str = Header(None)):
+    actor = _su(authorization)
+    return _run(lambda c: S.approve_pending(c, actor, pid, body.reason))
+
+
+@router.post("/api/permmatrix/versions/{version_id}/restore")
+def permmatrix_version_restore(version_id: int, body: ReasonIn, authorization: str = Header(None)):
+    actor = _su(authorization)
+    return _run(lambda c: S.restore_version(c, actor, version_id, body.reason))
+
+
+@router.post("/api/permmatrix/undo")
+def permmatrix_undo(authorization: str = Header(None)):
+    actor = _su(authorization)
+    return _run(lambda c: S.undo_last_change(c, actor))

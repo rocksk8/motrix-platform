@@ -164,12 +164,34 @@ def test_views_module_is_read_only():
     assert not (names & WRITE_FUNCS), names & WRITE_FUNCS
 
 
-def test_permmatrix_module_declares_only_read_routes_until_pm_s3():
-    """PM-S2：狀態探針＋唯讀檢視端點；沒有任何寫入端點（寫入端點屬 PM-S3，屆時改這份清單並走寫入端點稽核）。"""
+def test_permmatrix_module_declares_exactly_the_reviewed_routes():
+    """PM-S2 唯讀檢視＋PM-S3 寫入端點的完整清單（新增或移除路由要同一個 commit 改這份、route_inventory 與金標案例）。
+    寫入端點全部在這個模組的 api.py，且 api.py 只做驗證＋呼叫服務層；其他產品碼仍不得取用 service（上面的守門）。"""
     import modules.permmatrix as PM
     assert len(PM.MODULE.routers) == 1
     routes = sorted((m, r.path) for r in PM.MODULE.routers[0].routes for m in r.methods)
-    assert all(m == "GET" for m, _ in routes), routes
-    assert [p for _, p in routes] == sorted([
-        "/api/permmatrix/status", "/api/permmatrix/matrix", "/api/permmatrix/users", "/api/permmatrix/users/{user_id}/effective",
-        "/api/permmatrix/pending", "/api/permmatrix/versions", "/api/permmatrix/delegations"])
+    assert routes == sorted([
+        ("GET", "/api/permmatrix/status"), ("GET", "/api/permmatrix/matrix"), ("GET", "/api/permmatrix/users"),
+        ("GET", "/api/permmatrix/users/{user_id}/effective"), ("GET", "/api/permmatrix/pending"), ("GET", "/api/permmatrix/versions"),
+        ("GET", "/api/permmatrix/delegations"),
+        ("POST", "/api/permmatrix/role-cap"), ("POST", "/api/permmatrix/role-cap/preview"),
+        ("POST", "/api/permmatrix/user-override"), ("POST", "/api/permmatrix/user-override/preview"), ("DELETE", "/api/permmatrix/user-override"),
+        ("POST", "/api/permmatrix/pending/{pid}/cancel"), ("POST", "/api/permmatrix/pending/{pid}/approve"),
+        ("POST", "/api/permmatrix/versions/{version_id}/restore"), ("POST", "/api/permmatrix/undo")])
+
+
+def test_every_write_endpoint_checks_superadmin_first():
+    """api.py 的每個非 GET 路由函式第一行都得先 `_su(authorization)`（縱深：服務層還會再查一次）。"""
+    src = (Path(__file__).resolve().parents[1] / "api.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    writes = []
+    for fn in tree.body:
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        for d in fn.decorator_list:
+            if isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr in ("post", "put", "patch", "delete"):
+                writes.append(fn)
+    assert len(writes) == 9, [f.name for f in writes]
+    for fn in writes:
+        first = ast.unparse(fn.body[0])
+        assert "_su(authorization)" in first, (fn.name, first)
