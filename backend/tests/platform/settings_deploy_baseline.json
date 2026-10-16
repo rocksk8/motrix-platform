@@ -4,7 +4,6 @@
   "lodging_labels": {"per_night": ["每晚", null, null, false], "per_person": ["每人", null, null, false], "phone": ["電話", null, null, false], "website": ["官網", null, null, false], "onsite": ["現場", null, null, false], "other": ["其他", null, null, false]},
   "netplan_labels": {"planning": ["規劃中", null, null, false], "confirmed": ["已確認", null, null, false], "delivered": ["已交付", null, null, false]},
   "procurement_labels": {"suggested": ["待下單", null, null, false], "ordered": ["已下單", null, null, false], "received": ["已到貨", null, null, false]},
-  "trail_labels": {"view": ["檢視", null, null, false], "change": ["變更", null, null, false], "delete": ["刪除", null, null, false], "approve": ["簽核", null, null, false], "export": ["匯出", null, null, false], "ok": ["成功", null, null, false], "created": ["已建立", null, null, false], "not_modified": ["沒有變更", null, null, false], "bad_request": ["資料有誤", null, null, false], "unauthorized": ["需要重新登入", null, null, false], "forbidden": ["沒有權限（被擋下）", null, null, false], "not_found": ["找不到資料", null, null, false], "conflict": ["有人剛改過（衝突）", null, null, false], "too_large": ["檔案太大", null, null, false], "invalid": ["資料格式有誤", null, null, false], "rate_limited": ["操作太頻繁", null, null, false]},
   "builder_actions": {
    "enabled": [
     false,

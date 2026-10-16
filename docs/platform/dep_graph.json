@@ -480,9 +480,7 @@
   "core:trail": {
    "api_prefixes": [],
    "dynamic_sql": false,
-   "imports": [
-    "helper:display_labels"
-   ],
+   "imports": [],
    "kind": "core",
    "path": "backend/trail.py",
    "tables_ddl": [],

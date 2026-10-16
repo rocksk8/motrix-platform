@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-"""C7：小模組狀態／單位／用語顯示名稱（display_labels）。預設＝各畫面原本寫死的字（部署零行為變更）；只換顯示，不換狀態值。"""
+"""C7：小模組狀態／單位顯示名稱（網路規劃、採購建議、住宿）；歷史紀錄用語不可改（見 test_trail_wording_is_not_configurable）（display_labels）。預設＝各畫面原本寫死的字（部署零行為變更）；只換顯示，不換狀態值。"""
 import pathlib
 import re
 
 import pytest
 
-import trail
 from helpers import display_labels as DL
 from helpers import settings_groups  # noqa: F401
 from helpers import settings_registry as SR
@@ -38,9 +37,6 @@ def test_groups_registered_as_core_display_only_with_legacy_defaults():
 
 
 def test_defaults_equal_the_literals_that_were_hardcoded():
-    assert {k: DL.DEFAULTS["trail_labels"][k] for k in trail.KIND_LABELS} == trail.KIND_LABELS
-    for code, key in trail._RESULT_KEY.items():
-        assert DL.DEFAULTS["trail_labels"][key] == trail.STATUS_LABELS[code]
     assert {DL.DEFAULTS["lodging_labels"][k] for k in LS.QUOTE_UNITS} == set(LS.QUOTE_UNITS.values())
     assert all(DL.DEFAULTS["lodging_labels"][k] == v for k, v in {**LS.QUOTE_UNITS, **LS.QUOTE_CHANNELS}.items())
     from modules.netplan import api as NP
@@ -77,14 +73,13 @@ def test_override_changes_only_the_shown_text(monkeypatch):
     assert out["unit"] == "per_night" and out["unitLabel"] == "每房每晚" and out["channelLabel"] == "電話"
 
 
-def test_trail_uses_labels_and_default_is_unchanged(monkeypatch):
-    assert trail.describe("GET", "/api/quotations")["kindLabel"] == "檢視"
-    assert [trail.status_label(c) for c in (200, 204, 403, 409)] == ["成功", "成功", "沒有權限（被擋下）", "有人剛改過（衝突）"]
-    assert trail.status_label(302) == "轉向" and trail.status_label(500) == "系統錯誤" and trail.status_label(418) == "失敗（418）"
-    _override(monkeypatch, "trail_labels", view="查閱", ok="完成")
-    d = trail.describe("GET", "/api/quotations")
-    assert d["kind"] == "view" and d["kindLabel"] == "查閱"
-    assert trail.status_label(200) == "完成" and trail.status_label(204) == "完成" and trail.status_ok(200)
+def test_trail_wording_is_not_configurable():
+    """稽核軌跡用語不可由管理者改名（forbidden 改成「成功」會讓紀錄失真）：沒有 trail 群組，trail.py 維持寫死。"""
+    import trail
+    assert "trail_labels" not in DL.DEFAULTS and "trail_labels" not in SR.groups()
+    assert not hasattr(trail, "_kind_label") and not hasattr(trail, "_result_label")
+    assert trail.describe("GET", "/api/quotations")["kindLabel"] == "檢視" and trail.status_label(403) == "沒有權限（被擋下）"
+    assert "display_labels" not in (BACK / "trail.py").read_text(encoding="utf-8")
 
 
 def test_netplan_text_follows_label_but_state_values_stay(monkeypatch):
@@ -107,7 +102,8 @@ def test_names_must_be_unique_in_a_group_and_default_official_wording_is_kept():
     assert _msgs("netplan_labels", {"planning": "已交付"})
     assert not _msgs("netplan_labels", {"planning": "籌備中"})
     assert not _msgs("netplan_labels", {"confirmed": "已確認"})              # 預設值本身含『確認』，不算違規
-    assert not _msgs("trail_labels", {"view": "查閱"})
+    assert _msgs("procurement_labels", {"suggested": "已到貨"}) and _msgs("lodging_labels", {"phone": "官網"}) and _msgs("lodging_labels", {"per_night": "每人"})
+    assert not _msgs("procurement_labels", {"suggested": "排隊中"}) and not _msgs("lodging_labels", {"phone": "致電"})
 
 
 def test_unsaved_or_broken_values_fall_back_to_the_whole_default_group(monkeypatch):
@@ -115,8 +111,7 @@ def test_unsaved_or_broken_values_fall_back_to_the_whole_default_group(monkeypat
     assert DL.labels("netplan_labels") == DL.DEFAULTS["netplan_labels"]
     monkeypatch.setattr(SR, "get_group", lambda g, **kw: (_ for _ in ()).throw(RuntimeError("db down")))
     DL._MEMO.clear()
-    assert DL.labels("trail_labels") == DL.DEFAULTS["trail_labels"]
-    assert trail.describe("GET", "/api/x")["kindLabel"] == "檢視"
+    assert DL.labels("lodging_labels") == DL.DEFAULTS["lodging_labels"]
 
 
 def test_pages_read_labels_but_logic_still_uses_state_values():

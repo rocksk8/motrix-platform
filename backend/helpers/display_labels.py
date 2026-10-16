@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""小模組的狀態／單位／用語顯示名稱（C7）：網路規劃狀態、採購建議狀態、住宿計價單位與管道、歷史紀錄用語。**只改『看到的字』，狀態值（資料庫值）永遠不變。**
+"""小模組的狀態／單位／用語顯示名稱（C7）：網路規劃狀態、採購建議狀態、住宿計價單位與管道。**只改『看到的字』，狀態值（資料庫值）永遠不變。**
 
 [單位] helper:display_labels    [層] L1    [穩定度] 實驗
 [公開介面] DEFAULTS, GROUPS, NETPLAN_KEY, label, labels, register, status_text
@@ -19,12 +19,6 @@ DEFAULTS = {
     "netplan_labels": {"planning": "規劃中", "confirmed": "已確認", "delivered": "已交付"},
     "procurement_labels": {"suggested": "待下單", "ordered": "已下單", "received": "已到貨"},
     "lodging_labels": {"per_night": "每晚", "per_person": "每人", "phone": "電話", "website": "官網", "onsite": "現場", "other": "其他"},
-    "trail_labels": {
-        "view": "檢視", "change": "變更", "delete": "刪除", "approve": "簽核", "export": "匯出",
-        "ok": "成功", "created": "已建立", "not_modified": "沒有變更", "bad_request": "資料有誤", "unauthorized": "需要重新登入",
-        "forbidden": "沒有權限（被擋下）", "not_found": "找不到資料", "conflict": "有人剛改過（衝突）", "too_large": "檔案太大",
-        "invalid": "資料格式有誤", "rate_limited": "操作太頻繁",
-    },
 }
 GROUPS = tuple(DEFAULTS)
 #: 網路規劃的狀態值（資料庫值）→ 欄位鍵
@@ -69,7 +63,7 @@ def _problems(group, values):
         if v != dflt and _official(v):
             out.append("『%s』含有官方用語（核准、批准、核可、已簽核…），一般狀態不可使用，以免被看成『已核准』。" % v)
         key = _squash(v)
-        if key in seen and group != "trail_labels":
+        if key in seen:
             out.append("『%s』在同一組已被使用，名稱不可重複。" % v)
         seen[key] = k
     return out
@@ -150,17 +144,4 @@ def register(S, _register_core):
          f("lodging_labels", "other", "詢價管道「其他」要顯示成什麼名稱？", "「其他」的顯示名稱", "住宿報價清單與詳細頁的詢價管道。")],
         sensitive=False, risk="none", cross_check=_cross("lodging_labels"),
         help="住宿報價的計價單位與詢價管道在畫面上的名稱。只改看到的字；已存的報價資料不變。",
-    )
-    names = {"view": "檢視", "change": "變更", "delete": "刪除", "approve": "簽核", "export": "匯出"}
-    http = {"ok": "成功", "created": "已建立", "not_modified": "沒有變更", "bad_request": "資料有誤", "unauthorized": "需要重新登入",
-            "forbidden": "沒有權限（被擋下）", "not_found": "找不到資料", "conflict": "有人剛改過（衝突）", "too_large": "檔案太大",
-            "invalid": "資料格式有誤", "rate_limited": "操作太頻繁"}
-    fields = [f("trail_labels", k, "歷史紀錄中的操作類型「%s」要顯示成什麼名稱？" % v, "操作類型「%s」的顯示名稱" % v, "歷史紀錄（稽核軌跡）列表的操作類型。")
-              for k, v in names.items()]
-    fields += [f("trail_labels", k, "歷史紀錄中的處理結果「%s」要顯示成什麼名稱？" % v, "處理結果「%s」的顯示名稱" % v, "歷史紀錄（稽核軌跡）列表的處理結果。")
-               for k, v in http.items()]
-    _register_core(
-        "trail_labels", "歷史紀錄：操作類型與處理結果用語",
-        fields, sensitive=False, risk="none", cross_check=_cross("trail_labels"),
-        help="歷史紀錄頁上操作類型與處理結果的用語。只改看到的字；紀錄本身、篩選條件與權限不變。",
     )

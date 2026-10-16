@@ -1,8 +1,7 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-16（wip/t68-c7-r1；C7 小模組狀態／單位／用語顯示名稱）
-- L1（只增）：新檔 `helpers/display_labels.py`（`label`、`labels`、`status_text`、`register`、`DEFAULTS`、`GROUPS`、`NETPLAN_KEY`；設定群組 `netplan_labels`／`procurement_labels`／`lodging_labels`／`trail_labels`，屬 core，由 `settings_groups` 載入時呼叫 `register`）。前端新檔 `static/display-labels.js` 經既有 `/api/settings-center/public` 取值，沒有新路由。
-- `trail.py`：操作類型與處理結果用語改走 `display_labels`（私有 `_kind_label`／`_result_label`；讀不到 ⇒ 原本的 `KIND_LABELS`／`STATUS_LABELS`，輸出逐字相同）。
+## (next) — 2026-10-16（wip/t68-c7-r1；C7 小模組狀態／單位顯示名稱）
+- L1（只增）：新檔 `helpers/display_labels.py`（`label`、`labels`、`status_text`、`register`、`DEFAULTS`、`GROUPS`、`NETPLAN_KEY`；設定群組 `netplan_labels`／`procurement_labels`／`lodging_labels`，屬 core，由 `settings_groups` 載入時呼叫 `register`）。前端新檔 `static/display-labels.js` 經既有 `/api/settings-center/public` 取值，沒有新路由。
 - 純顯示：只換畫面上看到的名稱，狀態值、轉換順序、查詢、權限一律用原值；名稱規則同狀態顯示表（最多 12 字、同組不重複、非預設值不可含官方用語）。預設＝各畫面今天的字（等值測試 `tests/platform/test_display_labels_c7.py`）。
 
 ## 1.144 — 2026-10-16（wip/t66-lp-r2；T66 清單個人偏好 L0～L2）
