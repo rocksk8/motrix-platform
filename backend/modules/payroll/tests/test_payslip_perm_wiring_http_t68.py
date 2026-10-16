@@ -31,6 +31,9 @@ PROBES = [
     ("get", "/api/payslips/" + NONE + "/pdf-download", "export"),
     ("delete", "/api/payslips/" + NONE + "/signed-files/zz", "attach"),
     ("delete", "/api/payslips/" + NONE + "/dispatch-links/1", "edit"),
+    ("post", "/api/payslips/" + NONE + "/dispatch-links", "edit"),     # 空 body：過閘後 400「請帶 dispatchId」；被擋＝403
+    ("get", "/api/payslip-dispatch-options", "view"),                  # T68 A4 新端點（無必填 query；過閘後回 200／空清單）
+    ("get", "/api/payslip-dispatch-options?q=x&offset=0&contractor_id=0&include_all=true", "view"),  # 帶齊全部 query 參數再量一次
 ]
 
 

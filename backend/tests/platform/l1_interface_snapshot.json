@@ -1530,6 +1530,7 @@
   "helper:settings_groups_list_view": {
    "register": "def(S, _register_core)"
   },
+  "helper:settings_groups_payslip_picker": {},
   "helper:settings_groups_profit": {
    "register": "def(S, _register_core)"
   },

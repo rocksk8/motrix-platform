@@ -74,7 +74,8 @@ def add_payslip_link(did: int, body: dict = Body(default={}), authorization: str
         if not _dispatch_exists(conn, did):
             raise HTTPException(404, "派發紀錄不存在")
         try:
-            res = prov.link(conn, slip_no, did, user, (body or {}).get("note") or "")
+            res = prov.link(conn, slip_no, did, user, (body or {}).get("note") or "",
+                            personnel_ids=_personnel_ids(conn.execute("SELECT personnel_json FROM contractor_dispatches WHERE id=?", (did,)).fetchone()["personnel_json"]))
         except ValueError as e:
             raise HTTPException(getattr(e, "status", 409), str(e))
         conn.commit()
@@ -125,6 +126,49 @@ def _personnel_ids(raw) -> list:
 _PERSON_LIST_EXCLUDED_STATUS = ("draft", "cancelled")
 
 
+_PERSON_SELECT = ("SELECT d.id, d.doc_code, d.quote_no, d.status, d.dispatch_date, d.personnel_json, d.scope, d.items_json, v.name AS vendor_name,"
+                  " q.project_name AS project_name, q.customer_name AS customer_name"
+                  " FROM contractor_dispatches d LEFT JOIN vendor_contractors v ON v.id = d.vendor_id"
+                  " LEFT JOIN quotations q ON q.quote_no = d.quote_no")
+
+
+def _case_visible(r, visible, user) -> bool:
+    """案件名稱能不能給這位呼叫者看（`guard_case_access`；結果依案件單號快取在 `visible`）。沒給 `user` 或沒通過 ⇒ False。"""
+    qn = r["quote_no"] or ""
+    if qn not in visible:
+        ok = False
+        if user is not None and qn and (r["project_name"] is not None or r["customer_name"] is not None):
+            gconn = get_db()          # guard_case_access 拒絕時會把傳進去的連線關掉 ⇒ 用自己的短連線，不影響外面這條
+            try:
+                guard_case_access(gconn, qn, user, allow_module="case_manage")
+                ok = True
+            except HTTPException:
+                ok = False
+            finally:
+                try:
+                    gconn.close()
+                except Exception:                                   # noqa: BLE001
+                    pass
+        visible[qn] = ok
+    return visible[qn]
+
+
+def _dispatch_view(r, visible, user) -> dict:
+    """派發一列 → 勞報單頁用的簡要樣子（**不含金額**）。`dispatches_for_person` 與 `dispatch_search` 共用，欄位一致。"""
+    vis = _case_visible(r, visible, user)
+    try:
+        items = json.loads(r["items_json"] or "[]")
+    except (TypeError, ValueError):
+        items = []
+    descs = [str(it.get("description") or "").strip() for it in (items if isinstance(items, list) else []) if isinstance(it, dict)]
+    summary = "、".join([x for x in descs if x][:3])
+    return {"id": r["id"], "docCode": r["doc_code"] or "", "quoteNo": r["quote_no"] or "", "status": r["status"] or "",
+            "vendorName": r["vendor_name"] or "", "dispatchDate": (r["dispatch_date"] or "")[:10],
+            "scope": (r["scope"] or "")[:200], "itemsSummary": summary[:200],
+            "projectName": (r["project_name"] or "") if vis else "", "customerName": (r["customer_name"] or "") if vis else "",
+            "caseVisible": bool(vis)}
+
+
 def dispatches_for_person(conn, contractor_id, limit=200, user=None) -> list:
     """提供者 `dispatch.by_person`（M04 → M07 勞報單頁；IP-115 暫定）：這位外包名冊人員被排進哪些派發（新到舊；不含草稿／已取消）。**不含金額**。
     第 51 班（加法）：另帶 `scope`（工作範圍）、`itemsSummary`（前 3 個品項描述）、`projectName`／`customerName`——案件名稱**只給通過案件讀取守門的人**
@@ -134,43 +178,78 @@ def dispatches_for_person(conn, contractor_id, limit=200, user=None) -> list:
     except (TypeError, ValueError):
         return []
     out, visible = [], {}
-    for r in conn.execute("SELECT d.id, d.doc_code, d.quote_no, d.status, d.dispatch_date, d.personnel_json, d.scope, d.items_json, v.name AS vendor_name,"
-                          " q.project_name AS project_name, q.customer_name AS customer_name"
-                          " FROM contractor_dispatches d LEFT JOIN vendor_contractors v ON v.id = d.vendor_id"
-                          " LEFT JOIN quotations q ON q.quote_no = d.quote_no"
-                          " WHERE d.personnel_json LIKE ? ORDER BY d.id DESC", ("%" + str(cid) + "%",)).fetchall():
+    for r in conn.execute(_PERSON_SELECT + " WHERE d.personnel_json LIKE ? ORDER BY d.id DESC", ("%" + str(cid) + "%",)).fetchall():
         if (r["status"] or "") in _PERSON_LIST_EXCLUDED_STATUS or cid not in _personnel_ids(r["personnel_json"]):
             continue
-        qn = r["quote_no"] or ""
-        if qn not in visible:
-            ok = False
-            if user is not None and qn and (r["project_name"] is not None or r["customer_name"] is not None):
-                gconn = get_db()          # guard_case_access 拒絕時會把傳進去的連線關掉 ⇒ 用自己的短連線，不影響外面這條
-                try:
-                    guard_case_access(gconn, qn, user, allow_module="case_manage")
-                    ok = True
-                except HTTPException:
-                    ok = False
-                finally:
-                    try:
-                        gconn.close()
-                    except Exception:                                   # noqa: BLE001
-                        pass
-            visible[qn] = ok
-        try:
-            items = json.loads(r["items_json"] or "[]")
-        except (TypeError, ValueError):
-            items = []
-        descs = [str(it.get("description") or "").strip() for it in (items if isinstance(items, list) else []) if isinstance(it, dict)]
-        summary = "、".join([x for x in descs if x][:3])
-        out.append({"id": r["id"], "docCode": r["doc_code"] or "", "quoteNo": qn, "status": r["status"] or "",
-                    "vendorName": r["vendor_name"] or "", "dispatchDate": (r["dispatch_date"] or "")[:10],
-                    "scope": (r["scope"] or "")[:200], "itemsSummary": summary[:200],
-                    "projectName": (r["project_name"] or "") if visible[qn] else "", "customerName": (r["customer_name"] or "") if visible[qn] else "",
-                    "caseVisible": bool(visible[qn])})
+        out.append(_dispatch_view(r, visible, user))
         if len(out) >= limit:
             break
     return out
+
+
+SEARCH_PAGE = 30                  # 下拉一次最多給幾筆（伺服器端分頁）；設定 `payslip_dispatch_picker.page_size` 可調，這裡是讀不到設定時的後備值
+SEARCH_MAX_Q = 60                 # 搜尋字串長度上限
+
+
+def _like_escape(t) -> str:
+    """LIKE 的跳脫字元用 `!`（避開反斜線在 Python／SQL 兩層的跳脫）。"""
+    return str(t).replace("!", "!!").replace("%", "!%").replace("_", "!_")
+
+
+def _page_size(conn) -> int:
+    """下拉一次給幾筆：設定 `payslip_dispatch_picker.page_size`（預設 30、10–100）；讀不到 ⇒ 後備 SEARCH_PAGE。"""
+    try:
+        from helpers import settings_registry
+        return int(settings_registry.get("payslip_dispatch_picker", "page_size", conn=conn))
+    except Exception:                                           # noqa: BLE001  設定層任何問題都不能讓下拉壞掉
+        return SEARCH_PAGE
+
+
+def dispatch_search(conn, q="", contractor_id=None, include_all=False, limit=None, offset=0, user=None) -> dict:
+    """提供者 `dispatch.search`（M04 → M07 勞報單頁下拉；IP-116 暫定）：可搜尋、分頁的派發清單（新到舊；**不含 draft／cancelled**；**不含金額**）。
+    `contractor_id` 給了且 `include_all` 為假 ⇒ 只列人員名單含此人的；`include_all` 為真或沒給人 ⇒ 全部（仍排除草稿／已取消）。
+    搜尋＝派發編號、案件單號、廠商名，另加案件名稱／客戶名（**僅呼叫者通過案件讀取守門的案件才比對**，避免用搜尋探出看不到的案件名）。
+    每筆多 `onRoster`（給了 `contractor_id` 時：此人是否在名單內；沒給 ⇒ None）。回 `{"items": [...], "hasMore": bool}`。"""
+    try:
+        limit = max(1, min(int(limit if limit is not None else _page_size(conn)), 100))
+        offset = max(0, int(offset))
+    except (TypeError, ValueError):
+        limit, offset = SEARCH_PAGE, 0
+    cid = None
+    if contractor_id not in (None, ""):
+        try:
+            cid = int(contractor_id)
+        except (TypeError, ValueError):
+            return {"items": [], "hasMore": False}
+    term = str(q or "").strip()[:SEARCH_MAX_Q].lower()
+    where, args = ["d.status NOT IN ('draft','cancelled')"], []
+    if cid is not None and not include_all:
+        where.append("d.personnel_json LIKE ?")
+        args.append("%" + str(cid) + "%")
+    if term:
+        like = "%" + _like_escape(term) + "%"
+        where.append("(lower(d.doc_code) LIKE ? ESCAPE '!' OR lower(d.quote_no) LIKE ? ESCAPE '!' OR lower(v.name) LIKE ? ESCAPE '!'"
+                     " OR lower(q.project_name) LIKE ? ESCAPE '!' OR lower(q.customer_name) LIKE ? ESCAPE '!')")
+        args += [like] * 5
+    visible, out, skipped, hasMore = {}, [], 0, False
+    for r in conn.execute(_PERSON_SELECT + " WHERE " + " AND ".join(where) + " ORDER BY d.id DESC", args).fetchall():
+        v = _dispatch_view(r, visible, user)
+        if term and not _case_visible(r, visible, user):
+            # 案件名稱欄位只有看得到該案的人才能拿來比對：看不到案件的人，只能靠編號／單號／廠商名命中
+            if not any(term in str(x or "").lower() for x in (r["doc_code"], r["quote_no"], r["vendor_name"])):
+                continue
+        ids = _personnel_ids(r["personnel_json"])
+        if cid is not None and not include_all and cid not in ids:
+            continue                                                   # LIKE 只是粗篩（"1" 會撞 "11"），名單精確比對
+        if skipped < offset:
+            skipped += 1
+            continue
+        if len(out) >= limit:
+            hasMore = True
+            break
+        v["onRoster"] = (cid in ids) if cid is not None else None
+        out.append(v)
+    return {"items": out, "hasMore": hasMore}
 
 
 def dispatch_brief(conn, dispatch_id):

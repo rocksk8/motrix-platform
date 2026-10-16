@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""勞報單頁的「來源派發」連結端點（第 46 班 P3；設計 PAYSLIP-APPROVAL-T45.md §6）。全部 superadmin＋`payslip` 模組（同勞報單其他端點）。
+"""勞報單頁的「來源派發」連結端點（第 46 班 P3；設計 PAYSLIP-APPROVAL-T45.md §6）。全部走權限矩陣 `payroll.payslip.*`（T67 接線；預設等價於 superadmin＋`payslip` 模組）。
 派發資料在 M04：經提供者 `dispatch.brief` 取（M04 不在 ⇒ 連結仍可讀，派發欄位空白並說明；不能新增連結）。"""
 from fastapi import APIRouter, Body, Header, HTTPException
 
@@ -11,6 +11,8 @@ from modules.payroll import payslip_links as PL
 
 router = APIRouter()
 DISPATCH_MISSING = "外包工班模組未安裝：看不到派發資料，也不能新增派發關聯"
+MSG_NO_SEARCH = "外包工班模組未安裝或版本過舊：不能搜尋派發"
+MSG_BAD_PAGE = "分頁參數格式不正確"
 
 
 def _brief(conn, dispatch_id):
@@ -50,15 +52,41 @@ def add_link(slip_no: str, body: dict = Body(default={}), authorization: str = H
             raise HTTPException(409, DISPATCH_MISSING)
         if _brief(conn, did) is None:
             raise HTTPException(404, "查無此派發")
+        brief = _brief(conn, did)
         try:
-            res = PL.link(conn, slip_no, did, user, (body or {}).get("note") or "")
+            res = PL.link(conn, slip_no, did, user, (body or {}).get("note") or "", personnel_ids=brief.get("personnelIds") or [])
         except PL.LinkError as e:
             raise HTTPException(e.status, str(e))
         conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), "payslip.dispatch_link", "payslip", slip_no, "%s 關聯派發 #%s" % (slip_no, did))
+    _audit(_tok(authorization), "payslip.dispatch_link", "payslip", slip_no,
+           "%s 關聯派發 #%s（%s）%s" % (slip_no, did, brief.get("docCode") or "", "；經下拉『顯示全部』選取" if (body or {}).get("viaShowAll") else ""))
     return {"ok": True, **res}
+
+
+@router.get("/api/payslip-dispatch-options")
+def dispatch_options(q: str = "", contractor_id: int = None, include_all: bool = False, slip_no: str = "", offset: int = 0,
+                     authorization: str = Header(None)):
+    """第 55 班：勞報單頁「選派發」下拉的清單（伺服器端搜尋＋分頁）。權限 `payroll.payslip.view`（預設＝最高管理者＋勞報單模組，同勞報單其他端點）；**不含金額**。
+    預設只列受領人（`contractor_id`）在人員名單內、非草稿非已取消的派發；`include_all=true` 才列全部。
+    每筆帶 `linked`（已關聯，仍可選）、`linkedToThis`（已連到 `slip_no` 這張，不能重複選）、`onRoster`（受領人在不在名單；不在名單者前端停用，伺服器另擋）。"""
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.view")      # T68 A4：同 T67 接線；選派發清單是讀取（同 payslip-person-dispatches），預設等價（superadmin 或持有 payslip 模組）
+    fn = registry.single_provider("dispatch.search")
+    if fn is None:
+        return {"items": [], "hasMore": False, "notice": MSG_NO_SEARCH}
+    if offset < 0 or offset > 100000:
+        raise HTTPException(400, MSG_BAD_PAGE)
+    conn = get_db()
+    try:
+        res = fn(conn, q=q, contractor_id=contractor_id, include_all=include_all, offset=offset, user=user)
+        flags = PL.link_flags(conn, [it["id"] for it in res["items"]], slip_no or None)
+        for it in res["items"]:
+            it.update(flags.get(it["id"]) or {"linked": False, "linkedToThis": False})
+    finally:
+        conn.close()
+    return {"items": res["items"], "hasMore": res["hasMore"], "notice": ""}
 
 
 @router.delete("/api/payslips/{slip_no}/dispatch-links/{dispatch_id}")

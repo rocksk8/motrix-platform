@@ -9,6 +9,8 @@
   <title>外包名冊 — MOTRIX ERP</title>
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/option-lists.js"></script>
+  <meta name="motrix-option-lists" content="payslip_nationality">   <!-- census #4：只是宣告；選項清單開啟且是最高管理者時，sidebar.js 才載入編輯器 -->
   <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -333,9 +335,7 @@
           <div class="form-group">
             <label class="form-label">國籍</label>
             <select class="form-select" x-model="form.nationality">
-              <option>本國籍</option>
-              <option>外國籍（滿183天）</option>
-              <option>外國籍（未滿183天）</option>
+              <template x-for="o in optItems('payslip_nationality', NATIONALITY_ITEMS, form.nationality)" :key="o.value"><option :value="o.value" x-text="o.label"></option></template>
             </select>
           </div>
           <div class="form-group" style="justify-content:flex-end">
@@ -577,9 +577,15 @@ function contractorsPage() {
     //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
     _initDone: false,
 
+    // census #4：選項清單（旗標關／沒發布 ⇒ 回到下面寫死的預設）；國籍的值決定扣繳，只能改顯示名稱
+    optVer: 0,
+    NATIONALITY_ITEMS: [{ value: '本國籍', label: '本國籍' }, { value: '外國籍（滿183天）', label: '外國籍（滿183天）' }, { value: '外國籍（未滿183天）', label: '外國籍（未滿183天）' }],
+    optItems(id, defaults, cur) { this.optVer; return MotrixOptions.options(id, defaults, cur) },
+
     async init() {
       if (this._initDone) return
       this._initDone = true
+      window.addEventListener('motrix-options', () => { this.optVer++ })
       const s = localStorage.getItem('motrix_session')
       if (!s) { window.location.href = 'login.html'; return }
       this.session = JSON.parse(s)

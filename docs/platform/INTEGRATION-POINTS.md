@@ -254,6 +254,23 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 契約版本 | 1（2026-10-09）；`dispatch.brief`（IP-113）同日加欄位 `personnelIds`、`dispatchDate`（加法） |
 | 守門 | `backend/modules/payroll/tests/test_payslip_person_link_t48.py` |
 
+## IP-116　`dispatch.search`：可搜尋、分頁的派發清單（M04 外包工班 → M07 薪資獎金勞報單頁下拉；暫定號，列車定號；2026-10-11，第55班）
+
+勞報單頁「選派發」下拉（詳情頁與新增表單共用）要搜尋派發；薪資獎金不 import 外包工班，改經 registry 取用。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M04 外包工班：`modules/subcontract/api/dispatch_payslip_links.py::dispatch_search` |
+| 使用方 | M07 薪資獎金：`modules/payroll/api/payslip_links.py`（`GET /api/payslip-dispatch-options`） |
+| 形式 | provider，單一提供者（名稱 `subcontract`） |
+| 語法 | 提供：`("dispatch.search", "subcontract"): dispatch_payslip_links.dispatch_search`；取用：`registry.single_provider("dispatch.search")` ⇒ `fn(conn, q="", contractor_id=None, include_all=False, limit=None（讀設定 payslip_dispatch_picker.page_size，預設 30）, offset=0, user=None)` |
+| 回傳 | `{"items": [...], "hasMore": bool}`；每筆同 IP-115 的欄位（`id, docCode, quoteNo, status, vendorName, dispatchDate, scope, itemsSummary, projectName, customerName, caseVisible`），另加 `onRoster`（給了 `contractor_id` 時：此人是否在派發人員名單內，否則 `None`）。新到舊；**不含 draft／cancelled、不含金額**；`limit` 上限 100、`q` 上限 60 字 |
+| 搜尋範圍 | 派發編號、案件單號、廠商名；案件名稱／客戶名**只在呼叫者通過案件讀取守門（`guard_case_access`）時才拿來比對與顯示**。`%`／`_` 當字面 |
+| 預設範圍 | 給了 `contractor_id` 且 `include_all` 為假 ⇒ 只列人員名單含此人的；否則全部（仍排除草稿／已取消） |
+| 對方不在時 | 提供者不在 ⇒ 端點回空清單＋`notice`「外包工班模組未安裝或版本過舊：不能搜尋派發」 |
+| 契約版本 | 1（2026-10-11）。同班 `payslip.dispatch_links`（IP-112）的 `link()` 加選用參數 `personnel_ids`（名單外 ⇒ `LinkError(400)`）與 `link_flags()`（皆加法） |
+| 守門 | `backend/modules/payroll/tests/test_payslip_dispatch_dropdown_t55.py` |
+
 ## IP-114　`contractor_voucher.planned_changed`：承攬商匯款預定付款日變動後對齊行事曆（M04 外包工班 → M05 出納；暫定號，列車定號；2026-10-08，第47班 paydate-l1）
 
 出納改承攬商匯款的預定付款日（`PATCH /api/cashier/payable-queue/{voucher_no}/planned-pay-date`）commit 之後，要依現況對齊行事曆「付款待辦」事件；出納不 import 外包工班，改經 registry 取用。

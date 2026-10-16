@@ -28,7 +28,7 @@
   },
   "capabilities": [
     {"key": "payroll.payslip.view", "label": "查看勞報單", "legacy": {"module": "payslip"},
-     "desc": "可以打開勞報單清單與單張勞報單，並查詢稅率規則與派工連結。",
+     "desc": "可以打開勞報單清單與單張勞報單，並查詢稅率規則、派工連結與「選派發」下拉清單。",
      "impact": "勾選後，這個角色（或這個人）可以看到勞報單的內容與金額；原本沒有「勞報單」功能勾選的人也會看得到。",
      "question": "{who}可以查看勞報單嗎？"},
     {"key": "payroll.payslip.create", "label": "新增勞報單", "legacy": {"module": "payslip"},
@@ -54,7 +54,7 @@
   ],
   "customization": {"schema": 1, "fields": {}, "pages": [], "outputs": []},
   "customization_note": "搬遷時沒有宣告可自訂點（CUSTOMIZATION-SPEC §5）；勞報單的輸出版型可覆寫（P2，helpers/output_templates/payslip.json，屬 L1 輸出引擎）",
-  "provides": {"api_prefixes": ["/api/payslips", "/api/payslip-person-dispatches", "/api/next-slip-no", "/api/tax-rules", "/api/bonus", "/api/me", "/api/bank-accounts"],
+  "provides": {"api_prefixes": ["/api/payslips", "/api/payslip-person-dispatches", "/api/payslip-dispatch-options", "/api/next-slip-no", "/api/tax-rules", "/api/bonus", "/api/me", "/api/bank-accounts"],
                "probes": ["/api/payslips", "/api/tax-rules", "/api/bonus/awards", "/api/bonus/items"]},
   "pages": [{"path": "payslips.html",
      "menu": {"group": "payroll", "label": "勞報單", "order": 20, "perm": ["payslip"], "active": ["payslips.html", "payslip-form.html"]}}, {"path": "payslip-form.html"}, {"path": "bonus-corrections.html"}, {"path": "bonus.html",
