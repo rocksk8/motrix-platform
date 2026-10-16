@@ -166,7 +166,9 @@ def row_label(key, label, summary):
     """精算明細表的列標籤。只有管銷分攤列會變：新口徑（summary.formulaVer>=2）＝「管銷分攤（直接毛利 N%）」，
     舊口徑（沒有戳記／1）＝「管銷分攤（報價稅前 10%）」。N 是該案存下來的百分比（每案可調），不是寫死 25。"""
     if key == "charityDonation":                    # 第 52 班：新基（summary.charityBasis=total）＝報價含稅 1%；無戳記＝舊基（直接毛利 1%）
-        return label.replace("（1%）", "") + ("（報價含稅 1%）" if (summary or {}).get("charityBasis") == "total" else "（直接毛利 1%）")
+        from helpers.profit_warning import rate_text               # T68 Q1：精算 summary 的比率戳記（沒有＝當時是 1），不看目前設定
+        r = rate_text((summary or {}).get("charityRatePct", 1))
+        return label.replace("（1%）", "") + ("（報價含稅 %s%%）" % r if (summary or {}).get("charityBasis") == "total" else "（直接毛利 %s%%）" % r)
     if key != "adminCost":
         return label
     s = summary or {}

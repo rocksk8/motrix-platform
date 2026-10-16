@@ -1,5 +1,12 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-16（wip/t68-q1-profit-r4；T68 Q1：公益比率與管銷後備值走設定，含單據比率戳記）
+- 新設定 `profit_rules.charity_rate_pct`（設定中心「利潤口徑」，預設 1％＝今天）：報價單（伺服器重算／影子比對）、精算頁、精算下游驗算、報價原始側的公益金都改用它；調低＝放寬（確認期間＋第二位最高管理者核准），調高立即生效。管銷比率的後備值改取 `overhead_default_pct`（預設 25），不再有第二份寫死的 25。
+- `GET /api/overhead/settings` 多回 `charityRatePct`、`targetMarginPct`（目標利潤率＝報價單紅線，預設 12）；`quotation-form.html`、`settlement.html` 載入後呼叫 `MotrixProfitRules.configure()`，「公益捐款（… 1%）」標籤跟著比率。
+- **比率戳記（r2）**：報價單 `tot.charityRatePct` 與精算 `summary.charityRatePct`／`origCharityRatePct` 由伺服器蓋（只在比率≠1 時帶鍵，預設時單據形狀與今天相同；用戶端送的一律丟棄；已精算／結案單沿用資料庫現值）。標籤（PDF、獎金明細、`reports.js`、`case-management-fin.js`、`settlement.html`）與舊報價單的補算一律看單據自己的戳記，**沒有戳記＝當時是 1%，不是目前設定**；完結後改比率，完結單據的標籤與金額都不變。新單據用新比率。
+- **單據比率一致（r4，審查 M3）**：已存檔單據的重算一律用單據自己的公益比率戳記（沒有戳記＝1），不吃目前設定、也不重蓋戳記——客戶回簽選定方案（`alt_sign.recompute_tot`）、改管銷比率（`change_pct`）、已精算／結案單的擇一方案比較（`alt_options.plan_view`）。`profit_guard.server_profit` 新增選用參數 `charity_rate_pct`（沒給＝目前設定，僅草稿存檔／新單）、`doc_charity_rate_pct(tot)` 為單一取值處。情境：1% 的單在比率改 2% 後回簽，公益金與淨利仍以 1% 計。測試：`test_customer_signback_recompute_keeps_the_documents_own_rate`、`test_plan_view_uses_the_documents_rate_when_settled`、`test_overhead_pct_change_keeps_the_documents_own_charity_rate`（修前紅燈已確認）。既有取捨（記錄）：已送出但沒有戳記的單據，回簽時用「單據戳記（沒有＝1）」，方案比較視圖（`plan_view`，未精算時）則用目前設定，兩者可能不同。未做（審查註記 N1）：重新完結仍以目前比率重算並重蓋戳記。
+
+
 ## 1.0.201 — 2026-10-16（wip/t66-quote-copy-sortable-r1；複製為新報價單後拖曳排序失效修復；報價單表單 V3.29）
 - 修正：報價單清單或表單按「複製為新報價單」後，新單的項目拖曳排序（拖曳把手）失效。原因是 `quotation-form.html` 的 `init()` 複製分支在中途 `return`，漏掉編輯／新增共用的尾巴（`Sortable` 建立、預覽模式 `$watch`、預覽高度 `message` 監聽）。尾巴抽成 `_bindLateHooks()`，複製分支與一般路徑都呼叫，可重複呼叫不重複綁定；`initSortable()` 重建前先銷毀舊實例、`$watch` 只登記一次。複製分支再保險一次：status 缺值或誤帶「已送出」時改為草稿並取消解鎖。無資料庫變動、無後端變動；`FORM_VERSION` V3.28→V3.29。守門測試 `tests/platform/test_quote_copy_binds_sortable_t66.py`。
 

@@ -13,6 +13,11 @@
 - 新設定群組 `legal_params_reminder`（`start_month` 1–12 預設 10、`start_day` 1–28 預設 1；風險 ops、`loosen="up"`（與 `alerts` 等提醒類設定一致）：**往後延提醒＝放寬 ⇒ 確認期間（預設 7 天）後才生效，且需另一位最高管理者核准（只有一位時改為原因＋確認期間＋警告＋通知）；提前則立即生效**；逐欄判斷月、日；變更照常留變更紀錄）；`settings_deploy_baseline.json` 已同步。要還原舊行為：月份設 12、日設 1。
 - L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.settings_groups_legal_reminder`（無公開介面；載入時由 `settings_groups` 檔尾一行 import 登錄群組）。`helpers.legal_params.year_status(versions, today)` 簽章不變；新增私有 `_reminder_start()`／`_REMINDER_FALLBACK`（讀不到或不合法的設定 ⇒ 後備 10／1，不讓法規參數頁壞掉）。起算日 12/1 時警示文字與舊版逐字相同；其他起算日顯示「已進入 M 月」（1 號）或「已過 M 月 D 日」。
 - 測試：`tests/test_legal_params_reminder_t68.py`（含真實 `SR.publish` 改值後 `year_status` 跟著變、12/31 與 1/1 跨年邊界）。
+- **（併入）(next) — 2026-10-16（wip/t68-q1-profit-r2；T68 Q1 利潤口徑單一來源收尾）**
+- L1（只增，相容擴充）：`helpers.profit_rules` 的 `admin_cost`／`charity`／`quote_profit`／`settlement_profit` 各加選用參數 `default_pct`（管銷比率後備值）、`rate_pct`／`charity_rate_pct`（公益比率百分數）；不傳＝內建 25／1，與今天逐位相同。檔仍是純函式，不讀設定。
+- L1（只增）：`helpers.profit_warning` 新增 `charity_rate_pct()`、`charity_rate_text()`、`charity_rate_stamp()`、`rate_text()`、`rules_config()`、`CHARITY_RATE_PCT_DEFAULT`；設定群組 `profit_rules`（欄位 `charity_rate_pct`，預設 1，0～10，money 風險）寫在既有的 `helpers/settings_groups_profit.py`（`settings_deploy_baseline.json` 已同步）。
+- **放寬方向**：公益比率**調低**＝少扣公益金、營業利益變高 ⇒ 放寬（`loosen=down`），走確認期間＋第二位最高管理者核准（D-K1）；**調高**＝多扣＝收緊，立即生效。讀不到／不合法一律回 1（今天的值）。已完結精算的存檔公益金不回頭改寫。
+- 前端 `static/profit-rules.js` 新增 `configure()`／`charityRateText()`；三個數字（管銷後備 25、公益 1%、目標利潤率 12）可由 `GET /api/overhead/settings` 帶入，沒呼叫＝內建值。
 
 ## 1.144 — 2026-10-16（wip/t66-lp-r2；T66 清單個人偏好 L0～L2）
 - T66 L0＋L1＋L2（清單個人偏好的目錄、公司政策與個人每頁筆數，旗標 `list_prefs.enabled` 預設關）：

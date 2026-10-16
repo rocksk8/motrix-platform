@@ -7,6 +7,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 from core.txn import write_txn
 from db import get_db
 from helpers import _audit, _require_user, _tok
+from helpers import profit_warning as _pw
 from helpers.settings import _set_setting
 from modules.case import profit_guard as PG
 
@@ -17,7 +18,8 @@ router = APIRouter()
 def get_overhead_settings(authorization: str = Header(None)):
     _require_user(authorization)
     return {"ruleMode": PG.rule_mode(), "defaultPct": PG.default_pct(), "ver": PG.current_ver(), "migrationDone": PG.migration_done(),
-            "charityBasis": PG.charity_basis(), "charityMode": PG.charity_mode(), "charityMigrationDone": PG.charity_migration_done()}
+            "charityBasis": PG.charity_basis(), "charityMode": PG.charity_mode(), "charityMigrationDone": PG.charity_migration_done(),
+            **_pw.rules_config()}          # T68 Q1：charityRatePct／targetMarginPct（連同既有 defaultPct，前端 MotrixProfitRules.configure 吃這三個）
 
 
 def _delete_setting(key):

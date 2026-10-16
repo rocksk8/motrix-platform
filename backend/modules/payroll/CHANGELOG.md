@@ -5,6 +5,8 @@
 - 名單外的派發擋下（`link()` 加選用參數 `personnel_ids`；受領人有權威 `contractor_id` 且不在名單 ⇒ 400「這張派發的人員名單沒有這張勞報單的受領人，不能關聯」）。詳情入口與派發頁入口都擋；沒選名冊人員的勞報單不檢查（同建立勞報單）。提供者 `payslip.dispatch_links` 加 `link_flags()`（加法）。稽核 `payslip.dispatch_link` 的說明多派發編號，並註記是否經「顯示全部」選取。`module.json` 的 `api_prefixes` 加 `/api/payslip-dispatch-options`。無 migration、不動簽核與付款。
 - T68 A4 r2：`GET /api/payslip-dispatch-options` 的第一道閘改為 `_require_user(authorization)` ＋ `perm.require(user, "payroll.payslip.view")`（同 T67 的 `payslip_links.py` 接線；`POST …/dispatch-links` 已隨 T67 走 `payroll.payslip.edit`）。預設等價，矩陣對 `view` 的拒絕現在也擋得住這支清單。HTTP 等價關卡 `test_payslip_perm_wiring_http_t68.py` 的探針新增這支與 `POST …/dispatch-links`。另補一題邊界測試（`test_payslip_dispatch_dropdown_t55.py`）：派發人員名單為空時，有受領人的勞報單兩個入口都被擋。`module.json` 的 `payroll.payslip.view` 說明加上「選派發下拉清單」。
 - **行為收緊（需列入驗收）**：關聯勞報單與派發時，勞報單的受領人必須在該派發的人員名單內（與建立勞報單時同一條規則）；從勞報單頁或派發頁連結名單外的受領人，都會被擋下並顯示原因。沒選名冊人員的勞報單、舊呼叫端不受影響。
+- **（併入）(next) — 2026-10-16（wip/t68-q1-profit-r2；公益捐款列標籤看單據自己的比率戳記）**
+- 精算明細表「公益捐款」列標籤的比率字樣改取精算 summary 自己的戳記 `charityRatePct`（沒有＝當時是 1，與今天完全相同的字樣；不看目前設定）；金額與獎金基數不變。
 
 ## 1.2.21 — 2026-10-16（train/t67-int；T68 PM-S1 勞報單）
 - 新增勞報單的權限能力宣告（`module.json` `capabilities`，6 項：`payroll.payslip.view｜create｜edit｜export｜void｜attach`）；`legacy` ＝ 今天的閘（最高管理者或持有『勞報單』功能勾選），種子矩陣不給任何角色預設勾選 ⇒ 行為與今天逐位元相同。

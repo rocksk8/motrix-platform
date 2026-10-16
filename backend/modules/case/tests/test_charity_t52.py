@@ -410,3 +410,88 @@ def test_legacy_ver1_finalize_never_gets_the_total_basis(W):
     assert r.status_code == 200, r.text
     s = _saved_summary()
     assert "charityBasis" not in s and "formulaVer" not in s
+
+
+# ── T68 Q1：公益比率戳記——完結後改比率，標籤仍是當時的比率 ───────────────────────────
+def _finalize_direct(c, h, rate_pct):
+    """以 direct 基數完結一份精算（公益金按 rate_pct 計）；回存檔後的 summary。"""
+    _set_tot()
+    _quote_stamp(None)
+    _all_on("direct")
+    p = page_payload(c, h)
+    s = p["summary"]
+    gross = s["grossProfit"]
+    admin = SA.round_half_up(max(gross, 0), "0.25")
+    charity = max(0, SA.round_half_up(gross, SA.profit_rules.pct_rate(rate_pct)))
+    net = gross - admin - charity
+    s.update(adminCost=admin, charityDonation=charity, netProfit=net, netMarginPct=round(net / QUOTED_PRETAX * 100, 1), formulaVer=2, overheadPct=25)
+    r = c.put(URL, json={"settlement": p}, headers=h)
+    assert r.status_code == 200, r.text
+    return _saved_summary()
+
+
+def test_finalized_settlement_keeps_the_rate_it_was_finalized_with(W, monkeypatch):
+    from helpers import profit_warning as PW
+    import pdf_gen
+    from modules.payroll import bonus
+    c, h = W
+    monkeypatch.setattr(PW, "charity_rate_pct", lambda conn=None: 2.0)
+    s = _finalize_direct(c, h, 2)
+    assert s["charityRatePct"] == 2.0 and s["charityDonation"] == max(0, SA.round_half_up(s["grossProfit"], "0.02"))
+    assert pdf_gen.charity_cost_label(s) == "公益捐款（直接毛利 2%）"
+    monkeypatch.setattr(PW, "charity_rate_pct", lambda conn=None: 3.0)          # 完結之後把比率改成 3
+    assert pdf_gen.charity_cost_label(s) == "公益捐款（直接毛利 2%）", "標籤跟存檔當時的比率，不跟目前設定"
+    assert bonus.row_label("charityDonation", "公益捐款（1%）", s) == "公益捐款（直接毛利 2%）"
+
+
+def test_default_rate_leaves_the_settlement_shape_unchanged(W):
+    c, h = W
+    s = _finalize_direct(c, h, 1)
+    assert "charityRatePct" not in s and "origCharityRatePct" not in s, "預設 1% ⇒ 不帶新鍵（形狀與今天相同）"
+    import pdf_gen
+    assert pdf_gen.charity_cost_label(s) == "公益捐款（直接毛利 1%）"
+
+
+def test_client_cannot_forge_the_rate_stamp(W):
+    c, h = W
+    _set_tot()
+    _quote_stamp(None)
+    _all_on("direct")
+    p = page_payload(c, h)
+    s = p["summary"]
+    gross = s["grossProfit"]
+    admin = SA.round_half_up(max(gross, 0), "0.25")
+    charity = max(0, SA.round_half_up(gross, 0.01))
+    s.update(adminCost=admin, charityDonation=charity, netProfit=gross - admin - charity, netMarginPct=round((gross - admin - charity) / QUOTED_PRETAX * 100, 1),
+             formulaVer=2, overheadPct=25, charityRatePct=9, origCharityRatePct=9)
+    assert c.put(URL, json={"settlement": p}, headers=h).status_code == 200
+    saved = _saved_summary()
+    assert "charityRatePct" not in saved and "origCharityRatePct" not in saved, "比率戳記只由伺服器蓋（用戶端值一律丟棄）"
+
+
+# ── T68 Q1 r3：已存檔單據的重算一律用單據自己的公益比率 ─────────────────────────
+def test_overhead_pct_change_keeps_the_documents_own_charity_rate(client, who, monkeypatch):
+    from helpers import profit_warning as PW
+    su, ad = who
+    qno = _v2_quote(client, su)                                           # 以預設 1% 存檔 ⇒ 無戳記
+    before = _row(qno)[0]["tot"]
+    assert "charityRatePct" not in before
+    monkeypatch.setattr(PW, "charity_rate_pct", lambda conn=None: 2.0)    # 之後設定改成 2%
+    assert client.put("/api/quotations/%s/overhead-pct" % qno, json={"pct": 20, "confirm": True}, headers=su).status_code == 200
+    after = _row(qno)[0]["tot"]
+    assert after["charityDonation"] == before["charityDonation"], "只換管銷比率：公益金不因目前設定而變"
+    assert "charityRatePct" not in after, "不重蓋戳記"
+
+
+def test_overhead_pct_change_keeps_a_stamp_that_differs_from_the_live_rate(client, who, monkeypatch):
+    from helpers import profit_warning as PW
+    su, ad = who
+    monkeypatch.setattr(PW, "charity_rate_pct", lambda conn=None: 2.0)
+    qno = _v2_quote(client, su)                                           # 以 2% 存檔 ⇒ 戳記 2.0
+    before = _row(qno)[0]["tot"]
+    assert before.get("charityRatePct") == 2.0
+    monkeypatch.setattr(PW, "charity_rate_pct", lambda conn=None: 1.0)    # 之後設定改回 1%（戳記≠目前）
+    assert client.put("/api/quotations/%s/overhead-pct" % qno, json={"pct": 20, "confirm": True}, headers=su).status_code == 200
+    after = _row(qno)[0]["tot"]
+    assert after["charityDonation"] == before["charityDonation"], "公益金沿用單據的 2%，不吃目前的 1%"
+    assert after.get("charityRatePct") == 2.0, "戳記不變"

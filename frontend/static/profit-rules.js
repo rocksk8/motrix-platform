@@ -8,6 +8,19 @@
   var CHARITY_DIRECT = 'direct', CHARITY_TOTAL = 'total'     // 第 52 班：公益捐款基數（direct＝直接毛利×1%、不為負；total＝報價含稅金額×1%、下限只設在含稅金額（負 ⇒ 0）、不看直接毛利，只在 ver 2 生效）
   var ACTIVE_CHARITY_BASIS = CHARITY_DIRECT
   var LEGACY_ADMIN_RATE = 0.10, DEFAULT_OVERHEAD_PCT = 25, CHARITY_RATE = 0.01, TARGET_MARGIN_PCT = 12
+  // T68 Q1：三個數字可由後端設定覆蓋（configure）；沒呼叫＝上面的內建值（與今天逐位相同）。後端孿生：helpers/profit_rules.py 的 rate_pct／default_pct 參數。
+  var BUILTIN = { overheadPct: DEFAULT_OVERHEAD_PCT, charityRate: CHARITY_RATE, targetMarginPct: TARGET_MARGIN_PCT }
+  function okNum(x, lo, hi) { return typeof x === 'number' && isFinite(x) && x >= lo && x <= hi }
+  // cfg＝GET /api/overhead/settings 的回應：{ defaultPct, charityRatePct, targetMarginPct }；任何欄位缺漏／不合法 ⇒ 該欄回內建值（不是半套）
+  function configure(cfg) {
+    cfg = cfg || {}
+    DEFAULT_OVERHEAD_PCT = okNum(cfg.defaultPct, 0, 100) ? cfg.defaultPct : BUILTIN.overheadPct
+    try { CHARITY_RATE = okNum(cfg.charityRatePct, 0, 10) ? pctRate(cfg.charityRatePct) : BUILTIN.charityRate }
+    catch (e) { CHARITY_RATE = BUILTIN.charityRate }          // 極小數（指數記法）pctRate 不收 ⇒ 內建值
+    TARGET_MARGIN_PCT = okNum(cfg.targetMarginPct, -100, 100) ? cfg.targetMarginPct : BUILTIN.targetMarginPct
+    api.DEFAULT_OVERHEAD_PCT = DEFAULT_OVERHEAD_PCT; api.TARGET_MARGIN_PCT = TARGET_MARGIN_PCT
+    return { defaultPct: DEFAULT_OVERHEAD_PCT, charityRate: CHARITY_RATE, targetMarginPct: TARGET_MARGIN_PCT }
+  }
 
   function halfUp(a, r) { return MotrixLegalRound.halfUp(a, r) }
 
@@ -108,7 +121,11 @@
     return out
   }
 
-  var api = { LEGACY_VER: LEGACY_VER, FORMULA_VER: FORMULA_VER, ACTIVE_VER: ACTIVE_VER, DEFAULT_OVERHEAD_PCT: DEFAULT_OVERHEAD_PCT,
+  // 標籤用：目前公益比率的字樣（'1'、'0.5'；整數不帶小數點）。CHARITY_RATE 是費率字串（'0.01'）⇒ 小數點右移兩位、去尾零
+  function charityRatePct() { return Math.round(Number(String(CHARITY_RATE)) * 100 * 1e6) / 1e6 }
+  function charityRateText() { return String(charityRatePct()) }
+
+  var api = { charityRatePct: charityRatePct, charityRateText: charityRateText, configure: configure, LEGACY_VER: LEGACY_VER, FORMULA_VER: FORMULA_VER, ACTIVE_VER: ACTIVE_VER, DEFAULT_OVERHEAD_PCT: DEFAULT_OVERHEAD_PCT,
               TARGET_MARGIN_PCT: TARGET_MARGIN_PCT, CHARITY_DIRECT: CHARITY_DIRECT, CHARITY_TOTAL: CHARITY_TOTAL, ACTIVE_CHARITY_BASIS: ACTIVE_CHARITY_BASIS, basisOf: basisOf, pctRate: pctRate, adminCost: adminCost, charity: charity, quote: quote, settlement: settlement, projectMargin: projectMargin, uncostedItems: uncostedItems }
   if (typeof window !== 'undefined') window.MotrixProfitRules = api
   if (typeof module !== 'undefined' && module.exports) module.exports = api

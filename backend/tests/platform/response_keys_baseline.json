@@ -3768,9 +3768,11 @@
    "charityBasis",
    "charityMigrationDone",
    "charityMode",
+   "charityRatePct",
    "defaultPct",
    "migrationDone",
    "ruleMode",
+   "targetMarginPct",
    "ver"
   ],
   "s": 200
@@ -6018,6 +6020,7 @@
    "groups[].values.cases_personal_default_tab",
    "groups[].values.cases_personal_page_size",
    "groups[].values.cert_warn_days",
+   "groups[].values.charity_rate_pct",
    "groups[].values.cloud_daily_keep_days",
    "groups[].values.cloud_monthly_keep_days",
    "groups[].values.cloud_weekly_keep_days",
