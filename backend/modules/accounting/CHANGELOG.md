@@ -3,7 +3,7 @@
 ## (next) — 2026-10-17（wip/t69-ledger-settings-r1；總帳設定：角色→科目對應雙人核准、會計年度起始月份僅最高管理者）
 - 行為變嚴（需列入驗收）：`PUT /api/ledger/roles`（角色→科目對應）**不再立即生效**：回 202 並建立待核准項（設定帳本 domain `ledger:role`，risk=money，需 1 位不同於申請人的在職最高管理者核准）；另一位最高管理者按核准（`POST /api/ledger/roles/pending/{id}/approve`）後**立即**套用到 `gl_account_roles`。變更必須填原因；申請人不能核准自己的；核准時會再驗一次科目（被停用／變成非最底層 ⇒ 409，維持待核准、可撤銷）；同一目標再申請 ⇒ 舊申請被取代；任一最高管理者可撤銷（`POST …/cancel`，需原因）。沒有第二位在職最高管理者 ⇒ 409 說明，不自動放行（待使用者裁示）。申請、核准、套用、撤銷都有稽核（`ledger.role.request／approve／put／cancel`）。
 - 新增：唯讀 `GET /api/ledger/roles`（現行角色對應＋待核准清單；權限同總帳讀取＝出納／財務）；`ledger-settings.html` 新增「科目角色對應」分頁（現行對應、待核准清單與核准／撤銷、申請表單）。
-- 行為變嚴：`PUT /api/ledger/settings`（會計年度起始月份）改為**只有最高管理者**可改（原為財務模組持有者）；立即生效；稽核記舊值→新值；起始月份須為 1～12 的整數（小數、布林一律 400）；已建立任何會計年度後仍不可改（409）。
+- 行為變嚴：`PUT /api/ledger/settings`（會計年度起始月份）改為**只有最高管理者**可改（原為財務角色（財務／出納能力由角色決定，模組勾選不算））；立即生效；稽核記舊值→新值；起始月份須為 1～12 的整數（小數、布林一律 400）；已建立任何會計年度後仍不可改（409）。
 
 ## 1.1.63 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/voucher.html`、`js/voucher.js`、`pages/ledger-{hub,periods,reports,statements}.html` 與對應 js 的數字顯示改呼叫 `MotrixFormat.num()`（`toLocaleString`→共用格式器；預設輸出逐字相同；voucher 兩處 `sv-SE` 是產生 YYYY-MM-DD 的值，保留）。
