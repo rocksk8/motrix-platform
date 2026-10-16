@@ -1,10 +1,10 @@
 # 附近旅宿 更新紀錄
 
-## 1.2.9 — 2026-10-16（wip/t68-c7-r1；C7 計價單位與詢價管道顯示名稱）
-- `search.py` 的 `unitLabel`／`channelLabel` 與 `pages/lodging-records.html` 的下拉選項文字改讀設定中心『住宿紀錄：計價單位與詢價管道』（預設＝每晚／每人／電話／官網／現場／其他，逐字相同）；`unit`／`channel` 的值不變。
-
 ## (next) — 2026-10-17（wip/t70-lodging-stale-r1；T70-3：資料過舊提示天數走設定 `lodging_freshness.stale_days`）
 - `source.py` 新增 `stale_days(conn=None)`（讀設定，預設 30；讀不到或不在 7～365 ⇒ 後備 `STALE_DAYS`＝30）；`catalog_state` 的 `stale` 判斷與 `/api/lodging/status`、搜尋回應的 `staleDays` 都改用它。預設 30 時輸出與先前逐位相同。無 migration、無新表。
+
+## 1.2.9 — 2026-10-16（wip/t68-c7-r1；C7 計價單位與詢價管道顯示名稱）
+- `search.py` 的 `unitLabel`／`channelLabel` 與 `pages/lodging-records.html` 的下拉選項文字改讀設定中心『住宿紀錄：計價單位與詢價管道』（預設＝每晚／每人／電話／官網／現場／其他，逐字相同）；`unit`／`channel` 的值不變。
 
 ## 1.2.8 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/lodging-records.html` 的價格顯示改呼叫 `MotrixFormat.num(…, {locale:'zh-TW'})`（輸出逐字相同）。
