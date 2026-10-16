@@ -1,5 +1,11 @@
 # 權限矩陣 更新紀錄
 
+## (next:minor) — 2026-10-16（train/t67-int；T67 PM-S2／PM-S3）
+- 新增『權限設定』頁（`permission-matrix.html`，只走系統中心卡片，不新增選單）與端點：唯讀檢視 `GET /api/permmatrix/matrix｜users｜users/{id}/effective｜pending｜versions｜delegations`（PM-S2）；寫入 `POST /role-cap`＋`/role-cap/preview`、`POST /user-override`＋`/user-override/preview`、`DELETE /user-override`、`POST /pending/{id}/cancel｜approve`、`POST /versions/{id}/restore`、`POST /undo`（PM-S3）。全部限最高管理者；規則仍全在服務層（原因必填、高風險放寬走設定帳本確認期間＋第二位最高管理者核准、稽核同交易）。
+- 格子內容全部來自各模組的能力宣告（`views.py` 唯讀檢視）：沒有宣告就是空表；『未接入』的格子不可勾。存檔前一定先顯示一句話影響面板。
+- 守門：`test_permmatrix_writes_unwired.py` 改為『其他產品碼不得取用 service；api.py／views.py 是模組自己的檔案』＋完整路由清單＋每個寫入端點第一行必須是最高管理者檢查；SPEC 新增 PMX16／PMX17。金標案例 `cases_permmatrix.py`（錯誤形狀）。
+- 沒有 schema 變更、沒有 migration。
+
 ## 1.0.4 — 2026-10-16（wip/t67-pms0-r1；T67 PM-S0）
 - 待生效改走設定帳本（`config_ledger`，domain `perm:*`）：確認期間＝設定中心 `change_control.confirm_period_days`（預設 7 天、下限 1 天），取代 P0 的 24 小時 `perm_pending`；放寬（高風險授予、取消高風險個人禁止、高風險代理）另需**第二位最高管理者核准**（`approve_pending`；只有申請人一位最高管理者 ⇒ 不需核票、回警告）。
 - 服務層：`list_pending` 讀帳本；`cancel_pending` 任一最高管理者；新增 `approve_pending`；`activate_due` 只轉『確認期間已過且票數足夠』者，逐筆 SAVEPOINT，出錯的那筆撤銷並稽核；同一目標再申請取代舊的待生效項；預覽句子改為確認期間＋核准說明（L1 `perm_text` 不動，服務層換句）。
