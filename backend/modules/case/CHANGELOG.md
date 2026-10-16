@@ -3,6 +3,8 @@
 ## (next) — 2026-10-17（wip/t70-backfill-l2-r1；T70-1 補登歷史案件 L2：畫面、自動關閉、提醒靜音）
 - 補登歷史案件 L2（T70-1，wip/t70-backfill-l2-r1）：①畫面：報價單表單（V3.31）新增模式多「補登歷史案件」區塊（僅最高管理者且設定中心開關有效時出現；報價日期限過去月份、即時預覽單號、可填原始單號、原因必填、走 `POST /api/quotations/historical`；補登模式下一般儲存／自動存檔／送審停用）。支援端點：`GET /api/quotations/historical/config`（非最高管理者回 `available=false`）、`GET /api/quotations/historical/next-no?date=`（與補登送出同一個派號函式；跳過暫存區保留號）。②自動關閉：設定 `quote_backfill.auto_off_hours`（預設 24、0＝不自動關、上限 720）——開關開啟超過該小時數即視為關閉（找不到開啟時間 ⇒ 視為關），補登與預覽端點回 403 並說明。③靜音（補登單＝`approval.historical`）：階段到期提醒、專案逾期提醒、「專案預計完成」行事曆、應收到期／收款行事曆推送、出納應收待辦（未收佇列不列、查全部時標示 `historical` 且不算逾期）、案件清單「階段逾期／應收逾期」分頁與計數；保固到期提醒不靜音（保固是真實義務）。④標示：案件清單每列多 `historical`；報價單 PDF/預覽頂端多「歷史補登案件（無簽核軌跡…）」標示。⑤補登標記 `historical` 現在永遠是 `approval` 的第一個鍵（SQL 靜音提示依賴此序列化形狀；測試鎖定）。報表月份：沿用 `quote_won_month_map`（優先 quote_date），測試鎖定補登單歸入其報價日期的月份。
 - 注意（形狀依賴）：補登單的 SQL 靜音依賴 data_json 開頭形狀 `{"approval": {"historical": true`；形狀壞掉時安全失敗（回到逾期分頁）。T71：專用欄位／精確頂層路徑、到期排程＋稽核。
+- **（併入）(next) — 2026-10-17（wip/t70-hygiene-r2；建立報價單的寫鎖衛生，重做於凍結的 T69 之上）**
+- 修正（內部衛生，無行為變更）：`POST /api/quotations` 取連線後以 `begin_write` 取得寫鎖，整段建立（取號、INSERT、保留序號、階段同步）在同一個寫交易內，任何例外 rollback 並關閉連線（原本在第一個寫入語句才隱含開啟交易，且帶 `caseRecord.stages`（含空陣列）時，同步階段會違反「讀 data_json 前要用 begin_write 拿寫鎖」的結構守門：測試環境 RuntimeError，正式機只記一行 ERROR 照寫；一般報價單表單新建時不帶 caseRecord，所以使用者不受影響）。守門測試 `tests/test_quote_create_stages_t70.py`。
 
 ## 1.0.203 — 2026-10-17 00:10（wip/t69-backfill-l0-r1；補登歷史案件 L0：序號月份修正＋開關＋能力鍵）
 - 修正：建立報價單時若帶入舊月份的單號，序號原本記到「本月」（會墊高本月序號，下一張新單號被跳號）；現在序號一律記在單號自己的月份（新增 `_month_of_no()`；送審失敗回收序號同理）。一般新增報價單（不帶單號）行為不變。
