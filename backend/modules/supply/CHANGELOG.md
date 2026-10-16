@@ -1,5 +1,8 @@
 # 採購・庫存・出貨 更新紀錄
 
+## (next) — 2026-10-16（wip/t66-format-fix-r1；T66 剩餘 toLocale* 顯示處遷移到共用格式器）
+- T66 列車佔位條目：本列車內 supply 模組有程式變動（`wip/t66-lp-r3`）；與格式器遷移批次（`wip/t66-format-remaining-r2`）同車，本批對 supply 頁面無改動，顯示格式維持與 1.0.31 相同。
+
 ## 1.0.31 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/inventory.html`、`pages/parts.html` 的金額顯示改呼叫 `MotrixFormat.num()`（預設輸出逐字相同）。
 

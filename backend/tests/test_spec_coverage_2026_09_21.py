@@ -907,6 +907,9 @@ C_OWNED = {
     # worker 期限與測試鎖），不是 SPEC 驗收條件；題名與稽核紀錄逐字對應，不改字，登記在這裡。
     "O14":  "RUN-PLAN／稽核檔的觀察追蹤序號（b-o14-2 子行程期限與測試鎖），不是 SPEC 驗收條件；"
             "test_e2e_inflight_report_2026_09_26.py 逐字對應，不改字",
+    # T66：格式器遷移（toLocale* ⇒ MotrixFormat）剩餘頁面的列車編號；規格不宣告它，
+    # test_motrix_format_t66.py 是那批頁面的對照組／量尺（沒有裸的 toLocale*String、有內嵌後備）。
+    "T66":  "格式器遷移剩餘頁面的量尺（對照組）：頁面不得再有裸 toLocale*String；列車編號，非 SPEC 驗收條件",
 }
 
 

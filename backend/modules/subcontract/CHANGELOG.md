@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-16（wip/t66-format-fix-r1；T66 剩餘 toLocale* 顯示處遷移到共用格式器）
+- `pages/vendor-contractors.html` 的金額顯示改呼叫 `MotrixFormat.num()`（預設輸出逐字相同）；載入共用格式器並帶內嵌後備。
+
 ## 1.1.38 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/contractors.html` 的金額顯示改呼叫 `MotrixFormat.num()`（預設輸出逐字相同）。
 
