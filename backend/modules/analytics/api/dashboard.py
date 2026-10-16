@@ -11,6 +11,7 @@ from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm
                      user_has_module, can_see_financial, receipt_amounts,
                      require_any_module, _get_setting, _set_setting)
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
+from helpers import financial_mask as _FM
 from helpers import row_access
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
@@ -90,6 +91,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
     closed_count  = sum(1 for r in rows if r["deal_tag"] == "已結案")
 
     my_username = u["username"]
+    money_view = _FM.quote_money_visible(u)
     waiting_for_me_count = 0
     pending_list = []
     for r in rows:
@@ -109,12 +111,21 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
 
         if r["status"] != "待審核":
             continue
+        # V1：金額層——沒有報價金額可視權限（quote_money_visible）的人，除非本人是送審人或在這張單的簽核鏈上
+        # （簽核人看得到金額是設計：看不到就沒辦法判斷該不該簽），總額與帶金額的審核原因一律遮蔽，規則與 /api/quotations 同一份。
+        # 只動金額；哪些列會出現（逐案可見）不變（T40 釘住）。
+        money_ok = money_view or appr.get("requestedBy") == my_username or any(
+            a.get("username") == my_username
+            for tier in (appr.get("tiers") or []) if isinstance(tier, dict) for a in (tier.get("approvers") or []) if isinstance(a, dict))
+        reasons = appr.get("reasons") or []
+        if not money_ok:
+            reasons = _FM.mask_quotation_data({"approval": {"reasons": list(reasons)}})["approval"]["reasons"] if isinstance(reasons, list) else []
         pending_list.append({
             "quoteNo":     r["quote_no"],
             "customer":    r["customer_name"] or "",
-            "total":       r["total"] or 0,
+            "total":       (r["total"] or 0) if money_ok else None,
             "requestedBy": appr.get("requestedByDisplay") or appr.get("requestedBy") or "",
-            "reasons":     appr.get("reasons") or [],
+            "reasons":     reasons,
             "quoteDate":   r["quote_date"] or "",
             "salesPerson": r["sales_person"] or "",
         })
