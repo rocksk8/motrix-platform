@@ -12,6 +12,7 @@ from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm
                      require_any_module, _get_setting, _set_setting)
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import financial_mask as _FM
+from helpers.field_policy import mask_flags as _mask_flags
 from helpers.approval_queue import approval_json_of
 from helpers import row_access
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
@@ -104,7 +105,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
     closed_count  = sum(1 for r in rows if r["deal_tag"] == "已結案")
 
     my_username = u["username"]
-    money_view = _FM.quote_money_visible(u)
+    money_view = _mask_flags(u)["keep_quote"]      # ＝quote_money_visible（出口遷移棘輪：走 field_policy）
     waiting_for_me_count = 0
     pending_list = []
     for r in rows:
@@ -583,7 +584,7 @@ def dashboard_funnel(authorization: str = Header(None)):
     follow_up_quotes = []
     expiring_quotes = []
     seen_expiring = set()
-    money_view = _FM.quote_money_visible(u)
+    money_view = _mask_flags(u)["keep_quote"]      # ＝quote_money_visible（出口遷移棘輪：走 field_policy）
 
     def _total_of(r):
         """V1：沒有報價金額可視權限、又不是送審人／簽核鏈上的人 ⇒ 總額不回（null）。"""
