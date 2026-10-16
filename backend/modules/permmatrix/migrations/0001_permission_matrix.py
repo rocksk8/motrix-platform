@@ -5,7 +5,7 @@
   所以新模組加進來的能力不必回填矩陣。
 - perm_user_overrides（T1）：個人允許／禁止（禁止優先）。
 - perm_versions（T1）：每次即時生效的矩陣變更後的完整快照（回溯用；回溯＝以差異走一般寫入路徑，高風險授予仍要 24 小時待生效）。
-- perm_pending（T1）：高風險授予的 24 小時待生效（使用者裁示）。`state`：pending → active｜cancelled｜superseded；生效由讀取時的 `activate_due` 轉態，不靠排程。
+- perm_pending（T1）：〔T67 PM-S0 起停用：待生效改走 config_ledger，本表保留、不再讀寫〕高風險授予的 24 小時待生效（原使用者裁示）。`state`：pending → active｜cancelled｜superseded；生效由讀取時的 `activate_due` 轉態，不靠排程。
 - perm_delegations（T1）：代理。`scope_kind` ＝ caps｜doc_types｜approval_slot（approval_slot 為既有「簽核代理人」語意，之後把 approval_delegates 併進來）。
 - 冪等（IF NOT EXISTS）；不自己 commit；SQL 寫在這裡（凍住的歷史），不 import 會演進的程式碼。
 """

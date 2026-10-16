@@ -14632,9 +14632,11 @@
     "core:db",
     "helper:audit",
     "helper:auth",
+    "helper:config_ledger",
     "helper:perm",
     "helper:perm_text",
     "helper:settings",
+    "helper:settings_registry",
     "plat:capabilities",
     "plat:txn"
    ],
@@ -14647,12 +14649,12 @@
     "users"
    ],
    "tables_r": [
+    "config_changes",
     "users"
    ],
    "tables_w": [
     "audit_log",
     "perm_delegations",
-    "perm_pending",
     "perm_role_caps",
     "perm_user_overrides",
     "perm_versions"
@@ -26226,6 +26228,7 @@
    "path": "backend/core/migrations.py:524",
    "readers": [
     "core:archive",
+    "mod:permmatrix/service",
     "router:settings_center"
    ],
    "tables_r": [],
@@ -27803,9 +27806,7 @@
    "readers": [],
    "tables_r": [],
    "tables_w": [],
-   "writers": [
-    "mod:permmatrix/service"
-   ]
+   "writers": []
   },
   "table:perm_role_caps": {
    "api_prefixes": [],

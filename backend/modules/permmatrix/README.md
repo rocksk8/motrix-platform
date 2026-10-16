@@ -1,12 +1,12 @@
 # 權限矩陣（permmatrix）
 
-「誰可以做哪件事」變成勾選：角色格、個人允許／禁止、代理（可限範圍與期間）、高風險授權 24 小時後生效。判斷在 L1 `helpers/perm.py`，**本模組只負責矩陣的資料與寫入**。
+「誰可以做哪件事」變成勾選：角色格、個人允許／禁止、代理（可限範圍與期間）、高風險授權經確認期間與第二位最高管理者核准後生效。判斷在 L1 `helpers/perm.py`，**本模組只負責矩陣的資料與寫入**。
 使用者核心規則（2026-10-10）：框架先行、預設值由今天的行為推導、其餘全由最高管理者在頁面決定，不寫死任何角色名單。
 
 ## 功能（里程碑 2）
-- 五張表：`perm_role_caps`（覆寫列；沒有列＝種子）、`perm_user_overrides`、`perm_versions`、`perm_pending`、`perm_delegations`。
+- 五張表：`perm_role_caps`（覆寫列；沒有列＝種子）、`perm_user_overrides`、`perm_versions`、`perm_pending`（已停用，見 SPEC PMX13）、`perm_delegations`。
 - 提供者 `perm.matrix_source`：L1 的 `perm.can()` 從這裡取得「種子 ⊕ 覆寫」＋有效代理；本模組不在 ⇒ L1 用種子（＝今天的行為）。
-- 服務層（`service.py`）：角色格／個人覆寫／代理的寫入、高風險授予的 24 小時待生效（可撤銷）、版本與回溯、稽核與通知。
+- 服務層（`service.py`）：角色格／個人覆寫／代理的寫入、高風險授予的待生效（設定帳本＋確認期間＋雙人核准，可撤銷；`list_pending`／`approve_pending`／`cancel_pending`／`activate_due`）、版本與回溯、稽核與通知。
 - 唯一端點：`GET /api/permmatrix/status`（唯讀狀態探針，`api.py`；只回 ok，不含矩陣資料）。
 - 其餘端點與「系統 > 權限設定」頁在後續里程碑；目前沒有任何端點使用 `perm.require`（各模組遷移照設計稿 §5 的順序）。
 
