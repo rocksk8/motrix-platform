@@ -1,4 +1,32 @@
 {
+ "DELETE /api/list-views/{list_id}": {
+  "k": [
+   "allowUserPrefs",
+   "columns",
+   "columns[].canShow",
+   "columns[].defaultVisible",
+   "columns[].id",
+   "columns[].label",
+   "columns[].money",
+   "columns[].pinned",
+   "columns[].required",
+   "custom",
+   "enabled",
+   "etag",
+   "label",
+   "listId",
+   "pageSize",
+   "pageSize.options",
+   "pageSize.source",
+   "pageSize.value",
+   "sort",
+   "sort.allowed",
+   "sort.default",
+   "sort.default.col",
+   "sort.default.dir"
+  ],
+  "s": 200
+ },
  "POST /api/notify-actions/{key}/preview": {
   "k": [
    "classification",
@@ -86,6 +114,34 @@
    "stages[].startDate",
    "template",
    "templateVersion"
+  ],
+  "s": 200
+ },
+ "PUT /api/list-views/{list_id}": {
+  "k": [
+   "allowUserPrefs",
+   "columns",
+   "columns[].canShow",
+   "columns[].defaultVisible",
+   "columns[].id",
+   "columns[].label",
+   "columns[].money",
+   "columns[].pinned",
+   "columns[].required",
+   "custom",
+   "enabled",
+   "etag",
+   "label",
+   "listId",
+   "pageSize",
+   "pageSize.options",
+   "pageSize.source",
+   "pageSize.value",
+   "sort",
+   "sort.allowed",
+   "sort.default",
+   "sort.default.col",
+   "sort.default.dir"
   ],
   "s": 200
  }

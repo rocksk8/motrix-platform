@@ -57,6 +57,10 @@
    "count": 1,
    "reason": "exempt: 地理編碼快取（可重建）"
   },
+  "helpers/list_view_prefs.py::user_list_view_prefs": {
+   "count": 1,
+   "reason": "exempt: 個人清單檢視偏好（T66；重設即回公司預設，非單據）"
+  },
   "helpers/payable_due_core.py::system_settings": {
    "count": 1,
    "reason": "exempt: 系統設定鍵值（非單據）"
@@ -364,6 +368,7 @@
   "routers/customers.py::delete_customer::DELETE /api/customers/{cid}": "p2: 其他業務資料（P2 評估）",
   "routers/definitions.py::delete_custom_module::DELETE /api/definitions/custom_module/{key}": "exempt: 自訂模組刪除（另有自己的刪除流程 helpers/custom_module_delete）",
   "routers/definitions.py::delete_definition_draft::DELETE /api/definitions/{kind}/{key}/draft": "exempt: 自訂定義草稿（設定，另有審核流程）",
+  "routers/list_view_prefs.py::delete_list_view::DELETE /api/list-views/{list_id}": "exempt: 個人清單檢視偏好（T66；只刪登入者自己的偏好列，非單據）",
   "routers/module_versions.py::delete_module_version::DELETE /api/module-versions/{mvid}": "exempt: 模組版本紀錄（系統維護資料）",
   "routers/org_structure.py::delete_department::DELETE /api/org/departments/{department_id}": "exempt: 組織設定",
   "routers/org_structure.py::delete_division::DELETE /api/org/divisions/{division_id}": "exempt: 組織設定",

@@ -3364,6 +3364,18 @@
   ],
   "s": 200
  },
+ "/api/list-views": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/list-views/{list_id}": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
  "/api/lodging/compare": {
   "k": [
    "detail"
@@ -4050,6 +4062,30 @@
    "gaps",
    "gaps[].message",
    "gaps[].section",
+   "listCatalog",
+   "listCatalog.available",
+   "listCatalog.items",
+   "listCatalog.items.lists",
+   "listCatalog.items.lists[].columns",
+   "listCatalog.items.lists[].columns[].catalogId",
+   "listCatalog.items.lists[].columns[].id",
+   "listCatalog.items.lists[].columns[].label",
+   "listCatalog.items.lists[].columns[].money",
+   "listCatalog.items.lists[].columns[].required",
+   "listCatalog.items.lists[].columns[].sortable",
+   "listCatalog.items.lists[].defaults",
+   "listCatalog.items.lists[].defaults.columns",
+   "listCatalog.items.lists[].defaults.pageSize",
+   "listCatalog.items.lists[].defaults.sort",
+   "listCatalog.items.lists[].defaults.sort.col",
+   "listCatalog.items.lists[].defaults.sort.dir",
+   "listCatalog.items.lists[].id",
+   "listCatalog.items.lists[].label",
+   "listCatalog.items.lists[].modules",
+   "listCatalog.items.lists[].owner",
+   "listCatalog.items.lists[].pageSizeCeiling",
+   "listCatalog.items.lists[].pageSizeMenu",
+   "listCatalog.owner",
    "modules",
    "modules[].core",
    "modules[].coreFields",

@@ -81,7 +81,7 @@ from routers import company_lookup
 from routers import auth, customers, parts, system, module_versions, search, org_structure, list_prefs, uploads, attachments, approval_delegates, approval_queue, licensing, map_points
 from routers import item_reads
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
-from routers import definitions, custom_records, def_governance, attachment_slots, def_pipeline, custom_fields_builtin, user_buttons
+from routers import definitions, custom_records, def_governance, attachment_slots, def_pipeline, custom_fields_builtin, user_buttons, list_view_prefs
 from routers import rules as rules_router
 from routers import notify_templates as notify_templates_router
 from routers import notify_actions as notify_actions_router
@@ -952,6 +952,7 @@ app.include_router(attachment_slots.router)   # 附件插槽（BP-4 S2；旗標 
 app.include_router(def_pipeline.router)
 app.include_router(custom_fields_builtin.router)   # 內建畫面的自訂欄位（T61 S5）
 app.include_router(user_buttons.router)            # 使用者自訂按鈕（T61 S6）
+app.include_router(list_view_prefs.router)         # 清單檢視偏好：每頁筆數＋政策限制（T66 L2）
 app.include_router(rules_router.router)
 app.include_router(notify_templates_router.router)   # 通知用語範本（S-X3）
 app.include_router(notify_actions_router.router)   # 額外通知動作（BP-4 S4／S5 後端；旗標 builder_notify 關＝404）
