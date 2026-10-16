@@ -65,6 +65,15 @@
         ｜ 隔離檔 <b x-text="st && fmtBytes(st.usedBytes)"></b>（<span x-text="st && st.fileCount"></span> 個檔）
         ｜ 保存 <b x-text="st && st.retentionDays"></b> 天
         <div style="color:var(--text-secondary);margin-top:4px">隔離目錄：<span x-text="st && st.dir"></span></div>
+        <div class="rb-dir" data-testid="rb-dir-panel" style="margin-top:8px">
+          <div style="color:var(--text-secondary)">隔離目錄放被刪除單據的附件；要換位置時，請填電腦上已存在資料夾底下的新資料夾（例：D:/MOTRIX-資源回收筒）。留空＝使用預設位置。</div>
+          <div x-show="dirLocked" style="color:#b45309;margin-top:4px" data-testid="rb-dir-locked">暫存區還有項目時不能換目錄（附件會找不到）：請先還原或永久刪除全部項目。</div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+            <input class="filter" style="min-width:320px" x-model="dirInput" :disabled="busy || dirLocked" placeholder="留空＝預設位置" data-testid="rb-dir-input">
+            <button class="rb-btn" :disabled="busy || dirLocked" @click="saveDir()" data-testid="rb-dir-save">儲存隔離目錄</button>
+            <button class="rb-btn" :disabled="busy || dirLocked" @click="dirInput = ''; saveDir()" data-testid="rb-dir-default">改回預設位置</button>
+          </div>
+        </div>
         <div class="rb-warn" x-show="st && st.overWarn">隔離區用量已超過 <span x-text="st && fmtBytes(st.warnBytes)"></span>，請檢查是否有大量待清除項目（不會自動提前清除）。</div>
       </div>
 
@@ -179,6 +188,8 @@
         st: null, types: {}, items: [], total: 0, page: 1, size: 50, loaded: false, busy: false, err: '', msg: '',
         f: { status: 'in_bin', entity_type: '', q: '' },
         detail: null, purgeTarget: null, purgeText: '',
+        dirInput: '',
+        get dirLocked() { return !!(this.st && this.st.counts && ((this.st.counts.in_bin || 0) + (this.st.counts.restore_failed || 0)) > 0) },
         ap: { entity_type: '', entity_id: '', loaded: false, supported: false, reason: '', impact: [], confirm_text: '', reason_text: '' },
         _hdr() {
           let s = {}
@@ -208,6 +219,7 @@
           this.err = ''
           try {
             this.st = await this._json('/api/recycle-bin/status')
+            this.dirInput = (this.st && this.st.dir && this.st.dir !== this.st.defaultDir) ? this.st.dir : ''
             await this.load()
           } catch (e) { this.err = String(e.message || e) }
         },
@@ -217,6 +229,14 @@
           if (this.f.q) p.set('q', this.f.q)
           const d = await this._json('/api/recycle-bin?' + p.toString())
           this.items = d.items; this.total = d.total; this.types = d.types || {}; this.loaded = true
+        },
+        async saveDir() {
+          this.busy = true; this.err = ''; this.msg = ''
+          try {
+            await this._json('/api/recycle-bin/settings', { method: 'PUT', body: JSON.stringify({ dir: String(this.dirInput || '').trim() }) })
+            this.msg = '隔離目錄已更新'
+          } catch (e) { this.err = '隔離目錄更新失敗：' + String(e.message || e) }
+          finally { this.busy = false; await this.refresh() }
         },
         apply() { this.page = 1; this.refresh() },
         go(n) { this.page = n; this.refresh() },
