@@ -433,9 +433,9 @@ function reportsApp() {
       var s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       return s.modules || []
     },
-    isAdminPlus() {                      // T68：財務角色／superadmin（與後端 _require_reports_access＝has_finance_access 或 money_visible 一致）；只勾「營運報表」模組不再足夠
+    isAdminPlus() {                      // 第42班：財務角色／superadmin，或持有「營運報表」模組者（與後端 _require_reports_access 一致）
       var r = this._role()
-      return r === 'finance' || r === 'superadmin'
+      return r === 'finance' || r === 'superadmin' || this._modules().includes('reports')
     },
     // 2026-08-31：出納併入本頁後的准入判斷——cashier/finance 模組使用者（非
     // 管理職）只能看到「出納」頁籤，其餘 11 個財務報表頁籤仍只有 admin+ 看得到

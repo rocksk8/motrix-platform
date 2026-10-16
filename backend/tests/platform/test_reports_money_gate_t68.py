@@ -103,20 +103,16 @@ def test_reports_page_shows_the_explanation_instead_of_a_blank_or_raw_error():
     assert "僅管理員以上可存取營運報表功能" not in js
 
 
-def test_reports_page_front_gate_matches_the_backend_gate():
-    """前端 isAdminPlus() 不再把『營運報表』模組當成足夠條件（與後端 has_finance_access／money_visible 同一條線）。"""
+def test_front_gate_and_menu_keep_their_original_or_rules_backend_403_is_the_single_source():
+    """PM 裁示（audit-t68-rep-r2）：選單 perm 只能表達 OR，無法表達『營運報表 且 money_visible』，所以前端不自己重做金額判斷：
+    選單入口與 isAdminPlus() 維持原本的 OR 規則，是否能看金額完全由後端 403 決定，被擋時顯示同一個說明面板。"""
+    import json
     js = (_FRONT / "js" / "reports.js").read_text(encoding="utf-8")
     i = js.index("isAdminPlus()")
-    body = js[i:i + 400]
-    assert "includes('reports')" not in body
-    assert "r === 'finance' || r === 'superadmin'" in body
-
-
-def test_menu_entry_is_hidden_for_accounts_without_finance():
-    import json
+    assert "includes('reports')" in js[i:i + 400]
     m = json.loads((__import__("pathlib").Path(__file__).resolve().parents[2] / "modules" / "analytics" / "module.json").read_text(encoding="utf-8"))
     page = [p for p in m["pages"] if p["path"] == "reports.html"][0]
-    assert page["menu"]["perm"] == ["finance"], page["menu"]
+    assert page["menu"]["perm"] == ["finance", "reports"], page["menu"]
 
 
 # ── 稽核必修（audit-t68-rep-r1）：新閘門永遠是舊閘門的子集 ──────────────────────────────
