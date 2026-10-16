@@ -1044,7 +1044,7 @@ def _today():
     return datetime.date.today()
 
 
-def _deadline_status(deadline, today):
+def _deadline_status(deadline, today, soon_days=None):
     """`MP3`：標案截止狀態。
 
     | 值 | 意思 |
@@ -1063,7 +1063,7 @@ def _deadline_status(deadline, today):
         return "unknown"
     if d < today:
         return "closed"
-    if (d - today).days <= closing_soon_days():
+    if (d - today).days <= (closing_soon_days() if soon_days is None else soon_days):
         return "closing"
     return "open"
 
@@ -1082,6 +1082,7 @@ def _tender_points(located, user_coord=None, budget=None):
     budget = budget or _GeocodeBudget()
     points, missing = [], 0
     today = _today()
+    soon_days = closing_soon_days()          # T70：整次取點只讀一次設定（不在逐列迴圈裡讀）
     for r in rows:
         place = (r["location"] or "").strip()
         found, used, deferred = _locate_tender(r["org"], place, budget)
@@ -1109,7 +1110,7 @@ def _tender_points(located, user_coord=None, budget=None):
             "address": used,
             "precision": found.precision, "source": found.source,
             "budget": r["budget"], "deadline": r["deadline"],
-            "deadlineStatus": _deadline_status(r["deadline"], today),
+            "deadlineStatus": _deadline_status(r["deadline"], today, soon_days),
             # 空網址回 `None` **不是 `""`**——理由與 `tender_radar._clean_url`
             # 相同（`href=""` 是一個看起來可以點、點了沒反應的東西）。
             # 📌 刻意**不跨 router 匯入**那個函式：L2 功能模組彼此不可依賴。

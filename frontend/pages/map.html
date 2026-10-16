@@ -610,6 +610,20 @@
 <script src="../static/sidebar.js"></script>
 <script src="../static/map-overlay.js"></script>
 <script>
+// T70：截止狀態的顏色／字樣表——同一個天數只建一次（markers 重畫時每個點都會取，不要每次配置新物件）
+const _deadlineStylesCache = { days: null, v: null }
+function _deadlineStylesFor(days) {
+  if (_deadlineStylesCache.days !== days) {
+    _deadlineStylesCache.days = days
+    _deadlineStylesCache.v = {
+      open:    { color: '#2563EB', label: '未截止' },
+      closing: { color: '#E11D48', label: days + ' 天內截止' },
+      closed:  { color: '#9CA3AF', label: '已截止' },
+      unknown: { color: '#2563EB', label: '截止日不明' },
+    }
+  }
+  return _deadlineStylesCache.v
+}
 function mapPage() {
   return {
     session: {}, token: '', loading: false, info: null, loadError: '',
@@ -716,12 +730,7 @@ function mapPage() {
     },
     // T70：「即將截止」的天數來自設定（後端回 closingSoonDays；舊後端沒有 ⇒ 7）
     get deadlineStyles() {
-      return {
-        open:    { color: '#2563EB', label: '未截止' },
-        closing: { color: '#E11D48', label: (((this.info || {}).closingSoonDays) || 7) + ' 天內截止' },
-        closed:  { color: '#9CA3AF', label: '已截止' },
-        unknown: { color: '#2563EB', label: '截止日不明' },
-      }
+      return _deadlineStylesFor(((this.info || {}).closingSoonDays) || 7)
     },
     deadlineStyleOf(p) {
       if (!p || p.dataset !== 'tenders' || !p.deadlineStatus) return null
