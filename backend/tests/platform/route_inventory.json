@@ -1463,6 +1463,11 @@
    "pp": 1,
    "body": false
   },
+  "GET /api/payslip-dispatch-options": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/payslip-person-dispatches": {
    "w": false,
    "pp": 0,

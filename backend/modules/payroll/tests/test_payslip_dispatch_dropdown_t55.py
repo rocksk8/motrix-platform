@@ -204,3 +204,22 @@ def test_off_roster_pick_is_blocked_on_both_entrances_and_audit_notes(client, ma
     rows = _q("SELECT target_label FROM audit_log WHERE action='payslip.dispatch_link' ORDER BY id")
     code = _q("SELECT doc_code FROM contractor_dispatches WHERE id=?", (mine,))[0]["doc_code"]
     assert code and code in rows[0]["target_label"] and "顯示全部" in rows[0]["target_label"] and "顯示全部" not in rows[1]["target_label"]
+
+
+def test_page_size_comes_from_the_setting_and_falls_back_when_unreadable(client, make_user, monkeypatch):
+    """下拉一次載入幾筆來自設定 payslip_dispatch_picker.page_size（預設 30）；設定層出問題時退回後備值，不讓下拉壞掉。"""
+    from helpers import settings_registry as SR
+    from modules.subcontract.api import dispatch_payslip_links as DL
+    assert SR.get("payslip_dispatch_picker", "page_size") == 30 == DL.SEARCH_PAGE            # 預設＝上線前常數
+    sa = _su(client, make_user, "dd_sa_ps")
+    a = _person("戊")
+    d1 = _dispatch(client, sa, [{"id": a, "name": "戊"}], quote="MQ-DD55-PS1")
+    d2 = _dispatch(client, sa, [{"id": a, "name": "戊"}], quote="MQ-DD55-PS2")
+    real = SR.get
+    monkeypatch.setattr(SR, "get", lambda g, f, **kw: 1 if (g, f) == ("payslip_dispatch_picker", "page_size") else real(g, f, **kw))
+    r = _opts(client, sa, q="MQ-DD55-PS", include_all="true")
+    assert _ids(r) == [d2] and r["hasMore"] is True                                          # 設定 1 筆 ⇒ 一頁一筆
+    def _boom(g, f, **kw):
+        raise RuntimeError("設定層壞了")
+    monkeypatch.setattr(SR, "get", _boom)
+    assert set(_ids(_opts(client, sa, q="MQ-DD55-PS", include_all="true"))) == {d1, d2}      # 後備 30 筆

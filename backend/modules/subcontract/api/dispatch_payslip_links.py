@@ -187,7 +187,7 @@ def dispatches_for_person(conn, contractor_id, limit=200, user=None) -> list:
     return out
 
 
-SEARCH_PAGE = 30                  # 下拉一次最多給幾筆（伺服器端分頁）
+SEARCH_PAGE = 30                  # 下拉一次最多給幾筆（伺服器端分頁）；設定 `payslip_dispatch_picker.page_size` 可調，這裡是讀不到設定時的後備值
 SEARCH_MAX_Q = 60                 # 搜尋字串長度上限
 
 
@@ -196,13 +196,22 @@ def _like_escape(t) -> str:
     return str(t).replace("!", "!!").replace("%", "!%").replace("_", "!_")
 
 
-def dispatch_search(conn, q="", contractor_id=None, include_all=False, limit=SEARCH_PAGE, offset=0, user=None) -> dict:
+def _page_size(conn) -> int:
+    """下拉一次給幾筆：設定 `payslip_dispatch_picker.page_size`（預設 30、10–100）；讀不到 ⇒ 後備 SEARCH_PAGE。"""
+    try:
+        from helpers import settings_registry
+        return int(settings_registry.get("payslip_dispatch_picker", "page_size", conn=conn))
+    except Exception:                                           # noqa: BLE001  設定層任何問題都不能讓下拉壞掉
+        return SEARCH_PAGE
+
+
+def dispatch_search(conn, q="", contractor_id=None, include_all=False, limit=None, offset=0, user=None) -> dict:
     """提供者 `dispatch.search`（M04 → M07 勞報單頁下拉；IP-116 暫定）：可搜尋、分頁的派發清單（新到舊；**不含 draft／cancelled**；**不含金額**）。
     `contractor_id` 給了且 `include_all` 為假 ⇒ 只列人員名單含此人的；`include_all` 為真或沒給人 ⇒ 全部（仍排除草稿／已取消）。
     搜尋＝派發編號、案件單號、廠商名，另加案件名稱／客戶名（**僅呼叫者通過案件讀取守門的案件才比對**，避免用搜尋探出看不到的案件名）。
     每筆多 `onRoster`（給了 `contractor_id` 時：此人是否在名單內；沒給 ⇒ None）。回 `{"items": [...], "hasMore": bool}`。"""
     try:
-        limit = max(1, min(int(limit), 100))
+        limit = max(1, min(int(limit if limit is not None else _page_size(conn)), 100))
         offset = max(0, int(offset))
     except (TypeError, ValueError):
         limit, offset = SEARCH_PAGE, 0

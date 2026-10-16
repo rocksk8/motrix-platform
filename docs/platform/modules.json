@@ -67,6 +67,7 @@
    "helper:settings_groups_q0",
    "helper:settings_groups_profit",
    "helper:settings_groups_list_view",
+   "helper:settings_groups_payslip_picker",
    "helper:profit_warning",
    "helper:quote_output",
    "helper:quote_privacy",
@@ -737,6 +738,7 @@
    "name": "薪資獎金",
    "units": [
     "js:js/bonus.js",
+    "js:static/dispatch-picker.js",
     "mod:payroll/recycle_adapter",
     "mod:payroll/__init__",
     "mod:payroll/gl_events",

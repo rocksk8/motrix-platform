@@ -263,7 +263,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 提供方 | M04 外包工班：`modules/subcontract/api/dispatch_payslip_links.py::dispatch_search` |
 | 使用方 | M07 薪資獎金：`modules/payroll/api/payslip_links.py`（`GET /api/payslip-dispatch-options`） |
 | 形式 | provider，單一提供者（名稱 `subcontract`） |
-| 語法 | 提供：`("dispatch.search", "subcontract"): dispatch_payslip_links.dispatch_search`；取用：`registry.single_provider("dispatch.search")` ⇒ `fn(conn, q="", contractor_id=None, include_all=False, limit=30, offset=0, user=None)` |
+| 語法 | 提供：`("dispatch.search", "subcontract"): dispatch_payslip_links.dispatch_search`；取用：`registry.single_provider("dispatch.search")` ⇒ `fn(conn, q="", contractor_id=None, include_all=False, limit=None（讀設定 payslip_dispatch_picker.page_size，預設 30）, offset=0, user=None)` |
 | 回傳 | `{"items": [...], "hasMore": bool}`；每筆同 IP-115 的欄位（`id, docCode, quoteNo, status, vendorName, dispatchDate, scope, itemsSummary, projectName, customerName, caseVisible`），另加 `onRoster`（給了 `contractor_id` 時：此人是否在派發人員名單內，否則 `None`）。新到舊；**不含 draft／cancelled、不含金額**；`limit` 上限 100、`q` 上限 60 字 |
 | 搜尋範圍 | 派發編號、案件單號、廠商名；案件名稱／客戶名**只在呼叫者通過案件讀取守門（`guard_case_access`）時才拿來比對與顯示**。`%`／`_` 當字面 |
 | 預設範圍 | 給了 `contractor_id` 且 `include_all` 為假 ⇒ 只列人員名單含此人的；否則全部（仍排除草稿／已取消） |
