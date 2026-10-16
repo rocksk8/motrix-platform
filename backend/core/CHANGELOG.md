@@ -29,6 +29,11 @@
 - **放寬方向**：公益比率**調低**＝少扣公益金、營業利益變高 ⇒ 放寬（`loosen=down`），走確認期間＋第二位最高管理者核准（D-K1）；**調高**＝多扣＝收緊，立即生效。讀不到／不合法一律回 1（今天的值）。已完結精算的存檔公益金不回頭改寫。
 - 前端 `static/profit-rules.js` 新增 `configure()`／`charityRateText()`；三個數字（管銷後備 25、公益 1%、目標利潤率 12）可由 `GET /api/overhead/settings` 帶入，沒呼叫＝內建值。
 
+## (next) — 2026-10-17（wip/t70-lodging-stale-r1；T70-3：附近旅宿資料過舊提示天數改成設定）
+- 新設定群組 `lodging_freshness`（設定中心「附近旅宿：資料新舊提示」），欄位 `stale_days`：整數，**預設 30（＝上線前寫死的 30 天，行為不變）**、範圍 7～365；風險 none、立即生效（只影響「資料日期已超過 N 天，內容可能過舊」這行提示，不自動去抓資料、不改任何查詢結果）。`settings_deploy_baseline.json` 已同步。
+- L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.settings_groups_lodging_freshness`（無公開介面；載入時由 `settings_groups` 檔尾兩行登錄群組）。
+- 測試：`modules/lodging/tests/test_lodging_stale_days_t70.py`（預設等值與 29／31 天邊界、改設定後提示門檻跟著動、範圍檢查、非最高管理者被擋、讀不到用 30）。
+
 ## 1.144 — 2026-10-16（wip/t66-lp-r2；T66 清單個人偏好 L0～L2）
 - T66 L0＋L1＋L2（清單個人偏好的目錄、公司政策與個人每頁筆數，旗標 `list_prefs.enabled` 預設關）：
 - L1（只增）：新檔 `helpers/list_catalog.py`（清單目錄：`register_list`、`by_id`、`lists`、`is_money_column`…；金額欄由欄位目錄 `moneyClass` 衍生；有問題的登記不生效）與 `helpers/list_pref_policy.py`（定義種類 `list_pref_policy`＋寬嚴比較＋`policy_for`；惰性登記，旗標關或沒開建構器治理 ⇒ 不登記）。能力目錄多一個區段 `listCatalog`（擁有者 `helpers.list_catalog`，不列入 `EXPECTED_SECTIONS`）。設定群組 `list_prefs`（`enabled`，預設 0）。先導清單：供應商（`supply:suppliers`，無金額欄）。無新路由、無資料表、無權限變更；旗標關＝清單與今天相同。設計 `docs/platform/plans/T66-LIST-PREFS-DESIGN.md`；測試 `tests/platform/test_list_catalog_t66.py`、`test_list_pref_policy_t66.py`。

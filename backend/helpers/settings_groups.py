@@ -1059,3 +1059,8 @@ register_group(
 from helpers import settings_groups_overhead as _overhead  # noqa: E402
 
 _overhead.register(S, _register_core)
+
+# T70：附近旅宿資料新舊提示天數（拆檔，同屬 core）
+from helpers import settings_groups_lodging_freshness as _lodging_freshness  # noqa: E402
+
+_lodging_freshness._register(S, _register_core)

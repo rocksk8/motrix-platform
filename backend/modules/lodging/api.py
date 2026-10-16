@@ -39,7 +39,7 @@ def lodging_status(authorization: str = Header(None)):
         "count": cat["count"],
         "datasetUpdatedAt": cat["dataset_updated_at"],
         "stale": cat["stale"],
-        "staleDays": lodging_source.STALE_DAYS,
+        "staleDays": cat["stale_days"],
         "lastSuccessAt": st.get("last_success_at") or "",
         "lastFailureAt": st.get("last_failure_at") or "",
         "lastError": st.get("last_error") or "",

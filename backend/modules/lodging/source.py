@@ -66,6 +66,18 @@ ZIP_REQUIRED_NAME = "HotelList.json"
 #: 快照超過這個天數 ⇒ 頁面提示「資料可能過舊」（不自動去抓）
 STALE_DAYS = 30
 
+
+def stale_days(conn=None) -> int:
+    """過舊提示天數：設定 `lodging_freshness.stale_days`（預設 30、7～365）；讀不到或不合法 ⇒ 後備 `STALE_DAYS`。"""
+    try:
+        from helpers import settings_groups, settings_registry as SR      # noqa: F401  確保群組已登錄
+        v = int(SR.get("lodging_freshness", "stale_days", conn=conn))
+        if 7 <= v <= 365:
+            return v
+    except Exception:                                       # noqa: BLE001  設定層任何問題都不能讓旅宿頁壞掉
+        pass
+    return STALE_DAYS
+
 STATE_SETTING = "lodging_fetch_state"
 
 #: 觀光資料標準 §20 旅宿類型代碼
@@ -130,8 +142,8 @@ def catalog_state(conn) -> dict:
     stale = False
     dt = _parse_ts(d[:19]) if d else None
     if dt:
-        stale = (_now() - dt) > timedelta(days=STALE_DAYS)
-    return {"count": n, "dataset_updated_at": d, "stale": stale}
+        stale = (_now() - dt) > timedelta(days=stale_days(conn))
+    return {"count": n, "dataset_updated_at": d, "stale": stale, "stale_days": stale_days(conn)}
 
 
 # ── 下載與解壓 ────────────────────────────────────────────────────────────────

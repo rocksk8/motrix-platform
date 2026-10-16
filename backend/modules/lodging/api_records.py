@@ -91,7 +91,7 @@ def _run_search(conn, body: dict):
     with geo.map_request_scope(page_basemap, missing=geo.MAP_SCOPE_MISSING_OSM) as google_ok:
         base = {"radiusM": radius, "kinds": kinds, "sort": sort, "basemap": "google" if google_ok else "osm",
                 "datasetUpdatedAt": cat["dataset_updated_at"], "stale": cat["stale"],
-                "staleDays": lodging_source.STALE_DAYS}
+                "staleDays": cat["stale_days"]}
         if not cat["count"]:
             return dict(base, available=False, reason="no_catalog",
                         message="尚未下載旅宿資料，請最高管理者按「更新旅宿資料」"), None, [], cat
