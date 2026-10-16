@@ -14653,97 +14653,97 @@
    "routes": [
     {
      "func": "permmatrix_status",
-     "line": 34,
+     "line": 30,
      "method": "GET",
      "path": "/api/permmatrix/status"
     },
     {
      "func": "permmatrix_matrix",
-     "line": 41,
+     "line": 37,
      "method": "GET",
      "path": "/api/permmatrix/matrix"
     },
     {
      "func": "permmatrix_users",
-     "line": 47,
+     "line": 43,
      "method": "GET",
      "path": "/api/permmatrix/users"
     },
     {
      "func": "permmatrix_user_effective",
-     "line": 53,
+     "line": 49,
      "method": "GET",
      "path": "/api/permmatrix/users/{user_id}/effective"
     },
     {
      "func": "permmatrix_pending",
-     "line": 59,
+     "line": 55,
      "method": "GET",
      "path": "/api/permmatrix/pending"
     },
     {
      "func": "permmatrix_versions",
-     "line": 65,
+     "line": 61,
      "method": "GET",
      "path": "/api/permmatrix/versions"
     },
     {
      "func": "permmatrix_delegations",
-     "line": 71,
+     "line": 67,
      "method": "GET",
      "path": "/api/permmatrix/delegations"
     },
     {
      "func": "permmatrix_role_cap_preview",
-     "line": 96,
+     "line": 92,
      "method": "POST",
      "path": "/api/permmatrix/role-cap/preview"
     },
     {
      "func": "permmatrix_role_cap",
-     "line": 102,
+     "line": 98,
      "method": "POST",
      "path": "/api/permmatrix/role-cap"
     },
     {
      "func": "permmatrix_user_override_preview",
-     "line": 108,
+     "line": 104,
      "method": "POST",
      "path": "/api/permmatrix/user-override/preview"
     },
     {
      "func": "permmatrix_user_override",
-     "line": 114,
+     "line": 110,
      "method": "POST",
      "path": "/api/permmatrix/user-override"
     },
     {
      "func": "permmatrix_user_override_clear",
-     "line": 120,
+     "line": 116,
      "method": "DELETE",
      "path": "/api/permmatrix/user-override"
     },
     {
      "func": "permmatrix_pending_cancel",
-     "line": 126,
+     "line": 122,
      "method": "POST",
      "path": "/api/permmatrix/pending/{pid}/cancel"
     },
     {
      "func": "permmatrix_pending_approve",
-     "line": 132,
+     "line": 128,
      "method": "POST",
      "path": "/api/permmatrix/pending/{pid}/approve"
     },
     {
      "func": "permmatrix_version_restore",
-     "line": 138,
+     "line": 134,
      "method": "POST",
      "path": "/api/permmatrix/versions/{version_id}/restore"
     },
     {
      "func": "permmatrix_undo",
-     "line": 144,
+     "line": 140,
      "method": "POST",
      "path": "/api/permmatrix/undo"
     }

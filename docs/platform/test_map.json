@@ -12840,7 +12840,6 @@
    "units": [
     "core:db",
     "dir:backend/modules/permmatrix/",
-    "dir:frontend/pages/",
     "file:backend/core/system_hub_l1.json",
     "file:backend/helpers/__init__.py",
     "file:backend/modules/permmatrix/module.json",
@@ -12851,12 +12850,14 @@
     "mod:permmatrix/service",
     "page:pages/permission-matrix.html",
     "plat:__init__",
-    "plat:capabilities"
+    "plat:capabilities",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/capabilities.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/auth.py",
@@ -12872,8 +12873,7 @@
     ],
     "path": [
      "backend/core/system_hub_l1.json",
-     "backend/modules/permmatrix/module.json",
-     "frontend/pages/"
+     "backend/modules/permmatrix/module.json"
     ],
     "module_dir": [
      "backend/modules/permmatrix/"
@@ -12895,12 +12895,14 @@
     "mod:permmatrix/service",
     "page:pages/permission-matrix.html",
     "plat:__init__",
-    "plat:capabilities"
+    "plat:capabilities",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/capabilities.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/auth.py",
@@ -12912,9 +12914,6 @@
      "backend/modules/permmatrix/api.py"
     ],
     "page": [
-     "frontend/pages/permission-matrix.html"
-    ],
-    "path": [
      "frontend/pages/permission-matrix.html"
     ],
     "module_dir": [
