@@ -386,6 +386,45 @@
       </div>
     </div>
 
+
+    <!-- 簽核提醒寄不出去的單據（T69：唯讀清單，資料來自既有端點 GET /api/settings/reminder-send-failures） -->
+    <div class="ns-card" id="rf-panel" x-show="rfLoaded">
+      <div class="ns-card-head">
+        <div class="ns-card-head-title">簽核提醒寄不出去的單據</div>
+      </div>
+      <div class="ns-card-body">
+        <div class="ns-hint" style="margin-top:0">
+          系統已放棄自動重寄的簽核催辦信會列在這裡，最新的在最上面。多半是收件人沒有填 Email，請至「使用者管理」補填；補填後新的催辦會正常寄出。
+        </div>
+        <div x-show="rfDenied" style="font-size:13px;color:var(--text-dim);margin-top:12px">這份清單只有最高管理者，或被授予「系統設定」功能的帳號可以查看；您的帳號沒有這個權限。</div>
+        <div x-show="rfError" data-testid="rf-error" style="font-size:13px;color:#B45309;margin-top:12px;font-weight:600">暫時讀不到這份清單（伺服器沒有正常回應），請稍後重新整理頁面；通知設定本身不受影響。</div>
+        <div x-show="!rfDenied && !rfError && rfItems.length === 0" style="font-size:13px;color:#16A34A;margin-top:12px;font-weight:600">目前沒有寄不出去的提醒。</div>
+        <table x-show="!rfDenied && !rfError && rfItems.length > 0" style="width:100%;border-collapse:collapse;font-size:13px;margin-top:12px">
+          <thead>
+            <tr style="text-align:left;color:var(--text-dim)">
+              <th style="padding:6px 8px">單據</th>
+              <th style="padding:6px 8px">單號</th>
+              <th style="padding:6px 8px">原因</th>
+              <th style="padding:6px 8px">嘗試次數</th>
+              <th style="padding:6px 8px">最近時間</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="it in rfItems" :key="it.key">
+              <tr style="border-top:1px solid var(--border)">
+                <td style="padding:6px 8px" x-text="it.docType || '—'"></td>
+                <td style="padding:6px 8px" x-text="it.docNo || '—'"></td>
+                <td style="padding:6px 8px" x-text="rfReason(it.reason)"></td>
+                <td style="padding:6px 8px" x-text="it.attempts || 1"></td>
+                <td style="padding:6px 8px" x-text="(it.at || '').replace('T', ' ')"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="ns-hint"><a href="users.html">前往使用者管理補填 Email</a></div>
+      </div>
+    </div>
+
   </main>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
@@ -416,6 +455,17 @@
         mrSaved: false,
         mrMsg: '',
         mrIsError: false,
+
+        rfItems: [],
+        rfLoaded: false,
+        rfDenied: false,
+        rfError: false,
+
+        rfReason(r) {
+          if (r === 'permanent_fail') return '收件人沒有 Email，信寄不出去'
+          if (r === 'unknown') return '不確定信有沒有寄出，請向收件人確認'
+          return '其他原因'
+        },
 
         get mrAvailableUsers() {
           return this.mrAllUsers.filter(u => !this.mrRecipients.includes(u.id))
@@ -485,6 +535,12 @@
             fetch('/api/users/selectable', { headers: { Authorization: 'Bearer ' + s.token } }),
             fetch('/api/settings/monthly-report-recipients', { headers: { Authorization: 'Bearer ' + s.token } }),
           ])
+          try {
+            const rf = await fetch('/api/settings/reminder-send-failures', { headers: { Authorization: 'Bearer ' + s.token } })
+            if (rf.ok) { const d = await rf.json(); this.rfItems = Array.isArray(d.items) ? d.items : []; this.rfLoaded = true }
+            else if (rf.status === 403) { this.rfDenied = true; this.rfLoaded = true }
+            else { this.rfError = true; this.rfLoaded = true }
+          } catch (e) { this.rfError = true; this.rfLoaded = true /* 清單讀不到不影響通知設定本身，但要讓人看到 */ }
           if (usersRes.ok) this.mrAllUsers = await usersRes.json()
           if (mrRes.ok) {
             const d = await mrRes.json()
