@@ -12,6 +12,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from helpers import download_name
+from helpers import perm
 from helpers import recycle_bin   # 第53班：刪除暫存區 L1 契約（IP-RB1／RB2）
 from db import get_db, is_demo_mode, DEMO_PAYSLIP_ARCHIVE_DIR
 from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
@@ -189,7 +190,8 @@ def get_tax_rules(date: Optional[str] = None, version: Optional[str] = None,
                   authorization: str = Header(None)):
     """單一版規則（勞報單頁試算用）。`version` 優先；否則依 `date`（空＝今天）。
     回應另附 `status`（跨年提示），勞報單頁據此顯示「下一年度規則未設定」。"""
-    _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.view")
     versions = _lp.load_versions()
     if version:
         rules = _lp.rules_by_version(versions, version)
@@ -206,7 +208,8 @@ def get_tax_rules(date: Optional[str] = None, version: Optional[str] = None,
 
 @router.get("/api/next-slip-no")
 def next_slip_no(authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.create")
     month = datetime.now().strftime("%Y%m")
     conn  = get_db()
     conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
@@ -221,7 +224,8 @@ def next_slip_no(authorization: str = Header(None)):
 def list_payslips(month: Optional[str] = None, contractor_id: Optional[int] = None,
                   limit: int = 100, offset: int = 0,
                   authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.view")
     conn = get_db()
     sql = ("SELECT id, slip_no, contractor_id, contractor_name, income_type, "
            "gross_amount, tax_withheld, nhi_supplement, net_amount, "
@@ -289,7 +293,8 @@ def _person_dispatch_ids(raw, contractor_id, single) -> list:
 
 @router.post("/api/payslips", status_code=201)
 def create_payslip(body: PayslipIn, authorization: str = Header(None)):
-    user  = _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.create")
     now   = datetime.now().isoformat()
     month = datetime.now().strftime("%Y%m")
     d     = body.data
@@ -404,7 +409,8 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
 
 @router.get("/api/payslips/{slip_no}")
 def get_payslip(slip_no: str, authorization: str = Header(None)):
-    user = _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.view")
     conn = get_db()
     row = conn.execute("SELECT * FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
     conn.close()
@@ -418,7 +424,8 @@ def get_payslip(slip_no: str, authorization: str = Header(None)):
 
 @router.put("/api/payslips/{slip_no}")
 def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(None)):
-    user = _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.edit")
     now    = datetime.now().isoformat()
     d      = body.data
     recalc = d.pop("recalcTaxRules", False) is True
@@ -533,7 +540,8 @@ def delete_payslip(slip_no: str, authorization: str = Header(None)):
 
 @router.post("/api/payslips/{slip_no}/export")
 def record_export(slip_no: str, authorization: str = Header(None)):
-    user = _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.export")
     conn = get_db()
     row = conn.execute("SELECT export_log, export_count, status FROM payslips WHERE slip_no=?",
                        (slip_no,)).fetchone()
@@ -580,7 +588,8 @@ def record_export(slip_no: str, authorization: str = Header(None)):
 @router.post("/api/payslips/{slip_no}/archive/{orig_idx}/record")
 def record_archive_download(slip_no: str, orig_idx: int, authorization: str = Header(None)):
     """記錄「調閱存檔」動作（不產生新 PDF，不覆寫舊存檔，計次）。"""
-    user = _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.export")
     conn = get_db()
     row = conn.execute("SELECT export_log, export_count FROM payslips WHERE slip_no=?",
                        (slip_no,)).fetchone()
@@ -638,7 +647,8 @@ def _dl_name(slip_no: str, user: dict, *, nth=None, inline: bool = False):
 
 @router.get("/api/payslips/{slip_no}/archive/{idx}")
 def get_archive_pdf(slip_no: str, idx: int, authorization: str = Header(None)):
-    user = _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.export")
     # 先確認 DB 裡真的有這張勞報單，避免 slip_no 被拿來做路徑穿越讀取任意檔案
     # （_archive_path 本身也有格式檢查，這裡是第二層防禦：即使格式合法，也必須
     # 對應到真實存在的勞報單）。
@@ -671,7 +681,8 @@ def get_archive_pdf(slip_no: str, idx: int, authorization: str = Header(None)):
 
 @router.get("/api/payslips/{slip_no}/pdf-download")
 def pdf_download(slip_no: str, authorization: str = Header(None)):
-    user = _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.export")
     from pdf_gen import generate_payslip_pdf_bytes
     try:
         pdf_bytes = generate_payslip_pdf_bytes(slip_no, mask_bank=not _pb.can_see_full(user))      # F1：非最高管理者 ****末四碼、不帶存簿影本
@@ -706,7 +717,8 @@ class VoidIn(BaseModel):
 @router.post("/api/payslips/{slip_no}/void")
 def void_payslip(slip_no: str, body: VoidIn, authorization: str = Header(None)):
     """作廢已匯出的勞報單（終結狀態，不可還原）。原因必填。"""
-    user = _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.void")
     reason = (body.reason or "").strip()
     if not reason:
         raise HTTPException(400, "請填寫作廢原因")
@@ -755,7 +767,8 @@ def _signed_path(slip_no: str, fid: str, ext: str) -> str:
 async def upload_signed_files(slip_no: str, files: List[UploadFile] = File(...),
                               authorization: str = Header(None)):
     """上傳對方簽回檔：已匯出 → 已簽回（已簽回可再補傳）。"""
-    user = _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.attach")
     who = user.get("display_name") or user["username"]
     if not _SLIP_NO_RE.match(slip_no):
         raise HTTPException(400, "勞報單號碼格式錯誤")
@@ -836,7 +849,8 @@ def get_signed_file(slip_no: str, file_id: str, authorization: str = Header(None
 @router.delete("/api/payslips/{slip_no}/signed-files/{file_id}")
 def delete_signed_file(slip_no: str, file_id: str, authorization: str = Header(None)):
     """刪除簽回檔（僅「已簽回」；已付款不可動）。刪光後退回「已匯出」。實體檔保留備查（F2，不刪）。"""
-    _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.attach")
     conn = get_db()
     try:
         row = conn.execute("SELECT status, signed_files_json FROM payslips WHERE slip_no=?",
@@ -868,7 +882,8 @@ def delete_signed_file(slip_no: str, file_id: str, authorization: str = Header(N
 @router.post("/api/payslips/{slip_no}/unsign")
 def unsign_payslip(slip_no: str, authorization: str = Header(None)):
     """退回簽回：已簽回（未付款）→ 已匯出，才可作廢。簽回檔保留備查。"""
-    _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization)
+    perm.require(user, "payroll.payslip.edit")
     conn = get_db()
     try:
         row = conn.execute("SELECT status FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
