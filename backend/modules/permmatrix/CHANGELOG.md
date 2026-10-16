@@ -1,6 +1,6 @@
 # 權限矩陣 更新紀錄
 
-## (next:minor) — 2026-10-16（train/t67-int；T67 PM-S2／PM-S3）
+## 1.1.0 — 2026-10-16（train/t67-int；T67 PM-S2／PM-S3）
 - 新增『權限設定』頁（`permission-matrix.html`，只走系統中心卡片，不新增選單）與端點：唯讀檢視 `GET /api/permmatrix/matrix｜users｜users/{id}/effective｜pending｜versions｜delegations`（PM-S2）；寫入 `POST /role-cap`＋`/role-cap/preview`、`POST /user-override`＋`/user-override/preview`、`DELETE /user-override`、`POST /pending/{id}/cancel｜approve`、`POST /versions/{id}/restore`、`POST /undo`（PM-S3）。全部限最高管理者；規則仍全在服務層（原因必填、高風險放寬走設定帳本確認期間＋第二位最高管理者核准、稽核同交易）。
 - 格子內容全部來自各模組的能力宣告（`views.py` 唯讀檢視）：沒有宣告就是空表；『未接入』的格子不可勾。存檔前一定先顯示一句話影響面板。
 - 守門：`test_permmatrix_writes_unwired.py` 改為『其他產品碼不得取用 service；api.py／views.py 是模組自己的檔案』＋完整路由清單＋每個寫入端點第一行必須是最高管理者檢查；SPEC 新增 PMX16／PMX17。金標案例 `cases_permmatrix.py`（錯誤形狀）。

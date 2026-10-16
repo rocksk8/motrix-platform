@@ -4034,6 +4034,7 @@
     "/api/online-users",
     "/api/platform/menu",
     "/api/reads",
+    "/api/system-hub",
     "/api/system/bonus-module-status",
     "/api/system/branding/logo-dark",
     "/api/system/modules/availability"
@@ -4045,7 +4046,8 @@
     "/api/online-users",
     "/api/platform",
     "/api/reads",
-    "/api/system"
+    "/api/system",
+    "/api/system-hub"
    ],
    "api_unmatched": [],
    "imports": [],
@@ -4055,7 +4057,8 @@
     "router:auth",
     "router:item_reads",
     "router:platform_menu",
-    "router:system"
+    "router:system",
+    "router:system_hub"
    ],
    "tables_r": [],
    "tables_w": []
@@ -13901,6 +13904,7 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:perm",
     "helper:profit_warning",
     "helper:quote_privacy",
     "helper:row_access",
@@ -13917,6 +13921,7 @@
     "core:db",
     "helper:audit",
     "helper:auth",
+    "helper:perm",
     "mod:payroll/payslip_links",
     "plat:registry"
    ],
@@ -13928,37 +13933,37 @@
    "routes": [
     {
      "func": "list_links",
-     "line": 21,
+     "line": 22,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/dispatch-links"
     },
     {
      "func": "add_link",
-     "line": 38,
+     "line": 40,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/dispatch-links"
     },
     {
      "func": "remove_link",
-     "line": 62,
+     "line": 65,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}/dispatch-links/{dispatch_id}"
     },
     {
      "func": "person_dispatches",
-     "line": 78,
+     "line": 82,
      "method": "GET",
      "path": "/api/payslip-person-dispatches"
     },
     {
      "func": "person_dispatch_roster",
-     "line": 99,
+     "line": 104,
      "method": "GET",
      "path": "/api/payslip-person-dispatches/by-dispatch"
     },
     {
      "func": "confirm_contractor",
-     "line": 121,
+     "line": 127,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/confirm-contractor"
     }
@@ -14032,6 +14037,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:perm",
     "helper:privacy_notice",
     "helper:profit_warning",
     "helper:quote_privacy",
@@ -14063,6 +14069,7 @@
     "helper:email_notify",
     "helper:errors",
     "helper:legal_params",
+    "helper:perm",
     "helper:privacy_notice",
     "helper:recycle_bin",
     "helper:settings",
@@ -14084,109 +14091,109 @@
    "routes": [
     {
      "func": "get_tax_rules",
-     "line": 188,
+     "line": 189,
      "method": "GET",
      "path": "/api/tax-rules"
     },
     {
      "func": "next_slip_no",
-     "line": 208,
+     "line": 210,
      "method": "GET",
      "path": "/api/next-slip-no"
     },
     {
      "func": "list_payslips",
-     "line": 221,
+     "line": 224,
      "method": "GET",
      "path": "/api/payslips"
     },
     {
      "func": "create_payslip",
-     "line": 291,
+     "line": 295,
      "method": "POST",
      "path": "/api/payslips"
     },
     {
      "func": "get_payslip",
-     "line": 406,
+     "line": 411,
      "method": "GET",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "update_payslip",
-     "line": 420,
+     "line": 426,
      "method": "PUT",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "delete_payslip",
-     "line": 504,
+     "line": 511,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "record_export",
-     "line": 535,
+     "line": 542,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/export"
     },
     {
      "func": "record_archive_download",
-     "line": 581,
+     "line": 589,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/archive/{orig_idx}/record"
     },
     {
      "func": "get_archive_pdf",
-     "line": 640,
+     "line": 649,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/archive/{idx}"
     },
     {
      "func": "pdf_download",
-     "line": 673,
+     "line": 683,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/pdf-download"
     },
     {
      "func": "void_payslip",
-     "line": 707,
+     "line": 718,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/void"
     },
     {
      "func": "upload_signed_files",
-     "line": 755,
+     "line": 767,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/signed-files"
     },
     {
      "func": "get_signed_file",
-     "line": 808,
+     "line": 821,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "delete_signed_file",
-     "line": 837,
+     "line": 850,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "unsign_payslip",
-     "line": 869,
+     "line": 883,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unsign"
     },
     {
      "func": "payslip_mark_paid",
-     "line": 896,
+     "line": 911,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/mark-paid"
     },
     {
      "func": "payslip_unpay",
-     "line": 924,
+     "line": 939,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unpay"
     }
@@ -14617,6 +14624,8 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:module_registry",
+    "helper:perm",
+    "helper:perm_text",
     "helper:profit_warning",
     "helper:quote_privacy",
     "helper:row_access",
@@ -14626,10 +14635,15 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
-    "helper:tiered_approval"
+    "helper:tiered_approval",
+    "mod:permmatrix/service",
+    "mod:permmatrix/views"
    ],
    "imports": [
-    "helper:auth"
+    "core:db",
+    "helper:auth",
+    "mod:permmatrix/service",
+    "mod:permmatrix/views"
    ],
    "kind": "mod",
    "module_key": "permmatrix",
@@ -14639,9 +14653,99 @@
    "routes": [
     {
      "func": "permmatrix_status",
-     "line": 15,
+     "line": 34,
      "method": "GET",
      "path": "/api/permmatrix/status"
+    },
+    {
+     "func": "permmatrix_matrix",
+     "line": 41,
+     "method": "GET",
+     "path": "/api/permmatrix/matrix"
+    },
+    {
+     "func": "permmatrix_users",
+     "line": 47,
+     "method": "GET",
+     "path": "/api/permmatrix/users"
+    },
+    {
+     "func": "permmatrix_user_effective",
+     "line": 53,
+     "method": "GET",
+     "path": "/api/permmatrix/users/{user_id}/effective"
+    },
+    {
+     "func": "permmatrix_pending",
+     "line": 59,
+     "method": "GET",
+     "path": "/api/permmatrix/pending"
+    },
+    {
+     "func": "permmatrix_versions",
+     "line": 65,
+     "method": "GET",
+     "path": "/api/permmatrix/versions"
+    },
+    {
+     "func": "permmatrix_delegations",
+     "line": 71,
+     "method": "GET",
+     "path": "/api/permmatrix/delegations"
+    },
+    {
+     "func": "permmatrix_role_cap_preview",
+     "line": 96,
+     "method": "POST",
+     "path": "/api/permmatrix/role-cap/preview"
+    },
+    {
+     "func": "permmatrix_role_cap",
+     "line": 102,
+     "method": "POST",
+     "path": "/api/permmatrix/role-cap"
+    },
+    {
+     "func": "permmatrix_user_override_preview",
+     "line": 108,
+     "method": "POST",
+     "path": "/api/permmatrix/user-override/preview"
+    },
+    {
+     "func": "permmatrix_user_override",
+     "line": 114,
+     "method": "POST",
+     "path": "/api/permmatrix/user-override"
+    },
+    {
+     "func": "permmatrix_user_override_clear",
+     "line": 120,
+     "method": "DELETE",
+     "path": "/api/permmatrix/user-override"
+    },
+    {
+     "func": "permmatrix_pending_cancel",
+     "line": 126,
+     "method": "POST",
+     "path": "/api/permmatrix/pending/{pid}/cancel"
+    },
+    {
+     "func": "permmatrix_pending_approve",
+     "line": 132,
+     "method": "POST",
+     "path": "/api/permmatrix/pending/{pid}/approve"
+    },
+    {
+     "func": "permmatrix_version_restore",
+     "line": 138,
+     "method": "POST",
+     "path": "/api/permmatrix/versions/{version_id}/restore"
+    },
+    {
+     "func": "permmatrix_undo",
+     "line": 144,
+     "method": "POST",
+     "path": "/api/permmatrix/undo"
     }
    ],
    "tables_ddl": [],
@@ -14650,11 +14754,13 @@
    "tables_r_transitive": [
     "approval_delegates",
     "audit_log",
+    "config_changes",
     "daily_tasks",
     "departments",
     "dev_cases",
     "divisions",
     "duty_roles",
+    "perm_user_overrides",
     "projects",
     "quotations",
     "sessions",
@@ -14671,6 +14777,10 @@
     "config_changes",
     "duty_roles",
     "notifications",
+    "perm_delegations",
+    "perm_role_caps",
+    "perm_user_overrides",
+    "perm_versions",
     "permission_changes",
     "system_settings",
     "user_duty_roles",
@@ -14711,6 +14821,29 @@
     "perm_user_overrides",
     "perm_versions"
    ]
+  },
+  "mod:permmatrix/views": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:perm",
+    "helper:perm_text",
+    "mod:permmatrix/service",
+    "plat:capabilities"
+   ],
+   "kind": "mod",
+   "module_key": "permmatrix",
+   "path": "backend/modules/permmatrix/views.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [
+    "users"
+   ],
+   "tables_r": [
+    "perm_user_overrides",
+    "users"
+   ],
+   "tables_w": []
   },
   "mod:recyclebin/__init__": {
    "api_prefixes": [],
@@ -19353,6 +19486,47 @@
     "mod:payroll/api/payslip_approval",
     "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "page:pages/permission-matrix.html": {
+   "api_calls": [
+    "/api/permmatrix/matrix",
+    "/api/permmatrix/pending",
+    "/api/permmatrix/pending/",
+    "/api/permmatrix/role-cap",
+    "/api/permmatrix/role-cap/preview",
+    "/api/permmatrix/undo",
+    "/api/permmatrix/user-override",
+    "/api/permmatrix/user-override/preview",
+    "/api/permmatrix/users",
+    "/api/permmatrix/users/",
+    "/api/permmatrix/versions",
+    "/api/permmatrix/versions/",
+    "/api/system/branding/favicon"
+   ],
+   "api_prefixes": [
+    "/api/permmatrix",
+    "/api/system"
+   ],
+   "api_unmatched": [],
+   "imports": [
+    "js:static/auth-guard.js",
+    "js:static/motrix-date.js",
+    "js:static/notif.js",
+    "js:static/sidebar.js",
+    "js:static/ui.js"
+   ],
+   "kind": "page",
+   "path": "frontend/pages/permission-matrix.html",
+   "routers_called": [
+    "mod:permmatrix/api",
+    "router:system"
+   ],
+   "routers_called_effective": [
+    "mod:permmatrix/api",
     "router:system"
    ],
    "tables_r": [],
@@ -27995,7 +28169,9 @@
    "kind": "table",
    "named_by": [],
    "path": "backend/modules/permmatrix/migrations/0001_permission_matrix.py:21",
-   "readers": [],
+   "readers": [
+    "mod:permmatrix/views"
+   ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
@@ -28758,6 +28934,7 @@
     "mod:case/api/quotations",
     "mod:payroll/api/bank_account",
     "mod:permmatrix/service",
+    "mod:permmatrix/views",
     "plat:migrations",
     "router:duty_roles",
     "router:mail_settings",
@@ -28808,6 +28985,7 @@
     "mod:payroll/bonus_payouts",
     "mod:payroll/bonus_pdf",
     "mod:permmatrix/service",
+    "mod:permmatrix/views",
     "mod:recyclebin/service",
     "mod:tender_radar/listing",
     "plat:migrations",
