@@ -1643,6 +1643,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     # body.created_by 欄位保留不刪（前端仍會送），但一律以 session 為準。
     user = _require_user(authorization)
     q   = body.data
+    _pin_backfill_marker(q, {})                            # T69：補登標記只由專用端點寫入，一般新增帶的一律丟掉
     _strip_foreign_file_entries(q.get("caseRecord"), {})   # 安全審查 W3：新建沒有既有檔案，前端帶的檔案路徑一律不收
     if isinstance(q.get("caseRecord"), dict):
         q["caseRecord"].pop("customFields", None)   # T61 S5：自訂欄位只能經案件記錄存檔路徑的閘門寫入；新建（含複製案件）一律不帶
@@ -2133,6 +2134,10 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         if not existing:
             conn.close()
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        try:
+            _pin_backfill_marker(q, json.loads(existing["data_json"] or "{}") or {})   # T69：補登標記以資料庫現值為準
+        except (TypeError, ValueError):
+            _pin_backfill_marker(q, {})
         # 編輯紀錄只由伺服器維護：此處（寫入交易內）放回資料庫現值；解鎖編輯的那一筆也在這裡追加
         try:
             _db_hist = (json.loads(existing["data_json"] or "{}") or {}).get("editHistory")
@@ -2934,6 +2939,26 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
             spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, actor_name, '結案'))
             spawn_bg_thread(_generate_case_closing_pdf, args=(quote_no, actor_name, '結案報表'))
         return {"ok": True}
+
+
+def _pin_backfill_marker(q: dict, old: dict) -> None:
+    """補登標記（approval.historical、頂層 historical）只由 POST /api/quotations/historical 寫入。
+    其他寫入路徑（一般新增、整份取代的編輯）一律以資料庫現值為準：現值沒有 ⇒ 用戶端帶的丟掉；現值有 ⇒ 放回（編輯不會洗掉補登標記）。"""
+    old_ap = (old or {}).get("approval") if isinstance((old or {}).get("approval"), dict) else {}
+    was = old_ap.get("historical") is True
+    ap = q.get("approval")
+    if isinstance(ap, dict):
+        ap.pop("historical", None)
+    q.pop("historical", None)
+    if was:
+        if not isinstance(q.get("approval"), dict):
+            q["approval"] = {}
+        q["approval"]["historical"] = True
+        for k in ("recordedBy", "recordedByDisplay", "recordedAt", "reason", "note"):
+            if k in old_ap:
+                q["approval"].setdefault(k, old_ap[k])
+        if isinstance(old.get("historical"), dict):
+            q["historical"] = old["historical"]
 
 
 def _is_historical_quote(conn, quote_no: str) -> bool:

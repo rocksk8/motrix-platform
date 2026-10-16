@@ -325,3 +325,46 @@ def test_ordinary_non_draft_quote_still_cannot_be_deleted(client, boss):
     no = r.json()["quote_no"]
     assert client.delete("/api/quotations/" + no, headers=boss).status_code == 403
     assert _row(no)[0] is not None
+
+
+# ── 11. 補登標記只由專用端點寫入（PM 裁示 2026-10-17）──────────────────────────
+FORGED = {"approval": {"historical": True, "tiers": [], "recordedBy": "x", "reason": "偽造"},
+          "historical": {"basisNote": "偽造"}}
+
+
+@pytest.mark.parametrize("role", ["admin", "superadmin"])
+def test_normal_create_drops_client_sent_backfill_marker(client, make_user, role):
+    h = _login(client, make_user, "bf1_forge_" + role, role=role)
+    r = client.post("/api/quotations", headers=h, json={"status": "草稿", "data": dict({"customerName": "偽造", "items": []}, **FORGED)})
+    assert r.status_code in (200, 201), r.text
+    _, d = _row(r.json()["quote_no"])
+    assert "historical" not in (d.get("approval") or {}) and "historical" not in d
+
+
+def test_forged_marker_does_not_unlock_superadmin_void(client, make_user):
+    h = _login(client, make_user, "bf1_forge_void")
+    r = client.post("/api/quotations", headers=h, json={"status": "已送出", "data": dict({"customerName": "偽造", "items": []}, **FORGED)})
+    assert r.status_code in (200, 201), r.text
+    no = r.json()["quote_no"]
+    assert client.delete("/api/quotations/" + no, headers=h).status_code == 403
+    assert _row(no)[0] is not None
+
+
+def test_update_drops_client_marker_on_ordinary_draft(client, make_user):
+    h = _login(client, make_user, "bf1_forge_upd")
+    no = client.post("/api/quotations", headers=h, json={"status": "草稿", "data": {"customerName": "一般", "items": []}}).json()["quote_no"]
+    r = client.put("/api/quotations/" + no, headers=h, json={"status": "草稿", "data": dict({"customerName": "一般2", "items": []}, **FORGED)})
+    assert r.status_code == 200, r.text
+    _, d = _row(no)
+    assert "historical" not in (d.get("approval") or {}) and "historical" not in d
+
+
+def test_pin_marker_keeps_real_marker_and_drops_forged_one():
+    from modules.case.api.quotations import _pin_backfill_marker
+    old = {"approval": {"historical": True, "recordedBy": "boss", "reason": "原因原因"}, "historical": {"basisNote": "n"}}
+    q = {"approval": {"isEditApproval": True}}
+    _pin_backfill_marker(q, old)                           # 現值是補登單 ⇒ 編輯後仍是
+    assert q["approval"]["historical"] is True and q["approval"]["recordedBy"] == "boss" and q["historical"] == {"basisNote": "n"}
+    q2 = dict(FORGED, approval=dict(FORGED["approval"]))
+    _pin_backfill_marker(q2, {"approval": {"status": "pending"}})   # 現值不是 ⇒ 丟掉
+    assert "historical" not in q2["approval"] and "historical" not in q2
