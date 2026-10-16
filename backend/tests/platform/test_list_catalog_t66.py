@@ -19,7 +19,7 @@ def _spec(**over):
                      {"id": "b", "label": "乙", "sortable": True},
                      {"id": "m", "label": "含稅總額", "catalogId": "quotation.total", "sortable": True}],
          "defaults": {"columns": ["a", "b", "m"], "sort": {"col": "a", "dir": "asc"}, "pageSize": 50},
-         "pageSizeCeiling": 200, "pageSizeMenu": [20, 50, 200]}
+         "pageSizeCeiling": 200, "pageSizeMenu": [20, 50, 200], "sortGuard": True}
     s.update(over)
     return s
 
@@ -126,3 +126,15 @@ def test_core_catalog_section_is_wired_but_not_expected():
     assert LC.SECTION_NAME not in catalog.EXPECTED_SECTIONS         # 沒載入時不算缺口
     owner, fn = catalog.snapshot()[LC.SECTION_NAME]
     assert owner == "helpers.list_catalog" and fn is LC.section_payload
+
+def test_money_list_without_sort_guard_declaration_is_rejected(clean):
+    s = _spec()
+    del s["sortGuard"]
+    probs = LC.register_list("t:noguard", "test", s)
+    assert probs and any("sortGuard" in p for p in probs)
+    assert LC.by_id("t:noguard") is None
+    # 沒有金額欄的清單不需要宣告（先導清單）
+    s2 = _spec(columns=[{"id": "a", "label": "甲", "sortable": True, "required": True}],
+               defaults={"columns": ["a"], "sort": {"col": "a", "dir": "asc"}, "pageSize": 50})
+    del s2["sortGuard"]
+    assert LC.register_list("t:plain", "test", s2) == []

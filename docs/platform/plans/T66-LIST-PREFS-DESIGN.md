@@ -171,3 +171,10 @@ Order: L0 → L1 → L2 → L4(pilot) → L3 (money lists) → L5. Money-bearing
 - **與 T65 `list_view` 的分工（單一來源 `T65-C-LIST-VIEW-DESIGN.md`）**：`list_view` 群組（`quotes_*`／`cases_*` 各項）是**各畫面使用端的開關**，預設 0；本案 `list_prefs.enabled` 是**通用清單目錄＋公司政策＋`/api/list-views` 的總開關**，預設 0。兩者不重複任何選項：每頁筆數的個人值，T65 前端（`static/list-view-prefs.js`）目前存 `user_list_prefs`，本案 `user_list_view_prefs.prefs_json.pageSize` 是 API 層的政策限制版本。
 - **待決（L4 前端前必須定）**：個人每頁筆數只留一個儲存處。建議 L4 讓 `list-view-prefs.js` 改讀寫 `/api/list-views/{id}`（受政策限制），`user_list_prefs` 只留排序；`list_view.*_page_size` 旗標與 `list_prefs.enabled` 同時成立才生效。
 - r2 重放：金額欄與 F7 守門不變；goldens 以實際輸出重錄（`response_keys_baseline` 僅增 `listCatalog.items.lists[].modules`；`l1_interface_snapshot` 為 `--pending`）。
+
+## 狀態補記（r3，2026-10-16，PM 裁示）
+- **儲存處裁示（已核准）**：個人每頁筆數只存 `user_list_view_prefs`；前端（L4）改讀寫 `/api/list-views/{id}`；`user_list_prefs` 只留排序，不再存每頁筆數。T65 `list_view.*` 列在正式機不存在（全是預設 0、沒有人存過偏好），切換沒有搬資料問題。沒有重複選項。
+- **L3 伺服器端強制（隨端點出貨，因為這是遮蔽問題）**：`helpers.list_view_prefs.enforce_query(conn, user, list_id, sort, dir, limit)`——清單資料端點查詢前呼叫、只准用回傳值組查詢。①排序欄位看不到（F7 天花板／衍生欄位）或不可排序 ⇒ 忽略，改用預設排序（預設也看不到 ⇒ 不排序）；**旗標關也擋**；②旗標開時另加政策排序白名單、`limit` 夾到「清單天花板」與「政策允許的最大每頁筆數」較小者（`limit<1` ⇒ 預設筆數；沒給 limit ⇒ 不動；旗標關 ⇒ 不動）；③清單沒登記 ⇒ 原樣；判斷失敗 ⇒ 當作看不到，不丟例外。
+- **登記規則（§6 的守門）**：含金額欄的清單必須宣告 `sortGuard: True`，否則 `register_list` 拒絕（fail closed）；宣告的意思是「資料端點已用 `enforce_query`」。目前只有供應商（無金額欄、端點沒有 sort／limit 參數）登記，所以真端點尚無接線；金額清單（案件、報價單）登記時才接，各自一個切片。
+- **測試**：`test_list_enforce_t66.py`（含正對照：同情境把檢查換成原樣回傳會洩漏；實測把可見判斷拿掉 ⇒ 4 題轉紅）、`test_list_catalog_t66.py`（金額清單缺 `sortGuard` 被拒）。
+- **L4 前端**：排下一班，等 PM 指示才開始。

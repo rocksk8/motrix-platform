@@ -2,7 +2,7 @@
 """清單檢視偏好（T66 L2）：每人每清單的「每頁筆數」，以及公司政策＋欄位可見（F7）對版面引擎輸出的限制。設計：docs/platform/plans/T66-LIST-PREFS-DESIGN.md §1.3、§3、§5。
 
 [單位] helper:list_view_prefs    [層] L1    [穩定度] 實驗（旗標 `list_prefs.enabled` 預設關；表 `user_list_view_prefs`）
-[公開介面] MAX_BYTES, TABLE, ViewError, can_access, check_access, clamp_columns, clamp_sort, column_visible, constraints, enabled, etag_of, list_summaries, reset, save_page_size
+[公開介面] MAX_BYTES, TABLE, ViewError, can_access, check_access, clamp_columns, clamp_sort, column_visible, constraints, enabled, enforce_query, etag_of, list_summaries, reset, save_page_size
 [不變式] ①單一來源：個人的欄位顯示／順序與排序仍由版面引擎（`user_list_prefs`、`/api/list-prefs`）負責；本檔**只存每頁筆數**，不複製欄位或排序。
     ②本檔對版面引擎輸出只做『限制』：欄位必須通過欄位可見（F7）∩ 公司政策允許；金額欄只能隱藏／重排、**不可加回**（預設就不顯示的金額欄根本不列出）；排序欄位必須是看得到、允許排序的欄位。
     ③每次讀取都重算（不存授權）：政策收緊或權限變動立即生效；存的值只是偏好，超出現行範圍時讀取回到預設，不報錯。
@@ -233,3 +233,49 @@ def clamp_sort(view, col, direction):
     if col in view["sort"]["allowed"] and direction in ("asc", "desc") and any(c["id"] == col for c in view["columns"]):
         return {"col": col, "dir": direction}
     return view["sort"]["default"]
+
+
+# ── 端點的伺服器端強制（T66 L3）：排序是洩漏管道（依成本／毛利排序會洩漏大小順序），所以由伺服器擋，不靠前端 ──
+def enforce_query(conn, user, list_id, sort=None, direction=None, limit=None) -> dict:
+    """清單資料端點在查詢前呼叫：回 `{"sort", "dir", "limit", "sortIgnored", "limitClamped"}`，端點只准用回傳值組查詢。
+    ①排序欄位若是呼叫者看不到的欄位（F7 天花板／衍生欄位不過）或不是可排序欄位 ⇒ **忽略**（不報錯、不洩漏欄位存在），改用清單預設排序（預設排序本身也要看得到，否則無排序）。
+    這一條不看旗標：它是遮蔽，旗標關也要擋（旗標關時對有權限者與今天相同）。
+    ②旗標開時：排序還須在公司政策允許的欄位內；`limit` 夾到「清單天花板」與「公司政策允許的最大每頁筆數」之間較小者（不夾下限以外的值；沒給 limit ⇒ 不動）。
+    ③清單沒登記 ⇒ 原樣回傳（端點不受目錄管理）。永不丟例外：判斷失敗 ⇒ 當作看不到（排序忽略、limit 用天花板）。"""
+    spec = LC.by_id(list_id)
+    out = {"sort": sort, "dir": direction, "limit": limit, "sortIgnored": False, "limitClamped": False}
+    if spec is None:
+        return out
+    cols = {c["id"]: c for c in spec["columns"]}
+    on = enabled(conn)
+    view = None
+    if on:
+        try:
+            view = constraints(conn, user, list_id)
+        except Exception:                                    # noqa: BLE001
+            logger.warning("清單限制計算失敗：%s", list_id, exc_info=True)
+    def _ok(col):
+        c = cols.get(col)
+        if c is None or not c["sortable"]:
+            return False
+        try:
+            if not column_visible(c, user):
+                return False
+        except Exception:                                    # noqa: BLE001  判斷失敗 ⇒ 當作看不到
+            logger.warning("排序欄位可見判斷失敗：%s.%s", list_id, col, exc_info=True)
+            return False
+        return col in view["sort"]["allowed"] if view is not None else True
+
+    if sort is not None:
+        if not (_ok(sort) and direction in ("asc", "desc", None)):
+            out["sortIgnored"] = True
+            d = (view["sort"]["default"] if view else spec["defaults"].get("sort")) or None
+            out["sort"], out["dir"] = (d["col"], d["dir"]) if d and _ok(d["col"]) else (None, None)
+    if on and limit is not None:
+        pol = (LP.policy_for(conn, list_id, (user or {}).get("role")) or {}).get("pageSize") or {}
+        allowed = [x for x in (pol.get("allowed") or []) if isinstance(x, int) and x <= spec["pageSizeCeiling"]]
+        cap = max(allowed) if allowed else spec["pageSizeCeiling"]
+        bad = not isinstance(limit, int) or isinstance(limit, bool) or limit < 1
+        if bad or limit > cap:
+            out["limit"], out["limitClamped"] = (cap if not bad else (view["pageSize"]["value"] if view else cap)), True
+    return out

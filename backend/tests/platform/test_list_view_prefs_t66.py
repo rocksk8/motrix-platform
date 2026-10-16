@@ -50,7 +50,7 @@ MONEY_SPEC = {"label": "含金額清單",
                           {"id": "tot", "label": "含稅總額", "catalogId": "quotation.total", "sortable": True},
                           {"id": "mar", "label": "直接毛利率", "catalogId": "quotation.direct_margin_pct", "sortable": True}],
               "defaults": {"columns": ["a", "b", "tot", "mar"], "sort": {"col": "tot", "dir": "desc"}, "pageSize": 50},
-              "pageSizeCeiling": 200, "pageSizeMenu": [20, 50, 200]}
+              "pageSizeCeiling": 200, "pageSizeMenu": [20, 50, 200], "sortGuard": True}
 
 
 # ── 表 ──

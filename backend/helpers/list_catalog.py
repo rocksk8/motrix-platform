@@ -58,6 +58,8 @@ def list_problems(list_id, spec) -> list:
     mods = spec.get("modules")
     if mods is not None and (not isinstance(mods, (list, tuple)) or not mods or any(not isinstance(m, str) or not m.strip() for m in mods)):
         out.append("%s：modules 必須是非空的模組鍵清單（清單的存取權限；不填＝只有超級管理者）" % list_id)
+    if any(isinstance(c, dict) and is_money_column(c) for c in cols) and spec.get("sortGuard") is not True:
+        out.append("%s：含金額欄的清單必須宣告 sortGuard=True（資料端點已用 list_view_prefs.enforce_query 擋金額排序；設計 §6）" % list_id)
     d = spec.get("defaults")
     if not isinstance(d, dict):
         return out + ["%s：沒有 defaults" % list_id]
