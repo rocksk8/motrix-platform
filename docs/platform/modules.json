@@ -67,6 +67,7 @@
    "helper:settings_groups_q0",
    "helper:settings_groups_profit",
    "helper:settings_groups_list_view",
+   "helper:settings_groups_overhead",
    "helper:profit_warning",
    "helper:quote_output",
    "helper:quote_privacy",

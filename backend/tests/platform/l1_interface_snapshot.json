@@ -1527,6 +1527,9 @@
   "helper:settings_groups_list_view": {
    "register": "def(S, _register_core)"
   },
+  "helper:settings_groups_overhead": {
+   "register": "def(S, _register_core)"
+  },
   "helper:settings_groups_profit": {
    "register": "def(S, _register_core)"
   },
