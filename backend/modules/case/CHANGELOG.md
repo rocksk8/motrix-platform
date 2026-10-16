@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-16（wip/t66-quote-copy-sortable-r1；複製為新報價單後拖曳排序失效修復；報價單表單 V3.29）
+- 修正：報價單清單或表單按「複製為新報價單」後，新單的項目拖曳排序（拖曳把手）失效。原因是 `quotation-form.html` 的 `init()` 複製分支在中途 `return`，漏掉編輯／新增共用的尾巴（`Sortable` 建立、預覽模式 `$watch`、預覽高度 `message` 監聽）。尾巴抽成 `_bindLateHooks()`，複製分支與一般路徑都呼叫，可重複呼叫不重複綁定；`initSortable()` 重建前先銷毀舊實例、`$watch` 只登記一次。複製分支再保險一次：status 缺值或誤帶「已送出」時改為草稿並取消解鎖。無資料庫變動、無後端變動；`FORM_VERSION` V3.28→V3.29。守門測試 `tests/platform/test_quote_copy_binds_sortable_t66.py`。
+
 ## 1.0.200 — 2026-10-16（train/t65-int；3f 預審修正）
 - 預審修正（3f）：`update_case_record` 的寫入旗標改為惰性求值、整個請求只建一次（保留舊的短路，有財務權限者存檔不因未用到的層級算不出來而 500）；`api/material_orders.py` 存檔後回顯補註解（非 strict、算不出來 ⇒ 遮）。行為不變。
 

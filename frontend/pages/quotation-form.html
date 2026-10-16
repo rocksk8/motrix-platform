@@ -2364,7 +2364,7 @@
   // V3.26（2026-10-15，T62 e2e）：自訂欄位清空時送 {}（後端『沒送這個鍵＝保留舊值』，只有 {} 才會清掉）。
   // V3.28（2026-10-15，T65）：三處儲存時間顯示改走共用格式器（輸出不變）
   // V3.27（2026-10-15，T64 A／B）：利潤顏色門檻改讀設定（MotrixProfitWarning，預設＝原本的 12／20）；金額、日期改走共用顯示格式器 MotrixFormat（預設輸出逐字相同）。
-  const FORM_VERSION = 'V3.28'
+  const FORM_VERSION = 'V3.29'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -4360,8 +4360,13 @@
                 // 真的取不到就維持空值，存檔時由後端派號。
                 await this._peekQuoteNo()
               }
+              // 複製出來的一定是草稿：status 缺值或誤帶「已送出」時，拖曳排序會被 isLocked() 鎖死
+              this.unlocked = false
+              if (!this.q.status || this.q.status === '已送出') this.q.status = '草稿'
               this.calcTotals()
               this.checkApproval()
+              // 複製模式也要綁預覽 watch／高度監聽／拖曳排序（與編輯、新增共用同一段尾巴）
+              this._bindLateHooks()
               this._initSettled = true
               return
             }
@@ -4456,20 +4461,30 @@
           this.lastSaved = MotrixFormat.dt(now, {hour:'2-digit',minute:'2-digit'})
         }
 
-        // 預覽：切換對外／內部就重取一次；iframe 內容以 postMessage 回報高度
-        this.$watch('previewMode', v => { if (v) this.loadPreview(); else this.previewHtml = '' })
-        window.addEventListener('message', e => {
-          const h = e && e.data && e.data.motrixPreviewHeight
-          if (typeof h === 'number' && h > 0 && h < 20000) this.previewFrameHeight = Math.ceil(h) + 8
-        })
-        this.$nextTick(() => this.initSortable())
+        this._bindLateHooks()
         this._initSettled = true
+      },
+
+      // init() 的尾巴：新增／編輯／複製三條路徑共用，可重複呼叫（只綁一次監聽，Sortable 重建前先銷毀舊的）。
+      // 複製模式曾在 init() 中途 return 而漏掉這段，複製出來的新報價單拖曳排序失效。
+      _bindLateHooks() {
+        // 預覽：切換對外／內部就重取一次；iframe 內容以 postMessage 回報高度
+        if (!this._previewHooksBound) {
+          this._previewHooksBound = true
+          this.$watch('previewMode', v => { if (v) this.loadPreview(); else this.previewHtml = '' })
+          window.addEventListener('message', e => {
+            const h = e && e.data && e.data.motrixPreviewHeight
+            if (typeof h === 'number' && h > 0 && h < 20000) this.previewFrameHeight = Math.ceil(h) + 8
+          })
+        }
+        this.$nextTick(() => this.initSortable())
       },
 
       initSortable() {
         const tbody = this.$refs.itemsTbody
         if (!tbody || typeof Sortable === 'undefined') return
         const isLocked = () => this.q.status === '已送出' && !this.unlocked
+        if (this._sortable) { try { this._sortable.destroy() } catch (e) {} this._sortable = null }
         this._sortable = Sortable.create(tbody, {
           animation: 150,
           handle: '.drag-handle',
@@ -4487,8 +4502,11 @@
             this.setDirty()
           }
         })
-        this.$watch('unlocked', v => this._sortable?.option('disabled', isLocked()))
-        this.$watch('q.status', v => this._sortable?.option('disabled', isLocked()))
+        if (!this._sortableWatched) {
+          this._sortableWatched = true
+          this.$watch('unlocked', v => this._sortable?.option('disabled', isLocked()))
+          this.$watch('q.status', v => this._sortable?.option('disabled', isLocked()))
+        }
       },
 
       logout() {
