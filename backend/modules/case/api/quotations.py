@@ -2135,7 +2135,8 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             conn.close()
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
         try:
-            _pin_backfill_marker(q, json.loads(existing["data_json"] or "{}") or {})   # T69：補登標記以資料庫現值為準
+            _pin_backfill_marker(q, json.loads(existing["data_json"] or "{}") or {},
+                                 real_approval=bool(is_unlock_edit or new_status == "待審核"))   # T69：補登標記以資料庫現值為準；進入真簽核由伺服器事實判定
         except (TypeError, ValueError):
             _pin_backfill_marker(q, {})
         # 編輯紀錄只由伺服器維護：此處（寫入交易內）放回資料庫現值；解鎖編輯的那一筆也在這裡追加
@@ -2941,15 +2942,15 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
         return {"ok": True}
 
 
-def _pin_backfill_marker(q: dict, old: dict) -> None:
+def _pin_backfill_marker(q: dict, old: dict, real_approval: bool = False) -> None:
     """補登標記（approval.historical、頂層 historical）只由 POST /api/quotations/historical 寫入。
     其他寫入路徑（一般新增、整份取代的編輯）一律以資料庫現值為準：現值沒有 ⇒ 用戶端帶的丟掉；現值有 ⇒ 放回（編輯不會洗掉補登標記）。
-    例外（稽核 hichan-49 SF4）：編輯送來的是**真正的簽核**（解鎖編輯＝`approval.isEditApproval`，伺服器端才會設）⇒ 這張單已離開「補登，無簽核」狀態，
-    補登標記不再放回（作廢權也回到一般規則）；頂層 `historical` 區塊（補登來歷、口徑註記）保留。"""
+    例外（稽核 hichan-49 SF4）：`real_approval` ＝這次寫入**由伺服器判定**進入真正的簽核（解鎖編輯、或轉為待審核）⇒ 這張單已離開「補登，無簽核」狀態，
+    補登標記不再放回（作廢權也回到一般規則）；頂層 `historical` 區塊（補登來歷、口徑註記）保留。
+    ⚠️ 判斷不可看用戶端送來的 approval 內容（isEditApproval／tiers 都能偽造 ⇒ 一般管理員可藉此洗掉標記、讓最高管理者失去作廢權）。"""
     old_ap = (old or {}).get("approval") if isinstance((old or {}).get("approval"), dict) else {}
     was = old_ap.get("historical") is True
     ap = q.get("approval")
-    real_approval = isinstance(ap, dict) and (ap.get("isEditApproval") is True or bool(ap.get("tiers")))
     if isinstance(ap, dict):
         ap.pop("historical", None)
     q.pop("historical", None)
@@ -2976,7 +2977,7 @@ def _doc_is_historical(data_json) -> bool:
 
 
 @router.delete("/api/quotations/{quote_no}")
-def delete_quotation(quote_no: str, authorization: str = Header(None), body: Optional[dict] = Body(None)):
+def delete_quotation(quote_no: str, authorization: str = Header(None), reason: Optional[str] = None):
     user = _require_user(authorization)
     conn = get_db()
     _hist_void = False
@@ -2999,7 +3000,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None), body: Opt
             conn.close()
             raise HTTPException(403, f"只有草稿狀態的報價單可以刪除（目前狀態：{row['status']}）")
         _hist_void = True        # 走暫存區的「刪除已核可」規則：底下有其他單據／已結案仍會被擋
-        _void_reason = str((body or {}).get("reason") or "").strip()
+        _void_reason = str(reason or "").strip()
         if len(_void_reason) < 5:      # 稽核 SF5：作廢補登單要寫原因（進暫存區紀錄與稽核）
             conn.close()
             raise HTTPException(400, "作廢補登單請填原因（至少 5 個字）")

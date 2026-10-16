@@ -85,7 +85,7 @@ def _row(no):
 
 
 def _void(client, h, no, reason="年度結算前更正：補登重複，作廢重補"):
-    return client.request("DELETE", "/api/quotations/" + no, headers=h, json={"reason": reason} if reason is not None else None)
+    return client.delete("/api/quotations/" + no, headers=h, params={"reason": reason} if reason is not None else None)
 
 
 def _audits(action):
@@ -409,15 +409,43 @@ def test_number_overflow_at_999_is_a_409_not_a_four_digit_number(client, boss, f
     assert _count() == n and _seq("202605") == 999
 
 
-def test_edit_approval_ends_the_backfilled_state_but_plain_edit_keeps_it():
+def test_server_decided_approval_ends_the_backfilled_state_client_dict_cannot():
     from modules.case.api.quotations import _pin_backfill_marker
     old = {"approval": {"historical": True, "recordedBy": "boss", "reason": "原因原因"}, "historical": {"basisNote": "n"}}
-    q = {"approval": {"isEditApproval": True, "status": "pending", "historical": True}}
-    _pin_backfill_marker(q, old)                           # 真正的簽核開始 ⇒ 不再是「補登，無簽核」
+    q = {"approval": {"isEditApproval": True, "tiers": [{"approver": "x"}], "historical": True}}   # 用戶端偽造的簽核內容
+    _pin_backfill_marker(q, old)                           # 伺服器沒判定進入簽核 ⇒ 標記仍在
+    assert q["approval"]["historical"] is True and q["historical"] == {"basisNote": "n"}
+    q = {"approval": {"status": "pending"}}
+    _pin_backfill_marker(q, old, real_approval=True)       # 伺服器判定進入真簽核 ⇒ 不再放回
     assert "historical" not in q["approval"] and q["historical"] == {"basisNote": "n"}
-    q = {"approval": {"tiers": [{"approver": "x"}]}}
-    _pin_backfill_marker(q, old)
-    assert "historical" not in q["approval"]
+
+
+def test_forged_tiers_on_a_plain_put_keep_the_marker_and_void_right(client, boss, make_user, flag_on):
+    no = _post(client, boss).json()["quote_no"]
+    adm = _login(client, make_user, "bf1_adm_tiers", role="admin")
+    d = _row(no)[1]
+    d["approval"] = dict(d["approval"], tiers=[{"approver": "x"}], isEditApproval=True)
+    r = client.put("/api/quotations/" + no, headers=adm, json={"status": "已送出", "data": d})
+    assert r.status_code in (200, 403, 409), r.text          # 已送出是鎖定狀態：多半 403；重點是標記沒被洗掉
+    assert _row(no)[1]["approval"]["historical"] is True
+    assert _void(client, boss, no).status_code == 200         # 最高管理者仍可作廢
+
+
+def test_real_unlock_edit_by_superadmin_ends_the_backfilled_state(client, boss, make_user, flag_on):
+    from tests.test_org_chain_approval_2026_09_15 import _org, _set_dept, _uid, _unified_flow
+    make_user("bf1_sa2", "Lay-Pass-123", role="superadmin")
+    _, dept = _org(dept_manager=_uid("bf1_boss"), div_manager=_uid("bf1_boss"))
+    _set_dept("bf1_boss", dept)                              # 送審需要申請人有部門（簽核鏈）
+    _unified_flow()
+    no = _post(client, boss).json()["quote_no"]
+    d = _row(no)[1]
+    d["_isUnlockEdit"] = True
+    r = client.put("/api/quotations/" + no, headers=boss, json={"status": "已送出", "data": d})
+    assert r.status_code == 200, r.text
+    d2 = _row(no)[1]
+    assert not (d2.get("approval") or {}).get("historical")    # 進入真簽核 ⇒ 不再是補登無簽核
+    assert d2.get("historical", {}).get("basisNote")           # 來歷保留
+    assert _void(client, boss, no).status_code == 403          # 作廢權回到一般規則（非草稿不可刪）
 
 
 def test_ordinary_non_draft_quote_still_cannot_be_deleted(client, boss):
