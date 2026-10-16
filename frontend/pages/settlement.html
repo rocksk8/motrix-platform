@@ -1985,7 +1985,7 @@ function settlementPage() {
     charityLbl(sm, orig) {                           // 第 52 班：公益捐款標籤（新基＝報價含稅 1%；舊基＝直接毛利 1%）。orig＝原始（報價）側，看 origCharityBasis
       const base = ((orig ? sm && sm.origCharityBasis : sm && sm.charityBasis) === 'total') ? '公益捐款（報價含稅 1%）' : '公益捐款（直接毛利 1%）'
       const rp = Number(orig ? sm && sm.origCharityRatePct : sm && sm.charityRatePct)
-      return base.replace('1%', (Number.isFinite(rp) && rp >= 0 && rp !== 1 ? String(Math.round(rp * 1e6) / 1e6) : '1') + '%')          // T68 Q1：比率看這份單據自己的戳記（沒有＝1）；字面保留給守門題比對
+      return base.replace('1%', (Number.isFinite(rp) && rp >= 0 && rp !== 1 ? String(Math.round(rp * 1e6) / 1e6) : '1') + '%')  /* 非金額 */   // T68 Q1：比率看這份單據自己的戳記（沒有＝1）；字面保留給守門題比對
     },
     charityHow(sm) {
       return (sm && sm.charityBasis === 'total') ? '公益＝報價含稅金額×1%（與毛利無關）' : '公益＝毛利×1%（毛利為負時以 0 計）'
