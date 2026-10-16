@@ -61,7 +61,7 @@ def _make_case_with_expense(quote_no, month):
 
 @needs_subcontract
 def test_excel_export_includes_expenses_sheet_and_month_grouped_cases(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_case_with_expense("MQ-XLSX-001", 3)
     _make_case_with_expense("MQ-XLSX-002", 7)

@@ -22,7 +22,7 @@ needs_subcontract = pytest.mark.skipif(not _source_tree.module_installed("module
 
 @needs_subcontract
 def test_expenses_monthly_filters_contractor_and_material_by_department(client, make_user):
-    admin_user, admin_pw = make_user(role="admin")
+    admin_user, admin_pw = make_user(role="superadmin")
     token = _login(client, admin_user, admin_pw)
     dept_a, dept_b, sales_a, sales_b = _make_dept_setup(make_user)
     _insert_case_with_stage("MQ-EXP-A01", sales_a)

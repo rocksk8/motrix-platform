@@ -51,7 +51,7 @@ def test_quarter_param_validation(client, make_user):
     """quarter 只接受 1-4。範圍外的整數由 _validate_quarter() 擋成 400；非整數
     字串則更早一步被 FastAPI 的 int 型別轉換擋成 422。兩者都是明確的用戶端錯誤，
     重點是都不會漏到 main.py 全域 handler 變成通用 500。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
 
     for path in ("/api/reports/receivables-monthly", "/api/reports/expenses-monthly"):
@@ -84,7 +84,7 @@ def test_receivables_quarter_equals_sum_of_its_months(client, make_user):
     且 2026-06（Q2）的案件不得混進來。"""
     import db
 
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
 
     conn = db.get_db()
@@ -137,7 +137,7 @@ def test_receivables_quarter_identity_holds(client, make_user):
     （比照既有月/年兩套欄位的規格）。"""
     import db
 
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
 
     conn = db.get_db()
@@ -169,7 +169,7 @@ def test_expenses_quarter_income_equals_sum_of_its_months(client, make_user):
     收入是依 receivedAt（現金流口徑），與應收的 wonMonth 口徑不同，所以要分開驗。"""
     import db
 
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
 
     conn = db.get_db()
@@ -209,7 +209,7 @@ def test_expenses_quarter_income_equals_sum_of_its_months(client, make_user):
 
 def test_expenses_quarter_expense_equals_sum_of_its_months(client, make_user):
     """季支出 == 該季三個月支出加總（走 _months_expense_slice 的新路徑）。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
 
     months_total = 0
@@ -230,7 +230,7 @@ def test_expenses_quarter_expense_equals_sum_of_its_months(client, make_user):
 def test_without_quarter_param_quarter_fields_are_empty(client, make_user):
     """不傳 quarter 時季欄位為空集合／0，且 quarter 欄位本身是 null。
     既有呼叫端（Excel／PDF／每月結算寄信）都不傳 quarter，行為必須零變化。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
 
     r = client.get("/api/reports/receivables-monthly?year=2026&month=2026-08", headers=_auth(token))
@@ -256,7 +256,7 @@ def test_month_and_year_fields_unchanged_by_quarter_param(client, make_user):
     不能反過來影響既有欄位。"""
     import db
 
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
 
     conn = db.get_db()
@@ -345,8 +345,8 @@ def test_excel_export_gains_quarter_sheet(client, make_user):
     import db
     import openpyxl
 
-    with_user, with_pw = make_user(username="q_exp_with", role="admin")
-    without_user, without_pw = make_user(username="q_exp_without", role="admin")
+    with_user, with_pw = make_user(username="q_exp_with", role="superadmin")
+    without_user, without_pw = make_user(username="q_exp_without", role="superadmin")
 
     conn = db.get_db()
     try:
@@ -385,7 +385,7 @@ def test_excel_export_gains_quarter_sheet(client, make_user):
 
 def test_excel_export_quarter_rejects_bad_value(client, make_user):
     """匯出端點的 quarter 同樣受 _validate_quarter 保護。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     r = client.get("/api/reports/financial/excel?period=2026-Q3&quarter=9", headers=_auth(token))
     assert r.status_code == 400, r.text

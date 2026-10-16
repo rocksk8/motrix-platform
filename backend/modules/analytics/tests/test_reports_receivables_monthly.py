@@ -42,7 +42,7 @@ def test_non_admin_forbidden(client, make_user):
 
 def test_month_param_rejects_malformed_month(client, make_user):
     """month 參數（YYYY-MM）格式檢驗，畸形值回 400。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
 
     for bad in ("2026", "2026-13", "2026-00", "abcd-ef", "2026/08"):
@@ -65,7 +65,7 @@ def test_grouped_by_receipt_date_not_won_month(client, make_user):
     """
     import db
 
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
 
     conn = db.get_db()
@@ -123,7 +123,7 @@ def test_month_receivable_equals_collected_plus_outstanding(client, make_user):
     東西可驗（各自落在不同月的情形由 test_different_month_items_do_not_leak 守）。"""
     import db
 
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
 
     conn = db.get_db()
@@ -174,7 +174,7 @@ def test_different_month_items_do_not_leak(client, make_user):
     那一組（不屬於任何月份），那是另一支測試的守備範圍。"""
     import db
 
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
 
     conn = db.get_db()
@@ -233,7 +233,7 @@ def test_department_id_param_accepted(client, make_user):
     """驗證 department_id 參數能被接受（雖然本測試環境中部門設定可能為空）。
     詳細的部門過濾邏輯由既有 _collect_income_items() 測試已涵蓋；此處只驗證
     參數傳遞與簽名一致。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
 
     # 不帶 department_id 應成功

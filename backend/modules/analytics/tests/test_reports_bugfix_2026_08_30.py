@@ -21,7 +21,7 @@ def _auth(token):
 
 
 def test_month_expense_scope_rejects_malformed_month(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
 
     for bad in ("2026", "2026-13", "2026-00", "abcd-ef", "2026/08"):

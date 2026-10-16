@@ -7,11 +7,12 @@ from tests.test_module_permission_fixes_2026_09_13 import (  # noqa: E402,F401  
 
 
 def test_reports_module_actually_opens_the_reports_api(client, make_user):
-    """勾了「營運報表」的業務要真的打得開報表 API（修正前一律 403）。"""
+    """T68（使用者裁示 2026-10-17）：只勾「營運報表」模組不再足以看全公司金額——業務打報表 API 回 403 並說明原因；
+    財務角色（見下一題）與持有『營運報表』且金額可見者才進得去。原題（2026-09-13：勾了就要進得去）被這個裁示取代。"""
     u, p = make_user(username="r_sales", role="sales", modules=["dashboard", "reports"])
     tok = _login(client, u, p)
     r = client.get("/api/reports/financial?period=2026-09", headers=_auth(tok))
-    assert r.status_code == 200, f"勾了營運報表卻還是進不去：{r.status_code} {r.text}"
+    assert r.status_code == 403 and "財務" in r.json().get("detail", ""), f"{r.status_code} {r.text}"
 
 
 def test_finance_module_also_opens_it(client, make_user):

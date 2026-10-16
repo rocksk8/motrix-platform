@@ -15,7 +15,7 @@ from tests.test_reports_review_fixes_2026_09_02 import (  # noqa: E402,F401  含
 
 def test_report_excel_export_neutralizes_malicious_customer_name(client, make_user):
     """端到端：客戶名稱帶惡意公式字串，匯出的 Excel 不應含真正的公式儲存格。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     import db
     conn = db.get_db()
@@ -48,7 +48,7 @@ def test_report_excel_export_neutralizes_malicious_customer_name(client, make_us
 @needs_m01
 def test_other_expense_bucketed_by_expense_date_not_finalize_date(client, make_user):
     """精算 9 月才完結，但額外支出憑證日期是 3 月——月度加總跟明細都該算進 3 月。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     import db
     conn = db.get_db()
@@ -105,7 +105,7 @@ def test_parse_period_still_accepts_valid_forms():
 
 
 def test_financial_endpoint_returns_400_not_500_on_bad_period(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     r = client.get("/api/reports/financial?period=2026-13", headers=_auth(token))
     assert r.status_code == 400, r.text

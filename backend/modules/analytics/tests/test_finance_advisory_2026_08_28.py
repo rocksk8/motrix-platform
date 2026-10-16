@@ -78,7 +78,7 @@ def _insert_approved_voucher(voucher_no, quote_no, grand_total, is_paid=0):
 # ── 資金水位總覽 ─────────────────────────────────────────────────────────────
 
 def test_cash_position_combines_ar_and_ap(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _insert_ar_quotation("MQ-CASH-001", amount=30000, total=100000, received=False)
     _insert_approved_voucher("PV-CASH-001", "MQ-CASH-001", grand_total=12000)
@@ -94,7 +94,7 @@ def test_cash_position_combines_ar_and_ap(client, make_user):
 
 
 def test_cash_position_excludes_paid_vouchers(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _insert_ar_quotation("MQ-CASH-002", amount=5000, total=50000)
     _insert_approved_voucher("PV-CASH-002", "MQ-CASH-002", grand_total=9000, is_paid=1)
@@ -120,7 +120,7 @@ def test_tax_export_lists_invoiced_items_with_tax_breakdown_and_year_filter(clie
     年份篩選排除不同年份資料——三個 tax-export 情境合併成一次匯出呼叫，避免連續
     呼叫觸發 helpers.xlsx_out.check_export_rate() 的 5 秒匯出冷卻（同一 pytest 進程內測試 user_id
     常常重複，見 test_cash_position 等其他檔案的既有慣例）。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _insert_ar_quotation("MQ-TAX-001", amount=21000, total=100000, received=True)
     # 未開發票的品項（invoiceNo 空）不應出現

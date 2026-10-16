@@ -10,7 +10,7 @@ pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點�
 
 
 def test_monthly_expense_report_details_include_extra_expense_files(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_closed_quotation("MQ-EXPFILE-002")
 
@@ -28,7 +28,7 @@ def test_financial_excel_export_includes_extra_expense_filename(client, make_use
     發票/收據附件檔名，不是只有 API JSON 層有資料。"""
     import io as _io
     from openpyxl import load_workbook
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_closed_quotation("MQ-EXPFILE-003")
 

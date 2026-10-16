@@ -48,7 +48,7 @@ def test_non_admin_forbidden(client, make_user):
 
 
 def test_empty_year_returns_zeroed_12_months(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     r = client.get("/api/reports/expenses-monthly?year=2099", headers=_auth(token))
     assert r.status_code == 200, r.text
@@ -61,7 +61,7 @@ def test_empty_year_returns_zeroed_12_months(client, make_user):
 
 
 def test_stock_purchase_bucketed_by_category(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     import db
     conn = db.get_db()
@@ -98,7 +98,7 @@ def test_stock_purchase_bucketed_by_category(client, make_user):
 
 @needs_m01
 def test_settlement_extra_item_counted_as_other(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     import db
     conn = db.get_db()
@@ -132,7 +132,7 @@ def test_settlement_extra_item_counted_as_other(client, make_user):
 @needs_m01
 @needs_subcontract
 def test_contractor_dispatch_counted(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     import db
     conn = db.get_db()

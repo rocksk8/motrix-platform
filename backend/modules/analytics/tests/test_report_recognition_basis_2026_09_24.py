@@ -195,10 +195,8 @@ def test_flag_amounts_are_hidden_without_financial_view(client, make_user):
     _case("MQ-RB-060")
     _dispatch("MQ-RB-060")
     hdr = _login(client, *make_user(username="rb_rpt_eng", role="engineer", modules=["reports"]))
-    body = _report(client, hdr)
-    items = body["recognitionFlags"]["dispatch_no_invoice"]["items"]
-    mine = [i for i in items if i["quoteNo"] == "MQ-RB-060"]
-    assert mine and mine[0]["amount"] is None
+    # T68：只勾「營運報表」模組的帳號連報表本身都進不去（403），金額更不會出現——比原本的「金額置空」更嚴
+    assert client.get("/api/reports/financial?period=2026-09", headers=hdr).status_code == 403
     sa_hdr = _login(client, *make_user(username="rb_sa2", role="superadmin"))
     mine = [i for i in _report(client, sa_hdr)["recognitionFlags"]["dispatch_no_invoice"]["items"]
             if i["quoteNo"] == "MQ-RB-060"]

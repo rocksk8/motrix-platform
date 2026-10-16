@@ -46,7 +46,7 @@ def test_round_half_up_matches_taiwan_invoice_convention():
 
 
 def test_excel_export_writes_audit_log(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     r = client.get("/api/reports/financial/excel?period=2026", headers=_auth(token))
     assert r.status_code == 200, r.text
@@ -58,7 +58,7 @@ def test_excel_export_writes_audit_log(client, make_user):
 
 @needs_m05
 def test_tax_export_writes_audit_log(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     r = client.get("/api/reports/tax-export", headers=_auth(token))
     assert r.status_code == 200, r.text
