@@ -24,7 +24,8 @@ PROBES = [
     ("get", "/api/tax-rules", "view"),
     ("get", "/api/next-slip-no", "create"),
     ("get", "/api/payslips/" + NONE + "/dispatch-links", "view"),
-    ("get", "/api/payslip-person-dispatches", "view"),
+    ("get", "/api/payslip-person-dispatches?contractor_id=0", "view"),  # 必填 query：缺它 FastAPI 先回 422，閘永遠量不到
+    ("get", "/api/payslip-person-dispatches/by-dispatch?dispatch_id=0", "view"),
     ("post", "/api/payslips/" + NONE + "/export", "export"),
     ("post", "/api/payslips/" + NONE + "/unsign", "edit"),
     ("get", "/api/payslips/" + NONE + "/pdf-download", "export"),
