@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""每日工作：孤兒隔離檔搬回、清除超過 30 天的暫存區項目（逐筆稽核）、磁碟水位告警。
+"""每日工作：孤兒隔離檔搬回、清除超過保留天數（設定，預設 30）的暫存區項目（逐筆稽核）、磁碟水位告警。
 
 形狀照 lodging／標案雷達：啟動時只排一個背景 Timer（立即返回），每小時檢查一次『今天跑過沒』；跑完一定重排（`finally`），丟一次例外不會讓排程靜默死亡。
 清除只在 `schedulers` 閘門開著時排（MOTRIX_DISABLE_SCHEDULERS=1 ⇒ 不排）；`run_daily()` 可被測試／手動直接呼叫。
@@ -60,7 +60,7 @@ def run_daily(now=None) -> dict:
         if out["purged"] or out["overWarn"]:
             msg = []
             if out["purged"]:
-                msg.append("已自動清除 %d 筆超過 %d 天的刪除項目" % (out["purged"], S.RB.RETENTION_DAYS))
+                msg.append("已自動清除 %d 筆超過 %d 天的刪除項目" % (out["purged"], S.retention_days(conn)))
             if out["overWarn"]:
                 msg.append("隔離區用量 %.1f GB 已超過 %.0f GB" % (st["usedBytes"] / 1024 ** 3, st["warnBytes"] / 1024 ** 3))
             for u in S.superadmins(conn):

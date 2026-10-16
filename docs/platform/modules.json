@@ -69,6 +69,7 @@
    "helper:settings_groups_profit",
    "helper:settings_groups_list_view",
    "helper:settings_groups_payslip_picker",
+   "helper:settings_groups_recycle_bin",
    "helper:profit_warning",
    "helper:display_labels",
    "helper:quote_output",

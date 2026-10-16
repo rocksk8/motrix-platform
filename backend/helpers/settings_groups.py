@@ -1019,3 +1019,8 @@ _payslip_picker._register(S, _register_core)
 from helpers import settings_groups_legal_reminder as _legal_reminder  # noqa: E402
 
 _legal_reminder._register(S, _register_core)
+
+# T69 SO-S2：刪除暫存區保留天數（拆檔，同屬 core）
+from helpers import settings_groups_recycle_bin as _recycle_bin  # noqa: E402
+
+_recycle_bin._register(S, _register_core)

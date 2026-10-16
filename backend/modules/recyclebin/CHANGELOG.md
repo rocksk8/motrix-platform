@@ -2,6 +2,10 @@
 
 ## (next) — 2026-10-17（wip/t69-recycle-dir-panel-r1；回收筒頁加隔離目錄設定面板）
 - `recycle-bin.html` 狀態列下方新增『隔離目錄』面板：可填新目錄或改回預設位置，呼叫既有 `PUT /api/recycle-bin/settings`（最高管理者限定，規則不變：樹外絕對路徑、不可在 uploads 底下、暫存區還有項目時伺服器拒絕）。暫存區有項目時面板停用並說明原因。無新端點、無權限變更、無 migration。守門測試 `tests/platform/test_recycle_bin_dir_panel_t69.py`。
+- **（併入）(next) — 2026-10-17（wip/t69-retention-r1；T69 SO-S2：保留天數走設定 `recycle_bin.retention_days`）**
+- `service.py` 新增 `retention_days(conn=None)`（讀設定，預設 30；讀不到或不在 7～365 ⇒ 後備 `RB.RETENTION_DAYS`＝30）；`purge_after_for(dt, conn=None)`、狀態 `retentionDays`、`jobs.py` 每日清理的通知文字、`api.py` 刪除已核可的通知，都改用它。預設 30 時輸出與先前逐字相同；已在暫存區的項目到期日不回頭改寫。
+- `frontend/pages/recycle-bin.html`：頁首說明與「已送進暫存區」提示的「30 天」改顯示狀態回傳的 `retentionDays`（後備 30）。
+- 無 migration、無新表。
 
 ## 1.0.6 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1）：module.json 新增 `system_cards`（『刪除暫存區』卡片；r2）**

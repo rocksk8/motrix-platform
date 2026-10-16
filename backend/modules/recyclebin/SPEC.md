@@ -5,13 +5,13 @@
 
 ## 用途與 API
 
-- 單據刪除先進暫存區（資料列快照＋附件搬進隔離目錄），只有最高管理者看得到與還原；30 天後自動清除。
+- 單據刪除先進暫存區（資料列快照＋附件搬進隔離目錄），只有最高管理者看得到與還原；預設 30 天後自動清除（保留天數可在設定中心『刪除暫存區』調整，7～365 天）。
 - `/api/recycle-bin`：`GET /`（列表）、`GET /status`、`GET /impact`、`GET /{id}`（詳情，快照遮罩）、`POST /{id}/restore`、`DELETE /{id}?confirm=永久刪除`、`POST /delete-approved`、`PUT /settings`。
 
 ## 規格條件
 
 - **RBN1.** 所有端點只有最高管理者可用（其他角色 403、未登入 401）；選單入口 `perm: ["superadmin"]`。
-- **RBN2.** 進暫存區＝資料列刪除＋附件**搬**進隔離目錄（原路徑不再有檔、隔離區有檔、`recycle_bin` 有一列含完整快照）；`purge_after` ＝ 刪除日 + 30 天（固定，不可設定）。
+- **RBN2.** 進暫存區＝資料列刪除＋附件**搬**進隔離目錄（原路徑不再有檔、隔離區有檔、`recycle_bin` 有一列含完整快照）；`purge_after` ＝ 刪除當下的時間 + 保留天數（設定 `recycle_bin.retention_days`，預設 30、7～365；T69 起可調，縮短須第二位最高管理者核准）；到期日在刪除當下就定了，之後改設定不回頭改寫。
 - **RBN3.** 不放寬任何刪除條件：adapter 的 `can_delete` 不通過 ⇒ 丟 `BinError`、資料與檔案原封不動；『刪除已核可』只有最高管理者、且 adapter 的 `can_delete_approved` 通過、並需要二次確認。
 - **RBN4.** 缺席要明說：本模組不在 ⇒ `helpers.recycle_bin.delete()` 回 None（擁有模組照舊硬刪並明說）；沒有該類型的 adapter ⇒ `BinError`，不刪任何東西。
 - **RBN5.** 還原把資料列與附件放回；任何失敗（衝突、父層不在、adapter 例外、附件搬不回）⇒ 資料列留在暫存區、附件回到隔離區、狀態 `restore_failed` 並記原因；不覆蓋既有資料。

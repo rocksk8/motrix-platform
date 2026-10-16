@@ -163,7 +163,7 @@ def bin_delete_approved(body: dict = Body(...), authorization: str = Header(None
         if post:
             post()                                          # commit 之後：擁有模組的後續動作（行事曆同步等），錯誤只記 log
         _notify_superadmins(conn, user["username"], "recyclebin_delete_approved", res["bin_id"], "%s %s" % (et, eid),
-                            "%s 把已核可的單據 %s %s 送進了暫存區（30 天內可還原）" % (user.get("display_name") or user["username"], et, eid))
+                            "%s 把已核可的單據 %s %s 送進了暫存區（%d 天內可還原）" % (user.get("display_name") or user["username"], et, eid, S.retention_days(conn)))
         return res
     finally:
         conn.close()
