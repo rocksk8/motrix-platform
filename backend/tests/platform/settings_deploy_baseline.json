@@ -197,6 +197,7 @@
     ]
    },
   "material_order": {"supplier_required": [1, 0, 1, false]},
+  "recycle_bin": {"retention_days": [30, 7, 365, false]},
   "completion_note": {"auto_prefill": [1, 0, 1, false], "prefill_unsigned": [1, 0, 1, false], "qty_mode": [0, 0, 1, false], "default_status": [0, 0, 2, false], "include_headers": [1, 0, 1, false], "brand_prefix": [1, 0, 1, false], "over_qty": [0, 0, 1, false]},
   "retention": {
    "audit_log_keep_days": [

@@ -1,5 +1,10 @@
 # 刪除暫存區 更新紀錄
 
+## (next) — 2026-10-17（wip/t69-retention-r1；T69 SO-S2：保留天數走設定 `recycle_bin.retention_days`）
+- `service.py` 新增 `retention_days(conn=None)`（讀設定，預設 30；讀不到或不在 7～365 ⇒ 後備 `RB.RETENTION_DAYS`＝30）；`purge_after_for(dt, conn=None)`、狀態 `retentionDays`、`jobs.py` 每日清理的通知文字、`api.py` 刪除已核可的通知，都改用它。預設 30 時輸出與先前逐字相同；已在暫存區的項目到期日不回頭改寫。
+- `frontend/pages/recycle-bin.html`：頁首說明與「已送進暫存區」提示的「30 天」改顯示狀態回傳的 `retentionDays`（後備 30）。
+- 無 migration、無新表。
+
 ## 1.0.6 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1）：module.json 新增 `system_cards`（『刪除暫存區』卡片；r2）**
 - 加性宣告：在系統中心登記資源回收筒；只影響索引顯示，頁面與 API 的權限、行為完全不變。

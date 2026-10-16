@@ -29,8 +29,20 @@ def _now():
     return datetime.now()
 
 
-def purge_after_for(dt) -> str:
-    return (dt + timedelta(days=RB.RETENTION_DAYS)).isoformat(timespec="seconds")      # 精確 30 天（含時間）；舊列只有日期，字串比較時仍以當天 00:00 視為到期
+def retention_days(conn=None) -> int:
+    """暫存區保留天數：設定 `recycle_bin.retention_days`（預設 30、7～365）；讀不到或不合法 ⇒ 後備 `RB.RETENTION_DAYS`（30）。"""
+    try:
+        from helpers import settings_groups, settings_registry as SR      # noqa: F401  確保群組已登錄
+        v = int(SR.get("recycle_bin", "retention_days", conn=conn))
+        if 7 <= v <= 365:
+            return v
+    except Exception:                                       # noqa: BLE001  設定層任何問題都不能讓刪除或每日清理壞掉
+        pass
+    return RB.RETENTION_DAYS
+
+
+def purge_after_for(dt, conn=None) -> str:
+    return (dt + timedelta(days=retention_days(conn))).isoformat(timespec="seconds")      # 精確 N 天（含時間；預設 30）；舊列只有日期，字串比較時仍以當天 00:00 視為到期
 
 
 def _files_of(snap: dict) -> list:
@@ -76,7 +88,7 @@ def _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group_token, p
             " deleted_at, purge_after, reason, via, impact_json, snapshot_json, files_manifest_json, bytes, file_count, restore_status, codes)"
             " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (token, group_token, entity_type, str(entity_id), str(snap.get("label") or entity_id), parent[0] if parent else "", str(parent[1]) if parent else "",
-             (user or {}).get("username", ""), (user or {}).get("display_name", ""), now.isoformat(), purge_after_for(now), (reason or "")[:500], via,
+             (user or {}).get("username", ""), (user or {}).get("display_name", ""), now.isoformat(), purge_after_for(now, conn), (reason or "")[:500], via,
              json.dumps(impact or [], ensure_ascii=False), payload, json.dumps(manifest, ensure_ascii=False),
              sum(int(m.get("size") or 0) for m in manifest), sum(1 for m in manifest if m.get("state") == "moved"), S_IN_BIN, _codes_text(snap)))
         ad.delete_in_tx(conn, entity_id)
@@ -92,7 +104,7 @@ def _bin_one(conn, ad, entity_type, entity_id, user, reason, via, group_token, p
             raise RB.BinError("單據未刪除（資料與附件都在原處）；暫存區的暫存資料夾稍後會自動清理")
         raise
     return {"bin_id": cur.lastrowid, "token": token, "entity_type": entity_type, "entity_id": str(entity_id),
-            "purge_after": purge_after_for(now), "files": sum(1 for m in manifest if m.get("state") == "moved"),
+            "purge_after": purge_after_for(now, conn), "files": sum(1 for m in manifest if m.get("state") == "moved"),
             "_hook": (ad, entity_id, snap), "_undo": (token, manifest)}
 
 
@@ -361,7 +373,7 @@ def status(conn) -> dict:
         counts[r["restore_status"]] = r["n"]
     oldest = conn.execute("SELECT MIN(deleted_at) FROM recycle_bin WHERE restore_status IN (?,?)", LIVE).fetchone()[0]
     used, nfiles = Q.used_bytes()
-    return {"counts": counts, "oldest": oldest or "", "retentionDays": RB.RETENTION_DAYS, "dir": Q.root_dir(), "defaultDir": Q.default_dir(),
+    return {"counts": counts, "oldest": oldest or "", "retentionDays": retention_days(conn), "dir": Q.root_dir(), "defaultDir": Q.default_dir(),
             "usedBytes": used, "fileCount": nfiles, "freeBytes": Q.free_bytes(), "warnBytes": DISK_WARN_BYTES, "overWarn": used > DISK_WARN_BYTES,
             "adapters": {k: a.label or k for k, a in RB.adapters().items()}}
 
