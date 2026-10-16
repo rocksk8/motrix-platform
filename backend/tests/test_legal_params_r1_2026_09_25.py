@@ -162,7 +162,8 @@ def test_a_future_version_can_be_corrected(client, make_user, frozen_today):
     (date(2026, 12, 1), [], True),
     (date(2026, 12, 1), [_v2027()], False),
 ])
-def test_next_year_missing_from_december(today, extra, missing):
+def test_next_year_missing_from_december(today, extra, missing, monkeypatch):
+    monkeypatch.setattr(lp, "_reminder_start", lambda conn=None: (12, 1))      # T68：起算日改成設定後，原本的『12 月』＝設成 12／1
     st = lp.year_status(lp.DEFAULT_TAX_RULE_VERSIONS + extra, today)
     assert st["nextYearMissing"] is missing
     assert any("2027 年的法規參數" in w for w in st["warnings"]) is missing

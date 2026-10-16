@@ -1004,3 +1004,4 @@ _profit.register(S, _register_core)
 from helpers import settings_groups_list_view as _list_view  # noqa: E402
 
 _list_view.register(S, _register_core)
+from helpers import settings_groups_legal_reminder  # noqa: E402,F401  T68 Y：跨年提醒起算日（拆檔、載入即登錄，同屬 core）
