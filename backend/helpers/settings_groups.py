@@ -1015,4 +1015,7 @@ from helpers import settings_groups_payslip_picker as _payslip_picker  # noqa: E
 
 _payslip_picker._register(S, _register_core)
 
-from helpers import settings_groups_legal_reminder  # noqa: E402,F401  T68 Y：跨年提醒起算日（拆檔、載入即登錄，同屬 core）
+# T68 Y：法規參數跨年提醒起算日（拆檔，同屬 core）
+from helpers import settings_groups_legal_reminder as _legal_reminder  # noqa: E402
+
+_legal_reminder._register(S, _register_core)
