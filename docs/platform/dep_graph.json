@@ -6987,6 +6987,7 @@
     "helper:display_labels",
     "helper:duty_roles",
     "helper:field_catalog",
+    "helper:field_policy",
     "helper:financial_mask",
     "helper:legal_params",
     "helper:module_registry",
@@ -7011,6 +7012,7 @@
     "helper:approval_queue",
     "helper:auth",
     "helper:dates",
+    "helper:field_policy",
     "helper:financial_mask",
     "helper:legal_params",
     "helper:option_lists",
@@ -7027,49 +7029,49 @@
    "routes": [
     {
      "func": "dashboard_stats",
-     "line": 44,
+     "line": 45,
      "method": "GET",
      "path": "/api/dashboard/stats"
     },
     {
      "func": "dashboard_monthly",
-     "line": 340,
+     "line": 341,
      "method": "GET",
      "path": "/api/dashboard/monthly"
     },
     {
      "func": "dashboard_expenses_monthly",
-     "line": 419,
+     "line": 420,
      "method": "GET",
      "path": "/api/dashboard/expenses-monthly"
     },
     {
      "func": "list_devices",
-     "line": 484,
+     "line": 485,
      "method": "GET",
      "path": "/api/devices"
     },
     {
      "func": "dashboard_funnel",
-     "line": 557,
+     "line": 558,
      "method": "GET",
      "path": "/api/dashboard/funnel"
     },
     {
      "func": "dashboard_ops_alerts",
-     "line": 664,
+     "line": 665,
      "method": "GET",
      "path": "/api/dashboard/ops-alerts"
     },
     {
      "func": "list_materials_summary",
-     "line": 751,
+     "line": 752,
      "method": "GET",
      "path": "/api/materials-summary"
     },
     {
      "func": "dashboard_activity_feed",
-     "line": 841,
+     "line": 842,
      "method": "GET",
      "path": "/api/dashboard/activity-feed"
     }

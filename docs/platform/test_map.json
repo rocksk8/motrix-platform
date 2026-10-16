@@ -27071,9 +27071,12 @@
     "helper:email_notify",
     "helper:settings",
     "mod:accounting/__init__",
+    "mod:accounting/api/accounting_export",
     "mod:accounting/voucher_pdf",
     "mod:analytics/api/__init__",
+    "mod:analytics/api/ledger_diff",
     "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
     "mod:case/api/quotations",
     "page:pages/company-profile-settings.html",
     "router:customers",
@@ -27098,7 +27101,10 @@
      "backend/tests/test_company_setup_core_2026_09_28.py"
     ],
     "api": [
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/modules/analytics/api/ledger_diff.py",
      "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/cashier.py",
      "backend/modules/case/api/quotations.py",
      "backend/routers/customers.py",
      "backend/routers/legal_params.py",

@@ -75,7 +75,7 @@
 | `helper:expense_types` | L1 | 費用單據的「類型定義」（A2-2）：請購單／採購單／差旅費用請款單／零用金支付單各是一份 `expense_type` 定義。 | 14 | 5 | `tests/platform/test_expense_types_2026_10_01.py` |
 | `helper:export_templates` | L1 | 匯出範本（BP-3 R0/R1）：宣告式的欄位／標籤／順序（＋頁首頁尾／浮水印文字），套在『已登記的匯出』上；發布前預覽。 | 30 | 14 | `tests/platform/test_export_templates_bp3.py` |
 | `helper:field_catalog` | L1 | 共用欄位目錄（T64 切片 D／F7 的 S0：只登記、不改行為）。 | 12 | 4 | `backend/tests/platform/test_field_catalog_t64.py` |
-| `helper:field_policy` | L1 | 欄位可見求值（T64 F7 S1a：只有『天花板』查表；政策規則是 S2，這裡沒有）。 | 4 | 3 | `backend/tests/platform/test_field_policy_t65.py` |
+| `helper:field_policy` | L1 | 欄位可見求值（T64 F7 S1a：只有『天花板』查表；政策規則是 S2，這裡沒有）。 | 4 | 4 | `backend/tests/platform/test_field_policy_t65.py` |
 | `helper:finance_params` | L1 | 財務報表的可調參數（財務盤點第一個切片；設計 docs/platform/plans/FINANCE-FRAMEWORK-INVENTORY-T62.md §4）。 | 18 | 3 | `backend/tests/test_finance_params_2026_10_14.py`、`backend/tests/test_finance_cashier_gates_2026_10_14.py` |
 | `helper:financial_mask` | L1 | 案件金額欄位遮蔽（CM13，2026-09-24 使用者裁示「要，後端移除金額欄位」）。（無單位卡） | 16 | 16 | — |
 | `helper:formula` | L1 | 安全的公式（CUSTOMIZATION-SPEC §1「積木式、不能寫程式」、§8.1 ②「公式語法檢查回傳錯誤位置」）。（無單位卡） | 9 | 3 | — |
