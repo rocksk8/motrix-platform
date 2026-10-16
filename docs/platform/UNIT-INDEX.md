@@ -6,7 +6,7 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 132 個；有單位卡 81 個。
+單位 133 個；有單位卡 82 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
@@ -53,7 +53,7 @@
 | `helper:clause_titles` | L1 | 報價單條款標題（census #5 / S-Q2）：報價單五個條款區塊的標題，管理者只能從預設清單挑（付款條件→付款方式…）。 | 7 | 5 | `tests/platform/test_clause_titles_t62.py` |
 | `helper:company_identity` | L1 | §9 QL · 一份單據要印的「公司身分」。（無單位卡） | 19 | 14 | — |
 | `helper:company_setup` | L1 | 本公司資料設定閘門：「這個安裝的本公司資料有沒有人確認過」（docs/platform/COMPANY-SETUP-GATE.md §3、§4.3、§6）。 | 66 | 7 | `tests/test_company_setup_core_2026_09_28.py`、`tests/test_company_setup_cli_2026_09_28.py`、`tests/test_company_setup_gate_2026_09_28.py`、`tests/test_company_setup_output_gate_2026_09_28.py` |
-| `helper:config_ledger` | L1 | 設定與權限共用的「變更明細＋待生效」層（L1；第 54 班設定中心 S0；與 1d 的權限矩陣設計 §7 共同定案）。 | 18 | 5 | `backend/tests/platform/test_config_ledger_t54.py` |
+| `helper:config_ledger` | L1 | 設定與權限共用的「變更明細＋待生效」層（L1；第 54 班設定中心 S0；與 1d 的權限矩陣設計 §7 共同定案）。 | 18 | 6 | `backend/tests/platform/test_config_ledger_t54.py` |
 | `helper:custom_builder_support` | L1 | 建構器底層支援（建構器第三輪 S2.5／S3／S5，CORE 1.72，只增）。 | 21 | 5 | `tests/test_builder_support_2026_09_30.py` |
 | `helper:custom_def_review` | L1 | 自訂模組「定義」的送審流程（建構器第三輪 S4，2026-09-30；使用者：定義送審→退回→修改重送，每次 v1→v2…，退回要填原因）。 | 13 | 2 | `tests/test_builder3_def_review_2026_09_30.py` |
 | `helper:custom_fields` | L1 | 自訂欄位命名空間（P4，CUSTOMIZATION-SPEC §3.6）。（無單位卡） | 10 | 3 | — |
@@ -101,7 +101,7 @@
 | `helper:part_catalog` | L1 | 料件分類代碼表（L1；DEPENDENCY-MAP §3 #17）。（無單位卡） | 5 | 2 | — |
 | `helper:payable_due_core` | L1 | 預定付款日提醒的共用純函式庫（第 45 班；使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）。 | 18 | 5 | `tests/test_payable_due_core_t45.py` |
 | `helper:pdf_scripts` | L1 | PDF 內嵌腳本註冊表（H2-a）：渲染硬化的 CSP `script-src` **只**認這裡登記的腳本（預先算好的 SHA-256），不再掃最終 HTML。 | 8 | 5 | `tests/test_pdf_hardening_h2_2026_10_14.py` |
-| `helper:perm` | L1 | 權限矩陣的中央檢查（框架 P0；設計 docs/platform/plans/PERMISSION-MATRIX-DESIGN-T54.md §2–§3、§8）。 | 16 | 7 | `tests/platform/test_perm_equivalence_gate_a.py` |
+| `helper:perm` | L1 | 權限矩陣的中央檢查（框架 P0；設計 docs/platform/plans/PERMISSION-MATRIX-DESIGN-T54.md §2–§3、§8）。 | 16 | 8 | `tests/platform/test_perm_equivalence_gate_a.py` |
 | `helper:perm_text` | L1 | 權限矩陣的白話文字（使用者核心規則 2026-10-10：畫面上沒有代碼、沒有 allow/deny 這類英文、沒有 id；只有繁體中文名稱、一句話說明與白話風險提示）。 | 11 | 2 | `tests/platform/test_perm_text.py` |
 | `helper:prefill_sources` | L1 | 表單「自動帶入」來源的唯一登記處（L1；表單設計器的下拉、定義驗證、伺服器端取值都讀這一份）。（無單位卡） | 8 | 3 | — |
 | `helper:privacy_notice` | L1 | L1 個資蒐集告知（R3；規格 CUSTOMIZATION-SPEC §9.3；個人資料保護法 §8 I）。（無單位卡） | 23 | 13 | — |
@@ -120,15 +120,16 @@
 | `helper:rule_sets` | L1 | 規則集定義種類 `rule_set`（BP-2 R1；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §3）。 | 9 | 3 | `backend/tests/test_rule_catalog_2026_10_14.py` |
 | `helper:safe_text` | L1 | 使用者可編輯的短文字（樣板名稱、階段名稱…）共用的安全檢查（S-ST1 起；通知用語編輯器有一份同規則的副本，之後併入這裡）。 | 4 | 1 | `tests/platform/test_stage_templates_t62.py` |
 | `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 52 | — |
-| `helper:settings_groups` | L1 | 設定群組登錄（L1；第 54 班 Train A）。**預設值＝上線前的程式常數**（部署零行為變更；`settings_deploy_baseline.json` 凍結）。 | 1 | 12 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_groups` | L1 | 設定群組登錄（L1；第 54 班 Train A）。**預設值＝上線前的程式常數**（部署零行為變更；`settings_deploy_baseline.json` 凍結）。 | 1 | 13 | `backend/tests/platform/test_settings_registry_t54.py` |
 | `helper:settings_groups_legal_reminder` | L1 | T68 設定群組：法規參數「跨年提醒」起算日（legal_params_reminder）。 | 0 | 1 | `backend/tests/test_legal_params_reminder_t68.py` |
 | `helper:settings_groups_list_view` | L1 | T65 C1 設定群組：清單檢視的個人偏好（list_view）。**預設全關＝畫面與請求和今天逐位元相同。** | 1 | 1 | `backend/tests/platform/test_list_view_c1_t65.py` |
+| `helper:settings_groups_lodging_freshness` | L1 | T70 設定群組：附近旅宿資料「多久算過舊」（lodging_freshness.stale_days）。 | 0 | 1 | `backend/modules/lodging/tests/test_lodging_stale_days_t70.py` |
 | `helper:settings_groups_overhead` | L1 | T69 設定群組：管銷分攤比率的全域預設值（overhead.default_pct）。**預設值＝上線前的 25（`profit_rules.DEFAULT_OVERHEAD_PCT`）**，部署零行為變更。 | 1 | 1 | `backend/modules/case/tests/test_overhead_default_pct_t69.py` |
 | `helper:settings_groups_payslip_picker` | L1 | T68 設定群組：勞報單「選派發」下拉（payslip_dispatch_picker）。**預設＝上線前的程式常數（一次 30 筆）。** | 0 | 1 | `backend/modules/payroll/tests/test_payslip_dispatch_dropdown_t55.py` |
 | `helper:settings_groups_profit` | L1 | T64 A 設定群組：利潤提醒色帶（profit_warning）與報價單預設值（quote_defaults）。**預設值＝各畫面今天寫死的數字**（部署零行為變更）。 | 1 | 1 | `backend/tests/platform/test_profit_warning_t64.py` |
 | `helper:settings_groups_q0` | L1 | T63 Q0 設定群組：報價單輸出（quote_output）與報價單個資（quote_privacy）。**預設值＝上線前的行為**（部署零行為變更）。 | 2 | 1 | `backend/tests/platform/test_q0_settings_t63.py` |
 | `helper:settings_groups_recycle_bin` | L1 | T69 設定群組：刪除暫存區保留天數（recycle_bin.retention_days）。 | 0 | 1 | `backend/modules/recyclebin/tests/test_recyclebin_retention_t69.py` |
-| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 38 | 46 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 38 | 47 | `backend/tests/platform/test_settings_registry_t54.py` |
 | `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 4 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
 | `helper:stage_templates` | L1 | 案件執行階段樣板（S-ST1；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）：宣告式的階段清單（種類鍵、名稱、起迄天數、建議比例、前置階段）。 | 15 | 4 | `backend/tests/platform/test_stage_templates_t62.py` |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 23 | 10 | — |
