@@ -6,7 +6,7 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 128 個；有單位卡 77 個。
+單位 130 個；有單位卡 79 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
@@ -38,7 +38,7 @@
 | `core:photos` | L1 | Photo upload processing: EXIF GPS extraction and watermarking.（無單位卡） | 2 | 2 | — |
 | `core:trail` | L1 | 操作軌跡（`user_request_log`）的共用設定，以及把路徑翻成人話的對照表。（無單位卡） | 23 | 2 | — |
 | `helper:alert_settings` | L1 | 設定中心的數字（census #7、#8）：到期預警天數、密碼最短長度、登入有效天數。讀不到設定一律回程式預設（＝今天的數字）。 | 8 | 5 | `tests/platform/test_settings_numbers_t62.py` |
-| `helper:approval_queue` | L1 | 「待我簽核」佇列與轉簽的共用形狀（L1；M01-PLAN §3-7，2026-09-26）。（無單位卡） | 11 | 18 | — |
+| `helper:approval_queue` | L1 | 「待我簽核」佇列與轉簽的共用形狀（L1；M01-PLAN §3-7，2026-09-26）。（無單位卡） | 11 | 19 | — |
 | `helper:attachment_search` | L1 | 附件目錄的搜尋共用件（`attachments.catalog` 契約 v1 的 `search`／`count`；附件目錄 P3， | 10 | 9 | `tests/test_filehub_search_2026_09_30.py` |
 | `helper:attachment_slots` | L1 | 附件插槽定義（BP-4 S2；kind `attachment_slot`，key＝`doc:<單據類型>`；設計 BP4-STORAGE-NOTIFY-DESIGN §3）。 | 16 | 4 | `backend/tests/test_attachment_slots_2026_10_14.py` |
 | `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 13 | 91 | — |
@@ -77,7 +77,7 @@
 | `helper:field_catalog` | L1 | 共用欄位目錄（T64 切片 D／F7 的 S0：只登記、不改行為）。 | 12 | 4 | `backend/tests/platform/test_field_catalog_t64.py` |
 | `helper:field_policy` | L1 | 欄位可見求值（T64 F7 S1a：只有『天花板』查表；政策規則是 S2，這裡沒有）。 | 4 | 3 | `backend/tests/platform/test_field_policy_t65.py` |
 | `helper:finance_params` | L1 | 財務報表的可調參數（財務盤點第一個切片；設計 docs/platform/plans/FINANCE-FRAMEWORK-INVENTORY-T62.md §4）。 | 18 | 3 | `backend/tests/test_finance_params_2026_10_14.py`、`backend/tests/test_finance_cashier_gates_2026_10_14.py` |
-| `helper:financial_mask` | L1 | 案件金額欄位遮蔽（CM13，2026-09-24 使用者裁示「要，後端移除金額欄位」）。（無單位卡） | 16 | 15 | — |
+| `helper:financial_mask` | L1 | 案件金額欄位遮蔽（CM13，2026-09-24 使用者裁示「要，後端移除金額欄位」）。（無單位卡） | 16 | 16 | — |
 | `helper:formula` | L1 | 安全的公式（CUSTOMIZATION-SPEC §1「積木式、不能寫程式」、§8.1 ②「公式語法檢查回傳錯誤位置」）。（無單位卡） | 9 | 3 | — |
 | `helper:geo` | L1 | 地理查詢：地址 → 座標（OSM／Nominatim），以及兩點間的直線距離。（無單位卡） | 80 | 5 | — |
 | `helper:gl_status` | L1 | [單位] helper:gl_status    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版） | 2 | 4 | `tests/test_gl_source_status_2026_09_30.py` |
@@ -107,7 +107,7 @@
 | `helper:privacy_notice` | L1 | L1 個資蒐集告知（R3；規格 CUSTOMIZATION-SPEC §9.3；個人資料保護法 §8 I）。（無單位卡） | 23 | 13 | — |
 | `helper:procurement` | L1 | 採購前置時間與採購建議狀態的判定（2026-09-21，第 3 輪）。（無單位卡） | 11 | 3 | — |
 | `helper:profit_rules` | L1 | 報價單／精算的利潤規則（第 48 班 S1；設計稿 docs/platform/plans/OVERHEAD-25PCT-OPERATING-PROFIT-DESIGN-T48.md）。（無單位卡） | 17 | 5 | — |
-| `helper:profit_warning` | L1 | T64 A：利潤提醒色帶與報價單預設有效天數的讀取（只讀設定；預設＝各畫面今天寫死的數字）。 | 4 | 4 | `backend/tests/platform/test_profit_warning_t64.py` |
+| `helper:profit_warning` | L1 | T64 A：利潤提醒色帶與報價單預設有效天數的讀取（只讀設定；預設＝各畫面今天寫死的數字）。 | 10 | 9 | `backend/tests/platform/test_profit_warning_t64.py` |
 | `helper:quote_output` | L1 | 報價單輸出的設定使用端（T63 Q0）：被管理者隱藏的報價條件欄位，PDF／預覽要不要照印。 | 2 | 1 | `backend/tests/platform/test_q0_settings_t63.py` |
 | `helper:quote_privacy` | L1 | 報價單個人資料欄位的設定使用端（T63 Q0）：客戶電子郵件／傳真能不能被管理者隱藏。 | 1 | 1 | `backend/tests/platform/test_q0_settings_t63.py` |
 | `helper:receivables` | L1 | L1 薄殼（淘汰中）：收款明細與銷項發票清單——**資料在 M05 應收應付**，這裡只轉呼叫它的 provider。（無單位卡） | 4 | 0 | — |
@@ -120,12 +120,13 @@
 | `helper:rule_sets` | L1 | 規則集定義種類 `rule_set`（BP-2 R1；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §3）。 | 9 | 3 | `backend/tests/test_rule_catalog_2026_10_14.py` |
 | `helper:safe_text` | L1 | 使用者可編輯的短文字（樣板名稱、階段名稱…）共用的安全檢查（S-ST1 起；通知用語編輯器有一份同規則的副本，之後併入這裡）。 | 4 | 1 | `tests/platform/test_stage_templates_t62.py` |
 | `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 52 | — |
-| `helper:settings_groups` | L1 | 設定群組登錄（L1；第 54 班 Train A）。**預設值＝上線前的程式常數**（部署零行為變更；`settings_deploy_baseline.json` 凍結）。 | 1 | 12 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_groups` | L1 | 設定群組登錄（L1；第 54 班 Train A）。**預設值＝上線前的程式常數**（部署零行為變更；`settings_deploy_baseline.json` 凍結）。 | 1 | 11 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_groups_legal_reminder` | L1 | T68 設定群組：法規參數「跨年提醒」起算日（legal_params_reminder）。 | 0 | 1 | `backend/tests/test_legal_params_reminder_t68.py` |
 | `helper:settings_groups_list_view` | L1 | T65 C1 設定群組：清單檢視的個人偏好（list_view）。**預設全關＝畫面與請求和今天逐位元相同。** | 1 | 1 | `backend/tests/platform/test_list_view_c1_t65.py` |
 | `helper:settings_groups_payslip_picker` | L1 | T68 設定群組：勞報單「選派發」下拉（payslip_dispatch_picker）。**預設＝上線前的程式常數（一次 30 筆）。** | 0 | 1 | `backend/modules/payroll/tests/test_payslip_dispatch_dropdown_t55.py` |
 | `helper:settings_groups_profit` | L1 | T64 A 設定群組：利潤提醒色帶（profit_warning）與報價單預設值（quote_defaults）。**預設值＝各畫面今天寫死的數字**（部署零行為變更）。 | 1 | 1 | `backend/tests/platform/test_profit_warning_t64.py` |
 | `helper:settings_groups_q0` | L1 | T63 Q0 設定群組：報價單輸出（quote_output）與報價單個資（quote_privacy）。**預設值＝上線前的行為**（部署零行為變更）。 | 2 | 1 | `backend/tests/platform/test_q0_settings_t63.py` |
-| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 37 | 39 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 37 | 41 | `backend/tests/platform/test_settings_registry_t54.py` |
 | `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 4 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
 | `helper:stage_templates` | L1 | 案件執行階段樣板（S-ST1；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）：宣告式的階段清單（種類鍵、名稱、起迄天數、建議比例、前置階段）。 | 15 | 4 | `backend/tests/platform/test_stage_templates_t62.py` |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 23 | 10 | — |

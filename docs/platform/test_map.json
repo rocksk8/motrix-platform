@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1433,
+  "tests": 1438,
   "unmapped": 13,
   "kinds": {
-   "api": 792,
+   "api": 797,
    "e2e": 311,
    "audit": 193,
    "unit": 137
@@ -3519,6 +3519,36 @@
    "login_fixture": true,
    "module": "analytics"
   },
+  "backend/modules/analytics/tests/test_dashboard_pending_money_mask_v1.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "helper:financial_mask",
+    "mod:analytics/api/dashboard",
+    "page:index.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/financial_mask.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/dashboard.py"
+    ],
+    "page": [
+     "frontend/index.html"
+    ],
+    "path": [
+     "frontend/index.html"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
   "backend/modules/analytics/tests/test_dashboard_stats_prefilter_2026_10_05.py": {
    "kind": "api",
    "units": [
@@ -5948,7 +5978,10 @@
    "kind": "api",
    "units": [
     "core:db",
+    "core:pdf_gen",
     "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "helper:profit_warning",
     "mod:case/__init__",
     "mod:case/api/overhead",
     "mod:case/api/quotations",
@@ -5957,17 +5990,24 @@
     "mod:case/tests/_t40_won",
     "mod:case/tests/test_purchase_item_lines_2026_10_02",
     "mod:case/tests/test_settlement_actuals_2026_10_03",
-    "mod:case/tests/test_settlement_finalize_integrity_2026_10_03"
+    "mod:case/tests/test_settlement_finalize_integrity_2026_10_03",
+    "mod:payroll/__init__",
+    "mod:payroll/bonus"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/profit_warning.py",
      "backend/modules/case/__init__.py",
      "backend/modules/case/settlement_actuals.py",
      "backend/modules/case/tests/_t40_won.py",
      "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py",
      "backend/modules/case/tests/test_settlement_actuals_2026_10_03.py",
-     "backend/modules/case/tests/test_settlement_finalize_integrity_2026_10_03.py"
+     "backend/modules/case/tests/test_settlement_finalize_integrity_2026_10_03.py",
+     "backend/modules/payroll/__init__.py",
+     "backend/modules/payroll/bonus.py",
+     "backend/pdf_gen.py"
     ],
     "api": [
      "backend/modules/case/api/overhead.py",
@@ -18625,6 +18665,57 @@
    },
    "login_fixture": true
   },
+  "backend/tests/platform/test_display_labels_c7.py": {
+   "kind": "api",
+   "units": [
+    "core:trail",
+    "file:backend/helpers/__init__.py",
+    "helper:display_labels",
+    "helper:procurement",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "js:static/display-labels.js",
+    "mod:case/api/quotations",
+    "mod:lodging/__init__",
+    "mod:lodging/search",
+    "mod:netplan/__init__",
+    "mod:netplan/api",
+    "page:pages/inventory.html",
+    "page:pages/lodging-records.html",
+    "page:pages/network-plan-form.html",
+    "page:pages/network-plans.html",
+    "router:settings_center"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/display_labels.py",
+     "backend/helpers/procurement.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/modules/lodging/__init__.py",
+     "backend/modules/lodging/search.py",
+     "backend/modules/netplan/__init__.py",
+     "backend/modules/netplan/api.py",
+     "backend/trail.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/settings_center.py"
+    ],
+    "page": [
+     "frontend/pages/inventory.html",
+     "frontend/pages/lodging-records.html",
+     "frontend/pages/network-plan-form.html",
+     "frontend/pages/network-plans.html",
+     "frontend/static/display-labels.js"
+    ],
+    "path": [
+     "backend/trail.py",
+     "frontend/static/display-labels.js"
+    ]
+   }
+  },
   "backend/tests/platform/test_doc_render_2026_10_01.py": {
    "kind": "unit",
    "units": [
@@ -22104,6 +22195,57 @@
     ]
    }
   },
+  "backend/tests/platform/test_profit_rules_config_t68.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:pdf_gen",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/platform/pdf_golden/cases.json",
+    "helper:profit_rules",
+    "helper:profit_warning",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "js:static/legal-round.js",
+    "js:static/profit-rules.js",
+    "mod:case/__init__",
+    "mod:case/alt_options",
+    "mod:case/alt_sign",
+    "mod:case/profit_guard",
+    "mod:case/settlement_actuals",
+    "mod:payroll/__init__",
+    "mod:payroll/bonus"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/profit_rules.py",
+     "backend/helpers/profit_warning.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/alt_options.py",
+     "backend/modules/case/alt_sign.py",
+     "backend/modules/case/profit_guard.py",
+     "backend/modules/case/settlement_actuals.py",
+     "backend/modules/payroll/__init__.py",
+     "backend/modules/payroll/bonus.py",
+     "backend/pdf_gen.py"
+    ],
+    "page": [
+     "frontend/static/legal-round.js",
+     "frontend/static/profit-rules.js"
+    ],
+    "path": [
+     "backend/modules/case/profit_guard.py",
+     "backend/modules/case/settlement_actuals.py",
+     "backend/tests/platform/pdf_golden/cases.json",
+     "frontend/static/legal-round.js",
+     "frontend/static/profit-rules.js"
+    ]
+   }
+  },
   "backend/tests/platform/test_profit_warning_t64.py": {
    "kind": "audit",
    "units": [
@@ -22381,6 +22523,43 @@
      "backend/modules/analytics/api/reports.py"
     ]
    }
+  },
+  "backend/tests/platform/test_reports_money_gate_t68.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/analytics/api/",
+    "file:backend/modules/analytics/module.json",
+    "js:js/reports.js",
+    "mod:analytics/api/__init__",
+    "mod:analytics/api/ledger_diff",
+    "mod:analytics/api/reports",
+    "page:pages/reports.html",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/source_tree.py",
+     "backend/modules/analytics/api/__init__.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/ledger_diff.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "page": [
+     "frontend/js/reports.js",
+     "frontend/pages/reports.html"
+    ],
+    "path": [
+     "backend/modules/analytics/",
+     "backend/modules/analytics/api/",
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/analytics/module.json",
+     "frontend/js/reports.js"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/platform/test_requirements_cover_imports.py": {
    "kind": "audit",
@@ -34005,6 +34184,27 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_legal_params_reminder_t68.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:config_ledger",
+    "helper:legal_params",
+    "helper:settings_groups",
+    "helper:settings_registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/config_ledger.py",
+     "backend/helpers/legal_params.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py"
+    ]
+   }
+  },
   "backend/tests/test_licensing_core_2026_09_21.py": {
    "kind": "api",
    "units": [
@@ -38554,6 +38754,7 @@
    "kind": "audit",
    "units": [
     "file:backend/helpers/__init__.py",
+    "helper:display_labels",
     "helper:settings_groups",
     "helper:status_display",
     "js:static/public-flags.js",
@@ -38576,6 +38777,7 @@
      "frontend/static/status-chip.js"
     ],
     "path": [
+     "backend/helpers/display_labels.py",
      "backend/helpers/settings_groups.py",
      "backend/helpers/status_display.py",
      "backend/routers/def_governance.py",

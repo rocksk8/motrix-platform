@@ -1010,6 +1010,20 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:display_labels": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:settings_registry",
+    "helper:status_display"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/display_labels.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "helper:doc_render": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -1888,6 +1902,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:display_labels",
     "helper:settings_groups_legal_reminder",
     "helper:settings_groups_list_view",
     "helper:settings_groups_payslip_picker",
@@ -1909,9 +1924,7 @@
   "helper:settings_groups_legal_reminder": {
    "api_prefixes": [],
    "dynamic_sql": false,
-   "imports": [
-    "helper:settings_groups"
-   ],
+   "imports": [],
    "kind": "helper",
    "path": "backend/helpers/settings_groups_legal_reminder.py",
    "tables_ddl": [],
@@ -3446,6 +3459,23 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:static/display-labels.js": {
+   "api_calls": [
+    "/api/settings-center/public"
+   ],
+   "api_prefixes": [
+    "/api/settings-center"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/display-labels.js",
+   "routers_called": [
+    "router:settings_center"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:static/download.js": {
    "api_calls": [],
    "api_prefixes": [],
@@ -4244,6 +4274,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -4257,6 +4288,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -4339,6 +4371,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
@@ -4362,6 +4395,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:xlsx_out"
    ],
@@ -4475,6 +4509,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -4488,6 +4523,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval",
     "mod:accounting/ledger/features"
    ],
@@ -4579,6 +4615,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -4592,6 +4629,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:validation",
     "mod:accounting/ledger/category_map",
@@ -4700,6 +4738,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
@@ -4720,6 +4759,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:validation",
     "helper:xlsx_out",
@@ -4858,6 +4898,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:doc_template",
     "helper:duty_roles",
     "helper:edit_log",
@@ -4882,6 +4923,7 @@
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads",
@@ -5033,6 +5075,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -5046,6 +5089,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:validation",
     "mod:accounting/ledger/opening",
@@ -5206,6 +5250,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -5219,6 +5264,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval",
     "mod:accounting/ledger/fs_lines",
     "mod:accounting/ledger/periods",
@@ -5351,6 +5397,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
@@ -5370,6 +5417,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:validation",
     "mod:accounting/ledger/cashflow",
@@ -5502,6 +5550,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -5515,6 +5564,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:validation",
     "mod:accounting/ledger/features",
@@ -5622,6 +5672,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -5635,6 +5686,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval",
     "mod:accounting/ledger/cashflow",
     "mod:accounting/ledger/equity",
@@ -5753,6 +5805,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:doc_template",
     "helper:download_name",
     "helper:duty_roles",
@@ -5778,6 +5831,7 @@
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads",
@@ -6038,6 +6092,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:doc_template",
     "helper:download_name",
     "helper:duty_roles",
@@ -6062,6 +6117,7 @@
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads",
@@ -6922,12 +6978,16 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:approval_queue",
     "helper:audit",
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
     "helper:dates",
+    "helper:display_labels",
     "helper:duty_roles",
+    "helper:field_catalog",
+    "helper:financial_mask",
     "helper:legal_params",
     "helper:module_registry",
     "helper:option_lists",
@@ -6942,13 +7002,16 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tax_calc",
     "helper:tiered_approval"
    ],
    "imports": [
     "core:db",
+    "helper:approval_queue",
     "helper:auth",
     "helper:dates",
+    "helper:financial_mask",
     "helper:legal_params",
     "helper:option_lists",
     "helper:row_access",
@@ -6964,49 +7027,49 @@
    "routes": [
     {
      "func": "dashboard_stats",
-     "line": 30,
+     "line": 44,
      "method": "GET",
      "path": "/api/dashboard/stats"
     },
     {
      "func": "dashboard_monthly",
-     "line": 318,
+     "line": 340,
      "method": "GET",
      "path": "/api/dashboard/monthly"
     },
     {
      "func": "dashboard_expenses_monthly",
-     "line": 397,
+     "line": 419,
      "method": "GET",
      "path": "/api/dashboard/expenses-monthly"
     },
     {
      "func": "list_devices",
-     "line": 462,
+     "line": 484,
      "method": "GET",
      "path": "/api/devices"
     },
     {
      "func": "dashboard_funnel",
-     "line": 535,
+     "line": 557,
      "method": "GET",
      "path": "/api/dashboard/funnel"
     },
     {
      "func": "dashboard_ops_alerts",
-     "line": 628,
+     "line": 664,
      "method": "GET",
      "path": "/api/dashboard/ops-alerts"
     },
     {
      "func": "list_materials_summary",
-     "line": 715,
+     "line": 751,
      "method": "GET",
      "path": "/api/materials-summary"
     },
     {
      "func": "dashboard_activity_feed",
-     "line": 805,
+     "line": 841,
      "method": "GET",
      "path": "/api/dashboard/activity-feed"
     }
@@ -7071,6 +7134,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:field_catalog",
     "helper:financial_mask",
@@ -7087,6 +7151,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -7167,6 +7232,7 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:download_name",
@@ -7200,6 +7266,7 @@
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -7239,67 +7306,67 @@
    "routes": [
     {
      "func": "report_json",
-     "line": 2592,
+     "line": 2600,
      "method": "GET",
      "path": "/api/reports/financial"
     },
     {
      "func": "report_excel",
-     "line": 2606,
+     "line": 2614,
      "method": "GET",
      "path": "/api/reports/financial/excel"
     },
     {
      "func": "report_pdf",
-     "line": 2643,
+     "line": 2651,
      "method": "GET",
      "path": "/api/reports/financial/pdf"
     },
     {
      "func": "get_ar_aging",
-     "line": 2776,
+     "line": 2784,
      "method": "GET",
      "path": "/api/reports/ar-aging"
     },
     {
      "func": "get_cash_position",
-     "line": 2837,
+     "line": 2845,
      "method": "GET",
      "path": "/api/reports/cash-position"
     },
     {
      "func": "tax_export_excel",
-     "line": 2905,
+     "line": 2913,
      "method": "GET",
      "path": "/api/reports/tax-export"
     },
     {
      "func": "customer_history",
-     "line": 2939,
+     "line": 2947,
      "method": "GET",
      "path": "/api/reports/customer-history"
     },
     {
      "func": "monthly_trend",
-     "line": 3215,
+     "line": 3223,
      "method": "GET",
      "path": "/api/reports/monthly-trend"
     },
     {
      "func": "report_payment_anomalies",
-     "line": 3441,
+     "line": 3449,
      "method": "GET",
      "path": "/api/reports/payment-anomalies"
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3873,
+     "line": 3881,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 4057,
+     "line": 4065,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
@@ -7407,6 +7474,7 @@
     "helper:company_setup",
     "helper:config_ledger",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_template",
     "helper:download_name",
     "helper:duty_roles",
@@ -7435,6 +7503,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tax_calc",
     "helper:tiered_approval",
     "helper:xlsx_out",
@@ -7613,6 +7682,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:doc_template",
     "helper:download_name",
     "helper:duty_roles",
@@ -7640,6 +7710,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -7811,6 +7882,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
@@ -7836,6 +7908,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:validation",
     "mod:arap/recycle_adapter"
@@ -8140,6 +8213,7 @@
    "dynamic_sql": false,
    "imports": [
     "helper:profit_rules",
+    "helper:profit_warning",
     "mod:case/profit_guard"
    ],
    "kind": "mod",
@@ -8220,6 +8294,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:field_catalog",
     "helper:financial_mask",
@@ -8237,6 +8312,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tax_calc",
     "helper:tiered_approval",
     "mod:case/alt_options",
@@ -8324,6 +8400,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
@@ -8343,6 +8420,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -8456,6 +8534,7 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:duty_roles",
@@ -8489,6 +8568,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -8781,6 +8861,7 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:download_name",
@@ -8817,6 +8898,7 @@
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -9047,6 +9129,7 @@
     "helper:custom_finance",
     "helper:custom_history",
     "helper:custom_modules",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:download_name",
@@ -9074,6 +9157,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads"
@@ -9177,6 +9261,7 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:duty_roles",
@@ -9208,6 +9293,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -9355,6 +9441,7 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:duty_roles",
@@ -9387,6 +9474,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -9538,6 +9626,7 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:duty_roles",
@@ -9569,6 +9658,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -9707,6 +9797,7 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:duty_roles",
@@ -9739,6 +9830,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -9888,6 +9980,7 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:duty_roles",
@@ -9922,6 +10015,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -10115,6 +10209,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:legal_params",
     "helper:module_registry",
@@ -10130,6 +10225,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tax_calc",
     "helper:tiered_approval",
     "mod:case/alt_policy",
@@ -10139,6 +10235,7 @@
     "core:db",
     "helper:audit",
     "helper:auth",
+    "helper:profit_warning",
     "helper:settings",
     "mod:case/profit_guard",
     "plat:txn"
@@ -10151,19 +10248,19 @@
    "routes": [
     {
      "func": "get_overhead_settings",
-     "line": 17,
+     "line": 18,
      "method": "GET",
      "path": "/api/overhead/settings"
     },
     {
      "func": "put_quotation_overhead_pct",
-     "line": 33,
+     "line": 35,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/overhead-pct"
     },
     {
      "func": "put_overhead_settings",
-     "line": 56,
+     "line": 58,
      "method": "PUT",
      "path": "/api/overhead/settings"
     }
@@ -10229,6 +10326,7 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:duty_roles",
@@ -10263,6 +10361,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -10404,6 +10503,7 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:download_name",
@@ -10448,6 +10548,7 @@
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:stage_templates",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -11092,6 +11193,7 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:duty_roles",
@@ -11124,6 +11226,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -11258,6 +11361,7 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:duty_roles",
@@ -11290,6 +11394,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -11937,6 +12042,7 @@
    "imports": [
     "helper:legal_params",
     "helper:profit_rules",
+    "helper:profit_warning",
     "helper:settings",
     "helper:tax_calc",
     "mod:case/alt_policy"
@@ -12136,6 +12242,7 @@
     "helper:custom_finance",
     "helper:legal_params",
     "helper:profit_rules",
+    "helper:profit_warning",
     "mod:case/profit_guard",
     "mod:case/purchase_items",
     "mod:case/recognition",
@@ -12199,6 +12306,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:google_calendar",
@@ -12219,6 +12327,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads"
@@ -12463,6 +12572,7 @@
     "helper:company_setup",
     "helper:config_ledger",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_template",
     "helper:download_name",
     "helper:duty_roles",
@@ -12487,6 +12597,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:xlsx_out"
    ],
@@ -12637,6 +12748,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:mail_types",
     "helper:module_registry",
@@ -12652,6 +12764,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads"
@@ -12737,6 +12850,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -12750,6 +12864,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval",
     "mod:lodging/attribution",
     "mod:lodging/source"
@@ -12827,6 +12942,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
@@ -12848,6 +12964,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:xlsx_out",
     "mod:lodging/attribution",
@@ -12994,6 +13111,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:display_labels",
     "helper:geo",
     "mod:lodging/source"
    ],
@@ -13062,6 +13180,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
@@ -13086,6 +13205,7 @@
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:xlsx_out",
     "mod:netplan/export",
@@ -13095,6 +13215,7 @@
     "core:db",
     "helper:audit",
     "helper:auth",
+    "helper:display_labels",
     "helper:download_name",
     "helper:email_notify",
     "helper:errors",
@@ -13112,91 +13233,91 @@
    "routes": [
     {
      "func": "list_network_plans",
-     "line": 107,
+     "line": 108,
      "method": "GET",
      "path": "/api/network-plans"
     },
     {
      "func": "get_network_plan",
-     "line": 131,
+     "line": 132,
      "method": "GET",
      "path": "/api/network-plans/{plan_id}"
     },
     {
      "func": "get_network_plan_by_case",
-     "line": 141,
+     "line": 142,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/network-plan"
     },
     {
      "func": "create_network_plan",
-     "line": 159,
+     "line": 160,
      "method": "POST",
      "path": "/api/network-plans"
     },
     {
      "func": "update_network_plan",
-     "line": 211,
+     "line": 212,
      "method": "PUT",
      "path": "/api/network-plans/{plan_id}"
     },
     {
      "func": "update_network_plan_status",
-     "line": 241,
+     "line": 242,
      "method": "PATCH",
      "path": "/api/network-plans/{plan_id}/status"
     },
     {
      "func": "delete_network_plan",
-     "line": 272,
+     "line": 273,
      "method": "DELETE",
      "path": "/api/network-plans/{plan_id}"
     },
     {
      "func": "preview_network_plan_topology",
-     "line": 293,
+     "line": 294,
      "method": "POST",
      "path": "/api/network-plans/{plan_id}/topology-preview"
     },
     {
      "func": "export_network_plan_excel",
-     "line": 315,
+     "line": 316,
      "method": "GET",
      "path": "/api/network-plans/{plan_id}/export/excel"
     },
     {
      "func": "export_network_plan_pdf",
-     "line": 333,
+     "line": 334,
      "method": "GET",
      "path": "/api/network-plans/{plan_id}/export/pdf"
     },
     {
      "func": "import_network_plan_excel",
-     "line": 354,
+     "line": 355,
      "method": "POST",
      "path": "/api/network-plans/{plan_id}/import/excel"
     },
     {
      "func": "get_network_plan_privacy_acks",
-     "line": 412,
+     "line": 413,
      "method": "GET",
      "path": "/api/network-plans/{plan_id}/privacy-notice"
     },
     {
      "func": "ack_network_plan_privacy_notice",
-     "line": 423,
+     "line": 424,
      "method": "POST",
      "path": "/api/network-plans/{plan_id}/privacy-notice/ack"
     },
     {
      "func": "preview_quick_topology",
-     "line": 464,
+     "line": 465,
      "method": "POST",
      "path": "/api/network-plans-quick/preview"
     },
     {
      "func": "export_quick_topology_pdf",
-     "line": 477,
+     "line": 478,
      "method": "POST",
      "path": "/api/network-plans-quick/pdf"
     }
@@ -13246,6 +13367,7 @@
    "dynamic_sql": false,
    "imports": [
     "helper:company_identity",
+    "helper:display_labels",
     "helper:pdf_scripts",
     "helper:startup",
     "helper:xlsx_out",
@@ -13317,6 +13439,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -13330,6 +13453,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval",
     "mod:payroll/bank_account"
    ],
@@ -13435,6 +13559,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
@@ -13456,6 +13581,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:validation",
     "mod:payroll/bonus",
@@ -13752,6 +13878,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:legal_params",
@@ -13772,6 +13899,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval",
     "mod:payroll/bonus_correction",
     "mod:payroll/bonus_deductions",
@@ -13917,6 +14045,7 @@
     "helper:case_access",
     "helper:config_ledger",
     "helper:dates",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
@@ -13936,6 +14065,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval",
     "mod:payroll/payslip_bank",
     "mod:payroll/payslip_notify"
@@ -14036,6 +14166,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:perm",
@@ -14050,6 +14181,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval",
     "mod:payroll/payslip_links"
    ],
@@ -14169,6 +14301,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
@@ -14194,6 +14327,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads",
@@ -14425,7 +14559,9 @@
   "mod:payroll/bonus": {
    "api_prefixes": [],
    "dynamic_sql": false,
-   "imports": [],
+   "imports": [
+    "helper:profit_warning"
+   ],
    "kind": "mod",
    "module_key": "payroll",
    "path": "backend/modules/payroll/bonus.py",
@@ -14766,6 +14902,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:perm",
@@ -14781,6 +14918,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval",
     "mod:permmatrix/service",
     "mod:permmatrix/views"
@@ -15021,6 +15159,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:mail_types",
     "helper:module_registry",
@@ -15037,6 +15176,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:storage_locations",
     "helper:storage_slots",
     "helper:tiered_approval",
@@ -15253,6 +15393,7 @@
     "helper:case_access",
     "helper:config_ledger",
     "helper:dates",
+    "helper:display_labels",
     "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
@@ -15279,6 +15420,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:validation",
     "mod:subcontract/bank_mask",
@@ -15522,6 +15664,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:doc_template",
     "helper:download_name",
     "helper:duty_roles",
@@ -15546,6 +15689,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:xlsx_out",
     "mod:subcontract/bank_mask"
@@ -15688,6 +15832,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
@@ -15708,6 +15853,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:validation",
     "mod:subcontract/dispatch_flow",
@@ -15831,6 +15977,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -15844,6 +15991,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -15928,6 +16076,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -15941,6 +16090,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval",
     "mod:subcontract/remit_kinds"
    ],
@@ -16021,6 +16171,7 @@
     "helper:company_setup",
     "helper:config_ledger",
     "helper:dates",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:gl_status",
@@ -16046,6 +16197,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads",
@@ -16544,6 +16696,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:legal_params",
@@ -16565,6 +16718,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -16714,6 +16868,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
@@ -16738,6 +16893,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads",
@@ -16946,6 +17102,7 @@
     "helper:company_setup",
     "helper:config_ledger",
     "helper:custom_fields",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
@@ -16970,6 +17127,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -17177,6 +17335,7 @@
     "helper:business_days",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
@@ -17196,6 +17355,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:validation",
     "mod:tender_radar/calendar_tw",
@@ -18708,6 +18868,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/display-labels.js",
     "js:static/motrix-date.js",
     "js:static/motrix-format.js",
     "js:static/notif.js",
@@ -18929,6 +19090,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/display-labels.js",
     "js:static/motrix-date.js",
     "js:static/motrix-format.js",
     "js:static/notif.js",
@@ -19196,6 +19358,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/display-labels.js",
     "js:static/edit-presence.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
@@ -19231,6 +19394,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/display-labels.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
     "js:static/sidebar.js"
@@ -20951,6 +21115,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -20964,6 +21129,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -21043,6 +21209,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -21056,6 +21223,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -21145,6 +21313,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:mail_types",
     "helper:module_registry",
@@ -21160,6 +21329,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads"
@@ -21236,6 +21406,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:mail_types",
     "helper:module_registry",
@@ -21251,6 +21422,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads"
@@ -21324,6 +21496,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
@@ -21346,6 +21519,7 @@
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -21660,6 +21834,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -21673,6 +21848,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -21747,6 +21923,7 @@
     "helper:case_access",
     "helper:config_ledger",
     "helper:custom_fields",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -21760,6 +21937,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -21840,6 +22018,7 @@
     "helper:custom_finance",
     "helper:custom_history",
     "helper:custom_modules",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:download_name",
@@ -21866,6 +22045,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads"
@@ -22123,6 +22303,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
@@ -22144,6 +22325,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -22267,6 +22449,7 @@
     "helper:custom_finance",
     "helper:custom_history",
     "helper:custom_modules",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:duty_roles",
@@ -22304,6 +22487,7 @@
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:stage_templates",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads",
@@ -22418,6 +22602,7 @@
     "helper:custom_finance",
     "helper:custom_history",
     "helper:custom_modules",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:duty_roles",
@@ -22573,6 +22758,7 @@
     "helper:custom_history",
     "helper:custom_module_delete",
     "helper:custom_modules",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:duty_roles",
@@ -22608,6 +22794,7 @@
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:stage_templates",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads",
@@ -22809,6 +22996,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -22822,6 +23010,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -22947,6 +23136,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:doc_template",
     "helper:duty_roles",
     "helper:email_notify",
@@ -22969,6 +23159,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:xlsx_out"
    ],
@@ -23049,6 +23240,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -23062,6 +23254,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -23167,6 +23360,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:legal_params",
@@ -23188,6 +23382,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -23276,6 +23471,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:licensing",
     "helper:module_registry",
@@ -23290,6 +23486,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -23350,6 +23547,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -23363,6 +23561,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -23432,6 +23631,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:field_catalog",
     "helper:financial_mask",
@@ -23450,6 +23650,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -23532,6 +23733,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:google_calendar",
@@ -23552,6 +23754,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -23639,6 +23842,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:geo",
@@ -23660,6 +23864,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -23755,6 +23960,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
@@ -23776,6 +23982,7 @@
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -23857,6 +24064,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -23870,6 +24078,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -23942,6 +24151,7 @@
     "helper:custom_finance",
     "helper:custom_history",
     "helper:custom_modules",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:duty_roles",
@@ -23968,6 +24178,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads"
@@ -24051,6 +24262,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:notify_templates",
@@ -24065,6 +24277,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -24138,6 +24351,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:option_lists",
@@ -24152,6 +24366,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -24218,6 +24433,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -24231,6 +24447,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -24336,6 +24553,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
@@ -24358,6 +24576,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -24455,6 +24674,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:doc_template",
     "helper:duty_roles",
     "helper:email_notify",
@@ -24477,6 +24697,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -24560,6 +24781,7 @@
     "helper:custom_finance",
     "helper:custom_history",
     "helper:custom_modules",
+    "helper:display_labels",
     "helper:doc_render",
     "helper:doc_template",
     "helper:duty_roles",
@@ -24588,6 +24810,7 @@
     "helper:settings_groups_q0",
     "helper:settings_registry",
     "helper:settings_strict",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads",
@@ -24684,6 +24907,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:menu_builder",
     "helper:module_registry",
@@ -24698,6 +24922,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -24761,6 +24986,7 @@
     "helper:case_access",
     "helper:config_ledger",
     "helper:custom_fields",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:field_catalog",
     "helper:financial_mask",
@@ -24780,6 +25006,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -24873,6 +25100,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -24886,6 +25114,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -24961,6 +25190,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -24974,6 +25204,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -25134,6 +25365,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -25224,6 +25456,7 @@
     "helper:company_setup",
     "helper:config_ledger",
     "helper:dates",
+    "helper:display_labels",
     "helper:doc_template",
     "helper:duty_roles",
     "helper:email_notify",
@@ -25252,6 +25485,7 @@
     "helper:settings_registry",
     "helper:settings_strict",
     "helper:startup",
+    "helper:status_display",
     "helper:storage_locations",
     "helper:storage_slots",
     "helper:system_checks",
@@ -25849,6 +26083,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:perm",
@@ -25863,6 +26098,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -25934,6 +26170,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:mail_types",
     "helper:module_registry",
@@ -25949,6 +26186,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:storage_slots",
     "helper:tiered_approval",
     "helper:uploads"
@@ -26027,6 +26265,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:config_ledger",
+    "helper:display_labels",
     "helper:duty_roles",
     "helper:module_registry",
     "helper:profit_warning",
@@ -26040,6 +26279,7 @@
     "helper:settings_groups_profit",
     "helper:settings_groups_q0",
     "helper:settings_registry",
+    "helper:status_display",
     "helper:tiered_approval",
     "helper:user_buttons"
    ],
