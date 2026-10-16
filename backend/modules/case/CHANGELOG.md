@@ -3,6 +3,9 @@
 ## (next) — 2026-10-17 00:10（wip/t69-backfill-l0-r1；補登歷史案件 L0：序號月份修正＋開關＋能力鍵）
 - 修正：建立報價單時若帶入舊月份的單號，序號原本記到「本月」（會墊高本月序號，下一張新單號被跳號）；現在序號一律記在單號自己的月份（新增 `_month_of_no()`；送審失敗回收序號同理）。一般新增報價單（不帶單號）行為不變。
 - 新增（預設關、尚無入口）：設定中心群組 `quote_backfill`（開關 `enabled` 預設 0、`earliest_month` 預設 202001；立即生效、僅稽核，使用者 2026-10-16 裁示）；能力鍵 `case.quote_backfill.create`（最高管理者專屬、不可委派、保留中）。補登端點在 L1。無資料庫變動。守門測試 `tests/test_quote_backfill_l0_t69.py`。
+- 新增（補登歷史案件 L1，wip/t69-backfill-l1-r1）：`POST /api/quotations/historical`——最高管理者（能力 `case.quote_backfill.create`，不可委派）在開關 `quote_backfill.enabled` 開啟時，補登**過去月份**（不含本月與未來、不早於 `earliest_month`）的「已送出＋已成案」報價單。原因必填（≥5 字）；單號可填原始單號（嚴格驗證：`MQ-YYYYMM-NNN`、年 2000–2099、月 01–12、序號 001–999、須與報價日期同月，否則 400），沒填就依報價日期所屬月份接續派號；填了的單號已被占用或在暫存區保留中 ⇒ 409，**絕不改派成本月單號**。派號、寫入、保留序號同一個寫鎖交易，任何一步失敗整筆回滾（單據與該月／本月序號都不變）。簽核欄寫 `approval.historical=true`、無簽核層級、無任何簽核人／簽核時間；利潤／公益金以現行口徑計算並註記「補登案件，以現行口徑計算」（`data.historical.basisNote`）；不發活動通知。稽核 `quotation.historical_backfill`（誰、原因、報價日期、**實際建立時間**、補登前序號）；被拒絕（非超管、開關關）記 `quotation.historical_denied`。
+- 新增（作廢補登單）：補登單可由最高管理者以 `DELETE /api/quotations/{no}` 作廢進暫存區（30 天內可復原；沿用「刪除已核可」規則——底下有其他單據或已結案仍會被擋）；單號不回收（序號不回減、暫存區保留中的號碼不再發出）。一般非草稿報價單的刪除規則不變。
+- 不在 L1：畫面／列表與 PDF 標示、階段到期與應收提醒排除、通知靜音的其餘部分（L2）；非根法人（`seq_by_entity`）補登；選用的「24 小時自動關閉」。
 
 ## 1.0.201 — 2026-10-16（wip/t66-quote-copy-sortable-r1；複製為新報價單後拖曳排序失效修復；報價單表單 V3.29）
 - 修正：報價單清單或表單按「複製為新報價單」後，新單的項目拖曳排序（拖曳把手）失效。原因是 `quotation-form.html` 的 `init()` 複製分支在中途 `return`，漏掉編輯／新增共用的尾巴（`Sortable` 建立、預覽模式 `$watch`、預覽高度 `message` 監聽）。尾巴抽成 `_bindLateHooks()`，複製分支與一般路徑都呼叫，可重複呼叫不重複綁定；`initSortable()` 重建前先銷毀舊實例、`$watch` 只登記一次。複製分支再保險一次：status 缺值或誤帶「已送出」時改為草稿並取消解鎖。無資料庫變動、無後端變動；`FORM_VERSION` V3.28→V3.29。守門測試 `tests/platform/test_quote_copy_binds_sortable_t66.py`。

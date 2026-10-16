@@ -1848,6 +1848,160 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     return {"quote_no": qno, "created_at": now}
 
 
+# ── T69 L1：補登歷史案件（超管專用；設計 D:/Claude-pm/reports/design-backfill-quote-t69.md §9–§10）──────────────────
+# 不鬆綁一般 create 的 H-1 擋門（那裡 dealTag 一律清空）：補登走專用端點，單一交易內派號＋寫入＋保留序號，
+# 任何一步失敗整筆回滾（單據與 quote_seq 都不留痕跡）。通知／提醒靜音的其餘部分（階段到期、應收）屬 L2。
+_BACKFILL_NO_RE = re.compile(r"^MQ-(20\d{2})(0[1-9]|1[0-2])-(\d{3})$")   # 年 2000–2099、月 01–12、序號 3 碼
+_BACKFILL_BASIS_NOTE = "補登案件，以現行口徑計算"
+
+
+class HistoricalQuotationIn(BaseModel):
+    data:        dict
+    quote_no:    Optional[str] = None      # 原始單號（選填）；未填由伺服器依報價日期所屬月份派號
+    reason:      str = ""
+    location_id: Optional[str] = Field(None, alias="locationId")
+
+    model_config = {"populate_by_name": True}
+
+
+def _backfill_deny(authorization: str, code: int, why: str):
+    _audit(_tok(authorization), "quotation.historical_denied", "quotation", "", why)
+    raise HTTPException(code, why)
+
+
+def _backfill_flag_on() -> bool:
+    """旗標讀取失敗＝視為關（同 status_display.flag_on）。"""
+    try:
+        from helpers import settings_registry as _SR
+        return int(_SR.get("quote_backfill", "enabled") or 0) == 1
+    except Exception:                       # noqa: BLE001 — 讀不到就當關
+        return False
+
+
+def _backfill_earliest() -> str:
+    try:
+        from helpers import settings_registry as _SR
+        return str(int(_SR.get("quote_backfill", "earliest_month") or 202001))
+    except Exception:                       # noqa: BLE001
+        return "202001"
+
+
+@router.post("/api/quotations/historical", status_code=201)
+def create_historical_quotation(body: HistoricalQuotationIn, authorization: str = Header(None)):
+    from helpers import perm as _perm
+    from helpers import recycle_bin as _rb
+    user = _require_user(authorization)
+    if user.get("role") != "superadmin" or not _perm.can(user, "case.quote_backfill.create"):
+        _backfill_deny(authorization, 403, "補登歷史案件僅限最高管理者")
+    if not _backfill_flag_on():
+        _backfill_deny(authorization, 403, "補登歷史案件的開關目前是關閉的（設定中心 → 補登歷史案件）")
+    reason = (body.reason or "").strip()
+    if len(reason) < 5:
+        raise HTTPException(400, "請填補登原因（至少 5 個字）")
+
+    q = body.data
+    # 報價日期：必須是真實日期、過去月份（不含本月與未來）、不早於最早可補登月份
+    try:
+        qdate = datetime.strptime(str(q.get("quoteDate") or "").strip(), "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(400, "請填正確的報價日期（YYYY-MM-DD）")
+    month = qdate.strftime("%Y%m")
+    if month >= datetime.now().strftime("%Y%m"):
+        raise HTTPException(400, "只能補登過去的月份（不含本月與未來）；本月案件請用一般新增報價單")
+    earliest = _backfill_earliest()
+    if month < earliest:
+        raise HTTPException(400, "報價日期早於最早可補登月份（%s）" % earliest)
+    q["quoteDate"] = qdate.strftime("%Y-%m-%d")
+
+    # 單號：選填；填了就嚴格驗證（月份 01–12、年份 2000–2099、序號 001–999、與報價日期同月），格式不對一律 400，不改派
+    client_no = (body.quote_no or "").strip()
+    if client_no:
+        m = _BACKFILL_NO_RE.match(client_no)
+        if not m or m.group(3) == "000":
+            raise HTTPException(400, "單號格式不正確（需為 MQ-YYYYMM-NNN，月份 01–12、序號 001–999）")
+        if m.group(1) + m.group(2) != month:
+            raise HTTPException(400, "單號的月份（%s）必須與報價日期的月份（%s）一致" % (m.group(1) + m.group(2), month))
+
+    _strip_foreign_file_entries(q.get("caseRecord"), {})
+    if isinstance(q.get("caseRecord"), dict):
+        q["caseRecord"].pop("customFields", None)
+    _quote_custom_fields_gate(q, None)
+    validate_quote_tax(q)
+    validate_tax_basis(q, "已送出")
+    q.pop("clauseTitles", None)
+    _PG.prepare(q, user)                    # 利潤／公益金一律以「今天」的口徑計算（使用者裁示 2026-10-16 #2）
+    q.pop("settlement", None)
+    q["editHistory"] = []
+    now = datetime.now().isoformat()
+    actor = user.get("display_name") or user["username"]
+    q["dealTag"] = "已成案"
+    q["approval"] = {"historical": True, "tiers": [], "recordedBy": user["username"], "recordedByDisplay": actor,
+                     "recordedAt": now, "reason": reason, "note": "補登，無簽核"}
+    q["historical"] = {"quoteDate": q["quoteDate"], "month": month, "recordedAt": now,
+                       "basisNote": _BACKFILL_BASIS_NOTE}
+    q["statusLog"] = [{"at": now, "user": actor, "from": "", "to": "已成案", "note": "補登，無簽核（原因：%s）" % reason}]
+    q[SNAPSHOT_KEY] = snapshot_for((body.location_id or "").strip())
+    _CT.freeze(q)
+    tot = q.get("tot", {})
+    deal_tag, settle_status = quote_hot_fields(q)
+
+    conn = get_db()
+    try:
+        begin_write(conn)                   # 派號與 INSERT 同一個寫鎖：兩人同時補同月不會拿到同一個號
+        row = conn.execute("SELECT seq FROM quote_seq WHERE month=?", (month,)).fetchone()
+        seq_before = row["seq"] if row else 0
+        reserved = _rb.reserved_ids(conn, "quotation")      # 暫存區裡的單號不可再發（單號不回收）
+        if client_no:
+            if conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (client_no,)).fetchone() or client_no in reserved:
+                raise HTTPException(409, "單號 %s 已被使用（或在暫存區保留中），不會改派其他號碼" % client_no)
+            qno = client_no
+        else:
+            qno = _peek_next_no(conn, month)
+            while qno in reserved:
+                qno = "MQ-%s-%03d" % (month, int(qno[-3:]) + 1)
+        if int(qno[-3:]) > 999:
+            raise HTTPException(409, "該月份單號已用盡")
+        q["quoteNo"] = qno
+        sp_name = (q.get("salesPerson") or "").strip()
+        sp_row = conn.execute("SELECT id FROM users WHERE display_name=? AND active=1 LIMIT 1", (sp_name,)).fetchone() if sp_name else None
+        MG.enforce(conn, qno, q, actor=user)
+        try:
+            conn.execute("""
+                INSERT INTO quotations
+                  (quote_no, status, customer_name, project_name, total, pretax, direct_margin_pct, net_margin_pct,
+                   sales_person, sales_person_id, quote_date, valid_days, data_json,
+                   created_at, updated_at, created_by, deal_tag, settle_status, location_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (qno, "已送出", q.get("customerName"), q.get("projectName"),
+                  tot.get("total", 0), tot.get("pretax", 0), tot.get("directMarginPct", 0), tot.get("netMarginPct", 0),
+                  q.get("salesPerson"), sp_row["id"] if sp_row else None, q["quoteDate"],
+                  q.get("validDays", _pw.default_valid_days()), json.dumps(q, ensure_ascii=False),
+                  now, now, user["username"], deal_tag, settle_status, (body.location_id or "").strip() or None))
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, "報價單號衝突，請重試")
+        conn.execute("INSERT INTO quote_seq (month, seq) VALUES (?, ?) ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)",
+                     (month, int(qno[-3:])))
+        cr = q.get("caseRecord")
+        if isinstance(cr, dict) and isinstance(cr.get("stages"), list):
+            _sync_json_stages_to_table(conn, qno, cr["stages"])
+            _sync_stages_to_json(conn, qno, updated_at=now)
+        conn.commit()
+    except BaseException:                   # 任何一步失敗：單據與序號一併回滾，連線不帶著寫鎖漏出去
+        try:
+            conn.rollback()
+        except Exception:                   # noqa: BLE001
+            pass
+        raise
+    finally:
+        conn.close()
+    spawn_bg_thread(_backup_quotation, args=(qno,))
+    _audit(_tok(authorization), "quotation.historical_backfill", "quotation", qno,
+           "%s（%s）補登" % (qno, q.get("customerName", "")),
+           {"reason": reason, "quoteDate": q["quoteDate"], "month": month, "createdAt": now,
+            "seqBefore": seq_before, "numberSupplied": bool(client_no), "historical": True})
+    return {"quote_no": qno, "created_at": now, "quote_date": q["quoteDate"], "status": "已送出", "dealTag": "已成案"}
+
+
 @router.put("/api/quotations/{quote_no}")
 def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -2782,10 +2936,20 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
         return {"ok": True}
 
 
+def _is_historical_quote(conn, quote_no: str) -> bool:
+    """data_json.approval.historical 為真＝補登單（只由 POST /api/quotations/historical 寫入）。"""
+    r = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    try:
+        return bool(((json.loads(r["data_json"] or "{}") if r else {}).get("approval") or {}).get("historical") is True)
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
 @router.delete("/api/quotations/{quote_no}")
 def delete_quotation(quote_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
+    _hist_void = False
     row = conn.execute(
         "SELECT customer_name, status, sales_person_id, sales_person FROM quotations WHERE quote_no=?",
         (quote_no,)
@@ -2799,8 +2963,11 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
         conn.close()
         raise
     if row["status"] != "草稿":
-        conn.close()
-        raise HTTPException(403, f"只有草稿狀態的報價單可以刪除（目前狀態：{row['status']}）")
+        # T69 L1（使用者裁示 2026-10-16 #3）：補登單僅最高管理者可作廢，走暫存區（可復原）；單號不回收（quote_seq 不回減）。
+        if not (user.get("role") == "superadmin" and _is_historical_quote(conn, quote_no)):
+            conn.close()
+            raise HTTPException(403, f"只有草稿狀態的報價單可以刪除（目前狀態：{row['status']}）")
+        _hist_void = True        # 走暫存區的「刪除已核可」規則：底下有其他單據／已結案仍會被擋
     cname = row['customer_name'] or ''
     from helpers import recycle_bin                  # 第 53 班 P1：刪除先進暫存區（IP-RB2）
     from modules.case import recycle_adapter as _ra
@@ -2808,7 +2975,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
     with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
         try:
             try:
-                res = recycle_bin.delete(conn, "quotation", quote_no, user)   # 報價單＋名下階段／拜訪／進度更新／行動事項＋附件一併進暫存區
+                res = recycle_bin.delete(conn, "quotation", quote_no, user, **({"reason": "補登單作廢", "approved": True} if _hist_void else {}))   # 報價單＋名下階段／拜訪／進度更新／行動事項＋附件一併進暫存區
             except recycle_bin.BinError as e:
                 conn.rollback()
                 conn.close()
