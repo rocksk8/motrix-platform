@@ -100,6 +100,8 @@ def test_viewer_without_any_related_module_gets_no_request_and_no_block(live_ser
     did, _sa, staff = world
     page = new_context(viewport={"width": 1440, "height": 1000}).new_page()
     _open_dispatch_tab(page, live_server, staff, did)
+    # 頁面自己的初次載入（x-init dpSlipLoad，真模組）可能還在途中；晚回來的回應會把被覆寫的狀態蓋回「顯示」⇒ 先等它落地再模擬無模組
+    page.wait_for_function("() => { const s = %s.dpSlips[%s]; return s && s.loaded === true }" % (DATA_JS, did), timeout=15000)
     seen = []
     page.on("request", lambda r: seen.append(r.url) if "payslip-links" in r.url else None)
     page.evaluate("() => { const d = %s; d.session = { ...d.session, modules: [], role: 'user' }; d.dpSlips = {}; "
