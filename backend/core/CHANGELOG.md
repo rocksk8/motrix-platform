@@ -2,7 +2,7 @@
 
 ## (next) — 2026-10-17（wip/t68-y-reminder-r2；T68 Y：法規參數跨年提醒起算日改成設定）
 - **行為變更（刻意，使用者 2026-10 裁示）**：「下一年度的法規參數還沒設定」提醒的預設起算日由寫死的 **12 月 1 日提前到 10 月 1 日**。設定沒動也會從 10/1 起在「法規參數設定」頁與勞報單頁顯示提醒（新增下一年度版本後消失）；只影響提示文字與旗標，不影響任何稅額、扣繳或勞報單內容。
-- 新設定群組 `legal_params_reminder`（`start_month` 1–12 預設 10、`start_day` 1–28 預設 1；風險 ops、立即生效，無確認期間、不需第二位最高管理者核准；變更照常留變更紀錄）；`settings_deploy_baseline.json` 已同步。要還原舊行為：月份設 12、日設 1。
+- 新設定群組 `legal_params_reminder`（`start_month` 1–12 預設 10、`start_day` 1–28 預設 1；風險 ops、`loosen="up"`（與 `alerts` 等提醒類設定一致）：**往後延提醒＝放寬 ⇒ 確認期間（預設 7 天）後才生效，且需另一位最高管理者核准（只有一位時改為原因＋確認期間＋警告＋通知）；提前則立即生效**；逐欄判斷月、日；變更照常留變更紀錄）；`settings_deploy_baseline.json` 已同步。要還原舊行為：月份設 12、日設 1。
 - L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.settings_groups_legal_reminder`（無公開介面；載入時由 `settings_groups` 檔尾一行 import 登錄群組）。`helpers.legal_params.year_status(versions, today)` 簽章不變；新增私有 `_reminder_start()`／`_REMINDER_FALLBACK`（讀不到或不合法的設定 ⇒ 後備 10／1，不讓法規參數頁壞掉）。起算日 12/1 時警示文字與舊版逐字相同；其他起算日顯示「已進入 M 月」（1 號）或「已過 M 月 D 日」。
 - 測試：`tests/test_legal_params_reminder_t68.py`（含真實 `SR.publish` 改值後 `year_status` 跟著變、12/31 與 1/1 跨年邊界）。
 

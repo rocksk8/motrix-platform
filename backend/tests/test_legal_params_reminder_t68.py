@@ -89,21 +89,43 @@ def real_conn(client):
 
 
 def test_published_setting_really_changes_year_status(real_conn):
+    """真實路徑（不 monkeypatch 讀設定那層）：往後延＝放寬 ⇒ 待生效，確認期間後才改變 year_status；提前＝立即生效。"""
+    from datetime import datetime, timedelta
+    from helpers import config_ledger as L
+    c = real_conn
     assert lp.year_status(V, date(2026, 10, 5))["nextYearMissing"] is True
-    SR.publish("legal_params_reminder", {"start_month": 12, "start_day": 1}, reason="測試", user="admin", conn=real_conn)
+    out = SR.publish("legal_params_reminder", {"start_month": 12, "start_day": 1}, reason="測試", user="admin", conn=c)
+    c.commit()
+    SR.invalidate()
+    assert out["pending"], "往後延（10/1 → 12/1）是放寬方向 ⇒ 待生效"
+    assert lp._reminder_start() == (10, 1) and lp.year_status(V, date(2026, 10, 5))["nextYearMissing"] is True, "確認期間內仍是舊值"
+    rows = L.pending(c, "setting:legal_params_reminder")
+    assert {r["field"] for r in rows} == {"start_month"}, "只有月份往後延；日 1→1 沒變"
+    for r in rows:                                                    # 第二位最高管理者核准（申請人不能核准自己的）
+        L.approve(c, r["id"], "approver_b", "測試核准")
+    later = (datetime.now() + timedelta(days=30)).isoformat(timespec="seconds")
+    assert SR.materialize_due(c, now=later) >= 1
+    c.commit()
     SR.invalidate()
     assert lp._reminder_start() == (12, 1)
-    assert lp.year_status(V, date(2026, 10, 5))["nextYearMissing"] is False, "起算日設成 12/1 ⇒ 10 月不再提醒（與舊行為相同）"
+    assert lp.year_status(V, date(2026, 10, 5))["nextYearMissing"] is False, "起算日改成 12/1 ⇒ 10 月不再提醒（與舊行為相同）"
     assert lp.year_status(V, date(2026, 12, 1))["nextYearMissing"] is True
-    SR.publish("legal_params_reminder", {"start_month": 11, "start_day": 15}, reason="測試", user="admin", conn=real_conn)
+    out = SR.publish("legal_params_reminder", {"start_month": 11, "start_day": 15}, reason="測試", user="admin", conn=c)
+    c.commit()
     SR.invalidate()
-    assert lp.year_status(V, date(2026, 11, 14))["nextYearMissing"] is False
-    assert lp.year_status(V, date(2026, 11, 15))["nextYearMissing"] is True
+    assert lp._reminder_start() == (11, 1) and out["pending"], "月 12→11 提前 ⇒ 立即生效；日 1→15 往後延 ⇒ 待生效（逐欄判斷）"
+    SR.publish("legal_params_reminder", {"start_month": 9}, reason="測試", user="admin", conn=c)    # 提前：立即生效
+    c.commit()
+    SR.invalidate()
+    assert lp._reminder_start()[0] == 9
+    assert lp.year_status(V, date(2026, 9, 1))["nextYearMissing"] is True
 
 
-def test_setting_is_immediate_not_a_pending_loosening():
+def test_setting_is_flagged_as_a_loosening_with_risk_text():
     f = {x["key"]: x for x in SR.groups()["legal_params_reminder"]["fields"]}
-    assert not f["start_month"].get("loosen") and not f["start_day"].get("loosen"), "提示時間不是風險變更：立即生效"
+    for k in ("start_month", "start_day"):
+        assert f[k]["loosen"] == "up" and f[k]["impactScope"]["effective"] == "pending", k
+        assert f[k]["riskText"] if "riskText" in f[k] else f[k].get("risk_text")
 
 
 @pytest.mark.parametrize("today,missing", [
