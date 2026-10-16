@@ -1004,3 +1004,8 @@ _profit.register(S, _register_core)
 from helpers import settings_groups_list_view as _list_view  # noqa: E402
 
 _list_view.register(S, _register_core)
+
+# T70：附近旅宿資料新舊提示天數（拆檔，同屬 core）
+from helpers import settings_groups_lodging_freshness as _lodging_freshness  # noqa: E402
+
+_lodging_freshness._register(S, _register_core)
