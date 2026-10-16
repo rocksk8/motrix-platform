@@ -1,5 +1,5 @@
 {
- "core_version": "1.146",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1549,6 +1549,7 @@
    "register": "def(S, _register_core)"
   },
   "helper:settings_groups_recycle_bin": {},
+  "helper:settings_groups_tender_closing": {},
   "helper:settings_registry": {
    "DEFAULT_CONFIRM_DAYS": "const",
    "DEFAULT_EFFECT": "const",

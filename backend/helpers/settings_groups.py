@@ -1059,3 +1059,8 @@ register_group(
 from helpers import settings_groups_overhead as _overhead  # noqa: E402
 
 _overhead.register(S, _register_core)
+
+# T70：地圖標案「即將截止」天數（拆檔，同屬 core）
+from helpers import settings_groups_tender_closing as _tender_closing  # noqa: E402
+
+_tender_closing._register(S, _register_core)

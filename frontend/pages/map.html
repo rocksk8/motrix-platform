@@ -350,7 +350,7 @@
           <select class="mp-tender-filter" x-model="tenderFilter" @change="_redraw()"
                   style="font-size:12px;padding:2px 4px">
             <option value="notClosed">未截止</option>
-            <option value="closing">7 天內截止</option>
+            <option value="closing" x-text="((info && info.closingSoonDays) || 7) + ' 天內截止'">7 天內截止</option>
             <option value="closed">已截止</option>
             <option value="all">全部</option>
           </select>
@@ -714,11 +714,14 @@ function mapPage() {
       const el = document.getElementById('mp-canvas')
       if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' })
     },
-    deadlineStyles: {
-      open:    { color: '#2563EB', label: '未截止' },
-      closing: { color: '#E11D48', label: '7 天內截止' },
-      closed:  { color: '#9CA3AF', label: '已截止' },
-      unknown: { color: '#2563EB', label: '截止日不明' },
+    // T70：「即將截止」的天數來自設定（後端回 closingSoonDays；舊後端沒有 ⇒ 7）
+    get deadlineStyles() {
+      return {
+        open:    { color: '#2563EB', label: '未截止' },
+        closing: { color: '#E11D48', label: (((this.info || {}).closingSoonDays) || 7) + ' 天內截止' },
+        closed:  { color: '#9CA3AF', label: '已截止' },
+        unknown: { color: '#2563EB', label: '截止日不明' },
+      }
     },
     deadlineStyleOf(p) {
       if (!p || p.dataset !== 'tenders' || !p.deadlineStatus) return null

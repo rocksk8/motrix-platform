@@ -643,6 +643,7 @@ def _data_fingerprint():
         h.update(repr(tuple(row)).encode())
     h.update(json.dumps(_company_profile(), sort_keys=True, ensure_ascii=False,
                         default=str).encode("utf-8"))
+    h.update(("closing_soon:%d" % closing_soon_days()).encode())      # T70：改「即將截止」天數 ⇒ 快取失效（deadlineStatus 在快取裡）
     return h.hexdigest()
 
 
@@ -756,6 +757,7 @@ def _build_points(user, wanted):
         "locationsUnlocated": unlocated,
         "points": points,
         "withoutLocation": without_location,
+        "closingSoonDays": closing_soon_days(),        # T70：「即將截止」的天數（設定），畫面的標籤與篩選文字用它
         "googleMapsConfigured": bool(api_key),
         # ⚠️ 地理查詢關著時，**已填的地址也定位不到** ⇒ 距離全是 null。
         # 不講的話使用者會以為地址填錯了。
@@ -1021,8 +1023,20 @@ def _locate_tender(org, place, budget):
     return None, None, deferred
 
 
-#: `MP3`：「即將截止」的天數（含當天）。
+#: `MP3`：「即將截止」的天數（含當天）——後備值；實際值是設定 `tender_closing.closing_soon_days`（T70，預設 7、1～60）。
 CLOSING_SOON_DAYS = 7
+
+
+def closing_soon_days():
+    """設定 `tender_closing.closing_soon_days`；讀不到或不在 1～60 ⇒ 後備 `CLOSING_SOON_DAYS`（設定層出任何問題都不能讓地圖壞掉）。"""
+    try:
+        from helpers import settings_groups, settings_registry as SR      # noqa: F401  確保群組已登錄
+        v = int(SR.get("tender_closing", "closing_soon_days"))
+        if 1 <= v <= 60:
+            return v
+    except Exception:                                       # noqa: BLE001
+        pass
+    return CLOSING_SOON_DAYS
 
 
 def _today():
@@ -1036,8 +1050,8 @@ def _deadline_status(deadline, today):
     | 值 | 意思 |
     |---|---|
     | `closed`  | 截止日 < 今天（截止日當天仍可投標） |
-    | `closing` | 今天 ≤ 截止日 ≤ 今天＋7 |
-    | `open`    | 截止日 > 今天＋7 |
+    | `closing` | 今天 ≤ 截止日 ≤ 今天＋N（N＝設定「即將截止天數」，預設 7） |
+    | `open`    | 截止日 > 今天＋N |
     | `unknown` | 沒有截止日或讀不懂 |
 
     ⚠️ `unknown` 不可以併進 `closed`：前端預設只看「未截止」，併進去的話
@@ -1049,7 +1063,7 @@ def _deadline_status(deadline, today):
         return "unknown"
     if d < today:
         return "closed"
-    if (d - today).days <= CLOSING_SOON_DAYS:
+    if (d - today).days <= closing_soon_days():
         return "closing"
     return "open"
 
