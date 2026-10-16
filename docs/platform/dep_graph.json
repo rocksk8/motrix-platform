@@ -1361,7 +1361,8 @@
     "helper:field_catalog",
     "helper:financial_mask",
     "helper:list_catalog",
-    "helper:list_pref_policy"
+    "helper:list_pref_policy",
+    "plat:txn"
    ],
    "kind": "helper",
    "path": "backend/helpers/list_view_prefs.py",
