@@ -3884,6 +3884,14 @@
   ],
   "s": 428
  },
+ "/api/payslip-dispatch-options": {
+  "k": [
+   "hasMore",
+   "items",
+   "notice"
+  ],
+  "s": 200
+ },
  "/api/payslip-person-dispatches": {
   "k": [
    "detail"
@@ -6084,6 +6092,7 @@
    "groups[].values.ordered",
    "groups[].values.other",
    "groups[].values.over_qty",
+   "groups[].values.page_size",
    "groups[].values.password_min_len",
    "groups[].values.payslip_show_name",
    "groups[].values.per_night",
@@ -6117,6 +6126,8 @@
    "groups[].values.settlement_good",
    "groups[].values.show_denied",
    "groups[].values.show_unpicked_in_pdf",
+   "groups[].values.start_day",
+   "groups[].values.start_month",
    "groups[].values.suggested",
    "groups[].values.supplier_required",
    "groups[].values.suppliers",
@@ -6899,6 +6910,9 @@
    "lastRecognised",
    "listState",
    "notices",
+   "notices[].kind",
+   "notices[].text",
+   "notices[].tone",
    "source",
    "suspectRedesign",
    "tenderCount"
