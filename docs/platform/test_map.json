@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1450,
+  "tests": 1451,
   "unmapped": 13,
   "kinds": {
-   "api": 809,
+   "api": 810,
    "e2e": 311,
    "audit": 193,
    "unit": 137
@@ -8903,6 +8903,30 @@
      "backend/modules/case/api/quotations.py",
      "backend/modules/filehub/api.py",
      "backend/routers/attachments.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_quote_create_stages_t70.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
     ],
     "module_dir": [
      "backend/modules/case/"
