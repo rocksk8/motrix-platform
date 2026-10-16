@@ -1005,6 +1005,14 @@ from helpers import settings_groups_list_view as _list_view  # noqa: E402
 
 _list_view.register(S, _register_core)
 
+def _backfill_cross_check(values):
+    """earliest_month 必須是合法年月（YYYYMM，月份 01–12）；年份範圍由欄位上下限（2000–2099）管。"""
+    m = values.get("earliest_month")
+    if isinstance(m, int) and not isinstance(m, bool) and not 1 <= m % 100 <= 12:
+        return [{"path": "earliest_month", "message": "最早可補登月份：月份必須是 01 到 12（例如 202001）"}]
+    return []
+
+
 # T69 補登歷史案件 L0（設計 D:/Claude-pm/reports/design-backfill-quote-t69.md §9 裁示 4）：預設關＝今天的行為（沒有任何補登入口）。
 # 使用者裁示：開關**立即生效、僅強制稽核**（不經第二位最高管理者核准、不設確認期間），所以不設 `loosen`。
 # 真正的限制在『最高管理者專屬、不可委派』的能力 case.quote_backfill.create 與預設關；L0 只登記開關，端點在 L1。
@@ -1023,4 +1031,5 @@ register_group(
     ],
     sensitive=False, risk="ops",
     help="最高管理者補登過去月份已成案報價單的開關與可補登的最早月份；預設關閉。",
+    cross_check=_backfill_cross_check,
 )

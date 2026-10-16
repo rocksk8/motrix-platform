@@ -115,3 +115,48 @@ def test_backfill_capability_is_superadmin_only_and_not_delegable():
     assert not c.roles and not c.modules             # 沒有任何角色種子
     assert c.legacy == ("superadmin",)
     assert not CAP.problems()
+
+
+# ── 6. 送審失敗的回收路徑也要用單號自己的月份（稽核 r1 建議；修正前為紅）──────────
+def test_failed_submit_rollback_recomputes_the_numbers_own_month(client, make_user, monkeypatch):
+    from modules.case.api import quotations as Q
+    h = _boss(client, make_user, "qbf_boss4")
+    month = "202009"
+    cur = datetime.now().strftime("%Y%m")
+    assert _qn(_create(client, h, "MQ-%s-002" % month)) == "MQ-%s-002" % month
+    import db
+    conn = db.get_db()
+    try:                                               # 把該月序號墊到 9：只有「回收時依該月份實際剩下的單據重算」才會回到 2
+        conn.execute("UPDATE quote_seq SET seq=9 WHERE month=?", (month,))
+        conn.commit()
+    finally:
+        conn.close()
+    before_cur = _seq(cur)
+
+    def boom(*a, **k):
+        raise RuntimeError("模擬建不出簽核流程")
+    monkeypatch.setattr(Q, "_build_approval_tiers_and_notify", boom)
+    try:
+        client.post("/api/quotations", headers=h, json={
+            "status": "待審核", "quote_no": "MQ-%s-005" % month,
+            "data": {"customerName": "補登測試", "projectName": "回收", "items": []}})
+    except Exception:                                  # noqa: BLE001 — TestClient 會把伺服器例外重新拋出
+        pass
+    conn = db.get_db()
+    try:
+        assert conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", ("MQ-%s-005" % month,)).fetchone() is None   # 失敗的那張已收回
+        assert conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", ("MQ-%s-002" % month,)).fetchone() is not None
+    finally:
+        conn.close()
+    assert _seq(month) == 2                            # 依該月份實際剩下的單據重算（修正前：回收只重算本月，該月份維持 9）
+    assert _seq(cur) == before_cur                     # 本月不受影響
+
+
+# ── 7. earliest_month 的月份必須是合法年月 ────────────────────────────────────
+def test_earliest_month_rejects_invalid_month_and_year():
+    from helpers import settings_registry as SR
+    for bad in (202000, 202013, 202099, 199912, 210001, 20201):
+        probs = SR.validate_values("quote_backfill", {"enabled": 0, "earliest_month": bad})
+        assert probs, "應拒絕 %r" % bad
+    for good in (202001, 202012, 209912, 202607):
+        assert not SR.validate_values("quote_backfill", {"enabled": 0, "earliest_month": good}), good

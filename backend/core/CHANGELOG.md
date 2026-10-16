@@ -1,5 +1,8 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-17 00:18（wip/t69-backfill-l0-r1；補登歷史案件 L0）
+- 設定群組（只增，預設＝今日行為）：`quote_backfill`（`enabled` 預設 0＝沒有補登入口、立即生效僅稽核；`earliest_month` 預設 202001，跨欄位檢查月份須為 01–12）。部署基準檔 `settings_deploy_baseline.json` 同步。無 L1 介面變動。
+
 ## 1.144 — 2026-10-16（wip/t66-lp-r2；T66 清單個人偏好 L0～L2）
 - T66 L0＋L1＋L2（清單個人偏好的目錄、公司政策與個人每頁筆數，旗標 `list_prefs.enabled` 預設關）：
 - L1（只增）：新檔 `helpers/list_catalog.py`（清單目錄：`register_list`、`by_id`、`lists`、`is_money_column`…；金額欄由欄位目錄 `moneyClass` 衍生；有問題的登記不生效）與 `helpers/list_pref_policy.py`（定義種類 `list_pref_policy`＋寬嚴比較＋`policy_for`；惰性登記，旗標關或沒開建構器治理 ⇒ 不登記）。能力目錄多一個區段 `listCatalog`（擁有者 `helpers.list_catalog`，不列入 `EXPECTED_SECTIONS`）。設定群組 `list_prefs`（`enabled`，預設 0）。先導清單：供應商（`supply:suppliers`，無金額欄）。無新路由、無資料表、無權限變更；旗標關＝清單與今天相同。設計 `docs/platform/plans/T66-LIST-PREFS-DESIGN.md`；測試 `tests/platform/test_list_catalog_t66.py`、`test_list_pref_policy_t66.py`。
