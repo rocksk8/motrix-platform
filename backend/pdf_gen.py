@@ -55,6 +55,11 @@ _ET.register_export(PAYMENT_REQUEST_PDF_EXPORT, label="請款單（PDF）", form
 def default_overhead_pct():
     """全域預設管銷百分比（system_settings.overhead_default_pct；缺或壞值＝25）。PDF／Excel 只在『和預設不同』時才印百分比（使用者 Q7 裁示）。"""
     try:
+        from helpers import settings_registry as _sr             # T69：設定中心 `overhead.default_pct`（沒發布過 ⇒ 舊鍵 ⇒ 25）
+        return float(_sr.get("overhead", "default_pct"))
+    except Exception:                                             # noqa: BLE001
+        pass
+    try:
         from helpers.settings import _get_setting
         return float(_get_setting("overhead_default_pct", 25))
     except Exception:                                             # noqa: BLE001

@@ -1540,6 +1540,7 @@
    "IMPACT_SCOPE_GRANDFATHERED": "const",
    "KIND": "const",
    "RISK_ORDER": "const",
+   "SCALAR_LEGACY": "const",
    "SCOPE": "const",
    "SettingDef": "class",
    "SettingDef.__init__": "def(self, key, type, default, *, question=…, label=…, help=…, impact=…, min=…, max=…, unit=…, risk=…, legacy=…, clamp=…, requires_pending=…, risk_text=…, choices=…, recommended=…, presets=…, advanced=…, impact_fn=…, effect=…, loosen=…, zero_is_max=…, impact_scope=…)",

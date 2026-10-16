@@ -1,6 +1,7 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-16（wip/t68-q1-profit-r2；T68 Q1 利潤口徑單一來源收尾）
+## (next) — 2026-10-17（wip/t69-overhead-pct-r1，疊在 wip/t68-q1-profit-r4 之上；含 T68 Q1 利潤口徑單一來源收尾）
+- L1（只增，相容擴充）：`helpers.settings_registry` 新增公開常數 `SCALAR_LEGACY`（欄位 `legacy="="` ⇒ 舊鍵是純量、整個舊鍵就是該欄位的值；讀取與雙寫都支援）；新單位 `helpers.settings_groups_overhead`（由 `settings_groups` 檔尾兩行登錄群組 `overhead`：`default_pct`，預設 25＝今天、0～100、調低＝放寬需第二位最高管理者核准、調高立即；舊鍵 `overhead_default_pct` 雙寫）。快照已以 `core_bump.py --pending` 重產，**未取號**。部署基準檔 `settings_deploy_baseline.json` 同步（零行為變更）。
 - L1（只增，相容擴充）：`helpers.profit_rules` 的 `admin_cost`／`charity`／`quote_profit`／`settlement_profit` 各加選用參數 `default_pct`（管銷比率後備值）、`rate_pct`／`charity_rate_pct`（公益比率百分數）；不傳＝內建 25／1，與今天逐位相同。檔仍是純函式，不讀設定。
 - L1（只增）：`helpers.profit_warning` 新增 `charity_rate_pct()`、`charity_rate_text()`、`charity_rate_stamp()`、`rate_text()`、`rules_config()`、`CHARITY_RATE_PCT_DEFAULT`；設定群組 `profit_rules`（欄位 `charity_rate_pct`，預設 1，0～10，money 風險）寫在既有的 `helpers/settings_groups_profit.py`（`settings_deploy_baseline.json` 已同步）。
 - **放寬方向**：公益比率**調低**＝少扣公益金、營業利益變高 ⇒ 放寬（`loosen=down`），走確認期間＋第二位最高管理者核准（D-K1）；**調高**＝多扣＝收緊，立即生效。讀不到／不合法一律回 1（今天的值）。已完結精算的存檔公益金不回頭改寫。

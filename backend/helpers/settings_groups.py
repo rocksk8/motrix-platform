@@ -1004,3 +1004,8 @@ _profit.register(S, _register_core)
 from helpers import settings_groups_list_view as _list_view  # noqa: E402
 
 _list_view.register(S, _register_core)
+
+# T69 管銷分攤預設比率（拆檔，同屬 core）
+from helpers import settings_groups_overhead as _overhead  # noqa: E402
+
+_overhead.register(S, _register_core)

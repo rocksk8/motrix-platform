@@ -148,14 +148,16 @@ def test_settings_endpoint_authz_audit_and_default_applies_to_new_quotes(client,
     assert client.put("/api/overhead/settings", json={"defaultPct": 20}, headers=ad).status_code == 403
     assert client.put("/api/overhead/settings", json={"defaultPct": 120}, headers=su).status_code == 422
     assert client.put("/api/overhead/settings", json={"ruleMode": "x"}, headers=su).status_code == 422
-    assert client.put("/api/overhead/settings", json={"defaultPct": 20}, headers=su).status_code == 200
-    assert _audits("settings.overhead.update") and "20" in _audits("settings.overhead.update")[0]["target_label"]
+    # T69：預設比率走設定中心（`overhead.default_pct`）。調高立即生效；調低是放寬 ⇒ 待核准＋確認期間（見 test_overhead_default_pct_t69.py）。
+    # 所以這裡用『調高』驗證「新建沿用全域預設」；原本調低到 20 的案例改由 T69 的測試以核准流程驗證。
+    r = client.put("/api/overhead/settings", json={"defaultPct": 30}, headers=su)
+    assert r.status_code == 200 and r.json()["defaultPct"] == 30 and r.json()["pending"] == [], r.text
+    assert _audits("settings.overhead.update") and "管銷分攤" in _audits("settings.overhead.update")[0]["target_label"]
     _mode(client, su, "v2")
     qno = _post(client, ad, _q()).json()["quote_no"]
-    assert _row(qno)[0]["overheadPct"] == 20, "新建沿用全域預設（v2 模式蓋章）"
+    assert _row(qno)[0]["overheadPct"] == 30, "新建沿用全域預設（v2 模式蓋章）"
     _mode(client, su, "legacy")
-    assert _post(client, ad, _q(overheadPct=25)).status_code == 403, "預設改成 20 之後 25 就是『偏離』"
-    client.put("/api/overhead/settings", json={"defaultPct": 25}, headers=su)
+    assert _post(client, ad, _q(overheadPct=25)).status_code == 403, "預設改成 30 之後 25 就是『偏離』"
 
 
 # ── v2：伺服器重算 ────────────────────────────────────────────────────────────────
@@ -295,10 +297,9 @@ def test_rejected_pct_change_happens_before_any_write_or_notification(client, wh
 def test_unstamped_quote_is_not_a_false_403_after_the_default_changes(client, who):
     su, ad = who
     qno = _post(client, ad, _q()).json()["quote_no"]               # legacy：沒有比率欄位
-    assert client.put("/api/overhead/settings", json={"defaultPct": 20}, headers=su).status_code == 200
+    assert client.put("/api/overhead/settings", json={"defaultPct": 30}, headers=su).status_code == 200      # T69：調高才會立即生效（調低要核准）
     r = client.put("/api/quotations/%s" % qno, json={"status": "草稿", "data": _q(customerName="改名")}, headers=ad)
     assert r.status_code == 200, r.text
-    client.put("/api/overhead/settings", json={"defaultPct": 25}, headers=su)
 
 
 def test_overhead_pct_is_hidden_from_roles_without_money_visibility():

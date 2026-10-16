@@ -1,6 +1,7 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-16（wip/t68-q1-profit-r4；T68 Q1：公益比率與管銷後備值走設定，含單據比率戳記）
+## (next) — 2026-10-17（wip/t69-overhead-pct-r1，疊在 wip/t68-q1-profit-r4 之上；T68 Q1：公益比率與管銷後備值走設定；T69：管銷預設比率走設定）
+- 管銷分攤預設比率成為設定 `overhead.default_pct`（設定中心「管銷分攤比率」，預設 25＝今天）：`PG.default_pct()` 先讀設定（沒發布過 ⇒ 沿用舊鍵 `overhead_default_pct` 的既有值 ⇒ 25）、PDF／Excel 的「和預設不同才印百分比」同源。**調高立即生效；調低＝放寬，需要第二位最高管理者核准並經確認期間**（使用者 2026-10-17 裁示）；`PUT /api/overhead/settings` 的 `defaultPct` 改走 `settings_registry.publish`（不可繞過核准；可選帶 `reason`；回應多 `pending`／`warnings`），舊鍵與設定同值雙寫。只影響之後新建的報價單，不回改既有單；口徑切換（`ruleMode`／`charityMode`）流程不變。原本「調低立即生效」的舊入口行為因此改變（刻意）。測試 `tests/test_overhead_default_pct_t69.py`；`test_overhead_s2_t48.py` 的兩題改用調高驗證。
 - 新設定 `profit_rules.charity_rate_pct`（設定中心「利潤口徑」，預設 1％＝今天）：報價單（伺服器重算／影子比對）、精算頁、精算下游驗算、報價原始側的公益金都改用它；調低＝放寬（確認期間＋第二位最高管理者核准），調高立即生效。管銷比率的後備值改取 `overhead_default_pct`（預設 25），不再有第二份寫死的 25。
 - `GET /api/overhead/settings` 多回 `charityRatePct`、`targetMarginPct`（目標利潤率＝報價單紅線，預設 12）；`quotation-form.html`、`settlement.html` 載入後呼叫 `MotrixProfitRules.configure()`，「公益捐款（… 1%）」標籤跟著比率。
 - **比率戳記（r2）**：報價單 `tot.charityRatePct` 與精算 `summary.charityRatePct`／`origCharityRatePct` 由伺服器蓋（只在比率≠1 時帶鍵，預設時單據形狀與今天相同；用戶端送的一律丟棄；已精算／結案單沿用資料庫現值）。標籤（PDF、獎金明細、`reports.js`、`case-management-fin.js`、`settlement.html`）與舊報價單的補算一律看單據自己的戳記，**沒有戳記＝當時是 1%，不是目前設定**；完結後改比率，完結單據的標籤與金額都不變。新單據用新比率。
