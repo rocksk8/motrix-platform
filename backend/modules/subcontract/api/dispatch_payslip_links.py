@@ -126,14 +126,16 @@ def _personnel_ids(raw) -> list:
 _PERSON_LIST_EXCLUDED_STATUS = ("draft", "cancelled")
 
 
-def _person_rows(conn, where_sql, args, user):
+def _person_rows(conn, where_sql, args, user, row_filter=None):
     """派發列（含廠商名、案件名稱）逐列產出 `(row, caseVisible)`。案件名稱**只給通過案件讀取守門的人**（`guard_case_access`；
-    結果依案件單號快取）；沒給 `user` 或沒通過 ⇒ False。SQL 與案件守門在同一個函式裡，讀取範圍一眼看得到。"""
+    結果依案件單號快取）；沒給 `user` 或沒通過 ⇒ False。`row_filter(r)` 為假的列**不做案件守門**（守門被拒會寫稽核，不該為被略過的列寫）。SQL 與案件守門在同一個函式裡，讀取範圍一眼看得到。"""
     visible = {}
     for r in conn.execute("SELECT d.id, d.doc_code, d.quote_no, d.status, d.dispatch_date, d.personnel_json, d.scope, d.items_json, v.name AS vendor_name,"
                           " q.project_name AS project_name, q.customer_name AS customer_name"
                           " FROM contractor_dispatches d LEFT JOIN vendor_contractors v ON v.id = d.vendor_id"
                           " LEFT JOIN quotations q ON q.quote_no = d.quote_no" + where_sql, args).fetchall():
+        if row_filter is not None and not row_filter(r):
+            continue
         qn = r["quote_no"] or ""
         if qn not in visible:
             ok = False
@@ -177,9 +179,8 @@ def dispatches_for_person(conn, contractor_id, limit=200, user=None) -> list:
     except (TypeError, ValueError):
         return []
     out = []
-    for r, vis in _person_rows(conn, " WHERE d.personnel_json LIKE ? ORDER BY d.id DESC", ("%" + str(cid) + "%",), user):
-        if (r["status"] or "") in _PERSON_LIST_EXCLUDED_STATUS or cid not in _personnel_ids(r["personnel_json"]):
-            continue
+    for r, vis in _person_rows(conn, " WHERE d.personnel_json LIKE ? ORDER BY d.id DESC", ("%" + str(cid) + "%",), user,
+                               row_filter=lambda r: (r["status"] or "") not in _PERSON_LIST_EXCLUDED_STATUS and cid in _personnel_ids(r["personnel_json"])):
         out.append(_dispatch_view(r, vis))
         if len(out) >= limit:
             break
