@@ -1528,6 +1528,7 @@
    "quote_cf_scan": "def(conn)",
    "register": "def(S, _register_core)"
   },
+  "helper:settings_groups_recycle_bin": {},
   "helper:settings_registry": {
    "DEFAULT_CONFIRM_DAYS": "const",
    "DEFAULT_EFFECT": "const",

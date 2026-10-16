@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 CAP_ADAPTER = "recyclebin.adapter"
 CAP_DELETE = "recyclebin.delete"
 CAP_RESERVED = "recyclebin.reserved"
-RETENTION_DAYS = 30                    # 使用者 D4：固定 30 天，不可設定
+RETENTION_DAYS = 30                    # 預設（後備）保留天數；實際值由設定 `recycle_bin.retention_days` 決定（T69，7～365），讀不到時才用這個
 MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024         # 單筆快照上限（一般使用者）；超過 ⇒ 拒絕進暫存區（BinError），不悄悄硬刪
 MAX_SNAPSHOT_BYTES_ADMIN = 50 * 1024 * 1024  # 管理員（admin／superadmin）的上限：很大的草稿報價單仍要刪得掉
 

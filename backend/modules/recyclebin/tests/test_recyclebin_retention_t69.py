@@ -117,7 +117,7 @@ def test_unreadable_setting_falls_back_to_30(monkeypatch):
     assert S.retention_days() == 30, "不合法的值也不採用"
 
 
-def test_daily_job_notice_and_approved_delete_use_the_setting(client, two_su):
+def test_daily_job_notice_uses_the_setting(client, two_su):
     su1, _su2, _ad, user = two_su
     n = S.retention_days() + 5
     assert client.post(URL, json={"values": {"retention_days": n}, "reason": "調整"}, headers=su1).status_code == 200
@@ -130,3 +130,49 @@ def test_daily_job_notice_and_approved_delete_use_the_setting(client, two_su):
     assert jobs.run_daily()["purged"] == 1
     notes = _q("SELECT * FROM notifications WHERE type='recyclebin_daily'")
     assert notes and any("超過 %d 天" % n in str(dict(x)) for x in notes)
+
+
+def test_approved_delete_notice_uses_the_setting(client, two_su):
+    su1, _su2, _ad, _u = two_su
+    n = S.retention_days() + 3
+    assert client.post(URL, json={"values": {"retention_days": n}, "reason": "調整"}, headers=su1).status_code == 200
+    _doc("AP1", status="已核准")
+    r = client.post("/api/recycle-bin/delete-approved", headers=su1,
+                    json={"entity_type": "rbn_doc", "entity_id": "AP1", "confirm": True, "confirm_text": "AP1", "reason": "測試"})
+    assert r.status_code in (200, 201), r.text
+    notes = _q("SELECT * FROM notifications WHERE type='recyclebin_delete_approved' AND username=?", "rt_su2")
+    assert notes and any("%d 天內可還原" % n in str(dict(x)) for x in notes)
+
+
+def test_single_superadmin_shortening_is_pending_with_a_clear_warning(client, two_su, make_user):
+    """只有一位最高管理者：縮短不能讓自己核准自己 ⇒ 改為『原因＋確認期間』，回應要明說；確認期間後才生效。"""
+    solo, solo_pw = make_user(username="rt_solo", role="superadmin")
+    su = _login(client, solo, solo_pw)
+    cn = db.get_db()
+    others = [r[0] for r in cn.execute("SELECT id FROM users WHERE role='superadmin' AND active=1 AND username<>?", (solo,)).fetchall()]
+    try:
+        for i in others:
+            cn.execute("UPDATE users SET active=0 WHERE id=?", (i,))
+        cn.commit()
+        cur = S.retention_days() + 20
+        assert client.post(URL, json={"values": {"retention_days": cur}, "reason": "先延長"}, headers=su).status_code == 200
+        r = client.post(URL, json={"values": {"retention_days": 10}, "reason": "縮短保存"}, headers=su)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["pending"] and all(p["approvalsRequired"] == 0 for p in d["pending"]), d
+        assert any("只有一位最高管理者" in w for w in d["warnings"]), d
+        assert S.retention_days() == cur, "確認期間內不生效"
+        later = (datetime.now() + timedelta(days=30)).isoformat(timespec="seconds")
+        cn2 = db.get_db()
+        try:
+            assert SR.materialize_due(cn2, now=later)
+            cn2.commit()
+        finally:
+            cn2.close()
+        SR.invalidate()
+        assert S.retention_days() == 10
+    finally:
+        for i in others:
+            cn.execute("UPDATE users SET active=1 WHERE id=?", (i,))
+        cn.commit()
+        cn.close()
