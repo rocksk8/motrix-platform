@@ -81,3 +81,90 @@ def test_finance_and_superadmin_still_get_amount_keys(client, make_user):
 def test_unauthenticated_is_still_401(client):
     for _, url in ENDPOINTS:
         assert client.get(url).status_code == 401, url
+
+
+# ── 前端：整頁說明（靜態頁面測試；不開瀏覽器）──────────────────────────────────
+_FRONT = __import__("pathlib").Path(__file__).resolve().parents[3] / "frontend"
+_MSG = "需要財務或金額可見權限才能查看報表"
+
+
+def test_reports_page_shows_the_explanation_instead_of_a_blank_or_raw_error():
+    html = (_FRONT / "pages" / "reports.html").read_text(encoding="utf-8")
+    js = (_FRONT / "js" / "reports.js").read_text(encoding="utf-8")
+    assert 'data-testid="reports-no-access"' in html and 'x-show="noAccess"' in html
+    assert 'x-show="!noAccess"' in html and 'data-testid="reports-body"' in html   # 其餘內容在同一個旗標下整塊隱藏
+    assert html.count("<main") == 1 and html.index('data-testid="reports-body"') < html.index("</main>")
+    assert "noAccessMsg: '%s'" % _MSG in js
+    assert "noAccess:   false" in js
+    # 兩個入口都會設旗標：init()（本機角色判斷）與 loadData()（後端 403）
+    assert js.count("this.noAccess = true") >= 3
+    assert "res.status === 403" in js
+    # 舊的「僅管理員以上…」紅字不能再出現（它會在說明旁邊重複出現）
+    assert "僅管理員以上可存取營運報表功能" not in js
+
+
+def test_reports_page_front_gate_matches_the_backend_gate():
+    """前端 isAdminPlus() 不再把『營運報表』模組當成足夠條件（與後端 has_finance_access／money_visible 同一條線）。"""
+    js = (_FRONT / "js" / "reports.js").read_text(encoding="utf-8")
+    i = js.index("isAdminPlus()")
+    body = js[i:i + 400]
+    assert "includes('reports')" not in body
+    assert "r === 'finance' || r === 'superadmin'" in body
+
+
+def test_menu_entry_is_hidden_for_accounts_without_finance():
+    import json
+    m = json.loads((__import__("pathlib").Path(__file__).resolve().parents[2] / "modules" / "analytics" / "module.json").read_text(encoding="utf-8"))
+    page = [p for p in m["pages"] if p["path"] == "reports.html"][0]
+    assert page["menu"]["perm"] == ["finance"], page["menu"]
+
+
+# ── 稽核必修（audit-t68-rep-r1）：新閘門永遠是舊閘門的子集 ──────────────────────────────
+def _gate_passes(R, fin, reports, money, monkeypatch):
+    """用三個底層判斷的所有真值組合直接驅動 `_require_reports_access`（不經 HTTP，所以連旗標 on 才可能出現的組合也能驗）。"""
+    from fastapi import HTTPException
+    monkeypatch.setattr(R, "has_finance_access", lambda u: fin)
+    monkeypatch.setattr(R, "user_has_module", lambda u, k: reports if k == "reports" else False)
+    monkeypatch.setattr(R, "money_visible", lambda u: money)
+    try:
+        R._require_reports_access({"role": "x", "modules": "[]"})
+        return True
+    except HTTPException as e:
+        assert e.status_code == 403
+        return False
+
+
+def test_new_gate_is_never_wider_than_the_old_gate(monkeypatch):
+    from modules.analytics.api import reports as R
+    import itertools
+    seen_allowed = set()
+    for fin, reports, money in itertools.product((False, True), repeat=3):
+        new = _gate_passes(R, fin, reports, money, monkeypatch)
+        old = fin or reports                      # 舊閘門：財務角色／superadmin，或持有「營運報表」模組
+        assert (not new) or old, ("gate widened", dict(finance=fin, reports=reports, money_visible=money))
+        if new:
+            seen_allowed.add((fin, reports, money))
+    # 精確形狀（不只是子集，也不能把該有的拿掉）：財務一律過；reports 模組要同時 money_visible 才過
+    assert seen_allowed == {(True, r, m) for r in (False, True) for m in (False, True)} | {(False, True, True)}
+
+
+def test_cashier_only_without_reports_module_stays_refused(monkeypatch):
+    """出納模組（money_visible 為真）但沒有營運報表模組、也不是財務角色：過去 403，現在仍 403（稽核必修）。"""
+    from modules.analytics.api import reports as R
+    assert _gate_passes(R, False, False, True, monkeypatch) is False
+
+
+def test_cashier_plus_reports_is_allowed_and_reports_only_is_refused(monkeypatch):
+    from modules.analytics.api import reports as R
+    assert _gate_passes(R, False, True, True, monkeypatch) is True
+    assert _gate_passes(R, False, True, False, monkeypatch) is False
+
+
+def test_ledger_diff_uses_the_same_gate(client, make_user):
+    """ledger-diff（analytics/api/ledger_diff.py）也呼叫同一個 `_require_reports_access`：reports-only 403、財務 200。"""
+    url = "/api/reports/ledger-diff?year=2026&basis=cash"
+    h = _h(client, make_user, "rm_ld_fin", "finance")
+    assert client.get(url, headers=h).status_code == 200
+    h = _h(client, make_user, "rm_ld_rep", "viewer", modules=["reports"])
+    r = client.get(url, headers=h)
+    assert r.status_code == 403 and "財務" in r.json().get("detail", "")

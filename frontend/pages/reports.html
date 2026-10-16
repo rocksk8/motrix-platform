@@ -269,6 +269,14 @@
   <div class="app-shell">
     <main class="page-main">
 
+      <!-- T68：無財務／金額可見權限（例如只勾了「營運報表」模組）⇒ 整頁只顯示說明，不載入任何報表資料 -->
+      <div x-show="noAccess" x-cloak data-testid="reports-no-access" class="empty-state" style="margin-top:60px">
+        <p style="margin-bottom:12px;font-size:28px">🔒</p>
+        <p style="font-size:16px;font-weight:600" x-text="noAccessMsg">需要財務或金額可見權限才能查看報表</p>
+        <p style="margin-top:8px;font-size:13px;color:var(--text-secondary)">營運報表內容都是全公司金額，只開放給財務角色與最高管理者。如需查看請向管理者申請。</p>
+      </div>
+      <div x-show="!noAccess" data-testid="reports-body">
+
       <!-- Period bar（財務報表期間選擇/匯出，僅 admin+；2026-08-31 出納併入
            本頁後，純 cashier/finance 模組使用者不該看到跟他們無關的期間/
            匯出控制列，出納自己的執行歷史匯出在出納頁籤裡另有一份） -->
@@ -2081,6 +2089,7 @@
         </div>
       </template>
 
+      </div><!-- /reports-body -->
     </main>
   </div>
 

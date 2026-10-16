@@ -110,9 +110,11 @@ def _require_reports_access(u: dict) -> None:
     """
     # 第42班：admin 直通拿掉；財務角色／superadmin（user_has_module "finance" 由角色推導）或持有「營運報表」模組者
     # T68（使用者裁示 2026-10-17）：這 11 支回的全是全公司金額（報價總額、毛利、收款、精算摘要、應收帳齡、發票），
-    # 只勾「營運報表」模組不再足以看金額——要財務角色／superadmin（has_finance_access）或 money_visible
-    # （與 /api/quotations、儀表板財務卡片同一條規則）。報表頁面本身（HTML、側欄入口）不受影響。
-    if has_finance_access(u) or money_visible(u):
+    # 只勾「營運報表」模組不再足以看金額——要財務角色／superadmin（has_finance_access），
+    # 或「營運報表」模組＋money_visible（與 /api/quotations、儀表板財務卡片同一條規則）。
+    # 新閘門永遠是舊閘門（財務／superadmin 或 reports 模組）的子集：只出納模組、沒有營運報表模組的帳號**不會**因此多出權限
+    # （稽核 audit-t68-rep-r1 必修；守門：test_reports_money_gate_t68 的子集題）。報表頁面本身（HTML）不受影響。
+    if has_finance_access(u) or (user_has_module(u, "reports") and money_visible(u)):
         return
     if user_has_module(u, "reports"):
         raise HTTPException(403, "營運報表的金額僅財務角色可看；您的帳號有『營運報表』模組，但沒有財務檢視權限")
