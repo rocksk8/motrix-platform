@@ -250,22 +250,40 @@ def _comparable(v):
     return v
 
 
+_REMINDER_FALLBACK = (10, 1)       # 讀不到設定 `legal_params_reminder` 時的提醒起算日（月, 日）；預設值與設定群組一致
+
+
+def _reminder_start(conn=None) -> tuple:
+    """跨年提醒的起算日 `(月, 日)`：設定 `legal_params_reminder.start_month／start_day`（預設 10／1）；讀不到或不合法 ⇒ 後備。"""
+    try:
+        from helpers import settings_groups, settings_registry as SR      # noqa: F401  確保群組已登錄
+        m = int(SR.get("legal_params_reminder", "start_month", conn=conn))
+        d = int(SR.get("legal_params_reminder", "start_day", conn=conn))
+        if 1 <= m <= 12 and 1 <= d <= 28:
+            return (m, d)
+    except Exception:                                       # noqa: BLE001  設定層任何問題都不能讓法規參數頁壞掉
+        pass
+    return _REMINDER_FALLBACK
+
+
 def year_status(versions, today) -> dict:
-    """跨年提示。12 月且沒有任何 effectiveFrom 在下一年 ⇒ nextYearMissing。"""
+    """跨年提示。今天已到提醒起算日（讀設定，見 `_reminder_start`；預設 10／1）且沒有任何 effectiveFrom 在下一年 ⇒ nextYearMissing。
+    起算日只決定『何時開始提醒』；下一年度＝今年＋1 與其餘檢查是法規決定，不可設定。"""
     t = _as_date(today)
+    sm, sd = _reminder_start()
     vs = sort_versions(versions)
     years = {str(v.get("effectiveFrom", ""))[:4] for v in vs}
     try:
         current = rules_for_date(vs, t)
     except NoApplicableRules:
         current = None
-    next_missing = t.month == 12 and str(t.year + 1) not in years
+    next_missing = (t.month, t.day) >= (sm, sd) and str(t.year + 1) not in years
     this_missing = str(t.year) not in years
     warnings = []
     if next_missing:
-        warnings.append("已進入 12 月，%d 年的法規參數（最低工資、扣繳起扣標準、補充保費門檻）還沒有設定；"
+        warnings.append("%s，%d 年的法規參數（最低工資、扣繳起扣標準、補充保費門檻）還沒有設定；"
                         "1 月起開立的勞報單會沿用 %s 版。請到「法規參數設定」新增一版（沿用也要新增一版以示確認）"
-                        % (t.year + 1, current["version"] if current else "—"))
+                        % (("已進入 %d 月" % sm) if sd == 1 else ("已過 %d 月 %d 日" % (sm, sd)), t.year + 1, current["version"] if current else "—"))
     if this_missing and current:
         warnings.append("今年（%d）沒有設定法規參數，勞報單沿用 %s 版（%s 起）的規則" %
                         (t.year, current["version"], current["effectiveFrom"]))

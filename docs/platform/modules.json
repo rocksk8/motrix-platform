@@ -65,6 +65,7 @@
    "helper:settings_strict",
    "helper:settings_groups",
    "helper:settings_groups_q0",
+   "helper:settings_groups_legal_reminder",
    "helper:settings_groups_profit",
    "helper:settings_groups_list_view",
    "helper:settings_groups_payslip_picker",
