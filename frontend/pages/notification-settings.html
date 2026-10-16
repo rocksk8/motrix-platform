@@ -396,9 +396,10 @@
         <div class="ns-hint" style="margin-top:0">
           系統已放棄自動重寄的簽核催辦信會列在這裡，最新的在最上面。多半是收件人沒有填 Email，請至「使用者管理」補填；補填後新的催辦會正常寄出。
         </div>
-        <div x-show="rfDenied" style="font-size:13px;color:var(--text-dim);margin-top:12px">只有最高管理者可以查看這份清單。</div>
-        <div x-show="!rfDenied && rfItems.length === 0" style="font-size:13px;color:#16A34A;margin-top:12px;font-weight:600">目前沒有寄不出去的提醒。</div>
-        <table x-show="!rfDenied && rfItems.length > 0" style="width:100%;border-collapse:collapse;font-size:13px;margin-top:12px">
+        <div x-show="rfDenied" style="font-size:13px;color:var(--text-dim);margin-top:12px">這份清單只有最高管理者，或被授予「系統設定」功能的帳號可以查看；您的帳號沒有這個權限。</div>
+        <div x-show="rfError" data-testid="rf-error" style="font-size:13px;color:#B45309;margin-top:12px;font-weight:600">暫時讀不到這份清單（伺服器沒有正常回應），請稍後重新整理頁面；通知設定本身不受影響。</div>
+        <div x-show="!rfDenied && !rfError && rfItems.length === 0" style="font-size:13px;color:#16A34A;margin-top:12px;font-weight:600">目前沒有寄不出去的提醒。</div>
+        <table x-show="!rfDenied && !rfError && rfItems.length > 0" style="width:100%;border-collapse:collapse;font-size:13px;margin-top:12px">
           <thead>
             <tr style="text-align:left;color:var(--text-dim)">
               <th style="padding:6px 8px">單據</th>
@@ -458,6 +459,7 @@
         rfItems: [],
         rfLoaded: false,
         rfDenied: false,
+        rfError: false,
 
         rfReason(r) {
           if (r === 'permanent_fail') return '收件人沒有 Email，信寄不出去'
@@ -537,7 +539,8 @@
             const rf = await fetch('/api/settings/reminder-send-failures', { headers: { Authorization: 'Bearer ' + s.token } })
             if (rf.ok) { const d = await rf.json(); this.rfItems = Array.isArray(d.items) ? d.items : []; this.rfLoaded = true }
             else if (rf.status === 403) { this.rfDenied = true; this.rfLoaded = true }
-          } catch (e) { /* 清單讀不到不影響通知設定本身 */ }
+            else { this.rfError = true; this.rfLoaded = true }
+          } catch (e) { this.rfError = true; this.rfLoaded = true /* 清單讀不到不影響通知設定本身，但要讓人看到 */ }
           if (usersRes.ok) this.mrAllUsers = await usersRes.json()
           if (mrRes.ok) {
             const d = await mrRes.json()

@@ -22,7 +22,8 @@ def test_page_reads_the_existing_endpoint_and_explains_empty_and_denied():
     s = _page()
     assert "/api/settings/reminder-send-failures" in s
     assert "目前沒有寄不出去的提醒" in s            # 空清單要有話說，不是一片空白
-    assert "只有最高管理者可以查看" in s            # 403 分支
+    assert "只有最高管理者，或被授予「系統設定」功能的帳號可以查看" in s            # 403 分支（與伺服器真實規則一致）
+    assert "暫時讀不到這份清單" in s and "rfError" in s            # 500／連線失敗不能靜默隱藏
     assert 'href="users.html"' in s                  # 補填 Email 的出口
 
 
@@ -49,11 +50,20 @@ def test_reason_codes_are_shown_as_plain_words():
     assert "收件人沒有 Email" in s and "不確定信有沒有寄出" in s
 
 
-def test_endpoint_refuses_non_superadmin(client, make_user):
-    name, pw = make_user(username="rfp_user", role="admin")
+def _get(client, make_user, username, role, modules=None):
+    name, pw = make_user(username=username, role=role, modules=modules)
     tok = client.post("/api/auth/login", json={"username": name, "password": pw}).json()["token"]
-    r = client.get("/api/settings/reminder-send-failures", headers={"Authorization": "Bearer " + tok})
-    assert r.status_code == 403, r.text
+    return client.get("/api/settings/reminder-send-failures", headers={"Authorization": "Bearer " + tok})
+
+
+def test_endpoint_access_rule_with_real_users(client, make_user):
+    """伺服器的真實規則：最高管理者，或擁有『系統設定』(settings) 模組的帳號；其他 403；沒登入 401。"""
+    assert _get(client, make_user, "rfp_user", "admin", modules=[]).status_code == 403          # 沒有 settings 模組的一般 admin
+    r = _get(client, make_user, "rfp_settings_admin", "admin", modules=["settings"])
+    assert r.status_code == 200 and isinstance(r.json()["items"], list), r.text               # 有 settings 模組的 admin
+    r = _get(client, make_user, "rfp_super", "superadmin")
+    assert r.status_code == 200 and isinstance(r.json()["items"], list), r.text
+    assert client.get("/api/settings/reminder-send-failures").status_code == 401
 
 
 def test_panel_does_not_add_a_second_init():
