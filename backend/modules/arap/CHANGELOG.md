@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## (next) — 2026-10-17（wip/t70-backfill-l2-r1；T70-1 補登歷史案件 L2）
+- 出納應收待辦（`cashier.py`）：補登單（`approval.historical`）不列入未收佇列；查全部時標示 `historical` 且不算逾期。補登開關預設關，一般報價單與其他出納頁面不變。詳見案件模組 CHANGELOG。
+
 ## 1.0.58 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/settlement.html`、`pages/payment-request{,-form}.html`、`static/definition-form.js` 的數字／時間顯示改呼叫 `MotrixFormat`（預設輸出逐字相同）。
 

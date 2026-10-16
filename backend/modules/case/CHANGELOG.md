@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-17（wip/t70-backfill-l2-r1；T70-1 補登歷史案件 L2：畫面、自動關閉、提醒靜音）
+- 補登歷史案件 L2（T70-1，wip/t70-backfill-l2-r1）：①畫面：報價單表單（V3.31）新增模式多「補登歷史案件」區塊（僅最高管理者且設定中心開關有效時出現；報價日期限過去月份、即時預覽單號、可填原始單號、原因必填、走 `POST /api/quotations/historical`；補登模式下一般儲存／自動存檔／送審停用）。支援端點：`GET /api/quotations/historical/config`（非最高管理者回 `available=false`）、`GET /api/quotations/historical/next-no?date=`（與補登送出同一個派號函式；跳過暫存區保留號）。②自動關閉：設定 `quote_backfill.auto_off_hours`（預設 24、0＝不自動關、上限 720）——開關開啟超過該小時數即視為關閉（找不到開啟時間 ⇒ 視為關），補登與預覽端點回 403 並說明。③靜音（補登單＝`approval.historical`）：階段到期提醒、專案逾期提醒、「專案預計完成」行事曆、應收到期／收款行事曆推送、出納應收待辦（未收佇列不列、查全部時標示 `historical` 且不算逾期）、案件清單「階段逾期／應收逾期」分頁與計數；保固到期提醒不靜音（保固是真實義務）。④標示：案件清單每列多 `historical`；報價單 PDF/預覽頂端多「歷史補登案件（無簽核軌跡…）」標示。⑤補登標記 `historical` 現在永遠是 `approval` 的第一個鍵（SQL 靜音提示依賴此序列化形狀；測試鎖定）。報表月份：沿用 `quote_won_month_map`（優先 quote_date），測試鎖定補登單歸入其報價日期的月份。
+- 注意（形狀依賴）：補登單的 SQL 靜音依賴 data_json 開頭形狀 `{"approval": {"historical": true`；形狀壞掉時安全失敗（回到逾期分頁）。T71：專用欄位／精確頂層路徑、到期排程＋稽核。
+
 ## 1.0.203 — 2026-10-17 00:10（wip/t69-backfill-l0-r1；補登歷史案件 L0：序號月份修正＋開關＋能力鍵）
 - 修正：建立報價單時若帶入舊月份的單號，序號原本記到「本月」（會墊高本月序號，下一張新單號被跳號）；現在序號一律記在單號自己的月份（新增 `_month_of_no()`；送審失敗回收序號同理）。一般新增報價單（不帶單號）行為不變。
 - 新增（預設關、尚無入口）：設定中心群組 `quote_backfill`（開關 `enabled` 預設 0、`earliest_month` 預設 202001；立即生效、僅稽核，使用者 2026-10-16 裁示）；能力鍵 `case.quote_backfill.create`（最高管理者專屬、不可委派、保留中）。補登端點在 L1。無資料庫變動。守門測試 `tests/test_quote_backfill_l0_t69.py`。
@@ -7,8 +11,6 @@
 - 新增（作廢補登單）：補登單可由最高管理者以 `DELETE /api/quotations/{no}` 作廢進暫存區（30 天內可復原；沿用「刪除已核可」規則——底下有其他單據或已結案仍會被擋）；單號不回收（序號不回減、暫存區保留中的號碼不再發出）。一般非草稿報價單的刪除規則不變。
 - 防偽造：補登標記（`approval.historical`、頂層 `historical`）只由補登端點寫入；一般新增一律丟掉用戶端帶來的，編輯（整份取代）以資料庫現值為準（現值是補登單則保留、不是則丟掉）。所以偽造標記無法讓一般單被當成補登單作廢。
 - 稽核跟進（hichan-49）：作廢補登單的 `DELETE` 須帶查詢參數 `?reason=`（≥5 字，進暫存區紀錄與稽核）；月份序號到 999 後回 409（不再排出 4 碼單號）；補登單一旦**由伺服器判定**進入真正的簽核（解鎖編輯或轉待審核；不看用戶端送的 approval 內容，避免被偽造洗掉標記），補登標記不再放回（回到一般規則，來歷區塊保留）；重號改由 INSERT 唯一鍵轉 409（不另做查詢）。
-- 補登歷史案件 L2（T70-1，wip/t70-backfill-l2-r1）：①畫面：報價單表單（V3.30）新增模式多「補登歷史案件」區塊（僅最高管理者且設定中心開關有效時出現；報價日期限過去月份、即時預覽單號、可填原始單號、原因必填、走 `POST /api/quotations/historical`；補登模式下一般儲存／自動存檔／送審停用）。支援端點：`GET /api/quotations/historical/config`（非最高管理者回 `available=false`）、`GET /api/quotations/historical/next-no?date=`（與補登送出同一個派號函式；跳過暫存區保留號）。②自動關閉：設定 `quote_backfill.auto_off_hours`（預設 24、0＝不自動關、上限 720）——開關開啟超過該小時數即視為關閉（找不到開啟時間 ⇒ 視為關），補登與預覽端點回 403 並說明。③靜音（補登單＝`approval.historical`）：階段到期提醒、專案逾期提醒、「專案預計完成」行事曆、應收到期／收款行事曆推送、出納應收待辦（未收佇列不列、查全部時標示 `historical` 且不算逾期）、案件清單「階段逾期／應收逾期」分頁與計數；保固到期提醒不靜音（保固是真實義務）。④標示：案件清單每列多 `historical`；報價單 PDF/預覽頂端多「歷史補登案件（無簽核軌跡…）」標示。⑤補登標記 `historical` 現在永遠是 `approval` 的第一個鍵（SQL 靜音提示依賴此序列化形狀；測試鎖定）。報表月份：沿用 `quote_won_month_map`（優先 quote_date），測試鎖定補登單歸入其報價日期的月份。
-- 注意（形狀依賴）：補登單的 SQL 靜音依賴 data_json 開頭形狀 `{"approval": {"historical": true`；形狀壞掉時安全失敗（回到逾期分頁）。T71：專用欄位／精確頂層路徑、到期排程＋稽核。
 - 不在 L1：畫面／列表與 PDF 標示、階段到期與應收提醒排除、通知靜音的其餘部分（L2）；非根法人（`seq_by_entity`）補登；選用的「24 小時自動關閉」。
 - **（併入）(next) — 2026-10-17（wip/t69-overhead-pct-r1 審查後，疊在 wip/t68-q1-profit-r4 之上；T68 Q1：公益比率與管銷後備值走設定；T69：管銷預設比率走設定）**
 - 管銷分攤預設比率成為設定 `overhead.default_pct`（設定中心「管銷分攤比率」，預設 25＝今天）：`PG.default_pct()` 先讀設定（沒發布過 ⇒ 沿用舊鍵 `overhead_default_pct` 的既有值 ⇒ 25）、PDF／Excel 的「和預設不同才印百分比」同源。**調高立即生效；調低＝放寬，需要第二位最高管理者核准並經確認期間**（使用者 2026-10-17 裁示）；`PUT /api/overhead/settings` 的 `defaultPct` 改走 `settings_registry.publish`（不可繞過核准；可選帶 `reason`；回應多 `pending`／`warnings`），舊鍵與設定同值雙寫。只影響之後新建的報價單，不回改既有單；口徑切換（`ruleMode`／`charityMode`）流程不變。原本「調低立即生效」的舊入口行為因此改變（刻意）。`PUT /api/overhead/settings` 先驗證所有欄位，預設比率最後才發布（後面欄位 422 時不留下已提交的半套）；已知：核准的調低在確認期間到期時 `SR.get` 立即套用，舊鍵要等每日 `materialize_due` 才同步，一次性工具 `tools/overhead_migrate.py` 直接讀舊鍵，在這個時間窗內讀到較高的舊值（偏保守，僅該工具）。測試 `tests/test_overhead_default_pct_t69.py`；`test_overhead_s2_t48.py` 的兩題改用調高驗證。
