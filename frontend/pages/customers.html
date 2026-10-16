@@ -2,6 +2,8 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
+  <script src="../static/motrix-format.js"></script>
+  <script>/* 後備：格式器沒載入時，頁面照印原值（不留白）。 */window.MotrixFormat||(window.MotrixFormat=(function(){var S={full:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},short:{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'},sec:{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}};function n(x,o){try{if(x==null)return '';o=o||{};return o.locale||o.maxFrac!=null?x.toLocaleString(o.locale,o.maxFrac!=null?{maximumFractionDigits:o.maxFrac}:undefined):x.toLocaleString()}catch(e){return String(x)}}return{num:n,money:n,date:function(d){try{return d==null?'':d.toLocaleDateString('zh-TW')}catch(e){return String(d)}},dt:function(d,s){try{return d==null?'':d.toLocaleString('zh-TW',typeof s==='object'&&s?s:S[s])}catch(e){return String(d)}},status:function(v){return v},apply:function(){}}})())</script>
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
@@ -1231,7 +1233,7 @@
         if (!this.backendOnline) { this.formError = '後端伺服器離線，無法儲存'; return }
         const savingId = this.editingId
         let targetId   = savingId
-        const now      = new Date().toLocaleDateString('zh-TW')
+        const now      = MotrixFormat.date(new Date())
         const { name, taxId, phone, id, createdAt, updatedAt, quoteCount, lastContact, ...dataFields } = this.form
         const body = { name: (name||'').trim(), tax_id: taxId||'', phone: phone||'', data: dataFields }
         try {
