@@ -57,3 +57,9 @@
 | 取決於資料的範圍規則 | 銀行帳號（本人／`may_see_full`／`may_edit_others`）、案件獎金列表與明細（`_sees_all_lines`）、請款單／開票憑證的讀取（`guard_case_access`、`_guard_voucher`、`require_any_module(case_manage／finance／cashier／quotation)` 含財務鍵） | 因人、因單據而異 | 不是『誰能做這類動作』，而是『這張單據看得到嗎』——屬欄位／範圍政策（F7／U1），不屬矩陣動作層 |
 
 結論：S1 能安全接線的只有勞報單那六項（純模組勾選閘）。其餘等 D5 收斂（或財務葉子被核准）後再做，不在 T68。
+
+## 8. 獨立複核提問的回覆（2026-10-16，hichan-e8 預審）
+1. **`unsign` 對應 `edit`**：維持。六項能力的 `legacy` 完全相同（最高管理者或持有『勞報單』勾選），對應哪一項不影響等價；語意上退回簽回是『改單據狀態』，`attach` 是上傳／刪除簽回檔本身；`edit` 的說明已寫明包含退回簽回。
+2. **`view` 同時管派工連結／名冊的讀取**：與今天等價。這些路由（`dispatch-links` 讀取、`payslip-person-dispatches`、`…/by-dispatch`）原本就是同一道閘 `_require_user(require_superadmin=True, module="payslip")`，所以不是新增也不是縮小的入口；它們不經派工模組的權限，今天也不經。
+3. **風險標籤**：框架只對 `risk == high` 動作（`view_money／view_sensitive／approve／pay／delete／config` 強制為高）要求原因＋確認期間＋第二位最高管理者核准；低／中只是顯示。`view`、`attach` 不在高風險動作內。若要讓『看勞報單金額』也走高風險放寬，需要把金額查看拆成 `view_money` 能力——這會改變放寬行為，屬產品決定，**留給使用者（後續追蹤）**。
+4. **接線範圍**：只有 **6 項能力、20 支端點**（payslips.py 14、payslip_links.py 6）。`get_signed_file`、`approve`、`reject`、`submit`、`delete`、`mark-paid`、`unpay` 及其他未列者仍走原本的閘。
