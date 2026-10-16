@@ -1996,6 +1996,7 @@ def historical_config(authorization: str = Header(None)):
 def historical_next_no(date: str = "", authorization: str = Header(None)):
     """畫面用：依報價日期預覽將取得的單號（不保留；與送出時的派號同一個函式）。規則同補登端點。"""
     from helpers import recycle_bin as _rb
+    _require_user(authorization)
     _backfill_super_and_flag(authorization)
     _qd, month = _backfill_check_date(date)
     conn = get_db()
@@ -3070,7 +3071,7 @@ def _pin_backfill_marker(q: dict, old: dict, real_approval: bool = False) -> Non
         for k in ("recordedBy", "recordedByDisplay", "recordedAt", "reason", "note"):
             if k in old_ap:
                 rest.setdefault(k, old_ap[k])
-        q["approval"] = dict({"historical": True}, **rest)       # historical 必須是第一個鍵：SQL 端的靜音提示靠這個序列化形狀（見 modules.case.quotations.HIST_APPROVAL_PREFIX）
+        q["approval"] = {"historical": True, **rest}       # historical 必須是第一個鍵：SQL 端的靜音提示靠這個序列化形狀（見 modules.case.quotations.HIST_APPROVAL_PREFIX）
         if isinstance(old.get("historical"), dict):
             q["historical"] = old["historical"]
         put_approval_first(q)
