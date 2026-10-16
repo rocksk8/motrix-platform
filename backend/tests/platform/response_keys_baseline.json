@@ -4081,6 +4081,7 @@
    "listCatalog.items.lists[].defaults.sort.dir",
    "listCatalog.items.lists[].id",
    "listCatalog.items.lists[].label",
+   "listCatalog.items.lists[].modules",
    "listCatalog.items.lists[].owner",
    "listCatalog.items.lists[].pageSizeCeiling",
    "listCatalog.items.lists[].pageSizeMenu",

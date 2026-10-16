@@ -166,3 +166,8 @@ Order: L0 → L1 → L2 → L4(pilot) → L3 (money lists) → L5. Money-bearing
 - **Access rule (added):** a catalog entry may declare `modules` (module keys; same set as the list's data endpoint, suppliers = customer/procurement/inventory). `GET /api/list-views[/{id}]`, PUT and DELETE use `auth.user_has_module` (superadmin passes; others need one key). No `modules` declared => superadmin only (fail closed). No access: summary omits the list, routes return 403.
 - **Deferred, not implemented (follow-ups):** (1) `max_saved_lists_per_user` cap - moot, one small row per user+list; (2) admin catalog/usage read (counts of users with a custom page size); (3) cleanup/export of `user_list_view_prefs` on user delete/rename (same hook as other per-user tables); (4) swap `_ceiling_ok` map for `field_policy.visible` when F7 S1 lands (TODO in code; no test pins the map).
 - Tests added: no-module 403/empty, list without `modules` superadmin-only, concurrent PUT (one wins, one 409), `*` fallback and per-list override.
+
+## 狀態補記（r2，2026-10-16，已併入 T65 基底 789b555e6）
+- **與 T65 `list_view` 的分工（單一來源 `T65-C-LIST-VIEW-DESIGN.md`）**：`list_view` 群組（`quotes_*`／`cases_*` 各項）是**各畫面使用端的開關**，預設 0；本案 `list_prefs.enabled` 是**通用清單目錄＋公司政策＋`/api/list-views` 的總開關**，預設 0。兩者不重複任何選項：每頁筆數的個人值，T65 前端（`static/list-view-prefs.js`）目前存 `user_list_prefs`，本案 `user_list_view_prefs.prefs_json.pageSize` 是 API 層的政策限制版本。
+- **待決（L4 前端前必須定）**：個人每頁筆數只留一個儲存處。建議 L4 讓 `list-view-prefs.js` 改讀寫 `/api/list-views/{id}`（受政策限制），`user_list_prefs` 只留排序；`list_view.*_page_size` 旗標與 `list_prefs.enabled` 同時成立才生效。
+- r2 重放：金額欄與 F7 守門不變；goldens 以實際輸出重錄（`response_keys_baseline` 僅增 `listCatalog.items.lists[].modules`；`l1_interface_snapshot` 為 `--pending`）。

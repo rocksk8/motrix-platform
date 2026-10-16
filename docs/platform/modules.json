@@ -326,6 +326,7 @@
    "/api/legal-params",
    "/api/license",
    "/api/list-prefs",
+   "/api/list-views",
    "/api/mail-types",
    "/api/map",
    "/api/module-versions",

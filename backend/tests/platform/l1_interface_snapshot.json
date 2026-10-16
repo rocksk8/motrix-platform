@@ -1,5 +1,5 @@
 {
- "core_version": "1.143",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1065,6 +1065,8 @@
    "TABLE": "const",
    "ViewError": "class",
    "ViewError.__init__": "def(self, status, message, problems=…)",
+   "can_access": "def(user, spec)",
+   "check_access": "def(user, list_id)",
    "clamp_columns": "def(view, columns)",
    "clamp_sort": "def(view, col, direction)",
    "column_visible": "def(col, user, _depth=…)",
