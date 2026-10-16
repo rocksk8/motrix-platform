@@ -6,7 +6,7 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 132 個；有單位卡 81 個。
+單位 133 個；有單位卡 82 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
@@ -120,7 +120,7 @@
 | `helper:rule_sets` | L1 | 規則集定義種類 `rule_set`（BP-2 R1；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §3）。 | 9 | 3 | `backend/tests/test_rule_catalog_2026_10_14.py` |
 | `helper:safe_text` | L1 | 使用者可編輯的短文字（樣板名稱、階段名稱…）共用的安全檢查（S-ST1 起；通知用語編輯器有一份同規則的副本，之後併入這裡）。 | 4 | 1 | `tests/platform/test_stage_templates_t62.py` |
 | `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 52 | — |
-| `helper:settings_groups` | L1 | 設定群組登錄（L1；第 54 班 Train A）。**預設值＝上線前的程式常數**（部署零行為變更；`settings_deploy_baseline.json` 凍結）。 | 1 | 12 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_groups` | L1 | 設定群組登錄（L1；第 54 班 Train A）。**預設值＝上線前的程式常數**（部署零行為變更；`settings_deploy_baseline.json` 凍結）。 | 1 | 13 | `backend/tests/platform/test_settings_registry_t54.py` |
 | `helper:settings_groups_legal_reminder` | L1 | T68 設定群組：法規參數「跨年提醒」起算日（legal_params_reminder）。 | 0 | 1 | `backend/tests/test_legal_params_reminder_t68.py` |
 | `helper:settings_groups_list_view` | L1 | T65 C1 設定群組：清單檢視的個人偏好（list_view）。**預設全關＝畫面與請求和今天逐位元相同。** | 1 | 1 | `backend/tests/platform/test_list_view_c1_t65.py` |
 | `helper:settings_groups_overhead` | L1 | T69 設定群組：管銷分攤比率的全域預設值（overhead.default_pct）。**預設值＝上線前的 25（`profit_rules.DEFAULT_OVERHEAD_PCT`）**，部署零行為變更。 | 1 | 1 | `backend/modules/case/tests/test_overhead_default_pct_t69.py` |
@@ -128,7 +128,8 @@
 | `helper:settings_groups_profit` | L1 | T64 A 設定群組：利潤提醒色帶（profit_warning）與報價單預設值（quote_defaults）。**預設值＝各畫面今天寫死的數字**（部署零行為變更）。 | 1 | 1 | `backend/tests/platform/test_profit_warning_t64.py` |
 | `helper:settings_groups_q0` | L1 | T63 Q0 設定群組：報價單輸出（quote_output）與報價單個資（quote_privacy）。**預設值＝上線前的行為**（部署零行為變更）。 | 2 | 1 | `backend/tests/platform/test_q0_settings_t63.py` |
 | `helper:settings_groups_recycle_bin` | L1 | T69 設定群組：刪除暫存區保留天數（recycle_bin.retention_days）。 | 0 | 1 | `backend/modules/recyclebin/tests/test_recyclebin_retention_t69.py` |
-| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 38 | 46 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_groups_tender_closing` | L1 | T70 設定群組：地圖上標案「即將截止」標記的天數（tender_closing.closing_soon_days）。 | 0 | 1 | `backend/tests/test_closing_soon_days_t70.py` |
+| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 38 | 47 | `backend/tests/platform/test_settings_registry_t54.py` |
 | `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 4 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
 | `helper:stage_templates` | L1 | 案件執行階段樣板（S-ST1；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）：宣告式的階段清單（種類鍵、名稱、起迄天數、建議比例、前置階段）。 | 15 | 4 | `backend/tests/platform/test_stage_templates_t62.py` |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 23 | 10 | — |

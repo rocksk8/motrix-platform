@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1446,
+  "tests": 1447,
   "unmapped": 13,
   "kinds": {
    "api": 805,
-   "e2e": 311,
+   "e2e": 312,
    "audit": 193,
    "unit": 137
   },
@@ -26925,6 +26925,48 @@
      "backend/tools/overhead_migrate.py"
     ]
    }
+  },
+  "backend/tests/test_closing_soon_days_t70.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
+    "file:backend/tests/test_mp3_map_tenders_by_deadline_2026_09_24.py",
+    "helper:settings_groups",
+    "helper:settings_registry",
+    "page:pages/map.html",
+    "router:map_points",
+    "router:settings_center"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_groups.py",
+     "backend/helpers/settings_registry.py",
+     "backend/routers/__init__.py",
+     "backend/routers/map_points.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py",
+     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
+     "backend/tests/test_mp3_map_tenders_by_deadline_2026_09_24.py"
+    ],
+    "api": [
+     "backend/routers/map_points.py",
+     "backend/routers/settings_center.py"
+    ],
+    "page": [
+     "frontend/pages/map.html"
+    ],
+    "path": [
+     "frontend/pages/map.html"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_cloud_archive_policy_2026_09_15.py": {
    "kind": "api",
