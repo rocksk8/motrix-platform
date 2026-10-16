@@ -154,9 +154,10 @@ def test_failed_submit_rollback_recomputes_the_numbers_own_month(client, make_us
 
 # ── 7. earliest_month 的月份必須是合法年月 ────────────────────────────────────
 def test_earliest_month_rejects_invalid_month_and_year():
+    import helpers.settings_groups  # noqa: F401 — 群組在匯入時登錄；不靠前面的測試順序帶進來
     from helpers import settings_registry as SR
     for bad in (202000, 202013, 202099, 199912, 210001, 20201):
-        probs = SR.validate_values("quote_backfill", {"enabled": 0, "earliest_month": bad})
+        probs = SR.validate_values("quote_backfill", {"enabled": 0, "auto_off_hours": 24, "earliest_month": bad})
         assert probs, "應拒絕 %r" % bad
     for good in (202001, 202012, 209912, 202607):
-        assert not SR.validate_values("quote_backfill", {"enabled": 0, "earliest_month": good}), good
+        assert not SR.validate_values("quote_backfill", {"enabled": 0, "auto_off_hours": 24, "earliest_month": good}), good

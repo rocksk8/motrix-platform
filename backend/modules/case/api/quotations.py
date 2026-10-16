@@ -42,7 +42,7 @@ from pydantic import BaseModel, Field
 from db import get_db, spawn_bg_thread
 from db import db_conn  # /api/sales-orders（M08 搬遷移入）
 from modules.case.quotations import payment_item_amounts  # 同上
-from modules.case.quotations import is_historical_json, sql_hist_hint, sql_not_historical  # T70 補登單標示／靜音
+from modules.case.quotations import is_historical_json, put_approval_first, sql_hist_hint, sql_not_historical  # T70 補登單標示／靜音
 from helpers import download_name
 from helpers.validation import body_flag, strict_bool  # noqa: E402  第49班 W1c-P2：旗標嚴格解析
 from helpers.gl_status import gl_posted_warning
@@ -990,7 +990,7 @@ def list_quotations(
         ).fetchone()
         overdue = conn.execute(
             "SELECT COUNT(*) FROM case_stages WHERE done=0 AND due_date != '' AND due_date < ? "
-            f"AND quote_no IN (SELECT quote_no FROM quotations WHERE 1=1{base_where})",
+            f"AND quote_no IN (SELECT quote_no FROM quotations WHERE 1=1{base_where} AND {sql_not_historical('quotations.data_json')})",
             [today] + base_params
         ).fetchone()[0]
         counts_out = {"all": c["n"] or 0, "active": c["active"] or 0, "closed": c["closed"] or 0,
@@ -1960,7 +1960,7 @@ def _backfill_super_and_flag(authorization):
         raise HTTPException(403, "補登歷史案件僅限最高管理者")
     st = _backfill_state()
     if not st["on"]:
-        raise HTTPException(403, ("補登歷史案件已超過 %d 小時自動關閉，請到設定中心重新開啟" % st["hours"]) if (st["enabled"] and st["auto_off"])
+        raise HTTPException(403, ("補登歷史案件已超過 %d 小時自動關閉，請到設定中心先關閉、再重新開啟（開關仍顯示開啟，但已過期不生效）" % st["hours"]) if (st["enabled"] and st["auto_off"])
                             else "補登歷史案件的開關目前是關閉的（設定中心 → 補登歷史案件）")
     return user
 
@@ -1970,8 +1970,8 @@ def historical_config(authorization: str = Header(None)):
     """畫面用：這個人現在能不能看到「補登歷史案件」入口（僅最高管理者且開關有效），以及日期範圍。非最高管理者一律回 available=false（不是 403，畫面免處理錯誤）。"""
     from helpers import perm as _perm
     user = _require_user(authorization)
-    st = _backfill_state()
     is_super = user.get("role") == "superadmin" and _perm.can(user, "case.quote_backfill.create")
+    st = _backfill_state() if is_super else {"on": False, "enabled": False, "auto_off": False, "expires_at": "", "hours": 24}   # 非最高管理者不讀設定／紀錄
     earliest = _backfill_earliest()
     last_prev = datetime.now().replace(day=1) - timedelta(days=1)
     return {"available": bool(is_super and st["on"]), "auto_off": bool(is_super and st["enabled"] and st["auto_off"]),
@@ -2003,7 +2003,7 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
         _backfill_deny(authorization, 403, "補登歷史案件僅限最高管理者")
     _st = _backfill_state()
     if not _st["on"]:
-        _backfill_deny(authorization, 403, ("補登歷史案件已超過 %d 小時自動關閉，請到設定中心重新開啟" % _st["hours"]) if (_st["enabled"] and _st["auto_off"])
+        _backfill_deny(authorization, 403, ("補登歷史案件已超過 %d 小時自動關閉，請到設定中心先關閉、再重新開啟（開關仍顯示開啟，但已過期不生效）" % _st["hours"]) if (_st["enabled"] and _st["auto_off"])
                        else "補登歷史案件的開關目前是關閉的（設定中心 → 補登歷史案件）")
     reason = (body.reason or "").strip()
     if len(reason) < 5:
@@ -2042,6 +2042,7 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
     q["statusLog"] = [{"at": now, "user": actor, "from": "", "to": "已成案", "note": "補登，無簽核（原因：%s）" % reason}]
     q[SNAPSHOT_KEY] = snapshot_for((body.location_id or "").strip())
     _CT.freeze(q)
+    put_approval_first(q)                   # 補登標記要在 data_json 最前面（SQL 靜音用開頭比對）
     tot = q.get("tot", {})
     deal_tag, settle_status = quote_hot_fields(q)
 
@@ -3060,6 +3061,7 @@ def _pin_backfill_marker(q: dict, old: dict, real_approval: bool = False) -> Non
         q["approval"] = dict({"historical": True}, **rest)       # historical 必須是第一個鍵：SQL 端的靜音提示靠這個序列化形狀（見 modules.case.quotations.HIST_APPROVAL_PREFIX）
         if isinstance(old.get("historical"), dict):
             q["historical"] = old["historical"]
+        put_approval_first(q)
 
 
 def _doc_is_historical(data_json) -> bool:

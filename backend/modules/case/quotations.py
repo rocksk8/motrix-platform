@@ -264,20 +264,32 @@ def quote_won_month_map(conn) -> dict:
     return result
 
 
-#: 補登單（T69）的標記在 data_json 裡一律是 `"approval": {"historical": true, …`（`historical` 永遠是 approval 的第一個鍵：
-#: 補登端點這樣建、`_pin_backfill_marker` 編輯時也維持）。SQL 端只用這個前綴做**提示**（`instr`，不是 json_extract：
-#: json_extract 的 ratchet 只准變少），需要精確判斷的地方再用 `is_historical_json()` 解析。
-HIST_APPROVAL_PREFIX = '"approval": {"historical": true'
+#: 補登單（T69）的標記在 data_json 裡一律是**整份文件的開頭**：`{"approval": {"historical": true, …`
+#: （`approval` 是頂層第一個鍵、`historical` 是 approval 的第一個鍵；補登端點這樣建，`_pin_backfill_marker` 編輯時也維持）。
+#: SQL 端用「開頭」精確比對（`substr`，不是 `instr`：文件內部任何位置都可能被偽造出同樣的子字串，但沒人能搬到第一個位元組；
+#: 也不用 json_extract：ratchet 只准變少）。頂層 approval.historical 與鍵序由伺服器釘住，用戶端寫不進去。
+#: 需要精確判斷的地方再用 `is_historical_json()` 解析。
+HIST_APPROVAL_PREFIX = '{"approval": {"historical": true'
+
+
+def put_approval_first(q: dict) -> None:
+    """就地把 `approval` 搬到頂層第一個鍵（補登單序列化後才會以 HIST_APPROVAL_PREFIX 開頭）。"""
+    if isinstance(q, dict) and "approval" in q and next(iter(q)) != "approval":
+        rest = {k: v for k, v in q.items() if k != "approval"}
+        ap = q["approval"]
+        q.clear()
+        q["approval"] = ap
+        q.update(rest)
 
 
 def sql_not_historical(col: str = "data_json") -> str:
     """SQL 片段：這一列不是補登單（用於提醒／逾期的排除；補登單 ⇒ 該列不納入）。"""
-    return "instr(%s, '%s') = 0" % (col, HIST_APPROVAL_PREFIX)
+    return "substr(%s, 1, %d) != '%s'" % (col, len(HIST_APPROVAL_PREFIX), HIST_APPROVAL_PREFIX)
 
 
 def sql_hist_hint(col: str = "data_json", alias: str = "hist_dj") -> str:
-    """SQL 選取欄：只有疑似補登單的列才把 data_json 帶回來（其餘為 NULL），再用 `is_historical_json()` 精確判斷。"""
-    return "CASE WHEN instr(%s, '%s') > 0 THEN %s END AS %s" % (col, HIST_APPROVAL_PREFIX, col, alias)
+    """SQL 選取欄：只有以補登標記開頭的列才把 data_json 帶回來（其餘為 NULL），再用 `is_historical_json()` 精確判斷。"""
+    return "CASE WHEN substr(%s, 1, %d) = '%s' THEN %s END AS %s" % (col, len(HIST_APPROVAL_PREFIX), HIST_APPROVAL_PREFIX, col, alias)
 
 
 def is_historical_json(text) -> bool:

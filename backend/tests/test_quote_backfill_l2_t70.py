@@ -236,6 +236,10 @@ def test_case_list_overdue_tabs_and_counts_skip_backfilled_cases(client, boss, f
         nos = [i["quote_no"] for i in r["items"]]
         assert n in nos, "正對照：一般案件出現在 %s 分頁" % flt
         assert h not in nos, "補登單不出現在 %s 分頁" % flt
+        cn = r["counts"]                                        # 稽核 M1：頁首徽章／分頁件數也要靜音
+        key = "recvOverdue" if flt == "recv_overdue" else "stageOverdueCases"
+        assert cn[key] == 1, "%s 件數只算一般案件，實得 %r" % (key, cn)
+    assert client.get("/api/quotations", headers=boss, params={"counts": 1}).json()["counts"]["overdueStages"] == 1,         "頭部『逾期階段』數只算一般案件的 1 個階段（補登單的階段不算）"
 
 
 # ── 4. 列表標示、PDF 標示、報表月份 ───────────────────────────────────────────
@@ -279,9 +283,88 @@ def test_hint_prefix_matches_what_the_endpoint_really_stores(client, boss, flag_
         txt = c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (h,)).fetchone()[0]
     finally:
         c.close()
-    assert HIST_APPROVAL_PREFIX in txt and is_historical_json(txt)
+    assert txt.startswith(HIST_APPROVAL_PREFIX) and is_historical_json(txt), "補登標記必須是 data_json 的開頭"
     from modules.case.api.quotations import _pin_backfill_marker
     q = {"approval": {"note": "x", "tiers": []}}
     _pin_backfill_marker(q, json.loads(txt))
     assert list(q["approval"])[0] == "historical"
     assert not is_historical_json('{"approval": {"historical": false}}') and not is_historical_json("{壞")
+
+
+def _plant(no, nested):
+    """模擬任何寫入路徑把自由欄位寫進 data_json（用戶端可帶任意 key）。"""
+    c = db.get_db()
+    try:
+        d = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()[0])
+        d["notes_x"] = nested
+        c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), no))
+        c.execute("UPDATE case_stages SET due_date=? WHERE quote_no=?", (PAST, no))
+        c.commit()
+    finally:
+        c.close()
+
+
+def test_forged_nested_marker_cannot_hide_a_normal_overdue_quote(client, boss, flag_on):
+    """稽核 M2：data 裡任何位置塞同樣結構的子字串，都不能讓一般案件從逾期分頁／件數消失（SQL 靜音只認文件開頭）。"""
+    from modules.case.quotations import HIST_APPROVAL_PREFIX
+    n = _normal_won(client, boss)
+    _plant(n, {"approval": {"historical": True}})
+    c = db.get_db()
+    try:
+        txt = c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (n,)).fetchone()[0]
+    finally:
+        c.close()
+    assert '"approval": {"historical": true' in txt and not txt.startswith(HIST_APPROVAL_PREFIX), "前置：偽造子字串確實在、但不在開頭"
+    r = client.get("/api/quotations", headers=boss, params={"stage_overdue": 1, "counts": 1}).json()
+    assert n in [i["quote_no"] for i in r["items"]]
+    assert r["counts"]["stageOverdueCases"] == 1 and r["counts"]["overdueStages"] == 1
+    assert next(i for i in r["items"] if i["quote_no"] == n)["historical"] is False
+
+
+def test_top_level_forged_marker_on_create_is_dropped_and_real_marker_leads_the_document(client, boss, flag_on):
+    r = client.post("/api/quotations", headers=boss, json={"status": "已送出", "data": {
+        "customerName": "偽造", "items": [], "approval": {"historical": True, "tiers": []}, "historical": {"x": 1}}})
+    assert r.status_code in (200, 201), r.text
+    no = r.json()["quote_no"]
+    c = db.get_db()
+    try:
+        txt = c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()[0]
+    finally:
+        c.close()
+    from modules.case.quotations import is_historical_json
+    assert not is_historical_json(txt) and '"historical": true' not in txt
+
+
+def test_pdf_badge_survives_a_non_dict_approval():
+    import pdf_gen
+    base = {"quoteNo": "MQ-202607-001", "customerName": "客戶", "items": [], "quoteDate": "2026-07-15"}
+    for bad in ("x", ["a"], 5):
+        assert "歷史補登" not in pdf_gen._build_quote_html(dict(base, approval=bad), {}, unapproved_status=None)
+
+
+def test_enabled_without_any_ledger_record_is_treated_as_off(client, boss, flag_on, monkeypatch):
+    """開關值是 1 但查不到『何時開啟』的紀錄 ⇒ 不信任（fail-closed）。"""
+    from helpers import config_ledger as L
+    from modules.case.api import quotations as Q
+    monkeypatch.setattr(L, "history", lambda *a, **k: [])
+    assert Q._backfill_state()["on"] is False
+    j = client.get("/api/quotations/historical/config", headers=boss).json()
+    assert j["available"] is False
+    assert client.post("/api/quotations/historical", headers=boss, json=_body()).status_code == 403
+
+
+def test_config_does_not_read_the_ledger_for_non_superadmin(client, make_user, flag_on, monkeypatch):
+    from modules.case.api import quotations as Q
+    adm = _login(client, make_user, "bf2_adm", role="admin")
+    monkeypatch.setattr(Q, "_backfill_state", lambda: (_ for _ in ()).throw(AssertionError("不應讀取")))
+    j = client.get("/api/quotations/historical/config", headers=adm).json()
+    assert j["available"] is False and j["expires_at"] == ""
+
+
+def test_warranty_reminders_are_not_muted_for_backfilled_cases():
+    """保固是真實義務：保固提醒函式不得引用補登靜音（靜態鎖，避免日後誤把保固一併靜音）。"""
+    import inspect
+    import modules.case.case_deadlines as D
+    for fn in (D._check_warranty_expiry, D._sync_warranty_calendar):
+        src = inspect.getsource(fn)
+        assert "historical" not in src and "_hist" not in src, fn.__name__

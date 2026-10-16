@@ -6017,6 +6017,7 @@
    "groups[].values.alt_groups_max",
    "groups[].values.approval_basis",
    "groups[].values.audit_log_keep_days",
+   "groups[].values.auto_off_hours",
    "groups[].values.auto_prefill",
    "groups[].values.bank_alias_amount",
    "groups[].values.bank_alias_date",
