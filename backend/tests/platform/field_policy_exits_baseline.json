@@ -2,7 +2,7 @@
  "helpers/expense_types.py": 1,
  "helpers/rule_catalog.py": 1,
  "modules/analytics/api/ledger_diff.py": 1,
- "modules/analytics/api/reports.py": 3,
+ "modules/analytics/api/reports.py": 4,
  "modules/arap/api/cashier.py": 3,
  "modules/case/api/alt_plan.py": 2,
  "modules/case/api/case_extra_expenses.py": 2,
