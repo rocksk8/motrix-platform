@@ -237,24 +237,28 @@ def test_legacy_quote_recompute_uses_one_percent_not_the_live_rate(monkeypatch):
 
 
 def test_customer_signback_recompute_keeps_the_documents_own_rate(monkeypatch):
-    """回簽（alt_sign.recompute_tot）不吃目前設定：1% 的單據在設定改成 2% 後回簽，公益金仍是 1%，戳記不被重蓋。"""
+    """回簽（alt_sign.recompute_tot）不吃目前設定：戳記≠目前設定的兩個方向都要用單據自己的比率，戳記不被重蓋。"""
+    import copy
     from modules.case import alt_sign
-    monkeypatch.setattr(SR, "get", lambda g, f, **kw: 2 if (g, f) == ("profit_rules", "charity_rate_pct") else None)
     base = {"items": [{"qty": 1, "unitPrice": 100000, "cost": 60000}], "taxRate": 5, "overheadPct": 25,
             "tot": {"formulaVer": 2, "overheadPct": 25}}
-    import copy
-    d1 = copy.deepcopy(base)
-    t1 = alt_sign.recompute_tot(d1)
-    assert t1["charityDonation"] == max(0, _hu(t1["directProfit"], "0.01")) and "charityRatePct" not in t1, "無戳記 ⇒ 1%，不是目前的 2%"
-    d2 = copy.deepcopy(base)
-    d2["tot"]["charityRatePct"] = 2.0
-    t2 = alt_sign.recompute_tot(d2)
+
+    def run(stamp, live):
+        monkeypatch.setattr(PW, "charity_rate_pct", lambda conn=None: live)      # 只換目前比率，其餘設定照舊
+        d = copy.deepcopy(base)
+        if stamp is not None:
+            d["tot"]["charityRatePct"] = stamp
+        return alt_sign.recompute_tot(d)
+
+    t1 = run(None, 2.0)                                                           # 無戳記（＝當時 1%）、目前 2%
+    assert t1["charityDonation"] == max(0, _hu(t1["directProfit"], "0.01")) and "charityRatePct" not in t1
+    t2 = run(2.0, 1.0)                                                            # 戳記 2%、目前 1%（戳記≠目前，能分辨「吃目前設定」）
     assert t2["charityDonation"] == max(0, _hu(t2["directProfit"], "0.02")) and t2["charityRatePct"] == 2.0
 
 
 def test_plan_view_uses_the_documents_rate_when_settled(monkeypatch):
     from modules.case import alt_options
-    monkeypatch.setattr(SR, "get", lambda g, f, **kw: 3 if (g, f) == ("profit_rules", "charity_rate_pct") else None)
+    monkeypatch.setattr(PW, "charity_rate_pct", lambda conn=None: 3.0)
     assert alt_options.rate_of({"tot": {}}, settled=True) == 1.0
     assert alt_options.rate_of({"tot": {"charityRatePct": 2}}, settled=True) == 2.0
     assert alt_options.rate_of({"tot": {}}, settled=False) == 3.0, "未精算 ⇒ 目前設定"

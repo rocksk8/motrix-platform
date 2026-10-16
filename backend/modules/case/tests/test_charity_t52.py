@@ -481,3 +481,17 @@ def test_overhead_pct_change_keeps_the_documents_own_charity_rate(client, who, m
     after = _row(qno)[0]["tot"]
     assert after["charityDonation"] == before["charityDonation"], "只換管銷比率：公益金不因目前設定而變"
     assert "charityRatePct" not in after, "不重蓋戳記"
+
+
+def test_overhead_pct_change_keeps_a_stamp_that_differs_from_the_live_rate(client, who, monkeypatch):
+    from helpers import profit_warning as PW
+    su, ad = who
+    monkeypatch.setattr(PW, "charity_rate_pct", lambda conn=None: 2.0)
+    qno = _v2_quote(client, su)                                           # 以 2% 存檔 ⇒ 戳記 2.0
+    before = _row(qno)[0]["tot"]
+    assert before.get("charityRatePct") == 2.0
+    monkeypatch.setattr(PW, "charity_rate_pct", lambda conn=None: 1.0)    # 之後設定改回 1%（戳記≠目前）
+    assert client.put("/api/quotations/%s/overhead-pct" % qno, json={"pct": 20, "confirm": True}, headers=su).status_code == 200
+    after = _row(qno)[0]["tot"]
+    assert after["charityDonation"] == before["charityDonation"], "公益金沿用單據的 2%，不吃目前的 1%"
+    assert after.get("charityRatePct") == 2.0, "戳記不變"
