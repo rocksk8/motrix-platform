@@ -60,10 +60,19 @@ def _latest_quotes(conn, keys):
     return out
 
 
+def _label(key, fallback):
+    """計價單位／詢價管道的顯示名稱：設定中心『住宿紀錄：計價單位與詢價管道』（C7，預設＝QUOTE_UNITS／QUOTE_CHANNELS）；只換字，不換值。"""
+    try:
+        from helpers import display_labels as _dl
+        return _dl.labels("lodging_labels").get(key, fallback)
+    except Exception:                                                                    # noqa: BLE001 — 純顯示
+        return fallback
+
+
 def quote_out(r: dict) -> dict:
     return {"id": r["id"], "quotedOn": r["quoted_on"], "roomType": r["room_type"], "price": r["price"],
-            "unit": r["unit"], "unitLabel": QUOTE_UNITS.get(r["unit"], r["unit"]), "includes": r["includes"],
-            "channel": r["channel"], "channelLabel": QUOTE_CHANNELS.get(r["channel"], r["channel"]),
+            "unit": r["unit"], "unitLabel": _label(r["unit"], QUOTE_UNITS.get(r["unit"], r["unit"])), "includes": r["includes"],
+            "channel": r["channel"], "channelLabel": _label(r["channel"], QUOTE_CHANNELS.get(r["channel"], r["channel"])),
             "note": r["note"], "enteredBy": r["entered_by"], "enteredAt": r["entered_at"], "priceKind": "manual"}
 
 

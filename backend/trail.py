@@ -299,6 +299,16 @@ KIND_LABELS = {
     "export":  "匯出",
 }
 
+
+def _kind_label(kind) -> str:
+    """操作類型的顯示名稱：設定中心『歷史紀錄用語』（C7，預設＝上面 KIND_LABELS）；讀不到 ⇒ 預設。"""
+    try:
+        from helpers import display_labels as _dl
+        return _dl.label("trail_labels", kind)
+    except Exception:                                  # noqa: BLE001 — 純顯示
+        return KIND_LABELS[kind]
+
+
 _VERBS = {"GET": "查看", "POST": "新增", "PUT": "修改", "PATCH": "修改", "DELETE": "刪除"}
 
 
@@ -421,7 +431,7 @@ def describe(method: str, path: str) -> dict:
     if len(segs) < 2 or segs[0] != "api":
         kind = "view" if method == "GET" else "change"
         return {"module": "", "summary": _cat(_VERBS.get(method, method), p),
-                "kind": kind, "kindLabel": KIND_LABELS[kind], "grouped": False}
+                "kind": kind, "kindLabel": _kind_label(kind), "grouped": False}
 
     mod_key = segs[1]
     module = module_label(mod_key)
@@ -430,7 +440,7 @@ def describe(method: str, path: str) -> dict:
     group = collapse_group(method, p)
     if group:
         return {"module": module, "summary": group[1], "kind": "view",
-                "kindLabel": KIND_LABELS["view"], "grouped": True}
+                "kindLabel": _kind_label("view"), "grouped": True}
 
     # 尾端的動作段先抽掉，剩下的才是受詞。
     action, action_key = None, ""
@@ -495,7 +505,7 @@ def describe(method: str, path: str) -> dict:
         kind = "change"
 
     return {"module": module, "summary": summary, "kind": kind,
-            "kindLabel": KIND_LABELS[kind], "grouped": False}
+            "kindLabel": _kind_label(kind), "grouped": False}
 
 
 # ── 七、HTTP 狀態碼 → 人話 ───────────────────────────────────────────────
@@ -508,13 +518,26 @@ STATUS_LABELS = {
 }
 
 
+_RESULT_KEY = {200: "ok", 204: "ok", 201: "created", 304: "not_modified", 400: "bad_request", 401: "unauthorized", 403: "forbidden",
+               404: "not_found", 409: "conflict", 413: "too_large", 422: "invalid", 429: "rate_limited"}
+
+
+def _result_label(s) -> str:
+    """HTTP 狀態碼的人話：設定中心『歷史紀錄用語』（C7，預設＝STATUS_LABELS）；讀不到 ⇒ 預設。"""
+    try:
+        from helpers import display_labels as _dl
+        return _dl.label("trail_labels", _RESULT_KEY[s])
+    except Exception:                                  # noqa: BLE001 — 純顯示
+        return STATUS_LABELS[s]
+
+
 def status_label(status) -> str:
     try:
         s = int(status or 0)
     except (TypeError, ValueError):
         return ""
     if s in STATUS_LABELS:
-        return STATUS_LABELS[s]
+        return _result_label(s)
     if 200 <= s < 300:
         return "成功"
     if 300 <= s < 400:

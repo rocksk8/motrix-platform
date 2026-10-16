@@ -1,5 +1,5 @@
 {
- "core_version": "1.144",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -618,6 +618,15 @@
    "_workdays_elapsed": "def(start_date, end_date)",
    "norm_at": "def(s)",
    "normalize_date": "def(v, label=…)"
+  },
+  "helper:display_labels": {
+   "DEFAULTS": "const",
+   "GROUPS": "const",
+   "NETPLAN_KEY": "const",
+   "label": "def(group, key, conn=…)",
+   "labels": "def(group, conn=…)",
+   "register": "def(S, _register_core)",
+   "status_text": "def(value, conn=…)"
   },
   "helper:doc_render": {
    "render_document": "def(template, view)"

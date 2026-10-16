@@ -1004,3 +1004,8 @@ _profit.register(S, _register_core)
 from helpers import settings_groups_list_view as _list_view  # noqa: E402
 
 _list_view.register(S, _register_core)
+
+# C7：小模組狀態／單位／用語顯示名稱（拆檔，同屬 core）
+from helpers import display_labels as _display_labels  # noqa: E402
+
+_display_labels.register(S, _register_core)

@@ -68,6 +68,7 @@
    "helper:settings_groups_profit",
    "helper:settings_groups_list_view",
    "helper:profit_warning",
+   "helper:display_labels",
    "helper:quote_output",
    "helper:quote_privacy",
    "helper:menu_builder",

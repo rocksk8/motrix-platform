@@ -8,6 +8,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/display-labels.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <style>
@@ -81,7 +82,7 @@
           <h1 style="font-size:18px;font-weight:700;color:var(--text-main);margin-top:4px">
             <span x-text="plan.siteName || '(未命名案場)'"></span>
             <span class="plan-no" x-text="'　' + plan.planNo"></span>
-            <span class="st" :class="stCls(plan.status)" x-text="plan.status" style="margin-left:8px"></span>
+            <span class="st" :class="stCls(plan.status)" x-text="stText(plan.status)" style="margin-left:8px"></span>
           </h1>
           <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
             <a :href="'case-management.html?q=' + plan.quoteNo" x-show="plan.quoteNo" style="color:var(--accent);text-decoration:none" x-text="'綁定案件：' + plan.quoteNo"></a>
@@ -105,7 +106,7 @@
           <span x-text="saving ? '儲存中…' : isDirty ? '儲存' : '已儲存'"></span>
         </button>
         <select data-saved-field x-model="statusSelect" @change="changeStatus()" :disabled="!editable" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px">
-          <template x-for="s in STATUSES" :key="s"><option :value="s" x-text="s"></option></template>
+          <template x-for="s in STATUSES" :key="s"><option :value="s" x-text="stText(s)"></option></template>
         </select>
         <span style="flex:1"></span>
         <input type="file" x-ref="importInput" accept=".xlsx" style="display:none" @change="importExcel($event)">
@@ -647,6 +648,7 @@ function networkPlanForm() {
       const s = localStorage.getItem('motrix_session')
       if (!s) { window.location.href = 'login.html'; return }
       this.session = JSON.parse(s)
+      MotrixLabels.load().then(m => { this.lb = m })
       const params = new URLSearchParams(window.location.search)
       const id = params.get('id')
       if (!id) { this.errMsg = '缺少規劃書 id'; this.loading = false; return }
@@ -672,6 +674,8 @@ function networkPlanForm() {
 
     _auth() { return { Authorization: 'Bearer ' + this.session.token } },
     dirty() { this.isDirty = true },
+    lb: MotrixLabels.defaults(),                     // C7：狀態顯示名稱（設定中心『網路規劃：狀態名稱』；預設＝原本的字）
+    stText(status) { return MotrixLabels.netplan(this.lb, status) },
     stCls(status) { return { '規劃中': 'st-plan', '已確認': 'st-confirmed', '已交付': 'st-delivered' }[status] || 'st-plan' },
 
     addRow(tabKey) {

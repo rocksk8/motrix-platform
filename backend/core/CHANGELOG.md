@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-16（wip/t68-c7-r1；C7 小模組狀態／單位／用語顯示名稱）
+- L1（只增）：新檔 `helpers/display_labels.py`（`label`、`labels`、`status_text`、`register`、`DEFAULTS`、`GROUPS`、`NETPLAN_KEY`；設定群組 `netplan_labels`／`procurement_labels`／`lodging_labels`／`trail_labels`，屬 core，由 `settings_groups` 載入時呼叫 `register`）。前端新檔 `static/display-labels.js` 經既有 `/api/settings-center/public` 取值，沒有新路由。
+- `trail.py`：操作類型與處理結果用語改走 `display_labels`（私有 `_kind_label`／`_result_label`；讀不到 ⇒ 原本的 `KIND_LABELS`／`STATUS_LABELS`，輸出逐字相同）。
+- 純顯示：只換畫面上看到的名稱，狀態值、轉換順序、查詢、權限一律用原值；名稱規則同狀態顯示表（最多 12 字、同組不重複、非預設值不可含官方用語）。預設＝各畫面今天的字（等值測試 `tests/platform/test_display_labels_c7.py`）。
+
 ## 1.144 — 2026-10-16（wip/t66-lp-r2；T66 清單個人偏好 L0～L2）
 - T66 L0＋L1＋L2（清單個人偏好的目錄、公司政策與個人每頁筆數，旗標 `list_prefs.enabled` 預設關）：
 - L1（只增）：新檔 `helpers/list_catalog.py`（清單目錄：`register_list`、`by_id`、`lists`、`is_money_column`…；金額欄由欄位目錄 `moneyClass` 衍生；有問題的登記不生效）與 `helpers/list_pref_policy.py`（定義種類 `list_pref_policy`＋寬嚴比較＋`policy_for`；惰性登記，旗標關或沒開建構器治理 ⇒ 不登記）。能力目錄多一個區段 `listCatalog`（擁有者 `helpers.list_catalog`，不列入 `EXPECTED_SECTIONS`）。設定群組 `list_prefs`（`enabled`，預設 0）。先導清單：供應商（`supply:suppliers`，無金額欄）。無新路由、無資料表、無權限變更；旗標關＝清單與今天相同。設計 `docs/platform/plans/T66-LIST-PREFS-DESIGN.md`；測試 `tests/platform/test_list_catalog_t66.py`、`test_list_pref_policy_t66.py`。

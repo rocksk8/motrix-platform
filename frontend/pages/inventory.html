@@ -9,6 +9,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>庫存管理 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/display-labels.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -376,15 +377,15 @@
                       :style="s.eta === null ? 'color:var(--text-dim)' : ''"
                       x-text="s.eta === null ? '未知（未設定前置時間）' : s.eta"></td>
                   <td style="font-size:12px;white-space:nowrap">
-                    <span x-show="s.status === 'suggested'" style="color:var(--text-dim)">待下單</span>
+                    <span x-show="s.status === 'suggested'" style="color:var(--text-dim)" x-text="lb.procurement_labels.suggested">待下單</span>
                     <span x-show="s.status === 'ordered'" style="color:var(--accent)"
-                          x-text="'已下單 ' + (s.orderedAt || '').slice(0, 10)"></span>
+                          x-text="lb.procurement_labels.ordered + ' ' + (s.orderedAt || '').slice(0, 10)"></span>
                     <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;margin-left:6px"
                             x-show="s.status === 'suggested'"
-                            @click="setSuggestionStatus(s, 'ordered')">標記已下單</button>
+                            @click="setSuggestionStatus(s, 'ordered')" x-text="'標記' + lb.procurement_labels.ordered">標記已下單</button>
                     <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;margin-left:6px"
                             x-show="s.status === 'ordered'"
-                            @click="setSuggestionStatus(s, 'received')">標記已到貨</button>
+                            @click="setSuggestionStatus(s, 'received')" x-text="'標記' + lb.procurement_labels.received">標記已到貨</button>
                   </td>
                 </tr>
               </template>
@@ -518,6 +519,7 @@ function app() {
     // ☠️ 後果不只是 API 發兩次：第二次的回應晚一步抵達，
     //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
     _initDone: false,
+    lb: MotrixLabels.defaults(),                     // C7：採購建議狀態顯示名稱（設定中心『採購建議：狀態名稱』；預設＝原本的字）
 
     async init() {
       if (this._initDone) return
@@ -525,6 +527,7 @@ function app() {
       const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!s.token) { location.href = 'login.html'; return }
       this.session = s
+      MotrixLabels.load().then(m => { this.lb = m })
       try {
         const r = await fetch(`${API}/auth/me`, { headers: { Authorization: 'Bearer ' + s.token } })
         if (!r.ok) { location.href = 'login.html'; return }
