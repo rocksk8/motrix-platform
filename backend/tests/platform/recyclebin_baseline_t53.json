@@ -376,6 +376,7 @@
   "routers/system.py::delete_custom_role::DELETE /api/settings/custom-roles/{rid}": "exempt: 角色設定（設定資料）",
   "routers/system.py::delete_work_log::DELETE /api/work-logs/{wid}": "p2: 其他業務資料（P2 評估）",
   "routers/system.py::delete_work_log_photo::DELETE /api/work-logs/{wid}/photos/{photo_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
+  "modules/permmatrix/api.py::permmatrix_user_override_clear::DELETE /api/permmatrix/user-override": "exempt: 個人權限覆寫（設定；有版本紀錄與一鍵復原，非單據）",
   "routers/system.py::edit_presence_release::DELETE /api/edit-presence": "exempt: 編輯中提示（暫態，無使用者資料）",
   "routers/system.py::reset_branding_asset::DELETE /api/settings/branding/{kind}": "exempt: 品牌圖設定（可重新上傳，非單據）"
  }

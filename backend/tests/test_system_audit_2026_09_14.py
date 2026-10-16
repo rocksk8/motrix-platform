@@ -729,7 +729,8 @@ def test_destructive_routes_check_role_or_ownership():
         if (fname, path) in _DELETE_OWNERSHIP_VERIFIED:
             continue
         has_role = re.search(r'role.{0,40}(superadmin|admin)|_is_admin|require_superadmin'
-                             r'|require_any_module|_guard_|_require_(?!user\b)\w+', body)
+                             r'|require_any_module|_guard_|_require_(?!user\b)\w+'
+                             r'|\bperm\.require\(', body)               # T68：權限矩陣的能力檢查（helpers.perm.require）也是權限把關
         if not has_role:
             weak.append(f"{fname}  {method} {path}")
     assert not weak, (

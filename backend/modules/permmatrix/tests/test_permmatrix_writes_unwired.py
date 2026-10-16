@@ -181,7 +181,7 @@ def test_permmatrix_module_declares_exactly_the_reviewed_routes():
 
 
 def test_every_write_endpoint_checks_superadmin_first():
-    """api.py 的每個非 GET 路由函式第一行都得先 `_su(authorization)`（縱深：服務層還會再查一次）。"""
+    """api.py 的每個端點第一行都得先 `_require_user(authorization, require_superadmin=True)`（縱深：服務層還會再查一次；寫在端點本體是為了 system_audit 的守門掃描認得）。"""
     src = (Path(__file__).resolve().parents[1] / "api.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     writes = []
@@ -194,4 +194,4 @@ def test_every_write_endpoint_checks_superadmin_first():
     assert len(writes) == 9, [f.name for f in writes]
     for fn in writes:
         first = ast.unparse(fn.body[0])
-        assert "_su(authorization)" in first, (fn.name, first)
+        assert "_require_user(authorization, require_superadmin=True)" in first, (fn.name, first)

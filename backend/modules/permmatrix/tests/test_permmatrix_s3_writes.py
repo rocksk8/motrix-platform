@@ -204,7 +204,8 @@ def test_undo_and_restore_walk_back_step_by_step(client, su):
 def test_page_edits_only_through_preview_and_has_init_guard():
     """頁面靜態守門：每個寫入都先走 preview 或確認對話框；有 _initDone 守衛；不顯示能力鍵（鍵只出現在 :data-testid 與請求內容）。"""
     from pathlib import Path
-    html = (Path(__file__).resolve().parents[4] / "frontend/pages/permission-matrix.html").read_text(encoding="utf-8")
+    from core import source_tree
+    html = source_tree.page_file("permission-matrix.html").read_text(encoding="utf-8")
     assert "_initDone" in html and "/role-cap/preview" in html and "/user-override/preview" in html
     assert html.count("this._open(") >= 6 and "confirmDlg" in html            # 所有寫入都經確認對話框
     assert "!c.wired" in html                                                  # 未接入的格子不可勾

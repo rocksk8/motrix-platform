@@ -138,4 +138,5 @@ def test_page_wired_into_module_and_hub():
     hub = json.loads((ROOT / "backend/core/system_hub_l1.json").read_text(encoding="utf-8"))
     card = [c for c in (hub if isinstance(hub, list) else hub.get("cards", hub.get("items", []))) if c.get("id") == "permission-matrix"][0]
     assert card["perm"] == "superadmin" and not card.get("planned")
-    assert (ROOT / "frontend/pages" / card["href"]).exists()
+    from core import source_tree
+    assert source_tree.page_file(card["href"]).exists()
