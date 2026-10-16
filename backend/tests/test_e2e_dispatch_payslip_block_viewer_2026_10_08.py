@@ -106,5 +106,6 @@ def test_viewer_without_any_related_module_gets_no_request_and_no_block(live_ser
                   "d.dpSlipLoad({ id: %s }) }" % (DATA_JS, did))
     page.wait_for_function("() => { const s = %s.dpSlips[%s]; return s && s.hidden === true }" % (DATA_JS, did), timeout=10000)
     assert seen == [], "不應送出請求：%s" % seen
+    page.locator("[data-testid=dispatch-slips-%s]" % did).wait_for(state="hidden", timeout=10000)  # 狀態翻了 ≠ Alpine 已重繪：等它真的隱藏再斷言
     assert not page.locator("[data-testid=dispatch-slips-%s]" % did).is_visible()
     assert "無法讀取勞報單關聯" not in page.inner_text("body")
