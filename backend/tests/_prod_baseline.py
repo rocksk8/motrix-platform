@@ -43,6 +43,7 @@
 📌 2026-10-15 17:09：正式機已更新到 26a0a07d（第六十三班：案件階段修正、匯出欄位、款項類別單一來源、狀態用語、報價單輸出選項與額外通知框架化，建構器各旗標仍全關；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261015-t63-apply.md；套件 20261015_165232_26a0a07d_full；core 1.137→1.139、arap 1.0.56、case 1.0.189、crm 1.0.17，schema 維持 118、無 migration；manifest 582 筆；設定群組 30 組）⇒ 基準改 26a0a07d。
 📌 2026-10-15 20:55：正式機已更新到 0dafc339（第六十四班：獲利警示色帶、報價單預設有效天數、數字與日期顯示格式、額外通知編輯器、欄位可見度目錄；預設值皆等於今天的行為、各旗標仍全關；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261015-t64-apply.md；套件 20261015_203717_0dafc339_full；core 1.139→1.141、arap 1.0.57、case 1.0.193、analytics 1.0.42（其餘模組版本不變），schema 維持 118、無 migration；manifest 583 筆；設定群組 33 組）⇒ 基準改 0dafc339。
 📌 2026-10-16 10:19：正式機已更新到 79d10f22（第六十五班：金額欄位遮罩出口改用欄位政策〔行為不變〕、清單檢視個人偏好〔報價單清單欄位／預設頁籤／每頁筆數、案件清單預設頁籤／每次載入筆數／合併重複的已成案頁籤，預設全關〕、前端數字與日期顯示統一走 MotrixFormat〔預設輸出不變〕；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261016-t65-apply.md；套件 20261016_100431_79d10f22_full；core 1.141→1.143、case 1.0.200、accounting 1.1.63、analytics 1.0.43、arap 1.0.58、lodging 1.2.8、payroll 1.2.20、subcontract 1.1.38、supply 1.0.31、tender_radar 1.5.10，schema 維持 118、無 migration；manifest 584 筆；設定群組 34 組）⇒ 基準改 79d10f22。
+📌 2026-10-16 12:53：正式機已更新到 b4db4637（第六十六班：清單個人偏好後端〔API＋新表 user_list_view_prefs，旗標預設全關、無畫面〕、其餘頁面數字與日期顯示統一走 MotrixFormat〔預設輸出不變〕、複製到新報價單後拖曳排序與預覽高度修復、權限矩陣待生效改走設定帳本〔寫入函式未接線、行為不變〕；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261016-t66-apply.md；套件 20261016_121636_b4db4637_full；core 1.143→1.144（核心 migration 10→11）、case 1.0.201、permmatrix 1.0.4、subcontract 1.1.39、supply 1.0.32，schema 維持 118；manifest 586 筆；設定群組 35 組）⇒ 基準改 b4db4637。
 """
 import json
 import subprocess
@@ -51,7 +52,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "79d10f22"
+BASELINE = "b4db4637"
 
 
 def baseline_manifest():
