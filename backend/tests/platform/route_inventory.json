@@ -1,16 +1,16 @@
 {
  "summary": {
-  "endpoints_total": 875,
-  "endpoints_api": 871,
+  "endpoints_total": 876,
+  "endpoints_api": 872,
   "write_total": 473,
   "write_api": 473,
-  "get_api": 398,
-  "distinct_paths_api": 735,
+  "get_api": 399,
+  "distinct_paths_api": 736,
   "write_with_body_api": 345,
   "write_with_path_param_api": 344
  },
  "select_star": {
-  "modules": 277,
+  "modules": 274,
   "archive": 94,
   "routers": 11,
   "helpers": 11,
