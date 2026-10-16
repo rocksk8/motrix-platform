@@ -68,7 +68,7 @@ helpers/field_policy.py            L1，[穩定度] 實驗
 - `finance_via_effective`：`off`、`shadow`、`on`（`on` 用測試替身注入生效權限；本期不開，但函式必須和舊函式在 `on` 下也一致，因為 `visible()` 只轉呼叫它們）
 - 欄位：目錄全部（47 筆，含 16 張工作表）
 
-每一格斷言 `visible(fid, u) == _OLD[ceiling](u)`，其中 `_OLD` 是**寫在測試裡的舊函式對照表**（不讀目錄，避免自證）。再加動作矩陣：對同一份樣本單據，分別用舊流程（`mask_quotation_data(..., keep_quote=…, keep_orders=…)`）與新流程（旗標由 `mask_flags` 產生）遮蔽，比較**整份輸出 JSON 逐位元相等**——樣本要含：舊形狀 `payment.received`、`settlement` 全欄、含『毛利／NT$／折讓』的核准原因、含『淨利率』舊標籤的修改紀錄、`editHistory[].reason`。
+每一格斷言 `visible(fid, u) == _OLD[ceiling] 在同一 u 的結果`，其中 `_OLD` 是**寫在測試裡的舊函式對照表**（不讀目錄，避免自證）。再加動作矩陣：對同一份樣本單據，分別用舊流程（`mask_quotation_data(..., keep_quote=…, keep_orders=…)`）與新流程（旗標由 `mask_flags` 產生）遮蔽，比較**整份輸出 JSON 逐位元相等**——樣本要含：舊形狀 `payment.received`、`settlement` 全欄、含『毛利／NT$／折讓』的核准原因、含『淨利率』舊標籤的修改紀錄、`editHistory[].reason`。
 正對照：把 `ceiling` 對映故意改錯一格，金標必須變紅。
 
 ## 6. 回寫與推論風險（S1 要守住的）
