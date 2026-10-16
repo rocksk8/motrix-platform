@@ -29,6 +29,8 @@ function reportsApp() {
     exporting:  false,
     exportType: '',
     error:      '',
+    noAccess:   false,        // T68：無財務／金額可見權限 ⇒ 整頁只顯示說明
+    noAccessMsg: '需要財務或金額可見權限才能查看報表',
     data:       null,
 
     // ── Customer history ─────────────────────────────────────────────────────
@@ -493,7 +495,7 @@ function reportsApp() {
     // ── Load preview data ─────────────────────────────────────────────────────
     async loadData() {
       if (!this.isAdminPlus()) {
-        if (!this.hasCashierAccess()) this.error = '僅管理員以上可存取營運報表功能'
+        if (!this.hasCashierAccess()) this.noAccess = true
         return
       }
       this._syncSubPeriods()
@@ -508,6 +510,11 @@ function reportsApp() {
         var res = await fetch('/api/reports/financial?' + qs, {
           headers: { Authorization: 'Bearer ' + this._token() }
         })
+        if (res.status === 403) {          // T68：後端金額閘（_require_reports_access）擋下 ⇒ 整頁顯示說明，不顯示空白或紅色錯誤列
+          this.noAccess = true
+          this.loading = false
+          return
+        }
         if (!res.ok) {
           var j = await res.json().catch(function () { return {} })
           throw new Error(j.detail || '載入失敗')
@@ -1265,7 +1272,7 @@ function reportsApp() {
       // （全部 12 個財務報表頁籤＋出納頁籤都看得到）；純 cashier/finance 模組
       // 的非管理職使用者只開放出納頁籤，其餘財務報表資料完全不載入。
       if (!this.hasCashierAccess()) {
-        this.error = '僅管理員以上可存取營運報表功能'
+        this.noAccess = true          // T68：整頁擋下並說明原因（reports.html 的 data-testid="reports-no-access"）
         return
       }
       if (!this.isAdminPlus()) {
