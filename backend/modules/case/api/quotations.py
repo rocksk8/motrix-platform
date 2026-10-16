@@ -1665,104 +1665,116 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     q["editHistory"] = []   # 編輯紀錄只由伺服器維護：新單從空白開始（用戶端帶的一律丟掉）
     deal_tag, settle_status = quote_hot_fields(q)
     conn = get_db()
+    try:                                 # T70：寫鎖由 begin_write 取得（讀 data_json 的結構守門要求）；任何例外都不可帶著寫鎖漏出連線
+        begin_write(conn)
 
-    sp_name = (q.get("salesPerson") or "").strip()
-    sp_row = conn.execute(
-        "SELECT id FROM users WHERE display_name=? AND active=1 LIMIT 1", (sp_name,)
-    ).fetchone() if sp_name else None
-    sp_id = sp_row["id"] if sp_row else None
+        sp_name = (q.get("salesPerson") or "").strip()
+        sp_row = conn.execute(
+            "SELECT id FROM users WHERE display_name=? AND active=1 LIMIT 1", (sp_name,)
+        ).fetchone() if sp_name else None
+        sp_id = sp_row["id"] if sp_row else None
 
-    # Ensure quote_seq row exists for peek helper
-    conn.execute(
-        "INSERT INTO quote_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
-        (month,)
-    )
+        # Ensure quote_seq row exists for peek helper
+        conn.execute(
+            "INSERT INTO quote_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
+            (month,)
+        )
 
-    # Use provisional number from client if provided; otherwise auto-assign
-    # 2026-09-10：client 送來的單號一律要通過格式驗證才採用，否則視同沒送、由後端派號。
-    # 前端曾經在取不到號時送出佔位字串（`copyToNew()` 的 `MQ-YYYYMM-???`、舊版
-    # `saveDraft()` 的寫死 001），`MQ-202609-???` 這種字串不會跟任何既有單號衝突，
-    # 所以 INSERT 會成功，接著下面解析序號的 int() 就炸成未捕捉的 ValueError → 500，
-    # 使用者只看到「儲存失敗」，複製的內容也救不回來（模板在頁面載入時就清掉了）。
-    # 前端那兩處已分別修掉，但「後端才是單號的權威」這件事要在這裡守住——
-    # 不管哪個 client、哪個版本送什麼過來，格式不對就由後端自己派。
-    _client_no = (body.quote_no or q.get("quoteNo") or "").strip()
-    if _client_no and not _QUOTE_NO_RE.match(_client_no):
-        logger.warning("create_quotation 收到格式不合的單號 %r，改由後端派號", _client_no)
-        _client_no = ""
-    qno = _client_no or _peek_next_no(conn, month)
+        # Use provisional number from client if provided; otherwise auto-assign
+        # 2026-09-10：client 送來的單號一律要通過格式驗證才採用，否則視同沒送、由後端派號。
+        # 前端曾經在取不到號時送出佔位字串（`copyToNew()` 的 `MQ-YYYYMM-???`、舊版
+        # `saveDraft()` 的寫死 001），`MQ-202609-???` 這種字串不會跟任何既有單號衝突，
+        # 所以 INSERT 會成功，接著下面解析序號的 int() 就炸成未捕捉的 ValueError → 500，
+        # 使用者只看到「儲存失敗」，複製的內容也救不回來（模板在頁面載入時就清掉了）。
+        # 前端那兩處已分別修掉，但「後端才是單號的權威」這件事要在這裡守住——
+        # 不管哪個 client、哪個版本送什麼過來，格式不對就由後端自己派。
+        _client_no = (body.quote_no or q.get("quoteNo") or "").strip()
+        if _client_no and not _QUOTE_NO_RE.match(_client_no):
+            logger.warning("create_quotation 收到格式不合的單號 %r，改由後端派號", _client_no)
+            _client_no = ""
+        qno = _client_no or _peek_next_no(conn, month)
 
-    # `QL25`（依據使用者 2026-09-23 裁示）入口①：直接建立即送審（沒有草稿
-    # 步驟），離開草稿那一刻＝這裡。草稿階段仍跟著設定走，只有真的要
-    # 送審才凍結——`body.status` 停在「草稿」的路不寫快照。判準用
-    # `!= "草稿"`（不是只認字面「待審核」）：同入口②③的理由，這支也
-    # 收得到 client 直接送非「待審核」的非草稿狀態。
-    if body.status != "草稿":
-        q[SNAPSHOT_KEY] = snapshot_for((body.location_id or "").strip())
-        _CT.freeze(q)                      # S-Q2：離開草稿那一刻凍結條款標題（待審核已在送審原因前凍結過，這裡涵蓋其他非草稿狀態；同一份範本 ⇒ 結果相同）
+        # `QL25`（依據使用者 2026-09-23 裁示）入口①：直接建立即送審（沒有草稿
+        # 步驟），離開草稿那一刻＝這裡。草稿階段仍跟著設定走，只有真的要
+        # 送審才凍結——`body.status` 停在「草稿」的路不寫快照。判準用
+        # `!= "草稿"`（不是只認字面「待審核」）：同入口②③的理由，這支也
+        # 收得到 client 直接送非「待審核」的非草稿狀態。
+        if body.status != "草稿":
+            q[SNAPSHOT_KEY] = snapshot_for((body.location_id or "").strip())
+            _CT.freeze(q)                      # S-Q2：離開草稿那一刻凍結條款標題（待審核已在送審原因前凍結過，這裡涵蓋其他非草稿狀態；同一份範本 ⇒ 結果相同）
 
-    def _do_insert(no: str):
-        q["quoteNo"] = no
-        MG.enforce(conn, no, q, actor=user)        # 叫料審核（31-C）：新建報價單帶來的叫料也要過閘（被拒的項目直接丟掉）
-        conn.execute("""
-            INSERT INTO quotations
-              (quote_no, status, customer_name, project_name,
-               total, pretax, direct_margin_pct, net_margin_pct,
-               sales_person, sales_person_id, quote_date, valid_days, data_json,
-               created_at, updated_at, created_by, deal_tag, settle_status,
-               location_id)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """, (
-            no, body.status,
-            q.get("customerName"), q.get("projectName"),
-            tot.get("total", 0), tot.get("pretax", 0),
-            tot.get("directMarginPct", 0), tot.get("netMarginPct", 0),
-            q.get("salesPerson"), sp_id, q.get("quoteDate"), q.get("validDays", _pw.default_valid_days()),
-            json.dumps(q, ensure_ascii=False),
-            now, now, user["username"], deal_tag, settle_status,
-            # 沒送 ⇒ 留空，由 DB 的 trigger 補成當下的主要據點。
-            # 🔑 **不在這裡查一次主要據點**：那會變成「兩個地方各自決定
-            # 什麼是預設」，而 trigger 那一份管得到所有寫入路徑。
-            (body.location_id or "").strip() or None,
-        ))
+        def _do_insert(no: str):
+            q["quoteNo"] = no
+            MG.enforce(conn, no, q, actor=user)        # 叫料審核（31-C）：新建報價單帶來的叫料也要過閘（被拒的項目直接丟掉）
+            conn.execute("""
+                INSERT INTO quotations
+                  (quote_no, status, customer_name, project_name,
+                   total, pretax, direct_margin_pct, net_margin_pct,
+                   sales_person, sales_person_id, quote_date, valid_days, data_json,
+                   created_at, updated_at, created_by, deal_tag, settle_status,
+                   location_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                no, body.status,
+                q.get("customerName"), q.get("projectName"),
+                tot.get("total", 0), tot.get("pretax", 0),
+                tot.get("directMarginPct", 0), tot.get("netMarginPct", 0),
+                q.get("salesPerson"), sp_id, q.get("quoteDate"), q.get("validDays", _pw.default_valid_days()),
+                json.dumps(q, ensure_ascii=False),
+                now, now, user["username"], deal_tag, settle_status,
+                # 沒送 ⇒ 留空，由 DB 的 trigger 補成當下的主要據點。
+                # 🔑 **不在這裡查一次主要據點**：那會變成「兩個地方各自決定
+                # 什麼是預設」，而 trigger 那一份管得到所有寫入路徑。
+                (body.location_id or "").strip() or None,
+            ))
 
-    try:
-        _do_insert(qno)
-    except sqlite3.IntegrityError:
-        # Provisional number taken (concurrent save); auto-assign next available
-        qno = _peek_next_no(conn, month)
         try:
             _do_insert(qno)
         except sqlite3.IntegrityError:
-            conn.close()
-            raise HTTPException(409, "報價單號衝突，請重試")
+            # Provisional number taken (concurrent save); auto-assign next available
+            qno = _peek_next_no(conn, month)
+            try:
+                _do_insert(qno)
+            except sqlite3.IntegrityError:
+                conn.close()
+                raise HTTPException(409, "報價單號衝突，請重試")
 
-    # Reserve in quote_seq so future peeks don't repeat this number.
-    # 這裡的 qno 已經過 _QUOTE_NO_RE 驗證（或由 _peek_next_no 產生），序號一定是
-    # 三位數字；仍用 try 兜底，因為「解析單號」不值得讓整支建立端點掛掉。
-    try:
-        seq_no = int(qno.split("-")[-1]) if qno.count("-") == 2 else 0
-    except ValueError:
-        logger.warning("create_quotation 無法從 %r 解析序號，略過 quote_seq 更新", qno)
-        seq_no = 0
-    if seq_no:
-        conn.execute(
-            "INSERT INTO quote_seq (month, seq) VALUES (?, ?) "
-            "ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)",
-            (_month_of_no(qno), seq_no)
-        )
-    # caseRecord.stages 正規化 Phase 3a（2026-08-23）：新建報價單也可能挾帶
-    # caseRecord.stages（例如複製既有案件、或 quotation-form.html 自己的
-    # ensureCaseRecord() 產生的階段），同一 conn 內、commit 前一併同步進新表，
-    # 邏輯與 update_quotation()/update_case_record() 完全一致。
-    cr = q.get("caseRecord")
-    if isinstance(cr, dict) and isinstance(cr.get("stages"), list):
-        _sync_json_stages_to_table(conn, qno, cr["stages"])
-        # 3b 收尾追加修正（2026-08-23）：合併後有些階段可能拿到新的真實 id，立刻
-        # 寫回 data_json，前端下一次讀到的 id 才會跟 case_stages 表一致。
-        _sync_stages_to_json(conn, qno, updated_at=now)
-    conn.commit()
-    conn.close()
+        # Reserve in quote_seq so future peeks don't repeat this number.
+        # 這裡的 qno 已經過 _QUOTE_NO_RE 驗證（或由 _peek_next_no 產生），序號一定是
+        # 三位數字；仍用 try 兜底，因為「解析單號」不值得讓整支建立端點掛掉。
+        try:
+            seq_no = int(qno.split("-")[-1]) if qno.count("-") == 2 else 0
+        except ValueError:
+            logger.warning("create_quotation 無法從 %r 解析序號，略過 quote_seq 更新", qno)
+            seq_no = 0
+        if seq_no:
+            conn.execute(
+                "INSERT INTO quote_seq (month, seq) VALUES (?, ?) "
+                "ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)",
+                (_month_of_no(qno), seq_no)
+            )
+        # caseRecord.stages 正規化 Phase 3a（2026-08-23）：新建報價單也可能挾帶
+        # caseRecord.stages（例如複製既有案件、或 quotation-form.html 自己的
+        # ensureCaseRecord() 產生的階段），同一 conn 內、commit 前一併同步進新表，
+        # 邏輯與 update_quotation()/update_case_record() 完全一致。
+        cr = q.get("caseRecord")
+        if isinstance(cr, dict) and isinstance(cr.get("stages"), list):
+            _sync_json_stages_to_table(conn, qno, cr["stages"])
+            # 3b 收尾追加修正（2026-08-23）：合併後有些階段可能拿到新的真實 id，立刻
+            # 寫回 data_json，前端下一次讀到的 id 才會跟 case_stages 表一致。
+            _sync_stages_to_json(conn, qno, updated_at=now)
+        conn.commit()
+        conn.close()
+    except BaseException:
+        try:
+            conn.rollback()
+        except Exception:                # noqa: BLE001  連線可能已關閉
+            pass
+        try:
+            conn.close()
+        except Exception:                # noqa: BLE001
+            pass
+        raise
 
     # Direct create+submit (new record sent straight to 待審核 with no draft step first)
     # never goes through update_quotation()'s PUT path, so it needs the same tier-building

@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-17（wip/t70-hygiene-r2；建立報價單的寫鎖衛生，重做於凍結的 T69 之上）
+- 修正（內部衛生，無行為變更）：`POST /api/quotations` 取連線後以 `begin_write` 取得寫鎖，整段建立（取號、INSERT、保留序號、階段同步）在同一個寫交易內，任何例外 rollback 並關閉連線（原本在第一個寫入語句才隱含開啟交易，且帶 `caseRecord.stages`（含空陣列）時，同步階段會違反「讀 data_json 前要用 begin_write 拿寫鎖」的結構守門：測試環境 RuntimeError，正式機只記一行 ERROR 照寫；一般報價單表單新建時不帶 caseRecord，所以使用者不受影響）。守門測試 `tests/test_quote_create_stages_t70.py`。
+
 ## 1.0.203 — 2026-10-17 00:10（wip/t69-backfill-l0-r1；補登歷史案件 L0：序號月份修正＋開關＋能力鍵）
 - 修正：建立報價單時若帶入舊月份的單號，序號原本記到「本月」（會墊高本月序號，下一張新單號被跳號）；現在序號一律記在單號自己的月份（新增 `_month_of_no()`；送審失敗回收序號同理）。一般新增報價單（不帶單號）行為不變。
 - 新增（預設關、尚無入口）：設定中心群組 `quote_backfill`（開關 `enabled` 預設 0、`earliest_month` 預設 202001；立即生效、僅稽核，使用者 2026-10-16 裁示）；能力鍵 `case.quote_backfill.create`（最高管理者專屬、不可委派、保留中）。補登端點在 L1。無資料庫變動。守門測試 `tests/test_quote_backfill_l0_t69.py`。
