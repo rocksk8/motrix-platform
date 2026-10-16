@@ -205,9 +205,25 @@ def _current_role_code(conn, p):
     return r[0] if r else None
 
 
+_PAGE = 1000          # history() 單頁上限；用分頁走完全部，舊的待核准項不會因為列數多而被擠掉
+
+
+def _role_rows(conn):
+    """角色對應的全部變更明細（新→舊），分頁走完。"""
+    off = 0
+    while True:
+        page = _L.history(conn, _ROLE_DOMAIN, None, limit=_PAGE, offset=off)
+        for r in page:
+            if r["domain"] == _ROLE_DOMAIN:
+                yield r
+        if len(page) < _PAGE:
+            return
+        off += _PAGE
+
+
 def _role_pending_row(conn, pid):
-    for r in _L.history(conn, _ROLE_DOMAIN, None, limit=1000):
-        if r["id"] == pid and r["domain"] == _ROLE_DOMAIN:
+    for r in _role_rows(conn):
+        if r["id"] == pid:
             return r
     raise HTTPException(404, "找不到這筆待核准的角色對應變更。")
 
@@ -232,8 +248,7 @@ def list_roles(authorization: str = Header(None)):
         roles = conn.execute("SELECT r.role, r.scope_type, r.scope_key, r.account_code, r.effective_from, a.name AS account_name"
                              " FROM gl_account_roles r LEFT JOIN account_items a ON a.code=r.account_code"
                              " ORDER BY r.role, r.scope_type, r.scope_key, r.effective_from").fetchall()
-        pend = [_pending_view(r) for r in _L.history(conn, _ROLE_DOMAIN, None, limit=1000)
-                if r["domain"] == _ROLE_DOMAIN and r["state"] == "pending"]
+        pend = [_pending_view(r) for r in _role_rows(conn) if r["state"] == "pending"]
         return {"roles": [dict(r) for r in roles], "pending": pend}
     finally:
         conn.close()
@@ -260,16 +275,16 @@ def put_role(body: dict = Body(...), authorization: str = Header(None)):
         others = [r[0] for r in conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' AND username<>?", (user["username"],))]
         if not others:
             raise HTTPException(409, "角色對應的變更需要另一位在職的最高管理者核准；目前沒有第二位最高管理者，無法申請。")
+        if _current_role_code(conn, p) == p["account_code"]:
+            raise HTTPException(409, "這個角色目前已經是這個科目，不需要變更。")
         key = _role_key(p)
-        for r in _L.pending(conn, _ROLE_DOMAIN):
-            if r["domain"] == _ROLE_DOMAIN and r["key"] == key:
+        for r in _role_rows(conn):
+            if r["key"] == key and r["state"] == "pending":
                 _L.supersede(conn, r["id"], user, "被較新的申請取代")
         rec = _L.record(conn, _ROLE_DOMAIN, key, [{"field": "account_code", "old": _current_role_code(conn, p), "new": p}], reason, user,
                         risk="money", effective_at=_dt.datetime.now().isoformat(timespec="seconds"), approvals_required=1,
                         audit_action="ledger.role.request", target_label="角色 %s → %s（待核准）" % (p["role"], p["account_code"]),
                         link="ledger-settings.html")
-        if not rec["ids"]:
-            raise HTTPException(409, "這個角色目前已經是這個科目，不需要變更。")
         conn.commit()
     except BaseException:
         if conn.in_transaction:

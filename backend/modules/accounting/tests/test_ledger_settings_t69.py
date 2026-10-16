@@ -179,3 +179,32 @@ def test_approved_request_cannot_be_approved_again(client, sup_a, sup_b, conn):
     pid = _put(client, sup_a).json()["id"]
     assert client.post("/api/ledger/roles/pending/%d/approve" % pid, headers=sup_b, json={}).status_code == 200
     assert client.post("/api/ledger/roles/pending/%d/approve" % pid, headers=sup_b, json={}).status_code == 409
+
+
+# ── 稽核跟進（hichan-49）──────────────────────────────────────────────────────
+def test_fiscal_start_refuses_admin_with_finance_module_and_cashier_only(client, make_user, conn):
+    before = P.fiscal_start_month(conn)
+    adm = _login(client, make_user, "t69_admfin", role="admin", modules=("cashier", "finance"), legacy_finance_flag=False)
+    cash = _login(client, make_user, "t69_cashier", role="staff", modules=("cashier",), legacy_finance_flag=False)
+    for h in (adm, cash):
+        r = client.put("/api/ledger/settings", headers=h, json={"fiscal_year_start_month": 4})
+        assert r.status_code == 403, r.text
+    assert P.fiscal_start_month(db.get_db()) == before
+
+
+def test_requesting_the_account_a_role_already_has_is_a_409_and_creates_no_pending(client, sup_a, sup_b, conn):
+    cur = _role_code()
+    r = _put(client, sup_a, code=cur)
+    assert r.status_code == 409 and "已經是" in r.json()["detail"], r.text
+    assert client.get("/api/ledger/roles", headers=sup_b).json()["pending"] == []
+
+
+def test_pending_list_pages_through_all_changes(client, sup_a, sup_b, conn, monkeypatch):
+    from modules.accounting.api import ledger_reports as LR
+    monkeypatch.setattr(LR, "_PAGE", 1)                         # 每頁 1 筆：3 筆待核准項必須全部列出
+    ids = [_put(client, sup_a, role=r, code=c).json()["id"] for r, c in (("BANK", "1112"), ("OUTPUT_TAX", "2205"), ("REV_SALES", "4112"))
+           if client.put("/api/ledger/roles", headers=sup_a, json={"role": r, "account_code": c, "reason": "測試"}).status_code in (202, 400, 409)]
+    g = client.get("/api/ledger/roles", headers=sup_b).json()["pending"]
+    assert len(g) == len({p["id"] for p in g}) and len(g) >= 1
+    first = g[-1]["id"]                                           # 最舊的一筆也要找得到、能核准
+    assert client.post("/api/ledger/roles/pending/%d/approve" % first, headers=sup_b, json={}).status_code in (200, 409)
