@@ -260,6 +260,34 @@ console.log(JSON.stringify({full, none, otherN: other.items.length}))
     assert r["none"]["items"] == [] and r["otherN"] == 2
 
 
+def test_sub_page_rail_wiring_uses_hub_endpoint_and_has_no_hardcoded_categories():
+    src = (ROOT / "frontend" / "static" / "sidebar.js").read_text(encoding="utf-8")
+    assert "_systemRail(a)" in src and "'/api/system-hub'" in src and "nav.id = 'sys-rail'" in src
+    assert "'#' + encodeURIComponent" in src                                           # 點分類 ⇒ 系統中心預選該分類
+    assert "(max-width:' + RAIL_NARROW" in src and "系統 › " in src                  # 窄螢幕退回麵包屑
+    assert src.index("window.MOTRIX_EMBED") < src.index("_systemRail(a)")             # 嵌入／預覽頁在檔頭就整支略過
+    rail = src[src.index("function _systemRail"):src.index("function buildSidebar")]
+    for key in ("notify", "accounts", "audit", "backup"):                              # 分類鍵不得寫死在分類欄裡
+        assert "'" + key + "'" not in rail
+
+
+@pytest.mark.skipif(not NODE, reason="需要 node")
+def test_rail_picks_current_category_from_hub_data():
+    src = (ROOT / "frontend" / "static" / "sidebar.js").read_text(encoding="utf-8")
+    body = src[src.index("var RAIL_W"):src.index("function _railData")]
+    script = """
+var secs = [{key: 'a', items: [{href: 'users.html'}, {href: 'x.html'}]}, {key: 'b', items: [{href: 'notif-settings.html#q'}, {href: 'x.html'}]}, {key: 'c', items: [{href: 'rec.html?k=2'}, {href: 'rec.html?k=3'}]}]
+function run(file, last, search) {
+  var window = {location: {search: search}}, sessionStorage = {getItem: function () { return last }}
+  %s
+  return _railCurrent(secs)
+}
+console.log(JSON.stringify({hash: run('notif-settings.html', '', ''), none: run('nope.html', '', ''), first: run('x.html', '', ''), lastPick: run('x.html', 'b', ''), exact: run('rec.html', '', '?k=3')}))
+""" % body
+    r = json.loads(subprocess.run([NODE, "-e", script], capture_output=True, text=True, encoding="utf-8", check=True, timeout=30).stdout)
+    assert r == {"hash": "b", "none": "", "first": "a", "lastPick": "b", "exact": "c"}
+
+
 def test_breadcrumb_wiring_exists_and_skips_the_hub_page():
     src = (ROOT / "frontend" / "static" / "sidebar.js").read_text(encoding="utf-8")
     assert "_systemCrumb()" in src and "file === 'system-hub.html'" in src and "sys-crumb" in src
