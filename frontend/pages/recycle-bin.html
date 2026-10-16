@@ -66,7 +66,7 @@
         ｜ 保存 <b x-text="st && st.retentionDays"></b> 天
         <div style="color:var(--text-secondary);margin-top:4px">隔離目錄：<span x-text="st && st.dir"></span></div>
         <div class="rb-dir" data-testid="rb-dir-panel" style="margin-top:8px">
-          <div style="color:var(--text-secondary)">隔離目錄放被刪除單據的附件；要換位置時，請填電腦上已存在資料夾底下的新資料夾（例：D:/MOTRIX-資源回收筒）。留空＝使用預設位置。</div>
+          <div style="color:var(--text-secondary)">隔離目錄放被刪除單據的附件；要換位置時，請填電腦上已存在資料夾底下的新資料夾（例：D:/MOTRIX-資源回收筒）。不可放在網站上傳資料夾（uploads）底下。留空＝使用預設位置。</div>
           <div x-show="dirLocked" style="color:#b45309;margin-top:4px" data-testid="rb-dir-locked">暫存區還有項目時不能換目錄（附件會找不到）：請先還原或永久刪除全部項目。</div>
           <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
             <input class="filter" style="min-width:320px" x-model="dirInput" :disabled="busy || dirLocked" placeholder="留空＝預設位置" data-testid="rb-dir-input">
