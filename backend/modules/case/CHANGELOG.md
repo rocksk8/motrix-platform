@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-17（wip/t70-hygiene-r1；建立報價單的寫鎖衛生）
+- 修正（內部衛生，無行為變更）：`POST /api/quotations` 在函式開頭用 `begin_write` 取得寫鎖，整段建立（取號、INSERT、保留序號、階段同步）在同一個寫交易內，任何例外 rollback 並關閉連線（原本在第一個寫入語句才隱含開啟交易，且帶 `caseRecord.stages`（含空陣列）時，同步階段會違反「讀 data_json 前要用 begin_write 拿寫鎖」的結構守門：測試環境 RuntimeError，正式機只記一行 ERROR 照寫；一般報價單表單新建時不帶 caseRecord，所以使用者不受影響）。守門測試 `tests/test_quote_create_stages_t70.py`。
+
 ## 1.0.201 — 2026-10-16（wip/t66-quote-copy-sortable-r1；複製為新報價單後拖曳排序失效修復；報價單表單 V3.29）
 - 修正：報價單清單或表單按「複製為新報價單」後，新單的項目拖曳排序（拖曳把手）失效。原因是 `quotation-form.html` 的 `init()` 複製分支在中途 `return`，漏掉編輯／新增共用的尾巴（`Sortable` 建立、預覽模式 `$watch`、預覽高度 `message` 監聽）。尾巴抽成 `_bindLateHooks()`，複製分支與一般路徑都呼叫，可重複呼叫不重複綁定；`initSortable()` 重建前先銷毀舊實例、`$watch` 只登記一次。複製分支再保險一次：status 缺值或誤帶「已送出」時改為草稿並取消解鎖。無資料庫變動、無後端變動；`FORM_VERSION` V3.28→V3.29。守門測試 `tests/platform/test_quote_copy_binds_sortable_t66.py`。
 
