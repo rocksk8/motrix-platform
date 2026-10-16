@@ -10,7 +10,8 @@ from datetime import datetime
 import pytest
 
 MONTH = "202607"
-CUR = datetime.now().strftime("%Y%m")
+def _cur():
+    return datetime.now().strftime("%Y%m")      # 執行期才取時鐘（收集期取會跨午夜偶發失敗）
 
 
 def _login(client, make_user, name, role="superadmin"):
@@ -100,7 +101,7 @@ def _audits(action):
 
 # ── 1. 正常補登 ─────────────────────────────────────────────────────────────
 def test_backfill_creates_closed_deal_numbered_by_its_own_month(client, boss, flag_on):
-    cur_before = _seq(CUR)
+    cur_before = _seq(_cur())
     r = _post(client, boss)
     assert r.status_code == 201, r.text
     no = r.json()["quote_no"]
@@ -114,7 +115,7 @@ def test_backfill_creates_closed_deal_numbered_by_its_own_month(client, boss, fl
     assert not [k for k in ap if k in ("approvedBy", "approvedAt", "approvedByDisplay", "signedAt")]
     assert row["quote_date"] == "2026-07-15"
     assert row["created_at"][:7] == datetime.now().strftime("%Y-%m")   # created_at 是真實時間，不偽造
-    assert _seq(CUR) == cur_before                         # 本月序號不動
+    assert _seq(_cur()) == cur_before                         # 本月序號不動
     assert _seq(MONTH) == 1
 
 
@@ -125,10 +126,10 @@ def test_backfill_continues_from_existing_max_of_that_month(client, boss, flag_o
 
 
 def test_client_supplied_original_number_is_honoured_and_reserves_its_month(client, boss, flag_on):
-    cur_before = _seq(CUR)
+    cur_before = _seq(_cur())
     r = _post(client, boss, date="2026-08-03", no="MQ-202608-007")
     assert r.status_code == 201 and r.json()["quote_no"] == "MQ-202608-007"
-    assert _seq("202608") == 7 and _seq(CUR) == cur_before
+    assert _seq("202608") == 7 and _seq(_cur()) == cur_before
 
 
 def test_profit_basis_is_stamped_as_current_basis(client, boss, flag_on):
@@ -158,14 +159,15 @@ def test_non_superadmin_is_refused_even_with_flag_on(client, make_user, flag_on,
 
 # ── 3. 日期 ─────────────────────────────────────────────────────────────────
 @pytest.mark.parametrize("date", [
-    datetime.now().strftime("%Y-%m-01"),                   # 本月
-    datetime.now().strftime("%Y-%m-%d"),                   # 今天
+    "@THIS_MONTH",                                         # 本月（執行期換成實際日期）
+    "@TODAY",                                              # 今天
     "2099-01-15",                                          # 未來
     "2019-12-31",                                          # 早於 2020-01
     "2026-13-01", "2026-02-30", "", "abc",                 # 不是日期
 ])
 def test_dates_outside_past_months_window_are_refused(client, boss, flag_on, date):
     n = _count()
+    date = {"@THIS_MONTH": datetime.now().strftime("%Y-%m-01"), "@TODAY": datetime.now().strftime("%Y-%m-%d")}.get(date, date)
     r = _post(client, boss, date=date)
     assert r.status_code == 400, (date, r.text)
     assert _count() == n
@@ -199,10 +201,10 @@ def test_reason_is_mandatory(client, boss, flag_on, reason):
     " ../MQ-202007-001",
 ])
 def test_malformed_or_impossible_numbers_are_rejected_not_silently_reassigned(client, boss, flag_on, no):
-    n, cur_before = _count(), _seq(CUR)
+    n, cur_before = _count(), _seq(_cur())
     r = _post(client, boss, no=no)
     assert r.status_code == 400, (no, r.text)
-    assert _count() == n and _seq(MONTH) == 0 and _seq(CUR) == cur_before
+    assert _count() == n and _seq(MONTH) == 0 and _seq(_cur()) == cur_before
 
 
 def test_number_month_must_match_quote_date_month(client, boss, flag_on):
@@ -213,19 +215,19 @@ def test_number_month_must_match_quote_date_month(client, boss, flag_on):
 
 def test_number_in_current_or_future_month_is_rejected(client, boss, flag_on):
     n = _count()
-    assert _post(client, boss, no="MQ-%s-001" % CUR).status_code == 400
+    assert _post(client, boss, no="MQ-%s-001" % _cur()).status_code == 400
     assert _post(client, boss, no="MQ-209912-001").status_code == 400
     assert _count() == n
 
 
 def test_duplicate_old_month_number_is_409_and_never_falls_back_to_current_month(client, boss, flag_on):
     assert _post(client, boss, no="MQ-%s-003" % MONTH).status_code == 201
-    n, cur_before, cur_rows = _count(), _seq(CUR), _count("quote_no LIKE ?", ("MQ-%s-%%" % CUR,))
+    n, cur_before, cur_rows = _count(), _seq(_cur()), _count("quote_no LIKE ?", ("MQ-%s-%%" % _cur(),))
     r = _post(client, boss, no="MQ-%s-003" % MONTH)
     assert r.status_code == 409, r.text
     assert _count() == n                                    # 沒有新增任何一筆
-    assert _count("quote_no LIKE ?", ("MQ-%s-%%" % CUR,)) == cur_rows   # 絕不改派成本月單號
-    assert _seq(CUR) == cur_before
+    assert _count("quote_no LIKE ?", ("MQ-%s-%%" % _cur(),)) == cur_rows   # 絕不改派成本月單號
+    assert _seq(_cur()) == cur_before
 
 
 # ── 6. 稽核 ─────────────────────────────────────────────────────────────────
@@ -283,7 +285,7 @@ def test_backfill_sends_nothing_at_the_real_delivery_layers_while_normal_create_
 def test_failure_after_insert_leaves_no_row_and_no_sequence_change(client, boss, flag_on, monkeypatch):
     from modules.case.api import quotations as Q
     assert _post(client, boss, no="MQ-%s-002" % MONTH).status_code == 201
-    seq_m, seq_c, n = _seq(MONTH), _seq(CUR), _count()
+    seq_m, seq_c, n = _seq(MONTH), _seq(_cur()), _count()
 
     def boom(*a, **k):
         raise RuntimeError("模擬建立後續步驟失敗")
@@ -295,7 +297,7 @@ def test_failure_after_insert_leaves_no_row_and_no_sequence_change(client, boss,
         except RuntimeError:                                # TestClient 會把未處理例外直接拋出
             pass
     assert _count() == n                                    # 單據沒留下
-    assert _seq(MONTH) == seq_m and _seq(CUR) == seq_c      # 該月與本月序號都不變
+    assert _seq(MONTH) == seq_m and _seq(_cur()) == seq_c      # 該月與本月序號都不變
     assert _post(client, boss).json()["quote_no"] == "MQ-%s-003" % MONTH   # 之後續號正常
 
 

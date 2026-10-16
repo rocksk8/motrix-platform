@@ -88,7 +88,7 @@ def test_backfill_flag_default_off_and_group_registered():
     assert int(SR.get("quote_backfill", "earliest_month")) == 202001
 
 
-def test_backfill_flag_takes_effect_immediately():
+def test_backfill_flag_takes_effect_immediately(client):
     import db
     from helpers import settings_registry as SR
     conn = db.get_db()
