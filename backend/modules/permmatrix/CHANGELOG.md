@@ -1,5 +1,10 @@
 # 權限矩陣 更新紀錄
 
+## 1.0.4 — 2026-10-16（wip/t67-pms0-r1；T67 PM-S0）
+- 待生效改走設定帳本（`config_ledger`，domain `perm:*`）：確認期間＝設定中心 `change_control.confirm_period_days`（預設 7 天、下限 1 天），取代 P0 的 24 小時 `perm_pending`；放寬（高風險授予、取消高風險個人禁止、高風險代理）另需**第二位最高管理者核准**（`approve_pending`；只有申請人一位最高管理者 ⇒ 不需核票、回警告）。
+- 服務層：`list_pending` 讀帳本；`cancel_pending` 任一最高管理者；新增 `approve_pending`；`activate_due` 只轉『確認期間已過且票數足夠』者，逐筆 SAVEPOINT，出錯的那筆撤銷並稽核；同一目標再申請取代舊的待生效項；預覽句子改為確認期間＋核准說明（L1 `perm_text` 不動，服務層換句）。
+- `perm_pending` 表保留、不再讀寫（沒有 schema 變更）；寫入函式仍未接任何端點／頁面（PMX14，守門 `test_permmatrix_writes_unwired.py` 納入 `approve_pending`），接線在 PM-S2／S3。
+
 ## 1.0.3 — 2026-10-13（wip/t57-u0a-core-r1；U0a 組織單位預留）
 - 新增模組 migration v2：`perm_role_caps`、`perm_user_overrides` 各加可為空的 `scope_json TEXT`（NULL＝全部＝今天的行為；共 2 欄）。只加欄位、冪等；沒有任何程式讀寫它（授權帶範圍屬 U1）。
 

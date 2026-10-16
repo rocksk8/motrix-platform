@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-"""權限矩陣的 P0 寫入函式是**過渡實作**（單人 24 小時待生效，不是『第二位最高管理者核准＋確認期』）。
-在設定帳本（config_ledger）接上之前，任何端點、頁面或其他產品碼都不得呼叫它們（SPEC PMX14）。本守門在有人呼叫時變紅。
+"""權限矩陣的 P0 寫入函式尚未接線（PM-S0 起待生效已是『第二位最高管理者核准＋確認期』）。
+T67 PM-S0 已改走設定帳本（確認期間＋雙人核准）；端點與頁面屬 PM-S2／S3，在那之前任何端點、頁面或其他產品碼都不得呼叫它們（SPEC PMX14）。本守門在有人呼叫時變紅。
 """
 import ast
 from pathlib import Path
@@ -8,7 +8,7 @@ from pathlib import Path
 from core import source_tree
 
 WRITE_FUNCS = {"set_role_cap", "set_user_override", "clear_user_override", "create_delegation", "revoke_delegation",
-               "restore_version", "undo_last_change", "cancel_pending", "activate_due", "kick_activation"}
+               "restore_version", "undo_last_change", "cancel_pending", "approve_pending", "activate_due", "kick_activation"}
 OWNER = "modules/permmatrix/service.py"       # 定義處與它自己的內部呼叫（restore 內部用 set_*、load_matrix 啟動背景轉態）
 OWN_PACKAGE = {OWNER, "modules/permmatrix/__init__.py"}      # 模組宣告檔：匯入 service 登記提供者（只取 load_matrix）
 PKG = "modules.permmatrix"

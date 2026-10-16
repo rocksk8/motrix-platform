@@ -53,7 +53,7 @@
 | `helper:clause_titles` | L1 | 報價單條款標題（census #5 / S-Q2）：報價單五個條款區塊的標題，管理者只能從預設清單挑（付款條件→付款方式…）。 | 7 | 5 | `tests/platform/test_clause_titles_t62.py` |
 | `helper:company_identity` | L1 | §9 QL · 一份單據要印的「公司身分」。（無單位卡） | 19 | 14 | — |
 | `helper:company_setup` | L1 | 本公司資料設定閘門：「這個安裝的本公司資料有沒有人確認過」（docs/platform/COMPANY-SETUP-GATE.md §3、§4.3、§6）。 | 66 | 7 | `tests/test_company_setup_core_2026_09_28.py`、`tests/test_company_setup_cli_2026_09_28.py`、`tests/test_company_setup_gate_2026_09_28.py`、`tests/test_company_setup_output_gate_2026_09_28.py` |
-| `helper:config_ledger` | L1 | 設定與權限共用的「變更明細＋待生效」層（L1；第 54 班設定中心 S0；與 1d 的權限矩陣設計 §7 共同定案）。 | 18 | 3 | `backend/tests/platform/test_config_ledger_t54.py` |
+| `helper:config_ledger` | L1 | 設定與權限共用的「變更明細＋待生效」層（L1；第 54 班設定中心 S0；與 1d 的權限矩陣設計 §7 共同定案）。 | 18 | 4 | `backend/tests/platform/test_config_ledger_t54.py` |
 | `helper:custom_builder_support` | L1 | 建構器底層支援（建構器第三輪 S2.5／S3／S5，CORE 1.72，只增）。 | 21 | 5 | `tests/test_builder_support_2026_09_30.py` |
 | `helper:custom_def_review` | L1 | 自訂模組「定義」的送審流程（建構器第三輪 S4，2026-09-30；使用者：定義送審→退回→修改重送，每次 v1→v2…，退回要填原因）。 | 13 | 2 | `tests/test_builder3_def_review_2026_09_30.py` |
 | `helper:custom_fields` | L1 | 自訂欄位命名空間（P4，CUSTOMIZATION-SPEC §3.6）。（無單位卡） | 10 | 3 | — |
@@ -123,7 +123,7 @@
 | `helper:settings_groups_list_view` | L1 | T65 C1 設定群組：清單檢視的個人偏好（list_view）。**預設全關＝畫面與請求和今天逐位元相同。** | 1 | 1 | `backend/tests/platform/test_list_view_c1_t65.py` |
 | `helper:settings_groups_profit` | L1 | T64 A 設定群組：利潤提醒色帶（profit_warning）與報價單預設值（quote_defaults）。**預設值＝各畫面今天寫死的數字**（部署零行為變更）。 | 1 | 1 | `backend/tests/platform/test_profit_warning_t64.py` |
 | `helper:settings_groups_q0` | L1 | T63 Q0 設定群組：報價單輸出（quote_output）與報價單個資（quote_privacy）。**預設值＝上線前的行為**（部署零行為變更）。 | 2 | 1 | `backend/tests/platform/test_q0_settings_t63.py` |
-| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 37 | 37 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 37 | 38 | `backend/tests/platform/test_settings_registry_t54.py` |
 | `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 4 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
 | `helper:stage_templates` | L1 | 案件執行階段樣板（S-ST1；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）：宣告式的階段清單（種類鍵、名稱、起迄天數、建議比例、前置階段）。 | 15 | 4 | `backend/tests/platform/test_stage_templates_t62.py` |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 23 | 10 | — |

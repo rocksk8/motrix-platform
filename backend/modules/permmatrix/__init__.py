@@ -2,7 +2,7 @@
 """權限矩陣（資料與寫入）。只 import core／helpers／db（L1），不 import 其他 L2 模組。
 
 設計：docs/platform/plans/PERMISSION-MATRIX-DESIGN-T54.md。判斷在 L1 `helpers/perm.py`（矩陣來源缺席時用 legacy 種子＝今天的行為）；
-本模組提供矩陣的**資料**（覆寫列、個人覆寫、代理、24 小時待生效、版本），透過提供者 `perm.matrix_source` 交給 L1。
+本模組提供矩陣的**資料**（覆寫列、個人覆寫、代理、待生效（設定帳本＋確認期間＋雙人核准）、版本），透過提供者 `perm.matrix_source` 交給 L1。
 """
 import importlib
 

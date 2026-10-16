@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""權限矩陣框架 P0 里程碑 2：矩陣資料表、提供者、服務層（覆寫／個人覆寫／代理／24 小時待生效／版本回溯）。規格 modules/permmatrix/SPEC.md（PMX1…）。"""
+"""權限矩陣框架 P0 里程碑 2：矩陣資料表、提供者、服務層（覆寫／個人覆寫／代理／待生效（設定帳本＋確認期間＋雙人核准）／版本回溯）。規格 modules/permmatrix/SPEC.md（PMX1…）。"""
 import json
 import time
 from datetime import datetime, timedelta
@@ -9,6 +9,7 @@ import pytest
 import db
 from core import capabilities as C
 from helpers import auth as A
+from helpers import config_ledger as L
 from helpers import perm as P
 from modules.permmatrix import service as S
 
@@ -26,6 +27,7 @@ DECLS = [
 ]
 CAPS, PROBLEMS = C.collect({"zz": {"capabilities": DECLS}}, valid_roles=A.VALID_ROLES)
 SU = {"id": 1, "username": "root", "display_name": "root", "role": "superadmin"}
+APPROVER = {"id": 98, "username": "pm_approver", "role": "superadmin"}      # 第二位最高管理者（核准只看帳號名，不查 users）
 
 
 @pytest.fixture(autouse=True)
@@ -64,6 +66,14 @@ def _rows(conn, sql, args=()):
     return [dict(r) for r in conn.execute(sql, args).fetchall()]
 
 
+def _mature(conn, monkeypatch, *results, days=8):
+    """讓待生效項『可以生效』：需要雙人核准的先由第二位最高管理者核准，再把時間推到確認期間（預設 7 天）之後。"""
+    for r in results:
+        if r.get("approvalsRequired"):
+            S.approve_pending(conn, APPROVER, r["id"], "同意")
+    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(days=days))
+
+
 def test_empty_tables_give_exactly_the_seed_and_a_failing_provider_falls_back_to_the_seed(conn, monkeypatch):
     seed = P.seed_from_legacy(CAPS)
     m = S.load_matrix(seed)
@@ -93,10 +103,10 @@ def test_revoking_a_seeded_grant_is_immediate(conn, make_user):
     S.set_role_cap(conn, SU, "admin", "zz.doc.edit", False, "暫時收回")
     assert not P.can(adm, "zz.doc.edit") and _rows(conn, "SELECT granted FROM perm_role_caps") == [{"granted": 0}]
     S.set_role_cap(conn, SU, "admin", "zz.doc.edit", True)
-    assert _rows(conn, "SELECT * FROM perm_role_caps") == [] and P.can(adm, "zz.doc.edit"), "恢復種子預設不需 24 小時"
+    assert _rows(conn, "SELECT * FROM perm_role_caps") == [] and P.can(adm, "zz.doc.edit"), "恢復種子預設不需確認期間"
 
 
-def test_high_risk_grant_needs_a_reason_waits_24h_can_be_cancelled_and_activates_on_read(conn, make_user, monkeypatch):
+def test_high_risk_grant_needs_a_reason_waits_for_confirm_period_and_second_approval_can_be_cancelled_and_activates(conn, make_user, monkeypatch):
     fin = _mk(make_user, "pm_fin", "finance")
     boss = _mk(make_user, "pm_boss", "superadmin")
     _mk(make_user, "root", "superadmin")                  # 申請人（SU）必須是真的在職最高管理者：到期套用時會再確認（05 稽核 C）
@@ -104,30 +114,79 @@ def test_high_risk_grant_needs_a_reason_waits_24h_can_be_cancelled_and_activates
         S.set_role_cap(conn, SU, "finance", "zz.doc.pay", True, "好")
     assert "原因" in str(e.value)
     r = S.set_role_cap(conn, SU, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
-    assert r["pending"] and not P.can(fin, "zz.doc.pay"), "24 小時內不生效"
+    assert r["pending"] and not P.can(fin, "zz.doc.pay"), "確認期間內不生效"
+    assert r["confirmDays"] == 7 and r["approvalsRequired"] == 1 and r["effectiveAt"] > datetime.now().isoformat(timespec="seconds")
     assert _rows(conn, "SELECT * FROM perm_role_caps") == []
-    told = {x["username"] for x in _rows(conn, "SELECT username FROM notifications WHERE type='perm_grant_pending'")}
-    assert "pm_boss" in told and "root" not in told, "通知其他最高管理者（不含申請人）"
+    assert _rows(conn, "SELECT * FROM perm_pending") == [], "舊的 perm_pending 表不再寫入"
+    told = {x["username"] for x in _rows(conn, "SELECT username FROM notifications WHERE type='config_change'")}
+    assert "pm_boss" in told and "root" not in told, "帳本同交易通知其他最高管理者（不含申請人）"
+    assert [x["id"] for x in S.list_pending(conn)] == [r["id"]] and S.list_pending(conn)[0]["kind"] == "role_cap"
     # 撤銷
     S.cancel_pending(conn, boss, r["id"], "還不需要")
-    assert _rows(conn, "SELECT state FROM perm_pending") == [{"state": "cancelled"}]
-    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=30))
+    assert L.state_of(conn, r["id"]) == "cancelled" and S.list_pending(conn) == []
+    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(days=9))
     P.invalidate()
     assert not P.can(fin, "zz.doc.pay"), "已撤銷的到期也不生效"
     monkeypatch.setattr(S, "_now", lambda: datetime.now())
-    # 再申請、到期自動生效（讀取時判斷）
+    # 再申請：到期但沒有第二人核准 ⇒ 仍不生效；核准＋到期 ⇒ 生效
     r2 = S.set_role_cap(conn, SU, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
     assert r2["pending"] and not P.can(fin, "zz.doc.pay")
-    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(days=8))
+    assert S.activate_due(conn) == 0 and not P.can(fin, "zz.doc.pay"), "沒有核准 ⇒ 到時間也不生效"
+    with pytest.raises(S.PermError) as e2:
+        S.approve_pending(conn, SU, r2["id"], "自己核准自己")
+    assert e2.value.status == 409 and "申請人" in str(e2.value)
+    with pytest.raises(S.PermError):
+        S.approve_pending(conn, {"username": "x", "role": "admin"}, r2["id"])
+    S.approve_pending(conn, boss, r2["id"], "同意")
+    with pytest.raises(S.PermError):
+        S.approve_pending(conn, boss, r2["id"], "再投一次")
+    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(days=3))
+    assert S.activate_due(conn) == 0, "核准了但確認期間還沒過 ⇒ 不生效"
+    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(days=8))
     assert S.activate_due(conn) == 1                       # 轉態在背景（kick_activation）或排程做；讀取路徑本身不寫（見下方 B 測試）
     P.invalidate()
     assert P.can(fin, "zz.doc.pay"), "轉為生效後下一次讀取就看到"
-    assert _rows(conn, "SELECT state, resolved_by FROM perm_pending WHERE id=?", (r2["id"],)) == [{"state": "active", "resolved_by": "system"}]
+    assert L.state_of(conn, r2["id"]) == "activated"
     assert _rows(conn, "SELECT granted FROM perm_role_caps") == [{"granted": 1}]
     assert _rows(conn, "SELECT 1 FROM audit_log WHERE action='permmatrix.pending.activate'")
-    assert S.activate_due(conn, datetime.now() + timedelta(hours=26)) == 0, "冪等"
+    assert _rows(conn, "SELECT 1 FROM audit_log WHERE action='permmatrix.pending.request'") and _rows(conn, "SELECT 1 FROM audit_log WHERE action='permmatrix.pending.approve'")
+    assert S.activate_due(conn, datetime.now() + timedelta(days=9)) == 0, "冪等"
     with pytest.raises(S.PermError):
         S.cancel_pending(conn, boss, r2["id"], "太晚")
+
+
+def test_sole_superadmin_loosening_needs_no_second_vote_but_warns_and_still_waits_the_confirm_period(conn, make_user, monkeypatch):
+    fin = _mk(make_user, "pm_fin", "finance")
+    conn.execute("UPDATE users SET active=0 WHERE role='superadmin' AND username<>'root'")
+    conn.commit()
+    _mk(make_user, "root", "superadmin")
+    r = S.set_role_cap(conn, SU, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
+    assert r["approvalsRequired"] == 0 and any("只有一位最高管理者" in w for w in r["warnings"])
+    assert S.activate_due(conn, datetime.now() + timedelta(days=3)) == 0, "確認期間內不生效"
+    assert S.activate_due(conn, datetime.now() + timedelta(days=8)) == 1
+    P.invalidate()
+    assert P.can(fin, "zz.doc.pay")
+
+
+def test_confirm_period_follows_the_settings_center_value_and_never_goes_below_one_day(conn, make_user, monkeypatch):
+    from helpers import settings_registry as SR
+    _mk(make_user, "root", "superadmin")
+    monkeypatch.setattr(SR, "confirm_period_days", lambda c=None: 3)
+    r = S.set_role_cap(conn, SU, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
+    assert r["confirmDays"] == 3
+    monkeypatch.setattr(SR, "confirm_period_days", lambda c=None: 0)
+    assert S._confirm_days(conn) == 1
+    monkeypatch.setattr(SR, "confirm_period_days", lambda c=None: (_ for _ in ()).throw(RuntimeError("x")))
+    assert S._confirm_days(conn) == S.DEFAULT_CONFIRM_DAYS, "讀不到設定 ⇒ 預設，不丟例外"
+
+
+def test_a_newer_request_for_the_same_cell_supersedes_the_older_pending_one(conn, make_user):
+    _mk(make_user, "root", "superadmin")
+    r1 = S.set_role_cap(conn, SU, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
+    r2 = S.set_user_override(conn, SU, _mk(make_user, "pm_u1", "viewer")["id"], "zz.doc.pay", "allow", "專案需要付款")
+    r3 = S.set_role_cap(conn, SU, "finance", "zz.doc.pay", True, "月底結帳需要財務付款 再申請")
+    assert L.state_of(conn, r1["id"]) == "superseded" and L.state_of(conn, r3["id"]) == "pending" and L.state_of(conn, r2["id"]) == "pending", "只取代同一格"
 
 
 def test_guards_non_delegable_non_superadmin_actor_and_superadmin_target(conn, make_user):
@@ -159,7 +218,7 @@ def test_personal_deny_wins_and_personal_allow_adds_for_low_risk(conn, make_user
     S.set_user_override(conn, SU, vwr["id"], "zz.doc.submit", "allow", "專案需要")
     assert P.can(vwr, "zz.doc.submit") and P.explain(vwr, "zz.doc.submit")["via"] == "allow", "『某個人可以做某件事』只勾他一個"
     r = S.set_user_override(conn, SU, vwr["id"], "zz.doc.pay", "allow", "付款也給他看看")
-    assert r["pending"] and not P.can(vwr, "zz.doc.pay"), "高風險個人允許要 24 小時"
+    assert r["pending"] and not P.can(vwr, "zz.doc.pay"), "高風險個人允許要確認期間"
 
 
 def test_restore_version_replays_the_difference_through_the_normal_rules(conn, make_user):
@@ -211,10 +270,10 @@ def test_delegation_cannot_escalate_and_risky_scopes_need_superadmin_and_24h(con
         S.create_delegation(conn, boss, "pm_boss", "pm_dlg", "caps", caps=["zz.doc.pay"], reason="自己建高風險")
     assert e2.value.status == 403
     r = S.create_delegation(conn, SU, "pm_boss", "pm_dlg", "caps", caps=["zz.doc.pay", "zz.doc.edit"], reason="月底付款由他代理")
-    assert r["pending"] and not P.can(dlg, "zz.doc.pay") and not P.can(dlg, "zz.doc.edit"), "含高風險 ⇒ 整筆 24 小時後才生效"
+    assert r["pending"] and not P.can(dlg, "zz.doc.pay") and not P.can(dlg, "zz.doc.edit"), "含高風險 ⇒ 整筆確認期間後才生效"
     assert _rows(conn, "SELECT * FROM perm_delegations") == []
     S.cancel_pending(conn, {"id": 9, "username": "pm_other_admin", "role": "superadmin"}, r["id"], "不需要了")
-    assert _rows(conn, "SELECT state FROM perm_pending") == [{"state": "cancelled"}]
+    assert L.state_of(conn, r["id"]) == "cancelled"
 
 
 def test_pending_delegation_activates_and_is_superseded_if_the_delegator_lost_the_capability(conn, make_user, monkeypatch):
@@ -223,23 +282,24 @@ def test_pending_delegation_activates_and_is_superseded_if_the_delegator_lost_th
     dlg = _mk(make_user, "pm_dlg", "viewer")
     r1 = S.create_delegation(conn, SU, "pm_boss", "pm_dlg", "caps", caps=["zz.doc.pay"], reason="月底付款由他代理")
     S.set_role_cap(conn, SU, "admin", "zz.doc.pay", False, "收回")                     # 委派人在等待期間失去這項能力
-    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    _mature(conn, monkeypatch, r1)
     S.activate_due(conn)
     P.invalidate()
     assert not P.can(dlg, "zz.doc.pay")
-    assert _rows(conn, "SELECT state FROM perm_pending WHERE id=?", (r1["id"],)) == [{"state": "superseded"}]
+    assert L.state_of(conn, r1["id"]) == "superseded"
     monkeypatch.setattr(S, "_now", lambda: datetime.now())
     S.set_role_cap(conn, SU, "admin", "zz.doc.pay", True, "恢復付款作業")           # 勾回種子預設的高風險格子＝放寬 ⇒ 待生效（r10），先讓它到期生效
-    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    cell = _rows(conn, "SELECT id FROM config_changes WHERE domain='perm:role_cap' ORDER BY id DESC LIMIT 1")[0]
+    _mature(conn, monkeypatch, {"id": cell["id"], "approvalsRequired": 1})
     S.activate_due(conn)
     P.invalidate()
     monkeypatch.setattr(S, "_now", lambda: datetime.now())
     r2 = S.create_delegation(conn, SU, "pm_boss", "pm_dlg", "caps", caps=["zz.doc.pay"], reason="月底付款由他代理")
-    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    _mature(conn, monkeypatch, r2)
     S.activate_due(conn)
     P.invalidate()
     assert P.can(dlg, "zz.doc.pay") and P.acting_as(dlg, "zz.doc.pay") == "pm_boss"
-    assert _rows(conn, "SELECT state FROM perm_pending WHERE id=?", (r2["id"],)) == [{"state": "active"}]
+    assert L.state_of(conn, r2["id"]) == "activated"
     assert len(_rows(conn, "SELECT * FROM perm_delegations WHERE state='active'")) == 1
 
 
@@ -268,7 +328,8 @@ def test_preview_role_cap_explains_who_is_affected_when_and_whether_it_can_be_un
     assert p["effective"] == "儲存後立即生效" and not p["pending"] and p["reversible"] and "一鍵復原" in p["reversibleText"]
     assert "不受影響" in p["appliesTo"] and p["risk"] == "" and p["question"] == "財務可以修改測試單嗎？"
     hi = S.preview_role_cap(conn, "finance", "zz.doc.pay", True)
-    assert hi["pending"] and "24 小時" in hi["effective"] and "高風險" in hi["risk"]
+    assert hi["pending"] and "7 天確認期間" in hi["effective"] and "另一位最高管理者核准" in hi["effective"] and "高風險" in hi["risk"]
+    assert "24 小時" not in hi["risk"] and "確認期間" in hi["risk"], "舊的 24 小時句子已換成目前規則"
     same = S.preview_role_cap(conn, "admin", "zz.doc.edit", True)
     assert same["changed"] is False and same["users"] == 0, "已經是這樣 ⇒ 沒有影響"
     for text in (p["sentence"], p["impact"], p["usersText"], p["appliesTo"], hi["risk"], hi["effective"]):
@@ -281,7 +342,7 @@ def test_preview_delegation_gives_the_plain_confirmation_sentence(conn, make_use
     p = S.preview_delegation(conn, "pv_boss", "pv_dlg", ["zz.doc.edit"], "2031-11-30")
     assert p["sentence"].startswith("你即將讓") and "代理" in p["sentence"] and "修改測試單" in p["sentence"] and "11/30" in p["sentence"] and "立即生效" in p["sentence"]
     risky = S.preview_delegation(conn, "pv_boss", "pv_dlg", ["zz.doc.pay"], "2031-11-30")
-    assert risky["pending"] and "24 小時後生效" in risky["sentence"] and "高風險" in risky["risk"]
+    assert risky["pending"] and "7 天確認期間後生效" in risky["sentence"] and "24 小時" not in risky["sentence"] and "高風險" in risky["risk"] and "24 小時" not in risky["risk"]
     with pytest.raises(S.PermError):
         S.preview_delegation(conn, "pv_boss", "pv_dlg", [], "")
 
@@ -335,14 +396,14 @@ def test_A_never_loaded_means_seed_plus_high_risk_denied_for_non_superadmin(conn
 
 
 def test_B_load_matrix_never_writes_and_never_waits_for_the_write_lock(conn, monkeypatch):
-    S.set_role_cap(conn, SU, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
-    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    rr = S.set_role_cap(conn, SU, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
+    _mature(conn, monkeypatch, rr)
     calls = []
     monkeypatch.setattr(S, "kick_activation", lambda wait=False: calls.append(1))      # 只記錄：讀取路徑不得自己轉態
     monkeypatch.setattr(S, "activate_due", lambda *a, **k: (_ for _ in ()).throw(AssertionError("讀取路徑不可呼叫 activate_due")))
     m = S.load_matrix(P.seed_from_legacy(CAPS))
     assert calls == [1], "有到期項目 ⇒ 只踢背景轉態"
-    assert _rows(conn, "SELECT state FROM perm_pending") == [{"state": "pending"}], "讀取沒有改任何列"
+    assert L.state_of(conn, rr["id"]) == "pending", "讀取沒有改任何列"
     assert "zz.doc.pay" not in m.role_grants.get("finance", ()), "尚未轉態的到期項目不納入這次的矩陣"
 
 
@@ -355,10 +416,10 @@ def test_B_background_activation_is_single_flight_and_does_not_block_when_busy(c
         assert time.monotonic() - t0 < 0.5
     finally:
         S._act_lock.release()
-    S.set_role_cap(conn, boss, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
-    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    rb = S.set_role_cap(conn, boss, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
+    _mature(conn, monkeypatch, rb)
     t = S.kick_activation(wait=True)
-    assert t is not None and _rows(conn, "SELECT state FROM perm_pending") == [{"state": "active"}]
+    assert t is not None and L.state_of(conn, rb["id"]) == "activated"
     assert S._act_lock.acquire(blocking=False), "跑完一定放鎖"
     S._act_lock.release()
 
@@ -368,10 +429,10 @@ def test_C_pending_is_not_applied_when_the_requester_was_demoted_meanwhile(conn,
     r = S.set_role_cap(conn, boss, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
     conn.execute("UPDATE users SET role='finance' WHERE username=?", (boss["username"],))
     conn.commit()
-    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    _mature(conn, monkeypatch, r)
     assert S.activate_due(conn) == 1
-    row = _rows(conn, "SELECT state, resolve_note FROM perm_pending WHERE id=?", (r["id"],))[0]
-    assert row["state"] == "superseded" and "最高管理者" in row["resolve_note"]
+    ev = _rows(conn, "SELECT reason FROM config_change_events WHERE change_id=? AND event='superseded'", (r["id"],))
+    assert L.state_of(conn, r["id"]) == "superseded" and ev and "最高管理者" in ev[0]["reason"]
     assert _rows(conn, "SELECT * FROM perm_role_caps") == [], "沒有套用"
     assert _rows(conn, "SELECT 1 FROM audit_log WHERE action='permmatrix.pending.supersede'")
 
@@ -379,9 +440,9 @@ def test_C_pending_is_not_applied_when_the_requester_was_demoted_meanwhile(conn,
 def test_C_requester_still_active_superadmin_is_applied_as_before(conn, make_user, monkeypatch):
     boss = _mk(make_user, "pm_boss_c2", "superadmin")
     r = S.set_role_cap(conn, boss, "finance", "zz.doc.pay", True, "月底結帳需要財務付款")
-    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    _mature(conn, monkeypatch, r)
     assert S.activate_due(conn) == 1
-    assert _rows(conn, "SELECT state FROM perm_pending WHERE id=?", (r["id"],)) == [{"state": "active"}]
+    assert L.state_of(conn, r["id"]) == "activated"
 
 
 def test_B_lock_is_released_when_the_thread_cannot_start(monkeypatch):
@@ -422,7 +483,7 @@ def test_D_regranting_a_seeded_high_risk_cell_after_revoke_is_a_loosening_and_wa
     assert "原因" in str(e.value)
     r = S.set_role_cap(conn, SU, "admin", "zz.doc.pay", True, "恢復付款")
     assert r.get("pending") and not P.can(adm, "zz.doc.pay"), "勾回高風險格子不得立即生效"
-    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    _mature(conn, monkeypatch, r)
     assert S.activate_due(conn) == 1
     P.invalidate()
     assert P.can(adm, "zz.doc.pay")
@@ -441,7 +502,7 @@ def test_D_clearing_a_personal_deny_on_a_high_risk_cap_is_a_loosening_and_waits_
     r = S.clear_user_override(conn, SU, adm["id"], "zz.doc.pay", "調查完畢")
     assert r.get("pending") and not P.can(adm, "zz.doc.pay"), "取消高風險的個人禁止不得立即生效"
     assert _rows(conn, "SELECT effect FROM perm_user_overrides WHERE cap='zz.doc.pay'") == [{"effect": "deny"}]
-    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    _mature(conn, monkeypatch, r)
     assert S.activate_due(conn) == 1
     P.invalidate()
     assert P.can(adm, "zz.doc.pay") and _rows(conn, "SELECT * FROM perm_user_overrides WHERE cap='zz.doc.pay'") == []
@@ -455,6 +516,6 @@ def test_D_pending_clear_is_superseded_if_the_deny_changed_meanwhile(conn, make_
     assert r.get("pending")
     conn.execute("DELETE FROM perm_user_overrides WHERE cap='zz.doc.pay'")      # 模擬別處已移除
     conn.commit()
-    monkeypatch.setattr(S, "_now", lambda: datetime.now() + timedelta(hours=25))
+    _mature(conn, monkeypatch, r)
     S.activate_due(conn)
-    assert _rows(conn, "SELECT state FROM perm_pending WHERE id=?", (r["id"],)) == [{"state": "superseded"}]
+    assert L.state_of(conn, r["id"]) == "superseded"

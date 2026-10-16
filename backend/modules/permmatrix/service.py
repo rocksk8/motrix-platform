@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""permmatrix 模組的服務層：矩陣覆寫、個人覆寫、代理、24 小時待生效、版本與回溯（設計稿 §2、§4、§8）。
+"""permmatrix 模組的服務層：矩陣覆寫、個人覆寫、代理、待生效（設定帳本＋確認期間＋放寬需第二位最高管理者核准）、版本與回溯（設計稿 §2、§4、§8；T67 PM-S0）。
 
 交易約定：每個寫入函式自己 `begin_write` ＋ `commit`（呼叫端給連線）；稽核（`audit_log`）與資料變更**同一個交易**；通知在 commit 之後送。
 所有寫入只有最高管理者（呼叫端傳 actor dict）；本檔再檢查一次（縱深）。矩陣的讀取方（`helpers.perm`）經提供者 `perm.matrix_source` 呼叫 `load_matrix`。
@@ -12,11 +12,15 @@ from datetime import datetime, timedelta
 from core import capabilities as CAP
 from core.txn import begin_write
 from helpers import auth as A
+from helpers import config_ledger as L
 from helpers import perm as P
 
 logger = logging.getLogger(__name__)
 
-PENDING_HOURS = 24                                  # 使用者裁示：高風險授予 24 小時後生效、期間可撤銷
+PENDING_DOMAIN = "perm"                             # 設定帳本的 domain 前綴；實際 domain＝`perm:<kind>`（kind＝role_cap／user_override／user_override_clear／delegation）
+PENDING_RISK = "security"                           # 權限變更在帳本的風險等級（屬 HIGH_RISK ⇒ 帳本同交易通知其他最高管理者）
+PENDING_LINK = "permission-matrix.html"
+DEFAULT_CONFIRM_DAYS = 7                            # 讀不到設定中心的確認期間時的預設（與 settings_registry.DEFAULT_CONFIRM_DAYS 同值）
 POLICY_KEY = "perm_delegation_policy"               # 之後由設定中心的群組 `delegation_policy` 接手（預設值不變）
 POLICY_DEFAULT = {"selfDelegateNonRisky": True,     # 今天任何登入者都能替自己建簽核代理
                   "delegationAdditive": True,       # 代理是「額外給代理人」，不是轉移
@@ -103,7 +107,7 @@ def load_matrix(seed):
     conn = get_db()
     try:
         m = _build_matrix(conn, seed)
-        due = conn.execute("SELECT 1 FROM perm_pending WHERE state='pending' AND effective_at<=? LIMIT 1", (_iso(_now()),)).fetchone() is not None
+        due = bool(_due_rows(conn, _iso(_now())))
     finally:
         conn.close()
     if due:
@@ -198,46 +202,74 @@ def _delete_override(conn, user_id, cap):
     conn.execute("DELETE FROM perm_user_overrides WHERE user_id=? AND cap=?", (user_id, cap))
 
 
-def _request_pending(conn, actor, kind, payload, risk_caps, reason, label):
-    now = _now()
-    eff = _iso(now + timedelta(hours=PENDING_HOURS))
-    cur = conn.execute("INSERT INTO perm_pending (kind, payload_json, risk_caps_json, reason, requested_by, requested_at, effective_at, state)"
-                       " VALUES (?,?,?,?,?,?,?, 'pending')",
-                       (kind, json.dumps(payload, ensure_ascii=False), json.dumps(sorted(risk_caps)), reason, _name(actor), _iso(now), eff))
-    pid = cur.lastrowid
-    _audit_tx(conn, actor, "permmatrix.pending.request", "perm_pending", pid, label,
-              {"kind": kind, "payload": payload, "riskCaps": sorted(risk_caps), "reason": reason, "effectiveAt": eff})
-    notices = [(u, "perm_grant_pending", pid, label, "%s 申請高風險授權：%s（%s 後生效，期間可撤銷）" % (_name(actor), label, eff[:16].replace("T", " ")))
-               for u in _superadmins(conn) if u != _name(actor)]
-    return {"pending": True, "id": pid, "effectiveAt": eff}, notices
+def _confirm_days(conn):
+    """確認期間（天）：與設定中心同一把（`change_control.confirm_period_days`，預設 7、下限 1）；讀不到 ⇒ 預設。永不丟例外。"""
+    try:
+        from helpers import settings_registry as SR
+        return max(1, int(SR.confirm_period_days(conn)))
+    except Exception:                                # noqa: BLE001
+        return DEFAULT_CONFIRM_DAYS
+
+
+def _due_rows(conn, now_iso):
+    """到期且已集滿核准票數的待生效變更（帳本 `in_effect` 判斷；純讀取）。先用一句 SQL 篩掉沒有到期項的常見情況。"""
+    if conn.execute("SELECT 1 FROM config_changes WHERE domain LIKE 'perm:%' AND effective_at<>'' AND effective_at<=? LIMIT 1", (now_iso,)).fetchone() is None:
+        return []
+    return [r for r in L.pending(conn, PENDING_DOMAIN) if r["domain"].startswith("perm:") and L.in_effect(r, now_iso)]
+
+
+def _request_pending(conn, actor, kind, key, old, payload, reason, label):
+    """放寬類變更：寫帳本待生效明細（確認期間後生效，期間可撤銷）；有其他在職最高管理者 ⇒ 還要其中一位核准（雙人核准，D-K1 同一條規則）。
+    只有申請人一位最高管理者 ⇒ 改為『原因＋確認期間＋警告』。同一目標更早的待生效項標為被取代。回 (結果, commit 之後才送的通知)。"""
+    days = _confirm_days(conn)
+    eff = _iso(_now() + timedelta(days=days))
+    domain = "%s:%s" % (PENDING_DOMAIN, kind)
+    need = 1 if [u for u in _superadmins(conn) if u != _name(actor)] else 0
+    for r in L.pending(conn, domain):
+        if r["domain"] == domain and r["key"] == key:
+            L.supersede(conn, r["id"], actor, "被較新的申請取代")
+    rec = L.record(conn, domain, key, [{"field": kind, "old": old, "new": payload}], reason, actor, risk=PENDING_RISK, effective_at=eff,
+                   audit_action="permmatrix.pending.request", target_label=label, link=PENDING_LINK, approvals_required=need)
+    res = {"pending": True, "id": rec["ids"][0], "effectiveAt": eff, "confirmDays": days, "approvalsRequired": need, "warnings": []}
+    if not need:
+        res["warnings"].append("目前只有一位最高管理者，沒有第二人可以核准：這項放寬改為「填寫原因、等 %d 天確認期間後生效」，並已留下紀錄。" % days)
+    return res, []
 
 
 def list_pending(conn, states=("pending",)):
-    ph = ",".join("?" * len(states))
+    """待生效清單（帳本資料）。每列：id、kind、key、payload、reason、requested_by、requested_at、effective_at、state、approvals、approvalsRequired、riskCaps。"""
     out = []
-    for r in conn.execute("SELECT * FROM perm_pending WHERE state IN (%s) ORDER BY id DESC" % ph, tuple(states)).fetchall():
-        d = dict(r)
-        d["payload"] = json.loads(d.pop("payload_json") or "{}")
-        d["riskCaps"] = json.loads(d.pop("risk_caps_json") or "[]")
-        out.append(d)
+    for r in L.history(conn, PENDING_DOMAIN, None, limit=1000):
+        if not r["domain"].startswith("perm:") or r["state"] not in states:
+            continue
+        pl = r["new"] if isinstance(r["new"], dict) else {}
+        out.append({"id": r["id"], "kind": r["domain"].split(":", 1)[1], "key": r["key"], "payload": pl, "reason": r["reason"],
+                    "requested_by": r["actor"], "requested_at": r["at"], "effective_at": r["effective_at"], "state": r["state"],
+                    "approvals": list(r.get("approvals") or []), "approvalsRequired": int(r.get("approvals_required") or 0),
+                    "riskCaps": [pl["cap"]] if pl.get("cap") else sorted(pl.get("caps") or ())})
     return out
 
 
+def _pending_requester(conn, pid):
+    r = conn.execute("SELECT domain, actor FROM config_changes WHERE id=?", (int(pid),)).fetchone()
+    if r is None or not r["domain"].startswith("perm:"):
+        raise PermError("找不到這筆待生效項目", 404)
+    return r["actor"]
+
+
 def cancel_pending(conn, actor, pid, reason):
+    """撤銷待生效項：任一最高管理者（含申請人本人）皆可，需原因；已非待生效 ⇒ 409。"""
     _need_super(actor)
     if len((reason or "").strip()) < 2:
         raise PermError("撤銷請填寫原因")
     begin_write(conn)
     try:
-        r = conn.execute("SELECT * FROM perm_pending WHERE id=?", (int(pid),)).fetchone()
-        if r is None:
-            raise PermError("找不到這筆待生效項目", 404)
-        cur = conn.execute("UPDATE perm_pending SET state='cancelled', resolved_by=?, resolved_at=?, resolve_note=? WHERE id=? AND state='pending'",
-                           (_name(actor), _iso(_now()), reason, int(pid)))
-        if cur.rowcount != 1:
-            raise PermError("這筆已不是待生效狀態（%s）" % r["state"], 409)
-        _audit_tx(conn, actor, "permmatrix.pending.cancel", "perm_pending", pid, "撤銷待生效 #%s" % pid, {"reason": reason, "kind": r["kind"]})
-        notices = [(r["requested_by"], "perm_grant_cancelled", pid, "待生效授權已撤銷", "%s 撤銷了你申請的高風險授權 #%s：%s" % (_name(actor), pid, reason))] if r["requested_by"] != _name(actor) else []
+        req = _pending_requester(conn, pid)
+        st = L.state_of(conn, int(pid))
+        if not L.cancel(conn, int(pid), actor, reason):
+            raise PermError("這筆已不是待生效狀態（%s）" % st, 409)
+        L.audit_event(conn, actor, "permmatrix.pending.cancel", pid, {"reason": reason, "id": int(pid)}, target_label="撤銷待生效 #%s" % pid)
+        notices = [(req, "perm_grant_cancelled", pid, "待生效授權已撤銷", "%s 撤銷了你申請的授權變更 #%s：%s" % (_name(actor), pid, reason))] if req != _name(actor) else []
         conn.commit()
     except Exception:
         conn.rollback()
@@ -247,37 +279,63 @@ def cancel_pending(conn, actor, pid, reason):
     return {"ok": True}
 
 
+def approve_pending(conn, actor, pid, reason=""):
+    """雙人核准的一票：另一位最高管理者核准放寬（申請人不能核准自己的、同一人不能重複投票——帳本把關）。核准不會讓它立刻生效：仍要等確認期間。"""
+    _need_super(actor)
+    begin_write(conn)
+    try:
+        _pending_requester(conn, pid)
+        res = L.approve(conn, int(pid), actor, reason)
+        if not res["ok"]:
+            raise PermError(res["why"], 409)
+        L.audit_event(conn, actor, "permmatrix.pending.approve", pid, {"id": int(pid), "approvals": res["approvals"], "required": res["required"], "reason": reason},
+                      target_label="核准待生效 #%s" % pid)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return {"ok": True, "approvals": res["approvals"], "required": res["required"]}
+
+
 def activate_due(conn, now=None):
-    """把 `effective_at <= now` 的待生效項目轉為生效。冪等；任何一筆失敗只記 log 不影響其他筆與讀取。回轉了幾筆。"""
+    """把到期且核准票數足夠的待生效項目轉為生效。冪等；任何一筆失敗只記 log、該筆撤銷並稽核，不影響其他筆與讀取（逐筆 SAVEPOINT）。回處理了幾筆（含被取代者）。"""
     now_iso = _iso(now or _now())
-    due = conn.execute("SELECT id FROM perm_pending WHERE state='pending' AND effective_at<=? ORDER BY id", (now_iso,)).fetchall()
-    n = 0
-    for row in due:
-        try:
-            begin_write(conn)
-            r = conn.execute("SELECT * FROM perm_pending WHERE id=? AND state='pending'", (row["id"],)).fetchone()
-            if r is None:
-                conn.rollback()
-                continue
-            payload = json.loads(r["payload_json"] or "{}")
-            actor = {"username": r["requested_by"], "role": "superadmin"}
-            if conn.execute("SELECT 1 FROM users WHERE username=? AND active=1 AND role='superadmin'", (r["requested_by"],)).fetchone() is None:
-                note = "申請人已不是在職的最高管理者，未套用"          # 05 稽核 C：申請後被降級／停用 ⇒ 不以他的名義套用
-            else:
-                note = _apply_pending(conn, r["kind"], payload, r["reason"], actor)
-            state = "active" if note == "" else "superseded"
-            conn.execute("UPDATE perm_pending SET state=?, resolved_by='system', resolved_at=?, resolve_note=? WHERE id=?", (state, now_iso, note, r["id"]))
-            _audit_tx(conn, {"username": "system"}, "permmatrix.pending." + ("activate" if state == "active" else "supersede"), "perm_pending", r["id"],
-                      "待生效 #%s" % r["id"], {"kind": r["kind"], "payload": payload, "note": note})
-            notices = [(u, "perm_grant_activated", r["id"], "高風險授權已生效", "待生效授權 #%s 已生效（%s）" % (r["id"], r["kind"]))
-                       for u in set([r["requested_by"]] + _superadmins(conn)) if u] if state == "active" else []
-            conn.commit()
-            _send(notices)
-            n += 1
-        except Exception:                             # noqa: BLE001
+    n, applied, notices = 0, False, []
+    try:
+        begin_write(conn)
+        for r in sorted(_due_rows(conn, now_iso), key=lambda x: x["id"]):
+            conn.execute("SAVEPOINT pm_row")
+            try:
+                kind = r["domain"].split(":", 1)[1]
+                payload = r["new"] if isinstance(r["new"], dict) else {}
+                if conn.execute("SELECT 1 FROM users WHERE username=? AND active=1 AND role='superadmin'", (r["actor"],)).fetchone() is None:
+                    note = "申請人已不是在職的最高管理者，未套用"          # 05 稽核 C：申請後被降級／停用 ⇒ 不以他的名義套用
+                else:
+                    note = _apply_pending(conn, kind, payload, r["reason"], {"username": r["actor"], "role": "superadmin"})
+                if note:
+                    L.supersede(conn, r["id"], "system", note)
+                else:
+                    applied = True
+                    notices += [(u, "perm_grant_activated", r["id"], "授權變更已生效", "待生效授權 #%s 已生效（%s）" % (r["id"], kind))
+                                for u in set([r["actor"]] + _superadmins(conn)) if u]
+                L.audit_event(conn, "system", "permmatrix.pending." + ("supersede" if note else "activate"), r["id"],
+                              {"kind": kind, "payload": payload, "note": note}, target_label="待生效 #%s" % r["id"])
+                conn.execute("RELEASE pm_row")
+                n += 1
+            except Exception:                         # noqa: BLE001
+                conn.execute("ROLLBACK TO pm_row")
+                conn.execute("RELEASE pm_row")
+                logger.exception("permmatrix activate_due #%s failed", r["id"])
+                L.cancel(conn, r["id"], "system", "套用時發生錯誤，已自動撤銷（詳見伺服器紀錄）")
+        L.promote_due(conn, now_iso, domain=PENDING_DOMAIN)       # 套用成功的（仍是 pending 且已生效者）轉 activated；被取代／撤銷的已不是 pending
+        conn.commit()
+    except Exception:                                 # noqa: BLE001
+        if conn.in_transaction:
             conn.rollback()
-            logger.exception("permmatrix activate_due #%s failed", row["id"])
-    if n:
+        logger.exception("permmatrix activate_due failed")
+        return 0
+    _send(notices)
+    if applied:
         P.invalidate()
     return n
 
@@ -334,7 +392,7 @@ def set_role_cap(conn, actor, role, cap, granted, reason=""):
         label = "%s 角色：%s %s" % (role, c.label, "勾選" if granted else "取消")
         if granted and c.risk == "high":                # 此時 effective_now 必為 False ⇒ 一定是放寬（含種子預設被取消後勾回）
             _require_reason(reason)
-            res, notices = _request_pending(conn, actor, "role_cap", {"role": role, "cap": cap, "granted": True}, [cap], reason, label)
+            res, notices = _request_pending(conn, actor, "role_cap", "%s:%s" % (role, cap), {"granted": effective_now}, {"role": role, "cap": cap, "granted": True}, reason, label)
             conn.commit()
             _send(notices)
             return res
@@ -377,7 +435,8 @@ def set_user_override(conn, actor, user_id, cap, effect, reason=""):
         label = "%s：%s %s" % (u["username"], c.label, "個人允許" if effect == "allow" else "個人禁止")
         if effect == "allow" and c.risk == "high":
             _require_reason(reason)
-            res, notices = _request_pending(conn, actor, "user_override", {"user_id": u["id"], "username": u["username"], "cap": cap, "effect": "allow"}, [cap], reason, label)
+            res, notices = _request_pending(conn, actor, "user_override", "%s:%s" % (u["id"], cap), {"effect": cur["effect"] if cur else ""},
+                                           {"user_id": u["id"], "username": u["username"], "cap": cap, "effect": "allow"}, reason, label)
             conn.commit()
             _send(notices)
             return res
@@ -409,7 +468,8 @@ def clear_user_override(conn, actor, user_id, cap, reason=""):
         if cur["effect"] == "deny" and c.risk == "high":
             _require_reason(reason)
             label = "%s：%s 取消個人禁止" % (u["username"], c.label)
-            res, notices = _request_pending(conn, actor, "user_override_clear", {"user_id": u["id"], "username": u["username"], "cap": cap}, [cap], reason, label)
+            res, notices = _request_pending(conn, actor, "user_override_clear", "%s:%s" % (u["id"], cap), {"effect": "deny"},
+                                           {"user_id": u["id"], "username": u["username"], "cap": cap}, reason, label)
             conn.commit()
             _send(notices)
             return res
@@ -566,7 +626,7 @@ def create_delegation(conn, actor, delegator, delegate, scope_kind, caps=(), doc
     begin_write(conn)
     try:
         if risky:
-            res, notices = _request_pending(conn, actor, "delegation", p, risky, reason, "代理 %s → %s（%s）" % (delegator, delegate, "、".join(risky[:3])))
+            res, notices = _request_pending(conn, actor, "delegation", "%s>%s" % (delegator, delegate), None, dict(p, riskCaps=risky), reason, "代理 %s → %s（%s）" % (delegator, delegate, "、".join(risky[:3])))
             notices += [(delegator, "perm_delegation_pending", res["id"], "代理待生效", "你被設定為 %s 的委派人（%s 後生效）" % (delegate, res["effectiveAt"][:16].replace("T", " ")))]
             conn.commit()
             _send(notices)
@@ -613,6 +673,13 @@ def list_delegations(conn, state=None):
 
 
 # ── 白話預覽（存檔前的「影響面板」）與一鍵復原 ─────────────────────────────────────────────
+def _risk_hint(conn, key):
+    """L1 `perm_text.risk_hint` 的句子寫的是舊的『24 小時後才會生效』；這裡換成目前的規則（確認期間＋第二位最高管理者核准）。低風險仍回空字串。"""
+    from helpers import perm_text as T
+    h = T.risk_hint(key)
+    return h.replace("24 小時後才會生效，這段時間內隨時可以撤銷。", "要等 %d 天確認期間後才會生效，需要另一位最高管理者核准，這段時間內隨時可以撤銷。" % _confirm_days(conn)) if h else h
+
+
 def _preview(conn, cap, sentence, users, delay, extra=None):
     """共用的預覽內容：句子、勾選後會影響什麼、影響幾位使用者／幾份單據、適用範圍、可否復原、何時生效、風險提示。畫面只顯示這些中文。"""
     from helpers import perm_text as T
@@ -624,9 +691,9 @@ def _preview(conn, cap, sentence, users, delay, extra=None):
         "appliesTo": "之後的操作會依新設定；已經送出或完成的單據與簽核紀錄不受影響",
         "reversible": True,
         "reversibleText": "隨時可以一鍵復原",
-        "effective": ("%d 小時後生效（這段時間內可以撤銷）" % PENDING_HOURS) if delay else "儲存後立即生效",
+        "effective": ("%d 天確認期間後生效（這段時間內可以撤銷；需要另一位最高管理者核准）" % _confirm_days(conn)) if delay else "儲存後立即生效",
         "pending": bool(delay),
-        "risk": T.risk_hint(cap.key),
+        "risk": _risk_hint(conn, cap.key),
     }
     # 影響計算（單據筆數等）：能力宣告的 `impact_calc` 已預留；提供者機制 `perm.impact` 等第一個單位真的需要時再登記（P1），目前只顯示白話影響說明與人數。
     return out
@@ -672,8 +739,10 @@ def preview_delegation(conn, delegator, delegate, keys, valid_to=""):
             raise PermError("找不到帳號或已停用：%s" % u, 404)
         names[u] = r["display_name"] or r["username"]
     risky = any(c.risk == "high" for c in caps)
-    out = _preview(conn, caps[0], T.sentence_delegation(names[delegator], names[delegate], [c.key for c in caps], valid_to, PENDING_HOURS if risky else 0), 1, risky)
+    out = _preview(conn, caps[0], T.sentence_delegation(names[delegator], names[delegate], [c.key for c in caps], valid_to, 0), 1, risky)
+    if risky:
+        out["sentence"] = out["sentence"].replace("儲存後立即生效", "%d 天確認期間後生效，並需要另一位最高管理者核准" % _confirm_days(conn))
     out["impact"] = "；".join(c.impact for c in caps)
-    out["risk"] = "；".join(h for h in (T.risk_hint(c.key) for c in caps) if h)
+    out["risk"] = "；".join(h for h in (_risk_hint(conn, c.key) for c in caps) if h)
     out["appliesTo"] = "代理期間內，%s可以以自己的帳號做這些事，並會註明是代理%s；%s本人的權限不變" % (names[delegate], names[delegator], names[delegator])
     return out

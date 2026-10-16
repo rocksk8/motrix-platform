@@ -1046,7 +1046,7 @@ L1 的中央檢查 `perm.can()` 需要「種子 ⊕ 管理者的覆寫」＋有�
 | 使用方 | L1 `helpers/perm.py::matrix()`（3 秒快取；寫入端呼叫 `perm.invalidate()`） |
 | 形式 | provider，單一提供者（名稱 `permmatrix`） |
 | 語法 | 提供：`("perm.matrix_source", "permmatrix"): fn`；取用：`registry.single_provider("perm.matrix_source")` ⇒ `fn(seed: Matrix) -> Matrix` |
-| 回傳 | `Matrix(role_grants, allow, deny, delegations)`：種子套上覆寫列、個人覆寫、有效代理；呼叫時順便把到期的 24 小時待生效轉為生效 |
+| 回傳 | `Matrix(role_grants, allow, deny, delegations)`：種子套上覆寫列、個人覆寫、有效代理；呼叫時只踢背景轉態（`kick_activation`，讀取本身不寫庫）；到期且核准足夠的待生效項（設定帳本 domain `perm:*`，T67 PM-S0）由背景轉為生效 |
 | 對方不在時 | 模組不在或讀取失敗 ⇒ L1 用種子（＝今天的行為）並記 log，不多給也不少給 |
 | 契約版本 | 1（2026-10-10） |
 | 守門 | `backend/modules/permmatrix/tests/test_permmatrix_m2.py`、`backend/tests/platform/test_perm_equivalence_gate_a.py` |
