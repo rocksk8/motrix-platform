@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — wip/t55-05-payslip-dropdown-r2（第 55 班）
+- 新提供者 `dispatch.search`（IP-116，暫定；第 55 班）：可搜尋、分頁的派發清單供勞報單下拉用（不含草稿／已取消、不含金額；案件名稱只給通過案件守門者）。`dispatches_for_person` 的每列組裝與案件可見性抽成共用函式，輸出不變。派發頁 `POST …/payslip-links` 新增勞報單關聯時一併傳人員名單給 `payslip.dispatch_links.link`（名單外 400）。無 migration。
+
 ## 1.1.39 — 2026-10-16（wip/t66-format-fix-r1；T66 剩餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/vendor-contractors.html` 的金額顯示改呼叫 `MotrixFormat.num()`（預設輸出逐字相同）；載入共用格式器並帶內嵌後備。
 
@@ -31,9 +34,6 @@
 - **（併入）(next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1）：module.json 新增 `system_cards`（匯款款別設定卡片）**
 - 加性宣告：在系統中心（`/pages/system-hub.html`）登記這個模組擁有的系統頁面；只影響索引顯示，頁面與 API 的權限、行為完全不變。
 - **（併入）(next) — 2026-10-10（wip/t54-b5-system-hub-p1；系統中心 P1；r5）：module.json 新增 `system_cards`（匯款款別設定卡片）**
-
-## (next) — wip/t55-05-payslip-dropdown-r2（第 55 班）
-- 新提供者 `dispatch.search`（IP-116，暫定；第 55 班）：可搜尋、分頁的派發清單供勞報單下拉用（不含草稿／已取消、不含金額；案件名稱只給通過案件守門者）。`dispatches_for_person` 的每列組裝與案件可見性抽成共用函式，輸出不變。派發頁 `POST …/payslip-links` 新增勞報單關聯時一併傳人員名單給 `payslip.dispatch_links.link`（名單外 400）。無 migration。
 
 ## 1.1.32 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t53-1d-rb-dispatch-no；node-39 稽核：派發單號不重發）**

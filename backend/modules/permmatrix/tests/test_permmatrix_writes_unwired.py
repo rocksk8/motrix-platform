@@ -10,7 +10,8 @@ from core import source_tree
 WRITE_FUNCS = {"set_role_cap", "set_user_override", "clear_user_override", "create_delegation", "revoke_delegation",
                "restore_version", "undo_last_change", "cancel_pending", "approve_pending", "activate_due", "kick_activation"}
 OWNER = "modules/permmatrix/service.py"       # 定義處與它自己的內部呼叫（restore 內部用 set_*、load_matrix 啟動背景轉態）
-OWN_PACKAGE = {OWNER, "modules/permmatrix/__init__.py"}      # 模組宣告檔：匯入 service 登記提供者（只取 load_matrix）
+#: 模組自己的檔案：宣告檔（登記提供者，只取 load_matrix）、PM-S2 起的端點層 api.py 與唯讀檢視 views.py。其他產品碼一律不得取用 service。
+OWN_PACKAGE = {OWNER, "modules/permmatrix/__init__.py", "modules/permmatrix/api.py", "modules/permmatrix/views.py"}
 PKG = "modules.permmatrix"
 
 
@@ -155,9 +156,42 @@ def test_no_product_code_calls_the_permmatrix_write_functions():
     assert not bad, "P0 寫入函式是過渡實作，帳本接上前不得有人呼叫（SPEC PMX14）：\n  " + "\n  ".join(bad)
 
 
-def test_permmatrix_module_declares_only_the_status_probe_route():
-    """1.0.2：只有唯讀狀態探針（D7 要求 provides.probes）；沒有任何寫入端點。"""
+def test_views_module_is_read_only():
+    """PM-S2：`views.py` 只讀——不得出現任何寫入函式名（守門放行它取用 service 的前提）。"""
+    src = (Path(__file__).resolve().parents[1] / "views.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    names = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)} | {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    assert not (names & WRITE_FUNCS), names & WRITE_FUNCS
+
+
+def test_permmatrix_module_declares_exactly_the_reviewed_routes():
+    """PM-S2 唯讀檢視＋PM-S3 寫入端點的完整清單（新增或移除路由要同一個 commit 改這份、route_inventory 與金標案例）。
+    寫入端點全部在這個模組的 api.py，且 api.py 只做驗證＋呼叫服務層；其他產品碼仍不得取用 service（上面的守門）。"""
     import modules.permmatrix as PM
     assert len(PM.MODULE.routers) == 1
-    routes = [(sorted(r.methods), r.path) for r in PM.MODULE.routers[0].routes]
-    assert routes == [(["GET"], "/api/permmatrix/status")]
+    routes = sorted((m, r.path) for r in PM.MODULE.routers[0].routes for m in r.methods)
+    assert routes == sorted([
+        ("GET", "/api/permmatrix/status"), ("GET", "/api/permmatrix/matrix"), ("GET", "/api/permmatrix/users"),
+        ("GET", "/api/permmatrix/users/{user_id}/effective"), ("GET", "/api/permmatrix/pending"), ("GET", "/api/permmatrix/versions"),
+        ("GET", "/api/permmatrix/delegations"),
+        ("POST", "/api/permmatrix/role-cap"), ("POST", "/api/permmatrix/role-cap/preview"),
+        ("POST", "/api/permmatrix/user-override"), ("POST", "/api/permmatrix/user-override/preview"), ("DELETE", "/api/permmatrix/user-override"),
+        ("POST", "/api/permmatrix/pending/{pid}/cancel"), ("POST", "/api/permmatrix/pending/{pid}/approve"),
+        ("POST", "/api/permmatrix/versions/{version_id}/restore"), ("POST", "/api/permmatrix/undo")])
+
+
+def test_every_write_endpoint_checks_superadmin_first():
+    """api.py 的每個端點第一行都得先 `_require_user(authorization, require_superadmin=True)`（縱深：服務層還會再查一次；寫在端點本體是為了 system_audit 的守門掃描認得）。"""
+    src = (Path(__file__).resolve().parents[1] / "api.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    writes = []
+    for fn in tree.body:
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        for d in fn.decorator_list:
+            if isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr in ("post", "put", "patch", "delete"):
+                writes.append(fn)
+    assert len(writes) == 9, [f.name for f in writes]
+    for fn in writes:
+        first = ast.unparse(fn.body[0])
+        assert "_require_user(authorization, require_superadmin=True)" in first, (fn.name, first)

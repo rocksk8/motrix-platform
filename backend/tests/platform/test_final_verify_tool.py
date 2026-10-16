@@ -266,6 +266,7 @@ def test_deployed_parity(tmp_path):
     root = _repo(tmp_path / "tree")
     _w(root, "backend/version_manifest.json", json.dumps([{"module": "m", "version": "2026-10-09b", "date": "d", "time": "t", "content": "c"}]))
     sha = _commit(root)
+    _git(root, "tag", "prod/" + sha[:8])
     rep = tmp_path / "report"
     _w(rep, "20261009_073500_x_成功/摘要.md", SUMMARY.format(old="0" * 40, new=sha))
     rs = F.check_deployed(root, rep, "HEAD")
@@ -276,6 +277,74 @@ def test_deployed_parity(tmp_path):
     _w(rep, "20261009_090000_y_成功/摘要.md", SUMMARY.format(old=sha, new=sha).replace("status=success", "status=failed"))
     assert F.check_deployed(root, rep, "HEAD")[0].status == F.FAIL
     assert F.check_deployed(root, None)[0].status == F.SKIP
+
+
+SUMMARY_B = ("# T66 套用成功報告（b4db46376）\n\n- `::RESULT:: v=2 status=success rolled_back=applied service=up exit=0`（log：apply_t66.log）\n"
+             "- 前 commit {old} → 後 {new}；deploy_manifest 與 .build_commit 一致。\n\napi_version 2026-10-09b\n")
+SUMMARY_C = ("﻿# T65 套用成功：{old} → {new}\n\n::RESULT:: v=2 status=success rolled_back=applied service=up exit=0\n"
+             "- #10 deployed_commit 相符，api_version 2026-10-09b ✅\n")
+
+
+@pytest.mark.parametrize("tpl", [SUMMARY, SUMMARY_B, SUMMARY_C])
+def test_parse_summary_accepts_all_known_formats(tpl):
+    d = F.parse_summary(tpl.format(old="a" * 9, new="b" * 40))
+    assert d["status"] == "success" and d["service"] == "up" and d["exit"] == "0"
+    assert d["old_commit"] == "a" * 9 and d["new_commit"] == "b" * 40 and d["api_version"] == "2026-10-09b"
+
+
+def test_parse_summary_result_line_stops_at_first_non_token_char():
+    d = F.parse_summary("::RESULT:: v=2 status=success service=up exit=3`（log：x=1）\n")
+    assert d["exit"] == "3" and "log" not in d
+
+
+@pytest.mark.parametrize("tpl", [SUMMARY, SUMMARY_B, SUMMARY_C])
+def test_deployed_baseline_by_ancestry_with_negative_controls(tmp_path, tpl):
+    root = _repo(tmp_path / "tree")
+    _w(root, "backend/version_manifest.json", json.dumps([{"module": "m", "version": "2026-10-09b", "date": "d", "time": "t", "content": "c"}]))
+    sha = _commit(root)
+    _git(root, "tag", "prod/" + sha[:8])
+    _w(root, "later.txt", "x")
+    _commit(root, "later")                       # 基準尖端已前進，批次 commit 只是祖先
+    rep = tmp_path / "report"
+    _w(rep, "20261009_073500_x_成功/摘要.md", tpl.format(old="0" * 9, new=sha))
+    rs = F.check_deployed(root, rep, "HEAD")
+    assert [r.status for r in rs] == [F.PASS, F.PASS, F.PASS, F.SKIP], [(r.id, r.status, r.detail) for r in rs]
+    # 反向控制
+    _w(rep, "20261009_073500_x_成功/摘要.md", tpl.format(old="0" * 9, new=sha).replace("exit=0", "exit=1"))
+    assert _by(F.check_deployed(root, rep, "HEAD"), "V5.1")[0].status == F.FAIL
+    _w(rep, "20261009_073500_x_成功/摘要.md", tpl.format(old="0" * 9, new="f" * 40))
+    assert _by(F.check_deployed(root, rep, "HEAD"), "V5.2")[0].status == F.FAIL
+    _git(root, "tag", "-d", "prod/" + sha[:8])   # 沒有 tag ⇒ 紅
+    _w(rep, "20261009_073500_x_成功/摘要.md", tpl.format(old="0" * 9, new=sha))
+    assert _by(F.check_deployed(root, rep, "HEAD"), "V5.2")[0].status == F.FAIL
+
+
+def test_deployed_commit_not_in_baseline_fails(tmp_path):
+    root = _repo(tmp_path / "tree")
+    _w(root, "a.txt", "1")
+    base = _commit(root)
+    _git(root, "branch", "-M", "main")
+    _git(root, "checkout", "-q", "-b", "side")
+    _w(root, "b.txt", "2")
+    side = _commit(root, "side")
+    _git(root, "tag", "prod/" + side[:8])
+    _git(root, "checkout", "-q", "main")
+    rep = tmp_path / "report"
+    _w(rep, "20261009_073500_x_成功/摘要.md", SUMMARY.format(old=base, new=side))
+    assert _by(F.check_deployed(root, rep, "HEAD"), "V5.2")[0].status == F.FAIL
+
+
+def test_deployed_latest_json_mismatch_still_fails(tmp_path):
+    root = _repo(tmp_path / "tree")
+    _w(root, "backend/version_manifest.json", json.dumps([{"module": "m", "version": "2026-10-09b", "date": "d", "time": "t", "content": "c"}]))
+    sha = _commit(root)
+    _git(root, "tag", "prod/" + sha[:8])
+    rep = tmp_path / "report"
+    _w(rep, "20261009_073500_x_成功/摘要.md", SUMMARY.format(old="0" * 9, new=sha))
+    _w(rep, "status/latest.json", json.dumps({"deployed_commit": "e" * 40, "errors": []}))
+    assert _by(F.check_deployed(root, rep, "HEAD"), "V5.4")[0].status == F.FAIL
+    _w(rep, "status/latest.json", json.dumps({"deployed_commit": sha, "errors": []}))
+    assert _by(F.check_deployed(root, rep, "HEAD"), "V5.4")[0].status == F.PASS
 
 
 # ── 總合 ────────────────────────────────────────────────────────────────────────────────────

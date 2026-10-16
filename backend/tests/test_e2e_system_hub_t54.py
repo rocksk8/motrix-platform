@@ -82,7 +82,8 @@ def test_old_urls_still_work_and_get_the_back_to_system_link(live_server, make_u
     page.goto(live_server + "/pages/users.html")
     page.wait_for_selector("[data-testid=sys-crumb]", state="attached", timeout=25000)
     assert "system-hub.html" in (page.get_attribute("[data-testid=sys-crumb]", "href") or "")
-    assert page.locator("[data-testid=sys-crumb]").inner_text().strip() == "← 系統"
+    assert "← 系統" in page.locator("[data-testid=sys-crumb]").text_content()        # 寬螢幕有左側分類欄時麵包屑隱藏，文字仍在
+    page.wait_for_selector("[data-testid=sys-rail]", state="visible", timeout=25000)
 
 
 @pytest.mark.e2e

@@ -1,5 +1,17 @@
 # 薪資獎金 更新紀錄
 
+## (next) — wip/t55-05-payslip-dropdown（第 55 班）
+- 勞報單「選派發」下拉（第 55 班）：新端點 `GET /api/payslip-dispatch-options`（權限 `payroll.payslip.view`，預設等價＝最高管理者或持有勞報單模組；搜尋＋分頁；預設只列受領人在名單內、非草稿非已取消的派發，`include_all` 列全部；標 `linked`／`linkedToThis`／`onRoster`；不含金額）。`payslips.html` 詳情的「手打派發編號」與 `payslip-form.html` 新增表單都改用共用元件 `static/dispatch-picker.js`（文字集中在 `LABELS`）。
+- 名單外的派發擋下（`link()` 加選用參數 `personnel_ids`；受領人有權威 `contractor_id` 且不在名單 ⇒ 400「這張派發的人員名單沒有這張勞報單的受領人，不能關聯」）。詳情入口與派發頁入口都擋；沒選名冊人員的勞報單不檢查（同建立勞報單）。提供者 `payslip.dispatch_links` 加 `link_flags()`（加法）。稽核 `payslip.dispatch_link` 的說明多派發編號，並註記是否經「顯示全部」選取。`module.json` 的 `api_prefixes` 加 `/api/payslip-dispatch-options`。無 migration、不動簽核與付款。
+- T68 A4 r2：`GET /api/payslip-dispatch-options` 的第一道閘改為 `_require_user(authorization)` ＋ `perm.require(user, "payroll.payslip.view")`（同 T67 的 `payslip_links.py` 接線；`POST …/dispatch-links` 已隨 T67 走 `payroll.payslip.edit`）。預設等價，矩陣對 `view` 的拒絕現在也擋得住這支清單。HTTP 等價關卡 `test_payslip_perm_wiring_http_t68.py` 的探針新增這支與 `POST …/dispatch-links`。`module.json` 的 `payroll.payslip.view` 說明加上「選派發下拉清單」。
+- **行為收緊（需列入驗收）**：關聯勞報單與派發時，勞報單的受領人必須在該派發的人員名單內（與建立勞報單時同一條規則）；從勞報單頁或派發頁連結名單外的受領人，都會被擋下並顯示原因。沒選名冊人員的勞報單、舊呼叫端不受影響。
+
+## 1.2.21 — 2026-10-16（train/t67-int；T68 PM-S1 勞報單）
+- 新增勞報單的權限能力宣告（`module.json` `capabilities`，6 項：`payroll.payslip.view｜create｜edit｜export｜void｜attach`）；`legacy` ＝ 今天的閘（最高管理者或持有『勞報單』功能勾選），種子矩陣不給任何角色預設勾選 ⇒ 行為與今天逐位元相同。
+- `api/payslips.py`（14 支）與 `api/payslip_links.py`（6 支）的第一道閘由 `_require_user(…, module="payslip")` 改為 `_require_user(authorization)` ＋ `perm.require(user, <能力鍵>)`；本體不動。被擋時的 403 訊息改為『權限不足：需要「…」』（狀態碼不變）。
+- 刻意不接：送審／刪除／核准／退回（只有最高管理者；核准／退回本體再檢查 `role==superadmin`）、付款與出納（隨財務模式 D5）、獎金、銀行帳號（資料範圍規則）。見 `docs/platform/plans/T68-PMS1-STEP-NOTES.md` 第 7 節。
+- 測試：`test_payslip_perm_wiring_t68.py`（結構＋純函式等價）、`test_payslip_perm_wiring_http_t68.py`（HTTP 等價關卡，整合者閘門跑）。
+
 
 ## 1.2.20 — 2026-10-15（wip/t65-format-rest-r1；T65 其餘 toLocale* 顯示處遷移到共用格式器）
 - `pages/payslips.html`、`payslip-form.html`、`bonus.html`／`js/bonus.js`、`bonus-corrections.html` 的金額顯示改呼叫 `MotrixFormat.num()`（預設輸出逐字相同）。
@@ -11,10 +23,6 @@
 
 ## 1.2.18 — 2026-10-13（wip/t57-download-name-p1-r1；A7 下載檔名第一期）
 - 勞報單 PDF 檔名（含預覽存檔第 N 次）與獎金分配單 PDF 改走 `helpers.download_name`：勞報單保留承攬人姓名＋日期（無則單號）＋第 N 次，前面加案件欄位；姓名受設定「勞報單檔名顯示承攬人姓名」控制。無 migration、無新路由、無權限變更。
-
-## (next) — wip/t55-05-payslip-dropdown（第 55 班）
-- 勞報單「選派發」下拉（第 55 班）：新端點 `GET /api/payslip-dispatch-options`（最高管理者＋勞報單模組；搜尋＋分頁；預設只列受領人在名單內、非草稿非已取消的派發，`include_all` 列全部；標 `linked`／`linkedToThis`／`onRoster`；不含金額）。`payslips.html` 詳情的「手打派發編號」與 `payslip-form.html` 新增表單都改用共用元件 `static/dispatch-picker.js`（文字集中在 `LABELS`）。
-- 名單外的派發擋下（`link()` 加選用參數 `personnel_ids`；受領人有權威 `contractor_id` 且不在名單 ⇒ 400「這張派發的人員名單沒有這張勞報單的受領人，不能關聯」）。詳情入口與派發頁入口都擋；沒選名冊人員的勞報單不檢查（同建立勞報單）。提供者 `payslip.dispatch_links` 加 `link_flags()`（加法）。稽核 `payslip.dispatch_link` 的說明多派發編號，並註記是否經「顯示全部」選取。`module.json` 的 `api_prefixes` 加 `/api/payslip-dispatch-options`。無 migration、不動簽核與付款。
 
 ## 1.2.17 — 2026-10-10（wip/t50-int；第 50 班）
 - **（併入）(next) — 2026-10-10（wip/t53-05-payslip-bypass-r2）：勞報單代核——代核人不得是這條簽核鏈上的人（1d 稽核）**

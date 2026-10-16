@@ -60,6 +60,7 @@
       .sc-side input { display: none; }
       .sc-gbtn { width: auto; white-space: nowrap; }
     }
+    @media (min-width: 901px) { body.sys-rail-on .sc-bar { left: calc(var(--sidebar-w) + 208px); } } /* 系統中心分類欄（sidebar.js RAIL_W）佔掉左側 208px */
     @media (max-width: 767px) { .sc-main { margin-left: 0; padding: 20px 16px 140px; } .sc-bar { left: 0; padding: 10px 16px; } }
   </style>
 </head>
