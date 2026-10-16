@@ -1,5 +1,5 @@
 {
- "core_version": "1.145",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1537,6 +1537,9 @@
   "helper:settings_groups_list_view": {
    "register": "def(S, _register_core)"
   },
+  "helper:settings_groups_overhead": {
+   "register": "def(S, _register_core)"
+  },
   "helper:settings_groups_payslip_picker": {},
   "helper:settings_groups_profit": {
    "register": "def(S, _register_core)"
@@ -1545,12 +1548,14 @@
    "quote_cf_scan": "def(conn)",
    "register": "def(S, _register_core)"
   },
+  "helper:settings_groups_recycle_bin": {},
   "helper:settings_registry": {
    "DEFAULT_CONFIRM_DAYS": "const",
    "DEFAULT_EFFECT": "const",
    "IMPACT_SCOPE_GRANDFATHERED": "const",
    "KIND": "const",
    "RISK_ORDER": "const",
+   "SCALAR_LEGACY": "const",
    "SCOPE": "const",
    "SettingDef": "class",
    "SettingDef.__init__": "def(self, key, type, default, *, question=…, label=…, help=…, impact=…, min=…, max=…, unit=…, risk=…, legacy=…, clamp=…, requires_pending=…, risk_text=…, choices=…, recommended=…, presets=…, advanced=…, impact_fn=…, effect=…, loosen=…, zero_is_max=…, impact_scope=…)",

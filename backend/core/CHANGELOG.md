@@ -1,5 +1,15 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-10-17（wip/t69-retention-r1；T69 SO-S2：刪除暫存區保留天數改成設定）
+- 新設定群組 `recycle_bin`（設定中心「刪除暫存區」），欄位 `retention_days`：整數，**預設 30（＝上線前寫死的 30 天，行為不變）**、下限 7、上限 365；風險 legal、`loosen="down"`：**縮短＝放寬（更快永久刪除、無法找回）⇒ 須等確認期間（預設 7 天）並由另一位最高管理者核准（只有一位時改為原因＋確認期間＋警告＋通知）；延長立即生效**。`settings_deploy_baseline.json` 已同步。
+- 只影響設定生效**之後**才被刪除的項目（到期日 `purge_after` 在刪除當下就寫定，不回頭改寫）；每日清理、狀態頁的「保存 N 天」、通知文字、刪除已核可的提示都跟著設定走。`helpers.recycle_bin.RETENTION_DAYS`（30）保留，作為讀不到／不合法時的後備值。
+- L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.settings_groups_recycle_bin`（無公開介面；載入時由 `settings_groups` 檔尾兩行登錄群組）。
+- 測試：`modules/recyclebin/tests/test_recyclebin_retention_t69.py`（真實帳號＋HTTP：預設等值、延長立即、縮短需第二位最高管理者核准與確認期間、範圍檢查、非最高管理者被擋）。
+- **（併入）(next) — 2026-10-17 00:18（wip/t69-backfill-l0-r1；補登歷史案件 L0）**
+- 設定群組（只增，預設＝今日行為）：`quote_backfill`（`enabled` 預設 0＝沒有補登入口、立即生效僅稽核；`earliest_month` 預設 202001，跨欄位檢查月份須為 01–12）。部署基準檔 `settings_deploy_baseline.json` 同步。無 L1 介面變動。
+- **（併入）(next) — 2026-10-17（wip/t69-overhead-pct-r1，疊在 wip/t68-q1-profit-r4 之上；含 T68 Q1 利潤口徑單一來源收尾）**
+- L1（只增，相容擴充）：`helpers.settings_registry` 新增公開常數 `SCALAR_LEGACY`（欄位 `legacy="="` ⇒ 舊鍵是純量、整個舊鍵就是該欄位的值；讀取與雙寫都支援）；新單位 `helpers.settings_groups_overhead`（由 `settings_groups` 檔尾兩行登錄群組 `overhead`：`default_pct`，預設 25＝今天、0～100、調低＝放寬需第二位最高管理者核准、調高立即；舊鍵 `overhead_default_pct` 雙寫）。快照已以 `core_bump.py --pending` 重產，**未取號**。部署基準檔 `settings_deploy_baseline.json` 同步（零行為變更）。
+
 ## 1.145 — 2026-10-16（wip/t68-c7-r1；C7 小模組狀態／單位顯示名稱）
 - L1（只增）：新檔 `helpers/display_labels.py`（`label`、`labels`、`status_text`、`register`、`DEFAULTS`、`GROUPS`、`NETPLAN_KEY`；設定群組 `netplan_labels`／`procurement_labels`／`lodging_labels`，屬 core，由 `settings_groups` 載入時呼叫 `register`）。前端新檔 `static/display-labels.js` 經既有 `/api/settings-center/public` 取值，沒有新路由。
 - 純顯示：只換畫面上看到的名稱，狀態值、轉換順序、查詢、權限一律用原值；名稱規則同狀態顯示表（最多 12 字、同組不重複、非預設值不可含官方用語）。預設＝各畫面今天的字（等值測試 `tests/platform/test_display_labels_c7.py`）。
@@ -18,16 +28,6 @@
 - L1（只增）：`helpers.profit_warning` 新增 `charity_rate_pct()`、`charity_rate_text()`、`charity_rate_stamp()`、`rate_text()`、`rules_config()`、`CHARITY_RATE_PCT_DEFAULT`；設定群組 `profit_rules`（欄位 `charity_rate_pct`，預設 1，0～10，money 風險）寫在既有的 `helpers/settings_groups_profit.py`（`settings_deploy_baseline.json` 已同步）。
 - **放寬方向**：公益比率**調低**＝少扣公益金、營業利益變高 ⇒ 放寬（`loosen=down`），走確認期間＋第二位最高管理者核准（D-K1）；**調高**＝多扣＝收緊，立即生效。讀不到／不合法一律回 1（今天的值）。已完結精算的存檔公益金不回頭改寫。
 - 前端 `static/profit-rules.js` 新增 `configure()`／`charityRateText()`；三個數字（管銷後備 25、公益 1%、目標利潤率 12）可由 `GET /api/overhead/settings` 帶入，沒呼叫＝內建值。
-
-## (next) — 2026-10-17（wip/t69-retention-r1；T69 SO-S2：刪除暫存區保留天數改成設定）
-- 新設定群組 `recycle_bin`（設定中心「刪除暫存區」），欄位 `retention_days`：整數，**預設 30（＝上線前寫死的 30 天，行為不變）**、下限 7、上限 365；風險 legal、`loosen="down"`：**縮短＝放寬（更快永久刪除、無法找回）⇒ 須等確認期間（預設 7 天）並由另一位最高管理者核准（只有一位時改為原因＋確認期間＋警告＋通知）；延長立即生效**。`settings_deploy_baseline.json` 已同步。
-- 只影響設定生效**之後**才被刪除的項目（到期日 `purge_after` 在刪除當下就寫定，不回頭改寫）；每日清理、狀態頁的「保存 N 天」、通知文字、刪除已核可的提示都跟著設定走。`helpers.recycle_bin.RETENTION_DAYS`（30）保留，作為讀不到／不合法時的後備值。
-- L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.settings_groups_recycle_bin`（無公開介面；載入時由 `settings_groups` 檔尾兩行登錄群組）。
-- 測試：`modules/recyclebin/tests/test_recyclebin_retention_t69.py`（真實帳號＋HTTP：預設等值、延長立即、縮短需第二位最高管理者核准與確認期間、範圍檢查、非最高管理者被擋）。
-- **（併入）(next) — 2026-10-17 00:18（wip/t69-backfill-l0-r1；補登歷史案件 L0）**
-- 設定群組（只增，預設＝今日行為）：`quote_backfill`（`enabled` 預設 0＝沒有補登入口、立即生效僅稽核；`earliest_month` 預設 202001，跨欄位檢查月份須為 01–12）。部署基準檔 `settings_deploy_baseline.json` 同步。無 L1 介面變動。
-- **（併入）(next) — 2026-10-17（wip/t69-overhead-pct-r1，疊在 wip/t68-q1-profit-r4 之上；含 T68 Q1 利潤口徑單一來源收尾）**
-- L1（只增，相容擴充）：`helpers.settings_registry` 新增公開常數 `SCALAR_LEGACY`（欄位 `legacy="="` ⇒ 舊鍵是純量、整個舊鍵就是該欄位的值；讀取與雙寫都支援）；新單位 `helpers.settings_groups_overhead`（由 `settings_groups` 檔尾兩行登錄群組 `overhead`：`default_pct`，預設 25＝今天、0～100、調低＝放寬需第二位最高管理者核准、調高立即；舊鍵 `overhead_default_pct` 雙寫）。快照已以 `core_bump.py --pending` 重產，**未取號**。部署基準檔 `settings_deploy_baseline.json` 同步（零行為變更）。
 
 ## 1.144 — 2026-10-16（wip/t66-lp-r2；T66 清單個人偏好 L0～L2）
 - T66 L0＋L1＋L2（清單個人偏好的目錄、公司政策與個人每頁筆數，旗標 `list_prefs.enabled` 預設關）：
