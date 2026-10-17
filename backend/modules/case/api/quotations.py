@@ -2048,6 +2048,7 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
     now = datetime.now().isoformat()
     actor = user.get("display_name") or user["username"]
     q["dealTag"] = "已成案"
+    _case_record_of(q)                      # 用戶端的新增頁送 caseRecord:null；之後新增階段等寫入要有 dict 可寫
     q["approval"] = {"historical": True, "tiers": [], "recordedBy": user["username"], "recordedByDisplay": actor,
                      "recordedAt": now, "reason": reason, "note": "補登，無簽核"}
     q["historical"] = {"quoteDate": q["quoteDate"], "month": month, "recordedAt": now,
@@ -3051,6 +3052,14 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
         return {"ok": True}
 
 
+def _case_record_of(data: dict) -> dict:
+    """data["caseRecord"]（一定是 dict）。`setdefault` 擋不住「key 在但值是 null／非 dict」——補登／舊資料常見——那樣下標賦值會 500；這裡就地補成 {}。"""
+    cr = data.get("caseRecord")
+    if not isinstance(cr, dict):
+        cr = data["caseRecord"] = {}
+    return cr
+
+
 def _pin_backfill_marker(q: dict, old: dict, real_approval: bool = False) -> None:
     """補登標記（approval.historical、頂層 historical）只由 POST /api/quotations/historical 寫入。
     其他寫入路徑（一般新增、整份取代的編輯）一律以資料庫現值為準：現值沒有 ⇒ 用戶端帶的丟掉；現值有 ⇒ 放回（編輯不會洗掉補登標記）。
@@ -3769,7 +3778,7 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     label = f"{quote_no}（{row['customer_name'] or ''}）"
     data = json.loads(row["data_json"] or "{}")
-    cr = data.setdefault("caseRecord", {})
+    cr = _case_record_of(data)
     result: dict = {}
 
     if action_type == "case_record_update":
@@ -4050,7 +4059,7 @@ def _sync_stages_to_json(conn, quote_no: str, updated_at: str = None) -> str | N
                 ],
                 **({"stageKey": sr["stage_key"]} if ("stage_key" in sr.keys() and sr["stage_key"]) else {}),
             })
-        data.setdefault("caseRecord", {})["stages"] = stages_json
+        _case_record_of(data)["stages"] = stages_json
         result_ts = save_quotation_json(conn, quote_no, data, updated_at=updated_at)
         conn.commit()
         return result_ts
@@ -4745,7 +4754,7 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         if expected_ua and row["updated_at"] != expected_ua:
             raise HTTPException(409, "報價單已被其他人修改，請重新載入後再操作")
         data = json.loads(row["data_json"] or "{}")
-        cr   = data.setdefault("caseRecord", {})
+        cr   = _case_record_of(data)
         pay  = cr.setdefault("payment", {})
         pits = pay.setdefault("items", [])
         if idx < 0 or idx >= len(pits):
@@ -4847,7 +4856,7 @@ def _load_payment_item(conn, no, idx, item_id=None, lock=True):
     if not row:
         raise HTTPException(404, "報價單不存在")
     data = json.loads(row["data_json"] or "{}")
-    cr   = data.setdefault("caseRecord", {})
+    cr   = _case_record_of(data)
     pay  = cr.setdefault("payment", {})
     pits = pay.setdefault("items", [])
     return data, pits, _locate_item(pits, idx, item_id, "款項索引超出範圍")
@@ -4931,7 +4940,7 @@ def _load_material_item(conn, no, idx, item_id=None, lock=True):
     if not row:
         raise HTTPException(404, "報價單不存在")
     data = json.loads(row["data_json"] or "{}")
-    cr   = data.setdefault("caseRecord", {})
+    cr   = _case_record_of(data)
     mats = cr.setdefault("materials", [])
     return data, mats, _locate_item(mats, idx, item_id, "料件索引超出範圍")
 
@@ -7192,7 +7201,7 @@ def case_batch_assign(body: dict = Body(...), authorization: str = Header(None))
                 continue
             d = json.loads(row["data_json"] or "{}")
             if set_exec:
-                cr = d.setdefault("caseRecord", {})
+                cr = _case_record_of(d)
                 roles = cr.get("roles") if isinstance(cr.get("roles"), dict) else {}
                 roles["executor"] = exec_val
                 cr["roles"] = roles

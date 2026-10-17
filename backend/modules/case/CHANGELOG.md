@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-17（wip/t71-backfill-fixes-r1；補登歷史案件 T71：瀏覽器實測缺陷與小修）
+- 修正（D1）：補登單由畫面建立時 `caseRecord` 是 null，之後新增階段（`POST /api/quotations/{no}/stages`）會 500。補登建立時補成 `{}`，並新增 `_case_record_of()` 讓新增階段／案件資料等 6 處寫入都容忍 null／非 dict 的 `caseRecord`（舊資料同樣受惠）。
+- 修正（畫面，報價單表單 V3.32）：補登模式的標題與單號欄改顯示「將取得的單號」（填了原始單號則顯示原始單號），關閉補登還原；「複製為新單」不再把來源補登單的 `historical` 來歷註記帶到新單（伺服器本來就會丟）。
+
 ## 1.0.204 — 2026-10-17（wip/t70-backfill-l2-r1；T70-1 補登歷史案件 L2：畫面、自動關閉、提醒靜音）
 - 補登歷史案件 L2（T70-1，wip/t70-backfill-l2-r1）：①畫面：報價單表單（V3.31）新增模式多「補登歷史案件」區塊（僅最高管理者且設定中心開關有效時出現；報價日期限過去月份、即時預覽單號、可填原始單號、原因必填、走 `POST /api/quotations/historical`；補登模式下一般儲存／自動存檔／送審停用）。支援端點：`GET /api/quotations/historical/config`（非最高管理者回 `available=false`）、`GET /api/quotations/historical/next-no?date=`（與補登送出同一個派號函式；跳過暫存區保留號）。②自動關閉：設定 `quote_backfill.auto_off_hours`（預設 24、0＝不自動關、上限 720）——開關開啟超過該小時數即視為關閉（找不到開啟時間 ⇒ 視為關），補登與預覽端點回 403 並說明。③靜音（補登單＝`approval.historical`）：階段到期提醒、專案逾期提醒、「專案預計完成」行事曆、應收到期／收款行事曆推送、出納應收待辦（未收佇列不列、查全部時標示 `historical` 且不算逾期）、案件清單「階段逾期／應收逾期」分頁與計數；保固到期提醒不靜音（保固是真實義務）。④標示：案件清單每列多 `historical`；報價單 PDF/預覽頂端多「歷史補登案件（無簽核軌跡…）」標示。⑤補登標記 `historical` 現在永遠是 `approval` 的第一個鍵（SQL 靜音提示依賴此序列化形狀；測試鎖定）。報表月份：沿用 `quote_won_month_map`（優先 quote_date），測試鎖定補登單歸入其報價日期的月份。
 - 注意（形狀依賴）：補登單的 SQL 靜音依賴 data_json 開頭形狀 `{"approval": {"historical": true`；形狀壞掉時安全失敗（回到逾期分頁）。T71：專用欄位／精確頂層路徑、到期排程＋稽核。
