@@ -72,6 +72,7 @@
    "helper:settings_groups_recycle_bin",
    "helper:settings_groups_overhead",
    "helper:settings_groups_lodging_freshness",
+   "helper:settings_groups_tender_closing",
    "helper:profit_warning",
    "helper:display_labels",
    "helper:quote_output",

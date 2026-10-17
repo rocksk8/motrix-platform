@@ -6,6 +6,11 @@
 - 測試：`modules/lodging/tests/test_lodging_stale_days_t70.py`（預設等值與 29／31 天邊界、改設定後提示門檻跟著動、範圍檢查、非最高管理者被擋、讀不到用 30）。
 - **（併入）(next) — 2026-10-17（wip/t70-backfill-l2-r1；T70-1 補登歷史案件 L2）**
 - 設定群組 `quote_backfill` 新欄位 `auto_off_hours`（T70-1；預設 24 小時、0＝不自動關、上限 720；風險 none、立即生效並稽核；基準檔已同步）。補登開關預設仍為關。
+- **（併入）(next) — 2026-10-17（wip/t70-closing-soon-r2，疊在 train/t69-int 之上；T70-3b：地圖標案「即將截止」天數改成設定）**
+- 新設定群組 `tender_closing`（設定中心「地圖：標案即將截止標記」），欄位 `closing_soon_days`：整數，**預設 7（＝上線前寫死的 7 天，行為不變）**、範圍 1～60；風險 none、立即生效（只影響地圖標案點位的顏色分類與「即將截止」篩選，不改標案資料、不改哪些標案會出現）。`settings_deploy_baseline.json` 已同步。
+- `routers/map_points.py`：`_deadline_status` 改讀 `closing_soon_days()`（讀不到或不在 1～60 ⇒ 後備常數 7）；`/api/map/points` 回應多一個 `closingSoonDays`；地圖取點快取的指紋把這個設定算進去（改設定後不回舊結果）。`pages/map.html` 篩選選項與圖例的「7 天內截止」字樣改用 `closingSoonDays`（後端沒回就顯示 7）。
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.settings_groups_tender_closing`（無公開介面；載入時由 `settings_groups` 檔尾兩行登錄群組）。
+- 測試：`tests/test_closing_soon_days_t70.py`（預設等值與邊界、改設定後邊界跟著動、取點端點隨設定變化且不回快取舊值、範圍檢查、非最高管理者被擋、讀不到用 7）。
 
 ## 1.146 — 2026-10-17（wip/t69-retention-r1；T69 SO-S2：刪除暫存區保留天數改成設定）
 - 新設定群組 `recycle_bin`（設定中心「刪除暫存區」），欄位 `retention_days`：整數，**預設 30（＝上線前寫死的 30 天，行為不變）**、下限 7、上限 365；風險 legal、`loosen="down"`：**縮短＝放寬（更快永久刪除、無法找回）⇒ 須等確認期間（預設 7 天）並由另一位最高管理者核准（只有一位時改為原因＋確認期間＋警告＋通知）；延長立即生效**。`settings_deploy_baseline.json` 已同步。
