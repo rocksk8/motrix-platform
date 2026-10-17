@@ -527,7 +527,7 @@ def parse_summary(text: str):
         d.update(dict(re.findall(r"(\w+)=([A-Za-z0-9_.\-]+)", m.group(0))))
     h = r"([0-9a-f]{7,40})"
     m = (re.search(r"前後 commit：" + h + r"\s*[→\->]+\s*" + h, text)
-         or re.search(r"前 commit\s*" + h + r"\s*[→\->]+\s*後\s*" + h, text)
+         or re.search(r"前 commit\s*" + h + r"(?:\s*[（(][^）)\n]{0,40}[）)])?\s*[→\->]+\s*後\s*" + h, text)   # 允許舊 commit 後面帶括號註記（例：「前 commit 4e8dd731…（T68）→ 後 8069…」，T69/T70 回報）
          or re.search(r"^﻿?#[^\n]*?\b" + h + r"\s*[→\->]+\s*" + h + r"\b", text, re.M))
     if m:
         d["old_commit"], d["new_commit"] = m.group(1), m.group(2)

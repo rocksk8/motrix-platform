@@ -281,11 +281,15 @@ def test_deployed_parity(tmp_path):
 
 SUMMARY_B = ("# T66 套用成功報告（b4db46376）\n\n- `::RESULT:: v=2 status=success rolled_back=applied service=up exit=0`（log：apply_t66.log）\n"
              "- 前 commit {old} → 後 {new}；deploy_manifest 與 .build_commit 一致。\n\napi_version 2026-10-09b\n")
+# T69/T70 回報的實際寫法：舊 commit 後面帶括號註記「（T68）」，再「→ 後 <新>」（舊的第二個樣式讀不到，V5.2/V5.4 曾因此誤判）
+SUMMARY_D = ("# T69 套用成功報告（80691505）\n\n- t0 = 2026-10-17T13:31:32\n- `::RESULT:: v=2 status=success rolled_back=applied service=up exit=0`\n"
+             "- 前 commit {old}（T68）→ 後 {new}；verification.mode=full、flaky_retried=[]、無 scoped；.build_commit 一致。\n\napi_version 2026-10-09b\n")
+SUMMARY_D2 = SUMMARY_D.replace("（T68）", "(T68)")        # 半形括號也接受
 SUMMARY_C = ("﻿# T65 套用成功：{old} → {new}\n\n::RESULT:: v=2 status=success rolled_back=applied service=up exit=0\n"
              "- #10 deployed_commit 相符，api_version 2026-10-09b ✅\n")
 
 
-@pytest.mark.parametrize("tpl", [SUMMARY, SUMMARY_B, SUMMARY_C])
+@pytest.mark.parametrize("tpl", [SUMMARY, SUMMARY_B, SUMMARY_C, SUMMARY_D, SUMMARY_D2])
 def test_parse_summary_accepts_all_known_formats(tpl):
     d = F.parse_summary(tpl.format(old="a" * 9, new="b" * 40))
     assert d["status"] == "success" and d["service"] == "up" and d["exit"] == "0"
@@ -297,7 +301,7 @@ def test_parse_summary_result_line_stops_at_first_non_token_char():
     assert d["exit"] == "3" and "log" not in d
 
 
-@pytest.mark.parametrize("tpl", [SUMMARY, SUMMARY_B, SUMMARY_C])
+@pytest.mark.parametrize("tpl", [SUMMARY, SUMMARY_B, SUMMARY_C, SUMMARY_D, SUMMARY_D2])
 def test_deployed_baseline_by_ancestry_with_negative_controls(tmp_path, tpl):
     root = _repo(tmp_path / "tree")
     _w(root, "backend/version_manifest.json", json.dumps([{"module": "m", "version": "2026-10-09b", "date": "d", "time": "t", "content": "c"}]))
@@ -379,3 +383,19 @@ def test_allow_file_is_valid_json_with_the_expected_keys():
     a = json.loads((REPO / "tools" / "platform" / "final_verify_allow.json").read_text(encoding="utf-8"))
     for k in ("root_files", "public_ok", "auth_ok", "dangling_links_ok", "dangling_tick_patterns", "frontend_calls_ok", "ip_ok", "tracked_ok"):
         assert isinstance(a[k], list), k
+
+
+_REAL = {"T69": ("20261017_133300_80691505_成功", "4e8dd731cc30fd22a57bec34438310a97ec0d549", "80691505436504300848a39c20d189daa993be0b", "2026-10-17f"),
+         "T70": ("20261017_134800_d2b6e245_成功", "80691505436504300848a39c20d189daa993be0b", "d2b6e24536c7f77bc0dca5b0e774db4895a44a93", "2026-10-17j")}
+
+
+@pytest.mark.parametrize("name", sorted(_REAL))
+def test_parse_summary_reads_the_real_published_reports(name):
+    """正式機實際回報（雲端硬碟上的唯讀檔）：V5 要能讀出前後 commit。沒有雲端硬碟的機器略過。"""
+    folder, old, new, api = _REAL[name]
+    f = Path("G:/我的雲端硬碟/MOTRIX-交付/正式機回報") / folder / "摘要.md"
+    if not f.exists():
+        pytest.skip("正式機回報資料夾不在這台機器上")
+    d = F.parse_summary(f.read_text(encoding="utf-8-sig"))
+    assert d["old_commit"] == old and d["new_commit"] == new and d["api_version"] == api
+    assert d["status"] == "success" and d["service"] == "up" and d["exit"] == "0"
