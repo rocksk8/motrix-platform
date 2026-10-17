@@ -1,6 +1,6 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — 2026-10-17（wip/t70-supply-caps-r1；T70-2 PM-S5：供應商能力宣告＋端點接線，預設等價）
+## 1.0.34 — 2026-10-17（wip/t70-supply-caps-r1；T70-2 PM-S5：供應商能力宣告＋端點接線，預設等價）
 - `module.json` 新增 `capabilities`（4 項：`supply.supplier.view｜create｜edit｜delete`）；`legacy` ＝ 今天的閘（最高管理者，或持有「客戶」「採購」「庫存」任一功能勾選），種子矩陣不給任何角色預設勾選 ⇒ 行為與今天逐位元相同。`delete` 依框架規則一律列高風險：之後在權限頁放寬需填原因、等確認期間、由另一位最高管理者核准。
 - `api/suppliers.py`（7 支：清單、新增、修改、刪除、更新拜訪、聯絡人個資告知讀取／登記）的第一道閘由 `require_any_module(…, "供應商管理")` 改為 `user = _require_user(authorization)` ＋ `perm.require(user, <能力鍵>)`；本體不動。被擋時 403 訊息改為『權限不足：需要「…」（鍵）』（狀態碼不變）。
 - 刻意不接：庫存（`inventory.py`）、出貨單（`shipping_notes.py`）各端點的閘不同（多模組、含案件／簽核人判斷），留給後續。

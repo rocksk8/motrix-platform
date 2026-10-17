@@ -1,6 +1,6 @@
 # 附近旅宿 更新紀錄
 
-## (next) — 2026-10-17（wip/t70-lodging-stale-r1；T70-3：資料過舊提示天數走設定 `lodging_freshness.stale_days`）
+## 1.2.10 — 2026-10-17（wip/t70-lodging-stale-r1；T70-3：資料過舊提示天數走設定 `lodging_freshness.stale_days`）
 - `source.py` 新增 `stale_days(conn=None)`（讀設定，預設 30；讀不到或不在 7～365 ⇒ 後備 `STALE_DAYS`＝30）；`catalog_state` 的 `stale` 判斷與 `/api/lodging/status`、搜尋回應的 `staleDays` 都改用它。預設 30 時輸出與先前逐位相同。無 migration、無新表。
 
 ## 1.2.9 — 2026-10-16（wip/t68-c7-r1；C7 計價單位與詢價管道顯示名稱）

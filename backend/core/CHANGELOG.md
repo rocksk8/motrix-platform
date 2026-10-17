@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-10-17（wip/t70-lodging-stale-r1；T70-3：附近旅宿資料過舊提示天數改成設定）
+## 1.147 — 2026-10-17（wip/t70-lodging-stale-r1；T70-3：附近旅宿資料過舊提示天數改成設定）
 - 新設定群組 `lodging_freshness`（設定中心「附近旅宿：資料新舊提示」），欄位 `stale_days`：整數，**預設 30（＝上線前寫死的 30 天，行為不變）**、範圍 7～365；風險 none、立即生效（只影響「資料日期已超過 N 天，內容可能過舊」這行提示，不自動去抓資料、不改任何查詢結果）。`settings_deploy_baseline.json` 已同步。
 - L1（新增，只增；快照已以 `core_bump.py --pending` 重產，**未取號**）：新單位 `helpers.settings_groups_lodging_freshness`（無公開介面；載入時由 `settings_groups` 檔尾兩行登錄群組）。
 - 測試：`modules/lodging/tests/test_lodging_stale_days_t70.py`（預設等值與 29／31 天邊界、改設定後提示門檻跟著動、範圍檢查、非最高管理者被擋、讀不到用 30）。
