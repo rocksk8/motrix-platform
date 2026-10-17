@@ -45,6 +45,8 @@
 📌 2026-10-16 10:19：正式機已更新到 79d10f22（第六十五班：金額欄位遮罩出口改用欄位政策〔行為不變〕、清單檢視個人偏好〔報價單清單欄位／預設頁籤／每頁筆數、案件清單預設頁籤／每次載入筆數／合併重複的已成案頁籤，預設全關〕、前端數字與日期顯示統一走 MotrixFormat〔預設輸出不變〕；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261016-t65-apply.md；套件 20261016_100431_79d10f22_full；core 1.141→1.143、case 1.0.200、accounting 1.1.63、analytics 1.0.43、arap 1.0.58、lodging 1.2.8、payroll 1.2.20、subcontract 1.1.38、supply 1.0.31、tender_radar 1.5.10，schema 維持 118、無 migration；manifest 584 筆；設定群組 34 組）⇒ 基準改 79d10f22。
 📌 2026-10-16 12:53：正式機已更新到 b4db4637（第六十六班：清單個人偏好後端〔API＋新表 user_list_view_prefs，旗標預設全關、無畫面〕、其餘頁面數字與日期顯示統一走 MotrixFormat〔預設輸出不變〕、複製到新報價單後拖曳排序與預覽高度修復、權限矩陣待生效改走設定帳本〔寫入函式未接線、行為不變〕；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261016-t66-apply.md；套件 20261016_121636_b4db4637_full；core 1.143→1.144（核心 migration 10→11）、case 1.0.201、permmatrix 1.0.4、subcontract 1.1.39、supply 1.0.32，schema 維持 118；manifest 586 筆；設定群組 35 組）⇒ 基準改 b4db4637。
 📌 2026-10-16 23:35：正式機已更新到 cb2885f3（第六十七班：權限設定頁、勞報單權限能力〔6 項能力、20 個端點〕、系統中心左側分類欄；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261016-t67-apply.md；套件 20261016_232115_cb2885f3_full；core 1.144 不變、permmatrix 1.0.4→1.1.0、payroll 1.2.20→1.2.21，schema 維持 118；manifest 586→589 筆）⇒ 基準改 cb2885f3。
+📌 2026-10-17 13:16：正式機已更新到 4e8dd731（第六十八班：營運報表金額閘、勞報單選派發下拉與選項清單、利潤口徑公益比率、法規參數跨年提醒、首頁待審核金額遮蔽、小模組顯示名稱；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261017-t68-apply.md；套件 20261017_043318_4e8dd731_full；core 1.144→1.145、analytics 1.0.44、case 1.0.202、lodging 1.2.9、netplan 1.0.14、payroll 1.2.22、subcontract 1.1.40、supply 1.0.33，schema 維持 118；manifest 589→590 筆）⇒ 基準改 4e8dd731。
+📌 2026-10-17 13:31：正式機已更新到 80691505（第六十九班：補登歷史案件 L0＋L1〔預設關閉、僅最高管理者〕、簽核提醒失敗清單、回收筒隔離目錄面板與保留天數設定、總帳設定〔角色→科目對應需第二位最高管理者核准；會計年度起始月僅最高管理者〕、管銷％預設值設定；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261017-t69-apply.md；套件 20261017_071334_80691505_full；core 1.145→1.146、case 1.0.203、recyclebin 1.0.7、accounting 1.1.64，schema 維持 118；manifest 590→595 筆）⇒ 基準改 80691505。
 """
 import json
 import subprocess
@@ -53,7 +55,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "cb2885f3"
+BASELINE = "80691505"
 
 
 def baseline_manifest():
