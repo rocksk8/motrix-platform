@@ -359,8 +359,8 @@
                   <button class="icon-btn" title="複製為新報價單" @click.stop="duplicateQuote(q.quote_no)">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                   </button>
-                  <template x-if="canDelete && q.status === '草稿'">
-                    <button class="icon-btn del" title="刪除（僅草稿可刪）" @click.stop="deleteQuote(q.quote_no)">
+                  <template x-if="canDelete && (q.status === '草稿' || (q.historical === true && session.role === 'superadmin'))">
+                    <button class="icon-btn del" :title="q.status === '草稿' ? '刪除（僅草稿可刪）' : '作廢補登單（需填原因）'" :data-testid="q.status === '草稿' ? 'ql-delete' : 'ql-void'" @click.stop="deleteQuote(q.quote_no, q)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                     </button>
                   </template>
@@ -784,21 +784,45 @@
         await this.loadQuotes()
       },
 
-      async deleteQuote(quoteNo) {
+      // 補登單（historical=true、非草稿）作廢：先開頁內視窗填原因（≥5 字），再帶 ?reason= 刪除；其餘維持原行為
+      voidDlg: { open: false, quoteNo: '', reason: '', err: '', busy: false },
+      async deleteQuote(quoteNo, row) {
+        if (row && row.historical === true && row.status !== '草稿') {
+          if (this.session.role !== 'superadmin') return
+          this.voidDlg = { open: true, quoteNo, reason: '', err: '', busy: false }
+          return
+        }
         if (!confirm(`確定刪除報價單 ${quoteNo}？此操作無法復原。`)) return
+        await this._doDelete(quoteNo, '')
+      },
+      async submitVoid() {
+        const d = this.voidDlg
+        const reason = (d.reason || '').trim()
+        if (reason.length < 5) { d.err = '請填作廢原因（至少 5 個字）'; return }
+        if (d.busy) return
+        d.busy = true; d.err = ''
+        const ok = await this._doDelete(d.quoteNo, reason, true)
+        d.busy = false
+        if (ok) d.open = false
+      },
+      async _doDelete(quoteNo, reason, inDlg) {
         try {
-          const r = await fetch(`${API}/quotations/${quoteNo}`, {
+          const r = await fetch(`${API}/quotations/${quoteNo}` + (reason ? '?reason=' + encodeURIComponent(reason) : ''), {
             method: 'DELETE',
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
-          if (!r.ok) { alert('後端刪除失敗'); return }
+          if (!r.ok) {
+            if (inDlg) { const j = await r.json().catch(() => ({})); this.voidDlg.err = typeof j.detail === 'string' ? j.detail : '作廢失敗（' + r.status + '）'; return false }
+            alert('後端刪除失敗'); return false
+          }
           // IP-13：業務開發模組不在時，後端照刪並回 notice（轉建連結沒有解除）——要讓使用者看到，不可以吞掉
           var body = await r.json().catch(function () { return {} })
           var notice = (body && body.notice) || ''
-        } catch { alert('網路錯誤，刪除失敗'); return }
+        } catch { if (inDlg) { this.voidDlg.err = '網路錯誤，作廢失敗'; return false } alert('網路錯誤，刪除失敗'); return false }
         this.quotes = this.quotes.filter(q => q.quote_no !== quoteNo)
         if (notice) this.toast('報價單已刪除。' + notice, '#B45309', 8000)
-        else this.toast('報價單已刪除')
+        else this.toast(reason ? '補登單已作廢（進暫存區，可復原）' : '報價單已刪除')
+        return true
       },
 
       async duplicateQuote(quoteNo) {
@@ -1022,5 +1046,17 @@
   })
   </script>
   <script src="../static/list-sort.js"></script>
+<div x-show="voidDlg.open" x-cloak style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center" data-testid="ql-void-dlg">
+  <div style="background:#fff;border-radius:8px;padding:20px;width:min(440px,92vw)">
+    <div style="font-weight:600;margin-bottom:8px">作廢補登單 <span x-text="voidDlg.quoteNo"></span></div>
+    <div style="font-size:12px;color:#6B7280;margin-bottom:8px">作廢後進暫存區（可由最高管理者復原），單號不會回收。請填原因（至少 5 個字）。</div>
+    <input class="form-input" style="width:100%" type="text" placeholder="作廢原因" x-model="voidDlg.reason" @keydown.enter="submitVoid()" data-testid="ql-void-reason">
+    <div style="color:#DC2626;font-size:12px;min-height:18px;margin-top:6px" x-text="voidDlg.err" data-testid="ql-void-err"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-ghost btn-sm" @click="voidDlg.open=false" data-testid="ql-void-cancel">取消</button>
+      <button class="btn btn-primary btn-sm" :disabled="voidDlg.busy" @click="submitVoid()" data-testid="ql-void-ok">確定作廢</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
