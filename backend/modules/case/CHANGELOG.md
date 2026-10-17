@@ -7,6 +7,7 @@
 - 新增（自動關閉真的執行）：每日排程（`daily.check`，`case_deadlines.run_daily_checks`）呼叫 `expire_backfill_if_due()`——補登開關開啟超過 `auto_off_hours` 後，真的把 `enabled` 翻回 0（設定異動紀錄＋稽核 `settings.quote_backfill.update`，原因「自動關閉…」）。過期期間仍由讀取時的即時判斷擋住，所以排程只是讓畫面與紀錄一致；讀取失敗不動。
 - 補強（稽核 hichan-49）：`GET /api/quotations/{no}/material-orders` 對 caseRecord 為 null 的單不再 500（HTTP 測試）；自動關閉改排在每日檢查最前面（後面的檢查出例外也不會跳過）；表單 V3.33：取消勾選補登一律還原原本的單號（含原本為空 ⇒ 存檔時由後端派號），不再把過去月份的預覽單號留在單號欄。
 - 修正（畫面，報價單表單 V3.32）：補登模式的標題與單號欄改顯示「將取得的單號」（填了原始單號則顯示原始單號），關閉補登還原；「複製為新單」不再把來源補登單的 `historical` 來歷註記帶到新單（伺服器本來就會丟）。
+- 新增（畫面，報價單清單）：補登單列的「作廢」改走頁內視窗並必填原因（至少 5 字，以 `?reason=` 帶給刪除端點；僅最高管理者看得到），一般草稿刪除不變；輸入法組字中按 Enter 不會誤送出。
 
 ## 1.0.204 — 2026-10-17（wip/t70-backfill-l2-r1；T70-1 補登歷史案件 L2：畫面、自動關閉、提醒靜音）
 - 補登歷史案件 L2（T70-1，wip/t70-backfill-l2-r1）：①畫面：報價單表單（V3.31）新增模式多「補登歷史案件」區塊（僅最高管理者且設定中心開關有效時出現；報價日期限過去月份、即時預覽單號、可填原始單號、原因必填、走 `POST /api/quotations/historical`；補登模式下一般儲存／自動存檔／送審停用）。支援端點：`GET /api/quotations/historical/config`（非最高管理者回 `available=false`）、`GET /api/quotations/historical/next-no?date=`（與補登送出同一個派號函式；跳過暫存區保留號）。②自動關閉：設定 `quote_backfill.auto_off_hours`（預設 24、0＝不自動關、上限 720）——開關開啟超過該小時數即視為關閉（找不到開啟時間 ⇒ 視為關），補登與預覽端點回 403 並說明。③靜音（補登單＝`approval.historical`）：階段到期提醒、專案逾期提醒、「專案預計完成」行事曆、應收到期／收款行事曆推送、出納應收待辦（未收佇列不列、查全部時標示 `historical` 且不算逾期）、案件清單「階段逾期／應收逾期」分頁與計數；保固到期提醒不靜音（保固是真實義務）。④標示：案件清單每列多 `historical`；報價單 PDF/預覽頂端多「歷史補登案件（無簽核軌跡…）」標示。⑤補登標記 `historical` 現在永遠是 `approval` 的第一個鍵（SQL 靜音提示依賴此序列化形狀；測試鎖定）。報表月份：沿用 `quote_won_month_map`（優先 quote_date），測試鎖定補登單歸入其報價日期的月份。
