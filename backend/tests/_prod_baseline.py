@@ -47,6 +47,7 @@
 📌 2026-10-16 23:35：正式機已更新到 cb2885f3（第六十七班：權限設定頁、勞報單權限能力〔6 項能力、20 個端點〕、系統中心左側分類欄；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261016-t67-apply.md；套件 20261016_232115_cb2885f3_full；core 1.144 不變、permmatrix 1.0.4→1.1.0、payroll 1.2.20→1.2.21，schema 維持 118；manifest 586→589 筆）⇒ 基準改 cb2885f3。
 📌 2026-10-17 13:16：正式機已更新到 4e8dd731（第六十八班：營運報表金額閘、勞報單選派發下拉與選項清單、利潤口徑公益比率、法規參數跨年提醒、首頁待審核金額遮蔽、小模組顯示名稱；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261017-t68-apply.md；套件 20261017_043318_4e8dd731_full；core 1.144→1.145、analytics 1.0.44、case 1.0.202、lodging 1.2.9、netplan 1.0.14、payroll 1.2.22、subcontract 1.1.40、supply 1.0.33，schema 維持 118；manifest 589→590 筆）⇒ 基準改 4e8dd731。
 📌 2026-10-17 13:31：正式機已更新到 80691505（第六十九班：補登歷史案件 L0＋L1〔預設關閉、僅最高管理者〕、簽核提醒失敗清單、回收筒隔離目錄面板與保留天數設定、總帳設定〔角色→科目對應需第二位最高管理者核准；會計年度起始月僅最高管理者〕、管銷％預設值設定；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261017-t69-apply.md；套件 20261017_071334_80691505_full；core 1.145→1.146、case 1.0.203、recyclebin 1.0.7、accounting 1.1.64，schema 維持 118；manifest 590→595 筆）⇒ 基準改 80691505。
+📌 2026-10-17 13:46：正式機已更新到 d2b6e245（第七十班：補登歷史案件 L2〔操作畫面、預覽端點、24 小時自動關閉、提醒與逾期靜音；旗標仍預設關閉，已知缺陷 D1 修好前不得開啟〕、附近旅宿資料過舊天數設定、地圖標案即將截止天數設定、供應商四項權限〔預設等價〕、建立報價單寫鎖衛生；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261017-t70-apply.md；套件 20261017_091233_d2b6e245_full；core 1.146→1.147、arap 1.0.59、case 1.0.204、lodging 1.2.10、supply 1.0.34，schema 維持 118；manifest 595→599 筆）⇒ 基準改 d2b6e245。
 """
 import json
 import subprocess
@@ -55,7 +56,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "80691505"
+BASELINE = "d2b6e245"
 
 
 def baseline_manifest():
