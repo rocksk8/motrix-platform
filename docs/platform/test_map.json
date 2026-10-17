@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1454,
+  "tests": 1455,
   "unmapped": 13,
   "kinds": {
    "api": 811,
-   "e2e": 312,
+   "e2e": 313,
    "audit": 193,
    "unit": 138
   },
@@ -32708,6 +32708,37 @@
     "path": [
      "frontend/pages/system-hub.html",
      "frontend/pages/users.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_system_rail_fixed_t72.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "js:static/sidebar.js",
+    "page:pages/expense-types.html",
+    "page:pages/system-hub.html",
+    "page:pages/users.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/expense-types.html",
+     "frontend/pages/system-hub.html",
+     "frontend/pages/users.html",
+     "frontend/static/sidebar.js"
+    ],
+    "path": [
+     "frontend/pages/expense-types.html",
+     "frontend/pages/system-hub.html",
+     "frontend/pages/users.html",
+     "frontend/static/sidebar.js"
     ]
    }
   },
