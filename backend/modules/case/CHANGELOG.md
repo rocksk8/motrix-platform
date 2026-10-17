@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-17（wip/t71-backfill-fixes-r1；補登歷史案件 T71：瀏覽器實測缺陷與小修）
+## (next) — 2026-10-17（wip/t71-backfill-fixes-r1；補登歷史案件 T71：瀏覽器實測缺陷、清單作廢入口與小修）
 - 新增（列表作廢入口）：報價單列表對補登單（`historical=true`）且為最高管理者時顯示「作廢」鈕，開頁內視窗填原因（≥5 字）後送 `DELETE …?reason=`，進暫存區、單號不回收；一般草稿刪除與非最高管理者行為不變。
 - 修正（D1）：補登單由畫面建立時 `caseRecord` 是 null，之後新增階段（`POST /api/quotations/{no}/stages`）會 500。補登建立時補成 `{}`，並新增 `_case_record_of()` 讓新增階段／案件資料等 6 處寫入都容忍 null／非 dict 的 `caseRecord`（舊資料同樣受惠）。
 - 補強（D1，稽核 8f）：17 個階段寫入端點共用 `_sync_stages_to_json`；新增／改名／排序／負責人／相依／拜訪／刪除等 8 條端點對「caseRecord 為 null 的補登單」逐一參數化測試（修正前全 500，修正後 200）。
