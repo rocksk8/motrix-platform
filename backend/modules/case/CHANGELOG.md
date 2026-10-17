@@ -4,6 +4,7 @@
 - 修正（D1）：補登單由畫面建立時 `caseRecord` 是 null，之後新增階段（`POST /api/quotations/{no}/stages`）會 500。補登建立時補成 `{}`，並新增 `_case_record_of()` 讓新增階段／案件資料等 6 處寫入都容忍 null／非 dict 的 `caseRecord`（舊資料同樣受惠）。
 - 補強（D1，稽核 8f）：17 個階段寫入端點共用 `_sync_stages_to_json`；新增／改名／排序／負責人／相依／拜訪／刪除等 8 條端點對「caseRecord 為 null 的補登單」逐一參數化測試（修正前全 500，修正後 200）。
 - 新增（自動關閉真的執行）：每日排程（`daily.check`，`case_deadlines.run_daily_checks`）呼叫 `expire_backfill_if_due()`——補登開關開啟超過 `auto_off_hours` 後，真的把 `enabled` 翻回 0（設定異動紀錄＋稽核 `settings.quote_backfill.update`，原因「自動關閉…」）。過期期間仍由讀取時的即時判斷擋住，所以排程只是讓畫面與紀錄一致；讀取失敗不動。
+- 補強（稽核 hichan-49）：`GET /api/quotations/{no}/material-orders` 對 caseRecord 為 null 的單不再 500（HTTP 測試）；自動關閉改排在每日檢查最前面（後面的檢查出例外也不會跳過）；表單 V3.33：取消勾選補登一律還原原本的單號（含原本為空 ⇒ 存檔時由後端派號），不再把過去月份的預覽單號留在單號欄。
 - 修正（畫面，報價單表單 V3.32）：補登模式的標題與單號欄改顯示「將取得的單號」（填了原始單號則顯示原始單號），關閉補登還原；「複製為新單」不再把來源補登單的 `historical` 來歷註記帶到新單（伺服器本來就會丟）。
 
 ## 1.0.204 — 2026-10-17（wip/t70-backfill-l2-r1；T70-1 補登歷史案件 L2：畫面、自動關閉、提醒靜音）

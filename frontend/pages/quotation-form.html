@@ -2383,9 +2383,10 @@
   // V3.26（2026-10-15，T62 e2e）：自訂欄位清空時送 {}（後端『沒送這個鍵＝保留舊值』，只有 {} 才會清掉）。
   // V3.28（2026-10-15，T65）：三處儲存時間顯示改走共用格式器（輸出不變）
   // V3.27（2026-10-15，T64 A／B）：利潤顏色門檻改讀設定（MotrixProfitWarning，預設＝原本的 12／20）；金額、日期改走共用顯示格式器 MotrixFormat（預設輸出逐字相同）。
+  // V3.33（2026-10-17，T71）：取消勾選補登時一律還原原本的單號（含「原本是空」）；不再把過去月份的預覽單號留在單號欄
   // V3.32（2026-10-17，T71）：補登模式的標題／單號欄顯示預覽單號；複製為新單不帶補登來歷註記
   // V3.31（2026-10-17，T70-1）：新增模式多一個「補登歷史案件」區塊（僅最高管理者且設定中心開關有效時出現；日期限過去月份、預覽單號、原因必填、走專用補登端點）
-  const FORM_VERSION = 'V3.32'
+  const FORM_VERSION = 'V3.33'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -3225,13 +3226,13 @@
         this.hb.on = !!on
         this.hb.err = ''
         if (on) {
-          this.hb.prevNo = this.q.quoteNo                  // 補登模式標題／單號欄顯示「將取得的單號」；關閉時還原
+          this.hb.prevNo = this.q.quoteNo || ''            // 補登模式標題／單號欄顯示「將取得的單號」；關閉時還原
           if (!this.q.quoteDate || this.q.quoteDate > this.hb.max || this.q.quoteDate < this.hb.min) this.q.quoteDate = this.hb.max
           this.previewBackfillNo()
         } else {
           this.hb.preview = ''; this.hb.previewErr = ''
           this.q.quoteDate = MotrixDate.today()
-          if (this.hb.prevNo) this.q.quoteNo = this.hb.prevNo
+          this.q.quoteNo = this.hb.prevNo || ''             // 還原原本的狀態（原本沒有單號 ⇒ 維持空，存檔時由後端派號）；不留過去月份的預覽單號
         }
       },
       syncBackfillNo() {                                     // 標題與單號欄跟著「原始單號（若填）否則預覽單號」

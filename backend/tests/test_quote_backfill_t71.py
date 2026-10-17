@@ -185,3 +185,27 @@ def test_daily_check_provider_runs_the_expiry(client, boss, flag_on, monkeypatch
     monkeypatch.setattr(Q, "_backfill_now", lambda: datetime.now() + timedelta(hours=25))
     CD.run_daily_checks("daily")
     assert _enabled() == 0
+
+
+def test_material_orders_get_works_on_a_backfilled_quote_with_null_case_record(client, boss, flag_on):
+    """稽核 S1：GET /api/quotations/{no}/material-orders 在 caseRecord 為 null 時曾 500。"""
+    no = _backfilled_with_null_case_record(client, boss)
+    assert _data_json(no)["caseRecord"] is None
+    r = client.get("/api/quotations/%s/material-orders" % no, headers=boss)
+    assert r.status_code == 200, r.text
+    assert r.json()["materialOrders"] == []
+
+
+def test_daily_checks_run_the_expiry_before_everything_else(client, boss, flag_on, monkeypatch):
+    """後面的檢查出例外也不能讓自動關閉被跳過：它排在最前面。"""
+    from modules.case import case_deadlines as CD
+    from modules.case.api import quotations as Q
+
+    def boom(*a, **k):
+        raise RuntimeError("後面的檢查壞了")
+    for n in ("_check_warranty_expiry", "_check_case_stage_deadline"):
+        monkeypatch.setattr(CD, n, boom)
+    monkeypatch.setattr(Q, "_backfill_now", lambda: datetime.now() + timedelta(hours=25))
+    with pytest.raises(RuntimeError):
+        CD.run_daily_checks("daily")
+    assert _enabled() == 0

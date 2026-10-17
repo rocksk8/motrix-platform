@@ -367,16 +367,16 @@ def _sync_project_end_calendar() -> None:
 # ── `daily.check` 提供者（INTEGRATION-POINTS IP-11）─────────────────────────────
 def run_daily_checks(mode: str = "daily") -> None:
     """mode：daily（08:00）／startup（啟動補跑）。案件類檢查都看未來，兩種模式做一樣的事。"""
+    try:                                                 # 補登歷史案件開關的自動關閉（T71）：放最前面——後面的檢查出例外也不影響它
+        from modules.case.api.quotations import expire_backfill_if_due
+        expire_backfill_if_due()
+    except Exception as exc:                             # noqa: BLE001
+        _logger.warning("expire_backfill_if_due failed: %s", exc)
     _check_warranty_expiry()
     _check_case_stage_deadline()
     _check_case_project_timeline_deadline()
     _check_project_deadline()
     payable_reminders.run()                              # 預定付款日提醒信（3 天前＋當天；2026-10-05）
-    try:                                                 # 補登歷史案件開關的自動關閉（T71）：真的把設定翻回關並留紀錄
-        from modules.case.api.quotations import expire_backfill_if_due
-        expire_backfill_if_due()
-    except Exception as exc:                             # noqa: BLE001
-        _logger.warning("expire_backfill_if_due failed: %s", exc)
     for fn in (_sync_warranty_calendar, _sync_project_end_calendar):      # 階段 2；各自吞例外，互不影響
         try:
             fn()

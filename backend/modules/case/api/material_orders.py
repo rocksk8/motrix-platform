@@ -270,7 +270,7 @@ def get_material_orders(quote_no: str, authorization: str = Header(None)):
         require_case_money(user, q, quote_no)
 
         data = json.loads(q["data_json"] or "{}")
-        orders = data.get("caseRecord", {}).get("materialOrders", [])
+        orders = ((data.get("caseRecord") or {}).get("materialOrders")) or []   # caseRecord 可能是 null（補登單由畫面建立時）
         if not tier_allowed("material_money", user):
             # CM13（2026-09-24 使用者裁示）：單價、小計、已付金額不回
             for o in orders:
