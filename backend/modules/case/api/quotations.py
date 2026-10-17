@@ -1927,6 +1927,29 @@ def _backfill_state() -> dict:
         return out
 
 
+def expire_backfill_if_due() -> bool:
+    """每日排程（case_deadlines.run_daily_checks 呼叫）：開關已過自動關閉時間 ⇒ 真的把 `enabled` 翻回 0（走設定中心的發布，
+    設定異動紀錄＋稽核 `settings.quote_backfill.update` 都在裡面）。回有沒有翻。過期時段內由 `_backfill_state()` 即時擋，本函式只是讓『開啟』的顯示與紀錄跟實際一致。
+    讀取失敗 ⇒ 不動（寧可晚關，不可誤關別人正在用的；即時擋仍在）。"""
+    try:
+        st = _backfill_state()
+        if not (st["enabled"] and st["auto_off"]):
+            return False
+        from helpers import settings_registry as _SR
+        conn = get_db()
+        try:
+            _SR.publish("quote_backfill", {"enabled": 0}, reason="自動關閉：補登開關開啟已超過 %d 小時（或查無開啟紀錄）" % st["hours"],
+                        user="system", conn=conn)
+            conn.commit()
+        finally:
+            conn.close()
+        _SR.invalidate("quote_backfill")
+        return True
+    except Exception:                      # noqa: BLE001
+        logger.exception("expire_backfill_if_due failed")
+        return False
+
+
 def _backfill_flag_on() -> bool:
     return _backfill_state()["on"]
 

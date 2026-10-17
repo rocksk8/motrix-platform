@@ -372,6 +372,11 @@ def run_daily_checks(mode: str = "daily") -> None:
     _check_case_project_timeline_deadline()
     _check_project_deadline()
     payable_reminders.run()                              # 預定付款日提醒信（3 天前＋當天；2026-10-05）
+    try:                                                 # 補登歷史案件開關的自動關閉（T71）：真的把設定翻回關並留紀錄
+        from modules.case.api.quotations import expire_backfill_if_due
+        expire_backfill_if_due()
+    except Exception as exc:                             # noqa: BLE001
+        _logger.warning("expire_backfill_if_due failed: %s", exc)
     for fn in (_sync_warranty_calendar, _sync_project_end_calendar):      # 階段 2；各自吞例外，互不影響
         try:
             fn()
