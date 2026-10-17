@@ -2,7 +2,7 @@
 """T72-A e2e：系統中心與系統子頁的『分類欄』位置固定（切換時不跳動）。
 
 - 寬螢幕（1366／1536／1920／2560）：系統中心的分類清單（`.groups` 內第一個分類）與子頁左欄（`#sys-rail` 內第一個分類）
-  的 x／y／寬度／高度相差 ≤1px（第二個分類的 y 也比對，確認列距相同）；整個欄（nav）的 x／y／寬度也一致；各頁的主內容區（`.page-main`）左緣一致
+  的 x／y／寬度／高度相差 ≤1px（每一個分類的 y／高度都比對，確認列距相同；整欄高度也比對）；整個欄（nav）的 x／y／寬度也一致；各頁的主內容區（`.page-main`）左緣一致
 - 子頁之間：主內容左緣一致
 - data-no-sys-rail 頁（費用類別）仍沒有分類欄
 - 窄螢幕（800px）：系統中心不套固定欄（仍在內容欄內），子頁不畫欄
@@ -21,6 +21,7 @@ WIDTHS = (1366, 1536, 1920, 2560)
 MAIN = "main, .page-main, [class$=\"-main\"], [class*=\"-main \"]"
 SHOTS = os.environ.get("T72_SHOTS", "")
 
+_ROWS = "els => els.map(e => { const r = e.getBoundingClientRect(); return {x: r.x, y: r.y, w: r.width, h: r.height} })"
 _BOX = """(sel) => { const e = document.querySelector(sel); if (!e) return null; const r = e.getBoundingClientRect();
   return {x: r.x, y: r.y, w: r.width, h: r.height} }"""
 
@@ -54,7 +55,7 @@ def test_category_rail_is_in_the_same_place_on_hub_and_sub_pages(live_server, ma
         assert len(hrefs) == 3, hrefs
         hub_first = page.evaluate(_BOX, "[data-testid=hub-groups] .grp")
         hub_rail = page.evaluate(_BOX, "[data-testid=hub-groups]")
-        hub_second = page.evaluate(_BOX, "[data-testid=hub-groups] .grp:nth-of-type(2)")
+        hub_rows = page.eval_on_selector_all("[data-testid=hub-groups] .grp", _ROWS)
         hub_main = page.evaluate(_BOX, MAIN)
         _shot(page, "hub_%d" % w)
         subs = {}
@@ -63,11 +64,13 @@ def test_category_rail_is_in_the_same_place_on_hub_and_sub_pages(live_server, ma
             page.wait_for_selector("[data-testid=sys-rail]", state="visible", timeout=25000)
             first = page.evaluate(_BOX, "#sys-rail a.sr-i")
             rail = page.evaluate(_BOX, "#sys-rail")
-            sub_second = page.evaluate(_BOX, "#sys-rail a.sr-i:nth-of-type(3)")
+            sub_rows = page.eval_on_selector_all("#sys-rail a.sr-i", _ROWS)
             main = page.evaluate(_BOX, MAIN)
             _near(hub_first, first, "%dpx 系統中心 vs %s 的第一個分類" % (w, i))
             _near(hub_rail, rail, "%dpx 系統中心 vs %s 的整欄" % (w, i))
-            assert abs(hub_second["y"] - sub_second["y"]) <= 1, "%dpx 第二個分類的垂直位置 %s vs %s" % (w, hub_second, sub_second)
+            assert len(hub_rows) == len(sub_rows) >= 7, (hub_rows, sub_rows)
+            for n, (a, b) in enumerate(zip(hub_rows, sub_rows), 1):       # 每一個分類（不只第一、二個）：列距不同會越往下越偏
+                assert abs(a["y"] - b["y"]) <= 1 and abs(a["h"] - b["h"]) <= 1, "%dpx 第 %d 個分類 %s vs %s" % (w, n, a, b)
             assert abs(hub_main["x"] - main["x"]) <= 1, "%dpx 主內容區左緣 %s vs %s" % (w, hub_main, main)
             subs[href] = {"first": first, "rail": rail, "main": main}
             _shot(page, "sub%d_%d" % (i + 1, w))
@@ -103,6 +106,15 @@ def test_no_rail_pages_stay_without_rail_and_narrow_keeps_old_behaviour(live_ser
     page.wait_for_timeout(1500)
     assert page.locator("#sys-rail").is_visible() is False
     page.context.close()
+    # 寬螢幕但清單沒畫出來（端點失敗）：不留 208px 空白欄
+    page = new_context(viewport={"width": 1536, "height": 900}).new_page()
+    inject_login(page, live_server, sa[0], sa[1])
+    page.route("**/api/system-hub", lambda route: route.fulfill(status=500, body="{}"))
+    page.goto(live_server + "/pages/system-hub.html")
+    page.wait_for_timeout(2500)
+    assert page.locator("[data-testid=hub-groups]").is_visible() is False
+    assert page.evaluate("() => getComputedStyle(document.body).paddingLeft") == "0px"
+    page.context.close()
 
 
 def test_hub_rail_css_matches_sidebar_rail_geometry():
@@ -117,5 +129,5 @@ def test_hub_rail_css_matches_sidebar_rail_geometry():
     assert "@media (min-width:%dpx){" % (rn + 1) in hub
     block = hub[hub.index("@media (min-width:%dpx){" % (rn + 1)):]
     block = block[:block.index("\n    }\n")]
-    assert "body{padding-left:%dpx}" % rw in block and "width:%dpx" % rw in block
+    assert "body.has-rail{padding-left:%dpx}" % rw in block and "width:%dpx" % rw in block
     assert "position:fixed;left:var(--sidebar-w,0px);top:var(--topbar-h,56px);bottom:0" in block

@@ -80,10 +80,10 @@
     /* T72：寬螢幕（>900px）分類欄固定在左側，和系統子頁（sidebar.js 的 #sys-rail）同位置同寬度（RAIL_W=208）；內容靠右邊欄。
        ≤900px 維持原樣（子頁是麵包屑、系統中心 ≤720px 是橫向分頁）。改尺寸時要和 sidebar.js 的 RAIL_W／#sys-rail 一起改（守門：test_e2e_system_rail_fixed_t72.py::test_hub_rail_css_matches_sidebar_rail_geometry）。 */
     @media (min-width:901px){
-      body{padding-left:208px}
+      body.has-rail{padding-left:208px}   /* 清單有畫出來才留左內距（端點失敗／沒有分類時不留空白欄） */
       .hub-inner{margin:0}
       .hub{display:block}
-      .groups{position:fixed;left:var(--sidebar-w,0px);top:var(--topbar-h,56px);bottom:0;width:208px;box-sizing:border-box;overflow-y:auto;gap:0;padding:12px 10px;background:var(--surface,#fff);border:0;border-right:1px solid var(--border-light,#e5e7eb);border-radius:0;z-index:30;font-family:var(--font-zh,inherit)}
+      .groups{display:block;position:fixed;left:var(--sidebar-w,0px);top:var(--topbar-h,56px);bottom:0;width:208px;box-sizing:border-box;overflow-y:auto;gap:0;padding:12px 10px;background:var(--surface,#fff);border:0;border-right:1px solid var(--border-light,#e5e7eb);border-radius:0;z-index:30;font-family:var(--font-zh,inherit)}
       .groups::before{content:"系統";display:block;padding:6px 8px 10px;font-size:13px;font-weight:800;color:var(--text-primary,#111)}
       .grp{padding:8px 10px;margin:1px 0;font-size:13px;line-height:inherit}
     }
@@ -100,7 +100,7 @@
     @media (prefers-reduced-motion:reduce){*{transition:none!important}}
   </style>
 </head>
-<body x-data="systemHub()" x-cloak>
+<body x-data="systemHub()" :class="{'has-rail': loaded && sections.length > 0}" x-cloak>
   <header id="app-topbar" class="topbar"></header>
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
   <aside class="sidebar" id="app-sidebar"></aside>
