@@ -32,3 +32,9 @@ def test_http_void_requires_reason_and_superadmin_contract_unchanged():
     import inspect
     from modules.case.api import quotations as m
     assert "reason" in inspect.signature(m.delete_quotation).parameters
+
+
+def test_void_dialog_enter_has_ime_guard():
+    s = _src()
+    assert '@keydown.enter="!$event.isComposing && $event.keyCode !== 229 && submitVoid()"' in s
+    assert '@keydown.enter="submitVoid()"' not in s

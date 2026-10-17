@@ -1050,7 +1050,7 @@
   <div style="background:#fff;border-radius:8px;padding:20px;width:min(440px,92vw)">
     <div style="font-weight:600;margin-bottom:8px">作廢補登單 <span x-text="voidDlg.quoteNo"></span></div>
     <div style="font-size:12px;color:#6B7280;margin-bottom:8px">作廢後進暫存區（可由最高管理者復原），單號不會回收。請填原因（至少 5 個字）。</div>
-    <input class="form-input" style="width:100%" type="text" placeholder="作廢原因" x-model="voidDlg.reason" @keydown.enter="submitVoid()" data-testid="ql-void-reason">
+    <input class="form-input" style="width:100%" type="text" placeholder="作廢原因" x-model="voidDlg.reason" @keydown.enter="!$event.isComposing && $event.keyCode !== 229 && submitVoid()" data-testid="ql-void-reason">
     <div style="color:#DC2626;font-size:12px;min-height:18px;margin-top:6px" x-text="voidDlg.err" data-testid="ql-void-err"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost btn-sm" @click="voidDlg.open=false" data-testid="ql-void-cancel">取消</button>
