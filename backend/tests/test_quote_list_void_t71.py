@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """T71：報價單列表對補登單的作廢入口（靜態＋HTTP）。畫面行為由瀏覽器實測另行驗證。"""
-import os
 import re
 
-HTML = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "pages", "quotations.html")
+from core import source_tree
+
+HTML = source_tree.page_file("quotations.html")
 
 
 def _src():
