@@ -164,6 +164,25 @@
       font-family: var(--font-zh);
     }
     .dc-case-card__foot { display: flex; align-items: center; gap: 6px; }
+    /* 指派／回覆期限（2026-11-03）：卡片小標籤 + 詳情的指派與進度區塊 */
+    .dc-case-card__assign {
+      font-size: 10px; color: var(--text-dim); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px;
+      font-family: var(--font-zh);
+    }
+    .dc-case-card__assign.is-set { color: var(--accent); }
+    .dc-assign {
+      padding: 16px 22px; border-bottom: 1px solid var(--border-light);
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    }
+    .dc-assign__box { min-width: 0; }
+    .dc-assign__row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-top: 4px; }
+    .dc-assign__row > div { flex: 1; min-width: 120px; }
+    .dc-assign__actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+    .dc-progress-text {
+      font-size: 12px; color: var(--text-primary); font-family: var(--font-zh);
+      white-space: pre-wrap; word-break: break-word;
+    }
 
     /* status badge */
     .dc-badge {
@@ -446,6 +465,7 @@
       .dc-list { width: 100%; position: fixed; top: var(--topbar-h); left: 0; z-index: 50; display: none; }
       .dc-list.show { display: flex; height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); }
       .dc-info-grid { grid-template-columns: 1fr; }
+      .dc-assign { grid-template-columns: 1fr; }
       .dc-form-row, .dc-form-row.triple { grid-template-columns: 1fr; }
     }
 
@@ -618,6 +638,8 @@
               <span x-show="c.salesPersonNames.length && c.plannerNames.length"> ｜ </span>
               <span x-show="c.plannerNames.length" x-text="'規劃：' + c.plannerNames.join('、')"></span>
             </div>
+            <div class="dc-case-card__assign" data-testid="card-assign"
+                 :class="{'is-set': c.assignedToName}" x-text="assignTag(c)"></div>
             <div class="dc-case-card__foot">
               <span class="dc-badge"
                 :class="c.status==='成案'?'dc-badge--won':c.status==='未成案'?'dc-badge--lost':c.status==='暫擱置'?'dc-badge--hold':'dc-badge--talk'"
@@ -873,6 +895,64 @@
             <div>
               <span class="dc-info-lbl">最後更新</span>
               <span class="dc-info-val" x-text="selectedCase.updatedAt ? selectedCase.updatedAt.slice(0,16) : '—'"></span>
+            </div>
+          </div>
+
+          <!-- 指派與進度回報（2026-11-03）：
+               指派＝僅管理員可編輯（其他人唯讀）；進度＝被指派人本人或管理員可編輯，其他人唯讀。
+               兩個儲存動作各打各的端點（/assign、/progress），不合併。 -->
+          <div class="dc-assign" data-testid="assign-section">
+            <div class="dc-assign__box" data-testid="assign-box">
+              <span class="dc-info-lbl">指派成員／回覆期限</span>
+              <template x-if="isAdmin">
+                <div>
+                  <div class="dc-assign__row">
+                    <div>
+                      <span class="dc-lbl">負責成員</span>
+                      <select class="dc-select" data-testid="assign-user" x-model="assignDraft.userId">
+                        <option value="">（未指派）</option>
+                        <template x-for="u in activeUsers" :key="u.id">
+                          <option :value="String(u.id)" x-text="u.displayName"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <div>
+                      <span class="dc-lbl">回覆期限</span>
+                      <input class="dc-input" type="date" data-testid="assign-deadline" x-model="assignDraft.deadline">
+                    </div>
+                  </div>
+                  <div class="dc-assign__actions">
+                    <button class="btn btn-primary btn-sm" data-testid="assign-save"
+                            :disabled="assignSaving" @click="saveAssign()"
+                            x-text="assignSaving ? '儲存中…' : '儲存指派'"></button>
+                  </div>
+                </div>
+              </template>
+              <template x-if="!isAdmin">
+                <div class="dc-info-val" data-testid="assign-readonly">
+                  <div x-text="'負責：' + (selectedCase.assignedToName || '未指派')"></div>
+                  <div x-text="'期限：' + (selectedCase.replyDeadline || '未設定')"></div>
+                </div>
+              </template>
+            </div>
+            <div class="dc-assign__box" data-testid="progress-box">
+              <span class="dc-info-lbl">進度回報</span>
+              <template x-if="canEditProgress">
+                <div>
+                  <textarea class="dc-textarea" data-testid="progress-text" rows="4"
+                            placeholder="填寫目前進度…" x-model="progressDraft"></textarea>
+                  <div class="dc-assign__actions">
+                    <button class="btn btn-primary btn-sm" data-testid="progress-save"
+                            :disabled="progressSaving" @click="saveProgress()"
+                            x-text="progressSaving ? '儲存中…' : '儲存進度'"></button>
+                  </div>
+                </div>
+              </template>
+              <template x-if="!canEditProgress">
+                <div class="dc-progress-text" data-testid="progress-readonly"
+                     :style="selectedCase.progressReport ? '' : 'color:var(--text-dim)'"
+                     x-text="selectedCase.progressReport || '尚無進度回報'"></div>
+              </template>
             </div>
           </div>
 
@@ -1483,6 +1563,92 @@ function devCrmPage() {
       return { 'Authorization': 'Bearer ' + this.token, 'Content-Type': 'application/json' }
     },
 
+    // ── 指派／回覆期限／進度回報（2026-11-03）──────────────────────────────
+    assignDraft: { userId: '', deadline: '' },
+    progressDraft: '',
+    _draftCaseId: null,
+    assignSaving: false,
+    progressSaving: false,
+
+    // 被指派人本人或管理員才能編輯進度（對應後端 /progress 權限）
+    get canEditProgress() {
+      const c = this.selectedCase
+      if (!c) return false
+      return this.isAdmin || (c.assignedToId != null && c.assignedToId === this.session.userId)
+    },
+
+    // 卡片小標籤：null／空字串一律換成中文提示，不顯示 null／undefined
+    assignTag(c) {
+      return '負責：' + (c.assignedToName || '未指派') + ' ｜ 期限：' + (c.replyDeadline || '未設定')
+    },
+
+    // 草稿只在「換了一個案件」時從 selectedCase 重設；同一案件被列表重抓換物件時
+    // 不覆蓋使用者還沒存的輸入。儲存成功後由 saveAssign／saveProgress 各自對齊。
+    _syncDrafts(c, force) {
+      if (!c) { this._draftCaseId = null; return }
+      if (!force && c.id === this._draftCaseId) return
+      this._draftCaseId = c.id
+      this.assignDraft = {
+        userId: c.assignedToId != null ? String(c.assignedToId) : '',
+        deadline: c.replyDeadline || '',
+      }
+      this.progressDraft = c.progressReport || ''
+    },
+
+    _applyUpdatedCase(updated) {
+      this.selectedCase = updated
+      const idx = this.cases.findIndex(c => c.id === updated.id)
+      if (idx >= 0) this.cases.splice(idx, 1, updated)
+    },
+
+    async _patchCase(path, body, okMsg, failMsg) {
+      const r = await fetch('/api/dev-cases/' + this.selectedCase.id + '/' + path, {
+        method: 'PATCH', headers: this._h(), body: JSON.stringify(body),
+      })
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        this._toast(failMsg + '：' + ((typeof d.detail === 'string' && d.detail) || r.status))
+        return null
+      }
+      const updated = await r.json()
+      this._toast(okMsg)
+      return updated
+    },
+
+    async saveAssign() {
+      if (!this.selectedCase || !this.isAdmin || this.assignSaving) return
+      this.assignSaving = true
+      try {
+        const uid = this.assignDraft.userId
+        const updated = await this._patchCase('assign', {
+          assignedTo: uid === '' ? null : Number(uid),
+          replyDeadline: this.assignDraft.deadline || null,
+        }, '指派已儲存', '指派失敗')
+        if (updated) {
+          const pending = this.progressDraft          // 保留進度欄尚未儲存的輸入
+          this._applyUpdatedCase(updated)
+          this._syncDrafts(updated, true)
+          this.progressDraft = pending
+        }
+      } finally { this.assignSaving = false }
+    },
+
+    async saveProgress() {
+      if (!this.selectedCase || !this.canEditProgress || this.progressSaving) return
+      this.progressSaving = true
+      try {
+        const updated = await this._patchCase('progress', {
+          progressReport: this.progressDraft || '',
+        }, '進度已儲存', '儲存進度失敗')
+        if (updated) {
+          const pendingAssign = { ...this.assignDraft }   // 保留指派欄尚未儲存的輸入
+          this._applyUpdatedCase(updated)
+          this._syncDrafts(updated, true)
+          this.assignDraft = pendingAssign
+        }
+      } finally { this.progressSaving = false }
+    },
+
     get yearOptions() {
       return [...new Set(this.cases.map(c => (c.createdAt || '').slice(0, 4)).filter(Boolean))].sort().reverse()
     },
@@ -1606,6 +1772,7 @@ function devCrmPage() {
         this._readAtLocal = loc
         this.unreadKeys = { ...this.unreadKeys, [k]: true }
       })
+      this.$watch('selectedCase', c => this._syncDrafts(c, false))
       await this.loadPrefs()
       await Promise.all([this.loadCases(), this.loadUsers(), this.loadCustomers()])
       if (this.isAdmin) this.loadPendingCount()

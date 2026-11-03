@@ -1,5 +1,5 @@
 {
- "core_version": "1.148",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -742,6 +742,7 @@
    "notify_daily_task_edited": "def(task_id, title, task_date, editor_username, editor_display, changes, supervisor_usernames=…)",
    "notify_daily_task_overdue": "def(task_id, title, task_date, assignee_username, assignee_display, supervisor_usernames=…)",
    "notify_daily_task_overdue_manager": "def(task_id, title, task_date, assignee_username, assignee_display, department_id)",
+   "notify_dev_case_assigned": "def(case_id, case_name, reply_deadline, assignee_username, assignee_display, assigned_by_display=…)",
    "notify_dev_case_delete_request": "def(case_id, case_name, requester_display, reason=…)",
    "notify_dev_case_relink_request": "def(case_id, case_name, requester_display, target_quote_no=…, reason=…)",
    "notify_dev_case_stale": "def(case_id, case_name, customer_name, days_since_update, usernames)",

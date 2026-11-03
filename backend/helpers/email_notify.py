@@ -1524,6 +1524,27 @@ def notify_dev_case_stale(case_id: int, case_name: str, customer_name: str,
     _async_send(to, _mt.subject("dev_case_stale", f"業務開發案件逾期提醒：{case_name}"), html)
 
 
+def notify_dev_case_assigned(case_id: int, case_name: str, reply_deadline,
+                             assignee_username: str, assignee_display: str,
+                             assigned_by_display: str = '') -> None:
+    """業務開發案件指派 → 通知被指派人（含回覆期限）"""
+    to = _lookup_emails([assignee_username], "dev_case_assigned")
+    if not to:
+        logger.warning("notify_dev_case_assigned: 無有效收件人（case_id=%d, assignee=%s）", case_id, assignee_username)
+        return
+    crm_page = f"{_base_url()}/pages/dev-crm.html"
+    rows = [("案件名稱", case_name), ("回覆期限", reply_deadline or "未設定")]
+    if assigned_by_display:
+        rows.append(("指派人", assigned_by_display))
+    html = _build_html("dev_case_assigned",
+        "業務開發案件指派通知", "請於期限內回覆進度", "#2F6FD6",
+        rows, "", crm_page,
+        intro=f"{assigned_by_display or '管理員'} 已將業務開發案件「{case_name}」指派給您，請於期限內跟進並回報進度。",
+        button_text="前往業務開發",
+    )
+    _async_send(to, _mt.subject("dev_case_assigned", f"業務開發案件指派通知：{case_name}"), html)
+
+
 def notify_daily_task_edited(
     task_id: int,
     title: str,

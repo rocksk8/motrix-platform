@@ -82,6 +82,7 @@ EVENT_GROUPS = [
         ("case_project_overdue", "案件專案期間已超期（每日檢查，超期當天寄一次、之後每 7 天一次）"),
         ("warranty_expiry",     "設備保固即將到期"),
         ("dev_case_stale",      "業務開發案件逾期未跟進"),
+        ("dev_case_assigned",   "業務開發案件指派通知"),
     ]),
     ("業務開發審核", [
         ("dev_case_delete_request", "業務開發案件刪除申請"),

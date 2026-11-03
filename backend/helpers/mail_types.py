@@ -185,6 +185,8 @@ register("warranty_expiry", "設備保固即將到期", _B, "admins", "業務負
          "設備保固即將到期，到期後維修需另行報價。", "請聯繫客戶確認是否續約或延長保固。")
 register("dev_case_stale", "業務開發案件逾期未跟進", _B, "none", "業務與規劃人員",
          "業務開發案件已超過規定天數沒有新的開發紀錄。", "請聯繫客戶並登錄開發紀錄。")
+register("dev_case_assigned", "業務開發案件指派", _B, "none", "被指派人",
+         "被指派人尚未留意前，案件可能逾期沒有人跟進。", "請登入系統查看案件內容，於回覆期限前更新進度並回報。")
 register("settlement_finalized", "成本精算完結", _B, "admins", "",
          "案件成本已精算完結，可進行獎金分潤與結案。", "請登入系統查看精算結果。")
 register("case_closing_report", "案件結案報表", _B, "superadmins", "",
