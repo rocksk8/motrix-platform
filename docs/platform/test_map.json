@@ -9916,14 +9916,19 @@
    "units": [
     "core:db",
     "dir:backend/modules/crm/",
+    "mod:analytics/api/dashboard",
+    "mod:crm/__init__",
     "mod:crm/api",
     "router:item_reads"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/modules/crm/__init__.py",
+     "backend/modules/crm/api.py"
     ],
     "api": [
+     "backend/modules/analytics/api/dashboard.py",
      "backend/modules/crm/api.py",
      "backend/routers/item_reads.py"
     ],

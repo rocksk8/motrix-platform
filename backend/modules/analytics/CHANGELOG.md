@@ -1,8 +1,8 @@
 # 營運分析 更新紀錄
 
-## 1.0.45 — 2026-11-03（暫用號，列車取號；wip/t73-dev-case-assignment-r1：業務開發案件指派的可見性修正）
-- `api/dashboard.py` 的業務開發停滯提醒（`dev_stale`）與動態牆（`dev_cases` 區塊）手列欄位的 SELECT 補上 `assigned_to`：crm 模組新增「案件指派」後，被指派人若不在 `sales_persons`／`planners`，`row_access.visible("dev_case", ...)` 收到的列缺這一欄就永遠判不到，造成被指派人在這兩個出口看不到自己的案件（審查發現；同一批連 `routers/item_reads.py`／`modules/crm/api.py` 一起修，見 crm 1.0.18）。無回應鍵變動、無 schema 變更。
-- 測試：`modules/crm/tests/test_dev_case_assignee_visibility_hichan10_2026_11_03.py`。
+## 1.0.45 — 2026-11-03（已由 train_number.py assign 取號；wip/t73-dev-case-assignment-r1：業務開發案件指派的可見性修正）
+- `api/dashboard.py` 的業務開發停滯提醒（`/api/dashboard/ops-alerts` 的 `devStale`）與動態牆（`/api/dashboard/activity-feed` 的 `dev_cases` 區塊）手列欄位的 SELECT 補上 `assigned_to`：crm 模組新增「案件指派」後，被指派人若不在 `sales_persons`／`planners`，`row_access.visible("dev_case", ...)` 收到的列缺這一欄就永遠判不到，造成被指派人在這兩個出口看不到自己的案件（審查發現；同一批連 `routers/item_reads.py`／`modules/crm/api.py` 一起修，見 crm 1.0.18）。無回應鍵變動、無 schema 變更。
+- 測試：`modules/crm/tests/test_dev_case_assignee_visibility_hichan10_2026_11_03.py`——2026-11-04 列車整合後獨立稽核發現原測試只打了 item_reads／activity-stats，沒有真正呼叫這兩個端點（`docs/platform/audit/AUDIT-pm-sub-t73.md` A-2），已補 `test_assignee_sees_their_stale_case_in_dashboard_ops_alerts`／`test_assignee_sees_their_dev_log_in_dashboard_activity_feed` 兩題真打端點驗證。
 
 ## 1.0.44 — 2026-10-16（wip/t68-v1-mask-r1；V1 首頁待審核清單金額遮蔽）
 - `/api/dashboard/stats` 的 `pendingList`：沒有報價金額可視權限、又不是送審人或該單簽核鏈上的人，`total` 回 null、帶金額的審核原因換成「（涉及金額，無財務檢視權限）」（規則重用 `helpers/financial_mask`，與 `/api/quotations` 同一份）；簽核人／送審人／業務／管理員照舊。同一規則也套用到 `/api/dashboard/funnel` 的 `followUpQuotes`／`expiringQuotes`（首頁「待追蹤報價」該列的金額沒有權限時顯示「—」）。回應鍵不變，哪些列會出現不變。

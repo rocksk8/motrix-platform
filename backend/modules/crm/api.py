@@ -1192,7 +1192,7 @@ _HOLD_AUTO_CONVERT_DAYS = 180
 
 
 def _check_dev_case_stale() -> None:
-    """洽談中案件超過 30 天未更新 → 通知業務/規劃人員 + 所有 admin/superadmin，
+    """洽談中案件超過 30 天未更新 → 通知業務/規劃人員/被指派人 + 所有 admin/superadmin，
     之後每 14 天重複提醒直到案件狀態改變或有新開發記錄（重置 updated_at）。"""
     now = datetime.now()
     today_str = now.strftime("%Y-%m-%d")
@@ -1204,7 +1204,7 @@ def _check_dev_case_stale() -> None:
         uid_map = {u["id"]: u["username"] for u in users}
         admin_usernames = [u["username"] for u in users if u["role"] in ("admin", "superadmin")]
         rows = conn.execute(
-            "SELECT id, case_name, customer_name, sales_persons, planners, created_by, updated_at "
+            "SELECT id, case_name, customer_name, sales_persons, planners, created_by, assigned_to, updated_at "
             "FROM dev_cases WHERE is_deleted=0 AND status='洽談中'"
         ).fetchall()
         conn.close()
@@ -1236,6 +1236,8 @@ def _check_dev_case_stale() -> None:
             usernames = [uid_map[uid] for uid in (sp + pl) if uid in uid_map]
             if not usernames and row["created_by"] in uid_map:
                 usernames = [uid_map[row["created_by"]]]
+            if row["assigned_to"] in uid_map:                     # 被指派人與業務／企劃同等，一律收提醒（不只是沒人時的備援）
+                usernames.append(uid_map[row["assigned_to"]])
             all_usernames = list(dict.fromkeys(usernames + admin_usernames))
 
             for username in all_usernames:
