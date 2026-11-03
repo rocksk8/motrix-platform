@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-11-03（wip/t73-dev-case-assignment-r1；T73 業務開發案件指派成員／回覆期限／進度回報）
+## 1.149 — 2026-11-03（wip/t73-dev-case-assignment-r1；T73 業務開發案件指派成員／回覆期限／進度回報）
 - 新增（只增）：`dev_cases` 加 `assigned_to`／`reply_deadline`／`progress_report` 三欄（`modules/crm/migrations/0002_dev_case_assignment.py`）；`crm.DEV_CASE_ACCESS`（`row_access.OwnerRule`）加 `owner_id_col="assigned_to"`，被指派人取得與業務／企劃同等完整權限（使用者裁示）；新端點 `PATCH /api/dev-cases/{id}/assign`（admin 限定）、`PATCH /api/dev-cases/{id}/progress`（被指派人或 admin）。
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產，**未取號**）：新公開介面 `helpers.notify_dev_case_assigned`（指派通知信，`helpers/__init__.py` 匯出）；`helpers.mail_types` 新登記 `dev_case_assigned`；`helpers.notification_prefs.EVENT_GROUPS` 新增同一事件鍵。
 - 測試：`modules/crm/tests/test_dev_case_assignment_2026_11_03.py`（assign／progress／row_access 完整權限／舊資料相容）。
