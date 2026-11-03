@@ -147,10 +147,15 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | PM 確認 |
 |---|---|---|---|
-| A-1 | | | |
-| A-2 | | | |
-| B-1 | | | |
-| B-2 | | | |
-| C-1 | | | |
-| C-2 | | | |
-| C-3 | | | |
+| A-1 | 已修：`_check_dev_case_stale` 的 SELECT 補 `assigned_to`，收件人併入被指派人（與 sales_persons／planners 同等，不只是備援）；補題 `test_assignee_gets_the_daily_stale_reminder_notification` 直接呼叫排程後查 `notifications` 表 | 85d04c3e | ✅ |
+| A-2 | 已修：`modules/crm/tests/test_dev_case_assignee_visibility_hichan10_2026_11_03.py` 補 `test_assignee_sees_their_stale_case_in_dashboard_ops_alerts`／`test_assignee_sees_their_dev_log_in_dashboard_activity_feed` 兩題，真打 `/api/dashboard/ops-alerts`／`/api/dashboard/activity-feed`；analytics CHANGELOG 1.0.45 的測試引用同步改為這兩題 | 85d04c3e | ✅ |
+| B-1 | 建議，不修：現狀唯一呼叫端（`dev-crm.html`）兩欄一起送，不觸發問題；之後有新呼叫端再處理 | | |
+| B-2 | 建議，不修：非安全問題，純顯示疑惑；列入之後統一處理自由文字欄位時的待辦 | | |
+| C-1 | TODO-VERIFY(pm)：待機器空檔跑 `pytest backend/tests/platform/test_module_migrations.py -k crm` | | |
+| C-2 | 觀察，不修：與既有欄位現狀一致，非本次新增缺陷 | | |
+| C-3 | 觀察，不修：非安全缺口，純管理顯示問題 | | |
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ A-1 關閉（85d04c3e）——`_check_dev_case_stale` 補 `assigned_to`，被指派人同等收停滯提醒，題已覆蓋
+- ✅ A-2 關閉（85d04c3e）——補兩個 dashboard 端點的真實 HTTP 呼叫測試，CHANGELOG 測試引用同步修正
