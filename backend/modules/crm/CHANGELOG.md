@@ -1,6 +1,6 @@
 # 業務開發 更新紀錄
 
-## (next) — 2026-11-04（train/t73-int；T73 列車整合後第二輪獨立稽核必修修正）
+## 1.0.19 — 2026-11-04（train/t73-int；T73 列車整合後第二輪獨立稽核必修修正）
 - 修正（內部邏輯，無新介面）：每日排程 `_check_dev_case_stale()` 的 SELECT 補 `assigned_to`，收件人併入被指派人，
   與 1.0.18 已修正的其他 4 處手列欄位同一模式（獨立稽核 T73A-M1，`docs/platform/audit/AUDIT-pm-sub-t73.md`）。
   題：`test_assignee_gets_the_daily_stale_reminder_notification`。
