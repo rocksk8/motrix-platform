@@ -15,8 +15,8 @@
   的 None 處理與既有 `test_row_access_2026_09_25.py` 的 SQL↔Python 等價性測試已覆蓋，取消指派會正確收回權限。
   migration 冪等、只增欄，回滾風險低。
 - **必修 2 項**：
-  1. A-1：排程 `_check_dev_case_stale()` 漏了第 5 處「手列欄位缺 `assigned_to`」——被指派人不會收到逾期案件提醒。
-  2. A-2：analytics 1.0.45 CHANGELOG 聲稱的測試覆蓋與實際測試內容不符（假綠燈）：
+  1. T73A-M1：排程 `_check_dev_case_stale()` 漏了第 5 處「手列欄位缺 `assigned_to`」——被指派人不會收到逾期案件提醒。
+  2. T73A-M2：analytics 1.0.45 CHANGELOG 聲稱的測試覆蓋與實際測試內容不符（假綠燈）：
      `dashboard_ops_alerts`／`dashboard_activity_feed` 的修正完全沒有測試執行到。
 - 建議 2 項、觀察 3 項。
 - 驗證方式：全部以讀程式碼＋ `grep -rn` 交叉比對推論，未實跑 `pytest`（遵守派工限制）。
@@ -35,7 +35,7 @@
 | `PATCH /dev-cases/{id}/progress` 權限 | 被指派人或 admin，非 row_access 完整存取者 | ✅ | `api.py:671-672`（刻意比對 `user["id"] == assigned_to`，不是 `row_access.visible`）；測試 `test_progress_denied_for_non_assignee_non_admin`（建立者在列權限內但 403） |
 | `/progress` 404／審計 | 需檢查 | ✅ | `api.py:668-669`、`:679` |
 | migration `0002_dev_case_assignment.py` 只增、冪等 | 不動凍結 schema | ✅（讀碼推論，未實跑） | `migrations/0002_dev_case_assignment.py:11-21`，與既有 `0001_dev_cases_referrer.py` 同一模式；`cols` 檢查防重複 `ALTER TABLE` |
-| 4 處「手列欄位」補 `assigned_to`（CHANGELOG 聲稱） | item_reads／activity-stats／analytics 停滯提醒／動態牆 | ⚠ 4/5（漏第 5 處） | `item_reads.py:193`、`api.py:887`（activity-stats）、`dashboard.py:683`、`dashboard.py:914-915` 已補；`api.py:1207`（`_check_dev_case_stale`）**沒有補**，見 A-1 |
+| 4 處「手列欄位」補 `assigned_to`（CHANGELOG 聲稱） | item_reads／activity-stats／analytics 停滯提醒／動態牆 | ⚠ 4/5（漏第 5 處） | `item_reads.py:193`、`api.py:887`（activity-stats）、`dashboard.py:683`、`dashboard.py:914-915` 已補；`api.py:1207`（`_check_dev_case_stale`）**沒有補**，見 T73A-M1 |
 | 舊資料相容（缺三欄時 GET 不 500） | 需檢查 | ✅ | `test_legacy_row_without_assignment_columns_does_not_crash`（DROP COLUMN 模擬） |
 | 契約快照（`l1_interface_snapshot.json`／`response_keys_baseline.json`／`route_inventory.json`／`version_manifest.json`） | 重產應與程式碼一致 | ✅ | 新端點、新回應鍵、新公開函式簽名、版號 1.148→1.149、使用者可見變更紀錄四處互相一致（git show 逐一核對） |
 
@@ -43,7 +43,7 @@
 
 ### 必修
 
-**A-1　排程 `_check_dev_case_stale()` 沒有把被指派人納入停滯提醒收件人**
+**T73A-M1　排程 `_check_dev_case_stale()` 沒有把被指派人納入停滯提醒收件人**
 - 位置：`backend/modules/crm/api.py:1206-1239`（`SELECT` 在 `:1207`，收件人組裝在 `:1228-1239`）。
 - 這是「洽談中案件超過 30 天未更新」每日排程（`:1194`），收件人＝`sales_persons`＋`planners`（JSON 陣列）＋
   （以上皆空時）`created_by`＋所有 `admin`/`superadmin`。這個 SELECT 手列欄位，**沒有列 `assigned_to`**，
@@ -64,7 +64,7 @@
   `test_dev_case_assignee_visibility_hichan10_2026_11_03.py` 的寫法，直接呼叫
   `api._check_dev_case_stale()` 或跑排程後檢查 `notifications` 表。
 
-**A-2　analytics 1.0.45 CHANGELOG 聲稱的測試覆蓋與實際測試內容不符（假綠燈）**
+**T73A-M2　analytics 1.0.45 CHANGELOG 聲稱的測試覆蓋與實際測試內容不符（假綠燈）**
 - 位置：`backend/modules/analytics/CHANGELOG.md`（1.0.45 段）寫「修正 `api/dashboard.py` 的業務開發停滯提醒
   （`dev_stale`）與動態牆（`dev_cases` 區塊）手列欄位的 SELECT 補上 `assigned_to`」，並列測試為
   `modules/crm/tests/test_dev_case_assignee_visibility_hichan10_2026_11_03.py`。
@@ -138,7 +138,7 @@
 - **回滾風險**：只新增欄位，舊程式碼不讀取新欄位、`SELECT *` 自動帶出不影響舊邏輯；唯一「只能往前」的
   效果是已發出的指派通知信（email／站內通知）與已寫入的 `assigned_to`／`progress_report` 資料本身無法隨
   程式碼回滾一起消失——這是任何通知／資料寫入功能都有的固有特性，不是本次設計缺陷。
-- **假綠燈**：見 A-2（analytics CHANGELOG 聲稱的測試覆蓋與實際不符）。另外確認
+- **假綠燈**：見 T73A-M2（analytics CHANGELOG 聲稱的測試覆蓋與實際不符）。另外確認
   `test_dev_case_assignment_2026_11_03.py` 的 12 題與 `test_dev_case_assignee_visibility_hichan10_2026_11_03.py`
   的 3 題本身斷言紮實（直接查 `dev_cases`／`notifications` 表，不是只看 API 回應文字；403/400/404 分支、
   資料不變、通知對象精確比對都有覆蓋），沒有發現 mock 掉待驗證行的情況。
@@ -147,8 +147,8 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | PM 確認 |
 |---|---|---|---|
-| A-1 | 已修：`_check_dev_case_stale` 的 SELECT 補 `assigned_to`，收件人併入被指派人（與 sales_persons／planners 同等，不只是備援）；補題 `test_assignee_gets_the_daily_stale_reminder_notification` 直接呼叫排程後查 `notifications` 表 | 85d04c3e | ✅ |
-| A-2 | 已修：`modules/crm/tests/test_dev_case_assignee_visibility_hichan10_2026_11_03.py` 補 `test_assignee_sees_their_stale_case_in_dashboard_ops_alerts`／`test_assignee_sees_their_dev_log_in_dashboard_activity_feed` 兩題，真打 `/api/dashboard/ops-alerts`／`/api/dashboard/activity-feed`；analytics CHANGELOG 1.0.45 的測試引用同步改為這兩題 | 85d04c3e | ✅ |
+| T73A-M1 | 已修：`_check_dev_case_stale` 的 SELECT 補 `assigned_to`，收件人併入被指派人（與 sales_persons／planners 同等，不只是備援）；補題 `test_assignee_gets_the_daily_stale_reminder_notification` 直接呼叫排程後查 `notifications` 表 | 85d04c3e | ✅ |
+| T73A-M2 | 已修：`modules/crm/tests/test_dev_case_assignee_visibility_hichan10_2026_11_03.py` 補 `test_assignee_sees_their_stale_case_in_dashboard_ops_alerts`／`test_assignee_sees_their_dev_log_in_dashboard_activity_feed` 兩題，真打 `/api/dashboard/ops-alerts`／`/api/dashboard/activity-feed`；analytics CHANGELOG 1.0.45 的測試引用同步改為這兩題 | 85d04c3e | ✅ |
 | B-1 | 建議，不修：現狀唯一呼叫端（`dev-crm.html`）兩欄一起送，不觸發問題；之後有新呼叫端再處理 | | |
 | B-2 | 建議，不修：非安全問題，純顯示疑惑；列入之後統一處理自由文字欄位時的待辦 | | |
 | C-1 | TODO-VERIFY(pm)：待機器空檔跑 `pytest backend/tests/platform/test_module_migrations.py -k crm` | | |
@@ -157,5 +157,5 @@
 
 ### 關閉紀錄（標準格式，PLAYBOOK §E-6）
 
-- ✅ A-1 關閉（85d04c3e）——`_check_dev_case_stale` 補 `assigned_to`，被指派人同等收停滯提醒，題已覆蓋
-- ✅ A-2 關閉（85d04c3e）——補兩個 dashboard 端點的真實 HTTP 呼叫測試，CHANGELOG 測試引用同步修正
+- ✅ T73A-M1 關閉（85d04c3e）——`_check_dev_case_stale` 補 `assigned_to`，被指派人同等收停滯提醒，題已覆蓋
+- ✅ T73A-M2 關閉（85d04c3e）——補兩個 dashboard 端點的真實 HTTP 呼叫測試，CHANGELOG 測試引用同步修正

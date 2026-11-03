@@ -2,7 +2,7 @@
 
 ## 1.0.18 — 2026-11-03（已由 train_number.py assign 取號；wip/t73-dev-case-assignment-r1：T73 業務開發案件指派成員／回覆期限／進度回報）
 - 新增（只增）：`dev_cases` 加 `assigned_to`／`reply_deadline`／`progress_report` 三欄（`migrations/0002_dev_case_assignment.py`）。
-- `DEV_CASE_ACCESS`（`row_access.OwnerRule`）加 `owner_id_col="assigned_to"`：被指派人取得與業務／企劃同等的完整存取（使用者裁示），list/get/update/status/convert/relink/logs 全部既有端點自動套用；另外手列欄位的 5 處（`item_reads.py` 未讀標記、本模組 activity-stats、analytics 停滯提醒與動態牆、本模組每日排程 `_check_dev_case_stale`）SELECT 補上 `assigned_to`，避免同樣的可見性判斷在不同出口漂移（審查發現，`helpers/row_access.py` 開頭就是在講這個問題；第 5 處由列車整合後的獨立稽核補發現，見 `docs/platform/audit/AUDIT-pm-sub-t73.md` A-1）。`_check_dev_case_stale` 的通知收件人也補上被指派人（原本只有 sales_persons／planners／created_by 落空時才退回備援，現在一律同等收提醒）。
+- `DEV_CASE_ACCESS`（`row_access.OwnerRule`）加 `owner_id_col="assigned_to"`：被指派人取得與業務／企劃同等的完整存取（使用者裁示），list/get/update/status/convert/relink/logs 全部既有端點自動套用；另外手列欄位的 5 處（`item_reads.py` 未讀標記、本模組 activity-stats、analytics 停滯提醒與動態牆、本模組每日排程 `_check_dev_case_stale`）SELECT 補上 `assigned_to`，避免同樣的可見性判斷在不同出口漂移（審查發現，`helpers/row_access.py` 開頭就是在講這個問題；第 5 處由列車整合後的獨立稽核補發現，見 `docs/platform/audit/AUDIT-pm-sub-t73.md` T73A-M1）。`_check_dev_case_stale` 的通知收件人也補上被指派人（原本只有 sales_persons／planners／created_by 落空時才退回備援，現在一律同等收提醒）。
 - 新端點 `PATCH /api/dev-cases/{id}/assign`（admin 限定，指派成員＋設定回覆期限，站內通知＋email）、`PATCH /api/dev-cases/{id}/progress`（被指派人或 admin 填寫進度回報）。
 - 前端 `dev-crm.html` 加對應 UI（指派下拉＋期限日期、進度回報 textarea）。
 - 測試：`modules/crm/tests/test_dev_case_assignment_2026_11_03.py`、`test_dev_case_assignee_visibility_hichan10_2026_11_03.py`（後者 2026-11-04 補每日停滯通知＋ops-alerts／activity-feed 兩個端點的真實呼叫測試）。

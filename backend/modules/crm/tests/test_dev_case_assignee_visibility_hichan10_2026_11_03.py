@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """被指派人（assigned_to）在「自己挑欄位 SELECT」的各個呼叫點也必須可見（審查補題，2026-11-03；
-2026-11-04 列車整合後獨立稽核補第 5 處＋前兩處的 HTTP 端點題，見 docs/platform/audit/AUDIT-pm-sub-t73.md A-1／A-2）。
+2026-11-04 列車整合後獨立稽核補第 5 處＋前兩處的 HTTP 端點題，見 docs/platform/audit/AUDIT-pm-sub-t73.md T73A-M1／T73A-M2）。
 
 ## 為什麼要有這題
 
