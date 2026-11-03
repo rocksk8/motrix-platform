@@ -1,5 +1,10 @@
 # 業務開發 更新紀錄
 
+## (next) — 2026-11-04（train/t73-int；T73 列車整合後第二輪獨立稽核必修修正）
+- 修正（內部邏輯，無新介面）：每日排程 `_check_dev_case_stale()` 的 SELECT 補 `assigned_to`，收件人併入被指派人，
+  與 1.0.18 已修正的其他 4 處手列欄位同一模式（獨立稽核 T73A-M1，`docs/platform/audit/AUDIT-pm-sub-t73.md`）。
+  題：`test_assignee_gets_the_daily_stale_reminder_notification`。
+
 ## 1.0.18 — 2026-11-03（已由 train_number.py assign 取號；wip/t73-dev-case-assignment-r1：T73 業務開發案件指派成員／回覆期限／進度回報）
 - 新增（只增）：`dev_cases` 加 `assigned_to`／`reply_deadline`／`progress_report` 三欄（`migrations/0002_dev_case_assignment.py`）。
 - `DEV_CASE_ACCESS`（`row_access.OwnerRule`）加 `owner_id_col="assigned_to"`：被指派人取得與業務／企劃同等的完整存取（使用者裁示），list/get/update/status/convert/relink/logs 全部既有端點自動套用；另外手列欄位的 5 處（`item_reads.py` 未讀標記、本模組 activity-stats、analytics 停滯提醒與動態牆、本模組每日排程 `_check_dev_case_stale`）SELECT 補上 `assigned_to`，避免同樣的可見性判斷在不同出口漂移（審查發現，`helpers/row_access.py` 開頭就是在講這個問題；第 5 處由列車整合後的獨立稽核補發現，見 `docs/platform/audit/AUDIT-pm-sub-t73.md` T73A-M1）。`_check_dev_case_stale` 的通知收件人也補上被指派人（原本只有 sales_persons／planners／created_by 落空時才退回備援，現在一律同等收提醒）。
