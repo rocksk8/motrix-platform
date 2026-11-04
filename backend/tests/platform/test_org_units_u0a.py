@@ -31,6 +31,8 @@ GLOBAL_TABLES = {
     "user_activity_daily", "user_duty_roles", "user_list_prefs", "user_list_view_prefs", "user_perm_subtracts", "user_request_log", "users",
     "voucher_template_versions", "voucher_templates", "webauthn_credentials",
 }
+#: 模組自己的 migration 就帶 owner_unit_id 的新表（隨所屬記錄的單位；不屬 core 的 U0A_OWNER_UNIT_TABLES，也不在模組自有「待補欄」清單）
+MODULE_KEYED_TABLES = {"dev_case_progress"}
 #: U0a 新建的表（單位功能自己的表）
 NEW_TABLES = {"org_units", "org_unit_closure", "user_units", "system_settings_unit", "seq_by_entity"}
 #: 模組自有表（由各模組自己的 migration 在 U1／U3 補欄；覆蓋率棘輪只增不減）。以前綴或精確名稱列出
@@ -234,7 +236,7 @@ def test_module_owned_tables_are_untouched_by_the_core_migration(real):
 
 def test_every_table_is_classified_so_a_new_table_cannot_skip_the_unit_question(real):
     """§14.10 #6 守門①：新建的表必須歸類（業務表加 owner_unit_id／子表／全域／模組自有），否則紅。基線只減不增。"""
-    known = (set(M.U0A_OWNER_UNIT_TABLES) | set(M.U0A_UNIT_ID_TABLES) | CHILD_TABLES | GLOBAL_TABLES | NEW_TABLES | MODULE_OWNED_TABLES)
+    known = (set(M.U0A_OWNER_UNIT_TABLES) | set(M.U0A_UNIT_ID_TABLES) | CHILD_TABLES | GLOBAL_TABLES | NEW_TABLES | MODULE_OWNED_TABLES | MODULE_KEYED_TABLES)
     unclassified = sorted(t for t in _tables(real) if t not in known and not t.startswith(MODULE_OWNED_PREFIXES))
     assert unclassified == [], "這些表還沒歸類（加 owner_unit_id，或寫進 test_org_units_u0a.py 的子表／全域／模組自有並說明）：%s" % unclassified
 

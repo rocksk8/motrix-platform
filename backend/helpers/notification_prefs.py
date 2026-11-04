@@ -83,6 +83,7 @@ EVENT_GROUPS = [
         ("warranty_expiry",     "設備保固即將到期"),
         ("dev_case_stale",      "業務開發案件逾期未跟進"),
         ("dev_case_assigned",   "業務開發案件指派通知"),
+        ("dev_case_reply_overdue", "業務開發案件回覆期限已過未回報（每個案件、每個期限只寄一次）"),
     ]),
     ("業務開發審核", [
         ("dev_case_delete_request", "業務開發案件刪除申請"),

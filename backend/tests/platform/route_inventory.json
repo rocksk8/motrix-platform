@@ -1,17 +1,17 @@
 {
  "summary": {
-  "endpoints_total": 900,
-  "endpoints_api": 896,
+  "endpoints_total": 901,
+  "endpoints_api": 897,
   "write_total": 487,
   "write_api": 487,
-  "get_api": 409,
+  "get_api": 410,
   "distinct_paths_api": 758,
   "write_with_body_api": 357,
   "write_with_path_param_api": 351
  },
  "select_star": {
-  "modules": 278,
-  "archive": 94,
+  "modules": 282,
+  "archive": 95,
   "routers": 11,
   "helpers": 11,
   "core": 5,
@@ -934,6 +934,11 @@
    "body": false
   },
   "GET /api/dev-cases/{case_id}/logs": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/dev-cases/{case_id}/progress": {
    "w": false,
    "pp": 1,
    "body": false
@@ -2473,11 +2478,6 @@
    "pp": 1,
    "body": true
   },
-  "PATCH /api/dev-cases/{case_id}/progress": {
-   "w": true,
-   "pp": 1,
-   "body": true
-  },
   "PATCH /api/dev-cases/{case_id}/status": {
    "w": true,
    "pp": 1,
@@ -3154,6 +3154,11 @@
    "body": false
   },
   "POST /api/dev-cases/{case_id}/logs": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/dev-cases/{case_id}/progress": {
    "w": true,
    "pp": 1,
    "body": true

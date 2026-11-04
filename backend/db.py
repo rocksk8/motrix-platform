@@ -416,7 +416,7 @@ DEMO_CLEARED_TABLES = frozenset((
     "case_updates", "completion_notes", "contractor_dispatches",
     "contractor_payment_vouchers", "contractors", "customers",
     "daily_task_completions", "daily_task_edit_log", "daily_tasks",
-    "departments", "dev_cases", "dev_logs", "divisions", "edit_presence",
+    "departments", "dev_cases", "dev_case_progress", "dev_logs", "divisions", "edit_presence",
     "env_guide_environments", "env_guide_links",
     "env_guide_recommendations", "gateway_categories", "gateway_fit",
     "gateway_products", "gateway_scenarios", "geocode_cache",
