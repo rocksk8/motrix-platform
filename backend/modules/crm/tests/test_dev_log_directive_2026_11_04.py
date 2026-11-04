@@ -513,3 +513,106 @@ def test_migration_0004_on_a_populated_crm_v3_database_keeps_every_existing_row(
     cols = {r["name"] for r in _q("PRAGMA table_info(dev_log_directive_target)")}
     assert {"must_reply", "replied_at", "owner_unit_id"} <= cols
     assert _direct(client, world.admin, world.cid, world.log, targets=[_t(world.ida)]).status_code == 201     # 遷移後功能可用
+
+
+# ─────────────────────────── 複核修正（hichan-9：M1～M3、S1、S2）───────────────────────────
+
+def _dev_crm_badge(client, h):
+    r = client.get("/api/reads/module-counts", headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()["dev_crm"]
+
+
+def test_a_bystanders_menu_badge_does_not_move_when_a_directive_or_reply_happens(client, world, sync_mail):
+    """M1：批示限作者／對象／管理員可見，audit_log 的 dev_log.directive* 不能讓旁觀者的 dev_crm 紅點 +1。"""
+    before = _dev_crm_badge(client, world.c)
+    d = _direct(client, world.admin, world.cid, world.log, targets=[_t(world.ida)]).json()
+    _reply(client, world.a, world.cid, d["id"])
+    assert _dev_crm_badge(client, world.c) == before
+    # 正對照：同一個旁觀者，其他的 dev_log 稽核事件照算（證明這個量測量得到東西）
+    _x("INSERT INTO audit_log (username, action, at) VALUES (?,?,?)", "dr_admin", "dev_log.create", "2999-01-01T00:00:00")
+    assert _dev_crm_badge(client, world.c) == before + 1
+
+
+def test_the_badge_exclusion_covers_both_counting_paths():
+    """M1：選單數字有兩條算法（system.audit_module_counts 與 item_reads.module_counts），共用同一張排除表。"""
+    from helpers import module_registry as mr
+    from routers import item_reads, system
+    for act in ("dev_log.directive", "dev_log.directive_reply"):
+        assert act in mr.BADGE_EXCLUDE["dev_crm"]
+    assert item_reads._MODULE_EXCLUDE_ACTIONS is mr.BADGE_EXCLUDE
+    assert system._MODULE_EXCLUDE_ACTIONS is mr.BADGE_EXCLUDE
+
+
+def test_replying_gives_a_bystander_the_same_404_for_every_kind_of_id(client, world, sync_mail):
+    """M2：看不到批示的人，不論給的是根批示 id、回覆 id、還是不存在的 id，都得到同一個 404（不能用 400 當探針）。"""
+    d = _direct(client, world.admin, world.cid, world.log, targets=[_t(world.ida)]).json()
+    rid = _reply(client, world.a, world.cid, d["id"]).json()["replies"][0]["id"]
+    got = {k: _reply(client, world.b, world.cid, i) for k, i in (("root", d["id"]), ("reply", rid), ("none", 99999))}
+    assert {k: r.status_code for k, r in got.items()} == {"root": 404, "reply": 404, "none": 404}
+    assert len({r.text for r in got.values()}) == 1
+    # 看得到的人回覆「回覆」仍是 400（正對照：400 的規則還在，只是排在可見度之後）
+    assert _reply(client, world.a, world.cid, rid).status_code == 400
+    assert _reply(client, world.sup, world.cid, rid).status_code == 400
+
+
+class _LockedOn:
+    """get_db() 的代理：執行到含 needle 的 SQL 就丟 OperationalError('database is locked')，其餘照常。"""
+
+    def __init__(self, conn, needle):
+        self._c, self._n = conn, needle
+
+    def execute(self, sql, *a, **k):
+        if self._n in sql:
+            raise sqlite3.OperationalError("database is locked")
+        return self._c.execute(sql, *a, **k)
+
+    def __getattr__(self, name):
+        return getattr(self._c, name)
+
+
+def test_a_locked_database_never_falls_back_to_an_unguarded_delete(client, world, sync_mail, monkeypatch):
+    """M3：只有『表不存在』才可退回舊行為；鎖定時刪除要失敗（503），紀錄與批示都還在。"""
+    _direct(client, world.admin, world.cid, world.log, targets=[_t(world.ida)])
+    real = crm.get_db
+    monkeypatch.setattr(crm, "get_db", lambda: _LockedOn(real(), "NOT EXISTS"))
+    r = client.delete(f"/api/dev-logs/{world.log}", headers=world.a)
+    assert r.status_code == 503, r.text
+    monkeypatch.setattr(crm, "get_db", real)
+    assert _q("SELECT id FROM dev_logs WHERE id=?", world.log) != []
+    assert len(_q("SELECT id FROM dev_log_directive WHERE log_id=?", world.log)) == 1
+
+
+def test_a_locked_database_does_not_make_the_listing_look_empty(client, world, sync_mail, monkeypatch):
+    """M3：讀批示時鎖定 ⇒ 503，不能回空清單讓畫面以為沒有批示。"""
+    _direct(client, world.admin, world.cid, world.log, targets=[_t(world.ida)])
+    real = crm.get_db
+    monkeypatch.setattr(crm, "get_db", lambda: _LockedOn(real(), "dev_log_directive_target"))
+    assert client.get(f"/api/dev-cases/{world.cid}/directives", headers=world.admin).status_code == 503
+    monkeypatch.setattr(crm, "get_db", real)
+    assert len(_list(client, world.admin, world.cid)["items"]) == 1
+
+
+def test_huge_ids_are_rejected_with_422_not_500(client, world, sync_mail):
+    """S2：2**70 這種超過 SQLite 整數範圍的 id 不能變成 500。"""
+    big = 2 ** 70
+    assert _direct(client, world.admin, world.cid, big, targets=[_t(world.ida)]).status_code == 422
+    assert _direct(client, world.admin, world.cid, world.log, targets=[_t(big)]).status_code == 422
+    assert client.get(f"/api/dev-cases/{big}/directives", headers=world.admin).status_code == 422
+    assert _direct(client, world.admin, big, world.log, targets=[_t(world.ida)]).status_code == 422
+    assert _reply(client, world.a, world.cid, big).status_code == 422
+    assert _direct(client, world.admin, world.cid, 0, targets=[_t(world.ida)]).status_code == 422       # 下界
+    assert _q("SELECT id FROM dev_log_directive") == []
+
+
+def test_the_audit_log_carries_neither_the_directive_text_nor_its_targets(client, world, sync_mail):
+    """S1：有 audit_log 模組的人讀得到稽核，但批示限作者／對象／管理員可見，所以稽核裡不放內文也不放對象。"""
+    secret = "底價絕對不能讓步的機密內文"
+    d = _direct(client, world.admin, world.cid, world.log, content=secret, targets=[_t(world.ida)]).json()
+    _reply(client, world.a, world.cid, d["id"], secret + "回覆")
+    rows = _q("SELECT * FROM audit_log WHERE action LIKE 'dev_log.directive%' ORDER BY id")
+    assert [r["action"] for r in rows] == ["dev_log.directive", "dev_log.directive_reply"]
+    blob = repr([tuple(r.values()) for r in rows])
+    assert secret not in blob
+    assert "targets" not in blob and "mustReply" not in blob
+    assert rows[0]["target_label"] == "批示#%d" % d["id"]

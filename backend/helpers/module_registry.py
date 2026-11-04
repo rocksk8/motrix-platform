@@ -136,6 +136,9 @@ BADGE_EXCLUDE = {
         "dev_case.delete_request",
         "dev_case.delete_cancel",
         "dev_case.delete_reject",
+        # 開發記錄批示（2026-11-04）：批示限作者／對象／管理員可見，不能讓其他人的選單紅點因此多一格（複核 M1）
+        "dev_log.directive",
+        "dev_log.directive_reply",
     ),
 }
 

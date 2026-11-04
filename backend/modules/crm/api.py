@@ -9,7 +9,7 @@ import sqlite3
 from datetime import datetime, timedelta, date
 from typing import Any, Optional, List
 
-from fastapi import APIRouter, File, Form, HTTPException, Header, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Header, Path, UploadFile
 from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, spawn_bg_thread
@@ -91,14 +91,14 @@ class DevCaseProgressIn(BaseModel):
 class DirectiveTargetIn(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    user_id: int = Field(..., alias="userId")
+    user_id: int = Field(..., alias="userId", ge=1, le=2**31 - 1)
     must_reply: bool = Field(True, alias="mustReply")
 
 
 class DevLogDirectiveIn(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    log_id: int = Field(..., alias="logId")
+    log_id: int = Field(..., alias="logId", ge=1, le=2**31 - 1)
     content: str = ""
     targets: List[DirectiveTargetIn] = []
 
@@ -1281,8 +1281,11 @@ def delete_dev_log(log_id: int, authorization: str = Header("")):
         try:
             deleted = conn.execute(
                 del_sql + " AND NOT EXISTS (SELECT 1 FROM dev_log_directive WHERE log_id=?)", (log_id, log_id)).rowcount
-        except sqlite3.OperationalError:                # 批示表不存在（舊庫、migration 未完成）⇒ 當作沒有批示
-            deleted = conn.execute(del_sql, (log_id,)).rowcount
+        except sqlite3.OperationalError as e:
+            if not _no_such_table(e):                   # 鎖定等其他原因不能退回「沒有守門的 DELETE」（複核 M3）
+                conn.rollback()
+                raise HTTPException(503, "資料庫忙碌中，請稍後再試")
+            deleted = conn.execute(del_sql, (log_id,)).rowcount      # 批示表不存在（舊庫、migration 未完成）⇒ 當作沒有批示
         if deleted == 0:
             conn.rollback()
             raise HTTPException(409, "此開發記錄已有後續處理紀錄，不可刪除")
@@ -1370,6 +1373,11 @@ DIRECTIVE_MAX = 4000
 DIRECTIVE_TARGETS_MAX = 10
 
 
+def _no_such_table(e: Exception) -> bool:
+    """只有「表不存在」（舊庫、migration 未完成）才算可以退回舊行為；鎖定、I/O 錯誤等一律不算。"""
+    return "no such table" in str(e).lower()
+
+
 def _directive_names(conn, ids) -> dict:
     """{user_id: 顯示名}。含已停用帳號（歷史批示的作者／對象之後可能離職，不能顯示成數字）。"""
     ids = sorted({i for i in ids if i is not None})
@@ -1390,8 +1398,10 @@ def _directive_items(conn, user: dict, case_id: int, only_root: Optional[int] = 
         trows = conn.execute(
             "SELECT t.* FROM dev_log_directive_target t JOIN dev_log_directive d ON d.id = t.directive_id "
             "WHERE d.case_id=? ORDER BY t.id", (case_id,)).fetchall()
-    except sqlite3.OperationalError:
-        return []
+    except sqlite3.OperationalError as e:
+        if _no_such_table(e):
+            return []
+        raise HTTPException(503, "資料庫忙碌中，請稍後再試")          # 鎖定等其他原因：不能回空清單讓畫面誤以為沒有批示（複核 M3）
     uid, admin = user["id"], _is_admin(user)
     targets = {}
     for t in trows:
@@ -1458,7 +1468,7 @@ def _snippet(text: str, n: int = 40) -> str:
 
 
 @router.get("/dev-cases/{case_id}/directives")
-def list_dev_log_directives(case_id: int, authorization: str = Header("")):
+def list_dev_log_directives(case_id: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header("")):
     """整案的批示（含回覆與對象），**只回這個人看得到的**（管理員／作者／對象）；`canDirect`＝這個人能不能下批示（前端據此顯示「批示」鈕）。"""
     user = _require_dev(authorization)
     conn = get_db()
@@ -1470,7 +1480,7 @@ def list_dev_log_directives(case_id: int, authorization: str = Header("")):
 
 
 @router.post("/dev-cases/{case_id}/directives", status_code=201)
-def add_dev_log_directive(case_id: int, body: DevLogDirectiveIn, authorization: str = Header("")):
+def add_dev_log_directive(body: DevLogDirectiveIn, case_id: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header("")):
     """對某筆開發記錄下批示。閘：業務開發模組 ＋ 能力 `crm.dev_log_directive.comment` ＋ 看得到此案件。
     對象 1～10 人，不含自己；每人須在職、具業務開發權限（或管理員）、看得到此案件，否則 400 並列出名字。"""
     user = _require_dev(authorization)
@@ -1524,8 +1534,9 @@ def add_dev_log_directive(case_id: int, body: DevLogDirectiveIn, authorization: 
                          (did, uid, 1 if must else 0))
         conn.commit()
         actor = user.get("display_name") or user["username"]
-        _audit(_tok(authorization), "dev_log.directive", "dev_log", str(body.log_id), _snippet(content),
-               {"directiveId": did, "targets": sorted(want), "mustReply": sorted(u for u, m in want.items() if m)})
+        # 稽核任何有 audit_log 模組勾選的人都讀得到：標籤與明細不放批示內容、也不放對象（複核 S1，與 §3 一致）
+        _audit(_tok(authorization), "dev_log.directive", "dev_log", str(body.log_id), "批示#%d" % did,
+               {"directiveId": did})
         mail_to = []
         for uid, must in want.items():
             u = urows[uid]
@@ -1544,7 +1555,8 @@ def add_dev_log_directive(case_id: int, body: DevLogDirectiveIn, authorization: 
 
 
 @router.post("/dev-cases/{case_id}/directives/{directive_id}/replies", status_code=201)
-def reply_dev_log_directive(case_id: int, directive_id: int, body: DevLogDirectiveReplyIn, authorization: str = Header("")):
+def reply_dev_log_directive(body: DevLogDirectiveReplyIn, case_id: int = Path(..., ge=1, le=2**31 - 1),
+                            directive_id: int = Path(..., ge=1, le=2**31 - 1), authorization: str = Header("")):
     """回覆批示。**只有批示作者與被列為對象的人可回**（不需要下批示的能力）；只一層，不能回覆回覆。
     對象回覆 ⇒ 記該對象首次回覆時間、通知作者；作者回覆 ⇒ 通知所有對象（皆站內通知，不寄信）。
     看不到這筆批示的人（不是管理員／作者／對象）得到 404，不洩漏它存在；管理員但不是作者／對象 ⇒ 403。"""
@@ -1555,13 +1567,18 @@ def reply_dev_log_directive(case_id: int, directive_id: int, body: DevLogDirecti
         root = conn.execute("SELECT * FROM dev_log_directive WHERE id=? AND case_id=?", (directive_id, case_id)).fetchone()
         if not root:
             raise HTTPException(404, "批示不存在")
-        if root["parent_id"] is not None:
-            raise HTTPException(400, "不能回覆回覆（請回覆原批示）")
+        # 可見度一律以「根批示」判斷：呼叫端給的 id 是根、是回覆、還是不存在，對看不到的人都回同一個 404（複核 M2）
+        head = root if root["parent_id"] is None else conn.execute(
+            "SELECT id, author_id FROM dev_log_directive WHERE id=?", (root["parent_id"],)).fetchone()
+        if head is None:
+            raise HTTPException(404, "批示不存在")
         tgt = conn.execute("SELECT * FROM dev_log_directive_target WHERE directive_id=? AND user_id=?",
-                           (directive_id, user["id"])).fetchone()
-        is_author = root["author_id"] == user["id"]
+                           (head["id"], user["id"])).fetchone()
+        is_author = head["author_id"] == user["id"]
         if not (is_author or tgt or _is_admin(user)):
             raise HTTPException(404, "批示不存在")
+        if root["parent_id"] is not None:
+            raise HTTPException(400, "不能回覆回覆（請回覆原批示）")
         if not (is_author or tgt):
             raise HTTPException(403, "僅批示作者或被指定的對象可回覆")
         content = _directive_text(body.content)
@@ -1573,7 +1590,7 @@ def reply_dev_log_directive(case_id: int, directive_id: int, body: DevLogDirecti
             conn.execute("UPDATE dev_log_directive_target SET replied_at=? WHERE id=? AND replied_at IS NULL", (now, tgt["id"]))
         conn.commit()
         actor = user.get("display_name") or user["username"]
-        _audit(_tok(authorization), "dev_log.directive_reply", "dev_log", str(root["log_id"]), _snippet(content),
+        _audit(_tok(authorization), "dev_log.directive_reply", "dev_log", str(root["log_id"]), "批示#%d 回覆" % directive_id,
                {"directiveId": directive_id, "replyId": cur.lastrowid})
         if is_author:
             to_ids = [t["user_id"] for t in conn.execute(
