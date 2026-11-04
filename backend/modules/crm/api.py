@@ -5,6 +5,7 @@
 import json
 import logging
 import re
+import sqlite3
 from datetime import datetime, timedelta, date
 from typing import Any, Optional, List
 
@@ -13,10 +14,11 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, spawn_bg_thread
 from helpers import row_access
+from helpers import perm as _perm
 import threading
 from helpers import (
     _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request,
-    notify_dev_case_relink_request, notify_dev_case_assigned, notify_dev_case_reply_overdue,
+    notify_dev_case_relink_request, notify_dev_case_assigned, notify_dev_case_reply_overdue, notify_dev_log_directive,
     _notify, _get_setting, _set_setting, notify_dev_case_stale, _purge_notifications,
     push_event_for_dev_case_converted, push_event_for_dev_case_stale, push_event_for_module,
 )
@@ -83,6 +85,25 @@ class DevCaseAssignIn(BaseModel):
 
 
 class DevCaseProgressIn(BaseModel):
+    content: str = ""
+
+
+class DirectiveTargetIn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    user_id: int = Field(..., alias="userId")
+    must_reply: bool = Field(True, alias="mustReply")
+
+
+class DevLogDirectiveIn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    log_id: int = Field(..., alias="logId")
+    content: str = ""
+    targets: List[DirectiveTargetIn] = []
+
+
+class DevLogDirectiveReplyIn(BaseModel):
     content: str = ""
 
 
@@ -1253,6 +1274,18 @@ def delete_dev_log(log_id: int, authorization: str = Header("")):
             raise HTTPException(404, "記錄不存在")
         if row["created_by"] != user["id"] and not _is_admin(user):
             raise HTTPException(403, "僅能刪除自己建立的記錄")
+        # 已有批示的紀錄不可刪（crm v4，docs/platform/plans/DEV-LOG-DIRECTIVE-PLAN.md §5）：硬刪附件後批示會懸空。
+        # 「沒有批示才刪」是單一陳述（SQLite 單寫者 ⇒ 與同時新增批示的 INSERT…WHERE EXISTS 不會交錯）。
+        # 訊息刻意不提「批示」：批示限作者／對象／管理員可見，被擋的建立者可能看不到它。
+        del_sql = "DELETE FROM dev_logs WHERE id=?"
+        try:
+            deleted = conn.execute(
+                del_sql + " AND NOT EXISTS (SELECT 1 FROM dev_log_directive WHERE log_id=?)", (log_id, log_id)).rowcount
+        except sqlite3.OperationalError:                # 批示表不存在（舊庫、migration 未完成）⇒ 當作沒有批示
+            deleted = conn.execute(del_sql, (log_id,)).rowcount
+        if deleted == 0:
+            conn.rollback()
+            raise HTTPException(409, "此開發記錄已有後續處理紀錄，不可刪除")
         # 記錄刪掉，附件也要從磁碟清掉——否則 uploads/ 會留下沒人引用的孤兒檔案，
         # 而 archive.py::_mirror_uploads() 只增不減，會一路跟著進雲端備份
         for f in _log_files(row):
@@ -1262,7 +1295,6 @@ def delete_dev_log(log_id: int, authorization: str = Header("")):
                     os.remove(full)
             except Exception:
                 pass
-        conn.execute("DELETE FROM dev_logs WHERE id=?", (log_id,))
         conn.commit()
         _audit(_tok(authorization), "dev_log.delete", "dev_log", str(log_id), "")
         _sync_customer_visit(conn, row["case_id"], log_id, "delete")
@@ -1323,6 +1355,238 @@ def approve_dev_log(log_id: int, authorization: str = Header("")):
         notify_module_activity("業務開發", "審核通過開發記錄", user.get("display_name") or user["username"],
                                 case_row["case_name"] if case_row else str(row["case_id"]), "dev-crm.html")
         return _log_row(updated, _user_map(conn))
+    finally:
+        conn.close()
+
+
+# ── 開發記錄「批示」（crm v4，2026-11-04；docs/platform/plans/DEV-LOG-DIRECTIVE-PLAN.md） ──────────────
+# 管理員（或被勾了 crm.dev_log_directive.comment 的人）對某筆開發記錄下批示，通知指定的成員、可指定誰要回覆。
+# 與「進度回報」方向相反（進度＝被指派人自己回報；批示＝上對下指示）。批示與回覆只增不改不刪；
+# 不碰 dev_logs（不連動客戶拜訪／行事曆／接洽統計）、不重置 dev_cases.updated_at（那是 30 天停滯警報的依據）、
+# 不呼叫 notify_module_activity（它帶全文寄全體 admin，與限縮可見度矛盾）。
+
+DIRECTIVE_CAP = "crm.dev_log_directive.comment"
+DIRECTIVE_MAX = 4000
+DIRECTIVE_TARGETS_MAX = 10
+
+
+def _directive_names(conn, ids) -> dict:
+    """{user_id: 顯示名}。含已停用帳號（歷史批示的作者／對象之後可能離職，不能顯示成數字）。"""
+    ids = sorted({i for i in ids if i is not None})
+    if not ids:
+        return {}
+    rows = conn.execute(
+        "SELECT id, display_name, username FROM users WHERE id IN (%s)" % ",".join("?" * len(ids)), ids
+    ).fetchall()
+    return {r["id"]: (r["display_name"] or r["username"]) for r in rows}
+
+
+def _directive_items(conn, user: dict, case_id: int, only_root: Optional[int] = None) -> list:
+    """這個人看得到的批示（連同回覆與對象）；前端依 log_id 分組。
+    可見度（使用者裁示）：**管理員、批示作者、被列為對象的人**；其他人連「有這筆批示」都看不到（整列不回）。
+    表不存在（舊庫、migration 未完成）⇒ 回空，不能讓案件頁 500。"""
+    try:
+        drows = conn.execute("SELECT * FROM dev_log_directive WHERE case_id=? ORDER BY id", (case_id,)).fetchall()
+        trows = conn.execute(
+            "SELECT t.* FROM dev_log_directive_target t JOIN dev_log_directive d ON d.id = t.directive_id "
+            "WHERE d.case_id=? ORDER BY t.id", (case_id,)).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    uid, admin = user["id"], _is_admin(user)
+    targets = {}
+    for t in trows:
+        targets.setdefault(t["directive_id"], []).append(t)
+    replies = {}
+    for r in drows:
+        if r["parent_id"] is not None:
+            replies.setdefault(r["parent_id"], []).append(r)
+    roots = []
+    for r in drows:
+        if r["parent_id"] is not None or (only_root is not None and r["id"] != only_root):
+            continue
+        is_target = any(t["user_id"] == uid for t in targets.get(r["id"], []))
+        if admin or r["author_id"] == uid or is_target:
+            roots.append((r, is_target))
+    ids = set()
+    for r, _ in roots:
+        ids.add(r["author_id"])
+        ids.update(t["user_id"] for t in targets.get(r["id"], []))
+        ids.update(x["author_id"] for x in replies.get(r["id"], []))
+    names = _directive_names(conn, ids)
+    out = []
+    for r, is_target in roots:
+        ts = targets.get(r["id"], [])
+        reps = replies.get(r["id"], [])
+        out.append({
+            "id": r["id"], "caseId": r["case_id"], "logId": r["log_id"],
+            "authorId": r["author_id"], "authorName": names.get(r["author_id"], str(r["author_id"])),
+            "content": r["content"], "createdAt": r["created_at"],
+            "targets": [{"userId": t["user_id"], "name": names.get(t["user_id"], str(t["user_id"])),
+                         "mustReply": bool(t["must_reply"]), "repliedAt": t["replied_at"]} for t in ts],
+            "pendingReplyNames": [names.get(t["user_id"], str(t["user_id"])) for t in ts
+                                  if t["must_reply"] and not t["replied_at"]],
+            "replies": [{"id": x["id"], "authorId": x["author_id"],
+                         "authorName": names.get(x["author_id"], str(x["author_id"])),
+                         "content": x["content"], "createdAt": x["created_at"]} for x in reps],
+            "lastActivityAt": max([r["created_at"]] + [x["created_at"] for x in reps]),
+            "canReply": r["author_id"] == uid or is_target,
+        })
+    return out
+
+
+def _directive_case(conn, user: dict, case_id: int):
+    row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "案件不存在")
+    if not row_access.visible("dev_case", user, row):
+        raise HTTPException(403, "無權限查看此案件")
+    return row
+
+
+def _directive_text(body_content: str) -> str:
+    content = (body_content or "").strip()
+    if not content:
+        raise HTTPException(400, "內容不可空白")
+    if len(content) > DIRECTIVE_MAX:
+        raise HTTPException(400, "內容最多 %d 個字（目前 %d 字）" % (DIRECTIVE_MAX, len(content)))
+    return content
+
+
+def _snippet(text: str, n: int = 40) -> str:
+    text = " ".join((text or "").split())
+    return text[:n] + ("…" if len(text) > n else "")
+
+
+@router.get("/dev-cases/{case_id}/directives")
+def list_dev_log_directives(case_id: int, authorization: str = Header("")):
+    """整案的批示（含回覆與對象），**只回這個人看得到的**（管理員／作者／對象）；`canDirect`＝這個人能不能下批示（前端據此顯示「批示」鈕）。"""
+    user = _require_dev(authorization)
+    conn = get_db()
+    try:
+        _directive_case(conn, user, case_id)
+        return {"canDirect": _perm.can(user, DIRECTIVE_CAP), "items": _directive_items(conn, user, case_id)}
+    finally:
+        conn.close()
+
+
+@router.post("/dev-cases/{case_id}/directives", status_code=201)
+def add_dev_log_directive(case_id: int, body: DevLogDirectiveIn, authorization: str = Header("")):
+    """對某筆開發記錄下批示。閘：業務開發模組 ＋ 能力 `crm.dev_log_directive.comment` ＋ 看得到此案件。
+    對象 1～10 人，不含自己；每人須在職、具業務開發權限（或管理員）、看得到此案件，否則 400 並列出名字。"""
+    user = _require_dev(authorization)
+    _perm.require(user, DIRECTIVE_CAP)
+    conn = get_db()
+    try:
+        case_row = _directive_case(conn, user, case_id)
+        log = conn.execute("SELECT id, case_id FROM dev_logs WHERE id=?", (body.log_id,)).fetchone()
+        if not log or log["case_id"] != case_id:
+            raise HTTPException(400, "開發記錄不存在或不屬於此案件")
+        content = _directive_text(body.content)
+        want = {}
+        for t in body.targets:                       # 去重；同一人重複出現時，任一筆要回覆就算要回覆
+            want[t.user_id] = want.get(t.user_id, False) or bool(t.must_reply)
+        if not want:
+            raise HTTPException(400, "請至少指定一位通知對象")
+        if len(want) > DIRECTIVE_TARGETS_MAX:
+            raise HTTPException(400, "通知對象最多 %d 人" % DIRECTIVE_TARGETS_MAX)
+        if user["id"] in want:
+            raise HTTPException(400, "通知對象不可包含自己")
+        urows = {r["id"]: r for r in conn.execute(
+            "SELECT id, username, display_name, role, modules, active FROM users WHERE id IN (%s)" % ",".join("?" * len(want)),
+            list(want)).fetchall()}
+        bad = []
+        for uid in want:
+            u = urows.get(uid)
+            if not u:
+                bad.append("使用者#%s（不存在）" % uid)
+                continue
+            name = u["display_name"] or u["username"]
+            if not u["active"]:
+                bad.append("%s（已停用）" % name)
+            elif u["role"] not in ("superadmin", "admin") and "dev_crm" not in json.loads(u["modules"] or "[]"):
+                bad.append("%s（沒有業務開發模組權限）" % name)
+            elif not row_access.visible("dev_case", {"id": u["id"], "role": u["role"], "modules": u["modules"],
+                                                     "username": u["username"], "display_name": u["display_name"]}, case_row):
+                bad.append("%s（看不到此案件）" % name)
+        if bad:
+            raise HTTPException(400, "以下對象無法指定：" + "、".join(bad))
+        now = _TW_NOW()
+        cur = conn.execute(                           # 「紀錄還在」與寫入是同一個陳述：與同時刪紀錄的 DELETE 不會交錯
+            "INSERT INTO dev_log_directive (log_id, case_id, author_id, content, parent_id, created_at) "
+            "SELECT ?,?,?,?,NULL,? WHERE EXISTS (SELECT 1 FROM dev_logs WHERE id=? AND case_id=?)",
+            (body.log_id, case_id, user["id"], content, now, body.log_id, case_id))
+        if cur.rowcount == 0:
+            conn.rollback()
+            raise HTTPException(400, "開發記錄不存在或不屬於此案件")
+        did = cur.lastrowid
+        for uid, must in want.items():
+            conn.execute("INSERT INTO dev_log_directive_target (directive_id, user_id, must_reply) VALUES (?,?,?)",
+                         (did, uid, 1 if must else 0))
+        conn.commit()
+        actor = user.get("display_name") or user["username"]
+        _audit(_tok(authorization), "dev_log.directive", "dev_log", str(body.log_id), _snippet(content),
+               {"directiveId": did, "targets": sorted(want), "mustReply": sorted(u for u, m in want.items() if m)})
+        mail_to = []
+        for uid, must in want.items():
+            u = urows[uid]
+            _notify(u["username"], "dev_log_directive", str(did), case_row["case_name"],
+                    "%s 對業務開發案件「%s」的開發記錄下了批示%s：%s"
+                    % (actor, case_row["case_name"], "，請回覆" if must else "（僅知會）", _snippet(content)),
+                    link="dev-crm.html")
+            if must:
+                mail_to.append(u["username"])
+        if mail_to:                                   # 信件只寄「要回覆」的人，本文不放批示全文
+            spawn_bg_thread(notify_dev_log_directive, args=(case_id, case_row["case_name"], mail_to, actor))
+        items = _directive_items(conn, user, case_id, only_root=did)
+        return items[0]
+    finally:
+        conn.close()
+
+
+@router.post("/dev-cases/{case_id}/directives/{directive_id}/replies", status_code=201)
+def reply_dev_log_directive(case_id: int, directive_id: int, body: DevLogDirectiveReplyIn, authorization: str = Header("")):
+    """回覆批示。**只有批示作者與被列為對象的人可回**（不需要下批示的能力）；只一層，不能回覆回覆。
+    對象回覆 ⇒ 記該對象首次回覆時間、通知作者；作者回覆 ⇒ 通知所有對象（皆站內通知，不寄信）。
+    看不到這筆批示的人（不是管理員／作者／對象）得到 404，不洩漏它存在；管理員但不是作者／對象 ⇒ 403。"""
+    user = _require_dev(authorization)
+    conn = get_db()
+    try:
+        case_row = _directive_case(conn, user, case_id)
+        root = conn.execute("SELECT * FROM dev_log_directive WHERE id=? AND case_id=?", (directive_id, case_id)).fetchone()
+        if not root:
+            raise HTTPException(404, "批示不存在")
+        if root["parent_id"] is not None:
+            raise HTTPException(400, "不能回覆回覆（請回覆原批示）")
+        tgt = conn.execute("SELECT * FROM dev_log_directive_target WHERE directive_id=? AND user_id=?",
+                           (directive_id, user["id"])).fetchone()
+        is_author = root["author_id"] == user["id"]
+        if not (is_author or tgt or _is_admin(user)):
+            raise HTTPException(404, "批示不存在")
+        if not (is_author or tgt):
+            raise HTTPException(403, "僅批示作者或被指定的對象可回覆")
+        content = _directive_text(body.content)
+        now = _TW_NOW()
+        cur = conn.execute(
+            "INSERT INTO dev_log_directive (log_id, case_id, author_id, content, parent_id, created_at) VALUES (?,?,?,?,?,?)",
+            (root["log_id"], case_id, user["id"], content, directive_id, now))
+        if tgt and not tgt["replied_at"]:
+            conn.execute("UPDATE dev_log_directive_target SET replied_at=? WHERE id=? AND replied_at IS NULL", (now, tgt["id"]))
+        conn.commit()
+        actor = user.get("display_name") or user["username"]
+        _audit(_tok(authorization), "dev_log.directive_reply", "dev_log", str(root["log_id"]), _snippet(content),
+               {"directiveId": directive_id, "replyId": cur.lastrowid})
+        if is_author:
+            to_ids = [t["user_id"] for t in conn.execute(
+                "SELECT user_id FROM dev_log_directive_target WHERE directive_id=? ORDER BY id", (directive_id,)).fetchall()]
+        else:
+            to_ids = [root["author_id"]]
+        recips = conn.execute("SELECT id, username FROM users WHERE active=1 AND id IN (%s)" % ",".join("?" * len(to_ids)),
+                              to_ids).fetchall() if to_ids else []
+        for u in recips:
+            _notify(u["username"], "dev_log_directive_reply", str(directive_id), case_row["case_name"],
+                    "%s 回覆了業務開發案件「%s」的批示：%s" % (actor, case_row["case_name"], _snippet(content)),
+                    link="dev-crm.html")
+        return _directive_items(conn, user, case_id, only_root=directive_id)[0]
     finally:
         conn.close()
 

@@ -84,6 +84,7 @@ EVENT_GROUPS = [
         ("dev_case_stale",      "業務開發案件逾期未跟進"),
         ("dev_case_assigned",   "業務開發案件指派通知"),
         ("dev_case_reply_overdue", "業務開發案件回覆期限已過未回報（每個案件、每個期限只寄一次）"),
+        ("dev_log_directive", "業務開發記錄批示（只寄給被要求回覆的成員）"),
     ]),
     ("業務開發審核", [
         ("dev_case_delete_request", "業務開發案件刪除申請"),

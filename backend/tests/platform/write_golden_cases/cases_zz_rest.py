@@ -212,6 +212,8 @@ WAIVE = {
     'POST /api/dev-cases/{case_id}/approve-relink-quote': "not yet covered (U0b freeze)",
     'POST /api/dev-cases/{case_id}/cancel-delete': "not yet covered (U0b freeze)",
     'POST /api/dev-cases/{case_id}/cancel-relink-quote': "not yet covered (U0b freeze)",
+    'POST /api/dev-cases/{case_id}/directives': "not yet covered (U0b freeze)",
+    'POST /api/dev-cases/{case_id}/directives/{directive_id}/replies': "not yet covered (U0b freeze)",
     'POST /api/dev-cases/{case_id}/logs': "not yet covered (U0b freeze)",
     'POST /api/dev-cases/{case_id}/progress': "not yet covered (U0b freeze)",
     'POST /api/dev-cases/{case_id}/request-delete': "not yet covered (U0b freeze)",
