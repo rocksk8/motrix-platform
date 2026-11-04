@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-11-04 13:40（wip/hichan8-dev-log-directive-v1；開發記錄批示）
+## 1.151 — 2026-11-04 13:40（wip/hichan8-dev-log-directive-v1；開發記錄批示）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.notify_dev_log_directive`（批示通知信，`helpers/__init__.py` 匯出）；`helpers.mail_types` 新登記 `dev_log_directive`；`helpers.notification_prefs.EVENT_GROUPS`「案件與到期提醒」加 `dev_log_directive`。`archive.py` 備份加兩張表。
 - 其餘見 `modules/crm/CHANGELOG.md`（migration 0004、批示與回覆、能力 `crm.dev_log_directive.comment`、擋刪 409）。
 

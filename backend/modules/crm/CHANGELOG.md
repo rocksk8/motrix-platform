@@ -1,6 +1,6 @@
 # 業務開發 更新紀錄
 
-## (next:minor) — 2026-11-04 13:40（wip/hichan8-dev-log-directive-v1：開發記錄「批示」，見 docs/platform/plans/DEV-LOG-DIRECTIVE-PLAN.md）
+## 1.2.0 — 2026-11-04 13:40（wip/hichan8-dev-log-directive-v1：開發記錄「批示」，見 docs/platform/plans/DEV-LOG-DIRECTIVE-PLAN.md）
 - 新增：`migrations/0004_dev_log_directive.py`（`module_schema_versions.crm` 3→4，冪等）：新表 `dev_log_directive`（批示與回覆同表，`parent_id` 只一層；只增不改不刪）、`dev_log_directive_target`（通知／待回覆對象，`must_reply`、首次回覆時間 `replied_at`，`UNIQUE(directive_id, user_id)`）；兩張都帶 `owner_unit_id`。**不碰 `dev_logs`**（不連動客戶拜訪、行事曆、接洽統計、報價單動態），**不重置 `dev_cases.updated_at`**（那是 30 天停滯警報的依據）。
 - 路由：`GET /api/dev-cases/{id}/directives`（整案批示＋回覆＋對象＋`canDirect` 旗標）、`POST /api/dev-cases/{id}/directives`（下批示）、`POST /api/dev-cases/{id}/directives/{directive_id}/replies`（回覆）。沒有修改／刪除端點：寫錯就再發一筆。
 - 權限：新能力 `crm.dev_log_directive.comment`「對開發記錄下批示」（`module.json`，沿用既有動作 `comment`；legacy＝admin ⇒ 上線當天只有管理員／最高管理者，之後在權限矩陣可勾給別人）。下批示＝業務開發模組 ＋ 此能力 ＋ 看得到該案件；回覆不需要此能力（批示作者與被列為對象的人可回）。對象 1～10 人、不含自己、去重；每人須在職、有業務開發權限（或管理員）、看得到該案件，否則 400 並列出名字。

@@ -78,6 +78,8 @@
     "departments",
     "dev_case_progress",
     "dev_cases",
+    "dev_log_directive",
+    "dev_log_directive_target",
     "dev_logs",
     "divisions",
     "duty_roles",
@@ -229,6 +231,8 @@
     "daily_task_edit_log",
     "departments",
     "dev_case_progress",
+    "dev_log_directive",
+    "dev_log_directive_target",
     "dev_logs",
     "duty_roles",
     "edit_presence",
@@ -1126,6 +1130,7 @@
    "path": "backend/helpers/email_notify.py",
    "tables_ddl": [],
    "tables_named": [
+    "dev_log_directive",
     "users"
    ],
    "tables_r": [
@@ -1402,7 +1407,9 @@
    "kind": "helper",
    "path": "backend/helpers/mail_types.py",
    "tables_ddl": [],
-   "tables_named": [],
+   "tables_named": [
+    "dev_log_directive"
+   ],
    "tables_r": [],
    "tables_w": []
   },
@@ -1496,7 +1503,9 @@
    "kind": "helper",
    "path": "backend/helpers/notification_prefs.py",
    "tables_ddl": [],
-   "tables_named": [],
+   "tables_named": [
+    "dev_log_directive"
+   ],
    "tables_r": [],
    "tables_w": []
   },
@@ -12555,6 +12564,7 @@
     "helper:notification_prefs",
     "helper:notify_matrix",
     "helper:notify_templates",
+    "helper:perm",
     "helper:profit_warning",
     "helper:quote_privacy",
     "helper:row_access",
@@ -12582,6 +12592,7 @@
     "helper:auth",
     "helper:email_notify",
     "helper:google_calendar",
+    "helper:perm",
     "helper:row_access",
     "helper:settings",
     "helper:uploads"
@@ -12594,141 +12605,159 @@
    "routes": [
     {
      "func": "list_dev_cases",
-     "line": 397,
+     "line": 418,
      "method": "GET",
      "path": "/api/dev-cases"
     },
     {
      "func": "create_dev_case",
-     "line": 428,
+     "line": 449,
      "method": "POST",
      "path": "/api/dev-cases"
     },
     {
      "func": "get_dev_case",
-     "line": 467,
+     "line": 488,
      "method": "GET",
      "path": "/api/dev-cases/{case_id}"
     },
     {
      "func": "update_dev_case",
-     "line": 482,
+     "line": 503,
      "method": "PUT",
      "path": "/api/dev-cases/{case_id}"
     },
     {
      "func": "request_dev_case_delete",
-     "line": 525,
+     "line": 546,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/request-delete"
     },
     {
      "func": "cancel_dev_case_delete",
-     "line": 560,
+     "line": 581,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/cancel-delete"
     },
     {
      "func": "approve_dev_case_delete",
-     "line": 593,
+     "line": 614,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/approve-delete"
     },
     {
      "func": "update_dev_case_status",
-     "line": 641,
+     "line": 662,
      "method": "PATCH",
      "path": "/api/dev-cases/{case_id}/status"
     },
     {
      "func": "assign_dev_case",
-     "line": 671,
+     "line": 692,
      "method": "PATCH",
      "path": "/api/dev-cases/{case_id}/assign"
     },
     {
      "func": "list_dev_case_progress",
-     "line": 774,
+     "line": 795,
      "method": "GET",
      "path": "/api/dev-cases/{case_id}/progress"
     },
     {
      "func": "add_dev_case_progress",
-     "line": 792,
+     "line": 813,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/progress"
     },
     {
      "func": "mark_converted",
-     "line": 831,
+     "line": 852,
      "method": "PATCH",
      "path": "/api/dev-cases/{case_id}/convert"
     },
     {
      "func": "request_dev_case_relink",
-     "line": 870,
+     "line": 891,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/request-relink-quote"
     },
     {
      "func": "cancel_dev_case_relink",
-     "line": 915,
+     "line": 936,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/cancel-relink-quote"
     },
     {
      "func": "approve_dev_case_relink",
-     "line": 948,
+     "line": 969,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/approve-relink-quote"
     },
     {
      "func": "list_pending_logs",
-     "line": 1006,
+     "line": 1027,
      "method": "GET",
      "path": "/api/dev-logs/pending"
     },
     {
      "func": "dev_crm_activity_stats",
-     "line": 1022,
+     "line": 1043,
      "method": "GET",
      "path": "/api/dev-crm/activity-stats"
     },
     {
      "func": "list_dev_logs",
-     "line": 1100,
+     "line": 1121,
      "method": "GET",
      "path": "/api/dev-cases/{case_id}/logs"
     },
     {
      "func": "create_dev_log",
-     "line": 1120,
+     "line": 1141,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/logs"
     },
     {
      "func": "update_dev_log",
-     "line": 1215,
+     "line": 1236,
      "method": "PUT",
      "path": "/api/dev-logs/{log_id}"
     },
     {
      "func": "delete_dev_log",
-     "line": 1247,
+     "line": 1268,
      "method": "DELETE",
      "path": "/api/dev-logs/{log_id}"
     },
     {
      "func": "delete_dev_log_file",
-     "line": 1277,
+     "line": 1312,
      "method": "DELETE",
      "path": "/api/dev-logs/{log_id}/files/{file_id}"
     },
     {
      "func": "approve_dev_log",
-     "line": 1305,
+     "line": 1340,
      "method": "PATCH",
      "path": "/api/dev-logs/{log_id}/approve"
+    },
+    {
+     "func": "list_dev_log_directives",
+     "line": 1471,
+     "method": "GET",
+     "path": "/api/dev-cases/{case_id}/directives"
+    },
+    {
+     "func": "add_dev_log_directive",
+     "line": 1483,
+     "method": "POST",
+     "path": "/api/dev-cases/{case_id}/directives"
+    },
+    {
+     "func": "reply_dev_log_directive",
+     "line": 1558,
+     "method": "POST",
+     "path": "/api/dev-cases/{case_id}/directives/{directive_id}/replies"
     }
    ],
    "tables_ddl": [],
@@ -12762,6 +12791,8 @@
     "customers",
     "dev_case_progress",
     "dev_cases",
+    "dev_log_directive",
+    "dev_log_directive_target",
     "dev_logs"
    ],
    "tables_w_transitive": [
@@ -12771,6 +12802,8 @@
     "customers",
     "dev_case_progress",
     "dev_cases",
+    "dev_log_directive",
+    "dev_log_directive_target",
     "dev_logs",
     "duty_roles",
     "notifications",
@@ -28000,6 +28033,43 @@
     "mod:crm/attachments",
     "router:item_reads",
     "router:search"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:crm/api"
+   ]
+  },
+  "table:dev_log_directive": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [
+    "core:db",
+    "helper:email_notify",
+    "helper:mail_types",
+    "helper:notification_prefs"
+   ],
+   "path": "backend/modules/crm/migrations/0004_dev_log_directive.py:21",
+   "readers": [
+    "core:archive"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:crm/api"
+   ]
+  },
+  "table:dev_log_directive_target": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [
+    "core:db"
+   ],
+   "path": "backend/modules/crm/migrations/0004_dev_log_directive.py:34",
+   "readers": [
+    "core:archive"
    ],
    "tables_r": [],
    "tables_w": [],
