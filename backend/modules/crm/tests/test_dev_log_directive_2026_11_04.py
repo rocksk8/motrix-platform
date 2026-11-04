@@ -487,3 +487,29 @@ def test_listing_without_the_tables_does_not_500(client, world, monkeypatch):
     got = _list(client, world.admin, world.cid)
     assert got["items"] == [] and got["canDirect"] is True
     assert client.delete(f"/api/dev-logs/{world.log}", headers=world.a).status_code == 204
+
+
+def test_migration_0004_on_a_populated_crm_v3_database_keeps_every_existing_row(client, world):
+    """票 §1 的「含既有資料的庫實測」：把這個已經過 0001～0003 的真庫（有案件、開發記錄、進度回報、通知）倒回 crm v3，
+    再用真正的模組 migration 執行器（core.migrations.run_all）跑一次 ⇒ crm 3→4、兩張新表出現、既有資料逐列不變；再跑一次什麼都不動。"""
+    from core import migrations as mg
+    _x("INSERT INTO dev_case_progress (case_id, author_id, content, created_at) VALUES (?,?,?,?)", world.cid, world.ida, "舊進度", "2026-11-01 09:00:00")
+    _make_log(client, world.a, world.cid, world.ida, content="第二筆舊紀錄")
+    snap = {t: _q("SELECT * FROM %s ORDER BY id" % t) for t in ("dev_cases", "dev_logs", "dev_case_progress", "users")}
+    assert snap["dev_logs"] and snap["dev_case_progress"]
+    _x("DROP TABLE dev_log_directive_target")
+    _x("DROP TABLE dev_log_directive")
+    _x("UPDATE module_schema_versions SET version=3 WHERE module='crm'")
+    conn = db.get_db()
+    try:
+        ran = mg.run_all(conn)
+        conn.commit()
+        assert ran.get("crm") == (3, 4), ran
+        assert mg.current_version(conn, "crm") == 4
+        assert mg.run_all(conn).get("crm") is None                                   # 再跑：版號已前進，什麼都不做
+    finally:
+        conn.close()
+    assert {t: _q("SELECT * FROM %s ORDER BY id" % t) for t in snap} == snap          # 既有資料逐列逐欄不變
+    cols = {r["name"] for r in _q("PRAGMA table_info(dev_log_directive_target)")}
+    assert {"must_reply", "replied_at", "owner_unit_id"} <= cols
+    assert _direct(client, world.admin, world.cid, world.log, targets=[_t(world.ida)]).status_code == 201     # 遷移後功能可用
