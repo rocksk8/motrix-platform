@@ -76,6 +76,7 @@
     "daily_task_edit_log",
     "daily_tasks",
     "departments",
+    "dev_case_progress",
     "dev_cases",
     "dev_logs",
     "divisions",
@@ -227,6 +228,7 @@
     "custom_records",
     "daily_task_edit_log",
     "departments",
+    "dev_case_progress",
     "dev_logs",
     "duty_roles",
     "edit_presence",
@@ -12592,121 +12594,139 @@
    "routes": [
     {
      "func": "list_dev_cases",
-     "line": 309,
+     "line": 397,
      "method": "GET",
      "path": "/api/dev-cases"
     },
     {
      "func": "create_dev_case",
-     "line": 339,
+     "line": 428,
      "method": "POST",
      "path": "/api/dev-cases"
     },
     {
      "func": "get_dev_case",
-     "line": 378,
+     "line": 467,
      "method": "GET",
      "path": "/api/dev-cases/{case_id}"
     },
     {
      "func": "update_dev_case",
-     "line": 393,
+     "line": 482,
      "method": "PUT",
      "path": "/api/dev-cases/{case_id}"
     },
     {
      "func": "request_dev_case_delete",
-     "line": 436,
+     "line": 525,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/request-delete"
     },
     {
      "func": "cancel_dev_case_delete",
-     "line": 471,
+     "line": 560,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/cancel-delete"
     },
     {
      "func": "approve_dev_case_delete",
-     "line": 504,
+     "line": 593,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/approve-delete"
     },
     {
      "func": "update_dev_case_status",
-     "line": 552,
+     "line": 641,
      "method": "PATCH",
      "path": "/api/dev-cases/{case_id}/status"
     },
     {
+     "func": "assign_dev_case",
+     "line": 671,
+     "method": "PATCH",
+     "path": "/api/dev-cases/{case_id}/assign"
+    },
+    {
+     "func": "list_dev_case_progress",
+     "line": 774,
+     "method": "GET",
+     "path": "/api/dev-cases/{case_id}/progress"
+    },
+    {
+     "func": "add_dev_case_progress",
+     "line": 792,
+     "method": "POST",
+     "path": "/api/dev-cases/{case_id}/progress"
+    },
+    {
      "func": "mark_converted",
-     "line": 582,
+     "line": 831,
      "method": "PATCH",
      "path": "/api/dev-cases/{case_id}/convert"
     },
     {
      "func": "request_dev_case_relink",
-     "line": 621,
+     "line": 870,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/request-relink-quote"
     },
     {
      "func": "cancel_dev_case_relink",
-     "line": 666,
+     "line": 915,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/cancel-relink-quote"
     },
     {
      "func": "approve_dev_case_relink",
-     "line": 699,
+     "line": 948,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/approve-relink-quote"
     },
     {
      "func": "list_pending_logs",
-     "line": 757,
+     "line": 1006,
      "method": "GET",
      "path": "/api/dev-logs/pending"
     },
     {
      "func": "dev_crm_activity_stats",
-     "line": 773,
+     "line": 1022,
      "method": "GET",
      "path": "/api/dev-crm/activity-stats"
     },
     {
      "func": "list_dev_logs",
-     "line": 851,
+     "line": 1100,
      "method": "GET",
      "path": "/api/dev-cases/{case_id}/logs"
     },
     {
      "func": "create_dev_log",
-     "line": 871,
+     "line": 1120,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/logs"
     },
     {
      "func": "update_dev_log",
-     "line": 966,
+     "line": 1215,
      "method": "PUT",
      "path": "/api/dev-logs/{log_id}"
     },
     {
      "func": "delete_dev_log",
-     "line": 998,
+     "line": 1247,
      "method": "DELETE",
      "path": "/api/dev-logs/{log_id}"
     },
     {
      "func": "delete_dev_log_file",
-     "line": 1028,
+     "line": 1277,
      "method": "DELETE",
      "path": "/api/dev-logs/{log_id}/files/{file_id}"
     },
     {
      "func": "approve_dev_log",
-     "line": 1056,
+     "line": 1305,
      "method": "PATCH",
      "path": "/api/dev-logs/{log_id}/approve"
     }
@@ -12740,6 +12760,7 @@
    "tables_w": [
     "audit_log",
     "customers",
+    "dev_case_progress",
     "dev_cases",
     "dev_logs"
    ],
@@ -12748,6 +12769,7 @@
     "config_change_events",
     "config_changes",
     "customers",
+    "dev_case_progress",
     "dev_cases",
     "dev_logs",
     "duty_roles",
@@ -27942,6 +27964,23 @@
    "tables_w": [],
    "writers": [
     "router:org_structure"
+   ]
+  },
+  "table:dev_case_progress": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [
+    "core:db"
+   ],
+   "path": "backend/modules/crm/migrations/0003_dev_case_progress.py:27",
+   "readers": [
+    "core:archive"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:crm/api"
    ]
   },
   "table:dev_cases": {

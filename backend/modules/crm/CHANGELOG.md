@@ -1,6 +1,6 @@
 # 業務開發 更新紀錄
 
-## (next:minor) — 2026-11-04 10:55（wip/hichan3-dev-case-progress-v2：業務開發案件「指派／進度回報」重設計，見 docs/platform/plans/DEV-CASE-PROGRESS-REDESIGN-PLAN.md）
+## 1.1.0 — 2026-11-04 10:55（wip/hichan3-dev-case-progress-v2：業務開發案件「指派／進度回報」重設計，見 docs/platform/plans/DEV-CASE-PROGRESS-REDESIGN-PLAN.md）
 - 新增：`migrations/0003_dev_case_progress.py`（`module_schema_versions.crm` 2→3，冪等）：新表 `dev_case_progress(id, case_id, author_id, content, created_at)`（進度回報歷史，只增不改不刪）；`dev_cases` 加 `assigned_at`／`assigned_by`（只在換人、首次指派、取消指派時更新）。既有 `progress_report` 非空的案件搬成第一筆進度（作者＝當時的 `assigned_to`、沒有被指派人則留空顯示「（舊資料）」；時間＝`updated_at`），已指派案件的 `assigned_at` 設成 `updated_at`（遷移當下不會把有回報的案件誤判逾期）。舊欄位 `progress_report` 保留不再使用。
 - 路由（破壞性變更，僅限本模組前端使用）：**移除** `PATCH /api/dev-cases/{id}/progress`（整段覆寫、管理員可代填）；**新增** `POST /api/dev-cases/{id}/progress`（新增一筆；**只有目前被指派人本人可以；不是被指派人的管理員（含 superadmin）403，管理員本人就是被指派人時可寫**；內容 1～4000 字不得空白）與 `GET /api/dev-cases/{id}/progress`（歷史，新到舊，依 `row_access` 可見者）。沒有修改／刪除端點：寫錯就再新增一筆。
 - 案件回傳欄位：`progressReport` 移除；新增 `currentProgress`（目前被指派人自指派之後寫的最新一筆，沒有＝null）、`progressCount`、`overdueDays`、`assignedAt`、`assignedById`、`assignedByName`。

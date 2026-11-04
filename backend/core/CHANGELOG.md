@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-11-04 10:55（wip/hichan3-dev-case-progress-v2；業務開發案件指派／進度回報重設計）
+## 1.150 — 2026-11-04 10:55（wip/hichan3-dev-case-progress-v2；業務開發案件指派／進度回報重設計）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.notify_dev_case_reply_overdue`（回覆期限已過未回報的提醒信，`helpers/__init__.py` 匯出）；`helpers.mail_types` 新登記 `dev_case_reply_overdue`；`helpers.notification_prefs.EVENT_GROUPS`「案件與到期提醒」群組加一行 `dev_case_reply_overdue`（帳號通知偏好可關）；`helpers.audit._NOTIF_SOURCE_CHECK` 加 `dev_case_reply_overdue`（案件已刪除時濾掉站內通知）；`archive.py` 備份匯出加「業務開發進度回報」（`dev_case_progress`）；`db.py` `DEMO_CLEARED_TABLES` 加 `dev_case_progress`。
 - 其餘見 `modules/crm/CHANGELOG.md`（migration 0003、進度回報歷史表、指派只有真的變才動作、逾期提醒）。
 
