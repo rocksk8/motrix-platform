@@ -52,6 +52,7 @@
 📌 2026-10-17 21:47：正式機已更新到 cc65003c（第七十二班：系統中心分類清單固定在左側、與系統子頁同位置；驗證工具 final_verify 讀得懂新回報格式；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261017-t72-apply.md；套件 20261017_213316_cc65003c_full；core 1.147→1.148，schema 維持 118；manifest 600→601 筆）⇒ 基準改 cc65003c。
 📌 2026-11-04 10:14：正式機已更新到 514c006b（第七十三班 T73：案件指派端點 PATCH /dev-cases/{id}/assign 與進度 PATCH /dev-cases/{id}/progress，dev_cases 新三欄 assigned_to／reply_deadline／progress_report（既有 125 筆新欄位全空）、指派通知 dev_case_assigned 與對應通知偏好事件（分組「案件與到期提醒」，opt-out 預設開）；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261104-t73-apply.md；套件 20261104_061037_514c006b_full；core 1.148→1.149、crm 1.0.17→1.0.19、analytics 1.0.44→1.0.45（其餘 13 模組不變），schema 維持 118（crm module_schema_versions 1→2）；manifest 601→603 筆；正式機 Claude 依主持「可以套用」執行 apply_update，37 秒成功、無回滾，步驟 3 十六項全過、未登入 assign/progress 401）⇒ 基準改 514c006b。
 📌 2026-11-04 15:27：正式機已更新到 e2e138ec（第七十四班 T74：業務開發案件進度回報改成只增不改不刪的歷史表 dev_case_progress（crm migration 0003），dev_cases 新兩欄 assigned_at／assigned_by，只有被指派人本人可寫（管理員非被指派人唯讀）、指派存檔前先比對沒真的變才寫入／通知、回覆期限不可一開始就逾期、回覆期限過未回報的每日提醒（新 mail type dev_case_reply_overdue）；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261104-t74-apply.md；套件 20261104_150425_e2e138ec_full；core 1.149→1.150、crm 1.0.19→1.1.0（其餘 14 模組不變），schema 維持 118（crm module_schema_versions 2→3）；manifest 603→604 筆；正式機 Claude 依主持「可以套用」執行 apply_update，22 秒成功、無回滾，步驟 3 十六項全過、未登入 assign/progress/GET progress 401、dev_case_progress 套用後＝1（＝套用前非空進度案件數）、assigned_at 補寫 1 筆）⇒ 基準改 e2e138ec。
+📌 2026-11-04 17:53：正式機已更新到 212d3779（第七十五班 T75：開發記錄新增「批示」（crm migration 0004，新表 dev_log_directive／dev_log_directive_target，無既有資料搬遷），新能力 crm.dev_log_directive.comment（預設只有管理員）可下批示、指定通知與回覆對象，批示只有作者／對象／管理員看得到，已有批示的開發記錄刪除改回 409；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261104-t75-apply.md；套件 20261104_173914_212d3779_full；core 1.150→1.151、crm 1.1.0→1.2.0（其餘 14 模組不變），schema 維持 118（crm module_schema_versions 3→4）；manifest 604→605 筆；能力 11→12；正式機 Claude 依主持「可以套用」執行 apply_update，23 秒成功、無回滾，步驟 3 十六項全過、未登入 GET/POST directives、POST replies 皆 401）⇒ 基準改 212d3779。
 """
 import json
 import subprocess
@@ -60,7 +61,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "e2e138ec"
+BASELINE = "212d3779"
 
 
 def baseline_manifest():
