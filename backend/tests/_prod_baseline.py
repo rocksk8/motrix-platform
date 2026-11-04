@@ -51,6 +51,7 @@
 📌 2026-10-17 17:35：正式機已更新到 d81f3200（第七十一班：補登歷史案件畫面修正〔標題顯示將取得的單號、取消勾選還原單號、複製為新單不帶補登註記、補登單可正常改階段〕、報價單清單可作廢補登單〔需填原因、僅最高管理者〕、自動關閉改為到期真的關掉開關並留稽核；補登旗標仍預設關閉；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261017-t71-apply.md；套件 20261017_172123_d81f3200_full；core 1.147 不變、case 1.0.204→1.0.205，schema 維持 118；manifest 599→600 筆）⇒ 基準改 d81f3200。
 📌 2026-10-17 21:47：正式機已更新到 cc65003c（第七十二班：系統中心分類清單固定在左側、與系統子頁同位置；驗證工具 final_verify 讀得懂新回報格式；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261017-t72-apply.md；套件 20261017_213316_cc65003c_full；core 1.147→1.148，schema 維持 118；manifest 600→601 筆）⇒ 基準改 cc65003c。
 📌 2026-11-04 10:14：正式機已更新到 514c006b（第七十三班 T73：案件指派端點 PATCH /dev-cases/{id}/assign 與進度 PATCH /dev-cases/{id}/progress，dev_cases 新三欄 assigned_to／reply_deadline／progress_report（既有 125 筆新欄位全空）、指派通知 dev_case_assigned 與對應通知偏好事件（分組「案件與到期提醒」，opt-out 預設開）；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261104-t73-apply.md；套件 20261104_061037_514c006b_full；core 1.148→1.149、crm 1.0.17→1.0.19、analytics 1.0.44→1.0.45（其餘 13 模組不變），schema 維持 118（crm module_schema_versions 1→2）；manifest 601→603 筆；正式機 Claude 依主持「可以套用」執行 apply_update，37 秒成功、無回滾，步驟 3 十六項全過、未登入 assign/progress 401）⇒ 基準改 514c006b。
+📌 2026-11-04 15:27：正式機已更新到 e2e138ec（第七十四班 T74：業務開發案件進度回報改成只增不改不刪的歷史表 dev_case_progress（crm migration 0003），dev_cases 新兩欄 assigned_at／assigned_by，只有被指派人本人可寫（管理員非被指派人唯讀）、指派存檔前先比對沒真的變才寫入／通知、回覆期限不可一開始就逾期、回覆期限過未回報的每日提醒（新 mail type dev_case_reply_overdue）；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261104-t74-apply.md；套件 20261104_150425_e2e138ec_full；core 1.149→1.150、crm 1.0.19→1.1.0（其餘 14 模組不變），schema 維持 118（crm module_schema_versions 2→3）；manifest 603→604 筆；正式機 Claude 依主持「可以套用」執行 apply_update，22 秒成功、無回滾，步驟 3 十六項全過、未登入 assign/progress/GET progress 401、dev_case_progress 套用後＝1（＝套用前非空進度案件數）、assigned_at 補寫 1 筆）⇒ 基準改 e2e138ec。
 """
 import json
 import subprocess
@@ -59,7 +60,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "514c006b"
+BASELINE = "e2e138ec"
 
 
 def baseline_manifest():
