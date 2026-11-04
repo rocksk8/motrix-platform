@@ -3,7 +3,7 @@
 觀測點是資料庫（`dev_case_progress`、`dev_cases`、`notifications`、`audit_log`）與實際端點／排程呼叫，不只看回應文字。
 
 涵蓋：
-- 進度回報：POST／GET（401、只有目前被指派人可新增、管理員含 superadmin 一律 403、內容 1～4000 字）、只增不改不刪、
+- 進度回報：POST／GET（401、只有目前被指派人可新增、不是被指派人的管理員含 superadmin 403、管理員本人即被指派人 201、內容 1～4000 字）、只增不改不刪、
   新增連動 updated_at、換人後舊進度全留著且「目前進度」只認現任被指派人自指派之後寫的、稽核標籤只放摘要
 - 指派：重存同一組值不動任何東西；換人／取消／只改期限各自的通知（誰收站內、誰收信）；有改動的期限早於今天 400
 - 逾期：端點的 overdueDays 條件（洽談中、期限已過、自指派後沒進度）、每日排程的收件人（含退路）與只提醒一次、換人／改期重新武裝
@@ -153,6 +153,15 @@ def test_only_the_current_assignee_can_add_progress_and_admins_are_read_only(cli
     assert _case(world.cid)["progress_report"] == ""                        # 舊欄位也沒被碰
     r = _post(client, world.a, world.cid)                                    # 正對照：被指派人本人可以
     assert r.status_code == 201, r.text
+
+
+def test_an_admin_who_is_the_current_assignee_can_add_progress(client, world):
+    assert _assign(client, world.admin, world.cid, world.idadmin, FUT()).status_code == 200      # 主持裁示：管理員本人就是現任負責人 ⇒ 可寫
+    r = _post(client, world.admin, world.cid, "管理員自己負責，自己回報")
+    assert r.status_code == 201, r.text
+    assert [p["author_id"] for p in _progress(world.cid)] == [world.idadmin]
+    assert _post(client, world.sup, world.cid, "超管不是被指派人").status_code == 403           # 正對照：別的管理員還是 403
+    assert _post(client, world.a, world.cid, "非被指派人").status_code == 403
 
 
 def test_nobody_can_add_progress_when_the_case_is_unassigned(client, world):
@@ -321,6 +330,28 @@ def test_a_deadline_that_is_changed_to_a_past_date_is_rejected_but_an_unchanged_
     assert bad.status_code == 400 and "格式" in bad.text
 
 
+def test_reassigning_or_first_assigning_with_an_already_past_deadline_is_rejected_but_resaving_the_same_is_a_noop(client, world, sync_mail):
+    _x("UPDATE dev_cases SET reply_deadline=? WHERE id=?", PAST(), world.cid)                    # 舊案：期限早就過了、還沒指派
+    r = _assign(client, world.admin, world.cid, world.ida, PAST())                              # 首次指派沿用過期期限（值沒變）
+    assert r.status_code == 400 and "早於今天" in r.text
+    c = _case(world.cid)
+    assert (c["assigned_to"], c["reply_deadline"]) == (None, PAST()) and _notices("pr_a") == []  # 整筆不生效
+    assert _assign(client, world.admin, world.cid, world.ida, FUT()).status_code == 200
+    _x("UPDATE dev_cases SET reply_deadline=? WHERE id=?", PAST(), world.cid)                    # 期限之後自然過期
+    r = _assign(client, world.admin, world.cid, world.idb, PAST())                              # A→B 期限不變、已過期
+    assert r.status_code == 400 and _case(world.cid)["assigned_to"] == world.ida
+    assert _assign(client, world.admin, world.cid, world.idb, FUT2()).status_code == 200         # 正對照：換人並給未來期限可以
+    assert _assign(client, world.admin, world.cid, None, PAST()).status_code == 200              # 取消指派不檢查期限（期限一併清空）
+    assert _case(world.cid)["reply_deadline"] is None
+
+
+def test_cancelling_clears_the_deadline_even_if_one_is_sent(client, world):
+    assert _assign(client, world.admin, world.cid, world.ida, FUT()).status_code == 200
+    assert _assign(client, world.admin, world.cid, None, FUT2()).status_code == 200
+    c = _case(world.cid)
+    assert (c["assigned_to"], c["reply_deadline"], c["assigned_at"]) == (None, None, None)
+
+
 def test_assign_still_validates_the_target_when_the_assignee_changes(client, world, make_user):
     _login(client, make_user, "pr_nomod", modules=("quotation",))
     assert _assign(client, world.admin, world.cid, 999999, FUT()).status_code == 400
@@ -380,6 +411,19 @@ def test_the_daily_job_notifies_assignee_and_assigner_once_by_site_and_mail(clie
     assert call[0] == cid and call[2] == PAST() and call[3] == 3 and sorted(call[5]) == ["pr_a", "pr_admin"]
     crm._check_dev_case_reply_overdue()                                                      # 再跑一次：同一組合不重複提醒
     assert len(_notices("pr_a", "dev_case_reply_overdue")) == 1 and len(sync_mail.overdue) == 1
+
+
+def test_the_daily_job_ignores_a_report_written_before_the_current_assignment(client, world, sync_mail):
+    cid = world.cid
+    _x("INSERT INTO dev_case_progress (case_id, author_id, content, created_at) VALUES (?,?,?,?)", cid, world.ida, "很久以前寫的", "2026-10-01 09:00:00")
+    _seed_assigned(cid, world.ida, world.idadmin, PAST(), assigned_at="2026-11-01 09:00:00")     # 之後又（重新）指派給同一人，舊回報早於 assigned_at
+    crm._check_dev_case_reply_overdue()
+    (call,) = sync_mail.overdue                                                              # 排程層：舊回報不算，仍要提醒（突變掉 SQL 的 assigned_at 下界就會紅）
+    assert call[0] == cid and sorted(call[5]) == ["pr_a", "pr_admin"]
+    _x("INSERT INTO dev_case_progress (case_id, author_id, content, created_at) VALUES (?,?,?,?)", cid, world.ida, "指派後寫的", "2026-11-02 09:00:00")
+    _seed_assigned(cid, world.ida, world.idadmin, (TODAY() - timedelta(days=1)).isoformat(), assigned_at="2026-11-01 09:00:00")
+    crm._check_dev_case_reply_overdue()
+    assert len(sync_mail.overdue) == 1                                                       # 指派後有回報 ⇒ 不再提醒（正對照）
 
 
 def test_changing_the_deadline_or_the_assignee_rearms_the_reminder(client, world, sync_mail):

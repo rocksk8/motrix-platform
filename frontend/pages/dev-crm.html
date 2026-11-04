@@ -911,7 +911,7 @@
           </div>
 
           <!-- 指派與進度回報（2026-11-03；2026-11-04 重設計）：
-               指派＝僅管理員可編輯（其他人唯讀）；進度＝只有目前被指派人能新增（管理員唯讀），只增不改，每筆帶作者與時間。
+               指派＝僅管理員可編輯（其他人唯讀）；進度＝只有目前被指派人能新增（不是被指派人的管理員唯讀），只增不改，每筆帶作者與時間。
                兩個動作各打各的端點（PATCH /assign、POST /progress），不合併。 -->
           <div class="dc-assign" data-testid="assign-section">
             <div class="dc-assign__box" data-testid="assign-box">
@@ -1615,7 +1615,7 @@ function devCrmPage() {
     progressSaving: false,
     get todayStr() { return MotrixDate.today() },   // 回覆期限日期欄的 min（後端也擋：有改動的期限不可早於今天）
 
-    // 只有目前被指派人本人能新增進度（對應後端 POST /progress）；管理員唯讀（2026-11-04 使用者確認）
+    // 只有目前被指派人本人能新增進度（對應後端 POST /progress）；不是被指派人的管理員唯讀（2026-11-04 使用者確認；管理員本人就是被指派人則可寫）
     get canEditProgress() {
       const c = this.selectedCase
       if (!c) return false
@@ -1677,17 +1677,21 @@ function devCrmPage() {
     async saveAssign() {
       if (!this.selectedCase || !this.isAdmin || this.assignSaving) return
       this.assignSaving = true
+      const caseId = this.selectedCase.id             // 回應回來前使用者可能已切到別的案件
       try {
         const uid = this.assignDraft.userId
         const updated = await this._patchCase('assign', {
           assignedTo: uid === '' ? null : Number(uid),
           replyDeadline: this.assignDraft.deadline || null,
         }, '指派已儲存', '指派失敗')
-        if (updated) {
+        if (updated && this.selectedCase && this.selectedCase.id === caseId) {
           const pending = this.progressDraft          // 保留進度欄尚未儲存的輸入
           this._applyUpdatedCase(updated)
           this._syncDrafts(updated, true)
           this.progressDraft = pending
+        } else if (updated) {                          // 已切到別案 ⇒ 只更新清單那張卡，不動目前開著的案件與草稿
+          const idx = this.cases.findIndex(c => c.id === caseId)
+          if (idx >= 0) this.cases.splice(idx, 1, updated)
         }
       } finally { this.assignSaving = false }
     },
@@ -1697,8 +1701,9 @@ function devCrmPage() {
       const text = (this.progressDraft || '').trim()
       if (!text) { this._toast('請先填寫進度內容'); return }
       this.progressSaving = true
+      const caseId = this.selectedCase.id             // 回應回來前使用者可能已切到別的案件
       try {
-        const r = await fetch('/api/dev-cases/' + this.selectedCase.id + '/progress', {
+        const r = await fetch('/api/dev-cases/' + caseId + '/progress', {
           method: 'POST', headers: this._h(), body: JSON.stringify({ content: text }),
         })
         if (!r.ok) {
@@ -1707,9 +1712,14 @@ function devCrmPage() {
           return
         }
         const d = await r.json()
-        this._applyUpdatedCase(d.case)           // 目前進度、逾期標示隨案件資料更新（同一案件不會重設草稿）
-        this.progressList = [d.entry, ...this.progressList]
-        this.progressDraft = ''
+        if (this.selectedCase && this.selectedCase.id === caseId) {      // 已切到別案 ⇒ 只更新清單那張卡，不動目前開著的案件、歷史與草稿
+          this._applyUpdatedCase(d.case)         // 目前進度、逾期標示隨案件資料更新（同一案件不會重設草稿）
+          this.progressList = [d.entry, ...this.progressList]
+          this.progressDraft = ''
+        } else {
+          const idx = this.cases.findIndex(c => c.id === caseId)
+          if (idx >= 0) this.cases.splice(idx, 1, d.case)
+        }
         this._toast('進度已新增')
       } finally { this.progressSaving = false }
     },

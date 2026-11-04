@@ -677,7 +677,8 @@ def assign_dev_case(case_id: int, body: DevCaseAssignIn, authorization: str = He
     - 對象與期限都沒變 ⇒ 不寫 DB、不稽核、不通知、updated_at 不動（重按一次儲存鍵沒有任何副作用）；
     - 換人（含首次指派、取消指派）⇒ 更新 assigned_at／assigned_by；新負責人站內＋信，前任站內「不再負責」；
     - 只改期限（對象不變）⇒ 只發站內通知給被指派人，不寄信；
-    - 期限「這次有被改動」且早於今天 ⇒ 400（不能一指派就逾期）；沒變的值不檢查。"""
+    - 期限早於今天 ⇒ 400（不能一指派就逾期）：期限這次有被改動，或這次換了人（即使沿用原期限）都檢查；同人同期限原封不動重存＝no-op，不擋；
+    - 取消指派 ⇒ 回覆期限一併清空。"""
     user = _require_dev(authorization)
     if not _is_admin(user):
         raise HTTPException(403, "僅管理員可指派業務開發案件")
@@ -692,9 +693,11 @@ def assign_dev_case(case_id: int, body: DevCaseAssignIn, authorization: str = He
         old_dl = (row["reply_deadline"] if "reply_deadline" in keys else None) or None
         new_to = body.assigned_to
         new_dl = (body.reply_deadline or "").strip() or None
+        if new_to is None:
+            new_dl = None                                                 # 取消指派（或本來就沒人）⇒ 期限一併清空：沒有負責人就沒有回覆期限
         if new_to == old_to and new_dl == old_dl:
             return _case_out(conn, row)                                   # 沒有任何變動
-        if new_dl is not None and new_dl != old_dl:
+        if new_dl is not None and (new_dl != old_dl or new_to != old_to):      # 期限有改，或換人（含首次指派）沿用過期期限：都不能一指派就逾期
             try:
                 if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", new_dl):        # fromisoformat 在 3.11+ 也收 20261201：存進去會讓字串比較的逾期判斷錯位
                     raise ValueError(new_dl)
@@ -787,8 +790,8 @@ def list_dev_case_progress(case_id: int, authorization: str = Header("")):
 
 @router.post("/dev-cases/{case_id}/progress", status_code=201)
 def add_dev_case_progress(case_id: int, body: DevCaseProgressIn, authorization: str = Header("")):
-    """新增一筆進度回報（crm v3，2026-11-04；取代 v2 的 PATCH 整段覆寫）。**只有目前被指派人本人可以新增；管理員（含 superadmin）一律 403**
-    （使用者已確認：管理員唯讀）。只增不改不刪：寫錯就再新增一筆更正。比對 assigned_to 本人，不走 row_access（row_access 給的是完整存取，
+    """新增一筆進度回報（crm v3，2026-11-04；取代 v2 的 PATCH 整段覆寫）。**只有目前被指派人本人可以新增；不是被指派人的管理員（含 superadmin）403**
+    （使用者已確認：管理員唯讀；管理員若「本人就是」被指派人，他是現任負責人，可以寫——主持裁示 2026-11-04）。只增不改不刪：寫錯就再新增一筆更正。比對 assigned_to 本人，不走 row_access（row_access 給的是完整存取，
     業務／企劃不等於被指派回報進度的人）。"""
     user = _require_dev(authorization)
     conn = get_db()
@@ -798,7 +801,7 @@ def add_dev_case_progress(case_id: int, body: DevCaseProgressIn, authorization: 
             raise HTTPException(404, "案件不存在")
         assigned_to = row["assigned_to"] if "assigned_to" in row.keys() else None
         if assigned_to is None or user["id"] != assigned_to:
-            raise HTTPException(403, "僅目前被指派人可新增進度回報（管理員為唯讀）")
+            raise HTTPException(403, "僅目前被指派人可新增進度回報")
         content = (body.content or "").strip()
         if not content:
             raise HTTPException(400, "進度內容不可空白")
