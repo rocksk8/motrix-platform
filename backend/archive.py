@@ -2282,6 +2282,8 @@ def _daily_backup_tables() -> dict:
         "業務開發案件":     "SELECT * FROM dev_cases ORDER BY id",
         "業務開發記錄":     "SELECT * FROM dev_logs ORDER BY id",
         "業務開發進度回報": "SELECT * FROM dev_case_progress ORDER BY id",
+        "業務開發批示":     "SELECT * FROM dev_log_directive ORDER BY id",
+        "業務開發批示對象": "SELECT * FROM dev_log_directive_target ORDER BY id",
         # ── 工作與日誌 ──
         "每日工作":         "SELECT * FROM daily_tasks ORDER BY id",
         "每日工作完成":     "SELECT * FROM daily_task_completions ORDER BY id",

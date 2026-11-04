@@ -199,6 +199,6 @@
 | 19 | K1 顯示名稱為空的帳號看得到業務欄也為空的舊案件（另開題） | CORE-SPEC「已知問題」K1 |
 | 20 | 下一版進行中：模組建構器（A 輸出預覽 be26ee3a、B 同頁拖放）、品牌設定 | RUN-PLAN §5 月台；§6 23:14 |
 | 21 | 補兩項必修的稽核者關閉紀錄：C-M4（對 429d27d1 重跑 2.5／-2.5／1.005 題與突變）、X-1～X-3（AUDIT-X-IP1-4 §6「X 確認」欄）；補齊前 D6「必修全部關閉」在紀錄上不成立 | AUDIT-D-C-P4P5P8 §回覆表 C-M4 列；AUDIT-X-IP1-4-row-access §6；RUN-LOG 2026-09-26 00:40（A：待 X 確認） |
-| 23 | 開發記錄（dc-logs）加「批示」（使用者 2026-11-04 提出；hichan-8 執筆、hichan-6 對碼核對收斂，主持裁示按鈕位置／可見度／刪除限制／範圍／only-知會 5 項開放問題）：另開 `dev_log_directive`／`dev_log_directive_target` 兩張子表（不動 `dev_logs` 本身——它不是 append-only，`POST` 連動客戶拜訪／行事曆／全體 admin 通知／`updated_at`，批示併進去會被誤算成客戶拜訪）；紀錄卡加第三顆「批示」鈕；可見度限作者＋對象＋管理員；批示與回覆都不重置 `dev_cases.updated_at`（避免洗掉 30 天停滯警報）；新能力 `crm.dev_log_directive.comment`，上線當天等價僅管理員；crm 0004 遷移。完整規格見 `docs/platform/plans/DEV-LOG-DIRECTIVE-PLAN.md`。實作：hichan-8；複核：hichan-6 | `docs/platform/plans/DEV-LOG-DIRECTIVE-PLAN.md` |
+| 23 | 開發記錄（dc-logs）加「批示」（使用者 2026-11-04 提出；hichan-8 執筆、hichan-6 對碼核對收斂，主持裁示按鈕位置／可見度／刪除限制／範圍／only-知會 5 項開放問題）：另開 `dev_log_directive`／`dev_log_directive_target` 兩張子表（不動 `dev_logs` 本身——它不是 append-only，`POST` 連動客戶拜訪／行事曆／全體 admin 通知／`updated_at`，批示併進去會被誤算成客戶拜訪）；紀錄卡加第三顆「批示」鈕；可見度限作者＋對象＋管理員；批示與回覆都不重置 `dev_cases.updated_at`（避免洗掉 30 天停滯警報）；新能力 `crm.dev_log_directive.comment`，上線當天等價僅管理員；crm 0004 遷移。完整規格見 `docs/platform/plans/DEV-LOG-DIRECTIVE-PLAN.md`。實作：hichan-8；複核：hichan-9 | `docs/platform/plans/DEV-LOG-DIRECTIVE-PLAN.md` |
 
 > 補（2026-09-27 23:44，主持）：D 建議——稽核關閉一律寫成單行「✅ <編號> 關閉（commit）」，並把 D 的必修掃描腳本收進 tools 當守門（本輪的 5 筆漏記就是靠它找到）。列入下一輪待辦。

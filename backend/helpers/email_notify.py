@@ -1564,6 +1564,24 @@ def notify_dev_case_reply_overdue(case_id: int, case_name: str, reply_deadline: 
     _async_send(to, _mt.subject("dev_case_reply_overdue", f"業務開發案件回覆期限已過：{case_name}"), html)
 
 
+def notify_dev_log_directive(case_id: int, case_name: str, usernames: list, directive_by_display: str = '') -> None:
+    """開發記錄批示 → 通知「要回覆」的對象。本文**不放批示全文**（批示限作者／對象／管理員可見，信件可能被轉寄；
+    全文只在系統裡），只放案名、批示人與請登入查看。只寄 must_reply 的人是呼叫端決定的。"""
+    to = _lookup_emails(usernames, "dev_log_directive")
+    if not to:
+        logger.warning("notify_dev_log_directive: 無有效收件人（case_id=%d）", case_id)
+        return
+    crm_page = f"{_base_url()}/pages/dev-crm.html"
+    html = _build_html("dev_log_directive",
+        "業務開發記錄批示", "請登入系統查看並回覆", "#2F6FD6",
+        [("案件名稱", case_name), ("批示人", directive_by_display or "管理員")],
+        "", crm_page,
+        intro=f"{directive_by_display or '管理員'} 對業務開發案件「{case_name}」的開發記錄下了批示，並請您回覆。內容請登入系統查看。",
+        button_text="前往業務開發",
+    )
+    _async_send(to, _mt.subject("dev_log_directive", f"業務開發記錄批示：{case_name}"), html)
+
+
 def notify_daily_task_edited(
     task_id: int,
     title: str,

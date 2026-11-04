@@ -1,5 +1,16 @@
 # 業務開發 更新紀錄
 
+## (next:minor) — 2026-11-04 13:40（wip/hichan8-dev-log-directive-v1：開發記錄「批示」，見 docs/platform/plans/DEV-LOG-DIRECTIVE-PLAN.md）
+- 新增：`migrations/0004_dev_log_directive.py`（`module_schema_versions.crm` 3→4，冪等）：新表 `dev_log_directive`（批示與回覆同表，`parent_id` 只一層；只增不改不刪）、`dev_log_directive_target`（通知／待回覆對象，`must_reply`、首次回覆時間 `replied_at`，`UNIQUE(directive_id, user_id)`）；兩張都帶 `owner_unit_id`。**不碰 `dev_logs`**（不連動客戶拜訪、行事曆、接洽統計、報價單動態），**不重置 `dev_cases.updated_at`**（那是 30 天停滯警報的依據）。
+- 路由：`GET /api/dev-cases/{id}/directives`（整案批示＋回覆＋對象＋`canDirect` 旗標）、`POST /api/dev-cases/{id}/directives`（下批示）、`POST /api/dev-cases/{id}/directives/{directive_id}/replies`（回覆）。沒有修改／刪除端點：寫錯就再發一筆。
+- 權限：新能力 `crm.dev_log_directive.comment`「對開發記錄下批示」（`module.json`，沿用既有動作 `comment`；legacy＝admin ⇒ 上線當天只有管理員／最高管理者，之後在權限矩陣可勾給別人）。下批示＝業務開發模組 ＋ 此能力 ＋ 看得到該案件；回覆不需要此能力（批示作者與被列為對象的人可回）。對象 1～10 人、不含自己、去重；每人須在職、有業務開發權限（或管理員）、看得到該案件，否則 400 並列出名字。
+- 可見度（使用者裁示）：只有管理員、批示作者、被列為對象的人看得到批示與回覆；其他人 GET 什麼都不回、回覆得到 404（不洩漏存在）。
+- 通知：站內通知給所有對象（`dev_log_directive`／`dev_log_directive_reply`）；信件只寄 `must_reply=1` 的對象（新 mail type `dev_log_directive`，本文不放批示全文）；**不呼叫 `notify_module_activity`**（它會把全文寄給全體 admin）。稽核 `dev_log.directive`／`dev_log.directive_reply`（標籤只放前約 40 字）。
+- 既有行為唯一變動：`DELETE /api/dev-logs/{id}` 若該紀錄已有批示 ⇒ 409（單一陳述 `DELETE … WHERE NOT EXISTS`，與同時新增批示不會交錯；訊息不提「批示」）。`PUT` 編輯不受影響（已知限制：被批示的紀錄仍可被改內容）。
+- 前端 `dev-crm.html`：開發記錄卡「編輯」「刪除」旁加「批示」鈕（有能力才顯示）、批示／回覆串顯示在記錄卡下方（待回覆標示）。
+- 備份／展示庫：`archive.py` 備份匯出加「業務開發批示」「業務開發批示對象」；`db.py` `DEMO_CLEARED_TABLES` 加兩張新表。
+- 測試：`modules/crm/tests/test_dev_log_directive_2026_11_04.py`。
+
 ## 1.1.0 — 2026-11-04 10:55（wip/hichan3-dev-case-progress-v2：業務開發案件「指派／進度回報」重設計，見 docs/platform/plans/DEV-CASE-PROGRESS-REDESIGN-PLAN.md）
 - 新增：`migrations/0003_dev_case_progress.py`（`module_schema_versions.crm` 2→3，冪等）：新表 `dev_case_progress(id, case_id, author_id, content, created_at)`（進度回報歷史，只增不改不刪）；`dev_cases` 加 `assigned_at`／`assigned_by`（只在換人、首次指派、取消指派時更新）。既有 `progress_report` 非空的案件搬成第一筆進度（作者＝當時的 `assigned_to`、沒有被指派人則留空顯示「（舊資料）」；時間＝`updated_at`），已指派案件的 `assigned_at` 設成 `updated_at`（遷移當下不會把有回報的案件誤判逾期）。舊欄位 `progress_report` 保留不再使用。
 - 路由（破壞性變更，僅限本模組前端使用）：**移除** `PATCH /api/dev-cases/{id}/progress`（整段覆寫、管理員可代填）；**新增** `POST /api/dev-cases/{id}/progress`（新增一筆；**只有目前被指派人本人可以；不是被指派人的管理員（含 superadmin）403，管理員本人就是被指派人時可寫**；內容 1～4000 字不得空白）與 `GET /api/dev-cases/{id}/progress`（歷史，新到舊，依 `row_access` 可見者）。沒有修改／刪除端點：寫錯就再新增一筆。
