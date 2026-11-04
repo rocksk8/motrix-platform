@@ -77,7 +77,7 @@ def test_list_splits_linked_from_extra_without_losing_money(W):
 
 # ── 營運報表來源 ───────────────────────────────────────────────────────────
 
-def test_report_entries_split_per_line_and_conserve_each_document(W):
+def test_report_entries_split_per_line_and_conserve_each_document(W, client):
     c, h = W
     ids = _world(c, h)
     ent = _entries()
@@ -116,7 +116,7 @@ def _e11():
     return [e for e in ev if e["event_code"] == "E11"]
 
 
-def test_e11_item_dimension_does_not_change_amounts_or_roles(W):
+def test_e11_item_dimension_does_not_change_amounts_or_roles(W, client):
     c, h = W
     ids = _world(c, h)
     cn = db.get_db()
@@ -198,7 +198,7 @@ def test_picker_actual_amount_only_counts_counted_po_lines_and_is_hidden_without
     assert got["a"]["orderedQty"] == 3 and got["a"]["requestedQty"] == 4
 
 
-def test_only_purchase_orders_can_be_item_cost_even_if_other_kinds_carry_an_item_id_in_storage(W):
+def test_only_purchase_orders_can_be_item_cost_even_if_other_kinds_carry_an_item_id_in_storage(W, client):
     """防線：其他類型的明細就算（資料庫被直接寫入）帶了 itemId，也不當品項實際成本——報表來源、E11、清單都不認。"""
     c, h = W
     po = _approved(c, h, "travel", [_ln(None, 1, unitCost=700)])
