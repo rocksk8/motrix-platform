@@ -1,5 +1,15 @@
 # 業務開發 更新紀錄
 
+## (next:minor) — 2026-11-04 10:55（wip/hichan3-dev-case-progress-v2：業務開發案件「指派／進度回報」重設計，見 docs/platform/plans/DEV-CASE-PROGRESS-REDESIGN-PLAN.md）
+- 新增：`migrations/0003_dev_case_progress.py`（`module_schema_versions.crm` 2→3，冪等）：新表 `dev_case_progress(id, case_id, author_id, content, created_at)`（進度回報歷史，只增不改不刪）；`dev_cases` 加 `assigned_at`／`assigned_by`（只在換人、首次指派、取消指派時更新）。既有 `progress_report` 非空的案件搬成第一筆進度（作者＝當時的 `assigned_to`、沒有被指派人則留空顯示「（舊資料）」；時間＝`updated_at`），已指派案件的 `assigned_at` 設成 `updated_at`（遷移當下不會把有回報的案件誤判逾期）。舊欄位 `progress_report` 保留不再使用。
+- 路由（破壞性變更，僅限本模組前端使用）：**移除** `PATCH /api/dev-cases/{id}/progress`（整段覆寫、管理員可代填）；**新增** `POST /api/dev-cases/{id}/progress`（新增一筆；**只有目前被指派人本人可以；不是被指派人的管理員（含 superadmin）403，管理員本人就是被指派人時可寫**；內容 1～4000 字不得空白）與 `GET /api/dev-cases/{id}/progress`（歷史，新到舊，依 `row_access` 可見者）。沒有修改／刪除端點：寫錯就再新增一筆。
+- 案件回傳欄位：`progressReport` 移除；新增 `currentProgress`（目前被指派人自指派之後寫的最新一筆，沒有＝null）、`progressCount`、`overdueDays`、`assignedAt`、`assignedById`、`assignedByName`。
+- `PATCH /api/dev-cases/{id}/assign` 只有真的變才動作：對象與期限都沒變＝不寫 DB／不稽核／不通知／`updated_at` 不動；換人＝新負責人站內＋信、前任站內「不再負責」；取消指派＝只通知前任（站內）；只改期限＝只通知被指派人（站內，不寄信）。期限早於今天回 400（期限有改動，或換人／首次指派時沿用過期期限都算；同人同期限原封不動重存仍是 no-op）；取消指派時回覆期限一併清空；日期格式嚴格 `YYYY-MM-DD`（Python 3.11 的 `fromisoformat` 也收 `20261201`，存進去會讓逾期判斷的字串比較錯位）。
+- 逾期提醒（新）：洽談中、期限已過（當天不算）、被指派人自指派後沒有任何進度 ⇒ 詳情與清單標紅「逾期 N 天未回報」；每日排程 `_check_dev_case_reply_overdue()`（與停滯提醒同一支排程）提醒一次（站內＋信，新 mail type `dev_case_reply_overdue`），guard key＝案件＋期限＋被指派人，收件人＝被指派人＋指派人，任一方停用或沒有紀錄（舊資料）另加全體 admin。
+- 前端 `dev-crm.html`：進度區改成「目前進度（作者·時間）＋新增輸入（僅被指派人）＋歷史紀錄（可展開）」，不是被指派人的管理員唯讀；清單卡片與詳情顯示逾期標示；期限日期欄 `min`＝今天。
+- 備份／展示庫：`archive.py` 備份匯出加「業務開發進度回報」；`db.py` `DEMO_CLEARED_TABLES` 加 `dev_case_progress`。
+- 測試：`modules/crm/tests/test_dev_case_progress_redesign_2026_11_04.py`（進度權限與內容、只增不改、換人後歷史、指派只有真的變才動作與通知對象、逾期端點與排程收件人／只提醒一次／重新武裝、信件登記與寄信函式、migration 0003 用 T73 之後含舊進度文字的資料實測且冪等）；`test_dev_case_assignment_2026_11_03.py` 的 v2 進度三題移除（由上列取代）、固定日期改相對今天。
+
 ## 1.0.19 — 2026-11-04（train/t73-int；T73 列車整合後第二輪獨立稽核必修修正）
 - 修正（內部邏輯，無新介面）：每日排程 `_check_dev_case_stale()` 的 SELECT 補 `assigned_to`，收件人併入被指派人，
   與 1.0.18 已修正的其他 4 處手列欄位同一模式（獨立稽核 T73A-M1，`docs/platform/audit/AUDIT-pm-sub-t73.md`）。

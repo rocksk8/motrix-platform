@@ -6,14 +6,22 @@
 涵蓋：
 - `PATCH /api/dev-cases/{id}/assign`：非管理員 403；管理員指到不存在／停用者 400、指到有效者 200（回應欄位＋DB＋通知）、
   設 null 取消、案件不存在 404
-- `PATCH /api/dev-cases/{id}/progress`：被指派人／管理員 200 並寫入；建立者（非被指派人、非管理員）與外人 403；案件不存在 404
+- 進度回報（v2 的 PATCH /progress）已由 crm v3 取代，見 test_dev_case_progress_redesign_2026_11_04.py
 - 列權限：被指派人 ≠ 建立者、不在業務／企劃名單、不是管理員 ⇒ 指派前看不到、指派後看得到且享有完整權限
   （能改狀態），取消指派後又看不到
 - 舊資料相容：`dev_cases` 沒有三個新欄位時，GET 單筆／列表不 500
 """
 import sqlite3
+from datetime import date, timedelta
 
 import pytest
+
+def _FUT():
+    return (date.today() + timedelta(days=30)).isoformat()      # 不在 import 時讀時鐘；v3 起有改動的期限早於今天會 400，所以用相對今天的日期
+
+
+def _FUT2():
+    return (date.today() + timedelta(days=45)).isoformat()
 
 
 # ─────────────────────────── helpers ───────────────────────────
@@ -83,7 +91,7 @@ def test_assign_requires_admin(client, make_user):
     tid = _uid("da_target")
 
     for who, h in (("建立者（業務）", owner), ("外人", outsider)):
-        r = _assign(client, h, cid, tid, "2026-12-01")
+        r = _assign(client, h, cid, tid, _FUT())
         assert r.status_code == 403, (who, r.text)
     after = _case_cols(cid)
     assert after["assigned_to"] is None and after["reply_deadline"] is None            # 資料不變
@@ -97,7 +105,7 @@ def test_assign_validates_target_user(client, make_user):
     cid = _make_case(client, owner)
 
     # 不存在的使用者
-    r = _assign(client, admin, cid, 999999, "2026-12-01")
+    r = _assign(client, admin, cid, 999999, _FUT())
     assert r.status_code == 400, r.text
     assert _case_cols(cid)["assigned_to"] is None
 
@@ -110,7 +118,7 @@ def test_assign_validates_target_user(client, make_user):
         conn.commit()
     finally:
         conn.close()
-    r = _assign(client, admin, cid, gone, "2026-12-01")
+    r = _assign(client, admin, cid, gone, _FUT())
     assert r.status_code == 400, r.text
     assert _case_cols(cid)["assigned_to"] is None
     assert _notices("dv_gone") == []
@@ -124,15 +132,15 @@ def test_assign_success_writes_db_response_and_notification(client, make_user):
     tid = _uid("ds_target")
     assert _notices("ds_target") == []
 
-    r = _assign(client, admin, cid, tid, "2026-12-01")
+    r = _assign(client, admin, cid, tid, _FUT())
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["assignedToId"] == tid
     assert body["assignedToName"]                                       # 有顯示名稱（非空）
-    assert body["replyDeadline"] == "2026-12-01"
+    assert body["replyDeadline"] == _FUT()
 
     row = _case_cols(cid)
-    assert row["assigned_to"] == tid and row["reply_deadline"] == "2026-12-01"
+    assert row["assigned_to"] == tid and row["reply_deadline"] == _FUT()
 
     notes = _notices("ds_target")                                       # 觀測點打 notifications 表
     assert len(notes) == 1, notes
@@ -148,10 +156,10 @@ def test_assign_accepts_snake_case_body(client, make_user):
     cid = _make_case(client, owner)
     tid = _uid("dsn_target")
     r = client.patch(f"/api/dev-cases/{cid}/assign", headers=admin,
-                     json={"assigned_to": tid, "reply_deadline": "2026-12-15"})
+                     json={"assigned_to": tid, "reply_deadline": _FUT2()})
     assert r.status_code == 200, r.text
     row = _case_cols(cid)
-    assert row["assigned_to"] == tid and row["reply_deadline"] == "2026-12-15"
+    assert row["assigned_to"] == tid and row["reply_deadline"] == _FUT2()
 
 
 def test_assign_null_unassigns(client, make_user):
@@ -160,7 +168,7 @@ def test_assign_null_unassigns(client, make_user):
     _login(client, make_user, "du_target")
     cid = _make_case(client, owner)
     tid = _uid("du_target")
-    assert _assign(client, admin, cid, tid, "2026-12-01").status_code == 200
+    assert _assign(client, admin, cid, tid, _FUT()).status_code == 200
     assert _case_cols(cid)["assigned_to"] == tid
 
     r = _assign(client, admin, cid, None, None)
@@ -172,51 +180,14 @@ def test_assign_null_unassigns(client, make_user):
 def test_assign_missing_case_is_404(client, make_user):
     admin = _login(client, make_user, "dm_admin", role="admin", modules=None)
     _login(client, make_user, "dm_target")
-    r = _assign(client, admin, 999999, _uid("dm_target"), "2026-12-01")     # 目標使用者有效 ⇒ 404 只可能來自案件
+    r = _assign(client, admin, 999999, _uid("dm_target"), _FUT())     # 目標使用者有效 ⇒ 404 只可能來自案件
     assert r.status_code == 404, r.text
     assert _notices("dm_target") == []
 
 
 # ─────────────────────────── progress ───────────────────────────
-
-def test_progress_assignee_and_admin_can_write(client, make_user):
-    owner = _login(client, make_user, "pg_owner")
-    admin = _login(client, make_user, "pg_admin", role="admin", modules=None)
-    assignee = _login(client, make_user, "pg_assignee")
-    cid = _make_case(client, owner)
-    assert _assign(client, admin, cid, _uid("pg_assignee"), "2026-12-01").status_code == 200
-    assert _case_cols(cid)["progress_report"] == ""                        # 預設空字串
-
-    r = client.patch(f"/api/dev-cases/{cid}/progress", headers=assignee, json={"progressReport": "已拜訪客戶，等報價"})
-    assert r.status_code == 200, r.text
-    assert _case_cols(cid)["progress_report"] == "已拜訪客戶，等報價"
-
-    # 管理員不是被指派人也可以
-    r = client.patch(f"/api/dev-cases/{cid}/progress", headers=admin, json={"progressReport": "管理員補充"})
-    assert r.status_code == 200, r.text
-    assert _case_cols(cid)["progress_report"] == "管理員補充"
-
-
-def test_progress_denied_for_non_assignee_non_admin(client, make_user):
-    owner = _login(client, make_user, "pd_owner")
-    admin = _login(client, make_user, "pd_admin", role="admin", modules=None)
-    _login(client, make_user, "pd_assignee")
-    outsider = _login(client, make_user, "pd_out")
-    cid = _make_case(client, owner)
-    assert _assign(client, admin, cid, _uid("pd_assignee"), None).status_code == 200
-    before = _case_cols(cid)["progress_report"]
-
-    # 建立者有列權限，但既非被指派人也非管理員 ⇒ 403（分辨「回報進度」權限與「看得到」是兩回事）
-    for who, h in (("建立者", owner), ("外人", outsider)):
-        r = client.patch(f"/api/dev-cases/{cid}/progress", headers=h, json={"progressReport": "我亂寫"})
-        assert r.status_code == 403, (who, r.text)
-    assert _case_cols(cid)["progress_report"] == before
-
-
-def test_progress_missing_case_is_404(client, make_user):
-    admin = _login(client, make_user, "pn_admin", role="admin", modules=None)
-    r = client.patch("/api/dev-cases/999999/progress", headers=admin, json={"progressReport": "x"})
-    assert r.status_code == 404, r.text
+# v2 的 PATCH /progress（整段覆寫、管理員可代填）三題已由 crm v3 取代：
+# 見 test_dev_case_progress_redesign_2026_11_04.py（POST/GET、只增不改、管理員唯讀）。
 
 
 # ─────────────────────────── row_access ───────────────────────────
@@ -235,7 +206,7 @@ def test_assignee_gets_full_row_access_until_unassigned(client, make_user):
     assert _case_cols(cid)["status"] != "暫擱置"
 
     # 指派給 B
-    assert _assign(client, admin, cid, bid, "2026-12-01").status_code == 200
+    assert _assign(client, admin, cid, bid, _FUT()).status_code == 200
     assert cid in _ids(client, b)
     assert client.get(f"/api/dev-cases/{cid}", headers=b).status_code == 200
     # 完整權限（與業務／企劃同等）：能改狀態，不是只能看或只能回報進度

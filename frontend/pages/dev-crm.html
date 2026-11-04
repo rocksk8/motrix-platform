@@ -183,6 +183,16 @@
       font-size: 12px; color: var(--text-primary); font-family: var(--font-zh);
       white-space: pre-wrap; word-break: break-word;
     }
+    .dc-progress-meta { font-size: 11px; color: var(--text-dim); font-family: var(--font-zh); margin-top: 2px; }
+    .dc-progress-hist { margin-top: 10px; border-top: 1px dashed var(--border-light); padding-top: 6px; }
+    .dc-progress-hist__head { font-size: 11px; color: var(--accent); cursor: pointer; font-family: var(--font-zh); user-select: none; }
+    .dc-progress-item { padding: 6px 0; border-bottom: 1px solid var(--border-light); }
+    .dc-progress-item:last-child { border-bottom: 0; }
+    .dc-overdue-badge {
+      font-size: 10px; font-weight: 600; font-family: var(--font-zh); margin-left: 8px;
+      padding: 2px 8px; border-radius: 10px; background: var(--danger-light); color: var(--danger);
+    }
+    .dc-case-card__overdue { font-size: 11px; font-weight: 600; color: var(--danger); font-family: var(--font-zh); margin-bottom: 6px; }
 
     /* status badge */
     .dc-badge {
@@ -640,6 +650,8 @@
             </div>
             <div class="dc-case-card__assign" data-testid="card-assign"
                  :class="{'is-set': c.assignedToName}" x-text="assignTag(c)"></div>
+            <div class="dc-case-card__overdue" data-testid="card-overdue"
+                 x-show="c.overdueDays != null" x-text="'逾期 ' + c.overdueDays + ' 天未回報'"></div>
             <div class="dc-case-card__foot">
               <span class="dc-badge"
                 :class="c.status==='成案'?'dc-badge--won':c.status==='未成案'?'dc-badge--lost':c.status==='暫擱置'?'dc-badge--hold':'dc-badge--talk'"
@@ -898,9 +910,9 @@
             </div>
           </div>
 
-          <!-- 指派與進度回報（2026-11-03）：
-               指派＝僅管理員可編輯（其他人唯讀）；進度＝被指派人本人或管理員可編輯，其他人唯讀。
-               兩個儲存動作各打各的端點（/assign、/progress），不合併。 -->
+          <!-- 指派與進度回報（2026-11-03；2026-11-04 重設計）：
+               指派＝僅管理員可編輯（其他人唯讀）；進度＝只有目前被指派人能新增（不是被指派人的管理員唯讀），只增不改，每筆帶作者與時間。
+               兩個動作各打各的端點（PATCH /assign、POST /progress），不合併。 -->
           <div class="dc-assign" data-testid="assign-section">
             <div class="dc-assign__box" data-testid="assign-box">
               <span class="dc-info-lbl">指派成員／回覆期限</span>
@@ -918,7 +930,7 @@
                     </div>
                     <div>
                       <span class="dc-lbl">回覆期限</span>
-                      <input class="dc-input" type="date" data-testid="assign-deadline" x-model="assignDraft.deadline">
+                      <input class="dc-input" type="date" data-testid="assign-deadline" :min="todayStr" x-model="assignDraft.deadline">
                     </div>
                   </div>
                   <div class="dc-assign__actions">
@@ -937,22 +949,51 @@
             </div>
             <div class="dc-assign__box" data-testid="progress-box">
               <span class="dc-info-lbl">進度回報</span>
+              <span class="dc-overdue-badge" data-testid="overdue-badge"
+                    x-show="selectedCase.overdueDays != null" x-text="'逾期 ' + selectedCase.overdueDays + ' 天未回報'"></span>
+              <div style="margin-top:4px">
+                <template x-if="selectedCase.currentProgress">
+                  <div data-testid="progress-current">
+                    <div class="dc-progress-text" data-testid="progress-current-text" x-text="selectedCase.currentProgress.content"></div>
+                    <div class="dc-progress-meta"
+                         x-text="selectedCase.currentProgress.authorName + ' · ' + (selectedCase.currentProgress.createdAt || '').slice(0,16)"></div>
+                  </div>
+                </template>
+                <template x-if="!selectedCase.currentProgress">
+                  <div class="dc-progress-text" data-testid="progress-empty" style="color:var(--text-dim)"
+                       x-text="selectedCase.assignedToId == null ? '尚未指派' : (selectedCase.progressCount > 0 ? '新負責人尚未回報' : '尚無進度回報')"></div>
+                </template>
+              </div>
               <template x-if="canEditProgress">
-                <div>
-                  <textarea class="dc-textarea" data-testid="progress-text" rows="4"
-                            placeholder="填寫目前進度…" x-model="progressDraft"></textarea>
+                <div style="margin-top:8px">
+                  <textarea class="dc-textarea" data-testid="progress-text" rows="3" maxlength="4000"
+                            placeholder="新增一筆進度回報…（送出後不能修改，寫錯請再新增一筆更正）" x-model="progressDraft"></textarea>
                   <div class="dc-assign__actions">
                     <button class="btn btn-primary btn-sm" data-testid="progress-save"
-                            :disabled="progressSaving" @click="saveProgress()"
-                            x-text="progressSaving ? '儲存中…' : '儲存進度'"></button>
+                            :disabled="progressSaving || !progressDraft.trim()" @click="saveProgress()"
+                            x-text="progressSaving ? '送出中…' : '新增進度回報'"></button>
                   </div>
                 </div>
               </template>
               <template x-if="!canEditProgress">
-                <div class="dc-progress-text" data-testid="progress-readonly"
-                     :style="selectedCase.progressReport ? '' : 'color:var(--text-dim)'"
-                     x-text="selectedCase.progressReport || '尚無進度回報'"></div>
+                <div class="dc-progress-meta" data-testid="progress-readonly-hint" style="margin-top:6px"
+                     x-text="selectedCase.assignedToId == null ? '指派成員後，由被指派人回報進度' : '只有被指派人能新增進度回報'"></div>
               </template>
+              <div class="dc-progress-hist" data-testid="progress-history" x-show="progressList.length > 0">
+                <div class="dc-progress-hist__head" data-testid="progress-history-toggle" @click="progressShowAll = !progressShowAll"
+                     x-text="(progressShowAll ? '▾ ' : '▸ ') + '歷史紀錄（' + progressList.length + ' 筆）'"></div>
+                <template x-if="progressShowAll">
+                  <div>
+                    <template x-for="e in progressList" :key="e.id">
+                      <div class="dc-progress-item" data-testid="progress-item">
+                        <div class="dc-progress-text" x-text="e.content"></div>
+                        <div class="dc-progress-meta"
+                             x-text="(e.legacy ? '（舊資料）' : (e.authorName || ('使用者 ' + e.authorId))) + (!e.legacy && e.authorId !== selectedCase.assignedToId ? '（原負責人）' : '') + ' · ' + (e.createdAt || '').slice(0,16)"></div>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
 
@@ -1566,15 +1607,19 @@ function devCrmPage() {
     // ── 指派／回覆期限／進度回報（2026-11-03）──────────────────────────────
     assignDraft: { userId: '', deadline: '' },
     progressDraft: '',
+    progressList: [],            // 進度歷史（新到舊；含前任寫的）
+    progressShowAll: false,
+    _progressSeq: 0,
     _draftCaseId: null,
     assignSaving: false,
     progressSaving: false,
+    get todayStr() { return MotrixDate.today() },   // 回覆期限日期欄的 min（後端也擋：有改動的期限不可早於今天）
 
-    // 被指派人本人或管理員才能編輯進度（對應後端 /progress 權限）
+    // 只有目前被指派人本人能新增進度（對應後端 POST /progress）；不是被指派人的管理員唯讀（2026-11-04 使用者確認；管理員本人就是被指派人則可寫）
     get canEditProgress() {
       const c = this.selectedCase
       if (!c) return false
-      return this.isAdmin || (c.assignedToId != null && c.assignedToId === this.session.userId)
+      return c.assignedToId != null && c.assignedToId === this.session.userId
     },
 
     // 卡片小標籤：null／空字串一律換成中文提示，不顯示 null／undefined
@@ -1585,14 +1630,28 @@ function devCrmPage() {
     // 草稿只在「換了一個案件」時從 selectedCase 重設；同一案件被列表重抓換物件時
     // 不覆蓋使用者還沒存的輸入。儲存成功後由 saveAssign／saveProgress 各自對齊。
     _syncDrafts(c, force) {
-      if (!c) { this._draftCaseId = null; return }
-      if (!force && c.id === this._draftCaseId) return
+      if (!c) { this._draftCaseId = null; this.progressList = []; return }
+      const changed = c.id !== this._draftCaseId
+      if (!force && !changed) return
       this._draftCaseId = c.id
       this.assignDraft = {
         userId: c.assignedToId != null ? String(c.assignedToId) : '',
         deadline: c.replyDeadline || '',
       }
-      this.progressDraft = c.progressReport || ''
+      if (changed) {
+        this.progressDraft = ''
+        this.progressShowAll = false
+        this.progressList = []
+        this.loadProgress(c.id)
+      }
+    },
+
+    async loadProgress(caseId) {
+      const seq = ++this._progressSeq               // 快速切換案件時，只收最後一次的回應
+      try {
+        const r = await fetch('/api/dev-cases/' + caseId + '/progress', { headers: this._h() })
+        if (r.ok && seq === this._progressSeq) this.progressList = await r.json()
+      } catch (e) { /* 歷史載入失敗不擋主畫面；目前進度在案件資料裡 */ }
     },
 
     _applyUpdatedCase(updated) {
@@ -1618,34 +1677,50 @@ function devCrmPage() {
     async saveAssign() {
       if (!this.selectedCase || !this.isAdmin || this.assignSaving) return
       this.assignSaving = true
+      const caseId = this.selectedCase.id             // 回應回來前使用者可能已切到別的案件
       try {
         const uid = this.assignDraft.userId
         const updated = await this._patchCase('assign', {
           assignedTo: uid === '' ? null : Number(uid),
           replyDeadline: this.assignDraft.deadline || null,
         }, '指派已儲存', '指派失敗')
-        if (updated) {
+        if (updated && this.selectedCase && this.selectedCase.id === caseId) {
           const pending = this.progressDraft          // 保留進度欄尚未儲存的輸入
           this._applyUpdatedCase(updated)
           this._syncDrafts(updated, true)
           this.progressDraft = pending
+        } else if (updated) {                          // 已切到別案 ⇒ 只更新清單那張卡，不動目前開著的案件與草稿
+          const idx = this.cases.findIndex(c => c.id === caseId)
+          if (idx >= 0) this.cases.splice(idx, 1, updated)
         }
       } finally { this.assignSaving = false }
     },
 
     async saveProgress() {
       if (!this.selectedCase || !this.canEditProgress || this.progressSaving) return
+      const text = (this.progressDraft || '').trim()
+      if (!text) { this._toast('請先填寫進度內容'); return }
       this.progressSaving = true
+      const caseId = this.selectedCase.id             // 回應回來前使用者可能已切到別的案件
       try {
-        const updated = await this._patchCase('progress', {
-          progressReport: this.progressDraft || '',
-        }, '進度已儲存', '儲存進度失敗')
-        if (updated) {
-          const pendingAssign = { ...this.assignDraft }   // 保留指派欄尚未儲存的輸入
-          this._applyUpdatedCase(updated)
-          this._syncDrafts(updated, true)
-          this.assignDraft = pendingAssign
+        const r = await fetch('/api/dev-cases/' + caseId + '/progress', {
+          method: 'POST', headers: this._h(), body: JSON.stringify({ content: text }),
+        })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._toast('新增進度失敗：' + ((typeof d.detail === 'string' && d.detail) || r.status))
+          return
         }
+        const d = await r.json()
+        if (this.selectedCase && this.selectedCase.id === caseId) {      // 已切到別案 ⇒ 只更新清單那張卡，不動目前開著的案件、歷史與草稿
+          this._applyUpdatedCase(d.case)         // 目前進度、逾期標示隨案件資料更新（同一案件不會重設草稿）
+          this.progressList = [d.entry, ...this.progressList]
+          this.progressDraft = ''
+        } else {
+          const idx = this.cases.findIndex(c => c.id === caseId)
+          if (idx >= 0) this.cases.splice(idx, 1, d.case)
+        }
+        this._toast('進度已新增')
       } finally { this.progressSaving = false }
     },
 
