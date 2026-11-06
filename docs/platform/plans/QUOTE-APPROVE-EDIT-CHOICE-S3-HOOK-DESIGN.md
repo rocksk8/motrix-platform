@@ -115,4 +115,5 @@ H4 寫的是布林 `reconfirm_on_change`（預設關），H9 另規定「影子�
 4. **偏離 ③：編輯者是最後一個未簽完的人 ⇒ 不自動簽**（S3a 新增分支，`changeLog.editorPending`）。否則舊單（其他層沒有 `signedFp`、永不作廢）上整單全 approved、狀態卻停在簽核中，沒走核准收尾（已送出、PDF、核准通知）。
 5. **範圍**：`caseRecord` 不可由 review-edit 改；`salesPerson` 釘資料庫（簽核人不能藉複查改案件擁有者）；代理人編輯不替本人重簽。
 6. **J1**：`stamp_signed(…, reason_entries)` 與 `reconcile_in_memory(…, reason_entries=)`；`reconcile_txn` 只在 `source==review-edit` 且 on 時才算（純函式維持不讀設定）。
-
+7. **已知限制／S5 前置（K 審 S4 要求）**：**`reconfirm_mode` 不可開成 on，直到 S5 完成。** S5 範圍必須含 `approval-queue.html`，不只報價單頁彈窗：佇列頁現在只送 `expectedFp`、不送 `choice`，on 之後遇到旗標單（複查／轉簽／代理）會一直 409 卻沒有操作路徑。
+8. **S6 清單**：①`X-Approve-Flags` 自訂標頭同源下前端讀得到，日後跨網域要加 `Access-Control-Expose-Headers`；②review-edit 帶 `altPicks` 被忽略的題已補（`test_client_alt_picks_are_ignored_by_review_edit`，靠 `profit_guard.prepare`）。

@@ -138,7 +138,10 @@ def test_editor_who_is_the_last_one_left_is_not_auto_signed_so_the_quote_cannot_
     fp = _get(client, hs[1])["contentFp"]
     r2 = client.post("/api/quotations/%s/approve" % NO, headers=hs[1], json={"expectedFp": fp, "choice": "keep"})
     assert r2.status_code == 200 and r2.json()["allDone"] is True
-    assert _row()[1] == "已送出"
+    d2, st2, _u = _row()
+    assert st2 == "已送出" and d2["approval"]["status"] == "approved" and d2["approval"]["approvedBy"] == names[1], "收尾：狀態、核准人、核准時間"
+    assert d2["approval"]["tiers"][1]["approvers"][0]["signedFp"] == fp
+    assert _notes("fp_req", "quotation_approved"), "收尾：送審人收到核准通知"
 
 
 # ── PM 交辦的順序題：先對帳、再查權限 ──────────────────────────────────────────────
@@ -510,3 +513,14 @@ def test_review_edit_server_owned_key_list_is_pinned():
     """S0 掃描器把 `q[_k]=d[_k]` 的迴圈變數視為「另守」——這題就是那個守門：伺服器自有鍵＝排除清單（扣掉另行處理的 approval／editHistory）＋這 5 個。"""
     from modules.case.api import quotations as Q
     assert set(Q._REVIEW_EDIT_SERVER_KEYS) == (C.EXCLUDED_KEYS - {"approval", "editHistory"}) | {"dealTag", "settlement", "caseRecord", "historical", "salesPerson"}
+
+
+def test_client_alt_picks_are_ignored_by_review_edit(client, make_user):
+    """擇一選定（altPicks／altPickedAt／altPickedBy）只有回簽路徑能寫（H6）：複查編輯經 profit_guard.prepare 一律放回資料庫現值。"""
+    hs, names = _seed(client, make_user, tiers=1)
+    _set_mode(2)
+    r = _edit(client, hs[0], qty=9, mutate=lambda d: d.update(altPicks={"g1": "i1"}, altPickedAt="2026-11-07T00:00:00", altPickedBy="fp_ap0"))
+    assert r.status_code == 200, r.text
+    d, _s, _u = _row()
+    assert d["items"][0]["qty"] == 9
+    assert not {"altPicks", "altPickedAt", "altPickedBy"} & set(d), "用戶端送的擇一選定不存"
