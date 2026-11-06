@@ -5484,7 +5484,7 @@ def approval_queue_items(conn) -> list:
     # 整個查詢丟例外**（`json_valid` 為假就不會執行 json_type／json_extract），其餘一切形狀（壞 JSON、沒有 approval、approval 不是
     # 物件、空字串、NULL）照舊走 Python 的 L1 `approval_json_of`（語意完全不變：壞的跳過＋ERROR、沒有簽核層照列）。
     rows = conn.execute("""
-        SELECT quote_no, customer_name, project_name, total, quote_date, sales_person,
+        SELECT quote_no, customer_name, project_name, total, quote_date, sales_person, data_json,
                CASE WHEN json_valid(data_json) THEN
                     CASE WHEN json_type(data_json, '$.approval') = 'object' THEN json_extract(data_json, '$.approval') END
                END AS appr_fast
@@ -5522,6 +5522,8 @@ def approval_queue_items(conn) -> list:
             "currentApprovers":    f["currentApprovers"],
             # 報價單本身就是案件：詳情的每案守門看這個單號（L1 `_detail_opens`：沒掛案件的單只列給簽核鏈上的人）
             "linkedQuoteNo":       r["quote_no"],
+            # 簽核二擇一 S4b：列表載入當下的內容指紋——列表上的「快速核准」帶它綁版本（列表過期 ⇒ 409＋重載列表）。算不出（壞 JSON）⇒ 省略鍵
+            **({"contentFp": _fp} if (_fp := _CFP.fingerprint_of_json(r["data_json"])) else {}),
         })
 
     ccr_rows = conn.execute("""
