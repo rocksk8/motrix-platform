@@ -128,25 +128,25 @@ def test_effective_approval_is_pure_and_derives_reconfirm():
     d["approval"]["currentTier"] = 1
     C.stamp_signed(d["approval"], [d["approval"]["tiers"][0]["approvers"][0]], d)             # b 簽在目前版本
     snap = copy.deepcopy(d)
-    appr, stale = C.effective_approval(d)
+    appr, stale = C.effective_approval(d, enabled=True)
     assert not stale and appr == d["approval"]                                                 # 內容沒變 ⇒ 原樣
     d["items"][0]["qty"] = 9                                                                   # C 之類的人改了內容
     snap = copy.deepcopy(d)
-    appr, stale = C.effective_approval(d)
+    appr, stale = C.effective_approval(d, enabled=True)
     assert stale and d == snap, "推導不得改傳入資料"
     b = appr["tiers"][0]["approvers"][0]
     assert b["status"] == "pending" and b["reconfirm"] is True and b["prevApprovedAt"] == "t1" and "approvedAt" not in b
     assert appr["currentTier"] == 0, "currentTier 退回第一個有未簽條目的層"
     d["status"] = "簽核中"; d["statusLog"] = [{"x": 1}]                                       # 只動簿記 ⇒ 不過期
     d["items"][0]["qty"] = 2
-    assert C.effective_approval(d)[1] is False
+    assert C.effective_approval(d, enabled=True)[1] is False
 
 
 def test_legacy_entries_without_signed_fp_are_never_stale():
     d = _doc()
     d["approval"] = _approval([{"username": "b", "status": "approved", "approvedAt": "t1"}])
     d["items"][0]["qty"] = 12345
-    appr, stale = C.effective_approval(d)
+    appr, stale = C.effective_approval(d, enabled=True)
     assert not stale and appr["tiers"][0]["approvers"][0]["status"] == "approved"
 
 
@@ -284,7 +284,7 @@ def test_two_tiers_each_signer_is_stamped_with_the_version_they_saw(client, make
     d, _s, _u = _row()
     t1, t2 = (t["approvers"][0] for t in d["approval"]["tiers"])
     assert t1["signedFp"] == fp1 and t2["signedFp"] == fp2, "各人蓋的是自己簽那一刻的版本（S3 靠這個判複查）"
-    assert C.effective_approval(d)[1] is True and C.effective_approval(d)[0]["tiers"][0]["approvers"][0]["status"] == "pending"
+    assert C.effective_approval(d, enabled=True)[1] is True and C.effective_approval(d, enabled=True)[0]["tiers"][0]["approvers"][0]["status"] == "pending"
 
 
 def test_cascade_stamps_every_tier_signed_in_one_call(client, make_user):
@@ -318,7 +318,7 @@ def test_rebaseline_resets_signed_entries_to_current_content_and_keeps_updated_a
     _signed_by_first(client, make_user)
     _edit_items(5)                                                  # 模擬遷移改了內容鍵
     d0, _s, ua0 = _row()
-    assert C.effective_approval(d0)[1] is True                       # 重設之前：第一層會被判過期
+    assert C.effective_approval(d0, enabled=True)[1] is True                       # 重設之前：第一層會被判過期
     conn = db.get_db()
     try:
         from core import txn
@@ -333,7 +333,7 @@ def test_rebaseline_resets_signed_entries_to_current_content_and_keeps_updated_a
     assert d1["approval"]["contentFp"] == fp and d1["approval"]["tiers"][0]["approvers"][0]["signedFp"] == fp
     assert d1["approval"]["tiers"][0]["approvers"][0]["status"] == "approved"
     assert "signedFp" not in d1["approval"]["tiers"][1]["approvers"][0], "還沒簽的不蓋"
-    assert C.effective_approval(d1)[1] is False
+    assert C.effective_approval(d1, enabled=True)[1] is False
     assert ua1 == ua0, "不動 updated_at（PUT 樂觀鎖的版本戳）"
     assert status == "簽核中" and n_audit == 1
     d1["approval"] = d0["approval"]
