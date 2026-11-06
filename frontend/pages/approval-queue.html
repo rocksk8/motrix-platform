@@ -1822,13 +1822,8 @@
               body: JSON.stringify({ approvedByDisplay: this.session.displayName || this.session.username,
                                      cascade: cascadeNos.length > 0,
                                      // 簽核綁版本（簽核二擇一 S1b）：只有報價單、且畫面上的詳情確實是這一筆時才帶；
-<<<<<<< HEAD
-                                     // 詳情沒載到（含列表上的快速核准）＝不綁（稽核記 fpBound:false）
-                                     expectedFp: this.expectedFpFor(item), ...choiceBody })
-=======
                                      // 詳情沒載到（列表上的快速核准）＝綁列表載入當下的指紋（S4b）；都沒有（舊列表資料）＝不綁（稽核記 fpBound:false）
-                                     expectedFp: this.expectedFpFor(item) })
->>>>>>> 3e8c84206 (wip(s4b): 列表帶 contentFp、快速核准綁列表指紋（後端＋佇列頁；測試進行中）)
+                                     expectedFp: this.expectedFpFor(item), ...choiceBody })
             })
             if (!r.ok) {
               // 伺服器要求先選維持／編輯（或要填說明）＝這一筆的詳情沒載或是舊的：載入這一筆的最新詳情後再問一次（只重試一次）。

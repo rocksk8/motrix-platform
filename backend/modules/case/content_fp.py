@@ -125,7 +125,6 @@ def approve_flags(entry: dict, username: str) -> list:
     return out
 
 
-<<<<<<< HEAD
 FLAG_LABELS = {"reconfirm": "內容在你簽過之後有變動", "reassigned": "此單由他人轉簽給你", "delegated": "你是代理簽核"}
 REVIEW_NOTE_MAX = 200                                 # confirmNote 進稽核的字數上限（approve 端點截斷用）
 
@@ -165,7 +164,8 @@ def approve_review(data: dict, entry: dict, *, fp: str = None) -> dict:
     out["needNote"] = bool(summ.get("needs_confirm"))
     out["newReasons"] = ([e["text"] for e in diff.get("added") or []] + [e["after"] for e in diff.get("changed") or []])[:10]
     return out
-=======
+
+
 _FP_CACHE: dict = {}
 _FP_CACHE_MAX = 1024
 
@@ -191,7 +191,6 @@ def fingerprint_of_json(raw):
         _FP_CACHE.clear()                                   # 簡單、有上限：待審核單量小，清空重算的代價可忽略
     _FP_CACHE[key] = fp
     return fp
->>>>>>> 3e8c84206 (wip(s4b): 列表帶 contentFp、快速核准綁列表指紋（後端＋佇列頁；測試進行中）)
 
 
 def stamp_signed(approval: dict, was_pending: list, data: dict, reason_entries=None) -> list:
