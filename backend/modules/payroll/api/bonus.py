@@ -1207,25 +1207,73 @@ def _unique_username_by_display(conn, display_name):
 
 
 def _roles_sales_of(data_json):
-    """案件的「業務負責」`caseRecord.roles.sales` ⇒ `("empty", None)`／`("user", 帳號, 顯示名)`／`("name", None, 顯示名)`。
+    """案件的「業務負責」`caseRecord.roles.sales` ⇒ `(kind, 帳號, 顯示名)`，kind 是：
 
-    新形狀 `{"username","display"}`（CM3）取帳號；未轉換的舊字串只有顯示名。完全沒填（缺、空字串、空白、
-    物件裡帳號與顯示名都空）⇒ `empty`。在 Python 逐筆解析（不新增 SQL `json_extract`；ratchet）：壞的一筆當作讀不到、不拋例外
-    （原本這支的 SQL `json_extract` 遇壞 JSON 會整句失敗；這裡不會讓情況變更糟）。"""
+    - `"empty"`   完全沒填：缺、`null`、空字串／空白、空物件、物件裡全是空字串 ⇒ 呼叫端才可以退回報價人。
+    - `"user"`    新形狀 `{"username","display"}`（CM3）取帳號。
+    - `"name"`    未轉換的舊字串（或只有 display 的物件）只有顯示名。
+    - `"invalid"` **有值但形狀不對／讀不出來**（例如數字、`true`、非空陣列、只有未知鍵的物件，或整份 `data_json` 壞掉）。
+                  🔴 與「有值對不到帳號」同一原則（D2）：**不可以當成沒填而悄悄退回報價人**——呼叫端要不帶人並提示手動指定。
+                  第三個值放可讀的描述（給提示文字用）。
+
+    在 Python 逐筆解析（不新增 SQL `json_extract`；ratchet）；壞的一筆只影響該案，不拋例外（原本這支的 SQL `json_extract`
+    遇壞 JSON 會整句失敗；現在改成「讀不出就不帶人」，比悄悄退回安全）。"""
     import json as _json
+
+    def _empty(v):
+        return v is None or (isinstance(v, str) and not v.strip()) or (isinstance(v, (dict, list)) and not v)
+
     try:
-        rs = ((_json.loads(data_json or "{}") or {}).get("caseRecord") or {}).get("roles", {}).get("sales")
+        d = _json.loads(data_json) if (data_json or "").strip() else {}
     except Exception:                                   # noqa: BLE001
+        return ("invalid", None, "案件資料無法解析")
+    if _empty(d):
         return ("empty", None, "")
+    if not isinstance(d, dict):
+        return ("invalid", None, "案件資料格式不正確")
+    cr = d.get("caseRecord")
+    if _empty(cr):
+        return ("empty", None, "")
+    if not isinstance(cr, dict):
+        return ("invalid", None, "caseRecord 格式不正確")
+    roles = cr.get("roles")
+    if _empty(roles):
+        return ("empty", None, "")
+    if not isinstance(roles, dict):
+        return ("invalid", None, "roles 格式不正確")
+    rs = roles.get("sales")
+    if _empty(rs):
+        return ("empty", None, "")
+    if isinstance(rs, str):
+        return ("name", None, rs.strip())
     if isinstance(rs, dict):
-        un = (rs.get("username") or "").strip()
-        dn = (rs.get("display") or "").strip()
+        un = rs.get("username")
+        dn = rs.get("display")
+        un = un.strip() if isinstance(un, str) else ""
+        dn = dn.strip() if isinstance(dn, str) else ""
         if un:
             return ("user", un, dn or un)
-        return ("name", None, dn) if dn else ("empty", None, "")
-    if isinstance(rs, str) and rs.strip():
-        return ("name", None, rs.strip())
-    return ("empty", None, "")
+        if dn:
+            return ("name", None, dn)
+        if all(_empty(v) for v in rs.values()):         # {"username": "", "display": ""}（清空後留下的空殼）
+            return ("empty", None, "")
+        return ("invalid", None, "內容格式不正確")
+    return ("invalid", None, "內容格式不正確（%s）" % type(rs).__name__)
+
+
+def _quote_people_row(conn, quote_no):
+    """案件的「人員來源」欄位一列：報價人（`sales_person`／`sales_person_id`）、`data_json`（業務負責 `roles.sales` 由 Python 解析）、
+    執行負責 `roles.executor`。`_auto_members` 與 `_sales_owner_note` 共用同一句讀取（不各自新增 quotations 讀取；
+    兩者都只在 `bonus.*` 權限且為最高管理者視圖時被呼叫）。查無回 None。"""
+    # CM3（2026-09-24）：roles.executor 可能是 {"username","display"}（新）或顯示名稱字串（未轉換的舊資料）
+    return conn.execute(
+        "SELECT sales_person, sales_person_id, data_json,"
+        " CASE json_type(data_json, '$.caseRecord.roles.executor') WHEN 'object'"
+        "   THEN json_extract(data_json, '$.caseRecord.roles.executor.username') END AS executor_user,"
+        " CASE json_type(data_json, '$.caseRecord.roles.executor') WHEN 'object'"
+        "   THEN json_extract(data_json, '$.caseRecord.roles.executor.display')"
+        "   ELSE json_extract(data_json, '$.caseRecord.roles.executor') END AS executor"
+        " FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone()
 
 
 def _auto_members(conn, quote_no):
@@ -1234,18 +1282,10 @@ def _auto_members(conn, quote_no):
 
     📜 「業務」來源的兩次裁示（新者取代舊者；見 `modules/payroll/bonus.py::PERSON_SOURCES` 的完整留痕）：
       ① 2026-09-23 使用者：業務獎金→`sales_person`；② 2026-11-06 產品負責人：改讀 `roles.sales`，沒填才退回 `sales_person`。
-    🔴 `roles.sales` **有值但對不到可用帳號**（舊字串查無／同名、帳號已停用或不存在）⇒ **不退回報價人**：
+    🔴 `roles.sales` **有值但對不到可用帳號**（舊字串查無／同名、帳號已停用或不存在、形狀不對／資料讀不出來）⇒ **不退回報價人**：
        退回等於悄悄把錢發給可能是錯的人（營運報表同一原則：不悄悄退回開單者）。只有「完全沒填」才退回。
     只在「尚無分潤單」時被呼叫；已有分潤單的名單在建立當下已凍結（lines），不受這裡影響（不回溯，2026-11-06 裁示 D1）。"""
-    # CM3（2026-09-24）：roles.executor 可能是 {"username","display"}（新）或顯示名稱字串（未轉換的舊資料）
-    row = conn.execute(
-        "SELECT sales_person, sales_person_id, data_json,"
-        " CASE json_type(data_json, '$.caseRecord.roles.executor') WHEN 'object'"
-        "   THEN json_extract(data_json, '$.caseRecord.roles.executor.username') END AS executor_user,"
-        " CASE json_type(data_json, '$.caseRecord.roles.executor') WHEN 'object'"
-        "   THEN json_extract(data_json, '$.caseRecord.roles.executor.display')"
-        "   ELSE json_extract(data_json, '$.caseRecord.roles.executor') END AS executor"
-        " FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone()
+    row = _quote_people_row(conn, quote_no)
     members = {c: [] for c in CATEGORIES}
     notes = {}
     if row is None:
@@ -1256,7 +1296,7 @@ def _auto_members(conn, quote_no):
         sales_user = hit["username"] if hit else None
     elif kind == "name":
         sales_user = _unique_username_by_display(conn, r_name)
-    else:
+    else:                                                # empty（退回報價人）或 invalid（不帶人）
         sales_user = None
     if kind != "empty":
         # 業務負責有值：只認它，不退回報價人
@@ -1264,6 +1304,7 @@ def _auto_members(conn, quote_no):
             members["sales"].append({"username": sales_user, "person_bp": None, "source": "auto_sales"})
         else:
             notes["sales"] = ("案件「業務負責」「%s」的帳號已停用或不存在，請手動指定" % r_name if kind == "user"
+                              else "案件「業務負責」：%s，請手動指定" % r_name if kind == "invalid"
                               else "案件「業務負責」「%s」對不到唯一的帳號，請手動指定" % r_name)
     else:
         # 完全沒填業務負責 ⇒ 退回報價人（原本的解析，逐字不變）
@@ -1299,11 +1340,11 @@ def _sales_owner_note(conn, quote_no, lines):
     業務獎金讀源改 `roles.sales` 之後，**不回溯**已建立的分潤單（名單在建立當下已凍結在 lines）；這行只是讓人看到
     「這張單的業務名單是當時的，現在的業務負責另有其人」，不改名單、不改金額、不擋任何動作。
     現行業務負責沒填、或已在名單內 ⇒ 空字串。"""
-    row = conn.execute("SELECT data_json FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone()
+    row = _quote_people_row(conn, quote_no)
     if row is None:
         return ""
     kind, r_user, r_name = _roles_sales_of(row["data_json"])
-    if kind == "empty":
+    if kind in ("empty", "invalid"):
         return ""
     frozen = [l for l in lines if l["category"] == "sales"]
     if not frozen:

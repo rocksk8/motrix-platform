@@ -45,7 +45,7 @@ def test_card_and_header_show_sales_owner_with_original_labels():
 def test_role_select_label_hint_and_note_present():
     h = _page()
     assert 'for="cm-role-sales">業績歸屬（業務負責）</label>' in h
-    assert 'data-testid="cm-role-sales-hint">清單與頭部的「業務」、營運報表的業績與部門、業務獎金依此欄位；沒填時退回報價單的報價人<' in h
+    assert 'data-testid="cm-role-sales-hint">清單與頭部的「業務」、營運報表的業績與部門依此欄位；業務獎金（尚未建分潤單者）也依此欄位，已建立的不回頭更動。沒填時退回報價人；有填但對不到帳號，獎金不帶人。<' in h
     assert 'data-testid="cm-sales-diff-note"' in h and 'x-text="salesRoleDiffNote"' in h
     assert 'x-model="roleSel.sales"' in h                      # 下拉仍綁同一個 roleSel.sales（只改文字，不改讀寫）
 
@@ -55,9 +55,11 @@ def test_hint_and_note_state_bonus_follows_sales_owner_now_that_bonus_code_switc
     若有人把獎金讀源改回報價人，這兩句就是在說謊 ⇒ 與 payroll 測試（test_bonus_sales_owner_2026_11_06）一起守。"""
     h = _page()
     i = h.index('data-testid="cm-role-sales-hint"')
-    assert "業務獎金" in h[i:i + 160]
+    seg = h[i:i + 260]
+    assert "業務獎金（尚未建分潤單者）也依此欄位，已建立的不回頭更動" in seg and "有填但對不到帳號，獎金不帶人" in seg
     biz = BIZ_JS.read_text(encoding="utf-8")
-    assert "業務獎金依業務負責" in biz[biz.index("get salesRoleDiffNote()"):]
+    tail = biz[biz.index("get salesRoleDiffNote()"):]
+    assert "業務獎金（尚未建立分潤單者）依業務負責，已建立的分潤單不回頭更動" in tail      # 與 D1 不回溯一致：不可寫成無條件的「獎金依業務負責」
     payroll = (ROOT / "backend" / "modules" / "payroll" / "api" / "bonus.py").read_text(encoding="utf-8")
     assert "_roles_sales_of(row[\"data_json\"])" in payroll             # 獎金帶入確實讀 roles.sales
 
@@ -132,7 +134,7 @@ def test_display_priority_and_note_matrix():
     header = [x["header"] for x in r]
     card = [x["card"] for x in r]
     assert [note[i] for i in (0, 2, 4, 5, 6, 8, 9)] == [""] * 7
-    assert note[1] == "報價人（黃玉龍）與業務負責（高晟耀）不是同一人：清單、營運報表的業績與部門、業務獎金依業務負責。"
+    assert note[1] == "報價人（黃玉龍）與業務負責（高晟耀）不是同一人：清單、營運報表的業績與部門依業務負責；業務獎金（尚未建立分潤單者）依業務負責，已建立的分潤單不回頭更動。"
     assert "高晟耀" in note[3] and "kao" in note[7]
     assert header == ["黃玉龍", "高晟耀", "黃玉龍", "高晟耀", "黃玉龍", "高晟耀", "黃玉龍", "kao", "", ""]
     assert card == ["黃玉龍", "高晟耀", "黃玉龍", "高晟耀", "黃玉龍", "高晟耀", "黃玉龍", "kao", "", ""]

@@ -162,28 +162,61 @@ def test_person_sources_comment_keeps_both_rulings_and_legacy_path_is_marked_fro
 
 
 # ── _roles_sales_of 單元 ─────────────────────────────────────────────────────
-@pytest.mark.parametrize("raw,expect", [
-    ({"username": "u1", "display": "甲"}, ("user", "u1", "甲")),
-    ({"username": "u1"}, ("user", "u1", "u1")),
-    ({"display": "乙"}, ("name", None, "乙")),
-    ({"username": "", "display": ""}, ("empty", None, "")),
-    ("丙", ("name", None, "丙")),
-    ("  ", ("empty", None, "")),
-    ("", ("empty", None, "")),
-    (None, ("empty", None, "")),
-    ({}, ("empty", None, "")),
-    (123, ("empty", None, "")),
+@pytest.mark.parametrize("raw,kind", [
+    ({"username": "u1", "display": "甲"}, "user"),
+    ({"username": "u1"}, "user"),
+    ({"display": "乙"}, "name"),
+    ("丙", "name"),
+    # 完全沒填 ⇒ empty（才可以退回報價人）
+    ({"username": "", "display": ""}, "empty"),
+    ("  ", "empty"), ("", "empty"), (None, "empty"), ({}, "empty"), ([], "empty"),
+    # 有值但形狀不對 ⇒ invalid（K 審 1a：不可以當成沒填而悄悄退回報價人）
+    (123, "invalid"), (0, "invalid"), (True, "invalid"), (False, "invalid"), (1.5, "invalid"),
+    (["高晟耀"], "invalid"), ([{"username": "u1"}], "invalid"),
+    ({"foo": "bar"}, "invalid"), ({"username": 7, "display": ["x"]}, "invalid"),
 ])
-def test_roles_sales_of_shapes(raw, expect):
+def test_roles_sales_of_shapes(raw, kind):
     from modules.payroll.api import bonus
     dj = json.dumps({"caseRecord": {"roles": {"sales": raw}}}, ensure_ascii=False)
-    assert bonus._roles_sales_of(dj) == expect
+    assert bonus._roles_sales_of(dj)[0] == kind, (raw, bonus._roles_sales_of(dj))
 
 
-@pytest.mark.parametrize("dj", ["", "{not json", "null", "[]", json.dumps({"caseRecord": None}), json.dumps({"caseRecord": {"roles": None}})])
-def test_roles_sales_of_broken_or_missing_is_empty_not_exception(dj):
+def test_roles_sales_of_values():
     from modules.payroll.api import bonus
-    assert bonus._roles_sales_of(dj) == ("empty", None, "")
+    f = lambda raw: bonus._roles_sales_of(json.dumps({"caseRecord": {"roles": {"sales": raw}}}, ensure_ascii=False))
+    assert f({"username": "u1", "display": "甲"}) == ("user", "u1", "甲")
+    assert f({"username": "u1"}) == ("user", "u1", "u1")
+    assert f({"display": "乙"}) == ("name", None, "乙")
+    assert f("丙") == ("name", None, "丙")
+
+
+@pytest.mark.parametrize("dj,kind", [
+    # 整份資料沒有「業務負責」可言 ⇒ empty（本來就沒填）
+    ("", "empty"), (None, "empty"), ("null", "empty"), ("{}", "empty"), ("[]", "empty"),
+    (json.dumps({"caseRecord": None}), "empty"), (json.dumps({"caseRecord": {}}), "empty"),
+    (json.dumps({"caseRecord": {"roles": None}}), "empty"), (json.dumps({"caseRecord": {"roles": {}}}), "empty"),
+    # 讀不出來／結構不對 ⇒ invalid（無法判斷有沒有填，不可悄悄退回報價人）
+    ("{not json", "invalid"), ("123", "invalid"), ('"字串"', "invalid"),
+    (json.dumps({"caseRecord": "x"}), "invalid"), (json.dumps({"caseRecord": {"roles": "x"}}), "invalid"),
+    (json.dumps({"caseRecord": {"roles": [1]}}), "invalid"),
+])
+def test_roles_sales_of_unreadable_or_missing(dj, kind):
+    from modules.payroll.api import bonus
+    assert bonus._roles_sales_of(dj)[0] == kind
+
+
+@pytest.mark.parametrize("label,value", [
+    ("數字", 123), ("零", 0), ("布林", True), ("非空陣列", ["高晟耀"]), ("未知鍵物件", {"foo": "bar"}),
+])
+def test_invalid_shape_is_not_silently_replaced_by_sales_person(client, people, label, value):
+    """K 審 1a：非空但形狀不對 ⇒ 與「有值對不到帳號」同一路——不帶人、提示手動指定，不退回報價人。"""
+    no = "MQ-SO-3" + str(abs(hash(label)) % 1000)
+    _seed_case(no, sales_id=_uid("bc_s1"), sales_name="報價人甲")
+    _set_roles_sales(no, value)
+    got, note = _preview(client, people["bc_sa"], no)
+    assert got == [] and "案件「業務負責」：" in note and "請手動指定" in note, (label, got, note)
+    _set_roles_sales(no, "")                                                           # 正向控制：清空才退回報價人
+    assert _preview(client, people["bc_sa"], no) == (["bc_s1"], "")
 
 
 # ── D1：已建立分潤單的中性註記（只讀、只給最高管理者）────────────────────────────
@@ -223,3 +256,45 @@ def test_note_is_not_shown_to_non_superadmin_scopes(client, people):
     for who in ("bc_cash", "bc_s1"):                       # 出納、名單上的本人
         r = client.get("/api/bonus/cases/MQ-SO-007", headers=_auth(people[who]))
         assert r.status_code == 200 and "salesOwnerNote" not in r.json(), who
+
+
+@pytest.mark.parametrize("status", ["待審核", "待發放", "已發放"])
+def test_existing_award_unchanged_for_every_non_draft_status(client, people, status):
+    """K 審 2：不回溯對待審核／待發放／已發放都成立——改業務負責後 lines、summary、預覽名單都不變，且沒有 autoMembers。"""
+    no = "MQ-SO-1" + str(abs(hash(status)) % 1000)
+    _seed_case(no, net=100, sales_id=_uid("bc_s1"), sales_name="報價人甲")
+    _set_roles_sales(no, {"username": "bc_other", "display": "高晟耀"})
+    assert _create(client, people["bc_sa"], no).status_code == 200
+    _set_status(no, status)
+    get = lambda: client.get(f"/api/bonus/cases/{no}", headers=_auth(people["bc_sa"])).json()
+    prev = lambda: client.post(f"/api/bonus/cases/{no}/preview", headers=_auth(people["bc_sa"]), json={})
+    before, before_prev = get(), prev()
+    assert before_prev.status_code == 200
+    _set_roles_sales(no, {"username": "bc_s1", "display": "改成別人"})
+    after, after_prev = get(), prev()
+    assert after["status"] == status
+    assert after["lines"] == before["lines"] and after["summary"] == before["summary"]
+    assert {l["username"] for l in after["lines"] if l["category"] == "sales"} == {"bc_other"}
+    assert "autoMembers" not in after and "autoMembers" not in before
+    assert after_prev.json() == before_prev.json()                                    # 預覽也是用 lines 的名單，不重新帶入
+    _set_roles_sales(no, "")                                                          # 清空也不動
+    assert get()["lines"] == before["lines"]
+
+
+def test_create_without_members_resolves_roles_sales_at_create_time(client, people):
+    """K 審 2 的提問：預覽與建立之間改了 roles.sales，建立用哪份？
+    畫面的「建立草稿」送空 body（bonus.js createDraft → _post('', {})），伺服器在建立當下**重新解析**；預覽（autoMembers）只是顯示、不會被送回。
+    API 呼叫端若明確帶 members，則以 members 為準。"""
+    _seed_case("MQ-SO-009", net=100, sales_id=_uid("bc_s1"), sales_name="報價人甲")
+    _set_roles_sales("MQ-SO-009", {"username": "bc_other", "display": "高晟耀"})
+    assert _preview(client, people["bc_sa"], "MQ-SO-009")[0] == ["bc_other"]           # 預覽時是 bc_other
+    _set_roles_sales("MQ-SO-009", {"username": "bc_p1", "display": "之後改的人"})      # 預覽與建立之間被改
+    assert _create(client, people["bc_sa"], "MQ-SO-009").status_code == 200           # 空 body（同畫面）
+    lines = client.get("/api/bonus/cases/MQ-SO-009", headers=_auth(people["bc_sa"])).json()["lines"]
+    assert {l["username"] for l in lines if l["category"] == "sales"} == {"bc_p1"}     # 建立當下重新解析的結果
+
+    _seed_case("MQ-SO-010", net=100, sales_id=_uid("bc_s1"), sales_name="報價人甲")
+    _set_roles_sales("MQ-SO-010", {"username": "bc_other", "display": "高晟耀"})
+    assert _create(client, people["bc_sa"], "MQ-SO-010", members={"sales": [{"username": "bc_a1"}]}).status_code == 200
+    lines = client.get("/api/bonus/cases/MQ-SO-010", headers=_auth(people["bc_sa"])).json()["lines"]
+    assert {l["username"] for l in lines if l["category"] == "sales"} == {"bc_a1"}     # 明確帶 members ⇒ 以 members 為準
