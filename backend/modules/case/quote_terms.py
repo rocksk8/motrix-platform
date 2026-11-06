@@ -215,14 +215,32 @@ def discount_review_above() -> int:
     return _strict_number("discount_review_above", 0, 100_000_000, STRICTEST_DISCOUNT_REVIEW_ABOVE, integer=True)
 
 
-def compute_approval_reasons(q: dict, presets: list, default_payment_terms: str) -> list:
-    """移植 quotation-form.html::checkApproval()（不含「已核准就清空」那一段——送審時不會是已核准）。"""
-    reasons = []
+def _item_idents(items) -> list:
+    """每個品項在「原因集合」裡的識別：有 `id` 且不重複 ⇒ `id:<id>`（品項增刪、換位置後仍是同一項）；否則 `idx:<陣列位置>`。"""
+    ids = [(it.get("id") if isinstance(it, dict) else None) for it in items]
+    seen: dict = {}
+    for v in ids:
+        if v is not None and v != "":
+            seen[v] = seen.get(v, 0) + 1
+    return [f"id:{_js_str(v)}" if v is not None and v != "" and seen[v] == 1 else f"idx:{i}" for i, v in enumerate(ids)]
+
+
+def compute_approval_reason_entries(q: dict, presets: list, default_payment_terms: str) -> list:
+    """`compute_approval_reasons` 的結構化版本：回 `[{"key": 穩定鍵, "text": 原因文字}]`，順序與文字**逐字**同 `compute_approval_reasons`。
+    鍵：`validDays`／`margin:<id:…|idx:…>`／`discount`／`tax`／`terms`——同一條規則在內容變動前後鍵不變（文字可以變，例如 20.00%→25.00%），
+    供 `diff_reason_entries` 比對「新增／消失／數字改變」。"""
+    entries = []
+
+    def add(key, text):
+        entries.append({"key": key, "text": text})
+
     min_pct = None                                                # 第一個有成本的品項才讀（預設 30＝今天的寫死值；前端 checkApproval 同源，見 project-margin/config 的 minItemMarginPct）
     _max_days = max_valid_days()                                  # 預設 30＝今天寫死的值（設定 quote_approval.max_valid_days；前端 checkApproval 同源）
     if _js_num(q.get("validDays")) > _max_days:
-        reasons.append(f"有效期限 {_js_str(q.get('validDays'))} 天（超過 {_max_days} 天）")
-    for i, item in enumerate(q.get("items") or []):
+        add("validDays", f"有效期限 {_js_str(q.get('validDays'))} 天（超過 {_max_days} 天）")
+    all_items = q.get("items") or []
+    idents = _item_idents(all_items)
+    for i, item in enumerate(all_items):
         if not isinstance(item, dict) or item.get("type") == "header":
             continue
         if _js_num(item.get("cost")) <= 0:
@@ -230,26 +248,32 @@ def compute_approval_reasons(q: dict, presets: list, default_payment_terms: str)
         if min_pct is None:
             min_pct = min_item_margin_pct()
         if _js_num(item.get("margin")) < min_pct / 100:
-            reasons.append(f"第 {i + 1} 項毛利率 {_js_to_fixed(_js_num(item.get('margin')) * 100, 2)}% 低於 {_js_str(min_pct)}%")
+            add(f"margin:{idents[i]}", f"第 {i + 1} 項毛利率 {_js_to_fixed(_js_num(item.get('margin')) * 100, 2)}% 低於 {_js_str(min_pct)}%")
     if _js_truthy(q.get("showDiscount")) and _js_num(q.get("discount")) > 0:
         if _js_num(q.get("discount")) > discount_review_above():   # 預設 0＝今天的規則（設定 quote_approval.discount_review_above）；只有真的有折讓才讀設定
-            reasons.append(f"含折讓（NT${_js_locale_number(_js_num(q.get('discount')))}）")
+            add("discount", f"含折讓（NT${_js_locale_number(_js_num(q.get('discount')))}）")
     tax_rate = q["taxRate"] if "taxRate" in q else 5
     if _js_num(tax_rate) < 5:
         # AC1：零稅率／免稅是法定稅別，原因寫稅別；舊 1～4% 單維持原文字（前端同一份，parity 題守）。
         from modules.case.quotations import quote_tax_type, TAX_TYPE_LABELS
         kind = quote_tax_type(q)
         if kind in ("zero", "exempt"):
-            reasons.append(f"稅別為{TAX_TYPE_LABELS[kind]}（非應稅 5%）")
+            add("tax", f"稅別為{TAX_TYPE_LABELS[kind]}（非應稅 5%）")
         else:
-            reasons.append(f"調整營業稅額為 {_js_str(tax_rate)}%（標準 5%）")
+            add("tax", f"調整營業稅額為 {_js_str(tax_rate)}%（標準 5%）")
     base = _terms_baseline(q, presets, default_payment_terms)
     changed = [_CT.title(key, q) for key, label in TERMS_FIELD_DEFS if _text(q.get(key)) != _text(base.get(key))]      # 標題：凍結 > 目前範本 > 預設（關著＝label）
     if changed:
         p = _preset_by_key(presets, q.get("termsPresetKey"))
-        reasons.append(f"報價條件已修改，與條款組「{_js_str(p.get('name'))}」不同（{'、'.join(changed)}）" if p
-                       else f"報價條件已修改，非預設內容（{'、'.join(changed)}）")
-    return reasons
+        add("terms", f"報價條件已修改，與條款組「{_js_str(p.get('name'))}」不同（{'、'.join(changed)}）" if p
+            else f"報價條件已修改，非預設內容（{'、'.join(changed)}）")
+    return entries
+
+
+def compute_approval_reasons(q: dict, presets: list, default_payment_terms: str) -> list:
+    """移植 quotation-form.html::checkApproval()（不含「已核准就清空」那一段——送審時不會是已核准）。
+    **照 `item.margin` 欄位判**（前端移植＋parity 題的基準）；伺服器端要用的是 `server_reason_entries`／`with_server_margins`（不信用戶端 margin）。"""
+    return [e["text"] for e in compute_approval_reason_entries(q, presets, default_payment_terms)]
 
 
 def submit_reasons(q: dict, submitter_display: str, presets: list, default_payment_terms: str) -> list:
@@ -263,3 +287,81 @@ def submit_reasons(q: dict, submitter_display: str, presets: list, default_payme
         reasons.insert(0, f"代理送出：由 {submitter_display} 代 {_js_str(q.get('salesPerson'))} 送出"
                           + (f"，原因：{note}" if note else ""))
     return reasons
+
+
+# ── S2：伺服器自己算品項毛利（不信用戶端送來的 `margin`）＋原因集合比對 ──────────────────
+# 提案：docs/platform/plans/QUOTE-APPROVE-EDIT-CHOICE-PROPOSAL.md（S2）。
+
+COST_FACTOR = 1.05             # 品項毛利口徑：成本×1.05（5% 進項稅假設）。前端 quotation-form.html 的 calcItem／unitPrice 輸入框同一條；modules/case/settlement_actuals.ESTIMATE_RATE 同值
+NO_PRICE_MARGIN = -1.0         # 有成本但單價 ≤0／不是數字 ⇒ 毛利記 −100%（任何門檻都會列入；顯示值只為辨識，真實毛利是負無限大）
+
+
+def server_item_margin(cost, unit_price) -> Optional[float]:
+    """伺服器端單項毛利率（小數，0.3＝30%）：`1 − 成本×1.05 ÷ 單價`，四捨五入到 4 位（＝前端 `parseFloat(x.toFixed(4))`，所以誠實資料與前端顯示逐位相同）。
+    只吃成本與單價——**不讀**品項上的 `margin`／`amount`／`unitPriceOverride`（都是用戶端可控）。數量不入參：單價×數量與成本×數量同乘，毛利率與數量無關。
+    成本 ≤0／不是數字 ⇒ None（沒有毛利概念；`compute_approval_reasons` 本來就略過這種品項）。單價 ≤0／不是數字 ⇒ `NO_PRICE_MARGIN`。"""
+    c = _js_num(cost)
+    if math.isnan(c) or c <= 0:
+        return None
+    p = _js_num(unit_price)
+    if math.isnan(p) or p <= 0:
+        return NO_PRICE_MARGIN
+    return float(_js_to_fixed(1 - c * COST_FACTOR / p, 4))
+
+
+def with_server_margins(q: dict) -> dict:
+    """回傳 `q` 的淺拷貝，所有有成本的非標題品項的 `margin` 換成 `server_item_margin(cost, unitPrice)`。**不改傳入的 `q`、也不改要存檔的資料**（存進 data_json 的仍是用戶端欄位，PDF／畫面不變）。"""
+    items = q.get("items")
+    if not isinstance(items, list):
+        return dict(q)
+    out = []
+    for it in items:
+        if isinstance(it, dict) and it.get("type") != "header":
+            m = server_item_margin(it.get("cost"), it.get("unitPrice"))
+            if m is not None:
+                it = dict(it, margin=m)
+        out.append(it)
+    return dict(q, items=out)
+
+
+def server_reason_entries(q: dict, presets: list, default_payment_terms: str) -> list:
+    """「需審核原因」的伺服器版：毛利用 `with_server_margins`，其餘規則同 `compute_approval_reason_entries`。"""
+    return compute_approval_reason_entries(with_server_margins(q), presets, default_payment_terms)
+
+
+def load_terms_settings():
+    """(presets, default_payment_terms)：與 `routers/quotations._apply_server_submit_reasons` 讀的設定同一份（條款組、預設付款條件）。"""
+    from helpers.settings import _get_setting
+    raw = _get_setting("quote_terms_presets", {}) or {}
+    presets = raw.get("presets") if isinstance(raw, dict) else None
+    presets = presets if isinstance(presets, list) else []
+    return presets, (_get_setting("default_payment_terms", DEFAULT_TERMS["paymentTerms"]) or "")
+
+
+def current_reason_entries(data: dict) -> list:
+    """可重複呼叫的介面（給 S3）：輸入目前的 `data_json`（dict），回這一版的原因集合 `[{"key","text"}]`。
+    純讀：不改 `data`、不寫資料庫（只讀設定）；毛利一律伺服器重算。不含「代理送出」那一行（那是送審人身分，不是內容規則）。"""
+    presets, default_pt = load_terms_settings()
+    return server_reason_entries(data, presets, default_pt)
+
+
+def diff_reason_entries(old: list, new: list) -> dict:
+    """比對兩版原因集合（元素 `{"key","text"}`；也接受只有文字的字串，鍵＝文字本身）。
+    回傳 `{"added": [...], "removed": [...], "changed": [{"key","before","after"}], "unchanged": [...]}`：
+    - added：新版有、舊版沒有的鍵；removed：舊版有、新版沒有的鍵；
+    - changed：同一個鍵但文字不同（例：第 2 項毛利率 20.00%→25.00%，仍低於門檻）；unchanged：鍵與文字都同。
+    順序：added／changed／unchanged 依新版順序，removed 依舊版順序。重複鍵以最後一筆為準。"""
+    def norm(lst):
+        d = {}
+        for e in lst or []:
+            if isinstance(e, str):
+                e = {"key": e, "text": e}
+            d[e["key"]] = e["text"]
+        return d
+    o, n = norm(old), norm(new)
+    return {
+        "added": [{"key": k, "text": t} for k, t in n.items() if k not in o],
+        "removed": [{"key": k, "text": t} for k, t in o.items() if k not in n],
+        "changed": [{"key": k, "before": o[k], "after": t} for k, t in n.items() if k in o and o[k] != t],
+        "unchanged": [{"key": k, "text": t} for k, t in n.items() if k in o and o[k] == t],
+    }
