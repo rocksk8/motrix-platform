@@ -298,3 +298,42 @@ def test_create_without_members_resolves_roles_sales_at_create_time(client, peop
     assert _create(client, people["bc_sa"], "MQ-SO-010", members={"sales": [{"username": "bc_a1"}]}).status_code == 200
     lines = client.get("/api/bonus/cases/MQ-SO-010", headers=_auth(people["bc_sa"])).json()["lines"]
     assert {l["username"] for l in lines if l["category"] == "sales"} == {"bc_a1"}     # 明確帶 members ⇒ 以 members 為準
+
+
+def test_sales_owner_note_failure_does_not_break_the_case_page_api(client, people, monkeypatch):
+    """K 審回歸：共用 SELECT（`_quote_people_row`）含 SQL `json_type()`，案件資料壞掉時會丟 `sqlite3.OperationalError: malformed JSON`。
+    `salesOwnerNote` 只是附帶資訊，它失敗不可讓最高管理者連已建分潤單的發放明細都看不到 ⇒ 200、沒有註記、其餘內容照給。
+    （注意：真的把 data_json 弄壞時，`GET /cases/{no}` 更早的 `_settlement_of`〔既有程式，這次沒動〕就會先失敗，到不了註記；
+    所以這裡直接讓共用讀取丟例外來驗證呼叫端的防護。）"""
+    import sqlite3
+    from modules.payroll.api import bonus
+    no = "MQ-SO-800"
+    _seed_case(no, net=100, sales_id=_uid("bc_s1"), sales_name="報價人甲")
+    _set_roles_sales(no, {"username": "bc_other", "display": "高晟耀"})
+    assert _create(client, people["bc_sa"], no).status_code == 200
+    _set_status(no, "待發放")
+    _set_roles_sales(no, {"username": "bc_s1", "display": "改成別人"})
+    ok = client.get(f"/api/bonus/cases/{no}", headers=_auth(people["bc_sa"]))
+    assert ok.status_code == 200 and "salesOwnerNote" in ok.json()                    # 正向控制：沒壞時有註記
+
+    def boom(conn, quote_no):
+        raise sqlite3.OperationalError("malformed JSON")
+    monkeypatch.setattr(bonus, "_quote_people_row", boom)
+    r = client.get(f"/api/bonus/cases/{no}", headers=_auth(people["bc_sa"]))
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert "salesOwnerNote" not in d and d["lines"] == ok.json()["lines"] and d["status"] == "待發放"
+
+
+def test_invalid_hint_text_has_no_python_type_names(client, people):
+    """K 審：提示文字不帶 int／list／dict／caseRecord 之類內部名稱。"""
+    from modules.payroll.api import bonus
+    for raw in (123, True, ["x"], {"foo": 1}):
+        dj = json.dumps({"caseRecord": {"roles": {"sales": raw}}}, ensure_ascii=False)
+        desc = bonus._roles_sales_of(dj)[2]
+        assert desc == "資料格式不正確", (raw, desc)
+        for bad in ("int", "bool", "list", "dict", "str", "caseRecord", "roles", "NoneType"):
+            assert bad not in desc
+    for dj in ("{not json", "123", json.dumps({"caseRecord": "x"}), json.dumps({"caseRecord": {"roles": "x"}})):
+        desc = bonus._roles_sales_of(dj)[2]
+        assert desc in ("資料無法解析", "資料格式不正確"), (dj, desc)

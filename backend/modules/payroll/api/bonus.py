@@ -1216,8 +1216,10 @@ def _roles_sales_of(data_json):
                   🔴 與「有值對不到帳號」同一原則（D2）：**不可以當成沒填而悄悄退回報價人**——呼叫端要不帶人並提示手動指定。
                   第三個值放可讀的描述（給提示文字用）。
 
-    在 Python 逐筆解析（不新增 SQL `json_extract`；ratchet）；壞的一筆只影響該案，不拋例外（原本這支的 SQL `json_extract`
-    遇壞 JSON 會整句失敗；現在改成「讀不出就不帶人」，比悄悄退回安全）。"""
+    在 Python 逐筆解析（不新增 SQL `json_extract`；ratchet）；本函式自己不拋例外。
+    ⚠️ 注意「整份 `data_json` 壞掉」這條 `invalid` 只有**直接呼叫本函式**（單元測試）才會命中：`_auto_members` 走的共用 SELECT
+    （`_quote_people_row`）含 SQL `json_type()`，遇壞 JSON／空字串會先丟例外，到不了這段 Python 判斷——那是沿用的舊行為，這次沒有改。
+    `GET /cases/{no}` 算 `salesOwnerNote` 時同樣可能撞到，所以呼叫端有 try/except（略過註記、記 log，不讓整個 GET 500）。"""
     import json as _json
 
     def _empty(v):
@@ -1226,21 +1228,21 @@ def _roles_sales_of(data_json):
     try:
         d = _json.loads(data_json) if (data_json or "").strip() else {}
     except Exception:                                   # noqa: BLE001
-        return ("invalid", None, "案件資料無法解析")
+        return ("invalid", None, "資料無法解析")
     if _empty(d):
         return ("empty", None, "")
     if not isinstance(d, dict):
-        return ("invalid", None, "案件資料格式不正確")
+        return ("invalid", None, "資料格式不正確")
     cr = d.get("caseRecord")
     if _empty(cr):
         return ("empty", None, "")
     if not isinstance(cr, dict):
-        return ("invalid", None, "caseRecord 格式不正確")
+        return ("invalid", None, "資料格式不正確")
     roles = cr.get("roles")
     if _empty(roles):
         return ("empty", None, "")
     if not isinstance(roles, dict):
-        return ("invalid", None, "roles 格式不正確")
+        return ("invalid", None, "資料格式不正確")
     rs = roles.get("sales")
     if _empty(rs):
         return ("empty", None, "")
@@ -1257,8 +1259,8 @@ def _roles_sales_of(data_json):
             return ("name", None, dn)
         if all(_empty(v) for v in rs.values()):         # {"username": "", "display": ""}（清空後留下的空殼）
             return ("empty", None, "")
-        return ("invalid", None, "內容格式不正確")
-    return ("invalid", None, "內容格式不正確（%s）" % type(rs).__name__)
+        return ("invalid", None, "資料格式不正確")
+    return ("invalid", None, "資料格式不正確")
 
 
 def _quote_people_row(conn, quote_no):
@@ -1691,7 +1693,13 @@ def get_case_bonus(quote_no: str, authorization: str = Header(None)):
             raise HTTPException(404, "找不到這個案件的獎金分潤。")
         out = {"case": case, "status": award["status"], "scope": view["scope"], "lines": view["lines"]}
         if view["scope"] == "all" and award["status"] != "草稿":
-            note = _sales_owner_note(conn, quote_no, lines)       # D1：不回溯，只加中性註記（只給最高管理者）
+            try:
+                note = _sales_owner_note(conn, quote_no, lines)   # D1：不回溯，只加中性註記（只給最高管理者）
+            except Exception:                                     # noqa: BLE001
+                # 註記只是附帶資訊：案件資料壞掉（例如 data_json 不是合法 JSON，共用的 SELECT 內 json_type() 會丟例外）
+                # 不可讓最高管理者連已建分潤單的發放明細都看不到。記 log、不給註記。
+                logger.warning("salesOwnerNote 略過（案件 %s 的資料讀不出）", quote_no, exc_info=True)
+                note = ""
             if note:
                 out["salesOwnerNote"] = note
         if view["scope"] in ("cashier", "all"):
