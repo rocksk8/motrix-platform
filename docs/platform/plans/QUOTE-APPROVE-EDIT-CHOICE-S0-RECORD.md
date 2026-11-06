@@ -83,3 +83,16 @@
 - SQL 靠字串拼接成變數再執行（非 `UPDATE quotations` 字面）的寫法；目前只見 `DataJsonApproval` 一處，已另行釘住。
 - 頂層鍵掃描只認 `X["k"]=`、`X.setdefault/pop("k")`；`X.update({...})`、整份 dict 字面值重組、前端整份送來的鍵都看不到（後者走 PUT 整份取代，登記為 `CONTENT_FULL`，且排除清單是 denylist，未知鍵本來就算內容）。
 - 產生檔（`test_map.json` 等）依 PLAYBOOK §G3 只由列車重產，本分支未提交；列車重產時會納入這支新測試檔。
+
+## 6. S1 執行記錄（2026-11-06；K 審 §I 定案後；不改簽核流向）
+
+**做了**：`modules/case/content_fp.py`（`content_fingerprint`／`key_hashes`／`changed_blocks`／`stamp_signed`／純推導 `effective_approval`／`rebaseline_fingerprint`）；`approve` 可帶 `expectedFp`（不符 409「內容已更新，請重看」，權限檢查之後才比，tiers 與超管無層級兩條路都綁）；簽核時替**這一次簽的**條目蓋 `signedFp`／`signedKeyHashes`（含 cascade），並寫 `approval.contentFp`；`GET /api/quotations/{no}` 待審核／簽核中多回頂層 `contentFp`（在 `data` 外）；`quotation-form.html` 載入時記下、核准時帶上、409 後重載。排除清單依 §I4 定案（13 鍵），S0 守門與 production 常數逐字對齊。
+
+**沒做（刻意）**：`reconcile_in_memory` 與 7 條 `CONTENT_DIRECT` 的掛鉤、S0 守門「必含 reconcile 呼叫」升級——提案 §I7 歸 S3，且掛鉤設計要先送 K 審。`effective_approval` 目前沒有任何端點使用。
+
+**偏離規格／請 K 確認**
+1. `expectedFp` 先不必填（`EXPECTED_FP_REQUIRED=False`）：H3 寫必填，但舊前端／其他入口沒帶會全部 409；所有入口都帶之後再翻。
+2. `tests/platform/unscoped_reads_baseline.json` +1（`rebaseline_fingerprint` 以明確單號讀 quotations）、`MAX_ENTRIES` 849→850：棘輪原則是只減不增，這是例外，需 K 確認。
+3. `rebaseline_fingerprint` 走 `save_quotation_json`（不新增直接寫入點），傳入原 `updated_at` 不動版本戳。
+
+**驗證**：新測試 44 題＋S0 守門 13 題＝57 題；突變 4 組（拿掉 409、拿掉蓋章、`contentFp` 放進 data、拿掉無層級分支 409）皆翻紅。回歸：`tests/test_approval*.py`＋`tests/platform`＋`modules/case/tests`（`-k "not e2e"`）5485 passed／4 failed→修 2（CHANGELOG 須已提交、unscoped 基準）；另 2 項與本案無關：`test_branch_does_not_touch_generated_files`（t76-int 相對 origin/platform 本來就改過產生檔）、`test_prod_status_snapshot_2026_09_30::test_all_fields_present`（S0 基準 commit 上同樣紅）。報價單表單相關 e2e 4 檔 10 題通過。
