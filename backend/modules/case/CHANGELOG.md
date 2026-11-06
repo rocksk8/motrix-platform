@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-07（s4/review-edit；簽核二擇一 S0＋S1＋S1b＋S3b＋S4（複查編輯，K 審通過）＋S5（維持／編輯彈窗）：內容指紋、核准綁版本、內容被改後已簽層回待複查（旗標預設關）；併入 t76-int 的 S2 與業務負責人欄位之後）
+## (next) — 2026-11-07（s4/review-edit；簽核二擇一 S0＋S1＋S1b＋S3b＋S4（複查編輯，K 審通過）＋S4b（列表快速核准綁版本）＋S5（維持／編輯彈窗）：內容指紋、核准綁版本、內容被改後已簽層回待複查（旗標預設關）；併入 t76-int 的 S2 與業務負責人欄位之後）
 - 新增（S0，不改行為）：`tests/test_content_fp_write_paths_s0_2026_11_06.py`——全樹寫 `quotations.data_json` 的 SQL 登記表（29 句／27 函式，含處置類別）、`save_quotation_json` 真實呼叫點（AST）、指紋排除清單與伺服器寫的頂層鍵歸類；新增寫入點或未歸類的鍵＝測試紅。盤點與發現見 `docs/platform/plans/QUOTE-APPROVE-EDIT-CHOICE-S0-RECORD.md`。
 - 新增（S1）：`content_fp.py`——`content_fingerprint`（`data_json` 去排除清單後正規化雜湊，未知鍵算內容）、`key_hashes`／`changed_blocks`、`stamp_signed`、**純推導**的 `effective_approval`（S1 沒有任何端點使用）、`rebaseline_fingerprint(conn, quote_no)`（供會碰簽核中單的遷移呼叫；走寫入漏斗、不動 `updated_at`、同交易寫稽核）。
 - 新增（S1，核准綁版本）：`GET /api/quotations/{no}` 在待審核／簽核中多回頂層 `contentFp`（在 `data` 外面，不會被存檔送回）；`POST /api/quotations/{no}/approve` 可帶 `expectedFp`，與伺服器現算不符 ⇒ 409「內容已更新，請重看」（權限檢查之後才比，不洩漏內容有沒有變）；簽核時替**這一次簽的**條目蓋 `signedFp`／`signedKeyHashes`，並寫 `approval.contentFp`（皆在排除清單內的 `approval` 底下）。沒帶 `expectedFp` 維持原行為（`content_fp.EXPECTED_FP_REQUIRED=False`；所有入口都帶了之後再翻）。報價單表單（quotation-form）載入時記下 `contentFp`、核准時帶上，409 後自動重載。
@@ -22,6 +22,7 @@
 - 新增（S4，J1）：每次簽核（`approve`）與複查編輯的重簽，條目同時記 `signedReasonEntries`＝`quote_terms.current_reason_entries(data)`（只存 `{key,text[,margin|value]}`），作為複查 diff 的基準；算不出來就不記、不影響簽核。
 - 新增（S4，K3 安全關鍵）：`reconfirm_mode=on` 時，目標條目有旗標（`reconfirm` 複查中／`reassigned` 轉簽而來／`delegated` 代理代簽）⇒ `approve` **一律**要 `expectedFp`（等於目前指紋）＋`choice="keep"`，缺任一 ⇒ 409＋`X-Approve-Flags`；`choice` 非 keep ⇒ 400；**不受 `EXPECTED_FP_REQUIRED` 影響**。off／shadow 與今天相同（S5 彈窗上線前不會把轉簽／代理的核准鎖死）。`ApprovalActionBody` 加 `choice`／`confirmNote`；`quotation.approve` 稽核有旗標時記 `flags`／`choice`／`fp`／`confirmNote`（off／shadow 也記旗標，量得出若強制會擋幾次）。
 - 已知限制（S4）：①代理人複查編輯時不替本人重簽（S3a 只比對 `username==編輯者`）；②複查編輯**不能改案件記錄**（`caseRecord` 一律取資料庫，避開階段／檔案／自訂欄位閘門）；③成本仍由用戶端送，伺服器重算防不了壓低成本（J3-3；複查畫面的變更區塊由 S5 列品項層級變動）；④前端尚無複查編輯畫面與 `choice` 彈窗（S5）。**⚠ `reconfirm_mode` 不可開成 on，直到 S5 完成**；**S5 範圍必須含 `approval-queue.html`，不只報價單頁彈窗**——佇列頁現在只送 `expectedFp`、不送 `choice`，mode=on 之後遇到旗標單（複查／轉簽／代理）會一直 409 卻沒有操作路徑。⑤S6 清單：`X-Approve-Flags` 自訂標頭同源下前端讀得到，若日後跨網域要加 `Access-Control-Expose-Headers`。
+- 新增（S4b，快速核准綁版本）：`GET /api/approval-queue` 的報價單列多回 `contentFp`＝**列表載入當下**的內容指紋（`content_fp.fingerprint_of_json`：以 `data_json` 字串雜湊為鍵的行程內快取，上限 1024，列表不因此每筆重新解析；壞 JSON 省略鍵）。佇列頁列表上的「核准」（不開詳情）帶它當 `expectedFp`——列表過期 ⇒ 409 並重載列表（拿到新指紋）再簽；詳情開著時仍用詳情的指紋。補上 S1b 留下的「快速核准稽核記 `fpBound:false`」缺口，**翻 `EXPECTED_FP_REQUIRED` 之前的最後一個已知入口**。
 
 ## 1.0.205 — 2026-10-17（wip/t71-backfill-fixes-r1；補登歷史案件 T71：瀏覽器實測缺陷、清單作廢入口與小修）
 - 新增（列表作廢入口）：報價單列表對補登單（`historical=true`）且為最高管理者時顯示「作廢」鈕，開頁內視窗填原因（≥5 字）後送 `DELETE …?reason=`，進暫存區、單號不回收；一般草稿刪除與非最高管理者行為不變。

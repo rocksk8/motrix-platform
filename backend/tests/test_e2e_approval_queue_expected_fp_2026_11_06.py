@@ -101,3 +101,47 @@ def test_queue_approve_sends_expected_fp_and_reloads_after_409(live_server, make
     a, status = _state()
     assert a["status"] == "approved" and a["signedFp"] == fp2, a
     assert approves[-1].get("expectedFp") == fp2
+
+
+@pytest.mark.e2e
+def test_list_quick_approve_sends_list_fp_and_reloads_list_after_409(live_server, make_user, e2e_browser):
+    """S4b：列表列上的「核准」（沒開詳情）帶的是**列表載入當下**的指紋；列表過期 ⇒ 409＋重載列表（拿到新指紋），再按一次簽成功。"""
+    u, p = make_user(username="aqfp_qa", role="admin", modules=["quotation"])
+    _seed(u)
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, u, p)
+    page.on("dialog", lambda dlg: dlg.accept())
+    approves, queues = [], []
+    page.on("request", lambda rq: approves.append(rq.post_data_json) if rq.method == "POST" and rq.url.endswith("/approve") else None)
+    page.on("response", lambda rs: queues.append(rs) if rs.url.endswith("/api/approval-queue") else None)
+
+    page.goto(f"{live_server}/pages/approval-queue.html")
+    page.wait_for_selector(f'[data-testid="aq-item-{NO}"]', timeout=15000)
+    for _ in range(50):
+        if queues:
+            break
+        page.wait_for_timeout(100)
+    item = [i for g in queues[-1].json()["queue"] for i in g["items"] if i.get("quoteNo") == NO][0]
+    fp1 = item["contentFp"]
+    assert fp1.startswith("1:")
+
+    _edit_qty(5)                                         # 列表載入之後有人改了內容
+    n_q = len(queues)
+    page.click(f'[data-testid="aq-item-{NO}"] button.btn-primary')      # 列表列的「核准」（快速核准，不開詳情）
+    for _ in range(50):
+        if len(queues) > n_q:
+            break
+        page.wait_for_timeout(100)
+    assert approves and approves[0].get("expectedFp") == fp1, "快速核准沒帶列表的指紋：%s" % approves
+    assert _state()[0]["status"] == "pending", "過期的列表指紋被簽過去了"
+    assert len(queues) > n_q, "409 之後沒有重載列表"
+    fp2 = [i for g in queues[-1].json()["queue"] for i in g["items"] if i.get("quoteNo") == NO][0]["contentFp"]
+    assert fp2 != fp1
+
+    page.click(f'[data-testid="aq-item-{NO}"] button.btn-primary')
+    for _ in range(60):
+        if _state()[0]["status"] == "approved":
+            break
+        page.wait_for_timeout(200)
+    a, _st = _state()
+    assert a["status"] == "approved" and a["signedFp"] == fp2 and approves[-1].get("expectedFp") == fp2
