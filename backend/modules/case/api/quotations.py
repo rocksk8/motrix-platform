@@ -1016,10 +1016,26 @@ def list_quotations(
                     _tc_map[_r2["quote_no"]] = ((json.loads(_r2["data_json"] or "{}") or {}).get("tot") or {}).get("totalCost")
                 except Exception:                                  # noqa: BLE001  壞資料／過深的 JSON（RecursionError）只影響該列，不能讓整個選用清單 500
                     _tc_map[_r2["quote_no"]] = None
+    # 業務負責（業績歸屬）：清單卡片的「業務」改顯示 caseRecord.roles.sales（沒填 ⇒ 前端退回 sales_person）。2026-11-06 產品負責人裁示，僅顯示。
+    # 在 Python 端逐筆解析這一頁的 data_json（不新增 SQL json_extract；ratchet）；壞資料只影響該列。
+    _owner_map = {}
+    if rows:
+        _disp = {u["username"]: (u["display_name"] or u["username"]) for u in conn.execute("SELECT username, display_name FROM users")}
+        _nos2 = [r["quote_no"] for r in rows]
+        for _c1 in range(0, len(_nos2), 300):
+            _chunk2 = _nos2[_c1:_c1 + 300]
+            for _r3 in conn.execute("SELECT quote_no, data_json FROM quotations WHERE quote_no IN (%s)" % ",".join("?" * len(_chunk2)), _chunk2):
+                try:
+                    _rs = (((json.loads(_r3["data_json"] or "{}") or {}).get("caseRecord") or {}).get("roles") or {}).get("sales")
+                    _un = role_username(_rs)
+                    _owner_map[_r3["quote_no"]] = (_disp.get(_un) if _un else None) or role_display(_rs)
+                except Exception:                                  # noqa: BLE001  壞資料／過深的 JSON 只影響該列
+                    _owner_map[_r3["quote_no"]] = ""
     conn.close()
     items = []
     for r in rows:
         row = dict(r)
+        row["sales_owner"] = _owner_map.get(row["quote_no"], "")
         row["historical"] = is_historical_json(row.pop("hist_dj", None))
         if masked:
             _mask_money_row(row)
