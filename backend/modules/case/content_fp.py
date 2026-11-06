@@ -7,7 +7,7 @@
 **未知鍵一律算內容**（denylist；預設從嚴）。排除清單鎖在 `tests/test_content_fp_write_paths_s0_2026_11_06.py`。
 
 S1 只提供：指紋／鍵雜湊、簽核條目蓋章（`signedFp`）、**純推導**的 `effective_approval`、`rebaseline_fingerprint`。
-**不**改任何簽核流向：`reconcile`／`invalidate_signatures`／旗標彈窗是 S3 以後（I2：讀路徑只推導、不寫入）。
+S3a（本檔尾）加 `reconcile_in_memory`／`reconfirm_enabled`：**純函式，沒有任何呼叫端**（接線是 S3b；I2：讀路徑只推導、不寫入）。
 
 相容：條目沒有 `signedFp`（S1 上線前簽的）＝**視為與目前相同**（不判過期）；第一次有人蓋章或 `rebaseline_fingerprint` 之後才開始計。
 """
@@ -169,3 +169,202 @@ def rebaseline_fingerprint(conn, quote_no: str, user: dict = None, reason: str =
          "quotation.rebaseline_fp", "quotation", quote_no, quote_no, json.dumps(detail, ensure_ascii=False),
          d["module"], d["case_no"], d["ref_no"]))
     return True
+
+
+# ── S3a：reconcile_in_memory（K2；純函式，**沒有呼叫端**——接線是 S3b）────────────────────────────
+
+REVIEW_ROUNDS_LIMIT = 5                 # H9-③：同一單複查輪次上限；已達上限後的內容變動不再自動作廢，改設 reconfirmSuspended 通知超管
+SOURCE_REVIEW_EDIT = "review-edit"      # S4 的編輯入口傳進來的 source：編輯者「原已簽、正在複查」的條目視為簽新版（H9-①）
+FLAG_GROUP, FLAG_FIELD = "quote_approval", "reconfirm_on_change"
+LOG_CAP = 50                            # changeLog／shadowLog 各保留最近幾筆（避免 data_json 無限長；輪次另由 reviewRounds 計）
+
+
+def reconfirm_enabled(conn=None) -> bool:
+    """旗標 `quote_approval.reconfirm_on_change`（開＝內容變動時作廢已簽、要求複查；關＝影子模式，只記錄）。
+    **嚴格讀取**（`helpers.settings_strict.strict_value`）：讀不到（連線／資料庫錯、欄位尚未註冊、格式不是 0/1/布林）⇒ **開**
+    （最嚴；與 D-K1「讀不到取最嚴格」同方向，不會因為設定壞掉而悄悄放寬）。欄位的預設值（未儲存過時）由設定註冊表決定——S3b 註冊時預設關。
+    S3a 尚未註冊該欄位，所以現在永遠回 True。"""
+    try:
+        from helpers.settings_strict import strict_value
+        own = conn is None
+        if own:
+            from db import get_db
+            conn = get_db()
+        try:
+            v = strict_value(conn, FLAG_GROUP, FLAG_FIELD)
+        finally:
+            if own:
+                conn.close()
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, (int, float)) and v in (0, 1):
+            return bool(v)
+        if isinstance(v, str) and v.strip() in ("0", "1"):
+            return v.strip() == "1"
+        raise ValueError("旗標值不是 0／1：%r" % (v,))
+    except Exception:                                                       # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning("quote_approval.reconfirm_on_change 讀不到，改取最嚴（開）", exc_info=True)
+        return True
+
+
+def _actor_name(actor) -> str:
+    if isinstance(actor, dict):
+        return actor.get("display_name") or actor.get("username") or "system"
+    return str(actor) if actor else "system"
+
+
+def _actor_username(actor):
+    return actor.get("username") if isinstance(actor, dict) else (actor if isinstance(actor, str) else None)
+
+
+def _append_log(appr: dict, key: str, entry: dict) -> None:
+    lst = appr.get(key)
+    lst = lst if isinstance(lst, list) else []
+    lst.append(entry)
+    appr[key] = lst[-LOG_CAP:]
+
+
+def _first_pending_tier(appr: dict):
+    for i, t in enumerate(appr.get("tiers") or []):
+        if isinstance(t, dict) and any(isinstance(a, dict) and a.get("status") != "approved" for a in (t.get("approvers") or [])):
+            return i
+    return None
+
+
+def _old_key_hashes(appr: dict) -> dict:
+    kh = appr.get("keyHashes")
+    if isinstance(kh, dict) and kh:
+        return kh
+    for _t, a in _entries(appr):
+        h = a.get("signedKeyHashes")
+        if isinstance(h, dict) and h:
+            return h
+    return {}
+
+
+def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str = None, enabled: bool = None):
+    """**只改記憶體中的 `data["approval"]`**，不寫資料庫、不呼叫任何 API。回 `(changed, notices)`：
+    `changed`＝approval 有被改（呼叫端要寫回）；`notices`＝要發的通知清單（dict：`type`／`to`／`text`…；S3b 同交易寫站內通知）。
+
+    - 單不在待審核／簽核中、或沒有 `approval.tiers` ⇒ 不動。`status` 沒給就看 `data["status"]`，再沒有才看 `approval.status == "pending"`。
+    - `approval.contentFp` 缺（舊單／剛送審）⇒ **靜默設基準**（`contentFp`／`keyHashes`／`baselineSetBy=source`），不算異動、不作廢。
+    - 指紋與 `contentFp` 相同且（旗標關，或沒有「已簽且 signedFp≠目前」的條目）⇒ no-op（冪等；旗標關時不讀旗標以外的任何東西）。
+    - 內容不同、旗標**關**（影子模式）：只追加 `shadowLog`（`{at, blocks, by, source, fp, wouldInvalidate}`），不改任何條目、不加 `contentRev`；
+      基準 `contentFp`／`keyHashes` 仍前進（否則每次呼叫都會重複記一筆）。
+    - 旗標**開**：
+        · 已簽且 `signedFp`≠目前者 ⇒ pending＋`reconfirm`、留 `prevSignedFp`／`prevApprovedAt`；`currentTier` 退到第一個有未簽條目的層；
+          `contentRev+=1`、`changeLog` 追加 `{at, rev, blocks, by, source, invalidated, resigned}`、`reviewRounds+=1`。
+        · 沒有 `signedFp` 的舊條目**永遠不作廢**。
+        · **補追**：影子模式期間內容改了 N 次、之後切到開——基準已追上，但條目的 `signedFp` 仍是舊的。旗標開之後的下一次 reconcile
+          （即使指紋與基準相同）一次作廢**所有** `signedFp`≠目前者，只算 **1 輪**（`reviewRounds` 只 +1，不補記 N 輪）；`changeLog` 標 `catchUp=True`，
+          區塊名取自各條目的 `signedKeyHashes` 與目前的差異聯集。
+        · **沒有任何條目需要作廢**（還沒人簽、或全是沒有 `signedFp` 的舊條目）：基準仍前進，`contentRev+=1`、`changeLog` 照記，
+          但**不**算一輪複查——`reviewRounds` 不加、**不產生任何通知**。
+        · `source==SOURCE_REVIEW_EDIT` 時，編輯者本人「原已簽（signedFp 過期）或 pending＋reconfirm」的條目改為 approved＋新 `signedFp`（H9-①）；首次待簽的不自動簽。
+        · `reviewRounds` 已達 `REVIEW_ROUNDS_LIMIT` ⇒ 不作廢、不改條目，設 `reconfirmSuspended=True`，通知超管處置（只在第一次設旗標時發）。
+    基準永遠在處理完之後前進到目前內容，所以重複呼叫是冪等的。"""
+    if not isinstance(data, dict):
+        return False, []
+    appr = data.get("approval")
+    if not isinstance(appr, dict) or not isinstance(appr.get("tiers"), list) or not appr["tiers"]:
+        return False, []
+    st = status if status is not None else data.get("status")
+    if not (st in PENDING_STATES if st is not None else appr.get("status") == "pending"):
+        return False, []
+
+    fp, hashes = content_fingerprint(data), key_hashes(data)
+    cur = appr.get("contentFp")
+    if not cur:
+        appr["contentFp"], appr["keyHashes"], appr["baselineSetBy"] = fp, hashes, source
+        return True, []
+    stale = [a for _t, a in _entries(appr) if a.get("status") == "approved" and a.get("signedFp") and a.get("signedFp") != fp]
+    if cur == fp and not stale:
+        return False, []
+    if enabled is None:
+        enabled = reconfirm_enabled()                                       # 只有真的需要判斷時才讀旗標
+    if cur == fp and not enabled:                                           # 影子期間留下的過期條目，旗標還關著：什麼都不做（不重複記錄）
+        return False, []
+
+    catch_up = cur == fp                                                    # 指紋與基準相同卻有過期條目 ⇒ 影子期間累積的變動，旗標剛開
+    if catch_up:
+        bl = set()
+        for a in stale:
+            sh = a.get("signedKeyHashes")
+            if isinstance(sh, dict) and sh:
+                bl.update(changed_blocks(sh, hashes))
+        blocks, known = sorted(bl), bool(bl)
+    else:
+        old_hashes = _old_key_hashes(appr)
+        blocks, known = (changed_blocks(old_hashes, hashes) if old_hashes else []), bool(old_hashes)
+    by = _actor_name(actor)
+    me = _actor_username(actor)
+
+    def finish_baseline():
+        appr["contentFp"], appr["keyHashes"] = fp, hashes
+
+    if not enabled:                                                         # 影子模式：只記錄
+        _append_log(appr, "shadowLog", {"at": now, "blocks": blocks, "by": by, "source": source, "fp": fp,
+                                        "wouldInvalidate": [a.get("username") for a in stale], **({} if known else {"blocksUnknown": True})})
+        finish_baseline()
+        return True, []
+
+    rev = int(appr.get("contentRev") or 0) + 1
+    rounds = int(appr.get("reviewRounds") or 0)
+    base_log = {"at": now, "rev": rev, "blocks": blocks, "by": by, "source": source,
+                **({} if known else {"blocksUnknown": True}), **({"catchUp": True} if catch_up else {})}
+    appr["contentRev"] = rev
+
+    if rounds >= REVIEW_ROUNDS_LIMIT:                                       # 上限：不再自動作廢，改請超管處置
+        first_time = not appr.get("reconfirmSuspended")
+        appr["reconfirmSuspended"] = True
+        _append_log(appr, "changeLog", dict(base_log, suspended=True, invalidated=[], resigned=[]))
+        finish_baseline()
+        notices = [{"type": "approval_reconfirm_suspended", "to": "superadmin", "text":
+                    f"報價單內容在簽核期間已變動超過 {REVIEW_ROUNDS_LIMIT} 輪，系統不再自動作廢已簽層，請最高管理者處置（最近一次：{by}，{source}）"}] if first_time else []
+        return True, notices
+
+    resigned = []
+    if source == SOURCE_REVIEW_EDIT and me:
+        for _t, a in _entries(appr):
+            if a.get("username") != me:
+                continue
+            if (a.get("status") == "approved" and a.get("signedFp") and a.get("signedFp") != fp) or (a.get("status") != "approved" and a.get("reconfirm")):
+                a["status"], a["approvedAt"], a["signedFp"], a["signedKeyHashes"] = "approved", now, fp, hashes
+                for k in ("reconfirm", "prevSignedFp", "prevApprovedAt"):
+                    a.pop(k, None)
+                resigned.append(a)
+    invalidated = []
+    for a in stale:
+        if any(a is r for r in resigned):
+            continue
+        a["prevSignedFp"], a["prevApprovedAt"] = a.get("signedFp"), a.get("approvedAt")
+        a["status"], a["reconfirm"] = "pending", True
+        a.pop("approvedAt", None)
+        invalidated.append(a)
+    if invalidated or resigned:
+        idx = _first_pending_tier(appr)
+        if idx is not None:
+            appr["currentTier"] = idx
+    if invalidated:
+        appr["reviewRounds"] = rounds + 1                                   # 不管這次一次作廢幾個條目、補追了幾次影子變動：只 +1
+    _append_log(appr, "changeLog", dict(base_log, invalidated=[a.get("username") for a in invalidated], resigned=[a.get("username") for a in resigned]))
+    finish_baseline()
+
+    notices = []
+    if invalidated:                                                         # 沒有任何條目被作廢 ⇒ 沒有通知
+        inv_names = [a.get("username") for a in invalidated if a.get("username") != me]
+        blk = "、".join(blocks) if blocks else "（區塊未知）"
+        if inv_names:
+            notices.append({"type": "approval_reconfirm", "to": inv_names, "blocks": blocks, "by": by, "source": source, "rev": rev,
+                            "text": f"你已簽核的報價單內容被 {by} 修改（{blk}），請重新複查確認"})
+        others = [a.get("username") for _t, a in _entries(appr)
+                  if a.get("status") != "approved" and not a.get("reconfirm") and a.get("username") not in (me, None)]
+        if others:
+            notices.append({"type": "approval_reconfirm_info", "to": others, "blocks": blocks, "by": by, "source": source, "rev": rev,
+                            "text": f"報價單內容被 {by} 修改（{blk}），前面已簽的層需重新複查"})
+        req = appr.get("requestedBy")
+        if req and req != me and req not in inv_names:
+            notices.append({"type": "approval_reconfirm_info", "to": [req], "blocks": blocks, "by": by, "source": source, "rev": rev,
+                            "text": f"你送審的報價單內容被 {by} 修改（{blk}），已簽核的層需重新複查"})
+    return True, notices
