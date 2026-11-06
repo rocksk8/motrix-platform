@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-06（wip/sales-gap-report；案件頁「報價人」與「業績歸屬」標示）
+- 修正（畫面文字，僅前端，無 migration、無新路由、無權限變更、不改任何欄位讀寫）：`pages/case-management.html` 清單卡片與詳情頭的「業務／負責業務」改稱「報價人」（來源仍是 `quotations.sales_person`，業務獎金依它）；人員角色下拉「業務負責」改稱「業績歸屬（業務負責）」並加一句說明「業務獎金依報價人計算，與此欄位無關」（`caseRecord.roles.sales`，營運報表業績與部門依它）。兩邊都有值且顯示名不同時，角色區下方多一條中性提示條（`js/case-management-biz.js::salesRoleDiffNote`，只讀；樣式 `css/case-management.css` `.cm-role-hint`／`.cm-role-note`）。兩欄位本來就是兩個獨立概念（見 `docs/platform/plans/SALES-PERSON-VS-ROLES-SALES-ANALYSIS.md`），獎金、報表、可見度的計算一概未動。`tests/golden_case_page_2026_09_24.json` 三處文字隨之更新。測試：`modules/case/tests/test_sales_label_note_2026_11_06.py`、`tests/test_e2e_case_sales_note_2026_11_06.py`。
+
+
 ## 1.0.205 — 2026-10-17（wip/t71-backfill-fixes-r1；補登歷史案件 T71：瀏覽器實測缺陷、清單作廢入口與小修）
 - 新增（列表作廢入口）：報價單列表對補登單（`historical=true`）且為最高管理者時顯示「作廢」鈕，開頁內視窗填原因（≥5 字）後送 `DELETE …?reason=`，進暫存區、單號不回收；一般草稿刪除與非最高管理者行為不變。
 - 修正（D1）：補登單由畫面建立時 `caseRecord` 是 null，之後新增階段（`POST /api/quotations/{no}/stages`）會 500。補登建立時補成 `{}`，並新增 `_case_record_of()` 讓新增階段／案件資料等 6 處寫入都容忍 null／非 dict 的 `caseRecord`（舊資料同樣受惠）。

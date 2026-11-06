@@ -59,6 +59,16 @@ window.CM_PARTS.push(() => ({
       }
       return null
     },
+    // 報價人（quotations.sales_person，報價單上的開單者；業務獎金依它）與業績歸屬（caseRecord.roles.sales；營運報表業績／部門依它）
+    // 是兩個獨立欄位、設計如此（docs/platform/plans/SALES-PERSON-VS-ROLES-SALES-ANALYSIS.md）。兩邊都有值且顯示名不同時給一句中性提示；
+    // 只讀顯示用，不改任何欄位。業績歸屬未填 ⇒ 報表本來就退回報價人，不提示。
+    get salesRoleDiffNote() {
+      const quoter = String((this.selected && this.selected.sales_person) || '').trim()
+      const v = this.cr && this.cr.caseRecord && this.cr.caseRecord.roles && this.cr.caseRecord.roles.sales
+      const owner = String(v && typeof v === 'object' ? (v.display || v.username || '') : (typeof v === 'string' ? v : '')).trim()
+      if (!quoter || !owner || quoter === owner) return ''
+      return '報價人（' + quoter + '）與業績歸屬（' + owner + '）不是同一人：業績與部門依業績歸屬，業務獎金依報價人。'
+    },
     get roleSel() {
       const self = this
       const o = {}
