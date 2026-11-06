@@ -1,12 +1,13 @@
 # 薪資獎金 更新紀錄
 
-## (next) — 2026-11-06（wip/sales-gap-report；業務獎金讀源改業務負責；K 審修正：形狀不對不退回）
+## (next) — 2026-11-06（wip/sales-gap-report；業務獎金讀源改業務負責；K 審修正：形狀不對不退回、註記失敗不拖垮 GET）
 - 變更（計算口徑，產品負責人 2026-11-06 裁示，經窗口轉達；推翻 2026-09-23 使用者「業務獎金→`sales_person`」的讀源，兩次裁示都留痕在 `bonus.py::PERSON_SOURCES` 註解）：以案件為中心的分潤，業務名單自動帶入（`api/bonus.py::_auto_members`，影響 `GET /cases/{no}` 無單預覽、`POST /cases/{no}` 建立、`POST …/preview` 無單分支）改讀案件「業務負責」`caseRecord.roles.sales`（新增 `_roles_sales_of()`，Python 逐筆解析，不新增 SQL `json_extract`）；**完全沒填**才退回報價人 `sales_person_id`／`sales_person`（逐字沿用舊解析）。`roles.sales` 有值但對不到可用帳號（舊字串查無／同名、帳號停用或不存在）⇒ 不退回報價人、不帶人並回 `memberNotes.sales` 提示手動指定。兩欄位仍各自存、互不寫入。
 - 不回溯：已有分潤單者（任何狀態）名單在建立當下已凍結於 `bonus_case_award_lines`，本次不改動；`GET /cases/{no}` 對最高管理者在非草稿單且現行業務負責不在名單內時多回 `salesOwnerNote`（中性註記，不改名單／金額／流程），`pages/bonus.html` 在「發放明細」上方顯示。
 - 凍結：舊版項目式獎金路徑（`GET／POST /awards/plan`、`_case_people()`、`bonus_items.person_source='sales_person'`）不隨本次改動，仍讀報價人；正式機 2026-11-06 回報相關表全部 0 筆、從未啟用。`person_source` 鍵名 `sales_person` 保留。
 - K 審修正（1a）：`_roles_sales_of()` 回 `(kind, 帳號, 顯示名)`，kind＝`empty`／`user`／`name`／`invalid`；**非空但形狀不對**（數字、`true`、非空陣列、只有未知鍵的物件）或整份 `data_json` 讀不出來 ⇒ `invalid`，與「有值對不到帳號」同一路——不帶人、`memberNotes.sales` 提示手動指定，**不悄悄退回報價人**；只有完全沒填（缺／null／空白字串／空物件／全空殼）才退回。
 - K 審修正（2）：不回溯測試改為對 待審核／待發放／已發放 三種狀態參數化（lines、summary、預覽名單前後相同、無 `autoMembers`）；新增「建立時重新解析」測試——畫面「建立草稿」送空 body，伺服器在建立當下重新解析 `roles.sales`，預覽只是顯示；明確帶 `members` 者以 `members` 為準。
 - K 審修正（3）：案件頁角色下拉說明與不同人提示條的字樣改為「業務獎金（尚未建分潤單者）依業務負責，已建立的不回頭更動」（不再寫成無條件的獎金依業務負責），連同測試與 golden 快照。
+- K 審回歸修正：`GET /cases/{no}` 算 `salesOwnerNote` 時，共用讀取（`_quote_people_row`，含 SQL `json_type()`）遇案件資料壞掉會丟例外；註記只是附帶資訊，呼叫端改為 try/except（記 log、略過註記），不讓最高管理者連已建分潤單的發放明細都看不到。`_quote_people_row`／`_auto_members` 的行為沒動（壞 JSON 仍由 SQL 先失敗，沿用舊行為）。`_roles_sales_of` docstring 改講實話：整份 `data_json` 壞掉的 `invalid` 只有直接呼叫才命中。`invalid` 的提示文字不再帶 Python 型別名或內部欄位名（一律「資料格式不正確」／「資料無法解析」）。
 - 無 migration、無新路由、無權限變更。測試：`tests/test_bonus_sales_owner_2026_11_06.py`（讀源、不退回、不回溯、兩欄位不被寫入、註記、留痕、反向控制：還原 `_auto_members` 時 24 題轉紅）。
 
 
