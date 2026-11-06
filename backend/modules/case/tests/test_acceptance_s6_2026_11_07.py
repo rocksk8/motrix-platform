@@ -245,7 +245,7 @@ def test_single_tier_review_edit_is_annotated_self_edit_sign_and_tells_superadmi
 
 
 def test_multi_tier_review_edit_is_not_self_edit_sign(client, make_user):
-    hs, names = _seed(client, make_user, tiers=2)
+    hs, names = _seed(client, make_user, tiers=2)                         # 兩層各是不同人
     su, _pw = make_user(username="fp_su", role="superadmin")
     _set_mode(2)
     assert _edit(client, hs[0], qty=9).status_code == 200
@@ -254,12 +254,29 @@ def test_multi_tier_review_edit_is_not_self_edit_sign(client, make_user):
     assert _notes(su, "approval_self_edit_sign") == []
 
 
-def test_self_edit_sign_helper_counts_every_approver_entry():
+def test_self_edit_sign_helper_is_about_distinct_people_not_entries():
     one = [{"approvers": [{"username": "a"}]}]
-    assert C.self_edit_sign(one) is True
-    assert C.self_edit_sign(one + [{"approvers": [{"username": "b"}]}]) is False
-    assert C.self_edit_sign([{"approvers": [{"username": "a"}, {"username": "b"}]}]) is False, "同層兩人＝有第二雙眼"
-    assert C.self_edit_sign([]) is False and C.self_edit_sign(None) is False
+    assert C.self_edit_sign(one, "a") is True
+    assert C.self_edit_sign(one + [{"approvers": [{"username": "a"}]}], "a") is True, "同一人連任兩層（條目 2、人 1）仍是自改自簽"
+    assert C.self_edit_sign(one + [{"approvers": [{"username": "b"}]}], "a") is False, "另有他人的層＝有第二雙眼"
+    assert C.self_edit_sign([{"approvers": [{"username": "a"}, {"username": "b"}]}], "a") is False, "同層兩人＝有第二雙眼"
+    assert C.self_edit_sign(one, "b") is False, "編輯者不是那位簽核人（例如代理人）＝兩個人"
+    assert C.self_edit_sign([], "a") is False and C.self_edit_sign(None, "a") is False and C.self_edit_sign(one, "") is False
+
+
+def test_same_person_holding_two_tiers_is_self_edit_sign(client, make_user):
+    """K 審：同一人連任多層（cascade 一次簽完）——條目 2、人 1，改完自己簽，沒有第二雙眼 ⇒ 標註並通知超管（不阻擋）。"""
+    hs, names = _seed(client, make_user, tiers=2)
+    su, _pw = make_user(username="fp_su", role="superadmin")
+    d, _s, _u = _row()
+    d["approval"]["tiers"][1]["approvers"][0].update(username=names[0], displayName=names[0])      # 兩層都是 ap0
+    import db
+    c = db.get_db(); c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), NO)); c.commit(); c.close()
+    _set_mode(2)
+    assert _edit(client, hs[0], qty=9).status_code == 200
+    det = json.loads(_audits("quotation.review_edit")[0]["detail"])
+    assert det["selfEditSign"] is True and det["tag"] == "self_edit_sign"
+    assert len(_notes(su, "approval_self_edit_sign")) == 1
 
 
 def test_audit_page_filters_informed_and_self_edit_sign(client, make_user):

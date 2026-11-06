@@ -6012,7 +6012,7 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
         _changes = _summarize_quote_changes(d, q)
         _append_edit_history(q, user, now, "review_edit", _changes)
 
-        _self_sign = _CFP.self_edit_sign(tiers)                 # H6-3：編輯者是唯一簽核條目（改完自己簽）⇒ 稽核加註＋通知超管（不阻擋）
+        _self_sign = _CFP.self_edit_sign(tiers, user["username"])                 # H6-3：編輯者是唯一簽核條目（改完自己簽）⇒ 稽核加註＋通知超管（不阻擋）
         _sig0, _rev0 = _CFP.signature(appr), appr.get("contentRev")
         save_quotation_json(conn, quote_no, q, status=row["status"], updated_at=now, actor=user, source="review-edit")
         appr = q.get("approval") or {}

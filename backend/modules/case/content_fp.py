@@ -95,13 +95,17 @@ def pending_entries(approval) -> list:
     return [a for _t, a in _entries(approval) if a.get("status") != "approved"]
 
 
-def self_edit_sign(tiers) -> bool:
-    """H6-3「自改自簽」：複查編輯者是整張單**唯一**的簽核條目（＝唯一未簽層、前面沒有已簽層、後面也沒有別層）⇒ 他改完自己簽，沒有第二雙眼。
-    只做標註（稽核＋通知超管），不阻擋。`tiers`＝有效簽核層（呼叫端的 `_active_tiers`）。"""
-    n = 0
+def self_edit_sign(tiers, editor: str) -> bool:
+    """H6-3「自改自簽」：整張單的簽核人（所有有效層、所有條目的 `username` 去重）**只有編輯者一個人** ⇒ 他改完自己簽，沒有第二雙眼。
+    同一人連任多層（2026-09-15 cascade，條目 ≥2、人 1）也算；同層兩人、或另有他人的層 ⇒ 有第二雙眼，不標註。
+    **偵測範圍之外**：舊單條目沒有 `signedFp` 不會被作廢，「沒有人被請回來複核」不在這裡——影子週的統計看得到。
+    只做標註（稽核＋通知超管），不阻擋。`tiers`＝有效簽核層（呼叫端的 `_active_tiers`）；代理人編輯時條目是本人、編輯者是代理人 ⇒ 兩個人 ⇒ 不標註。"""
+    names = set()
     for t in tiers or []:
-        n += sum(1 for a in ((t.get("approvers") or []) if isinstance(t, dict) else []) if isinstance(a, dict))
-    return n == 1
+        for a in ((t.get("approvers") or []) if isinstance(t, dict) else []):
+            if isinstance(a, dict) and a.get("username"):
+                names.add(a["username"])
+    return bool(editor) and names == {editor}
 
 
 def current_reasons_or_none(data: dict):

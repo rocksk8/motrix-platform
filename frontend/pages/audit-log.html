@@ -362,8 +362,8 @@
       </select>
       <select class="filter" x-model="fTag" @change="applyFilter()" title="簽核標籤">
         <option value="">所有標籤</option>
-        <option value="informed">知情核准（內容有變仍選維持）</option>
-        <option value="self_edit_sign">自改自簽（唯一簽核人自己改）</option>
+        <option value="informed">知情核准（選了「維持」的旗標單）</option>
+        <option value="self_edit_sign">自改自簽（整單只有編輯者一人簽）</option>
       </select>
       <input type="search" placeholder="案件單號 MQ-…" x-model.debounce.400ms="fCase" @input="applyFilter()">
       <input type="search" placeholder="單據號" x-model.debounce.400ms="fRef" @input="applyFilter()">
