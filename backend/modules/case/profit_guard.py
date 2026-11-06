@@ -465,6 +465,8 @@ def change_pct(conn, quote_no: str, raw_pct, user: dict, confirm=False, now: str
                              charity_rate_pct=doc_charity_rate_pct(tot)))                  # 只換管銷比率：公益比率沿用這張單據自己的（不重蓋戳記、不吃目前設定）
     tot["formulaVer"] = PR.FORMULA_VER
     q["tot"] = tot
+    from modules.case import content_fp as _cfp
+    _cfp.reconcile_txn(conn, quote_no, q, source="overhead_pct", actor=user, status=row["status"])      # 簽核二擇一 S3b：直接 UPDATE 繞過漏斗，要自己對帳（off ⇒ 零查詢）
     conn.execute("UPDATE quotations SET data_json=?, net_margin_pct=?, updated_at=? WHERE quote_no=?",
                  (json.dumps(q, ensure_ascii=False), tot.get("netMarginPct"), now, quote_no))
     return {"old": old, "new": new, "default": default, "tot": tot}

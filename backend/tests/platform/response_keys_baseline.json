@@ -6193,6 +6193,7 @@
    "groups[].values.quotes_personal_page_size",
    "groups[].values.receivable_grace_days",
    "groups[].values.received",
+   "groups[].values.reconfirm_mode",
    "groups[].values.reject_final_keep",
    "groups[].values.report_good",
    "groups[].values.report_low",

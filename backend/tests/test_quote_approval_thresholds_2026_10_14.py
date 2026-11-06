@@ -207,7 +207,7 @@ def test_non_five_percent_tax_is_a_statutory_rule_and_stays_hard_coded():
     from helpers import settings_groups  # noqa: F401
     from helpers import settings_registry as SR
     keys = {f["key"] for f in SR.groups()["quote_approval"]["fields"]}
-    assert keys == {"min_item_margin_pct", "max_valid_days", "discount_review_above"}, "稅別判斷（營業稅法）不開放設定"
+    assert keys == {"min_item_margin_pct", "max_valid_days", "discount_review_above", "reconfirm_mode"}, "稅別判斷（營業稅法）不開放設定（reconfirm_mode 是簽核二擇一 S3b 的三態旗標，與稅別無關）"
 
 
 # ── 設定與端點（需要資料庫） ────────────────────────────────────────────────

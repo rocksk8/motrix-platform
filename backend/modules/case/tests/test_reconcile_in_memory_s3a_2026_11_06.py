@@ -392,10 +392,17 @@ def test_mode_values(monkeypatch, value, want):
     assert C.reconfirm_mode(_Conn()) == want
 
 
-@pytest.mark.parametrize("value", [None, 0, 1, True, False, "yes", "", "true", [], {}, "0"])
+@pytest.mark.parametrize("value", [None, 3, -1, 1.5, 2.5, True, False, "yes", "", "true", [], {}, "0"])      # S3b：設定值是整數代碼 0／1／2，其餘一律是垃圾
 def test_mode_garbage_means_on(monkeypatch, value):
+    """S3b 改動：0／1 不再是垃圾（設定中心的整數代碼 0＝off、1＝shadow、2＝on）；超出範圍、小數、布林、字串數字仍取 on。"""
     _patch_mode(monkeypatch, value)
     assert C.reconfirm_mode(_Conn()) == "on"
+
+
+@pytest.mark.parametrize("value,want", [(0, "off"), (1, "shadow"), (2, "on"), (0.0, "off"), (1.0, "shadow"), (2.0, "on")])
+def test_mode_int_codes_from_the_settings_center(monkeypatch, value, want):
+    _patch_mode(monkeypatch, value)
+    assert C.reconfirm_mode(_Conn()) == want
 
 
 @pytest.mark.parametrize("exc", [RuntimeError("db"), KeyError("reconfirm_mode"), ValueError("格式"), OSError("locked")])
@@ -519,7 +526,7 @@ def test_notices_to_is_always_a_list_with_str_or_role_dict():
     assert n2[0]["type"] == "approval_reconfirm_suspended" and n2[0]["to"] == [{"role": "superadmin"}]
 
 
-@pytest.mark.parametrize("source,label", [("put", "儲存報價單"), ("material", "叫料"), ("something-new", "something-new")])
+@pytest.mark.parametrize("source,label", [("put", "儲存報價單"), ("material", "材料申請"), ("something-new", "something-new")])
 def test_system_actor_text(source, label):
     d = _doc(signed=1)
     _edit(d)
@@ -530,10 +537,15 @@ def test_system_actor_text(source, label):
 
 
 def test_no_call_sites_in_s3a():
-    """S3a 不接線：別的檔不得 import／呼叫 reconcile_in_memory（S3b 才接；接線時請同步改這題）。"""
+    """S3b 接線之後：`reconcile_in_memory` 只准 `content_fp.reconcile_txn` 一處呼叫（其他檔不得 import／呼叫；測試檔不算）。"""
     import pathlib
     root = pathlib.Path(__file__).resolve().parents[2]
     hits = [str(p.relative_to(root)) for p in root.rglob("*.py")
             if "reconcile_in_memory" in p.read_text(encoding="utf-8", errors="ignore")
-            and p.name not in ("content_fp.py", pathlib.Path(__file__).name) and "__pycache__" not in str(p)]
+            and p.name != "content_fp.py" and "tests" not in p.relative_to(root).parts and "__pycache__" not in str(p)]
     assert hits == [], hits
+    import ast
+    tree = ast.parse((root / "case" / "content_fp.py").read_text(encoding="utf-8"))
+    callers = sorted(f.name for f in ast.walk(tree) if isinstance(f, ast.FunctionDef)
+                     for n in ast.walk(f) if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "reconcile_in_memory")
+    assert callers == ["reconcile_txn"], callers

@@ -27,6 +27,7 @@ BOOKKEEPING_ONLY = "BOOKKEEPING_ONLY"  # 只動排除清單內的鍵（指紋不
 CONTENT_DIRECT = "CONTENT_DIRECT"    # 直接 UPDATE 且會改內容鍵、**繞過漏斗** → S3 的「寫後掛鉤」抓不到，需改走漏斗或手動呼叫 reconcile
 LEAVES_APPROVAL = "LEAVES_APPROVAL"  # 同時清掉 approval／回草稿：離開簽核範圍，指紋不適用
 CONTENT_FULL = "CONTENT_FULL"        # 整份本文取代（解鎖編輯 PUT）：既有「重建簽核」路徑，spec 明訂不動
+UNREACHABLE_IN_APPROVAL = "UNREACHABLE_IN_APPROVAL"  # S3b：待審核／簽核中**進不去**（路由層有狀態閘 409）⇒ 不掛 reconcile；以 AST 釘住呼叫端＋狀態閘 409 測試取代（K 審 Q3）
 POST_APPROVAL = "POST_APPROVAL"      # 僅 已成案／已結案 單據可達：不在「待審核／簽核中」範圍
 
 # {"相對路徑::函式限定名": (語句數, 處置類別, 備註)}——語句數＝該函式內寫 data_json 的 SQL 語句數
@@ -51,8 +52,8 @@ DIRECT_WRITES = {
     "modules/case/profit_guard.py::change_pct": (1, CONTENT_DIRECT, "改管銷比率：overheadPct／tot／net_margin_pct"),
     "modules/case/recycle_adapter.py::MaterialOrderAdapter.delete_in_tx": (1, CONTENT_DIRECT, "刪除材料申請：拿掉 materialOrders 一筆"),
     "modules/case/recycle_adapter.py::MaterialOrderAdapter.restore_in_tx": (1, CONTENT_DIRECT, "還原材料申請：放回 materialOrders 一筆"),
-    "modules/case/alt_sign.py::sign": (1, CONTENT_DIRECT, "擇一回簽：altPicks／total／pretax；另改 is_signed 欄位"),
-    "modules/case/alt_sign.py::clear_signed_selection": (1, CONTENT_DIRECT, "取消回簽：清 altPicks／altPickedAt／altPickedBy"),
+    "modules/case/alt_sign.py::sign": (1, UNREACHABLE_IN_APPROVAL, "擇一回簽：altPicks／total／pretax；另改 is_signed 欄位"),
+    "modules/case/alt_sign.py::clear_signed_selection": (1, UNREACHABLE_IN_APPROVAL, "取消回簽：清 altPicks／altPickedAt／altPickedBy"),
     "modules/case/quotations.py::_record_doc_version": (1, BOOKKEEPING_ONLY, "只 append docVersions（PDF 版本紀錄；提案排除清單未列，S0 盤點新增）"),
     # —— 開機遷移／一次性工具 ——
     "db.py::_m052_fix_stage_json_ids": (1, MIGRATION_ONCE, "stages 作廢 id 修正寫進 caseRecord.stages"),
@@ -66,11 +67,11 @@ DIRECT_WRITES = {
     "migrations_frozen/t52_charity/recalc.py::apply_rollback": (1, MIGRATION_ONCE, "凍結：T52 還原"),
 }
 
-# 真正呼叫 `save_quotation_json(...)` 的點（AST 數；S0 實測 25（不是提案寫的「約31」），S1 加 content_fp.rebaseline_fingerprint 一處＝26——31 含註解／docstring／def／import）
+# 真正呼叫 `save_quotation_json(...)` 的點（AST 數；S0 實測 25（不是提案寫的「約31」），S1 加 content_fp.rebaseline_fingerprint 一處＝26，S3b 加 approve 對帳後存檔一處＝27——31 含註解／docstring／def／import）
 FUNNEL_CALLS = {
     "modules/case/content_fp.py": 1,      # S1 rebaseline_fingerprint（走漏斗、不動 updated_at）
     "modules/case/api/material_orders.py": 2,
-    "modules/case/api/quotations.py": 22,
+    "modules/case/api/quotations.py": 23,      # S3b：approve 對帳後狀態被重算時用漏斗存（+1）
     "modules/case/api/settlement_api.py": 1,
 }
 
@@ -204,19 +205,21 @@ def test_every_direct_data_json_write_is_registered_with_a_disposition():
 
 
 def test_dispositions_are_valid_and_every_content_bypass_is_listed_for_s3():
-    valid = {FUNNEL, NEW_ROW, MIGRATION_ONCE, BOOKKEEPING_ONLY, CONTENT_DIRECT, LEAVES_APPROVAL, CONTENT_FULL, POST_APPROVAL}
+    valid = {FUNNEL, NEW_ROW, MIGRATION_ONCE, BOOKKEEPING_ONLY, CONTENT_DIRECT, UNREACHABLE_IN_APPROVAL, LEAVES_APPROVAL, CONTENT_FULL, POST_APPROVAL}
     assert all(v[1] in valid for v in DIRECT_WRITES.values())
     assert all(v[2].strip() for v in DIRECT_WRITES.values()), "每一筆都要有備註"
     # 釘住 S3 要處理的『繞過漏斗＋會改內容鍵』清單：新增／移除都要讓人意識到（改走漏斗＝從這裡拿掉）
     direct = sorted(k for k, v in DIRECT_WRITES.items() if v[1] == CONTENT_DIRECT)
     assert direct == sorted([
-        "modules/case/alt_sign.py::sign",
-        "modules/case/alt_sign.py::clear_signed_selection",
         "modules/case/material_change.py::_apply",
         "modules/case/material_payment.py::sync_order_paid",
         "modules/case/profit_guard.py::change_pct",
         "modules/case/recycle_adapter.py::MaterialOrderAdapter.delete_in_tx",
         "modules/case/recycle_adapter.py::MaterialOrderAdapter.restore_in_tx",
+    ])
+    assert sorted(k for k, v in DIRECT_WRITES.items() if v[1] == UNREACHABLE_IN_APPROVAL) == sorted([
+        "modules/case/alt_sign.py::sign",
+        "modules/case/alt_sign.py::clear_signed_selection",
     ])
 
 
@@ -278,7 +281,7 @@ def test_save_quotation_json_call_sites_are_pinned():
     assert _funnel_call_counts() == FUNNEL_CALLS, (
         "save_quotation_json 呼叫點變了：新增呼叫端走漏斗＝安全（S3 的寫後掛鉤會涵蓋），但請更新 FUNNEL_CALLS；"
         "若是想繞過它另寫 UPDATE，請改到 DIRECT_WRITES 登記並說明理由")
-    assert sum(FUNNEL_CALLS.values()) == 26
+    assert sum(FUNNEL_CALLS.values()) == 27
 
 
 def test_the_funnel_is_the_only_place_with_a_plain_data_json_update_in_quotations_module():
@@ -390,3 +393,69 @@ def test_key_scanner_positive_control():
     real = _server_written_top_level_keys()
     for must in ("approval", "statusLog", "editHistory", "docVersions", "googleCalendarEventId", "caseRecord", "altPicks"):
         assert must in real, f"頂層鍵掃描沒抓到已知的 {must}——掃描範圍或變數名單失效"
+
+
+# ── S3b：CONTENT_DIRECT 的函式本體必須自己呼叫 reconcile_txn；UNREACHABLE_IN_APPROVAL 的呼叫端與狀態閘被釘住 ──────────────────
+def _function_node(rel: str, qualname: str):
+    tree = ast.parse((BACKEND / rel).read_text(encoding="utf-8"))
+    node, parts = tree, qualname.split(".")
+    for i, name in enumerate(parts):
+        kinds = (ast.ClassDef,) if i < len(parts) - 1 else (ast.FunctionDef, ast.AsyncFunctionDef)
+        node = next((n for n in ast.walk(node) if isinstance(n, kinds) and n.name == name), None)
+        assert node is not None, f"{rel} 找不到 {qualname}"
+    return node
+
+
+def _calls(node, name: str) -> list:
+    out = []
+    for n in ast.walk(node):
+        if isinstance(n, ast.Call):
+            f = n.func
+            if (isinstance(f, ast.Name) and f.id == name) or (isinstance(f, ast.Attribute) and f.attr == name):
+                out.append(n)
+    return out
+
+
+def test_every_content_direct_function_calls_reconcile_txn():
+    """直接 UPDATE 繞過漏斗、又會改內容鍵的函式，**函式本體自己**要呼叫 `reconcile_txn(`（呼叫要在 UPDATE 之前，由各自的行為測試證明）。
+    拿掉任一處 ⇒ 這題紅。"""
+    missing = []
+    for key, (_n, disp, _note) in sorted(DIRECT_WRITES.items()):
+        if disp != CONTENT_DIRECT:
+            continue
+        rel, qual = key.split("::", 1)
+        if not _calls(_function_node(rel, qual), "reconcile_txn"):
+            missing.append(key)
+    assert not missing, "這些直接寫 data_json 的函式沒有呼叫 reconcile_txn（簽核中被改內容時不會作廢已簽層）：\n  " + "\n  ".join(missing)
+
+
+def test_reconcile_txn_guard_controls():
+    """正對照：呼叫在巢狀／屬性寫法下都找得到；負對照：只在註解／字串裡提到不算。"""
+    def _fn(*lines):
+        return ast.parse("\n".join(lines)).body[0]
+    yes = _fn("def f(conn):", "    from m import content_fp as c", "    c.reconcile_txn(conn, 'q', {})")
+    yes2 = _fn("def f(conn):", "    if 1:", "        reconcile_txn(conn, 'q', {})")
+    no = _fn("def f(conn):", "    # reconcile_txn(conn)", "    s = 'reconcile_txn('")
+    assert _calls(yes, "reconcile_txn") and _calls(yes2, "reconcile_txn") and not _calls(no, "reconcile_txn")
+
+
+def test_unreachable_in_approval_callers_are_pinned_to_the_status_gated_route():
+    """`alt_sign.sign`／`clear_signed_selection` 在待審核／簽核中進不去，是靠**路由層**的狀態閘（`_toggle_alt_signed`：已送出才可回簽、
+    取消回簽限 `UNSIGN_STATES`）。所以：(1) 全樹只准這一個函式呼叫它們（新增呼叫端 ⇒ 紅，要回頭補 reconcile 或證明有閘）；
+    (2) 閘的 409 行為測試在 S3b 測試檔裡，這裡只確認它們還在（拿掉閘 ⇒ 那兩題紅）。"""
+    callers = {}
+    for rel, src in _iter_sources():
+        if "alt_sign" not in src and "ALT_SIGN" not in src:
+            continue
+        tree = ast.parse(src)
+        at = _enclosing_qualnames(tree)
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in ("sign", "clear_signed_selection")                     and isinstance(n.func.value, ast.Name) and n.func.value.id in ("_ALT_SIGN", "alt_sign", "ALT_SIGN", "_alt_sign"):
+                callers.setdefault(f"{rel}::{at(n.lineno)}", []).append(n.func.attr)
+    assert {k: sorted(v) for k, v in callers.items()} == {"modules/case/api/quotations.py::_toggle_alt_signed": ["clear_signed_selection", "sign"]}, callers
+    own = (BACKEND / "modules/case/alt_sign.py").read_text(encoding="utf-8")
+    inner = [ln for ln in own.splitlines() if "clear_signed_selection(" in ln and "def clear_signed_selection" not in ln and not ln.lstrip().startswith(("#", '"', "-"))]
+    assert not inner, "alt_sign.py 自己內部有呼叫 clear_signed_selection：這條路徑要證明待審核進不去或補 reconcile：%s" % inner
+    t = (BACKEND / "modules/case/tests/test_reconcile_txn_s3b_2026_11_06.py").read_text(encoding="utf-8")
+    for name in ("test_alt_sign_is_409_while_in_approval", "test_unsign_is_409_while_in_approval"):
+        assert "def " + name in t, f"狀態閘 409 測試 {name} 不見了"

@@ -504,6 +504,8 @@ class MaterialOrderAdapter(RB.Adapter):
             kept = [o for o in cr["materialOrders"] if not (isinstance(o, dict) and str(o.get("itemId")) == iid)]
             if len(kept) != len(cr["materialOrders"]):
                 cr["materialOrders"] = kept
+                from modules.case import content_fp as _cfp
+                _cfp.reconcile_txn(conn, qn, data, source="material_recycle")      # 簽核二擇一 S3b：直接 UPDATE 繞過漏斗，要自己對帳（off ⇒ 零查詢）
                 # updated_at 要跟著動：存檔流程之外（刪除已核可、還原）改了 JSON，舊畫面的 _expectedUpdatedAt 才會對不上而得到 409（否則舊畫面存檔會把這一列救活／再丟進暫存區）
                 conn.execute("UPDATE quotations SET data_json=?, updated_at=? WHERE quote_no=?", (json.dumps(data, ensure_ascii=False), datetime.now().isoformat(), qn))
 
@@ -526,6 +528,8 @@ class MaterialOrderAdapter(RB.Adapter):
                 raise RB.BinError("conflict: 這筆材料申請的審核單已存在")
             _insert(conn, "case_material_approvals", a)
         orders.append(_remap_paths(snap["order"], ctx))
+        from modules.case import content_fp as _cfp
+        _cfp.reconcile_txn(conn, qn, data, source="material_recycle")      # 簽核二擇一 S3b：同上
         conn.execute("UPDATE quotations SET data_json=?, updated_at=? WHERE quote_no=?", (json.dumps(data, ensure_ascii=False), datetime.now().isoformat(), qn))
         return {"entity_id": "%s|%s" % (qn, iid), "renumbered": False, "notes": ["材料清單裡原本對應到它的項目，連結需到案件頁重新確認"]}
 

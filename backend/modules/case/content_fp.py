@@ -85,6 +85,11 @@ def _entries(approval):
                 yield t, a
 
 
+def signature(approval) -> tuple:
+    """每個簽核條目的 (狀態, 是否待複查)——`reconcile_txn` 前後比對「有沒有任何簽核層被作廢」（影子模式只動 log／基準，簽名不變）。"""
+    return tuple((a.get("status"), bool(a.get("reconfirm"))) for _t, a in _entries(approval))
+
+
 def pending_entries(approval) -> list:
     """目前尚未簽核的條目（物件本身，不是複本）；`stamp_signed` 用它在簽核動作前後做差。"""
     return [a for _t, a in _entries(approval) if a.get("status") != "approved"]
@@ -170,16 +175,7 @@ def rebaseline_fingerprint(conn, quote_no: str, user: dict = None, reason: str =
     data["approval"] = appr
     save_quotation_json(conn, quote_no, data, updated_at=row["updated_at"])
     now = now or datetime.now().isoformat()
-    from helpers.audit import _derive_fields
-    detail = {"reason": reason, "fromFp": before, "toFp": fp, "entries": n}
-    d = _derive_fields("quotation.rebaseline_fp", "quotation", quote_no, quote_no, detail)
-    u = user or {}
-    conn.execute(
-        "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
-        (now, u.get("id"), u.get("username", "system"), u.get("display_name") or u.get("username", "system"),
-         "quotation.rebaseline_fp", "quotation", quote_no, quote_no, json.dumps(detail, ensure_ascii=False),
-         d["module"], d["case_no"], d["ref_no"]))
+    _audit_in_txn(conn, "quotation.rebaseline_fp", quote_no, {"reason": reason, "fromFp": before, "toFp": fp, "entries": n}, user, now)
     return True
 
 
@@ -192,33 +188,78 @@ MODES = ("off", "shadow", "on")         # off＝完全不跑 reconcile（外層�
 LOG_CAP = 50                            # changeLog／shadowLog 各保留最近幾筆（避免 data_json 無限長；輪次另由 reviewRounds 計）
 
 #: 通知文字裡「系統做的」來源中文名（actor 為 None 時用）；沒列到的 source 照原字串
-SOURCE_LABELS = {"put": "儲存報價單", "submit": "送審", "approve": "核准", "review-edit": "複查編輯", "material": "叫料", "payment": "款項",
-                 "settlement": "精算", "case-record": "案件記錄", "migration": "系統遷移"}
+SOURCE_LABELS = {"put": "儲存報價單", "submit": "送審", "approve": "核准", "review-edit": "複查編輯", "material": "材料申請", "payment": "款項",
+                 "settlement": "精算", "case-record": "案件記錄", "migration": "系統遷移",
+                 # S3b 的呼叫點
+                 "funnel": "儲存報價單", "overhead_pct": "調整管銷％", "material_change": "材料申請變更", "material_paid": "材料申請付款",
+                 "material_recycle": "材料申請刪除／還原"}
+
+
+_MODE_CODES = {0: "off", 1: "shadow", 2: "on"}      # 設定欄位是整數代碼（放寬管制只認數字欄位）；字串三態也收（測試／舊呼叫端）
+
+
+def _read_mode(conn) -> str:
+    """嚴格讀取、**讀不到就丟例外**（不快取失敗用）。"""
+    from helpers.settings_strict import strict_value
+    v = strict_value(conn, MODE_GROUP, MODE_FIELD)
+    if isinstance(v, bool):
+        raise ValueError("reconfirm_mode 不是 0／1／2：%r" % (v,))
+    if isinstance(v, (int, float)) and v == int(v) and int(v) in _MODE_CODES:
+        return _MODE_CODES[int(v)]
+    if isinstance(v, str) and v.strip().lower() in MODES:
+        return v.strip().lower()
+    raise ValueError("reconfirm_mode 不是 0／1／2（off／shadow／on）：%r" % (v,))
 
 
 def reconfirm_mode(conn=None) -> str:
-    """三態旗標 `quote_approval.reconfirm_mode`（`off`／`shadow`／`on`）。**只給外層（S3b 的 reconcile_txn）呼叫**——`reconcile_in_memory` 是純函式，不讀設定。
+    """三態旗標 `quote_approval.reconfirm_mode`（設定值 0／1／2 ⇒ `off`／`shadow`／`on`）。**只給外層（`reconcile_txn`）呼叫**——`reconcile_in_memory` 是純函式，不讀設定。
     外層映射：`off` ⇒ 略過 reconcile；`shadow` ⇒ `enabled=False`；`on` ⇒ `enabled=True`。
-    **嚴格讀取**（`helpers.settings_strict.strict_value`）：讀不到（連線／資料庫錯、欄位尚未註冊、不是這三個值）⇒ **`on`**（最嚴；與 D-K1「讀不到取最嚴格」同方向）。
-    欄位的預設值（未儲存過時）由設定註冊表決定——S3a 尚未註冊該欄位（註冊了設定中心會多一個沒接線的開關），所以現在永遠回 `on`；S3b 註冊時預設 `off`。"""
+    **嚴格讀取**（`helpers.settings_strict.strict_value`）：讀不到（連線／資料庫錯、欄位尚未註冊、不是合法值）⇒ **`on`**（最嚴；與 D-K1「讀不到取最嚴格」同方向）。
+    欄位預設 0（`off`，S3b 已在 `helpers/settings_groups.py` 註冊）。不快取；漏斗熱路徑請用 `_mode_cached`。"""
     try:
-        from helpers.settings_strict import strict_value
         own = conn is None
         if own:
             from db import get_db
             conn = get_db()
         try:
-            v = strict_value(conn, MODE_GROUP, MODE_FIELD)
+            return _read_mode(conn)
         finally:
             if own:
                 conn.close()
-        if isinstance(v, str) and v.strip().lower() in MODES:
-            return v.strip().lower()
-        raise ValueError("reconfirm_mode 不是 off／shadow／on：%r" % (v,))
     except Exception:                                                       # noqa: BLE001
         import logging
         logging.getLogger(__name__).warning("quote_approval.reconfirm_mode 讀不到，改取最嚴（on）", exc_info=True)
         return "on"
+
+
+MODE_TTL_SECONDS = 5.0
+_mode_cache = {"key": None, "at": 0.0, "mode": None}
+
+
+def _reset_mode_cache() -> None:
+    _mode_cache.update(key=None, at=0.0, mode=None)
+
+
+def _mode_cached(conn) -> str:
+    """漏斗熱路徑用：行程內快取 `MODE_TTL_SECONDS` 秒，設定發布（`settings_registry.invalidate`）或換資料庫即作廢。
+    **讀失敗取 `on`（最嚴）且不快取**——下一次再讀，不會因為一次資料庫抖動把『最嚴』黏住 5 秒以上。
+    快取命中時**零查詢**（`off` 的報價單寫入不多任何一句 SQL；測試用 SQL 計數證明）。"""
+    import time
+    from helpers import settings_registry as SR
+    import db as _db
+    key = (SR.generation(), str(getattr(_db, "DB_PATH", "")))
+    now = time.monotonic()
+    c = _mode_cache
+    if c["key"] == key and c["mode"] is not None and now - c["at"] < MODE_TTL_SECONDS:
+        return c["mode"]
+    try:
+        mode = _read_mode(conn)
+    except Exception:                                                       # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning("quote_approval.reconfirm_mode 讀不到，這次改取最嚴（on），不快取", exc_info=True)
+        return "on"
+    _mode_cache.update(key=key, at=now, mode=mode)
+    return mode
 
 
 def _actor_name(actor) -> str:
@@ -385,3 +426,90 @@ def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str
             notices.append({"type": "approval_reconfirm_info", "to": [req], "blocks": blocks, "by": by, "source": source, "rev": rev,
                             "text": f"你送審的報價單內容被 {who} 修改（{blk}），已簽核的層需重新複查"})
     return True, notices
+
+
+# ── S3b：reconcile_txn（外殼；呼叫點在漏斗與 5 條直接寫入）────────────────────────────────────
+
+NOTICE_LINK = "approval-queue.html"
+_MERGE_TYPES = ("approval_reconfirm", "approval_reconfirm_info", "approval_reconfirm_suspended")
+
+
+def _audit_in_txn(conn, action: str, quote_no: str, detail: dict, user: dict = None, now: str = None) -> None:
+    """同一連線、同一交易寫一列稽核（`audit_log`）；不 commit。操作者沒給 ⇒ system。"""
+    from helpers.audit import _derive_fields
+    now = now or datetime.now().isoformat()
+    d = _derive_fields(action, "quotation", quote_no, quote_no, detail)
+    u = user or {}
+    conn.execute(
+        "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module,case_no,ref_no,result,reason_code,status_code) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
+        (now, u.get("id"), u.get("username", "system"), u.get("display_name") or u.get("username", "system"),
+         action, "quotation", quote_no, quote_no, json.dumps(detail, ensure_ascii=False), d["module"], d["case_no"], d["ref_no"]))
+
+
+def _superadmins(conn) -> list:
+    return [r["username"] for r in conn.execute("SELECT username FROM users WHERE role='superadmin' AND active=1")]
+
+
+def _write_notices(conn, quote_no: str, notices: list) -> int:
+    """把 `reconcile_in_memory` 回的通知清單寫進 `notifications`（**同一連線、同一交易**）；回寫入的收件人數。
+    `to` 的元素：帳號字串，或 `{"role": "superadmin"}`（展開成所有啟用中的超管）。同一收件人在同一份清單裡只寫一次（以先出現的為準）。
+    同 `(type, ref_id, username)` 已有未讀列 ⇒ 合併成那一列（連改很多次，簽核人只看到一則）。"""
+    from helpers.audit import _notify_in_txn
+    n, seen = 0, set()
+    for nt in notices or []:
+        names = []
+        for t in nt.get("to") or []:
+            if isinstance(t, str):
+                names.append(t)
+            elif isinstance(t, dict) and t.get("role") == "superadmin":
+                names.extend(_superadmins(conn))
+        for u in names:
+            if not u or (nt.get("type"), u) in seen:
+                continue
+            seen.add((nt.get("type"), u))
+            _notify_in_txn(conn, u, nt["type"], quote_no, quote_no, nt.get("text") or "", NOTICE_LINK, merge_unread=nt["type"] in _MERGE_TYPES)
+            n += 1
+    return n
+
+
+def _last_log(appr: dict, key: str, now: str):
+    lst = appr.get(key)
+    if isinstance(lst, list) and lst and isinstance(lst[-1], dict) and lst[-1].get("at") == now:
+        return lst[-1]
+    return None
+
+
+def reconcile_txn(conn, quote_no: str, data: dict, *, source: str, actor: dict = None, status: str = None, now: str = None) -> bool:
+    """**外殼**（S3b）：在呼叫端**寫入 `quotations.data_json` 之前**，對已讀進記憶體、改完內容的 `data` 做一次對帳。
+    讀設定 ⇒ （必要時讀資料庫真實 status）⇒ `reconcile_in_memory`（只改 `data["approval"]`）⇒ 同交易寫通知與稽核。回傳 `data["approval"]` 有沒有被改
+    （True＝呼叫端寫回的 `data` 帶著新的簽核狀態，**必須用這份 `data` 寫**，不可以再用舊的）。
+
+    - `off`（預設）⇒ **立刻回 False，零查詢**（模式讀取走 `_mode_cached`，快取命中不碰資料庫）。
+    - `status`：呼叫端知道「這次寫完之後這張單的狀態」就傳（漏斗在改狀態時傳新狀態），不知道就不傳 ⇒ 這裡多讀一次 `SELECT status`（只在 mode≠off）。
+      `data_json["status"]` 是排除鍵會過期，**不可當依據**。單不存在 ⇒ 不動。
+    - 通知與稽核都在**呼叫端的連線與交易**裡，交易回滾 ⇒ 一起消失；不 commit、不另開連線（W3 凍結）。
+    - `actor`：做這次修改的人（`{id, username, display_name}`）；沒有（系統路徑）⇒ 文字寫「系統（來源）」，且沒有人被當成「自己改的」而略過通知。
+    - 讀路徑（佇列、GET）**不要**呼叫這裡——只用 `effective_approval` 純推導。"""
+    mode = _mode_cached(conn)
+    if mode == "off":
+        return False
+    if status is None:
+        row = conn.execute("SELECT status FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        status = row["status"] if row else None
+    now = now or datetime.now().isoformat()
+    changed, notices = reconcile_in_memory(data, now, actor, source, status=status, enabled=(mode == "on"))
+    if not changed:
+        return False
+    appr = data.get("approval") or {}
+    sh = _last_log(appr, "shadowLog", now)
+    ch = _last_log(appr, "changeLog", now)
+    if sh is not None:                                                      # 影子：同一指紋只會有一筆（基準已前進）⇒ 稽核天然去重
+        _audit_in_txn(conn, "quotation.reconfirm_shadow", quote_no,
+                      {"fp": sh.get("fp"), "blocks": sh.get("blocks"), "wouldInvalidate": sh.get("wouldInvalidate"), "source": source}, actor, now)
+    if ch is not None:
+        act = "quotation.reconfirm_suspended" if ch.get("suspended") else "quotation.reconfirm"
+        _audit_in_txn(conn, act, quote_no, {"rev": ch.get("rev"), "blocks": ch.get("blocks"), "invalidated": ch.get("invalidated"),
+                                            "resigned": ch.get("resigned"), "source": source, "rounds": appr.get("reviewRounds")}, actor, now)
+    _write_notices(conn, quote_no, notices)
+    return True

@@ -1,5 +1,5 @@
 {
- "core_version": "1.151",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -212,6 +212,7 @@
    "_filter_live_notifications": "def(conn, rows)",
    "_mark_notifications_read": "def(ref_id, types, username=…)",
    "_notify": "def(username, type_, ref_id, ref_label, message, link=…)",
+   "_notify_in_txn": "def(conn, username, type_, ref_id, ref_label, message, link=…, *, merge_unread=…)",
    "_purge_notifications": "def(ref_id, types)",
    "notify_org_chain_notice": "def(conn, tiers, requester_username, ref_id, ref_label, message, type_=…)",
    "purge_old_notifications": "def(now=…, days=…)"
@@ -1577,6 +1578,7 @@
    "confirm_period_days": "def(conn=…)",
    "field_defs": "def(group)",
    "field_views": "def(group, values=…, *, days=…)",
+   "generation": "def()",
    "get": "def(group, field, *, conn=…, now=…)",
    "get_group": "def(group, *, conn=…, now=…)",
    "group_info": "def(group)",

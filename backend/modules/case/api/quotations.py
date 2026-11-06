@@ -1869,6 +1869,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             _row2 = _conn2.execute("SELECT data_json FROM quotations WHERE quote_no=?", (qno,)).fetchone()
             _data2 = json.loads(_row2["data_json"] or "{}") if _row2 else dict(q)
             _data2["approval"] = appr
+            _CFP.reconcile_txn(_conn2, qno, _data2, source="submit", actor=user, status="待審核")    # S3b：以寫回的最終內容靜默設基準（off ⇒ 零查詢）
             _conn2.execute(
                 "UPDATE quotations SET data_json=? WHERE quote_no=?",
                 (json.dumps(_data2, ensure_ascii=False), qno)
@@ -2449,6 +2450,9 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
                 q.pop("clauseTitles", None)
 
         MG.enforce(conn, quote_no, q, actor=user)   # 叫料審核（31-C）：整份存檔也要過閘（以資料庫現值為準；被拒的項目維持原值）
+        # 簽核二擇一 S3b：**所有改動都做完、UPDATE 之前**才對帳／補基準（送審的簽核層剛建好、還沒有 contentFp ⇒ 在這裡以最終內容靜默設基準；
+        # 更早算會被後面的精算／customFields／MG.enforce／權限還原改掉內容而誤判）。`reconfirm_mode=off`（預設）⇒ 零查詢、不動 q。
+        _CFP.reconcile_txn(conn, quote_no, q, source="put", actor=user, status=new_status)
         conn.execute("""
             UPDATE quotations SET
               status=?, customer_name=?, project_name=?,
@@ -5704,7 +5708,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
     after_commit = []       # 寫鎖內只收集，commit 之後才執行（見 _run_after_commit）
     with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（modules.case.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
         row = conn.execute(
-            "SELECT data_json, customer_name FROM quotations WHERE quote_no=? AND status IN ('待審核','簽核中')",
+            "SELECT data_json, customer_name, status FROM quotations WHERE quote_no=? AND status IN ('待審核','簽核中')",
             (quote_no,)
         ).fetchone()
         if not row:
@@ -5722,6 +5726,14 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             if not ok:
                 conn.close()
                 raise HTTPException(status_code, err_msg)
+            # 簽核二擇一 S3b：**先對帳、再決定**（權限檢查之後：沒權限的人不該觸發任何寫入）。內容在別條路徑被改過 ⇒ 已簽層回到待複查，這次核准不蓋章：
+            # 存起來（簽核狀態＋通知＋稽核同一交易）、409 請簽核人重看。影子模式只記錄、簽名不變 ⇒ 照常往下簽（行為與今天相同）。
+            _sig0 = _CFP.signature(appr)
+            if _CFP.reconcile_txn(conn, quote_no, d, source="approve", actor=user, status=row["status"])                     and _CFP.signature(d.get("approval") or {}) != _sig0:
+                save_quotation_json(conn, quote_no, d, reconcile_actor=user)
+                conn.commit()
+                conn.close()
+                raise HTTPException(409, "內容已更新，簽核狀態已重算，請重看")
             _guard_expected_fp(conn, d, body)
             _was_pending = _CFP.pending_entries(appr)       # 簽核動作前後做差，只替「這一次才簽」的條目蓋 signedFp
             tier      = tiers[ct_idx]
@@ -5823,7 +5835,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
                f"{quote_no}（{cname}）", {"allDone": all_done, "status": detail_status,
                                          "fpBound": body.expectedFp is not None})   # 過渡期（expectedFp 未強制）：記這次有沒有綁版本，才量得出何時能翻必填
         _run_after_commit(after_commit)
-        _mark_notifications_read(quote_no, ["approval_request"], user["username"])     # 我簽過了：自己那筆「待簽核」通知失效
+        _mark_notifications_read(quote_no, ["approval_request", "approval_reconfirm"], user["username"])     # 我簽過了：自己那筆「待簽核」「待複查」通知失效（S3b）
         return {"ok": True, "allDone": all_done, "signedTiers": _signed_tier_nos}
 
 
@@ -5915,7 +5927,7 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
         conn.close()
         _audit(_tok(authorization), "quotation.return", "quotation", new_no,
                f"{new_no}（原 {quote_no}，{cname}）", {"note": note, "previous_no": quote_no})
-        _mark_notifications_read(quote_no, ["approval_request"])           # 簽核作廢：所有人的待簽核通知失效
+        _mark_notifications_read(quote_no, ["approval_request", "approval_reconfirm", "approval_reconfirm_info", "approval_reconfirm_suspended"])           # 簽核作廢：所有人的待簽核／待複查通知失效
         return {"ok": True, "new_quote_no": new_no}
 
 
@@ -5979,7 +5991,7 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
         conn.close()
         _audit(_tok(authorization), "quotation.reject_final", "quotation", quote_no,
                f"{quote_no}（{cname}）", {"note": note})
-        _mark_notifications_read(quote_no, ["approval_request"])           # 拒絕結案：所有人的待簽核通知失效
+        _mark_notifications_read(quote_no, ["approval_request", "approval_reconfirm", "approval_reconfirm_info", "approval_reconfirm_suspended"])           # 拒絕結案：所有人的待簽核／待複查通知失效
         return {"ok": True}
 
 
