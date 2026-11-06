@@ -4,6 +4,7 @@
 - 新增（S0，不改行為）：`tests/test_content_fp_write_paths_s0_2026_11_06.py`——全樹寫 `quotations.data_json` 的 SQL 登記表（29 句／27 函式，含處置類別）、`save_quotation_json` 真實呼叫點（AST）、指紋排除清單與伺服器寫的頂層鍵歸類；新增寫入點或未歸類的鍵＝測試紅。盤點與發現見 `docs/platform/plans/QUOTE-APPROVE-EDIT-CHOICE-S0-RECORD.md`。
 - 新增（S1）：`content_fp.py`——`content_fingerprint`（`data_json` 去排除清單後正規化雜湊，未知鍵算內容）、`key_hashes`／`changed_blocks`、`stamp_signed`、**純推導**的 `effective_approval`（S1 沒有任何端點使用）、`rebaseline_fingerprint(conn, quote_no)`（供會碰簽核中單的遷移呼叫；走寫入漏斗、不動 `updated_at`、同交易寫稽核）。
 - 新增（S1，核准綁版本）：`GET /api/quotations/{no}` 在待審核／簽核中多回頂層 `contentFp`（在 `data` 外面，不會被存檔送回）；`POST /api/quotations/{no}/approve` 可帶 `expectedFp`，與伺服器現算不符 ⇒ 409「內容已更新，請重看」（權限檢查之後才比，不洩漏內容有沒有變）；簽核時替**這一次簽的**條目蓋 `signedFp`／`signedKeyHashes`，並寫 `approval.contentFp`（皆在排除清單內的 `approval` 底下）。沒帶 `expectedFp` 維持原行為（`content_fp.EXPECTED_FP_REQUIRED=False`；所有入口都帶了之後再翻）。報價單表單（quotation-form）載入時記下 `contentFp`、核准時帶上，409 後自動重載。
+- 新增（S1，稽核）：`quotation.approve` 的稽核 detail 加 `fpBound`（這次核准有沒有帶 `expectedFp`）——過渡期量得出何時能把 `EXPECTED_FP_REQUIRED` 翻成必填。`rebaseline_fingerprint` 不得接任何使用者端點（守門題）。
 - 不變：簽核流向、解鎖編輯、轉簽、通知——逐位元不變；舊單（條目沒有 `signedFp`）一律不判過期。
 
 ## 1.0.205 — 2026-10-17（wip/t71-backfill-fixes-r1；補登歷史案件 T71：瀏覽器實測缺陷、清單作廢入口與小修）
