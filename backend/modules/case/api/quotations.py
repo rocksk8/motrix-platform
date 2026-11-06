@@ -868,6 +868,7 @@ def list_quotations(
     missing_docs:  int = 0,
     unread:        int = 0,
     include_project_margin: int = 0,
+    with_sales_owner: int = 0,
     authorization: str = Header(None),
 ):
     """CM6（2026-09-24）：案件頁改由伺服器搜尋／篩選／排序／分頁（原本一次拉 500 件在前端篩，
@@ -1019,7 +1020,7 @@ def list_quotations(
     # 業務負責（業績歸屬）：清單卡片的「業務」改顯示 caseRecord.roles.sales（沒填 ⇒ 前端退回 sales_person）。2026-11-06 產品負責人裁示，僅顯示。
     # 在 Python 端逐筆解析這一頁的 data_json（不新增 SQL json_extract；ratchet）；壞資料只影響該列。
     _owner_map = {}
-    if rows:
+    if with_sales_owner and rows:                            # 選用：只有案件頁清單要求才多讀這一頁的 data_json（其他呼叫端行為不變）
         _disp = {u["username"]: (u["display_name"] or u["username"]) for u in conn.execute("SELECT username, display_name FROM users")}
         _nos2 = [r["quote_no"] for r in rows]
         for _c1 in range(0, len(_nos2), 300):
@@ -1035,7 +1036,8 @@ def list_quotations(
     items = []
     for r in rows:
         row = dict(r)
-        row["sales_owner"] = _owner_map.get(row["quote_no"], "")
+        if with_sales_owner:
+            row["sales_owner"] = _owner_map.get(row["quote_no"], "")
         row["historical"] = is_historical_json(row.pop("hist_dj", None))
         if masked:
             _mask_money_row(row)

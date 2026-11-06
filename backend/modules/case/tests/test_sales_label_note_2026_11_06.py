@@ -159,6 +159,8 @@ def test_card_falls_back_to_sales_person_when_list_has_no_owner_field():
 def test_list_endpoint_adds_sales_owner_in_python_not_sql_json_extract():
     src = API.read_text(encoding="utf-8")
     assert 'row["sales_owner"] = _owner_map.get(row["quote_no"], "")' in src
+    assert "with_sales_owner: int = 0," in src and "if with_sales_owner and rows:" in src       # 選用參數：其他呼叫端不多讀 data_json
+    assert "qs.set('with_sales_owner', '1')" in (ROOT / "frontend" / "js" / "case-management-list.js").read_text(encoding="utf-8")
     i = src.index("_owner_map = {}")
     seg = src[i:src.index('row["sales_owner"]', i)]
     assert "json_extract(" not in seg.lower()                  # ratchet：新程式在 Python 端逐筆解析
