@@ -165,6 +165,26 @@ def test_get_exposes_reconfirm_review_for_the_pending_entry(client, make_user):
     assert rv["needNote"] is True and rv["newReasons"]
 
 
+def test_get_masks_new_reason_text_when_quote_money_is_not_kept(client, make_user):
+    """K 審必修：newReasons 文字含毛利率／折讓金額 ⇒ 沒保留報價金額的 GET 回應給空陣列（needNote／changedBlocks 保留）；有金額的人照給。"""
+    hs, names = _signed_b_then_reconfirm(client, make_user, _set_cost(90.0))
+    boss_u, boss_p = make_user(username="s5_boss", role="superadmin")
+    boss = _login(client, boss_u, boss_p)
+    eng_u, eng_p = make_user(username="s5_eng", role="engineer")
+    eng = _login(client, eng_u, eng_p)
+    import db
+    c = db.get_db()
+    uid = c.execute("SELECT id FROM users WHERE username=?", (eng_u,)).fetchone()[0]
+    c.execute("UPDATE quotations SET assigned_user_ids=? WHERE quote_no=?", (json.dumps([uid]), NO)); c.commit(); c.close()
+    full = _get(client, boss)["approveReview"]
+    assert full["newReasons"] and any("毛利率" in t for t in full["newReasons"]), "對照組：有金額檢視權限者看得到文字"
+    r = client.get("/api/quotations/" + NO, headers=eng)
+    assert r.status_code == 200, r.text
+    masked = r.json()["approveReview"]
+    assert masked["newReasons"] == [] and masked["needNote"] is True and masked["changedBlocks"] == ["items"] and masked["flags"] == ["reconfirm"]
+    assert "毛利率" not in json.dumps(r.json(), ensure_ascii=False).replace("approval", ""), "整份回應不應帶出毛利率文字"
+
+
 def test_queue_detail_endpoint_carries_approve_review(client, make_user):
     hs, names = _signed_b_then_reconfirm(client, make_user, _set_cost(90.0))
     r = client.get("/api/approval-queue/detail", params={"type": "quotation", "id": NO}, headers=hs[0])

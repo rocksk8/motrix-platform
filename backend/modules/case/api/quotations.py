@@ -1412,6 +1412,8 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
         # 第42班（使用者裁示「拆開」）：業務／管理員仍看得到報價單層級（品項單價／成本／毛利、總額），精算與款項期別（收款／付款）才遮
         _keep_quote = _fl["keep_quote"]
         mask_quotation_data(result["data"], keep_orders=_fl["keep_orders"], keep_quote=_keep_quote)
+        if not _keep_quote and "approveReview" in result:     # S5（K 審必修）：新增原因文字含毛利率／折讓金額 ⇒ 沒保留報價金額的回應不給文字（needNote／changedBlocks 保留）
+            result["approveReview"]["newReasons"] = []
         if not _keep_quote:
             _mask_money_row(result)
     if isinstance(result["data"].get("tot"), dict):                 # 判定式＝該回應本來就保有 tot 金額（與 directMarginPct 同步）；否則鍵不存在
