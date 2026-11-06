@@ -1,6 +1,6 @@
-# 業務獎金讀源改 `roles.sales`——施工前方案（待點頭，尚未改任何獎金程式）
+# 業務獎金讀源改 `roles.sales`——方案與施工紀錄（D1～D5 已裁示、新版已施工）
 
-> 2026-11-06｜方案階段：**沒有改 `bonus.py` 或任何計算邏輯**｜基準 `76d3e2d07`＋本分支
+> 2026-11-06｜原方案階段未改程式；**D1～D5 裁示後已施工**（見文末「裁示與施工紀錄」）｜基準 `76d3e2d07`＋本分支
 > 裁示（轉達）：產品負責人看過正式機實測（4 張單兩欄人不同，其中 1 張分潤草稿人工已繞過 `sales_person`、手動填 `roles.sales`）後，裁示業務獎金計算讀源改 `roles.sales`；兩個欄位仍分開存、不合併、不互相寫入；`roles.sales` 沒填退回 `sales_person`。
 > 前置分析：`SALES-PERSON-VS-ROLES-SALES-ANALYSIS.md`
 
@@ -85,3 +85,23 @@
 3. 差異探針：切換前後對同一批合成案件逐位元組比對 `_auto_members` 輸出——兩欄相同或 `roles.sales` 空的案件必須與切換前**完全相同**。
 4. 同版補畫面「業務獎金亦依此欄位」與更新留痕註解、SPEC、known-limits、CHANGELOG。
 5. 不動：報價單表單、`sales_person` 的任何寫入、報表、row-access、`db.py` 凍住的歷史。
+
+---
+
+## 7. 裁示與施工紀錄（2026-11-06，產品負責人裁示，經 MOTRIX-ERP 模組結構圖窗口轉達）
+
+| # | 裁示 | 施工 |
+|---|---|---|
+| D1 | 已發放（及其他已建立分潤單）**不回溯**，只加中性註記（採 P1＋P2，不做 P3） | 不回溯＝現行結構自然結果（有單時名單來自 lines）；測試鎖住。註記：`GET /api/bonus/cases/{no}` 對最高管理者、非草稿單、現行「業務負責」不在名單內時多回 `salesOwnerNote`（`api/bonus.py::_sales_owner_note`），`pages/bonus.html`「發放明細」上方以中性色顯示；出納／名單本人看不到 |
+| D2 | `roles.sales` 有值但對不到唯一帳號 ⇒ 不退回報價人、提示手動指定；**只有完全沒填**才退回 | `api/bonus.py::_roles_sales_of()`＋`_auto_members()`：舊字串查無／同名、帳號停用或不存在 ⇒ `members.sales=[]`、`memberNotes.sales` 說明；反向控制測試：同一案件清空業務負責就會退回報價人 |
+| D3 | 舊版項目式獎金路徑：**凍結不處理** | **正式機回覆（2026-11-06，經窗口轉達）**：舊路徑相關表（`bonus_awards`、`bonus_award_lines`、`bonus_items` 等）全部 0 筆，從未有 `person_source='sales_person'` 的紀錄，`/awards/plan` 在正式機等於從未啟用；正式機唯一有資料的分潤是新版 `bonus_case_awards` 1 筆（MQ-202607-023）。⇒ 不為它設計相容方案；`_case_people()` 與 `PERSON_SOURCES` 註解標「凍結、仍讀報價人、日後啟用要先回頭決定」，程式未動 |
+| D4 | 鍵名保留 `'sales_person'`，只改解析邏輯 | 鍵名與 `bonus_items.person_source`／`person_source_snapshot` 歷史列未動；測試鎖鍵名仍在 |
+| D5 | 尚無分潤單、兩欄不同：**不主動通知**（**未採我原本「人工告知」的建議**；理由：建單時自然會看到） | 無通知程式 |
+
+**留痕**：`modules/payroll/bonus.py::PERSON_SOURCES` 註解並列 ①2026-09-23 使用者原話（逐字，未刪）②2026-11-06 產品負責人裁示（含依據、推翻的是「讀哪一欄」而非「兩欄各自存」）與 D1～D5、D3 正式機回覆；`test_person_sources_comment_keeps_both_rulings_and_legacy_path_is_marked_frozen` 鎖「兩個日期、舊原話、凍結、鍵名」都在。同步更新：`api/bonus.py` `_auto_members`／`_case_people` docstring、`docs/windows/SPEC-BONUS.md` §11.7（原文留著、加更新段）、`docs/quick/known-limits.md` §11 新列、payroll `CHANGELOG.md`。`db.py` 的 `_m103`／`_m113`（凍住的歷史）未改。
+
+**畫面文字**：案件管理頁角色下拉說明與不同人提示條，在同一版補上「業務獎金依此欄位」（測試 `test_hint_and_note_state_bonus_follows_sales_owner_now_that_bonus_code_switched` 鎖：畫面這樣說，程式就必須真的這樣做）。
+
+**驗證**：`modules/payroll/tests/test_bonus_sales_owner_2026_11_06.py` 29 題；還原 `_auto_members` 後 24 題轉紅（反向控制）。不被寫入：預覽與建立分潤單前後 `quotations.sales_person`／`sales_person_id` 位元組相同。
+
+**提醒（來源）**：新裁示來自產品負責人，經窗口轉達，不是使用者本人逐字；程式註解與文件都照實寫「產品負責人裁示（經窗口轉達）」。

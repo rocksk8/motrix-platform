@@ -1,5 +1,12 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-11-06（wip/sales-gap-report；業務獎金讀源改業務負責）
+- 變更（計算口徑，產品負責人 2026-11-06 裁示，經窗口轉達；推翻 2026-09-23 使用者「業務獎金→`sales_person`」的讀源，兩次裁示都留痕在 `bonus.py::PERSON_SOURCES` 註解）：以案件為中心的分潤，業務名單自動帶入（`api/bonus.py::_auto_members`，影響 `GET /cases/{no}` 無單預覽、`POST /cases/{no}` 建立、`POST …/preview` 無單分支）改讀案件「業務負責」`caseRecord.roles.sales`（新增 `_roles_sales_of()`，Python 逐筆解析，不新增 SQL `json_extract`）；**完全沒填**才退回報價人 `sales_person_id`／`sales_person`（逐字沿用舊解析）。`roles.sales` 有值但對不到可用帳號（舊字串查無／同名、帳號停用或不存在）⇒ 不退回報價人、不帶人並回 `memberNotes.sales` 提示手動指定。兩欄位仍各自存、互不寫入。
+- 不回溯：已有分潤單者（任何狀態）名單在建立當下已凍結於 `bonus_case_award_lines`，本次不改動；`GET /cases/{no}` 對最高管理者在非草稿單且現行業務負責不在名單內時多回 `salesOwnerNote`（中性註記，不改名單／金額／流程），`pages/bonus.html` 在「發放明細」上方顯示。
+- 凍結：舊版項目式獎金路徑（`GET／POST /awards/plan`、`_case_people()`、`bonus_items.person_source='sales_person'`）不隨本次改動，仍讀報價人；正式機 2026-11-06 回報相關表全部 0 筆、從未啟用。`person_source` 鍵名 `sales_person` 保留。
+- 無 migration、無新路由、無權限變更。測試：`tests/test_bonus_sales_owner_2026_11_06.py`（讀源、不退回、不回溯、兩欄位不被寫入、註記、留痕、反向控制：還原 `_auto_members` 時 24 題轉紅）。
+
+
 ## 1.2.22 — wip/t68-labor-dropdown-r3（審查 S1 後；T68 A4：勞報單選派發下拉，原第 55 班）
 - r3（內部整理，行為不變）：派發／勞報單關聯的讀取改為重用已在基準登記的 `_SELECT` 與既有 `dispatch_brief`（案件守門與 SQL 同一函式），未新增未經範圍讀取登記；對外回應與權限與 r2 逐位元相同
 - 勞報單「選派發」下拉（第 55 班）：新端點 `GET /api/payslip-dispatch-options`（權限 `payroll.payslip.view`，預設等價＝最高管理者或持有勞報單模組；搜尋＋分頁；預設只列受領人在名單內、非草稿非已取消的派發，`include_all` 列全部；標 `linked`／`linkedToThis`／`onRoster`；不含金額）。`payslips.html` 詳情的「手打派發編號」與 `payslip-form.html` 新增表單都改用共用元件 `static/dispatch-picker.js`（文字集中在 `LABELS`）。

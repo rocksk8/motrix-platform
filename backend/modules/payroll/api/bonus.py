@@ -1100,6 +1100,12 @@ def _username_of_sales_person(conn, sales_person_id, sales_person_name):
 def _case_people(conn, quote_no):
     """把案件上的人彙整成 `people_for_item()` 吃得下的形狀。
 
+    ## 🧊 凍結（2026-11-06，D3）：舊版項目式獎金路徑，**不隨「業務獎金改讀 `roles.sales`」的裁示改動**
+
+    這條（`GET／POST /awards/plan`、`bonus_items.person_source='sales_person'`）**仍讀報價人** `sales_person`。
+    正式機 2026-11-06 回報相關表全部 0 筆、從未啟用；所以沒有為它設計相容方案。**不要順手改，也不要假設它已經改了**——
+    日後若真的啟用，要先回頭決定是否同口徑（見 `modules/payroll/bonus.py::PERSON_SOURCES` 的裁示留痕）。
+
     ⚠️ `case_stages.assigned_to` 是 **JSON text**（`db.py` 註解逐字：
        「刻意維持 JSON text 欄位，不再往下正規化成 join table」）
        ⇒ 彙整**不能用一句 SQL JOIN**，要在應用層逐筆解析。
@@ -1200,12 +1206,40 @@ def _unique_username_by_display(conn, display_name):
     return rows[0]["username"] if len(rows) == 1 else None
 
 
+def _roles_sales_of(data_json):
+    """案件的「業務負責」`caseRecord.roles.sales` ⇒ `("empty", None)`／`("user", 帳號, 顯示名)`／`("name", None, 顯示名)`。
+
+    新形狀 `{"username","display"}`（CM3）取帳號；未轉換的舊字串只有顯示名。完全沒填（缺、空字串、空白、
+    物件裡帳號與顯示名都空）⇒ `empty`。在 Python 逐筆解析（不新增 SQL `json_extract`；ratchet）：壞的一筆當作讀不到、不拋例外
+    （原本這支的 SQL `json_extract` 遇壞 JSON 會整句失敗；這裡不會讓情況變更糟）。"""
+    import json as _json
+    try:
+        rs = ((_json.loads(data_json or "{}") or {}).get("caseRecord") or {}).get("roles", {}).get("sales")
+    except Exception:                                   # noqa: BLE001
+        return ("empty", None, "")
+    if isinstance(rs, dict):
+        un = (rs.get("username") or "").strip()
+        dn = (rs.get("display") or "").strip()
+        if un:
+            return ("user", un, dn or un)
+        return ("name", None, dn) if dn else ("empty", None, "")
+    if isinstance(rs, str) and rs.strip():
+        return ("name", None, rs.strip())
+    return ("empty", None, "")
+
+
 def _auto_members(conn, quote_no):
-    """§11.7：業務＝quotations.sales_person；專案＝caseRecord.roles.executor；後勤不自動帶。
-    回 (members, notes)。解不出（同名／查無）⇒ 不帶，notes 說明要手動指定。"""
+    """§11.7：業務＝案件「業務負責」`caseRecord.roles.sales`（沒填才退回報價人 `quotations.sales_person`）；
+    專案＝caseRecord.roles.executor；後勤不自動帶。回 (members, notes)。解不出（同名／查無／停用）⇒ 不帶，notes 說明要手動指定。
+
+    📜 「業務」來源的兩次裁示（新者取代舊者；見 `modules/payroll/bonus.py::PERSON_SOURCES` 的完整留痕）：
+      ① 2026-09-23 使用者：業務獎金→`sales_person`；② 2026-11-06 產品負責人：改讀 `roles.sales`，沒填才退回 `sales_person`。
+    🔴 `roles.sales` **有值但對不到可用帳號**（舊字串查無／同名、帳號已停用或不存在）⇒ **不退回報價人**：
+       退回等於悄悄把錢發給可能是錯的人（營運報表同一原則：不悄悄退回開單者）。只有「完全沒填」才退回。
+    只在「尚無分潤單」時被呼叫；已有分潤單的名單在建立當下已凍結（lines），不受這裡影響（不回溯，2026-11-06 裁示 D1）。"""
     # CM3（2026-09-24）：roles.executor 可能是 {"username","display"}（新）或顯示名稱字串（未轉換的舊資料）
     row = conn.execute(
-        "SELECT sales_person, sales_person_id,"
+        "SELECT sales_person, sales_person_id, data_json,"
         " CASE json_type(data_json, '$.caseRecord.roles.executor') WHEN 'object'"
         "   THEN json_extract(data_json, '$.caseRecord.roles.executor.username') END AS executor_user,"
         " CASE json_type(data_json, '$.caseRecord.roles.executor') WHEN 'object'"
@@ -1216,18 +1250,34 @@ def _auto_members(conn, quote_no):
     notes = {}
     if row is None:
         return members, notes
-    sales_user = None
-    if row["sales_person_id"]:
-        r = conn.execute("SELECT username FROM users WHERE id = ? AND active = 1",
-                         (row["sales_person_id"],)).fetchone()
-        sales_user = r["username"] if r else None
-    if not sales_user:
-        sales_user = _unique_username_by_display(conn, row["sales_person"])
-    if sales_user:
-        members["sales"].append({"username": sales_user, "person_bp": None, "source": "auto_sales"})
+    kind, r_user, r_name = _roles_sales_of(row["data_json"])
+    if kind == "user":
+        hit = conn.execute("SELECT username FROM users WHERE username = ? AND active = 1", (r_user,)).fetchone()
+        sales_user = hit["username"] if hit else None
+    elif kind == "name":
+        sales_user = _unique_username_by_display(conn, r_name)
     else:
-        notes["sales"] = ("報價單業務人員「%s」對不到唯一的帳號，請手動指定" % (row["sales_person"] or "")
-                          if row["sales_person"] else "報價單沒有業務人員，請手動指定")
+        sales_user = None
+    if kind != "empty":
+        # 業務負責有值：只認它，不退回報價人
+        if sales_user:
+            members["sales"].append({"username": sales_user, "person_bp": None, "source": "auto_sales"})
+        else:
+            notes["sales"] = ("案件「業務負責」「%s」的帳號已停用或不存在，請手動指定" % r_name if kind == "user"
+                              else "案件「業務負責」「%s」對不到唯一的帳號，請手動指定" % r_name)
+    else:
+        # 完全沒填業務負責 ⇒ 退回報價人（原本的解析，逐字不變）
+        if row["sales_person_id"]:
+            r = conn.execute("SELECT username FROM users WHERE id = ? AND active = 1",
+                             (row["sales_person_id"],)).fetchone()
+            sales_user = r["username"] if r else None
+        if not sales_user:
+            sales_user = _unique_username_by_display(conn, row["sales_person"])
+        if sales_user:
+            members["sales"].append({"username": sales_user, "person_bp": None, "source": "auto_sales"})
+        else:
+            notes["sales"] = ("報價單業務人員「%s」對不到唯一的帳號，請手動指定" % (row["sales_person"] or "")
+                              if row["sales_person"] else "報價單沒有業務人員，請手動指定")
     if row["executor_user"]:
         hit = conn.execute("SELECT username FROM users WHERE username = ? AND active = 1",
                            (row["executor_user"],)).fetchone()
@@ -1241,6 +1291,29 @@ def _auto_members(conn, quote_no):
                             if row["executor"] else "案件沒有設定「執行負責」，請手動指定")
     notes["admin"] = "後勤不自動帶入，請手動指定人員或群組"
     return members, notes
+
+
+def _sales_owner_note(conn, quote_no, lines):
+    """D1（2026-11-06）：已建立的分潤單（待審核／待發放／已發放）的業務名單，與案件**現行**「業務負責」不同人時的中性註記（只讀、只給最高管理者）。
+
+    業務獎金讀源改 `roles.sales` 之後，**不回溯**已建立的分潤單（名單在建立當下已凍結在 lines）；這行只是讓人看到
+    「這張單的業務名單是當時的，現在的業務負責另有其人」，不改名單、不改金額、不擋任何動作。
+    現行業務負責沒填、或已在名單內 ⇒ 空字串。"""
+    row = conn.execute("SELECT data_json FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone()
+    if row is None:
+        return ""
+    kind, r_user, r_name = _roles_sales_of(row["data_json"])
+    if kind == "empty":
+        return ""
+    frozen = [l for l in lines if l["category"] == "sales"]
+    if not frozen:
+        return ""
+    cur = r_user if kind == "user" else _unique_username_by_display(conn, r_name)
+    if cur and any(l["username"] == cur for l in frozen):
+        return ""
+    names = "、".join((l["display_name_snapshot"] or l["username"]) for l in frozen)
+    return ("此分潤單的業務名單（%s）於建立當下已凍結；現行案件「業務負責」為「%s」，不會回頭更動已建立的分潤單。"
+            % (names, r_name))
 
 
 def _case_row(conn, quote_no):
@@ -1576,6 +1649,10 @@ def get_case_bonus(quote_no: str, authorization: str = Header(None)):
         if view is None:
             raise HTTPException(404, "找不到這個案件的獎金分潤。")
         out = {"case": case, "status": award["status"], "scope": view["scope"], "lines": view["lines"]}
+        if view["scope"] == "all" and award["status"] != "草稿":
+            note = _sales_owner_note(conn, quote_no, lines)       # D1：不回溯，只加中性註記（只給最高管理者）
+            if note:
+                out["salesOwnerNote"] = note
         if view["scope"] in ("cashier", "all"):
             out.update(_deduction_view(conn, award, lines))
         if view["scope"] == "cashier":
