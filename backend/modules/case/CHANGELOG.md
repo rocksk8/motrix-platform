@@ -2,7 +2,7 @@
 
 ## (next) — 2026-11-06（wip/sales-gap-report；案件頁「業務」顯示業務負責）
 - 修正（畫面，僅顯示；無 migration、無新路由、無權限變更；不改任何欄位的讀寫、獎金、報表、可見度、篩選）：`pages/case-management.html` 清單卡片「業務：」與詳情頭「負責業務」改顯示 `caseRecord.roles.sales`（業務負責），**沒填才退回報價人 `sales_person`**（與營運報表 `_case_sales_owner` 同一個優先序；兩個欄位仍各自存、互不寫入）。人員角色下拉標籤改「業績歸屬（業務負責）」並加一句說明；報價人與業務負責兩邊都有值且顯示名不同時，角色區多一條中性提示條（不是錯誤，本來就是兩個欄位）。報價單表單的「報價人」欄不動。
-- 新增（清單端點，只加欄位）：`GET /api/quotations`（案件清單）選用參數 `with_sales_owner=1`（案件頁清單帶；其他呼叫端行為不變）時每列多回 `sales_owner`（業務負責的目前顯示名；沒填為空字串），`sales_person` 原樣保留。在 Python 端逐筆解析該頁 data_json（不新增 SQL `json_extract`；壞資料只影響該列）。`js/case-management-biz.js` 新增 `salesOwnerName(c)`／`selectedSalesOwner`／`salesRoleDiffNote`（只讀）；`css/case-management.css` 新增 `.cm-role-hint`／`.cm-role-note`。畫面文字**不提獎金**（獎金讀哪一欄另案裁示、另版施工）。
+- 新增（清單端點，只加欄位）：`GET /api/quotations`（案件清單）選用參數 `with_sales_owner=1`（案件頁清單帶；其他呼叫端行為不變）時每列多回 `sales_owner`（業務負責的目前顯示名；沒填為空字串），`sales_person` 原樣保留。在 Python 端逐筆解析該頁 data_json（不新增 SQL `json_extract`；壞資料只影響該列）。`js/case-management-biz.js` 新增 `salesOwnerName(c)`／`selectedSalesOwner`／`salesRoleDiffNote`（只讀）；`css/case-management.css` 新增 `.cm-role-hint`／`.cm-role-note`。同版補上說明「業務獎金依此欄位」（業務獎金名單已同版改讀業務負責，見 payroll 模組 CHANGELOG；測試鎖「畫面這樣說，程式就真的這樣做」）。
 - 分析與方案：`docs/platform/plans/SALES-PERSON-VS-ROLES-SALES-ANALYSIS.md`、`SALES-OWNER-BONUS-SWITCH-PLAN.md`。測試：`modules/case/tests/test_sales_label_note_2026_11_06.py`、`tests/test_e2e_case_sales_note_2026_11_06.py`；`tests/golden_case_page_2026_09_24.json` 一處文字（角色下拉標籤與說明）隨之更新。
 
 ## 1.0.205 — 2026-10-17（wip/t71-backfill-fixes-r1；補登歷史案件 T71：瀏覽器實測缺陷、清單作廢入口與小修）
