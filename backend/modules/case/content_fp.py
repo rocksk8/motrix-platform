@@ -95,6 +95,15 @@ def pending_entries(approval) -> list:
     return [a for _t, a in _entries(approval) if a.get("status") != "approved"]
 
 
+def self_edit_sign(tiers) -> bool:
+    """H6-3「自改自簽」：複查編輯者是整張單**唯一**的簽核條目（＝唯一未簽層、前面沒有已簽層、後面也沒有別層）⇒ 他改完自己簽，沒有第二雙眼。
+    只做標註（稽核＋通知超管），不阻擋。`tiers`＝有效簽核層（呼叫端的 `_active_tiers`）。"""
+    n = 0
+    for t in tiers or []:
+        n += sum(1 for a in ((t.get("approvers") or []) if isinstance(t, dict) else []) if isinstance(a, dict))
+    return n == 1
+
+
 def current_reasons_or_none(data: dict):
     """J1：目前內容的原因集合 `[{key,text}]`（S2 伺服器演算法）；任何失敗（設定讀不到、資料殘缺）回 None＝這次不記基準，**不可讓簽核因此失敗**。"""
     try:
@@ -524,8 +533,10 @@ def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str
             appr["currentTier"] = idx
     if invalidated:
         appr["reviewRounds"] = rounds + 1                                   # 不管這次一次作廢幾個條目、補追了幾次影子變動：只 +1
-    _append_log(appr, "changeLog", dict(base_log, invalidated=[a.get("username") for a in invalidated], resigned=[a.get("username") for a in resigned],
-                                        **({"editorPending": editor_pending} if editor_pending else {})))
+    entry_log = dict(base_log, invalidated=[a.get("username") for a in invalidated], resigned=[a.get("username") for a in resigned])
+    if editor_pending:
+        entry_log["editorPending"] = editor_pending
+    _append_log(appr, "changeLog", entry_log)
     finish_baseline()
 
     notices = []
@@ -595,6 +606,55 @@ def _write_notices(conn, quote_no: str, notices: list) -> int:
             _notify_in_txn(conn, u, nt["type"], quote_no, quote_no, nt.get("text") or "", NOTICE_LINK, merge_unread=nt["type"] in _MERGE_TYPES)
             n += 1
     return n
+
+
+SHADOW_STATS_ROW_CAP = 20000       # 影子統計最多讀幾列稽核（一週的量遠低於此；超過 ⇒ truncated=True，讓讀的人知道數字是下限）
+
+
+def shadow_stats(conn, since: str, until: str = None) -> dict:
+    """影子模式（`reconfirm_mode=shadow`）統計（K2，**唯讀**）：窗內 `quotation.reconfirm_shadow` 稽核列＝「若開旗標本會作廢」的內容變動事件。
+    回 `{window, events, wouldInvalidateEvents, quotes, byBlock, bySource, byUser, byDay, dealTagShare, truncated}`：
+    - `events`：影子事件數（每次指紋變動一筆；基準前進 ⇒ 同一指紋不重複）；`wouldInvalidateEvents`：其中真的有人會被作廢（有已簽層過期）的事件數。
+    - `byBlock`／`bySource`／`byUser`：依 `wouldInvalidate` 非空的事件分布（沒人會被作廢的變動不算打斷），皆 `[{key,count}]` 由多到少。
+    - `dealTagShare`：會作廢的事件中，區塊含 `dealTag` 者的占比（0~1；規格要用它決定 dealTag 是否改列排除）。
+    只讀 `audit_log`（走 action 索引＋at 範圍），不碰 `quotations`；不寫任何東西。"""
+    sql = "SELECT at, username, target_id, detail FROM audit_log WHERE action='quotation.reconfirm_shadow' AND at>=?"
+    params = [since]
+    if until:
+        sql += " AND at<?"
+        params.append(until)
+    rows = conn.execute(sql + " ORDER BY id LIMIT ?", params + [SHADOW_STATS_ROW_CAP + 1]).fetchall()
+    truncated = len(rows) > SHADOW_STATS_ROW_CAP
+    rows = rows[:SHADOW_STATS_ROW_CAP]
+    by_block, by_source, by_user, by_day, quotes = {}, {}, {}, {}, set()
+    would = deal = 0
+    for r in rows:
+        try:
+            d = json.loads(r["detail"] or "{}") or {}
+        except (TypeError, ValueError):
+            d = {}
+        quotes.add(r["target_id"])
+        if not d.get("wouldInvalidate"):
+            continue
+        would += 1
+        blocks = [x for x in (d.get("blocks") or []) if isinstance(x, str)]
+        for blk in blocks:
+            by_block[blk] = by_block.get(blk, 0) + 1
+        if any(x == "dealTag" for x in blocks):
+            deal += 1
+        src = str(d.get("source") or "")
+        by_source[src] = by_source.get(src, 0) + 1
+        who = r["username"] or ""
+        by_user[who] = by_user.get(who, 0) + 1
+        day = (r["at"] or "")[:10]
+        by_day[day] = by_day.get(day, 0) + 1
+
+    def _top(m):
+        return [{"key": k, "count": v} for k, v in sorted(m.items(), key=lambda kv: (-kv[1], kv[0]))]
+    return {"window": {"from": since, "to": until}, "events": len(rows), "wouldInvalidateEvents": would, "quotes": len(quotes),
+            "byBlock": _top(by_block), "bySource": _top(by_source), "byUser": _top(by_user),
+            "byDay": [{"key": k, "count": by_day[k]} for k in sorted(by_day)],
+            "dealTagShare": round(deal / would, 4) if would else 0.0, "truncated": truncated}
 
 
 def _last_log(appr: dict, key: str, now: str):

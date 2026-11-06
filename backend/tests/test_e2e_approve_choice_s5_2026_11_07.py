@@ -226,3 +226,33 @@ def test_form_without_flags_keeps_the_plain_confirm(live_server, make_user, e2e_
     assert _wait(lambda: _state()[1]["status"] == "approved", page=page)
     assert any("確認簽核通過" in m for m in confirms) and page.locator('[data-testid="approve-choice-dialog"]').count() == 0
     assert "choice" not in posts[-1] and posts[-1]["expectedFp"] == fp
+
+
+@pytest.mark.e2e
+def test_dialog_traps_focus_and_closes_on_escape_and_overlay(live_server, make_user, e2e_browser):
+    """S6（K 審 S5 的備註）：彈窗開著時 Tab／Shift+Tab 不會跳到背後的頁面；Esc 與點遮罩都等於取消（不送請求）。"""
+    u, p = make_user(username="aqch_ft", role="admin", modules=["quotation"])
+    _set_mode(2)
+    _seed(u, reconfirm=True)
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, u, p)
+    page.on("dialog", lambda dlg: dlg.accept())
+    posts = []
+    page.on("request", lambda rq: posts.append(1) if rq.method == "POST" and rq.url.endswith("/approve") else None)
+    _open_queue_item(page, live_server)
+    inside = "() => !!document.activeElement.closest('[data-testid=approve-choice-dialog]')"
+    page.click('[data-testid="aq-approve"]')
+    page.wait_for_selector('[data-testid="approve-choice-dialog"]', timeout=5000)
+    for _ in range(7):                                                         # 比可聚焦元件數多按幾次：一直在彈窗內循環
+        page.keyboard.press("Tab")
+        assert page.evaluate(inside)
+    for _ in range(7):
+        page.keyboard.press("Shift+Tab")
+        assert page.evaluate(inside)
+    page.keyboard.press("Escape")
+    page.wait_for_selector('[data-testid="approve-choice-dialog"]', state="detached", timeout=3000)
+    page.click('[data-testid="aq-approve"]')
+    page.wait_for_selector('[data-testid="approve-choice-dialog"]', timeout=5000)
+    page.mouse.click(5, 5)                                                     # 點遮罩（彈窗外）
+    page.wait_for_selector('[data-testid="approve-choice-dialog"]', state="detached", timeout=3000)
+    assert not posts and _state()[1]["status"] == "pending"

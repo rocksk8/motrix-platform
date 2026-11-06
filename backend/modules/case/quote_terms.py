@@ -236,7 +236,9 @@ def compute_approval_reason_entries(q: dict, presets: list, default_payment_term
     entries = []
 
     def add(key, text, **extra):
-        entries.append(dict({"key": key, "text": text}, **extra))      # 毛利原因另帶 `margin`（判定用的毛利，小數）供 category_summary；diff_reason_entries 只看 key／text
+        e = {"key": key, "text": text}
+        e.update(extra)
+        entries.append(e)      # 毛利原因另帶 `margin`（判定用的毛利，小數）供 category_summary；diff_reason_entries 只看 key／text
 
     min_pct = None                                                # 第一個有成本的品項才讀（預設 30＝今天的寫死值；前端 checkApproval 同源，見 project-margin/config 的 minItemMarginPct）
     _max_days = max_valid_days()                                  # 預設 30＝今天寫死的值（設定 quote_approval.max_valid_days；前端 checkApproval 同源）

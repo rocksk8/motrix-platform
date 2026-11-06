@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 905,
-  "endpoints_api": 901,
+  "endpoints_total": 906,
+  "endpoints_api": 902,
   "write_total": 490,
   "write_api": 490,
-  "get_api": 411,
-  "distinct_paths_api": 761,
+  "get_api": 412,
+  "distinct_paths_api": 762,
   "write_with_body_api": 360,
   "write_with_path_param_api": 354
  },
@@ -1634,6 +1634,11 @@
    "body": false
   },
   "GET /api/quotations/last-received-bank-account": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/quotations/reconfirm-shadow-stats": {
    "w": false,
    "pp": 0,
    "body": false

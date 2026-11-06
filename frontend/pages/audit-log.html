@@ -133,6 +133,10 @@
           <option value="quotation.create">新增報價單</option>
           <option value="quotation.submit">送出審核</option>
           <option value="quotation.approve">簽核通過</option>
+          <option value="quotation.review_edit">複查編輯</option>
+          <option value="quotation.reconfirm">內容變動複查</option>
+          <option value="quotation.reconfirm_suspended">複查暫停（輪次達上限）</option>
+          <option value="quotation.reconfirm_shadow">內容變動（影子模式）</option>
           <option value="quotation.return">退回重審</option>
           <option value="quotation.reject_final">最終否決</option>
           <option value="quotation.update">更新報價單</option>
@@ -356,6 +360,11 @@
         <option value="">所有模組</option>
         <template x-for="m in moduleOptions" :key="m.key"><option :value="m.key" x-text="m.label + '（' + m.count + '）'"></option></template>
       </select>
+      <select class="filter" x-model="fTag" @change="applyFilter()" title="簽核標籤">
+        <option value="">所有標籤</option>
+        <option value="informed">知情核准（內容有變仍選維持）</option>
+        <option value="self_edit_sign">自改自簽（唯一簽核人自己改）</option>
+      </select>
       <input type="search" placeholder="案件單號 MQ-…" x-model.debounce.400ms="fCase" @input="applyFilter()">
       <input type="search" placeholder="單據號" x-model.debounce.400ms="fRef" @input="applyFilter()">
       <input type="search" placeholder="人員（帳號或姓名）" x-model.debounce.400ms="fUser" @input="applyFilter()">
@@ -412,6 +421,7 @@
               <span class="badge-fail" x-show="item.result==='fail'" x-text="'失敗：' + (item.reason_label || item.status_code)"></span>
               <span class="badge-action" :style="`background:${badgeBg(item.action)};color:${badgeFg(item.action)}`"
                     x-text="item.result==='fail' ? failTitle(item) : actionLabel(item.action)"></span>
+              <span class="badge-action" x-show="tagLabel(item)" style="background:#fef3c7;color:#92400e" x-text="tagLabel(item)"></span>
             </div>
             <div class="tl-label" x-text="item.target_label || item.target_id || '—'"></div>
             <div class="tl-label" x-show="item.case_no || item.ref_no" x-text="[item.module_label, item.case_no, item.ref_no].filter(Boolean).join(' › ')"></div>
@@ -453,7 +463,7 @@
       loading: false,
       q: '',
       filterAction: '',
-      fModule: '', fCase: '', fRef: '', fUser: '', fFrom: '', fTo: '', fResult: '',
+      fModule: '', fCase: '', fRef: '', fUser: '', fFrom: '', fTo: '', fResult: '', fTag: '',
       moduleOptions: [], tree: [], treeWindow: null, failSummary: { total: 0, byReason: [] },
 
       // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，
@@ -485,13 +495,21 @@
         if (this.fFrom) p.set('date_from', this.fFrom)
         if (this.fTo) p.set('date_to', this.fTo)
         if (this.fResult) p.set('result', this.fResult)
+        if (this.fTag) p.set('tag', this.fTag)
         return p
+      },
+      // 簽核標籤（S6）：detail 內 `"tag": "informed" | "self_edit_sign"`；detail 可能是字串或物件
+      tagLabel(it) {
+        let d = it && it.detail
+        if (typeof d === 'string') { try { d = JSON.parse(d) } catch (e) { d = null } }
+        const t = d && d.tag
+        return t === 'informed' ? '知情核准' : t === 'self_edit_sign' ? '自改自簽' : ''
       },
       moduleLabel(k) { const m = this.moduleOptions.find(x => x.key === k); return m ? m.label : k },
       failTitle(it) { return (it.module_label || '操作') + ' 寫入被擋下' + (it.target_label ? '（' + it.target_label + '）' : '') },
       applyFilter() { this.page = 1; this.load(); this.loadTree(); this.loadFailSummary() },
       resetFilter() {
-        this.fModule = this.fCase = this.fRef = this.fUser = this.fFrom = this.fTo = this.fResult = ''
+        this.fModule = this.fCase = this.fRef = this.fUser = this.fFrom = this.fTo = this.fResult = this.fTag = ''
         this.filterAction = ''; this.q = ''; this.applyFilter()
       },
       treeLevel() { return !this.fModule ? 'module' : (!this.fCase ? 'case' : 'ref') },
@@ -585,6 +603,10 @@
           'quotation.create':                '新增報價單',
           'quotation.submit':                '送出審核',
           'quotation.approve':               '簽核通過',
+          'quotation.review_edit':           '複查編輯',
+          'quotation.reconfirm':             '內容變動複查',
+          'quotation.reconfirm_suspended':   '複查暫停（輪次達上限）',
+          'quotation.reconfirm_shadow':      '內容變動（影子模式）',
           'quotation.return':                '退回重審',
           'quotation.reject_final':          '最終否決',
           'quotation.update':                '更新報價單',

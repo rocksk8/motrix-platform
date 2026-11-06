@@ -1274,6 +1274,26 @@ def get_last_received_bank_account(customerName: Optional[str] = None, authoriza
 # 命中 {quote_no} 這條、被當成一個叫 gate-matrix 的單號而回 404（看起來就像
 # 端點沒生效）。上面的 stage-board / last-received-bank-account 也是同樣理由
 # 排在這裡。
+@router.get("/api/quotations/reconfirm-shadow-stats")
+def reconfirm_shadow_stats(days: int = 7, authorization: str = Header(None)):
+    """影子模式統計（簽核二擇一 K2／H6-1④；**唯讀、僅超管**）：近 `days` 天（預設 7，最多 90）「若開旗標本會作廢」的次數與區塊／來源／操作者分布，
+    供決定 `dealTag` 是否改列排除、與是否可把 `reconfirm_mode` 翻 on。另帶目前的 `mode`。不寫任何東西、不發通知。
+    ⚠️ 必須在 `{quote_no}` 路由之前（同 gate-matrix）。"""
+    user = _require_user(authorization)
+    if user["role"] != "superadmin":
+        raise HTTPException(403, "只有最高管理者可查看影子模式統計")
+    days = max(1, min(int(days), 90))
+    since = (datetime.now() - timedelta(days=days)).isoformat()
+    conn = get_db()
+    try:
+        out = _CFP.shadow_stats(conn, since)
+        out["mode"] = _CFP._mode_cached(conn)
+    finally:
+        conn.close()
+    out["days"] = days
+    return out
+
+
 @router.get("/api/quotations/gate-matrix")
 def gate_matrix(authorization: str = Header(None)):
     """已成案／已結案案件的「完結案五關卡」一次攤平回傳，供案件管理的關卡矩陣使用
@@ -5892,6 +5912,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
                f"{quote_no}（{cname}）", {"allDone": all_done, "status": detail_status,
                                          "fpBound": body.expectedFp is not None,
                                          **({"flags": _flags, "choice": body.choice, "fp": body.expectedFp,
+                                             **({"tag": "informed"} if body.choice == "keep" else {}),     # S6：稽核頁「知情核准」篩選的標籤（旗標成立＋明確選維持）
                                              **({"confirmNote": (body.confirmNote or "")[:_CFP.REVIEW_NOTE_MAX]} if body.confirmNote else {}),
                                              **({"needNote": _review["needNote"], "newReasons": _review["newReasons"], "changedBlocks": _review["changedBlocks"]} if _review else {})} if _flags else {})})   # 過渡期（expectedFp 未強制）：記這次有沒有綁版本，才量得出何時能翻必填
         _run_after_commit(after_commit)
@@ -5991,6 +6012,7 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
         _changes = _summarize_quote_changes(d, q)
         _append_edit_history(q, user, now, "review_edit", _changes)
 
+        _self_sign = _CFP.self_edit_sign(tiers)                 # H6-3：編輯者是唯一簽核條目（改完自己簽）⇒ 稽核加註＋通知超管（不阻擋）
         _sig0, _rev0 = _CFP.signature(appr), appr.get("contentRev")
         save_quotation_json(conn, quote_no, q, status=row["status"], updated_at=now, actor=user, source="review-edit")
         appr = q.get("approval") or {}
@@ -6008,10 +6030,14 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
             _to = [u for u in dict.fromkeys(_names + [appr.get("requestedBy")]) if u and u != user["username"]]
             if _to:
                 _CFP._write_notices(conn, quote_no, [{"type": "approval_reconfirm_info", "to": _to, "text": _txt}])
+        if _self_sign:
+            _CFP._write_notices(conn, quote_no, [{"type": "approval_self_edit_sign", "to": [{"role": "superadmin"}],
+                                                  "text": f"{user.get('display_name') or user['username']} 複查編輯了自己是唯一簽核人的報價單（自改自簽，無第二人複核）"}])
         _CFP.audit_in_txn(conn, "quotation.review_edit", quote_no,
                           {"fpBefore": body.expectedFp, "fpAfter": _fp_new, "changes": _changes[:30], "invalidated": _ch.get("invalidated") or [],
                            "resigned": _ch.get("resigned") or [], "editorPending": _ch.get("editorPending") or [], "rev": _ch.get("rev"),
-                           "note": (body.note or "")[:200]}, user, now)
+                           "note": (body.note or "")[:200],
+                           **({"tag": "self_edit_sign", "selfEditSign": True} if _self_sign else {})}, user, now)
         conn.commit()
     except BaseException:
         try:

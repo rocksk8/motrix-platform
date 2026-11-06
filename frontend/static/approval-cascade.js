@@ -162,7 +162,15 @@
       if (ta) ta.addEventListener('input', sync);
       sync();
       let done = false;
-      const onKey = function (ev) { if (ev.key === 'Escape') { ev.stopPropagation(); finish(null); } };
+      const onKey = function (ev) {
+        if (ev.key === 'Escape') { ev.stopPropagation(); finish(null); return; }
+        if (ev.key !== 'Tab') return;                               // 焦點圈住：Tab／Shift+Tab 只在彈窗內可操作的元件間循環（不跳到背後的頁面）
+        const f = Array.prototype.slice.call(box.querySelectorAll('textarea,button')).filter(function (x) { return !x.disabled; });
+        ev.preventDefault();
+        if (!f.length) return;
+        const i = f.indexOf(document.activeElement);
+        f[ev.shiftKey ? (i <= 0 ? f.length - 1 : i - 1) : (i < 0 || i === f.length - 1 ? 0 : i + 1)].focus();
+      };
       function finish(v) {
         if (done) return; done = true;
         document.removeEventListener('keydown', onKey, true);

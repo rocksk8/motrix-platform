@@ -4673,6 +4673,25 @@
   ],
   "s": 200
  },
+ "/api/quotations/reconfirm-shadow-stats": {
+  "k": [
+   "byBlock",
+   "byDay",
+   "bySource",
+   "byUser",
+   "days",
+   "dealTagShare",
+   "events",
+   "mode",
+   "quotes",
+   "truncated",
+   "window",
+   "window.from",
+   "window.to",
+   "wouldInvalidateEvents"
+  ],
+  "s": 200
+ },
  "/api/quotations/stage-board": {
   "k": [
    "caseLifecycle",
