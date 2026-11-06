@@ -421,3 +421,40 @@ def test_rebaseline_fingerprint_is_not_reachable_from_any_user_facing_endpoint()
             if "rebaseline_fingerprint" in f.read_text(encoding="utf-8", errors="replace") and ("/api" in "/" + rel or rel.startswith("routers/")):
                 hits.append(rel)
     assert hits == [], "rebaseline_fingerprint 出現在使用者端點檔：%s" % hits
+
+
+# ── S1b：簽核佇列詳情帶 contentFp（簽核人在佇列頁看到的版本）────────────────────────────────
+def _queue_detail(client, h):
+    r = client.get("/api/approval-queue/detail", params={"type": "quotation", "id": NO}, headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_queue_detail_returns_the_same_fp_as_the_quote_get(client, make_user):
+    hs, _ = _seed(client, make_user)
+    det = _queue_detail(client, hs[0])
+    assert det["contentFp"] == client.get("/api/quotations/" + NO, headers=hs[0]).json()["contentFp"] == C.content_fingerprint(_row()[0])
+
+
+def test_queue_detail_fp_moves_with_content_and_approving_with_it_is_bound(client, make_user):
+    hs, _ = _seed(client, make_user)
+    fp = _queue_detail(client, hs[0])["contentFp"]
+    _edit_items(9)
+    assert _queue_detail(client, hs[0])["contentFp"] != fp, "內容變了，詳情重抓要拿到新指紋"
+    before = _row()
+    assert client.post("/api/quotations/%s/approve" % NO, headers=hs[0], json={"expectedFp": fp}).status_code == 409
+    assert _row() == before
+    fp2 = _queue_detail(client, hs[0])["contentFp"]
+    assert client.post("/api/quotations/%s/approve" % NO, headers=hs[0], json={"expectedFp": fp2}).status_code == 200
+    assert _row()[0]["approval"]["tiers"][0]["approvers"][0]["signedFp"] == fp2
+
+
+def test_queue_detail_fp_is_computed_at_view_time_not_read_from_stored_approval(client, make_user):
+    """approval.contentFp 是『上次有人簽的版本』；詳情必須是『現在這版』，否則改過內容後仍會放行。"""
+    hs, _ = _seed(client, make_user)
+    import db
+    conn = db.get_db()
+    d = json.loads(conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+    d["approval"]["contentFp"] = "1:" + "0" * 32
+    conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), NO)); conn.commit(); conn.close()
+    assert _queue_detail(client, hs[0])["contentFp"] == C.content_fingerprint(_row()[0])

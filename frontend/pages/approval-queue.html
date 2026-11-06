@@ -1725,6 +1725,14 @@
           return (firstPending?.username === a.username ? '等待簽核中' : '等待前一位完成') + selfTag
         },
 
+        // 簽核綁版本（簽核二擇一 S1b）：只有報價單（走 /api/quotations/{no}/approve、沒有自帶端點）、
+        // 且 detail 確實是這一筆時才回指紋；否則 undefined（JSON 序列化時整個鍵省略）
+        expectedFpFor(item) {
+          const d = this.detail
+          if (item?.type !== 'quotation' || item.approveUrl) return undefined
+          return (d && d.type === 'quotation' && d.id === item.quoteNo && d.contentFp) || undefined
+        },
+
         async doApprove() {
           if (!this.selected) return
           const item = this.selected
@@ -1788,11 +1796,15 @@
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
               body: JSON.stringify({ approvedByDisplay: this.session.displayName || this.session.username,
-                                     cascade: cascadeNos.length > 0 })
+                                     cascade: cascadeNos.length > 0,
+                                     // 簽核綁版本（簽核二擇一 S1b）：只有報價單、且畫面上的詳情確實是這一筆時才帶；
+                                     // 詳情沒載到（含列表上的快速核准）＝不綁（稽核記 fpBound:false）
+                                     expectedFp: this.expectedFpFor(item) })
             })
             if (!r.ok) {
               const err = await r.json().catch(() => ({}))
               alert('簽核失敗：' + (err.detail || r.status))
+              if (r.status === 409 && this.expectedFpFor(item)) await this.loadDetail(item)   // 內容在你看的時候被改了：重載這一筆，重看再簽
               return
             }
             const resp = await r.json()

@@ -7066,6 +7066,10 @@ def detail_quotation(conn, doc_no):
                       "時間": last.get("at"), "類型": last.get("type")},
             "before": None,
         }
+    if isinstance(d, dict) and d:
+        # 簽核二擇一 S1b：簽核佇列詳情也給內容指紋（簽核人在佇列頁看到內容的那一刻算），核准時當 expectedFp 帶回。
+        # 算在原始（未遮蔽）內容上，與 approve 端點讀到的 data_json 同一份；指紋本身不含任何內容
+        out["contentFp"] = _CFP.content_fingerprint(d)
     return out
 
 

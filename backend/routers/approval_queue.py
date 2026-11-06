@@ -421,6 +421,8 @@ def approval_queue_detail(type: str, id: str, authorization: str = Header(None))
                "fields": list(d.get("fields") or []), "items": list(d.get("items") or []),
                "files": list(d.get("files") or []), "changes": d.get("changes"),
                "case": _case_header(conn, d["quoteNo"])}
+        if d.get("contentFp"):        # 簽核二擇一 S1b：提供者（目前只有 M01 報價單）給的內容指紋，核准時帶回綁版本；指紋不含內容，不必遮蔽
+            out["contentFp"] = d["contentFp"]
         # 金額遮蔽：規則與憑證流一致（見 _can_see_queue_money）
         if user.get("role") != "superadmin":           # 存簿封面影像上印著完整帳號 ⇒ 只有最高管理者（使用者裁示 2026-10-01）
             out["files"] = [f for f in out["files"] if not f.get("dataUrl") and f.get("id") != "passbook"]
