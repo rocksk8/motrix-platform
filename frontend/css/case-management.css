@@ -308,7 +308,10 @@ td.cm-gate:hover .cm-gatecell__v { text-decoration: underline; }
 .cm-fgrid--contract > :nth-child(1),
 .cm-fgrid--contract > :nth-child(2) { grid-column:span 2; }
 .cm-fgrid--contract > :nth-child(5) { grid-column:1 / -1; }
-.cm-fgrid--people { grid-template-columns:repeat(3, minmax(0,240px)); justify-content:start; margin-bottom:20px; }
+.cm-fgrid--people { grid-template-columns:repeat(3, minmax(0,240px)); justify-content:start; margin-bottom:20px; align-items:start; }
+/* 業績歸屬欄的說明與「報價人≠業績歸屬」提示：中性色（不是錯誤也不是警告——兩個欄位本來就各有用途） */
+.cm-role-hint { margin-top:4px; font-size:11px; line-height:1.5; color:var(--text-dim); }
+.cm-role-note { margin:-8px 0 20px; padding:6px 10px; font-size:12px; line-height:1.6; color:var(--text-secondary); background:var(--surface-muted); border:1px solid var(--border-light); border-radius:var(--radius); }
 .cm-fgrid--dates  { grid-template-columns:repeat(2, minmax(0,200px)); justify-content:start; }
 @media (max-width:900px) {
   .cm-fgrid--contract { grid-template-columns:repeat(2, minmax(0,1fr)); }
