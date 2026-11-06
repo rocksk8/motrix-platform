@@ -95,7 +95,37 @@ def pending_entries(approval) -> list:
     return [a for _t, a in _entries(approval) if a.get("status") != "approved"]
 
 
-def stamp_signed(approval: dict, was_pending: list, data: dict) -> list:
+def current_reasons_or_none(data: dict):
+    """J1：目前內容的原因集合 `[{key,text}]`（S2 伺服器演算法）；任何失敗（設定讀不到、資料殘缺）回 None＝這次不記基準，**不可讓簽核因此失敗**。"""
+    try:
+        from modules.case import quote_terms as _qt
+        return _qt.current_reason_entries(data)
+    except Exception:                                   # noqa: BLE001
+        return None
+
+
+APPROVE_FLAGS = ("reconfirm", "reassigned", "delegated")
+
+
+def approve_flags(entry: dict, username: str) -> list:
+    """K3：這次核准是不是「簽在別人看過的、或自己沒親自接手的內容上」。回成立的旗標（固定順序）：
+    - `reconfirm`：目標條目正在複查（內容在他簽過之後變動）；
+    - `reassigned`：條目是轉簽而來（`reassignedFrom`）——新簽核人沒看過原本的送審內容；
+    - `delegated`：操作者不是條目本人（代理代簽）。
+    成立 ⇒ 核准一律要帶 `expectedFp`（且等於目前指紋）與 `choice="keep"`（`reconfirm_mode=on` 時，不受 `EXPECTED_FP_REQUIRED` 影響）。"""
+    if not isinstance(entry, dict):
+        return []
+    out = []
+    if entry.get("reconfirm"):
+        out.append("reconfirm")
+    if entry.get("reassignedFrom"):
+        out.append("reassigned")
+    if entry.get("username") and username and entry.get("username") != username:
+        out.append("delegated")
+    return out
+
+
+def stamp_signed(approval: dict, was_pending: list, data: dict, reason_entries=None) -> list:
     """把『這一次才變成 approved』的條目蓋上 `signedFp`／`signedKeyHashes`（含同人連簽的 cascade 層），並更新 `approval.contentFp`。
 
     只蓋這次簽的——S1 之前就簽好的舊條目不蓋（否則等於替它們背書了這之後才發生的內容變動）。回傳被蓋章的條目。"""
@@ -104,6 +134,8 @@ def stamp_signed(approval: dict, was_pending: list, data: dict) -> list:
     for a in done:
         a["signedFp"] = fp
         a["signedKeyHashes"] = hashes
+        if reason_entries is not None:                   # J1：複查 diff 的基準（與 signedFp 同時記；舊單沒有 ⇒ 首次複查以當下補算）
+            a["signedReasonEntries"] = reason_entries
     approval["contentFp"] = fp
     approval["keyHashes"] = hashes                       # 最近一次基準的區塊雜湊（`reconcile_in_memory` 比對「哪些區塊變了」用；否則會退回取某個舊條目的 signedKeyHashes ⇒ 重複報舊變動）
     return done
@@ -188,7 +220,7 @@ MODES = ("off", "shadow", "on")         # off＝完全不跑 reconcile（外層�
 LOG_CAP = 50                            # changeLog／shadowLog 各保留最近幾筆（避免 data_json 無限長；輪次另由 reviewRounds 計）
 
 #: 通知文字裡「系統做的」來源中文名（actor 為 None 時用）；沒列到的 source 照原字串
-SOURCE_LABELS = {"put": "儲存報價單", "submit": "送審", "approve": "核准", "review-edit": "複查編輯", "material": "材料申請", "payment": "款項",
+SOURCE_LABELS = {"put": "儲存報價單", "submit": "送審", "approve": "核准", "review-edit": "複查編輯", "review-edit-pre": "複查編輯前對帳", "material": "材料申請", "payment": "款項",
                  "settlement": "精算", "case-record": "案件記錄", "migration": "系統遷移",
                  # S3b 的呼叫點
                  "funnel": "儲存報價單", "overhead_pct": "調整管銷％", "material_change": "材料申請變更", "material_paid": "材料申請付款",
@@ -304,7 +336,7 @@ def _old_key_hashes(appr: dict) -> dict:
     return {}
 
 
-def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str = None, enabled: bool):
+def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str = None, enabled: bool, reason_entries=None):
     """**純函式**：只改記憶體中的 `data["approval"]`，不寫資料庫、不讀設定、不呼叫任何 API。回 `(changed, notices)`：
     `changed`＝approval 有被改、呼叫端要寫回；`notices`＝要發的通知清單（見下）。
 
@@ -388,9 +420,27 @@ def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str
                     "text": f"報價單內容在簽核期間已變動超過 {REVIEW_ROUNDS_LIMIT} 輪，系統不再自動作廢已簽層，請最高管理者處置（最近一次：{who}）"}] if first_time else []
         return True, notices
 
+    # 編輯者是「最後一個還沒簽完的人」（扣掉他，其他條目全已簽、且這次沒有任何一個被作廢）⇒ 不自動簽：自動簽會讓整單全部 approved 卻沒走核准的收尾
+    # （狀態改已送出、PDF、通知核准）而卡在簽核中。改成他維持待簽（原已簽的轉 pending＋reconfirm），自己再按一次核准（綁版本＋choice）走正常收尾。
+    last_one = bool(resign_candidates) and not to_invalidate and not any(
+        a.get("status") != "approved" for _t, a in _entries(appr) if not any(a is r for r in resign_candidates))
+    editor_pending = []
+    if last_one:
+        for a in resign_candidates:
+            if a.get("status") == "approved":
+                a["prevSignedFp"], a["prevApprovedAt"] = a.get("signedFp"), a.get("approvedAt")
+                a["status"], a["reconfirm"] = "pending", True
+                a.pop("approvedAt", None)
+            editor_pending.append(a.get("username"))
+        resign_candidates = []
+        idx = _first_pending_tier(appr)
+        if idx is not None:
+            appr["currentTier"] = idx
     resigned = []
     for a in resign_candidates:
         a["status"], a["approvedAt"], a["signedFp"], a["signedKeyHashes"] = "approved", now, fp, hashes
+        if reason_entries is not None:                                      # J1：呼叫端（reconcile_txn）算好傳進來，這裡維持純函式
+            a["signedReasonEntries"] = reason_entries
         for k in ("reconfirm", "prevSignedFp", "prevApprovedAt"):
             a.pop(k, None)
         resigned.append(a)
@@ -406,7 +456,8 @@ def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str
             appr["currentTier"] = idx
     if invalidated:
         appr["reviewRounds"] = rounds + 1                                   # 不管這次一次作廢幾個條目、補追了幾次影子變動：只 +1
-    _append_log(appr, "changeLog", dict(base_log, invalidated=[a.get("username") for a in invalidated], resigned=[a.get("username") for a in resigned]))
+    _append_log(appr, "changeLog", dict(base_log, invalidated=[a.get("username") for a in invalidated], resigned=[a.get("username") for a in resigned],
+                                        **({"editorPending": editor_pending} if editor_pending else {})))
     finish_baseline()
 
     notices = []
@@ -432,6 +483,11 @@ def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str
 
 NOTICE_LINK = "approval-queue.html"
 _MERGE_TYPES = ("approval_reconfirm", "approval_reconfirm_info", "approval_reconfirm_suspended")
+
+
+def audit_in_txn(conn, action: str, quote_no: str, detail: dict, user: dict = None, now: str = None) -> None:
+    """公開別名（S4 的 review-edit 與存檔同交易寫稽核用）。"""
+    _audit_in_txn(conn, action, quote_no, detail, user, now)
 
 
 def _audit_in_txn(conn, action: str, quote_no: str, detail: dict, user: dict = None, now: str = None) -> None:
@@ -498,7 +554,8 @@ def reconcile_txn(conn, quote_no: str, data: dict, *, source: str, actor: dict =
         row = conn.execute("SELECT status FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
         status = row["status"] if row else None
     now = now or datetime.now().isoformat()
-    changed, notices = reconcile_in_memory(data, now, actor, source, status=status, enabled=(mode == "on"))
+    reasons = current_reasons_or_none(data) if (source == SOURCE_REVIEW_EDIT and mode == "on") else None    # J1：只有複查編輯會重簽條目，才需要基準
+    changed, notices = reconcile_in_memory(data, now, actor, source, status=status, enabled=(mode == "on"), reason_entries=reasons)
     if not changed:
         return False
     appr = data.get("approval") or {}

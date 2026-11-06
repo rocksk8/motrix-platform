@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 904,
-  "endpoints_api": 900,
-  "write_total": 489,
-  "write_api": 489,
+  "endpoints_total": 905,
+  "endpoints_api": 901,
+  "write_total": 490,
+  "write_api": 490,
   "get_api": 411,
-  "distinct_paths_api": 760,
-  "write_with_body_api": 359,
-  "write_with_path_param_api": 353
+  "distinct_paths_api": 761,
+  "write_with_body_api": 360,
+  "write_with_path_param_api": 354
  },
  "select_star": {
   "modules": 287,
@@ -3864,6 +3864,11 @@
    "body": true
   },
   "POST /api/quotations/{quote_no}/reject-final": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/review-edit": {
    "w": true,
    "pp": 1,
    "body": true

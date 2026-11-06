@@ -755,6 +755,17 @@ class ApprovalActionBody(BaseModel):
     # 簽核二擇一 S1：簽核人載入畫面時拿到的內容指紋（GET /api/quotations/{no} 的 `contentFp`）。
     # 帶了而與伺服器現在算的不同 ⇒ 409「內容已更新，請重看」（核准綁版本；B3）。沒帶 ⇒ 看 `content_fp.EXPECTED_FP_REQUIRED`。
     expectedFp:        Optional[str]  = None
+    # 簽核二擇一 K3：旗標成立（複查中／轉簽而來／代理代簽）時必帶 `choice="keep"`＝「我看過目前這一版、維持我的核准」；
+    # 要改內容走 POST /review-edit。`confirmNote` 只進稽核（簽核人的補充說明）。沒有旗標時兩個都可省略。
+    choice:            Optional[str]  = None
+    confirmNote:       Optional[str]  = None
+
+
+class ReviewEditBody(BaseModel):
+    """簽核二擇一 S4：簽核人複查時改內容。`data`＝整份編輯後本文；`expectedFp`＝他載入畫面時的內容指紋（必填：不符 ⇒ 409）。"""
+    data:       dict
+    expectedFp: str
+    note:       Optional[str] = None
 
 
 # ── Quotation sequence ────────────────────────────────────────────────────────
@@ -5689,6 +5700,9 @@ def _run_after_commit(actions):
             logger.exception("簽核後續動作失敗（簽核本身已成立）：%r", getattr(act, "func", act))
 
 
+_FLAG_LABELS = {"reconfirm": "內容在你簽過之後有變動", "reassigned": "此單由他人轉簽給你", "delegated": "你是代理簽核"}
+
+
 def _guard_expected_fp(conn, d: dict, body) -> None:
     """核准綁版本（簽核二擇一 S1）：內容在簽核人載入畫面之後被改過 ⇒ 409，連線先關（呼叫端在 write_txn 內）。
     放在權限檢查**之後**：沒權限的人不該從 409 得知「內容有沒有變」。"""
@@ -5737,12 +5751,21 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
                 conn.commit()
                 conn.close()
                 raise HTTPException(409, "內容已更新，簽核狀態已重算，請重看")
-            _guard_expected_fp(conn, d, body)
-            _was_pending = _CFP.pending_entries(appr)       # 簽核動作前後做差，只替「這一次才簽」的條目蓋 signedFp
             tier      = tiers[ct_idx]
             approvers = tier.get("approvers") or []
             first_pending = next((a for a in approvers if a.get("status") != "approved"), None)
             my_entry = first_pending
+            _flags = _CFP.approve_flags(my_entry, user["username"])
+            if _flags and _CFP._mode_cached(conn) == "on":     # K3（安全關鍵）：旗標成立 ⇒ expectedFp＋choice 一律必填，**不受 EXPECTED_FP_REQUIRED 影響**；off／shadow 與今天逐位元相同
+                if body.choice is not None and body.choice != "keep":
+                    conn.close()
+                    raise HTTPException(400, "choice 只接受 keep；要修改內容請用複查編輯")
+                if body.expectedFp is None or body.choice != "keep":
+                    conn.close()
+                    raise HTTPException(409, "此單需先看過目前內容再確認（" + "、".join(_FLAG_LABELS[f] for f in _flags) + "）：請重新載入後選擇「維持核准」",
+                                        headers={"X-Approve-Flags": ",".join(_flags)})
+            _guard_expected_fp(conn, d, body)
+            _was_pending = _CFP.pending_entries(appr)       # 簽核動作前後做差，只替「這一次才簽」的條目蓋 signedFp
 
             my_entry["status"]     = "approved"
             my_entry["approvedAt"] = now
@@ -5775,11 +5798,12 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             appr["tiers"] = tiers
             appr.pop("steps", None)
             appr.pop("currentStep", None)
-            _CFP.stamp_signed(appr, _was_pending, d)        # signedFp／signedKeyHashes／approval.contentFp（只動排除清單內的 approval，內容不變）
+            _CFP.stamp_signed(appr, _was_pending, d, _CFP.current_reasons_or_none(d))        # signedFp／signedKeyHashes／approval.contentFp（只動排除清單內的 approval，內容不變）
             _signed_tier_nos = [i + 1 for i in [ct_idx, *cascaded]]
             detail_status = (f"第 {'、'.join(str(n) for n in _signed_tier_nos)} 層 "
                              f"{my_entry.get('displayName', user['username'])} 已簽核")
         else:
+            _flags = []
             # no tiers on this quotation — check global settings first
             if user["role"] != "superadmin":
                 conn.close()
@@ -5836,10 +5860,140 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         conn.close()
         _audit(_tok(authorization), "quotation.approve", "quotation", quote_no,
                f"{quote_no}（{cname}）", {"allDone": all_done, "status": detail_status,
-                                         "fpBound": body.expectedFp is not None})   # 過渡期（expectedFp 未強制）：記這次有沒有綁版本，才量得出何時能翻必填
+                                         "fpBound": body.expectedFp is not None,
+                                         **({"flags": _flags, "choice": body.choice, "fp": body.expectedFp,
+                                             **({"confirmNote": (body.confirmNote or "")[:200]} if body.confirmNote else {})} if _flags else {})})   # 過渡期（expectedFp 未強制）：記這次有沒有綁版本，才量得出何時能翻必填
         _run_after_commit(after_commit)
         _mark_notifications_read(quote_no, ["approval_request", "approval_reconfirm"], user["username"])     # 我簽過了：自己那筆「待簽核」「待複查」通知失效（S3b）
         return {"ok": True, "allDone": all_done, "signedTiers": _signed_tier_nos}
+
+
+# 複查編輯：伺服器自有（不採用用戶端值）的頂層鍵＝排除清單（簿記）＋這幾個。approval 由伺服器對帳後的值為準、editHistory 另外追加。
+_REVIEW_EDIT_SERVER_KEYS = tuple(sorted(_CFP.EXCLUDED_KEYS - {"approval", "editHistory"})) + ("dealTag", "settlement", "caseRecord", "historical", "salesPerson")
+
+
+@router.post("/api/quotations/{quote_no}/review-edit")
+def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: str = Header(None)):
+    """簽核人複查時直接改內容（簽核二擇一 S4；規格 H2／H3／H7／H9）。
+
+    - 權限：待審核／簽核中；當層待簽人或有效代理人（同 `check_approve_permission`）；有金額檢視權限；**不是送審人**；非 `is_signed` 回簽擇一單；沿用 `require_case`。
+      超管不走這裡（用既有的解鎖編輯）。`reconfirm_mode` 必須是 on：off／shadow 不會作廢任何簽，開放編輯等於讓簽核人改完內容卻沒人複查。
+    - **先對帳、再查權限**（同 approve；S3b）：資料庫裡「已簽但已過期」的人先被落地成待複查，才輪得到他當「當層待簽人」。這一步用 `review-edit-pre`、不掛操作者
+      （不是他改的；也不觸發他自己的重簽）；沒權限 ⇒ 不 commit，對帳寫的一切一起消失。
+    - 儲存走漏斗（`save_quotation_json(source="review-edit")`）：其他已簽層依一般規則作廢；**編輯者自己**的條目依 H2——原已簽、正在複查 ⇒ `signedFp`＝新指紋、維持已簽；
+      首次待簽 ⇒ 不自動簽。伺服器自有欄位（dealTag／settlement／clauseTitles／editHistory／案件記錄…）一律以資料庫為準。
+    - 稽核 `quotation.review_edit` 與存檔同一交易。送審人維持原申請人。
+    """
+    user = _require_user(authorization)
+    if user["role"] == "superadmin":
+        raise HTTPException(403, "超級管理員請使用解鎖編輯")
+    if not _tier_allowed("quote_money", user):                       # ＝quote_money_visible（欄位政策的報價單層級；出口不再直接呼叫角色函式，t65 棘輪）
+        raise HTTPException(403, "此帳號沒有財務檢視權限，不可編輯報價單")
+    q   = body.data
+    now = datetime.now().isoformat()
+    for _k in ("_isUnlockEdit", "_expectedUpdatedAt", "moneyMasked", "contentFp"):     # 控制旗標／讀取端點注入的顯示欄位：不是內容，不可存進 data_json 變成指紋的一部分
+        q.pop(_k, None)
+    validate_quote_tax(q)
+    q["quoteNo"] = quote_no
+    conn = get_db()
+    try:
+        begin_write(conn)
+        row = conn.execute(
+            "SELECT id, status, deal_tag, settle_status, updated_at, sales_person_id, sales_person, data_json, location_id, is_signed "
+            "FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        if not row:
+            conn.close()
+            raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        require_case(user, row, quote_no)
+        if row["status"] not in _CFP.PENDING_STATES:
+            conn.close()
+            raise HTTPException(409, f"報價單狀態為「{row['status']}」，只有待審核／簽核中可複查編輯")
+        if row["is_signed"]:
+            conn.close()
+            raise HTTPException(409, "已回簽的擇一單不可複查編輯")
+        if _CFP._mode_cached(conn) != "on":
+            conn.close()
+            raise HTTPException(409, "複查編輯尚未啟用（簽核內容變動複查模式未開）")
+        try:
+            d = json.loads(row["data_json"] or "{}") or {}
+        except (TypeError, ValueError):
+            d = {}
+        _CFP.reconcile_txn(conn, quote_no, d, source="review-edit-pre", actor=None, status=row["status"], now=now)
+        appr  = d.get("approval") or {}
+        tiers = _active_tiers(appr)
+        if not tiers:
+            conn.close()
+            raise HTTPException(409, "此報價單沒有簽核層，無法複查編輯")
+        if appr.get("requestedBy") and appr.get("requestedBy") == user["username"]:
+            conn.close()
+            raise HTTPException(403, "送審人不可複查編輯自己送審的報價單")
+        ct_idx = _current_tier_idx(appr)
+        ok, status_code, err_msg = check_approve_permission(tiers, ct_idx, user["username"], conn=conn)
+        if not ok:
+            conn.close()
+            raise HTTPException(status_code, err_msg)
+        if body.expectedFp != _CFP.content_fingerprint(d):
+            conn.close()
+            raise HTTPException(409, "內容已更新，請重看")
+        if appr.get("reconfirmSuspended") or int(appr.get("reviewRounds") or 0) >= _CFP.REVIEW_ROUNDS_LIMIT:
+            conn.close()
+            raise HTTPException(409, f"複查輪次已達上限（{_CFP.REVIEW_ROUNDS_LIMIT}），請由最高管理者處置")
+
+        # 伺服器自有欄位以資料庫為準（同 PUT）；其餘由用戶端帶來的整份本文為內容
+        for _k in _REVIEW_EDIT_SERVER_KEYS:
+            if _k in d:
+                q[_k] = d[_k]
+            else:
+                q.pop(_k, None)
+        q["status"] = row["status"]
+        q["approval"] = appr
+        q.pop("editHistory", None)
+        if isinstance(d.get("editHistory"), list):
+            q["editHistory"] = d["editHistory"]
+        _PG.prepare(q, user, row, quote_no)                    # 管銷比率權限／利潤欄位伺服器重算／擇一欄位放回現值（同 PUT）
+        validate_tax_basis(q, row["status"])
+        _quote_custom_fields_gate(q, d.get("customFields"))
+        _fp_new = _CFP.content_fingerprint(q)
+        if _fp_new == body.expectedFp:
+            conn.close()
+            raise HTTPException(400, "內容沒有任何變動；若要維持原內容請直接核准")
+        _changes = _summarize_quote_changes(d, q)
+        _append_edit_history(q, user, now, "review_edit", _changes)
+
+        _sig0, _rev0 = _CFP.signature(appr), appr.get("contentRev")
+        save_quotation_json(conn, quote_no, q, status=row["status"], updated_at=now, actor=user, source="review-edit")
+        appr = q.get("approval") or {}
+        _ch = (appr.get("changeLog") or [None])[-1]                # 這次存檔的對帳紀錄（contentRev 有前進才算；漏斗內的對帳用自己的時間戳，不能比 at）
+        _ch = _ch if isinstance(_ch, dict) and appr.get("contentRev") != _rev0 and _ch.get("rev") == appr.get("contentRev") else {}
+        tot = q.get("tot") or {}
+        conn.execute(                                          # 漏斗只寫 data_json／狀態／熱欄位；其餘冗餘欄位這裡補（業務與據點不動：伺服器自有）
+            "UPDATE quotations SET customer_name=?, project_name=?, total=?, pretax=?, direct_margin_pct=?, net_margin_pct=?, quote_date=?, valid_days=? WHERE quote_no=?",
+            (q.get("customerName"), q.get("projectName"), tot.get("total", 0), tot.get("pretax", 0),
+             tot.get("directMarginPct", 0), tot.get("netMarginPct", 0), q.get("quoteDate"), q["validDays"] if "validDays" in q else _pw.default_valid_days(), quote_no))
+        if not _ch.get("invalidated"):                         # 沒有已簽層被作廢（沒人簽過）⇒ 一般複查通知不會發；送審人與其他待簽人仍要知道內容被改了
+            _blk = "、".join(_ch.get("blocks") or []) or "（區塊未知）"
+            _names = [a.get("username") for _t, a in _CFP._entries(appr) if a.get("status") != "approved" and a.get("username") != user["username"]]
+            _txt = f"報價單內容被 {user.get('display_name') or user['username']} 複查編輯（{_blk}）"
+            _to = [u for u in dict.fromkeys(_names + [appr.get("requestedBy")]) if u and u != user["username"]]
+            if _to:
+                _CFP._write_notices(conn, quote_no, [{"type": "approval_reconfirm_info", "to": _to, "text": _txt}])
+        _CFP.audit_in_txn(conn, "quotation.review_edit", quote_no,
+                          {"fpBefore": body.expectedFp, "fpAfter": _fp_new, "changes": _changes[:30], "invalidated": _ch.get("invalidated") or [],
+                           "resigned": _ch.get("resigned") or [], "editorPending": _ch.get("editorPending") or [], "rev": _ch.get("rev"),
+                           "note": (body.note or "")[:200]}, user, now)
+        conn.commit()
+    except BaseException:
+        try:
+            conn.rollback()
+            conn.close()
+        except Exception:                # noqa: BLE001 — 前面可能已關閉
+            pass
+        raise
+    conn.close()
+    spawn_bg_thread(_backup_quotation, args=(quote_no,))
+    _mark_notifications_read(quote_no, ["approval_request", "approval_reconfirm"], user["username"])
+    return {"ok": True, "updated_at": now, "contentFp": _fp_new, "resigned": _ch.get("resigned") or [], "invalidated": _ch.get("invalidated") or [],
+            "signatureChanged": _CFP.signature(appr) != _sig0}
 
 
 @router.post("/api/quotations/{quote_no}/reject")

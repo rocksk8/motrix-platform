@@ -71,7 +71,7 @@ DIRECT_WRITES = {
 FUNNEL_CALLS = {
     "modules/case/content_fp.py": 1,      # S1 rebaseline_fingerprint（走漏斗、不動 updated_at）
     "modules/case/api/material_orders.py": 2,
-    "modules/case/api/quotations.py": 23,      # S3b：approve 對帳後狀態被重算時用漏斗存（+1）
+    "modules/case/api/quotations.py": 24,      # S3b：approve 對帳後狀態被重算時用漏斗存（+1）；S4：review-edit 存檔（+1）
     "modules/case/api/settlement_api.py": 1,
 }
 
@@ -112,7 +112,8 @@ KEY_SCAN_FILES = (
 )
 KEY_VARS = frozenset({"d", "data", "q", "qdata", "_data2", "_sd", "dd"})
 #: 變數鍵（`d[k]=`／`d[SNAPSHOT_KEY]=`）：SNAPSHOT_KEY＝locationIdentity；`profit_guard` 的 `d[k]` 迴圈是 ALT_SERVER_KEYS
-VARIABLE_KEY_ALIASES = {"SNAPSHOT_KEY": "locationIdentity", "k": None}   # None＝迴圈變數，鍵集合由 ALT_SERVER_KEYS 另守
+VARIABLE_KEY_ALIASES = {"SNAPSHOT_KEY": "locationIdentity", "k": None,
+                         "_k": None}   # None＝迴圈變數，鍵集合另守：`k`＝ALT_SERVER_KEYS；`_k`＝review-edit 的 _REVIEW_EDIT_SERVER_KEYS（test_review_edit_s4 釘死內容）
 
 
 # ── 掃描器 ─────────────────────────────────────────────────────────────────────────────────
@@ -281,7 +282,7 @@ def test_save_quotation_json_call_sites_are_pinned():
     assert _funnel_call_counts() == FUNNEL_CALLS, (
         "save_quotation_json 呼叫點變了：新增呼叫端走漏斗＝安全（S3 的寫後掛鉤會涵蓋），但請更新 FUNNEL_CALLS；"
         "若是想繞過它另寫 UPDATE，請改到 DIRECT_WRITES 登記並說明理由")
-    assert sum(FUNNEL_CALLS.values()) == 27
+    assert sum(FUNNEL_CALLS.values()) == 28
 
 
 def test_the_funnel_is_the_only_place_with_a_plain_data_json_update_in_quotations_module():

@@ -56,7 +56,7 @@ def _qty(n):
 
 def _approve(client, h):
     fp = client.get("/api/quotations/" + NO, headers=h).json()["contentFp"]
-    r = client.post("/api/quotations/%s/approve" % NO, headers=h, json={"expectedFp": fp})
+    r = client.post("/api/quotations/%s/approve" % NO, headers=h, json={"expectedFp": fp, "choice": "keep"})   # S4 K3：複查中／轉簽／代理要帶 choice；沒旗標時多帶無害
     assert r.status_code == 200, r.text
     return fp
 

@@ -106,3 +106,13 @@ H4 寫的是布林 `reconfirm_on_change`（預設關），H9 另規定「影子�
 4. **模式快取最長 5 秒**：設定發布立即作廢（設定世代）；到期的待生效值（放寬後的新值）最多晚 5 秒被看到。讀不到設定一律當 `on`（最嚴）、不快取。
 5. **`change_pct`、`material_change._apply` 沒有各自的行為測試**：只有 S0 守門（函式內有 `reconcile_txn(` 呼叫，且行號早於寫 `data_json` 的 `execute`）；`sync_order_paid`、`recycle_adapter` 刪除／還原有行為測試。
 6. **觸發對帳的人不會收到自己的通知**：簽核人自己按核准而被對帳作廢時，只得到 409「簽核狀態已重算」；其他層與送審人照常收到通知。
+
+## 10. S4（複查編輯端點）實作記錄與偏離
+
+1. **順序（PM 交辦的判斷題）**：review-edit 與 approve 有**同一個過期狀態問題**（資料庫裡「已簽但簽在舊內容」的人，在對帳之前不是「當層待簽人」）⇒ 同樣**先對帳、再查權限**。對帳用 `source="review-edit-pre"`、不掛操作者：那不是他改的，也不能觸發他自己的重簽。沒權限 ⇒ 連線不 commit，對帳痕跡消失（測試：`test_stale_approved_approver_can_review_edit…`、`test_denied_review_edit_leaves_no_trace…`；拿掉對帳呼叫前者翻紅）。
+2. **偏離 ①（需 PM／K 確認）：`reconfirm_mode` 不是 on 時 review-edit 一律 409。** off／shadow 不會作廢任何簽，開放編輯＝簽核人改完內容卻沒人複查，是新的繞過。
+3. **偏離 ②：K3 只在 on 時強制。** off／shadow 維持與今天逐位元相同；否則 S5 彈窗上線前，轉簽／代理的核准會被鎖死。稽核照記旗標。**S5 上線前不得把模式開成 on。**
+4. **偏離 ③：編輯者是最後一個未簽完的人 ⇒ 不自動簽**（S3a 新增分支，`changeLog.editorPending`）。否則舊單（其他層沒有 `signedFp`、永不作廢）上整單全 approved、狀態卻停在簽核中，沒走核准收尾（已送出、PDF、核准通知）。
+5. **範圍**：`caseRecord` 不可由 review-edit 改；`salesPerson` 釘資料庫（簽核人不能藉複查改案件擁有者）；代理人編輯不替本人重簽。
+6. **J1**：`stamp_signed(…, reason_entries)` 與 `reconcile_in_memory(…, reason_entries=)`；`reconcile_txn` 只在 `source==review-edit` 且 on 時才算（純函式維持不讀設定）。
+
