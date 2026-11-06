@@ -157,6 +157,12 @@
   ],
   "s": 200
  },
+ "POST /api/quotations/{quote_no}/review-edit": {
+  "k": [
+   "detail"
+  ],
+  "s": 403
+ },
  "POST /api/quotations/{quote_no}/stages/apply-template": {
   "k": [
    "baseDate",
