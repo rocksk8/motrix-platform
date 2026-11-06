@@ -1727,10 +1727,11 @@
 
         // 簽核綁版本（簽核二擇一 S1b）：只有報價單（走 /api/quotations/{no}/approve、沒有自帶端點）、
         // 且 detail 確實是這一筆時才回指紋；否則 undefined（JSON 序列化時整個鍵省略）
+        // 優先用詳情的指紋（簽核人看到的內容）；沒開詳情（列表上的快速核准）就用列表載入當下的指紋（S4b）——列表過期同樣 409
         expectedFpFor(item) {
           const d = this.detail
           if (item?.type !== 'quotation' || item.approveUrl) return undefined
-          return (d && d.type === 'quotation' && d.id === item.quoteNo && d.contentFp) || undefined
+          return (d && d.type === 'quotation' && d.id === item.quoteNo && d.contentFp) || item.contentFp || undefined
         },
 
         async doApprove() {
@@ -1798,13 +1799,17 @@
               body: JSON.stringify({ approvedByDisplay: this.session.displayName || this.session.username,
                                      cascade: cascadeNos.length > 0,
                                      // 簽核綁版本（簽核二擇一 S1b）：只有報價單、且畫面上的詳情確實是這一筆時才帶；
-                                     // 詳情沒載到（含列表上的快速核准）＝不綁（稽核記 fpBound:false）
+                                     // 詳情沒載到（列表上的快速核准）＝綁列表載入當下的指紋（S4b）；都沒有（舊列表資料）＝不綁（稽核記 fpBound:false）
                                      expectedFp: this.expectedFpFor(item) })
             })
             if (!r.ok) {
               const err = await r.json().catch(() => ({}))
               alert('簽核失敗：' + (err.detail || r.status))
-              if (r.status === 409 && this.expectedFpFor(item)) await this.loadDetail(item)   // 內容在你看的時候被改了：重載這一筆，重看再簽
+              if (r.status === 409 && this.expectedFpFor(item)) {                              // 內容在你看的時候被改了：重載，重看再簽
+                const d = this.detail
+                if (d && d.type === 'quotation' && d.id === item.quoteNo) await this.loadDetail(item)   // 詳情開著：重載這一筆
+                await this.loadQueue()                                                         // 列表的指紋也要換新（快速核准用）
+              }
               return
             }
             const resp = await r.json()

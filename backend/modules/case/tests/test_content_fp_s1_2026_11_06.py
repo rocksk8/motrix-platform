@@ -458,3 +458,44 @@ def test_queue_detail_fp_is_computed_at_view_time_not_read_from_stored_approval(
     d["approval"]["contentFp"] = "1:" + "0" * 32
     conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), NO)); conn.commit(); conn.close()
     assert _queue_detail(client, hs[0])["contentFp"] == C.content_fingerprint(_row()[0])
+
+
+# ── S4b：列表載入當下的指紋（快速核准綁版本）──────────────────────────────────────────────
+def _queue_item(client, h):
+    r = client.get("/api/approval-queue", headers=h)
+    assert r.status_code == 200, r.text
+    its = [it for g in r.json()["queue"] for it in g["items"] if it.get("quoteNo") == NO and it.get("type") == "quotation"]
+    assert len(its) == 1, r.text
+    return its[0]
+
+
+def test_queue_list_item_carries_the_same_fp_as_detail(client, make_user):
+    hs, _ = _seed(client, make_user)
+    it = _queue_item(client, hs[0])
+    assert it["contentFp"] == C.content_fingerprint(_row()[0]) == client.get("/api/quotations/" + NO, headers=hs[0]).json()["contentFp"]
+    _edit_items(7)
+    assert _queue_item(client, hs[0])["contentFp"] != it["contentFp"], "內容變了列表的指紋要跟著變（快取以字串雜湊為鍵，不會拿到舊值）"
+
+
+def test_quick_approve_with_list_fp_signs_and_a_stale_list_fp_is_409(client, make_user):
+    hs, _ = _seed(client, make_user)
+    fp_list = _queue_item(client, hs[0])["contentFp"]
+    _edit_items(7)                                                  # 列表載入之後有人改了內容
+    before = _row()
+    r = client.post("/api/quotations/%s/approve" % NO, headers=hs[0], json={"expectedFp": fp_list})
+    assert r.status_code == 409 and "內容已更新" in r.text and _row() == before
+    fp2 = _queue_item(client, hs[0])["contentFp"]                   # 重載列表後拿到新指紋，再簽
+    r = client.post("/api/quotations/%s/approve" % NO, headers=hs[0], json={"expectedFp": fp2})
+    assert r.status_code == 200, r.text
+    assert _row()[0]["approval"]["tiers"][0]["approvers"][0]["signedFp"] == fp2
+
+
+def test_fingerprint_of_json_cache_is_keyed_by_content_and_tolerates_garbage():
+    a = json.dumps(_doc(), ensure_ascii=False)
+    d2 = _doc(); d2["items"][0]["qty"] = 99
+    b = json.dumps(d2, ensure_ascii=False)
+    fa, fb = C.fingerprint_of_json(a), C.fingerprint_of_json(b)
+    assert fa == C.content_fingerprint(_doc()) and fb == C.content_fingerprint(d2) and fa != fb
+    assert C.fingerprint_of_json(a) == fa                               # 命中快取，結果不變
+    for bad in (None, "", "{not json", "[1,2]", 7):
+        assert C.fingerprint_of_json(bad) is None, bad

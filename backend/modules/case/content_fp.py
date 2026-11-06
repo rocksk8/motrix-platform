@@ -125,6 +125,33 @@ def approve_flags(entry: dict, username: str) -> list:
     return out
 
 
+_FP_CACHE: dict = {}
+_FP_CACHE_MAX = 1024
+
+
+def fingerprint_of_json(raw):
+    """列表用（S4b）：`data_json` 字串 ⇒ 內容指紋；壞 JSON／不是物件／空 ⇒ None。**行程內快取**：鍵＝字串的雜湊（內容一變鍵就變，不會拿到舊值），
+    指紋只由字串決定，所以快取天然正確；列表每次只付「讀字串＋雜湊」，不再每筆 json.loads＋正規化（W3 approval-freeze 的教訓）。"""
+    if not raw or not isinstance(raw, str):
+        return None
+    import hashlib
+    key = hashlib.blake2b(raw.encode("utf-8", "surrogatepass"), digest_size=16).digest()
+    hit = _FP_CACHE.get(key)
+    if hit is not None:
+        return hit
+    try:
+        d = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(d, dict):
+        return None
+    fp = content_fingerprint(d)
+    if len(_FP_CACHE) >= _FP_CACHE_MAX:
+        _FP_CACHE.clear()                                   # 簡單、有上限：待審核單量小，清空重算的代價可忽略
+    _FP_CACHE[key] = fp
+    return fp
+
+
 def stamp_signed(approval: dict, was_pending: list, data: dict, reason_entries=None) -> list:
     """把『這一次才變成 approved』的條目蓋上 `signedFp`／`signedKeyHashes`（含同人連簽的 cascade 層），並更新 `approval.contentFp`。
 
