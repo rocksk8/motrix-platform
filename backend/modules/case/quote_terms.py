@@ -215,6 +215,10 @@ def discount_review_above() -> int:
     return _strict_number("discount_review_above", 0, 100_000_000, STRICTEST_DISCOUNT_REVIEW_ABOVE, integer=True)
 
 
+def _finite(x):
+    return x if isinstance(x, float) and math.isfinite(x) else None
+
+
 def _item_idents(items) -> list:
     """每個品項在「原因集合」裡的識別：有 `id` 且不重複 ⇒ `id:<id>`（品項增刪、換位置後仍是同一項）；否則 `idx:<陣列位置>`。"""
     ids = [(it.get("id") if isinstance(it, dict) else None) for it in items]
@@ -237,7 +241,7 @@ def compute_approval_reason_entries(q: dict, presets: list, default_payment_term
     min_pct = None                                                # 第一個有成本的品項才讀（預設 30＝今天的寫死值；前端 checkApproval 同源，見 project-margin/config 的 minItemMarginPct）
     _max_days = max_valid_days()                                  # 預設 30＝今天寫死的值（設定 quote_approval.max_valid_days；前端 checkApproval 同源）
     if _js_num(q.get("validDays")) > _max_days:
-        add("validDays", f"有效期限 {_js_str(q.get('validDays'))} 天（超過 {_max_days} 天）")
+        add("validDays", f"有效期限 {_js_str(q.get('validDays'))} 天（超過 {_max_days} 天）", value=_finite(_js_num(q.get("validDays"))))
     all_items = q.get("items") or []
     idents = _item_idents(all_items)
     for i, item in enumerate(all_items):
@@ -252,16 +256,16 @@ def compute_approval_reason_entries(q: dict, presets: list, default_payment_term
                 margin=_js_num(item.get("margin")))
     if _js_truthy(q.get("showDiscount")) and _js_num(q.get("discount")) > 0:
         if _js_num(q.get("discount")) > discount_review_above():   # 預設 0＝今天的規則（設定 quote_approval.discount_review_above）；只有真的有折讓才讀設定
-            add("discount", f"含折讓（NT${_js_locale_number(_js_num(q.get('discount')))}）")
+            add("discount", f"含折讓（NT${_js_locale_number(_js_num(q.get('discount')))}）", value=_finite(_js_num(q.get("discount"))))
     tax_rate = q["taxRate"] if "taxRate" in q else 5
     if _js_num(tax_rate) < 5:
         # AC1：零稅率／免稅是法定稅別，原因寫稅別；舊 1～4% 單維持原文字（前端同一份，parity 題守）。
         from modules.case.quotations import quote_tax_type, TAX_TYPE_LABELS
         kind = quote_tax_type(q)
         if kind in ("zero", "exempt"):
-            add("tax", f"稅別為{TAX_TYPE_LABELS[kind]}（非應稅 5%）")
+            add("tax", f"稅別為{TAX_TYPE_LABELS[kind]}（非應稅 5%）", value=_finite(_js_num(tax_rate)))
         else:
-            add("tax", f"調整營業稅額為 {_js_str(tax_rate)}%（標準 5%）")
+            add("tax", f"調整營業稅額為 {_js_str(tax_rate)}%（標準 5%）", value=_finite(_js_num(tax_rate)))
     base = _terms_baseline(q, presets, default_payment_terms)
     changed = [_CT.title(key, q) for key, label in TERMS_FIELD_DEFS if _text(q.get(key)) != _text(base.get(key))]      # 標題：凍結 > 目前範本 > 預設（關著＝label）
     if changed:
@@ -382,20 +386,33 @@ def diff_reason_entries(old: list, new: list) -> dict:
     }
 
 
+# 同類別內「數值更不利」的方向：有效天數／折讓越大越不利；稅率越低越不利（偏離應稅 5%）。條款（terms）沒有數值。
+_WORSE_DIRECTION = {"validDays": "higher", "discount": "higher", "tax": "lower"}
+
+
 def category_summary(old: list, new: list) -> dict:
     """類別層級的差異（給複查畫面判斷「要不要請簽核人確認」）；**不依賴品項識別**（報價品項沒有穩定 id，插入一列會讓 `margin:idx:N` 全部位移 ⇒ `diff_reason_entries` 會誤報新增／消失）。
-    類別＝鍵冒號前的部分（validDays／margin／discount／tax／terms）。只有下列三種算「要確認」：
+    類別＝鍵冒號前的部分（validDays／margin／discount／tax／terms）。算「要確認」的只有：
     - 新類別出現（新版有、舊版沒有的類別）；
     - 低於門檻的品項數增加；
-    - 最低毛利變低（新版最低毛利 < 舊版最低毛利；舊版沒有低毛利品項而新版有，也算）。
-    類別消失、同類別文字改變（折讓金額、天數…）都不算。元素是 `{"key","text"[,"margin"]}`；字串視為類別＝自己。
-    回 `{"new_categories": [...], "low_margin_items": {"before","after","increased"}, "lowest_margin": {"before","after","lower"}, "needs_confirm": bool}`。"""
+    - 毛利惡化：兩版的低毛利清單各自由小到大排序，**新版任一名次比舊版同名次低**（例：X 25%→10%、Y 仍是最低 5%，最低毛利沒變也抓得到），或新版品項更多；
+    - 同類別數值更不利：有效天數變大、折讓變大、稅率變低（entry 帶 `value`；缺值的不比）。
+    類別消失、毛利變好、數值變有利、條款文字改變都不算。元素是 `{"key","text"[,"margin"|"value"]}`；字串視為類別＝自己。
+    回 `{"new_categories", "low_margin_items": {before,after,increased}, "lowest_margin": {before,after,lower},
+    "margin_ranks": {"before": [...], "after": [...], "worse": bool}, "worse_values": [{"category","before","after"}], "needs_confirm": bool}`。"""
     def cat(e):
         k = e if isinstance(e, str) else e["key"]
         return k.split(":", 1)[0]
 
     def margins(lst):
-        return [e["margin"] for e in (lst or []) if isinstance(e, dict) and cat(e) == "margin" and e.get("margin") is not None]
+        return sorted(e["margin"] for e in (lst or []) if isinstance(e, dict) and cat(e) == "margin" and e.get("margin") is not None)
+
+    def values(lst):
+        out = {}
+        for e in (lst or []):
+            if isinstance(e, dict) and cat(e) in _WORSE_DIRECTION and e.get("value") is not None:
+                out[cat(e)] = e["value"]
+        return out
 
     oc = {cat(e) for e in (old or [])}
     new_cats = []
@@ -406,13 +423,19 @@ def category_summary(old: list, new: list) -> dict:
     om, nm = margins(old), margins(new)
     n_old = sum(1 for e in (old or []) if cat(e) == "margin")
     n_new = sum(1 for e in (new or []) if cat(e) == "margin")
-    lo_old = min(om) if om else None
-    lo_new = min(nm) if nm else None
+    lo_old = om[0] if om else None
+    lo_new = nm[0] if nm else None
     lower = lo_new is not None and (lo_old is None or lo_new < lo_old)
     increased = n_new > n_old
+    ranks_worse = increased or any(nv < ov for ov, nv in zip(om, nm))
+    ov, nv = values(old), values(new)
+    worse_values = [{"category": c, "before": ov[c], "after": nv[c]} for c in _WORSE_DIRECTION
+                    if c in ov and c in nv and ((nv[c] > ov[c]) if _WORSE_DIRECTION[c] == "higher" else (nv[c] < ov[c]))]
     return {
         "new_categories": new_cats,
         "low_margin_items": {"before": n_old, "after": n_new, "increased": increased},
         "lowest_margin": {"before": lo_old, "after": lo_new, "lower": lower},
-        "needs_confirm": bool(new_cats or increased or lower),
+        "margin_ranks": {"before": om, "after": nm, "worse": ranks_worse},
+        "worse_values": worse_values,
+        "needs_confirm": bool(new_cats or ranks_worse or worse_values),
     }

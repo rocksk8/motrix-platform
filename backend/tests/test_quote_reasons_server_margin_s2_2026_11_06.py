@@ -280,3 +280,58 @@ def test_summary_end_to_end_with_real_entries_and_inserted_row():
     worse = copy.deepcopy(base)
     worse["items"][0]["unitPrice"] = 110
     assert QT.category_summary(old, QT.current_reason_entries(worse))["needs_confirm"] is True
+
+
+def _v(key, value, text=None):
+    return {"key": key, "text": text or f"{key}={value}", "value": value}
+
+
+def test_summary_other_item_worsens_while_lowest_unchanged():
+    """K 審缺口 a：X 25%→10%、Y 仍是最低 5%、品項數沒變 ⇒ 最低毛利沒變也要確認。"""
+    old = [_m("margin:idx:0", 0.25), _m("margin:idx:1", 0.05)]
+    new = [_m("margin:idx:0", 0.10), _m("margin:idx:1", 0.05)]
+    s = QT.category_summary(old, new)
+    assert s["lowest_margin"]["lower"] is False and s["low_margin_items"]["increased"] is False
+    assert s["margin_ranks"] == {"before": [0.05, 0.25], "after": [0.05, 0.10], "worse": True}
+    assert s["needs_confirm"] is True
+
+
+def test_summary_rank_compare_is_order_independent_and_improvement_ok():
+    old = [_m("margin:idx:0", 0.25), _m("margin:idx:1", 0.05)]
+    assert QT.category_summary(old, list(reversed(old)))["needs_confirm"] is False
+    better = [_m("margin:idx:5", 0.28), _m("margin:idx:9", 0.20)]
+    assert QT.category_summary(old, better)["needs_confirm"] is False
+    fewer = [_m("margin:idx:0", 0.05)]
+    assert QT.category_summary(old, fewer)["needs_confirm"] is False, "少一個低毛利品項、其餘不變 ⇒ 沒惡化"
+
+
+@pytest.mark.parametrize("cat,before,after,confirm", [
+    ("discount", 1000, 500000, True), ("discount", 500000, 1000, False), ("discount", 1000, 1000, False),
+    ("validDays", 31, 365, True), ("validDays", 365, 31, False),
+    ("tax", 4, 1, True), ("tax", 1, 4, False), ("tax", 0, 0, False),
+])
+def test_summary_same_category_numbers(cat, before, after, confirm):
+    s = QT.category_summary([_v(cat, before)], [_v(cat, after)])
+    assert s["needs_confirm"] is confirm
+    assert bool(s["worse_values"]) is confirm and s["new_categories"] == []
+
+
+def test_summary_terms_text_change_and_missing_value_do_not_confirm():
+    assert QT.category_summary([_e("terms", "a")], [_e("terms", "b")])["needs_confirm"] is False
+    assert QT.category_summary([_e("discount")], [_v("discount", 5)])["needs_confirm"] is False, "舊版缺值 ⇒ 不比"
+
+
+def test_entries_carry_numeric_values_for_validdays_discount_tax():
+    q = _q([], validDays=90, showDiscount=True, discount=1234.5, taxRate=0, taxType="zero", taxBasis={"code": "7-1", "note": ""})
+    vals = {e["key"]: e.get("value") for e in QT.compute_approval_reason_entries(q, [], "")}
+    assert vals == {"validDays": 90.0, "discount": 1234.5, "tax": 0.0}
+
+
+def test_summary_end_to_end_discount_and_days_worse():
+    base = _q([_it(1, 700, 1500, 0.5)], validDays=31, showDiscount=True, discount=1000)
+    old = QT.current_reason_entries(base)
+    assert [e["key"] for e in old] == ["validDays", "discount"]
+    worse = dict(base, validDays=365, discount=500000)
+    s = QT.category_summary(old, QT.current_reason_entries(worse))
+    assert s["needs_confirm"] is True and [w["category"] for w in s["worse_values"]] == ["validDays", "discount"]
+    assert QT.category_summary(old, QT.current_reason_entries(base))["needs_confirm"] is False
