@@ -429,6 +429,51 @@ def test_every_content_direct_function_calls_reconcile_txn():
     assert not missing, "這些直接寫 data_json 的函式沒有呼叫 reconcile_txn（簽核中被改內容時不會作廢已簽層）：\n  " + "\n  ".join(missing)
 
 
+def _first_line(node, pred):
+    ls = [n.lineno for n in ast.walk(node) if isinstance(n, ast.Call) and pred(n)]
+    return min(ls) if ls else None
+
+
+def _writes_data_json_call(n) -> bool:
+    """`<x>.execute("UPDATE quotations SET … data_json=…", …)`（第一個參數是字面字串）。"""
+    f = n.func
+    if not (isinstance(f, ast.Attribute) and f.attr == "execute" and n.args):
+        return False
+    a0 = n.args[0]
+    return isinstance(a0, ast.Constant) and isinstance(a0.value, str) and bool(re.search(r"UPDATE\s+quotations\b", a0.value, re.I))         and bool(_ASSIGNS_DATA_JSON.search(a0.value))
+
+
+def test_reconcile_txn_runs_before_the_direct_update_in_every_content_direct_function():
+    """呼叫放在 UPDATE **之後**，對帳結果（approval 被改）不會被寫進去——光驗「函式內有呼叫」驗不出來（K 審 ③ 追加）。
+    每個 CONTENT_DIRECT 函式：reconcile_txn 的呼叫行號必須小於同函式內第一句寫 data_json 的 execute 行號。"""
+    bad = []
+    for key, (_n, disp, _note) in sorted(DIRECT_WRITES.items()):
+        if disp != CONTENT_DIRECT:
+            continue
+        rel, qual = key.split("::", 1)
+        fn = _function_node(rel, qual)
+        rc = _first_line(fn, lambda n: (isinstance(n.func, ast.Name) and n.func.id == "reconcile_txn") or (isinstance(n.func, ast.Attribute) and n.func.attr == "reconcile_txn"))
+        up = _first_line(fn, _writes_data_json_call)
+        if rc is None or up is None or rc >= up:
+            bad.append(f"{key}（reconcile_txn 行 {rc}、UPDATE data_json 行 {up}）")
+    assert not bad, "reconcile_txn 必須在寫 data_json 的 UPDATE 之前呼叫：\n  " + "\n  ".join(bad)
+
+
+def test_order_guard_controls():
+    """正對照：UPDATE 先於對帳 ⇒ 抓得到；對帳先於 UPDATE ⇒ 放行；多行字串的 UPDATE 也算。"""
+    def lines(src):
+        fn = ast.parse(src).body[0]
+        rc = _first_line(fn, lambda n: getattr(n.func, "attr", getattr(n.func, "id", None)) == "reconcile_txn")
+        return rc, _first_line(fn, _writes_data_json_call)
+    upd, rc = "    c.execute('UPDATE quotations SET data_json=? WHERE 1', ())", "    reconcile_txn(c, 'q', d)"
+    late = "\n".join(["def f(c, d):", upd, rc])
+    ok = "\n".join(["def f(c, d):", rc, upd])
+    other = "\n".join(["def f(c, d):", upd.replace("data_json", "deal_tag"), rc])
+    r, u = lines(late); assert r > u
+    r, u = lines(ok); assert r < u
+    assert lines(other)[1] is None
+
+
 def test_reconcile_txn_guard_controls():
     """正對照：呼叫在巢狀／屬性寫法下都找得到；負對照：只在註解／字串裡提到不算。"""
     def _fn(*lines):

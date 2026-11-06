@@ -377,21 +377,23 @@ def test_reading_paths_never_write(client, make_user):
 
 
 # ── approve：先對帳、再決定 ───────────────────────────────────────────────────────────────
-def test_approve_reconciles_first_and_409s_without_signing_when_a_layer_was_invalidated(client, make_user):
+def test_next_tier_approver_is_403_on_a_stale_row_and_nothing_is_persisted_then_the_signer_resigns(client, make_user):
+    """先對帳再查權限之後：第 2 層簽核人在『第 1 層其實已過期』時按核准 ⇒ 對帳後輪不到他（403 此層需由第 1 層簽）；他不是被對帳通知的人、也沒權限 ⇒
+    對帳寫的一切不 commit。第 1 層簽核人才是進得了對帳的人（409，作廢落地）；他複查簽完，第 2 層才簽得到。"""
     hs, names = _signed_first_of_two(client, make_user)
     _set_mode(2)
-    import db
-    c = db.get_db()
-    d = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
-    d["items"][0]["qty"] = 55                                                  # 繞過漏斗的改動（例如舊分頁、未掛鉤的路徑）
-    c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), NO)); c.commit(); c.close()
+    _stale_row_edit()
+    before, rows0 = _row(), _reconfirm_rows()
     fp = client.get("/api/quotations/" + NO, headers=hs[1]).json()["contentFp"]
     r = client.post("/api/quotations/%s/approve" % NO, headers=hs[1], json={"expectedFp": fp})
-    assert r.status_code == 409 and "重算" in r.text, r.text
+    assert r.status_code == 403, r.text
+    assert _row() == before and _reconfirm_rows() == rows0, "403 ⇒ 對帳不落地"
+    fp0 = client.get("/api/quotations/" + NO, headers=hs[0]).json()["contentFp"]
+    r0 = client.post("/api/quotations/%s/approve" % NO, headers=hs[0], json={"expectedFp": fp0})
+    assert r0.status_code == 409 and "重算" in r0.text, r0.text
     es, ap, _st = _entries()
     assert es[0]["status"] == "pending" and es[0]["reconfirm"] and es[1]["status"] == "pending", "第 2 層沒被簽"
-    assert ap["currentTier"] == 0 and [n["type"] for n in _notes(names[0])] == ["approval_reconfirm"]
-    # 第 1 層複查簽完，第 2 層才簽得到
+    assert ap["currentTier"] == 0 and [n["type"] for n in _notes(names[1], "approval_reconfirm_info")] == ["approval_reconfirm_info"]
     _approve_as(client, names[0], make_user)
     _approve(client, hs[1])
     assert _row()[1] == "已送出"
@@ -409,19 +411,53 @@ def test_approve_in_shadow_mode_behaves_like_today(client, make_user):
     assert _row()[1] == "已送出" and len(_audits("quotation.reconfirm_shadow")) == 1
 
 
-def test_approve_by_unauthorised_caller_never_reconciles(client, make_user):
-    hs, names = _signed_first_of_two(client, make_user)
-    _set_mode(2)
+def _stale_row_edit(qty=55):
+    """走不經過漏斗的寫法改內容（庫裡的簽核狀態沒更新）：模擬舊分頁／未掛鉤的路徑，或影子→開切換後的在途單。"""
     import db
     c = db.get_db()
     d = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
-    d["items"][0]["qty"] = 55
+    d["items"][0]["qty"] = qty
     c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), NO)); c.commit(); c.close()
-    before = _row()
+
+
+def _reconfirm_rows():
+    import db
+    c = db.get_db()
+    try:
+        n = c.execute("SELECT COUNT(*) n FROM notifications WHERE type LIKE 'approval_reconfirm%'").fetchone()["n"]
+        a = c.execute("SELECT COUNT(*) n FROM audit_log WHERE action LIKE 'quotation.reconfirm%'").fetchone()["n"]
+        return n, a
+    finally:
+        c.close()
+
+
+def test_signer_whose_layer_is_stale_gets_409_not_403(client, make_user):
+    """K 審必修：先對帳、再查權限。A 已簽第 1 層、內容在別處被改（mode=on、庫裡簽核沒更新）→ A 按核准要 409（不是 403：用庫裡舊的已簽狀態查權限
+    會 403，被作廢的簽核人永遠進不了對帳）；409 之後 A 的層回待複查、通知與稽核已寫入，A 重簽才成功。"""
+    hs, names = _signed_first_of_two(client, make_user)
+    _set_mode(2)
+    _stale_row_edit()
+    fp = client.get("/api/quotations/" + NO, headers=hs[0]).json()["contentFp"]
+    r = client.post("/api/quotations/%s/approve" % NO, headers=hs[0], json={"expectedFp": fp})
+    assert r.status_code == 409 and "重算" in r.text, r.text
+    es, ap, _st = _entries()
+    assert es[0]["status"] == "pending" and es[0]["reconfirm"] and ap["currentTier"] == 0
+    assert _audits("quotation.reconfirm"), "對帳落地（簽核人自己觸發的，不通知自己）"
+    _approve(client, hs[0])                                  # 重看之後再簽：成功
+    assert _entries()[0][0]["status"] == "approved"
+
+
+def test_approve_by_unauthorised_caller_never_reconciles(client, make_user):
+    """沒權限的人：403，而且對帳寫的一切（簽核狀態、通知、稽核）都不留下——對帳在他的交易裡跑、沒 commit 就 close。"""
+    hs, names = _signed_first_of_two(client, make_user)
+    _set_mode(2)
+    _stale_row_edit()
+    before, rows0 = _row(), _reconfirm_rows()
     other, pw = make_user(username="fp_other", role="admin")
     r = client.post("/api/quotations/%s/approve" % NO, headers=_login(client, other, pw), json={})
-    assert r.status_code in (403, 409) and r.status_code == 403, r.text
+    assert r.status_code == 403, r.text
     assert _row() == before, "沒權限的人不能觸發任何寫入"
+    assert _reconfirm_rows() == rows0, "通知／稽核零新增"
 
 
 def test_approve_marks_my_reconfirm_notification_read(client, make_user):

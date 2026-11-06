@@ -5716,6 +5716,12 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             raise HTTPException(404, f"報價單 {quote_no} 不存在或不在待審核狀態")
         cname = row["customer_name"] or ""
         d     = json.loads(row["data_json"] or "{}")
+        # 簽核二擇一 S3b：**先對帳、再查權限**（K 審必修）。影子→開切換時所有在途單同時過期：被作廢的簽核人要先看到「已被作廢、請重簽」，
+        # 若先用庫裡舊的已簽狀態查權限，他會回 403、永遠進不了對帳。對帳寫進這條連線的交易（簽核狀態＋通知＋稽核）；
+        # 沒權限的人 `conn.close()` 不 commit ⇒ 對帳寫的一切一起消失，不用額外擋。影子模式只記錄、簽名不變 ⇒ 照常往下簽（行為與今天相同）。
+        _sig0 = _CFP.signature(d.get("approval") or {})
+        _reconciled = _CFP.reconcile_txn(conn, quote_no, d, source="approve", actor=user, status=row["status"])
+        _invalidated = _reconciled and _CFP.signature(d.get("approval") or {}) != _sig0
         appr  = d.get("approval") or {}
         tiers = _active_tiers(appr)
         now   = datetime.now().isoformat()
@@ -5726,11 +5732,8 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             if not ok:
                 conn.close()
                 raise HTTPException(status_code, err_msg)
-            # 簽核二擇一 S3b：**先對帳、再決定**（權限檢查之後：沒權限的人不該觸發任何寫入）。內容在別條路徑被改過 ⇒ 已簽層回到待複查，這次核准不蓋章：
-            # 存起來（簽核狀態＋通知＋稽核同一交易）、409 請簽核人重看。影子模式只記錄、簽名不變 ⇒ 照常往下簽（行為與今天相同）。
-            _sig0 = _CFP.signature(appr)
-            if _CFP.reconcile_txn(conn, quote_no, d, source="approve", actor=user, status=row["status"])                     and _CFP.signature(d.get("approval") or {}) != _sig0:
-                save_quotation_json(conn, quote_no, d, reconcile_actor=user)
+            if _invalidated:                    # 有簽核層因內容變動回到待複查：這次不蓋章，存起來、請簽核人重看
+                save_quotation_json(conn, quote_no, d, status=row["status"], reconcile_actor=user)
                 conn.commit()
                 conn.close()
                 raise HTTPException(409, "內容已更新，簽核狀態已重算，請重看")
