@@ -1,8 +1,8 @@
-"""瀏覽器端對端：案件頁「報價人」標籤、業績歸屬說明、「報價人≠業績歸屬」提示（2026-11-06，選項 A）。
+"""瀏覽器端對端：案件頁「業務」顯示業務負責（roles.sales，沒填退回報價人）、業績歸屬說明、「報價人≠業務負責」提示（2026-11-06）。
 
-- 清單卡片／詳情頭標「報價人」；角色下拉標「業績歸屬（業務負責）」並帶一句說明。
-- 報價人與業績歸屬同一人 ⇒ 沒有提示條；不同人 ⇒ 有提示條（中性樣式）。
-- 在畫面上改業績歸屬 ⇒ 提示條即時變化；存檔後 quotations.sales_person／sales_person_id 完全不變（只改文字，不改讀寫）。
+- 清單卡片「業務：」與詳情頭「負責業務」顯示 roles.sales；沒填 ⇒ 退回報價人（sales_person）。
+- 報價人與業務負責同一人 ⇒ 沒有提示條；不同人 ⇒ 有提示條（中性樣式）。
+- 在畫面上改業務負責 ⇒ 頭部與提示條即時變化；存檔後 quotations.sales_person／sales_person_id 完全不變（只改顯示，不改讀寫）。
 設 E2E_SHOT_DIR 環境變數時，把兩種情況的截圖存到該目錄（人工驗收用）。
 """
 import json
@@ -22,6 +22,16 @@ from tests.test_e2e_case_concurrent_edit_2026_09_24 import (  # noqa: F401,E402 
 SALES_SELECT = ".cm-fgrid--people select >> nth=1"
 NOTE = "[data-testid=cm-sales-diff-note]"
 HINT = "[data-testid=cm-role-sales-hint]"
+
+
+def _name(username, display):
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE users SET display_name=? WHERE username=?", (display, username))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _seed(no, sales_person, sales_person_id, roles_sales):
@@ -76,16 +86,16 @@ def _shot(page, name):
 def test_labels_and_no_note_when_same_person(live_server, make_user, e2e_browser):
     adm = make_user(username="sn_admin", role="admin")
     make_user(username="sn_huang", role="sales")
+    _name("sn_huang", "黃玉龍")
     no = "MQ-SALESNOTE-001"
     _seed(no, "黃玉龍", None, {"username": "sn_huang", "display": "黃玉龍"})
     page = _open(e2e_browser, live_server, adm, no)
-    # 卡片與詳情頭
-    assert "報價人：黃玉龍" in page.locator(".cm-card__sales").first.inner_text()
-    assert page.locator(".cm-meta__lbl", has_text="報價人").count() >= 1
-    assert page.locator(".cm-meta__lbl", has_text="負責業務").count() == 0
+    # 卡片與詳情頭（同一人）
+    assert "業務：黃玉龍" in page.locator(".cm-card__sales").first.inner_text()
+    assert page.locator(".cm-meta__lbl", has_text="負責業務").locator("xpath=following-sibling::*[1]").first.inner_text() == "黃玉龍"
     # 角色下拉標籤與說明
     assert "業績歸屬（業務負責）" in page.locator("label[for=cm-role-sales]").inner_text()
-    assert "業務獎金依報價人計算，與此欄位無關" in page.locator(HINT).inner_text()
+    assert "營運報表的業績與部門依此欄位；沒填時退回報價單的報價人" in page.locator(HINT).inner_text()
     # 同一人 ⇒ 沒有提示條
     assert not page.locator(NOTE).is_visible()
     _shot(page, "same_person.png")
@@ -96,23 +106,30 @@ def test_labels_and_no_note_when_same_person(live_server, make_user, e2e_browser
 def test_note_when_different_and_live_update_without_touching_sales_person(live_server, make_user, e2e_browser):
     adm = make_user(username="sn_admin2", role="admin")
     make_user(username="sn_kao", role="sales")
+    _name("sn_kao", "高晟耀")
     no = "MQ-SALESNOTE-002"
     _seed(no, "黃玉龍", None, {"username": "sn_kao", "display": "高晟耀"})
     page = _open(e2e_browser, live_server, adm, no)
     note = page.locator(NOTE)
     note.wait_for(state="visible", timeout=10000)
     txt = note.inner_text()
-    assert "報價人（黃玉龍）與業績歸屬（高晟耀）不是同一人" in txt and "業務獎金依報價人" in txt
+    assert "報價人（黃玉龍）與業務負責（高晟耀）不是同一人" in txt
+    # 清單卡片與詳情頭都顯示業務負責（高晟耀），不是報價人
+    assert "業務：高晟耀" in page.locator(".cm-card__sales").first.inner_text()
+    hdr = page.locator(".cm-meta__lbl", has_text="負責業務").locator("xpath=following-sibling::*[1]").first
+    assert hdr.inner_text() == "高晟耀"
     # 中性樣式：不是錯誤／警告色（取計算後樣式比對 tone 變數的色值不可行，改驗 class 與 inline style 不含 danger／warning）
     cls_style = note.evaluate("e => (e.className + ' ' + (e.getAttribute('style') || ''))")
     assert "danger" not in cls_style and "warning" not in cls_style
     _shot(page, "different_person.png")
-    # 清空業績歸屬 ⇒ 提示條消失（報表此時退回報價人）
+    # 清空業務負責 ⇒ 提示條消失，頭部退回報價人（報表此時也退回報價人）
     page.locator(SALES_SELECT).select_option("")
     page.wait_for_function("() => !document.querySelector('[data-testid=cm-sales-diff-note]').offsetParent", timeout=5000)
+    assert hdr.inner_text() == "黃玉龍"
     # 改回別人 ⇒ 提示條回來，存檔後報價人欄位完全不變
     page.locator(SALES_SELECT).select_option("sn_kao")
     note.wait_for(state="visible", timeout=5000)
+    assert hdr.inner_text() == "高晟耀"
     msg = page.evaluate(f"async () => {{ const c = {DATA_JS}; await c.saveCaseRecord(); return c.saveMsg }}")
     assert "已儲存" in msg
     assert _db_sales(no) == ("黃玉龍", None)

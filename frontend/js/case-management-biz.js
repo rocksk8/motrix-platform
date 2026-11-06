@@ -59,15 +59,32 @@ window.CM_PARTS.push(() => ({
       }
       return null
     },
-    // 報價人（quotations.sales_person，報價單上的開單者；業務獎金依它）與業績歸屬（caseRecord.roles.sales；營運報表業績／部門依它）
-    // 是兩個獨立欄位、設計如此（docs/platform/plans/SALES-PERSON-VS-ROLES-SALES-ANALYSIS.md）。兩邊都有值且顯示名不同時給一句中性提示；
-    // 只讀顯示用，不改任何欄位。業績歸屬未填 ⇒ 報表本來就退回報價人，不提示。
+    // 業務負責（業績歸屬）＝caseRecord.roles.sales；沒填時退回報價單的報價人（quotations.sales_person）。
+    // 2026-11-06 產品負責人裁示：清單卡片／詳情頭的「業務」改讀這個口徑（比照營運報表 reports.py::_case_sales_owner）。
+    // 兩個欄位仍各自存、互不寫入；這裡只決定「顯示哪一個」。docs/platform/plans/SALES-PERSON-VS-ROLES-SALES-ANALYSIS.md
+    _roleSalesDisplay() {
+      const v = this.cr && this.cr.caseRecord && this.cr.caseRecord.roles && this.cr.caseRecord.roles.sales
+      if (v && typeof v === 'object') {
+        // 帳號形狀：顯示「現在的」名稱（與下拉、清單卡片同一個來源）；查不到才用存檔當下的 display
+        const u = (this.selectableUsers || []).find(x => x.username === v.username)
+        return String((u && (u.display_name || u.username)) || v.display || v.username || '').trim()
+      }
+      return String(typeof v === 'string' ? v : '').trim()
+    },
+    // 清單卡片：列表端點回 sales_owner（伺服器端解析 roles.sales，見 list_cases）；沒有 ⇒ 報價人
+    salesOwnerName(c) {
+      return String((c && (c.sales_owner || c.sales_person)) || '').trim()
+    },
+    // 詳情頭：用頁面上現在的 roles.sales（改了下拉立刻跟著變），沒填 ⇒ 報價人
+    get selectedSalesOwner() {
+      return this._roleSalesDisplay() || String((this.selected && this.selected.sales_person) || '').trim()
+    },
+    // 報價人與業務負責兩邊都有值且顯示名不同 ⇒ 一句中性提示（不是錯誤：本來就是兩個欄位）；只讀顯示，不改任何欄位。
     get salesRoleDiffNote() {
       const quoter = String((this.selected && this.selected.sales_person) || '').trim()
-      const v = this.cr && this.cr.caseRecord && this.cr.caseRecord.roles && this.cr.caseRecord.roles.sales
-      const owner = String(v && typeof v === 'object' ? (v.display || v.username || '') : (typeof v === 'string' ? v : '')).trim()
+      const owner = this._roleSalesDisplay()
       if (!quoter || !owner || quoter === owner) return ''
-      return '報價人（' + quoter + '）與業績歸屬（' + owner + '）不是同一人：業績與部門依業績歸屬，業務獎金依報價人。'
+      return '報價人（' + quoter + '）與業務負責（' + owner + '）不是同一人：清單、營運報表的業績與部門依業務負責。'
     },
     get roleSel() {
       const self = this
