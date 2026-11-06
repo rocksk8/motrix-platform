@@ -84,7 +84,7 @@ window.CM_PARTS.push(() => ({
       const quoter = String((this.selected && this.selected.sales_person) || '').trim()
       const owner = this._roleSalesDisplay()
       if (!quoter || !owner || quoter === owner) return ''
-      return '報價人（' + quoter + '）與業務負責（' + owner + '）不是同一人：清單、營運報表的業績與部門依業務負責。'
+      return '報價人（' + quoter + '）與業務負責（' + owner + '）不是同一人：清單、營運報表的業績與部門、業務獎金依業務負責。'
     },
     get roleSel() {
       const self = this

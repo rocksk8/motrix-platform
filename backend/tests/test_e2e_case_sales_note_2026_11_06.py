@@ -95,7 +95,7 @@ def test_labels_and_no_note_when_same_person(live_server, make_user, e2e_browser
     assert page.locator(".cm-meta__lbl", has_text="負責業務").locator("xpath=following-sibling::*[1]").first.inner_text() == "黃玉龍"
     # 角色下拉標籤與說明
     assert "業績歸屬（業務負責）" in page.locator("label[for=cm-role-sales]").inner_text()
-    assert "營運報表的業績與部門依此欄位；沒填時退回報價單的報價人" in page.locator(HINT).inner_text()
+    assert "營運報表的業績與部門、業務獎金依此欄位；沒填時退回報價單的報價人" in page.locator(HINT).inner_text()
     # 同一人 ⇒ 沒有提示條
     assert not page.locator(NOTE).is_visible()
     _shot(page, "same_person.png")
