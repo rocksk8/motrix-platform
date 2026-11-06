@@ -105,3 +105,15 @@
 **驗證**：`modules/payroll/tests/test_bonus_sales_owner_2026_11_06.py` 29 題；還原 `_auto_members` 後 24 題轉紅（反向控制）。不被寫入：預覽與建立分潤單前後 `quotations.sales_person`／`sales_person_id` 位元組相同。
 
 **提醒（來源）**：新裁示來自產品負責人，經窗口轉達，不是使用者本人逐字；程式註解與文件都照實寫「產品負責人裁示（經窗口轉達）」。
+
+---
+
+## 8. K 審（有條件可併）的處理（2026-11-06）
+
+| 項 | 處理 |
+|---|---|
+| 1a 形狀不對不可悄悄退回 | `_roles_sales_of()` 新增 `invalid`：非空但形狀不對／`data_json` 讀不出來 ⇒ 不帶人、提示手動指定，**不退回報價人**；只有完全沒填才退回。參數化測試涵蓋數字、0、`true`／`false`、非空陣列、未知鍵物件、壞 JSON，並有正向控制（清空後才退回報價人） |
+| 1b 上線前跑 DIFF-REPORT | `SALES-OWNER-DIFF-REPORT.py.txt` 改為逐案比較**舊口徑**與**新口徑**的業務名單，輸出 `bonus_effect`：`SNAPSHOT`／`UNCHANGED`／`CHANGES_TO_OTHER`／`NEW_NO_MEMBER`，並在 tally 另列 `NEW_NO_MEMBER_LEGACY_STRING`（未轉換舊字串、解不出唯一在職帳號）。**上線前請正式機 Claude 唯讀跑一次並回報 tally 與 `NEW_NO_MEMBER` 清單**（這些案件建分潤單時需手動指定業務）。已在合成資料庫驗證各分支 |
+| 2 不回溯三狀態＋建立路徑 | 待審核／待發放／已發放參數化測試。回答：畫面「建立草稿」送空 body（`bonus.js createDraft`），伺服器於**建立當下重新解析** `roles.sales`；預覽（`autoMembers`）只是顯示，不會被送回；API 若明確帶 `members` 則以 `members` 為準（有測試） |
+| 3 畫面字樣 | 改為「業務獎金（尚未建分潤單者）依業務負責，已建立的分潤單不回頭更動」；提示說明加「有填但對不到帳號，獎金不帶人」。測試鎖住字樣 |
+| 4 | 無需處理 |

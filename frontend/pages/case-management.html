@@ -766,7 +766,7 @@
                         <option :value="u.username" x-text="u.display_name || u.username"></option>
                       </template>
                     </select>
-                    <div class="cm-role-hint" data-testid="cm-role-sales-hint">清單與頭部的「業務」、營運報表的業績與部門、業務獎金依此欄位；沒填時退回報價單的報價人</div>
+                    <div class="cm-role-hint" data-testid="cm-role-sales-hint">清單與頭部的「業務」、營運報表的業績與部門依此欄位；業務獎金（尚未建分潤單者）也依此欄位，已建立的不回頭更動。沒填時退回報價人；有填但對不到帳號，獎金不帶人。</div>
                   </div>
                   <div class="fi-group">
                     <label class="fi-label" for="cm-role-executor">執行負責</label>
