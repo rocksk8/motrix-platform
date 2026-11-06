@@ -5802,7 +5802,8 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         conn.commit()
         conn.close()
         _audit(_tok(authorization), "quotation.approve", "quotation", quote_no,
-               f"{quote_no}（{cname}）", {"allDone": all_done, "status": detail_status})
+               f"{quote_no}（{cname}）", {"allDone": all_done, "status": detail_status,
+                                         "fpBound": body.expectedFp is not None})   # 過渡期（expectedFp 未強制）：記這次有沒有綁版本，才量得出何時能翻必填
         _run_after_commit(after_commit)
         _mark_notifications_read(quote_no, ["approval_request"], user["username"])     # 我簽過了：自己那筆「待簽核」通知失效
         return {"ok": True, "allDone": all_done, "signedTiers": _signed_tier_nos}

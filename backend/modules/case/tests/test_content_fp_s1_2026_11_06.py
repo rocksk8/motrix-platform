@@ -386,3 +386,38 @@ def test_superadmin_no_tier_branch_is_also_bound_to_the_version(client, make_use
     assert _row()[1] == "待審核"
     fp = client.get("/api/quotations/" + NO, headers=h).json()["contentFp"]
     assert client.post("/api/quotations/%s/approve" % NO, headers=h, json={"expectedFp": fp}).status_code == 200
+
+
+# ── K 審補項：過渡期稽核記 fpBound；rebaseline_fingerprint 不得接使用者端點 ──────────────────────
+def _approve_audit_detail():
+    import db
+    conn = db.get_db()
+    try:
+        r = conn.execute("SELECT detail FROM audit_log WHERE action='quotation.approve' AND target_id=? ORDER BY id DESC LIMIT 1", (NO,)).fetchone()
+        return json.loads(r["detail"])
+    finally:
+        conn.close()
+
+
+def test_approve_audit_records_whether_the_version_was_bound(client, make_user):
+    hs, _ = _seed(client, make_user, tiers=2)
+    fp = client.get("/api/quotations/" + NO, headers=hs[0]).json()["contentFp"]
+    assert client.post("/api/quotations/%s/approve" % NO, headers=hs[0], json={"expectedFp": fp}).status_code == 200
+    assert _approve_audit_detail()["fpBound"] is True
+    assert client.post("/api/quotations/%s/approve" % NO, headers=hs[1], json={}).status_code == 200     # 過渡期：沒帶
+    assert _approve_audit_detail()["fpBound"] is False
+
+
+def test_rebaseline_fingerprint_is_not_reachable_from_any_user_facing_endpoint():
+    """棘輪例外的條件（K 審）：`rebaseline_fingerprint` 只給開機遷移／系統工具用，**不得**接到 routers／模組 api 的使用者端點。"""
+    from pathlib import Path
+    backend = Path(__file__).resolve().parents[3]
+    hits = []
+    for sub in ("routers", "modules"):
+        for f in (backend / sub).rglob("*.py"):
+            rel = f.relative_to(backend).as_posix()
+            if "/tests/" in "/" + rel or rel == "modules/case/content_fp.py":
+                continue
+            if "rebaseline_fingerprint" in f.read_text(encoding="utf-8", errors="replace") and ("/api" in "/" + rel or rel.startswith("routers/")):
+                hits.append(rel)
+    assert hits == [], "rebaseline_fingerprint 出現在使用者端點檔：%s" % hits

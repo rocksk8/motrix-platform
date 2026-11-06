@@ -13,7 +13,7 @@ from tests.platform import _unscoped_reads as U
 
 #: 基準總筆數上限：只准手動調小（基準縮小後把這個數字一起降下來）
 MAX_ENTRIES = 850      # 849 + 1（簽核二擇一 S1 2026-11-06：content_fp.rebaseline_fingerprint 以呼叫端明確給的單號讀 quotations，
-                        # 供會碰簽核中單的開機遷移重設指紋基準；不是使用者請求路徑、不回傳資料給使用者，沒有 row_access 可套。需 K 審確認）
+                        # 供會碰簽核中單的開機遷移重設指紋基準；不是使用者請求路徑、不回傳資料給使用者，沒有 row_access 可套。K 審已通過，條件：**不得接使用者端點**（modules/case/tests/test_content_fp_s1_2026_11_06.py 有守門題）、保留可呼叫證明題與 S0 MIGRATION_ONCE 備註）
                         # 849 = 847 + 2（業務開發進度重設計 2026-11-04：舊 update_dev_case_progress 移除 −1，新增 add_dev_case_progress／_progress_extras／_check_dev_case_reply_overdue +3；
                         # 前者比對 user["id"]==assigned_to（不是 row_access 範圍查詢），_progress_extras 只對呼叫端已過 row_access 的案件列補進度，每日排程與 _check_dev_case_stale 同為系統身分）；
                         # 847 = 845 + 2（T73：assign_dev_case／update_dev_case_progress 讀 dev_cases 後自己在 Python 層判權限

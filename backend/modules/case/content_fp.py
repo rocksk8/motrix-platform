@@ -134,6 +134,9 @@ def rebaseline_fingerprint(conn, quote_no: str, user: dict = None, reason: str =
     用在：會改 `quotations.data_json` 內容鍵、又可能碰到待審核／簽核中單的**開機遷移**（例：`db.py::_m116`）——
     否則遷移會讓已簽的簽核一次性失配。之後新增這類遷移必須呼叫它（S0 守門的 MIGRATION_ONCE 備註要寫明）。
 
+    ⚠ **不得接到任何使用者端點**（unscoped 讀取棘輪的例外條件，K 審 2026-11-06）：它以呼叫端給的單號直接讀 quotations、沒有 row_access；
+    守門題 `test_rebaseline_fingerprint_is_not_reachable_from_any_user_facing_endpoint` 會擋。
+
     前置：呼叫端已在寫交易內（沿用 `save_quotation_json` 的 lost-update 守門）。**不動 `updated_at`**（它是 PUT 樂觀鎖的版本戳）。
     回傳 True＝有重設；單不存在／不在待審核簽核中／沒有簽核資料 ⇒ False（什麼都不寫）。稽核與資料同一交易。"""
     from modules.case.quotations import save_quotation_json
