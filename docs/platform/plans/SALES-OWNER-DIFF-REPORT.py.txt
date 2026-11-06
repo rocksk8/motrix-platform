@@ -1,0 +1,90 @@
+"""唯讀：報價人（sales_person）與業務負責（caseRecord.roles.sales）不同人的案件清單，附獎金分潤現況。
+
+用法：python -I sales_owner_diff_report.py <motrix_erp.db 路徑> [--all]
+  - 以 SQLite URI mode=ro 開啟，不寫任何東西、不依賴專案程式碼。
+  - 預設只列「狀態不是草稿」且兩邊都有值且不同的案件；--all 連相同／未填也列（看全貌）。
+  - 逐筆在 Python 解析 data_json；壞的一筆只標 BAD_JSON，不影響其他筆。
+判定（與 reports.py::_case_sales_owner 的優先序一致）：
+  roles.sales 空            ⇒ ROLES_EMPTY（改讀 roles.sales 後退回 sales_person，結果不變）
+  兩邊都解析得出帳號        ⇒ 帳號相同 SAME／不同 DIFF
+  至少一邊解析不出帳號      ⇒ 比顯示名：相同 SAME_NAME／不同 DIFF_UNRESOLVED（人工看）
+獎金現況（新版以案件為中心 bonus_case_awards；舊版以項目為中心 bonus_awards，只看未作廢者）：
+  有分潤單 ⇒ 名單已凍在 lines，改讀取來源不會回頭動它（SNAPSHOT）；沒有 ⇒ 下次建立／預覽才會換人（WOULD_CHANGE）。
+"""
+import json
+import sqlite3
+import sys
+
+
+def _uri(path):
+    return "file:%s?mode=ro" % path.replace("\\", "/")
+
+
+def main(path, show_all=False):
+    sys.stdout.reconfigure(encoding="utf-8")
+    c = sqlite3.connect(_uri(path), uri=True)
+    c.row_factory = sqlite3.Row
+    users = [dict(r) for r in c.execute("SELECT id, username, COALESCE(display_name,'') AS dn, active FROM users")]
+    by_id = {u["id"]: u for u in users}
+    by_name = {}
+    for u in users:
+        if u["dn"]:
+            by_name.setdefault(u["dn"].strip(), []).append(u)
+
+    def uniq(name):
+        hit = by_name.get((name or "").strip(), [])
+        return hit[0]["username"] if len(hit) == 1 else None
+
+    awards = {r["quote_no"]: dict(r) for r in c.execute(
+        "SELECT quote_no, id, status, paid_by, paid_at FROM bonus_case_awards")}
+    case_lines = {}
+    for r in c.execute("SELECT award_id, category, username, source, amount FROM bonus_case_award_lines WHERE category='sales'"):
+        case_lines.setdefault(r["award_id"], []).append("%s(%s,%s)" % (r["username"], r["source"], r["amount"]))
+    legacy = {}
+    for r in c.execute("SELECT id, quote_no, status FROM bonus_awards WHERE voided_at=''"):
+        legacy[r["quote_no"]] = dict(r)
+    legacy_lines = {}
+    for r in c.execute("SELECT award_id, username, amount FROM bonus_award_lines WHERE person_source_snapshot='sales_person'"):
+        legacy_lines.setdefault(r["award_id"], []).append("%s(%s)" % (r["username"], r["amount"]))
+
+    out, tally = [], {}
+    for q in c.execute("SELECT quote_no, status, customer_name, sales_person, sales_person_id, data_json FROM quotations"):
+        if (q["status"] or "") == "草稿":
+            continue
+        try:
+            roles = ((json.loads(q["data_json"] or "{}") or {}).get("caseRecord") or {}).get("roles") or {}
+            rs = roles.get("sales")
+        except Exception:                                                     # noqa: BLE001
+            tally["BAD_JSON"] = tally.get("BAD_JSON", 0) + 1
+            out.append({"quote_no": q["quote_no"], "verdict": "BAD_JSON"})
+            continue
+        r_user = rs.get("username") if isinstance(rs, dict) else (uniq(rs) if isinstance(rs, str) else None)
+        r_name = ((rs.get("display") or rs.get("username") or "") if isinstance(rs, dict) else (rs if isinstance(rs, str) else "")).strip()
+        s_user = by_id[q["sales_person_id"]]["username"] if q["sales_person_id"] in by_id else uniq(q["sales_person"])
+        s_name = (q["sales_person"] or "").strip()
+        if not r_name:
+            verdict = "ROLES_EMPTY"
+        elif r_user and s_user:
+            verdict = "SAME" if r_user == s_user else "DIFF"
+        else:
+            verdict = "SAME_NAME" if r_name == s_name else "DIFF_UNRESOLVED"
+        tally[verdict] = tally.get(verdict, 0) + 1
+        if not show_all and verdict not in ("DIFF", "DIFF_UNRESOLVED"):
+            continue
+        a = awards.get(q["quote_no"])
+        lg = legacy.get(q["quote_no"])
+        row = {
+            "quote_no": q["quote_no"], "customer": q["customer_name"], "quote_status": q["status"], "verdict": verdict,
+            "sales_person": "%s(%s)" % (s_name, s_user or "?"), "roles_sales": "%s(%s)" % (r_name, r_user or "?"),
+            "case_award": None if a is None else {"status": a["status"], "paid_by": a["paid_by"], "paid_at": a["paid_at"],
+                                                  "paid": bool(a["paid_by"] or a["paid_at"]),
+                                                  "sales_lines": case_lines.get(a["id"], [])},
+            "legacy_award": None if lg is None else {"status": lg["status"], "sales_person_lines": legacy_lines.get(lg["id"], [])},
+        }
+        row["effect"] = "SNAPSHOT（已有分潤單，名單已凍結，不受影響）" if (a or lg) else "WOULD_CHANGE（尚無分潤單；下次建立／預覽的業務名單換人）"
+        out.append(row)
+    print(json.dumps({"tally": tally, "cases": out}, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1], "--all" in sys.argv[2:])
