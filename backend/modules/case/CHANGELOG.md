@@ -6,6 +6,10 @@
 - 新增（S1，核准綁版本）：`GET /api/quotations/{no}` 在待審核／簽核中多回頂層 `contentFp`（在 `data` 外面，不會被存檔送回）；`POST /api/quotations/{no}/approve` 可帶 `expectedFp`，與伺服器現算不符 ⇒ 409「內容已更新，請重看」（權限檢查之後才比，不洩漏內容有沒有變）；簽核時替**這一次簽的**條目蓋 `signedFp`／`signedKeyHashes`，並寫 `approval.contentFp`（皆在排除清單內的 `approval` 底下）。沒帶 `expectedFp` 維持原行為（`content_fp.EXPECTED_FP_REQUIRED=False`；所有入口都帶了之後再翻）。報價單表單（quotation-form）載入時記下 `contentFp`、核准時帶上，409 後自動重載。
 - 新增（S1，稽核）：`quotation.approve` 的稽核 detail 加 `fpBound`（這次核准有沒有帶 `expectedFp`）——過渡期量得出何時能把 `EXPECTED_FP_REQUIRED` 翻成必填。`rebaseline_fingerprint` 不得接任何使用者端點（守門題）。
 - 不變：簽核流向、解鎖編輯、轉簽、通知——逐位元不變；舊單（條目沒有 `signedFp`）一律不判過期。
+- **（併入）(next) — 2026-11-06（wip/sales-gap-report；案件頁「業務」顯示業務負責，說明含獎金；K 審：獎金字樣對齊不回溯）**
+- 修正（畫面，僅顯示；無 migration、無新路由、無權限變更；不改任何欄位的讀寫、獎金、報表、可見度、篩選）：`pages/case-management.html` 清單卡片「業務：」與詳情頭「負責業務」改顯示 `caseRecord.roles.sales`（業務負責），**沒填才退回報價人 `sales_person`**（與營運報表 `_case_sales_owner` 同一個優先序；兩個欄位仍各自存、互不寫入）。人員角色下拉標籤改「業績歸屬（業務負責）」並加一句說明；報價人與業務負責兩邊都有值且顯示名不同時，角色區多一條中性提示條（不是錯誤，本來就是兩個欄位）。報價單表單的「報價人」欄不動。
+- 新增（清單端點，只加欄位）：`GET /api/quotations`（案件清單）選用參數 `with_sales_owner=1`（案件頁清單帶；其他呼叫端行為不變）時每列多回 `sales_owner`（業務負責的目前顯示名；沒填為空字串），`sales_person` 原樣保留。在 Python 端逐筆解析該頁 data_json（不新增 SQL `json_extract`；壞資料只影響該列）。`js/case-management-biz.js` 新增 `salesOwnerName(c)`／`selectedSalesOwner`／`salesRoleDiffNote`（只讀）；`css/case-management.css` 新增 `.cm-role-hint`／`.cm-role-note`。同版補上說明「業務獎金依此欄位」（業務獎金名單已同版改讀業務負責，見 payroll 模組 CHANGELOG；測試鎖「畫面這樣說，程式就真的這樣做」）。
+- 分析與方案：`docs/platform/plans/SALES-PERSON-VS-ROLES-SALES-ANALYSIS.md`、`SALES-OWNER-BONUS-SWITCH-PLAN.md`。測試：`modules/case/tests/test_sales_label_note_2026_11_06.py`、`tests/test_e2e_case_sales_note_2026_11_06.py`；`tests/golden_case_page_2026_09_24.json` 一處文字（角色下拉標籤與說明）隨之更新。
 
 ## 1.0.205 — 2026-10-17（wip/t71-backfill-fixes-r1；補登歷史案件 T71：瀏覽器實測缺陷、清單作廢入口與小修）
 - 新增（列表作廢入口）：報價單列表對補登單（`historical=true`）且為最高管理者時顯示「作廢」鈕，開頁內視窗填原因（≥5 字）後送 `DELETE …?reason=`，進暫存區、單號不回收；一般草稿刪除與非最高管理者行為不變。

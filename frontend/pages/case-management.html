@@ -374,7 +374,7 @@
                       style="background:var(--tone-warning-bg-strong);color:var(--tone-warning-fg)" x-text="t"></span>
               </template>
               <div class="cm-card__customer" x-show="lShown('customer')" :style="lo('customer')" x-text="c.customer_name || '(未填客戶)'"></div>
-              <div class="cm-card__sales" x-show="c.sales_person && lShown('sales')" :style="lo('sales')" x-text="lLabel('sales', '業務') + '：' + c.sales_person"></div>
+              <div class="cm-card__sales" x-show="salesOwnerName(c) && lShown('sales')" :style="lo('sales')" x-text="lLabel('sales', '業務') + '：' + salesOwnerName(c)"></div>
               <div class="cm-card__footer" x-show="lShown('amount') || lShown('stageProgress') || lShown('date')" :style="loFooter()">
                 <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
                   <span class="cm-card__amount" x-show="lShown('amount')" :style="lo('amount')" x-text="c.moneyMasked ? '—' : 'NT$ ' + MotrixFormat.num((c.total||0))"></span>
@@ -582,7 +582,7 @@
 
               <div class="cm-meta">
                 <span><span class="cm-meta__lbl">報價日期</span><span class="cm-meta__val" x-text="(selected.quote_date||selected.created_at||'').slice(0,10)||'—'"></span></span>
-                <span><span class="cm-meta__lbl">負責業務</span><span class="cm-meta__val" x-text="selected.sales_person||'—'"></span></span>
+                <span><span class="cm-meta__lbl">負責業務</span><span class="cm-meta__val" x-text="selectedSalesOwner||'—'"></span></span>
                 <button @click="showLog=!showLog"
                         style="margin-left:auto;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;background:none;border:none;cursor:pointer;color:var(--text-dim);padding:0;text-decoration:underline;flex-shrink:0"
                         x-text="showLog ? '收起操作紀錄' : '操作紀錄 ▸'"></button>
@@ -756,7 +756,7 @@
                     </select>
                   </div>
                   <div class="fi-group">
-                    <label class="fi-label" for="cm-role-sales">業務負責</label>
+                    <label class="fi-label" for="cm-role-sales">業績歸屬（業務負責）</label>
                     <select class="fi" id="cm-role-sales" x-model="roleSel.sales">
                       <option value="">— 選擇 —</option>
                       <template x-if="roleExtra('sales')">
@@ -766,6 +766,7 @@
                         <option :value="u.username" x-text="u.display_name || u.username"></option>
                       </template>
                     </select>
+                    <div class="cm-role-hint" data-testid="cm-role-sales-hint">清單與頭部的「業務」、營運報表的業績與部門依此欄位；業務獎金（尚未建分潤單者）也依此欄位，已建立的不回頭更動。沒填時退回報價人；有填但對不到帳號，獎金不帶人。</div>
                   </div>
                   <div class="fi-group">
                     <label class="fi-label" for="cm-role-executor">執行負責</label>
@@ -779,6 +780,8 @@
                       </template>
                     </select>
                   </div>
+                  <!-- 報價人≠業績歸屬提示：放在同一個 grid 裡（整列），不另開版面區塊（BP-1 的 roles 區塊只有標題與 grid 兩個綁定） -->
+                  <div class="cm-role-note" data-testid="cm-sales-diff-note" x-show="salesRoleDiffNote" x-text="salesRoleDiffNote"></div>
                 </div>
 
                 <div class="cm-section-title" x-show="bShown('timeline')" :style="bo('timeline', 0)"><span x-text="bLabel('timeline', secLabel('timeline', '專案期間'))">專案期間</span><span class="save-mode save-mode--auto" data-save-mode="auto" title="修改後自動存檔，不需要按儲存">即時儲存<span class="save-mode__ok" data-testid="flash-case" x-show="savedFlash['case']" x-transition.opacity> ✓ 已存</span></span></div>
