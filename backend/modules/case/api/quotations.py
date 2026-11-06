@@ -1380,6 +1380,7 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
         deny_case(conn, quote_no, user, "not_found" if row is None else "denied")
     # 不是案件成員、靠 cashier 例外讀到的 ⇒ 案件頁除收款外全唯讀（寫入面後端另擋，見 update_case_record）
     cashier_read_only = not _is_case_member(conn, quote_no, row, user)
+    _review_on = row["status"] in _CFP.PENDING_STATES and _CFP._mode_cached(conn) == "on"     # S5：複查模式 on 才給「維持／編輯」彈窗資料（off／shadow 回應逐位元不變）
     conn.close()
     result = dict(row)
     result["cashierReadOnly"] = cashier_read_only
@@ -1389,6 +1390,10 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
         # 簽核二擇一 S1：內容指紋給簽核人帶回 approve（核准綁版本）。放在 data 的**外面**（不會被前端原樣送回 PUT 存進 data_json）、
         # 遮蔽金額之前算（指紋看的是完整內容，與是否看得到金額無關）；只待審核／簽核中才有（其餘狀態回應逐位元不變）
         result["contentFp"] = _CFP.content_fingerprint(result["data"])
+        if _review_on:
+            _ar = _approve_review(result["data"])
+            if _ar:
+                result["approveReview"] = _ar
     result["signed_log"] = json.loads(result.get("signed_log") or "[]")
     result["signed_files"] = json.loads(result.pop("signed_files_json", None) or "[]")
     result["assigned_user_ids"] = json.loads(result.get("assigned_user_ids") or "[]")
@@ -5700,7 +5705,19 @@ def _run_after_commit(actions):
             logger.exception("簽核後續動作失敗（簽核本身已成立）：%r", getattr(act, "func", act))
 
 
-_FLAG_LABELS = {"reconfirm": "內容在你簽過之後有變動", "reassigned": "此單由他人轉簽給你", "delegated": "你是代理簽核"}
+_FLAG_LABELS = _CFP.FLAG_LABELS
+
+
+def _approve_review(d: dict):
+    """S5（H3）：簽核畫面「維持／編輯」彈窗的資料（當層第一個未簽核條目的旗標、變動區塊、新增原因、要不要填說明）。
+    **與檢視者無關**（`delegated` 由 approve 的 409 判定）；呼叫端只在 `reconfirm_mode=on`、待審核／簽核中時呼叫。沒有簽核層／已全簽 ⇒ None。純讀。"""
+    appr = d.get("approval") or {}
+    tiers = _active_tiers(appr)
+    ct = _current_tier_idx(appr)
+    if not tiers or ct >= len(tiers):
+        return None
+    entry = next((a for a in tiers[ct].get("approvers") or [] if a.get("status") != "approved"), None)
+    return _CFP.approve_review(d, entry) if entry else None
 
 
 def _guard_expected_fp(conn, d: dict, body) -> None:
@@ -5765,6 +5782,13 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
                     raise HTTPException(409, "此單需先看過目前內容再確認（" + "、".join(_FLAG_LABELS[f] for f in _flags) + "）：請重新載入後選擇「維持核准」",
                                         headers={"X-Approve-Flags": ",".join(_flags)})
             _guard_expected_fp(conn, d, body)
+            # S5（G1）：內容變動複查、且重算後**新增了需審核原因**（類別層級判準，J1／J4）⇒ 選「維持」要填一句確認說明（進稽核）；沒新增就一鍵維持。
+            # 放在指紋核對之後：過期的人先被告知「內容已更新」，不會在舊畫面上先填說明。off／shadow 與今天逐位元相同（`_flags` 的強制本來就只在 on）。
+            _review = _CFP.approve_review(d, my_entry) if ("reconfirm" in _flags and _CFP._mode_cached(conn) == "on") else None
+            if _review and _review["needNote"] and not (body.confirmNote or "").strip():
+                conn.close()
+                raise HTTPException(409, "內容變動後新增了需審核的原因，選擇「維持核准」請填一句確認說明",
+                                    headers={"X-Approve-Flags": ",".join(_flags), "X-Approve-Need-Note": "1"})
             _was_pending = _CFP.pending_entries(appr)       # 簽核動作前後做差，只替「這一次才簽」的條目蓋 signedFp
 
             my_entry["status"]     = "approved"
@@ -5798,12 +5822,14 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             appr["tiers"] = tiers
             appr.pop("steps", None)
             appr.pop("currentStep", None)
-            _CFP.stamp_signed(appr, _was_pending, d, _CFP.current_reasons_or_none(d))        # signedFp／signedKeyHashes／approval.contentFp（只動排除清單內的 approval，內容不變）
+            for _a in _CFP.stamp_signed(appr, _was_pending, d, _CFP.current_reasons_or_none(d)):        # signedFp／signedKeyHashes／approval.contentFp（只動排除清單內的 approval，內容不變）
+                for _k in ("reconfirm", "prevSignedFp", "prevApprovedAt"):                               # 複查完成（選「維持」）：待複查標記隨簽核一起清掉，與複查編輯的重簽（S4）一致；否則畫面會對已簽的人顯示「需複查」
+                    _a.pop(_k, None)
             _signed_tier_nos = [i + 1 for i in [ct_idx, *cascaded]]
             detail_status = (f"第 {'、'.join(str(n) for n in _signed_tier_nos)} 層 "
                              f"{my_entry.get('displayName', user['username'])} 已簽核")
         else:
-            _flags = []
+            _flags, _review = [], None
             # no tiers on this quotation — check global settings first
             if user["role"] != "superadmin":
                 conn.close()
@@ -5862,7 +5888,8 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
                f"{quote_no}（{cname}）", {"allDone": all_done, "status": detail_status,
                                          "fpBound": body.expectedFp is not None,
                                          **({"flags": _flags, "choice": body.choice, "fp": body.expectedFp,
-                                             **({"confirmNote": (body.confirmNote or "")[:200]} if body.confirmNote else {})} if _flags else {})})   # 過渡期（expectedFp 未強制）：記這次有沒有綁版本，才量得出何時能翻必填
+                                             **({"confirmNote": (body.confirmNote or "")[:_CFP.REVIEW_NOTE_MAX]} if body.confirmNote else {}),
+                                             **({"needNote": _review["needNote"], "newReasons": _review["newReasons"], "changedBlocks": _review["changedBlocks"]} if _review else {})} if _flags else {})})   # 過渡期（expectedFp 未強制）：記這次有沒有綁版本，才量得出何時能翻必填
         _run_after_commit(after_commit)
         _mark_notifications_read(quote_no, ["approval_request", "approval_reconfirm"], user["username"])     # 我簽過了：自己那筆「待簽核」「待複查」通知失效（S3b）
         return {"ok": True, "allDone": all_done, "signedTiers": _signed_tier_nos}
@@ -7184,7 +7211,7 @@ def detail_case_change(conn, doc_no):
 def detail_quotation(conn, doc_no):
     r = conn.execute(
         "SELECT quote_no, customer_name, project_name, total, quote_date, sales_person, "
-        "data_json, signed_files_json FROM quotations WHERE quote_no=?", (doc_no,)).fetchone()
+        "data_json, signed_files_json, status FROM quotations WHERE quote_no=?", (doc_no,)).fetchone()
     if not r:
         raise HTTPException(404, "報價單不存在")
     try:
@@ -7239,6 +7266,10 @@ def detail_quotation(conn, doc_no):
         # 簽核二擇一 S1b：簽核佇列詳情也給內容指紋（簽核人在佇列頁看到內容的那一刻算），核准時當 expectedFp 帶回。
         # 算在原始（未遮蔽）內容上，與 approve 端點讀到的 data_json 同一份；指紋本身不含任何內容
         out["contentFp"] = _CFP.content_fingerprint(d)
+        if (r["status"] in _CFP.PENDING_STATES) and _CFP._mode_cached(conn) == "on":    # S5：佇列頁的「維持／編輯」彈窗資料（簽核人本來就看得到 approval.reasons，不另遮蔽）
+            _ar = _approve_review(d)
+            if _ar:
+                out["approveReview"] = _ar
     return out
 
 

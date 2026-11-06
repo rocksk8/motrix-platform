@@ -67,6 +67,9 @@ EXEMPT = {
     # ── 轉簽（第54班）：稽核與換人同一個交易（直接 INSERT audit_log，寫不進去整個轉簽回滾），掃描器只認 _audit／_system_audit 呼叫 ──
     ("approval_queue.py", "POST", "/api/approval-queue/reassign"):
         "稽核 approval.reassign 在同一個交易內由端點直接寫入 audit_log（第 54 班強制稽核：寫不進去整個轉簽回滾，不再是 commit 之後吞錯誤的 _audit）；detail 上限與欄位推導沿用 _audit 的同一份規則",
+    # ── 複查編輯（簽核二擇一 S4）：稽核與存檔同一個交易（content_fp.audit_in_txn 直接寫 audit_log；寫不進去整筆回滾），掃描器只認 _audit／_system_audit 呼叫 ──
+    ("modules/case/api/quotations.py", "POST", "/api/quotations/{quote_no}/review-edit"):
+        "稽核 quotation.review_edit 在同一個交易內由 content_fp.audit_in_txn 寫入（與存檔、對帳、通知同交易；寫不進去整筆回滾，不是 commit 之後吞錯誤的 _audit）；測試 test_review_edit_s4_2026_11_07.py 驗稽核列存在",
     # ── 刪除暫存區（第53班）：稽核與刪除同一個交易，經 service.audit_tx 寫入（掃描器只認 _audit／_system_audit 呼叫）──
     ("modules/recyclebin/api.py", "POST", "/api/recycle-bin/delete-approved"):
         "稽核 recyclebin.delete_approved 在同一個交易內由 service.audit_tx 寫入（寫不進去整筆回滾，附件搬回）；端點本身不再另呼叫 _audit",

@@ -423,11 +423,15 @@ def approval_queue_detail(type: str, id: str, authorization: str = Header(None))
                "case": _case_header(conn, d["quoteNo"])}
         if d.get("contentFp"):        # 簽核二擇一 S1b：提供者（目前只有 M01 報價單）給的內容指紋，核准時帶回綁版本；指紋不含內容，不必遮蔽
             out["contentFp"] = d["contentFp"]
+        if d.get("approveReview"):    # 簽核二擇一 S5：提供者給的「維持／編輯」彈窗資料（旗標、變動區塊名、新增原因文字；與檢視者無關）
+            out["approveReview"] = dict(d["approveReview"])
         # 金額遮蔽：規則與憑證流一致（見 _can_see_queue_money）
         if user.get("role") != "superadmin":           # 存簿封面影像上印著完整帳號 ⇒ 只有最高管理者（使用者裁示 2026-10-01）
             out["files"] = [f for f in out["files"] if not f.get("dataUrl") and f.get("id") != "passbook"]
         if not _can_see_queue_money(conn, user, approval_raw):
             _mask_money(out)
+            if "approveReview" in out:      # 新增原因的文字含毛利率／折讓金額：看不到金額者只留「要不要填說明」（needNote）與區塊名
+                out["approveReview"]["newReasons"] = []
             # 內嵌影像（dataUrl：存簿封面）一律拿掉——看的是「有沒有內嵌內容」，不只看 id 字串（稽核 D AP-M2）
             out["files"] = [f for f in out["files"] if not f.get("dataUrl") and f.get("id") != "passbook"]
         return out

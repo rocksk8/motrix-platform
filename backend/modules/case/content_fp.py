@@ -125,6 +125,47 @@ def approve_flags(entry: dict, username: str) -> list:
     return out
 
 
+FLAG_LABELS = {"reconfirm": "內容在你簽過之後有變動", "reassigned": "此單由他人轉簽給你", "delegated": "你是代理簽核"}
+REVIEW_NOTE_MAX = 200                                 # confirmNote 進稽核的字數上限（approve 端點截斷用）
+
+
+def approve_review(data: dict, entry: dict, *, fp: str = None) -> dict:
+    """S5（H3）：簽核畫面「維持／編輯」彈窗要的資料——**與檢視者無關**的部分（`delegated` 旗標依操作者而定，由 approve 端點的 409 判定，這裡不含）。
+
+    - `entry`：當層第一個未簽核條目（誰按核准，就是在簽它）。`flags`＝`approve_flags(entry, None)`（reconfirm／reassigned）。
+    - `changedBlocks`：只有 reconfirm 才算——該條目簽核當時的區塊雜湊（`signedKeyHashes`）對目前內容的差異區塊名（不含內容；舊條目沒有雜湊 ⇒ 空）。
+    - `newReasons`／`needNote`：只有 reconfirm 才算（G1／J1／J4）。基準＝條目的 `signedReasonEntries`，目前＝S2 伺服器演算法；
+      判準在**類別層級**（`category_summary.needs_confirm`：新類別、低毛利品項增加／名次變差、天數／折讓變大、稅率變低），不看個別 key。
+      舊單沒有基準 ⇒ 不要求（J1）；基準有、但目前的原因算不出來（設定讀不到）⇒ **要求**（算不出來不能當作沒新增）。
+      `newReasons`＝新增與數值惡化的原因文字（畫面列表用，最多 10 則）；簽核人本來就看得到 `approval.reasons`，不另遮蔽。
+    純讀：不改 `data`／`entry`。"""
+    fp = fp or content_fingerprint(data)
+    flags = approve_flags(entry, None)
+    out = {"entry": (entry or {}).get("username"), "flags": flags, "flagLabels": [FLAG_LABELS[f] for f in flags],
+           "changedBlocks": [], "newReasons": [], "needNote": False, "contentFp": fp}
+    if "reconfirm" not in flags:
+        return out
+    sh = entry.get("signedKeyHashes")
+    if isinstance(sh, dict) and sh:
+        out["changedBlocks"] = changed_blocks(sh, key_hashes(data))
+    old = entry.get("signedReasonEntries")
+    if old is None:
+        return out                                          # 舊單沒有歷史基準：不提示新增原因（J1）
+    new = current_reasons_or_none(data)
+    if new is None:
+        out["needNote"] = True
+        return out
+    try:
+        from modules.case import quote_terms as _qt
+        diff, summ = _qt.diff_reason_entries(old, new), _qt.category_summary(old, new)
+    except Exception:                                       # noqa: BLE001 — 比對本身出錯也不可當成「沒新增」
+        out["needNote"] = True
+        return out
+    out["needNote"] = bool(summ.get("needs_confirm"))
+    out["newReasons"] = ([e["text"] for e in diff.get("added") or []] + [e["after"] for e in diff.get("changed") or []])[:10]
+    return out
+
+
 def stamp_signed(approval: dict, was_pending: list, data: dict, reason_entries=None) -> list:
     """把『這一次才變成 approved』的條目蓋上 `signedFp`／`signedKeyHashes`（含同人連簽的 cascade 層），並更新 `approval.contentFp`。
 
