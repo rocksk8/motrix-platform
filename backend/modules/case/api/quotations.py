@@ -70,6 +70,7 @@ from modules.case import profit_guard as _PG  # 第 48 班 S2：管銷分攤比�
 from helpers import profit_rules as _PR  # 專案毛利%（project_margin）
 from helpers import profit_warning as _pw  # T64 A：新報價單預設有效天數（設定 quote_defaults.valid_days，預設 30）
 from modules.case import alt_sign as _ALT_SIGN  # M3 T9：擇一方案回簽選定／取消回簽
+from modules.case import content_fp as _CFP  # 簽核二擇一 S1：內容指紋（核准綁版本、signedFp 蓋章）
 from modules.case import receipt_calendar as _RC  # 行事曆「收款登錄／應收到期提醒」（2026-10-05，預設關）
 from modules.case.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
 from modules.case.case_stage_tasks import daily_task_notice, delete_daily_task_for_case_stage, sync_daily_task_for_case_stage  # noqa: E402
@@ -751,6 +752,9 @@ class ApprovalActionBody(BaseModel):
     # 後端一次把那幾層一起簽掉（2026-09-15，見 helpers/tiered_approval.py::
     # plan_self_cascade()）。預設 false：沒問過就不會替使用者多簽。
     cascade:           Optional[bool] = False
+    # 簽核二擇一 S1：簽核人載入畫面時拿到的內容指紋（GET /api/quotations/{no} 的 `contentFp`）。
+    # 帶了而與伺服器現在算的不同 ⇒ 409「內容已更新，請重看」（核准綁版本；B3）。沒帶 ⇒ 看 `content_fp.EXPECTED_FP_REQUIRED`。
+    expectedFp:        Optional[str]  = None
 
 
 # ── Quotation sequence ────────────────────────────────────────────────────────
@@ -1352,6 +1356,10 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
     result["cashierReadOnly"] = cashier_read_only
     result["data"] = json.loads(result.pop("data_json", "{}"))
     result["data"]["status"] = result["status"]   # DB column is authoritative
+    if result["status"] in _CFP.PENDING_STATES:
+        # 簽核二擇一 S1：內容指紋給簽核人帶回 approve（核准綁版本）。放在 data 的**外面**（不會被前端原樣送回 PUT 存進 data_json）、
+        # 遮蔽金額之前算（指紋看的是完整內容，與是否看得到金額無關）；只待審核／簽核中才有（其餘狀態回應逐位元不變）
+        result["contentFp"] = _CFP.content_fingerprint(result["data"])
     result["signed_log"] = json.loads(result.get("signed_log") or "[]")
     result["signed_files"] = json.loads(result.pop("signed_files_json", None) or "[]")
     result["assigned_user_ids"] = json.loads(result.get("assigned_user_ids") or "[]")
@@ -5659,6 +5667,18 @@ def _run_after_commit(actions):
             logger.exception("簽核後續動作失敗（簽核本身已成立）：%r", getattr(act, "func", act))
 
 
+def _guard_expected_fp(conn, d: dict, body) -> None:
+    """核准綁版本（簽核二擇一 S1）：內容在簽核人載入畫面之後被改過 ⇒ 409，連線先關（呼叫端在 write_txn 內）。
+    放在權限檢查**之後**：沒權限的人不該從 409 得知「內容有沒有變」。"""
+    if body.expectedFp is None:
+        if not _CFP.EXPECTED_FP_REQUIRED:
+            return
+    elif body.expectedFp == _CFP.content_fingerprint(d):
+        return
+    conn.close()
+    raise HTTPException(409, "內容已更新，請重看")
+
+
 @router.post("/api/quotations/{quote_no}/approve")
 def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -5684,6 +5704,8 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             if not ok:
                 conn.close()
                 raise HTTPException(status_code, err_msg)
+            _guard_expected_fp(conn, d, body)
+            _was_pending = _CFP.pending_entries(appr)       # 簽核動作前後做差，只替「這一次才簽」的條目蓋 signedFp
             tier      = tiers[ct_idx]
             approvers = tier.get("approvers") or []
             first_pending = next((a for a in approvers if a.get("status") != "approved"), None)
@@ -5720,6 +5742,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             appr["tiers"] = tiers
             appr.pop("steps", None)
             appr.pop("currentStep", None)
+            _CFP.stamp_signed(appr, _was_pending, d)        # signedFp／signedKeyHashes／approval.contentFp（只動排除清單內的 approval，內容不變）
             _signed_tier_nos = [i + 1 for i in [ct_idx, *cascaded]]
             detail_status = (f"第 {'、'.join(str(n) for n in _signed_tier_nos)} 層 "
                              f"{my_entry.get('displayName', user['username'])} 已簽核")
@@ -5748,6 +5771,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             if self_block_msg:
                 conn.close()
                 raise HTTPException(403, self_block_msg)
+            _guard_expected_fp(conn, d, body)
             all_done      = True
             detail_status = "超級管理員簽核"
             _signed_tier_nos = []

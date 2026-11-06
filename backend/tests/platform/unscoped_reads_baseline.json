@@ -394,6 +394,7 @@
   "modules/case/completion_pdf.py::_build_completion_html_core::<from>": "dynamic",
   "modules/case/completion_pdf.py::generate_completion_pdf_bytes::completion_notes": "unscoped",
   "modules/case/completion_sync.py::completed_qty_by_item::completion_notes": "unscoped",
+  "modules/case/content_fp.py::rebaseline_fingerprint::quotations": "unscoped",
   "modules/case/expense_forms.py::next_doc_code::case_extra_expenses": "unscoped",
   "modules/case/gl_events.py::gl_events::case_extra_expenses": "unscoped",
   "modules/case/item_shipped.py::case_shipped_summary::quotations": "unscoped",

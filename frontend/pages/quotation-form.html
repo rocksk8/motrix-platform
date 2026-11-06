@@ -2405,6 +2405,7 @@
       lastSaved: null,
       vendorQuoteOpts: [],    // N1：該案承攬商報價品項（派工單），供成本欄逐項帶入
       _lastUpdatedAt: null,   // 樂觀鎖：loadQuote() 讀入、apiSave() 送出比對、成功後更新
+      _contentFp: null,       // 簽核綁版本：loadQuote() 讀入（待審核／簽核中才有）、approveQuote() 帶給 /approve 當 expectedFp；不進 q，不會被存檔送回
       _saveConflict: false,  // apiSave() 收到 409 時設 true，saveDraft() 據此提示使用者
       // 補登歷史案件（T70-1）：只有最高管理者且設定中心開關有效時 available 才會是 true；on＝本次新增改走補登端點
       hb: { available: false, on: false, min: '', max: '', reason: '', origNo: '', preview: '', previewErr: '', busy: false, err: '', expires: '' },
@@ -3742,11 +3743,13 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ approvedByDisplay: this.session.displayName || this.session.username,
-                                 cascade: cascadeNos.length > 0 })
+                                 cascade: cascadeNos.length > 0,
+                                 expectedFp: this._contentFp || undefined })
         })
         if (!r.ok) {
           const err = await r.json().catch(() => ({ detail: '未知錯誤' }))
           alert('簽核失敗：' + (err.detail || '未知錯誤'))
+          if (r.status === 409) await this.loadQuote()      // 內容在你開著畫面時被改過：重載最新版，讓簽核人重看後再簽
           return
         }
         const data = await r.json()
@@ -3936,6 +3939,7 @@
         this._fillMissingTerms(row.data)
         this.q.quoteNo = row.data.quoteNo || this.q.quoteNo
         this._lastUpdatedAt = row.updated_at || null
+        this._contentFp = row.contentFp || null
         this.loadVendorQuoteOpts()
         // 同時編輯警示（2026-09-14）：載到哪一張就回報哪一張，有別人在編會跳警示條
         if (window.MotrixPresence) window.MotrixPresence.start('quotation', this.q.quoteNo)

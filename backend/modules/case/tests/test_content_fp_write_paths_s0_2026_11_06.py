@@ -58,7 +58,7 @@ DIRECT_WRITES = {
     "db.py::_m052_fix_stage_json_ids": (1, MIGRATION_ONCE, "stages 作廢 id 修正寫進 caseRecord.stages"),
     "db.py::_m058_backfill_deal_won_at": (1, MIGRATION_ONCE, "補 dealWonAt（只 已成案／已結案）"),
     "db.py::_m059_fix_deal_won_at_from_audit_log": (2, MIGRATION_ONCE, "依稽核紀錄校正／移除 dealWonAt（只 已成案／已結案）"),
-    "db.py::_m116_case_roles_username": (1, MIGRATION_ONCE, "caseRecord.roles 字串→物件；⚠ 不分狀態——未來類似遷移若跑在簽核中的單，指紋會一次性翻動"),
+    "db.py::_m116_case_roles_username": (1, MIGRATION_ONCE, "caseRecord.roles 字串→物件；⚠ 不分狀態——這類遷移會讓簽核中的單指紋一次性翻動；已套用不追溯。之後凡可能碰待審核／簽核中單的遷移必須呼叫 `content_fp.rebaseline_fingerprint(conn, quote_no)`（K 審 §I5）"),
     "tools/backfill_location_identity_snapshot.py::main": (1, MIGRATION_ONCE, "補 locationIdentity 快照（排除鍵）"),
     "migrations_frozen/t48_overhead25/recalc.py::apply_plan": (1, MIGRATION_ONCE, "凍結：T48 管銷 25% 重算"),
     "migrations_frozen/t48_overhead25/recalc.py::apply_rollback": (1, MIGRATION_ONCE, "凍結：T48 還原"),
@@ -66,8 +66,9 @@ DIRECT_WRITES = {
     "migrations_frozen/t52_charity/recalc.py::apply_rollback": (1, MIGRATION_ONCE, "凍結：T52 還原"),
 }
 
-# 真正呼叫 `save_quotation_json(...)` 的點（AST 數；2026-11-06 實測 25，不是提案寫的「約31」——31 含註解／docstring／def／import）
+# 真正呼叫 `save_quotation_json(...)` 的點（AST 數；S0 實測 25（不是提案寫的「約31」），S1 加 content_fp.rebaseline_fingerprint 一處＝26——31 含註解／docstring／def／import）
 FUNNEL_CALLS = {
+    "modules/case/content_fp.py": 1,      # S1 rebaseline_fingerprint（走漏斗、不動 updated_at）
     "modules/case/api/material_orders.py": 2,
     "modules/case/api/quotations.py": 22,
     "modules/case/api/settlement_api.py": 1,
@@ -80,10 +81,13 @@ EXCLUDED_SPEC = frozenset({
 })
 #: 時間戳類：提案寫「updatedAt 類時間戳」。目前頂層實際只見 `updatedAt`（寫入時被 `_DIFF_IGNORE_KEYS` 也忽略）
 EXCLUDED_TIMESTAMPS = frozenset({"updatedAt"})
-#: S0 盤點新增（純伺服器簿記；**待 K 審確認**，S3 開工前定案）
+#: S0 盤點新增、K 審（提案 §I4）定案的純伺服器簿記
 EXCLUDED_PROPOSED = frozenset({
-    "docVersions",             # append_doc_version：PDF 版本紀錄，伺服器自己 append
+    "docVersions",             # _record_doc_version：PDF 版本紀錄，伺服器自己 append
     "googleCalendarEventId",   # _calendar_writeback_quotation：日曆事件回寫
+    "altPickedAt",             # 回簽時間戳（與 altPicks 成對寫；altPicks 本身維持內容）
+    "altPickedBy",             # 回簽人
+    "dealWonAt",               # 成案時間戳（由 dealTag 轉換產生）
 })
 #: 請求暫存欄位：寫入前 `q.pop(...)`，不會進 data_json；列在這裡只是讓掃描器的歸類表完整
 TRANSIENT_REQUEST_ONLY = frozenset({"_expectedUpdatedAt", "_isUnlockEdit"})
@@ -94,14 +98,9 @@ CONTENT_KEYS = frozenset({
     "caseRecord", "customFields", "items", "tot", "overheadPct", "quoteNo", "quoteDate", "locationId",
     "settlement", "taxBasis", "historical", "altPicks", "altTexts",
 })
-#: 內容或簿記**有疑義**，S0 先依「未知鍵從嚴」算內容，列出來請 K 審裁定（改成排除要改上面的集合並更新測試）
-CONTENT_PENDING_K = frozenset({
-    "dealTag",       # 成案標記（使用者可見狀態；熱欄位 deal_tag 同步）
-    "dealWonAt",     # 成案時間（伺服器寫的時間戳，但只在 已成案／已結案 單據）
-    "altPickedAt",   # 回簽時間戳（與 altPicks 成對寫；altPicks 本身會改 total）
-    "altPickedBy",   # 回簽人
-    "rejection",     # 拒絕資料（statusLog 之外另存的一份）
-})
+#: K 審（§I4）裁定**維持從嚴算內容**：`rejection` 只在離開簽核範圍時寫；`dealTag` 先這樣，等影子模式（§H6-1④）一週的
+#: 「來源區塊」統計，若佔比高再改列排除（改清單要同步改 `content_fp.EXCLUDED_KEYS` 與本檔）
+CONTENT_PENDING_K = frozenset({"dealTag", "rejection"})
 
 # 頂層鍵掃描的範圍＝會寫報價單 data_json 的檔（db.py 排除：遷移裡 d[...] 多為巢狀欄位，非頂層）
 KEY_SCAN_FILES = (
@@ -279,7 +278,7 @@ def test_save_quotation_json_call_sites_are_pinned():
     assert _funnel_call_counts() == FUNNEL_CALLS, (
         "save_quotation_json 呼叫點變了：新增呼叫端走漏斗＝安全（S3 的寫後掛鉤會涵蓋），但請更新 FUNNEL_CALLS；"
         "若是想繞過它另寫 UPDATE，請改到 DIRECT_WRITES 登記並說明理由")
-    assert sum(FUNNEL_CALLS.values()) == 25
+    assert sum(FUNNEL_CALLS.values()) == 26
 
 
 def test_the_funnel_is_the_only_place_with_a_plain_data_json_update_in_quotations_module():
@@ -307,7 +306,9 @@ def test_dynamic_table_data_json_writer_is_pinned_and_never_pointed_at_quotation
 # ── 4. 排除清單 ───────────────────────────────────────────────────────────────────────────
 def test_exclusion_list_is_locked():
     assert EXCLUDED_SPEC == {"approval", "statusLog", "editHistory", "returnInfo", "clauseTitles", "locationIdentity", "status"}
-    assert EXCLUDED_KEYS == EXCLUDED_SPEC | {"updatedAt", "docVersions", "googleCalendarEventId"}
+    assert EXCLUDED_KEYS == EXCLUDED_SPEC | {"updatedAt", "docVersions", "googleCalendarEventId", "altPickedAt", "altPickedBy", "dealWonAt"}
+    from modules.case import content_fp            # S1 起排除清單有了 production 常數：兩邊必須逐字相等
+    assert content_fp.EXCLUDED_KEYS == EXCLUDED_KEYS
     # 排除清單與內容清單不得重疊；內容清單裡的核心鍵一個都不能被排除（突變：把它們搬進排除清單，這裡必須翻紅）
     assert not (EXCLUDED_KEYS & (CONTENT_KEYS | CONTENT_PENDING_K))
     for core in ("items", "tot", "caseRecord", "customFields", "overheadPct", "settlement", "altPicks", "dealTag"):
