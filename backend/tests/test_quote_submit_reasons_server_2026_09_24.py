@@ -6,8 +6,8 @@ R3 項次照移植（含區段標題的位置）。
 原本 approval.reasons 是前端 checkApproval() 算好帶上來的，後端照收 ⇒ 直接打 API
 不帶 reasons（或帶假的），簽核人就看不到「低毛利」等特殊條件。
 
-⚠️ 已知且使用者接受的限制（R2）：只看 `margin` 欄位——margin 可以假造，
-搭配真實的低單價仍能隱瞞低毛利。
+⚠️ 原限制（R2）：只看 `margin` 欄位、可假造。S2b（2026-11-06）起送審路徑改由伺服器用成本×1.05÷單價重算，不信 margin；
+成本本身仍由用戶端送（重算不防壓低成本）。見文末 S2b 題。
 """
 from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
@@ -39,7 +39,7 @@ def _data(**over):
          "showDiscount": False, "discount": 0,
          "tot": {"total": 1050, "pretax": 1000, "directMarginPct": 0, "netMarginPct": 0},
          "items": [{"description": "品項 A", "qty": 1, "cost": 700, "margin": 0.35,
-                    "unitPrice": 1000, "amount": 1000}],
+                    "unitPrice": 1150, "amount": 1150}],        # S2b：cost／margin／unitPrice 自洽（前端 calcUnitPrice(700, 0.35)＝1150；真實毛利 36.1%），送審重算不會多出低毛利原因
          "approval": {"status": "pending"}}
     d.update(_terms())
     d.update(over)
@@ -73,13 +73,13 @@ def _create(client, token, data, status="待審核"):
 
 def test_low_margin_listed_even_if_client_sends_no_reasons(client, token):
     items = [{"type": "header", "description": "區段"},
-             {"description": "低毛利", "qty": 1, "cost": 900, "margin": 0.2, "unitPrice": 1000, "amount": 1000}]
+             {"description": "低毛利", "qty": 1, "cost": 800, "margin": 0.2, "unitPrice": 1050, "amount": 1050}]      # S2b：1 − 800×1.05÷1050 ＝ 0.2 自洽
     no = _create(client, token, _data(items=items))
     assert "第 2 項毛利率 20.00% 低於 30%" in _reasons(no), "R3：項次照移植，含區段標題的位置"
 
 
 def test_fake_client_reasons_are_replaced(client, token):
-    items = [{"description": "低毛利", "qty": 1, "cost": 900, "margin": 0.1, "unitPrice": 1000, "amount": 1000}]
+    items = [{"description": "低毛利", "qty": 1, "cost": 900, "margin": 0.1, "unitPrice": 1050, "amount": 1050}]      # S2b：1 − 900×1.05÷1050 ＝ 0.1 自洽
     no = _create(client, token, _data(items=items, validDays=60,
                                       approval={"status": "pending", "reasons": ["標準報價單送出"]}))
     rs = _reasons(no)
@@ -165,3 +165,35 @@ def test_frontend_no_longer_carries_its_own_copy():
 def test_to_fixed_matches_js(x, expected):
     from modules.case.quote_terms import _js_to_fixed
     assert _js_to_fixed(x, 2) == expected
+
+
+# ── S2b：送審時毛利由伺服器重算（不信用戶端 margin） ───────────────────────────
+
+def test_s2b_forged_margin_with_real_low_price_is_listed_on_submit(client, token):
+    items = [{"id": 1, "description": "假毛利", "qty": 1, "cost": 900, "margin": 0.9, "unitPrice": 1000, "amount": 1000}]
+    no = _create(client, token, _data(items=items))
+    assert "第 1 項毛利率 5.50% 低於 30%" in _reasons(no), "margin 寫 90% 但單價只有 1000（真實 5.5%）⇒ 仍要列"
+
+
+def test_s2b_omitting_unit_price_does_not_hide_low_margin(client, token):
+    items = [{"id": 1, "description": "不送單價", "qty": 1, "cost": 900, "margin": 0.9}]
+    no = _create(client, token, _data(items=items))
+    assert "第 1 項毛利率 -100.00% 低於 30%" in _reasons(no)
+
+
+def test_s2b_gift_item_is_not_listed(client, token):
+    items = [{"id": 1, "description": "贈品", "qty": 1, "cost": 500, "margin": 1, "unitPrice": 0, "amount": 0}]
+    no = _create(client, token, _data(items=items))
+    assert _reasons(no) == ["標準報價單送出"], "贈品（成本>0、單價 0）照今天的行為不列毛利原因"
+
+
+def test_s2b_stored_client_margin_is_left_as_is(client, token):
+    import db
+    items = [{"id": 1, "description": "x", "qty": 1, "cost": 900, "margin": 0.9, "unitPrice": 1000, "amount": 1000}]
+    no = _create(client, token, _data(items=items))
+    conn = db.get_db()
+    try:
+        row = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()
+    finally:
+        conn.close()
+    assert json.loads(row["data_json"])["items"][0]["margin"] == 0.9, "只影響 approval.reasons；存檔資料不被改寫"

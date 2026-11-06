@@ -11,8 +11,8 @@
 送審時由後端重算、覆蓋前端送來的 `approval.reasons`——簽核人看到的原因不能由送件人決定。
 
 ⚠️ 已知且使用者 2026-09-24 裁示接受的限制：
-- 毛利率只看品項的 `margin` 欄位（使用者原話「只看毛利率欄位」）。`margin` 可以假造，
-  搭配真實的低單價仍能隱瞞低毛利
+- （S2b 起已解除）原本毛利率只看品項的 `margin` 欄位、可假造；現在**送審路徑**（`submit_reasons`）由伺服器用成本×1.05÷單價重算，
+  `compute_approval_reasons` 本身仍照 `margin` 欄位（前端移植＋parity 基準）。成本本身仍由用戶端送，重算不防壓低成本
 - 「第 N 項」的 N 是含區段標題在內的陣列位置（照移植），與 PDF 的項次（不含標題）不同
 """
 import math
@@ -231,8 +231,8 @@ def compute_approval_reason_entries(q: dict, presets: list, default_payment_term
     供 `diff_reason_entries` 比對「新增／消失／數字改變」。"""
     entries = []
 
-    def add(key, text):
-        entries.append({"key": key, "text": text})
+    def add(key, text, **extra):
+        entries.append(dict({"key": key, "text": text}, **extra))      # 毛利原因另帶 `margin`（判定用的毛利，小數）供 category_summary；diff_reason_entries 只看 key／text
 
     min_pct = None                                                # 第一個有成本的品項才讀（預設 30＝今天的寫死值；前端 checkApproval 同源，見 project-margin/config 的 minItemMarginPct）
     _max_days = max_valid_days()                                  # 預設 30＝今天寫死的值（設定 quote_approval.max_valid_days；前端 checkApproval 同源）
@@ -248,7 +248,8 @@ def compute_approval_reason_entries(q: dict, presets: list, default_payment_term
         if min_pct is None:
             min_pct = min_item_margin_pct()
         if _js_num(item.get("margin")) < min_pct / 100:
-            add(f"margin:{idents[i]}", f"第 {i + 1} 項毛利率 {_js_to_fixed(_js_num(item.get('margin')) * 100, 2)}% 低於 {_js_str(min_pct)}%")
+            add(f"margin:{idents[i]}", f"第 {i + 1} 項毛利率 {_js_to_fixed(_js_num(item.get('margin')) * 100, 2)}% 低於 {_js_str(min_pct)}%",
+                margin=_js_num(item.get("margin")))
     if _js_truthy(q.get("showDiscount")) and _js_num(q.get("discount")) > 0:
         if _js_num(q.get("discount")) > discount_review_above():   # 預設 0＝今天的規則（設定 quote_approval.discount_review_above）；只有真的有折讓才讀設定
             add("discount", f"含折讓（NT${_js_locale_number(_js_num(q.get('discount')))}）")
@@ -277,10 +278,10 @@ def compute_approval_reasons(q: dict, presets: list, default_payment_terms: str)
 
 
 def submit_reasons(q: dict, submitter_display: str, presets: list, default_payment_terms: str) -> list:
-    """送審時寫進 approval.reasons 的完整內容（移植 confirmSubmit() 的組法）：
+    """送審時寫進 approval.reasons 的完整內容（移植 confirmSubmit() 的組法；毛利改伺服器重算，S2b）：
     沒有特殊條件 ⇒「標準報價單送出」；代理送出那一行放最前面。
     代理與否沿用前端帶的 `delegateSubmitter`，但**送出人的名字用伺服器的登入身分**。"""
-    reasons = compute_approval_reasons(q, presets, default_payment_terms) or [_NO_REASON]
+    reasons = [e["text"] for e in server_reason_entries(q, presets, default_payment_terms)] or [_NO_REASON]      # S2b：毛利由伺服器用成本／單價重算，不信用戶端 margin
     appr = q.get("approval") or {}
     if appr.get("delegateSubmitter"):
         note = _js_trim(str(appr.get("delegateNote") or ""))
@@ -293,24 +294,36 @@ def submit_reasons(q: dict, submitter_display: str, presets: list, default_payme
 # 提案：docs/platform/plans/QUOTE-APPROVE-EDIT-CHOICE-PROPOSAL.md（S2）。
 
 COST_FACTOR = 1.05             # 品項毛利口徑：成本×1.05（5% 進項稅假設）。前端 quotation-form.html 的 calcItem／unitPrice 輸入框同一條；modules/case/settlement_actuals.ESTIMATE_RATE 同值
-NO_PRICE_MARGIN = -1.0         # 有成本但單價 ≤0／不是數字 ⇒ 毛利記 −100%（任何門檻都會列入；顯示值只為辨識，真實毛利是負無限大）
+NO_PRICE_MARGIN = -1.0         # 有成本但單價沒填／負數／不是數字 ⇒ 毛利記 −100%（任何門檻都會列入；顯示值只為辨識）
+GIFT_MARGIN = 1.0              # 贈品（成本>0、單價剛好 0）：照今天的行為不列毛利原因（前端贈品就是 margin=100%）；with_server_margins 用它取代用戶端 margin
+
+
+def _price_is_given_zero(unit_price) -> bool:
+    """單價是明確填的 0（數字 0／"0"）；沒填（None／""／False）、NaN、負數都不算。"""
+    if unit_price is None or unit_price is False or (isinstance(unit_price, str) and _js_trim(unit_price) == ""):
+        return False
+    return _js_num(unit_price) == 0
 
 
 def server_item_margin(cost, unit_price) -> Optional[float]:
     """伺服器端單項毛利率（小數，0.3＝30%）：`1 − 成本×1.05 ÷ 單價`，四捨五入到 4 位（＝前端 `parseFloat(x.toFixed(4))`，所以誠實資料與前端顯示逐位相同）。
     只吃成本與單價——**不讀**品項上的 `margin`／`amount`／`unitPriceOverride`（都是用戶端可控）。數量不入參：單價×數量與成本×數量同乘，毛利率與數量無關。
-    成本 ≤0／不是數字 ⇒ None（沒有毛利概念；`compute_approval_reasons` 本來就略過這種品項）。單價 ≤0／不是數字 ⇒ `NO_PRICE_MARGIN`。"""
+    回 None＝不判毛利：成本 ≤0／不是數字（本來就略過），或**贈品**（成本>0、單價明確是 0；今天的既有行為是不列）。
+    成本>0 但單價沒填／負數／不是數字 ⇒ `NO_PRICE_MARGIN`（不能靠「不送單價」躲過重算）。"""
     c = _js_num(cost)
     if math.isnan(c) or c <= 0:
         return None
+    if _price_is_given_zero(unit_price):
+        return None
     p = _js_num(unit_price)
-    if math.isnan(p) or p <= 0:
+    if math.isnan(p) or p <= 0 or unit_price is None or unit_price is False or (isinstance(unit_price, str) and _js_trim(unit_price) == ""):
         return NO_PRICE_MARGIN
     return float(_js_to_fixed(1 - c * COST_FACTOR / p, 4))
 
 
 def with_server_margins(q: dict) -> dict:
-    """回傳 `q` 的淺拷貝，所有有成本的非標題品項的 `margin` 換成 `server_item_margin(cost, unitPrice)`。**不改傳入的 `q`、也不改要存檔的資料**（存進 data_json 的仍是用戶端欄位，PDF／畫面不變）。"""
+    """回傳 `q` 的淺拷貝，所有有成本的非標題品項的 `margin` 換成 `server_item_margin(cost, unitPrice)`；贈品換成 `GIFT_MARGIN`（不列原因，不讀用戶端 margin）。
+    **不改傳入的 `q`、也不改要存檔的資料**（存進 data_json 的仍是用戶端欄位，PDF／畫面不變）。"""
     items = q.get("items")
     if not isinstance(items, list):
         return dict(q)
@@ -318,6 +331,8 @@ def with_server_margins(q: dict) -> dict:
     for it in items:
         if isinstance(it, dict) and it.get("type") != "header":
             m = server_item_margin(it.get("cost"), it.get("unitPrice"))
+            if m is None and _js_num(it.get("cost")) > 0:          # 成本>0 而 None ＝ 贈品
+                m = GIFT_MARGIN
             if m is not None:
                 it = dict(it, margin=m)
         out.append(it)
@@ -364,4 +379,40 @@ def diff_reason_entries(old: list, new: list) -> dict:
         "removed": [{"key": k, "text": t} for k, t in o.items() if k not in n],
         "changed": [{"key": k, "before": o[k], "after": t} for k, t in n.items() if k in o and o[k] != t],
         "unchanged": [{"key": k, "text": t} for k, t in n.items() if k in o and o[k] == t],
+    }
+
+
+def category_summary(old: list, new: list) -> dict:
+    """類別層級的差異（給複查畫面判斷「要不要請簽核人確認」）；**不依賴品項識別**（報價品項沒有穩定 id，插入一列會讓 `margin:idx:N` 全部位移 ⇒ `diff_reason_entries` 會誤報新增／消失）。
+    類別＝鍵冒號前的部分（validDays／margin／discount／tax／terms）。只有下列三種算「要確認」：
+    - 新類別出現（新版有、舊版沒有的類別）；
+    - 低於門檻的品項數增加；
+    - 最低毛利變低（新版最低毛利 < 舊版最低毛利；舊版沒有低毛利品項而新版有，也算）。
+    類別消失、同類別文字改變（折讓金額、天數…）都不算。元素是 `{"key","text"[,"margin"]}`；字串視為類別＝自己。
+    回 `{"new_categories": [...], "low_margin_items": {"before","after","increased"}, "lowest_margin": {"before","after","lower"}, "needs_confirm": bool}`。"""
+    def cat(e):
+        k = e if isinstance(e, str) else e["key"]
+        return k.split(":", 1)[0]
+
+    def margins(lst):
+        return [e["margin"] for e in (lst or []) if isinstance(e, dict) and cat(e) == "margin" and e.get("margin") is not None]
+
+    oc = {cat(e) for e in (old or [])}
+    new_cats = []
+    for e in (new or []):
+        c = cat(e)
+        if c not in oc and c not in new_cats:
+            new_cats.append(c)
+    om, nm = margins(old), margins(new)
+    n_old = sum(1 for e in (old or []) if cat(e) == "margin")
+    n_new = sum(1 for e in (new or []) if cat(e) == "margin")
+    lo_old = min(om) if om else None
+    lo_new = min(nm) if nm else None
+    lower = lo_new is not None and (lo_old is None or lo_new < lo_old)
+    increased = n_new > n_old
+    return {
+        "new_categories": new_cats,
+        "low_margin_items": {"before": n_old, "after": n_new, "increased": increased},
+        "lowest_margin": {"before": lo_old, "after": lo_new, "lower": lower},
+        "needs_confirm": bool(new_cats or increased or lower),
     }
