@@ -2339,6 +2339,20 @@ def pytest_probe_leak_sessionfinish(session, exitstatus):
     if session.exitstatus == 0:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
+# ── P8 自訂模組引擎總開關（builder_custom_modules.enabled，正式預設 0＝關；T78）──
+# 約 80 個既有測試會直接建立自訂模組（存草稿→發布）。總開關關著時這些會被擋（403），所以測試環境預設把它的「預設值」開起來，
+# 不必逐題設定；要驗正式預設（關）或「關著擋建立」的題目標 `@pytest.mark.custom_switch_default`（也可以題內明確發布 0／1，不受影響）。
+@pytest.fixture(autouse=True)
+def _custom_module_engine_on_for_tests(request, monkeypatch):
+    if request.node.get_closest_marker("custom_switch_default"):
+        return
+    try:
+        from helpers import settings_registry as _sr
+        monkeypatch.setattr(_sr._g("builder_custom_modules")["fields"]["enabled"], "default", 1)
+    except KeyError:                                                       # 群組沒登錄（不應發生）：不動
+        return
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # 31-A 相容殼：舊測試用 API 建立／編輯「帶 status 的派發」（例如直接 completed）來造「既有資料」。
 # 第 31 班起 API 忽略建立時的 status、編輯不可改狀態（寫入口的閘，見 modules/subcontract/dispatch_flow.py）；

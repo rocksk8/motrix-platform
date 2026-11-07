@@ -75,12 +75,14 @@
 
       <template x-if="ready && !key && !tplChoice">
         <div class="mb-card" id="mb-pick">
-          <h3>開啟或建立模組</h3>
-          <div class="mb-row">
+          <h3 x-text="createOn ? '開啟或建立模組' : '開啟模組'"></h3>
+          <div class="mb-row" x-show="createOn" data-testid="mb-create-row">
             <input class="mb-in mb-in-s" id="mb-key" x-model.trim="keyInput" placeholder="模組代號（例：equipment_loan）" style="min-width:260px" @keydown.enter="openKey(keyInput)">
             <button class="btn btn-primary" id="mb-open" @click="openKey(keyInput)">開啟／建立</button>
           </div>
-          <div class="mb-hint">代號只能用小寫英文、數字與底線，英文開頭（2～40 字）；建立後不能改（它是網址與權限的一部分）。</div>
+          <div class="mb-hint" x-show="createOn">代號只能用小寫英文、數字與底線，英文開頭（2～40 字）；建立後不能改（它是網址與權限的一部分）。</div>
+          <!-- P8 總開關（builder_custom_modules.enabled，預設關）：關著時不提供「建立新模組」，既有模組仍可從下面的清單開啟與修改 -->
+          <div class="mb-hint" x-show="!createOn" data-testid="mb-create-off">目前未開放建立新的自訂模組（請最高管理者到設定中心開啟「自訂模組引擎」）。已有的模組仍可從下方清單開啟與修改。</div>
           <div class="mb-bad" x-show="keyErr" x-text="keyErr"></div>
           <!-- 缺口 #5：全部模組（含只有草稿、從未發布的），GET /api/definitions/custom_module -->
           <div style="margin-top:14px" id="mb-module-list" :data-loaded="defsLoaded ? '1' : '0'">
@@ -1151,6 +1153,7 @@
   <script src="../static/ui.js"></script>
   <script src="../static/custom-layout.js"></script>
   <script src="../static/sidebar.js"></script>
+  <script src="../static/public-flags.js"></script>
   <script src="../js/module-builder-consts.js"></script>
   <script src="../js/module-builder-core.js"></script>
   <script src="../js/module-builder-form.js"></script>

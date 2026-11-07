@@ -39,6 +39,7 @@
    "helper:custom_fields",
    "helper:custom_modules",
    "helper:custom_module_delete",
+   "helper:custom_module_switch",
    "helper:formula",
    "helper:field_catalog",
    "helper:field_policy",

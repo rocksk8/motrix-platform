@@ -7,7 +7,7 @@
         L: window.MotrixCustomLayout, STEPS: STEPS, NAV: NAV, DEFAULT_GROUP: '自訂模組',
         navAnchor: '', thumbTick: 0, previewMissing: false, liveMsg: '',
         ready: false, errMsg: '', me: {}, catalog: {}, users: [], orgTree: [], published: [], menuGroups: ['自訂模組'], mountPoints: [], mountMax: 8,
-        keyInput: '', keyErr: '', key: '', def: null, latestVersion: 0, versions: [],
+        createOn: false, keyInput: '', keyErr: '', key: '', def: null, latestVersion: 0, versions: [],
         step: 1, tab: 'info', drawer: false, sel: null, dragOver: false,
         dirty: false, saving: false, saveState: 'idle', draftEtag: null, conflict: null, conflictHeld: false, savedAt: '', _saveTimer: null, _loading: false, _inflight: null, flushLimitMs: 10000,
         draftProblems: [], publishProblems: [],
@@ -48,6 +48,11 @@
           this.orgTree = res[1].ok ? (res[1].data || []) : []
           this.published = res[2].ok ? (res[2].data || []) : []
           this.menuGroups = this.readMenuGroups()
+          // P8 總開關（builder_custom_modules.enabled，預設關）：關著 ⇒ 隱藏「建立新模組」入口（既有模組照常開啟與修改）。讀不到旗標＝當作關（伺服器端才是真正的把關，這裡只是不誤導）
+          try {
+            var pf = window.MotrixPublicFlags ? await window.MotrixPublicFlags.read(['builder_custom_modules']) : {}
+            this.createOn = !!(pf.builder_custom_modules && Number(pf.builder_custom_modules.enabled) === 1)
+          } catch (e) { this.createOn = false }
           var mp = await this.api('GET', '/api/platform/mount-points')       // 掛載目標下拉；失敗＝清單空（欄位仍可用於已存的目標）
           if (mp.ok && mp.data) { this.mountPoints = mp.data.points || []; this.mountMax = mp.data.maxTabs || 8 }
           this.$watch('def', () => this.onDefChange())
@@ -159,7 +164,10 @@
           if (!KEY_RE.test(k)) { this.keyErr = '代號只能用小寫英文、數字與底線，英文開頭（2～40 字）'; return }
           var r = await this.api('GET', '/api/definitions/custom_module/' + encodeURIComponent(k))
           if (!r.ok) { this.keyErr = '讀取定義失敗：' + ((r.data && r.data.detail) || r.status); return }
-          if (!r.data.draft && !r.data.latest) { this.tplKey = k; this.tplChoice = true; return }      // 新模組：先挑範本（或空白）
+          if (!r.data.draft && !r.data.latest) {                                                        // 新模組：先挑範本（或空白）
+            if (!this.createOn) { this.keyErr = '尚未開放建立新的自訂模組（請最高管理者先到設定中心開啟「自訂模組引擎」）；已有的模組仍可開啟與修改。'; return }
+            this.tplKey = k; this.tplChoice = true; return
+          }
           this._loading = true
           this.key = k
           this.latestVersion = r.data.latest ? r.data.latest.version : 0
