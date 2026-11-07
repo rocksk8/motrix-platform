@@ -1,8 +1,13 @@
 /* menu-editor.js — 選單建構器（BP-1）：側欄項改名、換到另一個既有群組、調順序／隱藏，發布前預覽整份選單。
  *
  * 只在「設定 builder_menu.enabled 開啟 ＋ 最高管理者」時，由 sidebar.js 在 /api/platform/menu 回 builderMenu:true 後載入（關著 ⇒ 這支檔案不會被載入）。
- * 不碰頁面內排版器（layout-editor.js／layout-runtime.js 屬排版器）：這裡自己是一個浮動面板，資料經既有的版面定義（kind=layout，key=module:<模組>，scope=company）
- * 發布，所以版本、稽核、還原都沿用定義文件庫；非側欄的版面操作（排版器存的）原樣保留。
+ * 不碰頁面內排版器（layout-editor.js／layout-runtime.js 屬排版器）：這裡自己是一個浮動面板，資料經既有的版面定義（kind=layout，key=module:<模組>，
+ * scope=company 或 role:<角色>）發布，所以版本、稽核、還原都沿用定義文件庫；非側欄的版面操作（排版器存的）原樣保留。
+ *
+ * 範圍（T78）：面板上方選「公司預設」或某個角色。套用順序＝角色層 ＞ 公司層 ＞ 程式預設，而且是『每個模組整份取代』（core.definitions.resolve）：
+ * 某角色在某模組一旦有角色層，那個模組就只看角色層（公司層的改名／換群組／隱藏都不再套用給他）；沒有角色層的模組繼續跟公司層。
+ * 所以角色層還沒有時，以『現行公司層』為起頭複製一份再改——只改了的模組才會建立角色層，沒動的模組繼續跟隨公司層。
+ * 角色層的預覽必須指定一位該角色的在職帳號（模組勾選是每個人各自的）。
  *
  * 只是顯示：改名與換群組不改任何人的權限（href、perm 不變）；沒有權限的項目不會出現在預覽。
  * 發布前一定要先預覽「同一份」草稿（POST /api/platform/menu/preview）；草稿一改就要重新預覽。
@@ -11,7 +16,8 @@
 ;(function () {
   if (window.MotrixMenuEditor) return
   var LABEL_MAX = 20
-  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, decl: [], base: {}, work: {}, order: {}, mods: {}, previewKey: '', preview: null, who: '' }
+  var st = { open: false, busy: false, state: 'idle', msg: '', msgBad: false, decl: [], base: {}, work: {}, order: {}, mods: {}, previewKey: '', preview: null, who: '',
+    scope: 'company', roles: [], roleLayers: {}, users: [], touched: false }
 
   function session() {
     try { return JSON.parse(localStorage.getItem('motrix_session') || 'null') || {} } catch (e) { return {} }
@@ -51,12 +57,62 @@
     return ''
   }
 
-  // ── 狀態：宣告版（base）＋ 已發布的公司層側欄操作 ⇒ 工作副本（work：每個群組的項目順序、名稱、隱藏）────────────────
+  // ── 範圍（公司／角色）────────────────────────────────────────────────────────────────────────────────────
+  function scopeQ() { return '?scope=' + encodeURIComponent(st.scope) }
+  function roleKey() { return st.scope.indexOf('role:') === 0 ? st.scope.slice(5) : '' }
+  function roleLabel(k) { var r = st.roles.filter(function (x) { return x.key === k })[0]; return r ? r.label : k }
+  function scopeLabel() { return st.scope === 'company' ? '公司預設' : '角色「' + roleLabel(roleKey()) + '」' }
+  function usersOfRole(k) {
+    return st.users.filter(function (u) { return u && u.role === k && u.active !== 0 && u.active !== false })
+  }
+  // 角色層預覽身分：目前選的帳號若不是該角色的在職帳號 ⇒ 換成第一位；公司層 ⇒ 沿用使用者自己填的
+  function fixWho() {
+    var k = roleKey()
+    if (!k) return
+    var us = usersOfRole(k)
+    if (!us.some(function (u) { return u.username === st.who })) st.who = us.length ? us[0].username : ''
+  }
+  // 讀角色名稱、已有角色層的角色、帳號清單（任何一項讀不到都不擋編輯：只是少了提示／預覽身分選單）
+  function loadMeta() {
+    var p = []
+    if (!st.roles.length) {
+      p.push(api('GET', '/api/settings/role-labels').then(function (l) {
+        st.roles = Object.keys(l || {}).map(function (k) { return { key: k, label: String(l[k]) } })
+      }).catch(function () {}))
+    }
+    p.push(api('GET', '/api/definitions/layout').then(function (rows) {
+      st.roleLayers = {}
+      ;(Array.isArray(rows) ? rows : []).forEach(function (r) {
+        if (r && /^role:/.test(r.scope || '') && r.latestVersion) st.roleLayers[r.scope.slice(5)] = true
+      })
+    }).catch(function () {}))
+    p.push(api('GET', '/api/users').then(function (u) { st.users = Array.isArray(u) ? u : [] }).catch(function () {}))
+    return Promise.all(p)
+  }
+  // 讀某模組在目前範圍的版面操作。角色層還沒有（沒草稿也沒發布）⇒ 以『現行公司層』為起頭（copied），因為角色層一發布就整份取代公司層。
+  // 公司層讀不到沿用舊行為（當空的）；角色層讀不到 ⇒ 整個讀取失敗（不能把空的當成起頭，否則發布後會把公司層的操作整份蓋掉）。
+  function loadMod(m) {
+    var url = '/api/definitions/layout/module:' + encodeURIComponent(m)
+    return api('GET', url + scopeQ()).then(function (r) {
+      var cur = r.draft || r.latest
+      var own = { ops: (cur && cur.body && cur.body.ops) || [], etag: (r.draft && r.draft.etag) || '', copied: false }
+      if (cur || st.scope === 'company') return own
+      return api('GET', url + '?scope=company').then(function (c) {
+        var live = c && c.latest
+        return { ops: (live && live.body && live.body.ops) || [], etag: '', copied: true }
+      })
+    }).then(function (x) { st.mods[m] = x }, function (e) {
+      if (st.scope !== 'company') throw e
+      st.mods[m] = { ops: [], etag: '', copied: false }
+    })
+  }
+
+  // ── 狀態：宣告版（base）＋ 已發布的側欄操作（目前範圍）⇒ 工作副本（work：每個群組的項目順序、名稱、隱藏）────────────────
   function load() {
     st.busy = true; st.msg = '讀取中…'; render()
-    return api('GET', '/api/platform/menu').then(function (d) {
+    return loadMeta().then(function () { return api('GET', '/api/platform/menu') }).then(function (d) {
       st.decl = d.groups || []
-      st.base = {}; st.order = {}; st.work = {}
+      st.base = {}; st.order = {}; st.work = {}; st.mods = {}; st.touched = false; fixWho()
       st.decl.forEach(function (g) {
         st.order[g.key] = g.items.map(function (it) { return it.module ? pid(it) : 'l1:' + it.href })
         g.items.forEach(function (it) {
@@ -67,12 +123,7 @@
       })
       var mods = {}
       Object.keys(st.base).forEach(function (id) { if (st.base[id].module) mods[st.base[id].module] = true })
-      return Promise.all(Object.keys(mods).map(function (m) {
-        return api('GET', '/api/definitions/layout/module:' + encodeURIComponent(m) + '?scope=company').then(function (r) {
-          var cur = r.draft || r.latest
-          st.mods[m] = { ops: (cur && cur.body && cur.body.ops) || [], etag: (r.draft && r.draft.etag) || '' }
-        }).catch(function () { st.mods[m] = { ops: [], etag: '' } })
-      }))
+      return Promise.all(Object.keys(mods).map(loadMod))
     }).then(function () {
       Object.keys(st.mods).forEach(function (m) { st.mods[m].ops.forEach(applyExisting) })
       st.busy = false; st.msg = ''; st.previewKey = ''; st.preview = null; render()
@@ -128,20 +179,24 @@
   function doPreview() {
     var bad = Object.keys(st.work).filter(function (id) { return labelProblem(st.work[id].label) })
     if (bad.length) { st.msg = '「' + st.work[bad[0]].label + '」：' + labelProblem(st.work[bad[0]].label); st.msgBad = true; return render() }
+    if (st.scope !== 'company' && !st.who.trim()) {
+      st.msg = '沒有「' + roleLabel(roleKey()) + '」角色的在職帳號可以預覽——角色層的預覽要用該角色的帳號（模組勾選是每個人各自的），所以也無法發布。'; st.msgBad = true; return render()
+    }
     var ops = buildOps(), key = JSON.stringify(ops)
     st.busy = true; st.msg = '產生預覽…'; st.msgBad = false; render()
     var body = { ops: ops }
+    if (st.scope !== 'company') body.scope = st.scope                 // 公司層不帶 scope（請求與過去逐位元相同）
     if (st.who.trim()) body.user = st.who.trim()
-    api('POST', '/api/platform/menu/preview', body).then(function (d) {
+    return api('POST', '/api/platform/menu/preview', body).then(function (d) {
       st.preview = d; st.previewKey = key; st.busy = false
       st.msg = d.skipped && d.skipped.length ? '有 ' + d.skipped.length + ' 項操作對這位使用者不適用（沒有權限或看不到目的群組），已略過。' : '預覽完成。'
       render()
     }).catch(function (e) { st.busy = false; st.msg = '預覽失敗：' + e.message; st.msgBad = true; render() })
   }
   // T62：把這個模組剛存好的版面草稿送去『影響預覽』（伺服端記一筆『看過』）⇒ 草稿戳；治理旗標關（404）或任何失敗 ⇒ null（不帶雜湊，與過去相同）
-  function previewSeen(m) {
+  function previewSeen(m, scope) {
     var gkey = 'module:' + encodeURIComponent(m)       // 版面定義的 key；寫成樣板字串讓 V3.3 掃描器看到 /api/def-governance/{kind}/{key}/impact
-    return api('GET', `/api/def-governance/layout/${gkey}/impact?scope=company`).then(function (d) {
+    return api('GET', `/api/def-governance/layout/${gkey}/impact?scope=${encodeURIComponent(scope || 'company')}`).then(function (d) {
       return d && typeof d.previewHash === 'string' && d.previewHash ? d.previewHash : null
     }).catch(function () { return null })
   }
@@ -149,6 +204,7 @@
     if (!st.preview || st.previewKey !== dirtyKey()) { st.msg = '草稿已變更，請先重新預覽'; st.msgBad = true; return render() }
     var ops = buildOps()
     var mods = Object.keys(st.mods)
+    var q = scopeQ(), sc = st.scope, where = scopeLabel()            // 發布期間範圍選單是鎖住的；仍以開始當下的範圍為準
     st.busy = true; st.msg = '發布中…'; st.msgBad = false; render()
     var chain = Promise.resolve(), done = 0, pend = []
     mods.forEach(function (m) {
@@ -158,11 +214,11 @@
       if (JSON.stringify(next) === JSON.stringify(st.mods[m].ops)) return
       chain = chain.then(function () {
         var url = '/api/definitions/layout/module:' + encodeURIComponent(m)
-        return api('PUT', url + '/draft?scope=company', { body: { ops: next }, base_etag: st.mods[m].etag || undefined }).then(function (r) {
-          return previewSeen(m).then(function (pvh) {
+        return api('PUT', url + '/draft' + q, { body: { ops: next }, base_etag: st.mods[m].etag || undefined }).then(function (r) {
+          return previewSeen(m, sc).then(function (pvh) {
             var pub = { note: '選單建構器', base_etag: r.etag }
             if (pvh) pub.preview_hash = pvh                       // T62：治理旗標開時才有；關＝請求與過去逐位元相同
-            return api('POST', url + '/publish?scope=company', pub)
+            return api('POST', url + '/publish' + q, pub)
           })
         }).then(function (r2) {
           // T60 S2：治理旗標開啟時，放寬的發布可能回 {pending:true,…}（待第二位最高管理者核准、還沒生效）——不能說「已發布」
@@ -172,7 +228,9 @@
     })
     chain.then(function () {
       st.busy = false; st.msgBad = false
-      var text = pend.length ? pendingText(pend, done) : '已發布（' + done + ' 個模組的版面）。重新整理頁面即可看到新的側欄。'
+      var text = pend.length ? pendingText(pend, done)
+        : sc === 'company' ? '已發布（' + done + ' 個模組的版面）。重新整理頁面即可看到新的側欄。'
+          : '已發布（' + done + ' 個模組的版面）到' + where + '的角色層。該角色的使用者重新整理頁面後即可看到；其他角色不受影響。'
       if (pend.length) { st.msg = text; st.state = 'pending'; render(); return }           // 待核准：選單沒有變，不重讀、不說已發布
       st.state = 'published'
       return load().then(function () { st.msg = text; st.state = 'published'; render() })
@@ -201,7 +259,14 @@
     st.order[g] = st.order[g].filter(function (x) { return x !== id })
     st.order[key].push(id); changed()
   }
-  function changed() { st.msg = ''; render() }
+  function changed() { st.msg = ''; st.touched = true; render() }
+  // 切換編輯範圍：放棄尚未發布的調整、重新讀該範圍的現況（角色層沒有時以公司層為起頭）
+  function switchScope(v) {
+    if (v === st.scope || st.busy) return render()
+    if (st.touched && typeof confirm === 'function' && !confirm('切換範圍會放棄目前尚未發布的調整，確定嗎？')) return render()
+    st.scope = v; st.who = ''; st.msg = ''; st.msgBad = false; st.state = 'idle'
+    return load()
+  }
 
   // ── 畫面 ───────────────────────────────────────────────────────────────────────────────────────────────
   var btn, panel
@@ -215,6 +280,10 @@
       '#me-panel .me-g{font-weight:600;margin:10px 0 4px}#me-panel .me-i{display:flex;gap:4px;align-items:center;padding:3px 0}' +
       '#me-panel .me-i input[type=text]{flex:1;min-width:0}#me-panel .me-i.is-hidden{opacity:.5}#me-panel .me-msg{padding:6px 14px}#me-panel .me-bad{color:#c0392b}' +
       '#me-panel .me-pv{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}#me-panel .me-pv ul{margin:2px 0 6px 16px;padding:0}#me-panel .me-chg{background:#fff3cd}' +
+      '#me-panel .me-scope{border:1px solid var(--border-light,#ddd);border-radius:6px;padding:8px 10px;margin-bottom:8px}#me-panel .me-scope-row{display:flex;gap:6px;align-items:center}' +
+      '#me-panel .me-scope-row select{flex:1;min-width:0}#me-panel .me-scope-now{font-weight:700;margin:6px 0 2px}' +
+      '#me-panel .me-scope[data-scope^="role:"] .me-scope-now{color:#8a5a00;background:#fff3cd;padding:2px 6px;border-radius:4px}' +
+      '#me-panel .me-scope-note{color:#666;line-height:1.5}' +
       '@media (max-width:1023px){#me-btn{display:none!important}}' })
     document.head.appendChild(s)
   }
@@ -257,14 +326,58 @@
     })
     return root
   }
+  // 範圍列：選單（公司預設／各角色）＋『目前在編輯哪一層』的醒目標示＋套用順序說明
+  function scopeBar() {
+    var k = roleKey()
+    var sel = el('select', { 'data-testid': 'me-scope-select', title: '編輯範圍', disabled: st.busy ? 'disabled' : null,
+      onchange: function (e) { switchScope(e.target.value) } })
+    var o0 = el('option', { value: 'company', text: '公司預設' }); if (st.scope === 'company') o0.selected = true; sel.appendChild(o0)
+    var keys = st.roles.map(function (r) { return r.key })
+    if (k && keys.indexOf(k) < 0) keys.push(k)                              // 角色表讀不到時，至少保留目前這一個
+    keys.forEach(function (rk) {
+      var o = el('option', { value: 'role:' + rk, text: '角色：' + roleLabel(rk) + (st.roleLayers[rk] ? '（已有角色層）' : '') })
+      if (st.scope === 'role:' + rk) o.selected = true; sel.appendChild(o)
+    })
+    var box = el('div', { class: 'me-scope', 'data-testid': 'me-scope', 'data-scope': st.scope }, [
+      el('div', { class: 'me-scope-row' }, [el('span', { text: '編輯範圍：' }), sel]),
+      el('div', { class: 'me-scope-now', 'data-testid': 'me-scope-now', text: '目前編輯：' + scopeLabel() + (k ? '的角色層' : '（所有人的預設）') })])
+    var note
+    if (k) {
+      var own = Object.keys(st.mods).filter(function (m) { return !st.mods[m].copied }).length
+      var follow = Object.keys(st.mods).length - own
+      note = '套用順序：角色層 ＞ 公司層。某個模組只要發布了「' + roleLabel(k) + '」的角色層，這個角色在該模組就整份改用角色層——公司層在該模組的改名、換群組、隱藏都不再套用給他（不是逐項合併）。'
+        + '還沒有角色層的模組會先以現行公司層為起頭複製一份再改；沒動的模組不會建立角色層，繼續跟公司層。目前：' + own + ' 個模組已有角色層、' + follow + ' 個跟隨公司層。'
+        + '預覽要用一位「' + roleLabel(k) + '」角色的在職帳號。'
+    } else {
+      var layered = st.roles.filter(function (r) { return st.roleLayers[r.key] }).map(function (r) { return r.label })
+      note = '公司預設會套用給所有沒有自己角色層的角色。'
+        + (layered.length ? '已有角色層的角色（' + layered.join('、') + '）在有角色層的模組不會看到這裡的調整；到該角色的範圍去改。' : '')
+    }
+    box.appendChild(el('div', { class: 'me-scope-note', text: note }))
+    return box
+  }
+  // 預覽身分：公司層＝自由填帳號（空白＝我自己）；角色層＝只能選該角色的在職帳號
+  function whoControl() {
+    var k = roleKey()
+    if (!k) return el('input', { type: 'text', placeholder: '預覽身分（帳號；空白＝我自己）', value: st.who, style: 'flex:1', onchange: function (e) { st.who = e.target.value; st.previewKey = ''; render() } })
+    var us = usersOfRole(k)
+    if (!us.length) return el('span', { class: 'me-bad', style: 'flex:1', 'data-testid': 'me-who-none', text: '沒有「' + roleLabel(k) + '」角色的在職帳號，無法預覽' })
+    var sel = el('select', { 'data-testid': 'me-who', style: 'flex:1', title: '預覽身分（該角色的帳號）',
+      onchange: function (e) { st.who = e.target.value; st.previewKey = ''; render() } })
+    us.forEach(function (u) {
+      var o = el('option', { value: u.username, text: (u.displayName || u.username) + '（' + u.username + '）' }); if (u.username === st.who) o.selected = true; sel.appendChild(o)
+    })
+    return sel
+  }
   function render() {
     css()
     if (!btn) { btn = el('button', { id: 'me-btn', type: 'button', class: 'btn btn-ghost btn-sm', 'data-testid': 'me-open', text: '調整選單', onclick: function () { st.open = !st.open; if (st.open && !st.decl.length) load(); else render() } }); document.body.appendChild(btn) }
     if (panel) { panel.remove(); panel = null }
     if (!st.open) return
     var dirty = !!st.previewKey && st.previewKey === dirtyKey()
-    var body = el('div', { class: 'me-b' })
-    body.appendChild(el('div', { style: 'color:#666;margin-bottom:6px', text: '只改側欄怎麼顯示，不改任何人的權限；沒有權限的項目不會出現在預覽。範圍：公司預設。' }))
+    var body = el('div', { class: 'me-b', inert: st.busy ? '' : null })     // 讀取／發布中不可編輯（否則改到的是即將被換掉的舊工作副本）
+    body.appendChild(el('div', { style: 'color:#666;margin-bottom:6px', text: '只改側欄怎麼顯示，不改任何人的權限；沒有權限的項目不會出現在預覽。' }))
+    body.appendChild(scopeBar())
     st.decl.forEach(function (g) {
       body.appendChild(el('div', { class: 'me-g', text: g.label }))
       ;(st.order[g.key] || []).forEach(function (id) { body.appendChild(itemRow(id)) })
@@ -273,7 +386,7 @@
       body.appendChild(el('div', { class: 'me-g', text: '預覽（' + st.preview.user + '／' + st.preview.role + '）：左＝目前已發布，右＝套用草稿後（黃底＝有變）' }))
       body.appendChild(el('div', { class: 'me-pv', 'data-testid': 'me-preview' }, [groupsList(st.preview.current), groupsList(st.preview.preview, st.preview.current)]))
     }
-    var who = el('input', { type: 'text', placeholder: '預覽身分（帳號；空白＝我自己）', value: st.who, style: 'flex:1', onchange: function (e) { st.who = e.target.value; st.previewKey = ''; render() } })
+    var who = whoControl()
     panel = el('div', { id: 'me-panel', 'data-busy': st.busy ? '1' : '0', 'data-state': st.state }, [
       el('div', { class: 'me-h' }, [el('b', { text: '調整選單' }), who, el('button', { type: 'button', text: '✕', onclick: function () { st.open = false; render() } })]),
       body,
@@ -287,6 +400,6 @@
     document.body.appendChild(panel)
   }
 
-  window.MotrixMenuEditor = { _pendingText: pendingText, _publish: doPublish, open: function () { st.open = true; return load() }, _state: st, _buildOps: buildOps }
+  window.MotrixMenuEditor = { _pendingText: pendingText, _publish: doPublish, open: function () { st.open = true; return load() }, _state: st, _buildOps: buildOps, _switchScope: switchScope, _preview: doPreview }
   render()
 })()

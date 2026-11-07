@@ -10,6 +10,7 @@
 """
 import hashlib
 import json
+import re
 
 from core import catalog, registry
 from core import menu as core_menu
@@ -82,20 +83,37 @@ def _problems(ops):
     return out
 
 
+def _scope_role(scope, probs):
+    """預覽請求的 `scope`（選填）：缺／`company` ⇒ None；`role:<角色>` ⇒ 角色鍵；其他 ⇒ 在 probs 加一筆（呼叫端據以丟 ValueError）。
+    角色鍵的字元集與定義文件庫的 scope 相同（core.definitions._SCOPE_RE）。"""
+    if scope is None or scope == "company":
+        return None
+    if isinstance(scope, str) and re.fullmatch(r"role:[A-Za-z0-9_\-]{1,40}", scope):
+        return scope[5:]
+    probs.append({"path": "scope", "message": "scope 只能是 company 或 role:<角色>"})
+    return None
+
+
 def preview(conn, caller, body):
     """整份選單的預覽（唯讀、不寫任何資料）：以某位使用者（預設＝呼叫者）的權限算出『目前已發布』與『套上草稿 ops 之後』兩份。
     草稿 ops＝整份側欄操作（取代已發布的側欄操作做比較）。使用者沒有權限的項目兩份都不會出現（先過 core.menu.build）。
+    `scope`（選填，T78）：`company`／缺＝與過去相同；`role:<角色>`＝編輯角色層，`user` 必填且必須是該角色的在職帳號（否則 422），『目前』＝該帳號角色實際生效的選單。
     ⇒ {"user","role","current","preview","skipped","opsHash"}；ops 不合法 ⇒ 丟 ValueError(problems)。"""
     from helpers.auth import effective_modules
     ops = (body or {}).get("ops", [])
     probs = _problems(ops)
+    scope_role = _scope_role((body or {}).get("scope"), probs)         # T78：編輯的層（公司／角色）；角色層預覽必須是該角色的帳號
     if probs:
         raise ValueError(probs)
     who = (body or {}).get("user")
+    if scope_role and not who:
+        raise ValueError([{"path": "user", "message": "預覽角色層要指定一位『%s』角色的在職帳號（模組勾選是每個人各自的）" % scope_role}])
     if who:
         row = conn.execute("SELECT id, username, role, modules FROM users WHERE username=? AND active=1", (str(who),)).fetchone()
         if not row:
             raise LookupError("找不到這位使用者")
+        if scope_role and row["role"] != scope_role:
+            raise ValueError([{"path": "user", "message": "這位帳號的角色是『%s』，不是正在編輯的『%s』角色層，預覽會不準" % (row["role"], scope_role)}])
         uid, uname, role, mods = row["id"], row["username"], row["role"], row["modules"]
     else:
         uid, uname, role, mods = caller.get("id"), caller["username"], caller["role"], caller.get("modules")
