@@ -45,7 +45,7 @@ def raw_key(raw) -> str:
     if raw is None or isinstance(raw, bool):
         return ""
     if isinstance(raw, int):
-        return str(raw)
+        return str(raw) if abs(raw) <= 2 ** 53 else _js_number_to_string(float(raw))      # JS 的 number 超過 2^53 就失去精度：兩端都以浮點為準
     if isinstance(raw, float):
         return _js_number_to_string(raw)
     if isinstance(raw, str):
