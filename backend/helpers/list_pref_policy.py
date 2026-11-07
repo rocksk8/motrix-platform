@@ -274,7 +274,7 @@ def effective_after(conn, key, scope, new_body):
     看不懂 ⇒ None（比較端視為放寬）。
     已知限制（K 審 8ae02f0f8，旗標預設關、風險低）：①公司層清單政策首發只拿公司層全域比，不分角色——若某角色有自己的、比公司全域更緊的全域角色層，
     而清單專屬政策寫了與公司全域相同的 pageSize，該角色實際放寬卻判中性；日後可改成逐『有全域角色層的角色』各比一次。
-    ②只有『還沒有自己的已發布版』才用有效政策比；已有版本時 `_classify_vs_base` 仍用原始 body 比（v1 只寫 columns、v2 加寬 pageSize 會被看成收緊）——另票。"""
+    ②（已解）已有自己的已發布版時也一律以有效政策比（`_classify_vs_base`）。"""
     if key == GLOBAL_KEY:
         return new_body
     g = None

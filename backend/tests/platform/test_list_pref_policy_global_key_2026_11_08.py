@@ -203,3 +203,26 @@ def test_global_role_first_publish_copy_of_company_global_is_direct(client, make
     h = _sa(client, make_user, "gk_sa15")
     _publish(client, h, LP.GLOBAL_KEY, "company", _glob((20,), allow=False))
     assert _publish(client, h, LP.GLOBAL_KEY, "role:sales", _glob((20,), allow=False)).get("status") == "published"
+
+
+# ── 已有自己版本時也用有效政策比（K 審舊洞）──
+
+def test_second_version_widening_a_page_size_that_v1_inherited_is_loosen(client, make_user, on):
+    """全域 pageSize [20]；清單 v1 只寫 columns（pageSize 繼承全域）；v2 加 pageSize.allowed=[20,50,100]
+    ⇒ 有效政策放寬 ⇒ 待核准（原始 body 比較會看成『第一次限定範圍＝收緊』而直接發布）。"""
+    h = _sa(client, make_user, "gk_sa16")
+    _publish(client, h, LP.GLOBAL_KEY, "company", _glob((20,)))
+    assert _publish(client, h, LID, "company", _own(("name",))).get("status") == "published"
+    r = _publish(client, h, LID, "company", _own(("name",), sizes=(20, 50, 100)))
+    assert r.get("status") == "submitted" and r.get("version") == 2, r
+    assert _policy()["pageSize"]["allowed"] == [20], "待核准不生效"
+
+
+def test_second_version_same_effective_policy_or_narrower_is_direct(client, make_user, on):
+    h = _sa(client, make_user, "gk_sa17")
+    _publish(client, h, LP.GLOBAL_KEY, "company", _glob((20, 50)))
+    _publish(client, h, LID, "company", _own(("name",)))                                  # 有效 pageSize＝[20,50]（繼承）
+    assert _publish(client, h, LID, "company", _own(("name",), sizes=(20, 50))).get("status") == "published", "明寫成跟繼承一樣 ⇒ 沒變"
+    assert _publish(client, h, LID, "company", _own(("name",), sizes=(20,))).get("status") == "published", "更窄 ⇒ 收緊"
+    r = _publish(client, h, LID, "company", _own(("name",)))                              # 拿掉自己的 pageSize ⇒ 回到繼承 [20,50]，比 [20] 寬
+    assert r.get("status") == "submitted", "從 [20] 回到繼承的 [20,50] ＝放寬"
