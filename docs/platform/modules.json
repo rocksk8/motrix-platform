@@ -434,6 +434,7 @@
     "mod:case/material_coverage",
     "mod:case/material_coverage_view",
     "mod:case/content_fp",
+    "mod:case/dispatch_lines",
     "mod:case/material_guard",
     "mod:case/material_notify",
     "mod:case/material_payment",
