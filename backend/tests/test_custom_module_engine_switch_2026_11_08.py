@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 import db
+from core import source_tree
 from helpers import settings_registry as SR
 
 pytestmark = pytest.mark.custom_switch_default
@@ -54,7 +55,7 @@ def boss(client, make_user):
     return _login(client, make_user, "sw_boss")
 
 
-def test_default_is_off_in_production_defaults():
+def test_default_is_off_in_production_defaults(client):
     c = db.get_db()
     try:
         from helpers.settings_strict import strict_value
@@ -143,7 +144,7 @@ _ROOT = Path(__file__).resolve().parents[2] / "frontend"
 
 
 def test_module_builder_page_hides_create_entry_when_flag_off_static_contract():
-    html = (_ROOT / "pages" / "module-builder.html").read_text(encoding="utf-8")
+    html = source_tree.page_file("module-builder.html").read_text(encoding="utf-8")
     core = (_ROOT / "js" / "module-builder-core.js").read_text(encoding="utf-8")
     assert "public-flags.js" in html                                                           # 旗標讀取器有載入
     assert re.search(r'x-show="createOn"[^>]*data-testid="mb-create-row"', html)                 # 建立列只在開著時顯示
