@@ -21,6 +21,7 @@ from modules.case.api import (case_action_items as _api_action_items, case_extra
 from modules.case import recycle_adapter as _recycle_adapter   # 刪除暫存區 adapter（IP-RB1）
 from modules.case import rule_provider as _rule_provider         # BP-2：標示規則的案件紀錄提供者（唯讀、逐筆讀取權限過濾）
 from modules.case import expense_notify as _expense_notify     # noqa: F401 — 載入時登記費用單據的信件類型
+from modules.case import invoice_notify as _invoice_notify       # noqa: F401 — 載入時登記案件發票上傳通知的信件類型
 from modules.case import material_approval as _material_approval  # noqa: F401 — 載入時登記簽核單據類型 material_order（叫料）
 from modules.case import material_change as _material_change      # noqa: E402
 _material_change.ensure_registered()                              # 33-M2b：載入時登記簽核單據類型 material_change（材料申請變更）
