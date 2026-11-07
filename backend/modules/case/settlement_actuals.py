@@ -12,6 +12,7 @@ import logging
 from core import registry
 from helpers import profit_rules
 from helpers.legal_params import round_half_up
+from modules.case import dispatch_lines as DL
 from modules.case import purchase_items as PI
 from modules.case import recognition as R
 
@@ -106,7 +107,9 @@ def manual_actual(saved_item, schema=1):
 
 
 def normalize_offsets(raw) -> list:
-    """精算存的 `offsets`（容錯：壞列略過）⇒ `[{kind: material|extra|dispatch, ref: str, itemId: str}]`；同一 (kind, ref) 只留第一個。"""
+    """精算存的 `offsets`（容錯：壞列略過）⇒ `[{kind: material|extra|dispatch, ref: str, itemId: str}]`；同一 (kind, ref) 只留第一個。
+    承攬商派發的逐行寫法（`<派發id>#<行鍵>`、`<派發id>#<行鍵>#<份次>`，見 dispatch_lines）：`ref` 格式不合法略過；**拆分份保留 `amount`**（未稅，JSON 數字，
+    必須 > 0 且最多 2 位小數）；整張／整行帶 `amount`、拆分份缺或壞 `amount` 都當壞列略過（沒有第二個真相來源）。其他 kind 不帶 `amount`。"""
     out, seen = [], set()
     for o in raw if isinstance(raw, list) else []:
         if not isinstance(o, dict):
@@ -114,8 +117,21 @@ def normalize_offsets(raw) -> list:
         kind, ref, iid = str(o.get("kind") or ""), str(o.get("ref") or "").strip(), str(o.get("itemId") or "").strip()
         if kind not in OFFSET_KINDS or not ref or not iid or (kind, ref) in seen:
             continue
+        row = {"kind": kind, "ref": ref, "itemId": iid}
+        if kind == "dispatch":
+            p = DL.parse_ref(ref) if "#" in ref else {"level": "dispatch"}
+            if p is None:
+                continue
+            amt = o.get("amount")
+            if p["level"] == "part":
+                c = DL.parse_amount(amt)
+                if c is None:
+                    continue
+                row["amount"] = DL.amount_out(c)
+            elif amt is not None:
+                continue
         seen.add((kind, ref))
-        out.append({"kind": kind, "ref": ref, "itemId": iid})
+        out.append(row)
     return out
 
 
@@ -196,12 +212,39 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
 
     # ── 承攬商派發（36）：整張單歸單一品項（offset）；其餘留在未對應。金額＝report（未稅＋外包人員，35c 稅基 B）──
     disp_by_item, unassigned_disp = {}, []
-    for d in dispatch_rows(conn, quote_no, d_basis):
-        tgt = off_dispatch.get(d["itemId"])
+    off_lines = _line_specs(offs, live, warnings)          # 逐行（整行／拆分份）對應：{派發id: {行鍵: {"line": 品項id|None, "parts": [(份次, 品項id, 整數分)]}}}；沒有 ⇒ {}，下面走原路徑
+    d_rows = dispatch_rows(conn, quote_no, d_basis, with_lines=True)
+    for did in sorted(set(off_lines) - {d["itemId"] for d in d_rows}):
+        for key in off_lines[did]:
+            warnings.append({"code": "dispatch_line_removed", "ref": DL.format_ref(did, key), "message": "逐行對應的派發單已不在精算內（取消／退回草稿？），對應暫時失效，金額列入未對應"})
+    disp_view = []                                          # 每張派發單的逐行檢視（含已被整張／全部分完而不在未對應清單者），給畫面「逐行對應」編輯用
+    for d in d_rows:
+        tgt, specs = off_dispatch.get(d["itemId"]), off_lines.get(d["itemId"])
         if tgt:
-            disp_by_item.setdefault(tgt, []).append(dict(d, assignedBy="offset"))
-        else:
+            if specs:                                                      # 整張與逐行並存（驗證會擋；舊檔／手改檔可能出現）：整張是舊語意，以它為準
+                warnings.append({"code": "dispatch_line_conflict", "ref": d["itemId"], "message": "同一張派發單同時有整張與逐行對應，以整張為準，逐行對應忽略"})
+            disp_by_item.setdefault(tgt, []).append(dict(_plain(d), assignedBy="offset"))
+            disp_view.append(_line_view(d, "whole", tgt, d.get("lines") or []))
+            continue
+        res = None
+        if specs:
+            if not d.get("linesOk"):
+                warnings.append({"code": "dispatch_line_unmappable", "ref": d["itemId"], "message": "派發單 %s：%s，逐行對應忽略" % (d.get("docCode") or d["itemId"], d.get("linesReason") or "不可逐行對應")})
+            else:
+                res = DL.allocate(d, specs, d_basis == BASIS_TAXED)
+        if res is None:
             unassigned_disp.append(d)
+            disp_view.append(_line_view(d, "none", "", d.get("lines") or []))
+            continue
+        for code, ref, msg in res["warnings"]:
+            warnings.append({"code": code, "ref": ref, "message": msg})
+        for item_id, part in res["assigned"]:
+            e = dict(_plain(d), assignedBy="offset")
+            e.update(part)
+            disp_by_item.setdefault(item_id, []).append(e)
+        disp_view.append(_line_view(d, "lines" if any(l.get("state") in ("line", "split") for l in res["lines"]) else "none", "", res["lines"]))
+        if res["remainder"]:                                              # 剩餘（外包人員＋未對應的行＋拆分餘額，含稅額）仍是一列未對應；剩 0 就不出列
+            unassigned_disp.append(dict(d, amount=res["remainder"], tax=res["remainderTax"], lines=res["lines"], partial=True))
 
     items, item_total, not_adopted_total, disp_absorbed = [], 0.0, 0.0, 0.0
     for p in plan:
@@ -256,7 +299,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
            "legacySave": legacy_save,          # 存檔品項沒有 adoptSystem（第 32 班前存的）：adopt 以舊行為（不採用）
            "unadoptedMode": unadopted, "items": items, "orphanItems": orphans, "schemaVersion": schema, "taxBasis": TAX_BASIS,
             "extra": {"onlyAmount": un_ex_total, "rows": extra_all},
-            "unassigned": {"materials": unassigned_mat, "extras": unassigned_extra, "dispatches": unassigned_disp}, "offsets": offs,
+            "unassigned": {"materials": unassigned_mat, "extras": unassigned_extra, "dispatches": unassigned_disp}, "offsets": offs, "dispatchLines": disp_view,
             "sources": sources,
             "totals": {"itemActualTotal": item_total, "itemPoUnadopted": not_adopted_total, "extraTotal": un_ex_total,
                        "materialUnassignedTotal": un_mat_total, "purchasedTotal": sum(sources.values()), "pendingTotal": pend},
@@ -359,6 +402,87 @@ def _freeze(out, saved, saved_items):
     out["totals"]["taxExpense"] = summ.get("taxExpense") if isinstance(summ.get("taxExpense"), dict) else None
 
 
+def _line_view(d: dict, mode: str, item_id: str, lines: list) -> dict:
+    """`compute()["dispatchLines"]` 的一列：這張派發單的逐行狀態。`mode`＝none（沒對應）／whole（整張歸 `assignedItemId`）／lines（有行層級對應）。"""
+    return {"dispatchId": d["itemId"], "docCode": d.get("docCode") or "", "vendorName": d.get("vendorName") or "", "name": d.get("name") or "", "status": d.get("status") or "",
+            "pending": bool(d.get("pending")), "amount": d["amount"], "tax": d["tax"], "linesOk": bool(d.get("linesOk")), "linesReason": d.get("linesReason") or "",
+            "mode": mode, "assignedItemId": item_id, "lines": lines}
+
+
+def _plain(d: dict) -> dict:
+    """派發列去掉逐行分解的鍵（整張對應的列維持原本的形狀）。"""
+    return {k: v for k, v in d.items() if k not in ("lines", "linesOk", "linesReason")}
+
+
+def _line_specs(offs, live, warnings) -> dict:
+    """normalize 過的 offsets 中承攬商派發的逐行寫法 ⇒ `{派發id: {行鍵: {"line": 品項id|None, "parts": [(份次, 品項id, 整數分)]}}}`。
+    品項已不在報價單內的列略過並警告（金額回未對應）。沒有逐行對應 ⇒ `{}`。"""
+    out = {}
+    for o in offs:
+        if o["kind"] != "dispatch" or "#" not in o["ref"]:
+            continue
+        p = DL.parse_ref(o["ref"])
+        if p is None:
+            continue
+        if o["itemId"] not in live:
+            warnings.append({"code": "dispatch_line_removed", "ref": o["ref"], "message": "逐行對應的品項已不在報價單內，金額列入未對應"})
+            continue
+        sp = out.setdefault(p["dispatch"], {}).setdefault(p["key"], {"line": None, "parts": []})
+        if p["level"] == "line":
+            sp["line"] = o["itemId"]
+        else:
+            sp["parts"].append((p["part"], o["itemId"], DL.parse_amount(o.get("amount")) or 0))
+    return out
+
+
+def _check_line_ref(n, ref, p, amt_raw, dispatch_by_id):
+    """單列的逐行檢查（不含跨列的互斥／加總）。"""
+    if p is None:
+        return "offsets 第 %d 列：ref「%s」格式錯誤（應為 派發id、派發id#行鍵 或 派發id#行鍵#份次）" % (n, ref)
+    d = dispatch_by_id.get(p["dispatch"])
+    if d is None:
+        return "offsets 第 %d 列：承攬商派發 %s 不在目前的未對應清單內" % (n, p["dispatch"])
+    if not d.get("linesOk"):
+        return "offsets 第 %d 列：派發單 %s 不可逐行對應（%s），請改用整張對應" % (n, d.get("docCode") or p["dispatch"], d.get("linesReason") or "")
+    ln = next((l for l in d.get("lines") or [] if l["lineKey"] == p["key"]), None)
+    if ln is None:
+        return "offsets 第 %d 列：派發單 %s 沒有這一行（行鍵 %s）" % (n, d.get("docCode") or p["dispatch"], DL.decode_key(p["key"]))
+    if not ln["mappable"]:
+        return "offsets 第 %d 列：這一行不可逐行對應（%s）" % (n, ln["reason"])
+    if p["level"] == "part":
+        if DL.parse_amount(amt_raw) is None:
+            return "offsets 第 %d 列：拆分份的 amount 必須是大於 0、最多 2 位小數的數字" % n
+    return None
+
+
+def _check_line_groups(whole_rows, dl_rows, dispatch_by_id):
+    """跨列的逐行檢查：同一張派發單整張與逐行互斥；同一行整行與拆分不並存；每行 ≤ 20 份；Σ份 ≤ 行未稅金額。
+    一組（同張／同行）的列**全部**是上次存檔原樣者才整組放行（舊草稿不卡住）；只要有一列是新的或改過金額，整組照規則驗。"""
+    by_disp, by_line = {}, {}
+    for n, ref, p, iid, amt, is_keep in dl_rows:
+        if p is None:
+            continue
+        by_disp.setdefault(p["dispatch"], []).append(is_keep)
+        by_line.setdefault((p["dispatch"], p["key"]), []).append((n, p, amt, is_keep))
+    for did, keeps in by_disp.items():
+        if did in whole_rows and not (whole_rows[did] and all(keeps)):
+            return "offsets：承攬商派發 %s 同時有整張與逐行對應，同一張只能二選一（切換時請清掉另一種）" % did
+    for (did, key), rows in by_line.items():
+        if all(k for _, _, _, k in rows):
+            continue
+        kinds = {p["level"] for _, p, _, _ in rows}
+        if len(kinds) > 1:
+            return "offsets：派發 %s 的同一行不可同時有整行與拆分對應" % did
+        parts = [r for r in rows if r[1]["level"] == "part"]
+        if len(parts) > DL.MAX_PARTS_PER_LINE:
+            return "offsets：派發 %s 的同一行最多拆成 %d 份" % (did, DL.MAX_PARTS_PER_LINE)
+        if parts:
+            ln = next((l for l in (dispatch_by_id.get(did) or {}).get("lines") or [] if l["lineKey"] == key), None)
+            if ln is not None and sum(DL.parse_amount(a) or 0 for _, _, a, _ in parts) > DL.cents(ln["pretax"]):
+                return "offsets：派發 %s 該行拆分金額加總超過行金額（未稅 %s）" % (did, ln["pretax"])
+    return None
+
+
 def validate_offsets(conn, quote_no, raw, previous=None):
     """精算 PUT 的 `settlement.offsets` 驗證（33-A4）。回傳錯誤訊息；合法回 None。
 
@@ -369,13 +493,16 @@ def validate_offsets(conn, quote_no, raw, previous=None):
         return None
     if not isinstance(raw, list):
         return "offsets 必須是清單"
-    keep = {(o["kind"], o["ref"], o["itemId"]) for o in normalize_offsets(previous)}
+    keep = {(o["kind"], o["ref"], o["itemId"], DL.parse_amount(o.get("amount"))) for o in normalize_offsets(previous)}      # 含 amount：只改金額的拆分份不算「原樣」
     base = compute(conn, quote_no, offsets=[])
     live = {i["itemId"] for i in base["items"] if not i["unkeyed"]}      # 缺 id／說明的舊品項不能當沖銷去處
     refs = {"material": {str(m["itemId"]) for m in base["unassigned"]["materials"]},
             "extra": {str(e["expenseId"]) for e in base["extra"]["rows"]},
             "dispatch": {str(d["itemId"]) for d in base["unassigned"]["dispatches"]}}
     # base 的 unassigned 在 offsets=[] 時含全部可沖銷的列（extra.rows 含 assignedTo 者，此時皆未歸屬）
+    dispatch_by_id = {str(d["itemId"]): d for d in base["unassigned"]["dispatches"]}
+    whole_rows = {}                                    # 整張對應列：{派發id: 是否原樣}
+    dl_rows = []                                       # 承攬商派發的逐行列：(列號, ref, 解析, 品項, amount 原值, 是否原樣)
     seen = set()
     for n, o in enumerate(raw, 1):
         if not isinstance(o, dict):
@@ -386,20 +513,35 @@ def validate_offsets(conn, quote_no, raw, previous=None):
         if (kind, ref) in seen:
             return "offsets 第 %d 列：%s %s 重複，同一筆只能有一個去處" % (n, kind, ref)
         seen.add((kind, ref))
-        if (kind, ref, iid) in keep:
+        p = DL.parse_ref(ref) if kind == "dispatch" else None
+        amt_raw = o.get("amount")
+        is_keep = (kind, ref, iid, DL.parse_amount(amt_raw)) in keep
+        if kind == "dispatch" and "#" in ref:
+            dl_rows.append((n, ref, p, iid, amt_raw, is_keep))
+        elif kind == "dispatch":
+            whole_rows[ref] = is_keep
+        if is_keep:
             continue
+        if kind == "dispatch" and amt_raw is not None and (p is None or p["level"] != "part"):
+            return "offsets 第 %d 列：整張或整行對應不可帶 amount（只有拆分份才有金額）" % n
         if iid not in live:
             return "offsets 第 %d 列：品項 %s 不在報價單內" % (n, iid)
+        if kind == "dispatch" and "#" in ref:
+            err = _check_line_ref(n, ref, p, amt_raw, dispatch_by_id)
+            if err:
+                return err
+            continue
         if ref not in refs[kind]:
             return "offsets 第 %d 列：%s %s 不在目前的未對應清單內" % (n, _LABELS[kind], ref)
-    return None
+    return _check_line_groups(whole_rows, dl_rows, dispatch_by_id)
 
 
-def dispatch_rows(conn, quote_no, basis=BASIS_TAXED) -> list:
+def dispatch_rows(conn, quote_no, basis=BASIS_TAXED, with_lines=False) -> list:
     """承攬商派發單（精算計入成本者）逐張：`[{itemId(=派發 id 字串), docCode, vendorName, name, status, amount, tax, grandTotal, pending}]`。
     `amount`＝計入成本的金額：basis＝taxed（現行，使用者 2026-10-06）＝含稅合計（未稅承攬費＋稅額＋外包人員）；basis＝pretax（35c／36 期間存的草稿尚未轉換）＝未稅承攬費＋外包人員；
     `tax`＝承攬商稅額（taxed：含在 amount 內；pretax：只顯示）。`report`＝未稅承攬費＋外包人員（營運報表舊口徑，兩種 basis 都帶）。排除已取消、草稿、已退回；待審核／簽核中照計並標 pending。
-    `case_extras().dispatch` 的合計與 `compute()` 的未對應／已對應都由這一份列產生，三處不會漂。純讀。"""
+    `case_extras().dispatch` 的合計與 `compute()` 的未對應／已對應都由這一份列產生，三處不會漂。純讀。
+    `with_lines`（只有 `compute()` 傳 True）：每列多附 `lines`（逐行分解，見 `dispatch_lines.view_lines`）、`linesOk`（可逐行對應）、`linesReason`；其餘欄位與沒帶時逐位相同。"""
     out = []
     dispatch_row = registry.single_provider("dispatch.row")
     if dispatch_row is None:
@@ -421,6 +563,15 @@ def dispatch_rows(conn, quote_no, basis=BASIS_TAXED) -> list:
                     "status": d.get("displayStatus") or d.get("statusLabel") or "",
                     "amount": grand if basis == BASIS_TAXED else pretax + pers, "report": pretax + pers, "tax": max(0.0, grand - pretax - pers),
                     "grandTotal": grand, "pending": ap in ("待審核", "簽核中")})
+        if with_lines:
+            ld = DL.lines_of(d.get("items"), pretax, d.get("taxRate"))
+            if ld["ok"] and DL.cents(out[-1]["tax"]) != ld["taxTotal"] * 100:      # 稅額與派發單的整張稅額對不上（舊提供者沒有 grandTotal 等）⇒ 不開放逐行，免得分攤稅額與整張不一致
+                ld = DL.lines_of(d.get("items"), pretax, None)
+                for l in ld["lines"]:
+                    l["reason"] = "稅額資料與派發單不一致，只能整張對應"
+                ld["reason"] = "稅額資料與派發單不一致，只能整張對應"
+            out[-1]["lines"] = DL.view_lines(ld, basis == BASIS_TAXED)
+            out[-1]["linesOk"], out[-1]["linesReason"] = ld["ok"], ld["reason"]
     return out
 
 
