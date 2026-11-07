@@ -71,6 +71,7 @@ from helpers import profit_rules as _PR  # 專案毛利%（project_margin）
 from helpers import profit_warning as _pw  # T64 A：新報價單預設有效天數（設定 quote_defaults.valid_days，預設 30）
 from modules.case import alt_sign as _ALT_SIGN  # M3 T9：擇一方案回簽選定／取消回簽
 from modules.case import content_fp as _CFP  # 簽核二擇一 S1：內容指紋（核准綁版本、signedFp 蓋章）
+from modules.case import invoice_notify as _INV_NOTIFY  # 發票上傳通知（財務＋最高管理者；寄信只記 log、不擋上傳）
 from modules.case import receipt_calendar as _RC  # 行事曆「收款登錄／應收到期提醒」（2026-10-05，預設關）
 from modules.case.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
 from modules.case.case_stage_tasks import daily_task_notice, delete_daily_task_for_case_stage, sync_daily_task_for_case_stage  # noqa: E402
@@ -3833,7 +3834,7 @@ def _move_staged_files(staged_files: list, subfolder: str, doc_no: str) -> list:
 
 
 def _apply_case_change_request(conn, req, approver: dict, authorization: str,
-                                deferred_audits: list, deferred_calendar: list = None) -> dict:
+                                deferred_audits: list, deferred_calendar: list = None, deferred_notices: list = None) -> dict:
     """superadmin 核准後真正套用一筆 case_change_requests。呼叫端負責在成功
     回傳後把該筆記錄標記 approved 並 commit；這裡只處理「套用效果」本身，
 
@@ -3930,6 +3931,16 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
         save_quotation_json(conn, quote_no, data)
         deferred_audits.append((f'{action_type}.approved', 'quotation', quote_no,
                                 f"{label}（半解鎖審核通過套用，{len(moved)} 個檔案）", None))
+        if deferred_notices is not None and action_type != "material_file_upload":   # 發票才通知（到貨憑證附件不寄）；commit 之後才寄
+            try:                                       # 通知是附帶動作：組裝（含取欄位）出任何錯都不可讓核准失敗
+                _it = arr[idx] if isinstance(arr[idx], dict) else {}
+                _is_pay = action_type == "payment_invoice_upload"
+                deferred_notices.append(_INV_NOTIFY.notice(
+                    quote_no, data, kind="payment" if _is_pay else "material",
+                    item_label=(_it.get("label") or f"第{idx+1}期") if _is_pay else (_it.get("name") or f"第{idx+1}項"),
+                    uploader=(req["requested_by_display"] or req["requested_by"] or ""), file_count=len(moved)))
+            except Exception:
+                logger.exception("案件發票上傳通知組裝失敗（不影響核准套用；quote_no=%r action=%r）", quote_no, action_type)
 
     elif action_type in ("payment_invoice_delete", "material_file_delete", "material_invoice_delete"):
         idx = payload["idx"]
@@ -4004,9 +4015,10 @@ def approve_case_change(change_id: int, authorization: str = Header(None)):
         # 而且例外被 `_audit()` 吞掉，稽核紀錄直接消失。實測 32.8 秒。
         deferred_audits: list = []
         deferred_calendar: list = []
+        deferred_notices: list = []
         try:
             apply_result = _apply_case_change_request(conn, req, user, authorization,
-                                                      deferred_audits, deferred_calendar)
+                                                      deferred_audits, deferred_calendar, deferred_notices)
         except HTTPException:
             conn.close()
             raise
@@ -4020,6 +4032,8 @@ def approve_case_change(change_id: int, authorization: str = Header(None)):
         for action, target_type, target_id, target_label, detail in deferred_audits:
             _audit(_tok(authorization), action, target_type, target_id, target_label, detail)
         spawn_bg_thread(_backup_quotation, args=(req["quote_no"],))
+        for _n in deferred_notices:                   # 寫鎖已放掉、已 commit；發票上傳通知（永不丟例外）
+            _INV_NOTIFY.send_notice(_n)
         for _qn, _old, _new in deferred_calendar:     # 寫鎖已放掉；半解鎖審核套用的收款也推行事曆
             _calendar_after_payment_change(_qn, _old, _new)
         _notify(req["requested_by"], "case_change_decided", req["quote_no"], req["quote_no"],
@@ -4989,10 +5003,13 @@ async def upload_payment_item_invoice_files(no: str, idx: int, files: List[Uploa
         pits[idx]["invoiceFiles"].extend(new_files)
         saved_at = save_quotation_json(conn, no, data)
         conn.commit()
+        _inv_notice = _INV_NOTIFY.notice(no, data, kind="payment", item_label=label,
+                                         uploader=user.get("display_name") or user["username"], file_count=len(new_files))
     finally:
         conn.close()
     _audit(_tok(authorization), "payment.upload_invoice_files", "quotation", no,
            f"{no} {label}（{len(new_files)} 個檔案）")
+    _INV_NOTIFY.send_notice(_inv_notice)      # commit 之後；永不丟例外
     return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": saved_at}
 
 
@@ -5134,10 +5151,13 @@ async def upload_material_invoice_files(no: str, idx: int, files: List[UploadFil
         mats[idx]["invoiceFiles"].extend(new_files)
         saved_at = save_quotation_json(conn, no, data)
         conn.commit()
+        _inv_notice = _INV_NOTIFY.notice(no, data, kind="material", item_label=name,
+                                         uploader=user.get("display_name") or user["username"], file_count=len(new_files))
     finally:
         conn.close()
     _audit(_tok(authorization), "material.upload_invoice_files", "quotation", no,
            f"{no} {name}（{len(new_files)} 個檔案）")
+    _INV_NOTIFY.send_notice(_inv_notice)      # commit 之後；永不丟例外
     return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": saved_at}
 
 
