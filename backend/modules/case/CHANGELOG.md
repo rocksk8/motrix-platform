@@ -1,14 +1,13 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-08（t78/r1-warranty-mail；T78 R1：保固到期信寄得到案件業務，且先寄成功才記已通知；非金額；K 審必修已修；寄送入口為私有函式、L1 介面不變）
+## (next) — 2026-11-08（T78；t78/r1-warranty-mail＋fix/dispatch-abnormal-amount 併入整合樹；非金額；K 審必修已修；L1 介面不變）
 - 修正（保固到期信，T78 R1）：`case_deadlines._check_warranty_expiry` 的收件人改用案件的 `sales_person_id` 外鍵解出的業務帳號（`helpers.case_access.case_owner_username`）；原作法把 `quotations.sales_person`（顯示名）當 `username` 比對，只有顯示名剛好等於帳號時業務才收得到。業務已停用或沒有外鍵 ⇒ 只寄群組收件人（管理員），與原先名字對不上時相同。⚠️ 例外：`sales_person_id` 為空、但 `sales_person` 剛好等於某個在職 username 的案件，舊作法收得到、新作法收不到（只剩群組收件人）；這類案件有多少待正式機備份副本統計（見下方已知限制）。
 - 修正（保固到期信，T78 R1）：已通知記號（`warranty_notif.*`）改成**寄送成功後才寫**——新增 `helpers.email_notify._send_warranty_expiry`（`send_registered(wait=True)`，寄出／結果不明／永久失敗 ⇒ 寫記號；暫時失敗／機器略過／沒有收件人 ⇒ 不寫，下一次每日檢查重試）。原作法寄信前就寫記號，SMTP 暫時失敗就永遠不補寄。單台設備寄送丟例外只略過該台，不中斷整個掃描。信件內容抽成 `_warranty_expiry_mail` 與舊入口 `notify_warranty_expiry` 共用（舊入口簽章與行為不變，其 `sales_person` 參數一直是帳號）。
 - 修正（保固到期信，K 審）：①信件按鈕連到該案（`quotation-form.html?no=<單號>`，與舊信相同）——新入口一度沒傳 `link`，退成站台首頁；②寄送暫時失敗／機器略過時**本輪停止後續保固信**（逐台各等一次最久 45 秒，會把同一次每日檢查後面的階段期限、付款提醒、日曆同步拖住），記號未寫，下次每日檢查補寄；「沒有收件人」不算暫時失敗，不中斷掃描。
 - 上線說明：機器沒設 SMTP 或信件總開關關閉時，現在**不寫已通知記號**；日後打開，30 天預警窗內所有設備會一次補寄（這是新設計要的行為）。
 - 測試：`tests/test_warranty_mail_owner_2026_11_08.py`（顯示名≠帳號業務仍在收件人內；暫時失敗不寫記號、下次補寄；結果不明／永久失敗保留記號；業務已停用只寄群組；無收件人不寫記號且不中斷；寄送例外不中斷；按鈕連結含單號；暫時失敗跨案件停止後續）。
 - 已知限制：每台設備的寄送會等寄送結果（最多 45 秒）；每日檢查是背景排程，不影響 request。上線前可統計正式機已成案案件 `sales_person` 對不上任何 `users.username` 的比例（R1 票的選做項，尚未做，需只讀備份副本）。
-- **（併入）(next) — 2026-11-08（T78；精算：派發單品項金額為 NaN／Infinity／1e400 等異常值不再讓整個案件精算 500，該張只能整張對應）＋K 審必修已修（極大值、qty／unitPrice、warning log）**
-- 修正（精算，T77 殘留）：`dispatch_rows(with_lines=True)` 對每張派發單都呼叫 `dispatch_lines.lines_of()`，裡面的 `cents()` 對非有限數會丟例外，`compute()` 外層沒有攔，所以案件內只要有一張派發單的品項金額是 NaN／Infinity／`1e400` 這類值，整個案件的精算讀取／存檔／驗證／完結比對全部回 500（與那張有沒有用逐行對應無關）。現在 `lines_of()` 永不丟例外：品項金額、總額或稅率是異常值（非數字、無限大、超出 10 兆元）⇒ `ok=False`、各行不可對應、理由「派發單金額或稅率含異常值…只能整張對應」，與「各行金額加總對不上總額」同一條降級路徑；整張對應照舊有效，其他派發單不受影響。新增 `dispatch_lines.safe_cents()`（異常值回 None）。逐行對應到這張派發單時，compute 回 `dispatch_line_unmappable` 警告並把整張留在未對應。
+- 修正（精算，T77 殘留，fix/dispatch-abnormal-amount，K 審必修已修——極大值、qty／unitPrice、warning log）：`dispatch_rows(with_lines=True)` 對每張派發單都呼叫 `dispatch_lines.lines_of()`，裡面的 `cents()` 對非有限數會丟例外，`compute()` 外層沒有攔，所以案件內只要有一張派發單的品項金額是 NaN／Infinity／`1e400` 這類值，整個案件的精算讀取／存檔／驗證／完結比對全部回 500（與那張有沒有用逐行對應無關）。現在 `lines_of()` 永不丟例外：品項金額、總額或稅率是異常值（非數字、無限大、超出 10 兆元）⇒ `ok=False`、各行不可對應、理由「派發單金額或稅率含異常值…只能整張對應」，與「各行金額加總對不上總額」同一條降級路徑；整張對應照舊有效，其他派發單不受影響。新增 `dispatch_lines.safe_cents()`（異常值回 None）。逐行對應到這張派發單時，compute 回 `dispatch_line_unmappable` 警告並把整張留在未對應。
 - 第二個來源（同一個缺口）：總額欄 0／空白、由品項金額加總時，加總在 `subcontract` 的派發列提供者 `_dispatch_row`——該處已改為異常值當 0 並記 log（見外包工班 CHANGELOG）。**取捨**：異常值當 0 處理，該張派發的成本在精算會顯示為 0（有 warning log，畫面沒有警示）；比整個案件 500 好，但請財務留意。另修 T77 新增輸出欄位的同類問題：`dispatchLines[].lines[]` 與 `unassigned.dispatches[].lines[]` 原樣帶出品項的 `qty`／`unitPrice`，這兩欄是 NaN／Infinity 時 JSON 序列化會 500，現在輸出 `null`（`dispatch_lines._json_num`）。測試見 `tests/test_dispatch_abnormal_amount_2026_11_08.py`（含 HTTP 端點層）。
 
 ## 1.0.207 — 2026-11-07（T77；發票上傳通知：款項／材料申請發票上傳 ⇒ 寄財務與最高管理者；module.json features 宣告、modules.json 登記；組裝與寄送失敗皆不影響上傳／核准）＋精算派發單逐行對應（整行／拆分；後端＋二之二；已 rebase 到 t77-int；K 審必修已修）
