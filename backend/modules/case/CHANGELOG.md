@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-08（T78；精算：派發單品項金額為 NaN／Infinity／1e400 等異常值不再讓整個案件精算 500，該張只能整張對應）
+## (next) — 2026-11-08（T78；精算：派發單品項金額為 NaN／Infinity／1e400 等異常值不再讓整個案件精算 500，該張只能整張對應）＋K 審必修已修（極大值、qty／unitPrice、warning log）
 - 修正（精算，T77 殘留）：`dispatch_rows(with_lines=True)` 對每張派發單都呼叫 `dispatch_lines.lines_of()`，裡面的 `cents()` 對非有限數會丟例外，`compute()` 外層沒有攔，所以案件內只要有一張派發單的品項金額是 NaN／Infinity／`1e400` 這類值，整個案件的精算讀取／存檔／驗證／完結比對全部回 500（與那張有沒有用逐行對應無關）。現在 `lines_of()` 永不丟例外：品項金額、總額或稅率是異常值（非數字、無限大、超出 10 兆元）⇒ `ok=False`、各行不可對應、理由「派發單金額或稅率含異常值…只能整張對應」，與「各行金額加總對不上總額」同一條降級路徑；整張對應照舊有效，其他派發單不受影響。新增 `dispatch_lines.safe_cents()`（異常值回 None）。逐行對應到這張派發單時，compute 回 `dispatch_line_unmappable` 警告並把整張留在未對應。
 - 第二個來源（同一個缺口）：總額欄 0／空白、由品項金額加總時，加總在 `subcontract` 的派發列提供者 `_dispatch_row`——該處已改為異常值當 0 並記 log（見外包工班 CHANGELOG）。**取捨**：異常值當 0 處理，該張派發的成本在精算會顯示為 0（有 warning log，畫面沒有警示）；比整個案件 500 好，但請財務留意。另修 T77 新增輸出欄位的同類問題：`dispatchLines[].lines[]` 與 `unassigned.dispatches[].lines[]` 原樣帶出品項的 `qty`／`unitPrice`，這兩欄是 NaN／Infinity 時 JSON 序列化會 500，現在輸出 `null`（`dispatch_lines._json_num`）。測試見 `tests/test_dispatch_abnormal_amount_2026_11_08.py`（含 HTTP 端點層）。
 
