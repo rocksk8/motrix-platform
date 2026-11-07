@@ -288,7 +288,7 @@ def _check_warranty_expiry() -> None:
                 # 收件人＝案件業務（sales_person_id 外鍵解出的帳號；舊作法拿顯示名當帳號比對，名字≠帳號就收不到）＋群組收件人。
                 out = {}
                 try:
-                    sent = _en.send_warranty_expiry(
+                    sent = _en._send_warranty_expiry(
                         dev.get("name") or sn or "未知設備", row["customer_name"] or "", row["quote_no"],
                         days_left, expiry.isoformat(), owner_username=_owner(row["quote_no"]), out=out)
                 except Exception as exc:

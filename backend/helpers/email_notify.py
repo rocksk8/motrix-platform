@@ -1625,7 +1625,7 @@ def notify_daily_task_edited(
 
 
 def _warranty_expiry_mail(device_name: str, customer: str, quote_no: str, days_left: int, expiry_date: str) -> dict:
-    """保固到期信的內容（標題／徽章／列／內文）；`notify_warranty_expiry`（舊入口）與 `send_warranty_expiry` 共用，兩邊字樣不分家。"""
+    """保固到期信的內容（標題／徽章／列／內文）；`notify_warranty_expiry`（舊入口）與 `_send_warranty_expiry` 共用，兩邊字樣不分家。"""
     from helpers.alert_settings import warranty_mail_days
     _urgent, _early = warranty_mail_days()          # census #7：預設 7／30＝今天的字
     return {
@@ -1649,7 +1649,7 @@ def notify_warranty_expiry(
     sales_person: str,
 ) -> None:
     """保固即將到期 → 業務員 + 管理員。⚠️ 舊入口：`sales_person` 是**帳號**（以 username 比對），不是顯示名；
-    案件的每日檢查已改走 `send_warranty_expiry`（用 FK 找業務帳號、先寄成功才記已通知）。"""
+    案件的每日檢查已改走 `_send_warranty_expiry`（用 FK 找業務帳號、先寄成功才記已通知）。"""
     to = list(dict.fromkeys(_lookup_emails([sales_person], "warranty_expiry") + _admin_emails("warranty_expiry")))
     if not to:
         logger.warning("notify_warranty_expiry: 無有效收件人（quote_no=%r）", quote_no)
@@ -1660,7 +1660,7 @@ def notify_warranty_expiry(
     _async_send(to, _mt.subject("warranty_expiry", m["subject"]), html)
 
 
-def send_warranty_expiry(device_name: str, customer: str, quote_no: str, days_left: int, expiry_date: str,
+def _send_warranty_expiry(device_name: str, customer: str, quote_no: str, days_left: int, expiry_date: str,
                          owner_username: str = "", out: dict = None) -> bool:
     """保固即將到期 → 案件業務（帳號）＋群組收件人，**等寄送結果**。回 True＝呼叫端可以寫「已通知」記號
     （寄出／結果不明／永久失敗）；False＝沒有收件人或暫時失敗（不寫記號，下次每日檢查重試）。
@@ -1672,7 +1672,7 @@ def send_warranty_expiry(device_name: str, customer: str, quote_no: str, days_le
                                link=f"{_base_url()}/pages/quotation-form.html?no={_urlquote(str(quote_no), safe='')}",       # 按鈕連到該案（與舊信同一個連結；沒傳會退成站台首頁）
                                button_text=m["button_text"], note=m["intro"], wait=True, out=out)
     except Exception:
-        logger.exception("send_warranty_expiry 失敗（不寫已通知記號；quote_no=%r）", quote_no)
+        logger.exception("_send_warranty_expiry 失敗（不寫已通知記號；quote_no=%r）", quote_no)
         return False
 
 
