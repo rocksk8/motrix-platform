@@ -49,7 +49,13 @@ def _why_few_routes(targets) -> str:
     return "targets=%d app.routes=%d failed_modules=%s" % (len(targets), len(main.app.routes), str(failed)[:1500])
 
 
-def test_record_or_compare_against_baseline(client, seeded):
+def test_record_or_compare_against_baseline(client, seeded, monkeypatch):
+    # 日期釘住：/api/tender-radar/status 的 notices[] 會隨『今天』變（週末／國定假日 ⇒ no_mail_day、假日表到期前 60 天 ⇒ calendar_expiring），
+    # 基準錄在平日；不釘的話週六日跑本題必紅（2026-11-07 週六就是這樣紅的，與沙箱無關）。釘到涵蓋範圍內的平日。
+    import datetime as _dt
+    from modules.tender_radar import source as _tsrc
+    monkeypatch.setattr(_tsrc, "today", lambda: _dt.date(2026, 9, 30))
+    assert _tsrc.no_mail_today()[0] is False, "釘住的日期必須是平日（否則 notices[] 會有 no_mail_day）"
     targets = _paths()
     assert len(targets) >= ROUTE_FLOOR, "GET /api 目標太少（模組可能沒載入）：" + _why_few_routes(targets)
     rec = RK.record(client, seeded, targets)

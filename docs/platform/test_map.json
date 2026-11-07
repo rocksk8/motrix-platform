@@ -23461,6 +23461,8 @@
     "file:backend/tests/platform/__init__.py",
     "file:backend/tests/platform/_response_keys.py",
     "mod:analytics/api/reports",
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/source",
     "plat:__init__",
     "plat:internal_cols",
     "plat:registry",
@@ -23473,6 +23475,8 @@
      "backend/core/registry.py",
      "backend/db.py",
      "backend/main.py",
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/source.py",
      "backend/tests/platform/__init__.py",
      "backend/tests/platform/_response_keys.py"
     ],
