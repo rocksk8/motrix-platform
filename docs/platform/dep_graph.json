@@ -945,6 +945,20 @@
     "ui_definitions"
    ]
   },
+  "helper:custom_module_switch": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:settings_strict",
+    "plat:definitions"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/custom_module_switch.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "helper:custom_modules": {
    "api_prefixes": [],
    "dynamic_sql": true,
@@ -3813,26 +3827,33 @@
   "js:static/menu-editor.js": {
    "api_calls": [
     "/api/def-governance/layout/{}/impact",
+    "/api/definitions/layout",
     "/api/definitions/layout/module:",
     "/api/definitions/layout/module:/draft",
     "/api/definitions/layout/module:/publish",
     "/api/platform/menu",
-    "/api/platform/menu/preview"
+    "/api/platform/menu/preview",
+    "/api/settings/role-labels",
+    "/api/users"
    ],
    "api_prefixes": [
     "/api/def-governance",
     "/api/definitions",
-    "/api/platform"
+    "/api/platform",
+    "/api/settings",
+    "/api/users"
    ],
    "api_unmatched": [],
    "imports": [],
    "kind": "js",
    "path": "frontend/static/menu-editor.js",
    "routers_called": [
+    "router:auth",
     "router:def_governance",
     "router:definitions",
     "router:platform_menu",
-    "router:platform_menu_preview"
+    "router:platform_menu_preview",
+    "router:system"
    ],
    "tables_r": [],
    "tables_w": []
@@ -11998,6 +12019,7 @@
     "helper:alert_settings",
     "helper:audit",
     "helper:calendar_sync",
+    "helper:case_access",
     "helper:dates",
     "helper:email_notify",
     "helper:notify_actions",
@@ -16881,163 +16903,163 @@
    "routes": [
     {
      "func": "list_vendor_contractors",
-     "line": 236,
+     "line": 272,
      "method": "GET",
      "path": "/api/vendor-contractors"
     },
     {
      "func": "list_vendors_selectable",
-     "line": 264,
+     "line": 300,
      "method": "GET",
      "path": "/api/vendor-contractors/selectable"
     },
     {
      "func": "get_vendor_contractor",
-     "line": 278,
+     "line": 314,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "create_vendor_contractor",
-     "line": 290,
+     "line": 326,
      "method": "POST",
      "path": "/api/vendor-contractors"
     },
     {
      "func": "update_vendor_contractor",
-     "line": 318,
+     "line": 354,
      "method": "PUT",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "get_vendor_privacy_ack",
-     "line": 366,
+     "line": 402,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}/privacy-notice"
     },
     {
      "func": "ack_vendor_privacy_notice",
-     "line": 376,
+     "line": 412,
      "method": "POST",
      "path": "/api/vendor-contractors/{vid}/privacy-notice/ack"
     },
     {
      "func": "toggle_vendor_active",
-     "line": 396,
+     "line": 432,
      "method": "PATCH",
      "path": "/api/vendor-contractors/{vid}/active"
     },
     {
      "func": "get_vendor_passbook",
-     "line": 419,
+     "line": 455,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}/passbook"
     },
     {
      "func": "upload_vendor_passbook",
-     "line": 437,
+     "line": 473,
      "method": "PUT",
      "path": "/api/vendor-contractors/{vid}/passbook"
     },
     {
      "func": "delete_vendor_contractor",
-     "line": 470,
+     "line": 506,
      "method": "DELETE",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "update_vendor_visits",
-     "line": 497,
+     "line": 533,
      "method": "PATCH",
      "path": "/api/vendor-contractors/{vid}/visits"
     },
     {
      "func": "list_dispatches",
-     "line": 532,
+     "line": 568,
      "method": "GET",
      "path": "/api/contractor-dispatches"
     },
     {
      "func": "get_dispatch",
-     "line": 555,
+     "line": 591,
      "method": "GET",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "create_dispatch",
-     "line": 572,
+     "line": 608,
      "method": "POST",
      "path": "/api/contractor-dispatches"
     },
     {
      "func": "update_dispatch",
-     "line": 618,
+     "line": 654,
      "method": "PUT",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "delete_dispatch",
-     "line": 720,
+     "line": 756,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "upload_dispatch_files",
-     "line": 768,
+     "line": 804,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files"
     },
     {
      "func": "delete_dispatch_file",
-     "line": 863,
+     "line": 899,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}"
     },
     {
      "func": "approve_dispatch_file_delete",
-     "line": 929,
+     "line": 965,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}/delete-approve"
     },
     {
      "func": "reject_dispatch_file_delete",
-     "line": 985,
+     "line": 1021,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}/delete-reject"
     },
     {
      "func": "upload_dispatch_invoice_files",
-     "line": 1060,
+     "line": 1096,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/invoice-files"
     },
     {
      "func": "delete_dispatch_invoice_file",
-     "line": 1097,
+     "line": 1133,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}/invoice-files/{file_id}"
     },
     {
      "func": "set_dispatch_invoice_date",
-     "line": 1126,
+     "line": 1162,
      "method": "PATCH",
      "path": "/api/contractor-dispatches/{did}/invoice-date"
     },
     {
      "func": "accept_dispatch",
-     "line": 1165,
+     "line": 1201,
      "method": "PATCH",
      "path": "/api/contractor-dispatches/{did}/accept"
     },
     {
      "func": "set_dispatch_status",
-     "line": 1213,
+     "line": 1249,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/status"
     },
     {
      "func": "import_dispatch_to_quote",
-     "line": 1229,
+     "line": 1265,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/import-to-quote"
     }
@@ -19927,6 +19949,7 @@
     "js:static/form-designer-model.js",
     "js:static/form-designer.js",
     "js:static/notif.js",
+    "js:static/public-flags.js",
     "js:static/sidebar.js",
     "js:static/ui.js"
    ],
@@ -22714,6 +22737,7 @@
     "helper:custom_files",
     "helper:custom_finance",
     "helper:custom_history",
+    "helper:custom_module_switch",
     "helper:custom_modules",
     "helper:display_labels",
     "helper:doc_render",
@@ -22762,6 +22786,7 @@
     "helper:custom_files",
     "helper:custom_finance",
     "helper:custom_history",
+    "helper:custom_module_switch",
     "helper:custom_modules",
     "helper:doc_template",
     "helper:download_name",
@@ -22891,55 +22916,55 @@
     },
     {
      "func": "reject_custom_definition",
-     "line": 446,
+     "line": 450,
      "method": "POST",
      "path": "/api/custom-modules/{key}/definition/{version}/reject"
     },
     {
      "func": "get_custom_definition_review",
-     "line": 460,
+     "line": 464,
      "method": "GET",
      "path": "/api/custom-modules/definition-review"
     },
     {
      "func": "set_custom_definition_review",
-     "line": 467,
+     "line": 471,
      "method": "PUT",
      "path": "/api/custom-modules/definition-review"
     },
     {
      "func": "custom_module_catalog",
-     "line": 488,
+     "line": 492,
      "method": "GET",
      "path": "/api/custom-modules/catalog"
     },
     {
      "func": "custom_module_template",
-     "line": 505,
+     "line": 509,
      "method": "GET",
      "path": "/api/custom-modules/templates/{tkey}"
     },
     {
      "func": "check_custom_formula",
-     "line": 515,
+     "line": 519,
      "method": "POST",
      "path": "/api/custom-modules/formula/check"
     },
     {
      "func": "preview_custom_numbering",
-     "line": 526,
+     "line": 530,
      "method": "POST",
      "path": "/api/custom-modules/numbering/preview"
     },
     {
      "func": "custom_ref_options",
-     "line": 536,
+     "line": 540,
      "method": "GET",
      "path": "/api/custom/{key}/ref-options/{field}"
     },
     {
      "func": "preview_custom_output",
-     "line": 560,
+     "line": 564,
      "method": "POST",
      "path": "/api/custom-modules/{key}/output/preview"
     }
@@ -23223,19 +23248,19 @@
    "routes": [
     {
      "func": "def_ledger",
-     "line": 198,
+     "line": 225,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/ledger"
     },
     {
      "func": "def_diff",
-     "line": 210,
+     "line": 237,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/diff"
     },
     {
      "func": "def_impact",
-     "line": 223,
+     "line": 250,
      "method": "GET",
      "path": "/api/def-governance/{kind}/{key}/impact"
     }
@@ -23366,7 +23391,8 @@
     "helper:settings_registry",
     "helper:stage_templates",
     "helper:status_display",
-    "plat:definitions"
+    "plat:definitions",
+    "router:def_governance"
    ],
    "kind": "router",
    "path": "backend/routers/def_pipeline.py",
@@ -23374,25 +23400,25 @@
    "routes": [
     {
      "func": "pending_changes",
-     "line": 525,
+     "line": 539,
      "method": "GET",
      "path": "/api/def-pipeline/pending"
     },
     {
      "func": "approve_change",
-     "line": 544,
+     "line": 558,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/approve"
     },
     {
      "func": "activate_change",
-     "line": 560,
+     "line": 574,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/activate"
     },
     {
      "func": "cancel_change",
-     "line": 585,
+     "line": 599,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/cancel"
     }
@@ -23470,6 +23496,7 @@
     "helper:custom_finance",
     "helper:custom_history",
     "helper:custom_module_delete",
+    "helper:custom_module_switch",
     "helper:custom_modules",
     "helper:display_labels",
     "helper:doc_render",
@@ -23525,6 +23552,7 @@
     "helper:custom_def_review",
     "helper:custom_fields",
     "helper:custom_module_delete",
+    "helper:custom_module_switch",
     "helper:custom_modules",
     "helper:doc_template",
     "helper:expense_types",
@@ -23549,103 +23577,103 @@
    "routes": [
     {
      "func": "list_definition_kinds",
-     "line": 246,
+     "line": 260,
      "method": "GET",
      "path": "/api/definition-kinds"
     },
     {
      "func": "list_expense_types",
-     "line": 254,
+     "line": 268,
      "method": "GET",
      "path": "/api/expense-types"
     },
     {
      "func": "get_expense_type",
-     "line": 266,
+     "line": 280,
      "method": "GET",
      "path": "/api/expense-types/{code}"
     },
     {
      "func": "list_definitions",
-     "line": 281,
+     "line": 295,
      "method": "GET",
      "path": "/api/definitions/{kind}"
     },
     {
      "func": "delete_definition_draft",
-     "line": 306,
+     "line": 320,
      "method": "DELETE",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "delete_custom_module",
-     "line": 325,
+     "line": 339,
      "method": "DELETE",
      "path": "/api/definitions/custom_module/{key}"
     },
     {
      "func": "get_definition",
-     "line": 342,
+     "line": 356,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}"
     },
     {
      "func": "get_definition_default",
-     "line": 356,
+     "line": 370,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/default"
     },
     {
      "func": "save_definition_draft",
-     "line": 366,
+     "line": 380,
      "method": "PUT",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "validate_definition",
-     "line": 396,
+     "line": 411,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/validate"
     },
     {
      "func": "publish_definition",
-     "line": 494,
+     "line": 509,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/publish"
     },
     {
      "func": "get_definition_version",
-     "line": 554,
+     "line": 570,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 571,
+     "line": 587,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 596,
+     "line": 612,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 636,
+     "line": 653,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
      "func": "effective_layout",
-     "line": 650,
+     "line": 667,
      "method": "GET",
      "path": "/api/layout/{module_key}"
     },
     {
      "func": "preview_output_template",
-     "line": 685,
+     "line": 702,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }

@@ -6,14 +6,14 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 134 個；有單位卡 83 個。
+單位 135 個；有單位卡 84 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
 | `plat:capabilities` | L0 | 能力登錄（權限矩陣框架 P0；設計 docs/platform/plans/PERMISSION-MATRIX-DESIGN-T54.md §2）。 | 18 | 4 | `tests/platform/test_capabilities_registry.py`、`tests/platform/test_perm_equivalence_gate_a.py` |
 | `plat:catalog` | L0 | 能力目錄（CUSTOMIZATION-SPEC P1；CORE-SPEC §7 端點登錄表的擴充）。 | 17 | 7 | `tests/platform/test_platform_catalog.py` |
 | `plat:customization` | L0 | L0 模組描述：可自訂點（CUSTOMIZATION-SPEC P3；§8.2 排版器需求）。 | 14 | 3 | `tests/platform/test_platform_catalog.py` |
-| `plat:definitions` | L0 | 定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。 | 26 | 27 | `tests/test_definitions_store_2026_09_25.py` |
+| `plat:definitions` | L0 | 定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。 | 26 | 28 | `tests/test_definitions_store_2026_09_25.py` |
 | `plat:events` | L0 | L1 事件匯流排（CUSTOMIZATION-SPEC §6，ROADMAP P6）。 | 9 | 3 | `tests/platform/test_core_events.py` |
 | `plat:internal_cols` | L0 | L0 內部欄位剝除（U0a 洩漏防線；設計 docs/platform/plans/FRAMEWORK-ORG-UNITS-T57.md §14.10 #4）。 | 6 | 2 | `backend/tests/platform/test_internal_cols.py` |
 | `plat:loader` | L0 | L0 模組載入器：掃 `modules/*/module.json`，相容且匯入成功的才登錄。 | 11 | 4 | `tests/platform/test_core_loader.py` |
@@ -48,7 +48,7 @@
 | `helper:builtin_fields` | L1 | 內建畫面的自訂欄位（T61 S5；設計：docs/platform/plans/T61-S5-FIELD-CATALOG-DESIGN.md）。 | 12 | 6 | `backend/tests/test_builtin_custom_fields_2026_10_14.py` |
 | `helper:business_days` | L1 | L1 工作日／假日判斷（第44班：自 M11 標案雷達 `calendar_tw.py` 提升為 L1 共用，供任何模組用——例如 M01 預定付款日提醒、M11 不寄信日）。**純函式，不連網、不讀時鐘（日期由呼叫端給）。**（無單位卡） | 9 | 3 | — |
 | `helper:calendar_sync` | L1 | 日期型行事曆事件的每日對帳（L1；MAIL-CAL 階段 2：保固到期／區間事項結束／專案預計完成）。 | 4 | 2 | `tests/test_notify_matrix_phase2_2026_10_06.py` |
-| `helper:case_access` | L1 | L1 案件存取守門（主持裁示 2026-09-26，DEPENDENCY-MAP §3 #2「案件可見性規則 → L1 權限」）。（無單位卡） | 25 | 30 | — |
+| `helper:case_access` | L1 | L1 案件存取守門（主持裁示 2026-09-26，DEPENDENCY-MAP §3 #2「案件可見性規則 → L1 權限」）。（無單位卡） | 25 | 31 | — |
 | `helper:case_roles` | L1 | 案件角色（caseRecord.roles 的 filler／sales／executor）的兩種形狀（CM3，2026-09-24）。（無單位卡） | 5 | 3 | — |
 | `helper:clause_titles` | L1 | 報價單條款標題（census #5 / S-Q2）：報價單五個條款區塊的標題，管理者只能從預設清單挑（付款條件→付款方式…）。 | 7 | 5 | `tests/platform/test_clause_titles_t62.py` |
 | `helper:company_identity` | L1 | §9 QL · 一份單據要印的「公司身分」。（無單位卡） | 19 | 14 | — |
@@ -61,6 +61,7 @@
 | `helper:custom_finance` | L1 | 自訂模組的金流（收入／支出）串接（建構器第三輪 S2.5；使用者 2026-09-30：「只要有收入、支出項，都需要跟營運報表或是相關模組數據串接」）。 | 10 | 6 | `tests/test_builder3_finance_2026_09_30.py` |
 | `helper:custom_history` | L1 | 自訂模組單據的送簽修訂紀錄（建構器第三輪 S5，2026-09-30；使用者：單據送簽→退回→修改重送，單號加 -R1、-R2 並保留各版內容，可比對差異）。 | 5 | 2 | `tests/test_builder3_history_2026_09_30.py` |
 | `helper:custom_module_delete` | L1 | 刪除自訂模組（建構器首頁「刪除模組」）。（無單位卡） | 3 | 1 | — |
+| `helper:custom_module_switch` | L1 | 自訂模組引擎總開關（P8，T78）：設定 `builder_custom_modules.enabled`（預設 0＝關；與其他 builder_* 功能「預設關、逐項開」同一慣例）。 | 3 | 2 | — |
 | `helper:custom_modules` | L1 | 自訂模組引擎（P8，CUSTOMIZATION-SPEC §1／§3.1／§8.1）：定義是資料，不是程式。（無單位卡） | 55 | 8 | — |
 | `helper:daily_checks` | L1 | L1 每日 08:00 檢查執行器（2026-09-26；取代 routers/daily_tasks.py::schedule_overdue_check）。（無單位卡） | 3 | 1 | — |
 | `helper:dates` | L1 | Date arithmetic utilities.（無單位卡） | 5 | 18 | — |
@@ -85,7 +86,7 @@
 | `helper:legal_params` | L1 | L1 法規參數服務（R1；規格 CUSTOMIZATION-SPEC §9.1）。（無單位卡） | 27 | 35 | — |
 | `helper:licensing` | L1 | 授權金鑰核心（2026-09-21，細線 1 第 1、2 步）。（無單位卡） | 13 | 4 | — |
 | `helper:list_catalog` | L1 | 清單目錄（T66 L0：只登記與驗證、不改行為）。設計：docs/platform/plans/T66-LIST-PREFS-DESIGN.md §1.1。 | 13 | 3 | `backend/tests/platform/test_list_catalog_t66.py` |
-| `helper:list_pref_policy` | L1 | 清單偏好的公司政策（T66 L1）：定義種類 `list_pref_policy`＋寬嚴比較＋讀取。設計：docs/platform/plans/T66-LIST-PREFS-DESIGN.md §1.2。 | 11 | 4 | `backend/tests/platform/test_list_pref_policy_t66.py` |
+| `helper:list_pref_policy` | L1 | 清單偏好的公司政策（T66 L1）：定義種類 `list_pref_policy`＋寬嚴比較＋讀取。設計：docs/platform/plans/T66-LIST-PREFS-DESIGN.md §1.2。 | 14 | 4 | `backend/tests/platform/test_list_pref_policy_t66.py` |
 | `helper:list_view_prefs` | L1 | 清單檢視偏好（T66 L2）：每人每清單的「每頁筆數」，以及公司政策＋欄位可見（F7）對版面引擎輸出的限制。設計：docs/platform/plans/T66-LIST-PREFS-DESIGN.md §1.3、§3、§5。 | 15 | 1 | `backend/tests/platform/test_list_view_prefs_t66.py` |
 | `helper:mail_types` | L1 | L1 信件類型登記表（CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）。（無單位卡） | 13 | 19 | — |
 | `helper:map_overlays` | L1 | L1 地圖覆蓋層（串接點 IP-101 `map.overlay`；docs/platform/LODGING-NEARBY.md §3.6.1，D 稽核 LG-M1／LG2-S1～S3）。 | 5 | 2 | `tests/test_map_overlay_contract_2026_09_28.py`、`tests/test_e2e_map_overlay_contract_2026_09_28.py` |
@@ -131,7 +132,7 @@
 | `helper:settings_groups_recycle_bin` | L1 | T69 設定群組：刪除暫存區保留天數（recycle_bin.retention_days）。 | 0 | 1 | `backend/modules/recyclebin/tests/test_recyclebin_retention_t69.py` |
 | `helper:settings_groups_tender_closing` | L1 | T70 設定群組：地圖上標案「即將截止」標記的天數（tender_closing.closing_soon_days）。 | 0 | 1 | `backend/tests/test_closing_soon_days_t70.py` |
 | `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 39 | 49 | `backend/tests/platform/test_settings_registry_t54.py` |
-| `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 5 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
+| `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 6 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
 | `helper:stage_templates` | L1 | 案件執行階段樣板（S-ST1；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）：宣告式的階段清單（種類鍵、名稱、起迄天數、建議比例、前置階段）。 | 15 | 4 | `backend/tests/platform/test_stage_templates_t62.py` |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 23 | 10 | — |
 | `helper:status_display` | L1 | 狀態顯示名稱與顏色（S-X2）：一張受治理的表，報價／案件／出納共用。**只改『看到的字與色』，狀態的鍵（資料庫值）永遠不變。** | 18 | 3 | `backend/tests/test_status_display_2026_10_14.py` |
