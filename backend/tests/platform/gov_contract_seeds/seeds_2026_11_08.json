@@ -1,0 +1,1094 @@
+[
+ {
+  "kind": "custom_fields",
+  "key": "invoice_vouchers",
+  "base": {
+   "fields": [
+    {
+     "key": "site_note",
+     "label": "現場備註",
+     "type": "text",
+     "maxLength": 200
+    },
+    {
+     "key": "po_no",
+     "label": "採購單號",
+     "type": "text",
+     "required": true,
+     "maxLength": 40
+    }
+   ]
+  },
+  "loose": {
+   "fields": [
+    {
+     "key": "site_note",
+     "label": "現場備註",
+     "type": "text",
+     "maxLength": 200
+    },
+    {
+     "key": "po_no",
+     "label": "採購單號",
+     "type": "text",
+     "required": false,
+     "maxLength": 40
+    }
+   ]
+  },
+  "tight": {
+   "fields": [
+    {
+     "key": "site_note",
+     "label": "現場備註",
+     "type": "text",
+     "maxLength": 200
+    }
+   ]
+  },
+  "neutral": {
+   "fields": [
+    {
+     "key": "site_note",
+     "label": "現場備註(新)",
+     "type": "text",
+     "maxLength": 200,
+     "hint": "說明"
+    },
+    {
+     "key": "po_no",
+     "label": "採購單號",
+     "type": "text",
+     "required": true,
+     "maxLength": 40
+    }
+   ]
+  },
+  "rationale": "loose: field po_no required true->false (less validation); tight: field po_no removed (comparator: removed field=tighten). Comparator also treats ADDING a field as loosen.",
+  "notes": "First publish (from empty) classifies as loosen (new fields) -> with governance on, v1 is pending/needs 2nd admin. Use {'fields':[]} as first body if you need an immediate first publish (classify({}, {'fields':[]})=neutral, validates).",
+  "scope_notes": "company OK, role:<name> OK (verified: publish at role:sales and role:ops). key regex ^[a-z][a-z0-9_:.\\-]{0,79}$; any module key accepted by validator; core field names of key are rejected (invoice_vouchers core: voucherNo, amount, status ...)"
+ },
+ {
+  "kind": "custom_fields",
+  "key": "case_info",
+  "base": {
+   "fields": [
+    {
+     "key": "site_note",
+     "label": "現場備註",
+     "type": "text"
+    }
+   ]
+  },
+  "loose": {
+   "fields": [
+    {
+     "key": "site_note",
+     "label": "現場備註",
+     "type": "text"
+    },
+    {
+     "key": "gate_code",
+     "label": "門禁代碼",
+     "type": "text"
+    }
+   ]
+  },
+  "tight": {
+   "fields": []
+  },
+  "neutral": {
+   "fields": [
+    {
+     "key": "site_note",
+     "label": "現場備註2",
+     "type": "text"
+    }
+   ]
+  },
+  "rationale": "loose: adds field gate_code (new input, comparator=loosen); tight: removes site_note",
+  "notes": "Secondary variant. In e2e, base publish was pending (new fields = loosen) and later steps hit pending-conflict; validate+classify verified only.",
+  "scope_notes": "company OK; role:<name> accepted by store (publish verified) though builtin_fields reads only company",
+  "variant": "builtin record type (no required/default allowed)"
+ },
+ {
+  "kind": "layout",
+  "key": "module:supply",
+  "base": {
+   "ops": [
+    {
+     "op": "hide",
+     "target": "supply:suppliers.html/list:suppliers/column:alias"
+    },
+    {
+     "op": "hide",
+     "target": "supply:suppliers.html/list:suppliers/column:phone"
+    }
+   ]
+  },
+  "loose": {
+   "ops": [
+    {
+     "op": "hide",
+     "target": "supply:suppliers.html/list:suppliers/column:alias"
+    }
+   ]
+  },
+  "tight": {
+   "ops": [
+    {
+     "op": "hide",
+     "target": "supply:suppliers.html/list:suppliers/column:alias"
+    },
+    {
+     "op": "hide",
+     "target": "supply:suppliers.html/list:suppliers/column:phone"
+    },
+    {
+     "op": "hide",
+     "target": "supply:suppliers.html/list:suppliers/column:taxId"
+    }
+   ]
+  },
+  "neutral": {
+   "ops": [
+    {
+     "op": "hide",
+     "target": "supply:suppliers.html/list:suppliers/column:alias"
+    },
+    {
+     "op": "hide",
+     "target": "supply:suppliers.html/list:suppliers/column:phone"
+    },
+    {
+     "op": "relabel",
+     "target": "supply:suppliers.html/list:suppliers/column:contact",
+     "label": "窗口"
+    }
+   ]
+  },
+  "rationale": "loose: drops hide of phone column (column visible again); tight: additionally hides taxId; neutral: adds relabel op only (comparator ignores relabel/move)",
+  "notes": "Comparator quirk: adding a 'show' op or removing ANY non-relabel/move op is loosen.",
+  "scope_notes": "company OK, role:<name> OK (both verified by publish). key must be module:<loaded module key> (also module:core for L1 points)"
+ },
+ {
+  "kind": "user_buttons",
+  "key": "module:supply",
+  "base": {
+   "buttons": [
+    {
+     "key": "b1",
+     "slot": "suppliers.html/toolbar",
+     "label": "開頁",
+     "action": {
+      "type": "navigate",
+      "page": "suppliers.html"
+     }
+    }
+   ]
+  },
+  "loose": {
+   "buttons": [
+    {
+     "key": "b1",
+     "slot": "suppliers.html/toolbar",
+     "label": "開頁",
+     "action": {
+      "type": "navigate",
+      "page": "suppliers.html"
+     }
+    },
+    {
+     "key": "b2",
+     "slot": "suppliers.html/toolbar",
+     "label": "外包名冊",
+     "action": {
+      "type": "export",
+      "export": "subcontract:roster"
+     }
+    }
+   ]
+  },
+  "tight": {
+   "buttons": []
+  },
+  "neutral": {
+   "buttons": [
+    {
+     "key": "b1",
+     "slot": "suppliers.html/toolbar",
+     "label": "前往",
+     "action": {
+      "type": "navigate",
+      "page": "suppliers.html"
+     }
+    }
+   ]
+  },
+  "rationale": "loose: adds an export button (subcontract:roster) that brings data out of system; tight: removes the only button; neutral: label change only",
+  "notes": "Reverse direction quirk: classify(tight=[] -> base[nav button]) = neutral (adding navigate button is neutral).",
+  "scope_notes": "company OK, role:<name> OK (publish verified at role:sales/role:ops, though runtime reads company). key must be module:<module> with module loaded; only supply has a slot (SLOTS)"
+ },
+ {
+  "kind": "rule_set",
+  "key": "case",
+  "base": {
+   "rules": [
+    {
+     "id": "low_margin",
+     "name": "低毛利",
+     "enabled": true,
+     "mode": "mark",
+     "on_failure": "degrade_loud",
+     "when": {
+      "op": "lt",
+      "field": "netMarginPct",
+      "value": 15
+     },
+     "mark": {
+      "level": "red",
+      "text": "毛利偏低",
+      "target": "row"
+     }
+    }
+   ]
+  },
+  "loose": {
+   "rules": [
+    {
+     "id": "low_margin",
+     "name": "低毛利",
+     "enabled": true,
+     "mode": "mark",
+     "on_failure": "degrade_loud",
+     "when": {
+      "op": "lt",
+      "field": "netMarginPct",
+      "value": 10
+     },
+     "mark": {
+      "level": "red",
+      "text": "毛利偏低",
+      "target": "row"
+     }
+    }
+   ]
+  },
+  "tight": {
+   "rules": [
+    {
+     "id": "low_margin",
+     "name": "低毛利",
+     "enabled": true,
+     "mode": "mark",
+     "on_failure": "degrade_loud",
+     "when": {
+      "op": "lt",
+      "field": "netMarginPct",
+      "value": 20
+     },
+     "mark": {
+      "level": "red",
+      "text": "毛利偏低",
+      "target": "row"
+     }
+    }
+   ]
+  },
+  "neutral": {
+   "rules": [
+    {
+     "id": "low_margin",
+     "name": "低毛利（改名）",
+     "enabled": true,
+     "mode": "mark",
+     "on_failure": "degrade_loud",
+     "when": {
+      "op": "lt",
+      "field": "netMarginPct",
+      "value": 15
+     },
+     "mark": {
+      "level": "red",
+      "text": "毛利偏低",
+      "target": "row"
+     }
+    }
+   ]
+  },
+  "rationale": "semantic note: a rule only MARKS records; loosen = fewer records flagged. loose: threshold netMarginPct < 15 -> < 10 (fewer red marks); tight: < 15 -> < 20 (more marks); neutral: rule name change only",
+  "notes": "First publish with new enabled rule = tighten (immediate).",
+  "scope_notes": "company OK; role:<name> accepted by store (publish verified) though engine reads only company. key must be an entity in rule_catalog.ENTITIES = {'case'}"
+ },
+ {
+  "kind": "attachment_slot",
+  "key": "doc:completion_note",
+  "base": {
+   "slots": [
+    {
+     "key": "site_photo",
+     "label": "現場照片",
+     "accept": [
+      ".jpg",
+      ".png"
+     ],
+     "maxFileMb": 10,
+     "maxFiles": 5,
+     "maxRequestMb": 20
+    }
+   ]
+  },
+  "loose": {
+   "slots": [
+    {
+     "key": "site_photo",
+     "label": "現場照片",
+     "accept": [
+      ".jpg",
+      ".png",
+      ".pdf"
+     ],
+     "maxFileMb": 10,
+     "maxFiles": 5,
+     "maxRequestMb": 20
+    }
+   ]
+  },
+  "tight": {
+   "slots": [
+    {
+     "key": "site_photo",
+     "label": "現場照片",
+     "accept": [
+      ".jpg"
+     ],
+     "maxFileMb": 10,
+     "maxFiles": 5,
+     "maxRequestMb": 20
+    }
+   ]
+  },
+  "neutral": {
+   "slots": [
+    {
+     "key": "site_photo",
+     "label": "現場相片",
+     "accept": [
+      ".jpg",
+      ".png"
+     ],
+     "maxFileMb": 10,
+     "maxFiles": 5,
+     "maxRequestMb": 20
+    }
+   ]
+  },
+  "rationale": "loose: adds .pdf to an existing slot (more file types accepted); tight: removes .png; neutral: label only. Also loosen: bigger maxFileMb/maxFiles/maxRequestMb, wider uploaders, re-enable, new slot with new ext/subfolder; tighten: smaller limits, narrower uploaders, disabled, slot removed.",
+  "notes": "classify({}, base) (first publish) = neutral (new slot whose accept is within builtin policy is ignored).",
+  "scope_notes": "D accepts scope 'company' and 'role:<name>' (core.definitions _SCOPE_RE); validator ignores scope; runtime (published_slots) reads only 'company'. key must be 'doc:<doc_type>' with doc_type in AS.SLOTTED_DOC_TYPES = {'completion_note'} only."
+ },
+ {
+  "kind": "export_template",
+  "key": "daily_tasks:task-history",
+  "base": {
+   "version": 1,
+   "format": "csv",
+   "columns": [
+    {
+     "id": "title",
+     "label": "工作事項"
+    },
+    {
+     "id": "date",
+     "label": "日期"
+    },
+    {
+     "id": "assignee",
+     "label": "指派人員"
+    }
+   ]
+  },
+  "loose": {
+   "version": 1,
+   "format": "csv",
+   "columns": [
+    {
+     "id": "title",
+     "label": "工作事項"
+    },
+    {
+     "id": "date",
+     "label": "日期"
+    },
+    {
+     "id": "assignee",
+     "label": "指派人員"
+    },
+    {
+     "id": "report",
+     "label": "回報內容"
+    }
+   ]
+  },
+  "tight": {
+   "version": 1,
+   "format": "csv",
+   "columns": [
+    {
+     "id": "title",
+     "label": "工作事項"
+    },
+    {
+     "id": "date",
+     "label": "日期"
+    }
+   ]
+  },
+  "neutral": {
+   "version": 1,
+   "format": "csv",
+   "columns": [
+    {
+     "id": "title",
+     "label": "事項"
+    },
+    {
+     "id": "date",
+     "label": "日期"
+    },
+    {
+     "id": "assignee",
+     "label": "指派人員"
+    }
+   ]
+  },
+  "rationale": "loose: adds column 'report' (export file gives more data); tight: drops column 'assignee'; neutral: relabel column only (title->事項).",
+  "notes": "classify({}, base) (first publish with columns) = LOOSEN (every column counts as new). Alternative decor-only pdf export (verified): key 'arap:invoice-voucher-pdf' (import modules.arap.api.invoice_vouchers; caps footer+watermark): base {version:1,format:pdf,footer:{text:内部資料}}, loose = base+watermark{text:機密} (loosen), tight = ll->base i.e. drop watermark (tighten, from the 'loose' doc as old). Header/footer/watermark texts must come from preset whitelist (PRESET_TEXTS / WATERMARK_PRESETS).",
+  "scope_notes": "D accepts 'company' and 'role:<name>'; validator ignores scope; runtime resolve() reads only 'company'. Key = registered export id (regex ^[a-z][a-z0-9_:.\\-]{0,79}$).",
+  "alt": {
+   "key": "arap:invoice-voucher-pdf",
+   "setup": "import modules.arap.api.invoice_vouchers",
+   "base": {
+    "version": 1,
+    "format": "pdf",
+    "footer": {
+     "text": "內部資料"
+    }
+   },
+   "loose": {
+    "version": 1,
+    "format": "pdf",
+    "footer": {
+     "text": "內部資料"
+    },
+    "watermark": {
+     "text": "機密"
+    }
+   },
+   "tight_note": "tighten = classify(old=loose_doc, new=base_doc) (drops the watermark); classify(base_doc, loose_doc)=loosen"
+  }
+ },
+ {
+  "kind": "option_list",
+  "key": "customer_type",
+  "base": {
+   "version": 1,
+   "values": [
+    {
+     "value": "一般",
+     "label": "一般客戶"
+    },
+    {
+     "value": "VIP",
+     "label": "VIP 客戶"
+    },
+    {
+     "value": "潛在",
+     "label": "潛在客戶"
+    }
+   ]
+  },
+  "loose": null,
+  "tight": {
+   "version": 1,
+   "values": [
+    {
+     "value": "一般",
+     "label": "一般客戶"
+    },
+    {
+     "value": "VIP",
+     "label": "VIP 客戶"
+    },
+    {
+     "value": "潛在",
+     "label": "潛在客戶",
+     "disabled": true
+    }
+   ]
+  },
+  "neutral": {
+   "version": 1,
+   "values": [
+    {
+     "value": "一般",
+     "label": "一般客戶"
+    },
+    {
+     "value": "VIP",
+     "label": "VIP 客戶"
+    },
+    {
+     "value": "潛在",
+     "label": "潛在客戶"
+    },
+    {
+     "value": "企業",
+     "label": "企業客戶"
+    }
+   ]
+  },
+  "rationale": "tight: disables option 潛在 (new data can no longer pick it); neutral: adds an option 企業 / relabels / reorders / re-enables. NO VALID 'loose' EXISTS: comparator loosens only on unknown top-level keys, removed values or changed part_category prefix - all rejected by definition_problems (verified), because published options can never be deleted and prefixes are frozen.",
+  "notes": "Re-enabling a disabled option and adding options classify as neutral although semantically slightly more permissive - comparator choice, not a loosen path.",
+  "scope_notes": "D accepts 'company' and 'role:<name>'; validator ignores scope; runtime reads 'company' only. key must be one of OL.BUILTIN (customer_type, supplier_category, part_category, payment_stage, payment_request_stage*, payslip_nationality*, payslip_income_type*, payslip_payment_method, payslip_income_subtype, part_unit); * = closed lists (cannot add/disable).",
+  "loose_unvalid_classify_only": {
+   "note": "NOT publishable (validator rejects: '不認得的鍵：extra'); classify(base, this)=loosen; use only if the property test calls classify() without validation",
+   "body": {
+    "version": 1,
+    "values": [
+     {
+      "value": "一般",
+      "label": "一般客戶"
+     },
+     {
+      "value": "VIP",
+      "label": "VIP 客戶"
+     },
+     {
+      "value": "潛在",
+      "label": "潛在客戶"
+     }
+    ],
+    "extra": 1
+   }
+  }
+ },
+ {
+  "kind": "status_display",
+  "key": "default",
+  "base": {
+   "statuses": {}
+  },
+  "loose": {
+   "statuses": {
+    "已核准": {
+     "label": "已核定"
+    }
+   }
+  },
+  "tight": null,
+  "neutral": {
+   "statuses": {
+    "草稿": {
+     "label": "初稿"
+    }
+   }
+  },
+  "rationale": "loose: renames approved-semantic status 已核准 -> 已核定 (approval/payment-class rename/recolor needs second approver); neutral: renames plain status 草稿 -> 初稿. NO 'tight' EXISTS: compare() returns only loosen/neutral ('顯示名稱與顏色沒有收緊'); reverting the approved rename is also loosen.",
+  "notes": "Also loosen: renaming 已付款/已匯款/已過帳/finalized/差額已核可/已收款 labels or their names/tone/order.",
+  "scope_notes": "D accepts 'company' and 'role:<name>' but the validator requires key == 'default' (one table per company); runtime reads company only."
+ },
+ {
+  "kind": "notify_template",
+  "key": "approval:submitted",
+  "base": {
+   "version": 1,
+   "inapp": {
+    "message": "報價單 {單號}{標記}（{對象}）請您簽核"
+   },
+   "mail": {
+    "title": "報價單簽核申請"
+   }
+  },
+  "loose": {
+   "version": 1,
+   "inapp": {
+    "message": "報價單 {單號}{標記}（{對象}）請您簽核"
+   },
+   "mail": {
+    "title": "報價單簽核申請",
+    "badge": "待您處理"
+   }
+  },
+  "tight": {
+   "version": 1,
+   "inapp": {
+    "message": "報價單 {單號}{標記}（{對象}）請您簽核"
+   }
+  },
+  "neutral": {
+   "mail": {
+    "title": "報價單簽核申請"
+   },
+   "inapp": {
+    "message": "報價單 {單號}{標記}（{對象}）請您簽核"
+   },
+   "version": 1
+  },
+  "scope_notes": "Key must be one of NT.EVENTS (4 keys; ':' OK in D._KEY_RE). Only scope company has runtime effect (resolve() reads company); role:<name> passes _SCOPE_RE + validator but is ignored at runtime and is not in ROLE_AWARE_KINDS.",
+  "semantics": {
+   "loose": "adds a new custom wording field (mail.badge): new text recipients see; any added/changed text = loosen (2nd admin approval)",
+   "tight": "removes custom mail.title -> falls back to system default text",
+   "neutral": "identical content with keys reordered (comparator has no cosmetic case: any text change loosens)"
+  }
+ },
+ {
+  "kind": "case_stage_template",
+  "key": "standard_build",
+  "base": {
+   "version": 1,
+   "label": "標準施工案",
+   "stages": [
+    {
+     "key": "survey",
+     "label": "現勘",
+     "offsetDays": 0,
+     "durationDays": 3,
+     "dependsOn": []
+    },
+    {
+     "key": "build",
+     "label": "施工",
+     "offsetDays": 3,
+     "durationDays": 10,
+     "dependsOn": [
+      "survey"
+     ]
+    },
+    {
+     "key": "accept",
+     "label": "驗收",
+     "offsetDays": 13,
+     "durationDays": 2,
+     "dependsOn": [
+      "build"
+     ]
+    }
+   ]
+  },
+  "loose": {
+   "version": 1,
+   "label": "標準施工案",
+   "stages": [
+    {
+     "key": "survey",
+     "label": "現勘",
+     "offsetDays": 0,
+     "durationDays": 3,
+     "dependsOn": []
+    },
+    {
+     "key": "build",
+     "label": "施工",
+     "offsetDays": 3,
+     "durationDays": 10,
+     "dependsOn": [
+      "survey"
+     ]
+    }
+   ]
+  },
+  "tight": {
+   "version": 1,
+   "label": "標準施工案",
+   "stages": [
+    {
+     "key": "survey",
+     "label": "現勘",
+     "offsetDays": 0,
+     "durationDays": 3,
+     "dependsOn": []
+    },
+    {
+     "key": "build",
+     "label": "施工",
+     "offsetDays": 3,
+     "durationDays": 10,
+     "dependsOn": [
+      "survey"
+     ]
+    },
+    {
+     "key": "accept",
+     "label": "驗收",
+     "offsetDays": 13,
+     "durationDays": 2,
+     "dependsOn": [
+      "build"
+     ]
+    },
+    {
+     "key": "closeout",
+     "label": "結案",
+     "offsetDays": 15,
+     "durationDays": 1,
+     "dependsOn": [
+      "accept"
+     ]
+    }
+   ]
+  },
+  "neutral": {
+   "version": 1,
+   "label": "標準施工案（改名）",
+   "stages": [
+    {
+     "key": "survey",
+     "label": "現勘",
+     "offsetDays": 0,
+     "durationDays": 3,
+     "dependsOn": []
+    },
+    {
+     "key": "build",
+     "label": "施工作業",
+     "offsetDays": 3,
+     "durationDays": 12,
+     "dependsOn": [
+      "survey"
+     ]
+    },
+    {
+     "key": "accept",
+     "label": "驗收",
+     "offsetDays": 13,
+     "durationDays": 2,
+     "dependsOn": [
+      "build"
+     ]
+    }
+   ]
+  },
+  "scope_notes": "Validator has no scope restriction; scope company is the only one read at runtime; role:<name> accepted by D._SCOPE_RE but unread and not in ROLE_AWARE_KINDS.",
+  "semantics": {
+   "loose": "removes stage 驗收: closing gate easier / ratio denominator changes",
+   "tight": "adds stage 結案 without ratio: new cases must complete one more stage",
+   "neutral": "renames template/stage label and changes durationDays only (display/date suggestion)"
+  }
+ },
+ {
+  "kind": "notify_action",
+  "key": "demo_notice",
+  "base": {
+   "version": 1,
+   "label": "單據送出通知",
+   "enabled": true,
+   "event": "custom_module.transitioned",
+   "when": [
+    {
+     "field": "新狀態",
+     "in": [
+      "已送出"
+     ]
+    }
+   ],
+   "channels": [
+    "in_app"
+   ],
+   "recipients": [
+    {
+     "kind": "role",
+     "value": "admin"
+    }
+   ],
+   "template": {
+    "title": "單據 {單據號} 已送出",
+    "body": "{操作人} 把 {單據號} 從 {原狀態} 改成 {新狀態}"
+   },
+   "throttle": {
+    "dedupeMinutes": 10,
+    "maxPerRecipientPerDay": 5
+   }
+  },
+  "loose": {
+   "version": 1,
+   "label": "單據送出通知",
+   "enabled": true,
+   "event": "custom_module.transitioned",
+   "when": [
+    {
+     "field": "新狀態",
+     "in": [
+      "已送出"
+     ]
+    }
+   ],
+   "channels": [
+    "in_app",
+    "email"
+   ],
+   "recipients": [
+    {
+     "kind": "role",
+     "value": "admin"
+    },
+    {
+     "kind": "role",
+     "value": "finance"
+    }
+   ],
+   "template": {
+    "title": "單據 {單據號} 已送出",
+    "body": "{操作人} 把 {單據號} 從 {原狀態} 改成 {新狀態}"
+   },
+   "throttle": {
+    "dedupeMinutes": 10,
+    "maxPerRecipientPerDay": 5
+   }
+  },
+  "tight": {
+   "version": 1,
+   "label": "單據送出通知",
+   "enabled": true,
+   "event": "custom_module.transitioned",
+   "when": [
+    {
+     "field": "新狀態",
+     "in": [
+      "已送出"
+     ]
+    }
+   ],
+   "channels": [
+    "in_app"
+   ],
+   "recipients": [
+    {
+     "kind": "role",
+     "value": "admin"
+    }
+   ],
+   "template": {
+    "title": "單據 {單據號} 已送出",
+    "body": "{操作人} 把 {單據號} 從 {原狀態} 改成 {新狀態}"
+   },
+   "throttle": {
+    "dedupeMinutes": 60,
+    "maxPerRecipientPerDay": 2
+   }
+  },
+  "neutral": {
+   "version": 1,
+   "label": "單據送出提醒",
+   "enabled": true,
+   "event": "custom_module.transitioned",
+   "when": [
+    {
+     "field": "新狀態",
+     "in": [
+      "已送出"
+     ]
+    }
+   ],
+   "channels": [
+    "in_app"
+   ],
+   "recipients": [
+    {
+     "kind": "role",
+     "value": "admin"
+    }
+   ],
+   "template": {
+    "title": "單據 {單據號} 已送出",
+    "body": "{操作人} 把 {單據號} 從 {原狀態} 改成 {新狀態}"
+   },
+   "throttle": {
+    "dedupeMinutes": 10,
+    "maxPerRecipientPerDay": 5
+   }
+  },
+  "scope_notes": "Key ^[a-z][a-z0-9_]{2,30}$ (3-31 chars). Only scope company is read at runtime (resolve_actions skips scope!='company'); role:<name> accepted by storage but ignored.",
+  "caveat": "classify(kind, {}, body) (first publish) is loosen whenever body.enabled is true.",
+  "semantics": {
+   "loose": "adds email channel and an extra recipient role (finance): more people/channels get notified",
+   "tight": "stricter throttle (dedupe 10->60 min, per-day 5->2): fewer notifications",
+   "neutral": "label rename only"
+  }
+ },
+ {
+  "kind": "list_pref_policy",
+  "key": "supply:suppliers",
+  "base": {
+   "version": 1,
+   "allowUserPrefs": true,
+   "columns": {
+    "allowed": [
+     "name"
+    ],
+    "pinned": [
+     "name"
+    ],
+    "defaultHidden": []
+   },
+   "sort": {
+    "allowed": [
+     "name"
+    ],
+    "default": {
+     "col": "name",
+     "dir": "asc"
+    }
+   },
+   "pageSize": {
+    "allowed": [
+     20
+    ]
+   }
+  },
+  "loose": {
+   "version": 1,
+   "allowUserPrefs": true,
+   "columns": {
+    "allowed": [
+     "name",
+     "alias",
+     "taxId",
+     "phone"
+    ],
+    "pinned": [
+     "name"
+    ],
+    "defaultHidden": []
+   },
+   "sort": {
+    "allowed": [
+     "name",
+     "taxId"
+    ],
+    "default": {
+     "col": "name",
+     "dir": "asc"
+    }
+   },
+   "pageSize": {
+    "allowed": [
+     20,
+     50,
+     100
+    ]
+   }
+  },
+  "tight": {
+   "version": 1,
+   "allowUserPrefs": false,
+   "columns": {
+    "allowed": [
+     "name"
+    ],
+    "pinned": [
+     "name"
+    ],
+    "defaultHidden": []
+   },
+   "sort": {
+    "allowed": [
+     "name"
+    ],
+    "default": {
+     "col": "name",
+     "dir": "asc"
+    }
+   },
+   "pageSize": {
+    "allowed": [
+     20
+    ]
+   }
+  },
+  "neutral": {
+   "version": 1,
+   "allowUserPrefs": true,
+   "columns": {
+    "allowed": [
+     "name"
+    ],
+    "pinned": [
+     "name"
+    ],
+    "defaultHidden": []
+   },
+   "sort": {
+    "allowed": [
+     "name"
+    ],
+    "default": {
+     "col": "name",
+     "dir": "desc"
+    }
+   },
+   "pageSize": {
+    "allowed": [
+     20
+    ]
+   }
+  },
+  "scope_notes": "list_pref_policy is in ROLE_AWARE_KINDS: scope company and role:<role> both take effect (policy_for -> D.resolve role>company; role layer replaces the company list policy wholesale, global default fills omitted fields). key = registered list id or global.default.",
+  "caveat": "Real pipeline (_classify_vs_base) compares EFFECTIVE policies (merged with global.default via effective_after/inherited_body), not raw bodies; raw classify() verified here.",
+  "semantics": {
+   "loose": "allows more columns, sort columns and page sizes",
+   "tight": "allowUserPrefs true->false (personal customisation switched off)",
+   "neutral": "only sort.default.dir changes (comparator ignores sort.default)"
+  }
+ },
+ {
+  "kind": "list_pref_policy",
+  "key": "global.default",
+  "base": {
+   "version": 1,
+   "allowUserPrefs": true,
+   "pageSize": {
+    "allowed": [
+     20,
+     50
+    ]
+   }
+  },
+  "loose": {
+   "version": 1,
+   "allowUserPrefs": true,
+   "pageSize": {
+    "allowed": [
+     20,
+     50,
+     100
+    ]
+   }
+  },
+  "tight": {
+   "version": 1,
+   "allowUserPrefs": true,
+   "pageSize": {
+    "allowed": [
+     20
+    ]
+   }
+  },
+  "neutral": {
+   "pageSize": {
+    "allowed": [
+     50,
+     20
+    ]
+   },
+   "allowUserPrefs": true,
+   "version": 1
+  },
+  "scope_notes": "global.default accepts company and role:<role> (role layer wins via D.resolve; ROLE_AWARE).",
+  "semantics": {
+   "loose": "adds page size 100",
+   "tight": "removes page size 50",
+   "neutral": "same set reordered ([50,20])"
+  }
+ }
+]
