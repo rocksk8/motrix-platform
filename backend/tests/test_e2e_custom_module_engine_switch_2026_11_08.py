@@ -41,10 +41,17 @@ def test_builder_hides_create_entry_when_flag_off_but_opens_existing(live_server
 
     # 直接帶新代號的網址：不進範本挑選，顯示原因
     page2 = _page(new_context, live_server, admin, errors)
+
+    def _slow_definition(route):                                                # 讓「讀定義」慢半秒，把『#mb-pick 先出現、錯誤訊息後到』的競爭變成必然：測試必須等錯誤訊息
+        import time
+        time.sleep(0.5)
+        route.continue_()
+    page2.route("**/api/definitions/custom_module/sw_brand_new", _slow_definition)
     page2.goto(live_server + "/pages/module-builder.html?key=sw_brand_new")
-    page2.wait_for_selector('#mb-pick')
-    assert not page2.is_visible('#mb-tpl-pick')
-    assert "尚未開放建立" in page2.inner_text('#mb-pick')
+    page2.wait_for_selector('#mb-pick')                                         # 頁面 ready 後 #mb-pick 就在（靜態說明已顯示），這時 openKey 還在等伺服器
+    page2.wait_for_selector('#mb-pick .mb-bad', state='visible')                # 等 openKey 設好 keyErr（終點狀態），再斷言
+    assert "尚未開放建立" in page2.inner_text('#mb-pick .mb-bad')
+    assert not page2.is_visible('#mb-tpl-pick')                                 # 等到錯誤之後才驗『沒有進範本挑選』，否則會假綠
     assert not _q("SELECT 1 FROM ui_definitions WHERE kind='custom_module' AND key='sw_brand_new'")      # 沒有留下任何草稿
     assert not errors, errors
 
