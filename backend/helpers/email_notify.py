@@ -1624,6 +1624,22 @@ def notify_daily_task_edited(
     _async_send(to, _mt.subject("daily_task_edited", f"工作事項已編輯：{name} · {title}（{task_date}）"), html)
 
 
+def _warranty_expiry_mail(device_name: str, customer: str, quote_no: str, days_left: int, expiry_date: str) -> dict:
+    """保固到期信的內容（標題／徽章／列／內文）；`notify_warranty_expiry`（舊入口）與 `send_warranty_expiry` 共用，兩邊字樣不分家。"""
+    from helpers.alert_settings import warranty_mail_days
+    _urgent, _early = warranty_mail_days()          # census #7：預設 7／30＝今天的字
+    return {
+        "title": "設備保固即將到期",
+        "badge_text": f"緊急預警：{_urgent}天內到期" if days_left <= _urgent else f"{_early}天到期預警",
+        "badge_color": "#DC2626" if days_left <= _urgent else "#D97706",
+        "rows": [("設備名稱", device_name), ("客戶", customer), ("到期日", expiry_date),
+                 ("剩餘天數", f"{days_left} 天"), ("案件編號", quote_no)],
+        "intro": "您負責的案件中有設備保固即將到期，請儘早與客戶確認是否需要延展保固或安排後續服務。",
+        "button_text": "前往查看案件",
+        "subject": f"保固到期預警：{device_name}（{customer}）剩 {days_left} 天",
+    }
+
+
 def notify_warranty_expiry(
     device_name: str,
     customer: str,
@@ -1632,33 +1648,31 @@ def notify_warranty_expiry(
     expiry_date: str,
     sales_person: str,
 ) -> None:
-    """保固即將到期 → 業務員 + 管理員"""
+    """保固即將到期 → 業務員 + 管理員。⚠️ 舊入口：`sales_person` 是**帳號**（以 username 比對），不是顯示名；
+    案件的每日檢查已改走 `send_warranty_expiry`（用 FK 找業務帳號、先寄成功才記已通知）。"""
     to = list(dict.fromkeys(_lookup_emails([sales_person], "warranty_expiry") + _admin_emails("warranty_expiry")))
     if not to:
         logger.warning("notify_warranty_expiry: 無有效收件人（quote_no=%r）", quote_no)
         return
-    from helpers.alert_settings import warranty_mail_days
-    _urgent, _early = warranty_mail_days()          # census #7：預設 7／30＝今天的字
-    color  = "#DC2626" if days_left <= _urgent else "#D97706"
-    label  = f"緊急預警：{_urgent}天內到期" if days_left <= _urgent else f"{_early}天到期預警"
-    html = _build_html("warranty_expiry", 
-        "設備保固即將到期", label, color,
-        [
-            ("設備名稱", device_name),
-            ("客戶",     customer),
-            ("到期日",   expiry_date),
-            ("剩餘天數", f"{days_left} 天"),
-            ("案件編號", quote_no),
-        ],
-        quote_no, _base_url(),
-        intro=f"您負責的案件中有設備保固即將到期，請儘早與客戶確認是否需要延展保固或安排後續服務。",
-        button_text="前往查看案件",
-    )
-    _async_send(
-        to,
-        _mt.subject("warranty_expiry", f"保固到期預警：{device_name}（{customer}）剩 {days_left} 天"),
-        html,
-    )
+    m = _warranty_expiry_mail(device_name, customer, quote_no, days_left, expiry_date)
+    html = _build_html("warranty_expiry", m["title"], m["badge_text"], m["badge_color"], m["rows"],
+                       quote_no, _base_url(), intro=m["intro"], button_text=m["button_text"])
+    _async_send(to, _mt.subject("warranty_expiry", m["subject"]), html)
+
+
+def send_warranty_expiry(device_name: str, customer: str, quote_no: str, days_left: int, expiry_date: str,
+                         owner_username: str = "", out: dict = None) -> bool:
+    """保固即將到期 → 案件業務（帳號）＋群組收件人，**等寄送結果**。回 True＝呼叫端可以寫「已通知」記號
+    （寄出／結果不明／永久失敗）；False＝沒有收件人或暫時失敗（不寫記號，下次每日檢查重試）。
+    `owner_username` 由呼叫端用案件的 `sales_person_id` 外鍵解出（`helpers/case_access.case_owner_username`），**不是**報價單上的顯示名。永不丟例外。"""
+    try:
+        m = _warranty_expiry_mail(device_name, customer, quote_no, days_left, expiry_date)
+        return send_registered("warranty_expiry", title=m["title"], rows=m["rows"], usernames=[owner_username] if owner_username else [],
+                               to_group=True, reason=m["subject"], badge_text=m["badge_text"], badge_color=m["badge_color"],
+                               button_text=m["button_text"], note=m["intro"], wait=True, out=out)
+    except Exception:
+        logger.exception("send_warranty_expiry 失敗（不寫已通知記號；quote_no=%r）", quote_no)
+        return False
 
 
 def notify_settlement_finalized(quote_no: str, customer: str, finalized_by: str) -> None:
