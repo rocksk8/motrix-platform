@@ -8,10 +8,14 @@
     <派發id>#<行鍵>#<份次>         拆分份（必帶 amount＝未稅金額，> 0、最多 2 位小數）
 行鍵＝派發單 items_json 該行 id 的正規化字串（與 JS `String(x)` 逐字相同），再做 `%`→`%25`、`#`→`%23`。前端 settlement.html 有同一組規則（V7 跨語言向量鎖住兩端一致）。
 """
+import logging
 import re
 from decimal import ROUND_HALF_UP, Decimal
 
+logger = logging.getLogger(__name__)
+
 MAX_PARTS_PER_LINE = 20
+MAX_SANE_CENTS = 10 ** 15                                       # 10 兆元：超過視為異常值（派發單金額不可能到這個量級；也避免 Decimal 預設 28 位精度溢位）
 _KEY_RE = re.compile(r"(?:[^%#]|%25|%23)+")
 _PART_RE = re.compile(r"[1-9][0-9]*")
 
@@ -118,6 +122,19 @@ def cents(x) -> int:
     return int((to_dec(x) * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
+def safe_cents(x):
+    """金額 ⇒ 整數分；**異常值 ⇒ None，永不丟例外**：NaN／±Infinity、`1e400` 這類超大值字串、無法轉數字、超過 `MAX_SANE_CENTS`。
+    與 `cents()` 的差別：`cents()` 對非有限數會丟 `ValueError`／`InvalidOperation`（呼叫端已確認過是正常值才用）；這支給「資料來自使用者輸入、可能髒」的路徑。"""
+    try:
+        d = to_dec(x)
+        if not d.is_finite():
+            return None
+        c = int((d * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+        return c if abs(c) <= MAX_SANE_CENTS else None
+    except Exception:                                                                              # noqa: BLE001
+        return None
+
+
 _AMOUNT_STR = re.compile(r"[0-9]+(\.[0-9]+)?")
 
 
@@ -188,15 +205,43 @@ def split_tax(line_tax: int, line_cents: int, part_cents) -> tuple:
     return out, line_tax - prev
 
 
+def _unmappable(items, reason: str) -> dict:
+    """異常資料的降級結果：這張派發單**只能整張對應**（與「各行金額加總對不上總額」同一條降級路徑）。每行金額記 0、不可對應。"""
+    items = [it for it in (items if isinstance(items, list) else []) if isinstance(it, dict)]
+    out = []
+    for it in items:
+        try:
+            k = line_key(it.get("id"))
+        except Exception:                                                                          # noqa: BLE001
+            k = ""
+        out.append({"key": k, "description": str(it.get("description") or ""), "qty": None, "unit": str(it.get("unit") or ""), "unitPrice": None,
+                    "cents": 0, "tax": 0, "mappable": False, "reason": reason})
+    return {"ok": False, "reason": reason, "totalCents": 0, "taxTotal": 0, "lines": out}
+
+
+ABNORMAL_REASON = "派發單金額或稅率含異常值（非數字／無限大／超出範圍），只能整張對應"
+
+
 def lines_of(items, total, rate) -> dict:
+    """見 `_lines_of`。**永不丟例外**：金額／稅率是異常值（NaN、Infinity、`1e400`…）或任何意外 ⇒ `ok=False`，只能整張對應（T77 殘留：一張壞派發單不可讓整個案件精算 500）。"""
+    try:
+        return _lines_of(items, total, rate)
+    except Exception:                                                                              # noqa: BLE001
+        logger.warning("派發單逐行分解失敗，降級為只能整張對應", exc_info=True)
+        return _unmappable(items, ABNORMAL_REASON)
+
+
+def _lines_of(items, total, rate) -> dict:
     """派發單 `items_json` ⇒ 逐行分解。回
     `{"ok": bool, "reason": str, "totalCents": int, "taxTotal": int,
       "lines": [{"key", "description", "qty", "unit", "unitPrice", "cents", "tax", "mappable", "reason"}]}`。
     `ok`（可逐行對應）＝有 taxRate、行數 > 0、Σ行金額（分）＝總額（分）；缺 id 或行鍵重複的行 `mappable=False`（其餘行仍可）。
     稅額一律照整張算（行稅額加總＝R(total)），與哪幾行被對應無關。"""
     items = [it for it in (items if isinstance(items, list) else []) if isinstance(it, dict)]
-    total_c = cents(total)
-    amts = [cents(it.get("amount")) for it in items]
+    total_c = safe_cents(total)
+    amts = [safe_cents(it.get("amount")) for it in items]
+    if total_c is None or any(a is None for a in amts) or (rate is not None and (not to_dec(rate).is_finite() or abs(to_dec(rate)) > 100)):
+        return _unmappable(items, ABNORMAL_REASON)
     reason = ""
     if rate is None:
         reason = "派發單沒有稅率資料"
