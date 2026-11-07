@@ -418,16 +418,9 @@ def _lkey(key):
     return str(key).replace(":", ".")[:60]
 
 
-def _live_body(conn, kind, key, scope):
-    """⇒ (寬嚴比較的基準內容, 這個範圍自己目前的已發布版號)。角色層首發的基準是公司層（見 def_governance.base_of）；版號仍是這個範圍自己的（首發＝0）。"""
-    from routers.def_governance import base_of
-    r, src = base_of(conn, kind, key, scope)
-    return (r or {}).get("body") or {}, ((r or {}).get("version") or 0) if src == scope else 0
-
-
 def _classify_vs_base(conn, kind, key, scope, new_body):
     """⇒ (cls, reasons, 這個範圍自己目前的已發布版號)：新內容對『現況』基準的寬嚴。
-    清單偏好政策還沒有自己的已發布版時：舊＝現況有效政策（公司層清單政策＋全域預設，`inherited_body`）；新＝發布後執行期真正會得到的
+    清單偏好政策一律以有效政策比：沒有自己的已發布版時，舊＝現況有效政策（公司層清單政策＋全域預設，`inherited_body`）；新＝發布後執行期真正會得到的
     有效政策（`effective_after`：新內容只疊在全域預設上；角色層整份取代公司層清單政策，省略的欄位不會由它補回）。
     這樣只寫 columns、pageSize 由全域補的政策不會被看成『pageSize 改為不限』，而『角色層省略欄位＝其實失去限制』會被看成放寬。"""
     from routers.def_governance import base_of
@@ -435,9 +428,13 @@ def _classify_vs_base(conn, kind, key, scope, new_body):
     old = (r or {}).get("body") or {}
     old_v = ((r or {}).get("version") or 0) if src == scope else 0
     new = new_body
-    if kind == "list_pref_policy" and r is not None and r.get("inherited"):          # 合成的繼承基準（不是定義列）
+    if kind == "list_pref_policy":
+        # 一律『有效政策對有效政策』：沒寫的欄位執行期由全域預設補，原始 body 比較會把『第一次寫 pageSize』看成收緊（K 審：v1 只寫 columns、v2 加寬 pageSize 直接發布）。
+        # 合成的繼承基準本身已是有效政策；自己的已發布版要先疊上全域預設再比。
         from helpers import list_pref_policy as _LP
         new = _LP.effective_after(conn, key, scope, new_body)
+        if r is not None and not r.get("inherited"):
+            old = _LP.effective_after(conn, key, scope, old)
     cls, reasons = classify(kind, old, new)
     return cls, reasons, old_v
 
@@ -494,8 +491,7 @@ def handle_restore(conn, kind, key, scope, version, user, note, authorization):
     old = D.get(conn, kind, key, scope, int(version))
     if old is None or old["status"] != "published":
         return None                                                    # 讓原本的錯誤出現
-    live_body, live_v = _live_body(conn, kind, key, scope)
-    cls, reasons = classify(kind, live_body, old["body"])
+    cls, reasons, live_v = _classify_vs_base(conn, kind, key, scope, old["body"])      # 與發布同一個比較（清單偏好政策＝有效對有效）
     if cls != "loosen":
         return None
     cur = D.get(conn, kind, key, scope, 0)
