@@ -1,5 +1,9 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-08（T78；P8 自訂模組引擎總開關 builder_custom_modules.enabled，預設關）
+- 新增（行為：預設關＝不能再建立新的自訂模組）：設定群組 `builder_custom_modules`（`enabled`，預設 0）。關著時，**還沒有已發布版本**的 `custom_module` key 不能存草稿、發布、還原、核可送審版本（403；讀不到開關 503，往嚴格方向收）；已發布模組的既有單據、查詢、輸出與它自己的草稿／發布完全不受影響（關閉不是下架）。新 helper `helpers/custom_module_switch.py`（`creation_block`），閘口在 `routers/definitions.py`（存草稿／發布／還原）與 `routers/custom_records.py`（核可送審定義）；模組建構器頁關著時隱藏建立入口。**上線備註**：既有正式機升級後預設是關——要繼續建立新模組，最高管理者須先到設定中心開啟「自訂模組引擎」；已發布的模組不受影響。
+- 測試：`tests/test_custom_module_engine_switch_2026_11_08.py`、`tests/test_e2e_custom_module_engine_switch_2026_11_08.py`；`conftest.py` 讓測試環境讀到的預設值是 1（只換 `settings_registry._defaults`，不動登錄值，凍結基準仍是 0），約 80 個既有自訂模組測試免逐題設定；要驗正式預設的題目標 `@pytest.mark.custom_switch_default`。
+
 ## 1.152 — 2026-11-06（s3b/reconcile-txn；簽核二擇一 S3b：內容被改後已簽層回待複查的接線）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：`helpers.audit._notify_in_txn`（在呼叫端自己的連線／交易裡寫站內通知，不另開連線、不 commit；`merge_unread=True` 時同 (type, ref_id, username) 已有未讀列就改寫那一列；`_notify` 改成「開連線→呼叫它→commit」，行為不變）、`helpers.settings_registry.generation`（設定快取世代，`invalidate()` 每呼叫一次加一，給自己再快取一層的呼叫端判斷作廢）。
 - 設定：`quote_approval.reconfirm_mode`（整數 0＝關／1＝影子／2＝開，預設 0；往小調＝放寬，走確認期間與第二位最高管理者核准）。其餘見 `modules/case/CHANGELOG.md`。

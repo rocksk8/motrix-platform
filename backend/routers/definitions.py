@@ -232,6 +232,20 @@ def _custom_module_scope_guard(kind, scope):
         raise HTTPException(400, "自訂模組定義只有 company 範圍")
 
 
+def _custom_module_create_gate(kind, key, scope):
+    """P8 總開關（`builder_custom_modules.enabled`，預設關）：關著時擋「建立」（這個 key 還沒有已發布版本）；已發布模組的修改不受影響。"""
+    if kind != "custom_module":
+        return
+    from helpers import custom_module_switch as _sw
+    conn = get_db()
+    try:
+        blocked = _sw.creation_block(conn, kind, key, scope)
+    finally:
+        conn.close()
+    if blocked:
+        raise HTTPException(blocked[0], blocked[1])
+
+
 def _err(e: D.DefinitionError, status=400):
     if isinstance(e, D.DefinitionConflict):
         status = 409
@@ -368,6 +382,7 @@ def save_definition_draft(kind: str, key: str, scope: str = Query("company"), pa
     u = _require_user(authorization, require_superadmin=True)
     _managed_guard(kind, authorization, key, "存草稿")
     _custom_module_scope_guard(kind, scope)
+    _custom_module_create_gate(kind, key, scope)
     base_etag = payload.get("base_etag")                                # K-2：缺 ⇒ 舊前端，照舊後寫者勝（稽核標 unguarded，盤點還有誰沒帶）
     force = payload.get("force") is True
     conn = get_db()
@@ -496,6 +511,7 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
     u = _require_user(authorization, require_superadmin=True)
     _managed_guard(kind, authorization, key, "發布")
     _custom_module_scope_guard(kind, scope)
+    _custom_module_create_gate(kind, key, scope)
     base_etag = (payload or {}).get("base_etag")                        # K-2：選填；缺＝照舊
     if base_etag is not None and not isinstance(base_etag, str):
         raise HTTPException(400, "base_etag 必須是字串")
@@ -598,6 +614,7 @@ def restore_definition(kind: str, key: str, version: int, scope: str = Query("co
     u = _require_user(authorization, require_superadmin=True)
     _managed_guard(kind, authorization, key, "還原")
     _custom_module_scope_guard(kind, scope)
+    _custom_module_create_gate(kind, key, scope)
     conn = get_db()
     unreviewed_reason = _UNREVIEWED_KIND_REASON
     try:
