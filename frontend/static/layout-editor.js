@@ -124,7 +124,7 @@
 '     <select title="群組內位置" @change="work.sidebar.index = ($event.target.value === \'\' ? null : +$event.target.value); sync()">' +
 '      <option value="" :selected="work.sidebar.index === null">原位置</option>' +
 '      <template x-for="(it, j) in sidebarGroup" :key="j"><option :value="j" :selected="work.sidebar.index === j" x-text="\'第 \' + (j + 1) + \' 項\'"></option></template></select></div>' +
-'    <div class="ml-ed__sub">預覽（群組「<span x-text="sidebarGroupLabel"></span>」）：實際側欄等選單改由 MOTRIX_MENU 產生（C4）後才會套用。</div>' +
+'    <div class="ml-ed__sub">預覽（群組「<span x-text="sidebarGroupLabel"></span>」）：這是目前編輯內容的預覽；實際側欄由 MOTRIX_MENU 依使用者角色的版面產生。</div>' +
 '    <ol data-testid="ml-sidebar-preview" style="margin:4px 0 0 18px"><template x-for="it in sidebarPreview()" :key="it.href"><li x-text="it.label" :style="it.self ? \'font-weight:600\' : \'\'"></li></template></ol>' +
 '   </div></template></div>' +
 // 差異與版本
