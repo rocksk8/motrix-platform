@@ -2,9 +2,9 @@
 """清單偏好的公司政策（T66 L1）：定義種類 `list_pref_policy`＋寬嚴比較＋讀取。設計：docs/platform/plans/T66-LIST-PREFS-DESIGN.md §1.2。
 
 [單位] helper:list_pref_policy    [層] L1    [穩定度] 實驗（旗標 `list_prefs.enabled` 預設關；沒有路由、沒有資料表）
-[公開介面] DEFAULT_ALLOW_USER_PREFS, FIELD, GLOBAL_KEY, GROUP, KIND, OFF_REASON, compare, definition_problems, enabled, ensure_kind, policy_for
+[公開介面] DEFAULT_ALLOW_USER_PREFS, FIELD, GLOBAL_KEY, GROUP, KIND, OFF_REASON, compare, definition_problems, enabled, ensure_kind, inherited_body, merge_policy, policy_for
 [不變式] ①旗標關（或沒開『建構器治理』）⇒ 不登記 kind（`/api/definition-kinds` 與今天相同）、`policy_for()` 回 None（＝沒有政策＝今天的行為）。
-    ②key＝已登記的清單代號，或 `*`（全域預設，只能設 `allowUserPrefs` 與 `pageSize`）；政策只能在清單目錄的範圍內縮小，不能超出（欄位、排序欄位、筆數選單）。
+    ②key＝已登記的清單代號，或 `global.default`（全域預設，只能設 `allowUserPrefs` 與 `pageSize`；曾寫成 `*`，但定義文件庫的 key 格式不收 `*`，存不進去也讀不到，T66 改正；清單代號不含 `.`，不會撞名）；政策只能在清單目錄的範圍內縮小，不能超出（欄位、排序欄位、筆數選單）。
     ③政策只存範圍與預設，不存任何使用者資料；金額欄可以出現在 `allowed`（只是上限），能不能看見仍由欄位可見政策（F7）在讀取時交集——政策永遠不能讓人看到 F7 看不到的欄位。
     ④寬嚴：放寬（允許更多欄位／排序／筆數、開放個人設定、預設顯示更多、拿掉固定欄位、預設筆數變大、看不懂的內容）＝需第二位最高管理者核准；收緊立即生效；其餘中性。
     ⑤`policy_for()` 永不丟例外：讀不到、壞掉、清單已不存在 ⇒ None。
@@ -20,7 +20,7 @@ logger = logging.getLogger("motrix.list_pref_policy")
 KIND = "list_pref_policy"
 GROUP = "list_prefs"
 FIELD = "enabled"
-GLOBAL_KEY = "*"
+GLOBAL_KEY = "global.default"              # 必須符合 core.definitions 的 key 格式（小寫字母開頭，可含 . : _ -）；清單代號（list_catalog._ID_RE）不含 "."，不會撞名
 DEFAULT_ALLOW_USER_PREFS = True            # 設計 §9-4：沒有政策列的清單預設允許個人設定（旗標本身預設關）
 OFF_REASON = "清單偏好尚未開放：請先在設定中心開啟「清單個人偏好」與「建構器治理」。"
 _TOP = {"version", "allowUserPrefs", "columns", "sort", "pageSize"}
@@ -64,7 +64,7 @@ def definition_problems(key, body) -> list:
     spec = None
     if key == GLOBAL_KEY:
         if "columns" in body or "sort" in body:
-            out.append(_p("columns", "全域預設（*）只能設定 allowUserPrefs 與 pageSize；欄位與排序要指定清單"))
+            out.append(_p("columns", "全域預設（global.default）只能設定 allowUserPrefs 與 pageSize；欄位與排序要指定清單"))
     else:
         spec = LC.by_id(key)
         if spec is None:
@@ -238,24 +238,44 @@ def compare(old, new):
     return ("tighten", tighten) if tighten else ("neutral", [])
 
 
+def merge_policy(own, glob):
+    """清單專屬政策 ＋ 全域預設 ⇒ 有效政策（清單專屬的欄位優先、缺的用全域補、pageSize 逐項合併）；都沒有或有一份看不懂（非 dict／version≠1）⇒ None。"""
+    for b in (own, glob):
+        if b is not None and (not isinstance(b, dict) or b.get("version") != 1):
+            return None
+    if own is None and glob is None:
+        return None
+    out = dict(glob or {})
+    out.update(own or {})
+    if "pageSize" in (glob or {}) and "pageSize" in (own or {}):
+        out["pageSize"] = {**glob["pageSize"], **own["pageSize"]}
+    return out
+
+
+def inherited_body(conn, key, scope):
+    """治理用：這個 (key, scope) **還沒有任何已發布版**時，使用者實際會得到的政策（發布第一版之前的『現況』）。
+    清單專屬鍵：角色層首發 ＝ 同一份清單的公司層政策 ＋ 全域預設（角色版優先）；公司層首發 ＝ 只有全域預設；全域預設自己的角色層首發 ＝ 公司層全域預設。
+    沒有 ⇒ None（＝空基準）。不看旗標、不吞例外（呼叫端是治理管線，要看得到錯）。"""
+    role = scope[5:] if str(scope).startswith("role:") else None
+    if key == GLOBAL_KEY:
+        r = D.get(conn, KIND, key, "company") if role else None
+        return r["body"] if r else None
+    own = D.get(conn, KIND, key, "company") if role else None
+    g_role = D.get(conn, KIND, GLOBAL_KEY, scope) if role else None
+    g = g_role or D.get(conn, KIND, GLOBAL_KEY, "company")
+    merged = merge_policy(own["body"] if own else None, g["body"] if g else None)
+    return merged
+
+
 def policy_for(conn, list_id, role=None):
-    """⇒ 這份清單目前有效的政策 body（清單專屬 ＞ `*`），或 None（＝沒有政策＝今天的行為）。旗標關、讀不到、壞掉 ⇒ None。永不丟例外。
-    兩者並存時清單專屬的欄位優先、缺的用 `*` 補（pageSize 逐項合併）。"""
+    """⇒ 這份清單目前有效的政策 body（清單專屬 ＞ `global.default`），或 None（＝沒有政策＝今天的行為）。旗標關、讀不到、壞掉 ⇒ None。永不丟例外。
+    兩者並存時清單專屬的欄位優先、缺的用全域預設補（pageSize 逐項合併）。"""
     try:
         if not enabled(conn) or LC.by_id(list_id) is None:
             return None
         own, _s1 = D.resolve(conn, KIND, list_id, role)
         glob, _s2 = D.resolve(conn, KIND, GLOBAL_KEY, role)
-        for b in (own, glob):
-            if b is not None and (not isinstance(b, dict) or b.get("version") != 1):
-                return None
-        if own is None and glob is None:
-            return None
-        out = dict(glob or {})
-        out.update(own or {})
-        if "pageSize" in (glob or {}) and "pageSize" in (own or {}):
-            out["pageSize"] = {**glob["pageSize"], **own["pageSize"]}
-        return out
+        return merge_policy(own, glob)
     except Exception:                                        # noqa: BLE001
         logger.warning("讀取清單偏好政策失敗：%s", list_id, exc_info=True)
         return None

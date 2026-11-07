@@ -67,6 +67,14 @@ def base_of(conn, kind, key, scope):
     版面（及清單偏好政策）的角色層**第一次**發布前，這個角色實際看到的是公司層（`core.definitions.resolve`：角色 ＞ 公司，而且整份取代），所以拿公司層已發布版當基準；
     否則『角色層沒帶公司層的 hide』會被看成『全新增』而繞過放寬核准（T78 K 審）。已有角色層 ⇒ 跟自己的上一版比；其他種類不變。"""
     r = D.get(conn, kind, key, scope)
+    if r is None and kind == "list_pref_policy":
+        # 清單偏好政策：第一版之前使用者實際得到的是『公司層清單政策＋全域預設』的合併（policy_for），不是空的；
+        # 空基準會把『比全域預設寬的清單專屬政策』看成『改為限定範圍＝收緊』而繞過放寬核准。
+        from helpers import list_pref_policy as _LP
+        b = _LP.inherited_body(conn, key, scope)
+        if b is not None:
+            return {"body": b, "version": 0, "inherited": True}, ("company" if str(scope).startswith("role:") else _LP.GLOBAL_KEY)
+        return r, scope
     if r is None and kind in ROLE_AWARE_KINDS and str(scope).startswith("role:"):
         c = D.get(conn, kind, key, "company")
         if c is not None:

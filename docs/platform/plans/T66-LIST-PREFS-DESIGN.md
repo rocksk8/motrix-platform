@@ -28,7 +28,7 @@ Recommendation: A now, revisit B only if a list needs server-side column enforce
 
 1. **Three layers, each reusing an existing mechanism; one new table only for the per-user values.**
    - *Catalog* (what can be configured): modules register lists via `register_section("listCatalog", owner, fn)` (same as `fieldCatalog`). No hardcode in core.
-   - *Company policy* (allowed range): new definition **kind `list_pref_policy`**, key = `<list_id>` or `*` (global default), scope `company` (+ optional `role:<r>` via existing `resolve()`). Gets drafts/versions/diff/restore/loosening-approval for free.
+   - *Company policy* (allowed range): new definition **kind `list_pref_policy`**, key = `<list_id>` or `global.default` (global default; was `*` in the first draft but the definitions key format rejects `*` — fixed in T78), scope `company` (+ optional `role:<r>` via existing `resolve()`). Gets drafts/versions/diff/restore/loosening-approval for free.
    - *User values*: table `user_list_prefs` (not a definition — see §1.3 for why).
 2. **Server computes the effective view; client never decides.** `effective(user, list)` = F7 visibility ∧ company allowed ∧ user choice, re-resolved on every read. Stored prefs hold only ids/numbers, never grants, so a policy tightening takes effect immediately and a loosening never retro-exposes anything.
 3. **Money columns are subtract-only.** A user pref can hide or reorder them; it can never add one that the user's effective default does not already show. Sorting by a money column requires it to be visible.
@@ -55,7 +55,7 @@ listCatalog = { "<list_id>": {                  # e.g. "case:case-list", "supply
 ### 1.2 Company policy (definition kind `list_pref_policy`, via `definitions.register_kind`)
 ```
 { "version":1,
-  "allowUserPrefs": true,                     # master switch for this list ("*" = default for all lists)
+  "allowUserPrefs": true,                     # master switch for this list ("global.default" = default for all lists)
   "columns": { "allowed": ["customer","status","total",...],   # subset of catalog; absent ⇒ all catalog columns
                "pinned":  ["case_no"],                          # always visible, order fixed first (can't hide)
                "defaultHidden": ["internal_note"] },            # hidden unless user shows it (non-money only)
@@ -63,7 +63,7 @@ listCatalog = { "<list_id>": {                  # e.g. "case:case-list", "supply
   "pageSize":{ "allowed": [20,50,100], "default": 50 }          # ⊆ pageSizeMenu, max ≤ pageSizeCeiling
 }
 ```
-Resolution: `definitions.resolve(conn,"list_pref_policy",list_id,role)` → falls back to `*` → falls back to catalog defaults (**no row = today's behavior**, nothing written on deploy). Validator rejects: unknown ids; `allowed` missing a `pinned`/`required` column; default outside allowed; pageSize > ceiling; **any money column in `defaultHidden` is fine, but a policy can never *add* a money column the F7 layer hides** (policy is intersected with F7, never unions).
+Resolution: `definitions.resolve(conn,"list_pref_policy",list_id,role)` → falls back to `global.default` → falls back to catalog defaults (**no row = today's behavior**, nothing written on deploy). Validator rejects: unknown ids; `allowed` missing a `pinned`/`required` column; default outside allowed; pageSize > ceiling; **any money column in `defaultHidden` is fine, but a policy can never *add* a money column the F7 layer hides** (policy is intersected with F7, never unions).
 - Loosening (more columns, larger page sizes, `allowUserPrefs` false→true) goes through the existing definition pipeline (second top-admin approval + confirm period, T54). Tightening is immediate. Comparator `_cmp_list_pref_policy` follows `_cmp_custom_fields` pattern (T61 S5 §1).
 - Setting-center group `list_prefs` (settings_registry) holds only the flag and one number: `max_saved_lists_per_user` (default 200, clamp), both `risk=ops`. The *range* lives in the policy kind, not in settings (ranges are structured data, versioning/diff wanted).
 
@@ -165,7 +165,7 @@ Order: L0 → L1 → L2 → L4(pilot) → L3 (money lists) → L5. Money-bearing
 - **Shipped = API-only slice.** L3 (per-endpoint sort/limit enforcement) and L4 (frontend) are **pending**; `clamp_columns` / `clamp_sort` have **no consumer yet**. Only `supply:suppliers` (no money column) is registered, so the "money list needs sortGuard" rule is not yet exercised.
 - **Access rule (added):** a catalog entry may declare `modules` (module keys; same set as the list's data endpoint, suppliers = customer/procurement/inventory). `GET /api/list-views[/{id}]`, PUT and DELETE use `auth.user_has_module` (superadmin passes; others need one key). No `modules` declared => superadmin only (fail closed). No access: summary omits the list, routes return 403.
 - **Deferred, not implemented (follow-ups):** (1) `max_saved_lists_per_user` cap - moot, one small row per user+list; (2) admin catalog/usage read (counts of users with a custom page size); (3) cleanup/export of `user_list_view_prefs` on user delete/rename (same hook as other per-user tables); (4) swap `_ceiling_ok` map for `field_policy.visible` when F7 S1 lands (TODO in code; no test pins the map).
-- Tests added: no-module 403/empty, list without `modules` superadmin-only, concurrent PUT (one wins, one 409), `*` fallback and per-list override.
+- Tests added: no-module 403/empty, list without `modules` superadmin-only, concurrent PUT (one wins, one 409), `global.default` fallback and per-list override.
 
 ## 狀態補記（r2，2026-10-16，已併入 T65 基底 789b555e6）
 - **與 T65 `list_view` 的分工（單一來源 `T65-C-LIST-VIEW-DESIGN.md`）**：`list_view` 群組（`quotes_*`／`cases_*` 各項）是**各畫面使用端的開關**，預設 0；本案 `list_prefs.enabled` 是**通用清單目錄＋公司政策＋`/api/list-views` 的總開關**，預設 0。兩者不重複任何選項：每頁筆數的個人值，T65 前端（`static/list-view-prefs.js`）目前存 `user_list_prefs`，本案 `user_list_view_prefs.prefs_json.pageSize` 是 API 層的政策限制版本。

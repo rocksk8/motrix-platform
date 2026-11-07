@@ -425,6 +425,22 @@ def _live_body(conn, kind, key, scope):
     return (r or {}).get("body") or {}, ((r or {}).get("version") or 0) if src == scope else 0
 
 
+def _classify_vs_base(conn, kind, key, scope, new_body):
+    """⇒ (cls, reasons, 這個範圍自己目前的已發布版號)：新內容對『現況』基準的寬嚴。
+    清單偏好政策還沒有自己的已發布版時，基準是繼承來的有效政策（公司層清單政策＋全域預設）；新內容沒寫的欄位執行期會由繼承補上，
+    所以要拿『新內容疊在繼承之上』去比（否則只寫 columns 的清單政策會被看成『pageSize 改為不限』而白白要第二人核准）。"""
+    from routers.def_governance import base_of
+    r, src = base_of(conn, kind, key, scope)
+    old = (r or {}).get("body") or {}
+    old_v = ((r or {}).get("version") or 0) if src == scope else 0
+    new = new_body
+    if kind == "list_pref_policy" and r is not None and r.get("inherited"):          # 合成的繼承基準（不是定義列）
+        from helpers import list_pref_policy as _LP
+        new = _LP.merge_policy(new_body, old)
+    cls, reasons = classify(kind, old, new)
+    return cls, reasons, old_v
+
+
 def _record(conn, kind, key, scope, user, old_v, new_v, note, *, risk="none", effective_at=None, approvals_required=0, audit_action=None):
     return L.record(conn, "def:" + kind, _lkey(key), [{"field": "%s|%s" % (scope, key), "old": old_v, "new": new_v}], note or "", user,
                     ref_version=new_v, target_label="%s %s（%s）" % (kind, key, scope), link="settings-center.html",
@@ -454,8 +470,7 @@ def handle_publish(conn, kind, key, scope, user, note, base_etag, authorization)
     draft = D.get(conn, kind, key, scope, 0)
     if draft is None:
         return None                                                    # 讓原本的『沒有草稿』錯誤出現
-    live_body, old_v = _live_body(conn, kind, key, scope)
-    cls, reasons = classify(kind, live_body, draft["body"])
+    cls, reasons, old_v = _classify_vs_base(conn, kind, key, scope, draft["body"])
     if cls == "loosen":
         if base_etag is not None and draft.get("etag") != base_etag:
             raise D.DraftConflict("這份草稿在你載入之後被別人改過，未送出", {"etag": draft.get("etag", "")})
