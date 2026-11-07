@@ -1,6 +1,6 @@
 # L0／L1 底層 更新紀錄
 
-## (next) — 2026-11-06（s3b/reconcile-txn；簽核二擇一 S3b：內容被改後已簽層回待複查的接線）
+## 1.152 — 2026-11-06（s3b/reconcile-txn；簽核二擇一 S3b：內容被改後已簽層回待複查的接線）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：`helpers.audit._notify_in_txn`（在呼叫端自己的連線／交易裡寫站內通知，不另開連線、不 commit；`merge_unread=True` 時同 (type, ref_id, username) 已有未讀列就改寫那一列；`_notify` 改成「開連線→呼叫它→commit」，行為不變）、`helpers.settings_registry.generation`（設定快取世代，`invalidate()` 每呼叫一次加一，給自己再快取一層的呼叫端判斷作廢）。
 - 設定：`quote_approval.reconfirm_mode`（整數 0＝關／1＝影子／2＝開，預設 0；往小調＝放寬，走確認期間與第二位最高管理者核准）。其餘見 `modules/case/CHANGELOG.md`。
 

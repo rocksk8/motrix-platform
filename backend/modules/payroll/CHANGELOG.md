@@ -1,6 +1,6 @@
 # 薪資獎金 更新紀錄
 
-## (next) — 2026-11-06（wip/sales-gap-report；業務獎金讀源改業務負責；K 審修正：形狀不對不退回、註記失敗不拖垮 GET）
+## 1.2.23 — 2026-11-06（wip/sales-gap-report；業務獎金讀源改業務負責；K 審修正：形狀不對不退回、註記失敗不拖垮 GET）
 - 變更（計算口徑，產品負責人 2026-11-06 裁示，經窗口轉達；推翻 2026-09-23 使用者「業務獎金→`sales_person`」的讀源，兩次裁示都留痕在 `bonus.py::PERSON_SOURCES` 註解）：以案件為中心的分潤，業務名單自動帶入（`api/bonus.py::_auto_members`，影響 `GET /cases/{no}` 無單預覽、`POST /cases/{no}` 建立、`POST …/preview` 無單分支）改讀案件「業務負責」`caseRecord.roles.sales`（新增 `_roles_sales_of()`，Python 逐筆解析，不新增 SQL `json_extract`）；**完全沒填**才退回報價人 `sales_person_id`／`sales_person`（逐字沿用舊解析）。`roles.sales` 有值但對不到可用帳號（舊字串查無／同名、帳號停用或不存在）⇒ 不退回報價人、不帶人並回 `memberNotes.sales` 提示手動指定。兩欄位仍各自存、互不寫入。
 - 不回溯：已有分潤單者（任何狀態）名單在建立當下已凍結於 `bonus_case_award_lines`，本次不改動；`GET /cases/{no}` 對最高管理者在非草稿單且現行業務負責不在名單內時多回 `salesOwnerNote`（中性註記，不改名單／金額／流程），`pages/bonus.html` 在「發放明細」上方顯示。
 - 凍結：舊版項目式獎金路徑（`GET／POST /awards/plan`、`_case_people()`、`bonus_items.person_source='sales_person'`）不隨本次改動，仍讀報價人；正式機 2026-11-06 回報相關表全部 0 筆、從未啟用。`person_source` 鍵名 `sales_person` 保留。
