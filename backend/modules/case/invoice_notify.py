@@ -4,8 +4,8 @@
 [單位] case:invoice_notify    [層] L2（M01）    [穩定度] 實作
 [公開介面] fire_uploaded(quote_no, *, kind, item_label, uploader, file_count, customer="", project="") → bool；
            notice(quote_no, data, *, kind, item_label, uploader, file_count) → dict｜None（組成「待寄通知」，供半解鎖套用路徑 commit 後再寄；永不丟例外）；send_notice(n) → bool（n 為 None ⇒ False）
-[對象] 案件管理的兩種發票上傳成功：款項明細發票（`kind="payment"`）、叫料發票（`kind="material"`）。
-       **不含**：額外支出（費用單據）的發票（本版不通知，草稿階段會反覆上傳）、叫料到貨憑證附件、任何刪除。
+[對象] 案件管理的兩種發票上傳成功：款項明細發票（`kind="payment"`）、材料申請發票（`kind="material"`）。
+       **不含**：額外支出（費用單據）的發票（本版不通知，草稿階段會反覆上傳）、材料申請到貨憑證附件、任何刪除。
 [收件人] 信件類型 `case_invoice_uploaded` 登記在「財務」群組（`mail_types` group `finance`）＝財務角色＋最高管理者；
          `to_group=True`、不另帶 usernames。在職、有 Email、**未退訂該類型**者才收；超級管理員可在「信件與通知收件設定」頁覆寫。
          退訂以信件類型 key 為單位（`users.notification_muted`，opt-out）——新類型預設人人都收，不會繼承別的類型（例如 `module_activity`）的退訂。
@@ -23,9 +23,9 @@ from helpers import mail_types as _mt
 logger = logging.getLogger(__name__)
 
 _mt.register("case_invoice_uploaded", "案件發票已上傳（財務）", "business", "finance", "財務",
-             "案件的款項或叫料有人上傳了發票。", "請登入系統，於案件管理查看發票並核對、登錄。", owner="case")
+             "案件的款項或材料申請有人上傳了發票。", "請登入系統，於案件管理查看發票並核對、登錄。", owner="case")
 
-KIND_LABEL = {"payment": "款項發票", "material": "叫料發票"}
+KIND_LABEL = {"payment": "款項發票", "material": "材料申請發票"}
 
 
 def _link(quote_no: str) -> str:

@@ -102,7 +102,7 @@ def test_material_invoice_upload_sends_one_mail(client, make_user, sent):
     assert r.status_code == 201, r.text
     assert len(sent) == 1
     rows = _rows(sent[0][1])
-    assert rows["項目"] == "測試料件A" and rows["類別"] == "叫料發票" and rows["檔案數量"] == "1 個"
+    assert rows["項目"] == "測試料件A" and rows["類別"] == "材料申請發票" and rows["檔案數量"] == "1 個"
     assert _SECRET_NAME not in json.dumps(sent[0][1], ensure_ascii=False)
 
 
@@ -143,7 +143,7 @@ def test_semi_unlock_staged_upload_no_mail_until_approved(client, make_user, sen
     assert len(sent) == 1, sent
     rows = _rows(sent[0][1])
     assert rows["案件編號"] == no and rows["檔案數量"] == "2 個" and rows["上傳人"].startswith("ed_")
-    assert rows["類別"] == ("款項發票" if path == "payment" else "叫料發票")
+    assert rows["類別"] == ("款項發票" if path == "payment" else "材料申請發票")
 
 
 def test_semi_unlock_reject_sends_nothing(client, make_user, sent):
