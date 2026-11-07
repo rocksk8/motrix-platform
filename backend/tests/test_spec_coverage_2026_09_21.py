@@ -814,6 +814,7 @@ KNOWN = {"M1", "U1"}   # M11 的 SL1／SL3／SL16～19／D20 登記在 modules/t
 C_OWNED = {
     "T9":   "地理查詢仍以 MOTRIX 自稱（撤掉 T8/T8b 時留下的對照組）",
     "T10":  "「不知道」的判定要有自己的短快取（我提的，A 採用）",
+    "H7":   "簽核二擇一提案（docs/platform/plans/QUOTE-APPROVE-EDIT-CHOICE-PROPOSAL.md）H7 的九句驗收字句；S6 的 test_acceptance_s6 逐句對應（提案書不在規格樹內，編號自成一套）",
     # ⚠️ 我第一版寫了 SL20–SL28 連號，**而 SL21／SL22 不存在**（跳號）。
     #    這是我今天第三次**憑印象填清單**（前兩次：A1–A10 填成欠帳、`LK1`／`LK2`），
     #    三次都是同一個動作：**列一張表的時候，用回想代替查。**

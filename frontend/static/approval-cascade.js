@@ -118,7 +118,7 @@
       const prev = document.activeElement;
       const shade = el('div', 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px',
         null, { 'data-testid': 'approve-choice-dialog' });
-      const box = el('div', 'background:#fff;color:#1C1917;border-radius:10px;max-width:480px;width:100%;max-height:90vh;overflow:auto;padding:20px 22px;box-shadow:0 12px 40px rgba(0,0,0,.35);font-size:13px;line-height:1.7;font-family:inherit',
+      const box = el('div', 'background:#fff;color:#1C1917;border-radius:10px;max-width:480px;width:100%;max-height:calc(90vh / var(--fz,1));overflow:auto;padding:20px 22px;box-shadow:0 12px 40px rgba(0,0,0,.35);font-size:13px;line-height:1.7;font-family:inherit',
         null, { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'approve-choice-title' });
       box.appendChild(el('div', 'font-size:15px;font-weight:700;margin-bottom:6px', '核准前請先確認', { id: 'approve-choice-title' }));
       if (opts.summary) box.appendChild(el('div', 'color:#57534E;margin-bottom:8px;white-space:pre-line', opts.summary));
