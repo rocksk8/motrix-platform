@@ -32,7 +32,7 @@ global.fetch = async (url, opt) => {
   const body = opt && opt.body ? JSON.parse(opt.body) : undefined
   calls.push({ m, url, body })
   const ok = (j) => ({ ok: true, status: 200, json: async () => j })
-  if (m === 'GET' && url === '/api/platform/menu') return ok({ groups: [{ key: 'g', label: 'G', items: [{ module: 'ma', href: 'a.html', label: 'A' }, { module: 'mb', href: 'b.html', label: 'B' }] }] })
+  if (m === 'GET' && url === '/api/platform/menu') return ok({ groups: [{ key: 'g', label: 'G', items: [{ module: 'ma', href: 'a.html', label: 'A' }, { module: 'mb', href: 'b.html', label: 'B' }, { module: 'mc', href: 'c.html', label: 'C' }] }] })
   if (m === 'GET' && url === '/api/settings/role-labels') return ok({ admin: '管理員', sales: '業務' })
   if (m === 'GET' && url === '/api/definitions/layout') return ok([{ key: 'module:mb', scope: 'role:sales', latestVersion: 2, hasDraft: false }, { key: 'module:mb', scope: 'company', latestVersion: 1 }])
   if (m === 'GET' && url === '/api/users') return ok([{ username: 'ad_off', role: 'admin', active: 0 }, { username: 'ad1', role: 'admin', active: 1, displayName: '小管' }, { username: 'sl1', role: 'sales', active: 1 }])
@@ -71,6 +71,15 @@ const out = (x) => console.log(JSON.stringify(Object.assign({ calls: calls.map(c
     await E._publish()
     await new Promise(r => setTimeout(r, 30))
     out({ snap, previewBody: pv.body, writes: calls.filter(c => c.m !== 'GET').filter(c => c.url !== '/api/platform/menu/preview').map(c => ({ m: c.m, url: c.url, ops: c.body && c.body.body && c.body.body.ops })), msg: st.msg, scopeAfter: st.scope })
+  } else if (scenario === 'will_publish') {
+    await E._switchScope('role:admin')
+    const none = E._willPublish()
+    st.work[A].label = '只改名'
+    const renameOnly = E._willPublish()
+    st.work[A].label = 'A'
+    const g = st.order.g; const i = g.indexOf(A); g.splice(i, 1); g.splice(i + 1, 0, A)      // 只把 A 往下移一格
+    const moved = E._willPublish()
+    out({ none, renameOnly, moved })
   } else if (scenario === 'switch_confirm') {
     st.work[A].label = '改了'; st.touched = true
     confirmAnswer = false
@@ -126,6 +135,14 @@ def test_role_scope_starts_from_company_layer_and_publishes_only_changed_modules
 def test_role_layer_read_failure_aborts_instead_of_starting_from_empty():
     r = _run("role_read_fails")
     assert r["bad"] is True and r["msg"].startswith("讀取失敗"), r
+
+
+def test_will_publish_lists_the_modules_that_get_a_role_layer():
+    """K 審建議修：『沒動的模組不建層』只在群組順序沒被改時成立——調整群組內順序，同群組所有模組都會建立角色層。
+    面板用 willPublish() 在發布前列出將寫入的模組（與 doPublish 同一個判準）；只改名只列被改的那一個。"""
+    r = _run("will_publish")
+    assert r["none"] == [] and r["renameOnly"] == ["ma"]
+    assert sorted(r["moved"]) == ["ma", "mb", "mc"], "移動順序 ⇒ 同群組的模組都要發 move（位置式），所以都會建立／更新角色層"
 
 
 def test_switching_scope_with_unpublished_edits_asks_first():

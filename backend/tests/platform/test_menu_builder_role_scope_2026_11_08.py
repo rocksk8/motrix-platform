@@ -140,3 +140,63 @@ def test_preview_scope_role_needs_a_user_of_that_role(client, make_user, monkeyp
     d = r.json()
     assert _find(d["current"], key, href)[0][0] == g1, "目前＝角色層已生效（已搬到 g1）"
     assert _find(d["preview"], key, href)[0][1]["label"] == "預覽名" and d["role"] == "admin"
+
+
+# ── 治理（builder_governance.enabled）：角色層首次發布的放寬分類基準 ────────────────────────────
+def _draft_publish(client, h, key, scope, ops):
+    """存草稿 → 發布；不斷言結果，⇒ 發布回應（可能是 pending）。"""
+    url = "/api/definitions/layout/module:%s" % key
+    r = client.put(url + "/draft?scope=" + scope, json={"body": {"ops": ops}}, headers=h)
+    assert r.status_code == 200 and r.json()["problems"] == [], r.text
+    return client.post(url + "/publish?scope=" + scope, json={"note": "t", "base_etag": r.json()["etag"]}, headers=h)
+
+
+def test_governance_role_layer_first_publish_is_compared_with_the_company_layer(client, make_user, monkeypatch):
+    """K 審必修：角色層第一次發布以『公司層』為基準（角色層整份取代公司層）——
+    公司層有 hide、角色層首發不帶那個 hide ＝ 放寬（待第二位最高管理者核准），不能因為角色層自己是空的就當成『全新增』直接發布。
+    原樣複製公司層的 hide ＝ 不變（直接發布）；已有角色層 ⇒ 跟自己的上一版比（維持舊行為）。"""
+    from routers import def_pipeline as P
+    key, href, tgt, h_sa, _h_ad, _h_sl = _setup(client, make_user, monkeypatch, "g")
+    monkeypatch.setattr(P, "enabled", lambda conn=None: True)
+    hide, rel = {"op": "hide", "target": tgt}, {"op": "relabel", "target": tgt, "label": "角色名"}
+    r = _draft_publish(client, h_sa, key, "company", [hide])
+    assert r.status_code == 200 and not r.json().get("pending"), "公司層收緊（加 hide）⇒ 直接發布"
+    # 對照組：公司層拿掉 hide 本來就是放寬（分類器本身沒問題）
+    # 角色層首發、不含公司層的 hide ⇒ 放寬 ⇒ pending
+    r = _draft_publish(client, h_sa, key, "role:admin", [rel])
+    assert r.status_code == 200 and r.json().get("pending") is True, r.text
+    assert any("hide" in x for x in r.json()["reasons"]), r.json()
+    # 原樣複製公司層的 hide（UI 沒動它）＋改名 ⇒ 不變 ⇒ 直接發布
+    r = _draft_publish(client, h_sa, key, "role:sales", [hide, rel])
+    assert r.status_code == 200 and not r.json().get("pending") and r.json().get("version") == 1, r.text
+    # 已有角色層（sales v1 = [hide, rel]）：跟自己的上一版比 ⇒ 拿掉 hide ＝ 放寬 ⇒ pending；只改名 ⇒ 直接發布
+    r = _draft_publish(client, h_sa, key, "role:sales", [rel])
+    assert r.json().get("pending") is True, r.text
+
+
+def test_governance_baseline_does_not_apply_without_a_company_layer_or_to_company_scope(client, make_user, monkeypatch):
+    """沒有公司層 ⇒ 基準＝空（與過去相同）：角色層首發 [relabel] ⇒ 不變；公司層首發不受影響。"""
+    from routers import def_pipeline as P
+    key, href, tgt, h_sa, _h_ad, _h_sl = _setup(client, make_user, monkeypatch, "h")
+    monkeypatch.setattr(P, "enabled", lambda conn=None: True)
+    r = _draft_publish(client, h_sa, key, "role:engineer", [{"op": "relabel", "target": tgt, "label": "x"}])
+    assert r.status_code == 200 and not r.json().get("pending"), r.text
+    r = _draft_publish(client, h_sa, key, "company", [{"op": "hide", "target": tgt}])
+    assert r.status_code == 200 and not r.json().get("pending"), "公司層首發 hide（收緊）照舊直接發布"
+
+
+def test_impact_of_first_role_layer_diffs_against_the_company_layer(client, make_user, monkeypatch):
+    """影響預覽：角色層首發的差異跟公司層比（實際效果），並標明比的是哪一層；已有角色層 ⇒ 沒有這個標記。"""
+    from routers import def_governance as G
+    from routers import def_pipeline as P
+    key, href, tgt, h_sa, _h_ad, _h_sl = _setup(client, make_user, monkeypatch, "i")
+    monkeypatch.setattr(P, "enabled", lambda conn=None: True)
+    monkeypatch.setattr(G, "enabled", lambda conn=None: True)
+    hide, rel = {"op": "hide", "target": tgt}, {"op": "relabel", "target": tgt, "label": "角色名"}
+    _draft_publish(client, h_sa, key, "company", [hide])
+    url = "/api/definitions/layout/module:%s/draft?scope=role:admin" % key
+    assert client.put(url, json={"body": {"ops": [hide, rel]}}, headers=h_sa).status_code == 200
+    d = client.get("/api/def-governance/layout/module:%s/impact?scope=role%%3Aadmin" % key, headers=h_sa).json()
+    assert d.get("changesBase") == "company"
+    assert len(d["changes"]) == 1 and "relabel" in json.dumps(d["changes"], ensure_ascii=False), "只有改名是新的；複製來的 hide 不是變更"
+    assert client.get("/api/def-governance/layout/module:%s/impact?scope=company" % key, headers=h_sa).json().get("changesBase") is None

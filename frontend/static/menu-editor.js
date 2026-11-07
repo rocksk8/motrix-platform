@@ -200,6 +200,23 @@
       return d && typeof d.previewHash === 'string' && d.previewHash ? d.previewHash : null
     }).catch(function () { return null })
   }
+  // 某模組發布後的整份版面操作：該模組既有的非側欄操作（排版器存的）原樣保留 ＋ 這次的側欄操作
+  function nextOps(m, ops) {
+    var mine = ops.filter(function (o) { return o.target.indexOf(m + ':') === 0 })
+    var keep = st.mods[m].ops.filter(function (o) { return !(o && typeof o.target === 'string' && /\/sidebar$/.test(o.target) && o.target.indexOf(m + ':') === 0) })
+    return keep.concat(mine)
+  }
+  // 兩份操作清單是不是『同一批操作』（不看順序：重新組出來時側欄操作會排在非側欄操作後面，順序不同不代表有改動；
+  // 側欄 move 都帶絕對位置，同一批操作的結果相同）。沒改動的模組不可以因為順序不同就被當成要發布（角色層會因此無端建立）
+  function sameOps(a, b) {
+    var f = function (l) { return (l || []).map(function (o) { return JSON.stringify(o) }).sort().join('|') }
+    return f(a) === f(b)
+  }
+  // 按下發布會寫入（建立或更新）哪些模組的版面：和 doPublish 同一個判準
+  function willPublish() {
+    var ops = buildOps()
+    return Object.keys(st.mods).filter(function (m) { return !sameOps(nextOps(m, ops), st.mods[m].ops) })
+  }
   function doPublish() {
     if (!st.preview || st.previewKey !== dirtyKey()) { st.msg = '草稿已變更，請先重新預覽'; st.msgBad = true; return render() }
     var ops = buildOps()
@@ -208,10 +225,8 @@
     st.busy = true; st.msg = '發布中…'; st.msgBad = false; render()
     var chain = Promise.resolve(), done = 0, pend = []
     mods.forEach(function (m) {
-      var mine = ops.filter(function (o) { return o.target.indexOf(m + ':') === 0 })
-      var keep = st.mods[m].ops.filter(function (o) { return !(o && typeof o.target === 'string' && /\/sidebar$/.test(o.target) && o.target.indexOf(m + ':') === 0) })
-      var next = keep.concat(mine)
-      if (JSON.stringify(next) === JSON.stringify(st.mods[m].ops)) return
+      var next = nextOps(m, ops)
+      if (sameOps(next, st.mods[m].ops)) return
       chain = chain.then(function () {
         var url = '/api/definitions/layout/module:' + encodeURIComponent(m)
         return api('PUT', url + '/draft' + q, { body: { ops: next }, base_etag: st.mods[m].etag || undefined }).then(function (r) {
@@ -283,7 +298,7 @@
       '#me-panel .me-scope{border:1px solid var(--border-light,#ddd);border-radius:6px;padding:8px 10px;margin-bottom:8px}#me-panel .me-scope-row{display:flex;gap:6px;align-items:center}' +
       '#me-panel .me-scope-row select{flex:1;min-width:0}#me-panel .me-scope-now{font-weight:700;margin:6px 0 2px}' +
       '#me-panel .me-scope[data-scope^="role:"] .me-scope-now{color:#8a5a00;background:#fff3cd;padding:2px 6px;border-radius:4px}' +
-      '#me-panel .me-scope-note{color:#666;line-height:1.5}' +
+      '#me-panel .me-scope-note{color:#666;line-height:1.5}#me-panel .me-scope-will{margin-top:6px;font-weight:600}' +
       '@media (max-width:1023px){#me-btn{display:none!important}}' })
     document.head.appendChild(s)
   }
@@ -346,7 +361,9 @@
       var own = Object.keys(st.mods).filter(function (m) { return !st.mods[m].copied }).length
       var follow = Object.keys(st.mods).length - own
       note = '套用順序：角色層 ＞ 公司層。某個模組只要發布了「' + roleLabel(k) + '」的角色層，這個角色在該模組就整份改用角色層——公司層在該模組的改名、換群組、隱藏都不再套用給他（不是逐項合併）。'
-        + '還沒有角色層的模組會先以現行公司層為起頭複製一份再改；沒動的模組不會建立角色層，繼續跟公司層。目前：' + own + ' 個模組已有角色層、' + follow + ' 個跟隨公司層。'
+        + '還沒有角色層的模組會先以現行公司層為起頭複製一份再改；只改項目名稱、隱藏或換群組時，只有被改到的模組會建立角色層；'
+        + '但調整群組內的順序時，同一個群組裡的所有模組都會一併建立角色層（順序是位置式的）——建立後那些模組就不再跟公司層。'
+        + '載入時：' + own + ' 個模組已有角色層、' + follow + ' 個跟隨公司層。'
         + '預覽要用一位「' + roleLabel(k) + '」角色的在職帳號。'
     } else {
       var layered = st.roles.filter(function (r) { return st.roleLayers[r.key] }).map(function (r) { return r.label })
@@ -354,6 +371,9 @@
         + (layered.length ? '已有角色層的角色（' + layered.join('、') + '）在有角色層的模組不會看到這裡的調整；到該角色的範圍去改。' : '')
     }
     box.appendChild(el('div', { class: 'me-scope-note', text: note }))
+    var wp = willPublish()                                                  // 隨編輯即時更新：按發布會寫入哪些模組
+    box.appendChild(el('div', { class: 'me-scope-will', 'data-testid': 'me-will-publish', 'data-count': String(wp.length),
+      text: wp.length ? '按發布會' + (k ? '建立或更新「' + roleLabel(k) + '」角色層' : '更新公司層') + '的 ' + wp.length + ' 個模組：' + wp.join('、') : '目前沒有要發布的調整。' }))
     return box
   }
   // 預覽身分：公司層＝自由填帳號（空白＝我自己）；角色層＝只能選該角色的在職帳號
@@ -400,6 +420,6 @@
     document.body.appendChild(panel)
   }
 
-  window.MotrixMenuEditor = { _pendingText: pendingText, _publish: doPublish, open: function () { st.open = true; return load() }, _state: st, _buildOps: buildOps, _switchScope: switchScope, _preview: doPreview }
+  window.MotrixMenuEditor = { _pendingText: pendingText, _publish: doPublish, open: function () { st.open = true; return load() }, _state: st, _buildOps: buildOps, _switchScope: switchScope, _preview: doPreview, _willPublish: willPublish }
   render()
 })()
