@@ -79,6 +79,8 @@ _mt.register("case_invoice_uploaded", "案件發票已上傳（財務）", "busi
 - **裁示（產品窗口轉達）**：Q1 本版不含費用單據發票；Q2 上傳人是財務／最高管理者也照寄；Q3 不合併（一請求一封）；Q4 只寄信、無站內通知。
 - **退訂範圍**：使用者退訂以信件類型 key 為單位（`users.notification_muted`，opt-out，空＝全收）。新類型 `case_invoice_uploaded` **不繼承** `module_activity` 等其他類型的退訂；正式機財務帳號（queena、sundy）退訂的是 `module_activity`，不影響本類型。若日後有人退訂本類型，屬使用者自選的預期行為，不是 bug。
 - **已知限制（既有缺口，非本功能新增）**：財務收件對象目前以 `users.role`（finance／superadmin）判斷，不是 `duty_roles` 職責旗標；旗標開 on 之前若有人職責有異動但 role 未同步，收／不收名單可能與預期不一致。本功能走既有 `to_group=True` → `finance_recipient_emails()`，沒有新增寫死判斷，旗標切換時會跟著該函式一起改。
-- **寄信可靠度**：SMTP 失敗（含 Gmail 421 限流）只記 log、不重送（既有機制）。8/10、9/2 曾因同一事件短時間連發被限流；本功能一個請求一封、不連發。
+- **寄信可靠度**：SMTP 失敗（含 Gmail 421 限流）只記 log、不重送（既有機制）。8/10、9/2 曾因同一事件短時間連發被限流；本功能同一請求多檔＝一封；**逐檔分次上傳仍一檔一封、無跨請求合併／節流**（K 審實測連續 5 次單檔上傳＝5 封），連續分次上傳會連發。是否加合併（如同案件同項目 60 秒內一封）是產品決定，本版不做。
+- **退訂後果**：因嫌吵退訂 `module_activity` 的財務（正式機 queena、sundy）仍會收到這類新信（退訂以類型 key 為單位）；上線說明請寫明。
+- **永不影響上傳／核准**：通知內容組裝（`notice()`）與寄送（`send_notice`／`fire_uploaded`）都不丟例外；半解鎖套用路徑的組裝另包 try/except（在交易內，K 審建議修）。
 - **實作**：`modules/case/invoice_notify.py`；兩個上傳端點 commit 後呼叫；半解鎖套用走 `deferred_notices`（commit 後）。連結 `case-management.html?q=<單號>`（該頁以 `q` 參數搜尋）。
 

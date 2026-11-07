@@ -3932,12 +3932,15 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
         deferred_audits.append((f'{action_type}.approved', 'quotation', quote_no,
                                 f"{label}（半解鎖審核通過套用，{len(moved)} 個檔案）", None))
         if deferred_notices is not None and action_type != "material_file_upload":   # 發票才通知（到貨憑證附件不寄）；commit 之後才寄
-            _it = arr[idx] if isinstance(arr[idx], dict) else {}
-            _is_pay = action_type == "payment_invoice_upload"
-            deferred_notices.append(_INV_NOTIFY.notice(
-                quote_no, data, kind="payment" if _is_pay else "material",
-                item_label=(_it.get("label") or f"第{idx+1}期") if _is_pay else (_it.get("name") or f"第{idx+1}項"),
-                uploader=(req["requested_by_display"] or req["requested_by"] or ""), file_count=len(moved)))
+            try:                                       # 通知是附帶動作：組裝（含取欄位）出任何錯都不可讓核准失敗
+                _it = arr[idx] if isinstance(arr[idx], dict) else {}
+                _is_pay = action_type == "payment_invoice_upload"
+                deferred_notices.append(_INV_NOTIFY.notice(
+                    quote_no, data, kind="payment" if _is_pay else "material",
+                    item_label=(_it.get("label") or f"第{idx+1}期") if _is_pay else (_it.get("name") or f"第{idx+1}項"),
+                    uploader=(req["requested_by_display"] or req["requested_by"] or ""), file_count=len(moved)))
+            except Exception:
+                logger.exception("案件發票上傳通知組裝失敗（不影響核准套用；quote_no=%r action=%r）", quote_no, action_type)
 
     elif action_type in ("payment_invoice_delete", "material_file_delete", "material_invoice_delete"):
         idx = payload["idx"]

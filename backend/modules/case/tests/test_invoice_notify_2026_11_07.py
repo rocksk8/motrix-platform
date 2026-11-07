@@ -218,6 +218,38 @@ def test_notice_tolerates_bad_data():
     assert IN.notice("MQ-1", [1], kind="payment", item_label="x", uploader="u", file_count=1)["project"] == ""
 
 
+def test_notice_never_raises_and_send_notice_tolerates_none(caplog):
+    """組裝（notice）丟例外不可往外冒：回 None＋記 log；send_notice(None) ⇒ False（K 審建議修）。"""
+    from modules.case import invoice_notify as IN
+
+    class _BadDict(dict):
+        def get(self, *a, **k):
+            raise RuntimeError("壞資料-ABC")
+    with caplog.at_level("ERROR"):
+        assert IN.notice("MQ-BAD", _BadDict(), kind="payment", item_label="x", uploader="u", file_count=1) is None
+    assert "壞資料-ABC" in caplog.text and "MQ-BAD" in caplog.text
+    assert IN.send_notice(None) is False and IN.send_notice({}) is False
+
+
+def test_assembly_failure_in_apply_path_does_not_fail_approval(client, make_user, monkeypatch, sent):
+    """半解鎖套用路徑：notice 組裝在 commit 之前、交易內——它出錯也不可讓核准失敗（稽核與套用照常）。"""
+    from modules.case import invoice_notify as IN
+    no = "MQ-INV-940"
+    sa, ed = _unlocked_closed_case(client, make_user, no)
+    r = client.post(f"/api/quotations/{no}/payment/0/invoice-files", headers=_auth(ed), files={"files": _png()})
+    assert r.status_code == 201 and r.json()["pending"] is True
+    cid = r.json()["changeRequestId"]
+
+    def _boom(*a, **k):
+        raise RuntimeError("assemble boom")
+    monkeypatch.setattr(IN, "notice", _boom)
+    ap = client.post(f"/api/case-changes/{cid}/approve", headers=_auth(sa))
+    assert ap.status_code == 200, ap.text
+    assert sent == []
+    cr = client.get(f"/api/quotations/{no}", headers=_auth(sa)).json()["data"]["caseRecord"]
+    assert len(cr["payment"]["items"][0]["invoiceFiles"]) == 1, "發票已套用"
+
+
 # ── ⑤ 收件人（走真的 send_registered，只攔 _async_send）─────────────────────
 
 def _set_user(username, email=None, muted=None, active=1):
