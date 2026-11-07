@@ -416,3 +416,34 @@ def test_dispatch_lines_view_lists_every_dispatch_with_mode(W):
     assert view[str(b)]["mode"] == "none" and view[str(b)]["linesOk"] is True and view[str(b)]["lines"][0]["lineKey"] == kc
     assert view[str(whole)]["mode"] == "whole" and view[str(whole)]["assignedItemId"] == "a" and view[str(whole)]["linesOk"] is False
     assert d["dispatchLines"] == _compute([_line(a, ka, "a"), _line(a, kb, "b"), {"kind": "dispatch", "ref": str(whole), "itemId": "a"}])["dispatchLines"]
+
+
+def test_parse_amount_rejects_loose_strings():
+    """K 審：字串路徑不再寬鬆——千分位逗號、尾巴文字、空白、全形、科學記號、十六進位、正號都是 None（前端 `_cents()` 同一條規則）。"""
+    for bad in ("1,000", "12abc", "1 000", "１０００", "0x10", "1e3", "1e2", "1.5.5", "+5", ".5", "5.", "1_000", "", "  "):
+        assert DL.parse_amount(bad) is None, bad
+    assert DL.parse_amount(" 800 ") == 80000 and DL.parse_amount("12.5") == 1250 and DL.parse_amount("0.10") == 10 and DL.parse_amount("1000") == 100000
+    out = SA.normalize_offsets([{"kind": "dispatch", "ref": "9#k#1", "itemId": "a", "amount": "1,000"}, {"kind": "dispatch", "ref": "9#k#2", "itemId": "a", "amount": "1000"}])
+    assert out == [{"kind": "dispatch", "ref": "9#k#2", "itemId": "a", "amount": 1000}]
+
+
+def test_partial_remainder_row_carries_remainder_values_not_the_whole_dispatch(W):
+    """剩餘列的 report／grandTotal 是「剩餘」的值，不沿用整張的（K 審小項）；兩種口徑都一致：grandTotal＝report＋tax。"""
+    c, h = W
+    did, (k1, k2) = _ldisp([1000, 2000], personnel=100)                                        # 稅 150；整張含稅 3250
+    d = _compute([_line(did, k1)])
+    un = _unassigned(d, did)[0]
+    assert (un["amount"], un["tax"], un["report"], un["grandTotal"]) == (3250 - 1050, 150 - 50, 3250 - 1050 - 100, 3250 - 1050)
+    assert un["grandTotal"] == un["report"] + un["tax"]
+    d = _compute([_line(did, k1)], basis="pretax")
+    un = _unassigned(d, did)[0]
+    assert (un["amount"], un["tax"], un["report"], un["grandTotal"]) == (2100, 100, 2100, 2200) and un["grandTotal"] == un["report"] + un["tax"]
+
+
+def test_allocation_fallback_is_visible_as_a_warning(W, monkeypatch):
+    """allocate 回 None（理論上走不到）時，錢整張回未對應，且要有 warning，不能靜默。"""
+    c, h = W
+    did, (k1,) = _ldisp([100])
+    monkeypatch.setattr(DL, "allocate", lambda *a, **k: None)
+    d = _compute([_line(did, k1)])
+    assert [w["code"] for w in d["warnings"]] == ["dispatch_line_unmappable"] and _unassigned(d, did)[0]["amount"] == 105 and _conserved(d)["dispatchAssignedTotal"] == 0

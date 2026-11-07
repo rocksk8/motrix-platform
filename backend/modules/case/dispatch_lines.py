@@ -118,14 +118,25 @@ def cents(x) -> int:
     return int((to_dec(x) * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
+_AMOUNT_STR = re.compile(r"[0-9]+(\.[0-9]+)?")
+
+
 def parse_amount(raw):
-    """拆分份的 amount ⇒ 整數分；非數字／布林／NaN／≤0／超過 2 位小數 ⇒ None。"""
+    """拆分份的 amount ⇒ 整數分；非數字／布林／NaN／≤0／超過 2 位小數 ⇒ None。
+    字串**只收 ASCII 純數字加小數點**（首尾只容許空格／Tab／換行）：千分位逗號「1,000」、「12abc」、「1 000」、全形「１０００」、「1e3」、「0x10」、「+5」都是 None——
+    前端 `settlement.html` 的 `_cents()` 是同一條規則（V7 向量鎖住兩端一致），不再有「一邊讀成 1、一邊拒絕」。數字（JSON 數字）：容許 0.1＋0.2 這類浮點雜訊，以分正規化。"""
     if raw is None or isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
         return None
-    try:
-        d = to_dec(raw) if not isinstance(raw, str) else Decimal(raw.strip())
-    except Exception:                                                                              # noqa: BLE001
-        return None
+    if isinstance(raw, str):
+        s = raw.strip(" \t\r\n")
+        if not _AMOUNT_STR.fullmatch(s):
+            return None
+        d = Decimal(s)
+    else:
+        try:
+            d = to_dec(raw)
+        except Exception:                                                                          # noqa: BLE001
+            return None
     if not d.is_finite() or d <= 0:
         return None
     c = d * 100

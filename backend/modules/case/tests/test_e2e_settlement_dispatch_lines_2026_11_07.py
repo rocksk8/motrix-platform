@@ -167,3 +167,56 @@ def test_dispatch_lines_map_split_and_finalize(live_server, make_user, e2e_brows
     assert not page.locator(f'[data-testid="stl-dl-split-{d1}-0"]').is_visible() and not page.locator(f'[data-testid="stl-dl-clear-{d1}"]').is_visible()
     assert page.locator(f'[data-testid="stl-dl-part-amt-{d1}-1-0"]').is_disabled()
     _shot(page, "3-finalized")
+
+
+@pytest.mark.e2e
+def test_ignored_mappings_are_visible_and_bad_amount_text_is_not_misread(live_server, make_user, e2e_browser):
+    """K 審：①金額欄打「1,000」不能被當成 1（格式不對 ⇒ 不寫進 offsets、不能存檔，訊息講清楚）；
+    ②存檔後派發單被改、拆分超過行金額（整行拆分忽略、錢回未對應）⇒ 畫面要看得到（二之二警示＋完結提醒分開講），但不擋完結。"""
+    sa = make_user(username="sa_sa", role="superadmin")
+    _seed()
+    d1 = _dispatch(6000, 0, quote_no=NO)
+    _set_items(d1, _lines([1000, 2000, 3000]))
+    k1 = DL.line_key(_lines([1000, 2000, 3000])[1]["id"])
+    page = e2e_browser.new_context(viewport={"width": 1400, "height": 1300}).new_page()
+    page.on("dialog", lambda d: d.accept())
+    _login(page, live_server, *sa)
+    _ready(page, live_server)
+    page.locator(f'[data-testid="stl-dl-toggle-{d1}"]').click()
+    page.locator(f'[data-testid="stl-dl-split-{d1}-1"]').click()
+    page.locator(f'[data-testid="stl-dl-part-item-{d1}-1-0"]').select_option("b")
+    amt = page.locator(f'[data-testid="stl-dl-part-amt-{d1}-1-0"]')
+    amt.fill("1,000")
+    amt.press("Tab")
+    _refreshed(page)
+    assert page.evaluate(f"() => {S}.offsets.filter(o => o.amount !== undefined).length") == 0          # 「1,000」沒有被讀成 1 寫進去
+    assert "金額格式不對" in page.evaluate(f"() => {S}.dlInvalid()")
+    puts = []
+    page.on("request", lambda rq: puts.append(rq.url) if rq.method == "PUT" and "/settlement" in rq.url else None)
+    page.locator('[data-testid="stl-save-draft"]').click()
+    page.wait_for_timeout(800)
+    assert puts == []
+    amt.fill("1200")
+    amt.press("Tab")
+    page.locator(f'[data-testid="stl-dl-add-{d1}-1"]').click()
+    page.locator(f'[data-testid="stl-dl-part-item-{d1}-1-1"]').select_option("a")
+    page.locator(f'[data-testid="stl-dl-fill-{d1}-1-1"]').click()
+    page.wait_for_function(f"() => {S}.offsets.filter(o => o.amount !== undefined).length === 2 && !{S}.dlInvalid()", timeout=10000)
+    page.locator('[data-testid="stl-save-draft"]').click()
+    page.wait_for_function(f"() => !{S}.saving", timeout=15000)
+    assert sorted(o["amount"] for o in _settlement()["offsets"] if "amount" in o) == [800, 1200]
+    assert page.locator('[data-testid="stl-dl-warnings"]').is_hidden()
+
+    # 派發單被改：第 2 行 2000→1500（第 1 行補 500，總額不變仍可逐行）⇒ Σ份 2000 > 1500，拆分忽略
+    _set_items(d1, _lines([1500, 1500, 3000]))
+    page.reload()
+    page.locator('[data-testid="stl-dl-card"]').wait_for(state="visible", timeout=20000)
+    page.wait_for_function(f"() => {S}._actualsOk", timeout=20000)
+    w = page.locator('[data-testid="stl-dl-warnings"]')
+    w.wait_for(state="visible", timeout=10000)
+    assert "未生效" in w.inner_text() and "拆分金額加總超過" in w.inner_text(), w.inner_text()
+    ready = page.locator('[data-testid="stl-ready"]').inner_text()
+    assert "逐行對應有 1 處未生效" in ready and "未對應項目" in ready, ready          # 與一般「有未對應項目」分開講
+    assert page.locator('[data-testid="stl-finalize"]').is_enabled()                  # 只警示、不擋完結（與 V5／BLOCK_ON_UNASSIGNED 一致）
+    t = page.evaluate(f"() => {S}.actuals.totals")
+    assert abs(t["dispatchAssignedTotal"] + t["dispatchUnassignedTotal"] - t["dispatchTotal"]) < 1e-6 and t["dispatchAssignedTotal"] == 0      # 錢全回未對應

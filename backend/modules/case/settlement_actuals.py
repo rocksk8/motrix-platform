@@ -233,6 +233,8 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
             else:
                 res = DL.allocate(d, specs, d_basis == BASIS_TAXED)
         if res is None:
+            if specs and d.get("linesOk"):                                    # allocate 回 None（分配後餘額為負；理論上走不到）：整張暫列未對應，要讓人看得到
+                warnings.append({"code": "dispatch_line_unmappable", "ref": d["itemId"], "message": "派發單 %s：逐行對應分配後金額對不上，逐行對應暫時失效，整張列入未對應" % (d.get("docCode") or d["itemId"])})
             unassigned_disp.append(d)
             disp_view.append(_line_view(d, "none", "", d.get("lines") or []))
             continue
@@ -244,7 +246,9 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
             disp_by_item.setdefault(item_id, []).append(e)
         disp_view.append(_line_view(d, "lines" if any(l.get("state") in ("line", "split") for l in res["lines"]) else "none", "", res["lines"]))
         if res["remainder"]:                                              # 剩餘（外包人員＋未對應的行＋拆分餘額，含稅額）仍是一列未對應；剩 0 就不出列
-            unassigned_disp.append(dict(d, amount=res["remainder"], tax=res["remainderTax"], lines=res["lines"], partial=True))
+            rem, rtax = res["remainder"], res["remainderTax"]            # 剩餘列的 report／grandTotal 也是「剩餘」的值（不沿用整張的）：taxed 口徑 amount 即含稅合計；pretax 口徑 amount 是未稅
+            unassigned_disp.append(dict(d, amount=rem, tax=rtax, lines=res["lines"], partial=True,
+                                        report=(rem - rtax) if d_basis == BASIS_TAXED else rem, grandTotal=rem if d_basis == BASIS_TAXED else rem + rtax))
 
     items, item_total, not_adopted_total, disp_absorbed = [], 0.0, 0.0, 0.0
     for p in plan:

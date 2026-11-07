@@ -60,8 +60,13 @@ def test_frontend_amount_rule_matches_backend_parse():
     start = html.index("    _cents(s) {")
     end = html.index("    // 完整的列（品項＋合法金額）才寫進 offsets", start)
     fn = html[start:end].strip().rstrip(",")
-    cases = [0.1 + 0.2, 33.33, 33.333, 0, -1, "12.5", "abc", "", 100, "1e2", 0.005, 1.005, 2000, "1200", " 800 "]
+    cases = [0.1 + 0.2, 33.33, 33.333, 0, -1, "12.5", "abc", "", 100, "1e2", 0.005, 1.005, 2000, "1200", " 800 ",
+             "1,000", "12abc", "1 000", "１０００", "0x10", "1e3", "1.5.5", "+5", ".5", "5.", "1_000", "0.10", "００５", None, True, [1], {}]
     script = "const o={%s};const v=JSON.parse(process.argv[1]);console.log(JSON.stringify(v.map(x=>o._cents(x))))" % fn
     js = subprocess.run([NODE, "-e", script, json.dumps(cases)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert js.returncode == 0, js.stderr
-    assert [DL.parse_amount(c) for c in cases] == json.loads(js.stdout)
+    got = [DL.parse_amount(c) for c in cases]
+    assert got == json.loads(js.stdout)
+    for bad in ("1,000", "12abc", "1 000", "１０００", "0x10", "1e3", "1.5.5", "+5", ".5", "5.", "1_000"):
+        assert DL.parse_amount(bad) is None, bad                                                     # 兩端都明確拒絕，不再有「一邊讀成 1」
+    assert DL.parse_amount(" 800 ") == 80000 and DL.parse_amount("12.5") == 1250 and DL.parse_amount("0.10") == 10

@@ -723,10 +723,14 @@
       <!-- ── 二之二、承攬商派發逐行對應（選填）：派發單的每一行歸一個品項，或一行依金額拆給多個品項；與整張對應二擇一。
            對應只寫進 settlement.offsets（整行 `派發id#行鍵`、拆分份 `派發id#行鍵#份次` 帶未稅 amount），派發單一個位元都不改。
            金額／稅額都由後端算（行稅額累計進位、拆分份稅額累計比例進位）；本頁只送「哪一行、哪個品項、拆分的未稅金額」。行鍵直接取後端回的 lineKey，不在本頁重算。 -->
-      <div class="stl-card" x-show="_actualsOk && dispatchLinesList().length" data-testid="stl-dl-card">
+      <div class="stl-card" x-show="_actualsOk && (dispatchLinesList().length || dlWarnings().length)" data-testid="stl-dl-card">
         <div class="stl-card__head">
           <div class="stl-card__title">二之二、承攬商派發逐行對應（選填）</div>
           <div style="font-size:11px;color:var(--text-dim)">把派發單的每一行歸到報價品項，一行可依金額拆給多個品項；整張對應與逐行對應二擇一。沒歸的行、外包人員、拆分餘額仍計入額外支出</div>
+        </div>
+        <div x-show="dlWarnings().length" role="alert" data-testid="stl-dl-warnings" style="margin:6px 0;padding:8px 10px;border-radius:6px;background:#FEF3C7;color:#92400E;font-size:12px">
+          <b x-text="'已存的逐行對應有 ' + dlWarnings().length + ' 處未生效：金額已回到未對應（仍計入總成本），對應到的品項成本會因此少算。'"></b>
+          <ul style="margin:4px 0 0;padding-left:18px"><template x-for="(w, i) in dlWarnings()" :key="i"><li x-text="w.message"></li></template></ul>
         </div>
         <template x-for="v in dispatchLinesList()" :key="v.dispatchId">
           <div style="border-top:1px solid var(--border,#e5e7eb);padding:8px 2px" :data-testid="'stl-dl-disp-' + v.dispatchId">
@@ -1668,6 +1672,8 @@ function settlementPage() {
       if (Math.abs(this.reconQuoteGap) > C.RECON_TOLERANCE) hard.push('報價對帳差額不為 0')
       if (Math.abs(this.reconCostGap) > C.RECON_TOLERANCE) hard.push('成本對帳差額不為 0')
       if (ms.unCount) (C.BLOCK_ON_UNASSIGNED ? hard : warns).push('有未對應項目（仍計入成本）：' + ms.unCount + ' 件，NT$ ' + this.fmt(ms.unTotal))
+      const dlw = this.dlWarnings()
+      if (dlw.length) warns.push('已存的派發單逐行對應有 ' + dlw.length + ' 處未生效（金額已回到未對應、仍計入成本，品項成本會因此少算）：' + dlw.map(w => w.message).join('；'))
       if (this._actualsOk && this.pendingAllAmount) (C.BLOCK_ON_PENDING ? hard : warns).push('有待審核金額 NT$ ' + this.fmt(this.pendingAllAmount) + '（照計，核准前可能變動）')
       if (this.settlement.items.some(i => this._noRecord(i))) (C.BLOCK_ON_NO_RECORD ? hard : warns).push('有品項無採購／對應紀錄且未手填（暫以估計計）')
       const state = hard.length ? 'blocked' : warns.length ? 'warn' : 'ok'
@@ -1795,6 +1801,7 @@ function settlementPage() {
     dlOpen: {},
     _dlLast: [],
     dlRowsMap: {},               // 拆分編輯中的列：{ '派發id|行鍵': [{ no, itemId, amount(字串) }] }——未填完整的列只留在這裡，不寫進 offsets
+    dlWarnings() { return this._actualsOk ? ((this.actuals.warnings || []).filter(w => String(w.code || '').startsWith('dispatch_line_'))) : [] },
     dispatchLinesList() { return this._actualsOk ? ((this.actuals.dispatchLines || []).filter(v => (v.lines || []).length)) : [] },
     _lineRef(did, key, no) { return String(did) + '#' + key + (no ? '#' + no : '') },
     lineItemOf(did, key) { const o = this.offsets.find(o => o.kind === 'dispatch' && o.ref === this._lineRef(did, key)); return o ? o.itemId : '' },
@@ -1856,7 +1863,11 @@ function settlementPage() {
     },
     async delPart(did, key, i) { this._dlEnsure(did, key).splice(i, 1); await this.onPartChange(did, key) },
     _cents(s) {
-      const x = typeof s === 'number' ? s : parseFloat(String(s == null ? '' : s).trim())
+      // 字串只收 ASCII 純數字加小數點（首尾容許空格／Tab／換行）：「1,000」「12abc」「1 000」「１０００」「1e3」「0x10」「+5」都回 null（後端 parse_amount 同一條規則；不用 parseFloat，它會把「1,000」讀成 1）
+      let x
+      if (typeof s === 'number') x = s
+      else if (typeof s === 'string') { const u = s.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, ''); if (!/^[0-9]+(\.[0-9]+)?$/.test(u)) return null; x = Number(u) }
+      else return null
       if (!isFinite(x) || x <= 0) return null
       const c = Math.round(x * 100)      /* 非金額 */ // 不是進位決策：下一行已確認 x×100 在 1e-6 內就是整數分，這裡只是轉成整數分
       return Math.abs(x * 100 - c) < 1e-6 ? c : null          // 最多 2 位小數（容許 0.1+0.2 這類浮點雜訊，一律以整數分比較）
@@ -1900,7 +1911,7 @@ function settlementPage() {
         if (!rows) continue
         const label = (v.docCode || '派發#' + v.dispatchId) + '「' + (l.description || '第 ' + (v.lines.indexOf(l) + 1) + ' 行') + '」'
         if (this.dlOver(l, v.dispatchId)) return label + ' 的拆分金額加總超過行金額，請調整後再存檔'
-        if (rows.some(r => (r.itemId && !this._cents(r.amount)) || (!r.itemId && String(r.amount || '').trim()))) return label + ' 有拆分列沒填完整（品項與未稅金額都要有；金額最多 2 位小數、要大於 0）'
+        if (rows.some(r => (r.itemId && !this._cents(r.amount)) || (!r.itemId && String(r.amount || '').trim()))) return label + ' 有拆分列沒填完整或金額格式不對（品項與未稅金額都要有；金額只能是數字，不要逗號、文字或空格，最多 2 位小數、要大於 0）'
       }
       return ''
     },
