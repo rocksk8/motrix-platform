@@ -61,7 +61,7 @@
 | `helper:custom_finance` | L1 | 自訂模組的金流（收入／支出）串接（建構器第三輪 S2.5；使用者 2026-09-30：「只要有收入、支出項，都需要跟營運報表或是相關模組數據串接」）。 | 10 | 6 | `tests/test_builder3_finance_2026_09_30.py` |
 | `helper:custom_history` | L1 | 自訂模組單據的送簽修訂紀錄（建構器第三輪 S5，2026-09-30；使用者：單據送簽→退回→修改重送，單號加 -R1、-R2 並保留各版內容，可比對差異）。 | 5 | 2 | `tests/test_builder3_history_2026_09_30.py` |
 | `helper:custom_module_delete` | L1 | 刪除自訂模組（建構器首頁「刪除模組」）。（無單位卡） | 3 | 1 | — |
-| `helper:custom_module_switch` | L1 | 自訂模組引擎總開關（P8，T78）：設定 `builder_custom_modules.enabled`（預設 0＝關；與其他 builder_* 功能「預設關、逐項開」同一慣例）。 | 3 | 2 | — |
+| `helper:custom_module_switch` | L1 | 自訂模組引擎總開關（P8，T78）：設定 `builder_custom_modules.enabled`（預設 0＝關；與其他 builder_* 功能「預設關、逐項開」同一慣例）。 | 3 | 2 | `tests/test_custom_module_engine_switch_2026_11_08.py` |
 | `helper:custom_modules` | L1 | 自訂模組引擎（P8，CUSTOMIZATION-SPEC §1／§3.1／§8.1）：定義是資料，不是程式。（無單位卡） | 55 | 8 | — |
 | `helper:daily_checks` | L1 | L1 每日 08:00 檢查執行器（2026-09-26；取代 routers/daily_tasks.py::schedule_overdue_check）。（無單位卡） | 3 | 1 | — |
 | `helper:dates` | L1 | Date arithmetic utilities.（無單位卡） | 5 | 18 | — |
