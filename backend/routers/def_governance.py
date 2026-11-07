@@ -57,12 +57,17 @@ def enabled(conn=None) -> bool:
         return False
 
 
+# 執行期真的會依角色讀不同層的種類（`D.resolve(..., role)` 的呼叫端）：layout（選單／版面）、list_pref_policy（`policy_for(..., role)`）。
+# 其他種類執行期只讀公司層 ⇒ 角色層發布沒有實際效果、也繞不過什麼；哪天有種類開始依角色讀取，要把它加進來（有守門測試）。
+ROLE_AWARE_KINDS = ("layout", "list_pref_policy")
+
+
 def base_of(conn, kind, key, scope):
     """寬嚴比較與影響預覽的『現況』基準 ⇒ (定義列｜None, 基準的範圍)。
-    版面的角色層**第一次**發布前，這個角色實際看到的是公司層（`core.definitions.resolve`：角色 ＞ 公司，而且整份取代），所以拿公司層已發布版當基準；
+    版面（及清單偏好政策）的角色層**第一次**發布前，這個角色實際看到的是公司層（`core.definitions.resolve`：角色 ＞ 公司，而且整份取代），所以拿公司層已發布版當基準；
     否則『角色層沒帶公司層的 hide』會被看成『全新增』而繞過放寬核准（T78 K 審）。已有角色層 ⇒ 跟自己的上一版比；其他種類不變。"""
     r = D.get(conn, kind, key, scope)
-    if r is None and kind == "layout" and str(scope).startswith("role:"):
+    if r is None and kind in ROLE_AWARE_KINDS and str(scope).startswith("role:"):
         c = D.get(conn, kind, key, "company")
         if c is not None:
             return c, "company"
