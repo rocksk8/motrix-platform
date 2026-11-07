@@ -5,8 +5,12 @@
 `compute()` 外層沒有 try/except ⇒ 整個案件的精算讀取／存檔／驗證／完結比對全部 500，跟這張派發單有沒有用逐行對應無關。
 修法：異常值 ⇒ 這張派發單「只能整張對應」（與各行金額加總對不上總額時同一條降級路徑）；其他派發單、其他成本不受影響。
 """
+import json
+
 import pytest
 
+import db
+from core import registry
 from modules.case import dispatch_lines as DL
 from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W  # noqa: F401
 from modules.case.tests.test_settlement_dispatch_lines_2026_11_07 import _compute, _ldisp, _lines, _line, _set_items, _unassigned, _validate
@@ -82,3 +86,59 @@ def test_dispatch_lines_of_unit_abnormal_values_return_not_ok_and_never_raise():
 def test_normal_dispatch_lines_of_is_unchanged():
     ld = DL.lines_of([{"id": 1, "amount": 100}, {"id": 2, "amount": "200.5"}], 300.5, 0.05)
     assert ld["ok"] is True and ld["totalCents"] == 30050 and [l["cents"] for l in ld["lines"]] == [10000, 20050]
+
+
+# ── 第二個來源：subcontract 派發列提供者（總額欄 0／空白時由品項加總；人員合計；稅率欄）──
+
+def _raw_set(did, **cols):
+    cn = db.get_db()
+    try:
+        for k, v in cols.items():
+            cn.execute("UPDATE contractor_dispatches SET %s=? WHERE id=?" % k, (v, did))
+        cn.commit()
+    finally:
+        cn.close()
+
+
+def _provider_row(did):
+    cn = db.get_db()
+    try:
+        return registry.single_provider("dispatch.row")(cn.execute("SELECT cd.*, vc.name AS vendor_name FROM contractor_dispatches cd LEFT JOIN vendor_contractors vc ON vc.id = cd.vendor_id WHERE cd.id=?", (did,)).fetchone())
+    finally:
+        cn.close()
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), "1e400", "NaN", "abc"], ids=lambda b: repr(b)[:10])
+def test_total_zero_with_abnormal_item_amount_does_not_break_provider_or_compute(W, bad):
+    """總額欄 0／空白 ⇒ 由品項加總：品項有異常值不可讓 `_dispatch_row` 丟例外；異常的品項當 0，其餘照加。"""
+    did = _bad_dispatch(bad)
+    _raw_set(did, total_amount=0)
+    r = _provider_row(did)
+    assert r["totalAmount"] == 4000 and r["taxAmount"] == 200                 # 1000＋3000（第 2 行 2000 換成異常值 ⇒ 0）
+    d = _compute([])
+    assert str(did) in {x["itemId"] for x in d["unassigned"]["dispatches"]}
+
+
+@pytest.mark.parametrize("bad", [float("inf"), 1e400], ids=lambda b: repr(b)[:10])
+def test_abnormal_total_column_and_personnel_do_not_break_provider_or_compute(W, bad):
+    did, _ = _ldisp([1000, 2000, 3000])
+    _raw_set(did, total_amount=bad, personnel_json=json.dumps([{"name": "甲", "amount": bad}, {"name": "乙", "amount": 500}]))
+    r = _provider_row(did)
+    assert r["personnelTotal"] == 500 and r["totalAmount"] == 6000            # 總額欄壞 ⇒ 當 0 ⇒ 改由品項加總
+    d = _compute([])
+    assert d["totals"]["dispatchTotal"] == r["grandTotal"]
+
+
+def test_abnormal_tax_rate_falls_back_to_default_not_500(W):
+    did, _ = _ldisp([1000, 2000, 3000])
+    _raw_set(did, tax_rate=float("inf"))
+    assert _provider_row(did)["taxRate"] == 0.05
+    _compute([])
+
+
+def test_provider_normal_values_unchanged(W):
+    did, _ = _ldisp([1000, 2000, 3000], personnel=500, rate=0.05)
+    r = _provider_row(did)
+    assert (r["totalAmount"], r["taxAmount"], r["personnelTotal"], r["grandTotal"], r["taxRate"]) == (6000, 300, 500, 6800, 0.05)
+    _raw_set(did, tax_rate=0)
+    assert _provider_row(did)["taxRate"] == 0 and _provider_row(did)["taxAmount"] == 0      # 稅率 0 是合法值，不可被預設值蓋掉

@@ -1,5 +1,6 @@
 """承攬商管理 (vendor contractors) + 案件派發 CRUD + 回推報價單品項."""
 import json
+import math
 import uuid
 from datetime import datetime
 from typing import List, Optional
@@ -145,6 +146,26 @@ def _legacy_modified_at(row) -> str:
         return ""
 
 
+def _finite(v) -> float:
+    """金額欄 ⇒ 有限浮點；NaN／±Infinity／`1e400`／非數字／缺 ⇒ 0.0（永不丟例外）。派發單的品項／人員金額是使用者輸入的 JSON，髒值不可讓下游（精算 compute）整個 500。"""
+    try:
+        f = float(v or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return f if math.isfinite(f) else 0.0
+
+
+def _rate_or_default(v, default: float = 0.05) -> float:
+    """稅率欄 ⇒ 有限浮點；缺（None）或異常值（NaN／Infinity／非數字）⇒ 預設 0.05（與原本「沒有稅率欄」同一個預設）。"""
+    if v is None:
+        return default
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return default
+    return f if math.isfinite(f) else default
+
+
 def _dispatch_row(row) -> dict:
     items = []
     try:
@@ -170,11 +191,11 @@ def _dispatch_row(row) -> dict:
             invoice_files = json.loads(row["invoice_files_json"] or "[]")
         except Exception:
             pass
-    personnel_total = sum(float(p.get("amount", 0) or 0) for p in personnel)
-    total = float(row["total_amount"] or 0)
+    personnel_total = _finite(sum(_finite(p.get("amount", 0)) for p in personnel if isinstance(p, dict)))
+    total = _finite(row["total_amount"])
     if not total and items:
-        total = sum(float(it.get("amount", 0) or 0) for it in items)
-    tax_rate = float(row["tax_rate"]) if "tax_rate" in keys and row["tax_rate"] is not None else 0.05
+        total = _finite(sum(_finite(it.get("amount", 0)) for it in items if isinstance(it, dict)))
+    tax_rate = _rate_or_default(row["tax_rate"]) if "tax_rate" in keys else 0.05
     tax_amount = round_half_up(total, tax_rate)
     total_with_tax = total + tax_amount
     return {
