@@ -206,10 +206,16 @@
     var keep = st.mods[m].ops.filter(function (o) { return !(o && typeof o.target === 'string' && /\/sidebar$/.test(o.target) && o.target.indexOf(m + ':') === 0) })
     return keep.concat(mine)
   }
-  // 兩份操作清單是不是『同一批操作』（不看順序：重新組出來時側欄操作會排在非側欄操作後面，順序不同不代表有改動；
-  // 側欄 move 都帶絕對位置，同一批操作的結果相同）。沒改動的模組不可以因為順序不同就被當成要發布（角色層會因此無端建立）
+  // 兩份操作清單是不是『同一批操作』（不看清單順序、也不看單一操作的鍵順序）。是 ⇒ 沒有要變更的內容，保持目前生效版（也就是畫面顯示的那一版）：
+  // 重新組出來時側欄操作會排在非側欄操作後面，或別的編輯器寫的操作鍵順序不同，都不代表使用者改了什麼；沒動的模組不可以因此被當成要發布（角色層會無端建立）。
+  // 注意：這裡只判斷『要不要發布』，不宣稱不同順序的 move 套用結果相同（絕對位置的 move 結果取決於套用順序）。
   function sameOps(a, b) {
-    var f = function (l) { return (l || []).map(function (o) { return JSON.stringify(o) }).sort().join('|') }
+    var canon = function (v) {
+      if (Array.isArray(v)) return v.map(canon)
+      if (v && typeof v === 'object') { var o = {}; Object.keys(v).sort().forEach(function (k) { o[k] = canon(v[k]) }); return o }
+      return v
+    }
+    var f = function (l) { return (l || []).map(function (o) { return JSON.stringify(canon(o)) }).sort().join('|') }
     return f(a) === f(b)
   }
   // 按下發布會寫入（建立或更新）哪些模組的版面：和 doPublish 同一個判準
