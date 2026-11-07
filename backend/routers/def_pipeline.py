@@ -419,8 +419,10 @@ def _lkey(key):
 
 
 def _live_body(conn, kind, key, scope):
-    r = D.get(conn, kind, key, scope)
-    return (r or {}).get("body") or {}, (r or {}).get("version") or 0
+    """⇒ (寬嚴比較的基準內容, 這個範圍自己目前的已發布版號)。角色層首發的基準是公司層（見 def_governance.base_of）；版號仍是這個範圍自己的（首發＝0）。"""
+    from routers.def_governance import base_of
+    r, src = base_of(conn, kind, key, scope)
+    return (r or {}).get("body") or {}, ((r or {}).get("version") or 0) if src == scope else 0
 
 
 def _record(conn, kind, key, scope, user, old_v, new_v, note, *, risk="none", effective_at=None, approvals_required=0, audit_action=None):
