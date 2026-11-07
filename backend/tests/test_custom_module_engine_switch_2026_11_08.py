@@ -132,6 +132,23 @@ def test_unreadable_switch_fails_closed_with_503(client, boss, monkeypatch):
     assert _draft(client, boss, NEW).status_code == 503
 
 
+def test_unreadable_switch_does_not_affect_editing_a_published_module(client, boss, monkeypatch):
+    """已發布模組的日常修改不讀開關：開關讀不到也照常存草稿與發布（只有『建立』才會因 503 被擋）。"""
+    _flag(True)
+    assert _draft(client, boss, KEY).status_code == 200 and _publish(client, boss, KEY).status_code == 200
+    import helpers.settings_strict as ss
+    _orig = ss.strict_value
+
+    def _boom(conn, group, field):
+        if group == "builder_custom_modules":                                  # 只讓本開關讀不到（其他設定照常，免得別的閘門先 503）
+            raise RuntimeError("db down")
+        return _orig(conn, group, field)
+    monkeypatch.setattr(ss, "strict_value", _boom)
+    assert _draft(client, boss, KEY, name="改名").status_code == 200
+    assert _publish(client, boss, KEY).status_code == 200
+    assert _draft(client, boss, NEW).status_code == 503                      # 建立仍往嚴格收
+
+
 def test_non_custom_module_kinds_and_other_roles_unaffected(client, boss, make_user):
     _flag(False)
     other = _login(client, make_user, "sw_user", role="user")

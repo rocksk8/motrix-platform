@@ -2343,6 +2343,8 @@ def pytest_probe_leak_sessionfinish(session, exitstatus):
 # 約 80 個既有測試會直接建立自訂模組（存草稿→發布）。總開關關著時這些會被擋（403），所以測試環境讓「讀到的預設值」是 1，
 # 不必逐題設定；要驗正式預設（關）或「關著擋建立」的題目標 `@pytest.mark.custom_switch_default`（題內也可明確發布 0／1，不受影響）。
 # 只換 `settings_registry._defaults`（讀值時用的預設），不動欄位登錄的 `default`——凍結基準守門（settings_deploy_baseline）比的是登錄值，仍是 0。
+# 副作用（要知道）：`_defaults` 也被定義庫「出貨範本／採用預設」（`_kind_default`）與預設組 preview 讀到，所以測試環境裡這幾條路徑對本群組看到 enabled=1、正式環境是 0；
+# 日後若有人對『預設組套用』寫斷言，本群組的結果在測試與正式不同。另外：除了標 `custom_switch_default` 的檔，沒有題目會在『開關關著』下走既有自訂模組流程——新增自訂模組入口（匯入、複製模組…）要記得補一題關著的。
 @pytest.fixture(autouse=True)
 def _custom_module_engine_on_for_tests(request, monkeypatch):
     if request.node.get_closest_marker("custom_switch_default"):
