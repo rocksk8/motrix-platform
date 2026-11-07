@@ -155,3 +155,51 @@ def test_impact_preview_diffs_against_the_inherited_policy(client, make_user, on
     paths = [c["path"] for c in d["changes"]]
     assert not any(p.startswith("pageSize") for p in paths), "pageSize 跟繼承來的一樣 ⇒ 不是變更"
     assert any(p.startswith("columns") for p in paths)
+
+
+# ── K 審必修：疊合範圍要和執行期一致（角色層整份取代公司層清單專屬政策，省略的欄位只由全域補） ──
+
+def test_role_first_publish_omitting_fields_loses_company_list_limits_is_loosen(client, make_user, on):
+    """全域 pageSize [20,50,100]；公司層清單政策限縮欄位／排序／筆數；role:sales 首發只寫 allowUserPrefs ⇒ 執行期欄位與排序限制消失、
+    筆數放寬成 [20,50,100] ⇒ 放寬 ⇒ 待核准（過去疊上公司層清單政策而被看成『沒變』直接發布）。"""
+    h = _sa(client, make_user, "gk_sa11")
+    _publish(client, h, LP.GLOBAL_KEY, "company", _glob((20, 50, 100)))
+    assert _publish(client, h, LID, "company", _own(("name",), sizes=(20,))).get("status") == "published"
+    r = _publish(client, h, LID, "role:sales", {"version": 1, "allowUserPrefs": True})
+    assert r.get("status") == "submitted", r
+    assert _policy("sales")["columns"]["allowed"] == ["name"], "待核准不生效：sales 仍是公司層清單政策"
+
+
+def test_role_global_first_publish_omitting_fields_is_loosen(client, make_user, on):
+    """全域預設自己的角色層：執行期單鍵整份取代（不由公司層全域補）⇒ 省略 allowUserPrefs／pageSize ＝ 放寬。"""
+    h = _sa(client, make_user, "gk_sa12")
+    _publish(client, h, LP.GLOBAL_KEY, "company", _glob((20,), allow=False))
+    r = _publish(client, h, LP.GLOBAL_KEY, "role:sales", {"version": 1})
+    assert r.get("status") == "submitted", r
+    assert _policy("sales")["allowUserPrefs"] is False
+
+
+def test_role_first_publish_omitting_pagesize_that_global_provides_is_not_loosen(client, make_user, on):
+    """正對照：角色層首發只寫欄位、pageSize 省略，但全域有 ⇒ 執行期 pageSize 仍是全域的 ⇒ 沒放寬 ⇒ 直接發布。"""
+    h = _sa(client, make_user, "gk_sa13")
+    _publish(client, h, LP.GLOBAL_KEY, "company", _glob((20, 50)))
+    _publish(client, h, LID, "company", _own(("name",)))
+    r = _publish(client, h, LID, "role:sales", _own(("name",)))
+    assert r.get("status") == "published", r
+    assert _policy("sales")["pageSize"]["allowed"] == [20, 50]
+
+
+def test_role_first_publish_with_only_a_default_page_size_stays_conservative(client, make_user, on):
+    """只寫 pageSize.default（省略 allowed）：預設筆數第一次出現 ＝ 加大 ⇒ 待核准（保守方向）。"""
+    h = _sa(client, make_user, "gk_sa14")
+    _publish(client, h, LP.GLOBAL_KEY, "company", _glob((20, 50)))
+    body = _own(("name",))
+    body["pageSize"] = {"default": 20}
+    r = _publish(client, h, LID, "role:viewer", body)
+    assert r.get("status") == "submitted", r
+
+
+def test_global_role_first_publish_copy_of_company_global_is_direct(client, make_user, on):
+    h = _sa(client, make_user, "gk_sa15")
+    _publish(client, h, LP.GLOBAL_KEY, "company", _glob((20,), allow=False))
+    assert _publish(client, h, LP.GLOBAL_KEY, "role:sales", _glob((20,), allow=False)).get("status") == "published"

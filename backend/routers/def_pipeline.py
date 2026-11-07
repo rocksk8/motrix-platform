@@ -427,8 +427,9 @@ def _live_body(conn, kind, key, scope):
 
 def _classify_vs_base(conn, kind, key, scope, new_body):
     """⇒ (cls, reasons, 這個範圍自己目前的已發布版號)：新內容對『現況』基準的寬嚴。
-    清單偏好政策還沒有自己的已發布版時，基準是繼承來的有效政策（公司層清單政策＋全域預設）；新內容沒寫的欄位執行期會由繼承補上，
-    所以要拿『新內容疊在繼承之上』去比（否則只寫 columns 的清單政策會被看成『pageSize 改為不限』而白白要第二人核准）。"""
+    清單偏好政策還沒有自己的已發布版時：舊＝現況有效政策（公司層清單政策＋全域預設，`inherited_body`）；新＝發布後執行期真正會得到的
+    有效政策（`effective_after`：新內容只疊在全域預設上；角色層整份取代公司層清單政策，省略的欄位不會由它補回）。
+    這樣只寫 columns、pageSize 由全域補的政策不會被看成『pageSize 改為不限』，而『角色層省略欄位＝其實失去限制』會被看成放寬。"""
     from routers.def_governance import base_of
     r, src = base_of(conn, kind, key, scope)
     old = (r or {}).get("body") or {}
@@ -436,7 +437,7 @@ def _classify_vs_base(conn, kind, key, scope, new_body):
     new = new_body
     if kind == "list_pref_policy" and r is not None and r.get("inherited"):          # 合成的繼承基準（不是定義列）
         from helpers import list_pref_policy as _LP
-        new = _LP.merge_policy(new_body, old)
+        new = _LP.effective_after(conn, key, scope, new_body)
     cls, reasons = classify(kind, old, new)
     return cls, reasons, old_v
 

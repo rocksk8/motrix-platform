@@ -2,7 +2,7 @@
 """清單偏好的公司政策（T66 L1）：定義種類 `list_pref_policy`＋寬嚴比較＋讀取。設計：docs/platform/plans/T66-LIST-PREFS-DESIGN.md §1.2。
 
 [單位] helper:list_pref_policy    [層] L1    [穩定度] 實驗（旗標 `list_prefs.enabled` 預設關；沒有路由、沒有資料表）
-[公開介面] DEFAULT_ALLOW_USER_PREFS, FIELD, GLOBAL_KEY, GROUP, KIND, OFF_REASON, compare, definition_problems, enabled, ensure_kind, inherited_body, merge_policy, policy_for
+[公開介面] DEFAULT_ALLOW_USER_PREFS, FIELD, GLOBAL_KEY, GROUP, KIND, OFF_REASON, compare, definition_problems, enabled, effective_after, ensure_kind, inherited_body, merge_policy, policy_for
 [不變式] ①旗標關（或沒開『建構器治理』）⇒ 不登記 kind（`/api/definition-kinds` 與今天相同）、`policy_for()` 回 None（＝沒有政策＝今天的行為）。
     ②key＝已登記的清單代號，或 `global.default`（全域預設，只能設 `allowUserPrefs` 與 `pageSize`；曾寫成 `*`，但定義文件庫的 key 格式不收 `*`，存不進去也讀不到，T66 改正；清單代號不含 `.`，不會撞名）；政策只能在清單目錄的範圍內縮小，不能超出（欄位、排序欄位、筆數選單）。
     ③政策只存範圍與預設，不存任何使用者資料；金額欄可以出現在 `allowed`（只是上限），能不能看見仍由欄位可見政策（F7）在讀取時交集——政策永遠不能讓人看到 F7 看不到的欄位。
@@ -265,6 +265,20 @@ def inherited_body(conn, key, scope):
     g = g_role or D.get(conn, KIND, GLOBAL_KEY, "company")
     merged = merge_policy(own["body"] if own else None, g["body"] if g else None)
     return merged
+
+
+def effective_after(conn, key, scope, new_body):
+    """治理用：把 `new_body` 發布到 (key, scope) 之後，**執行期真正會得到**的政策（和 `policy_for` 同一套疊法）。
+    清單專屬鍵：新內容疊在『這個範圍看得到的全域預設』上（角色層首發＝該角色的全域層，沒有就公司層全域；公司層首發＝公司層全域）；
+    **不**疊公司層的清單專屬政策——角色層是整份取代它，省略的欄位只會由全域預設補。全域預設鍵本身：單鍵整份取代，不補。
+    看不懂 ⇒ None（比較端視為放寬）。"""
+    if key == GLOBAL_KEY:
+        return new_body
+    g = None
+    if str(scope).startswith("role:"):
+        g = D.get(conn, KIND, GLOBAL_KEY, scope)
+    g = g or D.get(conn, KIND, GLOBAL_KEY, "company")
+    return merge_policy(new_body, g["body"] if g else None)
 
 
 def policy_for(conn, list_id, role=None):
