@@ -55,8 +55,8 @@ def test_frontend_amount_rule_matches_backend_parse():
     """頁面 `_cents()`（最多 2 位小數、容許浮點雜訊、>0）與後端 `parse_amount` 對同一組向量的結論相同。"""
     if NODE is None:
         pytest.skip("沒有 node")
-    import os
-    html = open(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "frontend", "pages", "settlement.html"), encoding="utf-8").read()
+    from core import source_tree
+    html = source_tree.page_file("settlement.html").read_text(encoding="utf-8")
     start = html.index("    _cents(s) {")
     end = html.index("    // 完整的列（品項＋合法金額）才寫進 offsets", start)
     fn = html[start:end].strip().rstrip(",")

@@ -1858,7 +1858,7 @@ function settlementPage() {
     _cents(s) {
       const x = typeof s === 'number' ? s : parseFloat(String(s == null ? '' : s).trim())
       if (!isFinite(x) || x <= 0) return null
-      const c = Math.round(x * 100)
+      const c = Math.round(x * 100)      /* 非金額 */ // 不是進位決策：下一行已確認 x×100 在 1e-6 內就是整數分，這裡只是轉成整數分
       return Math.abs(x * 100 - c) < 1e-6 ? c : null          // 最多 2 位小數（容許 0.1+0.2 這類浮點雜訊，一律以整數分比較）
     },
     // 完整的列（品項＋合法金額）才寫進 offsets；未填完整的留在編輯區，不存
@@ -1868,7 +1868,7 @@ function settlementPage() {
       rows.forEach(r => { const c = this._cents(r.amount); if (r.itemId && c) this.offsets.push({ kind: 'dispatch', ref: this._lineRef(did, key, r.no), itemId: String(r.itemId), amount: c / 100 }) })
       await this._dlRefresh()
     },
-    _lineCents(l) { const c = this._cents(l.pretax); return c == null ? Math.round(l.pretax * 100) : c },
+    _lineCents(l) { const c = this._cents(l.pretax); return c == null ? Math.round(l.pretax * 100) : c },      /* 非金額 */ // 後端回的未稅金額本來就是 ≤2 位小數，轉整數分
     _dlRemainderCents(l, did) { return this._lineCents(l) - this.dlRows(did, l.lineKey).reduce((s, r) => s + (this._cents(r.amount) || 0), 0) },
     dlOver(l, did) { return this._dlRemainderCents(l, did) < 0 },
     dlRemainderText(l, did) {
