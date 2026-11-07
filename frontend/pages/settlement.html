@@ -653,8 +653,8 @@
                   </td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"><b x-text="fmt(u.amount)"></b><div x-show="u.kind === 'dispatch'" data-testid="stl-tax" style="font-size:10px;color:var(--text-dim)" x-text="dispatchIsPretax() ? '稅額 ' + fmt(u.tax) + '（不計成本）' : '其中稅額 ' + fmt(u.tax) + '（含在金額內）'"></div></td>
                   <td>
-                    <div x-show="u.partial" data-testid="stl-un-partial-note" style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">已逐行對應，這是剩餘；要整張對應請先到「二之二」清除逐行對應</div>
-                    <select class="stl-input" :data-testid="'stl-offset-' + u.kind + '-' + u.ref" :disabled="settlement.status === 'finalized' || u.partial"
+                    <div x-show="u.partial" data-testid="stl-partial-note" style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">已逐行對應，這是剩餘；要整張對應請先到「二之二」清除逐行對應</div>
+                    <select class="stl-input" :data-testid="'stl-offset-' + u.kind + '-' + u.ref" :disabled="settlement.status === 'finalized' || !!u.partial"
                             @change="setOffset(u.kind, u.ref, $event.target.value)" style="width:100%">
                       <option value="" :selected="!u.itemId">（不對應，計入額外支出）</option>
                       <template x-for="it in offsetTargets()" :key="it.id">
