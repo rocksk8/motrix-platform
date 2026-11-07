@@ -8,7 +8,9 @@
   D `helpers.notify_actions._people`（通知動作的 `group: finance`，自己查 users）
   E `routers/mail_settings.receivable`（收件設定頁「這位使用者可能收到嗎」的 finance 群組）
   F `helpers.auth.has_finance_access`（權限判斷；旗標 `finance_via_effective` 打開後改看生效權限）
-哪天其中一處改了（例如旗標 `on` 之後權限那邊多了／少了人，或有人只改了信箱那一支），這裡會紅，提醒另外幾處要一起改，而不是悄悄分裂。
+哪天其中一處改了（例如有人只改了信箱那一支、或只改了某個資料庫查詢），這裡會紅，提醒另外幾處要一起改，而不是悄悄分裂。
+⚠️ 範圍：種子帳號**沒有職責角色（duty_roles）綁定**，所以旗標 `finance_via_effective` 的三種值下，生效權限都等於角色；
+『旗標 on 之後職責角色把財務鍵授給非財務角色的人』這個分裂目前**確實存在**，由最後一題 `xfail(strict=True)` 釘住——有人修好（或讓各處一致）它會自動轉紅，到時把 xfail 拿掉。
 轉換：全部換成帳號集合再比（B 的信箱 ↔ 帳號靠 users.email 對應，種子帳號的信箱彼此不同）。"""
 import json
 from types import SimpleNamespace
@@ -144,3 +146,25 @@ def test_probe_catches_a_split(client, seeded, monkeypatch):
     views = _each_view(monkeypatch)
     assert views["B finance_recipient_emails"] != views["A finance_usernames"]
     assert any(u.startswith("fx_admin_") for u in views["B finance_recipient_emails"])
+
+
+@pytest.mark.xfail(strict=True, reason="已知分裂：旗標 on 後職責角色把 finance 鍵授給非財務角色的人 ⇒ has_finance_access 多出這個人，但財務帳號／信箱／站內通知／通知動作仍只認 finance＋superadmin 角色。修好或對齊後這題會轉紅，請拿掉 xfail。")
+def test_duty_role_grant_under_flag_on_splits_the_audience(client, seeded, monkeypatch):
+    import db
+    from helpers import auth
+    c = db.get_db()
+    try:
+        uid = c.execute("SELECT id FROM users WHERE username='fx_sales_1'").fetchone()["id"]
+        rid = c.execute("INSERT INTO duty_roles (key, name, permissions, active, created_at, updated_at) VALUES ('fx_cashier','出納職責','[\"finance\"]',1,'2026-01-01','2026-01-01')").lastrowid
+        c.execute("INSERT INTO user_duty_roles (user_id, role_id, granted_at) VALUES (?,?,?)", (uid, rid, "2026-01-01"))
+        c.commit()
+    finally:
+        c.close()
+    _set_mode("on")
+    try:
+        views = _each_view(monkeypatch)
+    finally:
+        _set_mode("off")
+    ref = views["A finance_usernames"]
+    for name, got in views.items():
+        assert got == ref, "%s 與 finance_usernames 不一致：多了 %s／少了 %s" % (name, sorted(got - ref), sorted(ref - got))
