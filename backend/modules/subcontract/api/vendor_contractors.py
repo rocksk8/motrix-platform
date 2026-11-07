@@ -1,5 +1,6 @@
 """承攬商管理 (vendor contractors) + 案件派發 CRUD + 回推報價單品項."""
 import json
+import logging
 import math
 import uuid
 from datetime import datetime
@@ -146,24 +147,37 @@ def _legacy_modified_at(row) -> str:
         return ""
 
 
-def _finite(v) -> float:
-    """金額欄 ⇒ 有限浮點；NaN／±Infinity／`1e400`／非數字／缺 ⇒ 0.0（永不丟例外）。派發單的品項／人員金額是使用者輸入的 JSON，髒值不可讓下游（精算 compute）整個 500。"""
+logger = logging.getLogger(__name__)
+
+MAX_AMOUNT = 1e13                  # 元；超過視為異常（與案件側 dispatch_lines.MAX_SANE_CENTS＝10^15 分同一門檻，也在 Decimal 預設 28 位精度之內）
+MAX_RATE = 100                     # 稅率絕對值上限（與案件側同一門檻）
+
+
+def _finite(v, rid=None, what="") -> float:
+    """金額欄 ⇒ 有限浮點；NaN／±Infinity／`1e400`／非數字／絕對值超過 `MAX_AMOUNT` ⇒ 0.0（永不丟例外）。派發單的品項／人員金額是使用者輸入的 JSON，
+    髒值不可讓下游（精算 compute）整個 500。**異常值當 0 會讓該張成本顯示為 0**，所以一律記 warning（帶派發 id）。"""
     try:
         f = float(v or 0)
     except (TypeError, ValueError):
-        return 0.0
-    return f if math.isfinite(f) else 0.0
+        f = float("nan")
+    if math.isfinite(f) and abs(f) <= MAX_AMOUNT:
+        return f
+    logger.warning("派發單 %s 的 %s 是異常值 %r，當 0 處理", rid, what or "金額", v)
+    return 0.0
 
 
-def _rate_or_default(v, default: float = 0.05) -> float:
-    """稅率欄 ⇒ 有限浮點；缺（None）或異常值（NaN／Infinity／非數字）⇒ 預設 0.05（與原本「沒有稅率欄」同一個預設）。"""
+def _rate_or_default(v, rid=None, default: float = 0.05) -> float:
+    """稅率欄 ⇒ 有限浮點且絕對值 ≤ `MAX_RATE`；缺（None）⇒ 預設 0.05；異常值（NaN／Infinity／非數字／太大）⇒ 預設 0.05 並記 warning。0 是合法值。"""
     if v is None:
         return default
     try:
         f = float(v)
     except (TypeError, ValueError):
-        return default
-    return f if math.isfinite(f) else default
+        f = float("nan")
+    if math.isfinite(f) and abs(f) <= MAX_RATE:
+        return f
+    logger.warning("派發單 %s 的稅率是異常值 %r，改用預設 %s", rid, v, default)
+    return default
 
 
 def _dispatch_row(row) -> dict:
@@ -191,11 +205,12 @@ def _dispatch_row(row) -> dict:
             invoice_files = json.loads(row["invoice_files_json"] or "[]")
         except Exception:
             pass
-    personnel_total = _finite(sum(_finite(p.get("amount", 0)) for p in personnel if isinstance(p, dict)))
-    total = _finite(row["total_amount"])
+    rid = row["id"]
+    personnel_total = _finite(sum(_finite(p.get("amount", 0), rid, "外包人員金額") for p in personnel if isinstance(p, dict)), rid, "外包人員合計")
+    total = _finite(row["total_amount"], rid, "總額欄")
     if not total and items:
-        total = _finite(sum(_finite(it.get("amount", 0)) for it in items if isinstance(it, dict)))
-    tax_rate = _rate_or_default(row["tax_rate"]) if "tax_rate" in keys else 0.05
+        total = _finite(sum(_finite(it.get("amount", 0), rid, "品項金額") for it in items if isinstance(it, dict)), rid, "品項金額合計")
+    tax_rate = _rate_or_default(row["tax_rate"], rid) if "tax_rate" in keys else 0.05
     tax_amount = round_half_up(total, tax_rate)
     total_with_tax = total + tax_amount
     return {

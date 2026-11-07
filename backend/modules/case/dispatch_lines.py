@@ -9,6 +9,7 @@
 行鍵＝派發單 items_json 該行 id 的正規化字串（與 JS `String(x)` 逐字相同），再做 `%`→`%25`、`#`→`%23`。前端 settlement.html 有同一組規則（V7 跨語言向量鎖住兩端一致）。
 """
 import logging
+import math
 import re
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -262,9 +263,14 @@ def _lines_of(items, total, rate) -> dict:
 
 # ── 一張派發單的行層級分配（compute 用）──────────────────────────────────────
 
+def _json_num(v):
+    """原樣帶出給 API 的數量／單價：NaN／±Infinity（JSON 序列化會丟 ValueError ⇒ 整個回應 500）⇒ None；其餘原樣。"""
+    return None if isinstance(v, float) and not math.isfinite(v) else v
+
+
 def view_lines(ld: dict, taxed: bool) -> list:
     """`lines_of` 的結果 ⇒ 給 API 的行列表（金額為元）：`pretax`＝未稅、`tax`＝分攤稅額（整數元）、`amount`＝計入成本（taxed＝未稅＋稅額；pretax 口徑＝未稅）。"""
-    return [{"lineKey": l["key"], "description": l["description"], "qty": l["qty"], "unit": l["unit"], "unitPrice": l["unitPrice"],
+    return [{"lineKey": l["key"], "description": l["description"], "qty": _json_num(l["qty"]), "unit": l["unit"], "unitPrice": _json_num(l["unitPrice"]),
              "pretax": amount_out(l["cents"]), "tax": l["tax"], "amount": amount_out(l["cents"] + (l["tax"] * 100 if taxed else 0)),
              "mappable": l["mappable"], "reason": l["reason"]} for l in ld["lines"]]
 

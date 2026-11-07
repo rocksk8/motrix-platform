@@ -142,3 +142,57 @@ def test_provider_normal_values_unchanged(W):
     assert (r["totalAmount"], r["taxAmount"], r["personnelTotal"], r["grandTotal"], r["taxRate"]) == (6000, 300, 500, 6800, 0.05)
     _raw_set(did, tax_rate=0)
     assert _provider_row(did)["taxRate"] == 0 and _provider_row(did)["taxAmount"] == 0      # 稅率 0 是合法值，不可被預設值蓋掉
+
+
+# ── K 審必修 1：有限但極大的值（1e300、1.7e308）──
+
+@pytest.mark.parametrize("col,val", [("total_amount", 1e300), ("total_amount", 1.7e308), ("total_amount", -1.7e308), ("total_amount", 2e13), ("tax_rate", 1e300), ("tax_rate", 101)],
+                         ids=lambda v: repr(v)[:10])
+def test_huge_finite_column_values_do_not_break_compute_or_http(W, col, val, caplog):
+    c, h = W
+    did, _ = _ldisp([1000, 2000, 3000])
+    _raw_set(did, **{col: val})
+    r = _provider_row(did)
+    assert r["totalAmount"] == 6000 if col == "total_amount" else r["taxRate"] == 0.05      # 總額壞 ⇒ 改由品項加總；稅率壞 ⇒ 預設
+    assert "異常值" in caplog.text and str(did) in caplog.text                                # 當 0／預設一定留 warning（帶派發 id）
+    _compute([])
+    resp = c.get("/api/quotations/%s/settlement-actuals" % NO, headers=h)
+    assert resp.status_code == 200, resp.text[:300]
+
+
+def test_two_huge_item_amounts_sum_is_guarded_and_logged(W, caplog):
+    c, h = W
+    did = _bad_dispatch(1.7e308, which=0)
+    items = _lines([1.7e308, 1.7e308, 1000])
+    _set_items(did, items)
+    _raw_set(did, total_amount=0)
+    r = _provider_row(did)
+    assert r["totalAmount"] == 1000                                                          # 兩個超大金額各自當 0
+    assert c.get("/api/quotations/%s/settlement-actuals" % NO, headers=h).status_code == 200
+
+
+# ── K 審必修 2：qty／unitPrice 是 NaN／Infinity 時，回應序列化不可 500（T77 新增的輸出欄位）──
+
+@pytest.mark.parametrize("field", ["qty", "unitPrice"])
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")], ids=lambda v: repr(v))
+def test_nonfinite_qty_or_unit_price_does_not_break_http_response(W, field, bad):
+    c, h = W
+    did, keys = _ldisp([1000, 2000, 3000])
+    items = _lines([1000, 2000, 3000])
+    items[1][field] = bad                                                                     # amount 正常 ⇒ lines_of 不降級，這個值會被原樣帶出
+    _set_items(did, items)
+    resp = c.get("/api/quotations/%s/settlement-actuals" % NO, headers=h)
+    assert resp.status_code == 200, resp.text[:300]
+    body = resp.json()
+    view = {v["dispatchId"]: v for v in body["dispatchLines"]}[str(did)]
+    assert view["linesOk"] is True and view["lines"][1][field] is None                       # 該欄位 ⇒ null，其餘欄位與逐行對應不受影響
+    assert view["lines"][0][field] == (1 if field == "qty" else 1000)
+    un = [x for x in body["unassigned"]["dispatches"] if x["itemId"] == str(did)][0]         # 未對應清單走同一個函式
+    assert un["lines"][1][field] is None
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), "1e400"], ids=lambda v: repr(v)[:10])
+def test_abnormal_item_amount_http_200(W, bad):
+    c, h = W
+    _bad_dispatch(bad)
+    assert c.get("/api/quotations/%s/settlement-actuals" % NO, headers=h).status_code == 200
