@@ -226,3 +226,27 @@ def test_second_version_same_effective_policy_or_narrower_is_direct(client, make
     assert _publish(client, h, LID, "company", _own(("name",), sizes=(20,))).get("status") == "published", "更窄 ⇒ 收緊"
     r = _publish(client, h, LID, "company", _own(("name",)))                              # 拿掉自己的 pageSize ⇒ 回到繼承 [20,50]，比 [20] 寬
     assert r.get("status") == "submitted", "從 [20] 回到繼承的 [20,50] ＝放寬"
+
+
+def test_restore_to_a_version_that_is_wider_in_effect_goes_pending(client, make_user, on):
+    """K 審：全域 [20,50,100]；v1＝columns＋pageSize [20,50,100]（與有效政策相同）；v2＝只寫 columns；全域收緊成 [20]；
+    還原 v1 ⇒ 有效 pageSize 從 [20] 放寬回 [20,50,100] ⇒ 待核准（原始 body 比較看成『從沒寫變成限定範圍』＝收緊而直接還原）。"""
+    h = _sa(client, make_user, "gk_sa18")
+    _publish(client, h, LP.GLOBAL_KEY, "company", _glob((20, 50, 100)))
+    assert _publish(client, h, LID, "company", _own(("name",), sizes=(20, 50, 100))).get("status") == "published"
+    assert _publish(client, h, LID, "company", _own(("name",))).get("status") == "published"
+    assert _publish(client, h, LP.GLOBAL_KEY, "company", _glob((20,))).get("status") == "published", "全域收緊 ⇒ 直接生效"
+    assert _policy()["pageSize"]["allowed"] == [20]
+    r = client.post("/api/definitions/list_pref_policy/%s/restore/1?scope=company" % LID, json={"note": "t"}, headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json().get("pending") is True or r.json().get("status") == "submitted", r.text
+    assert _policy()["pageSize"]["allowed"] == [20], "待核准不生效"
+
+
+def test_restore_to_a_version_with_the_same_or_tighter_effect_is_direct(client, make_user, on):
+    h = _sa(client, make_user, "gk_sa19")
+    _publish(client, h, LP.GLOBAL_KEY, "company", _glob((20,)))
+    _publish(client, h, LID, "company", _own(("name",), sizes=(20,)))                    # v1：明寫 [20]（＝有效政策）
+    _publish(client, h, LID, "company", _own(("name",)))                                  # v2：繼承 [20]
+    r = client.post("/api/definitions/list_pref_policy/%s/restore/1?scope=company" % LID, json={"note": "t"}, headers=h)
+    assert r.status_code == 200 and not r.json().get("pending") and r.json().get("version") == 3, r.text

@@ -418,13 +418,6 @@ def _lkey(key):
     return str(key).replace(":", ".")[:60]
 
 
-def _live_body(conn, kind, key, scope):
-    """⇒ (寬嚴比較的基準內容, 這個範圍自己目前的已發布版號)。角色層首發的基準是公司層（見 def_governance.base_of）；版號仍是這個範圍自己的（首發＝0）。"""
-    from routers.def_governance import base_of
-    r, src = base_of(conn, kind, key, scope)
-    return (r or {}).get("body") or {}, ((r or {}).get("version") or 0) if src == scope else 0
-
-
 def _classify_vs_base(conn, kind, key, scope, new_body):
     """⇒ (cls, reasons, 這個範圍自己目前的已發布版號)：新內容對『現況』基準的寬嚴。
     清單偏好政策一律以有效政策比：沒有自己的已發布版時，舊＝現況有效政策（公司層清單政策＋全域預設，`inherited_body`）；新＝發布後執行期真正會得到的
@@ -498,8 +491,7 @@ def handle_restore(conn, kind, key, scope, version, user, note, authorization):
     old = D.get(conn, kind, key, scope, int(version))
     if old is None or old["status"] != "published":
         return None                                                    # 讓原本的錯誤出現
-    live_body, live_v = _live_body(conn, kind, key, scope)
-    cls, reasons = classify(kind, live_body, old["body"])
+    cls, reasons, live_v = _classify_vs_base(conn, kind, key, scope, old["body"])      # 與發布同一個比較（清單偏好政策＝有效對有效）
     if cls != "loosen":
         return None
     cur = D.get(conn, kind, key, scope, 0)
