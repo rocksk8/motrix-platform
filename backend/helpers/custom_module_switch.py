@@ -2,12 +2,15 @@
 """自訂模組引擎總開關（P8，T78）：設定 `builder_custom_modules.enabled`（預設 0＝關；與其他 builder_* 功能「預設關、逐項開」同一慣例）。
 
 [單位] helper:custom_module_switch    [層] L1    [穩定度] 實作
-[公開介面] GROUP；creation_block(conn, kind, key, scope="company") → None｜(HTTP 狀態, 訊息)
+[公開介面] GROUP, MSG, creation_block
+[契約題] tests/test_custom_module_engine_switch_2026_11_08.py
 [不變式] ①關著時**只擋「建立」**：這個 key 還沒有任何已發布版本的 `custom_module` 不能存草稿、發布、還原、核可；
             已發布模組的既有單據（`custom_records`）、查詢、輸出與它自己的草稿／發布／還原**完全不受影響**（關閉不是下架）。
          ②先看有沒有已發布版本（有 ⇒ 放行，不讀開關）；只有「建立」才讀開關，走 `settings_strict`（讀不到 ⇒ 503 往嚴格方向收，不悄悄當成開著）。
          ③只管 `custom_module` 的 company 範圍（其他範圍本來就被 `_custom_module_scope_guard` 擋掉）。
-[呼叫端] routers/definitions.py（存草稿／發布／還原）、routers/custom_records.py（核可送審中的定義版本）。
+
+簽名：creation_block(conn, kind, key, scope="company") → None｜(HTTP 狀態, 訊息)
+呼叫端：routers/definitions.py（存草稿／發布／還原）、routers/custom_records.py（核可送審中的定義版本）。
 """
 import logging
 
