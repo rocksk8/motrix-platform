@@ -88,8 +88,13 @@ def _wait(pred, tries=60, ms=200, page=None):
 def _open_queue_item(page, live_server):
     page.goto(f"{live_server}/pages/approval-queue.html")
     page.wait_for_selector(f'[data-testid="aq-item-{NO}"]', timeout=15000)
-    page.click(f'[data-testid="aq-item-{NO}"]')
+    # 點列後 `selected` 先是列表那一筆、詳情（approveReview／contentFp）才非同步載入：只等按鈕可見會偶發在詳情到之前就按下去，
+    # 走到「列表快速核准」路徑（先 POST → 409 → 載詳情 → 彈窗），與本檔其他題假設的「詳情已到、不送請求就跳彈窗」不同（T76 閘門抓到偶發紅）。
+    # ⇒ 先等詳情回應，再給前端一個 tick 把它寫進畫面。
+    with page.expect_response(lambda r: "/api/approval-queue/detail" in r.url and r.status == 200, timeout=10000):
+        page.click(f'[data-testid="aq-item-{NO}"]')
     page.wait_for_selector('[data-testid="aq-approve"]', state="visible", timeout=10000)
+    page.wait_for_timeout(300)
 
 
 @pytest.mark.e2e
