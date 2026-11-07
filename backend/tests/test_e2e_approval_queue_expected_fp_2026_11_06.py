@@ -190,5 +190,7 @@ def test_list_quick_approve_of_flagged_item_with_stale_list_fp_goes_through_the_
     assert S5._state()[1]["status"] == "pending"
     page.click('[data-testid="approve-choice-keep"]')
     assert S5._wait(lambda: S5._state()[1]["status"] == "approved", page=page), statuses
+    # 資料庫狀態翻成 approved 早於瀏覽器收到 200 回應事件：不等回應就斷言會讀到還只有第一次的 409（併發時偶發紅，非伺服器回 409）。
+    assert S5._wait(lambda: statuses[-1:] == [200], page=page), statuses
     assert statuses[-1:] == [200] and posts[-1]["choice"] == "keep" and posts[-1]["expectedFp"] == fp_new, "第二次要用詳情的新指紋、帶 choice=keep：%s" % posts
     assert S5._state()[1]["signedFp"] == fp_new
