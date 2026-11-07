@@ -4,7 +4,7 @@
 執行期 `D.resolve(conn, kind, key, role)`：角色層整份取代公司層。list_pref_policy 的 `policy_for(..., role)` 就是這樣讀的，
 所以『公司層限縮、角色層首發放寬』若拿空基準比，會被看成『改為限定範圍＝收緊』而直接生效、繞過第二位最高管理者核准。
 """
-import re
+import ast
 from pathlib import Path
 
 import pytest
@@ -101,17 +101,65 @@ def test_impact_marks_company_as_the_baseline_for_first_role_layer(client, make_
     assert d.get("changesBase") == "company"
 
 
+def _scan_source(src):
+    """⇒ (帶角色的 resolve 呼叫數, 含 "role:" 的字串常數數)。用 AST，不靠 regex：
+    resolve 的呼叫（任何寫法的接收者／連線變數名／參數含括號）只要有 ≥4 個位置參數、`role=`／`**kw` 關鍵字或 `*args`，就算；
+    從 definitions 匯入別名的 resolve 另算一筆（以呼叫數＋匯入數）；`"role:…"` 字串常數（含 f-string）＝有人在組角色層的 scope。"""
+    t = ast.parse(src)
+    calls = strs = 0
+    for n in ast.walk(t):
+        if isinstance(n, ast.Call):
+            f = n.func
+            name = f.attr if isinstance(f, ast.Attribute) else f.id if isinstance(f, ast.Name) else None
+            if name == "resolve" and (len(n.args) >= 4 or any(isinstance(a, ast.Starred) for a in n.args)
+                                      or any(k.arg in ("role", None) for k in n.keywords)):
+                calls += 1
+        elif isinstance(n, ast.ImportFrom) and (n.module or "").endswith("definitions") and any(a.name == "resolve" for a in n.names):
+            calls += 1
+        elif isinstance(n, ast.Constant) and isinstance(n.value, str) and "role:" in n.value:
+            strs += 1
+    return calls, strs
+
+
+def test_scanner_positive_control_catches_every_way_of_writing_a_role_reader():
+    """守門自己要有正對照：這些寫法 regex 版會漏（K 審），AST 版都要抓到；沒帶角色的不能誤報。"""
+    must = [
+        'D.resolve(conn, KIND, k, user.get("role"))',                 # 角色參數含括號
+        'D.resolve(c, KIND, k, role)',                                # 連線變數不叫 conn
+        'self.D.resolve(self.conn, KIND, _key(k), role)',            # 接收者／key 含呼叫
+        'definitions.resolve(conn, "layout", k, role)',               # 別名
+        'core.definitions.resolve(conn, "layout", k, role=role)',
+        'D.resolve(*args)',
+        'D.resolve(conn, KIND, k, **kw)',
+        'from core.definitions import resolve as rs',                 # 匯入別名
+        'x = "role:%s" % r',                                          # 直接組 scope 去 D.get
+        'x = f"role:{r}"',
+    ]
+    for src in must:
+        assert sum(_scan_source(src)) >= 1, src
+    assert _scan_source('D.resolve(conn, KIND, code)') == (0, 0) and _scan_source('Path(p).resolve()') == (0, 0)
+
+
+# 執行期『帶角色讀定義』的檔案：目錄（layout）、清單偏好政策、診斷端點。出現新檔案 ⇒ 該種類開始依角色讀取 ⇒ 判斷要不要加進
+# def_governance.ROLE_AWARE_KINDS（不加＝角色層首發會拿空基準比，治理被繞過），再更新這份名單。
+_ROLE_READERS = {"core/catalog.py", "helpers/list_pref_policy.py", "routers/definitions.py"}
+# 組 "role:<角色>" scope 字串的檔案：定義庫本身（resolve 內）、選單建構器（驗證）、治理（基準）、清單偏好政策（繼承基準）、定義路由（說明文字／診斷）。
+_ROLE_SCOPE_BUILDERS = {"core/definitions.py", "helpers/menu_builder.py", "routers/def_governance.py",
+                        "helpers/list_pref_policy.py", "routers/definitions.py"}
+
+
 def test_role_aware_kinds_cover_every_runtime_reader_that_passes_a_role():
-    """守門：有『帶角色』的 D.resolve 呼叫端的檔案只有這三個（目錄=layout、清單偏好政策、診斷端點）。
-    出現新的檔案 ⇒ 該種類執行期開始依角色讀取 ⇒ 要判斷是否加進 def_governance.ROLE_AWARE_KINDS，再更新這份名單。"""
     from routers import def_governance as G
     assert {"layout", "list_pref_policy"} <= set(G.ROLE_AWARE_KINDS)
-    pat = re.compile(r"\bD\.resolve\(\s*conn\s*,\s*[^,()]+,\s*[^,()]+,\s*[^()]+\)")
-    found = set()
+    readers, builders = set(), set()
     for p in _ROOT.rglob("*.py"):
         rel = p.relative_to(_ROOT).as_posix()
-        if rel.startswith(("tests/", ".venv", "venv")) or "/tests/" in rel:
+        if rel.startswith(("tests/", ".venv", "venv")) or "/tests/" in rel or "site-packages" in rel:
             continue
-        if pat.search(p.read_text(encoding="utf-8", errors="ignore")):
-            found.add(rel)
-    assert found == {"core/catalog.py", "helpers/list_pref_policy.py", "routers/definitions.py"}, found
+        calls, strs = _scan_source(p.read_text(encoding="utf-8", errors="ignore"))
+        if calls:
+            readers.add(rel)
+        if strs:
+            builders.add(rel)
+    assert readers == _ROLE_READERS, "帶角色的 resolve 呼叫端變了：新增 %s／消失 %s" % (sorted(readers - _ROLE_READERS), sorted(_ROLE_READERS - readers))
+    assert builders <= _ROLE_SCOPE_BUILDERS, "新增了組 'role:' scope 的檔案：%s（直接 D.get(..., 'role:…') 也是角色層讀取）" % sorted(builders - _ROLE_SCOPE_BUILDERS)

@@ -373,7 +373,7 @@ def json_size(raw):
     return json.loads(raw)["pageSize"]
 
 
-# ── 全域政策 `*` 的遞補 ──
+# ── 全域政策 `global.default` 的遞補 ──
 def test_global_policy_fallback_and_per_list_override(db, monkeypatch):
     from core import definitions as D
     monkeypatch.setattr(LP, "enabled", lambda conn=None: True)
@@ -382,7 +382,7 @@ def test_global_policy_fallback_and_per_list_override(db, monkeypatch):
     table = {}
     monkeypatch.setattr(D, "resolve", lambda conn, kind, key, role=None: (copy.deepcopy(table.get(key)), "t") if kind == LP.KIND else (None, ""))
     assert LP.policy_for(db, LID) is None                                          # 都沒有 ⇒ 今天的行為
-    table["*"] = glob
+    table[LP.GLOBAL_KEY] = glob
     p = LP.policy_for(db, LID)
     assert p["allowUserPrefs"] is False and p["pageSize"]["default"] == 20
     v = LV.constraints(db, U1, LID)
