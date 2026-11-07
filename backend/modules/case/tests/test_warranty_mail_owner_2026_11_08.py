@@ -38,15 +38,15 @@ def _mk_user(username, display, email, role="sales", active=1):
         c.close()
 
 
-def _mk_case(owner_id, owner_display):
+def _mk_case(owner_id, owner_display, qno=QNO, n_devices=1):
     import db
     ws = (date.today() - timedelta(days=350)).isoformat()                       # 12 個月保固 ⇒ 約 15 天後到期（落在預設 30 天預警內）
-    data = {"caseRecord": {"devices": [{"name": "NVR-01", "sn": "SN0001", "warrantyStart": ws, "warrantyMonths": 12}]}}
+    data = {"caseRecord": {"devices": [{"name": "NVR-%02d" % i, "sn": "SN%04d" % i, "warrantyStart": ws, "warrantyMonths": 12} for i in range(1, n_devices + 1)]}}
     c = db.get_db()
     try:
         c.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at, deal_tag, sales_person, sales_person_id) "
                   "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                  (QNO, "已送出", "保固客戶", "保固專案", 1000, 952, json.dumps(data, ensure_ascii=False),
+                  (qno, "已送出", "保固客戶", "保固專案", 1000, 952, json.dumps(data, ensure_ascii=False),
                    "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已成案", owner_display, owner_id))
         c.commit()
     finally:
@@ -66,10 +66,11 @@ def _guards():
 def mail(monkeypatch):
     """攔截寄送：記下收件人；結果由 `state["outcome"]` 決定（預設寄出）。"""
     from helpers import email_notify as en
-    state = {"outcome": en.SEND_SENT, "sent": []}
+    state = {"outcome": en.SEND_SENT, "sent": [], "html": []}
 
     def fake(to, subject, html):
         state["sent"].append(list(to))
+        state["html"].append(html)
         return _Handle(state["outcome"])
     monkeypatch.setattr(en, "_async_send", fake)
     return state
@@ -142,3 +143,41 @@ def test_one_failing_device_does_not_stop_the_scan(client, mail, monkeypatch):
     monkeypatch.setattr(en, "send_registered", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
     _run()                                                      # 不丟例外
     assert _guards() == []
+
+
+def test_button_link_points_at_the_case_not_the_site_home(client, mail):
+    """K 審必修：信件按鈕連到 quotation-form.html?no=<單號>（與舊信相同），不是退成站台首頁。"""
+    import re
+    from helpers import email_notify as en
+    uid = _mk_user("sales_wang", "王小明", OWNER_EMAIL)
+    _mk_case(uid, "王小明")
+    _run()
+    hrefs = re.findall(r'<a href="([^"]+)" class="btn"', mail["html"][0])
+    assert hrefs == ["%s/pages/quotation-form.html?no=%s" % (en._base_url(), QNO)], hrefs
+
+
+def test_transient_failure_stops_the_rest_of_this_run(client, mail):
+    """K 審建議：SMTP 暫時失敗就別逐台各等一次——本輪只試第一台，全部不寫記號；下一輪恢復後補齊。"""
+    from helpers import email_notify as en
+    uid = _mk_user("sales_wang", "王小明", OWNER_EMAIL)
+    _mk_case(uid, "王小明", n_devices=2)
+    _mk_case(uid, "王小明", qno="MQ-WR-002", n_devices=2)                 # 兩張案件：停止要跨案件生效，不只跳出內層迴圈
+    mail["outcome"] = en.SEND_TRANSIENT_FAIL
+    _run()
+    assert len(mail["sent"]) == 1 and _guards() == []
+    mail["outcome"] = en.SEND_SENT
+    _run()
+    assert len(mail["sent"]) == 5 and len(_guards()) == 4        # 第二輪四台都補寄（第一輪已試過 1 台）
+
+
+def test_no_recipient_does_not_halt_the_scan(client, mail, monkeypatch):
+    """沒有收件人只是這一台沒人可寄，不代表 SMTP 壞了：後面的設備照掃（各自都沒收件人 ⇒ 都不寫記號）。"""
+    from helpers import email_notify as en
+    uid = _mk_user("sales_nomail", "無信箱", "")
+    _mk_case(uid, "無信箱", n_devices=3)
+    monkeypatch.setattr(en, "_group_emails", lambda *a, **k: [])
+    seen = []
+    real = en.send_registered
+    monkeypatch.setattr(en, "send_registered", lambda *a, **k: (seen.append(1), real(*a, **k))[1])
+    _run()
+    assert len(seen) == 3 and _guards() == []

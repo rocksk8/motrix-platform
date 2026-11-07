@@ -1,9 +1,11 @@
 # 案件 更新紀錄
 
 ## (next) — 2026-11-08（t78/r1-warranty-mail；T78 R1：保固到期信寄得到案件業務，且先寄成功才記已通知；非金額）
-- 修正（保固到期信，T78 R1）：`case_deadlines._check_warranty_expiry` 的收件人改用案件的 `sales_person_id` 外鍵解出的業務帳號（`helpers.case_access.case_owner_username`）；原作法把 `quotations.sales_person`（顯示名）當 `username` 比對，只有顯示名剛好等於帳號時業務才收得到。業務已停用或沒有外鍵 ⇒ 只寄群組收件人（管理員），與原先收不到時相同，不會比以前少。
+- 修正（保固到期信，T78 R1）：`case_deadlines._check_warranty_expiry` 的收件人改用案件的 `sales_person_id` 外鍵解出的業務帳號（`helpers.case_access.case_owner_username`）；原作法把 `quotations.sales_person`（顯示名）當 `username` 比對，只有顯示名剛好等於帳號時業務才收得到。業務已停用或沒有外鍵 ⇒ 只寄群組收件人（管理員），與原先名字對不上時相同。⚠️ 例外：`sales_person_id` 為空、但 `sales_person` 剛好等於某個在職 username 的案件，舊作法收得到、新作法收不到（只剩群組收件人）；這類案件有多少待正式機備份副本統計（見下方已知限制）。
 - 修正（保固到期信，T78 R1）：已通知記號（`warranty_notif.*`）改成**寄送成功後才寫**——新增 `helpers.email_notify.send_warranty_expiry`（`send_registered(wait=True)`，寄出／結果不明／永久失敗 ⇒ 寫記號；暫時失敗／機器略過／沒有收件人 ⇒ 不寫，下一次每日檢查重試）。原作法寄信前就寫記號，SMTP 暫時失敗就永遠不補寄。單台設備寄送丟例外只略過該台，不中斷整個掃描。信件內容抽成 `_warranty_expiry_mail` 與舊入口 `notify_warranty_expiry` 共用（舊入口簽章與行為不變，其 `sales_person` 參數一直是帳號）。
-- 測試：`tests/test_warranty_mail_owner_2026_11_08.py`（顯示名≠帳號業務仍在收件人內；暫時失敗不寫記號、下次補寄；結果不明／永久失敗保留記號；業務已停用只寄群組；無收件人不寫記號；寄送例外不中斷）。
+- 修正（保固到期信，K 審）：①信件按鈕連到該案（`quotation-form.html?no=<單號>`，與舊信相同）——新入口一度沒傳 `link`，退成站台首頁；②寄送暫時失敗／機器略過時**本輪停止後續保固信**（逐台各等一次最久 45 秒，會把同一次每日檢查後面的階段期限、付款提醒、日曆同步拖住），記號未寫，下次每日檢查補寄；「沒有收件人」不算暫時失敗，不中斷掃描。
+- 上線說明：機器沒設 SMTP 或信件總開關關閉時，現在**不寫已通知記號**；日後打開，30 天預警窗內所有設備會一次補寄（這是新設計要的行為）。
+- 測試：`tests/test_warranty_mail_owner_2026_11_08.py`（顯示名≠帳號業務仍在收件人內；暫時失敗不寫記號、下次補寄；結果不明／永久失敗保留記號；業務已停用只寄群組；無收件人不寫記號且不中斷；寄送例外不中斷；按鈕連結含單號；暫時失敗跨案件停止後續）。
 - 已知限制：每台設備的寄送會等寄送結果（最多 45 秒）；每日檢查是背景排程，不影響 request。上線前可統計正式機已成案案件 `sales_person` 對不上任何 `users.username` 的比例（R1 票的選做項，尚未做，需只讀備份副本）。
 
 ## 1.0.207 — 2026-11-07（T77；發票上傳通知：款項／材料申請發票上傳 ⇒ 寄財務與最高管理者；module.json features 宣告、modules.json 登記；組裝與寄送失敗皆不影響上傳／核准）＋精算派發單逐行對應（整行／拆分；後端＋二之二；已 rebase 到 t77-int；K 審必修已修）

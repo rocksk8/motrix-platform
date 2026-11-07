@@ -1669,6 +1669,7 @@ def send_warranty_expiry(device_name: str, customer: str, quote_no: str, days_le
         m = _warranty_expiry_mail(device_name, customer, quote_no, days_left, expiry_date)
         return send_registered("warranty_expiry", title=m["title"], rows=m["rows"], usernames=[owner_username] if owner_username else [],
                                to_group=True, reason=m["subject"], badge_text=m["badge_text"], badge_color=m["badge_color"],
+                               link=f"{_base_url()}/pages/quotation-form.html?no={_urlquote(str(quote_no), safe='')}",       # 按鈕連到該案（與舊信同一個連結；沒傳會退成站台首頁）
                                button_text=m["button_text"], note=m["intro"], wait=True, out=out)
     except Exception:
         logger.exception("send_warranty_expiry 失敗（不寫已通知記號；quote_no=%r）", quote_no)
