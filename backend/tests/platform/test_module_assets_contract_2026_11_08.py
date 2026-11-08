@@ -352,7 +352,7 @@ def test_test_map_names_a_module_js_like_the_url_it_is_served_at():
 
 def test_test_map_resolver_finds_a_module_js_by_name_and_keeps_the_frontend_js_directory_unambiguous():
     TM = _tools()
-    files = ["frontend/js/other.js", "frontend/pages/p.html", "backend/modules/zz/js/mine.js", "backend/modules/zz/module.json"]
+    files = ["frontend/js/other.js", "backend/modules/zz/js/mine.js", "backend/modules/zz/module.json"]
     R = TM.Resolver(files)
     assert R.asset("mine.js") == "backend/modules/zz/js/mine.js"
     assert R.asset("js/mine.js") == "backend/modules/zz/js/mine.js"
@@ -364,10 +364,7 @@ def test_test_map_resolver_finds_a_module_js_by_name_and_keeps_the_frontend_js_d
 def test_a_guard_that_lists_js_through_the_shared_enumeration_is_still_picked_when_frontend_js_changes(tmp_path):
     """守門改走 tests/_frontend_sources.py 後字面路徑消失 ⇒ test_map 要補回 `dir:frontend/js/`，modtest 要把模組 JS 的改動算進去。"""
     TM = _tools()
-    (tmp_path / "backend" / "tests").mkdir(parents=True)
-    (tmp_path / "frontend" / "js").mkdir(parents=True)
-    (tmp_path / "backend" / "tests" / "_frontend_sources.py").write_text("X = 1\n", encoding="utf-8")
-    t = tmp_path / "backend" / "tests" / "test_zz_guard.py"
+    t = tmp_path / "guard_under_test.py"        # 檔案位置無關緊要：test_map 只看它 import 了什麼、Resolver 給的檔案集合
     t.write_text("from tests import _frontend_sources as FS\n\ndef test_x():\n    assert FS.top_js() is not None\n", encoding="utf-8")
     R = TM.Resolver(["backend/tests/_frontend_sources.py", "backend/tests/test_zz_guard.py", "frontend/js/a.js"])
     got = TM.scan_test(t, R)

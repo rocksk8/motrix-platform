@@ -9,13 +9,14 @@
 import logging
 from pathlib import Path
 
-from core import registry
+from core import registry, source_tree
 from helpers import module_assets
+from tests import _frontend_sources as FS
 
 MOD = Path(__file__).resolve().parents[1]
 JS = MOD / "js" / "remit-kinds-settings.js"
 URL = "/js/remit-kinds-settings.js"
-PAGE = Path(__file__).resolve().parents[4] / "frontend" / "pages" / "remit-kinds-settings.html"
+PAGE = source_tree.page_file("remit-kinds-settings.html")
 
 
 def test_loaded_module_serves_its_js_byte_for_byte_at_the_unchanged_url(client):
@@ -29,7 +30,7 @@ def test_loaded_module_serves_its_js_byte_for_byte_at_the_unchanged_url(client):
 
 def test_page_still_points_at_the_same_url_and_no_orphan_copy_is_left_in_frontend(client):
     assert '<script src="../js/remit-kinds-settings.js">' in PAGE.read_text(encoding="utf-8")
-    assert not (PAGE.parents[1] / "js" / "remit-kinds-settings.js").exists()
+    assert not (FS.FRONTEND / "js" / "remit-kinds-settings.js").exists()
 
 
 def test_neighbouring_frontend_js_is_still_served(client):
