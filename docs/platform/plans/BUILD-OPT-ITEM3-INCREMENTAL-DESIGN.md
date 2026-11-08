@@ -234,3 +234,12 @@ stages.not_e2e = {
 - **重放對照本文 §3／§4**（`replay_incremental.py`，兩班 296.1 分）：A·M 省 76.6（文件 76.5）、B·M 省 93.0（91.8）、B·S 37.2（34.8）、出貨包強制全量 51.7（52.1）；`--legacy-floor`（§3.1 舊底板）B·M 90.6、召回 24／26；新底板（含 F0d 掃目錄、扣 F1）召回 25／26，唯一漏的是 `test_audit_search` perf 偶發。**差異來源**：新底板扣掉 F1 演練（依賴鍵控）、加 F0d；一個檔同時有 e2e 與非 e2e 題（33 個 e2e 類檔，如 `test_module_registry`）改為兩段都收（本文 §3 把它們只算 e2e 段，會漏 t29#1 的 `test_module_registry` 紅）。
 - **仍阻塞**：①接進建包（`build_deploy_package.ps1` Step 3、manifest `verification.stages` 欄位、儀表板顯示）＝步驟 7，等使用者套用第 30 包；②影子全量 2 週（R3-e）與參數校準（6 小時／N=3）＝步驟 8；③`dep_fp` 與兩條推導互證（步驟 2）、`lookup-stage --incremental`／紀錄擴充（步驟 3）尚未做；④逐題耗時（fail_stream 逐題 `t`）仍用 §3.1 的估算模型（slowest_files 60 檔實測＋0.60 s／題）。
 - **合進 `platform` 的條件不變**：本分支動了 `tools/**`、`backend/tools/**` 之外的新檔（`tools/platform/stage_select.py` 本身屬 `tools/**` 底層），第 30 包上機並打 `prod/` tag 前不得合入。
+
+### 7.2 影子模式（2026-11-08，使用者裁示：先走影子、2 週後用準確率數據裁示是否轉正）
+- **性質**：`tools/platform/stage_select_shadow.py` 只**記錄預測**——不跳過任何一題、不改建包結果、不是閘門；正式建包仍跑全量、以全量為唯一真相。選題器本體（`stage_select.py` 與 `SELECTOR_FILES`）一個字沒動。
+- **接法**：`build_deploy_package.ps1::Record-Stage`（每段完成、含紅的那次，在 Fail 離開之前）尾端多一個**背景程序**（`Start-Process` 不等、任何錯誤吞掉；`MOTRIX_STAGE_SHADOW=0` 關閉）；與 `Record-Stage` 同一前提（工作樹乾淨、有指紋）。這一個 hook 單獨一個 commit，可整個拿掉，不影響紀錄器本身（`record`／`backfill` 也可手動或排程跑）。
+- **紀錄檔**：`backend/tools/deploy_logs/stage_select_shadow.jsonl`（主工作樹；deploy_logs 已 gitignore；與 `test_results.jsonl` 分開）。一行＝（建包 run × 段）：基準、這次全量的實際紅檔、`stage_select` 計畫摘要、判定 `verdict`。
+- **基準**：同段、最近一筆『跑完』（未被 fail-fast／中斷）且 commit ≠ head 的影子紀錄；其紅檔進 `red_reselect`；鏈長固定 1、鏈根固定真全量（影子期每次都全量）；環境指紋相同**未判**。
+- **判定兩層**：`policy`＝照真實政策（強制全量⇒全跑⇒不會漏）；`no_escape`＝**不算全量逃生門**，只看 `selected ∪ floor ∪ red_reselect` 有沒有蓋住該抓的紅檔。**轉正要看 `no_escape`**（`policy` 在 6 小時年齡上限等強制全量多時會太樂觀）。
+- **該抓的紅**：該段全量最後被判綠（偶發重跑放行）⇒ 不算；fail-fast 提前停的段（`complete=false`）沒跑完，沒看到紅 ≠ 沒有紅，彙總單列。
+- **看數據**：`python tools/platform/stage_select_shadow.py report [--since YYYY-MM-DD] [--json]`；歷史可用 `backfill` 依 fail_stream＋test_results 時間配對補錄（`commit_source=joined_by_time`）。
