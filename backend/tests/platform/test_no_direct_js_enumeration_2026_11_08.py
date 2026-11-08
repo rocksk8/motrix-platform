@@ -29,6 +29,8 @@ ALLOWED = {
         "自帶模組感知的列舉（_js_files 另掃 modules/<key>/js/）；STAGE-C 前就有，先不動它的邏輯",
     "tests/test_alpine_double_init_2026_09_23.py":
         "替身 frontend 樹（_fake_frontend 只複製 static／js 當固定對照）；真實母體由 tools/check_double_init.py 的 MODULE_JS_GLOB 一併掃",
+    "tests/platform/test_module_assets_contract_2026_11_08.py":
+        "契約題本身就是在核對『module.json 宣告 ⇔ modules/<key>/js/ 的實際檔案』，必須獨立於共用列舉自己走一次目錄",
     "tests/test_map_overlay_contract_2026_09_28.py":
         "掃的是 modules/*/pages/*overlay*.js（地圖覆蓋層，不是 /js 資產）",
     # case-management-*.js 還在 frontend/js（尚未搬進 case 模組）。C 車搬 case 時這 9 支改走 _frontend_sources。
@@ -88,3 +90,40 @@ def test_js_is_enumerated_only_through_the_shared_entry():
     assert not new, ("直接列舉前端 JS 而沒走 tests/_frontend_sources.py（模組自有 js 會被安靜略過）；"
                      "改走 FS.all_js()／FS.module_js()，或在 ALLOWED 附理由：%s" % new)
     assert not stale, ("ALLOWED 內的檔已經沒有直接列舉了——請從清單移除（清單不准放過期）：%s" % stale)
+
+
+# ── 共用入口本身的正對照：它少列一個檔，所有走它的守門就一起少掃，而且不會有任何一題變紅 ──────────────────────
+
+def test_shared_entry_lists_exactly_the_module_js_files_that_exist(tmp_path, monkeypatch):
+    """合成模組樹：module_js／top_js／all_js／js_path 都要看得到模組自有 JS；vendor 與 tests 底下的不算。"""
+    from core import source_tree
+    from tests import _frontend_sources as FS
+    mods = tmp_path / "modules"
+    for key, files in (("zz_a", ["js/a.js", "js/b.js", "js/vendor/v.js", "tests/t.js"]), ("zz_b", ["js/c.js"]), ("zz_none", [])):
+        (mods / key).mkdir(parents=True)
+        (mods / key / "module.json").write_text("{}", encoding="utf-8")
+        for f in files:
+            (mods / key / f).parent.mkdir(parents=True, exist_ok=True)
+            (mods / key / f).write_text("1", encoding="utf-8")
+    monkeypatch.setattr(source_tree, "module_dirs", lambda: sorted(p for p in mods.iterdir() if (p / "module.json").is_file()))
+    names = lambda ps: sorted(p.name for p in ps)          # noqa: E731
+    assert names(FS.module_js()) == ["a.js", "b.js", "c.js"]
+    assert {"a.js", "b.js", "c.js"} <= set(names(FS.top_js()))
+    assert {"a.js", "b.js", "c.js"} <= set(names(FS.all_js()))
+    assert FS.js_path("c.js") == mods / "zz_b" / "js" / "c.js"
+
+
+def test_shared_entry_matches_an_independent_walk_of_the_real_tree():
+    """真實樹：FS.module_js() ＝ 另一種寫法（os.walk）數出來的 backend/modules/*/js/**.js（不含 vendor）。"""
+    import os
+    from tests import _frontend_sources as FS
+    mods = BACKEND / "modules"
+    expect = set()
+    for d in sorted(mods.iterdir()) if mods.is_dir() else []:
+        if not (d / "module.json").is_file():
+            continue
+        for root, dirs, files in os.walk(d / "js"):
+            dirs[:] = [x for x in dirs if x != "vendor"]
+            expect |= {(Path(root) / f).resolve() for f in files if f.endswith(".js")}
+    assert {p.resolve() for p in FS.module_js()} == expect
+    assert expect <= {p.resolve() for p in FS.all_js()}

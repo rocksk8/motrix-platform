@@ -127,6 +127,20 @@ def test_request_strings_never_reach_files_outside_the_declared_assets(world, ur
     assert r.status_code == 404 and "not-a-js-asset" not in r.text and "zz_a" not in r.text
 
 
+def test_a_declared_asset_whose_realpath_leaves_js_is_not_served(world, tmp_path, monkeypatch):
+    """宣告的檔解析後（連結、junction）落在 js/ 外面 ⇒ 不提供。Windows 一般帳號建不了符號連結，所以直接讓 realpath 回報逃出去的結果。"""
+    import os
+    client, add, _ = world
+    add("zz_a", [{"path": "js/link.js"}, {"path": "js/ok.js"}], {"link.js": JS_BODY, "ok.js": JS_BODY})
+    outside = tmp_path / "outside.js"
+    _w(outside, "window.__leak = 1" + chr(10))
+    real = os.path.realpath
+    monkeypatch.setattr(module_assets.os.path, "realpath",
+                        lambda p, *a, **k: str(outside) if str(p).endswith("link.js") else real(p, *a, **k))
+    assert client.get("/js/link.js").status_code == 404
+    assert client.get("/js/ok.js").status_code == 200
+
+
 @pytest.mark.parametrize("bad", [
     [{"path": "js/../x.js"}], [{"path": "../js/x.js"}], [{"path": "x.js"}], [{"path": "js/sub/x.js"}], [{"path": "js/x.css"}],
     [{"path": "js/x.js"}, {"path": "js/x.js"}], [{"path": "js/x.js", "extra": 1}], ["js/x.js"], {"path": "js/x.js"}, [{"path": 1}],

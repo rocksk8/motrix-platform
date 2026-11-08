@@ -54,7 +54,10 @@ def js_rel(p):
     try:
         return p.resolve().relative_to(FRONTEND.resolve()).as_posix()
     except ValueError:
-        return "backend/" + source_tree.rel(p)
+        try:
+            return "backend/" + source_tree.rel(p)
+        except ValueError:                      # 合成樹（不在 repo 底下）：給完整路徑，不丟例外
+            return p.resolve().as_posix()
 
 
 def display(p):
