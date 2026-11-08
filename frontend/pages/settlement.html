@@ -653,7 +653,8 @@
                   </td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"><b x-text="fmt(u.amount)"></b><div x-show="u.kind === 'dispatch'" data-testid="stl-tax" style="font-size:10px;color:var(--text-dim)" x-text="dispatchIsPretax() ? '稅額 ' + fmt(u.tax) + '（不計成本）' : '其中稅額 ' + fmt(u.tax) + '（含在金額內）'"></div></td>
                   <td>
-                    <select class="stl-input" :data-testid="'stl-offset-' + u.kind + '-' + u.ref" :disabled="settlement.status === 'finalized'"
+                    <div x-show="u.partial" data-testid="stl-partial-note" style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">已逐行對應，這是剩餘；要整張對應請先到「二之二」清除逐行對應</div>
+                    <select class="stl-input" :data-testid="'stl-offset-' + u.kind + '-' + u.ref" :disabled="settlement.status === 'finalized' || !!u.partial"
                             @change="setOffset(u.kind, u.ref, $event.target.value)" style="width:100%">
                       <option value="" :selected="!u.itemId">（不對應，計入額外支出）</option>
                       <template x-for="it in offsetTargets()" :key="it.id">
@@ -698,7 +699,10 @@
                       <template x-if="u.assignedBy === 'link'">
                         <span style="font-size:12px;color:var(--text-secondary)" :data-testid="'stl-linked-' + u.kind + '-' + u.ref">由材料申請連結（唯讀）</span>
                       </template>
-                      <template x-if="u.assignedBy !== 'link'">
+                      <template x-if="u.linePart">
+                        <span style="font-size:12px;color:var(--text-secondary)" :data-testid="'stl-linepart-' + u.kind + '-' + u.ref">逐行對應（到「二之二」調整）</span>
+                      </template>
+                      <template x-if="u.assignedBy !== 'link' && !u.linePart">
                         <select class="stl-input" :data-testid="'stl-offset-' + u.kind + '-' + u.ref" :disabled="settlement.status === 'finalized'"
                                 @change="setOffset(u.kind, u.ref, $event.target.value)" style="width:100%">
                           <option value="" :selected="!u.itemId">（取消對應，計入額外支出）</option>
@@ -714,6 +718,95 @@
             </table>
           </div>
         </div>
+      </div>
+
+      <!-- ── 二之二、承攬商派發逐行對應（選填）：派發單的每一行歸一個品項，或一行依金額拆給多個品項；與整張對應二擇一。
+           對應只寫進 settlement.offsets（整行 `派發id#行鍵`、拆分份 `派發id#行鍵#份次` 帶未稅 amount），派發單一個位元都不改。
+           金額／稅額都由後端算（行稅額累計進位、拆分份稅額累計比例進位）；本頁只送「哪一行、哪個品項、拆分的未稅金額」。行鍵直接取後端回的 lineKey，不在本頁重算。 -->
+      <div class="stl-card" x-show="_actualsOk && (dispatchLinesList().length || dlWarnings().length)" data-testid="stl-dl-card">
+        <div class="stl-card__head">
+          <div class="stl-card__title">二之二、承攬商派發逐行對應（選填）</div>
+          <div style="font-size:11px;color:var(--text-dim)">把派發單的每一行歸到報價品項，一行可依金額拆給多個品項；整張對應與逐行對應二擇一。沒歸的行、外包人員、拆分餘額仍計入額外支出</div>
+        </div>
+        <div x-show="dlWarnings().length" role="alert" data-testid="stl-dl-warnings" style="margin:6px 0;padding:8px 10px;border-radius:6px;background:#FEF3C7;color:#92400E;font-size:12px">
+          <b x-text="'已存的逐行對應有 ' + dlWarnings().length + ' 處未生效：金額已回到未對應（仍計入總成本），對應到的品項成本會因此少算。'"></b>
+          <ul style="margin:4px 0 0;padding-left:18px"><template x-for="(w, i) in dlWarnings()" :key="i"><li x-text="w.message"></li></template></ul>
+        </div>
+        <template x-for="v in dispatchLinesList()" :key="v.dispatchId">
+          <div style="border-top:1px solid var(--border,#e5e7eb);padding:8px 2px" :data-testid="'stl-dl-disp-' + v.dispatchId">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <button type="button" class="btn btn-ghost btn-sm" :data-testid="'stl-dl-toggle-' + v.dispatchId" @click="toggleDl(v.dispatchId)"
+                      x-text="(dlOpen[v.dispatchId] ? '▼ ' : '▶ ') + dispLabel({ docCode: v.docCode, itemId: v.dispatchId, vendorName: v.vendorName })"></button>
+              <span style="font-size:11px;color:var(--text-secondary)" :data-testid="'stl-dl-summary-' + v.dispatchId" x-text="dlSummary(v)"></span>
+              <button type="button" class="btn btn-ghost btn-sm" x-show="settlement.status !== 'finalized' && dlHasLineOffsets(v.dispatchId)" :data-testid="'stl-dl-clear-' + v.dispatchId"
+                      @click="clearLines(v.dispatchId)">清除逐行對應</button>
+            </div>
+            <div x-show="dlOpen[v.dispatchId]" style="margin:6px 0 4px 12px">
+              <div x-show="!v.linesOk" :data-testid="'stl-dl-reason-' + v.dispatchId" style="font-size:12px;color:#92400E" x-text="'這張派發單不能逐行對應：' + v.linesReason + '。請用上面的整張對應。'"></div>
+              <div x-show="v.mode === 'whole'" :data-testid="'stl-dl-whole-' + v.dispatchId" style="font-size:12px;color:var(--text-secondary)" x-text="'這張派發單目前是整張對應到 #' + itemNo(v.assignedItemId) + ' ' + itemName(v.assignedItemId) + '；在下面選品項會改成逐行對應（取消整張對應）。'"></div>
+              <template x-if="v.linesOk">
+                <div style="overflow-x:auto">
+                  <table class="stl-table">
+                    <thead><tr><th style="min-width:180px">行</th><th style="width:100px;text-align:right">未稅 (NT$)</th><th style="width:80px;text-align:right">稅額</th><th style="width:110px;text-align:right" x-text="dispatchIsPretax() ? '計入成本（未稅）' : '計入成本（含稅）'"></th><th style="min-width:230px">歸到品項</th></tr></thead>
+                    <template x-for="(l, n) in v.lines" :key="n">
+                      <tbody :data-testid="'stl-dl-line-' + v.dispatchId + '-' + n">
+                        <tr>
+                          <td><span x-text="(n + 1) + '. ' + (l.description || '（無說明）')"></span><div style="font-size:10px;color:var(--text-dim)" x-text="(l.qty || '') + ' ' + (l.unit || '') + (l.unitPrice ? ' × ' + fmt(l.unitPrice) : '')"></div></td>
+                          <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(l.pretax)"></td>
+                          <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(l.tax)"></td>
+                          <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(l.amount)"></td>
+                          <td>
+                            <div x-show="!l.mappable" style="font-size:11px;color:#92400E" x-text="'不可逐行對應：' + l.reason"></div>
+                            <div x-show="l.mappable" style="display:flex;gap:6px;align-items:center">
+                              <select class="stl-input" style="flex:1" :data-testid="'stl-dl-select-' + v.dispatchId + '-' + n" :disabled="settlement.status === 'finalized' || dlSplitting(v.dispatchId, l.lineKey)"
+                                      @change="setLineItem(v.dispatchId, l.lineKey, $event.target.value, $event)">
+                                <option value="" :selected="!lineItemOf(v.dispatchId, l.lineKey)">（不對應，計入額外支出）</option>
+                                <template x-for="it in offsetTargets()" :key="it.id">
+                                  <option :value="String(it.id)" :selected="String(it.id) === String(lineItemOf(v.dispatchId, l.lineKey))" x-text="'#' + itemNo(it.id) + ' ' + (it.origDescription || it.id)"></option>
+                                </template>
+                              </select>
+                              <button type="button" class="btn btn-ghost btn-sm" x-show="settlement.status !== 'finalized' && !dlSplitting(v.dispatchId, l.lineKey)" :data-testid="'stl-dl-split-' + v.dispatchId + '-' + n"
+                                      @click="startSplit(v.dispatchId, l.lineKey, l)">拆分</button>
+                              <button type="button" class="btn btn-ghost btn-sm" x-show="settlement.status !== 'finalized' && dlSplitting(v.dispatchId, l.lineKey)" :data-testid="'stl-dl-unsplit-' + v.dispatchId + '-' + n"
+                                      @click="cancelSplit(v.dispatchId, l.lineKey)">取消拆分</button>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr x-show="l.mappable && dlSplitting(v.dispatchId, l.lineKey)" :data-testid="'stl-dl-editor-' + v.dispatchId + '-' + n">
+                          <td colspan="5" style="background:#FAFAF7">
+                            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">每份填「未稅金額」，含稅金額由系統依累計比例進位算出（唯讀）；沒分配完的餘額（含稅額）留在未對應。</div>
+                            <template x-for="(r, i) in dlRows(v.dispatchId, l.lineKey)" :key="r.no">
+                              <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap">
+                                <span style="width:46px;font-size:12px" x-text="'第 ' + r.no + ' 份'"></span>
+                                <select class="stl-input" style="min-width:200px" :data-testid="'stl-dl-part-item-' + v.dispatchId + '-' + n + '-' + i" :disabled="settlement.status === 'finalized'"
+                                        @change="r.itemId = $event.target.value; onPartChange(v.dispatchId, l.lineKey)">
+                                  <option value="" :selected="!r.itemId">（選品項）</option>
+                                  <template x-for="it in offsetTargets()" :key="it.id">
+                                    <option :value="String(it.id)" :selected="String(it.id) === String(r.itemId)" x-text="'#' + itemNo(it.id) + ' ' + (it.origDescription || it.id)"></option>
+                                  </template>
+                                </select>
+                                <input type="text" inputmode="decimal" class="stl-input" style="width:110px;text-align:right" placeholder="未稅金額" :data-testid="'stl-dl-part-amt-' + v.dispatchId + '-' + n + '-' + i" :disabled="settlement.status === 'finalized'"
+                                       :value="r.amount" @input="r.amount = $event.target.value" @change="onPartChange(v.dispatchId, l.lineKey)">
+                                <span style="font-size:11px;color:var(--text-secondary)" :data-testid="'stl-dl-part-gross-' + v.dispatchId + '-' + n + '-' + i" x-text="dlPartText(l, r)"></span>
+                                <button type="button" class="btn btn-ghost btn-sm" x-show="settlement.status !== 'finalized'" :data-testid="'stl-dl-fill-' + v.dispatchId + '-' + n + '-' + i" @click="fillRemainder(v.dispatchId, l, r)">填入餘額</button>
+                                <button type="button" class="btn btn-ghost btn-sm" x-show="settlement.status !== 'finalized'" :data-testid="'stl-dl-del-' + v.dispatchId + '-' + n + '-' + i" @click="delPart(v.dispatchId, l.lineKey, i)">刪除</button>
+                              </div>
+                            </template>
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                              <button type="button" class="btn btn-ghost btn-sm" x-show="settlement.status !== 'finalized'" :disabled="dlRows(v.dispatchId, l.lineKey).length >= 20" :data-testid="'stl-dl-add-' + v.dispatchId + '-' + n" @click="addPart(v.dispatchId, l.lineKey)">新增一份</button>
+                              <button type="button" class="btn btn-ghost btn-sm" x-show="settlement.status !== 'finalized'" :data-testid="'stl-dl-even-' + v.dispatchId + '-' + n" @click="splitEven(v.dispatchId, l)">平分</button>
+                              <b :data-testid="'stl-dl-remainder-' + v.dispatchId + '-' + n" :style="dlOver(l, v.dispatchId) ? 'color:#B91C1C' : ''" x-text="dlRemainderText(l, v.dispatchId)"></b>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </template>
+                  </table>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
       </div>
 
       <!-- ── 三、承攬商派發成本 ── -->
@@ -1270,7 +1363,7 @@ function settlementPage() {
           this.settlement.extraItems    = saved.extraItems || []
           this._frozenSummary           = saved.summary || null
           this._draftBasis              = (saved.status !== 'finalized' && saved.summary && saved.summary.dispatchBasis === 'pretax') ? 'pretax' : 'taxed'
-          this.offsets                  = Array.isArray(saved.offsets) ? saved.offsets.map(o => ({ kind: o.kind, ref: String(o.ref), itemId: String(o.itemId) })) : []
+          this.offsets                  = Array.isArray(saved.offsets) ? saved.offsets.map(o => (o.amount === undefined || o.amount === null ? { kind: o.kind, ref: String(o.ref), itemId: String(o.itemId) } : { kind: o.kind, ref: String(o.ref), itemId: String(o.itemId), amount: o.amount })) : []        // 拆分份的 amount 要保留，否則存檔一次金額就沒了
 
           // 合併報價品項（若報價單有新增/刪除品項，以報價單為基準）
           const savedMap = {}
@@ -1362,6 +1455,7 @@ function settlementPage() {
         if (!d || !Array.isArray(d.items) || !d.totals) return
         d.items.forEach(i => { this.itemActuals[i.itemId] = i })
         this.actuals = d
+        this._dlLast = Array.isArray(d.dispatchLines) ? d.dispatchLines : []      // 最近一次成功的逐行檢視：重取預覽的瞬間 actuals 是 null，存檔前檢查不能因此被略過
         this._actualsOk = true
       } catch {}
     },
@@ -1578,6 +1672,8 @@ function settlementPage() {
       if (Math.abs(this.reconQuoteGap) > C.RECON_TOLERANCE) hard.push('報價對帳差額不為 0')
       if (Math.abs(this.reconCostGap) > C.RECON_TOLERANCE) hard.push('成本對帳差額不為 0')
       if (ms.unCount) (C.BLOCK_ON_UNASSIGNED ? hard : warns).push('有未對應項目（仍計入成本）：' + ms.unCount + ' 件，NT$ ' + this.fmt(ms.unTotal))
+      const dlw = this.dlWarnings()
+      if (dlw.length) warns.push('已存的派發單逐行對應有 ' + dlw.length + ' 處未生效（金額已回到未對應、仍計入成本，品項成本會因此少算）：' + dlw.map(w => w.message).join('；'))
       if (this._actualsOk && this.pendingAllAmount) (C.BLOCK_ON_PENDING ? hard : warns).push('有待審核金額 NT$ ' + this.fmt(this.pendingAllAmount) + '（照計，核准前可能變動）')
       if (this.settlement.items.some(i => this._noRecord(i))) (C.BLOCK_ON_NO_RECORD ? hard : warns).push('有品項無採購／對應紀錄且未手填（暫以估計計）')
       const state = hard.length ? 'blocked' : warns.length ? 'warn' : 'ok'
@@ -1660,7 +1756,12 @@ function settlementPage() {
       const rows = []
       const add = (kind, ref, label, detail, amount, pending, noPo, itemId, assignedBy, extra) =>
         rows.push(Object.assign({ kind, ref: String(ref), label, detail, amount, pending, noPo, itemId: itemId === '' ? '' : String(itemId), assignedBy }, extra || {}))
-      const dsp = (d, itemId, assignedBy) => add('dispatch', d.itemId, this.dispLabel(d), this.dispDetail(d), d.amount, d.pending, false, itemId, assignedBy, { tax: d.tax || 0, status: d.status || '' })
+      const dsp = (d, itemId, assignedBy) => {
+        // 逐行對應的份（後端 part＝line／split）：ref 用「派發id#行鍵[#份次]」讓每份各自一列；剩餘（partial）仍是整張派發單的 id，但不能再選整張（要先清掉逐行對應）
+        const ref = d.part ? d.itemId + '#' + d.lineKey + (d.partNo ? '#' + d.partNo : '') : d.itemId
+        const label = this.dispLabel(d) + (d.part ? ' › ' + (d.lineDescription || '（行）') + (d.partNo ? '（第 ' + d.partNo + ' 份）' : '') : '') + (d.partial ? '（逐行對應後的剩餘）' : '')
+        add('dispatch', ref, label, this.dispDetail(d), d.amount, d.pending, false, itemId, assignedBy, { tax: d.tax || 0, status: d.status || '', linePart: !!d.part, partial: !!d.partial })
+      }
       this.actuals.unassigned.materials.forEach(m => add('material', m.itemId, this.matLabel(m), this.matDetail(m), m.amount, m.pending, m.noPo, '', ''))
       this.actuals.unassigned.extras.forEach(e => add('extra', e.expenseId, this.extLabel(e), this.extDetail(e), e.amount, e.pending, false, '', ''))
       ;((this.actuals.unassigned || {}).dispatches || []).forEach(d => dsp(d, '', ''))
@@ -1692,7 +1793,130 @@ function settlementPage() {
     async setOffset(kind, ref, itemId) {
       if (this.settlement.status === 'finalized') return
       this.offsets = this.offsets.filter(o => !(o.kind === kind && o.ref === String(ref)))
+      if (kind === 'dispatch' && itemId) this.offsets = this.offsets.filter(o => !(o.kind === 'dispatch' && o.ref.startsWith(String(ref) + '#')))      // 整張與逐行二擇一：整張生效就清掉同一張的逐行對應
       if (itemId) this.offsets.push({ kind, ref: String(ref), itemId: String(itemId) })
+      await this._afterOffsetsChanged()
+    },
+    // ───────── 二之二：派發單逐行對應（整行／拆分份；金額稅額由後端算，這裡只管選品項與輸入未稅金額）─────────
+    dlOpen: {},
+    _dlLast: [],
+    dlRowsMap: {},               // 拆分編輯中的列：{ '派發id|行鍵': [{ no, itemId, amount(字串) }] }——未填完整的列只留在這裡，不寫進 offsets
+    dlWarnings() { return this._actualsOk ? ((this.actuals.warnings || []).filter(w => String(w.code || '').startsWith('dispatch_line_'))) : [] },
+    dispatchLinesList() { return this._actualsOk ? ((this.actuals.dispatchLines || []).filter(v => (v.lines || []).length)) : [] },
+    _lineRef(did, key, no) { return String(did) + '#' + key + (no ? '#' + no : '') },
+    lineItemOf(did, key) { const o = this.offsets.find(o => o.kind === 'dispatch' && o.ref === this._lineRef(did, key)); return o ? o.itemId : '' },
+    _lineParts(did, key) { const pre = this._lineRef(did, key) + '#'; return this.offsets.filter(o => o.kind === 'dispatch' && o.ref.startsWith(pre)) },
+    dlHasLineOffsets(did) { return this.offsets.some(o => o.kind === 'dispatch' && o.ref.startsWith(String(did) + '#')) },
+    _dlKey(did, key) { return String(did) + '|' + key },
+    dlSplitting(did, key) { return !!this.dlRowsMap[this._dlKey(did, key)] || this._lineParts(did, key).length > 0 },
+    dlRows(did, key) {
+      const k = this._dlKey(did, key)
+      if (this.dlRowsMap[k]) return this.dlRowsMap[k]
+      return this._lineParts(did, key).map(o => ({ no: +o.ref.split('#')[2], itemId: o.itemId, amount: String(o.amount) })).sort((a, b) => a.no - b.no)      // 只讀（不在渲染時改狀態）
+    },
+    _dlEnsure(did, key) { const k = this._dlKey(did, key); if (!this.dlRowsMap[k]) this.dlRowsMap[k] = this.dlRows(did, key); return this.dlRowsMap[k] },
+    toggleDl(id) {
+      const open = !this.dlOpen[id]
+      this.dlOpen = Object.assign({}, this.dlOpen, { [id]: open })
+      if (open) ((this.actuals.dispatchLines || []).find(v => v.dispatchId === id) || { lines: [] }).lines.forEach(l => { if (this._lineParts(id, l.lineKey).length) this._dlEnsure(id, l.lineKey) })
+    },
+    dlSummary(v) {
+      const n = (v.lines || []).filter(l => l.state === 'line' || l.state === 'split').length
+      if (v.mode === 'whole') return '整張對應到 #' + this.itemNo(v.assignedItemId) + ' ' + this.itemName(v.assignedItemId)
+      if (!v.linesOk) return '只能整張對應'
+      return n ? '已逐行對應 ' + n + ' / ' + v.lines.length + ' 行' : '尚未逐行對應（共 ' + v.lines.length + ' 行）'
+    },
+    async _dlRefresh() { await this._afterOffsetsChanged() },
+    async setLineItem(did, key, itemId, ev) {
+      if (this.settlement.status === 'finalized') return
+      const hadWhole = this.offsets.some(o => o.kind === 'dispatch' && o.ref === String(did))
+      if (itemId && hadWhole && !confirm('這張派發單目前是「整張對應」；改成逐行對應會取消整張對應，確定嗎？')) { if (ev) ev.target.value = this.lineItemOf(did, key); return }
+      this.offsets = this.offsets.filter(o => !(o.kind === 'dispatch' && (o.ref === String(did) || o.ref === this._lineRef(did, key))))
+      if (itemId) this.offsets.push({ kind: 'dispatch', ref: this._lineRef(did, key), itemId: String(itemId) })
+      await this._dlRefresh()
+    },
+    async clearLines(did) {
+      if (this.settlement.status === 'finalized') return
+      if (!confirm('清除這張派發單所有逐行對應（含拆分）？金額會回到未對應。')) return
+      this.offsets = this.offsets.filter(o => !(o.kind === 'dispatch' && o.ref.startsWith(String(did) + '#')))
+      Object.keys(this.dlRowsMap).filter(k => k.startsWith(String(did) + '|')).forEach(k => { delete this.dlRowsMap[k] })
+      await this._dlRefresh()
+    },
+    async startSplit(did, key, l) {
+      if (this.settlement.status === 'finalized') return
+      if (this.offsets.some(o => o.kind === 'dispatch' && o.ref === String(did)) && !confirm('這張派發單目前是「整張對應」；改成逐行對應會取消整張對應，確定嗎？')) return
+      const prev = this.lineItemOf(did, key)
+      this.offsets = this.offsets.filter(o => !(o.kind === 'dispatch' && (o.ref === String(did) || o.ref === this._lineRef(did, key))))
+      this.dlRowsMap[this._dlKey(did, key)] = [{ no: 1, itemId: prev, amount: prev ? String(l.pretax) : '' }]
+      await this.onPartChange(did, key)
+    },
+    async cancelSplit(did, key) {
+      if (this.settlement.status === 'finalized') return
+      delete this.dlRowsMap[this._dlKey(did, key)]
+      this.offsets = this.offsets.filter(o => !(o.kind === 'dispatch' && o.ref.startsWith(this._lineRef(did, key) + '#')))
+      await this._dlRefresh()
+    },
+    addPart(did, key) {
+      const rows = this._dlEnsure(did, key)
+      if (rows.length >= 20) return
+      rows.push({ no: rows.reduce((m, r) => Math.max(m, r.no), 0) + 1, itemId: '', amount: '' })
+    },
+    async delPart(did, key, i) { this._dlEnsure(did, key).splice(i, 1); await this.onPartChange(did, key) },
+    _cents(s) {
+      // 字串只收 ASCII 純數字加小數點（首尾容許空格／Tab／換行）：「1,000」「12abc」「1 000」「１０００」「1e3」「0x10」「+5」都回 null（後端 parse_amount 同一條規則；不用 parseFloat，它會把「1,000」讀成 1）
+      let x
+      if (typeof s === 'number') x = s
+      else if (typeof s === 'string') { const u = s.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, ''); if (!/^[0-9]+(\.[0-9]+)?$/.test(u)) return null; x = Number(u) }
+      else return null
+      if (!isFinite(x) || x <= 0) return null
+      const c = Math.round(x * 100)      /* 非金額 */ // 不是進位決策：下一行已確認 x×100 在 1e-6 內就是整數分，這裡只是轉成整數分
+      return Math.abs(x * 100 - c) < 1e-6 ? c : null          // 最多 2 位小數（容許 0.1+0.2 這類浮點雜訊，一律以整數分比較）
+    },
+    // 完整的列（品項＋合法金額）才寫進 offsets；未填完整的留在編輯區，不存
+    async onPartChange(did, key) {
+      const rows = this._dlEnsure(did, key)
+      this.offsets = this.offsets.filter(o => !(o.kind === 'dispatch' && o.ref.startsWith(this._lineRef(did, key) + '#')))
+      rows.forEach(r => { const c = this._cents(r.amount); if (r.itemId && c) this.offsets.push({ kind: 'dispatch', ref: this._lineRef(did, key, r.no), itemId: String(r.itemId), amount: c / 100 }) })
+      await this._dlRefresh()
+    },
+    _lineCents(l) { const c = this._cents(l.pretax); return c == null ? Math.round(l.pretax * 100) : c },      /* 非金額 */ // 後端回的未稅金額本來就是 ≤2 位小數，轉整數分
+    _dlRemainderCents(l, did) { return this._lineCents(l) - this.dlRows(did, l.lineKey).reduce((s, r) => s + (this._cents(r.amount) || 0), 0) },
+    dlOver(l, did) { return this._dlRemainderCents(l, did) < 0 },
+    dlRemainderText(l, did) {
+      const c = this._dlRemainderCents(l, did)
+      return c < 0 ? '拆分金額超過行金額 NT$ ' + this.fmt(-c / 100) + '（不能存檔）' : '尚未分配餘額 NT$ ' + this.fmt(c / 100) + '（留在未對應）'
+    },
+    dlPartText(l, r) {
+      const s = (l.parts || []).find(p => p.partNo === r.no)
+      if (!s) return this._cents(r.amount) && r.itemId ? '（存檔前請先完成這列）' : '（選品項並填金額）'
+      return '稅額 ' + this.fmt(s.tax) + '・' + (this.dispatchIsPretax() ? '計入成本 ' : '含稅 ') + this.fmt(s.amount)
+    },
+    async fillRemainder(did, l, r) {
+      const own = this._cents(r.amount) || 0, c = this._dlRemainderCents(l, did) + own
+      if (c <= 0) return
+      r.amount = String(c / 100)
+      await this.onPartChange(did, l.lineKey)
+    },
+    async splitEven(did, l) {
+      const rows = this._dlEnsure(did, l.lineKey), n = rows.length, A = this._lineCents(l)
+      if (!n || A <= 0) return
+      const base = Math.floor(A / n), extra = A - base * n
+      rows.forEach((r, i) => { r.amount = String((base + (i < extra ? 1 : 0)) / 100) })
+      await this.onPartChange(did, l.lineKey)
+    },
+    // 存檔／完結前的檢查：拆分金額超過行金額、或有填一半的列 ⇒ 擋下（後端也會 422，這裡先給明確訊息）
+    dlInvalid() {
+      for (const v of this._dlLast) for (const l of (v.lines || [])) {
+        const rows = this.dlRowsMap[this._dlKey(v.dispatchId, l.lineKey)]
+        if (!rows) continue
+        const label = (v.docCode || '派發#' + v.dispatchId) + '「' + (l.description || '第 ' + (v.lines.indexOf(l) + 1) + ' 行') + '」'
+        if (this.dlOver(l, v.dispatchId)) return label + ' 的拆分金額加總超過行金額，請調整後再存檔'
+        if (rows.some(r => (r.itemId && !this._cents(r.amount)) || (!r.itemId && String(r.amount || '').trim()))) return label + ' 有拆分列沒填完整或金額格式不對（品項與未稅金額都要有；金額只能是數字，不要逗號、文字或空格，最多 2 位小數、要大於 0）'
+      }
+      return ''
+    },
+
+    async _afterOffsetsChanged() {
       await this.loadActuals()
       this.applyXeTotal()
       this.settlement.items.forEach(i => { if (i.adoptSystem && (this.hasPurchase(i) || i._fromSystem)) this.calcItemCost(i) })     // 沖銷搬走了採購 ⇒ 原本取自系統的品項回到手填值
@@ -2071,7 +2295,7 @@ function settlementPage() {
     _snap() {
       const f = i => ({ id: String(i.id), name: i.origDescription || '', actualQty: i.actualQty, actualUnitCost: i.actualUnitCost, actualCostTaxMode: i.actualCostTaxMode,
                         adoptSystem: !!i.adoptSystem, actualSource: i.actualSource || 'manual', note: i.note || '' })
-      return { items: this.settlement.items.map(f), memo: this.settlement.memo || '', settlementDate: this.settlement.settlementDate || '', offsets: (this.offsets || []).map(o => o.kind + ':' + o.ref + '>' + o.itemId).sort() }
+      return { items: this.settlement.items.map(f), memo: this.settlement.memo || '', settlementDate: this.settlement.settlementDate || '', offsets: (this.offsets || []).map(o => o.kind + ':' + o.ref + '>' + o.itemId + (o.amount === undefined || o.amount === null ? '' : '@' + o.amount)).sort() }
     },
     _markClean() { this._baseline = JSON.parse(JSON.stringify(this._snap())) },
     get dirtyList() {
@@ -2132,6 +2356,8 @@ function settlementPage() {
     },
 
     async saveDraft() {
+      const dlMsg = this.dlInvalid()
+      if (dlMsg) { this.toastErr(dlMsg); return }
       if (this.xeMasked > 0) { this.toastErr('有 ' + this.xeMasked + ' 筆費用單據的金額對你遮蔽，額外支出總額不完整，不能儲存精算'); return }
       this.saving = true
       try {
@@ -2142,6 +2368,8 @@ function settlementPage() {
     },
 
     async finalize() {
+      const dlMsg = this.dlInvalid()
+      if (dlMsg) { this.toastErr(dlMsg); this.showFinalizeModal = false; return }
       if (this.xeMasked > 0) { this.toastErr('額外支出總額不完整（有金額對你遮蔽的費用單據），不能完結精算'); this.showFinalizeModal = false; return }
       this.saving = true
       this._finalizing = true

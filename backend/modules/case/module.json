@@ -1,7 +1,7 @@
 {
   "key": "case",
   "name": "案件",
-  "version": "1.0.206",
+  "version": "1.0.207",
   "core": ">=1.0,<2.0",
   "license_key": "case",
   "permissions": [
@@ -308,7 +308,8 @@
     ]
   },
   "features": [
-    {"code": "material_recognize_notify", "label": "材料卡片認列採購單被拒的通知信", "mail": ["material_recognize_denied"]}
+    {"code": "material_recognize_notify", "label": "材料卡片認列採購單被拒的通知信", "mail": ["material_recognize_denied"]},
+    {"code": "case_invoice_upload_notify", "label": "案件發票上傳通知信（財務＋最高管理者）", "mail": ["case_invoice_uploaded"]}
   ],
   "pages": [
     {

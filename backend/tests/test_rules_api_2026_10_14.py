@@ -58,6 +58,7 @@ def _turn_flag_on():
         c.commit()
     finally:
         c.close()
+    RS.ensure_registered()                                                    # rule_set 種類懶登記：可重複呼叫；單獨跑／xdist 分到沒人先登記的 worker 時才不會順序相依
 
 
 def _publish_rules(client, h, rules):
