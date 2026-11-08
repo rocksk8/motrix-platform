@@ -54,6 +54,7 @@
 📌 2026-11-04 15:27：正式機已更新到 e2e138ec（第七十四班 T74：業務開發案件進度回報改成只增不改不刪的歷史表 dev_case_progress（crm migration 0003），dev_cases 新兩欄 assigned_at／assigned_by，只有被指派人本人可寫（管理員非被指派人唯讀）、指派存檔前先比對沒真的變才寫入／通知、回覆期限不可一開始就逾期、回覆期限過未回報的每日提醒（新 mail type dev_case_reply_overdue）；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261104-t74-apply.md；套件 20261104_150425_e2e138ec_full；core 1.149→1.150、crm 1.0.19→1.1.0（其餘 14 模組不變），schema 維持 118（crm module_schema_versions 2→3）；manifest 603→604 筆；正式機 Claude 依主持「可以套用」執行 apply_update，22 秒成功、無回滾，步驟 3 十六項全過、未登入 assign/progress/GET progress 401、dev_case_progress 套用後＝1（＝套用前非空進度案件數）、assigned_at 補寫 1 筆）⇒ 基準改 e2e138ec。
 📌 2026-11-04 17:53：正式機已更新到 212d3779（第七十五班 T75：開發記錄新增「批示」（crm migration 0004，新表 dev_log_directive／dev_log_directive_target，無既有資料搬遷），新能力 crm.dev_log_directive.comment（預設只有管理員）可下批示、指定通知與回覆對象，批示只有作者／對象／管理員看得到，已有批示的開發記錄刪除改回 409；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261104-t75-apply.md；套件 20261104_173914_212d3779_full；core 1.150→1.151、crm 1.1.0→1.2.0（其餘 14 模組不變），schema 維持 118（crm module_schema_versions 3→4）；manifest 604→605 筆；能力 11→12；正式機 Claude 依主持「可以套用」執行 apply_update，23 秒成功、無回滾，步驟 3 十六項全過、未登入 GET/POST directives、POST replies 皆 401）⇒ 基準改 212d3779。
 📌 2026-11-07 16:00：正式機已更新到 bb332042（第七十六班 T76：報價單簽核「二擇一」程式整批鋪上、reconfirm_mode 維持 0（關閉）；案件頁業務顯示與獎金名單讀源改業務負責；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261107-t76-apply.md；套件 20261107_154425_bb332042_full；core 1.151→1.152、case 1.0.205→1.0.206、payroll 1.2.22→1.2.23（其餘 13 模組不變），schema 維持 118（module_schema_versions 套用前後逐列相同）；manifest 605→608 筆；能力維持 12；正式機 Claude 依常設授權執行 apply_update，t0 15:59:54／started 15:59:55／finished 16:00:30，約 36 秒成功、無回滾，步驟 3 十七項全過、未登入 POST review-edit／GET reconfirm-shadow-stats 皆 401；回報資料夾 20261107_155955_bb332042_成功）⇒ 正式機基準＝bb332042，但 BASELINE 不在本條單獨移到 bb332042：T77（3c13b82d）把文字追加進 T76 已出貨的「案件管理 2026-11-07b」條目，基準停在 bb332042 時 test_every_shipped_entry_is_still_there_unchanged 會紅；T77 已套用，BASELINE 於下一條直接移到 3c13b82d。
+📌 2026-11-08 00:31：正式機已更新到 3c13b82d（第七十七班 T77：案件發票上傳通知——款項明細發票／材料申請發票上傳後寄信給財務角色與最高管理者，一次上傳只寄一封、不含檔名與金額；精算承攬商派發單可逐行對應報價品項（選填，整張對應維持預設）；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261108-t77-apply.md；套件 20261108_001433_3c13b82d_full；core 1.152 不變、case 1.0.206→1.0.207（其餘 14 模組不變），schema 維持 118（module_schema_versions 套用前後逐列相同、sqlite_master 485 項無增減）；manifest 608 筆不變——T77 文字追加進 T76 已出貨的「案件管理 2026-11-07b」條目（見上一條），非新增條目；能力維持 12；正式機 Claude 依常設授權執行 apply_update，t0 00:30:56／finished 00:31:32，約 36 秒成功、無回滾，步驟 3 十六項全過；回報資料夾 20261108_003056_3c13b82d_成功；套用前 reconfirm_mode 已是使用者於 2026-11-07 16:12:59 改的 2（開啟），非步驟檔預期的 0，套用前後相同）⇒ 基準改 3c13b82d。
 """
 import json
 import subprocess
@@ -62,7 +63,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "212d3779"
+BASELINE = "3c13b82d"
 
 
 def baseline_manifest():
