@@ -18,7 +18,8 @@ REPO = Path(__file__).resolve().parents[3]
 BASELINE = Path(__file__).with_name("page_path_baseline.json")
 ALLOWED = {"backend/core/source_tree.py", "backend/core/pages.py", "backend/core/paths.py",
            "backend/tests/platform/test_page_paths_centralized.py",   # 本檔的樣本字串
-           "backend/tests/platform/test_core_paths.py"}               # core.paths 每個常數的預期值對照表
+           "backend/tests/platform/test_core_paths.py",               # core.paths 每個常數的預期值對照表
+           "backend/tests/platform/test_dep_scan_script_refs_2026_11_08.py"}   # tmp_path 合成樹的 frontend/pages 夾具字串（不讀真頁面；dep_scan.use_root 指向合成樹）
 SCAN_ROOTS = ("backend", "tools")
 SKIP_PARTS = {"__pycache__", "node_modules", ".git"}
 
