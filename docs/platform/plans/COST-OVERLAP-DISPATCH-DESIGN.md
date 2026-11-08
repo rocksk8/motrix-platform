@@ -128,7 +128,7 @@ T77 做的是**分配**：`<派發id>#<行鍵>#<份次>`＋`amount`，把一個�
 | 2b「品項有手填且案內有未對應派發」 | 草稿 2 案／20 品項（MQ-202607-045、MQ-202609-012）；含已完結 3 案／30 品項（再加 MQ-202608-007，`legacySave`） | S1 的待觸發態池 |
 | **S3–S5 單據↔派發重疊** | **0 件**：品項層 0／68；金額層（不限同品項；整張／逐行含稅／逐行未稅×1.05／÷1.05，容差 1 元）0 組；廠商層唯二同時有單據與派發的兩案（045、012）廠商與性質都不同 | 方向 3 需求目前不存在。**樣本很小**（57 張報價、6 案有派發、2 案同時有單據） |
 | **`actualSource` 分布** | 57 張報價中 14 張有 settlement 存檔、73 列品項：`manual` 37、缺鍵 36（舊存檔 UI 視為 manual）、**`legacy` 0、`labor` 0** | **不能當訊號**；已從所有規則移除 |
-| **新訊號：存檔 `actualTotalCost` ≠ 數量×單價（±稅）** | 全庫只命中 4 列（PM 括號列舉 5 項：海光保險費用、045 弱電標線兩列、045 另一列、007 一列 `legacySave`——**4 與 5 的差異待 PM 釐清**），且全是「系統金額被寫進手填欄」 | 精確、命中極少；它標出「關採用後金額會改變」的品項，即 W4（§4） |
+| **新訊號：存檔 `actualTotalCost` ≠ 數量×單價（±稅）** | 全庫命中 **4 列**（PM 澄清：①海光保險費用、②045 弱電標線——這兩列都是「採用吸收派發」寫入的系統金額；③045 另一列 qty1×unit0 但 total 7,811；④007 一列 qty1×unit0 但 total 187,992）。全是「系統金額被寫進手填欄」 | 精確、命中極少；①②關採用後會改寫成非零的手填值（疑似重複來源）；③④單價為 0，**關採用會把實際成本改成 0**（`calcItemCost`：單價 0 非空⇒ total＝0，schemaVersion≥2 視為真的 0），那是「成本消失」而非重複，兩者後果不同，W4 訊息要分開寫。對應 W4（§4） |
 
 **由這些數字得到的修正**：①關採用提示（層 A）的前提**成立**，應保留；②海光案與 045 都屬「現狀沒重複、一切換就重複」；③常駐偵測（層 B）要補顯示出口才有意義；④`actualSource` 規則作廢。
 
@@ -176,7 +176,7 @@ T77 做的是**分配**：`<派發id>#<行鍵>#<份次>`＋`amount`，把一個�
   - **W1** 品項 **`adoptSystem=false`**（採用中的品項不得觸發——採用中「手填＝派發」是恆真式）＋有手填金額（非空）＋已對應派發。
   - **W2（候選，未量測前不宣稱精準）** 品項手填（含 `legacySave` 預設不採用）＋案內有未對應派發＋手填與該派發含稅額相等（整數分，±1 元）。**它會漏掉海光真實型態**（手填＝指派到該品項的派發**行**之和，不等於整張）；上線前必須離線模擬。
   - **W3（兼任方向 3 偵測器）** 額外支出或材料申請與某派發行含稅額相等（整張／逐行含稅／逐行未稅×1.05／÷1.05，±1 元）。±1 加上 ×1.05／÷1.05 變體會撞巧合：**設金額下限（建議 ≥1,000）、限同案、訊息必須同時帶兩邊單據 ref**。
-  - **W4（PM 的新訊號）** 採用中且有已對應派發的品項，其手填欄（`actualQty×actualUnitCost`，依 `actualCostTaxMode`）與存檔 `actualTotalCost` 差異 >1 元 ⇒ 「取消採用將把實際成本改寫為 X，且派發 Z 不再被吸收」。正式機命中 4 列（§2.7，4 與 5 待釐清）。**代價**：後端要複製一份 `calcItemCost` 的重算（`halfUp` 加三種稅別），是又一份公式副本，需以 golden vector 做前後端等值測試（先例：`profit_rules.py`／`profit-rules.js`）。
+  - **W4（PM 的新訊號）** 採用中且有已對應派發的品項，其手填欄（`actualQty×actualUnitCost`，依 `actualCostTaxMode`）與存檔 `actualTotalCost` 差異 >1 元 ⇒ 「取消採用將把實際成本改寫為 X，且派發 Z 不再被吸收」。正式機命中 4 列（§2.7；其中 2 列單價為 0，關採用會變成 0 成本，訊息需分開）。**代價**：後端要複製一份 `calcItemCost` 的重算（`halfUp` 加三種稅別），是又一份公式副本，需以 golden vector 做前後端等值測試（先例：`profit_rules.py`／`profit-rules.js`）。
 - **閘門**：`compute()` 先算 `warnings` 再 `_freeze`，所以**要明確閘：凍結路徑（`freeze=True` 且 `status=finalized`）不發 W 警示**；`check_finalize` 以 `freeze=False` 呼叫 `compute()`，完結當下可算。
 - **顯示出口（v3 的「已有顯示管道」不成立，刪除）**：`settlement.html:1804 dlWarnings()` 只挑 `code` 以 `dispatch_line_` 開頭的；W 碼（連既有 `item_removed`／`item_unkeyed`）頁面都不顯示；後端 `compute()` 的外部呼叫只有 GET 與 POST preview，沒有任何地方記錄或彙整 `warnings`。**只加 `warnings[]` 不等於偵測器，沒人看得到。** 採用 **(b)＋最小 banner**：①完結時把 W 命中寫進 settlement 編輯歷史的完結快照（`settlement_api.py:145` 那條）；②PM 的唯讀正式機查詢定期重跑；③`settlement.html` 加一個最小 banner 顯示 W 碼（**需改頁面**——v3「不碰頁面」的說法撤回）。已完結案需要明確 banner，否則警示無處放。
 - **受影響的既有測試（W 碼一加就可能紅）**：`test_settlement_dispatch_lines_2026_11_07.py` 對 `warnings` 做整列表相等斷言（已確認 :255、:257、:284、:288、:291、:298 等；hichan-8 另列 :393／:449）；`test_settlement_actuals_2026_10_03.py:172／:187`（整列表）；`test_dispatch_abnormal_amount_2026_11_08.py:53／:65` 用 `any()`／`not any()`，**看起來安全，待驗證**。夾具只要有「手填＋派發」組合就會命中。
@@ -267,7 +267,7 @@ T77 做的是**分配**：`<派發id>#<行鍵>#<份次>`＋`amount`，把一個�
 - ✅ 讀碼（我自己讀過）：`compute()`（總成本式、品項層）、`validate_offsets`／`dispatch_rows`、`recognition.*`、`purchase_items._link_check`、`expense_forms.py:92-97`、`settlement.html`（`buildPayload` :2254-2290、`toggleAdopt` :1934、`calcItemCost` :2086-2105、載入 :1378-1400、`dlWarnings` :1804、`itemActual` :1692、`systemActual` :1469）、`settlement_api.py` 整包取代、`quotations.py` :2436-2444／:2500 的覆蓋行為、`case_access.require_case_money`、`reports.py:355-369`、`bonus_pdf.py:205-216`、`dashboard.py:218-221`、`reports.html:2209-2292`、`bonus.html:187`、`db.py:5374`、`profit_rules.py` 的 `settlement_profit`；測試對 `warnings` 的整列表斷言（:255／:257／:288／:291／:298、`test_settlement_actuals_2026_10_03.py:172／:187`）。
 - ✅ hichan-8 自述讀過並確認：`reports.py:1704-1706`、`pdf_gen.py:2761-2765`、`settlement_actuals.py` 的 :322／:396／:611／:676／:703／:722／:779。**其餘行號我只做了存在性抽驗**：`payroll/bonus.py:122-155`、`pdf_gen.py:2736`、`reports.py:1744-1746／2276-2282／655-666`。
 - 🧪 探針（我跑的）：S1、S2、S3 與基準；**用模擬數字**。S4、S5 為推論。
-- ⚠️ **PM 轉述、我未親驗**：§2.7 全部數字，包括 UI 關採用的重算（272,644、45 案 +25,000）、`actualSource` 分布、「4 列 vs 括號列 5 項」。其中「UI 關採用重算」應由 T-1 e2e 在測試夾具上重現釘住，不能只靠轉述。
+- ⚠️ **PM 轉述、我未親驗**：§2.7 全部數字，包括 UI 關採用的重算（272,644、45 案 +25,000）、`actualSource` 分布。其中「UI 關採用重算」應由 T-1 e2e 在測試夾具上重現釘住，不能只靠轉述。
 - ❌ 沒做的：T-1 e2e；W1–W4 離線模擬與誤報數；折讓／採購單退款列對報表傳票的影響；重開已完結案補扣的獎金連鎖；獨立表的備份／匯出／回收桶／權限矩陣涵蓋；任何方向的原型。
 - 探針為一次性腳本，**未提交進任何分支**。
 
@@ -358,4 +358,4 @@ def test_probe(W, capsys):
 | Q-C 表方向（hichan-8 核對正確） | 無改動 | §7 |
 | PM：UI 關採用會重算並覆寫（海光 272,644；045 活案 +25,000；`_actualsOk=false` 不重算） | **接受（轉述、未親驗）**；恢復層 A 前端提示，修正 §0 #5／§2.7；350,764 改標為理論值 | §0 #5、§2.7、方向 2 層 A |
 | PM：`actualSource` legacy／labor 皆 0 | **接受**：作廢所有 `actualSource` 規則 | §2.7、方向 2 |
-| PM：新訊號「存檔 `actualTotalCost`≠數量×單價」 | **採納為 W4**；註明需後端複製 `calcItemCost` 公式與 golden vector；「4 列 vs 5 項」待 PM 釐清 | §4 W4、§2.7 |
+| PM：新訊號「存檔 `actualTotalCost`≠數量×單價」 | **採納為 W4**；註明需後端複製 `calcItemCost` 公式與 golden vector；PM 已澄清為 4 列（其中 2 列單價 0，關採用變 0 成本，訊息分開） | §4 W4、§2.7 |
