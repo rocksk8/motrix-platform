@@ -2,7 +2,7 @@
 """L0 模組載入器：掃 `modules/*/module.json`，相容且匯入成功的才登錄。
 
 [單位] plat:loader    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] ALL, DISABLED_REASON, MODULES_DIR, MODULES_PACKAGE, check_declared_settings, check_migrations, core_compatible, declared_settings_groups, load_all, mount_modules,
+[公開介面] ALL, DISABLED_REASON, MODULES_DIR, MODULES_PACKAGE, check_declared_settings, check_migrations, core_compatible, declared_assets, declared_settings_groups, load_all, mount_modules,
     start_schedulers
 [不變式] 載入失敗一律「不載入＋記 ERROR＋記進 registry.failed()」，不讓伺服器起不來；版本範圍看不懂 ⇒ 不載入
 [契約題] tests/platform/test_core_loader.py
@@ -136,6 +136,7 @@ def load_all(modules_dir: str = None, package: str = None,
             if not ok:
                 raise ValueError(f"requires core {manifest.get('core')}, have {registry.CORE_VERSION}")
             customization.require_valid(manifest)   # 可自訂點格式錯誤 ⇒ 不載入（CUSTOMIZATION-SPEC P3）
+            declared_assets(manifest)                # assets 宣告形狀不對 ⇒ 不載入（同上，import 之前驗；宣告了卻缺檔不在這裡擋，見 helpers.module_assets）
             declared_settings_groups(manifest)       # settings 宣告形狀不對 ⇒ 不載入，且**不執行模組程式碼**（import 之前驗）
             spine.parse_features(manifest, name)     # features 不是清單 ⇒ 認不出功能，整個模組不載入（單一功能的問題不擋模組，見 spine.validate_all）
             if license_check is not None:
@@ -191,6 +192,27 @@ def declared_settings_groups(manifest) -> list:
     if len(set(groups)) != len(groups):
         raise ValueError("module.json settings.groups 有重複的群組代號")
     return list(groups)
+
+
+_ASSET_PATH = re.compile(r"^js/[A-Za-z0-9][A-Za-z0-9_.-]*\.js\Z")      # \Z 不是 $：$ 會放過結尾的換行
+
+
+def declared_assets(manifest) -> list:
+    """`module.json` 的 `assets: [{"path": "js/<檔名>.js"}]`——模組自有的前端 JS，實體在 `modules/<key>/js/`，
+    網址仍是 `/js/<檔名>.js`（STAGE-C-DESIGN §3）。沒有區段 ⇒ []。形狀不對 ⇒ ValueError（載入前就擋）。
+    只驗形狀；宣告了卻缺檔不在這裡擋（記 ERROR、該檔 404、模組照常載入；出貨前由 module_update check 擋）。"""
+    sec = manifest.get("assets")
+    if sec is None:
+        return []
+    ok = isinstance(sec, list) and all(
+        isinstance(d, dict) and set(d) == {"path"} and isinstance(d["path"], str) and _ASSET_PATH.match(d["path"])
+        for d in sec)
+    if not ok:
+        raise ValueError("module.json assets 必須是 [{\"path\": \"js/<檔名>.js\"}, …]（檔名只含英數 . _ -，副檔名 .js）")
+    paths = [d["path"] for d in sec]
+    if len(set(paths)) != len(paths):
+        raise ValueError("module.json assets 有重複的 path")
+    return paths
 
 
 def check_declared_settings(manifest, name) -> None:

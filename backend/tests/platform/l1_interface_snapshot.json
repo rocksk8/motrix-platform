@@ -1,5 +1,5 @@
 {
- "core_version": "1.153",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1142,6 +1142,14 @@
    "redact_ops": "def(items)",
    "sidebar_ops_of_all": "def(conn, role, mod_items)"
   },
+  "helper:module_assets": {
+   "ASSETS_MIN_CORE": "const",
+   "JsAssetLookup": "class",
+   "JsAssetLookup.lookup_path": "def(self, path)",
+   "asset_path": "def(name)",
+   "served_assets": "def()",
+   "undeclared_files": "def(module_key)"
+  },
   "helper:module_registry": {
    "BADGE_EXCLUDE": "const",
    "BADGE_PREFIXES": "const",
@@ -1978,6 +1986,7 @@
    "check_declared_settings": "def(manifest, name)",
    "check_migrations": "def(items)",
    "core_compatible": "def(spec, core_version=…)",
+   "declared_assets": "def(manifest)",
    "declared_settings_groups": "def(manifest)",
    "load_all": "def(modules_dir=…, package=…, license_check=…, disabled=…, disabled_reason=…)",
    "mount_modules": "def(app)",

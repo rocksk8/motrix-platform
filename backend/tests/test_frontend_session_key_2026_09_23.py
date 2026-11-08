@@ -44,6 +44,8 @@ from pathlib import Path
 
 import pytest
 
+from tests import _frontend_sources as FS
+
 _ROOT = Path(__file__).resolve().parent.parent.parent
 _FRONTEND = _ROOT / "frontend"
 
@@ -57,7 +59,7 @@ FORBIDDEN = ("token", "auth", "jwt", "access_token", "accessToken",
 
 
 def _js_sources():
-    files = sorted(_FRONTEND.glob("js/*.js")) + sorted(_FRONTEND.glob("pages/*.html"))
+    files = FS.top_js() + sorted(_FRONTEND.glob("pages/*.html"))                  # 含模組自有 js（backend/modules/<key>/js/）
     assert files, (
         "`frontend/js/*.js` 與 `frontend/pages/*.html` 一個都掃不到 ——\n"
         + "☠️ **一份掃不到的檔案與一份乾淨的檔案，在結果上長得一樣。**")

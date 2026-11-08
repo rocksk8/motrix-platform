@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from core import source_tree
+from tests import _frontend_sources as FS
 
 ROOT = Path(__file__).resolve().parents[2]
 JS = ROOT / "frontend" / "js"
@@ -157,7 +158,7 @@ console.log(JSON.stringify(out))
 
 
 def _editor(which, files, stub=True):
-    out = subprocess.run([NODE, "-e", EDITOR_HARNESS, "x", json.dumps({"which": which, "stub": stub})] + [str(JS / f) for f in files],
+    out = subprocess.run([NODE, "-e", EDITOR_HARNESS, "x", json.dumps({"which": which, "stub": stub})] + [str(FS.js_path(f)) for f in files],
                          capture_output=True, text=True, encoding="utf-8", timeout=30)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout.strip().splitlines()[-1])
@@ -274,7 +275,7 @@ page.govOn = inp.govOn; page.reload = async () => {}
 
 
 def _publish(govon, review):
-    out = subprocess.run([NODE, "-e", PUBLISH_HARNESS, "x", json.dumps({"govOn": govon, "review": review}), str(JS / "remit-kinds-settings.js")],
+    out = subprocess.run([NODE, "-e", PUBLISH_HARNESS, "x", json.dumps({"govOn": govon, "review": review}), str(FS.js_path("remit-kinds-settings.js"))],
                          capture_output=True, text=True, encoding="utf-8", timeout=30)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout.strip().splitlines()[-1])

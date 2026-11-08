@@ -14,6 +14,7 @@ import pytest
 
 from routers import def_governance as G
 from routers import definitions as R
+from tests import _frontend_sources as FS
 
 NODE = shutil.which("node")
 ROOT = Path(__file__).resolve().parents[2]
@@ -266,5 +267,5 @@ console.log(JSON.stringify([out,calls[0],calls[2]]))})()"""
 def test_every_restore_caller_that_has_governance_sends_the_version_preview():
     """還原端點在強制範圍內要帶『這一版』的預覽雜湊：面板與三個有 govOn 的編輯器都要先取（layout-editor.js 屬 3c，另行接）。"""
     for f in ("def-governance.js", "expense-types.js", "remit-kinds-settings.js", "module-builder-output.js"):
-        src = (ROOT / "frontend" / "js" / f).read_text(encoding="utf-8")
+        src = FS.js_path(f).read_text(encoding="utf-8")
         assert "preview_hash = " in src and ("previewRestore" in src or "&version=" in src), f

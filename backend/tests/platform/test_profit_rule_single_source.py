@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 
 from core import source_tree
+from tests import _frontend_sources as FS
 
 FRONTEND = source_tree.BACKEND.parent / "frontend"
 ALLOWED = {"helpers/profit_rules.py"}
@@ -46,15 +47,15 @@ def test_overhead_formula_lives_only_in_the_profit_rules():
         for ln, s in hits(p.read_text(encoding="utf-8")):
             bad.append(f"backend/{rel}:{ln}: {s}")
     seen = {}
-    for p in sorted(list(FRONTEND.rglob("*.html")) + list(FRONTEND.rglob("*.js"))):
-        rel = p.relative_to(FRONTEND).as_posix()
+    for p in sorted(FRONTEND.rglob("*.html")) + FS.all_js():
+        rel = FS.js_rel(p) if p.suffix == ".js" else p.relative_to(FRONTEND).as_posix()
         if "vendor" in p.parts or rel == "static/profit-rules.js":
             continue
         found = hits(p.read_text(encoding="utf-8", errors="replace"))
         if rel in TRANSITIONAL:
             seen[rel] = len(found)
         else:
-            bad.extend(f"frontend/{rel}:{ln}: {s}" for ln, s in found)
+            bad.extend(f"{FS.display(p) if p.suffix == '.js' else 'frontend/' + rel}:{ln}: {s}" for ln, s in found)
     for rel, n in TRANSITIONAL.items():
         if seen.get(rel) != n:
             bad.append(f"frontend/{rel}: 過渡登記 {n} 處，實際 {seen.get(rel)} 處（改接規則後請同步調整 TRANSITIONAL）")

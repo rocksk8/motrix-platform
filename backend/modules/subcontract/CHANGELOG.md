@@ -1,5 +1,9 @@
 # 外包工班 更新紀錄
 
+## 1.1.42 — 2026-11-08（模組資產 POC；feat/module-assets-poc）
+- 搬遷（行為不變）：`frontend/js/remit-kinds-settings.js` → `modules/subcontract/js/remit-kinds-settings.js`，`module.json` 新增 `"assets": [{"path": "js/remit-kinds-settings.js"}]`。**網址不變**（`/js/remit-kinds-settings.js`），`remit-kinds-settings.html` 不用改。
+- 需要核心支援 `module.json assets` 與 `/js` 掛載（見 `core/CHANGELOG.md` 最上面 `(next)` 段）；列車取號後，本模組 `module.json` 的 `core` 下限要改成該版號，舊核心就不會載入一個它不會提供這支 JS 的新模組。
+
 ## 1.1.41 — 2026-11-08（T78；派發列提供者 `dispatch.row`：金額／稅率欄的異常值不再丟例外）＋K 審必修已修（極大值、qty／unitPrice、warning log）
 - 修正（T77 殘留；案件精算 `compute()` 的第二個 500 來源）：`_dispatch_row` 在總額欄為 0／空白時以品項金額加總，人員合計以人員金額加總，稅率直接 `float()`；品項／人員金額是 NaN、Infinity、`1e400`、非數字或極大值（例如 `1e300`），或稅率欄是無限大／極大時，後面的 `round_half_up` 或 `float()` 會丟例外，經由 `dispatch.row` 提供者讓呼叫端（案件精算）整個回 500。現在新增 `_finite()`／`_rate_or_default()`：金額異常值（非有限、非數字、絕對值超過 1e13 元）當 0，合計結果也檢查；稅率異常值（非有限、非數字、絕對值超過 100）用預設 0.05（0 仍是合法值）；非 dict 的品項／人員列略過。**取捨**：異常值當 0 會讓該張派發的成本顯示為 0，所以每次當 0／換預設都記 warning（帶派發 id、欄位名與原值）。正常值的輸出逐位不變（測試鎖住）；其餘欄位、回傳形狀與契約 IP-1 不變。
 - 已知限制：異常值只在這個提供者「當 0」處理；`items`／`personnel` 原樣仍會帶出異常的原始值給前端，不改寫、不清洗；寫入端（建立／修改派發單）本版沒有加金額驗證。

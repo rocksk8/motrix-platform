@@ -33,6 +33,8 @@ _LOGIN_SEGS = ("api", "auth", "login")
 _AUTH_TEST_NAME = re.compile(r"auth|login|session|totp|webauthn|passkey|password", re.I)
 _DOTTED_RE = re.compile(r"(?:routers|helpers|tests|core|modules|platform)(?:\.[A-Za-z_][A-Za-z0-9_]*)+")
 _FMT_RE = re.compile(r"%[sdr]|\{[^/{}]*\}")
+_MODULE_JS_DIR_RE = re.compile(r"^backend/modules/[^/]+/js$")
+_MODULE_JS_RE = re.compile(r"^backend/modules/[^/]+/js/[^/]+\.js$")        # 模組自有 JS（module.json assets）
 _ASSET_RE = re.compile(r"[\w\-./]*?[\w\-]+\.(?:html|js|css)\b")
 
 
@@ -76,6 +78,9 @@ def unit_name(path):
     if len(parts) == 3 and parts[0] == BACKEND and parts[1] in ("routers", "helpers") \
             and name.endswith(".py") and name != "__init__.py":
         return ("router:" if parts[1] == "routers" else "helper:") + name[:-3]
+    if len(parts) >= 5 and parts[:2] == [BACKEND, "modules"] and parts[3] == "js" and name.endswith(".js") \
+            and "vendor" not in parts:
+        return "js:js/" + "/".join(parts[4:])                               # 模組自有 JS：網址仍是 /js/…，單位名同 dep_scan
     if len(parts) >= 4 and parts[:2] == [BACKEND, "modules"] and name.endswith(".py"):
         return "mod:%s/%s" % (parts[2], "/".join(parts[3:])[:-3])        # mod:<key>/<file>
     if len(parts) == 3 and parts[:2] == [BACKEND, "core"] and name.endswith(".py"):
@@ -288,7 +293,10 @@ class Resolver:
         for f in files:
             parts = f.split("/")
             for i in range(1, len(parts)):
-                self.dirs.add("/".join(parts[:i]))
+                d = "/".join(parts[:i])
+                # 模組自有 JS 的 `js/` 目錄不當目錄單位：否則測試裡寫的 `"js"` 目錄片段變成兩個以上的候選而「不唯一」⇒ 悄悄對不到 frontend/js
+                if not _MODULE_JS_DIR_RE.match(d):
+                    self.dirs.add(d)
         self.by_base = {}
         for f in files:
             if f.startswith((BACKEND + "/", "frontend/")):
@@ -329,7 +337,8 @@ class Resolver:
             if u and not u.endswith("/"):
                 return u
             name = name.rsplit("/", 1)[-1]
-        hits = [f for f in self.by_base.get(name, []) if f.startswith("frontend/")]
+        hits = [f for f in self.by_base.get(name, [])
+                if f.startswith("frontend/") or (name.endswith(".js") and _MODULE_JS_RE.match(f))]
         return hits[0] if len(hits) == 1 else None
 
     def api(self, segs):
@@ -481,6 +490,10 @@ def scan_test(path, R):
         u = R.module(d)
         if u and u != path:
             ev["import"].add(u)
+    # 經共用列舉（tests/_frontend_sources.py）掃前端 JS 的守門：原本直接 glob `frontend/js` 時，字面路徑讓「改任何前端 JS 就選到它」；
+    # 改走共用列舉後字面路徑不見了 ⇒ 在這裡補回同一個目錄單位（否則守門悄悄從選題裡消失）
+    if "backend/tests/_frontend_sources.py" in ev["import"]:
+        ev["path"].add("frontend/js/")
     # 字串形式的模組名：importlib.import_module("routers.x")、monkeypatch.setattr("helpers.y.z", ...)
     for t in sc.strings:
         if _DOTTED_RE.fullmatch(t):

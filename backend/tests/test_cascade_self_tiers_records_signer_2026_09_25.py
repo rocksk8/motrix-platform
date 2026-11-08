@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 from helpers import tiered_approval as ta
+from tests import _frontend_sources as FS
 
 NEW_KEYS = ("approvedBy", "approvedByDisplay", "onBehalfOf")
 CALLERS = ["completion_notes.py", "contractor_vouchers.py", "invoice_vouchers.py",
@@ -153,6 +154,6 @@ def test_frontend_prediction_matches_the_backend_on_every_configuration():
 def test_no_page_asks_for_the_removed_any_one_semantics():
     """前端不可以再傳 completesOnFirst（上一題驗的是函式本身；這一題驗呼叫端沒有把它打開）。"""
     fe = Path(__file__).resolve().parents[2] / "frontend"
-    hits = [str(f.relative_to(fe)) for f in list(fe.rglob("*.html")) + list(fe.rglob("*.js"))
+    hits = [FS.js_rel(f) if f.suffix == ".js" else str(f.relative_to(fe)) for f in list(fe.rglob("*.html")) + FS.all_js()
             if re.search(r"completesOnFirst\s*:", f.read_text(encoding="utf-8", errors="ignore"))]
     assert not hits, hits

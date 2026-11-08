@@ -5,6 +5,13 @@
 - 測試：`backend/tests/platform/test_option_lists_t62.py`；`backend/tests/platform/test_gov_contract_2026_11_08.py` 補合法 loose 種子（`seeds_2026_11_08.json`），`KNOWN_P3_NOT_APPLICABLE` 清空（option_list 現適用 P3）。
 - 已知衍生（無害，記 backlog）：角色層首發的種子補齊後，P6 掃到 option_list 角色層首發會直接生效沒人擋（執行期只讀 company 層，無實際效果）——`KNOWN_LATENT_ROLE_FIRST_PUBLISH` 從 3 個 kind 變 4 個。
 
+## (next) — 2026-11-08（feat/module-assets-poc；模組自有前端 JS：`module.json assets`＋`/js` 掛載）
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產，**未取號**）：新公開介面 `helpers.module_assets`（`ASSETS_MIN_CORE`、`JsAssetLookup`、`asset_path`、`served_assets`、`undeclared_files`）；`core.loader.declared_assets(manifest)`（`module.json` 新選填欄位 `assets: [{"path": "js/<檔名>.js"}]`，形狀不對 ⇒ 該模組不載入，import 之前驗）。
+- 行為：`main.py` 在 `/` 的 StaticFiles 之前掛 `/js`（`JsAssetLookup`，directory＝`frontend/js`）：已載入模組宣告、檔案在 `modules/<key>/js/` 的 JS 由模組提供（網址不變 `/js/<檔名>.js`，優先於 `frontend/js` 同名舊檔）；其餘照舊。模組停用／未授權／失敗 ⇒ 不提供。宣告了卻缺檔 ⇒ 記 ERROR、404、模組照常載入；擋在出貨前（`tools/platform/module_update.py` 的 `asset_problems`，`check`／`ship` 都跑）。
+- 工具：`dep_scan` 掃 `modules/<key>/js/` 的 JS（單位 id 照網址不變 `js:js/<檔名>`，帶 `module_key`；與 `frontend/js` 同名 ⇒ 報錯）；測試列舉前端 JS 一律走 `tests/_frontend_sources.py`（`test_no_direct_js_enumeration` 擋新的直接列舉）。
+- 首位使用者：`modules/subcontract`（`remit-kinds-settings.js`）。**取號後要做：`helpers/module_assets.ASSETS_MIN_CORE`（暫用 1.154）與 `subcontract/module.json` 的 `core` 下限一起改成本版號**（守門 `test_modules_with_assets_require_a_core_that_has_the_mount` 現為 xfail(strict)，改完會轉通過，要把 xfail 標記拿掉）（舊核心不認得 `/js` 掛載，會讓那支 JS 404）。
+- 測試：`tests/platform/test_module_assets_contract_2026_11_08.py`、`tests/platform/test_no_direct_js_enumeration_2026_11_08.py`、`tools/platform/dep_scan.py --check`（合成樹正對照）。
+
 ## 1.153 — 2026-11-08（T78；P8 自訂模組引擎總開關 builder_custom_modules.enabled，預設關）
 - 新增（行為：預設關＝不能再建立新的自訂模組）：設定群組 `builder_custom_modules`（`enabled`，預設 0）。關著時，**還沒有已發布版本**的 `custom_module` key 不能存草稿、發布、還原、核可送審版本（403；讀不到開關 503，往嚴格方向收）；已發布模組的既有單據、查詢、輸出與它自己的草稿／發布完全不受影響（關閉不是下架）。新 helper `helpers/custom_module_switch.py`（`creation_block`），閘口在 `routers/definitions.py`（存草稿／發布／還原）與 `routers/custom_records.py`（核可送審定義）；模組建構器頁關著時隱藏建立入口。**上線備註**：既有正式機升級後預設是關——要繼續建立新模組，最高管理者須先到設定中心開啟「自訂模組引擎」；已發布的模組不受影響。
 - 測試：`tests/test_custom_module_engine_switch_2026_11_08.py`、`tests/test_e2e_custom_module_engine_switch_2026_11_08.py`；`conftest.py` 讓測試環境讀到的預設值是 1（只換 `settings_registry._defaults`，不動登錄值，凍結基準仍是 0），約 80 個既有自訂模組測試免逐題設定；要驗正式預設的題目標 `@pytest.mark.custom_switch_default`。

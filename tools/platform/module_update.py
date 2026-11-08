@@ -253,6 +253,9 @@ def ship(key, out_dir, prod_base, commit="HEAD", overlays=None, run_tests=True, 
             raise UpdateError("第②級測試要在 X 本身跑：工作樹必須是 %s 而且 backend／frontend／tools 沒有未 commit 的改動" % commit[:8])
         summary = run_ship_tests(ship_tests(key, res, repo), repo)
     pkg = build(key, out_dir, commit=commit, repo=repo)
+    bad = check(pkg)
+    if bad:
+        raise UpdateError("更新包自檢不過，不出貨（包留在 %s 供查看）：" % pkg + "；".join(bad))
     lock = load_pkg(pkg)
     lock.update({"prod_base_commit": _git("rev-parse", prod_base, repo=repo), "tier": "module", "tests": summary,
                  "manifest_lines": manifest_lines(prod_base, commit, key, repo),
@@ -276,6 +279,44 @@ def load_pkg(pkg):
     return lock
 
 
+#: 與 core.loader._ASSET_PATH 同一個寫法（test_module_assets_contract 有一題比對兩邊相同）；本檔不 import backend
+_ASSET_PATH_RE = re.compile(r"^js/[A-Za-z0-9][A-Za-z0-9_.-]*\.js\Z")
+
+
+def asset_problems(mdir):
+    """模組目錄的前端資產（module.json `assets`，檔在 `js/`）宣告與實際檔案是否一致 ⇒ 問題清單。
+
+    執行期對「宣告了卻缺檔」只記 ERROR、不擋載入（使用者裁示）；擋在這裡——出貨前（build／check）。
+    只做 `assets` 區段存在時或 `js/` 資料夾存在時的檢查；兩者都沒有的模組（絕大多數）零成本、零輸出。"""
+    mdir = Path(mdir)
+    try:
+        spec = json.loads((mdir / "module.json").read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as e:
+        return ["module.json 讀不到或不是合法 JSON：%s" % e]
+    decl = spec.get("assets")
+    jd = mdir / "js"
+    if decl is None and not jd.is_dir():
+        return []
+    if decl is None:
+        decl = []
+    ok = isinstance(decl, list) and all(
+        isinstance(d, dict) and set(d) == {"path"} and isinstance(d["path"], str) and _ASSET_PATH_RE.match(d["path"])
+        for d in decl)
+    if not ok:
+        return ["module.json assets 形狀不對（必須是 [{\"path\": \"js/<檔名>.js\"}, …]）"]
+    paths = [d["path"] for d in decl]
+    problems = []
+    if len(set(paths)) != len(paths):
+        problems.append("module.json assets 有重複的 path")
+    declared = {x.split("/", 1)[1] for x in paths}
+    have = {f.name for f in jd.glob("*.js") if f.is_file()} if jd.is_dir() else set()
+    problems += ["module.json 宣告了資產 js/%s，但包裡沒有這個檔" % n for n in sorted(declared - have)]
+    problems += ["js/%s 在包裡但 module.json assets 沒有宣告（不會被提供）" % n for n in sorted(have - declared)]
+    problems += ["js/ 底下有子目錄的檔 %s（目前只支援單層檔名）" % f.relative_to(mdir).as_posix()
+                 for f in sorted(jd.rglob("*.js")) if f.parent != jd] if jd.is_dir() else []
+    return problems
+
+
 def check(pkg):
     """更新包自身 ⇒ 問題清單。"""
     try:
@@ -290,6 +331,7 @@ def check(pkg):
     cur = PS.module_entry(mdir)
     if cur["version"] != entry.get("version") or cur["sha256"] != entry.get("sha256"):
         problems.append("模組 %s 的版本或內容雜湊與 lock 不符（打包後被改過）" % key)
+    problems += ["模組 %s：%s" % (key, p) for p in asset_problems(mdir)]
     for rel in (lock.get("pages") or {}):
         if not PAGE_REL_RE.match(str(rel)):
             problems.append("lock 的頁面路徑不合格（只准 %s/<檔名>.html）：%r" % (_PAGES_DIR, rel))

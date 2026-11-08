@@ -43,7 +43,7 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_map import REPO, build as build_map, file_is_e2e, unit_name  # noqa: E402
+from test_map import REPO, _MODULE_JS_RE, build as build_map, file_is_e2e, unit_name  # noqa: E402
 import project_env  # noqa: E402
 
 BACKEND = REPO / "backend"
@@ -570,7 +570,8 @@ def select(changed, tmap, graph, iface_changed=None):
         for u in v["units"]:
             if u.startswith("dir:"):
                 d = u[4:]
-                if any(f.startswith(d) for f in changed):
+                # 模組自有 JS（backend/modules/<key>/js/）的網址仍在 /js/ 底下 ⇒ 對「frontend/js/」目錄單位也算改動
+                if any(f.startswith(d) or (d == "frontend/js/" and _MODULE_JS_RE.match(f)) for f in changed):
                     hit.add(u)
         if implied and v["kind"] in ("api", "e2e"):
             hit |= {"%s（fixture 隱含）" % x for x in implied}
