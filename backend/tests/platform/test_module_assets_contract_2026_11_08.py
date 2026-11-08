@@ -315,3 +315,47 @@ def test_loader_and_ship_check_agree_on_which_declarations_are_well_formed(tmp_p
 
 def _is_plain(path):
     return bool(re.fullmatch(r"js/[A-Za-z0-9][A-Za-z0-9_.-]*\.js", path))
+
+
+# ── ④ 選題不退化：模組 JS 搬家後 test_map／modtest 仍認得它（本檔只管機制，不綁任何真的模組）────────────────────
+
+def _tools():
+    repo = Path(__file__).resolve().parents[3]
+    if str(repo / "tools" / "platform") not in sys.path:
+        sys.path.insert(0, str(repo / "tools" / "platform"))
+    import test_map
+    return test_map
+
+
+def test_test_map_names_a_module_js_like_the_url_it_is_served_at():
+    TM = _tools()
+    assert TM.unit_name("backend/modules/zz/js/a-b.js") == "js:js/a-b.js"
+    assert TM.unit_name("frontend/js/a-b.js") == "js:js/a-b.js"                       # 搬前搬後同一個單位名
+    assert TM.unit_name("backend/modules/zz/js/vendor/x.js").startswith("file:")       # vendor 不算
+    assert TM.unit_name("backend/modules/zz/tests/a.js").startswith("file:")           # 不在 js/ 底下不算
+    assert TM.unit_name("backend/modules/zz/api.py") == "mod:zz/api"                   # 其他類型不受影響
+
+
+def test_test_map_resolver_finds_a_module_js_by_name_and_keeps_the_frontend_js_directory_unambiguous():
+    TM = _tools()
+    files = ["frontend/js/other.js", "frontend/pages/p.html", "backend/modules/zz/js/mine.js", "backend/modules/zz/module.json"]
+    R = TM.Resolver(files)
+    assert R.asset("mine.js") == "backend/modules/zz/js/mine.js"
+    assert R.asset("js/mine.js") == "backend/modules/zz/js/mine.js"
+    assert R.asset("other.js") == "frontend/js/other.js"
+    assert R.fragment("js", as_dir=True) == "frontend/js/"        # 模組 js/ 目錄不可以讓「js」這個片段變得不唯一
+    assert R.asset("x.css") is None
+
+
+def test_a_guard_that_lists_js_through_the_shared_enumeration_is_still_picked_when_frontend_js_changes(tmp_path):
+    """守門改走 tests/_frontend_sources.py 後字面路徑消失 ⇒ test_map 要補回 `dir:frontend/js/`，modtest 要把模組 JS 的改動算進去。"""
+    TM = _tools()
+    (tmp_path / "backend" / "tests").mkdir(parents=True)
+    (tmp_path / "frontend" / "js").mkdir(parents=True)
+    (tmp_path / "backend" / "tests" / "_frontend_sources.py").write_text("X = 1\n", encoding="utf-8")
+    t = tmp_path / "backend" / "tests" / "test_zz_guard.py"
+    t.write_text("from tests import _frontend_sources as FS\n\ndef test_x():\n    assert FS.top_js() is not None\n", encoding="utf-8")
+    R = TM.Resolver(["backend/tests/_frontend_sources.py", "backend/tests/test_zz_guard.py", "frontend/js/a.js"])
+    got = TM.scan_test(t, R)
+    assert "dir:frontend/js/" in got["units"], got
+    assert TM._MODULE_JS_RE.match("backend/modules/zz/js/a.js") and not TM._MODULE_JS_RE.match("backend/modules/zz/js/sub/a.js")
