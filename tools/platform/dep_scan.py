@@ -392,6 +392,22 @@ def frontend_units() -> dict[str, dict]:
         if "vendor" in p.parts:
             continue
         units[f"js:{p.relative_to(FRONTEND).as_posix()}"] = {"kind": "js", "path": rel(p)}
+    # 模組自有 JS（STAGE-C-DESIGN §3）：住 backend/modules/<key>/js/，網址仍是 /js/<相對路徑>，
+    # 所以單位 id 不變（js:js/<相對 js/ 的路徑>），只有 path 指進模組、多一個 module_key
+    # （check_module_folders 借此驗「這支 JS 與它的模組同一組」）。
+    # 與 frontend/js 同名＝兩個來源搶同一個網址 ⇒ 直接報錯，不安靜地蓋掉其中一個。
+    for mdir in sorted((BACKEND / "modules").glob("*/")) if (BACKEND / "modules").is_dir() else []:
+        jd = mdir / "js"
+        if not jd.is_dir():
+            continue
+        for p in sorted(jd.rglob("*.js")):
+            if "vendor" in p.parts:
+                continue
+            uid = f"js:js/{p.relative_to(jd).as_posix()}"
+            if uid in units:
+                raise SystemExit(f"模組 JS 與既有 JS 同網址：{uid}（{units[uid]['path']} ↔ {rel(p)}）——"
+                                 "同一個網址只能有一個來源")
+            units[uid] = {"kind": "js", "path": rel(p), "module_key": mdir.name}
     return units
 
 
@@ -637,9 +653,11 @@ SYNTHETIC_FILES = {
     "backend/modules/zz_mod/module.json": (
         '{"key": "zz_mod", "tables": ["zz_log"], "provides": {"api_prefixes": ["/api/zz-mod", "/api/zz-pub"]}}\n'),
     "frontend/pages/zz.html": (
-        "<script src=\"../js/zz.js\"></script>\n<script>\nconst API = '/api'\n"
+        "<script src=\"../js/zz.js\"></script>\n<script src=\"../js/zz-mod.js\"></script>\n<script>\nconst API = '/api'\n"
         "fetch(`${API}/zz-alpha/items/${id}`)\n</script>\n"),
     "frontend/js/zz.js": "fetch('/api/zz-mod/run')\n",
+    # 模組自有 JS：實體在模組內、網址仍是 /js/zz-mod.js（STAGE-C-DESIGN §3）；它獨有的呼叫（zz-beta）只能經它被看到
+    "backend/modules/zz_mod/js/zz-mod.js": "fetch('/api/zz-beta/list')\n",
 }
 
 #: 合成樹的分組（check-modules 的正對照：zz_alpha → zz_beta 必須被列成跨組邊）
@@ -650,7 +668,7 @@ SYNTHETIC_MODULES = {
                "tables": [], "api_prefixes": ["/api/zz-alpha"]},
         "MB": {"key": "zz_b", "name": "乙", "units": ["router:zz_beta"], "tables": [], "api_prefixes": ["/api/zz-beta"]},
         "MC": {"key": "zz_mod", "name": "丙", "units": ["mod:zz_mod/__init__", "mod:zz_mod/api", "mod:zz_mod/work",
-                                                    "mod:zz_mod/util", "mod:zz_mod/service/calc"], "tables": ["zz_log"],
+                                                    "mod:zz_mod/util", "mod:zz_mod/service/calc", "js:js/zz-mod.js"], "tables": ["zz_log"],
                "api_prefixes": ["/api/zz-mod", "/api/zz-pub"]},
     },
     "retired": {},
@@ -681,6 +699,13 @@ def _synthetic_checks(U: dict) -> list[tuple[str, bool]]:
          "router:zz_beta" in U.get("mod:zz_mod/service/calc", {}).get("imports", [])),
         ("modules.<key>.<子目錄>.<檔> 的 import 指到那個檔",
          "mod:zz_mod/service/calc" in U.get("mod:zz_mod/api", {}).get("imports", [])),
+        ("模組自有 JS：單位 id 照網址（js:js/…）、path 指進模組、帶 module_key",
+         U.get("js:js/zz-mod.js", {}).get("path") == "backend/modules/zz_mod/js/zz-mod.js"
+         and U.get("js:js/zz-mod.js", {}).get("module_key") == "zz_mod"),
+        ("頁面的 <script src=../js/…> 指到實體在模組內的 JS，該 JS 的呼叫算進頁面的有效呼叫",
+         "js:js/zz-mod.js" in U.get("page:pages/zz.html", {}).get("imports", [])
+         and "router:zz_beta" in U.get("page:pages/zz.html", {}).get("routers_called_effective", [])
+         and "router:zz_beta" not in U.get("page:pages/zz.html", {}).get("routers_called", [])),
         ("反向控制：模組的 tests/ 不算模組的檔", not any(k.startswith("mod:zz_mod/tests") for k in U)),
         ("模組寫表（DELETE）", "zz_log" in U.get("mod:zz_mod/work", {}).get("tables_w", [])),
         ("反向控制：註解不是表（table:IF 不存在）", "table:IF" not in U),
@@ -718,6 +743,19 @@ def positive_controls(g: dict | None = None) -> list[str]:
             fails.append(f"合成樹的分組應為 0 錯誤，實得 {errors}")
         if "MA router:zz_alpha → MB router:zz_beta" not in edges.get("L2→L2 import", []):
             fails.append("check-modules 未列出已知跨組邊 MA router:zz_alpha → MB router:zz_beta")
+    # 同網址兩個來源（frontend/js 與模組 js 同名）必須報錯，不可以安靜蓋掉其中一個
+    with tempfile.TemporaryDirectory(prefix="dep_scan_synth_dup_") as td:
+        tmp = Path(td)
+        (tmp / "frontend" / "js").mkdir(parents=True)
+        (tmp / "frontend" / "js" / "dup.js").write_text("1\n", encoding="utf-8")
+        (tmp / "backend" / "modules" / "zz_mod" / "js").mkdir(parents=True)
+        (tmp / "backend" / "modules" / "zz_mod" / "js" / "dup.js").write_text("2\n", encoding="utf-8")
+        with use_root(tmp):
+            try:
+                frontend_units()
+                fails.append("frontend/js 與模組 js 同名卻沒有報錯（同網址兩個來源被安靜蓋掉）")
+            except SystemExit:
+                pass
     if g is not None:
         # 真實圖：只驗 L0／L1（不隨 L2 模組增刪而變）
         R = g["units"]
@@ -752,7 +790,7 @@ def check_module_folders(U: dict, path: Path = MODULES) -> list[str]:
     by_key = {g["key"]: (gid, g) for gid, g in m["modules"].items()}
     u2g, _, _ = load_groups(path)
     errors = []
-    keys = sorted({u["module_key"] for u in U.values() if u["kind"] == "mod"})
+    keys = sorted({u["module_key"] for u in U.values() if u.get("module_key")})
     for key in keys:
         groups = {g for n, u in U.items() if u.get("module_key") == key for g in u2g.get(n, [])}
         if len(groups) != 1:
