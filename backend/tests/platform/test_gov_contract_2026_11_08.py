@@ -103,7 +103,7 @@ def _prep(world, seed):
     from routers import def_governance as G
     G.kinds()
     from core import definitions as D
-    assert seed["kind"] in D.kinds() or seed["kind"] in [k for k in G.kinds()], "kind 未登記：%s" % seed["kind"]
+    assert seed["kind"] in D.kinds(), "kind 未登記：%s" % seed["kind"]
 
 
 def _url(kind, key):
@@ -177,10 +177,6 @@ def _same(a, b):
     return json.dumps(a, sort_keys=True, ensure_ascii=False) == json.dumps(b, sort_keys=True, ensure_ascii=False)
 
 
-def _run(prop, seed, fn):
-    return fn()
-
-
 # 種子缺的欄位（該 kind 在那個方向做不出合法內容）：釘死；多缺或補上都紅，不得悄悄少跑
 KNOWN_SEED_GAPS = {("option_list", "loose"), ("status_display", "tight")}
 
@@ -205,7 +201,7 @@ def test_p1_loosen_needs_approval(world, seed):
         live = _live(seed["kind"], seed["key"])
         assert _same(live["body"], seed["base"]) and live["version"] == live0["version"], "待核准時 live 被動到"
         return "first_publish_pending=%s" % pend0
-    _run("P1", seed, f)
+    f()
 
 
 @_P("tight")
@@ -217,7 +213,7 @@ def test_p2_tighten_is_direct(world, seed):
         assert r.status_code == 200, (r.status_code, r.text[:300])
         assert _is_pending(r) is False, ("收緊被送審", r.json())
         assert _same(_live(seed["kind"], seed["key"])["body"], seed["tight"]), "收緊沒有生效"
-    _run("P2", seed, f)
+    f()
 
 
 @_P("neutral")
@@ -228,7 +224,7 @@ def test_p4_neutral_is_direct(world, seed):
         r = _publish(world, seed["kind"], seed["key"], "company", seed["neutral"])
         assert r.status_code == 200, (r.status_code, r.text[:300])
         assert _is_pending(r) is False, ("中性變更被送審", r.json())
-    _run("P4", seed, f)
+    f()
 
 
 def _restore(w, kind, key, scope, version, who="a"):
@@ -242,8 +238,8 @@ def _restore(w, kind, key, scope, version, who="a"):
 # P3 不適用的 kind：從『收緊版』回到『基準版』在該 kind 的 comparator 下不算放寬，所以還原本來就可直接生效。
 # 這不是缺口；表釘死，避免 comparator 改了而沒人發現。
 KNOWN_P3_NOT_APPLICABLE = {
-    "user_buttons": "實測 classify(tight→base) 為 neutral（原因待查，若是 comparator 漏判放寬則是缺口）",
-    "option_list": "實測 classify(tight→base) 為 neutral（原因待查，若是 comparator 漏判放寬則是缺口）",
+    "option_list": "_cmp_option_list 的 docstring 明寫『重新啟用 ⇒ 中性』（停用＝收緊、啟用＝中性，不對稱是刻意設計）；"
+                   "種子的 tight 是停用選項，回到 base 等於重新啟用，所以還原不送審。產品面是否算放寬缺口由 PM 判斷。",
 }
 
 
@@ -264,7 +260,7 @@ def test_p3_restore_parity(world, seed):
         assert rr.status_code == 200, ("還原失敗", rr.status_code, rr.text[:300])
         assert _is_pending(rr), ("還原到較寬的版本被直接生效", rr.json())
         assert _same(_live(seed["kind"], seed["key"])["body"], seed["tight"]), "還原待核准時 live 被動到"
-    _run("P3", seed, f)
+    f()
 
 
 @_P("loose")
@@ -278,7 +274,7 @@ def test_p5_impact_matches_diff(world, seed):
         from core import definitions as D
         want = len(D.diff(seed["base"], seed["loose"]))
         assert r.json()["changeCount"] == want, ("impact 的差異數與 D.diff 不同", r.json()["changeCount"], want)
-    _run("P5", seed, f)
+    f()
 
 
 # 判準獨立於被測的名單：執行期真的依角色讀不同層的 kind＝D.resolve(..., role) 的呼叫端（core/catalog.py 的 layout、list_pref_policy.policy_for）。
@@ -294,7 +290,9 @@ def test_p6_role_first_publish(world, seed):
         _establish(world, seed)
         r = _publish(world, seed["kind"], seed["key"], "role:sales", seed["loose"])
         if r.status_code != 200:
-            return "role scope rejected %s %s" % (r.status_code, r.text[:120])          # 該 kind 不收角色層：不算缺陷
+            # 執行期讀角色層的 kind 一定要收角色層首發；被拒＝無法驗證，不能當通過
+            assert seed["kind"] not in RUNTIME_ROLE_READERS, ("執行期讀角色層的 kind 卻拒收角色層首發", r.status_code, r.text[:200])
+            return "role scope rejected %s %s" % (r.status_code, r.text[:120])          # 其他 kind 不收角色層：不算缺陷
         direct = not _is_pending(r)
         if seed["kind"] in RUNTIME_ROLE_READERS:
             assert not direct, ("角色層首發比公司層寬卻直接生效", r.json())      # 執行期真的讀角色層：這是繞過第二位核准
@@ -312,7 +310,7 @@ def test_p6_role_first_publish(world, seed):
         finally:
             conn.close()
         assert _same(body, seed["base"]), ("待核准的角色層已經被 resolve 讀到", src)
-    _run("P6", seed, f)
+    f()
 
 
 @_P("loose")
@@ -325,12 +323,13 @@ def test_p7_approval_path(world, seed):
         items = _pending_ids(world, seed["kind"], seed["key"], "company")
         cid = items[-1]["id"]
         r0 = world["c"].post("/api/def-pipeline/changes/%d/approve" % cid, json={"reason": "self"}, headers=world["a"])
-        self_ok = r0.status_code == 200
-        assert not self_ok, "提交者自己核准通過了（應該要第二位）"
+        assert r0.status_code == 409, ("提交者自己核准應被擋（409），不是別的錯誤", r0.status_code, r0.text[:200])
+        assert [i["id"] for i in _pending_ids(world, seed["kind"], seed["key"], "company")] == [cid], "自核准被擋後，待核准項應原樣還在"
+        assert _same(_live(seed["kind"], seed["key"])["body"], seed["base"]), "自核准被擋後 live 被動到"
         _approve_and_activate(world, seed["kind"], seed["key"], "company")
         live = _live(seed["kind"], seed["key"])
         assert _same(live["body"], seed["loose"]) and live["version"] > live0["version"], "核准套用後 live 不等於送審內容"
-    _run("P7", seed, f)
+    f()
 
 
 # ── 靜態／結構性質（不走 HTTP）─────────────────────────────────────────────
@@ -375,10 +374,45 @@ def test_s4_seed_fields_complete_or_listed():
     assert gaps == KNOWN_SEED_GAPS, ("種子缺欄位與 KNOWN_SEED_GAPS 不符", sorted(gaps ^ KNOWN_SEED_GAPS))
 
 
+_WRITE_FUNCS = ("publish", "restore", "decide_submitted", "publish_direct")
+
+
+def _write_entrances_in(source, rel):
+    """一份原始碼裡把定義寫成『已發布』的呼叫點：<別名>.publish(...) 與 `from core.definitions import publish [as x]` 後的 x(...)。
+    別名名單＝D／definitions／_D 加上檔內 `from core import definitions as X`／`import core.definitions as X` 取得的名字。"""
+    import ast
+    t = ast.parse(source)
+    mods, funcs = {"D", "definitions", "_D"}, {}
+    for n in ast.walk(t):
+        if isinstance(n, ast.ImportFrom) and n.module == "core":
+            mods |= {a.asname or a.name for a in n.names if a.name == "definitions"}
+        elif isinstance(n, ast.ImportFrom) and n.module == "core.definitions":
+            funcs.update({a.asname or a.name: a.name for a in n.names if a.name in _WRITE_FUNCS})
+        elif isinstance(n, ast.Import):
+            mods |= {a.asname for a in n.names if a.name == "core.definitions" and a.asname}
+    found = []
+    for n in ast.walk(t):
+        if not isinstance(n, ast.Call):
+            continue
+        if isinstance(n.func, ast.Attribute) and n.func.attr in _WRITE_FUNCS and isinstance(n.func.value, ast.Name) and n.func.value.id in mods:
+            found.append("%s:%s" % (rel, n.func.attr))
+        elif isinstance(n.func, ast.Name) and n.func.id in funcs:
+            found.append("%s:%s" % (rel, funcs[n.func.id]))
+    return found
+
+
+def test_s3_scanner_positive_control():
+    """掃描器本身要抓得到：換別名、直接 import 函式都不能漏；不相干的 publish 不能誤報。"""
+    src = ("from core import definitions as defs\n"
+           "from core.definitions import restore as rs\n"
+           "import core.definitions as cd\n"
+           "defs.publish(1)\nrs(2)\ncd.decide_submitted(3)\nother.publish(4)\ndefs.get(5)\n")
+    assert sorted(_write_entrances_in(src, "x.py")) == ["x.py:decide_submitted", "x.py:publish", "x.py:restore"]
+
+
 def test_s3_write_entrances_are_the_known_ones():
     """誰能把定義寫成『已發布』：D.publish／D.restore／D.decide_submitted／D.publish_direct 的呼叫點（AST，排除 tests）。
     新增呼叫點＝新的寫入口，要有人看過（並確認走治理管線）。"""
-    import ast
     root = Path(__file__).resolve().parents[2]                          # backend/
     found = []
     for p in root.rglob("*.py"):
@@ -386,14 +420,9 @@ def test_s3_write_entrances_are_the_known_ones():
         if rel.startswith(("tests/", "tools/", "migrations_frozen/")) or "/tests/" in rel or rel.endswith("conftest.py"):
             continue
         try:
-            t = ast.parse(p.read_text(encoding="utf-8"))
+            found += _write_entrances_in(p.read_text(encoding="utf-8"), rel)
         except SyntaxError:
             continue
-        for n in ast.walk(t):
-            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-                    and n.func.attr in ("publish", "restore", "decide_submitted", "publish_direct")
-                    and isinstance(n.func.value, ast.Name) and n.func.value.id in ("D", "definitions", "_D")):
-                found.append("%s:%s" % (rel, n.func.attr))
     got = sorted(set(found))
     want = sorted({"helpers/custom_def_review.py:publish", "helpers/custom_def_review.py:decide_submitted", "routers/definitions.py:publish",
                    "routers/definitions.py:restore", "routers/def_pipeline.py:publish", "routers/def_pipeline.py:decide_submitted",

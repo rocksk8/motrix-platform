@@ -184,6 +184,15 @@
       "type": "navigate",
       "page": "suppliers.html"
      }
+    },
+    {
+     "key": "b2",
+     "slot": "suppliers.html/toolbar",
+     "label": "外包名冊",
+     "action": {
+      "type": "export",
+      "export": "subcontract:roster"
+     }
     }
    ]
   },
@@ -206,6 +215,15 @@
       "type": "export",
       "export": "subcontract:roster"
      }
+    },
+    {
+     "key": "b3",
+     "slot": "suppliers.html/toolbar",
+     "label": "外包名冊（另存）",
+     "action": {
+      "type": "export",
+      "export": "subcontract:roster"
+     }
     }
    ]
   },
@@ -222,11 +240,20 @@
       "type": "navigate",
       "page": "suppliers.html"
      }
+    },
+    {
+     "key": "b2",
+     "slot": "suppliers.html/toolbar",
+     "label": "外包名冊",
+     "action": {
+      "type": "export",
+      "export": "subcontract:roster"
+     }
     }
    ]
   },
-  "rationale": "loose: adds an export button (subcontract:roster) that brings data out of system; tight: removes the only button; neutral: label change only",
-  "notes": "Reverse direction quirk: classify(tight=[] -> base[nav button]) = neutral (adding navigate button is neutral).",
+  "rationale": "base: 開頁＋匯出各一；loose: 再加一個匯出（匯出會把資料帶出系統）；tight: 全拿掉；neutral: 只改開頁按鈕文字",
+  "notes": "base 要含匯出按鈕：tight→base 才是『新增匯出』＝放寬，P3（還原）才適用。若 base 只有開頁按鈕，classify(tight→base) 是 neutral（_cmp_user_buttons：新增『開頁』＝不變）。",
   "scope_notes": "company OK, role:<name> OK (publish verified at role:sales/role:ops, though runtime reads company). key must be module:<module> with module loaded; only supply has a slot (SLOTS)"
  },
  {
