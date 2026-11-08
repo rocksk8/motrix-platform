@@ -21,17 +21,17 @@ global.document = { createElement: mk, getElementById: () => null, body: mk('bod
 global.localStorage = { getItem: () => JSON.stringify({ token: 't' }) }
 global.window = global
 window.MOTRIX_OPTION_LIST_IDS = 'customer_type'
-const calls = []
+const calls = [], bodies = []
 const scen = JSON.parse(process.argv[1])
 global.fetch = async (url, opt) => {
   const m = (opt && opt.method) || 'GET', path = url.split('?')[0]
-  calls.push(m + ' ' + path)
+  calls.push(m + ' ' + path); bodies.push(opt && opt.body ? JSON.parse(opt.body) : null)
   let status = 200, body = {}
   if (/\/status$/.test(path)) body = scen.meta
   else if (m === 'GET' && /api\/definitions\/option_list/.test(path)) body = { draft: null, latest: null, versions: [] }
   else if (m === 'PUT') body = { etag: 'e1' }
   else if (/\/preview$/.test(path)) body = { values: [], added: [], warnings: [] }
-  else if (/\/impact$/.test(path)) body = { previewHash: 'e1' }
+  else if (/\/impact$/.test(path)) { status = scen.impactStatus || 200; body = status < 400 ? { previewHash: 'e1' } : { detail: 'x' } }
   else if (/\/publish$/.test(path)) { status = scen.publishStatus || 200; body = scen.publish || {} }
   return { ok: status < 400, status, json: async () => body }
 }
@@ -41,7 +41,7 @@ eval(fs.readFileSync(process.argv[2], 'utf8'))
   const E = window.MotrixOptionListEditor, st = E._state
   const out = { drawn: appended.length }
   if (scen.run) await eval('(async () => {' + scen.run + '})()').then(v => { out.v = v })
-  out.calls = calls; out.msg = st.msg; out.state = st.state; out.bad = st.msgBad
+  out.calls = calls; out.bodies = bodies; out.msg = st.msg; out.state = st.state; out.bad = st.msgBad
   console.log(JSON.stringify(out))
 })().catch(e => { console.error(String(e && e.stack || e)); process.exit(1) })
 """
@@ -97,3 +97,20 @@ def test_publish_requires_preview_then_says_published_or_pending_honestly():
     for code in ("preview_required", "preview_stale"):
         g = _run({"meta": {"enabled": False}, "publishStatus": 409, "publish": {"detail": "x", "code": code}, "run": base + "await E._preview(); await E._publish(); return st.msg"})
         assert g["state"] == "error" and "必須先看過" in g["msg"]
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_restore_sends_the_seen_preview_hash_of_that_version():
+    """T79：伺服端（旗標開）對 option_list 的還原要求『看過那一版的影響預覽』——編輯器先取該版預覽雜湊再還原（原本送空 body ⇒ 409 preview_required）。"""
+    r = _run({"meta": {"enabled": False}, "run": _setup(_META) + "await E._restore(2); return st.state"})
+    i = next(k for k, c in enumerate(r["calls"]) if c.endswith("/impact"))
+    j = next(k for k, c in enumerate(r["calls"]) if c.startswith("POST") and c.endswith("/restore/2"))
+    assert i < j and r["bodies"][j] == {"preview_hash": "e1"}, (r["calls"], r["bodies"])
+
+
+@pytest.mark.skipif(NODE is None, reason="沒有 node")
+def test_restore_still_goes_through_when_the_preview_cannot_be_read():
+    """治理關閉／預覽讀不到 ⇒ 不帶雜湊照樣送還原（與舊行為相同；伺服端旗標關時本來就不要求）。"""
+    r = _run({"meta": {"enabled": False}, "impactStatus": 404, "run": _setup(_META) + "await E._restore(2); return st.state"})
+    j = next(k for k, c in enumerate(r["calls"]) if c.startswith("POST") and c.endswith("/restore/2"))
+    assert r["bodies"][j] == {}, r["bodies"]

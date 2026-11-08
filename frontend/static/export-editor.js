@@ -186,7 +186,14 @@
   }
   function doRestore(v) {
     st.busy = true; st.msg = '還原中…'; render()
-    return api('POST', '/api/definitions/export_template/' + encodeURIComponent(EXPORT_ID) + '/restore/' + v + '?scope=company', {}).then(function (r) {
+    // T79：旗標開時伺服端要求還原也『看過那一版的影響預覽』：先取該版預覽雜湊（同時記一筆『看過』），取不到就不帶（旗標關／沒有治理 ⇒ 與舊行為相同）
+    var enc = encodeURIComponent(EXPORT_ID)
+    return api('GET', '/api/def-governance/export_template/' + enc + '/impact?scope=company&version=' + v).then(function (im) { return (im && im.previewHash) || '' }, function () { return '' })
+      .then(function (h) {
+        var rb = {}
+        if (h) rb.preview_hash = h
+        return api('POST', '/api/definitions/export_template/' + enc + '/restore/' + v + '?scope=company', rb)
+      }).then(function (r) {
       return afterWrite(r, '已還原到第 ' + v + ' 版。')
     }).catch(function (e) { st.busy = false; st.state = 'error'; st.msg = '還原失敗：' + e.message; st.msgBad = true; render() })
   }
