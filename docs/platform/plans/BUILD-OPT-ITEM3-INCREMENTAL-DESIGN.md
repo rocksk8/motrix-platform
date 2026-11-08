@@ -243,3 +243,4 @@ stages.not_e2e = {
 - **判定兩層**：`policy`＝照真實政策（強制全量⇒全跑⇒不會漏）；`no_escape`＝**不算全量逃生門**，只看 `selected ∪ floor ∪ red_reselect` 有沒有蓋住該抓的紅檔。**轉正要看 `no_escape`**（`policy` 在 6 小時年齡上限等強制全量多時會太樂觀）。
 - **該抓的紅**：該段全量最後被判綠（偶發重跑放行）⇒ 不算；fail-fast 提前停的段（`complete=false`）沒跑完，沒看到紅 ≠ 沒有紅，彙總單列。
 - **看數據**：`python tools/platform/stage_select_shadow.py report [--since YYYY-MM-DD] [--json]`；歷史可用 `backfill` 依 fail_stream＋test_results 時間配對補錄（`commit_source=joined_by_time`）。
+- **K 審後補充（hichan-10）**：①全量紅卻歸不到檔（只有 worker 掉線等非檔路徑、或 summary 有 failed 無 fail 行）記 `unattributed`，不當「沒有紅」；②彙總分母只算已評估的列（no_escape 為 covered／miss），沒基準／計畫壞／歸不到檔／沒證據各自單列，另有「增量列」小計（轉正看這批）；③`covered_by` 分 selected／floor／red_reselect（red_reselect 是前一次就知道的紅，不算選題召回）；④基準不採「未來」的列（backfill 補舊 run 時）；⑤背景程序 120 秒上限＋BelowNormal；⑥**report 前先跑 backfill**（紅的段 Record-Stage 後立刻 Fail 結束，若 runner 把子程序綁在 Job Object 會被殺；backfill 按 (run_id,段) 去重補回），第一次實建後要看紅段有沒有落地。

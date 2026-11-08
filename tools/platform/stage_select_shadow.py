@@ -29,6 +29,12 @@
   環境變數：MOTRIX_FAIL_STREAM_DIR（fail_stream 目錄）、建包端 MOTRIX_STAGE_SHADOW=0 關閉紀錄。
 
 ## 已知限制（記錄在案，不是缺陷）
+- 背景程序有 120 秒上限（git 卡住 ⇒ 寫 error 行後自行結束）；建包端把它的優先權降到 BelowNormal。
+- 紅的段在 Record-Stage 之後立刻 Fail 結束：若執行建包的 runner 把子程序綁在 Job Object（關閉即殺），這筆影子紀錄可能被殺掉
+  ——而它正是最有資訊的一筆。緩解：**report 前先跑 backfill**（按 (run_id,段) 去重；紅的段 test_results 有紀錄）；第一次實建後直接看紅段有沒有落地。
+- 全量 green=False 卻歸不到紅檔（只有 worker 掉線等非檔路徑，或 summary 有 failed 卻無 fail 行）⇒ verdict 記 `unattributed`，彙總單列，不當『沒有紅』。
+- 彙總分母只算『已評估』的列（no_escape 為 covered／miss）；沒基準／計畫壞／沒證據的列各自單列，不算漏抓 0。
+  `增量列` 小計＝只看 mode=incremental（轉正看這批）；`covered_by` 分 selected／floor／red_reselect，red_reselect 蓋住的是前一次就知道的紅，不是選題召回。
 - 基準的『環境指紋相同』未判（notes 記「未提供基準中繼資料」）；基準鏈長固定 1、鏈根固定為真全量（影子期每次建包都跑全量）。
 - 基準年齡上限沿用 stage_select 預設 6 小時：隔夜／久未建包的紀錄會 forced_full（policy 看起來安全，要看 no_escape）。
 - fail-fast 提前停的段（`complete=false`）沒跑完，沒看到紅 ≠ 沒有紅；彙總把它單列。
@@ -125,7 +131,7 @@ def full_result(records, stage, green):
     mine = [r for r in records if isinstance(r, dict) and r.get("stage") == stage]
     summaries = [r for r in mine if r.get("type") == "summary"]
     if not summaries:
-        return {"evidence": "none", "green": green, "complete": False, "aborted_by": "", "reds_files": [], "reds_raw_files": [],
+        return {"evidence": "none", "green": green, "complete": None, "aborted_by": "", "reds_files": [], "reds_raw_files": [],
                 "reds_unmapped": [], "finished_at": None, "duration_s": None, "passed": None, "failed": None}
     s = summaries[-1]
     raw_files, unmapped = set(), []
@@ -151,23 +157,31 @@ def judge(full, plan):
     reds = list(full.get("reds_files") or [])
     out = {"reds_n": len(reds), "reds_unmapped_n": len(full.get("reds_unmapped") or []), "full_complete": bool(full.get("complete"))}
     if full.get("evidence") != "fail_stream" or full.get("green") is None:
-        out.update(policy="unknown", no_escape="unknown", missed_files=[], missed_files_no_escape=[])
+        out.update(policy="unknown", no_escape="unknown", missed_files=[], missed_files_no_escape=[], covered_by={}, missed_files_selection_only=[])
+        return out
+    if not reds and full.get("green") is False:      # 紅了卻歸不到檔（只有 worker 掉線等非檔路徑、或 summary 有 failed 卻沒 fail 行）：不能當『沒東西要抓』
+        out.update(policy="unattributed", no_escape="unattributed", missed_files=[], missed_files_no_escape=[], covered_by={},
+                   missed_files_selection_only=[])
         return out
     if not reds:
-        out.update(policy="no_reds", no_escape="no_reds", missed_files=[], missed_files_no_escape=[])
+        out.update(policy="no_reds", no_escape="no_reds", missed_files=[], missed_files_no_escape=[], covered_by={}, missed_files_selection_only=[])
         return out
     if plan.get("plan_error") or not plan.get("base_commit"):     # 計算壞了／沒有基準 ⇒ fail closed 全量；選題本身無從評估
-        out.update(policy="covered", no_escape="unknown", missed_files=[], missed_files_no_escape=[])
+        out.update(policy="covered", no_escape="unknown", missed_files=[], missed_files_no_escape=[], covered_by={}, missed_files_selection_only=[])
         return out
-    cover = set(plan.get("selected_files") or []) | set(plan.get("floor_files") or []) | set(plan.get("red_reselect") or [])
+    sel, flo, rr = set(plan.get("selected_files") or []), set(plan.get("floor_files") or []), set(plan.get("red_reselect") or [])
+    cover = sel | flo | rr
     miss_ne = sorted(f for f in reds if f not in cover)
     if plan.get("mode") == "full":
         miss_pol = []
     else:
         run = set(plan.get("to_run") or [])
         miss_pol = sorted(f for f in reds if f not in run)
+    # 由誰蓋住（selected＞floor＞red_reselect）：red_reselect 蓋住的是『前一次就知道的紅』，不是選題召回，彙總要能分開看
+    by = {f: ("selected" if f in sel else "floor" if f in flo else "red_reselect") for f in reds if f in cover}
     out.update(policy="miss" if miss_pol else "covered", no_escape="miss" if miss_ne else "covered",
-               missed_files=miss_pol, missed_files_no_escape=miss_ne)
+               missed_files=miss_pol, missed_files_no_escape=miss_ne, covered_by=by,
+               missed_files_selection_only=sorted(f for f in reds if f not in (sel | flo)))
     return out
 
 
@@ -224,6 +238,8 @@ def pick_base(entries, stage, head_sha, now=None):
             continue
         fin = _parse_ts(f.get("finished_at")) or _parse_ts(e.get("recorded_at"))
         age = ((now or datetime.now()) - fin).total_seconds() / 3600.0 if fin else None
+        if age is not None and age < 0:          # backfill 補較舊的 run 時，檔案順序上較晚的列在『未來』：不能當基準
+            continue
         return {"commit": e["commit"], "run_id": e.get("run_id"), "finished_at": f.get("finished_at"), "age_hours": age,
                 "red_files": list(f.get("reds_raw_files") or [])}
     return None
@@ -250,7 +266,7 @@ def build_entry(repo, run_id, stage, commit, green, stream_records, entries, dir
 
 
 def _is_dirty(repo):
-    r = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True,
+    r = subprocess.run(["git", "-C", str(repo), "--no-optional-locks", "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True,
                        encoding="utf-8", errors="replace")
     return bool(r.stdout.strip())
 
@@ -263,8 +279,28 @@ def _flaky_nodeids(path):
         return []
 
 
+WATCHDOG_S = int(os.environ.get("MOTRIX_STAGE_SHADOW_TIMEOUT_S") or 120)    # 測試／診斷可改
+
+
+def _watchdog(log, a):
+    """背景程序的上限：超過 WATCHDOG_S 秒（git 卡住等）⇒ 寫一筆 error 行後自殺，不留孤兒。"""
+    import threading
+
+    def boom():
+        try:
+            append_line(log, {"v": VERSION, "type": "error", "recorded_at": datetime.now().strftime(TS), "run_id": a.run_id,
+                              "stage": a.stage, "error": "timeout: 超過 %d 秒，已自行結束" % WATCHDOG_S})
+        finally:
+            os._exit(0)
+    t = threading.Timer(WATCHDOG_S, boom)
+    t.daemon = True
+    t.start()
+    return t
+
+
 def cmd_record(a):
     log = Path(a.log) if a.log else default_log(a.repo)
+    wd = _watchdog(log, a)
     try:
         if not a.force and any(e.get("run_id") == a.run_id and e.get("stage") == a.stage and e.get("type") == "shadow" for e in read_jsonl(log)):
             return 0
@@ -282,6 +318,8 @@ def cmd_record(a):
                               "stage": a.stage, "error": "%s: %s" % (type(ex).__name__, ex)})
         except Exception:                                              # noqa: BLE001
             pass
+    finally:
+        wd.cancel()
     return 0
 
 
@@ -348,8 +386,35 @@ def cmd_backfill(a):
 
 # ── 彙總 ─────────────────────────────────────────────────────────────────────────
 
+def _block(rows):
+    """一組列 ⇒ 計數。**分母只算『已評估』的列（no_escape 為 covered／miss）**：沒基準、plan_error、歸不到檔的紅、沒證據的列
+    不能被當成『漏抓 0』——它們各自單列。"""
+    def v(e):
+        return e.get("verdict") or {}
+    ev = [e for e in rows if v(e).get("no_escape") in ("covered", "miss")]
+    pev = [e for e in rows if v(e).get("policy") in ("covered", "miss")]
+    by = {"selected": 0, "floor": 0, "red_reselect": 0}
+    for e in ev:
+        for src in (v(e).get("covered_by") or {}).values():
+            by[src] = by.get(src, 0) + 1
+    return {
+        "rows": len(rows), "no_reds": sum(1 for e in rows if v(e).get("no_escape") == "no_reds"),
+        "unattributed": sum(1 for e in rows if v(e).get("no_escape") == "unattributed"),
+        "unknown_policy": sum(1 for e in rows if v(e).get("policy") == "unknown"),
+        "no_escape_unknown": sum(1 for e in rows if v(e).get("no_escape") == "unknown" and v(e).get("policy") != "unknown"),
+        "evaluated": len(ev), "no_escape_covered": sum(1 for e in ev if v(e)["no_escape"] == "covered"),
+        "no_escape_miss": sum(1 for e in ev if v(e)["no_escape"] == "miss"),
+        "reds_evaluated": sum(v(e).get("reds_n", 0) for e in ev),
+        "reds_missed_no_escape": sum(len(v(e).get("missed_files_no_escape") or []) for e in ev),
+        "reds_missed_selection_only": sum(len(v(e).get("missed_files_selection_only") or []) for e in ev),
+        "reds_covered_by": by,
+        "policy_evaluated": len(pev), "policy_miss": sum(1 for e in pev if v(e)["policy"] == "miss"),
+        "reds_missed_policy": sum(len(v(e).get("missed_files") or []) for e in pev),
+        "reds_policy_evaluated": sum(v(e).get("reds_n", 0) for e in pev)}
+
+
 def summarize(entries):
-    """影子紀錄 ⇒ 彙總 dict（純函式）。"""
+    """影子紀錄 ⇒ 彙總 dict（純函式）。`all`＝該段全部列；`incremental`＝只看真的會走增量（mode=incremental）的列——轉正要看這批。"""
     sh = [e for e in entries if e.get("type") == "shadow"]
     s = {"entries": len(sh), "errors": sum(1 for e in entries if e.get("type") == "error"), "by_stage": {}}
     for st in SS.STAGES:
@@ -361,37 +426,39 @@ def summarize(entries):
             for r in (e["plan"].get("forced_full") or [])[:1]:
                 k = r.split("：")[0].split("（")[0][:40]
                 why[k] = why.get(k, 0) + 1
-        with_reds = [e for e in rows if (e.get("verdict") or {}).get("reds_n")]
-        def cnt(key, val, rr=rows):
-            return sum(1 for e in rr if (e.get("verdict") or {}).get(key) == val)
         shares = [e["plan"]["to_run_share_tests"] for e in inc if (e["plan"].get("to_run_share_tests") is not None)]
         shares_f = [e["plan"]["to_run_share_files"] for e in inc if (e["plan"].get("to_run_share_files") is not None)]
         s["by_stage"][st] = {
-            "entries": len(rows), "incremental": len(inc), "forced_full": len(forced), "forced_full_why": why,
-            "with_reds": len(with_reds), "policy_miss": cnt("policy", "miss"), "policy_covered": cnt("policy", "covered"),
-            "no_escape_miss": cnt("no_escape", "miss"), "no_escape_covered": cnt("no_escape", "covered"),
-            "unknown": cnt("policy", "unknown"), "incomplete_full_runs": sum(1 for e in rows if not (e.get("full") or {}).get("complete")),
-            "reds_total": sum(e["verdict"]["reds_n"] for e in rows if e.get("verdict")),
-            "reds_missed_policy": sum(len(e["verdict"].get("missed_files") or []) for e in rows if e.get("verdict")),
-            "reds_missed_no_escape": sum(len(e["verdict"].get("missed_files_no_escape") or []) for e in rows if e.get("verdict")),
+            "entries": len(rows), "incremental_n": len(inc), "forced_full_n": len(forced), "forced_full_why": why,
+            "incomplete_full_runs": sum(1 for e in rows if (e.get("full") or {}).get("evidence") == "fail_stream" and not (e.get("full") or {}).get("complete")),
+            "no_evidence": sum(1 for e in rows if (e.get("full") or {}).get("evidence") != "fail_stream"),
+            "all": _block(rows), "incremental": _block(inc),
             "mean_to_run_share_tests_incremental": round(sum(shares) / len(shares), 4) if shares else None,
             "mean_to_run_share_files_incremental": round(sum(shares_f) / len(shares_f), 4) if shares_f else None,
-            "misses": [{"run": e["run_id"], "commit": e["commit"][:9], "policy": e["verdict"].get("missed_files"),
-                        "no_escape": e["verdict"].get("missed_files_no_escape")} for e in with_reds
-                       if e["verdict"].get("policy") == "miss" or e["verdict"].get("no_escape") == "miss"]}
+            "misses": [{"run": e["run_id"], "commit": e["commit"][:9], "mode": e["plan"].get("mode"), "policy": e["verdict"].get("missed_files"),
+                        "no_escape": e["verdict"].get("missed_files_no_escape")} for e in rows
+                       if (e.get("verdict") or {}).get("policy") == "miss" or (e.get("verdict") or {}).get("no_escape") == "miss"]}
     return s
+
+
+def _fmt_block(name, b):
+    return ("    %s：%d 列｜已評估 %d（紅檔 %d）→ 選題漏抓 %d 列／%d 檔（只算 selected＋floor 則漏 %d 檔）；蓋住來源 %s｜"
+            "政策漏抓 %d 列／%d 檔｜無紅 %d｜歸不到檔 %d｜無基準或計畫壞 %d｜無證據 %d" % (
+                name, b["rows"], b["evaluated"], b["reds_evaluated"], b["no_escape_miss"], b["reds_missed_no_escape"],
+                b["reds_missed_selection_only"], b["reds_covered_by"], b["policy_miss"], b["reds_missed_policy"], b["no_reds"],
+                b["unattributed"], b["no_escape_unknown"], b["unknown_policy"]))
 
 
 def format_summary(s):
     L = ["影子紀錄 %d 筆（error 行 %d）" % (s["entries"], s["errors"])]
     for st, d in s["by_stage"].items():
-        L.append("[%s] %d 筆｜增量 %d｜強制全量 %d %s" % (st, d["entries"], d["incremental"], d["forced_full"], d["forced_full_why"] or ""))
-        L.append("    有紅的建包 %d｜政策漏抓 %d（紅檔 %d／%d）｜不算逃生門漏抓 %d（紅檔 %d／%d）｜全量未跑完 %d｜無法判定 %d" % (
-            d["with_reds"], d["policy_miss"], d["reds_missed_policy"], d["reds_total"], d["no_escape_miss"],
-            d["reds_missed_no_escape"], d["reds_total"], d["incomplete_full_runs"], d["unknown"]))
+        L.append("[%s] %d 筆｜增量 %d｜強制全量 %d %s｜全量未跑完 %d｜無 fail_stream 證據 %d" % (
+            st, d["entries"], d["incremental_n"], d["forced_full_n"], d["forced_full_why"] or "", d["incomplete_full_runs"], d["no_evidence"]))
+        L.append(_fmt_block("全部列", d["all"]))
+        L.append(_fmt_block("增量列（轉正看這批）", d["incremental"]))
         L.append("    增量時平均要跑：題數 %s｜檔數 %s" % (d["mean_to_run_share_tests_incremental"], d["mean_to_run_share_files_incremental"]))
         for m in d["misses"][:10]:
-            L.append("    漏：%s @%s  policy=%s  no_escape=%s" % (m["run"], m["commit"], m["policy"], m["no_escape"]))
+            L.append("    漏：%s @%s [%s] policy=%s no_escape=%s" % (m["run"], m["commit"], m["mode"], m["policy"], m["no_escape"]))
     return "\n".join(L)
 
 
@@ -400,7 +467,7 @@ def format_entry(e):
     return "%s %-7s %s base=%s mode=%s(%s) to_run=%s/%s reds=%d → policy=%s no_escape=%s%s" % (
         e["run_id"], e["stage"], e["commit"][:9], ((e.get("base") or {}).get("commit") or "-")[:9], p["mode"],
         (p["forced_full"][0][:28] if p["forced_full"] else "-"), p["to_run_n"], p["collected_n"], v["reds_n"], v["policy"], v["no_escape"],
-        "" if f.get("complete") else "  [全量未跑完]")
+        "  [全量未跑完]" if f.get("complete") is False else "")
 
 
 def cmd_report(a):

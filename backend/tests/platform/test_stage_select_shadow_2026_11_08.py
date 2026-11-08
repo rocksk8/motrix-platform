@@ -107,7 +107,7 @@ def test_no_base_or_plan_error_cannot_judge_selection():
 
 
 def test_no_reds_and_green_unknown():
-    assert SH.judge(_full([]), _plan())["policy"] == "no_reds"
+    assert SH.judge(_full([], green=True), _plan())["policy"] == "no_reds"
     f = _full([F_A])
     f["green"] = None
     assert SH.judge(f, _plan())["policy"] == "unknown"
@@ -212,22 +212,69 @@ def test_record_cli_is_idempotent_and_never_fails_the_build(env, monkeypatch):
     assert last["type"] == "error" and last["run_id"] == "r9" and "no-such-commit" in last["error"]
 
 
-# ── 彙總 ──────────────────────────────────────────────────────────────────────────
+# ── 必修 1：紅卻歸不到檔 ⇒ 不是『沒有紅』───────────────────────────────────────────
 
-def test_summarize_counts_misses_both_ways_and_incomplete_runs():
-    def ent(run, mode, pol, ne, reds, miss=(), miss_ne=(), complete=True, share=0.3):
-        return {"type": "shadow", "stage": "not_e2e", "run_id": run, "commit": "c" * 40,
-                "plan": {"mode": mode, "forced_full": ["基準年齡 7 小時 > 6.0"] if mode == "full" else [], "to_run_share_tests": share, "to_run_share_files": share},
-                "full": {"complete": complete}, "verdict": {"reds_n": reds, "policy": pol, "no_escape": ne, "missed_files": list(miss), "missed_files_no_escape": list(miss_ne)}}
-    s = SH.summarize([ent("a", "incremental", "no_reds", "no_reds", 0), ent("b", "incremental", "miss", "miss", 2, [F_A], [F_A]),
-                      ent("c", "full", "covered", "miss", 1, [], [F_B], complete=False), {"type": "error"}])
+def test_red_stage_without_attributable_file_is_unattributed_not_no_reds():
+    only_node_down = SH.full_result([_fail("not_e2e", "gw2", "node_down"), _summary("not_e2e", failed=0)], "not_e2e", False)
+    v = SH.judge(only_node_down, _plan())
+    assert v["policy"] == "unattributed" and v["no_escape"] == "unattributed" and v["reds_n"] == 0
+    failed_no_lines = SH.full_result([_summary("not_e2e", failed=3)], "not_e2e", False)
+    v = SH.judge(failed_no_lines, _plan())
+    assert v["policy"] == "unattributed" and v["no_escape"] == "unattributed"
+    # 綠（偶發放行）才是真的 no_reds
+    assert SH.judge(SH.full_result([_fail("not_e2e", "gw2", "node_down"), _summary("not_e2e")], "not_e2e", True), _plan())["policy"] == "no_reds"
+
+
+# ── 建議 a／b／g ──────────────────────────────────────────────────────────────────
+
+def test_pick_base_skips_rows_from_the_future_for_backfill():
+    now = datetime(2026, 11, 8, 5, 0, 0)
+    entries = [_shadow("r1", "not_e2e", "c1" * 20, fin="2026-11-08T03:00:00"), _shadow("r2", "not_e2e", "c2" * 20, fin="2026-11-08T09:00:00")]
+    b = SH.pick_base(entries, "not_e2e", "c9" * 20, now)
+    assert b["commit"] == "c1" * 20 and b["age_hours"] > 0
+
+
+def test_covered_by_is_split_by_source_and_selection_only_excludes_red_reselect():
+    v = SH.judge(_full([F_A, F_B, F_C]), _plan(selected=[F_A], floor=[F_B], red_reselect=[F_C]))
+    assert v["covered_by"] == {F_A: "selected", F_B: "floor", F_C: "red_reselect"}
+    assert v["missed_files_selection_only"] == [F_C], "red_reselect 蓋住的是前一次就知道的紅，不算選題召回"
+
+
+def test_no_evidence_is_not_counted_as_unfinished_full_run():
+    f = SH.full_result([], "not_e2e", False)
+    assert f["evidence"] == "none" and f["complete"] is None
+    s = SH.summarize([{"type": "shadow", "stage": "not_e2e", "run_id": "x", "commit": "c" * 40, "plan": {"mode": "full", "forced_full": []},
+                       "full": f, "verdict": SH.judge(f, _plan())}])
     d = s["by_stage"]["not_e2e"]
-    assert s["entries"] == 3 and s["errors"] == 1
-    assert (d["incremental"], d["forced_full"], d["with_reds"]) == (2, 1, 2)
-    assert (d["policy_miss"], d["no_escape_miss"], d["reds_missed_policy"], d["reds_missed_no_escape"], d["reds_total"]) == (1, 2, 1, 2, 3)
-    assert d["incomplete_full_runs"] == 1 and d["forced_full_why"] == {"基準年齡 7 小時 > 6.0": 1}
+    assert d["incomplete_full_runs"] == 0 and d["no_evidence"] == 1
+
+
+# ── 彙總（必修 2：分母只算已評估；無法評估要單列）─────────────────────────────────────
+
+def _ent(run, mode, verdict, complete=True, share=0.3, evidence="fail_stream"):
+    return {"type": "shadow", "stage": "not_e2e", "run_id": run, "commit": "c" * 40,
+            "plan": {"mode": mode, "forced_full": ["基準年齡 7 小時 > 6.0"] if mode == "full" else [], "to_run_share_tests": share, "to_run_share_files": share},
+            "full": {"complete": complete, "evidence": evidence}, "verdict": verdict}
+
+
+def test_summarize_unknown_is_not_reported_as_zero_misses_and_denominator_is_evaluated_only():
+    ok = SH.judge(_full([F_A]), _plan(selected=[F_A]))                               # 已評估、蓋住
+    miss = SH.judge(_full([F_B, F_C]), _plan(selected=[F_A]))                        # 已評估、漏 2 檔
+    nobase = SH.judge(_full([F_A]), _plan(mode="full", base=None))                   # 有紅但沒基準 ⇒ no_escape=unknown
+    unattr = SH.judge(SH.full_result([_summary("not_e2e", failed=2)], "not_e2e", False), _plan())
+    s = SH.summarize([_ent("a", "incremental", ok), _ent("b", "incremental", miss), _ent("c", "full", nobase, complete=False),
+                      _ent("d", "full", unattr), {"type": "error"}])
+    d = s["by_stage"]["not_e2e"]
+    a, inc = d["all"], d["incremental"]
+    assert s["entries"] == 4 and s["errors"] == 1
+    assert (a["evaluated"], a["no_escape_covered"], a["no_escape_miss"]) == (2, 1, 1)
+    assert a["reds_evaluated"] == 3 and a["reds_missed_no_escape"] == 2, "分母是已評估列的紅檔，不含沒基準那筆"
+    assert a["no_escape_unknown"] == 1 and a["unattributed"] == 1
+    assert (inc["rows"], inc["evaluated"], inc["no_escape_miss"]) == (2, 2, 1), "增量列另計"
+    assert (d["incremental_n"], d["forced_full_n"], d["incomplete_full_runs"]) == (2, 2, 1)
     assert d["mean_to_run_share_tests_incremental"] == 0.3
-    assert SH.format_summary(s)
+    txt = SH.format_summary(s)
+    assert "無基準或計畫壞 1" in txt and "歸不到檔 1" in txt and "增量列" in txt
 
 
 # ── 反向控制（突變）：判定被改鬆，守門題必須紅 ─────────────────────────────────────────
@@ -245,7 +292,7 @@ def _mutant(tmp_path, old, new):
 
 
 def test_mutation_ignoring_floor_in_coverage_is_detected(tmp_path):
-    m = _mutant(tmp_path, '| set(plan.get("floor_files") or [])', '')
+    m = _mutant(tmp_path, "cover = sel | flo | rr", "cover = sel | rr")
     v = m.judge(_full([F_B]), _plan(floor=[F_B]))
     assert v["no_escape"] == "miss", "（突變版把底板拿掉 ⇒ 會假報漏抓）"
     assert SH.judge(_full([F_B]), _plan(floor=[F_B]))["no_escape"] == "covered"
@@ -256,3 +303,28 @@ def test_mutation_counting_retry_stage_reds_is_detected(tmp_path):
     recs = [_fail("not_e2e-retry", "tests/test_b.py::t"), _summary("not_e2e", failed=0)]
     assert m.full_result(recs, "not_e2e", False)["reds_files"] == [F_B]
     assert SH.full_result(recs, "not_e2e", False)["reds_files"] == []
+
+
+def test_mutation_dropping_unattributed_rule_is_detected(tmp_path):
+    m = _mutant(tmp_path, 'if not reds and full.get("green") is False:', "if False:")
+    f = SH.full_result([_summary("not_e2e", failed=3)], "not_e2e", False)
+    assert m.judge(f, _plan())["policy"] == "no_reds", "（突變版把紅的建包判成沒有紅）"
+    assert SH.judge(f, _plan())["policy"] == "unattributed"
+
+
+def test_watchdog_kills_a_stuck_background_record_and_leaves_an_error_line(env):
+    import os
+    prog = "\n".join([
+        "import sys, time",
+        "sys.path.insert(0, %r)" % str(TOOLS),
+        "import stage_select_shadow as SH",
+        "SH.SS.plan_stage = lambda *a, **k: time.sleep(60)",
+        "SH.main(['--repo', %r, '--log', %r, '--stream-dir', %r, 'record', '--run-id', 'rw', '--stage', 'not_e2e', '--green', '1', '--head', %r])"
+        % (str(env["repo"]), str(env["log"]), str(env["sd"]), env["c2"]),
+    ])
+    (env["sd"] / "rw.jsonl").write_text(json.dumps(_summary("not_e2e")) + "\n", encoding="utf-8")
+    r = subprocess.run([sys.executable, "-c", prog], env=dict(os.environ, MOTRIX_STAGE_SHADOW_TIMEOUT_S="1"), timeout=45, capture_output=True)
+    assert r.returncode == 0
+    last = SH.read_jsonl(env["log"])[-1]
+    assert last["type"] == "error" and "timeout" in last["error"] and last["run_id"] == "rw"
+
