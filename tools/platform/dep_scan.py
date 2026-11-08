@@ -450,7 +450,12 @@ def fe_scan(p: Path, extra_consts: dict[str, str] | None = None, problems: list 
                     problems.append({"page": rel(p), "src": ref, "reason": "outside_frontend"})
                 continue
             if "vendor" in key:
-                if stats is not None:
+                # 這裡是『字串包含』，而 frontend_units() 排除 vendor 用的是『路徑片段』：`js/vendor-utils.js` 是有效單位，卻在這裡被當 vendor 丟掉
+                # ⇒ 邊少一條。回傳值維持舊行為不動，只讓它看得見（K 審 hichan-8）。
+                if known is not None and key in known:
+                    if problems is not None:
+                        problems.append({"page": rel(p), "src": ref, "reason": "dropped_as_vendor"})
+                elif stats is not None:
                     stats["vendor"] = stats.get("vendor", 0) + 1
                 continue
             if known is not None and key not in known:

@@ -35,9 +35,10 @@ def test_no_unresolved_script_src_in_real_tree():
 def test_the_guard_really_scanned_something():
     """正對照：基準 0 不能是『什麼都沒掃』造成的。"""
     stats = {}
-    dep_scan.script_ref_problems(stats)
+    probs = dep_scan.script_ref_problems(stats)
     assert stats.get("pages", 0) >= 50 and stats.get("refs", 0) >= 300, stats
-    assert stats.get("ok", 0) > 0 and stats["ok"] + stats.get("vendor", 0) + stats.get("external", 0) == stats["refs"], stats
+    # 每個 src 都有去處：有效／vendor／外部／列為失敗，沒有第五種（對帳）
+    assert stats.get("ok", 0) > 0 and stats["ok"] + stats.get("vendor", 0) + stats.get("external", 0) + len(probs) == stats["refs"], stats
 
 
 def test_known_unresolved_entries_are_alive_and_explained():
@@ -63,12 +64,14 @@ PAGE = ("<script src=\"../js/ok.js\"></script>\n"
         "<script src=\"../../../etc/y.js\"></script>\n"             # 爬出 frontend/
         "<script src=\"https://cdn.example.invalid/a.js\"></script>\n"   # 外部：不算失敗
         "<script src=\"//cdn.example.invalid/b.js\"></script>\n"
-        "<script src=\"../static/vendor/v.js\"></script>\n")        # vendor：刻意略過
+        "<script src=\"../static/vendor/v.js\"></script>\n"         # vendor 目錄：刻意略過
+        "<script src=\"../js/vendor-utils.js\"></script>\n")        # 名字帶 vendor 的『真 JS』：是有效單位，不可以被當 vendor 靜默丟掉
 
 
 @pytest.fixture
 def synthetic(tmp_path):
-    _tree(tmp_path, {"frontend/pages/p.html": PAGE, "frontend/js/ok.js": "x=1\n", "frontend/static/vendor/v.js": "v=1\n"})
+    _tree(tmp_path, {"frontend/pages/p.html": PAGE, "frontend/js/ok.js": "x=1\n", "frontend/js/vendor-utils.js": "u=1\n",
+                           "frontend/static/vendor/v.js": "v=1\n"})
     with dep_scan.use_root(tmp_path):
         yield tmp_path
 
@@ -77,8 +80,9 @@ def test_guard_catches_each_kind_of_silent_skip(synthetic):
     stats = {}
     got = {(d["src"], d["reason"]) for d in dep_scan.script_ref_problems(stats)}
     assert got == {("../js/gone.js", "not_found"), ("../js/ok.js?v=3", "not_found"),
-                   ("/static/x.js", "outside_frontend"), ("../../../etc/y.js", "outside_frontend")}, got
-    assert stats == {"pages": 1, "refs": 8, "ok": 1, "vendor": 1, "external": 2}, stats
+                   ("/static/x.js", "outside_frontend"), ("../../../etc/y.js", "outside_frontend"),
+                   ("../js/vendor-utils.js", "dropped_as_vendor")}, got
+    assert stats == {"pages": 1, "refs": 9, "ok": 1, "vendor": 1, "external": 2}, stats
 
 
 def test_moving_a_js_file_is_detected(synthetic):
