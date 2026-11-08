@@ -24,6 +24,7 @@ NODE = shutil.which("node")
 BACKEND_ALLOWED = {
     "helpers/status_display.py", "routers/status_display.py", "routers/def_governance.py", "routers/def_pipeline.py",
     "helpers/settings_groups.py", "main.py",
+    "routers/definitions.py",        # T79：只有『發布前預覽強制名單』裡的 kind 名字字串，沒有使用顯示表
     "helpers/display_labels.py",     # T68 C7：小模組顯示名稱登錄（只換看到的字；沿用官方用語清單檢查名稱，不在邏輯位置用顯示表）
 }
 
