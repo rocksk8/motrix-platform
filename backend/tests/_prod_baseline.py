@@ -55,6 +55,7 @@
 📌 2026-11-04 17:53：正式機已更新到 212d3779（第七十五班 T75：開發記錄新增「批示」（crm migration 0004，新表 dev_log_directive／dev_log_directive_target，無既有資料搬遷），新能力 crm.dev_log_directive.comment（預設只有管理員）可下批示、指定通知與回覆對象，批示只有作者／對象／管理員看得到，已有批示的開發記錄刪除改回 409；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261104-t75-apply.md；套件 20261104_173914_212d3779_full；core 1.150→1.151、crm 1.1.0→1.2.0（其餘 14 模組不變），schema 維持 118（crm module_schema_versions 3→4）；manifest 604→605 筆；能力 11→12；正式機 Claude 依主持「可以套用」執行 apply_update，23 秒成功、無回滾，步驟 3 十六項全過、未登入 GET/POST directives、POST replies 皆 401）⇒ 基準改 212d3779。
 📌 2026-11-07 16:00：正式機已更新到 bb332042（第七十六班 T76：報價單簽核「二擇一」程式整批鋪上、reconfirm_mode 維持 0（關閉）；案件頁業務顯示與獎金名單讀源改業務負責；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261107-t76-apply.md；套件 20261107_154425_bb332042_full；core 1.151→1.152、case 1.0.205→1.0.206、payroll 1.2.22→1.2.23（其餘 13 模組不變），schema 維持 118（module_schema_versions 套用前後逐列相同）；manifest 605→608 筆；能力維持 12；正式機 Claude 依常設授權執行 apply_update，t0 15:59:54／started 15:59:55／finished 16:00:30，約 36 秒成功、無回滾，步驟 3 十七項全過、未登入 POST review-edit／GET reconfirm-shadow-stats 皆 401；回報資料夾 20261107_155955_bb332042_成功）⇒ 正式機基準＝bb332042，但 BASELINE 不在本條單獨移到 bb332042：T77（3c13b82d）把文字追加進 T76 已出貨的「案件管理 2026-11-07b」條目，基準停在 bb332042 時 test_every_shipped_entry_is_still_there_unchanged 會紅；T77 已套用，BASELINE 於下一條直接移到 3c13b82d。
 📌 2026-11-08 00:31：正式機已更新到 3c13b82d（第七十七班 T77：案件發票上傳通知——款項明細發票／材料申請發票上傳後寄信給財務角色與最高管理者，一次上傳只寄一封、不含檔名與金額；精算承攬商派發單可逐行對應報價品項（選填，整張對應維持預設）；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261108-t77-apply.md；套件 20261108_001433_3c13b82d_full；core 1.152 不變、case 1.0.206→1.0.207（其餘 14 模組不變），schema 維持 118（module_schema_versions 套用前後逐列相同、sqlite_master 485 項無增減）；manifest 608 筆不變——T77 文字追加進 T76 已出貨的「案件管理 2026-11-07b」條目（見上一條），非新增條目；能力維持 12；正式機 Claude 依常設授權執行 apply_update，t0 00:30:56／finished 00:31:32，約 36 秒成功、無回滾，步驟 3 十六項全過；回報資料夾 20261108_003056_3c13b82d_成功；套用前 reconfirm_mode 已是使用者於 2026-11-07 16:12:59 改的 2（開啟），非步驟檔預期的 0，套用前後相同）⇒ 基準改 3c13b82d。
+📌 2026-11-08 07:02：正式機已更新到 55835216（第七十八班 T78：派發單異常金額（NaN／Infinity 等髒值）防精算頁 500；保固到期信改以帳號外鍵找業務並只在寄送成功後才記已通知；選單建構器補角色層編輯範圍；清單偏好政策三修（全域預設鍵 global.default、首發以繼承政策為基準、疊合範圍與執行期一致）；自訂模組引擎新增總開關（設定中心群組 builder_custom_modules，預設關）；文案清理；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261108-t78-apply.md；套件 20261108_064705_55835216_full；core 1.152→1.153、case 1.0.207→1.0.208、subcontract 1.1.40→1.1.41（其餘 13 模組不變），schema 維持 118（module_schema_versions 套用前後逐列相同、sqlite_master 485 項無增減）；manifest 608→610 筆（兩筆佔位編號：平台/選單建構器 2026-11-08a、平台/清單個人偏好 2026-11-08b）；設定群組 46→47；能力維持 12；正式機 Claude 依常設授權執行 apply_update，t0 07:02:23／started 07:02:24／finished 07:02:46，約 23 秒成功、無回滾，步驟 3 十八項全過；回報資料夾 20261108_070224_55835216_成功；套用前後 reconfirm_mode 同為 2（開啟）；正式機有一個從未發布的自訂模組草稿 key=test（draft v0），總開關關著時無法存檔，非資料遺失）⇒ 基準改 55835216。
 """
 import json
 import subprocess
@@ -63,7 +64,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "3c13b82d"
+BASELINE = "55835216"
 
 
 def baseline_manifest():
