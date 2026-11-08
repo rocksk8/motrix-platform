@@ -227,6 +227,31 @@ def test_red_stage_without_attributable_file_is_unattributed_not_no_reds():
 
 # ── 建議 a／b／g ──────────────────────────────────────────────────────────────────
 
+def test_pick_base_takes_latest_finished_not_last_in_file_order():
+    """backfill 補錄的較舊 run 會排在檔案後面：基準仍要是『跑完時間』最近的那筆。"""
+    now = datetime(2026, 11, 8, 6, 0, 0)
+    entries = [_shadow("newer", "not_e2e", "c1" * 20, fin="2026-11-08T05:00:00"), _shadow("older", "not_e2e", "c2" * 20, fin="2026-11-08T03:00:00")]
+    assert SH.pick_base(entries, "not_e2e", "c9" * 20, now)["run_id"] == "newer"
+    assert SH.pick_base(list(reversed(entries)), "not_e2e", "c9" * 20, now)["run_id"] == "newer"
+
+
+def test_timeout_env_garbage_falls_back_and_never_raises(monkeypatch):
+    assert SH._timeout_s("abc") == 120 and SH._timeout_s("0") == 120 and SH._timeout_s("-3") == 120 and SH._timeout_s("7") == 7
+    monkeypatch.setenv("MOTRIX_STAGE_SHADOW_TIMEOUT_S", "abc")
+    assert SH._timeout_s() == 120
+
+
+def test_dirty_check_uses_no_optional_locks(monkeypatch):
+    seen = {}
+
+    def fake_run(cmd, **kw):
+        seen["cmd"] = cmd
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+    monkeypatch.setattr(SH.subprocess, "run", fake_run)
+    assert SH._is_dirty("x") is False
+    assert "--no-optional-locks" in seen["cmd"], "共用樹上別搶 index.lock"
+
+
 def test_pick_base_skips_rows_from_the_future_for_backfill():
     now = datetime(2026, 11, 8, 5, 0, 0)
     entries = [_shadow("r1", "not_e2e", "c1" * 20, fin="2026-11-08T03:00:00"), _shadow("r2", "not_e2e", "c2" * 20, fin="2026-11-08T09:00:00")]

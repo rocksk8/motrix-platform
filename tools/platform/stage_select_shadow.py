@@ -228,7 +228,9 @@ def plan_summary(plan, repo=None, with_tests=True):
 
 def pick_base(entries, stage, head_sha, now=None):
     """影子紀錄 ⇒ 同段、最近一筆『跑完且有 fail_stream 證據』且 commit ≠ head 的紀錄；沒有 ⇒ None。"""
-    for e in reversed(entries):
+    now = now or datetime.now()
+    best = None                                   # (跑完時間, 檔案順序, 紀錄, 年齡)
+    for i, e in enumerate(entries):
         if e.get("type") != "shadow" or e.get("stage") != stage:
             continue
         f = e.get("full") or {}
@@ -237,12 +239,17 @@ def pick_base(entries, stage, head_sha, now=None):
         if e["commit"] == head_sha:
             continue
         fin = _parse_ts(f.get("finished_at")) or _parse_ts(e.get("recorded_at"))
-        age = ((now or datetime.now()) - fin).total_seconds() / 3600.0 if fin else None
-        if age is not None and age < 0:          # backfill 補較舊的 run 時，檔案順序上較晚的列在『未來』：不能當基準
+        age = (now - fin).total_seconds() / 3600.0 if fin else None
+        if age is not None and age < 0:          # backfill 補較舊的 run 時：比 head 還晚的列在『未來』，不能當基準
             continue
-        return {"commit": e["commit"], "run_id": e.get("run_id"), "finished_at": f.get("finished_at"), "age_hours": age,
-                "red_files": list(f.get("reds_raw_files") or [])}
-    return None
+        key = (fin or datetime.min, i)           # 取『跑完時間』最大的，不看檔案順序（backfill 補錄的舊列會排在檔案後面）
+        if best is None or key > best[0]:
+            best = (key, e, f, age)
+    if best is None:
+        return None
+    _, e, f, age = best
+    return {"commit": e["commit"], "run_id": e.get("run_id"), "finished_at": f.get("finished_at"), "age_hours": age,
+            "red_files": list(f.get("reds_raw_files") or [])}
 
 
 # ── 一筆紀錄 ─────────────────────────────────────────────────────────────────────
@@ -279,7 +286,16 @@ def _flaky_nodeids(path):
         return []
 
 
-WATCHDOG_S = int(os.environ.get("MOTRIX_STAGE_SHADOW_TIMEOUT_S") or 120)    # 測試／診斷可改
+def _timeout_s(raw=None, default=120):
+    """MOTRIX_STAGE_SHADOW_TIMEOUT_S（測試／診斷用）；非數字或 ≤0 ⇒ 預設（import 時不可丟例外：永遠 exit 0）。"""
+    try:
+        v = int(raw if raw is not None else os.environ.get("MOTRIX_STAGE_SHADOW_TIMEOUT_S") or default)
+        return v if v > 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
+WATCHDOG_S = _timeout_s()
 
 
 def _watchdog(log, a):
