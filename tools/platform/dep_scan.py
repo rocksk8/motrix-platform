@@ -411,7 +411,19 @@ def substitute_bases(text: str, consts: dict[str, str]) -> str:
     return text
 
 
-def fe_scan(p: Path, extra_consts: dict[str, str] | None = None) -> tuple[list[str], list[str]]:
+#: 不是本機檔的 `<script src>`（`https://…`、`//cdn…`、`data:`、`blob:`）：本來就不會有頁面→JS 的邊，不算解析失敗
+RE_EXTERNAL_SRC = re.compile(r"^(?:[A-Za-z][A-Za-z0-9+.-]*:|//)")
+
+
+def fe_scan(p: Path, extra_consts: dict[str, str] | None = None, problems: list | None = None,
+            known: set | None = None, stats: dict | None = None) -> tuple[list[str], list[str]]:
+    """⇒ (呼叫的 API 路徑, 引用的 js 單位名)。
+
+    `problems`／`known`／`stats` 只用來**看見**靜默跳過的 `<script src>`，不改回傳值（都不給＝與舊版逐字相同）：
+    - `problems`：解析失敗的清單（附加 `{"page","src","reason"}`）。reason＝`outside_frontend`（解析後不在 frontend/ 底下，如 `/static/x.js`）
+      或 `not_found`（在 frontend/ 底下、卻不是 `known` 裡的 js 單位——檔案被搬走／改名、或寫了 `?v=1` 這類掃描器不認的形式）。
+    - `known`：有效的 `js:` 單位名集合；沒給就不判 not_found。
+    - `stats`：計數（pages／refs／ok／vendor／external）；守門用它證明『真的掃到了東西』。"""
     raw = p.read_text(encoding="utf-8-sig", errors="replace")
     consts = dict(extra_consts or {})
     consts.update(base_consts(raw))
@@ -420,15 +432,53 @@ def fe_scan(p: Path, extra_consts: dict[str, str] | None = None) -> tuple[list[s
     calls = sorted({re.sub(r"\$\{[^}]*\}", "{}", m.group(1)).split("$", 1)[0] for m in RE_API.finditer(text)})
     scripts = []
     if p.suffix == ".html":
+        if stats is not None:
+            stats["pages"] = stats.get("pages", 0) + 1
         for m in RE_SCRIPT.finditer(text):
-            src = (p.parent / m.group(1)).resolve()
+            ref = m.group(1)
+            if stats is not None:
+                stats["refs"] = stats.get("refs", 0) + 1
+            if RE_EXTERNAL_SRC.match(ref):
+                if stats is not None:
+                    stats["external"] = stats.get("external", 0) + 1
+                continue
+            src = (p.parent / ref).resolve()
             try:
                 key = "js:" + src.relative_to(FRONTEND.resolve()).as_posix()
             except ValueError:
+                if problems is not None:
+                    problems.append({"page": rel(p), "src": ref, "reason": "outside_frontend"})
                 continue
-            if "vendor" not in key:
-                scripts.append(key)
+            if "vendor" in key:
+                # 這裡是『字串包含』，而 frontend_units() 排除 vendor 用的是『路徑片段』：`js/vendor-utils.js` 是有效單位，卻在這裡被當 vendor 丟掉
+                # ⇒ 邊少一條。回傳值維持舊行為不動，只讓它看得見（K 審 hichan-8）。
+                if known is not None and key in known:
+                    if problems is not None:
+                        problems.append({"page": rel(p), "src": ref, "reason": "dropped_as_vendor"})
+                elif stats is not None:
+                    stats["vendor"] = stats.get("vendor", 0) + 1
+                continue
+            if known is not None and key not in known:
+                if problems is not None:
+                    problems.append({"page": rel(p), "src": ref, "reason": "not_found"})
+            elif stats is not None:
+                stats["ok"] = stats.get("ok", 0) + 1
+            scripts.append(key)
     return calls, scripts
+
+
+def script_ref_problems(stats: dict | None = None) -> list[dict]:
+    """全站 `<script src>` 解析失敗清單（走 `fe_scan` 同一條解析路徑，不另寫一份）。
+
+    背景（T79）：`fe_scan` 解析不到時直接跳過、`build()` 再用 `s in units` 濾掉，頁面→JS 的邊（⇒ `routers_called_effective`、
+    test_map 的頁面對應）就悄悄少了一條，沒有任何測試會紅。這裡把它變成看得見的數字；守門在 test_dep_scan_script_refs_*。"""
+    units = frontend_units()
+    known = {n for n, u in units.items() if u["kind"] == "js"}
+    out: list[dict] = []
+    for u in units.values():
+        if u["kind"] == "page":
+            fe_scan(ROOT / u["path"], problems=out, known=known, stats=stats)
+    return sorted(out, key=lambda d: (d["page"], d["src"]))
 
 
 def route_regex(path: str) -> re.Pattern:
@@ -949,6 +999,11 @@ def main() -> int:
         for e in errors:
             print("  " + e)
         return 1 if errors else 0
+    sp = script_ref_problems()
+    if sp:                                     # 資訊性（不改 exit code、不擋產生圖）：守門在 pytest
+        print(f"⚠ {len(sp)} 個 <script src> 解析失敗（頁面→JS 的邊會少）：", file=sys.stderr)
+        for d in sp[:20]:
+            print(f"  {d['page']}  src={d['src']}  ({d['reason']})", file=sys.stderr)
     if not a.check:
         out = Path(a.out)
         out.parent.mkdir(parents=True, exist_ok=True)
