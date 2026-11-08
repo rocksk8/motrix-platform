@@ -531,12 +531,12 @@
     },
     {
      "value": "潛在",
-     "label": "潛在客戶"
+     "label": "潛在客戶",
+     "disabled": true
     }
    ]
   },
-  "loose": null,
-  "tight": {
+  "loose": {
    "version": 1,
    "values": [
     {
@@ -546,6 +546,24 @@
     {
      "value": "VIP",
      "label": "VIP 客戶"
+    },
+    {
+     "value": "潛在",
+     "label": "潛在客戶"
+    }
+   ]
+  },
+  "tight": {
+   "version": 1,
+   "values": [
+    {
+     "value": "一般",
+     "label": "一般客戶"
+    },
+    {
+     "value": "VIP",
+     "label": "VIP 客戶",
+     "disabled": true
     },
     {
      "value": "潛在",
@@ -567,7 +585,8 @@
     },
     {
      "value": "潛在",
-     "label": "潛在客戶"
+     "label": "潛在客戶",
+     "disabled": true
     },
     {
      "value": "企業",
@@ -575,8 +594,8 @@
     }
    ]
   },
-  "rationale": "tight: disables option 潛在 (new data can no longer pick it); neutral: adds an option 企業 / relabels / reorders / re-enables. NO VALID 'loose' EXISTS: comparator loosens only on unknown top-level keys, removed values or changed part_category prefix - all rejected by definition_problems (verified), because published options can never be deleted and prefixes are frozen.",
-  "notes": "Re-enabling a disabled option and adding options classify as neutral although semantically slightly more permissive - comparator choice, not a loosen path.",
+  "rationale": "base has 潛在 already disabled. loose: re-enables 潛在 (user ruling 2026-11-08: re-enabling a disabled option is a loosening, needs second approver); tight: additionally disables VIP (潛在 stays disabled); neutral: adds a new option 企業 / relabels / reorders while 潛在 stays disabled.",
+  "notes": "Re-enabling a disabled option classifies as loosen (2026-11-08); disabling stays tighten (immediate); adding options is neutral.",
   "scope_notes": "D accepts 'company' and 'role:<name>'; validator ignores scope; runtime reads 'company' only. key must be one of OL.BUILTIN (customer_type, supplier_category, part_category, payment_stage, payment_request_stage*, payslip_nationality*, payslip_income_type*, payslip_payment_method, payslip_income_subtype, part_unit); * = closed lists (cannot add/disable).",
   "loose_unvalid_classify_only": {
    "note": "NOT publishable (validator rejects: '不認得的鍵：extra'); classify(base, this)=loosen; use only if the property test calls classify() without validation",

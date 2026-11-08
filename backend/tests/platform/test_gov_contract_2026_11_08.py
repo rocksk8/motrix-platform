@@ -17,7 +17,7 @@
 
 新增一個 ACTIVE kind 時：在 gov_contract_seeds/ 補一份種子（base 必填；loose／tight／neutral 能給就給），S2 會擋沒有種子的。
 v2 backlog（不在本版）：list_pref_policy 的 kind 專屬對抗種子（global.default 與 overlay 交互作用）；
-角色層首發直接生效的 3 個 kind（見 KNOWN_LATENT_ROLE_FIRST_PUBLISH）等該 kind 真的要做角色層支援時一併處理。
+角色層首發直接生效的 4 個 kind（見 KNOWN_LATENT_ROLE_FIRST_PUBLISH）等該 kind 真的要做角色層支援時一併處理。
 """
 import importlib
 import json
@@ -178,7 +178,7 @@ def _same(a, b):
 
 
 # 種子缺的欄位（該 kind 在那個方向做不出合法內容）：釘死；多缺或補上都紅，不得悄悄少跑
-KNOWN_SEED_GAPS = {("option_list", "loose"), ("status_display", "tight")}
+KNOWN_SEED_GAPS = {("status_display", "tight")}
 
 
 def _has(*names):
@@ -237,10 +237,8 @@ def _restore(w, kind, key, scope, version, who="a"):
 
 # P3 不適用的 kind：從『收緊版』回到『基準版』在該 kind 的 comparator 下不算放寬，所以還原本來就可直接生效。
 # 這不是缺口；表釘死，避免 comparator 改了而沒人發現。
-KNOWN_P3_NOT_APPLICABLE = {
-    "option_list": "_cmp_option_list 的 docstring 明寫『重新啟用 ⇒ 中性』（停用＝收緊、啟用＝中性，不對稱是刻意設計）；"
-                   "種子的 tight 是停用選項，回到 base 等於重新啟用，所以還原不送審。產品面是否算放寬缺口由 PM 判斷。",
-}
+# （option_list 曾在這裡：重新啟用判為中性。使用者 2026-11-08 裁示重新啟用＝放寬、要二次核准，已移出——現在 P3 對它也成立。）
+KNOWN_P3_NOT_APPLICABLE = {}
 
 
 @_P("tight")
@@ -280,7 +278,8 @@ def test_p5_impact_matches_diff(world, seed):
 # 判準獨立於被測的名單：執行期真的依角色讀不同層的 kind＝D.resolve(..., role) 的呼叫端（core/catalog.py 的 layout、list_pref_policy.policy_for）。
 # S1 另外檢查它與 def_governance.ROLE_AWARE_KINDS 一致。
 RUNTIME_ROLE_READERS = ("layout", "list_pref_policy")
-KNOWN_LATENT_ROLE_FIRST_PUBLISH = {"rule_set", "attachment_slot", "case_stage_template"}
+# option_list：2026-11-08 補上合法 loose 種子後才被 P6 掃到；執行期只讀 company 層，角色層首發目前無實際效果（同上，做角色層支援時一併處理）。
+KNOWN_LATENT_ROLE_FIRST_PUBLISH = {"rule_set", "attachment_slot", "case_stage_template", "option_list"}
 
 
 @_P("loose")
@@ -297,7 +296,7 @@ def test_p6_role_first_publish(world, seed):
         if seed["kind"] in RUNTIME_ROLE_READERS:
             assert not direct, ("角色層首發比公司層寬卻直接生效", r.json())      # 執行期真的讀角色層：這是繞過第二位核准
         else:
-            # 執行期不讀角色層：目前無實際效果，已知 3 個直接生效（backlog：做角色層支援時一併處理）。表釘死兩個方向。
+            # 執行期不讀角色層：目前無實際效果，已知 4 個直接生效（backlog：做角色層支援時一併處理）。表釘死兩個方向。
             assert direct == (seed["kind"] in KNOWN_LATENT_ROLE_FIRST_PUBLISH), (
                 "角色層首發行為與 KNOWN_LATENT_ROLE_FIRST_PUBLISH 不符（新增＝新缺口；變成待核准＝表可以縮小）", seed["kind"], direct)
             if direct:
