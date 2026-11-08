@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1455,
+  "tests": 1457,
   "unmapped": 13,
   "kinds": {
-   "api": 811,
+   "api": 813,
    "e2e": 313,
    "audit": 193,
    "unit": 138
   },
-  "routes": 879
+  "routes": 881
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -9909,6 +9909,55 @@
      "backend/modules/crm/"
     ]
    },
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_dev_case_assignee_visibility_hichan10_2026_11_03.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/crm/",
+    "mod:analytics/api/dashboard",
+    "mod:crm/__init__",
+    "mod:crm/api",
+    "router:item_reads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/crm/__init__.py",
+     "backend/modules/crm/api.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/crm/api.py",
+     "backend/routers/item_reads.py"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_dev_case_assignment_2026_11_03.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/crm/",
+    "mod:crm/api"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/crm/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "login_fixture": true,
    "module": "crm"
   },
   "backend/modules/crm/tests/test_dev_case_row_access_2026_09_25.py": {

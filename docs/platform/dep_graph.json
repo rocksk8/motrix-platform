@@ -12592,121 +12592,133 @@
    "routes": [
     {
      "func": "list_dev_cases",
-     "line": 309,
+     "line": 331,
      "method": "GET",
      "path": "/api/dev-cases"
     },
     {
      "func": "create_dev_case",
-     "line": 339,
+     "line": 361,
      "method": "POST",
      "path": "/api/dev-cases"
     },
     {
      "func": "get_dev_case",
-     "line": 378,
+     "line": 400,
      "method": "GET",
      "path": "/api/dev-cases/{case_id}"
     },
     {
      "func": "update_dev_case",
-     "line": 393,
+     "line": 415,
      "method": "PUT",
      "path": "/api/dev-cases/{case_id}"
     },
     {
      "func": "request_dev_case_delete",
-     "line": 436,
+     "line": 458,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/request-delete"
     },
     {
      "func": "cancel_dev_case_delete",
-     "line": 471,
+     "line": 493,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/cancel-delete"
     },
     {
      "func": "approve_dev_case_delete",
-     "line": 504,
+     "line": 526,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/approve-delete"
     },
     {
      "func": "update_dev_case_status",
-     "line": 552,
+     "line": 574,
      "method": "PATCH",
      "path": "/api/dev-cases/{case_id}/status"
     },
     {
+     "func": "assign_dev_case",
+     "line": 604,
+     "method": "PATCH",
+     "path": "/api/dev-cases/{case_id}/assign"
+    },
+    {
+     "func": "update_dev_case_progress",
+     "line": 659,
+     "method": "PATCH",
+     "path": "/api/dev-cases/{case_id}/progress"
+    },
+    {
      "func": "mark_converted",
-     "line": 582,
+     "line": 688,
      "method": "PATCH",
      "path": "/api/dev-cases/{case_id}/convert"
     },
     {
      "func": "request_dev_case_relink",
-     "line": 621,
+     "line": 727,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/request-relink-quote"
     },
     {
      "func": "cancel_dev_case_relink",
-     "line": 666,
+     "line": 772,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/cancel-relink-quote"
     },
     {
      "func": "approve_dev_case_relink",
-     "line": 699,
+     "line": 805,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/approve-relink-quote"
     },
     {
      "func": "list_pending_logs",
-     "line": 757,
+     "line": 863,
      "method": "GET",
      "path": "/api/dev-logs/pending"
     },
     {
      "func": "dev_crm_activity_stats",
-     "line": 773,
+     "line": 879,
      "method": "GET",
      "path": "/api/dev-crm/activity-stats"
     },
     {
      "func": "list_dev_logs",
-     "line": 851,
+     "line": 957,
      "method": "GET",
      "path": "/api/dev-cases/{case_id}/logs"
     },
     {
      "func": "create_dev_log",
-     "line": 871,
+     "line": 977,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/logs"
     },
     {
      "func": "update_dev_log",
-     "line": 966,
+     "line": 1072,
      "method": "PUT",
      "path": "/api/dev-logs/{log_id}"
     },
     {
      "func": "delete_dev_log",
-     "line": 998,
+     "line": 1104,
      "method": "DELETE",
      "path": "/api/dev-logs/{log_id}"
     },
     {
      "func": "delete_dev_log_file",
-     "line": 1028,
+     "line": 1134,
      "method": "DELETE",
      "path": "/api/dev-logs/{log_id}/files/{file_id}"
     },
     {
      "func": "approve_dev_log",
-     "line": 1056,
+     "line": 1162,
      "method": "PATCH",
      "path": "/api/dev-logs/{log_id}/approve"
     }

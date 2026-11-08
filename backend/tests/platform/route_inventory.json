@@ -1,16 +1,16 @@
 {
  "summary": {
-  "endpoints_total": 898,
-  "endpoints_api": 894,
-  "write_total": 485,
-  "write_api": 485,
+  "endpoints_total": 900,
+  "endpoints_api": 896,
+  "write_total": 487,
+  "write_api": 487,
   "get_api": 409,
-  "distinct_paths_api": 756,
-  "write_with_body_api": 355,
-  "write_with_path_param_api": 349
+  "distinct_paths_api": 758,
+  "write_with_body_api": 357,
+  "write_with_path_param_api": 351
  },
  "select_star": {
-  "modules": 274,
+  "modules": 278,
   "archive": 94,
   "routers": 11,
   "helpers": 11,
@@ -2463,7 +2463,17 @@
    "pp": 1,
    "body": true
   },
+  "PATCH /api/dev-cases/{case_id}/assign": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
   "PATCH /api/dev-cases/{case_id}/convert": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PATCH /api/dev-cases/{case_id}/progress": {
    "w": true,
    "pp": 1,
    "body": true

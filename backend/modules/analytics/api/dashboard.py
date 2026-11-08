@@ -680,7 +680,7 @@ def dashboard_ops_alerts(authorization: str = Header(None)):
     if can_dev_crm:
         with db_conn() as conn:
             rows = conn.execute("""
-                SELECT id, case_name, customer_name, sales_persons, planners, created_by, updated_at
+                SELECT id, case_name, customer_name, sales_persons, planners, created_by, assigned_to, updated_at
                 FROM dev_cases WHERE is_deleted=0 AND status='洽談中'
             """).fetchall()
         for r in rows:
@@ -911,7 +911,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
         # 3. 業務開發：開發記錄 + 案件建立／狀態異動／轉換（row_access 的 dev_case 逐筆過濾）
         if can_dev_crm:
             dc_map = {r["id"]: r for r in conn.execute(
-                "SELECT id, case_name, customer_name, sales_persons, planners, created_by "
+                "SELECT id, case_name, customer_name, sales_persons, planners, created_by, assigned_to "
                 "FROM dev_cases WHERE is_deleted=0"
             ).fetchall()}
 

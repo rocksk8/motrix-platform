@@ -190,7 +190,7 @@ def _visible_keys(conn, user, kind, keys):
             return []
         ph = ",".join("?" * len(ids))
         rows = conn.execute(
-            f"SELECT id, created_by, sales_persons, planners FROM dev_cases WHERE id IN ({ph})",
+            f"SELECT id, created_by, sales_persons, planners, assigned_to FROM dev_cases WHERE id IN ({ph})",
             ids).fetchall()
         return [str(r["id"]) for r in rows if row_access.visible("dev_case", user, r)]
     if kind == "daily_task":

@@ -12,7 +12,9 @@
 from tests.platform import _unscoped_reads as U
 
 #: 基準總筆數上限：只准手動調小（基準縮小後把這個數字一起降下來）
-MAX_ENTRIES = 845      # 839 凍結時實數 + 6（T63 gate2：L1 唯讀 case_access 四支＋notify_actions 兩處通知計數；呼叫端各自守範圍，理由見提交說明）
+MAX_ENTRIES = 847      # 845 + 2（T73：assign_dev_case／update_dev_case_progress 讀 dev_cases 後自己在 Python 層判權限
+                        # ——/assign 限管理員、/progress 比對 user["id"]==assigned_to，不是 row_access 範圍查詢；
+                        # 兩輪獨立稽核都已確認這個判權限方式，見 AUDIT-hichan3-t73.md／AUDIT-pm-sub-t73.md 的驗收列）
 #: 掃描器自己的下限：掃到的筆數太少 ⇒ 掃描壞了（假綠）
 SCAN_FLOOR = 100
 

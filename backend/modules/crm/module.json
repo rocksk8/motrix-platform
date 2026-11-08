@@ -1,12 +1,12 @@
 {
   "key": "crm",
   "name": "業務開發",
-  "version": "1.0.17",
+  "version": "1.0.19",
   "core": ">=1.0,<2.0",
   "license_key": "crm",
   "permissions": ["dev_crm"],
   "tables": ["dev_cases", "dev_logs"],
-  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6，db.py v27 起）；dev_cases.referrer（介紹人）由本模組自己的 migration（migrations/0001_dev_cases_referrer.py）新增",
+  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6，db.py v27 起）；dev_cases.referrer（介紹人）由本模組自己的 migration（migrations/0001_dev_cases_referrer.py）新增；dev_cases.assigned_to／reply_deadline／progress_report（指派成員／回覆期限／進度回報）由 migrations/0002_dev_case_assignment.py 新增",
   "data": {
     "tables": [
       {"name": "dev_cases", "class": "T1"},

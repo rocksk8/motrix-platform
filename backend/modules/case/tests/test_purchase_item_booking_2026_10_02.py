@@ -22,13 +22,16 @@ def _approved(c, h, kind, lines, data=None):
 
 
 def _legacy_row(amount=200, status="已核准"):
+    """支出日期用「今天」所在月份（固定日 2 號），而不是寫死月份——營運報表依查詢月份篩選，寫死的月份跨月後會把這筆篩掉
+    （2026-11-04 發現：跨到 11 月後 other 少了這 200）。"""
+    d = date.today().replace(day=2).isoformat()
     cn = db.get_db()
     try:
         cn.execute("INSERT INTO case_extra_expenses (quote_no, category, description, qty, unit, unit_cost, total_cost, note, expense_date, doc_no, files_json, "
                    "created_by, created_by_name, created_by_inferred, payer_username, payer_name, created_at, updated_at, updated_by_name, status, approval_json) "
                    "VALUES (?,?,?,?,?,?,?,?,?,?,'[]',?,?,0,?,?,?,?,?,?,'{}')",
-                   (NO, "其他", "舊版支出", 1, "式", amount, amount, "", "2026-10-02", "", "pl_sa", "pl_sa", "pl_sa", "pl_sa",
-                    "2026-10-02T00:00:00", "2026-10-02T00:00:00", "pl_sa", status))
+                   (NO, "其他", "舊版支出", 1, "式", amount, amount, "", d, "", "pl_sa", "pl_sa", "pl_sa", "pl_sa",
+                    d + "T00:00:00", d + "T00:00:00", "pl_sa", status))
         cn.commit()
     finally:
         cn.close()

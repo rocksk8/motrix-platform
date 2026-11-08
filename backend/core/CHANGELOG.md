@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+## 1.149 — 2026-11-03（wip/t73-dev-case-assignment-r1；T73 業務開發案件指派成員／回覆期限／進度回報）
+- 新增（只增）：`dev_cases` 加 `assigned_to`／`reply_deadline`／`progress_report` 三欄（`modules/crm/migrations/0002_dev_case_assignment.py`）；`crm.DEV_CASE_ACCESS`（`row_access.OwnerRule`）加 `owner_id_col="assigned_to"`，被指派人取得與業務／企劃同等完整權限（使用者裁示）；新端點 `PATCH /api/dev-cases/{id}/assign`（admin 限定）、`PATCH /api/dev-cases/{id}/progress`（被指派人或 admin）。
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產，**已由 `train_number.py assign` 取號為 1.149**）：新公開介面 `helpers.notify_dev_case_assigned`（指派通知信，`helpers/__init__.py` 匯出）；`helpers.mail_types` 新登記 `dev_case_assigned`；`helpers.notification_prefs.EVENT_GROUPS` 新增同一事件鍵。
+- 測試：`modules/crm/tests/test_dev_case_assignment_2026_11_03.py`（assign／progress／row_access 完整權限／舊資料相容）。
+
 ## 1.148 — 2026-10-17（wip/t72-system-rail-fixed-r1；T72-A 系統中心分類欄固定位置）
 - 修正（畫面）：系統中心（`pages/system-hub.html`）在寬螢幕（>900px）的分類清單改成固定在左側，和系統子頁（`sidebar.js` 的 `#sys-rail`）同一個位置、同寬度（208px，標題『系統』與清單列距同高）；內容靠清單右邊。以前系統中心的清單在置中內容欄裡（約 x=390），子頁的清單貼左（x=0），來回切換會跳動。≤900px 不變（子頁是麵包屑、系統中心 ≤720px 是橫向分頁）；`data-no-sys-rail` 頁（設計器、模組產生器、費用類別）不變；沒有權限、資料或介面變動（L1 快照不變）。守門：`tests/test_e2e_system_rail_fixed_t72.py`（4 種寬度量測系統中心與 3 個子頁的分類清單 x／y／寬／高相差 ≤1px，並有 CSS 寬度與 `RAIL_W` 一致的靜態題）。
 

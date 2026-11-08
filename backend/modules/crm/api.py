@@ -15,7 +15,7 @@ from helpers import row_access
 import threading
 from helpers import (
     _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request,
-    notify_dev_case_relink_request,
+    notify_dev_case_relink_request, notify_dev_case_assigned,
     _notify, _get_setting, _set_setting, notify_dev_case_stale, _purge_notifications,
     push_event_for_dev_case_converted, push_event_for_dev_case_stale, push_event_for_module,
 )
@@ -74,6 +74,19 @@ class DevCaseDeleteApproveIn(BaseModel):
     reject_reason: Optional[str] = ''
 
 
+class DevCaseAssignIn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    assigned_to: Optional[int] = Field(None, alias="assignedTo")
+    reply_deadline: Optional[str] = Field(None, alias="replyDeadline")
+
+
+class DevCaseProgressIn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    progress_report: str = Field("", alias="progressReport")
+
+
 class DevLogIn(BaseModel):
     log_date: str
     log_by: int
@@ -104,10 +117,14 @@ def _is_admin(user: dict) -> bool:
 
 
 # ── M02 業務開發案可見性：登錄到 L1 row_access（DEPENDENCY-MAP §0-5）─────────────
-# 取代原 `_can_access_case()`：admin+ 直通，否則須為建立者、sales_persons 或 planners 之一。
+# 取代原 `_can_access_case()`：admin+ 直通，否則須為建立者、sales_persons／planners 之一、
+# 或被指派人（assigned_to，crm v2 2026-11-03）。使用者裁示：被指派人取得與業務／企劃
+# 同等完整權限，不是只讀＋回報進度——故用 owner_id_col（單值相等）而非另開一條窄權限路徑，
+# 這樣 list/get/update/status/convert/relink/logs 全部既有的 row_access 呼叫點自動套用，不用逐一改。
 # 成員欄位壞 JSON 視為空（沿用原行為）；dashboard／search／item_reads 經 row_access 查詢，
 # 不再 import 本檔。沒登錄時 row_access 一律 fail closed。
 DEV_CASE_ACCESS = row_access.OwnerRule(
+    owner_id_col="assigned_to",
     creator_col="created_by",
     id_list_cols=("sales_persons", "planners"),
     lenient_json=True,
@@ -266,6 +283,11 @@ def _case_row(row, umap: dict) -> dict:
         "relinkRequestedAt": row["relink_requested_at"] if "relink_requested_at" in row.keys() else "",
         "relinkReason": row["relink_reason"] if "relink_reason" in row.keys() else "",
         "relinkTargetQuoteNo": row["relink_target_quote_no"] if "relink_target_quote_no" in row.keys() else "",
+        "assignedToId": row["assigned_to"] if "assigned_to" in row.keys() else None,
+        "assignedToName": (umap.get(row["assigned_to"], str(row["assigned_to"]))
+                            if ("assigned_to" in row.keys() and row["assigned_to"]) else None),
+        "replyDeadline": (row["reply_deadline"] if "reply_deadline" in row.keys() else None) or None,
+        "progressReport": (row["progress_report"] if "progress_report" in row.keys() else "") or "",
     }
 
 
@@ -578,6 +600,90 @@ def update_dev_case_status(
         conn.close()
 
 
+@router.patch("/dev-cases/{case_id}/assign")
+def assign_dev_case(case_id: int, body: DevCaseAssignIn, authorization: str = Header("")):
+    """管理員指派業務開發案件給成員，並可設定回覆期限（crm v2，2026-11-03）。
+    被指派人經 DEV_CASE_ACCESS 的 owner_id_col="assigned_to" 取得與業務／企劃同等的完整權限
+    （使用者裁示；見本檔 DEV_CASE_ACCESS 旁的說明），不是另一條窄權限路徑。"""
+    user = _require_dev(authorization)
+    if not _is_admin(user):
+        raise HTTPException(403, "僅管理員可指派業務開發案件")
+    now = _TW_NOW()
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "案件不存在")
+        if body.reply_deadline:
+            try:
+                date.fromisoformat(body.reply_deadline)
+            except ValueError:
+                raise HTTPException(400, "回覆期限格式錯誤（須為 YYYY-MM-DD）")
+        assignee = None
+        if body.assigned_to is not None:
+            assignee = conn.execute(
+                "SELECT id, username, display_name, role, modules FROM users WHERE id=? AND active=1", (body.assigned_to,)
+            ).fetchone()
+            if not assignee:
+                raise HTTPException(400, "指派對象不存在或已停用")
+            if assignee["role"] not in ("superadmin", "admin") and "dev_crm" not in json.loads(assignee["modules"] or "[]"):
+                raise HTTPException(400, "指派對象沒有業務開發模組權限")
+        conn.execute(
+            "UPDATE dev_cases SET assigned_to=?, reply_deadline=?, updated_at=? WHERE id=?",
+            (body.assigned_to, body.reply_deadline, now, case_id),
+        )
+        conn.commit()
+        updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        umap = _user_map(conn)
+        _audit(_tok(authorization), "dev_case.assign", "dev_case", str(case_id),
+               f"{row['case_name']} → {umap.get(body.assigned_to, '') if body.assigned_to else '（取消指派）'}")
+        actor_display = user.get("display_name") or user["username"]
+        if assignee:
+            assignee_display = assignee["display_name"] or assignee["username"]
+            _notify(assignee["username"], "dev_case_assigned", str(case_id), row["case_name"],
+                    f"{actor_display} 將業務開發案件「{row['case_name']}」指派給您"
+                    + (f"，回覆期限 {body.reply_deadline}" if body.reply_deadline else "") + "。",
+                    link="dev-crm.html")
+            spawn_bg_thread(
+                notify_dev_case_assigned,
+                args=(case_id, row["case_name"], body.reply_deadline, assignee["username"],
+                      assignee_display, actor_display),
+            )
+        notify_module_activity("業務開發", "指派案件", actor_display, row["case_name"], "dev-crm.html")
+        return _case_row(updated, umap)
+    finally:
+        conn.close()
+
+
+@router.patch("/dev-cases/{case_id}/progress")
+def update_dev_case_progress(case_id: int, body: DevCaseProgressIn, authorization: str = Header("")):
+    """被指派人或管理員填寫進度回報（crm v2，2026-11-03）。比對 assigned_to 本人，不走
+    row_access（row_access 給的是完整存取，這裡刻意只准被指派人或管理員——其他有完整
+    存取的人，例如業務／企劃，不等於被指派回報進度的人）。"""
+    user = _require_dev(authorization)
+    now = _TW_NOW()
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "案件不存在")
+        assigned_to = row["assigned_to"] if "assigned_to" in row.keys() else None
+        if not _is_admin(user) and user["id"] != assigned_to:
+            raise HTTPException(403, "僅被指派人或管理員可填寫進度回報")
+        conn.execute(
+            "UPDATE dev_cases SET progress_report=?, updated_at=? WHERE id=?",
+            (body.progress_report, now, case_id),
+        )
+        conn.commit()
+        updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        _audit(_tok(authorization), "dev_case.progress", "dev_case", str(case_id), body.progress_report)
+        notify_module_activity("業務開發", "更新進度回報", user.get("display_name") or user["username"],
+                                row["case_name"], "dev-crm.html", detail=body.progress_report)
+        return _case_row(updated, _user_map(conn))
+    finally:
+        conn.close()
+
+
 @router.patch("/dev-cases/{case_id}/convert")
 def mark_converted(
     case_id: int, body: DevCaseConvertIn, authorization: str = Header("")
@@ -778,7 +884,7 @@ def dev_crm_activity_stats(authorization: str = Header("")):
     conn = get_db()
     try:
         case_rows = conn.execute(
-            "SELECT id, sales_persons, planners, created_by, case_name, customer_name FROM dev_cases WHERE is_deleted=0"
+            "SELECT id, sales_persons, planners, created_by, assigned_to, case_name, customer_name FROM dev_cases WHERE is_deleted=0"
         ).fetchall()
         visible_ids = [r["id"] for r in case_rows if row_access.visible("dev_case", user, r)]
         if not visible_ids:
@@ -1086,7 +1192,7 @@ _HOLD_AUTO_CONVERT_DAYS = 180
 
 
 def _check_dev_case_stale() -> None:
-    """洽談中案件超過 30 天未更新 → 通知業務/規劃人員 + 所有 admin/superadmin，
+    """洽談中案件超過 30 天未更新 → 通知業務/規劃人員/被指派人 + 所有 admin/superadmin，
     之後每 14 天重複提醒直到案件狀態改變或有新開發記錄（重置 updated_at）。"""
     now = datetime.now()
     today_str = now.strftime("%Y-%m-%d")
@@ -1098,7 +1204,7 @@ def _check_dev_case_stale() -> None:
         uid_map = {u["id"]: u["username"] for u in users}
         admin_usernames = [u["username"] for u in users if u["role"] in ("admin", "superadmin")]
         rows = conn.execute(
-            "SELECT id, case_name, customer_name, sales_persons, planners, created_by, updated_at "
+            "SELECT id, case_name, customer_name, sales_persons, planners, created_by, assigned_to, updated_at "
             "FROM dev_cases WHERE is_deleted=0 AND status='洽談中'"
         ).fetchall()
         conn.close()
@@ -1130,6 +1236,8 @@ def _check_dev_case_stale() -> None:
             usernames = [uid_map[uid] for uid in (sp + pl) if uid in uid_map]
             if not usernames and row["created_by"] in uid_map:
                 usernames = [uid_map[row["created_by"]]]
+            if row["assigned_to"] in uid_map:                     # 被指派人與業務／企劃同等，一律收提醒（不只是沒人時的備援）
+                usernames.append(uid_map[row["assigned_to"]])
             all_usernames = list(dict.fromkeys(usernames + admin_usernames))
 
             for username in all_usernames:

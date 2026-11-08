@@ -1219,9 +1219,9 @@
  "/api/cashier/export": {
   "ct": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "hdr": [
-   "已匯款明細|出納執行紀錄 — 已匯款（2026-10-01 ~ 2026-10-13）",
-   "已收款明細|出納執行紀錄 — 已收款（2026-10-01 ~ 2026-10-13）",
-   "獎金發放明細|出納執行紀錄 — 獎金分潤發放（2026-10-01 ~ 2026-10-13）"
+   "已匯款明細|出納執行紀錄 — 已匯款（2026-11-01 ~ 2026-11-04）",
+   "已收款明細|出納執行紀錄 — 已收款（2026-11-01 ~ 2026-11-04）",
+   "獎金發放明細|出納執行紀錄 — 獎金分潤發放（2026-11-01 ~ 2026-11-04）"
   ],
   "s": 200
  },
@@ -2447,7 +2447,6 @@
    "items[].other",
    "items[].total",
    "otherBreakdown",
-   "otherBreakdown.2025-11",
    "otherBreakdown.2025-12",
    "otherBreakdown.2026-01",
    "otherBreakdown.2026-02",
@@ -2458,7 +2457,8 @@
    "otherBreakdown.2026-07",
    "otherBreakdown.2026-08",
    "otherBreakdown.2026-09",
-   "otherBreakdown.2026-10"
+   "otherBreakdown.2026-10",
+   "otherBreakdown.2026-11"
   ],
   "s": 200
  },
@@ -2603,6 +2603,8 @@
  },
  "/api/dev-cases": {
   "k": [
+   "[].assignedToId",
+   "[].assignedToName",
    "[].caseName",
    "[].convertedQuoteNo",
    "[].createdAt",
@@ -2617,11 +2619,13 @@
    "[].pendingRelink",
    "[].plannerIds",
    "[].plannerNames",
+   "[].progressReport",
    "[].referrer",
    "[].relinkReason",
    "[].relinkRequestedAt",
    "[].relinkRequestedBy",
    "[].relinkTargetQuoteNo",
+   "[].replyDeadline",
    "[].salesPersonIds",
    "[].salesPersonNames",
    "[].status",
@@ -2631,6 +2635,8 @@
  },
  "/api/dev-cases/{case_id}": {
   "k": [
+   "assignedToId",
+   "assignedToName",
    "caseName",
    "convertedQuoteNo",
    "createdAt",
@@ -2645,11 +2651,13 @@
    "pendingRelink",
    "plannerIds",
    "plannerNames",
+   "progressReport",
    "referrer",
    "relinkReason",
    "relinkRequestedAt",
    "relinkRequestedBy",
    "relinkTargetQuoteNo",
+   "replyDeadline",
    "salesPersonIds",
    "salesPersonNames",
    "status",
@@ -5829,16 +5837,16 @@
   "hdr": [
    "執行摘要|營運報表",
    "目標達成率|2026 年度目標達成率",
-   "本期收款明細|本期收款明細 — 2026 年 10 月",
-   "未收款清單|未收款清單 — 截至 2026-10-16",
-   "當月收支|2026-10 當月收支明細",
+   "本期收款明細|本期收款明細 — 2026 年 11 月",
+   "未收款清單|未收款清單 — 截至 2026-11-04",
+   "當月收支|2026-11 當月收支明細",
    "今年度收支|2026年度收支總表",
    "案件清單|全部案件清單（本期新成案：0 件）",
    "業務員績效|業務員績效一覽",
    "毛利分析|利潤分析 — 精算利潤對照（已結案案件）",
    "保固到期預警|保固到期預警（90 天內，共 0 筆）",
    "已結案未精算|已結案未完成精算（共 0 件）",
-   "帳齡分析|應收帳款帳齡分析（截至 2026-10-16，合計未收 NT$ 0）"
+   "帳齡分析|應收帳款帳齡分析（截至 2026-11-04，合計未收 NT$ 0）"
   ],
   "s": 200
  },
@@ -6938,9 +6946,6 @@
    "lastRecognised",
    "listState",
    "notices",
-   "notices[].kind",
-   "notices[].text",
-   "notices[].tone",
    "source",
    "suspectRedesign",
    "tenderCount"

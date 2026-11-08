@@ -21,8 +21,8 @@ from helpers import row_access as ra
 CASE = ra.OwnerRule(owner_id_col="sales_person_id", legacy_name_col="sales_person",
                     id_list_cols=("assigned_user_ids",), lenient_json=False,
                     read_bypass_modules=("cashier",))
-DEV = ra.OwnerRule(creator_col="created_by", id_list_cols=("sales_persons", "planners"),
-                   lenient_json=True)
+DEV = ra.OwnerRule(owner_id_col="assigned_to", creator_col="created_by",
+                   id_list_cols=("sales_persons", "planners"), lenient_json=True)
 ra.register("_t_case", CASE)
 ra.register("_t_dev", DEV)
 
@@ -48,10 +48,13 @@ def _case_rows(lists):
     return rows
 
 
-def _dev_rows(lists):
+def _dev_rows(lists, ats=(None,)):
+    """`ats`（assigned_to 的值域）預設只有 None：不影響既有呼叫端（都在比對 2026-11-03 之前的行為，
+    那時候沒有 assigned_to，恆為 NULL 時 owner_id_col 這條路徑永遠不會命中，等價於沒加這欄）。
+    只有需要真正練到 assigned_to 這條路徑的題目才傳非預設值（見 test_dev_case_single_equals_sql）。"""
     rows = []
-    for i, (cb, sp, pl) in enumerate(itertools.product([None, 1, 2], lists, lists), start=1):
-        rows.append((i, cb, sp, pl))
+    for i, (cb, sp, pl, at) in enumerate(itertools.product([None, 1, 2], lists, lists, ats), start=1):
+        rows.append((i, cb, sp, pl, at))
     return rows
 
 
@@ -61,9 +64,10 @@ def _db(case_rows=(), dev_rows=()):
     # 型別親和性照正式 schema（db.py：quotations／dev_cases）
     c.execute("CREATE TABLE q (id INTEGER PRIMARY KEY, sales_person_id INTEGER, sales_person TEXT, "
               "assigned_user_ids TEXT DEFAULT '[]')")
-    c.execute("CREATE TABLE d (id INTEGER PRIMARY KEY, created_by INTEGER, sales_persons TEXT, planners TEXT)")
+    c.execute("CREATE TABLE d (id INTEGER PRIMARY KEY, created_by INTEGER, sales_persons TEXT, planners TEXT, "
+              "assigned_to INTEGER)")
     c.executemany("INSERT INTO q VALUES (?,?,?,?)", case_rows)
-    c.executemany("INSERT INTO d VALUES (?,?,?,?)", dev_rows)
+    c.executemany("INSERT INTO d VALUES (?,?,?,?,?)", dev_rows)
     return c
 
 
@@ -88,7 +92,8 @@ def test_case_single_equals_sql(user, scope):
 @pytest.mark.parametrize("scope", ra.SCOPES)
 @pytest.mark.parametrize("user", USERS, ids=lambda u: f"{u['role']}{u['id']}")
 def test_dev_case_single_equals_sql(user, scope):
-    conn = _db(dev_rows=_dev_rows(WELL_FORMED_LISTS + ODD_JSON + BROKEN))
+    # ats 含 None／1／2／4：練到 owner_id_col（assigned_to，2026-11-03 新增）命中與不命中兩種情況。
+    conn = _db(dev_rows=_dev_rows(WELL_FORMED_LISTS + ODD_JSON + BROKEN, ats=(None, 1, 2, 4)))
     assert _py_ids(conn, "d", "_t_dev", user, scope) == _sql_ids(conn, "d", "_t_dev", user, scope)
 
 
