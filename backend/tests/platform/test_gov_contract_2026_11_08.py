@@ -358,9 +358,9 @@ def _restore_sites_without_hash(files: dict, enforced: set) -> list:
 
 
 def _frontend_js():
-    root = Path(__file__).resolve().parents[3] / "frontend"
-    return {p.relative_to(root).as_posix(): p.read_text(encoding="utf-8", errors="replace")
-            for p in root.rglob("*.js") if "vendor" not in p.parts}
+    """全部前端 JS（frontend/** ∪ 模組自有 backend/modules/<key>/js/**）：一律走共用列舉，JS 搬進模組後才不會安靜漏掃（test_no_direct_js_enumeration）。"""
+    from tests import _frontend_sources as FS
+    return {FS.js_rel(p): p.read_text(encoding="utf-8", errors="replace") for p in FS.all_js()}
 
 
 def test_p9b_editor_restore_calls_carry_a_preview_hash():
