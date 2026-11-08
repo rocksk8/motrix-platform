@@ -142,7 +142,14 @@
   }
   function doRestore(v) {
     st.busy = true; st.msg = '還原中…'; render()
-    return api('POST', '/api/definitions/option_list/' + encodeURIComponent(st.id) + '/restore/' + v + '?scope=company', {}).then(function (r) { return afterWrite(r, '已還原到第 ' + v + ' 版。') })
+    // T79：旗標開時伺服端要求還原也『看過那一版的影響預覽』：先取該版預覽雜湊（同時記一筆『看過』），取不到就不帶（旗標關／沒有治理 ⇒ 與舊行為相同）
+    var enc = encodeURIComponent(st.id)
+    return api('GET', '/api/def-governance/option_list/' + enc + '/impact?scope=company&version=' + v).then(function (im) { return (im && im.previewHash) || '' }, function () { return '' })
+      .then(function (h) {
+        var rb = {}
+        if (h) rb.preview_hash = h
+        return api('POST', '/api/definitions/option_list/' + enc + '/restore/' + v + '?scope=company', rb)
+      }).then(function (r) { return afterWrite(r, '已還原到第 ' + v + ' 版。') })
       .catch(function (e) { st.busy = false; st.state = 'error'; st.msg = '還原失敗：' + e.message; st.msgBad = true; render() })
   }
   function move(i, dir) { var j = i + dir; if (j < 0 || j >= st.items.length) return; var t = st.items[i]; st.items[i] = st.items[j]; st.items[j] = t; changed() }

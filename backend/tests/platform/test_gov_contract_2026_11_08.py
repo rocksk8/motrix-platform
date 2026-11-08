@@ -21,6 +21,7 @@ v2 backlog（不在本版）：list_pref_policy 的 kind 專屬對抗種子（gl
 """
 import importlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -316,6 +317,62 @@ def test_p9_restore_requires_seen_preview_when_enforced(world, seed):
         rr = _restore(world, kind, key, "company", live0["version"])                       # 帶『看過這一版』的雜湊 ⇒ 不再被預覽把關擋
         assert rr.status_code == 200, ("看過預覽後還原應被受理（生效或待核准）", kind, rr.status_code, rr.text[:300])
     f()
+
+
+# P9b：P9 只驗伺服端；編輯器（前端）自己的還原有沒有帶預覽雜湊，以前沒人盯（export-editor／option-list-editor 就送 {}，旗標開時 409）。
+# 靜態守門：凡是 frontend 裡呼叫 `/restore/` 的檔，如果它處理的 kind 有任何一個在強制名單內，這個呼叫所在的函式（從最近的函式宣告行到呼叫後 3 行）
+# 必須出現 preview_hash／previewRestore。不夠細（只看文字、不跑瀏覽器），所以每個編輯器另有 node 假 fetch 的行為題；這題是『新編輯器忘了』的網。
+# ⚠️ 不能用固定行數視窗：同一個檔的發布函式就在還原函式上面、也有 preview_hash，視窗會被它蓋住（第一版就這樣漏掉 export-editor）。
+_RESTORE_CALL = re.compile(r"/restore/")
+_HASH_TOKENS = ("preview_hash", "previewRestore")
+_FUNC_START = re.compile(r"\bfunction\b|^\s*(?:async\s+)?[A-Za-z_$][\w$]*\s*\([^)]*\)\s*\{\s*$|^\s*[A-Za-z_$][\w$]*\s*:\s*(?:async\s+)?\(?[^)]*\)?\s*=>")
+NL = chr(10)
+
+
+def _restore_sites_without_hash(files: dict, enforced: set) -> list:
+    """files＝{路徑: 內容}；⇒ [(路徑, 行號)]：呼叫 /restore/、處理強制名單內的 kind、附近卻沒有預覽雜湊字樣。"""
+    bad = []
+    for path, text in sorted(files.items()):
+        if not any(("'%s'" % k) in text or ('"%s"' % k) in text or ("definitions/%s/" % k) in text for k in enforced):
+            continue                                            # 這個檔不碰任何強制名單內的 kind（例如 layout／custom_fields：選用強制）
+        lines = text.splitlines()
+        for i, ln in enumerate(lines):
+            if _RESTORE_CALL.search(ln) and "POST" in NL.join(lines[max(0, i - 2):i + 2]):
+                j = next((k for k in range(i, -1, -1) if _FUNC_START.search(lines[k])), 0)      # 這個呼叫所在函式的宣告行
+                near = NL.join(lines[j:i + 4])
+                if not any(tok in near for tok in _HASH_TOKENS):
+                    bad.append((path, i + 1))
+    return bad
+
+
+def _frontend_js():
+    root = Path(__file__).resolve().parents[3] / "frontend"
+    return {p.relative_to(root).as_posix(): p.read_text(encoding="utf-8", errors="replace")
+            for p in root.rglob("*.js") if "vendor" not in p.parts}
+
+
+def test_p9b_editor_restore_calls_carry_a_preview_hash():
+    files = _frontend_js()
+    assert len(files) > 30 and any(("/restore/" in t) for t in files.values()), "沒掃到前端檔／沒有任何還原呼叫——這題什麼都沒驗"      # 正對照
+    bad = _restore_sites_without_hash(files, _enforced_kinds())
+    assert not bad, ("這些前端還原呼叫在強制預覽名單內的 kind 上沒帶 preview_hash（旗標開時會 409 preview_required）：", bad)
+
+
+def test_p9b_scanner_positive_control():
+    """掃描器本身要抓得到、也不亂抓：沒雜湊＝抓；有雜湊／previewRestore＝不抓；不碰強制 kind 的檔＝不抓。"""
+    enforced = {"export_template", "option_list"}
+    no_hash = NL.join(["function doRestore(v) {", "  return api('POST', '/api/definitions/export_template/x/restore/' + v, {})", "}"])
+    with_hash = NL.join(["function doRestore(v) {", "  var rb = { preview_hash: h }",
+                         "  return api('POST', '/api/definitions/export_template/x/restore/' + v, rb)", "}"])
+    via_panel = NL.join(["async function r(v) {", "  var h = await G.previewRestore(o, v)",
+                         "  return api('POST', '/api/definitions/option_list/x/restore/' + v, {})", "}"])
+    other_kind = NL.join(["function doRestore(v) {", "  return api('POST', '/api/definitions/layout/x/restore/' + v, {})", "}"])
+    got = _restore_sites_without_hash({"a.js": no_hash, "b.js": with_hash, "c.js": via_panel, "d.js": other_kind}, enforced)
+    assert got == [("a.js", 2)], got
+    # 反向控制（第一版的漏洞）：同檔裡『上面』的發布函式有 preview_hash，不能蓋住下面沒帶的還原函式
+    sibling = NL.join(["function doPublish() {", "  body.preview_hash = h", "}", "function doRestore(v) {",
+                       "  return api('POST', '/api/definitions/export_template/x/restore/' + v, {})", "}"])
+    assert _restore_sites_without_hash({"e.js": sibling}, enforced) == [("e.js", 5)]
 
 
 @_P("loose")
