@@ -744,6 +744,18 @@ function Record-Stage([string]$stage, [bool]$green, [string]$flakyFile = "") {
     $rsArgs = @("record-stage", "--records", $testRecords, "--fp", $testFp, "--stage", $stage, "--green", $flag, "--commit", $commitShort)
     if ($flakyFile) { $rsArgs += @("--flaky-from", $flakyFile) }
     try { & $pyExe $reuseTool @rsArgs | Out-Null } catch {}
+    # 影子模式（2026-11-08，使用者裁示）：stage_select 增量選題只『平行記錄預測』，建包仍以這一段的全量結果為唯一真相。
+    # 背景程序、不等它、任何錯誤吞掉；結果寫 backend\tools\deploy_logs\stage_select_shadow.jsonl（不進 test_results.jsonl，不是閘門）。
+    # 只在有指紋（工作樹乾淨）時記——與上面同一個前提。關閉：環境變數 MOTRIX_STAGE_SHADOW=0。
+    if ($env:MOTRIX_STAGE_SHADOW -ne "0") {
+        try {
+            $shadowTool = Join-Path $projectRoot "tools\platform\stage_select_shadow.py"
+            if ((Test-Path -LiteralPath $shadowTool) -and $buildRunId -and $commit) {
+                $shArgs = @("`"$shadowTool`"", "--repo", "`"$projectRoot`"", "record", "--run-id", $buildRunId, "--stage", $stage, "--green", $flag, "--head", $commit)
+                Start-Process -FilePath $pyExe -ArgumentList $shArgs -WindowStyle Hidden | Out-Null
+            }
+        } catch {}
+    }
 }
 
 function Invoke-FlakyRetry([string]$stage, [int]$exitCode, $outLines) {
