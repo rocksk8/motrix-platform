@@ -1,11 +1,11 @@
 # L0／L1 底層 更新紀錄
 
-## 1.154（next，未取號）— 2026-11-08（T79；option_list 重新啟用已停用選項改需核准）
+## 1.155（next，未取號）— 2026-11-08（T79；option_list 重新啟用已停用選項改需核准）〔train_number：1.154 → 1.155〕
 - **行為變更（使用者 2026-11-08 裁示）**：治理層 `_cmp_option_list`（`routers/def_pipeline.py`）把「重新啟用已停用的選項」從中性改判為放寬，需第二位最高管理者核准＋確認期間（原先判為中性是產品設計缺口，hichan-8 審A車時發現）；停用本身維持收緊、立即生效不變；第一次發布（沒有舊版）出現的選項沒有「已停用」歷史，不算重新啟用。**上線備註**：既有正式機升級後，有待核准的 option_list 版本時，同一清單不能再直接發布，連緊急停用都要先請審核人退回待核准版本（管線既有行為，非這次新增）。
 - 測試：`backend/tests/platform/test_option_lists_t62.py`；`backend/tests/platform/test_gov_contract_2026_11_08.py` 補合法 loose 種子（`seeds_2026_11_08.json`），`KNOWN_P3_NOT_APPLICABLE` 清空（option_list 現適用 P3）。
 - 已知衍生（無害，記 backlog）：角色層首發的種子補齊後，P6 掃到 option_list 角色層首發會直接生效沒人擋（執行期只讀 company 層，無實際效果）——`KNOWN_LATENT_ROLE_FIRST_PUBLISH` 從 3 個 kind 變 4 個。
 
-## (next) — 2026-11-08（feat/module-assets-poc；模組自有前端 JS：`module.json assets`＋`/js` 掛載）
+## 1.154 — 2026-11-08（feat/module-assets-poc；模組自有前端 JS：`module.json assets`＋`/js` 掛載）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產，**未取號**）：新公開介面 `helpers.module_assets`（`ASSETS_MIN_CORE`、`JsAssetLookup`、`asset_path`、`served_assets`、`undeclared_files`）；`core.loader.declared_assets(manifest)`（`module.json` 新選填欄位 `assets: [{"path": "js/<檔名>.js"}]`，形狀不對 ⇒ 該模組不載入，import 之前驗）。
 - 行為：`main.py` 在 `/` 的 StaticFiles 之前掛 `/js`（`JsAssetLookup`，directory＝`frontend/js`）：已載入模組宣告、檔案在 `modules/<key>/js/` 的 JS 由模組提供（網址不變 `/js/<檔名>.js`，優先於 `frontend/js` 同名舊檔）；其餘照舊。模組停用／未授權／失敗 ⇒ 不提供。宣告了卻缺檔 ⇒ 記 ERROR、404、模組照常載入；擋在出貨前（`tools/platform/module_update.py` 的 `asset_problems`，`check`／`ship` 都跑）。
 - 工具：`dep_scan` 掃 `modules/<key>/js/` 的 JS（單位 id 照網址不變 `js:js/<檔名>`，帶 `module_key`；與 `frontend/js` 同名 ⇒ 報錯）；測試列舉前端 JS 一律走 `tests/_frontend_sources.py`（`test_no_direct_js_enumeration` 擋新的直接列舉）。

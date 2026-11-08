@@ -23,9 +23,9 @@ from starlette.staticfiles import StaticFiles
 logger = logging.getLogger(__name__)
 
 #: 引進「模組自有前端 JS」（`/js` 掛載）的核心版號下限：宣告了 `assets` 的模組，`core` 範圍的下限必須 >= 這個值，
-#: 否則舊核心（沒有 `/js` 掛載）會接受新模組包、該 JS 變 404。⚠ 暫用值——列車取號後改成實際版號，同時改
-#: 各宣告 assets 的模組的 `module.json core`；守門：test_module_assets_contract::test_modules_with_assets_require_a_core_that_has_the_mount
-ASSETS_MIN_CORE = "1.154"
+#: 否則舊核心（沒有 `/js` 掛載）會接受新模組包、該 JS 變 404。T79 列車取號為 1.155（`train_number.py assign`）。
+#: 守門：test_module_assets_contract::test_modules_with_assets_require_a_core_that_has_the_mount
+ASSETS_MIN_CORE = "1.155"
 
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*\.js\Z")
 _logged = set()          # 同一個問題只記一次 ERROR（/js 每個請求都會查表，不可以洗版）

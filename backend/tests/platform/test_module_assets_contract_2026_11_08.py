@@ -396,8 +396,6 @@ def test_core_lower_bound_parser():
         _core_lower_bound("~1.0")
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="待列車取號：取到版號後，把 helpers.module_assets.ASSETS_MIN_CORE 與 subcontract/module.json 的 core 下限"
-                                       "一起改成該版號；改完這題會轉為通過，strict 會逼人拿掉這個標記")
 def test_modules_with_assets_require_a_core_that_has_the_mount():
     need = tuple(int(x) for x in module_assets.ASSETS_MIN_CORE.split("."))
     bad = [f"{k}: core={mf.get('core')!r} 下限低於 {module_assets.ASSETS_MIN_CORE}（舊核心沒有 /js 掛載，該模組的 JS 會 404）"
