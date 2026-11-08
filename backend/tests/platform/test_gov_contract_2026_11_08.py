@@ -237,10 +237,8 @@ def _restore(w, kind, key, scope, version, who="a"):
 
 # P3 不適用的 kind：從『收緊版』回到『基準版』在該 kind 的 comparator 下不算放寬，所以還原本來就可直接生效。
 # 這不是缺口；表釘死，避免 comparator 改了而沒人發現。
-KNOWN_P3_NOT_APPLICABLE = {
-    "option_list": "_cmp_option_list 的 docstring 明寫『重新啟用 ⇒ 中性』（停用＝收緊、啟用＝中性，不對稱是刻意設計）；"
-                   "種子的 tight 是停用選項，回到 base 等於重新啟用，所以還原不送審。產品面是否算放寬缺口由 PM 判斷。",
-}
+# （option_list 曾在這裡：重新啟用判為中性。使用者 2026-11-08 裁示重新啟用＝放寬、要二次核准，已移出——現在 P3 對它也成立。）
+KNOWN_P3_NOT_APPLICABLE = {}
 
 
 @_P("tight")

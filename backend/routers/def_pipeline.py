@@ -197,7 +197,9 @@ def _cmp_export_template(old, new):
 
 
 def _cmp_option_list(old, new):
-    """選項清單：新增選項、改顯示名稱、重排、重新啟用 ⇒ 中性（只影響下拉怎麼列）；停用選項 ⇒ 收緊；無法判斷的變動 ⇒ 放寬。
+    """選項清單：新增選項、改顯示名稱、重排 ⇒ 中性（只影響下拉怎麼列）；停用選項 ⇒ 收緊；**重新啟用已停用的選項 ⇒ 放寬**
+    （使用者裁示 2026-11-08：停用的本意是限制，重新啟用等於放寬限制，要第二位最高管理者核准；原先判為中性是產品設計缺口）；
+    無法判斷的變動 ⇒ 放寬。第一次發布（沒有舊版）出現的選項沒有『已停用』的歷史，不算重新啟用。
     （已發布的選項不能刪除、不能改字——驗證器擋；這裡不會看到。）"""
     old, new = old or {}, new or {}
     ov = {x.get("value"): x for x in old.get("values", []) if isinstance(x, dict)}
@@ -213,6 +215,8 @@ def _cmp_option_list(old, new):
         o = ov.get(v)
         if o is not None and bool(x.get("disabled")) and not bool(o.get("disabled")):
             tighten.append("停用選項 %s" % v)
+        if o is not None and bool(o.get("disabled")) and not bool(x.get("disabled")):
+            loosen.append("重新啟用已停用的選項 %s（停用本意是限制，重新啟用等於放寬，需核准）" % v)
         if o is not None and x.get("prefix") != o.get("prefix"):
             loosen.append("選項 %s 的料號前綴變了（視為放寬）" % v)
     if loosen:

@@ -156,6 +156,19 @@ def test_pipeline_classes():
     assert classify("option_list", a, _body(DEFAULT_CT + [_v("合作夥伴")]))[0] == "neutral", "新增選項 ⇒ 中性（只影響下拉怎麼列）"
     assert classify("option_list", a, _body([_v("一般", "一般客戶"), _v("VIP", "VIP 客戶", disabled=True), _v("潛在", "潛在客戶")]))[0] == "tighten"
     assert classify("option_list", a, dict(a, extra=1))[0] == "loosen"
+    # 重新啟用已停用的選項 ⇒ 放寬（使用者裁示 2026-11-08）；停用仍是收緊
+    off = _body([_v("一般", "一般客戶"), _v("VIP", "VIP 客戶", disabled=True), _v("潛在", "潛在客戶")])
+    assert classify("option_list", off, a)[0] == "loosen", "重新啟用 ⇒ 放寬"
+    assert any("重新啟用" in m and "VIP" in m for m in classify("option_list", off, a)[1])
+    assert classify("option_list", off, _body([_v("潛在", "潛在客戶（開發中）"), _v("一般", "一般客戶"), _v("VIP", "VIP 客戶", disabled=True)]))[0] == "neutral", \
+        "仍是停用，只重排／改名 ⇒ 中性"
+    assert classify("option_list", off, _body(off["values"] + [_v("合作夥伴")]))[0] == "neutral", "停用的維持停用、另新增選項 ⇒ 中性"
+    mix = _body([_v("一般", "一般客戶", disabled=True), _v("VIP", "VIP 客戶"), _v("潛在", "潛在客戶")])
+    cls, msgs = classify("option_list", off, mix)
+    assert cls == "loosen" and any("停用選項 一般" in m for m in msgs), "同時停用 A、重新啟用 B ⇒ 放寬（核准時兩項都列出）"
+    assert classify("option_list", _body(DEFAULT_CT[:2]), _body([_v("一般", "一般客戶"), _v("VIP", "VIP 客戶"), _v("潛在", "潛在客戶", disabled=True)]))[0] != "loosen", \
+        "新出現就帶停用的選項（沒有停用歷史）不是重新啟用，不可判成放寬"
+    assert classify("option_list", {}, off)[0] != "loosen", "第一次發布（沒有舊版）含停用的選項不算重新啟用"
     assert classify("option_list", _body(DEFAULT_PC), _body([dict(DEFAULT_PC[0], prefix="NW")] + DEFAULT_PC[1:]))[0] == "loosen"
 
 
@@ -266,6 +279,42 @@ def test_governance_neutral_publishes_immediately_tighten_too_and_removal_is_blo
     h2 = client.get("/api/def-governance/option_list/supplier_category/impact?scope=company", headers=h).json()["previewHash"]
     r2 = client.post(url + "/publish?scope=company", json={"note": "停用", "preview_hash": h2}, headers=h)
     assert r2.status_code == 200 and not r2.json().get("pending"), "停用＝收緊 ⇒ 立即生效"
+
+
+def test_governance_reenabling_a_disabled_option_needs_the_second_approver(client, make_user, monkeypatch):
+    """使用者裁示 2026-11-08：重新啟用已停用的選項 ⇒ 放寬 ⇒ 待第二位最高管理者核准；核准前下拉仍看不到它。"""
+    h = _login(client, make_user, "ol_sa6")
+    h2 = _login(client, make_user, "ol_sa6b")
+    _flag(monkeypatch, True, governance=True)
+    from helpers import settings_registry as SR
+    monkeypatch.setattr(SR, "confirm_period_days", lambda conn=None: 0)          # 放寬核准後的確認期間歸零（否則套用要等 7 天）
+    url = "/api/definitions/option_list/supplier_category"
+    sup = [_v(x) for x in ("原廠", "代理商", "製造商", "服務商", "其他")]
+
+    def pub(body, note):
+        client.put(url + "/draft?scope=company", json={"body": body}, headers=h)
+        hh = client.get("/api/def-governance/option_list/supplier_category/impact?scope=company", headers=h).json()["previewHash"]
+        return client.post(url + "/publish?scope=company", json={"note": note, "preview_hash": hh}, headers=h)
+
+    assert pub(_body(sup + [_v("經銷商")]), "新增").status_code == 200
+    r_off = pub(_body(sup + [_v("經銷商", disabled=True)]), "停用")
+    assert r_off.status_code == 200 and not r_off.json().get("pending"), "停用＝收緊 ⇒ 立即生效（不變）"
+    r_on = pub(_body(sup + [_v("經銷商")]), "重新啟用")
+    assert r_on.status_code == 200 and r_on.json().get("pending"), ("重新啟用應待核准", r_on.json())
+    live = client.get("/api/definitions/option_list/supplier_category/effective?scope=company", headers=h)
+    if live.status_code == 200:
+        vals = {x["value"]: x for x in (live.json().get("body") or live.json()).get("values", [])}
+        assert vals.get("經銷商", {}).get("disabled") is True, "核准前仍是停用"
+    items = client.get("/api/def-pipeline/pending", headers=h).json()
+    items = items.get("items", items) if isinstance(items, dict) else items
+    mine = [i for i in items if i.get("kind") == "option_list" and i.get("key") == "supplier_category"]
+    assert len(mine) == 1
+    cid = mine[0]["id"]
+    self_ok = client.post("/api/def-pipeline/changes/%d/approve" % cid, json={"reason": "self"}, headers=h)
+    assert self_ok.status_code >= 400, "自己不能核准自己送的放寬"
+    assert client.post("/api/def-pipeline/changes/%d/approve" % cid, json={"reason": "ok"}, headers=h2).status_code == 200
+    act = client.post("/api/def-pipeline/changes/%d/activate" % cid, json={}, headers=h2)
+    assert act.status_code == 200, act.text[:400]
 
 
 def test_part_category_list_drives_the_parts_endpoint_and_prefix(client, make_user, monkeypatch):
