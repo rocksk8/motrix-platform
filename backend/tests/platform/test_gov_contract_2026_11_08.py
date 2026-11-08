@@ -44,6 +44,20 @@ REQUIRED = ("loose", "tight", "neutral")
 _ids = ["%s[%s]" % (s["kind"], s["key"]) for s in SEEDS]
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _restore_definition_registries(_app):
+    """本檔會登記 kind（SETUP 的 import、G.kinds() 惰性登記，部分要開旗標才登記）；登記表是行程內全域狀態，
+    收尾必須還原成進場時的樣子，否則後面假設『kind 未登記』的測試（例如 test_notify_actions_t63）會紅。
+    用 module 範圍而不是每題還原：kind 的登記靠 import 副作用，import 只會跑一次，每題清掉後下一題就找不到 kind。
+    依賴 _app：user_buttons／expense_types／remit_kinds 在 import 時就登記，要先讓 main 載完再拍快照，否則還原會把它們一併抹掉。"""
+    from core import definitions as D
+    snap = [(t, dict(t)) for t in (D._EXTRA_KINDS, D._VALIDATORS, D._DEFAULTS)]      # noqa: SLF001
+    yield
+    for t, saved in snap:
+        t.clear()
+        t.update(saved)
+
+
 @pytest.fixture
 def world(client, make_user, monkeypatch):
     from helpers import settings_registry as SR
