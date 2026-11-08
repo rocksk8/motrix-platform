@@ -19,6 +19,7 @@ import ast
 import re
 
 from core import source_tree
+from tests import _frontend_sources as FS
 
 FRONTEND = source_tree.BACKEND.parent / "frontend"
 
@@ -303,7 +304,7 @@ def test_invoice_quote_and_payment_amounts_use_the_shared_half_up():
 
 
 def test_pages_using_the_shared_rounding_load_legal_round_js():
-    js_texts = {p.name: p.read_text(encoding="utf-8") for p in (FRONTEND / "js").glob("*.js")}
+    js_texts = {p.name: p.read_text(encoding="utf-8") for p in list((FRONTEND / "js").glob("*.js")) + FS.module_js()}   # 模組自有 js 也要算
     pages = source_tree.page_files()   # 頁面位置一律經 source_tree（C1；列車 train/0926-0415 交會）
     assert pages
     bad = [p.name for p in pages

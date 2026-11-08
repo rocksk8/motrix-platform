@@ -41,6 +41,8 @@ from pathlib import Path
 
 import pytest
 
+from tests import _frontend_sources as FS
+
 _ROOT = Path(__file__).resolve().parent.parent.parent
 _BACKEND = _ROOT / "backend"
 
@@ -62,7 +64,7 @@ SCANNED = {
         _BACKEND / "modules" / "accounting" / "api" / "vouchers.py",
     ],
     "localStorage.getItem('token')": (
-        sorted((_ROOT / "frontend" / "js").glob("*.js"))
+        FS.top_js()                                                   # frontend/js ＋ 模組自有 js（backend/modules/<key>/js/）
         + sorted((_ROOT / "frontend" / "pages").glob("*.html"))),
 }
 

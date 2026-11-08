@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 
 from core import source_tree
+from tests import _frontend_sources as FS
 
 #: 115 年版的法規數字（改年度時，新的數字也只能出現在 legal_params）
 LEGAL_NUMBERS = ("90501", "29500", "0.0211", "20010")
@@ -49,9 +50,10 @@ def test_legal_numbers_live_only_in_the_legal_params_service():
             continue
         for ln, s in hits(p.read_text(encoding="utf-8")):
             bad.append(f"backend/{rel}:{ln}: {s}")
-    for p in sorted(list(FRONTEND.rglob("*.html")) + list(FRONTEND.rglob("*.js"))):
+    # JS 一律走 _frontend_sources.all_js()（含 backend/modules/<key>/js/）；頁面經 FRONTEND.rglob（頁面沒有搬進模組）
+    for p in sorted(FRONTEND.rglob("*.html")) + FS.all_js():
         if "vendor" in p.parts:
             continue
         for ln, s in hits(p.read_text(encoding="utf-8", errors="replace")):
-            bad.append(f"frontend/{p.relative_to(FRONTEND).as_posix()}:{ln}: {s}")
+            bad.append(f"{FS.display(p)}:{ln}: {s}")
     assert not bad, "法規數字要從 helpers.legal_params 取（依生效日版本化），不可以寫死：\n" + "\n".join(bad)

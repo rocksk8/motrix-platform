@@ -24,6 +24,8 @@
 from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 #: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
 needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
+from tests import _frontend_sources as FS  # noqa: E402
+
 import glob
 import io
 import os
@@ -86,7 +88,7 @@ def sidebar_keys():
 def frontend_other_keys():
     """側欄以外的前端判斷（頁面 inline script、frontend/js/*.js）。"""
     files = (glob.glob(os.path.join(ROOT, "frontend", "pages", "*.html"))
-             + glob.glob(os.path.join(ROOT, "frontend", "js", "*.js"))
+             + [str(p) for p in FS.top_js()]
              + [os.path.join(ROOT, "frontend", "index.html")])
     src = "\n".join(_read(f) for f in files)
     return set(re.findall(r"(?:modules|mods|m)\.(?:includes|indexOf)\(\s*'([a-z_]+)'", src))
@@ -248,7 +250,7 @@ def test_module_checks_do_not_block_their_own_pages():
     pages = _page_modules()
     offenders = []
     for f in (glob.glob(os.path.join(ROOT, "frontend", "pages", "*.html"))
-              + glob.glob(os.path.join(ROOT, "frontend", "js", "*.js"))):
+              + [str(p) for p in FS.top_js()]):
         base = os.path.basename(f).replace(".js", ".html")
         mod = pages.get(base)
         if not mod:
@@ -295,7 +297,7 @@ def test_sidebar_promise_matches_backend_module_checks():
     nav = _sidebar_nav_modules()
     offenders = []
     for f in (glob.glob(os.path.join(ROOT, "frontend", "pages", "*.html"))
-              + glob.glob(os.path.join(ROOT, "frontend", "js", "*.js"))):
+              + [str(p) for p in FS.top_js()]):
         base = os.path.basename(f).replace(".js", ".html")
         keys = nav.get(base)
         if not keys:
