@@ -916,7 +916,14 @@
           重新鎖定
         </button>
       </template>
-      <button class="btn btn-ghost btn-sm" @click="saveDraft()" x-show="(q.status !== '已送出' || unlocked) && !hb.on">
+      <template x-if="reviewEditing">
+        <span style="display:inline-flex;gap:6px;align-items:center;padding:3px 8px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius);font-size:11px;color:#3730A3" data-testid="review-edit-bar">
+          複查編輯中：改完請按「儲存複查編輯」
+          <button class="btn btn-sm" style="background:#4338CA;color:#fff;border:1px solid #4338CA" :disabled="reviewEditBusy" @click="saveReviewEdit()" data-testid="review-edit-save">儲存複查編輯</button>
+          <button class="btn btn-ghost btn-sm" :disabled="reviewEditBusy" @click="cancelReviewEdit()" data-testid="review-edit-cancel">放棄修改</button>
+        </span>
+      </template>
+      <button class="btn btn-ghost btn-sm" @click="saveDraft()" x-show="(q.status !== '已送出' || unlocked) && !hb.on && !reviewEditing">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
         <span x-text="unlocked ? '儲存修改' : '儲存草稿'"></span>
       </button>
@@ -953,8 +960,8 @@
           <span x-text="needsApproval ? '⚠ 申請送出（含特殊條件）' : '申請送出審核'"></span>
         </button>
       </template>
-      <template x-if="(q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
-        <button class="btn btn-approve btn-sm" @click="openPreview('external')" title="查看對外預覽後確認簽核">
+      <template x-if="(q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover() && !reviewEditing">
+        <button class="btn btn-approve btn-sm" data-testid="qf-approve-open-preview" @click="openPreview('external')" title="查看對外預覽後確認簽核">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           預覽後簽核
         </button>
@@ -2306,7 +2313,7 @@
           </button>
         </template>
         <template x-if="previewMode === 'external' && (q.status === '待審核' || q.status === '簽核中') && isCurrentTierApprover()">
-          <button class="btn btn-approve btn-sm" @click="approveQuote(); previewMode=null">
+          <button class="btn btn-approve btn-sm" data-testid="qf-approve-from-preview" @click="approveQuote(); previewMode=null">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             確認簽核
           </button>
@@ -2383,10 +2390,11 @@
   // V3.26（2026-10-15，T62 e2e）：自訂欄位清空時送 {}（後端『沒送這個鍵＝保留舊值』，只有 {} 才會清掉）。
   // V3.28（2026-10-15，T65）：三處儲存時間顯示改走共用格式器（輸出不變）
   // V3.27（2026-10-15，T64 A／B）：利潤顏色門檻改讀設定（MotrixProfitWarning，預設＝原本的 12／20）；金額、日期改走共用顯示格式器 MotrixFormat（預設輸出逐字相同）。
+  // V3.34（2026-11-07，簽核二擇一 S1／S5）：核准綁內容指紋（expectedFp；`?id=` 載入路徑補設）；內容在簽過之後有變／轉簽而來時，核准前跳「維持／編輯」（新增原因要填說明）；選「編輯」＝複查編輯（POST /review-edit）。reconfirm_mode=off 時畫面行為與 V3.33 相同
   // V3.33（2026-10-17，T71）：取消勾選補登時一律還原原本的單號（含「原本是空」）；不再把過去月份的預覽單號留在單號欄
   // V3.32（2026-10-17，T71）：補登模式的標題／單號欄顯示預覽單號；複製為新單不帶補登來歷註記
   // V3.31（2026-10-17，T70-1）：新增模式多一個「補登歷史案件」區塊（僅最高管理者且設定中心開關有效時出現；日期限過去月份、預覽單號、原因必填、走專用補登端點）
-  const FORM_VERSION = 'V3.33'
+  const FORM_VERSION = 'V3.34'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -2405,6 +2413,16 @@
       lastSaved: null,
       vendorQuoteOpts: [],    // N1：該案承攬商報價品項（派工單），供成本欄逐項帶入
       _lastUpdatedAt: null,   // 樂觀鎖：loadQuote() 讀入、apiSave() 送出比對、成功後更新
+      _contentFp: null,       // 簽核綁版本：loadQuote() 讀入（待審核／簽核中才有）、approveQuote() 帶給 /approve 當 expectedFp；不進 q，不會被存檔送回
+      // 簽核二擇一 S5：複查／轉簽時的「維持／編輯」。_approveReview＝GET 給的彈窗資料（reconfirm_mode=on 才有）；
+      // reviewEditing＝簽核人選了「編輯」，改完按「儲存複查編輯」走 POST /review-edit（不是 PUT）。
+      // _srvData／_qBase：載入當下的伺服器本文與畫面 q 的複本——儲存時只送「真的被改過的頂層鍵」，其餘沿用伺服器本文
+      // （q 上有畫面預設值與前端附加欄位，整份送會讓指紋變動、白白作廢別人的簽）。
+      _approveReview: null,
+      _srvData: null,
+      _qBase: null,
+      reviewEditing: false,
+      reviewEditBusy: false,
       _saveConflict: false,  // apiSave() 收到 409 時設 true，saveDraft() 據此提示使用者
       // 補登歷史案件（T70-1）：只有最高管理者且設定中心開關有效時 available 才會是 true；on＝本次新增改走補登端點
       hb: { available: false, on: false, min: '', max: '', reason: '', origNo: '', preview: '', previewErr: '', busy: false, err: '', expires: '' },
@@ -3272,6 +3290,7 @@
       },
 
       autoSave() {
+        if (this.reviewEditing) return        // 複查編輯只走「儲存複查編輯」（POST /review-edit）；PUT 在待審核狀態本來就會被擋
         this.apiSave(this.isNewRecord).then(ok => {
           if (ok) {
             this.isNewRecord = false
@@ -3725,28 +3744,53 @@
         this._downloadServerPdf(mode)
       },
 
-      async approveQuote() {
+      // 簽核二擇一 S5：這個人能不能「編輯內容」——當層待簽人本人、不是送審人、不是最高管理者（最高管理者走解鎖編輯）。
+      // 只是畫面提示；伺服器的 review-edit 另外把關（含代理、金額檢視權限、is_signed 等）
+      canReviewEdit() {
+        const me = this.session?.username
+        return !!me && this.session.role !== 'superadmin' && this.isCurrentTierApprover()
+          && this.q.approval?.requestedBy !== me && (this.q.status === '待審核' || this.q.status === '簽核中') && !this.q.isSigned
+      },
+
+      async approveQuote(_retried = false) {
         if (!this.isCurrentTierApprover()) {
           alert('您不是目前層的簽核人員，無法執行此操作')
           return
         }
+        const MA = window.MotrixApproval
         const req = this.q.approval
         const reqDisplay = req?.requestedByDisplay || req?.requestedBy || ''
         // 同一人連任多層時一次簽完（2026-09-15）：確認訊息先講清楚會一併簽掉哪幾層
-        const cascadeNos = window.MotrixApproval.selfCascadeTiers(
+        const cascadeNos = MA.selfCascadeTiers(
           req?.tiers || [], req?.currentTier ?? 0, this.session.username, [])
-        const confirmMsg = `確認簽核通過此報價單？\n\n申請人：${reqDisplay}\n報價單：${this.q.quoteNo}`
-          + window.MotrixApproval.cascadeNote(cascadeNos)
-        if (!confirm(confirmMsg)) return
+        const summary = `申請人：${reqDisplay}\n報價單：${this.q.quoteNo}`
+        // 旗標成立（內容在簽過之後有變／轉簽而來）⇒ 不走一般確認，改跳「維持／編輯」；沒有旗標維持原本的確認視窗
+        const rv = this._approveReview
+        const flags = MA.flagsFor(rv, rv?.entry, this.session.username)
+        let choiceBody = {}
+        if (flags.length) {
+          const pick = await MA.askChoice({ flags, changedBlocks: rv.changedBlocks, newReasons: rv.newReasons, needNote: !!rv.needNote,
+                                            canEdit: this.canReviewEdit(), summary, extra: MA.cascadeNote(cascadeNos) })
+          if (!pick) return
+          if (pick.choice === 'edit') { this.startReviewEdit(); return }
+          choiceBody = { choice: 'keep', confirmNote: pick.note || undefined }
+        } else {
+          const confirmMsg = `確認簽核通過此報價單？\n\n${summary}` + MA.cascadeNote(cascadeNos)
+          if (!confirm(confirmMsg)) return
+        }
         const r = await fetch(`${API}/quotations/${encodeURIComponent(this.q.quoteNo)}/approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ approvedByDisplay: this.session.displayName || this.session.username,
-                                 cascade: cascadeNos.length > 0 })
+                                 cascade: cascadeNos.length > 0,
+                                 expectedFp: this._contentFp || undefined, ...choiceBody })
         })
         if (!r.ok) {
+          // 伺服器說「這張單需要先選維持／編輯」或「要填說明」＝畫面資料是舊的（模式剛開、內容剛被改）：重載後再問一次（只重試一次，避免迴圈）
+          if (MA.conflictInfo(r) && !_retried) { await this.loadQuote(); return this.approveQuote(true) }
           const err = await r.json().catch(() => ({ detail: '未知錯誤' }))
           alert('簽核失敗：' + (err.detail || '未知錯誤'))
+          if (r.status === 409) await this.loadQuote()      // 內容在你開著畫面時被改過：重載最新版，讓簽核人重看後再簽
           return
         }
         const data = await r.json()
@@ -3757,6 +3801,72 @@
         msg.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#15803D;color:#fff;padding:10px 22px;border-radius:8px;font-size:13px;z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)'
         document.body.appendChild(msg)
         setTimeout(() => { msg.style.opacity='0'; msg.style.transition='opacity .4s'; setTimeout(() => msg.remove(), 400) }, 2500)
+      },
+
+      // ── 簽核二擇一 S5：複查編輯（選「編輯」之後）──
+      startReviewEdit() {
+        if (!this.canReviewEdit()) { alert('您目前不能在這裡編輯內容（需為當層待簽人，且不是送審人或最高管理者）'); return }
+        this._snapshotBase()                 // 以「此刻畫面」為基準：之後改的才算複查編輯的內容
+        this.reviewEditing = true
+        this.toast('已進入複查編輯：改完請按上方「儲存複查編輯」；存檔後你的簽核視為已簽新版')
+      },
+
+      async cancelReviewEdit() {
+        if (this.isDirty && !confirm('放棄尚未儲存的修改？')) return
+        this.reviewEditing = false
+        this.isDirty = false
+        await this.loadQuote()               // 還原成伺服器版本
+      },
+
+      // 只送真的被改過的頂層鍵；其餘沿用載入時的伺服器本文（見 data() 裡 _srvData／_qBase 的說明）。沒有任何改動 ⇒ 不送
+      _reviewEditPayload() {
+        if (!this._srvData || !this._qBase) return null
+        const now = JSON.parse(JSON.stringify({ ...this.q, tot: this.tot }))
+        const out = JSON.parse(JSON.stringify(this._srvData))
+        let changed = 0
+        for (const k of Object.keys(now)) {
+          if (k.startsWith('_') || k === 'tot') continue
+          if (JSON.stringify(now[k]) !== JSON.stringify(this._qBase[k])) { out[k] = now[k]; changed++ }
+        }
+        for (const k of Object.keys(this._qBase)) {                    // 被刪掉的頂層鍵
+          if (!k.startsWith('_') && k !== 'tot' && !(k in now) && k in out) { delete out[k]; changed++ }
+        }
+        if (!changed) return null
+        out.tot = now.tot                                              // 金額小計跟著品項重算（伺服器另外重算利潤欄位）
+        delete out.moneyMasked                                         // 讀取端點注入的顯示欄位，不是內容（伺服器也會剝掉；這裡不送）
+        return out
+      },
+
+      async saveReviewEdit() {
+        if (this.reviewEditBusy) return
+        if (Object.keys(this.badNum).length) { alert('有無法解析的數字欄位，請先修正'); return }
+        const data = this._reviewEditPayload()
+        if (!data) { alert('內容沒有任何變動；若要維持原內容，請按「放棄修改」後直接核准'); return }
+        this.reviewEditBusy = true
+        try {
+          const r = await fetch(`${API}/quotations/${encodeURIComponent(this.q.quoteNo)}/review-edit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ data, expectedFp: this._contentFp })
+          })
+          if (!r.ok) {
+            const err = await r.json().catch(() => ({ detail: '未知錯誤' }))
+            alert('複查編輯儲存失敗：' + (err.detail || '未知錯誤'))
+            if (r.status === 409) { this.reviewEditing = false; this.isDirty = false; await this.loadQuote() }   // 內容在你編輯時又被別人改了：重載最新版，請重看後再編
+            return
+          }
+          const res = await r.json()
+          this.reviewEditing = false
+          this.isDirty = false
+          await this.loadQuote()
+          const others = (res.invalidated || []).length
+          const meResigned = (res.resigned || []).some(x => x === this.session.username || (x && x.username === this.session.username))
+          this.toast('✓ 複查編輯已儲存' + (others ? `；其他已簽層（${others} 位）需重新複查` : '') + '。' + (meResigned ? '你的簽核已視為簽在新版。' : '你仍需再按一次核准。'))
+        } catch (e) {
+          alert('網路錯誤：' + e.message)
+        } finally {
+          this.reviewEditBusy = false
+        }
       },
 
       rejectQuote() {
@@ -3936,6 +4046,9 @@
         this._fillMissingTerms(row.data)
         this.q.quoteNo = row.data.quoteNo || this.q.quoteNo
         this._lastUpdatedAt = row.updated_at || null
+        this._contentFp = row.contentFp || null
+        this._approveReview = row.approveReview || null          // S5：reconfirm_mode=on 時才有
+        this._srvData = JSON.parse(JSON.stringify(row.data || {}))
         this.loadVendorQuoteOpts()
         // 同時編輯警示（2026-09-14）：載到哪一張就回報哪一張，有別人在編會跳警示條
         if (window.MotrixPresence) window.MotrixPresence.start('quotation', this.q.quoteNo)
@@ -3955,6 +4068,12 @@
         }
         this.calcTotals()
         this.checkApproval()
+        this._snapshotBase()
+      },
+
+      // S5：載入完成後的畫面 q 複本（含畫面預設值、補的品項 id、算好的 tot）——複查編輯儲存時拿來判斷「哪些頂層鍵真的被改了」
+      _snapshotBase() {
+        try { this._qBase = JSON.parse(JSON.stringify({ ...this.q, tot: this.tot })) } catch { this._qBase = null }
       },
 
       // ── 客戶回簽 ──────────────────────────────────────────────────────────
@@ -4494,6 +4613,10 @@
                 if (matched) this.q.salesPersonUsername = matched.username
               }
               this._lastUpdatedAt = row.updated_at || null
+              // 簽核綁版本＋S5 彈窗資料：這條 `?id=` 載入路徑原本沒設 `_contentFp`（只有 loadQuote() 設）⇒ 直接開單簽核時 expectedFp 永遠是空的
+              this._contentFp = row.contentFp || null
+              this._approveReview = row.approveReview || null
+              this._srvData = JSON.parse(JSON.stringify(row.data || {}))
               this.loadVendorQuoteOpts()          // N1：`?id=` 載入路徑也要載入承攬商報價品項（與 loadQuote() 是兩條路徑）
               loaded = true
               // 同時編輯警示（2026-09-14）：編輯模式一載入就回報，有別人在編會跳警示條。
@@ -4552,6 +4675,11 @@
 
         this._bindLateHooks()
         this._initSettled = true
+        if (this._srvData) {
+          this._snapshotBase()
+          // 簽核佇列「編輯內容」導過來（?reviewEdit=1）：資格仍由伺服器把關；這裡只決定一進來就進入編輯狀態
+          if (new URLSearchParams(window.location.search).get('reviewEdit') === '1' && this.canReviewEdit()) this.startReviewEdit()
+        }
       },
 
       // init() 的尾巴：新增／編輯／複製三條路徑共用，可重複呼叫（只綁一次監聽，Sortable 重建前先銷毀舊的）。

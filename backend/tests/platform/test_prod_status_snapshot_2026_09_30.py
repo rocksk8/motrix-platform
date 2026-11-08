@@ -142,8 +142,38 @@ def test_all_fields_present(tmp_path, server):
     assert b["alerts_since"]["timestamp"] == "2026-09-30T03:00:00" and b["alerts_since"]["level"] == "ERROR"
     assert b["sticky_alert_file"] is True
     assert isinstance(s["disk_free_gb"], float) and s["disk_free_gb"] > 0
-    if os.name == "nt":
-        assert os.getpid() in s["service_pids_on_666"]                                   # 本題的假服務就在本行程
+
+
+def _port_visible_in_netstat(text, port):
+    """環境探針（與被測工具 PS.pids_on_port 的解析各自獨立）：netstat 輸出裡有沒有『本機埠＝port、最後一欄是非 0 的 PID』的列。
+    沒有 ⇒ 這個環境的 netstat 看不到本行程自己剛開的 listener（受限沙箱：只列少數 127.0.0.1 LISTEN、owner 0）。"""
+    for line in text.splitlines():
+        cols = line.split()
+        if len(cols) >= 5 and cols[0].upper() == "TCP" and cols[1].rsplit(":", 1)[-1] == str(port) and cols[-1].isdigit() and int(cols[-1]) != 0:
+            return True
+    return False
+
+
+def test_probe_positive_and_negative_control():
+    """探針本身不是假的：有列 ⇒ 看得到；沒有那一列、或 owner 0 ⇒ 看不到（才允許下一題 skip）。"""
+    seen = "  TCP    127.0.0.1:5555   0.0.0.0:0   LISTENING   4242"
+    assert _port_visible_in_netstat(seen, 5555) is True
+    assert _port_visible_in_netstat(seen, 5556) is False
+    assert _port_visible_in_netstat(seen.replace("4242", "0"), 5555) is False
+
+
+def test_service_pids_include_own_listener(tmp_path, server):
+    """工具回報的 service_pids_on_<port> 要含本行程（假服務就在本行程）。
+    只有『探針證明此環境的 netstat 根本看不到自己的 listener』才 skip；看得到卻沒回 ⇒ 工具壞了，照常紅。"""
+    if os.name != "nt":
+        pytest.skip("pids_on_port 只支援 Windows（netstat -ano）")
+    raw = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, timeout=20).stdout.decode("utf-8", errors="replace")
+    if not _port_visible_in_netstat(raw, server):
+        pytest.skip("此環境 netstat 看不到本行程自己的 listener（port %s；受限沙箱），無法驗 service_pids：不是工具壞了" % server)
+    root, cloud = _build(tmp_path)
+    code, s = _run(root / "backend" / "tools" / TOOL.name, "--port", str(server), "--archive-root", str(cloud))
+    assert code == 0 and s["errors"] == {}, s["errors"]
+    assert os.getpid() in s["service_pids_on_666"]
 
 
 @pytest.mark.parametrize("remove, field", [

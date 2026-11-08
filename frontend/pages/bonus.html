@@ -45,6 +45,8 @@
     .bn-in{width:70px;padding:4px 6px;border:1px solid var(--border-light);border-radius:4px;font-size:12px;text-align:right}
     .bn-sel{padding:4px 6px;border:1px solid var(--border-light);border-radius:4px;font-size:12px}
     .bn-note{font-size:11px;color:#92400E;font-family:var(--font-zh)}
+    /* 業務名單≠現行業務負責的註記：中性色（不是警告，只是讓人知道名單是建立當下凍結的） */
+    .bn-sales-note{font-size:12px;line-height:1.6;color:var(--text-secondary);background:var(--surface-muted);border:1px solid var(--border-light);border-radius:var(--radius);padding:6px 10px;margin:0 0 10px}
     .bn-err{font-size:12px;color:var(--danger);font-family:var(--font-zh)}
     .bn-ok{font-size:12px;color:#15803D;font-family:var(--font-zh)}
     .bn-warn{font-size:12px;color:var(--warning);background:var(--warning-light);border:1px solid var(--warning);border-radius:6px;padding:8px 10px;margin:8px 0;font-family:var(--font-zh)}
@@ -283,6 +285,7 @@
                 <template x-if="detail.award && !draft">
                   <div class="bn-card">
                     <div class="bn-sec" x-text="detail.scope === 'self' ? '我的獎金' : '發放明細'"></div>
+                    <div class="bn-sales-note" data-testid="bn-sales-owner-note" x-show="detail.salesOwnerNote" x-text="detail.salesOwnerNote"></div>
                     <template x-for="c in cats" :key="c">
                       <div class="bn-cat" x-show="linesOf(c).length || detail.scope !== 'self'">
                         <div class="bn-cat-hd"><span x-text="catLabels[c]"></span>

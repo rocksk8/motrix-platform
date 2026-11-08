@@ -12,6 +12,7 @@ __l1_public__ = (
     "_filter_live_notifications",
     "_mark_notifications_read",           # 簽核處理掉 ⇒ 對應通知列標已讀（modules/case 報價單核准／退回／拒絕）
     "_notify",
+    "_notify_in_txn",                     # 同一交易內寫通知（簽核二擇一 S3b：reconcile 與簽核資料原子；modules/case）
     "_purge_notifications",
 )
 
@@ -125,38 +126,55 @@ def _mask_money(conn, username: str, text) -> str:
     return _MONEY_RE.sub("（金額略）", text)
 
 
+def _notify_in_txn(conn, username: str, type_: str, ref_id: str, ref_label: str, message: str, link: str = None, *, merge_unread: bool = False) -> None:
+    """在**呼叫端自己的連線／交易**裡寫一則站內通知（不另開連線、不 commit、不吞例外——交易回滾，通知一起消失）。
+    規則與 `_notify` 完全相同（link 白名單、金額遮罩、`_approved` 去重）；`_notify` 就是「開連線→呼叫本函式→commit」。
+
+    `merge_unread=True`（簽核二擇一 S3b，合併通知）：同一 `(type, ref_id, username)` 已有**未讀**列 ⇒ 不新增，改寫那一列的訊息與時間；沒有 ⇒ 新增。
+    已讀後再有變動才有新的一則。先 UPDATE 後 INSERT（SQLite 單寫者，呼叫端已握寫鎖 ⇒ 判斷與寫入之間沒有別人插進來）。
+    表還沒有 `link` 欄（舊庫）⇒ 退回舊寫法，不丟例外。"""
+    link = (link or "").strip()
+    if link and not _LINK_RE.match(link):                      # 只准同站頁面檔名＋選填查詢字串；外部網址／路徑穿越／javascript: 一律丟掉（通知照寫，只是沒有連結）
+        logger.warning("_notify: 不合格的 link 已丟棄：%r", link[:80])
+        link = ""
+    message, ref_label = _mask_money(conn, username, message), _mask_money(conn, username, ref_label)
+    now = datetime.now().isoformat()
+    if merge_unread:
+        cur = conn.execute(
+            "UPDATE notifications SET message=?, ref_label=?, created_at=? WHERE username=? AND type=? AND ref_id=? AND is_read=0",
+            (message, ref_label, now, username, type_, ref_id))
+        if (cur.rowcount or 0) > 0:
+            return
+    try:
+        if (type_ or "").endswith("_approved"):
+            conn.execute(
+                "INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at, link) "
+                "SELECT ?,?,?,?,?,0,?,? WHERE NOT EXISTS "
+                "(SELECT 1 FROM notifications WHERE username=? AND type=? AND ref_id=?)",
+                (username, type_, ref_id, ref_label, message, now, link, username, type_, ref_id))
+        else:
+            conn.execute(
+                "INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at, link) "
+                "VALUES (?,?,?,?,?,0,?,?)",
+                (username, type_, ref_id, ref_label, message, now, link))
+    except sqlite3.OperationalError as e:
+        if "link" not in str(e):
+            raise
+        conn.execute(                                                 # 舊庫沒有 link 欄：只寫舊欄位
+            "INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at) VALUES (?,?,?,?,?,0,?)",
+            (username, type_, ref_id, ref_label, message, now))
+
+
 def _notify(username: str, type_: str, ref_id: str, ref_label: str, message: str, link: str = None) -> None:
     """寫一則站內通知。`link`（選填）＝點通知要開的頁面（相對路徑，例如 `quotation-edit.html?no=Q-1`；空＝沒有連結）。
 
     第44班（使用者裁示）：**核准類通知（type 以 `_approved` 結尾）同一 (type, ref_id, username) 只留一列**——
     單一 `INSERT … WHERE NOT EXISTS`（SQLite 單寫者 ⇒ 判斷與寫入在同一個原子陳述裡，兩個同時核准也不會寫出兩列）。
-    其他類型照舊每次一列。`link` 欄位由 core 的未取號 migration 加入；表還沒有該欄（舊庫、migration 未完成）⇒ 退回舊寫法，不丟例外。"""
-    link = (link or "").strip()
-    if link and not _LINK_RE.match(link):                      # 只准同站頁面檔名＋選填查詢字串；外部網址／路徑穿越／javascript: 一律丟掉（通知照寫，只是沒有連結）
-        logger.warning("_notify: 不合格的 link 已丟棄：%r", link[:80])
-        link = ""
+    其他類型照舊每次一列。`link` 欄位由 core 的未取號 migration 加入；表還沒有該欄（舊庫、migration 未完成）⇒ 退回舊寫法，不丟例外。
+    另開連線、自己 commit；要與呼叫端的資料同一交易請用 `_notify_in_txn`。"""
     conn = get_db()
     try:
-        message, ref_label = _mask_money(conn, username, message), _mask_money(conn, username, ref_label)
-        now = datetime.now().isoformat()
-        try:
-            if (type_ or "").endswith("_approved"):
-                conn.execute(
-                    "INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at, link) "
-                    "SELECT ?,?,?,?,?,0,?,? WHERE NOT EXISTS "
-                    "(SELECT 1 FROM notifications WHERE username=? AND type=? AND ref_id=?)",
-                    (username, type_, ref_id, ref_label, message, now, link, username, type_, ref_id))
-            else:
-                conn.execute(
-                    "INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at, link) "
-                    "VALUES (?,?,?,?,?,0,?,?)",
-                    (username, type_, ref_id, ref_label, message, now, link))
-        except sqlite3.OperationalError as e:
-            if "link" not in str(e):
-                raise
-            conn.execute(                                                 # 舊庫沒有 link 欄：只寫舊欄位
-                "INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at) VALUES (?,?,?,?,?,0,?)",
-                (username, type_, ref_id, ref_label, message, now))
+        _notify_in_txn(conn, username, type_, ref_id, ref_label, message, link)
         conn.commit()
     except Exception as e:
         logger.warning("_notify failed: %s", e)

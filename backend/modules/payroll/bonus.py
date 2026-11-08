@@ -234,6 +234,25 @@ def remainder_of(base, total_pct, lines):
 #:    「業務獎金→`sales_person`／專案執行獎金→`case_stages.assigned_to`」，
 #:    `BN14`（2026-09-23）加了第三個 `"group"`（見下）。
 #:
+#: ## 📜 「業務」來源的兩次裁示（新者取代舊者；**兩條都留痕，不要只留最新的、也不要刪舊的原話**）
+#:
+#:   ① 2026-09-23 使用者原話（逐字）：「業務獎金→`sales_person`／專案執行獎金→`case_stages.assigned_to`」。
+#:   ② 2026-11-06 產品負責人裁示（經 MOTRIX-ERP 模組結構圖窗口轉達；依據：正式機實測 4 張單報價人≠業務負責，
+#:      其中 1 張分潤草稿人工已繞過 `sales_person`、手動填了 `roles.sales`）：
+#:      **業務獎金改讀 `caseRecord.roles.sales`（業務負責／業績歸屬）**；完全沒填才退回 `quotations.sales_person`／`sales_person_id`。
+#:      → **推翻 ① 的「讀哪一欄」**；**沒有推翻**「兩個欄位各自存、互不寫入」（報價單的「報價人」欄不受影響）。
+#:   同日細則（D1～D5）：
+#:      D1 已有分潤單的案件不回溯（名單在建立當下已凍結在 lines；已發放的只在畫面加中性註記）。
+#:      D2 `roles.sales` 有值但對不到可用帳號（舊字串查無／同名、帳號停用或不存在）⇒ **不退回報價人**，不帶人並提示手動指定。
+#:      D3 舊版項目式獎金（`bonus_items.person_source='sales_person'`、`GET／POST /awards/plan`、`_case_people()`）**凍結不處理**：
+#:         2026-11-06 正式機回報 `bonus_awards`／`bonus_award_lines`／`bonus_items` 全部 0 筆、從未有 `person_source='sales_person'`
+#:         的紀錄，等於從未啟用；唯一有資料的分潤是新版 `bonus_case_awards` 1 筆（MQ-202607-023）。舊路徑**仍讀報價人**，
+#:         日後若啟用必須先回來決定要不要同口徑（不要順手改，也不要假設它已經改了）。
+#:      D4 鍵名 `"sales_person"` 保留（存在 `bonus_items.person_source` 與 `person_source_snapshot` 的歷史列）；只改解析邏輯。
+#:      D5 兩欄不同且尚無分潤單的案件不主動通知（建單時自然會看到）。
+#:   ➜ 讀取點：新版 `api/bonus.py::_auto_members()`（已改）；舊版 `_case_people()`（凍結，仍讀 `sales_person`）。
+#:   ➜ 方案與影響範圍：`docs/platform/plans/SALES-OWNER-BONUS-SWITCH-PLAN.md`。
+#:
 #: ## ☠️ 這裡原本有 `owner` 與 `engineer`，已拿掉（A 裁，2026-09-23）
 #:
 #: 那兩個是**規格自己加的**，而 `quotations` 上**沒有那兩個欄位**

@@ -643,5 +643,7 @@ def sync_order_paid(conn, quote_no, item_id):
         target.update({"paidStatus": "pending", "paidAmount": 0, "paidDate": ""})
     else:                                                                            # 多付時 paidAmount 封頂在小計（明細才是事實；閘的驗證要求 ≤ 小計）
         target.update({"paidStatus": "paid" if total_paid >= tot - 0.005 else "partial", "paidAmount": min(total_paid, tot), "paidDate": last})
+    from modules.case import content_fp as _cfp
+    _cfp.reconcile_txn(conn, quote_no, data, source="material_paid")      # 簽核二擇一 S3b：直接 UPDATE 繞過漏斗，要自己對帳（系統投影，沒有操作者；off ⇒ 零查詢）
     conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(data, ensure_ascii=False), quote_no))
     return True

@@ -316,3 +316,12 @@ modules/<key>/
 - **鎖定比對在伺服器端、以已存值為準**（`alt_lock.changed`；P1 ①整份本文／②只鎖品項與金額；fail-closed）；不看用戶端的 `_isUnlockEdit`。新增寫 `quotations` 的函式必須登記到 `tests/data/quote_write_paths.json`（靜態守門 `test_quote_alt_write_paths`），並判斷會不會動已回簽擇一單的鎖定本文。
 - **輸出路徑禁引用成本**：PDF／列印預覽／回簽頁只經 `case.alt_view`（IP-ALT1，不含成本）；`alt_options.plan_view` 只給成本權限者的內部畫面（報價單頁用 `quote_money_visible`、案件頁用 `money_visible`，兩者不得互換）。範本文字代入一律單趟取代（不用 `str.format`／`%`），輸出端自行跳脫。
 - **政策走設定中心群組 `quote_alt`**：選項『尚未提供』（`settings_groups.UNAVAILABLE_ALT_CHOICES`）＝已登錄但不可儲存、讀取夾回預設；有消費者的那個 commit 才把它從表中移除。
+
+### 14.7 報價單簽核「內容指紋／複查」（簽核二擇一 S0～S6；規格 `docs/platform/plans/QUOTE-APPROVE-EDIT-CHOICE-PROPOSAL.md`）
+- **內容的定義是「除了排除清單以外的全部頂層鍵」**（`content_fp.EXCLUDED_KEYS`，簿記／簽核本身／稽核類）。新增任何寫進 `data_json` 的頂層鍵，預設就是內容——它變動會讓已簽的人回待複查。是簿記就加進排除清單，並同步 `test_content_fp_write_paths_s0` 的鎖定清單（守門會擋）；**不要**為了少打擾簽核人把內容鍵偷偷列為排除。
+- **新增寫 `quotations.data_json` 的函式**：走 `save_quotation_json`（漏斗內已對帳）；必須自己 UPDATE 的，在 UPDATE 之前、同一交易呼叫 `content_fp.reconcile_txn(...)` 並登記到 S0 的寫入路徑表（守門測試會掃）。讀路徑（GET／佇列）**只用** `effective_approval` 純推導，不可呼叫 `reconcile_txn`。
+- **核准一律綁版本**：`approve` 帶 `expectedFp`；條目有旗標（`reconfirm` 複查中／`reassigned` 轉簽／`delegated` 代理）且 `reconfirm_mode=on` 時另要 `choice`（`keep`＝維持照目前版本簽；要改內容走 `POST /review-edit`）；reconfirm 旗標且 `approveReview.needNote` 時選維持要 `confirmNote`。off／shadow 與今天逐位元相同。
+- **`quote_approval.reconfirm_mode`**（0 off／1 shadow／2 on，預設 off）：往大調立即生效，往小調走放寬流程（第二位最高管理者核准＋確認期間；沒有緊急關閉開關，止血靠複查輪次上限 5）。**翻 on 之前必須通過 S6 驗收閘門**（見下），不可只因為「功能做完了」就開。
+- **翻 on 的閘門（缺一不可）**：①影子模式（`shadow`）至少跑滿一週，用超管唯讀統計 `GET /api/quotations/reconfirm-shadow-stats?days=7` 看「本會作廢」次數與區塊／來源分布，由產品負責人決定可接受（`dealTagShare` 高則先議 `dealTag` 是否改列排除，改清單要同步守門測試）；②`test_acceptance_s6_2026_11_07.py`（含 H7 逐句對應表）與 S5 e2e 全綠；③稽核頁可用「知情核准」「自改自簽」標籤查到實例。
+- **稽核標籤約定**：寫入端在 `quotation.approve`（旗標成立且選維持）與 `quotation.review_edit`（整張單的簽核人去重後只有編輯者一人＝自改自簽，含同一人連任多層；同時通知最高管理者，不阻擋。**偵測範圍之外**：舊單條目沒有 `signedFp` 不會被作廢，「沒有人被請回來複核」的情形不在此偵測，影子週的統計看得到）的 detail 放 `"tag": "informed"`／`"tag": "self_edit_sign"`；稽核頁 `tag` 篩選（`/api/audit-log`、`/tree`）以 `routers/system.py::_AUDIT_TAGS`（固定 action＋detail 字面比對，走 action 索引）。新增標籤＝兩邊同改，`test_audit_tag_literal_contract_between_writer_and_filter` 會對照。
+- **通知類型**：`approval_reconfirm`（待複查）、`approval_reconfirm_info`（知會送審人／後續層）、`approval_reconfirm_suspended`（輪次達上限，只通知超管一次）、`approval_self_edit_sign`（自改自簽，通知超管）；前三者同 `(type, ref_id, username)` 未讀列合併成一列。

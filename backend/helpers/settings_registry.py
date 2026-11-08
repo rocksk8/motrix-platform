@@ -3,7 +3,7 @@
 
 [單位] helper:settings_registry    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] DEFAULT_CONFIRM_DAYS, DEFAULT_EFFECT, IMPACT_SCOPE_GRANDFATHERED, KIND, RISK_ORDER, SCALAR_LEGACY, SCOPE, SettingDef, SettingError, apply_profile, banner_of, clamp_value, clear_edition_bounds, confirm_period_days,
-    audit_spine_failures, cancel_pending_of_nonopen, field_defs, field_views, get, get_group, group_info, group_stamp, group_status, groups, invalidate, live_impact, materialize_due, owner_groups, plan, profile_preview, profile_skipped, profiles, publish, register_group, set_edition_bounds, show_value, unregister_owner, validate_values
+    audit_spine_failures, cancel_pending_of_nonopen, field_defs, field_views, generation, get, get_group, group_info, group_stamp, group_status, groups, invalidate, live_impact, materialize_due, owner_groups, plan, profile_preview, profile_skipped, profiles, publish, register_group, set_edition_bounds, show_value, unregister_owner, validate_values
 [不變式] ①`get()` **永不丟例外**：資料庫讀不到、值壞掉、型別不對、超出範圍 ⇒ 回程式預設並記 warning（`clamp` 欄位改為夾到範圍內）；
     ②**部署不寫任何定義列**：沒有列＝程式預設＝上線前的行為（`settings_deploy_baseline.json` 凍結）；③上下限**只寫在程式**（資料庫的值只是值）；
     ④寫入口只有 `publish()`：同一交易寫定義新版本＋變更明細（config_ledger）＋稽核＋（有舊鍵時）雙寫舊鍵；⑤讀取走 15 秒行程內快取，
@@ -492,8 +492,18 @@ def _db_id():
     return str(getattr(db, "DB_PATH", ""))
 
 
+_generation = 0                                # 每次 invalidate（設定發布／改寫）加一：給「自己再快取一層」的呼叫端判斷快取是否作廢（簽核二擇一 S3b 的 reconfirm_mode）
+
+
+def generation() -> int:
+    """設定快取世代：`invalidate()` 每呼叫一次加一。呼叫端把自己的衍生快取連同世代存起來，世代變了就重讀。"""
+    return _generation
+
+
 def invalidate(group=None):
+    global _generation
     with _lock:
+        _generation += 1
         if group is None:
             _cache.clear()
         else:

@@ -4673,6 +4673,25 @@
   ],
   "s": 200
  },
+ "/api/quotations/reconfirm-shadow-stats": {
+  "k": [
+   "byBlock",
+   "byDay",
+   "bySource",
+   "byUser",
+   "days",
+   "dealTagShare",
+   "events",
+   "mode",
+   "quotes",
+   "truncated",
+   "window",
+   "window.from",
+   "window.to",
+   "wouldInvalidateEvents"
+  ],
+  "s": 200
+ },
  "/api/quotations/stage-board": {
   "k": [
    "caseLifecycle",
@@ -6193,6 +6212,7 @@
    "groups[].values.quotes_personal_page_size",
    "groups[].values.receivable_grace_days",
    "groups[].values.received",
+   "groups[].values.reconfirm_mode",
    "groups[].values.reject_final_keep",
    "groups[].values.report_good",
    "groups[].values.report_low",

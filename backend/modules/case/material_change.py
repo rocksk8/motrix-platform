@@ -508,6 +508,8 @@ def _apply(conn, change_id, user: dict, now: str) -> bool:
             order[k] = stored[k]
     # 系統自己的投影（同 sync_order_paid），不經 material_guard；直接寫 data_json、不經 save_quotation_json ⇒ 不更新 updated_at／熱欄位
     # （材料申請欄位目前不影響報價單的熱欄位；若之後有欄位進熱欄位，這裡要改走 save_quotation_json）。
+    from modules.case import content_fp as _cfp
+    _cfp.reconcile_txn(conn, quote_no, data, source="material_change", actor=user)      # 簽核二擇一 S3b：直接 UPDATE 繞過漏斗，要自己對帳（off ⇒ 零查詢）
     conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(data, ensure_ascii=False), quote_no))
     row = MA.get(conn, quote_no, item_id)
     appr = _j(row["approval_json"], {})

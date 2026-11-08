@@ -392,7 +392,12 @@ def _like_escape(s: str) -> str:
     return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _audit_filters(module, case_no, ref_no, user_q, action, date_from, date_to, result, q):
+#: 稽核標籤（簽核二擇一 S6）：標籤 → 只會出現在哪個 action。寫入端是 `modules/case/api/quotations.py`（approve 選維持＝informed；review-edit 自改自簽＝self_edit_sign），
+#: detail 內的字面是 `"tag": "<標籤>"`；字面約定由 case 模組測試鎖住。routers 不 import 模組，所以常數放這裡。
+_AUDIT_TAGS = {"informed": "quotation.approve", "self_edit_sign": "quotation.review_edit"}
+
+
+def _audit_filters(module, case_no, ref_no, user_q, action, date_from, date_to, result, q, tag=None):
     """歷史紀錄的共用篩選（列表、樹、失敗摘要同一套）。除 q（相容舊版的關鍵字）外都走索引：精確／前綴，不用 %x%。
     文字值一律截到 `_AUDIT_TEXT_MAX`；LIKE 的萬用字元一律跳脫（安全審查 W3 #5）。"""
     mx = _AUDIT_TEXT_MAX
@@ -418,6 +423,12 @@ def _audit_filters(module, case_no, ref_no, user_q, action, date_from, date_to, 
         where.append("at<?");            params.append(date_to + "T99" if len(date_to) == 10 else date_to)
     if result in ("ok", "fail"):
         where.append("result=?");        params.append(result)
+    if tag:                                    # S6：稽核標籤（知情核准／自改自簽）＝固定 action（走索引）＋ detail 的 "tag" 字面比對；不認得的標籤 ⇒ 400，不靜默忽略
+        t = str(tag)[:mx]
+        if t not in _AUDIT_TAGS:
+            raise HTTPException(400, "tag 只能是 " + "／".join(_AUDIT_TAGS))
+        where.append("action=?");              params.append(_AUDIT_TAGS[t])
+        where.append("detail LIKE ? ESCAPE '\\'");  params.append("%" + _like_escape('"tag": "%s"' % t) + "%")
     if q:
         like = "%" + _like_escape(q) + "%"
         where.append("(target_label LIKE ? ESCAPE '\\' OR username LIKE ? ESCAPE '\\'"
@@ -448,6 +459,7 @@ def list_audit_log(
     date_to: str = None,
     result: str = None,
     before_id: int = None,
+    tag: str = None,
     authorization: str = Header(None),
 ):
     """使用者 2026-09-30：「人員的紀錄或是操作紀錄可以分層依模組、案件等搜尋，或是紀錄中有失敗能快速查詢」。
@@ -456,7 +468,7 @@ def list_audit_log(
     limit = max(1, min(int(limit), 200))
     conn = get_db()
     try:
-        where, params = _audit_filters(module, case_no, ref_no, user, action, date_from, date_to, result, q)
+        where, params = _audit_filters(module, case_no, ref_no, user, action, date_from, date_to, result, q, tag)
         cond = ("WHERE " + " AND ".join(where)) if where else ""
         # 總數只數到 _AUDIT_COUNT_CAP（帶索引的篩選很快；無篩選時不對百萬列做 COUNT(*)）
         total = conn.execute(f"SELECT COUNT(*) FROM (SELECT 1 FROM audit_log {cond} LIMIT {_AUDIT_COUNT_CAP})", params).fetchone()[0]
@@ -509,6 +521,7 @@ def audit_log_tree(
     date_from: str = None,
     date_to: str = None,
     result: str = None,
+    tag: str = None,
     authorization: str = Header(None),
 ):
     """分層下鑽：module（模組）→ case（案件，需 module）→ ref（單據，需 module／case_no）。每層回
@@ -520,7 +533,7 @@ def audit_log_tree(
     window = _audit_tree_window(date_from, date_to)
     conn = get_db()
     try:
-        where, params = _audit_filters(module, case_no, ref_no, user, action, window["from"], window["to"], result, None)
+        where, params = _audit_filters(module, case_no, ref_no, user, action, window["from"], window["to"], result, None, tag)
         # 加一個 **id 範圍**收窄掃描：`at` 條件單獨會讓 SQLite 走 idx_audit_at 再逐列回表（100 萬列 1.7～4.7 秒）。
         # id 上下界各一次索引查詢取得：窗內每一列的 id 必定落在 [MIN(id where at>=起), MAX(id where at<迄)] 之內（與資料是否依時間遞增無關），
         # `at` 條件仍保留 ⇒ 結果恆正確；稽核列依寫入順序遞增（正式機如此）時掃描量就是窗內那一段，不是全表。

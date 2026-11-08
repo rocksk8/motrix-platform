@@ -47,9 +47,9 @@
    "note": "稅額沖銷核准：只改 caseRecord.payment 沖銷欄位"
   },
   "modules/case/api/quotations.py::approve_quotation::save": {
-   "count": 2,
+   "count": 3,
    "class": "not-body",
-   "note": "簽核鏈推進：只改 approval／status，不動品項與金額"
+   "note": "簽核鏈推進：只改 approval／status，不動品項與金額；S3b 加一處：對帳後簽核層被作廢時存回（只改 approval）"
   },
   "modules/case/api/quotations.py::cancel_payment_writeoff::save": {
    "count": 1,
@@ -121,6 +121,16 @@
    "class": "not-body",
    "note": "稅額沖銷申請：只改 caseRecord.payment"
   },
+  "modules/case/api/quotations.py::review_edit_quotation::save": {
+   "count": 1,
+   "class": "guarded",
+   "note": "簽核二擇一 S4 複查編輯：is_signed（已回簽擇一單）一律 409，擇一欄位由 _PG.prepare 放回現值（同 PUT）；與 update_quotation 的 guard_update 等價的早退（測試釘住 is_signed 檢查）"
+  },
+  "modules/case/api/quotations.py::review_edit_quotation::sql": {
+   "count": 1,
+   "class": "guarded",
+   "note": "複查編輯存檔後補冗餘欄位（客戶名／專案名／金額／日期）；同一函式已先擋 is_signed，不碰鎖定本文"
+  },
   "modules/case/api/quotations.py::save::save": {
    "count": 1,
    "class": "not-body",
@@ -185,6 +195,11 @@
    "count": 1,
    "class": "not-body",
    "note": "只改 settlement（精算，執行紀錄）；P8 重開精算的出口"
+  },
+  "modules/case/content_fp.py::rebaseline_fingerprint::save": {
+   "count": 1,
+   "class": "not-body",
+   "note": "簽核二擇一 S1：開機遷移後把簽核中單的指紋基準重設為現值，只動 approval（排除鍵），不動品項與鎖定本文；不得接使用者端點"
   },
   "modules/case/material_change.py::_apply::sql": {
    "count": 1,

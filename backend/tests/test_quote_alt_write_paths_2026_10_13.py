@@ -72,7 +72,8 @@ def test_guarded_writers_actually_call_their_guard():
     src = (BACKEND / "modules" / "case" / "api" / "quotations.py").read_text(encoding="utf-8")
     for fn, needle in (("update_quotation", "_ALT_SIGN.guard_update"), ("update_status", "_ALT_SIGN.guard_move_out_of_sent"),
                        ("recall_quotation", "_ALT_SIGN.guard_move_out_of_sent"), ("reject_quotation", "_ALT_SIGN.guard_move_out_of_sent"),
-                       ("_append_items_to_quotation", "_ALT_SIGN.applies"), ("toggle_quotation_signed", "_toggle_alt_signed")):
+                       ("_append_items_to_quotation", "_ALT_SIGN.applies"), ("toggle_quotation_signed", "_toggle_alt_signed"),
+                       ("review_edit_quotation", 'row["is_signed"]')):
         i = src.index("def %s(" % fn)
         j = src.find("\ndef ", i + 10)
         assert needle in src[i:j if j > 0 else None], "%s 沒有呼叫 %s" % (fn, needle)

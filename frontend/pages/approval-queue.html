@@ -500,7 +500,7 @@
                       </template>
                       <template x-if="item.type !== 'custom_record' && item.type !== 'custom_module_def'">
                         <span style="display:contents">
-                          <button type="button" class="btn btn-primary btn-sm"
+                          <button type="button" class="btn btn-primary btn-sm" data-testid="aq-quick-approve"
                                   @click.stop="quickApprove(item)" :disabled="actioning">核准</button>
                           <button type="button" class="btn btn-reject btn-sm"
                                   @click.stop="quickReject(item)" :disabled="actioning">退回</button>
@@ -1725,7 +1725,24 @@
           return (firstPending?.username === a.username ? '等待簽核中' : '等待前一位完成') + selfTag
         },
 
-        async doApprove() {
+        // 簽核綁版本（簽核二擇一 S1b）：只有報價單（走 /api/quotations/{no}/approve、沒有自帶端點）、
+        // 且 detail 確實是這一筆時才回指紋；否則 undefined（JSON 序列化時整個鍵省略）
+        // 優先用詳情的指紋（簽核人看到的內容）；沒開詳情（列表上的快速核准）就用列表載入當下的指紋（S4b）——列表過期同樣 409
+        expectedFpFor(item) {
+          const d = this.detail
+          if (item?.type !== 'quotation' || item.approveUrl) return undefined
+          return (d && d.type === 'quotation' && d.id === item.quoteNo && d.contentFp) || item.contentFp || undefined
+        },
+
+        // 簽核二擇一 S5：這一筆報價單的「維持／編輯」彈窗資料（同 expectedFpFor：只有報價單、且詳情確實是這一筆）。
+        // 列表上的快速核准沒載詳情 ⇒ undefined ⇒ 先照一般流程送；伺服器若要求選擇會回 409＋X-Approve-Flags，下面會載入詳情後再問
+        approveReviewFor(item) {
+          const d = this.detail
+          if (item?.type !== 'quotation' || item.approveUrl) return undefined
+          return (d && d.type === 'quotation' && d.id === item.quoteNo && d.approveReview) || undefined
+        },
+
+        async doApprove(_retried = false) {
           if (!this.selected) return
           const item = this.selected
           if (item.type === 'case_change') {
@@ -1781,18 +1798,48 @@
             ? `確認簽核通過 ${this.docTypeLabel(item)} ${item.quoteNo}？\n\n客戶：${item.customer}\n${this.amountLabel(item)}：${this.amountDisplay(item)}\n\n簽核後狀態將更新為「${finalStatus}」。`
             : `確認完成第 ${(item.currentTier ?? 0) + 1} 層簽核（共 ${tiers.length} 層）？\n\n${item.quoteNo}｜${item.customer}`
           confirmMsg += window.MotrixApproval.cascadeNote(cascadeNos)
-          if (!confirm(confirmMsg)) return
+          // 簽核二擇一 S5：旗標成立（內容在簽過之後有變／轉簽而來／代理代簽）⇒ 改跳「維持／編輯」（與 quotation-form 同一支彈窗）；沒旗標維持原確認視窗
+          const MA = window.MotrixApproval
+          const rv = this.approveReviewFor(item)
+          const flags = MA.flagsFor(rv, rv?.entry, this.session.username)
+          let choiceBody = {}
+          if (flags.length) {
+            const canEdit = this.session.role !== 'superadmin' && rv.entry === this.session.username && item.requestedBy !== this.session.username
+            const pick = await MA.askChoice({ flags, changedBlocks: rv.changedBlocks, newReasons: rv.newReasons, needNote: !!rv.needNote, canEdit,
+                                              summary: `${item.quoteNo}｜${item.customer}`, extra: MA.cascadeNote(cascadeNos) })
+            if (!pick) return
+            if (pick.choice === 'edit') {                 // 編輯在報價單頁做（?reviewEdit=1 一進去就是編輯狀態；資格由伺服器把關）
+              window.location.href = 'quotation-form.html?id=' + encodeURIComponent(item.quoteNo) + '&reviewEdit=1'
+              return
+            }
+            choiceBody = { choice: 'keep', confirmNote: pick.note || undefined }
+          } else if (!confirm(confirmMsg)) return
           this.actioning = true
           try {
             const r = await fetch(approveUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
               body: JSON.stringify({ approvedByDisplay: this.session.displayName || this.session.username,
-                                     cascade: cascadeNos.length > 0 })
+                                     cascade: cascadeNos.length > 0,
+                                     // 簽核綁版本（簽核二擇一 S1b）：只有報價單、且畫面上的詳情確實是這一筆時才帶；
+                                     // 詳情沒載到（列表上的快速核准）＝綁列表載入當下的指紋（S4b）；都沒有（舊列表資料）＝不綁（稽核記 fpBound:false）
+                                     expectedFp: this.expectedFpFor(item), ...choiceBody })
             })
             if (!r.ok) {
+              // 伺服器要求先選維持／編輯（或要填說明）＝這一筆的詳情沒載或是舊的：載入這一筆的最新詳情後再問一次（只重試一次）。
+              // 這就是 mode=on 時「列表快速核准」遇到旗標單的操作路徑——不會卡在 409。
+              if (MA.conflictInfo(r) && !_retried && item.type === 'quotation' && !item.approveUrl) {
+                this.actioning = false
+                await this.loadDetail(item)
+                return await this.doApprove(true)
+              }
               const err = await r.json().catch(() => ({}))
               alert('簽核失敗：' + (err.detail || r.status))
+              if (r.status === 409 && this.expectedFpFor(item)) {                              // 內容在你看的時候被改了：重載，重看再簽
+                const d = this.detail
+                if (d && d.type === 'quotation' && d.id === item.quoteNo) await this.loadDetail(item)   // 詳情開著：重載這一筆
+                await this.loadQueue()                                                         // 列表的指紋也要換新（快速核准用）
+              }
               return
             }
             const resp = await r.json()

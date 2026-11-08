@@ -31,7 +31,7 @@
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 24 | 9 | — |
 | `core:backup_job` | L1 | MOTRIX ERP 獨立備份腳本（無單位卡） | 1 | 0 | — |
 | `core:cloud_storage` | L1 | Pluggable cloud backup storage backend (2026-09-07, architecture map §6.4).（無單位卡） | 9 | 2 | — |
-| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 29 | 152 | — |
+| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 29 | 153 | — |
 | `core:heartbeat_job` | L1 | Independent heartbeat pinger: confirms local ERP is responding, then pings an（無單位卡） | 1 | 0 | — |
 | `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 12 | 0 | — |
 | `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 25 | 17 | — |
@@ -41,7 +41,7 @@
 | `helper:approval_queue` | L1 | 「待我簽核」佇列與轉簽的共用形狀（L1；M01-PLAN §3-7，2026-09-26）。（無單位卡） | 11 | 19 | — |
 | `helper:attachment_search` | L1 | 附件目錄的搜尋共用件（`attachments.catalog` 契約 v1 的 `search`／`count`；附件目錄 P3， | 10 | 9 | `tests/test_filehub_search_2026_09_30.py` |
 | `helper:attachment_slots` | L1 | 附件插槽定義（BP-4 S2；kind `attachment_slot`，key＝`doc:<單據類型>`；設計 BP4-STORAGE-NOTIFY-DESIGN §3）。 | 16 | 4 | `backend/tests/test_attachment_slots_2026_10_14.py` |
-| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 13 | 91 | — |
+| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 14 | 92 | — |
 | `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 28 | 126 | — |
 | `helper:branding` | L1 | 品牌圖檔（主 LOGO／深色底 LOGO／favicon）：上傳驗證、存放、讀取時回預設。 | 16 | 2 | `tests/test_branding_2026_09_27.py` |
 | `helper:build_info` | L1 | 這個**行程**載入的是哪一份程式碼（`BR1`）。（無單位卡） | 3 | 2 | — |
@@ -119,7 +119,7 @@
 | `helper:rule_grammar` | L1 | 規則文法與驗證器（BP-2 R0；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §4）。 | 9 | 4 | `backend/tests/test_rule_engine_2026_10_14.py` |
 | `helper:rule_sets` | L1 | 規則集定義種類 `rule_set`（BP-2 R1；設計 docs/platform/plans/BP2-RULES-MARK-DESIGN-T62.md §3）。 | 9 | 3 | `backend/tests/test_rule_catalog_2026_10_14.py` |
 | `helper:safe_text` | L1 | 使用者可編輯的短文字（樣板名稱、階段名稱…）共用的安全檢查（S-ST1 起；通知用語編輯器有一份同規則的副本，之後併入這裡）。 | 4 | 1 | `tests/platform/test_stage_templates_t62.py` |
-| `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 52 | — |
+| `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 53 | — |
 | `helper:settings_groups` | L1 | 設定群組登錄（L1；第 54 班 Train A）。**預設值＝上線前的程式常數**（部署零行為變更；`settings_deploy_baseline.json` 凍結）。 | 1 | 14 | `backend/tests/platform/test_settings_registry_t54.py` |
 | `helper:settings_groups_legal_reminder` | L1 | T68 設定群組：法規參數「跨年提醒」起算日（legal_params_reminder）。 | 0 | 1 | `backend/tests/test_legal_params_reminder_t68.py` |
 | `helper:settings_groups_list_view` | L1 | T65 C1 設定群組：清單檢視的個人偏好（list_view）。**預設全關＝畫面與請求和今天逐位元相同。** | 1 | 1 | `backend/tests/platform/test_list_view_c1_t65.py` |
@@ -130,8 +130,8 @@
 | `helper:settings_groups_q0` | L1 | T63 Q0 設定群組：報價單輸出（quote_output）與報價單個資（quote_privacy）。**預設值＝上線前的行為**（部署零行為變更）。 | 2 | 1 | `backend/tests/platform/test_q0_settings_t63.py` |
 | `helper:settings_groups_recycle_bin` | L1 | T69 設定群組：刪除暫存區保留天數（recycle_bin.retention_days）。 | 0 | 1 | `backend/modules/recyclebin/tests/test_recyclebin_retention_t69.py` |
 | `helper:settings_groups_tender_closing` | L1 | T70 設定群組：地圖上標案「即將截止」標記的天數（tender_closing.closing_soon_days）。 | 0 | 1 | `backend/tests/test_closing_soon_days_t70.py` |
-| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 38 | 48 | `backend/tests/platform/test_settings_registry_t54.py` |
-| `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 4 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
+| `helper:settings_registry` | L1 | 設定中心登錄與讀取（L1；第 54 班 Train A／S0）。每個「可調整的數字／開關」在程式裡登錄一次，值存在 `setting_group` 定義（版本、還原、差異共用 L0）。 | 39 | 49 | `backend/tests/platform/test_settings_registry_t54.py` |
+| `helper:settings_strict` | L1 | 設定值的**嚴格**讀取（安全把關專用；BP-2／T62）。 | 1 | 5 | `backend/tests/test_t62_preview_gate_optin_2026_10_14.py`、`backend/tests/test_quote_approval_margin_2026_10_14.py` |
 | `helper:stage_templates` | L1 | 案件執行階段樣板（S-ST1；設計 docs/platform/plans/CASE-STAGE-TEMPLATE-INVESTIGATION-T62.md）：宣告式的階段清單（種類鍵、名稱、起迄天數、建議比例、前置階段）。 | 15 | 4 | `backend/tests/platform/test_stage_templates_t62.py` |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 23 | 10 | — |
 | `helper:status_display` | L1 | 狀態顯示名稱與顏色（S-X2）：一張受治理的表，報價／案件／出納共用。**只改『看到的字與色』，狀態的鍵（資料庫值）永遠不變。** | 18 | 3 | `backend/tests/test_status_display_2026_10_14.py` |
