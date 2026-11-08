@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+## 1.154（next，未取號）— 2026-11-08（T79；option_list 重新啟用已停用選項改需核准）
+- **行為變更（使用者 2026-11-08 裁示）**：治理層 `_cmp_option_list`（`routers/def_pipeline.py`）把「重新啟用已停用的選項」從中性改判為放寬，需第二位最高管理者核准＋確認期間（原先判為中性是產品設計缺口，hichan-8 審A車時發現）；停用本身維持收緊、立即生效不變；第一次發布（沒有舊版）出現的選項沒有「已停用」歷史，不算重新啟用。**上線備註**：既有正式機升級後，有待核准的 option_list 版本時，同一清單不能再直接發布，連緊急停用都要先請審核人退回待核准版本（管線既有行為，非這次新增）。
+- 測試：`backend/tests/platform/test_option_lists_t62.py`；`backend/tests/platform/test_gov_contract_2026_11_08.py` 補合法 loose 種子（`seeds_2026_11_08.json`），`KNOWN_P3_NOT_APPLICABLE` 清空（option_list 現適用 P3）。
+- 已知衍生（無害，記 backlog）：角色層首發的種子補齊後，P6 掃到 option_list 角色層首發會直接生效沒人擋（執行期只讀 company 層，無實際效果）——`KNOWN_LATENT_ROLE_FIRST_PUBLISH` 從 3 個 kind 變 4 個。
+
 ## 1.153 — 2026-11-08（T78；P8 自訂模組引擎總開關 builder_custom_modules.enabled，預設關）
 - 新增（行為：預設關＝不能再建立新的自訂模組）：設定群組 `builder_custom_modules`（`enabled`，預設 0）。關著時，**還沒有已發布版本**的 `custom_module` key 不能存草稿、發布、還原、核可送審版本（403；讀不到開關 503，往嚴格方向收）；已發布模組的既有單據、查詢、輸出與它自己的草稿／發布完全不受影響（關閉不是下架）。新 helper `helpers/custom_module_switch.py`（`creation_block`），閘口在 `routers/definitions.py`（存草稿／發布／還原）與 `routers/custom_records.py`（核可送審定義）；模組建構器頁關著時隱藏建立入口。**上線備註**：既有正式機升級後預設是關——要繼續建立新模組，最高管理者須先到設定中心開啟「自訂模組引擎」；已發布的模組不受影響。
 - 測試：`tests/test_custom_module_engine_switch_2026_11_08.py`、`tests/test_e2e_custom_module_engine_switch_2026_11_08.py`；`conftest.py` 讓測試環境讀到的預設值是 1（只換 `settings_registry._defaults`，不動登錄值，凍結基準仍是 0），約 80 個既有自訂模組測試免逐題設定；要驗正式預設的題目標 `@pytest.mark.custom_switch_default`。
