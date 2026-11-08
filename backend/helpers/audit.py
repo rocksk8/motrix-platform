@@ -228,6 +228,7 @@ _NOTIF_SOURCE_CHECK = {
     'daily_task':                "SELECT 1 FROM daily_tasks WHERE id=? AND is_deleted=0",
     'project_deadline':          "SELECT 1 FROM projects WHERE code=?",
     'dev_case_stale':            "SELECT 1 FROM dev_cases WHERE id=? AND is_deleted=0",
+    'dev_case_reply_overdue':    "SELECT 1 FROM dev_cases WHERE id=? AND is_deleted=0",
 }
 
 

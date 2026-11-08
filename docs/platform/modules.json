@@ -487,7 +487,8 @@
    ],
    "tables": [
     "dev_cases",
-    "dev_logs"
+    "dev_logs",
+    "dev_case_progress"
    ],
    "api_prefixes": [
     "/api/dev-cases",

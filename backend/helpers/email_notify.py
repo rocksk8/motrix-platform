@@ -1545,6 +1545,25 @@ def notify_dev_case_assigned(case_id: int, case_name: str, reply_deadline,
     _async_send(to, _mt.subject("dev_case_assigned", f"業務開發案件指派通知：{case_name}"), html)
 
 
+def notify_dev_case_reply_overdue(case_id: int, case_name: str, reply_deadline: str,
+                                  days_overdue: int, assignee_display: str, usernames: list) -> None:
+    """業務開發案件回覆期限已過、被指派人自指派後沒有任何進度回報 → 通知被指派人與指派人（每案每期限只寄一次，由呼叫端的 guard key 保證）"""
+    to = _lookup_emails(usernames, "dev_case_reply_overdue")
+    if not to:
+        logger.warning("notify_dev_case_reply_overdue: 無有效收件人（case_id=%d）", case_id)
+        return
+    crm_page = f"{_base_url()}/pages/dev-crm.html"
+    html = _build_html("dev_case_reply_overdue",
+        "業務開發案件回覆期限已過", f"逾期 {days_overdue} 天未回報", "#DC2626",
+        [("案件名稱", case_name), ("被指派人", assignee_display or "（未知）"),
+         ("回覆期限", reply_deadline), ("逾期天數", f"{days_overdue} 天")],
+        "", crm_page,
+        intro=f"案件「{case_name}」的回覆期限（{reply_deadline}）已過，被指派人尚未回報進度。請被指派人儘快回報；指派人請確認是否需要改期或重新指派。",
+        button_text="前往業務開發",
+    )
+    _async_send(to, _mt.subject("dev_case_reply_overdue", f"業務開發案件回覆期限已過：{case_name}"), html)
+
+
 def notify_daily_task_edited(
     task_id: int,
     title: str,

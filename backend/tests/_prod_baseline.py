@@ -50,6 +50,7 @@
 📌 2026-10-17 13:46：正式機已更新到 d2b6e245（第七十班：補登歷史案件 L2〔操作畫面、預覽端點、24 小時自動關閉、提醒與逾期靜音；旗標仍預設關閉，已知缺陷 D1 修好前不得開啟〕、附近旅宿資料過舊天數設定、地圖標案即將截止天數設定、供應商四項權限〔預設等價〕、建立報價單寫鎖衛生；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261017-t70-apply.md；套件 20261017_091233_d2b6e245_full；core 1.146→1.147、arap 1.0.59、case 1.0.204、lodging 1.2.10、supply 1.0.34，schema 維持 118；manifest 595→599 筆）⇒ 基準改 d2b6e245。
 📌 2026-10-17 17:35：正式機已更新到 d81f3200（第七十一班：補登歷史案件畫面修正〔標題顯示將取得的單號、取消勾選還原單號、複製為新單不帶補登註記、補登單可正常改階段〕、報價單清單可作廢補登單〔需填原因、僅最高管理者〕、自動關閉改為到期真的關掉開關並留稽核；補登旗標仍預設關閉；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261017-t71-apply.md；套件 20261017_172123_d81f3200_full；core 1.147 不變、case 1.0.204→1.0.205，schema 維持 118；manifest 599→600 筆）⇒ 基準改 d81f3200。
 📌 2026-10-17 21:47：正式機已更新到 cc65003c（第七十二班：系統中心分類清單固定在左側、與系統子頁同位置；驗證工具 final_verify 讀得懂新回報格式；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261017-t72-apply.md；套件 20261017_213316_cc65003c_full；core 1.147→1.148，schema 維持 118；manifest 600→601 筆）⇒ 基準改 cc65003c。
+📌 2026-11-04 10:14：正式機已更新到 514c006b（第七十三班 T73：案件指派端點 PATCH /dev-cases/{id}/assign 與進度 PATCH /dev-cases/{id}/progress，dev_cases 新三欄 assigned_to／reply_deadline／progress_report（既有 125 筆新欄位全空）、指派通知 dev_case_assigned 與對應通知偏好事件（分組「案件與到期提醒」，opt-out 預設開）；內容與驗收項見步驟檔 docs/platform/prod-tasks/20261104-t73-apply.md；套件 20261104_061037_514c006b_full；core 1.148→1.149、crm 1.0.17→1.0.19、analytics 1.0.44→1.0.45（其餘 13 模組不變），schema 維持 118（crm module_schema_versions 1→2）；manifest 601→603 筆；正式機 Claude 依主持「可以套用」執行 apply_update，37 秒成功、無回滾，步驟 3 十六項全過、未登入 assign/progress 401）⇒ 基準改 514c006b。
 """
 import json
 import subprocess
@@ -58,7 +59,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "cc65003c"
+BASELINE = "514c006b"
 
 
 def baseline_manifest():

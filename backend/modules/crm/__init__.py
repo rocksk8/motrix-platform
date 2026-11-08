@@ -8,11 +8,12 @@ from modules.crm import api, attachments
 
 _m0001 = importlib.import_module("modules.crm.migrations.0001_dev_cases_referrer")
 _m0002 = importlib.import_module("modules.crm.migrations.0002_dev_case_assignment")
+_m0003 = importlib.import_module("modules.crm.migrations.0003_dev_case_progress")
 
 MODULE = ModuleSpec(
     key="crm",
     routers=[api.router],
-    migrations=[(1, _m0001.up), (2, _m0002.up)],
+    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up)],
     # 走模組屬性、晚綁定（直接放函式物件會凍結成副本，測試 patch 不到——tender_radar 的註解）
     schedulers=[lambda: api.schedule_dev_case_stale_check()],
     providers={
