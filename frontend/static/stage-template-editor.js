@@ -169,7 +169,14 @@
   }
   function doRestore(v) {
     st.busy = true; st.msg = '還原中…'; render()
-    return api('POST', '/api/definitions/case_stage_template/' + encodeURIComponent(st.key) + '/restore/' + v + '?scope=company', {}).then(function (r) { return afterWrite(r, '已還原到第 ' + v + ' 版。') })
+    // T79：伺服端現在對這個 kind 的還原也要求『看過那一版的影響預覽』（旗標開時）：先取該版的預覽雜湊（同時記一筆『看過』），失敗就不帶（旗標關／沒有治理 ⇒ 與舊行為相同）
+    var enc = encodeURIComponent(st.key)
+    return api('GET', '/api/def-governance/case_stage_template/' + enc + '/impact?scope=company&version=' + v).then(function (im) { return (im && im.previewHash) || '' }, function () { return '' })
+      .then(function (h) {
+        var rb = {}
+        if (h) rb.preview_hash = h
+        return api('POST', '/api/definitions/case_stage_template/' + enc + '/restore/' + v + '?scope=company', rb)
+      }).then(function (r) { return afterWrite(r, '已還原到第 ' + v + ' 版。') })
       .catch(function (e) { st.busy = false; st.state = 'error'; st.msg = '還原失敗：' + e.message; st.msgBad = true; render() })
   }
   function move(i, dir) { var j = i + dir; if (j < 0 || j >= st.stages.length) return; var t = st.stages[i]; st.stages[i] = st.stages[j]; st.stages[j] = t; changed() }

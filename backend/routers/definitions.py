@@ -417,9 +417,9 @@ def validate_definition(kind: str, key: str, payload: dict = Body(...), authoriz
 
 
 # ── T60 S1：伺服端強制「發布要先看過同一份草稿的預覽」（D4：沒有後門）；旗標 builder_governance.enabled（與 def_governance.enabled 同一個設定） ──
-#: 已經會在發布時帶 `preview_hash` 的編輯器所對應的 kind（旗標開啟時才強制）。
-#: 排版器（layout）與選單建構器（發布走 layout）尚未送雜湊 ⇒ 還不在名單；它們接上之後再加進來（見 T60 計畫 S1）。
-_PREVIEW_ENFORCED_KINDS = ("expense_type", "remit_kinds", "custom_module", "export_template", "option_list", "notify_action")
+#: 已經會在發布時帶 `preview_hash` 的編輯器所對應的 kind（旗標開啟時才強制）。排版器（layout）與選單建構器（發布走 layout）尚未送雜湊 ⇒ 還不在名單（見 T60 計畫 S1）。
+#: T79：後五個（attachment_slot…list_pref_policy）T61–T66 加進 ACTIVE_KINDS 時漏了這份名單（編輯器本來就送 preview_hash，只是伺服端沒強制）；list_pref_policy 目前沒有專屬編輯器，之後做要帶 preview_hash。契約題 P8／P9 盯著。
+_PREVIEW_ENFORCED_KINDS = ("expense_type", "remit_kinds", "custom_module", "export_template", "option_list", "notify_action", "attachment_slot", "case_stage_template", "notify_template", "status_display", "list_pref_policy")
 
 
 def _preview_gate(conn, kind, key, scope, user, preview_hash, expect=None):

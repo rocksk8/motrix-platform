@@ -261,6 +261,61 @@ def test_p3_restore_parity(world, seed):
     f()
 
 
+# P8／P9：預覽名單不是裝飾——名單內的 kind，發布／還原不帶『看過的』預覽雜湊 ⇒ 409 preview_required（旗標開）；帶了才放行。
+# 『名單內』以行為判斷（走 HTTP 的結果），名單本身是否齊全由 S1 守。選用強制名單（_OPT_IN_PREVIEW_KINDS）預設不強制，兩個方向都釘住。
+def _enforced_kinds():
+    from routers import definitions as R
+    return set(R._PREVIEW_ENFORCED_KINDS)
+
+
+@_P("base")
+def test_p8_publish_requires_seen_preview_when_enforced(world, seed):
+    def f():
+        _prep(world, seed)
+        from routers import definitions as R
+        kind, key = seed["kind"], seed["key"]
+        d = _draft(world, kind, key, "company", seed["base"])
+        bare = world["c"].post(_url(kind, key) + "/publish?scope=company", json={"note": "k", "base_etag": d.get("etag")}, headers=world["a"])
+        if kind in _enforced_kinds():
+            assert bare.status_code == 409 and (bare.json().get("code") == "preview_required"), (
+                "名單內的 kind 不帶預覽雜湊也能發布（伺服端沒強制）", kind, bare.status_code, bare.text[:200])
+            stale = world["c"].post(_url(kind, key) + "/publish?scope=company", json={"note": "k", "preview_hash": "not-the-draft-stamp"}, headers=world["a"])
+            assert stale.status_code == 409 and stale.json().get("code") == "preview_stale", (kind, stale.status_code, stale.text[:200])
+            ok = _publish(world, kind, key, "company", seed["base"])                       # 帶『看過』的雜湊 ⇒ 放行
+            assert ok.status_code == 200, ("看過預覽後應能發布", kind, ok.status_code, ok.text[:300])
+        else:
+            assert kind in R._OPT_IN_PREVIEW_KINDS, ("既不在強制名單、也不在選用名單（S1 應該已經紅）", kind)
+            if kind == "rule_set":      # 規則功能開著（本檔把 builder_rules.enabled 打開）就一律要先預覽——見 definitions._preview_enforced
+                assert bare.status_code == 409 and bare.json().get("code") == "preview_required", (kind, bare.status_code, bare.text[:200])
+            else:
+                assert bare.status_code == 200, ("選用強制預設不強制：不帶雜湊應照常發布", kind, bare.status_code, bare.text[:200])
+    f()
+
+
+@_P("base")
+def test_p9_restore_requires_seen_preview_when_enforced(world, seed):
+    def f():
+        _prep(world, seed)
+        kind, key = seed["kind"], seed["key"]
+        if kind not in _enforced_kinds():
+            pytest.skip("%s 不在強制名單（選用強制，預設不強制）" % kind)
+        alt = next((seed[n] for n in ("tight", "neutral", "loose") if seed.get(n)), None)      # 任何一份與 base 不同的內容就夠（要有第二個版本可還原）
+        assert alt is not None, "種子沒有任何與 base 不同的內容"
+        _, live0 = _establish(world, seed)
+        r = _publish(world, kind, key, "company", alt)
+        if r.status_code != 200 or _is_pending(r):
+            if _is_pending(r):
+                _approve_and_activate(world, kind, key, "company")
+            else:
+                pytest.fail(("前置：第二版發布失敗", r.status_code, r.text[:200]))
+        bare = world["c"].post(_url(kind, key) + "/restore/%d?scope=company" % live0["version"], json={"note": "k"}, headers=world["a"])
+        assert bare.status_code == 409 and bare.json().get("code") == "preview_required", (
+            "名單內的 kind 不帶預覽雜湊也能還原", kind, bare.status_code, bare.text[:200])
+        rr = _restore(world, kind, key, "company", live0["version"])                       # 帶『看過這一版』的雜湊 ⇒ 不再被預覽把關擋
+        assert rr.status_code == 200, ("看過預覽後還原應被受理（生效或待核准）", kind, rr.status_code, rr.text[:300])
+    f()
+
+
 @_P("loose")
 def test_p5_impact_matches_diff(world, seed):
     def f():
@@ -332,8 +387,8 @@ def test_p7_approval_path(world, seed):
 
 
 # ── 靜態／結構性質（不走 HTTP）─────────────────────────────────────────────
-# 目前不在任何預覽名單的 ACTIVE kind（已知缺口，v2 backlog）：釘死；新 kind 沒進名單＝紅（要決定進哪份），補進名單＝紅（表要縮小）。
-KNOWN_NOT_IN_ANY_PREVIEW_LIST = {"attachment_slot", "case_stage_template", "list_pref_policy", "notify_template", "status_display"}
+# 每個 ACTIVE kind 都必須在兩份預覽名單之一（T79 補齊：原本 attachment_slot／case_stage_template／list_pref_policy／notify_template／status_display
+# 五個 kind 不在任何名單，繞過編輯器直接打 API 可以不看預覽就發布）。新 kind 沒進名單＝紅（要決定進哪份）。沒有「已知缺口」表了。
 
 
 def test_s1_kind_lists_are_consistent(world):
@@ -345,8 +400,8 @@ def test_s1_kind_lists_are_consistent(world):
     if act != cmp_:
         problems.append(("ACTIVE != COMPARATORS", sorted(act ^ cmp_)))
     miss = {k for k in act if k not in pe and k not in oi}
-    if miss != KNOWN_NOT_IN_ANY_PREVIEW_LIST:
-        problems.append(("不在任何預覽名單的 ACTIVE kind 與 KNOWN_NOT_IN_ANY_PREVIEW_LIST 不符", sorted(miss ^ KNOWN_NOT_IN_ANY_PREVIEW_LIST)))
+    if miss:
+        problems.append(("這些 ACTIVE kind 不在任何預覽名單（發布不需要先看預覽）：加進 definitions._PREVIEW_ENFORCED_KINDS 或 _OPT_IN_PREVIEW_KINDS", sorted(miss)))
     if not ra <= act:
         problems.append(("ROLE_AWARE 不在 ACTIVE", sorted(ra - act)))
     if ra != set(RUNTIME_ROLE_READERS):
