@@ -1143,6 +1143,7 @@
    "sidebar_ops_of_all": "def(conn, role, mod_items)"
   },
   "helper:module_assets": {
+   "ASSETS_MIN_CORE": "const",
    "JsAssetLookup": "class",
    "JsAssetLookup.lookup_path": "def(self, path)",
    "asset_path": "def(name)",

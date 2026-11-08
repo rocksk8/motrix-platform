@@ -78,7 +78,8 @@ def unit_name(path):
     if len(parts) == 3 and parts[0] == BACKEND and parts[1] in ("routers", "helpers") \
             and name.endswith(".py") and name != "__init__.py":
         return ("router:" if parts[1] == "routers" else "helper:") + name[:-3]
-    if len(parts) >= 5 and parts[:2] == [BACKEND, "modules"] and parts[3] == "js" and name.endswith(".js")             and "vendor" not in parts:
+    if len(parts) >= 5 and parts[:2] == [BACKEND, "modules"] and parts[3] == "js" and name.endswith(".js") \
+            and "vendor" not in parts:
         return "js:js/" + "/".join(parts[4:])                               # 模組自有 JS：網址仍是 /js/…，單位名同 dep_scan
     if len(parts) >= 4 and parts[:2] == [BACKEND, "modules"] and name.endswith(".py"):
         return "mod:%s/%s" % (parts[2], "/".join(parts[3:])[:-3])        # mod:<key>/<file>

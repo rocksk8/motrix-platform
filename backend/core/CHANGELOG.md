@@ -1,10 +1,10 @@
 # L0／L1 底層 更新紀錄
 
 ## (next) — 2026-11-08（feat/module-assets-poc；模組自有前端 JS：`module.json assets`＋`/js` 掛載）
-- L1（新增，只增；快照以 `core_bump.py --pending` 重產，**未取號**）：新公開介面 `helpers.module_assets`（`JsAssetLookup`、`asset_path`、`served_assets`、`undeclared_files`）；`core.loader.declared_assets(manifest)`（`module.json` 新選填欄位 `assets: [{"path": "js/<檔名>.js"}]`，形狀不對 ⇒ 該模組不載入，import 之前驗）。
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產，**未取號**）：新公開介面 `helpers.module_assets`（`ASSETS_MIN_CORE`、`JsAssetLookup`、`asset_path`、`served_assets`、`undeclared_files`）；`core.loader.declared_assets(manifest)`（`module.json` 新選填欄位 `assets: [{"path": "js/<檔名>.js"}]`，形狀不對 ⇒ 該模組不載入，import 之前驗）。
 - 行為：`main.py` 在 `/` 的 StaticFiles 之前掛 `/js`（`JsAssetLookup`，directory＝`frontend/js`）：已載入模組宣告、檔案在 `modules/<key>/js/` 的 JS 由模組提供（網址不變 `/js/<檔名>.js`，優先於 `frontend/js` 同名舊檔）；其餘照舊。模組停用／未授權／失敗 ⇒ 不提供。宣告了卻缺檔 ⇒ 記 ERROR、404、模組照常載入；擋在出貨前（`tools/platform/module_update.py` 的 `asset_problems`，`check`／`ship` 都跑）。
 - 工具：`dep_scan` 掃 `modules/<key>/js/` 的 JS（單位 id 照網址不變 `js:js/<檔名>`，帶 `module_key`；與 `frontend/js` 同名 ⇒ 報錯）；測試列舉前端 JS 一律走 `tests/_frontend_sources.py`（`test_no_direct_js_enumeration` 擋新的直接列舉）。
-- 首位使用者：`modules/subcontract`（`remit-kinds-settings.js`）。**取號後要做：`subcontract/module.json` 的 `core` 下限改成本版號**（舊核心不認得 `/js` 掛載，會讓那支 JS 404）。
+- 首位使用者：`modules/subcontract`（`remit-kinds-settings.js`）。**取號後要做：`helpers/module_assets.ASSETS_MIN_CORE`（暫用 1.154）與 `subcontract/module.json` 的 `core` 下限一起改成本版號**（守門 `test_modules_with_assets_require_a_core_that_has_the_mount` 現為 xfail(strict)，改完會轉通過，要把 xfail 標記拿掉）（舊核心不認得 `/js` 掛載，會讓那支 JS 404）。
 - 測試：`tests/platform/test_module_assets_contract_2026_11_08.py`、`tests/platform/test_no_direct_js_enumeration_2026_11_08.py`、`tools/platform/dep_scan.py --check`（合成樹正對照）。
 
 ## 1.153 — 2026-11-08（T78；P8 自訂模組引擎總開關 builder_custom_modules.enabled，預設關）

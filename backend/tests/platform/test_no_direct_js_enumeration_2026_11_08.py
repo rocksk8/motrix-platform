@@ -18,6 +18,9 @@ _PATTERNS = (
     re.compile(r"""\b(?:r?glob)\(\s*[^)]*\*\.js["']"""),
     re.compile(r"""["'](?:js|static)["']\s*\)\s*\.(?:r?glob|iterdir)\("""),
     re.compile(r"""\bSTATIC_GLOB\b"""),
+    re.compile(r"""\bos\.walk\(\s*[^)]*(?:FRONTEND|frontend)"""),                 # os.walk(FRONTEND…)
+    re.compile(r"""\bos\.listdir\(\s*[^)]*["'](?:js|static)["']"""),               # os.listdir(…/"js")
+    re.compile(r"""\bFRONTEND\s*\.\s*iterdir\("""),                                  # FRONTEND.iterdir()
 )
 
 #: 本檔自己與共用入口不算
@@ -64,6 +67,9 @@ def test_scanner_positive_control():
         'for p in FRONTEND.rglob("*.js"):',
         'x = list((FRONTEND / "static").iterdir())',
         'g = glob.glob(STATIC_GLOB)',
+        'for root, d, fs in os.walk(FRONTEND):',
+        'names = os.listdir(os.path.join(FRONTEND, "js"))',
+        'top = list(FRONTEND.iterdir())',
     ]
     good = [
         'files = FS.all_js()',

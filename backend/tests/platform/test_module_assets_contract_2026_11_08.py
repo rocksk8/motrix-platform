@@ -370,3 +370,67 @@ def test_a_guard_that_lists_js_through_the_shared_enumeration_is_still_picked_wh
     got = TM.scan_test(t, R)
     assert "dir:frontend/js/" in got["units"], got
     assert TM._MODULE_JS_RE.match("backend/modules/zz/js/a.js") and not TM._MODULE_JS_RE.match("backend/modules/zz/js/sub/a.js")
+
+
+# ── ⑤ 防呆：宣告了 assets 的模組，core 下限必須已有 /js 掛載（取號前先擋住「忘了改下限」）──────────────
+
+def _core_lower_bound(spec):
+    """'>=1.2,<2.0' ⇒ (1, 2)；沒有 >= 下限 ⇒ (0,)。看不懂 ⇒ ValueError。"""
+    lows = []
+    for clause in str(spec).split(","):
+        clause = clause.strip()
+        m = re.fullmatch(r"(>=|==)\s*(\d+(?:\.\d+)*)", clause)
+        if m:
+            lows.append(tuple(int(x) for x in m.group(2).split(".")))
+        elif not re.fullmatch(r"(<|<=|>|!=)\s*\d+(?:\.\d+)*", clause):
+            raise ValueError(clause)
+    return max(lows) if lows else (0,)
+
+
+def test_core_lower_bound_parser():
+    assert _core_lower_bound(">=1.0,<2.0") == (1, 0)
+    assert _core_lower_bound(">= 1.154 , < 2.0") == (1, 154)
+    assert _core_lower_bound("<2.0") == (0,)
+    assert _core_lower_bound("==1.9") == (1, 9)
+    with pytest.raises(ValueError):
+        _core_lower_bound("~1.0")
+
+
+@pytest.mark.xfail(strict=True, reason="待列車取號：取到版號後，把 helpers.module_assets.ASSETS_MIN_CORE 與 subcontract/module.json 的 core 下限"
+                                       "一起改成該版號；改完這題會轉為通過，strict 會逼人拿掉這個標記")
+def test_modules_with_assets_require_a_core_that_has_the_mount():
+    need = tuple(int(x) for x in module_assets.ASSETS_MIN_CORE.split("."))
+    bad = [f"{k}: core={mf.get('core')!r} 下限低於 {module_assets.ASSETS_MIN_CORE}（舊核心沒有 /js 掛載，該模組的 JS 會 404）"
+           for k, mf in _module_manifests().items() if loader.declared_assets(mf) and _core_lower_bound(mf.get("core", "")) < need]
+    assert not bad, "\n".join(bad)
+
+
+def test_the_core_floor_check_would_notice_a_module_without_a_floor():
+    """正對照（不 xfail）：同一個判斷式對合成清單要抓得到缺下限的模組、放過有下限的。"""
+    need = (1, 154)
+    mods = {"ok": {"core": ">=1.154,<2.0", "assets": [{"path": "js/a.js"}]}, "low": {"core": ">=1.0,<2.0", "assets": [{"path": "js/a.js"}]},
+            "none": {"core": "<2.0", "assets": [{"path": "js/a.js"}]}, "plain": {"core": ">=1.0,<2.0"}}
+    bad = sorted(k for k, mf in mods.items() if loader.declared_assets(mf) and _core_lower_bound(mf["core"]) < need)
+    assert bad == ["low", "none"]
+
+
+def test_a_js_directory_that_is_itself_a_link_outside_the_module_is_not_served(world, tmp_path, monkeypatch):
+    """`modules/<key>/js` 本身是指到模組外的連結（junction 不需管理員）⇒ 裡面的檔不提供。以 monkeypatch 模擬 realpath 的結果。"""
+    import os
+    client, add, _ = world
+    add("zz_a", [{"path": "js/a.js"}], {"a.js": JS_BODY})
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    _w(elsewhere / "a.js", JS_BODY)
+    real = os.path.realpath
+    jsdir = str(tmp_path / "modules" / "zz_a" / "js")
+
+    def fake(p, *a, **k):
+        p = os.path.normpath(str(p))            # 呼叫端會混用 / 與 \
+        if p == jsdir:
+            return str(elsewhere)
+        if p.startswith(jsdir + os.sep):
+            return str(elsewhere / p[len(jsdir) + 1:])
+        return real(p, *a, **k)
+    monkeypatch.setattr(module_assets.os.path, "realpath", fake)
+    assert client.get("/js/a.js").status_code == 404
