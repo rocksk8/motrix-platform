@@ -252,13 +252,15 @@ def test_unknown_kinds_can_never_be_opted_in():
 @pytest.mark.skipif(not NODE, reason="需要 node")
 def test_menu_editor_sends_the_hash_only_when_the_preview_gives_one():
     src = (ROOT / "frontend" / "static" / "menu-editor.js").read_text(encoding="utf-8")
-    fn = re.search(r"function previewSeen\(m\) \{.*?\n  \}\n", src, re.S).group(0)
-    assert "preview_hash = pvh" in src and "previewSeen(m).then" in src
+    fn = re.search(r"function previewSeen\(m, scope\) \{.*?\n  \}\n", src, re.S).group(0)     # T78：多一個 scope 參數（角色層的影響預覽帶 role:<角色>）；不給＝company
+    assert "preview_hash = pvh" in src and "previewSeen(m, sc).then" in src
     harness = "var calls=[];var mode;function api(m,u){calls.push(u);return mode==='ok'?Promise.resolve({previewHash:'h1'}):Promise.reject(new Error('404'))}\n" + fn + """
 (async()=>{var out=[];mode='ok';out.push(await previewSeen('suppliers'));mode='no';out.push(await previewSeen('suppliers'));
-console.log(JSON.stringify([out,calls[0]]))})()"""
+mode='ok';await previewSeen('suppliers','role:admin');
+console.log(JSON.stringify([out,calls[0],calls[2]]))})()"""
     out = subprocess.run([NODE, "-e", harness], capture_output=True, text=True, encoding="utf-8", timeout=30)
-    assert json.loads(out.stdout.strip()) == [["h1", None], "/api/def-governance/layout/module:suppliers/impact?scope=company"]   # 前端腳本的輸入就是 suppliers（與後端夾具無關）
+    assert json.loads(out.stdout.strip()) == [["h1", None], "/api/def-governance/layout/module:suppliers/impact?scope=company",
+                                              "/api/def-governance/layout/module:suppliers/impact?scope=role%3Aadmin"]   # 前端腳本的輸入就是 suppliers（與後端夾具無關）
 
 
 def test_every_restore_caller_that_has_governance_sends_the_version_preview():

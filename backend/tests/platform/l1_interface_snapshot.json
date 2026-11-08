@@ -1,5 +1,5 @@
 {
- "core_version": "1.152",
+ "core_version": "1.153",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -549,6 +549,11 @@
    "delete_module": "def(conn, key, with_records=…)",
    "record_count": "def(conn, key)"
   },
+  "helper:custom_module_switch": {
+   "GROUP": "const",
+   "MSG": "const",
+   "creation_block": "def(conn, kind, key, scope=…)"
+  },
   "helper:custom_modules": {
    "APPROVER_SOURCES": "const",
    "CustomModuleError": "class",
@@ -1069,8 +1074,11 @@
    "OFF_REASON": "const",
    "compare": "def(old, new)",
    "definition_problems": "def(key, body)",
+   "effective_after": "def(conn, key, scope, new_body)",
    "enabled": "def(conn=…)",
    "ensure_kind": "def()",
+   "inherited_body": "def(conn, key, scope)",
+   "merge_policy": "def(own, glob)",
    "policy_for": "def(conn, list_id, role=…)"
   },
   "helper:list_view_prefs": {

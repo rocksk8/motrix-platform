@@ -433,6 +433,10 @@ def approve_custom_definition(key: str, version: int, payload: dict = Body(defau
     u = _require_user(authorization)
     conn = get_db()
     try:
+        from helpers import custom_module_switch as _sw                   # P8 總開關：關著時，從未發布過的模組不能靠核可送審版本而「建立」
+        _blocked = _sw.creation_block(conn, "custom_module", key)
+        if _blocked:
+            raise HTTPException(_blocked[0], _blocked[1])
         out = DEFR.decide(conn, key, version, u, True, (payload or {}).get("note", ""))
     except DEFR.ReviewError as e:
         return _review_err(e)

@@ -24,6 +24,8 @@ from helpers import (
     notify_module_activity,
     _get_setting, _set_setting, notify_approval_reminder, _workdays_elapsed,
 )
+from helpers import email_notify as _en                    # noqa: E402
+from helpers.case_access import case_owner_username        # noqa: E402
 from helpers.email_notify import (            # noqa: E402
     SEND_SENT as _SEND_SENT,
     SEND_PERMANENT_FAIL as _SEND_PERMANENT_FAIL,
@@ -240,15 +242,28 @@ def _check_warranty_expiry() -> None:
     try:
         conn = get_db()
         rows = conn.execute("""
-            SELECT quote_no, customer_name, sales_person,
+            SELECT quote_no, customer_name,
                    json_extract(data_json, '$.caseRecord') AS cr_json
             FROM quotations
             WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') = '已成案'
               AND json_extract(data_json, '$.caseRecord') IS NOT NULL
         """).fetchall()
-        conn.close()
 
+        owner_cache = {}      # quote_no → 業務帳號（走 sales_person_id 外鍵；沒有／已停用 ⇒ ""，只寄群組收件人）
+
+        def _owner(qn):
+            if qn not in owner_cache:
+                try:
+                    owner_cache[qn] = case_owner_username(conn, qn) or ""
+                except Exception as exc:
+                    _logger.warning("_check_warranty_expiry: 查案件業務帳號失敗（%s）：%s", qn, exc)
+                    owner_cache[qn] = ""
+            return owner_cache[qn]
+
+        halted = False        # 寄送暫時失敗／機器略過 ⇒ 本輪不再往下寄（逐台各等一次會把後面的每日檢查拖很久；記號沒寫，明天補）
         for row in rows:
+            if halted:
+                break
             try:
                 cr = json.loads(row["cr_json"] or "{}")
             except Exception:
@@ -269,22 +284,31 @@ def _check_warranty_expiry() -> None:
                 if _get_setting(guard_key):
                     continue  # already sent for this threshold
 
-                _set_setting(guard_key, today_str)
-                threading.Thread(
-                    target=notify_warranty_expiry,
-                    args=(
-                        dev.get("name") or sn or "未知設備",
-                        row["customer_name"] or "",
-                        row["quote_no"],
-                        days_left,
-                        expiry.isoformat(),
-                        row["sales_person"] or "",
-                    ),
-                    daemon=True,
-                ).start()
+                # 先寄成功才寫已通知記號：SMTP 暫時失敗（或這台機器沒設 SMTP）⇒ 不寫，明天的每日檢查會補寄。
+                # 收件人＝案件業務（sales_person_id 外鍵解出的帳號；舊作法拿顯示名當帳號比對，名字≠帳號就收不到）＋群組收件人。
+                out = {}
+                try:
+                    sent = _en._send_warranty_expiry(
+                        dev.get("name") or sn or "未知設備", row["customer_name"] or "", row["quote_no"],
+                        days_left, expiry.isoformat(), owner_username=_owner(row["quote_no"]), out=out)
+                except Exception as exc:
+                    _logger.warning("_check_warranty_expiry: 寄送失敗（%s／%s）：%s", row["quote_no"], sn, exc)
+                    sent, out = False, {"outcome": _en.SEND_TRANSIENT_FAIL}
+                if sent:
+                    _set_setting(guard_key, today_str)
+                elif out.get("outcome") in (_en.SEND_TRANSIENT_FAIL, _en.SEND_SKIPPED):
+                    _logger.warning("_check_warranty_expiry: 寄送%s，本輪停止後續保固信（%s／%s 起；記號未寫，下次每日檢查重試）",
+                                    out.get("outcome"), row["quote_no"], sn)
+                    halted = True
+                    break
         _logger.info("Warranty expiry check complete for %s", today_str)
     except Exception as exc:
         _logger.warning("_check_warranty_expiry failed: %s", exc)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 

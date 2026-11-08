@@ -14,8 +14,9 @@
   <link rel="stylesheet" href="../css/form-designer.css">
   <!--
     自訂模組建構器（CUSTOMIZATION-SPEC §8.1、§3.7；P8 前端）。僅超級管理員。
-    步驟：① 基本 ② 表單 ④ 流程 ⑤ 輸出 ⑥ 發布（2026-09-27 使用者第二輪：原本的 ② 欄位＋③ 版面合成 ② 表單——畫布就是表單本身，
-    欄位直接拖進區塊；步驟編號 4～6 不變）。
+    畫面結構：3 個頁籤〔作業資訊（基本資料＋輸出設定）／表單設計／流程設計〕，發布（含差異與版本還原）是右側抽屜，不在頁籤內。
+    （歷史：2026-09-27 使用者第二輪把 ② 欄位＋③ 版面合成 ② 表單——畫布就是表單本身，欄位直接拖進區塊；section 的 id `mb-step-N` 沿用當時的編號，
+    e2e 與程式用它定位，不是「步驟數」。）
     - 定義存在定義文件庫（kind＝custom_module）：每次修改自動存成草稿（PUT …/draft），發布前看差異，發布後可還原任一版。
     - 🔴 只從能力目錄（GET /api/custom-modules/catalog）挑：欄位型別、公式函式、參照對象、日期格式、資料分類、輸出積木
       與其參數規格（outputBlockSpecs／outputBlockItemSpecs ⇒ ⑤ 的參數表單）、主題、欄位格式、輸出格式、簽核人來源（④）。
@@ -75,12 +76,14 @@
 
       <template x-if="ready && !key && !tplChoice">
         <div class="mb-card" id="mb-pick">
-          <h3>開啟或建立模組</h3>
-          <div class="mb-row">
+          <h3 x-text="createOn ? '開啟或建立模組' : '開啟模組'"></h3>
+          <div class="mb-row" x-show="createOn" data-testid="mb-create-row">
             <input class="mb-in mb-in-s" id="mb-key" x-model.trim="keyInput" placeholder="模組代號（例：equipment_loan）" style="min-width:260px" @keydown.enter="openKey(keyInput)">
             <button class="btn btn-primary" id="mb-open" @click="openKey(keyInput)">開啟／建立</button>
           </div>
-          <div class="mb-hint">代號只能用小寫英文、數字與底線，英文開頭（2～40 字）；建立後不能改（它是網址與權限的一部分）。</div>
+          <div class="mb-hint" x-show="createOn">代號只能用小寫英文、數字與底線，英文開頭（2～40 字）；建立後不能改（它是網址與權限的一部分）。</div>
+          <!-- P8 總開關（builder_custom_modules.enabled，預設關）：關著時不提供「建立新模組」，既有模組仍可從下面的清單開啟與修改 -->
+          <div class="mb-hint" x-show="!createOn" data-testid="mb-create-off">目前未開放建立新的自訂模組（請最高管理者到設定中心開啟「自訂模組引擎」）。已有的模組仍可從下方清單開啟與修改。</div>
           <div class="mb-bad" x-show="keyErr" x-text="keyErr"></div>
           <!-- 缺口 #5：全部模組（含只有草稿、從未發布的），GET /api/definitions/custom_module -->
           <div style="margin-top:14px" id="mb-module-list" :data-loaded="defsLoaded ? '1' : '0'">
@@ -1151,6 +1154,7 @@
   <script src="../static/ui.js"></script>
   <script src="../static/custom-layout.js"></script>
   <script src="../static/sidebar.js"></script>
+  <script src="../static/public-flags.js"></script>
   <script src="../js/module-builder-consts.js"></script>
   <script src="../js/module-builder-core.js"></script>
   <script src="../js/module-builder-form.js"></script>

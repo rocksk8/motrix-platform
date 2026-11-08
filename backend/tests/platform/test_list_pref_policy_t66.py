@@ -62,10 +62,10 @@ def test_default_sort_column_must_be_visible_by_default():
 
 def test_unknown_list_and_global_key_rules():
     assert LP.definition_problems("no:such", {"version": 1})
-    assert LP.definition_problems("*", {"version": 1, "allowUserPrefs": False, "pageSize": {"allowed": [10, 500], "default": 10}}) == []
-    assert LP.definition_problems("*", {"version": 1, "pageSize": {"allowed": [501]}})
-    assert LP.definition_problems("*", {"version": 1, "columns": {"allowed": ["name"]}})
-    assert LP.definition_problems("*", {"version": 1, "sort": {"allowed": ["name"]}})
+    assert LP.definition_problems(LP.GLOBAL_KEY, {"version": 1, "allowUserPrefs": False, "pageSize": {"allowed": [10, 500], "default": 10}}) == []
+    assert LP.definition_problems(LP.GLOBAL_KEY, {"version": 1, "pageSize": {"allowed": [501]}})
+    assert LP.definition_problems(LP.GLOBAL_KEY, {"version": 1, "columns": {"allowed": ["name"]}})
+    assert LP.definition_problems(LP.GLOBAL_KEY, {"version": 1, "sort": {"allowed": ["name"]}})
     assert LP.definition_problems(LID, "x") and LP.definition_problems(LID, None)
 
 

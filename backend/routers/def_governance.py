@@ -57,6 +57,31 @@ def enabled(conn=None) -> bool:
         return False
 
 
+# 執行期真的會依角色讀不同層的種類（`D.resolve(..., role)` 的呼叫端）：layout（選單／版面）、list_pref_policy（`policy_for(..., role)`）。
+# 其他種類執行期只讀公司層 ⇒ 角色層發布沒有實際效果、也繞不過什麼；哪天有種類開始依角色讀取，要把它加進來（有守門測試）。
+ROLE_AWARE_KINDS = ("layout", "list_pref_policy")
+
+
+def base_of(conn, kind, key, scope):
+    """寬嚴比較與影響預覽的『現況』基準 ⇒ (定義列｜None, 基準的範圍)。
+    版面（及清單偏好政策）的角色層**第一次**發布前，這個角色實際看到的是公司層（`core.definitions.resolve`：角色 ＞ 公司，而且整份取代），所以拿公司層已發布版當基準；
+    否則『角色層沒帶公司層的 hide』會被看成『全新增』而繞過放寬核准（T78 K 審）。已有角色層 ⇒ 跟自己的上一版比；其他種類不變。"""
+    r = D.get(conn, kind, key, scope)
+    if r is None and kind == "list_pref_policy":
+        # 清單偏好政策：第一版之前使用者實際得到的是『公司層清單政策＋全域預設』的合併（policy_for），不是空的；
+        # 空基準會把『比全域預設寬的清單專屬政策』看成『改為限定範圍＝收緊』而繞過放寬核准。
+        from helpers import list_pref_policy as _LP
+        b = _LP.inherited_body(conn, key, scope)
+        if b is not None:
+            return {"body": b, "version": 0, "inherited": True}, ("company" if str(scope).startswith("role:") else _LP.GLOBAL_KEY)
+        return r, scope
+    if r is None and kind in ROLE_AWARE_KINDS and str(scope).startswith("role:"):
+        c = D.get(conn, kind, key, "company")
+        if c is not None:
+            return c, "company"
+    return r, scope
+
+
 def _check_kind(kind):
     if kind not in kinds():
         raise D.DefinitionError("治理檢視不支援這個定義種類：%r（可用：%s）" % (kind, "、".join(kinds())))
@@ -150,8 +175,9 @@ def impact(conn, kind, key, scope) -> dict:
     _check_kind(kind)
     draft = D.get(conn, kind, key, scope, 0)
     live = D.get(conn, kind, key, scope)
+    base, base_scope = base_of(conn, kind, key, scope)                 # 版面角色層首發：跟公司層比（實際效果）；其他＝自己的已發布版
     problems = D.validate(kind, key, draft["body"]) if draft else []
-    changes = D.diff((live or {}).get("body") or {}, draft["body"]) if draft else []
+    changes = D.diff((base or {}).get("body") or {}, draft["body"]) if draft else []
     others = [{"scope": r["scope"], "latestVersion": r["latestVersion"]} for r in D.list_definitions(conn, kind)
               if r["key"] == key and r["scope"] != scope and r["latestVersion"]]
     live_v = (live or {}).get("version")
@@ -162,7 +188,8 @@ def impact(conn, kind, key, scope) -> dict:
             frozen = conn.execute("SELECT COUNT(*) FROM custom_records WHERE module_key=? AND def_version=?", (key, live_v or 0)).fetchone()[0]
         except Exception:                                              # noqa: BLE001  舊庫沒有此表 ⇒ 不適用
             frozen = None
-    return {"kind": kind, "key": key, "scope": scope, "hasDraft": draft is not None,
+    extra = {"changesBase": base_scope} if base_scope != scope else {}   # 只有角色層首發才有：差異是跟哪一層比的
+    return {"kind": kind, "key": key, "scope": scope, "hasDraft": draft is not None, **extra,
             "liveVersion": live_v, "nextVersion": ((live_v or 0) + 1) if draft else None,
             "previewHash": (draft or {}).get("etag", ""), "changes": changes, "changeCount": len(changes),
             "validation": {"ok": not problems, "problems": problems}, "otherScopes": others,

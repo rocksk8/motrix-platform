@@ -13,6 +13,7 @@ x-model 先把值寫進 select，當下還沒有值相符的 option ⇒ 瀏覽�
 - 期別列：下拉顯示的年／月／季組出來的期別 ＝ 送出的 `/api/reports/financial?period=`。
 """
 import re
+import time
 
 import pytest
 
@@ -50,6 +51,18 @@ def _shown_period(page):
       const txt = s => s.options[s.selectedIndex] ? s.options[s.selectedIndex].text : ''
       return sel.map(txt)
     }""")
+
+
+def _settled_mismatches(page, timeout_ms=4000):
+    """切分頁後下拉的 DOM 值與模型值的差異，**等到終態**才算：x-if 剛渲染、年份選項還在非同步長出來的瞬間，
+    DOM 值與模型值短暫不一致是正常的過渡（networkidle 不保證涵蓋）。真正的缺陷（☠️ 季下拉顯示 Q1、模型 Q3）是**持續**不一致，
+    逾時後仍不一致 ⇒ 照樣回傳差異讓測試失敗。"""
+    deadline = time.monotonic() + timeout_ms / 1000
+    got = page.evaluate(_MISMATCHES_JS)
+    while got and time.monotonic() < deadline:
+        page.wait_for_timeout(100)
+        got = page.evaluate(_MISMATCHES_JS)
+    return got
 
 
 @pytest.mark.e2e
@@ -91,8 +104,14 @@ def test_every_tab_shows_select_values_equal_to_the_model(live_server, make_user
     _open(page, live_server)
     _switch(page, label, kind)
     bad = {}
+    # 分頁按鈕是報表資料回來後才長出來的：期別切換的回應到手時，按鈕可能還沒渲染（負載重時 count()==0）⇒ 先等到終態再數；
+    # 等不到才失敗，所以『選擇器失效就什麼都沒掃到』的守門仍在。
+    try:
+        page.wait_for_function("() => document.querySelectorAll('.tab').length >= 5", timeout=10000)
+    except Exception:                                                  # noqa: BLE001  逾時 ⇒ 交給下面的斷言報錯（帶實際數量）
+        pass
     n = page.locator(".tab").count()
-    assert n >= 5, "分頁按鈕找不到（選擇器失效就什麼都沒掃到）"
+    assert n >= 5, "分頁按鈕找不到（選擇器失效就什麼都沒掃到）：%d" % n
     for i in range(n):
         tab = page.locator(".tab").nth(i)
         if not tab.is_visible():
@@ -100,7 +119,7 @@ def test_every_tab_shows_select_values_equal_to_the_model(live_server, make_user
         name = tab.inner_text().strip()
         tab.click()
         page.wait_for_load_state("networkidle")
-        got = page.evaluate(_MISMATCHES_JS)
+        got = _settled_mismatches(page)
         if got:
             bad[name] = got
     assert bad == {}, bad

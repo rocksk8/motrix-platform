@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1479,
+  "tests": 1489,
   "unmapped": 13,
   "kinds": {
-   "api": 823,
-   "e2e": 320,
+   "api": 830,
+   "e2e": 322,
    "audit": 196,
-   "unit": 140
+   "unit": 141
   },
   "routes": 887
  },
@@ -6366,6 +6366,40 @@
    },
    "module": "case"
   },
+  "backend/modules/case/tests/test_dispatch_abnormal_amount_2026_11_08.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "mod:case/api/settlement_actuals",
+    "mod:case/dispatch_lines",
+    "mod:case/tests/_t40_won",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02",
+    "mod:case/tests/test_settlement_dispatch_lines_2026_11_07",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/dispatch_lines.py",
+     "backend/modules/case/tests/_t40_won.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py",
+     "backend/modules/case/tests/test_settlement_dispatch_lines_2026_11_07.py"
+    ],
+    "api": [
+     "backend/modules/case/api/settlement_actuals.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
   "backend/modules/case/tests/test_dispatch_lines_js_parity_2026_11_07.py": {
    "kind": "unit",
    "units": [
@@ -10278,6 +10312,34 @@
     ]
    },
    "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_warranty_mail_owner_2026_11_08.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
+    "helper:email_notify",
+    "mod:case/case_deadlines",
+    "page:pages/quotation-form.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/email_notify.py",
+     "backend/modules/case/case_deadlines.py",
+     "backend/tests/_requires.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
    "module": "case"
   },
   "backend/modules/crm/tests/test_crm_api_integration.py": {
@@ -19743,6 +19805,35 @@
     ]
    }
   },
+  "backend/tests/platform/test_e2e_menu_editor_role_scope_2026_11_08.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:menu_builder",
+    "page:index.html",
+    "plat:__init__",
+    "plat:registry",
+    "router:platform_menu"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/menu_builder.py"
+    ],
+    "api": [
+     "backend/routers/platform_menu.py"
+    ],
+    "page": [
+     "frontend/index.html"
+    ],
+    "path": [
+     "frontend/index.html"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_e2e_menu_layout.py": {
    "kind": "e2e",
    "units": [
@@ -20937,6 +21028,41 @@
     ]
    }
   },
+  "backend/tests/platform/test_list_pref_policy_global_key_2026_11_08.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "helper:list_catalog",
+    "helper:list_pref_policy",
+    "mod:supply/api/suppliers",
+    "plat:__init__",
+    "plat:definitions",
+    "router:def_governance",
+    "router:def_pipeline",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/list_catalog.py",
+     "backend/helpers/list_pref_policy.py",
+     "backend/modules/supply/api/suppliers.py",
+     "backend/routers/__init__.py",
+     "backend/routers/def_governance.py",
+     "backend/routers/def_pipeline.py"
+    ],
+    "api": [
+     "backend/routers/def_governance.py",
+     "backend/routers/definitions.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_list_pref_policy_t66.py": {
    "kind": "audit",
    "units": [
@@ -21311,7 +21437,64 @@
    },
    "login_fixture": true
   },
+  "backend/tests/platform/test_menu_builder_role_scope_2026_11_08.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "helper:menu_builder",
+    "js:static/menu-editor.js",
+    "plat:__init__",
+    "plat:registry",
+    "router:def_governance",
+    "router:def_pipeline",
+    "router:definitions",
+    "router:platform_menu",
+    "router:platform_menu_preview"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/menu_builder.py",
+     "backend/routers/__init__.py",
+     "backend/routers/def_governance.py",
+     "backend/routers/def_pipeline.py"
+    ],
+    "api": [
+     "backend/routers/def_governance.py",
+     "backend/routers/definitions.py",
+     "backend/routers/platform_menu.py",
+     "backend/routers/platform_menu_preview.py"
+    ],
+    "page": [
+     "frontend/static/menu-editor.js"
+    ]
+   },
+   "unresolved_api": [
+    "/api/platform/menu/preview/draft",
+    "/api/platform/menu/preview/publish"
+   ],
+   "login_fixture": true
+  },
   "backend/tests/platform/test_menu_editor_pending_2026_10_14.py": {
+   "kind": "unit",
+   "units": [
+    "dir:frontend/static/",
+    "js:static/menu-editor.js"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/static/menu-editor.js"
+    ],
+    "path": [
+     "frontend/static/",
+     "frontend/static/menu-editor.js"
+    ]
+   }
+  },
+  "backend/tests/platform/test_menu_editor_role_scope_2026_11_08.py": {
    "kind": "unit",
    "units": [
     "dir:frontend/static/",
@@ -23637,6 +23820,49 @@
    "unresolved_api": [
     "/api/not-rate-limited"
    ],
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_role_layer_governance_baseline_2026_11_08.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "helper:list_pref_policy",
+    "helper:menu_builder",
+    "mod:supply/api/suppliers",
+    "plat:__init__",
+    "plat:catalog",
+    "plat:definitions",
+    "router:def_governance",
+    "router:def_pipeline",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/list_pref_policy.py",
+     "backend/modules/supply/api/suppliers.py",
+     "backend/routers/__init__.py",
+     "backend/routers/def_governance.py",
+     "backend/routers/def_pipeline.py"
+    ],
+    "api": [
+     "backend/routers/def_governance.py",
+     "backend/routers/definitions.py"
+    ],
+    "path": [
+     "backend/core/catalog.py",
+     "backend/core/definitions.py",
+     "backend/helpers/list_pref_policy.py",
+     "backend/helpers/menu_builder.py",
+     "backend/routers/def_governance.py",
+     "backend/routers/definitions.py"
+    ]
+   },
    "login_fixture": true
   },
   "backend/tests/platform/test_route_inventory.py": {
@@ -28422,6 +28648,45 @@
     ]
    }
   },
+  "backend/tests/test_custom_module_engine_switch_2026_11_08.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:settings_registry",
+    "helper:settings_strict",
+    "js:js/module-builder-core.js",
+    "js:static/public-flags.js",
+    "page:pages/module-builder.html",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:custom_records",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_registry.py",
+     "backend/helpers/settings_strict.py"
+    ],
+    "api": [
+     "backend/routers/custom_records.py",
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/js/module-builder-core.js",
+     "frontend/pages/module-builder.html",
+     "frontend/static/public-flags.js"
+    ],
+    "path": [
+     "frontend/js/module-builder-core.js"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_custom_modules_engine_2026_09_25.py": {
    "kind": "api",
    "units": [
@@ -30946,6 +31211,30 @@
     ],
     "page": [
      "frontend/pages/quotation-form.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_custom_module_engine_switch_2026_11_08.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_e2e_p8_gaps_2026_09_26.py",
+    "helper:settings_registry",
+    "page:pages/module-builder.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings_registry.py",
+     "backend/tests/test_e2e_p8_gaps_2026_09_26.py"
+    ],
+    "page": [
+     "frontend/pages/module-builder.html"
+    ],
+    "path": [
+     "frontend/pages/module-builder.html"
     ]
    }
   },
@@ -34590,6 +34879,31 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_finance_recipients_crosscheck_2026_11_08.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "helper:auth",
+    "helper:email_notify",
+    "helper:notify_actions",
+    "helper:payable_due_core",
+    "router:mail_settings"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/notify_actions.py",
+     "backend/helpers/payable_due_core.py",
+     "backend/routers/__init__.py",
+     "backend/routers/mail_settings.py"
+    ]
+   }
   },
   "backend/tests/test_finance_role_2026_10_05.py": {
    "kind": "api",
@@ -41424,6 +41738,7 @@
     "helper:geo",
     "helper:notify_actions",
     "mod:accounting/notify",
+    "mod:case/case_deadlines",
     "mod:case/expense_notify",
     "mod:permmatrix/service",
     "mod:tender_radar/notify",
@@ -41443,6 +41758,7 @@
      "backend/helpers/geo.py",
      "backend/helpers/notify_actions.py",
      "backend/modules/accounting/notify.py",
+     "backend/modules/case/case_deadlines.py",
      "backend/modules/case/expense_notify.py",
      "backend/modules/permmatrix/service.py",
      "backend/modules/tender_radar/",
