@@ -109,6 +109,12 @@ def _linked_js(page_src, page_path):
             alt = os.path.normpath(os.path.join(os.path.dirname(PAGES_GLOB), src))
             if os.path.exists(alt):
                 cand = alt
+        if not os.path.exists(cand) and os.path.basename(os.path.dirname(cand)) == "js":
+            # 模組自有 JS（模組資產）：網址仍是 /js/x.js，實體檔在 modules/<key>/js/x.js ⇒ 依檔名找
+            mdir = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "modules"))
+            hits = sorted(glob.glob(os.path.join(mdir, "*", "js", os.path.basename(cand))))
+            if hits:
+                cand = hits[0]
         if os.path.exists(cand):
             out.append(cand)
     return out

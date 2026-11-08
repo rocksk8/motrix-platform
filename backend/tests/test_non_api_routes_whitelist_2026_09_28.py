@@ -14,6 +14,8 @@ ALLOWED = {
         "頁面 HTML（core.pages）：靜態頁本體，不含資料；模組未載入 ⇒ 404＋提示頁。資料一律經 /api 各自驗權限",
     "/map-overlays/{module_key}/{script}":
         "地圖覆蓋層腳本（IP-101，helpers.map_overlays）：<script src> 帶不了 token；只給已載入模組宣告的 .js，內容是程式碼不含資料",
+    "/js":
+        "前端 JS 掛載（helpers.module_assets.JsAssetLookup）：frontend/js 的靜態檔，加上已載入模組宣告的模組自有 .js；內容是程式碼不含資料",
     "/static/sidebar.js":
         "側欄腳本（前置選單宣告 window.MOTRIX_MENU）：與使用者無關的 L1＋已載入模組選單宣告，不含任何使用者資料",
     "/":
