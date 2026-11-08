@@ -752,7 +752,8 @@ function Record-Stage([string]$stage, [bool]$green, [string]$flakyFile = "") {
             $shadowTool = Join-Path $projectRoot "tools\platform\stage_select_shadow.py"
             if ((Test-Path -LiteralPath $shadowTool) -and $buildRunId -and $commit) {
                 $shArgs = @("`"$shadowTool`"", "--repo", "`"$projectRoot`"", "record", "--run-id", $buildRunId, "--stage", $stage, "--green", $flag, "--head", $commit)
-                Start-Process -FilePath $pyExe -ArgumentList $shArgs -WindowStyle Hidden | Out-Null
+                $shProc = Start-Process -FilePath $pyExe -ArgumentList $shArgs -WindowStyle Hidden -PassThru
+                try { $shProc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::BelowNormal } catch {}   # 不跟測試搶 CPU；程式本身有 120 秒上限
             }
         } catch {}
     }
