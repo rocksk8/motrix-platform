@@ -380,6 +380,20 @@
       font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .dc-log-card__actions { margin-left: auto; display: flex; gap: 5px; }
+    /* 批示（2026-11-04）：掛在開發記錄卡下方；只有作者／被指定的對象／管理員看得到 */
+    .dc-directive { margin-top: 10px; padding: 9px 11px; border-left: 3px solid #2F6FD6; background: #F3F7FE; border-radius: 0 8px 8px 0; font-size: 12px; font-family: var(--font-zh); }
+    .dc-directive__head { display: flex; gap: 6px; align-items: center; color: var(--text-dim); font-size: 11px; }
+    .dc-directive__head strong { color: #2F6FD6; }
+    .dc-directive__body { margin: 4px 0; white-space: pre-wrap; color: var(--text-primary); }
+    .dc-directive__targets { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 11px; color: var(--text-dim); }
+    .dc-directive__chip { padding: 1px 8px; border-radius: 10px; background: #E5E7EB; color: #374151; }
+    .dc-directive__chip.is-pending { background: #FEF3C7; color: #92400E; font-weight: 600; }
+    .dc-directive__reply { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border-light); }
+    .dc-directive__reply .who { color: var(--text-dim); font-size: 11px; }
+    .dc-directive__replyform { display: flex; gap: 6px; margin-top: 8px; align-items: flex-start; }
+    .dc-directive__replyform textarea, .dc-directive-form textarea { flex: 1; width: 100%; min-height: 54px; font-size: 12px; padding: 6px 8px; border: 1px solid var(--border-light); border-radius: 6px; font-family: var(--font-zh); resize: vertical; }
+    .dc-directive-form { margin-top: 10px; padding: 10px 12px; border: 1px solid #BFD3F6; background: #FAFCFF; border-radius: 8px; font-size: 12px; font-family: var(--font-zh); }
+    .dc-directive-form .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; flex-wrap: wrap; }
     .dc-approved { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #D1FAE5; color: #065F46; font-weight: 600; }
     .dc-pending  { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #FEF3C7; color: #92400E; font-weight: 600; }
     .dc-pending-banner {
@@ -1132,11 +1146,67 @@
                     </template>
                   </div>
                 </template>
+                <!-- 批示（僅作者／被指定的對象／管理員會收到資料；其他人這裡什麼都不會出現） -->
+                <template x-for="d in directivesOf(log.id)" :key="d.id">
+                  <div class="dc-directive" data-testid="directive-item">
+                    <div class="dc-directive__head">
+                      <strong>批示</strong>
+                      <span x-text="d.authorName"></span><span>·</span>
+                      <span x-text="(d.createdAt || '').slice(0,16)"></span>
+                    </div>
+                    <div class="dc-directive__body" x-text="d.content"></div>
+                    <div class="dc-directive__targets">通知：
+                      <template x-for="t in d.targets" :key="t.userId">
+                        <span class="dc-directive__chip" :class="{'is-pending': t.mustReply && !t.repliedAt}"
+                              x-text="t.name + (t.mustReply ? (t.repliedAt ? '（已回覆）' : '（待回覆）') : '（知會）')"></span>
+                      </template>
+                    </div>
+                    <template x-for="r in d.replies" :key="r.id">
+                      <div class="dc-directive__reply" data-testid="directive-reply">
+                        <div class="who"><span x-text="r.authorName"></span> · <span x-text="(r.createdAt || '').slice(0,16)"></span></div>
+                        <div style="white-space:pre-wrap" x-text="r.content"></div>
+                      </div>
+                    </template>
+                    <div class="dc-directive__replyform" x-show="d.canReply">
+                      <textarea data-testid="reply-text" maxlength="4000" placeholder="回覆這則批示…"
+                                x-model="replyDraft[d.id]"></textarea>
+                      <button class="btn btn-primary btn-sm" data-testid="reply-save"
+                              :disabled="replySaving" @click="saveReply(d)">回覆</button>
+                    </div>
+                  </div>
+                </template>
+                <div class="dc-directive-form" data-testid="directive-form" x-show="directiveForm.logId === log.id" x-cloak>
+                  <strong>對這筆記錄下批示</strong>
+                  <textarea data-testid="directive-text" maxlength="4000" placeholder="批示內容（必填）"
+                            x-model="directiveForm.content"></textarea>
+                  <div class="row">
+                    <select data-testid="directive-target-select" x-model="directiveForm.pick" @change="addDirectiveTarget()">
+                      <option value="">＋ 加入通知對象…</option>
+                      <template x-for="u in directiveCandidates()" :key="u.id">
+                        <option :value="String(u.id)" x-text="u.displayName"></option>
+                      </template>
+                    </select>
+                  </div>
+                  <template x-for="(t, i) in directiveForm.targets" :key="t.userId">
+                    <div class="row" data-testid="directive-target">
+                      <span x-text="t.name"></span>
+                      <label><input type="checkbox" x-model="t.mustReply"> 要回覆</label>
+                      <button class="btn btn-ghost btn-sm" @click="removeDirectiveTarget(i)">移除</button>
+                    </div>
+                  </template>
+                  <div class="row">
+                    <button class="btn btn-primary btn-sm" data-testid="directive-save"
+                            :disabled="directiveSaving" @click="saveDirective()">送出批示</button>
+                    <button class="btn btn-ghost btn-sm" @click="directiveForm.logId = null">取消</button>
+                  </div>
+                </div>
                 <div class="dc-log-card__foot">
                   <span x-text="log.logByName"></span>
                   <span style="color:var(--border-light)">·</span>
                   <span x-text="log.createdAt ? log.createdAt.slice(0,16) : ''"></span>
                   <div class="dc-log-card__actions">
+                    <button class="btn btn-ghost btn-sm" data-testid="directive-btn"
+                      x-show="canDirect" @click="openDirective(log)">批示</button>
                     <button class="btn btn-ghost btn-sm"
                       x-show="log.createdById === session.userId || isAdmin"
                       @click="openEditLog(log)">編輯</button>
@@ -1604,6 +1674,83 @@ function devCrmPage() {
       return { 'Authorization': 'Bearer ' + this.token, 'Content-Type': 'application/json' }
     },
 
+    // ── 開發記錄批示（2026-11-04）：伺服器只回這個人看得到的批示（作者／對象／管理員）──────────────
+    directives: [],
+    canDirect: false,            // 有「對開發記錄下批示」能力（權限矩陣可設）才顯示「批示」鈕
+    replyDraft: {},
+    replySaving: false,
+    directiveSaving: false,
+    _directiveSeq: 0,
+    directiveForm: { logId: null, content: '', targets: [], pick: '' },
+
+    directivesOf(logId) {
+      return this.directives.filter(d => d.logId === logId)
+    },
+    async loadDirectives(caseId) {
+      const seq = ++this._directiveSeq
+      try {
+        const r = await fetch('/api/dev-cases/' + caseId + '/directives', { headers: this._h() })
+        if (!r.ok || seq !== this._directiveSeq) return
+        const d = await r.json()
+        this.directives = d.items || []
+        this.canDirect = !!d.canDirect
+      } catch (e) { /* 批示載入失敗不擋開發記錄主畫面 */ }
+    },
+    openDirective(log) {
+      if (this.directiveForm.logId === log.id) { this.directiveForm.logId = null; return }
+      const targets = []
+      const who = this.activeUsers.find(u => u.id === log.logById)
+      if (who && who.id !== this.session.userId) targets.push({ userId: who.id, name: who.displayName, mustReply: true })   // 預設通知填寫的成員並請他回覆
+      this.directiveForm = { logId: log.id, content: '', targets, pick: '' }
+    },
+    directiveCandidates() {
+      const chosen = new Set(this.directiveForm.targets.map(t => t.userId))
+      return this.activeUsers.filter(u => u.id !== this.session.userId && !chosen.has(u.id))
+    },
+    addDirectiveTarget() {
+      const id = Number(this.directiveForm.pick)
+      this.directiveForm.pick = ''
+      const u = this.activeUsers.find(x => x.id === id)
+      if (u) this.directiveForm.targets.push({ userId: u.id, name: u.displayName, mustReply: true })
+    },
+    removeDirectiveTarget(i) { this.directiveForm.targets.splice(i, 1) },
+    async saveDirective() {
+      const f = this.directiveForm
+      const text = (f.content || '').trim()
+      if (!text) { this._toast('請先填寫批示內容'); return }
+      if (!f.targets.length) { this._toast('請至少加入一位通知對象'); return }
+      if (this.directiveSaving || !this.selectedCase) return
+      this.directiveSaving = true
+      try {
+        const r = await fetch('/api/dev-cases/' + this.selectedCase.id + '/directives', {
+          method: 'POST', headers: this._h(),
+          body: JSON.stringify({ logId: f.logId, content: text,
+            targets: f.targets.map(t => ({ userId: t.userId, mustReply: !!t.mustReply })) }),
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this._toast('批示失敗：' + ((typeof d.detail === 'string' && d.detail) || r.status)); return }
+        this.directives = [...this.directives, d]
+        this.directiveForm = { logId: null, content: '', targets: [], pick: '' }
+        this._toast('批示已送出')
+      } finally { this.directiveSaving = false }
+    },
+    async saveReply(d) {
+      const text = ((this.replyDraft[d.id]) || '').trim()
+      if (!text) { this._toast('請先填寫回覆內容'); return }
+      if (this.replySaving || !this.selectedCase) return
+      this.replySaving = true
+      try {
+        const r = await fetch('/api/dev-cases/' + this.selectedCase.id + '/directives/' + d.id + '/replies', {
+          method: 'POST', headers: this._h(), body: JSON.stringify({ content: text }),
+        })
+        const nd = await r.json().catch(() => ({}))
+        if (!r.ok) { this._toast('回覆失敗：' + ((typeof nd.detail === 'string' && nd.detail) || r.status)); return }
+        this.directives = this.directives.map(x => x.id === nd.id ? nd : x)
+        this.replyDraft[d.id] = ''
+        this._toast('已回覆')
+      } finally { this.replySaving = false }
+    },
+
     // ── 指派／回覆期限／進度回報（2026-11-03）──────────────────────────────
     assignDraft: { userId: '', deadline: '' },
     progressDraft: '',
@@ -1939,7 +2086,10 @@ function devCrmPage() {
       this.showLogForm = false
       this.editingLogId = null
       this.mobileListOpen = false
-      await this.loadLogs(c.id)
+      this.directives = []
+      this.canDirect = false
+      this.directiveForm = { logId: null, content: '', targets: [], pick: '' }
+      await Promise.all([this.loadLogs(c.id), this.loadDirectives(c.id)])
     },
 
     async loadLogs(caseId) {

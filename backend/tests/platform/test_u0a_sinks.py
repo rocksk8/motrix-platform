@@ -132,6 +132,7 @@ def test_dynamic_update_builders_only_shrink():
 QUOTED_NAMES_ALLOW = frozenset({
     "core/internal_cols.py", "core/upgrade.py", "core/migrations.py", "core/spine.py",
     "archive.py", "helpers/xlsx_out.py", "modules/permmatrix/migrations/0002_scope_json.py",
+    "modules/crm/migrations/0004_dev_log_directive.py",          # 批示兩張新表自己帶單位鍵（同 0003）
     "modules/crm/migrations/0003_dev_case_progress.py",         # 新表自己帶單位鍵（t6 守門：新表直接加 owner_unit_id，不再宣告豁免）；遷移當下抄所屬案件的單位
 })
 

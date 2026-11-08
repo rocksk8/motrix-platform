@@ -488,7 +488,9 @@
    "tables": [
     "dev_cases",
     "dev_logs",
-    "dev_case_progress"
+    "dev_case_progress",
+    "dev_log_directive",
+    "dev_log_directive_target"
    ],
    "api_prefixes": [
     "/api/dev-cases",

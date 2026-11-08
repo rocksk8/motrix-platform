@@ -1,17 +1,17 @@
 {
  "summary": {
-  "endpoints_total": 901,
-  "endpoints_api": 897,
-  "write_total": 487,
-  "write_api": 487,
-  "get_api": 410,
-  "distinct_paths_api": 758,
-  "write_with_body_api": 357,
-  "write_with_path_param_api": 351
+  "endpoints_total": 904,
+  "endpoints_api": 900,
+  "write_total": 489,
+  "write_api": 489,
+  "get_api": 411,
+  "distinct_paths_api": 760,
+  "write_with_body_api": 359,
+  "write_with_path_param_api": 353
  },
  "select_star": {
-  "modules": 282,
-  "archive": 95,
+  "modules": 287,
+  "archive": 97,
   "routers": 11,
   "helpers": 11,
   "core": 5,
@@ -929,6 +929,11 @@
    "body": false
   },
   "GET /api/dev-cases/{case_id}": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/dev-cases/{case_id}/directives": {
    "w": false,
    "pp": 1,
    "body": false
@@ -3152,6 +3157,16 @@
    "w": true,
    "pp": 1,
    "body": false
+  },
+  "POST /api/dev-cases/{case_id}/directives": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "POST /api/dev-cases/{case_id}/directives/{directive_id}/replies": {
+   "w": true,
+   "pp": 2,
+   "body": true
   },
   "POST /api/dev-cases/{case_id}/logs": {
    "w": true,

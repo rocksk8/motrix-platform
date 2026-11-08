@@ -213,8 +213,9 @@ _MODULE_OWNED_FRONTEND_PAGES = {"cashier.html", "receivables.html", "payment-req
 #: 第十三班列車：subcontract 2 → 4（b-drill-absent404-4 把 contractor-voucher-approval-settings.html
 #: 補進 subcontract 的 module.json pages[] ⇒ 這頁的 2 條導航語氣從 _outside 移到 subcontract 組）；_outside 103 → 101
 #: 第 31 班列車：filehub 新增一組 1——file-center.html 結果列的連結文字「前往原單據」（是連結本身，點了就到；不是叫人去別處找的提示句）
-_BASELINE_BY_GROUP = {"_outside": 101, "accounting": 4, "analytics": 8, "arap": 3, "case": 17, "daily_tasks": 3,
-                      "filehub": 1, "netplan": 1, "payroll": 6, "subcontract": 4, "supply": 2, "tender_radar": 8}
+_BASELINE_BY_GROUP = {"_outside": 101, "accounting": 4, "analytics": 8, "arap": 3, "case": 17, "crm": 2,
+                      "daily_tasks": 3, "filehub": 1, "netplan": 1, "payroll": 6, "subcontract": 4,
+                      "supply": 2, "tender_radar": 8}
 
 
 def _page_owners():

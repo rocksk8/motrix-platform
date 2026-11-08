@@ -621,7 +621,7 @@ def test_module_declares_migration_3_and_the_new_table():
     import json
     from pathlib import Path
     import modules.crm as m
-    assert [v for v, _ in m.MODULE.migrations] == [1, 2, 3]
+    assert [v for v, _ in m.MODULE.migrations][:3] == [1, 2, 3]       # 0004（開發記錄批示）之後只增不改：前三支固定
     meta = json.loads((Path(m.__file__).parent / "module.json").read_text(encoding="utf-8"))
     assert "dev_case_progress" in meta["tables"] and "dev_case_progress" in [t["name"] for t in meta["data"]["tables"]]
 

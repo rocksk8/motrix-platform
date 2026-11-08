@@ -2675,6 +2675,29 @@
   ],
   "s": 200
  },
+ "/api/dev-cases/{case_id}/directives": {
+  "k": [
+   "canDirect",
+   "items",
+   "items[].authorId",
+   "items[].authorName",
+   "items[].canReply",
+   "items[].caseId",
+   "items[].content",
+   "items[].createdAt",
+   "items[].id",
+   "items[].lastActivityAt",
+   "items[].logId",
+   "items[].pendingReplyNames",
+   "items[].replies",
+   "items[].targets",
+   "items[].targets[].mustReply",
+   "items[].targets[].name",
+   "items[].targets[].repliedAt",
+   "items[].targets[].userId"
+  ],
+  "s": 200
+ },
  "/api/dev-cases/{case_id}/logs": {
   "k": [
    "[].approvedAt",
