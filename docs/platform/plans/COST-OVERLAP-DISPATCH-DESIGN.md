@@ -1,12 +1,12 @@
-# 手填成本（材料申請／額外支出／品項手填實際）與承攬商派發單：重複計入的現況盤點與方向（設計討論稿 v17；未寫碼）
+# 手填成本（材料申請／額外支出／品項手填實際）與承攬商派發單：重複計入的現況盤點與方向（設計討論稿 v18；未寫碼）
 
 > 2026-11-08｜作者：hichan-7（K 角色）｜基準：`train/t79-int` @ `5090764ae`（讀碼＋一次性探針，探針未提交）
 > 來源：MOTRIX-ERP 轉述使用者裁示——海光案（MQ-202607-025）衍生 backlog，「排 backlog，找窗口做」；先做對抗式設計討論，**不動 `offsets` 資料結構、不寫程式**。
-> 版本：v1（e589fc665）→ v2（718a0e61d）→ v3（69b982a07）→ v4（11048f3aa）→ v5（4ee1b43ba）→ v6（f507c3c2e）→ v7（01db09edf）→ v8（c82fca4e3）→ v9（98d4f2c5a）→ v10（acc8cb51d）→ v11（58af88a82）→ v12（670a95fb6）→ v13（b73e0162a）→ v14（92a2a4617）→ v15（731c38c7d）→ v16（6b52a5bc1）→ **v17（本版）= v16＋hichan-8 第十輪對 §10 的審查（「三處同源」不成立、兩側核准機制相反、方向 4 會重新製造 S6、關帳期間）**（逐條處理對照見附錄 B／C／D／E／F／G／H／I／J／K／L／M／N／O／P）。**hichan-8 第八輪無異議，審查結束，可定稿。**v8 仍是討論稿：**等 PM 離線模擬的聚合數字，之後才問使用者（§7）；Q-B 的獎金流程問前需獎金模組負責人確認**。
+> 版本：v1（e589fc665）→ v2（718a0e61d）→ v3（69b982a07）→ v4（11048f3aa）→ v5（4ee1b43ba）→ v6（f507c3c2e）→ v7（01db09edf）→ v8（c82fca4e3）→ v9（98d4f2c5a）→ v10（acc8cb51d）→ v11（58af88a82）→ v12（670a95fb6）→ v13（b73e0162a）→ v14（92a2a4617）→ v15（731c38c7d）→ v16（6b52a5bc1）→ v17（0628d9bd8）→ **v18（本版）= v17＋hichan-8 補答的 §8 #5（略過被連結單據對 offsets／`check_finalize` 的影響）；她表示本輪結束、無待審**（逐條處理對照見附錄 B／C／D／E／F／G／H／I／J／K／L／M／N／O／P／Q）。**hichan-8 第八輪無異議，審查結束，可定稿。**v8 仍是討論稿：**等 PM 離線模擬的聚合數字，之後才問使用者（§7）；Q-B 的獎金流程問前需獎金模組負責人確認**。
 > 本檔不授權任何程式修改，也不碰正式機資料。
 > 前身：`DISPATCH-LINE-LINKAGE-REPORT.md` §3、`DISPATCH-LINE-LINKAGE-PROPOSAL.md` §10 末、`SETTLEMENT-ACTUALS-SPEC.md`、`DISPATCH-OFFSET-SPEC.md`（`git show d739eeec3:docs/platform/plans/DISPATCH-OFFSET-SPEC.md`，不在工作樹）、`prod-tasks/20261108-t78-apply.md` 已知殘留。
 
-## 0. 結論先講（v17）
+## 0. 結論先講（v18）
 
 1. **「完全沒有關聯機制」屬實**：4 條成本來源（品項手填實際、材料申請、額外支出、承攬商派發）彼此不比對；現有防重複機制都只擋同一種來源內，或「材料申請→採購單」（§2.3）。
 2. **「對應了卻仍重複」不是計算缺陷，是刻意設計**：`DISPATCH-OFFSET-SPEC` §1–2 明寫「不採用→估計不變；取消對應＝回未對應仍計入成本」，並被 `test_settlement_dispatch_offset_2026_10_04.py:59/92` 釘死。派發在精算裡「**永遠是成本**；『採用』只決定它要不要取代該品項的估計」。這是工程／PM 設計，**使用者從未被問過**（`USER-DECISIONS` §H 派發段沒有這題；D8 問的是採購）。
@@ -157,7 +157,7 @@ T77 做的是**分配**：`<派發id>#<行鍵>#<份次>`＋`amount`，把一個�
    - 是否比照 D-K1／定義治理「放寬需第二位最高管理者核准」、完結案補扣走「重新開啟＋理由＋再完結」，見 Q-A／Q-B。**重開已完結案補扣的獎金連鎖（獎金是否已發、是否重算）我沒有驗證**——標「未查」。
 9. **金額可見度**：排除的讀寫端點有自己的權限閘；回應不得讓沒有金額權限的人看到金額。
 
-## 4. 方向（v17：四類）
+## 4. 方向（v18：四類）
 
 ### 方向 1：來源端處理（基準做法；v1 漏列）
 
@@ -321,7 +321,7 @@ T77 做的是**分配**：`<派發id>#<行鍵>#<份次>`＋`amount`，把一個�
 2. **「一個判定原語、三處同源」不成立（v16 的錯誤）**：
    - 材料：`recognition.material_entries`（權責／現金）被營運報表與總帳 E12／E12b 共用，這邊 S4c 的原語有效。
    - **額外支出**：總帳 E11／E11b **用自己的 SQL**（`case/gl_events.py:57-60`，`FROM case_extra_expenses WHERE status='已核准' AND payable_sql()`），**不經 `recognition.extra_entries`**；`settlement_actuals.py:171` 註解「營運報表、總帳 E11 也讀它」與現況不符。額外支出的消費者至少還有：`payables.py` 的 3 處 `payable_sql`（:267／:283／:297，應付清單／出納待付）、`/extra-expenses` 端點的 `totalAmount`／`extraOnlyAmount`（`case_extra_expenses.py:429-448`，精算頁舊路徑與 `xeTotal` 用）、`recognition.py:449 extra_entries`。**只改 `recognition`，出納待付清單仍會列出重複單據讓人付掉、總帳仍入 E11。至少要改 3–4 處，並需要一支守門測試列舉「所有讀 `case_extra_expenses` 的查詢」**（類似 `dep_scan`／lint 的 ALLOWED 清單），否則漏一處就是隱性不一致。
-3. **精算公式副本不必動**成立（hichan-8 確認）：方向 4 讓 `extraTotal`／`materialUnassignedTotal` 本身變小，不新增扣減項，§2.5 的 7 份總成本公式與「分項加總＝總成本」都不受影響。需動的是 `compute()` 取 extra／material 時略過被連結者，以及 `validate_offsets` 不得對應已被連結的 ref；**略過後對 `check_finalize` 的 extra 比對的影響還沒查（§8 #5）**。
+3. **精算公式副本不必動**成立（hichan-8 確認）：方向 4 讓 `extraTotal`／`materialUnassignedTotal` 本身變小，不新增扣減項，§2.5 的 7 份總成本公式與「分項加總＝總成本」都不受影響。需動的是 `compute()` 取 extra／material 時略過被連結者，以及 `validate_offsets` 不得對應已被連結的 ref；**略過後的影響（v18，hichan-8 讀碼 `settlement_actuals.py:171-200、490-540`）**：①`validate_offsets` 的 `refs["extra"]` 取自 `compute(offsets=[])["extra"]["rows"]`（即 `R.extra_entries` 的輸出），被連結而略過的額外支出不在 refs 內 ⇒ **新增**指向它的 offset 會被 422「不在目前的未對應清單內」（期望行為）；**已存**的 offset 因 `is_keep`（原樣放行）不會被擋。②`compute()` 對已存的額外支出 offset 只在 `for e in extra_rows` 迴圈內用 `off_extra.get(expenseId)` 查去處；被略過的單據不在 `extra_rows`，所以**該 offset 靜默失效、沒有 warning**（目前只有 `dispatch_line_removed` 與材料的 `item_removed` 兩種失效警示，額外支出沒有）⇒ 該單據原本歸屬品項的 `purchased` 減少（若是採用中品項唯一來源 ⇒ S6）且使用者看不到原因。**建議階段 2 加 info 級 warning（例如 `extra_linked_offset_dropped`），或在連結寫入當下清掉相關 offset 並提示——二選一，前者不改資料較安全。**③`check_finalize` 用同一個 `compute()` 重算，頁面 summary 的 extra 來自 `actuals.totals`（`applyXeTotal`，`_actualsOk` 時），兩邊同源、不會因略過而新增不一致；唯二會 409：(a)頁面在連結建立前載入、完結時資料已變（既有的「編輯期間有變動」409，合理）；(b)`_actualsOk=false` 舊路徑用 `/extra-expenses` 的 `totalAmount`，該端點（`case_extra_expenses.py:429-448`）沒同步排除就會與重算差額而 409——所以它必須在改動清單內。④材料側已有 `r["linked"]` 略過（`compute` :182），不需新增；風險只在額外支出側。另 `settlement_actuals.py:171` 與 `:200` 兩處「與營運報表、總帳同源」註解與現況不符，實作時順手修。
 4. **現金口徑不略過**，且 **`has_payment` 排除是必要條件、不是可選**：材料 E12b 走 `_rec.material_entries(...,'cash')`，若連結只略過權責口徑，已付款者才會單獨出現 E12b。
 
 ### C. 風險與限制（均為推論，標明驗證程度）
@@ -590,3 +590,13 @@ def test_probe(W, capsys):
 | §8#7 W3 靜音要基於連結仍有效 | **接受** | §10 F |
 | 新增風險：方向 4 重新製造 S6 | **接受**；寫入 C-6，連結寫入時檢查是否被採用中品項對應 | §10 C-6 |
 | 我的 §8#5 問題（略過後對 `check_finalize` extra 比對、offsets 驗證的影響） | hichan-8 未回；列為仍待查 | §10 B-3 |
+
+## 附錄 Q：§8 #5 補答（hichan-8，針對 v17 0628d9bd8）處理對照
+
+| 項目 | 處理 | 位置 |
+|---|---|---|
+| `validate_offsets`：新增指向被略過單據的 offset 422（期望）；已存者放行 | **接受**，寫入 B-3 | §10 B-3 |
+| 已存的額外支出 offset 在被略過後**靜默失效、無 warning**；建議階段 2 加 info 警示或連結時清 offset（前者較安全） | **接受**；列為階段 2 的必要項 | §10 B-3 |
+| `check_finalize` 與頁面同源；唯二 409 情形；`/extra-expenses` 端點必須同步 | **接受** | §10 B-3 |
+| 材料側已有 `linked` 略過；註解 :171／:200 與現況不符 | **接受**；實作時順手修 | §10 B-3 |
+| 本輪結束，無待審 | — | — |
