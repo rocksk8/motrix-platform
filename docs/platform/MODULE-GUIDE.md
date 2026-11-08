@@ -142,6 +142,7 @@ modules/<key>/
   *.py             業務邏輯
   migrations/      本模組的新表
   pages/           前端頁面（搬移中，見路線圖階段 C）
+  js/              模組自有的前端 JS（網址仍是 /js/<檔名>.js；module.json `assets` 宣告，見下「模組自有前端 JS」）
   tests/           本模組測試（modtest 以此為邊界）
   README.md        給使用者與開發者看：功能、端點、資料分類、串接點、對方不在時的行為
   CHANGELOG.md     本模組自己的更新紀錄（最上面的 `## X.Y.Z` ＝ module.json 的 version）
@@ -150,6 +151,14 @@ modules/<key>/
                    ## 登記（C_OWNED／KNOWN／AMBIGUOUS_ACK）；test_spec_coverage 讀它，拿掉模組時跟著消失
                    ↑ 每個模組都要有（主持裁示 2026-09-26）；沒有專屬編號也要在「## 規格條件」寫明「本模組沒有專屬編號」（G2 守門）
 ```
+
+**模組自有前端 JS（模組資產 POC，2026-11-08；STAGE-C-DESIGN §3）**
+- 只屬於這個模組頁面的 JS 住 `modules/<key>/js/<檔名>.js`，在 `module.json` 宣告 `"assets": [{"path": "js/<檔名>.js"}]`；**網址不變**，頁面仍寫 `<script src="../js/<檔名>.js">`。只准單層檔名（`^[A-Za-z0-9][A-Za-z0-9_.-]*\.js$`）。
+- 提供規則（`helpers/module_assets.py`，`main.py` 在 `/` 的 StaticFiles 之前掛 `/js`）：模組**已載入**、有宣告、檔案真的在 `modules/<key>/js/` 底下 ⇒ 由模組提供（優先於 `frontend/js` 的同名舊檔）；模組停用／未授權／載入失敗 ⇒ 不提供，退回 `frontend/js`（乾淨的樹上就是 404）。沒宣告的檔、路徑跑出 `js/` 的請求一律不提供。
+- 宣告形狀不對 ⇒ 模組不載入（import 之前驗）；**宣告了卻缺檔 ⇒ 記 ERROR、該檔 404、模組照常載入**（使用者裁示），擋在出貨前：`module_update check`／`ship` 的 `asset_problems`、`test_module_assets_contract`。兩個已載入模組宣告同一個檔名 ⇒ key 排序先到先得，後到的記 ERROR。
+- 同名檔不得同時存在於模組 `js/` 與 `frontend/js`（契約題擋；升級後留下的舊檔是孤兒，無害，模組版優先）。L1 頁面不得載入任何模組的資產；模組 k 的資產只准 k 宣告的頁面載入。
+- **測試與守門列舉前端 JS 一律走 `backend/tests/_frontend_sources.py`**（`all_js()`／`top_js()`／`module_js()`／`js_path(name)`）；直接 `glob frontend/js` 的新寫法由 `test_no_direct_js_enumeration` 擋（否則 JS 搬進模組後會安靜地少掃）。
+- 舊版核心（沒有 `/js` 掛載）收到宣告了 `assets` 的模組時，該 JS 會 404：模組的 `core` 範圍要寫到引進這個機制的核心版號之後（列車取號後補，見該版 CHANGELOG）。
 
 **可自訂點（CUSTOMIZATION-SPEC P3，§3.9；2026-09-26）**
 - `customization`：排版器（P9）唯一能動的點——列表欄位、表單區塊、按鈕、頁內選單、匯出、輸出版型；欄位標 `core`（核心：不可隱藏、不可改名）。**每個模組都要寫**，沒有的類別寫空清單。側欄選單項不在這裡寫（在 `pages[].menu`，STAGE-C）。

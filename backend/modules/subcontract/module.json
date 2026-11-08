@@ -1,7 +1,7 @@
 {
   "key": "subcontract",
   "name": "外包工班",
-  "version": "1.1.41",
+  "version": "1.1.42",
   "core": ">=1.0,<2.0",
   "license_key": "subcontract",
   "permissions": ["contractor_list"],
@@ -55,6 +55,7 @@
   "customization_note": "搬遷時沒有宣告可自訂點（CUSTOMIZATION-SPEC §5）；之後要開放欄位、頁面或輸出的自訂時在這裡加",
   "provides": {"api_prefixes": ["/api/contractors", "/api/vendor-contractors", "/api/contractor-dispatches", "/api/contractor-vouchers", "/api/remit-kinds"],
                "probes": ["/api/contractors", "/api/vendor-contractors", "/api/contractor-dispatches", "/api/contractor-vouchers", "/api/remit-kinds"]},
+  "assets": [{"path": "js/remit-kinds-settings.js"}],
   "pages": [{"path": "contractors.html",
      "menu": {"group": "payroll", "label": "外包名冊", "order": 10, "perm": ["contractor_list"]}}, {"path": "vendor-contractors.html",
      "menu": {"group": "supply", "label": "承攬商管理", "order": 30, "perm": ["procurement"], "badge": "sb-mod-vendor"}},

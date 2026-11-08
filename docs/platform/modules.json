@@ -93,6 +93,7 @@
    "helper:licensing",
    "helper:mail_types",
    "helper:map_overlays",
+   "helper:module_assets",
    "helper:module_registry",
    "helper:module_startup",
    "helper:module_switches",

@@ -1053,6 +1053,12 @@ def root():
     return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 
+# ── 模組自有前端 JS（STAGE-C-DESIGN §3；helpers.module_assets）────────────────────────
+# 🔴 必須在 "/" 的 StaticFiles 之前。網址不變（/js/<檔名>.js），只是已載入模組宣告的檔改由 modules/<key>/js/ 提供；
+# 其餘 /js/* 照舊走 frontend/js。
+from helpers.module_assets import JsAssetLookup as _JsAssetLookup
+app.mount("/js", _JsAssetLookup(directory=os.path.join(FRONTEND_DIR, "js")), name="frontend_js")
+
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 _startup_step("page_and_static_routes")
 _startup_total()
