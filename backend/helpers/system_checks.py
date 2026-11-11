@@ -805,6 +805,17 @@ def _prune_request_log(keep_days: int = None) -> None:
 
 
 
+def _check_line_quota() -> None:
+    """每日備援（2026-11-12）：讀 LINE 本月訊息用量，跨過門檻就寄信（同一門檻同月一次）。主要觸發點是「推播成功後」（helpers/line_quota.after_push）；
+    這裡涵蓋 LINE 控制台手動發送也耗額度、以及重開機後第一次檢查。沒設 token（開發機）＝不連網、什麼都不做。
+    背景執行緒（LINE API 與寄信都可能慢）；例外只記 log。"""
+    try:
+        from helpers import line_quota as _lq
+        threading.Thread(target=_lq.check_and_alert, args=(), daemon=True, name="line-quota-daily").start()
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("_check_line_quota failed: %s", exc)
+
+
 def run_all(prune: bool = False) -> None:
     """每日系統檢查（順序同搬移前）。prune：08:00 那一輪另清理請求紀錄（啟動補跑不清）。"""
     _check_approval_reminders()
@@ -813,5 +824,6 @@ def run_all(prune: bool = False) -> None:
     _check_heartbeat_health()
     _check_disk_space()
     _check_temp_bloat()
+    _check_line_quota()
     if prune:
         _prune_request_log()

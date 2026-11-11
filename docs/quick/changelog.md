@@ -24,6 +24,11 @@
 - **上線後人工步驟**：部署後第一次對外打卡成功，需**人工登入 healthchecks.io** 確認收件人仍有效、check 回到綠燈（卡住的 down 狀態不會自己恢復告警能力）。
 - 測試：`test_heartbeat_watch_2026_11_11.py`、`test_heartbeat_https_ping_2026_11_11.py`、`tests/platform/test_prod_status_snapshot_2026_09_30.py`（heartbeat 區塊）。
 
+## 2026-11-12 LINE 通知：收件人粒度（角色＋個人）與額度常駐監控／告警（feat/line-recipient-quota）
+
+- **收件人（只縮不擴）**：LINE 收件人＝信件已解析的帳號 ∩ 該類型允許的角色 ∩ 本人沒退訂 ∩ 已綁定。角色清單缺省＝所有角色、個人預設收（升版後行為不變）。超管在通知設定頁每個類型勾「可收的角色」；同仁在帳號安全頁自行退訂（只列公司已開啟且自己角色被允許的類型）。
+- **額度**：通知設定頁常駐用量條（本月已用／上限，不必按「驗證 token」）；門檻由最高管理者自訂（預設 80%、100%，最多 5 個）；跨過門檻寄信給最高管理者（`line_quota_warning`，不可關），同一門檻同月一次、一次跨多個只寄一封、換月重置。觸發：設定頁載入、推播成功後（去抖動）、每日 08:00 備援。LINE 100% 後會回 429，本票只告警、不自動停推播。
+- 測試：`test_line_recipients_2026_11_12.py`、`test_line_quota_2026_11_12.py`、`test_e2e_line_recipients_quota_2026_11_12.py`。
 
 ## 2026-11-11 手機直拍照片存起來橫躺：浮水印重存沒處理 EXIF 方向（fix/photo-exif-orientation）
 

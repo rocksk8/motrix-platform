@@ -3424,6 +3424,13 @@
  "/api/line/callback": {
   "s": 400
  },
+ "/api/line/prefs": {
+  "k": [
+   "events",
+   "linked"
+  ],
+  "s": 200
+ },
  "/api/list-prefs/{list_key}": {
   "k": [
    "customOrder",
@@ -6608,10 +6615,29 @@
    "events[].enabled",
    "events[].key",
    "events[].name",
+   "events[].roles",
    "include_links",
    "login_channel_id",
    "login_channel_secret",
-   "public_base_url"
+   "public_base_url",
+   "quota_thresholds",
+   "role_choices"
+  ],
+  "s": 200
+ },
+ "/api/settings/line-notify/quota": {
+  "k": [
+   "alerted",
+   "checked_at",
+   "error",
+   "level",
+   "limit",
+   "month",
+   "ok",
+   "percent",
+   "thresholds",
+   "unlimited",
+   "used"
   ],
   "s": 200
  },

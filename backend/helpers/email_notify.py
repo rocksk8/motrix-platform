@@ -2219,6 +2219,40 @@ def notify_heartbeat_stale(summary: str, problems: list, state: dict = None) -> 
     return outcome in (SEND_SENT, SEND_UNKNOWN, SEND_PERMANENT_FAIL)
 
 
+def notify_line_quota_warning(used: int, limit: int, threshold: int, thresholds: list = None, month: str = "") -> bool:
+    """LINE 本月訊息額度用量跨過門檻 → 所有 superadmin（2026-11-12）
+
+    LINE 官方帳號免費方案每月有上限（推播每位收件人各算一則）；用完後 LINE 回 429、通知靜默停止送達（Email 不受影響）。
+    `threshold`＝這次跨過的最高門檻（百分比）；同一門檻同一個月只會被叫一次（旗標在 helpers/line_quota）。
+    回傳＝「呼叫端可以寫『這個門檻已通知』旗標」：等寄送結果（`handle.wait()`），
+    寄出／結果不明（重寄恐雙寄）／永久失敗（天天重試只是天天失敗）＝True；沒有收件人、暫時失敗、機器層級略過＝False（下次重試）。
+    """
+    to = _admin_emails("line_quota_warning")
+    if not to:
+        return False
+    pct = (used * 100.0 / limit) if limit else 0.0
+    rows = [("統計月份", month or "—"), ("本月已用", "%d / %d 則（%.0f%%）" % (used, limit, pct)),
+            ("這次跨過的門檻", "%d%%" % threshold),
+            ("設定的門檻", "、".join("%d%%" % t for t in (thresholds or [])) or "—")]
+    intro = _safe("LINE 本月訊息用量已達 %.0f%%（上限 %d 則）。" % (pct, limit))
+    note = _safe(
+        "<b>這代表什麼</b>：LINE 官方帳號的免費方案每月有訊息上限，推播給每位收件人各算一則。"
+        "用完之後 LINE 會拒絕發送，<b>勾選了「同時發 LINE」的通知就不會送到手機</b>（Email 照常寄出）。額度每月 1 日重置。"
+        "<br><br><b>可以怎麼做</b>："
+        "<br>1. 到「通知設定」頁看用量條，確認哪些通知類型在耗用額度，必要時取消勾選或縮小「可收的角色」"
+        "<br>2. 評估升級 LINE 官方帳號方案"
+        "<br>3. 門檻可由最高管理者在同一頁自訂"
+    )
+    html = _build_html("line_quota_warning", "LINE 本月額度告警", "需要留意", "#D97706", rows, "", _base_url(),
+                       note=note, intro=intro, button_text="前往系統")
+    outcome = _async_send(to, _mt.subject("line_quota_warning", "LINE 本月額度已達 %.0f%%（%d / %d）" % (pct, used, limit)), html).wait()
+    if outcome in (SEND_UNKNOWN, SEND_PERMANENT_FAIL):
+        logger.error("notify_line_quota_warning 寄送結果 %s，保留旗標（不重寄），請人工確認收件人是否收到", outcome)
+    elif outcome != SEND_SENT:
+        logger.warning("notify_line_quota_warning 寄送結果 %s（不寫旗標，下次重試）", outcome)
+    return outcome in (SEND_SENT, SEND_UNKNOWN, SEND_PERMANENT_FAIL)
+
+
 def notify_disk_space_low(problems: list, temp_bloat: list = None,
                           temp_total_gb: float = 0) -> None:
     """磁碟空間不足／測試暫存累積 → 所有 admin/superadmin（2026-09-14）

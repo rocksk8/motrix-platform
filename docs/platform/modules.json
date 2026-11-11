@@ -117,6 +117,8 @@
    "helper:storage_slots",
    "helper:system_checks",
    "helper:heartbeat_status",
+   "helper:line_recipients",
+   "helper:line_quota",
    "helper:tiered_approval",
    "helper:uploads",
    "helper:user_buttons",

@@ -349,6 +349,30 @@
             預設全部不發；訊息內容與 Email 相同，<strong>不含金額</strong>。
           </div>
 
+          <!-- 本月訊息用量（常駐；資料來源 GET /api/settings/line-notify/quota，LINE 官方帳號免費方案每月有上限） -->
+          <div data-testid="line-quota" style="margin:12px 0;padding:10px 12px;border:1px solid var(--border);border-radius:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+              <strong style="font-size:13px">本月 LINE 訊息用量</strong>
+              <span style="font-size:12px;color:var(--text-dim)">
+                <span x-show="quota && quota.checked_at" x-text="'更新於 ' + (quota.checked_at || '').replace('T', ' ').slice(0, 16)"></span>
+                <button class="btn btn-ghost" style="padding:2px 8px;font-size:12px" @click="loadQuota(true)" :disabled="quotaLoading">重新整理</button>
+              </span>
+            </div>
+            <div x-show="quota && quota.ok && !quota.unlimited">
+              <div style="height:10px;background:var(--bg-sub, #e5e7eb);border-radius:5px;margin:8px 0;overflow:hidden">
+                <div data-testid="line-quota-fill" :style="'height:100%;width:' + Math.min(100, quota.percent || 0) + '%;background:' + quotaColor"></div>
+              </div>
+              <div data-testid="line-quota-text" style="font-size:13px;font-weight:600" x-text="quotaText"></div>
+            </div>
+            <div data-testid="line-quota-unlimited" x-show="quota && quota.ok && quota.unlimited" style="font-size:13px;margin-top:6px" x-text="'本月已用 ' + quota.used + ' 則（此方案沒有上限，不會告警）'"></div>
+            <div data-testid="line-quota-error" x-show="!quota || !quota.ok" style="font-size:12px;color:var(--text-dim);margin-top:6px" x-text="quota ? ('目前讀不到用量：' + quota.error) : '讀取中…'"></div>
+            <div class="ns-field" style="margin-top:10px">
+              <label for="line-quota-th">用量告警門檻（%，逗號分隔，最多 5 個）</label>
+              <input data-saved-field type="text" id="line-quota-th" x-model="thText" placeholder="80,100" style="max-width:220px">
+              <div style="font-size:12px;color:var(--text-dim);margin-top:4px">用量達到門檻時寄信給最高管理者；同一門檻每月只寄一次。修改後按下方「儲存 LINE 設定」。</div>
+            </div>
+          </div>
+
           <div class="ns-toggle">
             <input data-saved-field type="checkbox" id="chk-line-enabled" x-model="cfg.enabled" style="width:16px;height:16px;cursor:pointer">
             <label for="chk-line-enabled">啟用 LINE 通知</label>
@@ -389,12 +413,23 @@
           <div class="ns-field" style="margin:12px 0">
             <label>同時發 LINE 的通知</label>
             <template x-for="e in cfg.events" :key="e.key">
+              <div>
               <div class="ns-toggle" style="margin:2px 0">
                 <input type="checkbox" :id="'chk-line-ev-' + e.key" :checked="e.enabled" @change="toggleEvent(e, $event.target.checked)" style="width:16px;height:16px;cursor:pointer">
                 <label :for="'chk-line-ev-' + e.key" x-text="e.name"></label>
               </div>
+              <div style="margin:0 0 8px 24px;font-size:12px;color:var(--text-dim)" :data-testid="'line-roles-' + e.key">
+                可收的角色：
+                <template x-for="r in cfg.role_choices" :key="r">
+                  <label style="margin-right:10px;cursor:pointer;white-space:nowrap">
+                    <input type="checkbox" :data-testid="'line-role-' + e.key + '-' + r" :checked="roleOn(e, r)" @change="toggleRole(e, r, $event.target.checked)" style="width:14px;height:14px;vertical-align:-2px">
+                    <span x-text="roleName(r)"></span>
+                  </label>
+                </template>
+              </div>
+              </div>
             </template>
-            <div style="font-size:12px;color:var(--text-dim);margin-top:4px">勾選後立即生效；付款、薪資、獎金類通知目前不提供 LINE。</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-top:4px">勾選後立即生效；付款、薪資、獎金類通知目前不提供 LINE。收件人仍以該通知本來的收件人為準（只會縮小，不會多寄給別人）；每位同仁也可以在「帳號安全」頁自行退訂。</div>
           </div>
 
           <div class="ns-actions">
@@ -541,25 +576,56 @@
         return json ? { Authorization: 'Bearer ' + s.token, 'Content-Type': 'application/json' } : { Authorization: 'Bearer ' + s.token }
       }
       return {
-        cfg: { enabled: false, channel_access_token: '', public_base_url: '', include_links: false, login_channel_id: '', login_channel_secret: '', callback_url: '', events: [] },
+        cfg: { enabled: false, channel_access_token: '', public_base_url: '', include_links: false, login_channel_id: '', login_channel_secret: '', callback_url: '', events: [], role_choices: [], quota_thresholds: [80, 100] },
+        quota: null, quotaLoading: false, thText: '80,100',
         denied: false, saving: false, verifying: false, saved: false, msg: '', isError: false,
         _say(text, err, ms) { this.msg = text; this.isError = !!err; setTimeout(() => { this.msg = '' }, ms || 5000) },
         // Alpine 3 看到資料物件有 init() 會自己叫一次——這裡不再寫 x-init（會跑兩遍）
-        async init() { await this.load() },
+        async init() { await this.load(); if (!this.denied) this.loadQuota(false) },
         async load() {
           const r = await fetch('/api/settings/line-notify', { headers: hdr(false) })
           if (r.status === 403) { this.denied = true; return }
-          if (r.ok) this.cfg = { ...this.cfg, ...(await r.json()) }
+          if (r.ok) { this.cfg = { ...this.cfg, ...(await r.json()) }; this.thText = (this.cfg.quota_thresholds || []).join(',') }
+        },
+        get quotaColor() {
+          const q = this.quota || {}
+          return { alert: 'var(--danger)', warn: '#B45309', ok: 'var(--success)' }[q.level] || 'var(--text-dim)'
+        },
+        get quotaText() {
+          const q = this.quota || {}
+          return '本月已用 ' + q.used + ' / ' + q.limit + ' 則（' + (q.percent == null ? '—' : q.percent.toFixed(0)) + '%）'
+        },
+        async loadQuota(force) {
+          this.quotaLoading = true
+          try {
+            const r = await fetch('/api/settings/line-notify/quota' + (force ? '?refresh=true' : ''), { headers: hdr(false) })
+            if (r.ok) this.quota = await r.json()
+          } finally { this.quotaLoading = false }
+        },
+        roleName(r) { return { superadmin: '最高管理者', admin: '管理員', sales: '業務', engineer: '工程師', viewer: '檢視者', finance: '財務' }[r] || r },
+        roleOn(e, r) { return e.roles == null || e.roles.includes(r) },
+        async toggleRole(e, r, on) {
+          const all = this.cfg.role_choices
+          let cur = e.roles == null ? all.slice() : e.roles.slice()
+          cur = on ? (cur.includes(r) ? cur : cur.concat([r])) : cur.filter(x => x !== r)
+          const send = all.every(x => cur.includes(x)) ? null : all.filter(x => cur.includes(x))
+          const resp = await fetch('/api/settings/line-notify/events/' + encodeURIComponent(e.key) + '/roles', { method: 'PUT', headers: hdr(true), body: JSON.stringify({ roles: send }) })
+          if (resp.ok) { e.roles = send; this._say('已更新「' + e.name + '」可收的角色', false, 3000) }
+          else { const d = await resp.json().catch(() => ({})); this._say(d.detail || '更新失敗', true); await this.load() }
         },
         async save() {
           this.saving = true
-          const { callback_url: _cb, events: _ev, ...payload } = this.cfg
+          const { callback_url: _cb, events: _ev, role_choices: _rc, ...payload } = this.cfg
+          const parts = String(this.thText || '').split(/[,，\s]+/).filter(Boolean)
+          if (parts.some(p => !/^[0-9]+$/.test(p))) { this.saving = false; this._say('告警門檻只能填整數百分比，例如 80,100', true); return }
+          payload.quota_thresholds = parts.map(Number)
           const r = await fetch('/api/settings/line-notify', { method: 'PUT', headers: hdr(true), body: JSON.stringify(payload) })
           this.saving = false
           const d = await r.json().catch(() => ({}))
           if (r.ok) {
             this.saved = true; setTimeout(() => { this.saved = false }, 3000)
             await this.load()
+            this.loadQuota(false)
             this._say('LINE 設定已儲存', false)
           } else {
             this._say(d.detail || '儲存失敗', true)

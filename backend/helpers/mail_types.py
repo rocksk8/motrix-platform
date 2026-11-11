@@ -210,6 +210,9 @@ register("heartbeat_stale", "心跳監控本身異常", _S, "superadmins", "",
          "心跳監控壞掉時，伺服器當機或斷電可能沒有人被通知。", "請檢查心跳排程、healthchecks.io 的狀態與收件人設定，修好後人工確認回到綠燈。")
 register("disk_space_low", "磁碟空間不足", _S, "superadmins", "",
          "磁碟空間不足時，備份與上傳可能失敗。", "請清理暫存檔案或擴充磁碟空間。")
+register("line_quota_warning", "LINE 本月訊息額度告警", _S, "superadmins", "",
+         "LINE 官方帳號免費方案每月有訊息上限，用完後 LINE 通知會停止送達（Email 不受影響）。",
+         "請確認本月用量，必要時減少勾選「同時發 LINE」的通知類型，或調整 LINE 方案。")
 register("backup_error", "備份嚴重錯誤", _S, "superadmins", "",
          "本次備份沒有完成，發生故障時可能遺失資料。",
          "請確認雲端硬碟是否已掛載、本機快照（backend/db_backups/）是否存在，以及伺服器磁碟空間。")

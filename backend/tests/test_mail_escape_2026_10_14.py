@@ -82,6 +82,10 @@ def _args(fn, evil, variant):
             out[n] = [_tok("hb_problem", evil)]
         elif fn.__name__ == "notify_heartbeat_stale" and n == "state":
             out[n] = {k: _tok("hb_" + k, evil) for k in ("status", "since", "scheme", "ext_ok_at", "seen_at")}
+        elif fn.__name__ == "notify_line_quota_warning" and n in ("used", "limit", "threshold"):
+            out[n] = {"used": 170, "limit": 200, "threshold": 80}[n]
+        elif fn.__name__ == "notify_line_quota_warning" and n == "thresholds":
+            out[n] = [80, 100]
         elif n == "problems":
             out[n] = [{"label": _tok("plabel", evil), "path": _tok("ppath", evil), "free_gb": 1.5, "total_gb": 10, "free_pct": 15}]
         elif n == "temp_bloat":
