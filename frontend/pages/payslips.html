@@ -81,8 +81,6 @@
     @media (hover: none) { .row-actions { opacity: 1; } }
     @media (max-width: 1023px) {
       .search-input, input.filter { font-size: 16px !important; min-height: 44px; }
-      .data-table td:first-child, .data-table td:nth-child(7) { white-space: nowrap; }
-      .data-table td:nth-child(2) { min-width: 150px; }   /* 平板表格：單號不折成三行、狀態「草稿」不直排 */
     }
     @media (max-width: 767px) {
       .page-main { padding: 14px 12px 28px; }
@@ -100,7 +98,9 @@
       .pv-overlay { padding: 0; align-items: stretch; }
       .pv-modal { width: 100vw; height: calc(100dvh / var(--fz,1)); border-radius: 0; }
       .pv-close { font-size: 28px; padding: 4px 12px; }
-
+    }
+    /* 表格 → 卡片：768–1023 的 8 欄表格放不下（操作欄被推出右緣、單號／狀態折行）→ 平板直立也用卡片（K 審 hichan-18） */
+    @media (max-width: 1023px) {
       .data-table, .data-table tbody { display: block; width: 100%; min-width: 0 !important; }
       .data-table thead { display: none; }
       .data-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 12px 14px; border-bottom: 1px solid #F0EEE9; align-items: center; }
