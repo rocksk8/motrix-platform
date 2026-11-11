@@ -123,5 +123,6 @@ def test_narrow_screen_toolbar_stays_inside_the_viewport(live_server, make_user,
         box = page.locator(sel).bounding_box()
         assert box and box["x"] >= 0 and box["x"] + box["width"] <= 391, "%s 超出畫面寬度：%s" % (sel, box)
     page.click("[data-testid=dt-more]")
+    page.locator("[data-testid=dt-more-menu]").wait_for(state="visible", timeout=5000)
     box = page.locator("[data-testid=dt-more-menu]").bounding_box()
     assert box and box["x"] >= 0 and box["x"] + box["width"] <= 391, "更多選單超出畫面：%s" % box
