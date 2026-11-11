@@ -148,7 +148,9 @@ class _ConnReaperMiddleware:
        只收在交易中的，是因為沒在交易中的連線仍可能被串流回應的產生器用到。
     2. **請求結束**（含未處理例外）：其餘全部回收。
 
-    放在最內層（本檔最先 add_middleware）只是讓登記簿的 context 由它複製給 worker 執行緒、且 auth 自己的連線不被它動。
+    放在最內層（本檔最先 add_middleware）：登記簿的 context 由它複製給 worker 執行緒。**只涵蓋路由處理函式開的連線**，外層 middleware
+    （auth／授權閘門／操作軌跡寫入）自己開的不在網內（見 docs/platform/GET-DB-CONNECTION-LEAK-AUDIT-T80.md §8.1 與 R6）。
+    ⚠️ 串流回應的產生器必須自己開連線，不可繼承一條在 response.start 時仍在交易中的連線（會被 rollback＋close）。
     純 ASGI（不是 BaseHTTPMiddleware）⇒ 不多開 task。"""
 
     def __init__(self, app):
