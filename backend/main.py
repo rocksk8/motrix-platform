@@ -4,6 +4,7 @@ MOTRIX ERP — FastAPI 後端
 """
 import os
 import time
+import threading
 import logging
 from datetime import datetime
 
@@ -442,6 +443,29 @@ def _record_failure_audit(request, row, status: int) -> None:
         pass
 
 
+#: 操作軌跡的去重「認領」（T80 R6）。去重原本靠「SELECT 最後一列→沒有才 INSERT」，沒有鎖——因為它一直在事件迴圈上跑，
+#: 所有請求的軌跡寫入天然排隊。搬進 threadpool 之後多條執行緒會同時做：同一群組（開一張案件＝base＋finance-summary＋…
+#: 六支同時回來）各自 SELECT 都沒看到前一列、各自 INSERT ⇒ 重複列。所以先在記憶體裡**認領**（持鎖只做字典操作，不碰資料庫；
+#: 不能用鎖包住 SELECT＋INSERT：資料庫忙時每條執行緒各等 busy timeout 30 秒，會一條一條串起來）；認領失敗＝同群組在去重
+#: 秒數內已有人記了。資料庫那道檢查保留（跨行程／重啟）。key 含庫檔路徑：測試每題一個庫、demo 與正式庫的使用者 id 互不相干。
+_TRAIL_CLAIMS = {}
+_TRAIL_CLAIM_LOCK = threading.Lock()
+_TRAIL_CLAIMS_PRUNE_AT = 2000
+
+
+def _trail_claim(key, now_dt) -> bool:
+    with _TRAIL_CLAIM_LOCK:
+        t = _TRAIL_CLAIMS.get(key)
+        if t is not None and abs((now_dt - t).total_seconds()) < trail.DEDUPE_SECONDS:
+            return False
+        _TRAIL_CLAIMS[key] = now_dt
+        if len(_TRAIL_CLAIMS) > _TRAIL_CLAIMS_PRUNE_AT:
+            for k, v in list(_TRAIL_CLAIMS.items()):
+                if abs((now_dt - v).total_seconds()) >= trail.DEDUPE_SECONDS:
+                    del _TRAIL_CLAIMS[k]
+        return True
+
+
 def _record_request_trail(user_id: int, now_dt, method: str, path: str,
                           referer: str, status: int) -> None:
     """把一次請求記進操作軌跡。失敗一律吞掉——這是觀測資料，不該擋下正常請求。"""
@@ -454,12 +478,17 @@ def _record_request_trail(user_id: int, now_dt, method: str, path: str,
         except Exception:
             page = ""
     now_iso = now_dt.isoformat()
+    tc = claim_key = None
     try:
         tc = get_db()
         # 開一張案件會同時撈 base + finance-summary + material-orders + …，那是
         # 一次點擊而不是六次。同一個群組在去重秒數內只留第一筆（見
         # trail.collapse_group 的說明，包含為什麼不能只用 LIKE 前綴比對）。
         group = trail.collapse_group(method, path)
+        claim_key = (_db_for_reaper.DB_PATH, user_id, method, group[0] if group else path)
+        if not _trail_claim(claim_key, now_dt):
+            tc.close()
+            return
         if group:
             last = tc.execute(
                 "SELECT at FROM user_request_log WHERE user_id=? AND method=? "
@@ -486,7 +515,14 @@ def _record_request_trail(user_id: int, now_dt, method: str, path: str,
         tc.commit()
         tc.close()
     except Exception:
-        pass
+        if claim_key is not None:
+            with _TRAIL_CLAIM_LOCK:             # 沒寫成（例如資料庫忙到逾時）⇒ 放掉認領，下一個同群組請求可以再試
+                _TRAIL_CLAIMS.pop(claim_key, None)
+        if tc is not None:
+            try:
+                tc.close()
+            except Exception:
+                pass
 
 
 # ⚠️ 這支**寫在 auth_middleware 前面**是刻意的，不是排版隨意。
@@ -562,6 +598,13 @@ async def _company_setup_required_handler(request: Request, exc):
     if exc.missing:
         body["missing"] = exc.missing
     return JSONResponse(status_code=428, content=body)
+
+
+def _after_response_records(request, row, now_dt, path: str, status: int) -> None:
+    """回應之後的兩筆觀測紀錄（操作軌跡、失敗稽核）合成一次 threadpool 呼叫——省一次執行緒切換（pool 與所有同步端點共用，
+    慢處理函式把它占滿時，每多一次 hop 輕量請求就多等一次空位；K 審 hichan-12 N1）。各自吞例外。"""
+    _record_request_trail(row["id"], now_dt, request.method, path, request.headers.get("Referer", ""), status)
+    _record_failure_audit(request, row, status)
 
 
 def _expire_session(token: str) -> None:
@@ -690,9 +733,7 @@ async def auth_middleware(request: Request, call_next):
     response = await call_next(request)
     # 操作軌跡（2026-09-14）：記在**回應之後**才拿得到狀態碼——被擋下來的操作
     # （403/404）跟成功的一樣重要，甚至更重要。
-    await run_in_threadpool(_record_request_trail, row["id"], now_dt, request.method, path,
-                            request.headers.get("Referer", ""), response.status_code)
-    await run_in_threadpool(_record_failure_audit, request, row, response.status_code)
+    await run_in_threadpool(_after_response_records, request, row, now_dt, path, response.status_code)       # 一次 hop：軌跡＋失敗稽核
     if _gate_kind in (_company_setup.GATE_UNDETERMINED, _company_setup.GATE_GRACE):
         response.headers[_company_setup.HEADER] = (
             "status_error" if _gate_kind == _company_setup.GATE_UNDETERMINED else "grace")
