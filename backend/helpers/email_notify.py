@@ -222,9 +222,19 @@ def _mail_off(event_key) -> bool:
 
 
 #: LINE 通道要知道「信件收件人是哪些帳號」，但收件人解析（覆寫／退訂／關閉）只有 `_users_emails` 這一個漏斗，不可複製第二份。
-#: 做法：`send_registered` 在解析期間打開這個執行緒區域的收集器，漏斗把「實際回傳的信箱 ⇒ 帳號」記進去；
-#: 最後以**最終寄出的信箱清單**反查帳號（被覆寫模式丟掉的收件人不會跑進 LINE）。沒開收集器＝行為與原本完全相同。
+#: 做法：`send_registered` 在解析期間打開這個執行緒區域的收集器（`_resolved.pairs`＝[(信箱, 帳號)]），漏斗把「實際回傳的人」記進去；
+#: 覆寫模式把事件收件人丟掉（`superadmin_only`）時，連同那一段 pair 一起丟（`event_span`），所以共用信箱的人也不會因此多收 LINE
+#: （K 審 L2）。最後只取**最終寄出信箱**對應的帳號。沒開收集器＝行為與原本完全相同。
 _resolved = threading.local()
+
+
+def _drop_event_pairs() -> None:
+    """覆寫把事件收件人換掉時，把 `_lookup_emails` 剛記下的那一段 (信箱, 帳號) 一起丟掉。沒開收集器＝什麼都不做。"""
+    sink = getattr(_resolved, "pairs", None)
+    span = getattr(_resolved, "event_span", None)
+    if sink is not None and span:
+        del sink[span[0]:span[1]]
+        _resolved.event_span = (span[0], span[0])
 
 
 def _users_emails(where: str, params, event_key) -> list:
@@ -238,10 +248,9 @@ def _users_emails(where: str, params, event_key) -> list:
             "AND email IS NOT NULL AND email != '' AND (%s)" % where, list(params)).fetchall()
         conn.close()
         kept = [r for r in rows if _pref_enabled(r["notification_muted"], event_key)]
-        sink = getattr(_resolved, "map", None)
+        sink = getattr(_resolved, "pairs", None)
         if sink is not None:
-            for r in kept:
-                sink.setdefault(r["email"], set()).add(r["username"])
+            sink.extend((r["email"], r["username"]) for r in kept)
         return [r["email"] for r in kept]
     except Exception as exc:
         logger.warning("收件人查詢失敗（%s）：%s", event_key, exc)
@@ -329,9 +338,11 @@ def _with_event_recipients(event_emails: list, event_key) -> list:
         return []
     t = _registered(event_key)
     if t is None:
+        _drop_event_pairs()
         return _only_superadmins(event_key)
     o = _override_of(event_key)
     if o["mode"] == "superadmin_only":
+        _drop_event_pairs()
         return _only_superadmins(event_key)
     if o["mode"] == "custom":
         return list(dict.fromkeys(event_emails + _custom_emails(o, event_key)))
@@ -346,9 +357,16 @@ def _admin_emails(event_key: str = None) -> list:
 def _lookup_emails(usernames: list, event_key: str = None) -> list:
     """事件收件人（依帳號）＋覆寫。"""
     found = []
+    sink = getattr(_resolved, "pairs", None)
+    start = len(sink) if sink is not None else 0
     if usernames:
         found = _users_emails("username IN (%s)" % ",".join("?" * len(usernames)), usernames, event_key)
-    return _with_event_recipients(found, event_key)
+    if sink is not None:
+        _resolved.event_span = (start, len(sink))        # 這一段是「事件收件人」；覆寫若把它丟掉，pair 也一起丟（見 `_drop_event_pairs`）
+    try:
+        return _with_event_recipients(found, event_key)
+    finally:
+        _resolved.event_span = None
 
 
 
@@ -970,13 +988,16 @@ def send_registered(event_key: str, *, title: str, rows: list, usernames: list =
     `SEND_SENT`（寄出了）、`SEND_UNKNOWN`（等不到結果——不知道有沒有出去，重寄可能雙寄）、`SEND_PERMANENT_FAIL`（這一封永遠寄不出去——重試只是天天失敗）都回 True（保留記號）；
     只有明確的暫時失敗（`SEND_TRANSIENT_FAIL`）、機器層級略過（`SEND_SKIPPED`）或沒有收件人才回 False（不寫記號，下次重試）。
     `out`（選填 dict）：寄送結果寫進 `out["outcome"]`（`SEND_*`；沒有收件人＝`"no_recipient"`），讓呼叫端分得出「真的寄出」與「保留記號但不確定」。"""
-    _resolved.map = {}                      # 收集「信箱 ⇒ 帳號」給 LINE 通道用（見 `_resolved` 說明）
+    _resolved.pairs = []                    # 收集 (信箱, 帳號) 給 LINE 通道用（見 `_resolved` 說明）
     try:
         to = list(dict.fromkeys((_lookup_emails(usernames, event_key) if usernames else [])
                                 + (_group_emails(event_key) if to_group else [])))
-        by_email = _resolved.map
+        pairs = list(_resolved.pairs)
     finally:
-        _resolved.map = None
+        _resolved.pairs = None
+        _resolved.event_span = None
+    final = set(to)
+    line_users = sorted({u for e, u in pairs if e in final})
     if not to:
         logger.warning("send_registered: %r 沒有收件人（usernames=%r, to_group=%r）", event_key, usernames, to_group)
         if out is not None:
@@ -985,9 +1006,10 @@ def send_registered(event_key: str, *, title: str, rows: list, usernames: list =
     html = _build_html(event_key, title, badge_text, badge_color, rows, "", link or _base_url(),
                        intro=reason, button_text=button_text, note=note)
     handle = _async_send(to, _mt.subject(event_key, reason or title), html)
-    # LINE 通道（附帶、背景、失敗只記 log；沒勾選／沒啟用／沒人綁定＝什麼都不做）。收件人＝信件最終寄出的那些帳號；連結經 safe_link（預設不帶）
-    _ln.notify_users(event_key, sorted({u for e in to for u in by_email.get(e, ())}), title, _rows_plain(rows),
-                     reason=reason, link=link)
+    def _line():
+        # LINE 通道（附帶、背景、失敗只記 log；沒勾選／沒啟用／沒人綁定＝什麼都不做）。收件人＝信件最終寄出的那些帳號；連結經 safe_link（預設不帶）
+        _ln.notify_users(event_key, line_users, title, _rows_plain(rows), reason=reason, link=link)
+
     if wait:
         outcome = handle.wait()
         if out is not None:
@@ -996,7 +1018,13 @@ def send_registered(event_key: str, *, title: str, rows: list, usernames: list =
             logger.error("send_registered: %r 寄送結果 %s——保留記號（不重寄），請人工確認收件人是否收到／補齊收件人 Email", event_key, outcome)
         elif outcome != SEND_SENT:
             logger.warning("send_registered: %r 寄送結果 %s（呼叫端不寫記號，下次重試）", event_key, outcome)
-        return outcome in (SEND_SENT, SEND_UNKNOWN, SEND_PERMANENT_FAIL)
+        may_mark = outcome in (SEND_SENT, SEND_UNKNOWN, SEND_PERMANENT_FAIL)
+        # 要寫「已通知」記號的呼叫端（wait=True）會在 False 時隔天重試：LINE 只在「可以寫記號」時才發，
+        # 否則同一件事每次重試都會再推一次 LINE（K 審 S1）；LINE 因此跟著信件的成敗走，信件機器層級沒設好時 LINE 也等它一起補發。
+        if may_mark:
+            _line()
+        return may_mark
+    _line()
     return True
 
 

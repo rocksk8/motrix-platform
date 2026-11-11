@@ -2688,6 +2688,8 @@ def get_line_notify(authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     from helpers import line_notify as _ln
     cfg = _get_setting("line_notify", {}) or {}
+    if not isinstance(cfg, dict):          # 手改壞的設定值不能讓設定頁 500
+        cfg = {}
     safe = {**_LINE_DEFAULTS, **{k: cfg[k] for k in _LINE_DEFAULTS if k in cfg}}
     safe["channel_access_token"] = _ln.mask(cfg.get("channel_access_token"))
     safe["callback_url"] = _ln.callback_url()       # 要貼進 LINE Login channel 的 Callback URL；沒有對外網址 ⇒ ""
@@ -2717,27 +2719,34 @@ def set_line_notify_event(key: str, body: dict = Body(...), authorization: str =
 def set_line_notify(body: dict = Body(...), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     from helpers import line_notify as _ln
-    current = _get_setting("line_notify", {}) or {}
-    data = {**current, **{k: body[k] for k in _LINE_DEFAULTS if k in body}}
-    data = {**_LINE_DEFAULTS, **data}
-    data["enabled"] = bool(data.get("enabled"))
-    tok = body.get("channel_access_token") if "channel_access_token" in body else None
-    if tok is None or tok == _MASKED:
-        data["channel_access_token"] = current.get("channel_access_token", "")
-    else:
-        data["channel_access_token"] = str(tok).strip()
     if "include_links" in body and not isinstance(body["include_links"], bool):
         raise HTTPException(400, "include_links 必須是 true／false")      # 不把 "false" 字串當 true
-    data["include_links"] = data.get("include_links") is True
-    try:
-        data["public_base_url"] = _ln.normalize_public_base(data.get("public_base_url"))
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    if data["enabled"] and not data["channel_access_token"]:
-        raise HTTPException(400, "啟用 LINE 通知前請先填寫 channel access token")
-    if data["include_links"] and not data["public_base_url"]:
-        raise HTTPException(400, "訊息要帶連結，必須先設定對外網址（public_base_url）")
-    _set_setting("line_notify", data)
+    with _ln.settings_lock():            # 讀改寫要在鎖內：否則會把同時間 set_event 寫的事件開關用舊值蓋回去（K 審 L1）
+        current = _get_setting("line_notify", {}) or {}
+        if not isinstance(current, dict):
+            current = {}
+        data = {**current, **{k: body[k] for k in _LINE_DEFAULTS if k in body}}
+        data = {**_LINE_DEFAULTS, **data}
+        data["enabled"] = bool(data.get("enabled"))
+        tok = body.get("channel_access_token") if "channel_access_token" in body else None
+        if tok is None or tok == _MASKED:
+            data["channel_access_token"] = current.get("channel_access_token", "")
+        else:
+            t = str(tok).strip()          # 空字串＝清除 token
+            if t and not _ln.valid_token(t):
+                # 格式不合會讓送出時的例外訊息帶出整串 token（K 審 S2）⇒ 一律在這裡擋下
+                raise HTTPException(400, "channel access token 格式不正確：只能是英數與 + / = . _ -，長度 20～512，請從 LINE Developers 重新複製")
+            data["channel_access_token"] = t
+        data["include_links"] = data.get("include_links") is True
+        try:
+            data["public_base_url"] = _ln.normalize_public_base(data.get("public_base_url"))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        if data["enabled"] and not data["channel_access_token"]:
+            raise HTTPException(400, "啟用 LINE 通知前請先填寫 channel access token")
+        if data["include_links"] and not data["public_base_url"]:
+            raise HTTPException(400, "訊息要帶連結，必須先設定對外網址（public_base_url）")
+        _set_setting("line_notify", data)
     # 稽核只記「啟用與否／token 有無被更換」，不記 token 本身；對外網址與連結開關影響對外曝露面，照實記
     _audit(_tok(authorization), "settings.line_notify.update", "settings", "line_notify", "LINE 通知設定",
            {"enabled": data["enabled"], "tokenChanged": data["channel_access_token"] != current.get("channel_access_token", ""),

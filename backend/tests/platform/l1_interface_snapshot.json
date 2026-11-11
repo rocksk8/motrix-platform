@@ -1082,7 +1082,9 @@
    "quota": "def(token=…)",
    "safe_link": "def(link)",
    "set_event": "def(event_key, on)",
+   "settings_lock": "def()",
    "unlink_user": "def(username)",
+   "valid_token": "def(tk)",
    "verify_token": "def(token=…)"
   },
   "helper:list_catalog": {

@@ -2,7 +2,7 @@
 """LINE Messaging API 發送管道（2026-11-11，T79 候選票；信件通知的並行通道）。
 
 [單位] helper:line_notify    [層] L1    [穩定度] 實作（已接事件通道；OAuth 綁定流程尚未接，等對外 callback 網址）
-[公開介面] CALLBACK_PATH, HTTP_TIMEOUT, LINE_API_BASE, LINKS_KEY, LINK_PAGES, MAX_TEXT, MULTICAST_LIMIT, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, WIRED_EVENTS, build_text, callback_url, enabled, event_enabled, events_view, ids_for, is_linked, link_user, links_enabled, mask, normalize_public_base, notify_users, public_base, push, push_async, quota, safe_link, set_event, unlink_user, verify_token
+[公開介面] CALLBACK_PATH, HTTP_TIMEOUT, LINE_API_BASE, LINKS_KEY, LINK_PAGES, MAX_TEXT, MULTICAST_LIMIT, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, WIRED_EVENTS, build_text, callback_url, enabled, event_enabled, events_view, ids_for, is_linked, link_user, links_enabled, mask, normalize_public_base, notify_users, public_base, push, push_async, quota, safe_link, set_event, settings_lock, unlink_user, valid_token, verify_token
 [契約題] tests/platform/test_line_notify_t79.py、modules/case/tests/test_line_review_edit_2026_11_11.py
 [不變式]
   ⓪ 曝露面：`public_base_url`（Tunnel 公開網域，callback 用）與 `include_links`（訊息是否帶連結，預設關）是**兩個獨立設定**（2026-11-11 PM 裁示）。
@@ -45,7 +45,27 @@ _MASK = "••••••••"
 
 
 def _cfg() -> dict:
-    return _get_setting(SETTING_KEY, {}) or {}
+    v = _get_setting(SETTING_KEY, {}) or {}
+    return v if isinstance(v, dict) else {}          # 手改壞（不是物件）⇒ 當成沒設定，不丟例外
+
+
+def _events() -> dict:
+    ev = _cfg().get("events")
+    return ev if isinstance(ev, dict) else {}
+
+
+#: LINE channel access token 是 base64url 風格的長字串；格式不合（含換行、中文、過長）一律不收、不送：
+#: 壞字元會讓 http.client 丟出「Invalid header value b'Bearer <整串 token>'」，例外訊息會把 token 帶進 log（K 審 S2）。
+_TOKEN_RE = re.compile(r"^[A-Za-z0-9+/=._-]{20,512}$")
+
+
+def valid_token(tk) -> bool:
+    return isinstance(tk, str) and bool(_TOKEN_RE.match(tk))
+
+
+def settings_lock():
+    """讀改寫 `system_settings.line_notify` 的行程內鎖（PUT 主設定與 `set_event` 共用，避免互相蓋掉）。"""
+    return _lock
 
 
 def mask(token) -> str:
@@ -66,13 +86,24 @@ CALLBACK_PATH = "/api/line/callback"
 _PUBLIC_BASE_RE = re.compile(r"^https://[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(:[0-9]{1,5})?$")
 
 
+_LABEL_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+
+
 def normalize_public_base(v) -> str:
-    """對外基準網址（Tunnel 公開網域）：只收 `https://主機[:埠]`，不可有路徑、查詢、帳密；末尾斜線容忍。不合法 ⇒ `ValueError`。空字串 ⇒ ""。"""
+    """對外基準網址（Tunnel 公開網域）：只收 `https://主機[:埠]`，不可有路徑、查詢、帳密；末尾斜線容忍。不合法 ⇒ `ValueError`。空字串 ⇒ ""。
+    主機的每一段（以 `.` 分隔）都要是合法標籤（不可有空段如 `a..b`）；埠號 1～65535。內網／私有位址不擋（管理者自己的決定）。"""
     s = str(v or "").strip().rstrip("/")
     if not s:
         return ""
+    bad = ValueError("對外網址只能是 https://網域（可含埠號 1～65535），不可含路徑、查詢或帳號")
     if len(s) > 255 or not _PUBLIC_BASE_RE.match(s):
-        raise ValueError("對外網址只能是 https://網域（可含埠號），不可含路徑、查詢或帳號")
+        raise bad
+    hostport = s[len("https://"):]
+    host, _, port = hostport.partition(":")
+    if port and not (1 <= int(port) <= 65535):
+        raise bad
+    if not all(_LABEL_RE.match(x) for x in host.split(".")):
+        raise bad
     return s
 
 
@@ -191,6 +222,9 @@ def push(user_ids, text: str) -> str:
             logger.warning("LINE skipped — 收件人（已綁定的 userId）為空")
             return SEND_PERMANENT_FAIL
         token = c["channel_access_token"]
+        if not valid_token(token):
+            logger.warning("LINE skipped — channel access token 格式不正確（請在設定頁重新貼上）")
+            return SEND_SKIPPED
         text = str(text or "")[:MAX_TEXT]
         outcomes = []
         for i in range(0, len(ids), MULTICAST_LIMIT):
@@ -209,7 +243,7 @@ def push(user_ids, text: str) -> str:
                 return pick
         return SEND_SENT
     except Exception as exc:       # 連線層錯誤（逾時／DNS／TLS）一律暫時性：往「會重試」那一側倒
-        logger.warning("LINE push error: %s", exc)
+        logger.warning("LINE push error: %s", type(exc).__name__)      # 只記型別：例外訊息可能帶整串 token（K 審 S2）
         return SEND_TRANSIENT_FAIL
 
 
@@ -220,8 +254,8 @@ def push_async(user_ids, text: str) -> threading.Thread:
             out = push(user_ids, text)
             if out != SEND_SENT:
                 logger.info("LINE 推播結果：%s（對象 %d 人）", out, len(list(user_ids or [])))
-        except Exception:                                       # push 本身不丟例外；這裡是最後一道
-            logger.exception("LINE 背景推播的執行緒自己炸了")
+        except Exception as exc:                                # push 本身不丟例外；這裡是最後一道
+            logger.warning("LINE 背景推播的執行緒自己炸了：%s", type(exc).__name__)
     t = threading.Thread(target=_run, daemon=True, name="line-push")
     t.start()
     return t
@@ -238,14 +272,14 @@ def event_enabled(event_key: str) -> bool:
     try:
         c = _cfg()
         return bool(c.get("enabled") and c.get("channel_access_token") and event_key in WIRED_EVENTS
-                    and (c.get("events") or {}).get(event_key) is True)
+                    and _events().get(event_key) is True)
     except Exception:
         return False
 
 
 def events_view() -> dict:
     """⇒ {key: bool}（只含已接線的類型；缺項＝關）。"""
-    ev = _cfg().get("events") or {}
+    ev = _events()
     return {k: ev.get(k) is True for k in WIRED_EVENTS}
 
 
@@ -257,7 +291,7 @@ def set_event(event_key: str, on: bool) -> None:
         raise ValueError("enabled 必須是 true 或 false")
     with _lock:
         c = dict(_cfg())
-        ev = dict(c.get("events") or {})
+        ev = dict(_events())
         ev[event_key] = on
         c["events"] = ev
         _set_setting(SETTING_KEY, c)
@@ -330,8 +364,8 @@ def notify_users(event_key: str, usernames, title: str, rows=None, *, reason: st
             logger.info("LINE：%r 沒有已綁定 LINE 的收件人（收件 %d 人）", event_key, len(list(usernames or [])))
             return None
         return push_async(ids, build_text(title, rows, reason=reason, link=link))
-    except Exception:
-        logger.exception("LINE notify_users 失敗（不影響信件；event=%r）", event_key)
+    except Exception as exc:
+        logger.warning("LINE notify_users 失敗（不影響信件；event=%r）：%s", event_key, type(exc).__name__)
         return None
 
 
@@ -342,6 +376,8 @@ def verify_token(token: str = None) -> dict:
         tk = token or _cfg().get("channel_access_token") or ""
         if not tk:
             return {"ok": False, "error": "尚未設定 channel access token"}
+        if not valid_token(tk):
+            return {"ok": False, "error": "channel access token 格式不正確（只能是英數與 + / = . _ -，20～512 字元），請重新貼上"}
         status, body = _http("GET", "/v2/bot/info", tk)
         if status == 200:
             return {"ok": True, "name": body.get("displayName", ""), "basicId": body.get("basicId", "")}
@@ -349,7 +385,7 @@ def verify_token(token: str = None) -> dict:
             return {"ok": False, "error": "token 無效或已過期（LINE 回 %s）" % status}
         return {"ok": False, "error": "LINE 回應 %s" % status}
     except Exception as exc:
-        logger.warning("LINE verify error: %s", exc)
+        logger.warning("LINE verify error: %s", type(exc).__name__)
         return {"ok": False, "error": "連不到 LINE（%s）" % type(exc).__name__}
 
 
@@ -359,6 +395,8 @@ def quota(token: str = None) -> dict:
         tk = token or _cfg().get("channel_access_token") or ""
         if not tk:
             return {"ok": False, "error": "尚未設定 channel access token"}
+        if not valid_token(tk):
+            return {"ok": False, "error": "channel access token 格式不正確"}
         s1, b1 = _http("GET", "/v2/bot/message/quota", tk)
         s2, b2 = _http("GET", "/v2/bot/message/quota/consumption", tk)
         if s1 != 200 or s2 != 200:
@@ -366,5 +404,5 @@ def quota(token: str = None) -> dict:
         return {"ok": True, "type": b1.get("type", ""), "limit": b1.get("value") if b1.get("type") == "limited" else None,
                 "used": b2.get("totalUsage", 0)}
     except Exception as exc:
-        logger.warning("LINE quota error: %s", exc)
+        logger.warning("LINE quota error: %s", type(exc).__name__)
         return {"ok": False, "error": "連不到 LINE（%s）" % type(exc).__name__}

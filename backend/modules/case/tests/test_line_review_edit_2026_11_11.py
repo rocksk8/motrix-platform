@@ -22,7 +22,7 @@ pytestmark = requires_module("case", "打 M01 的報價單複查編輯端點")
 
 _ = _fresh_mode_cache
 
-TOKEN = "tok-line-e2e"
+TOKEN = "tok-line-e2e-0123456789"
 
 
 def _uid(n):

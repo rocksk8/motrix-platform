@@ -125,7 +125,7 @@ def test_verify_token_ok_and_failures(ln):
     ln.fake.status = 200                                          # token 給空字串 ⇒ 退回已存設定
     assert ln.verify_token("")["ok"] is True
     assert ln.fake.calls[-1][2] == TOKEN
-    assert ln.verify_token("other-tok")["ok"] is True and ln.fake.calls[-1][2] == "other-tok"
+    assert ln.verify_token("other-token-0123456789")["ok"] is True and ln.fake.calls[-1][2] == "other-token-0123456789"
 
 
 def test_quota_limited_and_unlimited(ln):
@@ -152,8 +152,8 @@ def test_settings_get_masks_put_keeps_and_replaces(client, make_user, ln):
     assert client.put("/api/settings/line-notify", headers=sa, json={"enabled": True}).status_code == 200
     assert _get_setting("line_notify")["channel_access_token"] == TOKEN
     # 真的新值 ＝ 取代
-    assert client.put("/api/settings/line-notify", headers=sa, json={"channel_access_token": "  new-tok  "}).status_code == 200
-    assert _get_setting("line_notify")["channel_access_token"] == "new-tok"
+    assert client.put("/api/settings/line-notify", headers=sa, json={"channel_access_token": "  new-token-0123456789abcdef  "}).status_code == 200
+    assert _get_setting("line_notify")["channel_access_token"] == "new-token-0123456789abcdef"
     # 未知欄位不入庫
     client.put("/api/settings/line-notify", headers=sa, json={"evil": 1})
     assert "evil" not in _get_setting("line_notify")
