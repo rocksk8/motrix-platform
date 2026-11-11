@@ -18,13 +18,15 @@ from fastapi import APIRouter, Body, Header, HTTPException, Request
 from db import get_db
 from helpers import _require_user
 from helpers import duty_roles as dr
+from helpers.client_ip import client_ip
 
 router = APIRouter()
 
 
 def _ip(request: Request) -> str:
+    """稽核紀錄的來源 IP：走 `helpers.client_ip`（cloudflared 同機時 `request.client.host` 全是 127.0.0.1，稽核價值歸零）。"""
     try:
-        return request.client.host if request and request.client else ""
+        return client_ip(request) if request else ""
     except Exception:                                   # noqa: BLE001
         return ""
 
