@@ -89,8 +89,8 @@ FOOTER_MARK = "<build-footer>"
 TEXT_JS = """() => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); const out = []; let n;
     while ((n = w.nextNode())) { const e = n.parentElement; if (!e || ['SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT'].includes(e.tagName)) continue;
       if (e.offsetParent === null && getComputedStyle(e).position !== 'fixed') continue; const t = n.textContent.trim(); if (!t) continue
-      if (e.closest('#build-footer')) { if (out[out.length - 1] !== '%s') out.push('%s'); continue }
-      out.push(t) } return out.join('\\n') }""" % (FOOTER_MARK, FOOTER_MARK)
+      if (e.closest('#build-footer')) { if (out[out.length - 1] !== '__FOOTER_MARK__') out.push('__FOOTER_MARK__'); continue }
+      out.push(t) } return out.join('\\n') }""".replace("__FOOTER_MARK__", FOOTER_MARK)
 
 
 def _snapshot(page, reqs, ready_js):
