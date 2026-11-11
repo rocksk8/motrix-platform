@@ -444,22 +444,43 @@ if (typeof module !== 'undefined' && module.exports) {
       + '<span class="topbar__title">' + esc(_pageName()) + '</span>'
       + buildGlobalSearch()
       + '<div class="topbar__right">'
+      // 手機版（≤767px）：次要項目（姓名／字級／深淺色／在線／？／修改密碼）收進「⋯」面板，頂欄只留 搜尋／通知／⋯／登出。
+      // 桌機與平板 .topbar__sec 是 display:contents（版面等同沒有這層）；通知鈴移到 ？／修改密碼 之後、緊貼登出。
+      + '<div class="topbar__sec" id="tb-sec">'
       + '<span id="tb-display-name" style="font-size:12px;color:#888;font-family:LINE Seed TW_OTF, sans-serif">' + esc(dn) + '</span>'
       + buildFontCtrl()
       + buildThemeToggle()
       + buildOnlineWidget()
-      + bell
       + '<button type="button" id="ux-help-btn" class="topbar__btn" data-testid="ux-help-btn" aria-haspopup="dialog" aria-expanded="false" title="這一頁怎麼用" aria-label="這一頁怎麼用" style="color:#888;border-color:#333;font-size:12px;font-weight:700;padding:5px 9px">？</button>'
       + '<a href="' + cpHref + '" class="topbar__btn" style="text-decoration:none;color:#888;border-color:#333;font-size:12px">修改密碼</a>'
+      + '</div>'
+      + bell
+      + '<button type="button" class="topbar__btn topbar__more" id="tb-more" aria-label="更多" aria-haspopup="true" aria-expanded="false" title="更多">⋯</button>'
       + '<button class="topbar__btn" onclick="motrixLogout()" style="color:#888;border-color:#333;font-size:12px">登出</button>'
       + '<div class="topbar__avatar">' + esc(av) + '</div>'
       + '</div>'
 
     // Process Alpine directives in the injected topbar (notifStore x-data)
     if (window.Alpine && window.Alpine.initTree) window.Alpine.initTree(el)
+    bindMoreMenu(el)
     bindOnlineWidget()
     refreshOnlineWidget()
     if (sa) setInterval(refreshOnlineWidget, 60000)
+  }
+
+  // ── 手機版頂欄「⋯」面板開關（≤767px 才看得到按鈕；面板內容是 .topbar__sec）──────────
+  function bindMoreMenu(bar) {
+    var btn = bar.querySelector('#tb-more')
+    if (!btn) return
+    function setOpen(v) {
+      bar.classList.toggle('tb-more-open', v)
+      btn.setAttribute('aria-expanded', v ? 'true' : 'false')
+    }
+    btn.addEventListener('click', function (e) { e.stopPropagation(); setOpen(!bar.classList.contains('tb-more-open')) })
+    document.addEventListener('click', function (e) {
+      if (bar.classList.contains('tb-more-open') && !bar.querySelector('#tb-sec').contains(e.target)) setOpen(false)
+    })
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setOpen(false) })
   }
 
   // ── Sidebar ─────────────────────────────────────────────────────────────────
