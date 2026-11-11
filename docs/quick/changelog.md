@@ -16,6 +16,14 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-11-11 手機直拍照片存起來橫躺：浮水印重存沒處理 EXIF 方向（fix/photo-exif-orientation）
+
+- **現象**（hichan-9 研究手機外勤時重現）：Orientation=6、顯示 300x400 的原圖，經 `photos._process_project_photo` 後變成 400x300（直書照片橫躺）。
+- **根因**：處理流程 `convert()`＋重存 JPEG，`save()` 沒帶 EXIF ⇒ Orientation 標記消失，像素卻沒被轉正。這條路徑是所有上傳流程共用的（案件更新、work-log、CRM、`helpers/uploads.py`、`routers/system.py`）。
+- **修法**：`photos.py` 在讀完 GPS 之後 `ImageOps.exif_transpose` 把方向烘進像素，再貼浮水印（浮水印貼在轉正後畫面的底部）；沒有方向標記的橫拍照片與 PNG logo 行為不變；GPS 仍從原圖讀。L1 介面（`_photo_root`、`_process_project_photo` 簽章）不變。已存在的舊照片不會被回頭修正（舊檔 EXIF 已被丟掉，無從得知原本方向）。
+- **沒動**：`modules/subcontract/api/contractors.py` 的身分證／存簿浮水印（另一條讀圖路徑，同樣沒處理方向）——只在這裡記一筆，未列入這張票。 另有兩個這條路徑本來就有、與方向無關的小問題（K 審 hichan-12 指出，沒動）：①`routers/system.py` work-log 白名單收 `.gif`／`.webp`／`.heic`，但 `_process_project_photo` 對非 PNG 一律輸出 JPEG ⇒ 「副檔名 .webp／.gif、內容是 JPEG」的不一致仍在（動畫 GIF 也被壓成單張）；②GPS 只從 `_getexif()` 讀（僅 JPEG），PNG／WEBP 的 EXIF 帶 GPS 時浮水印沒有 GPS 字串。
+- 測試：`backend/tests/test_photo_exif_orientation_2026_11_11.py`——Orientation 1～8 逐一驗**像素位置**（期望值取自 EXIF 規格表，不是 Pillow 對照表）、hichan-9 的重現尺寸、GPS 在轉正後仍讀得到且浮水印在底部、PNG 帶方向仍保留 alpha；舊 `photos.py` 上 10 題紅（對照組 Orientation=1、無 EXIF 橫拍各自綠）；另有非法方向值（0／9／99）不炸、`exif_transpose` 丟例外時退回舊行為共 4 題鎖住 `try/except`。
+
 ## 2026-11-11 正式機評估衍生：webauthn-config 404、case.access_denied（fix/ops-webauthn404-case-denied）
 
 - **webauthn-config 404（32 次）**：根因＝公司設定頁每次載入都 GET 該端點並把 404 當「Passkey 已停用」訊號。改問 `/api/system/webauthn-config-status`，停用時不再打。
