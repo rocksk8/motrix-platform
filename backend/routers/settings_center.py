@@ -27,6 +27,7 @@ from core import registry as _registry
 from core import spine as _spine
 from helpers import _require_user
 from helpers import config_ledger as ledger
+from helpers.client_ip import client_ip
 from helpers import settings_groups  # noqa: F401  登錄群組
 from helpers import settings_registry as sr
 
@@ -129,7 +130,7 @@ def _do_publish(group, values, reason, request, actor):
     try:
         cls = sr.plan(group, values, user=actor["username"])["fields"]
         out = sr.publish(group, values, note=reason, user=actor["username"], reason=reason,
-                         ip=(request.client.host if request.client else ""), actor=actor)
+                         ip=(client_ip(request) if request else ""), actor=actor)
     except sr.SettingError as e:
         raise HTTPException(400, {"message": str(e), "problems": e.problems})
     except Exception as e:                                   # noqa: BLE001
@@ -407,7 +408,7 @@ def apply_profile(name: str, request: Request, body: dict = Body(default={}), au
     out = {}
     if name in sr.profiles():                                     # 只涵蓋開發中群組的預設組：沒有東西可套用，但不是 404
         try:
-            out = sr.apply_profile(name, reason=reason, user=actor["username"], ip=(request.client.host if request.client else ""), actor=actor)
+            out = sr.apply_profile(name, reason=reason, user=actor["username"], ip=(client_ip(request) if request else ""), actor=actor)
         except sr.SettingError as e:
             raise HTTPException(400, {"message": str(e), "problems": e.problems})
     return {"ok": True, "results": out, "skipped": _skipped_planned(name)}       # 畫面要說『略過 N 項』，不可說成全部套用
