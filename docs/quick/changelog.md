@@ -16,6 +16,15 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-11-11 T79：來源 IP 只信該信的——登入鎖定不可被 X-Forwarded-For 繞過（fix/trusted-client-ip）
+
+- **現象／風險**（外網存取 go-live 前必修）：`routers/auth.py::_client_ip` 無條件信第一個 `X-Forwarded-For` ⇒ 登入鎖定（5 次失敗／15 分鐘，以來源 IP 計）每次換 XFF 就繞過 ⇒ 無限次猜密碼。cloudflared 與本程式同機時，所有外部使用者對本程式都是 127.0.0.1 ⇒ 若只改成「不信 XFF」，一個人輸錯 5 次會鎖住全部外部使用者，稽核 IP 也全變 127.0.0.1。
+- **修法**：新增 `helpers/client_ip.py`（L0）——永遠不讀 XFF；**只有 TCP 對端本身是 loopback 才採信 `CF-Connecting-IP`**（且須是合法 IP，正規化後使用），否則用對端位址。`auth.py`（登入鎖定／TOTP／passkey）、`duty_roles.py`、`settings_center.py` 稽核 IP 全走這支；既有呼叫點不動。
+- **部署儀表板第二道防線**：`tools/deploy_dashboard.py` 以「對端是 loopback」判斷本機——隧道同機轉進來的外部請求也是 loopback。現在帶 Cloudflare／代理標頭（CF-Connecting-IP、CF-Ray、X-Forwarded-For、Forwarded、X-Real-IP…）的請求一律 403（WebSocket 關 1008）；本機瀏覽器直連不帶這些標頭，不受影響。**第一道仍是設定面：隧道 ingress 只能指到主程式 port，不可指到儀表板 port。**
+- **守門**：AST 守門禁止 `helpers/client_ip.py`、`tools/deploy_dashboard.py` 以外的程式碼讀 `X-Forwarded-For` 或 `.client.host`（含正對照）。
+- **沒動／已知限制**：IPv6 同 /64 內換位址仍可繞過「以單一位址計」的鎖定（另案）；本機使用者共用 127.0.0.1 桶（與以前相同）；uvicorn 預設的 proxy-headers 行為不受影響（本 helper 不論它開不開都給同一個答案）。
+- 測試：`backend/tests/test_trusted_client_ip_2026_11_11.py`（規則單元＋登入端點整合＋同機隧道各自一桶＋守門）、`backend/tests/test_deploy_dashboard_local_only_2026_09_22.py` HC1d。
+
 ## 2026-11-11 手機直拍照片存起來橫躺：浮水印重存沒處理 EXIF 方向（fix/photo-exif-orientation）
 
 - **現象**（hichan-9 研究手機外勤時重現）：Orientation=6、顯示 300x400 的原圖，經 `photos._process_project_photo` 後變成 400x300（直書照片橫躺）。
@@ -23,6 +32,7 @@
 - **修法**：`photos.py` 在讀完 GPS 之後 `ImageOps.exif_transpose` 把方向烘進像素，再貼浮水印（浮水印貼在轉正後畫面的底部）；沒有方向標記的橫拍照片與 PNG logo 行為不變；GPS 仍從原圖讀。L1 介面（`_photo_root`、`_process_project_photo` 簽章）不變。已存在的舊照片不會被回頭修正（舊檔 EXIF 已被丟掉，無從得知原本方向）。
 - **沒動**：`modules/subcontract/api/contractors.py` 的身分證／存簿浮水印（另一條讀圖路徑，同樣沒處理方向）——只在這裡記一筆，未列入這張票。 另有兩個這條路徑本來就有、與方向無關的小問題（K 審 hichan-12 指出，沒動）：①`routers/system.py` work-log 白名單收 `.gif`／`.webp`／`.heic`，但 `_process_project_photo` 對非 PNG 一律輸出 JPEG ⇒ 「副檔名 .webp／.gif、內容是 JPEG」的不一致仍在（動畫 GIF 也被壓成單張）；②GPS 只從 `_getexif()` 讀（僅 JPEG），PNG／WEBP 的 EXIF 帶 GPS 時浮水印沒有 GPS 字串。
 - 測試：`backend/tests/test_photo_exif_orientation_2026_11_11.py`——Orientation 1～8 逐一驗**像素位置**（期望值取自 EXIF 規格表，不是 Pillow 對照表）、hichan-9 的重現尺寸、GPS 在轉正後仍讀得到且浮水印在底部、PNG 帶方向仍保留 alpha；舊 `photos.py` 上 10 題紅（對照組 Orientation=1、無 EXIF 橫拍各自綠）；另有非法方向值（0／9／99）不炸、`exif_transpose` 丟例外時退回舊行為共 4 題鎖住 `try/except`。
+
 
 ## 2026-11-11 正式機評估衍生：webauthn-config 404、case.access_denied（fix/ops-webauthn404-case-denied）
 

@@ -352,6 +352,41 @@ def test_hc1a_the_websocket_is_closed_for_a_non_local_client(dash):
     )
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# HC1d · 隧道（cloudflared）轉進來的請求不可被當成「本機」（2026-11-11，外網存取 go-live 前的防線）
+# ═══════════════════════════════════════════════════════════════════════
+# cloudflared 與本工具同機時，被轉進來的外部請求對端也是 127.0.0.1——光看 request.client 會把它們當成本機，
+# 而這個工具可以部署與回滾正式機。第一道防線是「隧道 ingress 只指到主程式的 port、不要指到 8765」（設定面）；
+# 這是第二道（程式面）：帶 Cloudflare／代理標頭的請求即使對端是 loopback 也 fail closed。
+# 本機瀏覽器直連不會帶這些標頭（正對照：test_hc1d_a_plain_local_request_is_still_allowed）。
+
+PROXIED = [{"CF-Connecting-IP": "198.51.100.7"}, {"CF-Ray": "abc-TPE"}, {"X-Forwarded-For": "198.51.100.7"},
+           {"Forwarded": "for=198.51.100.7"}, {"X-Real-IP": "198.51.100.7"}]
+
+
+@pytest.mark.parametrize("hdr", PROXIED)
+def test_hc1d_a_loopback_request_that_came_through_a_proxy_is_refused(dash, hdr):
+    with TestClient(dash.app, client=LOCAL) as client:
+        r = client.get("/api/pre-deploy-check", headers=hdr)
+    assert r.status_code == 403, f"{hdr} 帶著代理標頭從 loopback 進來，卻回 {r.status_code}（隧道轉進來的請求被當成本機）"
+
+
+def test_hc1d_a_plain_local_request_is_still_allowed(dash):
+    """正對照：沒有代理標頭的本機直連照常放行（否則「一律 403」會讓上面全綠、把工具關掉）。"""
+    with TestClient(dash.app, client=LOCAL) as client:
+        assert client.get("/api/pre-deploy-check").status_code == 200
+
+
+def test_hc1d_the_websocket_refuses_a_proxied_loopback_request(dash):
+    from starlette.websockets import WebSocketDisconnect
+
+    with TestClient(dash.app, client=LOCAL) as client:
+        with pytest.raises(WebSocketDisconnect) as excinfo:
+            with client.websocket_connect("/ws/prod-status", headers={"CF-Connecting-IP": "198.51.100.7"}) as ws:
+                ws.receive_json()
+    assert excinfo.value.code == 1008
+
+
 # ══════════════════════════════════════════════════════════════════════
 # HC1c · 這 13 支路由不可以搬到別人身上
 # ══════════════════════════════════════════════════════════════════════
