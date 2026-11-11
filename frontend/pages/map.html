@@ -150,6 +150,39 @@
     .mp-ov-list { list-style:none; margin:6px 0; padding:0; max-height:260px; overflow:auto; font-size:12px; }
     .mp-ov-msg[data-kind=err] { color:var(--danger); }
     .mp-ov-msg[data-kind=warn] { color:var(--warning); }
+
+    /* ══ 手機／直立平板補強（hichan-17，2026-11-12）════════════════════════════
+       ① 篩選區：勾選框 13px、下拉／搜尋 12px（iOS 聚焦放大）、整排緊貼 → 勾選項整條 44px 可點、輸入 16px
+       ② 按鈕（開啟地圖／使用我的位置／重新整理／全螢幕）高度 ≥44px、整列對齊
+       ③ 地點清單 7 欄表格（要橫捲）→ 一個地點一張卡：類別＋距離、名稱、機關、地點、截止 */
+    @media (max-width: 1023px) {
+      .mp-search, .mp-tender-filter, .mp-near { font-size: 16px !important; min-height: 44px; box-sizing: border-box; }
+    }
+    @media (max-width: 767px) {
+      .mp-panel-body > label { min-height: 44px; }
+      .mp-panel-body > label input[type="checkbox"] { width: 22px; height: 22px; }
+      .mp-panel-body > label > span, .mp-panel-body > span { font-size: 14px !important; }
+      .mp-panel-body > label select { padding: 6px 8px !important; }
+      .mp-panel-body > input.mp-search { padding: 8px 12px !important; }
+      .mp-wrap .btn, .mp-wrap .btn-sm { min-height: 44px; padding: 8px 16px; font-size: 14px; }
+      .mp-map-tools .btn { min-height: 44px; }
+      .mp-note { font-size: 13px; }
+      .mp-table-scroll { overflow-x: visible; }
+      .mp-table-scroll .table { min-width: 0; display: block; width: 100%; }
+      .mp-table-scroll .table thead { display: none; }
+      .mp-table-scroll .table tbody { display: block; }
+      .mp-table-scroll .table tr.mp-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 12px 14px; border-bottom: 1px solid var(--border-light); align-items: center; }
+      .mp-table-scroll .table tr.mp-row td { display: block; padding: 0; border: 0; min-width: 0; text-align: left !important; }
+      .mp-table-scroll .table tr.mp-row td:nth-child(1) { grid-column: 1; grid-row: 1; }
+      .mp-table-scroll .table tr.mp-row td:nth-child(5) { grid-column: 2; grid-row: 1; text-align: right !important; font-weight: 700; }
+      .mp-table-scroll .table tr.mp-row td:nth-child(3) { grid-column: 1 / -1; grid-row: 2; font-size: 15px !important; font-weight: 600; }
+      .mp-table-scroll .table tr.mp-row td:nth-child(2) { grid-column: 1 / -1; grid-row: 3; color: var(--text-secondary); }
+      .mp-table-scroll .table tr.mp-row td:nth-child(4) { grid-column: 1 / -1; grid-row: 4; color: var(--text-secondary); }
+      .mp-table-scroll .table tr.mp-row td:nth-child(6) { grid-column: 1 / -1; grid-row: 5; }
+      .mp-table-scroll .table tr.mp-row td:nth-child(7) { grid-column: 1 / -1; grid-row: 6; }
+      .mp-table-scroll .table tr.mp-row td:nth-child(5)::before { content: "離最近據點 "; color: var(--text-dim); font-size: 12px; font-weight: 400; }
+      .mp-table-scroll .table tr.mp-row td:nth-child(6):not([style*="display: none"])::before { content: "離你 "; color: var(--text-dim); font-size: 12px; }
+    }
   </style>
 </head>
 <body>

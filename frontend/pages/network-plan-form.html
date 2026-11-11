@@ -13,7 +13,8 @@
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <style>
     [x-cloak]{display:none!important}
-    .page-wrap{padding:calc(var(--topbar-h) + 20px) 28px 60px calc(var(--sidebar-w) + 28px);max-width:1400px}
+    /* style.css 的 .page-wrap 已有 margin-top／margin-left 讓出頂欄與側欄；原本又用 padding 讓一次 → 桌面頁首多一個頂欄高的空白、手機約 230px（hichan-17 2026-11-12） */
+    .page-wrap{padding:20px 28px 60px;max-width:1400px}
     .plan-no{font-family:LINE Seed TW_OTF, monospace;font-size:13px;color:var(--text-dim)}
     .st{display:inline-flex;padding:2px 8px;border-radius:4px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;vertical-align:middle}
     .st-plan{background:#F0EEE9;color:var(--text-secondary)}
@@ -66,6 +67,36 @@
     .modal-box h3{font-size:15px;font-weight:700;margin-bottom:12px}
     .stock-item-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--border-light);border-radius:6px;margin-bottom:6px;cursor:pointer;font-size:12px}
     .stock-item-row:hover{border-color:var(--accent);background:var(--accent-light)}
+
+    /* ══ 手機／直立平板補強（hichan-17，2026-11-12）══════════════════════════
+       ① 頁面上方空白 ~220px（page-wrap 已有 margin-top，又加了 topbar 高度的 padding）；平板左側多 64px 空白
+       ② 三欄表單把案場名稱擠到只剩 5 個字 → 手機單欄
+       ③ 工具列 3 排且 sticky（吃掉 1/5 螢幕）→ 手機改不黏、按鈕 44px
+       ④ 12 個分頁折成 4 排 → 一排可橫滑；表格內輸入 12px（iOS 聚焦放大）→ 16px */
+    @media (max-width: 1023px) {
+      .form-group input, .batch-bar select, .batch-bar input[type=text], .toolbar select, .modal-box input, .modal-box select { font-size: 16px !important; min-height: 44px; }
+      .grid-table input[type=text], .grid-table input[type=number], .grid-table select { font-size: 16px; min-height: 40px; }
+      .grid-table input[type=checkbox], .batch-bar input[type=checkbox] { width: 22px; height: 22px; }
+      .grid-table td.checkbox-cell { padding: 0 10px !important; }
+      .tab-bar > .tab { min-height: 44px; white-space: nowrap; }
+      .row-del { min-height: 40px; padding: 6px 10px; font-size: 13px; }
+    }
+    @media (max-width: 767px) {
+      .page-wrap { padding: 12px 14px 48px; }
+      .toolbar { position: static; padding: 8px 0; }
+      .toolbar .btn, .toolbar select { min-height: 44px; }
+      .toolbar > span[style*="flex:1"] { display: none; }
+      .toolbar > select { flex: 1 1 120px; }
+      .card { padding: 16px 14px; }
+      .form-row { grid-template-columns: minmax(0, 1fr); }
+      .tab-bar { flex-wrap: nowrap !important; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; margin-left: -14px; margin-right: -14px; padding: 0 14px; }
+      .tab-bar > .tab { flex: 0 0 auto; }
+      .tab-panel-head .btn, .batch-bar .btn { min-height: 44px; }
+      .btn-xs { padding: 8px 12px; font-size: 13px; min-height: 40px; }
+      .modal-overlay { align-items: flex-end; padding: 0; }
+      .modal-box { width: 100%; max-width: none; border-radius: 16px 16px 0 0; max-height: calc(88dvh / var(--fz,1)); padding: 18px 16px calc(14px + env(safe-area-inset-bottom)); }
+      .stock-item-row { min-height: 48px; }
+    }
   </style>
 </head>
 <body x-data="networkPlanForm()" x-init="init()" x-cloak>

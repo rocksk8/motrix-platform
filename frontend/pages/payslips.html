@@ -72,6 +72,54 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     .pv-iframe{width:100%;height:100%;border:none;display:block}
     .pv-foot{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-top:1px solid var(--border-light);flex-shrink:0}
+
+    /* ══ 手機／直立平板版面（hichan-17，2026-11-12）══════════════════════════
+       ① 8 欄表格在手機要橫捲才看得到「狀態」→ 改成一張勞報單一張卡（單號＋狀態、受領人、類別＋日期、應付／實發、預覽鈕）
+       ② 右側詳情欄是 fixed 380px：手機比螢幕還寬，而且點選後頁面再被加 padding-right:400px ⇒ 整頁被推出畫面
+          → 手機改成全螢幕蓋板，頁面不留右側空間
+       ③ 「預覽」鈕 opacity:0 要 hover 才出現，觸控裝置永遠看不到 → 觸控裝置一律顯示 */
+    @media (hover: none) { .row-actions { opacity: 1; } }
+    @media (max-width: 1023px) {
+      .search-input, input.filter { font-size: 16px !important; min-height: 44px; }
+    }
+    @media (max-width: 767px) {
+      .page-main { padding: 14px 12px 28px; }
+      .page-main[style*="padding-right"] { padding-right: 12px !important; }
+      .search-wrap { flex: 1 1 100%; }
+      .search-bar > div:nth-child(2) { flex: 1 1 55%; }
+      .search-bar input[type=month] { width: 100%; box-sizing: border-box; }
+      .search-bar .btn { min-height: 44px; }
+      .pg .btn { min-height: 44px; }
+      .detail-pane { width: 100%; top: 0; height: calc(100dvh / var(--fz,1)); z-index: 200; border-left: 0; }
+      .detail-head { padding: 10px 14px; }
+      .detail-close { width: 44px; height: 44px; font-size: 22px; }
+      .detail-body { padding: 14px; }
+      .detail-row { font-size: 14px; }
+      .pv-overlay { padding: 0; align-items: stretch; }
+      .pv-modal { width: 100vw; height: calc(100dvh / var(--fz,1)); border-radius: 0; }
+      .pv-close { font-size: 28px; padding: 4px 12px; }
+    }
+    /* 表格 → 卡片：768–1023 的 8 欄表格放不下（操作欄被推出右緣、單號／狀態折行）→ 平板直立也用卡片（K 審 hichan-18） */
+    @media (max-width: 1023px) {
+      .data-table, .data-table tbody { display: block; width: 100%; min-width: 0 !important; }
+      .data-table thead { display: none; }
+      .data-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 12px 14px; border-bottom: 1px solid #F0EEE9; align-items: center; }
+      .data-table td { display: block; padding: 0; border: 0; min-width: 0; }
+      .data-table tbody tr:has(td[colspan]) { display: block; padding: 0; }
+      .data-table td:nth-child(1) { grid-column: 1; grid-row: 1; font-size: 13px !important; color: var(--text-secondary); }
+      .data-table td:nth-child(7) { grid-column: 2; grid-row: 1; text-align: right; }
+      .data-table td:nth-child(2) { grid-column: 1 / -1; grid-row: 2; font-size: 15px; }
+      .data-table td:nth-child(3) { grid-column: 1; grid-row: 3; }
+      .data-table td:nth-child(6) { grid-column: 2; grid-row: 3; text-align: right; color: var(--text-dim); }
+      .data-table td:nth-child(4) { grid-column: 1; grid-row: 4; text-align: left; }
+      .data-table td:nth-child(5) { grid-column: 2; grid-row: 4; text-align: right; font-size: 15px; }
+      .data-table td:nth-child(4)::before { content: "應付 "; color: var(--text-dim); font-size: 12px; font-family: var(--font-zh); }
+      .data-table td:nth-child(5)::before { content: "實發 "; color: var(--text-dim); font-size: 12px; font-weight: 400; font-family: var(--font-zh); }
+      .data-table td:nth-child(8) { grid-column: 1 / -1; grid-row: 5; }
+      .data-table td:nth-child(8) .row-actions { justify-content: flex-end; }
+      .data-table td:nth-child(8) .btn { min-height: 44px; min-width: 80px; }
+      .exp-chip { padding: 4px 10px; margin-left: 6px; font-size: 13px; }
+    }
   </style>
 </head>
 <body x-data="payslipsPage()" x-init="init()">

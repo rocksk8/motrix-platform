@@ -37,6 +37,22 @@
     .ms-note--warn { background: #FEF3C7; border-color: #F59E0B; color: #92400E; }
     .ms-msg { max-width: 960px; margin-top: 12px; font-size: 13px; }
     .ms-msg--err { color: var(--danger); }
+    /* 手機／直立平板：5 欄表格改成一模組一張卡（狀態欄原本被擠成一字一行）；停用／啟用鈕放大到好點 */
+    @media (max-width: 767px) {
+      .ms-main { padding: 18px 14px 28px; }
+      .ms-table, .ms-table tbody { display: block; }
+      .ms-table thead { display: none; }
+      .ms-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 12px 14px; margin-bottom: 10px; border: 1px solid var(--border-light); border-radius: 10px; background: #fff; }
+      .ms-table td { display: block; padding: 0; border: 0; min-width: 0; grid-column: 1; }
+      .ms-table td:nth-child(1) { font-size: 15px; font-weight: 700; }
+      .ms-table td:nth-child(2)::before { content: "版本 "; color: var(--text-dim); font-size: 12px; }
+      .ms-table td:nth-child(3)::before { content: "目前狀態　"; color: var(--text-dim); font-size: 12px; }
+      .ms-table td:nth-child(4)::before { content: "重啟後　"; color: var(--text-dim); font-size: 12px; }
+      .ms-table td:nth-child(5) { grid-column: 2; grid-row: 1 / span 4; align-self: center; }
+      .ms-table td:nth-child(5) .btn { min-width: 76px; min-height: 44px; }
+      .ms-table tr:has(td[colspan]) { display: block; }
+      .ms-table td[colspan] { grid-column: auto; }
+    }
   </style>
 </head>
 <body x-data="moduleSettingsPage()" x-init="init()" x-cloak>

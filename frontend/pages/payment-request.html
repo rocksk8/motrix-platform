@@ -50,6 +50,42 @@
     .pr-flist li { display: flex; align-items: center; gap: 8px; font-size: 12px; }
     .pr-flist img { width: 34px; height: 34px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border-light); }
     @media (max-width: 767px) { .pr-main { margin-left: 0; padding: 16px 12px 48px; } .pr-table { display: block; overflow-x: auto; } }
+
+    /* ══ 手機／直立平板補強（hichan-17，2026-11-12）══════════════════════════
+       ① 輸入 13px（iOS／iPad 聚焦放大）、按鈕 .btn-sm 約 28px、案件挑選列、勾選框 → 觸控尺寸
+       ② 「我的申請」11 欄表格在手機要橫捲（單號看得到、狀態在螢幕外）→ 一張申請一張卡：單號＋狀態、內容、案件、金額…
+          卡片順序依「先看是哪筆、什麼狀態、多少錢」排，細項帶標籤。 */
+    @media (max-width: 1023px) {
+      .pr-f input, .pr-f select, .pr-f textarea, .pr-card input[type=text], .pr-card input[type=number], .pr-card input[type=date],
+      .pr-card input[type=search], .pr-card select, .pr-card textarea, .pr-table input:not([type=checkbox]):not([type=file]) { font-size: 16px !important; min-height: 44px; box-sizing: border-box; }
+      .pr-card input[type=checkbox] { width: 22px; height: 22px; }
+      .pr-card .btn, .pr-tabs .btn, #pr-tab-new, #pr-tab-mine { min-height: 44px; }
+      .pr-case { min-height: 48px; padding: 10px 12px; font-size: 14px; }
+      .pr-main { padding-top: 20px; }
+    }
+    @media (max-width: 767px) {
+      .pr-card { padding: 14px; }
+      .pr-card label { font-size: 13px; }
+      .pr-grid { grid-template-columns: minmax(0, 1fr); }
+      #pr-save-draft, #pr-submit, #pr-t-save-draft, #pr-t-submit { flex: 1 1 40%; }
+      .pr-table { display: block; overflow: visible; }
+      .pr-table thead { display: none; }
+      .pr-table tbody { display: block; }
+      .pr-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 12px 0; border-bottom: 1px solid var(--border-light); }
+      .pr-table td { display: block; padding: 0; border: 0; min-width: 0 !important; grid-column: 1 / -1; font-size: 13px !important; }
+      .pr-table td:nth-child(1) { grid-column: 1; grid-row: 1; font-weight: 700; font-size: 15px !important; }
+      .pr-table td:nth-child(5) { grid-column: 2; grid-row: 1; text-align: right; }
+      .pr-table td:nth-child(3) { grid-row: 2; font-weight: 600; font-size: 15px !important; }
+      .pr-table td:nth-child(2) { grid-row: 3; }
+      .pr-table td:nth-child(4) { grid-row: 4; font-weight: 700; }
+      .pr-table td:nth-child(6)::before { content: "發票　"; color: var(--text-dim); }
+      .pr-table td:nth-child(7)::before { content: "預定付款日"; display: block; color: var(--text-dim); font-size: 12px; margin-bottom: 2px; }
+      .pr-table td:nth-child(8)::before { content: "付款日　"; color: var(--text-dim); }
+      .pr-table td:nth-child(10)::before { content: "附件"; display: block; color: var(--text-dim); font-size: 12px; margin-bottom: 2px; }
+      .pr-table td:nth-child(9) .btn, .pr-table td:nth-child(7) .btn { min-height: 44px; }
+      .pr-table td:nth-child(7) input[type=date] { flex: 1 1 140px; }
+      .pr-table td:empty { display: none; }
+    }
   </style>
 </head>
 <body x-data="paymentRequestPage()" x-cloak>
