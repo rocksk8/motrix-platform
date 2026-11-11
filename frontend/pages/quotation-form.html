@@ -744,6 +744,57 @@
     </div>
   </div>
 
+  <!-- ══ 送審前置檢查 Modal：申請人沒歸屬部門／部門沒主管 ⇒ 送審註定被擋，按之前就先講清楚該去哪裡設定 ══ -->
+  <div x-show="showPrecheckModal" x-cloak data-testid="qf-precheck-modal"
+       style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center"
+       @keydown.escape.window="showPrecheckModal=false">
+    <div style="background:#fff;border-radius:12px;width:500px;max-width:94vw;box-shadow:0 24px 64px rgba(0,0,0,.22);font-family:LINE Seed TW_OTF, sans-serif;overflow:hidden" @click.stop>
+      <div style="padding:15px 20px 13px;border-bottom:1px solid #E5E7EB;display:flex;align-items:center;gap:10px">
+        <span style="font-size:15px">⚠</span>
+        <span style="font-size:13px;font-weight:600;color:#0A0A0A">還不能送審：簽核流程尚未設定完成</span>
+        <button @click="showPrecheckModal=false" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#9CA3AF;font-size:20px;line-height:1;padding:0 4px">&times;</button>
+      </div>
+      <div style="padding:16px 20px;font-size:12px;color:#374151;line-height:1.8">
+        <template x-for="p in (precheck?.problems || [])" :key="p.code + p.message">
+          <div data-testid="qf-precheck-problem" style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:9px 12px;color:#991B1B;margin-bottom:10px" x-text="p.message"></div>
+        </template>
+        <div style="font-weight:600;margin:4px 0 6px">第一次送審，需要先完成這四件事（依序）：</div>
+        <template x-for="(st, i) in (precheck?.steps || [])" :key="st.key">
+          <div style="display:flex;align-items:center;gap:8px;padding:3px 0">
+            <span :style="st.done ? 'color:#059669' : 'color:#DC2626'" style="width:16px;font-weight:700" x-text="st.done ? '✓' : '✗'"></span>
+            <span :style="st.done ? 'color:#6B7280' : 'color:#111827;font-weight:600'" x-text="(i+1) + '. ' + st.label"></span>
+            <span x-show="!st.done && (precheck?.steps || []).findIndex(x => !x.done) === i"
+                  style="font-size:10px;background:#FEE2E2;color:#B91C1C;border-radius:3px;padding:1px 6px">目前卡在這一步</span>
+          </div>
+        </template>
+        <div style="margin-top:12px;color:#4B5563">
+          <template x-if="precheck?.canFix">
+            <div>
+              <div>您是最高管理者，可以直接設定：</div>
+              <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+                <template x-for="p in uniqueFixPages()" :key="p.page">
+                  <a :href="p.page" target="_blank" rel="noopener" data-testid="qf-precheck-fix-link"
+                     style="padding:6px 14px;border-radius:6px;background:#0A0A0A;color:#F5F4F0;font-size:12px;text-decoration:none"
+                     x-text="'前往「' + p.label + '」（新分頁開啟）'"></a>
+                </template>
+              </div>
+              <div style="margin-top:8px;color:#6B7280">新分頁開啟，這張報價單的內容不會遺失。設定好後回到本頁按「重新檢查」即可。</div>
+            </div>
+          </template>
+          <template x-if="!precheck?.canFix">
+            <div>您的帳號沒有修改組織架構的權限，請聯絡最高管理者完成上面標 ✗ 的設定。報價單內容已保留，可先儲存草稿，設定完成後再送審。</div>
+          </template>
+        </div>
+      </div>
+      <div style="padding:10px 20px 16px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #F3F4F6">
+        <button @click="showPrecheckModal=false"
+                style="padding:7px 18px;border:1.5px solid #D1D5DB;border-radius:6px;background:#fff;font-size:13px;color:#374151;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">關閉</button>
+        <button @click="showPrecheckModal=false; submitQuote()" data-testid="qf-precheck-recheck"
+                style="padding:7px 18px;border:none;border-radius:6px;background:#0A0A0A;color:#F5F4F0;font-size:13px;font-weight:500;cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">重新檢查</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ══ 退回修改 Modal ══ -->
   <div x-show="showRejectModal" x-cloak
        style="position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center"
@@ -872,13 +923,16 @@
             <option value="">未標記</option>
             <option value="未提供">未提供</option>
             <option value="已提供">已提供</option>
-            <option value="未成案">未成案</option>
-            <option value="已成案" :disabled="q.status !== '已送出'"
-                    :title="q.status !== '已送出' ? '需先完成簽核（狀態為已送出）才能標記為已成案' : ''">已成案</option>
+            <option value="未成案" :disabled="!isAdminPlus()"
+                    :title="!isAdminPlus() ? '只有管理員以上可標記為未成案' : ''">未成案</option>
+            <option value="已成案" :disabled="q.status !== '已送出' || !isAdminPlus()"
+                    :title="!isAdminPlus() ? '只有管理員以上可標記為已成案' : (q.status !== '已送出' ? '需先完成簽核（狀態為已送出）才能標記為已成案' : '')">已成案</option>
           </select>
           <!-- 2026-09-24：瀏覽器不顯示 option 的 title，灰掉的「已成案」看不出原因 -->
           <span x-show="q.status !== '已送出'"
                 style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh);white-space:nowrap">需完成簽核（已送出）才能標記「已成案」</span>
+          <span x-show="q.status === '已送出' && !isAdminPlus()" data-testid="qf-dealtag-admin-hint"
+                style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh);white-space:nowrap">「未成案／已成案」僅管理員以上可標記</span>
           </span>
         </template>
       </div>
@@ -2398,7 +2452,7 @@
   // V3.32（2026-10-17，T71）：補登模式的標題／單號欄顯示預覽單號；複製為新單不帶補登來歷註記
   // V3.31（2026-10-17，T70-1）：新增模式多一個「補登歷史案件」區塊（僅最高管理者且設定中心開關有效時出現；日期限過去月份、預覽單號、原因必填、走專用補登端點）
   // V3.35（2026-11-11）：品項明細三個多行欄（品名／廠牌型號／備註）載入既有單、改值、欄寬變動時自動撐高，不再看起來被裁切
-  const FORM_VERSION = 'V3.35'
+  const FORM_VERSION = 'V3.36'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -2465,6 +2519,8 @@
       reviewEditing: false,
       reviewEditBusy: false,
       _saveConflict: false,  // apiSave() 收到 409 時設 true，saveDraft() 據此提示使用者
+      _saveError: '',        // apiSave() 收到後端 4xx/5xx 時存後端回的具體原因（detail）；呼叫端直接顯示，不再一律說「後端是否在線」
+      _saveNet: false,       // apiSave() 連線本身失敗（fetch 丟例外）才為 true；兩者皆空 ⇒ 是前端自己的檢查擋下（數字欄位等）
       // 補登歷史案件（T70-1）：只有最高管理者且設定中心開關有效時 available 才會是 true；on＝本次新增改走補登端點
       hb: { available: false, on: false, min: '', max: '', reason: '', origNo: '', preview: '', previewErr: '', busy: false, err: '', expires: '' },
       previewMode: null,
@@ -2495,6 +2551,9 @@
       unlockLoading: false,
       allUsers: [],
       showSubmitModal: false,
+      showPrecheckModal: false,   // 送審前置檢查：申請人沒部門／部門沒主管時攔下並說明
+      precheck: null,             // GET /api/quotations/submit-precheck 的回應
+      precheckBusy: false,
       submitNote: '',
       submitNoteError: false,
       submitting: false,
@@ -3080,6 +3139,8 @@
         // POST 帶著空號送出、後端派了 001，取號這時才回來拿到 002，而 q.quoteNo
         // 仍是空的（POST 回應還沒到），守門就放行了。2026-09-10 用測試診斷抓到。
         this._quoteNoFrozen = true
+        this._saveError = ''
+        this._saveNet = false
         const data = { ...this.q, tot: this.tot }
         if (!isNew) data._expectedUpdatedAt = this._lastUpdatedAt
         // QL13：`locationId` 是**真的欄位**（`quotations.location_id`），
@@ -3098,7 +3159,12 @@
             this._saveConflict = true
             return false
           }
-          if (!res.ok) throw new Error(await res.text())
+          if (!res.ok) {
+            // 後端有回具體原因（例如「申請人尚未歸屬任何部門」）就留著給呼叫端顯示，不要吞成「後端是否在線」
+            this._saveError = this._detailFromBody(await res.text(), res.status)
+            console.warn('API 儲存被後端拒絕', res.status, this._saveError)
+            return false
+          }
           const d = await res.json()
           this._lastUpdatedAt = d.updated_at || d.created_at || this._lastUpdatedAt
           this._saveConflict = false
@@ -3116,8 +3182,50 @@
           return true
         } catch(e) {
           console.warn('API 儲存失敗（後端未啟動）', e.message)
+          this._saveNet = true
           return false
         }
+      },
+
+      // FastAPI 錯誤本文 → 給人看的一句話：detail 是字串就直接用；422 的 detail 是陣列就把各筆 msg 串起來；解析不了就給狀態碼
+      _detailFromBody(text, status) {
+        try {
+          const j = JSON.parse(text)
+          if (typeof j.detail === 'string' && j.detail.trim()) return j.detail.trim()
+          if (Array.isArray(j.detail)) {
+            const m = j.detail.map(x => (x && x.msg) || '').filter(Boolean).join('；')
+            if (m) return m
+          }
+        } catch (_e) { /* 非 JSON */ }
+        return '伺服器回應錯誤（HTTP ' + status + '）'
+      },
+
+      // 儲存／送審失敗時給使用者看的原因：後端具體原因 ＞ 連不上伺服器 ＞ 前端自己的檢查擋下
+      _saveFailReason() {
+        if (this._saveError) return this._saveError
+        if (this._saveNet) return '無法連線到伺服器，請確認網路與後端伺服器是否在線'
+        return '表單內容有誤（例如數字欄位格式不正確或稅率未選），請修正後再試一次'
+      },
+
+      // 送審前置檢查（唯讀）：回 {ok, problems, canFix, steps}；查詢本身失敗 ⇒ null（不擋，真正的把關仍在送審端點）
+      async runSubmitPrecheck() {
+        try {
+          const r = await fetch(`${this.API}/quotations/submit-precheck`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) return null
+          const d = await r.json()
+          return (d && typeof d.ok === 'boolean') ? d : null
+        } catch (_e) { return null }
+      },
+
+      uniqueFixPages() {
+        const seen = new Set(), out = []
+        for (const p of (this.precheck?.problems || [])) {
+          if (!seen.has(p.fixPage)) { seen.add(p.fixPage); out.push({ page: p.fixPage, label: p.fixLabel }) }
+        }
+        for (const st of (this.precheck?.steps || [])) {
+          if (!st.done && !seen.has(st.page)) { seen.add(st.page); out.push({ page: st.page, label: st.page === 'users.html' ? '使用者管理' : '組織架構設定' }) }
+        }
+        return out
       },
 
       // ── 條款組 ────────────────────────────────────────────────────────
@@ -3470,12 +3578,28 @@
         } catch(e) { console.warn('建立客戶失敗', e) }
       },
 
+      isAdminPlus() {
+        return ['admin', 'superadmin'].includes(this.session?.role || '')
+      },
+
+      // 取回資料庫現在的 updated_at 當樂觀鎖基準。階段 API／PATCH /deal-tag 都會推進 quotations.updated_at，
+      // 不同步的話，之後別處再整份存檔（例如解鎖編輯）會被樂觀鎖 409 擋下。
+      // 有未存的編輯（isDirty）時不同步：此時換掉基準會讓「別人已改過」的衝突偵測失效，寧可讓 409 提醒重新載入。
+      async _refreshUpdatedAt() {
+        if (this.isDirty || !this.q.quoteNo) return
+        try {
+          const r = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) return
+          const row = await r.json()
+          if (row && row.updated_at) this._lastUpdatedAt = row.updated_at
+        } catch (_e) { /* 同步不到就維持舊值：最壞是下次存檔 409 提醒重新載入，不會覆蓋別人的修改 */ }
+      },
+
       async onDealTagChange(newTag) {
         const oldTag = this._prevDealTag || ''
         // Guard: downgrading from 已成案 requires admin+
         if (oldTag === '已成案' && newTag !== '已成案') {
-          const role = this.session?.role || ''
-          if (!['admin', 'superadmin'].includes(role)) {
+          if (!this.isAdminPlus()) {
             this.$nextTick(() => { this.q.dealTag = oldTag })
             alert('已成案狀態只有管理員以上才可降級')
             return
@@ -3484,6 +3608,13 @@
             this.$nextTick(() => { this.q.dealTag = oldTag })
             return
           }
+        }
+        // 後端 PATCH /deal-tag 對「未成案／已成案」要 admin 以上。先在前端擋下——
+        // 否則會先建完階段、PATCH 才被 403，留下殘餘階段（下拉已對非管理員停用，這裡是第二道）
+        if ((newTag === '已成案' || newTag === '未成案') && !this.isAdminPlus()) {
+          this.$nextTick(() => { this.q.dealTag = oldTag })
+          alert('只有管理員以上才可標記為「' + newTag + '」')
+          return
         }
         if (newTag === '已成案') {
           if (this.q.status !== '已送出') {
@@ -3495,39 +3626,41 @@
             this.$nextTick(() => { this.q.dealTag = oldTag })
             return
           }
-          this.ensureCaseRecord()
-          await this._seedDefaultStagesIfEmpty()
         }
         this.q.dealTag = newTag
         this._prevDealTag = newTag
-        this.isDirty = true
-        // 🔴 `EM11`：dealTag 是**樂觀更新**——上面已經先改了畫面，而原本不管
-        //    saveDraft() 或後面那支 PATCH 成不成功，都不會把它改回去。
-        //    ☠️ 後端沒真的記到，重新整理／下次開頁面看到的是舊值，
-        //    使用者會以為系統把他剛改的狀態弄丟了。
-        //    ⇒ 兩個失敗點都要退回 oldTag：
-        //       ① saveDraft() 失敗（它自己已經跳出 alert 說明原因，
-        //          這裡用 isDirty 還是 true 判斷——saveDraft() 成功會把它
-        //          設回 false，失敗則提早 return，isDirty 留著）
-        //       ② PATCH 本身失敗（草稿存成功了，但這支記錄變更歷史的
-        //          請求沒有成功）
+        // 🔴 已送出的單：案件進度（dealTag）只走專用端點 PATCH /deal-tag，**不整份存檔**。
+        //    原本這裡先 `await saveDraft()`（整份 PUT）——但後端對「已送出」等鎖定狀態的 PUT 一律 403
+        //    （非解鎖編輯），所以已送出單的 saveDraft() 必然失敗；2026-09-23 `EM11` 把「存檔失敗就忽略」
+        //    改成「存檔失敗就擋下」之後，選「已成案」整個被硬擋（正式機至少 7 週）。
+        //    ⇒ 不再先存檔；PATCH 失敗就退回舊值並顯示後端 detail。階段改成 PATCH 成功**之後**才建，
+        //    失敗時不會留下殘餘階段（建階段失敗無妨：之後載入此單、或進案件管理，空階段會自動補建）。
         if (this.q.status === '已送出') {
-          await this.saveDraft()
-          if (this.isDirty) {
+          const entry = { at: new Date().toISOString(), user: this.session?.displayName || '', from: oldTag, to: newTag }
+          let pr = null
+          try {
+            pr = await fetch(`/api/quotations/${this.q.quoteNo}/deal-tag`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (this.session?.token || '') },
+              body: JSON.stringify({ deal_tag: newTag, log_entry: entry })
+            })
+          } catch (_e) { pr = null }
+          if (!pr || !pr.ok) {
+            // dealTag 是樂觀更新：後端沒記到就要退回舊值，否則重新整理會看到舊值、使用者以為系統把他的操作弄丟
             this.$nextTick(() => { this.q.dealTag = oldTag; this._prevDealTag = oldTag })
+            const why = pr ? this._detailFromBody(await pr.text().catch(() => ''), pr.status)
+                           : '無法連線到伺服器，請確認網路與後端伺服器是否在線'
+            alert('案件進度沒有變更成功，已退回「' + (oldTag || '未標記') + '」。\n原因：' + why)
             return
           }
-          const entry = { at: new Date().toISOString(), user: this.session?.displayName || '', from: oldTag, to: newTag }
-          const pr = await fetch(`/api/quotations/${this.q.quoteNo}/deal-tag`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (this.session?.token || '') },
-            body: JSON.stringify({ deal_tag: newTag, log_entry: entry })
-          }).catch(() => null)
-          if (!pr || !pr.ok) {
-            this.$nextTick(() => { this.q.dealTag = oldTag; this._prevDealTag = oldTag })
-            this.toast('狀態變更沒有記錄成功，已退回原本的狀態，請重新操作一次。')
+          if (newTag === '已成案') {
+            this.ensureCaseRecord()
+            await this._seedDefaultStagesIfEmpty()
           }
+          await this._refreshUpdatedAt()
+          return
         }
+        this.isDirty = true     // 草稿等狀態：dealTag 隨之後的整份存檔一起走
       },
 
       async saveDraft() {
@@ -3557,7 +3690,7 @@
           if (this._saveConflict) {
             alert('這張報價單已被其他人更新，為避免覆蓋對方的修改，這次儲存未生效。請重新載入頁面後再繼續編輯。')
           } else {
-            alert('儲存失敗，請確認後端伺服器是否在線')
+            alert('儲存失敗：' + this._saveFailReason())
           }
           return
         }
@@ -3968,6 +4101,12 @@
         if (this._taxBasisBlocksSubmit('待審核')) return
         if (!this.q.customerName) { alert('請填寫客戶名稱'); return }
         if (!this.q.projectName)  { alert('請填寫案件名稱'); return }
+        // 送審前置檢查：申請人沒歸屬部門／部門沒主管 ⇒ 按了送出一定被後端擋；先攔下並講清楚去哪設定
+        if (this.precheckBusy) return
+        this.precheckBusy = true
+        let pc = null
+        try { pc = await this.runSubmitPrecheck() } finally { this.precheckBusy = false }
+        if (pc && !pc.ok) { this.precheck = pc; this.showPrecheckModal = true; return }
         this.submitNote = ''
         this.submitNoteError = false
         this.showSubmitModal = true
@@ -3992,6 +4131,7 @@
           const note = this.submitNote.trim()
           reasons.unshift(`代理送出：由 ${submitter} 代 ${this.q.salesPerson} 送出${note ? '，原因：' + note : ''}`)
         }
+        const prevStatus = this.q.status, prevApproval = this.q.approval   // 送審失敗要還原——否則畫面停在「待審核」，使用者以為已送出
         this.q.status = '待審核'
         this.q.approval = {
           requestedBy: this.session.username,
@@ -4010,11 +4150,13 @@
           } : {})
         }
         try {
-          const ok = await this.apiSave(this.isNewRecord)
+          const ok = await this.apiSave(this.isNewRecord).catch(() => false)
           if (!ok) {
+            this.q.status = prevStatus
+            this.q.approval = prevApproval
             alert(this._saveConflict
               ? '這張報價單已被其他人更新，為避免覆蓋對方的修改，送審未生效。請重新載入頁面後再試一次。'
-              : '送出審核失敗，請確認後端伺服器是否在線')
+              : '送出審核失敗，報價單仍是「' + (prevStatus || '草稿') + '」狀態，尚未送出。\n原因：' + this._saveFailReason())
             return
           }
           this.isNewRecord = false

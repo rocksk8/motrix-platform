@@ -140,7 +140,15 @@ def current_tier_idx(appr: dict) -> int:
 class UnresolvedManagerError(Exception):
     """部門主管自動簽核層在送審當下無法解析（部門不存在／未設主管／主管已停用）。
     呼叫端（各 router 的送審端點）自己 catch 並包成 HTTPException(400, str(e))，
-    這個模組維持不碰 FastAPI 的既有分工。"""
+    這個模組維持不碰 FastAPI 的既有分工。
+
+    `code` 是機器可讀的原因（前端「送審前置檢查」依它決定提示去哪裡設定），不影響 `str(e)`：
+    no_department＝申請人沒歸屬部門／department_gone＝部門已不存在／no_manager＝申請人部門沒主管／
+    tier_dept_manager＝簽核設定指定的部門沒主管／tier_div_manager＝簽核設定指定的處沒主管。"""
+
+    def __init__(self, message: str = "", code: str = "unresolved"):
+        super().__init__(message)
+        self.code = code
 
 
 def resolve_department_manager(conn, department_id: int) -> Optional[dict]:
@@ -208,15 +216,16 @@ def resolve_submitter_org_chain(conn, requester_username: str) -> list:
         (requester_username,)
     ).fetchone()
     if not req or not req["department_id"]:
-        raise UnresolvedManagerError("申請人尚未歸屬任何部門，請聯絡管理員設定部門後才能送審")
+        raise UnresolvedManagerError("申請人尚未歸屬任何部門，請聯絡管理員設定部門後才能送審", code="no_department")
 
     dept = conn.execute("SELECT id, name, division_id FROM departments WHERE id=?", (req["department_id"],)).fetchone()
     if not dept:
-        raise UnresolvedManagerError("申請人所屬部門已不存在，請聯絡管理員確認組織架構設定")
+        raise UnresolvedManagerError("申請人所屬部門已不存在，請聯絡管理員確認組織架構設定", code="department_gone")
 
     mgr = resolve_department_manager(conn, dept["id"])
     if not mgr:
-        raise UnresolvedManagerError(f"「{dept['name']}」尚未指定主管（或主管帳號已停用），請聯絡管理員先設定部門主管")
+        raise UnresolvedManagerError(f"「{dept['name']}」尚未指定主管（或主管帳號已停用），請聯絡管理員先設定部門主管",
+                                     code="no_manager")
     chain = [{**mgr, "orgRole": "department_manager", "orgUnit": dept["name"]}]
     if mgr["username"] != requester_username:
         return chain
@@ -294,7 +303,8 @@ def resolve_tier_approvers(conn, tier_setting: dict, requester_username: str = N
             if not mgr:
                 raise UnresolvedManagerError(
                     f"此層設定為「{dept_name}」主管自動簽核，但目前該部門未指定主管"
-                    f"（或主管帳號已停用），請聯絡管理員先設定部門主管"
+                    f"（或主管帳號已停用），請聯絡管理員先設定部門主管",
+                    code="tier_dept_manager",
                 )
             # 申請人剛好就是這個部門的主管時**由他本人簽這一層**（標
             # selfApproval），2026-09-15 起比照組織鏈的新規則。
@@ -311,7 +321,8 @@ def resolve_tier_approvers(conn, tier_setting: dict, requester_username: str = N
             if not mgr:
                 raise UnresolvedManagerError(
                     f"此層設定為「{div_name}」處主管自動簽核，但目前該處未指定主管"
-                    f"（或主管帳號已停用），請聯絡管理員先設定處主管"
+                    f"（或主管帳號已停用），請聯絡管理員先設定處主管",
+                    code="tier_div_manager",
                 )
             resolved.append({**mgr, "selfApproval": mgr["username"] == requester_username,
                              "status": "pending", "approvedAt": None})
