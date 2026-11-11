@@ -358,3 +358,69 @@ def test_streaming_response_can_still_use_idle_connection_after_start(table):
 
     r = TestClient(app, raise_server_exceptions=False).get("/stream")
     assert r.status_code == 200 and r.content == b"a2"
+
+
+# ───────── R6：async 中介層的同步 SQLite 寫入不可以卡事件迴圈 ─────────
+
+def _asgi_get(app, path, token):
+    """直接呼叫 ASGI app（不經 TestClient，才能在同一個事件迴圈裡同時量心跳）。回 (狀態碼, 秒)。"""
+    async def run():
+        scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "GET", "scheme": "http",
+                 "path": path, "raw_path": path.encode(), "query_string": b"", "root_path": "",
+                 "headers": [(b"authorization", b"Bearer " + token.encode()), (b"host", b"test")],
+                 "client": ("127.0.0.1", 1), "server": ("test", 80)}
+        sent = []
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(m):
+            sent.append(m)
+        t0 = time.monotonic()
+        await app(scope, receive, send)
+        return next(m["status"] for m in sent if m["type"] == "http.response.start"), time.monotonic() - t0
+    return run()
+
+
+def test_async_middleware_writes_do_not_block_the_event_loop(client, make_user, table, monkeypatch):
+    """別的連線握著寫鎖時，auth_middleware 回應後的操作軌跡寫入會等 busy timeout——那段等待不可以發生在事件迴圈上：
+    同一個迴圈裡的心跳（每 50ms 一次）最大間隔必須遠小於那個等待時間。（R6 之前＝整個等待時間，全站一起卡。）"""
+    import asyncio
+    import main
+    from tests.test_stock_batch_payment_2026_09_01 import _login
+    orig = db._connect
+
+    def short_timeout(path, *a, **kw):
+        c = orig(path, *a, **kw)
+        c.execute("PRAGMA busy_timeout=1500")            # 測試用：等 1.5 秒就放棄（正式是 30 秒）
+        return c
+    monkeypatch.setattr(db, "_connect", short_timeout)
+    u, p = make_user(username="t80_r6", role="superadmin")
+    token = _login(client, u, p)
+    holder = sqlite3.connect(db.DB_PATH, timeout=1)
+    holder.execute("BEGIN IMMEDIATE")                    # 別人握著寫鎖
+    try:
+        async def scenario():
+            gaps = []
+            stop = asyncio.Event()
+
+            async def heartbeat():
+                last = time.monotonic()
+                while not stop.is_set():
+                    await asyncio.sleep(0.05)
+                    now = time.monotonic()
+                    gaps.append(now - last)
+                    last = now
+            hb = asyncio.create_task(heartbeat())
+            await asyncio.sleep(0.2)
+            status, took = await _asgi_get(main.app, "/api/parts", token)
+            stop.set()
+            await hb
+            return status, took, max(gaps)
+        status, took, worst = asyncio.run(scenario())
+    finally:
+        holder.rollback()
+        holder.close()
+    assert status == 200, status
+    assert took > 1.0, "請求沒有被寫鎖擋到——這題沒量到東西（took=%.2f）" % took
+    assert worst < 0.6, "事件迴圈被卡住 %.2f 秒（請求共 %.2f 秒）：middleware 的同步寫入又回到事件迴圈上了" % (worst, took)
