@@ -19,6 +19,8 @@
 | **程式 11-11** | 2026-11-11 對照程式碼／commit／測試核對過（核對對象寫在備註） |
 | 自述 ＋ 日期 | 狀態取自文件自己的標頭或內文，加上 `git log` 最後更動日；**沒有對照程式**，可能過時 |
 
+**維護規則（使用者裁示，2026-11-11）：每次建立或修正活文件，同一個提交裡同步更新本檔對應那一行**（狀態、查證方式與日期）；不要建完就放著讓索引自己過期。
+
 **這份索引不保證「自述」那一欄是對的。** 發現與程式不符就改本檔那一行，並在文件開頭加上更正註記（慣例：`~~舊句~~（**日期 更正…**）`，見 `docs/quick/known-limits.md`）。
 
 ---
@@ -56,7 +58,7 @@
 
 | 文件 | 主題 | 狀態 | 查證 |
 |---|---|---|---|
-| `CORE-SPEC.md` | 共用核心規格；**使用者裁示的唯一落點**（標頭仍寫「草案 v0.1」，實際已是現行規格） | 現行 | 自述 10-14 |
+| `CORE-SPEC.md` | 共用核心規格；**使用者裁示的唯一落點**（標頭 11-11 已更正：不再是草案；§3 以後是 09-25 條文原文，與現況不一致時以程式與「使用者裁示」為準） | 現行 | **程式 11-11**（模組分組已裁示、`modules.json` 為機器來源、91 次提交、多支測試引用） |
 | `MODULE-GUIDE.md` | 模組開發準則（每條規則要有守門測試） | 現行 | 自述 11-08 |
 | `PLAYBOOK.md` | 後續作業手冊（步驟式） | 現行 | 自述 10-13 |
 | `ROADMAP.md` | 模組化路線圖與待辦；S-PLD12 已於 11-11 更正為已實作 | 現行（個別條目狀態以條目為準） | **程式 11-11**（S-PLD12：`core/migrations.py` `run_all()` SAVEPOINT，d9b90719b） |
@@ -65,11 +67,11 @@
 | `UNIT-INDEX.md` | L0／L1 程式單位索引（機器產生） | 現行 | `unit_index.py --check` 有守門測試 |
 | `CACHE-INDEX.md` | 大文件快取索引 | 現行 | 自述 09-30 |
 | `DATA-COMPAT.md` | 既有資料相容性盤點 | 快照（初版 09-25，10-08 更新） | 自述 10-08 |
-| `CUSTOMIZATION-SPEC.md` | 網站內自訂：模組建構、拖曳排版、獨立升級 | **已實作**；⚠ 標頭仍寫「目前還沒開始實作」（過時，待另案更正）。證據：`core/customization.py`、`frontend/pages/module-builder.html`、`custom-records.html` | **程式 11-11**（只核對存在，未核對與規格逐項一致） |
+| `CUSTOMIZATION-SPEC.md` | 網站內自訂：模組建構、拖曳排版、獨立升級 | **主體已實作**（標頭 11-11 已更正）。P6 `core/events.py`、P7 `module_update.py`、P8 `module-builder.html`＋`core/customization.py`（總開關預設關）、P9 `/api/layout`＋BP1 選單建構 | **程式 11-11**（只核對存在，未逐節核對與規格一致） |
 | `BUILDER-UX.md` | 模組建構器拖曳式／縮圖化 UX | 已實作（頁面存在） | **程式 11-11**（只核對存在） |
-| `STAGE-C-DESIGN.md` | 階段 C：頁面進模組資料夾、選單由登錄表產生 | **部分實作**：`modules/lodging/pages/` 與 `helpers/module_assets` 是 POC；其餘模組頁面仍在 `frontend/pages/`；ROADMAP 階段 C 未勾。標頭「草案，待裁示」過時 | **程式 11-11** |
-| `COMPANY-SETUP-GATE.md` | 販售版本公司資料設定閘門 | **已實作**（E4，609fc0257）；⚠ 標頭仍寫「尚未實作」（過時，待另案更正） | **程式 11-11** |
-| `LODGING-NEARBY.md` | 地圖附近旅宿：來源調查與設計 | **已實作**（`backend/modules/lodging/` 存在）；⚠ 標頭仍寫「尚未實作」（過時，待另案更正） | **程式 11-11**（只核對模組存在） |
+| `STAGE-C-DESIGN.md` | 階段 C：頁面進模組資料夾、選單由登錄表產生 | **部分實作（標頭 11-11 已更正）**：C1～C4 已做（`core/pages.py`、`source_tree.page_file`、`/api/platform/menu`、sidebar 吃宣告）；C5 實體搬家**沒做**（46 個宣告頁 0 頁搬進 `modules/<key>/pages/`）；§7 決策點是否全有裁示未逐題核對 | **程式 11-11** |
+| `COMPANY-SETUP-GATE.md` | 販售版本公司資料設定閘門 | **已實作**（E4，609fc0257；標頭 11-11 已更正）。`helpers/company_setup.py`、`main.py` 閘門、6 組 `test_company_setup_*`＋e2e | **程式 11-11** |
+| `LODGING-NEARBY.md` | 地圖附近旅宿：來源調查與設計 | **已實作**（L2 模組 `lodging` v1.2.10；標頭 11-11 已更正） | **程式 11-11**（模組、migration、頁面、測試存在；§5 未查證各項未重核） |
 | `GOOGLE-BASEMAP.md` | Google 底圖：計費、條款、做法比較 | 已實作（文內已更正，採 Maps JavaScript API；`helpers/geo.py`、`routers/map_points.py`） | 自述更正 09-28＋程式存在 |
 | `MONEY-FLOWS.md`／`FINANCE-INTEGRATION.md`／`LEDGER-ACCEPTANCE.md` | 金流串接覆蓋表／財務串接總覽（快取）／總帳端到端驗收 | 現行（`money_flows.json` 有守門） | 自述 10-01～10-10 |
 | `TAX401-OFFICIAL-FIELDS.md` | 營業稅 401 欄位代號官方核對表 | 現行 | 自述 10-01 |
@@ -111,10 +113,9 @@
 
 ---
 
-## 本次盤點的待更正事項（尚未改，另案）
+## 待更正事項
 
-1. `CUSTOMIZATION-SPEC.md`、`COMPANY-SETUP-GATE.md`、`LODGING-NEARBY.md`：標頭說「尚未實作」，程式已有。
-2. `CORE-SPEC.md` 標頭「草案 v0.1」：實際是使用者裁示的唯一落點。
-3. `STAGE-C-DESIGN.md`：標頭「草案，待裁示」，實況是 POC 部分實作。
-4. `GITFLOW.md`（07-22）：多視窗時期以 `MULTIWIN-PROTOCOL.md` 為準，內文未註明。
-5. 「自述」欄全數**沒有**對照程式逐項核對；`SELLABLE-AND-MOBILE-SPEC.md`、`UI-REDESIGN-PLAN.md` 連狀態標頭都沒有。
+1. ~~`CUSTOMIZATION-SPEC`、`COMPANY-SETUP-GATE`、`LODGING-NEARBY` 標頭說「尚未實作」~~、~~`CORE-SPEC`「草案 v0.1」~~、~~`STAGE-C-DESIGN`「草案，待裁示」~~：**2026-11-11 已更正**（MOTRIX-ERP 同意；STAGE-C 寫明「C1～C4 已做、C5 沒做」，沒有改成「已實作」）。
+2. `STAGE-C-DESIGN`：§7 決策點 D1～D4 是否全有書面裁示、`sidebar.js` 的 `_FILE_MODULE` 殘留是否已被宣告取代，未逐項核對。
+3. `GITFLOW.md`（07-22）：多視窗時期以 `MULTIWIN-PROTOCOL.md` 為準，內文未註明。
+4. 「自述」欄全數**沒有**對照程式逐項核對；`SELLABLE-AND-MOBILE-SPEC.md`、`UI-REDESIGN-PLAN.md` 連狀態標頭都沒有。
