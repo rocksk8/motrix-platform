@@ -290,7 +290,7 @@
         <div class="form-group">
           <label class="form-label">兩步驟驗證碼</label>
           <input class="form-input" :class="{error: error}"
-                 type="text" inputmode="text" autocapitalize="none" autocorrect="off" spellcheck="false" x-model="totpCode" x-ref="totpCode"
+                 type="text" inputmode="numeric" autocapitalize="none" autocorrect="off" spellcheck="false" x-model="totpCode" x-ref="totpCode"
                  @keydown.enter="onEnterDown($event)" @keyup.enter="onEnterUp($event)"
                  placeholder="請輸入驗證 App 顯示的 6 位數字，或救援碼" autocomplete="one-time-code" autofocus>
           <div class="error-msg" x-show="error">
