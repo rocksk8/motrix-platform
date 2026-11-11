@@ -1,14 +1,14 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
-- 前端視覺（D3）：本模組頁面（`case-management.html`／`case-stage-board.html`／`completion-note-form.html`、`case-management*.css`／`case-management-mchange.js` 等）內文字最小 12px，文字色改用語意 token（次要文字在頁底 #F5F4F0 上對比 ≥4.5:1）；只改 CSS 值，不改版面結構、API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
-- 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
-- **（併入）(next) — 2026-11-11（feat/ux-onboarding-consistency；首次體驗與一致性：UX 提案 A1–A6、E1–E2；僅前端；報價單表單 V3.38；L1 介面不變）**
+## (next) — 2026-11-11（feat/ux-onboarding-consistency；首次體驗與一致性：UX 提案 A1–A6、E1–E2；僅前端；報價單表單 V3.38；L1 介面不變）
 - 新增（前端，全站）：首次設定精靈（強制改密碼→重新登入→確認公司資料→兩步驟驗證（可略過）→儀表板；步驟條「步驟 n／N」、隱藏頂欄）、公司資料閘門頁瘦身（只留確認卡＋4 個必填欄、統編即時驗證）、頂欄「？」說明抽屜與「第一次來？」橫幅（`static/ux-help.js`，內容集中一處）、儀表板上手清單（帶勾選進度；有資料的老系統不出現）。
 - 修正（案件模組頁面）：`quotations.html` 空狀態分三種（從未有資料／篩選後沒有／載入失敗），不再顯示「資料為空，自動重試中…」「DB 已連線」「MQ 系列」；`case-management.html` 空狀態說明案件由報價單「成案」而來；`quotation-form.html` 送出審核確認視窗與按鈕補「這會…」說明、取消折讓說明，「INTERNAL · 成本分機」改「內部成本與利潤」（V3.38）。
 - 變更（全站）：建置戳記（頁尾右下）只對管理員顯示。
 - 測試：`tests/test_e2e_ux_onboarding_2026_11_11.py`；`test_dashboard_empty_state_2026_09_23.py`（引導卡片改讀 `checklistVisible`，種子同步）、`test_display_consistency_t55.py`（空狀態列內距）同步更新。
 
+## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
+- 前端視覺（D3）：本模組頁面（`case-management.html`／`case-stage-board.html`／`completion-note-form.html`、`case-management*.css`／`case-management-mchange.js` 等）內文字最小 12px，文字色改用語意 token（次要文字在頁底 #F5F4F0 上對比 ≥4.5:1）；只改 CSS 值，不改版面結構、API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
+- 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
 ## (next) — 2026-11-11（feat/quote-submit-error-clarity；報價單送審前置檢查＋送審失敗原因＋「已成案」卡住修復；報價單表單 V3.36；K 審必修已修，L1 介面不變）
 - 新增（送審前置檢查）：`GET /api/quotations/submit-precheck`（唯讀、需登入、不建單不發通知）——用跟真正送審同一套解析（`_setting_to_active_tiers`）dry-run；申請人沒歸屬部門／部門沒在職主管／簽核設定指定的部門或處沒主管 ⇒ `ok=false`＋`problems[{code,message,fixPage,fixLabel}]`；另附 `steps`（處→部門→申請人歸屬→部門主管四步驟完成度，只供畫面顯示）與 `canFix`（最高管理者才能改組織）。`helpers.tiered_approval.UnresolvedManagerError` 新增類別屬性 `code`（不加建構子，避免動到 L1 公開介面；raise 點用私有 `_unresolved(msg, code)`；no_department／department_gone／no_manager／tier_dept_manager／tier_div_manager；預設 unresolved，`str(e)` 不變）。
 - 修正（前端 `quotation-form.html`）：①送審前先問 precheck，會失敗就攔下並用中文清單說明去哪裡設定（查詢本身失敗＝放行，真正把關仍在送審端點）。②`apiSave()` 不再把後端 4xx／5xx 吞成「請確認後端伺服器是否在線」：後端 `detail` 原文顯示，只有真的連不上才說伺服器問題。③送審失敗時還原 `status`／`approval`（原本畫面會停在「待審核」，使用者以為已送出）。
