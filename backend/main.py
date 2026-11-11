@@ -564,6 +564,28 @@ async def _company_setup_required_handler(request: Request, exc):
     return JSONResponse(status_code=428, content=body)
 
 
+def _expire_session(token: str) -> None:
+    """閒置逾時：刪掉這個 session。失敗吞掉（呼叫端照回 401）。同步 SQLite 寫入 ⇒ 由 async 中介層經 run_in_threadpool 呼叫（T80 R6）。"""
+    try:
+        ec = get_db()
+        ec.execute("DELETE FROM sessions WHERE token=?", (token,))
+        ec.commit()
+        ec.close()
+    except Exception:
+        pass
+
+
+def _touch_session(token: str, now_iso: str) -> None:
+    """更新 session 的 last_active。失敗吞掉。同步 SQLite 寫入 ⇒ 由 async 中介層經 run_in_threadpool 呼叫（T80 R6）。"""
+    try:
+        uc = get_db()
+        uc.execute("UPDATE sessions SET last_active=? WHERE token=?", (now_iso, token))
+        uc.commit()
+        uc.close()
+    except Exception:
+        pass
+
+
 def _company_setup_gate_kind(token: str) -> str:
     """這個請求看到的閘門狀態。demo 帳號與正式帳號同一套判定（demo 登入時種虛構示範公司＋demo 專用確認紀錄，
     `gate` 依 db.is_demo_mode 取 demo 庫判定；〔~~第三段前 demo 先不擋~~ 段③ 拿掉豁免〕）。
@@ -633,35 +655,17 @@ async def auth_middleware(request: Request, call_next):
         idle_secs = (now_dt - datetime.fromisoformat(la_str)).total_seconds()
         if idle_secs > idle_limit:
             # Expire this session
-            try:
-                ec = get_db()
-                ec.execute("DELETE FROM sessions WHERE token=?", (token,))
-                ec.commit()
-                ec.close()
-            except Exception:
-                pass
+            await run_in_threadpool(_expire_session, token)       # T80 R6：async 中介層不做同步 SQLite 寫入（別人握著寫鎖會卡事件迴圈到 30 秒）
             limit_label = "2 小時" if is_high_priv else "8 小時"
             return JSONResponse(status_code=401, content={"detail": f"閒置超過 {limit_label}，請重新登入"})
         if idle_secs > 300:
-            try:
-                uc = get_db()
-                uc.execute("UPDATE sessions SET last_active=? WHERE token=?", (now_iso, token))
-                uc.commit()
-                uc.close()
-            except Exception:
-                pass
+            await run_in_threadpool(_touch_session, token, now_iso)
             # 在線時間統計（2026-09-14）：沿用同一個節流點，不額外增加寫入頻率——
             # 每 5 分鐘一列 UPDATE，跟原本就在做的 last_active 同一個數量級。
-            _record_user_activity(row["id"], now_dt, idle_secs)
+            await run_in_threadpool(_record_user_activity, row["id"], now_dt, idle_secs)
     else:
         # First request after migration — stamp last_active without any check
-        try:
-            uc = get_db()
-            uc.execute("UPDATE sessions SET last_active=? WHERE token=?", (now_iso, token))
-            uc.commit()
-            uc.close()
-        except Exception:
-            pass
+        await run_in_threadpool(_touch_session, token, now_iso)
 
     if row["must_change_password"] and path not in _MUST_CHANGE_PW_ALLOWED:
         return JSONResponse(
@@ -677,7 +681,7 @@ async def auth_middleware(request: Request, call_next):
         if _demo_why:
             return JSONResponse(status_code=404, content={"detail": _demo_why})
     # 本公司資料設定閘門（COMPANY-SETUP-GATE §4.1、§3.6）：未設定 ⇒ 白名單外一律 428；判定失敗 ⇒ 放行＋標頭（Q7＝C）
-    _gate_kind = _company_setup_gate_kind(token)
+    _gate_kind = await run_in_threadpool(_company_setup_gate_kind, token)       # 內含 commit（可能寫入）⇒ 不在事件迴圈上做
     if _gate_kind == _company_setup.GATE_REQUIRED and not _company_setup.is_allowed(
             _COMPANY_SETUP_ALLOWED_COMPILED, request.method, path):
         return JSONResponse(status_code=428, content={
@@ -686,9 +690,9 @@ async def auth_middleware(request: Request, call_next):
     response = await call_next(request)
     # 操作軌跡（2026-09-14）：記在**回應之後**才拿得到狀態碼——被擋下來的操作
     # （403/404）跟成功的一樣重要，甚至更重要。
-    _record_request_trail(row["id"], now_dt, request.method, path,
-                          request.headers.get("Referer", ""), response.status_code)
-    _record_failure_audit(request, row, response.status_code)
+    await run_in_threadpool(_record_request_trail, row["id"], now_dt, request.method, path,
+                            request.headers.get("Referer", ""), response.status_code)
+    await run_in_threadpool(_record_failure_audit, request, row, response.status_code)
     if _gate_kind in (_company_setup.GATE_UNDETERMINED, _company_setup.GATE_GRACE):
         response.headers[_company_setup.HEADER] = (
             "status_error" if _gate_kind == _company_setup.GATE_UNDETERMINED else "grace")
