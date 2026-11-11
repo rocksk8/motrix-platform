@@ -1,8 +1,9 @@
 # 業務開發 更新紀錄
 
-## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
+## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；K 審後補：業務開發名次欄放寬；L1 介面不變）
 - 頁頭（B6）：`customers.html` 眉標改為麵包屑（客戶與業務 › 客戶管理）；客戶管理從「廠商與採購」移到「客戶與業務」群組（order 30），入口與權限不變。
 - 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
+- 補修（K 審 N4）：`dev-crm.html` 的活動排行名次欄由固定 14px 寬改為最小 16px，12px 字級下兩位數名次不再撐版。
 - 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
 
 ## 1.2.0 — 2026-11-04 13:40（wip/hichan8-dev-log-directive-v1：開發記錄「批示」，見 docs/platform/plans/DEV-LOG-DIRECTIVE-PLAN.md）
