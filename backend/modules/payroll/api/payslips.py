@@ -324,80 +324,84 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     dispatch_ids = _person_dispatch_ids(dispatch_ids, body.contractor_id, dispatch_id)
 
     conn = get_db()
-    conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
-                 (month,))
-    try:
-        _apply_privacy_ack(d, None, user, conn)   # R3：已告知紀錄由伺服器蓋時間與人員（全文存檔跟著本交易）
-    except HTTPException:
-        conn.rollback()
-        conn.close()
-        raise
+    # write_txn：區塊內任何例外（含 body_flag 的 422、int() 的 ValueError、沒預期的錯）⇒ rollback 並關連線。
+    # 原本 INSERT payslip_seq 一開始就開了寫交易，之後 422 沒關連線 ⇒ 寫鎖留到連線被回收，下一個寫入卡滿 busy timeout 後 500「database is locked」
+    # （test_strict_bool_sites_t49 的 payslip 題穩定紅的真因；update_payslip 在稽核 D-2 已用同一招）。
+    with write_txn(conn):
+        conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
+                     (month,))
+        try:
+            _apply_privacy_ack(d, None, user, conn)   # R3：已告知紀錄由伺服器蓋時間與人員（全文存檔跟著本交易）
+        except HTTPException:
+            conn.rollback()
+            conn.close()
+            raise
 
-    try:
-        _pb.resolve_on_write(conn, user, d, None, body.contractor_id, creating=True)
-    except ValueError as e:
-        conn.rollback()
-        conn.close()
-        raise HTTPException(400, str(e))
-    slip_no = body.slip_no or d.get("slipNo") or _peek_next_slip_no(conn, month)
-    if not _SLIP_NO_RE.match(slip_no):
-        conn.close()
-        raise HTTPException(400, f"勞報單號碼格式錯誤（須為 PS-YYYYMM-NNN）：{slip_no}")
+        try:
+            _pb.resolve_on_write(conn, user, d, None, body.contractor_id, creating=True)
+        except ValueError as e:
+            conn.rollback()
+            conn.close()
+            raise HTTPException(400, str(e))
+        slip_no = body.slip_no or d.get("slipNo") or _peek_next_slip_no(conn, month)
+        if not _SLIP_NO_RE.match(slip_no):
+            conn.close()
+            raise HTTPException(400, f"勞報單號碼格式錯誤（須為 PS-YYYYMM-NNN）：{slip_no}")
 
-    gross       = int(d.get("grossAmount", 0))
-    income_type = d.get("incomeType", "9A")
-    nationality = d.get("contractorNationality", "本國籍")
-    has_union   = body_flag(d, "contractorHasUnionInsurance")
-    calc        = _calc(gross, income_type, nationality, has_union, rules)
+        gross       = int(d.get("grossAmount", 0))
+        income_type = d.get("incomeType", "9A")
+        nationality = d.get("contractorNationality", "本國籍")
+        has_union   = body_flag(d, "contractorHasUnionInsurance")
+        calc        = _calc(gross, income_type, nationality, has_union, rules)
 
-    d["slipNo"]         = slip_no
-    d["calc"]           = calc
-    _freeze_rules(d, rules)
+        d["slipNo"]         = slip_no
+        d["calc"]           = calc
+        _freeze_rules(d, rules)
 
-    def _insert(no: str):
-        conn.execute("""
-            INSERT INTO payslips
-              (slip_no, contractor_id, contractor_name, income_type,
-               gross_amount, tax_withheld, nhi_supplement, net_amount,
-               payment_method, slip_date, status, tax_rules_version,
-               data_json, created_by, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """, (
-            no, body.contractor_id, d.get("contractorName", ""),
-            income_type, gross,
-            calc["taxWithheld"], calc["nhiSupplement"], calc["netAmount"],
-            d.get("paymentMethod", "匯款"), d.get("slipDate", ""),
-            "草稿", d["taxRulesVersion"],                                  # 新單一律草稿（原本 d["status"] 可由前端指定，直接寫成已簽回／已付款）
-            json.dumps(d, ensure_ascii=False),
-            user["username"], now, now
-        ))
+        def _insert(no: str):
+            conn.execute("""
+                INSERT INTO payslips
+                  (slip_no, contractor_id, contractor_name, income_type,
+                   gross_amount, tax_withheld, nhi_supplement, net_amount,
+                   payment_method, slip_date, status, tax_rules_version,
+                   data_json, created_by, created_at, updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                no, body.contractor_id, d.get("contractorName", ""),
+                income_type, gross,
+                calc["taxWithheld"], calc["nhiSupplement"], calc["netAmount"],
+                d.get("paymentMethod", "匯款"), d.get("slipDate", ""),
+                "草稿", d["taxRulesVersion"],                                  # 新單一律草稿（原本 d["status"] 可由前端指定，直接寫成已簽回／已付款）
+                json.dumps(d, ensure_ascii=False),
+                user["username"], now, now
+            ))
 
-    try:
-        _insert(slip_no)
-    except Exception:
-        slip_no = _peek_next_slip_no(conn, month)
-        d["slipNo"] = slip_no
         try:
             _insert(slip_no)
         except Exception:
-            conn.close()
-            raise HTTPException(409, "勞報單號碼衝突，請重試")
+            slip_no = _peek_next_slip_no(conn, month)
+            d["slipNo"] = slip_no
+            try:
+                _insert(slip_no)
+            except Exception:
+                conn.close()
+                raise HTTPException(409, "勞報單號碼衝突，請重試")
 
-    seq_no = int(slip_no.split("-")[-1]) if slip_no.count("-") == 2 else 0
-    if seq_no:
-        conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, ?) "
-                     "ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)",
-                     (month, seq_no))
-    if dispatch_id is not None or dispatch_ids:                     # 與勞報單同一個交易：連結失敗就整張不建
-        from modules.payroll import payslip_links as _pl
-        try:
-            for _did in ([dispatch_id] if dispatch_id is not None else []) + dispatch_ids:
-                _pl.link(conn, slip_no, _did, user)
-        except _pl.LinkError as e:
-            conn.rollback()
-            conn.close()
-            raise HTTPException(e.status, str(e))
-    conn.commit()
+        seq_no = int(slip_no.split("-")[-1]) if slip_no.count("-") == 2 else 0
+        if seq_no:
+            conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, ?) "
+                         "ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)",
+                         (month, seq_no))
+        if dispatch_id is not None or dispatch_ids:                     # 與勞報單同一個交易：連結失敗就整張不建
+            from modules.payroll import payslip_links as _pl
+            try:
+                for _did in ([dispatch_id] if dispatch_id is not None else []) + dispatch_ids:
+                    _pl.link(conn, slip_no, _did, user)
+            except _pl.LinkError as e:
+                conn.rollback()
+                conn.close()
+                raise HTTPException(e.status, str(e))
+        conn.commit()
     conn.close()
     _audit(_tok(authorization), 'payslip.create', 'payslip', slip_no,
            f"{slip_no}（{d.get('contractorName', '')}）")
