@@ -25,6 +25,7 @@
    "helper:case_access",
    "helper:download_name",
    "helper:case_roles",
+   "helper:client_ip",
    "helper:company_identity",
    "helper:company_setup",
    "helper:daily_checks",
