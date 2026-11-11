@@ -192,6 +192,8 @@ pytest exit 0（payroll／supply／subcontract／arap／daily_tasks／netplan／
 - **為什麼要有「回應開始前」那一步（K 審 hichan-12 的真實堆疊測試逼出來的）**：`auth_middleware` 在 `call_next` 回來（＝收到回應標頭）之後還有**同步**寫入（`_record_request_trail`、`_record_failure_audit`）。只在請求結束才回收的話，處理函式漏掉的寫鎖會先讓這幾筆寫入卡滿 busy timeout——實測 32.9 秒、而且卡在事件迴圈上（全站一起卡）；回應開始前就放鎖後，同一個測試 < 1 秒。只收「在交易中」的，是因為沒在交易中的連線仍可能被串流回應的產生器用到（測試 `test_streaming_response_can_still_use_idle_connection_after_start` 釘住）。
 - **一個請求內登記到 200 條連線會警告一次**（不改行為）：登記簿持有強參照到請求結束（`sqlite3.Connection` 不支援弱參照），單一請求在迴圈裡每圈開一條沒關的，會持有 fd 與頁面快取到請求結束。
 - **回收是同步的**：只發生在漏連線的少數情況；改丟 threadpool 要在 `finally` 內 `await`，遇到 anyio 取消範圍會被再次取消而漏回收，風險比收益大，所以不做。
+- **覆蓋範圍（K 審 hichan-12 N2）**：收尾網在最內層，只涵蓋**路由處理函式**（含它呼叫的 helper）開的連線。外層 middleware 自己開的連線（`auth_middleware`、授權閘門、操作軌跡／失敗稽核寫入）**不在網內**——那是為了消掉「回應標頭一送出、後續同步寫入先撞處理函式漏的鎖」的 32.9 秒卡頓所付的代價；那一類由 R6 處理。
+- **設計限制（K 審 hichan-12 N1）**：回應開始送出前，仍在交易中的連線會被 rollback＋close。所以**回傳 `StreamingResponse`／async generator 的處理函式，產生器必須自己開連線（在產生器內 `get_db()`，那條會登記到請求結束才收），不可繼承一條在 `response.start` 時仍在交易中的連線**（例如 `begin_write` 之後才串流讀取、或產生器結尾才 commit），否則會在第一個 chunk 之前被 rollback＋close，寫入靜默丟失。今天不會發生（唯一的 `StreamingResponse` 是 `reports.py:2692`，內容是記憶體 bytes；沒在交易中的連線會保留，有測試釘住）。
 - **沒登記的**：背景執行緒（`spawn_bg_thread`）、請求之外（排程、啟動、測試直呼 helper）、`get_demo_db()`。這些由各自 owner 負責，行為與從前完全相同。
 - **看日誌**：上線後 `grep conn-reaper` 就是「還有哪些站點會漏寫鎖」的即時清單，可當之後逐站修的優先序（這比靜態掃描更準）。
 - **不處理 B 類（持鎖又自開連線）**：收尾網在請求結束才動，B 類發生在請求中間；那一類靠 §4 的「commit／close 之後才 `_audit`／`_notify`」慣例。
