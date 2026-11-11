@@ -1,0 +1,16 @@
+#!/bin/bash
+# usage: mut.sh <name> <file> <python-expr transforming s> <tests...>
+name="$1"; f="$2"; expr="$3"; shift 3
+cd /d/Claude-pm/h10-audit/wt/backend
+cp "$f" /d/Claude-pm/h10-audit/bak.orig
+python - "$f" "$expr" <<'PY'
+import sys
+p,expr=sys.argv[1],sys.argv[2]
+s=open(p,encoding='utf-8',newline='').read()
+old,new=expr.split('=>>')
+assert s.count(old)>=1,("no match",old)
+open(p,'w',encoding='utf-8',newline='').write(s.replace(old,new,1))
+PY
+res=$(bash /d/Claude-pm/h10-audit/run.sh "$@" -q -x 2>&1 | grep -E "^FAILED|passed|failed" | head -3 | tr '\n' ' ' | cut -c1-260)
+cp /d/Claude-pm/h10-audit/bak.orig "$f"
+echo "[$name] $res"
