@@ -28,7 +28,7 @@ echo [%date% %time%] MOTRIX ERP starting... >> "C:\Users\Motrix\Desktop\V9.0\bac
 set SSL_ARGS=
 if exist "certs\cert.pem" if exist "certs\key.pem" set SSL_ARGS=--ssl-keyfile=certs\key.pem --ssl-certfile=certs\cert.pem
 
-"C:\Users\Motrix\AppData\Local\Programs\Python\Python312\Scripts\uvicorn.exe" main:app --port 666 --host 0.0.0.0 --log-level info %SSL_ARGS% >> "C:\Users\Motrix\Desktop\V9.0\backend\logs\server.log" 2>&1
+"C:\Users\Motrix\AppData\Local\Programs\Python\Python312\Scripts\uvicorn.exe" main:app --port 666 --host 0.0.0.0 --forwarded-allow-ips 127.0.0.1 --log-level info %SSL_ARGS% >> "C:\Users\Motrix\Desktop\V9.0\backend\logs\server.log" 2>&1
 echo [%date% %time%] MOTRIX ERP stopped (exit code %errorlevel%). restart in 5s... >> "C:\Users\Motrix\Desktop\V9.0\backend\logs\server.log"
 timeout /t 5 /nobreak >nul
 goto loop

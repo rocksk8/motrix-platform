@@ -119,6 +119,58 @@ def test_audit_ip_of_duty_roles_and_settings_center_uses_the_trusted_ip():
     assert duty_roles._ip(None) == ""
 
 
+# ── 稽核紀錄之外：跟 uvicorn 那一層疊在一起（hichan-13 K 審 S1）──────────────────
+
+def _through_uvicorn_proxy_layer(client, peer, allow="127.0.0.1"):
+    """把 app 包上真正的 uvicorn ProxyHeadersMiddleware（就像 `uvicorn main:app` 預設會做的），再用指定的 TCP 對端打。"""
+    from fastapi.testclient import TestClient
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+    return TestClient(ProxyHeadersMiddleware(client.app, trusted_hosts=allow), client=(peer, 5000))
+
+
+def _six_logins(c, user, pw, header_for):
+    codes = []
+    for i in range(5):
+        codes.append(c.post("/api/auth/login", json={"username": user, "password": "wrong"}, headers=header_for(i)).status_code)
+    codes.append(c.post("/api/auth/login", json={"username": user, "password": pw}, headers=header_for(99)).status_code)
+    return codes
+
+
+def test_cloudflare_shaped_request_through_the_uvicorn_layer_locks_the_real_visitor(client, make_user):
+    """隧道同機：對端 127.0.0.1、XFF＝「攻擊者塞的假值, Cloudflare 附加的真實 IP」、CF-Connecting-IP＝真實 IP。
+    uvicorn 取最右邊不受信任的那個（真實 IP）⇒ 假值被略過 ⇒ 第 6 次被鎖。"""
+    user, pw = make_user()
+    c = _through_uvicorn_proxy_layer(client, "127.0.0.1")
+    codes = _six_logins(c, user, pw, lambda i: {"X-Forwarded-For": "9.9.9.%d, 198.51.100.7" % i, "CF-Connecting-IP": "198.51.100.7"})
+    assert codes == [401] * 5 + [429], codes
+
+
+def test_lan_peer_with_rotating_xff_through_the_uvicorn_layer_is_locked(client, make_user):
+    """區網對端不在 forwarded_allow_ips ⇒ uvicorn 不理 XFF；這支 helper 也不讀 XFF ⇒ 鎖得住。"""
+    user, pw = make_user()
+    c = _through_uvicorn_proxy_layer(client, "192.168.1.50")
+    codes = _six_logins(c, user, pw, lambda i: {"X-Forwarded-For": "203.0.113.%d" % (10 + i)})
+    assert codes == [401] * 5 + [429], codes
+
+
+def test_autostart_pins_uvicorn_forwarded_allow_ips():
+    """uvicorn 的 forwarded_allow_ips 若被環境變數 FORWARDED_ALLOW_IPS／複製來的指令改成 `*`，uvicorn 會對任何對端取 XFF 第一個值
+    ⇒ 原本的漏洞回來而 helper 擋不住（它信 request.client.host）。命令列優先於環境變數，所以在啟動指令明寫死。"""
+    import re
+    bat = (_BACKEND / "autostart.bat").read_text(encoding="utf-8", errors="replace")
+    lines = [ln for ln in bat.splitlines() if "uvicorn" in ln.lower() and "main:app" in ln and not ln.lstrip().startswith("::")]
+    assert lines, "autostart.bat 找不到 uvicorn 啟動行"
+    for ln in lines:
+        m = re.search(r"--forwarded-allow-ips[= ]+(\S+)", ln)
+        assert m, "uvicorn 啟動行沒有明寫 --forwarded-allow-ips 127.0.0.1：\n" + ln
+        assert m.group(1).strip("'\"") == "127.0.0.1", "forwarded-allow-ips 必須只信 127.0.0.1（不可 *）：" + m.group(1)
+        assert "--no-proxy-headers" not in ln
+
+
+def test_scoped_ipv6_in_cf_header_is_not_adopted():
+    assert client_ip(_req("127.0.0.1", **{"CF-Connecting-IP": "fe80::1%eth0"})) == "127.0.0.1"
+
+
 # ── 守門：以後不准再自己讀 XFF／request.client.host ──────────────────────────
 
 _BACKEND = Path(__file__).resolve().parent.parent
@@ -126,33 +178,77 @@ _ALLOWED = {
     "helpers/client_ip.py",                 # 唯一的實作
     "tools/deploy_dashboard.py",            # 本機判斷（對端是否 loopback＋是否帶代理標頭），自成一體
 }
+_PROXY_HEADER_NAMES = {"x-forwarded-for", "x-real-ip", "cf-connecting-ip", "forwarded"}
+
+
+def _const_text(node):
+    v = getattr(node, "value", None)
+    if isinstance(v, bytes):
+        v = v.decode("latin-1")
+    return v.strip().lower() if isinstance(v, str) else None
+
+
+def _is_client_attr(node):
+    return isinstance(node, ast.Attribute) and node.attr == "client"
+
+
+def _is_scope(node):
+    return (isinstance(node, ast.Attribute) and node.attr == "scope") or (isinstance(node, ast.Name) and node.id == "scope")
+
+
 def _offences(source: str):
     """AST 掃描（不看註解與文件字串，只看程式碼）：回傳 [(行號, 說明)]——
-    ① 字串常數恰為 `X-Forwarded-For`（不分大小寫；讀標頭的寫法）；② 屬性鏈 `….client.host`（直接讀對端位址）。"""
+    ① 字串／bytes 常數恰為 X-Forwarded-For／X-Real-IP／CF-Connecting-IP／Forwarded（不分大小寫；讀標頭的各種寫法）；
+    ② 屬性鏈 `….client.host`；③ `….client[0]`、`h, p = ….client`、`getattr(….client, "host")`、`getattr(x, "client")`；
+    ④ `….scope["client"]`、`scope.get("client")`（繞過 request.client 直接讀 ASGI scope）。"""
     out = []
     for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.strip().lower() == "x-forwarded-for":
-            out.append((node.lineno, "讀 X-Forwarded-For"))
-        if (isinstance(node, ast.Attribute) and node.attr == "host"
-                and isinstance(node.value, ast.Attribute) and node.value.attr == "client"):
+        if isinstance(node, ast.Constant) and _const_text(node) in _PROXY_HEADER_NAMES:
+            out.append((node.lineno, "讀代理標頭 %s" % _const_text(node)))
+        if isinstance(node, ast.Attribute) and node.attr == "host" and _is_client_attr(node.value):
             out.append((node.lineno, "直接讀 .client.host"))
+        if isinstance(node, ast.Subscript):
+            if _is_client_attr(node.value):
+                out.append((node.lineno, "直接取 .client[…]"))
+            if _is_scope(node.value) and _const_text(node.slice) == "client":
+                out.append((node.lineno, 'scope["client"]'))
+        if isinstance(node, ast.Assign) and any(isinstance(t, (ast.Tuple, ast.List)) for t in node.targets) and _is_client_attr(node.value):
+            out.append((node.lineno, "拆解 .client"))
+        if isinstance(node, ast.Call):
+            f = node.func
+            if isinstance(f, ast.Name) and f.id == "getattr" and len(node.args) >= 2:
+                if _const_text(node.args[1]) == "client" or (_is_client_attr(node.args[0]) and _const_text(node.args[1]) == "host"):
+                    out.append((node.lineno, "getattr 讀 client／host"))
+            if isinstance(f, ast.Attribute) and f.attr == "get" and _is_scope(f.value) and node.args and _const_text(node.args[0]) == "client":
+                out.append((node.lineno, 'scope.get("client")'))
     return out
+
+
+def _scanned_files():
+    roots = [_BACKEND]
+    if (_BACKEND.parent / "tools").is_dir():
+        roots.append(_BACKEND.parent / "tools")
+    for root in roots:
+        for p in root.rglob("*.py"):
+            rel = p.relative_to(root).as_posix()
+            if root is not _BACKEND:
+                rel = "../tools/" + rel
+            if rel.startswith("tests/") or "/tests/" in rel or ".venv" in rel or "node_modules" in rel or p.name == "conftest.py":
+                continue
+            if rel in _ALLOWED:
+                continue
+            yield rel, p
 
 
 def test_no_code_outside_the_helper_reads_xff_or_the_raw_peer_address():
     offenders = []
-    for p in _BACKEND.rglob("*.py"):
-        rel = p.relative_to(_BACKEND).as_posix()
-        if rel.startswith("tests/") or "/tests/" in rel or rel in _ALLOWED or ".venv" in rel or "node_modules" in rel:
-            continue
-        if p.name == "conftest.py":
-            continue
+    for rel, p in _scanned_files():
         try:
             found = _offences(p.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, SyntaxError):
             continue
         offenders += ["%s:%d  %s" % (rel, n, what) for n, what in found]
-    assert not offenders, "來源 IP 一律走 helpers.client_ip.client_ip(request)（不可自己讀 XFF／client.host）：\n" + "\n".join(offenders)
+    assert not offenders, "來源 IP 一律走 helpers.client_ip.client_ip(request)（不可自己讀 XFF／client.host／scope client）：\n" + "\n".join(offenders)
 
 
 _OLD_CODE = (
@@ -166,8 +262,31 @@ _PROSE_ONLY = (
     "    # request.client.host\n"
     "    return client_ip(r)\n"
 )
+#: 每種繞過寫法一個正對照（K 審 N1）：掃描器要全部抓得到
+_BYPASS_SNIPPETS = {
+    "client[0]": "def f(r):\n    return r.client[0]\n",
+    "unpack client": "def f(r):\n    h, p = r.client\n    return h\n",
+    "getattr host": "def f(r):\n    return getattr(r.client, 'host')\n",
+    "getattr client": "def f(r):\n    return getattr(r, 'client')\n",
+    "scope subscript": "def f(r):\n    return r.scope['client']\n",
+    "scope.get": "def f(r):\n    return r.scope.get('client')\n",
+    "bare scope": "def f(scope):\n    return scope['client'][0]\n",
+    "x-real-ip": "def f(r):\n    return r.headers.get('X-Real-IP')\n",
+    "cf-connecting-ip": "def f(r):\n    return r.headers.get('cf-connecting-ip')\n",
+    "forwarded": "def f(r):\n    return r.headers['Forwarded']\n",
+    "bytes header": "def f(scope):\n    return dict(scope['headers']).get(b'x-forwarded-for')\n",
+}
 
 
 def test_guard_positive_control_the_scanner_flags_the_old_code_and_ignores_prose():
-    assert [w for _n, w in _offences(_OLD_CODE)] == ["讀 X-Forwarded-For", "直接讀 .client.host"]
+    assert [w for _n, w in _offences(_OLD_CODE)] == ["讀代理標頭 x-forwarded-for", "直接讀 .client.host"]
     assert _offences(_PROSE_ONLY) == []
+
+
+@pytest.mark.parametrize("name", sorted(_BYPASS_SNIPPETS))
+def test_guard_positive_control_every_bypass_spelling_is_flagged(name):
+    assert _offences(_BYPASS_SNIPPETS[name]), "掃描器漏掉這種寫法：%s" % name
+
+
+def test_guard_does_not_flag_the_normal_call():
+    assert _offences("from helpers.client_ip import client_ip\ndef f(r):\n    return client_ip(r)\n") == []
