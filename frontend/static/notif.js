@@ -286,14 +286,29 @@ function notifStore() {
         const role = this._sess?.role || ''
         if (role !== 'superadmin' && role !== 'admin') return
         const currentFile = window.location.pathname.split('/').pop()
-        if (currentFile === 'change-password.html') return
+        if (currentFile === 'change-password.html') {
+          // 狀態會在這一頁改變 ⇒ 離開後重新查一次（不沿用舊快取）
+          try { sessionStorage.removeItem('motrix_totp_status') } catch (_e) { /* 無痕／禁用儲存：下次多查一次而已 */ }
+          return
+        }
         if (this._reminderDismissed('totp')) return
-        const r = await fetch('/api/auth/totp/status', {
-          headers: { Authorization: 'Bearer ' + this._sess.token }
-        })
-        if (!r.ok) return
-        const d = await r.json()
-        if (d.enabled) return
+        // 提醒每頁都要重新出現（直到按 ×），但「有沒有啟用」每個分頁只查一次：之前是每分頁只彈一次所以只查一次，
+        // 改成常駐後不能變成每換頁多打一支 API（e2e golden 的 API 請求清單釘住這一點）。
+        // 快取值帶帳號（同一分頁登出再換人登入時不沿用上一位的狀態）
+        const who = String(this._sess.username || this._sess.userId || '')
+        let st = ''
+        try { st = sessionStorage.getItem('motrix_totp_status') || '' } catch (_e) { st = '' }
+        st = st.startsWith(who + ':') ? st.slice(who.length + 1) : ''
+        if (st === 'on') return
+        if (st !== 'off') {
+          const r = await fetch('/api/auth/totp/status', {
+            headers: { Authorization: 'Bearer ' + this._sess.token }
+          })
+          if (!r.ok) return
+          const d = await r.json()
+          try { sessionStorage.setItem('motrix_totp_status', who + ':' + (d.enabled ? 'on' : 'off')) } catch (_e) { /* 同上 */ }
+          if (d.enabled) return
+        }
         const isPages = window.location.pathname.includes('/pages/')
         this._setReminder({
           id: 'totp', tone: 'warning', title: '尚未啟用兩步驟驗證',

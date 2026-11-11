@@ -206,6 +206,12 @@
     <div class="card">
       <div class="card-title">登入系統</div>
       <div class="card-sub" x-text="(branding.shortName ? branding.shortName + ' · ' : '') + '內部管理平台'">內部管理平台</div>
+      <!-- A1：剛在首次設定精靈改完密碼 ⇒ 告訴使用者這是流程的一部分，不是被登出了（旗標由 static/ux-wizard.js 在第 1 步寫入） -->
+      <div id="wizard-login-note" data-testid="wizard-login-note" role="status"
+           style="display:none;margin:0 0 16px;padding:10px 12px;border-radius:8px;background:rgba(21,128,61,.14);color:#86EFAC;font-size:13px;line-height:1.6">
+        ✓ 步驟 1 完成：密碼已更新。請用<strong>新密碼</strong>登入，接著完成首次設定。
+      </div>
+      <script>try { if (sessionStorage.getItem('motrix_wizard') === '1') document.getElementById('wizard-login-note').style.display = 'block' } catch (e) {}</script>
 
       <form @submit.prevent="login()" x-show="!totpStep">
         <div class="form-group">

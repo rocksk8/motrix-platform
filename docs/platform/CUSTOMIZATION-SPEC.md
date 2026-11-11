@@ -1,6 +1,8 @@
 # 網站內自訂：模組建構、拖曳排版、獨立升級（CUSTOMIZATION-SPEC）
 
-> 2026-09-25 使用者提出的核心方向。本檔是**目標規格**：目前還沒開始實作，但底層從現在起所有設計都要為它留好串接點（§5）。
+> ~~2026-09-25 使用者提出的核心方向。本檔是**目標規格**：目前還沒開始實作，但底層從現在起所有設計都要為它留好串接點（§5）。~~
+> （**2026-11-11 更正：主體已實作；本檔仍是規格原文，語氣是 09-25 的「要做」**。程式核對——P6 事件匯流排：`backend/core/events.py`；P7 模組更新包：`tools/platform/module_update.py`（見 `MODULE-UPDATE-DELIVERY.md`）；P8 模組建構器與自訂模組引擎：`frontend/pages/module-builder.html`、`backend/core/customization.py`、`core.mounts`，**總開關 `builder_custom_modules.enabled` 預設關**（93ab4964e，2026-11-08）；P9 側欄排版器：`/api/layout`、BP1 選單建構切片（ddd3167ca，2026-10-14）。**沒有逐條核對每一節與程式是否一致**，§9 法規參數以 `ROADMAP.md` 階段 R 為準；與程式不一致時以程式為準。）
+> 底層要為它留好的串接點見 §5（已留）。
 > 使用者裁示寫在 CORE-SPEC「使用者裁示」；本檔描述怎麼達成。
 
 ## 0. 三個核心（使用者原話整理）

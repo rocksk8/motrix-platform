@@ -166,6 +166,8 @@
    "js:static/privacy-notice.js",
    "js:static/record-link.js",
    "js:static/sidebar.js",
+   "js:static/ux-help.js",
+   "js:static/ux-wizard.js",
    "js:static/menu-editor.js",
    "js:static/export-editor.js",
    "js:static/export-guard.js",

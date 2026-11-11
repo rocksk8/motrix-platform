@@ -125,3 +125,20 @@ def test_reminder_stays_across_pages_until_dismissed_then_stays_closed(live_serv
     page.wait_for_function("() => window.Alpine && document.querySelector('[x-data]')", timeout=15000)
     page.wait_for_timeout(2500)
     assert page.locator(sel).count() == 0, "關掉之後同一分頁不應再出現"
+
+
+@pytest.mark.e2e
+def test_totp_status_is_asked_once_per_tab_not_once_per_page(live_server, client, make_user, new_context):
+    """提醒改成每頁都在（按 × 才收）之後，「有沒有啟用兩步驟驗證」仍只能每個分頁查一次：
+    否則每換一頁多打一支 /api/auth/totp/status（case-page golden 的 API 請求清單就是釘這個）。"""
+    u = make_user(username="nb_totpq", role="admin")
+    ctx = new_context(viewport={"width": 1440, "height": 900})
+    _session_only(client, ctx, u)
+    page = ctx.new_page()
+    hits = []
+    page.on("request", lambda r: hits.append(r.url) if r.url.endswith("/api/auth/totp/status") else None)
+    sel = "[data-reminder-id=totp]"
+    for path in ("/pages/quotations.html", "/pages/customers.html", "/pages/quotations.html"):
+        page.goto(live_server + path)
+        page.wait_for_function(f"() => document.querySelectorAll('{sel}').length === 1", timeout=15000)
+    assert len(hits) == 1, "三頁共查了 %d 次 totp/status：%s" % (len(hits), hits)

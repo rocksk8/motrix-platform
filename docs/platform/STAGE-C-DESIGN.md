@@ -1,6 +1,12 @@
 # 階段 C 設計：頁面進模組資料夾、選單由登錄表產生
 
-> 狀態：草案（B，2026-09-26 00:03 起草），待主持裁示 §7 的決策點。對應 ROADMAP 階段 C、PLAYBOOK §A 第 6 階段。
+> ~~狀態：草案（B，2026-09-26 00:03 起草），待主持裁示 §7 的決策點。~~對應 ROADMAP 階段 C、PLAYBOOK §A 第 6 階段。
+> **狀態（2026-11-11 核對程式）：部分實作——C1～C4 已做，C5 沒做。**
+> - **已做（C1～C4）**：`core.pages`（`/pages/<檔名>` 依 module.json `pages[].path` 宣告對照；模組沒載入 ⇒ 404＋提示頁）＝`backend/core/pages.py`；`core.source_tree.page_file()` 路徑解析集中；選單由宣告產生——`backend/core/menu_l1.json`＋各模組 `module.json` 的 `pages[].menu`、`GET /api/platform/menu`（`routers/platform_menu.py`、`core/menu.py`）；`sidebar.js` 以 `window.MOTRIX_MENU` 宣告＋`/api/platform/menu` 排版。守門：`tests/platform/test_core_pages.py`、`test_menu.py`。完成條件「關閉模組後選單消失、頁面回 404」由此達成。
+> - **沒做（C5 逐模組實體搬家）**：15 個模組共宣告 46 頁，**沒有任何一頁**實際搬進 `modules/<key>/pages/`，頁面檔仍在 `frontend/pages/`（URL 不變，裁示 D1）。`modules/lodging/pages/` 只放覆蓋層 JS（非頁面）；模組自有前端 JS 的另一條路是 `helpers/module_assets`（POC，2026-11-08）。
+> - **殘留**：C4 原定「刪 `_hideUnavailableModulePages`／`_FILE_MODULE`」——`sidebar.js` 內 `_FILE_MODULE` 仍在使用（頁面→模組對照），是否已被宣告取代**未逐項核對**。
+> - **未驗證**：§7 的決策點 D1～D4 是否全部有書面裁示，本次沒有逐題找（D1「URL 不變、實體搬家」與 D2「404＋提示頁」從程式行為看已採用）。
+> 本文 §1～§8 仍是 09-26 草案原文，C5 以後的步驟尚是草案。
 > 完成條件（PLAYBOOK §A）：**關閉模組後選單消失、頁面回 404**。
 
 ## 1. 現況（2026-09-26 盤點，wip/b-hardcap）

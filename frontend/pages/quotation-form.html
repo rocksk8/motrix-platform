@@ -704,6 +704,10 @@
       </div>
       <!-- Body -->
       <div style="padding:18px 20px">
+        <!-- A6（2026-11-11 UX）：按下去之前先講「這會做什麼」 -->
+        <div data-testid="qf-submit-consequence" style="font-size:12px;color:#374151;line-height:1.7;margin-bottom:12px">
+          確認送出後，這張報價單會交給主管簽核並通知對方，狀態變成「待審核」；核准後才能標記「已成案」。
+        </div>
         <!-- 報價資訊 -->
         <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:11px 14px;font-size:12px;color:#374151;line-height:1.9">
           <div><span style="color:#9CA3AF;display:inline-block;width:52px">報價單</span><strong style="font-family:LINE Seed TW_OTF, sans-serif" x-text="q.quoteNo"></strong></div>
@@ -1027,7 +1031,8 @@
       </button>
       <template x-if="q.status !== '待審核' && q.status !== '簽核中' && q.status !== '已送出' && !hb.on">
         <button class="btn btn-sm" @click="submitQuote()"
-                :class="needsApproval ? 'btn-warning' : 'btn-primary'">
+                :class="needsApproval ? 'btn-warning' : 'btn-primary'"
+                title="A6：送出後會交給主管簽核並通知對方；核准後才能標記「已成案」。">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
           <span x-text="needsApproval ? '⚠ 申請送出（含特殊條件）' : '申請送出審核'"></span>
         </button>
@@ -1751,6 +1756,7 @@
                   折讓
                   <button class="toggle-btn" :class="{active:q.showDiscount}"
                           @click="q.showDiscount=!q.showDiscount; if(!q.showDiscount){q.discount=0;calcTotals();}"
+                          :title="q.showDiscount ? '取消折讓會把已填的折讓金額清成 0，並重新計算總額' : '展開折讓欄位，填入要給客戶的減價金額'"
                           style="margin-left:6px">
                     <span x-text="q.showDiscount ? '取消折讓' : '申請折讓'"></span>
                   </button>
@@ -1994,7 +2000,7 @@
       <div class="cost-panel" x-show="showCostCols">
         <div class="cost-panel__title">
           <span></span>
-          INTERNAL · 成本分機
+          內部成本與利潤<small style="font-weight:400;opacity:.7;margin-left:6px">僅公司內部可見</small>
         </div>
 
         <div x-show="altUnpicked()" style="font-size:11px;color:#9CA3AF;margin-bottom:8px" data-testid="qf-alt-estimate"
@@ -2132,7 +2138,7 @@
       <!-- M3 T5：擇一方案比較（只給成本權限者；內容全由後端 plan-view 回傳，前端不自算；列印預覽不含） -->
       <div class="cost-panel alt-plan" x-show="showCostCols && altGroupNames().length && q.quoteNo" x-cloak data-testid="qf-alt-plan"
            x-init="$watch('q.quoteNo', v => { if (v && altGroupNames().length) loadPlan() })">
-        <div class="cost-panel__title"><span></span>INTERNAL · 擇一方案比較</div>
+        <div class="cost-panel__title"><span></span>內部・擇一方案比較</div>
         <div style="font-size:11px;color:#9CA3AF;margin-bottom:6px">依「已儲存」的內容計算；改了品項或單價請先儲存，再按「重新計算」。每個方案欄是「其他組都取下方選的基準」時的結果。</div>
         <button class="btn btn-ghost btn-sm" @click="loadPlan()" :disabled="plan.loading" x-text="plan.loading ? '計算中…' : '重新計算'"></button>
         <div class="alt-warn" x-show="plan.error" x-text="plan.error"></div>
@@ -2471,8 +2477,9 @@
   // V3.31（2026-10-17，T70-1）：新增模式多一個「補登歷史案件」區塊（僅最高管理者且設定中心開關有效時出現；日期限過去月份、預覽單號、原因必填、走專用補登端點）
   // V3.35（2026-11-11）：品項明細三個多行欄（品名／廠牌型號／備註）載入既有單、改值、欄寬變動時自動撐高，不再看起來被裁切
   // V3.36（2026-11-11）：送審前置檢查、送審失敗顯示後端原因並還原狀態、已送出單選「已成案」改只打 PATCH（修 EM11 起的卡住）。
-  // V3.37（2026-11-11，簽核人編輯）：簽核人檢視待審核／簽核中時欄位預設 disabled、工具列常駐「編輯」鈕（reconfirm_mode=on 才顯示）；核准前彈窗退場「編輯內容」選項、只留「維持核准」；第 3 層以後編輯提示整條回第 1 層。
-  const FORM_VERSION = 'V3.37'
+  // V3.38（2026-11-11，UX A6／E2）：送出審核確認視窗與按鈕補「這會…」說明、取消折讓說明；「INTERNAL · 成本分機」改白話「內部成本與利潤」。
+  // V3.39（2026-11-11，簽核人編輯）：簽核人檢視待審核／簽核中時欄位預設 disabled、工具列常駐「編輯」鈕（reconfirm_mode=on 才顯示）；核准前彈窗退場「編輯內容」選項、只留「維持核准」；第 3 層以後編輯提示整條回第 1 層。
+  const FORM_VERSION = 'V3.39'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
