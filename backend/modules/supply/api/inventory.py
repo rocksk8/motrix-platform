@@ -14,6 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Body
 
 from db import get_db, next_entity_code
+from core.txn import write_txn
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
@@ -433,46 +434,47 @@ def create_batch(body: dict = Body(...), authorization: str = Header(None)):
         clean.append({"serial_no": sn, "mac": (s.get("mac") or "").strip(), "note": s.get("note") or ""})
 
     conn = get_db()
-    part = conn.execute("SELECT part_no, cost FROM parts WHERE part_no=? AND active=1", (part_no,)).fetchone()
-    if not part:
-        conn.close()
-        raise HTTPException(404, "料號不存在")
+    with write_txn(conn):          # T80 R5：重複序號檢查與 INSERT 之間原本沒有寫鎖（TOCTOU）；併發同序號時 IntegrityError 會讓連線帶著寫鎖漏掉
+        part = conn.execute("SELECT part_no, cost FROM parts WHERE part_no=? AND active=1", (part_no,)).fetchone()
+        if not part:
+            conn.close()
+            raise HTTPException(404, "料號不存在")
 
-    dup = conn.execute(
-        f"SELECT serial_no FROM stock_items WHERE part_no=? AND serial_no IN ({','.join('?' * len(clean))})",
-        [part_no] + [c["serial_no"] for c in clean],
-    ).fetchall()
-    if dup:
-        conn.close()
-        raise HTTPException(409, f"序號已存在於庫存：{', '.join(d['serial_no'] for d in dup)}")
+        dup = conn.execute(
+            f"SELECT serial_no FROM stock_items WHERE part_no=? AND serial_no IN ({','.join('?' * len(clean))})",
+            [part_no] + [c["serial_no"] for c in clean],
+        ).fetchall()
+        if dup:
+            conn.close()
+            raise HTTPException(409, f"序號已存在於庫存：{', '.join(d['serial_no'] for d in dup)}")
 
-    batch_no = next_entity_code(conn, "stock_items", "PO", code_col="batch_no")
-    cost = body.get("cost")
-    if cost is None:
-        cost = part["cost"] or 0
-    note = body.get("note") or ""
-    now = datetime.now().isoformat()
-    actor = user.get("display_name") or user["username"]
+        batch_no = next_entity_code(conn, "stock_items", "PO", code_col="batch_no")
+        cost = body.get("cost")
+        if cost is None:
+            cost = part["cost"] or 0
+        note = body.get("note") or ""
+        now = datetime.now().isoformat()
+        actor = user.get("display_name") or user["username"]
 
-    supplier_id = body.get("supplier_id") or body.get("supplierId")
-    supplier_name = ""
-    if supplier_id:
-        srow = conn.execute("SELECT name FROM suppliers WHERE id=?", (supplier_id,)).fetchone()
-        supplier_name = srow["name"] if srow else ""
-    invoice_no = (body.get("invoice_no") or body.get("invoiceNo") or "").strip()
+        supplier_id = body.get("supplier_id") or body.get("supplierId")
+        supplier_name = ""
+        if supplier_id:
+            srow = conn.execute("SELECT name FROM suppliers WHERE id=?", (supplier_id,)).fetchone()
+            supplier_name = srow["name"] if srow else ""
+        invoice_no = (body.get("invoice_no") or body.get("invoiceNo") or "").strip()
 
-    for c in clean:
+        for c in clean:
+            conn.execute("""
+                INSERT INTO stock_items (part_no, serial_no, mac, status, batch_no, cost, note,
+                                          created_by, created_at, updated_at)
+                VALUES (?,?,?,'in_stock',?,?,?,?,?,?)
+            """, (part_no, c["serial_no"], c["mac"], batch_no, cost, c["note"] or note, actor, now, now))
         conn.execute("""
-            INSERT INTO stock_items (part_no, serial_no, mac, status, batch_no, cost, note,
-                                      created_by, created_at, updated_at)
-            VALUES (?,?,?,'in_stock',?,?,?,?,?,?)
-        """, (part_no, c["serial_no"], c["mac"], batch_no, cost, c["note"] or note, actor, now, now))
-    conn.execute("""
-        INSERT INTO stock_batches (batch_no, part_no, supplier_id, supplier_name, invoice_no,
-                                    note, created_by, created_at, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?)
-    """, (batch_no, part_no, supplier_id, supplier_name, invoice_no, note, actor, now, now))
-    conn.commit()
+            INSERT INTO stock_batches (batch_no, part_no, supplier_id, supplier_name, invoice_no,
+                                        note, created_by, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?)
+        """, (batch_no, part_no, supplier_id, supplier_name, invoice_no, note, actor, now, now))
+        conn.commit()
     conn.close()
 
     label = f"{batch_no}（{part_no}，{len(clean)} 台）"
