@@ -56,7 +56,7 @@ window.CM_PARTS.push(() => ({
 
     mcStatusStyle(st) {
       const c = { '草稿': 'var(--text-dim)', '待審核': 'var(--warning)', '簽核中': 'var(--warning)', '已核准': 'var(--success)', '已退回': 'var(--danger)', '已撤回': 'var(--text-dim)' }[st] || 'var(--text-dim)'
-      return `font-size:11px;padding:1px 8px;border-radius:10px;border:1px solid ${c};color:${c}`
+      return `font-size:12px;padding:1px 8px;border-radius:10px;border:1px solid ${c};color:${c}`
     },
     mcFmt(v) {
       if (v === null || v === undefined || v === '') return '—'

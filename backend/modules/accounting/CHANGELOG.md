@@ -1,5 +1,10 @@
 # 會計 更新紀錄
 
+## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
+- 選單宣告（B2／B3）：財務會計下拉依 `section` 分「日常／月結／設定」小標題（憑證＝日常；總帳／會計期間＝月結；科目項目＝設定）；`ledger-statements.html`／`ledger-reports.html`／`ledger-settings.html` 改掛到「報表」群組（頁籤 財務／帳簿／設定），網址與權限不變，仍可由報表中心與選單進入。
+- 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
+- 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
+
 ## 1.1.64 — 2026-10-17（wip/t69-ledger-settings-r1；總帳設定：角色→科目對應雙人核准、會計年度起始月份僅最高管理者）
 - 行為變嚴（需列入驗收）：`PUT /api/ledger/roles`（角色→科目對應）**不再立即生效**：回 202 並建立待核准項（設定帳本 domain `ledger:role`，risk=money，需 1 位不同於申請人的在職最高管理者核准）；另一位最高管理者按核准（`POST /api/ledger/roles/pending/{id}/approve`）後**立即**套用到 `gl_account_roles`。變更必須填原因；申請人不能核准自己的；核准時會再驗一次科目（被停用／變成非最底層 ⇒ 409，維持待核准、可撤銷）；同一目標再申請 ⇒ 舊申請被取代；任一最高管理者可撤銷（`POST …/cancel`，需原因）。沒有第二位在職最高管理者 ⇒ 409 說明，不自動放行（待使用者裁示）。申請、核准、套用、撤銷都有稽核（`ledger.role.request／approve／put／cancel`）。
 - 新增：唯讀 `GET /api/ledger/roles`（現行角色對應＋待核准清單；權限同總帳讀取＝出納／財務）；`ledger-settings.html` 新增「科目角色對應」分頁（現行對應、待核准清單與核准／撤銷、申請表單）。

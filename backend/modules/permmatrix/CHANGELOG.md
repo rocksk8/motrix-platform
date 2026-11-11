@@ -1,5 +1,9 @@
 # 權限矩陣 更新紀錄
 
+## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
+- 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
+- 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
+
 ## 1.1.0 — 2026-10-16（train/t67-int；T67 PM-S2／PM-S3）
 - 新增『權限設定』頁（`permission-matrix.html`，只走系統中心卡片，不新增選單）與端點：唯讀檢視 `GET /api/permmatrix/matrix｜users｜users/{id}/effective｜pending｜versions｜delegations`（PM-S2）；寫入 `POST /role-cap`＋`/role-cap/preview`、`POST /user-override`＋`/user-override/preview`、`DELETE /user-override`、`POST /pending/{id}/cancel｜approve`、`POST /versions/{id}/restore`、`POST /undo`（PM-S3）。全部限最高管理者；規則仍全在服務層（原因必填、高風險放寬走設定帳本確認期間＋第二位最高管理者核准、稽核同交易）。
 - 格子內容全部來自各模組的能力宣告（`views.py` 唯讀檢視）：沒有宣告就是空表；『未接入』的格子不可勾。存檔前一定先顯示一句話影響面板。

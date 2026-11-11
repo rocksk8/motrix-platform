@@ -27,10 +27,10 @@
       border-bottom: 1px solid var(--border-light);
     }
     .ql-lane__in { display: flex; align-items: center; gap: 8px; }
-    .ql-lane__t { font-size: 11px; font-weight: 700; letter-spacing: .06em; }
-    .ql-lane__d { font-size: 11px; color: var(--text-dim); }
+    .ql-lane__t { font-size: 12px; font-weight: 700; letter-spacing: .06em; }
+    .ql-lane__d { font-size: 12px; color: var(--text-dim); }
     .ql-lane__n {
-      margin-left: auto; font-size: 11px; color: var(--text-dim);
+      margin-left: auto; font-size: 12px; color: var(--text-dim);
       font-family: var(--font-en); font-variant-numeric: tabular-nums;
     }
     /* 壓力帶的段在這一頁是可點的篩選器（共用的 .vm-andon__seg 是純顯示） */
@@ -38,7 +38,7 @@
     .ql-phase:hover { background:var(--icon-btn-bg); }
     .ql-phase.on { outline:2px solid var(--accent); outline-offset:-2px; }
     .ql-age {
-      display: block; margin-top: 2px; font-size: 10px;
+      display: block; margin-top: 2px; font-size: 12px;
       font-family: var(--font-en); font-variant-numeric: tabular-nums;
     }
     .filter-tabs { display:flex; gap:2px; background:#F0EEE9; padding:3px; border-radius:8px; margin-bottom:20px; }
@@ -66,7 +66,7 @@
     .sortable-chosen { box-shadow: 0 2px 16px rgba(0,0,0,.12); }
     .summary-row { display:flex; gap:24px; margin-bottom:20px; padding:14px 20px; background:#fff; border:1px solid var(--border-light); border-radius:var(--radius-lg); }
     .summary-item { display:flex; flex-direction:column; gap:2px; }
-    .summary-item__label { font-size:10px; font-family:var(--font-en); letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); }
+    .summary-item__label { font-size:12px; font-family:var(--font-en); letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); }
     .summary-item__val { font-family:var(--font-en); font-size:18px; font-weight:700; color:var(--text-primary); }
     .offline-banner { background:#FEF3C7; border:1px solid #FDE68A; border-radius:var(--radius); padding:8px 14px; margin-bottom:14px; font-size:12px; color:#92400E; display:flex; align-items:center; gap:8px; }
     /* View switcher */
@@ -91,8 +91,8 @@
         <div class="page-header__sub" x-text="'MQ 系列 · 共 ' + quotes.length + ' 筆紀錄'"></div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
-        <span style="font-size:11px;padding:3px 8px;border-radius:4px;font-family:LINE Seed TW_OTF, sans-serif"
-              :style="backendOnline ? 'background:#F0FDF4;color:#15803D' : 'background:#FEF2F2;color:#DC2626'"
+        <span style="font-size:12px;padding:3px 8px;border-radius:4px;font-family:LINE Seed TW_OTF, sans-serif"
+              :style="backendOnline ? 'background:#F0FDF4;color:#15803D' : 'background:#FEF2F2;color:var(--danger)'"
               x-text="backendOnline ? '● DB 已連線' : '○ 後端離線'"></span>
         <a href="quotation-form.html" class="action-btn action-btn--primary" style="text-decoration:none">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
@@ -250,7 +250,7 @@
       <template x-for="tab in tabs" :key="tab.key">
         <button class="filter-tab" :class="{active: activeTab === tab.key}" :title="tab.title || ''" @click="activeTab = tab.key; phaseFilter = ''">
           <span x-text="tab.label"></span>
-          <span x-show="tabCount(tab.key) > 0" style="margin-left:4px;font-size:10px;color:var(--text-dim)" x-text="'(' + tabCount(tab.key) + ')'"></span>
+          <span x-show="tabCount(tab.key) > 0" style="margin-left:4px;font-size:12px;color:var(--text-dim)" x-text="'(' + tabCount(tab.key) + ')'"></span>
         </button>
       </template>
     </div>
@@ -295,15 +295,15 @@
                      style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"
                      x-text="q.quote_no"></a>
                   <template x-if="/\-R\d+$/.test(q.quote_no)">
-                    <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#FED7AA;color:#7C2D12;letter-spacing:.03em;flex-shrink:0">改版</span>
+                    <span style="font-size:12px;font-weight:700;padding:1px 5px;border-radius:3px;background:#FED7AA;color:#7C2D12;letter-spacing:.03em;flex-shrink:0">改版</span>
                   </template>
                 </div>
                 <template x-if="q.edit_count > 0">
-                  <div style="display:inline-flex;align-items:center;gap:4px;margin-top:3px;padding:2px 6px;border-radius:3px;background:#FEF3C7;border:1px solid #FDE68A;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E;max-width:220px;overflow:hidden">
+                  <div style="display:inline-flex;align-items:center;gap:4px;margin-top:3px;padding:2px 6px;border-radius:3px;background:#FEF3C7;border:1px solid #FDE68A;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E;max-width:220px;overflow:hidden">
                     <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#92400E" stroke-width="2.5" style="flex-shrink:0"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1"
                           x-text="q.edit_last ? (q.edit_last.byDisplay + ' · ' + fmtEditAt(q.edit_last.at)) : '已修改 ' + q.edit_count + ' 次'"></span>
-                    <span style="flex-shrink:0;padding:1px 5px;border-radius:2px;background:#FDE68A;font-weight:700;font-size:9px;white-space:nowrap"
+                    <span style="flex-shrink:0;padding:1px 5px;border-radius:2px;background:#FDE68A;font-weight:700;font-size:12px;white-space:nowrap"
                           x-text="q.edit_last ? editTypeLabel(q.edit_last.type) : ''"></span>
                   </div>
                 </template>
@@ -317,9 +317,9 @@
                 <span :style="MotrixMargin.style(q.direct_margin_pct)"
                       x-text="q.direct_margin_pct ? q.direct_margin_pct.toFixed(1) + '%' : '—'"></span>
               </td>
-              <td data-col="validDays" x-show="cShown('validDays')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px">
+              <td data-col="validDays" x-show="cShown('validDays')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px">
                 <span x-text="(q.valid_days || 30) + ' 天'"></span>
-                <span x-show="q.valid_days > 30" style="color:var(--danger);font-size:9px;font-weight:600;display:block">需審核</span>
+                <span x-show="q.valid_days > 30" style="color:var(--danger);font-size:12px;font-weight:600;display:block">需審核</span>
               </td>
               <td data-col="filler" x-show="cShown('filler')" style="font-size:12px;color:var(--text-secondary)" x-text="q.sales_person || '—'"></td>
               <td data-col="status" x-show="cShown('status')">
@@ -331,7 +331,7 @@
               <td data-col="dealTag" x-show="cShown('dealTag')">
                 <!-- 已成案/已結案：鎖定顯示，不可在此頁修改 -->
                 <template x-if="q.deal_tag === '已成案' || q.deal_tag === '已結案'">
-                  <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600"
+                  <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;font-size:12px;font-weight:600"
                         :style="q.deal_tag === '已結案' ? 'background:#EDE9FE;color:#6D28D9;border:1px solid #C4B5FD' : 'background:#DCFCE7;color:#15803D;border:1px solid #86EFAC'">
                     <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
                     <span x-text="q.deal_tag"></span>
@@ -340,8 +340,8 @@
                 <template x-if="q.deal_tag !== '已成案' && q.deal_tag !== '已結案'">
                   <select @change="trySetLost(q.quote_no, $event.target.value, q)"
                           :value="q.deal_tag || ''"
-                          style="padding:3px 6px;font-size:11px;border:1px solid var(--border-light);border-radius:4px;background:#fff;font-family:var(--font-zh);cursor:pointer;outline:none;max-width:86px;transition:border-color .12s"
-                          :style="q.deal_tag==='未成案' ? 'color:#DC2626;border-color:#FCA5A5' : q.deal_tag==='已提供' ? 'color:var(--accent);border-color:#93C5FD' : q.deal_tag==='未提供' ? 'color:#6B7280' : 'color:var(--text-dim)'">
+                          style="padding:3px 6px;font-size:12px;border:1px solid var(--border-light);border-radius:4px;background:#fff;font-family:var(--font-zh);cursor:pointer;outline:none;max-width:86px;transition:border-color .12s"
+                          :style="q.deal_tag==='未成案' ? 'color:var(--danger);border-color:#FCA5A5' : q.deal_tag==='已提供' ? 'color:var(--accent);border-color:#93C5FD' : q.deal_tag==='未提供' ? 'color:var(--text-secondary)' : 'color:var(--text-dim)'">
                     <option value="">未標記</option>
                     <option value="未提供">未提供</option>
                     <option value="已提供">已提供</option>
@@ -350,7 +350,7 @@
                   </select>
                 </template>
               </td>
-              <td data-col="date" x-show="cShown('date')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-dim)" x-text="(q.quote_date || q.created_at || '').slice(0,10)"></td>
+              <td data-col="date" x-show="cShown('date')" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;color:var(--text-dim)" x-text="(q.quote_date || q.created_at || '').slice(0,10)"></td>
               <td>
                 <div class="row-actions">
                   <a :href="'quotation-form.html?id=' + q.quote_no" class="icon-btn" title="編輯">
@@ -396,7 +396,7 @@
       </div>
     </div>
 
-    <div style="margin-top:12px;font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
+    <div style="margin-top:12px;font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
          x-text="'共 ' + filtered.length + ' 筆 · 顯示 ' + pagedFiltered.length + ' / ' + quotes.length + ' 筆'"></div>
     <div x-show="pageSize > 0 && filtered.length > pageSize" x-cloak data-testid="lv-pager" style="margin-top:8px;display:flex;gap:10px;align-items:center;font-size:12px">
       <button class="action-btn action-btn--ghost" :disabled="pvPage <= 0" @click="pvPage = Math.max(0, Math.min(pvPage, pageCount - 1) - 1)">上一頁</button>
@@ -419,13 +419,13 @@
         <div>
           <div style="font-size:14px;font-weight:700;color:#111;margin-bottom:3px">確認標記為「未成案」</div>
           <div style="font-size:12px;color:#666;line-height:1.5">
-            本案將標記為 <strong style="color:#DC2626">未成案</strong>，案件進度將終止，此操作無法自行撤銷。<br>
+            本案將標記為 <strong style="color:var(--danger)">未成案</strong>，案件進度將終止，此操作無法自行撤銷。<br>
             此操作將留下管理員操作紀錄。
           </div>
         </div>
       </div>
       <div style="margin-bottom:18px">
-        <label style="font-size:11px;color:#555;font-weight:600;display:block;margin-bottom:5px;letter-spacing:.02em">
+        <label style="font-size:12px;color:#555;font-weight:600;display:block;margin-bottom:5px;letter-spacing:.02em">
           失單原因 <span style="color:#999;font-weight:400">（選填，將附於操作紀錄）</span>
         </label>
         <textarea x-model="dealTagLostReason"
@@ -1049,9 +1049,9 @@
 <div x-show="voidDlg.open" x-cloak style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center" data-testid="ql-void-dlg">
   <div style="background:#fff;border-radius:8px;padding:20px;width:min(440px,92vw)">
     <div style="font-weight:600;margin-bottom:8px">作廢補登單 <span x-text="voidDlg.quoteNo"></span></div>
-    <div style="font-size:12px;color:#6B7280;margin-bottom:8px">作廢後進暫存區（可由最高管理者復原），單號不會回收。請填原因（至少 5 個字）。</div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">作廢後進暫存區（可由最高管理者復原），單號不會回收。請填原因（至少 5 個字）。</div>
     <input class="form-input" style="width:100%" type="text" placeholder="作廢原因" x-model="voidDlg.reason" @keydown.enter="!$event.isComposing && $event.keyCode !== 229 && submitVoid()" data-testid="ql-void-reason">
-    <div style="color:#DC2626;font-size:12px;min-height:18px;margin-top:6px" x-text="voidDlg.err" data-testid="ql-void-err"></div>
+    <div style="color:var(--danger);font-size:12px;min-height:18px;margin-top:6px" x-text="voidDlg.err" data-testid="ql-void-err"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost btn-sm" @click="voidDlg.open=false" data-testid="ql-void-cancel">取消</button>
       <button class="btn btn-primary btn-sm" :disabled="voidDlg.busy" @click="submitVoid()" data-testid="ql-void-ok">確定作廢</button>

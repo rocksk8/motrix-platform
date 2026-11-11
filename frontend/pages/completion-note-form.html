@@ -24,19 +24,19 @@
     .cnf-card { border:1px solid var(--border-light); border-radius:10px; padding:20px 22px; margin-bottom:18px; background:#fff }
     .cnf-card-title { font-size:13px; font-weight:700; font-family:var(--font-zh); margin-bottom:14px; color:var(--text-main) }
     .cnf-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px }
-    .cnf-lbl { display:block; font-size:10px; font-family:'LINE Seed TW_OTF',sans-serif; letter-spacing:.08em;
-               text-transform:uppercase; color:#9CA3AF; font-weight:500; margin-bottom:5px }
+    .cnf-lbl { display:block; font-size:12px; font-family:'LINE Seed TW_OTF',sans-serif; letter-spacing:.08em;
+               text-transform:uppercase; color:var(--text-dim); font-weight:500; margin-bottom:5px }
     .cnf-in { width:100%; padding:8px 10px; border:1px solid var(--border-light); border-radius:6px;
               font-size:13px; font-family:var(--font-zh); outline:none; box-sizing:border-box; background:#fff }
     .cnf-in:focus { border-color:var(--accent) }
-    .cnf-hint { font-size:11px; color:var(--text-dim); margin-top:5px; line-height:1.6; font-family:var(--font-zh) }
+    .cnf-hint { font-size:12px; color:var(--text-dim); margin-top:5px; line-height:1.6; font-family:var(--font-zh) }
     .cnf-btn { padding:7px 15px; border-radius:6px; font-size:12px; cursor:pointer; font-family:var(--font-zh);
                border:1px solid var(--border-light); background:#fff; color:var(--text-primary) }
     .cnf-btn--primary { background:var(--accent-hover); color:#fff; border:none; font-weight:500 }
     .cnf-btn--warn { background:#B45309; color:#fff; border:none; font-weight:500 }
     .cnf-btn:disabled { opacity:.45; cursor:default }
     .cnf-item-row { display:flex; align-items:center; gap:7px; margin-bottom:7px; flex-wrap:wrap }
-    .cnf-badge { padding:2px 9px; border-radius:10px; font-size:11px; font-weight:600 }
+    .cnf-badge { padding:2px 9px; border-radius:10px; font-size:12px; font-weight:600 }
   </style>
 </head>
 
@@ -82,7 +82,7 @@
             <input type="checkbox" x-model="d.checked" data-testid="cnf-diff-check">
             <span>
               <b x-text="d.kindLabel"></b>　<span x-text="d.label"></span>
-              <span x-show="d.detail" style="display:block;font-size:11px;color:var(--text-dim)" x-text="d.detail"></span>
+              <span x-show="d.detail" style="display:block;font-size:12px;color:var(--text-dim)" x-text="d.detail"></span>
             </span>
           </label>
         </template>
@@ -234,7 +234,7 @@
             </template>
             <template x-for="(it, i) in form.items" :key="i">
               <div class="cnf-item-row">
-                <span style="width:22px;text-align:center;color:var(--text-dim);font-size:11px" x-text="it.type==='header' ? '§' : (realIdx(i))"></span>
+                <span style="width:22px;text-align:center;color:var(--text-dim);font-size:12px" x-text="it.type==='header' ? '§' : (realIdx(i))"></span>
                 <template x-if="it.type === 'header'">
                   <input class="cnf-in" type="text" style="flex:1;min-width:220px;background:var(--accent-light)"
                          x-model="it.description" :disabled="!editable()" @input="dirty=true"
@@ -252,7 +252,7 @@
                       <option value="未施作">未施作</option>
                     </select>
                     <input class="cnf-in" type="text" style="flex:1;min-width:120px" x-model="it.notes" :disabled="!editable()" @input="dirty=true" placeholder="備註">
-                    <span x-show="progressOf(it)" data-testid="cnf-progress" style="font-size:11px;font-family:var(--font-zh);flex-basis:100%;padding-left:2px"
+                    <span x-show="progressOf(it)" data-testid="cnf-progress" style="font-size:12px;font-family:var(--font-zh);flex-basis:100%;padding-left:2px"
                           :style="overBy(it) > 0 ? 'color:#92400E;background:#FFFBEB' : 'color:var(--text-dim)'" x-text="progressOf(it)"></span>
                   </span>
                 </template>
@@ -294,7 +294,7 @@
                x-init="pnLoadNotice(); pnRefresh(); $watch('noteNo', () => pnRefresh())"
                style="margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border-light);border-radius:6px">
             <div style="font-size:12px;font-weight:600;margin-bottom:4px">個資蒐集告知</div>
-            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
               客戶驗收人／聯絡人的姓名、電話屬個人資料，蒐集時須告知蒐集目的、類別、利用方式與當事人權利。先儲存單據，再列印告知書或勾選；換了聯絡人要重新告知。沒有記錄不影響存檔。
             </div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -313,8 +313,8 @@
               </template>
             </div>
             <div x-show="pnSubject() && !pnAck() && !privacyAckRequested" data-privacy-missing
-                 style="margin-top:6px;font-size:11px;color:var(--warning)">尚未記錄個資告知</div>
-            <div x-show="privacyErr" data-privacy-error style="margin-top:6px;font-size:11px;color:var(--danger)" x-text="privacyErr"></div>
+                 style="margin-top:6px;font-size:12px;color:var(--warning)">尚未記錄個資告知</div>
+            <div x-show="privacyErr" data-privacy-error style="margin-top:6px;font-size:12px;color:var(--danger)" x-text="privacyErr"></div>
           </div>
           <div class="cnf-card">
             <div class="cnf-card-title">備註</div>
@@ -643,7 +643,7 @@
       statusStyle(s) {
         if (s === '已核准') return 'background:#DCFCE7;color:#15803D'
         if (s === '待審核' || s === '簽核中') return 'background:#FEF3C7;color:#92400E'
-        return 'background:#F3F4F6;color:#6B7280'
+        return 'background:#F3F4F6;color:var(--text-secondary)'
       },
       realIdx(i) {
         let n = 0

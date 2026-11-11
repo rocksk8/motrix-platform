@@ -25,17 +25,17 @@
     .np-seg.on{outline:2px solid var(--accent);outline-offset:-2px}
     .np-arrow{display:grid;place-items:center;background:var(--white);color:var(--border-light);font-size:13px;padding:0 2px}
     @media (max-width:767px){.np-arrow{display:none}}
-    .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
+    .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
     .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
     .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
     .data-table{width:100%;border-collapse:collapse;font-size:13px}
-    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table th{padding:10px 14px;text-align:left;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
     .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle;color:var(--text-primary)}
     .data-table tr:last-child td{border-bottom:none}
     .data-table tr:hover td{background:#FDFCFA;cursor:pointer}
-    .mono{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;letter-spacing:.03em}
-    .st{display:inline-flex;padding:2px 8px;border-radius:4px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600}
-    .st-plan{background:#F0EEE9;color:#6B7280}
+    .mono{font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;letter-spacing:.03em}
+    .st{display:inline-flex;padding:2px 8px;border-radius:4px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600}
+    .st-plan{background:#F0EEE9;color:var(--text-secondary)}
     .st-confirmed{background:#DBEAFE;color:var(--accent-hover)}
     .st-delivered{background:#DCFCE7;color:#15803D}
     .empty{text-align:center;padding:60px 20px;color:var(--text-dim)}
@@ -51,7 +51,7 @@
     .link-pill.active{background:#C2410C;color:#fff;border-color:#C2410C}
     .stock-item-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--border-light);border-radius:6px;cursor:pointer;font-size:12px}
     .stock-item-row:hover{border-color:var(--accent);background:var(--accent-light)}
-    .btn-xs{padding:4px 8px;font-size:11px}
+    .btn-xs{padding:4px 8px;font-size:12px}
   </style>
 </head>
 <body x-data="networkPlansPage()" x-init="init()" x-cloak>
@@ -62,7 +62,7 @@
   <div class="page-main">
     <div class="pg">
       <div class="pg__l">
-        <div class="pg__eyebrow">設備管理</div>
+        <nav class="pg__crumb" data-crumb-auto aria-label="目前位置"><span>網路架構規劃書</span></nav>
         <h1 class="pg__t">網路架構規劃書</h1>
         <p class="pg__s">WAN／VLAN／IP／交換器／防火牆／無線／線路配置的完整規劃文件，可匯出 Excel／PDF 給客戶</p>
 </div>
@@ -77,7 +77,7 @@
         <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
         <input class="search-input" type="text" x-model="search" @input.debounce.400ms="load()" placeholder="搜尋規劃書編號、案場名稱…">
       </div>
-      <span style="font-size:11px;color:var(--text-dim);margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif" x-text="filtered.length + ' 份'"></span>
+      <span style="font-size:12px;color:var(--text-dim);margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif" x-text="filtered.length + ' 份'"></span>
     </div>
 
     <!-- ── 規劃書流程帶（2026-09-14）──────────────────────────────────
@@ -151,12 +151,12 @@
                   <td x-text="p.siteName || '—'"></td>
                   <td>
                     <a :href="'case-management.html?q=' + p.quoteNo" x-show="p.quoteNo"
-                       style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--accent);text-decoration:none"
+                       style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--accent);text-decoration:none"
                        x-text="p.quoteNo" @click.stop></a>
                     <span x-show="!p.quoteNo" style="color:var(--text-dim)">獨立建立</span>
                   </td>
                   <td><span class="st" :class="stCls(p.status)" x-text="stText(p.status)"></span></td>
-                  <td style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif" x-text="(p.updatedAt||'').replace('T',' ').slice(0,16)"></td>
+                  <td style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif" x-text="(p.updatedAt||'').replace('T',' ').slice(0,16)"></td>
                   <td style="font-size:12px" x-text="p.updatedBy || '—'"></td>
                 </tr>
               </template>
@@ -196,9 +196,9 @@
                   <div class="stock-item-row" style="margin:6px" @click="pickCase(c)">
                     <div>
                       <div style="font-weight:600" x-text="c.quote_no"></div>
-                      <div style="font-size:11px;color:var(--text-dim)" x-text="(c.customer_name||'—') + '　' + (c.project_name||'')"></div>
+                      <div style="font-size:12px;color:var(--text-dim)" x-text="(c.customer_name||'—') + '　' + (c.project_name||'')"></div>
                     </div>
-                    <span style="font-size:11px;color:var(--text-dim)" x-text="c.deal_tag"></span>
+                    <span style="font-size:12px;color:var(--text-dim)" x-text="c.deal_tag"></span>
                   </div>
                 </template>
               </div>
@@ -228,7 +228,7 @@
       <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：手動輸入的聯絡人也要告知） -->
       <div data-privacy-card style="margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border-light);border-radius:6px">
         <div style="font-size:12px;font-weight:600;margin-bottom:4px">個資蒐集告知</div>
-        <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
           案場聯絡人的姓名、電話屬個人資料，蒐集時須告知蒐集目的、類別、利用方式與當事人權利。勾選後於建立時一併記錄；沒有記錄不影響建立。
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -241,7 +241,7 @@
           </label>
         </div>
         <div x-show="pnSubject() && !privacyAckRequested" data-privacy-missing
-             style="margin-top:6px;font-size:11px;color:var(--warning)">尚未記錄個資告知</div>
+             style="margin-top:6px;font-size:12px;color:var(--warning)">尚未記錄個資告知</div>
       </div>
 
       <div x-show="createErr" style="color:var(--danger);font-size:12px;margin-bottom:10px" x-text="createErr"></div>

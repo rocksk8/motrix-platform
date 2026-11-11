@@ -13,7 +13,7 @@ pytest.importorskip("playwright.sync_api")
 
 from tests.test_e2e_notice_banners_2026_09_25 import _pending_approval, _session_only  # noqa: E402
 
-BANNER = "#approval-notif-banner"
+BANNER = "[data-reminder-id=approval]"      # 2026-11-11 D1：浮動橫幅改成鈴鐺裡的提醒（仍是同一個數字、同一個判準）
 
 
 def _login_headers(client, u):
@@ -39,8 +39,10 @@ def test_banner_shows_while_pending_and_not_after_signing(live_server, client, m
     # ① 有待簽：登入後跳出，數字＝真實待簽數
     page, count = _open_after_login(live_server, client, new_context, u)
     assert count == 1
-    page.locator(BANNER).wait_for(state="visible", timeout=10000)
-    assert page.locator(BANNER + " b").inner_text() == "1"
+    page.wait_for_function("() => document.querySelectorAll('[data-reminder-id=approval]').length === 1", timeout=10000)
+    page.locator(".topbar__btn:has-text('通知')").click()
+    page.locator(BANNER).wait_for(state="visible", timeout=5000)
+    assert "1 件待您簽核" in page.locator(BANNER).inner_text()
     # ② 簽掉
     r = client.post("/api/quotations/MQ-NB-PEND-lp_user/approve", headers=_login_headers(client, u), json={})
     assert r.status_code == 200, r.text
@@ -53,8 +55,8 @@ def test_banner_shows_while_pending_and_not_after_signing(live_server, client, m
         conn.commit()
     finally:
         conn.close()
-    # ③ 再登入（新分頁狀態）：待簽數 0 ⇒ 不跳（橫幅延遲 0.9 秒出現，多等 1.5 秒確認「不會出現」）
+    # ③ 再登入（新分頁狀態）：待簽數 0 ⇒ 沒有提醒（多等 1.5 秒確認「不會出現」）
     page2, count2 = _open_after_login(live_server, client, new_context, u)
     assert count2 == 0
     page2.wait_for_timeout(1500)
-    assert page2.locator(BANNER).count() == 0, "簽過了，登入還是跳「待簽核」橫幅"
+    assert page2.locator(BANNER).count() == 0, "簽過了，鈴鐺裡還是有「待簽核」提醒"

@@ -78,10 +78,10 @@
     .gc-desc {
       font-size: 13px;
       color: var(--text-secondary);
-      background: #F8F7F4;
+      background: var(--info-light);
       border-radius: 7px;
       padding: 12px 14px;
-      border-left: 3px solid var(--accent);
+      border-left: 3px solid var(--info);
       margin-bottom: 20px;
       line-height: 1.6;
     }
@@ -109,7 +109,7 @@
       cursor: pointer;
     }
     .gc-ev-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-    .gc-ev-default { font-size: 11px; color: var(--text-dim); margin-left: 6px; }
+    .gc-ev-default { font-size: 12px; color: var(--text-dim); margin-left: 6px; }
     .gc-ev-desc { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
     .gc-check-row {
       display: flex;
@@ -120,7 +120,7 @@
     }
     .gc-check-row:last-child { border-bottom: none; }
     .gc-check-badge {
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 600;
       padding: 2px 8px;
       border-radius: 10px;
@@ -212,14 +212,14 @@
     <div class="gc-card">
       <div class="gc-card-head">
         <div class="gc-card-head-title">設定狀態</div>
-        <span x-show="allReady" style="font-size:12px;color:#16A34A;font-weight:600">● 已就緒</span>
-        <span x-show="!allReady" style="font-size:12px;color:#D97706;font-weight:600"
+        <span x-show="allReady" style="font-size:12px;color:var(--success);font-weight:600">● 已就緒</span>
+        <span x-show="!allReady" style="font-size:12px;color:var(--warning);font-weight:600"
               x-text="'尚有 ' + (checks.length - readyCount) + ' 項待完成'"></span>
       </div>
       <div class="gc-card-body" style="padding-top:8px;padding-bottom:8px">
         <template x-for="c in checks" :key="c.label">
           <div class="gc-check-row">
-            <div :style="c.ok ? 'color:#15803D' : 'color:#9CA3AF'" style="flex-shrink:0;margin-top:1px">
+            <div :style="c.ok ? 'color:#15803D' : 'color:var(--text-dim)'" style="flex-shrink:0;margin-top:1px">
               <template x-if="c.ok">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               </template>
@@ -232,7 +232,7 @@
                    :style="c.ok ? 'color:var(--text-main)' : 'color:var(--text-secondary)'"
                    x-text="c.label"></div>
               <div x-show="!c.ok" x-text="c.hint"
-                   style="font-size:11px;color:#D97706;margin-top:2px"></div>
+                   style="font-size:12px;color:var(--warning);margin-top:2px"></div>
             </div>
             <span class="gc-check-badge"
                   :style="c.ok ? 'background:#D1FAE5;color:#065F46' : 'background:#FEF3C7;color:#92400E'"
@@ -246,7 +246,7 @@
     <div class="gc-card">
       <div class="gc-card-head">
         <div class="gc-card-head-title">OAuth 連線設定</div>
-        <span x-show="saved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+        <span x-show="saved" x-transition style="font-size:12px;color:var(--success);font-weight:600">已儲存</span>
       </div>
       <div class="gc-card-body">
 
@@ -254,7 +254,7 @@
           <input type="checkbox" id="chk-enabled" x-model="cfg.enabled" style="width:16px;height:16px;cursor:pointer">
           <label for="chk-enabled">啟用 Google 行事曆整合</label>
           <span x-show="!cfg.enabled" style="font-size:12px;color:var(--text-dim)">(目前關閉)</span>
-          <span x-show="cfg.enabled" style="font-size:12px;color:#16A34A;font-weight:600">(已啟用)</span>
+          <span x-show="cfg.enabled" style="font-size:12px;color:var(--success);font-weight:600">(已啟用)</span>
         </div>
 
         <div class="gc-desc">
@@ -305,7 +305,7 @@
         </div>
 
         <div x-show="msg" x-text="msg" x-transition
-             :style="isError ? 'color:#DC2626' : 'color:#16A34A'"
+             :style="isError ? 'color:var(--danger)' : 'color:var(--success)'"
              style="font-size:13px;margin-top:12px;font-weight:600"></div>
       </div>
     </div>

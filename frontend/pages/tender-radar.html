@@ -19,7 +19,7 @@
     .btn:disabled { opacity:.45; cursor:not-allowed; }
     .btn-primary { background:var(--accent); color:#fff; border-color:var(--accent); }
     .btn-ghost { background:#fff; color:var(--text-secondary); border-color:var(--border-light); }
-    .btn-sm { padding:5px 12px; font-size:11px; }
+    .btn-sm { padding:5px 12px; font-size:12px; }
 
     /* 前綴 tr- 避免與 style.css 衝突 */
     .tr-wrap { padding:18px 22px; max-width:1280px; }
@@ -37,9 +37,9 @@
     .tr-panel-body { padding:12px 14px; }
     .tr-form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
                     gap:10px; margin-bottom:10px; }
-    .tr-src { font-size:11px; color:var(--text-dim); margin-top:18px; }
+    .tr-src { font-size:12px; color:var(--text-dim); margin-top:18px; }
     /* P9：表單區塊標題（跨滿整列；順序由 CSS order 決定） */
-    .tr-sec-label { grid-column:1 / -1; font-size:11px; font-weight:600; color:var(--text-secondary);
+    .tr-sec-label { grid-column:1 / -1; font-size:12px; font-weight:600; color:var(--text-secondary);
                     border-bottom:1px solid var(--border-light); padding-bottom:3px; margin-top:4px; }
 
     /* 🔴 被標註的那幾筆**要看得出來是被標的**，不能只是排在前面。
@@ -58,7 +58,7 @@
     .tr-mark-btn:hover { background:var(--warning-light); }
     .tr-mark-btn:disabled { opacity:.4; cursor:progress; }
     .tr-mark-btn.on { color:var(--warning); }
-    .tr-mark-who { font-size:10px; color:var(--text-dim); display:block;
+    .tr-mark-who { font-size:12px; color:var(--text-dim); display:block;
                    margin-top:2px; white-space:nowrap; }
 
     /* ⚠️ `.empty-state` **本來就沒有定義**：這一頁用了它，而它只存在於
@@ -82,7 +82,7 @@
        其他頁面不一樣」就是這個。教訓：沒有樣式不會報錯，它只是看起來很醜。 */
     .fi { width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border-light); border-radius:6px; font-family:var(--font-zh); background:#fff; outline:none; transition:border-color .12s; box-sizing:border-box; }
     .fi:focus { border-color:#9CA3AF; }
-    .fi-label { font-size:10px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; margin-bottom:3px; display:block; }
+    .fi-label { font-size:12px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; margin-bottom:3px; display:block; }
     @media (max-width:640px) { .tr-wrap { padding:14px 16px; } }
   </style>
 </head>
@@ -156,18 +156,18 @@
     <div class="panel" style="margin-top:12px" x-show="mapInfo">
       <div class="tr-panel-body" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
         <div>
-          <div style="font-size:11px;color:var(--text-secondary)">可定位的標案</div>
+          <div style="font-size:12px;color:var(--text-secondary)">可定位的標案</div>
           <div style="font-size:18px;font-weight:600"
                x-text="mapInfo ? mapInfo.points.length : '—'"></div>
         </div>
         <div>
-          <div style="font-size:11px;color:var(--text-secondary)">沒有地點資訊</div>
+          <div style="font-size:12px;color:var(--text-secondary)">沒有地點資訊</div>
           <div style="font-size:18px;font-weight:600"
                :style="mapInfo && mapInfo.withoutLocation ? 'color:var(--warning)' : ''"
                x-text="mapInfo ? mapInfo.withoutLocation : '—'"></div>
         </div>
         <div>
-          <div style="font-size:11px;color:var(--text-secondary)">尚未定位</div>
+          <div style="font-size:12px;color:var(--text-secondary)">尚未定位</div>
           <div style="font-size:18px;font-weight:600"
                :style="mapInfo && mapInfo.pendingGeocode ? 'color:var(--text-secondary)' : ''"
                x-text="mapInfo ? mapInfo.pendingGeocode : '—'"></div>
@@ -248,7 +248,7 @@
         </div>
         <!-- 📌 「留空＝不寄」要寫出來：它是一個合法設定，而它看起來像「還沒設」。
              不寫的話使用者不會知道自己可以關掉它。 -->
-        <div style="font-size:11px;color:var(--text-secondary);margin-top:8px;line-height:1.7">
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:8px;line-height:1.7">
           抓取與寄信是<strong>兩份獨立的設定</strong>：可以一天抓四次、只在傍晚寄一封，
           也可以完全不寄（寄信時段留空）。同一個時段內重複觸發只會抓一次。<br>
           超過 <span x-text="schedule ? schedule.highFrequencyThreshold : 12"></span>
@@ -320,7 +320,7 @@
                 x-show="$store.layout.shown('action', 'watchSave')"
                 x-text="form.id ? '儲存變更' : $store.layout.label('action', 'watchSave', '新增條件')"></button>
         <button class="btn btn-ghost btn-sm" x-show="form.id" @click="resetForm()">取消</button>
-        <span style="font-size:11px;color:var(--danger)" x-text="formError"></span>
+        <span style="font-size:12px;color:var(--danger)" x-text="formError"></span>
       </div>
     </div>
 
@@ -334,7 +334,7 @@
         <!-- P9：顯示哪些欄、什麼順序由版面決定（cols('watches')）；每一欄怎麼畫仍在這裡 -->
         <div style="display:flex;flex-wrap:wrap;gap:5px 10px;align-items:center" data-layout-list="watches">
           <template x-for="c in $store.layout.cols('watches')" :key="c.field">
-            <span :data-col="c.field" style="font-size:11px;color:var(--text-dim)">
+            <span :data-col="c.field" style="font-size:12px;color:var(--text-dim)">
               <template x-if="c.field === 'name'"><span style="font-weight:600;font-size:13px;color:var(--text)" x-text="w.name"></span></template>
               <template x-if="c.field === 'enabled'"><span x-show="!w.enabled" class="badge badge--draft">已停用</span></template>
               <template x-if="c.field === 'keywords'"><span><template x-for="k in w.keywords" :key="k"><span class="chip" x-text="k"></span></template></span></template>
@@ -393,7 +393,7 @@
       <!-- 📌 這一句要寫出來，否則使用者會以為是漏信。
            通知與顯示現在是**兩條不相交的路**：畫面上看得到全部，
            而信裡只有「這次掃到的新東西」。 -->
-      <span style="font-size:11px;color:var(--text-dim)">
+      <span style="font-size:12px;color:var(--text-dim)">
         關鍵字是<strong>分類標籤</strong>，不是篩選門檻——沒分到類的也會留在清單裡。
         信件只寄新掃到的命中，<strong>新增條件不會補寄舊標案</strong>。
       </span>
@@ -520,11 +520,11 @@ function tenderRadarPage() {
     _sourceLink(url) {
       const u = (typeof url === 'string' && /^https?:[/][/]/i.test(url)) ? url : ''
       return u
-        ? '<a data-source-link="1" href="' + this._esc(u) + '" target="_blank" rel="noopener noreferrer" style="display:block;font-size:11px;margin-top:2px">前往來源網站明細</a>'
-        : '<span data-source-link-missing="1" style="display:block;font-size:11px;color:var(--text-dim);margin-top:2px">來源網址未取得</span>'
+        ? '<a data-source-link="1" href="' + this._esc(u) + '" target="_blank" rel="noopener noreferrer" style="display:block;font-size:12px;margin-top:2px">前往來源網站明細</a>'
+        : '<span data-source-link-missing="1" style="display:block;font-size:12px;color:var(--text-dim);margin-top:2px">來源網址未取得</span>'
     },
     _captchaHelp() {
-      return '<span data-captcha-help="1" style="display:block;font-size:11px;color:var(--text-dim)">地點與招標方式需在來源網站通過驗證碼後查看</span>'
+      return '<span data-captcha-help="1" style="display:block;font-size:12px;color:var(--text-dim)">地點與招標方式需在來源網站通過驗證碼後查看</span>'
     },
     cellHtml(t, field) {
       const L = this.$store.layout
@@ -549,7 +549,7 @@ function tenderRadarPage() {
         case 'org': return '<span>' + this._link(t.url, t.org) + '</span>'
         case 'name': return '<span>' + this._link(t.url, t.name) + this._sourceLink(t.url) + '</span>'
         case 'caseNo':
-          return '<span><span>' + this._esc(t.caseNo) + '</span><a class="mp1-onmap" style="font-size:11px;margin-left:4px" href="'
+          return '<span><span>' + this._esc(t.caseNo) + '</span><a class="mp1-onmap" style="font-size:12px;margin-left:4px" href="'
             + this._esc(MotrixRecordLink.mapUrl('tenders', t.caseNo)) + '">在地圖上看</a></span>'
         // ⚠️ NULL 顯示「—」不是空白：空白分不出「沒有這個欄位」與「沒載好」
         // 2026-10-03：地點為 NULL 一律明講「未取得」（詳細頁可能被來源網站的驗證碼擋住），不是空白也不是「—」：

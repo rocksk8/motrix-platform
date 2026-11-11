@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>報表中心 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!-- 深色模式刻意不在這裡寫任何色彩覆寫：全站是反轉濾鏡，不是另一套色票（見 style.css「DARK MODE」區塊）。 -->
+  <style>
+    .rh-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 28px 32px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h));
+      background: var(--white);
+    }
+    .rh-gear {
+      display: inline-flex; align-items: center; gap: 6px; text-decoration: none; cursor: pointer;
+      padding: 7px 14px; border: 1px solid var(--border-light); border-radius: var(--radius);
+      background: var(--white); color: var(--text-primary); font-size: 13px; font-weight: 600;
+    }
+    .rh-gear:hover { border-color: var(--text-secondary); }
+    .rh-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; flex-wrap: wrap; }
+    .rh-tab {
+      appearance: none; background: none; border: 0; border-bottom: 3px solid transparent;
+      padding: 10px 18px; font: inherit; font-size: 14px; font-weight: 600; color: var(--text-secondary);
+      cursor: pointer; margin-bottom: -1px;
+    }
+    .rh-tab:hover { color: var(--text-primary); }
+    .rh-tab.is-on { color: var(--text-primary); border-bottom-color: var(--accent); }
+    .rh-tab:focus-visible { outline: 2px solid var(--info, #1D4ED8); outline-offset: 2px; }
+    .rh-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    .rh-card {
+      display: flex; flex-direction: column; gap: 10px;
+      border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; background: var(--bg);
+    }
+    .rh-card__t { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+    .rh-card__q { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.8; color: var(--text-secondary); flex: 1; }
+    .rh-card__go { align-self: flex-start; text-decoration: none; }
+    .rh-empty {
+      border: 1px dashed var(--border); border-radius: var(--radius); padding: 36px 24px; text-align: center;
+      color: var(--text-secondary); font-size: 13px; line-height: 1.9;
+    }
+    .rh-empty b { display: block; font-size: 15px; color: var(--text-primary); margin-bottom: 6px; }
+  </style>
+</head>
+<body x-data="reportsHubPage()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <!-- 側欄必須是 <body> 的直接子元素：深色模式的反轉濾鏡排除清單只認直接子元素
+       （style.css「DARK MODE」區塊的 body > *:not(.sidebar)）。 -->
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="rh-main">
+    <!-- 頁頭規格（B6）：麵包屑＋單一 H1＋一句說明＋右側主要動作 -->
+    <div class="pg">
+      <div class="pg__l">
+        <nav class="pg__crumb" aria-label="目前位置"><span>報表</span></nav>
+        <h1 class="pg__t">報表中心</h1>
+        <p class="pg__s">先選您想回答的問題：老闆看營運、會計看財務、對帳查帳簿。</p>
+      </div>
+      <div class="pg__a">
+        <template x-if="gear">
+          <a class="rh-gear" :href="gear.href" data-testid="rh-gear" :title="gear.desc">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            <span x-text="gear.label"></span>
+          </a>
+        </template>
+      </div>
+    </div>
+
+    <template x-if="tabs.length === 0">
+      <div class="rh-empty" data-testid="rh-empty">
+        <b>您的帳號目前沒有可看的報表</b>
+        報表依權限顯示。需要「營運報表」或「財務會計」的權限，請聯絡管理員開通。
+      </div>
+    </template>
+
+    <template x-if="tabs.length > 0">
+      <div>
+        <div class="rh-tabs" role="tablist" aria-label="報表分類">
+          <template x-for="t in tabs" :key="t">
+            <button type="button" class="rh-tab" role="tab" :class="{'is-on': t === current}"
+                    :aria-selected="t === current ? 'true' : 'false'" :data-testid="'rh-tab-' + t"
+                    @click="pick(t)" x-text="t"></button>
+          </template>
+        </div>
+        <div class="rh-grid" role="tabpanel">
+          <template x-for="c in cards" :key="c.file">
+            <section class="rh-card" :data-testid="'rh-card-' + c.file">
+              <h2 class="rh-card__t" x-text="c.label"></h2>
+              <ul class="rh-card__q">
+                <template x-for="q in c.questions" :key="q"><li x-text="q"></li></template>
+              </ul>
+              <a class="btn btn-primary rh-card__go" :href="c.href" x-text="'開啟' + c.label"></a>
+            </section>
+          </template>
+        </div>
+      </div>
+    </template>
+  </main>
+
+  <script src="../static/notif.js"></script>
+  <script>
+    // 報表中心：不寫死有哪些報表、誰看得到——卡片全部來自選單宣告（報表群組的各項：section＝頁籤、desc＝「回答什麼問題」），
+    // 權限與角色版面由 sidebar.js 的 MotrixMenu.groupItems('analysis') 依這位使用者過濾。新增報表只要在 module.json 的 pages[].menu 宣告。
+    function reportsHubPage() {
+      return {
+        items: [],
+        current: '',
+        init() {
+          this.load()
+          window.addEventListener('motrix-menu-built', () => this.load())
+        },
+        load() {
+          const M = window.MotrixMenu
+          this.items = (M && M.groupItems) ? M.groupItems('analysis') : []
+          if (!this.tabs.includes(this.current)) {
+            let want = ''
+            try { want = decodeURIComponent((location.hash || '').replace(/^#/, '')) || localStorage.getItem('motrix_reports_tab') || '' } catch (_e) { want = '' }
+            this.current = this.tabs.includes(want) ? want : (this.tabs[0] || '')
+          }
+        },
+        // 「設定」類（報表設定）不佔頁籤，收成頁頭右側的齒輪
+        get gear() { return this.items.find(i => i.section === '設定') || null },
+        get tabs() {
+          const out = []
+          this.items.forEach(i => { const t = i.section === '設定' ? '' : (i.section || '其他'); if (t && !out.includes(t)) out.push(t) })
+          return out
+        },
+        get cards() {
+          return this.items
+            .filter(i => i.section !== '設定' && (i.section || '其他') === this.current)
+            .map(i => Object.assign({}, i, { questions: (i.desc || '').split('；').map(s => s.trim()).filter(Boolean) }))
+        },
+        pick(t) {
+          this.current = t
+          try { localStorage.setItem('motrix_reports_tab', t) } catch (_e) { /* 記不住只是下次不記得頁籤 */ }
+        },
+      }
+    }
+  </script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

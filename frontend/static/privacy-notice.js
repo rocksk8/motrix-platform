@@ -28,7 +28,7 @@
       '<div class="txt" data-notice-text>' + esc(notice.text || '') + '</div>' +
       '<div class="sign"><div>當事人：<span data-subject>' + esc(subjectName || '') + '</span></div>' +
       '<div>簽名：</div><div>日期：' + today + '</div><div>告知人：</div></div>' +
-      '<div style="margin-top:18px;font-size:11px;color:#777">告知文字版本 ' + esc(notice.hash || '') + '</div>' +
+      '<div style="margin-top:18px;font-size:12px;color:#777">告知文字版本 ' + esc(notice.hash || '') + '</div>' +
       '</body></html>'
   }
 

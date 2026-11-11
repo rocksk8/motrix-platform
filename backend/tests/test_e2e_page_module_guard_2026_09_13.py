@@ -42,15 +42,14 @@ def _login(page, base_url, username, password):
 #: ⇒ 所以 `test_superadmin_still_sees_everything` 反過來斷言**這裡每一個字
 #:    superadmin 都看得到**。那是這份清單的正對照，兩題必須成對。
 _FORBIDDEN_WITHOUT_MODULES = (
-    # 廠商與採購
-    "廠商與採購", "客戶管理", "供應商管理", "承攬商管理",
+    # 採購與庫存（2026-11-11 B1：原「廠商與採購」＋「設備」合併；客戶管理搬去「客戶與業務」，但沒有 customer 模組照樣不該出現）
+    "採購與庫存", "客戶管理", "供應商管理", "承攬商管理",
     "料號主檔", "庫存管理", "採購管理",
-    # 設備
-    "設備", "設備登載", "保固追蹤", "網路架構規劃書",
+    "設備登載", "保固追蹤", "網路架構規劃書",
     # 勞務管理
     "勞務管理", "外包名冊", "勞報單",
-    # 財務（單項分組 ⇒ 平常渲染成項目名）
-    "營運報表",
+    # 報表（2026-11-11 B2：報表群組收成單一入口「報表」＝報表中心；原「營運報表」等子項不再出現在導覽列）
+    "報表",
 )
 
 
@@ -199,7 +198,7 @@ def test_admin_with_module_still_sees_the_group(live_server, make_user, e2e_brow
     # 🔑 用兩層詞彙之後，這一條**不再依賴「財務底下只有一項」**：
     #    哪天有人往財務加第二項 ⇒ 營運報表改渲染成 `.mnav__item`，
     #    而 `_nav_vocabulary()` 照樣找得到它 ⇒ **這一題不會紅在一個假的理由上**。
-    assert "營運報表" in names, f"有 reports 模組卻看不到營運報表：{names}"
+    assert "報表" in names, f"有 reports 模組卻看不到報表入口：{names}"
 
 
 @needs_m01
@@ -213,7 +212,7 @@ def test_superadmin_still_sees_everything(live_server, make_user, e2e_browser):
     page.goto(f"{live_server}/index.html")   # PERF #5：注入登入不經 index，這一題要的是 index 上的東西
     page.wait_for_selector(".mnav .mnav__top", timeout=10000)
     names = _nav_vocabulary(page)
-    for expect in ("業務", "案件", "營運報表", "廠商與採購", "系統"):
+    for expect in ("客戶與業務", "案件", "報表", "採購與庫存", "系統"):
         assert expect in names, f"superadmin 看不到「{expect}」：{names}"
 
     # 📏 **這是 `_FORBIDDEN_WITHOUT_MODULES` 的正對照，兩題必須成對。**

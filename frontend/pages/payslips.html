@@ -21,24 +21,24 @@
     .search-input{width:100%;padding:8px 12px 8px 36px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;outline:none;box-sizing:border-box}
     .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
     .data-table{width:100%;border-collapse:collapse;font-size:13px}
-    .data-table th{padding:10px 12px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table th{padding:10px 12px;text-align:left;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
     .data-table th.amt,.data-table td.amt{text-align:right;font-family:LINE Seed TW_OTF, monospace}
     .data-table td{padding:11px 12px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
     .data-table tr:last-child td{border-bottom:none}
     .data-table tr:hover td{background:#FDFCFA}
     .data-table tr:hover .row-actions{opacity:1}
     .row-actions{opacity:0;display:flex;gap:6px;transition:opacity .12s}
-    .tag{display:inline-flex;padding:2px 8px;border-radius:3px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif}
+    .tag{display:inline-flex;padding:2px 8px;border-radius:3px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif}
     .tag-exported{background:#ECFDF5;color:#059669}
-    .tag-draft{background:#F3F4F6;color:#6B7280}
+    .tag-draft{background:#F3F4F6;color:var(--text-secondary)}
     .tag-signed{background:#EFF6FF;color:#1D4ED8}
     .tag-paid{background:#DCFCE7;color:#166534}
     .tag-review{background:var(--tone-warning-bg);color:var(--tone-warning-fg)}
     .tag-approved{background:var(--tone-success-bg);color:var(--tone-success-fg)}
     .tag-void{background:#FEE2E2;color:#B91C1C;text-decoration:line-through}
     .void-banner{margin:0 0 10px;padding:8px 12px;border:1px solid #FCA5A5;background:#FEF2F2;color:#B91C1C;border-radius:var(--radius);font-size:12px;line-height:1.7}
-    .itype{display:inline-flex;padding:1px 7px;border-radius:3px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;background:var(--accent-light);color:var(--accent)}
-    .exp-chip{display:inline-flex;padding:1px 7px;border-radius:10px;font-size:10px;font-family:LINE Seed TW_OTF, monospace;background:#F0EEE9;color:var(--text-dim);border:1px solid var(--border-light);cursor:pointer;margin-left:4px}
+    .itype{display:inline-flex;padding:1px 7px;border-radius:3px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;background:var(--accent-light);color:var(--accent)}
+    .exp-chip{display:inline-flex;padding:1px 7px;border-radius:10px;font-size:12px;font-family:LINE Seed TW_OTF, monospace;background:#F0EEE9;color:var(--text-dim);border:1px solid var(--border-light);cursor:pointer;margin-left:4px}
     .exp-chip:hover{background:#e8f0fe;border-color:#93c5fd;color:var(--accent)}
     .detail-pane{position:fixed;right:0;top:var(--topbar-h);width:380px;height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));background:#fff;border-left:1px solid var(--border-light);box-shadow:var(--shadow-lg);z-index:100;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .22s ease}
     .detail-pane.open{transform:translateX(0)}
@@ -52,7 +52,7 @@
     .detail-label{color:var(--text-dim);min-width:72px;flex-shrink:0}
     .detail-val{color:var(--text-primary);font-weight:500;flex:1;word-break:break-all}
     .detail-divider{border:none;border-top:1px solid var(--border-light);margin:14px 0}
-    .detail-sec{font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px}
+    .detail-sec{font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px}
     .amount-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:12px;border-bottom:1px solid #F9F8F6}
     .amount-row:last-child{border-bottom:none}
     .amount-row--total{font-size:13px;font-weight:700;color:var(--text-primary)}
@@ -63,7 +63,7 @@
     .pv-modal{background:#fff;border-radius:12px;width:min(900px,96vw);height:calc(90vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)}
     .pv-head{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border-light);flex-shrink:0}
     .pv-title{font-size:14px;font-weight:700;color:var(--text-primary)}
-    .pv-sub{font-size:11px;color:var(--text-dim);margin-top:2px;font-family:LINE Seed TW_OTF, monospace}
+    .pv-sub{font-size:12px;color:var(--text-dim);margin-top:2px;font-family:LINE Seed TW_OTF, monospace}
     .pv-close{background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:22px;line-height:1;padding:2px 8px;border-radius:4px;font-family:inherit}
     .pv-close:hover{background:var(--border-light);color:var(--text-primary)}
     .pv-body{flex:1;overflow:hidden;background:#525659;position:relative}
@@ -133,7 +133,7 @@
                        x-text="(p.contractor_name||'?')[0]"></div>
                   <span x-text="p.contractor_name || '—'"></span>
                   <span x-show="p.contractor_guess_id != null && p.contractor_id == null" data-testid="ps-unconfirmed-badge" title="這張舊勞報單是用姓名推測對應到外包名冊，尚未確認；確認前不會自動顯示在派工頁"
-                        style="font-size:10px;padding:1px 6px;border-radius:8px;background:#FEF3C7;color:#92400E;white-space:nowrap">身分待確認</span>
+                        style="font-size:12px;padding:1px 6px;border-radius:8px;background:#FEF3C7;color:#92400E;white-space:nowrap">身分待確認</span>
                 </div>
               </td>
               <td><span class="itype" x-text="p.income_type"></span></td>
@@ -183,7 +183,7 @@
                   x-text="selectedSlip.status"></span>
             <span class="itype" x-text="selectedSlip.income_type"></span>
             <button x-show="selectedSlip.contractor_guess_id != null && selectedSlip.contractor_id == null && ['已簽回','已付款','已作廢'].indexOf(selectedSlip.status) < 0" data-testid="ps-confirm-contractor" @click.stop="confirmContractor(selectedSlip)"
-                    style="font-size:11px;padding:2px 8px;border:1px solid #D97706;border-radius:6px;background:#FFFBEB;color:#92400E;cursor:pointer">確認受領人對應</button>
+                    style="font-size:12px;padding:2px 8px;border:1px solid #D97706;border-radius:6px;background:#FFFBEB;color:#92400E;cursor:pointer">確認受領人對應</button>
           </div>
         </div>
         <button class="detail-close" @click="selectedId=null;selectedSlip=null">×</button>
@@ -357,14 +357,14 @@
               @load="previewIframeReady = true"></iframe>
     </div>
     <div class="pv-foot">
-      <div x-show="!previewArchiveMode" style="font-size:11px;color:var(--text-dim)">
+      <div x-show="!previewArchiveMode" style="font-size:12px;color:var(--text-dim)">
         <span x-show="previewItem?.status === '已作廢'" style="color:#B91C1C;font-weight:600">已作廢　</span>
         <span x-show="!previewItem?.export_count">尚未匯出</span>
         <span x-show="previewItem?.export_count > 0">
           已匯出 <strong x-text="previewItem?.export_count"></strong> 次
         </span>
       </div>
-      <div x-show="previewArchiveMode" style="font-size:11px;color:var(--text-dim)">
+      <div x-show="previewArchiveMode" style="font-size:12px;color:var(--text-dim)">
         調閱第 <strong x-text="previewArchiveIdx"></strong> 次存檔 PDF
       </div>
       <div style="display:flex;gap:8px">
@@ -427,18 +427,18 @@
       <template x-for="(log, i) in histLog" :key="i">
         <div style="display:grid;grid-template-columns:40px 1fr auto;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border-light)">
           <div :style="log.redownload_of
-                ? 'width:36px;height:36px;border-radius:50%;background:#f0f4ff;border:1px solid #c7d7ff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#4f6ef7;flex-shrink:0'
+                ? 'width:36px;height:36px;border-radius:50%;background:#f0f4ff;border:1px solid #c7d7ff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#4f6ef7;flex-shrink:0'
                 : 'width:36px;height:36px;border-radius:50%;background:var(--bg-secondary);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text-secondary);flex-shrink:0'"
                x-text="log.idx || (i+1)"></div>
           <div>
             <div style="display:flex;align-items:center;gap:6px">
               <span style="font-size:13px;font-weight:600;color:var(--text-main)" x-text="log.by || '—'"></span>
               <span x-show="log.redownload_of"
-                    style="font-size:10px;padding:1px 5px;border-radius:4px;background:#e8edff;color:#4f6ef7;border:1px solid #c7d7ff">
+                    style="font-size:12px;padding:1px 5px;border-radius:4px;background:#e8edff;color:#4f6ef7;border:1px solid #c7d7ff">
                 調閱 #<span x-text="log.redownload_of"></span>
               </span>
             </div>
-            <div style="font-size:11px;font-family:LINE Seed TW_OTF, monospace;color:var(--text-dim);margin-top:2px"
+            <div style="font-size:12px;font-family:LINE Seed TW_OTF, monospace;color:var(--text-dim);margin-top:2px"
                  x-text="(log.at||'').replace('T',' ').slice(0,19)"></div>
           </div>
           <div style="display:flex;gap:8px;flex-shrink:0">
@@ -452,7 +452,7 @@
       </template>
     </div>
     <div class="pv-foot" style="justify-content:space-between;align-items:center">
-      <div style="font-size:11px;color:var(--text-dim)">
+      <div style="font-size:12px;color:var(--text-dim)">
         ＊「下載存檔」讀取存檔當時之 PDF；「新增匯出」以當前資料重新產生並計次
       </div>
       <div style="display:flex;gap:8px">

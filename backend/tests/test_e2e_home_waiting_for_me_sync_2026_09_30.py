@@ -22,7 +22,7 @@ def test_home_count_list_and_badge_agree_and_follow_approval(live_server, make_u
     page.goto(f"{live_server}/index.html")
     page.wait_for_function("() => document.querySelectorAll('[data-testid=home-mine-row]').length === 2", timeout=20000)
     assert page.locator('.h-band__c .h-band__n').first.inner_text().strip() == "2"
-    assert "2" in page.locator('[data-testid="home-mine-count"]').inner_text()
+    assert page.locator('[data-testid="home-mine-count"]').count() == 0     # 2026-11-11 D1：清單標題不再重複數字（統計卡＋清單列數負責）
     h = {"Authorization": "Bearer " + sess["token"]}
     assert client.get("/api/approval-queue/count", headers=h).json()["count"] == 2
     r = client.post("/api/quotations/MQ-W2H-001/approve", headers=h, json={})

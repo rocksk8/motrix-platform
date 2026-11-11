@@ -171,8 +171,8 @@
     }
     if (st.meta) {
       panel.appendChild(el('div', { text: (st.meta.label || st.id) + '：已發布的選項不能刪除，只能停用；停用後新增／編輯時不能再選，舊資料照常顯示。', style: 'font-size:12px;margin-bottom:4px' }))
-      ;(st.meta.usedBy || []).forEach(function (u) { panel.appendChild(el('div', { text: '・用在：' + u, style: 'font-size:11px;color:var(--text-dim,#888)' })) })
-      if (st.meta.relabel === false) panel.appendChild(el('div', { text: '這份清單的顯示名稱固定（同一個字也被報表或科目對照使用），只能新增、重排或停用。', style: 'font-size:11px;color:var(--text-dim,#888)' }))
+      ;(st.meta.usedBy || []).forEach(function (u) { panel.appendChild(el('div', { text: '・用在：' + u, style: 'font-size:12px;color:var(--text-dim,#888)' })) })
+      if (st.meta.relabel === false) panel.appendChild(el('div', { text: '這份清單的顯示名稱固定（同一個字也被報表或科目對照使用），只能新增、重排或停用。', style: 'font-size:12px;color:var(--text-dim,#888)' }))
     }
     st.items.forEach(function (x, i) {
       var fixedLabel = st.meta && st.meta.relabel === false
@@ -180,7 +180,7 @@
         el('span', { text: x.value, style: 'min-width:90px;font-size:12px', title: st.locked[x.value] ? '已發布，不能改字' : '新選項' }),
         fixedLabel ? null : el('input', { type: 'text', value: x.label, maxlength: String(LABEL_MAX), style: 'flex:1;font-size:12px', oninput: function (ev) { x.label = ev.target.value; st.preview = null; st.previewHash = ''; st.state = 'idle' } }),
         (st.meta && st.meta.prefix) ? el('input', { type: 'text', value: x.prefix, maxlength: '5', placeholder: '料號前綴', disabled: st.locked[x.value] ? 'disabled' : null, style: 'width:80px;font-size:12px', oninput: function (ev) { x.prefix = ev.target.value; st.preview = null; st.previewHash = ''; st.state = 'idle' } }) : null,
-        (st.meta && st.meta.closed) ? null : el('label', { style: 'font-size:11px' }, [el('input', { type: 'checkbox', checked: x.disabled ? 'checked' : null, onchange: function (ev) { x.disabled = !!ev.target.checked; changed() } }), el('span', { text: ' 停用' })]),
+        (st.meta && st.meta.closed) ? null : el('label', { style: 'font-size:12px' }, [el('input', { type: 'checkbox', checked: x.disabled ? 'checked' : null, onchange: function (ev) { x.disabled = !!ev.target.checked; changed() } }), el('span', { text: ' 停用' })]),
         el('button', { type: 'button', text: '↑', onclick: function () { move(i, -1) } }),
         el('button', { type: 'button', text: '↓', onclick: function () { move(i, 1) } }),
         st.locked[x.value] ? null : el('button', { type: 'button', text: '移除', onclick: function () { st.items.splice(i, 1); changed() } })
@@ -194,8 +194,8 @@
     if (st.preview) {
       var pv = st.preview
       panel.appendChild(el('div', { text: '預覽：' + (pv.values || []).map(function (v) { return v.label + (v.disabled ? '（停用）' : '') }).join('、'), style: 'font-size:12px;margin-top:6px' }))
-      if ((pv.added || []).length) panel.appendChild(el('div', { text: '新增：' + pv.added.join('、'), style: 'font-size:11px' }))
-      ;(pv.warnings || []).forEach(function (w) { panel.appendChild(el('div', { text: w, style: 'font-size:11px;color:#b45309' })) })
+      if ((pv.added || []).length) panel.appendChild(el('div', { text: '新增：' + pv.added.join('、'), style: 'font-size:12px' }))
+      ;(pv.warnings || []).forEach(function (w) { panel.appendChild(el('div', { text: w, style: 'font-size:12px;color:#b45309' })) })
     }
     panel.appendChild(el('div', { style: 'display:flex;gap:6px;margin-top:8px' }, [
       el('input', { type: 'text', placeholder: '備註（選填）', value: st.note, style: 'flex:1;font-size:12px', oninput: function (ev) { st.note = ev.target.value } }),

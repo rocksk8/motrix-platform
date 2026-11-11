@@ -198,11 +198,11 @@
     var mailRows = st.cat.mailRows || []
     var box = el('div', { style: 'margin-top:10px;padding:8px;border:1px dashed var(--border,#bbb);border-radius:8px', 'data-role': 'preview' })
     box.appendChild(el('div', { text: '即時預覽（樣本單據：' + (ctx['單號'] || '') + '／' + (ctx['對象'] || '') + '）', style: 'font-size:12px;font-weight:600' }))
-    box.appendChild(el('div', { text: '站內訊息（簽核人看到）', style: 'font-size:11px;color:var(--text-dim,#888);margin-top:6px' }))
+    box.appendChild(el('div', { text: '站內訊息（簽核人看到）', style: 'font-size:12px;color:var(--text-dim,#888);margin-top:6px' }))
     box.appendChild(el('div', { text: msg, style: 'font-size:13px;padding:4px 6px;background:var(--bg-hover,#f3f4f6);border-radius:6px', 'data-role': 'pv-inapp' }))
-    box.appendChild(el('div', { text: '沒有財務權限的簽核人看到（金額會被遮蔽）', style: 'font-size:11px;color:var(--text-dim,#888);margin-top:4px' }))
+    box.appendChild(el('div', { text: '沒有財務權限的簽核人看到（金額會被遮蔽）', style: 'font-size:12px;color:var(--text-dim,#888);margin-top:4px' }))
     box.appendChild(el('div', { text: masked, style: 'font-size:13px;padding:4px 6px;background:var(--bg-hover,#f3f4f6);border-radius:6px', 'data-role': 'pv-masked' }))
-    box.appendChild(el('div', { text: '通知信', style: 'font-size:11px;color:var(--text-dim,#888);margin-top:8px' }))
+    box.appendChild(el('div', { text: '通知信', style: 'font-size:12px;color:var(--text-dim,#888);margin-top:8px' }))
     var subj = el('div', { style: 'font-size:12px', 'data-role': 'pv-subject' }, [
       el('span', { text: PREFIX, style: 'color:var(--text-dim,#999)' }), el('span', { text: reason })
     ])
@@ -210,7 +210,7 @@
     box.appendChild(el('div', { style: 'margin-top:4px;padding:10px;border:1px solid var(--border,#ddd);border-radius:8px;background:#fff;color:#111;font-size:12px' }, [
       el('div', { style: 'font-size:15px;font-weight:700' }, [
         el('span', { text: expand(eff('mail.title'), ctxShow) + ' ', 'data-role': 'pv-title' }),
-        el('span', { text: expand(eff('mail.badge'), ctxShow), style: 'font-size:11px;background:#2F6FD6;color:#fff;padding:1px 6px;border-radius:8px', 'data-role': 'pv-badge' })
+        el('span', { text: expand(eff('mail.badge'), ctxShow), style: 'font-size:12px;background:#2F6FD6;color:#fff;padding:1px 6px;border-radius:8px', 'data-role': 'pv-badge' })
       ]),
       el('div', { text: '事由', style: 'font-weight:700;margin-top:8px' }),
       el('div', { text: expand(eff('mail.intro'), ctxShow), 'data-role': 'pv-intro' }),
@@ -220,7 +220,7 @@
       st.cat.noteSample ? el('div', { text: st.cat.noteSample, style: 'margin-top:8px;padding:6px 8px;background:#FFF8E1;border-radius:6px;color:#7A5A00' }) : null,
       el('div', { text: expand(eff('mail.button'), ctxShow), style: 'display:inline-block;margin-top:10px;padding:6px 14px;background:#1D4ED8;color:#fff;border-radius:6px', 'data-role': 'pv-button' })
     ]))
-    box.appendChild(el('div', { text: '主旨前綴與分類、信件版型、收件人與寄送時機都不能改；信件沒有金額欄位。', style: 'font-size:11px;color:var(--text-dim,#888);margin-top:4px' }))
+    box.appendChild(el('div', { text: '主旨前綴與分類、信件版型、收件人與寄送時機都不能改；信件沒有金額欄位。', style: 'font-size:12px;color:var(--text-dim,#888);margin-top:4px' }))
     return box
   }
 
@@ -238,7 +238,7 @@
       })))
     }
     panel.appendChild(el('div', { text: st.cat.label + '：調整收到的訊息與通知信文字（留空＝用系統預設字）', style: 'font-size:13px;font-weight:600;margin-bottom:6px' }))
-    panel.appendChild(el('div', { text: '文字只能用中文、英數字與常用標點；不能使用 $ 與 /（金額請寫成「1,200 元」這類說法），也不能放網址或標記。', style: 'font-size:11px;color:var(--text-dim,#888);margin-bottom:6px', 'data-role': 'help' }))
+    panel.appendChild(el('div', { text: '文字只能用中文、英數字與常用標點；不能使用 $ 與 /（金額請寫成「1,200 元」這類說法），也不能放網址或標記。', style: 'font-size:12px;color:var(--text-dim,#888);margin-bottom:6px', 'data-role': 'help' }))
     fields().forEach(function (f) {
       var prob = problemOf(f.field, st.vals[f.field])
       var input = el('input', { type: 'text', 'data-path': f.field, value: st.vals[f.field] || '', placeholder: f.default, maxlength: String(f.limit + 20), style: 'flex:1;font-size:12px', oninput: function (ev) { st.vals[f.field] = ev.target.value; st.state = 'idle'; refreshLive() } })
@@ -247,7 +247,7 @@
         el('div', { style: 'display:flex;gap:4px;align-items:center;flex-wrap:wrap' }, [input].concat(f.placeholders.map(function (p) {
           return el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '{' + p + '}', 'data-ph': p, onclick: function () { insertAt(input, f.field, '{' + p + '}') } })
         })).concat([el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '恢復預設', onclick: function () { st.vals[f.field] = ''; st.state = 'idle'; render() } })])),
-        el('div', { text: prob, 'data-role': 'problem', style: 'color:#b91c1c;font-size:11px;min-height:0' })
+        el('div', { text: prob, 'data-role': 'problem', style: 'color:#b91c1c;font-size:12px;min-height:0' })
       ])
       panel.appendChild(row)
     })
@@ -257,7 +257,7 @@
       el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '版本與還原', onclick: function () { if (window.MotrixDefGovernance) window.MotrixDefGovernance.open({ kind: KIND, key: EVENT, scope: 'company', title: '簽核通知用語：版本帳本', onRestored: load }) } }),
       el('button', { type: 'button', class: 'btn btn-primary btn-sm', 'data-role': 'publish', text: '檢查並發布', disabled: st.busy ? 'disabled' : null, onclick: doPublish })
     ]))
-    panel.appendChild(el('div', { text: '新增或更換用語需要第二位最高管理者核准後才生效；已經寄出的通知不會改變。', style: 'font-size:11px;color:var(--text-dim,#888);margin-top:4px' }))
+    panel.appendChild(el('div', { text: '新增或更換用語需要第二位最高管理者核准後才生效；已經寄出的通知不會改變。', style: 'font-size:12px;color:var(--text-dim,#888);margin-top:4px' }))
     if (st.msg) panel.appendChild(el('div', { text: st.msg, 'data-role': 'msg', style: 'margin-top:6px;font-size:12px;color:' + (st.msgBad ? '#b91c1c' : 'inherit') }))
     root.appendChild(panel)
     refreshLive()

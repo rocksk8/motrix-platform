@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
+- 前端視覺（D3）：本模組頁面（`case-management.html`／`case-stage-board.html`／`completion-note-form.html`、`case-management*.css`／`case-management-mchange.js` 等）內文字最小 12px，文字色改用語意 token（次要文字在頁底 #F5F4F0 上對比 ≥4.5:1）；只改 CSS 值，不改版面結構、API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
+- 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
+
 ## (next) — 2026-11-11（feat/quote-submit-error-clarity；報價單送審前置檢查＋送審失敗原因＋「已成案」卡住修復；報價單表單 V3.36；K 審必修已修，L1 介面不變）
 - 新增（送審前置檢查）：`GET /api/quotations/submit-precheck`（唯讀、需登入、不建單不發通知）——用跟真正送審同一套解析（`_setting_to_active_tiers`）dry-run；申請人沒歸屬部門／部門沒在職主管／簽核設定指定的部門或處沒主管 ⇒ `ok=false`＋`problems[{code,message,fixPage,fixLabel}]`；另附 `steps`（處→部門→申請人歸屬→部門主管四步驟完成度，只供畫面顯示）與 `canFix`（最高管理者才能改組織）。`helpers.tiered_approval.UnresolvedManagerError` 新增類別屬性 `code`（不加建構子，避免動到 L1 公開介面；raise 點用私有 `_unresolved(msg, code)`；no_department／department_gone／no_manager／tier_dept_manager／tier_div_manager；預設 unresolved，`str(e)` 不變）。
 - 修正（前端 `quotation-form.html`）：①送審前先問 precheck，會失敗就攔下並用中文清單說明去哪裡設定（查詢本身失敗＝放行，真正把關仍在送審端點）。②`apiSave()` 不再把後端 4xx／5xx 吞成「請確認後端伺服器是否在線」：後端 `detail` 原文顯示，只有真的連不上才說伺服器問題。③送審失敗時還原 `status`／`approval`（原本畫面會停在「待審核」，使用者以為已送出）。
