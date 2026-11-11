@@ -152,7 +152,7 @@ CASE = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
 
 
 def test_form_block_is_inside_the_cost_panel_and_not_stored():
-    panel = FORM[FORM.index('<div class="cost-panel" x-show="showCostCols">'): FORM.index("<!-- 隱藏成本時的簡易摘要 -->")]
+    panel = FORM[FORM.index('<div class="cost-panel" x-show="showCostCols">'): FORM.index("<!-- 成本區收合時的一行摘要")]
     assert 'data-testid="qf-project-margin"' in panel and "projectMarginText()" in panel          # 只在成本分機（成本權限）內
     assert "this.tot.project" not in FORM and "tot.projectMargin" not in FORM and "q.project_margin" not in FORM    # 不進 tot、不進單據
     assert "不含進項稅、管銷分攤、公益捐款與保留款" in FORM
