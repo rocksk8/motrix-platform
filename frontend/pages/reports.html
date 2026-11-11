@@ -44,11 +44,11 @@
     .kpi-grid--primary{max-width:720px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
     .kpi-more-btn{display:inline-flex;align-items:center;gap:8px;margin:0 0 14px;padding:5px 14px;border:1px solid var(--border-light);border-radius:var(--radius);background:#fff;color:var(--text-secondary);font-size:12px;font-family:var(--font-zh);cursor:pointer}
     .kpi-more-btn:hover{border-color:var(--accent);color:var(--accent)}
-    .kpi-more-btn__hint{font-size:10px;color:var(--text-dim)}
+    .kpi-more-btn__hint{font-size:12px;color:var(--text-dim)}
     /* C5：頁籤分組（業績／現金／風險）；每個頁籤都還在，只是分三組、各組有小標 */
     .tab-bar--grouped{flex-wrap:wrap;gap:6px 22px;border-bottom:none}
     .tab-group{display:flex;align-items:flex-end;gap:2px;border-bottom:1px solid var(--border-light);flex-wrap:wrap}
-    .tab-group__lbl{align-self:center;font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text-dim);padding:2px 8px 2px 0;font-family:LINE Seed TW_OTF, sans-serif;white-space:nowrap}
+    .tab-group__lbl{align-self:center;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--text-dim);padding:2px 8px 2px 0;font-family:LINE Seed TW_OTF, sans-serif;white-space:nowrap}
     .kpi-card{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 18px}
     .kpi-card__lbl{font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px}
     .kpi-card__val{font-size:20px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;line-height:1;color:var(--text-primary)}
@@ -388,7 +388,7 @@
             <span class="kpi-more-btn__hint" x-show="!kpiMore">精算、收支、財務概況</span>
           </button>
           <div x-show="kpiMore" data-testid="kpi-more" x-cloak>
-          <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+          <div style="font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:8px;display:flex;align-items:center;gap:8px">
             <span>業績核心</span>
             <span style="flex:1;height:1px;background:var(--border-light)"></span>
           </div>

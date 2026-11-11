@@ -107,6 +107,11 @@ def test_expanded_state_is_remembered_and_warning_appears_only_with_amounts(live
     page.click('button:has-text("隱藏成本欄")')
     page.wait_for_selector('[data-testid="qf-cost-strip"]', state="visible")
     assert page.evaluate("() => localStorage.getItem('motrix.qf.showCostCols')") == "0"
+    # K 審 N1：全部品項售價 0（贈品）但有成本 ⇒ 要照算（顯示虧損），不可當成「尚未填」
+    page.evaluate(f"() => {{ {DATA}.q.items.forEach(i => {{ i.amount = 0; i.unitPrice = 0 }}) }}")
+    page.wait_for_timeout(300)
+    assert page.evaluate(f"{DATA}.hasAmounts()") is True
+    assert "營業利益率" in page.inner_text('[data-testid="qf-cost-strip-text"]')
 
 
 @pytest.mark.e2e
@@ -126,6 +131,13 @@ def test_notes_move_below_the_row_and_open_on_demand(live_server, make_user, e2e
     box.fill("到貨後三日內安裝")
     assert page.evaluate(f"{DATA}.q.items[1].notes") == "到貨後三日內安裝"
     assert page.evaluate(f"{DATA}.q.items[1]._notesOpen") is None, "展開狀態不可寫進品項資料（會改內容指紋）"
+    # K 審 M2：載入既有單時就有內容的備註，清空後輸入框不可消失（否則邊改邊刪最後一個字就沒框、焦點掉到 BODY）
+    first = page.locator('[data-testid="qf-item-note"]').first
+    first.fill("")
+    page.wait_for_timeout(300)
+    assert page.locator('[data-testid="qf-item-note"]').count() == 2, "備註清空後輸入框仍在"
+    first.type("改")
+    assert page.evaluate(f"{DATA}.q.items[0].notes") == "改"
     # 沒有橫向捲動：收合時表格寬度不超過容器
     over = page.evaluate("() => { const t = document.querySelector('table.items-table'); return t.parentElement.scrollWidth - t.parentElement.clientWidth }")
     assert over <= 1, f"1440 寬收合時品項表不該橫向溢出（溢出 {over}px）"

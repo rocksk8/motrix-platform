@@ -55,6 +55,7 @@ def test_expanding_reveals_the_old_controls(live_server, make_user, e2e_browser)
     quote = page.locator("[data-doc-type=quotation]")
     quote.locator("[data-testid=as-scope-adjust]").click()
     box = quote.locator("input[data-saved-field]")
+    box.wait_for(state="visible", timeout=5000)
     assert box.is_visible() and box.is_checked()
     assert quote.locator(".scope-side").count() == 2
     assert quote.locator(".scope-side.live").is_visible()
@@ -95,3 +96,15 @@ def test_narrow_screen_hides_toc_and_keeps_rows(live_server, make_user, e2e_brow
     assert page.locator("[data-doc-type=quotation] [data-testid=as-scope-adjust]").is_visible()
     over = page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
     assert over <= 1, "手機寬度出現橫向捲動 %s px" % over
+
+
+@pytest.mark.e2e
+def test_bonus_superadmin_only_warning_stays_visible_when_collapsed(live_server, make_user, e2e_browser):
+    """K 審 M1：獎金分潤的簽核人只能是最高管理者——這條警示不可隨收合一起被藏起來
+    （頁首「建議最小設定」會讓人照做，獎金送審就被擋）。"""
+    page = _open(live_server, make_user, e2e_browser, "e2e_as_bonus")
+    warn = page.locator("[data-testid=bonus-superadmin-only]")
+    n = warn.count()
+    assert n >= 1, "至少有一張卡（獨立的獎金流程或統一流程）會顯示這條警示"
+    assert any(warn.nth(i).is_visible() for i in range(n)), "收合狀態下警示仍看得到"
+    assert "獎金分潤" in page.locator("[data-testid=as-intro]").inner_text() and "最高管理者" in page.locator("[data-testid=as-intro]").inner_text()

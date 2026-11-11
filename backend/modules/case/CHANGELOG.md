@@ -32,6 +32,7 @@
 - 變更（C3，客戶資訊）：每個欄位旁綠色「顯示／隱藏」鈕改成小眼睛（綠＝印在報價單上、灰斜線＝不印，hover 說明；`pdfShow` 資料與行為不變），區塊頂端加一行圖例；個資蒐集告知預設收合成一行「個資蒐集告知（選填）」，**告知狀態（✓已告知／尚未記錄）仍顯示在標題列**，展開才有說明、列印告知書、勾選；統一編號 placeholder 改「8 碼，例 12345678」。
 - 測試：新增 `tests/test_e2e_quote_density_2026_11_11.py`（真 Chromium：空表單收合＋無警示、記住展開、備註展開、個資收合但狀態可見、眼睛鈕改同一份資料、390px 表單主體不溢出）；因預設收合而調整既有題——`test_e2e_settlement_zero_and_loss`／`test_e2e_n1_dispatch` 先把偏好設成展開、`test_e2e_privacy_notice_docs` 先展開告知區、`test_off_state_golden` 的畫面文字 golden 重錄（只換文字、請求清單不動）、兩支原始碼字串守門（`test_project_margin`／`test_quote_alt_t6_form`）更新比對字串。
 - 已知限制：手機寬度（390px）頁頭導覽列本來就會橫向溢出（既有，UX 提案 F 另案）；成本區預設收合會讓第一次開單的簽核人看不到成本明細，直到按「展開成本分析」（有記住偏好）。
+- K 審後修正（hichan-9）：有備註的列清空後輸入框不再消失；個資告知標題改「個資蒐集告知紀錄」（去掉易誤解的「（選填）」）；鎖定單據上「列印告知書」鈕可按；所有品項售價 0 但有成本時照算（不當成尚未填）。表單版本 V3.40（rebase 於 V3.39 之上）。
 
 ## 1.0.208 — 2026-11-08（T78；t78/r1-warranty-mail＋fix/dispatch-abnormal-amount 併入整合樹；非金額；K 審必修已修；L1 介面不變）
 - 修正（保固到期信，T78 R1）：`case_deadlines._check_warranty_expiry` 的收件人改用案件的 `sales_person_id` 外鍵解出的業務帳號（`helpers.case_access.case_owner_username`）；原作法把 `quotations.sales_person`（顯示名）當 `username` 比對，只有顯示名剛好等於帳號時業務才收得到。業務已停用或沒有外鍵 ⇒ 只寄群組收件人（管理員），與原先名字對不上時相同。⚠️ 例外：`sales_person_id` 為空、但 `sales_person` 剛好等於某個在職 username 的案件，舊作法收得到、新作法收不到（只剩群組收件人）；這類案件有多少待正式機備份副本統計（見下方已知限制）。

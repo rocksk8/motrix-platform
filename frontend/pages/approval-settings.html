@@ -161,12 +161,12 @@
                 font-size: 12.5px; line-height: 1.7; color: var(--text-secondary); }
     .as-intro li { display: flex; gap: 8px; }
     .as-intro li::before { content: attr(data-n); flex-shrink: 0; width: 16px; height: 16px; margin-top: 3px;
-                           border-radius: 50%; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
+                           border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700;
                            display: flex; align-items: center; justify-content: center; }
     .as-layout { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 28px; align-items: start; }
     .as-toc { position: sticky; top: calc(var(--topbar-h) + 16px); display: flex; flex-direction: column; gap: 2px;
               font-size: 12px; border-left: 2px solid var(--border-light); }
-    .as-toc__t { font-size: 10px; font-weight: 700; color: var(--text-dim); letter-spacing: .06em; padding: 0 0 6px 12px;
+    .as-toc__t { font-size: 12px; font-weight: 700; color: var(--text-dim); letter-spacing: .06em; padding: 0 0 6px 12px;
                  font-family: 'LINE Seed TW_OTF', sans-serif; }
     .as-toc a { display: block; padding: 4px 10px 4px 12px; margin-left: -2px; border-left: 2px solid transparent;
                 color: var(--text-secondary); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -180,9 +180,9 @@
     .as-compare .cmp-step  { fill: var(--white); stroke: var(--text-dim); stroke-width: 1; }
     .as-compare .cmp-line  { stroke: var(--text-dim); stroke-width: 1.2; fill: none; }
     .as-compare .cmp-arrow { fill: var(--text-dim); }
-    .as-compare text       { font-family: inherit; font-size: 11px; fill: var(--text-primary); }
+    .as-compare text       { font-family: inherit; font-size: 12px; fill: var(--text-primary); }
     .as-compare .cmp-title { font-size: 12px; font-weight: 700; }
-    .as-compare .cmp-sub   { font-size: 10px; fill: var(--text-dim); }
+    .as-compare .cmp-sub   { font-size: 12px; fill: var(--text-dim); }
     .as-caption { font-size: 12px; color: var(--text-secondary); margin: 0 0 14px; }
     /* 每類一列：名稱｜現況摘要｜[調整] */
     .scope-row { padding: 7px 14px; gap: 6px; }
@@ -191,14 +191,14 @@
     .scope-row__digest { flex: 1; min-width: 0; font-size: 12px; color: var(--text-secondary);
                          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .scope-row__more { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--border-light); }
-    .as-adjust-btn { flex-shrink: 0; padding: 3px 12px; font-size: 11px; }
-    .as-card-digest { font-size: 11px; color: var(--text-secondary); flex: 2; min-width: 0;
+    .as-adjust-btn { flex-shrink: 0; padding: 3px 12px; font-size: 12px; }
+    .as-card-digest { font-size: 12px; color: var(--text-secondary); flex: 2; min-width: 0;
                       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .as-card-head.as-card-head--fold { padding: 10px 16px; }
     details.as-help > summary { list-style: none; cursor: pointer; }
     details.as-help > summary::-webkit-details-marker { display: none; }
     details.as-help[open] > summary { border-bottom: 1px solid var(--border-light); }
-    .as-fold-more > summary { cursor: pointer; font-size: 11px; color: var(--accent); margin-top: 2px; }
+    .as-fold-more > summary { cursor: pointer; font-size: 12px; color: var(--accent); margin-top: 2px; }
 
   /* -- Mobile RWD -- */
   @media (max-width:1099px) {
@@ -233,7 +233,7 @@
         <ol class="as-intro" data-testid="as-intro">
           <li data-n="1">簽核流程＝單據送出後，要依序由誰核准才算通過。</li>
           <li data-n="2">多數單據共用一條「統一流程」；流程不同的單據才改成「獨立設定」。</li>
-          <li data-n="3">建議最小設定：全部維持統一流程、保留預設的部門主管簽核，有特殊需求再調整個別單據。</li>
+          <li data-n="3">建議最小設定：全部維持統一流程、保留預設的部門主管簽核，有特殊需求再調整個別單據（獎金分潤例外：簽核人須為最高管理者）。</li>
         </ol>
       </div>
       <template x-if="session.role !== 'superadmin'">
@@ -380,11 +380,6 @@
         </div>
         <div class="as-card-body" x-show="flows[key] && flowOpen[key]" x-cloak>
 
-          <div x-show="key === 'bonus' || (key === 'unified' && bonusUsesUnified)"
-               data-testid="bonus-superadmin-only"
-               style="font-size:11px;color:var(--danger);font-family:var(--font-zh);margin-bottom:10px">
-            獎金分潤的簽核人只能是最高管理者（其他人或自動主管會讓獎金送審被擋下）</div>
-
           <div class="as-desc">
             <span x-text="sectionDesc(key)"></span>
           </div>
@@ -413,7 +408,7 @@
               </div>
               <details class="as-fold-more">
               <summary>詳細規則</summary>
-              <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+              <div style="font-size:12px;color:var(--text-dim);margin-top:2px">
                 申請人本身就是部門主管時，<b>由他本人簽自己這一層，再加一層處主管</b>（2026-09-15 起照組織流程逐層留痕，不再跳過換人）；連處主管也是他本人時就到頂，不再指派其他超級管理員簽核，改為送出時知會在職的最高管理者（仍可隨時退回）。
               </div>
               </details>
