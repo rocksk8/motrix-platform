@@ -12,7 +12,8 @@
 from tests.platform import _unscoped_reads as U
 
 #: 基準總筆數上限：只准手動調小（基準縮小後把這個數字一起降下來）
-MAX_ENTRIES = 853      # 852 + 1（T80c 外勤 S1 2026-11-12：新端點 `POST /api/quotations/{quote_no}/updates/{uid}/files` 補附件——`_add_case_update_files_impl` 讀 `case_updates` 那一列（作者比對＋拿鎖重讀追加），
+MAX_ENTRIES = 856      # 853 + 3（T80c 外勤 S2 2026-11-12：新端點 `GET /api/field/cases/{quote_no}` 的 `get_field_case` 讀 quotations／case_stages／case_updates 各一——一律先過 `_guard_case`（案件範圍）、只回白名單欄位（無金額），與 `GET /api/quotations/{no}/stages`、`/updates` 同型；列表 `list_field_cases` 走 row_access.filter_sql 不新增）
+                        # 853 = 852 + 1（T80c 外勤 S1 2026-11-12：新端點 `POST /api/quotations/{quote_no}/updates/{uid}/files` 補附件——`_add_case_update_files_impl` 讀 `case_updates` 那一列（作者比對＋拿鎖重讀追加），
                         # 之前一律已過 `_guard_case`（案件範圍）且只碰 URL 指名的那一則留言；與同檔 delete_case_update_file 同型。另兩筆是既有端點抽出 `_impl` 的改名，不增減）
                         # 852 = 851 + 1（簽核二擇一 S6 2026-11-07：content_fp.shadow_stats 唯讀聚合 `audit_log` 的 `quotation.reconfirm_shadow` 列，只供超管端點 `GET /api/quotations/reconfirm-shadow-stats`；
                         # audit_log 不是案件範圍資料（沒有 row_access 可套），回傳的是計數不是列；端點本身限 superadmin；不得接其他使用者端點）

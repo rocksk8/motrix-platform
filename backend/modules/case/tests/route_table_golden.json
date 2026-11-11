@@ -309,6 +309,8 @@
 ["GET", "/api/extra-expenses/mine", "payreq_mine_api_extra_expenses_mine_get", [["header", "authorization", false]], [], []]
 ["GET", "/api/extra-expenses/po-bank-block", "po_bank_block_status_api_extra_expenses_po_bank_block_get", [["header", "authorization", false]], [], []]
 ["PUT", "/api/extra-expenses/po-bank-block", "po_bank_block_set_api_extra_expenses_po_bank_block_put", [["header", "authorization", false]], [["application/json", ""]], []]
+["GET", "/api/field/cases", "list_field_cases_api_field_cases_get", [["header", "authorization", false], ["query", "limit", false], ["query", "mine", false], ["query", "offset", false], ["query", "q", false], ["query", "scope", false]], [], []]
+["GET", "/api/field/cases/{quote_no}", "get_field_case_api_field_cases__quote_no__get", [["header", "authorization", false], ["path", "quote_no", true]], [], []]
 ["GET", "/api/filehub/search", "search_api_filehub_search_get", [["header", "authorization", false], ["query", "customer", false], ["query", "date_from", false], ["query", "date_to", false], ["query", "doc_no", false], ["query", "exts", false], ["query", "page", false], ["query", "q", false], ["query", "quote_no", false], ["query", "size", false], ["query", "types", false], ["query", "uploader", false]], [], []]
 ["GET", "/api/inventory/batches", "list_batches_api_inventory_batches_get", [["header", "authorization", false]], [], []]
 ["POST", "/api/inventory/batches", "create_batch_api_inventory_batches_post", [["header", "authorization", false]], [["application/json", ""]], []]

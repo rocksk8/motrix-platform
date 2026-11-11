@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-12（feat/field-read-api；T80c 外勤手機 S2：窄唯讀案件端點）
+- 新增：`GET /api/field/cases`（我的案件列表）、`GET /api/field/cases/{quote_no}`（案件摘要）——**只回白名單欄位，金額／毛利／成本／付款不下發**（個人手機沒有 MDM）。列表權限同 `GET /api/quotations`（`row_access`）、單件同案件執行面（`_guard_case(allow_module="case_manage")`）；`mine` 預設開、`scope` 預設只看已成案、每頁 ≤ 50、回 `has_more`（不回總數）。「我的」「已成案」在 Python 逐筆判斷（不寫 SQL json_extract；壞 JSON 的一筆跳過並記 ERROR），判定規則與案件列表逐項同義。登記：`case_read_scope.json`（單件 `row_access`）、module.json `api_prefixes`。
+- 測試：`tests/test_field_cases_2026_11_12.py`（15 題；含金額不外洩、與既有列表／守門同一套權限、「我的」逐項同義、壞 JSON、掃描上限）。
+
 ## (next) — 2026-11-12（feat/field-idempotency；T80c 外勤手機 S1：冪等鍵＋補檔案端點）
 - 新增：`POST /api/quotations/{quote_no}/updates/{uid}/files`——把照片／檔案補進**已存在**的案件留言（外勤上傳形狀 B：文字先存、照片逐張補）。留言作者或 admin 以上、案件權限同發留言；選填 `geo`＝「lat,lng[,accuracy]」（前端定位，盡力而為，格式不對就當沒有；只存進該檔 metadata，不印在浮水印上）；拿寫鎖後重讀再追加，存檔期間留言被刪 ⇒ 清掉剛存的檔回 404；上傳登記 `upload_points.json`（目錄 case_update）。
 - 變更（只加選填）：`POST /api/quotations/{quote_no}/updates` 與上面的補檔案端點支援選填標頭 `Idempotency-Key`（見 `helpers/idempotency.py`）；沒帶＝行為不變（原實作改名 `_post_case_update_impl`，邏輯未動）。

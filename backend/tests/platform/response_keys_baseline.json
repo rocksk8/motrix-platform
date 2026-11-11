@@ -2869,6 +2869,39 @@
   ],
   "s": 200
  },
+ "/api/field/cases": {
+  "k": [
+   "has_more",
+   "items",
+   "limit",
+   "offset"
+  ],
+  "s": 200
+ },
+ "/api/field/cases/{quote_no}": {
+  "k": [
+   "address",
+   "contact_person",
+   "contact_phone",
+   "current_stage",
+   "customer_name",
+   "deal_tag",
+   "last_update_at",
+   "project_name",
+   "quote_date",
+   "quote_no",
+   "sales_person",
+   "server_time",
+   "stages",
+   "stages[].done",
+   "stages[].due_date",
+   "stages[].id",
+   "stages[].label",
+   "status",
+   "updated_at"
+  ],
+  "s": 200
+ },
  "/api/filehub/search": {
   "k": [
    "categories",
