@@ -118,8 +118,9 @@ def _publish_tpl(key, body):
 @pytest.fixture
 def on(monkeypatch):
     monkeypatch.setattr(ST, "enabled", lambda conn=None: True)
-    from modules.case.api import quotations as q
+    from modules.case.api import quotations as q, quotation_stages as qs   # 階段端點在 quotation_stages；案件存檔等仍在 quotations
     monkeypatch.setattr(q, "spawn_bg_thread", lambda target, args=(), **kw: None)
+    monkeypatch.setattr(qs, "spawn_bg_thread", lambda target, args=(), **kw: None)
 
 
 URL = "/api/quotations/%s/stages/apply-template"
@@ -365,13 +366,14 @@ def test_dry_run_must_be_a_boolean(client, make_user, on, val):
 
 @needs_case
 def test_write_takes_the_lock_before_reading_stages_but_preview_does_not(client, make_user, on, monkeypatch):
-    from modules.case.api import quotations as q
+    from modules.case.api import quotations as q, quotation_stages as qs
     h = _login(client, make_user, "st2_lock")
     _case("MQ-ST2-K")
     _publish_tpl("std", TPL)
     seen = []
     real = q.begin_write
-    monkeypatch.setattr(q, "begin_write", lambda c: (seen.append(1), real(c))[1])
+    monkeypatch.setattr(q, "begin_write", lambda c: (seen.append(1), real(c))[1])      # `_sync_stages_to_json` 鏡像寫回（留在 quotations）
+    monkeypatch.setattr(qs, "begin_write", lambda c: (seen.append(1), real(c))[1])     # 套用端點自己的寫鎖（已搬到 quotation_stages）
     client.post(URL % "MQ-ST2-K", headers=h, json={"template": "std", "mode": "new", "baseDate": "2026-10-01", "dryRun": True})
     assert seen == []                                                               # 預覽不拿寫鎖
     r = client.post(URL % "MQ-ST2-K", headers=h, json={"template": "std", "mode": "new", "baseDate": "2026-10-01"})

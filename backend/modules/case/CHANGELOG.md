@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-11（refactor/quotations-stages-split；案件階段端點拆檔：純搬移，零行為變更；L1 介面不變）
+- 重構（後端）：案件階段端點（`/api/quotations/{quote_no}/stages…`、`/api/quotations/stage-templates/preview` 共 14 條路由，含 `_apply_stage_template_write`、`_would_create_cycle`）自 `api/quotations.py` 逐字搬到新檔 `api/quotation_stages.py`；路由路徑、函式名稱、驗證、回應形狀都不變，`modules/case/__init__.py` 的 routers 清單在 `quotations` 之後加掛新 router。階段表的讀寫 helper（`_serialize_stage`／`_get_stage_row`／`_sync_stages_to_json`）仍留在 `api/quotations.py`。
+- 測試／登記：基線與清單改跟新檔名（`unscoped_reads_baseline`、`recyclebin_baseline_t53`、`case_read_scope`、`test_u0a_sinks`、`modules.json`）；對 `quotations` 打的 `spawn_bg_thread`／`begin_write` 補丁補上對 `quotation_stages` 的同樣補丁。
+
 ## (next) — 2026-11-11（feat/ux-quoteform-density；UX 提案 C1～C3「報價單表單與資訊密度」；純畫面、不動後端與資料；報價單表單 V3.40）
 - 變更（C1，報價單頁）：內部成本區（成本欄＋右側黑底 INTERNAL 面板）**預設收合**，右欄只顯示一行「內部利潤：—」摘要＋「展開成本分析」；展開／收合沿用既有「顯示／隱藏成本欄」總開關（`showCostCols`），並把選擇記在這台瀏覽器（`localStorage` 鍵 `motrix.qf.showCostCols`，讀寫失敗＝預設收合）。**預設值由展開改為收合**——有成本權限的簽核人／業務第一次開單要多按一下，之後記住。
 - 變更（C1）：沒有任何品項金額時，成本面板的營業利益率／直接毛利率／專案毛利提醒一律不上色、不寫「低於目標」，改顯示「—（填入品項與售價後才比較目標）」（原本空白表單就跳紅字「0.0% ⚠ 低於目標 12%」）。收合摘要在「擇一方案未選定」「尚有品項沒填成本」時也只顯示中性文字。

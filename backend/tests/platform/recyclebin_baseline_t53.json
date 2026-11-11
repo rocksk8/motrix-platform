@@ -125,12 +125,16 @@
    "count": 1,
    "reason": "exempt: 系統設定鍵值（非單據）"
   },
-  "modules/case/api/quotations.py::case_stage_visits": {
+  "modules/case/api/quotation_stages.py::case_stage_visits": {
    "count": 1,
    "reason": "p2: 案件階段拜訪單筆刪除（整張報價單刪除已進暫存區）"
   },
+  "modules/case/api/quotation_stages.py::case_stages": {
+   "count": 1,
+   "reason": "p2: 案件階段單筆刪除／存檔差異（整張報價單刪除已進暫存區）"
+  },
   "modules/case/api/quotations.py::case_stages": {
-   "count": 3,
+   "count": 2,
    "reason": "p2: 案件階段單筆刪除／存檔差異（整張報價單刪除已進暫存區）"
   },
   "modules/case/api/quotations.py::case_updates": {
@@ -335,15 +339,15 @@
   "modules/case/api/case_extra_expenses.py::delete_extra_expense_file::DELETE /api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/case/api/completion_notes.py::delete_completion_signed_file::DELETE /api/completion-notes/{note_no}/signed-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/case/api/material_approvals.py::receive_undo::DELETE _BASE + '/receive'": "p2: 其他業務資料（P2 評估）",
-  "modules/case/api/quotations.py::delete_case_stage::DELETE /api/quotations/{quote_no}/stages/{stage_id}": "p2: 其他業務資料（P2 評估）",
+  "modules/case/api/quotation_stages.py::delete_case_stage::DELETE /api/quotations/{quote_no}/stages/{stage_id}": "p2: 其他業務資料（P2 評估）",
+  "modules/case/api/quotation_stages.py::delete_stage_visit::DELETE /api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}": "p2: 其他業務資料（P2 評估）",
+  "modules/case/api/quotation_stages.py::remove_stage_assignee::DELETE /api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}": "p2: 其他業務資料（P2 評估）",
   "modules/case/api/quotations.py::delete_case_update::DELETE /api/quotations/{quote_no}/updates/{uid}": "p2: 其他業務資料（P2 評估）",
   "modules/case/api/quotations.py::delete_case_update_file::DELETE /api/quotations/{quote_no}/updates/{uid}/files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/case/api/quotations.py::delete_material_file::DELETE /api/quotations/{no}/materials/{idx}/files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/case/api/quotations.py::delete_material_invoice_file::DELETE /api/quotations/{no}/materials/{idx}/invoice-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/case/api/quotations.py::delete_payment_item_invoice_file::DELETE /api/quotations/{no}/payment/{idx}/invoice-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/case/api/quotations.py::delete_quotation_signed_file::DELETE /api/quotations/{quote_no}/signed-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
-  "modules/case/api/quotations.py::delete_stage_visit::DELETE /api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}": "p2: 其他業務資料（P2 評估）",
-  "modules/case/api/quotations.py::remove_stage_assignee::DELETE /api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}": "p2: 其他業務資料（P2 評估）",
   "modules/crm/api.py::delete_dev_log::DELETE /dev-logs/{log_id}": "p2: 其他業務資料（P2 評估）",
   "modules/crm/api.py::delete_dev_log_file::DELETE /dev-logs/{log_id}/files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "modules/daily_tasks/api.py::delete_daily_task::DELETE /api/daily-tasks/{task_id}": "p2: 其他業務資料（P2 評估）",
@@ -352,6 +356,7 @@
   "modules/payroll/api/bonus.py::remove_bonus_group_member::DELETE /groups/{group_id}/members/{username}": "p2: 其他業務資料（P2 評估）",
   "modules/payroll/api/payslip_links.py::remove_link::DELETE /api/payslips/{slip_no}/dispatch-links/{dispatch_id}": "p2: 其他業務資料（P2 評估）",
   "modules/payroll/api/payslips.py::delete_signed_file::DELETE /api/payslips/{slip_no}/signed-files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
+  "modules/permmatrix/api.py::permmatrix_user_override_clear::DELETE /api/permmatrix/user-override": "exempt: 個人權限覆寫（設定；有版本紀錄與一鍵復原，非單據）",
   "modules/recyclebin/api.py::bin_purge::DELETE /api/recycle-bin/{bin_id}": "exempt: 暫存區自己的永久刪除——它就是暫存區的最後一步（二次確認＋稽核），不能再進暫存區",
   "modules/subcontract/api/dispatch_payslip_links.py::remove_payslip_link::DELETE /api/contractor-dispatches/{did}/payslip-links/{slip_no}": "p2: 其他業務資料（P2 評估）",
   "modules/subcontract/api/vendor_contractors.py::delete_dispatch_file::DELETE /api/contractor-dispatches/{did}/files/{file_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
@@ -376,7 +381,6 @@
   "routers/system.py::delete_custom_role::DELETE /api/settings/custom-roles/{rid}": "exempt: 角色設定（設定資料）",
   "routers/system.py::delete_work_log::DELETE /api/work-logs/{wid}": "p2: 其他業務資料（P2 評估）",
   "routers/system.py::delete_work_log_photo::DELETE /api/work-logs/{wid}/photos/{photo_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
-  "modules/permmatrix/api.py::permmatrix_user_override_clear::DELETE /api/permmatrix/user-override": "exempt: 個人權限覆寫（設定；有版本紀錄與一鍵復原，非單據）",
   "routers/system.py::edit_presence_release::DELETE /api/edit-presence": "exempt: 編輯中提示（暫態，無使用者資料）",
   "routers/system.py::reset_branding_asset::DELETE /api/settings/branding/{kind}": "exempt: 品牌圖設定（可重新上傳，非單據）"
  }
