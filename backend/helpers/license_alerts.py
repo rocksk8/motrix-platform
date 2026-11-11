@@ -19,6 +19,7 @@
 """
 import json
 import logging
+import threading
 from datetime import datetime
 
 from helpers import licensing as _lic
@@ -28,11 +29,17 @@ logger = logging.getLogger(__name__)
 #: 代碼 → 日期（行程內節流）。測試會清它。
 _ALERTED = {}
 
+#: 背景寫稽核的執行緒（`flush()` 等它們）。
+_PENDING = []
+_PENDING_LOCK = threading.Lock()
+
 
 def _audit(action, detail):
     try:
-        from db import get_db
-        conn = get_db()
+        # 一律寫**正式庫**（不用 get_db()）：get_db() 看目前請求的 demo 旗標，示範帳號碰巧是當天第一個請求時，
+        # 授權告警會寫進示範庫（K 審 S1）。授權是整台機器的事，與誰在操作無關。
+        import db
+        conn = db._connect(db.DB_PATH)
         try:
             conn.execute(
                 "INSERT INTO audit_log (at, user_id, username, display_name, action, target_type, target_id,"
@@ -46,6 +53,28 @@ def _audit(action, detail):
         logger.exception("license_alerts: 稽核寫入失敗（%s）", action)
 
 
+def _emit(action, detail, background):
+    """寫稽核。`background=True`（async 中介層用）⇒ 丟到背景執行緒：`audit_log` 是同步 SQLite 寫入，
+    有別的連線握著寫鎖時會卡到 busy timeout（30 秒），在事件迴圈裡寫就是全站一起卡（K 審 S1）。
+    啟動檢查與測試用同步寫（預設）。"""
+    if not background:
+        _audit(action, detail)
+        return
+    th = threading.Thread(target=_audit, args=(action, detail), name="license-audit", daemon=True)
+    with _PENDING_LOCK:
+        _PENDING[:] = [x for x in _PENDING if x.is_alive()]
+        _PENDING.append(th)
+    th.start()
+
+
+def flush(timeout=10.0):
+    """等背景稽核寫完（測試與關機前用）。"""
+    with _PENDING_LOCK:
+        pending = list(_PENDING)
+    for th in pending:
+        th.join(timeout)
+
+
 def _once(code):
     today = datetime.now().date().isoformat()
     if _ALERTED.get(code) == today:
@@ -54,7 +83,7 @@ def _once(code):
     return True
 
 
-def emergency_in_use(info):
+def emergency_in_use(info, background=False):
     """通行證生效中（`licensing.emergency_pass()` 的回傳）。回是否這次有寫（每個通行證每天一次）。"""
     if not info or not _once("emergency:" + str(info.get("pass_id"))):
         return False
@@ -62,11 +91,11 @@ def emergency_in_use(info):
               "env": info.get("env")}
     logger.error("授權金鑰無法通過驗證，系統靠緊急放行通行證運作（通行證 %s，至 %s）：%s",
                  detail["pass_id"], detail["until"], detail["note"])
-    _audit("license.emergency_pass", detail)
+    _emit("license.emergency_pass", detail, background)
     return True
 
 
-def dev_key_in_use(status):
+def dev_key_in_use(status, background=False):
     """驗章通過但簽發方是開發金鑰。回是否這次有寫（每天一次）。"""
     if not (isinstance(status, dict) and status.get("valid") and status.get("env") == "dev"):
         return False
@@ -75,7 +104,7 @@ def dev_key_in_use(status):
     detail = {"customer": status.get("customer"), "expires": status.get("expires")}
     logger.warning("這台伺服器使用的授權金鑰是開發金鑰簽發的（env=dev）——正式機應使用正式金鑰（客戶 %s）",
                    status.get("customer"))
-    _audit("license.dev_key", detail)
+    _emit("license.dev_key", detail, background)
     return True
 
 

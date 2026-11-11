@@ -1036,8 +1036,9 @@
    "year_status": "def(versions, today)"
   },
   "helper:license_alerts": {
-   "dev_key_in_use": "def(status)",
-   "emergency_in_use": "def(info)",
+   "dev_key_in_use": "def(status, background=…)",
+   "emergency_in_use": "def(info, background=…)",
+   "flush": "def(timeout=…)",
    "startup_check": "def()"
   },
   "helper:licensing": {
