@@ -39,7 +39,8 @@ def _norm_reqs(items):
 # T62 在旗標【關閉】時多出來的請求，逐條列出（PM 裁示 2026-10-15：允許清單，不做延後載入重構）。
 # 理由：全是「讀旗標」的 GET 與靜態資源（頁面載入版面／自訂欄位／狀態顯示的腳本），旗標關閉時不呈現任何東西、使用者看到的畫面與 platform 相同。
 # 任何不在這份清單裡的新請求都會讓測試失敗；寫入（非 GET）一律不准。
-_JS = ["GET /js/def-governance.js", "GET /static/custom-layout.js", "GET /static/layout-editor.js", "GET /static/layout-runtime.js", "GET /static/public-flags.js"]
+_JS = ["GET /js/def-governance.js", "GET /static/custom-layout.js", "GET /static/layout-editor.js", "GET /static/layout-runtime.js", "GET /static/public-flags.js",
+        "GET /static/ux-help.js"]      # 2026-11-11 UX A4／A5：頂欄「？」說明抽屜＋「第一次來？」橫幅（旗標無關，每頁都載入）
 ALLOWED_EXTRA = {
     "quotation_form_off": set(_JS + [
         "GET /api/settings-center/public?groups=builder_layout,builder_custom_fields,builder_stage_templates",
