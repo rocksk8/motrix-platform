@@ -32,6 +32,7 @@
     .ms-cell input:disabled { cursor: not-allowed; opacity: .45 }
     .ms-off { opacity: .6 }
     .ms-ok { color: var(--success); font-size: 12px }
+    .ms-more { display: none }
     .ms-note { max-width: 1200px; margin-top: 16px; padding: 12px 16px; border-radius: 8px; background: #EFF6FF;
       border: 1px solid #BFDBFE; color: #1E3A8A; font-size: 13px; line-height: 1.7 }
     @media (max-width: 767px) {
@@ -50,6 +51,11 @@
       .ms-t td.ms-cell:nth-child(3)::before { content: '行事曆'; font-size: 13px; color: var(--text-secondary) }
       .ms-t td.ms-cell .ms-sub { max-width: none !important }
       .ms-cell input { width: 28px; height: 28px }
+      .ms-t td.ms-cell > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap }
+      .ms-t td.ms-cell > div > .ms-sub { flex: 1 0 100% }
+      /* 一種信件一張卡太長（約 120 種 ≈ 64 屏）⇒ 卡片預設只留「名稱＋信件／行事曆開關」，收件人設定／影響說明／儲存收進「展開」 */
+      .ms-t td.ms-fold { display: none !important }
+      .ms-more { display: inline-flex; align-items: center; margin-top: 6px; min-height: 40px; padding: 6px 14px; font-size: 13px }
       .ms-t td:nth-child(5) { order: 4; flex: 1 0 100%; font-size: 13px }
       .ms-t td:nth-child(5)::before { content: '預設收件人　'; color: var(--text-dim); font-size: 12px }
       .ms-t td:nth-child(5) > div { display: inline }
@@ -96,8 +102,9 @@
         <thead><tr><th>信件類型</th><th class="ms-cell">信件</th><th class="ms-cell">行事曆</th><th>分類</th><th>預設收件人</th><th>影響／建議處理</th><th style="min-width:280px">收件人設定</th><th></th></tr></thead>
         <tbody>
           <template x-for="t in shown" :key="t.key">
-            <tr :data-testid="'ms-row-' + t.key" :class="{'ms-off': t.mailOff}">
-              <td><div x-text="t.name"></div><div class="ms-sub" x-text="t.calOnly ? ('行事曆代碼：' + t.calendar.code) : t.key"></div></td>
+            <tr :data-testid="'ms-row-' + t.key" :class="{'ms-off': t.mailOff}" x-data="{ more: false }">
+              <td><div x-text="t.name"></div><div class="ms-sub" x-text="t.calOnly ? ('行事曆代碼：' + t.calendar.code) : t.key"></div>
+                <button type="button" class="ms-more btn btn-sm" @click="more = !more" :aria-expanded="more" :data-testid="'ms-more-' + t.key" x-text="more ? '收合設定 ▴' : '收件人設定與說明 ▾'"></button></td>
               <td class="ms-cell">
                 <template x-if="t.calOnly"><span class="ms-sub" :data-testid="'ms-mail-' + t.key" title="沒有信件範本">—</span></template>
                 <template x-if="!t.calOnly">
@@ -123,10 +130,10 @@
                 </template>
               </td>
               <td x-text="t.categoryLabel"></td>
-              <td><div x-text="t.groupLabel"></div><div class="ms-sub" x-show="t.event" x-text="'事件相關：' + t.event"></div></td>
-              <td><div class="ms-sub" x-show="!t.calOnly" x-text="'影響：' + t.impact"></div><div class="ms-sub" x-show="!t.calOnly" x-text="'建議處理：' + t.action"></div>
+              <td :class="{'ms-fold': !more}"><div x-text="t.groupLabel"></div><div class="ms-sub" x-show="t.event" x-text="'事件相關：' + t.event"></div></td>
+              <td :class="{'ms-fold': !more}"><div class="ms-sub" x-show="!t.calOnly" x-text="'影響：' + t.impact"></div><div class="ms-sub" x-show="!t.calOnly" x-text="'建議處理：' + t.action"></div>
                   <div class="ms-sub" x-show="t.calOnly" x-text="t.calendar.group + '：' + t.description"></div></td>
-              <td>
+              <td :class="{'ms-fold': !more}">
                 <div class="ms-sub" x-show="t.calOnly">沒有信件範本，只有行事曆。</div>
                 <div class="ms-sub" x-show="t.mailOff && !t.calOnly" :data-testid="'ms-off-' + t.key">信件已關閉（收件人設定保留）。</div>
                 <div class="ms-bad" x-show="t.noRecipient" :data-testid="'ms-norecip-' + t.key">目前沒有任何人會收到這類信（超級管理員都退訂了，或沒有人設定 email）。</div>
@@ -159,7 +166,7 @@
                   </div>
                 </template>
               </td>
-              <td style="white-space:nowrap">
+              <td style="white-space:nowrap" :class="{'ms-fold': !more}">
                 <button x-show="!t.managedElsewhere && !t.calOnly" class="btn btn-primary btn-sm" :disabled="t.saving || !changed(t)" @click="save(t)" :data-testid="'ms-save-' + t.key">儲存</button>
                 <div class="ms-ok" x-show="t.okMsg" x-text="t.okMsg"></div>
                 <div class="ms-bad" x-show="t.errMsg" x-text="t.errMsg"></div>
@@ -194,6 +201,8 @@
           if (this._initDone) return
           this._initDone = true
           await this.load()
+          // 手機：預設只顯示第一個分類（約 120 種信件全列要捲 60 多屏）；使用者仍可點「全部」
+          try { if (!this.cat && window.matchMedia('(max-width: 767px)').matches) { const ks = Object.keys(this.categories || {}); if (ks.length) this.cat = ks[0] } } catch (e) { /* 純外觀預設 */ }
         },
         async load() {
           try {

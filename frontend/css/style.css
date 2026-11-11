@@ -1507,7 +1507,7 @@ body.sidebar-lock { overflow: hidden; }
   .topbar__logo { padding: 0; width: auto; flex-shrink: 0; }
   .topbar__logo img { height: 22px; }
   .topbar__divider, .topbar__title, .topbar__avatar { display: none; }
-  .topbar__right { gap: 4px; flex-shrink: 0; }
+  .topbar__right { gap: 8px; flex-shrink: 0; }
   /* 搜尋吃掉剩餘寬度；16px 避免 iOS 聚焦時自動放大 */
   .topbar > div[x-data="globalSearchStore()"] { margin: 0 !important; min-width: 0; }
   .global-search-input { font-size: 16px !important; min-height: 40px; }
@@ -1526,7 +1526,7 @@ body.sidebar-lock { overflow: hidden; }
   .topbar.tb-more-open .topbar__sec > div:has(#fz-0) { margin-right: 0 !important; }
   .topbar.tb-more-open .topbar__sec button[id^="fz-"] { height: 40px !important; line-height: 40px !important; min-width: 44px; padding: 0 10px !important; font-size: 14px !important; }
   .topbar.tb-more-open .topbar__sec .topbar__btn { font-size: 14px !important; padding: 0 14px; }
-  #tb-online-pop { position: fixed !important; left: 12px; right: 12px; top: calc(var(--topbar-bar-h) + 8px); width: auto !important; }
+  #tb-online-pop { position: fixed !important; left: 12px !important; right: 12px !important; top: calc(var(--topbar-bar-h) + 8px) !important; width: auto !important; }
 
   /* 主導覽：右緣漸層＝「還有更多分頁可橫向滑」的提示；末端留白讓最後一項能滑出漸層 */
   .mnav__in { padding-right: 36px; -webkit-overflow-scrolling: touch; }
@@ -2040,4 +2040,10 @@ html.ux-wizard .ns-main .pg { display:none }
   #sys-crumb, #hub-crumb { padding: 10px 4px !important; margin: -10px 0 0 -4px !important; font-size: 13px !important; }
   .cust-back { padding: 10px 4px; margin-left: -4px; }
   #fc-all-time { display: inline-block; padding: 10px 4px; margin: -10px 0; }
+}
+
+/* 觸控：分頁籤／分類膠囊至少 40px 高（頁籤 35px、膠囊 24px 太容易按錯） */
+@media (max-width: 1023px) and (pointer: coarse) {
+  .tab-bar .tab, .cs-cat { min-height: 40px; align-items: center; }
+  .cs-cats { gap: 8px; }
 }

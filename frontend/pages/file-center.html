@@ -46,6 +46,15 @@
     .fc-empty { padding: 28px; text-align: center; color: var(--text-dim); font-size: 13px; }
     .fc-pager { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 13px; }
     @media (max-width: 900px) { .fc-grid { grid-template-columns: 1fr; } .fc-main { margin-left: 0; padding: 16px; } }
+    @media (min-width: 768px) and (max-width: 900px) {
+      /* 平板直式：分類樹已疊在檔案清單上方（單欄）⇒ 同手機改成單列橫滑膠囊，否則 17 列把篩選與結果推到 1000px 以下 */
+      .fc-tree { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 8px; }
+      .fc-tree h3 { flex-shrink: 0; margin: 0 2px 0 8px; white-space: nowrap; align-self: center }
+      .fc-tree h3:first-child { margin-left: 0 }
+      .fc-tree > div { display: contents }
+      .fc-cat { width: auto; flex-shrink: 0; white-space: nowrap; min-height: 40px; align-items: center; padding: 6px 12px; border: 1px solid var(--border-light); border-radius: 20px; background: #fff; gap: 6px }
+      .fc-cat.is-on { border-color: var(--tone-info-fg) }
+    }
     @media (max-width: 767px) {
       /* 分類樹（17 個分類）佔掉整個首屏 ⇒ 改成單列橫滑的膠囊；群組名稱縮成列內小標 */
       .fc-tree { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 8px; }
