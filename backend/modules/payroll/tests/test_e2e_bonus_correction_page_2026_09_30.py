@@ -214,7 +214,7 @@ def test_clawback_shows_pending_label_and_draft_can_be_cancelled(live_server, ma
     sa.locator('[data-testid="bc-form"]').wait_for(timeout=15000)
     sa.fill('[data-testid="bc-new-amt-e2c_s1"]', "1000")
     sa.fill('[data-testid="bc-reason"]', "業務金額多給，追回")
-    assert sa.locator('[data-testid="bc-form-clawback"]').is_visible()
+    sa.locator('[data-testid="bc-form-clawback"]').wait_for(state="visible", timeout=5000)      # 填完理由後的提示要等畫面更新
     sa.locator('[data-testid="bc-save"]').click()
     cn = no + "-C1"
     sa.locator(f'[data-testid="bc-item-{cn}"]').wait_for(timeout=15000)
