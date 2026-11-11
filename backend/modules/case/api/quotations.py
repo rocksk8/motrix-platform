@@ -6100,7 +6100,8 @@ async def add_case_update_files(quote_no: str, uid: int,
     return await _idem.run(
         user["username"], key, f"POST case_update_files:{quote_no}:{uid}",
         _idem.request_hash(geo, [(f.filename, f.size) for f in (files or [])]),
-        lambda: _add_case_update_files_impl(quote_no, uid, files, geo, user, authorization), 201)
+        lambda: _add_case_update_files_impl(quote_no, uid, files, geo, user, authorization), 201,
+        abort_on_cancel=True)       # 所有 await 都在寫入之前（save_document_files）⇒ 取消時寫入一定還沒發生
 
 
 async def _add_case_update_files_impl(quote_no, uid, files, geo, user, authorization):

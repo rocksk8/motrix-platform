@@ -1010,7 +1010,7 @@
   },
   "helper:idempotency": {
    "Call": "class",
-   "Call.__init__": "def(self, username, key, replay=…)",
+   "Call.__init__": "def(self, username, key, replay=…, stamp=…)",
    "Call.abort": "def(self)",
    "Call.finish": "def(self, status_code, body)",
    "Call.guard": "def(self)",
@@ -1022,7 +1022,7 @@
    "parse_key": "def(raw)",
    "replay_response": "def(call)",
    "request_hash": "def(*parts)",
-   "run": "async def(username, key, endpoint, req_hash, handler, status_code=…)",
+   "run": "async def(username, key, endpoint, req_hash, handler, status_code=…, abort_on_cancel=…)",
    "run_sync": "def(username, key, endpoint, req_hash, handler, status_code=…)"
   },
   "helper:legal_params": {

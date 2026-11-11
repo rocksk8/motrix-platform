@@ -156,6 +156,134 @@ def test_cancel_is_not_failure_row_stays_in_progress():
     assert _count("SELECT COUNT(*) FROM idempotency_keys WHERE key='key-00000004'") == 1
 
 
+def _backdate(username, key, seconds):
+    import db
+    from helpers import idempotency as I
+    old = (datetime.now() - timedelta(seconds=seconds)).isoformat()
+    conn = db.get_db()
+    conn.execute("UPDATE idempotency_keys SET created_at=? WHERE username=? AND key=?", (old, username, key))
+    conn.commit()
+    conn.close()
+
+
+def test_fencing_a_superseded_request_cannot_abort_the_takeovers_row():
+    """K 審 M1／P1：c1 被 c2 接手（stale）後 c1 才失敗 abort ⇒ 不可以刪掉 c2 的 in_progress 列（否則第三次重送會與仍在跑的 c2 並行）。"""
+    from fastapi import HTTPException
+    from helpers import idempotency as I
+    h = I.request_hash("a")
+    c1 = I.begin("fence1", "fence-key-0001", "EP", h)
+    _backdate("fence1", "fence-key-0001", I.STALE_SECONDS + 5)
+    c2 = I.begin("fence1", "fence-key-0001", "EP", h)          # 接手
+    assert c2.stamp != c1.stamp
+    c1.abort()                                                    # 被取代者失敗 ⇒ no-op
+    assert _count("SELECT COUNT(*) FROM idempotency_keys WHERE username='fence1' AND key='fence-key-0001'") == 1
+    with pytest.raises(HTTPException) as e:                       # 第三次重送：仍是「處理中」，不是全新請求
+        I.begin("fence1", "fence-key-0001", "EP", h)
+    assert e.value.status_code == 409
+    c2.abort()                                                    # 接手者自己 abort 才真的釋放
+    assert _count("SELECT COUNT(*) FROM idempotency_keys WHERE username='fence1'") == 0
+
+
+def test_fencing_a_superseded_request_cannot_overwrite_the_takeovers_response():
+    """K 審 M1／P2：c2.finish 之後 c1.finish 不可以後蓋前；重播回的是接手者（c2）的回應。"""
+    from helpers import idempotency as I
+    h = I.request_hash("a")
+    c1 = I.begin("fence2", "fence-key-0002", "EP", h)
+    _backdate("fence2", "fence-key-0002", I.STALE_SECONDS + 5)
+    c2 = I.begin("fence2", "fence-key-0002", "EP", h)
+    c2.finish(201, {"id": 2})
+    c1.finish(201, {"id": 1})                                     # 被取代者：no-op
+    assert I.begin("fence2", "fence-key-0002", "EP", h).replay == {"status": 201, "body": {"id": 2}}
+
+
+def test_fencing_a_superseded_request_finishing_first_does_not_complete_the_takeovers_row():
+    from fastapi import HTTPException
+    from helpers import idempotency as I
+    h = I.request_hash("a")
+    c1 = I.begin("fence3", "fence-key-0003", "EP", h)
+    _backdate("fence3", "fence-key-0003", I.STALE_SECONDS + 5)
+    c2 = I.begin("fence3", "fence-key-0003", "EP", h)
+    c1.finish(201, {"id": 1})                                     # 被取代者先跑完：不可以把接手者的列標成 done
+    with pytest.raises(HTTPException) as e:
+        I.begin("fence3", "fence-key-0003", "EP", h)
+    assert e.value.status_code == 409                             # 還是 in_progress（c2 還在跑）
+    c2.finish(201, {"id": 2})
+    assert I.begin("fence3", "fence-key-0003", "EP", h).replay["body"] == {"id": 2}
+
+
+def test_run_wrapper_new_replay_and_failure_release():
+    import asyncio
+    from helpers import idempotency as I
+
+    async def go():
+        calls = []
+
+        async def handler():
+            calls.append(1)
+            return {"n": len(calls)}
+        h = I.request_hash("x")
+        r1 = await I.run("runner1", "run-key-00001", "EP", h, handler, 201)
+        r2 = await I.run("runner1", "run-key-00001", "EP", h, handler, 201)
+        assert r1 == {"n": 1} and calls == [1]
+        assert r2.status_code == 201 and json.loads(r2.body) == {"n": 1}      # 重播：handler 沒再跑
+        assert await I.run("runner1", None, "EP", h, handler) == {"n": 2}       # 沒帶 key ⇒ 直接跑
+
+        async def boom():
+            raise ValueError("x")
+        with pytest.raises(ValueError):
+            await I.run("runner1", "run-key-00002", "EP", h, boom)
+        assert _count("SELECT COUNT(*) FROM idempotency_keys WHERE key='run-key-00002'") == 0
+    asyncio.run(go())
+
+
+def test_run_on_cancel_keeps_the_row_by_default_and_releases_it_when_asked():
+    import asyncio
+    from helpers import idempotency as I
+
+    async def cancelled():
+        raise asyncio.CancelledError()
+
+    async def go():
+        h = I.request_hash("c")
+        with pytest.raises(asyncio.CancelledError):
+            await I.run("runner2", "cancel-key-001", "EP", h, cancelled)
+        with pytest.raises(asyncio.CancelledError):
+            await I.run("runner2", "cancel-key-002", "EP", h, cancelled, abort_on_cancel=True)
+    asyncio.run(go())
+    assert _count("SELECT COUNT(*) FROM idempotency_keys WHERE key='cancel-key-001'") == 1, "預設：結果不明 ⇒ 留著等 stale"
+    assert _count("SELECT COUNT(*) FROM idempotency_keys WHERE key='cancel-key-002'") == 0, "abort_on_cancel ⇒ 釋放"
+
+
+def test_run_does_not_run_the_sync_db_work_on_the_event_loop_thread(monkeypatch):
+    """K 審 N1：begin／finish 是同步 SQLite，必須離開事件迴圈執行緒。"""
+    import asyncio
+    import threading
+    from helpers import idempotency as I
+    seen = []
+    real_begin, real_finish = I.begin, I.Call.finish
+
+    def spy_begin(*a, **k):
+        seen.append(("begin", threading.get_ident()))
+        return real_begin(*a, **k)
+
+    def spy_finish(self, *a, **k):
+        seen.append(("finish", threading.get_ident()))
+        return real_finish(self, *a, **k)
+    monkeypatch.setattr(I, "begin", spy_begin)
+    monkeypatch.setattr(I.Call, "finish", spy_finish)
+
+    async def go():
+        loop_thread = threading.get_ident()
+
+        async def handler():
+            return {"ok": True}
+        await I.run("runner3", "thread-key-001", "EP", I.request_hash("t"), handler)
+        return loop_thread
+    loop_thread = asyncio.run(go())
+    assert [n for n, _t in seen] == ["begin", "finish"]
+    assert all(t != loop_thread for _n, t in seen), "同步 SQLite 不可以跑在事件迴圈執行緒上"
+
+
 def test_keys_are_per_user():
     from helpers import idempotency as I
     h = I.request_hash("a")
