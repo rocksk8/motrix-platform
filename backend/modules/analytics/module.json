@@ -11,13 +11,15 @@
     "tables": [],
     "files": []
   },
-  "provides": {"api_prefixes": ["/api/dashboard", "/api/devices", "/api/materials-summary", "/api/reports"],
+  "provides": {"api_prefixes": ["/api/dashboard", "/api/devices", "/api/materials-summary", "/api/report-templates", "/api/reports"],
                "probes": ["/api/dashboard/stats", "/api/devices", "/api/materials-summary", "/api/reports/ar-aging"]},
   "pages": [
     {"path": "reports-hub.html",
      "menu": {"group": "analysis", "label": "報表中心", "order": 0, "perm": ["finance", "reports", "cashier"], "hub": true}},
     {"path": "reports.html",
      "menu": {"group": "analysis", "label": "營運報表", "order": 10, "perm": ["finance", "reports"], "badge": "sb-mod-finance", "section": "營運", "desc": "這個月賺多少、哪個案件虧；誰還沒付錢、應收帳款帳齡；各業務的成案與目標達成"}},
+    {"path": "report-templates.html",
+     "menu": {"group": "analysis", "label": "自選條件報表", "order": 15, "perm": ["finance", "reports"], "section": "營運", "desc": "自己選日期區間、部門、案件狀態，重新產出案件清單、收款明細、業務員績效，可下載 Excel"}},
     {"path": "devices.html",
      "menu": {"group": "supply", "label": "設備登載", "order": 70, "perm": ["equipment"], "badge": "sb-mod-equipment"}},
     {"path": "warranty.html",

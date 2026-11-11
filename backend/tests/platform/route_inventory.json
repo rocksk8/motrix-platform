@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 907,
-  "endpoints_api": 903,
+  "endpoints_total": 911,
+  "endpoints_api": 907,
   "write_total": 490,
   "write_api": 490,
-  "get_api": 413,
-  "distinct_paths_api": 763,
+  "get_api": 417,
+  "distinct_paths_api": 767,
   "write_with_body_api": 360,
   "write_with_path_param_api": 354
  },
@@ -1856,6 +1856,26 @@
   "GET /api/remit-kinds/definition": {
    "w": false,
    "pp": 0,
+   "body": false
+  },
+  "GET /api/report-templates": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/report-templates/{tid}/excel": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/report-templates/{tid}/pdf": {
+   "w": false,
+   "pp": 1,
+   "body": false
+  },
+  "GET /api/report-templates/{tid}/run": {
+   "w": false,
+   "pp": 1,
    "body": false
   },
   "GET /api/reports/ar-aging": {
