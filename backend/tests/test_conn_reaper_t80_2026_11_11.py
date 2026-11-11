@@ -424,3 +424,139 @@ def test_async_middleware_writes_do_not_block_the_event_loop(client, make_user, 
     assert status == 200, status
     assert took > 1.0, "請求沒有被寫鎖擋到——這題沒量到東西（took=%.2f）" % took
     assert worst < 0.6, "事件迴圈被卡住 %.2f 秒（請求共 %.2f 秒）：middleware 的同步寫入又回到事件迴圈上了" % (worst, took)
+
+
+# ───────── R6 的代價：軌跡／失敗稽核搬進 threadpool 後，原本靠「事件迴圈上一次一個」的去重要自己撐住 ─────────
+
+class _SlowWrites:
+    """轉發給真連線；每句 INSERT／UPDATE 前睡一下，把「查有沒有前一列」到「寫入」之間的窗口撐大（讓競態每次都發生）。"""
+
+    def __init__(self, conn):
+        self._c = conn
+
+    def execute(self, sql, *a, **k):
+        head = sql.lstrip()[:6].upper()
+        if head in ("INSERT", "UPDATE"):
+            time.sleep(0.15)
+        return self._c.execute(sql, *a, **k)
+
+    def __getattr__(self, name):
+        return getattr(self._c, name)
+
+
+def _run_parallel(n, fn):
+    barrier = threading.Barrier(n)
+    out, errs = [], []
+
+    def work():
+        try:
+            barrier.wait(5)
+            out.append(fn())
+        except Exception as e:      # noqa: BLE001
+            errs.append(e)
+    ths = [threading.Thread(target=work) for _ in range(n)]
+    for t in ths:
+        t.start()
+    for t in ths:
+        t.join(30)
+    assert not errs, errs
+    return out
+
+
+def _trail_rows(path):
+    c = db.get_db()
+    try:
+        return c.execute("SELECT COUNT(*) FROM user_request_log WHERE path=?", (path,)).fetchone()[0]
+    finally:
+        c.close()
+
+
+def _trail_setup(client, make_user, monkeypatch):
+    import main
+    u, p = make_user(username="t80_trail", role="superadmin")
+    c = db.get_db()
+    uid = c.execute("SELECT id FROM users WHERE username=?", (u,)).fetchone()[0]
+    c.close()
+    real = main.get_db
+    monkeypatch.setattr(main, "get_db", lambda: _SlowWrites(real()))
+    main._TRAIL_CLAIMS.clear()
+    return main, uid
+
+
+def test_trail_dedupe_holds_when_same_group_requests_finish_together(client, make_user, table, monkeypatch):
+    """開一張案件會同時回來好幾支（一次點擊）：搬進 threadpool 後同時寫軌跡，仍只能留一筆。"""
+    from datetime import datetime
+    main, uid = _trail_setup(client, make_user, monkeypatch)
+    now = datetime.now()
+    _run_parallel(6, lambda: main._record_request_trail(uid, now, "GET", "/api/parts/zz-t80", "", 200))
+    assert _trail_rows("/api/parts/zz-t80") == 1
+
+
+def test_trail_dedupe_negative_control_without_claim_duplicates(client, make_user, table, monkeypatch):
+    """負對照：拿掉認領（＝搬進 threadpool 又沒補去重）⇒ 同樣的並行情境會寫出重複列。"""
+    from datetime import datetime
+    main, uid = _trail_setup(client, make_user, monkeypatch)
+    monkeypatch.setattr(main, "_trail_claim", lambda key, now_dt: True)
+    now = datetime.now()
+    _run_parallel(6, lambda: main._record_request_trail(uid, now, "GET", "/api/parts/zz-t80b", "", 200))
+    assert _trail_rows("/api/parts/zz-t80b") > 1, "沒有認領也只寫一列——這組測試量不到競態"
+
+
+def test_trail_claim_released_when_write_fails(client, make_user, table, monkeypatch):
+    """寫入失敗（例如資料庫忙到逾時）⇒ 放掉認領；下一個同群組請求還能記。"""
+    from datetime import datetime
+    main, uid = _trail_setup(client, make_user, monkeypatch)
+    now = datetime.now()
+    real = main.get_db
+
+    def boom():
+        raise sqlite3.OperationalError("database is locked")
+    monkeypatch.setattr(main, "get_db", boom)
+    main._record_request_trail(uid, now, "GET", "/api/parts/zz-t80c", "", 200)       # 失敗、被吞
+    monkeypatch.setattr(main, "get_db", real)
+    main._record_request_trail(uid, now, "GET", "/api/parts/zz-t80c", "", 200)
+    assert _trail_rows("/api/parts/zz-t80c") == 1
+
+
+def test_failure_audit_concurrent_identical_failures_write_one_row_and_count_repeats(client, make_user, table, monkeypatch):
+    """同一個人、同一個路由、同一個狀態碼的失敗並行到達：只能一列 new，其餘併入 repeat，計數不可被蓋掉。"""
+    import json
+    from helpers import audit as A
+    u, p = make_user(username="t80_fail", role="superadmin")
+    c = db.get_db()
+    uid = c.execute("SELECT id FROM users WHERE username=?", (u,)).fetchone()[0]
+    c.close()
+    real = A.get_db
+    monkeypatch.setattr(A, "get_db", lambda: _SlowWrites(real()))
+    A._FAIL_LAST.clear()
+    A._FAIL_HOUR.clear()
+    # 先寫第一列（new），再讓 5 條並行 repeat：計數必須 +5
+    assert A._audit_failure(uid, u, "t", "POST", "/api/t80/zz", 409) == "new"
+    res = _run_parallel(5, lambda: A._audit_failure(uid, u, "t", "POST", "/api/t80/zz", 409))
+    assert res.count("repeat") == 5, res
+    c = db.get_db()
+    try:
+        rows = c.execute("SELECT detail FROM audit_log WHERE target_label='/api/t80/zz' AND action='fail.POST'").fetchall()
+    finally:
+        c.close()
+    assert len(rows) == 1
+    assert json.loads(rows[0]["detail"])["repeat"] == 5
+
+
+def test_failure_audit_concurrent_first_failures_write_one_row(client, make_user, table, monkeypatch):
+    from helpers import audit as A
+    u, p = make_user(username="t80_fail2", role="superadmin")
+    c = db.get_db()
+    uid = c.execute("SELECT id FROM users WHERE username=?", (u,)).fetchone()[0]
+    c.close()
+    real = A.get_db
+    monkeypatch.setattr(A, "get_db", lambda: _SlowWrites(real()))
+    A._FAIL_LAST.clear()
+    A._FAIL_HOUR.clear()
+    _run_parallel(5, lambda: A._audit_failure(uid, u, "t", "POST", "/api/t80/yy", 409))
+    c = db.get_db()
+    try:
+        n = c.execute("SELECT COUNT(*) FROM audit_log WHERE target_label='/api/t80/yy' AND action='fail.POST'").fetchone()[0]
+    finally:
+        c.close()
+    assert n == 1
