@@ -118,6 +118,9 @@ READ_ONLY_PAGES = {
     "reports-hub.html":
         "報表中心（2026-11-11 UX 導覽票）：純導覽頁，只讀選單宣告（`window.MotrixMenu.groupItems('analysis')`，已依權限過濾）畫出頁籤與卡片連結；"
         "唯一的儲存是 localStorage 記住上次的頁籤，沒有任何後端呼叫 ⇒ 報表本身的動作都在各報表頁。",
+    "report-templates.html":
+        "自選條件報表（T79 候選）：只有查詢——GET /api/report-templates 取範本與條件欄位、GET …/run 依條件重新查詢、GET …/excel 下載同一組條件；"
+        "沒有任何會改資料的呼叫（匯出稽核由後端寫，不是頁面送出的動作）。條件只存在畫面上，不存檔。",
 }
 
 #: ⚠️ 罐頭理由 —— 登記表最容易腐爛的形狀是「理由等於重述結論」。

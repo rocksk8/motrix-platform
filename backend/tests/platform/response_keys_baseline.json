@@ -4524,6 +4524,9 @@
    "pageModules.remit-kinds-settings.html",
    "pageModules.remit-kinds-settings.html.key",
    "pageModules.remit-kinds-settings.html.name",
+   "pageModules.report-templates.html",
+   "pageModules.report-templates.html.key",
+   "pageModules.report-templates.html.name",
    "pageModules.reports-hub.html",
    "pageModules.reports-hub.html.key",
    "pageModules.reports-hub.html.name",
@@ -5747,6 +5750,44 @@
    "version"
   ],
   "s": 200
+ },
+ "/api/report-templates": {
+  "k": [
+   "maxRows",
+   "templates",
+   "templates[].columns",
+   "templates[].columns[].key",
+   "templates[].columns[].label",
+   "templates[].columns[].type",
+   "templates[].desc",
+   "templates[].id",
+   "templates[].params",
+   "templates[].params[].hint",
+   "templates[].params[].key",
+   "templates[].params[].label",
+   "templates[].params[].options",
+   "templates[].params[].type",
+   "templates[].title"
+  ],
+  "s": 200
+ },
+ "/api/report-templates/{tid}/excel": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/report-templates/{tid}/pdf": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
+ },
+ "/api/report-templates/{tid}/run": {
+  "k": [
+   "detail"
+  ],
+  "s": 404
  },
  "/api/reports/ar-aging": {
   "k": [

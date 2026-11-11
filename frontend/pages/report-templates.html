@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>自選條件報表 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-format.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!-- 深色模式刻意不在這裡寫任何色彩覆寫：全站是反轉濾鏡，不是另一套色票（見 style.css「DARK MODE」區塊）。 -->
+  <style>
+    .rt-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 28px 32px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h));
+      background: var(--white);
+    }
+    .rt-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 14px; flex-wrap: wrap; }
+    .rt-tab {
+      appearance: none; background: none; border: 0; border-bottom: 3px solid transparent;
+      padding: 10px 18px; font: inherit; font-size: 14px; font-weight: 600; color: var(--text-secondary);
+      cursor: pointer; margin-bottom: -1px;
+    }
+    .rt-tab:hover { color: var(--text-primary); }
+    .rt-tab.is-on { color: var(--text-primary); border-bottom-color: var(--accent); }
+    .rt-tab:focus-visible { outline: 2px solid var(--info, #1D4ED8); outline-offset: 2px; }
+    /* 類別名含 filter：sidebar.js 的「未儲存變更」守門把含 filter／search 的輸入框當純篩選條件，不算待存內容。
+       少了它，填一個條件後下載 Excel（blob 連結點擊）會被守門攔下、跳出「離開此頁面」確認，下載不會發生。 */
+    .rt-desc { margin: 0 0 14px; font-size: 13px; color: var(--text-secondary); line-height: 1.7; }
+    .rt-form { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end; margin-bottom: 12px; }
+    .rt-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+    .rt-field input, .rt-field select {
+      padding: 5px 8px; border: 1px solid var(--border-light); border-radius: var(--radius);
+      font-size: 13px; background: #fff; min-width: 140px; color: var(--text-primary);
+    }
+    .rt-quick { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; font-size: 12px; color: var(--text-secondary); }
+    .rt-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .rt-stale { font-size: 12px; color: var(--warning, #B45309); }
+    .rt-err { margin-bottom: 12px; padding: 9px 14px; background: #FEF2F2; border: 1px solid #DC2626; border-radius: 6px; font-size: 12px; color: #991B1B; }
+    .rt-sum { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    .rt-sum__i { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 16px; background: var(--bg); min-width: 130px; }
+    .rt-sum__l { font-size: 12px; color: var(--text-secondary); }
+    .rt-sum__v { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+    .rt-notes { margin: 0 0 12px; padding-left: 18px; font-size: 12px; color: var(--text-secondary); line-height: 1.8; }
+    .rt-wrap { overflow-x: auto; }
+    .rt-wrap td.r, .rt-wrap th.r { text-align: right; }
+    .rt-empty { border: 1px dashed var(--border); border-radius: var(--radius); padding: 28px 24px; text-align: center; color: var(--text-secondary); font-size: 13px; }
+  </style>
+</head>
+<body x-data="reportTemplatesPage()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <!-- 側欄必須是 <body> 的直接子元素（深色模式的反轉濾鏡排除清單只認直接子元素）。 -->
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="rt-main">
+    <div class="pg">
+      <div class="pg__l">
+        <nav class="pg__crumb" aria-label="目前位置"><span>報表</span> › <span>自選條件報表</span></nav>
+        <h1 class="pg__t">自選條件報表</h1>
+        <p class="pg__s">選一份報表，自己決定日期區間、部門、案件狀態等條件，按「產出報表」重新查詢；可下載 Excel。版面固定，只有條件由您決定。</p>
+      </div>
+    </div>
+
+    <template x-if="loadError">
+      <div class="rt-err" data-testid="rt-load-error" x-text="loadError"></div>
+    </template>
+
+    <template x-if="tpl">
+      <div>
+        <div class="rt-tabs" role="tablist" aria-label="報表種類">
+          <template x-for="t in templates" :key="t.id">
+            <button type="button" class="rt-tab" role="tab" :class="{'is-on': t.id === tpl.id}"
+                    :aria-selected="t.id === tpl.id ? 'true' : 'false'" :data-testid="'rt-tab-' + t.id"
+                    @click="pick(t.id)" x-text="t.title"></button>
+          </template>
+        </div>
+        <p class="rt-desc" x-text="tpl.desc"></p>
+
+        <div class="rt-form" data-testid="rt-form">
+          <template x-for="d in tpl.params" :key="d.key">
+            <label class="rt-field">
+              <span x-text="d.label"></span>
+              <template x-if="d.type === 'date'">
+                <input type="date" class="rt-filter" :data-testid="'rt-param-' + d.key" x-model="form[d.key]" @input="touch()">
+              </template>
+              <template x-if="d.type === 'text'">
+                <input type="text" class="rt-filter" maxlength="40" :data-testid="'rt-param-' + d.key" x-model="form[d.key]" @input="touch()"
+                       @keydown.enter="run()">
+              </template>
+              <template x-if="d.type === 'enum' || d.type === 'department'">
+                <select class="rt-filter" :data-testid="'rt-param-' + d.key" x-model="form[d.key]" @change="touch()">
+                  <option value="">全部</option>
+                  <template x-for="o in d.options" :key="o[0]">
+                    <option :value="String(o[0])" x-text="o[1]"></option>
+                  </template>
+                </select>
+              </template>
+            </label>
+          </template>
+        </div>
+
+        <div class="rt-quick" x-show="hasDates" data-testid="rt-quick">
+          <span>日期快選：</span>
+          <button type="button" class="btn" data-testid="rt-quick-month" @click="quick('month')">本月</button>
+          <button type="button" class="btn" data-testid="rt-quick-quarter" @click="quick('quarter')">本季</button>
+          <button type="button" class="btn" data-testid="rt-quick-year" @click="quick('year')">今年</button>
+          <button type="button" class="btn" data-testid="rt-quick-lastyear" @click="quick('lastyear')">去年</button>
+        </div>
+
+        <div class="rt-actions">
+          <button type="button" class="btn btn-primary" data-testid="rt-run" :disabled="loading" @click="run()"
+                  x-text="loading ? '產出中…' : '產出報表'"></button>
+          <button type="button" class="btn" data-testid="rt-excel" :disabled="loading || exporting || !result || stale" @click="download()"
+                  x-text="exporting ? '下載中…' : '下載 Excel'"></button>
+          <button type="button" class="btn" data-testid="rt-reset" @click="reset()">清除條件</button>
+          <span class="rt-stale" data-testid="rt-stale" x-show="result && stale">條件已變更，下方仍是上一次的結果——請按「產出報表」。</span>
+        </div>
+
+        <template x-if="error">
+          <div class="rt-err" data-testid="rt-error" role="alert" x-text="error"></div>
+        </template>
+
+        <template x-if="result">
+          <div data-testid="rt-result">
+            <div class="rt-sum">
+              <template x-for="s in result.summary" :key="s.label">
+                <div class="rt-sum__i" :data-testid="'rt-sum-' + s.label">
+                  <div class="rt-sum__l" x-text="s.label"></div>
+                  <div class="rt-sum__v" x-text="fmt(s.value, s.type)"></div>
+                </div>
+              </template>
+            </div>
+            <ul class="rt-notes" data-testid="rt-notes">
+              <template x-for="n in result.notes" :key="n"><li x-text="n"></li></template>
+            </ul>
+            <template x-if="result.rows.length === 0">
+              <div class="rt-empty" data-testid="rt-empty">沒有符合這些條件的資料。放寬條件（例如日期區間或部門）再試一次。</div>
+            </template>
+            <template x-if="result.rows.length > 0">
+              <div class="rt-wrap panel">
+                <table class="data-table" data-testid="rt-table">
+                  <thead><tr>
+                    <template x-for="c in result.columns" :key="c.key">
+                      <th :class="{r: isNum(c)}" x-text="c.label"></th>
+                    </template>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="(r, i) in result.rows" :key="i">
+                      <tr data-testid="rt-row">
+                        <template x-for="c in result.columns" :key="c.key">
+                          <td :class="{r: isNum(c)}" x-text="fmt(r[c.key], c.type)"></td>
+                        </template>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+    </template>
+  </main>
+
+  <script src="../static/notif.js"></script>
+  <script>
+    // 自選條件報表：範本清單、參數欄位、欄位目錄全部來自後端（GET /api/report-templates），頁面不寫死有哪些報表或條件。
+    // 條件在伺服器端驗證；這裡只負責收集、顯示與下載。
+    function reportTemplatesPage() {
+      var NUM = { money: 1, pct: 1, count: 1 }
+      return {
+        templates: [], tpl: null, form: {}, forms: {},
+        result: null, shown: null, stale: false,
+        loading: false, exporting: false, error: '', loadError: '', seq: 0,
+        init() {
+          this.load()
+        },
+        _token() {
+          try { return (JSON.parse(localStorage.getItem('motrix_session') || '{}')).token || '' } catch (_e) { return '' }
+        },
+        async load() {
+          try {
+            var res = await fetch('/api/report-templates', { headers: { Authorization: 'Bearer ' + this._token() } })
+            if (res.status === 403) { this.loadError = '自選條件報表需要財務角色，或「營運報表」模組加上財務檢視權限。請聯絡管理員。'; return }
+            if (!res.ok) { this.loadError = '載入失敗（' + res.status + '）'; return }
+            this.templates = (await res.json()).templates || []
+          } catch (_e) { this.loadError = '載入失敗，請重新整理'; return }
+          var want = ''
+          try { want = decodeURIComponent((location.hash || '').replace(/^#/, '')) } catch (_e) { want = '' }
+          var first = this.templates.find(function (t) { return t.id === want }) || this.templates[0]
+          if (first) this.pick(first.id)
+        },
+        pick(id) {
+          if (this.tpl) this.forms[this.tpl.id] = this.form
+          this.tpl = this.templates.find(function (t) { return t.id === id }) || null
+          if (!this.tpl) return
+          var f = this.forms[id]
+          if (!f) { f = {}; this.tpl.params.forEach(function (d) { f[d.key] = '' }) }
+          this.form = f
+          // 換範本：作廢還在路上的產出（否則它回來時會把別的範本的結果畫在這個頁籤底下）
+          this.seq++; this.loading = false; this.exporting = false
+          this.result = null; this.shown = null; this.error = ''; this.stale = false
+          try { history.replaceState(null, '', '#' + id) } catch (_e) { /* 網址不能改只是不記得頁籤 */ }
+        },
+        get hasDates() { return !!this.tpl && this.tpl.params.some(function (d) { return d.key === 'date_from' }) },
+        touch() { this.stale = true },
+        _ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') },
+        quick(kind) {
+          var n = new Date(), y = n.getFullYear(), m = n.getMonth(), a, b
+          if (kind === 'month') { a = new Date(y, m, 1); b = new Date(y, m + 1, 0) }
+          else if (kind === 'quarter') { var q = Math.floor(m / 3) * 3; a = new Date(y, q, 1); b = new Date(y, q + 3, 0) }
+          else if (kind === 'lastyear') { a = new Date(y - 1, 0, 1); b = new Date(y - 1, 11, 31) }
+          else { a = new Date(y, 0, 1); b = new Date(y, 11, 31) }
+          this.form.date_from = this._ymd(a); this.form.date_to = this._ymd(b)
+          this.touch()
+        },
+        reset() {
+          var f = {}; this.tpl.params.forEach(function (d) { f[d.key] = '' })
+          this.form = f; this.touch()
+        },
+        _qs() {
+          var f = this.form, p = new URLSearchParams()
+          Object.keys(f).forEach(function (k) { var v = (f[k] == null ? '' : String(f[k])).trim(); if (v !== '') p.set(k, v) })
+          return p.toString()
+        },
+        async _fail(res) {
+          var j = await res.json().catch(function () { return {} })
+          var d = j.detail
+          return typeof d === 'string' ? d : ('失敗（' + res.status + '）')
+        },
+        async run() {
+          if (this.loading || !this.tpl) return
+          var mine = ++this.seq
+          var tid = this.tpl.id          // 這一趟屬於哪個範本、用哪組條件：之後下載只認這份快照，不認畫面上當下的表單
+          this.loading = true; this.error = ''
+          try {
+            var qs = this._qs()
+            var res = await fetch('/api/report-templates/' + encodeURIComponent(tid) + '/run' + (qs ? '?' + qs : ''),
+              { headers: { Authorization: 'Bearer ' + this._token() } })
+            if (mine !== this.seq) return
+            if (!res.ok) { this.error = await this._fail(res); return }
+            var data = await res.json()
+            if (mine !== this.seq || !this.tpl || this.tpl.id !== tid || data.id !== tid) return
+            this.result = data
+            this.shown = { id: tid, qs: qs }
+            this.stale = false
+          } catch (_e) {
+            if (mine === this.seq) this.error = '產出失敗，請稍後再試'
+          } finally {
+            if (mine === this.seq) this.loading = false
+          }
+        },
+        async download() {
+          var snap = this.shown            // 下載「上一次產出的那組」：範本與條件都取自快照，不看畫面上現在的表單或頁籤
+          if (this.exporting || !this.result || this.stale || !snap || !this.tpl || snap.id !== this.tpl.id) return
+          this.exporting = true; this.error = ''
+          var mine = this.seq
+          try {
+            var res = await fetch('/api/report-templates/' + encodeURIComponent(snap.id) + '/excel' + (snap.qs ? '?' + snap.qs : ''),
+              { headers: { Authorization: 'Bearer ' + this._token() } })
+            if (!res.ok) { if (mine === this.seq) this.error = await this._fail(res); return }
+            var blob = await res.blob()
+            var name = 'MOTRIX_' + this.tpl.title + '.xlsx'
+            var m = /filename\*=UTF-8''([^;]+)/i.exec(res.headers.get('Content-Disposition') || '')
+            if (m) { try { name = decodeURIComponent(m[1]) } catch (_e) { /* 用預設檔名 */ } }   // 伺服器給的檔名帶日期
+            var url = URL.createObjectURL(blob)
+            var a = document.createElement('a')
+            a.href = url
+            a.download = name
+            document.body.appendChild(a); a.click(); document.body.removeChild(a)
+            // 不能在 click() 之後立刻 revoke：瀏覽器還沒開始讀這個 blob 就被收回，下載會偶發地不出現（沒有任何錯誤）
+            setTimeout(function () { URL.revokeObjectURL(url) }, 60000)
+          } catch (_e) {
+            this.error = '下載失敗，請稍後再試'
+          } finally {
+            this.exporting = false
+          }
+        },
+        isNum(c) { return !!NUM[c.type] },
+        fmt(v, type) {
+          if (v === null || v === undefined || v === '') return '—'
+          if (type === 'money' || type === 'count') return window.MotrixFormat ? MotrixFormat.num(v) : String(v)
+          if (type === 'pct') return v + '%'
+          return String(v)
+        },
+      }
+    }
+  </script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

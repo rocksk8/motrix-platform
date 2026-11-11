@@ -861,12 +861,14 @@
     "js:js/reports.js",
     "page:pages/devices.html",
     "page:pages/procurement.html",
+    "page:pages/report-templates.html",
     "page:pages/reports-hub.html",
     "page:pages/reports.html",
     "page:pages/warranty.html",
     "mod:analytics/__init__",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
+    "mod:analytics/api/report_templates",
     "mod:analytics/api/ledger_diff"
    ],
    "tables": [],
@@ -874,6 +876,7 @@
     "/api/dashboard",
     "/api/devices",
     "/api/materials-summary",
+    "/api/report-templates",
     "/api/reports"
    ]
   },

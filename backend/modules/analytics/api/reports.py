@@ -382,6 +382,65 @@ def _settle_actual_profit_margin(settle: dict):
     return round(float(profit or 0)), float(pct or 0)
 
 
+def _sales_perf_rows(cases_all: list) -> list:
+    """依業務負責歸屬彙總案件（_collect() 與報表範本共用同一份算法，不可各寫一份）。"""
+    sm: dict = {}
+    for c in cases_all:
+        k, label = tuple(c["ownerKey"]), c["ownerName"]
+        sm.setdefault(k, {"salesPerson": label, "cases": 0, "total": 0, "received": 0,
+                          "mRevSum": 0.0, "mProfitSum": 0.0,
+                          "amRevSum": 0.0, "amProfitSum": 0.0, "amCnt": 0})
+        sm[k]["cases"]    += 1
+        sm[k]["total"]    += c["total"]
+        sm[k]["received"] += c["receivedAmount"]
+        sm[k]["mRevSum"]    += c["pretax"]
+        sm[k]["mProfitSum"] += c["pretax"] * (c["netMarginPct"] or 0) / 100
+        if c["actualMarginPct"] is not None and c["settleStatus"] == "finalized":
+            sm[k]["amCnt"]       += 1
+            sm[k]["amRevSum"]    += c["pretax"]
+            sm[k]["amProfitSum"] += c["pretax"] * c["actualMarginPct"] / 100
+    sales = []
+    for v in sm.values():
+        sales.append({
+            "salesPerson":        v["salesPerson"],
+            "caseCount":          v["cases"],
+            "totalAmount":        v["total"],
+            "receivedAmount":     v["received"],
+            "collectionRate":     round(v["received"] / v["total"] * 100, 1) if v["total"] > 0 else 0,
+            "avgMarginPct":       round(v["mProfitSum"] / v["mRevSum"] * 100, 1) if v["mRevSum"] > 0 else 0,
+            "avgActualMarginPct": round(v["amProfitSum"] / v["amRevSum"] * 100, 1) if v["amRevSum"] > 0 else None,
+            "settledCount":       v["amCnt"],
+        })
+    sales.sort(key=lambda x: x["totalAmount"], reverse=True)
+    return sales
+
+
+def _dept_perf_rows(cases_all: list) -> list:
+    """依部門彙總案件（同上，單一定義）。"""
+    dm: dict = {}
+    for c in cases_all:
+        k = c["deptName"] or "未分類"
+        dm.setdefault(k, {"deptId": c["deptId"], "deptName": k, "cases": 0, "total": 0, "received": 0,
+                          "mRevSum": 0.0, "mProfitSum": 0.0})
+        dm[k]["cases"]    += 1
+        dm[k]["total"]    += c["total"]
+        dm[k]["received"] += c["receivedAmount"]
+        dm[k]["mRevSum"]    += c["pretax"]
+        dm[k]["mProfitSum"] += c["pretax"] * (c["netMarginPct"] or 0) / 100
+    dept_perf = []
+    for v in dm.values():
+        dept_perf.append({
+            "deptId":         v["deptId"],
+            "deptName":       v["deptName"],
+            "caseCount":      v["cases"],
+            "totalAmount":    v["total"],
+            "receivedAmount": v["received"],
+            "collectionRate": round(v["received"] / v["total"] * 100, 1) if v["total"] > 0 else 0,
+            "avgMarginPct":   round(v["mProfitSum"] / v["mRevSum"] * 100, 1) if v["mRevSum"] > 0 else 0,
+        })
+    dept_perf.sort(key=lambda x: x["totalAmount"], reverse=True)
+    return dept_perf
+
 def _collect(period_start: str, period_end: str, department_id: Optional[int] = None) -> dict:
     conn = get_db()
     rows = conn.execute("""
@@ -536,58 +595,9 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     # `_case_sales_owner()`，年度目標達成率用的是同一組 key——**兩張表一定要
     # 用同一套歸屬**，不然同一個人在「業務員績效」與「目標達成率」會算到不同
     # 案件，而使用者是把這兩張表並排看的。
-    sm: dict = {}
-    for c in cases_all:
-        k, label = tuple(c["ownerKey"]), c["ownerName"]
-        sm.setdefault(k, {"salesPerson": label, "cases": 0, "total": 0, "received": 0,
-                          "mRevSum": 0.0, "mProfitSum": 0.0,
-                          "amRevSum": 0.0, "amProfitSum": 0.0, "amCnt": 0})
-        sm[k]["cases"]    += 1
-        sm[k]["total"]    += c["total"]
-        sm[k]["received"] += c["receivedAmount"]
-        sm[k]["mRevSum"]    += c["pretax"]
-        sm[k]["mProfitSum"] += c["pretax"] * (c["netMarginPct"] or 0) / 100
-        if c["actualMarginPct"] is not None and c["settleStatus"] == "finalized":
-            sm[k]["amCnt"]       += 1
-            sm[k]["amRevSum"]    += c["pretax"]
-            sm[k]["amProfitSum"] += c["pretax"] * c["actualMarginPct"] / 100
-    sales = []
-    for v in sm.values():
-        sales.append({
-            "salesPerson":        v["salesPerson"],
-            "caseCount":          v["cases"],
-            "totalAmount":        v["total"],
-            "receivedAmount":     v["received"],
-            "collectionRate":     round(v["received"] / v["total"] * 100, 1) if v["total"] > 0 else 0,
-            "avgMarginPct":       round(v["mProfitSum"] / v["mRevSum"] * 100, 1) if v["mRevSum"] > 0 else 0,
-            "avgActualMarginPct": round(v["amProfitSum"] / v["amRevSum"] * 100, 1) if v["amRevSum"] > 0 else None,
-            "settledCount":       v["amCnt"],
-        })
-    sales.sort(key=lambda x: x["totalAmount"], reverse=True)
+    sales = _sales_perf_rows(cases_all)
 
-    # dept perf（依部門彙總，跟上面「依業務員」同樣算法，多一層部門分組；
-    # 業務負責人查無帳號／部門的案件歸類「未分類」）
-    for c in cases_all:
-        k = c["deptName"] or "未分類"
-        dm.setdefault(k, {"deptId": c["deptId"], "deptName": k, "cases": 0, "total": 0, "received": 0,
-                          "mRevSum": 0.0, "mProfitSum": 0.0})
-        dm[k]["cases"]    += 1
-        dm[k]["total"]    += c["total"]
-        dm[k]["received"] += c["receivedAmount"]
-        dm[k]["mRevSum"]    += c["pretax"]
-        dm[k]["mProfitSum"] += c["pretax"] * (c["netMarginPct"] or 0) / 100
-    dept_perf = []
-    for v in dm.values():
-        dept_perf.append({
-            "deptId":         v["deptId"],
-            "deptName":       v["deptName"],
-            "caseCount":      v["cases"],
-            "totalAmount":    v["total"],
-            "receivedAmount": v["received"],
-            "collectionRate": round(v["received"] / v["total"] * 100, 1) if v["total"] > 0 else 0,
-            "avgMarginPct":   round(v["mProfitSum"] / v["mRevSum"] * 100, 1) if v["mRevSum"] > 0 else 0,
-        })
-    dept_perf.sort(key=lambda x: x["totalAmount"], reverse=True)
+    dept_perf = _dept_perf_rows(cases_all)
 
     # warranty
     warr = []
