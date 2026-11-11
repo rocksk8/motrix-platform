@@ -604,7 +604,7 @@
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
               <span x-text="selected?.openUrl ? '開啟單據' : selected?.type === 'voucher' ? '開啟傳票' : selected?.type === 'ledger_action' ? '開啟期間與結帳' : selected?.type === 'bonus_case_award' ? '開啟獎金分潤' : selected?.type === 'bonus_correction' ? '開啟獎金更正單' : (isVoucher(selected) ? '開啟案件管理' : '開啟報價單')"></span>
             </a>
-            <button class="btn btn-sm" x-show="selected?.type !== 'case_change' && selected?.type !== 'bonus_case_award' && selected?.type !== 'bonus_correction'" @click="previewItem(selected)" :disabled="previewFetching"
+            <button class="btn btn-sm" x-show="hasPreview(selected)" @click="previewItem(selected)" :disabled="previewFetching"
                     style="font-size:12px;color:var(--accent);background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;display:inline-flex;align-items:center;gap:5px;cursor:pointer">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               預覽
@@ -1309,6 +1309,7 @@
           if (item?.type === 'completion_note') return '/api/completion-notes'
           if (item?.type === 'payment_request') return '/api/payment-requests'
           if (item?.type === 'voucher') return '/api/vouchers'
+          if (item?.type === 'payslip') return '/api/payslips'          // 勞報單：2026-11-11 原本漏了這行，預覽落到 /api/quotations/PS-…/pdf-download（404＋audit not_found）
           if (item?.type === 'ledger_action') return '/api/ledger/action-requests'
           // 吃案件單號：/api/bonus/cases/{quote_no}/approve|reject
           if (item?.type === 'bonus_case_award') return '/api/bonus/cases'
@@ -1373,8 +1374,16 @@
           return this.isVoucher(item) ? '建立日期' : '報價日期'
         },
 
+        // 有 PDF／預覽端點的單據類型（apiBase 對得到的）。其餘類型（期間結帳、自訂紀錄／模組定義、已結案變更…）沒有可預覽的檔，
+        // 2026-11-11：原本一律落到 /api/quotations/{單號}/pdf-download，必定 404 並在 audit 留一筆 case.access_denied(not_found)。
+        hasPreview(item) {
+          return !!item && ['quotation', 'contractor_voucher', 'invoice_voucher', 'shipping_note', 'completion_note',
+                            'payment_request', 'voucher', 'payslip'].includes(item.type)
+        },
+
         async previewItem(item) {
           // 額外支出跟已結案變更一樣沒有 PDF 可預覽
+          if (!this.hasPreview(item)) return
           if (!item || item.type === 'case_change' || item.type === 'dispatch_file_delete' || item.type === 'extra_expense'
               || item.type === 'extra_expense_change' || item.type === 'bonus_case_award' || item.type === 'bonus_correction') return
           this.previewFetching = true

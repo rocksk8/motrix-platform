@@ -1,5 +1,5 @@
 {
- "core_version": "1.155",
+ "core_version": "1.156",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -64,12 +64,14 @@
    "demo_module_tables": "def()",
    "get_db": "def()",
    "get_demo_db": "def()",
+   "get_request_ctx": "def()",
    "init_db": "def(path=…)",
    "is_demo_mode": "def()",
    "next_entity_code": "def(conn, table, prefix, code_col=…)",
    "quick_check": "def(path)",
    "reset_demo_db": "def()",
    "set_demo_mode": "def(flag)",
+   "set_request_ctx": "def(method, path)",
    "spawn_bg_thread": "def(target, args=…, kwargs=…, daemon=…)"
   },
   "core:heartbeat_job": {
@@ -308,7 +310,7 @@
    "SUMMARY_LINK_FIELDS": "const",
    "SUMMARY_PURPOSE_MODULES": "const",
    "SYSTEM": "const",
-   "case_access_allowed": "def(conn, q, user, *, allow_approver=…, allow_module=…)",
+   "case_access_allowed": "def(conn, q, user, *, allow_approver=…, allow_module=…, allow_read=…)",
    "case_data_json": "def(conn, quote_no)",
    "case_data_json_rows": "def(conn, limit, customfields_only=…)",
    "case_documents_readable": "def(conn, quote_no, user)",
@@ -323,7 +325,7 @@
    "case_sales_department": "def(conn, quote_no)",
    "case_summary_scope": "def(user, purpose=…)",
    "deny_case": "def(conn, quote_no, user, reason)",
-   "guard_case_access": "def(conn, quote_no, user, *, allow_approver=…, allow_module=…)",
+   "guard_case_access": "def(conn, quote_no, user, *, allow_approver=…, allow_module=…, allow_read=…)",
    "is_document_approver": "def(data_json, user, conn)",
    "require_case": "def(user, row, quote_no, *, scope=…)",
    "require_case_money": "def(user, row, quote_no, *, scope=…)"

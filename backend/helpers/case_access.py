@@ -36,8 +36,21 @@ def case_not_found_message(quote_no: str) -> str:
 
 def _audit_case_denial(user: dict, quote_no: str, reason: str) -> None:
     """記真正原因。背景執行緒寫：呼叫端可能正拿著寫鎖、或例外之後會 rollback（同一條連線寫 audit 會一起消失）。"""
-    from db import get_db, spawn_bg_thread
+    from db import get_db, spawn_bg_thread, get_request_ctx
     from datetime import datetime
+
+    u = user or {}
+    # 診斷鍵（2026-11-11，只加不改、reason 仍在）：是哪支端點、什麼角色被拒——正式機 48 筆只有 reason，無法歸因。
+    # 在呼叫端執行緒算好再交給背景執行緒（不在背景緒讀 DB／解析使用者）。
+    detail = {"reason": reason, "role": u.get("role") or ""}
+    ctx = get_request_ctx()
+    if ctx:
+        detail["method"], detail["path"] = ctx
+    try:
+        from helpers.auth import user_has_module
+        detail["case_manage"] = bool(u and user_has_module(u, "case_manage"))
+    except Exception:                                        # noqa: BLE001  診斷鍵算不出來就不記，不影響回應
+        pass
 
     def _write(uid, uname, dname):
         try:
@@ -46,13 +59,12 @@ def _audit_case_denial(user: dict, quote_no: str, reason: str) -> None:
                 c.execute("INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail) "
                           "VALUES (?,?,?,?,?,?,?,?,?)",
                           (datetime.now().isoformat(), uid, uname, dname, CASE_DENIAL_AUDIT, "quotation", quote_no, "",
-                           json.dumps({"reason": reason}, ensure_ascii=False)))
+                           json.dumps(detail, ensure_ascii=False)))
                 c.commit()
             finally:
                 c.close()
         except Exception:                                    # noqa: BLE001  記錄失敗不影響回應
             pass
-    u = user or {}
     spawn_bg_thread(_write, args=(u.get("id"), u.get("username") or "", u.get("display_name") or ""))
 
 
@@ -154,7 +166,7 @@ def is_document_approver(data_json: str, user: dict, conn) -> bool:
 
 
 def case_access_allowed(conn, q, user: dict, *, allow_approver: bool = False,
-                        allow_module: str = None) -> bool:
+                        allow_module: str = None, allow_read: bool = False) -> bool:
     """單一案件列 `q`（需含 sales_person_id、sales_person、assigned_user_ids、data_json）准不准這個人動。
     規則只有這一份：row_access `case`／scope="owner"，否則 `allow_module`，否則（`allow_approver`）簽核人。
     `guard_case_access()` 與 `routers/quotations.py::_guard_case()` 都呼叫這一支（稽核 Y-5）。"""
@@ -162,13 +174,18 @@ def case_access_allowed(conn, q, user: dict, *, allow_approver: bool = False,
         return False                        # M01 不在 ⇒ 不放行（連 admin 也一樣；row_access 的 fail-closed 同一個原則）
     if row_access.visible("case", user, q, scope="owner"):
         return True
+    # `allow_read`：案件頁讀得到的人（scope="read"＝擁有者＋持 cashier，CM14b）也放行——給「案件頁上順手載入的唯讀端點」
+    # （完結案五關、PDF 版本清單、PDF 下載、材料申請審核摘要）用，可見範圍＝案件頁本體，不寬也不嚴（稽核 D AT-M1c）。
+    # 2026-11-11：這幾支原本只認擁有者規則，財務開別人的案件頁時每次靜默被拒（正式機 48 筆 case.access_denied 中 44 筆）。
+    if allow_read and row_access.visible("case", user, q, scope="read"):
+        return True
     from helpers.auth import user_has_module
     return bool((allow_module and user_has_module(user, allow_module))
                 or (allow_approver and is_document_approver(q["data_json"], user, conn)))
 
 
 def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool = False,
-                      allow_module: str = None):
+                      allow_module: str = None, allow_read: bool = False):
     """「用 quote_no 直接取單一案件」的共用守門（2026-09-13 模組權限稽核）。
 
     `quote_no` 可列舉（`MQ-YYYYMM-NNN`），少了這道就是 IDOR。規則是 `row_access`
@@ -205,7 +222,7 @@ def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool =
         q = None
     if not q:
         deny_case(conn, quote_no, user, "not_found")
-    if not case_access_allowed(conn, q, user, allow_approver=allow_approver, allow_module=allow_module):
+    if not case_access_allowed(conn, q, user, allow_approver=allow_approver, allow_module=allow_module, allow_read=allow_read):
         deny_case(conn, quote_no, user, "denied")          # M01-O1：看不到＝不存在（同一個 404）
     return q
 

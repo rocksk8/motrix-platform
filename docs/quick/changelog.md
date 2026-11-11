@@ -16,6 +16,13 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-11-11 正式機評估衍生：webauthn-config 404、case.access_denied（fix/ops-webauthn404-case-denied）
+
+- **webauthn-config 404（32 次）**：根因＝公司設定頁每次載入都 GET 該端點並把 404 當「Passkey 已停用」訊號。改問 `/api/system/webauthn-config-status`，停用時不再打。
+- **case.access_denied（48 次）**：44 筆＝財務（cashier）開別人的案件頁，五關／PDF 版本／材料審核摘要用擁有者規則被靜默拒；改讀取規則（沒資格的人照舊 404）。4 筆 not_found＝簽核佇列的勞報單「預覽」落到報價單端點（PS-…），改白名單。audit detail 補 method／path／role。
+- **PUT 報價單 403（14 次，全是最高管理者）**：待審核／簽核中時表單對非簽核人沒鎖，自動存檔送必 403 的 PUT（靜默失敗）；非簽核人（最高管理者、申請人…）開待審核／簽核中的單改為整張鎖唯讀＋橫幅「僅簽核人可編輯」（N7，使用者確認；表單 V3.42）。
+- 測試：`test_e2e_webauthn_config_no_404_2026_11_11.py`、`test_case_read_rule_denials_2026_11_11.py`、`test_frontend_ops_guards_2026_11_11.py`。
+
 ## 2026-11-11 UX 密度 C4：簽核流程設定頁預設收合（feat/ux-density-c456）
 
 - `frontend/pages/approval-settings.html`（平台頁，只改呈現）：頁首改三句話；「統一流程 vs 獨立設定」三段長文字換成一張並排對照示意圖＋一行說明；每個單據類型預設收成一列「名稱｜統一流程／獨立設定：現況摘要｜[調整]」，展開後才出現原本的套用範圍開關與兩邊預覽（「現在生效／儲存後變這個」）；各簽核流程編輯區塊預設只留標題列與摘要，展開才看到簽核層、新增簽核層等控制項；左側加錨點目錄（寬螢幕，點擊會一併展開）；底部「說明」改預設收合、內容不刪。所有控制項、`x-model`、`data-saved-field`、`data-testid`、儲存內容與權限不變；無 API、無資料庫、無設定變動。收合後頁高約 2 屏（原 6135px）。

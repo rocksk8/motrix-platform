@@ -1108,6 +1108,12 @@
   <div class="form-layout">
 
     <div class="form-left" :class="{'is-locked': q.status === '已送出' && !unlocked, 'approver-locked': isApproverLocked()}" :data-approver-locked="isApproverLocked() ? '1' : '0'">
+      <template x-if="pendingReadOnlyBanner()">
+        <div data-testid="qf-pending-lock-banner" role="status" style="margin:0 0 12px;padding:10px 14px;background:#FEF3C7;border:1px solid #FDE68A;border-radius:var(--radius);font-size:13px;color:#92400E;line-height:1.6">
+          <strong>此單目前<span x-text="q.status"></span>，僅簽核人可編輯。</strong>
+          您目前是唯讀；要修改內容，申請人請先按上方「收回草稿」，或請簽核人（<span x-text="pendingApproverLabel()"></span>）退回修改。
+        </div>
+      </template>
 
       <!-- 樂觀鎖衝突（只有「存既有單的 PUT」撞 409 才設；新單 POST 的單號衝突不算）。放在流程裡第一個、sticky 貼在工具列下方：
            不蓋住下面的通知條（用 fixed 會蓋住「看說明／我知道了」）。載入最新版成功（loadQuote）或存檔成功才清。 -->
@@ -2549,6 +2555,7 @@
   // V3.33（2026-10-17，T71）：取消勾選補登時一律還原原本的單號（含「原本是空」）；不再把過去月份的預覽單號留在單號欄
   // V3.32（2026-10-17，T71）：補登模式的標題／單號欄顯示預覽單號；複製為新單不帶補登來歷註記
   // V3.31（2026-10-17，T70-1）：新增模式多一個「補登歷史案件」區塊（僅最高管理者且設定中心開關有效時出現；日期限過去月份、預覽單號、原因必填、走專用補登端點）
+  // V3.41（2026-11-11，ops）：待審核／簽核中且非簽核人（最高管理者或申請人）開著單時，自動存檔不再送 PUT（必 403＋靜默失敗），改提醒一次走正式流程。
   // V3.40（2026-11-11，UX 提案 C1～C3）：成本區（成本欄＋右側 INTERNAL 面板）預設收合成一行「內部利潤」摘要，展開後記在這台瀏覽器；沒有任何金額時不上警示色；品項表收合時 7 欄（備註改列下展開）、可填格有淺底／下底線；客戶區每欄「顯示／隱藏」改小眼睛、個資告知預設收合、統編 placeholder 改範例
   // V3.35（2026-11-11）：品項明細三個多行欄（品名／廠牌型號／備註）載入既有單、改值、欄寬變動時自動撐高，不再看起來被裁切
   // V3.36（2026-11-11）：送審前置檢查、送審失敗顯示後端原因並還原狀態、已送出單選「已成案」改只打 PATCH（修 EM11 起的卡住）。
@@ -2556,7 +2563,8 @@
   // V3.39（2026-11-11，簽核人編輯）：簽核人檢視待審核／簽核中時欄位預設 disabled、工具列常駐「編輯」鈕（reconfirm_mode=on 才顯示）；核准前彈窗退場「編輯內容」選項、只留「維持核准」；第 3 層以後編輯提示整條回第 1 層。
   // V3.41（2026-11-11，多人同時編輯保護）：存檔撞樂觀鎖 409（手動／自動／送審共用 apiSave）時，頂端顯示持續橫幅「有人在你之後也改過」＋「載入最新版」鈕，並暫停自動存檔；
   //   原本只有手動「儲存草稿」會 alert，60 秒自動存檔撞 409 是無聲失敗（使用者不知道自己的修改一直沒存進去）。
-  const FORM_VERSION = 'V3.41'
+  // V3.42（2026-11-11，ops）：待審核／簽核中，非簽核人（最高管理者、申請人、其他人）開著單時整張表單鎖唯讀＋上方橫幅「僅簽核人可編輯」（原本欄位可編輯、存檔必 403、自動存檔靜默失敗）。
+  const FORM_VERSION = 'V3.42'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -3568,6 +3576,7 @@
         if (this.isApproverLocked()) return   // 簽核人檢視中不存檔（PUT 在待審核會被擋）；欄位已鎖，這是最後一道防線
         if (this.reviewEditing) return        // 複查編輯只走「儲存複查編輯」（POST /review-edit）；PUT 在待審核狀態本來就會被擋
         if (this.saveConflictBanner) return   // 已知衝突：等使用者載入最新版（橫幅上的按鈕）；手動「儲存草稿」仍可再試（對方若剛好又存過會再 409）
+        // （待審核／簽核中的非簽核人也由 isApproverLocked() 擋在最上面：整張鎖唯讀＋橫幅，不會走到這裡送必 403 的 PUT）
         this.apiSave(this.isNewRecord).then(ok => {
           if (ok) {
             this.isNewRecord = false
@@ -4064,8 +4073,14 @@
       },
 
       // 簽核人檢視待審核／簽核中：品項欄位預設鎖住（PUT 在待審核本來就會被擋，鎖住才不會讓人以為改了能存）；按「編輯」進入複查編輯（reviewEditing）才解鎖。
+      // 2026-11-11（ops）：不只簽核人——非簽核人（最高管理者、申請人、其他人）開著待審核／簽核中的單也一律鎖唯讀（只有解鎖編輯 unlocked 例外）。
+      // 原本只鎖簽核人，其餘人欄位可編輯但 PUT 必 403、自動存檔靜默失敗＝以為存了（正式機 14 次，全是最高管理者）。上方橫幅說明原因與出路。
       isApproverLocked() {
-        return (this.q.status === '待審核' || this.q.status === '簽核中') && !this.reviewEditing && this.isCurrentTierApprover()
+        return (this.q.status === '待審核' || this.q.status === '簽核中') && !this.reviewEditing && (this.isCurrentTierApprover() || !this.unlocked)
+      },
+      // 非簽核人看待審核／簽核中單的橫幅（簽核人本人不顯示：他有自己的工具列與「編輯」鈕）
+      pendingReadOnlyBanner() {
+        return (this.q.status === '待審核' || this.q.status === '簽核中') && !this.reviewEditing && !this.unlocked && !this.isCurrentTierApprover()
       },
       // 第 3 層（含）以後的編輯＝整條簽核鏈回第 1 層（currentTier 0 起算 ⇒ >=2）；伺服器為準，這只是畫面提示
       reviewEditResetsChain() { return (this.q.approval?.currentTier ?? 0) >= 2 },

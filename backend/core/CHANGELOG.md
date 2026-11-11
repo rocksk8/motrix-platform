@@ -1,5 +1,10 @@
 # L0／L1 底層 更新紀錄
 
+## 1.156（next，未取號）— 2026-11-11（fix/ops-webauthn404-case-denied；case.access_denied 診斷鍵、L1 案件守門 `allow_read`）
+- L1（新增）：`helpers.case_access.case_access_allowed／guard_case_access` 新增 `allow_read`（讀取規則 scope="read" 也放行，預設 False＝行為不變）；`db.set_request_ctx／get_request_ctx`（auth_middleware 每個 /api/ 請求設 method＋path，`spawn_bg_thread` 帶進背景緒；只供事後診斷，授權不得依賴）。
+- L1（診斷）：`deny_case` 寫的 `case.access_denied` detail 補 `method／path／role／case_manage`（只加鍵）。
+- 前端：公司設定頁不再用 `GET /api/settings/webauthn-config` 的 404 當 Passkey 開關（每開一次頁就一筆 404，正式機 32 次），改問 `/api/system/webauthn-config-status`；簽核佇列的「預覽」改白名單，勞報單走 `/api/payslips/{no}/pdf-download`，沒有 PDF 端點的類型不再落到報價單端點（原本必 404＋audit not_found）。
+- 測試：`tests/test_e2e_webauthn_config_no_404_2026_11_11.py`。
 ## 1.155（next，未取號）— 2026-11-08（T79；option_list 重新啟用已停用選項改需核准）〔train_number：1.154 → 1.155〕
 - **行為變更（使用者 2026-11-08 裁示）**：治理層 `_cmp_option_list`（`routers/def_pipeline.py`）把「重新啟用已停用的選項」從中性改判為放寬，需第二位最高管理者核准＋確認期間（原先判為中性是產品設計缺口，hichan-8 審A車時發現）；停用本身維持收緊、立即生效不變；第一次發布（沒有舊版）出現的選項沒有「已停用」歷史，不算重新啟用。**上線備註**：既有正式機升級後，有待核准的 option_list 版本時，同一清單不能再直接發布，連緊急停用都要先請審核人退回待核准版本（管線既有行為，非這次新增）。
 - 測試：`backend/tests/platform/test_option_lists_t62.py`；`backend/tests/platform/test_gov_contract_2026_11_08.py` 補合法 loose 種子（`seeds_2026_11_08.json`），`KNOWN_P3_NOT_APPLICABLE` 清空（option_list 現適用 P3）。

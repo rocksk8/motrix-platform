@@ -1476,14 +1476,21 @@
         },
 
         async loadWebauthnConfig() {
+          // 2026-11-11 正式機 log 出現 32 次 `GET /api/settings/webauthn-config` 404：
+          // 原本（2026-09-16）拿這支設定端點的 404 當「Passkey 已停用」的開關訊號，
+          // 每開一次本頁就製造一筆 404。開關訊號改問專門回答這件事的公開端點
+          // /api/system/webauthn-config-status（login／change-password 也是用它，永遠回 200），
+          // 功能啟用才去讀設定；停用時不再打 webauthn-config。
+          let enabled = false
+          try {
+            const s = await fetch('/api/system/webauthn-config-status')
+            if (s.ok) enabled = !!(await s.json()).enabled
+          } catch (e) { /* 查不到就當停用：卡片不顯示，不影響頁面其他區塊 */ }
+          this.passkeyFeatureEnabled = enabled
+          if (!enabled) return
           const r = await fetch('/api/settings/webauthn-config', {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
-          // 2026-09-16 Passkey 功能暫緩：這支停用時回 404，直接拿它當開關訊號，
-          // 不必為了決定一張卡片顯不顯示，再多打一次
-          // /api/system/webauthn-config-status。這支端點一直都存在，
-          // 所以 404 只會是「功能被關掉」，不會是舊版後端沒有這條路由。
-          this.passkeyFeatureEnabled = r.status !== 404
           if (r.ok) {
             const data = await r.json()
             this.webauthnRpId = data.rp_id || ''
