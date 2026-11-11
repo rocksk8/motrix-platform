@@ -7,8 +7,6 @@
 - `backend/autostart.bat`、`restart.bat`、`start.bat`、`start_server.ps1`：uvicorn 啟動行加 `--forwarded-allow-ips 127.0.0.1`（＝預設值，釘死以防被環境變數設成 `*`）。
 - 測試：`tests/test_trusted_client_ip_2026_11_11.py`、`tests/test_deploy_dashboard_local_only_2026_09_22.py`（HC1d）。
 
-## 1.156（next，未取號）— 2026-11-11（fix/ops-webauthn404-case-denied；case.access_denied 診斷鍵、L1 案件守門 `allow_read`）
-
 ## 1.157（next，未取號）— 2026-11-11（fix/ops-webauthn404-case-denied；case.access_denied 診斷鍵、L1 案件守門 `allow_read`）〔train_number：1.156 → 1.157〕
 
 - L1（新增）：`helpers.case_access.case_access_allowed／guard_case_access` 新增 `allow_read`（讀取規則 scope="read" 也放行，預設 False＝行為不變）；`db.set_request_ctx／get_request_ctx`（auth_middleware 每個 /api/ 請求設 method＋path，`spawn_bg_thread` 帶進背景緒；只供事後診斷，授權不得依賴）。
