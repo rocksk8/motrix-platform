@@ -143,7 +143,8 @@ def test_settings_get_masks_put_keeps_and_replaces(client, make_user, ln):
     g = client.get("/api/settings/line-notify", headers=sa).json()
     assert g.pop("events") == [{"key": "approval_review_edit", "name": "報價單審核中被簽核人編輯", "enabled": False},
                                {"key": "warranty_expiry", "name": "設備保固即將到期", "enabled": False}]      # 預設全關
-    assert g == {"enabled": True, "channel_access_token": "••••••••", "public_base_url": "", "include_links": False, "callback_url": ""}
+    assert g == {"enabled": True, "channel_access_token": "••••••••", "public_base_url": "", "include_links": False, "callback_url": "",
+                 "login_channel_id": "", "login_channel_secret": ""}
     assert TOKEN not in client.get("/api/settings/line-notify", headers=sa).text
     # 遮罩值／空值 ＝ 保留原 token
     assert client.put("/api/settings/line-notify", headers=sa, json={"enabled": False, "channel_access_token": "••••••••"}).status_code == 200

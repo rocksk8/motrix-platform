@@ -1,19 +1,25 @@
 # -*- coding: utf-8 -*-
 """LINE Messaging API 發送管道（2026-11-11，T79 候選票；信件通知的並行通道）。
 
-[單位] helper:line_notify    [層] L1    [穩定度] 實作（已接事件通道；OAuth 綁定流程尚未接，等對外 callback 網址）
-[公開介面] CALLBACK_PATH, HTTP_TIMEOUT, LINE_API_BASE, LINKS_KEY, LINK_PAGES, MAX_TEXT, MULTICAST_LIMIT, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, WIRED_EVENTS, build_text, callback_url, enabled, event_enabled, events_view, ids_for, is_linked, link_user, links_enabled, mask, normalize_public_base, notify_users, public_base, push, push_async, quota, safe_link, set_event, settings_lock, unlink_user, valid_token, verify_token
+[單位] helper:line_notify    [層] L1    [穩定度] 實作（事件通道＋綁定儲存；OAuth 綁定流程在 helper:line_login）
+[公開介面] CALLBACK_PATH, HTTP_TIMEOUT, LINE_API_BASE, LINKS_KEY, LINK_PAGES, MAX_TEXT, MULTICAST_LIMIT, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, WIRED_EVENTS, binding_view, build_text, callback_url, enabled, event_enabled, events_view, ids_for, is_linked, link_user, links_enabled, login_credentials, mask, normalize_public_base, notify_users, public_base, push, push_async, quota, safe_link, set_confirmed, set_event, settings_lock, unlink_user, valid_login_id, valid_login_secret, valid_token, verify_token
 [契約題] tests/platform/test_line_notify_t79.py、modules/case/tests/test_line_review_edit_2026_11_11.py
 [不變式]
   ⓪ 曝露面：`public_base_url`（Tunnel 公開網域，callback 用）與 `include_links`（訊息是否帶連結，預設關）是**兩個獨立設定**（2026-11-11 PM 裁示）。
      有公開網域 ≠ 訊息帶連結；帶連結要兩者都成立，且只限 `LINK_PAGES` 白名單頁面，其餘連結一律不帶（不改寫）。
   ① 本檔不 import 業務模組；對 `email_notify` 只在函式內惰性 import（`email_notify` 頂層 import 本檔，反過來不可循環）；寄不寄由 `email_notify.email_send_policy()`
      （環境變數／`.no_email_send`）決定——**開發機標記同時擋信件與 LINE**（開發機誤推真實同仁的事故同一類）。
+     ⚠️ 被擋的只有「推播」（`push`）；`verify_token`／`quota` 是唯讀 GET（不發訊息、不耗額度）**刻意不受開發機標記影響**，讓部署前能先確認 token——不是漏掉，不要「補」。
+     若 PM 要「開發機完全不對外」，那是 PM 的決定，不是審查項目。
   ② 唯一的對外呼叫是 `_http`（urllib）；測試只換 `_http`。conftest NETGUARD 擋 urllib.request.urlopen，所以測試沒換就連不出去。
   ③ 回傳值沿用信件的四種結果（字串值與 `email_notify.SEND_*` 相同）：sent／transient_fail／permanent_fail／skipped。永不拋例外。
   ④ channel access token 存 `system_settings.line_notify.channel_access_token`（admin 在設定頁輸入；與 SMTP 密碼同一慣例）。
      GET 一律遮罩、PUT 收到遮罩值＝保留原值；每日 JSON 匯出以 json_remove 挖掉（archive.py）；**不寫進 log**。
   ⑤ 內容只用呼叫端給的文字：信件現有規則是「外部系統不帶金額」，LINE 同一規則（呼叫端負責，本檔不判斷內容）。
+  ⑥ LINE Login channel 的 secret（`login_channel_secret`）與 token 同一慣例：GET 遮罩、PUT 遮罩值＝保留、每日 JSON 匯出挖掉、不寫 log；
+     `login_channel_id`（純數字）不是祕密。兩者格式不合一律不收、不用（`login_credentials()` 回 ("", "")）。
+  ⑦ 綁定紀錄 `line_links[username] = {userId, linkedAt[, confirmed]}`；`confirmed` 是綁定後推確認訊息的結果（True／False／None＝沒驗），只由
+     `set_confirmed` 寫；重新綁定（`link_user`）會清掉舊的 `confirmed`。
 """
 import json
 import logging
@@ -61,6 +67,28 @@ _TOKEN_RE = re.compile(r"^[A-Za-z0-9+/=._-]{20,512}$")
 
 def valid_token(tk) -> bool:
     return isinstance(tk, str) and bool(_TOKEN_RE.match(tk))
+
+
+#: LINE Login channel：Channel ID 是純數字；Channel secret 是 32 位十六進位。
+_LOGIN_ID_RE = re.compile(r"^[0-9]{6,20}$")
+_LOGIN_SECRET_RE = re.compile(r"^[0-9a-fA-F]{32}$")
+
+
+def valid_login_id(v) -> bool:
+    return isinstance(v, str) and bool(_LOGIN_ID_RE.match(v))
+
+
+def valid_login_secret(v) -> bool:
+    return isinstance(v, str) and bool(_LOGIN_SECRET_RE.match(v))
+
+
+def login_credentials() -> tuple:
+    """`(channel_id, channel_secret)`；任一個沒設或格式不合 ⇒ `("", "")`（LINE Login 視為沒設好）。"""
+    c = _cfg()
+    cid, sec = c.get("login_channel_id"), c.get("login_channel_secret")
+    if valid_login_id(cid) and valid_login_secret(sec):
+        return cid, sec
+    return "", ""
 
 
 def settings_lock():
@@ -339,6 +367,31 @@ def unlink_user(username: str) -> bool:
 def is_linked(username: str) -> bool:
     rec = _links().get(username)
     return isinstance(rec, dict) and bool(_USER_ID_RE.match(str(rec.get("userId") or "")))
+
+
+def set_confirmed(username: str, ok) -> None:
+    """記下「綁定後確認訊息」的結果：True＝推送成功、False＝LINE 回永久失敗（常見：Login 與 Messaging channel 不在同一 Provider）、None＝沒驗。沒綁定 ⇒ 什麼都不做。"""
+    with _lock:
+        links = dict(_links())
+        rec = links.get(username)
+        if not isinstance(rec, dict):
+            return
+        rec = dict(rec)
+        if ok is None:
+            rec.pop("confirmed", None)
+        else:
+            rec["confirmed"] = bool(ok)
+        links[username] = rec
+        _set_setting(LINKS_KEY, links)
+
+
+def binding_view(username: str) -> dict:
+    """給使用者自己看的綁定狀態；**不含 userId**（那是 LINE 端的識別碼，沒必要回到瀏覽器）。"""
+    rec = _links().get(username)
+    if not (isinstance(rec, dict) and _USER_ID_RE.match(str(rec.get("userId") or ""))):
+        return {"linked": False, "linkedAt": "", "confirmed": None}
+    c = rec.get("confirmed")
+    return {"linked": True, "linkedAt": str(rec.get("linkedAt") or ""), "confirmed": c if isinstance(c, bool) else None}
 
 
 def ids_for(usernames) -> list:

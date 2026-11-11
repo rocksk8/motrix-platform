@@ -3412,6 +3412,18 @@
   ],
   "s": 200
  },
+ "/api/line/binding": {
+  "k": [
+   "available",
+   "confirmed",
+   "linked",
+   "linkedAt"
+  ],
+  "s": 200
+ },
+ "/api/line/callback": {
+  "s": 400
+ },
  "/api/list-prefs/{list_key}": {
   "k": [
    "customOrder",
@@ -6556,6 +6568,8 @@
    "events[].key",
    "events[].name",
    "include_links",
+   "login_channel_id",
+   "login_channel_secret",
    "public_base_url"
   ],
   "s": 200

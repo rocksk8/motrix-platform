@@ -2236,6 +2236,7 @@ def _daily_backup_tables() -> dict:
         #   google_calendar.client_secret    OAuth client secret
         #   google_calendar.refresh_token    可以無限換取 access token
         #   line_notify.channel_access_token LINE 官方帳號的長效 token（能以官方帳號名義推播）
+        #   line_notify.login_channel_secret LINE Login channel 的 secret（能用 code 換出使用者的 id_token）
         # 這幾個跟使用者的 totp_secret 同一個等級——寫進人看得懂的 JSON
         # 等於把可直接使用的認證素材放進備份資料夾（還會鏡像到雲端）。
         # 用 json_remove() 只挖掉這幾個欄位，其餘設定（收件人、SMTP 主機、
@@ -2245,7 +2246,7 @@ def _daily_backup_tables() -> dict:
         "系統設定":         ("SELECT key, CASE key "
                              "WHEN 'email_notify' THEN json_remove(value_json, '$.smtp_password') "
                              "WHEN 'google_calendar' THEN json_remove(value_json, '$.client_secret', '$.refresh_token') "
-                             "WHEN 'line_notify' THEN json_remove(value_json, '$.channel_access_token') "
+                             "WHEN 'line_notify' THEN json_remove(value_json, '$.channel_access_token', '$.login_channel_secret') "
                              "ELSE value_json END AS value_json, updated_at "
                              "FROM system_settings ORDER BY key"),
         # ── 案件與單據 ──

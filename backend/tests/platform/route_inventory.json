@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 911,
-  "endpoints_api": 907,
-  "write_total": 493,
-  "write_api": 493,
-  "get_api": 414,
-  "distinct_paths_api": 766,
+  "endpoints_total": 916,
+  "endpoints_api": 912,
+  "write_total": 496,
+  "write_api": 496,
+  "get_api": 416,
+  "distinct_paths_api": 770,
   "write_with_body_api": 362,
-  "write_with_path_param_api": 355
+  "write_with_path_param_api": 356
  },
  "select_star": {
   "modules": 287,
@@ -124,6 +124,16 @@
    "body": false
   },
   "DELETE /api/ledger/category-map/{category}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
+  "DELETE /api/line/binding": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
+  "DELETE /api/line/binding/{username}": {
    "w": true,
    "pp": 1,
    "body": false
@@ -1264,6 +1274,16 @@
    "body": false
   },
   "GET /api/license/status": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/line/binding": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/line/callback": {
    "w": false,
    "pp": 0,
    "body": false
@@ -3407,6 +3427,11 @@
    "w": true,
    "pp": 1,
    "body": true
+  },
+  "POST /api/line/binding/start": {
+   "w": true,
+   "pp": 0,
+   "body": false
   },
   "POST /api/lodging/quotes": {
    "w": true,

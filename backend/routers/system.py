@@ -2680,7 +2680,8 @@ def test_google_calendar(authorization: str = Header(None)):
 
 # public_base_url（Tunnel 公開網域，LINE Login callback 用）與 include_links（訊息是否帶連結）是**兩個獨立開關**：
 # 有公開網域不代表訊息帶連結（PM 裁示）。include_links 預設關，且要有 public_base_url 才能開。
-_LINE_DEFAULTS = {"enabled": False, "channel_access_token": "", "public_base_url": "", "include_links": False}
+_LINE_DEFAULTS = {"enabled": False, "channel_access_token": "", "public_base_url": "", "include_links": False,
+                  "login_channel_id": "", "login_channel_secret": ""}
 
 
 @router.get("/api/settings/line-notify")
@@ -2692,6 +2693,7 @@ def get_line_notify(authorization: str = Header(None)):
         cfg = {}
     safe = {**_LINE_DEFAULTS, **{k: cfg[k] for k in _LINE_DEFAULTS if k in cfg}}
     safe["channel_access_token"] = _ln.mask(cfg.get("channel_access_token"))
+    safe["login_channel_secret"] = _ln.mask(cfg.get("login_channel_secret"))
     safe["callback_url"] = _ln.callback_url()       # 要貼進 LINE Login channel 的 Callback URL；沒有對外網址 ⇒ ""
     # 「同時發 LINE」的信件類型開關（只列已接線的類型；預設全關）
     from helpers import mail_types as _mt
@@ -2738,6 +2740,19 @@ def set_line_notify(body: dict = Body(...), authorization: str = Header(None)):
                 raise HTTPException(400, "channel access token 格式不正確：只能是英數與 + / = . _ -，長度 20～512，請從 LINE Developers 重新複製")
             data["channel_access_token"] = t
         data["include_links"] = data.get("include_links") is True
+        # LINE Login channel（綁定用）：ID 是純數字、secret 是 32 位十六進位；secret 同 token 慣例（遮罩值／未帶＝保留，空字串＝清除）
+        lid = str(data.get("login_channel_id") or "").strip()
+        if lid and not _ln.valid_login_id(lid):
+            raise HTTPException(400, "LINE Login 的 Channel ID 格式不正確（應為純數字，請從 LINE Developers 的 Basic settings 複製）")
+        data["login_channel_id"] = lid
+        sec = body.get("login_channel_secret") if "login_channel_secret" in body else None
+        if sec is None or sec == _MASKED:
+            data["login_channel_secret"] = current.get("login_channel_secret", "")
+        else:
+            s = str(sec).strip()
+            if s and not _ln.valid_login_secret(s):
+                raise HTTPException(400, "LINE Login 的 Channel secret 格式不正確（應為 32 位英數字，請從 LINE Developers 重新複製）")
+            data["login_channel_secret"] = s
         try:
             data["public_base_url"] = _ln.normalize_public_base(data.get("public_base_url"))
         except ValueError as e:
@@ -2750,7 +2765,9 @@ def set_line_notify(body: dict = Body(...), authorization: str = Header(None)):
     # 稽核只記「啟用與否／token 有無被更換」，不記 token 本身；對外網址與連結開關影響對外曝露面，照實記
     _audit(_tok(authorization), "settings.line_notify.update", "settings", "line_notify", "LINE 通知設定",
            {"enabled": data["enabled"], "tokenChanged": data["channel_access_token"] != current.get("channel_access_token", ""),
-            "publicBaseUrl": data["public_base_url"], "includeLinks": data["include_links"]})
+            "publicBaseUrl": data["public_base_url"], "includeLinks": data["include_links"],
+            "loginChannelId": data["login_channel_id"],
+            "loginSecretChanged": data["login_channel_secret"] != current.get("login_channel_secret", "")})
     return {"ok": True}
 
 
@@ -2764,6 +2781,98 @@ def verify_line_notify(authorization: str = Header(None)):
     if not res.get("ok"):
         raise HTTPException(400, res.get("error") or "驗證失敗")
     return {"ok": True, "name": res.get("name", ""), "basicId": res.get("basicId", ""), "quota": _ln.quota()}
+
+
+# ── LINE 綁定（使用者自己綁：電腦發起、手機授權；2026-11-11）──────────────────────────────────────────────
+# 流程與不變式見 helpers/line_login.py。⚠️ `/api/line/callback` 是 Cloudflare Tunnel **唯一**對外的路徑（ingress 精確比對
+# `^/api/line/callback$`，改路徑要同步改正式機設定並重啟）；它在 main._PUBLIC_API_PATHS（LINE 導回來時沒有 session），
+# 自己用 state 驗證，且**不回任何 ERP 資料**。
+
+_LINE_CALLBACK_PAGES = {
+    "linked": (200, "綁定完成", "已完成綁定，可以關閉這個頁面。之後您勾選的通知會送到這個 LINE。"),
+    "denied": (400, "已取消", "您已取消綁定。需要時請回到電腦重新操作。"),
+    "expired": (400, "已逾時", "綁定要求已逾時，請回到電腦重新按「綁定 LINE」。"),
+    "session_ended": (400, "無法綁定", "電腦端已登出或帳號狀態已改變，請重新登入後再綁定。"),
+    "invalid": (400, "連結無效", "這個綁定連結無效或已使用過，請回到電腦重新按「綁定 LINE」。"),
+    "failed": (400, "綁定失敗", "綁定沒有成功，請回到電腦重新操作；若持續失敗請通知管理員。"),
+    "rate": (429, "請稍後再試", "目前要求太多，請稍後再試。"),
+}
+
+
+def _line_callback_page(kind: str):
+    from fastapi.responses import HTMLResponse
+    status, title, msg = _LINE_CALLBACK_PAGES.get(kind, _LINE_CALLBACK_PAGES["failed"])
+    html = ("<!doctype html><html lang=\"zh-Hant\"><head><meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex\">"
+            "<title>%s</title><style>body{font-family:sans-serif;margin:0;padding:32px 20px;text-align:center;color:#222}"
+            "h1{font-size:20px}p{font-size:15px;line-height:1.6}</style></head><body><h1>%s</h1><p>%s</p></body></html>") % (title, title, msg)
+    # 固定頁面、不帶任何使用者或 ERP 資料；網址上的 code／state 不可外流到別的網站（no-referrer）、不可被快取
+    return HTMLResponse(html, status_code=status, headers={
+        "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"})
+
+
+@router.get("/api/line/callback")
+def line_login_callback(code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+    """LINE Login 導回。**未登入可打**（main._PUBLIC_API_PATHS）：不信任這個請求本身，只信 state（單次、綁發起人的登入 session）。"""
+    from helpers import line_login as _ll
+    if not _ll.rate_ok():
+        return _line_callback_page("rate")
+    result, token, username = _ll.complete(code, state, error)
+    if username:
+        _audit(token, "line.binding.callback", "line_binding", username, "LINE 綁定回調", {"result": result})
+    return _line_callback_page(result)
+
+
+@router.get("/api/line/binding")
+def get_line_binding(authorization: str = Header(None)):
+    """自己的綁定狀態；`available`＝管理員已設好 LINE Login 與對外網址（沒設好時前端不顯示綁定按鈕）。"""
+    user = _require_user(authorization)
+    from helpers import line_notify as _ln
+    cid, sec = _ln.login_credentials()
+    v = _ln.binding_view(user["username"])
+    v["available"] = bool(cid and sec and _ln.callback_url())
+    return v
+
+
+@router.post("/api/line/binding/start")
+def start_line_binding(authorization: str = Header(None)):
+    """發起綁定：回一個 QR（內容是 LINE 授權網址）給電腦顯示，手機掃碼授權。state 綁定目前這個登入 session，10 分鐘內單次有效。"""
+    user = _require_user(authorization)
+    from helpers import line_login as _ll
+    try:
+        res = _ll.start(user["username"], _tok(authorization))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    import base64
+    import io
+    import qrcode
+    buf = io.BytesIO()
+    qrcode.make(res["authorizeUrl"]).save(buf, format="PNG")
+    _audit(_tok(authorization), "line.binding.start", "line_binding", user["username"], "發起 LINE 綁定")
+    return {"authorizeUrl": res["authorizeUrl"], "expiresIn": res["expiresIn"],
+            "qrCodePng": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")}
+
+
+@router.delete("/api/line/binding")
+def unlink_own_line(authorization: str = Header(None)):
+    user = _require_user(authorization)
+    from helpers import line_notify as _ln
+    done = _ln.unlink_user(user["username"])
+    if done:
+        _audit(_tok(authorization), "line.binding.unlink", "line_binding", user["username"], "解除 LINE 綁定")
+    return {"ok": True, "unlinked": done}
+
+
+@router.delete("/api/line/binding/{username}")
+def unlink_line_of(username: str, authorization: str = Header(None)):
+    """最高管理員替別人解除綁定（例如手機換號、同仁離職）。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_notify as _ln
+    done = _ln.unlink_user(username)
+    if done:
+        _audit(_tok(authorization), "line.binding.unlink", "line_binding", username, "最高管理員解除 LINE 綁定")
+    return {"ok": True, "unlinked": done}
 
 
 @router.post("/api/settings/email-notify/test")

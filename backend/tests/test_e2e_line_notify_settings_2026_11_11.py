@@ -39,7 +39,7 @@ def test_line_card_save_masks_token_and_verify_shows_account_and_quota(live_serv
     panel = page.locator("#line-panel")
     assert panel.locator("#chk-line-enabled").is_checked() is False        # 預設關
     assert panel.locator("#chk-line-links").is_checked() is False          # 連結預設關
-    panel.locator("input[type=password]").fill("tok-ui-SECRET-0123456789")
+    panel.locator("input[type=password]").first.fill("tok-ui-SECRET-0123456789")
     panel.locator("#chk-line-enabled").check()
     panel.get_by_role("button", name="儲存 LINE 設定").click()
     page.locator("[data-testid=line-msg]").filter(has_text="LINE 設定已儲存").wait_for(state="visible", timeout=10000)
@@ -47,7 +47,7 @@ def test_line_card_save_masks_token_and_verify_shows_account_and_quota(live_serv
     page.reload()
     page.locator("#line-panel").wait_for(state="visible", timeout=20000)
     page.wait_for_function("() => document.querySelector('#line-panel input[type=password]').value.length > 0", timeout=10000)
-    val = page.locator("#line-panel input[type=password]").input_value()
+    val = page.locator("#line-panel input[type=password]").first.input_value()
     assert val == "••••••••" and "SECRET" not in page.content()
     assert page.locator("#chk-line-enabled").is_checked()
     # 驗證 token：顯示官方帳號名稱與本月額度
@@ -63,7 +63,7 @@ def test_line_card_event_checkbox_takes_effect_immediately_and_links_need_a_publ
     from helpers import line_notify as L
     page = _open(live_server, make_user, new_page, login_as, "e2e_ln2")
     panel = page.locator("#line-panel")
-    panel.locator("input[type=password]").fill("tok-ui-2-0123456789abcdef")
+    panel.locator("input[type=password]").first.fill("tok-ui-2-0123456789abcdef")
     panel.locator("#chk-line-enabled").check()
     panel.get_by_role("button", name="儲存 LINE 設定").click()
     page.locator("[data-testid=line-msg]").filter(has_text="LINE 設定已儲存").wait_for(state="visible", timeout=10000)

@@ -638,6 +638,9 @@ _PUBLIC_ROUTES = {
     ("auth.py", "GET", "/api/system/version"),
     ("auth.py", "GET", "/api/system/deployed-version"),
     ("system.py", "GET", "/api/system/webauthn-config-status"),
+    # LINE Login 綁定導回（T79）：手機瀏覽器從 LINE 導回時沒有任何 session，不可能要求身分；端點自己用單次 state 驗證
+    # （state 綁發起人的登入 session、10 分鐘、用過即銷毀），只回固定頁面、不含 ERP 資料。Cloudflare Tunnel 唯一對外的路徑。
+    ("system.py", "GET", "/api/line/callback"),
     # 伺服器時間：前端對時用，不含任何公司資料
     ("company_lookup.py", "GET", "/api/now"),   # M08 搬遷 ②：自 dashboard.py 拆到 L1
     # ⚠️ 2026-09-22 §4 YD：兩支 GCIS 代理（`/api/company/tax/{tax_id}` 與
@@ -708,6 +711,8 @@ _DELETE_OWNERSHIP_VERIFIED = {
     ("auth.py", "/api/auth/webauthn/credentials/{cred_id}"),
     # 釋放自己的編輯鎖（edit_presence）
     ("system.py", "/api/edit-presence"),
+    # 解除自己的 LINE 綁定（T79）：只刪 token 帳號自己的那一筆，路徑沒有帳號參數；替別人解除是另一支 `/api/line/binding/{username}`（require_superadmin）
+    ("system.py", "/api/line/binding"),
     # 清單檢視偏好回預設（T66）：只刪登入者自己的那一列（鍵＝token 的帳號，路徑沒有帳號參數）
     ("list_view_prefs.py", "/api/list-views/{list_id}"),
     # 報價單刪除走**狀態**把關而不是角色——§5.1「僅草稿可刪；其他狀態回 403」

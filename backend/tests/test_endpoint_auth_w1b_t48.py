@@ -35,6 +35,7 @@ PUBLIC_BASELINE = {
     "/api/auth/webauthn/login/complete": "WebAuthn 未登入登入流程：驗證認證器簽名，自行驗證",
     "/api/system/deployed-version": "本機部署儀表板查詢正式機目前部署版本：純讀 commit 資訊，無敏感內容（2026-09-08）",
     "/api/system/webauthn-config-status": "login.html／change-password.html 判斷是否顯示 Passkey 按鈕（2026-09-10）",
+    "/api/line/callback": "LINE Login 綁定導回（T79）：手機瀏覽器從 LINE 導回時沒有 session；端點用單次 state 自行驗證、不回 ERP 資料；Tunnel 唯一對外路徑",
 }
 SWEPT_METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE")
 

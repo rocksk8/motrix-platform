@@ -370,6 +370,16 @@
             </div>
           </div>
 
+          <div class="ns-field" style="margin-bottom:12px">
+            <label>LINE Login channel（讓同仁自己綁定 LINE 用）</label>
+            <input data-saved-field type="text" x-model="cfg.login_channel_id" autocomplete="off" placeholder="Channel ID（純數字）" style="margin-bottom:6px">
+            <input data-saved-field type="password" x-model="cfg.login_channel_secret" autocomplete="off" placeholder="Channel secret（32 位英數字）">
+            <div style="font-size:12px;color:var(--text-dim);margin-top:4px">
+              LINE Login channel 必須與上面的 Messaging API channel 在<strong>同一個 Provider</strong>，且狀態是 Published。已儲存的 secret 會顯示成圓點，不修改請保持不動。
+              填好 Channel ID／secret 與對外網址後，同仁可在「帳號安全」頁自己綁定。
+            </div>
+          </div>
+
           <div class="ns-toggle">
             <input data-saved-field type="checkbox" id="chk-line-links" x-model="cfg.include_links" style="width:16px;height:16px;cursor:pointer">
             <label for="chk-line-links">LINE 訊息帶連結</label>
@@ -507,7 +517,7 @@
         return json ? { Authorization: 'Bearer ' + s.token, 'Content-Type': 'application/json' } : { Authorization: 'Bearer ' + s.token }
       }
       return {
-        cfg: { enabled: false, channel_access_token: '', public_base_url: '', include_links: false, callback_url: '', events: [] },
+        cfg: { enabled: false, channel_access_token: '', public_base_url: '', include_links: false, login_channel_id: '', login_channel_secret: '', callback_url: '', events: [] },
         denied: false, saving: false, verifying: false, saved: false, msg: '', isError: false,
         _say(text, err, ms) { this.msg = text; this.isError = !!err; setTimeout(() => { this.msg = '' }, ms || 5000) },
         // Alpine 3 看到資料物件有 init() 會自己叫一次——這裡不再寫 x-init（會跑兩遍）
