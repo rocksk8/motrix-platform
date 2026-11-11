@@ -286,6 +286,41 @@
       background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px;
       padding:12px 16px; margin-bottom:18px;
     }
+    /* ── 手機／平板直式（≤900px）：固定 52px 的工具列放不下「返回＋單號＋客戶案名＋兩顆按鈕」，
+       文字被擠成一字一行、完結鈕被切掉 → 改成跟著頁面走的兩列：上列＝返回／單號／狀態，客戶案名換行；下列＝兩顆主要鈕各半寬（44px 高） */
+    @media (max-width: 900px) {
+      .stl-toolbar { position: sticky; top: var(--topbar-h); left: 0; right: 0; height: auto; margin-top: var(--topbar-h);
+        flex-wrap: wrap; padding: 10px 16px; gap: 8px 10px; }
+      .stl-toolbar__left { flex-wrap: wrap; gap: 4px 10px; width: 100%; }
+      .stl-toolbar__left > a { min-height: 32px; white-space: nowrap; }
+      .stl-toolbar__left > span:nth-of-type(3) { flex: 1 1 100%; line-height: 1.5; }   /* 客戶 · 案名：獨立一行，可換行 */
+      .stl-toolbar__right { margin-left: 0; width: 100%; flex-wrap: wrap; }
+      .stl-toolbar__right .btn { flex: 1 1 0; min-height: 44px; justify-content: center; white-space: nowrap; }
+      .stl-toolbar__right > span { flex: 1 1 100%; max-width: none !important; }
+      .stl-main { margin-top: 0; padding: 16px; }
+      /* 卡片標題：標題整列、說明文字換到下一行（原本並排，標題被擠成一字一行） */
+      .stl-card__head { flex-wrap: wrap; gap: 4px 12px; padding: 12px 16px; }
+      .stl-card__head > :first-child { flex: 1 1 100%; }
+      .stl-card__body { padding: 14px 16px; }
+      /* 11px 以下的標籤在手機上看不清 → 一律 12px */
+      .badge, .stl-k__l, .stl-k__s, .stl-chcard__n, .stl-bt th, .stl-bt__basis, .stl-badge-mapped { font-size: 12px; }
+      /* 一、原始報價品項（11 欄、要橫滑才看得到「實際成本」）→ 每個品項一張卡：品名／報價／實際成本／毛利由上往下，輸入框 44px */
+      .stl-table--items, .stl-table--items tbody { display: block; }
+      .stl-table--items thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      .stl-table--items tbody tr { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 10px 12px; padding: 14px 16px; border-bottom: 8px solid var(--stl-note-bg); }
+      .stl-table--items tbody td { display: block; padding: 0; border: 0 !important; min-width: 0; text-align: left !important; background: transparent !important; }
+      .stl-table--items tbody td::before { content: attr(data-label); display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 3px; font-family: var(--font-zh); font-weight: 400; }
+      .stl-table--items tbody td:nth-child(1) { grid-column: 1 / -1; font-size: 12px !important; }
+      .stl-table--items tbody td:nth-child(1)::before { content: "項目 "; display: inline; }
+      .stl-table--items tbody td:nth-child(2), .stl-table--items tbody td:nth-child(3), .stl-table--items tbody td:nth-child(6),
+      .stl-table--items tbody td:nth-child(9), .stl-table--items tbody td:nth-child(10), .stl-table--items tbody td:nth-child(11) { grid-column: 1 / -1; }
+      .stl-table--items tbody td:nth-child(2)::before { content: none; }
+      .stl-table--items tbody td:nth-child(2) > div { font-size: 14px !important; font-weight: 700 !important; }
+      .stl-table--items .stl-input { font-size: 16px; min-height: 44px; box-sizing: border-box; width: 100%; }
+      .stl-table--items tfoot, .stl-table--items tfoot tr { display: block; }
+      .stl-table--items tfoot tr { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; padding: 12px 16px; }
+      .stl-table--items tfoot td { display: block; border: 0 !important; padding: 0 !important; text-align: left !important; }
+    }
   </style>
 </head>
 <body x-data="settlementPage()" x-init="init()" x-cloak>
@@ -445,7 +480,7 @@
           </div>
         </div>
         <div style="overflow-x:auto" :class="settlement.status === 'finalized' ? 'locked-overlay' : ''">
-          <table class="stl-table">
+          <table class="stl-table stl-table--items">
             <thead>
               <tr>
                 <th style="width:28px">#</th>
@@ -478,29 +513,29 @@
               <template x-for="(item, idx) in settlement.items" :key="item.id">
                 <tr :id="'stl-row-' + item.id">
                   <td style="text-align:center;color:var(--text-dim);font-size:11px;font-family:LINE Seed TW_OTF, sans-serif" x-text="idx+1"></td>
-                  <td>
+                  <td data-label="品名／規格說明">
                     <div style="font-size:12px;font-weight:500;color:var(--text-primary)" x-text="item.origDescription || '（無品名）'"></div>
                   </td>
-                  <td class="stl-orig" x-text="item.origBrand || '—'"></td>
+                  <td data-label="廠牌／型號" class="stl-orig" x-text="item.origBrand || '—'"></td>
 
                   <!-- 原始報價欄 -->
-                  <td class="col-orig" style="border-left:2px solid #E5E7EB;text-align:right;font-family:LINE Seed TW_OTF, sans-serif">
+                  <td data-label="報價數量" class="col-orig" style="border-left:2px solid #E5E7EB;text-align:right;font-family:LINE Seed TW_OTF, sans-serif">
                     <span x-text="item.origQty"></span>
                     <span style="font-size:10px;color:var(--text-dim)" x-text="item.origUnit"></span>
                   </td>
-                  <td class="col-orig" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :data-testid="'stl-shipped-' + item.id">
+                  <td data-label="已出貨／報價數量" class="col-orig" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :data-testid="'stl-shipped-' + item.id">
                     <template x-if="shippedOf(item.id)">
                       <span><span x-text="fmtQty(shippedOf(item.id).shipped) + ' / ' + fmtQty(item.origQty)"></span>
                         <span x-show="shippedOf(item.id).reserved > 0" style="display:block;font-size:10px;color:var(--text-dim)" x-text="'占用 ' + fmtQty(shippedOf(item.id).reserved)"></span></span>
                     </template>
                     <span x-show="!shippedOf(item.id)" style="color:var(--text-dim)">—</span>
                   </td>
-                  <td class="col-orig" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif">
+                  <td data-label="報價金額" class="col-orig" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif">
                     <span x-text="'NT$ ' + fmt(item.origAmount)"></span>
                   </td>
 
                   <!-- 實際成本欄 -->
-                  <td class="col-actual" style="border-left:2px solid #FDE68A">
+                  <td data-label="實際數量" class="col-actual" style="border-left:2px solid #FDE68A">
                     <div style="display:flex;align-items:center;gap:3px">
                       <input class="stl-input num" type="number" min="0" step="any"
                              x-model.number="item.actualQty" :aria-label="(item.origDescription || '品項') + ' 實際數量'"
@@ -510,7 +545,7 @@
                       <span style="font-size:10px;color:var(--text-dim)" x-text="item.origUnit"></span>
                     </div>
                   </td>
-                  <td class="col-actual">
+                  <td data-label="實際單位成本" class="col-actual">
                     <div style="display:flex;align-items:center;gap:3px">
                       <span style="font-size:10px;color:var(--text-dim)">NT$</span>
                       <input class="stl-input num" type="number" min="0" step="any"
@@ -534,7 +569,7 @@
                       <option value="taxed_gross">含稅5%（自動加總）</option>
                     </select>
                   </td>
-                  <td class="col-actual" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600">
+                  <td data-label="實際總成本" class="col-actual" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600">
                     <span x-text="_filled(item) ? 'NT$ ' + fmt(item.actualTotalCost) : '—'" :data-testid="'stl-actual-total-' + item.id"></span>
                     <template x-if="item.actualCostTaxMode === 'taxed' && item.actualTotalCost > 0 && !item.adoptSystem">
                       <div style="font-size:9px;color:var(--text-dim);font-weight:400"
@@ -563,7 +598,7 @@
                   </td>
 
                   <!-- 毛利欄：每個品項賺多少（只算到毛利；管銷分攤／公益／營業利益只在總結） -->
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :data-testid="'stl-profit-' + item.id">
+                  <td data-label="本項毛利（報價−實際）" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :data-testid="'stl-profit-' + item.id">
                     <div style="font-size:18px;font-weight:800;line-height:1.2" :style="{ color: itemProfit(item) < 0 ? 'var(--danger)' : 'var(--success)' }"
                          x-text="(itemProfit(item) < 0 ? '−' : '') + 'NT$ ' + fmt(Math.abs(itemProfit(item)))"></div>
                     <div style="font-size:12px;font-weight:700" :style="{ color: itemProfit(item) < 0 ? 'var(--danger)' : '' }" x-text="'毛利比 ' + pctTxt(itemPct(item))"></div>
@@ -571,7 +606,7 @@
                   </td>
 
                   <!-- 備註 -->
-                  <td>
+                  <td data-label="備註">
                     <input class="stl-input" type="text" x-model="item.note" :aria-label="(item.origDescription || '品項') + ' 備註'"
                            :disabled="settlement.status === 'finalized'"
                            placeholder="說明…"
