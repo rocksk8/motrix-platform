@@ -76,7 +76,8 @@ _UNTOUCHED = (
      '報價單需完成簽核（狀態為「已送出」）才能標記為「已成案」'),
     ('modules/case/api/quotations.py',
      '這個版本的存檔檔案已不存在（PDF 存檔目錄可能被搬移或清理過）'),
-    ('modules/case/api/quotations.py',
+    # 〔2026-11-11：T79案件階段子系統拆分，純搬移無文字變更，檔案由quotations.py→quotation_stages.py〕
+    ('modules/case/api/quotation_stages.py',
      '這樣設定會讓階段之間互相循環依賴，請重新選擇前置階段'),
     ('modules/case/api/quotations.py',
      '系統已設定簽核流程，此報價單缺少簽核層資料。請請申請人收回並重新送審，以套用最新簽核設定'),

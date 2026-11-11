@@ -37,4 +37,5 @@ def test_accounts_without_finance_never_see_the_panel():
 def test_the_panel_is_bound_to_the_finance_visible_getter_and_keeps_the_nav_link_rule():
     html = (FRONTEND / "index.html").read_text(encoding="utf-8")
     assert re.search(r'<div class="panel" x-show="showReceivables"', html)
-    assert 'x-show="canFinance">營運報表' in html          # 其他 canFinance 規則不動
+    # 2026-11-11：導覽重分組（a287a0991）把這顆主導覽連結文字從「營運報表」簡化成「報表」，純文案非邏輯變動
+    assert 'x-show="canFinance">報表' in html          # 其他 canFinance 規則不動
