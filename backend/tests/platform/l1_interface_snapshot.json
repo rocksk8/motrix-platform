@@ -1,5 +1,5 @@
 {
- "core_version": "1.157",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -757,6 +757,7 @@
    "notify_dev_case_stale": "def(case_id, case_name, customer_name, days_since_update, usernames)",
    "notify_dev_log_directive": "def(case_id, case_name, usernames, directive_by_display=…)",
    "notify_disk_space_low": "def(problems, temp_bloat=…, temp_total_gb=…)",
+   "notify_heartbeat_stale": "def(summary, problems, state=…)",
    "notify_invoice_voucher_approved": "def(voucher_no, customer, approved_by, requester_username)",
    "notify_invoice_voucher_next_tier": "def(voucher_no, customer, tier_no, total_tiers, approver_usernames)",
    "notify_invoice_voucher_returned": "def(voucher_no, customer, note, requester_username)",

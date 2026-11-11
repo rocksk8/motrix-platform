@@ -16,6 +16,15 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-11-11 心跳監控「看守看守者」（feat/heartbeat-watch，隨 T79 出貨）
+
+- **事故**：正式機心跳（工作排程每 5 分鐘 → healthchecks.io）自 2026-09-07 起壞了兩個多月沒人知道。根因＝`heartbeat_job.py` 打 `http://127.0.0.1:666`，伺服器早已只講 https ⇒ 每 5 分鐘誤報 local_down 並 `/fail`；healthchecks.io「已紅燈」不再重寄 ⇒ 9/8 斷電也沒有新告警。最後一次成功打卡 2026-09-07 20:12。
+- **A（job）**：本機檢查 https＋http 兩種都試（autostart.bat 依 `certs/cert.pem` 決定協定，協定會跟著憑證檔變）；狀態檔補 `since／seen_at／scheme／local_ok_at／ext_ok_at`（寫入頻率不變）。防背離守門：`test_heartbeat_watch_2026_11_11.py` 比對 job 的埠與 `autostart.bat`／`start.bat` 的 `--port`。
+- **D（看守看守者）**：新 L1 `helpers/heartbeat_status.py`（唯讀判斷）；每日檢查 `system_checks._check_heartbeat_health`（壞狀態＞90 分／狀態檔停更＞26 小時 ⇒ 信 `heartbeat_stale` 給最高管理者，列入不可關）；`GET /api/system/heartbeat`＋通知設定頁唯讀卡片；`prod_status_snapshot` 新增 `heartbeat` 區塊（`ping_url` 只回布林，網址等同密碼，永不外露）。告警只走 email。
+- **上線後人工步驟**：部署後第一次對外打卡成功，需**人工登入 healthchecks.io** 確認收件人仍有效、check 回到綠燈（卡住的 down 狀態不會自己恢復告警能力）。
+- 測試：`test_heartbeat_watch_2026_11_11.py`、`test_heartbeat_https_ping_2026_11_11.py`、`tests/platform/test_prod_status_snapshot_2026_09_30.py`（heartbeat 區塊）。
+
+
 ## 2026-11-11 手機直拍照片存起來橫躺：浮水印重存沒處理 EXIF 方向（fix/photo-exif-orientation）
 
 - **現象**（hichan-9 研究手機外勤時重現）：Orientation=6、顯示 300x400 的原圖，經 `photos._process_project_photo` 後變成 400x300（直書照片橫躺）。

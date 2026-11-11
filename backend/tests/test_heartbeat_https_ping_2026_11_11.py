@@ -103,8 +103,9 @@ def https_only_server(tmp_path):
         t.join(timeout=5)
 
 
-def test_local_ping_constant_is_https_loopback(hb):
-    assert hb._LOCAL_PING == "https://127.0.0.1:666/api/ping"
+def test_local_ping_urls_are_loopback_https_first_then_http(hb):
+    """2026-11-11 起兩種協定都試（見 heartbeat_job 檔頭）；https 先。"""
+    assert hb._local_urls() == ["https://127.0.0.1:666/api/ping", "http://127.0.0.1:666/api/ping"]
 
 
 @loopback_net
@@ -163,23 +164,25 @@ def _external_ok(hb, monkeypatch):
 @loopback_net
 def test_main_reports_ok_against_https_only_service(hb, https_only_server, monkeypatch):
     _cfg(hb, "https://hc.example/x")
-    monkeypatch.setattr(hb, "_LOCAL_PING", f"https://127.0.0.1:{https_only_server}/api/ping")
+    monkeypatch.setattr(hb, "_LOCAL_PORT", https_only_server)
     calls = _external_ok(hb, monkeypatch)
     hb.main()
-    assert json.loads(Path(hb._STATE_PATH).read_text(encoding="utf-8"))["status"] == "ok"
+    st = json.loads(Path(hb._STATE_PATH).read_text(encoding="utf-8"))
+    assert st["status"] == "ok" and st["scheme"] == "https"
     assert calls[-1] == "https://hc.example/x" and not any(c.endswith("/fail") for c in calls)
     assert not [k for k, _ in hb._lines if k == "error"]
 
 
 @loopback_net
-def test_main_with_old_http_url_reproduces_false_local_down(hb, https_only_server, monkeypatch):
-    """修前：_LOCAL_PING 還是 http:// ⇒ 服務明明活著卻 local_down 並對外 /fail。"""
+def test_main_no_longer_reports_false_local_down_when_only_one_scheme_is_up(hb, https_only_server, monkeypatch):
+    """修前（2026-09-07 起的 bug）：腳本寫死 http:// ⇒ 服務明明活著卻 local_down 並對外 /fail。
+    現在兩種協定都試：只有 https 活著也判存活，且不送 /fail。（http-only 與全掛的情形見 test_heartbeat_watch_2026_11_11.py）"""
     _cfg(hb, "https://hc.example/x")
-    monkeypatch.setattr(hb, "_LOCAL_PING", f"http://127.0.0.1:{https_only_server}/api/ping")
+    monkeypatch.setattr(hb, "_LOCAL_PORT", https_only_server)
     calls = _external_ok(hb, monkeypatch)
     hb.main()
-    assert json.loads(Path(hb._STATE_PATH).read_text(encoding="utf-8"))["status"] == "local_down"
-    assert "https://hc.example/x/fail" in calls
+    assert json.loads(Path(hb._STATE_PATH).read_text(encoding="utf-8"))["status"] == "ok"
+    assert not any(c.endswith("/fail") for c in calls)
 
 
 @loopback_net
@@ -191,7 +194,7 @@ def test_stuck_local_down_state_self_heals_without_clearing_state_file(hb, https
     Path(hb._STATE_PATH).write_text(json.dumps(
         {"status": "local_down", "day": now.strftime("%Y-%m-%d"), "hour": now.strftime("%Y-%m-%d %H")}),
         encoding="utf-8")
-    monkeypatch.setattr(hb, "_LOCAL_PING", f"https://127.0.0.1:{https_only_server}/api/ping")
+    monkeypatch.setattr(hb, "_LOCAL_PORT", https_only_server)
     _external_ok(hb, monkeypatch)
     hb.main()
     assert json.loads(Path(hb._STATE_PATH).read_text(encoding="utf-8"))["status"] == "ok"

@@ -506,6 +506,30 @@
       </div>
     </div>
 
+    <!-- 心跳監控本身的狀態（2026-11-11）：資料來源 GET /api/system/heartbeat（唯讀；判斷邏輯在 helpers/heartbeat_status.py）。
+         這張卡回答「監控自己有沒有在正常運作」——正式機的心跳曾經壞了兩個多月沒人知道。 -->
+    <div class="ns-card" id="hb-panel" x-data="heartbeatCard()" x-show="!denied" x-cloak>
+      <div class="ns-card-head">
+        <div class="ns-card-head-title">心跳監控狀態</div>
+        <span data-testid="hb-level" :style="'font-size:12px;font-weight:700;color:' + levelColor" x-text="levelText"></span>
+      </div>
+      <div class="ns-card-body">
+        <div class="ns-desc">心跳是獨立於本機的當機告警：本機每 5 分鐘向外部服務（healthchecks.io）打卡，打卡中斷就會寄信。這裡顯示它<strong>自己</strong>是否正常。</div>
+        <div data-testid="hb-summary" x-text="d.summary" style="font-size:13px;margin:8px 0;font-weight:600"></div>
+        <template x-for="p in d.problems" :key="p">
+          <div style="font-size:12px;color:var(--danger);margin:2px 0" x-text="'• ' + p"></div>
+        </template>
+        <table style="font-size:12px;color:var(--text-dim);margin-top:8px" x-show="d.level !== 'na'">
+          <tr><td style="padding-right:12px">目前狀態</td><td x-text="d.status || '—'"></td></tr>
+          <tr><td style="padding-right:12px">此狀態開始於</td><td x-text="d.since || '—'"></td></tr>
+          <tr><td style="padding-right:12px">本機服務協定</td><td x-text="d.scheme || '—'"></td></tr>
+          <tr><td style="padding-right:12px">上次對外打卡成功</td><td x-text="d.ext_ok_at || '—'"></td></tr>
+          <tr><td style="padding-right:12px">對外打卡網址</td><td x-text="d.ping_url_set ? '已設定' : '未設定'"></td></tr>
+        </table>
+        <div class="ns-actions" style="margin-top:10px"><button class="btn btn-ghost" @click="load()">重新整理</button></div>
+      </div>
+    </div>
+
   </main>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
@@ -735,6 +759,24 @@
             this.msg = d.detail || '寄送失敗，請確認 SMTP 設定'; this.isError = true
           }
           setTimeout(() => this.msg = '', 6000)
+        },
+      }
+    }
+  </script>
+  <script>
+    // 心跳監控狀態卡片（2026-11-11）：唯讀。Alpine 會自己叫 init()，不另寫 x-init。
+    function heartbeatCard() {
+      return {
+        d: { level: 'na', summary: '讀取中…', problems: [], status: '', since: '', scheme: '', ext_ok_at: '', ping_url_set: false },
+        denied: false,
+        get levelText() { return { ok: '正常', warn: '注意', error: '異常', na: '未設定' }[this.d.level] || '' },
+        get levelColor() { return { ok: 'var(--success)', warn: '#B45309', error: 'var(--danger)', na: 'var(--text-dim)' }[this.d.level] || 'inherit' },
+        async init() { await this.load() },
+        async load() {
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          const r = await fetch('/api/system/heartbeat', { headers: { Authorization: 'Bearer ' + s.token } })
+          if (r.status === 403) { this.denied = true; return }
+          if (r.ok) this.d = { ...this.d, ...(await r.json()) }
         },
       }
     }

@@ -1,5 +1,11 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-11（feat/heartbeat-watch；心跳監控「看守看守者」：helpers.heartbeat_status、heartbeat_stale 信件、每日檢查）
+- L1（新增，只增）：新公開介面 `helpers.heartbeat_status`（唯讀判斷 `logs/heartbeat_state.json`：`assess／read_state／config_exists／ping_url_set`＋常數）；`helpers.email_notify.notify_heartbeat_stale`；信件類型 `heartbeat_stale`（superadmins、列入 `MAIL_OFF_LOCKED` 不可關）。
+- 行為：`system_checks.run_all` 新增 `_check_heartbeat_health`（每日；app 活著卻看到心跳回報壞狀態＞90 分／狀態檔停更＞26 小時 ⇒ 寄信給最高管理者；同日一次、寄成功才記旗標、恢復清旗標；開發機沒有心跳＝不動作）。新端點 `GET /api/system/heartbeat`（僅最高管理者）與通知設定頁唯讀卡片。
+- 外部：`backend/heartbeat_job.py` 本機檢查 https＋http 兩種都試（原只打 http，正式機自 2026-09-07 起 666 埠只講 https ⇒ 兩個多月誤報、healthchecks.io 卡紅燈、斷電無新告警）；狀態檔補 `since／seen_at／scheme／local_ok_at／ext_ok_at`（寫入頻率不變）。`tools/prod_status_snapshot.py` 新增 `heartbeat` 區塊（白名單欄位，ping_url 只回布林）。
+- 測試：`tests/test_heartbeat_watch_2026_11_11.py`（含 job 埠與 `autostart.bat`／`start.bat` 的 `--port` 防背離守門）、`tests/test_heartbeat_https_ping_2026_11_11.py`。
+
 ## 1.157（next，未取號）— 2026-11-11（fix/ops-webauthn404-case-denied；case.access_denied 診斷鍵、L1 案件守門 `allow_read`）〔train_number：1.156 → 1.157〕
 - L1（新增）：`helpers.case_access.case_access_allowed／guard_case_access` 新增 `allow_read`（讀取規則 scope="read" 也放行，預設 False＝行為不變）；`db.set_request_ctx／get_request_ctx`（auth_middleware 每個 /api/ 請求設 method＋path，`spawn_bg_thread` 帶進背景緒；只供事後診斷，授權不得依賴）。
 - L1（診斷）：`deny_case` 寫的 `case.access_denied` detail 補 `method／path／role／case_manage`（只加鍵）。

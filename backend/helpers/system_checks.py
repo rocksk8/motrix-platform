@@ -20,7 +20,7 @@ from helpers import (
     notify_daily_task_edited, notify_warranty_expiry, notify_range_task_deadline, _warranty_expiry,
     notify_case_stage_deadline, notify_case_stage_deadline_manager,
     notify_case_project_overdue,
-    notify_cert_expiry, notify_backup_stale, notify_disk_space_low,
+    notify_cert_expiry, notify_backup_stale, notify_disk_space_low, notify_heartbeat_stale,
     notify_module_activity,
     _get_setting, _set_setting, notify_approval_reminder, _workdays_elapsed,
 )
@@ -310,6 +310,40 @@ def _check_backup_freshness() -> None:
                                 for l, t in stale))
     except Exception as exc:
         _logger.warning("_check_backup_freshness failed: %s", exc)
+
+
+def _check_heartbeat_health() -> None:
+    """每日檢查「心跳監控本身」（2026-11-11）：app 活著、卻看到心跳回報壞的狀態很久／心跳排程停了 ⇒ 寄信給 superadmin。
+
+    背景：正式機心跳壞了兩個多月沒人知道（http/https 不符 ⇒ 每 5 分鐘 /fail ⇒ healthchecks.io 一直紅燈，
+    真正的斷電沒有新告警）。判斷邏輯在 helpers/heartbeat_status.assess（只讀狀態檔）。
+    沒有心跳（開發機：沒設定檔也沒狀態檔）⇒ 什麼都不做。同一天最多寄一次；寄成功才記旗標、恢復正常就清旗標（比照備份新鮮度）。
+    """
+    try:
+        from helpers import heartbeat_status as _hs
+        res = _hs.assess()
+        guard_key = "heartbeat_stale_last_notified"
+        if not res["alert"]:
+            if _get_setting(guard_key):
+                _set_setting(guard_key, "")
+            return
+        today = _date.today().isoformat()
+        if _get_setting(guard_key) == today:
+            return
+        state = {k: res[k] for k in ("status", "since", "seen_at", "scheme", "ext_ok_at")}
+
+        def _send_alert():
+            try:
+                notify_heartbeat_stale(res["summary"], res["problems"], state)
+            except Exception:  # noqa: BLE001
+                _logger.exception("notify_heartbeat_stale failed —— 旗標不寫，今天仍會重試")
+                return
+            _set_setting(guard_key, today)
+
+        threading.Thread(target=_send_alert, args=(), daemon=True).start()
+        _logger.error("心跳監控異常：%s", res["summary"])
+    except Exception as exc:
+        _logger.warning("_check_heartbeat_health failed: %s", exc)
 
 
 def _disk_targets() -> list:
@@ -759,6 +793,7 @@ def run_all(prune: bool = False) -> None:
     _check_approval_reminders()
     _check_cert_expiry()
     _check_backup_freshness()
+    _check_heartbeat_health()
     _check_disk_space()
     _check_temp_bloat()
     if prune:

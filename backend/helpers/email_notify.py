@@ -2181,6 +2181,37 @@ def notify_backup_stale(stale: list, threshold_hours: int) -> None:
     _async_send(to, _mt.subject("backup_stale", "備份已超過 %d 小時沒有成功執行" % threshold_hours), html)
 
 
+def notify_heartbeat_stale(summary: str, problems: list, state: dict = None) -> None:
+    """心跳監控本身有問題 → 所有 superadmin（2026-11-11）
+
+    正式機的心跳監控曾經壞了兩個多月沒人知道（腳本打 http、伺服器早已只講 https ⇒ 每 5 分鐘 /fail，
+    healthchecks.io 一直紅燈，真正的斷電反而沒有新告警）。這封信是「看守看守者」：app 活著、
+    卻看到心跳回報壞的狀態很久，或心跳排程停了。信裡直接講「這代表什麼、先看哪裡」。
+    `state` 只放狀態欄位（時間、協定），**不放 ping 網址**。
+    """
+    to = _admin_emails("heartbeat_stale")
+    if not to:
+        return
+    st = state or {}
+    rows = [("狀態", st.get("status") or "—"), ("目前狀態開始於", st.get("since") or "—"),
+            ("本機服務協定", st.get("scheme") or "—"), ("上次對外打卡成功", st.get("ext_ok_at") or "—"),
+            ("狀態檔最後更新", st.get("seen_at") or "—")]
+    intro = _safe("監控本身可能沒有在正常運作：" + "；".join(_esc(str(p)) for p in (problems or [summary])))
+    note = _safe(
+        "<b>這代表什麼</b>：心跳是「獨立於本機」的當機告警（本機停止打卡 ⇒ healthchecks.io 寄信）。"
+        "它壞掉時，<b>真正當機或斷電可能不會有人被通知</b>。"
+        "<br><br><b>請依序檢查（正式機）</b>："
+        "<br>1. 登入 healthchecks.io 看這個 check 的狀態與歷史，確認<b>收件人設定仍有效</b>"
+        "<br>2. 排程工作「MOTRIX ERP Heartbeat」是否還在、最近一次執行結果"
+        "<br>3. <code>backend/logs/heartbeat_job.log</code> 最後幾行（判定哪一種協定、哪一步失敗）"
+        "<br>4. 伺服器是否改過協定／埠（<code>autostart.bat</code> 依 <code>certs/cert.pem</code> 是否存在決定 https 或 http）"
+        "<br><br>修好並看到下一次打卡成功後，請到 healthchecks.io <b>人工確認狀態回到綠燈</b>。"
+    )
+    html = _build_html("heartbeat_stale", "心跳監控異常", "需要處理", "#DC2626", rows, "", _base_url(),
+                       note=note, intro=intro, button_text="前往系統")
+    _async_send(to, _mt.subject("heartbeat_stale", "心跳監控異常：%s" % summary[:60]), html)
+
+
 def notify_disk_space_low(problems: list, temp_bloat: list = None,
                           temp_total_gb: float = 0) -> None:
     """磁碟空間不足／測試暫存累積 → 所有 admin/superadmin（2026-09-14）

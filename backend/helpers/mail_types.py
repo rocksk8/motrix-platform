@@ -206,6 +206,8 @@ register("cert_expiry", "HTTPS 憑證即將到期", _S, "superadmins", "",
          "憑證到期後，使用者開啟系統時瀏覽器會出現安全性警告。", "請依系統說明更新憑證，並於更新後重新啟動服務。")
 register("backup_stale", "備份已停止運作", _S, "superadmins", "",
          "超過規定時間沒有成功的備份，發生故障時可能遺失資料。", "請檢查備份排程、雲端硬碟掛載與磁碟空間，處理後確認下一次備份成功。")
+register("heartbeat_stale", "心跳監控本身異常", _S, "superadmins", "",
+         "心跳監控壞掉時，伺服器當機或斷電可能沒有人被通知。", "請檢查心跳排程、healthchecks.io 的狀態與收件人設定，修好後人工確認回到綠燈。")
 register("disk_space_low", "磁碟空間不足", _S, "superadmins", "",
          "磁碟空間不足時，備份與上傳可能失敗。", "請清理暫存檔案或擴充磁碟空間。")
 register("backup_error", "備份嚴重錯誤", _S, "superadmins", "",

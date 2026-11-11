@@ -2983,6 +2983,15 @@ _DEFAULT_ROLE_LABELS = {
 }
 
 
+@router.get("/api/system/heartbeat")
+def get_heartbeat_status(authorization: str = Header(None)):
+    """心跳監控「本身」的狀態（唯讀；僅最高管理者）：狀態、開始時間、本機協定、上次對外打卡成功、有沒有設對外網址（只回布林）。
+    判斷邏輯在 helpers/heartbeat_status.assess（只讀 logs/heartbeat_state.json；不回 ping 網址）。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import heartbeat_status as _hs
+    return _hs.assess()
+
+
 @router.get("/api/system/schema-status")
 def get_schema_status(authorization: str = Header(None)):
     """唯讀 schema/migration 診斷資訊：目前版本、目標版本、完整 migration 清單。
