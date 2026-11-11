@@ -78,6 +78,7 @@ def test_quota_shows_reason_when_line_is_not_configured(live_server, make_user, 
     page = _open_settings(live_server, make_user, new_page, login_as, "e2e_lq2")
     err = page.locator("[data-testid=line-quota-error]")
     err.wait_for(state="visible", timeout=10000)
+    page.wait_for_function("() => (document.querySelector('[data-testid=line-quota-error]').innerText || '').includes('token')", timeout=10000)   # 先出現「讀取中…」，等回應後才換成原因
     assert "token" in err.inner_text()
 
 

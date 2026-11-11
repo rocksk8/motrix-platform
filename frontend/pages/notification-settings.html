@@ -631,7 +631,7 @@
           if (r.ok) {
             this.saved = true; setTimeout(() => { this.saved = false }, 3000)
             await this.load()
-            this.loadQuota(false)
+            this.loadQuota(true)                      // 剛存過（可能換了 token）：略過 60 秒負快取，立刻重讀（K 複審 nit）
             this._say('LINE 設定已儲存', false)
           } else {
             this._say(d.detail || '儲存失敗', true)
