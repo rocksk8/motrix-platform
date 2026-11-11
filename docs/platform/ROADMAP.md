@@ -183,7 +183,7 @@
 | S-PLD03 | core 主版號一升，沒跟上的模組同時消失（缺升版前的相容性預檢） | 中 | `test_core_loader.py::test_core_range`（只驗判斷） | ⏳ |
 | S-PLD06 | 模組 `__init__` 匯入失敗（缺套件、引用別組私有函式） | 中 | `test_core_loader.py::test_broken_module_is_isolated_and_reported` | ⏳ |
 | S-PLD08 | 有程式、沒有 module.json 的資料夾完全不出現在狀態表 | 中 | 缺 | ⏳ |
-| S-PLD12 | 模組 migration 執行器尚未實作（失敗 ⇒ 不載入＋回滾）；第一個有自有表的模組搬進來前必須補 | 中 | 缺（機制未實作） | ⏳ |
+| S-PLD12 | ~~模組 migration 執行器尚未實作（失敗 ⇒ 不載入＋回滾）；第一個有自有表的模組搬進來前必須補~~（**2026-11-11 更正：已實作**——`core/migrations.py::run_all()` 自 d9b90719b〔2026-09-28，稽核 D PM1〕起逐支 `SAVEPOINT motrix_module_migration`：L2 migration 丟例外或回原因字串 ⇒ 撤回該支寫入（含 DDL）、記進 `incomplete()`、版號不前進；`helpers/module_startup.fail_incomplete_modules`（5c06142ee，2026-09-28）讓未完成的模組下線，其他模組與服務照常；L1 core 的 migration 例外照舊往上丟。守門：`tests/platform/test_migration_incomplete.py`、`test_module_migrations.py`、`test_module_startup.py`。2026-11-11 以 subcontract 0005（重建 `contractor_payment_vouchers`）實跑單模組更新並驗失敗路徑：`docs/platform/plans/MODULE-UPDATE-MIGRATION-DRILL-20261111.md`） | 中 | `test_migration_incomplete.py`（例外／原因字串皆撤回、其他模組照跑）＋`test_module_startup.py` | ✅ |
 | S-PLD13 | 載入失敗原因是英文例外字串 | 低 | 缺 | ⏳ |
 | S-PSW04 | 停用清單殘留不存在的 key，管理頁看不到也清不掉 | 低 | 缺 | ⏳ |
 | S-PSW07 | 停用清單內容壞掉 | 中 | `test_module_selection.py::test_read_disabled_values`（與 P-SW-05 同路徑：沿用快取／全部停用） | ✅ A（併入 P-SW-05） |

@@ -1,9 +1,12 @@
-# 單一模組更新包上線：簽章交付＋正式機同等保護（設計，未實作）
+# 單一模組更新包上線：簽章交付＋正式機同等保護（已實作；本文保留設計脈絡與實作紀錄）
+
+> **狀態（2026-11-11 核對程式、測試與演練紀錄）：已實作。** 2026-09-28～29 上車，commit 對照：ship_tier 出貨等級判定＝2701c2e5b（S1）；模組載入狀態檔＝f5f7429aa（S2）；`module_update` 的 ship／preflight／鏡像＋baseline＋version_manifest＋回滾，並**取消對 `migrations/` 的拒收**＝c98cc0811（S3）；delivery `kind=module`＝781cddc6a（S4）；`backend/tools/apply_module_update.ps1`＝c2cf3dd79（S5）。演練（開發機、正式機條件）A 成功／B 自動回滾／C 乾跑擋下皆通過：`docs/platform/archive/docs/platform/MODULE-UPDATE-DRILL-20260928.md`；2026-11-11 另以帶 migration 的包（subcontract 0005 重建表）實跑 ship_tier→preflight→乾跑→套用→migration→回滾，並驗失敗路徑：`docs/platform/plans/MODULE-UPDATE-MIGRATION-DRILL-20261111.md`。重跑相關 9 檔 250 題全過。
+> 本文是 2026-09-28 的**設計稿**（含 D 審修訂與演練後更正），「要做」「新增」是當時語氣；與程式不一致時以程式為準。「正式機實際使用過幾次」不在本次核對範圍。
 
 > B，2026-09-28。依據：CORE-SPEC「單一模組更新包上線（正式機可用）」列（a8ec2b4b）、「出貨前測試依改動範圍分級」列、「完整包與客戶加購模組」列。
 > 本文件只寫設計；D 審過再實作。沿用 UPDATE-DELIVERY.md（完整包交付）的通道、簽章、儀表板與結果協定，**只寫與完整包不同的地方**。
 > **第二版（D 設計審 AUDIT-D-B55-module-delivery.md，wip/d-audit-train16 6b7d7552；主持裁示）**：DB-M1 照 D（疊加樹改白名單）；U-M1＝②、U-M2＝②；DB-S3～S6 全收；U-M4～M6＝①；DB-M2 實作成可切換的判斷點（§4.3），第二版預設乙；**第三版：使用者裁示＝甲（CORE-SPEC ee383527），預設改 consumers**。各處改動以〔D 審〕標示，原文保留在 git 歷史（2ab3585d）。
-> 現況盤點（2026-09-28 讀碼）：`tools/platform/module_update.py`（P7）有 build／check／preflight／apply／rollback（備份到 `module_backups/<key>/<ts>/`、雜湊逐一核對），但沒有鎖、停服、健檢、自動回滾、`::RESULT::`；遇到 `migrations/` 一律拒絕（P7b）。`delivery.py` 沒有包型別，`verify_staged`／`apply_staged` 假設完整包（要 `payload/backend/tools`、跑 `apply_update.ps1`）。
+> 現況盤點（2026-09-28 讀碼）：`tools/platform/module_update.py`（P7）有 build／check／preflight／apply／rollback（備份到 `module_backups/<key>/<ts>/`、雜湊逐一核對），但沒有鎖、停服、健檢、自動回滾、`::RESULT::`；~~遇到 `migrations/` 一律拒絕（P7b）。~~（**2026-11-11 更正**：此拒收已於 c98cc0811〔S3，2026-09-28〕取消，現行題 `test_module_with_migrations_is_no_longer_refused`；原拒收是 16280fd17〔P7，2026-09-25〕的行為。）`delivery.py` 沒有包型別，`verify_staged`／`apply_staged` 假設完整包（要 `payload/backend/tools`、跑 `apply_update.ps1`）。
 
 ## 0. 邊界與不變式
 

@@ -274,7 +274,7 @@
 
 ## 1.0.18 — 2026-09-30（暫用號，列車取號；W1 wip/w1-remit-fee）
 - 稽核補修（見 1.0.19 段）：日期必填 400、自己標記不能自己核可、待審核差額標示
-- W1 出納匯款手續費（暫用號，列車取號）：`contractor_payment_vouchers` 加實付／手續費／差額審核欄位（本模組首支 migration v1 `0001_remit_fee`）；`paid-toggle` 收 `actualAmount`／`hasFee`／`fee`，實付≠應付 ⇒ `remit_review='pending'`（差額待審核，通知管理員），取消匯款一併清空；匯款日期不帶仍退回今天（舊契約）；提供 IP-102 `remit.reviews`（名稱 `contractor_voucher`：清單、核可／退回）、IP-9 `expense.entries`（名稱 `remit_fee_contractor`：手續費以匯款日列營運報表支出）；`GET /api/contractor-vouchers/remit-fee-total`（案件成本用）；匯款單公開形狀加 payableAmount／remitActual／remitFee／remitDiff／remitReview*（IP-14 加欄位、相容）。⚠ 帶 migrations/ 的模組目前不能用單模組更新包出貨（P7b）
+- W1 出納匯款手續費（暫用號，列車取號）：`contractor_payment_vouchers` 加實付／手續費／差額審核欄位（本模組首支 migration v1 `0001_remit_fee`）；`paid-toggle` 收 `actualAmount`／`hasFee`／`fee`，實付≠應付 ⇒ `remit_review='pending'`（差額待審核，通知管理員），取消匯款一併清空；匯款日期不帶仍退回今天（舊契約）；提供 IP-102 `remit.reviews`（名稱 `contractor_voucher`：清單、核可／退回）、IP-9 `expense.entries`（名稱 `remit_fee_contractor`：手續費以匯款日列營運報表支出）；`GET /api/contractor-vouchers/remit-fee-total`（案件成本用）；匯款單公開形狀加 payableAmount／remitActual／remitFee／remitDiff／remitReview*（IP-14 加欄位、相容）。
 
 ## 1.0.17 — 2026-09-28（暫用號，列車取號；E4 wip/e-company-gate-impl 第三段）
 - 本公司資料設定閘門第二道（COMPANY-SETUP-GATE §5；D CG5-M1）：承攬匯款申請 PDF 下載端點：`except Exception` 前先 `except HTTPException: raise`（第二道的 428 不被吞成 500）
