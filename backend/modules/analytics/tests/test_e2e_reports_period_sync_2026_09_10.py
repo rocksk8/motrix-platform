@@ -109,6 +109,8 @@ def test_period_bar_drives_income_expense_block(live_server, make_user, e2e_brow
     _login(page, live_server, username, password)
     page.goto(f"{live_server}/pages/reports.html")
     page.wait_for_selector(".period-bar", timeout=20000)
+    # 2026-11-11 C5：KPI 預設只顯示 3 張，「收支」那組收在「更多指標」——先展開（展開狀態記在 localStorage，之後切期別不變）
+    page.click("[data-testid=kpi-more-toggle]", timeout=20000)
     page.wait_for_selector(".kpi-card__lbl:text-is('當月收入')", timeout=20000)
 
     # ── 月報 2026-07 ──────────────────────────────────────────────

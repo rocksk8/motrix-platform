@@ -5,6 +5,9 @@
 - 選單宣告：`reports.html` 加 `section: 營運`＋`desc`；`devices.html`／`warranty.html` 從「經營分析」移到「採購與庫存」群組（order 70／80），入口不變。`group analysis` 的顯示名稱由「經營分析」改為「報表」（鍵不變）。
 - 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
 - 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
+- **（併入）(next) — 2026-11-11（wip/ux-density-c456；C5 營運報表頁預設收密）**
+- `pages/reports.html`、`js/reports.js`（只改呈現）：KPI 預設只顯示 3 張（本期新成案、本期收款、未收款），其餘 12 張收在「更多指標」（展開狀態記在這個瀏覽器的 localStorage，讀寫包 try/catch，取不到時預設收合、頁面照常）；13 個頁籤分成「業績／現金／風險」三組，一個都沒少、點擊行為不變；統計全為空時顯示「還沒有資料，建立第一張報價單後這裡會出現統計」。警示橫幅、頁籤內容、匯出、權限、API 都不變；無 migration、無新路由、無設定變動。
+- 測試：新增 `tests/test_e2e_reports_density_2026_11_11.py`（6 題）；`tests/test_e2e_reports_period_sync_2026_09_10.py` 因為「收支」那組 KPI 改收在「更多指標」，開頭多一步展開（驗的內容不變）。
 
 ## 1.0.45 — 2026-11-03（已由 train_number.py assign 取號；wip/t73-dev-case-assignment-r1：業務開發案件指派的可見性修正）
 - `api/dashboard.py` 的業務開發停滯提醒（`/api/dashboard/ops-alerts` 的 `devStale`）與動態牆（`/api/dashboard/activity-feed` 的 `dev_cases` 區塊）手列欄位的 SELECT 補上 `assigned_to`：crm 模組新增「案件指派」後，被指派人若不在 `sales_persons`／`planners`，`row_access.visible("dev_case", ...)` 收到的列缺這一欄就永遠判不到，造成被指派人在這兩個出口看不到自己的案件（審查發現；同一批連 `routers/item_reads.py`／`modules/crm/api.py` 一起修，見 crm 1.0.18）。無回應鍵變動、無 schema 變更。
