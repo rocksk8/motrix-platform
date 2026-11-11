@@ -1,6 +1,15 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-11（fix/trusted-client-ip；來源 IP 只信該信的，登入鎖定不可被 X-Forwarded-For 繞過）
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.client_ip`（`client_ip`、`is_loopback`、`has_proxy_headers`、`CLOUDFLARE_HEADERS`；L0，只依賴標準庫）。
+- 行為變更（安全）：`routers/auth.py::_client_ip` 不再信 `X-Forwarded-For`（以前無條件信第一個值 ⇒ 登入鎖定每次換 XFF 就繞過）；只有 TCP 對端是 loopback 才採信 `CF-Connecting-IP`（須為合法 IP），其餘一律用對端位址。登入鎖定／TOTP／passkey 限流、`duty_roles` 與 `settings_center` 稽核 IP 全走這支。
+- `tools/deploy_dashboard.py`：loopback 對端但帶 Cloudflare／代理標頭的請求 fail closed（HTTP 403／WebSocket 1008）。**部署設定：隧道 ingress 只能指到主程式 port，不可指到儀表板 port。**
+- 測試：`tests/test_trusted_client_ip_2026_11_11.py`、`tests/test_deploy_dashboard_local_only_2026_09_22.py`（HC1d）。
+
+## 1.156（next，未取號）— 2026-11-11（fix/ops-webauthn404-case-denied；case.access_denied 診斷鍵、L1 案件守門 `allow_read`）
+
 ## 1.157（next，未取號）— 2026-11-11（fix/ops-webauthn404-case-denied；case.access_denied 診斷鍵、L1 案件守門 `allow_read`）〔train_number：1.156 → 1.157〕
+
 - L1（新增）：`helpers.case_access.case_access_allowed／guard_case_access` 新增 `allow_read`（讀取規則 scope="read" 也放行，預設 False＝行為不變）；`db.set_request_ctx／get_request_ctx`（auth_middleware 每個 /api/ 請求設 method＋path，`spawn_bg_thread` 帶進背景緒；只供事後診斷，授權不得依賴）。
 - L1（診斷）：`deny_case` 寫的 `case.access_denied` detail 補 `method／path／role／case_manage`（只加鍵）。
 - 前端：公司設定頁不再用 `GET /api/settings/webauthn-config` 的 404 當 Passkey 開關（每開一次頁就一筆 404，正式機 32 次），改問 `/api/system/webauthn-config-status`；簽核佇列的「預覽」改白名單，勞報單走 `/api/payslips/{no}/pdf-download`，沒有 PDF 端點的類型不再落到報價單端點（原本必 404＋audit not_found）。

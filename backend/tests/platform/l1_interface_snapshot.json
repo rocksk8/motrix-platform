@@ -1,5 +1,5 @@
 {
- "core_version": "1.157",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -345,6 +345,12 @@
    "freeze": "def(q)",
    "title": "def(key, data=…, conn=…)",
    "titles_for": "def(data=…, conn=…)"
+  },
+  "helper:client_ip": {
+   "CLOUDFLARE_HEADERS": "const",
+   "client_ip": "def(request)",
+   "has_proxy_headers": "def(headers)",
+   "is_loopback": "def(host)"
   },
   "helper:company_identity": {
    "CODE_BANK_REQUIRED": "const",
