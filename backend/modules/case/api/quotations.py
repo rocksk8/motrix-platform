@@ -396,7 +396,7 @@ from helpers.case_access import deny_case, guard_case_access, require_case, requ
 
 
 def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False,
-                allow_module: str = None, skip_if_semi_unlocked: bool = False):
+                allow_module: str = None, skip_if_semi_unlocked: bool = False, allow_read: bool = False):
     """取單＋擁有者檢查，給所有「用 quote_no 直接操作單一案件」的端點共用。
 
     2026-09-13（模組權限稽核第二輪）：`quote_no` 是可列舉的（`MQ-YYYYMM-NNN`），
@@ -438,7 +438,7 @@ def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False
         return q
     # 稽核 Y-5：放行規則與 modules.case.quotations.guard_case_access 同一份（case_access_allowed）；
     # 這裡只多「已結案半解鎖」的例外與回傳欄位（deal_tag、case_semi_unlocked）。
-    if not case_access_allowed(conn, q, user, allow_approver=allow_approver, allow_module=allow_module):
+    if not case_access_allowed(conn, q, user, allow_approver=allow_approver, allow_module=allow_module, allow_read=allow_read):
         deny_case(conn, quote_no, user, "denied")           # M01-O1：看不到＝不存在（同一個 404）
     return q
 
@@ -3089,7 +3089,7 @@ def case_close_gates(quote_no: str, authorization: str = Header(None)):
         row = conn.execute("SELECT * FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
         if not row:
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
-        require_case(user, row, quote_no)
+        require_case(user, row, quote_no, scope="read")   # 2026-11-11：與 docstring「可見性比照單筆讀取」一致（原為 owner，財務開案件頁時這段每次被拒）
         d = json.loads(row["data_json"] or "{}")
         gates = _case_close_gates(conn, quote_no, d)
         for g in gates:
@@ -6161,7 +6161,7 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
     """後端 Edge Headless 產生 PDF 並直接下載（internal=true 含成本），避免 macOS/瀏覽器列印頁首干擾。"""
     user = _require_user(authorization)
     conn = get_db()
-    q = _guard_case(conn, quote_no, user, allow_approver=True)
+    q = _guard_case(conn, quote_no, user, allow_approver=True, allow_read=True)
     if internal:
         _require_money_or_approver(conn, q, user)   # 內部版含成本（CM15）
     # 🔑 QL10：把 `location_id` 一起取出來 —— 列印的稽核要記得下這一次用了哪個據點。
@@ -6228,7 +6228,7 @@ def list_quotation_versions(quote_no: str, authorization: str = Header(None)):
     """
     user = _require_user(authorization)
     conn = get_db()
-    _guard_case(conn, quote_no, user, allow_approver=True)
+    _guard_case(conn, quote_no, user, allow_approver=True, allow_read=True)
     row = conn.execute(
         "SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     conn.close()
@@ -6288,7 +6288,7 @@ def download_quotation_version(quote_no: str, seq: int, authorization: str = Hea
     """
     user = _require_user(authorization)
     conn = get_db()
-    _guard_case(conn, quote_no, user, allow_approver=True)
+    _guard_case(conn, quote_no, user, allow_approver=True, allow_read=True)
     row = conn.execute(
         "SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     conn.close()

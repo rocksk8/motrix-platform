@@ -173,6 +173,21 @@ def is_demo_mode() -> bool:
     return _demo_mode.get()
 
 
+#: 目前這個 API 請求的 (method, path)（不含 query string）。auth_middleware 設定、`spawn_bg_thread` 會一起帶進背景執行緒。
+#: 只給「事後診斷」用——例如 `case.access_denied` 的 audit 要能回答「是哪支端點被拒」（2026-11-11 正式機 48 筆
+#: 只剩 reason、無從歸因）。⚠️ 純唯讀的診斷資訊，任何授權判斷都不得依賴它。
+_request_ctx: contextvars.ContextVar = contextvars.ContextVar("motrix_request_ctx", default=None)
+
+
+def set_request_ctx(method: str, path: str) -> None:
+    _request_ctx.set((method, path))
+
+
+def get_request_ctx():
+    """`(method, path)`；不在 API 請求內（背景排程、測試直接呼叫 helper）⇒ None。"""
+    return _request_ctx.get()
+
+
 #: 目前這條執行緒是不是「背景工作」（spawn_bg_thread 起的）：背景工作可以降低外部行程（Edge 無頭 PDF）的 CPU 優先權，
 #: 使用者正在等的請求（下載 PDF 等）不降。W3 approval-freeze：簽核後的 PDF 是背景工作，不該跟服務搶 CPU。
 _BACKGROUND_WORK = contextvars.ContextVar("motrix_background_work", default=False)

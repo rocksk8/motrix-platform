@@ -62,7 +62,7 @@ import mimetypes
 mimetypes.add_type("font/woff2", ".woff2")
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
-from db import get_db, init_db, DEMO_DB_PATH, set_demo_mode
+from db import get_db, init_db, DEMO_DB_PATH, set_demo_mode, set_request_ctx
 from helpers import (
     init_default_admin, init_demo_account, _cleanup_sessions, _prune_login_locks,
     init_unlock_passwords, flag_weak_passwords,
@@ -565,6 +565,7 @@ async def auth_middleware(request: Request, call_next):
     # flip routing BEFORE the session lookup below (and before any downstream
     # get_db() calls in the route handler / _require_user() / _audit()).
     set_demo_mode(token.startswith(DEMO_TOKEN_PREFIX))
+    set_request_ctx(request.method, path)          # 診斷用（case.access_denied 的 audit 記是哪支端點被拒）
     now_dt  = datetime.now()
     now_iso = now_dt.isoformat()
     conn    = get_db()

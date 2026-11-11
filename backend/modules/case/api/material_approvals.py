@@ -92,7 +92,7 @@ def get_approvals(quote_no: str, authorization: str = Header(None)):
     conn = get_db()
     try:
         q = _load_case(conn, quote_no)
-        require_case(user, q, quote_no)
+        require_case(user, q, quote_no, scope="read")   # 2026-11-11：唯讀摘要、不含金額；案件頁讀得到的人（含持 cashier）就看得到
         rows = MA.rows_for_case(conn, quote_no)
         return {"quoteNo": quote_no, "approvals": {str(o.get("itemId")): _summary(rows.get(str(o.get("itemId")))) for o in _orders(q)},
                 "shipping": _MSV.summary_extra(conn, quote_no)}              # 34-S3：已申請／已到料／已出貨（占用中）＋出貨單號；只經提供者
