@@ -153,18 +153,44 @@ def test_lan_peer_with_rotating_xff_through_the_uvicorn_layer_is_locked(client, 
     assert codes == [401] * 5 + [429], codes
 
 
-def test_autostart_pins_uvicorn_forwarded_allow_ips():
+def _uvicorn_launch_lines():
+    """所有「把 main:app 綁在 0.0.0.0」的啟動行：[(相對路徑, 行)]。掃 backend/*.bat／*.cmd、repo 根目錄 *.ps1、各層 tools 下的 *.ps1。"""
+    root = _BACKEND.parent
+    files = set(_BACKEND.glob("*.bat")) | set(_BACKEND.glob("*.cmd")) | set(root.glob("*.ps1"))
+    for d in (root / "tools", _BACKEND / "tools"):
+        if d.is_dir():
+            files |= set(d.rglob("*.ps1"))
+    out = []
+    for f in sorted(files):
+        for ln in f.read_text(encoding="utf-8", errors="replace").splitlines():
+            low = ln.lower()
+            if "uvicorn" in low and "main:app" in low and "0.0.0.0" in ln and not ln.lstrip().startswith(("::", "#", "rem ", "REM ")):
+                out.append((f.relative_to(root).as_posix(), ln))
+    return out
+
+
+def test_every_launcher_that_binds_all_interfaces_pins_uvicorn_forwarded_allow_ips():
     """uvicorn 的 forwarded_allow_ips 若被環境變數 FORWARDED_ALLOW_IPS／複製來的指令改成 `*`，uvicorn 會對任何對端取 XFF 第一個值
-    ⇒ 原本的漏洞回來而 helper 擋不住（它信 request.client.host）。命令列優先於環境變數，所以在啟動指令明寫死。"""
+    ⇒ 原本的漏洞回來而 helper 擋不住（它信 request.client.host）。命令列優先於環境變數，所以每個綁 0.0.0.0 的啟動行都明寫死
+    （正式機 autostart.bat、手動重啟 restart.bat、開發用 start.bat／start_server.ps1；綁 127.0.0.1 的演練腳本不用）。"""
     import re
-    bat = (_BACKEND / "autostart.bat").read_text(encoding="utf-8", errors="replace")
-    lines = [ln for ln in bat.splitlines() if "uvicorn" in ln.lower() and "main:app" in ln and not ln.lstrip().startswith("::")]
-    assert lines, "autostart.bat 找不到 uvicorn 啟動行"
-    for ln in lines:
+    lines = _uvicorn_launch_lines()
+    names = {rel for rel, _ in lines}
+    assert "backend/autostart.bat" in names and len(names) >= 2, "掃描器沒找到啟動行（不可靜默掃空）：%s" % sorted(names)
+    for rel, ln in lines:
         m = re.search(r"--forwarded-allow-ips[= ]+(\S+)", ln)
-        assert m, "uvicorn 啟動行沒有明寫 --forwarded-allow-ips 127.0.0.1：\n" + ln
-        assert m.group(1).strip("'\"") == "127.0.0.1", "forwarded-allow-ips 必須只信 127.0.0.1（不可 *）：" + m.group(1)
+        assert m, "%s 的 uvicorn 啟動行沒有明寫 --forwarded-allow-ips 127.0.0.1：\n%s" % (rel, ln)
+        assert m.group(1).strip("'\"") == "127.0.0.1", "%s：forwarded-allow-ips 必須只信 127.0.0.1（不可 *）：%s" % (rel, m.group(1))
         assert "--no-proxy-headers" not in ln
+
+
+def test_launcher_scanner_positive_control_it_flags_a_launcher_without_the_flag(monkeypatch):
+    """正對照：把 restart.bat 的旗標拿掉，掃描到的那行就必須不合格（避免掃描器永遠只看到合格的行）。"""
+    import re
+    ok = {rel: ln for rel, ln in _uvicorn_launch_lines()}
+    assert "backend/restart.bat" in ok, "restart.bat 啟動行沒被掃到"
+    stripped = re.sub(r"--forwarded-allow-ips[= ]+\S+\s*", "", ok["backend/restart.bat"])
+    assert not re.search(r"--forwarded-allow-ips", stripped)
 
 
 def test_scoped_ipv6_in_cf_header_is_not_adopted():
@@ -200,7 +226,9 @@ def _offences(source: str):
     """AST 掃描（不看註解與文件字串，只看程式碼）：回傳 [(行號, 說明)]——
     ① 字串／bytes 常數恰為 X-Forwarded-For／X-Real-IP／CF-Connecting-IP／Forwarded（不分大小寫；讀標頭的各種寫法）；
     ② 屬性鏈 `….client.host`；③ `….client[0]`、`h, p = ….client`、`getattr(….client, "host")`、`getattr(x, "client")`；
-    ④ `….scope["client"]`、`scope.get("client")`（繞過 request.client 直接讀 ASGI scope）。"""
+    ④ `….scope["client"]`、`scope.get("client")`（繞過 request.client 直接讀 ASGI scope）；⑤ `c = r.client` 別名、拼接／f-string 組出的 forwarded 標頭名。
+    已知限制（靜態掃描不可能完整，價值在攔住顯而易見的）：變數當 scope 鍵（`K="client"`; `scope[K]`）、逐個比對原始 scope["headers"] 的前綴、
+    其他廠商的來源 IP 標頭（True-Client-IP、X-Client-IP）不會被抓到。"""
     out = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Constant) and _const_text(node) in _PROXY_HEADER_NAMES:
@@ -212,8 +240,11 @@ def _offences(source: str):
                 out.append((node.lineno, "直接取 .client[…]"))
             if _is_scope(node.value) and _const_text(node.slice) == "client":
                 out.append((node.lineno, 'scope["client"]'))
-        if isinstance(node, ast.Assign) and any(isinstance(t, (ast.Tuple, ast.List)) for t in node.targets) and _is_client_attr(node.value):
-            out.append((node.lineno, "拆解 .client"))
+        if isinstance(node, ast.Assign) and _is_client_attr(node.value):       # 拆解 `h, p = r.client`、別名 `c = r.client`
+            out.append((node.lineno, "取走 .client（拆解／別名）"))
+        if isinstance(node, (ast.BinOp, ast.JoinedStr)) and "forwarded" in "".join(
+                str(getattr(n, "value", "")).lower() for n in ast.walk(node) if isinstance(n, ast.Constant)):
+            out.append((node.lineno, "拼出 forwarded 標頭名"))
         if isinstance(node, ast.Call):
             f = node.func
             if isinstance(f, ast.Name) and f.id == "getattr" and len(node.args) >= 2:
@@ -274,6 +305,9 @@ _BYPASS_SNIPPETS = {
     "x-real-ip": "def f(r):\n    return r.headers.get('X-Real-IP')\n",
     "cf-connecting-ip": "def f(r):\n    return r.headers.get('cf-connecting-ip')\n",
     "forwarded": "def f(r):\n    return r.headers['Forwarded']\n",
+    "alias client": "def f(r):\n    c = r.client\n    return c.host\n",
+    "concat header": "def f(r):\n    return r.headers.get('x-forwarded-' + 'for')\n",
+    "fstring header": "def f(r, k):\n    return r.headers.get(f'x-forwarded-{k}')\n",
     "bytes header": "def f(scope):\n    return dict(scope['headers']).get(b'x-forwarded-for')\n",
 }
 

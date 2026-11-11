@@ -24,5 +24,5 @@ echo.
 set SSL_ARGS=
 if exist "certs\cert.pem" if exist "certs\key.pem" set SSL_ARGS=--ssl-keyfile=certs\key.pem --ssl-certfile=certs\cert.pem
 
-uvicorn main:app --reload --port 666 --host 0.0.0.0 %SSL_ARGS%
+uvicorn main:app --reload --port 666 --host 0.0.0.0 --forwarded-allow-ips 127.0.0.1 %SSL_ARGS%
 pause
