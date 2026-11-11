@@ -1543,8 +1543,9 @@
                               x-model="item.description"
                               :placeholder="item.type === 'header' ? '區段標題（如：網路設備、伺服器）' : '品名或規格說明'"
                               rows="1"
-                              @input="setDirty(); $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px'"
-                              x-init="$nextTick(()=>{ $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px' })"></textarea>
+                              @input="setDirty(); autoGrow($el)"
+                              x-init="autoGrowInit($el)"
+                              x-effect="item.description; autoGrowLater($el)"></textarea>
                     <div class="alt-row" x-show="item.type !== 'header' && (altCfg.enabled || altGroupOf(item))" data-testid="qf-alt-row">
                       <label title="同一組的品項只會有一個被客戶選中，合計只算被選中的那一個">
                         <input type="checkbox" :checked="!!altGroupOf(item)" @change="altToggle(item, $event.target.checked)"> 擇一方案
@@ -1558,8 +1559,9 @@
                     <textarea class="cell-textarea" x-model="item.brand"
                               x-show="item.type !== 'header'"
                               placeholder="廠牌 / 型號" rows="1"
-                              @input="setDirty(); $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px'"
-                              x-init="$nextTick(()=>{ $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px' })"></textarea>
+                              @input="setDirty(); autoGrow($el)"
+                              x-init="autoGrowInit($el)"
+                              x-effect="item.brand; autoGrowLater($el)"></textarea>
                   </td>
                   <td style="text-align:center">
                     <input class="cell-input num qty-input" type="text" inputmode="decimal"
@@ -1632,8 +1634,9 @@
                     <textarea class="cell-textarea" x-model="item.notes"
                               x-show="item.type !== 'header'"
                               placeholder="備註" rows="1"
-                              @input="setDirty(); $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px'"
-                              x-init="$nextTick(()=>{ $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px' })"></textarea>
+                              @input="setDirty(); autoGrow($el)"
+                              x-init="autoGrowInit($el)"
+                              x-effect="item.notes; autoGrowLater($el)"></textarea>
                   </td>
                   <td>
                     <button class="del-btn" @click="removeItem(idx)" title="刪除此項目">
@@ -2407,12 +2410,13 @@
   // V3.26（2026-10-15，T62 e2e）：自訂欄位清空時送 {}（後端『沒送這個鍵＝保留舊值』，只有 {} 才會清掉）。
   // V3.28（2026-10-15，T65）：三處儲存時間顯示改走共用格式器（輸出不變）
   // V3.27（2026-10-15，T64 A／B）：利潤顏色門檻改讀設定（MotrixProfitWarning，預設＝原本的 12／20）；金額、日期改走共用顯示格式器 MotrixFormat（預設輸出逐字相同）。
-  // V3.35（2026-11-11，簽核人編輯）：簽核人檢視待審核／簽核中時欄位預設 disabled、工具列常駐「編輯」鈕（reconfirm_mode=on 才顯示）；核准前彈窗退場「編輯內容」選項、只留「維持核准」；第 3 層以後編輯提示整條回第 1 層。
   // V3.34（2026-11-07，簽核二擇一 S1／S5）：核准綁內容指紋（expectedFp；`?id=` 載入路徑補設）；內容在簽過之後有變／轉簽而來時，核准前跳「維持／編輯」（新增原因要填說明）；選「編輯」＝複查編輯（POST /review-edit）。reconfirm_mode=off 時畫面行為與 V3.33 相同
   // V3.33（2026-10-17，T71）：取消勾選補登時一律還原原本的單號（含「原本是空」）；不再把過去月份的預覽單號留在單號欄
   // V3.32（2026-10-17，T71）：補登模式的標題／單號欄顯示預覽單號；複製為新單不帶補登來歷註記
   // V3.31（2026-10-17，T70-1）：新增模式多一個「補登歷史案件」區塊（僅最高管理者且設定中心開關有效時出現；日期限過去月份、預覽單號、原因必填、走專用補登端點）
-  const FORM_VERSION = 'V3.35'
+  // V3.35（2026-11-11）：品項明細三個多行欄（品名／廠牌型號／備註）載入既有單、改值、欄寬變動時自動撐高，不再看起來被裁切
+  // V3.36（2026-11-11，簽核人編輯）：簽核人檢視待審核／簽核中時欄位預設 disabled、工具列常駐「編輯」鈕（reconfirm_mode=on 才顯示）；核准前彈窗退場「編輯內容」選項、只留「維持核准」；第 3 層以後編輯提示整條回第 1 層。
+  const FORM_VERSION = 'V3.36'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -2422,6 +2426,43 @@
   // 也不擋送審；送審時後端會用同一份來源重算。
   const DEFAULT_TERMS = { paymentTerms: '', deliveryTerms: '', acceptanceTerms: '', warrantyTerms: '', afterSales: '' }
 
+
+  // ── 品項明細 textarea 自動撐高（2026-11-11）──
+  // 原本只在 @input（逐字打）與 x-init（掛載當下）各算一次 scrollHeight：載入既有單子、程式改值、
+  // 欄寬變動（視窗縮放／字型載入／x-show 由隱藏變顯示）都不會重算 ⇒ 文字其實換行了，框卻停在一行高、
+  // 看起來像被裁切。現在三條路都走這裡：@input、x-effect（model 值變動）、ResizeObserver（寬度變動）。
+  function autoGrow(el) { // 同步版：@input 用（打字要立即跟上）
+    if (!el || !el.isConnected || el.clientWidth === 0) return // 隱藏中（x-show=false）量到 0，不寫高度
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }
+  // 批次版：x-effect／ResizeObserver 用。同一幀內全部欄位「先全寫 auto、再一次全讀、再全寫」＝一次 layout
+  // （逐格讀寫交錯在 200 列／600 格時慢約 3.5 倍）；且在 rAF 內改高度，不會在 ResizeObserver 回呼裡改被觀察元素
+  // 而噴 "ResizeObserver loop completed with undelivered notifications"。
+  const _agQueue = new Set()
+  let _agRaf = 0
+  function autoGrowLater(el) {
+    _agQueue.add(el)
+    if (_agRaf) return
+    _agRaf = requestAnimationFrame(() => {
+      _agRaf = 0
+      const els = [..._agQueue].filter(e => e.isConnected && e.clientWidth > 0)
+      _agQueue.clear()
+      els.forEach(e => { e.style.height = 'auto' })
+      const hs = els.map(e => e.scrollHeight)
+      els.forEach((e, i) => { e.style.height = hs[i] + 'px' })
+    })
+  }
+  function autoGrowInit(el) {
+    autoGrowLater(el)
+    if (typeof ResizeObserver === 'undefined') return
+    let lastW = el.clientWidth
+    // 只在「寬度」變時重算：高度是我們自己改的，不能讓它再觸發自己
+    new ResizeObserver(() => {
+      const w = el.clientWidth
+      if (w !== lastW) { lastW = w; autoGrowLater(el) }
+    }).observe(el)
+  }
 
   function quotationForm() {
     return {
