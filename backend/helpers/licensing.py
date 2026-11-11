@@ -340,34 +340,41 @@ def verify_license(blob=None):
     return _verify_blob(blob)
 
 
-def _verify_blob(text):
-    """驗一個已經拿到手的 blob 字串。不碰檔案系統。"""
+def _open_blob(text, required=None):
+    """blob 字串 → `(payload, env, None)`（簽章驗過）或 `(None, None, reason)`。
+
+    **簽章驗過之前 payload 沒有任何一個欄位可信**，所以失敗時一律不回 payload。
+    授權金鑰與緊急放行通行證（見下方）共用這一條驗章路徑，只差 `required`（必要欄位）。
+    reason ∈ missing／malformed／bad_signature；檢查順序固定，與 `verify_license` 的契約一致。
+    """
+    if required is None:
+        required = _REQUIRED_FIELDS
     if isinstance(text, (bytes, bytearray)):
         try:
             text = bytes(text).decode("utf-8")
         except UnicodeDecodeError:
-            return _unverified("malformed")
+            return None, None, "malformed"
     elif not isinstance(text, str):
-        return _unverified("malformed")
+        return None, None, "malformed"
 
     # 空字串／只有空白 ＝ 沒有金鑰，不是壞掉的金鑰。
     if not text.strip():
-        return _unverified("missing")
+        return None, None, "missing"
 
     payload = _decode_blob(text)
     if payload is None:
-        return _unverified("malformed")
-    if any(k not in payload for k in _REQUIRED_FIELDS):
-        return _unverified("malformed")
+        return None, None, "malformed"
+    if any(k not in payload for k in required):
+        return None, None, "malformed"
 
     sig_b64 = payload.get("sig")
     if not isinstance(sig_b64, str) or not sig_b64:
-        return _unverified("malformed")
+        return None, None, "malformed"
     try:
         signature = base64.b64decode(sig_b64.encode("ascii"), validate=True)
     except (binascii.Error, ValueError, UnicodeEncodeError):
         # 結構是對的，壞的是簽章本身 → 這是簽章問題不是格式問題。
-        return _unverified("bad_signature")
+        return None, None, "bad_signature"
 
     signed_bytes = _signing_bytes(payload)
     env = None
@@ -385,7 +392,15 @@ def _verify_blob(text):
         break
 
     if env is None:
-        return _unverified("bad_signature")
+        return None, None, "bad_signature"
+    return payload, env, None
+
+
+def _verify_blob(text):
+    """驗一個已經拿到手的 blob 字串。不碰檔案系統。"""
+    payload, env, why = _open_blob(text)
+    if payload is None:
+        return _unverified(why)
 
     # ── 到這裡 payload 才可信 ────────────────────────────────────────────────
     customer  = payload.get("customer")
@@ -460,6 +475,147 @@ def license_block_message(status):
     return _GATE_MESSAGES.get(
         status.get("reason"), "授權狀態異常，請聯絡供應商。"
     )
+
+
+# ── 緊急放行通行證（break-glass；2026-11-11，T80）────────────────────────────
+#
+# 為什麼要有：授權閘門沒有任何「程式以外」的出口時，正式機只要金鑰失效（最典型：換主機板／網卡造成機器指紋漂移，
+# 這台機器有過 BSOD 0x124 記憶體 MCE 紀錄，換硬體不是假設）就是全站 402，唯一的解法是重新發版。
+#
+# 怎麼做（**不是「放一個檔案就放行」**——那個口本身會變成新的繞過漏洞）：
+#   ① 通行證是**簽章過的**（與授權金鑰同一條驗章路徑、同兩把公鑰）：只有握有私鑰的簽發方做得出來，
+#      伺服器管理員自己建檔、改日期、改內容都會 bad_signature。
+#   ② `purpose` 必須是 "emergency_pass"：授權金鑰不能拿來當通行證，通行證也不是授權金鑰（缺 machine／modules ⇒ malformed）。
+#   ③ **綁客戶、不綁機器**：綁機器的話，在指紋漂移（它存在的理由）時恰好失效。改綁 `tax_id`，且必須等於
+#      **驗章通過**的那把授權金鑰裡的 tax_id（別家客戶的通行證、或沒有可信授權金鑰時，不放行）。
+#   ④ **只救兩種狀況**：`machine_mismatch`（換硬體）、`expired`（續約作業來不及）。沒有金鑰／損毀／簽章不符
+#      都不放行——那是「重新簽一把授權」的事，不是通行證該蓋掉的事。
+#   ⑤ **有期限且上限寫死在驗證端**：`issued ≤ 今天 ≤ expires`，且 `expires − issued ≤ EMERGENCY_MAX_DAYS`。
+#      簽發方多簽幾年也沒用。過期的通行證自動失效，不需要有人去刪。
+#   ⑥ 放行時**不安靜**：log＋稽核（helpers/license_alerts.py）、每個 /api 回應帶 `X-Motrix-License: emergency;until=…`
+#      （前端橫幅）、`GET /api/license/status` 的 `emergency` 欄位講出生效或不生效的原因。
+#
+# 位置：與授權金鑰同一個資料夾的 `license_emergency.key`（`emergency_path()`，跟著 `LICENSE_PATH` 走，測試換得掉）。
+# 簽發：`python tools/issue_license.py emergency --tax-id <統編> --days 7 --reason "…" --out license_emergency.key`。
+EMERGENCY_FILE_NAME = "license_emergency.key"
+EMERGENCY_PURPOSE = "emergency_pass"
+EMERGENCY_MAX_DAYS = 14                                   # 驗證端的硬上限（簽發端再長也只認這麼久）
+EMERGENCY_MAX_BYTES = 8192                                # 通行證是小檔；超過就不讀
+EMERGENCY_COVERS = frozenset({"machine_mismatch", "expired"})
+LICENSE_HEADER = "X-Motrix-License"                       # 前端橫幅用（notif.js）
+_EMERGENCY_REQUIRED = ("purpose", "tax_id", "issued", "expires", "reason")
+
+
+def emergency_path():
+    """通行證檔案位置：與授權金鑰同一個資料夾。**呼叫時才算**（測試會換 `LICENSE_PATH`）。"""
+    return os.path.join(os.path.dirname(os.path.abspath(LICENSE_PATH)), EMERGENCY_FILE_NAME)
+
+
+def _read_small_text(path):
+    """讀一個小檔 → `(text, None)` 或 `(None, 原因)`。原因：missing／unreadable／too_big。不丟例外。"""
+    try:
+        st_result = os.stat(path)
+    except OSError:
+        return None, "missing"
+    if not _stat.S_ISREG(st_result.st_mode):
+        return None, "missing"
+    if st_result.st_size > EMERGENCY_MAX_BYTES:
+        return None, "too_big"
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.read(), None
+    except (OSError, UnicodeDecodeError):
+        return None, "unreadable"
+
+
+def _emergency_judge(status, token_text):
+    """通行證判定（純函式，不碰檔案系統除了讀授權金鑰）→ dict：present／active／why（＋ until／pass_id／note／env）。"""
+    pass_id = hashlib.sha256(token_text.strip().encode("utf-8", "replace")).hexdigest()[:12]
+    base = {"present": True, "active": False, "pass_id": pass_id}
+
+    def no(why, extra=None):
+        out = dict(base, why=why)
+        out.update(extra or {})
+        return out
+
+    payload, env, why = _open_blob(token_text, _EMERGENCY_REQUIRED)
+    if payload is None:
+        return no("token_bad_signature" if why == "bad_signature" else "token_malformed")
+    if payload.get("purpose") != EMERGENCY_PURPOSE:
+        return no("token_wrong_purpose", {"env": env})
+
+    issued, expires = payload.get("issued"), payload.get("expires")
+    try:
+        d_issued = date.fromisoformat(issued.strip())
+        d_expires = date.fromisoformat(expires.strip())
+    except (AttributeError, ValueError):
+        return no("token_bad_dates", {"env": env})
+    until = d_expires.isoformat()
+    note = payload.get("reason") if isinstance(payload.get("reason"), str) else ""
+    info = {"until": until, "note": note, "env": env}
+    if (d_expires - d_issued).days > EMERGENCY_MAX_DAYS or d_expires < d_issued:
+        return no("token_span_too_long", info)
+    today = date.today()
+    if today < d_issued:
+        return no("token_not_yet_valid", info)
+    if today > d_expires:
+        return no("token_expired", info)
+
+    # ③④：只在授權金鑰「驗章通過、但機器不符或過期」時才有意義；綁的是那把金鑰的 tax_id。
+    if not isinstance(status, dict) or status.get("reason") not in EMERGENCY_COVERS:
+        return no("not_needed" if (status or {}).get("reason") == "ok" else "license_not_covered", info)
+    lic_text, err = _read_small_text(LICENSE_PATH)
+    lic_payload = _open_blob(lic_text)[0] if lic_text is not None else None
+    if lic_payload is None:
+        return no("license_untrusted", info)
+    tax = lic_payload.get("tax_id")
+    if not isinstance(tax, str) or not isinstance(payload.get("tax_id"), str) \
+            or tax.strip() == "" or tax.strip() != payload["tax_id"].strip():
+        return no("tax_id_mismatch", info)
+
+    out = dict(base, why="ok", active=True)
+    out.update(info)
+    return out
+
+
+def emergency_status(status):
+    """給狀態端點用：沒有通行證檔 → None；有 → dict（active／why …）。**任何情況都不丟例外。**"""
+    try:
+        text, err = _read_small_text(emergency_path())
+        if text is None:
+            if err == "missing":
+                return None
+            return {"present": True, "active": False, "why": "token_" + err, "pass_id": None}
+        return _emergency_judge(status, text)
+    except Exception:  # noqa: BLE001 — 狀態端點不可以因為通行證壞掉而 500
+        return {"present": True, "active": False, "why": "token_error", "pass_id": None}
+
+
+def emergency_blob_problem(blob):
+    """簽發端自我複驗用：通行證 blob 的**簽章、用途、日期**都過 ⇒ None，否則原因碼（token_*）。
+    不看授權金鑰綁定（那要在目標機器上、有那把授權金鑰才判得了）。"""
+    why = _emergency_judge(None, blob)["why"]
+    return None if why == "license_not_covered" else why
+
+
+def emergency_pass(status):
+    """這個（會被擋的）授權狀態有沒有生效中的通行證 → dict 或 None。**不丟例外；任何不確定都當沒有。**
+
+    不確定就不放行：把「讀不懂」當成放行，是把鎖拆掉。"""
+    info = emergency_status(status)
+    return info if info and info.get("active") else None
+
+
+def license_banner(status, emergency):
+    """前端橫幅用的標頭值；沒有要提示的 → None。
+
+    emergency ＝ 靠通行證撐著（最優先）；dev_key ＝ 驗章通過但簽發方是開發金鑰（env=dev）——
+    正式機上裝了開發金鑰簽的東西，不可以悄悄放過去（開發私鑰不在受控保管下）。"""
+    if emergency:
+        return "emergency;until=%s" % emergency.get("until", "")
+    if isinstance(status, dict) and status.get("valid") and status.get("env") == "dev":
+        return "dev_key"
+    return None
 
 
 # ── 機器指紋 ─────────────────────────────────────────────────────────────────
@@ -682,4 +838,12 @@ def module_licensed(manifest, status, gate_enabled):
 def module_license_check(manifest):
     """載入器用（main.py 注入 core.loader.load_all）。每次呼叫當下讀開關與金鑰。"""
     gate = LICENSE_GATE_ENABLED
-    return module_licensed(manifest, verify_license() if gate else {}, gate)
+    if not gate:
+        return module_licensed(manifest, {}, False)
+    status = verify_license()
+    if license_blocks_request(status):
+        # 靠緊急放行通行證撐著時，重啟也不能讓模組全部不載入（那等於「放行」只撐到下次重啟）。
+        # 模組清單取自驗章通過的那把授權金鑰（machine_mismatch／expired 時 status.modules 仍是可信的）。
+        if emergency_pass(status):
+            status = dict(status, valid=True, reason="ok")
+    return module_licensed(manifest, status, gate)

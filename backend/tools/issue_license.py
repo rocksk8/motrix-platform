@@ -39,8 +39,12 @@ if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
 from helpers.licensing import (  # noqa: E402 — sys.path 要先補好才 import 得到
+    EMERGENCY_FILE_NAME,
+    EMERGENCY_MAX_DAYS,
+    EMERGENCY_PURPOSE,
     LICENSE_KIND_PERPETUAL,
     LICENSE_KIND_SUBSCRIPTION,
+    emergency_blob_problem,
     machine_fingerprint,
     sign_license,
     verify_license,
@@ -182,6 +186,53 @@ def cmd_issue(args):
     return 0
 
 
+def cmd_emergency(args):
+    """簽一張緊急放行通行證（授權閘門的 break-glass；設計見 helpers/licensing.py「緊急放行通行證」一節）。
+
+    綁客戶統編、不綁機器（綁機器的話，在指紋漂移——它存在的理由——時恰好失效）；有期限，且驗證端另有硬上限
+    （EMERGENCY_MAX_DAYS 天），這裡簽再長也沒用。只救「機器不符」與「過期」，不救沒金鑰／損毀／簽章不符。"""
+    if not os.path.isfile(args.key):
+        print(f"[錯誤] 找不到私鑰：{args.key}", file=sys.stderr)
+        return 2
+    if not (args.reason or "").strip():
+        print("[錯誤] --reason 不可為空（會寫進稽核紀錄，事後要查得到為什麼簽這張）", file=sys.stderr)
+        return 2
+    if not 1 <= args.days <= EMERGENCY_MAX_DAYS:
+        print(f"[錯誤] --days 必須在 1～{EMERGENCY_MAX_DAYS}（驗證端的硬上限；這是橋接用的，不是續約）", file=sys.stderr)
+        return 2
+    issued_d = date.fromisoformat(args.issued) if args.issued else date.today()
+    expires_d = issued_d + timedelta(days=args.days)
+    with open(args.key, "rb") as fh:
+        priv_pem = fh.read()
+    payload = {
+        "purpose":  EMERGENCY_PURPOSE,
+        "customer": args.customer or "",
+        "tax_id":   args.tax_id,
+        "issued":   issued_d.isoformat(),
+        "expires":  expires_d.isoformat(),
+        "reason":   args.reason.strip(),
+    }
+    blob = sign_license(payload, priv_pem)
+    problem = emergency_blob_problem(blob)
+    if problem:
+        print(f"[錯誤] 自我複驗失敗（{problem}）：剛簽出來的通行證用內嵌公鑰驗不過。", file=sys.stderr)
+        return 3
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            fh.write(blob + chr(10))
+        print(f"通行證已寫入：{args.out}")
+    else:
+        print(blob)
+    print("", file=sys.stderr)
+    print(f"  客戶     {payload['customer']}（統編 {payload['tax_id']}）", file=sys.stderr)
+    print(f"  有效期   {payload['issued']} ~ {payload['expires']}（{args.days} 天）", file=sys.stderr)
+    print(f"  原因     {payload['reason']}", file=sys.stderr)
+    print(f"  放置     目標伺服器的 backend/{EMERGENCY_FILE_NAME}（與 license.key 同一個資料夾），不必重啟", file=sys.stderr)
+    print("  效果     只在授權為「機器不符」或「已過期」時生效，且那把授權金鑰的統編必須等於上面這個；", file=sys.stderr)
+    print("           生效時：log＋稽核、每頁橫幅、/api/license/status 的 emergency 欄位", file=sys.stderr)
+    return 0
+
+
 # ── 進入點 ───────────────────────────────────────────────────────────────────
 
 def main(argv=None):
@@ -221,6 +272,17 @@ def main(argv=None):
     p_iss.add_argument("--out", default=None,
                        help="金鑰輸出檔（預設印到 stdout）")
     p_iss.set_defaults(func=cmd_issue)
+
+    p_em = sub.add_parser("emergency", help="簽一張緊急放行通行證（授權閘門 break-glass，有期限、綁客戶統編）")
+    p_em.add_argument("--tax-id", required=True, dest="tax_id",
+                      help="客戶統編（必須等於目標機器上那把授權金鑰的統編）")
+    p_em.add_argument("--customer", default="", help="客戶名稱（僅供辨識）")
+    p_em.add_argument("--days", type=int, default=7, help=f"有效天數 1～{EMERGENCY_MAX_DAYS}（預設 7）")
+    p_em.add_argument("--issued", default=None, help="簽發日 YYYY-MM-DD（預設今天）")
+    p_em.add_argument("--reason", required=True, help="為什麼簽（會進稽核）")
+    p_em.add_argument("--key", default=DEFAULT_KEY, help="私鑰路徑")
+    p_em.add_argument("--out", default=None, help="輸出檔（預設印到 stdout）")
+    p_em.set_defaults(func=cmd_emergency)
 
     args = parser.parse_args(argv)
     return args.func(args)

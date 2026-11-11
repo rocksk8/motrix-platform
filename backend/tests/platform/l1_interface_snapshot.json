@@ -1,5 +1,5 @@
 {
- "core_version": "1.157",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1037,13 +1037,29 @@
    "validate_versions": "def(versions)",
    "year_status": "def(versions, today)"
   },
+  "helper:license_alerts": {
+   "dev_key_in_use": "def(status)",
+   "emergency_in_use": "def(info)",
+   "startup_check": "def()"
+  },
   "helper:licensing": {
+   "EMERGENCY_COVERS": "const",
+   "EMERGENCY_FILE_NAME": "const",
+   "EMERGENCY_MAX_BYTES": "const",
+   "EMERGENCY_MAX_DAYS": "const",
+   "EMERGENCY_PURPOSE": "const",
    "LICENSE_EXEMPT_PATHS": "const",
    "LICENSE_GATE_ENABLED": "const",
+   "LICENSE_HEADER": "const",
    "LICENSE_KIND_PERPETUAL": "const",
    "LICENSE_KIND_SUBSCRIPTION": "const",
    "LICENSE_PATH": "const",
    "MODULE_LICENSE_NOT_CHECKED": "const",
+   "emergency_blob_problem": "def(blob)",
+   "emergency_pass": "def(status)",
+   "emergency_path": "def()",
+   "emergency_status": "def(status)",
+   "license_banner": "def(status, emergency)",
    "license_block_message": "def(status)",
    "license_blocks_request": "def(status)",
    "machine_fingerprint": "def()",

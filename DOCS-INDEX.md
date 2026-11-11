@@ -71,6 +71,7 @@
 | `BUILDER-UX.md` | 模組建構器拖曳式／縮圖化 UX | 已實作（頁面存在） | **程式 11-11**（只核對存在） |
 | `STAGE-C-DESIGN.md` | 階段 C：頁面進模組資料夾、選單由登錄表產生 | **部分實作（標頭 11-11 已更正）**：C1～C4 已做（`core/pages.py`、`source_tree.page_file`、`/api/platform/menu`、sidebar 吃宣告）；C5 實體搬家**沒做**（46 個宣告頁 0 頁搬進 `modules/<key>/pages/`）；§7 決策點是否全有裁示未逐題核對 | **程式 11-11** |
 | `COMPANY-SETUP-GATE.md` | 販售版本公司資料設定閘門 | **已實作**（E4，609fc0257；標頭 11-11 已更正）。`helpers/company_setup.py`、`main.py` 閘門、6 組 `test_company_setup_*`＋e2e；「停擺風險」列的 `LICENSE_GATE_ENABLED=False` 11-11 已更正（授權閘門預設已改開，未部署） | **程式 11-11** |
+| `LICENSE-EMERGENCY-PASS.md` | 授權閘門：緊急放行通行證（簽發／安裝／確認／結束）、402 說明頁、env=dev 警告、風險 | **已實作**（T80，2026-11-11；`LICENSE_GATE_ENABLED` 預設開，**正式機未切換**） | 程式 11-11 |
 | `LODGING-NEARBY.md` | 地圖附近旅宿：來源調查與設計 | **已實作**（L2 模組 `lodging` v1.2.10；標頭 11-11 已更正） | **程式 11-11**（模組、migration、頁面、測試存在；§5 未查證各項未重核） |
 | `GOOGLE-BASEMAP.md` | Google 底圖：計費、條款、做法比較 | 已實作（文內已更正，採 Maps JavaScript API；`helpers/geo.py`、`routers/map_points.py`） | 自述更正 09-28＋程式存在 |
 | `MONEY-FLOWS.md`／`FINANCE-INTEGRATION.md`／`LEDGER-ACCEPTANCE.md` | 金流串接覆蓋表／財務串接總覽（快取）／總帳端到端驗收 | 現行（`money_flows.json` 有守門） | 自述 10-01～10-10 |

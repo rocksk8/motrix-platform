@@ -109,7 +109,7 @@ def test_the_conftest_key_is_a_real_signed_key_not_a_stub(license_test_key):
     （否則這份檔案的 200 全是自己造出來的。）"""
     assert lic.machine_fingerprint() == TEST_LICENSE_MACHINE
     st = lic.verify_license()
-    assert (st["valid"], st["reason"], st["env"], st["modules"]) == (True, "ok", "dev", ["*"]), st
+    assert (st["valid"], st["reason"], st["env"], st["modules"]) == (True, "ok", "prod", ["*"]), st
     assert st["kind"] == lic.LICENSE_KIND_SUBSCRIPTION
     # 換一把別人簽的 ⇒ 同一條驗章路徑必須判無效
     from cryptography.hazmat.primitives import serialization

@@ -11,6 +11,7 @@
 from fastapi import APIRouter, Header
 
 from helpers import _require_user
+from helpers import licensing as _lic
 from helpers.licensing import verify_license
 
 router = APIRouter()
@@ -28,4 +29,14 @@ def license_status(authorization: str = Header(None)):
     而且**每次呼叫都重讀**（第 6 步的到期提醒要能每天重新判定 `days_left`）。
     """
     _require_user(authorization)
-    return verify_license()
+    status = verify_license()
+    # 在 LicenseStatus 八個欄位之外另外帶（2026-11-11，T80；前端「授權無法使用」頁與橫幅用，既有欄位不動）：
+    #   machine    本機指紋——被擋（機器不符）時簽發方要拿它重簽；不是祕密。讀不到 ⇒ None
+    #   emergency  緊急放行通行證的狀態：沒有通行證檔 ⇒ None；有 ⇒ {present, active, why, until, note, pass_id, env}
+    #   gate       授權閘門是否開著；blocked ＝ 這個狀態會不會擋業務 API（不含通行證；永久授權過期＝不擋）
+    try:
+        machine = _lic.machine_fingerprint()
+    except Exception:  # noqa: BLE001 — 狀態端點必須永遠讀得到
+        machine = None
+    return dict(status, machine=machine, emergency=_lic.emergency_status(status),
+                gate=bool(_lic.LICENSE_GATE_ENABLED), blocked=_lic.license_blocks_request(status))
