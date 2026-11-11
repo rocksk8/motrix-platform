@@ -1,6 +1,7 @@
 # 販售版：本公司資料設定閘門——調查與設計（E 線 E4，2026-09-28）
 
-> 狀態：**調查＋設計，尚未實作**（主持派工：交 D 審，過了才實作）。
+> ~~狀態：**調查＋設計，尚未實作**（主持派工：交 D 審，過了才實作）。~~
+> **狀態（2026-11-11 核對程式與測試）：已實作。** 2026-09-28～29 上車（E4，609fc0257）。程式：`backend/helpers/company_setup.py`（閘門、簽章確認檔、demo、第二道輸出驗證）、`backend/main.py` 的 `CompanySetupRequired` 處理與 `_COMPANY_SETUP_ALLOWED` 清單、`helpers/company_identity.py`；測試：`tests/test_company_setup_{cli,core,gate,output_gate,output_points,sign}_*`、`test_e2e_company_setup_gate_*`、`tests/platform/test_no_our_company_literals.py`。以下是 09-28 的**設計稿原文**（「要做」是當時語氣），與程式不一致時以程式為準；§9 的待裁示都已有裁示結果。
 > 依據：CORE-SPEC 裁示表「販售版：輸出文件前強制設定本公司資料」（0f8b16bf＋99702431）。使用者原話（逐字）：
 > 「未來販售輸出的檔案，需要對方強制設定自己的公司名稱跟統編等訊息，避免對方用預設我的公司統編輸出報價單等相關文件」；
 > 「例如先導航去公司設置，設置完才開放功能」。
