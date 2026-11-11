@@ -107,7 +107,7 @@ _BG_RESULT = {}
 
 def test_negative_control_without_reaper_lock_persists(table, monkeypatch):
     """負對照：收尾網關掉 ⇒ 例外後的寫鎖確實還在（GC 停掉，排除『剛好被回收』）。"""
-    monkeypatch.setattr(db, "REAP_REQUEST_CONNECTIONS", False)
+    monkeypatch.setattr(db, "_REAP_REQUEST_CONNECTIONS", False)
     client = TestClient(_app(), raise_server_exceptions=False)
     gc.collect()
     gc.disable()
@@ -179,7 +179,7 @@ def test_background_thread_connection_not_reaped(table):
 
 
 def test_reap_logs_warning_only_for_connections_in_transaction(table, caplog):
-    token, reg = db.track_request_connections()
+    token, reg = db._track_request_connections()
     try:
         held = db.get_db()
         held.execute("INSERT INTO _t80 VALUES (7)")      # 在交易中
@@ -189,7 +189,7 @@ def test_reap_logs_warning_only_for_connections_in_transaction(table, caplog):
         done.close()                                     # 正常關閉
     finally:
         with caplog.at_level("WARNING", logger="db"):
-            n = db.reap_request_connections(token, reg)
+            n = db._reap_request_connections(token, reg)
     assert n == 1
     warns = [r for r in caplog.records if "conn-reaper" in r.getMessage()]
     assert len(warns) == 1 and "test_conn_reaper_t80" in warns[0].getMessage()
@@ -201,7 +201,7 @@ def test_reap_logs_warning_only_for_connections_in_transaction(table, caplog):
 
 def test_reap_from_other_thread_than_creator(table):
     """請求內連線在 worker 執行緒開、收尾網在別條執行緒回收（check_same_thread=False 才行）。"""
-    token, reg = db.track_request_connections()
+    token, reg = db._track_request_connections()
     box = {}
 
     def worker():
@@ -214,7 +214,7 @@ def test_reap_from_other_thread_than_creator(table):
     t = threading.Thread(target=ctx.run, args=(worker,))
     t.start()
     t.join()
-    assert db.reap_request_connections(token, reg) == 1
+    assert db._reap_request_connections(token, reg) == 1
     assert _other_can_write() is True
 
 

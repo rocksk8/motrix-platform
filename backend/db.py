@@ -225,20 +225,20 @@ def _connect(path: str, *, check_same_thread: bool = True):
 #: 因為 traceback→frame→conn 的參考循環**不會立刻被回收**，要等 cyclic GC ⇒ 寫鎖留到不確定的時間，
 #: 下一個寫入者卡滿 `timeout=30` 後 500 `database is locked`（payslip 事故的機制）。
 #: 做法：middleware 進場時放一個 list；`get_db()` 把這個請求內（非背景執行緒）開的連線登記進去；
-#: 請求結束時 `reap_request_connections` 對**還開著**的連線：在交易中 ⇒ rollback＋close＋warning（記是哪裡開的），
+#: 請求結束時 `_reap_request_connections` 對**還開著**的連線：在交易中 ⇒ rollback＋close＋warning（記是哪裡開的），
 #: 沒在交易中 ⇒ 只 close。已正常 close 的略過。背景執行緒（`spawn_bg_thread`）排除——它們比請求活得久，由各自的 owner 關。
 #: 關掉：環境變數 MOTRIX_CONN_REAPER=0。
-REAP_REQUEST_CONNECTIONS = os.environ.get("MOTRIX_CONN_REAPER", "1") != "0"
+_REAP_REQUEST_CONNECTIONS = os.environ.get("MOTRIX_CONN_REAPER", "1") != "0"
 _REQ_CONNS = contextvars.ContextVar("motrix_request_conns", default=None)
 
 
-def track_request_connections():
-    """請求進場：開一個登記簿。回 `(token, registry)`，請求結束時交給 `reap_request_connections`。"""
+def _track_request_connections():
+    """請求進場：開一個登記簿。回 `(token, registry)`，請求結束時交給 `_reap_request_connections`。"""
     reg = []
     return _REQ_CONNS.set(reg), reg
 
 
-def reap_request_connections(token, registry) -> int:
+def _reap_request_connections(token, registry) -> int:
     """請求結束：回收登記簿內還開著的連線；回傳『在交易中（持寫鎖）被 rollback』的數量。永不丟例外。"""
     try:
         _REQ_CONNS.reset(token)

@@ -751,20 +751,20 @@ import db as _db_for_reaper     # noqa: E402
 
 
 class _ConnReaperMiddleware:
-    """T80 R1：請求結束時回收這個請求內沒 close 的 `get_db()` 連線（見 db.track_request_connections）。
+    """T80 R1：請求結束時回收這個請求內沒 close 的 `get_db()` 連線（見 db._track_request_connections）。
     純 ASGI（不是 BaseHTTPMiddleware）⇒ 不多開 task；包住整個請求（含 auth_middleware 自己開的連線與回應本文送完之後）。"""
 
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or not _db_for_reaper.REAP_REQUEST_CONNECTIONS:
+        if scope["type"] != "http" or not _db_for_reaper._REAP_REQUEST_CONNECTIONS:
             return await self.app(scope, receive, send)
-        token, registry = _db_for_reaper.track_request_connections()
+        token, registry = _db_for_reaper._track_request_connections()
         try:
             await self.app(scope, receive, send)
         finally:
-            _db_for_reaper.reap_request_connections(token, registry)
+            _db_for_reaper._reap_request_connections(token, registry)
 
 
 app.add_middleware(_ConnReaperMiddleware)       # T80：在 InternalCols 之前加＝比它內層；仍包住 auth_middleware 以內的所有東西
