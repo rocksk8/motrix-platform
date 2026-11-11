@@ -377,6 +377,13 @@ def test_hc1d_a_plain_local_request_is_still_allowed(dash):
         assert client.get("/api/pre-deploy-check").status_code == 200
 
 
+def test_hc1d_the_dashboard_marker_headers_match_the_helpers_list(dash):
+    """儀表板自成一體（不 import backend helpers），所以它的「代理標頭」清單是 helpers.client_ip 那份的副本——防兩邊漂移。"""
+    from helpers.client_ip import CLOUDFLARE_HEADERS
+
+    assert set(dash._PROXY_MARKER_HEADERS) == set(CLOUDFLARE_HEADERS) | {"x-forwarded-for", "forwarded", "x-real-ip"}
+
+
 def test_hc1d_the_websocket_refuses_a_proxied_loopback_request(dash):
     from starlette.websockets import WebSocketDisconnect
 
