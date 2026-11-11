@@ -13,7 +13,8 @@
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <style>
     [x-cloak]{display:none!important}
-    .page-wrap{padding:calc(var(--topbar-h) + 20px) 28px 60px calc(var(--sidebar-w) + 28px);max-width:1400px}
+    /* style.css 的 .page-wrap 已有 margin-top／margin-left 讓出頂欄與側欄；原本又用 padding 讓一次 → 桌面頁首多一個頂欄高的空白、手機約 230px（hichan-17 2026-11-12） */
+    .page-wrap{padding:20px 28px 60px;max-width:1400px}
     .plan-no{font-family:LINE Seed TW_OTF, monospace;font-size:13px;color:var(--text-dim)}
     .st{display:inline-flex;padding:2px 8px;border-radius:4px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;vertical-align:middle}
     .st-plan{background:#F0EEE9;color:var(--text-secondary)}
@@ -73,7 +74,6 @@
        ③ 工具列 3 排且 sticky（吃掉 1/5 螢幕）→ 手機改不黏、按鈕 44px
        ④ 12 個分頁折成 4 排 → 一排可橫滑；表格內輸入 12px（iOS 聚焦放大）→ 16px */
     @media (max-width: 1023px) {
-      .page-wrap { padding-top: 20px; padding-left: 28px; }
       .form-group input, .batch-bar select, .batch-bar input[type=text], .toolbar select, .modal-box input, .modal-box select { font-size: 16px !important; min-height: 44px; }
       .grid-table input[type=text], .grid-table input[type=number], .grid-table select { font-size: 16px; min-height: 40px; }
       .grid-table input[type=checkbox], .batch-bar input[type=checkbox] { width: 22px; height: 22px; }
