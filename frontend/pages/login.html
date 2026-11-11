@@ -381,7 +381,7 @@
       state(input).caps = !!e.getModifierState('CapsLock')
       render(input)
     }
-    document.addEventListener('keydown', function (e) { if (pending.length) flush(); caps(e) }, true)   // 有鍵盤事件＝滑鼠不在按著
+    document.addEventListener('keydown', function (e) { mouseDown = false; if (pending.length) flush(); caps(e) }, true)   // 有鍵盤事件＝滑鼠不在按著（mouseup 遺失時也不會卡住旗標）
     document.addEventListener('keyup', caps, true)
     document.addEventListener('mousedown', function (e) { mouseDown = true; caps(e) }, true)
     document.addEventListener('mouseup', function () { setTimeout(flush, 0) }, true)   // click 緊接在 mouseup 之後；延後一拍再動版面

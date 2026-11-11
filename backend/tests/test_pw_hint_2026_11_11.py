@@ -345,3 +345,16 @@ def test_repeated_identical_state_does_not_rewrite_the_live_region(login_page):
     for t in ("keydown", "keyup", "keydown", "keyup", "keydown"):
         _key(p, PW, t, True)
     assert p.evaluate("() => window.__muts") == 0
+
+
+@pytest.mark.e2e
+def test_lost_mouseup_does_not_leave_an_invisible_hint_reserving_space(login_page):
+    """K審 hichan-11 nit：mouseup 遺失（例如 mousedown 就開右鍵選單）時 mouseDown 旗標會卡住，
+    之後用 Tab 離開欄位 ⇒ 提示只被隱藏、永遠不移除（看不見但佔位）。任何鍵盤事件都要重置旗標。"""
+    p = login_page
+    _key(p, PW, "keydown", True)
+    assert p.locator(HINT).count() == 1
+    # 空白處 mousedown、沒有 mouseup（合成：只送 mousedown 事件，不觸發焦點變化）
+    p.evaluate("() => document.body.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}))")
+    p.keyboard.press("Tab")                          # 真的鍵盤換焦點離開密碼欄
+    p.wait_for_function("() => !document.querySelector('.pw-hint')")
