@@ -1,10 +1,10 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-11（refactor/quotations-stages-split；案件階段端點拆檔：純搬移，零行為變更；L1 介面不變）
+## 1.0.213 — 2026-11-11（refactor/quotations-stages-split；案件階段端點拆檔：純搬移，零行為變更；L1 介面不變）
 - 重構（後端）：案件階段端點（`/api/quotations/{quote_no}/stages…`、`/api/quotations/stage-templates/preview` 共 14 條路由，含 `_apply_stage_template_write`、`_would_create_cycle`）自 `api/quotations.py` 逐字搬到新檔 `api/quotation_stages.py`；路由路徑、函式名稱、驗證、回應形狀都不變，`modules/case/__init__.py` 的 routers 清單在 `quotations` 之後加掛新 router。階段表的讀寫 helper（`_serialize_stage`／`_get_stage_row`／`_sync_stages_to_json`）仍留在 `api/quotations.py`。
 - 測試／登記：基線與清單改跟新檔名（`unscoped_reads_baseline`、`recyclebin_baseline_t53`、`case_read_scope`、`test_u0a_sinks`、`modules.json`）；對 `quotations` 打的 `spawn_bg_thread`／`begin_write` 補丁補上對 `quotation_stages` 的同樣補丁。
 
-## (next) — 2026-11-11（feat/ux-quoteform-density；UX 提案 C1～C3「報價單表單與資訊密度」；純畫面、不動後端與資料；報價單表單 V3.40）
+## 1.0.212 — 2026-11-11（feat/ux-quoteform-density；UX 提案 C1～C3「報價單表單與資訊密度」；純畫面、不動後端與資料；報價單表單 V3.40）
 - 變更（C1，報價單頁）：內部成本區（成本欄＋右側黑底 INTERNAL 面板）**預設收合**，右欄只顯示一行「內部利潤：—」摘要＋「展開成本分析」；展開／收合沿用既有「顯示／隱藏成本欄」總開關（`showCostCols`），並把選擇記在這台瀏覽器（`localStorage` 鍵 `motrix.qf.showCostCols`，讀寫失敗＝預設收合）。**預設值由展開改為收合**——有成本權限的簽核人／業務第一次開單要多按一下，之後記住。
 - 變更（C1）：沒有任何品項金額時，成本面板的營業利益率／直接毛利率／專案毛利提醒一律不上色、不寫「低於目標」，改顯示「—（填入品項與售價後才比較目標）」（原本空白表單就跳紅字「0.0% ⚠ 低於目標 12%」）。收合摘要在「擇一方案未選定」「尚有品項沒填成本」時也只顯示中性文字。
 - 變更（C2，品項表）：成本區收合時品項表只有 7 欄（#／品名規格／廠牌型號／數量／單位／售價／金額）；**備註欄移到品名下方**——有內容就直接展開，沒有就只有「＋備註」（展開狀態只存在畫面，不寫進品項資料，不影響內容指紋）。可填格加淺底與下底線、placeholder 變淡；表格最小寬度收合時 760px、展開時 1080px。「擇一方案」勾選框**維持原位**（提案的「列尾 ⋯ 選單」未做，避免牽動既有擇一方案 e2e）。
@@ -13,7 +13,7 @@
 - 已知限制：手機寬度（390px）頁頭導覽列本來就會橫向溢出（既有，UX 提案 F 另案）；成本區預設收合會讓第一次開單的簽核人看不到成本明細，直到按「展開成本分析」（有記住偏好）。
 - K 審後修正（hichan-9）：有備註的列清空後輸入框不再消失；個資告知標題改「個資蒐集告知紀錄」（去掉易誤解的「（選填）」）；鎖定單據上「列印告知書」鈕可按；所有品項售價 0 但有成本時照算（不當成尚未填）。表單版本 V3.40（rebase 於 V3.39 之上）。
 
-## (next) — 2026-11-11（feat/approval-edit-lock-tier-reset；業主需求：簽核人改了報價單內容存不了；金額相關；L1 介面不變；含 K 審兩輪修正；已併入 train/t79-int b508c2406；含 V3.36 送審前置檢查，本票表單 V3.39）
+## 1.0.211 — 2026-11-11（feat/approval-edit-lock-tier-reset；業主需求：簽核人改了報價單內容存不了；金額相關；L1 介面不變；含 K 審兩輪修正；已併入 train/t79-int b508c2406；含 V3.36 送審前置檢查，本票表單 V3.39）
 - 修正（畫面，業主回報的 bug）：簽核人檢視待審核／簽核中的報價單時，**欄位原本看起來能打字、但按「儲存草稿」PUT 回 403**（待審核狀態本來就不能存）⇒ 主管只好退回修改。現在當層待簽人檢視時表單欄位一律 `disabled`（`pages/quotation-form.html` `isApproverLocked()`／`_syncControlLock()`；鍵盤 Tab 進去也打不進去）、「儲存草稿」不顯示，工具列常駐「編輯」鈕（`data-testid="qf-review-edit-start"`，`canReviewEdit()` 成立且 GET 帶 `reviewEditOn` 才顯示；**不再需要旗標成立**）→ 按下去進複查編輯 → 「儲存複查編輯」走既有 `POST /review-edit`。
 - 新增（`GET /api/quotations/{no}`）：待審核／簽核中且 `reconfirm_mode=on` 時多回頂層 `reviewEditOn: true`（off／shadow 沒有這個鍵，回應逐位元不變）——複查編輯端點只在 on 開放，前端據此決定要不要顯示編輯鈕。**出廠預設 `reconfirm_mode=0`：沒翻 on 之前編輯鈕不會出現（欄位仍鎖住）。**
 - 修改（畫面）：`approveQuote()` 核准前的「維持／編輯」彈窗**退場「編輯內容」選項**（編輯入口只剩常駐編輯鈕）；彈窗保留「維持核准」（伺服器在複查／轉簽／代理旗標成立時仍要求 `choice=keep`，需要時補說明進稽核——不是多餘的）。`approval-cascade.js::askChoice` 加選用參數 `noEditHint`。簽核佇列頁的彈窗與「編輯內容→轉報價單頁」維持原樣。
@@ -29,10 +29,10 @@
 - 變更（全站）：建置戳記（頁尾右下）只對管理員顯示。
 - 測試：`tests/test_e2e_ux_onboarding_2026_11_11.py`；`test_dashboard_empty_state_2026_09_23.py`（引導卡片改讀 `checklistVisible`，種子同步）、`test_display_consistency_t55.py`（空狀態列內距）同步更新。
 
-## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
+## 1.0.210 — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
 - 前端視覺（D3）：本模組頁面（`case-management.html`／`case-stage-board.html`／`completion-note-form.html`、`case-management*.css`／`case-management-mchange.js` 等）內文字最小 12px，文字色改用語意 token（次要文字在頁底 #F5F4F0 上對比 ≥4.5:1）；只改 CSS 值，不改版面結構、API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
 - 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
-## (next) — 2026-11-11（feat/quote-submit-error-clarity；報價單送審前置檢查＋送審失敗原因＋「已成案」卡住修復；報價單表單 V3.36；K 審必修已修，L1 介面不變）
+## 1.0.209 — 2026-11-11（feat/quote-submit-error-clarity；報價單送審前置檢查＋送審失敗原因＋「已成案」卡住修復；報價單表單 V3.36；K 審必修已修，L1 介面不變）
 - 新增（送審前置檢查）：`GET /api/quotations/submit-precheck`（唯讀、需登入、不建單不發通知）——用跟真正送審同一套解析（`_setting_to_active_tiers`）dry-run；申請人沒歸屬部門／部門沒在職主管／簽核設定指定的部門或處沒主管 ⇒ `ok=false`＋`problems[{code,message,fixPage,fixLabel}]`；另附 `steps`（處→部門→申請人歸屬→部門主管四步驟完成度，只供畫面顯示）與 `canFix`（最高管理者才能改組織）。`helpers.tiered_approval.UnresolvedManagerError` 新增類別屬性 `code`（不加建構子，避免動到 L1 公開介面；raise 點用私有 `_unresolved(msg, code)`；no_department／department_gone／no_manager／tier_dept_manager／tier_div_manager；預設 unresolved，`str(e)` 不變）。
 - 修正（前端 `quotation-form.html`）：①送審前先問 precheck，會失敗就攔下並用中文清單說明去哪裡設定（查詢本身失敗＝放行，真正把關仍在送審端點）。②`apiSave()` 不再把後端 4xx／5xx 吞成「請確認後端伺服器是否在線」：後端 `detail` 原文顯示，只有真的連不上才說伺服器問題。③送審失敗時還原 `status`／`approval`（原本畫面會停在「待審核」，使用者以為已送出）。
 - 修正（「已成案」卡住，正式機既有 regression，自 2026-09-23 `EM11` 起）：`onDealTagChange` 對已送出單不再先整份 PUT（後端對鎖定狀態的 PUT 一律 403，必然失敗，EM11 把「失敗就忽略」改成「失敗就擋下」後整個成案流程被擋死）；改成只打 `PATCH /deal-tag`，成功後才建 5 個預設階段（失敗不留殘餘階段；建階段中途失敗可能留下 1～4 個，之後不會自動補建），並回頭同步 `_lastUpdatedAt`（階段 API 會推進 `updated_at`，不同步的話之後整份存檔撞樂觀鎖 409）；PATCH 失敗顯示後端 `detail` 並退回舊值。下拉「未成案／已成案」對非管理員停用（後端本來就要 admin 以上），硬呼叫也在建階段之前擋下。
