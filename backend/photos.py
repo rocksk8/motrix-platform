@@ -42,7 +42,7 @@ def _process_project_photo(image_bytes: bytes, uploader_name: str):
     """Add date/time/GPS watermark with auto contrast text. Returns (bytes, gps_str, watermark_str)."""
     gps_str, watermark_str = '', ''
     try:
-        from PIL import Image, ImageDraw, ImageFont
+        from PIL import Image, ImageDraw, ImageFont, ImageOps
         from PIL.ExifTags import TAGS, GPSTAGS
 
         img = Image.open(io.BytesIO(image_bytes))
@@ -63,6 +63,16 @@ def _process_project_photo(image_bytes: bytes, uploader_name: str):
                     break
         except Exception:
             pass
+
+        # 拍攝方向（2026-11-11 修）。手機直拍的 JPEG 常常像素是橫的、靠 EXIF Orientation（6／8 等）告訴看圖軟體「要轉 90°」。
+        # 下面重存時 EXIF 會被丟掉（`save()` 沒帶 exif）⇒ 方向標記消失、像素還是橫的 ⇒ 直書的照片存起來橫躺
+        # （實測：Orientation=6、顯示 300x400 的原圖，處理後變成 400x300）。所以**先把方向烘進像素**再往下做：
+        # GPS 上面已經從原圖讀完了；浮水印也要貼在「轉正之後」的畫面底部，不能貼在轉正前的像素底部。
+        # exif_transpose 對沒有方向標記（或標記為 1）的圖原樣回傳一份副本，所以橫拍照片、PNG logo 行為不變。
+        try:
+            img = ImageOps.exif_transpose(img)
+        except Exception:
+            logger.warning("exif_transpose failed; keeping pixels as-is", exc_info=True)
 
         # 透明度與輸出格式（2026-09-15 修）。
         #
