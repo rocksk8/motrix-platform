@@ -6077,7 +6077,18 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
     conn.close()
     spawn_bg_thread(_backup_quotation, args=(quote_no,))
     _mark_notifications_read(quote_no, ["approval_request", "approval_reconfirm"], user["username"])
-    # 通知信（commit 之後才寄；送審人＋全部超級管理員；收件人與退訂規則在 notify_review_edited）。信件失敗不影響已存檔的編輯
+    # 整條重跑：第 1 層現在握著「輪到你」——比照一般送審通知當層簽核人（站內通知＋信）；後面各層等輪到時由一般核准流程通知
+    if _chain_reset:
+        try:
+            _t0 = [a["username"] for a in ((appr.get("tiers") or [{}])[0].get("approvers") or []) if a.get("status") != "approved" and a.get("username")]
+            for _u in _t0:
+                _notify(_u, "approval_request", quote_no, quote_no,
+                        f"報價單 {quote_no}（{q.get('customerName') or ''}）內容被 {user.get('display_name') or user['username']} 修改，整條簽核回到第 1 層重新進行，輪到您簽核")
+            if _t0:
+                notify_approval_request(quote_no, q.get("customerName") or "", _t0)
+        except Exception:                                  # noqa: BLE001
+            logger.exception("整條重跑後通知第 1 層簽核人失敗（quote_no=%s）", quote_no)
+    # 通知信（commit 之後才寄；送審人＋全部超級管理員；收件人與退訂規則在 review_edit_notify）。信件失敗不影響已存檔的編輯
     try:
         _REN.fire_edited(quote_no, customer=q.get("customerName") or "", editor=user.get("display_name") or user["username"],
                          requester=appr.get("requestedBy") or "", fields=[c.get("field") for c in _changes[:30]],     # 只傳欄位名稱、不帶新舊值（收件人不一定有金額檢視權限）

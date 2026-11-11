@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""瀏覽器層級（真的 Chromium）：簽核人檢視待審核報價單——欄位鎖定＋常駐「編輯」鈕（2026-11-11 業主需求）。
+"""瀏覽器層級（真的 Chromium）：簽核人檢視待審核報價單——欄位鎖定（文字欄 readonly、其餘 disabled）＋常駐「編輯」鈕（2026-11-11 業主需求）。
 
 業主回報的 bug：簽核人改了報價單內容「存不了」（欄位看起來能打字，但 PUT 在待審核本來就被擋）⇒ 主管只好按退回修改、申請人整張重走。
 這支驗：
@@ -97,7 +97,7 @@ QTY = ".qty-input"
 
 
 def _is_locked(page):
-    return page.evaluate("() => [...document.querySelectorAll('.form-left input,.form-left textarea,.form-left select')].filter(e => e.offsetParent !== null || e.type !== 'hidden').every(e => e.disabled)")
+    return page.evaluate("() => [...document.querySelectorAll('.form-left input,.form-left textarea,.form-left select')].filter(e => e.type !== 'hidden').every(e => e.disabled || e.readOnly)")
 
 
 @pytest.mark.e2e
@@ -108,8 +108,8 @@ def test_approver_sees_locked_fields_and_a_permanent_edit_button_even_without_fl
     page = e2e_browser.new_page()
     inject_login(page, live_server, u, p)
     _open_form(page, live_server)
-    page.wait_for_function("() => document.querySelector('.qty-input').disabled", timeout=5000)
-    assert _is_locked(page), "簽核人檢視：所有表單欄位都是 disabled"
+    page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=5000)
+    assert _is_locked(page), "簽核人檢視：所有表單欄位都是 disabled／readonly"
     assert page.get_attribute('.form-left', 'data-approver-locked') == '1'
     assert page.is_visible('[data-testid="qf-review-edit-start"]'), "沒有旗標也要有常駐的編輯鈕（舊版這種情境沒有編輯入口）"
     assert not page.get_by_role("button", name="儲存草稿").is_visible(), "待審核單對簽核人不該有會失敗的「儲存草稿」"
@@ -133,10 +133,10 @@ def test_edit_unlocks_save_persists_and_the_same_approver_can_then_approve_witho
     page.on("response", lambda rs: reviews.append(rs.status) if rs.request.method == "POST" and rs.url.endswith("/review-edit") else None)
     page.on("response", lambda rs: approves.append(rs.status) if rs.request.method == "POST" and rs.url.endswith("/approve") else None)
     _open_form(page, live_server)
-    page.wait_for_function("() => document.querySelector('.qty-input').disabled", timeout=5000)
+    page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=5000)
     page.click('[data-testid="qf-review-edit-start"]')
     page.wait_for_selector('[data-testid="review-edit-bar"]', timeout=5000)
-    page.wait_for_function("() => !document.querySelector('.qty-input').disabled", timeout=5000)
+    page.wait_for_function("() => !document.querySelector('.qty-input').readOnly", timeout=5000)
     assert page.get_attribute('.form-left', 'data-approver-locked') == '0'
     assert not page.is_visible('[data-testid="qf-review-edit-start"]')
     assert "回第 1 層" not in page.inner_text('[data-testid="review-edit-bar"]'), "第 1 層編輯：沒有整條重跑的提示"
@@ -149,7 +149,7 @@ def test_edit_unlocks_save_persists_and_the_same_approver_can_then_approve_witho
     assert appr["tiers"][0]["approvers"][0]["status"] == "pending", "首次待簽的編輯者不自動簽：仍要自己再按核准"
     assert any(e.get("type") == "review_edit" for e in d.get("editHistory", [])), "editHistory 有寫"
     # 存檔後回到鎖定狀態，接著核准（預覽後簽核）
-    page.wait_for_function("() => document.querySelector('.qty-input').disabled", timeout=5000)
+    page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=5000)
     page.click('[data-testid="qf-approve-open-preview"]')
     page.wait_for_selector('[data-testid="qf-approve-from-preview"]', state="visible", timeout=15000)
     page.click('[data-testid="qf-approve-from-preview"]')
@@ -173,7 +173,7 @@ def test_tier3_edit_warns_resets_chain_and_the_first_tier_reruns_it_to_the_end(l
     reviews = []
     page.on("response", lambda rs: reviews.append(rs) if rs.request.method == "POST" and rs.url.endswith("/review-edit") else None)
     _open_form(page, live_server)
-    page.wait_for_function("() => document.querySelector('.qty-input').disabled", timeout=5000)
+    page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=5000)
     page.click('[data-testid="qf-review-edit-start"]')
     page.wait_for_selector('[data-testid="review-edit-bar"]', timeout=5000)
     assert "整條簽核會回第 1 層重跑" in page.inner_text('[data-testid="review-edit-bar"]')
@@ -255,9 +255,29 @@ def test_mode_off_keeps_fields_locked_but_hides_the_edit_button(live_server, mak
     inject_login(page, live_server, u, p)
     page.on("dialog", lambda dlg: dlg.accept())
     _open_form(page, live_server)
-    page.wait_for_function("() => document.querySelector('.qty-input').disabled", timeout=5000)
+    page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=5000)
     assert not page.is_visible('[data-testid="qf-review-edit-start"]')
     page.click('[data-testid="qf-approve-open-preview"]')
     page.wait_for_selector('[data-testid="qf-approve-from-preview"]', state="visible", timeout=15000)
     page.click('[data-testid="qf-approve-from-preview"]')
     assert _wait(lambda: _state()[2] == "已送出", page)
+
+
+@pytest.mark.e2e
+def test_locked_form_keeps_cost_toggle_and_long_text_selectable(live_server, make_user, e2e_browser):
+    """K 審（hichan-12）：舊的 .is-locked 會藏掉「顯示／隱藏成本欄」、並讓長欄位不能捲動／選取複製。簽核人要看成本與毛利 ⇒ 切換鈕要留著可按；
+    文字區是 readonly（不是 disabled、不是 pointer-events:none）。"""
+    u, p = make_user(username="relk_tg", role="admin", modules=["quotation"])
+    _set_mode(2)
+    _seed([u])
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, u, p)
+    _open_form(page, live_server)
+    page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=5000)
+    tog = page.locator('.form-left .toggle-btn.keep-open')                      # 文字會隨狀態變（顯示／隱藏成本欄）⇒ 用固定選擇器
+    assert tog.is_visible() and tog.is_enabled(), "成本欄切換鈕要留著"
+    before = tog.inner_text()
+    tog.click()
+    assert tog.inner_text() != before, "點了有反應（純顯示切換，不改內容）"
+    ta = page.evaluate("() => { const t = [...document.querySelectorAll('.form-left textarea')].find(e => e.offsetParent !== null); return t ? {ro: t.readOnly, dis: t.disabled, pe: getComputedStyle(t).pointerEvents} : null }")
+    assert ta and ta["ro"] and not ta["dis"] and ta["pe"] != "none", ta

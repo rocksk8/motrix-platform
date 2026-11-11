@@ -216,3 +216,46 @@ def test_edit_history_gets_a_review_edit_entry_in_both_scenarios(client, make_us
     d, _s, _u = _row()
     assert [e["type"] for e in d["editHistory"]][-2:] == ["review_edit", "review_edit"] and d["editHistory"][-1]["by"] == names[0]
     assert d["editHistory"][-1]["rev"] == d["editHistory"][-2]["rev"] + 1
+
+
+def test_tier3_with_two_approvers_first_already_signed_second_edits_resets_everyone(client, make_user):
+    """K 審（hichan-12）建議：第 3 層有兩位簽核人、第一位已簽，第二位編輯 ⇒ 兩位都回待簽、currentTier=0。"""
+    import db
+    hs, names = _seed(client, make_user, tiers=3)
+    extra, pw = make_user(username="fp_ap2b", role="admin")
+    h_extra = _login(client, extra, pw)
+    d, _s, _u = _row()
+    d["approval"]["tiers"][2]["approvers"].append({"username": extra, "displayName": extra, "status": "pending"})
+    c = db.get_db()
+    c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), NO)); c.commit(); c.close()
+    _set_mode(2)
+    for h in hs:
+        _approve(client, h)                                          # T1、T2、T3 第一位；currentTier 仍是 2（第 3 層還有第二位）
+    es, ap, _st = _entries()
+    assert [e["status"] for e in es] == ["approved", "approved", "approved", "pending"] and ap["currentTier"] == 2
+    r = _edit(client, h_extra, qty=9)
+    assert r.status_code == 200, r.text
+    es, ap, st = _entries()
+    assert r.json()["chainReset"] is True
+    assert [e["status"] for e in es] == ["pending"] * 4 and ap["currentTier"] == 0 and st == "待審核"
+    assert sorted(r.json()["invalidated"]) == sorted(names)
+
+
+def test_chain_reset_tells_tier1_it_is_their_turn_with_in_app_notice_and_mail(client, make_user, monkeypatch):
+    """K 審（hichan-12）：整條重跑後第 1 層握著「輪到你」——要有 approval_request 站內通知＋信（比照一般送審），被作廢者的通知文字講清楚是整條重跑。"""
+    from helpers import email_notify as EN
+    sent = []
+    monkeypatch.setattr(EN, "_async_send", lambda to, subject, html: sent.append((sorted(to), subject)))
+    hs, names = _three_tiers_two_signed(client, make_user)
+    for n in names:
+        _set_email(n, n + "@example.test")
+    sent.clear()
+    n0, n1 = len(_notes(names[0], "approval_request")), len(_notes(names[1], "approval_request"))      # 更早的核准流程留下的舊通知不算
+    r = _edit(client, hs[2], qty=9)
+    assert r.status_code == 200, r.text
+    assert len(_notes(names[0], "approval_request")) == n0 + 1, "第 1 層收到新的站內「待簽核」通知"
+    assert len(_notes(names[1], "approval_request")) == n1, "第 2 層還沒輪到：不發待簽核"
+    assert any(names[0] + "@example.test" in to and "待審核" in subj for to, subj in sent), sent
+    assert not any(names[1] + "@example.test" in to and "待審核" in subj for to, subj in sent)
+    txt = [n["message"] for n in _notes(names[1], "approval_reconfirm")]
+    assert txt and "整條簽核已回到第 1 層" in txt[0] and "請重新複查確認" not in txt[0], txt

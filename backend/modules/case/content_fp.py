@@ -558,7 +558,8 @@ def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str
         blk = "、".join(blocks) if blocks else "（區塊未知）"
         if inv_names:
             notices.append({"type": "approval_reconfirm", "to": inv_names, "blocks": blocks, "by": by, "source": source, "rev": rev,
-                            "text": f"你已簽核的報價單內容被 {who} 修改（{blk}），請重新複查確認"})
+                            "text": (f"你已簽核的報價單內容被 {who} 修改（{blk}），整條簽核已回到第 1 層重新進行；輪到你時會再通知" if chain_reset
+                                     else f"你已簽核的報價單內容被 {who} 修改（{blk}），請重新複查確認")})
         others = [a.get("username") for _t, a in _entries(appr)
                   if a.get("status") != "approved" and not a.get("reconfirm") and a.get("username") not in (me, None)]
         if others:

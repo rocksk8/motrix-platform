@@ -627,6 +627,16 @@
     .is-locked .toggle-btn { display:none !important; }
     .is-locked .add-item-btn { display:none !important; }
     .is-locked .form-section button { pointer-events:none; opacity:.55; }
+    /* ── 簽核人檢視待審核／簽核中：欄位唯讀（文字欄 readonly、其餘 disabled；見 _syncControlLock）。不用 .is-locked：
+       那一套會藏掉「顯示／隱藏成本欄」（簽核人要看成本與毛利）、並用 pointer-events:none 讓長欄位不能捲動／選取複製 ── */
+    .approver-locked .cell-input,
+    .approver-locked .cell-textarea,
+    .approver-locked .form-input,
+    .approver-locked .form-select,
+    .approver-locked .form-textarea { background:#FAFAF8; border-color:#F0EEE9; color:var(--text-secondary); }
+    .approver-locked .nt-input-group { opacity:.75; }
+    .approver-locked .del-btn, .approver-locked .add-item-btn, .approver-locked .drag-handle { display:none !important; }
+    .approver-locked .toggle-btn:not(.keep-open) { pointer-events:none; opacity:.55; }
     /* ── NT$ 前綴輸入欄 ── */
     .nt-input-group { display:flex; align-items:stretch; border:1px solid var(--border-light); border-radius:var(--radius); overflow:hidden; background:#fff; transition:border-color .12s,box-shadow .12s; }
     .nt-input-group:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.08); }
@@ -1002,7 +1012,7 @@
   <!-- ══ 主體 ══ -->
   <div class="form-layout">
 
-    <div class="form-left" :class="{'is-locked': (q.status === '已送出' && !unlocked) || isApproverLocked()}" :data-approver-locked="isApproverLocked() ? '1' : '0'">
+    <div class="form-left" :class="{'is-locked': q.status === '已送出' && !unlocked, 'approver-locked': isApproverLocked()}" :data-approver-locked="isApproverLocked() ? '1' : '0'">
 
       <!-- 退回改版通知橫幅：有 returnInfo 就顯示（不限於草稿狀態） -->
       <div x-show="q.returnInfo"
@@ -1159,7 +1169,7 @@
           <div class="section-num">基</div>
           <span x-text="secLabel('qbasic', '報價資訊')">報價資訊</span>
           <div style="margin-left:auto;display:flex;gap:6px">
-            <button class="toggle-btn" :class="{active:showCostCols}" @click="showCostCols=!showCostCols">
+            <button class="toggle-btn keep-open" :class="{active:showCostCols}" @click="showCostCols=!showCostCols">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
               <span x-text="showCostCols ? '隱藏成本欄' : '顯示成本欄'"></span>
             </button>
@@ -3766,16 +3776,26 @@
       },
       // 第 3 層（含）以後的編輯＝整條簽核鏈回第 1 層（currentTier 0 起算 ⇒ >=2）；伺服器為準，這只是畫面提示
       reviewEditResetsChain() { return (this.q.approval?.currentTier ?? 0) >= 2 },
-      // 鎖住時同步把表單欄位設成 disabled（pointer-events:none 擋不住鍵盤 Tab 進去打字）；只動這裡自己鎖的，解鎖時只還原自己鎖的
+      // 鎖住時同步鎖表單欄位（CSS 的 pointer-events:none 擋不住鍵盤 Tab 進去打字）：文字欄／文字區 readonly（長條款仍可捲動、選取、複製），
+      // 其餘（下拉、勾選、數字日期…）disabled；只動這裡自己鎖的，解鎖時只還原自己鎖的（data-approver-lock＝ro／dis）
       _syncControlLock() {
         const root = document.querySelector('.form-left')
         if (!root) return
         if (this.isApproverLocked()) {
           root.querySelectorAll('input,textarea,select').forEach(el => {
-            if (!el.disabled) { el.disabled = true; el.setAttribute('data-approver-lock', '1') }
+            if (el.disabled || el.readOnly || el.hasAttribute('data-approver-lock')) return
+            const textual = el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && ['text', 'search', 'email', 'tel', 'url', 'number', ''].includes(el.type || ''))
+            if (textual) { el.readOnly = true; el.setAttribute('data-approver-lock', 'ro') }
+            else { el.disabled = true; el.setAttribute('data-approver-lock', 'dis') }
+          })
+          root.querySelectorAll('button.toggle-btn:not(.keep-open)').forEach(el => {
+            if (!el.disabled && !el.hasAttribute('data-approver-lock')) { el.disabled = true; el.setAttribute('data-approver-lock', 'dis') }
           })
         } else {
-          root.querySelectorAll('[data-approver-lock]').forEach(el => { el.disabled = false; el.removeAttribute('data-approver-lock') })
+          root.querySelectorAll('[data-approver-lock]').forEach(el => {
+            if (el.getAttribute('data-approver-lock') === 'ro') el.readOnly = false; else el.disabled = false
+            el.removeAttribute('data-approver-lock')
+          })
         }
       },
       _setupControlLock() {
