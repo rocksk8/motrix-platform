@@ -138,6 +138,8 @@
     }
     /* 進階篩選的摺疊摘要：桌面／平板不顯示（永遠展開），手機才是可點的收合列 */
     .al-adv__sum { display: none; }
+    /* 觸控：「擴大到 N 天」文字鈕只有 17px 高 ⇒ 撐到 40px（K 審 D） */
+    @media (hover:none){ [data-testid="tree-widen"]{ min-height:40px; padding:0 8px } }
     @media (max-width:767px){
       .al-adv{margin-bottom:14px}
       .al-adv__sum{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:0 14px;border:1px solid var(--border);border-radius:var(--radius);background:#fff;font-size:14px;cursor:pointer;list-style:none}

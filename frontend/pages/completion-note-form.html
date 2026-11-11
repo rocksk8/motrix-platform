@@ -23,6 +23,8 @@
     .cnf-body { margin-left: var(--sidebar-w); margin-top: calc(var(--topbar-h) + 52px); padding: 0 28px 60px; }
     .cnf-card { border:1px solid var(--border-light); border-radius:10px; padding:20px 22px; margin-bottom:18px; background:#fff }
     .cnf-card-title { font-size:13px; font-weight:700; font-family:var(--font-zh); margin-bottom:14px; color:var(--text-main) }
+    .cnf-adj__sum { list-style:none; cursor:default }
+    .cnf-adj__sum::-webkit-details-marker { display:none }
     .cnf-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px }
     .cnf-lbl { display:block; font-size:12px; font-family:'LINE Seed TW_OTF',sans-serif; letter-spacing:.08em;
                text-transform:uppercase; color:var(--text-dim); font-weight:500; margin-bottom:5px }
@@ -49,6 +51,10 @@
       .cnf-toolbar > span[x-text]:first-of-type{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .cnf-body{margin-top:12px;padding:0 12px 60px}
       .cnf-card{padding:14px 14px}
+      /* 逐欄調整（11 個標題欄位）在手機預設收起，主要欄位才不會被推到 900px 以下（K 審 E） */
+      .cnf-adj__sum{display:flex;align-items:center;justify-content:space-between;min-height:44px;margin:-8px 0 6px;cursor:pointer}
+      .cnf-adj__sum::after{content:"▾";color:var(--text-dim)}
+      .cnf-adj[open] > .cnf-adj__sum::after{content:"▴"}
       .cnf-in{font-size:16px;min-height:44px}
       .cnf-btn{min-height:44px}
     }
@@ -165,8 +171,8 @@
               <button class="cnf-btn" @click="resetLabels()" :disabled="!editable()">回到系統預設</button>
             </div>
           </div>
-          <div class="cnf-card">
-            <div class="cnf-card-title">逐欄調整</div>
+          <details class="cnf-card cnf-adj" open>
+            <summary class="cnf-card-title cnf-adj__sum">逐欄調整</summary>
             <div class="cnf-grid">
               <template x-for="f in labelFields" :key="f.key">
                 <div>
@@ -178,7 +184,8 @@
               </template>
             </div>
             <div class="cnf-hint">留空＝使用系統預設值（不會變成空白標題）。每欄上限 40 字。</div>
-          </div>
+          </details>
+          <script>(function(){try{if(window.matchMedia('(max-width:767px)').matches){var d=document.querySelector('.cnf-adj');if(d)d.open=false}}catch(e){}})()</script>
         </div>
         <div>
           <div class="cnf-card">

@@ -47,6 +47,8 @@
     @media (max-width:767px){.page-main{margin-left:0;padding:16px}.bc-layout{grid-template-columns:1fr}}
     /* 手機／平板直式（2026-11-12 UI 檢查）：明細列「人員／目前金額／更正後(輸入)／差額／移除」五欄一行在 375px 放不下、輸入框 12px 小又窄。
        ⇒ 手機每位人員一塊：姓名一行、三個金額並排（各有小標）、輸入 16px／44px 高；表頭列在手機隱藏（改由各格小標說明）。 */
+    /* 觸控：頁內小連結（回獎金分潤／原單 xxx）高度只有 19px ⇒ 用 padding 撐到 ~40px、負 margin 保持原版面（K 審 D） */
+    @media (hover:none){.page-main a[href^="bonus.html"]{display:inline-block;padding:10px 6px;margin:-10px -6px}}
     @media (max-width:767px){
       .page-main{padding:14px 12px 28px}
       .bc-card{padding:14px}
