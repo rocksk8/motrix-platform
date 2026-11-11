@@ -840,6 +840,7 @@
 ["GET", "/api/system/branding/{kind}", "get_branding_asset_api_system_branding__kind__get", [["header", "if-none-match", false], ["path", "kind", true], ["query", "v", false]], [], []]
 ["GET", "/api/system/case-roles-unmapped", "case_roles_unmapped_api_system_case_roles_unmapped_get", [["header", "authorization", false]], [], []]
 ["GET", "/api/system/deployed-version", "system_deployed_version_api_system_deployed_version_get", [], [], []]
+["GET", "/api/system/heartbeat", "get_heartbeat_status_api_system_heartbeat_get", [["header", "authorization", false]], [], []]
 ["GET", "/api/system/modules", "list_system_modules_api_system_modules_get", [["header", "authorization", false]], [], []]
 ["GET", "/api/system/modules/availability", "module_availability_api_system_modules_availability_get", [["header", "authorization", false]], [], []]
 ["GET", "/api/system/modules/unavailable-pages", "unavailable_module_pages_api_system_modules_unavailable_pages_get", [["header", "authorization", false]], [], []]
