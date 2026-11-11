@@ -311,9 +311,18 @@
               </template>
               <tr x-show="filtered.length === 0">
                 <td :colspan="$store.layout.cols('customers').length + 2" class="empty-state">
-                  <div class="empty-icon">🏢</div>
-                  <div>尚無客戶資料</div>
-                  <button class="btn btn-primary" @click="openCreate()" style="margin-top:12px">新增第一筆客戶</button>
+                  <div x-show="customers.length === 0" data-testid="empty-none">
+                    <div class="empty-icon">🏢</div>
+                    <div class="ux-empty__title">尚無客戶資料</div>
+                    <div class="ux-empty__desc">客戶是報價單與案件的起點；先建立第一筆，之後開報價單就能直接選。</div>
+                    <button class="btn btn-primary" @click="openCreate()" style="margin-top:12px">新增第一筆客戶</button>
+                  </div>
+                  <div x-show="customers.length > 0" data-testid="empty-filtered">
+                    <div class="empty-icon">🔍</div>
+                    <div class="ux-empty__title">沒有符合條件的客戶</div>
+                    <div class="ux-empty__desc">目前的搜尋或篩選條件下找不到資料。</div>
+                    <button class="btn" @click="search = ''; filterType = ''; filterIndustry = ''" style="margin-top:4px" data-testid="empty-clear-filters">清除篩選</button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -396,9 +405,18 @@
           </template>
           <tr x-show="filtered.length === 0">
             <td colspan="12" class="empty-state">
-              <div class="empty-icon">🏢</div>
-              <div>尚無客戶資料</div>
-              <button class="btn btn-primary" @click="openCreate()" style="margin-top:12px">新增第一筆客戶</button>
+              <div x-show="customers.length === 0" data-testid="empty-none">
+                <div class="empty-icon">🏢</div>
+                <div class="ux-empty__title">尚無客戶資料</div>
+                <div class="ux-empty__desc">客戶是報價單與案件的起點；先建立第一筆，之後開報價單就能直接選。</div>
+                <button class="btn btn-primary" @click="openCreate()" style="margin-top:12px">新增第一筆客戶</button>
+              </div>
+              <div x-show="customers.length > 0" data-testid="empty-filtered">
+                <div class="empty-icon">🔍</div>
+                <div class="ux-empty__title">沒有符合條件的客戶</div>
+                <div class="ux-empty__desc">目前的搜尋或篩選條件下找不到資料。</div>
+                <button class="btn" @click="search = ''; filterType = ''; filterIndustry = ''" style="margin-top:4px" data-testid="empty-clear-filters">清除篩選</button>
+              </div>
             </td>
           </tr>
         </tbody>
