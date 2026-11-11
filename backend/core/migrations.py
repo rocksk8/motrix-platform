@@ -712,3 +712,30 @@ def _core_next_list_view_prefs(conn):
 
 
 register("core", 11, _core_next_list_view_prefs)
+
+
+# ── 請求冪等鍵（T80c 外勤手機；未取號，PLAYBOOK §G6）─────────────────────────────────────
+# `idempotency_keys`：helpers/idempotency.py 的狀態表（弱訊號重送不重複存檔／寫入）。主鍵 (username, key)：key 只在同一個使用者內唯一。
+# 純新增、冪等；帶 owner_unit_id（單位守門 test_unit_scope_guard_t6 的要求，預設 1）；created_at 有索引（寫入時順手清 7 天前的列）。
+# 不 import 會演進的程式碼（凍住的歷史）。
+def _core_next_idempotency_keys(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS idempotency_keys (
+            username      TEXT    NOT NULL,
+            key           TEXT    NOT NULL,
+            endpoint      TEXT    NOT NULL,
+            req_hash      TEXT    NOT NULL,
+            state         TEXT    NOT NULL DEFAULT 'in_progress',
+            status_code   INTEGER,
+            response_json TEXT,
+            created_at    TEXT    NOT NULL,
+            owner_unit_id INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (username, key)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created ON idempotency_keys(created_at)")
+    conn.commit()
+    return None
+
+
+register("core", NEXT, _core_next_idempotency_keys)

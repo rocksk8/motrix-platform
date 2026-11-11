@@ -83,6 +83,7 @@
    "helper:option_lists",
    "helper:list_catalog",
    "helper:list_pref_policy",
+   "helper:idempotency",
    "helper:list_view_prefs",
    "helper:alert_settings",
    "helper:clause_titles",

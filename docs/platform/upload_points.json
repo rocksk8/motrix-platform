@@ -9,6 +9,10 @@
       "module": "case",
       "catalog": "case_update"
     },
+    "POST /api/quotations/{quote_no}/updates/{uid}/files": {
+      "module": "case",
+      "catalog": "case_update"
+    },
     "POST /api/quotations/{no}/payment/{idx}/invoice-files": {
       "module": "case",
       "catalog": "payment_item"

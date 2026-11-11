@@ -1,5 +1,11 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-12（feat/field-idempotency；T80c 外勤手機 S1：請求冪等鍵）
+- L1（新增，只增）：`helpers.idempotency`（`parse_key／request_hash／begin／run／run_sync／Call`）——選填標頭 `Idempotency-Key`：弱訊號重送時，同 key＋同內容 ⇒ 重播第一次的回應（`Idempotent-Replay: true`），不再存檔、不再寫資料、不再通知；同 key 不同內容 422；處理中 409；處理失敗不留列；key 只在同一使用者內唯一。沒帶標頭＝行為與先前逐位元相同。
+- core migration（未取號，PLAYBOOK §G6）：新表 `idempotency_keys`（PK username+key；7 天前的列在寫入時順手清，不開排程）。
+- 套用端點：`POST /api/work-logs`、`POST /api/work-logs/{id}/photos`（其餘見 `modules/case/CHANGELOG.md`）。
+- 測試：`tests/test_idempotency_2026_11_11.py`。
+
 ## 1.157（next，未取號）— 2026-11-11（fix/ops-webauthn404-case-denied；case.access_denied 診斷鍵、L1 案件守門 `allow_read`）〔train_number：1.156 → 1.157〕
 - L1（新增）：`helpers.case_access.case_access_allowed／guard_case_access` 新增 `allow_read`（讀取規則 scope="read" 也放行，預設 False＝行為不變）；`db.set_request_ctx／get_request_ctx`（auth_middleware 每個 /api/ 請求設 method＋path，`spawn_bg_thread` 帶進背景緒；只供事後診斷，授權不得依賴）。
 - L1（診斷）：`deny_case` 寫的 `case.access_denied` detail 補 `method／path／role／case_manage`（只加鍵）。

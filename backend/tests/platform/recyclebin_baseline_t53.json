@@ -57,6 +57,10 @@
    "count": 1,
    "reason": "exempt: 地理編碼快取（可重建）"
   },
+  "helpers/idempotency.py::idempotency_keys": {
+   "count": 2,
+   "reason": "exempt: 請求冪等鍵狀態（T80c；7 天後自動清、處理失敗時釋放，非單據）"
+  },
   "helpers/list_view_prefs.py::user_list_view_prefs": {
    "count": 1,
    "reason": "exempt: 個人清單檢視偏好（T66；重設即回公司預設，非單據）"

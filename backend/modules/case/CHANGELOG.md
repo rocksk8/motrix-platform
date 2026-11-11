@@ -1,5 +1,11 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-12（feat/field-idempotency；T80c 外勤手機 S1：冪等鍵＋補檔案端點）
+- 新增：`POST /api/quotations/{quote_no}/updates/{uid}/files`——把照片／檔案補進**已存在**的案件留言（外勤上傳形狀 B：文字先存、照片逐張補）。留言作者或 admin 以上、案件權限同發留言；選填 `geo`＝「lat,lng[,accuracy]」（前端定位，盡力而為，格式不對就當沒有；只存進該檔 metadata，不印在浮水印上）；拿寫鎖後重讀再追加，存檔期間留言被刪 ⇒ 清掉剛存的檔回 404；上傳登記 `upload_points.json`（目錄 case_update）。
+- 變更（只加選填）：`POST /api/quotations/{quote_no}/updates` 與上面的補檔案端點支援選填標頭 `Idempotency-Key`（見 `helpers/idempotency.py`）；沒帶＝行為不變（原實作改名 `_post_case_update_impl`，邏輯未動）。
+- 測試：`tests/test_idempotency_2026_11_11.py`。
+
+
 ## 1.0.216（next，未取號）— 2026-11-11（fix/t79-versions-mask-field-policy；t65 棘輪收尾）
 - 重構（行為不變）：`versions` 修改紀錄遮金額那一行（T79 N1 加入）由直接呼叫 `quote_money_visible(user)` 改走 `_tier_allowed("quote_money", user)`（欄位政策的報價單層級，＝同一支角色函式）。原本把 `quotations.py` 的直接角色函式呼叫從基準 5 推到 6，`tests/platform/test_field_policy_exits_t65.py::test_no_exit_file_grows_its_direct_role_function_calls` 轉紅；**基準檔沒有調高**。沒有 API／畫面／遮蔽結果的變動，既有 `test_collaborator_passes_and_versions_history_masks_money_for_non_money_accounts` 守行為。
 

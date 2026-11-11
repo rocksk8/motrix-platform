@@ -12,7 +12,9 @@
 from tests.platform import _unscoped_reads as U
 
 #: 基準總筆數上限：只准手動調小（基準縮小後把這個數字一起降下來）
-MAX_ENTRIES = 852      # 851 + 1（簽核二擇一 S6 2026-11-07：content_fp.shadow_stats 唯讀聚合 `audit_log` 的 `quotation.reconfirm_shadow` 列，只供超管端點 `GET /api/quotations/reconfirm-shadow-stats`；
+MAX_ENTRIES = 853      # 852 + 1（T80c 外勤 S1 2026-11-12：新端點 `POST /api/quotations/{quote_no}/updates/{uid}/files` 補附件——`_add_case_update_files_impl` 讀 `case_updates` 那一列（作者比對＋拿鎖重讀追加），
+                        # 之前一律已過 `_guard_case`（案件範圍）且只碰 URL 指名的那一則留言；與同檔 delete_case_update_file 同型。另兩筆是既有端點抽出 `_impl` 的改名，不增減）
+                        # 852 = 851 + 1（簽核二擇一 S6 2026-11-07：content_fp.shadow_stats 唯讀聚合 `audit_log` 的 `quotation.reconfirm_shadow` 列，只供超管端點 `GET /api/quotations/reconfirm-shadow-stats`；
                         # audit_log 不是案件範圍資料（沒有 row_access 可套），回傳的是計數不是列；端點本身限 superadmin；不得接其他使用者端點）
                         # 851 = 850 + 1（簽核二擇一 S3b 2026-11-06：content_fp.reconcile_txn 在 reconfirm_mode≠off 時多讀一次 `SELECT status FROM quotations`（K 審 Q1 選項 A，漏斗不知道單據真實狀態）；
                         # 另 helpers/audit 的 `_notify` 抽出 `_notify_in_txn`，通知表的 NOT EXISTS 讀取跟著搬過去，不增減）

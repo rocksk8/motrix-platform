@@ -1,5 +1,5 @@
 {
- "core_version": "1.157",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1007,6 +1007,23 @@
    "push_event_for_quotation_won": "def(quote_no)",
    "push_event_for_shipping_note": "def(note_no)",
    "push_event_upsert_for_module": "def(code, summary, description, event_date, key)"
+  },
+  "helper:idempotency": {
+   "Call": "class",
+   "Call.__init__": "def(self, username, key, replay=…)",
+   "Call.abort": "def(self)",
+   "Call.finish": "def(self, status_code, body)",
+   "Call.guard": "def(self)",
+   "HEADER": "const",
+   "REPLAY_HEADER": "const",
+   "RETENTION_DAYS": "const",
+   "STALE_SECONDS": "const",
+   "begin": "def(username, key, endpoint, req_hash)",
+   "parse_key": "def(raw)",
+   "replay_response": "def(call)",
+   "request_hash": "def(*parts)",
+   "run": "async def(username, key, endpoint, req_hash, handler, status_code=…)",
+   "run_sync": "def(username, key, endpoint, req_hash, handler, status_code=…)"
   },
   "helper:legal_params": {
    "ARTICLE_8_DELETED": "const",

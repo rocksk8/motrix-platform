@@ -435,7 +435,7 @@ DEMO_CLEARED_TABLES = frozenset((
     "env_guide_environments", "env_guide_links",
     "env_guide_recommendations", "gateway_categories", "gateway_fit",
     "gateway_products", "gateway_scenarios", "geocode_cache",
-    "geocode_usage", "invoice_vouchers", "item_reads", "login_rate_limit",
+    "geocode_usage", "idempotency_keys", "invoice_vouchers", "item_reads", "login_rate_limit",
     "ui_definitions",           # 2026-09-25 定義文件庫（core 模組 migration v1）；demo 的定義一併清空
     "custom_records", "custom_record_values", "custom_record_counters", "custom_record_log",   # P8 自訂模組單據（core v2）
     "duty_roles", "user_duty_roles", "user_perm_subtracts", "permission_changes",   # 職責角色化 R1（core 未取號 migration）；demo 清空後由 init_db 重種子

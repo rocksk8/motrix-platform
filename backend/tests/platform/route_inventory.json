@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 920,
-  "endpoints_api": 916,
-  "write_total": 496,
-  "write_api": 496,
+  "endpoints_total": 921,
+  "endpoints_api": 917,
+  "write_total": 497,
+  "write_api": 497,
   "get_api": 420,
-  "distinct_paths_api": 774,
-  "write_with_body_api": 362,
-  "write_with_path_param_api": 356
+  "distinct_paths_api": 775,
+  "write_with_body_api": 363,
+  "write_with_path_param_api": 357
  },
  "select_star": {
   "modules": 287,
@@ -3976,6 +3976,11 @@
   "POST /api/quotations/{quote_no}/updates": {
    "w": true,
    "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/updates/{uid}/files": {
+   "w": true,
+   "pp": 2,
    "body": true
   },
   "POST /api/reads": {

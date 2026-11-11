@@ -86,6 +86,7 @@ from helpers.financial_mask import (
     HISTORY_MONEY_FIELDS, PaymentStructureChange,
 )
 import helpers.uploads as _uploads_mod
+from helpers import idempotency as _idem   # T80c：外勤手機弱訊號重送（選填 Idempotency-Key）
 from helpers.uploads import _effective_subfolder
 from modules.case.recognition import normalize_ratio_bp  # `AC2`
 from helpers.errors import trace_id
@@ -5972,7 +5973,20 @@ async def post_case_update(quote_no: str,
                            content: str = Form(""),
                            important: str = Form(""),
                            files: List[UploadFile] = File(default=[]),
-                           authorization: str = Header(None)):
+                           authorization: str = Header(None),
+                           idempotency_key: str = Header(None)):
+    """案件動態留言（選填標頭 `Idempotency-Key`：弱訊號重送不重複存，見 helpers/idempotency.py；沒帶＝行為不變）。
+
+    實作在 `_post_case_update_impl`；這裡只負責冪等包裝。"""
+    user = _require_user(authorization)
+    key = _idem.parse_key(idempotency_key)
+    return await _idem.run(
+        user["username"], key, f"POST case_update:{quote_no}",
+        _idem.request_hash(content, important, [(f.filename, f.size) for f in (files or [])]),
+        lambda: _post_case_update_impl(quote_no, content, important, files, authorization), 201)
+
+
+async def _post_case_update_impl(quote_no, content, important, files, authorization):
     """案件動態留言（2026-09-14 起可附照片／檔案）。
 
     **改成 multipart 而不是另開一支補傳端點**（使用者裁示）：一次請求送出，
@@ -6051,6 +6065,95 @@ async def post_case_update(quote_no: str,
         "canDelete": True,
         "important": important,
     }
+
+
+def _parse_geo(raw):
+    """前端定位（選填、盡力而為）「lat,lng[,accuracy]」→ dict 或 None。格式不對／超出範圍＝當作沒有（不擋上傳）。
+    只存進檔案 metadata（不印在浮水印上）。"""
+    try:
+        parts = [float(x) for x in str(raw or "").replace(" ", "").split(",") if x != ""]
+    except ValueError:
+        return None
+    if len(parts) not in (2, 3):
+        return None
+    lat, lng = parts[0], parts[1]
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180) or lat != lat or lng != lng:
+        return None
+    geo = {"lat": round(lat, 6), "lng": round(lng, 6)}
+    if len(parts) == 3 and parts[2] >= 0:
+        geo["acc"] = round(parts[2], 1)
+    return geo
+
+
+@router.post("/api/quotations/{quote_no}/updates/{uid}/files", status_code=201)
+async def add_case_update_files(quote_no: str, uid: int,
+                                files: List[UploadFile] = File(...),
+                                geo: str = Form(""),
+                                authorization: str = Header(None),
+                                idempotency_key: str = Header(None)):
+    """把照片／檔案補進**已存在**的一則案件留言（T80c 外勤上傳形狀 B：文字先存、照片逐張補）。
+
+    只有留言作者或 admin 以上可以補；案件權限同 `post_case_update`。選填 `geo`＝「lat,lng[,accuracy]」（前端定位，盡力而為），
+    只存進該檔的 metadata。選填 `Idempotency-Key`：同一把 key 重送 ⇒ 重播第一次的回應，不再存檔、不再通知。"""
+    user = _require_user(authorization)
+    key = _idem.parse_key(idempotency_key)
+    return await _idem.run(
+        user["username"], key, f"POST case_update_files:{quote_no}:{uid}",
+        _idem.request_hash(geo, [(f.filename, f.size) for f in (files or [])]),
+        lambda: _add_case_update_files_impl(quote_no, uid, files, geo, user, authorization), 201)
+
+
+async def _add_case_update_files_impl(quote_no, uid, files, geo, user, authorization):
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user, allow_module="case_manage")
+        row = conn.execute("SELECT id, author, files_json FROM case_updates WHERE id=? AND quote_no=?",
+                           (uid, quote_no)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        raise HTTPException(404, "留言不存在")
+    if user["role"] not in ("superadmin", "admin") and user["username"] != row["author"]:
+        raise HTTPException(403, "只能替自己的留言補附件")
+    try:
+        existing_count = len(json.loads(row["files_json"] or "[]"))
+    except Exception:
+        existing_count = 0
+    display = user.get("display_name") or user["username"]
+    saved = await save_document_files("case_updates", quote_no, files, display,
+                                      watermark_by=display, existing_count=existing_count)
+    g = _parse_geo(geo)
+    if g:
+        for f in saved:
+            f["geo"] = g
+    # 拿鎖之後重讀、只追加自己這批（慢動作＝存檔已經做完；同一則留言同時補檔不會互相蓋掉）
+    conn = get_db()
+    try:
+        with write_txn(conn):
+            cur_row = conn.execute("SELECT files_json FROM case_updates WHERE id=? AND quote_no=?",
+                                   (uid, quote_no)).fetchone()
+            if not cur_row:           # 存檔期間留言被刪了 ⇒ 清掉剛存的檔，回 404
+                _remove_saved_files(saved)
+                raise HTTPException(404, "留言不存在")
+            try:
+                cur_files = json.loads(cur_row["files_json"] or "[]")
+            except Exception:
+                cur_files = []
+            conn.execute("UPDATE case_updates SET files_json=? WHERE id=?",
+                         (json.dumps(cur_files + saved, ensure_ascii=False), uid))
+            conn.commit()
+    finally:
+        conn.close()
+    notify_module_activity("案件留言板", "補上附件", display, quote_no, "case-management.html",
+                           detail=f"{len(saved)} 個檔案")
+    _audit(_tok(authorization), 'case.update_files_add', 'case_update', quote_no, quote_no,
+           {'id': uid, 'files': len(saved)})
+    return {"ok": True, "id": uid, "added": len(saved), "files": saved}
+
+
+def _remove_saved_files(saved):
+    """存檔之後留言才被刪 ⇒ 把剛存的檔清掉（走既有的 `purge_document_files`：驗路徑在 uploads 底下、空資料夾順手清）。"""
+    _uploads_mod.purge_document_files(saved)
 
 
 @router.delete("/api/quotations/{quote_no}/updates/{uid}")
