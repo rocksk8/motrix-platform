@@ -1,6 +1,6 @@
 # 營運分析 更新紀錄
 
-## (next) — 2026-11-11（feat/report-param-templates；T79 候選：客戶需求缺口「自助報表」第一階段＝套用參數化範本）
+## 1.0.48 — 2026-11-11（feat/report-param-templates；T79 候選：客戶需求缺口「自助報表」第一階段＝套用參數化範本）
 - 新增頁面 `report-templates.html`（選單「報表」→ 營運 → 自選條件報表）＋ 3 支端點 `GET /api/report-templates`（範本清單、參數與欄位目錄）、`GET /api/report-templates/{id}/run`（依條件重新查詢）、`GET /api/report-templates/{id}/excel`（同條件下載）。使用者**不自訂版面**，只選條件：日期區間、部門、案件狀態、業務、精算狀態、客戶、收款狀態（各範本只提供用得到的）。
 - 第一版 3 個範本：案件清單、收款明細、業務員績效。母體＝已成案／已結案（與營運報表相同）；報價中等狀態需直查報價單與逐案權限，列第二批。
 - **金額不重算**：範本只對 `_collect()`／`_collect_receivable_items()` 既有結果做篩選與欄位投影；業務員績效與部門績效的彙總從 `_collect()` 抽成 `_sales_perf_rows()`／`_dept_perf_rows()` 兩支純函式，`_collect()` 與範本共用同一份（行為不變，營運報表既有測試為證）。測試以「無條件時與 `/api/reports/financial` 的 casesAll／salesPerf／allItems 逐列相同」對帳。
