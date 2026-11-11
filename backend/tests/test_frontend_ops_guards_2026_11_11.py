@@ -5,8 +5,8 @@
    `/api/quotations/PS-…/pdf-download` → 404＋audit `case.access_denied(not_found)`（正式機 4 筆，superadmin）。
    其他沒有 PDF 端點的類型（期間結帳、自訂紀錄／模組定義、已結案變更…）也會同樣落到報價單端點，所以改成白名單：
    只有「apiBase 對得到 PDF／預覽端點」的類型才顯示預覽鈕、才發請求。
-② quotation-form.html 的自動存檔：待審核／簽核中、且不是簽核人／複查編輯／解鎖編輯時，PUT 必 403（正式機 14 次，全是最高管理者），
-   而自動存檔失敗是靜默的＝使用者以為存了。不送請求、提醒一次。
+② quotation-form.html：待審核／簽核中、非簽核人（最高管理者、申請人…）開著單，PUT 必 403（正式機 14 次，全是最高管理者），
+   而自動存檔失敗是靜默的＝使用者以為存了。現在整張鎖唯讀＋橫幅（N7，使用者確認）。
 """
 import re
 
@@ -42,12 +42,13 @@ def test_approval_queue_preview_is_whitelisted_and_payslip_has_its_own_base():
     assert 'x-show="hasPreview(selected)" @click="previewItem(selected)"' in html
 
 
-def test_quotation_form_autosave_does_not_put_while_approval_pending():
+def test_quotation_form_locks_every_non_approver_while_approval_pending():
+    """N7：isApproverLocked() 對待審核／簽核中的非簽核人也成立（只有 unlocked 例外），所以 autoSave 最上面那道早退就擋得住；
+    橫幅只給非簽核人。行為由 test_e2e_pending_readonly_for_non_approvers 驗，這裡只釘住判斷式沒被改回「只鎖簽核人」。"""
     html = _read("quotation-form.html")
-    body = _slice(html, "autoSave() {", 2200)
-    guard = body.index("this.q.status === '待審核' || this.q.status === '簽核中'")
-    put = body.index("this.apiSave(")
-    assert guard < put, "待審核／簽核中的守門必須在 apiSave 之前（不能先送再看結果）"
-    assert "!this.unlocked" in body[guard:put] and "return" in body[guard:put]
-    # 原本的兩道早退仍在
-    assert "this.isApproverLocked()" in body[:guard] and "this.reviewEditing" in body[:guard]
+    body = _slice(html, "isApproverLocked() {", 400)
+    assert "this.isCurrentTierApprover() || !this.unlocked" in body, "非簽核人也要鎖（unlocked 才例外）"
+    ban = _slice(html, "pendingReadOnlyBanner() {", 300)
+    assert "!this.isCurrentTierApprover()" in ban and "!this.unlocked" in ban
+    auto = _slice(html, "autoSave() {", 1500)
+    assert auto.index("this.isApproverLocked()") < auto.index("this.apiSave(")
