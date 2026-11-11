@@ -494,8 +494,17 @@ def quota(token: str = None) -> dict:
         s2, b2 = _http("GET", "/v2/bot/message/quota/consumption", tk)
         if s1 != 200 or s2 != 200:
             return {"ok": False, "error": "LINE 回應 %s／%s" % (s1, s2)}
-        return {"ok": True, "type": b1.get("type", ""), "limit": b1.get("value") if b1.get("type") == "limited" else None,
-                "used": b2.get("totalUsage", 0)}
+        # 欄位缺失或型別不對＝讀不到（不補 0、不當無上限）：補 0 會讓額度告警誤判「用量歸零」而清掉已警示紀錄、重寄同一門檻的信（K 審 F2）
+        used, qtype, value = b2.get("totalUsage"), b1.get("type"), b1.get("value")
+        if isinstance(used, bool) or not isinstance(used, int) or used < 0:
+            return {"ok": False, "error": "LINE 回傳的本月用量欄位缺失或格式不對"}
+        if qtype == "limited":
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                return {"ok": False, "error": "LINE 回傳的訊息上限欄位缺失或格式不對"}
+            return {"ok": True, "type": qtype, "limit": value, "used": used}
+        if qtype == "none":
+            return {"ok": True, "type": qtype, "limit": None, "used": used}
+        return {"ok": False, "error": "LINE 回傳了不認得的額度類型（%r）" % (qtype,)}
     except Exception as exc:
         logger.warning("LINE quota error: %s", type(exc).__name__)
         return {"ok": False, "error": "連不到 LINE（%s）" % type(exc).__name__}

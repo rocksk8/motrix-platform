@@ -14,7 +14,10 @@
   ③ 個人勾選存 `system_settings.line_prefs = {username: [被退訂的 event_key…]}`：**opt-out 清單**（與 `users.notification_muted` 同慣例：
      新增接線類型不會讓任何人被靜音）。預設＝收；只有本人按勾選才寫（寫入量最小）。個人只能設定「自己角色被允許」的類型（`prefs_view` 不列、`set_muted` 拒收其餘）。
   ④ 本檔不 import `line_notify` 於模組層（`line_notify.notify_users` 會呼叫本檔；循環）：需要 `WIRED_EVENTS` 時在函式內惰性 import。
-  ⑤ `filter_usernames` 永不丟例外；查不到使用者角色（資料庫錯誤）＝回空清單並記 WARNING（fail-closed）。停用或不存在的帳號一律被濾掉。
+  ⑤ `filter_usernames` 永不丟例外；查不到使用者角色（資料庫錯誤）＝回空清單並記 WARNING（fail-closed）。
+     **有角色限制時**，停用或不存在的帳號會被濾掉（要查角色就一併查 `active=1`）；**沒有任何限制且沒人退訂的快速路徑**不查資料庫、原樣回傳呼叫端的清單
+     ——與舊版行為相同（呼叫端給的帳號本來就是信件解析出的在職收件人；停用者之後在 `ids_for`／信件端另有處理）。
+  ⑥ `line_prefs` 不主動清理已刪除／停用使用者的條目：資料量極小（每人最多接線類型數個字串）、無安全影響（過濾只看呼叫端給的帳號）。
 """
 import logging
 import threading

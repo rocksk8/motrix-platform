@@ -164,3 +164,19 @@ def test_unlinked_user_sees_hint_not_checkboxes(live_server, make_user, new_page
     page.goto(f"{live_server}/pages/change-password.html")
     page.locator("[data-testid=line-prefs-need-link]").wait_for(state="visible", timeout=20000)
     assert page.locator("[data-testid=line-prefs]").is_visible() is False
+
+
+@pytest.mark.e2e
+def test_rapid_role_clicks_do_not_overwrite_each_other(live_server, make_user, new_page, login_as, fake):
+    """K 審 F7：快速連點兩個角色，第二次不能拿舊清單蓋掉第一次（請求期間該列勾選會被鎖住）。"""
+    _configure()
+    page = _open_settings(live_server, make_user, new_page, login_as, "e2e_lq7")
+    from helpers import line_recipients as lr
+    page.locator("[data-testid=line-roles-%s]" % EV).wait_for(state="visible", timeout=10000)
+    page.locator("[data-testid=line-role-%s-viewer]" % EV).click()
+    page.locator("[data-testid=line-role-%s-finance]" % EV).click()          # 不等第一個回應
+    deadline = __import__("time").time() + 10
+    while (lr.allowed_roles(EV) is None or {"viewer", "finance"} & set(lr.allowed_roles(EV))) and __import__("time").time() < deadline:
+        page.wait_for_timeout(200)
+    got = lr.allowed_roles(EV)
+    assert got is not None and "viewer" not in got and "finance" not in got, got

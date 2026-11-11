@@ -12,11 +12,17 @@
   ④ 告警：用量百分比跨過任一門檻 ⇒ 寄一封 `line_quota_warning` 給最高管理者。**同一門檻同一個月只寄一次**（`alerted`）；一次跨過多個門檻只寄一封（講最高那個），
      而且**這次跨過的所有門檻**都記為已警示；**等寄送結果才記**（`notify_line_quota_warning` 回 False＝沒寄成、不記、下次重試）。
      寄信那一段在 `_lock` 裡（推播後的背景執行緒與每日備援可能同時跑，不可雙寄）。
-  ⑤ 換月重置：狀態的 `month` ≠ 當月，或新讀到的用量比上次小（LINE 月初重置／換方案）⇒ 清 `alerted`。用量降到門檻下只更新狀態，不寄信。
+  ⑤ 換月重置：狀態的 `month` ≠ 當月 ⇒ 清 `alerted`（同月內回落見 ⑪）。用量降到門檻下只更新狀態，不寄信。
      門檻被改：`alerted` 只留仍在新門檻清單內的；新增且目前已超過的門檻，下一次評估補寄一次。
   ⑥ 沒有上限（`limit is None`，無限方案）或讀不到用量（沒 token／LINE 連不上）⇒ 不告警；`snapshot` 回 `ok=False`＋原因，永不丟例外。
   ⑦ 門檻存 `line_notify.quota_thresholds`（百分比整數，1～`MAX_THRESHOLDS` 個，各 1～100，不重複，存成遞增）；缺省／壞值 ⇒ `DEFAULT_THRESHOLDS`。
   ⑧ 100% 時 LINE 回 429（`line_notify` 歸為 transient_fail）：本單位只告警，**不**自動停推播（PM 裁示 D6）。
+  ⑨ 狀態的「讀→改→寫」只由 `_state_lock`（短鎖，**不包網路呼叫與寄信**）保護：設定頁的 `refresh` 與告警的記旗標不會互相蓋掉（K 審 F1）；
+     鎖序固定 `_lock`（評估＋寄信）→ `_state_lock`，`refresh` 只拿 `_state_lock`，不會死鎖，也不會被寄信等待堵住。
+  ⑩ LINE 回的用量／上限欄位缺失或型別不對＝讀不到（`ok=False`），不補 0、不當無上限（K 審 F2；`line_notify.quota` 與 `refresh` 兩處都擋）。
+  ⑪ 同月內用量變小：只清掉「已回落到門檻以下再多 `_HYSTERESIS_POINTS` 個百分點」的已警示門檻（LINE 統計有延遲，小幅回落不算新週期；K 審 F3）；換月清空。
+  ⑫ 告警與備援檢查只在「LINE 已啟用且本機允許對外發送」時進行（與 `line_notify.push` 同條件）；設定頁的用量條不受影響（有 token 就能看）。
+     讀取失敗會被負快取 `_FAIL_CACHE_SECONDS` 秒（設定頁自動載入不會一直重打；手動「重新整理」會略過快取）。
 """
 import logging
 import threading
@@ -33,10 +39,15 @@ MAX_THRESHOLDS = 5
 CACHE_SECONDS = 300
 #: 推播成功後至少等這麼久才讀用量（LINE 的 consumption 統計有些許延遲）
 _SETTLE_SECONDS = 5
+#: 同月內用量回落：已警示門檻要降到「門檻 − 這麼多個百分點」以下才算回落、才清掉（遲滯）
+_HYSTERESIS_POINTS = 5
+#: 讀取失敗（LINE 連不上、欄位缺失）的負快取秒數
+_FAIL_CACHE_SECONDS = 60
 
 _lock = threading.Lock()          # 評估＋寄信＋記旗標（避免雙寄）
+_state_lock = threading.Lock()    # 狀態的讀→改→寫（短鎖；不包網路呼叫與寄信）
 _mem_lock = threading.Lock()
-_mem = {"checked_at": None}       # 行程內：最近一次「成功讀到 LINE 用量」的時間
+_mem = {"checked_at": None, "failed_at": None, "error": ""}       # 行程內：最近一次「成功讀到 LINE 用量」／「讀取失敗」的時間
 _pending = False
 
 
@@ -114,27 +125,32 @@ def refresh(now: datetime = None) -> dict:
     ths = thresholds()
     try:
         from . import line_notify as _ln
-        q = _ln.quota()
-        prev = _state()
-        if not q.get("ok"):
-            v = _view(prev, ths, ok=False, error=str(q.get("error") or "讀不到用量"))
-            return v
+        q = _ln.quota()                                   # 網路呼叫在任何鎖之外
+        used = _int_or_none(q.get("used")) if q.get("ok") else None
+        limit = _int_or_none(q.get("limit")) if (q.get("ok") and q.get("limit") is not None) else None
+        if not q.get("ok") or used is None or (q.get("limit") is not None and limit is None):
+            err = str(q.get("error") or "LINE 回傳的用量資料不完整")      # 欄位缺失／型別不對＝讀不到（K 審 F2：不補 0）
+            with _mem_lock:
+                _mem["failed_at"], _mem["error"] = now, err
+            return _view(_state(), ths, ok=False, error=err)
         month = month_key(now)
-        used = _int_or_none(q.get("used")) or 0
-        limit = _int_or_none(q.get("limit")) if q.get("limit") is not None else None
-        alerted = [t for t in (prev.get("alerted") or []) if isinstance(t, int) and t in ths]
-        prev_used = _int_or_none(prev.get("used"))
-        if prev.get("month") != month or (prev_used is not None and used < prev_used):
-            alerted = []                                  # 換月／LINE 重置／換方案：新週期
-        new = {"month": month, "used": used, "limit": limit, "type": str(q.get("type") or ""), "alerted": alerted,
-               "checked_at": now.isoformat(timespec="seconds")}
-        with _mem_lock:
-            _mem["checked_at"] = now
-        cmp_keys = ("month", "used", "limit", "type", "alerted")
-        if any(prev.get(k) != new[k] for k in cmp_keys):
-            _set_setting(STATE_KEY, new)                  # 只有內容變了才寫；checked_at 只在寫入時順便更新（新鮮度看記憶體）
-            return _view(new, ths)
-        return _view({**prev, "checked_at": new["checked_at"]}, ths)
+        with _state_lock:                                 # 讀→改→寫：與 check_and_alert 記旗標互斥（K 審 F1）
+            prev = _state()
+            alerted = [t for t in (prev.get("alerted") or []) if isinstance(t, int) and t in ths]
+            if prev.get("month") != month:
+                alerted = []                              # 換月：新週期
+            elif limit:
+                # 同月內百分比回落（LINE 重置／升級方案放大上限／統計延遲）：只清「已降到門檻 − 遲滯」以下的，小幅回落不算新週期（K 審 F3）
+                alerted = [t for t in alerted if used * 100 >= (t - _HYSTERESIS_POINTS) * limit]
+            new = {"month": month, "used": used, "limit": limit, "type": str(q.get("type") or ""), "alerted": alerted,
+                   "checked_at": now.isoformat(timespec="seconds")}
+            with _mem_lock:
+                _mem["checked_at"], _mem["failed_at"], _mem["error"] = now, None, ""
+            cmp_keys = ("month", "used", "limit", "type", "alerted")
+            if any(prev.get(k) != new[k] for k in cmp_keys):
+                _set_setting(STATE_KEY, new)              # 只有內容變了才寫；checked_at 只在寫入時順便更新（新鮮度看記憶體）
+                return _view(new, ths)
+            return _view({**prev, "checked_at": new["checked_at"]}, ths)
     except Exception as exc:  # noqa: BLE001
         logger.warning("LINE 額度刷新失敗：%s", type(exc).__name__)
         return _view(_state(), ths, ok=False, error="讀取用量時發生錯誤（%s）" % type(exc).__name__)
@@ -145,10 +161,12 @@ def snapshot(max_age: int = CACHE_SECONDS, now: datetime = None, force: bool = F
     now = now or datetime.now()
     try:
         with _mem_lock:
-            at = _mem["checked_at"]
+            at, failed_at, err = _mem["checked_at"], _mem["failed_at"], _mem["error"]
         st = _state()
         if not force and at is not None and st.get("month") == month_key(now) and 0 <= (now - at).total_seconds() < max_age:
             return _view(st, thresholds())
+        if not force and failed_at is not None and 0 <= (now - failed_at).total_seconds() < _FAIL_CACHE_SECONDS:
+            return _view(st, thresholds(), ok=False, error=err)          # 剛失敗過：負快取（K 審 F5）
         return refresh(now)
     except Exception as exc:  # noqa: BLE001
         logger.warning("LINE 額度 snapshot 失敗：%s", type(exc).__name__)
@@ -160,6 +178,8 @@ def check_and_alert(now: datetime = None, max_age: int = CACHE_SECONDS, force: b
     now = now or datetime.now()
     out = {"alerted": False, "new": [], "view": None}
     try:
+        if not _active():
+            return out                                    # LINE 沒啟用／本機不允許對外發送：不連 LINE、不寄信（K 審 F4）
         with _lock:
             v = snapshot(max_age, now, force)
             out["view"] = v
@@ -176,9 +196,10 @@ def check_and_alert(now: datetime = None, max_age: int = CACHE_SECONDS, force: b
             if may_mark is False:                         # 沒收件人／暫時失敗：不記，下次（推播後／明天 08:00）重試
                 logger.warning("LINE 額度告警沒有寄出（已達 %s%%），下次重試", max(ev["new"]))
                 return out
-            st = _state()
-            st["alerted"] = sorted(set(st.get("alerted") or []) | set(ev["crossed"]))      # 這次跨過的所有門檻都記
-            _set_setting(STATE_KEY, st)
+            with _state_lock:                             # 重讀再寫：不蓋掉同時間 refresh 寫的用量（K 審 F1）
+                st = _state()
+                st["alerted"] = sorted(set(st.get("alerted") or []) | set(ev["crossed"]))      # 這次跨過的所有門檻都記
+                _set_setting(STATE_KEY, st)
             out["alerted"] = True
             logger.error("LINE 本月額度已達 %.0f%%（%s / %s），已通知最高管理者", ev["percent"], v["used"], v["limit"])
             return out
@@ -198,11 +219,29 @@ def _run_after_push() -> None:
             _pending = False
 
 
+def _active() -> bool:
+    """LINE 已啟用（有 token）且本機允許對外發送（同 `line_notify.push` 的條件；開發機標記會擋）。永不丟例外。"""
+    try:
+        from . import line_notify as _ln
+        if not _ln.enabled():
+            return False
+        try:
+            from .email_notify import email_send_policy
+            allowed, _why = email_send_policy()
+        except Exception:  # noqa: BLE001
+            return True       # 讀不到政策＝維持預設（與 line_notify._machine_may_send 同理）
+        return bool(allowed)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def after_push(now: datetime = None) -> None:
     """推播成功後呼叫：背景、去抖動、永不丟例外。距上次刷新不足 `CACHE_SECONDS` ⇒ 排到滿 5 分鐘（至少等 `_SETTLE_SECONDS`）；同時只排一個。"""
     global _pending
     try:
         now = now or datetime.now()
+        if not _active():
+            return
         with _mem_lock:
             if _pending:
                 return

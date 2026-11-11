@@ -233,6 +233,12 @@
   ],
   "s": 400
  },
+ "PUT /api/line/prefs/{key}": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "PUT /api/list-views/{list_id}": {
   "k": [
    "allowUserPrefs",
@@ -268,6 +274,12 @@
   "s": 400
  },
  "PUT /api/settings/line-notify/events/{key}": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "PUT /api/settings/line-notify/events/{key}/roles": {
   "k": [
    "detail"
   ],

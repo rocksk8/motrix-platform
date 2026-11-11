@@ -19,13 +19,16 @@ class _Line:
     """假的 LINE：quota 與 consumption 兩支唯讀 GET。"""
     def __init__(self, used=0, limit=200, qtype="limited", status=200):
         self.used, self.limit, self.qtype, self.status, self.calls = used, limit, qtype, status, []
+        self.quota_body = self.consumption_body = None          # 要測「LINE 回了怪東西」時直接指定回應內容
 
     def __call__(self, method, path, token, payload=None):
         self.calls.append(path)
         if self.status != 200:
             return self.status, {}
         if path.endswith("/quota/consumption"):
-            return 200, {"totalUsage": self.used}
+            return 200, ({"totalUsage": self.used} if self.consumption_body is None else self.consumption_body)
+        if self.quota_body is not None:
+            return 200, self.quota_body
         return 200, ({"type": "limited", "value": self.limit} if self.qtype == "limited" else {"type": "none"})
 
 
@@ -38,7 +41,8 @@ def q(client, monkeypatch):
     _set_setting(lq.STATE_KEY, {})
     fake = _Line()
     monkeypatch.setattr(L, "_http", fake)
-    lq._mem["checked_at"] = None
+    monkeypatch.setattr("helpers.email_notify.email_send_policy", lambda env=None: (True, "測試允許"))
+    lq._mem.update(checked_at=None, failed_at=None, error="")
     lq._pending = False
     mails = []
     ret = {"v": True}
@@ -46,7 +50,7 @@ def q(client, monkeypatch):
                         lambda used, limit, threshold, thresholds=None, month="": (mails.append((used, limit, threshold, list(thresholds or []), month)), ret["v"])[1])
     lq.fake, lq.mails, lq.ret = fake, mails, ret
     yield lq
-    lq._mem["checked_at"] = None
+    lq._mem.update(checked_at=None, failed_at=None, error="")
     lq._pending = False
 
 
@@ -421,3 +425,175 @@ def test_thresholds_saved_through_main_settings_with_validation_and_audit(client
     assert q.thresholds() == [50, 95]
     from helpers.settings import _get_setting
     assert TOKEN not in json.dumps(_get_setting(q.STATE_KEY, {})), "狀態裡不放 token"
+
+
+# ══ K 審 F1：refresh 與「記旗標」交錯不可互相蓋掉 ═════════════════════════════
+
+def test_refresh_and_flag_write_do_not_overwrite_each_other(q, monkeypatch):
+    """設定頁載入（refresh）寫狀態到一半時，告警剛好要記旗標：兩者必須串行，最後 alerted 要保留、用量是最新的、信只一封。"""
+    import threading
+    import time
+    from helpers.settings import _get_setting
+    q.fake.used = 170
+    q.refresh(T0)                                    # 狀態：used=170、alerted=[]
+    q.fake.used = 171
+    in_write = threading.Event()
+    real = q._set_setting
+
+    def slow(key, value):
+        if threading.current_thread().name == "t_refresh":
+            in_write.set()
+            time.sleep(0.4)                          # 拖住 refresh 的寫入，讓另一條執行緒有機會在這段時間記旗標
+        return real(key, value)
+    monkeypatch.setattr(q, "_set_setting", slow)
+    t1 = threading.Thread(target=lambda: q.refresh(T0 + timedelta(minutes=10)), name="t_refresh")
+    t1.start()
+    assert in_write.wait(5)
+    out = {}
+    t2 = threading.Thread(target=lambda: out.update(q.check_and_alert(T0 + timedelta(minutes=10, seconds=1))), name="t_check")
+    t2.start()
+    t1.join(10)
+    t2.join(10)
+    st = _get_setting(q.STATE_KEY, {})
+    assert out.get("alerted") is True and len(q.mails) == 1
+    assert st["alerted"] == [80], "旗標被 refresh 的舊值蓋回去了 ⇒ 下次會重寄同一門檻"
+    assert st["used"] == 171, "refresh 的最新用量也要保留（不能被旗標寫入蓋成舊值）"
+
+
+# ══ K 審 F2：LINE 回怪東西＝讀不到，不補 0、不當無上限 ═══════════════════════════
+
+@pytest.mark.parametrize("cons, quota", [
+    ({}, None),                                          # totalUsage 缺
+    ({"totalUsage": None}, None),
+    ({"totalUsage": "170"}, None),
+    ({"totalUsage": True}, None),
+    ({"totalUsage": -3}, None),
+    (None, {"type": "limited"}),                         # limited 但 value 缺
+    (None, {"type": "limited", "value": "200"}),
+    (None, {"type": "limited", "value": None}),
+    (None, {"type": "weird", "value": 200}),             # 不認得的類型
+    (None, {}),                                          # 型別也缺
+])
+def test_malformed_line_answers_are_unreadable_not_zero_or_unlimited(q, cons, quota):
+    from helpers import line_notify as L
+    q.fake.consumption_body, q.fake.quota_body = cons, quota
+    r = L.quota()
+    assert r["ok"] is False and r["error"], r
+    v = q.refresh(T0)
+    assert v["ok"] is False and v["used"] is None and v["unlimited"] is False
+    from helpers.settings import _get_setting
+    assert not _get_setting(q.STATE_KEY, {}), "讀不到時不寫狀態"
+
+
+def test_malformed_answer_does_not_clear_alerted_or_cause_a_second_mail(q):
+    from helpers.settings import _get_setting
+    q.fake.used = 170
+    q.check_and_alert(T0)
+    assert len(q.mails) == 1
+    q.fake.consumption_body = {}                         # LINE 這一次回的資料缺 totalUsage（以前會被當 used=0 ⇒ 清掉 alerted）
+    v = q.refresh(T0 + timedelta(minutes=10))
+    assert v["ok"] is False
+    q.fake.consumption_body = None
+    q.fake.used = 171
+    q.check_and_alert(T0 + timedelta(minutes=20), force=True)
+    assert len(q.mails) == 1 and _get_setting(q.STATE_KEY, {})["alerted"] == [80]
+
+
+def test_limited_without_value_is_not_shown_as_unlimited(q):
+    q.fake.quota_body = {"type": "limited"}
+    v = q.snapshot(now=T0, force=True)
+    assert v["ok"] is False and v["unlimited"] is False
+
+
+def test_real_unlimited_plan_still_reads_fine(q):
+    q.fake.quota_body = {"type": "none"}
+    q.fake.used = 5
+    v = q.refresh(T0)
+    assert v["ok"] and v["unlimited"] and v["limit"] is None and v["used"] == 5
+
+
+# ══ K 審 F3：同月小幅回落不算新週期（遲滯）════════════════════════════════════
+
+def test_small_dip_in_same_month_keeps_alerted_but_real_drop_clears_it(q):
+    from helpers.settings import _get_setting
+    q.fake.used = 170
+    q.check_and_alert(T0)
+    assert len(q.mails) == 1
+    for i, used in enumerate([158, 150, 169, 161]):      # LINE 統計延遲造成的小幅起伏（150 剛好＝75%＝門檻 − 遲滯，仍保留）
+        q.fake.used = used
+        q.check_and_alert(T0 + timedelta(minutes=10 * (i + 1)), force=True)
+    assert len(q.mails) == 1 and _get_setting(q.STATE_KEY, {})["alerted"] == [80], "小幅起伏不重寄"
+    q.fake.used = 149                                    # < 75%：真的回落
+    q.check_and_alert(T0 + timedelta(minutes=60), force=True)
+    assert _get_setting(q.STATE_KEY, {})["alerted"] == []
+    q.fake.used = 165
+    q.check_and_alert(T0 + timedelta(minutes=70), force=True)
+    assert len(q.mails) == 2
+
+
+def test_plan_upgrade_with_bigger_limit_clears_alerted_when_no_longer_crossed(q):
+    q.fake.used, q.fake.limit = 170, 200
+    q.check_and_alert(T0)
+    q.fake.limit = 1000                                   # 升級方案：17%
+    q.refresh(T0 + timedelta(minutes=10))
+    from helpers.settings import _get_setting
+    assert _get_setting(q.STATE_KEY, {})["alerted"] == [], "上限放大後百分比掉到 17%：舊警示要清掉，之後再到 80% 才會再寄"
+    q.fake.used = 850
+    q.check_and_alert(T0 + timedelta(minutes=20), force=True)
+    assert len(q.mails) == 2
+
+
+# ══ K 審 F4：沒啟用／本機不允許對外發送 ⇒ 不連 LINE、不寄信 ═══════════════════════
+
+def test_disabled_line_means_no_http_and_no_mail(q):
+    from helpers.settings import _get_setting, _set_setting
+    c = _get_setting("line_notify", {})
+    c["enabled"] = False
+    _set_setting("line_notify", c)
+    q.fake.used = 190
+    r = q.check_and_alert(T0, force=True)
+    assert r["alerted"] is False and q.fake.calls == [] and q.mails == []
+
+
+def test_dev_machine_marker_means_no_http_and_no_mail(q, monkeypatch):
+    monkeypatch.setattr("helpers.email_notify.email_send_policy", lambda env=None: (False, "測試：開發機標記"))
+    q.fake.used = 190
+    r = q.check_and_alert(T0, force=True)
+    assert r["alerted"] is False and q.fake.calls == [] and q.mails == []
+
+
+@pytest.mark.line_quota_real_timer
+def test_after_push_schedules_nothing_when_inactive(q, monkeypatch):
+    timers = _Timers()
+    monkeypatch.setattr(q.threading, "Timer", timers)
+    monkeypatch.setattr("helpers.email_notify.email_send_policy", lambda env=None: (False, "測試：開發機標記"))
+    q.after_push(T0)
+    assert timers.made == [] and q._pending is False
+
+
+def test_settings_page_snapshot_still_works_when_line_is_disabled_but_token_exists(q):
+    """用量條只要有 token 就能看（停用 LINE 不影響「看」）；只有告警與備援檢查看啟用狀態。"""
+    from helpers.settings import _get_setting, _set_setting
+    c = _get_setting("line_notify", {})
+    c["enabled"] = False
+    _set_setting("line_notify", c)
+    q.fake.used = 33
+    assert q.snapshot(now=T0, force=True)["used"] == 33
+
+
+# ══ K 審 F5：讀取失敗負快取 ═══════════════════════════════════════════════════
+
+def test_failed_read_is_negatively_cached_for_a_minute_and_force_bypasses(q):
+    q.fake.status = 503
+    assert q.snapshot(now=T0)["ok"] is False
+    n = len(q.fake.calls)
+    assert q.snapshot(now=T0 + timedelta(seconds=30))["ok"] is False and len(q.fake.calls) == n, "60 秒內不重打"
+    assert q.snapshot(now=T0 + timedelta(seconds=61))["ok"] is False and len(q.fake.calls) > n, "過了就再試"
+    n = len(q.fake.calls)
+    q.snapshot(now=T0 + timedelta(seconds=62), force=True)
+    assert len(q.fake.calls) > n, "手動重新整理略過負快取"
+    q.fake.status = 200
+    q.fake.used = 5
+    assert q.snapshot(now=T0 + timedelta(seconds=63), force=True)["ok"] is True
+    n = len(q.fake.calls)
+    assert q.snapshot(now=T0 + timedelta(seconds=64))["used"] == 5 and len(q.fake.calls) == n, "成功後負快取清掉、改用正快取"

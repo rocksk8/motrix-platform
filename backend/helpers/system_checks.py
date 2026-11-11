@@ -807,7 +807,7 @@ def _prune_request_log(keep_days: int = None) -> None:
 
 def _check_line_quota() -> None:
     """每日備援（2026-11-12）：讀 LINE 本月訊息用量，跨過門檻就寄信（同一門檻同月一次）。主要觸發點是「推播成功後」（helpers/line_quota.after_push）；
-    這裡涵蓋 LINE 控制台手動發送也耗額度、以及重開機後第一次檢查。沒設 token（開發機）＝不連網、什麼都不做。
+    這裡涵蓋 LINE 控制台手動發送也耗額度、以及重開機後第一次檢查。LINE 沒啟用（沒 token／被停用）或本機不允許對外發送（開發機標記）＝不連網、不寄信（`line_quota.check_and_alert` 自己判斷）。
     背景執行緒（LINE API 與寄信都可能慢）；例外只記 log。"""
     try:
         from helpers import line_quota as _lq

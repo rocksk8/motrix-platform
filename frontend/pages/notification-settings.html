@@ -422,7 +422,7 @@
                 可收的角色：
                 <template x-for="r in cfg.role_choices" :key="r">
                   <label style="margin-right:10px;cursor:pointer;white-space:nowrap">
-                    <input type="checkbox" :data-testid="'line-role-' + e.key + '-' + r" :checked="roleOn(e, r)" @change="toggleRole(e, r, $event.target.checked)" style="width:14px;height:14px;vertical-align:-2px">
+                    <input type="checkbox" :data-testid="'line-role-' + e.key + '-' + r" :checked="roleOn(e, r)" :disabled="!!rolesBusy[e.key]" @change="toggleRole(e, r, $event.target.checked)" style="width:14px;height:14px;vertical-align:-2px">
                     <span x-text="roleName(r)"></span>
                   </label>
                 </template>
@@ -577,7 +577,7 @@
       }
       return {
         cfg: { enabled: false, channel_access_token: '', public_base_url: '', include_links: false, login_channel_id: '', login_channel_secret: '', callback_url: '', events: [], role_choices: [], quota_thresholds: [80, 100] },
-        quota: null, quotaLoading: false, thText: '80,100',
+        quota: null, quotaLoading: false, thText: '80,100', rolesBusy: {},
         denied: false, saving: false, verifying: false, saved: false, msg: '', isError: false,
         _say(text, err, ms) { this.msg = text; this.isError = !!err; setTimeout(() => { this.msg = '' }, ms || 5000) },
         // Alpine 3 看到資料物件有 init() 會自己叫一次——這裡不再寫 x-init（會跑兩遍）
@@ -605,6 +605,12 @@
         roleName(r) { return { superadmin: '最高管理者', admin: '管理員', sales: '業務', engineer: '工程師', viewer: '檢視者', finance: '財務' }[r] || r },
         roleOn(e, r) { return e.roles == null || e.roles.includes(r) },
         async toggleRole(e, r, on) {
+          // 請求期間鎖住該類型的角色勾選：e.roles 要等回應才更新，連點會拿舊清單重算而蓋掉前一次（K 審 F7）
+          if (this.rolesBusy[e.key]) return
+          this.rolesBusy = { ...this.rolesBusy, [e.key]: true }
+          try { await this._putRoles(e, r, on) } finally { this.rolesBusy = { ...this.rolesBusy, [e.key]: false } }
+        },
+        async _putRoles(e, r, on) {
           const all = this.cfg.role_choices
           let cur = e.roles == null ? all.slice() : e.roles.slice()
           cur = on ? (cur.includes(r) ? cur : cur.concat([r])) : cur.filter(x => x !== r)
