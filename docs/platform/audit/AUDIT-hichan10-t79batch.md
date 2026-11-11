@@ -193,3 +193,9 @@ tools/duty_roles_rollback.apply_rollback；core/txn.py（本體）
 | 探針（複製成 `tests/test_zz_audit_probe_h10_*.py` 後 `-s`，不要 commit） | `probe_g2.py.txt`、`probe_g3.py.txt`、`probe_n7.py.txt` |
 | 突變 | `AUDIT-hichan10-t79batch.probes/mut.sh.txt`（把 `<file>` 的某字串換掉、跑指定測試、還原） |
 | H10-M1 | 見 §4.1 的迴圈 |
+
+## 6. 關閉紀錄
+
+（group1 獨立稽核者 hichan-12，PLAYBOOK §E-6）
+
+- ✅ H10-M1 關閉（08a641492）——`tests/test_e2e_draft_edit_conflict_2026_11_11.py` 的 :109／:227 改 `wait_for_selector(…, state="hidden")`（:223 補 `state="visible"`），修在 ad695f661、已併入 train（merge 08a641492）。複驗：該檔 5 次整檔連跑各 7 passed；程式只改測試、產品碼未動；剩餘的 `is_visible()` 立即斷言（:90、:94、:116、:208）都是「橫幅尚未出現／已確定消失」的負向斷言，晚一個影格只會假綠、不會隨機紅。
