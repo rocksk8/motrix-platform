@@ -22,15 +22,15 @@
     .bn-list{border:1px solid var(--border-light);border-radius:8px;background:#fff;overflow:hidden}
     .bn-list-tools{padding:10px;border-bottom:1px solid var(--border-light);display:flex;flex-direction:column;gap:8px}
     .bn-tabs{display:flex;flex-wrap:wrap;gap:4px}
-    .bn-tab{font-size:11px;padding:3px 8px;border:1px solid var(--border-light);border-radius:10px;background:#fff;cursor:pointer;font-family:var(--font-zh)}
+    .bn-tab{font-size:12px;padding:3px 8px;border:1px solid var(--border-light);border-radius:10px;background:#fff;cursor:pointer;font-family:var(--font-zh)}
     .bn-tab.on{background:var(--black,#0A0A0A);color:#fff;border-color:transparent}
     .bn-case{padding:10px 12px;border-bottom:1px solid var(--border-light);cursor:pointer}
     .bn-case:hover{background:#FAFAF8}
     .bn-case.selected{background:#EFF6FF}
     .bn-case-no{font-size:12px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
-    .bn-case-name{font-size:11px;color:var(--text-secondary);font-family:var(--font-zh);margin-top:2px}
-    .bn-badge{display:inline-block;font-size:10px;padding:1px 7px;border-radius:9px;font-family:var(--font-zh);margin-left:6px}
-    .st-gray{background:#F3F4F6;color:#6B7280}.st-blue{background:#DBEAFE;color:#1D4ED8}
+    .bn-case-name{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);margin-top:2px}
+    .bn-badge{display:inline-block;font-size:12px;padding:1px 7px;border-radius:9px;font-family:var(--font-zh);margin-left:6px}
+    .st-gray{background:#F3F4F6;color:var(--text-secondary)}.st-blue{background:#DBEAFE;color:#1D4ED8}
     .st-amber{background:#FEF3C7;color:#92400E}.st-orange{background:#FFEDD5;color:#C2410C}
     .st-green{background:#DCFCE7;color:#15803D}.st-purple{background:#EDE9FE;color:#6D28D9}
     .bn-card{border:1px solid var(--border-light);border-radius:8px;background:#fff;padding:16px 18px;margin-bottom:14px}
@@ -44,7 +44,7 @@
     .bn-row .amt{min-width:100px;text-align:right;font-family:LINE Seed TW_OTF, sans-serif}
     .bn-in{width:70px;padding:4px 6px;border:1px solid var(--border-light);border-radius:4px;font-size:12px;text-align:right}
     .bn-sel{padding:4px 6px;border:1px solid var(--border-light);border-radius:4px;font-size:12px}
-    .bn-note{font-size:11px;color:#92400E;font-family:var(--font-zh)}
+    .bn-note{font-size:12px;color:#92400E;font-family:var(--font-zh)}
     /* 業務名單≠現行業務負責的註記：中性色（不是警告，只是讓人知道名單是建立當下凍結的） */
     .bn-sales-note{font-size:12px;line-height:1.6;color:var(--text-secondary);background:var(--surface-muted);border:1px solid var(--border-light);border-radius:var(--radius);padding:6px 10px;margin:0 0 10px}
     .bn-err{font-size:12px;color:var(--danger);font-family:var(--font-zh)}
@@ -56,7 +56,7 @@
     .bn-btn:disabled{opacity:.5;cursor:not-allowed}
     .bn-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
     .bn-empty{padding:30px;text-align:center;color:var(--text-dim);font-size:12px;font-family:var(--font-zh)}
-    .bn-log{font-size:11px;color:var(--text-secondary);font-family:var(--font-zh);line-height:1.8}
+    .bn-log{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);line-height:1.8}
     @media (max-width:767px){.page-main{margin-left:0;padding:16px}.bn-layout{grid-template-columns:1fr}}
   </style>
 </head>
@@ -239,7 +239,7 @@
                         <div class="bn-cat-hd">
                           <span x-text="catLabels[c]"></span>
                           <span>比例 <input class="bn-in" x-model="draft.split[c]" :data-testid="'bn-split-' + c"> %</span>
-                          <label style="font-size:11px;font-weight:400"><input type="checkbox" x-model="draft.custom[c]"> 指定個人比例（不勾＝平均）</label>
+                          <label style="font-size:12px;font-weight:400"><input type="checkbox" x-model="draft.custom[c]"> 指定個人比例（不勾＝平均）</label>
                           <span style="margin-left:auto;font-weight:400" :data-testid="'bn-cat-amount-' + c"
                                 x-text="'類金額合計 ' + (previewCatAmount(c) === null || previewCatAmount(c) === undefined ? '—' : money(previewCatAmount(c)))"></span>
                         </div>

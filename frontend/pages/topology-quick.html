@@ -19,17 +19,17 @@
     .form-group input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box}
     .tab-bar{margin-bottom:16px}
     .tab-panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px}
-    .btn-xs{padding:4px 8px;font-size:11px}
+    .btn-xs{padding:4px 8px;font-size:12px}
 
     .grid-table-wrap{overflow-x:auto;border:1px solid var(--border-light);border-radius:8px}
     .grid-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
-    .grid-table thead th{background:#F1F5F9;color:var(--text-secondary);font-weight:700;font-size:11px;
+    .grid-table thead th{background:#F1F5F9;color:var(--text-secondary);font-weight:700;font-size:12px;
       padding:7px 6px;text-align:left;white-space:nowrap;border-bottom:2px solid var(--border)}
     .grid-table tbody td{padding:1px 3px;border-bottom:1px solid var(--border-light)}
     .grid-table tbody tr:hover td{background:#FAFAF8}
     .grid-table tbody tr:nth-child(even) td{background:#FCFBF9}
     .grid-table tbody tr:nth-child(even):hover td{background:#F5F3EF}
-    .grid-idx{color:var(--text-dim);font-family:LINE Seed TW_OTF, monospace;font-size:11px;text-align:center;padding:0 6px!important}
+    .grid-idx{color:var(--text-dim);font-family:LINE Seed TW_OTF, monospace;font-size:12px;text-align:center;padding:0 6px!important}
     .grid-table input[type=text],.grid-table input[type=number]{
       width:118px;padding:6px 6px;border:1px solid transparent;border-radius:4px;font-size:12px;
       font-family:inherit;outline:none;box-sizing:border-box;background:transparent;color:#0A0A0A}
@@ -37,7 +37,7 @@
     .grid-table select{width:100px;padding:6px 4px;border:1px solid transparent;border-radius:4px;font-size:12px;font-family:inherit;background:transparent;color:#0A0A0A}
     .grid-table select:focus{border-color:var(--accent);background:#fff}
     .grid-table td.checkbox-cell{text-align:center;padding:0 4px!important}
-    .row-del{background:none;border:none;color:var(--danger);cursor:pointer;font-size:11px;padding:3px 6px;white-space:nowrap}
+    .row-del{background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;padding:3px 6px;white-space:nowrap}
     .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px}
     .modal-box{background:#fff;border-radius:12px;width:min(820px,96vw);max-height:none;display:flex;flex-direction:column;padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
     .modal-box h3{font-size:15px;font-weight:700;margin-bottom:12px}
@@ -53,12 +53,12 @@
     <div>
       <a href="network-plans.html" style="font-size:12px;color:var(--accent);text-decoration:none">← 返回規劃書列表</a>
       <h1 style="font-size:18px;font-weight:700;color:var(--text-main);margin-top:4px">快速拓樸圖產生器</h1>
-      <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+      <div style="font-size:12px;color:var(--text-dim);margin-top:2px">
         不建立規劃書、不寫入資料庫——資料只存在這台瀏覽器（重新整理不會消失，換電腦/清瀏覽器資料則不會保留）。
         只是想單純畫一張交換器埠位拓樸圖時用這個；若需要完整 WAN／VLAN／IP 等規劃文件，請到「網路架構規劃書」建立。
       </div>
     </div>
-    <button class="btn btn-ghost" style="color:#DC2626;border-color:#FCA5A5" @click="clearAll()">清空重新開始</button>
+    <button class="btn btn-ghost" style="color:var(--danger);border-color:#FCA5A5" @click="clearAll()">清空重新開始</button>
   </div>
 
   <div x-show="actionResultMsg" style="color:#15803D;font-size:12px;margin-bottom:10px;padding:8px 12px;background:#F0FDF4;border:1px solid #A7F3D0;border-radius:6px;display:flex;justify-content:space-between;gap:10px;white-space:pre-line">
@@ -137,7 +137,7 @@
           <button class="btn btn-ghost btn-xs" @click="addPort()">+ 新增一列</button>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--text-dim);margin:-4px 0 12px">
+      <div style="font-size:12px;color:var(--text-dim);margin:-4px 0 12px">
         「拓樸圖連線對象」填另一台交換器的名稱＋對方埠號才會自動畫連線；填其他文字（如「ISP路由器」）會畫成外部設備方塊。
       </div>
       <div class="grid-table-wrap">

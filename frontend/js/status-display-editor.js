@@ -49,7 +49,7 @@
     '#sde-panel .sde-warn{margin:6px 0;padding:6px 8px;border:1px solid var(--warning,#c80);border-radius:6px;font-size:12px}',
     '#sde-panel .sde-grp{margin:12px 0 4px;font-weight:600}#sde-panel input,#sde-panel select{padding:3px 6px;max-width:100%}',
     '#sde-panel button.sde-btn{padding:3px 9px;border:1px solid var(--border-light,#ccc);border-radius:6px;background:var(--bg-card,#fff);color:inherit;cursor:pointer}',
-    '#sde-panel .sde-prev{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px}#sde-panel .sde-ctx{font-size:11px;color:var(--text-dim,#888)}'
+    '#sde-panel .sde-prev{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px}#sde-panel .sde-ctx{font-size:12px;color:var(--text-dim,#888)}'
   ].join('')
 
   var st = null

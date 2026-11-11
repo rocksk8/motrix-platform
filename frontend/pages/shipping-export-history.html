@@ -52,13 +52,13 @@
       font-size: 12px; color: var(--text-secondary); margin-top: 2px;
     }
     .seh-meta {
-      font-size: 11px; color: var(--text-dim); margin-top: 4px;
+      font-size: 12px; color: var(--text-dim); margin-top: 4px;
       display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
     }
     .seh-time { font-family: 'LINE Seed TW_OTF', sans-serif; }
     .seh-mode-badge {
       display: inline-block; padding: 1px 7px; border-radius: 10px;
-      font-size: 10px; font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif;
+      font-size: 12px; font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .seh-mode-badge.internal { background: #F5F3FF; color: #7C3AED; }
     .seh-mode-badge.external { background: #ECFDF5; color: #059669; }
@@ -110,7 +110,7 @@
               <a :href="'case-management.html?q=' + encodeURIComponent(e.quoteNo)" x-text="e.noteNo"></a>
               <span class="seh-mode-badge" :class="e.mode==='internal' ? 'internal' : 'external'"
                     x-text="e.mode==='internal' ? '對內' : '對外'"></span>
-              <span x-show="e.count > 1" style="font-size:11px;color:var(--text-dim)" x-text="'第 ' + e.count + ' 次'"></span>
+              <span x-show="e.count > 1" style="font-size:12px;color:var(--text-dim)" x-text="'第 ' + e.count + ' 次'"></span>
             </div>
             <div class="seh-sub" x-text="[e.customerName, e.projectName].filter(Boolean).join(' ／ ') || '（無客戶／專案資訊）'"></div>
             <div class="seh-meta">

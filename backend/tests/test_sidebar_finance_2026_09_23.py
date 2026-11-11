@@ -426,9 +426,9 @@ def test_ui10_the_reports_item_is_not_shown_to_cashier_only_users(nav):
     ✅ 而本檔那兩道鎖門守門會繼續驗這件事 —— **它們不是靠這一段推演，是靠斷言。**
     """
     # 2026-09-30 選單拆分：營運報表搬到「經營分析」組（不在財務會計）
-    _l, _c, items = _groups(nav)["經營分析"]
+    _l, _c, items = _groups(nav)["報表"]   # 2026-11-11 B2：群組改名「報表」（收成單一入口）
     rpt = [it for it in items if it[0] == "營運報表"]
-    assert rpt, "經營分析組底下沒有「營運報表」—— **儀器失效**。"
+    assert rpt, "報表組底下沒有「營運報表」—— **儀器失效**。"
 
     flags = rpt[0][3]
     assert "cashier" not in flags, (

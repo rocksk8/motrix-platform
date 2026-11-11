@@ -58,7 +58,7 @@
                "probes": ["/api/payslips", "/api/tax-rules", "/api/bonus/awards", "/api/bonus/items"]},
   "pages": [{"path": "payslips.html",
      "menu": {"group": "payroll", "label": "勞報單", "order": 20, "perm": ["payslip"], "active": ["payslips.html", "payslip-form.html"]}}, {"path": "payslip-form.html"}, {"path": "bonus-corrections.html"}, {"path": "bonus.html",
-     "menu": {"group": "finance", "label": "獎金分潤", "order": 90, "perm": "any"}},
+     "menu": {"group": "finance", "label": "獎金分潤", "order": 55, "perm": "any", "section": "月結"}},
     {"path": "bank-account.html",
-     "menu": {"group": "finance", "label": "收款帳號", "order": 95, "perm": "any"}}]
+     "menu": {"group": "finance", "label": "收款帳號", "order": 70, "perm": "any", "section": "設定"}}]
 }

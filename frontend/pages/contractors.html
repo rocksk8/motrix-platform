@@ -23,7 +23,7 @@
     .search-input{width:100%;padding:8px 12px 8px 36px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;outline:none;box-sizing:border-box}
     .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
     .data-table{width:100%;border-collapse:collapse;font-size:13px}
-    .data-table th{padding:10px 12px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table th{padding:10px 12px;text-align:left;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
     .data-table td{padding:11px 12px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
     .data-table tr:last-child td{border-bottom:none}
     .data-table tr:hover td{background:#FDFCFA}
@@ -37,7 +37,7 @@
     .modal-foot{display:flex;align-items:center;padding:14px 22px;border-top:1px solid var(--border-light);gap:8px;justify-content:flex-end}
     .form-section{margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border-light)}
     .form-section:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
-    .form-section-title{font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:14px}
+    .form-section-title{font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:14px}
     .form-group{display:flex;flex-direction:column;gap:5px}
     .form-label{font-size:12px;font-weight:500;color:var(--text-secondary)}
     .form-input,.form-select,.form-textarea{padding:8px 11px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);color:var(--text-primary);background:#fff;outline:none;transition:border-color .12s,box-shadow .12s}
@@ -56,17 +56,17 @@
     .detail-label{color:var(--text-dim);min-width:68px;flex-shrink:0}
     .detail-val{color:var(--text-primary);font-weight:500;flex:1;word-break:break-all}
     .detail-divider{border:none;border-top:1px solid var(--border-light);margin:14px 0}
-    .detail-sec{font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px}
-    .tag{display:inline-flex;padding:2px 8px;border-radius:3px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif}
+    .detail-sec{font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px}
+    .tag{display:inline-flex;padding:2px 8px;border-radius:3px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif}
     .tag-active{background:var(--success-light);color:var(--success)}
-    .tag-inactive{background:#F3F4F6;color:#6B7280}
+    .tag-inactive{background:#F3F4F6;color:var(--text-secondary)}
     .empty-state{text-align:center;padding:60px 20px;color:var(--text-dim)}
     .empty-icon{font-size:40px;margin-bottom:12px;opacity:.4}
     .id-card-drop{border:2px dashed var(--border-light);border-radius:var(--radius-lg);padding:20px;text-align:center;color:var(--text-dim);font-size:13px;transition:border-color .15s,background .15s;cursor:pointer}
     .id-card-drop:hover{border-color:var(--accent);background:var(--accent-light)}
     .id-card-preview{position:relative;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden;background:#f8f8f6}
     .id-card-preview img{width:100%;max-height:180px;object-fit:contain;display:block}
-    .id-card-remove{position:absolute;top:6px;right:6px;background:rgba(220,38,38,.9);color:#fff;border:none;border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit}
+    .id-card-remove{position:absolute;top:6px;right:6px;background:rgba(220,38,38,.9);color:#fff;border:none;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer;font-family:inherit}
     .id-card-remove:hover{background:var(--danger)}
   </style>
 </head>
@@ -142,8 +142,8 @@
                 <div style="font-weight:500" x-text="c.name"></div>
                 <div style="display:flex;align-items:center;gap:4px;margin-top:1px">
                   <span x-show="c.has_id_card"
-                        style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#ECFDF5;color:#059669;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600">ID ✓</span>
-                  <span x-show="c.has_union_insurance" style="font-size:11px;color:var(--text-dim)">職業工會</span>
+                        style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;background:#ECFDF5;color:#059669;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600">ID ✓</span>
+                  <span x-show="c.has_union_insurance" style="font-size:12px;color:var(--text-dim)">職業工會</span>
                 </div>
               </td>
               <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="c.id_number || '—'"></td>
@@ -189,7 +189,7 @@
             <span class="tag" :class="selectedContractor.active ? 'tag-active' : 'tag-inactive'"
                   x-text="selectedContractor.active ? '往來中' : '停用'"></span>
             <span x-show="selectedContractor.has_id_card"
-                  style="font-size:10px;background:#ECFDF5;color:#059669;padding:1px 7px;border-radius:3px;font-weight:600">ID ✓</span>
+                  style="font-size:12px;background:#ECFDF5;color:#059669;padding:1px 7px;border-radius:3px;font-weight:600">ID ✓</span>
           </div>
         </div>
         <a class="btn btn-ghost btn-sm mp1-onmap" x-show="selectedContractor.address"
@@ -259,7 +259,7 @@
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
               存簿影本已上傳
             </div>
-            <div style="font-size:11px;color:var(--text-dim);margin-top:3px">產出勞報單 PDF 時將自動附入</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-top:3px">產出勞報單 PDF 時將自動附入</div>
           </div>
         </template>
 
@@ -292,7 +292,7 @@
           </div>
         </template>
         <template x-if="contractorDispatches.length > 5">
-          <div style="text-align:center;font-size:11px;color:var(--text-dim);padding:4px 0">
+          <div style="text-align:center;font-size:12px;color:var(--text-dim);padding:4px 0">
             … 另有 <span x-text="contractorDispatches.length - 5"></span> 筆
           </div>
         </template>
@@ -402,7 +402,7 @@
                 <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>
                 <circle cx="8" cy="14.5" r="1.5"/><path d="M13 13h5M13 16h3"/>
               </svg>
-              點擊或拖曳上傳<br><span style="font-size:11px">JPG / PNG / WEBP &lt; 3 MB</span>
+              點擊或拖曳上傳<br><span style="font-size:12px">JPG / PNG / WEBP &lt; 3 MB</span>
             </div>
             <div x-show="idCardFrontPreview || idCardFront" class="id-card-preview">
               <img :src="idCardFrontPreview || idCardFront" alt="身分證正面">
@@ -413,7 +413,7 @@
               <label class="btn btn-ghost btn-sm" style="cursor:pointer">
                 重新上傳<input type="file" accept="image/*" style="display:none" @change="handleIdCardFile($event,'front')">
               </label>
-              <span style="font-size:11px">
+              <span style="font-size:12px">
                 <span x-show="idCardFrontPreview" style="color:var(--warning)">● 未儲存</span>
                 <span x-show="!idCardFrontPreview && idCardFront" style="color:var(--success)">● 已上傳</span>
               </span>
@@ -429,7 +429,7 @@
                 <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>
                 <circle cx="8" cy="14.5" r="1.5"/><path d="M13 13h5M13 16h3"/>
               </svg>
-              點擊或拖曳上傳<br><span style="font-size:11px">JPG / PNG / WEBP &lt; 3 MB</span>
+              點擊或拖曳上傳<br><span style="font-size:12px">JPG / PNG / WEBP &lt; 3 MB</span>
             </div>
             <div x-show="idCardBackPreview || idCardBack" class="id-card-preview">
               <img :src="idCardBackPreview || idCardBack" alt="身分證反面">
@@ -440,7 +440,7 @@
               <label class="btn btn-ghost btn-sm" style="cursor:pointer">
                 重新上傳<input type="file" accept="image/*" style="display:none" @change="handleIdCardFile($event,'back')">
               </label>
-              <span style="font-size:11px">
+              <span style="font-size:12px">
                 <span x-show="idCardBackPreview" style="color:var(--warning)">● 未儲存</span>
                 <span x-show="!idCardBackPreview && idCardBack" style="color:var(--success)">● 已上傳</span>
               </span>
@@ -458,7 +458,7 @@
             <rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5M16 4v5"/>
           </svg>
           點擊或拖曳上傳存摺封面（含帳號頁）<br>
-          <span style="font-size:11px">JPG / PNG / WEBP &lt; 3 MB</span>
+          <span style="font-size:12px">JPG / PNG / WEBP &lt; 3 MB</span>
         </div>
         <div x-show="bankPassbookPreview || bankPassbook" class="id-card-preview">
           <img :src="bankPassbookPreview || bankPassbook" alt="銀行存簿">
@@ -469,7 +469,7 @@
           <label class="btn btn-ghost btn-sm" style="cursor:pointer">
             重新上傳<input type="file" accept="image/*" style="display:none" @change="handleIdCardFile($event,'passbook')">
           </label>
-          <span style="font-size:11px">
+          <span style="font-size:12px">
             <span x-show="bankPassbookPreview" style="color:var(--warning)">● 未儲存</span>
             <span x-show="!bankPassbookPreview && bankPassbook" style="color:var(--success)">● 已上傳</span>
           </span>

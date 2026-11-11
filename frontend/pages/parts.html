@@ -26,11 +26,11 @@
     .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
     .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
     .data-table{width:100%;border-collapse:collapse;font-size:13px}
-    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table th{padding:10px 14px;text-align:left;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
     .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
     .data-table tr:last-child td{border-bottom:none}
     .data-table tr:hover td{background:#FDFCFA}
-    .action-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);font-size:11px;font-weight:500;cursor:pointer;border:1px solid;transition:all .12s}
+    .action-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);font-size:12px;font-weight:500;cursor:pointer;border:1px solid;transition:all .12s}
     .action-btn.edit{background:#EEF2FF;border-color:#C7D2FE;color:#4338CA}
     .action-btn.edit:hover{background:#E0E7FF}
     .action-btn.del{background:var(--danger-light);border-color:var(--danger-border);color:var(--danger)}
@@ -40,7 +40,7 @@
     .modal-title{font-size:15px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary);margin-bottom:20px}
     .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     .field-row{margin-bottom:0}
-    .field-label{font-size:11px;color:var(--text-secondary);margin-bottom:4px;font-weight:500;font-family:var(--font-zh)}
+    .field-label{font-size:12px;color:var(--text-secondary);margin-bottom:4px;font-weight:500;font-family:var(--font-zh)}
     .field-input{width:100%;padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);outline:none;box-sizing:border-box}
     .field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
     .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
@@ -59,8 +59,8 @@
     .pt-cat.is-orphan{border-style:dashed;border-color:var(--warning)}
     .pt-cat__n{font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;
                font-variant-numeric:tabular-nums;color:var(--text-primary);line-height:1}
-    .pt-cat__l{font-size:11.5px;color:var(--text-secondary);line-height:1.3}
-    .pt-cat__l small{display:block;font-size:9.5px;color:var(--text-dim);
+    .pt-cat__l{font-size:12px;color:var(--text-secondary);line-height:1.3}
+    .pt-cat__l small{display:block;font-size:12px;color:var(--text-dim);
                      font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.04em}
 
     /* ── 可排序表頭 ── */
@@ -72,7 +72,7 @@
     .pt-sortable.asc::after{opacity:1;border-bottom:4px solid var(--accent);border-top:0}
     .pt-sortable.desc::after{opacity:1;border-top:4px solid var(--accent);border-bottom:0}
 
-    .stock-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
+    .stock-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
     .stock-badge.ok{background:#DCFCE7;color:#15803D}
     .stock-badge.zero{background:#F0EEE9;color:var(--text-dim)}
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -94,7 +94,7 @@
 
     <div class="pg">
       <div class="pg__l">
-        <div class="pg__eyebrow">廠商與採購</div>
+        <nav class="pg__crumb" data-crumb-auto aria-label="目前位置"><span>料號主檔</span></nav>
         <h1 class="pg__t">料號主檔</h1>
         <p class="pg__s">全公司共用的料號、品名與廠牌目錄</p>
       </div>
@@ -107,11 +107,11 @@
       </div>
       <div style="margin-left:auto;font-size:12px;color:var(--text-dim)" x-text="filtered.length + ' 項料號'"></div>
       <input type="file" x-ref="importFile" accept=".xlsx,.xls,.csv" style="display:none" @change="handleImport($event)">
-      <button class="btn btn-ghost" @click="$refs.importFile.click()" style="font-size:11px">
+      <button class="btn btn-ghost" @click="$refs.importFile.click()" style="font-size:12px">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
         匯入 Excel
       </button>
-      <button class="btn btn-ghost" @click="exportExcel()" :disabled="!items.length" style="font-size:11px">
+      <button class="btn btn-ghost" @click="exportExcel()" :disabled="!items.length" style="font-size:12px">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
         匯出 Excel
       </button>
@@ -185,14 +185,14 @@
                   <td style="font-size:12px" x-text="p.name"></td>
                   <td style="font-size:12px;color:var(--text-secondary)" x-text="p.brand || '—'"></td>
                   <td>
-                    <span x-show="p.category" style="font-size:11px;padding:2px 8px;border-radius:4px;background:#F0EEE9;color:var(--text-secondary)" x-text="p.category"></span>
+                    <span x-show="p.category" style="font-size:12px;padding:2px 8px;border-radius:4px;background:#F0EEE9;color:var(--text-secondary)" x-text="p.category"></span>
                     <span x-show="!p.category" style="color:var(--text-dim)">—</span>
                   </td>
                   <td style="font-size:12px;color:var(--text-dim)" x-text="p.unit || '台'"></td>
                   <td style="text-align:right"><span class="stock-badge" :class="stockCount(p.part_no) > 0 ? 'ok' : 'zero'" x-text="stockCount(p.part_no)"></span></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="p.cost ? 'NT$ ' + MotrixFormat.num(Math.round(p.cost)) : '—'"></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600" x-text="p.list_price ? 'NT$ ' + MotrixFormat.num(Math.round(p.list_price)) : '—'"></td>
-                  <td style="font-size:11px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="p.note || '—'"></td>
+                  <td style="font-size:12px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="p.note || '—'"></td>
                   <td style="white-space:nowrap">
                     <button class="action-btn edit" @click.stop="openModal(p)">編輯</button>
                     <button class="action-btn del" @click.stop="deletePart(p)" style="margin-left:4px">刪除</button>
@@ -246,7 +246,7 @@
         <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center">
           <button type="button" @click="showAddBrand=!showAddBrand"
                   :style="showAddBrand ? 'border-color:var(--accent);color:var(--accent)' : ''"
-                  style="padding:3px 10px;border-radius:4px;font-size:11px;font-family:var(--font-zh);cursor:pointer;border:1px dashed var(--border-light);background:transparent;color:var(--text-dim);transition:all .12s">
+                  style="padding:3px 10px;border-radius:4px;font-size:12px;font-family:var(--font-zh);cursor:pointer;border:1px dashed var(--border-light);background:transparent;color:var(--text-dim);transition:all .12s">
             ⚙ 管理廠牌
           </button>
         </div>
@@ -262,11 +262,11 @@
                         style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:0;font-size:12px;line-height:1;opacity:.7">✎</button>
               </span>
             </template>
-            <span x-show="brandSelectOptions.length===0" style="font-size:11px;color:var(--text-dim)">尚無廠牌，請在下方新增</span>
+            <span x-show="brandSelectOptions.length===0" style="font-size:12px;color:var(--text-dim)">尚無廠牌，請在下方新增</span>
           </div>
           <div x-show="brandFix.show" style="margin-bottom:10px;padding:10px;background:#FFF7ED;border:1px solid #FDBA74;border-radius:var(--radius)">
             <div style="font-size:12px;font-weight:600;margin-bottom:4px">修正廠牌：<span x-text="brandFix.oldName"></span></div>
-            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">
+            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">
               將套用到 <span x-text="brandFix.affected.length"></span> 筆料號：<span x-text="brandFix.affected.map(p=>p.part_no).join('、')"></span>
             </div>
             <div style="display:flex;gap:6px">
@@ -278,7 +278,7 @@
                 <span x-text="brandFix.saving ? '套用中…' : '套用'"></span>
               </button>
             </div>
-            <div x-show="brandFix.error" style="color:var(--danger);font-size:11px;margin-top:6px" x-text="brandFix.error"></div>
+            <div x-show="brandFix.error" style="color:var(--danger);font-size:12px;margin-top:6px" x-text="brandFix.error"></div>
           </div>
           <div style="display:flex;gap:6px">
             <input type="text" x-model="newBrandPreset" placeholder="輸入新廠牌名稱…"
@@ -304,7 +304,7 @@
       <div class="field-row" style="grid-column:1/-1">
         <div class="field-label">安全庫存</div>
         <input class="field-input" type="number" min="0" placeholder="0＝不設定" x-model.number="modal.safetyStock">
-        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">在庫低於此數量時，庫存管理頁會顯示紅燈；低於 1.5 倍時顯示黃燈</div>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:4px">在庫低於此數量時，庫存管理頁會顯示紅燈；低於 1.5 倍時顯示黃燈</div>
       </div>
       <div class="field-row" style="grid-column:1/-1">
         <div class="field-label">備註</div>
@@ -340,23 +340,23 @@
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
             <div style="text-align:center;padding:14px;background:#F0FDF4;border-radius:var(--radius)">
               <div style="font-size:28px;font-weight:700;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.created"></div>
-              <div style="font-size:11px;color:#15803D;margin-top:4px">新增</div>
+              <div style="font-size:12px;color:#15803D;margin-top:4px">新增</div>
             </div>
             <div style="text-align:center;padding:14px;background:var(--accent-light);border-radius:var(--radius)">
               <div style="font-size:28px;font-weight:700;color:var(--accent-hover);font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.updated"></div>
-              <div style="font-size:11px;color:var(--accent-hover);margin-top:4px">更新</div>
+              <div style="font-size:12px;color:var(--accent-hover);margin-top:4px">更新</div>
             </div>
             <div style="text-align:center;padding:14px;background:#FEF2F2;border-radius:var(--radius)">
-              <div style="font-size:28px;font-weight:700;color:#DC2626;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.failed"></div>
-              <div style="font-size:11px;color:#DC2626;margin-top:4px">失敗</div>
+              <div style="font-size:28px;font-weight:700;color:var(--danger);font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.failed"></div>
+              <div style="font-size:12px;color:var(--danger);margin-top:4px">失敗</div>
             </div>
           </div>
           <template x-if="importResults.errors.length > 0">
             <div>
-              <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">錯誤明細</div>
+              <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">錯誤明細</div>
               <div style="max-height:150px;overflow-y:auto;background:#FEF2F2;border-radius:var(--radius);padding:10px 12px">
                 <template x-for="(e, ei) in importResults.errors" :key="ei">
-                  <div style="font-size:11px;color:#DC2626;margin-bottom:4px;font-family:var(--font-zh)" x-text="e"></div>
+                  <div style="font-size:12px;color:var(--danger);margin-bottom:4px;font-family:var(--font-zh)" x-text="e"></div>
                 </template>
               </div>
             </div>
@@ -365,7 +365,7 @@
       </template>
     </div>
     <div class="modal-foot">
-      <div style="font-size:11px;color:var(--text-dim);flex:1">
+      <div style="font-size:12px;color:var(--text-dim);flex:1">
         支援格式：.xlsx / .xls / .csv<br>
         必填欄位：<strong>品名</strong>；料號相符則自動更新，料號留空則依類別自動產生
       </div>

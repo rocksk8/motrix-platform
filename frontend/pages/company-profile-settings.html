@@ -68,10 +68,10 @@
     .ns-desc {
       font-size: 13px;
       color: var(--text-secondary);
-      background: #F8F7F4;
+      background: var(--info-light);
       border-radius: 7px;
       padding: 12px 14px;
-      border-left: 3px solid var(--accent);
+      border-left: 3px solid var(--info);
       margin-bottom: 20px;
       line-height: 1.6;
     }
@@ -175,7 +175,7 @@
                     <img :src="brand[kind] && brand[kind].url" :data-brand-preview="kind" alt=""
                          style="max-height:56px;max-width:90%;object-fit:contain">
                   </div>
-                  <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px"
+                  <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px"
                        x-text="brand[kind] && brand[kind].custom
                                ? ('已上傳（' + (brand[kind].updatedAt || '').replace('T', ' ') + (brand[kind].by ? '，' + brand[kind].by : '') + '）')
                                : '使用系統預設'"></div>
@@ -193,7 +193,7 @@
                 </div>
               </template>
             </div>
-            <div style="font-size:11px;color:var(--text-secondary);margin-top:8px">
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:8px">
               接受 PNG、JPG、WebP，單檔 2 MB 以內、單邊 4096 像素以內；不接受 SVG。
               深色底 LOGO 用在上方列（黑底），建議白色或淺色字；網站圖示會自動轉成 256×256。
             </div>
@@ -242,7 +242,7 @@
                 <!-- 🔴 BR17：第一筆是「主要據點」，而那件事要講出來。
                      ⚠️ 不講的話，使用者調整順序時不會知道自己改動了別的東西
                      （報價單的抬頭與地圖的辦公室標記都跟著它走）。 -->
-                <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">
+                <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">
                   <strong>第一筆是「主要據點」</strong>：單據與地圖上的「辦公室」都跟著它走。
                   地圖上每一筆案子會顯示<strong>離最近的據點</strong>多遠，並寫出是哪一個。
                 </div>
@@ -252,7 +252,7 @@
                               padding:10px 12px;margin-bottom:8px">
                     <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
                       <span x-show="i === 0" class="chip" style="background:var(--accent);color:#fff">主要據點</span>
-                      <span x-show="i !== 0" style="font-size:11px;color:var(--text-dim)"
+                      <span x-show="i !== 0" style="font-size:12px;color:var(--text-dim)"
                             x-text="'據點 ' + (i + 1)"></span>
                       <div style="flex:1"></div>
                       <button type="button" class="btn btn-ghost btn-sm"
@@ -301,7 +301,7 @@
                                       + (locFilledCount(loc) ? '　已填 ' + locFilledCount(loc) + ' 項' : '')"></button>
                       <div x-show="loc._open" x-cloak style="margin-top:6px;padding:8px 10px;
                            background:#F8FAFC;border-radius:6px">
-                        <div style="font-size:11px;color:#64748B;margin-bottom:6px">
+                        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">
                           <strong>每一格都可以留空</strong>，<span x-show="i > 0">留空的那一格會沿用<strong>主要據點</strong>的同一格</span><span x-show="i === 0">留空的那一格會沿用上方「公司基本資料」的同一格</span>。
                           <br>只填一格也可以 —— 例如只填公司名稱，統編就會沿用。
                         </div>
@@ -319,7 +319,7 @@
                           <input type="text" style="flex:1 1 200px" x-model="loc.email"
                                  placeholder="Email（選填）">
                         </div>
-                        <div style="font-size:11px;color:#64748B;margin:8px 0 4px">
+                        <div style="font-size:12px;color:var(--text-secondary);margin:8px 0 4px">
                           匯款帳號 —— <strong>請款單上印的就是這一組</strong>。
                         </div>
                         <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -352,12 +352,12 @@
                      逼他手動拆的話，最可能的錯誤是**兩個數字貼反**，
                      ☠️ 而 `(120.53, 24.25)` 是一個**合法**座標（阿拉伯海上）——
                      🔑 一個會通過所有驗證的錯誤，比一個被擋下來的錯誤貴得多。 -->
-                <div style="font-size:11px;color:var(--text-secondary);margin-top:6px">
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">
                   座標<strong>選填</strong>：填了就跳過地址查詢（圖資認不得台灣的門牌，
                   查地址只到得了「區」級）。在 Google 地圖上對著據點按右鍵，第一列就是座標，
                   <strong>整串貼進緯度那一格會自動拆成兩欄</strong>。
                 </div>
-                <div x-show="coordWarn" style="font-size:11px;color:var(--warning);margin-top:4px"
+                <div x-show="coordWarn" style="font-size:12px;color:var(--warning);margin-top:4px"
                      x-text="coordWarn"></div>
               </div>
             </div>
@@ -370,18 +370,18 @@
                   <input type="password" style="flex:1 1 280px" x-model="keyText"
                          :placeholder="keySet ? '已設定，留空表示不變更' : '未設定'"
                          autocomplete="off">
-                  <span x-show="keySet && !keyCleared" style="font-size:11px;color:var(--text-secondary)"
+                  <span x-show="keySet && !keyCleared" style="font-size:12px;color:var(--text-secondary)"
                         x-text="'目前：' + keyMasked"></span>
                   <button type="button" class="btn btn-ghost btn-sm"
                           x-show="keySet && !keyCleared" @click="keyCleared = true; keyText = ''">清除金鑰</button>
-                  <span x-show="keyCleared" style="font-size:11px;color:var(--warning)">
+                  <span x-show="keyCleared" style="font-size:12px;color:var(--warning)">
                     儲存後會清除（按取消或重新整理可還原）
                   </span>
                 </div>
                 <!-- 🔴 這一欄**只開啟「附近廠商」那一塊**，不影響底圖與距離。
                      ⚠️ 讀取時只回末四碼：那是一個**付費憑證**，
                      而這個畫面會被截圖、被投影、被肩後看見。 -->
-                <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
                   伺服器定位用（地址轉座標、附近廠商），<strong>只在伺服器使用、不會送到瀏覽器</strong>。
                   為了安全，讀取時只會顯示末四碼。
                 </div>
@@ -397,15 +397,15 @@
                   <input type="password" style="flex:1 1 280px" x-model="bkText" id="google_maps_browser_key"
                          :placeholder="bkSet ? '已設定，留空表示不變更' : '未設定（地圖使用 OpenStreetMap）'"
                          autocomplete="off">
-                  <span x-show="bkSet && !bkCleared" style="font-size:11px;color:var(--text-secondary)"
+                  <span x-show="bkSet && !bkCleared" style="font-size:12px;color:var(--text-secondary)"
                         x-text="'目前：' + bkMasked"></span>
                   <button type="button" class="btn btn-ghost btn-sm"
                           x-show="bkSet && !bkCleared" @click="bkCleared = true; bkText = ''">清除金鑰</button>
-                  <span x-show="bkCleared" style="font-size:11px;color:var(--warning)">
+                  <span x-show="bkCleared" style="font-size:12px;color:var(--warning)">
                     儲存後會清除（按取消或重新整理可還原）
                   </span>
                 </div>
-                <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
                   <strong>地圖金鑰與下方的地圖 ID 兩項都填</strong>，地圖頁才會改用 Google 地圖（缺一項照舊使用 OpenStreetMap）。
                   這把金鑰會出現在瀏覽器載入地圖的網址上，
                   <strong>請與上面的伺服器金鑰分開</strong>，並在 Google Cloud 主控台設定：
@@ -419,7 +419,7 @@
                 <label>Google 地圖 ID（使用 Google 地圖時需要）</label>
                 <input type="text" id="google_maps_map_id" x-model="cfg.google_maps_map_id" autocomplete="off"
                        placeholder="在 Google Cloud 主控台「地圖管理」建立的地圖 ID">
-                <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
                   地圖上的標記使用 Google 的進階標記，它需要一個地圖 ID（不另外計費）。
                 </div>
               </div>
@@ -441,7 +441,7 @@
               </button>
             </div>
             <div x-show="msg" x-text="msg" x-transition
-                 :style="isError ? 'color:#DC2626' : 'color:#16A34A'"
+                 :style="isError ? 'color:var(--danger)' : 'color:var(--success)'"
                  style="font-size:13px;margin-top:12px;font-weight:600"></div>
           </div>
         </div>
@@ -450,7 +450,7 @@
         <div class="ns-card">
           <div class="ns-card-head">
             <div class="ns-card-head-title">收款帳戶資訊</div>
-            <span x-show="saved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+            <span x-show="saved" x-transition style="font-size:12px;color:var(--success);font-weight:600">已儲存</span>
           </div>
           <div class="ns-card-body">
             <div class="ns-desc">
@@ -485,7 +485,7 @@
             </div>
 
             <div x-show="msg" x-text="msg" x-transition
-                 :style="isError ? 'color:#DC2626' : 'color:#16A34A'"
+                 :style="isError ? 'color:var(--danger)' : 'color:var(--success)'"
                  style="font-size:13px;margin-top:12px;font-weight:600"></div>
           </div>
         </div>
@@ -544,7 +544,7 @@
         <div class="ns-card" x-show="passkeyFeatureEnabled">
           <div class="ns-card-head">
             <div class="ns-card-head-title">Passkey / WebAuthn 網域設定</div>
-            <span x-show="webauthnSaved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+            <span x-show="webauthnSaved" x-transition style="font-size:12px;color:var(--success);font-weight:600">已儲存</span>
           </div>
           <div class="ns-card-body">
             <div class="ns-desc">
@@ -571,7 +571,7 @@
             </div>
 
             <div x-show="webauthnMsg" x-text="webauthnMsg" x-transition
-                 :style="webauthnIsError ? 'color:#DC2626' : 'color:#16A34A'"
+                 :style="webauthnIsError ? 'color:var(--danger)' : 'color:var(--success)'"
                  style="font-size:13px;margin-top:12px;font-weight:600"></div>
           </div>
         </div>
@@ -607,7 +607,7 @@
                  那會讓他為了省錢關掉一個根本不花錢的東西。 -->
             <div class="ns-card-head-title">Google 地址定位額度</div>
             <span x-show="gqSaved" x-transition
-                  style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+                  style="font-size:12px;color:var(--success);font-weight:600">已儲存</span>
           </div>
           <div class="ns-card-body">
             <!-- 🔴 GB21②：這一行講的是**已經存檔的狀態**，不是輸入框裡的值。
@@ -643,7 +643,7 @@
                         截圖把「不管制」讀成「不啟用」而長出來的結論，已撤銷。
                      📌 「不寫死在程式裡」與「寫在畫面上當提示」不衝突：
                         程式不依賴它，使用者拿得到一個出發點。 -->
-                <div style="font-size:11px;color:#64748B;margin-top:4px">
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
                   留空＝<strong>不設上限，超用多少算多少</strong>。
                   Google 目前給 Geocoding <strong>每月 10,000 次免費</strong>
                   （2026-09 查證，印度區另有例外），
@@ -676,7 +676,7 @@
               </div>
             </div>
             <div x-show="quotaUnmanaged()"
-                 style="font-size:11px;color:#B45309;margin-top:-4px;margin-bottom:8px">
+                 style="font-size:12px;color:#B45309;margin-top:-4px;margin-bottom:8px">
               ⚠️ 上面兩個百分比<strong>目前不會生效</strong>：沒有額度就沒有「幾成」可言。
               填了上方的免費額度之後它們才會開始作用。
             </div>
@@ -684,7 +684,7 @@
               <div class="ns-field">
                 <label>帳單週期起算日（1～28）</label>
                 <input type="number" min="1" max="28" x-model.number="gq.cycle_start_day">
-                <div style="font-size:11px;color:#64748B;margin-top:4px">
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
                   Google 的帳單週期不一定是自然月。29 以後的日子二月沒有，所以上限是 28。
                 </div>
               </div>
@@ -729,7 +729,7 @@
               </button>
             </div>
             <div x-show="gqMsg" x-text="gqMsg" x-transition
-                 :style="gqIsError ? 'color:#DC2626' : 'color:#16A34A'"
+                 :style="gqIsError ? 'color:var(--danger)' : 'color:var(--success)'"
                  style="font-size:13px;margin-top:12px;font-weight:600"></div>
           </div>
         </div>
@@ -738,7 +738,7 @@
         <div class="ns-card" x-show="!sysLoading">
           <div class="ns-card-head">
             <div class="ns-card-head-title">備份保留天數</div>
-            <span x-show="retSaved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+            <span x-show="retSaved" x-transition style="font-size:12px;color:var(--success);font-weight:600">已儲存</span>
           </div>
           <div class="ns-card-body">
             <div class="ns-desc">
@@ -784,14 +784,14 @@
               <div class="ns-field">
                 <label>雲端月備份（天，0 = 永久保留）</label>
                 <input data-saved-field type="number" min="0" max="3650" x-model.number="retention.cloud_monthly_keep_days">
-                <div style="font-size:11px;color:#64748B;margin-top:4px">
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
                   預設 0。這是長期保存的那一層，<strong>填 0 就永遠不會被清掉</strong>。
                 </div>
               </div>
               <div class="ns-field">
                 <label>更新前快照（份數，不是天數）</label>
                 <input type="number" min="0" max="100" x-model.number="retention.local_pre_update_keep">
-                <div style="font-size:11px;color:#64748B;margin-top:4px">
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
                   每次套用更新前會先做一份本機快照，這裡是保留幾份。0 = 不清理。
                 </div>
               </div>
@@ -803,7 +803,7 @@
               </button>
             </div>
             <div x-show="retMsg" x-text="retMsg" x-transition
-                 :style="retIsError ? 'color:#DC2626' : 'color:#16A34A'"
+                 :style="retIsError ? 'color:var(--danger)' : 'color:var(--success)'"
                  style="font-size:13px;margin-top:12px;font-weight:600"></div>
           </div>
         </div>
@@ -812,7 +812,7 @@
         <div class="ns-card" x-show="!sysLoading">
           <div class="ns-card-head">
             <div class="ns-card-head-title">PDF 存檔根目錄</div>
-            <span x-show="pdfSaved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+            <span x-show="pdfSaved" x-transition style="font-size:12px;color:var(--success);font-weight:600">已儲存</span>
           </div>
           <div class="ns-card-body">
             <div class="ns-desc">
@@ -824,7 +824,7 @@
               <div class="ns-field">
                 <label>自訂路徑（留空＝使用預設）</label>
                 <input type="text" x-model="pdfBase.configured" :placeholder="pdfBase.default || 'C:\\...'">
-                <div style="font-size:11px;color:var(--text-dim);margin-top:6px">
+                <div style="font-size:12px;color:var(--text-dim);margin-top:6px">
                   目前實際使用：<span style="font-family:monospace" x-text="pdfBase.resolved || '（未知）'"></span>
                   <template x-if="pdfBase.default">
                     <span>　｜　預設：<span style="font-family:monospace" x-text="pdfBase.default"></span></span>
@@ -839,7 +839,7 @@
               </button>
             </div>
             <div x-show="pdfMsg" x-text="pdfMsg" x-transition
-                 :style="pdfIsError ? 'color:#DC2626' : 'color:#16A34A'"
+                 :style="pdfIsError ? 'color:var(--danger)' : 'color:var(--success)'"
                  style="font-size:13px;margin-top:12px;font-weight:600"></div>
           </div>
         </div>
@@ -848,7 +848,7 @@
         <div class="ns-card" x-show="!sysLoading">
           <div class="ns-card-head">
             <div class="ns-card-head-title">Edge 瀏覽器路徑</div>
-            <span x-show="edgeSaved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+            <span x-show="edgeSaved" x-transition style="font-size:12px;color:var(--success);font-weight:600">已儲存</span>
           </div>
           <div class="ns-card-body">
             <div class="ns-desc">
@@ -861,10 +861,10 @@
                 <label>自訂路徑（留空＝自動偵測）</label>
                 <input type="text" x-model="edgePath.configured"
                        placeholder="C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe">
-                <div style="font-size:11px;color:var(--text-dim);margin-top:6px">
+                <div style="font-size:12px;color:var(--text-dim);margin-top:6px">
                   目前實際使用：<span style="font-family:monospace"
                     x-text="edgePath.resolved || '（偵測不到——PDF 產生會失敗）'"
-                    :style="edgePath.resolved ? '' : 'color:#DC2626'"></span>
+                    :style="edgePath.resolved ? '' : 'color:var(--danger)'"></span>
                 </div>
               </div>
             </div>
@@ -875,7 +875,7 @@
               </button>
             </div>
             <div x-show="edgeMsg" x-text="edgeMsg" x-transition
-                 :style="edgeIsError ? 'color:#DC2626' : 'color:#16A34A'"
+                 :style="edgeIsError ? 'color:var(--danger)' : 'color:var(--success)'"
                  style="font-size:13px;margin-top:12px;font-weight:600"></div>
           </div>
         </div>
@@ -884,7 +884,7 @@
         <div class="ns-card" x-show="!sysLoading">
           <div class="ns-card-head">
             <div class="ns-card-head-title">雲端備份目標</div>
-            <span x-show="cloudSaved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+            <span x-show="cloudSaved" x-transition style="font-size:12px;color:var(--success);font-weight:600">已儲存</span>
           </div>
           <div class="ns-card-body">
             <div class="ns-desc">
@@ -932,17 +932,17 @@
               </button>
             </div>
             <div x-show="cloudMsg" x-text="cloudMsg" x-transition
-                 :style="cloudIsError ? 'color:#DC2626' : 'color:#16A34A'"
+                 :style="cloudIsError ? 'color:var(--danger)' : 'color:var(--success)'"
                  style="font-size:13px;margin-top:12px;font-weight:600"></div>
             <!-- F2 個資存檔（勞報單）：資料夾由人預先建立並收窄權限，程式不自動建立（MODULE-GUIDE §3.2） -->
             <div class="ns-desc" data-pii-archive-status style="margin-top:14px">
               <strong>個資存檔（勞報單）雲端資料夾：</strong>
-              <span x-show="pii.state === 'ready'" style="color:#16A34A;font-weight:600">已就緒</span>
-              <span x-show="pii.state === 'missing' || pii.state === 's3_unsupported'" style="color:#DC2626;font-weight:600">未上雲</span>
-              <span x-show="pii.state === 'cloud_off' || pii.state === 'cloud_unavailable'" style="color:#6B7280">不適用</span>
-              <span x-show="!pii.state" style="color:#6B7280">讀取中…</span>
-              <div x-show="pii.path" x-text="pii.path" style="font-size:12px;color:#6B7280"></div>
-              <div x-show="pii.reason" x-text="pii.reason" style="font-size:12px;color:#6B7280"></div>
+              <span x-show="pii.state === 'ready'" style="color:var(--success);font-weight:600">已就緒</span>
+              <span x-show="pii.state === 'missing' || pii.state === 's3_unsupported'" style="color:var(--danger);font-weight:600">未上雲</span>
+              <span x-show="pii.state === 'cloud_off' || pii.state === 'cloud_unavailable'" style="color:var(--text-secondary)">不適用</span>
+              <span x-show="!pii.state" style="color:var(--text-secondary)">讀取中…</span>
+              <div x-show="pii.path" x-text="pii.path" style="font-size:12px;color:var(--text-secondary)"></div>
+              <div x-show="pii.reason" x-text="pii.reason" style="font-size:12px;color:var(--text-secondary)"></div>
             </div>
           </div>
         </div>

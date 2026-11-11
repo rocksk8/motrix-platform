@@ -51,8 +51,8 @@
     .calc-row.net{font-weight:700;font-size:15px;color:var(--accent);padding-top:10px;margin-top:4px}
     .calc-row .label{color:var(--text-secondary)}
     .calc-row .val{font-family:LINE Seed TW_OTF, monospace}
-    .badge{font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600}
-    .sign-mini{font-size:11px;color:var(--text-secondary);padding:4px 0;border-bottom:1px solid var(--border-light);
+    .badge{font-size:12px;padding:2px 8px;border-radius:4px;font-weight:600}
+    .sign-mini{font-size:12px;color:var(--text-secondary);padding:4px 0;border-bottom:1px solid var(--border-light);
                display:flex;justify-content:space-between;gap:8px}
     .sign-mini:last-child{border-bottom:none}
     /* PDF Preview Modal */
@@ -63,7 +63,7 @@
     .pv-head{display:flex;justify-content:space-between;align-items:center;
              padding:14px 20px;border-bottom:1px solid var(--border-light);flex-shrink:0}
     .pv-title{font-size:14px;font-weight:700;color:var(--text-primary)}
-    .pv-sub{font-size:11px;color:var(--text-dim);margin-top:2px;font-family:LINE Seed TW_OTF, monospace}
+    .pv-sub{font-size:12px;color:var(--text-dim);margin-top:2px;font-family:LINE Seed TW_OTF, monospace}
     .pv-close{background:none;border:none;cursor:pointer;color:var(--text-dim);
               font-size:22px;line-height:1;padding:2px 8px;border-radius:4px;font-family:inherit}
     .pv-close:hover{background:var(--border-light);color:var(--text-primary)}
@@ -75,7 +75,7 @@
     .pv-iframe{width:100%;height:100%;border:none;display:block}
     .pv-foot{display:flex;justify-content:space-between;align-items:center;
              padding:12px 20px;border-top:1px solid var(--border-light);flex-shrink:0}
-    .export-hist{font-size:11px;color:var(--text-dim)}
+    .export-hist{font-size:12px;color:var(--text-dim)}
   </style>
 </head>
 <body x-data="paymentRequestForm()" x-init="init()">
@@ -155,17 +155,17 @@
                        x-model.number="ratioInput" :disabled="!editable" @input="dirty()"
                        placeholder="輸入比例自動換算金額，或留空改用下方自訂金額">
               </div>
-              <div x-show="ratioInput > 0" style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
+              <div x-show="ratioInput > 0" style="font-size:12px;color:var(--text-dim);margin-bottom:10px">
                 換算請款金額（含稅）約 NT$ <span x-text="MotrixFormat.num(ratioToAmount())"></span>
               </div>
-              <div x-show="remaining && ratioInput > remaining.remainingRatioPct" style="font-size:11px;color:var(--danger);margin-bottom:10px">超過剩餘可請款比例</div>
+              <div x-show="remaining && ratioInput > remaining.remainingRatioPct" style="font-size:12px;color:var(--danger);margin-bottom:10px">超過剩餘可請款比例</div>
 
               <template x-if="!ratioInput">
                 <div class="form-group">
                   <label>或直接輸入請款金額（含稅）</label>
                   <input type="number" min="0" :max="remaining ? remaining.remainingAmount : null"
                          x-model.number="amountInput" :disabled="!editable" @input="dirty()">
-                  <div x-show="remaining && amountInput > remaining.remainingAmount" style="font-size:11px;color:var(--danger);margin-top:4px">超過剩餘可請款金額</div>
+                  <div x-show="remaining && amountInput > remaining.remainingAmount" style="font-size:12px;color:var(--danger);margin-top:4px">超過剩餘可請款金額</div>
                 </div>
               </template>
             </div>
@@ -179,29 +179,29 @@
                   <label>
                     <input type="checkbox" :checked="!!itemSelections[it.itemId]" :disabled="!editable" @change="toggleItem(it)" style="accent-color:#C2410C">
                     <span style="flex:1" x-text="it.description + (it.brand ? '　' + it.brand : '')"></span>
-                    <span style="font-size:10px;color:var(--text-dim)" x-text="'剩餘 ' + it.remainingQty + ' ' + it.unit"></span>
+                    <span style="font-size:12px;color:var(--text-dim)" x-text="'剩餘 ' + it.remainingQty + ' ' + it.unit"></span>
                   </label>
                   <template x-if="itemSelections[it.itemId]">
                     <div class="item-sub">
                       <div>
-                        <label style="font-size:10px;color:var(--text-dim)">比例 %</label>
+                        <label style="font-size:12px;color:var(--text-dim)">比例 %</label>
                         <input type="number" min="0" max="100" step="any" :disabled="!editable"
                                x-model.number="itemSelections[it.itemId].ratioPct" @input="itemRatioChanged(it)">
                       </div>
                       <div>
-                        <label style="font-size:10px;color:var(--text-dim)">數量</label>
+                        <label style="font-size:12px;color:var(--text-dim)">數量</label>
                         <input type="number" min="0.01" :max="it.remainingQty" step="any" :disabled="!editable"
                                x-model.number="itemSelections[it.itemId].qty" @input="itemQtyChanged(it)">
                       </div>
                       <div>
-                        <label style="font-size:10px;color:var(--text-dim)">金額（未稅）</label>
+                        <label style="font-size:12px;color:var(--text-dim)">金額（未稅）</label>
                         <input type="number" min="0" :disabled="!editable" x-model.number="itemSelections[it.itemId].amount" @input="dirty()">
                       </div>
                     </div>
                   </template>
                 </div>
               </template>
-              <div x-show="remaining && selectedGrossTotal() > remaining.remainingAmount" style="font-size:11px;color:var(--danger);margin-top:6px">超過剩餘可請款金額</div>
+              <div x-show="remaining && selectedGrossTotal() > remaining.remainingAmount" style="font-size:12px;color:var(--danger);margin-top:6px">超過剩餘可請款金額</div>
             </div>
           </template>
         </div>
@@ -257,7 +257,7 @@
           <!-- 簽核歷程 -->
           <template x-if="approval && approval.tiers && approval.tiers.length">
             <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border-light)">
-              <div style="font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">簽核歷程</div>
+              <div style="font-size:12px;font-weight:600;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">簽核歷程</div>
               <template x-for="(t, i) in approval.tiers" :key="i">
                 <template x-for="a in (t.approvers || [])" :key="a.username">
                   <div class="sign-mini">
@@ -280,21 +280,21 @@
                     @click="submitReq()">送出審核</button>
             <button class="btn btn-primary" style="width:100%;justify-content:center;background:#059669;border-color:#059669"
                     x-show="q.status === '待審核' || q.status === '簽核中'" @click="approveReq()">簽核</button>
-            <button class="btn btn-ghost" style="width:100%;justify-content:center;color:#DC2626;border-color:#FCA5A5"
+            <button class="btn btn-ghost" style="width:100%;justify-content:center;color:var(--danger);border-color:#FCA5A5"
                     x-show="q.status === '待審核' || q.status === '簽核中'" @click="rejectReq()">退回</button>
-            <button class="btn btn-ghost" style="width:100%;justify-content:center;color:#DC2626;border-color:#FCA5A5"
+            <button class="btn btn-ghost" style="width:100%;justify-content:center;color:var(--danger);border-color:#FCA5A5"
                     x-show="q.status === '已核准'" @click="revokeReq()">撤銷核准</button>
             <button class="btn btn-ghost" style="width:100%;justify-content:center"
                     @click="previewPdf()" :disabled="previewFetching || isNew">
               <span x-text="previewFetching ? '準備預覽…' : '預覽 / 匯出 PDF'"></span>
             </button>
-            <button class="btn btn-ghost" style="width:100%;justify-content:center;color:#DC2626;border-color:#FCA5A5"
+            <button class="btn btn-ghost" style="width:100%;justify-content:center;color:var(--danger);border-color:#FCA5A5"
                     x-show="q.status === '草稿' && !isNew" @click="deleteReq()">刪除草稿</button>
           </div>
 
           <!-- 匯出記錄 -->
           <div x-show="exportLog.length > 0" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border-light)">
-            <div style="font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">
+            <div style="font-size:12px;font-weight:600;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">
               匯出記錄（共 <span x-text="exportLog.length"></span> 次）
             </div>
             <template x-for="(log, i) in exportLog" :key="i">

@@ -10,7 +10,12 @@
 - 修正（K 審再審）：`.approver-locked` 漏了舊 `.is-locked` 的「`.form-section button` 擋點擊」——鎖住後「新增區段標題」、欄位顯示開關仍會改內容並把 `isDirty` 弄髒（啟動自動存檔 PUT）。補 CSS＋`_syncControlLock` 一併 disable（鍵盤也擋）＋`autoSave()` 簽核人鎖定時直接不存。
 - 已知限制（K 審）：①鎖定只對**當層待簽人**生效；送審人、尚未輪到的後層簽核人、整條重跑後的原編輯者看到的欄位仍是可輸入的樣子（後端 PUT 會擋、不會寫入）。②超級管理員當層簽核時欄位鎖住但沒有編輯鈕（複查編輯端點擋超管；解鎖編輯只對已送出）。③簽核佇列頁的彈窗仍保留「編輯內容」（轉到報價單頁 `?reviewEdit=1` 進入編輯），**刻意不動**；是否一併退場待產品決定。④編輯前的「會回第 1 層」警告用載入當下的 `currentTier`，伺服器以「編輯前對帳之後」的 `currentTier` 為準，兩者在有過期簽核時可能不同；存檔後的提示以伺服器回的 `chainReset` 為準。
 - 測試：`modules/case/tests/test_review_edit_chain_reset_2026_11_11.py`（第 3 層整條重跑＋依序重簽到底／舊單與編輯者自己也重置／第 1、2 層不重跑／收件人＝送審人＋全部可寄的超管／失敗不寄信／editHistory）、`tests/test_e2e_review_edit_lock_2026_11_11.py`（真瀏覽器：欄位鎖住含鍵盤、常駐編輯鈕、編輯→存檔→核准過關、第 3 層編輯提示與整條重跑、旗標彈窗只剩維持核准、mode off 不顯示編輯鈕）。表單版本 V3.37。
-- **（併入）(next) — 2026-11-11（feat/quote-submit-error-clarity；報價單送審前置檢查＋送審失敗原因＋「已成案」卡住修復；報價單表單 V3.36；K 審必修已修，L1 介面不變）**
+
+## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
+- 前端視覺（D3）：本模組頁面（`case-management.html`／`case-stage-board.html`／`completion-note-form.html`、`case-management*.css`／`case-management-mchange.js` 等）內文字最小 12px，文字色改用語意 token（次要文字在頁底 #F5F4F0 上對比 ≥4.5:1）；只改 CSS 值，不改版面結構、API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
+- 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
+
+## (next) — 2026-11-11（feat/quote-submit-error-clarity；報價單送審前置檢查＋送審失敗原因＋「已成案」卡住修復；報價單表單 V3.36；K 審必修已修，L1 介面不變）
 - 新增（送審前置檢查）：`GET /api/quotations/submit-precheck`（唯讀、需登入、不建單不發通知）——用跟真正送審同一套解析（`_setting_to_active_tiers`）dry-run；申請人沒歸屬部門／部門沒在職主管／簽核設定指定的部門或處沒主管 ⇒ `ok=false`＋`problems[{code,message,fixPage,fixLabel}]`；另附 `steps`（處→部門→申請人歸屬→部門主管四步驟完成度，只供畫面顯示）與 `canFix`（最高管理者才能改組織）。`helpers.tiered_approval.UnresolvedManagerError` 新增類別屬性 `code`（不加建構子，避免動到 L1 公開介面；raise 點用私有 `_unresolved(msg, code)`；no_department／department_gone／no_manager／tier_dept_manager／tier_div_manager；預設 unresolved，`str(e)` 不變）。
 - 修正（前端 `quotation-form.html`）：①送審前先問 precheck，會失敗就攔下並用中文清單說明去哪裡設定（查詢本身失敗＝放行，真正把關仍在送審端點）。②`apiSave()` 不再把後端 4xx／5xx 吞成「請確認後端伺服器是否在線」：後端 `detail` 原文顯示，只有真的連不上才說伺服器問題。③送審失敗時還原 `status`／`approval`（原本畫面會停在「待審核」，使用者以為已送出）。
 - 修正（「已成案」卡住，正式機既有 regression，自 2026-09-23 `EM11` 起）：`onDealTagChange` 對已送出單不再先整份 PUT（後端對鎖定狀態的 PUT 一律 403，必然失敗，EM11 把「失敗就忽略」改成「失敗就擋下」後整個成案流程被擋死）；改成只打 `PATCH /deal-tag`，成功後才建 5 個預設階段（失敗不留殘餘階段；建階段中途失敗可能留下 1～4 個，之後不會自動補建），並回頭同步 `_lastUpdatedAt`（階段 API 會推進 `updated_at`，不同步的話之後整份存檔撞樂觀鎖 409）；PATCH 失敗顯示後端 `detail` 並退回舊值。下拉「未成案／已成案」對非管理員停用（後端本來就要 admin 以上），硬呼叫也在建階段之前擋下。

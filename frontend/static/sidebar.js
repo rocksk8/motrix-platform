@@ -124,7 +124,7 @@ if (typeof module !== 'undefined' && module.exports) {
       if (!btn) return
       var on = Math.abs(step.v - z) < 0.01
       btn.style.background  = on ? 'rgba(255,255,255,0.18)' : 'transparent'
-      btn.style.color       = on ? '#F5F4F0' : '#666'
+      btn.style.color       = on ? '#F5F4F0' : '#A3A3A3'
       btn.style.fontWeight  = on ? '700' : '400'
     })
   }
@@ -182,9 +182,9 @@ if (typeof module !== 'undefined' && module.exports) {
         + ' title="字體大小：' + step.label + '"'
         + ' style="'
         + 'background:' + (on ? 'rgba(255,255,255,0.18)' : 'transparent') + ';'
-        + 'color:' + (on ? '#F5F4F0' : '#666') + ';'
+        + 'color:' + (on ? '#F5F4F0' : '#A3A3A3') + ';'
         + 'font-weight:' + (on ? '700' : '400') + ';'
-        + 'border:none;cursor:pointer;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;'
+        + 'border:none;cursor:pointer;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;'
         + 'padding:0 7px;height:22px;line-height:22px;border-radius:3px;'
         + 'transition:background .15s,color .15s">'
         + step.label
@@ -212,55 +212,55 @@ if (typeof module !== 'undefined' && module.exports) {
           </template>
           <template x-if="results.quotations.length">
             <div style="border-bottom:1px solid var(--border-light)">
-              <div style="padding:8px 14px 4px;font-size:10px;color:var(--text-dim);font-weight:600">報價單</div>
+              <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">報價單</div>
               <template x-for="item in results.quotations" :key="'quote-'+item.quoteNo">
                 <div @click="goQuotation(item.quoteNo)" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.quoteNo + '　' + (item.customerName || '—')"></div>
-                  <div style="font-size:10px;color:var(--text-dim)" x-text="item.projectName || item.status || ''"></div>
+                  <div style="font-size:12px;color:var(--text-dim)" x-text="item.projectName || item.status || ''"></div>
                 </div>
               </template>
             </div>
           </template>
           <template x-if="results.devCases.length">
             <div style="border-bottom:1px solid var(--border-light)">
-              <div style="padding:8px 14px 4px;font-size:10px;color:var(--text-dim);font-weight:600">業務開發案</div>
+              <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">業務開發案</div>
               <template x-for="item in results.devCases" :key="'dc-'+item.id">
                 <div @click="goDevCase()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.caseName"></div>
-                  <div style="font-size:10px;color:var(--text-dim)" x-text="(item.customerName || '—') + '　' + item.status"></div>
+                  <div style="font-size:12px;color:var(--text-dim)" x-text="(item.customerName || '—') + '　' + item.status"></div>
                 </div>
               </template>
             </div>
           </template>
           <template x-if="results.customers.length">
             <div style="border-bottom:1px solid var(--border-light)">
-              <div style="padding:8px 14px 4px;font-size:10px;color:var(--text-dim);font-weight:600">客戶</div>
+              <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">客戶</div>
               <template x-for="item in results.customers" :key="'c-'+item.id">
                 <div @click="goCustomer()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.name"></div>
-                  <div style="font-size:10px;color:var(--text-dim)" x-text="item.code"></div>
+                  <div style="font-size:12px;color:var(--text-dim)" x-text="item.code"></div>
                 </div>
               </template>
             </div>
           </template>
           <template x-if="results.suppliers.length">
             <div style="border-bottom:1px solid var(--border-light)">
-              <div style="padding:8px 14px 4px;font-size:10px;color:var(--text-dim);font-weight:600">供應商</div>
+              <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">供應商</div>
               <template x-for="item in results.suppliers" :key="'s-'+item.id">
                 <div @click="goSupplier()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.name"></div>
-                  <div style="font-size:10px;color:var(--text-dim)" x-text="item.code"></div>
+                  <div style="font-size:12px;color:var(--text-dim)" x-text="item.code"></div>
                 </div>
               </template>
             </div>
           </template>
           <template x-if="results.parts.length">
             <div>
-              <div style="padding:8px 14px 4px;font-size:10px;color:var(--text-dim);font-weight:600">料號</div>
+              <div style="padding:8px 14px 4px;font-size:12px;color:var(--text-dim);font-weight:600">料號</div>
               <template x-for="item in results.parts" :key="'p-'+item.partNo">
                 <div @click="goPart()" style="padding:7px 14px;cursor:pointer" @mouseenter="$el.style.background='#FAFAF8'" @mouseleave="$el.style.background=''">
                   <div style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="item.partNo + '　' + item.name"></div>
-                  <div style="font-size:10px;color:var(--text-dim)" x-text="item.brand"></div>
+                  <div style="font-size:12px;color:var(--text-dim)" x-text="item.brand"></div>
                 </div>
               </template>
             </div>
@@ -283,7 +283,7 @@ if (typeof module !== 'undefined' && module.exports) {
   function buildOnlineWidget() {
     if (!sa) return ''
     return '<div id="tb-online-wrap" style="position:relative">'
-      + '<button class="topbar__btn" id="tb-online-btn" title="在線成員" style="color:#888;border-color:#333;font-size:11px">'
+      + '<button class="topbar__btn" id="tb-online-btn" title="在線成員" style="color:#888;border-color:#333;font-size:12px">'
       + '<span style="width:7px;height:7px;border-radius:50%;background:#22C55E;display:inline-block;margin-right:5px"></span>'
       + '在線 <span id="tb-online-count" style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;margin-left:3px">–</span>'
       + '</button>'
@@ -291,7 +291,7 @@ if (typeof module !== 'undefined' && module.exports) {
       + 'border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.13);z-index:999;overflow:hidden">'
       + '<div style="padding:11px 16px;border-bottom:1px solid var(--border-light);font-size:13px;font-weight:600;color:var(--text-main)">目前在線</div>'
       + '<div id="tb-online-list" style="max-height:320px;overflow-y:auto"></div>'
-      + '<div style="padding:8px 16px;border-top:1px solid var(--border-light);font-size:10px;color:var(--text-dim);line-height:1.7">'
+      + '<div style="padding:8px 16px;border-top:1px solid var(--border-light);font-size:12px;color:var(--text-dim);line-height:1.7">'
       + '依最後活動時間判定（5 分鐘內），最慢 5 分鐘更新一次</div>'
       + '<a href="' + pg('online-stats.html') + '" style="display:block;padding:9px 16px;text-align:center;font-size:12px;color:var(--accent);border-top:1px solid var(--border-light);text-decoration:none;font-weight:500">查看在線時數統計 →</a>'
       + '</div></div>'
@@ -324,8 +324,8 @@ if (typeof module !== 'undefined' && module.exports) {
             + '<span style="width:7px;height:7px;border-radius:50%;background:#22C55E;flex:0 0 auto"></span>'
             + '<div style="min-width:0;flex:1">'
             + '<div style="font-size:12px;color:var(--text-main);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
-            + esc(u.displayName) + '<span style="color:var(--text-dim);font-size:10px;margin-left:6px">' + esc(_roleLabel(u.role)) + '</span></div>'
-            + '<div style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">' + ago + '</div>'
+            + esc(u.displayName) + '<span style="color:var(--text-dim);font-size:12px;margin-left:6px">' + esc(_roleLabel(u.role)) + '</span></div>'
+            + '<div style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">' + ago + '</div>'
             + '</div></div>'
         }).join('')
       })
@@ -386,8 +386,10 @@ if (typeof module !== 'undefined' && module.exports) {
       + '<button class="topbar__btn" @click="toggle()" style="position:relative">'
       + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>'
       + '通知'
+      + '<i x-show="reminders.length>0" data-testid="bell-reminder-dot" aria-label="有提醒"'
+      + ' style="position:absolute;top:2px;right:2px;width:9px;height:9px;border-radius:50%;background:var(--warning);box-shadow:0 0 0 2px #fff;display:none"></i>'
       + '<span x-show="unread>0" x-text="unread>9?\'9+\':unread"'
-      + ' style="background:var(--danger);color:#fff;font-size:9px;padding:1px 5px;border-radius:8px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;min-width:16px;text-align:center"></span>'
+      + ' style="background:var(--danger);color:#fff;font-size:12px;padding:1px 5px;border-radius:8px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;min-width:16px;text-align:center"></span>'
       + '</button>'
       + '<div x-show="open" @click.outside="open=false"'
       + ' style="display:none;position:absolute;top:calc(100% + 6px);right:0;width:310px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.13);z-index:999;overflow:hidden">'
@@ -396,20 +398,33 @@ if (typeof module !== 'undefined' && module.exports) {
       + '<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-bottom:1px solid var(--border-light)">'
       + '<span style="font-size:13px;font-weight:600;color:var(--text-main)">通知</span>'
       + '<button type="button" x-show="unread>0" @click="markAllNotifications()" data-notif-all'
-      + ' style="background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;padding:0">全部標為已讀</button>'
+      + ' style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0">全部標為已讀</button>'
       + '</div>'
       + '<div style="max-height:320px;overflow-y:auto">'
+      // 提醒（待簽核、尚未啟用兩步驟驗證）：釘在通知清單最上方；不計入紅色未讀數字，× 關掉後同分頁不再出現
+      + '<template x-for="r in reminders" :key="r.id">'
+      + '<div :data-reminder-id="r.id" data-testid="bell-reminder"'
+      + ' :style="`padding:10px 16px;border-bottom:1px solid var(--border-light);border-left:3px solid ${r.tone===\'warning\' ? \'var(--warning)\' : \'var(--info)\'};background:${r.tone===\'warning\' ? \'var(--warning-light)\' : \'var(--info-light)\'}`">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'
+      + '<span x-text="r.title" style="font-size:12px;font-weight:700;color:var(--text-main)"></span>'
+      + '<button type="button" @click.stop="dismissReminder(r.id)" aria-label="關閉這則提醒" data-testid="bell-reminder-close"'
+      + ' style="border:none;background:none;cursor:pointer;color:var(--text-secondary);font-size:16px;line-height:1;padding:0">×</button>'
+      + '</div>'
+      + '<div x-text="r.msg" style="font-size:12px;color:var(--text-secondary);margin-top:2px;line-height:1.5"></div>'
+      + '<a :href="r.href" x-text="r.linkText" style="display:inline-block;margin-top:6px;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none"></a>'
+      + '</div>'
+      + '</template>'
       + '<template x-for="item in items" :key="item.id">'
       + '<div @click="markOne(item)" :data-notif-id="item.id" :data-unread="item.is_read ? 0 : 1"'
       + ' :style="`padding:10px 16px;border-bottom:1px solid var(--border-light);cursor:pointer;${item.is_read ? \'\' : \'background:#FFF7ED\'}`">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
       + '<span x-text="item.ref_label||\'通知\'" :style="`font-size:12px;font-weight:${item.is_read ? 400 : 700};color:var(--text-main);overflow:hidden;text-overflow:ellipsis;white-space:nowrap`"></span>'
-      + '<span x-text="formatTime(item.created_at)" style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;flex-shrink:0"></span>'
+      + '<span x-text="formatTime(item.created_at)" style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;flex-shrink:0"></span>'
       + '</div>'
-      + '<div x-text="item.message" style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>'
+      + '<div x-text="item.message" style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>'
       + '</div>'
       + '</template>'
-      + '<div x-show="items.length===0" style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">目前沒有通知</div>'
+      + '<div x-show="items.length===0 && reminders.length===0" style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">目前沒有通知</div>'
       + '</div>'
       + (ad ? '<a :href="auditHref" style="display:block;padding:9px 16px;text-align:center;font-size:12px;color:var(--accent);border-top:1px solid var(--border-light);text-decoration:none;font-weight:500">查看操作紀錄 →</a>' : '')
       + '</div>'
@@ -434,8 +449,8 @@ if (typeof module !== 'undefined' && module.exports) {
       + buildThemeToggle()
       + buildOnlineWidget()
       + bell
-      + '<a href="' + cpHref + '" class="topbar__btn" style="text-decoration:none;color:#888;border-color:#333;font-size:11px">修改密碼</a>'
-      + '<button class="topbar__btn" onclick="motrixLogout()" style="color:#888;border-color:#333;font-size:11px">登出</button>'
+      + '<a href="' + cpHref + '" class="topbar__btn" style="text-decoration:none;color:#888;border-color:#333;font-size:12px">修改密碼</a>'
+      + '<button class="topbar__btn" onclick="motrixLogout()" style="color:#888;border-color:#333;font-size:12px">登出</button>'
       + '<div class="topbar__avatar">' + esc(av) + '</div>'
       + '</div>'
 
@@ -581,7 +596,7 @@ if (typeof module !== 'undefined' && module.exports) {
     'daily-tasks.html':        'daily_task',
   }
 
-  var _SB_BADGE_STYLE = 'display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6'
+  var _SB_BADGE_STYLE = 'display:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6'
 
   // 2026-09-13（模組權限稽核）：頁面層守門的資料來源。
   //
@@ -601,7 +616,7 @@ if (typeof module !== 'undefined' && module.exports) {
   var _navGroups = []
   var _curGroup = null
 
-  function ni(href, icKey, label, activeNames, show, badgeId, extraBadge) {
+  function ni(href, icKey, label, activeNames, show, badgeId, extraBadge, section) {
     if (show === false) {
       _deniedPages = _deniedPages.concat(activeNames || [])
       return ''
@@ -612,7 +627,8 @@ if (typeof module !== 'undefined' && module.exports) {
       label: label,
       active: act(activeNames) !== '',
       badgeId: badgeId || '',
-      extraBadge: extraBadge || ''
+      extraBadge: extraBadge || '',
+      section: section || ''
     })
     return ''
   }
@@ -644,11 +660,23 @@ if (typeof module !== 'undefined' && module.exports) {
           + esc(it0.label) + '</a>'
       }
       // 一欄最多 6 項，超過就分欄——欄數自適應，不用寫死
+      // 項目帶 `section`（選單宣告的選填欄位，例如財務會計：日常／月結／設定）⇒ 每個連續的小標題一欄、欄頂印標題；
+      // 沒有任何項目帶 section 的群組 ⇒ 與原本逐字相同
       var per = 6
       var cols = []
-      for (var i = 0; i < g.items.length; i += per) cols.push(g.items.slice(i, i + per))
-      var panel = '<div class="mnav__panel"><div class="mnav__cols">' + cols.map(function (col) {
-        return '<div class="mnav__col">' + col.map(function (it) {
+      var hasSec = g.items.some(function (it) { return it.section })
+      if (hasSec) {
+        g.items.forEach(function (it) {
+          var last = cols[cols.length - 1]
+          if (last && last.sec === (it.section || '') && last.items.length < per) last.items.push(it)
+          else cols.push({ sec: it.section || '', items: [it] })
+        })
+      } else {
+        for (var i = 0; i < g.items.length; i += per) cols.push({ sec: '', items: g.items.slice(i, i + per) })
+      }
+      var panel = '<div class="mnav__panel"><div class="mnav__cols">' + cols.map(function (colObj) {
+        var col = colObj.items
+        return '<div class="mnav__col">' + (colObj.sec ? '<div class="mnav__sec" role="presentation">' + esc(colObj.sec) + '</div>' : '') + col.map(function (it) {
           return '<a class="mnav__item' + (it.active ? ' is-on' : '') + '"'
             + (it.customKey ? ' data-custom-nav="' + esc(it.customKey) + '"' : '') + ' href="' + it.href + '">'
             + '<span>' + esc(it.label) + '</span>'
@@ -718,7 +746,7 @@ if (typeof module !== 'undefined' && module.exports) {
   function _extraBadge(x) {
     if (!x || !x.id) return ''
     return '<span id="' + esc(x.id) + '" style="display:none;background:' + esc(x.color || 'var(--accent)')
-      + ';color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'
+      + ';color:#fff;font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'
   }
 
   function _setMenuState(st) { document.documentElement.setAttribute('data-menu-state', st) }
@@ -763,6 +791,63 @@ if (typeof module !== 'undefined' && module.exports) {
       a.style.cssText = 'display:inline-block;margin:0 0 10px;font-size:12px;color:var(--text-secondary);text-decoration:none'
       host.insertBefore(a, host.firstChild)
       _systemRail(a)
+    } catch (e) { /* 麵包屑是附帶功能：失敗不影響頁面 */ }
+  }
+
+  // 頁頭麵包屑（B6）：頁面寫 `<nav class="pg__crumb" data-crumb-auto><span>頁名</span></nav>`，這裡依選單宣告把「這一頁屬於哪個群組」
+  // 補在前面（hub 群組的名稱連回 hub）。群組改名、頁面搬組都只改宣告，各頁不用動。
+  function _fillCrumb() {
+    try {
+      var nav = document.querySelector('.pg__crumb[data-crumb-auto]')
+      if (!nav || nav.getAttribute('data-crumb-done') === file) return
+      var hit = null
+      _declaredGroups().forEach(function (g) {
+        if (hit) return
+        var hub = null
+        g.items.forEach(function (it) { if (it.hub) hub = it })
+        g.items.forEach(function (it) {
+          if (!hit && !it.hub && (it.active || [it.href]).indexOf(file) > -1) hit = { g: g, hub: hub }
+        })
+      })
+      if (!hit) return
+      nav.querySelectorAll('[data-crumb-grp]').forEach(function (n) { n.remove() })
+      var grp = document.createElement(hit.hub ? 'a' : 'span')
+      grp.setAttribute('data-crumb-grp', '')
+      grp.textContent = hit.g.label
+      if (hit.hub) grp.href = _hrefOf(hit.hub.href)
+      var sep = document.createElement('i')
+      sep.setAttribute('data-crumb-grp', '')
+      sep.setAttribute('aria-hidden', 'true')
+      sep.textContent = '›'
+      nav.insertBefore(sep, nav.firstChild)
+      nav.insertBefore(grp, nav.firstChild)
+      nav.setAttribute('data-crumb-done', file)
+    } catch (e) { /* 麵包屑是附帶功能：失敗不影響頁面 */ }
+  }
+
+  // 其他 hub 群組（報表）的『← 報表』麵包屑：站在報表群組底下的子頁（營運報表／財務報表／帳簿報表／報表設定）時，
+  // 內容區頂端加一條回報表中心的連結。與 _systemCrumb 同一個做法（頁面本身不用改）；系統群組另有分類欄，不走這裡。
+  function _hubCrumb() {
+    try {
+      if (document.getElementById('hub-crumb')) return
+      var hit = null
+      _declaredGroups().forEach(function (g) {
+        if (g.key === 'system' || hit) return
+        var hub = null
+        g.items.forEach(function (it) { if (it.hub) hub = it })
+        if (!hub || _pageOf(hub.href) === file) return
+        g.items.forEach(function (it) { if (!it.hub && (it.active || []).indexOf(file) > -1) hit = { g: g, hub: hub } })
+      })
+      if (!hit) return
+      var host = document.querySelector('main, .page-main, [class$="-main"], [class*="-main "]')
+      if (!host) return
+      var a = document.createElement('a')
+      a.id = 'hub-crumb'
+      a.href = _hrefOf(hit.hub.href)
+      a.setAttribute('data-testid', 'hub-crumb')
+      a.textContent = '← ' + hit.g.label
+      a.style.cssText = 'display:inline-block;margin:0 0 10px;font-size:12px;color:var(--text-secondary);text-decoration:none'
+      host.insertBefore(a, host.firstChild)
     } catch (e) { /* 麵包屑是附帶功能：失敗不影響頁面 */ }
   }
 
@@ -822,7 +907,7 @@ if (typeof module !== 'undefined' && module.exports) {
             '#sys-rail a.sr-i{display:flex;align-items:center;gap:8px;padding:8px 10px;margin:1px 0;border-left:3px solid transparent;border-radius:var(--radius,6px);font-size:13px;color:var(--text-primary,#111);text-decoration:none}' +
             '#sys-rail a.sr-i:hover{background:var(--surface-sunken,#f3f4f6)}' +
             '#sys-rail a.sr-i[aria-current="page"]{background:var(--accent-light,#eef2ff);border-left-color:var(--accent,#4f46e5);color:var(--accent,#4f46e5);font-weight:700}' +
-            '#sys-rail .sr-c{margin-left:auto;font-size:11px;color:var(--text-dim,#9ca3af)}' +
+            '#sys-rail .sr-c{margin-left:auto;font-size:12px;color:var(--text-dim,#9ca3af)}' +
             '#sys-rail .sr-d{width:8px;height:8px;border-radius:50%;background:var(--tone-warning-fg,#d97706);flex:0 0 8px}' +
             '#sys-crumb .sr-n{display:none}' +
             '@media (min-width:' + (RAIL_NARROW + 1) + 'px){body.sys-rail-on{padding-left:' + RAIL_W + 'px}body.sys-rail-on #sys-crumb{display:none}}' +
@@ -864,7 +949,7 @@ if (typeof module !== 'undefined' && module.exports) {
       if (!g.items || !g.items.length) return          // 群組顯示＝底下至少一項可見（不留空標題）
       sec(g.label, true, g.key)
       g.items.forEach(function (it) {
-        ni(_hrefOf(it.href), '', it.label, it.custom ? [] : (it.active || []), true, it.badge || '', _extraBadge(it.extra_badge))
+        ni(_hrefOf(it.href), '', it.label, it.custom ? [] : (it.active || []), true, it.badge || '', _extraBadge(it.extra_badge), it.section || '')
         if (it.custom) {
           var rec = _curGroup.items[_curGroup.items.length - 1]
           rec.active = (file === 'custom-records.html' && _curKey === it.custom)
@@ -878,6 +963,9 @@ if (typeof module !== 'undefined' && module.exports) {
     if (el) el.innerHTML = ''
     renderMainNav()
     _systemCrumb()
+    _hubCrumb()
+    _fillCrumb()
+    try { window.dispatchEvent(new Event('motrix-menu-built')) } catch (_e) { /* 舊瀏覽器 */ }
 
     // 使用者正站在一個「側欄判定他不該看到」的頁面上 → 顯示沒有權限，而不是
     // 把頁面內容留在那裡讓 API 一路 403（看起來像壞掉，不像沒權限）。
@@ -911,7 +999,7 @@ if (typeof module !== 'undefined' && module.exports) {
     bar.id = 'build-footer'
     bar.setAttribute('data-testid', 'build-footer')
     bar.style.cssText = 'position:fixed;right:10px;bottom:6px;z-index:40;'
-      + 'font-size:11px;color:var(--text-dim,#6B6B6B);font-family:monospace;'
+      + 'font-size:12px;color:var(--text-dim,#6B6B6B);font-family:monospace;'
       + 'background:rgba(255,255,255,.82);padding:2px 8px;border-radius:9px;'
       + 'pointer-events:none;max-width:60vw;white-space:nowrap;overflow:hidden;'
       + 'text-overflow:ellipsis'
@@ -1257,7 +1345,20 @@ if (typeof module !== 'undefined' && module.exports) {
       })
   }
   // 重新套一次版面（P9 發布後、或 e2e 驗序號用）；回傳這一輪的序號，等 `data-menu-seq` 等於它
-  window.MotrixMenu = { refresh: function () { _applyLayout(); return _menuSeq } }
+  // groupItems(key)：目前這位使用者在該群組**看得到**的項目（排除 hub 入口本身；有角色版面就用版面、否則宣告＋權限）。
+  // 報表中心等 hub 頁用它畫卡片——頁面自己不寫死有哪些報表、誰能看（選單宣告是唯一來源）。
+  window.MotrixMenu = {
+    refresh: function () { _applyLayout(); return _menuSeq },
+    groupItems: function (key) {
+      var src = _layoutGroups || _declaredGroups().map(function (g) {
+        return { key: g.key, label: g.label, items: g.items.filter(function (it) { return _permOk(it.perm) }) }
+      })
+      var g = src.filter(function (x) { return x.key === key })[0]
+      return g ? (g.items || []).filter(function (it) { return !it.hub }).map(function (it) {
+        return { href: _hrefOf(it.href), label: it.label, section: it.section || '', desc: it.desc || '', file: _pageOf(it.href) }
+      }) : []
+    }
+  }
 
   // ── Async session refresh（背景刷新模組權限，有變動立即重建 sidebar）──────────
   function _refreshSession() {

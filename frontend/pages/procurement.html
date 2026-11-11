@@ -15,8 +15,8 @@
     .stat-strip{display:flex;gap:12px;margin-bottom:22px;flex-wrap:wrap}
     .stat-pill{display:flex;flex-direction:column;padding:14px 18px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;min-width:110px;flex:1;max-width:180px}
     .stat-pill__val{font-size:22px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;line-height:1;color:var(--text-primary)}
-    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;margin-top:4px;text-transform:uppercase}
-    .stat-pill.warn .stat-pill__val{color:#D97706}
+    .stat-pill__lbl{font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;margin-top:4px;text-transform:uppercase}
+    .stat-pill.warn .stat-pill__val{color:var(--warning)}
     .stat-pill.success .stat-pill__val{color:var(--success)}
     .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
     .search-wrap{position:relative;flex:0 0 280px}
@@ -27,17 +27,17 @@
     .pc-seg{border:none;cursor:pointer;text-align:left;font-family:var(--font-zh)}
     .pc-seg:hover{background:var(--icon-btn-bg)}
     .pc-seg.on{outline:2px solid var(--accent);outline-offset:-2px}
-    .pc-arrow{display:grid;place-items:center;background:var(--white);color:var(--border-light);font-size:13px;padding:0 2px}
+    .pc-arrow{display:grid;place-items:center;background:var(--white);color:var(--text-dim);font-size:13px;padding:0 2px}
     @media (max-width:767px){.pc-arrow{display:none}}
-    .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
+    .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
     .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
     .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
     .data-table{width:100%;border-collapse:collapse;font-size:13px}
-    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table th{padding:10px 14px;text-align:left;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
     .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
     .data-table tr:last-child td{border-bottom:none}
     .data-table tr:hover td{background:#FDFCFA}
-    .rb{display:inline-flex;align-items:center;padding:2px 9px;border-radius:4px;font-size:11px;font-weight:600}
+    .rb{display:inline-flex;align-items:center;padding:2px 9px;border-radius:4px;font-size:12px;font-weight:600}
     .rb-pending{background:#FEF3C7;color:#92400E}
     .rb-ordered{background:#DBEAFE;color:#1E40AF}
     .rb-arrived{background:var(--success-light);color:var(--success)}
@@ -63,7 +63,7 @@
 
     <div class="pg">
       <div class="pg__l">
-        <div class="pg__eyebrow">廠商與採購</div>
+        <nav class="pg__crumb" data-crumb-auto aria-label="目前位置"><span>採購管理</span></nav>
         <h1 class="pg__t">採購管理</h1>
         <p class="pg__s">材料申請需求與採購進度追蹤</p>
       </div>
@@ -143,10 +143,10 @@
                         <template x-if="c.field === 'quoteNo'"><a :href="'case-management.html?q=' + m.quoteNo" style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent);text-decoration:none" x-text="m.quoteNo"></a></template>
                         <template x-if="c.field === 'customer'"><span style="font-size:12px" x-text="m.customer || '—'"></span></template>
                         <template x-if="c.field === 'dealTag'"><span class="rb" :class="m.dealTag==='已結案'?'rb-closed':'rb-case'" x-text="m.dealTag || '—'"></span></template>
-                        <template x-if="c.field === 'note'"><span style="font-size:11px;color:var(--text-dim);display:inline-block;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="m.note || '—'"></span></template>
+                        <template x-if="c.field === 'note'"><span style="font-size:12px;color:var(--text-dim);display:inline-block;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="m.note || '—'"></span></template>
                       </td>
                     </template>
-                    <td><a :href="'case-management.html?q=' + m.quoteNo" style="display:inline-flex;align-items:center;gap:3px;padding:4px 8px;border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);font-weight:500;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;text-decoration:none">材料申請 →</a></td>
+                    <td><a :href="'case-management.html?q=' + m.quoteNo" style="display:inline-flex;align-items:center;gap:3px;padding:4px 8px;border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);font-weight:500;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;text-decoration:none">材料申請 →</a></td>
                   </tr>
                 </template>
               </tbody>
@@ -189,10 +189,10 @@
                   <td>
                     <span class="rb" :class="m.dealTag==='已結案'?'rb-closed':'rb-case'" x-text="m.dealTag || '—'"></span>
                   </td>
-                  <td style="font-size:11px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="m.note || '—'"></td>
+                  <td style="font-size:12px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="m.note || '—'"></td>
                   <td>
                     <a :href="'case-management.html?q=' + m.quoteNo"
-                       style="display:inline-flex;align-items:center;gap:3px;padding:4px 8px;border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);font-weight:500;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;text-decoration:none">
+                       style="display:inline-flex;align-items:center;gap:3px;padding:4px 8px;border-radius:var(--radius);font-size:12px;font-family:var(--font-zh);font-weight:500;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;text-decoration:none">
                       材料申請 →
                     </a>
                   </td>

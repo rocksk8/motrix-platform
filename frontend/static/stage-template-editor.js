@@ -192,7 +192,7 @@
     changed()
   }
   function num(label, obj, field, w) {
-    return el('label', { style: 'font-size:11px' }, [el('span', { text: label + ' ' }), el('input', { type: 'number', value: String(obj[field]), style: 'width:' + w + 'px;font-size:12px', oninput: function (ev) { obj[field] = ev.target.value; st.preview = null; st.previewKey = ''; st.state = 'idle' } })])
+    return el('label', { style: 'font-size:12px' }, [el('span', { text: label + ' ' }), el('input', { type: 'number', value: String(obj[field]), style: 'width:' + w + 'px;font-size:12px', oninput: function (ev) { obj[field] = ev.target.value; st.preview = null; st.previewKey = ''; st.state = 'idle' } })])
   }
 
   function render() {
@@ -224,7 +224,7 @@
           el('input', { type: 'text', value: s.label, placeholder: '階段名稱', maxlength: '20', style: 'flex:1;min-width:110px;font-size:12px', oninput: function (ev) { s.label = ev.target.value; st.preview = null; st.previewKey = '' } }),
           num('第幾天開始（基準日起算）', s, 'offsetDays', 56), num('持續幾天', s, 'durationDays', 56),
           st.useRatio ? num('收入認列比例 %', s, 'ratioPct', 64) : null,
-          others.length ? el('span', { style: 'font-size:11px' }, [el('span', { text: '要先完成：' })].concat(others.map(function (o) {
+          others.length ? el('span', { style: 'font-size:12px' }, [el('span', { text: '要先完成：' })].concat(others.map(function (o) {
             return el('label', { style: 'margin-right:4px' }, [el('input', { type: 'checkbox', checked: s.dependsOn.indexOf(o.key) >= 0 ? 'checked' : null, onchange: function (ev) { s.dependsOn = s.dependsOn.filter(function (d) { return d !== o.key }); if (ev.target.checked) s.dependsOn.push(o.key); changed() } }), el('span', { text: o.label || o.key })])
           }))) : null,
           el('button', { type: 'button', text: '↑', onclick: function () { move(i, -1) } }), el('button', { type: 'button', text: '↓', onclick: function () { move(i, 1) } }),
@@ -243,7 +243,7 @@
         })))
         var im = st.impact || {}
         if (im.classification || im.kind) panel.appendChild(el('div', { text: '這次變更的性質：' + (({ loosen: '放寬（需第二位最高管理者核准）', tighten: '收緊', neutral: '中性' })[im.classification] || im.classification || ''), style: 'font-size:12px;margin-top:4px' }))
-        ;(im.reasons || []).forEach(function (r) { panel.appendChild(el('div', { text: '・' + (typeof r === 'string' ? r : (r.message || r.text || '')), style: 'font-size:11px;color:#b45309' })) })
+        ;(im.reasons || []).forEach(function (r) { panel.appendChild(el('div', { text: '・' + (typeof r === 'string' ? r : (r.message || r.text || '')), style: 'font-size:12px;color:#b45309' })) })
       }
       panel.appendChild(el('div', { style: 'display:flex;gap:6px;margin-top:8px' }, [
         el('input', { type: 'text', placeholder: '備註（選填）', value: st.note, style: 'flex:1;font-size:12px', oninput: function (ev) { st.note = ev.target.value } }),

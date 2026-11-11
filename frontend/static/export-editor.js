@@ -214,7 +214,7 @@
     var panel = el('div', { style: 'margin-top:6px;padding:10px;border:1px solid var(--border,#ccc);border-radius:8px;background:var(--bg-card,#fff);max-width:640px' })
     panel.appendChild(el('div', { text: (st.cat && st.cat.label || '匯出') + '：選擇要匯出的欄位、標題與順序（資料與權限不變；沒有權限看的欄位不會出現）', style: 'font-size:12px;margin-bottom:6px' }))
     if (hasSheets()) {
-      panel.appendChild(el('div', { text: '選擇報表要包含哪些明細工作表（Excel、PDF 與月報郵件都一樣；順序、名稱與內容固定，不能修改）。注意：摘要永遠包含公司層級金額合計；這個設定只控制明細工作表，不會讓報表變成沒有金額。拿掉工作表屬收緊；重新加回含金額的工作表需要第二位最高管理者核准。', style: 'font-size:11px;color:var(--text-dim,#888)' }))
+      panel.appendChild(el('div', { text: '選擇報表要包含哪些明細工作表（Excel、PDF 與月報郵件都一樣；順序、名稱與內容固定，不能修改）。注意：摘要永遠包含公司層級金額合計；這個設定只控制明細工作表，不會讓報表變成沒有金額。拿掉工作表屬收緊；重新加回含金額的工作表需要第二位最高管理者核准。', style: 'font-size:12px;color:var(--text-dim,#888)' }))
       st.cat.sheets.forEach(function (s) {
         panel.appendChild(el('label', { style: 'display:flex;gap:6px;align-items:center;margin:2px 0;font-size:12px', 'data-sheet': s.id }, [
           el('input', { type: 'checkbox', checked: (s.required || st.sheets[s.id] !== false) ? 'checked' : null, disabled: s.required ? 'disabled' : null,
@@ -228,10 +228,10 @@
       panel.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;margin:2px 0' }, [
         el('input', { type: 'checkbox', checked: c.on ? 'checked' : null, onchange: function (ev) { c.on = !!ev.target.checked; changed() } }),
         el('input', { type: 'text', value: c.label, maxlength: String(LABEL_MAX), disabled: (st.cat && st.cat.lockLabels) ? 'disabled' : null, style: 'flex:1;font-size:12px', oninput: function (ev) { c.label = ev.target.value; st.preview = null; st.previewHash = ''; st.state = 'idle' } }),
-        el('span', { text: c.money ? '（有權限條件）' : '', style: 'font-size:11px;color:var(--text-dim,#888)' }),
+        el('span', { text: c.money ? '（有權限條件）' : '', style: 'font-size:12px;color:var(--text-dim,#888)' }),
         el('button', { type: 'button', text: '↑', onclick: function () { move(i, -1) } }),
         el('button', { type: 'button', text: '↓', onclick: function () { move(i, 1) } }),
-        lp ? el('span', { text: lp, style: 'color:#b91c1c;font-size:11px' }) : null
+        lp ? el('span', { text: lp, style: 'color:#b91c1c;font-size:12px' }) : null
       ]))
     })
     if (hasTitles()) {
@@ -244,7 +244,7 @@
         ]))
       })
     }
-    if (st.cat && st.cat.lockLabels) panel.appendChild(el('div', { text: '這個匯出的檔案會被匯入回來（靠表頭文字對應），所以欄位標題固定；可以選欄位與換順序。', style: 'font-size:11px;color:var(--text-dim,#888)' }))
+    if (st.cat && st.cat.lockLabels) panel.appendChild(el('div', { text: '這個匯出的檔案會被匯入回來（靠表頭文字對應），所以欄位標題固定；可以選欄位與換順序。', style: 'font-size:12px;color:var(--text-dim,#888)' }))
     ;[['header', '頁首文字（列印頁首）'], ['footer', '頁尾文字（列印頁尾）'], ['watermark', '浮水印文字（內容下層、淺灰）']].forEach(function (x) {
       if (caps().indexOf(x[0]) < 0) return
       panel.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:6px' }, [
@@ -254,7 +254,7 @@
             return el('option', { value: t, text: t, selected: st[x[0]] === t ? 'selected' : null }) })))
       ]))
     })
-    panel.appendChild(el('div', { text: '頁首／頁尾／浮水印只能從預設文字挑選（內容會出現在輸出檔上，所以不開放自由輸入）；新增或更換文字需要第二位最高管理者核准。', style: 'font-size:11px;color:var(--text-dim,#888);margin-top:4px' }))
+    panel.appendChild(el('div', { text: '頁首／頁尾／浮水印只能從預設文字挑選（內容會出現在輸出檔上，所以不開放自由輸入）；新增或更換文字需要第二位最高管理者核准。', style: 'font-size:12px;color:var(--text-dim,#888);margin-top:4px' }))
     panel.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:8px' }, [
       el('span', { text: '以誰的身分預覽', style: 'font-size:12px' }),
       el('input', { type: 'text', placeholder: '帳號（空白＝我自己）', value: st.user, style: 'font-size:12px', oninput: function (ev) { st.user = ev.target.value; st.preview = null; st.state = 'idle' } }),
@@ -272,15 +272,15 @@
         fr.srcdoc = pv.html
         panel.appendChild(fr)
       }
-      var tb = el('table', { style: 'border-collapse:collapse;font-size:11px' })
+      var tb = el('table', { style: 'border-collapse:collapse;font-size:12px' })
       tb.appendChild(el('tr', {}, pv.columns.map(function (h) { return el('th', { text: h, style: 'border:1px solid #ccc;padding:2px 4px' }) })))
       pv.rows.forEach(function (r) { tb.appendChild(el('tr', {}, r.map(function (v) { return el('td', { text: v === null || v === undefined ? '' : String(v), style: 'border:1px solid #ccc;padding:2px 4px' }) }))) })
       if (pv.sheets) {
-        pv.sheets.forEach(function (s) { panel.appendChild(el('div', { text: (s.on ? '✓ ' : '✗ ') + s.label + (s.on ? '' : '（不會出現）'), style: 'font-size:11px;' + (s.on ? '' : 'color:#b45309') })) })
+        pv.sheets.forEach(function (s) { panel.appendChild(el('div', { text: (s.on ? '✓ ' : '✗ ') + s.label + (s.on ? '' : '（不會出現）'), style: 'font-size:12px;' + (s.on ? '' : 'color:#b45309') })) })
       } else if (!pv.decorOnly) panel.appendChild(tb)
-      if (pv.header) panel.appendChild(el('div', { text: '列印頁首：' + pv.header, style: 'font-size:11px' }))
-      if (pv.footer) panel.appendChild(el('div', { text: '列印頁尾：' + pv.footer, style: 'font-size:11px' }))
-      ;(pv.warnings || []).forEach(function (w) { panel.appendChild(el('div', { text: w, style: 'font-size:11px;color:#b45309' })) })
+      if (pv.header) panel.appendChild(el('div', { text: '列印頁首：' + pv.header, style: 'font-size:12px' }))
+      if (pv.footer) panel.appendChild(el('div', { text: '列印頁尾：' + pv.footer, style: 'font-size:12px' }))
+      ;(pv.warnings || []).forEach(function (w) { panel.appendChild(el('div', { text: w, style: 'font-size:12px;color:#b45309' })) })
     }
     panel.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:8px' }, [
       el('input', { type: 'text', placeholder: '備註（選填）', value: st.note, style: 'flex:1;font-size:12px', oninput: function (ev) { st.note = ev.target.value } }),

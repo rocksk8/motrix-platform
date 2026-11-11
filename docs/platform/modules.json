@@ -858,6 +858,7 @@
     "js:js/reports.js",
     "page:pages/devices.html",
     "page:pages/procurement.html",
+    "page:pages/reports-hub.html",
     "page:pages/reports.html",
     "page:pages/warranty.html",
     "mod:analytics/__init__",

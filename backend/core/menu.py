@@ -17,6 +17,8 @@
   - `["k1", "k2"]`：有任一模組權限即可；最高管理者一律可（同 sidebar.js `has()`）
   - `"superadmin"`：只限最高管理者
   - `"any"`：任何登入者
+選填 `section`：同一群組內連續幾項共用的小標題（下拉面板分段顯示；順序仍由 `order` 決定，所以同一 section 的 order 要相鄰）。
+選填 `desc`：一句話說明（報表中心卡片用）。兩者都不影響權限與排序。
 群組**不另設條件**：群組顯示＝底下至少一項可見（舊碼 UI8 那一類「群組條件與項目條件各自演進」從結構上消失）。
 排序：群組依 menu_l1.json 的順序；群組內依 `order`（同 order 依 href）。
 """
@@ -24,7 +26,7 @@ import json
 from pathlib import Path
 
 MENU_L1 = Path(__file__).with_name("menu_l1.json")
-ITEM_KEYS = {"group", "href", "label", "order", "perm", "active", "badge", "extra_badge", "hub"}
+ITEM_KEYS = {"group", "href", "label", "order", "perm", "active", "badge", "extra_badge", "hub", "section", "desc"}
 
 
 def load_l1(path=MENU_L1):
@@ -64,6 +66,9 @@ def validate(l1, mod_items=()):
             problems.append("%s 的選單項 %s 缺整數 order" % (where, it.get("href")))
         if not _perm_ok(it.get("perm")):
             problems.append("%s 的選單項 %s 的 perm 不合法：%r" % (where, it.get("href"), it.get("perm")))
+        for k in ("section", "desc"):
+            if k in it and not (isinstance(it[k], str) and it[k].strip()):
+                problems.append("%s 的選單項 %s 的 %s 必須是非空字串" % (where, it.get("href"), k))
         if not it.get("label") or not it.get("href"):
             problems.append("%s 有選單項缺 label 或 href：%r" % (where, it))
         if it.get("href") in seen:
@@ -113,6 +118,10 @@ def _grouped(l1, mod_items, keep, with_perm):
                        "badge": it.get("badge"), "extra_badge": it.get("extra_badge"), "module": it.get("module")}
                 if it.get("hub"):                                  # 系統中心入口（第 54 班）：導覽列把整個群組收成這一個連結（sidebar.js）
                     row["hub"] = True
+                if it.get("section"):                              # 選填：下拉內的小標題（財務會計：日常／月結／設定）；報表中心的頁籤也讀它
+                    row["section"] = it["section"]
+                if it.get("desc"):                                 # 選填：一句話說明這一項「回答什麼問題」（報表中心的卡片）
+                    row["desc"] = it["desc"]
                 if with_perm:
                     row["perm"] = it["perm"]
                 rows.append(row)

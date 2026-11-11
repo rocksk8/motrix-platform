@@ -31,7 +31,7 @@
     .pr-f label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
     .pr-f input, .pr-f select, .pr-f textarea { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--border-light);
       border-radius: 6px; font-size: 13px; font-family: inherit; background: var(--white); color: var(--text-primary); }
-    .pr-hint { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; line-height: 1.5; }
+    .pr-hint { font-size: 12px; color: var(--text-dim); margin-top: 3px; line-height: 1.5; }
     .pr-err { margin-top: 10px; padding: 10px 14px; border-radius: 8px; background: var(--tone-danger-bg); border: 1px solid var(--tone-danger-border);
       color: var(--tone-danger-fg); font-size: 13px; }
     .pr-ok { margin-top: 10px; padding: 10px 14px; border-radius: 8px; background: var(--tone-info-bg); border: 1px solid var(--tone-info-border);
@@ -44,7 +44,7 @@
     .pr-tabs { display: flex; gap: 6px; margin-top: 12px; }
     .pr-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
     .pr-table th, .pr-table td { padding: 7px 8px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
-    .pr-table th { font-size: 11px; color: var(--text-secondary); font-weight: 600; }
+    .pr-table th { font-size: 12px; color: var(--text-secondary); font-weight: 600; }
     .pr-attach { margin-top: 2px; }
     .pr-flist { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
     .pr-flist li { display: flex; align-items: center; gap: 8px; font-size: 12px; }
@@ -350,7 +350,7 @@
                     <div class="pr-hint" x-show="!(e.files || []).length">無附件</div>
                     <template x-if="canEditFiles(e) && mineP[e.id]">
                       <div :data-attach-add-form="e.id" style="margin-top:4px">
-                        <input type="file" multiple :accept="mineP[e.id].accept()" :data-attach-input="e.id" style="font-size:11px"
+                        <input type="file" multiple :accept="mineP[e.id].accept()" :data-attach-input="e.id" style="font-size:12px"
                                @change="mineP[e.id].add($event.target.files); $event.target.value = ''">
                         <template x-for="(it, i) in mineP[e.id].files" :key="it.id">
                           <div style="display:flex;gap:6px"><span x-text="it.file.name + '（' + AttachPicker.fmtSize(it.file.size) + '）'"></span>
@@ -364,7 +364,7 @@
                   <td>
                     <template x-if="e.status === '已核准'">
                       <div :data-invoice-form="e.id">
-                        <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" :data-invoice-upload="e.id" @change="invoiceDraft[e.id] = [...$event.target.files]" style="font-size:11px">
+                        <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" :data-invoice-upload="e.id" @change="invoiceDraft[e.id] = [...$event.target.files]" style="font-size:12px">
                         <input :data-invoice-no="e.id" :value="e.invoiceNo" maxlength="40" placeholder="發票號碼" style="width:110px;font-size:12px"
                                @input="invoiceNoDraft[e.id] = $event.target.value">
                         <button class="btn btn-secondary btn-sm" :data-invoice-save="e.id" :disabled="busy" @click="addInvoice(e)">補發票</button>

@@ -51,7 +51,7 @@
     .form-group { margin-bottom: 14px; }
     .form-label {
       display: block;
-      font-size: 10px;
+      font-size: 12px;
       font-family: 'LINE Seed TW_OTF', sans-serif;
       letter-spacing: .08em;
       text-transform: uppercase;
@@ -76,13 +76,13 @@
       border-color: var(--accent);
       box-shadow: 0 0 0 3px rgba(37,99,235,.08);
     }
-    .form-hint { font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+    .form-hint { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
     .form-hint.error { color: var(--danger); }
     /* Table */
     .data-table { width:100%; border-collapse:collapse; font-size:13px; }
     .data-table th {
       padding:10px 12px; text-align:left;
-      font-size:10px; font-family:LINE Seed TW_OTF, sans-serif;
+      font-size:12px; font-family:LINE Seed TW_OTF, sans-serif;
       letter-spacing:.08em; text-transform:uppercase;
       color:var(--text-dim); font-weight:500;
       background:#FAFAF8; border-bottom:1px solid var(--border-light);
@@ -94,7 +94,7 @@
     .role-badge {
       display:inline-flex; align-items:center; gap:4px;
       padding:3px 9px; border-radius:12px;
-      font-size:11px; font-weight:500; font-family:LINE Seed TW_OTF, sans-serif;
+      font-size:12px; font-weight:500; font-family:LINE Seed TW_OTF, sans-serif;
     }
     .role-superadmin { background:#FEF3C7; color:#92400E; }
     .role-admin      { background:var(--accent-light); color:var(--accent-hover); }
@@ -125,7 +125,7 @@
     /* Access level display */
     .access-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px; }
     .access-chip {
-      padding:2px 7px; border-radius:3px; font-size:10px;
+      padding:2px 7px; border-radius:3px; font-size:12px;
       font-family:LINE Seed TW_OTF, sans-serif;
       background:#F0EEE9; color:var(--text-secondary);
     }
@@ -134,7 +134,7 @@
     .preset-chip {
       display:inline-flex; align-items:center; padding:4px 11px;
       border:1px solid var(--border-light); border-radius:20px;
-      font-size:11px; font-family:var(--font-zh); background:#fff;
+      font-size:12px; font-family:var(--font-zh); background:#fff;
       cursor:pointer; color:var(--text-secondary); transition:all .12s;
       white-space:nowrap; line-height:1.4;
     }
@@ -187,19 +187,19 @@
     <!-- 統計 -->
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px">
       <div class="panel" style="padding:16px">
-        <div style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em">總帳號數</div>
+        <div style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em">總帳號數</div>
         <div style="font-size:28px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;margin-top:4px" x-text="users.length"></div>
       </div>
       <div class="panel" style="padding:16px">
-        <div style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em">啟用中</div>
+        <div style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em">啟用中</div>
         <div style="font-size:28px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;margin-top:4px;color:var(--success)" x-text="users.filter(u=>u.active).length"></div>
       </div>
       <div class="panel" style="padding:16px">
-        <div style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em">管理員</div>
+        <div style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em">管理員</div>
         <div style="font-size:28px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;margin-top:4px;color:var(--accent)" x-text="users.filter(u=>u.role==='superadmin'||u.role==='admin').length"></div>
       </div>
       <div class="panel" style="padding:16px">
-        <div style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em">業務/檢視</div>
+        <div style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em">業務/檢視</div>
         <div style="font-size:28px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;margin-top:4px" x-text="users.filter(u=>u.role==='sales'||u.role==='viewer').length"></div>
       </div>
     </div>
@@ -211,8 +211,8 @@
              @click="customRoleMgrOpen=!customRoleMgrOpen">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 2v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87m-4-12a4 4 0 010 7.75"/></svg>
           <span style="font-size:13px;font-weight:600">自訂角色管理</span>
-          <span style="font-size:11px;color:var(--text-dim)">快速選取中的自訂選項</span>
-          <span style="margin-left:auto;font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="customRoles.length + ' 個'"></span>
+          <span style="font-size:12px;color:var(--text-dim)">快速選取中的自訂選項</span>
+          <span style="margin-left:auto;font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="customRoles.length + ' 個'"></span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                :style="customRoleMgrOpen ? 'transform:rotate(180deg)' : ''" style="transition:.2s;color:var(--text-dim)">
             <path d="M6 9l6 6 6-6"/>
@@ -228,7 +228,7 @@
               <span class="role-badge"
                     :class="{'role-superadmin':cr.baseRole==='superadmin','role-admin':cr.baseRole==='admin','role-sales':cr.baseRole==='sales','role-engineer':cr.baseRole==='engineer','role-viewer':cr.baseRole==='viewer','role-finance':cr.baseRole==='finance'}"
                     x-text="roleLabel(cr.baseRole)"></span>
-              <span style="font-size:11px;color:var(--text-dim)" x-text="(cr.modules||[]).length + ' 個模組'"></span>
+              <span style="font-size:12px;color:var(--text-dim)" x-text="(cr.modules||[]).length + ' 個模組'"></span>
               <div style="margin-left:auto;display:flex;gap:6px">
                 <button class="btn btn-ghost btn-sm" @click="openCrEdit(cr)">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
@@ -256,7 +256,7 @@
              @click="roleLabelsMgrOpen=!roleLabelsMgrOpen">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h10M7 12h10M7 17h6"/></svg>
           <span style="font-size:13px;font-weight:600">角色名稱設定</span>
-          <span style="font-size:11px;color:var(--text-dim)">自訂各角色層級的顯示名稱</span>
+          <span style="font-size:12px;color:var(--text-dim)">自訂各角色層級的顯示名稱</span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                :style="roleLabelsMgrOpen ? 'transform:rotate(180deg)' : ''" style="transition:.2s;color:var(--text-dim);margin-left:auto">
             <path d="M6 9l6 6 6-6"/>
@@ -265,31 +265,31 @@
         <div x-show="roleLabelsMgrOpen" style="padding:14px 16px">
           <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px">
             <div>
-              <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">superadmin</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">superadmin</div>
               <input class="form-input" type="text" x-model="rlForm.superadmin" placeholder="超級管理員" style="font-size:12px;padding:7px 9px">
             </div>
             <div>
-              <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">admin</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">admin</div>
               <input class="form-input" type="text" x-model="rlForm.admin" placeholder="管理員" style="font-size:12px;padding:7px 9px">
             </div>
             <div>
-              <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">sales</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">sales</div>
               <input class="form-input" type="text" x-model="rlForm.sales" placeholder="業務" style="font-size:12px;padding:7px 9px">
             </div>
             <div>
-              <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">engineer</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">engineer</div>
               <input class="form-input" type="text" x-model="rlForm.engineer" placeholder="工程師" style="font-size:12px;padding:7px 9px">
             </div>
             <div>
-              <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">finance</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">finance</div>
               <input class="form-input" type="text" x-model="rlForm.finance" placeholder="財務" style="font-size:12px;padding:7px 9px">
             </div>
             <div>
-              <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">viewer</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">viewer</div>
               <input data-saved-field class="form-input" type="text" x-model="rlForm.viewer" placeholder="檢視者" style="font-size:12px;padding:7px 9px">
             </div>
           </div>
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">變更後，使用者列表、角色選單及快速套用 chips 均會即時反映新名稱。</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">變更後，使用者列表、角色選單及快速套用 chips 均會即時反映新名稱。</div>
           <div style="display:flex;justify-content:flex-end;gap:8px">
             <button class="btn btn-ghost btn-sm" @click="rlForm={...roleLabels};roleLabelsMgrOpen=false">取消</button>
             <button class="btn btn-primary btn-sm" @click="saveRoleLabels()">儲存名稱</button>
@@ -308,7 +308,7 @@
         <input class="form-input user-search" type="text" x-model="userSearch" placeholder="搜尋帳號／顯示名稱／Email"
                style="padding-left:30px;font-size:12px">
       </div>
-      <span style="font-size:11px;color:var(--text-dim)" x-text="users.length + ' 位使用者'"></span>
+      <span style="font-size:12px;color:var(--text-dim)" x-text="users.length + ' 位使用者'"></span>
     </div>
 
     <div x-show="isSuperAdmin && orgTree.length === 0"
@@ -318,7 +318,7 @@
     </div>
 
     <div class="panel" style="padding:0;overflow:hidden">
-      <div style="display:flex;padding:10px 12px;background:#FAFAF8;border-bottom:1px solid var(--border-light);font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);gap:12px">
+      <div style="display:flex;padding:10px 12px;background:#FAFAF8;border-bottom:1px solid var(--border-light);font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);gap:12px">
         <div style="width:190px;flex-shrink:0">帳號</div>
         <div style="width:100px;flex-shrink:0">顯示名稱</div>
         <div style="width:160px;flex-shrink:0">E-mail</div>
@@ -337,9 +337,9 @@
                    style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;background:#F5F4F0;border-bottom:1px solid var(--border-light)">
                 <span x-text="isDivOpen(row.division.id) ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
                 <span style="font-size:13px;font-weight:700" x-text="row.division.name"></span>
-                <span style="font-size:11px;color:var(--text-dim)" x-text="row.division.departments.length + ' 個部門・' + row.userCount + ' 人'"></span>
+                <span style="font-size:12px;color:var(--text-dim)" x-text="row.division.departments.length + ' 個部門・' + row.userCount + ' 人'"></span>
                 <template x-if="row.division.managerName">
-                  <span style="font-size:10px;background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:10px" x-text="'處級主管：' + row.division.managerName"></span>
+                  <span style="font-size:12px;background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:10px" x-text="'處級主管：' + row.division.managerName"></span>
                 </template>
               </div>
             </template>
@@ -349,9 +349,9 @@
                    style="display:flex;align-items:center;gap:8px;padding:9px 12px 9px 28px;cursor:pointer;background:#FBFAF8;border-bottom:1px solid var(--border-light)">
                 <span x-text="isDeptOpen(row.department.id) ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
                 <span style="font-size:12px;font-weight:600" x-text="row.department.name"></span>
-                <span style="font-size:11px;color:var(--text-dim)" x-text="row.userCount + ' 人'"></span>
+                <span style="font-size:12px;color:var(--text-dim)" x-text="row.userCount + ' 人'"></span>
                 <template x-if="row.department.managerName">
-                  <span style="font-size:10px;background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:10px" x-text="'主管：' + row.department.managerName"></span>
+                  <span style="font-size:12px;background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:10px" x-text="'主管：' + row.department.managerName"></span>
                 </template>
               </div>
             </template>
@@ -361,7 +361,7 @@
                    style="display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;background:#F5F4F0;border-bottom:1px solid var(--border-light)">
                 <span x-text="isDeptOpen('unassigned') ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
                 <span style="font-size:13px;font-weight:700;color:var(--text-secondary)">未分類</span>
-                <span style="font-size:11px;color:var(--text-dim)" x-text="row.userCount + ' 人'"></span>
+                <span style="font-size:12px;color:var(--text-dim)" x-text="row.userCount + ' 人'"></span>
               </div>
             </template>
             <!-- 使用者列 -->
@@ -373,7 +373,7 @@
                        x-text="(row.user.displayName||row.user.username)[0].toUpperCase()"></div>
                   <span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:13px;font-weight:500" x-text="row.user.username"></span>
                   <template x-if="row.user.username === session.username">
-                    <span style="font-size:9px;background:var(--accent-light);color:var(--accent);padding:1px 6px;border-radius:3px;font-family:LINE Seed TW_OTF, sans-serif">我</span>
+                    <span style="font-size:12px;background:var(--accent-light);color:var(--accent);padding:1px 6px;border-radius:3px;font-family:LINE Seed TW_OTF, sans-serif">我</span>
                   </template>
                 </div>
                 <div style="width:100px;flex-shrink:0;font-size:13px" x-text="row.user.displayName || '—'"></div>
@@ -390,7 +390,7 @@
                           x-text="mod.label"></span>
                   </template>
                 </div>
-                <div style="width:80px;flex-shrink:0;font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">
+                <div style="width:80px;flex-shrink:0;font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">
                   <span x-text="formatDate(row.user.createdAt)"></span>
                 </div>
                 <div style="width:46px;flex-shrink:0">
@@ -442,7 +442,7 @@
       <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">
         案件的填單人／業務負責／執行負責改為記錄帳號。下列舊資料的名稱查不到帳號或有同名，系統不自動猜測；請到案件管理重新選擇。
       </div>
-      <div x-show="rolesUnmappedError" style="font-size:12px;color:#DC2626" x-text="rolesUnmappedError"></div>
+      <div x-show="rolesUnmappedError" style="font-size:12px;color:var(--danger)" x-text="rolesUnmappedError"></div>
       <div x-show="!rolesUnmappedError && rolesUnmapped.length === 0" style="font-size:12px;color:var(--text-dim)">沒有未對應的案件角色。</div>
       <table x-show="rolesUnmapped.length > 0" style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="text-align:left;border-bottom:1px solid var(--border-light)">
@@ -485,18 +485,18 @@
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="form-group">
-            <label class="form-label">E-mail <span style="color:var(--text-dim);font-size:9px">（自動帶入報價單）</span></label>
+            <label class="form-label">E-mail <span style="color:var(--text-dim);font-size:12px">（自動帶入報價單）</span></label>
             <input class="form-input" type="email" x-model="form.email" placeholder="name@example.com">
           </div>
           <div class="form-group">
-            <label class="form-label">電話 <span style="color:var(--text-dim);font-size:9px">（自動帶入報價單）</span></label>
+            <label class="form-label">電話 <span style="color:var(--text-dim);font-size:12px">（自動帶入報價單）</span></label>
             <input class="form-input" type="text" x-model="form.phone" placeholder="02-1234-5678">
           </div>
         </div>
         <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；告知文字在「公司資料設定」維護） -->
         <div data-privacy-card style="margin-bottom:14px;padding:10px 12px;border:1px solid var(--border-light);border-radius:6px">
-          <div style="font-size:10px;font-weight:600;color:var(--text-dim);letter-spacing:.08em;margin-bottom:6px">個資蒐集告知</div>
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
+          <div style="font-size:12px;font-weight:600;color:var(--text-dim);letter-spacing:.08em;margin-bottom:6px">個資蒐集告知</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
             帳號的姓名、Email、電話屬個人資料，蒐集時須告知蒐集目的、類別、利用方式與當事人權利。可列印告知書請當事人簽名；沒有記錄不影響存檔。
           </div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -514,7 +514,7 @@
             </template>
           </div>
           <div x-show="!privacyAck && !privacyAckRequested" data-privacy-missing
-               style="margin-top:6px;font-size:11px;color:var(--warning)">尚未記錄個資告知</div>
+               style="margin-top:6px;font-size:12px;color:var(--warning)">尚未記錄個資告知</div>
         </div>
         <!-- 處/部門 -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -581,7 +581,7 @@
                     <span x-text="_modGroupOpen[grp.group] ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
                     <span x-text="grp.group"></span>
                   </span>
-                  <span style="font-size:11px;color:var(--text-dim);font-weight:400"
+                  <span style="font-size:12px;color:var(--text-dim);font-weight:400"
                         x-text="modGroupSelectedCount(grp.mods) + ' / ' + grp.mods.length"></span>
                 </div>
                 <div x-show="_modGroupOpen[grp.group]" x-cloak
@@ -607,7 +607,7 @@
         <!-- 職責角色／個人扣項／生效權限預覽（R2 第 2 步）：只有編輯既有、非最高管理者；勾選仍只存「原始勾選」，預覽由伺服器算 -->
         <div class="form-group" x-show="editingId && duty.visible" x-cloak data-testid="duty-section">
           <label class="form-label">職責角色與個人扣項
-            <span style="color:var(--text-dim);font-size:9px">（角色給的權限加在上面的勾選之外；扣項只能扣角色給的權限；預覽由伺服器計算）</span></label>
+            <span style="color:var(--text-dim);font-size:12px">（角色給的權限加在上面的勾選之外；扣項只能扣角色給的權限；預覽由伺服器計算）</span></label>
           <div x-show="duty.loading" style="font-size:12px;color:var(--text-dim)">讀取中…</div>
           <div x-show="duty.error" style="font-size:12px;color:var(--danger)" data-testid="duty-error" x-text="duty.error"></div>
           <div x-show="duty.loaded">
@@ -620,12 +620,12 @@
                   <input type="checkbox" style="display:none" :checked="duty.roleIds.includes(r.id)" @change="dutyToggleRole(r.id)">
                   <span x-text="duty.roleIds.includes(r.id) ? '✓ ' : ''"></span>
                   <span x-text="r.name"></span>
-                  <span x-show="(r.highSensitive || []).length" style="font-size:10px;color:var(--danger)" title="含高敏感權限">★</span>
+                  <span x-show="(r.highSensitive || []).length" style="font-size:12px;color:var(--danger)" title="含高敏感權限">★</span>
                 </label>
               </template>
               <span x-show="!duty.roles.length" style="font-size:12px;color:var(--text-dim)">尚未建立任何職責角色（到「職責角色」頁建立）</span>
             </div>
-            <div style="margin-top:8px;font-size:11px;color:var(--text-dim)">個人扣項（扣掉角色給的權限；財務三鍵由「財務」角色決定，不開放扣項）：</div>
+            <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">個人扣項（扣掉角色給的權限；財務三鍵由「財務」角色決定，不開放扣項）：</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
               <template x-for="k in dutySubCandidates()" :key="k">
                 <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:6px"
@@ -634,7 +634,7 @@
                   <input type="checkbox" style="display:none" :checked="duty.subs.includes(k)" @change="dutyToggleSub(k)">
                   <span x-text="duty.subs.includes(k) ? '－ ' : ''"></span>
                   <span x-text="dutyKeyLabel(k)"></span>
-                  <span x-show="dutyIsHi(k)" style="font-size:10px;color:var(--danger)">★</span>
+                  <span x-show="dutyIsHi(k)" style="font-size:12px;color:var(--danger)">★</span>
                 </label>
               </template>
               <span x-show="!dutySubCandidates().length" style="font-size:12px;color:var(--text-dim)">（沒有可扣的角色權限）</span>
@@ -644,7 +644,7 @@
               <span x-show="duty.previewBusy" style="color:var(--text-dim)">（計算中…）</span>
               <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap" x-show="duty.preview">
                 <template x-for="k in ((duty.preview || {}).effective || [])" :key="k">
-                  <span style="font-size:11px;padding:2px 8px;border:1px solid var(--border-light);border-radius:10px"
+                  <span style="font-size:12px;padding:2px 8px;border:1px solid var(--border-light);border-radius:10px"
                         :style="dutyIsHi(k) ? 'border-color:var(--danger,#dc2626);color:var(--danger,#dc2626)' : ''" x-text="dutyKeyLabel(k)"></span>
                 </template>
               </div>
@@ -655,11 +655,11 @@
                 <span x-show="dutyNeedsReason()" style="color:var(--danger)" data-testid="duty-reason-required"> * 涉及高敏感權限，必填</span></label>
               <input class="form-input" type="text" maxlength="200" x-model="duty.reason" data-testid="duty-reason" placeholder="例如：接手出納業務">
             </div>
-            <div x-show="duty.progress" style="margin-top:6px;font-size:11px;color:var(--text-dim)" x-text="'已完成：' + duty.progress"></div>
+            <div x-show="duty.progress" style="margin-top:6px;font-size:12px;color:var(--text-dim)" x-text="'已完成：' + duty.progress"></div>
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Email 通知偏好 <span style="color:var(--text-dim);font-size:9px">（取消勾選＝不寄該類信件給此帳號）</span></label>
+          <label class="form-label">Email 通知偏好 <span style="color:var(--text-dim);font-size:12px">（取消勾選＝不寄該類信件給此帳號）</span></label>
           <div style="margin-top:6px;border:1px solid var(--border-light);border-radius:6px;overflow:hidden">
             <template x-for="(grp, grpIdx) in notifyGroups" :key="grp.group">
               <div :style="grpIdx > 0 ? 'border-top:1px solid var(--border-light)' : ''">
@@ -669,7 +669,7 @@
                     <span x-text="_notifyGroupOpen[grp.group] ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
                     <span x-text="grp.group"></span>
                   </span>
-                  <span style="font-size:11px;color:var(--text-dim);font-weight:400"
+                  <span style="font-size:12px;color:var(--text-dim);font-weight:400"
                         x-text="notifyGroupOnCount(grp.items) + ' / ' + grp.items.length"></span>
                 </div>
                 <div x-show="_notifyGroupOpen[grp.group]" x-cloak
@@ -684,7 +684,7 @@
                              @change="toggleNotifyType(item.key)">
                       <span x-text="(item.receivable && !form.notificationMuted.includes(item.key)) ? '✓ ' : ''"></span>
                       <span x-text="item.label"></span>
-                      <span x-show="!item.receivable" style="font-size:10px">（此帳號不在收件範圍；由「信件與通知收件設定」決定）</span>
+                      <span x-show="!item.receivable" style="font-size:12px">（此帳號不在收件範圍；由「信件與通知收件設定」決定）</span>
                     </label>
                   </template>
                 </div>
@@ -707,14 +707,14 @@
         <!-- 解鎖密碼：僅編輯超級管理員時顯示 -->
         <template x-if="form.role === 'superadmin' && editingId">
           <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border-light)">
-            <div style="font-size:10px;font-weight:600;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+            <div style="font-size:12px;font-weight:600;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
               解鎖密碼
-              <span style="font-weight:400;font-size:9px;color:var(--text-dim);text-transform:none;letter-spacing:0">（報價單審核後解鎖編輯用；沒有預設值，未設定前無法解鎖）</span>
+              <span style="font-weight:400;font-size:12px;color:var(--text-dim);text-transform:none;letter-spacing:0">（報價單審核後解鎖編輯用；沒有預設值，未設定前無法解鎖）</span>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
               <div class="form-group" style="margin-bottom:0">
-                <label class="form-label">新解鎖密碼 <span style="color:var(--text-dim);text-transform:none;letter-spacing:0;font-size:9px">（留空不更改）</span></label>
+                <label class="form-label">新解鎖密碼 <span style="color:var(--text-dim);text-transform:none;letter-spacing:0;font-size:12px">（留空不更改）</span></label>
                 <input class="form-input" type="password" x-model="form.unlockPassword" placeholder="留空則不修改">
               </div>
               <div class="form-group" style="margin-bottom:0">
@@ -727,17 +727,17 @@
         <!-- 每日工作事項密碼：僅編輯超級管理員時顯示 -->
         <template x-if="form.role === 'superadmin' && editingId">
           <div style="margin-top:12px;padding-top:14px;border-top:1px solid var(--border-light)">
-            <div style="font-size:10px;font-weight:600;color:#7C3AED;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+            <div style="font-size:12px;font-weight:600;color:#7C3AED;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:6px">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
               每日工作事項密碼
-              <span style="font-weight:400;font-size:9px;color:var(--text-dim);text-transform:none;letter-spacing:0">（解鎖管理視角所需密碼）</span>
+              <span style="font-weight:400;font-size:12px;color:var(--text-dim);text-transform:none;letter-spacing:0">（解鎖管理視角所需密碼）</span>
             </div>
-            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;background:#F5F3FF;border:1px solid #C4B5FD;border-radius:4px;padding:6px 9px">
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;background:#F5F3FF;border:1px solid #C4B5FD;border-radius:4px;padding:6px 9px">
               ⓘ 在「每日工作事項」頁面，超管需輸入此密碼才能解鎖查看全體人員工作事項。
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
               <div class="form-group" style="margin-bottom:0">
-                <label class="form-label">工作事項密碼 <span style="color:var(--text-dim);text-transform:none;letter-spacing:0;font-size:9px">（留空不更改）</span></label>
+                <label class="form-label">工作事項密碼 <span style="color:var(--text-dim);text-transform:none;letter-spacing:0;font-size:12px">（留空不更改）</span></label>
                 <input class="form-input" type="password" x-model="form.dtPassword" placeholder="留空則不修改">
               </div>
               <div class="form-group" style="margin-bottom:0">
@@ -787,7 +787,7 @@
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
             <label class="form-label" style="margin-bottom:0">存取模組</label>
             <button type="button" @click="applyCrBaseRole()"
-                    style="font-size:10px;color:var(--accent);background:none;border:1px solid var(--accent);border-radius:4px;cursor:pointer;padding:2px 8px;font-family:var(--font-zh)">
+                    style="font-size:12px;color:var(--accent);background:none;border:1px solid var(--accent);border-radius:4px;cursor:pointer;padding:2px 8px;font-family:var(--font-zh)">
               套用基礎角色預設
             </button>
           </div>
@@ -800,7 +800,7 @@
                     <span x-text="_crModGroupOpen[grp.group] ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
                     <span x-text="grp.group"></span>
                   </span>
-                  <span style="font-size:11px;color:var(--text-dim);font-weight:400"
+                  <span style="font-size:12px;color:var(--text-dim);font-weight:400"
                         x-text="crModGroupSelectedCount(grp.mods) + ' / ' + grp.mods.length"></span>
                 </div>
                 <div x-show="_crModGroupOpen[grp.group]" x-cloak
