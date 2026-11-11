@@ -230,6 +230,7 @@ def _connect(path: str, *, check_same_thread: bool = True):
 #: 關掉：環境變數 MOTRIX_CONN_REAPER=0。
 _REAP_REQUEST_CONNECTIONS = os.environ.get("MOTRIX_CONN_REAPER", "1") != "0"
 _REQ_CONNS = contextvars.ContextVar("motrix_request_conns", default=None)
+_REQ_CONNS_WARN_AT = 200          # 一個請求內登記到這個數量就警告一次（不改行為）
 
 
 def _track_request_connections():
@@ -238,28 +239,35 @@ def _track_request_connections():
     return _REQ_CONNS.set(reg), reg
 
 
-def _reap_request_connections(token, registry) -> int:
-    """請求結束：回收登記簿內還開著的連線；回傳『在交易中（持寫鎖）被 rollback』的數量。永不丟例外。"""
-    try:
-        _REQ_CONNS.reset(token)
-    except (ValueError, RuntimeError):
-        pass
+def _reap_request_connections(token, registry, only_in_tx=False) -> int:
+    """回收登記簿內還開著的連線；回傳『在交易中（持寫鎖）被 rollback』的數量。永不丟例外。
+
+    `only_in_tx=True`（回應開始送出時用）：只處理**在交易中**的（＝握著寫鎖的），其餘不動、也不清登記簿、不重設 token——
+    回應已經開始，沒在交易中的連線仍可能被串流回應的產生器用到；握著寫鎖的卻會卡住後面 middleware 的同步寫入。
+    預設（請求結束）：全部回收並清空登記簿。"""
+    if token is not None:
+        try:
+            _REQ_CONNS.reset(token)
+        except (ValueError, RuntimeError):
+            pass
     leaked_tx = 0
-    for conn, site in registry:
+    for conn, site, req in registry:
         try:
             in_tx = conn.in_transaction           # 已 close 的連線會丟 ProgrammingError ⇒ 正常，略過
         except Exception:                         # noqa: BLE001
+            continue
+        if only_in_tx and not in_tx:
             continue
         try:
             if in_tx:
                 conn.rollback()
                 leaked_tx += 1
-                logger.warning("conn-reaper：請求結束時連線仍在交易中（會持寫鎖）⇒ 已 rollback＋close；開在 %s；請求 %s",
-                               site, get_request_ctx())
+                logger.warning("conn-reaper：連線仍在交易中（會持寫鎖）⇒ 已 rollback＋close；開在 %s；請求 %s", site, req)
             conn.close()
         except Exception:                         # noqa: BLE001
             logger.exception("conn-reaper：回收連線失敗（開在 %s）", site)
-    registry.clear()
+    if not only_in_tx:
+        registry.clear()
     return leaked_tx
 
 
@@ -272,7 +280,13 @@ def get_db():
     # 回收發生在處理函式結束之後（anyio 的 run_sync 不會在取消時放掉還在跑的執行緒），不會與處理函式併用。
     conn = _connect(path, check_same_thread=False)
     f = sys._getframe(1)
-    reg.append((conn, "%s:%d %s" % (os.path.basename(f.f_code.co_filename), f.f_lineno, f.f_code.co_name)))
+    site = "%s:%d %s" % (os.path.basename(f.f_code.co_filename), f.f_lineno, f.f_code.co_name)
+    # 請求資訊在開連線當下記（worker 執行緒的 context 看得到 auth_middleware 設的 request ctx；
+    # 收尾網在外層 ASGI 的 context，看不到子 task 設的 ContextVar ⇒ 回收時才讀會是 None）
+    reg.append((conn, site, get_request_ctx()))
+    if len(reg) == _REQ_CONNS_WARN_AT:
+        logger.warning("conn-reaper：單一請求已開 %d 條 get_db() 連線（含已關閉的；最近一條開在 %s；請求 %s）——迴圈裡每圈各開一條？"
+                       "沒關的會被登記簿持有到請求結束", len(reg), site, get_request_ctx())
     return conn
 
 
