@@ -909,13 +909,6 @@
     </div>
   </div>
 
-  <!-- 樂觀鎖衝突：別人在你載入之後也存過這張單。apiSave() 收到 409（手動存檔／自動存檔／送審共用）就顯示，直到重新載入或存檔成功為止 -->
-  <div x-show="saveConflictBanner" x-cloak data-testid="qf-save-conflict" role="alert"
-       style="position:fixed;top:calc(var(--topbar-h) + 52px);left:var(--sidebar-w);right:0;z-index:79;box-shadow:0 2px 6px rgba(0,0,0,.12);display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 28px;background:#FEF2F2;border-bottom:1px solid #FCA5A5;color:#991B1B;font-size:13px">
-    <span><b>有人在你之後也改過這份報價單。</b>為避免蓋掉對方的修改，你這次的存檔沒有生效（自動存檔已暫停）。請先載入最新版，再把你要改的地方重做一次。</span>
-    <button class="btn btn-sm" data-testid="qf-save-conflict-reload" @click="reloadLatestAfterConflict()">載入最新版（放棄我未存的修改）</button>
-  </div>
-
   <!-- ══ 工具列 ══ -->
   <div class="form-toolbar">
     <div class="form-toolbar__left">
@@ -1115,6 +1108,14 @@
   <div class="form-layout">
 
     <div class="form-left" :class="{'is-locked': q.status === '已送出' && !unlocked, 'approver-locked': isApproverLocked()}" :data-approver-locked="isApproverLocked() ? '1' : '0'">
+
+      <!-- 樂觀鎖衝突（只有「存既有單的 PUT」撞 409 才設；新單 POST 的單號衝突不算）。放在流程裡第一個、sticky 貼在工具列下方：
+           不蓋住下面的通知條（用 fixed 會蓋住「看說明／我知道了」）。載入最新版成功（loadQuote）或存檔成功才清。 -->
+      <div x-show="saveConflictBanner" x-cloak data-testid="qf-save-conflict" role="alert"
+           style="position:sticky;top:calc(var(--topbar-h) + 52px);z-index:70;display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;margin-bottom:14px;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;color:#991B1B;font-size:13px">
+        <span><b>這份報價單在你載入之後已被更新</b>（可能是其他人，也可能是你在別處的操作）。為避免蓋掉對方的修改，你這次的存檔沒有生效，自動存檔已暫停。請先載入最新版，再把你要改的地方重做一次。</span>
+        <button class="btn btn-sm" data-testid="qf-save-conflict-reload" @click="reloadLatestAfterConflict()">載入最新版（放棄我未存的修改）</button>
+      </div>
 
       <!-- 退回改版通知橫幅：有 returnInfo 就顯示（不限於草稿狀態） -->
       <div x-show="q.returnInfo"
@@ -3275,7 +3276,7 @@
           const method = isNew ? 'POST' : 'PUT'
           const url    = isNew ? `${this.API}/quotations` : `${this.API}/quotations/${this.q.quoteNo}`
           const res    = await fetch(url, { method, headers:{'Content-Type':'application/json', Authorization:'Bearer '+this.session.token}, body: JSON.stringify(payload) })
-          if (res.status === 409) {
+          if (res.status === 409 && !isNew) {      // 只有 PUT（既有單）的 409 是樂觀鎖；新單 POST 的 409 是單號衝突，走下面 !res.ok 帶後端原因
             // 樂觀鎖衝突：另一個 session 已經存過檔，這次存檔不生效——不要覆蓋使用者
             // 正在編輯的內容，只標記出來讓 saveDraft() 之類的呼叫端決定怎麼提示
             this._saveConflict = true
@@ -3579,10 +3580,10 @@
       // 衝突橫幅上的按鈕：丟掉手上未存的修改、載入伺服器最新版（_lastUpdatedAt 也跟著換成最新 ⇒ 之後存檔不再 409）
       async reloadLatestAfterConflict() {
         clearTimeout(this.autoSaveTimer)
-        await this.loadQuote()
-        this.isDirty = false
-        this._saveConflict = false
-        this.saveConflictBanner = false
+        let ok = false
+        try { ok = (await this.loadQuote()) === true } catch (_e) { ok = false }
+        if (!ok) { this.toast('載入最新版失敗，你的修改仍留在畫面上；請確認連線後再按一次'); return }   // 失敗時不清 isDirty／橫幅：基準沒換，下次存檔仍會 409
+        this.isDirty = false              // 橫幅與 _saveConflict 由 loadQuote() 成功時清
       },
 
       _allCombined() {
@@ -4410,11 +4411,11 @@
         const res = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}`,
           { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (!res.ok) {
-          if (res.status === 401) { this.logout(); return }
+          if (res.status === 401) { this.logout(); return false }
           this.toast(res.status === 404
             ? '找不到此報價單，可能已被刪除或單號有誤'
             : '報價單載入失敗，請確認後端伺服器連線')
-          return
+          return false
         }
         const row = await res.json()
         Object.assign(this.q, row.data)
@@ -4445,6 +4446,9 @@
         this.calcTotals()
         this.checkApproval()
         this._snapshotBase()
+        this._saveConflict = false
+        this.saveConflictBanner = false      // 樂觀鎖基準（_lastUpdatedAt）已換成最新：衝突橫幅不再成立（所有呼叫 loadQuote 的路徑都一樣）
+        return true
       },
 
       // S5：載入完成後的畫面 q 複本（含畫面預設值、補的品項 id、算好的 tot）——複查編輯儲存時拿來判斷「哪些頂層鍵真的被改了」

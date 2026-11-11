@@ -1,9 +1,9 @@
 # 案件 更新紀錄
 
 ## (next) — 2026-11-11（feat/draft-optimistic-lock；多人同時編輯保護；只動畫面＋測試＋文件，不動 API；L1 介面不變；報價單表單 V3.41）
-- 修正（畫面）：報價單存檔撞樂觀鎖 409（`_expectedUpdatedAt` 與資料庫 `updated_at` 不符；後端本來就對草稿比對）時，頂端出現**持續橫幅**「有人在你之後也改過這份報價單…」＋「載入最新版（放棄我未存的修改）」鈕，並**暫停自動存檔**。原本只有手動「儲存草稿」會 alert；60 秒自動存檔撞 409 是**無聲失敗**（使用者以為有存、其實一直沒存進去）。橫幅由 `apiSave()` 統一設，手動存檔／自動存檔／送審共用；存檔成功或載入最新版後清除。橫幅是 `position:fixed` 貼在工具列下方（工具列本身是 fixed，放在流程裡會被頂欄蓋住按不到）。
-- 稽核（文件）：`docs/platform/WRITE-ENDPOINT-LOCK-AUDIT-T79.md`——案件模組 99 條寫入路由逐條分類（已有版本比對 6／覆蓋型缺口 15／狀態機 34／新增刪除 44）、缺口與處理、「token 選填要不要強制」的相容性評估與分階段建議。**本票沒有改 API，也沒有把 token 改強制**（待裁示）；最大的缺口是 `PATCH /material-orders`（整份覆蓋叫料清單），建議另開票。
-- 測試：`tests/test_e2e_draft_edit_conflict_2026_11_11.py`（真瀏覽器，兩個人開同一張草稿：B 先存→A 手動存檔得到 409＋alert＋橫幅、資料庫仍是 B 的內容→「載入最新版」後橫幅消失、再改再存兩人修改都在；自動存檔撞 409＝無 alert、有橫幅、之後不再重打 PUT）；改回舊前端這兩題都紅（突變驗證）。版本帳加 V3.41。
+- 修正（畫面）：報價單存檔撞樂觀鎖 409（`_expectedUpdatedAt` 與資料庫 `updated_at` 不符；後端本來就對草稿比對）時，頂端出現**持續橫幅**「有人在你之後也改過這份報價單…」＋「載入最新版（放棄我未存的修改）」鈕，並**暫停自動存檔**。原本只有手動「儲存草稿」會 alert；60 秒自動存檔撞 409 是**無聲失敗**（使用者以為有存、其實一直沒存進去）。橫幅由 `apiSave()` 統一設（**只有既有單的 PUT 撞 409 才設**；新單 POST 的 409 是單號衝突，走原本帶後端原因的錯誤訊息），手動存檔／自動存檔／送審共用；存檔成功或 `loadQuote()` 成功（任何路徑，基準已換新）後清除；橫幅上的「載入最新版」鈕在載入失敗時不清橫幅也不清 `isDirty`（`loadQuote()` 改回傳 true／false）。橫幅放在 `.form-left` 流程第一個、`position:sticky` 貼在工具列下方（會把內容往下推，不蓋下面的通知條；先前用 fixed 在 1024／390 寬會蓋住「看說明／我知道了」）；文案不指定是誰改的（可能是自己在別處的操作，例如超管狀態下拉的 PATCH 不會更新畫面的版本基準）。
+- 稽核（文件）：`docs/platform/WRITE-ENDPOINT-LOCK-AUDIT-T79.md`——案件模組 99 條寫入路由逐條分類（已有版本比對 6／覆蓋型缺口 17／狀態機 33／新增刪除 43）、缺口與處理、「token 選填要不要強制」的相容性評估與分階段建議。**本票沒有改 API，也沒有把 token 改強制**（待裁示）；最大的缺口是 `PATCH /material-orders`（整份覆蓋叫料清單），建議另開票。
+- 測試：`tests/test_e2e_draft_edit_conflict_2026_11_11.py`（真瀏覽器，7 題：兩個人開同一張草稿，B 先存→A 手動存檔得到 409＋alert＋橫幅、資料庫仍是 B 的內容→「載入最新版」後橫幅消失、再改再存兩人修改都在；自動存檔撞 409＝無 alert、有橫幅、之後不再重打 PUT；橫幅在 1440／1024／390 寬都在流程內、不壓下一個元素；新單 POST 409 不出橫幅；載入最新版失敗保留橫幅與 isDirty、其他路徑 loadQuote 成功會清橫幅）；舊前端、改回 fixed、拿掉 `!isNew`、拿掉失敗保護，各自讓對應題目紅（突變驗證）。K 審：hichan-11。版本帳加 V3.41。
 
 ## 1.0.213 — 2026-11-11（refactor/quotations-stages-split；案件階段端點拆檔：純搬移，零行為變更；L1 介面不變）
 - 重構（後端）：案件階段端點（`/api/quotations/{quote_no}/stages…`、`/api/quotations/stage-templates/preview` 共 14 條路由，含 `_apply_stage_template_write`、`_would_create_cycle`）自 `api/quotations.py` 逐字搬到新檔 `api/quotation_stages.py`；路由路徑、函式名稱、驗證、回應形狀都不變，`modules/case/__init__.py` 的 routers 清單在 `quotations` 之後加掛新 router。階段表的讀寫 helper（`_serialize_stage`／`_get_stage_row`／`_sync_stages_to_json`）仍留在 `api/quotations.py`。
