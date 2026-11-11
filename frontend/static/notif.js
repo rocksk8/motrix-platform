@@ -27,7 +27,8 @@
   // ── 授權閘門（helpers/licensing.py；T80）──────────────────────────────────────
   // ① 402 license_required ⇒ 導向「授權無法使用」說明頁（不是系統壞了；頁上講原因與找誰）。說明頁與登入頁本身不導。
   // ② 回應標頭 X-Motrix-License：`emergency;until=YYYY-MM-DD`（授權金鑰失效、靠緊急放行通行證撐著）／`dev_key`
-  //    （裝的是開發金鑰簽的授權）⇒ 所有頁面頂端橫幅；之後的 /api 回應沒有這個標頭 ⇒ 移除（伺服器每個 /api 回應都帶）。
+  //    （裝的是開發金鑰簽的授權）⇒ 所有頁面頂端橫幅；值 `none` ⇒ 移除橫幅。**已登入**的請求回應一定帶這個標頭（有提示＝值、沒有＝none）；
+  //    公開／未登入的回應沒有標頭 ⇒ 不動橫幅（不然呼叫一次公開端點橫幅就閃掉）。
   function _licenseBanner(value) {
     var el = document.getElementById('motrix-license-banner')
     var text = ''
@@ -62,7 +63,7 @@
     var r = await _origFetch.apply(this, arguments)
     if (_isApi(arguments) && r.status < 500) {
       try { _setupBanner(r.headers.get('X-Motrix-Company-Setup')) } catch (e) {}
-      try { _licenseBanner(r.headers.get('X-Motrix-License')) } catch (e) {}
+      try { var lh = r.headers.get('X-Motrix-License'); if (lh !== null) _licenseBanner(lh === 'none' ? '' : lh) } catch (e) {}
     }
     if (r.status === 402 && !_redirecting && _isApi(arguments)) {
       try {

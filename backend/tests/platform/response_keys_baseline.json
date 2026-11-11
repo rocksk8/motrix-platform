@@ -3411,6 +3411,7 @@
    "kind",
    "machine",
    "modules",
+   "modules_unlicensed",
    "reason",
    "valid"
   ],

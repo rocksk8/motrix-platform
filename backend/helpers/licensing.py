@@ -44,6 +44,7 @@ import binascii
 import hashlib
 import json
 import os
+import re
 import stat as _stat
 import subprocess
 import sys
@@ -486,8 +487,11 @@ def license_block_message(status):
 #   ① 通行證是**簽章過的**（與授權金鑰同一條驗章路徑、同兩把公鑰）：只有握有私鑰的簽發方做得出來，
 #      伺服器管理員自己建檔、改日期、改內容都會 bad_signature。
 #   ② `purpose` 必須是 "emergency_pass"：授權金鑰不能拿來當通行證，通行證也不是授權金鑰（缺 machine／modules ⇒ malformed）。
-#   ③ **綁客戶、不綁機器**：綁機器的話，在指紋漂移（它存在的理由）時恰好失效。改綁 `tax_id`，且必須等於
-#      **驗章通過**的那把授權金鑰裡的 tax_id（別家客戶的通行證、或沒有可信授權金鑰時，不放行）。
+#   ③ **綁被救的那把授權金鑰**：不綁目標機器「現在」的指紋（指紋漂移正是它存在的理由）。綁 `tax_id` 與 `machine`
+#      （授權金鑰裡那個值），都必須等於**驗章通過**的那把授權金鑰的值——別家客戶的、同客戶另一個安裝的通行證、
+#      或沒有可信授權金鑰時，不放行（K 審 S5）。**簽發環境**（開發／正式）也必須與那把授權金鑰相同（K 審 M2：開發私鑰
+#      不在受控保管下，正式公鑰一上線，這是唯一擋住「拿開發金鑰簽通行證」的東西）。擋不住的：把授權金鑰與通行證兩個檔
+#      一起複製到別台——那台指紋也對不上，所以仍由 14 天上限兜底。
 #   ④ **只救兩種狀況**：`machine_mismatch`（換硬體）、`expired`（續約作業來不及）。沒有金鑰／損毀／簽章不符
 #      都不放行——那是「重新簽一把授權」的事，不是通行證該蓋掉的事。
 #   ⑤ **有期限且上限寫死在驗證端**：`issued ≤ 今天 ≤ expires`，且 `expires − issued ≤ EMERGENCY_MAX_DAYS`。
@@ -496,14 +500,21 @@ def license_block_message(status):
 #      （前端橫幅）、`GET /api/license/status` 的 `emergency` 欄位講出生效或不生效的原因。
 #
 # 位置：與授權金鑰同一個資料夾的 `license_emergency.key`（`emergency_path()`，跟著 `LICENSE_PATH` 走，測試換得掉）。
-# 簽發：`python tools/issue_license.py emergency --tax-id <統編> --days 7 --reason "…" --out license_emergency.key`。
+# 簽發：`python tools/issue_license.py emergency --license <被救的 license.key> --days 7 --reason "…" --out license_emergency.key`。
+# 生效時間：業務 API 下一個請求就恢復；**但模組是否載入只在開機時決定一次**（core/loader.py）：服務若是在授權失效時
+# 啟動的（換主機板後重開機最常見），被擋的模組要在放好通行證之後**重啟服務**才會載入（`/api/license/status` 的
+# `modules_unlicensed` 列出它們；K 審 M1）。
+# 〔上正式金鑰時的另一張票（K 審 nit）：`_PUBKEY_PROD` 填入之後，部署包不要再帶 `_PUBKEY_DEV`（build／git archive 那一步），
+#   不要靠「這台是不是正式機」的猜測——那是唯一可靠的訊號。〕
 EMERGENCY_FILE_NAME = "license_emergency.key"
 EMERGENCY_PURPOSE = "emergency_pass"
 EMERGENCY_MAX_DAYS = 14                                   # 驗證端的硬上限（簽發端再長也只認這麼久）
 EMERGENCY_MAX_BYTES = 8192                                # 通行證是小檔；超過就不讀
 EMERGENCY_COVERS = frozenset({"machine_mismatch", "expired"})
 LICENSE_HEADER = "X-Motrix-License"                       # 前端橫幅用（notif.js）
-_EMERGENCY_REQUIRED = ("purpose", "tax_id", "issued", "expires", "reason")
+_EMERGENCY_REQUIRED = ("purpose", "tax_id", "machine", "issued", "expires", "reason")
+# date.fromisoformat（py3.11+）也收 20261111／週曆格式；通行證只收 YYYY-MM-DD
+_ISO_DATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 
 
 def emergency_path():
@@ -511,7 +522,7 @@ def emergency_path():
     return os.path.join(os.path.dirname(os.path.abspath(LICENSE_PATH)), EMERGENCY_FILE_NAME)
 
 
-def _read_small_text(path):
+def _read_small_text(path, limit=None):
     """讀一個小檔 → `(text, None)` 或 `(None, 原因)`。原因：missing／unreadable／too_big。不丟例外。"""
     try:
         st_result = os.stat(path)
@@ -519,7 +530,7 @@ def _read_small_text(path):
         return None, "missing"
     if not _stat.S_ISREG(st_result.st_mode):
         return None, "missing"
-    if st_result.st_size > EMERGENCY_MAX_BYTES:
+    if st_result.st_size > (EMERGENCY_MAX_BYTES if limit is None else limit):
         return None, "too_big"
     try:
         with open(path, "r", encoding="utf-8") as fh:
@@ -546,6 +557,8 @@ def _emergency_judge(status, token_text):
 
     issued, expires = payload.get("issued"), payload.get("expires")
     try:
+        if not (_ISO_DATE.match(issued.strip()) and _ISO_DATE.match(expires.strip())):
+            raise ValueError("not YYYY-MM-DD")
         d_issued = date.fromisoformat(issued.strip())
         d_expires = date.fromisoformat(expires.strip())
     except (AttributeError, ValueError):
@@ -564,18 +577,37 @@ def _emergency_judge(status, token_text):
     # ③④：只在授權金鑰「驗章通過、但機器不符或過期」時才有意義；綁的是那把金鑰的 tax_id。
     if not isinstance(status, dict) or status.get("reason") not in EMERGENCY_COVERS:
         return no("not_needed" if (status or {}).get("reason") == "ok" else "license_not_covered", info)
-    lic_text, err = _read_small_text(LICENSE_PATH)
-    lic_payload = _open_blob(lic_text)[0] if lic_text is not None else None
+    if not license_blocks_request(status):       # 例：永久授權過期（reason=expired 但不擋）⇒ 沒有東西要放行，不可以報「生效」
+        return no("not_needed", info)
+    # 授權金鑰讀法與 verify_license 一致（不設 8 KB 上限，否則「驗得過卻救不了」）
+    lic_text, err = _read_small_text(LICENSE_PATH, limit=1 << 30)
+    lic_payload, lic_env, _why = _open_blob(lic_text) if lic_text is not None else (None, None, None)
     if lic_payload is None:
         return no("license_untrusted", info)
-    tax = lic_payload.get("tax_id")
-    if not isinstance(tax, str) or not isinstance(payload.get("tax_id"), str) \
-            or tax.strip() == "" or tax.strip() != payload["tax_id"].strip():
+    # 簽發方環境必須相同：開發金鑰簽的通行證不能救正式金鑰的授權（反之亦然）。開發私鑰不在受控保管下，
+    # 正式公鑰一進 _PUBKEY_PROD，這一條就是唯一擋住「拿開發金鑰簽通行證」的東西（K 審 M2）。
+    if env != lic_env:
+        return no("env_mismatch", info)
+    if not _same_text(lic_payload.get("tax_id"), payload.get("tax_id"), lower=False):
         return no("tax_id_mismatch", info)
+    # 通行證也綁被救的那把授權金鑰的 machine 值：只能救「那一個安裝」，不是客戶的任何一份授權（K 審 S5）。
+    # （擋不住「同時複製授權金鑰與通行證到別台」——那台的指紋也對不上，所以仍是同一條 14 天上限在兜底。）
+    if not _same_text(lic_payload.get("machine"), payload.get("machine"), lower=True):
+        return no("machine_mismatch", info)
 
     out = dict(base, why="ok", active=True)
     out.update(info)
     return out
+
+
+def _same_text(a, b, lower):
+    """兩個欄位都是非空字串、去頭尾空白後相等（型別不對、空字串一律不相等）。"""
+    if not isinstance(a, str) or not isinstance(b, str):
+        return False
+    a, b = a.strip(), b.strip()
+    if lower:
+        a, b = a.lower(), b.lower()
+    return a != "" and a == b
 
 
 def emergency_status(status):

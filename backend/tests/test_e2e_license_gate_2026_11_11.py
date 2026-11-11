@@ -76,7 +76,7 @@ def test_emergency_pass_shows_a_banner_and_keeps_pages_usable(
     monkeypatch.setattr(lic, "machine_fingerprint", lambda: "deadbeefdeadbeef")               # 指紋漂移
     monkeypatch.setattr(lic, "_LICENSE_FILE_CACHE", None)                                      # 快取鍵不含指紋（正式機指紋是行程常數）；測試換指紋要清它
     (d / lic.EMERGENCY_FILE_NAME).write_text(lic.sign_license({
-        "purpose": lic.EMERGENCY_PURPOSE, "tax_id": "00000000", "issued": today.isoformat(),
+        "purpose": lic.EMERGENCY_PURPOSE, "tax_id": "00000000", "machine": license_test_key["machine"], "issued": today.isoformat(),
         "expires": (today + _dt.timedelta(days=5)).isoformat(), "reason": "e2e 換主機板"},
         license_test_key["priv_pem"]), encoding="utf-8")
     page.goto(f"{live_server}/pages/customers.html")

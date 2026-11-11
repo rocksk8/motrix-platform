@@ -29,6 +29,7 @@
     <p id="lr-msg">系統目前無法確認這台伺服器的使用授權，所以暫停使用。這不是系統故障，您的資料都還在。</p>
     <p class="lr-dim">請聯絡<strong>系統供應商</strong>（提供這套系統授權金鑰的廠商），並把下方的「狀態代碼」與「機器代碼」一併提供，對方才能處理。</p>
     <div class="lr-box" id="lr-emergency" hidden></div>
+    <div class="lr-box" id="lr-restart" hidden></div>
     <dl class="lr-kv" id="lr-kv"></dl>
     <div class="lr-row">
       <button type="button" class="btn btn-primary" id="lr-retry">重新檢查</button>
@@ -54,7 +55,9 @@
         token_bad_dates: '日期格式不正確', token_span_too_long: '有效期間超過上限', token_not_yet_valid: '尚未到生效日',
         token_expired: '已過期', license_not_covered: '目前的授權狀態不適用緊急放行（只適用於「機器不符」與「已到期」）',
         license_untrusted: '找不到可信的授權金鑰可以對照', tax_id_mismatch: '通行證的統一編號與授權金鑰不符',
-        token_too_big: '檔案過大', token_unreadable: '檔案讀不到', token_error: '無法判定'
+        token_too_big: '檔案過大', token_unreadable: '檔案讀不到', token_error: '無法判定',
+        env_mismatch: '通行證與授權金鑰不是同一個簽發環境（開發／正式）', machine_mismatch: '通行證綁的機器值與授權金鑰不符',
+        not_needed: '目前授權不需要通行證'
       }
       function row(k, v) {
         var dt = document.createElement('dt'); dt.textContent = k
@@ -64,6 +67,7 @@
       function render(s) {
         document.getElementById('lr-kv').textContent = ''
         var em = document.getElementById('lr-emergency'); em.hidden = true
+        document.getElementById('lr-restart').hidden = true
         var r = REASON[s.reason]
         if (r) {
           document.getElementById('lr-title').textContent = r[0]
@@ -80,15 +84,33 @@
       }
       function check() {
         fetch('/api/license/status', { headers: H })
-          .then(function (r) { return r.ok ? r.json() : null })
+          .then(function (r) {
+            if (r.status === 401) { try { localStorage.removeItem('motrix_session') } catch (e) {} ; location.replace('login.html'); return null }   // 登入已過期：回登入頁（不是留在這頁）
+            return r.ok ? r.json() : null
+          })
           .then(function (s) {
             if (!s) return
-            if (s.blocked === false || s.gate === false || (s.emergency && s.emergency.active)) { location.replace('../index.html'); return }
+            var unloaded = s.modules_unlicensed || []
+            if (s.blocked === false || s.gate === false || (s.emergency && s.emergency.active)) {
+              // 授權（或通行證）已恢復，但載入器只在開機時決定模組要不要載入：開機時被擋的模組要重啟服務才會出現。
+              if (unloaded.length) { render(s); showRestart(unloaded); return }
+              location.replace('../index.html'); return
+            }
             render(s)
           })
           .catch(function () { /* 連不上就留在這頁，按「重新檢查」再試 */ })
       }
-      document.getElementById('lr-retry').addEventListener('click', check)
+      function showRestart(keys) {
+        document.getElementById('lr-title').textContent = '授權已恢復，但有模組要重啟服務才會出現'
+        document.getElementById('lr-msg').textContent = '業務功能已經可以使用。不過服務是在授權失效的狀態下啟動的，下列模組當時沒有載入，需要重新啟動服務才會載入。'
+        var box = document.getElementById('lr-restart'); box.hidden = false
+        box.textContent = '尚未載入的模組：' + keys.join('、') + '。請聯絡系統管理員重新啟動服務；在那之前，這些模組的頁面會找不到。'
+        var go = document.getElementById('lr-retry'); go.textContent = '先進入系統'; go.dataset.mode = 'enter'
+      }
+      document.getElementById('lr-retry').addEventListener('click', function () {
+        if (this.dataset.mode === 'enter') { location.replace('../index.html'); return }
+        check()
+      })
       document.getElementById('lr-logout').addEventListener('click', function () {
         fetch('/api/auth/logout', { method: 'POST', headers: H }).finally(function () {
           try { localStorage.removeItem('motrix_session') } catch (e) {}

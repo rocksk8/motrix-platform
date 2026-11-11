@@ -513,15 +513,17 @@ async def license_gate_middleware(request: Request, call_next):
                 "code":   "license_required",
             },
         )
+    # 稽核寫入丟背景執行緒（background=True）：這裡是 async 中介層，同步 SQLite 寫入遇到別人握著寫鎖會卡全站。
     if emergency:
-        license_alerts.emergency_in_use(emergency)       # log＋稽核，每個通行證每天一次
+        license_alerts.emergency_in_use(emergency, background=True)       # log＋稽核，每個通行證每天一次
     else:
-        license_alerts.dev_key_in_use(status)            # env=dev：log＋稽核，每天一次
+        license_alerts.dev_key_in_use(status, background=True)            # env=dev：log＋稽核，每天一次
     response = await call_next(request)
-    # 前端橫幅（notif.js）：**每個** /api 回應都帶（含豁免／公開端點），否則橫幅會在下一個沒帶標頭的回應被移除而閃爍。
-    banner = license_core.license_banner(status, emergency)
-    if banner:
-        response.headers[license_core.LICENSE_HEADER] = banner
+    # 前端橫幅（notif.js）：**只在已登入的請求**帶標頭（K 審 S4：公開／未登入的呼叫者不該得知「這台靠通行證／開發金鑰在跑」）。
+    # 已登入的回應一定帶：有東西要提示 ⇒ 值；沒有 ⇒ `none`（前端據此移除橫幅）；沒有標頭 ⇒ 前端不動橫幅
+    # （公開端點的回應沒有標頭，不可以讓橫幅閃掉）。
+    if getattr(request.state, "authed", False):
+        response.headers[license_core.LICENSE_HEADER] = license_core.license_banner(status, emergency) or "none"
     return response
 
 
@@ -598,6 +600,7 @@ async def auth_middleware(request: Request, call_next):
         conn.close()
     if not row:
         return JSONResponse(status_code=401, content={"detail": "Session 已過期，請重新登入"})
+    request.state.authed = True      # 授權閘門的橫幅標頭只給已登入的請求（license_gate_middleware；K 審 S4）
 
     is_high_priv = row["role"] in ("superadmin", "admin")
     idle_limit = _ADMIN_IDLE_TIMEOUT_SECONDS if is_high_priv else _IDLE_TIMEOUT_SECONDS
