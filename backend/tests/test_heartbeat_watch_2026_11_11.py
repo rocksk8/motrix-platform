@@ -382,3 +382,32 @@ def test_job_failed_loopback_attempt_is_not_a_warning(monkeypatch, tmp_path):
     assert mod._http_get("http://127.0.0.1:%d/api/ping" % port) is False
     assert got and all(m.startswith("DEBUG") for m in got), got
     sys.modules.pop("heartbeat_job", None)
+
+
+def test_job_state_replace_retries_then_gives_up_cleanly_when_destination_is_held_open(monkeypatch, tmp_path):
+    """K 審 N1 補充：Windows 上目的檔被別人開著讀 ⇒ os.replace PermissionError。
+    重試後成功＝寫入成功；一直失敗＝不拋例外、不留 .tmp、只記 WARNING（沒有 traceback）。"""
+    mod = _job(monkeypatch, tmp_path)
+    monkeypatch.setattr(mod.time, "sleep", lambda s: None)
+    real = mod.os.replace
+    calls = []
+
+    def flaky(src, dst):
+        calls.append(1)
+        if len(calls) < 3:
+            raise PermissionError(5, "held open")
+        return real(src, dst)
+    monkeypatch.setattr(mod.os, "replace", flaky)
+    mod._save_state("ok", NOW, {}, "https")
+    assert len(calls) == 3 and json.loads(Path(mod._STATE_PATH).read_text(encoding="utf-8"))["status"] == "ok"
+
+    def always(src, dst):
+        raise PermissionError(5, "held open")
+    monkeypatch.setattr(mod.os, "replace", always)
+    warns, excs = [], []
+    monkeypatch.setattr(mod.logger, "warning", lambda m, *a, **k: warns.append(m))
+    monkeypatch.setattr(mod.logger, "exception", lambda m, *a, **k: excs.append(m))
+    mod._save_state("local_down", NOW, {}, "")
+    assert warns and not excs, "只記 WARNING、不記 traceback"
+    assert not Path(mod._STATE_PATH + ".tmp").exists(), "最後仍失敗要刪暫存檔"
+    sys.modules.pop("heartbeat_job", None)

@@ -16,6 +16,7 @@ import logging
 import logging.handlers
 import os
 import ssl
+import time
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -88,6 +89,24 @@ def _load_state() -> dict:
         return {}
 
 
+def _replace_with_retry(src: str, dst: str, tries: int = 3, delay: float = 0.05) -> None:
+    """os.replace 在 Windows 上，目的檔剛好被別的 handle 開著讀（app 的每日檢查／狀態快照）時會 PermissionError；
+    等一下重試幾次。最後仍失敗 ⇒ 刪掉暫存檔（不留殘檔）、記 WARNING（無 traceback）後放棄：狀態沒寫進去，
+    `_should_log` 下一輪仍為 True ⇒ 5 分鐘內自然重寫（K 審 N1 補充）。"""
+    for i in range(tries):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if i + 1 < tries:
+                time.sleep(delay)
+    try:
+        os.remove(src)
+    except OSError:
+        pass
+    logger.warning("heartbeat_state.json 被占用，這一輪沒寫入（下一輪會重試）")
+
+
 def _save_state(status: str, now: datetime, prev: dict = None, scheme: str = None) -> None:
     """寫狀態檔（只在「該記 log」的那幾次寫：狀態改變／正常每天第一筆／壞的持續每小時一筆——寫入量不變）。
     欄位給 helpers/heartbeat_status.py 與 tools/prod_status_snapshot.py 讀：
@@ -105,7 +124,7 @@ def _save_state(status: str, now: datetime, prev: dict = None, scheme: str = Non
                        "since": since, "seen_at": iso, "scheme": scheme or "",
                        "local_ok_at": iso if local_ok else prev.get("local_ok_at", ""),
                        "ext_ok_at": iso if status == "ok" else prev.get("ext_ok_at", "")}, f)
-        os.replace(tmp, _STATE_PATH)
+        _replace_with_retry(tmp, _STATE_PATH)
     except Exception:
         logger.exception("failed to write heartbeat_state.json")
 
