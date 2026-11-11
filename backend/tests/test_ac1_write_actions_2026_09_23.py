@@ -125,7 +125,7 @@ _EMPTY_REASONS = ("唯讀", "唯讀頁", "沒有寫入", "不需要", "純顯示
 
 
 def _pages():
-    # 2026-11-11：頁面位置一律經 source_tree（frontend/pages ∪ modules/*/pages），不自己 glob。
+    # 2026-11-11：頁面位置一律經 source_tree（原 frontend 的 pages 目錄∪modules/*/pages），不自己 glob。
     return source_tree.page_files()
 
 
