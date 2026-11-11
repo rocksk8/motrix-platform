@@ -100,6 +100,10 @@
     "POST /api/auth/totp/setup": {
       "module": "L1",
       "excluded": "非上傳：回應含 TOTP QR 的 data:image，掃描器的字面值誤判"
+    },
+    "POST /api/line/binding/start": {
+      "module": "L1",
+      "excluded": "非上傳：回應含 LINE 綁定授權網址的 data:image QR 圖，掃描器的字面值誤判（T79）"
     }
   }
 }

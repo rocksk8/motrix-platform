@@ -382,6 +382,8 @@
   "routers/system.py::delete_work_log::DELETE /api/work-logs/{wid}": "p2: 其他業務資料（P2 評估）",
   "routers/system.py::delete_work_log_photo::DELETE /api/work-logs/{wid}/photos/{photo_id}": "p2: 附件單檔刪除（單據本身進暫存區時附件跟著；單檔刪除之後評估）",
   "routers/system.py::edit_presence_release::DELETE /api/edit-presence": "exempt: 編輯中提示（暫態，無使用者資料）",
-  "routers/system.py::reset_branding_asset::DELETE /api/settings/branding/{kind}": "exempt: 品牌圖設定（可重新上傳，非單據）"
+  "routers/system.py::reset_branding_asset::DELETE /api/settings/branding/{kind}": "exempt: 品牌圖設定（可重新上傳，非單據）",
+  "routers/system.py::unlink_line_of::DELETE /api/line/binding/{username}": "exempt: 解除 LINE 綁定（綁定紀錄可重新綁定；有稽核；非單據）",
+  "routers/system.py::unlink_own_line::DELETE /api/line/binding": "exempt: 解除自己的 LINE 綁定（可重新綁定；有稽核；非單據）"
  }
 }

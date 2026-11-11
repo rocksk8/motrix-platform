@@ -149,7 +149,8 @@ def test_settings_get_masks_put_keeps_and_replaces(client, make_user, ln):
     # 遮罩值／空值 ＝ 保留原 token
     assert client.put("/api/settings/line-notify", headers=sa, json={"enabled": False, "channel_access_token": "••••••••"}).status_code == 200
     from helpers.settings import _get_setting
-    assert _get_setting("line_notify") == {"enabled": False, "channel_access_token": TOKEN, "public_base_url": "", "include_links": False}
+    assert _get_setting("line_notify") == {"enabled": False, "channel_access_token": TOKEN, "public_base_url": "", "include_links": False,
+                                                "login_channel_id": "", "login_channel_secret": ""}
     assert client.put("/api/settings/line-notify", headers=sa, json={"enabled": True}).status_code == 200
     assert _get_setting("line_notify")["channel_access_token"] == TOKEN
     # 真的新值 ＝ 取代
