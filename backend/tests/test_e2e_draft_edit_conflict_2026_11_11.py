@@ -106,7 +106,7 @@ def test_second_editor_gets_a_visible_conflict_on_save_and_can_reload_then_save(
     # 載入最新版：看到 B 的內容、橫幅消失；再改再存成功，兩人的修改都在
     page_a.click('[data-testid="qf-save-conflict-reload"]')
     page_a.wait_for_function(f"() => !{D}.saveConflictBanner && {D}.q.projectName === 'B改的專案'", timeout=10000)
-    assert not page_a.is_visible('[data-testid="qf-save-conflict"]')
+    page_a.wait_for_selector('[data-testid="qf-save-conflict"]', state="hidden", timeout=5000)   # 狀態已變 ≠ DOM 已更新：Alpine x-if 晚一個影格；立即 assert is_visible() 會隨機紅（稽核 H10-M1）
     assert page_a.input_value(PROJECT) == "B改的專案"
     _type(page_a, CUSTOMER, "A改的客戶")
     _save_draft(page_a)
@@ -220,8 +220,8 @@ def test_failed_reload_keeps_banner_and_dirty_and_other_loads_clear_the_banner(l
     page_a.wait_for_timeout(800)
     st = page_a.evaluate(f"() => ({{banner: {D}.saveConflictBanner, dirty: {D}.isDirty, cust: {D}.q.customerName}})")
     assert st["banner"] is True and st["dirty"] is True and st["cust"] == "A改的客戶", st
-    assert page_a.is_visible('[data-testid="qf-save-conflict"]')
+    page_a.wait_for_selector('[data-testid="qf-save-conflict"]', state="visible", timeout=5000)   # 同上（稽核 H10-M1）
     fail["on"] = False
     page_a.evaluate(f"() => {D}.loadQuote()")                       # 例如簽核／回簽後的重載：不經橫幅上的按鈕
     page_a.wait_for_function(f"() => !{D}.saveConflictBanner && {D}.q.projectName === 'B改的專案'", timeout=10000)
-    assert not page_a.is_visible('[data-testid="qf-save-conflict"]')
+    page_a.wait_for_selector('[data-testid="qf-save-conflict"]', state="hidden", timeout=5000)   # 狀態已變 ≠ DOM 已更新：Alpine x-if 晚一個影格；立即 assert is_visible() 會隨機紅（稽核 H10-M1）
