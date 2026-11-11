@@ -54,7 +54,19 @@
     }
     .mig-body { flex: 1; min-width: 0; }
     .mig-name { font-size: 13px; font-weight: 600; color: var(--text-main); font-family: 'LINE Seed TW_OTF', sans-serif; }
-    .mig-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .mig-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; overflow-wrap: anywhere; }
+    .mig-name { overflow-wrap: anywhere; }
+    .mig-more { display: none; }
+    /* ── 手機／平板直式：118 筆全展開＝頁高 4 萬 px，每筆說明動輒 20 行 ──
+       預設只列最近 10 筆、說明截 4 行；點一筆展開全文，「顯示全部」才列出其餘。長英文／路徑不斷行會把頁面撐寬 → 一律可斷行。 */
+    @media (max-width: 1023px) {
+      .schema-main { padding: 20px 16px; }
+      .schema-summary { padding: 16px; gap: 16px 24px; }
+      .migration-list:not(.show-all) .mig-item:nth-child(n+11) { display: none; }
+      .mig-item { cursor: pointer; gap: 10px; }
+      .mig-item:not(.open) .mig-desc { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+      .mig-more { display: block; width: 100%; min-height: 44px; margin-top: 12px; justify-content: center; }
+    }
   </style>
 </head>
 <body x-data="schemaStatusApp()" x-init="init()" x-cloak>
@@ -98,9 +110,9 @@
 
     <div x-show="loading" style="padding:48px;text-align:center;color:var(--text-dim);font-size:13px">載入中…</div>
 
-    <div class="migration-list" x-show="!loading">
+    <div class="migration-list" :class="{'show-all': showAll}" x-show="!loading">
       <template x-for="m in migrationsDesc" :key="m.version">
-        <div class="mig-item">
+        <div class="mig-item" x-data="{open:false}" :class="{open}" @click="open = !open">
           <div class="mig-badge" x-text="'v' + m.version"></div>
           <div class="mig-body">
             <div class="mig-name" x-text="m.name"></div>
@@ -109,6 +121,8 @@
         </div>
       </template>
     </div>
+    <button type="button" class="mig-more btn btn-ghost" x-show="!loading && migrationsDesc.length > 10" @click="showAll = !showAll"
+            x-text="showAll ? '只看最近 10 筆' : '顯示全部 ' + migrationsDesc.length + ' 筆'"></button>
   </main>
 
   <script src="../static/notif.js"></script>
@@ -119,6 +133,7 @@
       session: {},
       data: {},
       loading: false,
+      showAll: false,        // 手機版：預設只列最近 10 筆 migration（共 100+ 筆、頁高 2 萬 px 以上）
 
       // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，
       //    而 body 上那個明著呼叫初始化的屬性會再叫一次 ⇒ **跑兩遍**。
