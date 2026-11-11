@@ -483,7 +483,7 @@ def _dev_license(license_test_key, dev_priv):
                              "kind": lic.LICENSE_KIND_SUBSCRIPTION}, dev_priv)
 
 
-def test_m2_a_dev_signed_pass_cannot_rescue_a_prod_signed_license(client, hdr, box, drifted, monkeypatch):
+def test_kfix_m2_a_dev_signed_pass_cannot_rescue_a_prod_signed_license(client, hdr, box, drifted, monkeypatch):
     """M2：通行證的簽發環境必須等於授權金鑰的環境。開發私鑰不在受控保管下，正式公鑰一上線，這是唯一擋住它的東西。"""
     dev_priv, dev_pub = _other_key()
     monkeypatch.setattr(lic, "_PUBKEY_DEV", dev_pub)
@@ -493,7 +493,7 @@ def test_m2_a_dev_signed_pass_cannot_rescue_a_prod_signed_license(client, hdr, b
     _assert_still_blocked(client, hdr, "env_mismatch")
 
 
-def test_m2_a_prod_signed_pass_cannot_rescue_a_dev_signed_license(client, hdr, box, drifted, monkeypatch, license_test_key):
+def test_kfix_m2_a_prod_signed_pass_cannot_rescue_a_dev_signed_license(client, hdr, box, drifted, monkeypatch, license_test_key):
     dev_priv, dev_pub = _other_key()
     monkeypatch.setattr(lic, "_PUBKEY_DEV", dev_pub)
     box.license.write_text(_dev_license(license_test_key, dev_priv), encoding="utf-8")
@@ -502,7 +502,7 @@ def test_m2_a_prod_signed_pass_cannot_rescue_a_dev_signed_license(client, hdr, b
     _assert_still_blocked(client, hdr, "env_mismatch")
 
 
-def test_m2_same_environment_is_honoured_dev_with_dev(client, hdr, box, drifted, monkeypatch, license_test_key):
+def test_kfix_m2_same_environment_is_honoured_dev_with_dev(client, hdr, box, drifted, monkeypatch, license_test_key):
     """正對照：同為 env=dev 的授權與通行證照常放行（環境相同就不是問題）。"""
     dev_priv, dev_pub = _other_key()
     monkeypatch.setattr(lic, "_PUBKEY_DEV", dev_pub)
@@ -511,14 +511,14 @@ def test_m2_same_environment_is_honoured_dev_with_dev(client, hdr, box, drifted,
     assert client.get(BUSINESS_API, headers=hdr).status_code == 200
 
 
-def test_s5_a_pass_is_bound_to_the_rescued_licenses_machine_value(client, hdr, box, drifted):
+def test_kfix_s5_a_pass_is_bound_to_the_rescued_licenses_machine_value(client, hdr, box, drifted):
     """S5：同客戶統編、但被救的是『另一個安裝』的授權（machine 值不同）⇒ 不放行。"""
     box.install_license()
     box.token.write_text(box.pass_blob(machine="0000111122223333"), encoding="utf-8")
     _assert_still_blocked(client, hdr, "machine_mismatch")
 
 
-def test_s5_a_pass_without_a_machine_value_is_malformed(client, hdr, box, drifted, license_test_key):
+def test_kfix_s5_a_pass_without_a_machine_value_is_malformed(client, hdr, box, drifted, license_test_key):
     import base64
     box.install_license()
     payload = json.loads(base64.b64decode(box.pass_blob()))
@@ -529,7 +529,7 @@ def test_s5_a_pass_without_a_machine_value_is_malformed(client, hdr, box, drifte
     _assert_still_blocked(client, hdr, "token_malformed")
 
 
-def test_s2_a_pass_is_not_reported_active_when_nothing_is_blocked(client, hdr, box):
+def test_kfix_s2_a_pass_is_not_reported_active_when_nothing_is_blocked(client, hdr, box):
     """S2：永久授權過期（reason=expired 但不擋）＋有效通行證 ⇒ 通行證不是『生效』，狀態端點不可以這樣講。"""
     box.install_license(kind=lic.LICENSE_KIND_PERPETUAL, expires=(_dt.date.today() - _dt.timedelta(days=30)).isoformat())
     box.install_pass()
@@ -559,7 +559,7 @@ def test_nit_pass_dates_must_be_strict_yyyy_mm_dd(client, hdr, box, drifted, lic
     _assert_still_blocked(client, hdr, "token_bad_dates")
 
 
-def test_s4_unauthenticated_callers_never_see_the_license_banner_header(client, hdr, box, drifted):
+def test_kfix_s4_unauthenticated_callers_never_see_the_license_banner_header(client, hdr, box, drifted):
     box.install_license()
     box.install_pass()
     for path in ("/api/ping", "/api/system/branding/favicon"):
@@ -569,7 +569,7 @@ def test_s4_unauthenticated_callers_never_see_the_license_banner_header(client, 
     assert client.get(BUSINESS_API, headers=hdr).headers.get(lic.LICENSE_HEADER, "").startswith("emergency")
 
 
-def test_s1_the_alert_is_written_off_the_event_loop(client, hdr, box, drifted, monkeypatch):
+def test_kfix_s1_the_alert_is_written_off_the_event_loop(client, hdr, box, drifted, monkeypatch):
     """S1：中介層丟背景執行緒寫稽核（同步 SQLite 在事件迴圈裡遇到寫鎖會卡全站）；flush 之後確實寫進去。"""
     import threading
     box.install_license()
@@ -587,7 +587,7 @@ def test_s1_the_alert_is_written_off_the_event_loop(client, hdr, box, drifted, m
     assert [a for a, _ in _audit_rows()] == ["license.emergency_pass"]
 
 
-def test_s1_the_audit_goes_to_the_main_db_even_when_the_request_is_a_demo_session(client):
+def test_kfix_s1_the_audit_goes_to_the_main_db_even_when_the_request_is_a_demo_session(client):
     """S1：示範帳號碰巧是當天第一個請求時，授權告警不可以寫進示範庫。"""
     import db
     db.set_demo_mode(True)
@@ -598,7 +598,7 @@ def test_s1_the_audit_goes_to_the_main_db_even_when_the_request_is_a_demo_sessio
     assert [a for a, _ in _audit_rows()] == ["license.emergency_pass"]
 
 
-def test_s6_status_endpoint_does_not_retry_an_unreadable_fingerprint_every_call(client, hdr, monkeypatch):
+def test_kfix_s6_status_endpoint_does_not_retry_an_unreadable_fingerprint_every_call(client, hdr, monkeypatch):
     """S6：指紋讀不到時 machine_fingerprint() 不快取（每次都跑硬體查詢）；狀態端點被前端反覆呼叫，不可以每次都打。"""
     import routers.licensing as rl
     calls = []
@@ -615,7 +615,7 @@ def test_s6_status_endpoint_does_not_retry_an_unreadable_fingerprint_every_call(
     assert len(calls) <= 2, calls         # 端點自己至多 1 次、verify_license 快取未命中至多 1 次；絕不是每次呼叫都來一次
 
 
-def test_m1_modules_skipped_at_start_stay_unloaded_until_a_restart(client, hdr, box, drifted):
+def test_kfix_m1_modules_skipped_at_start_stay_unloaded_until_a_restart(client, hdr, box, drifted):
     """M1（如實記下行為）：載入器只在開機時決定模組要不要載入。開機時授權被擋（還沒有通行證）⇒ 模組登記為 unlicensed；
     之後才放通行證 ⇒ 業務 API 立刻恢復，但那些模組**沒有**變成已載入——要重啟。狀態端點要講出有哪些模組在等重啟。"""
     from core import registry
