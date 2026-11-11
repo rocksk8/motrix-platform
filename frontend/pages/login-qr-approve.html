@@ -138,6 +138,17 @@
     }
     .status-box.ok { color: #4ADE80; }
     .status-box.bad { color: #F87171; }
+
+    /* ── 這頁就是給手機掃 QR 用的（2026-11-12）：輸入 16px（iOS 聚焦不自動放大）、核准鈕 52px、提示字／說明對比拉高 ── */
+    .form-input::placeholder { color: #7A7A7A; }
+    .card-sub { color: #8A8A8A; line-height: 1.7; }
+    @media (max-width: 767px) {
+      .form-input { font-size: 16px; min-height: 48px; padding: 12px 14px; }
+      .btn-login { min-height: 52px; font-size: 16px; }
+      .card-title { font-size: 20px; }
+      .card-sub { font-size: 14px; }
+      .status-box { font-size: 15px; line-height: 1.8; }
+    }
   </style>
 </head>
 <!-- `data-no-topbar`：**未登入頁**，本來就不該有頂欄（它要顯示使用者身分

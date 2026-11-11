@@ -34,7 +34,34 @@
     .ms-ok { color: var(--success); font-size: 12px }
     .ms-note { max-width: 1200px; margin-top: 16px; padding: 12px 16px; border-radius: 8px; background: #EFF6FF;
       border: 1px solid #BFDBFE; color: #1E3A8A; font-size: 13px; line-height: 1.7 }
-    @media (max-width: 767px) { .ms-main { margin-left: 0; padding: 20px 16px } }
+    @media (max-width: 767px) {
+      .ms-main { margin-left: 0; padding: 20px 16px }
+      .ms-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch }
+      .ms-tab { flex-shrink: 0; white-space: nowrap; min-height: 44px; padding: 8px 16px }
+      .ms-card { overflow: visible; border: none; background: none }
+      /* 每種信件一張卡：名稱＞（信件／行事曆開關並排）＞影響與建議＞收件人設定＞儲存 */
+      .ms-t tr { gap: 8px 14px }
+      .ms-t td:nth-child(1) { order: 1; flex: 1 0 100% }
+      .ms-t td:nth-child(1) > div:first-child { font-size: 16px; font-weight: 700 }
+      .ms-t td:nth-child(4) { order: 2; flex: 1 0 100%; font-size: 12px; color: var(--text-secondary) }
+      .ms-t td.ms-cell { display: flex !important; align-items: center; gap: 8px; text-align: left; white-space: normal; min-width: 0; min-height: 44px; order: 3; flex: 1 1 40% }
+      .ms-t td.ms-cell::before { white-space: nowrap; flex-shrink: 0 }
+      .ms-t td.ms-cell:nth-child(2)::before { content: '信件'; font-size: 13px; color: var(--text-secondary) }
+      .ms-t td.ms-cell:nth-child(3)::before { content: '行事曆'; font-size: 13px; color: var(--text-secondary) }
+      .ms-t td.ms-cell .ms-sub { max-width: none !important }
+      .ms-cell input { width: 28px; height: 28px }
+      .ms-t td:nth-child(5) { order: 4; flex: 1 0 100%; font-size: 13px }
+      .ms-t td:nth-child(5)::before { content: '預設收件人　'; color: var(--text-dim); font-size: 12px }
+      .ms-t td:nth-child(5) > div { display: inline }
+      .ms-t td:nth-child(6) { order: 5; flex: 1 0 100%; background: #FAFAF8 !important; padding: 8px 10px !important; border-radius: 8px }
+      .ms-t td:nth-child(7) { order: 6; flex: 1 0 100%; min-width: 0 !important }
+      .ms-t td:nth-child(7)::before { content: '收件人設定'; display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px }
+      .ms-t td:nth-child(8) { order: 7; flex: 1 0 100%; white-space: normal !important }
+      .ms-t td:nth-child(8) .btn { width: 100%; min-height: 44px; justify-content: center }
+      .ms-sel, .ms-in { font-size: 16px; min-height: 44px; width: 100%; box-sizing: border-box; padding: 8px 10px }
+      .ms-chip { padding: 8px 14px; font-size: 14px; min-height: 36px; box-sizing: border-box; display: inline-flex; align-items: center }
+      .ms-chips { gap: 8px }
+    }
   </style>
 </head>
 <body x-data="mailSettingsPage()" x-init="init()" x-cloak>
@@ -65,7 +92,7 @@
     <div class="ms-bad" x-show="errMsg" x-text="errMsg" style="margin-top:12px" data-testid="ms-err"></div>
 
     <div class="ms-card">
-      <table class="ms-table">
+      <table class="ms-table m-cards ms-t">
         <thead><tr><th>信件類型</th><th class="ms-cell">信件</th><th class="ms-cell">行事曆</th><th>分類</th><th>預設收件人</th><th>影響／建議處理</th><th style="min-width:280px">收件人設定</th><th></th></tr></thead>
         <tbody>
           <template x-for="t in shown" :key="t.key">

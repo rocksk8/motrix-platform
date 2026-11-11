@@ -53,7 +53,22 @@
        這裡的面板底色與提示條 token 無條件固定成淺色值（淺色主題下本來就是這些值），所以不需要寫深色選擇器；設計器元件有自己的色票，不能被這裡覆蓋。 */
     .et-err, .et-ok { --tone-danger-fg: #B91C1C; --tone-danger-bg: #FEF2F2; --tone-danger-border: #FECACA;
       --tone-info-fg: #1D4ED8; --tone-info-bg: #EEF2FF; --tone-info-border: #BFDBFE; }
-    @media (max-width: 720px) { .et-main { margin-left: 0; padding: 20px 16px 60px; } }
+    @media (max-width: 767px) {
+      .et-main { margin-left: 0; padding: 20px 16px 60px; }
+      .et-t-types td:nth-child(2) { order: -2; flex: 1 0 100%; font-size: 16px; font-weight: 600 }
+      .et-t-types td:nth-child(1) { order: -1; flex: 1 0 100%; color: var(--text-dim); font-size: 12px }
+      .et-t-types td:nth-child(3)::before { content: '單號前綴 '; color: var(--text-dim); font-size: 12px; font-family: var(--font-zh) }
+      .et-t-types td:nth-child(4)::before { content: '進出納 '; color: var(--text-dim); font-size: 12px }
+      .et-t-types td:nth-child(5) { flex: 1 0 100%; color: var(--text-secondary); font-size: 12px }
+      .et-t-types td:nth-child(7) { margin-left: auto }
+      .et-t-types .btn, .et-t-share .btn { min-height: 44px; padding: 8px 18px }
+      .et-t-share td:nth-child(1) { flex: 1 0 100%; color: var(--text-dim); font-size: 12px }
+      .et-t-share td:nth-child(2) { flex: 1 0 100%; font-size: 15px; font-weight: 600 }
+      .et-t-share td:nth-child(3)::before { content: '我的：'; color: var(--text-dim); font-size: 12px }
+      .et-t-share td:nth-child(4)::before { content: '出貨範本：'; color: var(--text-dim); font-size: 12px }
+      .et-t-share td:nth-child(5) { margin-left: auto }
+      .et-tbl input[type="text"], .et-tbl select { min-width: 120px }
+    }
   </style>
 </head>
 <body data-no-sys-rail x-data="expenseTypesPage()" x-init="init()" x-cloak>
@@ -92,7 +107,7 @@
         </div>
         <div x-show="refreshOpen" style="margin-top:8px">
           <div class="et-sub">「採用出貨的」只改這個畫面上的草稿，要按「儲存草稿」才寫入、按「發布」才生效；「保留我的」只是這次不再列出。已開出的單據固定使用開單當時的版本。</div>
-          <table class="data-table" style="width:100%;margin-top:6px">
+          <table class="data-table m-cards et-t-share" style="width:100%;margin-top:6px">
             <thead><tr><th>類別</th><th>項目</th><th>我的</th><th>出貨範本</th><th></th></tr></thead>
             <tbody>
               <template x-for="(it, ri) in refreshList" :key="it.id">
@@ -117,7 +132,7 @@
         <div class="et-sub" x-show="loading">載入中…</div>
         <div class="et-sub" data-testid="et-empty" x-show="!loading && rows.length===0">還沒有任何類型。按「新增類型」建立第一個。</div>
         <div class="et-scroll" x-show="rows.length>0">
-          <table class="data-table" style="width:100%">
+          <table class="data-table m-cards et-t-types" style="width:100%">
             <thead><tr><th>代碼</th><th>名稱</th><th>單號前綴</th><th>進出納</th><th>版本</th><th>狀態</th><th></th></tr></thead>
             <tbody>
               <template x-for="r in rows" :key="r.key">
@@ -182,7 +197,7 @@
               <button class="btn" data-testid="et-add-blank" @click="addBlank()">＋ 自訂欄位</button>
             </div>
             <div class="et-scroll">
-              <table class="et-tbl" data-testid="et-fields">
+              <table class="et-tbl m-scroll" data-testid="et-fields">
                 <thead><tr><th>代碼</th><th>顯示名稱</th><th>型別</th><th>必填</th><th>預填鎖定</th><th>僅出納可改</th><th>預設</th><th>選項／對象／公式</th><th></th></tr></thead>
                 <tbody>
                   <template x-for="(f, i) in plainFields" :key="i">
@@ -236,7 +251,7 @@
                   <label class="et-sub">最少列數 <input type="number" min="0" style="width:64px" x-model.number="linesField.minRows"></label>
                 </div>
                 <div class="et-scroll">
-                  <table class="et-tbl" data-testid="et-lines">
+                  <table class="et-tbl m-scroll" data-testid="et-lines">
                     <thead><tr><th>代碼</th><th>顯示名稱</th><th>型別</th><th>必填</th><th>選項／公式</th><th></th></tr></thead>
                     <tbody>
                       <template x-for="(c, i) in linesField.columns" :key="i">
