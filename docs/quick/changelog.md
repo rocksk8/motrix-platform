@@ -24,6 +24,7 @@
 - **守門**：AST 守門禁止 `helpers/client_ip.py`、`tools/deploy_dashboard.py` 以外的程式碼讀 `X-Forwarded-For` 或 `.client.host`（含正對照）。
 - **沒動／已知限制**：IPv6 同 /64 內換位址仍可繞過「以單一位址計」的鎖定（另案）；本機使用者共用 127.0.0.1 桶（與以前相同）；uvicorn 預設的 proxy-headers 行為不受影響（本 helper 不論它開不開都給同一個答案）。
 - 測試：`backend/tests/test_trusted_client_ip_2026_11_11.py`（規則單元＋登入端點整合＋同機隧道各自一桶＋守門）、`backend/tests/test_deploy_dashboard_local_only_2026_09_22.py` HC1d。
+
 ## 2026-11-11 手機直拍照片存起來橫躺：浮水印重存沒處理 EXIF 方向（fix/photo-exif-orientation）
 
 - **現象**（hichan-9 研究手機外勤時重現）：Orientation=6、顯示 300x400 的原圖，經 `photos._process_project_photo` 後變成 400x300（直書照片橫躺）。
