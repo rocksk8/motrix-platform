@@ -28,13 +28,13 @@
    "background": "rgb(76, 29, 32)",
    "border": "rgb(252, 165, 165)",
    "color": "rgb(252, 165, 165)",
-   "fontSize": "11px"
+   "fontSize": "12px"
   },
   ".cm-card__tag": {
    "background": "rgb(20, 54, 31)",
    "border": "rgb(134, 239, 172)",
    "color": "rgb(134, 239, 172)",
-   "fontSize": "11px"
+   "fontSize": "12px"
   },
   ".cm-header": {
    "background": "rgb(28, 28, 30)",
@@ -58,13 +58,13 @@
    "background": "rgba(0, 0, 0, 0)",
    "border": "rgb(248, 113, 113)",
    "color": "rgb(248, 113, 113)",
-   "fontSize": "11px"
+   "fontSize": "12px"
   },
   ".cm-list__tab:not(.active)": {
    "background": "rgba(0, 0, 0, 0)",
    "border": "rgb(161, 165, 173)",
    "color": "rgb(161, 165, 173)",
-   "fontSize": "11px"
+   "fontSize": "12px"
   },
   ".cm-list__title": {
    "background": "rgba(0, 0, 0, 0)",
@@ -144,13 +144,13 @@
    "background": "rgb(254, 226, 226)",
    "border": "rgb(185, 28, 28)",
    "color": "rgb(185, 28, 28)",
-   "fontSize": "11px"
+   "fontSize": "12px"
   },
   ".cm-card__tag": {
    "background": "rgb(220, 252, 231)",
    "border": "rgb(21, 128, 61)",
    "color": "rgb(21, 128, 61)",
-   "fontSize": "11px"
+   "fontSize": "12px"
   },
   ".cm-header": {
    "background": "rgb(255, 255, 255)",
@@ -174,13 +174,13 @@
    "background": "rgba(0, 0, 0, 0)",
    "border": "rgb(200, 16, 46)",
    "color": "rgb(200, 16, 46)",
-   "fontSize": "11px"
+   "fontSize": "12px"
   },
   ".cm-list__tab:not(.active)": {
    "background": "rgba(0, 0, 0, 0)",
-   "border": "rgb(118, 118, 118)",
-   "color": "rgb(118, 118, 118)",
-   "fontSize": "11px"
+   "border": "rgb(102, 102, 102)",
+   "color": "rgb(102, 102, 102)",
+   "fontSize": "12px"
   },
   ".cm-list__title": {
    "background": "rgba(0, 0, 0, 0)",
@@ -191,7 +191,7 @@
   ".cm-more__btn": {
    "background": "rgb(255, 255, 255)",
    "border": "rgb(229, 227, 222)",
-   "color": "rgb(107, 107, 107)",
+   "color": "rgb(89, 89, 89)",
    "fontSize": "12px"
   },
   ".cm-section-title": {
@@ -208,8 +208,8 @@
   },
   ".cm-tab:not(.active)": {
    "background": "rgba(0, 0, 0, 0)",
-   "border": "rgb(118, 118, 118)",
-   "color": "rgb(118, 118, 118)",
+   "border": "rgb(102, 102, 102)",
+   "color": "rgb(102, 102, 102)",
    "fontSize": "12px"
   },
   ".fi": {

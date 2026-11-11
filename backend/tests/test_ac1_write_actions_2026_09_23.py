@@ -109,6 +109,14 @@ READ_ONLY_PAGES = {
     "file-center.html":
         "檔案中心（附件目錄 P3）：只呼叫 `GET /api/filehub/search`（各擁有模組 `attachments.catalog` 提供者的 `search`／`count` 合併結果）；"
         "沒有任何寫入端點——上傳與刪除都在原單據頁（報價單、出貨單、傳票…）、開檔走 L1 `GET /api/attachments/open` ⇒ 頁面唯讀與後端一致。",
+    # ⚠️ 這一筆**不是唯讀頁**：登記是因為守門的偵測盲區（2026-11-11 UX 導覽票順手查出，a71c3164 基底就是紅的，不是那張票造成的）。
+    "remit-kinds-settings.html":
+        "匯款款別設定（定義文件庫第三個編輯頁）**有**寫入：`PUT/POST/DELETE …/draft｜validate｜publish｜restore`，都寫在模組自己的 "
+        "`backend/modules/subcontract/js/remit-kinds-settings.js`（`this._call({ method: 'PUT' }, …)`）；頁面以 `../js/remit-kinds-settings.js` 載入，"
+        "而守門只解析 `frontend/js/`，找不到模組目錄的檔案 ⇒ 誤判成沒有動作。要改的是守門解析模組 js 的路徑（另案），不是這一頁；修好後請把這一筆拿掉。",
+    "reports-hub.html":
+        "報表中心（2026-11-11 UX 導覽票）：純導覽頁，只讀選單宣告（`window.MotrixMenu.groupItems('analysis')`，已依權限過濾）畫出頁籤與卡片連結；"
+        "唯一的儲存是 localStorage 記住上次的頁籤，沒有任何後端呼叫 ⇒ 報表本身的動作都在各報表頁。",
 }
 
 #: ⚠️ 罐頭理由 —— 登記表最容易腐爛的形狀是「理由等於重述結論」。
