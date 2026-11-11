@@ -6,7 +6,7 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 139 個；有單位卡 88 個。
+單位 138 個；有單位卡 87 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
@@ -51,7 +51,6 @@
 | `helper:case_access` | L1 | L1 案件存取守門（主持裁示 2026-09-26，DEPENDENCY-MAP §3 #2「案件可見性規則 → L1 權限」）。（無單位卡） | 25 | 32 | — |
 | `helper:case_roles` | L1 | 案件角色（caseRecord.roles 的 filler／sales／executor）的兩種形狀（CM3，2026-09-24）。（無單位卡） | 5 | 3 | — |
 | `helper:clause_titles` | L1 | 報價單條款標題（census #5 / S-Q2）：報價單五個條款區塊的標題，管理者只能從預設清單挑（付款條件→付款方式…）。 | 7 | 5 | `tests/platform/test_clause_titles_t62.py` |
-| `helper:client_ip` | L1 | 可信的來源 IP（2026-11-11，外網存取 go-live 前必修的安全項）。 | 4 | 3 | `backend/tests/test_trusted_client_ip_2026_11_11.py` |
 | `helper:company_identity` | L1 | §9 QL · 一份單據要印的「公司身分」。（無單位卡） | 19 | 14 | — |
 | `helper:company_setup` | L1 | 本公司資料設定閘門：「這個安裝的本公司資料有沒有人確認過」（docs/platform/COMPANY-SETUP-GATE.md §3、§4.3、§6）。 | 66 | 7 | `tests/test_company_setup_core_2026_09_28.py`、`tests/test_company_setup_cli_2026_09_28.py`、`tests/test_company_setup_gate_2026_09_28.py`、`tests/test_company_setup_output_gate_2026_09_28.py` |
 | `helper:config_ledger` | L1 | 設定與權限共用的「變更明細＋待生效」層（L1；第 54 班設定中心 S0；與 1d 的權限矩陣設計 §7 共同定案）。 | 18 | 6 | `backend/tests/platform/test_config_ledger_t54.py` |
