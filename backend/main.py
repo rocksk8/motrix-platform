@@ -488,7 +488,8 @@ def _record_request_trail(user_id: int, now_dt, method: str, path: str,
         # 一次點擊而不是六次。同一個群組在去重秒數內只留第一筆（見
         # trail.collapse_group 的說明，包含為什麼不能只用 LIKE 前綴比對）。
         group = trail.collapse_group(method, path)
-        claim_key = (_db_for_reaper.DB_PATH, user_id, method, group[0] if group else path)
+        claim_key = ((_db_for_reaper.DEMO_DB_PATH if _db_for_reaper.is_demo_mode() else _db_for_reaper.DB_PATH),      # 與 get_db() 同一條路由
+                     user_id, method, group[0] if group else path)
         if not _trail_claim(claim_key, now_dt):
             tc.close()
             return

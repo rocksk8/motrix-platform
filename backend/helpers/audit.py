@@ -356,7 +356,9 @@ def _audit_failure(user_id, username: str, display_name: str, method: str, route
 
     **不記請求內容**：只有方法、路由樣板、單號、狀態碼、原因碼（固定詞彙）。
     **限流**：同 (人, 方法, 路由樣板, 狀態) 60 秒內只寫第一筆，後續只在那一列的 detail 累加 `repeat`；
-    另有每人每小時 200 筆上限（超過只記 log）。鉤子本身絕不丟例外、不擋回應。"""
+    另有每人每小時 200 筆上限（超過只記 log）。鉤子本身絕不丟例外、不擋回應。
+    ⚠️ `repeat` 是**節流用的近似計數，不是精確次數**：第一筆還在寫的當下並行進來的同 key 呼叫（T80 R6 起本函式由多條 threadpool
+    執行緒同時呼叫）併入那一筆但來不及計數（列 id 還不知道），所以 detail.repeat 會少算那幾次。"""
     try:
         if method not in ("POST", "PUT", "PATCH", "DELETE") or int(status) not in _FAIL_STATUSES:
             return "skip"
