@@ -106,3 +106,27 @@ def test_png_with_orientation_keeps_alpha_and_is_rotated_too():
     out, _g, _w = _process_project_photo(buf.getvalue(), "測試人")
     res = Image.open(io.BytesIO(out))
     assert res.format == "PNG" and res.mode == "RGBA" and res.size == (300, 400)
+
+
+@pytest.mark.parametrize("bad_orientation", [0, 9, 99])
+def test_invalid_orientation_values_do_not_break_processing(bad_orientation):
+    """K 審（hichan-12）：方向標記是非法值（0／9／99）時不可炸：維持原尺寸、輸出可讀、浮水印照貼。"""
+    out, _g, wm = _process_project_photo(_stored_jpeg(bad_orientation, 400, 300), "測試人")
+    res = Image.open(io.BytesIO(out))
+    assert res.format == "JPEG" and res.size == (400, 300)
+    assert "測試人" in wm
+
+
+def test_exif_transpose_failure_falls_back_to_unrotated_pixels(monkeypatch):
+    """exif_transpose 本身丟例外（EXIF 區塊壞掉等）⇒ 退回舊行為（像素不轉），照樣輸出帶浮水印的圖，不是回原 bytes、更不是 500。
+    這題鎖住 photos.py 裡包 exif_transpose 的那個 try/except（沒有題目走到它就等於沒有守門）。"""
+    from PIL import ImageOps
+
+    def boom(_img):
+        raise ValueError("broken EXIF block")
+
+    monkeypatch.setattr(ImageOps, "exif_transpose", boom)
+    out, _g, wm = _process_project_photo(_stored_jpeg(6, 400, 300), "測試人")
+    assert out != b"" and "測試人" in wm
+    res = Image.open(io.BytesIO(out))
+    assert res.format == "JPEG" and res.size == (400, 300), "失敗時維持原像素尺寸（舊行為），而且浮水印流程有跑完"
