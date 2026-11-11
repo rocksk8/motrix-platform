@@ -154,7 +154,7 @@
   "內部利潤",
   "—（填入品項與售價後顯示）",
   "展開成本分析 ▸",
-  "<build> · 啟動 <日期>"
+  "<build-footer>"
  ],
  "requests": [
   "GET /api/alt-quote/config",

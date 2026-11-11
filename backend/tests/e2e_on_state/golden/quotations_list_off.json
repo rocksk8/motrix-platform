@@ -120,7 +120,7 @@
   "—",
   "草稿",
   "共 1 筆 · 顯示 1 / 1 筆",
-  "<build> · 啟動 <日期>"
+  "<build-footer>"
  ],
  "requests": [
   "GET /api/approval-queue/count",
