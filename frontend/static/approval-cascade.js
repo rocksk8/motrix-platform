@@ -20,7 +20,8 @@
  *
  * ── 簽核二擇一 S5：核准前的「維持／編輯」選擇（報價單；quotation-form 與 approval-queue 共用同一支）──
  *   const flags = MotrixApproval.flagsFor(detail.approveReview, entryUser, me)   // 空陣列 ⇒ 不跳窗，走原本的確認視窗
- *   const pick  = await MotrixApproval.askChoice({ flags, changedBlocks, newReasons, needNote, canEdit, summary, extra })
+ *   const pick  = await MotrixApproval.askChoice({ flags, changedBlocks, newReasons, needNote, canEdit, noEditHint, summary, extra })
+ *   //   canEdit＝false 時不顯示「編輯內容」鈕；`noEditHint` 可換掉底下那行說明（報價單頁已有常駐的「編輯」鈕，編輯入口只剩那一個，這個彈窗只留「維持核准」＝確認旗標／補說明）
  *   //   pick＝null（取消）｜{choice:'edit'}｜{choice:'keep', note}
  *   body: { ..., expectedFp, choice: 'keep', confirmNote: pick.note }
  *   // 伺服器為準：409＋X-Approve-Flags（或 X-Approve-Need-Note）＝畫面資料過期，重載後再問一次（MotrixApproval.conflictInfo(resp)）
@@ -151,7 +152,7 @@
       const keep = btn('維持核准', 'background:#15803D;border-color:#15803D;color:#fff', 'approve-choice-keep');
       bar.appendChild(cancel); if (edit) bar.appendChild(edit); bar.appendChild(keep);
       box.appendChild(bar);
-      if (!opts.canEdit) box.appendChild(el('div', 'margin-top:8px;color:#78716C;font-size:12px', '你的身分不能在這裡直接改內容；若要修改請退回，或請有編輯權限的簽核人處理。', { 'data-testid': 'approve-choice-noedit' }));
+      if (!opts.canEdit) box.appendChild(el('div', 'margin-top:8px;color:#78716C;font-size:12px', opts.noEditHint || '你的身分不能在這裡直接改內容；若要修改請退回，或請有編輯權限的簽核人處理。', { 'data-testid': 'approve-choice-noedit' }));
       shade.appendChild(box);
       document.body.appendChild(shade);
 

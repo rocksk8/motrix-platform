@@ -51,6 +51,7 @@ from helpers import row_access
 from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from helpers.case_access import case_page_readable   # AT-M1c：與報價單上附件的提供者同一支
 from modules.case import case_deadlines  # noqa: F401,E402  M01 的每日到期檢查（daily.check，import 即登記）
+from modules.case import review_edit_notify as _REN  # noqa: E402  審核中被編輯的通知信（信件類型 approval_review_edit，import 即登記）
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications, _mark_notifications_read, notify_approval_request,
     notify_next_tier, notify_approved, notify_returned, notify_resubmit_requester,
@@ -1412,6 +1413,7 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
         # 遮蔽金額之前算（指紋看的是完整內容，與是否看得到金額無關）；只待審核／簽核中才有（其餘狀態回應逐位元不變）
         result["contentFp"] = _CFP.content_fingerprint(result["data"])
         if _review_on:
+            result["reviewEditOn"] = True                      # 2026-11-11：複查編輯端點在 mode=on 才開放（否則 409）⇒ 前端常駐「編輯」鈕只在這個旗標為真時顯示；off／shadow 沒有這個鍵（回應逐位元不變）
             _ar = _approve_review(result["data"])
             if _ar:
                 result["approveReview"] = _ar
@@ -5941,6 +5943,9 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
 
 
 # 複查編輯：伺服器自有（不採用用戶端值）的頂層鍵＝排除清單（簿記）＋這幾個。approval 由伺服器對帳後的值為準、editHistory 另外追加。
+# 第 3 層（含）以後的簽核人複查編輯 ⇒ 整條簽核鏈回第 1 層重跑（2026-11-11 業主需求）。`currentTier` 是 0 起算，所以「第 3 層」＝索引 >= 2。
+# 第 1、2 層自己編輯：維持原行為（只讓其他已簽層回待複查；編輯者原已簽者視為簽新版）。
+_REVIEW_EDIT_CHAIN_RESET_FROM_TIER = 2
 _REVIEW_EDIT_SERVER_KEYS = tuple(sorted(_CFP.EXCLUDED_KEYS - {"approval", "editHistory"})) + ("dealTag", "settlement", "caseRecord", "historical", "salesPerson")
 
 
@@ -6017,7 +6022,9 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
                 q[_k] = d[_k]
             else:
                 q.pop(_k, None)
-        q["status"] = row["status"]
+        _chain_reset = ct_idx >= _REVIEW_EDIT_CHAIN_RESET_FROM_TIER      # 整條重跑：沒有任何人簽著、回到第 1 層 ⇒ 狀態比照 approve（簽核中＝currentTier>0）回「待審核」
+        _new_status = "待審核" if _chain_reset else row["status"]
+        q["status"] = _new_status
         q["approval"] = appr
         q.pop("editHistory", None)
         if isinstance(d.get("editHistory"), list):
@@ -6034,7 +6041,7 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
 
         _self_sign = _CFP.self_edit_sign(tiers, user["username"])                 # H6-3：編輯者是唯一簽核條目（改完自己簽）⇒ 稽核加註＋通知超管（不阻擋）
         _sig0, _rev0 = _CFP.signature(appr), appr.get("contentRev")
-        save_quotation_json(conn, quote_no, q, status=row["status"], updated_at=now, actor=user, source="review-edit")
+        save_quotation_json(conn, quote_no, q, status=_new_status, updated_at=now, actor=user, source="review-edit", chain_reset=_chain_reset)
         appr = q.get("approval") or {}
         _ch = (appr.get("changeLog") or [None])[-1]                # 這次存檔的對帳紀錄（contentRev 有前進才算；漏斗內的對帳用自己的時間戳，不能比 at）
         _ch = _ch if isinstance(_ch, dict) and appr.get("contentRev") != _rev0 and _ch.get("rev") == appr.get("contentRev") else {}
@@ -6056,7 +6063,8 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
         _CFP.audit_in_txn(conn, "quotation.review_edit", quote_no,
                           {"fpBefore": body.expectedFp, "fpAfter": _fp_new, "changes": _changes[:30], "invalidated": _ch.get("invalidated") or [],
                            "resigned": _ch.get("resigned") or [], "editorPending": _ch.get("editorPending") or [], "rev": _ch.get("rev"),
-                           "note": (body.note or "")[:200],
+                           "note": (body.note or "")[:200], "tier": ct_idx + 1,
+                           **({"chainReset": True} if _chain_reset else {}),
                            **({"tag": "self_edit_sign", "selfEditSign": True} if _self_sign else {})}, user, now)
         conn.commit()
     except BaseException:
@@ -6069,8 +6077,15 @@ def review_edit_quotation(quote_no: str, body: ReviewEditBody, authorization: st
     conn.close()
     spawn_bg_thread(_backup_quotation, args=(quote_no,))
     _mark_notifications_read(quote_no, ["approval_request", "approval_reconfirm"], user["username"])
+    # 通知信（commit 之後才寄；送審人＋全部超級管理員；收件人與退訂規則在 notify_review_edited）。信件失敗不影響已存檔的編輯
+    try:
+        _REN.fire_edited(quote_no, customer=q.get("customerName") or "", editor=user.get("display_name") or user["username"],
+                         requester=appr.get("requestedBy") or "", fields=[c.get("field") for c in _changes[:30]],     # 只傳欄位名稱、不帶新舊值（收件人不一定有金額檢視權限）
+                         chain_reset=_chain_reset)
+    except Exception:                                      # noqa: BLE001
+        logger.exception("複查編輯通知信失敗（quote_no=%s）", quote_no)
     return {"ok": True, "updated_at": now, "contentFp": _fp_new, "resigned": _ch.get("resigned") or [], "invalidated": _ch.get("invalidated") or [],
-            "signatureChanged": _CFP.signature(appr) != _sig0}
+            "signatureChanged": _CFP.signature(appr) != _sig0, "chainReset": _chain_reset}
 
 
 @router.post("/api/quotations/{quote_no}/reject")

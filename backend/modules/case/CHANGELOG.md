@@ -1,5 +1,13 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-11（feat/approval-edit-lock-tier-reset；業主需求：簽核人改了報價單內容存不了；金額相關；L1 介面不變）
+- 修正（畫面，業主回報的 bug）：簽核人檢視待審核／簽核中的報價單時，**欄位原本看起來能打字、但按「儲存草稿」PUT 回 403**（待審核狀態本來就不能存）⇒ 主管只好退回修改。現在當層待簽人檢視時表單欄位一律 `disabled`（`pages/quotation-form.html` `isApproverLocked()`／`_syncControlLock()`；鍵盤 Tab 進去也打不進去）、「儲存草稿」不顯示，工具列常駐「編輯」鈕（`data-testid="qf-review-edit-start"`，`canReviewEdit()` 成立且 GET 帶 `reviewEditOn` 才顯示；**不再需要旗標成立**）→ 按下去進複查編輯 → 「儲存複查編輯」走既有 `POST /review-edit`。
+- 新增（`GET /api/quotations/{no}`）：待審核／簽核中且 `reconfirm_mode=on` 時多回頂層 `reviewEditOn: true`（off／shadow 沒有這個鍵，回應逐位元不變）——複查編輯端點只在 on 開放，前端據此決定要不要顯示編輯鈕。**出廠預設 `reconfirm_mode=0`：沒翻 on 之前編輯鈕不會出現（欄位仍鎖住）。**
+- 修改（畫面）：`approveQuote()` 核准前的「維持／編輯」彈窗**退場「編輯內容」選項**（編輯入口只剩常駐編輯鈕）；彈窗保留「維持核准」（伺服器在複查／轉簽／代理旗標成立時仍要求 `choice=keep`，需要時補說明進稽核——不是多餘的）。`approval-cascade.js::askChoice` 加選用參數 `noEditHint`。簽核佇列頁的彈窗與「編輯內容→轉報價單頁」維持原樣。
+- 新增（規則）：**第 3 層（含）以後（`currentTier>=2`，0 起算）的複查編輯＝整條簽核鏈回第 1 層重跑**——`content_fp.reconcile_in_memory(..., chain_reset=True)`（只在 `source=review-edit` 生效）：所有已簽條目（含舊單沒有 `signedFp` 的、編輯者自己）回待簽＋`reconfirm`、不做編輯者自動重簽、`currentTier=0`、`changeLog` 記 `chainReset`；狀態回「待審核」（比照 approve：簽核中＝currentTier>0）。`save_quotation_json`／`reconcile_txn` 加選用參數 `chain_reset`；回應多 `chainReset`；稽核 `quotation.review_edit` 多 `tier`（1 起算）與 `chainReset`。第 1、2 層編輯維持原行為（首次待簽者不自動簽、其他已簽層回待複查）。
+- 新增（通知信）：複查編輯存檔成功後寄信給**送審人＋全部超級管理員**——新檔 `modules/case/review_edit_notify.py`（`fire_edited`，走 `send_registered`；`module.json` features 與 `docs/platform/modules.json` 已登記；不動 L1）；信件類型 `approval_review_edit`（模組自己 `mail_types.register`，群組＝superadmins、事件＝送審人；超管可在收件設定頁覆寫；使用者可退訂）。信內只列變動的欄位名稱、不帶新舊值（收件人不一定有金額檢視權限）。`editHistory` 照舊寫一筆 `review_edit`。
+- 測試：`modules/case/tests/test_review_edit_chain_reset_2026_11_11.py`（第 3 層整條重跑＋依序重簽到底／舊單與編輯者自己也重置／第 1、2 層不重跑／收件人＝送審人＋全部可寄的超管／失敗不寄信／editHistory）、`tests/test_e2e_review_edit_lock_2026_11_11.py`（真瀏覽器：欄位鎖住含鍵盤、常駐編輯鈕、編輯→存檔→核准過關、第 3 層編輯提示與整條重跑、旗標彈窗只剩維持核准、mode off 不顯示編輯鈕）。表單版本 V3.35。
+
 ## 1.0.208 — 2026-11-08（T78；t78/r1-warranty-mail＋fix/dispatch-abnormal-amount 併入整合樹；非金額；K 審必修已修；L1 介面不變）
 - 修正（保固到期信，T78 R1）：`case_deadlines._check_warranty_expiry` 的收件人改用案件的 `sales_person_id` 外鍵解出的業務帳號（`helpers.case_access.case_owner_username`）；原作法把 `quotations.sales_person`（顯示名）當 `username` 比對，只有顯示名剛好等於帳號時業務才收得到。業務已停用或沒有外鍵 ⇒ 只寄群組收件人（管理員），與原先名字對不上時相同。⚠️ 例外：`sales_person_id` 為空、但 `sales_person` 剛好等於某個在職 username 的案件，舊作法收得到、新作法收不到（只剩群組收件人）；這類案件有多少待正式機備份副本統計（見下方已知限制）。
 - 修正（保固到期信，T78 R1）：已通知記號（`warranty_notif.*`）改成**寄送成功後才寫**——新增 `helpers.email_notify._send_warranty_expiry`（`send_registered(wait=True)`，寄出／結果不明／永久失敗 ⇒ 寫記號；暫時失敗／機器略過／沒有收件人 ⇒ 不寫，下一次每日檢查重試）。原作法寄信前就寫記號，SMTP 暫時失敗就永遠不補寄。單台設備寄送丟例外只略過該台，不中斷整個掃描。信件內容抽成 `_warranty_expiry_mail` 與舊入口 `notify_warranty_expiry` 共用（舊入口簽章與行為不變，其 `sales_person` 參數一直是帳號）。

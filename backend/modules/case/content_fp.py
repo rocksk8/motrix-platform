@@ -417,7 +417,7 @@ def _old_key_hashes(appr: dict) -> dict:
     return {}
 
 
-def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str = None, enabled: bool, reason_entries=None):
+def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str = None, enabled: bool, reason_entries=None, chain_reset: bool = False):
     """**純函式**：只改記憶體中的 `data["approval"]`，不寫資料庫、不讀設定、不呼叫任何 API。回 `(changed, notices)`：
     `changed`＝approval 有被改、呼叫端要寫回；`notices`＝要發的通知清單（見下）。
 
@@ -436,7 +436,10 @@ def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str
           但**不**加輪、**不**通知、**不**暫停——不管 `reviewRounds` 已經多少。
         · **有可作廢條目**而 `reviewRounds>=REVIEW_ROUNDS_LIMIT` ⇒ 不作廢、不改任何條目（連編輯者的重簽也不做），設 `reconfirmSuspended=True`，通知超管（只在第一次設旗標時發）。
     通知元素：`{type, to, text, blocks, by, source, rev}`；`to` 一律是**清單**：元素是帳號字串，或 `{"role": "superadmin"}`（超管）。
+    - `chain_reset`（只在 `source==SOURCE_REVIEW_EDIT` 生效；第 3 層（含）以後的簽核人複查編輯，2026-11-11）：整條簽核鏈回到第 1 層重跑——
+      **所有**已簽條目（不論有沒有 `signedFp`、含編輯者自己）都回 pending＋`reconfirm`，**不**做編輯者自動重簽，`currentTier` 歸 0；`changeLog` 記 `chainReset=True`。
     基準永遠在處理完之後前進到目前內容，所以重複呼叫是冪等的。"""
+    chain_reset = bool(chain_reset) and source == SOURCE_REVIEW_EDIT
     if not isinstance(data, dict) or status not in PENDING_STATES:
         return False, []
     appr = data.get("approval")
@@ -485,12 +488,14 @@ def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str
     appr["contentRev"] = rev
 
     resign_candidates = []                                                  # 編輯者自己的條目（先只挑出來，確定要不要作廢之後才動）
-    if source == SOURCE_REVIEW_EDIT and me:
+    if source == SOURCE_REVIEW_EDIT and me and not chain_reset:
         for _t, a in _entries(appr):
             if a.get("username") == me and ((a.get("status") == "approved" and a.get("signedFp") and a.get("signedFp") != fp)
                                             or (a.get("status") != "approved" and a.get("reconfirm"))):
                 resign_candidates.append(a)
     to_invalidate = [a for a in stale if not any(a is r for r in resign_candidates)]
+    if chain_reset:                                                         # 整條重跑：每一個已簽的都作廢（含舊單沒有 signedFp 的、編輯者自己的）
+        to_invalidate = [a for _t, a in _entries(appr) if a.get("status") == "approved"]
 
     if to_invalidate and rounds >= REVIEW_ROUNDS_LIMIT:                     # 有東西要作廢、但輪次已滿：不再自動作廢，改請超管處置（不改任何條目）
         first_time = not appr.get("reconfirmSuspended")
@@ -535,11 +540,15 @@ def reconcile_in_memory(data: dict, now: str, actor, source: str, *, status: str
         idx = _first_pending_tier(appr)
         if idx is not None:
             appr["currentTier"] = idx
+    if chain_reset:
+        appr["currentTier"] = 0                                             # 從第 1 層重新開始（即使沒有任何已簽條目可作廢）
     if invalidated:
         appr["reviewRounds"] = rounds + 1                                   # 不管這次一次作廢幾個條目、補追了幾次影子變動：只 +1
     entry_log = dict(base_log, invalidated=[a.get("username") for a in invalidated], resigned=[a.get("username") for a in resigned])
     if editor_pending:
         entry_log["editorPending"] = editor_pending
+    if chain_reset:
+        entry_log["chainReset"] = True
     _append_log(appr, "changeLog", entry_log)
     finish_baseline()
 
@@ -668,7 +677,7 @@ def _last_log(appr: dict, key: str, now: str):
     return None
 
 
-def reconcile_txn(conn, quote_no: str, data: dict, *, source: str, actor: dict = None, status: str = None, now: str = None) -> bool:
+def reconcile_txn(conn, quote_no: str, data: dict, *, source: str, actor: dict = None, status: str = None, now: str = None, chain_reset: bool = False) -> bool:
     """**外殼**（S3b）：在呼叫端**寫入 `quotations.data_json` 之前**，對已讀進記憶體、改完內容的 `data` 做一次對帳。
     讀設定 ⇒ （必要時讀資料庫真實 status）⇒ `reconcile_in_memory`（只改 `data["approval"]`）⇒ 同交易寫通知與稽核。回傳 `data["approval"]` 有沒有被改
     （True＝呼叫端寫回的 `data` 帶著新的簽核狀態，**必須用這份 `data` 寫**，不可以再用舊的）。
@@ -687,7 +696,7 @@ def reconcile_txn(conn, quote_no: str, data: dict, *, source: str, actor: dict =
         status = row["status"] if row else None
     now = now or datetime.now().isoformat()
     reasons = current_reasons_or_none(data) if (source == SOURCE_REVIEW_EDIT and mode == "on") else None    # J1：只有複查編輯會重簽條目，才需要基準
-    changed, notices = reconcile_in_memory(data, now, actor, source, status=status, enabled=(mode == "on"), reason_entries=reasons)
+    changed, notices = reconcile_in_memory(data, now, actor, source, status=status, enabled=(mode == "on"), reason_entries=reasons, chain_reset=chain_reset)
     if not changed:
         return False
     appr = data.get("approval") or {}
@@ -699,6 +708,7 @@ def reconcile_txn(conn, quote_no: str, data: dict, *, source: str, actor: dict =
     if ch is not None:
         act = "quotation.reconfirm_suspended" if ch.get("suspended") else "quotation.reconfirm"
         _audit_in_txn(conn, act, quote_no, {"rev": ch.get("rev"), "blocks": ch.get("blocks"), "invalidated": ch.get("invalidated"),
-                                            "resigned": ch.get("resigned"), "source": source, "rounds": appr.get("reviewRounds")}, actor, now)
+                                            "resigned": ch.get("resigned"), "source": source, "rounds": appr.get("reviewRounds"),
+                                            **({"chainReset": True} if ch.get("chainReset") else {})}, actor, now)
     _write_notices(conn, quote_no, notices)
     return True
