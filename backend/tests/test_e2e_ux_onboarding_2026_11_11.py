@@ -234,7 +234,7 @@ def test_first_visit_hint_dismiss_persist_and_replay(live_server, make_user, new
     drawer.wait_for(state="visible", timeout=5000)
     page.locator("[data-testid=ux-drawer] [data-ux=replay]").click()
     page.locator("[data-testid=ux-first-hint]").wait_for(state="visible", timeout=5000)
-    assert not drawer.is_visible()
+    drawer.wait_for(state="hidden", timeout=5000)
 
 
 @pytest.mark.e2e
@@ -254,7 +254,7 @@ def test_help_drawer_opens_closes_and_has_page_specific_content(live_server, mak
     text = drawer.inner_text()
     assert "報價單" in text and "最常見的做法" in text and "已成案" in text      # 本頁內容＋名詞解釋
     page.keyboard.press("Escape")
-    assert not drawer.is_visible()
+    drawer.wait_for(state="hidden", timeout=5000)
     assert btn.get_attribute("aria-expanded") == "false"
     # 沒寫專屬內容的頁面也有通用說明，不是空白
     page.goto(f"{live_server}/pages/daily-tasks.html")
@@ -366,7 +366,7 @@ def test_quotations_empty_states_three_kinds(live_server, make_user, new_page, l
     none.wait_for(state="visible", timeout=20000)
     assert "新增第一張報價單" in none.inner_text()
     assert "自動重試" not in page.locator("body").inner_text()
-    assert not page.locator("[data-testid=empty-error]").is_visible()
+    page.locator("[data-testid=empty-error]").wait_for(state="hidden", timeout=5000)
 
     # E2：工程師用語不再出現
     body = page.locator("body").inner_text()
@@ -380,10 +380,13 @@ def test_quotations_empty_states_three_kinds(live_server, make_user, new_page, l
     page.locator("input[x-model='search']").first.fill("絕對找不到的字串zzz")
     filt = page.locator("[data-testid=empty-filtered]")
     filt.wait_for(state="visible", timeout=10000)
-    assert not page.locator("[data-testid=empty-none]").is_visible()
+    page.locator("[data-testid=empty-none]").wait_for(state="hidden", timeout=5000)
     filt.locator("[data-testid=empty-clear-filters]").click()
-    assert not filt.is_visible()
-    assert page.locator("text=空狀態客戶").first.is_visible()
+    # 偶發紅燈（T79-FLAKE-ONBOARDING-EMPTY-STATES）的根因：Alpine 3.17 的 x-show 隱藏要等約一個動畫影格（實測點擊後 ~11–14ms）才生效，
+    # 而 Playwright 點擊→is_visible() 的來回也是這個量級 ⇒ 這裡不能「點完立刻斷言」。改等終態；
+    # 真的沒清掉篩選（filtered 仍為 0）時 5 秒後照樣逾時判失敗。
+    filt.wait_for(state="hidden", timeout=5000)
+    page.locator("text=空狀態客戶").first.wait_for(state="visible", timeout=5000)
 
     # ③ 載入失敗：才用「重試」，並說明原因
     page.route("**/api/quotations?*", lambda route: route.abort())
@@ -391,7 +394,7 @@ def test_quotations_empty_states_three_kinds(live_server, make_user, new_page, l
     err = page.locator("[data-testid=empty-error]")
     err.wait_for(state="visible", timeout=20000)
     assert "重試" in err.inner_text() and "載入失敗" in err.inner_text()
-    assert not page.locator("[data-testid=empty-none]").is_visible()
+    page.locator("[data-testid=empty-none]").wait_for(state="hidden", timeout=5000)
 
 
 # ── E2：建置戳記只給管理員 ──────────────────────────────────────────────────
