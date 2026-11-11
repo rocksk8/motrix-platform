@@ -748,7 +748,7 @@
       .items-table .cell-input.num { text-align: right; }
       .items-table .cell-input.qty-input { width: 100%; max-width: none; field-sizing: fixed; }
       .items-table .cell-input.internal { background: #FFF8F0; }
-      .items-table .item-note { font-size: 15px; min-height: 40px; }
+      .items-table .item-note { font-size: 16px; min-height: 40px; }
       .items-table .cell-textarea.header-desc { font-size: 16px; }
       .items-table .row-tool { font-size: 13px; padding: 8px 10px; min-height: 36px; }
       .items-table .alt-row { font-size: 13px; }
@@ -761,6 +761,12 @@
     }
     @media (max-width: 479px) {
       .form-grid-2 { grid-template-columns: minmax(0, 1fr); }
+    }
+
+    /* 平板（768–1023）明細表仍是表格：格內輸入 13px 在 iPad 聚焦會放大整頁 → 16px；狀態下拉 12px 同理（K 審 hichan-18） */
+    @media (max-width: 1023px) {
+      .items-table input:not([type=checkbox]):not([type=radio]), .items-table textarea, .items-table select { font-size: 16px; }
+      .status-select-admin { font-size: 16px; }
     }
   </style>
 </head>

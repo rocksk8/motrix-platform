@@ -81,6 +81,8 @@
     @media (hover: none) { .row-actions { opacity: 1; } }
     @media (max-width: 1023px) {
       .search-input, input.filter { font-size: 16px !important; min-height: 44px; }
+      .data-table td:first-child, .data-table td:nth-child(7) { white-space: nowrap; }
+      .data-table td:nth-child(2) { min-width: 150px; }   /* 平板表格：單號不折成三行、狀態「草稿」不直排 */
     }
     @media (max-width: 767px) {
       .page-main { padding: 14px 12px 28px; }

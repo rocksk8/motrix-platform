@@ -79,7 +79,7 @@
        改成「一張單一張卡」：單號＋金額在上、客戶、案名、狀態與其他資訊成一排標籤、操作鈕在底。
        觸控裝置沒有 hover，操作鈕原本 opacity:0 要先點到那一列才出現 ⇒ 一律顯示。 */
     @media (hover: none) { .row-actions { opacity: 1; } }
-    @media (max-width: 767px) {
+    @media (max-width: 1023px) {   /* 768–1023 原本是桌面表格：客戶／案件欄被擠成一字一行、操作欄被切掉 → 平板直立也用卡片（K 審 hichan-18） */
       /* 篩選列：搜尋整列、下拉兩兩並排；16px 避免 iOS 聚焦時自動放大 */
       .search-bar { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
       .search-bar .search-input { max-width:none !important; width:100%; min-width:0; font-size:16px; min-height:44px; box-sizing:border-box; }
