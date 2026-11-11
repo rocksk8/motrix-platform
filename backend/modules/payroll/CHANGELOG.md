@@ -1,5 +1,10 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
+- 選單宣告：`bonus.html`（order 55）歸「月結」、`bank-account.html`（order 70）歸「設定」（財務會計下拉小標題），入口與權限不變。
+- 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
+- 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
+
 ## 1.2.23 — 2026-11-06（wip/sales-gap-report；業務獎金讀源改業務負責；K 審修正：形狀不對不退回、註記失敗不拖垮 GET）
 - 變更（計算口徑，產品負責人 2026-11-06 裁示，經窗口轉達；推翻 2026-09-23 使用者「業務獎金→`sales_person`」的讀源，兩次裁示都留痕在 `bonus.py::PERSON_SOURCES` 註解）：以案件為中心的分潤，業務名單自動帶入（`api/bonus.py::_auto_members`，影響 `GET /cases/{no}` 無單預覽、`POST /cases/{no}` 建立、`POST …/preview` 無單分支）改讀案件「業務負責」`caseRecord.roles.sales`（新增 `_roles_sales_of()`，Python 逐筆解析，不新增 SQL `json_extract`）；**完全沒填**才退回報價人 `sales_person_id`／`sales_person`（逐字沿用舊解析）。`roles.sales` 有值但對不到可用帳號（舊字串查無／同名、帳號停用或不存在）⇒ 不退回報價人、不帶人並回 `memberNotes.sales` 提示手動指定。兩欄位仍各自存、互不寫入。
 - 不回溯：已有分潤單者（任何狀態）名單在建立當下已凍結於 `bonus_case_award_lines`，本次不改動；`GET /cases/{no}` 對最高管理者在非草稿單且現行業務負責不在名單內時多回 `salesOwnerNote`（中性註記，不改名單／金額／流程），`pages/bonus.html` 在「發放明細」上方顯示。

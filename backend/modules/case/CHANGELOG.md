@@ -6,6 +6,8 @@
 - 修正（「已成案」卡住，正式機既有 regression，自 2026-09-23 `EM11` 起）：`onDealTagChange` 對已送出單不再先整份 PUT（後端對鎖定狀態的 PUT 一律 403，必然失敗，EM11 把「失敗就忽略」改成「失敗就擋下」後整個成案流程被擋死）；改成只打 `PATCH /deal-tag`，成功後才建 5 個預設階段（失敗不留殘餘階段；建階段中途失敗可能留下 1～4 個，之後不會自動補建），並回頭同步 `_lastUpdatedAt`（階段 API 會推進 `updated_at`，不同步的話之後整份存檔撞樂觀鎖 409）；PATCH 失敗顯示後端 `detail` 並退回舊值。下拉「未成案／已成案」對非管理員停用（後端本來就要 admin 以上），硬呼叫也在建階段之前擋下。
 - 已知限制：①已存在的殘餘階段（舊 code 失敗時留下的）不在本次清理範圍；「空階段自動補建」只對 0 個階段成立。③解鎖編輯中有未存修改時改案件進度，不同步 `_lastUpdatedAt`（避免讓衝突偵測失效），之後存檔可能 409 要求重新載入。④連線中斷而無法確認送審結果時，畫面不還原也不說「尚未送出」，請重新載入確認。②草稿狀態選案件進度仍只是前端暫存，之後整份存檔時後端會沿用資料庫現值（既有行為，未動）。
 - 測試：`tests/test_quote_submit_precheck_2026_11_11.py`（7 項）、`tests/test_e2e_quote_submit_clarity_2026_11_11.py`（5 項真瀏覽器，含修前對照：基底程式碼上 3 項紅）；路由基準 route_table_golden／route_inventory／response_keys_baseline 各補 1 條。
+- 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
+- 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
 
 ## 1.0.208 — 2026-11-08（T78；t78/r1-warranty-mail＋fix/dispatch-abnormal-amount 併入整合樹；非金額；K 審必修已修；L1 介面不變）
 - 修正（保固到期信，T78 R1）：`case_deadlines._check_warranty_expiry` 的收件人改用案件的 `sales_person_id` 外鍵解出的業務帳號（`helpers.case_access.case_owner_username`）；原作法把 `quotations.sales_person`（顯示名）當 `username` 比對，只有顯示名剛好等於帳號時業務才收得到。業務已停用或沒有外鍵 ⇒ 只寄群組收件人（管理員），與原先名字對不上時相同。⚠️ 例外：`sales_person_id` 為空、但 `sales_person` 剛好等於某個在職 username 的案件，舊作法收得到、新作法收不到（只剩群組收件人）；這類案件有多少待正式機備份副本統計（見下方已知限制）。

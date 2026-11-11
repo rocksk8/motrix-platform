@@ -59,6 +59,8 @@
 
 ## §6 · Sidebar 結構
 
+> **2026-11-11 更新**：導覽列已改為單一宣告（`backend/core/menu_l1.json` ＋ 各模組 `module.json` 的 `pages[].menu`），群組現為「客戶與業務／案件／採購與庫存／財務會計（日常·月結·設定）／報表（單一入口→報表中心）／勞務管理／我的工作／系統」，規格見 `docs/UI-HEADER-COLOR-SPEC.md`。下面是歷史結構，僅供查舊事。
+
 ```
 主選單     儀表板
 業務       業務開發（dev-crm.html, dev_crm 模組旗標或 admin+）/ 報價單 / 簽核佇列（approval-queue.html）/

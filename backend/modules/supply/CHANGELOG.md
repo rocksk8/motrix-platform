@@ -1,5 +1,10 @@
 # 採購・庫存・出貨 更新紀錄
 
+## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
+- 頁頭（B6）：`suppliers.html`／`procurement.html`／`inventory.html`／`parts.html` 的眉標改為自動麵包屑（「採購與庫存 › 頁名」，由 sidebar.js 依選單群組填入）；群組顯示名稱「廠商與採購」改為「採購與庫存」。
+- 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
+- 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
+
 ## 1.0.34 — 2026-10-17（wip/t70-supply-caps-r1；T70-2 PM-S5：供應商能力宣告＋端點接線，預設等價）
 - `module.json` 新增 `capabilities`（4 項：`supply.supplier.view｜create｜edit｜delete`）；`legacy` ＝ 今天的閘（最高管理者，或持有「客戶」「採購」「庫存」任一功能勾選），種子矩陣不給任何角色預設勾選 ⇒ 行為與今天逐位元相同。`delete` 依框架規則一律列高風險：之後在權限頁放寬需填原因、等確認期間、由另一位最高管理者核准。
 - `api/suppliers.py`（7 支：清單、新增、修改、刪除、更新拜訪、聯絡人個資告知讀取／登記）的第一道閘由 `require_any_module(…, "供應商管理")` 改為 `user = _require_user(authorization)` ＋ `perm.require(user, <能力鍵>)`；本體不動。被擋時 403 訊息改為『權限不足：需要「…」（鍵）』（狀態碼不變）。

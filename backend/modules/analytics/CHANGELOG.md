@@ -1,5 +1,11 @@
 # 營運分析 更新紀錄
 
+## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
+- 新增頁面 `reports-hub.html`（報表中心，選單「報表」唯一一個一級連結）：頁籤 營運／財務／帳簿，卡片與頁籤完全來自選單宣告（`pages[].menu.section／desc`）＋使用者權限，不另寫死清單；「報表設定」收成頁頭右側齒輪。需要本模組安裝才有這個頁（已列入 `docs/platform/modules.json`）。
+- 選單宣告：`reports.html` 加 `section: 營運`＋`desc`；`devices.html`／`warranty.html` 從「經營分析」移到「採購與庫存」群組（order 70／80），入口不變。`group analysis` 的顯示名稱由「經營分析」改為「報表」（鍵不變）。
+- 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
+- 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
+
 ## 1.0.45 — 2026-11-03（已由 train_number.py assign 取號；wip/t73-dev-case-assignment-r1：業務開發案件指派的可見性修正）
 - `api/dashboard.py` 的業務開發停滯提醒（`/api/dashboard/ops-alerts` 的 `devStale`）與動態牆（`/api/dashboard/activity-feed` 的 `dev_cases` 區塊）手列欄位的 SELECT 補上 `assigned_to`：crm 模組新增「案件指派」後，被指派人若不在 `sales_persons`／`planners`，`row_access.visible("dev_case", ...)` 收到的列缺這一欄就永遠判不到，造成被指派人在這兩個出口看不到自己的案件（審查發現；同一批連 `routers/item_reads.py`／`modules/crm/api.py` 一起修，見 crm 1.0.18）。無回應鍵變動、無 schema 變更。
 - 測試：`modules/crm/tests/test_dev_case_assignee_visibility_hichan10_2026_11_03.py`——2026-11-04 列車整合後獨立稽核發現原測試只打了 item_reads／activity-stats，沒有真正呼叫這兩個端點（`docs/platform/audit/AUDIT-pm-sub-t73.md` T73A-M2），已補 `test_assignee_sees_their_stale_case_in_dashboard_ops_alerts`／`test_assignee_sees_their_dev_log_in_dashboard_activity_feed` 兩題真打端點驗證。

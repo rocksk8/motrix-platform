@@ -1,5 +1,9 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
+- 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
+- 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
+
 ## 1.1.42 — 2026-11-08（模組資產 POC；feat/module-assets-poc）
 - 搬遷（行為不變）：`frontend/js/remit-kinds-settings.js` → `modules/subcontract/js/remit-kinds-settings.js`，`module.json` 新增 `"assets": [{"path": "js/remit-kinds-settings.js"}]`。**網址不變**（`/js/remit-kinds-settings.js`），`remit-kinds-settings.html` 不用改。
 - 需要核心支援 `module.json assets` 與 `/js` 掛載（見 `core/CHANGELOG.md` 最上面 `(next)` 段）；列車取號後，本模組 `module.json` 的 `core` 下限要改成該版號，舊核心就不會載入一個它不會提供這支 JS 的新模組。

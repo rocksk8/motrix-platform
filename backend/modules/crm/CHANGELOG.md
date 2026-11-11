@@ -1,5 +1,10 @@
 # 業務開發 更新紀錄
 
+## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
+- 頁頭（B6）：`customers.html` 眉標改為麵包屑（客戶與業務 › 客戶管理）；客戶管理從「廠商與採購」移到「客戶與業務」群組（order 30），入口與權限不變。
+- 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
+- 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
+
 ## 1.2.0 — 2026-11-04 13:40（wip/hichan8-dev-log-directive-v1：開發記錄「批示」，見 docs/platform/plans/DEV-LOG-DIRECTIVE-PLAN.md）
 - 新增：`migrations/0004_dev_log_directive.py`（`module_schema_versions.crm` 3→4，冪等）：新表 `dev_log_directive`（批示與回覆同表，`parent_id` 只一層；只增不改不刪）、`dev_log_directive_target`（通知／待回覆對象，`must_reply`、首次回覆時間 `replied_at`，`UNIQUE(directive_id, user_id)`）；兩張都帶 `owner_unit_id`。**不碰 `dev_logs`**（不連動客戶拜訪、行事曆、接洽統計、報價單動態），**不重置 `dev_cases.updated_at`**（那是 30 天停滯警報的依據）。
 - 路由：`GET /api/dev-cases/{id}/directives`（整案批示＋回覆＋對象＋`canDirect` 旗標）、`POST /api/dev-cases/{id}/directives`（下批示）、`POST /api/dev-cases/{id}/directives/{directive_id}/replies`（回覆）。沒有修改／刪除端點：寫錯就再發一筆。
