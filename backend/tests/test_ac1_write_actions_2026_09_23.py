@@ -71,7 +71,10 @@ PAGES_DIR = ROOT / "frontend" / "pages"
 WRITE_RE = re.compile(r"method\s*:\s*['\"](POST|PUT|PATCH|DELETE)['\"]", re.I)
 
 #: 頁面自己 `<script src>` 進來的專案 js。
-_SRC_RE = re.compile(r'<script[^>]+src="([^"]+\.js)"')
+#: 單雙引號皆可、容許 `?v=` 版本戳（原本只吃 `src="….js"` ⇒ 將來有人加版本戳就會安靜少掃）。
+_SRC_RE = re.compile(r"""<script[^>]+src=["']([^"']+?\.js)(?:\?[^"']*)?["']""")
+#: 動態載入：`el.src = '….js'`（approval-settings／case-management／map／quotations 都有）。
+_DYN_SRC_RE = re.compile(r"""\.src\s*=\s*["']([^"']+?\.js)(?:\?[^"']*)?["']""")
 
 #: 🔴 **唯讀頁的豁免登記表**（2026-09-23 實算，共 8 頁）。
 #:
@@ -136,7 +139,7 @@ def _linked(page):
     """
     out = []
     html = page.read_text(encoding="utf-8", errors="replace")
-    for m in _SRC_RE.finditer(html):
+    for m in list(_SRC_RE.finditer(html)) + list(_DYN_SRC_RE.finditer(html)):
         s = m.group(1)
         if "vendor" in s or s.startswith("http"):
             continue
@@ -185,7 +188,8 @@ def test_ac1_every_script_link_of_every_page_resolves_to_a_file():
     """
     dead = []
     for page in _pages():
-        for m in _SRC_RE.finditer(page.read_text(encoding="utf-8", errors="replace")):
+        html = page.read_text(encoding="utf-8", errors="replace")
+        for m in list(_SRC_RE.finditer(html)) + list(_DYN_SRC_RE.finditer(html)):
             src = m.group(1)
             if "vendor" in src or src.startswith("http"):
                 continue
@@ -194,6 +198,16 @@ def test_ac1_every_script_link_of_every_page_resolves_to_a_file():
             except FileNotFoundError:
                 dead.append("%s → %s" % (page.name, src))
     assert not dead, "這些頁面載入的 js 找不到實體檔（守門會安靜地少掃）：\n  " + "\n  ".join(dead)
+
+
+def test_ac1_js_basenames_are_unique_across_frontend_and_modules():
+    """`FS.js_path` 只用**檔名**對應實體檔（與伺服器的 `/js/<檔名>` 掛載同一套）。
+    兩處同名（frontend/js、frontend/static、模組 js）⇒ 頁面載的是哪一份就說不準 ⇒ 守門可能掃到錯的檔 ⇒ 紅。"""
+    seen = collections.defaultdict(list)
+    for p in FS.all_js():
+        seen[p.name].append(FS.display(p))
+    dup = {k: v for k, v in seen.items() if len(v) > 1}
+    assert not dup, "js 檔名重複（守門靠檔名解析）：%r" % dup
 
 
 def test_ac1_a_page_whose_writes_live_in_a_module_js_counts_as_writing():
