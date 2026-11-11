@@ -39,7 +39,7 @@
 | `MOTRIX-ERP-QUICK.md` | 開發快速參考中樞（拆出 `docs/quick/`） | 現行 | 自述 09-23 |
 | `MULTIWIN-PROTOCOL.md` | 多視窗開發協定（派工、回報、閘門） | 現行 | 自述 09-30 |
 | `NETWORK-PLAN-MODULE-DESIGN.md` | 網路架構規劃模組的設計與施做順序 | 已實作（標頭：已部署、DB v64；`backend/modules/netplan/` 存在） | 自述 08-26＋模組存在 |
-| `SELLABLE-AND-MOBILE-SPEC.md` | 販售化與手機版兩條端到端細線 | 自述無狀態標頭，**未核對** | 自述 09-21 |
+| `SELLABLE-AND-MOBILE-SPEC.md` | 販售化與手機版兩條端到端細線 | 自述無狀態標頭，**未核對**（細線 1「授權閘門預設關／解凍前置」那一段 11-11 已更正：預設已改開、測試已補、**未部署**） | 自述 09-21；授權閘門段**程式 11-11** |
 | `MODULE-AUDIT-2026-09-13.md` | 模組權限盤點（狀態、對接、邏輯） | 快照 | 日期在檔名 |
 | `WEEKLY-AUDIT-2026-09-07_2026-09-10.md` | 一週更新拆解與異常排查索引 | 快照 | 日期在檔名 |
 | `AGENT-HANDOFF-TEMPLATE.md` | 視窗交接紀錄範本 | 現行（範本） | 自述 09-10 |
@@ -70,7 +70,7 @@
 | `CUSTOMIZATION-SPEC.md` | 網站內自訂：模組建構、拖曳排版、獨立升級 | **主體已實作**（標頭 11-11 已更正）。P6 `core/events.py`、P7 `module_update.py`、P8 `module-builder.html`＋`core/customization.py`（總開關預設關）、P9 `/api/layout`＋BP1 選單建構 | **程式 11-11**（只核對存在，未逐節核對與規格一致） |
 | `BUILDER-UX.md` | 模組建構器拖曳式／縮圖化 UX | 已實作（頁面存在） | **程式 11-11**（只核對存在） |
 | `STAGE-C-DESIGN.md` | 階段 C：頁面進模組資料夾、選單由登錄表產生 | **部分實作（標頭 11-11 已更正）**：C1～C4 已做（`core/pages.py`、`source_tree.page_file`、`/api/platform/menu`、sidebar 吃宣告）；C5 實體搬家**沒做**（46 個宣告頁 0 頁搬進 `modules/<key>/pages/`）；§7 決策點是否全有裁示未逐題核對 | **程式 11-11** |
-| `COMPANY-SETUP-GATE.md` | 販售版本公司資料設定閘門 | **已實作**（E4，609fc0257；標頭 11-11 已更正）。`helpers/company_setup.py`、`main.py` 閘門、6 組 `test_company_setup_*`＋e2e | **程式 11-11** |
+| `COMPANY-SETUP-GATE.md` | 販售版本公司資料設定閘門 | **已實作**（E4，609fc0257；標頭 11-11 已更正）。`helpers/company_setup.py`、`main.py` 閘門、6 組 `test_company_setup_*`＋e2e；「停擺風險」列的 `LICENSE_GATE_ENABLED=False` 11-11 已更正（授權閘門預設已改開，未部署） | **程式 11-11** |
 | `LODGING-NEARBY.md` | 地圖附近旅宿：來源調查與設計 | **已實作**（L2 模組 `lodging` v1.2.10；標頭 11-11 已更正） | **程式 11-11**（模組、migration、頁面、測試存在；§5 未查證各項未重核） |
 | `GOOGLE-BASEMAP.md` | Google 底圖：計費、條款、做法比較 | 已實作（文內已更正，採 Maps JavaScript API；`helpers/geo.py`、`routers/map_points.py`） | 自述更正 09-28＋程式存在 |
 | `MONEY-FLOWS.md`／`FINANCE-INTEGRATION.md`／`LEDGER-ACCEPTANCE.md` | 金流串接覆蓋表／財務串接總覽（快取）／總帳端到端驗收 | 現行（`money_flows.json` 有守門） | 自述 10-01～10-10 |

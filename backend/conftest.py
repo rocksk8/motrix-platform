@@ -838,6 +838,74 @@ def _company_setup_gate_default(request, monkeypatch):
     _cs.reset_cache()
 
 
+#: 測試用的「本機指紋」。16 碼小寫 hex（與真指紋同格式）；真指紋要跑 PowerShell 讀硬體，測試不該每次都去讀。
+TEST_LICENSE_MACHINE = "a1b2c3d4e5f60718"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def license_test_key(tmp_path_factory):
+    """授權閘門（`LICENSE_GATE_ENABLED` 預設 True，2026-11-11 起）下，整個測試 session 都有一把**有效**的測試金鑰。
+
+    沒有它：每一題打 `/api/*` 都先被 402 擋住，而且 `import main` 時 `core.loader.load_all` 會把所有模組判成
+    未授權、一個都不載入。**這是讓「閘門開著」成為測試的常態，而不是把閘門關掉。**
+
+    做法（驗章走**真的簽章路徑**，只換三樣環境）：
+      · 自己產一把臨時 Ed25519 金鑰對，公鑰換進 `_PUBKEY_DEV`（`_PUBKEY_PROD` 清空）——私鑰不落地、不進 repo；
+      · 用真的 `sign_license` 簽一把 `modules=["*"]`、2099 年到期、`machine=TEST_LICENSE_MACHINE` 的金鑰，
+        寫進 session 暫存目錄，`LICENSE_PATH` 指過去；
+      · `machine_fingerprint` 換成固定值——真的那支會在 Windows 上跑 PowerShell `Get-CimInstance` 讀硬體，
+        每一題（甚至 import main 那一刻）都去跑不合理。要驗真指紋的題標 `@pytest.mark.real_fingerprint`。
+
+    ⚠️ 必須是 **session 級且在 `_app` 之前**：`import main` 當下就會呼叫模組授權檢查（autouse 的 session 固件先於一般固件）。
+    要驗「沒金鑰／過期／無效」的題，自己 monkeypatch `LICENSE_PATH`（見 tests/test_licensing_gate_2026_09_21.py）。
+    回傳 dict：`priv_pem`、`pub_pem`、`path`、`machine`、`real_fingerprint`（換掉之前的真函式）。"""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+    from helpers import licensing as _lic
+
+    priv = ed25519.Ed25519PrivateKey.generate()
+    priv_pem = priv.private_bytes(encoding=serialization.Encoding.PEM,
+                                  format=serialization.PrivateFormat.PKCS8,
+                                  encryption_algorithm=serialization.NoEncryption())
+    pub_pem = priv.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                             format=serialization.PublicFormat.SubjectPublicKeyInfo)
+    blob = _lic.sign_license({
+        "customer": "測試用公司", "tax_id": "00000000", "machine": TEST_LICENSE_MACHINE,
+        "modules": ["*"], "issued": "2026-01-01", "expires": "2099-12-31", "kind": _lic.LICENSE_KIND_SUBSCRIPTION,
+    }, priv_pem)
+    key_path = tmp_path_factory.mktemp("license") / "license.key"
+    key_path.write_text(blob, encoding="utf-8")
+
+    real_fp = _lic.machine_fingerprint
+    mp = pytest.MonkeyPatch()
+    mp.setattr(_lic, "_PUBKEY_DEV", pub_pem)
+    mp.setattr(_lic, "_PUBKEY_PROD", b"")
+    mp.setattr(_lic, "LICENSE_PATH", str(key_path))
+    mp.setattr(_lic, "machine_fingerprint", lambda: TEST_LICENSE_MACHINE)
+    try:
+        yield {"priv_pem": priv_pem, "pub_pem": pub_pem, "path": str(key_path),
+               "machine": TEST_LICENSE_MACHINE, "real_fingerprint": real_fp}
+    finally:
+        mp.undo()
+
+
+@pytest.fixture(autouse=True)
+def _license_per_test_defaults(request, license_test_key, monkeypatch):
+    """每題開始時把 `LICENSE_PATH` 重設回 session 的測試金鑰（用 monkeypatch ⇒ 題目結束還原）。
+
+    為什麼每題都要：`tools/apply_plan.py::_license_check_for`、`tools/platform/module_update.py::_license_for`、
+    `tools/migrate_like_startup.py` 在行程裡**直接賦值** `LICENSE_PATH = <安裝目錄>/backend/license.key`（工具是獨立行程，
+    不需要還原）。測試行程裡有題目真的呼叫它們（授權檢查不注入），賦值就會留到後面的題目 ⇒ 之後同 worker 的每一題都 402。
+    這裡讓污染只活在那一題。
+
+    `@pytest.mark.real_fingerprint` ⇒ 這一題用真的 `machine_fingerprint`（讀硬體）。其餘題見 session 固件的固定值。"""
+    from helpers import licensing as _lic
+    monkeypatch.setattr(_lic, "LICENSE_PATH", license_test_key["path"])
+    if request.node.get_closest_marker("real_fingerprint"):
+        monkeypatch.setattr(_lic, "machine_fingerprint", license_test_key["real_fingerprint"])
+    yield
+
+
 @pytest.fixture(autouse=True)
 def _upload_magic_default(request, monkeypatch):
     """上傳檔頭檢查（helpers.uploads._check_upload_magic，2026-09-30）：既有的上傳題用的是 b"x"／b"fake" 之類的假內容，

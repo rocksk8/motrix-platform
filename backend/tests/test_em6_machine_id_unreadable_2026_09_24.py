@@ -16,6 +16,10 @@ import pytest
 
 from helpers import licensing as lic
 
+# 這個檔案量的就是真的 machine_fingerprint（`_windows_hardware` 等來源讀不到時的行為）。
+# conftest 預設把指紋換成固定值（授權閘門預設開之後），這裡要用真的。
+pytestmark = pytest.mark.real_fingerprint
+
 
 @pytest.fixture()
 def signed_for_this_machine(monkeypatch):

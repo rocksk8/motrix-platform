@@ -459,9 +459,9 @@ def _record_request_trail(user_id: int, now_dt, method: str, path: str,
 # 而且會對還沒通過身分驗證的人洩漏「這台機器沒有授權」。
 @app.middleware("http")
 async def license_gate_middleware(request: Request, call_next):
-    """授權守門（細線 1 第 3 步）。**預設完全不介入。**
+    """授權守門（細線 1 第 3 步）。**預設生效**（2026-11-11 起；沿革見 helpers/licensing.py）。
 
-    `LICENSE_GATE_ENABLED` 是 False 時**連 `verify_license()` 都不呼叫** ——
+    `LICENSE_GATE_ENABLED` 是 False 時**完全不介入、連 `verify_license()` 都不呼叫** ——
     不要留「算了但不擋」的中間狀態，那會付出效能成本卻換不到任何好處。
 
     ⚠️ 透過 `license_core.` 讀那兩個名字（而不是 `from ... import` 進來），
