@@ -316,7 +316,10 @@
       .stl-table--items tbody td:nth-child(9), .stl-table--items tbody td:nth-child(10), .stl-table--items tbody td:nth-child(11) { grid-column: 1 / -1; }
       .stl-table--items tbody td:nth-child(2)::before { content: none; }
       .stl-table--items tbody td:nth-child(2) > div { font-size: 14px !important; font-weight: 700 !important; }
-      .stl-table--items .stl-input { font-size: 16px; min-height: 44px; box-sizing: border-box; width: 100%; }
+      .stl-table--items .stl-input { font-size: 16px !important; min-height: 44px; box-sizing: border-box; width: 100%; }   /* 稅別／來源下拉原本 inline 10px */
+      .stl-main [style*="font-size:11px"], .stl-main [style*="font-size:10px"] { font-size: 12px !important; }
+      .stl-table th .stl-sort { display: inline-block; padding: 12px 6px; }
+      .stl-pf button { min-height: 36px; padding: 4px 14px; }
       .stl-table--items tfoot, .stl-table--items tfoot tr { display: block; }
       .stl-table--items tfoot tr { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; padding: 12px 16px; }
       .stl-table--items tfoot td { display: block; border: 0 !important; padding: 0 !important; text-align: left !important; }
