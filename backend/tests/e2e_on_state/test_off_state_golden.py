@@ -23,12 +23,8 @@ RECORD = os.environ.get("MOTRIX_RECORD_GOLDEN") == "1"
 _DATE = re.compile(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?")
 
 
-_BUILD = re.compile(r"(?<![0-9a-f])[0-9a-f]{7,12}(?= · 啟動)")
-
-
 def _norm_text(s):
     s = _DATE.sub("<日期>", s)
-    s = _BUILD.sub("<build>", s)                                     # 頁尾 build 短 hash 每個 commit 都不同
     return [ln.strip() for ln in s.splitlines() if ln.strip()]
 
 
@@ -84,14 +80,26 @@ def _compare(name, snap):
     assert snap["text"] == want["text"], "OFF 狀態的畫面文字變了"                                           # (b) 畫面文字與 platform 逐項相同
 
 
+#: 頁尾建置戳記（admin／superadmin 才有，`#build-footer`）是**執行環境資訊**，不是 OFF 狀態的畫面：內容是
+#: 「<短 hash> · 啟動 <時間>」，還會隨環境變成「⚠️ 執行中 … 落後 N 個異動」（共用工作樹的 HEAD 在回歸跑到一半被別的視窗往前推）、
+#: 「不可得 · 啟動 … · 版本比對不可得」（git 不在 PATH／git 逾時）。2026-11-11：全量回歸在平行 e2e 負載下紅、單獨重跑就綠；
+#: 乾淨 train tip 上畫面文字與 golden 逐項相同，唯一會隨環境變的就是這一行（git 不在 PATH 時可穩定重現同一個「畫面文字變了」）。
+#: 所以快照裡它只留一個佔位字串 `<build-footer>`（仍然證明「頁尾有出現」），內容不比對。
+FOOTER_MARK = "<build-footer>"
+TEXT_JS = """() => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); const out = []; let n;
+    while ((n = w.nextNode())) { const e = n.parentElement; if (!e || ['SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT'].includes(e.tagName)) continue;
+      if (e.offsetParent === null && getComputedStyle(e).position !== 'fixed') continue; const t = n.textContent.trim(); if (!t) continue
+      if (e.closest('#build-footer')) { if (out[out.length - 1] !== '%s') out.push('%s'); continue }
+      out.push(t) } return out.join('\\n') }""" % (FOOTER_MARK, FOOTER_MARK)
+
+
 def _snapshot(page, reqs, ready_js):
     page.wait_for_function(ready_js, timeout=20000)
+    # 頁尾（admin／superadmin）是 /api/build-info 回來才有字：負載高時它比 networkidle 晚，就要明確等到它有內容（內容本身不比對，見 FOOTER_MARK）
+    page.wait_for_function("() => { const b = document.getElementById('build-footer'); return !!b && b.textContent.trim().length > 0 }", timeout=20000)
     page.wait_for_load_state("networkidle")
     page.wait_for_timeout(500)
-    text = page.evaluate("""() => { const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); const out = []; let n;
-        while ((n = w.nextNode())) { const e = n.parentElement; if (!e || ['SCRIPT', 'STYLE', 'TEMPLATE', 'NOSCRIPT'].includes(e.tagName)) continue;
-          if (e.offsetParent === null && getComputedStyle(e).position !== 'fixed') continue; const t = n.textContent.trim(); if (t) out.push(t) } return out.join('\\n') }""")
-    return {"text": _norm_text(text), "requests": _norm_reqs(reqs.sorted())}
+    return {"text": _norm_text(page.evaluate(TEXT_JS)), "requests": _norm_reqs(reqs.sorted())}
 
 
 def test_quotation_form_off_golden(live_server, make_user, new_context):
@@ -135,3 +143,27 @@ def test_query_date_normalization_is_narrow():
                 ["GET /api/auth/me", "GET /api/daily-tasks?date=2026-10-15&username=other"],   # 不同使用者
                 ["GET /api/auth/me", "GET /api/daily-tasks?username=off_qf&x=date=2026-10-15"]):   # date 不在查詢鍵位置
         assert Counter(_norm_query_dates(base)) - Counter(_norm_query_dates(bad)), bad
+
+
+@pytest.mark.parametrize("footer", [
+    "abc1234 · 啟動 2026-11-11 10:00",                                           # 平常
+    "不可得 · 啟動 2026-11-11 10:00 · 版本比對不可得",                              # git 不在 PATH／逾時
+    "⚠️ 執行中 abc1234　落後 3 個後端／前端異動　—— 建議重新啟動",                    # 共用工作樹 HEAD 被往前推
+])
+def test_build_footer_variants_do_not_change_the_snapshot(live_server, make_user, new_context, footer):
+    """正對照（K審紀錄）：頁尾建置戳記不管長成哪一種，快照文字都一樣（只剩 <build-footer> 佔位）；
+    把 TEXT_JS 的佔位邏輯拿掉，後兩種就會紅。頁尾若根本沒出現也要紅（佔位也是『頁尾有出現』的證明）。"""
+    u = make_user(username="off_bf", role="superadmin")
+    qn = seed_draft_quote()
+    page = new_context().new_page()
+    inject_login(page, live_server, u[0], u[1])
+    page.goto("%s/pages/quotation-form.html?id=%s" % (live_server, qn))
+    page.wait_for_function("() => %s.q && %s.q.quoteNo === '%s'" % (DATA_JS, DATA_JS, qn), timeout=20000)
+    page.wait_for_selector("#build-footer", state="attached", timeout=15000)
+    page.wait_for_function("() => document.getElementById('build-footer').textContent.length > 0", timeout=15000)
+    page.wait_for_timeout(500)
+    before = _norm_text(page.evaluate(TEXT_JS))                                    # 頁尾是「真的」內容時的快照
+    page.evaluate("(t) => { document.getElementById('build-footer').textContent = t }", footer)
+    got = _norm_text(page.evaluate(TEXT_JS))
+    assert got[-1] == FOOTER_MARK and got.count(FOOTER_MARK) == 1, got[-3:]
+    assert got == before                                                            # 頁尾內容換成任何一種，快照都不變
