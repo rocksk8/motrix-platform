@@ -317,6 +317,7 @@
       .stl-table--items tbody td:nth-child(2)::before { content: none; }
       .stl-table--items tbody td:nth-child(2) > div { font-size: 14px !important; font-weight: 700 !important; }
       .stl-table--items .stl-input { font-size: 16px !important; min-height: 44px; box-sizing: border-box; width: 100%; }   /* 稅別／來源下拉原本 inline 10px */
+      .stl-table--items td > div > .stl-input { flex: 1 1 auto; width: auto !important; min-width: 0; }   /* 數字欄原本 inline width:80px，卡片裡與「NT$」並排時 placeholder「預設 52,000」被截 */
       .stl-main [style*="font-size:11px"], .stl-main [style*="font-size:10px"] { font-size: 12px !important; }
       .stl-table th .stl-sort { display: inline-block; padding: 12px 6px; }
       .stl-pf button { min-height: 36px; padding: 4px 14px; }
