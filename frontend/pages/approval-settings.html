@@ -213,6 +213,20 @@
     .as-card-digest { display: none; }
     .as-card-head { flex-wrap: wrap; }
   }
+
+  /* -- 手機／平板直式觸控補強（2026-11-12 UI 檢查）：「調整」「儲存設定」「加入」等小按鈕 ~38px、下拉 12px（iOS 聚焦會放大頁面）、
+        展開後的步驟編輯區按鈕太近。只補尺寸與間距，不動既有版面規則。 -- */
+  @media (max-width:767px) {
+    .as-main .btn-sm { min-height: 44px; padding-left: 14px; padding-right: 14px; }
+    .as-card-head { row-gap: 8px; }
+    .as-main select, .as-main input[type="text"], .as-main input[type="search"], .as-main input:not([type]) { font-size: 16px !important; min-height: 44px; box-sizing: border-box; }
+    .as-main .scope-row__more { gap: 12px; }
+    .as-main .status-toggle { min-height: 44px; display: inline-flex; align-items: center; }
+  }
+  @media (min-width:768px) and (max-width:1023px) {
+    .as-main .btn-sm { min-height: 40px; }
+    .as-main select { min-height: 40px; }
+  }
   </style>
 </head>
 <body x-data="approvalSettingsApp()" x-init="init()" x-cloak>

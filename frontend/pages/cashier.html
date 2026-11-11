@@ -258,6 +258,55 @@
     .stl-table th{padding:7px 10px;text-align:left;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);background:#FAFAF8;border-bottom:1px solid var(--border-light)}
     .stl-table td{padding:7px 10px;border-bottom:1px solid #F0EEE9;vertical-align:middle;font-family:var(--font-zh)}
     .stl-table tr:last-child td{border-bottom:none}
+
+    /* ── 手機／平板直式（2026-11-12 UI 檢查）──────────────────────────────────
+       原本：KPI 方塊被 max-width:200px 卡成窄條、九個子頁籤被擠成一字一行、客戶歷史左右兩欄在 375px 下互相擠壓。
+       ⇒ KPI 兩欄；子頁籤改單列橫向滑動（不換行）；客戶歷史上下堆疊；輸入框 16px 免 iOS 自動放大；按鈕 ≥40px。 */
+    @media (max-width:767px){
+      .page-main{padding:14px 12px 24px}
+      .page-main > .panel[style*="padding:20px"]{padding:12px !important}
+      .stat-strip{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+      .stat-pill{max-width:none;min-width:0;padding:10px 12px}
+      .stat-pill:last-child:nth-child(odd){grid-column:1 / -1}
+      .stat-pill__val{font-size:17px;overflow-wrap:anywhere}
+      /* 明細表格：原本 min-width:520px 配 9～10 欄，欄位被壓到一字一行（客戶名稱直排）。改成「依內容撐開、不換行」，
+         表格本身在 .panel 內橫向滑動（各表有自己的 .panel 捲動容器，不會連同上方 KPI 一起捲）。 */
+      .data-table{min-width:max-content}
+      .data-table th,.data-table td{white-space:nowrap}
+      .data-table td[style*="white-space"]{white-space:normal}
+      .ctabs{overflow-x:auto;flex-wrap:nowrap;gap:0;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+      .ctabs::-webkit-scrollbar{display:none}
+      .ctab{flex:none;white-space:nowrap;min-height:44px;padding:10px 10px;margin-right:8px}
+      .period-nav button{width:40px;height:40px}
+      .period-type-btn,.btn-export,.btn-load,.btn-set-target{min-height:40px;padding-left:14px;padding-right:14px}
+      .export-wrap{margin-left:0;flex-wrap:wrap}
+      .action-btn{min-height:40px;padding:6px 12px}
+      .search-wrap{flex:1 1 100%}
+      .search-input,.field-input,.tgt-field input,.cust-search,.cust-sort{font-size:16px;min-height:42px}
+      .cust-layout{flex-direction:column;min-height:0}
+      .cust-list-col{width:auto;min-width:0;max-height:260px;border-right:0;border-bottom:1px solid var(--border-light)}
+      .cust-detail-col{padding:14px 12px}
+      .tgt-2col,.stl-meta{grid-template-columns:1fr}
+      .modal-overlay{align-items:flex-end;padding:0}
+      .modal-box{max-width:100%;border-radius:16px 16px 0 0}
+      .modal-hd{padding:14px 16px}
+      .modal-body{padding:14px 16px}
+      .summary-bar{flex-wrap:wrap;gap:6px 16px}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .page-main{padding:22px 20px}
+      .stat-pill{max-width:none}
+      .ctabs{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}
+      .ctabs::-webkit-scrollbar{display:none}
+      .ctab{flex:none;white-space:nowrap;min-height:44px;padding:10px 6px}
+      .period-nav button{width:36px;height:36px}
+      .panel{overflow-x:auto}
+      .data-table{min-width:max-content}
+      .data-table th,.data-table td{white-space:nowrap}
+      .period-type-btn,.btn-export,.btn-load{min-height:38px}
+      .action-btn{min-height:36px;padding:4px 12px}
+      .cust-list-col{width:240px}
+    }
   </style>
 </head>
 <body x-data="cashierApp()" x-init="init()" x-cloak>

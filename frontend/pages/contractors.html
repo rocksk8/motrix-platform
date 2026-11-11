@@ -68,6 +68,46 @@
     .id-card-preview img{width:100%;max-height:180px;object-fit:contain;display:block}
     .id-card-remove{position:absolute;top:6px;right:6px;background:rgba(220,38,38,.9);color:#fff;border:none;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer;font-family:inherit}
     .id-card-remove:hover{background:var(--danger)}
+    /* 手機／平板直式（2026-11-12 UI 檢查）：
+       ① 九欄表格 + 頁面右側預留 400px（開詳情時）⇒ 375px 寬橫向溢出、按鈕列「新增人員」被推出畫面
+       ② 「編輯」按鈕 opacity:0、滑鼠移上去才出現 ⇒ 觸控裝置永遠看不到
+       ⇒ 觸控裝置編輯鈕常駐；手機只留 姓名／電話／狀態／編輯（證件、Email、國籍、分行點整列看詳情）；
+          詳情改全螢幕覆蓋，不再擠壓頁面。 */
+    @media (hover:none){ .row-actions{opacity:1} }
+    @media (max-width:1023px){ .row-actions{opacity:1} .page-main{padding-right:20px !important} }
+    @media (max-width:767px){
+      .page-main{padding:16px 12px 28px !important}
+      .pg > div[style*="display:flex"]{flex-wrap:wrap;width:100%}
+      .pg > div[style*="display:flex"] .btn{flex:1 1 auto;justify-content:center}
+      .search-bar{flex-wrap:wrap}
+      .search-wrap{flex:1 1 100%}
+      .search-input,.form-input,.form-select,.form-textarea{font-size:16px;min-height:44px}
+      .search-bar label{min-height:44px}
+      .search-bar label input{width:20px;height:20px}
+      .data-table{min-width:0}
+      .data-table th:nth-child(3),.data-table td:nth-child(3),
+      .data-table th:nth-child(5),.data-table td:nth-child(5),
+      .data-table th:nth-child(6),.data-table td:nth-child(6),
+      .data-table th:nth-child(7),.data-table td:nth-child(7){display:none}
+      .data-table th,.data-table td{padding-left:8px;padding-right:8px}
+      .data-table td:nth-child(4){white-space:nowrap}
+      .data-table td .btn{min-height:40px;min-width:48px}
+      .detail-pane{width:100%;border-left:0}
+      .detail-pane:not(.open){box-shadow:none}
+      .detail-close{width:44px;height:44px;font-size:20px}
+      .form-grid-2{grid-template-columns:1fr}
+      .modal-overlay{padding:0 !important;align-items:flex-end !important}
+      .modal-box{max-width:100% !important;border-radius:16px 16px 0 0}
+      .modal-head,.modal-foot{padding-left:16px;padding-right:16px}
+      .modal-body{padding:16px}
+      .modal-foot .btn{flex:1 1 auto;justify-content:center;min-height:44px}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .page-main{padding-left:20px}
+      .search-input,.form-input,.form-select{min-height:40px}
+      .detail-pane{width:340px}
+      .data-table th:nth-child(6),.data-table td:nth-child(6),.data-table th:nth-child(7),.data-table td:nth-child(7){display:none}
+    }
   </style>
 </head>
 <body x-data="contractorsPage()" x-init="init()">
@@ -347,7 +387,7 @@
         <div class="form-grid-2">
           <div class="form-group">
             <label class="form-label">電話</label>
-            <input class="form-input" type="text" x-model="form.phone" placeholder="04-XXXX-XXXX">
+            <input class="form-input" type="tel" inputmode="tel" x-model="form.phone" placeholder="04-XXXX-XXXX">
           </div>
           <div class="form-group">
             <label class="form-label">Email</label>
@@ -365,7 +405,7 @@
         <div class="form-grid-2">
           <div class="form-group">
             <label class="form-label">銀行代碼</label>
-            <input class="form-input" type="text" x-model="form.bank_code" placeholder="如 812">
+            <input class="form-input" type="text" inputmode="numeric" x-model="form.bank_code" placeholder="如 812">
           </div>
           <div class="form-group">
             <label class="form-label">銀行名稱</label>

@@ -38,6 +38,10 @@
     @media (max-width: 767px) {
       .moved-main { margin-left: 0 !important; padding: 20px 16px; }
     }
+    /* 前往連結的點擊熱區（原 ~38px 高）放大到 ≥44px；平板直式的內距比照手機收斂。 */
+    .moved-link { min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; }
+    @media (max-width: 767px) { .moved-card { padding: 28px 20px; } .moved-link { width: 100%; } }
+    @media (min-width: 768px) and (max-width: 1023px) { .moved-main { padding: 24px 20px; } }
   </style>
 </head>
 <body>

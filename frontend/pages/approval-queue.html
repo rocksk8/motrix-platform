@@ -383,6 +383,27 @@
     .aq-card__act { width:100%; margin-left:0; }
     .mob-back-aq { display:inline-flex !important; }
   }
+
+  /* -- 手機／平板直式觸控補強（2026-11-12 UI 檢查）--
+     ① 詳情抽屜的動作列（開啟單據／預覽／轉簽／確認簽核／退回／拒絕結案）是不換行的單排 flex ⇒ 375px 下「退回」被擠出畫面右側看不到
+        ⇒ 動作列允許換行；手機把「簽核／退回」排在最前面、各自撐滿、≥48px 高（這頁最重要的動作，不該要橫向捲才找得到）
+     ② 抽屜關閉鈕 28px ⇒ 44px；清單卡上的小按鈕補高度 */
+  .aq-detail-actions { flex-wrap: wrap; flex-shrink: 1; min-width: 0; }
+  @media (max-width:767px) {
+    .aq-detail-header { gap: 10px; margin-bottom: 16px; }
+    .aq-detail-actions { width: 100%; gap: 8px; }
+    .aq-detail-actions > div[style*="display:flex"] { order: -1; flex: 1 1 100%; gap: 10px !important; }
+    .aq-detail-actions .btn, .aq-detail-actions > a, .aq-detail-actions > button { min-height: 44px; }
+    .aq-detail-actions > div[style*="display:flex"] .btn { flex: 1 1 calc(50% - 10px); min-height: 48px; justify-content: center; }
+    .aq-drawer__close { width: 44px; height: 44px; }
+    .aq-info-grid { gap: 12px 14px; }
+    .aq-card .btn, .aq-card button { min-height: 44px; }
+  }
+  @media (min-width:768px) and (max-width:1023px) {
+    .aq-drawer__close { width: 40px; height: 40px; }
+    .aq-detail-actions .btn, .aq-detail-actions > a, .aq-detail-actions > button { min-height: 40px; }
+    .aq-card .btn, .aq-card button { min-height: 40px; }
+  }
   </style>
 </head>
 <body x-data="approvalQueueApp()" x-init="init()" x-cloak>
