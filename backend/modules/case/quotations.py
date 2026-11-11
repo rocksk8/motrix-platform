@@ -349,6 +349,7 @@ def save_quotation_json(
     *,
     source: str = "funnel",
     reconcile_actor: dict = None,
+    chain_reset: bool = False,
 ) -> str:
     """Persist data_json and keep deal_tag / settle_status columns in sync.
 
@@ -363,7 +364,7 @@ def save_quotation_json(
     from modules.case import material_guard as _mg
     _mg.enforce(conn, quote_no, data, actor)
     from modules.case import content_fp as _cfp
-    _cfp.reconcile_txn(conn, quote_no, data, source=source, actor=reconcile_actor or actor, status=status)
+    _cfp.reconcile_txn(conn, quote_no, data, source=source, actor=reconcile_actor or actor, status=status, chain_reset=chain_reset)
     now = updated_at or datetime.now().isoformat()
     deal_tag, settle_status = quote_hot_fields(data)
     if status is not None:

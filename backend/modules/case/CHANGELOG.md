@@ -1,6 +1,16 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-11（feat/ux-onboarding-consistency；首次體驗與一致性：UX 提案 A1–A6、E1–E2；僅前端；報價單表單 V3.38；L1 介面不變）
+## (next) — 2026-11-11（feat/approval-edit-lock-tier-reset；業主需求：簽核人改了報價單內容存不了；金額相關；L1 介面不變；含 K 審兩輪修正；已併入 train/t79-int b508c2406；含 V3.36 送審前置檢查，本票表單 V3.39）
+- 修正（畫面，業主回報的 bug）：簽核人檢視待審核／簽核中的報價單時，**欄位原本看起來能打字、但按「儲存草稿」PUT 回 403**（待審核狀態本來就不能存）⇒ 主管只好退回修改。現在當層待簽人檢視時表單欄位一律 `disabled`（`pages/quotation-form.html` `isApproverLocked()`／`_syncControlLock()`；鍵盤 Tab 進去也打不進去）、「儲存草稿」不顯示，工具列常駐「編輯」鈕（`data-testid="qf-review-edit-start"`，`canReviewEdit()` 成立且 GET 帶 `reviewEditOn` 才顯示；**不再需要旗標成立**）→ 按下去進複查編輯 → 「儲存複查編輯」走既有 `POST /review-edit`。
+- 新增（`GET /api/quotations/{no}`）：待審核／簽核中且 `reconfirm_mode=on` 時多回頂層 `reviewEditOn: true`（off／shadow 沒有這個鍵，回應逐位元不變）——複查編輯端點只在 on 開放，前端據此決定要不要顯示編輯鈕。**出廠預設 `reconfirm_mode=0`：沒翻 on 之前編輯鈕不會出現（欄位仍鎖住）。**
+- 修改（畫面）：`approveQuote()` 核准前的「維持／編輯」彈窗**退場「編輯內容」選項**（編輯入口只剩常駐編輯鈕）；彈窗保留「維持核准」（伺服器在複查／轉簽／代理旗標成立時仍要求 `choice=keep`，需要時補說明進稽核——不是多餘的）。`approval-cascade.js::askChoice` 加選用參數 `noEditHint`。簽核佇列頁的彈窗與「編輯內容→轉報價單頁」維持原樣。
+- 新增（規則）：**第 3 層（含）以後（`currentTier>=2`，0 起算）的複查編輯＝整條簽核鏈回第 1 層重跑**——`content_fp.reconcile_in_memory(..., chain_reset=True)`（只在 `source=review-edit` 生效）：所有已簽條目（含舊單沒有 `signedFp` 的、編輯者自己）回待簽＋`reconfirm`、不做編輯者自動重簽、`currentTier=0`、`changeLog` 記 `chainReset`；狀態回「待審核」（比照 approve：簽核中＝currentTier>0）。`save_quotation_json`／`reconcile_txn` 加選用參數 `chain_reset`；回應多 `chainReset`；稽核 `quotation.review_edit` 多 `tier`（1 起算）與 `chainReset`。第 1、2 層編輯維持原行為（首次待簽者不自動簽、其他已簽層回待複查）。
+- 新增（通知信）：複查編輯存檔成功後寄信給**送審人＋全部超級管理員**——新檔 `modules/case/review_edit_notify.py`（`fire_edited`，走 `send_registered`；`module.json` features 與 `docs/platform/modules.json` 已登記；不動 L1）；信件類型 `approval_review_edit`（模組自己 `mail_types.register`，群組＝superadmins、事件＝送審人；超管可在收件設定頁覆寫；使用者可退訂）。信內只列變動的欄位名稱、不帶新舊值（收件人不一定有金額檢視權限）。`editHistory` 照舊寫一筆 `review_edit`。
+- 修改（K 審 hichan-12）：①整條重跑後**通知第 1 層「輪到你」**（站內 `approval_request`＋`notify_approval_request` 信，比照一般送審）；被作廢者的站內通知文字改成「整條簽核已回到第 1 層重新進行；輪到你時會再通知」。②簽核人鎖定改用獨立的 `.approver-locked`（不再借 `.is-locked`）：文字欄／文字區 `readonly`（長條款仍可捲動、選取、複製）、其餘 `disabled`；**「顯示／隱藏成本欄」維持可按**（簽核人要看成本與毛利）。
+- 修正（K 審再審）：`.approver-locked` 漏了舊 `.is-locked` 的「`.form-section button` 擋點擊」——鎖住後「新增區段標題」、欄位顯示開關仍會改內容並把 `isDirty` 弄髒（啟動自動存檔 PUT）。補 CSS＋`_syncControlLock` 一併 disable（鍵盤也擋）＋`autoSave()` 簽核人鎖定時直接不存。
+- 已知限制（K 審）：①鎖定只對**當層待簽人**生效；送審人、尚未輪到的後層簽核人、整條重跑後的原編輯者看到的欄位仍是可輸入的樣子（後端 PUT 會擋、不會寫入）。②超級管理員當層簽核時欄位鎖住但沒有編輯鈕（複查編輯端點擋超管；解鎖編輯只對已送出）。③簽核佇列頁的彈窗仍保留「編輯內容」（轉到報價單頁 `?reviewEdit=1` 進入編輯），**刻意不動**；是否一併退場待產品決定。④編輯前的「會回第 1 層」警告用載入當下的 `currentTier`，伺服器以「編輯前對帳之後」的 `currentTier` 為準，兩者在有過期簽核時可能不同；存檔後的提示以伺服器回的 `chainReset` 為準。
+- 測試：`modules/case/tests/test_review_edit_chain_reset_2026_11_11.py`（第 3 層整條重跑＋依序重簽到底／舊單與編輯者自己也重置／第 1、2 層不重跑／收件人＝送審人＋全部可寄的超管／失敗不寄信／editHistory）、`tests/test_e2e_review_edit_lock_2026_11_11.py`（真瀏覽器：欄位鎖住含鍵盤、常駐編輯鈕、編輯→存檔→核准過關、第 3 層編輯提示與整條重跑、旗標彈窗只剩維持核准、mode off 不顯示編輯鈕）。表單版本 V3.39。
+- **（併入）(next) — 2026-11-11（feat/ux-onboarding-consistency；首次體驗與一致性：UX 提案 A1–A6、E1–E2；僅前端；報價單表單 V3.38；L1 介面不變）**
 - 新增（前端，全站）：首次設定精靈（強制改密碼→重新登入→確認公司資料→兩步驟驗證（可略過）→儀表板；步驟條「步驟 n／N」、隱藏頂欄）、公司資料閘門頁瘦身（只留確認卡＋4 個必填欄、統編即時驗證）、頂欄「？」說明抽屜與「第一次來？」橫幅（`static/ux-help.js`，內容集中一處）、儀表板上手清單（帶勾選進度；有資料的老系統不出現）。
 - 修正（案件模組頁面）：`quotations.html` 空狀態分三種（從未有資料／篩選後沒有／載入失敗），不再顯示「資料為空，自動重試中…」「DB 已連線」「MQ 系列」；`case-management.html` 空狀態說明案件由報價單「成案」而來；`quotation-form.html` 送出審核確認視窗與按鈕補「這會…」說明、取消折讓說明，「INTERNAL · 成本分機」改「內部成本與利潤」（V3.38）。
 - 變更（全站）：建置戳記（頁尾右下）只對管理員顯示。

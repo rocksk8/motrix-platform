@@ -627,6 +627,17 @@
     .is-locked .toggle-btn { display:none !important; }
     .is-locked .add-item-btn { display:none !important; }
     .is-locked .form-section button { pointer-events:none; opacity:.55; }
+    /* ── 簽核人檢視待審核／簽核中：欄位唯讀（文字欄 readonly、其餘 disabled；見 _syncControlLock）。不用 .is-locked：
+       那一套會藏掉「顯示／隱藏成本欄」（簽核人要看成本與毛利）、並用 pointer-events:none 讓長欄位不能捲動／選取複製 ── */
+    .approver-locked .cell-input,
+    .approver-locked .cell-textarea,
+    .approver-locked .form-input,
+    .approver-locked .form-select,
+    .approver-locked .form-textarea { background:#FAFAF8; border-color:#F0EEE9; color:var(--text-secondary); }
+    .approver-locked .nt-input-group { opacity:.75; }
+    .approver-locked .del-btn, .approver-locked .add-item-btn, .approver-locked .drag-handle { display:none !important; }
+    .approver-locked .toggle-btn:not(.keep-open) { pointer-events:none; opacity:.55; }
+    .approver-locked .form-section button:not(.keep-open) { pointer-events:none; opacity:.55; }   /* 會改內容的按鈕（欄位顯示開關、新增區段標題、套用條款組…）；舊 .is-locked 也有這條 */
     /* ── NT$ 前綴輸入欄 ── */
     .nt-input-group { display:flex; align-items:stretch; border:1px solid var(--border-light); border-radius:var(--radius); overflow:hidden; background:#fff; transition:border-color .12s,box-shadow .12s; }
     .nt-input-group:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.08); }
@@ -975,14 +986,20 @@
           重新鎖定
         </button>
       </template>
+      <template x-if="canReviewEdit() && !reviewEditing">
+        <button class="btn btn-sm" style="background:#fff;color:#4338CA;border:1px solid #4338CA" data-testid="qf-review-edit-start" @click="startReviewEdit()" title="修改這張報價單的內容（存檔後會通知送審人與最高管理者）">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+          編輯
+        </button>
+      </template>
       <template x-if="reviewEditing">
         <span style="display:inline-flex;gap:6px;align-items:center;padding:3px 8px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius);font-size:11px;color:#3730A3" data-testid="review-edit-bar">
-          複查編輯中：改完請按「儲存複查編輯」
+          <span x-text="reviewEditResetsChain() ? '複查編輯中（第 3 層以後的編輯，存檔後整條簽核會回第 1 層重跑）：改完請按「儲存複查編輯」' : '複查編輯中：改完請按「儲存複查編輯」'"></span>
           <button class="btn btn-sm" style="background:#4338CA;color:#fff;border:1px solid #4338CA" :disabled="reviewEditBusy" @click="saveReviewEdit()" data-testid="review-edit-save">儲存複查編輯</button>
           <button class="btn btn-ghost btn-sm" :disabled="reviewEditBusy" @click="cancelReviewEdit()" data-testid="review-edit-cancel">放棄修改</button>
         </span>
       </template>
-      <button class="btn btn-ghost btn-sm" @click="saveDraft()" x-show="(q.status !== '已送出' || unlocked) && !hb.on && !reviewEditing">
+      <button class="btn btn-ghost btn-sm" @click="saveDraft()" x-show="(q.status !== '已送出' || unlocked) && !hb.on && !reviewEditing && !isApproverLocked()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
         <span x-text="unlocked ? '儲存修改' : '儲存草稿'"></span>
       </button>
@@ -1056,7 +1073,7 @@
   <!-- ══ 主體 ══ -->
   <div class="form-layout">
 
-    <div class="form-left" :class="{'is-locked': q.status === '已送出' && !unlocked}">
+    <div class="form-left" :class="{'is-locked': q.status === '已送出' && !unlocked, 'approver-locked': isApproverLocked()}" :data-approver-locked="isApproverLocked() ? '1' : '0'">
 
       <!-- 退回改版通知橫幅：有 returnInfo 就顯示（不限於草稿狀態） -->
       <div x-show="q.returnInfo"
@@ -1213,7 +1230,7 @@
           <div class="section-num">基</div>
           <span x-text="secLabel('qbasic', '報價資訊')">報價資訊</span>
           <div style="margin-left:auto;display:flex;gap:6px">
-            <button class="toggle-btn" :class="{active:showCostCols}" @click="showCostCols=!showCostCols">
+            <button class="toggle-btn keep-open" :class="{active:showCostCols}" @click="showCostCols=!showCostCols">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
               <span x-text="showCostCols ? '隱藏成本欄' : '顯示成本欄'"></span>
             </button>
@@ -2461,7 +2478,8 @@
   // V3.35（2026-11-11）：品項明細三個多行欄（品名／廠牌型號／備註）載入既有單、改值、欄寬變動時自動撐高，不再看起來被裁切
   // V3.36（2026-11-11）：送審前置檢查、送審失敗顯示後端原因並還原狀態、已送出單選「已成案」改只打 PATCH（修 EM11 起的卡住）。
   // V3.38（2026-11-11，UX A6／E2）：送出審核確認視窗與按鈕補「這會…」說明、取消折讓說明；「INTERNAL · 成本分機」改白話「內部成本與利潤」。
-  const FORM_VERSION = 'V3.38'
+  // V3.39（2026-11-11，簽核人編輯）：簽核人檢視待審核／簽核中時欄位預設 disabled、工具列常駐「編輯」鈕（reconfirm_mode=on 才顯示）；核准前彈窗退場「編輯內容」選項、只留「維持核准」；第 3 層以後編輯提示整條回第 1 層。
+  const FORM_VERSION = 'V3.39'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -2523,6 +2541,7 @@
       // _srvData／_qBase：載入當下的伺服器本文與畫面 q 的複本——儲存時只送「真的被改過的頂層鍵」，其餘沿用伺服器本文
       // （q 上有畫面預設值與前端附加欄位，整份送會讓指紋變動、白白作廢別人的簽）。
       _approveReview: null,
+      _reviewEditOn: false,   // GET 的 reviewEditOn（reconfirm_mode=on 才有）：複查編輯端點只在 on 開放，off／shadow 時不顯示編輯鈕（按了也只會 409）
       _srvData: null,
       _qBase: null,
       reviewEditing: false,
@@ -2967,7 +2986,7 @@
 
       // 2026-09-24：鍵盤操作品項——Ctrl+Enter 在下方插入一列、Alt+↑／↓ 移動。
       // 鎖定規則比照拖拉排序（initSortable() 的 isLocked）。
-      _itemsLocked() { return this.q.status === '已送出' && !this.unlocked },
+      _itemsLocked() { return (this.q.status === '已送出' && !this.unlocked) || this.isApproverLocked() },
       _itemRow(i) { return this.$refs.itemsTbody ? this.$refs.itemsTbody.querySelectorAll(':scope > tr')[i] : null },
       insertItemAfter(idx) {
         if (this._itemsLocked()) return
@@ -3450,6 +3469,7 @@
       },
 
       autoSave() {
+        if (this.isApproverLocked()) return   // 簽核人檢視中不存檔（PUT 在待審核會被擋）；欄位已鎖，這是最後一道防線
         if (this.reviewEditing) return        // 複查編輯只走「儲存複查編輯」（POST /review-edit）；PUT 在待審核狀態本來就會被擋
         this.apiSave(this.isNewRecord).then(ok => {
           if (ok) {
@@ -3933,8 +3953,54 @@
       // 只是畫面提示；伺服器的 review-edit 另外把關（含代理、金額檢視權限、is_signed 等）
       canReviewEdit() {
         const me = this.session?.username
-        return !!me && this.session.role !== 'superadmin' && this.isCurrentTierApprover()
+        return !!me && this._reviewEditOn && this.session.role !== 'superadmin' && this.isCurrentTierApprover()
           && this.q.approval?.requestedBy !== me && (this.q.status === '待審核' || this.q.status === '簽核中') && !this.q.isSigned
+      },
+
+      // 簽核人檢視待審核／簽核中：品項欄位預設鎖住（PUT 在待審核本來就會被擋，鎖住才不會讓人以為改了能存）；按「編輯」進入複查編輯（reviewEditing）才解鎖。
+      isApproverLocked() {
+        return (this.q.status === '待審核' || this.q.status === '簽核中') && !this.reviewEditing && this.isCurrentTierApprover()
+      },
+      // 第 3 層（含）以後的編輯＝整條簽核鏈回第 1 層（currentTier 0 起算 ⇒ >=2）；伺服器為準，這只是畫面提示
+      reviewEditResetsChain() { return (this.q.approval?.currentTier ?? 0) >= 2 },
+      // 鎖住時同步鎖表單欄位（CSS 的 pointer-events:none 擋不住鍵盤 Tab 進去打字）：文字欄／文字區 readonly（長條款仍可捲動、選取、複製），
+      // 其餘（下拉、勾選、數字日期…）disabled；只動這裡自己鎖的，解鎖時只還原自己鎖的（data-approver-lock＝ro／dis）
+      _syncControlLock() {
+        const root = document.querySelector('.form-left')
+        if (!root) return
+        if (this.isApproverLocked()) {
+          root.querySelectorAll('input,textarea,select').forEach(el => {
+            if (el.disabled || el.readOnly || el.hasAttribute('data-approver-lock')) return
+            const textual = el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && ['text', 'search', 'email', 'tel', 'url', 'number', ''].includes(el.type || ''))
+            if (textual) { el.readOnly = true; el.setAttribute('data-approver-lock', 'ro') }
+            else { el.disabled = true; el.setAttribute('data-approver-lock', 'dis') }
+          })
+          root.querySelectorAll('.form-section button:not(.keep-open), button.toggle-btn:not(.keep-open)').forEach(el => {      // 鍵盤也不能觸發會改內容的按鈕
+            if (!el.disabled && !el.hasAttribute('data-approver-lock')) { el.disabled = true; el.setAttribute('data-approver-lock', 'dis') }
+          })
+        } else {
+          root.querySelectorAll('[data-approver-lock]').forEach(el => {
+            if (el.getAttribute('data-approver-lock') === 'ro') el.readOnly = false; else el.disabled = false
+            el.removeAttribute('data-approver-lock')
+          })
+        }
+      },
+      _setupControlLock() {
+        if (this._controlLockReady) return
+        this._controlLockReady = true
+        let pending = false
+        const soon = () => {
+          if (pending) return
+          pending = true
+          requestAnimationFrame(() => { pending = false; this._syncControlLock() })
+        }
+        this.$watch('isApproverLocked()', () => {
+          this._sortable?.option('disabled', (this.q.status === '已送出' && !this.unlocked) || this.isApproverLocked())     // 拖曳排序跟著鎖（initSortable 的 watch 數量有守門，不在那邊加）
+          this.$nextTick(soon)
+        })
+        const root = document.querySelector('.form-left')
+        if (root) new MutationObserver(() => { if (this.isApproverLocked() || root.querySelector('[data-approver-lock]')) soon() }).observe(root, { childList: true, subtree: true })
+        soon()
       },
 
       async approveQuote(_retried = false) {
@@ -3954,10 +4020,11 @@
         const flags = MA.flagsFor(rv, rv?.entry, this.session.username)
         let choiceBody = {}
         if (flags.length) {
+          // 編輯入口只剩工具列常駐的「編輯」鈕（2026-11-11）；這個彈窗只留「維持核准」＝伺服器要求旗標成立時必帶 choice=keep（需要時要補說明、進稽核）
           const pick = await MA.askChoice({ flags, changedBlocks: rv.changedBlocks, newReasons: rv.newReasons, needNote: !!rv.needNote,
-                                            canEdit: this.canReviewEdit(), summary, extra: MA.cascadeNote(cascadeNos) })
+                                            canEdit: false, noEditHint: this.canReviewEdit() ? '若要修改內容，請按「取消」，再按上方工具列的「編輯」。' : undefined,
+                                            summary, extra: MA.cascadeNote(cascadeNos) })
           if (!pick) return
-          if (pick.choice === 'edit') { this.startReviewEdit(); return }
           choiceBody = { choice: 'keep', confirmNote: pick.note || undefined }
         } else {
           const confirmMsg = `確認簽核通過此報價單？\n\n${summary}` + MA.cascadeNote(cascadeNos)
@@ -3993,7 +4060,9 @@
         if (!this.canReviewEdit()) { alert('您目前不能在這裡編輯內容（需為當層待簽人，且不是送審人或最高管理者）'); return }
         this._snapshotBase()                 // 以「此刻畫面」為基準：之後改的才算複查編輯的內容
         this.reviewEditing = true
-        this.toast('已進入複查編輯：改完請按上方「儲存複查編輯」；存檔後你的簽核視為已簽新版')
+        this.toast(this.reviewEditResetsChain()
+          ? '已進入複查編輯：你在第 3 層以後編輯，存檔後整條簽核會回到第 1 層重新進行（包含你自己）'
+          : '已進入複查編輯：改完請按上方「儲存複查編輯」；存檔後你的簽核視為已簽新版')
       },
 
       async cancelReviewEdit() {
@@ -4046,7 +4115,9 @@
           await this.loadQuote()
           const others = (res.invalidated || []).length
           const meResigned = (res.resigned || []).some(x => x === this.session.username || (x && x.username === this.session.username))
-          this.toast('✓ 複查編輯已儲存' + (others ? `；其他已簽層（${others} 位）需重新複查` : '') + '。' + (meResigned ? '你的簽核已視為簽在新版。' : '你仍需再按一次核准。'))
+          this.toast(res.chainReset
+            ? '✓ 複查編輯已儲存；簽核已回到第 1 層，整條重新進行。已通知送審人與最高管理者。'
+            : '✓ 複查編輯已儲存' + (others ? `；其他已簽層（${others} 位）需重新複查` : '') + '。' + (meResigned ? '你的簽核已視為簽在新版。' : '你仍需再按一次核准。') + '已通知送審人與最高管理者。')
         } catch (e) {
           alert('網路錯誤：' + e.message)
         } finally {
@@ -4247,6 +4318,7 @@
         this._lastUpdatedAt = row.updated_at || null
         this._contentFp = row.contentFp || null
         this._approveReview = row.approveReview || null          // S5：reconfirm_mode=on 時才有
+        this._reviewEditOn = !!row.reviewEditOn
         this._srvData = JSON.parse(JSON.stringify(row.data || {}))
         this.loadVendorQuoteOpts()
         // 同時編輯警示（2026-09-14）：載到哪一張就回報哪一張，有別人在編會跳警示條
@@ -4606,7 +4678,7 @@
       _layoutP: null,          // initLayout() 的 promise（預設階段 seed 要在旗標讀完之後才決定）
       // Q3：自訂欄位（值存在 q.customFields；空值＝移除該欄位；整個物件空了＝送 {}（伺服端據此移除這個鍵）。
       cfIsAdmin() { return !!(this.session && this.session.role === 'superadmin') },
-      cfLocked() { return this.q.status === '已送出' && !this.unlocked },
+      cfLocked() { return (this.q.status === '已送出' && !this.unlocked) || this.isApproverLocked() },
       cfGet(k) { const cf = this.q && this.q.customFields; return cf ? cf[k] : undefined },
       cfSet(k, v) {
         const empty = v === '' || v === null || v === undefined || v === false
@@ -4815,6 +4887,7 @@
               // 簽核綁版本＋S5 彈窗資料：這條 `?id=` 載入路徑原本沒設 `_contentFp`（只有 loadQuote() 設）⇒ 直接開單簽核時 expectedFp 永遠是空的
               this._contentFp = row.contentFp || null
               this._approveReview = row.approveReview || null
+          this._reviewEditOn = !!row.reviewEditOn
               this._srvData = JSON.parse(JSON.stringify(row.data || {}))
               this.loadVendorQuoteOpts()          // N1：`?id=` 載入路徑也要載入承攬商報價品項（與 loadQuote() 是兩條路徑）
               loaded = true
@@ -4884,6 +4957,7 @@
       // init() 的尾巴：新增／編輯／複製三條路徑共用，可重複呼叫（只綁一次監聽，Sortable 重建前先銷毀舊的）。
       // 複製模式曾在 init() 中途 return 而漏掉這段，複製出來的新報價單拖曳排序失效。
       _bindLateHooks() {
+        this._setupControlLock()           // 簽核人檢視待審核單時，欄位 disabled（可重複呼叫，只綁一次）
         // 預覽：切換對外／內部就重取一次；iframe 內容以 postMessage 回報高度
         if (!this._previewHooksBound) {
           this._previewHooksBound = true
@@ -4899,7 +4973,7 @@
       initSortable() {
         const tbody = this.$refs.itemsTbody
         if (!tbody || typeof Sortable === 'undefined') return
-        const isLocked = () => this.q.status === '已送出' && !this.unlocked
+        const isLocked = () => (this.q.status === '已送出' && !this.unlocked) || this.isApproverLocked()
         if (this._sortable) { try { this._sortable.destroy() } catch (e) {} this._sortable = null }
         this._sortable = Sortable.create(tbody, {
           animation: 150,
