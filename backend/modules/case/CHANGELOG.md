@@ -8,6 +8,7 @@
 ## 1.0.214（next，未取號）— 2026-11-11（fix/ops-webauthn404-case-denied；正式機評估衍生：案件頁唯讀端點改用讀取規則）
 - 修正：`close-gates`（完結案五關）、`material-order-approvals`（材料申請審核摘要）、`versions`／`versions/{seq}/download`／`pdf-download`（PDF 版本與下載）原本只認擁有者規則，持 cashier 的財務開別人的案件頁時每次靜默被拒（`case-bundle` 的 parts 吞例外、頁面照開）——正式機 48 筆 `case.access_denied` 中 44 筆。改成案件頁本體同一條讀取規則（`scope="read"`／`allow_read`；可見範圍＝原單據，不寬也不嚴）。**沒有讀取資格的人（一般業務、只有 case_manage 的工程師）照舊 404。** 內部版 PDF 仍要金額檢視權或簽核人（`_require_money_or_approver` 不動）。
 - 修正（前端）：報價單表單在待審核／簽核中、且不是簽核人／複查編輯／解鎖編輯時，自動存檔不再送必 403 的 PUT（正式機 14 次，全是最高管理者；原本靜默失敗＝以為存了），改提醒一次「此單簽核中，修改不會自動儲存」。報價單表單 V3.41。
+- 修正（K 審 N1）：`versions` 的修改紀錄對沒有報價金額檢視權的帳號，金額／毛利欄位值遮成「—」（與案件頁一致，原本只遮理由）。
 - 診斷：`case.access_denied` 的 audit detail 補 `method／path／role／case_manage`（只加鍵，`reason` 照舊）。
 - 測試：`tests/test_case_read_rule_denials_2026_11_11.py`、`tests/test_frontend_ops_guards_2026_11_11.py`。
 ## 1.0.213 — 2026-11-11（refactor/quotations-stages-split；案件階段端點拆檔：純搬移，零行為變更；L1 介面不變）

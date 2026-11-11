@@ -83,7 +83,7 @@ from helpers import clause_titles as _CT      # S-Q2：條款標題凍結（伺�
 from helpers.case_roles import ROLE_KEYS, ROLE_LABELS, role_username, role_display
 from helpers.financial_mask import (
     money_visible, material_money_visible, quote_money_visible, mask_row as _mask_money_row, mask_quotation_data, mask_case_record, restore_case_record, strip_history_reasons,
-    PaymentStructureChange,
+    HISTORY_MONEY_FIELDS, PaymentStructureChange,
 )
 import helpers.uploads as _uploads_mod
 from helpers.uploads import _effective_subfolder
@@ -6161,6 +6161,8 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
     """後端 Edge Headless 產生 PDF 並直接下載（internal=true 含成本），避免 macOS/瀏覽器列印頁首干擾。"""
     user = _require_user(authorization)
     conn = get_db()
+    # allow_read（2026-11-11）：案件頁讀得到的人（擁有者／協作者／admin+／財務角色 cashier）可下載。外部版含單價與總額，目前 read 範圍內的人都有報價金額檢視權
+    # （cashier 由財務角色推導）；若日後 cashier 可由非財務角色勾選取得，這裡要補 quote_money_visible 守門（K 審 N2）。內部版另有 _require_money_or_approver。
     q = _guard_case(conn, quote_no, user, allow_approver=True, allow_read=True)
     if internal:
         _require_money_or_approver(conn, q, user)   # 內部版含成本（CM15）
@@ -6257,6 +6259,11 @@ def list_quotation_versions(quote_no: str, authorization: str = Header(None)):
     history = [h for h in (data.get("editHistory") or []) if isinstance(h, dict)]
     if not _tier_allowed("finance_money", user):                       # 重新開啟精算的理由是自由文字：沒有財務檢視的帳號只看誰／何時／事件
         strip_history_reasons(history)
+    if not quote_money_visible(user):                                  # 與案件頁 GET 同一條（mask_quotation_data）：沒有報價金額檢視的帳號，修改紀錄裡的金額／毛利欄位值一律「—」
+        for h in history:
+            for c in (h.get("changes") or []):
+                if isinstance(c, dict) and c.get("field") in HISTORY_MONEY_FIELDS:
+                    c["from"] = c["to"] = "—"
     return {"quote_no": quote_no, "versions": versions, "history": history}
 
 

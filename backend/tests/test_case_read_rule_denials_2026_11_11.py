@@ -30,7 +30,7 @@ def _login(client, username, password):
     return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
-def _seed(make_user):
+def _seed(make_user, assigned=(), history=None):
     """別人業務的已成案案件（擁有者是另一位業務，測試使用者都不是擁有者）。"""
     import db
     owner = make_user(username="rr_owner", role="sales")
@@ -40,9 +40,11 @@ def _seed(make_user):
         oid = conn.execute("SELECT id FROM users WHERE username=?", (owner[0],)).fetchone()[0]
         conn.execute(
             "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json,"
-            " created_at, updated_at, deal_tag, sales_person_id, sales_person) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (NO, "已送出", "客", "案", 100, 95, json.dumps({"dealTag": "已成案"}, ensure_ascii=False),
-             now, now, "已成案", oid, "擁有者"))
+            " created_at, updated_at, deal_tag, sales_person_id, sales_person, assigned_user_ids) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (NO, "已送出", "客", "案", 100, 95,
+             json.dumps({"dealTag": "已成案", "editHistory": history or []}, ensure_ascii=False),
+             now, now, "已成案", oid, "擁有者",
+             json.dumps([conn.execute("SELECT id FROM users WHERE username=?", (a,)).fetchone()[0] for a in assigned])))
         conn.commit()
     finally:
         conn.close()
@@ -114,3 +116,32 @@ def test_denial_audit_records_endpoint_and_role(client, make_user):
     assert d[0]["method"] == "GET" and d[0]["path"] == f"/api/quotations/{NO}/close-gates", d[0]
     assert d[0]["role"] == "engineer" and d[0]["case_manage"] is True, d[0]
     assert d[0]["user"] == "rr_eng"
+
+
+@needs_m01
+@pytest.mark.parametrize("role,modules", [("admin", None), ("superadmin", None)])
+def test_admin_roles_still_pass_the_same_endpoints(client, make_user, role, modules):
+    """正向對照：admin／superadmin 本來就直通，放寬後不得變差。"""
+    u = make_user(username=f"rr_{role}", role=role, modules=modules)
+    _seed(make_user)
+    h = _login(client, *u)
+    for url in READ_ONLY_ENDPOINTS:
+        assert client.get(url.format(no=NO), headers=h).status_code == 200, url
+
+
+@needs_m01
+def test_collaborator_passes_and_versions_history_masks_money_for_non_money_accounts(client, make_user):
+    """協作者（assigned_user_ids）本來就放行；而沒有報價金額檢視權的帳號，versions 的修改紀錄金額欄位值與案件頁一樣遮成「—」
+    （K 審 N1：versions 原本只遮理由，不遮金額／毛利欄位值）。"""
+    u = make_user(username="rr_collab", role="engineer", modules=["case_manage"])
+    hist = [{"rev": 1, "at": "2026-01-01T00:00:00", "by": "x", "changes": [
+        {"field": "含稅總額", "from": "1000", "to": "2000"}, {"field": "客戶名稱", "from": "甲", "to": "乙"}]}]
+    _seed(make_user, assigned=[u[0]], history=hist)
+    h = _login(client, *u)
+    r = client.get(f"/api/quotations/{NO}/versions", headers=h)
+    assert r.status_code == 200, r.text
+    ch = r.json()["history"][0]["changes"]
+    money = next(c for c in ch if c["field"] == "含稅總額")
+    other = next(c for c in ch if c["field"] == "客戶名稱")
+    assert (money["from"], money["to"]) == ("—", "—"), money           # 金額欄位被遮
+    assert (other["from"], other["to"]) == ("甲", "乙"), other          # 非金額欄位照常（遮蔽不是一律抹掉）
