@@ -11,6 +11,11 @@
 修法：整段交易包進 `core.txn.write_txn`（`update_payslip` 在稽核 D-2 已用同一招），區塊內任何例外都 rollback＋關連線。
 
 這支題直接量「錯誤回應之後，別的連線能不能立刻拿寫鎖」，不依賴後面的請求去撞。
+
+哪些題是回歸守門：`test_failed_create_payslip_does_not_leave_the_write_lock` 的 422 與 ValueError 兩個參數（鎖探針，舊程式上必紅）。
+其餘兩題是對照／症狀題：400 單號格式那個參數的路徑本來就會自己關連線（對照組，舊程式也綠）；
+`test_create_payslip_still_works_right_after_a_422` 重現原症狀，但在舊程式上是否紅取決於洩漏的連線有沒有剛好被回收（GC 時機），
+不能單獨當守門（K 審 hichan-9 實測：舊程式上兩次綠）。
 """
 import sqlite3
 
