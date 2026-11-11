@@ -123,7 +123,6 @@ def test_precheck_blocks_then_recheck_passes_after_setup(live_server, make_user,
     assert page.evaluate(f"() => {ROOT}.showSubmitModal") is False
     assert not submit_calls, submit_calls                          # 前置檢查階段不送審、不存檔
     assert page.evaluate(f"() => {ROOT}.q.status") in ("草稿", "", None)
-    page.screenshot(path=r"D:\Claude-pm\qse-tmp\shot_precheck_blocked.png")
 
     # 設定補齊（有部門＋有主管）→「重新檢查」放行
     _org_with_manager(["sc_nodept"], "sc_mgr")
@@ -156,7 +155,6 @@ def test_failed_submit_restores_state_and_shows_backend_reason(live_server, make
     st = page.evaluate(f"() => ({{status: {ROOT}.q.status, approval: {ROOT}.q.approval}})")
     assert st["status"] in ("草稿", "", None), st                     # 不再停在「待審核」
     assert not st["approval"] or st["approval"].get("status") != "pending", st
-    page.screenshot(path=r"D:\Claude-pm\qse-tmp\shot_submit_failed_restored.png")
     assert _db("SELECT COUNT(*) c FROM quotations", one=True)["c"] == before
 
 
@@ -193,7 +191,6 @@ def test_admin_marks_won_without_put_403_and_syncs_updated_at(client, live_serve
     row = _db("SELECT deal_tag, updated_at FROM quotations WHERE quote_no=?", (no,), one=True)
     assert page.evaluate(f"() => {ROOT}._lastUpdatedAt") == row["updated_at"], "樂觀鎖基準要與資料庫同步"
     assert page.evaluate(f"() => {ROOT}.q.dealTag") == "已成案"
-    page.screenshot(path=r"D:\Claude-pm\qse-tmp\shot_marked_won.png")
 
 
 @pytest.mark.e2e

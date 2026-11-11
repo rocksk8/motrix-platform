@@ -170,5 +170,6 @@ def test_unresolved_manager_error_codes_are_set():
     from helpers.tiered_approval import UnresolvedManagerError
     e = UnresolvedManagerError("x")
     assert e.code == "unresolved" and str(e) == "x"
-    e2 = UnresolvedManagerError("y", code="no_manager")
+    from helpers.tiered_approval import _unresolved
+    e2 = _unresolved("y", "no_manager")
     assert e2.code == "no_manager" and str(e2) == "y"

@@ -758,7 +758,8 @@
         <template x-for="p in (precheck?.problems || [])" :key="p.code + p.message">
           <div data-testid="qf-precheck-problem" style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:9px 12px;color:#991B1B;margin-bottom:10px" x-text="p.message"></div>
         </template>
-        <div style="font-weight:600;margin:4px 0 6px">第一次送審，需要先完成這四件事（依序）：</div>
+        <div style="font-weight:600;margin:4px 0 6px"
+             x-text="(precheck?.steps || []).every(x => x.done) ? '您的基本組織設定已完成，但簽核流程指定的單位還缺主管（見上方說明）。第一次送審的四個基本步驟：' : '第一次送審，需要先完成這四件事（依序）：'"></div>
         <template x-for="(st, i) in (precheck?.steps || [])" :key="st.key">
           <div style="display:flex;align-items:center;gap:8px;padding:3px 0">
             <span :style="st.done ? 'color:#059669' : 'color:#DC2626'" style="width:16px;font-weight:700" x-text="st.done ? '✓' : '✗'"></span>
@@ -2452,6 +2453,7 @@
   // V3.32（2026-10-17，T71）：補登模式的標題／單號欄顯示預覽單號；複製為新單不帶補登來歷註記
   // V3.31（2026-10-17，T70-1）：新增模式多一個「補登歷史案件」區塊（僅最高管理者且設定中心開關有效時出現；日期限過去月份、預覽單號、原因必填、走專用補登端點）
   // V3.35（2026-11-11）：品項明細三個多行欄（品名／廠牌型號／備註）載入既有單、改值、欄寬變動時自動撐高，不再看起來被裁切
+  // V3.36（2026-11-11）：送審前置檢查、送審失敗顯示後端原因並還原狀態、已送出單選「已成案」改只打 PATCH（修 EM11 起的卡住）。
   const FORM_VERSION = 'V3.36'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
@@ -3129,6 +3131,10 @@
       },
 
       async apiSave(isNew) {
+        // 先重設：後面幾個早退 `return false` 不是後端拒絕，不能讓上一次留下的原因／衝突旗標被當成這次的失敗原因
+        this._saveError = ''
+        this._saveNet = false
+        this._saveConflict = false
         if (this.hb.on) return false                        // 補登模式：只能用「補登送出」，不走一般存檔／自動存檔
         if (Object.keys(this.badNum).length) return false   // 解析不了的數字不送（自動存檔靜默略過）
         if (this.taxKind() === '') return false             // AC1：已停用稅率要先改選（後端同樣會擋）
@@ -3139,8 +3145,6 @@
         // POST 帶著空號送出、後端派了 001，取號這時才回來拿到 002，而 q.quoteNo
         // 仍是空的（POST 回應還沒到），守門就放行了。2026-09-10 用測試診斷抓到。
         this._quoteNoFrozen = true
-        this._saveError = ''
-        this._saveNet = false
         const data = { ...this.q, tot: this.tot }
         if (!isNew) data._expectedUpdatedAt = this._lastUpdatedAt
         // QL13：`locationId` 是**真的欄位**（`quotations.location_id`），
@@ -4151,6 +4155,11 @@
         }
         try {
           const ok = await this.apiSave(this.isNewRecord).catch(() => false)
+          if (!ok && this._saveNet) {
+            // 連線中斷：後端可能已收到並建好（回應遺失）。這時不還原、也不說「尚未送出」，請使用者重新載入確認
+            alert('無法確認是否已送出（與伺服器的連線中斷）。請重新載入頁面，確認報價單狀態後再決定是否重新送審。')
+            return
+          }
           if (!ok) {
             this.q.status = prevStatus
             this.q.approval = prevApproval
