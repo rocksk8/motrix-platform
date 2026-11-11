@@ -13,6 +13,17 @@
     .cs-title { font-size:20px; margin:0 0 8px; }
     .cs-dim { color:var(--text-secondary); font-size:13px; }
     .cs-row { display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+    /* 手機（2026-11-12 UI 檢查）：卡片左右貼邊（margin:64px auto 在窄螢幕沒有側邊距）、兩顆按鈕並排偏小。 */
+    @media (max-width:767px){
+      .cs-wrap{margin:24px 14px;padding:20px 18px}
+      .cs-title{font-size:18px}
+      .cs-row{flex-direction:column}
+      .cs-row .btn{width:100%;min-height:46px;justify-content:center}
+    }
+    @media (min-width:768px) and (max-width:1023px){
+      .cs-wrap{margin:48px auto}
+      .cs-row .btn{min-height:42px}
+    }
   </style>
 </head>
 <body>
