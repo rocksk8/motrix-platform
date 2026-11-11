@@ -57,6 +57,10 @@ def license_status(authorization: str = Header(None)):
     #   modules_unlicensed  這次開機時因為授權沒過而「沒載入」的模組 key。載入器只在啟動時決定一次：
     #              通行證／新金鑰放上去之後，業務 API 立刻恢復，但這些模組要**重啟服務**才會載入（K 審 M1）
     unlicensed = [m["key"] for m in _registry.module_states() if m.get("state") == _registry.STATE_UNLICENSED]
-    return dict(status, machine=_machine_or_none(), emergency=_lic.emergency_status(status),
+    em = _lic.emergency_status(status)
+    if em and em.get("active") and not _lic.LICENSE_GATE_ENABLED:
+        # 閘門關著＝沒有東西在擋、通行證不會被讀：不可以回 active（K 審 N2；狀態欄位語意）
+        em = dict(em, active=False, why="gate_off")
+    return dict(status, machine=_machine_or_none(), emergency=em,
                 gate=bool(_lic.LICENSE_GATE_ENABLED), blocked=_lic.license_blocks_request(status),
                 modules_unlicensed=unlicensed)

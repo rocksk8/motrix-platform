@@ -376,6 +376,31 @@ def test_the_issuing_tool_refuses_unusable_or_unexplained_passes(tool, license_t
     assert not (tmp_path / "o.key").exists()
 
 
+def test_kfix_n1_the_tool_refuses_to_sign_in_the_wrong_environment(client, box, tool, license_test_key, tmp_path, monkeypatch):
+    """簽錯環境的私鑰：簽發端就擋（exit 2、不寫檔），不要等到目標機器停機搶修時才看到 env_mismatch。"""
+    box.install_license()
+    key = tmp_path / "priv.pem"
+    key.write_bytes(license_test_key["priv_pem"])
+    real = tool._open_blob
+    monkeypatch.setattr(tool, "_open_blob", lambda text, *a, **k: (lambda r: (r[0], "dev", r[2]) if r[0] and r[0].get("purpose") != lic.EMERGENCY_PURPOSE else r)(real(text, *a, **k)))
+    out = tmp_path / "o.key"
+    assert tool.main(["emergency", "--license", str(lic.LICENSE_PATH), "--days", "3", "--reason", "x",
+                      "--key", str(key), "--out", str(out)]) == 2          # 授權被讀成 dev、私鑰是 prod
+    assert not out.exists()
+    monkeypatch.setattr(tool, "_open_blob", real)                          # 正對照：環境一致就簽得出來
+    assert tool.main(["emergency", "--license", str(lic.LICENSE_PATH), "--days", "3", "--reason", "x",
+                      "--key", str(key), "--out", str(out)]) == 0 and out.exists()
+
+
+def test_kfix_n2_status_does_not_report_a_pass_active_when_the_gate_is_off(client, hdr, box, drifted, monkeypatch):
+    box.install_license()
+    box.token.write_text(box.pass_blob(), encoding="utf-8")
+    assert client.get("/api/license/status", headers=hdr).json()["emergency"]["active"] is True     # 正對照：閘門開＋機器不符
+    monkeypatch.setattr(lic, "LICENSE_GATE_ENABLED", False)
+    em = client.get("/api/license/status", headers=hdr).json()["emergency"]
+    assert em["active"] is False and em["why"] == "gate_off" and em["present"] is True
+
+
 # ── ② env=dev 警告 ───────────────────────────────────────────────────────────
 
 @pytest.fixture()

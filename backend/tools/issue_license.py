@@ -44,6 +44,7 @@ from helpers.licensing import (  # noqa: E402 — sys.path 要先補好才 impor
     EMERGENCY_PURPOSE,
     LICENSE_KIND_PERPETUAL,
     LICENSE_KIND_SUBSCRIPTION,
+    _EMERGENCY_REQUIRED,
     _open_blob,
     emergency_blob_problem,
     machine_fingerprint,
@@ -204,6 +205,7 @@ def cmd_emergency(args):
         print(f"[錯誤] --days 必須在 1～{EMERGENCY_MAX_DAYS}（驗證端的硬上限；這是橋接用的，不是續約）", file=sys.stderr)
         return 2
     tax_id, machine, customer = (args.tax_id or "").strip(), (args.machine or "").strip().lower(), args.customer or ""
+    lic_env = None            # 給了 --license 才知道被救的授權金鑰是哪個環境（只給 --tax-id/--machine 時沒得比）
     if args.license:
         try:
             with open(args.license, "r", encoding="utf-8") as fh:
@@ -239,6 +241,13 @@ def cmd_emergency(args):
     if problem:
         print(f"[錯誤] 自我複驗失敗（{problem}）：剛簽出來的通行證用內嵌公鑰驗不過。", file=sys.stderr)
         return 3
+    if lic_env is not None:
+        _p, blob_env, _w = _open_blob(blob, _EMERGENCY_REQUIRED)
+        if blob_env != lic_env:
+            # 簽錯環境：驗證端會回 env_mismatch——但那要到目標機器上、正在停機搶修時才會發現 ⇒ 在簽發端就擋（K 審 N1）
+            print(f"[錯誤] 簽發用的私鑰是「{blob_env}」環境，但 --license 那把授權金鑰是「{lic_env}」環境："
+                  "通行證只能救同一個環境簽的授權金鑰。請改用對應環境的私鑰。", file=sys.stderr)
+            return 2
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:
             fh.write(blob + chr(10))
