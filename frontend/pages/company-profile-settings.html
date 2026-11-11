@@ -139,11 +139,11 @@
                 <div class="ns-row">
                   <div class="ns-field">
                     <label for="gate-name">公司名稱（中文）<span class="ns-req" aria-hidden="true">*</span></label>
-                    <input id="gate-name" type="text" x-model="cfg.name" data-gate-field="name" placeholder="例：範例科技股份有限公司" autocomplete="organization" required>
+                    <input id="gate-name" type="text" :value="gateGet('name')" @input="gateSet('name', $event.target.value)" data-gate-field="name" placeholder="例：範例科技股份有限公司" autocomplete="organization" required>
                   </div>
                   <div class="ns-field">
                     <label for="gate-tax">統一編號<span class="ns-req" aria-hidden="true">*</span></label>
-                    <input id="gate-tax" type="text" inputmode="numeric" maxlength="12" x-model="cfg.tax_id" data-gate-field="tax_id" placeholder="8 碼數字，例：12345678"
+                    <input id="gate-tax" type="text" inputmode="numeric" maxlength="12" :value="gateGet('tax_id')" @input="gateSet('tax_id', $event.target.value)" data-gate-field="tax_id" placeholder="8 碼數字，例：12345678"
                            :aria-invalid="taxState().cls === 'bad' ? 'true' : 'false'" aria-describedby="gate-tax-msg">
                     <div id="gate-tax-msg" class="ns-field-msg" :class="taxState().cls" data-gate-tax-msg role="status" x-text="taxState().text"></div>
                   </div>
@@ -151,11 +151,11 @@
                 <div class="ns-row">
                   <div class="ns-field">
                     <label for="gate-phone">電話</label>
-                    <input id="gate-phone" type="text" x-model="cfg.phone" data-gate-field="phone" placeholder="例：02-1234-5678" autocomplete="tel">
+                    <input id="gate-phone" type="text" :value="gateGet('phone')" @input="gateSet('phone', $event.target.value)" data-gate-field="phone" placeholder="例：02-1234-5678" autocomplete="tel">
                   </div>
                   <div class="ns-field">
                     <label for="gate-email">Email</label>
-                    <input id="gate-email" type="text" x-model="cfg.email" data-gate-field="email" placeholder="例：service@example.com" autocomplete="email">
+                    <input id="gate-email" type="text" :value="gateGet('email')" @input="gateSet('email', $event.target.value)" data-gate-field="email" placeholder="例：service@example.com" autocomplete="email">
                   </div>
                 </div>
                 <div class="ns-field-msg" style="margin:-8px 0 14px;color:var(--text-secondary)">電話與 Email <b>至少填一項</b>。輸出的報價單、請款單等文件會用這些資料當抬頭；Logo、據點、收款帳戶等其餘設定，確認後再慢慢補。</div>
@@ -1110,11 +1110,28 @@
           for (let i = 0; i < 8; i++) { const p = Number(s[i]) * w[i]; total += Math.floor(p / 10) + (p % 10) }
           return total % 5 === 0 || (s[6] === '7' && (total + 1) % 5 === 0)
         },
+        // R1（K 審 hichan-11）：閘門卡的四個欄位要讀寫「實際生效的那一份」。
+        // 後端 identity_from_profile 是「主要據點（locations[0]）的欄位優先、company_profile 頂層只是後備」，
+        // 複製／搬家來的舊庫多半已經有據點、而且據點裡帶著舊公司名／舊統編；只改頂層欄位＝確認了，但生效的身分還是舊的。
+        // ⇒ 顯示：據點[0] 有填就顯示據點的值，否則顯示頂層；寫入：頂層一定寫，據點[0] 已經有填同一欄時一併改（沒填的不去動它，維持「沿用頂層」）。
+        GATE_LOC_KEY: { name: 'company_name', tax_id: 'tax_id', phone: 'phone', email: 'email' },
+        _primaryLoc() { return this.locations && this.locations.length ? this.locations[0] : null },
+        gateGet(k) {
+          const loc = this._primaryLoc(), lk = this.GATE_LOC_KEY[k]
+          const v = loc ? String(loc[lk] || '').trim() : ''
+          return v ? loc[lk] : (this.cfg[k] || '')
+        },
+        gateSet(k, v) {
+          this.cfg[k] = v
+          const loc = this._primaryLoc(), lk = this.GATE_LOC_KEY[k]
+          if (loc && String(loc[lk] || '').trim()) loc[lk] = v
+        },
         taxState() {
-          const s = String(this.cfg.tax_id || '').replace(/\D/g, '')
+          const s = String(this.gateGet('tax_id') || '').replace(/\D/g, '')
           if (!s) return { cls: '', text: '' }
           if (s.length < 8) return { cls: '', text: '統一編號為 8 碼數字（目前 ' + s.length + ' 碼）' }
           if (s.length > 8) return { cls: 'bad', text: '統一編號只有 8 碼，請再核對' }
+          if (s === '00000000') return { cls: 'bad', text: '00000000 是系統保留的示範統編，請填貴公司的統一編號' }
           return this._ubnValid(s) ? { cls: 'ok', text: '✓ 統編格式正確' } : { cls: 'bad', text: '統編檢查碼不符，請再核對' }
         },
         // 精靈：最高管理員走完公司資料後還有「兩步驟驗證」一步（要走過第 1 步才有；否則直接開始使用）

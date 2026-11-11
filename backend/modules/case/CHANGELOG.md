@@ -3,9 +3,9 @@
 ## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
 - 前端視覺（D3）：本模組頁面（`case-management.html`／`case-stage-board.html`／`completion-note-form.html`、`case-management*.css`／`case-management-mchange.js` 等）內文字最小 12px，文字色改用語意 token（次要文字在頁底 #F5F4F0 上對比 ≥4.5:1）；只改 CSS 值，不改版面結構、API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
 - 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
-- **（併入）(next) — 2026-11-11（feat/ux-onboarding-consistency；首次體驗與一致性：UX 提案 A1–A6、E1–E2；僅前端；報價單表單 V3.37；L1 介面不變）**
+- **（併入）(next) — 2026-11-11（feat/ux-onboarding-consistency；首次體驗與一致性：UX 提案 A1–A6、E1–E2；僅前端；報價單表單 V3.38；L1 介面不變）**
 - 新增（前端，全站）：首次設定精靈（強制改密碼→重新登入→確認公司資料→兩步驟驗證（可略過）→儀表板；步驟條「步驟 n／N」、隱藏頂欄）、公司資料閘門頁瘦身（只留確認卡＋4 個必填欄、統編即時驗證）、頂欄「？」說明抽屜與「第一次來？」橫幅（`static/ux-help.js`，內容集中一處）、儀表板上手清單（帶勾選進度；有資料的老系統不出現）。
-- 修正（案件模組頁面）：`quotations.html` 空狀態分三種（從未有資料／篩選後沒有／載入失敗），不再顯示「資料為空，自動重試中…」「DB 已連線」「MQ 系列」；`case-management.html` 空狀態說明案件由報價單「成案」而來；`quotation-form.html` 送出審核確認視窗與按鈕補「這會…」說明、取消折讓說明，「INTERNAL · 成本分機」改「內部成本與利潤」（V3.37）。
+- 修正（案件模組頁面）：`quotations.html` 空狀態分三種（從未有資料／篩選後沒有／載入失敗），不再顯示「資料為空，自動重試中…」「DB 已連線」「MQ 系列」；`case-management.html` 空狀態說明案件由報價單「成案」而來；`quotation-form.html` 送出審核確認視窗與按鈕補「這會…」說明、取消折讓說明，「INTERNAL · 成本分機」改「內部成本與利潤」（V3.38）。
 - 變更（全站）：建置戳記（頁尾右下）只對管理員顯示。
 - 測試：`tests/test_e2e_ux_onboarding_2026_11_11.py`；`test_dashboard_empty_state_2026_09_23.py`（引導卡片改讀 `checklistVisible`，種子同步）、`test_display_consistency_t55.py`（空狀態列內距）同步更新。
 

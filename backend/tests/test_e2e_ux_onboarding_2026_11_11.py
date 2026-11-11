@@ -159,6 +159,55 @@ def test_plain_change_password_page_is_not_a_wizard(live_server, make_user, new_
     assert page.locator("text=兩步驟驗證（TOTP）").is_visible()
 
 
+@pytest.mark.e2e
+@pytest.mark.company_gate
+def test_gate_card_edits_the_identity_that_actually_takes_effect(live_server, make_user, new_page, login_as):
+    """R1（K 審 hichan-11）：複製／搬家來的舊庫已經有據點，而後端的身分是「主要據點欄位優先、頂層只是後備」。
+    閘門卡顯示的要是生效的那一份（據點裡的舊名／示範統編），改完確認後，生效的身分要是新的——不能只改頂層而被據點蓋回去。"""
+    import db
+    from helpers import company_identity as ci
+    conn = db.get_db()
+    try:
+        cs._set(conn, "company_profile", {
+            "name": "舊公司股份有限公司", "tax_id": "", "phone": "",
+            "locations": [{"id": "loc-1", "name": "總公司", "address": "台中市", "company_name": "舊公司股份有限公司",
+                           "tax_id": "00000000", "phone": "02-0000-0000"},
+                          {"id": "loc-2", "name": "分公司", "address": "高雄市"}]})
+        conn.commit()
+    finally:
+        conn.close()
+    cs.reset_cache()
+    username, password = make_user(username="e2e_ux_gate_loc", role="superadmin")
+    page = new_page(viewport={"width": 1440, "height": 900})
+    login_as(page, (username, password))
+    page.goto(f"{live_server}/pages/company-profile-settings.html?setup=1")
+    page.locator("[data-company-setup-card]").wait_for(state="visible", timeout=15000)
+    # 顯示的是生效的那一份（據點[0]），不是頂層空白
+    assert page.input_value("#gate-name") == "舊公司股份有限公司"
+    assert page.input_value("#gate-tax") == "00000000"
+    assert "保留" in page.locator("[data-gate-tax-msg]").inner_text()     # N1：示範統編不能被當成「格式正確」
+    assert page.locator("[data-company-setup-confirm]").is_disabled()
+    ubn = make_ubn("2456789")
+    page.fill("#gate-name", "新公司股份有限公司")
+    page.fill("#gate-tax", ubn)
+    page.fill("#gate-phone", "02-1234-5678")
+    page.check("[data-company-setup-ack]")
+    with page.expect_response(lambda r: "/api/settings/company-profile" in r.url and r.request.method == "PUT") as resp:
+        page.click("[data-company-setup-confirm]")
+    assert resp.value.status == 200
+    page.locator("[data-company-setup-done]").wait_for(state="visible", timeout=10000)
+    conn = db.get_db()
+    try:
+        saved = cs._get(conn, "company_profile")
+    finally:
+        conn.close()
+    ident = ci.identity_from_profile(saved)
+    assert ident["company_name"] == "新公司股份有限公司"
+    assert ident["tax_id"] == ubn
+    assert ident["phone"] == "02-1234-5678"
+    assert saved["locations"][1].get("company_name") in (None, ""), "沒填身分的第二據點不該被動到"
+
+
 # ── A4／A5：橫幅與「？」抽屜 ────────────────────────────────────────────────
 
 @pytest.mark.e2e
@@ -245,6 +294,21 @@ def test_dashboard_checklist_progress_dismiss_and_reopen(live_server, make_user,
     page.click("#ux-help-btn")
     page.locator("[data-testid=ux-drawer] [data-ux=checklist]").click()
     page.locator("[data-testid=onboarding-checklist]").wait_for(state="visible", timeout=10000)
+
+
+@pytest.mark.e2e
+def test_checklist_does_not_remember_a_failed_stats_load(live_server, make_user, new_page, login_as):
+    """R2（K 審 hichan-11）：統計讀失敗時 totalQuotes 停在預設 0——不可以把它當成「全新系統」而把「看過清單」旗標寫進瀏覽器，
+    否則之後網路好了，有大量資料的老使用者會一直看到新手清單。"""
+    username, password = make_user(username="e2e_ux_check_fail", role="superadmin")
+    page = new_page(viewport={"width": 1440, "height": 900})
+    login_as(page, (username, password))
+    page.route("**/api/dashboard/stats*", lambda route: route.fulfill(status=500, body="{}"))
+    page.goto(f"{live_server}/index.html")
+    page.wait_for_timeout(3000)
+    assert not page.locator("[data-testid=onboarding-checklist]").is_visible()
+    keys = page.evaluate("Object.keys(localStorage).filter(k => k.startsWith('motrix_ux_check_started_'))")
+    assert keys == [], "統計沒讀到時不該寫下「全新系統」的旗標：%s" % keys
 
 
 # ── A6：送出審核前的說明 ───────────────────────────────────────────────────

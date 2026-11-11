@@ -1102,6 +1102,8 @@ feedCount(key) {
       },
       _ckStartKey() { return 'motrix_ux_check_started_' + (this.session.username || this.session.userId || 'u') },
       async loadChecklist() {
+        // R2（K 審 hichan-11）：統計沒讀到時 totalQuotes 停在預設 0，不可以把它當成「全新系統」而把旗標永久寫進 localStorage
+        if (!this.statsLoaded) return
         const young = this.stats.totalQuotes === 0 && this.stats.activeCases === 0
         try { this.checklistStarted = localStorage.getItem(this._ckStartKey()) === '1' } catch { this.checklistStarted = false }
         // 有資料的老系統、而且這個瀏覽器沒看過清單、也沒有人明確要求 ⇒ 完全不判定（不發任何請求）
