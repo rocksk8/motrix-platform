@@ -427,6 +427,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
+    "mod:case/api/quotation_stages",
     "mod:case/api/material_links",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",

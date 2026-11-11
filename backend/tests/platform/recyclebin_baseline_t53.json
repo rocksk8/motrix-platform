@@ -125,12 +125,16 @@
    "count": 1,
    "reason": "exempt: 系統設定鍵值（非單據）"
   },
-  "modules/case/api/quotations.py::case_stage_visits": {
+  "modules/case/api/quotation_stages.py::case_stage_visits": {
    "count": 1,
    "reason": "p2: 案件階段拜訪單筆刪除（整張報價單刪除已進暫存區）"
   },
+  "modules/case/api/quotation_stages.py::case_stages": {
+   "count": 1,
+   "reason": "p2: 案件階段單筆刪除／存檔差異（整張報價單刪除已進暫存區）"
+  },
   "modules/case/api/quotations.py::case_stages": {
-   "count": 3,
+   "count": 2,
    "reason": "p2: 案件階段單筆刪除／存檔差異（整張報價單刪除已進暫存區）"
   },
   "modules/case/api/quotations.py::case_updates": {
