@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 924,
-  "endpoints_api": 920,
+  "endpoints_total": 925,
+  "endpoints_api": 921,
   "write_total": 498,
   "write_api": 498,
-  "get_api": 422,
-  "distinct_paths_api": 778,
+  "get_api": 423,
+  "distinct_paths_api": 779,
   "write_with_body_api": 364,
   "write_with_path_param_api": 358
  },
