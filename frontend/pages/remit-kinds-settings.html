@@ -42,6 +42,34 @@
     .rk-tag { font-size: 12px; padding: 1px 7px; border-radius: 8px; background: var(--border-light); }
     .rk-bad { color: var(--tone-danger-fg); font-size: 12px; }
     @media (max-width: 720px) { .rk-main { margin-left: 0; padding: 20px 16px 60px; } }
+    /* 平板／手機（≤1023px）：7 欄表（最小寬 900px）要橫捲才看得到「可以開立的派發狀態」——這是整頁最重要的欄 →
+       每個款別改成一張卡：名稱、代碼、啟用／排序、派發狀態、備註，由上往下一眼看完，不用左右滑 */
+    @media (max-width: 1023px) {
+      .rk-scroll { overflow-x: visible; }
+      .rk-tbl, .rk-tbl tbody { display: block; min-width: 0; }
+      .rk-tbl thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }   /* 欄名改由每格的 data-label 顯示；仍留給讀屏 */
+      .rk-tbl tr { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; padding: 14px; margin-top: 12px;
+        border: 1px solid var(--border-light); border-radius: 10px; background: #FAFAF8; }
+      .rk-tbl td { display: block; padding: 0; border: 0; min-width: 0; }
+      .rk-tbl td::before { content: attr(data-label); display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+      .rk-tbl td:nth-child(1), .rk-tbl td:nth-child(2), .rk-tbl td:nth-child(5), .rk-tbl td:nth-child(6), .rk-tbl td:nth-child(7) { grid-column: 1 / -1; }
+      .rk-tbl td:nth-child(7):not(:has(button:not([style*="display: none"]))) { display: none; }   /* 已儲存的款別沒有「移除」鈕（x-show 關著）→ 不留空白格 */
+      .rk-tbl td:nth-child(7)::before { content: none; }
+      .rk-tbl input[type=text], .rk-tbl input[type=number], .rk-panel > .rk-actions input[type=text] {
+        font-size: 16px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+      .rk-tbl input[type=checkbox] { width: 24px; height: 24px; margin: 8px 0 0; }
+      /* 派發狀態：每個選項是一個大點擊區，間距拉開避免誤觸鄰近的選項 */
+      .rk-chips { gap: 8px; }
+      .rk-chips label { min-height: 44px; padding: 0 12px; gap: 8px; border: 1px solid var(--border-light); border-radius: 8px; background: #fff; font-size: 14px; }
+      .rk-chips input[type=checkbox] { width: 20px; height: 20px; margin: 0; }
+      .rk-actions .btn { min-height: 44px; }
+      .rk-panel { padding: 16px; overflow-x: auto; }
+      .rk-sub { font-size: 13px; }
+    }
+    @media (max-width: 720px) {
+      .rk-actions > .btn-primary, .rk-actions > input[type=text] { flex: 1 1 100%; min-width: 0 !important; }
+      .rk-tag { white-space: normal; }
+    }
   </style>
 </head>
 <body x-data="remitKindsPage()" x-init="init()" x-cloak>
@@ -84,22 +112,22 @@
               <tbody>
                 <template x-for="(k, ki) in body.kinds" :key="ki">
                   <tr data-testid="rk-row" :data-code="k.code">
-                    <td><input type="text" x-model="k.name" maxlength="20" data-testid="rk-name"></td>
-                    <td>
+                    <td data-label="名稱"><input type="text" x-model="k.name" maxlength="20" data-testid="rk-name"></td>
+                    <td data-label="代碼（建立後不能改）">
                       <span class="mono" x-show="isSaved(k)" x-text="k.code" data-testid="rk-code-fixed"></span>
                       <input type="text" x-show="!isSaved(k)" x-model="k.code" maxlength="40" placeholder="例：retention" data-testid="rk-code">
                       <div class="rk-bad" x-show="codeProblem(k)" x-text="codeProblem(k)"></div>
                     </td>
-                    <td><input type="checkbox" x-model="k.active" data-testid="rk-active"></td>
-                    <td><input type="number" data-saved-field x-model.number="k.sort" data-testid="rk-sort"></td>
-                    <td>
+                    <td data-label="啟用"><input type="checkbox" x-model="k.active" data-testid="rk-active"></td>
+                    <td data-label="排序（小的在前）"><input type="number" data-saved-field x-model.number="k.sort" data-testid="rk-sort"></td>
+                    <td data-label="可以開立的派發狀態">
                       <div class="rk-chips">
                         <template x-for="s in stages" :key="s.key">
                           <label><input type="checkbox" :checked="stageOn(k, s.key)" @change="toggleStage(k, s.key)" :data-testid="'rk-stage-' + s.key"> <span x-text="s.label"></span></label>
                         </template>
                       </div>
                     </td>
-                    <td><input type="text" x-model="k.note" maxlength="200" data-testid="rk-note-field"></td>
+                    <td data-label="備註"><input type="text" x-model="k.note" maxlength="200" data-testid="rk-note-field"></td>
                     <td><button class="btn btn-danger" x-show="!isSaved(k)" @click="removeNew(k)" data-testid="rk-remove-new">移除</button></td>
                   </tr>
                 </template>

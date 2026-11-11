@@ -98,7 +98,16 @@
       .pane-sub{margin-left:0}
     }
     @media (prefers-reduced-motion:reduce){*{transition:none!important}}
-  </style>
+      /* ── 手機／平板（≤1023px）觸控體驗（2026-11-12 UI 檢查）：輸入框 16px 以上（iOS／iPadOS 聚焦不自動放大）、按鈕／輸入框 44px 高、勾選框放大 ── */
+    @media (max-width: 1023px) {
+      .page-main input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=hidden]),
+      .page-main select,
+      .page-main textarea { font-size: 16px; min-height: 44px; }
+      .page-main .btn { min-height: 44px; }
+      .page-main input[type=checkbox],
+      .page-main input[type=radio] { width: 22px; height: 22px; }
+    }
+</style>
 </head>
 <body x-data="systemHub()" :class="{'has-rail': loaded && sections.length > 0}" x-cloak>
   <header id="app-topbar" class="topbar"></header>

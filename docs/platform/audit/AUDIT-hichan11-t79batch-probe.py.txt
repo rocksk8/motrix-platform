@@ -1,0 +1,177 @@
+# -*- coding: utf-8 -*-
+"""hichan-11 T79 稽核探針（LINE 綁定／通知）。不屬於產品測試；只在稽核樹（detached worktree）跑。
+每題的『預期』寫在 docstring：RED＝證實有缺口，GREEN＝反向控制通過。"""
+import logging
+import threading
+import urllib.parse
+
+import pytest
+
+from tests.platform.test_line_login_t79 import (  # noqa: F401  重用既有夾具與假 LINE
+    BASE, CID, SECRET, TOKEN, UID, UID2, _FakeForm, _FakeLine, _begin, _cb, _login, env,
+)
+
+
+# ── P1 公開路徑精確比對（反向控制）──────────────────────────────────────
+@pytest.mark.parametrize("path", ["/api/line/callback/", "/api/line/callback/x", "/api/line/callbackx", "/api/line/binding",
+                                  "/API/LINE/CALLBACK"])
+def test_p1_only_the_exact_path_is_public(client, env, path):
+    """GREEN：其餘路徑（含尾斜線、大小寫、前綴）未登入一律 401/404，不會被 callback 的公開豁免帶出去。"""
+    r = client.get(path)
+    assert r.status_code in (401, 404, 405), (path, r.status_code, r.text[:80])
+    assert r.status_code != 400
+
+
+def test_p1b_other_methods_on_callback_do_not_reach_complete(client, env):
+    """GREEN：POST/PUT/DELETE callback 不能觸發 complete()（405）。"""
+    for m in ("post", "put", "delete", "patch"):
+        r = getattr(client, m)("/api/line/callback?state=" + "a" * 40 + "&code=x")
+        assert r.status_code == 405, (m, r.status_code)
+    assert env.calls == []
+
+
+# ── P2 內部人員（已登入、有效 state）可耗盡「全站」對外查詢額度 ─────────────────
+def test_p2_insiders_with_valid_states_can_exhaust_the_global_rate_budget(client, make_user, env, monkeypatch):
+    """RED（建議級）：不變式 ⑧ 說『攻擊者不能用垃圾請求把所有人擋在外面』——對**未登入**者成立；
+    但 3 個一般帳號各自每 3 秒發起一次（實際節流），60 秒內就能產生 60 個有效 state、各配垃圾 code，
+    把全站 60/分 的額度用完，第 4 個人（正常使用者）拿到 429『請稍後再試』。同時每次都真的打了 LINE token 端點。"""
+    from helpers import line_login as ll
+    monkeypatch.setattr(ll, "START_INTERVAL", 0)             # 以時間快轉代替真等 3 秒：下面用同一個假時鐘
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(ll, "_now", lambda: clock["t"])
+    env.token_status = 400                                    # 垃圾 code：LINE 會拒
+    hs = [_login(client, make_user, "ins%d" % i) for i in range(3)]
+    victim = _login(client, make_user, "victim")
+    sent = 0
+    for sec in range(0, 60, 3):                               # 每 3 秒每人一個（＝真實 START_INTERVAL）
+        clock["t"] = 1000.0 + sec
+        for h in hs:
+            st, _ = _begin(client, h, env)
+            _cb(client, state=st, code="garbage")
+            sent += 1
+    assert sent == 60
+    token_calls = [c for c in env.calls if c[0].endswith("/token")]
+    assert len(token_calls) == 60                            # 60 次真的打到 LINE
+    st, _ = _begin(client, victim, env)
+    r = _cb(client, state=st, code="legit-code")
+    assert r.status_code == 429, "受害者被全站額度擋掉（RED 預期）"
+    assert not client.get("/api/line/binding", headers=victim).json()["linked"]
+
+
+# ── P3 失敗路徑：已綁定但頁面說失敗 ─────────────────────────────────────
+def test_p3_link_persists_but_page_says_failed_when_confirmation_bookkeeping_raises(client, make_user, env, monkeypatch):
+    """RED（建議級）：link_user 成功後，set_confirmed（寫設定）若丟例外，complete() 的總 except 回 'failed'，
+    手機看到『綁定失敗』，但綁定其實已寫入；電腦端設定頁顯示 linked=True。使用者以為沒成功而重綁／回報。"""
+    from helpers import line_notify as ln
+    hdr = _login(client, make_user, "half_amy")
+    st, _ = _begin(client, hdr, env)
+    env.sub = UID
+    monkeypatch.setattr(ln, "set_confirmed", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db hiccup")))
+    r = _cb(client, state=st, code="ok-code")
+    assert r.status_code == 400 and "失敗" in r.text
+    assert client.get("/api/line/binding", headers=hdr).json()["linked"] is True
+
+
+# ── P4 同一 state 並發兩次 ─────────────────────────────────────────────
+def test_p4_concurrent_same_state_only_one_wins(client, make_user, env):
+    """GREEN：兩條執行緒同時用同一 state 打 complete()，只有一條通過（pop 在鎖內）；LINE 端只被呼叫一次 token。"""
+    from helpers import line_login as ll
+    hdr = _login(client, make_user, "race_amy")
+    st, _ = _begin(client, hdr, env)
+    results, gate = [], threading.Barrier(2)
+
+    def run():
+        gate.wait()
+        results.append(ll.complete("ok-code", st)[0])
+
+    ts = [threading.Thread(target=run) for _ in range(2)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert sorted(results) == ["invalid", "linked"], results
+    assert len([c for c in env.calls if c[0].endswith("/token")]) == 1
+
+
+# ── P5 demo 工作階段不能綁定到正式庫 ────────────────────────────────────
+def test_p5_demo_token_cannot_complete_binding(client, env):
+    """GREEN：demo 帳號的 token（只存在 demo 庫）→ callback 在 `_initiator_ok` 就擋下（session_ended），不消耗額度、不打 LINE。"""
+    from helpers import line_login as ll
+    from db import DEMO_DB_PATH  # noqa: F401
+    res = ll.start("demo", "demo-token-not-in-real-db") if hasattr(ll, "start") else None
+    st = urllib.parse.parse_qs(urllib.parse.urlparse(res["authorizeUrl"]).query)["state"][0]
+    r = _cb(client, state=st, code="x")
+    assert r.status_code == 400 and "無法綁定" in r.text
+    assert env.calls == [] and len(ll._hits) == 0
+
+
+# ── P6 失敗探測不留痕跡 ─────────────────────────────────────────────────
+def test_p6_invalid_state_probing_leaves_no_audit_and_no_warning(client, env, caplog):
+    """RED（觀察級）：亂猜 state 的請求不寫稽核、不記 WARNING；只有 uvicorn access log 看得到，應用層無法偵測『有人在掃』。"""
+    import db
+    caplog.set_level(logging.DEBUG)
+    for i in range(30):
+        assert _cb(client, state=("z%02d" % i) * 14, code="x").status_code == 400
+    conn = db.get_db()
+    try:
+        n = conn.execute("SELECT COUNT(*) c FROM audit_log WHERE action LIKE 'line.%'").fetchone()["c"]
+    finally:
+        conn.close()
+    assert n == 0
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING and "line" in r.getMessage().lower()]
+
+
+# ── P7 讀取失敗被當成『沒有綁定』→ 整份綁定表被覆寫 ──────────────────────
+def test_p7_transient_read_failure_wipes_every_other_users_binding(client, make_user, env, monkeypatch):
+    """RED（建議級）：line_links 是**單一 JSON 值**，link_user／unlink_user／set_confirmed 都是 讀→改→寫。
+    `_get_setting` 對任何例外回預設值 {}，於是一次暫時性讀取失敗（locked／I/O）就讓 `links={}`，
+    寫回時把『所有其他人』的綁定一起抹掉，且無任何錯誤。"""
+    from helpers import line_notify as ln
+    import helpers.settings as hs
+    ln.link_user("alice", "U" + "1" * 32)
+    ln.link_user("bob", "U" + "2" * 32)
+    assert ln.is_linked("alice") and ln.is_linked("bob")
+    real_get = hs.get_db
+    state = {"n": 0}
+
+    class _Flaky:
+        def __init__(self, c):
+            self._c = c
+
+        def execute(self, *a, **k):
+            state["n"] += 1
+            if state["n"] == 1:               # 第一次 SELECT 暫時失敗（與 get_db 成功連線之後的 busy／I/O 同一個落點）
+                raise __import__("sqlite3").OperationalError("database is locked")
+            return self._c.execute(*a, **k)
+
+        def __getattr__(self, n):
+            return getattr(self._c, n)
+
+    monkeypatch.setattr(hs, "get_db", lambda: _Flaky(real_get()))
+    ln.link_user("carol", "U" + "3" * 32)           # 讀取第一次失敗 → 以為沒有任何綁定
+    monkeypatch.setattr(hs, "get_db", real_get)
+    assert ln.is_linked("carol")
+    assert ln.is_linked("alice") is False and ln.is_linked("bob") is False   # 被抹掉（RED 預期）
+
+
+# ── P8 反向控制：停用帳號不會收到 LINE ───────────────────────────────────
+def test_p8_deactivated_user_is_dropped_from_line_recipients(client, make_user, env):
+    """GREEN：離職（active=0）但綁定還在的人，收件人解析（active=1）已把他排除 → 不推播。"""
+    import db
+    from helpers import email_notify as en
+    from helpers import line_notify as ln
+    make_user(username="gone_gus", role="sales")
+    conn = db.get_db()
+    conn.execute("UPDATE users SET email='gus@example.com' WHERE username='gone_gus'")
+    conn.commit()
+    conn.close()
+    ln.link_user("gone_gus", UID)
+    conn = db.get_db()
+    conn.execute("UPDATE users SET active=0 WHERE username='gone_gus'")
+    conn.commit()
+    conn.close()
+    en._resolved.pairs = []
+    try:
+        to = en._lookup_emails(["gone_gus"], "approval_review_edit")
+        pairs = list(en._resolved.pairs)
+    finally:
+        en._resolved.pairs = None
+    assert not [u for e, u in pairs if u == "gone_gus"]

@@ -1,0 +1,58 @@
+# -*- coding: utf-8 -*-
+"""AUDIT PROBE（hichan-10，不 commit）：N7 非簽核人唯讀——模式 0／下一層簽核人／已簽過的簽核人／草稿狀態。"""
+import json
+
+import pytest
+
+pytest.importorskip("playwright.sync_api")
+
+from tests._e2e_login import inject_login  # noqa: E402
+from tests._requires import requires_module  # noqa: E402
+from tests.test_e2e_review_edit_lock_2026_11_11 import NO, _seed, _set_mode  # noqa: E402
+
+pytestmark = requires_module("case", "probe")
+BANNER = '[data-testid="qf-pending-lock-banner"]'
+
+
+def _open(page, live_server):
+    page.goto(f"{live_server}/pages/quotation-form.html?id={NO}")
+    page.wait_for_selector(".qty-input", state="attached", timeout=15000)
+    page.wait_for_function("() => !!document.querySelector('.form-left')", timeout=10000)
+    page.wait_for_timeout(1200)
+
+
+def _snap(page):
+    return {
+        "banner": page.is_visible(BANNER),
+        "qtyReadOnly": page.evaluate("() => document.querySelector('.qty-input').readOnly"),
+        "approverLocked": page.get_attribute(".form-left", "data-approver-locked"),
+        "approveBtn": page.is_visible('[data-testid="qf-approve-open-preview"]'),
+        "recallBtn": page.get_by_role("button", name="收回草稿").is_visible(),
+        "saveDraftBtn": page.get_by_role("button", name="儲存草稿").is_visible(),
+    }
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("mode", [0, 1, 2])
+def test_probe_superadmin_non_approver_by_mode(live_server, make_user, e2e_browser, mode):
+    sa, sp = make_user(username=f"pn7_sa{mode}", role="superadmin", modules=["quotation"])
+    _set_mode(mode)
+    _seed(["pn7_ap1", "pn7_ap2"], signed=0)
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, sa, sp)
+    _open(page, live_server)
+    print("\nMODE", mode, "superadmin-non-approver", _snap(page))
+
+
+@pytest.mark.e2e
+def test_probe_later_tier_and_signed_approver(live_server, make_user, e2e_browser):
+    later, lp = make_user(username="pn7_later", role="admin", modules=["quotation"])
+    signed, sp = make_user(username="pn7_done", role="admin", modules=["quotation"])
+    _set_mode(2)
+    # 兩層：第 1 層 pn7_done 已簽、第 2 層（當層）是別人；pn7_later 在第 3 層
+    _seed(["pn7_done", "pn7_cur", "pn7_later"], signed=1)
+    for who, pw in ((later, lp), (signed, sp)):
+        page = e2e_browser.new_page()
+        inject_login(page, live_server, who, pw)
+        _open(page, live_server)
+        print("\nROLE", who, _snap(page))
