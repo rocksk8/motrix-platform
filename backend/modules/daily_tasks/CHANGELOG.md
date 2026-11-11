@@ -3,6 +3,9 @@
 ## (next) — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
 - 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
 - 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。
+- **（併入）(next) — 2026-11-11（wip/ux-density-c456；C6 每日工作事項工具列與日曆收密）**
+- `pages/daily-tasks.html`（只改呈現）：日曆視圖預設只展開當月，前一個月收成一條標題列（按一下展開）；工具列只留「今日」（新增：回到當月／回報彙整時回到今日）、「日曆視圖」與已解鎖時的「新增工作事項」，「回報彙整／月曆總覽／看板／解鎖管理視角」收進「更多」選單（動作、權限不變；進入某視圖後列上會多一顆「← 返回列表」）；手機寬度工具列改為可換行。無 API、無 migration、無設定變動。
+- 測試：新增 `tests/test_e2e_daily_tasks_density_2026_11_11.py`（5 題）。
 
 ## 1.0.12 — 2026-10-14（wip/t61-bp3-templates-r1；每日任務歷程 CSV 可套用匯出範本）；t62 整合 r8
 - 每日任務歷程 CSV（`GET /api/daily-tasks/{id}/history/export`）可套用匯出範本（設定中心「自訂匯出」`builder_exports.enabled`，**預設關閉**）：最高管理者可選要匯出的欄位、標題與順序，發布前先預覽；沒有權限看的欄位不會出現。關閉或沒有已發布範本時，匯出檔與今天逐位元相同。頁面多載入 `export-editor.js`（旗標關／不是最高管理者時什麼都不畫）。無 migration、無權限變更。

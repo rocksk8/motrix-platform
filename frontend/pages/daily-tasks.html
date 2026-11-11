@@ -48,6 +48,25 @@
       min-width: 88px; text-align: center; white-space: nowrap;
     }
     .dt-spacer { flex: 1; }
+    /* C6：「今日」與「更多」下拉（中性色；原本的彩色按鈕收進選單） */
+    .dt-bar-act-today { background:#fff;color:var(--text-primary);border-color:var(--border-light);font-weight:600 }
+    .dt-bar-act-today:hover { border-color:var(--accent);color:var(--accent) }
+    .dt-more { position: relative; }
+    .dt-bar-act-more { background:#fff;color:var(--text-secondary);border-color:var(--border-light) }
+    .dt-bar-act-more:hover { border-color:var(--accent);color:var(--accent) }
+    .dt-more-menu { position:absolute; right:0; top:calc(100% + 4px); min-width:170px; z-index:60; background:#fff;
+                    border:1px solid var(--border-light); border-radius:8px; padding:4px; box-shadow:0 8px 24px rgba(0,0,0,.14); }
+    .dt-more-item { display:flex; align-items:center; gap:8px; width:100%; padding:8px 10px; border:none; background:none; border-radius:6px;
+                    font-size:12px; font-family:var(--font-zh); color:var(--text-primary); cursor:pointer; text-align:left; white-space:nowrap }
+    .dt-more-item:hover { background:var(--accent-light); color:var(--accent-hover) }
+    .dt-more-item.on { font-weight:700; color:var(--accent) }
+    /* C6：日曆預設只展開當月；前一個月收成一條標題列 */
+    .dt-cal-card-hd.dt-cal-fold { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; cursor:pointer; border:none; border-bottom:1px solid var(--border-light); font-family:inherit }
+    .dt-cal-card-hd.dt-cal-fold:hover { background:var(--accent-light) }
+    .dt-cal-fold__hint { font-size:10px; color:var(--text-dim); font-weight:500 }
+    .dt-cal-card.folded .dt-cal-card-hd { border-bottom:none }
+    /* C6：窄螢幕工具列換行（原本整列不換行、手機寬度會把按鈕擠出畫面外） */
+    @media (max-width: 767px) { .dt-bar { flex-wrap: wrap; padding: 8px 12px; } .dt-spacer { flex-basis: 100%; height: 0; } }
     .dt-unlock-badge {
       display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
       color: #15803D; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 20px; padding: 3px 10px;
@@ -740,53 +759,68 @@
     </div>
     <div class="dt-spacer"></div>
 
+    <!-- C6（2026-11-11 UX 密度）：主要動作留在列上（今日、日曆視圖、新增），其餘視圖／管理動作收進「更多」。
+         目前所在的視圖（回報彙整／月曆總覽／看板）會多一顆「← 返回列表」留在列上，隨時一步退出。 -->
+    <button class="dt-bar-act dt-bar-act-today" data-testid="dt-today" @click="goToday()">今日</button>
+
     <!-- 日曆視圖 toggle -->
     <button class="dt-bar-act dt-bar-act-cal" :class="{on: calMode}" @click="toggleCalMode()">
       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       <span x-text="calMode ? '← 關閉日曆' : '日曆視圖'"></span>
     </button>
 
-    <!-- 回報彙整 toggle -->
-    <button class="dt-bar-act dt-bar-act-report" :class="{on: reportMode}" @click="toggleReportMode()">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-      <span x-text="reportMode ? '← 返回列表' : '回報彙整'"></span>
-    </button>
+    <template x-if="reportMode">
+      <button class="dt-bar-act dt-bar-act-report on" data-testid="dt-exit-report" @click="toggleReportMode()">← 返回列表</button>
+    </template>
+    <template x-if="monthCalMode">
+      <button class="dt-bar-act dt-bar-act-cal on" data-testid="dt-exit-month" @click="toggleMonthCalMode()">← 關閉月曆</button>
+    </template>
+    <template x-if="boardMode">
+      <button class="dt-bar-act dt-bar-act-report on" data-testid="dt-exit-board" @click="toggleBoardMode()">← 關閉看板</button>
+    </template>
 
-    <!-- 月曆總覽 toggle -->
-    <button class="dt-bar-act dt-bar-act-cal" :class="{on: monthCalMode}" @click="toggleMonthCalMode()">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="4" x2="9" y2="20"/><line x1="15" y1="4" x2="15" y2="20"/></svg>
-      <span x-text="monthCalMode ? '← 關閉月曆' : '月曆總覽'"></span>
-    </button>
-
-    <!-- 看板 toggle -->
-    <button class="dt-bar-act dt-bar-act-report" :class="{on: boardMode}" @click="toggleBoardMode()">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="10" rx="1"/></svg>
-      <span x-text="boardMode ? '← 關閉看板' : '看板'"></span>
-    </button>
-
-    <template x-if="session?.role === 'superadmin'">
+    <template x-if="session?.role === 'superadmin' && dtUnlocked">
       <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
         <div class="dt-bar-sep"></div>
-        <template x-if="!dtUnlocked">
-          <button class="dt-bar-act dt-bar-act-lock" @click="showUnlock=true">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        <span class="dt-unlock-badge">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          管理視角已解鎖
+        </span>
+        <button class="dt-bar-act dt-bar-act-add" @click="openCreate()">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          新增工作事項
+        </button>
+      </div>
+    </template>
+
+    <!-- 更多：回報彙整／月曆總覽／看板／解鎖管理視角（原本各是一顆彩色按鈕，動作與行為不變） -->
+    <div class="dt-more" @click.outside="moreOpen = false" @keydown.escape.window="moreOpen = false">
+      <button type="button" class="dt-bar-act dt-bar-act-more" data-testid="dt-more" aria-haspopup="menu"
+              :aria-expanded="moreOpen" @click="moreOpen = !moreOpen">
+        更多
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="dt-more-menu" role="menu" x-show="moreOpen" x-cloak data-testid="dt-more-menu">
+        <button type="button" role="menuitem" class="dt-more-item" :class="{on: reportMode}" @click="moreOpen = false; toggleReportMode()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span x-text="reportMode ? '← 返回列表' : '回報彙整'"></span>
+        </button>
+        <button type="button" role="menuitem" class="dt-more-item" :class="{on: monthCalMode}" @click="moreOpen = false; toggleMonthCalMode()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="4" x2="9" y2="20"/><line x1="15" y1="4" x2="15" y2="20"/></svg>
+          <span x-text="monthCalMode ? '← 關閉月曆' : '月曆總覽'"></span>
+        </button>
+        <button type="button" role="menuitem" class="dt-more-item" :class="{on: boardMode}" @click="moreOpen = false; toggleBoardMode()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="10" rx="1"/></svg>
+          <span x-text="boardMode ? '← 關閉看板' : '看板'"></span>
+        </button>
+        <template x-if="session?.role === 'superadmin' && !dtUnlocked">
+          <button type="button" role="menuitem" class="dt-more-item" @click="moreOpen = false; showUnlock = true">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
             解鎖管理視角
           </button>
         </template>
-        <template x-if="dtUnlocked">
-          <span class="dt-unlock-badge">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-            管理視角已解鎖
-          </span>
-        </template>
-        <template x-if="dtUnlocked">
-          <button class="dt-bar-act dt-bar-act-add" @click="openCreate()">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-            新增工作事項
-          </button>
-        </template>
       </div>
-    </template>
+    </div>
   </div>
 
   <!-- ══ 回報彙整視圖 ══ -->
@@ -1015,17 +1049,19 @@
             <span class="dt-cal-legend-item"><span class="dt-cal-legend-dot" style="background:#DC2626"></span>未完成</span>
           </div>
 
-          <!-- Previous month -->
-          <div class="dt-cal-card">
-            <div class="dt-cal-card-hd">
+          <!-- Previous month（C6：預設收成一條標題列，按一下展開；當月永遠展開） -->
+          <div class="dt-cal-card" :class="{folded: !calPrevOpen}" data-testid="cal-prev-card">
+            <button type="button" class="dt-cal-card-hd dt-cal-fold" data-testid="cal-prev-toggle"
+                    :aria-expanded="calPrevOpen" @click="calPrevOpen = !calPrevOpen">
               <span class="dt-cal-card-title" x-text="calPrevMonthYear().year + ' 年 ' + calPrevMonthYear().month + ' 月'"></span>
-            </div>
-            <div class="dt-cal-wdays">
+              <span class="dt-cal-fold__hint" x-text="calPrevOpen ? '▴ 收合' : '▾ 展開'"></span>
+            </button>
+            <div class="dt-cal-wdays" x-show="calPrevOpen">
               <span class="dt-cal-wday">一</span><span class="dt-cal-wday">二</span><span class="dt-cal-wday">三</span>
               <span class="dt-cal-wday">四</span><span class="dt-cal-wday">五</span>
               <span class="dt-cal-wday sat">六</span><span class="dt-cal-wday sun">日</span>
             </div>
-            <div class="dt-cal-grid">
+            <div class="dt-cal-grid" x-show="calPrevOpen">
               <template x-for="cell in calMonthDays(calPrevMonthYear().year, calPrevMonthYear().month)" :key="'p'+cell.date">
                 <div class="dt-cal-cell"
                      :class="[
@@ -2514,6 +2550,8 @@ function app() {
 
     // Calendar view
     calMode:        false,
+    calPrevOpen:    false,   // C6：日曆視圖預設只展開當月，前一個月收成標題列（純畫面狀態）
+    moreOpen:       false,   // C6：工具列「更多」選單
     calData:        {},
     calLoading:     false,
     calSelDate:     '',
@@ -2635,6 +2673,17 @@ function app() {
     prevMonth() {
       this.viewMonth--
       if (this.viewMonth < 1) { this.viewMonth = 12; this.viewYear-- }
+      this.selected = null; this.selectedOccDate = ''
+      if (this.calMode) { this.calSelDate = ''; this.reportData = []; this.loadCalendarData() }
+      else this.loadTasks()
+    },
+    // C6：回到今天（回報彙整視圖＝回到今日；其餘視圖＝回到當月並清掉選取）
+    goToday() {
+      this.moreOpen = false
+      if (this.reportMode) { this.goReportToday(); return }
+      const t = MotrixDate.today()
+      this.viewYear = +t.slice(0, 4)
+      this.viewMonth = +t.slice(5, 7)
       this.selected = null; this.selectedOccDate = ''
       if (this.calMode) { this.calSelDate = ''; this.reportData = []; this.loadCalendarData() }
       else this.loadTasks()
