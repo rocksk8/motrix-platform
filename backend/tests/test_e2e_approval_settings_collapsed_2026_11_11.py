@@ -61,10 +61,10 @@ def test_expanding_reveals_the_old_controls(live_server, make_user, e2e_browser)
     assert quote.locator(".scope-side.live").is_visible()
     # 撥動開關：預覽照舊（儲存後變這個），摘要註明尚未儲存；沒有任何請求被送出（只是畫面狀態）
     box.evaluate("e => e.click()")
-    assert quote.locator(".scope-side.next").is_visible()
+    quote.locator(".scope-side.next").wait_for(state="visible", timeout=5000)          # 撥動後的畫面要等一個影格
     assert "尚未儲存" in quote.locator(".scope-row__digest").inner_text()
     box.evaluate("e => e.click()")
-    assert quote.locator(".scope-side.next").count() == 0
+    quote.locator(".scope-side.next").wait_for(state="detached", timeout=5000)
     # 「編輯簽核層」展開並帶到統一流程的編輯區塊
     quote.get_by_role("button", name="編輯簽核層").click()
     card = page.locator("#as-flow-unified")

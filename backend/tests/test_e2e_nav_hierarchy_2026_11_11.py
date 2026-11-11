@@ -129,11 +129,12 @@ def test_report_hub_tabs_cards_and_gear(live_server, make_user, new_page, login_
     assert tabs == ["營運", "財務", "帳簿"], tabs
     assert page.locator("[data-testid=rh-card-reports\\.html]").is_visible()          # 預設第一個頁籤
     page.locator("[data-testid=rh-tab-財務]").click()
-    assert page.locator("[data-testid=rh-card-ledger-statements\\.html]").is_visible()
-    assert not page.locator("[data-testid=rh-card-reports\\.html]").is_visible() if page.locator("[data-testid=rh-card-reports\\.html]").count() else True
+    # 切頁籤後的顯示／隱藏要等 Alpine 的 x-show 套完（約一個影格），不能點完立刻 is_visible()
+    page.locator("[data-testid=rh-card-ledger-statements\\.html]").wait_for(state="visible", timeout=5000)
+    page.locator("[data-testid=rh-card-reports\\.html]").wait_for(state="hidden", timeout=5000)      # 不在 DOM 也算隱藏
     page.locator("[data-testid=rh-tab-帳簿]").click()
     card = page.locator("[data-testid=rh-card-ledger-reports\\.html]")
-    assert card.is_visible()
+    card.wait_for(state="visible", timeout=5000)
     assert "明細帳" in card.inner_text()                                                # 卡片寫的是「回答什麼問題」
     card.locator("a").click()
     page.wait_for_url("**/ledger-reports.html*")

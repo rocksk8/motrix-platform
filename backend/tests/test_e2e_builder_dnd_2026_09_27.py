@@ -129,10 +129,14 @@ def test_three_tabs_replace_the_seven_thumbnails_and_publish_is_a_drawer(live_se
     assert page.locator(".mb-tab").count() == 3 and page.locator("#mb-nav").count() == 0
     assert page.locator('#mb-step-3').count() == 0 and page.locator('.mb-step').count() == 0
     go_step(page, 1)
-    assert page.locator("#mb-step-5").is_visible() and not page.locator("#mb-step-2").is_visible()      # 作業資訊 ＝ 基本＋輸出
+    # go_step 只等「目標步驟」可見；換頁籤時另一頁籤內容的隱藏晚約一個影格，所以「不可見」也要等（不能立刻 is_visible()）
+    page.locator("#mb-step-5").wait_for(state="visible", timeout=5000)
+    page.locator("#mb-step-2").wait_for(state="hidden", timeout=5000)                                    # 作業資訊 ＝ 基本＋輸出
     go_step(page, 4)
-    assert page.locator("#mb-step-4").is_visible() and not page.locator("#mb-step-1").is_visible()
-    assert page.locator("#mb-sec-workflow").is_visible() and page.locator("#mb-sec-approval").count() == 1
+    page.locator("#mb-step-4").wait_for(state="visible", timeout=5000)
+    page.locator("#mb-step-1").wait_for(state="hidden", timeout=5000)
+    page.locator("#mb-sec-workflow").wait_for(state="visible", timeout=5000)
+    assert page.locator("#mb-sec-approval").count() == 1
     go_step(page, 2)
     page.click('#mb-palette [data-palette-type="ref"]')
     _saved(page)

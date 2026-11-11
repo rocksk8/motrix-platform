@@ -98,7 +98,8 @@ def test_tax401_tab_query_export_and_settlement_buttons(live_server, make_user, 
     assert "自己補" in page.locator("[data-testid=hb-tax-summary]").inner_text()                     # 兩行白話摘要（預設可見）
     assert page.locator("[data-testid=hb-tax-legal]").is_hidden()                                    # 詳細說明預設收合
     page.locator("[data-testid=hb-tax-details] summary").click()
-    assert page.locator("[data-testid=hb-tax-legal]").is_visible() and "附件六" in page.locator("[data-testid=hb-tax-legal]").inner_text()
+    page.locator("[data-testid=hb-tax-legal]").wait_for(state="visible", timeout=5000)
+    assert "附件六" in page.locator("[data-testid=hb-tax-legal]").inner_text()
     unverified = page.locator("[data-testid=hb-tax-unverified]").inner_text()
     assert "代號 115" in unverified and "媒體申報檔" in unverified                                   # 只列未能核實的項目
     page.wait_for_selector("[data-testid=hb-tax-checks] td:has-text('相符')")

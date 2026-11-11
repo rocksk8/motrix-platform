@@ -240,7 +240,7 @@ def test_leaflet_legend_pins_zoom_steps_chips_and_overlap(live_server, make_user
             && vis.every(o => o === m || !hit(r, o.querySelector('.mp-chip').getBoundingClientRect())) }) }""")
     hidden = page.locator("#mp-canvas .mp-mk", has_text=LONG[:16])
     hidden.locator(".mp-pin").hover()
-    assert hidden.locator(".mp-chip").is_visible()
+    hidden.locator(".mp-chip").wait_for(state="visible", timeout=5000)
     # 彈窗有全文與連結所在（名稱全文）
     page.locator("#mp-canvas .mp-mk", has_text=SHORT).locator(".mp-pin").click()
     page.wait_for_selector(".leaflet-popup", state="visible")
