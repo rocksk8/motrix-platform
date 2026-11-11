@@ -753,6 +753,14 @@ def _prune_login_locks() -> None:
         conn.close()
 
 
+def _license_startup_check() -> None:
+    """授權閘門啟動檢查（T80）：授權不通過／靠緊急放行通行證／裝的是開發金鑰 ⇒ log＋稽核（`license_alerts` 寫 audit_log）。
+    **不擋啟動、不丟例外**（理由見 helpers/license_alerts.py）。啟動時的寫入只能經本檔
+    （CORE-SPEC 裁示 K-O2；守門 tests/platform/test_startup_writes_only_via_startup.py），所以 main.py 呼叫這裡、不直接呼叫 license_alerts。"""
+    from helpers import license_alerts
+    license_alerts.startup_check()
+
+
 def _cleanup_sessions() -> None:
     conn = get_db()
     try:

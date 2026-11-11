@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>授權無法使用 - MOTRIX 專案管理系統</title>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    .lr-wrap { max-width:640px; margin:64px auto; padding:24px 28px; background:var(--white);
+               border:1px solid var(--border-light); border-radius:var(--radius-lg); line-height:1.8; }
+    .lr-title { font-size:20px; margin:0 0 8px; }
+    .lr-dim { color:var(--text-secondary); font-size:13px; }
+    .lr-box { margin:14px 0 0; padding:10px 14px; background:var(--warning-light); color:var(--warning);
+              border:1px solid var(--warning); border-radius:var(--radius-lg); font-size:13px; }
+    .lr-kv { margin:14px 0 0; font-size:13px; }
+    .lr-kv dt { color:var(--text-secondary); float:left; clear:left; width:6.5em; }
+    .lr-kv dd { margin:0 0 2px 6.5em; word-break:break-all; }
+    .lr-row { display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+  <!-- 授權閘門（helpers/licensing.py；notif.js 在任何 /api 回 402 license_required 時導來這一頁）。
+       讓使用者知道「這是授權問題、不是系統壞了」、原因是什麼、找誰處理。
+       不用 Alpine；只讀 /api/license/status（授權豁免清單內，沒有授權也讀得到），不讀任何業務資料。 -->
+  <div class="lr-wrap" data-license-required>
+    <h1 class="lr-title" id="lr-title">授權無法使用</h1>
+    <p id="lr-msg">系統目前無法確認這台伺服器的使用授權，所以暫停使用。這不是系統故障，您的資料都還在。</p>
+    <p class="lr-dim">請聯絡<strong>系統供應商</strong>（提供這套系統授權金鑰的廠商），並把下方的「狀態代碼」與「機器代碼」一併提供，對方才能處理。</p>
+    <div class="lr-box" id="lr-emergency" hidden></div>
+    <dl class="lr-kv" id="lr-kv"></dl>
+    <div class="lr-row">
+      <button type="button" class="btn btn-primary" id="lr-retry">重新檢查</button>
+      <button type="button" class="btn btn-ghost" id="lr-logout">登出</button>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var sess = {}
+      try { sess = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { sess = {} }
+      if (!sess.token) { location.replace('login.html'); return }
+      var H = { Authorization: 'Bearer ' + sess.token }
+      // 狀態代碼 ⇒ 給人看的說明（與後端 helpers/licensing.py::_GATE_MESSAGES 同義；這裡多講「該怎麼辦」）
+      var REASON = {
+        missing: ['尚未安裝授權金鑰', '這台伺服器上找不到授權金鑰。請向供應商取得，並放到伺服器的指定位置。'],
+        malformed: ['授權金鑰檔已損毀', '授權金鑰檔讀不懂（可能被截斷或改動）。請向供應商重新取得。'],
+        bad_signature: ['授權金鑰驗證失敗', '授權金鑰的簽章不符（內容被改動，或不是供應商簽發的）。請向供應商重新取得。'],
+        machine_mismatch: ['授權金鑰不是發給這台機器的', '常見原因是伺服器換過主機板或網卡。請把下方「機器代碼」提供給供應商，重新簽發。'],
+        expired: ['授權已到期', '請聯絡供應商續約。續約完成前，系統暫停使用。']
+      }
+      var EM_WHY = {
+        token_bad_signature: '簽章不符', token_malformed: '格式不正確', token_wrong_purpose: '這不是緊急放行通行證',
+        token_bad_dates: '日期格式不正確', token_span_too_long: '有效期間超過上限', token_not_yet_valid: '尚未到生效日',
+        token_expired: '已過期', license_not_covered: '目前的授權狀態不適用緊急放行（只適用於「機器不符」與「已到期」）',
+        license_untrusted: '找不到可信的授權金鑰可以對照', tax_id_mismatch: '通行證的統一編號與授權金鑰不符',
+        token_too_big: '檔案過大', token_unreadable: '檔案讀不到', token_error: '無法判定'
+      }
+      function row(k, v) {
+        var dt = document.createElement('dt'); dt.textContent = k
+        var dd = document.createElement('dd'); dd.textContent = v
+        var kv = document.getElementById('lr-kv'); kv.appendChild(dt); kv.appendChild(dd)
+      }
+      function render(s) {
+        document.getElementById('lr-kv').textContent = ''
+        var em = document.getElementById('lr-emergency'); em.hidden = true
+        var r = REASON[s.reason]
+        if (r) {
+          document.getElementById('lr-title').textContent = r[0]
+          document.getElementById('lr-msg').textContent = r[1] + ' 這不是系統故障，您的資料都還在。'
+        }
+        row('狀態代碼', s.reason || '未知')
+        if (s.machine) row('機器代碼', s.machine)
+        if (s.customer) row('授權客戶', s.customer)
+        if (s.expires) row('授權到期日', s.expires)
+        if (s.emergency && s.emergency.present && !s.emergency.active) {
+          em.hidden = false
+          em.textContent = '已偵測到緊急放行通行證，但目前無法使用：' + (EM_WHY[s.emergency.why] || s.emergency.why)
+        }
+      }
+      function check() {
+        fetch('/api/license/status', { headers: H })
+          .then(function (r) { return r.ok ? r.json() : null })
+          .then(function (s) {
+            if (!s) return
+            if (s.blocked === false || s.gate === false || (s.emergency && s.emergency.active)) { location.replace('../index.html'); return }
+            render(s)
+          })
+          .catch(function () { /* 連不上就留在這頁，按「重新檢查」再試 */ })
+      }
+      document.getElementById('lr-retry').addEventListener('click', check)
+      document.getElementById('lr-logout').addEventListener('click', function () {
+        fetch('/api/auth/logout', { method: 'POST', headers: H }).finally(function () {
+          try { localStorage.removeItem('motrix_session') } catch (e) {}
+          location.replace('login.html')
+        })
+      })
+      check()
+    })()
+  </script>
+</body>
+</html>

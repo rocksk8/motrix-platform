@@ -64,7 +64,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 from db import get_db, init_db, DEMO_DB_PATH, set_demo_mode
 from helpers import (
-    init_default_admin, init_demo_account, _cleanup_sessions, _prune_login_locks,
+    init_default_admin, init_demo_account, _cleanup_sessions, _prune_login_locks, _license_startup_check,
     init_unlock_passwords, flag_weak_passwords,
     _sync_module_versions, DEMO_TOKEN_PREFIX,
 )
@@ -72,6 +72,7 @@ from archive import _schedule_weekly, _schedule_daily
 import trail
 
 from helpers import licensing as license_core
+from helpers import license_alerts
 from helpers import geo as geo_core
 from core import loader as module_loader, pages as module_pages, registry as module_registry
 from core.internal_cols import InternalColsMiddleware
@@ -482,8 +483,7 @@ async def license_gate_middleware(request: Request, call_next):
     if not path.startswith("/api/"):
         return await call_next(request)
     # 豁免清單 ∪ 既有公開端點——未授權時這些仍要通，否則客戶連自救都做不到。
-    if path in license_core.LICENSE_EXEMPT_PATHS or path in _PUBLIC_API_PATHS:
-        return await call_next(request)
+    exempt = path in license_core.LICENSE_EXEMPT_PATHS or path in _PUBLIC_API_PATHS
 
     # ⚠️⚠️ 這一行**刻意沒有包 try/except**。不是漏寫的，不要順手補上去。
     #
@@ -495,7 +495,11 @@ async def license_gate_middleware(request: Request, call_next):
     # 選最後一條：500 會被報修，「出錯就放行」是降級，而**降級不會有人報修**。
     # 授權模組壞掉本來就該是全站停下來的等級。（A 於 2026-09-21 覆核通過）
     status = license_core.verify_license()
-    if license_core.license_blocks_request(status):
+    blocked = license_core.license_blocks_request(status)
+    # 緊急放行通行證（licensing.py 的「緊急放行通行證」一節）：只有「會被擋」時才看它；
+    # emergency_pass() 與 license_alerts 都不丟例外，任何不確定都當沒有通行證 ⇒ 照擋。
+    emergency = license_core.emergency_pass(status) if blocked else None
+    if blocked and emergency is None and not exempt:
         # 402 Payment Required，不是 403。
         # 403＝「你這個人沒權限」，402＝「這台機器沒買」。客服現場要分得開。
         return JSONResponse(
@@ -506,7 +510,16 @@ async def license_gate_middleware(request: Request, call_next):
                 "code":   "license_required",
             },
         )
-    return await call_next(request)
+    if emergency:
+        license_alerts.emergency_in_use(emergency)       # log＋稽核，每個通行證每天一次
+    else:
+        license_alerts.dev_key_in_use(status)            # env=dev：log＋稽核，每天一次
+    response = await call_next(request)
+    # 前端橫幅（notif.js）：**每個** /api 回應都帶（含豁免／公開端點），否則橫幅會在下一個沒帶標頭的回應被移除而閃爍。
+    banner = license_core.license_banner(status, emergency)
+    if banner:
+        response.headers[license_core.LICENSE_HEADER] = banner
+    return response
 
 
 from helpers import company_setup as _company_setup                     # noqa: E402
@@ -834,6 +847,12 @@ def _startup_company_setup():
 
 _startup_company_setup()
 _startup_step("company_setup")
+
+
+# 授權閘門啟動檢查（T80）：授權不通過／靠緊急放行通行證／裝的是開發金鑰（env=dev）⇒ log＋稽核，**不擋啟動**
+# （理由見 helpers/license_alerts.py）。license_alerts.startup_check 不丟例外；閘門關著時什麼都不做。
+_license_startup_check()                      # 經 helpers/startup.py（啟動寫入的唯一出口）；內部呼叫 license_alerts.startup_check
+_startup_step("license_check")
 init_default_admin()
 _startup_step("init_default_admin")
 init_demo_account()

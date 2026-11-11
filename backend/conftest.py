@@ -850,7 +850,7 @@ def license_test_key(tmp_path_factory):
     未授權、一個都不載入。**這是讓「閘門開著」成為測試的常態，而不是把閘門關掉。**
 
     做法（驗章走**真的簽章路徑**，只換三樣環境）：
-      · 自己產一把臨時 Ed25519 金鑰對，公鑰換進 `_PUBKEY_DEV`（`_PUBKEY_PROD` 清空）——私鑰不落地、不進 repo；
+      · 自己產一把臨時 Ed25519 金鑰對，公鑰換進 `_PUBKEY_PROD`（env=prod；`_PUBKEY_DEV` 換成拋棄式金鑰）——私鑰不落地、不進 repo；
       · 用真的 `sign_license` 簽一把 `modules=["*"]`、2099 年到期、`machine=TEST_LICENSE_MACHINE` 的金鑰，
         寫進 session 暫存目錄，`LICENSE_PATH` 指過去；
       · `machine_fingerprint` 換成固定值——真的那支會在 Windows 上跑 PowerShell `Get-CimInstance` 讀硬體，
@@ -876,10 +876,15 @@ def license_test_key(tmp_path_factory):
     key_path = tmp_path_factory.mktemp("license") / "license.key"
     key_path.write_text(blob, encoding="utf-8")
 
+    # 測試金鑰當成**正式**金鑰（env=prod）：env=dev 會讓每個 /api 回應都帶 `X-Motrix-License: dev_key` ⇒ 每頁頂端多一條橫幅，
+    # 所有 e2e／截圖基準都會被改到。開發公鑰換成另一把沒人持有私鑰的拋棄式金鑰（不留真的開發公鑰，避免「開發金鑰簽的東西
+    # 在測試裡也過」）。要驗 env=dev 的題自己換（見 tests/test_licensing_gate_2026_09_21.py）。
+    _dead = ed25519.Ed25519PrivateKey.generate().public_key().public_bytes(
+        encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
     real_fp = _lic.machine_fingerprint
     mp = pytest.MonkeyPatch()
-    mp.setattr(_lic, "_PUBKEY_DEV", pub_pem)
-    mp.setattr(_lic, "_PUBKEY_PROD", b"")
+    mp.setattr(_lic, "_PUBKEY_DEV", _dead)
+    mp.setattr(_lic, "_PUBKEY_PROD", pub_pem)
     mp.setattr(_lic, "LICENSE_PATH", str(key_path))
     mp.setattr(_lic, "machine_fingerprint", lambda: TEST_LICENSE_MACHINE)
     try:

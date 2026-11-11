@@ -20,6 +20,7 @@
   // frontend/index.html 用 static/auth-guard.js（無 ../），
   // frontend/pages/*.html 用 ../static/auth-guard.js（有 /pages/ 這一層）
   var loginPath = location.pathname.indexOf('/pages/') >= 0 ? 'login.html' : 'pages/login.html';
+  var licensePath = location.pathname.indexOf('/pages/') >= 0 ? 'license-required.html' : 'pages/license-required.html';
 
   // 轉去登入頁之前記下「原本要去的網址」（含 ?q=／?id= 等查詢字串），登入成功後 login.html 會回到它
   // （通知連結、信件連結在未登入時打開，登入後才會落在原本那一頁；否則一律掉到首頁）。
@@ -66,6 +67,10 @@
       if (r.ok) {
         forgetReturn();
         reveal();
+      } else if (r.status === 402) {
+        // 授權閘門（helpers/licensing.py，T80）：這不是「未登入」——不清 session、不轉登入頁（否則使用者以為被登出、
+        // 重新登入又被擋，永遠看不到原因），導向「授權無法使用」說明頁。
+        location.replace(licensePath);
       } else {
         try { localStorage.removeItem('motrix_session'); } catch (e) {}
         rememberReturn();
