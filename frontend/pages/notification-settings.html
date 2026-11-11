@@ -81,10 +81,10 @@
     .ns-desc {
       font-size: 13px;
       color: var(--text-secondary);
-      background: #F8F7F4;
+      background: var(--info-light);
       border-radius: 7px;
       padding: 12px 14px;
-      border-left: 3px solid var(--accent);
+      border-left: 3px solid var(--info);
       margin-bottom: 20px;
       line-height: 1.6;
     }
@@ -157,7 +157,7 @@
     }
     .ns-check-row:last-child { border-bottom: none; }
     .ns-check-badge {
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 600;
       padding: 2px 8px;
       border-radius: 10px;
@@ -203,14 +203,14 @@
     <div class="ns-card">
       <div class="ns-card-head">
         <div class="ns-card-head-title">設定狀態</div>
-        <span x-show="allReady" style="font-size:12px;color:#16A34A;font-weight:600">● 已就緒</span>
-        <span x-show="!allReady" style="font-size:12px;color:#D97706;font-weight:600"
+        <span x-show="allReady" style="font-size:12px;color:var(--success);font-weight:600">● 已就緒</span>
+        <span x-show="!allReady" style="font-size:12px;color:var(--warning);font-weight:600"
               x-text="'尚有 ' + (checks.length - readyCount) + ' 項待完成'"></span>
       </div>
       <div class="ns-card-body" style="padding-top:8px;padding-bottom:8px">
         <template x-for="c in checks" :key="c.label">
           <div class="ns-check-row">
-            <div :style="c.ok ? 'color:#15803D' : 'color:#9CA3AF'" style="flex-shrink:0;margin-top:1px">
+            <div :style="c.ok ? 'color:#15803D' : 'color:var(--text-dim)'" style="flex-shrink:0;margin-top:1px">
               <template x-if="c.ok">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               </template>
@@ -223,7 +223,7 @@
                    :style="c.ok ? 'color:var(--text-main)' : 'color:var(--text-secondary)'"
                    x-text="c.label"></div>
               <div x-show="!c.ok" x-text="c.hint"
-                   style="font-size:11px;color:#D97706;margin-top:2px"></div>
+                   style="font-size:12px;color:var(--warning);margin-top:2px"></div>
             </div>
             <span class="ns-check-badge"
                   :style="c.ok ? 'background:#D1FAE5;color:#065F46' : 'background:#FEF3C7;color:#92400E'"
@@ -237,7 +237,7 @@
     <div class="ns-card">
       <div class="ns-card-head">
         <div class="ns-card-head-title">Gmail SMTP 設定</div>
-        <span x-show="saved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+        <span x-show="saved" x-transition style="font-size:12px;color:var(--success);font-weight:600">已儲存</span>
       </div>
       <div class="ns-card-body">
 
@@ -246,7 +246,7 @@
           <input type="checkbox" id="chk-enabled" x-model="cfg.enabled" style="width:16px;height:16px;cursor:pointer">
           <label for="chk-enabled">啟用 Email 通知</label>
           <span x-show="!cfg.enabled" style="font-size:12px;color:var(--text-dim)">(目前關閉)</span>
-          <span x-show="cfg.enabled" style="font-size:12px;color:#16A34A;font-weight:600">(已啟用)</span>
+          <span x-show="cfg.enabled" style="font-size:12px;color:var(--success);font-weight:600">(已啟用)</span>
         </div>
 
         <!-- 開發機測試模式（2026-08-26 新增）：這個設定值存在本機 DB，不隨部署
@@ -254,7 +254,7 @@
         <div class="ns-toggle">
           <input data-saved-field type="checkbox" id="chk-dev-mode" x-model="cfg.dev_mode" style="width:16px;height:16px;cursor:pointer">
           <label for="chk-dev-mode">開發機測試模式（寄出信件標題加註「【開發機測試】」）</label>
-          <span x-show="cfg.dev_mode" style="font-size:12px;color:#D97706;font-weight:600">(測試模式已開啟)</span>
+          <span x-show="cfg.dev_mode" style="font-size:12px;color:var(--warning);font-weight:600">(測試模式已開啟)</span>
         </div>
 
         <div class="ns-desc">
@@ -329,7 +329,7 @@
         </div>
 
         <div x-show="msg" x-text="msg" x-transition
-             :style="isError ? 'color:#DC2626' : 'color:#16A34A'"
+             :style="isError ? 'color:var(--danger)' : 'color:var(--success)'"
              style="font-size:13px;margin-top:12px;font-weight:600"></div>
       </div>
     </div>
@@ -338,7 +338,7 @@
     <div class="ns-card">
       <div class="ns-card-head">
         <div class="ns-card-head-title">每月營運報表收件人</div>
-        <span x-show="mrSaved" x-transition style="font-size:12px;color:#16A34A;font-weight:600">已儲存</span>
+        <span x-show="mrSaved" x-transition style="font-size:12px;color:var(--success);font-weight:600">已儲存</span>
       </div>
       <div class="ns-card-body">
         <div class="ns-desc">
@@ -381,7 +381,7 @@
         </div>
 
         <div x-show="mrMsg" x-text="mrMsg" x-transition
-             :style="mrIsError ? 'color:#DC2626' : 'color:#16A34A'"
+             :style="mrIsError ? 'color:var(--danger)' : 'color:var(--success)'"
              style="font-size:13px;margin-top:12px;font-weight:600"></div>
       </div>
     </div>
@@ -398,7 +398,7 @@
         </div>
         <div x-show="rfDenied" style="font-size:13px;color:var(--text-dim);margin-top:12px">這份清單只有最高管理者，或被授予「系統設定」功能的帳號可以查看；您的帳號沒有這個權限。</div>
         <div x-show="rfError" data-testid="rf-error" style="font-size:13px;color:#B45309;margin-top:12px;font-weight:600">暫時讀不到這份清單（伺服器沒有正常回應），請稍後重新整理頁面；通知設定本身不受影響。</div>
-        <div x-show="!rfDenied && !rfError && rfItems.length === 0" style="font-size:13px;color:#16A34A;margin-top:12px;font-weight:600">目前沒有寄不出去的提醒。</div>
+        <div x-show="!rfDenied && !rfError && rfItems.length === 0" style="font-size:13px;color:var(--success);margin-top:12px;font-weight:600">目前沒有寄不出去的提醒。</div>
         <table x-show="!rfDenied && !rfError && rfItems.length > 0" style="width:100%;border-collapse:collapse;font-size:13px;margin-top:12px">
           <thead>
             <tr style="text-align:left;color:var(--text-dim)">

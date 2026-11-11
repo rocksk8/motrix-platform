@@ -47,7 +47,7 @@
     .form-group { margin-bottom: 14px; }
     .form-label {
       display: block;
-      font-size: 10px;
+      font-size: 12px;
       font-family: 'LINE Seed TW_OTF', sans-serif;
       letter-spacing: .08em;
       text-transform: uppercase;
@@ -72,7 +72,7 @@
       border-color: var(--accent);
       box-shadow: 0 0 0 3px rgba(37,99,235,.08);
     }
-    .form-hint { font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+    .form-hint { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
     .form-hint.error { color: var(--danger); }
     .div-panel { border-bottom: 1px solid var(--border-light); }
     .div-panel:last-child { border-bottom: none; }
@@ -114,7 +114,7 @@
     .chart-summary__cell { background: #fff; padding: 14px 16px; }
     .chart-summary__num { font-size: 22px; font-weight: 800; line-height: 1; color: var(--text-primary); }
     .chart-summary__num.warn { color: var(--warning); }
-    .chart-summary__label { margin-top: 5px; font-size: 11px; color: var(--text-secondary); }
+    .chart-summary__label { margin-top: 5px; font-size: 12px; color: var(--text-secondary); }
 
     .chart-tree { display: flex; flex-direction: column; gap: 36px; }
     .chart-division { position: relative; }
@@ -128,12 +128,12 @@
     }
     .chart-band:hover { border-color: var(--accent); box-shadow: 0 2px 6px rgba(0,0,0,.06); }
     .chart-band__name { font-size: 15px; font-weight: 700; color: var(--text-primary); }
-    .chart-band__meta { font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
+    .chart-band__meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
     .chart-band__manager { margin-left: auto; }
 
     .chart-chip {
       display: inline-flex; align-items: center; gap: 5px;
-      font-size: 11px; font-weight: 600; padding: 4px 10px 4px 8px; border-radius: 999px;
+      font-size: 12px; font-weight: 600; padding: 4px 10px 4px 8px; border-radius: 999px;
       white-space: nowrap;
     }
     .chart-chip--manager { background: var(--accent-light); color: var(--accent); }
@@ -161,7 +161,7 @@
     }
     .chart-dept-card:hover { border-color: var(--accent); box-shadow: 0 2px 6px rgba(0,0,0,.06); transform: translateY(-1px); }
     .chart-dept-card__name { font-size: 13px; font-weight: 700; color: var(--text-primary); }
-    .chart-dept-card__count { margin-top: 3px; font-size: 11px; color: var(--text-secondary); }
+    .chart-dept-card__count { margin-top: 3px; font-size: 12px; color: var(--text-secondary); }
     .chart-dept-card__count b { color: var(--text-primary); font-weight: 700; }
     .chart-dept-card .chart-chip { margin-top: 9px; }
   </style>
@@ -215,10 +215,10 @@
           <div class="div-head" @click="toggleDiv(div.id)">
             <span x-text="isDivOpen(div.id) ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
             <span style="font-size:14px;font-weight:700" x-text="div.name"></span>
-            <span style="font-size:11px;color:var(--text-dim)"
+            <span style="font-size:12px;color:var(--text-dim)"
                   x-text="div.departments.length + ' 個部門・' + divisionMemberCount(div) + ' 人'"></span>
             <template x-if="div.managerName">
-              <span style="font-size:10px;background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:10px" x-text="'處級主管：' + div.managerName"></span>
+              <span style="font-size:12px;background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:10px" x-text="'處級主管：' + div.managerName"></span>
             </template>
             <div style="margin-left:auto;display:flex;gap:6px" @click.stop>
               <button class="btn btn-ghost btn-sm" @click="openDepartmentCreate(div.id)" x-show="isSuperAdmin">
@@ -243,9 +243,9 @@
                   <div class="dept-row" @click="toggleDeptMembers(dept.id)" style="cursor:pointer">
                     <span x-text="isDeptMembersOpen(dept.id) ? '▾' : '▸'" style="color:var(--text-dim);width:10px;display:inline-block"></span>
                     <span style="font-size:13px;font-weight:600" x-text="dept.name"></span>
-                    <span style="font-size:11px;color:var(--text-dim)" x-text="dept.memberCount + ' 人'"></span>
+                    <span style="font-size:12px;color:var(--text-dim)" x-text="dept.memberCount + ' 人'"></span>
                     <template x-if="dept.managerName">
-                      <span style="font-size:10px;background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:10px" x-text="'主管：' + dept.managerName"></span>
+                      <span style="font-size:12px;background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:10px" x-text="'主管：' + dept.managerName"></span>
                     </template>
                     <div style="margin-left:auto;display:flex;gap:6px" @click.stop>
                       <button class="btn btn-ghost btn-sm" @click="openDepartmentEdit(dept, div.id)" x-show="isSuperAdmin">
@@ -261,13 +261,13 @@
                     <div style="padding:10px 16px 12px 50px;background:#FCFBF9;border-top:1px solid #F0EEE9">
                       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
                         <template x-for="m in membersOf(dept.id)" :key="m.id">
-                          <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 5px 3px 10px;border-radius:14px;background:#EFEDE7;font-size:11px">
+                          <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 5px 3px 10px;border-radius:14px;background:#EFEDE7;font-size:12px">
                             <span x-text="m.displayName || m.username"></span>
                             <button @click="removeMember(m)" x-show="isSuperAdmin" title="移出部門"
                                     style="border:none;background:none;cursor:pointer;color:var(--text-dim);font-size:13px;line-height:1;padding:2px 4px">×</button>
                           </span>
                         </template>
-                        <span x-show="membersOf(dept.id).length === 0" style="font-size:11px;color:var(--text-dim)">尚無成員</span>
+                        <span x-show="membersOf(dept.id).length === 0" style="font-size:12px;color:var(--text-dim)">尚無成員</span>
                       </div>
                       <div style="display:flex;gap:6px" x-show="isSuperAdmin">
                         <select class="form-select" x-model.number="addMemberSelection[dept.id]" style="font-size:12px;max-width:260px">
@@ -376,7 +376,7 @@
           <input data-saved-field class="form-input" type="number" x-model.number="divForm.sortOrder">
         </div>
         <div class="form-group">
-          <label class="form-label">處級主管 <span style="color:var(--text-dim);font-size:9px">（先預留，未來供簽核路由使用）</span></label>
+          <label class="form-label">處級主管 <span style="color:var(--text-dim);font-size:12px">（先預留，未來供簽核路由使用）</span></label>
           <select class="form-select" x-model.number="divForm.managerUserId">
             <option :value="null">未指定</option>
             <template x-for="u in selectableUsers" :key="u.id">
@@ -420,7 +420,7 @@
           <input data-saved-field class="form-input" type="number" x-model.number="deptForm.sortOrder">
         </div>
         <div class="form-group">
-          <label class="form-label">部門主管 <span style="color:var(--text-dim);font-size:9px">（先預留，未來供簽核路由使用）</span></label>
+          <label class="form-label">部門主管 <span style="color:var(--text-dim);font-size:12px">（先預留，未來供簽核路由使用）</span></label>
           <select class="form-select" x-model.number="deptForm.managerUserId">
             <option :value="null">未指定</option>
             <template x-for="u in selectableUsers" :key="u.id">

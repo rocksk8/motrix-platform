@@ -26,7 +26,7 @@
     }
     .os-bar { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 18px; }
     .os-field { display: flex; flex-direction: column; gap: 4px; }
-    .os-field label { font-size: 11px; color: var(--text-dim); }
+    .os-field label { font-size: 12px; color: var(--text-dim); }
     .os-online {
       display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
       border: 1px solid var(--border); border-radius: var(--radius);
@@ -42,21 +42,21 @@
     .os-table th, .os-table td {
       padding: 9px 12px; border-bottom: 1px solid var(--border-light); text-align: left;
     }
-    .os-table th { font-size: 11px; color: var(--text-dim); font-weight: 600; }
+    .os-table th { font-size: 12px; color: var(--text-dim); font-weight: 600; }
     .os-table td.num { text-align: right; font-family: 'LINE Seed TW_OTF', sans-serif; }
     .os-track { background: var(--border-light); border-radius: 4px; height: 7px; min-width: 60px; }
     .os-fill { background: var(--accent); border-radius: 4px; height: 7px; }
     /* 操作軌跡的「類型」標籤：一眼分出只是看看、動了資料、還是刪掉了東西 */
     .os-kind {
-      display: inline-block; font-size: 10px; font-weight: 600;
+      display: inline-block; font-size: 12px; font-weight: 600;
       padding: 2px 7px; border-radius: 10px; white-space: nowrap;
     }
     .os-rep {
-      display: inline-block; margin-left: 6px; font-size: 10px; color: var(--text-dim);
+      display: inline-block; margin-left: 6px; font-size: 12px; color: var(--text-dim);
       font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .os-raw {
-      font-family: 'LINE Seed TW_OTF', sans-serif; font-size: 10px;
+      font-family: 'LINE Seed TW_OTF', sans-serif; font-size: 12px;
       color: var(--text-dim); word-break: break-all; margin-top: 2px;
     }
   </style>
@@ -88,7 +88,7 @@
         <span class="os-chip">
           <span class="os-dot"></span>
           <span x-text="u.displayName"></span>
-          <span style="color:var(--text-dim);font-size:10px" x-text="roleLabel(u.role)"></span>
+          <span style="color:var(--text-dim);font-size:12px" x-text="roleLabel(u.role)"></span>
         </span>
       </template>
       <span x-show="online.count === 0" style="font-size:12px;color:var(--text-dim)">目前沒有人在線</span>
@@ -149,7 +149,7 @@
         <h2 style="font-size:15px;font-weight:600;margin:0">操作軌跡</h2>
         <!-- 成員篩選走 members（users 表全部人），不是上面那張表的成員——沒有活躍
              時數但有操作紀錄的人，在舊版點不到，而那常常正是要查的人。 -->
-        <label for="os-member" style="font-size:11px;color:var(--text-dim)">成員</label>
+        <label for="os-member" style="font-size:12px;color:var(--text-dim)">成員</label>
         <select id="os-member" class="fi filter" style="width:210px;font-size:12px"
                 x-model="trailUser" @change="reloadTrail()">
           <option value="">全部成員</option>
@@ -159,10 +159,10 @@
         </select>
         <button class="btn btn-secondary btn-sm" x-show="trailUser" @click="selectMember('')">顯示全部</button>
         <button class="btn btn-secondary btn-sm" @click="loadTrail()">重新整理</button>
-        <label style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:5px;cursor:pointer">
+        <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:5px;cursor:pointer">
           <input class="filter" type="checkbox" x-model="showPaths"> 顯示原始路徑
         </label>
-        <span style="font-size:11px;color:var(--text-dim);margin-left:auto" x-text="trailNote"></span>
+        <span style="font-size:12px;color:var(--text-dim);margin-left:auto" x-text="trailNote"></span>
       </div>
 
       <div class="os-note" style="background:#F1F5F9;border-color:#CBD5E1;color:#334155">
@@ -199,8 +199,8 @@
                 <!-- 人話是給人看的，原始路徑是查問題用的：預設收起來，要對照時再打開 -->
                 <div class="os-raw" x-show="showPaths" x-text="t.method + ' ' + t.path"></div>
               </td>
-              <td style="font-size:11px;color:var(--text-dim)" x-text="t.pageLabel || '—'"></td>
-              <td style="text-align:right;font-size:11px"
+              <td style="font-size:12px;color:var(--text-dim)" x-text="t.pageLabel || '—'"></td>
+              <td style="text-align:right;font-size:12px"
                   :style="t.ok ? 'color:var(--text-dim)' : 'color:var(--danger);font-weight:600'"
                   x-text="t.resultLabel"></td>
             </tr>

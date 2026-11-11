@@ -32,7 +32,7 @@
   "pages": [
     {
       "path": "network-plans.html",
-      "menu": {"group": "device", "label": "網路架構規劃書", "order": 30, "perm": ["netplan", "netplan_edit"], "active": ["network-plans.html", "network-plan-form.html", "topology-quick.html"], "badge": "sb-mod-netplan"}
+      "menu": {"group": "supply", "label": "網路架構規劃書", "order": 90, "perm": ["netplan", "netplan_edit"], "active": ["network-plans.html", "network-plan-form.html", "topology-quick.html"], "badge": "sb-mod-netplan"}
     },
     {
       "path": "network-plan-form.html"

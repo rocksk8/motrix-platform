@@ -7,7 +7,7 @@
   },
   {
    "key": "business",
-   "label": "業務"
+   "label": "客戶與業務"
   },
   {
    "key": "case",
@@ -15,15 +15,11 @@
   },
   {
    "key": "supply",
-   "label": "廠商與採購"
-  },
-  {
-   "key": "device",
-   "label": "設備"
+   "label": "採購與庫存"
   },
   {
    "key": "analysis",
-   "label": "經營分析"
+   "label": "報表"
   },
   {
    "key": "finance",
@@ -62,16 +58,16 @@
    "group": "business",
    "href": "map.html",
    "label": "地圖",
-   "order": 30,
+   "order": 50,
    "perm": [
     "map"
    ]
   },
   {
-   "group": "supply",
+   "group": "business",
    "href": "customers.html",
    "label": "客戶管理",
-   "order": 10,
+   "order": 30,
    "perm": [
     "customer"
    ],

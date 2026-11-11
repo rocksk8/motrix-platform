@@ -226,9 +226,12 @@ function notifStore() {
     open:   false,
     items:  [],
     unread: 0,
+    // 提醒（D1，2026-11-11）：待簽核、尚未啟用兩步驟驗證——原本是右下角浮動卡片（會蓋住內容、7～9 秒就消失），
+    // 改成鈴鐺下拉最上方的「提醒」列＋鈴鐺上一顆小點：不浮在內容上、不會把頁面往下推、看漏了也還在。
+    // 關閉（×）記在分頁的 sessionStorage（鍵沿用舊橫幅的：測試與登入注入用同一組旗標當『已處理』）。
+    reminders: [],
     auditHref,
     _sess: null,
-    _popupShown: false,
 
     // 🔴 這兩支 store 是 `sidebar.js` **注入**的 ⇒ **每一頁都跑兩遍**，
     //    而 53 頁那份待修清單裡**沒有它們**（工具只掃 pages/*.html）。
@@ -284,17 +287,19 @@ function notifStore() {
         if (role !== 'superadmin' && role !== 'admin') return
         const currentFile = window.location.pathname.split('/').pop()
         if (currentFile === 'change-password.html') return
-        const ssKey = 'motrix_totp_reminder_shown'
-        if (sessionStorage.getItem(ssKey)) return
+        if (this._reminderDismissed('totp')) return
         const r = await fetch('/api/auth/totp/status', {
           headers: { Authorization: 'Bearer ' + this._sess.token }
         })
         if (!r.ok) return
         const d = await r.json()
         if (d.enabled) return
-        sessionStorage.setItem(ssKey, '1')
         const isPages = window.location.pathname.includes('/pages/')
-        setTimeout(() => this._showTotpReminderBanner(isPages ? 'change-password.html' : 'pages/change-password.html'), 1400)
+        this._setReminder({
+          id: 'totp', tone: 'warning', title: '尚未啟用兩步驟驗證',
+          msg: '密碼外洩時，兩步驟驗證能多一道防線擋下未授權登入，建議管理員帳號啟用。',
+          href: isPages ? 'change-password.html' : 'pages/change-password.html', linkText: '前往設定 →'
+        })
       } catch (e) {}
     },
 
@@ -361,14 +366,29 @@ function notifStore() {
       } catch(e) {}
     },
 
-    /** 登入後的「待簽核」橫幅：數字＝/api/approval-queue/count（與角標、簽核佇列同一份）；每個分頁最多彈一次；0 件不彈。 */
+    /** 鈴鐺裡的「待簽核」提醒：數字＝/api/approval-queue/count（與角標、簽核佇列同一份）；0 件就收掉；關掉後同分頁不再出現。 */
     _maybeShowApprovalBanner(count) {
-      const ssKey = 'motrix_approval_banner_shown'
-      if (!(count > 0) || this._popupShown) return
-      try { if (sessionStorage.getItem(ssKey)) return; sessionStorage.setItem(ssKey, '1') } catch (e) {}
-      this._popupShown = true
+      if (!(count > 0)) { this._removeReminder('approval'); return }
+      if (this._reminderDismissed('approval')) return
       const isPages = window.location.pathname.includes('/pages/')
-      setTimeout(() => this._showApprovalBanner(count, isPages ? 'approval-queue.html' : 'pages/approval-queue.html'), 900)
+      this._setReminder({
+        id: 'approval', tone: 'info', title: '待簽核通知', msg: '您有 ' + Number(count) + ' 件待您簽核',
+        href: isPages ? 'approval-queue.html' : 'pages/approval-queue.html', linkText: '前往簽核 →'
+      })
+    },
+
+    // ── 提醒（鈴鐺下拉最上方）──
+    _reminderKey(id) { return id === 'totp' ? 'motrix_totp_reminder_shown' : 'motrix_approval_banner_shown' },
+    _reminderDismissed(id) { try { return !!sessionStorage.getItem(this._reminderKey(id)) } catch (e) { return false } },
+    _setReminder(r) {
+      const i = this.reminders.findIndex(x => x.id === r.id)
+      if (i >= 0) this.reminders.splice(i, 1, r)
+      else this.reminders.push(r)
+    },
+    _removeReminder(id) { this.reminders = this.reminders.filter(x => x.id !== id) },
+    dismissReminder(id) {
+      try { sessionStorage.setItem(this._reminderKey(id), '1') } catch (e) {}
+      this._removeReminder(id)
     },
 
     _updateApprovalBadge(count) {
@@ -554,148 +574,6 @@ function notifStore() {
       return d.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' }) + ' ' +
              d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
     },
-
-    // 2026-09-25：兩個提醒橫幅（待簽核、兩步驟驗證）原本固定在右上角（top:72px、z-index:99999），
-    // 分頁的第一頁若不是 index（例如新分頁直接開案件頁）就蓋住標頭的「儲存／更多」。
-    // 改放右下角、跟 MotrixUI toast 同一欄（.mui-toasts，直向排、彼此不疊）：
-    //   ・不選「頂欄下方讓出空間」：橫幅約 1 秒後才出現，那時把整頁往下推會讓按鈕移到游標底下（誤點）；
-    //     也會與 edit-presence.js 的 W-1 同時改 --topbar-h（兩個寫入者互相蓋掉）。
-    //   ・⚠️ 已知且接受的限制（2026-09-25 裁示）：右下角仍可能暫時蓋到頁面右下角的內容——實測報價單列表
-    //     （1440／1024）畫面最底一列的列尾圖示會被蓋住；橫幅 7～9 秒後自動淡出、也可按 × 關掉。
-    //     案件頁在 1440／1024 掃過全部可見操作元件都沒被蓋（test_e2e_notice_banners_2026_09_25）。
-    _noticeStack() {
-      let stack = document.querySelector('.mui-toasts')
-      if (!stack) {
-        stack = document.createElement('div')
-        stack.className = 'mui-root mui-toasts'     // ui.js 的 toast() 會沿用同一欄
-        stack.style.cssText = 'position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:9100;pointer-events:none'
-        document.body.appendChild(stack)
-      }
-      return stack
-    },
-
-    _showApprovalBanner(count, href) {
-      if (document.getElementById('approval-notif-banner')) return
-      const el = document.createElement('div')
-      el.id = 'approval-notif-banner'
-      el.style.cssText = [
-        'pointer-events:auto',
-        'background:#EEF2FF;border:1.5px solid #6366F1',
-        'border-radius:10px;padding:14px 18px',
-        'box-shadow:0 6px 24px rgba(99,102,241,.22)',
-        'font-family:LINE Seed TW_OTF, sans-serif;max-width:300px',
-        'animation:notif-slide-in .25s ease',
-      ].join(';')
-      // Build banner DOM without innerHTML to avoid XSS from count/href
-      const row = document.createElement('div')
-      row.style.cssText = 'display:flex;align-items:flex-start;gap:10px'
-
-      const icon = document.createElement('div')
-      icon.style.cssText = 'color:#4F46E5;flex-shrink:0;margin-top:1px'
-      icon.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>'
-
-      const body = document.createElement('div')
-      body.style.cssText = 'flex:1'
-
-      const title = document.createElement('div')
-      title.style.cssText = 'font-size:13px;font-weight:600;color:#3730A3;margin-bottom:4px'
-      title.textContent = '待簽核通知'
-
-      const msg = document.createElement('div')
-      msg.style.cssText = 'font-size:12px;color:#4338CA;line-height:1.5'
-      const b = document.createElement('b')
-      b.textContent = String(Number(count))
-      msg.append('您有 ', b, ' 件待您簽核')
-
-      const link = document.createElement('a')
-      link.href = href
-      link.style.cssText = 'display:inline-block;margin-top:8px;font-size:11px;color:#fff;background:#6366F1;padding:4px 12px;border-radius:5px;text-decoration:none;font-weight:600'
-      link.textContent = '前往簽核 →'
-
-      body.append(title, msg, link)
-
-      const closeBtn = document.createElement('button')
-      closeBtn.style.cssText = 'border:none;background:none;cursor:pointer;color:#9CA3AF;font-size:20px;line-height:1;padding:0;flex-shrink:0;margin-top:-2px'
-      closeBtn.textContent = '×'
-      closeBtn.addEventListener('click', () => el.remove())
-
-      row.append(icon, body, closeBtn)
-      el.appendChild(row)
-      if (!document.querySelector('#notif-kf')) {
-        const s = document.createElement('style')
-        s.id = 'notif-kf'
-        s.textContent = '@keyframes notif-slide-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}'
-        document.head.appendChild(s)
-      }
-      this._noticeStack().appendChild(el)
-      setTimeout(() => {
-        if (el.parentNode) {
-          el.style.transition = 'opacity .5s'
-          el.style.opacity = '0'
-          setTimeout(() => el.remove(), 500)
-        }
-      }, 7000)
-    },
-
-    _showTotpReminderBanner(href) {
-      if (document.getElementById('totp-reminder-banner')) return
-      const el = document.createElement('div')
-      el.id = 'totp-reminder-banner'
-      el.style.cssText = [
-        'pointer-events:auto',
-        'background:#FFFBEB;border:1.5px solid #D97706',
-        'border-radius:10px;padding:14px 18px',
-        'box-shadow:0 6px 24px rgba(217,119,6,.22)',
-        'font-family:LINE Seed TW_OTF, sans-serif;max-width:300px',
-        'animation:notif-slide-in .25s ease',
-      ].join(';')
-      const row = document.createElement('div')
-      row.style.cssText = 'display:flex;align-items:flex-start;gap:10px'
-
-      const icon = document.createElement('div')
-      icon.style.cssText = 'color:#B45309;flex-shrink:0;margin-top:1px'
-      icon.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>'
-
-      const body = document.createElement('div')
-      body.style.cssText = 'flex:1'
-
-      const title = document.createElement('div')
-      title.style.cssText = 'font-size:13px;font-weight:600;color:#92400E;margin-bottom:4px'
-      title.textContent = '尚未啟用兩步驟驗證'
-
-      const msg = document.createElement('div')
-      msg.style.cssText = 'font-size:12px;color:#B45309;line-height:1.5'
-      msg.textContent = '密碼外洩時，兩步驟驗證能多一道防線擋下未授權登入，建議管理員帳號啟用。'
-
-      const link = document.createElement('a')
-      link.href = href
-      link.style.cssText = 'display:inline-block;margin-top:8px;font-size:11px;color:#fff;background:#D97706;padding:4px 12px;border-radius:5px;text-decoration:none;font-weight:600'
-      link.textContent = '前往設定 →'
-
-      body.append(title, msg, link)
-
-      const closeBtn = document.createElement('button')
-      closeBtn.style.cssText = 'border:none;background:none;cursor:pointer;color:#C2954D;font-size:20px;line-height:1;padding:0;flex-shrink:0;margin-top:-2px'
-      closeBtn.textContent = '×'
-      closeBtn.addEventListener('click', () => el.remove())
-
-      row.append(icon, body, closeBtn)
-      el.appendChild(row)
-      if (!document.querySelector('#notif-kf')) {
-        const s = document.createElement('style')
-        s.id = 'notif-kf'
-        s.textContent = '@keyframes notif-slide-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}'
-        document.head.appendChild(s)
-      }
-      this._noticeStack().appendChild(el)
-      setTimeout(() => {
-        if (el.parentNode) {
-          el.style.transition = 'opacity .5s'
-          el.style.opacity = '0'
-          setTimeout(() => el.remove(), 500)
-        }
-      }, 9000)
-    }
   }
 }
 

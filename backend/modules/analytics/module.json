@@ -14,12 +14,14 @@
   "provides": {"api_prefixes": ["/api/dashboard", "/api/devices", "/api/materials-summary", "/api/reports"],
                "probes": ["/api/dashboard/stats", "/api/devices", "/api/materials-summary", "/api/reports/ar-aging"]},
   "pages": [
+    {"path": "reports-hub.html",
+     "menu": {"group": "analysis", "label": "報表中心", "order": 0, "perm": ["finance", "reports", "cashier"], "hub": true}},
     {"path": "reports.html",
-     "menu": {"group": "analysis", "label": "營運報表", "order": 10, "perm": ["finance", "reports"], "badge": "sb-mod-finance"}},
+     "menu": {"group": "analysis", "label": "營運報表", "order": 10, "perm": ["finance", "reports"], "badge": "sb-mod-finance", "section": "營運", "desc": "這個月賺多少、哪個案件虧；誰還沒付錢、應收帳款帳齡；各業務的成案與目標達成"}},
     {"path": "devices.html",
-     "menu": {"group": "device", "label": "設備登載", "order": 10, "perm": ["equipment"], "badge": "sb-mod-equipment"}},
+     "menu": {"group": "supply", "label": "設備登載", "order": 70, "perm": ["equipment"], "badge": "sb-mod-equipment"}},
     {"path": "warranty.html",
-     "menu": {"group": "device", "label": "保固追蹤", "order": 20, "perm": ["equipment"], "badge": "sb-mod-warranty"}},
+     "menu": {"group": "supply", "label": "保固追蹤", "order": 80, "perm": ["equipment"], "badge": "sb-mod-warranty"}},
     {"path": "procurement.html",
      "menu": {"group": "supply", "label": "採購管理", "order": 60, "perm": ["procurement"], "badge": "sb-mod-procurement"}}
   ],

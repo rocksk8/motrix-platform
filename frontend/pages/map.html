@@ -24,7 +24,7 @@
     .btn:disabled { opacity:.45; cursor:not-allowed; }
     .btn-primary { background:var(--accent); color:#fff; border-color:var(--accent); }
     .btn-ghost { background:#fff; color:var(--text-secondary); border-color:var(--border-light); }
-    .btn-sm { padding:5px 12px; font-size:11px; }
+    .btn-sm { padding:5px 12px; font-size:12px; }
 
     .mp-wrap { padding:18px 22px; max-width:1280px; }
     .mp-panel-body { padding:12px 14px; }
@@ -82,7 +82,7 @@
                border-radius:6px; padding:2px 8px; white-space:nowrap; text-align:left;
                font-size:13px; font-weight:700; line-height:1.3; pointer-events:none;
                box-shadow:0 1px 5px rgba(0,0,0,.4); }
-    .mp-chip small { display:block; font-size:11px; font-weight:500; color:#374151; }
+    .mp-chip small { display:block; font-size:12px; font-weight:500; color:#374151; }
     .mp-chip--off { display:none; }
     .mp-chip .mp-chip-c { display:none; }
     #mp-canvas[data-mp-chip="compact"] .mp-chip .mp-chip-t, #mp-canvas[data-mp-chip="none"] .mp-chip .mp-chip-t { display:none; }
@@ -146,7 +146,7 @@
     .mp-ov-pop { font-size:12px; line-height:1.5; max-width:260px; }
     .mp-ov-pop a { display:inline-block; margin-top:4px; }
     .mp-ov-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px; font-size:12px; }
-    .mp-ov-dim { color:var(--text-dim); font-size:11px; }
+    .mp-ov-dim { color:var(--text-dim); font-size:12px; }
     .mp-ov-list { list-style:none; margin:6px 0; padding:0; max-height:260px; overflow:auto; font-size:12px; }
     .mp-ov-msg[data-kind=err] { color:var(--danger); }
     .mp-ov-msg[data-kind=warn] { color:var(--warning); }
@@ -366,7 +366,7 @@
             <option value="20">最近 20 筆</option>
             <option value="50">最近 50 筆</option>
           </select>
-          <span x-show="nearN" style="font-size:11px;color:var(--text-dim)"
+          <span x-show="nearN" style="font-size:12px;color:var(--text-dim)"
                 x-text="hasUserPos ? '（依與您的距離）' : '（依與最近據點的距離）'"></span>
         </label>
       </div>
@@ -400,12 +400,12 @@
       <div class="mp-panel-body"
            style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <div>
-          <div style="font-size:11px;color:var(--text-secondary)">可定位</div>
+          <div style="font-size:12px;color:var(--text-secondary)">可定位</div>
           <div style="font-size:18px;font-weight:600"
                x-text="info ? view.points.length : '—'"></div>
         </div>
         <div>
-          <div style="font-size:11px;color:var(--text-secondary)">沒有地點資訊</div>
+          <div style="font-size:12px;color:var(--text-secondary)">沒有地點資訊</div>
           <div style="font-size:18px;font-weight:600"
                x-text="info ? info.withoutLocation : '—'"></div>
         </div>
@@ -470,13 +470,13 @@
              這一行是它載不出來時的後備。 -->
         <!-- D 稽核 GB-S1（主持裁示，授權義務）：畫面上有 Nominatim 來源的點 ⇒ 標示地點資料出處（ODbL／Nominatim 使用政策）。
              兩種底圖都顯示；放在圖面下方，不蓋住 Google 的標誌與歸屬。 -->
-        <div class="mp-osm-data" style="font-size:11px;color:var(--text-secondary);margin-top:6px"
+        <div class="mp-osm-data" style="font-size:12px;color:var(--text-secondary);margin-top:6px"
              x-show="hasOsmDataPoints">
           地點資料 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>
         </div>
         <!-- 第十五班 ②(b)：Google 底圖時不顯示 OSM 出處（Google 標誌與資料歸屬由 Maps JavaScript API 自己畫在圖上，
              依條款不可遮蓋、不可換成客戶品牌）。 -->
-        <div style="font-size:11px;color:var(--text-secondary);margin-top:6px" x-show="basemap !== 'google'">
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:6px" x-show="basemap !== 'google'">
           底圖 © <a href="https://www.openstreetmap.org/copyright"
                     target="_blank" rel="noopener">OpenStreetMap</a> 貢獻者
           ・<a href="https://www.openstreetmap.org/fixthemap"
@@ -501,7 +501,7 @@
                沒有定位時整欄不出現 —— 不顯示「—」也不顯示 0。 -->
           <th style="text-align:right" x-show="hasUserPos">
             離你<br>
-            <span style="font-size:10px;font-weight:400;opacity:.8"
+            <span style="font-size:12px;font-weight:400;opacity:.8"
                   x-text="accuracyLabel()"></span>
           </th>
           <th>截止</th>
@@ -517,7 +517,7 @@
             <tr class="mp-row" style="cursor:pointer" @click="rowClicked($event, p)">
               <!-- ⚠️ 這一欄原本顯示 `p.source`，而那是**定位服務**（nominatim）
                    不是資料集 —— 對使用者沒有意義。 -->
-              <td style="font-size:11px;white-space:nowrap">
+              <td style="font-size:12px;white-space:nowrap">
                 <span class="mp-pin" :style="'background:' + pinColor(p)"
                       x-text="datasetOf(p).mark"></span>
                 <span x-text="datasetOf(p).label"></span>
@@ -536,11 +536,11 @@
                 <template x-if="!p.url"><span x-text="p.name || '—'"></span></template>
                 <!-- `MP1`：連回單據。看不到那一頁的人不給連結（`recordUrl` 回 null）。 -->
                 <template x-if="recordUrl(p)">
-                  <a class="mp-rec" :href="recordUrl(p)" style="font-size:11px;margin-left:6px">開啟單據</a>
+                  <a class="mp-rec" :href="recordUrl(p)" style="font-size:12px;margin-left:6px">開啟單據</a>
                 </template>
                 <template x-if="navUrl(p)">
                   <a class="mp-nav" :href="navUrl(p)" target="_blank" rel="noopener noreferrer"
-                     style="font-size:11px;margin-left:6px">導航</a>
+                     style="font-size:12px;margin-left:6px">導航</a>
                 </template>
               </td>
               <td style="font-size:12px" x-text="p.location || '—'"></td>
@@ -560,7 +560,7 @@
                                   + p.distanceFromOfficeKm + ' km'"></span><br>
                     <!-- 🔑 **要說出是哪一個據點** —— 多據點時「12 km」
                          這個數字本身回答不了「該由誰去」。 -->
-                    <span style="font-size:10px;opacity:.85"
+                    <span style="font-size:12px;opacity:.85"
                           x-text="(p.nearestLocationName ? p.nearestLocationName + '｜' : '')
                                   + precisionLabel(p.precision)"></span>
                   </span>
@@ -581,7 +581,7 @@
               <td style="font-size:12px">
                 <span x-text="p.deadline || '—'"></span>
                 <template x-if="deadlineStyleOf(p)">
-                  <span class="mp-deadline" :style="'display:block;font-size:10px;color:' + deadlineStyleOf(p).color"
+                  <span class="mp-deadline" :style="'display:block;font-size:12px;color:' + deadlineStyleOf(p).color"
                         x-text="deadlineStyleOf(p).label"></span>
                 </template>
               </td>
@@ -598,7 +598,7 @@
       </div>
     </div>
 
-    <p style="font-size:11px;color:var(--text-dim);margin-top:18px">
+    <p style="font-size:12px;color:var(--text-dim);margin-top:18px">
       距離為<strong>直線</strong>距離，非行車距離；各筆定位精度不同（門牌、路段或行政區）。
     </p>
   </div>

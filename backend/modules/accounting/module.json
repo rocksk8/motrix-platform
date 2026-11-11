@@ -249,6 +249,7 @@
         "group": "finance",
         "label": "傳票",
         "order": 20,
+        "section": "日常",
         "perm": [
           "cashier"
         ]
@@ -259,7 +260,8 @@
       "menu": {
         "group": "finance",
         "label": "會計科目",
-        "order": 30,
+        "order": 60,
+        "section": "設定",
         "perm": [
           "cashier"
         ]
@@ -271,6 +273,7 @@
         "group": "finance",
         "label": "會計期間與結帳",
         "order": 50,
+        "section": "月結",
         "perm": [
           "cashier",
           "finance"
@@ -280,9 +283,11 @@
     {
       "path": "ledger-reports.html",
       "menu": {
-        "group": "finance",
+        "group": "analysis",
         "label": "帳簿報表",
-        "order": 60,
+        "order": 30,
+        "section": "帳簿",
+        "desc": "某一個科目的明細帳、總分類帳、試算表：對帳或查某筆錢去哪了",
         "perm": [
           "cashier",
           "finance"
@@ -292,9 +297,11 @@
     {
       "path": "ledger-settings.html",
       "menu": {
-        "group": "finance",
+        "group": "analysis",
         "label": "報表設定",
-        "order": 80,
+        "order": 40,
+        "section": "設定",
+        "desc": "調整財務報表與帳簿報表的科目分組、顯示方式",
         "perm": [
           "cashier",
           "finance"
@@ -304,9 +311,11 @@
     {
       "path": "ledger-statements.html",
       "menu": {
-        "group": "finance",
+        "group": "analysis",
         "label": "財務報表",
-        "order": 70,
+        "order": 20,
+        "section": "財務",
+        "desc": "資產負債表與損益表：公司現在有多少錢、這段期間賺或賠多少",
         "perm": [
           "cashier",
           "finance"
@@ -319,6 +328,7 @@
         "group": "finance",
         "label": "總帳作業",
         "order": 40,
+        "section": "月結",
         "perm": [
           "cashier",
           "finance"

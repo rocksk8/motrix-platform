@@ -22,8 +22,8 @@
     .bc-item{padding:10px 12px;border-bottom:1px solid var(--border-light);cursor:pointer;font-family:var(--font-zh)}
     .bc-item:hover{background:#FAFAF8}.bc-item.selected{background:#EFF6FF}
     .bc-item-no{font-size:12px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
-    .bc-badge{display:inline-block;font-size:10px;padding:1px 7px;border-radius:9px;font-family:var(--font-zh);margin-left:6px}
-    .st-gray{background:#F3F4F6;color:#6B7280}.st-amber{background:#FEF3C7;color:#92400E}.st-orange{background:#FFEDD5;color:#C2410C}
+    .bc-badge{display:inline-block;font-size:12px;padding:1px 7px;border-radius:9px;font-family:var(--font-zh);margin-left:6px}
+    .st-gray{background:#F3F4F6;color:var(--text-secondary)}.st-amber{background:#FEF3C7;color:#92400E}.st-orange{background:#FFEDD5;color:#C2410C}
     .st-green{background:#DCFCE7;color:#15803D}.st-purple{background:#EDE9FE;color:#6D28D9}
     .bc-card{border:1px solid var(--border-light);border-radius:8px;background:#fff;padding:16px 18px;margin-bottom:14px}
     .bc-sec{font-size:12px;font-weight:700;color:var(--text-secondary);margin:0 0 10px;font-family:var(--font-zh)}
@@ -35,14 +35,14 @@
     .bc-sel,.bc-txt{padding:4px 6px;border:1px solid var(--border-light);border-radius:4px;font-size:12px;font-family:var(--font-zh)}
     .bc-err{font-size:12px;color:var(--danger);font-family:var(--font-zh)}
     .bc-ok{font-size:12px;color:#15803D;font-family:var(--font-zh)}
-    .bc-note{font-size:11px;color:#92400E;font-family:var(--font-zh)}
+    .bc-note{font-size:12px;color:#92400E;font-family:var(--font-zh)}
     .bc-btn{padding:6px 14px;border-radius:6px;border:1px solid transparent;font-size:12px;cursor:pointer;font-family:var(--font-zh);background:var(--black,#0A0A0A);color:#fff}
     .bc-btn--ghost{background:#fff;color:var(--text-primary);border-color:var(--border-light)}
     .bc-btn--danger{background:#fff;color:var(--danger);border-color:#FECACA}
     .bc-btn:disabled{opacity:.5;cursor:not-allowed}
     .bc-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
     .bc-empty{padding:30px;text-align:center;color:var(--text-dim);font-size:12px;font-family:var(--font-zh)}
-    .bc-log{font-size:11px;color:var(--text-secondary);font-family:var(--font-zh);line-height:1.8}
+    .bc-log{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);line-height:1.8}
     .bc-neg{color:var(--danger)}.bc-pos{color:#15803D}
     @media (max-width:767px){.page-main{margin-left:0;padding:16px}.bc-layout{grid-template-columns:1fr}}
   </style>
@@ -83,7 +83,7 @@
               <div class="bc-item" :class="{selected: selectedNo === it.corr_no}" @click="select(it.corr_no)" :data-testid="'bc-item-' + it.corr_no">
                 <span class="bc-item-no" x-text="it.corr_no"></span>
                 <span class="bc-badge" :class="badge(it.status)" x-text="it.status"></span>
-                <div style="font-size:11px;color:var(--text-secondary);margin-top:2px" x-text="'原單 ' + it.quote_no"></div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:2px" x-text="'原單 ' + it.quote_no"></div>
               </div>
             </template>
             <div class="bc-empty" x-show="loaded && !items.length" data-testid="bc-empty">沒有更正單</div>
@@ -147,7 +147,7 @@
                   <div>更正前合計<b x-text="money(detail.old_total)" data-testid="bc-old-total"></b></div>
                   <div>更正後合計<b x-text="money(detail.new_total)" data-testid="bc-new-total"></b></div>
                   <div>補發<b x-text="money(detail.supplement_total)" data-testid="bc-supplement"></b></div>
-                  <div>追回<b x-text="money(detail.clawback_total)" data-testid="bc-clawback"></b><span x-show="detail.clawback_total > 0" data-testid="bc-clawback-pending" style="font-size:11px;color:#b45309;margin-left:6px">追回處理方式待確認</span></div>
+                  <div>追回<b x-text="money(detail.clawback_total)" data-testid="bc-clawback"></b><span x-show="detail.clawback_total > 0" data-testid="bc-clawback-pending" style="font-size:12px;color:#b45309;margin-left:6px">追回處理方式待確認</span></div>
                 </div>
                 <div style="margin-top:10px;font-size:12px;font-family:var(--font-zh)">原因：<span x-text="detail.reason" data-testid="bc-detail-reason"></span></div>
                 <div style="margin-top:10px">

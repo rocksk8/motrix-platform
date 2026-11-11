@@ -118,7 +118,7 @@
       '.fp-img{max-width:calc(100% - 96px);max-height:calc(70vh / var(--fz,1));object-fit:contain}' +
       '.fp-pdf{width:calc(100% - 96px);height:calc(70vh / var(--fz,1));border:1px solid var(--border-light)}' +
       '.fp-meta{font-size:12px;color:var(--text-secondary);margin-right:auto}' +
-      '.fp-hint{font-size:11px;color:var(--text-secondary);font-weight:400}' +
+      '.fp-hint{font-size:12px;color:var(--text-secondary);font-weight:400}' +
       '.fp-err{margin:10px 0;padding:9px 11px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:var(--radius);font-size:12px;color:#7F1D1D;line-height:1.7}' +
       '.fp-card{padding:24px}' +
       '.fp-foot-actions{display:flex;gap:8px;align-items:center}'

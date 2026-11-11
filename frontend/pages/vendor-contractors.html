@@ -24,7 +24,7 @@
     .search-input{width:100%;padding:8px 12px 8px 36px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;outline:none;box-sizing:border-box}
     .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
     .data-table{width:100%;border-collapse:collapse;font-size:13px}
-    .data-table th{padding:10px 12px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table th{padding:10px 12px;text-align:left;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
     .data-table td{padding:11px 12px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
     .data-table tr:last-child td{border-bottom:none}
     .data-table tr:hover td{background:#FDFCFA}
@@ -38,7 +38,7 @@
     .modal-foot{display:flex;align-items:center;padding:14px 22px;border-top:1px solid var(--border-light);gap:8px;justify-content:flex-end}
     .form-section{margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--border-light)}
     .form-section:last-child{border-bottom:none;margin-bottom:0}
-    .form-section-title{font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:14px}
+    .form-section-title{font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:14px}
     .form-group{display:flex;flex-direction:column;gap:5px}
     .form-label{font-size:12px;font-weight:500;color:var(--text-secondary)}
     .form-input,.form-select,.form-textarea{padding:8px 11px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);color:var(--text-primary);background:#fff;outline:none;transition:border-color .12s,box-shadow .12s}
@@ -50,7 +50,7 @@
     .id-card-drop:hover{border-color:var(--accent);background:var(--accent-light)}
     .id-card-preview{position:relative;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden;background:#f8f8f6}
     .id-card-preview img{width:100%;max-height:180px;object-fit:contain;display:block}
-    .id-card-remove{position:absolute;top:6px;right:6px;background:rgba(220,38,38,.9);color:#fff;border:none;border-radius:4px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit}
+    .id-card-remove{position:absolute;top:6px;right:6px;background:rgba(220,38,38,.9);color:#fff;border:none;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer;font-family:inherit}
     .id-card-remove:hover{background:var(--danger)}
     .detail-pane{position:fixed;right:0;top:var(--topbar-h);width:380px;height:calc(100vh - var(--topbar-h));background:#fff;border-left:1px solid var(--border-light);box-shadow:var(--shadow-lg);z-index:100;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .22s ease}
     .detail-pane.open{transform:translateX(0)}
@@ -64,10 +64,10 @@
     .detail-label{color:var(--text-dim);min-width:68px;flex-shrink:0}
     .detail-val{color:var(--text-primary);font-weight:500;flex:1;word-break:break-all}
     .detail-divider{border:none;border-top:1px solid var(--border-light);margin:14px 0}
-    .detail-sec{font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px}
-    .tag{display:inline-flex;padding:2px 8px;border-radius:3px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif}
+    .detail-sec{font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px}
+    .tag{display:inline-flex;padding:2px 8px;border-radius:3px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif}
     .tag-active{background:var(--success-light);color:var(--success)}
-    .tag-inactive{background:#F3F4F6;color:#6B7280}
+    .tag-inactive{background:#F3F4F6;color:var(--text-secondary)}
     .empty-state{text-align:center;padding:60px 20px;color:var(--text-dim)}
     .empty-icon{font-size:40px;margin-bottom:12px;opacity:.4}
     .vlog-row{display:grid;grid-template-columns:120px 1fr auto;gap:6px;align-items:start;margin-bottom:6px}
@@ -85,7 +85,7 @@
   <!-- 頁頭 -->
   <div class="pg">
       <div class="pg__l">
-        <div class="pg__eyebrow">外包廠商</div>
+        <nav class="pg__crumb" data-crumb-auto aria-label="目前位置"><span>承攬商管理</span></nav>
         <h1 class="pg__t">承攬商管理</h1>
 <p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${vendors.length} 家承攬商`"></p>
     </div>
@@ -132,7 +132,7 @@
               <td><div style="width:30px;height:30px;border-radius:50%;background:#7C3AED;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700" x-text="(v.name||'?')[0]"></div></td>
               <template x-for="c in $store.layout.cols('vendors')" :key="c.field">
                 <td :data-layout-cell="c.field">
-                  <template x-if="c.field === 'name'"><div><div style="font-weight:500" x-text="v.name"></div><div style="display:flex;align-items:center;gap:5px;margin-top:1px"><span x-show="v.code" x-text="v.code" style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#EDE9FE;color:#7C3AED;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span><span x-show="v.category" style="font-size:11px;color:var(--text-dim)" x-text="v.category"></span></div></div></template>
+                  <template x-if="c.field === 'name'"><div><div style="font-weight:500" x-text="v.name"></div><div style="display:flex;align-items:center;gap:5px;margin-top:1px"><span x-show="v.code" x-text="v.code" style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;background:#EDE9FE;color:#7C3AED;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span><span x-show="v.category" style="font-size:12px;color:var(--text-dim)" x-text="v.category"></span></div></div></template>
                   <template x-if="c.field === 'taxId'"><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="v.taxId || '—'"></span></template>
                   <template x-if="c.field === 'contact'"><span x-text="v.contactName || '—'"></span></template>
                   <template x-if="c.field === 'phone'"><span style="font-size:12px" x-text="v.phone || '—'"></span></template>
@@ -175,8 +175,8 @@
                 <div style="font-weight:500" x-text="v.name"></div>
                 <div style="display:flex;align-items:center;gap:5px;margin-top:1px">
                   <span x-show="v.code" x-text="v.code"
-                        style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#EDE9FE;color:#7C3AED;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span>
-                  <span x-show="v.category" style="font-size:11px;color:var(--text-dim)" x-text="v.category"></span>
+                        style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;background:#EDE9FE;color:#7C3AED;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span>
+                  <span x-show="v.category" style="font-size:12px;color:var(--text-dim)" x-text="v.category"></span>
                 </div>
               </td>
               <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="v.taxId || '—'"></td>
@@ -217,13 +217,13 @@
           <div style="font-weight:600;font-size:14px" x-text="selectedVendor.name"></div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">
             <span x-show="selectedVendor.code" x-text="selectedVendor.code"
-                  style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;background:#EDE9FE;color:#7C3AED;padding:1px 7px;border-radius:3px;letter-spacing:.05em;font-weight:600"></span>
-            <span style="font-size:11px;color:var(--text-dim)"
+                  style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;background:#EDE9FE;color:#7C3AED;padding:1px 7px;border-radius:3px;letter-spacing:.05em;font-weight:600"></span>
+            <span style="font-size:12px;color:var(--text-dim)"
                   x-text="(selectedVendor.category ? selectedVendor.category + (selectedVendor.taxId ? ' · ' : '') : '') + (selectedVendor.taxId ? '統編 ' + selectedVendor.taxId : '')"></span>
           </div>
           <div x-show="(selectedVendor.tags||[]).length" style="display:flex;flex-wrap:wrap;gap:3px;margin-top:5px">
             <template x-for="tag in (selectedVendor.tags||[])" :key="tag">
-              <span style="background:#EDE9FE;color:#7C3AED;border-radius:3px;padding:1px 6px;font-size:10px" x-text="tag"></span>
+              <span style="background:#EDE9FE;color:#7C3AED;border-radius:3px;padding:1px 6px;font-size:12px" x-text="tag"></span>
             </template>
           </div>
         </div>
@@ -284,14 +284,14 @@
               <span class="badge" :class="'badge--' + _dStatusClass(d.status)" x-text="d.statusLabel"></span>
             </div>
             <div style="color:var(--text-secondary)" x-text="d.scope || ''"></div>
-            <div x-show="d.invoiceNo" style="color:var(--text-dim);font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;margin-top:2px"
+            <div x-show="d.invoiceNo" style="color:var(--text-dim);font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;margin-top:2px"
                  x-text="'發票：' + d.invoiceNo"></div>
             <div style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;margin-top:3px;font-size:12px"
                  x-text="'NT$ ' + MotrixFormat.num(d.totalAmount||0)"></div>
           </div>
         </template>
         <template x-if="vendorDispatches.length > 5">
-          <div style="text-align:center;font-size:11px;color:var(--text-dim);padding:4px 0">
+          <div style="text-align:center;font-size:12px;color:var(--text-dim);padding:4px 0">
             … 另有 <span x-text="vendorDispatches.length - 5"></span> 筆
           </div>
         </template>
@@ -314,7 +314,7 @@
           <div class="vlog-row">
             <input class="vlog-input" type="date" x-model="vl.date">
             <input class="vlog-input" type="text" placeholder="紀錄說明" x-model="vl.note">
-            <button style="padding:4px 7px;border:1px solid var(--border-light);border-radius:5px;font-size:11px;background:#fff;cursor:pointer;color:var(--danger)"
+            <button style="padding:4px 7px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;background:#fff;cursor:pointer;color:var(--danger)"
                     @click="removeVisit(vi)">✕</button>
           </div>
         </template>
@@ -366,7 +366,7 @@
              但三頁都只接了統編查詢——不知道統編就查不到。查詢邏輯共用
              static/gov-lookup.js，帶入表單由各頁的 govApply() 處理（欄位名不同）。 -->
         <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border-light)">
-          <div style="font-size:10px;color:var(--text-dim);margin-bottom:5px;font-family:LINE Seed TW_OTF, sans-serif">
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:5px;font-family:LINE Seed TW_OTF, sans-serif">
             公司名稱查詢<span style="margin-left:6px;font-weight:400">— 不知道統編時用這個</span>
           </div>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -394,12 +394,12 @@
                        style="padding:8px 12px;border-bottom:1px solid var(--border-light);cursor:pointer;display:flex;gap:10px;align-items:baseline"
                        onmouseover="this.style.background='#F8F7F4'" onmouseout="this.style.background=''">
                     <span style="flex:1;font-size:13px" x-text="g.name"></span>
-                    <span style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em" x-text="g.taxId"></span>
-                    <span style="font-size:10px;color:var(--text-dim)" x-text="g.status"></span>
+                    <span style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em" x-text="g.taxId"></span>
+                    <span style="font-size:12px;color:var(--text-dim)" x-text="g.status"></span>
                   </div>
                 </template>
               </div>
-              <div style="font-size:10px;color:var(--text-dim);margin-top:4px">點一列即帶入欄位（最多 15 筆）</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-top:4px">點一列即帶入欄位（最多 15 筆）</div>
             </div>
           </template>
         </div>
@@ -507,7 +507,7 @@
             <rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5M16 4v5"/>
           </svg>
           點擊或拖曳上傳存摺封面（含帳號頁）<br>
-          <span style="font-size:11px">JPG / PNG / WEBP &lt; 3 MB</span>
+          <span style="font-size:12px">JPG / PNG / WEBP &lt; 3 MB</span>
         </div>
         <div x-show="bankPassbookPreview || bankPassbook" class="id-card-preview">
           <img :src="bankPassbookPreview || bankPassbook" alt="銀行存簿">
@@ -518,7 +518,7 @@
           <label class="btn btn-ghost btn-sm" style="cursor:pointer">
             重新上傳<input type="file" accept="image/*" style="display:none" @change="handlePassbookFile($event)">
           </label>
-          <span style="font-size:11px">
+          <span style="font-size:12px">
             <span x-show="bankPassbookPreview" style="color:var(--warning)">● 未儲存</span>
             <span x-show="!bankPassbookPreview && bankPassbook" style="color:var(--success)">● 已上傳</span>
           </span>
@@ -581,20 +581,20 @@
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
             <div style="text-align:center;padding:14px;background:var(--success-light);border-radius:8px">
               <div style="font-size:24px;font-weight:700;color:var(--success)" x-text="importResults.created"></div>
-              <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">新增</div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">新增</div>
             </div>
             <div style="text-align:center;padding:14px;background:var(--accent-light);border-radius:8px">
               <div style="font-size:24px;font-weight:700;color:var(--accent)" x-text="importResults.updated"></div>
-              <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">更新</div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">更新</div>
             </div>
             <div style="text-align:center;padding:14px;background:var(--danger-light);border-radius:8px">
               <div style="font-size:24px;font-weight:700;color:var(--danger)" x-text="importResults.failed"></div>
-              <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">失敗</div>
+              <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">失敗</div>
             </div>
           </div>
           <template x-if="importResults.errors && importResults.errors.length">
             <div style="background:#FEF2F2;border-radius:6px;padding:10px 12px;max-height:160px;overflow-y:auto">
-              <div style="font-size:11px;font-weight:600;color:var(--danger);margin-bottom:6px">錯誤詳情</div>
+              <div style="font-size:12px;font-weight:600;color:var(--danger);margin-bottom:6px">錯誤詳情</div>
               <template x-for="(e, ei) in importResults.errors" :key="ei">
                 <div style="font-size:12px;color:var(--danger);padding:2px 0" x-text="e"></div>
               </template>

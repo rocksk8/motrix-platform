@@ -39,21 +39,21 @@
     .calc-row.net{font-weight:700;font-size:16px;color:var(--accent);padding-top:10px;margin-top:4px}
     .calc-row .label{color:var(--text-secondary)}
     .calc-row .val{font-family:LINE Seed TW_OTF, monospace}
-    .calc-note{font-size:10px;color:var(--text-dim);margin-top:2px;text-align:right}
+    .calc-note{font-size:12px;color:var(--text-dim);margin-top:2px;text-align:right}
     .slip-no{font-family:LINE Seed TW_OTF, monospace;font-size:13px;color:var(--text-dim)}
     /* Contractor picker */
     .id-card-thumb{margin-top:10px;border:1px solid var(--border-light);border-radius:var(--radius-lg);
                    overflow:hidden;background:#f8f8f6}
     .id-card-thumb img{width:100%;max-height:160px;object-fit:contain;display:block}
-    .id-card-thumb-label{font-size:11px;color:var(--text-dim);padding:4px 8px;
+    .id-card-thumb-label{font-size:12px;color:var(--text-dim);padding:4px 8px;
                          border-top:1px solid var(--border-light);background:#fafaf8}
     .con-drop{position:relative}
     .con-list{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);
               border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.1);z-index:50;max-height:200px;overflow-y:auto}
     .con-item{padding:8px 12px;cursor:pointer;font-size:13px}
     .con-item:hover,.con-item.active{background:var(--bg-hover)}
-    .con-item small{display:block;font-size:11px;color:var(--text-dim)}
-    .tag-union{display:inline-block;font-size:10px;padding:1px 6px;border-radius:4px;
+    .con-item small{display:block;font-size:12px;color:var(--text-dim)}
+    .tag-union{display:inline-block;font-size:12px;padding:1px 6px;border-radius:4px;
                background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;margin-left:6px}
     .save-bar{position:fixed;bottom:0;left:var(--sidebar-w);right:0;background:#fff;
               border-top:1px solid var(--border);padding:12px 28px;
@@ -70,7 +70,7 @@
     .pv-head{display:flex;justify-content:space-between;align-items:center;
              padding:14px 20px;border-bottom:1px solid var(--border-light);flex-shrink:0}
     .pv-title{font-size:14px;font-weight:700;color:var(--text-primary)}
-    .pv-sub{font-size:11px;color:var(--text-dim);margin-top:2px;font-family:LINE Seed TW_OTF, monospace}
+    .pv-sub{font-size:12px;color:var(--text-dim);margin-top:2px;font-family:LINE Seed TW_OTF, monospace}
     .pv-close{background:none;border:none;cursor:pointer;color:var(--text-dim);
               font-size:22px;line-height:1;padding:2px 8px;border-radius:4px;font-family:inherit}
     .pv-close:hover{background:var(--border-light);color:var(--text-primary)}
@@ -82,10 +82,10 @@
     .pv-iframe{width:100%;height:100%;border:none;display:block}
     .pv-foot{display:flex;justify-content:space-between;align-items:center;
              padding:12px 20px;border-top:1px solid var(--border-light);flex-shrink:0}
-    .export-hist{font-size:11px;color:var(--text-dim)}
+    .export-hist{font-size:12px;color:var(--text-dim)}
     .export-hist strong{color:var(--text-secondary);font-weight:600}
     /* Export log in calc card */
-    .exp-log-item{display:flex;justify-content:space-between;font-size:11px;
+    .exp-log-item{display:flex;justify-content:space-between;font-size:12px;
                   color:var(--text-secondary);padding:3px 0;border-bottom:1px solid var(--border-light)}
     .exp-log-item:last-child{border-bottom:none}
   </style>
@@ -166,14 +166,14 @@
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
               <span style="font-size:12px;font-weight:600">這位人員的派工（已預設勾選還沒連過勞報單的；建立勞報單時一併關聯）</span>
               <button type="button" class="btn btn-ghost btn-sm" data-testid="ps-fill-from-dispatch" @click="fillFromPicked()" style="padding:2px 8px;font-size:12px">帶入勾選的派工</button>
-              <span x-show="personDispatchFillMsg" data-testid="ps-fill-msg" style="font-size:11px;color:var(--text-dim)" x-text="personDispatchFillMsg"></span>
+              <span x-show="personDispatchFillMsg" data-testid="ps-fill-msg" style="font-size:12px;color:var(--text-dim)" x-text="personDispatchFillMsg"></span>
             </div>
             <template x-for="d in personDispatches" :key="d.id">
               <label style="display:flex;gap:6px;align-items:flex-start;font-size:12px;padding:3px 0;cursor:pointer" :data-testid="'ps-dispatch-row-' + d.id">
                 <input type="checkbox" :value="d.id" x-model.number="pickedDispatchIds" :data-testid="'ps-pick-dispatch-' + d.id" style="width:auto;margin-top:2px" @change="dirty()">
                 <span style="flex:1">
                   <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-                    <span :data-testid="'ps-dispatch-chip-' + d.id" :style="dispatchChipStyle(d.status)" style="padding:0 6px;border-radius:8px;font-size:11px;font-weight:600" x-text="dispatchStatusLabel(d.status)"></span>
+                    <span :data-testid="'ps-dispatch-chip-' + d.id" :style="dispatchChipStyle(d.status)" style="padding:0 6px;border-radius:8px;font-size:12px;font-weight:600" x-text="dispatchStatusLabel(d.status)"></span>
                     <b x-text="d.docCode || ('#' + d.id)"></b>
                     <span x-show="d.caseVisible && (d.projectName || d.customerName)" x-text="[d.projectName, d.customerName ? '（' + d.customerName + '）' : ''].join('')"></span>
                     <span x-show="d.caseVisible && d.quoteNo" style="color:var(--text-dim)" x-text="d.quoteNo"></span>
@@ -259,17 +259,17 @@
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:6px">
             <div x-show="contractorIdCardFront" style="text-align:center">
               <img :src="contractorIdCardFront" style="width:100%;max-height:110px;object-fit:contain">
-              <div style="font-size:10px;color:var(--text-dim);margin-top:2px">正面</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-top:2px">正面</div>
             </div>
             <div x-show="contractorIdCardBack" style="text-align:center">
               <img :src="contractorIdCardBack" style="width:100%;max-height:110px;object-fit:contain">
-              <div style="font-size:10px;color:var(--text-dim);margin-top:2px">反面</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-top:2px">反面</div>
             </div>
           </div>
           <div class="id-card-thumb-label">身分證影本（來自外包名冊，將輸出至 PDF）</div>
         </div>
         <div x-show="q.contractorId && !contractorIdCardFront && !contractorIdCardBack && !loadingIdCard"
-             style="margin-top:8px;font-size:11px;color:var(--text-dim)">
+             style="margin-top:8px;font-size:12px;color:var(--text-dim)">
           此承包商尚未上傳身分證影本，可至「外包名冊」補齊
         </div>
       </div>
@@ -363,7 +363,7 @@
               <label>帳號</label>
               <input type="text" x-model="q.bankAccountNumber" @input="dirty()">
               <div data-testid="ps-bank-masked-hint" x-show="String(q.bankAccountNumber || '').startsWith('****')"
-                   style="font-size:11px;color:var(--text-dim);margin-top:2px"
+                   style="font-size:12px;color:var(--text-dim);margin-top:2px"
                    x-text="q.bankAccountNumber + '（僅最高管理者可見完整帳號；沒改這一欄，儲存時會沿用原帳號）'"></div>
             </div>
           </div>
@@ -446,12 +446,12 @@
         </div>
 
         <div x-show="errMsg" data-err style="color:var(--danger);font-size:12px;margin-top:10px;text-align:center" x-text="errMsg"></div>
-        <div data-rules-version style="margin-top:12px;font-size:11px;color:var(--text-dim);text-align:center">
+        <div data-rules-version style="margin-top:12px;font-size:12px;color:var(--text-dim);text-align:center">
           法規參數版本：<span x-text="rulesVersion"></span>（<span x-text="rulesEffectiveFrom"></span> 起）
         </div>
         <!-- R1：修改舊單沿用建立時的版本；開單日期適用的版本不同時，由使用者明確選擇是否重算 -->
         <div x-show="!isNew && applicableVersion && applicableVersion !== storedVersion" data-rules-mismatch
-             style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#FEF3C7;font-size:11px;color:#92400E;line-height:1.6">
+             style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#FEF3C7;font-size:12px;color:#92400E;line-height:1.6">
           開單日期適用 <b x-text="applicableVersion"></b> 版，本單沿用建立時的 <b x-text="storedVersion"></b> 版。
           <label style="display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer">
             <input type="checkbox" data-recalc x-model="recalcTaxRules" @change="onRecalcToggle(); dirty()" style="width:auto">
@@ -462,7 +462,7 @@
         <!-- 匯出記錄 -->
         <div x-show="exportLog.length > 0"
              style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border-light)">
-          <div style="font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.06em;
+          <div style="font-size:12px;font-weight:600;color:var(--text-dim);letter-spacing:.06em;
                       text-transform:uppercase;margin-bottom:8px">
             匯出記錄（共 <span x-text="exportLog.length"></span> 次）
           </div>
@@ -472,19 +472,19 @@
                 <div style="display:flex;align-items:center;gap:5px">
                   <span style="font-weight:500" x-text="log.by || '—'"></span>
                   <span x-show="log.redownload_of"
-                        style="font-size:9px;padding:1px 4px;border-radius:3px;background:#e8edff;color:#4f6ef7;border:1px solid #c7d7ff"
+                        style="font-size:12px;padding:1px 4px;border-radius:3px;background:#e8edff;color:#4f6ef7;border:1px solid #c7d7ff"
                         x-text="'↩#' + log.redownload_of"></span>
                 </div>
-                <div style="font-family:LINE Seed TW_OTF, monospace;font-size:10px;color:var(--text-dim)"
+                <div style="font-family:LINE Seed TW_OTF, monospace;font-size:12px;color:var(--text-dim)"
                      x-text="(log.at||'').replace('T',' ').slice(0,16)"></div>
               </div>
               <button style="background:none;border:1px solid var(--border);border-radius:4px;
-                             font-size:11px;padding:2px 8px;cursor:pointer;color:var(--accent);
+                             font-size:12px;padding:2px 8px;cursor:pointer;color:var(--accent);
                              font-family:inherit;white-space:nowrap"
                       @click="previewArchiveLog(log, i)" :disabled="!q.slipNo || isNew">預覽存檔</button>
             </div>
           </template>
-          <div style="font-size:10px;color:var(--text-dim);margin-top:6px">
+          <div style="font-size:12px;color:var(--text-dim);margin-top:6px">
             ＊「預覽存檔」調閱當次存檔 PDF；「預覽 / 匯出 PDF」以當前資料重新產生
           </div>
         </div>

@@ -23,11 +23,11 @@
     .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
     .panel{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);overflow:hidden}
     .data-table{width:100%;border-collapse:collapse;font-size:13px}
-    .data-table th{padding:10px 14px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
+    .data-table th{padding:10px 14px;text-align:left;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid var(--border-light);white-space:nowrap}
     .data-table td{padding:11px 14px;border-bottom:1px solid #F0EEE9;vertical-align:middle}
     .data-table tr:last-child td{border-bottom:none}
     .data-table tr:hover td{background:#FDFCFA}
-    .action-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);font-size:11px;font-weight:500;cursor:pointer;border:1px solid;transition:all .12s}
+    .action-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);font-size:12px;font-weight:500;cursor:pointer;border:1px solid;transition:all .12s}
     .action-btn.edit{background:#EEF2FF;border-color:#C7D2FE;color:#4338CA}
     .action-btn.edit:hover{background:#E0E7FF}
     .action-btn.del{background:var(--danger-light);border-color:var(--danger-border);color:var(--danger)}
@@ -39,13 +39,13 @@
     .modal-title{font-size:15px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary);margin-bottom:20px}
     .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     .field-row{margin-bottom:0}
-    .field-label{font-size:11px;color:var(--text-secondary);margin-bottom:4px;font-weight:500;font-family:var(--font-zh)}
+    .field-label{font-size:12px;color:var(--text-secondary);margin-bottom:4px;font-weight:500;font-family:var(--font-zh)}
     .field-input{width:100%;padding:7px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);outline:none;box-sizing:border-box}
     .field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
     .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
     .empty-state{text-align:center;padding:48px;color:var(--text-dim);font-size:13px}
     .loading-text{text-align:center;padding:40px;color:var(--text-dim);font-size:13px}
-    .stock-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
+    .stock-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
     .stock-badge.ok{background:#DCFCE7;color:#15803D}
     .stock-badge.zero{background:#F0EEE9;color:var(--text-dim)}
     .stock-level-dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex-shrink:0}
@@ -53,12 +53,12 @@
     .stock-level-dot.yellow{background:#D97706}
     .stock-level-dot.green{background:#D1D5DB}
     .serial-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
-    .status-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+    .status-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600}
     .status-chip.in_stock{background:#DCFCE7;color:#15803D}
     .status-chip.shipped{background:#DBEAFE;color:var(--accent-hover)}
     .status-chip.installed{background:#EDE9FE;color:#6D28D9}
     .status-chip.void{background:#F0EEE9;color:var(--text-dim)}
-    .filter-chip{padding:4px 10px;border-radius:999px;font-size:11px;border:1px solid var(--border-light);cursor:pointer;background:#fff}
+    .filter-chip{padding:4px 10px;border-radius:999px;font-size:12px;border:1px solid var(--border-light);cursor:pointer;background:#fff}
     .filter-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
   </style>
 </head>
@@ -78,7 +78,7 @@
 
     <div class="pg">
       <div class="pg__l">
-        <div class="pg__eyebrow">廠商與採購</div>
+        <nav class="pg__crumb" data-crumb-auto aria-label="目前位置"><span>庫存管理</span></nav>
         <h1 class="pg__t">庫存管理</h1>
         <p class="pg__s">現有庫存與安全存量，出貨時自動扣帳</p>
       </div>
@@ -136,7 +136,7 @@
                   <td style="font-size:12px" x-text="p.name || '—'"></td>
                   <td style="font-size:12px;color:var(--text-secondary)" x-text="p.brand || '—'"></td>
                   <td>
-                    <span x-show="p.category" style="font-size:11px;padding:2px 8px;border-radius:4px;background:#F0EEE9;color:var(--text-secondary)" x-text="p.category"></span>
+                    <span x-show="p.category" style="font-size:12px;padding:2px 8px;border-radius:4px;background:#F0EEE9;color:var(--text-secondary)" x-text="p.category"></span>
                     <span x-show="!p.category" style="color:var(--text-dim)">—</span>
                   </td>
                   <td style="text-align:center">
@@ -145,7 +145,7 @@
                   </td>
                   <td style="text-align:right"><span class="stock-badge" :class="p.inStockCount > 0 ? 'ok' : 'zero'" x-text="p.inStockCount"></span></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;color:var(--text-secondary)" x-text="p.inStockValue ? 'NT$ ' + MotrixFormat.num(Math.round(p.inStockValue)) : '—'"></td>
-                  <td style="font-size:11px;color:var(--text-dim)" x-text="fmtDateTime(p.lastInAt)"></td>
+                  <td style="font-size:12px;color:var(--text-dim)" x-text="fmtDateTime(p.lastInAt)"></td>
                   <td style="text-align:right;font-size:12px;color:var(--text-secondary)" x-text="p.shippedCount"></td>
                   <td style="text-align:right;font-size:12px;color:var(--text-secondary)" x-text="p.installedCount"></td>
                   <td style="text-align:right;font-size:12px;color:var(--text-dim)" x-text="p.voidCount"></td>
@@ -188,7 +188,7 @@
             </template>
           </select>
         </div>
-        <div x-show="intake.brandFilter && intakeFilteredParts.length===0" style="margin-top:5px;font-size:11px;color:var(--text-dim)">此廠牌下無料號</div>
+        <div x-show="intake.brandFilter && intakeFilteredParts.length===0" style="margin-top:5px;font-size:12px;color:var(--text-dim)">此廠牌下無料號</div>
       </div>
       <div class="field-row">
         <div class="field-label">數量</div>
@@ -215,7 +215,7 @@
       </div>
     </div>
 
-    <div style="margin-top:16px;font-size:11px;color:var(--text-secondary);font-weight:600;margin-bottom:8px">序號明細（每台實體設備需輸入實際序號）</div>
+    <div style="margin-top:16px;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:8px">序號明細（每台實體設備需輸入實際序號）</div>
     <template x-for="(row, idx) in intake.serials" :key="idx">
       <div class="serial-row">
         <input class="field-input" type="text" placeholder="序號 SN" x-model="row.serial_no">
@@ -257,9 +257,9 @@
                 <td style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif" x-text="it.serial_no"></td>
                 <td style="font-size:12px;color:var(--text-dim)" x-text="it.mac || '—'"></td>
                 <td><span class="status-chip" :class="it.status" x-text="statusLabel(it.status)"></span></td>
-                <td style="font-size:11px;color:var(--text-dim)" x-text="it.batch_no || '—'"></td>
-                <td style="font-size:11px;color:var(--text-dim)" x-text="fmtDateTime(it.created_at)"></td>
-                <td style="font-size:11px;color:var(--text-dim)" x-text="it.shipping_note_no || it.quote_no || '—'"></td>
+                <td style="font-size:12px;color:var(--text-dim)" x-text="it.batch_no || '—'"></td>
+                <td style="font-size:12px;color:var(--text-dim)" x-text="fmtDateTime(it.created_at)"></td>
+                <td style="font-size:12px;color:var(--text-dim)" x-text="it.shipping_note_no || it.quote_no || '—'"></td>
                 <td style="white-space:nowrap">
                   <button class="action-btn ghost" x-show="it.status!=='void'" @click="adjustItem(it, 'void')">報廢</button>
                   <button class="action-btn edit" x-show="it.status!=='in_stock' && it.status!=='void'" @click="adjustItem(it, 'return_to_stock')" style="margin-left:4px">退回庫存</button>
@@ -282,7 +282,7 @@
 <div class="modal-overlay" x-show="batches.show" @click.self="batches.show=false" x-cloak>
   <div class="modal-box" style="width:900px" @click.stop>
     <div class="modal-title">進貨批次（供應商 / 發票 / 付款狀態）</div>
-    <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px">
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">
       標記「已付款」的批次會納入 T100 傳票匯出（財務報表 → 資金水位）的現金基礎付款事件；供應商/發票號可事後補登。
     </div>
     <div class="loading-text" x-show="batches.loading">載入中…</div>
@@ -327,7 +327,7 @@
 <div class="modal-overlay" x-show="purchaseSuggestions.show" @click.self="purchaseSuggestions.show=false" x-cloak>
   <div class="modal-box" style="width:920px" @click.stop>
     <div class="modal-title">採購建議</div>
-    <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px">
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">
       依安全庫存缺口自動計算，建議量補到「黃燈門檻」（安全庫存 × 1.5）；供應商/單價取自該料號最近一筆進貨紀錄，查無紀錄則單價退回料件標準成本。前置時間優先取料號設定，未設定則取上次供應商的設定；<strong>兩邊都沒設定時預計到貨日會顯示「未知」——那不是今天，是系統沒有資料</strong>，請自行向供應商確認交期。
     </div>
     <div class="loading-text" x-show="purchaseSuggestions.loading">載入中…</div>
@@ -380,10 +380,10 @@
                     <span x-show="s.status === 'suggested'" style="color:var(--text-dim)" x-text="lb.procurement_labels.suggested">待下單</span>
                     <span x-show="s.status === 'ordered'" style="color:var(--accent)"
                           x-text="lb.procurement_labels.ordered + ' ' + (s.orderedAt || '').slice(0, 10)"></span>
-                    <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;margin-left:6px"
+                    <button class="btn btn-ghost" style="font-size:12px;padding:2px 8px;margin-left:6px"
                             x-show="s.status === 'suggested'"
                             @click="setSuggestionStatus(s, 'ordered')" x-text="'標記' + lb.procurement_labels.ordered">標記已下單</button>
-                    <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;margin-left:6px"
+                    <button class="btn btn-ghost" style="font-size:12px;padding:2px 8px;margin-left:6px"
                             x-show="s.status === 'ordered'"
                             @click="setSuggestionStatus(s, 'received')" x-text="'標記' + lb.procurement_labels.received">標記已到貨</button>
                   </td>

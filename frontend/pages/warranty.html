@@ -16,7 +16,7 @@
     .stat-strip{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
     .stat-pill{display:flex;align-items:center;gap:8px;padding:10px 16px;border:1px solid var(--border-light);border-radius:var(--radius-lg);background:#fff;min-width:110px}
     .stat-pill__val{font-size:20px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;line-height:1}
-    .stat-pill__lbl{font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;margin-top:2px}
+    .stat-pill__lbl{font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;margin-top:2px}
 
     .filter-bar{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
     .search-wrap{position:relative;flex:0 0 300px}
@@ -24,10 +24,10 @@
     .search-input{width:100%;padding:8px 11px 8px 34px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;outline:none;box-sizing:border-box}
     .search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
 
-    .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
+    .tab__cnt{font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;margin-left:4px;padding:1px 5px;border-radius:8px;background:#F0EEE9}
     .tab.on .tab__cnt{background:var(--accent-light);color:var(--accent)}
 
-    .wb{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600}
+    .wb{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600}
     .wb-expired{background:var(--danger-light);color:var(--danger)}
     .wb-q{background:var(--orange-light);color:var(--orange)}
     /* 壓力帶的段在這一頁是可點的篩選器（共用的 .vm-andon__seg 是純顯示） */
@@ -36,12 +36,12 @@
     .wb-seg.on{outline:2px solid var(--accent);outline-offset:-2px}
     .wb-soon{background:var(--warning-light);color:var(--warning)}
     .wb-ok{background:var(--success-light);color:var(--success)}
-    .wb-none{background:#F3F4F6;color:#6B7280}
+    .wb-none{background:#F3F4F6;color:var(--text-secondary)}
 
-    .dt{display:inline-flex;padding:2px 7px;border-radius:3px;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600}
+    .dt{display:inline-flex;padding:2px 7px;border-radius:3px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600}
     .dt-active{background:#DBEAFE;color:var(--accent-hover)}
-    .dt-closed{background:#F0EEE9;color:#6B7280}
-    .dt-none{background:#F3F4F6;color:#9CA3AF}
+    .dt-closed{background:#F0EEE9;color:var(--text-secondary)}
+    .dt-none{background:#F3F4F6;color:var(--text-dim)}
 
     /* accordion */
     .cust-card{border:1px solid var(--border-light);border-radius:var(--radius-lg);margin-bottom:12px;overflow:hidden;background:#fff}
@@ -51,21 +51,21 @@
     .cust-chevron.open{transform:rotate(90deg)}
     .cust-name{font-weight:600;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .cust-meta{display:flex;align-items:center;gap:8px;flex-shrink:0}
-    .cust-count{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;color:var(--text-dim)}
+    .cust-count{font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;color:var(--text-dim)}
 
     .cases-wrap{border-top:1px solid var(--border-light);padding:12px 16px;display:flex;flex-direction:column;gap:10px;background:#FAFAF8}
     .case-block{border:1px solid var(--border-light);border-radius:var(--radius);background:#fff;overflow:hidden}
     @media(max-width:767px){.case-block{overflow-x:auto;-webkit-overflow-scrolling:touch}.dev-table{min-width:460px}}
     .case-header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #F0EEE9;flex-wrap:wrap}
-    .case-qno{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;font-weight:600;color:var(--accent);flex-shrink:0}
+    .case-qno{font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;font-weight:600;color:var(--accent);flex-shrink:0}
     .case-name{font-size:12px;color:var(--text-secondary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .case-count{font-family:LINE Seed TW_OTF, sans-serif;font-size:10px;color:var(--text-dim);flex-shrink:0}
+    .case-count{font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;color:var(--text-dim);flex-shrink:0}
 
     .dev-table{width:100%;border-collapse:collapse;font-size:12px}
-    .dev-table th{padding:7px 12px;text-align:left;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid #F0EEE9;white-space:nowrap}
+    .dev-table th{padding:7px 12px;text-align:left;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);font-weight:500;background:#FAFAF8;border-bottom:1px solid #F0EEE9;white-space:nowrap}
     .dev-table td{padding:9px 12px;border-bottom:1px solid #F0EEE9;vertical-align:middle;color:var(--text-primary)}
     .dev-table tr:last-child td{border-bottom:none}
-    .mono{font-family:LINE Seed TW_OTF, sans-serif;font-size:11px;letter-spacing:.03em}
+    .mono{font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;letter-spacing:.03em}
 
     .empty{text-align:center;padding:60px 20px;color:var(--text-dim)}
     @keyframes spin{to{transform:rotate(360deg)}}
@@ -93,13 +93,13 @@
     <!-- Page header -->
     <div class="pg">
       <div class="pg__l">
-        <div class="pg__eyebrow">設備管理</div>
+        <nav class="pg__crumb" data-crumb-auto aria-label="目前位置"><span>保固追蹤</span></nav>
         <h1 class="pg__t">保固追蹤</h1>
         <p class="pg__s">依客戶 → 案件分組，監控設備保固狀態（含已成案 / 已結案）</p>
 </div>
       <div style="display:flex;gap:8px">
-        <button class="topbar__btn" style="font-size:11px" @click="expandAll()">展開全部</button>
-        <button class="topbar__btn" style="font-size:11px" @click="collapseAll()">收合全部</button>
+        <button class="btn" @click="expandAll()">展開全部</button>
+        <button class="btn" @click="collapseAll()">收合全部</button>
       </div>
     </div>
 

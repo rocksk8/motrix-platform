@@ -31,9 +31,9 @@
     .btn-success:hover:not(:disabled) { background: #047857; border-color: #047857; }
     .btn-danger  { background: var(--danger-light); color: var(--danger); border-color: var(--danger-border); }
     .btn-danger:hover:not(:disabled) { background: var(--danger-hover-bg); border-color: var(--danger); }
-    .btn-ghost-danger { background: #fff; color: #DC2626; border-color: #FCA5A5; }
+    .btn-ghost-danger { background: #fff; color: var(--danger); border-color: #FCA5A5; }
     .btn-ghost-danger:hover:not(:disabled) { background: #FEF2F2; border-color: #DC2626; }
-    .btn-sm   { padding: 5px 12px; font-size: 11px; }
+    .btn-sm   { padding: 5px 12px; font-size: 12px; }
     .btn-icon { padding: 4px 10px; font-size: 15px; line-height: 1; }
 
     /* ── prefix dc- (dev-crm) to avoid conflict with style.css ── */
@@ -62,20 +62,20 @@
       display: block; font-size: 20px; font-weight: 700; line-height: 1.1;
       font-family: var(--font-en); font-variant-numeric: tabular-nums;
     }
-    .dc-funnel__l { display: block; font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
-    .dc-funnel__l small { display: block; font-size: 10.5px; color: var(--text-dim); }
-    .dc-funnel__arrow { display: grid; place-items: center; color: var(--border-light); font-size: 13px; flex: 0 0 auto; }
+    .dc-funnel__l { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .dc-funnel__l small { display: block; font-size: 12px; color: var(--text-dim); }
+    .dc-funnel__arrow { display: grid; place-items: center; color: var(--text-dim); font-size: 13px; flex: 0 0 auto; }
     @media (max-width: 767px) { .dc-funnel__arrow { display: none; } }
 
     /* 卡片上的接觸溫度：條越長＝越久沒更新，顏色跟著跨門檻換。
        紅色那一段就是既有的 isStale()（洽談中且逾 30 天）。 */
     .dc-temp { margin: 0 0 6px; }
     .dc-temp__d {
-      font-size: 10px; font-weight: 700; margin-top: 3px; display: block;
+      font-size: 12px; font-weight: 700; margin-top: 3px; display: block;
       font-family: var(--font-en); font-variant-numeric: tabular-nums;
     }
     .dc-sortbtn {
-      font-family: var(--font-zh); font-size: 10.5px; padding: 2px 7px;
+      font-family: var(--font-zh); font-size: 12px; padding: 2px 7px;
       border-radius: 4px; border: 1px solid var(--border-light);
       background: var(--white); color: var(--text-secondary); cursor: pointer;
     }
@@ -122,19 +122,19 @@
     .dc-search:focus { border-color: var(--accent); background: #fff; }
     .dc-chips { display: flex; gap: 5px; flex-wrap: wrap; }
     .dc-chip {
-      font-size: 11px; padding: 3px 10px; border-radius: 12px;
+      font-size: 12px; padding: 3px 10px; border-radius: 12px;
       border: 1px solid var(--border-light); cursor: pointer;
       background: #fff; color: var(--text-secondary); transition: all .15s;
       font-family: var(--font-zh); white-space: nowrap;
     }
     .dc-chip.on           { background: var(--accent); color: #fff; border-color: var(--accent); }
-    .dc-chip.talk         { border-color: #D97706; color: #D97706; }
+    .dc-chip.talk         { border-color: #D97706; color: var(--warning); }
     .dc-chip.talk.on      { background: #D97706; color: #fff; }
     .dc-chip.won          { border-color: #059669; color: #059669; }
     .dc-chip.won.on       { background: #059669; color: #fff; }
     .dc-chip.lost         { border-color: var(--danger); color: var(--danger); }
     .dc-chip.lost.on      { background: var(--danger); color: #fff; }
-    .dc-chip.hold         { border-color: #6B7280; color: #6B7280; }
+    .dc-chip.hold         { border-color: #6B7280; color: var(--text-secondary); }
     .dc-chip.hold.on      { background: #6B7280; color: #fff; }
 
     .dc-list__body { flex: 1; overflow-y: auto; padding: 6px; }
@@ -155,18 +155,18 @@
       overflow: hidden; text-overflow: ellipsis; font-family: var(--font-zh);
     }
     .dc-case-card__sub {
-      font-size: 11px; color: var(--text-dim); white-space: nowrap;
+      font-size: 12px; color: var(--text-dim); white-space: nowrap;
       overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px;
     }
     .dc-case-card__people {
-      font-size: 10px; color: var(--text-dim); white-space: nowrap;
+      font-size: 12px; color: var(--text-dim); white-space: nowrap;
       overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px;
       font-family: var(--font-zh);
     }
     .dc-case-card__foot { display: flex; align-items: center; gap: 6px; }
     /* 指派／回覆期限（2026-11-03）：卡片小標籤 + 詳情的指派與進度區塊 */
     .dc-case-card__assign {
-      font-size: 10px; color: var(--text-dim); white-space: nowrap;
+      font-size: 12px; color: var(--text-dim); white-space: nowrap;
       overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px;
       font-family: var(--font-zh);
     }
@@ -183,20 +183,20 @@
       font-size: 12px; color: var(--text-primary); font-family: var(--font-zh);
       white-space: pre-wrap; word-break: break-word;
     }
-    .dc-progress-meta { font-size: 11px; color: var(--text-dim); font-family: var(--font-zh); margin-top: 2px; }
+    .dc-progress-meta { font-size: 12px; color: var(--text-dim); font-family: var(--font-zh); margin-top: 2px; }
     .dc-progress-hist { margin-top: 10px; border-top: 1px dashed var(--border-light); padding-top: 6px; }
-    .dc-progress-hist__head { font-size: 11px; color: var(--accent); cursor: pointer; font-family: var(--font-zh); user-select: none; }
+    .dc-progress-hist__head { font-size: 12px; color: var(--accent); cursor: pointer; font-family: var(--font-zh); user-select: none; }
     .dc-progress-item { padding: 6px 0; border-bottom: 1px solid var(--border-light); }
     .dc-progress-item:last-child { border-bottom: 0; }
     .dc-overdue-badge {
-      font-size: 10px; font-weight: 600; font-family: var(--font-zh); margin-left: 8px;
+      font-size: 12px; font-weight: 600; font-family: var(--font-zh); margin-left: 8px;
       padding: 2px 8px; border-radius: 10px; background: var(--danger-light); color: var(--danger);
     }
-    .dc-case-card__overdue { font-size: 11px; font-weight: 600; color: var(--danger); font-family: var(--font-zh); margin-bottom: 6px; }
+    .dc-case-card__overdue { font-size: 12px; font-weight: 600; color: var(--danger); font-family: var(--font-zh); margin-bottom: 6px; }
 
     /* status badge */
     .dc-badge {
-      font-size: 10px; font-weight: 600; font-family: var(--font-zh);
+      font-size: 12px; font-weight: 600; font-family: var(--font-zh);
       padding: 2px 8px; border-radius: 10px;
     }
     .dc-badge--talk { background: #FEF3C7; color: #92400E; }
@@ -224,26 +224,26 @@
     /* ── 接洽成效總覽 ── */
     .dc-act-dash { border: 1px solid var(--border-light); border-radius: 10px; padding: 18px 20px; background: #FAFAF9; }
     .dc-act-dash__title { font-size: 14px; font-weight: 700; color: var(--text-primary); font-family: var(--font-zh); }
-    .dc-act-dash__sub { font-size: 11px; color: var(--text-dim); font-family: var(--font-zh); margin-top: 2px; margin-bottom: 14px; }
+    .dc-act-dash__sub { font-size: 12px; color: var(--text-dim); font-family: var(--font-zh); margin-top: 2px; margin-bottom: 14px; }
     .dc-act-kpis { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; margin-bottom: 18px; }
     .dc-act-kpi { background: #fff; border: 1px solid var(--border-light); border-radius: 8px; padding: 10px 12px; }
     .dc-act-kpi__val { font-size: 20px; font-weight: 700; font-family: LINE Seed TW_OTF, sans-serif; color: var(--text-primary); }
-    .dc-act-kpi__lbl { font-size: 10px; color: var(--text-dim); font-family: var(--font-zh); margin-top: 2px; }
-    .dc-act-kpi__delta { font-size: 10px; font-weight: 600; font-family: var(--font-zh); margin-top: 4px; }
-    .dc-act-section-title { font-size: 11px; font-weight: 700; color: var(--text-secondary); font-family: var(--font-zh); margin: 14px 0 8px; }
+    .dc-act-kpi__lbl { font-size: 12px; color: var(--text-dim); font-family: var(--font-zh); margin-top: 2px; }
+    .dc-act-kpi__delta { font-size: 12px; font-weight: 600; font-family: var(--font-zh); margin-top: 4px; }
+    .dc-act-section-title { font-size: 12px; font-weight: 700; color: var(--text-secondary); font-family: var(--font-zh); margin: 14px 0 8px; }
     .dc-act-weekbars { display: flex; align-items: flex-end; gap: 8px; height: 90px; }
     .dc-act-weekbar { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
-    .dc-act-weekbar__cnt { font-size: 10px; font-weight: 700; color: var(--text-secondary); font-family: LINE Seed TW_OTF, sans-serif; margin-bottom: 2px; }
+    .dc-act-weekbar__cnt { font-size: 12px; font-weight: 700; color: var(--text-secondary); font-family: LINE Seed TW_OTF, sans-serif; margin-bottom: 2px; }
     .dc-act-weekbar__track { flex: 1; width: 100%; display: flex; align-items: flex-end; background: #F0EEE9; border-radius: 3px; overflow: hidden; }
     .dc-act-weekbar__fill { width: 100%; background: #93C5FD; border-radius: 3px 3px 0 0; min-height: 2px; transition: height .3s; }
     .dc-act-weekbar__fill.cur { background: var(--accent); }
-    .dc-act-weekbar__lbl { font-size: 8px; color: var(--text-dim); font-family: LINE Seed TW_OTF, sans-serif; margin-top: 4px; white-space: nowrap; }
+    .dc-act-weekbar__lbl { font-size: 12px; color: var(--text-dim); font-family: LINE Seed TW_OTF, sans-serif; margin-top: 4px; white-space: nowrap; }
     .dc-act-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    .dc-act-empty { font-size: 11px; color: var(--text-dim); font-family: var(--font-zh); padding: 8px 0; }
+    .dc-act-empty { font-size: 12px; color: var(--text-dim); font-family: var(--font-zh); padding: 8px 0; }
     .dc-act-rank-row { display: flex; align-items: center; gap: 7px; padding: 5px 0; border-bottom: 1px solid #F0EEE9; font-family: var(--font-zh); }
-    .dc-act-rank-no { font-size: 10px; font-weight: 700; color: var(--text-dim); width: 14px; flex-shrink: 0; }
+    .dc-act-rank-no { font-size: 12px; font-weight: 700; color: var(--text-dim); width: 14px; flex-shrink: 0; }
     .dc-act-rank-name { font-size: 12px; color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .dc-act-rank-cnt { font-size: 11px; font-weight: 600; color: var(--accent); font-family: LINE Seed TW_OTF, sans-serif; white-space: nowrap; }
+    .dc-act-rank-cnt { font-size: 12px; font-weight: 600; color: var(--accent); font-family: LINE Seed TW_OTF, sans-serif; white-space: nowrap; }
     @media (max-width: 767px) {
       .dc-act-cols { grid-template-columns: 1fr; }
     }
@@ -262,7 +262,7 @@
     .dc-detail-meta {
       display: flex; align-items: center;
       gap: 10px; flex-wrap: wrap;
-      font-size: 11px; color: var(--text-dim);
+      font-size: 12px; color: var(--text-dim);
       font-family: 'LINE Seed TW_OTF', sans-serif;
     }
     .dc-detail-actions {
@@ -277,18 +277,18 @@
       background: #FAFAF9;
     }
     .dc-info-lbl {
-      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      font-size: 12px; font-weight: 700; text-transform: uppercase;
       letter-spacing: .07em; color: var(--text-dim);
       font-family: 'LINE Seed TW_OTF', sans-serif; display: block; margin-bottom: 4px;
     }
     .dc-info-val { font-size: 12px; color: var(--text-primary); font-family: var(--font-zh); }
     .dc-person-chips { display: flex; gap: 4px; flex-wrap: wrap; }
     .dc-person-chip {
-      font-size: 11px; padding: 2px 9px; border-radius: 10px;
+      font-size: 12px; padding: 2px 9px; border-radius: 10px;
       background: var(--accent-light); color: var(--accent); font-weight: 500;
     }
     .dc-converted-link {
-      font-size: 11px; padding: 3px 10px; border-radius: 7px;
+      font-size: 12px; padding: 3px 10px; border-radius: 7px;
       background: var(--accent-light); color: var(--accent-hover); font-weight: 600;
       text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
     }
@@ -317,7 +317,7 @@
     .dc-form-row.full { grid-template-columns: 1fr; }
     .dc-form-row.triple { grid-template-columns: 1fr 1fr 1fr; }
     .dc-lbl {
-      font-size: 11px; font-weight: 600; color: var(--text-secondary);
+      font-size: 12px; font-weight: 600; color: var(--text-secondary);
       margin-bottom: 4px; display: block; font-family: var(--font-zh);
     }
     .dc-input, .dc-select, .dc-textarea {
@@ -354,11 +354,11 @@
       margin-bottom: 8px; flex-wrap: wrap;
     }
     .dc-log-date {
-      font-size: 11px; font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif;
+      font-size: 12px; font-weight: 700; font-family: 'LINE Seed TW_OTF', sans-serif;
       color: var(--text-secondary);
     }
     .dc-channel {
-      font-size: 10px; font-weight: 600; padding: 2px 8px;
+      font-size: 12px; font-weight: 600; padding: 2px 8px;
       border-radius: 10px; background: #EEF2FF; color: #3730A3;
     }
     .dc-log-card__content {
@@ -367,14 +367,14 @@
       line-height: 1.65; font-family: var(--font-zh);
     }
     .dc-log-card__next {
-      font-size: 11px; color: #059669; background: #ECFDF5;
+      font-size: 12px; color: #059669; background: #ECFDF5;
       padding: 5px 10px; border-radius: 6px; margin-bottom: 8px;
       font-family: var(--font-zh);
     }
     .dc-log-card__next::before { content: '→ 下一步：'; font-weight: 700; }
     .dc-log-card__foot {
       display: flex; align-items: center; gap: 8px;
-      font-size: 11px; color: var(--text-dim);
+      font-size: 12px; color: var(--text-dim);
       border-top: 1px solid var(--border-light);
       padding-top: 8px; margin-top: 8px;
       font-family: 'LINE Seed TW_OTF', sans-serif;
@@ -382,20 +382,20 @@
     .dc-log-card__actions { margin-left: auto; display: flex; gap: 5px; }
     /* 批示（2026-11-04）：掛在開發記錄卡下方；只有作者／被指定的對象／管理員看得到 */
     .dc-directive { margin-top: 10px; padding: 9px 11px; border-left: 3px solid #2F6FD6; background: #F3F7FE; border-radius: 0 8px 8px 0; font-size: 12px; font-family: var(--font-zh); }
-    .dc-directive__head { display: flex; gap: 6px; align-items: center; color: var(--text-dim); font-size: 11px; }
+    .dc-directive__head { display: flex; gap: 6px; align-items: center; color: var(--text-dim); font-size: 12px; }
     .dc-directive__head strong { color: #2F6FD6; }
     .dc-directive__body { margin: 4px 0; white-space: pre-wrap; color: var(--text-primary); }
-    .dc-directive__targets { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 11px; color: var(--text-dim); }
+    .dc-directive__targets { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; color: var(--text-dim); }
     .dc-directive__chip { padding: 1px 8px; border-radius: 10px; background: #E5E7EB; color: #374151; }
     .dc-directive__chip.is-pending { background: #FEF3C7; color: #92400E; font-weight: 600; }
     .dc-directive__reply { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border-light); }
-    .dc-directive__reply .who { color: var(--text-dim); font-size: 11px; }
+    .dc-directive__reply .who { color: var(--text-dim); font-size: 12px; }
     .dc-directive__replyform { display: flex; gap: 6px; margin-top: 8px; align-items: flex-start; }
     .dc-directive__replyform textarea, .dc-directive-form textarea { flex: 1; width: 100%; min-height: 54px; font-size: 12px; padding: 6px 8px; border: 1px solid var(--border-light); border-radius: 6px; font-family: var(--font-zh); resize: vertical; }
     .dc-directive-form { margin-top: 10px; padding: 10px 12px; border: 1px solid #BFD3F6; background: #FAFCFF; border-radius: 8px; font-size: 12px; font-family: var(--font-zh); }
     .dc-directive-form .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; flex-wrap: wrap; }
-    .dc-approved { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #D1FAE5; color: #065F46; font-weight: 600; }
-    .dc-pending  { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #FEF3C7; color: #92400E; font-weight: 600; }
+    .dc-approved { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #D1FAE5; color: #065F46; font-weight: 600; }
+    .dc-pending  { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #FEF3C7; color: #92400E; font-weight: 600; }
     .dc-pending-banner {
       background: #FFF7ED; border-bottom: 1px solid #FED7AA;
       margin: -14px -16px 12px; padding: 8px 14px;
@@ -433,10 +433,10 @@
       font-size: 12px; font-weight: 600; color: var(--text-secondary);
       display: block; margin-bottom: 5px; font-family: var(--font-zh);
     }
-    .dc-form-group .hint { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+    .dc-form-group .hint { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
     .dc-user-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
     .dc-user-check {
-      font-size: 11px; padding: 4px 12px; border-radius: 12px;
+      font-size: 12px; padding: 4px 12px; border-radius: 12px;
       border: 1px solid var(--border-light); cursor: pointer;
       user-select: none; transition: all .15s; font-family: var(--font-zh);
       background: #fff; color: var(--text-secondary);
@@ -450,7 +450,7 @@
     /* pending admin bar */
     .dc-admin-bar {
       background: var(--orange-light); border-bottom: 1px solid #FED7AA;
-      padding: 7px 14px; font-size: 11px; color: #9A3412;
+      padding: 7px 14px; font-size: 12px; color: #9A3412;
       display: flex; align-items: center; gap: 7px; cursor: pointer;
       font-family: var(--font-zh);
     }
@@ -459,7 +459,7 @@
     /* stale-case warning bar */
     .dc-stale-bar {
       background: #FEF2F2; border-bottom: 1px solid #FECACA;
-      padding: 7px 14px; font-size: 11px; color: #991B1B;
+      padding: 7px 14px; font-size: 12px; color: #991B1B;
       display: flex; align-items: center; gap: 7px; cursor: pointer;
       font-family: var(--font-zh);
     }
@@ -468,7 +468,7 @@
     /* unread-case bar */
     .dc-unread-bar {
       background: #FFFBEB; border-bottom: 1px solid #FDE68A;
-      padding: 7px 14px; font-size: 11px; color: #92400E;
+      padding: 7px 14px; font-size: 12px; color: #92400E;
       display: flex; align-items: center; gap: 7px; cursor: pointer;
       font-family: var(--font-zh);
     }
@@ -567,7 +567,7 @@
              兩個控制項綁同一個 filterStatus，而且 chips 那組沒有數字、資訊量
              比較少。這一排改放使用者真正缺的：人員與排序。 -->
         <div style="display:flex;gap:5px;margin-top:8px">
-          <select class="dc-select filter" style="flex:1;font-size:11px;padding:5px 6px"
+          <select class="dc-select filter" style="flex:1;font-size:12px;padding:5px 6px"
                   x-model="filterPerson" @change="savePersonPref()">
             <option value="">所有人員</option>
             <option value="__me__">只看我負責的</option>
@@ -577,7 +577,7 @@
           </select>
         </div>
         <div style="display:flex;gap:5px;margin-top:6px;align-items:center">
-          <select class="dc-select filter" style="flex:1;font-size:11px;padding:5px 6px"
+          <select class="dc-select filter" style="flex:1;font-size:12px;padding:5px 6px"
                   x-model="sortPref.sortMode" @change="saveSort()">
             <option value="updated">最後更新</option>
             <option value="created">建立日期</option>
@@ -589,11 +589,11 @@
                   x-text="sortPref.sortDir === 'asc' ? '↑ 由舊到新' : '↓ 由新到舊'"></button>
         </div>
         <div style="display:flex;gap:5px;margin-top:8px">
-          <select class="dc-select filter" style="flex:1;font-size:11px;padding:5px 6px" x-model="filterYear">
+          <select class="dc-select filter" style="flex:1;font-size:12px;padding:5px 6px" x-model="filterYear">
             <option value="">年份</option>
             <template x-for="y in yearOptions" :key="y"><option :value="y" x-text="y + '年'"></option></template>
           </select>
-          <select class="dc-select filter" style="flex:1;font-size:11px;padding:5px 6px" x-model="filterMonth">
+          <select class="dc-select filter" style="flex:1;font-size:12px;padding:5px 6px" x-model="filterMonth">
             <option value="">月份</option>
             <template x-for="m in 12" :key="m">
               <option :value="String(m).padStart(2,'0')" x-text="m + '月'"></option>
@@ -608,7 +608,7 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
         <span x-text="unreadCount + ' 筆案件有更新未讀'"></span>
         <span style="text-decoration:underline" x-text="unreadOnly ? '顯示全部 →' : '只看未讀 →'"></span>
-        <button class="btn btn-ghost btn-sm" style="margin-left:auto;padding:2px 10px;font-size:10px" @click.stop="markAllRead()">一鍵已讀</button>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;padding:2px 10px;font-size:12px" @click.stop="markAllRead()">一鍵已讀</button>
       </div>
 
       <!-- 洽談中逾期警示 -->
@@ -652,7 +652,7 @@
                  跟上面的溫度條講同一件事且更不精確（只有過/沒過 30 天兩種），
                  移除。溫度條本身就帶天數。 -->
             <template x-if="isUnread(c)">
-              <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;display:inline-block;margin-bottom:3px">有更新</span>
+              <span style="font-size:12px;font-weight:700;padding:1px 5px;border-radius:4px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;display:inline-block;margin-bottom:3px">有更新</span>
             </template>
             <div class="dc-case-card__name" x-text="c.caseName"></div>
             <div class="dc-case-card__sub" x-text="c.customerName || '（未指定客戶）'"></div>
@@ -671,12 +671,12 @@
                 :class="c.status==='成案'?'dc-badge--won':c.status==='未成案'?'dc-badge--lost':c.status==='暫擱置'?'dc-badge--hold':'dc-badge--talk'"
                 x-text="stLabel(c.status)"></span>
               <template x-if="c.pendingDelete">
-                <span style="font-size:9px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700;margin-left:4px">待刪除審核</span>
+                <span style="font-size:12px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700;margin-left:4px">待刪除審核</span>
               </template>
               <template x-if="c.pendingRelink">
-                <span style="font-size:9px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700;margin-left:4px">待連結異動審核</span>
+                <span style="font-size:12px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700;margin-left:4px">待連結異動審核</span>
               </template>
-              <span style="font-size:10px;color:var(--text-dim);margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif"
+              <span style="font-size:12px;color:var(--text-dim);margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif"
                     x-text="c.updatedAt ? c.updatedAt.slice(0,10) : ''"></span>
             </div>
           </div>
@@ -705,7 +705,7 @@
                 <div class="dc-act-kpi__val" x-text="actThisWeekCount"></div>
                 <div class="dc-act-kpi__lbl">本週接洽</div>
                 <div class="dc-act-kpi__delta"
-                     :style="actWeekDelta > 0 ? 'color:#15803D' : actWeekDelta < 0 ? 'color:#DC2626' : 'color:var(--text-dim)'"
+                     :style="actWeekDelta > 0 ? 'color:#15803D' : actWeekDelta < 0 ? 'color:var(--danger)' : 'color:var(--text-dim)'"
                      x-text="actWeekDelta > 0 ? ('▲ +' + actWeekDelta + ' 較上週') : actWeekDelta < 0 ? ('▼ ' + actWeekDelta + ' 較上週') : '與上週持平'"></div>
               </div>
               <div class="dc-act-kpi">
@@ -830,7 +830,7 @@
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   </button>
                   <template x-if="selectedCase.pendingRelink">
-                    <span style="font-size:9px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700"
+                    <span style="font-size:12px;padding:2px 6px;border-radius:5px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:700"
                           :title="'申請人：' + selectedCase.relinkRequestedBy">待審核連結異動</span>
                   </template>
                 </div>
@@ -866,7 +866,7 @@
               </template>
               <template x-if="isAdmin && selectedCase.pendingDelete">
                 <div style="display:flex;gap:6px;align-items:center">
-                  <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:600">待審核刪除</span>
+                  <span style="font-size:12px;padding:3px 8px;border-radius:6px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:600">待審核刪除</span>
                   <template x-if="session.role === 'superadmin'">
                     <button class="btn btn-sm" style="background:#DC2626;color:#fff;border-color:#DC2626" @click="showApproveDeleteModal=true">審核刪除申請</button>
                   </template>
@@ -878,7 +878,7 @@
               <!-- 連結異動審核流程 -->
               <template x-if="isAdmin && selectedCase.pendingRelink">
                 <div style="display:flex;gap:6px;align-items:center">
-                  <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:600">待審核連結異動</span>
+                  <span style="font-size:12px;padding:3px 8px;border-radius:6px;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;font-weight:600">待審核連結異動</span>
                   <template x-if="session.role === 'superadmin'">
                     <button class="btn btn-sm" style="background:#DC2626;color:#fff;border-color:#DC2626" @click="showApproveRelinkModal=true">審核連結異動</button>
                   </template>
@@ -1016,7 +1016,7 @@
             <div class="dc-logs__head">
               <h3 class="dc-logs__title">
                 開發記錄
-                <span style="font-size:11px;font-weight:400;color:var(--text-dim)"
+                <span style="font-size:12px;font-weight:400;color:var(--text-dim)"
                   x-text="devLogs.length ? '（' + devLogs.length + ' 筆）' : ''"></span>
               </h3>
               <button class="btn btn-primary btn-sm"
@@ -1074,7 +1074,7 @@
                 </div>
               </div>
               <div x-show="logForm.log_by && logForm.log_by !== session.userId"
-                   style="font-size:11px;color:#D97706;margin-bottom:10px;font-family:var(--font-zh)">
+                   style="font-size:12px;color:var(--warning);margin-bottom:10px;font-family:var(--font-zh)">
                 ⚠ 代他人填寫，儲存後需主管審核
               </div>
               <!-- 附件（2026-09-14，DB v82）。編輯既有記錄時不顯示：那支 PUT
@@ -1115,7 +1115,7 @@
                 <div class="dc-log-card__head">
                   <span class="dc-log-date" x-text="log.logDate"></span>
                   <span class="dc-channel" x-show="log.channel" x-text="log.channel"></span>
-                  <span style="font-size:10px;background:#F3F4F6;color:#374151;padding:2px 7px;border-radius:8px;font-weight:600"
+                  <span style="font-size:12px;background:#F3F4F6;color:#374151;padding:2px 7px;border-radius:8px;font-weight:600"
                     x-show="log.statusSnapshot" x-text="stLabel(log.statusSnapshot)"></span>
                   <span class="dc-pending" x-show="log.needsApproval && !isAdmin">待審核</span>
                   <span class="dc-approved" x-show="!log.needsApproval && log.approvedAt">已審核</span>
@@ -1135,13 +1135,13 @@
                         </template>
                         <template x-if="!isLogImage(f)">
                           <a href="javascript:void(0)" @click="previewAttachmentFile(f)"
-                             style="display:flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--border-light);border-radius:6px;font-size:11px;color:var(--text-secondary);text-decoration:none;background:#fff;max-width:180px;cursor:pointer">
+                             style="display:flex;align-items:center;gap:5px;padding:6px 10px;border:1px solid var(--border-light);border-radius:6px;font-size:12px;color:var(--text-secondary);text-decoration:none;background:#fff;max-width:180px;cursor:pointer">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
                             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="f.filename"></span>
                           </a>
                         </template>
                         <button x-show="isAdmin" @click.stop="deleteLogFile(log, f)" title="刪除附件（限管理員）"
-                                style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:1px solid var(--border-light);background:#fff;color:var(--text-dim);font-size:11px;line-height:1;cursor:pointer;padding:0">×</button>
+                                style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:1px solid var(--border-light);background:#fff;color:var(--text-dim);font-size:12px;line-height:1;cursor:pointer;padding:0">×</button>
                       </div>
                     </template>
                   </div>
@@ -1263,7 +1263,7 @@
                   </template>
                 </div>
               </div>
-              <div class="hint" x-show="caseForm.customer_id" style="color:#16a34a">✓ 已連結客戶管理名單</div>
+              <div class="hint" x-show="caseForm.customer_id" style="color:var(--success)">✓ 已連結客戶管理名單</div>
               <div class="hint" x-show="!caseForm.customer_id && caseForm.customer_name">未連結客戶管理，儲存時將以名稱比對</div>
               <div x-show="caseCustomerHistory.length" style="margin-top:6px;padding:8px 10px;background:#F9FAFB;border-radius:6px">
                 <div class="hint" style="font-weight:600;margin-bottom:4px">此客戶過去案件</div>
@@ -1331,7 +1331,7 @@
               <div class="dc-log-card__head">
                 <span class="dc-log-date" x-text="log.logDate"></span>
                 <span class="dc-channel" x-show="log.channel" x-text="log.channel"></span>
-                <span style="font-size:11px;color:var(--text-dim);margin-left:auto"
+                <span style="font-size:12px;color:var(--text-dim);margin-left:auto"
                   x-text="'記錄人：' + log.logByName"></span>
               </div>
               <div class="dc-log-card__content" x-text="log.content"></div>
@@ -1390,10 +1390,10 @@
           <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;font-family:var(--font-zh)">
             目前連結：<b x-text="selectedCase && selectedCase.convertedQuoteNo"></b>
           </div>
-          <label style="display:block;font-size:11px;color:var(--text-secondary);margin-bottom:4px;font-family:var(--font-zh)">新的報價單號（留空＝申請解除連結）</label>
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;font-family:var(--font-zh)">新的報價單號（留空＝申請解除連結）</label>
           <input class="dc-input" type="text" x-model="relinkQuoteNo"
             placeholder="MQ-YYYYMM-NNN，留空表示案件變更需取消連結">
-          <label style="display:block;font-size:11px;color:var(--text-secondary);margin:10px 0 4px;font-family:var(--font-zh)">申請原因（選填）</label>
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin:10px 0 4px;font-family:var(--font-zh)">申請原因（選填）</label>
           <textarea class="dc-input" x-model="relinkReason" rows="3"
             style="resize:vertical;min-height:56px"
             placeholder="例如：報價單已取消，案件需求變更…"></textarea>
@@ -1424,13 +1424,13 @@
             <div style="margin-bottom:5px"><b>目前連結：</b><span x-text="selectedCase && selectedCase.convertedQuoteNo"></span></div>
             <div><b>異動後：</b>
               <span x-show="selectedCase && selectedCase.relinkTargetQuoteNo" x-text="selectedCase && selectedCase.relinkTargetQuoteNo"></span>
-              <span x-show="selectedCase && !selectedCase.relinkTargetQuoteNo" style="color:#DC2626;font-weight:600">解除連結（案件將退回洽談中）</span>
+              <span x-show="selectedCase && !selectedCase.relinkTargetQuoteNo" style="color:var(--danger);font-weight:600">解除連結（案件將退回洽談中）</span>
             </div>
           </div>
         </div>
         <div class="dc-modal-foot">
           <button class="btn btn-ghost" @click="showApproveRelinkModal=false">取消</button>
-          <button class="btn btn-ghost" style="color:#D97706;border-color:#FDE68A" @click="approveRelinkQuote(false)">退回申請</button>
+          <button class="btn btn-ghost" style="color:var(--warning);border-color:#FDE68A" @click="approveRelinkQuote(false)">退回申請</button>
           <button class="btn btn-danger" @click="approveRelinkQuote(true)">批准異動</button>
         </div>
       </div>
@@ -1450,7 +1450,7 @@
           <div style="font-size:12px;color:var(--text-primary);margin-bottom:6px;font-family:var(--font-zh)">
             案件：<b x-text="selectedCase && selectedCase.caseName"></b>
           </div>
-          <label style="display:block;font-size:11px;color:var(--text-secondary);margin-bottom:4px;font-family:var(--font-zh)">刪除原因（選填）</label>
+          <label style="display:block;font-size:12px;color:var(--text-secondary);margin-bottom:4px;font-family:var(--font-zh)">刪除原因（選填）</label>
           <textarea class="dc-input" x-model="deleteReason" rows="3"
             style="resize:vertical;min-height:60px"
             placeholder="請說明申請刪除的原因…"></textarea>
@@ -1484,7 +1484,7 @@
         </div>
         <div class="dc-modal-foot">
           <button class="btn btn-ghost" @click="showApproveDeleteModal=false">取消</button>
-          <button class="btn btn-ghost" style="color:#D97706;border-color:#FDE68A" @click="approveDeleteCase(false)">退回申請</button>
+          <button class="btn btn-ghost" style="color:var(--warning);border-color:#FDE68A" @click="approveDeleteCase(false)">退回申請</button>
           <button class="btn btn-danger" @click="approveDeleteCase(true)">批准刪除</button>
         </div>
       </div>

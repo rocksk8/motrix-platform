@@ -15,8 +15,8 @@
     [x-cloak]{display:none!important}
     .page-wrap{padding:calc(var(--topbar-h) + 20px) 28px 60px calc(var(--sidebar-w) + 28px);max-width:1400px}
     .plan-no{font-family:LINE Seed TW_OTF, monospace;font-size:13px;color:var(--text-dim)}
-    .st{display:inline-flex;padding:2px 8px;border-radius:4px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;vertical-align:middle}
-    .st-plan{background:#F0EEE9;color:#6B7280}
+    .st{display:inline-flex;padding:2px 8px;border-radius:4px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;vertical-align:middle}
+    .st-plan{background:#F0EEE9;color:var(--text-secondary)}
     .st-confirmed{background:#DBEAFE;color:var(--accent-hover)}
     .st-delivered{background:#DCFCE7;color:#15803D}
     .toolbar{position:sticky;top:var(--topbar-h);z-index:20;background:var(--white);padding:12px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border-light);margin-bottom:16px}
@@ -32,14 +32,14 @@
        Tab 鍵可跳下一格，方便大量資料輸入／比對） */
     .grid-table-wrap{overflow-x:auto;border:1px solid var(--border-light);border-radius:8px}
     .grid-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
-    .grid-table thead th{background:#F1F5F9;color:var(--text-secondary);font-weight:700;font-size:11px;
+    .grid-table thead th{background:#F1F5F9;color:var(--text-secondary);font-weight:700;font-size:12px;
       padding:7px 6px;text-align:left;white-space:nowrap;border-bottom:2px solid var(--border)}
     .grid-table tbody td{padding:1px 3px;border-bottom:1px solid var(--border-light)}
     .grid-table tbody tr:hover td{background:#FAFAF8}
     .grid-table tbody tr:nth-child(even) td{background:#FCFBF9}
     .grid-table tbody tr:nth-child(even):hover td{background:#F5F3EF}
-    .grid-idx{color:var(--text-dim);font-family:LINE Seed TW_OTF, monospace;font-size:11px;text-align:center;padding:0 6px!important}
-    .grid-cell-na{color:var(--text-dim);padding-left:6px;font-size:11px}
+    .grid-idx{color:var(--text-dim);font-family:LINE Seed TW_OTF, monospace;font-size:12px;text-align:center;padding:0 6px!important}
+    .grid-cell-na{color:var(--text-dim);padding-left:6px;font-size:12px}
     .grid-table input[type=text],.grid-table input[type=number]{
       width:118px;padding:6px 6px;border:1px solid transparent;border-radius:4px;font-size:12px;
       font-family:inherit;outline:none;box-sizing:border-box;background:transparent;color:#0A0A0A}
@@ -49,14 +49,14 @@
     .grid-table select:focus{border-color:var(--accent);background:#fff}
     .grid-table select:disabled{background:transparent;border-color:transparent;color:var(--text-secondary)}
     .grid-table td.checkbox-cell{text-align:center;padding:0 4px!important}
-    .row-del{background:none;border:none;color:var(--danger);cursor:pointer;font-size:11px;padding:3px 6px;white-space:nowrap}
+    .row-del{background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;padding:3px 6px;white-space:nowrap}
     .row-del:hover{text-decoration:underline}
-    .btn-xs{padding:4px 8px;font-size:11px}
+    .btn-xs{padding:4px 8px;font-size:12px}
     .tab-panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px}
     .batch-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#EEF2FF;border:1px solid #C7D2FE;border-radius:7px;margin-bottom:10px;flex-wrap:wrap;font-size:12px}
     .batch-bar select,.batch-bar input[type=text]{padding:6px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;background:#fff}
     .ip-order-box{background:#FAFAF8;border:1px solid var(--border-light);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px}
-    .ip-order-row{display:flex;gap:10px;padding:3px 0;font-family:LINE Seed TW_OTF, monospace;font-size:11px}
+    .ip-order-row{display:flex;gap:10px;padding:3px 0;font-family:LINE Seed TW_OTF, monospace;font-size:12px}
     .ip-order-row.dup{color:var(--danger);font-weight:700}
     .ip-order-vlan{font-weight:700;margin-top:8px;color:var(--text-secondary);font-family:var(--font-zh)}
     .rev-row{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:6px 0;border-bottom:1px solid var(--border-light)}
@@ -84,7 +84,7 @@
             <span class="plan-no" x-text="'　' + plan.planNo"></span>
             <span class="st" :class="stCls(plan.status)" x-text="stText(plan.status)" style="margin-left:8px"></span>
           </h1>
-          <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+          <div style="font-size:12px;color:var(--text-dim);margin-top:2px">
             <a :href="'case-management.html?q=' + plan.quoteNo" x-show="plan.quoteNo" style="color:var(--accent);text-decoration:none" x-text="'綁定案件：' + plan.quoteNo"></a>
             <span x-show="!plan.quoteNo">獨立建立（未綁定案件）</span>
           </div>
@@ -119,7 +119,7 @@
         <button class="btn btn-ghost" @click="exportPdf()" :disabled="exportingPdf">
           <span x-text="exportingPdf ? '匯出中…' : '匯出 PDF'"></span>
         </button>
-        <button class="btn btn-ghost" style="color:#DC2626;border-color:#FCA5A5" @click="deletePlan()" x-show="plan.status==='規劃中' && isSuperadmin">刪除</button>
+        <button class="btn btn-ghost" style="color:var(--danger);border-color:#FCA5A5" @click="deletePlan()" x-show="plan.status==='規劃中' && isSuperadmin">刪除</button>
       </div>
 
       <div class="tab-bar" style="display:flex;flex-wrap:wrap;gap:2px;border-bottom:1px solid var(--border-light)">
@@ -171,7 +171,7 @@
                x-init="pnLoadNotice(); pnRefresh(); $watch('plan.id', () => pnRefresh())"
                style="margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border-light);border-radius:6px">
             <div style="font-size:12px;font-weight:600;margin-bottom:4px">個資蒐集告知</div>
-            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
               案場聯絡人的姓名、電話屬個人資料，蒐集時須告知蒐集目的、類別、利用方式與當事人權利。先儲存單據，再列印告知書或勾選；換了聯絡人要重新告知。沒有記錄不影響存檔。
             </div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -190,8 +190,8 @@
               </template>
             </div>
             <div x-show="pnSubject() && !pnAck() && !privacyAckRequested" data-privacy-missing
-                 style="margin-top:6px;font-size:11px;color:var(--warning)">尚未記錄個資告知</div>
-            <div x-show="privacyErr" data-privacy-error style="margin-top:6px;font-size:11px;color:var(--danger)" x-text="privacyErr"></div>
+                 style="margin-top:6px;font-size:12px;color:var(--warning)">尚未記錄個資告知</div>
+            <div x-show="privacyErr" data-privacy-error style="margin-top:6px;font-size:12px;color:var(--danger)" x-text="privacyErr"></div>
           </div>
           <div class="form-row">
             <div class="form-group"><label>規劃書編號</label><input type="text" :value="plan.planNo" readonly></div>
@@ -246,7 +246,7 @@
             </div>
           </div>
           <div class="tab-panel-head" x-show="tab.key==='switchPorts'" style="margin-top:-4px;margin-bottom:12px">
-            <span style="font-size:11px;color:var(--text-dim)">依「設備清單」裡類別為「交換器」設備的 RJ45／SFP 埠數，自動補齊缺少的埠列（設備名稱＋埠號）；已存在的埠列不會被覆蓋或刪除，未設定埠數的交換器預設視為 24 RJ45（比照拓樸圖預覽的預設值）。</span>
+            <span style="font-size:12px;color:var(--text-dim)">依「設備清單」裡類別為「交換器」設備的 RJ45／SFP 埠數，自動補齊缺少的埠列（設備名稱＋埠號）；已存在的埠列不會被覆蓋或刪除，未設定埠數的交換器預設視為 24 RJ45（比照拓樸圖預覽的預設值）。</span>
           </div>
 
           <!-- 批次套用：勾選多筆後，一次把同一個欄位（例如 VLAN、階段）設成同一個值 -->
@@ -399,9 +399,9 @@
         <div class="stock-item-row" @click="pickStock(it)">
           <div>
             <div style="font-weight:600" x-text="it.part_no"></div>
-            <div style="font-size:11px;color:var(--text-dim)" x-text="'SN: ' + (it.serial_no||'—') + '　MAC: ' + (it.mac||'—')"></div>
+            <div style="font-size:12px;color:var(--text-dim)" x-text="'SN: ' + (it.serial_no||'—') + '　MAC: ' + (it.mac||'—')"></div>
           </div>
-          <span style="font-size:11px;color:var(--text-dim)" x-text="it.status"></span>
+          <span style="font-size:12px;color:var(--text-dim)" x-text="it.status"></span>
         </div>
       </template>
     </div>

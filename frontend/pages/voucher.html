@@ -78,11 +78,11 @@
     .vc-srcblk__case.on{border-color:var(--accent);background:var(--accent-light,#EEF2FF);font-weight:600}
     .vc-srcblk__mark{display:inline-block;width:1em;flex:0 0 auto;color:var(--accent)}
     .vc-srcblk__files{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px}
-    .vc-srcblk__file{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px;border:1px solid var(--border-light);border-radius:6px;background:#fff;cursor:pointer;font:inherit;font-size:11px;min-width:0}
+    .vc-srcblk__file{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px;border:1px solid var(--border-light);border-radius:6px;background:#fff;cursor:pointer;font:inherit;font-size:12px;min-width:0}
     .vc-srcblk__file:disabled{cursor:not-allowed;opacity:.55}
     .vc-srcblk__thumb{width:80px;height:60px;object-fit:cover;border-radius:4px;background:#F5F4F0}
     .vc-pdf-icon{display:flex;align-items:center;justify-content:center;width:80px;height:60px;border-radius:4px;background:#FEE2E2;color:#B91C1C;font-weight:700;font-size:13px}
-    .vc-pdf-icon--sm{width:48px;height:48px;font-size:11px}
+    .vc-pdf-icon--sm{width:48px;height:48px;font-size:12px}
     .vc-srcblk__name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .vc-srcblk__brought{color:#15803D;font-weight:600}
     .vc-pv-stage{position:relative;display:flex;align-items:center;justify-content:center}
@@ -92,7 +92,7 @@
     .vc-pv-meta{font-size:12px;color:var(--text-secondary);margin-right:auto}
     .vc-side{width:290px;flex-shrink:0;font-family:var(--font-zh)}
     .vc-side__hd{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text-primary)}
-    .vc-side__chk{font-size:11px;color:var(--text-secondary);font-weight:400;display:flex;align-items:center;gap:4px;cursor:pointer}
+    .vc-side__chk{font-size:12px;color:var(--text-secondary);font-weight:400;display:flex;align-items:center;gap:4px;cursor:pointer}
     .vc-row{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--border-light);border-radius:var(--radius);margin-bottom:6px;font-size:12px;cursor:pointer;background:var(--white)}
     .vc-row:hover{background:#FAF9F6}
     .vc-row.on{border-color:var(--text-primary)}
@@ -110,7 +110,7 @@
 
     .vc-src{margin-top:18px;border:1px solid var(--border-light);border-radius:var(--radius);padding:12px 14px;font-family:var(--font-zh)}
     .vc-src__hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:13px;font-weight:600;color:var(--text-primary)}
-    .vc-src__hint{font-size:11px;color:var(--text-secondary);font-weight:400}
+    .vc-src__hint{font-size:12px;color:var(--text-secondary);font-weight:400}
     .vc-src__tabs{display:flex;gap:4px;border-bottom:1px solid var(--border-light);margin-bottom:8px}
     .vc-src__tab{padding:6px 14px;border:none;background:transparent;font-size:13px;font-family:var(--font-zh);cursor:pointer;color:var(--text-secondary);border-bottom:2px solid transparent;margin-bottom:-1px}
     .vc-src__tab.on{color:var(--text-primary);font-weight:700;border-bottom-color:var(--text-primary)}
@@ -119,29 +119,29 @@
     .vc-src__item:hover:not(:disabled){background:#FAF9F6}
     .vc-src__item:disabled{opacity:.5;cursor:not-allowed}
     .vc-src__txt{font-weight:600}
-    .vc-src__meta{color:var(--text-secondary);font-size:11px;margin-left:auto}
+    .vc-src__meta{color:var(--text-secondary);font-size:12px;margin-left:auto}
     .vc-src__empty{padding:16px 8px;color:var(--text-secondary);font-size:12px;line-height:1.8}
     /* `JV18`：紅字「已計算」＋點開的明細——不用顏色以外的訊號會分不出來，
        但這裡只是輔助標記（旁邊還有文字「已計算」本身），保留紅色沒問題。 */
-    .vc-src__used{font-size:11px;color:#B91C1C;flex:none;padding:1px 7px;border-radius:9px;background:#FEF2F2;border:1px solid #FCA5A5;cursor:pointer}
+    .vc-src__used{font-size:12px;color:#B91C1C;flex:none;padding:1px 7px;border-radius:9px;background:#FEF2F2;border:1px solid #FCA5A5;cursor:pointer}
     .vc-src__used:hover{background:#FEE2E2}
-    .vc-src__usedinfo{padding:4px 8px 8px 30px;font-size:11px;color:var(--text-secondary);line-height:1.7}
+    .vc-src__usedinfo{padding:4px 8px 8px 30px;font-size:12px;color:var(--text-secondary);line-height:1.7}
     /* `JV21`：支出項頁籤的展開箭頭與子列——子列縮排＋淡底色，讀起來
        是「屬於上一筆」而不是同一層的另一筆。 */
-    .vc-src__expand{font-size:11px;color:var(--text-secondary);flex:none;padding:1px 7px;border-radius:9px;cursor:pointer}
+    .vc-src__expand{font-size:12px;color:var(--text-secondary);flex:none;padding:1px 7px;border-radius:9px;cursor:pointer}
     .vc-src__expand:hover{color:var(--text-primary)}
     .vc-src__children{padding-left:20px;background:#FAF9F6;border-radius:6px}
-    .vc-src__item--child{font-size:11px}
+    .vc-src__item--child{font-size:12px}
     .vc-src__item--child .vc-src__txt{font-weight:400}
 
     .vc-att{margin-top:18px;border:1px solid var(--border-light);border-radius:var(--radius);padding:12px 14px;font-family:var(--font-zh)}
     .vc-att__hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:13px;font-weight:600;color:var(--text-primary)}
-    .vc-att__hint{font-size:11px;color:var(--text-secondary);font-weight:400}
+    .vc-att__hint{font-size:12px;color:var(--text-secondary);font-weight:400}
     .vc-att__row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border-light);font-size:12px}
     .vc-att__row:last-of-type{border-bottom:none}
-    .vc-att__tag{font-size:11px;padding:1px 7px;border-radius:9px;background:#F0EEE9;color:var(--text-secondary)}
+    .vc-att__tag{font-size:12px;padding:1px 7px;border-radius:9px;background:#F0EEE9;color:var(--text-secondary)}
     .vc-att__name{font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .vc-att__meta{color:var(--text-secondary);font-size:11px;margin-left:auto}
+    .vc-att__meta{color:var(--text-secondary);font-size:12px;margin-left:auto}
     .vc-att__del{border:none;background:transparent;color:#B91C1C;cursor:pointer;font-size:12px;font-family:var(--font-zh);padding:0 4px}
     .vc-att__empty{padding:12px 4px;color:var(--text-secondary);font-size:12px}
     .vc-att__acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}

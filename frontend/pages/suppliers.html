@@ -22,7 +22,7 @@
   <style>
     /* ── 分類籤（2026-09-14）── */
     .cs-cats{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:12px}
-    .cs-cats__t{font-size:10.5px;color:var(--text-dim);letter-spacing:.06em;margin-right:1px}
+    .cs-cats__t{font-size:12px;color:var(--text-dim);letter-spacing:.06em;margin-right:1px}
     .cs-cats__sep{width:1px;align-self:stretch;background:var(--border-light);margin:0 6px}
     .cs-cat{display:flex;align-items:baseline;gap:6px;padding:4px 10px;border-radius:var(--radius);
             border:1px solid var(--border-light);background:#fff;cursor:pointer;font-family:var(--font-zh)}
@@ -35,7 +35,7 @@
     .cs-cat.is-orphan{border-style:dashed;border-color:var(--warning)}
     .cs-cat__n{font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;
                font-variant-numeric:tabular-nums;color:var(--text-primary);line-height:1}
-    .cs-cat__l{font-size:11.5px;color:var(--text-secondary);line-height:1.2}
+    .cs-cat__l{font-size:12px;color:var(--text-secondary);line-height:1.2}
     .page-main {
       margin-left: var(--sidebar-w);
       margin-top: var(--topbar-h);
@@ -49,7 +49,7 @@
     .search-wrap { position: relative; flex: 0 0 320px; }
     .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-dim); pointer-events: none; }
     .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .data-table th { padding: 10px 12px; text-align: left; font-size: 10px; font-family: 'LINE Seed TW_OTF', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); font-weight: 500; background: #FAFAF8; border-bottom: 1px solid var(--border-light); white-space: nowrap; }
+    .data-table th { padding: 10px 12px; text-align: left; font-size: 12px; font-family: 'LINE Seed TW_OTF', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); font-weight: 500; background: #FAFAF8; border-bottom: 1px solid var(--border-light); white-space: nowrap; }
     .data-table td { padding: 11px 12px; border-bottom: 1px solid #F0EEE9; vertical-align: middle; }
     .data-table tr:last-child td { border-bottom: none; }
     .data-table tr:hover td { background: #FDFCFA; }
@@ -64,14 +64,14 @@
     .modal-foot { display: flex; align-items: center; padding: 14px 22px; border-top: 1px solid var(--border-light); gap: 8px; }
     .form-section { margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-light); }
     .form-section:last-child { border-bottom: none; margin-bottom: 0; }
-    .form-section-title { font-size: 11px; font-family: 'LINE Seed TW_OTF', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; margin-bottom: 14px; }
+    .form-section-title { font-size: 12px; font-family: 'LINE Seed TW_OTF', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); font-weight: 600; margin-bottom: 14px; }
     .form-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 0; }
     .form-label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
     .form-label .req { color: var(--danger); }
     .form-input, .form-select, .form-textarea { padding: 8px 11px; border: 1px solid var(--border-light); border-radius: var(--radius); font-size: 13px; font-family: var(--font-zh); color: var(--text-primary); background: #fff; outline: none; transition: border-color .12s, box-shadow .12s; }
     .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
     .form-textarea { resize: vertical; min-height: 64px; line-height: 1.6; }
-    .form-hint { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+    .form-hint { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
     .form-grid { display: grid; gap: 14px; }
     .form-grid-2 { grid-template-columns: 1fr 1fr; }
     .form-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
@@ -85,13 +85,13 @@
     .detail-label { color: var(--text-dim); min-width: 80px; flex-shrink: 0; }
     .detail-val { color: var(--text-primary); font-weight: 500; flex: 1; word-break: break-all; }
     .detail-divider { border: none; border-top: 1px solid var(--border-light); margin: 14px 0; }
-    .tag { display: inline-flex; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .tag { display: inline-flex; padding: 2px 8px; border-radius: 3px; font-size: 12px; font-family: 'LINE Seed TW_OTF', sans-serif; }
     .tag-active   { background: var(--success-light); color: var(--success); }
-    .tag-inactive { background: #F3F4F6; color: #6B7280; }
+    .tag-inactive { background: #F3F4F6; color: var(--text-secondary); }
     .empty-state { text-align: center; padding: 60px 20px; color: var(--text-dim); }
     .empty-icon  { font-size: 40px; margin-bottom: 12px; opacity: .4; }
     .contacts-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .contacts-table th { padding: 6px 8px; background: #FAFAF8; border-bottom: 1px solid var(--border-light); text-align: left; font-size: 10px; color: var(--text-dim); font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .contacts-table th { padding: 6px 8px; background: #FAFAF8; border-bottom: 1px solid var(--border-light); text-align: left; font-size: 12px; color: var(--text-dim); font-family: 'LINE Seed TW_OTF', sans-serif; }
     .contacts-table td { padding: 7px 8px; border-bottom: 1px solid #F0EEE9; }
     .contacts-table tr:last-child td { border-bottom: none; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -117,7 +117,7 @@
     <!-- 頁頭 -->
     <div class="pg">
       <div class="pg__l">
-        <div class="pg__eyebrow">採購庫存</div>
+        <nav class="pg__crumb" data-crumb-auto aria-label="目前位置"><span>供應商管理</span></nav>
         <h1 class="pg__t">供應商管理</h1>
 <p style="font-size:12px;color:var(--text-secondary);margin-top:4px" x-text="`共 ${filtered.length} 筆供應商資料`"></p>
 <!-- 退休舊「標準交期」文字欄位的時機要由資料決定，不是由感覺決定：
@@ -137,8 +137,8 @@
               <span x-show="b.type === 'export'" aria-hidden="true">⬇ </span><span x-text="b.label"></span>
             </button>
           </template>
-          <span x-show="$store.ub.mode !== 'live'" x-text="$store.ub.previewLabel" style="font-size:11px;color:var(--warning)"></span>
-          <span x-show="$store.ub.msg" x-text="$store.ub.msg" style="font-size:11px;color:var(--danger)"></span>
+          <span x-show="$store.ub.mode !== 'live'" x-text="$store.ub.previewLabel" style="font-size:12px;color:var(--warning)"></span>
+          <span x-show="$store.ub.msg" x-text="$store.ub.msg" style="font-size:12px;color:var(--danger)"></span>
           <button type="button" class="btn btn-ghost btn-sm" data-testid="ub-edit-open" x-show="ubIsAdmin()" @click="MotrixUserButtons.openEditor()">自訂按鈕</button>
         </div>
       </template>
@@ -175,11 +175,11 @@
       </div>
       <input type="file" x-ref="importFile" accept=".xlsx,.xls,.csv" style="display:none" @change="handleImport($event)">
       <div style="margin-left:auto;display:flex;gap:6px">
-        <button class="btn btn-ghost" @click="$refs.importFile.click()" style="font-size:11px">
+        <button class="btn btn-ghost" @click="$refs.importFile.click()" style="font-size:12px">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
           匯入 Excel
         </button>
-        <button class="btn btn-ghost" @click="exportExcel()" :disabled="!suppliers.length" style="font-size:11px">
+        <button class="btn btn-ghost" @click="exportExcel()" :disabled="!suppliers.length" style="font-size:12px">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
           匯出 Excel
         </button>
@@ -216,15 +216,15 @@
                 <div style="font-weight:500" x-text="s.name"></div>
                 <div style="display:flex;align-items:center;gap:5px;margin-top:1px">
                   <span x-show="s.code" x-text="s.code"
-                        style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#F3F4F6;color:#6B7280;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span>
-                  <span x-show="s.nameEn" style="font-size:11px;color:var(--text-dim)" x-text="s.nameEn"></span>
+                        style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;background:#F3F4F6;color:var(--text-secondary);padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span>
+                  <span x-show="s.nameEn" style="font-size:12px;color:var(--text-dim)" x-text="s.nameEn"></span>
                 </div>
               </td>
               <td>
                 <template x-if="(s.tags&&s.tags.length) || s.alias">
                   <div style="display:flex;flex-wrap:wrap;gap:3px">
                     <template x-for="t in (s.tags&&s.tags.length ? s.tags : (s.alias?[s.alias]:[]))" :key="t">
-                      <span x-text="t" style="font-size:10px;background:var(--accent-light);color:var(--accent-hover);padding:1px 6px;border-radius:3px;white-space:nowrap;font-family:var(--font-zh)"></span>
+                      <span x-text="t" style="font-size:12px;background:var(--accent-light);color:var(--accent-hover);padding:1px 6px;border-radius:3px;white-space:nowrap;font-family:var(--font-zh)"></span>
                     </template>
                   </div>
                 </template>
@@ -232,12 +232,12 @@
               </td>
               <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="s.taxId || '—'"></td>
               <td>
-                <span style="font-size:11px;padding:2px 8px;border-radius:3px;background:var(--accent-light);color:var(--accent-hover)"
+                <span style="font-size:12px;padding:2px 8px;border-radius:3px;background:var(--accent-light);color:var(--accent-hover)"
                       x-text="s.category || '—'"></span>
               </td>
               <td>
                 <div x-text="s.contacts?.[0]?.name || '—'"></div>
-                <div style="font-size:11px;color:var(--text-dim)" x-text="s.contacts?.[0]?.title || ''"></div>
+                <div style="font-size:12px;color:var(--text-dim)" x-text="s.contacts?.[0]?.title || ''"></div>
               </td>
               <td style="font-size:12px" x-text="s.contacts?.[0]?.phone || s.phone || '—'"></td>
               <td style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="s.currency || '—'"></td>
@@ -279,8 +279,8 @@
             <div style="font-weight:600;font-size:14px" x-text="selectedSupplier.name"></div>
             <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">
               <span x-show="selectedSupplier.code" x-text="selectedSupplier.code"
-                    style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;background:#F3F4F6;color:#6B7280;padding:1px 7px;border-radius:3px;letter-spacing:.05em;font-weight:600"></span>
-              <span x-show="selectedSupplier.taxId" style="font-size:11px;color:var(--text-dim)"
+                    style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;background:#F3F4F6;color:var(--text-secondary);padding:1px 7px;border-radius:3px;letter-spacing:.05em;font-weight:600"></span>
+              <span x-show="selectedSupplier.taxId" style="font-size:12px;color:var(--text-dim)"
                     x-text="'統編 ' + selectedSupplier.taxId"></span>
             </div>
           </div>
@@ -290,14 +290,14 @@
         </div>
         <div class="detail-body">
 
-          <div style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">基本資訊</div>
+          <div style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">基本資訊</div>
           <div class="detail-row"><span class="detail-label">公司名稱</span><span class="detail-val" x-text="selectedSupplier.name"></span></div>
           <div class="detail-row" x-show="selectedSupplier.nameEn"><span class="detail-label">英文名稱</span><span class="detail-val" x-text="selectedSupplier.nameEn"></span></div>
           <div class="detail-row" x-show="(selectedSupplier.tags&&selectedSupplier.tags.length) || selectedSupplier.alias">
             <span class="detail-label">內部標籤</span>
             <div style="display:flex;flex-wrap:wrap;gap:4px">
               <template x-for="t in (selectedSupplier.tags&&selectedSupplier.tags.length ? selectedSupplier.tags : (selectedSupplier.alias?[selectedSupplier.alias]:[]))" :key="t">
-                <span x-text="t" style="font-size:11px;background:var(--accent-light);color:var(--accent-hover);padding:2px 8px;border-radius:3px;font-family:var(--font-zh)"></span>
+                <span x-text="t" style="font-size:12px;background:var(--accent-light);color:var(--accent-hover);padding:2px 8px;border-radius:3px;font-family:var(--font-zh)"></span>
               </template>
             </div>
           </div>
@@ -308,7 +308,7 @@
           <div class="detail-row" x-show="selectedSupplier.leadTime"><span class="detail-label">標準交期</span><span class="detail-val" x-text="selectedSupplier.leadTime"></span></div>
 
           <hr class="detail-divider">
-          <div style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">聯絡資訊</div>
+          <div style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">聯絡資訊</div>
           <div class="detail-row"><span class="detail-label">公司電話</span><span class="detail-val" x-text="selectedSupplier.phone || '—'"></span></div>
           <div class="detail-row" x-show="selectedSupplier.fax"><span class="detail-label">傳真</span><span class="detail-val" x-text="selectedSupplier.fax"></span></div>
           <div class="detail-row" x-show="selectedSupplier.email"><span class="detail-label">公司 Email</span><span class="detail-val" x-text="selectedSupplier.email"></span></div>
@@ -322,17 +322,17 @@
           <template x-if="selectedSupplier.contacts?.length > 0">
             <div>
               <hr class="detail-divider">
-              <div style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">聯絡人</div>
+              <div style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">聯絡人</div>
               <template x-for="ct in selectedSupplier.contacts" :key="ct.id">
                 <div style="padding:10px 12px;border:1px solid var(--border-light);border-radius:var(--radius);margin-bottom:8px;font-size:12px">
                   <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
                     <div style="font-weight:600" x-text="ct.name"></div>
-                    <div style="color:var(--text-dim);font-size:11px" x-text="ct.title ? '· ' + ct.title : ''"></div>
+                    <div style="color:var(--text-dim);font-size:12px" x-text="ct.title ? '· ' + ct.title : ''"></div>
                   </div>
                   <div x-show="ct.phone" style="color:var(--text-secondary);margin-bottom:2px" x-text="'📞 ' + ct.phone"></div>
                   <div x-show="ct.email" style="color:var(--text-secondary);margin-bottom:2px" x-text="'✉ ' + ct.email"></div>
                   <div x-show="ct.line" style="color:var(--text-secondary);margin-bottom:2px" x-text="'LINE: ' + ct.line"></div>
-                  <div x-show="ct.note" style="font-size:11px;color:var(--text-dim);margin-top:4px;border-top:1px solid var(--border-light);padding-top:4px" x-text="ct.note"></div>
+                  <div x-show="ct.note" style="font-size:12px;color:var(--text-dim);margin-top:4px;border-top:1px solid var(--border-light);padding-top:4px" x-text="ct.note"></div>
                 </div>
               </template>
             </div>
@@ -341,7 +341,7 @@
           <template x-if="selectedSupplier.notes">
             <div>
               <hr class="detail-divider">
-              <div style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:6px">備註</div>
+              <div style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:6px">備註</div>
               <div style="font-size:12px;color:var(--text-secondary);line-height:1.7" x-text="selectedSupplier.notes"></div>
             </div>
           </template>
@@ -349,13 +349,13 @@
           <!-- 往來紀錄摘要 -->
           <hr class="detail-divider">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-            <div style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600">
+            <div style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);font-weight:600">
               往來紀錄
               <span style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:4px;color:var(--text-dim)"
                     x-text="(selectedSupplier.visits||[]).length ? '共 ' + (selectedSupplier.visits||[]).length + ' 筆' : ''"></span>
             </div>
             <a :href="'supplier-log.html?id=' + selectedSupplier.id"
-               style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--accent);text-decoration:none;font-family:var(--font-zh)">
+               style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--accent);text-decoration:none;font-family:var(--font-zh)">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
               管理日誌
             </a>
@@ -372,18 +372,18 @@
             <div style="padding:9px 11px;border:1px solid var(--border-light);border-radius:7px;margin-bottom:6px;font-size:12px;line-height:1.5">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
                 <span style="font-weight:600;color:var(--text-primary);font-family:LINE Seed TW_OTF, sans-serif" x-text="(v.date||'').slice(0,10)"></span>
-                <span style="font-size:10px;padding:1px 7px;border-radius:3px;background:#DBEAFE;color:#1E40AF" x-text="v.type||'電話聯繫'"></span>
+                <span style="font-size:12px;padding:1px 7px;border-radius:3px;background:#DBEAFE;color:#1E40AF" x-text="v.type||'電話聯繫'"></span>
               </div>
               <div style="color:var(--text-secondary);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" x-text="v.content||''"></div>
               <template x-if="v.attendees?.length">
-                <div style="margin-top:4px;font-size:10px;color:var(--text-dim)"
+                <div style="margin-top:4px;font-size:12px;color:var(--text-dim)"
                      x-text="'人員：' + (v.attendees?.join('、') || '')"></div>
               </template>
             </div>
           </template>
           <template x-if="(selectedSupplier.visits||[]).length > 3">
             <a :href="'supplier-log.html?id=' + selectedSupplier.id"
-               style="display:block;text-align:center;font-size:11px;color:var(--accent);text-decoration:none;padding:6px 0">
+               style="display:block;text-align:center;font-size:12px;color:var(--accent);text-decoration:none;padding:6px 0">
               查看全部 <span x-text="(selectedSupplier.visits||[]).length"></span> 筆紀錄 →
             </a>
           </template>
@@ -423,23 +423,23 @@
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
               <div style="text-align:center;padding:14px;background:#F0FDF4;border-radius:var(--radius)">
                 <div style="font-size:28px;font-weight:700;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.created"></div>
-                <div style="font-size:11px;color:#15803D;margin-top:4px">新增</div>
+                <div style="font-size:12px;color:#15803D;margin-top:4px">新增</div>
               </div>
               <div style="text-align:center;padding:14px;background:var(--accent-light);border-radius:var(--radius)">
                 <div style="font-size:28px;font-weight:700;color:var(--accent-hover);font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.updated"></div>
-                <div style="font-size:11px;color:var(--accent-hover);margin-top:4px">更新</div>
+                <div style="font-size:12px;color:var(--accent-hover);margin-top:4px">更新</div>
               </div>
               <div style="text-align:center;padding:14px;background:#FEF2F2;border-radius:var(--radius)">
-                <div style="font-size:28px;font-weight:700;color:#DC2626;font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.failed"></div>
-                <div style="font-size:11px;color:#DC2626;margin-top:4px">失敗</div>
+                <div style="font-size:28px;font-weight:700;color:var(--danger);font-family:LINE Seed TW_OTF, sans-serif" x-text="importResults.failed"></div>
+                <div style="font-size:12px;color:var(--danger);margin-top:4px">失敗</div>
               </div>
             </div>
             <template x-if="importResults.errors.length > 0">
               <div>
-                <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">錯誤明細</div>
+                <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">錯誤明細</div>
                 <div style="max-height:150px;overflow-y:auto;background:#FEF2F2;border-radius:var(--radius);padding:10px 12px">
                   <template x-for="(e, ei) in importResults.errors" :key="ei">
-                    <div style="font-size:11px;color:#DC2626;margin-bottom:4px;font-family:var(--font-zh)" x-text="e"></div>
+                    <div style="font-size:12px;color:var(--danger);margin-bottom:4px;font-family:var(--font-zh)" x-text="e"></div>
                   </template>
                 </div>
               </div>
@@ -448,7 +448,7 @@
         </template>
       </div>
       <div class="modal-foot">
-        <div style="font-size:11px;color:var(--text-dim);flex:1">
+        <div style="font-size:12px;color:var(--text-dim);flex:1">
           支援格式：.xlsx / .xls / .csv<br>
           必填欄位：<strong>公司名稱</strong>；統編相符則自動更新
         </div>
@@ -472,19 +472,19 @@
 
           <!-- 統編查詢 -->
           <div style="background:#F8F7F4;border:1px solid var(--border-light);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px">
-            <div style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">
+            <div style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px">
               政府登記資料查詢
               <span style="font-weight:400;text-transform:none;letter-spacing:0;margin-left:6px;color:var(--text-dim)">— 查到後自動帶入，仍可手動修改</span>
             </div>
             <div style="display:flex;gap:6px;align-items:flex-end">
               <div style="flex:1;max-width:280px">
-                <div style="font-size:10px;color:var(--text-dim);margin-bottom:5px;font-family:LINE Seed TW_OTF, sans-serif">統一編號查詢</div>
+                <div style="font-size:12px;color:var(--text-dim);margin-bottom:5px;font-family:LINE Seed TW_OTF, sans-serif">統一編號查詢</div>
                 <input class="form-input filter" type="text" x-model="taxIdSearch"
                        placeholder="輸入 8 碼統編" maxlength="8"
                        style="font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;width:100%"
                        @keydown.enter.prevent="lookupByTaxId()"
                        @input="if(taxIdSearch.replace(/\D/g,'').length===8){ taxIdSearch=taxIdSearch.replace(/\D/g,''); lookupByTaxId() }">
-                <div style="font-size:10px;color:var(--text-dim);margin-top:4px">輸滿 8 碼自動查，或按查詢</div>
+                <div style="font-size:12px;color:var(--text-dim);margin-top:4px">輸滿 8 碼自動查，或按查詢</div>
               </div>
               <button class="btn btn-ghost btn-sm" @click="lookupByTaxId()"
                       :disabled="lookingUp || taxIdSearch.replace(/\D/g,'').length < 8"
@@ -501,7 +501,7 @@
                  但三頁都只接了統編查詢——不知道統編就查不到。查詢邏輯共用
                  static/gov-lookup.js，帶入表單由各頁的 govApply() 處理（欄位名不同）。 -->
             <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border-light)">
-              <div style="font-size:10px;color:var(--text-dim);margin-bottom:5px;font-family:LINE Seed TW_OTF, sans-serif">
+              <div style="font-size:12px;color:var(--text-dim);margin-bottom:5px;font-family:LINE Seed TW_OTF, sans-serif">
                 公司名稱查詢<span style="margin-left:6px;font-weight:400">— 不知道統編時用這個</span>
               </div>
               <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -529,17 +529,17 @@
                            style="padding:8px 12px;border-bottom:1px solid var(--border-light);cursor:pointer;display:flex;gap:10px;align-items:baseline"
                            onmouseover="this.style.background='#F8F7F4'" onmouseout="this.style.background=''">
                         <span style="flex:1;font-size:13px" x-text="g.name"></span>
-                        <span style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em" x-text="g.taxId"></span>
-                        <span style="font-size:10px;color:var(--text-dim)" x-text="g.status"></span>
+                        <span style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em" x-text="g.taxId"></span>
+                        <span style="font-size:12px;color:var(--text-dim)" x-text="g.status"></span>
                       </div>
                     </template>
                   </div>
-                  <div style="font-size:10px;color:var(--text-dim);margin-top:4px">點一列即帶入欄位（最多 15 筆）</div>
+                  <div style="font-size:12px;color:var(--text-dim);margin-top:4px">點一列即帶入欄位（最多 15 筆）</div>
                 </div>
               </template>
             </div>
             <div x-show="lookupMsg" style="margin-top:10px;padding:7px 10px;border-radius:4px;font-size:12px;display:flex;align-items:center;gap:6px"
-                 :style="lookupOk ? 'background:#F0FDF4;color:#15803D' : 'background:#FEF2F2;color:#DC2626'">
+                 :style="lookupOk ? 'background:#F0FDF4;color:#15803D' : 'background:#FEF2F2;color:var(--danger)'">
               <span x-text="lookupOk ? '✓' : '✗'"></span>
               <span x-text="lookupMsg"></span>
             </div>
@@ -581,21 +581,21 @@
                         :style="(form.tags||[]).includes(preset)
                           ? 'background:#DBEAFE;color:#1E40AF;border-color:#93C5FD;font-weight:600'
                           : 'background:#F3F4F6;color:#4B5563;border-color:transparent'"
-                        style="padding:3px 10px;border-radius:4px;font-size:11px;font-family:var(--font-zh);cursor:pointer;border:1px solid;transition:all .12s;display:inline-flex;align-items:center;gap:3px">
-                  <span x-show="(form.tags||[]).includes(preset)" style="font-size:10px;margin-right:1px">✓</span>
+                        style="padding:3px 10px;border-radius:4px;font-size:12px;font-family:var(--font-zh);cursor:pointer;border:1px solid;transition:all .12s;display:inline-flex;align-items:center;gap:3px">
+                  <span x-show="(form.tags||[]).includes(preset)" style="font-size:12px;margin-right:1px">✓</span>
                   <span x-text="preset"></span>
                 </button>
               </template>
-              <span x-show="tagPresets.length===0" style="font-size:11px;color:var(--text-dim)">（尚無預設標籤）</span>
+              <span x-show="tagPresets.length===0" style="font-size:12px;color:var(--text-dim)">（尚無預設標籤）</span>
               <button type="button" @click="showAddPreset=!showAddPreset"
                       :style="showAddPreset ? 'border-color:var(--accent);color:var(--accent)' : ''"
-                      style="padding:3px 10px;border-radius:4px;font-size:11px;font-family:var(--font-zh);cursor:pointer;border:1px dashed var(--border-light);background:transparent;color:var(--text-dim);transition:all .12s;margin-left:2px">
+                      style="padding:3px 10px;border-radius:4px;font-size:12px;font-family:var(--font-zh);cursor:pointer;border:1px dashed var(--border-light);background:transparent;color:var(--text-dim);transition:all .12s;margin-left:2px">
                 ⚙ 管理標籤
               </button>
             </div>
             <!-- 標籤管理面板 -->
             <div x-show="showAddPreset" style="margin-top:8px;padding:12px;background:#F8F7F4;border:1px solid var(--border-light);border-radius:var(--radius)">
-              <div style="font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-dim);font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">管理預設標籤</div>
+              <div style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-dim);font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">管理預設標籤</div>
               <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
                 <template x-for="(preset, pi) in tagPresets" :key="preset">
                   <span style="background:#fff;border:1px solid var(--border-light);padding:3px 8px;border-radius:4px;font-size:12px;display:inline-flex;align-items:center;gap:5px;font-family:var(--font-zh)">
@@ -604,7 +604,7 @@
                             style="background:none;border:none;cursor:pointer;color:var(--danger);padding:0;font-size:14px;line-height:1;opacity:.8">×</button>
                   </span>
                 </template>
-                <span x-show="tagPresets.length===0" style="font-size:11px;color:var(--text-dim)">尚無預設標籤，請在下方新增</span>
+                <span x-show="tagPresets.length===0" style="font-size:12px;color:var(--text-dim)">尚無預設標籤，請在下方新增</span>
               </div>
               <div style="display:flex;gap:6px">
                 <input type="text" x-model="newPreset" placeholder="輸入新標籤名稱…"
@@ -663,13 +663,13 @@
             <div class="form-group">
               <label class="form-label">標準交期（說明）</label>
               <input class="form-input" type="text" x-model="form.leadTime" placeholder="例：30 天、4~6 週">
-              <div style="font-size:10px;color:var(--text-dim);margin-top:3px">純文字備註，系統不拿它算日期</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-top:3px">純文字備註，系統不拿它算日期</div>
             </div>
             <div class="form-group">
               <label class="form-label">前置時間（天）</label>
               <input class="form-input" type="number" min="0" step="1" x-model="form.leadTimeDays"
                      placeholder="留空 = 未知">
-              <div style="font-size:10px;color:var(--text-dim);margin-top:3px">
+              <div style="font-size:12px;color:var(--text-dim);margin-top:3px">
                 採購建議用這個欄位算預計到貨日。<strong>留空代表「未知」，到貨日會顯示未知；
                 填 0 代表「現貨、當天可出」</strong>——兩者不一樣，不確定就留空。
               </div>
@@ -678,7 +678,7 @@
                    自動猜一個進去，失敗的樣子是「採購照著一個沒人決定過的日期在排程」。 -->
               <div x-show="(form.leadTimeDays === null || form.leadTimeDays === '' || form.leadTimeDays === undefined)
                            && String(form.leadTime || '').trim() !== ''"
-                   style="font-size:11px;color:var(--warning);margin-top:4px;
+                   style="font-size:12px;color:var(--warning);margin-top:4px;
                           background:var(--warning-light);padding:5px 7px;border-radius:4px">
                 舊的「標準交期」寫的是「<strong x-text="form.leadTime"></strong>」，
                 請換算成天數填進上面的欄位。<span style="color:var(--text-dim)">（系統不會自動換算）</span>
@@ -728,7 +728,7 @@
           <template x-for="(ct, idx) in form.contacts" :key="ct.id">
             <div style="background:#FAFAF8;border:1px solid var(--border-light);border-radius:var(--radius);padding:12px;margin-bottom:10px">
               <div style="display:flex;align-items:center;margin-bottom:10px">
-                <span style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="'聯絡人 ' + (idx+1)"></span>
+                <span style="font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="'聯絡人 ' + (idx+1)"></span>
                 <button class="btn btn-danger btn-sm" style="margin-left:auto;padding:3px 8px" @click="form.contacts.splice(idx,1)">移除</button>
               </div>
               <div class="form-grid form-grid-2" style="gap:10px">
@@ -893,23 +893,23 @@
                     <template x-if="c.field === 'name'"><div>
                       <div style="font-weight:500" x-text="s.name"></div>
                       <div style="display:flex;align-items:center;gap:5px;margin-top:1px">
-                        <span x-show="s.code" x-text="s.code" style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#F3F4F6;color:#6B7280;padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span>
-                        <span x-show="s.nameEn" style="font-size:11px;color:var(--text-dim)" x-text="s.nameEn"></span>
+                        <span x-show="s.code" x-text="s.code" style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;background:#F3F4F6;color:var(--text-secondary);padding:1px 5px;border-radius:3px;letter-spacing:.04em;font-weight:600"></span>
+                        <span x-show="s.nameEn" style="font-size:12px;color:var(--text-dim)" x-text="s.nameEn"></span>
                       </div></div></template>
                     <template x-if="c.field === 'alias'"><div>
                       <template x-if="(s.tags&&s.tags.length) || s.alias">
                         <div style="display:flex;flex-wrap:wrap;gap:3px">
                           <template x-for="t in (s.tags&&s.tags.length ? s.tags : (s.alias?[s.alias]:[]))" :key="t">
-                            <span x-text="t" style="font-size:10px;background:var(--accent-light);color:var(--accent-hover);padding:1px 6px;border-radius:3px;white-space:nowrap;font-family:var(--font-zh)"></span>
+                            <span x-text="t" style="font-size:12px;background:var(--accent-light);color:var(--accent-hover);padding:1px 6px;border-radius:3px;white-space:nowrap;font-family:var(--font-zh)"></span>
                           </template>
                         </div>
                       </template>
                       <span x-show="!(s.tags&&s.tags.length) && !s.alias" style="color:var(--text-dim)">—</span></div></template>
                     <template x-if="c.field === 'taxId'"><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="s.taxId || '—'"></span></template>
-                    <template x-if="c.field === 'category'"><span style="font-size:11px;padding:2px 8px;border-radius:3px;background:var(--accent-light);color:var(--accent-hover)" x-text="s.category || '—'"></span></template>
+                    <template x-if="c.field === 'category'"><span style="font-size:12px;padding:2px 8px;border-radius:3px;background:var(--accent-light);color:var(--accent-hover)" x-text="s.category || '—'"></span></template>
                     <template x-if="c.field === 'contact'"><div>
                       <div x-text="s.contacts?.[0]?.name || '—'"></div>
-                      <div style="font-size:11px;color:var(--text-dim)" x-text="s.contacts?.[0]?.title || ''"></div></div></template>
+                      <div style="font-size:12px;color:var(--text-dim)" x-text="s.contacts?.[0]?.title || ''"></div></div></template>
                     <template x-if="c.field === 'phone'"><span style="font-size:12px" x-text="s.contacts?.[0]?.phone || s.phone || '—'"></span></template>
                     <template x-if="c.field === 'currency'"><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="s.currency || '—'"></span></template>
                     <template x-if="c.field === 'paymentTerms'"><span style="font-size:12px" x-text="s.paymentTerms || '—'"></span></template>

@@ -60,7 +60,7 @@
     ;(kids || []).forEach(function (c) { if (c) n.appendChild(c) })
     return n
   }
-  function dim(text) { return el('div', { text: text, style: 'font-size:11px;color:var(--text-dim,#888);margin-top:3px' }) }
+  function dim(text) { return el('div', { text: text, style: 'font-size:12px;color:var(--text-dim,#888);margin-top:3px' }) }
   function eventOf(name) { return ((st.cat && st.cat.events) || []).filter(function (e) { return e.event === name })[0] || null }
   function curEvent() { return st.f ? eventOf(st.f.event) : null }
   function skeleton(s) { return String(s).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '') }
@@ -317,8 +317,8 @@
       box.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border-light,#eee)', 'data-role': 'item' }, [
         el('div', { style: 'flex:1;min-width:200px' }, [
           el('div', { text: it.label, style: 'font-size:13px;font-weight:600' }),
-          el('div', { text: (ev ? '當「' + ev.label + '」時通知　' : '') + '｜' + statusText(it), style: 'font-size:11px;color:var(--text-dim,#888)' }),
-          el('div', {}, (st.pending[it.key] || []).map(function (p) { return el('div', { text: '待核准：' + pendingLine(p), 'data-role': 'pending', style: 'font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:2px 6px;margin-top:2px' }) }))]),
+          el('div', { text: (ev ? '當「' + ev.label + '」時通知　' : '') + '｜' + statusText(it), style: 'font-size:12px;color:var(--text-dim,#888)' }),
+          el('div', {}, (st.pending[it.key] || []).map(function (p) { return el('div', { text: '待核准：' + pendingLine(p), 'data-role': 'pending', style: 'font-size:12px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:2px 6px;margin-top:2px' }) }))]),
         el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'edit', text: '編輯', disabled: st.busy ? 'disabled' : null, onclick: function () { startEdit(it) } }),
         it.published && it.enabled ? el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-role': 'disable', text: st.confirmDisable === it.key ? '確認停用' : '停用', disabled: st.busy ? 'disabled' : null, onclick: function () { disableNow(it) } }) : null,
         el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: '版本與還原', onclick: function () { if (window.MotrixDefGovernance) window.MotrixDefGovernance.open({ kind: KIND, key: it.key, scope: 'company', title: '額外通知「' + it.label + '」的版本與還原', onRestored: loadList }) } })
@@ -349,7 +349,7 @@
       return el('li', { text: whoText(r) + '：' + (r.count === null || r.count === undefined ? '依實際發生的事而定' : r.count + ' 人') })
     })))
     var roles = d.renders || []
-    box.appendChild(el('div', { text: '不同的人收到的文字（沒有權限看金額的人，金額會顯示「（略）」）：', style: 'font-size:11px;color:var(--text-dim,#888);margin-top:6px' }))
+    box.appendChild(el('div', { text: '不同的人收到的文字（沒有權限看金額的人，金額會顯示「（略）」）：', style: 'font-size:12px;color:var(--text-dim,#888);margin-top:6px' }))
     box.appendChild(el('div', { style: 'display:flex;gap:4px;flex-wrap:wrap;margin:4px 0', 'data-role': 'role-tabs' }, roles.map(function (r) {
       return el('button', { type: 'button', class: 'btn btn-sm ' + (r.role === st.previewRole ? 'btn-primary' : 'btn-ghost'), text: r.roleName, 'data-render-role': r.role,
                             onclick: function () { st.previewRole = r.role; render() } })
@@ -423,7 +423,7 @@
         el('div', { style: 'display:flex;gap:4px;flex-wrap:wrap;margin-top:3px' }, allowedPh(ev).map(function (p) {
           return el('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-ph': p, text: '插入「' + p + '」', onclick: function () { insertAt(input, key, '{' + p + '}') } })
         })),
-        el('div', { 'data-problem': key, text: f[key] ? prob : '', style: 'color:#b91c1c;font-size:11px' })]),
+        el('div', { 'data-problem': key, text: f[key] ? prob : '', style: 'color:#b91c1c;font-size:12px' })]),
         '文字只能用中文、英數字與常用標點；不能放網址、$、/ 或標記；不能寫「已核准」這類官方狀態字樣。「插入」的詞會換成實際內容。'))
     })
     // 節流
