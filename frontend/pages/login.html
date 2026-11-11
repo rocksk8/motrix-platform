@@ -319,16 +319,23 @@
 
   <script>
   /* pw-hint:begin ── 密碼欄位輸入提示（login.html 與 change-password.html 此區逐字相同，守門：test_pw_hint_2026_11_11.py）
-     用法：在 <input> 加 data-pw-hint。事件委派，所以 x-if 動態長出來的欄位也適用。純前端，不送出任何資料。
+     用法：在 <input> 加 data-pw-hint，且欄位要在 .form-group 之內（提示是欄位的下一個兄弟）。事件委派，所以 x-if 動態長出來的欄位也適用。
+     純前端：不讀欄位的值、不讀按鍵內容、不送出任何資料。
      ① 大寫鎖定：KeyboardEvent／MouseEvent.getModifierState('CapsLock')，keydown／keyup／mousedown 時判斷。
         限制：Caps Lock 在「還沒有任何鍵盤或滑鼠事件」時瀏覽器讀不到，所以打開頁面、尚未按任何鍵時不會預先顯示。
      ② 非英文輸入法：只能抓「正在組字」（compositionstart～compositionend）。不是偵測輸入法圖示的模式：
         開著中文輸入法卻打純英數（多數輸入法的字母模式不組字）抓不到＝已知限制，不是 bug。
-        另：部分瀏覽器／作業系統在「密碼遮蔽」時會直接關掉輸入法，此時也不會組字；按眼睛顯示密碼後較容易觸發。
-     欄位失焦（focusout）即收掉；兩種提示各自獨立，同時成立就兩行都顯示。 */
+        另：Windows 上的 Chromium 等瀏覽器預期會在「密碼遮蔽」時直接關掉輸入法（尚待正式機實機確認），
+        若如此，遮蔽狀態下不會組字、這個提示不會出現；按眼睛顯示密碼（欄位變 type=text）後才有作用。大寫鎖定不受影響。
+     欄位失焦（focusout）即收掉；兩種提示各自獨立，同時成立就兩行都顯示。
+     ⚠ 版面：提示出現會把下方元素往下推、收掉會往上跳。滑鼠按著的期間（mousedown→mouseup）不可以動版面，
+        否則 mousedown 把焦點移走→提示被移除→按鈕上跳→mouseup 落在別的元素上→click 不產生（按鈕下緣點不到）。
+        所以滑鼠按著時只把提示「隱藏」（visibility:hidden，高度保留），放開後才真的移除。 */
   (function () {
     var MSG_CAPS = '⚠ 大寫鎖定已開啟', MSG_IME = '⚠ 輸入法可能不是英文，請確認'
     var states = new WeakMap()
+    var mouseDown = false          // 滑鼠按著中：不動版面
+    var pending = []               // 失焦時因滑鼠按著而只隱藏、等放開後才移除的狀態
     function field(e) {
       var t = e.target
       return t && t.nodeType === 1 && t.hasAttribute('data-pw-hint') ? t : null
@@ -343,7 +350,11 @@
       if (s.caps) lines.push(MSG_CAPS)
       if (s.ime) lines.push(MSG_IME)
       if (!lines.length || !input.isConnected) {
-        if (s.el) { s.el.remove(); s.el = null }
+        if (!s.el) return
+        if (mouseDown && input.isConnected) {       // 先隱藏、保留高度；放開滑鼠後 flush() 才移除
+          s.el.style.visibility = 'hidden'
+          if (pending.indexOf(s) < 0) pending.push(s)
+        } else { s.el.remove(); s.el = null }
         return
       }
       if (!s.el) {
@@ -352,7 +363,17 @@
         s.el.setAttribute('role', 'status')
         ;(input.closest('.pw-wrap') || input).insertAdjacentElement('afterend', s.el)
       }
-      s.el.textContent = lines.join('\n')          // textContent：不經 innerHTML
+      s.el.style.visibility = ''
+      var text = lines.join('\n')
+      if (s.el.textContent !== text) s.el.textContent = text   // 沒變就不寫：避免螢幕閱讀器每按一鍵重念
+    }
+    function flush() {
+      mouseDown = false
+      var list = pending; pending = []
+      list.forEach(function (s) {
+        if (s.el && !s.caps && !s.ime) { s.el.remove(); s.el = null }
+        else if (s.el) s.el.style.visibility = ''
+      })
     }
     function caps(e) {
       var input = field(e)
@@ -360,9 +381,11 @@
       state(input).caps = !!e.getModifierState('CapsLock')
       render(input)
     }
-    document.addEventListener('keydown', caps, true)
+    document.addEventListener('keydown', function (e) { if (pending.length) flush(); caps(e) }, true)   // 有鍵盤事件＝滑鼠不在按著
     document.addEventListener('keyup', caps, true)
-    document.addEventListener('mousedown', caps, true)
+    document.addEventListener('mousedown', function (e) { mouseDown = true; caps(e) }, true)
+    document.addEventListener('mouseup', function () { setTimeout(flush, 0) }, true)   // click 緊接在 mouseup 之後；延後一拍再動版面
+    window.addEventListener('blur', flush)
     document.addEventListener('compositionstart', function (e) {
       var input = field(e); if (!input) return
       state(input).ime = true; render(input)
