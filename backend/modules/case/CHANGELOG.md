@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-11（feat/approval-edit-lock-tier-reset；業主需求：簽核人改了報價單內容存不了；金額相關；L1 介面不變）
+## (next) — 2026-11-11（feat/approval-edit-lock-tier-reset；業主需求：簽核人改了報價單內容存不了；金額相關；L1 介面不變；含 K 審修正）
 - 修正（畫面，業主回報的 bug）：簽核人檢視待審核／簽核中的報價單時，**欄位原本看起來能打字、但按「儲存草稿」PUT 回 403**（待審核狀態本來就不能存）⇒ 主管只好退回修改。現在當層待簽人檢視時表單欄位一律 `disabled`（`pages/quotation-form.html` `isApproverLocked()`／`_syncControlLock()`；鍵盤 Tab 進去也打不進去）、「儲存草稿」不顯示，工具列常駐「編輯」鈕（`data-testid="qf-review-edit-start"`，`canReviewEdit()` 成立且 GET 帶 `reviewEditOn` 才顯示；**不再需要旗標成立**）→ 按下去進複查編輯 → 「儲存複查編輯」走既有 `POST /review-edit`。
 - 新增（`GET /api/quotations/{no}`）：待審核／簽核中且 `reconfirm_mode=on` 時多回頂層 `reviewEditOn: true`（off／shadow 沒有這個鍵，回應逐位元不變）——複查編輯端點只在 on 開放，前端據此決定要不要顯示編輯鈕。**出廠預設 `reconfirm_mode=0`：沒翻 on 之前編輯鈕不會出現（欄位仍鎖住）。**
 - 修改（畫面）：`approveQuote()` 核准前的「維持／編輯」彈窗**退場「編輯內容」選項**（編輯入口只剩常駐編輯鈕）；彈窗保留「維持核准」（伺服器在複查／轉簽／代理旗標成立時仍要求 `choice=keep`，需要時補說明進稽核——不是多餘的）。`approval-cascade.js::askChoice` 加選用參數 `noEditHint`。簽核佇列頁的彈窗與「編輯內容→轉報價單頁」維持原樣。
