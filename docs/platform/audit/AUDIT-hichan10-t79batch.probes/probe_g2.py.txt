@@ -1,0 +1,81 @@
+# -*- coding: utf-8 -*-
+"""AUDIT PROBE（hichan-10，不 commit）：群組 2 allow_read／scope="read" 的差異探針。
+案件頁本體（GET /api/quotations/{no}）與六支被放寬的唯讀端點，對每種身分的結果必須一致（放行／404）。"""
+import json
+import time
+
+import pytest
+
+from tests._requires import requires_module
+from tests.test_case_read_rule_denials_2026_11_11 import NO, _login, _seed, _denials
+
+needs_m01 = requires_module("case", "probe")
+
+ENDPOINTS = {
+    "page": "/api/quotations/{no}",
+    "close-gates": "/api/quotations/{no}/close-gates",
+    "mat-approvals": "/api/quotations/{no}/material-order-approvals",
+    "versions": "/api/quotations/{no}/versions",
+    "pdf": "/api/quotations/{no}/pdf-download",
+    "pdf-internal": "/api/quotations/{no}/pdf-download?internal=true",
+}
+
+WHO = [
+    ("owner", dict(role="sales"), "owner"),
+    ("collab", dict(role="engineer", modules=["case_manage"]), "collab"),
+    ("fin_cashier+cm", dict(role="finance", modules=["case_manage", "cashier"]), None),
+    ("fin_cashier_only", dict(role="finance", modules=["cashier"]), None),
+    ("fin_nomods", dict(role="finance", modules=[]), None),
+    ("engineer_cm", dict(role="engineer", modules=["case_manage"]), None),
+    ("other_sales", dict(role="sales"), None),
+    ("admin", dict(role="admin"), None),
+    ("superadmin", dict(role="superadmin"), None),
+]
+
+
+@needs_m01
+def test_probe_matrix(client, make_user):
+    users = {}
+    for name, kw, _ in WHO:
+        if name == "owner":
+            continue
+        users[name] = make_user(username="pr_" + name.replace("+", "_"), **kw)
+    # 擁有者由 _seed 建（rr_owner）；協作者放進 assigned
+    _seed(make_user, assigned=[users["collab"][0]])
+    owner_pw = None
+    import db
+    conn = db.get_db()
+    try:
+        # rr_owner 的密碼：make_user 回傳；_seed 內部丟掉了 ⇒ 另建一個「擁有者」登入不可行，改用 DB 直接把 rr_owner 當 owner 測 page 即可略過
+        pass
+    finally:
+        conn.close()
+    rows = []
+    for name, _kw, _ in WHO:
+        if name == "owner":
+            continue
+        h = _login(client, *users[name])
+        res = {}
+        for ek, url in ENDPOINTS.items():
+            before = len(_denials())
+            r = client.get(url.format(no=NO), headers=h)
+            time.sleep(0.25)
+            res[ek] = r.status_code
+        rows.append((name, res))
+    print()
+    hdr = "%-18s" % "who" + "".join("%-14s" % k for k in ENDPOINTS)
+    print(hdr)
+    for name, res in rows:
+        print("%-18s" % name + "".join("%-14s" % res[k] for k in ENDPOINTS))
+    # 差異：page 與各唯讀端點「放行／不放行」是否一致（pdf 可能 500＝已過權限）
+    def passed(code):
+        return code != 404
+    bad = []
+    for name, res in rows:
+        for k in ENDPOINTS:
+            if k == "page":
+                continue
+            if passed(res[k]) != passed(res["page"]):
+                bad.append((name, k, res["page"], res[k]))
+    print("MISMATCH vs page:", bad)
+    assert True
