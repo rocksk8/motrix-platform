@@ -9,6 +9,8 @@ import json
 import logging
 import logging.handlers
 import os
+import ssl
+import urllib.parse
 import urllib.request
 from datetime import datetime
 
@@ -17,7 +19,10 @@ from core import paths as _paths  # 只取路徑常數，不載入 app
 _CONFIG_PATH = _paths.HEARTBEAT_CONFIG
 _LOG_PATH    = os.path.join(_paths.LOGS_DIR, "heartbeat_job.log")
 _STATE_PATH  = os.path.join(_paths.LOGS_DIR, "heartbeat_state.json")
-_LOCAL_PING  = "http://127.0.0.1:666/api/ping"
+# 666 埠自 2026-09-07 起只講 HTTPS（mkcert 自簽憑證）；打 http:// 會連不上，
+# 結果每 5 分鐘誤報 local_down（並對外 /fail），等於兩個多月沒有真正的當機監控。
+_LOCAL_PING  = "https://127.0.0.1:666/api/ping"
+_LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
 _TIMEOUT     = 10
 _LOG_MAX_BYTES = 5 * 1024 * 1024      # 單檔上限；加 backupCount 共 3 份（≤ 15MB）
 _LOG_BACKUPS   = 2
@@ -72,9 +77,22 @@ def _load_ping_url() -> str:
         return ""
 
 
+def _ssl_context_for(url: str):
+    """只有「打本機 loopback 的 https」才略過憑證驗證（自簽憑證沒有受信任的 CA，
+    同 backend/tools/_healthcheck_ping.py）。其他一律回 None＝urllib 預設驗證，
+    所以對外打卡的 ping_url（healthchecks.io 等）仍照常驗憑證。"""
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme != "https" or (parsed.hostname or "").lower() not in _LOOPBACK_HOSTS:
+        return None
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 def _http_get(url: str) -> bool:
     try:
-        with urllib.request.urlopen(url, timeout=_TIMEOUT) as resp:
+        with urllib.request.urlopen(url, timeout=_TIMEOUT, context=_ssl_context_for(url)) as resp:
             return 200 <= resp.status < 300
     except Exception as e:
         logger.warning("GET %s failed: %s", url, e)
