@@ -4699,6 +4699,23 @@
   ],
   "s": 200
  },
+ "/api/quotations/submit-precheck": {
+  "k": [
+   "canFix",
+   "ok",
+   "problems",
+   "problems[].code",
+   "problems[].fixLabel",
+   "problems[].fixPage",
+   "problems[].message",
+   "steps",
+   "steps[].done",
+   "steps[].key",
+   "steps[].label",
+   "steps[].page"
+  ],
+  "s": 200
+ },
  "/api/quotations/{quote_no}": {
   "k": [
    "assigned_user_ids",

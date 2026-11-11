@@ -63,6 +63,7 @@ from helpers import (
     active_delegators_for, user_has_module, can_see_financial, require_any_module, summarize_payment_items, norm_ymd,
 )
 from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E402  CA-O4：L1
+from helpers.tiered_approval import resolve_department_manager as _resolve_dept_mgr  # noqa: E402  送審前置檢查
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
 from modules.case import material_guard as MG  # 叫料審核的寫入閘（31-C）
 from modules.case import material_recognize as MR  # 認列已核准採購單（T57）
@@ -1387,6 +1388,53 @@ def gate_matrix(authorization: str = Header(None)):
         for it in items:
             _mask_money_row(it, ("total",))
     return {"items": items, "today": today}
+
+
+# 送審前置檢查（2026-11-11，hichan-12 UX 評分 A 項）：申請人沒歸屬部門／部門沒主管時，送審「註定」被後端 400 擋下
+# （resolve_submitter_org_chain 等）。新手不知道要先建處→建部門→歸屬申請人→指定主管，按了才被擋、訊息還被前端
+# 吞成「請確認後端伺服器是否在線」。這支唯讀端點讓前端在送審**前**就問得到：用跟真正送審同一套解析
+# （_setting_to_active_tiers，含「內建申請人主管層被管理員關閉」「簽核設定指定的部門沒主管」等情況），
+# 所以前端不用自己猜規則、也不會誤擋後端其實放行的人。只讀、不發通知、不建單；真正的把關仍在送審端點。
+_PRECHECK_FIX = {   # code → (設定頁, 頁名)；組織架構／使用者歸屬都只有最高管理者能改
+    "no_department":   ("users.html", "使用者管理"),
+    "department_gone": ("users.html", "使用者管理"),
+    "no_manager":      ("org-structure.html", "組織架構設定"),
+    "tier_dept_manager": ("org-structure.html", "組織架構設定"),
+    "tier_div_manager":  ("org-structure.html", "組織架構設定"),
+}
+
+
+@router.get("/api/quotations/submit-precheck")
+def submit_precheck(authorization: str = Header(None)):
+    """回 `{ok, problems:[{code,message,fixPage,fixLabel}], canFix, steps:[{key,label,done,page}]}`。
+    `ok=False` ⇒ 現在按送審一定會被擋；`steps` 是首次設定清單（處→部門→申請人歸屬→部門主管），
+    只給畫面顯示進度用，是否能送審一律以 `ok`／`problems` 為準。"""
+    user = _require_user(authorization)
+    problems = []
+    conn = get_db()
+    try:
+        try:
+            _setting_to_active_tiers(resolve_active_flow_setting("quotation"), conn, user["username"])
+        except UnresolvedManagerError as e:
+            page, label = _PRECHECK_FIX.get(getattr(e, "code", ""), ("org-structure.html", "組織架構設定"))
+            problems.append({"code": getattr(e, "code", "unresolved"), "message": str(e),
+                             "fixPage": page, "fixLabel": label})
+        me = conn.execute("SELECT department_id FROM users WHERE id=?", (user.get("id"),)).fetchone()             if user.get("id") is not None else None
+        dept_id = me["department_id"] if me else None
+        dept_row = conn.execute("SELECT id FROM departments WHERE id=?", (dept_id,)).fetchone() if dept_id else None
+        steps = [
+            {"key": "division", "label": "建立「處」",
+             "done": bool(conn.execute("SELECT 1 FROM divisions LIMIT 1").fetchone()), "page": "org-structure.html"},
+            {"key": "department", "label": "在處底下建立「部門」",
+             "done": bool(conn.execute("SELECT 1 FROM departments LIMIT 1").fetchone()), "page": "org-structure.html"},
+            {"key": "membership", "label": "把申請人（您）歸屬到某個部門",
+             "done": bool(dept_row), "page": "users.html"},
+            {"key": "manager", "label": "替該部門指定在職主管",
+             "done": bool(dept_row and _resolve_dept_mgr(conn, dept_row["id"])), "page": "org-structure.html"},
+        ]
+    finally:
+        conn.close()
+    return {"ok": not problems, "problems": problems, "canFix": user.get("role") == "superadmin", "steps": steps}
 
 
 @router.get("/api/quotations/{quote_no}")
