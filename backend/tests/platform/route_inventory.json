@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 911,
-  "endpoints_api": 907,
-  "write_total": 490,
-  "write_api": 490,
-  "get_api": 417,
-  "distinct_paths_api": 767,
-  "write_with_body_api": 360,
-  "write_with_path_param_api": 354
+  "endpoints_total": 920,
+  "endpoints_api": 916,
+  "write_total": 496,
+  "write_api": 496,
+  "get_api": 420,
+  "distinct_paths_api": 774,
+  "write_with_body_api": 362,
+  "write_with_path_param_api": 356
  },
  "select_star": {
   "modules": 287,

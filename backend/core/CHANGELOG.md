@@ -1,12 +1,12 @@
 # L0／L1 底層 更新紀錄
 
-## 1.156（next，未取號）— 2026-11-11（fix/ops-webauthn404-case-denied；case.access_denied 診斷鍵、L1 案件守門 `allow_read`）
+## 1.157（next，未取號）— 2026-11-11（fix/ops-webauthn404-case-denied；case.access_denied 診斷鍵、L1 案件守門 `allow_read`）〔train_number：1.156 → 1.157〕
 - L1（新增）：`helpers.case_access.case_access_allowed／guard_case_access` 新增 `allow_read`（讀取規則 scope="read" 也放行，預設 False＝行為不變）；`db.set_request_ctx／get_request_ctx`（auth_middleware 每個 /api/ 請求設 method＋path，`spawn_bg_thread` 帶進背景緒；只供事後診斷，授權不得依賴）。
 - L1（診斷）：`deny_case` 寫的 `case.access_denied` detail 補 `method／path／role／case_manage`（只加鍵）。
 - 前端：公司設定頁不再用 `GET /api/settings/webauthn-config` 的 404 當 Passkey 開關（每開一次頁就一筆 404，正式機 32 次），改問 `/api/system/webauthn-config-status`；簽核佇列的「預覽」改白名單，勞報單走 `/api/payslips/{no}/pdf-download`，沒有 PDF 端點的類型不再落到報價單端點（原本必 404＋audit not_found）。
 - 測試：`tests/test_e2e_webauthn_config_no_404_2026_11_11.py`。
 
-## (next) — 2026-11-11（feat/line-notify；T79 候選：LINE 發送管道，階段 1＝封裝＋token 設定）
+## 1.156 — 2026-11-11（feat/line-notify；T79 候選：LINE 發送管道，階段 1＝封裝＋token 設定）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.line_notify`（LINE Messaging API push／multicast 封裝：`push`、`build_text`、`verify_token`、`quota`、`enabled`、`mask`、`SEND_*`）。對外呼叫只有一支 `_http`（urllib），測試換掉它；開發機標記（`.no_email_send`／`MOTRIX_EMAIL_SEND=off`）同時擋 LINE。
 - 設定：`system_settings.line_notify`（`enabled`、`channel_access_token`，admin 在設定頁輸入；照 SMTP 密碼慣例 GET 遮罩、PUT 遮罩值＝保留、啟用前必須有 token）。每日 JSON 匯出（`archive.py`）以 `json_remove` 挖掉 token；稽核只記啟用與否與 token 是否更換。
 - 端點（僅最高管理者）：`GET／PUT /api/settings/line-notify`、`POST /api/settings/line-notify/verify`（驗 token＋本月額度，不發訊息）。
