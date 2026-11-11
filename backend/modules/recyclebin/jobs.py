@@ -50,6 +50,10 @@ def run_daily(now=None) -> dict:
                     {"entity_type": r["entity_type"], "entity_id": r["entity_id"], "deleted_at": r["deleted_at"], "purge_after": r["purge_after"]}))
                 out["purged"] += 1
             except Exception as e:                               # noqa: BLE001
+                try:
+                    conn.rollback()                              # T80 R3：purge() 在 begin_write 之後的非預期例外不會自己放鎖；下面的 _audit 自開連線寫入，不放就卡 30 秒（且例外被吞）
+                except Exception:                                # noqa: BLE001
+                    pass
                 out["failed"] += 1
                 logger.exception("recyclebin purge #%s failed", bin_id)
                 _audit("", "recyclebin.purge_failed", "recycle_bin", str(bin_id), str(e)[:200], {"error": str(e)[:500]})
