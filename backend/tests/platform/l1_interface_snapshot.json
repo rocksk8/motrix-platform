@@ -1009,6 +1009,19 @@
    "push_event_for_shipping_note": "def(note_no)",
    "push_event_upsert_for_module": "def(code, summary, description, event_date, key)"
   },
+  "helper:heartbeat_status": {
+   "BAD_GRACE_MINUTES": "const",
+   "EXT_UNSET_ALERT_HOURS": "const",
+   "LEVEL_ERROR": "const",
+   "LEVEL_NA": "const",
+   "LEVEL_OK": "const",
+   "LEVEL_WARN": "const",
+   "OK_STALE_HOURS": "const",
+   "assess": "def(now=…, state=…)",
+   "config_exists": "def()",
+   "ping_url_set": "def()",
+   "read_state": "def()"
+  },
   "helper:legal_params": {
    "ARTICLE_8_DELETED": "const",
    "ARTICLE_8_ITEMS": "const",
