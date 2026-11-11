@@ -278,13 +278,13 @@
    "scope": "row_access"
   },
   {
-   "file": "modules/case/api/quotations.py",
+   "file": "modules/case/api/quotation_stages.py",
    "path": "/api/quotations/{quote_no}/stages",
    "handler": "list_case_stages_normalized",
    "scope": "row_access"
   },
   {
-   "file": "modules/case/api/quotations.py",
+   "file": "modules/case/api/quotation_stages.py",
    "path": "/api/quotations/{quote_no}/stages/templates",
    "handler": "list_stage_templates",
    "scope": "row_access"

@@ -29,8 +29,9 @@ def _inline_bg(monkeypatch):
     """端點的背景同步改成當場執行（斷言看得到結果；不留執行緒）。"""
     if not source_tree.module_installed("modules/case/"):
         return                                         # M01 不在（④(c)）：沒有案件端點的背景同步可改
-    from modules.case.api import quotations as q
+    from modules.case.api import quotations as q, quotation_stages as qs   # 階段端點在 quotation_stages；案件存檔等仍在 quotations
     monkeypatch.setattr(q, "spawn_bg_thread", lambda target, args=(), **kw: target(*args))
+    monkeypatch.setattr(qs, "spawn_bg_thread", lambda target, args=(), **kw: target(*args))
 
 
 def _without(monkeypatch, capability, name):
