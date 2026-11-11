@@ -8,13 +8,20 @@
          ② 只有「TCP 對端本身是 loopback」才採信 `CF-Connecting-IP`（cloudflared 與本程式同機時，所有外部使用者對本程式而言
            `request.client.host` 都是 127.0.0.1——不採信的話 IP 鎖定會把全部外部使用者綁成同一個桶：一個人輸錯 5 次鎖住所有人，
            稽核紀錄的 IP 也全變 127.0.0.1）。對端不是 loopback（區網、直接連線）⇒ `CF-Connecting-IP` 一律不理。
-         ③ `CF-Connecting-IP` 的值必須是合法 IP 才採用（`ipaddress` 解析；亂填就退回對端位址），並正規化成標準寫法。
+         ③ `CF-Connecting-IP` 的值必須是合法 IP 才採用（`ipaddress` 解析；亂填、含 scope id 的就退回對端位址），並正規化成標準寫法。
          ④ 拿不到對端 ⇒ "unknown"（跟舊行為一致；不是 loopback，所以不會被當成本機）。
 
-為什麼不用 uvicorn 的 `--proxy-headers`：它預設就開（`forwarded_allow_ips=127.0.0.1`）、會在對端是 127.0.0.1 時用 XFF 改寫
-`scope["client"]`；那是另一層、可由啟動參數關掉，這裡不依賴它——不管它開不開，這支都給出同一個答案：
-  · 它改寫了 ⇒ `request.client.host` 已是真實 IP（非 loopback）⇒ 直接用；
-  · 它沒改寫（關掉、或 uvicorn 版本行為不同）、對端仍是 127.0.0.1 ⇒ 採信 `CF-Connecting-IP`。
+uvicorn 這一層（hichan-13 K 審 S1）：uvicorn 的 ProxyHeadersMiddleware 預設就開，只要 TCP 對端在 `forwarded_allow_ips`（預設 127.0.0.1）
+裡，就會用 `X-Forwarded-For` 的「最右邊一個不受信任的位址」改寫 `scope["client"]`——所以 XFF 其實在這支 helper 的**下一層**就被讀過了，
+這支只是不再自己讀。這樣仍然安全，前提是兩件事（缺一不可）：
+  · `forwarded_allow_ips` 維持 127.0.0.1：`backend/autostart.bat` 已明寫 `--forwarded-allow-ips 127.0.0.1`（命令列優先於環境變數
+    FORWARDED_ALLOW_IPS）；設成 `*` 的話 uvicorn 會對任何對端取 XFF 第一個值 ⇒ 原本的漏洞回來而這支擋不住。守門：
+    `test_autostart_pins_uvicorn_forwarded_allow_ips`；
+  · 前面是 Cloudflare：它會把真實 IP 附加在 XFF 最右邊，攻擊者塞的假值在左邊、被 uvicorn 略過；對端是區網／直連 ⇒ uvicorn 不理 XFF。
+    已知殘餘：對端是 loopback、且**沒有**經過 Cloudflare（本機行程、同機的非 Cloudflare 代理）仍可用 XFF 自選桶——外部攻擊者碰不到。
+結果：
+  · uvicorn 改寫了 ⇒ `request.client.host` 已是真實 IP（非 loopback）⇒ 直接用；
+  · 它沒改寫、對端仍是 127.0.0.1 ⇒ 採信 `CF-Connecting-IP`。
 """
 import ipaddress
 from typing import Optional
@@ -39,6 +46,8 @@ def is_loopback(host: Optional[str]) -> bool:
 
 
 def _valid_ip(text: str) -> Optional[str]:
+    if "%" in text:                                  # IPv6 scope id（fe80::1%eth0）不是來源位址，不採用
+        return None
     try:
         ip = ipaddress.ip_address(text.strip())
     except ValueError:
