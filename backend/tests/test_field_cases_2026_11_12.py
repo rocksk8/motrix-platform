@@ -478,3 +478,14 @@ def test_same_display_name_but_case_owned_by_another_id_is_not_visible(client, m
     assert _ids(client, tb) == ["MQ-SAME-02"]
     assert client.get("/api/field/cases/MQ-SAME-01", headers=_auth(tb)).status_code == 404
     assert client.get("/api/field/cases/MQ-SAME-02", headers=_auth(tb)).status_code == 200
+
+
+def test_before_id_out_of_range_is_clamped_not_a_500(client, sales):
+    """K 複審 N1：超過 SQLite INTEGER 上限的 before_id 不可變成 500（OverflowError 會進 ERROR log）。"""
+    u, t = sales
+    _seed("MQ-BIG-001", sales_username=u)
+    for v in ("99999999999999999999", str(2 ** 63), str(2 ** 62), "-5", "0"):
+        r = client.get("/api/field/cases?before_id=" + v, headers=_auth(t))
+        assert r.status_code == 200, (v, r.status_code)
+        assert [i["quote_no"] for i in r.json()["items"]] == ["MQ-BIG-001"], v          # 大於所有 id ⇒ 從頭；非正數 ⇒ 從頭
+    assert client.get("/api/field/cases?before_id=abc", headers=_auth(t)).status_code == 422

@@ -59,6 +59,8 @@ _CHUNK = 100
 #: 掃描上限（保護：湊不滿一頁也不會無限掃；到了 ⇒ 回已湊到的並 has_more=True＋next_before_id 讓 client 續掃）
 _MAX_SCAN = 5000
 _NO_STORE = "private, no-store"
+#: `before_id` 的上限（SQLite INTEGER 是 64 位元有號；夾在 2**62，之上的值語意都是「全部」）
+_MAX_ID = 2 ** 62
 #: 壞 JSON 只在行程內第一次記 ERROR（手機輪詢不會持續噴），之後降為 DEBUG
 _LOGGED = set()
 _LOGGED_MAX = 2000
@@ -218,7 +220,7 @@ def list_field_cases(response: Response, q: str = "", mine: int = 1, scope: str 
             kw = f"%{q.strip()}%"
             where += " AND (quote_no LIKE ? COLLATE NOCASE OR customer_name LIKE ? COLLATE NOCASE OR project_name LIKE ? COLLATE NOCASE)"
             args.extend([kw, kw, kw])
-        last_id = int(before_id) if before_id and int(before_id) > 0 else None
+        last_id = min(int(before_id), _MAX_ID) if before_id and int(before_id) > 0 else None     # 上限夾住：超過 SQLite INTEGER 會 OverflowError（500）
         picked, scanned, truncated, last_scanned = [], 0, False, None
         tags = {}
         done = False
