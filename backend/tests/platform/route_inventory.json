@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 906,
-  "endpoints_api": 902,
+  "endpoints_total": 907,
+  "endpoints_api": 903,
   "write_total": 490,
   "write_api": 490,
-  "get_api": 412,
-  "distinct_paths_api": 762,
+  "get_api": 413,
+  "distinct_paths_api": 763,
   "write_with_body_api": 360,
   "write_with_path_param_api": 354
  },
@@ -1644,6 +1644,11 @@
    "body": false
   },
   "GET /api/quotations/stage-board": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/quotations/submit-precheck": {
    "w": false,
    "pp": 0,
    "body": false
