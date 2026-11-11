@@ -2,8 +2,8 @@
 
 ## (next) — 2026-11-12（feat/field-js-upload；T80c 外勤手機 S3：上傳模組 `static/field.js`）
 - 新增（前端模組，尚未掛到任何頁面；S4 才掛）：`static/field.js`——弱訊號手機上傳：先 POST 文字、再逐張補照片（各自一把 `Idempotency-Key`，重試同 key 同位元組）；`createImageBitmap(imageOrientation:'from-image')`→canvas→JPEG（長邊 ≤1600、q0.8，EXIF 方向烤進像素；任何失敗退回原檔）；XHR 進度、60 秒**沒有進度**才逾時；重試 2／5／10 秒、最多 3 次（409 照 `Retry-After`、上限 15 秒；408／425／429／5xx／網路錯誤重試，其他 4xx 不重試）；401／402／428 各導對應頁面且不再重試；失敗保留表單與照片、只重傳失敗那張；定位盡力而為（拒絕／逾時不擋）；草稿存 sessionStorage。**沒有離線佇列**（設計裁示）。依賴全可注入，node 可測。
-- K 審修正（N2～N5）：重整後再送出沿用同一把冪等鍵（sessionStorage `motrix_field_pending:<案號>`，綁送出內容與檔案身分＋定位值；全部成功才清；沿用的照片 key 若遇 422 換新 key 重送一次）；`retryFailed()` 進行中回同一個 promise；429／503 也照 Retry-After（上限 15 秒）；`makeBody` 丟例外 ⇒ `prepare_failed` 不重試；`cancel()` 真的 abort 傳輸中的 XHR；縮圖前先填白（透明 PNG 不變黑底）；位元組送完後改等 120 秒（`serverWaitMs`）而不是 60 秒。
-- 測試：`tests/test_field_js_2026_11_12.py`（30 題；`tests/field_js_harness.js` 以 node 注入假 XHR／計時器／相機／定位）。沒有 node 的機器略過（⚠️ skip 不是驗過）。
+- K 審修正（N2～N5）：重整後再送出沿用同一把冪等鍵（sessionStorage `motrix_field_pending:<案號>`，綁送出內容與檔案身分＋定位值；全部成功才清；沿用的照片 key 若遇 422 換新 key 重送一次）；`retryFailed()` 進行中回同一個 promise；429／503 也照 Retry-After（上限 15 秒）；`makeBody` 丟例外 ⇒ `prepare_failed` 不重試；`cancel()` 真的 abort 傳輸中的 XHR；縮圖前先填白（透明 PNG 不變黑底）；位元組送完後改等 120 秒（`serverWaitMs`）而不是 60 秒。沿用的 key 有時效（`pendingTtlMs` 30 分鐘；放棄的舊送出不會讓日後同樣文字被伺服端重播成舊留言）。**已知取捨**：沿用的照片 key 遇 422 換新 key 重送時，若第一次其實已在伺服端成功（回應丟了）而重縮圖位元組大小不同，會多存一張（重複附件，非資料毀損）；S4 e2e 要量「重整後照片是重播（Idempotent-Replay）還是重存」。
+- 測試：`tests/test_field_js_2026_11_12.py`（31 題；`tests/field_js_harness.js` 以 node 注入假 XHR／計時器／相機／定位）。沒有 node 的機器略過（⚠️ skip 不是驗過）。
 
 ## (next) — 2026-11-12（feat/field-read-api；T80c 外勤手機 S2：窄唯讀案件端點；含 K 審 M1／M2 與 hichan-12 F1 修正）
 - 新增：`GET /api/field/cases`（外勤案件列表）、`GET /api/field/cases/{quote_no}`（案件摘要）——**只回白名單欄位（值只放行字串／數字，巢狀物件丟掉），金額／毛利／成本／付款不下發**（個人手機沒有 MDM）；回 `Cache-Control: private, no-store`。

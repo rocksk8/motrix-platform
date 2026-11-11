@@ -389,6 +389,25 @@ function keysOf(log) { return log.map(function (l) { return l.headers['Idempoten
   m.F.clearDraft('MQ-5');
   OUT.clear_draft_clears_pending = { had: had, after: shared.getItem('motrix_field_pending:MQ-5') };
 
+  // pending 時效：30 分鐘內沿用、超過不沿用；每次寫入會刷新 savedAt
+  shared = mkStorage();
+  var clk = 1000000;
+  function nowFn() { return clk; }
+  m = mk([ok(201, { id: 5 }), ok(503, {})], Object.assign({ sessionStorage: shared, now: nowFn }, imgDeps(10, 10).d));
+  h = m.F.postCaseUpdate({ quoteNo: 'MQ-4', text: 'A', files: [f1] });
+  st = await drive(m.clock, h.promise);
+  var k0 = st.textKey;
+  function textKeyAfter(ms) {
+    clk += ms;
+    var mm = mk([ok(201, { id: 7 })], Object.assign({ sessionStorage: shared, now: nowFn }, imgDeps(10, 10).d));
+    var raw = shared.getItem('motrix_field_pending:MQ-4');
+    var k = mm.F.postCaseUpdate({ quoteNo: 'MQ-4', text: 'A', files: [f1] }).state.textKey;
+    shared.setItem('motrix_field_pending:MQ-4', raw);
+    clk -= ms;
+    return k;
+  }
+  OUT.pending_ttl = { within: textKeyAfter(29 * 60 * 1000) === k0, atLimit: textKeyAfter(30 * 60 * 1000) === k0, expired: textKeyAfter(30 * 60 * 1000 + 1) !== k0 };
+
   // 預設頁面清單（給 Python 守門檢查檔案存在）
   OUT.default_pages = [F.DEFAULTS.loginPage, F.DEFAULTS.licensePage, F.DEFAULTS.companySetupPage, F.DEFAULTS.companyFixPage];
 

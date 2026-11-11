@@ -251,3 +251,9 @@ def test_reused_key_with_different_bytes_gets_one_fresh_key_but_a_fresh_422_does
 def test_clear_draft_also_drops_the_pending_keys():
     r = _out()["clear_draft_clears_pending"]
     assert r == {"had": True, "after": None}
+
+
+def test_pending_keys_expire_after_30_minutes_so_an_abandoned_send_is_not_replayed_later():
+    """K 複驗：放棄的送出（文字已存、照片失敗、沒按放棄）不可永遠讓日後同樣文字沿用舊 key——伺服端會重播舊留言、新留言沒建立也沒提示。"""
+    r = _out()["pending_ttl"]
+    assert r == {"within": True, "atLimit": True, "expired": True}

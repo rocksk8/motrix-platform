@@ -22,6 +22,7 @@
     maxEdge: 1600,               // 縮圖長邊上限（px）
     quality: 0.8,                // JPEG 品質
     noProgressMs: 60000,         // 這麼久沒有任何上傳進度 ⇒ 逾時
+    pendingTtlMs: 30 * 60 * 1000,   // 「這次送出」的 key 只在這段時間內沿用（放棄的舊送出不會讓日後同樣文字被當成重播）
     serverWaitMs: 120000,        // 位元組都送完、等伺服器處理（此時不再有進度事件）的容忍時間
     retryDelays: [2000, 5000, 10000],   // 失敗重試的間隔（長度＝最多重試次數）
     maxRetryAfterMs: 15000,      // 409／429／503 的 Retry-After 上限
@@ -323,12 +324,15 @@
     // ── 「這次送出」的冪等鍵（頁面重新整理後再按送出，要沿用同一把，否則伺服端認不出是同一次＝重複留言）──
     // 存 sessionStorage：{sig, textKey, photos:{身分:key}}。sig＝送出內容（文字＋important）；內容變了就不沿用。
     // 照片 key 綁檔案身分（名稱|大小|lastModified|geo）：換了檔案、換了定位值都是新請求，不得沿用。
+    // 時效：savedAt 超過 pendingTtlMs（30 分鐘）就不沿用——否則使用者放棄後、日後再送同樣文字，會被伺服端當成重播舊留言（沒建立新的、也沒提示）。
+    // 沿用時 'text-saved' 事件帶 replay:true（伺服端回的是舊結果），畫面可據此講「接續上次未完成的送出」。
+    // 已知取捨：沿用的照片 key 遇 422（重縮圖位元組不同）會換新 key 重送；若第一次其實已在伺服端成功（回應丟了），這裡會多存一張（重複附件，非資料毀損）。
     function pendingKey(quoteNo) { return 'motrix_field_pending:' + quoteNo; }
     function photoIdent(f, geo) { return [f && f.name, f && f.size, f && f.lastModified, geo || ''].join('|'); }
     function loadPending(quoteNo, sig) {
       try {
         var v = JSON.parse(env.sessionStorage.getItem(pendingKey(quoteNo)) || 'null');
-        if (v && v.sig === sig && typeof v.textKey === 'string') return v;
+        if (v && v.sig === sig && typeof v.textKey === 'string' && typeof v.savedAt === 'number' && env.now() - v.savedAt <= cfg.pendingTtlMs) return v;
       } catch (e) { /* 壞掉當沒有 */ }
       return null;
     }
@@ -372,7 +376,7 @@
         if (o.persist === false) return;
         var ph = {};
         state.photos.forEach(function (p) { ph[p.ident] = p.key; });
-        savePending(o.quoteNo, { sig: sig, textKey: state.textKey, photos: ph });
+        savePending(o.quoteNo, { sig: sig, textKey: state.textKey, photos: ph, savedAt: env.now() });
       }
       persist();
       function emit(type, extra) {
