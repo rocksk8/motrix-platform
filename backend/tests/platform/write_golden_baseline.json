@@ -1,4 +1,18 @@
 {
+ "DELETE /api/line/binding": {
+  "k": [
+   "ok",
+   "unlinked"
+  ],
+  "s": 200
+ },
+ "DELETE /api/line/binding/{username}": {
+  "k": [
+   "ok",
+   "unlinked"
+  ],
+  "s": 200
+ },
  "DELETE /api/list-views/{list_id}": {
   "k": [
    "allowUserPrefs",
@@ -44,6 +58,12 @@
    "detail"
   ],
   "s": 404
+ },
+ "POST /api/line/binding/start": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
  },
  "POST /api/notify-actions/{key}/preview": {
   "k": [
@@ -195,6 +215,12 @@
   ],
   "s": 200
  },
+ "POST /api/settings/line-notify/verify": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "PUT /api/ledger/roles": {
   "k": [
    "detail"
@@ -234,5 +260,17 @@
    "sort.default.dir"
   ],
   "s": 200
+ },
+ "PUT /api/settings/line-notify": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "PUT /api/settings/line-notify/events/{key}": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
  }
 }

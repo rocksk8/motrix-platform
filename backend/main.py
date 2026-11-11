@@ -219,6 +219,9 @@ _PUBLIC_API_PATHS = {
     # 2026-09-10：WebAuthn 設定狀態檢查（未登入時）——login.html 和 change-password.html
     # 需要知道 WebAuthn 是否已配置，以決定是否顯示 Passkey 登入/註冊按鈕。
     "/api/system/webauthn-config-status",
+    # 2026-11-11 T79：LINE Login 綁定導回——手機上的瀏覽器從 LINE 導回來時沒有任何 session；端點自己用單次 state 驗證（state 綁發起人的登入
+    # session），不回任何 ERP 資料。也是 Cloudflare Tunnel 唯一對外的路徑（ingress 精確比對），見 routers/system.py。
+    "/api/line/callback",
 }
 _IDLE_TIMEOUT_SECONDS = 8 * 3600  # 8 hours（一般角色）
 # 2026-08-28 資安優化：superadmin/admin 能看財務/稽核紀錄/使用者管理等敏感資料，

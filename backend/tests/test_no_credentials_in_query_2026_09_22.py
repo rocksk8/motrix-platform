@@ -104,6 +104,10 @@ ALLOWED = {
     ("/api/uploads/{file_path:path}", "pt"):
         "HMAC、1 小時、綁定單一路徑。`<img src>` 設不了 header ⇒ "
         "這是解同一個問題的**正確**做法，不是欠帳。",
+    ("/api/line/callback", "code"):
+        "OAuth 授權碼：LINE 規定用瀏覽器導向（GET）把 code 與 state 帶回，沒有 POST 的選項。它單次使用、LINE 端 10 分鐘內有效、"
+        "沒有 channel secret 換不出任何東西，而且 state（單次、綁發起人的登入 session）驗過才會去換；換完 state 即銷毀 ⇒ 進 access log 的那一筆已經是死的。"
+        "回應頁帶 no-store／no-referrer。這是 OAuth 標準流程本身，不是欠帳。",
 }
 
 

@@ -1713,6 +1713,11 @@ def delete_user(user_id: int, authorization: str = Header(None)):
         conn.execute("DELETE FROM users WHERE id=?", (user_id,))
         conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
         conn.commit()
+        try:        # 帳號刪除 ⇒ 同時解除 LINE 綁定（否則同名新帳號會繼承舊綁定，通知送給前一個人）
+            from helpers import line_notify as _line
+            _line.unlink_user(uname)
+        except Exception as _e:
+            logger.warning("刪除帳號時解除 LINE 綁定失敗：%s", type(_e).__name__)
     except sqlite3.IntegrityError:
         # 2026-08-28（模組逐步檢查）：users.id 被多張表以 FK 引用（quotations.
         # sales_person_id／dev_cases.created_by／dev_logs 多欄／divisions／

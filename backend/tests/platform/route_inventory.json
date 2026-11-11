@@ -128,6 +128,16 @@
    "pp": 1,
    "body": false
   },
+  "DELETE /api/line/binding": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
+  "DELETE /api/line/binding/{username}": {
+   "w": true,
+   "pp": 1,
+   "body": false
+  },
   "DELETE /api/list-views/{list_id}": {
    "w": true,
    "pp": 1,
@@ -1268,6 +1278,16 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/line/binding": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/line/callback": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/list-prefs/{list_key}": {
    "w": false,
    "pp": 1,
@@ -2094,6 +2114,11 @@
    "body": false
   },
   "GET /api/settings/google-quota": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/settings/line-notify": {
    "w": false,
    "pp": 0,
    "body": false
@@ -3423,6 +3448,11 @@
    "pp": 1,
    "body": true
   },
+  "POST /api/line/binding/start": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
   "POST /api/lodging/quotes": {
    "w": true,
    "pp": 0,
@@ -4053,6 +4083,11 @@
    "pp": 0,
    "body": false
   },
+  "POST /api/settings/line-notify/verify": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
   "POST /api/settings/storage-locations/create": {
    "w": true,
    "pp": 0,
@@ -4486,6 +4521,16 @@
   "PUT /api/settings/google-quota": {
    "w": true,
    "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/line-notify": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/line-notify/events/{key}": {
+   "w": true,
+   "pp": 1,
    "body": true
   },
   "PUT /api/settings/monthly-report-recipients": {

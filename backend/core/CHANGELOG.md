@@ -5,6 +5,22 @@
 - L1（診斷）：`deny_case` 寫的 `case.access_denied` detail 補 `method／path／role／case_manage`（只加鍵）。
 - 前端：公司設定頁不再用 `GET /api/settings/webauthn-config` 的 404 當 Passkey 開關（每開一次頁就一筆 404，正式機 32 次），改問 `/api/system/webauthn-config-status`；簽核佇列的「預覽」改白名單，勞報單走 `/api/payslips/{no}/pdf-download`，沒有 PDF 端點的類型不再落到報價單端點（原本必 404＋audit not_found）。
 - 測試：`tests/test_e2e_webauthn_config_no_404_2026_11_11.py`。
+
+## (next) — 2026-11-11（feat/line-notify；T79 候選：LINE 發送管道，階段 1＝封裝＋token 設定）
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.line_notify`（LINE Messaging API push／multicast 封裝：`push`、`build_text`、`verify_token`、`quota`、`enabled`、`mask`、`SEND_*`）。對外呼叫只有一支 `_http`（urllib），測試換掉它；開發機標記（`.no_email_send`／`MOTRIX_EMAIL_SEND=off`）同時擋 LINE。
+- 設定：`system_settings.line_notify`（`enabled`、`channel_access_token`，admin 在設定頁輸入；照 SMTP 密碼慣例 GET 遮罩、PUT 遮罩值＝保留、啟用前必須有 token）。每日 JSON 匯出（`archive.py`）以 `json_remove` 挖掉 token；稽核只記啟用與否與 token 是否更換。
+- 端點（僅最高管理者）：`GET／PUT /api/settings/line-notify`、`POST /api/settings/line-notify/verify`（驗 token＋本月額度，不發訊息）。
+- 曝露面（PM 裁示）：`public_base_url`（Tunnel 公開網域，LINE Login callback 用；只收 `https://網域[:埠]`）與 `include_links`（訊息是否帶連結，**預設關**，必須是布林 true、且要有 public_base_url 才能開）是**兩個獨立開關**；有公開網域不代表訊息帶連結。帶連結時只限 `LINK_PAGES` 白名單（quotation-form／approval-queue／case-management／cashier 四頁），內網網址換成對外網址、白名單外的連結直接不帶。新增 L1 名稱：`LINK_PAGES`、`CALLBACK_PATH`、`normalize_public_base`、`public_base`、`callback_url`、`links_enabled`、`safe_link`。
+- 事件通道（階段 2）：`email_notify.send_registered` 寄信後同步呼叫 `line_notify.notify_users`（背景、失敗只記 log、不影響信件與「已通知」記號）。收件人**不另做第二份解析**：`_users_emails`（收件人唯一漏斗）在 `send_registered` 解析期間把「信箱 ⇒ 帳號」記進執行緒區域收集器，最後以**實際寄出的信箱**反查帳號——所以覆寫模式、個人退訂、公司關閉、停用、沒信箱的人在 LINE 一律與信件同一結果；沒開收集器時行為與原本逐位元相同。
+  新增 L1 名稱：`WIRED_EVENTS`（已接線＝可勾選的類型，目前 `approval_review_edit`、`warranty_expiry`；付款／薪資／獎金類不開放）、`LINKS_KEY`、`push_async`、`event_enabled`、`events_view`、`set_event`、`link_user`、`unlink_user`、`is_linked`、`ids_for`、`notify_users`。
+  端點：`PUT /api/settings/line-notify/events/{key}`（僅最高管理者；只收已接線的類型、enabled 必須是布林）；`GET /api/settings/line-notify` 多回 `events`。事件開關預設全關。
+  綁定儲存：`system_settings.line_links = {帳號: {userId, linkedAt}}`——**刻意不動資料庫 schema**（核心 migration 已凍結在基準 118，新增核心表要走列車編號且易撞號）；同一個 LINE userId 不能綁給兩個帳號。OAuth 綁定流程尚未接（等對外 callback 網址）。
+- 畫面：`notification-settings.html` 新增獨立小元件「LINE 通知」卡片（啟用、token 遮罩、對外網址與 Callback URL 提示、「訊息帶連結」開關〔預設關〕、事件勾選〔即時生效〕、驗證 token 並顯示本月額度）。
+- 測試：`tests/platform/test_line_notify_t79.py`、`modules/case/tests/test_line_review_edit_2026_11_11.py`（走真實 review-edit 端點的 e2e，LINE 對外呼叫為假的）、`tests/test_e2e_line_notify_settings_2026_11_11.py`（瀏覽器按鈕 e2e）。
+- 階段 3（LINE Login 綁定；PM 2026-11-11：Tunnel 已上線，callback＝`https://line.miactw.com/api/line/callback`）：新 L1 單元 `helpers.line_login`（「電腦發起、手機授權」；一次性 `state` 綁定發起人的登入 session、單次使用、10 分鐘、每人最多 3 筆／全域 200 筆；code→id_token→LINE verify 確認 aud／nonce，userId＝`sub`，只要 `openid` scope、不取個資；綁定完成推一則確認訊息並記 `confirmed`）。`helpers.line_notify` 新增 `login_credentials`、`valid_login_id`、`valid_login_secret`、`set_confirmed`、`binding_view`。
+  設定：`line_notify.login_channel_id`（純數字）、`login_channel_secret`（32 位十六進位；**照 token 慣例**：GET 遮罩、PUT 遮罩值＝保留、稽核只記「有沒有換」、每日 JSON 匯出挖掉、不寫 log）。
+  端點：`GET /api/line/callback`（**免登入**，列入 `main._PUBLIC_API_PATHS`；Tunnel 唯一對外路徑，ingress 精確比對 `^/api/line/callback$`，不可改路徑；只回固定頁面、不含任何 ERP 資料、no-store／no-referrer；對外查詢總量保護每分鐘 60 次，**只計 state 有效的請求**〔垃圾請求不計，避免被拿來鎖死綁定功能〕，被限流的 state 也已銷毀；發起綁定每人每 3 秒一次）、`GET /api/line/binding`、`POST /api/line/binding/start`（回 QR）、`DELETE /api/line/binding`、`DELETE /api/line/binding/{username}`（僅最高管理者）。`test_no_credentials_in_query` 的 `ALLOWED` 新增 `code`（OAuth 授權碼，理由寫在該列）。
+  連帶：刪除使用者帳號時一併解除 LINE 綁定（`routers/auth.py`）；畫面：`change-password.html`（帳號安全頁）新增「LINE 通知」綁定卡片、`notification-settings.html` LINE 卡片新增 Login channel 欄位。測試：`tests/platform/test_line_login_t79.py`。
 ## 1.155（next，未取號）— 2026-11-08（T79；option_list 重新啟用已停用選項改需核准）〔train_number：1.154 → 1.155〕
 - **行為變更（使用者 2026-11-08 裁示）**：治理層 `_cmp_option_list`（`routers/def_pipeline.py`）把「重新啟用已停用的選項」從中性改判為放寬，需第二位最高管理者核准＋確認期間（原先判為中性是產品設計缺口，hichan-8 審A車時發現）；停用本身維持收緊、立即生效不變；第一次發布（沒有舊版）出現的選項沒有「已停用」歷史，不算重新啟用。**上線備註**：既有正式機升級後，有待核准的 option_list 版本時，同一清單不能再直接發布，連緊急停用都要先請審核人退回待核准版本（管線既有行為，非這次新增）。
 - 測試：`backend/tests/platform/test_option_lists_t62.py`；`backend/tests/platform/test_gov_contract_2026_11_08.py` 補合法 loose 種子（`seeds_2026_11_08.json`），`KNOWN_P3_NOT_APPLICABLE` 清空（option_list 現適用 P3）。
