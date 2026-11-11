@@ -281,3 +281,27 @@ def test_locked_form_keeps_cost_toggle_and_long_text_selectable(live_server, mak
     assert tog.inner_text() != before, "點了有反應（純顯示切換，不改內容）"
     ta = page.evaluate("() => { const t = [...document.querySelectorAll('.form-left textarea')].find(e => e.offsetParent !== null); return t ? {ro: t.readOnly, dis: t.disabled, pe: getComputedStyle(t).pointerEvents} : null }")
     assert ta and ta["ro"] and not ta["dis"] and ta["pe"] != "none", ta
+
+
+@pytest.mark.e2e
+def test_locked_form_blocks_content_mutating_buttons_and_stays_clean(live_server, make_user, e2e_browser):
+    """K 審再審（hichan-12）：.approver-locked 一度漏掉 `.form-section button` 的擋點擊規則——鎖住後按「新增區段標題」／pdfShow 顯示開關仍會改內容、
+    isDirty 變 true（啟動 60 秒自動存檔 PUT、之後按編輯還會把這些本地改動吃進快照）。鎖住時：這些按鈕 disabled，硬點（含 JS click）也不改內容、不弄髒。"""
+    u, p = make_user(username="relk_mb", role="admin", modules=["quotation"])
+    _set_mode(2)
+    _seed([u])
+    page = e2e_browser.new_page()
+    inject_login(page, live_server, u, p)
+    _open_form(page, live_server)
+    page.wait_for_function("() => document.querySelector('.qty-input').readOnly", timeout=5000)
+    page.wait_for_function("() => [...document.querySelectorAll('.form-left .form-section button')].some(b => b.hasAttribute('data-approver-lock'))", timeout=5000)
+    res = page.evaluate("""() => {
+      const d = Alpine.$data(document.querySelector('[x-data]'));
+      const rows0 = d.q.items.length, dirty0 = !!d.isDirty;
+      const btns = [...document.querySelectorAll('.form-left .form-section button')].filter(b => !b.classList.contains('keep-open'));
+      const live = btns.filter(b => !b.disabled && getComputedStyle(b).pointerEvents !== 'none').map(b => (b.textContent || '').trim().slice(0, 12));
+      btns.forEach(b => b.click());                                  // 硬點全部（disabled 的按鈕 JS click 也不會觸發 @click）
+      return {rows0, rows1: d.q.items.length, dirty0, dirty1: !!d.isDirty, live, n: btns.length};
+    }""")
+    assert res["n"] >= 2 and res["live"] == [], res
+    assert res["rows1"] == res["rows0"] and res["dirty1"] is False, res

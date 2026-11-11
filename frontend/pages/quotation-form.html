@@ -637,6 +637,7 @@
     .approver-locked .nt-input-group { opacity:.75; }
     .approver-locked .del-btn, .approver-locked .add-item-btn, .approver-locked .drag-handle { display:none !important; }
     .approver-locked .toggle-btn:not(.keep-open) { pointer-events:none; opacity:.55; }
+    .approver-locked .form-section button:not(.keep-open) { pointer-events:none; opacity:.55; }   /* 會改內容的按鈕（欄位顯示開關、新增區段標題、套用條款組…）；舊 .is-locked 也有這條 */
     /* ── NT$ 前綴輸入欄 ── */
     .nt-input-group { display:flex; align-items:stretch; border:1px solid var(--border-light); border-radius:var(--radius); overflow:hidden; background:#fff; transition:border-color .12s,box-shadow .12s; }
     .nt-input-group:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.08); }
@@ -3308,6 +3309,7 @@
       },
 
       autoSave() {
+        if (this.isApproverLocked()) return   // 簽核人檢視中不存檔（PUT 在待審核會被擋）；欄位已鎖，這是最後一道防線
         if (this.reviewEditing) return        // 複查編輯只走「儲存複查編輯」（POST /review-edit）；PUT 在待審核狀態本來就會被擋
         this.apiSave(this.isNewRecord).then(ok => {
           if (ok) {
@@ -3788,7 +3790,7 @@
             if (textual) { el.readOnly = true; el.setAttribute('data-approver-lock', 'ro') }
             else { el.disabled = true; el.setAttribute('data-approver-lock', 'dis') }
           })
-          root.querySelectorAll('button.toggle-btn:not(.keep-open)').forEach(el => {
+          root.querySelectorAll('.form-section button:not(.keep-open), button.toggle-btn:not(.keep-open)').forEach(el => {      // 鍵盤也不能觸發會改內容的按鈕
             if (!el.disabled && !el.hasAttribute('data-approver-lock')) { el.disabled = true; el.setAttribute('data-approver-lock', 'dis') }
           })
         } else {
