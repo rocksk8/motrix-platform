@@ -91,6 +91,7 @@
 | `TRAIN-PREFLIGHT-T47.md` | 列車預檢（一個指令列出便宜的紅燈） | 已實作（`tools/platform/train_preflight.py` 存在） | 自述 10-08＋工具存在 |
 | `BUILD-VERIFY-OPTIMIZATION-T47.md` | 建包與驗證時間優化（≤30 分鐘） | 規劃中（標頭：待主持／使用者裁示；後續另有 `build_log_report.py`、`preflight_seconds.json`，是否採納未核對） | 自述 10-08 |
 | `PO-VENDOR-BANK-GAP-T47.md` | 採購單廠商銀行資料缺口：選項與建議 | 已實作（使用者已裁示；`FULL_ACCOUNT_STRICT` 相關 commit 已合） | 自述 10-08＋commit |
+| `WRITE-ENDPOINT-LOCK-AUDIT-T79.md` | 案件模組 99 條寫入路由的樂觀鎖覆蓋稽核＋「token 選填要不要強制」建議 | 稽核結果（2026-11-11；已修自動存檔無聲 409，其餘缺口待另開票） | 本票分支 `feat/draft-optimistic-lock` |
 
 ## docs/platform/ 作業與紀錄（日期快照）
 
