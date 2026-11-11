@@ -3964,6 +3964,7 @@
     "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/ledger_diff",
+    "mod:analytics/api/report_templates",
     "mod:analytics/api/reports",
     "mod:arap/api/cashier",
     "mod:arap/api/invoice_vouchers",
@@ -7166,6 +7167,7 @@
    "imports": [
     "mod:analytics/api/dashboard",
     "mod:analytics/api/ledger_diff",
+    "mod:analytics/api/report_templates",
     "mod:analytics/api/reports",
     "plat:registry"
    ],
@@ -7425,6 +7427,116 @@
     "user_perm_subtracts"
    ]
   },
+  "mod:analytics/api/report_templates": {
+   "api_prefixes": [
+    "/api/report-templates"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:alert_settings",
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:company_identity",
+    "helper:company_setup",
+    "helper:config_ledger",
+    "helper:display_labels",
+    "helper:download_name",
+    "helper:duty_roles",
+    "helper:email_notify",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:notify_matrix",
+    "helper:notify_templates",
+    "helper:profit_warning",
+    "helper:quote_privacy",
+    "helper:row_access",
+    "helper:settings",
+    "helper:settings_groups",
+    "helper:settings_groups_legal_reminder",
+    "helper:settings_groups_list_view",
+    "helper:settings_groups_lodging_freshness",
+    "helper:settings_groups_overhead",
+    "helper:settings_groups_payslip_picker",
+    "helper:settings_groups_profit",
+    "helper:settings_groups_q0",
+    "helper:settings_groups_recycle_bin",
+    "helper:settings_groups_tender_closing",
+    "helper:settings_registry",
+    "helper:settings_strict",
+    "helper:status_display",
+    "helper:tiered_approval",
+    "helper:xlsx_out"
+   ],
+   "imports": [
+    "core:db",
+    "helper:auth",
+    "helper:download_name",
+    "helper:xlsx_out",
+    "mod:analytics/api/reports"
+   ],
+   "kind": "mod",
+   "module_key": "analytics",
+   "path": "backend/modules/analytics/api/report_templates.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_templates",
+     "line": 336,
+     "method": "GET",
+     "path": "/api/report-templates"
+    },
+    {
+     "func": "run_template",
+     "line": 353,
+     "method": "GET",
+     "path": "/api/report-templates/{tid}/run"
+    },
+    {
+     "func": "excel_template",
+     "line": 384,
+     "method": "GET",
+     "path": "/api/report-templates/{tid}/excel"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "departments",
+    "divisions"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "audit_log",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "config_change_events",
+    "config_changes",
+    "duty_roles",
+    "notifications",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
+  },
   "mod:analytics/api/reports": {
    "api_prefixes": [
     "/api/reports"
@@ -7528,67 +7640,67 @@
    "routes": [
     {
      "func": "report_json",
-     "line": 2600,
+     "line": 2610,
      "method": "GET",
      "path": "/api/reports/financial"
     },
     {
      "func": "report_excel",
-     "line": 2614,
+     "line": 2624,
      "method": "GET",
      "path": "/api/reports/financial/excel"
     },
     {
      "func": "report_pdf",
-     "line": 2651,
+     "line": 2661,
      "method": "GET",
      "path": "/api/reports/financial/pdf"
     },
     {
      "func": "get_ar_aging",
-     "line": 2784,
+     "line": 2794,
      "method": "GET",
      "path": "/api/reports/ar-aging"
     },
     {
      "func": "get_cash_position",
-     "line": 2845,
+     "line": 2855,
      "method": "GET",
      "path": "/api/reports/cash-position"
     },
     {
      "func": "tax_export_excel",
-     "line": 2913,
+     "line": 2923,
      "method": "GET",
      "path": "/api/reports/tax-export"
     },
     {
      "func": "customer_history",
-     "line": 2947,
+     "line": 2957,
      "method": "GET",
      "path": "/api/reports/customer-history"
     },
     {
      "func": "monthly_trend",
-     "line": 3223,
+     "line": 3233,
      "method": "GET",
      "path": "/api/reports/monthly-trend"
     },
     {
      "func": "report_payment_anomalies",
-     "line": 3449,
+     "line": 3459,
      "method": "GET",
      "path": "/api/reports/payment-anomalies"
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3881,
+     "line": 3891,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 4065,
+     "line": 4075,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
@@ -21122,6 +21234,36 @@
    "tables_r": [],
    "tables_w": []
   },
+  "page:pages/report-templates.html": {
+   "api_calls": [
+    "/api/report-templates",
+    "/api/report-templates/",
+    "/api/system/branding/favicon"
+   ],
+   "api_prefixes": [
+    "/api/report-templates",
+    "/api/system"
+   ],
+   "api_unmatched": [],
+   "imports": [
+    "js:static/auth-guard.js",
+    "js:static/motrix-format.js",
+    "js:static/notif.js",
+    "js:static/sidebar.js"
+   ],
+   "kind": "page",
+   "path": "frontend/pages/report-templates.html",
+   "routers_called": [
+    "mod:analytics/api/report_templates",
+    "router:system"
+   ],
+   "routers_called_effective": [
+    "mod:analytics/api/report_templates",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "page:pages/reports-hub.html": {
    "api_calls": [
     "/api/system/branding/favicon"
@@ -28587,6 +28729,7 @@
     "helper:email_notify",
     "helper:prefill_sources",
     "helper:tiered_approval",
+    "mod:analytics/api/report_templates",
     "mod:analytics/api/reports",
     "mod:case/api/case_action_items",
     "mod:case/api/quotations",
@@ -28727,6 +28870,7 @@
    "readers": [
     "core:archive",
     "helper:tiered_approval",
+    "mod:analytics/api/report_templates",
     "mod:case/api/quotations",
     "router:auth"
    ],

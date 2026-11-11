@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1511,
+  "tests": 1515,
   "unmapped": 13,
   "kinds": {
-   "api": 837,
-   "e2e": 333,
+   "api": 838,
+   "e2e": 336,
    "audit": 199,
    "unit": 142
   },
-  "routes": 888
+  "routes": 891
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -3805,6 +3805,32 @@
    },
    "module": "analytics"
   },
+  "backend/modules/analytics/tests/test_e2e_report_templates_2026_11_11.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:analytics/tests/test_report_templates_2026_11_11",
+    "page:pages/report-templates.html",
+    "page:pages/reports-hub.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/analytics/tests/test_report_templates_2026_11_11.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/report-templates.html",
+     "frontend/pages/reports-hub.html"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
   "backend/modules/analytics/tests/test_e2e_reports_density_2026_11_11.py": {
    "kind": "e2e",
    "units": [
@@ -4389,6 +4415,34 @@
      "backend/modules/analytics/"
     ]
    },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_report_templates_2026_11_11.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/report_templates",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/analytics/api/report_templates.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/report_templates.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "unresolved_api": [
+    "/api/report-templates/case-list/pdf",
+    "/api/report-templates/nope/pdf"
+   ],
+   "login_fixture": true,
    "module": "analytics"
   },
   "backend/modules/analytics/tests/test_reports_bonus_payout_consumer.py": {
@@ -15673,6 +15727,7 @@
     "mod:accounting/api/account_items",
     "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
+    "mod:analytics/api/report_templates",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:case/api/completion_notes",
@@ -15720,6 +15775,7 @@
      "backend/modules/accounting/api/account_items.py",
      "backend/modules/accounting/api/vouchers.py",
      "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/analytics/api/report_templates.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
      "backend/modules/case/api/completion_notes.py",
@@ -20523,6 +20579,7 @@
     "mod:accounting/api/account_items",
     "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
+    "mod:analytics/api/report_templates",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:case/api/completion_notes",
@@ -20573,6 +20630,7 @@
      "backend/modules/accounting/api/account_items.py",
      "backend/modules/accounting/api/vouchers.py",
      "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/analytics/api/report_templates.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
      "backend/modules/case/api/completion_notes.py",
@@ -22333,6 +22391,7 @@
     "mod:accounting/api/account_items",
     "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
+    "mod:analytics/api/report_templates",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:case/api/completion_notes",
@@ -22391,6 +22450,7 @@
      "backend/modules/accounting/api/account_items.py",
      "backend/modules/accounting/api/vouchers.py",
      "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/analytics/api/report_templates.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
      "backend/modules/case/api/completion_notes.py",
@@ -25821,6 +25881,7 @@
     "page:pages/online-stats.html",
     "page:pages/receivables.html",
     "page:pages/remit-kinds-settings.html",
+    "page:pages/report-templates.html",
     "page:pages/reports-hub.html",
     "page:pages/sales-orders.html",
     "page:pages/shipping-export-history.html",
@@ -25847,6 +25908,7 @@
      "frontend/pages/online-stats.html",
      "frontend/pages/receivables.html",
      "frontend/pages/remit-kinds-settings.html",
+     "frontend/pages/report-templates.html",
      "frontend/pages/reports-hub.html",
      "frontend/pages/sales-orders.html",
      "frontend/pages/shipping-export-history.html",
@@ -26565,6 +26627,7 @@
     "mod:accounting/api/account_items",
     "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
+    "mod:analytics/api/report_templates",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:case/api/completion_notes",
@@ -26616,6 +26679,7 @@
      "backend/modules/accounting/api/account_items.py",
      "backend/modules/accounting/api/vouchers.py",
      "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/analytics/api/report_templates.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
      "backend/modules/case/api/completion_notes.py",
@@ -28839,6 +28903,7 @@
     "mod:accounting/api/accounting_export",
     "mod:accounting/api/vouchers",
     "mod:accounting/voucher_pdf",
+    "mod:analytics/api/report_templates",
     "mod:analytics/api/reports",
     "mod:arap/api/cashier",
     "mod:arap/api/invoice_vouchers",
@@ -28871,6 +28936,7 @@
      "backend/modules/accounting/api/accounting_export.py",
      "backend/modules/accounting/api/vouchers.py",
      "backend/modules/accounting/voucher_pdf.py",
+     "backend/modules/analytics/api/report_templates.py",
      "backend/modules/analytics/api/reports.py",
      "backend/modules/arap/api/cashier.py",
      "backend/modules/arap/api/invoice_vouchers.py",
@@ -29902,6 +29968,7 @@
     "mod:accounting/api/account_items",
     "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
+    "mod:analytics/api/report_templates",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:case/api/completion_notes",
@@ -29960,6 +30027,7 @@
      "backend/modules/accounting/api/account_items.py",
      "backend/modules/accounting/api/vouchers.py",
      "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/analytics/api/report_templates.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
      "backend/modules/case/api/completion_notes.py",
@@ -31890,6 +31958,25 @@
     ]
    }
   },
+  "backend/tests/test_e2e_draft_edit_conflict_2026_11_11.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "page:pages/quotation-form.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_edit_presence_2026_09_14.py": {
    "kind": "e2e",
    "units": [
@@ -33690,6 +33777,25 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_e2e_pending_readonly_for_non_approvers_2026_11_11.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/test_e2e_review_edit_lock_2026_11_11.py",
+    "page:pages/quotation-form.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py",
+     "backend/tests/test_e2e_review_edit_lock_2026_11_11.py"
+    ],
+    "page": [
+     "frontend/pages/quotation-form.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_planned_pay_mine_t45.py": {
    "kind": "e2e",
    "units": [
@@ -34933,6 +35039,7 @@
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
+    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:crm/api",
     "mod:daily_tasks/api",
@@ -34970,6 +35077,7 @@
      "backend/modules/case/api/case_action_items.py",
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/quotation_stages.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
@@ -37057,6 +37165,7 @@
     "mod:accounting/api/account_items",
     "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
+    "mod:analytics/api/report_templates",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:case/api/completion_notes",
@@ -37113,6 +37222,7 @@
      "backend/modules/accounting/api/account_items.py",
      "backend/modules/accounting/api/vouchers.py",
      "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/analytics/api/report_templates.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
      "backend/modules/case/api/completion_notes.py",
@@ -38713,6 +38823,7 @@
     "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/ledger_diff",
+    "mod:analytics/api/report_templates",
     "mod:analytics/api/reports",
     "mod:arap/api/cashier",
     "mod:arap/api/invoice_vouchers",
@@ -38807,6 +38918,7 @@
      "backend/modules/accounting/api/vouchers.py",
      "backend/modules/analytics/api/dashboard.py",
      "backend/modules/analytics/api/ledger_diff.py",
+     "backend/modules/analytics/api/report_templates.py",
      "backend/modules/analytics/api/reports.py",
      "backend/modules/arap/api/cashier.py",
      "backend/modules/arap/api/invoice_vouchers.py",
@@ -40180,6 +40292,7 @@
     "mod:accounting/api/account_items",
     "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
+    "mod:analytics/api/report_templates",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:case/api/completion_notes",
@@ -40228,6 +40341,7 @@
      "backend/modules/accounting/api/account_items.py",
      "backend/modules/accounting/api/vouchers.py",
      "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/analytics/api/report_templates.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
      "backend/modules/case/api/completion_notes.py",
