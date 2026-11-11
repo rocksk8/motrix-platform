@@ -181,6 +181,8 @@ def test_download_excel_matches_the_conditions_on_screen(live_server, make_user,
         wb = openpyxl.load_workbook(io.BytesIO(f.read()))
     ws = wb["報表"]
     assert dialogs == [], dialogs
+    import re
+    assert re.fullmatch(r"MOTRIX_案件清單_\d{4}-\d{2}-\d{2}\.xlsx", dl.value.suggested_filename), dl.value.suggested_filename
     assert {ws.cell(row=i, column=1).value for i in range(2, ws.max_row + 1)} == {"MQ-T3"}
     cond = {r[0].value: r[1].value for r in wb["條件"].iter_rows(min_row=1) if r[0].value}
     assert cond["報價日 起"] == "2026-05-01" and cond["部門"] == "事業處 / 業務部"
@@ -229,3 +231,36 @@ def test_hub_lists_the_page_and_it_opens(live_server, make_user, e2e_browser):
     card.locator("a").click()
     page.wait_for_url("**/report-templates.html**", timeout=20000)
     _ready(page)
+
+
+@pytest.mark.e2e
+def test_switching_template_while_a_run_is_in_flight_does_not_mix_results(live_server, make_user, e2e_browser):
+    """K 審 must-fix 2：案件清單的產出還在路上就切到收款明細，舊結果回來時不可畫在新頁籤底下，
+    下載也不可拿「新範本＋舊條件」去要檔。請求用 route 攔住、切完頁籤才放行。"""
+    _seed()
+    page = _open(live_server, make_user, e2e_browser, "e2e_rt9")
+    _ready(page)
+    page.fill("[data-testid=rt-param-customer]", "大海")
+    held = []
+    page.route("**/api/report-templates/case-list/run*", lambda route: held.append(route))
+    page.click("[data-testid=rt-run]")
+    page.wait_for_function("() => document.querySelector('[data-testid=rt-run]').disabled")     # 產出中
+    page.click("[data-testid=rt-tab-payments]")
+    page.wait_for_function("() => !document.querySelector('[data-testid=rt-run]').disabled")    # 換範本＝作廢舊的、按鈕恢復
+    assert len(held) == 1
+    with page.expect_response("**/api/report-templates/case-list/run*"):
+        held[0].continue_()                                                                      # 舊的現在才回來
+    page.evaluate("() => new Promise(r => setTimeout(r, 400))")                                  # 讓頁面處理完那份晚到的回應
+    assert page.locator("[data-testid=rt-result]").count() == 0, "舊範本的結果不可出現在收款明細底下"
+    assert page.locator("[data-testid=rt-error]").count() == 0
+    assert page.locator("[data-testid=rt-tab-payments]").get_attribute("aria-selected") == "true"
+    assert page.locator("[data-testid=rt-excel]").is_disabled()
+    # 在收款明細上正常產出、下載：檔案是收款明細（不是案件清單），條件是它自己的（沒有 customer）
+    _run(page, 4)
+    with page.expect_download(timeout=20000) as dl:
+        page.click("[data-testid=rt-excel]")
+    with open(dl.value.path(), "rb") as f:
+        wb = openpyxl.load_workbook(io.BytesIO(f.read()))
+    assert wb["條件"]["A1"].value == "收款明細"
+    assert "收款明細" in dl.value.suggested_filename
+    assert {wb["報表"].cell(row=i, column=1).value for i in range(2, wb["報表"].max_row + 1)} == {"MQ-T1", "MQ-T2", "MQ-T3", "MQ-T4"}

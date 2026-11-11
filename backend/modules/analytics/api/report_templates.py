@@ -136,9 +136,11 @@ def _has_text(hay, needle) -> bool:
 
 # ── 案件母體（案件清單、業務員績效共用） ───────────────────────────────────────
 
-def _filtered_cases(p: dict) -> list:
+def _filtered_cases(p: dict) -> tuple:
+    """⇒ (案件, 這些案件的逐筆款項, 因有日期條件而被排除的「無報價日」件數)。"""
     data = _rp._collect("0000-01-01", "9999-12-31", p.get("department_id"))
-    out = []
+    out, undated = [], 0
+    dated = bool(p.get("date_from") or p.get("date_to"))
     for c in data["casesAll"]:
         if p.get("deal_tag") and c["dealTag"] != p["deal_tag"]:
             continue
@@ -150,10 +152,32 @@ def _filtered_cases(p: dict) -> list:
             continue
         if p.get("customer") and not _has_text(c["customer"], p["customer"]):
             continue
+        if dated and not (c["quoteDate"] or "")[:10]:
+            undated += 1
+            continue
         if not _in_range(c["quoteDate"], p):
             continue
         out.append(c)
-    return out
+    nos = {c["quoteNo"] for c in out}
+    return out, [i for i in data["allItems"] if i["quoteNo"] in nos], undated
+
+
+def _collection(items: list) -> dict:
+    """彙總收款率＝營運報表 summary.collectionRate 的定義：已收款項金額 ÷ 應收款項金額（逐筆款項加總；沒有收款期別的案件不在內）。"""
+    tr = sum(i["amount"] for i in items)
+    tc = sum(i["amount"] for i in items if i["received"])
+    return {"rate": round(tc / tr * 100, 1) if tr > 0 else 0, "receivable": tr, "collected": tc}
+
+
+def _case_notes(cases: list, undated: int, rate_scope: str) -> list:
+    notes = ["日期條件依「報價日」。業務欄為案件管理的「業務負責」（沒填才是開單者），與營運報表的業務員績效同一歸屬。"]
+    if undated:
+        notes.append(f"有 {undated} 件案件沒有報價日，因為有日期條件所以未列入；不設日期條件即可看到。")
+    no_pay = sum(1 for c in cases if not c["hasPaymentItems"])
+    notes.append(rate_scope)
+    if no_pay:
+        notes.append(f"其中 {no_pay} 件尚未填寫收款期別：合約金額仍計入「合約總額」，但不計入彙總收款率。")
+    return notes
 
 
 def _settle_text(c) -> str:
@@ -163,7 +187,7 @@ def _settle_text(c) -> str:
 # ── 範本一：案件清單 ─────────────────────────────────────────────────────────
 
 def _run_case_list(p: dict, u: dict):
-    cases = _filtered_cases(p)
+    cases, items, undated = _filtered_cases(p)
     cases.sort(key=lambda c: (c["quoteDate"] or "", c["quoteNo"]), reverse=True)
     rows = [{
         "quoteNo": c["quoteNo"], "customer": c["customer"], "project": c["project"],
@@ -172,18 +196,15 @@ def _run_case_list(p: dict, u: dict):
         "collectionRate": c["collectionRate"], "estMargin": c["netMarginPct"],
         "actualMargin": c["actualMarginPct"], "settle": _settle_text(c),
     } for c in cases]
-    total = sum(c["total"] for c in cases)
-    recv = sum(c["receivedAmount"] for c in cases)
+    col = _collection(items)
     summary = [
         {"label": "案件數", "value": len(cases), "type": "count"},
-        {"label": "合約總額", "value": total, "type": "money"},
-        {"label": "已收款", "value": recv, "type": "money"},
-        {"label": "收款率", "value": round(recv / total * 100, 1) if total > 0 else 0, "type": "pct"},
+        {"label": "合約總額", "value": sum(c["total"] for c in cases), "type": "money"},
+        {"label": "已收款", "value": sum(c["receivedAmount"] for c in cases), "type": "money"},
+        {"label": "收款率", "value": col["rate"], "type": "pct"},
     ]
-    notes = ["日期條件依「報價日」。業務欄為案件管理的「業務負責」（沒填才是開單者），與營運報表的業務員績效同一歸屬。"]
-    no_pay = sum(1 for c in cases if not c["hasPaymentItems"])
-    if no_pay:
-        notes.append(f"其中 {no_pay} 件尚未填寫收款期別，合約金額不計入收款率。")
+    notes = _case_notes(cases, undated,
+                        "彙總「收款率」＝已收款項 ÷ 應收款項（與營運報表彙總相同）；表內每列的收款率＝該案已收款 ÷ 合約金額（與營運報表案件清單相同）。")
     return rows, summary, notes
 
 
@@ -208,7 +229,7 @@ def _run_payments(p: dict, u: dict):
         if not _in_range(day, p):
             continue
         rows.append({
-            "quoteNo": it["quoteNo"], "customer": it["customer"], "project": it["project"],
+            "quoteNo": it["quoteNo"], "idx": it["idx"], "customer": it["customer"], "project": it["project"],
             "type": it["type"], "amount": it["amount"], "state": "已收" if it["received"] else "未收",
             "receivedAt": (it.get("receivedAt") or "")[:10], "expected": (it.get("expectedReceiptDate") or "")[:10],
             "actual": it["actualAmount"], "fee": it["feeAmount"], "net": it["netAmount"], "invoiceNo": it.get("invoiceNo") or "",
@@ -223,29 +244,28 @@ def _run_payments(p: dict, u: dict):
     ]
     notes = ["日期條件：已收款項依「實收日」，未收款項依「預計收款日」。"]
     if undated:
-        notes.append(f"有 {undated} 筆款項沒填對應日期（未收且無預計收款日），因為有日期條件所以未列入；不設日期條件即可看到。")
+        notes.append(f"有 {undated} 筆款項沒填對應日期（已收但沒填實收日，或未收且沒填預計收款日），因為有日期條件所以未列入；不設日期條件即可看到。")
     return rows, summary, notes
 
 
 # ── 範本三：業務員績效 ───────────────────────────────────────────────────────
 
 def _run_sales_perf(p: dict, u: dict):
-    cases = _filtered_cases(p)
+    cases, items, undated = _filtered_cases(p)
     perf = _rp._sales_perf_rows(cases)
     rows = [{
         "owner": r["salesPerson"], "caseCount": r["caseCount"], "total": r["totalAmount"],
         "received": r["receivedAmount"], "collectionRate": r["collectionRate"],
         "estMargin": r["avgMarginPct"], "actualMargin": r["avgActualMarginPct"], "settled": r["settledCount"],
     } for r in perf]
-    total = sum(r["total"] for r in rows)
-    recv = sum(r["received"] for r in rows)
     summary = [
         {"label": "業務人數", "value": len(rows), "type": "count"},
         {"label": "案件數", "value": sum(r["caseCount"] for r in rows), "type": "count"},
-        {"label": "合約總額", "value": total, "type": "money"},
-        {"label": "收款率", "value": round(recv / total * 100, 1) if total > 0 else 0, "type": "pct"},
+        {"label": "合約總額", "value": sum(r["total"] for r in rows), "type": "money"},
+        {"label": "收款率", "value": _collection(items)["rate"], "type": "pct"},
     ]
-    notes = ["日期條件依「報價日」。歸屬與營運報表的業務員績效相同（案件管理的「業務負責」）。實際利益率只含已精算案件。"]
+    notes = _case_notes(cases, undated,
+                        "彙總「收款率」＝已收款項 ÷ 應收款項（與營運報表彙總相同）；表內每位業務的收款率＝其已收款 ÷ 合約金額（與營運報表業務員績效相同）。實際利益率只含已精算案件。")
     return rows, summary, notes
 
 
@@ -294,7 +314,12 @@ def _get(tid: str) -> dict:
 
 
 def _raw_params(request: Request) -> dict:
-    return {k: v for k, v in request.query_params.items()}
+    items = request.query_params.multi_items()
+    keys = [k for k, _v in items]
+    dup = sorted({k for k in keys if keys.count(k) > 1})
+    if dup:
+        raise HTTPException(400, "同一個條件不可重複送出：" + "、".join(dup))
+    return dict(items)
 
 
 def _produce(tpl: dict, request: Request, u: dict) -> tuple:
@@ -364,6 +389,7 @@ def excel_template(tid: str, request: Request, authorization: str = Header(None)
     u = _require_user(authorization)
     _rp._require_reports_access(u)
     tpl = _get(tid)
+    validate_params(tpl, _raw_params(request))              # 先驗條件：不合法的請求不消耗匯出冷卻
     check_export_rate(u["id"], "excel")
     _u, p, rows, summary, notes, truncated = _produce(tpl, request, u)
     wb = openpyxl.Workbook()

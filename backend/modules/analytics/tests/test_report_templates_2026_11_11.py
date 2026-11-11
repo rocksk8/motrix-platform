@@ -72,6 +72,40 @@ def _seed():
         conn.close()
 
 
+def _seed_edge():
+    """在 _seed() 之上補「真實資料才有」的形狀（K 審：只有單期、全有報價日的種子抓不到定義錯誤）：
+    MQ-T5  甲 2026-06-01 已成案  90000 **沒有收款期別**
+    MQ-T6  甲 **沒有報價日**     已成案  10000 全收(06-02)
+    MQ-T7  乙 2026-07-01 已成案 400000 **兩期**：50% 已收(07-01)、50% 未收預計 09-01
+    MQ-T8  甲 2026-07-15 已成案  20000 已收但**沒填實收日**
+    MQ-T9  乙 **2027-03-01（未來）** 已成案 30000 未收預計 2027-03-10
+    """
+    import db
+    conn = db.get_db()
+    try:
+        uid = {r["display_name"]: r["id"] for r in conn.execute(
+            "SELECT id, display_name FROM users WHERE display_name IN ('甲業務','乙業務')")}
+        rows = [
+            ("MQ-T5", "甲業務", "2026-06-01", 90000, "客戶五", []),
+            ("MQ-T6", "甲業務", None, 10000, "客戶六", [_pay(True, "2026-06-02")]),
+            ("MQ-T7", "乙業務", "2026-07-01", 400000, "客戶七",
+             [{"id": 1, "type": "訂金", "pct": 50, "received": True, "receivedAt": "2026-07-01"},
+              {"id": 2, "type": "尾款", "pct": 50, "received": False, "expectedReceiptDate": "2026-09-01"}]),
+            ("MQ-T8", "甲業務", "2026-07-15", 20000, "客戶八", [_pay(True)]),
+            ("MQ-T9", "乙業務", "2027-03-01", 30000, "客戶九", [_pay(False, expected="2027-03-10")]),
+        ]
+        for qn, sp, qd, total, cust, pay in rows:
+            dj = {"dealTag": "已成案", "caseRecord": {"roles": {"sales": sp}, "payment": {"items": pay}}}
+            conn.execute(
+                "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at,"
+                " updated_at, deal_tag, quote_date, sales_person, sales_person_id, settle_status) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (qn, "已送出", cust, "專案" + qn[-1], total, total, json.dumps(dj), NOW, NOW, "已成案", qd, sp, uid[sp], ""))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _run(client, h, tid, qs=""):
     return client.get(f"/api/report-templates/{tid}/run" + ("?" + qs if qs else ""), headers=h)
 
@@ -242,7 +276,7 @@ def test_payments_amounts_match_operating_report(client, make_user):
     h = _hdr(client, make_user, "rtp3")
     fin = client.get("/api/reports/financial?period=2026", headers=h).json()
     want = {(i["quoteNo"], i["idx"]): (i["amount"], i["received"]) for i in fin["allItems"]}
-    got = {(r["quoteNo"], 0): (r["amount"], r["state"] == "已收") for r in _run(client, h, "payments").json()["rows"]}
+    got = {(r["quoteNo"], r["idx"]): (r["amount"], r["state"] == "已收") for r in _run(client, h, "payments").json()["rows"]}
     assert got == want
 
 
@@ -329,3 +363,109 @@ def test_bad_params_on_excel_are_400_not_a_file(client, make_user):
     _seed()
     h = _hdr(client, make_user, "rtx4")
     assert client.get("/api/report-templates/case-list/excel?date_from=bad", headers=h).status_code == 400
+
+
+# ══ K 審補強（hichan-11）：真實形狀的資料、獨立算出來的數字、不靠同一支函式兩邊對 ═══════════════════
+
+def _edge(client, make_user, name):
+    _seed()
+    _seed_edge()
+    return _hdr(client, make_user, name)
+
+
+def _summary(r):
+    return {x["label"]: x["value"] for x in r.json()["summary"]}
+
+
+def test_headline_collection_rate_is_receivable_based_like_the_operating_report(client, make_user):
+    """彙總收款率＝已收款項 ÷ 應收款項（沒有收款期別的案件不在分母）。數字由種子手算：
+    應收 100000+200000+300000+50000+10000+(200000+200000)+20000+30000＝1,110,000；已收 100000+200000+10000+200000+20000＝530,000
+    ⇒ 47.7%。若分母誤用全部合約金額（含 MQ-T5 的 90000）會是 44.2%——正是 K 審抓到的那種錯。"""
+    h = _edge(client, make_user, "rtk1")
+    fin = client.get("/api/reports/financial?period=2026", headers=h).json()["summary"]
+    assert fin["collectionRate"] == 47.7, fin                        # 先確認手算與營運報表一致（題目問得對）
+    for tid in ("case-list", "sales-perf"):
+        assert _summary(_run(client, h, tid))["收款率"] == 47.7, tid
+    s = _summary(_run(client, h, "case-list"))
+    assert s["合約總額"] == 1200000 and s["已收款"] == 530000 and s["案件數"] == 9
+
+
+def test_headline_rate_note_names_the_definition_and_the_no_payment_case(client, make_user):
+    h = _edge(client, make_user, "rtk2")
+    notes = " ".join(_run(client, h, "case-list").json()["notes"])
+    assert "已收款項 ÷ 應收款項" in notes
+    assert "1 件尚未填寫收款期別" in notes and "仍計入「合約總額」" in notes and "不計入彙總收款率" in notes
+
+
+def test_rate_with_conditions_uses_only_the_selected_cases_items(client, make_user):
+    """只看乙業務 ⇒ T3(300000 未收)、T4(50000 未收)、T7(200000 收＋200000 未收)、T9(30000 未收)：應收 780000、已收 200000 ⇒ 25.6%。"""
+    h = _edge(client, make_user, "rtk3")
+    assert _summary(_run(client, h, "case-list", "sales_person=乙"))["收款率"] == 25.6
+
+
+def test_cases_without_quote_date_are_reported_when_a_date_filter_is_on(client, make_user):
+    h = _edge(client, make_user, "rtk4")
+    for tid in ("case-list", "sales-perf"):
+        d = _run(client, h, tid, "date_from=2026-01-01&date_to=2026-12-31").json()
+        assert any("1 件案件沒有報價日" in n for n in d["notes"]), (tid, d["notes"])
+    assert "MQ-T6" not in _nos(_run(client, h, "case-list", "date_from=2026-01-01"))
+    assert "MQ-T6" in _nos(_run(client, h, "case-list"))
+    assert not any("沒有報價日" in n for n in _run(client, h, "case-list").json()["notes"])
+
+
+def test_future_dated_case_is_selectable(client, make_user):
+    h = _edge(client, make_user, "rtk5")
+    assert _nos(_run(client, h, "case-list", "date_from=2027-01-01")) == {"MQ-T9"}
+    assert _nos(_run(client, h, "payments", "date_from=2027-01-01")) == {"MQ-T9"}
+
+
+def test_multi_installment_payments_match_operating_report_by_index(client, make_user):
+    h = _edge(client, make_user, "rtk6")
+    fin = client.get("/api/reports/financial?period=2026", headers=h).json()
+    want = {(i["quoteNo"], i["idx"]): (i["amount"], i["received"]) for i in fin["allItems"]}
+    rows = _run(client, h, "payments").json()["rows"]
+    got = {(r["quoteNo"], r["idx"]): (r["amount"], r["state"] == "已收") for r in rows}
+    assert got == want and len(rows) == 9, (len(rows), sorted(set(want) ^ set(got)))
+    assert got[("MQ-T7", 0)] == (200000, True) and got[("MQ-T7", 1)] == (200000, False)
+    # 同一案兩期各依自己的日期挑：7 月只有第一期（實收 07-01），第二期預計 09-01 不在
+    d = _run(client, h, "payments", "date_from=2026-07-01&date_to=2026-07-31").json()
+    assert {(r["quoteNo"], r["idx"]) for r in d["rows"]} == {("MQ-T7", 0)}, "MQ-T8 已收但沒填實收日，不在 7 月"
+    assert any("已收但沒填實收日" in n and "2 筆" in n for n in d["notes"]), d["notes"]   # MQ-T4（未收沒預計日）＋MQ-T8（已收沒實收日）
+
+
+def test_sales_perf_owner_order_and_totals_match_operating_report(client, make_user):
+    h = _edge(client, make_user, "rtk7")
+    fin = client.get("/api/reports/financial?period=2026", headers=h).json()["salesPerf"]
+    rows = _run(client, h, "sales-perf").json()["rows"]
+    assert [r["owner"] for r in rows] == [x["salesPerson"] for x in fin]
+    assert [r["total"] for r in rows] == [x["totalAmount"] for x in fin] and rows[0]["total"] >= rows[-1]["total"]
+
+
+@pytest.mark.parametrize("role,modules", [
+    ("finance", None), ("superadmin", None), ("viewer", ["reports"]), ("admin", ["reports"]), ("sales", ["reports", "cashier"]),
+    ("viewer", ["cashier"]), ("viewer", ["cashier", "reports"]), ("finance", ["reports"]), ("viewer", []),
+])
+def test_gate_matches_the_operating_report_gate_for_every_role_module_shape(client, make_user, role, modules):
+    """差分：同一個帳號打範本與打營運報表（/api/reports/ar-aging，同一道 _require_reports_access）得到同一個放行／拒絕結果。
+    含放行路徑與「只有營運報表」的拒絕路徑——不靠我對閘門的理解，靠它跟閘門本人一致。"""
+    h = _hdr(client, make_user, "rtg2_%s_%s" % (role, "_".join(modules or ["none"])), role, modules=modules)
+    want = client.get("/api/reports/ar-aging", headers=h).status_code
+    assert want in (200, 403)
+    for url in ("/api/report-templates", "/api/report-templates/case-list/run", "/api/report-templates/case-list/excel"):
+        assert client.get(url, headers=h).status_code == want, (role, modules, url)
+
+
+def test_duplicate_condition_keys_are_rejected(client, make_user):
+    _seed()
+    h = _hdr(client, make_user, "rtk8")
+    r = _run(client, h, "case-list", "customer=大海&customer=小山")
+    assert r.status_code == 400 and "customer" in r.json()["detail"]
+
+
+def test_invalid_excel_request_does_not_burn_the_export_cooldown(client, make_user):
+    _seed()
+    h = _hdr(client, make_user, "rtk9")
+    assert client.get("/api/report-templates/case-list/excel?date_from=bad", headers=h).status_code == 400
+    assert client.get("/api/report-templates/case-list/excel?bogus=1", headers=h).status_code == 400
+    assert client.get("/api/report-templates/case-list/excel", headers=h).status_code == 200, "壞請求之後馬上一個好請求不該 429"
+    assert client.get("/api/report-templates/case-list/excel", headers=h).status_code == 429, "好請求之後才進冷卻"
