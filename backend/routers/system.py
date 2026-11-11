@@ -2676,6 +2676,54 @@ def test_google_calendar(authorization: str = Header(None)):
     return {"ok": True, "event_id": event_id}
 
 
+# ── LINE 通知設定（2026-11-11；channel access token 照 SMTP 密碼慣例：GET 遮罩、PUT 遮罩值＝保留）──────────
+
+_LINE_DEFAULTS = {"enabled": False, "channel_access_token": ""}
+
+
+@router.get("/api/settings/line-notify")
+def get_line_notify(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_notify as _ln
+    cfg = _get_setting("line_notify", {}) or {}
+    safe = {**_LINE_DEFAULTS, **{k: cfg[k] for k in _LINE_DEFAULTS if k in cfg}}
+    safe["channel_access_token"] = _ln.mask(cfg.get("channel_access_token"))
+    return safe
+
+
+@router.put("/api/settings/line-notify")
+def set_line_notify(body: dict = Body(...), authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    current = _get_setting("line_notify", {}) or {}
+    data = {**current, **{k: body[k] for k in _LINE_DEFAULTS if k in body}}
+    data = {**_LINE_DEFAULTS, **data}
+    data["enabled"] = bool(data.get("enabled"))
+    tok = body.get("channel_access_token") if "channel_access_token" in body else None
+    if tok is None or tok == _MASKED:
+        data["channel_access_token"] = current.get("channel_access_token", "")
+    else:
+        data["channel_access_token"] = str(tok).strip()
+    if data["enabled"] and not data["channel_access_token"]:
+        raise HTTPException(400, "啟用 LINE 通知前請先填寫 channel access token")
+    _set_setting("line_notify", data)
+    # 稽核只記「啟用與否／token 有無被更換」，不記 token 本身
+    _audit(_tok(authorization), "settings.line_notify.update", "settings", "line_notify", "LINE 通知設定",
+           {"enabled": data["enabled"], "tokenChanged": data["channel_access_token"] != current.get("channel_access_token", "")})
+    return {"ok": True}
+
+
+@router.post("/api/settings/line-notify/verify")
+def verify_line_notify(authorization: str = Header(None)):
+    """用已存的 token 呼叫 LINE（GET /v2/bot/info＋本月額度），確認 token 有效；不發任何訊息。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_notify as _ln
+    res = _ln.verify_token()
+    _audit(_tok(authorization), "settings.line_notify.verify", "settings", "line_notify", "驗證 LINE token", {"ok": res.get("ok", False)})
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "驗證失敗")
+    return {"ok": True, "name": res.get("name", ""), "basicId": res.get("basicId", ""), "quota": _ln.quota()}
+
+
 @router.post("/api/settings/email-notify/test")
 def test_email_notify(authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)

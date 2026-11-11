@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 907,
-  "endpoints_api": 903,
-  "write_total": 490,
-  "write_api": 490,
-  "get_api": 413,
-  "distinct_paths_api": 763,
-  "write_with_body_api": 360,
+  "endpoints_total": 910,
+  "endpoints_api": 906,
+  "write_total": 492,
+  "write_api": 492,
+  "get_api": 414,
+  "distinct_paths_api": 765,
+  "write_with_body_api": 361,
   "write_with_path_param_api": 354
  },
  "select_star": {
@@ -2078,6 +2078,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/settings/line-notify": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/settings/monthly-report-recipients": {
    "w": false,
    "pp": 0,
@@ -4033,6 +4038,11 @@
    "pp": 0,
    "body": false
   },
+  "POST /api/settings/line-notify/verify": {
+   "w": true,
+   "pp": 0,
+   "body": false
+  },
   "POST /api/settings/storage-locations/create": {
    "w": true,
    "pp": 0,
@@ -4464,6 +4474,11 @@
    "body": true
   },
   "PUT /api/settings/google-quota": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/line-notify": {
    "w": true,
    "pp": 0,
    "body": true

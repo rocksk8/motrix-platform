@@ -1,5 +1,11 @@
 # L0／L1 底層 更新紀錄
 
+## (next) — 2026-11-11（feat/line-notify；T79 候選：LINE 發送管道，階段 1＝封裝＋token 設定）
+- L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.line_notify`（LINE Messaging API push／multicast 封裝：`push`、`build_text`、`verify_token`、`quota`、`enabled`、`mask`、`SEND_*`）。對外呼叫只有一支 `_http`（urllib），測試換掉它；開發機標記（`.no_email_send`／`MOTRIX_EMAIL_SEND=off`）同時擋 LINE。
+- 設定：`system_settings.line_notify`（`enabled`、`channel_access_token`，admin 在設定頁輸入；照 SMTP 密碼慣例 GET 遮罩、PUT 遮罩值＝保留、啟用前必須有 token）。每日 JSON 匯出（`archive.py`）以 `json_remove` 挖掉 token；稽核只記啟用與否與 token 是否更換。
+- 端點（僅最高管理者）：`GET／PUT /api/settings/line-notify`、`POST /api/settings/line-notify/verify`（驗 token＋本月額度，不發訊息）。
+- 階段 1 **不接任何事件**：沒有任何現有信件因本次變更多發 LINE；個人綁定與事件開關在後續 commit。測試：`tests/platform/test_line_notify_t79.py`。
+
 ## 1.155（next，未取號）— 2026-11-08（T79；option_list 重新啟用已停用選項改需核准）〔train_number：1.154 → 1.155〕
 - **行為變更（使用者 2026-11-08 裁示）**：治理層 `_cmp_option_list`（`routers/def_pipeline.py`）把「重新啟用已停用的選項」從中性改判為放寬，需第二位最高管理者核准＋確認期間（原先判為中性是產品設計缺口，hichan-8 審A車時發現）；停用本身維持收緊、立即生效不變；第一次發布（沒有舊版）出現的選項沒有「已停用」歷史，不算重新啟用。**上線備註**：既有正式機升級後，有待核准的 option_list 版本時，同一清單不能再直接發布，連緊急停用都要先請審核人退回待核准版本（管線既有行為，非這次新增）。
 - 測試：`backend/tests/platform/test_option_lists_t62.py`；`backend/tests/platform/test_gov_contract_2026_11_08.py` 補合法 loose 種子（`seeds_2026_11_08.json`），`KNOWN_P3_NOT_APPLICABLE` 清空（option_list 現適用 P3）。

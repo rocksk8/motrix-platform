@@ -1,5 +1,5 @@
 {
- "core_version": "1.155",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1049,6 +1049,23 @@
    "module_licensed": "def(manifest, status, gate_enabled)",
    "sign_license": "def(payload, private_key_pem)",
    "verify_license": "def(blob=…)"
+  },
+  "helper:line_notify": {
+   "HTTP_TIMEOUT": "const",
+   "LINE_API_BASE": "const",
+   "MAX_TEXT": "const",
+   "MULTICAST_LIMIT": "const",
+   "SEND_PERMANENT_FAIL": "const",
+   "SEND_SENT": "const",
+   "SEND_SKIPPED": "const",
+   "SEND_TRANSIENT_FAIL": "const",
+   "SETTING_KEY": "const",
+   "build_text": "def(title, rows=…, *, reason=…, link=…)",
+   "enabled": "def()",
+   "mask": "def(token)",
+   "push": "def(user_ids, text)",
+   "quota": "def(token=…)",
+   "verify_token": "def(token=…)"
   },
   "helper:list_catalog": {
    "MAX_PAGE_SIZE_CEILING": "const",

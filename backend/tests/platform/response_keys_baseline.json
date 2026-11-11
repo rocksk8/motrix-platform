@@ -6546,6 +6546,13 @@
   ],
   "s": 200
  },
+ "/api/settings/line-notify": {
+  "k": [
+   "channel_access_token",
+   "enabled"
+  ],
+  "s": 200
+ },
  "/api/settings/monthly-report-recipients": {
   "k": [
    "userIds"

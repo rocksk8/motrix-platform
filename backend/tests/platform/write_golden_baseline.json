@@ -195,6 +195,12 @@
   ],
   "s": 200
  },
+ "POST /api/settings/line-notify/verify": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "PUT /api/ledger/roles": {
   "k": [
    "detail"
@@ -234,5 +240,11 @@
    "sort.default.dir"
   ],
   "s": 200
+ },
+ "PUT /api/settings/line-notify": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
  }
 }
