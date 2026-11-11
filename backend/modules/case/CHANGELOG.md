@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.216（next，未取號）— 2026-11-11（fix/t79-versions-mask-field-policy；t65 棘輪收尾）
+- 重構（行為不變）：`versions` 修改紀錄遮金額那一行（T79 N1 加入）由直接呼叫 `quote_money_visible(user)` 改走 `_tier_allowed("quote_money", user)`（欄位政策的報價單層級，＝同一支角色函式）。原本把 `quotations.py` 的直接角色函式呼叫從基準 5 推到 6，`tests/platform/test_field_policy_exits_t65.py::test_no_exit_file_grows_its_direct_role_function_calls` 轉紅；**基準檔沒有調高**。沒有 API／畫面／遮蔽結果的變動，既有 `test_collaborator_passes_and_versions_history_masks_money_for_non_money_accounts` 守行為。
+
 ## 1.0.215（next，未取號）— 2026-11-11（fix/ops-webauthn404-case-denied；正式機評估衍生：案件頁唯讀端點改用讀取規則）
 - 修正：`close-gates`（完結案五關）、`material-order-approvals`（材料申請審核摘要）、`versions`／`versions/{seq}/download`／`pdf-download`（PDF 版本與下載）原本只認擁有者規則，持 cashier 的財務開別人的案件頁時每次靜默被拒（`case-bundle` 的 parts 吞例外、頁面照開）——正式機 48 筆 `case.access_denied` 中 44 筆。改成案件頁本體同一條讀取規則（`scope="read"`／`allow_read`；可見範圍＝原單據，不寬也不嚴）。**沒有讀取資格的人（一般業務、只有 case_manage 的工程師）照舊 404。** 內部版 PDF 仍要金額檢視權或簽核人（`_require_money_or_approver` 不動）。
 - 修正（前端，N7，使用者確認）：報價單表單在待審核／簽核中，**非簽核人**（最高管理者、申請人、其他人）整張鎖唯讀（沿用 `isApproverLocked` 的鎖法，只有解鎖編輯例外），上方橫幅「此單目前待審核／簽核中，僅簽核人可編輯」並說明出路（申請人收回草稿／請簽核人退回）；簽核人本人行為不變。原本欄位可編輯、存檔必 403、自動存檔靜默失敗（正式機 14 次，全是最高管理者）。報價單表單 V3.42。
