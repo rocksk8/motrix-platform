@@ -2691,7 +2691,26 @@ def get_line_notify(authorization: str = Header(None)):
     safe = {**_LINE_DEFAULTS, **{k: cfg[k] for k in _LINE_DEFAULTS if k in cfg}}
     safe["channel_access_token"] = _ln.mask(cfg.get("channel_access_token"))
     safe["callback_url"] = _ln.callback_url()       # 要貼進 LINE Login channel 的 Callback URL；沒有對外網址 ⇒ ""
+    # 「同時發 LINE」的信件類型開關（只列已接線的類型；預設全關）
+    from helpers import mail_types as _mt
+    sw = _ln.events_view()
+    safe["events"] = [{"key": k, "name": (_mt.get(k).name if _mt.get(k) else k), "enabled": sw[k]} for k in _ln.WIRED_EVENTS]
     return safe
+
+
+@router.put("/api/settings/line-notify/events/{key}")
+def set_line_notify_event(key: str, body: dict = Body(...), authorization: str = Header(None)):
+    """勾選／取消某種信件「同時發 LINE」。只接受已接線的類型；enabled 必須是布林。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_notify as _ln
+    if key not in _ln.WIRED_EVENTS:
+        raise HTTPException(404, "這種通知尚未支援 LINE：%s" % key)
+    on = (body or {}).get("enabled")
+    if not isinstance(on, bool):
+        raise HTTPException(400, "enabled 必須是 true 或 false")
+    _ln.set_event(key, on)
+    _audit(_tok(authorization), "settings.line_notify.event", "settings", key, "LINE 通知事件開關：%s → %s" % (key, "開" if on else "關"))
+    return {"ok": True, "key": key, "enabled": on}
 
 
 @router.put("/api/settings/line-notify")

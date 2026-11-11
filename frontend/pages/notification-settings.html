@@ -334,6 +334,77 @@
       </div>
     </div>
 
+    <!-- LINE 通知（T79 候選）：同一批信件事件「同時發 LINE」；token 照 SMTP 密碼慣例（遮罩、留空＝保留）。
+         獨立的小元件，資料來源 GET/PUT /api/settings/line-notify、PUT .../events/{key}、POST .../verify。 -->
+    <div class="ns-card" id="line-panel" x-data="lineNotifyCard()">
+      <div class="ns-card-head">
+        <div class="ns-card-head-title">LINE 通知</div>
+        <span x-show="saved" x-transition style="font-size:12px;color:var(--success);font-weight:600">已儲存</span>
+      </div>
+      <div class="ns-card-body">
+        <div x-show="denied" style="font-size:13px;color:var(--text-dim)">LINE 通知設定只有最高管理者可以查看與修改。</div>
+        <div x-show="!denied">
+          <div class="ns-desc">
+            在下方勾選的通知，寄 Email 時會<strong>同時</strong>用 LINE 官方帳號推播給「已綁定 LINE」的收件人（收件人與個人退訂規則和 Email 完全相同）。
+            預設全部不發；訊息內容與 Email 相同，<strong>不含金額</strong>。
+          </div>
+
+          <div class="ns-toggle">
+            <input data-saved-field type="checkbox" id="chk-line-enabled" x-model="cfg.enabled" style="width:16px;height:16px;cursor:pointer">
+            <label for="chk-line-enabled">啟用 LINE 通知</label>
+            <span x-show="!cfg.enabled" style="font-size:12px;color:var(--text-dim)">(目前關閉)</span>
+            <span x-show="cfg.enabled" style="font-size:12px;color:var(--success);font-weight:600">(已啟用)</span>
+          </div>
+
+          <div class="ns-field" style="margin-bottom:12px">
+            <label>Channel access token（Messaging API，長效）</label>
+            <input data-saved-field type="password" x-model="cfg.channel_access_token" autocomplete="off" placeholder="貼上 LINE Developers → Messaging API → Channel access token">
+            <div style="font-size:12px;color:var(--text-dim);margin-top:4px">已儲存的 token 會顯示成圓點；不修改請保持不動。</div>
+          </div>
+
+          <div class="ns-field" style="margin-bottom:12px">
+            <label>對外網址（LINE 綁定回調用；沒有就留空）</label>
+            <input data-saved-field type="text" x-model="cfg.public_base_url" placeholder="https://網域（不含路徑）">
+            <div x-show="cfg.callback_url" style="font-size:12px;color:var(--text-dim);margin-top:4px">
+              LINE Login 的 Callback URL 請填：<code x-text="cfg.callback_url"></code>
+            </div>
+          </div>
+
+          <div class="ns-toggle">
+            <input data-saved-field type="checkbox" id="chk-line-links" x-model="cfg.include_links" style="width:16px;height:16px;cursor:pointer">
+            <label for="chk-line-links">LINE 訊息帶連結</label>
+            <span style="font-size:12px;color:var(--warning)">開啟會讓外部網路連到系統頁面，需先與網路管理確認；預設關閉。需要先填對外網址。</span>
+          </div>
+
+          <div class="ns-field" style="margin:12px 0">
+            <label>同時發 LINE 的通知</label>
+            <template x-for="e in cfg.events" :key="e.key">
+              <div class="ns-toggle" style="margin:2px 0">
+                <input type="checkbox" :id="'chk-line-ev-' + e.key" :checked="e.enabled" @change="toggleEvent(e, $event.target.checked)" style="width:16px;height:16px;cursor:pointer">
+                <label :for="'chk-line-ev-' + e.key" x-text="e.name"></label>
+              </div>
+            </template>
+            <div style="font-size:12px;color:var(--text-dim);margin-top:4px">勾選後立即生效；付款、薪資、獎金類通知目前不提供 LINE。</div>
+          </div>
+
+          <div class="ns-actions">
+            <button class="btn btn-primary" @click="save()" :disabled="saving">
+              <span x-show="!saving">儲存 LINE 設定</span>
+              <span x-show="saving">儲存中…</span>
+            </button>
+            <button class="btn btn-ghost" @click="verify()" :disabled="verifying">
+              <span x-show="!verifying">驗證 token</span>
+              <span x-show="verifying">驗證中…</span>
+            </button>
+          </div>
+
+          <div x-show="msg" x-text="msg" x-transition data-testid="line-msg"
+               :style="isError ? 'color:var(--danger)' : 'color:var(--success)'"
+               style="font-size:13px;margin-top:12px;font-weight:600"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- 每月營運報表收件人（2026-08-27 新增：取代原本寫死只寄 superadmin） -->
     <div class="ns-card">
       <div class="ns-card-head">
@@ -429,6 +500,58 @@
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
   <script>
+    // LINE 通知卡片（T79 候選）。token 欄位：後端回遮罩字串；原樣送回＝保留原值。
+    function lineNotifyCard() {
+      const hdr = (json) => {
+        const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+        return json ? { Authorization: 'Bearer ' + s.token, 'Content-Type': 'application/json' } : { Authorization: 'Bearer ' + s.token }
+      }
+      return {
+        cfg: { enabled: false, channel_access_token: '', public_base_url: '', include_links: false, callback_url: '', events: [] },
+        denied: false, saving: false, verifying: false, saved: false, msg: '', isError: false,
+        _say(text, err, ms) { this.msg = text; this.isError = !!err; setTimeout(() => { this.msg = '' }, ms || 5000) },
+        // Alpine 3 看到資料物件有 init() 會自己叫一次——這裡不再寫 x-init（會跑兩遍）
+        async init() { await this.load() },
+        async load() {
+          const r = await fetch('/api/settings/line-notify', { headers: hdr(false) })
+          if (r.status === 403) { this.denied = true; return }
+          if (r.ok) this.cfg = { ...this.cfg, ...(await r.json()) }
+        },
+        async save() {
+          this.saving = true
+          const { callback_url: _cb, events: _ev, ...payload } = this.cfg
+          const r = await fetch('/api/settings/line-notify', { method: 'PUT', headers: hdr(true), body: JSON.stringify(payload) })
+          this.saving = false
+          const d = await r.json().catch(() => ({}))
+          if (r.ok) {
+            this.saved = true; setTimeout(() => { this.saved = false }, 3000)
+            await this.load()
+            this._say('LINE 設定已儲存', false)
+          } else {
+            this._say(d.detail || '儲存失敗', true)
+          }
+        },
+        async toggleEvent(e, on) {
+          const r = await fetch('/api/settings/line-notify/events/' + encodeURIComponent(e.key), { method: 'PUT', headers: hdr(true), body: JSON.stringify({ enabled: on }) })
+          if (r.ok) { e.enabled = on; this._say((on ? '已開啟：' : '已關閉：') + e.name, false, 3000) }
+          else { const d = await r.json().catch(() => ({})); this._say(d.detail || '更新失敗', true); await this.load() }
+        },
+        async verify() {
+          this.verifying = true
+          const r = await fetch('/api/settings/line-notify/verify', { method: 'POST', headers: hdr(false) })
+          this.verifying = false
+          const d = await r.json().catch(() => ({}))
+          if (r.ok) {
+            const q = d.quota || {}
+            const quota = q.ok ? ('；本月已用 ' + q.used + (q.limit == null ? '（無上限）' : ' / ' + q.limit)) : ''
+            this._say('token 有效：' + (d.name || '（未取得名稱）') + quota, false, 8000)
+          } else {
+            this._say(d.detail || '驗證失敗（請先儲存 token）', true, 8000)
+          }
+        },
+      }
+    }
+
     function notifSettingsPage() {
       return {
         cfg: {

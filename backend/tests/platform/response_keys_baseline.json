@@ -6551,6 +6551,10 @@
    "callback_url",
    "channel_access_token",
    "enabled",
+   "events",
+   "events[].enabled",
+   "events[].key",
+   "events[].name",
    "include_links",
    "public_base_url"
   ],

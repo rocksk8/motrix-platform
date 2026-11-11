@@ -246,5 +246,11 @@
    "detail"
   ],
   "s": 400
+ },
+ "PUT /api/settings/line-notify/events/{key}": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
  }
 }

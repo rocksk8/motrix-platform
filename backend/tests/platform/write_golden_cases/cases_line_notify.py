@@ -5,5 +5,6 @@ _E = (4,)
 CASES = [
     {"key": "PUT /api/settings/line-notify", "url": "/api/settings/line-notify", "body": {"enabled": True}, "expect": _E},
     {"key": "POST /api/settings/line-notify/verify", "url": "/api/settings/line-notify/verify", "body": {}, "expect": _E},
+    {"key": "PUT /api/settings/line-notify/events/{key}", "url": "/api/settings/line-notify/events/approval_review_edit", "body": {"enabled": "yes"}, "expect": _E},
 ]
 WAIVE = {}

@@ -14,6 +14,7 @@ from urllib.parse import quote as _urlquote
 import logging
 from datetime import datetime   # notify_backup_stale 用；缺它是執行期 NameError
 import os
+import re
 import smtplib
 import threading
 from email.encoders import encode_base64 as _encode_b64
@@ -26,6 +27,7 @@ from .settings import _get_setting
 from .notification_prefs import is_enabled as _pref_enabled
 from . import mail_types as _mt
 from . import notify_matrix as _nm
+from . import line_notify as _ln
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +221,12 @@ def _mail_off(event_key) -> bool:
         return False
 
 
+#: LINE 通道要知道「信件收件人是哪些帳號」，但收件人解析（覆寫／退訂／關閉）只有 `_users_emails` 這一個漏斗，不可複製第二份。
+#: 做法：`send_registered` 在解析期間打開這個執行緒區域的收集器，漏斗把「實際回傳的信箱 ⇒ 帳號」記進去；
+#: 最後以**最終寄出的信箱清單**反查帳號（被覆寫模式丟掉的收件人不會跑進 LINE）。沒開收集器＝行為與原本完全相同。
+_resolved = threading.local()
+
+
 def _users_emails(where: str, params, event_key) -> list:
     if _mail_off(event_key):                   # 所有收件人查詢的唯一漏斗：關了就沒有收件人（呼叫端照「沒有收件人」處理）
         return []
@@ -226,10 +234,15 @@ def _users_emails(where: str, params, event_key) -> list:
         from db import get_db
         conn = get_db()
         rows = conn.execute(
-            "SELECT email, notification_muted FROM users WHERE active=1 "
+            "SELECT username, email, notification_muted FROM users WHERE active=1 "
             "AND email IS NOT NULL AND email != '' AND (%s)" % where, list(params)).fetchall()
         conn.close()
-        return [r["email"] for r in rows if _pref_enabled(r["notification_muted"], event_key)]
+        kept = [r for r in rows if _pref_enabled(r["notification_muted"], event_key)]
+        sink = getattr(_resolved, "map", None)
+        if sink is not None:
+            for r in kept:
+                sink.setdefault(r["email"], set()).add(r["username"])
+        return [r["email"] for r in kept]
     except Exception as exc:
         logger.warning("收件人查詢失敗（%s）：%s", event_key, exc)
         return []
@@ -932,6 +945,20 @@ def _custom_def_page(module_key: str) -> str:
     return f"{_base_url()}/pages/custom-def-review.html?key={_q(module_key)}"
 
 
+def _rows_plain(rows) -> list:
+    """信件的列 ⇒ LINE 用的純文字列。`_Safe`（已逸出的 HTML 標記）還原成文字：實體字元反轉、`<br>` 換成空白、其餘標籤拿掉。"""
+    out = []
+    for r in rows or []:
+        try:
+            k, v = r
+        except Exception:
+            continue
+        if isinstance(v, _Safe):
+            v = _html.unescape(re.sub(r"<[^>]+>", " ", re.sub(r"(?i)<br\s*/?>", " ", str(v))))
+        out.append((k, v))
+    return out
+
+
 def send_registered(event_key: str, *, title: str, rows: list, usernames: list = None, to_group: bool = False,
                     reason: str = "", badge_text: str = "通知", badge_color: str = "#2F6FD6",
                     link: str = "", note: str = "", button_text: str = "前往系統查看", wait: bool = False, out: dict = None) -> bool:
@@ -943,8 +970,13 @@ def send_registered(event_key: str, *, title: str, rows: list, usernames: list =
     `SEND_SENT`（寄出了）、`SEND_UNKNOWN`（等不到結果——不知道有沒有出去，重寄可能雙寄）、`SEND_PERMANENT_FAIL`（這一封永遠寄不出去——重試只是天天失敗）都回 True（保留記號）；
     只有明確的暫時失敗（`SEND_TRANSIENT_FAIL`）、機器層級略過（`SEND_SKIPPED`）或沒有收件人才回 False（不寫記號，下次重試）。
     `out`（選填 dict）：寄送結果寫進 `out["outcome"]`（`SEND_*`；沒有收件人＝`"no_recipient"`），讓呼叫端分得出「真的寄出」與「保留記號但不確定」。"""
-    to = list(dict.fromkeys((_lookup_emails(usernames, event_key) if usernames else [])
-                            + (_group_emails(event_key) if to_group else [])))
+    _resolved.map = {}                      # 收集「信箱 ⇒ 帳號」給 LINE 通道用（見 `_resolved` 說明）
+    try:
+        to = list(dict.fromkeys((_lookup_emails(usernames, event_key) if usernames else [])
+                                + (_group_emails(event_key) if to_group else [])))
+        by_email = _resolved.map
+    finally:
+        _resolved.map = None
     if not to:
         logger.warning("send_registered: %r 沒有收件人（usernames=%r, to_group=%r）", event_key, usernames, to_group)
         if out is not None:
@@ -953,6 +985,9 @@ def send_registered(event_key: str, *, title: str, rows: list, usernames: list =
     html = _build_html(event_key, title, badge_text, badge_color, rows, "", link or _base_url(),
                        intro=reason, button_text=button_text, note=note)
     handle = _async_send(to, _mt.subject(event_key, reason or title), html)
+    # LINE 通道（附帶、背景、失敗只記 log；沒勾選／沒啟用／沒人綁定＝什麼都不做）。收件人＝信件最終寄出的那些帳號；連結經 safe_link（預設不帶）
+    _ln.notify_users(event_key, sorted({u for e in to for u in by_email.get(e, ())}), title, _rows_plain(rows),
+                     reason=reason, link=link)
     if wait:
         outcome = handle.wait()
         if out is not None:

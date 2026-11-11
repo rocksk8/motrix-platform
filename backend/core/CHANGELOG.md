@@ -5,7 +5,12 @@
 - 設定：`system_settings.line_notify`（`enabled`、`channel_access_token`，admin 在設定頁輸入；照 SMTP 密碼慣例 GET 遮罩、PUT 遮罩值＝保留、啟用前必須有 token）。每日 JSON 匯出（`archive.py`）以 `json_remove` 挖掉 token；稽核只記啟用與否與 token 是否更換。
 - 端點（僅最高管理者）：`GET／PUT /api/settings/line-notify`、`POST /api/settings/line-notify/verify`（驗 token＋本月額度，不發訊息）。
 - 曝露面（PM 裁示）：`public_base_url`（Tunnel 公開網域，LINE Login callback 用；只收 `https://網域[:埠]`）與 `include_links`（訊息是否帶連結，**預設關**，必須是布林 true、且要有 public_base_url 才能開）是**兩個獨立開關**；有公開網域不代表訊息帶連結。帶連結時只限 `LINK_PAGES` 白名單（quotation-form／approval-queue／case-management／cashier 四頁），內網網址換成對外網址、白名單外的連結直接不帶。新增 L1 名稱：`LINK_PAGES`、`CALLBACK_PATH`、`normalize_public_base`、`public_base`、`callback_url`、`links_enabled`、`safe_link`。
-- 階段 1 **不接任何事件**：沒有任何現有信件因本次變更多發 LINE；個人綁定與事件開關在後續 commit。測試：`tests/platform/test_line_notify_t79.py`。
+- 事件通道（階段 2）：`email_notify.send_registered` 寄信後同步呼叫 `line_notify.notify_users`（背景、失敗只記 log、不影響信件與「已通知」記號）。收件人**不另做第二份解析**：`_users_emails`（收件人唯一漏斗）在 `send_registered` 解析期間把「信箱 ⇒ 帳號」記進執行緒區域收集器，最後以**實際寄出的信箱**反查帳號——所以覆寫模式、個人退訂、公司關閉、停用、沒信箱的人在 LINE 一律與信件同一結果；沒開收集器時行為與原本逐位元相同。
+  新增 L1 名稱：`WIRED_EVENTS`（已接線＝可勾選的類型，目前 `approval_review_edit`、`warranty_expiry`；付款／薪資／獎金類不開放）、`LINKS_KEY`、`push_async`、`event_enabled`、`events_view`、`set_event`、`link_user`、`unlink_user`、`is_linked`、`ids_for`、`notify_users`。
+  端點：`PUT /api/settings/line-notify/events/{key}`（僅最高管理者；只收已接線的類型、enabled 必須是布林）；`GET /api/settings/line-notify` 多回 `events`。事件開關預設全關。
+  綁定儲存：`system_settings.line_links = {帳號: {userId, linkedAt}}`——**刻意不動資料庫 schema**（核心 migration 已凍結在基準 118，新增核心表要走列車編號且易撞號）；同一個 LINE userId 不能綁給兩個帳號。OAuth 綁定流程尚未接（等對外 callback 網址）。
+- 畫面：`notification-settings.html` 新增獨立小元件「LINE 通知」卡片（啟用、token 遮罩、對外網址與 Callback URL 提示、「訊息帶連結」開關〔預設關〕、事件勾選〔即時生效〕、驗證 token 並顯示本月額度）。
+- 測試：`tests/platform/test_line_notify_t79.py`、`modules/case/tests/test_line_review_edit_2026_11_11.py`（走真實 review-edit 端點的 e2e，LINE 對外呼叫為假的）、`tests/test_e2e_line_notify_settings_2026_11_11.py`（瀏覽器按鈕 e2e）。
 
 ## 1.155（next，未取號）— 2026-11-08（T79；option_list 重新啟用已停用選項改需核准）〔train_number：1.154 → 1.155〕
 - **行為變更（使用者 2026-11-08 裁示）**：治理層 `_cmp_option_list`（`routers/def_pipeline.py`）把「重新啟用已停用的選項」從中性改判為放寬，需第二位最高管理者核准＋確認期間（原先判為中性是產品設計缺口，hichan-8 審A車時發現）；停用本身維持收緊、立即生效不變；第一次發布（沒有舊版）出現的選項沒有「已停用」歷史，不算重新啟用。**上線備註**：既有正式機升級後，有待核准的 option_list 版本時，同一清單不能再直接發布，連緊急停用都要先請審核人退回待核准版本（管線既有行為，非這次新增）。

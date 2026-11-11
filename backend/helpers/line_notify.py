@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """LINE Messaging API 發送管道（2026-11-11，T79 候選票；信件通知的並行通道）。
 
-[單位] helper:line_notify    [層] L1    [穩定度] 實作（階段 1：封裝＋設定；綁定與事件接線在後續 commit）
-[公開介面] LINE_API_BASE, LINK_PAGES, CALLBACK_PATH, SEND_*, enabled, build_text, push, verify_token, quota, mask,
-          normalize_public_base, public_base, callback_url, links_enabled, safe_link
-[曝露面] 兩個**獨立**設定（2026-11-11 PM 裁示）：`public_base_url`（Tunnel 公開網域，callback 用）與 `include_links`（訊息是否帶連結，預設關）。
-         有公開網域 ≠ 訊息帶連結；帶連結要兩者都成立，且只限 `LINK_PAGES` 白名單頁面。
+[單位] helper:line_notify    [層] L1    [穩定度] 實作（已接事件通道；OAuth 綁定流程尚未接，等對外 callback 網址）
+[公開介面] CALLBACK_PATH, HTTP_TIMEOUT, LINE_API_BASE, LINKS_KEY, LINK_PAGES, MAX_TEXT, MULTICAST_LIMIT, SEND_PERMANENT_FAIL, SEND_SENT, SEND_SKIPPED, SEND_TRANSIENT_FAIL, SETTING_KEY, WIRED_EVENTS, build_text, callback_url, enabled, event_enabled, events_view, ids_for, is_linked, link_user, links_enabled, mask, normalize_public_base, notify_users, public_base, push, push_async, quota, safe_link, set_event, unlink_user, verify_token
+[契約題] tests/platform/test_line_notify_t79.py、modules/case/tests/test_line_review_edit_2026_11_11.py
 [不變式]
-  ① 本檔不 import 業務模組、不 import email_notify（email_notify 之後會呼叫本檔，不可循環）；寄不寄由 `email_notify.email_send_policy()`
-     （環境變數／`.no_email_send`）決定——**開發機標記同時擋信件與 LINE**（惰性 import，開發機誤推真實同仁的事故同一類）。
+  ⓪ 曝露面：`public_base_url`（Tunnel 公開網域，callback 用）與 `include_links`（訊息是否帶連結，預設關）是**兩個獨立設定**（2026-11-11 PM 裁示）。
+     有公開網域 ≠ 訊息帶連結；帶連結要兩者都成立，且只限 `LINK_PAGES` 白名單頁面，其餘連結一律不帶（不改寫）。
+  ① 本檔不 import 業務模組；對 `email_notify` 只在函式內惰性 import（`email_notify` 頂層 import 本檔，反過來不可循環）；寄不寄由 `email_notify.email_send_policy()`
+     （環境變數／`.no_email_send`）決定——**開發機標記同時擋信件與 LINE**（開發機誤推真實同仁的事故同一類）。
   ② 唯一的對外呼叫是 `_http`（urllib）；測試只換 `_http`。conftest NETGUARD 擋 urllib.request.urlopen，所以測試沒換就連不出去。
   ③ 回傳值沿用信件的四種結果（字串值與 `email_notify.SEND_*` 相同）：sent／transient_fail／permanent_fail／skipped。永不拋例外。
   ④ channel access token 存 `system_settings.line_notify.channel_access_token`（admin 在設定頁輸入；與 SMTP 密碼同一慣例）。
@@ -18,11 +18,13 @@
 import json
 import logging
 import re
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime
 
-from .settings import _get_setting
+from .settings import _get_setting, _set_setting
 
 logger = logging.getLogger(__name__)
 
@@ -209,6 +211,128 @@ def push(user_ids, text: str) -> str:
     except Exception as exc:       # 連線層錯誤（逾時／DNS／TLS）一律暫時性：往「會重試」那一側倒
         logger.warning("LINE push error: %s", exc)
         return SEND_TRANSIENT_FAIL
+
+
+def push_async(user_ids, text: str) -> threading.Thread:
+    """背景推播（不擋呼叫端）；回 daemon 執行緒（測試可 `.join()`）。結果只進 log——LINE 是附帶通道，失敗不影響信件與呼叫端的「已通知」記號。"""
+    def _run():
+        try:
+            out = push(user_ids, text)
+            if out != SEND_SENT:
+                logger.info("LINE 推播結果：%s（對象 %d 人）", out, len(list(user_ids or [])))
+        except Exception:                                       # push 本身不丟例外；這裡是最後一道
+            logger.exception("LINE 背景推播的執行緒自己炸了")
+    t = threading.Thread(target=_run, daemon=True, name="line-push")
+    t.start()
+    return t
+
+
+# ── 事件開關：哪些信件類型「同時發 LINE」（公司層、預設全關、逐類由最高管理者勾選）──────────────────────────
+#: 已接上 LINE 的信件類型（＝設定頁可勾選的清單）。**接一個事件就加一個**；沒接線的類型不開放勾選（勾了也不會有任何東西送出，只會誤導）。
+#: 付款／薪資／獎金類（含金額或個資）先不開放——PM 裁示（2026-11-11）；要開放須逐類確認內容不含金額。
+WIRED_EVENTS = ("approval_review_edit", "warranty_expiry")
+
+
+def event_enabled(event_key: str) -> bool:
+    """這種信件類型要不要同時發 LINE：LINE 已啟用（有 token）、類型已接線、管理者已勾選。"""
+    try:
+        c = _cfg()
+        return bool(c.get("enabled") and c.get("channel_access_token") and event_key in WIRED_EVENTS
+                    and (c.get("events") or {}).get(event_key) is True)
+    except Exception:
+        return False
+
+
+def events_view() -> dict:
+    """⇒ {key: bool}（只含已接線的類型；缺項＝關）。"""
+    ev = _cfg().get("events") or {}
+    return {k: ev.get(k) is True for k in WIRED_EVENTS}
+
+
+def set_event(event_key: str, on: bool) -> None:
+    """寫入單一類型的開關。不是已接線的類型 ⇒ `ValueError`（不留死開關）。"""
+    if event_key not in WIRED_EVENTS:
+        raise ValueError("這種通知尚未支援 LINE：%s" % event_key)
+    if not isinstance(on, bool):
+        raise ValueError("enabled 必須是 true 或 false")
+    with _lock:
+        c = dict(_cfg())
+        ev = dict(c.get("events") or {})
+        ev[event_key] = on
+        c["events"] = ev
+        _set_setting(SETTING_KEY, c)
+
+
+# ── 綁定：系統帳號 ⇄ LINE userId ──────────────────────────────────────────────────────────────────────────
+#: 存 `system_settings.line_links = {username: {"userId", "linkedAt"}}`。⚠️ 刻意不動資料庫 schema：核心 migration 已凍結在基準 118，
+#: 新增核心表／欄位要走列車編號且與別的分支撞號；使用者數是幾十人、綁定／解除很少發生，一個 JSON 設定值足夠。
+#: 讀改寫用行程內的鎖保護（單一伺服器行程；若改多 worker 要換成資料表）。
+LINKS_KEY = "line_links"
+_USER_ID_RE = re.compile(r"^U[0-9a-f]{32}$")
+_lock = threading.Lock()
+
+
+def _links() -> dict:
+    v = _get_setting(LINKS_KEY, {}) or {}
+    return v if isinstance(v, dict) else {}
+
+
+def link_user(username: str, line_user_id: str) -> None:
+    """綁定。userId 格式不對 ⇒ `ValueError`；這個 LINE 帳號已綁在**別的**系統帳號 ⇒ `ValueError`（不讓通知送錯人）；同一帳號重綁＝換成新的。"""
+    uid = str(line_user_id or "").strip()
+    if not username or not _USER_ID_RE.match(uid):
+        raise ValueError("LINE userId 格式不正確")
+    with _lock:
+        links = dict(_links())
+        for other, rec in links.items():
+            if other != username and isinstance(rec, dict) and rec.get("userId") == uid:
+                raise ValueError("這個 LINE 帳號已綁定給其他系統帳號")
+        links[username] = {"userId": uid, "linkedAt": datetime.now().isoformat(timespec="seconds")}
+        _set_setting(LINKS_KEY, links)
+
+
+def unlink_user(username: str) -> bool:
+    """解除綁定；原本就沒綁 ⇒ False。"""
+    with _lock:
+        links = dict(_links())
+        if username not in links:
+            return False
+        links.pop(username)
+        _set_setting(LINKS_KEY, links)
+        return True
+
+
+def is_linked(username: str) -> bool:
+    rec = _links().get(username)
+    return isinstance(rec, dict) and bool(_USER_ID_RE.match(str(rec.get("userId") or "")))
+
+
+def ids_for(usernames) -> list:
+    """帳號 ⇒ 已綁定者的 LINE userId（保持順序、去重；沒綁的略過）。"""
+    links = _links()
+    out = []
+    for u in dict.fromkeys(usernames or []):
+        rec = links.get(u)
+        uid = str((rec or {}).get("userId") or "") if isinstance(rec, dict) else ""
+        if _USER_ID_RE.match(uid) and uid not in out:
+            out.append(uid)
+    return out
+
+
+def notify_users(event_key: str, usernames, title: str, rows=None, *, reason: str = "", link: str = ""):
+    """信件寄出時同步發 LINE：類型沒勾選／LINE 未啟用／沒有人綁定 ⇒ 什麼都不做（回 None）；否則背景推播並回執行緒。**永不丟例外。**
+    收件人由呼叫端給（＝信件解析出來的、已套過覆寫與個人退訂的帳號），這裡不再做第二次收件人解析。"""
+    try:
+        if not event_enabled(event_key):
+            return None
+        ids = ids_for(usernames)
+        if not ids:
+            logger.info("LINE：%r 沒有已綁定 LINE 的收件人（收件 %d 人）", event_key, len(list(usernames or [])))
+            return None
+        return push_async(ids, build_text(title, rows, reason=reason, link=link))
+    except Exception:
+        logger.exception("LINE notify_users 失敗（不影響信件；event=%r）", event_key)
+        return None
 
 
 def verify_token(token: str = None) -> dict:

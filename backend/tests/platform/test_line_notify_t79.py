@@ -141,6 +141,8 @@ def test_quota_limited_and_unlimited(ln):
 def test_settings_get_masks_put_keeps_and_replaces(client, make_user, ln):
     sa = _hdr(client, make_user, "ln_sa", "superadmin")
     g = client.get("/api/settings/line-notify", headers=sa).json()
+    assert g.pop("events") == [{"key": "approval_review_edit", "name": "報價單審核中被簽核人編輯", "enabled": False},
+                               {"key": "warranty_expiry", "name": "設備保固即將到期", "enabled": False}]      # 預設全關
     assert g == {"enabled": True, "channel_access_token": "••••••••", "public_base_url": "", "include_links": False, "callback_url": ""}
     assert TOKEN not in client.get("/api/settings/line-notify", headers=sa).text
     # 遮罩值／空值 ＝ 保留原 token
@@ -223,6 +225,70 @@ def test_hand_edited_garbage_settings_fail_closed(ln):
     assert ln.public_base() == "" and ln.links_enabled() is False and ln.callback_url() == "" and ln.safe_link(LINK) == ""
     _set_setting("line_notify", {"enabled": True, "channel_access_token": TOKEN, "public_base_url": "https://ok.example.com", "include_links": "true"})
     assert ln.links_enabled() is False                                    # 非布林 true ⇒ 不當成開
+
+
+# ── 事件開關與綁定 ────────────────────────────────────────────────────────
+
+def test_event_switch_endpoint_only_wired_types_and_strict_bool(client, make_user, ln):
+    sa = _hdr(client, make_user, "ln_sa8", "superadmin")
+    adm = _hdr(client, make_user, "ln_adm2", "admin")
+    url = "/api/settings/line-notify/events/%s"
+    assert client.put(url % "approval_review_edit", headers=adm, json={"enabled": True}).status_code == 403
+    assert ln.event_enabled("approval_review_edit") is False                    # 預設關
+    assert client.put(url % "approval_review_edit", headers=sa, json={"enabled": True}).status_code == 200
+    assert ln.event_enabled("approval_review_edit") is True and ln.event_enabled("warranty_expiry") is False
+    for bad in ("true", 1, None):
+        assert client.put(url % "warranty_expiry", headers=sa, json={"enabled": bad}).status_code == 400
+    assert client.put(url % "payslip_payable", headers=sa, json={"enabled": True}).status_code == 404    # 沒接線的類型不開放勾選
+    assert client.put(url % "no_such_type", headers=sa, json={"enabled": True}).status_code == 404
+    # 其他設定（PUT 主設定）不會洗掉事件開關
+    assert _put(client, sa, enabled=True).status_code == 200
+    assert ln.event_enabled("approval_review_edit") is True
+    assert client.put(url % "approval_review_edit", headers=sa, json={"enabled": False}).status_code == 200
+    assert ln.event_enabled("approval_review_edit") is False
+
+
+def test_event_needs_line_enabled_and_wired(ln):
+    from helpers.settings import _set_setting
+    ln.set_event("warranty_expiry", True)
+    assert ln.event_enabled("warranty_expiry") is True
+    _set_setting("line_notify", {**ln._cfg(), "enabled": False})
+    assert ln.event_enabled("warranty_expiry") is False
+    with pytest.raises(ValueError):
+        ln.set_event("payment_request_approved", True)
+    for k in ln.WIRED_EVENTS:                                     # 每個已接線的類型都真的登記過，且不是付款／薪資／獎金類
+        from helpers import mail_types as mt
+        assert mt.get(k) is not None, k
+        assert not any(w in k for w in ("payable", "payment", "payslip", "bonus", "expense", "voucher", "cashier")), k
+
+
+def test_link_rules(ln):
+    a, b = "U" + "a" * 32, "U" + "b" * 32
+    ln.link_user("amy", a)
+    assert ln.is_linked("amy") and ln.ids_for(["amy", "nobody", "amy"]) == [a]
+    with pytest.raises(ValueError):
+        ln.link_user("bob", a)                                    # 同一個 LINE 帳號不能綁給兩個系統帳號（通知會送錯人）
+    ln.link_user("amy", b)                                        # 同一系統帳號重綁＝換成新的
+    assert ln.ids_for(["amy"]) == [b]
+    ln.link_user("bob", a)                                        # 舊的釋放後可以給別人
+    for bad in ("", "x", "U123", "u" + "a" * 32, "U" + "g" * 32, None):
+        with pytest.raises(ValueError):
+            ln.link_user("cy", bad)
+    assert ln.unlink_user("amy") is True and ln.unlink_user("amy") is False and ln.ids_for(["amy"]) == []
+    from helpers.settings import _set_setting
+    _set_setting("line_links", {"amy": "garbage", "bob": {"userId": "nope"}})        # 手改壞的資料 ⇒ 當成沒綁，不丟例外
+    assert ln.ids_for(["amy", "bob"]) == [] and not ln.is_linked("amy")
+
+
+def test_notify_users_noop_cases_never_raise(ln):
+    ln.link_user("amy", "U" + "a" * 32)
+    assert ln.notify_users("approval_review_edit", ["amy"], "t") is None          # 類型沒勾選
+    ln.set_event("approval_review_edit", True)
+    assert ln.notify_users("approval_review_edit", ["nobody"], "t") is None        # 沒人綁定
+    assert ln.notify_users("approval_review_edit", None, "t") is None
+    th = ln.notify_users("approval_review_edit", ["amy"], "標題", [("單號", "MQ-1")])
+    th.join(5)
+    assert ln.fake.calls[-1][1] == "/v2/bot/message/push" and ln.fake.calls[-1][3]["to"] == "U" + "a" * 32
 
 
 def test_cannot_enable_without_token(client, make_user):

@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 910,
-  "endpoints_api": 906,
-  "write_total": 492,
-  "write_api": 492,
+  "endpoints_total": 911,
+  "endpoints_api": 907,
+  "write_total": 493,
+  "write_api": 493,
   "get_api": 414,
-  "distinct_paths_api": 765,
-  "write_with_body_api": 361,
-  "write_with_path_param_api": 354
+  "distinct_paths_api": 766,
+  "write_with_body_api": 362,
+  "write_with_path_param_api": 355
  },
  "select_star": {
   "modules": 287,
@@ -4481,6 +4481,11 @@
   "PUT /api/settings/line-notify": {
    "w": true,
    "pp": 0,
+   "body": true
+  },
+  "PUT /api/settings/line-notify/events/{key}": {
+   "w": true,
+   "pp": 1,
    "body": true
   },
   "PUT /api/settings/monthly-report-recipients": {
