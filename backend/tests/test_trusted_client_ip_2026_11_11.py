@@ -169,28 +169,42 @@ def _uvicorn_launch_lines():
     return out
 
 
+def _launcher_line_problem(ln):
+    """一行 uvicorn 啟動行有沒有把 forwarded-allow-ips 釘在 127.0.0.1？⇒ 問題說明或 None（真測試與正對照走同一條路）。"""
+    import re
+    m = re.search(r"--forwarded-allow-ips[= ]+(\S+)", ln)
+    if not m:
+        return "沒有明寫 --forwarded-allow-ips 127.0.0.1"
+    if m.group(1).strip("'\"") != "127.0.0.1":
+        return "forwarded-allow-ips 必須只信 127.0.0.1（不可 *）：" + m.group(1)
+    if "--no-proxy-headers" in ln:
+        return "不可用 --no-proxy-headers（會丟掉 X-Forwarded-Proto 的 scheme 處理）"
+    return None
+
+
 def test_every_launcher_that_binds_all_interfaces_pins_uvicorn_forwarded_allow_ips():
     """uvicorn 的 forwarded_allow_ips 若被環境變數 FORWARDED_ALLOW_IPS／複製來的指令改成 `*`，uvicorn 會對任何對端取 XFF 第一個值
     ⇒ 原本的漏洞回來而 helper 擋不住（它信 request.client.host）。命令列優先於環境變數，所以每個綁 0.0.0.0 的啟動行都明寫死
-    （正式機 autostart.bat、手動重啟 restart.bat、開發用 start.bat／start_server.ps1；綁 127.0.0.1 的演練腳本不用）。"""
-    import re
+    （正式機 autostart.bat、手動重啟 restart.bat、開發用 start.bat／start_server.ps1；綁 127.0.0.1 的演練腳本不用）。
+    已知限制：掃描器要求 uvicorn／main:app／0.0.0.0 在**同一行**；用 `^`／反引號斷行、或 `--host %HOST%` 這種寫法的啟動檔會被略過
+    （現有四個都是單行）——新增啟動檔請保持單行，或把它加進這裡。"""
     lines = _uvicorn_launch_lines()
     names = {rel for rel, _ in lines}
     assert "backend/autostart.bat" in names and len(names) >= 2, "掃描器沒找到啟動行（不可靜默掃空）：%s" % sorted(names)
-    for rel, ln in lines:
-        m = re.search(r"--forwarded-allow-ips[= ]+(\S+)", ln)
-        assert m, "%s 的 uvicorn 啟動行沒有明寫 --forwarded-allow-ips 127.0.0.1：\n%s" % (rel, ln)
-        assert m.group(1).strip("'\"") == "127.0.0.1", "%s：forwarded-allow-ips 必須只信 127.0.0.1（不可 *）：%s" % (rel, m.group(1))
-        assert "--no-proxy-headers" not in ln
+    bad = ["%s：%s\n%s" % (rel, _launcher_line_problem(ln), ln) for rel, ln in lines if _launcher_line_problem(ln)]
+    assert not bad, "uvicorn 啟動行不合格：\n" + "\n".join(bad)
 
 
-def test_launcher_scanner_positive_control_it_flags_a_launcher_without_the_flag(monkeypatch):
-    """正對照：把 restart.bat 的旗標拿掉，掃描到的那行就必須不合格（避免掃描器永遠只看到合格的行）。"""
+def test_launcher_check_positive_control_rejects_a_launcher_without_the_flag():
+    """正對照：同一個檢查函式——真的 restart.bat 啟動行合格；拿掉旗標、改成 `*`、加 --no-proxy-headers 都不合格。"""
     import re
     ok = {rel: ln for rel, ln in _uvicorn_launch_lines()}
     assert "backend/restart.bat" in ok, "restart.bat 啟動行沒被掃到"
-    stripped = re.sub(r"--forwarded-allow-ips[= ]+\S+\s*", "", ok["backend/restart.bat"])
-    assert not re.search(r"--forwarded-allow-ips", stripped)
+    line = ok["backend/restart.bat"]
+    assert _launcher_line_problem(line) is None
+    assert _launcher_line_problem(re.sub(r"--forwarded-allow-ips[= ]+\S+\s*", "", line))
+    assert _launcher_line_problem(line.replace("--forwarded-allow-ips 127.0.0.1", "--forwarded-allow-ips *"))
+    assert _launcher_line_problem(line + " --no-proxy-headers")
 
 
 def test_scoped_ipv6_in_cf_header_is_not_adopted():
