@@ -61,6 +61,9 @@ import re
 
 import pytest
 
+from core import source_tree
+from tests import _frontend_sources as FS
+
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PAGES_DIR = ROOT / "frontend" / "pages"
 
@@ -68,7 +71,10 @@ PAGES_DIR = ROOT / "frontend" / "pages"
 WRITE_RE = re.compile(r"method\s*:\s*['\"](POST|PUT|PATCH|DELETE)['\"]", re.I)
 
 #: 頁面自己 `<script src>` 進來的專案 js。
-_SRC_RE = re.compile(r'<script[^>]+src="([^"]+\.js)"')
+#: 單雙引號皆可、容許 `?v=` 版本戳（原本只吃 `src="….js"` ⇒ 將來有人加版本戳就會安靜少掃）。
+_SRC_RE = re.compile(r"""<script[^>]+src=["']([^"']+?\.js)(?:\?[^"']*)?["']""")
+#: 動態載入：`el.src = '….js'`（approval-settings／case-management／map／quotations 都有）。
+_DYN_SRC_RE = re.compile(r"""\.src\s*=\s*["']([^"']+?\.js)(?:\?[^"']*)?["']""")
 
 #: 🔴 **唯讀頁的豁免登記表**（2026-09-23 實算，共 8 頁）。
 #:
@@ -109,11 +115,6 @@ READ_ONLY_PAGES = {
     "file-center.html":
         "檔案中心（附件目錄 P3）：只呼叫 `GET /api/filehub/search`（各擁有模組 `attachments.catalog` 提供者的 `search`／`count` 合併結果）；"
         "沒有任何寫入端點——上傳與刪除都在原單據頁（報價單、出貨單、傳票…）、開檔走 L1 `GET /api/attachments/open` ⇒ 頁面唯讀與後端一致。",
-    # ⚠️ 這一筆**不是唯讀頁**：登記是因為守門的偵測盲區（2026-11-11 UX 導覽票順手查出，a71c3164 基底就是紅的，不是那張票造成的）。
-    "remit-kinds-settings.html":
-        "匯款款別設定（定義文件庫第三個編輯頁）**有**寫入：`PUT/POST/DELETE …/draft｜validate｜publish｜restore`，都寫在模組自己的 "
-        "`backend/modules/subcontract/js/remit-kinds-settings.js`（`this._call({ method: 'PUT' }, …)`）；頁面以 `../js/remit-kinds-settings.js` 載入，"
-        "而守門只解析 `frontend/js/`，找不到模組目錄的檔案 ⇒ 誤判成沒有動作。要改的是守門解析模組 js 的路徑（另案），不是這一頁；修好後請把這一筆拿掉。",
     "reports-hub.html":
         "報表中心（2026-11-11 UX 導覽票）：純導覽頁，只讀選單宣告（`window.MotrixMenu.groupItems('analysis')`，已依權限過濾）畫出頁籤與卡片連結；"
         "唯一的儲存是 localStorage 記住上次的頁籤，沒有任何後端呼叫 ⇒ 報表本身的動作都在各報表頁。",
@@ -124,17 +125,28 @@ _EMPTY_REASONS = ("唯讀", "唯讀頁", "沒有寫入", "不需要", "純顯示
 
 
 def _pages():
-    return sorted(PAGES_DIR.glob("*.html"))
+    # 2026-11-11：頁面位置一律經 source_tree（frontend/pages ∪ modules/*/pages），不自己 glob。
+    return source_tree.page_files()
 
 
 def _linked(page):
+    """頁面 `<script src>` 載入的專案 js（實體檔）。
+
+    ☠️ 2026-11-11（UX 導覽票查出）：原本用「頁面所在目錄 + src」自己解析，而模組專屬 js 住在
+    `backend/modules/<key>/js/`（網址仍是 `/js/<檔名>`）⇒ 解析不到就**安靜地當成沒有那支 js**：
+    寫入動作全在模組 js 裡的頁面（匯款款別設定）被判成「沒有任何會送出的動作」。
+    ⇒ 一律用 `FS.js_path`（與伺服器同一套：模組版優先，其次 frontend/js、frontend/static）；找不到的才退回相對路徑。
+    """
     out = []
     html = page.read_text(encoding="utf-8", errors="replace")
-    for m in _SRC_RE.finditer(html):
+    for m in list(_SRC_RE.finditer(html)) + list(_DYN_SRC_RE.finditer(html)):
         s = m.group(1)
         if "vendor" in s or s.startswith("http"):
             continue
-        cand = (page.parent / s).resolve()
+        try:
+            cand = FS.js_path(s).resolve()
+        except FileNotFoundError:
+            cand = (page.parent / s).resolve()
         if cand.exists():
             out.append(cand)
     return out
@@ -166,6 +178,50 @@ def _writes(page, shared):
 # ══════════════════════════════════════════════════════════════════════
 # ⓪ 量具
 # ══════════════════════════════════════════════════════════════════════
+
+def test_ac1_every_script_link_of_every_page_resolves_to_a_file():
+    """⚙️ **掃描對象不可以安靜地少掃**（2026-11-11 UX 導覽票查出的盲區）。
+
+    模組專屬 js 住在 `backend/modules/<key>/js/`，頁面仍以 `../js/<檔名>` 載入。守門若用「頁面目錄＋src」自己解析，
+    那支 js 就**不存在**——而一份掃不到的檔與一份乾淨的檔，在結果上長得一樣（匯款款別設定被判成沒有任何寫入動作）。
+    ⇒ 每一個 `<script src>` 都必須經共用列舉（`FS.js_path`）找得到實體檔；找不到 ⇒ 紅（掃描盲區或死連結）。
+    """
+    dead = []
+    for page in _pages():
+        html = page.read_text(encoding="utf-8", errors="replace")
+        for m in list(_SRC_RE.finditer(html)) + list(_DYN_SRC_RE.finditer(html)):
+            src = m.group(1)
+            if "vendor" in src or src.startswith("http"):
+                continue
+            try:
+                FS.js_path(src)
+            except FileNotFoundError:
+                dead.append("%s → %s" % (page.name, src))
+    assert not dead, "這些頁面載入的 js 找不到實體檔（守門會安靜地少掃）：\n  " + "\n  ".join(dead)
+
+
+def test_ac1_js_basenames_are_unique_across_frontend_and_modules():
+    """`FS.js_path` 只用**檔名**對應實體檔（與伺服器的 `/js/<檔名>` 掛載同一套）。
+    兩處同名（frontend/js、frontend/static、模組 js）⇒ 頁面載的是哪一份就說不準 ⇒ 守門可能掃到錯的檔 ⇒ 紅。"""
+    seen = collections.defaultdict(list)
+    for p in FS.all_js():
+        seen[p.name].append(FS.display(p))
+    dup = {k: v for k, v in seen.items() if len(v) > 1}
+    assert not dup, "js 檔名重複（守門靠檔名解析）：%r" % dup
+
+
+def test_ac1_a_page_whose_writes_live_in_a_module_js_counts_as_writing():
+    """正對照：匯款款別設定的寫入動作全在 `backend/modules/subcontract/js/remit-kinds-settings.js`。
+    守門看得到它 ⇒ 該頁算「有會送出的動作」，**不需要**也**不可以**登記成唯讀。"""
+    page = next((p for p in _pages() if p.name == "remit-kinds-settings.html"), None)
+    if page is None:
+        pytest.skip("remit-kinds-settings.html 不在（模組未安裝）")
+    own = [j for j in _linked(page) if j.name == "remit-kinds-settings.js"]
+    assert own, "守門解析不到這一頁自己的模組 js ⇒ 又回到盲區"
+    assert "modules" in own[0].parts, "應解析到模組目錄的檔案：%s" % own[0]
+    assert _writes(page, _shared_js()), "模組 js 裡的 method: 'PUT'／'POST' 沒被算進這一頁"
+    assert "remit-kinds-settings.html" not in READ_ONLY_PAGES
+
 
 def test_ac1_the_write_detector_can_tell_a_read_only_page_apart():
     """⚙️ **判準自檢：分得出「會送出」與「只是有按鈕」。**
