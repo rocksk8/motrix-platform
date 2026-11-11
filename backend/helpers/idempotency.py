@@ -2,7 +2,11 @@
 """請求冪等鍵（`Idempotency-Key` 標頭）：弱訊號下「回應掉了、伺服器其實已經存好」時，重送不會產生第二份資料。
 
 [單位] helper:idempotency    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[表] `idempotency_keys`（core migration，只增）：主鍵 (username, key)；`req_hash`＝請求內容指紋；`state` in_progress／done。
+[公開介面] Call, HEADER, REPLAY_HEADER, RETENTION_DAYS, STALE_SECONDS, begin, parse_key, replay_response, request_hash, run, run_sync
+[不變式] ①沒帶 `Idempotency-Key` ⇒ 行為與沒有這個機制時逐位元相同。②重播不執行處理函式（不存檔、不寫資料、不通知、不稽核）。
+    ③key 只在同一使用者（username）內唯一。④finish／abort 只動「自己這一代」的列（created_at 世代柵欄）；被 stale 接手取代者變 no-op。
+    ⑤表 `idempotency_keys`（core migration，只增）：主鍵 (username, key)；`req_hash`＝請求內容指紋；`state` in_progress／done；7 天前的列在寫入時順手清。
+[契約題] backend/tests/test_idempotency_2026_11_11.py
 
 ## 為什麼要有
 
