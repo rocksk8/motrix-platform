@@ -1,5 +1,10 @@
 # 刪除暫存區 更新紀錄
 
+## (next) — 2026-11-11（fix/t80-conn-leak-net；每日清除失敗分支先放寫鎖；L1 介面不變）
+- 修正（後端）：`jobs.py run_daily` 的 purge 失敗 `except` 先 `conn.rollback()` 再呼叫 `_audit`。`purge()` 在 `begin_write` 之後遇到非預期例外不會自己 rollback，這條連線仍握著寫鎖，而 `_audit` 另開連線寫入會卡滿 30 秒並吞掉例外（稽核紀錄靜默丟失）。每日背景工作，不影響使用者請求。
+- 測試：`tests/test_run_daily_releases_lock_t80.py`（`_audit` 被呼叫那一刻別條連線寫得進去；舊碼紅、新碼綠）。
+- 來源：`docs/platform/GET-DB-CONNECTION-LEAK-AUDIT-T80.md` §4.3／R3。無 migration、無新表。
+
 ## 1.0.7 — 2026-10-17（wip/t69-recycle-dir-panel-r1；回收筒頁加隔離目錄設定面板）
 - `recycle-bin.html` 狀態列下方新增『隔離目錄』面板：可填新目錄或改回預設位置，呼叫既有 `PUT /api/recycle-bin/settings`（最高管理者限定，規則不變：樹外絕對路徑、不可在 uploads 底下、暫存區還有項目時伺服器拒絕）。暫存區有項目時面板停用並說明原因。無新端點、無權限變更、無 migration。守門測試 `tests/platform/test_recycle_bin_dir_panel_t69.py`。
 - **（併入）(next) — 2026-10-17（wip/t69-retention-r1；T69 SO-S2：保留天數走設定 `recycle_bin.retention_days`）**
