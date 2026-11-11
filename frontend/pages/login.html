@@ -90,6 +90,7 @@
     }
     .form-input::placeholder { color: #444; }
     .form-input.error { border-color: #DC2626; }
+    .pw-hint { font-size: 12px; color: #FBBF24; margin-top: 6px; white-space: pre-line; line-height: 1.5; }
     .error-msg {
       font-size: 12px;
       color: #F87171;
@@ -226,7 +227,7 @@
           <div class="pw-wrap">
             <input class="form-input" :class="{error: error}"
                    :type="showPw ? 'text' : 'password'"
-                   x-model="password" x-ref="password" @keydown.enter="onEnterDown($event)" @keyup.enter="onEnterUp($event)"
+                   x-model="password" x-ref="password" data-pw-hint @keydown.enter="onEnterDown($event)" @keyup.enter="onEnterUp($event)"
                    placeholder="輸入密碼" autocomplete="current-password"
                    style="padding-right:42px">
             <!-- 按下時不搶焦點、也不在 Tab 順序裡：焦點留在密碼欄，切換後直接按 Enter 就送出（2026-09-25） -->
@@ -315,6 +316,68 @@
       </div>
     </div>
   </div>
+
+  <script>
+  /* pw-hint:begin ── 密碼欄位輸入提示（login.html 與 change-password.html 此區逐字相同，守門：test_pw_hint_2026_11_11.py）
+     用法：在 <input> 加 data-pw-hint。事件委派，所以 x-if 動態長出來的欄位也適用。純前端，不送出任何資料。
+     ① 大寫鎖定：KeyboardEvent／MouseEvent.getModifierState('CapsLock')，keydown／keyup／mousedown 時判斷。
+        限制：Caps Lock 在「還沒有任何鍵盤或滑鼠事件」時瀏覽器讀不到，所以打開頁面、尚未按任何鍵時不會預先顯示。
+     ② 非英文輸入法：只能抓「正在組字」（compositionstart～compositionend）。不是偵測輸入法圖示的模式：
+        開著中文輸入法卻打純英數（多數輸入法的字母模式不組字）抓不到＝已知限制，不是 bug。
+        另：部分瀏覽器／作業系統在「密碼遮蔽」時會直接關掉輸入法，此時也不會組字；按眼睛顯示密碼後較容易觸發。
+     欄位失焦（focusout）即收掉；兩種提示各自獨立，同時成立就兩行都顯示。 */
+  (function () {
+    var MSG_CAPS = '⚠ 大寫鎖定已開啟', MSG_IME = '⚠ 輸入法可能不是英文，請確認'
+    var states = new WeakMap()
+    function field(e) {
+      var t = e.target
+      return t && t.nodeType === 1 && t.hasAttribute('data-pw-hint') ? t : null
+    }
+    function state(input) {
+      var s = states.get(input)
+      if (!s) { s = { caps: false, ime: false, el: null }; states.set(input, s) }
+      return s
+    }
+    function render(input) {
+      var s = state(input), lines = []
+      if (s.caps) lines.push(MSG_CAPS)
+      if (s.ime) lines.push(MSG_IME)
+      if (!lines.length || !input.isConnected) {
+        if (s.el) { s.el.remove(); s.el = null }
+        return
+      }
+      if (!s.el) {
+        s.el = document.createElement('div')
+        s.el.className = 'pw-hint'
+        s.el.setAttribute('role', 'status')
+        ;(input.closest('.pw-wrap') || input).insertAdjacentElement('afterend', s.el)
+      }
+      s.el.textContent = lines.join('\n')          // textContent：不經 innerHTML
+    }
+    function caps(e) {
+      var input = field(e)
+      if (!input || typeof e.getModifierState !== 'function') return
+      state(input).caps = !!e.getModifierState('CapsLock')
+      render(input)
+    }
+    document.addEventListener('keydown', caps, true)
+    document.addEventListener('keyup', caps, true)
+    document.addEventListener('mousedown', caps, true)
+    document.addEventListener('compositionstart', function (e) {
+      var input = field(e); if (!input) return
+      state(input).ime = true; render(input)
+    }, true)
+    document.addEventListener('compositionend', function (e) {
+      var input = field(e); if (!input) return
+      state(input).ime = false; render(input)
+    }, true)
+    document.addEventListener('focusout', function (e) {
+      var input = field(e); if (!input) return
+      var s = state(input); s.caps = false; s.ime = false; render(input)
+    }, true)
+  })()
+  /* pw-hint:end */
+  </script>
 
   <script>
   function loginPage() {
