@@ -22,8 +22,9 @@
     maxEdge: 1600,               // 縮圖長邊上限（px）
     quality: 0.8,                // JPEG 品質
     noProgressMs: 60000,         // 這麼久沒有任何上傳進度 ⇒ 逾時
+    serverWaitMs: 120000,        // 位元組都送完、等伺服器處理（此時不再有進度事件）的容忍時間
     retryDelays: [2000, 5000, 10000],   // 失敗重試的間隔（長度＝最多重試次數）
-    maxRetryAfterMs: 15000,      // 409 的 Retry-After 上限
+    maxRetryAfterMs: 15000,      // 409／429／503 的 Retry-After 上限
     geoTimeoutMs: 5000,
     geoMaxAgeMs: 60000,
     emptyText: '（現場照片）',    // 沒打字只傳照片時，文字留言用這句（後端要求內容或檔案至少一個；形狀 B 文字先存）
@@ -166,6 +167,7 @@
         var tw = Math.max(1, Math.round(w * scale)), th = Math.max(1, Math.round(h * scale));
         var canvas = env.createCanvas(tw, th);
         var ctx = canvas.getContext('2d');
+        if (typeof ctx.fillRect === 'function') { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, tw, th); }   // JPEG 沒有 alpha：透明 PNG 不要變黑底
         ctx.drawImage(bmp, 0, 0, tw, th);
         if (typeof bmp.close === 'function') { try { bmp.close(); } catch (e) { /* ignore */ } }
         return new Promise(function (resolve, reject) {
@@ -214,14 +216,14 @@
         var x = env.xhr();
         var timer = null;
         var settled = false;
-        function arm() {
+        function arm(ms) {
           if (timer !== null) env.clearTimeout(timer);
           timer = env.setTimeout(function () {
             if (settled) return;
             settled = true;
             try { x.abort(); } catch (e) { /* ignore */ }
             reject({ kind: 'timeout' });
-          }, cfg.noProgressMs);
+          }, ms || cfg.noProgressMs);
         }
         function end() { settled = true; if (timer !== null) env.clearTimeout(timer); }
         x.open(o.method || 'POST', o.url, true);
@@ -233,6 +235,7 @@
             arm();
             if (o.onProgress && e && e.lengthComputable) o.onProgress(e.loaded, e.total);
           };
+          x.upload.onload = function () { if (!settled) arm(cfg.serverWaitMs); };   // 送完了：之後只等伺服器，不會再有進度事件
         }
         x.onload = function () {
           if (settled) return;
@@ -248,8 +251,11 @@
         x.onerror = function () { if (settled) return; end(); reject({ kind: 'network' }); };
         x.ontimeout = function () { if (settled) return; end(); reject({ kind: 'timeout' }); };
         x.onabort = function () { if (settled) return; end(); reject({ kind: 'abort' }); };
+        var body;
+        try { body = o.makeBody(); } catch (e4) { end(); reject({ kind: 'prepare' }); return; }   // 組不出請求內容：重試也一樣，不當成網路錯誤
+        if (o.onXhr) o.onXhr(x);
         arm();
-        x.send(o.makeBody());
+        x.send(body);
       });
     }
 
@@ -262,6 +268,7 @@
      * onRetry(n, why, delayMs), isCancelled()}。
      * **每次重試沿用同一把 key**；resolve {ok, status, body, replay, attempts, gated, error}（不 reject）。
      * 只重試：逾時、網路錯誤、408／409／425／429／5xx；4xx 其他（驗證失敗）立刻回傳；401／402／428 導走並回傳 gated。
+     * 409／429／503 的 Retry-After 照辦（上限 maxRetryAfterMs）；`makeBody` 丟例外 ⇒ 不重試、error:'prepare_failed'；`onXhr(x)` 給呼叫端拿到進行中的 XHR（取消時 abort）。
      */
     function uploadWithRetry(o) {
       var headers = authHeaders(o.headers);
@@ -269,7 +276,7 @@
       var attempt = 0;
       function go() {
         attempt += 1;
-        return xhrOnce({ url: o.url, method: o.method, headers: headers, makeBody: o.makeBody, onProgress: o.onProgress })
+        return xhrOnce({ url: o.url, method: o.method, headers: headers, makeBody: o.makeBody, onProgress: o.onProgress, onXhr: o.onXhr })
           .then(function (r) {
             if (r.status >= 200 && r.status < 300) return { ok: true, status: r.status, body: r.body, replay: r.replay, attempts: attempt };
             if (handleGate(r.status, r.body)) return { ok: false, gated: true, status: r.status, body: r.body, attempts: attempt };
@@ -277,6 +284,7 @@
             return { ok: false, status: r.status, body: r.body, attempts: attempt, error: detail(r.body) };
           }, function (e) {
             if (e && e.kind === 'abort') return { ok: false, aborted: true, attempts: attempt, error: 'aborted' };
+            if (e && e.kind === 'prepare') return { ok: false, attempts: attempt, error: 'prepare_failed' };
             return again({ status: 0, body: null, why: (e && e.kind) || 'network' }, 0);
           });
       }
@@ -286,7 +294,7 @@
           return { ok: false, status: last.status, body: last.body, attempts: attempt, error: last.why, exhausted: true };
         }
         var delay = cfg.retryDelays[i];
-        if (last.status === 409 && retryAfterMs) delay = Math.max(delay, Math.min(retryAfterMs, cfg.maxRetryAfterMs));
+        if ((last.status === 409 || last.status === 429 || last.status === 503) && retryAfterMs > 0) delay = Math.max(delay, Math.min(retryAfterMs, cfg.maxRetryAfterMs));
         if (o.onRetry) o.onRetry(attempt, last.why, delay);
         return sleep(delay).then(function () {
           if (o.isCancelled && o.isCancelled()) return { ok: false, aborted: true, attempts: attempt, error: 'cancelled' };
@@ -309,6 +317,26 @@
     }
     function clearDraft(quoteNo) {
       try { env.sessionStorage.removeItem(draftKey(quoteNo)); } catch (e) { /* ignore */ }
+      clearPending(quoteNo);        // 使用者放棄／成功送出：連「這次送出用的 key」一起丟
+    }
+
+    // ── 「這次送出」的冪等鍵（頁面重新整理後再按送出，要沿用同一把，否則伺服端認不出是同一次＝重複留言）──
+    // 存 sessionStorage：{sig, textKey, photos:{身分:key}}。sig＝送出內容（文字＋important）；內容變了就不沿用。
+    // 照片 key 綁檔案身分（名稱|大小|lastModified|geo）：換了檔案、換了定位值都是新請求，不得沿用。
+    function pendingKey(quoteNo) { return 'motrix_field_pending:' + quoteNo; }
+    function photoIdent(f, geo) { return [f && f.name, f && f.size, f && f.lastModified, geo || ''].join('|'); }
+    function loadPending(quoteNo, sig) {
+      try {
+        var v = JSON.parse(env.sessionStorage.getItem(pendingKey(quoteNo)) || 'null');
+        if (v && v.sig === sig && typeof v.textKey === 'string') return v;
+      } catch (e) { /* 壞掉當沒有 */ }
+      return null;
+    }
+    function savePending(quoteNo, v) {
+      try { env.sessionStorage.setItem(pendingKey(quoteNo), JSON.stringify(v)); } catch (e) { /* 沒有儲存空間：只剩同一次頁面生命的保護 */ }
+    }
+    function clearPending(quoteNo) {
+      try { env.sessionStorage.removeItem(pendingKey(quoteNo)); } catch (e) { /* ignore */ }
     }
 
     // ── 形狀 B：先文字、再逐張照片 ───────────────────────────────────────
@@ -324,15 +352,29 @@
      */
     function postCaseUpdate(o) {
       var files = o.files || [];
+      var sig = JSON.stringify([String(o.text || '').trim(), !!o.important]);
+      var pending = (o.persist === false) ? null : loadPending(o.quoteNo, sig);
       var state = {
         updateId: null,
-        textKey: o.textKey || newKey(),
+        textKey: o.textKey || (pending && pending.textKey) || newKey(),
         text: { status: 'queued', error: '' },
         photos: files.map(function (f) {
-          return { name: f.name, status: 'queued', progress: 0, key: newKey(), error: '', attempts: 0, blob: null, upName: null, file: f };
+          var id = photoIdent(f, o.geo);
+          var reused = !!(pending && pending.photos && typeof pending.photos[id] === 'string');
+          return { name: f.name, status: 'queued', progress: 0, key: reused ? pending.photos[id] : newKey(), keyReused: reused, ident: id,
+                   error: '', attempts: 0, blob: null, upName: null, file: f };
         })
       };
       var cancelled = false;
+      var running = null;
+      var curXhr = null;
+      function persist() {
+        if (o.persist === false) return;
+        var ph = {};
+        state.photos.forEach(function (p) { ph[p.ident] = p.key; });
+        savePending(o.quoteNo, { sig: sig, textKey: state.textKey, photos: ph });
+      }
+      persist();
       function emit(type, extra) {
         if (!o.onEvent) return;
         var ev = { type: type, state: state };
@@ -350,6 +392,7 @@
           url: '/api/quotations/' + encode(o.quoteNo) + '/updates',
           key: state.textKey,
           isCancelled: isCancelled,
+          onXhr: function (x) { curXhr = x; },
           makeBody: function () {
             var fd = new env.FormData();
             fd.append('content', text);
@@ -384,18 +427,29 @@
           p.progress = 0;
           p.error = '';
           emit('photo', { index: i });
-          return uploadWithRetry({
-            url: '/api/quotations/' + encode(o.quoteNo) + '/updates/' + encode(String(state.updateId)) + '/files',
-            key: p.key,
-            isCancelled: isCancelled,
-            onProgress: function (loaded, total) { p.progress = total ? loaded / total : 0; emit('photo', { index: i }); },
-            onRetry: function (n, why) { p.attempts = n; p.error = why; emit('photo', { index: i, retrying: true }); },
-            makeBody: function () {
-              var fd = new env.FormData();
-              fd.append('files', p.blob, p.upName || p.name || 'photo.jpg');
-              if (o.geo) fd.append('geo', o.geo);
-              return fd;
+          function send() {
+            return uploadWithRetry({
+              url: '/api/quotations/' + encode(o.quoteNo) + '/updates/' + encode(String(state.updateId)) + '/files',
+              key: p.key,
+              isCancelled: isCancelled,
+              onXhr: function (x) { curXhr = x; },
+              onProgress: function (loaded, total) { p.progress = total ? loaded / total : 0; emit('photo', { index: i }); },
+              onRetry: function (n, why) { p.attempts = n; p.error = why; emit('photo', { index: i, retrying: true }); },
+              makeBody: function () {
+                var fd = new env.FormData();
+                fd.append('files', p.blob, p.upName || p.name || 'photo.jpg');
+                if (o.geo) fd.append('geo', o.geo);
+                return fd;
+              }
+            });
+          }
+          return send().then(function (r) {
+            // 沿用重整前的 key、但這次重新縮圖的位元組不同 ⇒ 伺服端 422（同 key 不同內容）：換一把新 key 重送一次
+            if (!r.ok && r.status === 422 && p.keyReused) {
+              p.key = newKey(); p.keyReused = false; persist();
+              return send();
             }
+            return r;
           }).then(function (r) {
             p.attempts = r.attempts;
             if (r.ok) { p.status = 'done'; p.progress = 1; p.error = ''; }
@@ -420,6 +474,7 @@
         return saveText().then(function (ok) {
           if (!ok) return state;
           return photosSequentially().then(function () {
+            if (o.persist !== false && state.photos.every(function (p) { return p.status === 'done'; })) clearPending(o.quoteNo);   // 全部成功：這次送出的 key 用完了
             emit('done');
             return state;
           });
@@ -427,14 +482,22 @@
       }
 
       var handle = { state: state };
-      handle.promise = run();
+      function start() {
+        running = run().then(function (st) { running = null; curXhr = null; return st; });
+        handle.promise = running;
+        return running;
+      }
+      start();
       handle.retryFailed = function () {
+        if (running) return running;       // 進行中（連點）：回同一個 promise，不開第二條重試鏈
         cancelled = false;
         state.photos.forEach(function (p) { if (p.status === 'failed') p.status = 'queued'; });
-        handle.promise = run();      // 文字還沒存成功時，這裡會先重存文字（同一把 key）
-        return handle.promise;
+        return start();                    // 文字還沒存成功時，這裡會先重存文字（同一把 key）
       };
-      handle.cancel = function () { cancelled = true; };
+      handle.cancel = function () {
+        cancelled = true;
+        if (curXhr) { try { curXhr.abort(); } catch (e) { /* ignore */ } }    // 傳輸中的也中止（不是等當前這張傳完）
+      };
       return handle;
     }
 
@@ -450,7 +513,8 @@
       postCaseUpdate: postCaseUpdate,
       saveDraft: saveDraft,
       loadDraft: loadDraft,
-      clearDraft: clearDraft
+      clearDraft: clearDraft,
+      clearPending: clearPending
     };
   }
 

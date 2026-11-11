@@ -33,10 +33,24 @@ async function drive(clock, promise) {
   return val;
 }
 
+async function until(clock, cond) {
+  for (var i = 0; i < 2000 && !cond(); i++) {
+    await flush();
+    if (cond()) break;
+    if (!clock.timers.length) { await flush(); if (!clock.timers.length) break; }
+    clock.timers.sort(function (a, b) { return a.at - b.at || a.id - b.id; });
+    var nx = clock.timers.shift();
+    clock.t = Math.max(clock.t, nx.at);
+    nx.f();
+  }
+  if (!cond()) throw new Error('until: 條件沒有成立');
+}
+
 // ── 假 XHR：每次 new 取下一個腳本 ──────────────────────────────────────────
 // 腳本：{type:'ok', status, body, headers} | {type:'neterr'} | {type:'hang'} | {type:'progress_then_hang', at:[ms...]}
 function makeXhrFactory(clock, script, log) {
   var n = 0;
+  log.xhrs = [];
   return function () {
     var step = script[Math.min(n, script.length - 1)];
     n++;
@@ -54,9 +68,12 @@ function makeXhrFactory(clock, script, log) {
           clock.setTimeout(function () { x.onerror(); }, 10);
         } else if (step.type === 'progress_then_hang') {
           (step.at || []).forEach(function (ms) { clock.setTimeout(function () { if (!x.aborted) x.upload.onprogress({ lengthComputable: true, loaded: 1, total: 2 }); }, ms); });
+        } else if (step.type === 'upload_done_then_hang') {
+          clock.setTimeout(function () { if (!x.aborted && x.upload.onload) x.upload.onload(); }, step.at || 5000);    // 位元組送完，之後再也沒有進度事件
         } // hang：什麼都不做
       }
     };
+    log.xhrs.push(x);
     return x;
   };
 }
@@ -149,7 +166,7 @@ function keysOf(log) { return log.map(function (l) { return l.headers['Idempoten
     var d = {
       createImageBitmap: function (f, o) { calls.bmp.push(o); return opt && opt.fail ? Promise.reject(new Error('heic')) : Promise.resolve({ width: w, height: h, close: function () { calls.closed = true; } }); },
       createCanvas: function (cw, ch) {
-        var c = { width: cw, height: ch, getContext: function () { return { drawImage: function (b, x, y, dw, dh) { calls.draw = [dw, dh]; } }; },
+        var c = { width: cw, height: ch, getContext: function () { var ctx = { fillStyle: '', fillRect: function (x, y, w2, h2) { calls.fill = [ctx.fillStyle, w2, h2, (calls.order = (calls.order || []).concat('fill')).length]; }, drawImage: function (b, x, y, dw, dh) { calls.draw = [dw, dh]; calls.order = (calls.order || []).concat('draw'); } }; return ctx; },
           toBlob: function (cb, type, q) { calls.toBlob.push([type, q]); cb(opt && opt.noBlob ? null : { __blob: true, size: 1234 }); } };
         calls.canvases.push([cw, ch]);
         return c;
@@ -254,6 +271,126 @@ function keysOf(log) { return log.map(function (l) { return l.headers['Idempoten
   m = mk([ok(201, { id: 1 })]);
   await drive(m.clock, m.F.postCaseUpdate({ quoteNo: 'MQ/../x y', text: 'x', files: [] }).promise);
   OUT.flow_url_encoded = { url: m.log[0].url };
+
+
+  // ── 審查 N3／N4／N5／N2 的新情境 ────────────────────────────────────────
+  // 429／503 的 Retry-After 也照辦（上限 15s）；408 不帶就用預設
+  m = mk([ok(429, {}, { 'Retry-After': '7' }), ok(201, {})]);
+  await drive(m.clock, upl(m));
+  OUT.retry_after_429 = { sleeps: m.clock.sleeps.filter(function (s2) { return s2 >= 1000; }) };
+  m = mk([ok(503, {}, { 'Retry-After': '999' }), ok(201, {})]);
+  await drive(m.clock, upl(m));
+  OUT.retry_after_503_cap = { sleeps: m.clock.sleeps.filter(function (s2) { return s2 >= 1000; }) };
+  m = mk([ok(500, {}, { 'Retry-After': 'Wed, 21 Oct 2026 07:28:00 GMT' }), ok(201, {})]);
+  await drive(m.clock, upl(m));
+  OUT.retry_after_httpdate = { sleeps: m.clock.sleeps.filter(function (s2) { return s2 >= 1000; }) };
+
+  // makeBody 丟例外 ⇒ 不重試、不送出請求、錯誤字樣不是 network
+  m = mk([ok(201, {})]);
+  r = await drive(m.clock, upl(m, { makeBody: function () { throw new Error('boom'); } }));
+  OUT.makebody_throws = { ok: r.ok, attempts: r.attempts, error: r.error, calls: m.log.length };
+
+  // 取消：傳輸中的 XHR 真的被 abort；照片標記 failed/aborted，之後不再送
+  m = mk([ok(201, { id: 1 }), { type: 'hang' }], imgDeps(10, 10).d);
+  h = m.F.postCaseUpdate({ quoteNo: 'Q', text: 'x', files: photoFiles(2) });
+  await until(m.clock, function () { return m.log.length >= 2; });
+  h.cancel();
+  st = await drive(m.clock, h.promise);
+  OUT.cancel_aborts = { calls: m.log.length, aborted: m.log.xhrs[1].aborted, statuses: st.photos.map(function (p) { return p.status; }), err: st.photos[0].error };
+
+  // 透明 PNG：先填白再畫
+  s = imgDeps(100, 100);
+  m = mk([ok(200)], s.d);
+  await m.F.shrinkImage({ name: 'a.png', type: 'image/png' });
+  OUT.shrink_white_bg = { fill: s.calls.fill && s.calls.fill.slice(0, 3), order: s.calls.order };
+
+  // 位元組送完後只等伺服器：不是 60s 就逾時，而是 serverWaitMs（120s）
+  m = mk([{ type: 'upload_done_then_hang', at: 5000 }, ok(201, { id: 1 })]);
+  r = await drive(m.clock, upl(m));
+  OUT.server_wait = { ok: r.ok, attempts: r.attempts, secondAttemptAt: m.log[1].at };
+
+  // retryFailed 連點：回同一個 promise，只多一次請求
+  m = mk([ok(201, { id: 5 }), ok(400, { detail: '壞檔' }), ok(201, {})], imgDeps(10, 10).d);
+  h = m.F.postCaseUpdate({ quoteNo: 'Q', text: 'x', files: photoFiles(1) });
+  await drive(m.clock, h.promise);
+  var callsBefore = m.log.length;
+  var pa = h.retryFailed(), pb = h.retryFailed(), pc = h.retryFailed();
+  await drive(m.clock, pa);
+  OUT.retry_reentrancy = { samePromise: pa === pb && pb === pc, extraCalls: m.log.length - callsBefore, status: h.state.photos[0].status };
+
+  // 重新整理後再送出：同內容沿用同一把 key（文字＋照片）；內容變了／換檔案就是新的
+  var shared = mkStorage();
+  var f1 = { name: 'a.jpg', type: 'image/jpeg', size: 111, lastModified: 1000 };
+  m = mk([ok(201, { id: 5 }), ok(503, {})], Object.assign({ sessionStorage: shared }, imgDeps(10, 10).d));
+  h = m.F.postCaseUpdate({ quoteNo: 'MQ-9', text: '到場', files: [f1] });
+  st = await drive(m.clock, h.promise);
+  var first = { textKey: st.textKey, photoKey: st.photos[0].key, photoStatus: st.photos[0].status, pending: !!shared.getItem('motrix_field_pending:MQ-9') };
+  // 「重新整理」：全新的 create()、同一個 sessionStorage
+  m = mk([ok(201, { id: 5 }), ok(201, {})], Object.assign({ sessionStorage: shared }, imgDeps(10, 10).d));
+  h = m.F.postCaseUpdate({ quoteNo: 'MQ-9', text: '到場', files: [f1] });
+  var second = { textKey: h.state.textKey, photoKey: h.state.photos[0].key };
+  st = await drive(m.clock, h.promise);
+  var afterOk = { statuses: st.photos.map(function (p) { return p.status; }), pendingCleared: shared.getItem('motrix_field_pending:MQ-9') === null };
+  // 內容變了 ⇒ 新 key
+  m = mk([ok(201, { id: 6 })], Object.assign({ sessionStorage: shared }, imgDeps(10, 10).d));
+  h = m.F.postCaseUpdate({ quoteNo: 'MQ-9', text: '到場', files: [] });
+  var third = { textKey: h.state.textKey };
+  await drive(m.clock, h.promise);
+  // 未成功的那次留下的 key：換文字、換檔案身分、換定位值都不得沿用
+  shared = mkStorage();
+  m = mk([ok(201, { id: 5 }), ok(503, {})], Object.assign({ sessionStorage: shared }, imgDeps(10, 10).d));
+  h = m.F.postCaseUpdate({ quoteNo: 'MQ-8', text: 'A', files: [f1], geo: '1,2,3' });
+  var base = { textKey: h.state.textKey, photoKey: h.state.photos[0].key };
+  await drive(m.clock, h.promise);
+  function keysFor(text, file, geo) {
+    var raw = shared.getItem('motrix_field_pending:MQ-8');      // 每次探測完把 pending 還原，探測之間互不影響
+    var mm = mk([ok(201, { id: 5 })], Object.assign({ sessionStorage: shared }, imgDeps(10, 10).d));
+    var hh = mm.F.postCaseUpdate({ quoteNo: 'MQ-8', text: text, files: [file], geo: geo });
+    var res = { textKey: hh.state.textKey, photoKey: hh.state.photos[0].key };
+    shared.setItem('motrix_field_pending:MQ-8', raw);
+    return res;
+  }
+  var sameAll = keysFor('A', f1, '1,2,3');
+  var otherText = keysFor('B', f1, '1,2,3');
+  var otherFile = keysFor('A', { name: 'a.jpg', type: 'image/jpeg', size: 222, lastModified: 1000 }, '1,2,3');
+  var otherGeo = keysFor('A', f1, '9,9,9');
+  OUT.reload_keys = {
+    first: first, second: second, afterOk: afterOk, third: third,
+    sameAsFirst: second.textKey === first.textKey && second.photoKey === first.photoKey,
+    thirdIsNew: third.textKey !== first.textKey,
+    sameAll: sameAll.textKey === base.textKey && sameAll.photoKey === base.photoKey,
+    otherTextNew: otherText.textKey !== base.textKey,
+    otherFileNew: otherFile.photoKey !== base.photoKey,
+    otherGeoNew: otherGeo.photoKey !== base.photoKey
+  };
+
+  // 沿用重整前的 key、但位元組不同 ⇒ 422 ⇒ 換新 key 重送一次（只一次）
+  shared = mkStorage();
+  m = mk([ok(201, { id: 5 }), ok(503, {})], Object.assign({ sessionStorage: shared }, imgDeps(10, 10).d));
+  h = m.F.postCaseUpdate({ quoteNo: 'MQ-7', text: 'A', files: [f1] });
+  st = await drive(m.clock, h.promise);
+  var oldKey = st.photos[0].key;
+  m = mk([ok(201, { id: 5 }), ok(422, { detail: '同 key 不同內容' }), ok(201, {})], Object.assign({ sessionStorage: shared }, imgDeps(10, 10).d));
+  h = m.F.postCaseUpdate({ quoteNo: 'MQ-7', text: 'A', files: [f1] });
+  st = await drive(m.clock, h.promise);
+  OUT.reload_422 = { calls: m.log.length, keys: keysOf(m.log), reusedFirst: m.log[1].headers['Idempotency-Key'] === oldKey, newKey: m.log[2].headers['Idempotency-Key'] !== oldKey, status: st.photos[0].status };
+  // 沒有沿用重整前的 key 時，422 就是 422（不重送）
+  m = mk([ok(201, { id: 5 }), ok(422, { detail: 'x' })], Object.assign({ sessionStorage: mkStorage() }, imgDeps(10, 10).d));
+  h = m.F.postCaseUpdate({ quoteNo: 'MQ-6', text: 'A', files: [f1] });
+  st = await drive(m.clock, h.promise);
+  OUT.fresh_422 = { calls: m.log.length, status: st.photos[0].status };
+
+  // clearDraft 一併清掉 pending
+  shared = mkStorage();
+  m = mk([ok(201, { id: 5 }), ok(503, {})], Object.assign({ sessionStorage: shared }, imgDeps(10, 10).d));
+  h = m.F.postCaseUpdate({ quoteNo: 'MQ-5', text: 'A', files: [f1] });
+  await drive(m.clock, h.promise);
+  var had = shared.getItem('motrix_field_pending:MQ-5') !== null;
+  m.F.clearDraft('MQ-5');
+  OUT.clear_draft_clears_pending = { had: had, after: shared.getItem('motrix_field_pending:MQ-5') };
+
+  // 預設頁面清單（給 Python 守門檢查檔案存在）
+  OUT.default_pages = [F.DEFAULTS.loginPage, F.DEFAULTS.licensePage, F.DEFAULTS.companySetupPage, F.DEFAULTS.companyFixPage];
 
   console.log(JSON.stringify(OUT));
 })().catch(function (e) { console.log(JSON.stringify({ __error: String(e && e.stack || e) })); process.exit(1); });

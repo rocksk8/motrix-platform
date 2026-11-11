@@ -176,3 +176,78 @@ def test_shrunk_photo_is_what_gets_uploaded_with_a_jpg_name():
 
 def test_case_number_is_url_encoded_in_the_path():
     assert _out()["flow_url_encoded"]["url"] == "/api/quotations/MQ%2F..%2Fx%20y/updates"
+
+
+# ── K 審 S3 的 N1～N5 ─────────────────────────────────────────────────────────────────────────────
+
+#: 「這個檔案會跟 T80（授權閘門，feat/license-gate-default-on）一起進來」的導向頁：402 只有閘門開啟才會出現，頁面隨閘門一起上線。
+#: 其餘 DEFAULTS.*Page 必須現在就存在——改檔名／拼錯不會有人發現（手機會跳 404），所以這裡守。T80 併入後把這個集合清空。
+_PAGES_SHIPPED_WITH_T80 = {"license-required.html"}
+
+
+def test_every_default_redirect_page_exists():
+    pages = _out()["default_pages"]
+    assert len(pages) == 4
+    missing = []
+    for p in pages:
+        name = p.split("?")[0]
+        if name in _PAGES_SHIPPED_WITH_T80:
+            continue
+        if not (HERE.parents[1] / "frontend" / "pages" / name).is_file():
+            missing.append(name)
+    assert not missing, "field.js 的導向頁不存在（手機會看到 404）：%s" % missing
+
+
+def test_retry_after_is_honored_for_429_and_503_capped_and_garbage_falls_back():
+    o = _out()
+    assert o["retry_after_429"]["sleeps"] == [7000]
+    assert o["retry_after_503_cap"]["sleeps"] == [15000]
+    assert o["retry_after_httpdate"]["sleeps"] == [2000]            # HTTP-date 形式讀不了 ⇒ 預設退避，不會 NaN
+
+
+def test_a_request_body_that_cannot_be_built_is_not_retried_as_a_network_error():
+    r = _out()["makebody_throws"]
+    assert r == {"ok": False, "attempts": 1, "error": "prepare_failed", "calls": 0}
+
+
+def test_cancel_aborts_the_transfer_in_flight_and_sends_no_more():
+    r = _out()["cancel_aborts"]
+    assert r["aborted"] is True and r["calls"] == 2 and r["statuses"] == ["failed", "queued"] and r["err"] == "aborted"
+
+
+def test_transparent_png_is_filled_white_before_drawing():
+    r = _out()["shrink_white_bg"]
+    assert r["fill"] == ["#ffffff", 100, 100] and r["order"] == ["fill", "draw"]
+
+
+def test_after_the_bytes_are_sent_it_waits_for_the_server_longer_than_60_seconds():
+    r = _out()["server_wait"]
+    assert r["ok"] is True and r["attempts"] == 2
+    assert r["secondAttemptAt"] == 5000 + 120000 + 2000          # 送完在 5s；之後等 120s（不是 60s）才逾時；再退避 2s
+
+
+def test_retry_failed_is_reentrant_safe():
+    r = _out()["retry_reentrancy"]
+    assert r == {"samePromise": True, "extraCalls": 1, "status": "done"}          # 連點三次：同一個 promise、只多一次請求
+
+
+def test_reload_then_resubmit_reuses_the_same_keys_only_for_the_same_content():
+    r = _out()["reload_keys"]
+    assert r["first"]["photoStatus"] == "failed" and r["first"]["pending"] is True
+    assert r["sameAsFirst"] is True                        # 重新整理後再送出：文字 key、照片 key 都沿用（伺服端才認得是同一次）
+    assert r["afterOk"] == {"statuses": ["done"], "pendingCleared": True}      # 全部成功才清
+    assert r["thirdIsNew"] is True                         # 清掉後下一次送出是新的
+    assert r["sameAll"] is True                            # 對照：同文字、同檔案、同定位 ⇒ 沿用
+    assert r["otherTextNew"] and r["otherFileNew"] and r["otherGeoNew"]      # 換文字／換檔案身分／換定位值 ⇒ 不得沿用
+
+
+def test_reused_key_with_different_bytes_gets_one_fresh_key_but_a_fresh_422_does_not():
+    r = _out()["reload_422"]
+    assert r["calls"] == 3 and r["reusedFirst"] is True and r["newKey"] is True and r["status"] == "done"
+    f = _out()["fresh_422"]
+    assert f == {"calls": 2, "status": "failed"}
+
+
+def test_clear_draft_also_drops_the_pending_keys():
+    r = _out()["clear_draft_clears_pending"]
+    assert r == {"had": True, "after": None}
