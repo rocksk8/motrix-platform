@@ -2816,9 +2816,7 @@ def _line_callback_page(kind: str):
 def line_login_callback(code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
     """LINE Login 導回。**未登入可打**（main._PUBLIC_API_PATHS）：不信任這個請求本身，只信 state（單次、綁發起人的登入 session）。"""
     from helpers import line_login as _ll
-    if not _ll.rate_ok():
-        return _line_callback_page("rate")
-    result, token, username = _ll.complete(code, state, error)
+    result, token, username = _ll.complete(code, state, error)         # 總量保護在 complete() 裡、state 銷毀之後（K 審 N1）
     if username:
         _audit(token, "line.binding.callback", "line_binding", username, "LINE 綁定回調", {"result": result})
     return _line_callback_page(result)

@@ -2,7 +2,7 @@
 """LINE Login 綁定流程（2026-11-11，T79；「電腦發起、手機授權」）。
 
 [單位] helper:line_login    [層] L1    [穩定度] 實作
-[公開介面] AUTHORIZE_URL, CALLBACK_RATE_LIMIT, CALLBACK_RATE_WINDOW, MAX_PENDING_PER_USER, MAX_PENDING_TOTAL, RESULT_DENIED, RESULT_EXPIRED, RESULT_FAILED, RESULT_INVALID, RESULT_LINKED, RESULT_SESSION_ENDED, STATE_TTL, TOKEN_PATH, VERIFY_PATH, authorize_url_for, complete, pending_count, rate_ok, reset_for_tests, start
+[公開介面] AUTHORIZE_URL, CALLBACK_RATE_LIMIT, CALLBACK_RATE_WINDOW, MAX_PENDING_PER_USER, MAX_PENDING_TOTAL, RESULT_DENIED, RESULT_EXPIRED, RESULT_FAILED, RESULT_INVALID, RESULT_LINKED, RESULT_RATE, RESULT_SESSION_ENDED, START_INTERVAL, STATE_TTL, TOKEN_PATH, VERIFY_PATH, authorize_url_for, complete, pending_count, rate_ok, reset_for_tests, start
 [契約題] tests/platform/test_line_login_t79.py
 [不變式]
   ① 流程：已登入的使用者在電腦按「綁定 LINE」→ `start()` 產生一次性 state（綁定發起人的登入 session）→ 電腦顯示 QR → 手機掃碼授權 →
@@ -14,6 +14,9 @@
      只要 `openid` scope，不取個資（不拿暱稱、頭像）。
   ⑤ 回傳純結果代碼，**不含任何 ERP 資料**；`complete()` 永不丟例外，也不把 code／state／secret／id_token 寫進 log（只記結果與例外型別）。
   ⑥ 唯一的對外呼叫是 `_post_form`（urllib）；測試只換它。conftest NETGUARD 擋 urllib.request.urlopen。
+  ⑧ 總量保護 `rate_ok()` 只算「已經查到有效 state、要去打 LINE」的那一步（state 已銷毀）：亂打的 state 只是記憶體裡查不到，不花任何對外成本、也不計數，
+     所以攻擊者不能用垃圾請求把所有人擋在外面（K 審 N1）；也因此每個到得了限流的請求，它的 state 都已經死了，進 access log 的 code／state 不會是活的（N4）。
+     `start()` 每人每 `START_INTERVAL` 秒只能發起一次（K 審 N3）。
   ⑦ 綁定完成後推一則「綁定完成」確認訊息（不含 ERP 資料）：成功 ⇒ `confirmed=True`；LINE 回永久失敗（常見原因：Login channel 與 Messaging channel
      不在同一個 Provider，userId 對不上）⇒ `confirmed=False`，設定頁要顯示警告；LINE 通知沒啟用／開發機標記 ⇒ `confirmed=None`（沒驗）。
 """
@@ -40,7 +43,9 @@ VERIFY_PATH = "/oauth2/v2.1/verify"
 STATE_TTL = 600
 MAX_PENDING_PER_USER = 3
 MAX_PENDING_TOTAL = 200
-#: 公開路徑的總量保護：每 CALLBACK_RATE_WINDOW 秒最多 CALLBACK_RATE_LIMIT 次（不依 IP——X-Forwarded-For 可偽造，見 PM 另開的票）
+#: 對外查詢（用 code 向 LINE 換身分）的總量保護：每 CALLBACK_RATE_WINDOW 秒最多 CALLBACK_RATE_LIMIT 次（不依 IP——X-Forwarded-For 可偽造，見 PM 另開的票）。
+#: 只計「state 有效」的請求，垃圾請求不計（見不變式 ⑧）。
+START_INTERVAL = 3                  # 同一個人兩次「發起綁定」至少間隔幾秒
 CALLBACK_RATE_LIMIT = 60
 CALLBACK_RATE_WINDOW = 60
 
@@ -49,6 +54,7 @@ RESULT_DENIED = "denied"            # 使用者在 LINE 按了「取消」
 RESULT_EXPIRED = "expired"          # state 過期
 RESULT_INVALID = "invalid"          # state 不存在／格式不對／已用過
 RESULT_SESSION_ENDED = "session_ended"   # 發起人已登出或帳號停用
+RESULT_RATE = "rate"                # 對外查詢太頻繁（state 已銷毀，請使用者重按一次）
 RESULT_FAILED = "failed"            # LINE 端驗證失敗、連不到 LINE、這個 LINE 帳號已綁別人
 
 _STATE_RE = re.compile(r"^[A-Za-z0-9_-]{20,128}$")
@@ -57,7 +63,8 @@ _CODE_RE = re.compile(r"^[A-Za-z0-9._~-]{1,512}$")
 _now = time.monotonic               # 測試換掉這個來快轉時間
 _lock = threading.Lock()
 _pending = {}                       # sha256(state) → {username, token, nonce, at}
-_hits = []                          # callback 的時間戳（總量保護）
+_hits = []                          # 對外查詢的時間戳（總量保護）
+_last_start = {}                    # username → 上次發起的時間
 
 
 def _h(state: str) -> str:
@@ -67,6 +74,7 @@ def _h(state: str) -> str:
 def reset_for_tests() -> None:
     with _lock:
         _pending.clear()
+        _last_start.clear()
         del _hits[:]
 
 
@@ -81,7 +89,7 @@ def _purge_locked(now: float) -> None:
 
 
 def rate_ok() -> bool:
-    """公開 callback 的總量保護；超過 ⇒ False（呼叫端回 429）。"""
+    """對外查詢的總量保護；超過 ⇒ False。"""
     now = _now()
     with _lock:
         _hits[:] = [t for t in _hits if now - t < CALLBACK_RATE_WINDOW]
@@ -114,12 +122,15 @@ def start(username: str, session_token: str) -> dict:
     now = _now()
     with _lock:
         _purge_locked(now)
+        if now - _last_start.get(username, -1e9) < START_INTERVAL:
+            raise ValueError("請稍候幾秒再按一次")
         mine = sorted((v["at"], k) for k, v in _pending.items() if v["username"] == username)
         while len(mine) >= MAX_PENDING_PER_USER:
             _pending.pop(mine.pop(0)[1], None)
         if len(_pending) >= MAX_PENDING_TOTAL:
             raise ValueError("目前綁定要求太多，請稍後再試")
         _pending[_h(state)] = {"username": username, "token": session_token, "nonce": nonce, "at": now}
+        _last_start[username] = now
     return {"authorizeUrl": authorize_url_for(cid, cb, state, nonce), "expiresIn": STATE_TTL}
 
 
@@ -196,6 +207,8 @@ def complete(code, state, error=None):
         cb = _ln.callback_url()
         if not (cid and secret and cb):
             return RESULT_FAILED, token, username
+        if not rate_ok():                              # 走到這裡的 state 已經銷毀（見不變式 ⑧）
+            return RESULT_RATE, token, username
         uid = _exchange(code, cid, secret, cb, rec["nonce"])
         if not uid:
             return RESULT_FAILED, token, username

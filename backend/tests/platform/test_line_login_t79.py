@@ -54,6 +54,7 @@ def env(client, monkeypatch):
     monkeypatch.setattr(line_login, "_post_form", form)
     monkeypatch.setattr(line_notify, "_http", line)
     monkeypatch.setattr("helpers.email_notify.email_send_policy", lambda env=None: (True, "測試允許"))
+    monkeypatch.setattr(line_login, "START_INTERVAL", 0)         # 一般題可以連續發起；節流有自己的題
     line_login.reset_for_tests()
     form.line = line
     yield form
@@ -270,11 +271,44 @@ def test_pending_caps(client, make_user, env, monkeypatch):
         line_login.start("someone_else", "tok")
 
 
-def test_callback_total_rate_limit(client, env, monkeypatch):
-    from helpers import line_login
+def test_garbage_requests_never_count_against_the_rate_limit(client, make_user, env, monkeypatch):
+    """K 審 N1：垃圾 state 不花對外成本、不計入限流——攻擊者不能把所有人擋在外面。"""
+    from helpers import line_login, line_notify
     monkeypatch.setattr(line_login, "CALLBACK_RATE_LIMIT", 3)
-    codes = [_cb(client, code="c", state="y" * 40).status_code for _ in range(5)]
-    assert codes == [400, 400, 400, 429, 429]
+    hdr = _login(client, make_user, "bind_rl")
+    state, _ = _begin(client, hdr, env)
+    assert [_cb(client, code="c", state="g" * 40).status_code for _ in range(100)] == [400] * 100
+    assert _cb(client, code="c", state=state).status_code == 200 and line_notify.is_linked("bind_rl")
+
+
+def test_rate_limit_applies_to_valid_states_and_burns_the_state(client, make_user, env, monkeypatch):
+    """限流只算「要去打 LINE」的請求；被擋的那一筆 state 也已銷毀（進 access log 的 code／state 不是活的）。"""
+    from helpers import line_login
+    monkeypatch.setattr(line_login, "CALLBACK_RATE_LIMIT", 2)
+    hdr = _login(client, make_user, "bind_rl2")
+    codes, last = [], None
+    for _ in range(3):                                 # 每筆都要用自己的 nonce，所以發起一筆就回調一筆
+        last, _r = _begin(client, hdr, env)
+        codes.append(_cb(client, code="c", state=last).status_code)
+    assert codes == [200, 200, 429]
+    n = len(env.calls)
+    assert _cb(client, code="c", state=last).status_code == 400 and len(env.calls) == n, "被限流的 state 已經死了"
+
+
+def test_start_is_throttled_per_user(client, make_user, env, monkeypatch):
+    """K 審 N3：同一個人兩次發起至少間隔 START_INTERVAL 秒。"""
+    from helpers import line_login
+    monkeypatch.setattr(line_login, "START_INTERVAL", 3)
+    t0 = line_login._now()
+    now = [t0]
+    monkeypatch.setattr(line_login, "_now", lambda: now[0])
+    hdr = _login(client, make_user, "bind_thr")
+    assert client.post("/api/line/binding/start", headers=hdr).status_code == 200
+    assert client.post("/api/line/binding/start", headers=hdr).status_code == 400
+    other = _login(client, make_user, "bind_thr2")
+    assert client.post("/api/line/binding/start", headers=other).status_code == 200, "別人不受影響"
+    now[0] = t0 + 3.5
+    assert client.post("/api/line/binding/start", headers=hdr).status_code == 200
 
 
 def test_no_code_state_secret_or_id_token_in_logs(client, make_user, env, caplog):
