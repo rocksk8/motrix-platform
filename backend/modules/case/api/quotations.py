@@ -6259,7 +6259,7 @@ def list_quotation_versions(quote_no: str, authorization: str = Header(None)):
     history = [h for h in (data.get("editHistory") or []) if isinstance(h, dict)]
     if not _tier_allowed("finance_money", user):                       # 重新開啟精算的理由是自由文字：沒有財務檢視的帳號只看誰／何時／事件
         strip_history_reasons(history)
-    if not quote_money_visible(user):                                  # 與案件頁 GET 同一條（mask_quotation_data）：沒有報價金額檢視的帳號，修改紀錄裡的金額／毛利欄位值一律「—」
+    if not _tier_allowed("quote_money", user):                         # 與案件頁 GET 同一條（mask_quotation_data）：沒有報價金額檢視的帳號，修改紀錄裡的金額／毛利欄位值一律「—」（＝quote_money_visible；走欄位政策，t65 棘輪）
         for h in history:
             for c in (h.get("changes") or []):
                 if isinstance(c, dict) and c.get("field") in HISTORY_MONEY_FIELDS:
