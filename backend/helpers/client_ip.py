@@ -14,9 +14,9 @@
 uvicorn 這一層（hichan-13 K 審 S1）：uvicorn 的 ProxyHeadersMiddleware 預設就開，只要 TCP 對端在 `forwarded_allow_ips`（預設 127.0.0.1）
 裡，就會用 `X-Forwarded-For` 的「最右邊一個不受信任的位址」改寫 `scope["client"]`——所以 XFF 其實在這支 helper 的**下一層**就被讀過了，
 這支只是不再自己讀。這樣仍然安全，前提是兩件事（缺一不可）：
-  · `forwarded_allow_ips` 維持 127.0.0.1：`backend/autostart.bat` 已明寫 `--forwarded-allow-ips 127.0.0.1`（命令列優先於環境變數
+  · `forwarded_allow_ips` 維持 127.0.0.1：所有綁 0.0.0.0 的啟動檔（autostart／restart／start.bat、start_server.ps1）都明寫 `--forwarded-allow-ips 127.0.0.1`（命令列優先於環境變數
     FORWARDED_ALLOW_IPS）；設成 `*` 的話 uvicorn 會對任何對端取 XFF 第一個值 ⇒ 原本的漏洞回來而這支擋不住。守門：
-    `test_autostart_pins_uvicorn_forwarded_allow_ips`；
+    `test_every_launcher_that_binds_all_interfaces_pins_uvicorn_forwarded_allow_ips`；
   · 前面是 Cloudflare：它會把真實 IP 附加在 XFF 最右邊，攻擊者塞的假值在左邊、被 uvicorn 略過；對端是區網／直連 ⇒ uvicorn 不理 XFF。
     已知殘餘：對端是 loopback、且**沒有**經過 Cloudflare（本機行程、同機的非 Cloudflare 代理）仍可用 XFF 自選桶——外部攻擊者碰不到。
 結果：
