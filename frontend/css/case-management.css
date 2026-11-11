@@ -52,7 +52,7 @@
 .cm-card__stageprog--danger { background:var(--tone-danger-bg-strong); color:var(--danger); }
 .cm-empty { padding:40px 20px; text-align:center; color:var(--text-dim); font-size:13px; font-family:var(--font-zh); display:flex; flex-direction:column; align-items:center; gap:6px; }
 .cm-empty__sub { font-size:12px; font-family:var(--font-zh); color:var(--text-dim); opacity:.65; }
-.cm-list__tab-badge { display:inline-flex; align-items:center; justify-content:center; min-width:16px; padding:0 4px; height:16px; background:var(--line); color:var(--ink-secondary); font-size:12px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; border-radius:8px; margin-left:3px; line-height:1; }
+.cm-list__tab-badge { display:inline-flex; align-items:center; justify-content:center; min-width:16px; padding:0 4px; min-height:16px; background:var(--line); color:var(--ink-secondary); font-size:12px; font-weight:700; font-family:LINE Seed TW_OTF, sans-serif; border-radius:8px; margin-left:3px; line-height:1; }
 .cm-list__tab.active .cm-list__tab-badge { background:var(--accent); color:var(--surface); }
 .cm-list__tab-badge.orange { background:var(--tone-orange-fg); color:var(--surface); }
 

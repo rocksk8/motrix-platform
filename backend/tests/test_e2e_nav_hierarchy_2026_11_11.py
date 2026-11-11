@@ -160,6 +160,41 @@ def test_report_hub_respects_permissions(live_server, make_user, new_page, login
     assert "報表" not in [g["label"] for g in _nav(page2)]
 
 
+def _hub_cards(page):
+    """走遍報表中心所有頁籤，回傳 {卡片 testid: 開啟連結}（含頁頭齒輪）。"""
+    page.wait_for_selector("[data-testid^=rh-tab-]", timeout=15000)
+    out = {}
+    for t in [x.inner_text().strip() for x in page.locator("[data-testid^=rh-tab-]").all()]:
+        page.locator("[data-testid=rh-tab-%s]" % t).click()
+        page.wait_for_timeout(150)
+        for c in page.locator("[data-testid^=rh-card-]").all():
+            out[c.get_attribute("data-testid")] = c.locator("a").get_attribute("href")
+    if page.locator("[data-testid=rh-gear]").count():
+        out["rh-gear"] = page.locator("[data-testid=rh-gear]").get_attribute("href")
+    return out
+
+
+@pytest.mark.e2e
+def test_report_hub_only_lists_reports_this_user_can_open(live_server, make_user, new_page, login_as):
+    """權限切片（K 審 N1）：只有「財務」或只有「出納」的使用者，報表中心列出的每一張卡片都必須點得進去
+    （不會出現『沒有權限』），而且不會比超級管理員多出任何一張。"""
+    sa = _open_as(live_server, make_user, new_page, login_as, "superadmin", [], "nav_hub_sa", "/pages/reports-hub.html")
+    full = _hub_cards(sa)
+    assert len(full) >= 4, full
+    for mod in ("finance", "cashier"):
+        page = _open_as(live_server, make_user, new_page, login_as, "admin", [mod], "nav_hub_" + mod, "/pages/reports-hub.html")
+        got = _hub_cards(page)
+        assert got, "%s：報表中心一張卡片都沒有" % mod
+        assert set(got) <= set(full), (mod, sorted(set(got) - set(full)))
+        for key, href in got.items():
+            page.goto(live_server + "/pages/" + href.split("/")[-1].split("#")[0])
+            page.wait_for_timeout(1200)
+            assert page.locator("#no-module-notice").count() == 0 or not page.locator("#no-module-notice").is_visible(), \
+                "%s：報表中心列出 %s（%s），點進去卻是『沒有權限』" % (mod, key, href)
+            page.goto(live_server + "/pages/reports-hub.html")
+            page.wait_for_selector("[data-testid^=rh-tab-]", timeout=15000)
+
+
 @pytest.mark.e2e
 def test_b6_page_header_crumb_is_filled_from_the_menu_declaration(live_server, make_user, new_page, login_as):
     page = _open_as(live_server, make_user, new_page, login_as, "superadmin", [], "nav_b6", "/pages/customers.html")
