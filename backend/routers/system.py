@@ -2678,7 +2678,9 @@ def test_google_calendar(authorization: str = Header(None)):
 
 # ── LINE 通知設定（2026-11-11；channel access token 照 SMTP 密碼慣例：GET 遮罩、PUT 遮罩值＝保留）──────────
 
-_LINE_DEFAULTS = {"enabled": False, "channel_access_token": ""}
+# public_base_url（Tunnel 公開網域，LINE Login callback 用）與 include_links（訊息是否帶連結）是**兩個獨立開關**：
+# 有公開網域不代表訊息帶連結（PM 裁示）。include_links 預設關，且要有 public_base_url 才能開。
+_LINE_DEFAULTS = {"enabled": False, "channel_access_token": "", "public_base_url": "", "include_links": False}
 
 
 @router.get("/api/settings/line-notify")
@@ -2688,12 +2690,14 @@ def get_line_notify(authorization: str = Header(None)):
     cfg = _get_setting("line_notify", {}) or {}
     safe = {**_LINE_DEFAULTS, **{k: cfg[k] for k in _LINE_DEFAULTS if k in cfg}}
     safe["channel_access_token"] = _ln.mask(cfg.get("channel_access_token"))
+    safe["callback_url"] = _ln.callback_url()       # 要貼進 LINE Login channel 的 Callback URL；沒有對外網址 ⇒ ""
     return safe
 
 
 @router.put("/api/settings/line-notify")
 def set_line_notify(body: dict = Body(...), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
+    from helpers import line_notify as _ln
     current = _get_setting("line_notify", {}) or {}
     data = {**current, **{k: body[k] for k in _LINE_DEFAULTS if k in body}}
     data = {**_LINE_DEFAULTS, **data}
@@ -2703,12 +2707,22 @@ def set_line_notify(body: dict = Body(...), authorization: str = Header(None)):
         data["channel_access_token"] = current.get("channel_access_token", "")
     else:
         data["channel_access_token"] = str(tok).strip()
+    if "include_links" in body and not isinstance(body["include_links"], bool):
+        raise HTTPException(400, "include_links 必須是 true／false")      # 不把 "false" 字串當 true
+    data["include_links"] = data.get("include_links") is True
+    try:
+        data["public_base_url"] = _ln.normalize_public_base(data.get("public_base_url"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     if data["enabled"] and not data["channel_access_token"]:
         raise HTTPException(400, "啟用 LINE 通知前請先填寫 channel access token")
+    if data["include_links"] and not data["public_base_url"]:
+        raise HTTPException(400, "訊息要帶連結，必須先設定對外網址（public_base_url）")
     _set_setting("line_notify", data)
-    # 稽核只記「啟用與否／token 有無被更換」，不記 token 本身
+    # 稽核只記「啟用與否／token 有無被更換」，不記 token 本身；對外網址與連結開關影響對外曝露面，照實記
     _audit(_tok(authorization), "settings.line_notify.update", "settings", "line_notify", "LINE 通知設定",
-           {"enabled": data["enabled"], "tokenChanged": data["channel_access_token"] != current.get("channel_access_token", "")})
+           {"enabled": data["enabled"], "tokenChanged": data["channel_access_token"] != current.get("channel_access_token", ""),
+            "publicBaseUrl": data["public_base_url"], "includeLinks": data["include_links"]})
     return {"ok": True}
 
 

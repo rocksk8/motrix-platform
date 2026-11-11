@@ -47,7 +47,7 @@ def _hdr(client, make_user, name, role):
 def test_build_text_layout_and_sanitizing():
     from helpers import line_notify as L
     t = L.build_text("報價單審核中被編輯", [("單號", "MQ-1"), ("客戶", "甲\n乙")], reason="有人改了", link="https://x/y")
-    assert t.splitlines() == ["【MOTRIX】報價單審核中被編輯", "有人改了", "單號：MQ-1", "客戶：甲 乙", "https://x/y"]
+    assert t.splitlines() == ["【MOTRIX】報價單審核中被編輯", "有人改了", "單號：MQ-1", "客戶：甲 乙"]     # 連結預設不帶（見下方兩個開關的測試）
     assert len(L.build_text("t", [("k", "v" * 5000)])) <= L.MAX_TEXT
 
 
@@ -141,12 +141,12 @@ def test_quota_limited_and_unlimited(ln):
 def test_settings_get_masks_put_keeps_and_replaces(client, make_user, ln):
     sa = _hdr(client, make_user, "ln_sa", "superadmin")
     g = client.get("/api/settings/line-notify", headers=sa).json()
-    assert g == {"enabled": True, "channel_access_token": "••••••••"}
+    assert g == {"enabled": True, "channel_access_token": "••••••••", "public_base_url": "", "include_links": False, "callback_url": ""}
     assert TOKEN not in client.get("/api/settings/line-notify", headers=sa).text
     # 遮罩值／空值 ＝ 保留原 token
     assert client.put("/api/settings/line-notify", headers=sa, json={"enabled": False, "channel_access_token": "••••••••"}).status_code == 200
     from helpers.settings import _get_setting
-    assert _get_setting("line_notify") == {"enabled": False, "channel_access_token": TOKEN}
+    assert _get_setting("line_notify") == {"enabled": False, "channel_access_token": TOKEN, "public_base_url": "", "include_links": False}
     assert client.put("/api/settings/line-notify", headers=sa, json={"enabled": True}).status_code == 200
     assert _get_setting("line_notify")["channel_access_token"] == TOKEN
     # 真的新值 ＝ 取代
@@ -155,6 +155,74 @@ def test_settings_get_masks_put_keeps_and_replaces(client, make_user, ln):
     # 未知欄位不入庫
     client.put("/api/settings/line-notify", headers=sa, json={"evil": 1})
     assert "evil" not in _get_setting("line_notify")
+
+
+# ── 兩個獨立開關：對外網址（callback）≠ 訊息帶連結（PM 裁示）─────────────────
+
+LINK = "https://172.16.10.177:666/pages/quotation-form.html?no=MQ-202611-001"
+
+
+def _put(client, sa, **body):
+    return client.put("/api/settings/line-notify", headers=sa, json=body)
+
+
+def test_public_base_alone_does_not_turn_on_links(client, make_user, ln):
+    """A 案上線的狀態：有對外網址（callback 要用）、include_links 關 ⇒ 訊息裡**沒有任何連結**，callback 網址有值。"""
+    sa = _hdr(client, make_user, "ln_sa4", "superadmin")
+    assert _put(client, sa, public_base_url="https://line.example.com").status_code == 200
+    g = client.get("/api/settings/line-notify", headers=sa).json()
+    assert g["callback_url"] == "https://line.example.com/api/line/callback" and g["include_links"] is False
+    assert ln.public_base() == "https://line.example.com" and ln.links_enabled() is False
+    assert ln.safe_link(LINK) == ""
+    assert LINK not in ln.build_text("t", [("k", "v")], link=LINK) and "https://" not in ln.build_text("t", [("k", "v")], link=LINK)
+
+
+def test_links_need_both_switches_and_only_whitelisted_pages(client, make_user, ln):
+    sa = _hdr(client, make_user, "ln_sa5", "superadmin")
+    # 只開連結、沒有對外網址 ⇒ 拒絕
+    assert _put(client, sa, include_links=True).status_code == 400
+    assert _put(client, sa, public_base_url="https://line.example.com/", include_links=True).status_code == 200
+    assert ln.links_enabled() is True
+    # 內網網址被換成對外網址，path＋query 保留
+    assert ln.safe_link(LINK) == "https://line.example.com/pages/quotation-form.html?no=MQ-202611-001"
+    assert ln.safe_link("/pages/approval-queue.html") == "https://line.example.com/pages/approval-queue.html"
+    assert "https://line.example.com/pages/quotation-form.html" in ln.build_text("t", [], link=LINK)
+    assert "172.16.10.177" not in ln.build_text("t", [], link=LINK)
+    # 白名單外／非 /pages／其他協定 ⇒ 不帶（不是改寫成別的網址）
+    for bad in ("https://172.16.10.177:666/pages/payslips.html?q=PS-1", "https://x/pages/bonus.html", "https://x/api/quotations",
+                "https://x/pages/../api/x", "javascript:alert(1)", "ftp://x/pages/cashier.html", "", None):
+        assert ln.safe_link(bad) == "", bad
+    # 關掉連結 ⇒ 立刻不帶，對外網址不受影響
+    assert _put(client, sa, include_links=False).status_code == 200
+    assert ln.safe_link(LINK) == "" and ln.public_base() == "https://line.example.com"
+    # 清空對外網址時若連結還開著 ⇒ 拒絕（不留「連結開、網址空」的狀態）
+    assert _put(client, sa, include_links=True).status_code == 200
+    assert _put(client, sa, public_base_url="").status_code == 400
+
+
+@pytest.mark.parametrize("bad", ["http://line.example.com", "https://line.example.com/path", "https://u:p@line.example.com",
+                                 "https://line.example.com?x=1", "line.example.com", "javascript:alert(1)", "https://a b.com",
+                                 "https://line.example.com:99999x"])
+def test_public_base_url_validation(client, make_user, ln, bad):
+    sa = _hdr(client, make_user, "ln_sa6", "superadmin")
+    assert _put(client, sa, public_base_url=bad).status_code == 400
+    assert ln.public_base() == ""
+
+
+def test_include_links_must_be_boolean(client, make_user, ln):
+    sa = _hdr(client, make_user, "ln_sa7", "superadmin")
+    assert _put(client, sa, public_base_url="https://line.example.com").status_code == 200
+    for v in ("false", "true", 1, "yes"):
+        assert _put(client, sa, include_links=v).status_code == 400, v      # 不把字串 "false" 當成 true
+    assert ln.links_enabled() is False
+
+
+def test_hand_edited_garbage_settings_fail_closed(ln):
+    from helpers.settings import _set_setting
+    _set_setting("line_notify", {"enabled": True, "channel_access_token": TOKEN, "public_base_url": "http://bad/x", "include_links": True})
+    assert ln.public_base() == "" and ln.links_enabled() is False and ln.callback_url() == "" and ln.safe_link(LINK) == ""
+    _set_setting("line_notify", {"enabled": True, "channel_access_token": TOKEN, "public_base_url": "https://ok.example.com", "include_links": "true"})
+    assert ln.links_enabled() is False                                    # 非布林 true ⇒ 不當成開
 
 
 def test_cannot_enable_without_token(client, make_user):

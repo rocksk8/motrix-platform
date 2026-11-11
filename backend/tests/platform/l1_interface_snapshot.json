@@ -1051,8 +1051,10 @@
    "verify_license": "def(blob=…)"
   },
   "helper:line_notify": {
+   "CALLBACK_PATH": "const",
    "HTTP_TIMEOUT": "const",
    "LINE_API_BASE": "const",
+   "LINK_PAGES": "const",
    "MAX_TEXT": "const",
    "MULTICAST_LIMIT": "const",
    "SEND_PERMANENT_FAIL": "const",
@@ -1061,10 +1063,15 @@
    "SEND_TRANSIENT_FAIL": "const",
    "SETTING_KEY": "const",
    "build_text": "def(title, rows=…, *, reason=…, link=…)",
+   "callback_url": "def()",
    "enabled": "def()",
+   "links_enabled": "def()",
    "mask": "def(token)",
+   "normalize_public_base": "def(v)",
+   "public_base": "def()",
    "push": "def(user_ids, text)",
    "quota": "def(token=…)",
+   "safe_link": "def(link)",
    "verify_token": "def(token=…)"
   },
   "helper:list_catalog": {

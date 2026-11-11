@@ -2,7 +2,10 @@
 """LINE Messaging API 發送管道（2026-11-11，T79 候選票；信件通知的並行通道）。
 
 [單位] helper:line_notify    [層] L1    [穩定度] 實作（階段 1：封裝＋設定；綁定與事件接線在後續 commit）
-[公開介面] LINE_API_BASE, SEND_*, enabled, build_text, push, verify_token, quota, mask
+[公開介面] LINE_API_BASE, LINK_PAGES, CALLBACK_PATH, SEND_*, enabled, build_text, push, verify_token, quota, mask,
+          normalize_public_base, public_base, callback_url, links_enabled, safe_link
+[曝露面] 兩個**獨立**設定（2026-11-11 PM 裁示）：`public_base_url`（Tunnel 公開網域，callback 用）與 `include_links`（訊息是否帶連結，預設關）。
+         有公開網域 ≠ 訊息帶連結；帶連結要兩者都成立，且只限 `LINK_PAGES` 白名單頁面。
 [不變式]
   ① 本檔不 import 業務模組、不 import email_notify（email_notify 之後會呼叫本檔，不可循環）；寄不寄由 `email_notify.email_send_policy()`
      （環境變數／`.no_email_send`）決定——**開發機標記同時擋信件與 LINE**（惰性 import，開發機誤推真實同仁的事故同一類）。
@@ -14,7 +17,9 @@
 """
 import json
 import logging
+import re
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from .settings import _get_setting
@@ -51,8 +56,64 @@ def enabled() -> bool:
     return bool(c.get("enabled") and c.get("channel_access_token"))
 
 
+#: LINE 訊息允許帶連結的頁面（B 案才會用到；A 案 `include_links` 預設關）。不在這裡的頁面，連結一律拿掉（不改寫成別的網址）。
+#: ⚠️ 加頁面＝擴大對外曝露面（Tunnel ingress 要同步放行該頁面與它依賴的 static／API），要走 PM 與正式機確認。
+LINK_PAGES = ("quotation-form.html", "approval-queue.html", "case-management.html", "cashier.html")
+CALLBACK_PATH = "/api/line/callback"
+
+_PUBLIC_BASE_RE = re.compile(r"^https://[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?(:[0-9]{1,5})?$")
+
+
+def normalize_public_base(v) -> str:
+    """對外基準網址（Tunnel 公開網域）：只收 `https://主機[:埠]`，不可有路徑、查詢、帳密；末尾斜線容忍。不合法 ⇒ `ValueError`。空字串 ⇒ ""。"""
+    s = str(v or "").strip().rstrip("/")
+    if not s:
+        return ""
+    if len(s) > 255 or not _PUBLIC_BASE_RE.match(s):
+        raise ValueError("對外網址只能是 https://網域（可含埠號），不可含路徑、查詢或帳號")
+    return s
+
+
+def public_base() -> str:
+    """設定的對外網址；設定值壞掉（手改資料庫）也回 ""，不丟例外。"""
+    try:
+        return normalize_public_base(_cfg().get("public_base_url"))
+    except ValueError:
+        return ""
+
+
+def callback_url() -> str:
+    """LINE Login 的 Callback URL（要與 LINE Developers Console 登記的逐字相同）；沒有對外網址 ⇒ ""。
+    ⚠️ 只代表「回調那一條路徑」的公開位置，**不代表訊息會帶連結**——連結由 `include_links` 另外控制。"""
+    b = public_base()
+    return b + CALLBACK_PATH if b else ""
+
+
+def links_enabled() -> bool:
+    """訊息是否帶連結：`include_links` 開 **且** 有對外網址。與「callback 要不要公開」是兩個獨立開關（預設關）。"""
+    c = _cfg()
+    return bool(c.get("include_links") is True and public_base())
+
+
+def safe_link(link: str) -> str:
+    """把信件用的連結轉成 LINE 可用的連結，或 ""（不帶）。
+    ⇒ 連結關閉／沒有對外網址／不是 `/pages/<白名單頁面>`／不是 http(s)：一律 ""。
+    通過時只取原連結的 path＋query，接在對外網址後面（內網網址不會外流）；其餘一律不帶。"""
+    try:
+        if not link or not links_enabled():
+            return ""
+        u = urllib.parse.urlsplit(str(link).strip())
+        if u.scheme not in ("", "http", "https") or not u.path.startswith("/pages/"):
+            return ""
+        if u.path[len("/pages/"):] not in LINK_PAGES:
+            return ""
+        return public_base() + u.path + ("?" + u.query if u.query else "")
+    except Exception:
+        return ""
+
+
 def build_text(title: str, rows=None, *, reason: str = "", link: str = "") -> str:
-    """把一則通知排成純文字：標題、事由、`欄位：值` 逐行、連結。控制字元收成空白，過長截斷。"""
+    """把一則通知排成純文字：標題、事由、`欄位：值` 逐行、連結（經 `safe_link`，預設不帶）。控制字元收成空白，過長截斷。"""
     def _one(s):
         return " ".join(str(s).replace("\r", " ").replace("\n", " ").split())
     lines = ["【MOTRIX】" + _one(title)]
@@ -64,8 +125,9 @@ def build_text(title: str, rows=None, *, reason: str = "", link: str = "") -> st
         except Exception:
             continue
         lines.append("%s：%s" % (_one(k), _one(v)))
-    if link:
-        lines.append(str(link))
+    sl = safe_link(link)
+    if sl:
+        lines.append(sl)
     text = "\n".join(lines)
     return text if len(text) <= MAX_TEXT else text[:MAX_TEXT - 1] + "…"
 

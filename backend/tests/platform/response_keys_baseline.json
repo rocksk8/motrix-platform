@@ -6548,8 +6548,11 @@
  },
  "/api/settings/line-notify": {
   "k": [
+   "callback_url",
    "channel_access_token",
-   "enabled"
+   "enabled",
+   "include_links",
+   "public_base_url"
   ],
   "s": 200
  },

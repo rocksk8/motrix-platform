@@ -4,6 +4,7 @@
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.line_notify`（LINE Messaging API push／multicast 封裝：`push`、`build_text`、`verify_token`、`quota`、`enabled`、`mask`、`SEND_*`）。對外呼叫只有一支 `_http`（urllib），測試換掉它；開發機標記（`.no_email_send`／`MOTRIX_EMAIL_SEND=off`）同時擋 LINE。
 - 設定：`system_settings.line_notify`（`enabled`、`channel_access_token`，admin 在設定頁輸入；照 SMTP 密碼慣例 GET 遮罩、PUT 遮罩值＝保留、啟用前必須有 token）。每日 JSON 匯出（`archive.py`）以 `json_remove` 挖掉 token；稽核只記啟用與否與 token 是否更換。
 - 端點（僅最高管理者）：`GET／PUT /api/settings/line-notify`、`POST /api/settings/line-notify/verify`（驗 token＋本月額度，不發訊息）。
+- 曝露面（PM 裁示）：`public_base_url`（Tunnel 公開網域，LINE Login callback 用；只收 `https://網域[:埠]`）與 `include_links`（訊息是否帶連結，**預設關**，必須是布林 true、且要有 public_base_url 才能開）是**兩個獨立開關**；有公開網域不代表訊息帶連結。帶連結時只限 `LINK_PAGES` 白名單（quotation-form／approval-queue／case-management／cashier 四頁），內網網址換成對外網址、白名單外的連結直接不帶。新增 L1 名稱：`LINK_PAGES`、`CALLBACK_PATH`、`normalize_public_base`、`public_base`、`callback_url`、`links_enabled`、`safe_link`。
 - 階段 1 **不接任何事件**：沒有任何現有信件因本次變更多發 LINE；個人綁定與事件開關在後續 commit。測試：`tests/platform/test_line_notify_t79.py`。
 
 ## 1.155（next，未取號）— 2026-11-08（T79；option_list 重新啟用已停用選項改需核准）〔train_number：1.154 → 1.155〕
