@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-11-12（feat/field-js-upload；T80c 外勤手機 S3：上傳模組 `static/field.js`）
+- 新增（前端模組，尚未掛到任何頁面；S4 才掛）：`static/field.js`——弱訊號手機上傳：先 POST 文字、再逐張補照片（各自一把 `Idempotency-Key`，重試同 key 同位元組）；`createImageBitmap(imageOrientation:'from-image')`→canvas→JPEG（長邊 ≤1600、q0.8，EXIF 方向烤進像素；任何失敗退回原檔）；XHR 進度、60 秒**沒有進度**才逾時；重試 2／5／10 秒、最多 3 次（409 照 `Retry-After`、上限 15 秒；408／425／429／5xx／網路錯誤重試，其他 4xx 不重試）；401／402／428 各導對應頁面且不再重試；失敗保留表單與照片、只重傳失敗那張；定位盡力而為（拒絕／逾時不擋）；草稿存 sessionStorage。**沒有離線佇列**（設計裁示）。依賴全可注入，node 可測。
+- 測試：`tests/test_field_js_2026_11_12.py`（18 題；`tests/field_js_harness.js` 以 node 注入假 XHR／計時器／相機／定位）。沒有 node 的機器略過（⚠️ skip 不是驗過）。
+
 ## (next) — 2026-11-12（feat/field-read-api；T80c 外勤手機 S2：窄唯讀案件端點）
 - 新增：`GET /api/field/cases`（外勤案件列表）、`GET /api/field/cases/{quote_no}`（案件摘要）——**只回白名單欄位（值只放行字串／數字，巢狀物件丟掉），金額／毛利／成本／付款不下發**（個人手機沒有 MDM）；回 `Cache-Control: private, no-store`。
 - **權限＝案件成員（CM14），列表與單件同一支 `_is_member`**（與 `_is_case_member` 逐項同義：admin／業務／assigned_user_ids／roles 三鍵〔物件比 username、舊字串比顯示名〕／階段負責人）；**不用 `case_manage` 模組放行**（K 審 M1／hichan-12 F1：持該模組者可讀任何案件的地址與電話，案號可列舉）。別人的案件單件＝404；只在 `roles.executor` 的現場工程師列得出來也開得進去；持 `cashier` 的財務不在內（這支不含金額）。SQL 只做 `instr` 粗篩（超集；非 ASCII／引號／反斜線的 JSON 兩種寫法都比），最後在 Python 逐筆精判。
