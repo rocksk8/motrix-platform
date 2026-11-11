@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """可信的來源 IP（2026-11-11，外網存取 go-live 前必修的安全項）。
 
-[單位] plat:client_ip    [層] L0（只依賴標準庫；不認識任何業務）
-[公開介面] client_ip, is_loopback, CLOUDFLARE_HEADERS, has_proxy_headers
+[單位] helper:client_ip    [層] L1    [穩定度] 契約
+[公開介面] CLOUDFLARE_HEADERS, client_ip, has_proxy_headers, is_loopback
 [不變式] ① **永遠不讀 `X-Forwarded-For`**（用戶端可任意填；以前 `routers/auth.py::_client_ip` 無條件信第一個值 ⇒ 登入鎖定
            〔5 次失敗／15 分鐘，以來源 IP 計〕只要每次換一個 XFF 就繞過 ⇒ 無限次猜密碼）。
          ② 只有「TCP 對端本身是 loopback」才採信 `CF-Connecting-IP`（cloudflared 與本程式同機時，所有外部使用者對本程式而言
@@ -10,6 +10,9 @@
            稽核紀錄的 IP 也全變 127.0.0.1）。對端不是 loopback（區網、直接連線）⇒ `CF-Connecting-IP` 一律不理。
          ③ `CF-Connecting-IP` 的值必須是合法 IP 才採用（`ipaddress` 解析；亂填、含 scope id 的就退回對端位址），並正規化成標準寫法。
          ④ 拿不到對端 ⇒ "unknown"（跟舊行為一致；不是 loopback，所以不會被當成本機）。
+[契約題] backend/tests/test_trusted_client_ip_2026_11_11.py
+
+只依賴標準庫、不認識任何業務。
 
 uvicorn 這一層（hichan-13 K 審 S1）：uvicorn 的 ProxyHeadersMiddleware 預設就開，只要 TCP 對端在 `forwarded_allow_ips`（預設 127.0.0.1）
 裡，就會用 `X-Forwarded-For` 的「最右邊一個不受信任的位址」改寫 `scope["client"]`——所以 XFF 其實在這支 helper 的**下一層**就被讀過了，
