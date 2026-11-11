@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-11-11（feat/quote-submit-error-clarity；報價單送審前置檢查＋送審失敗原因＋「已成案」卡住修復；報價單表單 V3.36）
+## (next) — 2026-11-11（feat/quote-submit-error-clarity；報價單送審前置檢查＋送審失敗原因＋「已成案」卡住修復；報價單表單 V3.36；K 審必修已修，L1 介面不變）
 - 新增（送審前置檢查）：`GET /api/quotations/submit-precheck`（唯讀、需登入、不建單不發通知）——用跟真正送審同一套解析（`_setting_to_active_tiers`）dry-run；申請人沒歸屬部門／部門沒在職主管／簽核設定指定的部門或處沒主管 ⇒ `ok=false`＋`problems[{code,message,fixPage,fixLabel}]`；另附 `steps`（處→部門→申請人歸屬→部門主管四步驟完成度，只供畫面顯示）與 `canFix`（最高管理者才能改組織）。`helpers.tiered_approval.UnresolvedManagerError` 新增類別屬性 `code`（不加建構子，避免動到 L1 公開介面；raise 點用私有 `_unresolved(msg, code)`；no_department／department_gone／no_manager／tier_dept_manager／tier_div_manager；預設 unresolved，`str(e)` 不變）。
 - 修正（前端 `quotation-form.html`）：①送審前先問 precheck，會失敗就攔下並用中文清單說明去哪裡設定（查詢本身失敗＝放行，真正把關仍在送審端點）。②`apiSave()` 不再把後端 4xx／5xx 吞成「請確認後端伺服器是否在線」：後端 `detail` 原文顯示，只有真的連不上才說伺服器問題。③送審失敗時還原 `status`／`approval`（原本畫面會停在「待審核」，使用者以為已送出）。
 - 修正（「已成案」卡住，正式機既有 regression，自 2026-09-23 `EM11` 起）：`onDealTagChange` 對已送出單不再先整份 PUT（後端對鎖定狀態的 PUT 一律 403，必然失敗，EM11 把「失敗就忽略」改成「失敗就擋下」後整個成案流程被擋死）；改成只打 `PATCH /deal-tag`，成功後才建 5 個預設階段（失敗不留殘餘階段；建階段中途失敗可能留下 1～4 個，之後不會自動補建），並回頭同步 `_lastUpdatedAt`（階段 API 會推進 `updated_at`，不同步的話之後整份存檔撞樂觀鎖 409）；PATCH 失敗顯示後端 `detail` 並退回舊值。下拉「未成案／已成案」對非管理員停用（後端本來就要 admin 以上），硬呼叫也在建階段之前擋下。
