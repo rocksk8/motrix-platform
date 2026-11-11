@@ -179,3 +179,35 @@
   .mb-top { position: static; }
 }
 @media (min-width: 900px) { .mb3__pal-open, .mb3__side-open { display: none; } }
+
+/* ═══ 手機／直立平板補強（hichan-17，2026-11-12）═══════════════════════════
+   版面本身已有行動版（元件／屬性抽屜、單欄）；剩下的是「手指」問題：
+   輸入框 13px（iOS／iPad 聚焦會自動放大整頁）、勾選框 13px 且貼字、↑↓✕／複製鈕約 28px 容易點錯。 */
+@media (max-width: 1023px) {
+  .mb-f input, .mb-f select, .mb-f textarea, .mb-in, .mb3__pal .mb-pal__q, .mb-col .mb-in { font-size: 16px; min-height: 44px; }
+  .mb-f textarea { min-height: 88px; }
+  .mb-f input[type="checkbox"], .mb-f input[type="radio"] { min-height: 0; }
+}
+@media (max-width: 899px) {
+  .mb-f label:has(> input[type="checkbox"]), .mb-f label:has(> input[type="radio"]),
+  .mb-card label:has(> input[type="checkbox"]), .mb-card label:has(> input[type="radio"]),
+  .mb3__side label:has(> input[type="checkbox"]), .mb-fc__q { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; margin-right: 10px; }
+  .mb-card input[type="checkbox"], .mb-card input[type="radio"], .mb3__side input[type="checkbox"], .mb-fc input[type="checkbox"] { width: 22px !important; height: 22px; flex: none; }
+  .mb-ib, .mb-fc__dup, .mb-chipbtn { min-height: 40px; min-width: 40px; padding: 4px 10px; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; }
+  .mb-tab { min-height: 44px; font-size: 14px; }
+  .mb3__tabs button, .mb-seg button { min-height: 44px; font-size: 14px; }
+  .mb3__pal .mb-pal__i { min-height: 44px; font-size: 14px; }
+  .mb-top { gap: 8px; }
+  .mb-card { padding: 14px; }
+  .mb-table td .mb-chipbtn { margin: 2px 6px 2px 0; }
+  .mb-fc__bar, .mb-sec__h { flex-wrap: wrap; row-gap: 6px; }
+  .mb-fc__bar .t, .mb-fc__q { white-space: nowrap; }
+  .mb-sec__h .mb-in { min-width: 0; flex: 1 1 140px; }
+  .mb-sec__h select.mb-in { flex: 0 1 auto; }
+  .mb3__grid > *, .mb-canvas, .mb-fc { min-width: 0; }
+  /* 欄位卡：第一列＝類型／代號，第二列＝必填（靠左）＋複製／上移／下移／刪除（靠右），不要讓按鈕散落兩三列 */
+  .mb-fc__bar .grow { flex: 0 0 100%; height: 0; margin: -3px 0 0; }
+  .mb-fc__dup, .mb-sec__h .mb-in-s + .mb-ib { margin-left: auto; }
+  .mb-sec__h > input.mb-in { flex: 1 1 calc(100% - 40px); }
+  .mb-sec__h > select.mb-in-s { flex: 0 0 auto; }
+}

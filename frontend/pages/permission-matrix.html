@@ -44,6 +44,53 @@
     .pm-chg { color: #6d28d9; font-size: 12px; }
     select.pm-sel { padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; font-family: inherit; background: #fff; }
     @media (max-width: 900px) { .pm-main { margin-left: 0; padding: 16px; } .pm-scroll { overflow-x: auto; } }
+
+    /* ══ 手機／直立平板版面（hichan-17，2026-11-12）══════════════════════════
+       權限矩陣原本：勾選框 13px、5 個角色欄各只有 ~50px 寬（角色名被折成直排字、功能說明被擠成 130px 窄欄）。
+       手機改成「一項功能一張卡」：功能名稱＋說明占滿整行，下面一排「☐ 角色名」大按鈕（整顆都能點、角色名就在旁邊不用回頭對表頭）。
+       桌機版外觀不變（.pm-cell-t 角色名文字只在手機顯示）。 */
+    .pm-cell { display: inline; }
+    .pm-cell-t { display: none; }
+    @media (max-width: 1023px) {
+      .pm-modal textarea, select.pm-sel { font-size: 16px; }
+      select.pm-sel { min-height: 44px; }
+    }
+    @media (max-width: 767px) {
+      .pm-main { padding: 14px 12px 40px; }
+      .pm-tabs { gap: 8px; }
+      .pm-tab { min-height: 44px; padding: 8px 16px; font-size: 14px; }
+      .pm-btn { min-height: 44px; padding: 8px 16px; font-size: 14px; }
+      .pm-modal { align-items: flex-end; }
+      .pm-modal > div { width: 100%; box-sizing: border-box; border-radius: 16px 16px 0 0; max-height: calc(90dvh / var(--fz,1)); }
+      .pm-scroll { overflow-x: visible; }
+      /* 矩陣 */
+      .pm-mt, .pm-mt thead, .pm-mt tbody { display: block; }
+      .pm-mt thead tr { display: block; }
+      .pm-mt thead th { display: none; }
+      table.pm-mt thead th:first-child { display: block; font-size: 15px; padding: 10px 2px 6px; border-bottom: 2px solid var(--border); }
+      .pm-mt tbody tr { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 2px 14px; border-bottom: 1px solid var(--border-light); }
+      table.pm-mt td { padding: 0; border: 0; }
+      .pm-mt td:first-child { flex: 1 1 100%; }
+      .pm-mt td:first-child b { font-size: 15px; }
+      .pm-mt td.c { flex: 0 0 auto; text-align: left; }
+      .pm-cell { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 10px 0 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; cursor: pointer; }
+      .pm-cell input { width: 24px; height: 24px; margin: 0; }
+      .pm-cell-t { display: inline; font-size: 14px; }
+      .pm-mt td.c .pm-chg { margin-top: 2px; text-align: center; }
+      /* 目前生效／版本紀錄表 */
+      .pm-ct, .pm-ct tbody, .pm-vt, .pm-vt tbody { display: block; }
+      .pm-ct thead, .pm-vt thead { display: none; }
+      .pm-ct tbody tr, .pm-vt tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 2px; border-bottom: 1px solid var(--border-light); }
+      table.pm-ct td, table.pm-vt td { display: block; padding: 0; border: 0; }
+      .pm-ct td:nth-child(1) { grid-column: 1; font-weight: 600; }
+      .pm-ct td:nth-child(2) { grid-column: 2; text-align: right; }
+      .pm-ct td:nth-child(3) { grid-column: 1 / -1; }
+      .pm-vt td:nth-child(1) { grid-column: 1; }
+      .pm-vt td:nth-child(2) { grid-column: 2; text-align: right; }
+      .pm-vt td:nth-child(3) { grid-column: 1 / -1; }
+      .pm-vt td:nth-child(4) { grid-column: 1 / -1; margin-top: 4px; }
+      .pm-vt td:nth-child(4) .pm-btn { width: 100%; }
+    }
   </style>
 </head>
 <body x-data="permMatrixPage()" x-init="init()" x-cloak>
@@ -74,7 +121,7 @@
         <div class="pm-sub" x-show="m && m.caps.length">最高管理者永遠可以做所有事，不列在表中。標「已調整」的格子與預設不同。標「未接入」的項目還沒有實際生效，暫時不能勾選。</div>
         <template x-for="g in groups()" :key="g.name">
           <div class="pm-scroll">
-            <table class="pm-t" style="margin-top:12px">
+            <table class="pm-t pm-mt" style="margin-top:12px">
               <thead><tr><th x-text="g.name"></th><template x-for="r in m.roles" :key="r.role"><th class="c" x-text="r.label"></th></template></tr></thead>
               <tbody>
                 <template x-for="c in g.caps" :key="c.key">
@@ -87,8 +134,8 @@
                     </td>
                     <template x-for="r in m.roles" :key="r.role">
                       <td class="c">
-                        <input type="checkbox" :checked="c.cells[r.role].granted" :disabled="!c.wired || busy" :data-testid="'pm-cell-' + c.key + '-' + r.role"
-                               :title="c.wired ? '' : '這個項目還沒有接入，暫時不能調整'" @click.prevent="askRole(c, r, !c.cells[r.role].granted)">
+                        <label class="pm-cell"><input type="checkbox" :checked="c.cells[r.role].granted" :disabled="!c.wired || busy" :data-testid="'pm-cell-' + c.key + '-' + r.role"
+                               :title="c.wired ? '' : '這個項目還沒有接入，暫時不能調整'" @click.prevent="askRole(c, r, !c.cells[r.role].granted)"><span class="pm-cell-t" x-text="r.label"></span></label>
                         <div class="pm-chg" x-show="c.cells[r.role].changed">已調整</div>
                       </td>
                     </template>
@@ -107,7 +154,7 @@
         </select>
         <div class="pm-card" x-show="eff">
           <b x-text="eff && eff.user.name"></b> <span class="pm-sub" x-text="eff && eff.user.roleLabel"></span>
-          <table class="pm-t" style="margin-top:8px">
+          <table class="pm-t pm-ct" style="margin-top:8px">
             <thead><tr><th>項目</th><th>能不能做</th><th>為什麼</th></tr></thead>
             <tbody>
               <template x-for="c in (eff ? eff.caps : [])" :key="c.key">
@@ -158,7 +205,7 @@
       <section x-show="tab === 'versions'" data-testid="pm-versions">
         <div class="pm-sub" x-show="!versions.length">還沒有任何調整紀錄。</div>
         <button class="pm-btn pri" x-show="versions.length" :disabled="busy" data-testid="pm-undo" @click="askUndo()">一鍵復原上一次調整</button>
-        <table class="pm-t" x-show="versions.length" style="margin-top:8px">
+        <table class="pm-t pm-vt" x-show="versions.length" style="margin-top:8px">
           <thead><tr><th>時間</th><th>操作者</th><th>原因</th><th></th></tr></thead>
           <tbody>
             <template x-for="v in versions" :key="v.id">

@@ -677,6 +677,91 @@
     .nt-input-group:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.08); }
     .nt-prefix { padding:0 10px; font-size:11px; color:var(--text-dim); background:#F8F7F4; border-right:1px solid var(--border-light); display:flex; align-items:center; flex-shrink:0; font-family:LINE Seed TW_OTF, sans-serif; white-space:nowrap; }
     .nt-input-group input.form-input { border:none !important; box-shadow:none !important; border-radius:0 !important; flex:1; min-width:0; }
+
+    /* ══ 手機／直立平板（≤767px）版面（hichan-17，2026-11-12）══════════════════
+       原本：工具列固定 52px 單列不換行 ⇒ 頁面被撐到 560px 寬、整頁縮成 0.67 倍（字級≈9px）；
+       品項明細是 7～11 欄寬表格；欄位字級 13px（iOS 聚焦會自動放大）。
+       作法：只改版面，不動資料／事件／Alpine 綁定。
+       ① 工具列改成可換行、隨頁面捲動（不再 fixed；修之後頂端不會被擋、單號／狀態／按鈕都看得到）
+       ② 品項明細一列＝一張卡（品名、廠牌整列；數量／單位／單價三欄並排；金額一行；成本欄用橘底區分）
+       ③ 欄位 16px、高度 ≥44px。 */
+    /* 工具列：768～1023 的直立平板同樣會被撐出畫面，一併處理 */
+    @media (max-width: 1023px) {
+      .form-toolbar { position: static; margin-top: var(--topbar-h); height: auto; flex-wrap: wrap; padding: 10px 12px; gap: 8px 10px; box-shadow: none; }
+      .form-toolbar__left { width: 100%; flex-wrap: wrap; gap: 6px 10px; }
+      .form-quote-no { font-size: 16px; }
+      .save-indicator { width: 100%; flex-wrap: wrap; font-size: 12px; }
+      .form-toolbar__right { width: 100%; margin-left: 0; flex-wrap: wrap; gap: 8px; }
+      .form-toolbar__right > div:first-child { width: 100%; font-size: 13px !important; }
+      .form-toolbar__right select { min-height: 40px; font-size: 16px !important; max-width: none !important; }
+      .form-toolbar__right .btn, .form-toolbar__right > a, .form-toolbar__right > label { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px !important; padding-left: 12px; padding-right: 12px; }
+      .form-toolbar__right .btn-primary, .form-toolbar__right .btn-warning { flex: 1 1 100%; }
+      [data-testid="qf-save-conflict"] { top: var(--topbar-h) !important; }
+      .form-layout { margin-top: 0; }
+    }
+    @media (max-width: 767px) {
+      .form-layout { padding: 12px 12px 28px; }
+      .form-section { padding: 14px; }
+      .section-title { font-size: 14px; flex-wrap: wrap; }
+      .section-title .toggle-btn { min-height: 40px; }
+      .form-grid-4, .form-grid-3, .form-grid-2 { grid-template-columns: 1fr 1fr; }
+      .form-grid-4 > .form-group:first-child { grid-column: 1 / -1; }   /* 報價單號（唯讀）整列，避免只露出 MQ-… 前綴 */
+      .form-label { font-size: 12px; letter-spacing: .02em; text-transform: none; }
+      .form-hint { font-size: 12px; }
+      .form-input, .form-select, .form-textarea, .nt-input-group input.form-input { font-size: 16px; min-height: 44px; padding: 10px 12px; box-sizing: border-box; }
+      .form-textarea { min-height: 96px; }
+      .nt-prefix { font-size: 13px; }
+      .form-section > div[style*="grid-template-columns:1fr auto"] { grid-template-columns: minmax(0, 1fr) !important; gap: 16px !important; }
+      .totals-grid { max-width: none; }
+      .total-row > * { font-size: 15px; }
+      .add-item-btn, .form-section .btn-sm { min-height: 44px; }
+
+      /* 品項明細：表格 → 卡片 */
+      .items-table, .items-table.with-cost { display: block; width: 100%; min-width: 0 !important; margin-bottom: 0; }
+      .items-table thead { display: none; }
+      .items-table tbody { display: block; }
+      .items-table tbody tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 12px; margin-bottom: 10px; border: 1px solid var(--border-light); border-radius: 10px; background: #fff; position: relative; }
+      .items-table td, .items-table td.va-top { display: block; padding: 0; border: 0; min-width: 0; text-align: left; background: transparent; }
+      .items-table tr:hover td { background: transparent; }
+      .items-table .qf-c-no { grid-column: 1 / -1; padding-right: 48px; }
+      .items-table .qf-c-no > div { justify-content: flex-start !important; }
+      .items-table .qf-c-qty, .items-table .qf-c-unit, .items-table .qf-c-price { text-align: left !important; }
+      .items-table .qf-c-no .drag-handle { padding: 10px 12px; }
+      .items-table .qf-c-desc, .items-table .qf-c-brand { grid-column: 1 / -1; }
+      .items-table .qf-c-qty::before, .items-table .qf-c-unit::before, .items-table .qf-c-price::before,
+      .items-table .qf-c-cost::before, .items-table .qf-c-margin::before, .items-table .qf-c-profit::before, .items-table .qf-c-amount::before {
+        display: block; font-size: 12px; line-height: 1.6; color: var(--text-dim); font-weight: 500; }
+      .items-table .qf-c-qty::before { content: "數量"; }
+      .items-table .qf-c-unit::before { content: "單位"; }
+      .items-table .qf-c-price::before { content: "單價（未稅）"; }
+      .items-table .qf-c-cost::before { content: "成本單價"; color: #B45309; }
+      .items-table .qf-c-margin::before { content: "毛利率"; color: #B45309; }
+      .items-table .qf-c-profit::before { content: "單項毛利"; color: #B45309; }
+      .items-table .qf-c-amount { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; border-top: 1px dashed var(--border-light); padding-top: 8px; }
+      .items-table .qf-c-amount::before { content: "金額（未稅）"; font-size: 13px; }
+      .items-table .qf-c-amount .cell-display { font-size: 17px; font-weight: 700; padding: 0; }
+      .items-table td.internal { background: #FFFBF5; border-radius: 6px; padding: 6px 8px; }
+      .items-table .qf-c-margin input { width: 100% !important; }
+      .items-table .qf-c-del { position: absolute; top: 6px; right: 6px; }
+      .items-table .del-btn { width: 40px; height: 40px; opacity: 1; }
+      .items-table .cell-input, .items-table .cell-textarea { font-size: 16px; min-height: 44px; padding: 10px 12px; text-align: left; background: #fff; border: 1px solid var(--border-light); border-radius: 6px; box-sizing: border-box; }
+      .items-table .cell-input.num { text-align: right; }
+      .items-table .cell-input.qty-input { width: 100%; max-width: none; field-sizing: fixed; }
+      .items-table .cell-input.internal { background: #FFF8F0; }
+      .items-table .item-note { font-size: 15px; min-height: 40px; }
+      .items-table .cell-textarea.header-desc { font-size: 16px; }
+      .items-table .row-tool { font-size: 13px; padding: 8px 10px; min-height: 36px; }
+      .items-table .alt-row { font-size: 13px; }
+      .items-table .alt-row label { min-height: 36px; }
+      .items-table .alt-row .cell-input { width: 100%; font-size: 16px; }
+      .items-table tr.item-header-row { grid-template-columns: minmax(0, 1fr); }
+      .items-table tr.item-header-row td:not(.qf-c-desc):not(.qf-c-no):not(.qf-c-del) { display: none; }
+      .items-table tr.item-header-row td { background: transparent; border-top: 0; border-bottom: 0; }
+      .items-table tr.item-header-row { background: var(--accent-light); border-color: #BFDBFE; }
+    }
+    @media (max-width: 479px) {
+      .form-grid-2 { grid-template-columns: minmax(0, 1fr); }
+    }
   </style>
 </head>
 
@@ -1225,7 +1310,7 @@
 
       <!-- 客戶回簽 -->
       <div x-show="q.status === '已送出'" style="border:1px solid var(--border-light);border-radius:8px;margin-bottom:18px;overflow:hidden">
-        <div :style="q.isSigned ? 'background:#F0FDF4' : 'background:#FAFAF9'"
+        <div :style="(q.isSigned ? 'background:#F0FDF4;' : 'background:#FAFAF9;') + 'padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap'"
              style="padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <span style="font-size:12px;font-weight:700;font-family:var(--font-zh)">客戶回簽</span>
           <span x-show="q.isSigned" style="font-size:11px;color:#065F46;font-weight:600">✓ 已回簽</span>
@@ -1661,7 +1746,7 @@
                     @keydown.ctrl.enter.prevent="insertItemAfter(idx)"
                     @keydown.alt.up.prevent="moveItemBy(idx, -1, $event)"
                     @keydown.alt.down.prevent="moveItemBy(idx, 1, $event)">
-                  <td style="text-align:center;color:var(--text-dim);font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;padding:0 4px">
+                  <td class="qf-c-no" style="text-align:center;color:var(--text-dim);font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;padding:0 4px">
                     <div style="display:flex;align-items:center;justify-content:center;gap:1px">
                       <span class="drag-handle" title="拖曳排序">
                         <svg width="12" height="19" viewBox="0 0 9 14" fill="currentColor">
@@ -1674,7 +1759,7 @@
                             x-text="q.items.slice(0, idx).filter(i => i.type !== 'header').length + 1"></span>
                     </div>
                   </td>
-                  <td class="va-top">
+                  <td class="va-top qf-c-desc">
                     <textarea :class="item.type === 'header' ? 'cell-textarea header-desc' : 'cell-textarea'"
                               x-model="item.description"
                               :placeholder="item.type === 'header' ? '區段標題（如：網路設備、伺服器）' : '品名或規格說明'"
@@ -1702,7 +1787,7 @@
                       <span class="alt-tag" :class="altIsDropped(item) ? 'dropped' : ''" x-show="altGroupOf(item) && MotrixAltItems.active(q)" x-text="altTagText(item)"></span>
                     </div>
                   </td>
-                  <td class="va-top">
+                  <td class="va-top qf-c-brand">
                     <textarea class="cell-textarea" x-model="item.brand"
                               x-show="item.type !== 'header'"
                               placeholder="廠牌 / 型號" rows="1"
@@ -1710,20 +1795,20 @@
                               x-init="autoGrowInit($el)"
                               x-effect="item.brand; autoGrowLater($el)"></textarea>
                   </td>
-                  <td style="text-align:center">
+                  <td class="qf-c-qty" style="text-align:center">
                     <input class="cell-input num qty-input" type="text" inputmode="decimal"
                            :value="numShown(item.qty, $el, 'qty-' + item.id)" :class="{'num-bad': badNum['qty-' + item.id]}"
                            x-show="item.type !== 'header'"
                            @input="if (setNumField(item, 'qty', 'qty-' + item.id, $event.target.value)) { calcItem(item); setDirty() }"
                            @blur="$el.value = numShown(item.qty, $el, 'qty-' + item.id, true)">
                   </td>
-                  <td>
+                  <td class="qf-c-unit">
                     <!-- 2026-09-24：focus 時不再清空（用 Tab 經過會以為內容被刪了）；下拉選項照舊由 datalist 提供 -->
                     <input class="cell-input" type="text" x-model="item.unit" @change="setDirty"
                            x-show="item.type !== 'header'" list="quote-unit-options" placeholder="單位">
                   </td>
                   <template x-if="showCostCols && item.type !== 'header'">
-                    <td class="internal">
+                    <td class="internal qf-c-cost">
                       <input class="cell-input num internal" type="text" inputmode="decimal"
                              :value="numShown(item.cost, $el, 'cost-' + item.id)" :class="{'num-bad': badNum['cost-' + item.id]}" placeholder="0"
                              @blur="$el.value = numShown(item.cost, $el, 'cost-' + item.id, true)"
@@ -1744,7 +1829,7 @@
                     </td>
                   </template>
                   <template x-if="showCostCols && item.type !== 'header'">
-                    <td class="internal">
+                    <td class="internal qf-c-margin">
                       <div style="display:flex;align-items:center;justify-content:center;gap:2px">
                         <input class="cell-input num internal" type="number" min="0" max="99.99" step="0.01"
                                :value="parseFloat((item.margin * 100).toFixed(2))"
@@ -1757,7 +1842,7 @@
                            style="font-size:9px;color:var(--danger);font-weight:600;text-align:center">需審核</div>
                     </td>
                   </template>
-                  <td>
+                  <td class="qf-c-price">
                     <input class="cell-input num" type="text" inputmode="decimal"
                            x-show="item.type !== 'header'"
                            :value="numShown(item.unitPrice, $el, 'price-' + item.id)" :class="{'num-bad': badNum['price-' + item.id]}"
@@ -1765,19 +1850,19 @@
                            @input="if (!setNumField(item, 'unitPrice', 'price-' + item.id, $event.target.value)) return; item.unitPriceOverride = true; if(item.cost > 0 && item.unitPrice > 0) item.margin = parseFloat((1 - item.cost * 1.05 / item.unitPrice).toFixed(4)); calcItem(item); setDirty(); checkApproval()"
                            :title="item.unitPriceOverride ? '手動覆寫（毛利率已反推）' : '自動計算'">
                   </td>
-                  <td>
+                  <td class="qf-c-amount">
                     <div class="cell-display" x-show="item.type !== 'header'"
                          x-text="item.amount > 0 ? MotrixFormat.num(item.amount) : ''"></div>
                   </td>
                   <template x-if="showCostCols && item.type !== 'header'">
-                    <td class="internal">
+                    <td class="internal qf-c-profit">
                       <div class="cell-display internal"
                            :style="(item.amount - (item.qty||0)*(item.cost||0)*1.05) < 0 ? 'color:var(--danger)' : 'color:#15803D'"
                            x-text="item.cost > 0 && item.amount > 0 ? MotrixFormat.num(MotrixLegalRound.halfUp(item.amount - (item.qty||0)*(item.cost||0)*1.05)) : ''">
                       </div>
                     </td>
                   </template>
-                  <td>
+                  <td class="qf-c-del">
                     <button class="del-btn" @click="removeItem(idx)" title="刪除此項目">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>

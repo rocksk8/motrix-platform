@@ -40,6 +40,41 @@
     .rb-modal { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; z-index: 50; }
     .rb-modal > div { background: #fff; border-radius: var(--radius); padding: 18px 20px; width: min(560px, 92vw); max-height: calc(86vh / var(--fz,1)); overflow: auto; }
     @media (max-width: 900px) { .rb-main { margin-left: 0; padding: 16px; } }
+
+    /* ══ 手機／直立平板版面（hichan-17，2026-11-12）══════════════════════════
+       8 欄表格在手機整頁被撐寬（頁面縮到 0.65 倍、「還原／永久刪除」鈕在螢幕外）→ 一筆一張卡；
+       「還原」與「永久刪除」並排的鈕放大並拉開距離，避免手指誤觸永久刪除。 */
+    @media (max-width: 1023px) {
+      .rb-bar input, .rb-bar select, .rb-card input { font-size: 16px; min-height: 44px; box-sizing: border-box; }
+    }
+    @media (max-width: 767px) {
+      .rb-main { padding: 14px 12px 40px; }
+      .rb-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .rb-bar select, .rb-bar input { width: 100%; min-width: 0; }
+      .rb-bar input[type=search], .rb-bar input[type=text] { grid-column: 1 / -1; }
+      .rb-card input.filter { min-width: 0 !important; width: 100%; }
+      .rb-btn { min-height: 44px; padding: 8px 16px; font-size: 14px; }
+      table.rb-t, table.rb-t tbody { display: block; }
+      table.rb-t thead { display: none; }
+      table.rb-t tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 12px 4px; border-bottom: 1px solid var(--border-light); }
+      table.rb-t td { display: block; padding: 0; border: 0; min-width: 0; }
+      table.rb-t tbody tr:has(td[colspan]) { display: block; }
+      table.rb-t td:nth-child(1) { grid-column: 1; grid-row: 1; color: var(--text-secondary); font-size: 12px; }
+      table.rb-t td:nth-child(7) { grid-column: 2; grid-row: 1; text-align: right; }
+      table.rb-t td:nth-child(2) { grid-column: 1 / -1; grid-row: 2; font-size: 15px; word-break: break-all; }
+      table.rb-t td:nth-child(3) { grid-column: 1; grid-row: 3; }
+      table.rb-t td:nth-child(4) { grid-column: 2; grid-row: 3; text-align: right; }
+      table.rb-t td:nth-child(5) { grid-column: 1; grid-row: 4; }
+      table.rb-t td:nth-child(6) { grid-column: 2; grid-row: 4; text-align: right; }
+      table.rb-t td:nth-child(3)::before { content: "刪除者 "; color: var(--text-dim); font-size: 12px; }
+      table.rb-t td:nth-child(5)::before { content: "剩餘 "; color: var(--text-dim); font-size: 12px; }
+      table.rb-t td:nth-child(6)::before { content: "附件 "; color: var(--text-dim); font-size: 12px; }
+      table.rb-t td:nth-child(8) { grid-column: 1 / -1; grid-row: 5; margin-top: 6px; display: flex !important; flex-wrap: wrap; gap: 10px; }
+      table.rb-t td:nth-child(8) .rb-btn { flex: 1 1 28%; margin: 0 !important; }
+      table.rb-t td:nth-child(8) .rb-btn.danger { flex-basis: 100%; }
+      .rb-modal { align-items: flex-end; }
+      .rb-modal > div { width: 100%; max-height: calc(88dvh / var(--fz,1)); border-radius: 16px 16px 0 0; box-sizing: border-box; }
+    }
   </style>
 </head>
 <body x-data="recycleBinPage()" x-init="init()" x-cloak>
