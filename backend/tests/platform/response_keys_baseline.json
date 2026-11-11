@@ -6919,6 +6919,22 @@
   "k": [],
   "s": 200
  },
+ "/api/system/heartbeat": {
+  "k": [
+   "alert",
+   "ext_ok_at",
+   "level",
+   "local_ok_at",
+   "ping_url_set",
+   "problems",
+   "scheme",
+   "seen_at",
+   "since",
+   "status",
+   "summary"
+  ],
+  "s": 200
+ },
  "/api/system/modules": {
   "k": [
    "disabledList",

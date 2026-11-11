@@ -1,11 +1,11 @@
 {
  "summary": {
-  "endpoints_total": 920,
-  "endpoints_api": 916,
+  "endpoints_total": 921,
+  "endpoints_api": 917,
   "write_total": 496,
   "write_api": 496,
-  "get_api": 420,
-  "distinct_paths_api": 774,
+  "get_api": 421,
+  "distinct_paths_api": 775,
   "write_with_body_api": 362,
   "write_with_path_param_api": 356
  },
@@ -2259,6 +2259,11 @@
    "body": false
   },
   "GET /api/system/deployed-version": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/system/heartbeat": {
    "w": false,
    "pp": 0,
    "body": false
