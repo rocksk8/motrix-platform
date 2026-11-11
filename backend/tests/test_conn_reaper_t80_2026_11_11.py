@@ -560,3 +560,24 @@ def test_failure_audit_concurrent_first_failures_write_one_row(client, make_user
     finally:
         c.close()
     assert n == 1
+
+
+def test_trail_claim_is_per_database_demo_vs_real(client, make_user, table, monkeypatch):
+    """demo 帳號與正式帳號即使 user id 與路徑相同、在去重秒數內，也各記各的（兩個庫的使用者 id 互不相干）。"""
+    from datetime import datetime
+    main, uid = _trail_setup(client, make_user, monkeypatch)
+    monkeypatch.setattr(main, "get_db", db.get_db)           # 這題不需要放慢寫入
+    now = datetime.now()
+    path = "/api/parts/zz-t80-demo"
+    try:
+        db.set_demo_mode(True)
+        main._record_request_trail(uid, now, "GET", path, "", 200)
+    finally:
+        db.set_demo_mode(False)
+    main._record_request_trail(uid, now, "GET", path, "", 200)
+    assert _trail_rows(path) == 1, "正式庫那一筆被 demo 的認領吃掉了"
+    dc = sqlite3.connect(db.DEMO_DB_PATH)
+    try:
+        assert dc.execute("SELECT COUNT(*) FROM user_request_log WHERE path=?", (path,)).fetchone()[0] == 1
+    finally:
+        dc.close()
