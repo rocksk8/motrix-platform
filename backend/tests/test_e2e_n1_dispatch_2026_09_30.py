@@ -151,6 +151,7 @@ def test_quotation_cost_pick_vendor_quote_and_diff(live_server, make_user, new_c
     page = new_context().new_page()
     page.on("pageerror", lambda e: errors.append(str(e)))
     inject_login(page, live_server, boss[0], boss[1])
+    page.add_init_script("try { localStorage.setItem('motrix.qf.showCostCols', '1') } catch (e) {}")     # V3.40（C1）：成本區預設收合；本題要看成本欄／面板，先把這台瀏覽器的偏好設成展開
     page.goto(live_server + "/pages/quotation-form.html?id=MQ-N1V-001")
     pick = page.locator('[data-testid="vq-pick"]').first
     pick.wait_for(state="visible", timeout=20000)

@@ -682,6 +682,25 @@ function reportsApp() {
     // 改成先看到圖表，其餘 12 個頁籤維持不動當細分用。
     activeTab: 'charts',
 
+    // ── C5（2026-11-11 UX 密度）：KPI 預設只顯示 3 張，其餘收在「更多指標」──────────
+    // 展開／收合記在這個瀏覽器（localStorage，每位使用者各自）；讀寫都包 try/catch——
+    // 無痕視窗、被封鎖時拋例外，頁面照常運作（只是記不住，預設收合）。
+    kpiMore: false,
+    _kpiMoreKey: 'motrix_reports_kpi_more',
+    initKpiMore() {
+      try { this.kpiMore = localStorage.getItem(this._kpiMoreKey) === '1' } catch (e) { this.kpiMore = false }
+    },
+    toggleKpiMore() {
+      this.kpiMore = !this.kpiMore
+      try { localStorage.setItem(this._kpiMoreKey, this.kpiMore ? '1' : '0') } catch (e) { /* 記不住就算了 */ }
+    },
+    // 還沒有任何統計資料（全新安裝／空資料）⇒ 頁面顯示一句說明，而不是只有一排 0
+    get noReportData() {
+      var sm = this.summary || {}
+      return !(sm.totalCases > 0) && !(sm.totalReceivable > 0) && !(sm.periodReceived > 0) &&
+             !(Math.abs(this.activeIncomeTotal || 0) > 0) && !(Math.abs(this.activeExpenseTotal || 0) > 0)
+    },
+
     // ── 圖表數值明細（2026-09-14 使用者交辦：「圖表也要顯示金額跟內容，
     //    目前只有圖表，沒有詳細資訊」）───────────────────────────────
     // 數字**不另外算一份**：每張圖的 _buildXChart() 在畫圖的同時把自己用的
@@ -1266,6 +1285,7 @@ function reportsApp() {
     async init() {
       if (this._initDone) return
       this._initDone = true
+      this.initKpiMore()
       MotrixProfitWarning.load().then(b => { this.pw = b })      // T64 A：取不到＝原本的數字
       if (window.MotrixStatus) window.MotrixStatus.init()      // 旗標關 ⇒ 什麼都不改
       // 2026-08-31：出納模組併入本頁後的准入判斷放寬——admin+ 維持原行為

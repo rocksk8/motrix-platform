@@ -154,9 +154,64 @@
     .scope-badge.on  { background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; }
     .scope-badge.off { background: #EEF2FF; color: #3730A3; border: 1px solid #C7D2FE; }
 
+    /* ── C4（2026-11-11 UX 密度）：頁首三句話、統一／獨立對照圖、每類預設收成一列、左側錨點目錄 ──
+       只動呈現：所有控制項、x-model、data-* 照舊，只是預設收在「調整」後面。
+       顏色一律走既有 token（深色模式由全站 body 濾鏡反轉，不另寫深色值）。 */
+    .as-intro { margin: 6px 0 0; padding: 0; list-style: none; max-width: 68ch;
+                font-size: 12.5px; line-height: 1.7; color: var(--text-secondary); }
+    .as-intro li { display: flex; gap: 8px; }
+    .as-intro li::before { content: attr(data-n); flex-shrink: 0; width: 16px; height: 16px; margin-top: 3px;
+                           border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700;
+                           display: flex; align-items: center; justify-content: center; }
+    .as-layout { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 28px; align-items: start; }
+    .as-toc { position: sticky; top: calc(var(--topbar-h) + 16px); display: flex; flex-direction: column; gap: 2px;
+              font-size: 12px; border-left: 2px solid var(--border-light); }
+    .as-toc__t { font-size: 12px; font-weight: 700; color: var(--text-dim); letter-spacing: .06em; padding: 0 0 6px 12px;
+                 font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .as-toc a { display: block; padding: 4px 10px 4px 12px; margin-left: -2px; border-left: 2px solid transparent;
+                color: var(--text-secondary); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .as-toc a:hover { color: var(--accent); border-left-color: var(--accent); }
+    .as-content { min-width: 0; }
+    .as-content .as-card, [id^="as-"] { scroll-margin-top: calc(var(--topbar-h) + 12px); }
+    .as-compare { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 8px; }
+    .as-compare svg { flex: 1 1 280px; min-width: 0; max-width: 340px; height: auto; display: block; }
+    .as-compare .cmp-panel { fill: var(--white); stroke: var(--border-light); stroke-width: 1; }
+    .as-compare .cmp-doc   { fill: var(--accent-light); stroke: var(--accent); stroke-width: 1; }
+    .as-compare .cmp-step  { fill: var(--white); stroke: var(--text-dim); stroke-width: 1; }
+    .as-compare .cmp-line  { stroke: var(--text-dim); stroke-width: 1.2; fill: none; }
+    .as-compare .cmp-arrow { fill: var(--text-dim); }
+    .as-compare text       { font-family: inherit; font-size: 12px; fill: var(--text-primary); }
+    .as-compare .cmp-title { font-size: 12px; font-weight: 700; }
+    .as-compare .cmp-sub   { font-size: 12px; fill: var(--text-dim); }
+    .as-caption { font-size: 12px; color: var(--text-secondary); margin: 0 0 14px; }
+    /* 每類一列：名稱｜現況摘要｜[調整] */
+    .scope-row { padding: 7px 14px; gap: 6px; }
+    .scope-row__sum { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .scope-row__name { font-size: 13px; font-weight: 600; flex-shrink: 0; min-width: 8.5em; }
+    .scope-row__digest { flex: 1; min-width: 0; font-size: 12px; color: var(--text-secondary);
+                         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .scope-row__more { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--border-light); }
+    .as-adjust-btn { flex-shrink: 0; padding: 3px 12px; font-size: 12px; }
+    .as-card-digest { font-size: 12px; color: var(--text-secondary); flex: 2; min-width: 0;
+                      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .as-card-head.as-card-head--fold { padding: 10px 16px; }
+    details.as-help > summary { list-style: none; cursor: pointer; }
+    details.as-help > summary::-webkit-details-marker { display: none; }
+    details.as-help[open] > summary { border-bottom: 1px solid var(--border-light); }
+    .as-fold-more > summary { cursor: pointer; font-size: 12px; color: var(--accent); margin-top: 2px; }
+
   /* -- Mobile RWD -- */
+  @media (max-width:1099px) {
+    .as-layout { grid-template-columns: minmax(0, 1fr); }
+    .as-toc { display: none; }
+  }
   @media (max-width:767px) {
     .as-main { margin-left:0 !important; padding:14px 12px; }
+    .scope-row__sum { flex-wrap: wrap; }
+    .scope-row__digest { order: 5; flex-basis: 100%; white-space: normal; }
+    .scope-row__name { min-width: 0; flex: 1; }
+    .as-card-digest { display: none; }
+    .as-card-head { flex-wrap: wrap; }
   }
   </style>
 </head>
@@ -175,7 +230,11 @@
       <div class="pg__l">
         <div class="pg__eyebrow">系統設定</div>
         <h1 class="pg__t">簽核流程設定</h1>
-        <p class="pg__s">下方先選擇哪些文件類型共用「統一流程」、哪些改用各自獨立的設定，再分別編輯各自的簽核順序</p>
+        <ol class="as-intro" data-testid="as-intro">
+          <li data-n="1">簽核流程＝單據送出後，要依序由誰核准才算通過。</li>
+          <li data-n="2">多數單據共用一條「統一流程」；流程不同的單據才改成「獨立設定」。</li>
+          <li data-n="3">建議最小設定：全部維持統一流程、保留預設的部門主管簽核，有特殊需求再調整個別單據（獎金分潤例外：簽核人須為最高管理者）。</li>
+        </ol>
       </div>
       <template x-if="session.role !== 'superadmin'">
         <span style="font-size:12px;color:#B45309;background:#FEF3C7;border:1px solid #FDE68A;border-radius:5px;padding:5px 12px">
@@ -184,26 +243,87 @@
       </template>
     </div>
 
+    <div class="as-layout">
+    <!-- C4：左側錨點目錄（寬螢幕才顯示；點擊會一併展開對應的區塊） -->
+    <nav class="as-toc" data-testid="as-toc" aria-label="頁內目錄">
+      <div class="as-toc__t">本頁目錄</div>
+      <a href="#as-scope" @click.prevent="tocGo('as-scope')">套用範圍</a>
+      <template x-for="key in flowSectionKeys" :key="'toc-' + key">
+        <a :href="'#as-flow-' + key" @click.prevent="tocGo('as-flow-' + key, key)"
+           x-text="key === 'unified' ? '統一流程' : docTypeMeta[key]"></a>
+      </template>
+      <a href="#as-help" @click.prevent="tocGo('as-help', null, true)">說明</a>
+    </nav>
+    <div class="as-content">
+
     <!-- 套用範圍選單 -->
-    <div class="as-card" style="margin-bottom:20px">
+    <div class="as-card" id="as-scope" style="margin-bottom:20px">
       <div class="as-card-head">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
         <div class="as-card-head-title">簽核流程套用範圍</div>
       </div>
       <div class="as-card-body">
-        <div class="as-desc">
-          勾選＝該文件類型走下方「統一簽核流程設定」；取消勾選＝改用該類型自己的獨立設定（會在下方各自展開一個編輯區塊）。剛從統一流程勾掉的類型，獨立設定會先複製一份目前統一流程的內容作為起點，不會突然變成沒有任何簽核層。<br><b>每一類下方兩列，左邊那一列是現在生效的設定、另一列是切過去之後會變成的設定</b>——切換之前就看得到「誰核准」會怎麼變，不必先存下去才知道。
+        <!-- C4：原本三段長文字改成一張對照圖（統一 vs 獨立）＋一行說明。圖只是示意，不讀任何設定值。 -->
+        <div class="as-compare" data-testid="as-compare" role="img"
+             aria-label="示意圖：統一流程是多種單據共用同一條簽核流程；獨立設定是每種單據各有一條簽核流程">
+          <!-- 左：統一流程 -->
+          <svg viewBox="0 0 320 170" aria-hidden="true">
+            <defs><marker id="as-arr-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="cmp-arrow" d="M0 0L8 4L0 8z"/></marker></defs>
+            <rect class="cmp-panel" x="1" y="1" width="318" height="168" rx="8"/>
+            <text class="cmp-title" x="14" y="22">統一流程</text>
+            <text class="cmp-sub" x="76" y="22">多種單據共用一條</text>
+            <rect class="cmp-doc" x="14" y="40" width="64" height="26" rx="5"/><text x="46" y="57" text-anchor="middle">報價單</text>
+            <rect class="cmp-doc" x="14" y="80" width="64" height="26" rx="5"/><text x="46" y="97" text-anchor="middle">出貨單</text>
+            <rect class="cmp-doc" x="14" y="120" width="64" height="26" rx="5"/><text x="46" y="137" text-anchor="middle">完工單</text>
+            <path class="cmp-line" d="M78 53H104V93M78 93H104M78 133H104V93"/>
+            <path class="cmp-line" d="M104 93H132" marker-end="url(#as-arr-a)"/>
+            <rect class="cmp-step" x="134" y="78" width="84" height="30" rx="5"/><text x="176" y="97" text-anchor="middle">部門主管</text>
+            <path class="cmp-line" d="M218 93H238" marker-end="url(#as-arr-a)"/>
+            <rect class="cmp-step" x="240" y="78" width="70" height="30" rx="5"/><text x="275" y="97" text-anchor="middle">核准</text>
+          </svg>
+          <!-- 右：獨立設定 -->
+          <svg viewBox="0 0 320 170" aria-hidden="true">
+            <defs><marker id="as-arr-b" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="cmp-arrow" d="M0 0L8 4L0 8z"/></marker></defs>
+            <rect class="cmp-panel" x="1" y="1" width="318" height="168" rx="8"/>
+            <text class="cmp-title" x="14" y="22">獨立設定</text>
+            <text class="cmp-sub" x="76" y="22">每種單據各一條</text>
+            <rect class="cmp-doc" x="14" y="40" width="64" height="26" rx="5"/><text x="46" y="57" text-anchor="middle">報價單</text>
+            <path class="cmp-line" d="M78 53H96" marker-end="url(#as-arr-b)"/>
+            <rect class="cmp-step" x="98" y="40" width="64" height="26" rx="5"/><text x="130" y="57" text-anchor="middle">部門主管</text>
+            <path class="cmp-line" d="M162 53H180" marker-end="url(#as-arr-b)"/>
+            <rect class="cmp-step" x="182" y="40" width="64" height="26" rx="5"/><text x="214" y="57" text-anchor="middle">處主管</text>
+            <rect class="cmp-doc" x="14" y="80" width="64" height="26" rx="5"/><text x="46" y="97" text-anchor="middle">出貨單</text>
+            <path class="cmp-line" d="M78 93H96" marker-end="url(#as-arr-b)"/>
+            <rect class="cmp-step" x="98" y="80" width="64" height="26" rx="5"/><text x="130" y="97" text-anchor="middle">部門主管</text>
+            <rect class="cmp-doc" x="14" y="120" width="64" height="26" rx="5"/><text x="46" y="137" text-anchor="middle">完工單</text>
+            <path class="cmp-line" d="M78 133H96" marker-end="url(#as-arr-b)"/>
+            <rect class="cmp-step" x="98" y="120" width="64" height="26" rx="5"/><text x="130" y="137" text-anchor="middle">指定人員</text>
+            <path class="cmp-line" d="M162 133H180" marker-end="url(#as-arr-b)"/>
+            <rect class="cmp-step" x="182" y="120" width="74" height="26" rx="5"/><text x="219" y="137" text-anchor="middle">最高管理者</text>
+          </svg>
         </div>
+        <p class="as-caption" data-testid="as-caption">勾選＝共用統一流程；取消＝該單據自己一條。按「調整」可看到切換後誰會核准（儲存前不會生效）。</p>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
           <template x-for="dt in docTypeOrder" :key="dt">
-            <div class="scope-row">
+            <div class="scope-row" :id="'as-scope-' + dt" :data-doc-type="dt">
+              <!-- C4：預設只顯示這一列「報價單｜統一流程：部門主管（自動）｜[調整]」 -->
+              <div class="scope-row__sum">
+                <span class="scope-row__name" x-text="docTypeMeta[dt]"></span>
+                <span class="scope-badge" :class="scope[dt] ? 'on' : 'off'" x-text="scope[dt] ? '統一流程' : '獨立設定'"></span>
+                <span class="scope-row__digest" :title="scopeSummary(dt)" x-text="scopeSummary(dt)"></span>
+                <button type="button" class="btn btn-ghost btn-sm as-adjust-btn" data-testid="as-scope-adjust"
+                        :aria-expanded="!!scopeOpen[dt]" @click="scopeOpen[dt] = !scopeOpen[dt]"
+                        x-text="scopeOpen[dt] ? '收合' : '調整'"></button>
+              </div>
+              <div class="scope-row__more" x-show="scopeOpen[dt]" x-cloak>
               <div class="scope-row__head">
                 <label class="status-toggle" style="margin:0;flex-shrink:0">
                   <input data-saved-field type="checkbox" x-model="scope[dt]" :disabled="session.role!=='superadmin'">
                   <span class="slider"></span>
                 </label>
-                <span style="font-size:13px;font-weight:600;flex:1" x-text="docTypeMeta[dt]"></span>
-                <span class="scope-badge" :class="scope[dt] ? 'on' : 'off'" x-text="scope[dt] ? '統一流程' : '獨立設定'"></span>
+                <span style="font-size:12px;font-weight:600;flex:1">共用統一流程（取消勾選＝獨立設定）</span>
+                <button type="button" class="btn btn-ghost btn-sm as-adjust-btn" data-testid="as-open-flow"
+                        @click="openFlowFor(dt)">編輯簽核層</button>
               </div>
 
               <!-- AS1：切換之前先說得出**現在是誰**與**切過去會變成什麼**
@@ -220,6 +340,7 @@
                   </div>
                 </template>
               </div>
+              </div>
             </div>
           </template>
         </div>
@@ -234,10 +355,13 @@
 
     <!-- 各組簽核流程（統一流程一定顯示；獨立設定的類型各自展開一份） -->
     <template x-for="key in flowSectionKeys" :key="key">
-      <div class="as-card" style="margin-bottom:20px" x-show="flows[key]">
-        <div class="as-card-head">
+      <div class="as-card" :id="'as-flow-' + key" :data-flow-key="key" style="margin-bottom:20px" x-show="flows[key]">
+        <div class="as-card-head as-card-head--fold">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-          <div class="as-card-head-title" x-text="sectionTitle(key)"></div>
+          <div class="as-card-head-title" style="flex:none" x-text="sectionTitle(key)"></div>
+          <!-- C4：收合時標題列旁只留一行現況摘要；展開才看得到下面所有控制項 -->
+          <span class="as-card-digest" x-show="!flowOpen[key]" :title="flowDigest(key)" x-text="flowDigest(key)"></span>
+          <span style="flex:1" x-show="flowOpen[key]"></span>
           <span x-show="key === 'bonus' || (key === 'unified' && bonusUsesUnified)"
                 data-testid="bonus-superadmin-only"
                 style="font-size:12px;color:var(--danger);font-family:var(--font-zh)">
@@ -250,8 +374,11 @@
               <span x-text="(flows[key] && flows[key].saving) ? '儲存中…' : '儲存設定'"></span>
             </button>
           </template>
+          <button type="button" class="btn btn-ghost btn-sm as-adjust-btn" data-testid="as-flow-toggle"
+                  :aria-expanded="!!flowOpen[key]" @click="flowOpen[key] = !flowOpen[key]"
+                  x-text="flowOpen[key] ? '收合' : '調整'"></button>
         </div>
-        <div class="as-card-body" x-show="flows[key]">
+        <div class="as-card-body" x-show="flows[key] && flowOpen[key]" x-cloak>
 
           <div class="as-desc">
             <span x-text="sectionDesc(key)"></span>
@@ -277,8 +404,14 @@
             <div>
               <div style="font-size:12px;font-weight:600">系統內建：申請人組織主管自動簽核（部門主管 → 處主管）</div>
               <div style="font-size:12px;color:var(--text-dim);margin-top:2px">
-                送審時自動查申請人所屬部門的主管簽核。申請人本身就是部門主管時，<b>由他本人簽自己這一層，再加一層處主管</b>（2026-09-15 起照組織流程逐層留痕，不再跳過換人）；連處主管也是他本人時就到頂，不再指派其他超級管理員簽核，改為送出時知會在職的最高管理者（仍可隨時退回）。取消勾選＝這份單據不套用此規則。
+                送審時自動查申請人所屬部門的主管簽核；取消勾選＝這份單據不套用此規則。
               </div>
+              <details class="as-fold-more">
+              <summary>詳細規則</summary>
+              <div style="font-size:12px;color:var(--text-dim);margin-top:2px">
+                申請人本身就是部門主管時，<b>由他本人簽自己這一層，再加一層處主管</b>（2026-09-15 起照組織流程逐層留痕，不再跳過換人）；連處主管也是他本人時就到頂，不再指派其他超級管理員簽核，改為送出時知會在職的最高管理者（仍可隨時退回）。
+              </div>
+              </details>
             </div>
           </div>
 
@@ -419,29 +552,32 @@
       </div>
     </template>
 
-    <!-- Info card -->
+    <!-- Info card（C4：預設收合；內容不刪） -->
     <div style="margin-top:20px;max-width:760px">
-      <div class="as-card">
-        <div class="as-card-head">
+      <details class="as-card as-help" id="as-help">
+        <summary class="as-card-head">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-dim)"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          <div class="as-card-head-title" style="font-size:13px">說明</div>
-        </div>
+          <div class="as-card-head-title" style="font-size:13px">說明（點開查看送審與簽核規則）</div>
+        </summary>
         <div class="as-card-body" style="padding:14px 20px">
           <ul style="font-size:12px;color:var(--text-secondary);line-height:2;margin:0;padding-left:18px">
             <li>每種文件類型依「套用範圍」設定走統一流程或自己的獨立設定，送出審核後系統依當下設定生成簽核步驟，並快照當時的設定（之後修改設定不影響已在審核中的單據）</li>
+            <li>勾選套用範圍＝走統一流程；取消勾選＝改用該類型自己的獨立設定（會在下方各自一個編輯區塊）。剛從統一流程勾掉的類型，獨立設定會先複製一份目前統一流程的內容作為起點，不會突然變成沒有任何簽核層；每一類的「調整」裡，左邊一列是現在生效的設定、另一列是切過去之後會變成的設定</li>
             <li>每位簽核人員在自己的步驟輪到時，才能在「簽核佇列」頁面執行簽核</li>
             <li>任何步驟皆可由超級管理員退回草稿</li>
             <li>所有步驟完成後，該單據狀態自動更新為完成狀態（報價單為「已送出」，其餘為「已核准」）</li>
             <li>未設定任何步驟時，回歸預設行為：任一超級管理員皆可簽核</li>
           </ul>
         </div>
-      </div>
+      </details>
     </div>
 
     <!-- S-X3：簽核通知用語編輯器的掛載點（旗標 builder_notify.enabled 開啟且是最高管理者才會載入；關著＝空的 div） -->
     <div id="notify-editor-mount"></div>
     <!-- BP-4 S5：額外通知編輯器的掛載點（同一個旗標 builder_notify.enabled；關著＝空的 div，不載入任何程式） -->
     <div id="notify-action-editor-mount"></div>
+    </div><!-- .as-content -->
+    </div><!-- .as-layout -->
   </main>
 
   <script>
@@ -501,6 +637,9 @@
           voucher:            { unified: 'unified_approval_flow', independent: 'voucher_approval_flow' },
           bonus:              { unified: 'unified_approval_flow', independent: 'bonus_approval_flow' },
         },
+        // C4：展開狀態（預設全部收合；只是畫面狀態，不存檔、不影響任何設定）
+        scopeOpen:   {},      // {quotation:true,...} 「套用範圍」那一列是否展開
+        flowOpen:    {},      // {unified:true, quotation:true,...} 各簽核流程區塊是否展開
         scope:       {},      // {quotation:bool, shipping:bool, ...} ← 使用者手上這一份（可能已被撥動、還沒存）
         // 🔴 後端回來的那一份，**使用者動不到它**。
         //    ☠️ 只有一份 `scope` 的話，撥動開關的那一刻「現在生效」就跟著變了
@@ -701,6 +840,30 @@
           //    決定的，這裡只是多備了另一邊的資料。
           const keys = ['unified', ...this.docTypeOrder]
           await Promise.all(keys.map(k => this.loadFlow(k)))
+        },
+
+        // ── C4：收合列的一句話摘要＋錨點跳轉 ─────────────────────────
+        // 摘要照「已儲存」的那一邊算（與 isLiveSide 同一個判斷）；撥動了還沒存就加註「未儲存」。
+        scopeSummary(dt) {
+          if (!this._scopeLoaded) return '載入中…'
+          const liveUnified = this._isUnified(this._savedScope, dt)
+          const base = (liveUnified ? '統一流程：' : '獨立設定：') + this.flowDigest(liveUnified ? 'unified' : dt)
+          return this._isUnified(this.scope, dt) === liveUnified ? base : base + '（已撥動，尚未儲存）'
+        },
+
+        openFlowFor(dt) {
+          const key = this._isUnified(this.scope, dt) ? 'unified' : dt
+          this.tocGo('as-flow-' + key, key)
+        },
+
+        tocGo(id, flowKey, openHelp) {
+          if (flowKey) this.flowOpen[flowKey] = true
+          this.$nextTick(() => {
+            const el = document.getElementById(id)
+            if (!el) return
+            if (openHelp && 'open' in el) el.open = true
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          })
         },
 
         // ── AS1：兩邊各是誰 ────────────────────────────────────────

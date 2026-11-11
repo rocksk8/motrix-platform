@@ -41,6 +41,14 @@
     .btn-load:hover{opacity:.88}
 
     .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:12px;margin-bottom:22px}
+    .kpi-grid--primary{max-width:720px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+    .kpi-more-btn{display:inline-flex;align-items:center;gap:8px;margin:0 0 14px;padding:5px 14px;border:1px solid var(--border-light);border-radius:var(--radius);background:#fff;color:var(--text-secondary);font-size:12px;font-family:var(--font-zh);cursor:pointer}
+    .kpi-more-btn:hover{border-color:var(--accent);color:var(--accent)}
+    .kpi-more-btn__hint{font-size:12px;color:var(--text-dim)}
+    /* C5：頁籤分組（業績／現金／風險）；每個頁籤都還在，只是分三組、各組有小標 */
+    .tab-bar--grouped{flex-wrap:wrap;gap:6px 22px;border-bottom:none}
+    .tab-group{display:flex;align-items:flex-end;gap:2px;border-bottom:1px solid var(--border-light);flex-wrap:wrap}
+    .tab-group__lbl{align-self:center;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--text-dim);padding:2px 8px 2px 0;font-family:LINE Seed TW_OTF, sans-serif;white-space:nowrap}
     .kpi-card{background:#fff;border:1px solid var(--border-light);border-radius:var(--radius-lg);padding:14px 18px}
     .kpi-card__lbl{font-size:12px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px}
     .kpi-card__val{font-size:20px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;line-height:1;color:var(--text-primary)}
@@ -353,11 +361,12 @@
           <!-- KPI 摘要（CEO 視角：成長 → 現金流 → 盈利質量 → 風控），僅 admin+ -->
           <template x-if="isAdminPlus()">
           <div>
-          <div style="font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:8px;display:flex;align-items:center;gap:8px">
-            <span>業績核心</span>
-            <span style="flex:1;height:1px;background:var(--border-light)"></span>
+          <!-- C5：預設只顯示 3 張最重要的指標；其餘收在「更多指標」（展開狀態記在這個瀏覽器） -->
+          <div x-show="noReportData" data-testid="reports-empty-hint"
+               style="margin-bottom:10px;padding:9px 14px;background:#fff;border:1px dashed var(--border-light);border-left:3px solid var(--accent);border-radius:6px;font-size:12px;color:var(--text-secondary)">
+            還沒有資料，建立第一張報價單後這裡會出現統計。
           </div>
-          <div class="kpi-grid" style="margin-bottom:10px">
+          <div class="kpi-grid kpi-grid--primary" data-testid="kpi-primary" style="margin-bottom:10px">
             <div class="kpi-card blue">
               <div class="kpi-card__lbl">本期新成案</div>
               <div class="kpi-card__val" x-text="summary.periodCases"></div>
@@ -368,6 +377,22 @@
               <div class="kpi-card__val" x-text="fmt(summary.periodReceived)"></div>
               <div class="kpi-card__sub" x-text="'淨 ' + fmt(summary.periodNet)"></div>
             </div>
+            <div class="kpi-card red">
+              <div class="kpi-card__lbl">未收款</div>
+              <div class="kpi-card__val" x-text="fmt(summary.totalOutstanding)"></div>
+            </div>
+          </div>
+          <button type="button" class="kpi-more-btn" data-testid="kpi-more-toggle"
+                  :aria-expanded="kpiMore" @click="toggleKpiMore()">
+            <span x-text="kpiMore ? '收起更多指標 ▴' : '更多指標 ▾'"></span>
+            <span class="kpi-more-btn__hint" x-show="!kpiMore">精算、收支、財務概況</span>
+          </button>
+          <div x-show="kpiMore" data-testid="kpi-more" x-cloak>
+          <div style="font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+            <span>業績核心</span>
+            <span style="flex:1;height:1px;background:var(--border-light)"></span>
+          </div>
+          <div class="kpi-grid" style="margin-bottom:10px">
             <div class="kpi-card purple">
               <div class="kpi-card__lbl">精算實際營業利益</div>
               <div class="kpi-card__val" x-text="fmt(summary.totalActualGrossProfit)"></div>
@@ -430,10 +455,6 @@
               <div class="kpi-card__lbl">實收淨額</div>
               <div class="kpi-card__val" x-text="fmt(summary.netCollected)"></div>
             </div>
-            <div class="kpi-card red">
-              <div class="kpi-card__lbl">未收款</div>
-              <div class="kpi-card__val" x-text="fmt(summary.totalOutstanding)"></div>
-            </div>
             <div class="kpi-card orange">
               <div class="kpi-card__lbl">手續費合計</div>
               <div class="kpi-card__val" x-text="fmt(summary.totalFee)"></div>
@@ -444,6 +465,8 @@
               <div class="kpi-card__sub">90 天內</div>
             </div>
           </div>
+
+          </div><!-- /kpi-more -->
 
           <!-- 已結案未精算警示 -->
           <div x-show="settleOverdue.length > 0"
@@ -497,8 +520,10 @@
           <!-- Tabs（CEO 視角：戰略優先 → 財務明細；2026-08-31 出納併入本頁後，
                以下 12 個既有頁籤整批只給 admin+ 看，非管理職的 cashier/finance
                模組使用者只看得到最後面的「出納」頁籤，見 reports.js::init() ） -->
-          <div class="tab-bar">
-            <button class="tab" :class="{on:activeTab==='targets'}" @click="activeTab='targets'">
+          <!-- C5：13 個頁籤一個都沒少，分成 業績／現金／風險 三組 -->
+          <div class="tab-bar tab-bar--grouped" data-testid="tab-bar">
+            <div class="tab-group" data-tab-group="perf"><span class="tab-group__lbl">業績</span>
+              <button class="tab" :class="{on:activeTab==='targets'}" @click="activeTab='targets'">
               🎯 目標達成率
               <span class="tab__cnt"
                     :style="achievement.hasTargets && achievement.annual && achievement.annual.revenue && achievement.annual.revenue.rate !== null
@@ -508,19 +533,30 @@
                     x-text="achievement.hasTargets && achievement.annual && achievement.annual.revenue && achievement.annual.revenue.rate !== null
                       ? (achievement.annual.revenue.rate||0).toFixed(0)+'%' : '未設定'"></span>
             </button>
-            <button class="tab" :class="{on:activeTab==='charts'}" @click="showChartsTab()">
+              <button class="tab" :class="{on:activeTab==='charts'}" @click="showChartsTab()">
               📈 圖表分析
             </button>
-            <button class="tab" :class="{on:activeTab==='sales'}" @click="activeTab='sales'">
+              <button class="tab" :class="{on:activeTab==='sales'}" @click="activeTab='sales'">
               業務員績效<span class="tab__cnt" x-text="salesPerf.length"></span>
             </button>
-            <button class="tab" :class="{on:activeTab==='recv'}" @click="showReceivablesTab('recv')">
+              <button class="tab" :class="{on:activeTab==='cases'}" @click="activeTab='cases'">
+              案件清單<span class="tab__cnt" x-text="casesAll.length"></span>
+            </button>
+              <button class="tab" :class="{on:activeTab==='margin'}" @click="activeTab='margin'">
+              利潤分析<span class="tab__cnt" x-text="marginCases.length"></span>
+            </button>
+              <button class="tab" :class="{on:activeTab==='cust'}" @click="showCustTab()">
+              客戶歷史<span class="tab__cnt" x-text="custHistory.length || ''"></span>
+            </button>
+            </div>
+            <div class="tab-group" data-tab-group="cash"><span class="tab-group__lbl">現金</span>
+              <button class="tab" :class="{on:activeTab==='recv'}" @click="showReceivablesTab('recv')">
               已收款<span class="tab__cnt" x-text="activeCollectedItems.length"></span>
             </button>
-            <button class="tab" :class="{on:activeTab==='out'}" @click="showReceivablesTab('out')">
+              <button class="tab" :class="{on:activeTab==='out'}" @click="showReceivablesTab('out')">
               未收款<span class="tab__cnt" x-text="activeOutstandingItems.length"></span>
             </button>
-            <button class="tab" :class="{on:activeTab==='expenses'}" @click="showExpensesTab()">
+              <button class="tab" :class="{on:activeTab==='expenses'}" @click="showExpensesTab()">
               <!-- x-show 條件用「資料載入了沒」而不是金額本身（2026-09-10）：
                    原本寫 x-show="…? monthExpenseTotal : expensesTotals.total"，
                    把金額當真值判斷，當月支出剛好是 0 時徽章會整個消失，看起來
@@ -528,27 +564,21 @@
                    已載入就顯示，$0 會正常顯示成 $0。 -->
               月支出<span class="tab__cnt" x-show="!!expensesData" x-text="fmt(expensesScope==='month' ? monthExpenseTotal : expensesTotals.total)"></span>
             </button>
-            <button class="tab" :class="{on:activeTab==='cases'}" @click="activeTab='cases'">
-              案件清單<span class="tab__cnt" x-text="casesAll.length"></span>
-            </button>
-            <button class="tab" :class="{on:activeTab==='margin'}" @click="activeTab='margin'">
-              利潤分析<span class="tab__cnt" x-text="marginCases.length"></span>
-            </button>
-            <button class="tab" :class="{on:activeTab==='warr'}" @click="activeTab='warr'">
-              保固預警<span class="tab__cnt" x-text="warranty.length"></span>
-            </button>
-            <button class="tab" :class="{on:activeTab==='cust'}" @click="showCustTab()">
-              客戶歷史<span class="tab__cnt" x-text="custHistory.length || ''"></span>
-            </button>
-            <button class="tab" :class="{on:activeTab==='ar'}" @click="showArTab()">
-              帳齡分析<span class="tab__cnt" x-show="arAging" x-text="arAging ? arAging.total.count : ''"></span>
-            </button>
-            <button class="tab" data-testid="tab-gldiff" :class="{on:activeTab==='gldiff'}" @click="activeTab='gldiff'">
-              與總帳差異
-            </button>
-            <button class="tab" :class="{on:activeTab==='cashpos'}" @click="showCashPosTab()">
+              <button class="tab" :class="{on:activeTab==='cashpos'}" @click="showCashPosTab()">
               資金水位<span class="tab__cnt" x-show="cashPos" x-text="cashPos ? (cashPos.ar.count + cashPos.ap.count) : ''"></span>
             </button>
+            </div>
+            <div class="tab-group" data-tab-group="risk"><span class="tab-group__lbl">風險</span>
+              <button class="tab" :class="{on:activeTab==='ar'}" @click="showArTab()">
+              帳齡分析<span class="tab__cnt" x-show="arAging" x-text="arAging ? arAging.total.count : ''"></span>
+            </button>
+              <button class="tab" :class="{on:activeTab==='warr'}" @click="activeTab='warr'">
+              保固預警<span class="tab__cnt" x-text="warranty.length"></span>
+            </button>
+              <button class="tab" data-testid="tab-gldiff" :class="{on:activeTab==='gldiff'}" @click="activeTab='gldiff'">
+              與總帳差異
+            </button>
+            </div>
           </div>
 
           <!-- recv/out 分頁共用的「當月/本季/今年度」切換鈕（2026-09-10 加入本季）。

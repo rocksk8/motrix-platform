@@ -191,7 +191,7 @@
     /* ── 明細表格 ── */
     .items-table {
       width: 100%;
-      min-width: 1080px;
+      min-width: 760px;           /* V3.40（C2）：成本區收合時只有 7 欄；展開（.with-cost）才回到 1080px */
       border-collapse: collapse;
       font-size: 12px;
       margin-bottom: 10px;
@@ -275,6 +275,40 @@
     .cell-textarea:hover { border-color: var(--border-light); background: #fff; }
     .cell-textarea:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
     .items-table td.va-top { vertical-align: top; padding-top: 7px; }
+    .items-table.with-cost { min-width: 1080px; }
+    /* ── V3.40（C2）可編輯格看得出來能填：淺底＋下底線（hover／focus 加深）、placeholder 更淡 ── */
+    .items-table .cell-input:not(.internal),
+    .items-table .cell-textarea { background: #FBFAF8; border-bottom-color: #DDD8CF; border-radius: 4px 4px 0 0; }
+    .items-table .cell-input:not(.internal):hover,
+    .items-table .cell-textarea:hover { border-bottom-color: var(--text-dim); background: #fff; }
+    .items-table .cell-input::placeholder,
+    .items-table .cell-textarea::placeholder { color: #BDB8AF; font-weight: 400; }
+    .items-table .item-note { margin-top: 3px; font-size: 12px; text-align: left; color: var(--text-secondary); }
+    .row-tools { margin-top: 2px; display: flex; gap: 8px; }
+    .row-tool { border: none; background: none; padding: 0 2px; font-size: 12px; color: var(--text-dim); cursor: pointer; }
+    .row-tool:hover { color: var(--accent); text-decoration: underline; }
+    /* ── V3.40（C1）成本區收合時的一行摘要 ── */
+    .cost-strip { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+                  padding: 9px 12px; margin-bottom: 14px; background: #FAFAF8; border: 1px solid var(--border-light); border-radius: var(--radius); }
+    .cost-strip__main { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
+    .cost-strip__label { font-size: 12px; font-weight: 700; color: var(--text-secondary); letter-spacing: .04em; white-space: nowrap; }
+    .cost-strip__val { font-size: 12px; color: var(--text-dim); font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .cost-strip__val.good { color: var(--success); font-weight: 600; }
+    .cost-strip__val.mid { color: var(--warning); font-weight: 600; }
+    .cost-strip__val.low { color: var(--danger); font-weight: 600; }
+    /* ── V3.40（C3）「是否印在報價單」的小眼睛鈕（取代每欄一顆的綠色「顯示／隱藏」） ── */
+    .pdf-eye { flex-shrink: 0; width: 34px; height: 38px; display: inline-flex; align-items: center; justify-content: center;
+               border-radius: 6px; border: 1.5px solid #86EFAC; background: #F0FDF4; color: #16a34a; cursor: pointer; transition: all .18s; padding: 0; }
+    .pdf-eye.off { border-color: #E5E7EB; background: #F5F5F5; color: #aaa; }
+    .pdf-eye:hover { filter: brightness(.96); }
+    .pdf-legend { font-size: 12px; color: var(--text-dim); margin: -4px 0 10px; display: flex; align-items: center; gap: 5px; }
+    .pn-fold { margin: 10px 0 14px; border: 1px solid var(--border-light); border-radius: 6px; }
+    .pn-fold__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 7px 12px; font-size: 12px; }
+    .pn-fold__toggle { border: none; background: none; padding: 0; font-weight: 600; font-size: 12px; cursor: pointer; color: var(--text-primary); }
+    /* 已送出／已成案的單據整個表單區的按鈕都被 .is-locked 擋掉，但個資告知（已告知勾選）在鎖定的單據上仍要能用——展開鈕不能被鎖 */
+    .is-locked .form-section .pn-fold__toggle { pointer-events: auto; opacity: 1; }
+    .is-locked .form-section [data-print-notice]:not(:disabled) { pointer-events: auto; opacity: 1; }
+    .pn-fold__body { padding: 0 12px 10px; }
     .cell-display { font-family: 'LINE Seed TW_OTF', sans-serif; font-size: 12px; text-align: center; padding: 5px 7px; color: var(--text-primary); }
     .cell-display.muted { color: var(--text-dim); }
     .margin-warn { color: var(--danger); font-weight: 600; }
@@ -1328,6 +1362,10 @@
           <div class="section-num">一</div>
           <span x-text="secLabel('qcustomer', '客戶資訊')">客戶資訊</span>
         </div>
+        <div class="pdf-legend" data-testid="qf-pdf-legend">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          欄位旁的眼睛＝這一欄要不要印在報價單上（綠色＝印出，灰色斜線＝不印）
+        </div>
         <div class="form-grid form-grid-2" style="margin-bottom:12px">
           <div class="form-group" x-show="fShown('qcustomer', 'customerName')" :style="fo('qcustomer', 'customerName')">
             <label class="form-label"><span x-text="fLabel('qcustomer', 'customerName', '公司名稱')">公司名稱</span> <span class="req">*</span></label>
@@ -1386,11 +1424,14 @@
           <div class="form-group" x-show="fShown('qcustomer', 'customerTaxId')" :style="fo('qcustomer', 'customerTaxId')">
             <label class="form-label"><span x-text="fLabel('qcustomer', 'customerTaxId', '統一編號')">統一編號</span></label>
             <div style="display:flex;gap:6px;align-items:center">
-              <input class="form-input" type="text" x-model="q.customerTaxId" placeholder="00000000" @change="setDirty" style="flex:1">
-              <button type="button" @click="q.pdfShow.taxId=!q.pdfShow.taxId;setDirty()"
-                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
-                      :style="q.pdfShow.taxId ? 'background:#F0FDF4;color:#16a34a;border-color:#86EFAC' : 'background:#F5F5F5;color:#aaa;border-color:#E5E7EB'"
-                      x-text="q.pdfShow.taxId ? '顯示' : '隱藏'"></button>
+              <input class="form-input" type="text" x-model="q.customerTaxId" placeholder="8 碼，例 12345678" @change="setDirty" style="flex:1">
+              <button type="button" class="pdf-eye" :class="{off: !q.pdfShow.taxId}" @click="q.pdfShow.taxId=!q.pdfShow.taxId;setDirty()"
+                      data-testid="qf-pdfshow-taxId" :aria-pressed="q.pdfShow.taxId ? 'true' : 'false'"
+                      :title="q.pdfShow.taxId ? '統一編號：會印在報價單上（點一下改為不印）' : '統一編號：不會印在報價單上（點一下改為印出）'"
+                      :aria-label="'統一編號 是否印在報價單上'">
+                <svg x-show="q.pdfShow.taxId" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg x-show="!q.pdfShow.taxId" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>
+              </button>
             </div>
           </div>
         </div>
@@ -1430,20 +1471,26 @@
             <label class="form-label"><span x-text="fLabel('qcustomer', 'contactName', '聯絡人')">聯絡人</span></label>
             <div style="display:flex;gap:6px;align-items:center">
               <input class="form-input" type="text" x-model="q.contactName" placeholder="姓名" @change="setDirty" style="flex:1">
-              <button type="button" @click="q.pdfShow.contactName=!q.pdfShow.contactName;setDirty()"
-                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
-                      :style="q.pdfShow.contactName ? 'background:#F0FDF4;color:#16a34a;border-color:#86EFAC' : 'background:#F5F5F5;color:#aaa;border-color:#E5E7EB'"
-                      x-text="q.pdfShow.contactName ? '顯示' : '隱藏'"></button>
+              <button type="button" class="pdf-eye" :class="{off: !q.pdfShow.contactName}" @click="q.pdfShow.contactName=!q.pdfShow.contactName;setDirty()"
+                      data-testid="qf-pdfshow-contactName" :aria-pressed="q.pdfShow.contactName ? 'true' : 'false'"
+                      :title="q.pdfShow.contactName ? '聯絡人：會印在報價單上（點一下改為不印）' : '聯絡人：不會印在報價單上（點一下改為印出）'"
+                      :aria-label="'聯絡人 是否印在報價單上'">
+                <svg x-show="q.pdfShow.contactName" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg x-show="!q.pdfShow.contactName" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>
+              </button>
             </div>
           </div>
           <div class="form-group" x-show="fShown('qcustomer', 'contactPhone')" :style="fo('qcustomer', 'contactPhone')">
             <label class="form-label"><span x-text="fLabel('qcustomer', 'contactPhone', '電話 / 分機')">電話 / 分機</span></label>
             <div style="display:flex;gap:6px;align-items:center">
               <input class="form-input" type="text" x-model="q.contactPhone" placeholder="04-XXXX-XXXX" @change="setDirty" style="flex:1">
-              <button type="button" @click="q.pdfShow.contactPhone=!q.pdfShow.contactPhone;setDirty()"
-                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
-                      :style="q.pdfShow.contactPhone ? 'background:#F0FDF4;color:#16a34a;border-color:#86EFAC' : 'background:#F5F5F5;color:#aaa;border-color:#E5E7EB'"
-                      x-text="q.pdfShow.contactPhone ? '顯示' : '隱藏'"></button>
+              <button type="button" class="pdf-eye" :class="{off: !q.pdfShow.contactPhone}" @click="q.pdfShow.contactPhone=!q.pdfShow.contactPhone;setDirty()"
+                      data-testid="qf-pdfshow-contactPhone" :aria-pressed="q.pdfShow.contactPhone ? 'true' : 'false'"
+                      :title="q.pdfShow.contactPhone ? '電話：會印在報價單上（點一下改為不印）' : '電話：不會印在報價單上（點一下改為印出）'"
+                      :aria-label="'電話 是否印在報價單上'">
+                <svg x-show="q.pdfShow.contactPhone" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg x-show="!q.pdfShow.contactPhone" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>
+              </button>
             </div>
           </div>
         </div>
@@ -1452,38 +1499,52 @@
             <label class="form-label"><span x-text="fLabel('qcustomer', 'contactEmail', 'E-mail')">E-mail</span></label>
             <div style="display:flex;gap:6px;align-items:center">
               <input class="form-input" type="email" x-model="q.contactEmail" placeholder="xxx@company.com" @change="setDirty" style="flex:1">
-              <button type="button" @click="q.pdfShow.contactEmail=!q.pdfShow.contactEmail;setDirty()"
-                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
-                      :style="q.pdfShow.contactEmail ? 'background:#F0FDF4;color:#16a34a;border-color:#86EFAC' : 'background:#F5F5F5;color:#aaa;border-color:#E5E7EB'"
-                      x-text="q.pdfShow.contactEmail ? '顯示' : '隱藏'"></button>
+              <button type="button" class="pdf-eye" :class="{off: !q.pdfShow.contactEmail}" @click="q.pdfShow.contactEmail=!q.pdfShow.contactEmail;setDirty()"
+                      data-testid="qf-pdfshow-contactEmail" :aria-pressed="q.pdfShow.contactEmail ? 'true' : 'false'"
+                      :title="q.pdfShow.contactEmail ? 'Email：會印在報價單上（點一下改為不印）' : 'Email：不會印在報價單上（點一下改為印出）'"
+                      :aria-label="'Email 是否印在報價單上'">
+                <svg x-show="q.pdfShow.contactEmail" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg x-show="!q.pdfShow.contactEmail" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>
+              </button>
             </div>
           </div>
           <div class="form-group" x-show="fShown('qcustomer', 'contactFax')" :style="fo('qcustomer', 'contactFax')">
             <label class="form-label"><span x-text="fLabel('qcustomer', 'contactFax', '傳真')">傳真</span></label>
             <div style="display:flex;gap:6px;align-items:center">
               <input class="form-input" type="text" x-model="q.contactFax" placeholder="04-XXXX-XXXX" @change="setDirty" style="flex:1">
-              <button type="button" @click="q.pdfShow.contactFax=!q.pdfShow.contactFax;setDirty()"
-                      style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
-                      :style="q.pdfShow.contactFax ? 'background:#F0FDF4;color:#16a34a;border-color:#86EFAC' : 'background:#F5F5F5;color:#aaa;border-color:#E5E7EB'"
-                      x-text="q.pdfShow.contactFax ? '顯示' : '隱藏'"></button>
+              <button type="button" class="pdf-eye" :class="{off: !q.pdfShow.contactFax}" @click="q.pdfShow.contactFax=!q.pdfShow.contactFax;setDirty()"
+                      data-testid="qf-pdfshow-contactFax" :aria-pressed="q.pdfShow.contactFax ? 'true' : 'false'"
+                      :title="q.pdfShow.contactFax ? '傳真：會印在報價單上（點一下改為不印）' : '傳真：不會印在報價單上（點一下改為印出）'"
+                      :aria-label="'傳真 是否印在報價單上'">
+                <svg x-show="q.pdfShow.contactFax" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg x-show="!q.pdfShow.contactFax" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>
+              </button>
             </div>
           </div>
         </div>
         <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：手動輸入的聯絡人也要告知） -->
         <div data-privacy-card x-data="MotrixPrivacyNotice.subjectState('contact', s => s.q && s.q.quoteNo && !s.isNewRecord ? '/api/quotations/' + encodeURIComponent(s.q.quoteNo) : null, s => s.q && s.q.contactName, { role: 'contact' })"
              x-init="pnLoadNotice(); pnRefresh(); $watch('q.quoteNo', () => pnRefresh())"
-             style="margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border-light);border-radius:6px">
-          <div style="font-size:12px;font-weight:600;margin-bottom:4px">個資蒐集告知</div>
+             class="pn-fold">
+          <!-- V3.40（C3）：預設收合成一行「個資告知（選填）」；告知狀態（已告知／尚未記錄）仍留在這一行，不必展開就看得到 -->
+          <div class="pn-fold__head">
+            <button type="button" class="pn-fold__toggle" @click="pnOpen = !pnOpen" :aria-expanded="pnOpen ? 'true' : 'false'" data-testid="qf-pn-toggle">
+              <span x-text="pnOpen ? '▾' : '▸'"></span> 個資蒐集告知紀錄
+            </button>
+            <template x-if="pnAck()">
+              <span data-privacy-acked style="font-size:12px;color:var(--success)"
+                    x-text="'✓ 已告知 ' + pnSubject() + '：' + (pnAck().at || '').replace('T', ' ').slice(0, 16) + '　' + (pnAck().by || '')"></span>
+            </template>
+            <span x-show="pnSubject() && !pnAck() && !privacyAckRequested" data-privacy-missing
+                  style="font-size:12px;color:var(--warning)">尚未記錄個資告知</span>
+          </div>
+          <div class="pn-fold__body" x-show="pnOpen" data-testid="qf-pn-body">
           <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
             聯絡人的姓名、電話屬個人資料，蒐集時須告知蒐集目的、類別、利用方式與當事人權利。先儲存單據，再列印告知書或勾選；換了聯絡人要重新告知。沒有記錄不影響存檔。
           </div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
             <button type="button" class="btn btn-ghost btn-sm" data-print-notice @click="pnPrint()"
                     :disabled="!privacyNotice || !pnSubject()">列印告知書</button>
-            <template x-if="pnAck()">
-              <span data-privacy-acked style="font-size:12px;color:var(--success)"
-                    x-text="'✓ 已告知 ' + pnSubject() + '：' + (pnAck().at || '').replace('T', ' ').slice(0, 16) + '　' + (pnAck().by || '')"></span>
-            </template>
             <template x-if="!pnAck()">
               <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin:0">
                 <input type="checkbox" data-privacy-ack :checked="privacyAckRequested" :disabled="!pnSubject()"
@@ -1492,18 +1553,20 @@
               </label>
             </template>
           </div>
-          <div x-show="pnSubject() && !pnAck() && !privacyAckRequested" data-privacy-missing
-               style="margin-top:6px;font-size:11px;color:var(--warning)">尚未記錄個資告知</div>
           <div x-show="privacyErr" data-privacy-error style="margin-top:6px;font-size:11px;color:var(--danger)" x-text="privacyErr"></div>
+          </div>
         </div>
         <div class="form-group" x-show="fShown('qcustomer', 'deliveryAddress')" :style="fo('qcustomer', 'deliveryAddress')">
           <label class="form-label"><span x-text="fLabel('qcustomer', 'deliveryAddress', '送貨地址 / 發票地址')">送貨地址 / 發票地址</span></label>
           <div style="display:flex;gap:6px;align-items:center">
             <input class="form-input" type="text" x-model="q.deliveryAddress" placeholder="縣市區路段號" @change="setDirty" style="flex:1">
-            <button type="button" @click="q.pdfShow.deliveryAddress=!q.pdfShow.deliveryAddress;setDirty()"
-                    style="flex-shrink:0;min-width:62px;height:38px;padding:0 12px;border-radius:6px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;cursor:pointer;border:1.5px solid;transition:all .18s;white-space:nowrap"
-                    :style="q.pdfShow.deliveryAddress ? 'background:#F0FDF4;color:#16a34a;border-color:#86EFAC' : 'background:#F5F5F5;color:#aaa;border-color:#E5E7EB'"
-                    x-text="q.pdfShow.deliveryAddress ? '顯示' : '隱藏'"></button>
+            <button type="button" class="pdf-eye" :class="{off: !q.pdfShow.deliveryAddress}" @click="q.pdfShow.deliveryAddress=!q.pdfShow.deliveryAddress;setDirty()"
+                      data-testid="qf-pdfshow-deliveryAddress" :aria-pressed="q.pdfShow.deliveryAddress ? 'true' : 'false'"
+                      :title="q.pdfShow.deliveryAddress ? '送貨／發票地址：會印在報價單上（點一下改為不印）' : '送貨／發票地址：不會印在報價單上（點一下改為印出）'"
+                      :aria-label="'送貨／發票地址 是否印在報價單上'">
+                <svg x-show="q.pdfShow.deliveryAddress" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg x-show="!q.pdfShow.deliveryAddress" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"/></svg>
+              </button>
           </div>
         </div>
       </div>
@@ -1555,7 +1618,7 @@
       <div class="form-section">
         <div class="section-title"><div class="section-num">三</div>品項明細</div>
         <div style="overflow-x:auto">
-          <table class="items-table">
+          <table class="items-table" :class="{'with-cost': showCostCols}">
             <thead>
               <tr>
                 <th style="width:32px">#</th>
@@ -1574,7 +1637,6 @@
                 <template x-if="showCostCols">
                   <th class="internal" style="width:90px">單項毛利<br><span style="font-size:8px;font-weight:400;opacity:.7">直接 NT$</span></th>
                 </template>
-                <th style="min-width:80px">備註</th>
                 <th style="width:28px"></th>
               </tr>
             </thead>
@@ -1606,6 +1668,17 @@
                               @input="setDirty(); autoGrow($el)"
                               x-init="autoGrowInit($el)"
                               x-effect="item.description; autoGrowLater($el)"></textarea>
+                    <!-- V3.40（C2）：備註不再佔一整欄——有內容或按了「＋備註」才在品名下方展開（x-if：展開時才建立，autoGrowInit 照常跑；展開狀態放 notesOpen，不寫進品項資料） -->
+                    <template x-if="item.type !== 'header' && (item.notes || notesOpen[item.id])">
+                      <textarea class="cell-textarea item-note" x-model="item.notes"
+                                placeholder="備註" rows="1" data-testid="qf-item-note"
+                                @input="setDirty(); autoGrow($el)"
+                                x-init="autoGrowInit($el); if (item.notes && !notesOpen[item.id]) notesOpen = { ...notesOpen, [item.id]: true }; if (notesOpen[item.id] && !item.notes) $nextTick(() => $el.focus())"
+                                x-effect="item.notes; autoGrowLater($el)"></textarea>
+                    </template>
+                    <div class="row-tools" x-show="item.type !== 'header' && !(item.notes || notesOpen[item.id])">
+                      <button type="button" class="row-tool" @click="notesOpen = { ...notesOpen, [item.id]: true }" data-testid="qf-add-note">＋備註</button>
+                    </div>
                     <div class="alt-row" x-show="item.type !== 'header' && (altCfg.enabled || altGroupOf(item))" data-testid="qf-alt-row">
                       <label title="同一組的品項只會有一個被客戶選中，合計只算被選中的那一個">
                         <input type="checkbox" :checked="!!altGroupOf(item)" @change="altToggle(item, $event.target.checked)"> 擇一方案
@@ -1690,14 +1763,6 @@
                       </div>
                     </td>
                   </template>
-                  <td class="va-top">
-                    <textarea class="cell-textarea" x-model="item.notes"
-                              x-show="item.type !== 'header'"
-                              placeholder="備註" rows="1"
-                              @input="setDirty(); autoGrow($el)"
-                              x-init="autoGrowInit($el)"
-                              x-effect="item.notes; autoGrowLater($el)"></textarea>
-                  </td>
                   <td>
                     <button class="del-btn" @click="removeItem(idx)" title="刪除此項目">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12"/></svg>
@@ -2026,16 +2091,16 @@
         <div class="cost-row" style="border-bottom:none">
           <span class="cost-row__label">直接毛利率</span>
           <span class="cost-row__val"
-                :class="altUnpicked() ? '' : MotrixMargin.tone(tot.directMarginPct)"
+                :class="(altUnpicked() || !hasAmounts()) ? '' : MotrixMargin.tone(tot.directMarginPct)"
                 x-text="tot.directMarginPct.toFixed(1) + '%'"></span>
         </div>
         <!-- 專案毛利%：（未稅營業收入 − 未稅品項成本）÷ 未稅營業收入；只算品項『成本單價 × 數量』，不扣進項稅、管銷、公益與保留款。算式在 static/profit-rules.js（與後端同一份黃金向量），這裡只顯示、不寫進單據 -->
         <div class="cost-row" style="border-bottom:none" data-testid="qf-project-margin">
           <span class="cost-row__label" title="（未稅營業收入 − 未稅品項成本）÷ 未稅營業收入。不另外扣進項稅（5%）、管銷分攤、公益捐款與保留款，所以會比「直接毛利率」高；差距就是成本的 5% 進項稅部分，不是計算錯誤。">專案毛利%</span>
-          <span class="cost-row__val" :class="projectMarginWarn() ? 'danger' : ''" x-text="projectMarginText()"></span>
+          <span class="cost-row__val" :class="hasAmounts() && projectMarginWarn() ? 'danger' : ''" x-text="projectMarginText()"></span>
         </div>
         <div style="font-size:10px;color:var(--text-dim);margin:-2px 0 6px">不含進項稅、管銷分攤、公益捐款與保留款，所以會比「直接毛利率」高</div>
-        <div x-show="projectMarginWarn()" style="font-size:11px;color:var(--danger);margin-bottom:6px" data-testid="qf-project-margin-warn"
+        <div x-show="hasAmounts() && projectMarginWarn()" style="font-size:12px;color:var(--danger);margin-bottom:6px" data-testid="qf-project-margin-warn"
              x-text="'專案毛利低於提醒門檻 ' + pmCfg.warnPct + '%'"></div>
         <div x-show="projectMarginObj().uncosted_items > 0 && !pmHideUncosted" style="font-size:11px;color:var(--text-dim);margin-bottom:6px" data-testid="qf-project-margin-uncosted">
           有 <span x-text="projectMarginObj().uncosted_items"></span> 項尚未填成本，專案毛利可能偏高
@@ -2099,12 +2164,12 @@
 
         <div class="net-profit">
           <div class="net-profit__val"
-               :style="altUnpicked() ? 'color:#9CA3AF' : tot.netMarginPct < pw.quote_form_low ? 'color:#F87171' : tot.netMarginPct < pw.quote_form_good ? 'color:#FCD34D' : 'color:#4ADE80'"
-               x-text="tot.netMarginPct.toFixed(1) + '%'"></div>
+               :style="(altUnpicked() || !hasAmounts()) ? 'color:#9CA3AF' : tot.netMarginPct < pw.quote_form_low ? 'color:#F87171' : tot.netMarginPct < pw.quote_form_good ? 'color:#FCD34D' : 'color:#4ADE80'"
+               x-text="hasAmounts() ? tot.netMarginPct.toFixed(1) + '%' : '—'"></div>
           <div class="net-profit__label">
             營業利益率
-            <span :style="altUnpicked() ? 'color:#9CA3AF' : tot.netMarginPct < pw.quote_form_low ? 'color:#F87171' : 'color:#4ADE80'"
-                  x-text="altUnpicked() ? '（暫估，尚未選定方案）' : tot.netMarginPct < pw.quote_form_low ? '⚠ 低於目標 ' + pw.quote_form_low + '%' : '✓ 達標'"></span>
+            <span :style="(altUnpicked() || !hasAmounts()) ? 'color:#9CA3AF' : tot.netMarginPct < pw.quote_form_low ? 'color:#F87171' : 'color:#4ADE80'"
+                  x-text="altUnpicked() ? '（暫估，尚未選定方案）' : !hasAmounts() ? '（填入品項與售價後才比較目標）' : tot.netMarginPct < pw.quote_form_low ? '⚠ 低於目標 ' + pw.quote_form_low + '%' : '✓ 達標'"></span>
           </div>
         </div>
       </div>
@@ -2202,12 +2267,13 @@
         </template>
       </div>
 
-      <!-- 隱藏成本時的簡易摘要 -->
-      <div class="form-section" x-show="!showCostCols">
-        <div style="font-size:11px;color:var(--text-dim);text-align:center;padding:8px 0">
-          成本欄位隱藏<br>
-          <button class="btn btn-ghost btn-sm" @click="showCostCols=true" style="margin-top:8px">顯示成本分機</button>
+      <!-- 成本區收合時的一行摘要（V3.40 C1）：預設狀態。點「展開成本分析」＝顯示成本欄＋上方 INTERNAL 面板（同一個 showCostCols 總開關） -->
+      <div class="cost-strip" x-show="!showCostCols" data-testid="qf-cost-strip">
+        <div class="cost-strip__main">
+          <span class="cost-strip__label">內部利潤</span>
+          <span class="cost-strip__val" :class="costStrip().tone" x-text="costStrip().text" data-testid="qf-cost-strip-text"></span>
         </div>
+        <button type="button" class="btn btn-ghost btn-sm keep-open" @click="showCostCols=true" data-testid="qf-cost-expand">展開成本分析 ▸</button>
       </div>
 
       <!-- 存檔版本（2026-09-14）——建立／簽核／結案等事件當下自動備存的 PDF。
@@ -2475,11 +2541,12 @@
   // V3.33（2026-10-17，T71）：取消勾選補登時一律還原原本的單號（含「原本是空」）；不再把過去月份的預覽單號留在單號欄
   // V3.32（2026-10-17，T71）：補登模式的標題／單號欄顯示預覽單號；複製為新單不帶補登來歷註記
   // V3.31（2026-10-17，T70-1）：新增模式多一個「補登歷史案件」區塊（僅最高管理者且設定中心開關有效時出現；日期限過去月份、預覽單號、原因必填、走專用補登端點）
+  // V3.40（2026-11-11，UX 提案 C1～C3）：成本區（成本欄＋右側 INTERNAL 面板）預設收合成一行「內部利潤」摘要，展開後記在這台瀏覽器；沒有任何金額時不上警示色；品項表收合時 7 欄（備註改列下展開）、可填格有淺底／下底線；客戶區每欄「顯示／隱藏」改小眼睛、個資告知預設收合、統編 placeholder 改範例
   // V3.35（2026-11-11）：品項明細三個多行欄（品名／廠牌型號／備註）載入既有單、改值、欄寬變動時自動撐高，不再看起來被裁切
   // V3.36（2026-11-11）：送審前置檢查、送審失敗顯示後端原因並還原狀態、已送出單選「已成案」改只打 PATCH（修 EM11 起的卡住）。
   // V3.38（2026-11-11，UX A6／E2）：送出審核確認視窗與按鈕補「這會…」說明、取消折讓說明；「INTERNAL · 成本分機」改白話「內部成本與利潤」。
   // V3.39（2026-11-11，簽核人編輯）：簽核人檢視待審核／簽核中時欄位預設 disabled、工具列常駐「編輯」鈕（reconfirm_mode=on 才顯示）；核准前彈窗退場「編輯內容」選項、只留「維持核准」；第 3 層以後編輯提示整條回第 1 層。
-  const FORM_VERSION = 'V3.39'
+  const FORM_VERSION = 'V3.40'
   const AFTERSALES_LABEL = '售後服務及備註說明'   // 顯示名稱只在這一處（欄位鍵 afterSales 不變）
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
@@ -2530,7 +2597,9 @@
   function quotationForm() {
     return {
       API,
-      showCostCols: true,
+      pnOpen: false,          // V3.40（C3）：個資告知區預設收合（狀態仍顯示在標題列）
+      notesOpen: {},          // V3.40（C2）：哪幾列的備註框已展開（item.id → true）；純畫面狀態，不存進單據
+      showCostCols: false,    // V3.40（C1）：內部成本區（成本欄＋右側 INTERNAL 面板）預設收合；有權限者按「展開成本分析」才看，選擇記在這台瀏覽器（init 讀、$watch 寫）
       isDirty: false,
       lastSaved: null,
       vendorQuoteOpts: [],    // N1：該案承攬商報價品項（派工單），供成本欄逐項帶入
@@ -2910,6 +2979,19 @@
       altGroupOf(item) { return MotrixAltItems.groupOf(item) },
       altGroupNames() { const seen = []; (this.q.items || []).forEach(i => { const g = MotrixAltItems.groupOf(i); if (g && !seen.includes(g)) seen.push(g) }); return seen },
       altUnpicked() { return MotrixAltItems.unpickedGroupCount(this.q) },
+      // V3.40（C1）：有沒有任何金額——空白表單不比較目標毛利、不上警示色（0.0% 會被當成「低於目標」）
+      hasAmounts() { return (this.q.items || []).some(i => i.type !== 'header' && (Number(i.amount) > 0 || (Number(i.qty) > 0 && Number(i.cost) > 0))) },
+      // 成本區收合時的一行摘要：沒金額／擇一未選定／還有品項沒填成本 ⇒ 只顯示中性文字，不上色
+      costStrip() {
+        const t = this.tot || {}
+        if (!this.hasAmounts()) return { text: '—（填入品項與售價後顯示）', tone: '' }
+        if (this.altUnpicked()) return { text: '—（擇一方案尚未選定，暫不計算）', tone: '' }
+        const pct = Number(t.netMarginPct || 0)
+        const base = 'NT$ ' + MotrixFormat.num(t.netProfit || 0) + '｜營業利益率 ' + pct.toFixed(1) + '%'
+        const un = Number(this.projectMarginObj().uncosted_items || 0)
+        if (un > 0) return { text: base + '（尚有 ' + un + ' 項未填成本，僅供參考）', tone: '' }
+        return { text: base, tone: pct < Number(this.pw.quote_form_low) ? 'low' : pct < Number(this.pw.quote_form_good) ? 'mid' : 'good' }
+      },
       altIsDropped(item) { const g = MotrixAltItems.groupOf(item); const p = this.q.altPicks || {}; return MotrixAltItems.active(this.q) && !!g && p[g] !== undefined && String(p[g]) !== String(item.id) },
       altTagText(item) {
         const g = MotrixAltItems.groupOf(item), p = this.q.altPicks || {}
@@ -4737,6 +4819,12 @@
           this.session = JSON.parse(s)
         } catch(e) { window.location.href = 'login.html'; return }
         this._layoutP = this.initLayout()
+        // V3.40（C1）：成本區展開／收合的個人偏好（只是這台瀏覽器的顯示習慣；讀寫失敗＝用預設收合，不影響開單）
+        try { this.showCostCols = localStorage.getItem('motrix.qf.showCostCols') === '1' } catch (e) { /* 預設收合 */ }
+        this.$watch('showCostCols', v => {
+          try { localStorage.setItem('motrix.qf.showCostCols', v ? '1' : '0') } catch (e) { /* 存不下就算了 */ }
+          if (v) this.loadPlan()
+        })
 
         // QL13：據點清單。放在這裡而不是更後面，是因為新單要用 locations[0]
         // 當預設值，而那要在既有單的資料載入**之前**決定 —— 否則會覆蓋掉

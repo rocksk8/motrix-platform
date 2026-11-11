@@ -156,6 +156,7 @@ def test_quotation_form_charity_floor(live_server, make_user, e2e_browser):
         c.close()
     page = e2e_browser.new_context(viewport={"width": 1400, "height": 1000}).new_page()
     _login(page, live_server, *sa)
+    page.add_init_script("try { localStorage.setItem('motrix.qf.showCostCols', '1') } catch (e) {}")     # V3.40（C1）：成本區預設收合；本題要看成本欄／面板，先把這台瀏覽器的偏好設成展開
     page.goto(f"{live_server}/pages/quotation-form.html?id=MQ-LOSS-1")
     page.wait_for_function(f"() => {{ const d = {S}; return d && d.q && d.q.items && d.q.items.length && d.tot && d.tot.pretax > 0 }}", timeout=20000)
     t = page.evaluate(f"() => ({{...{S}.tot}})")

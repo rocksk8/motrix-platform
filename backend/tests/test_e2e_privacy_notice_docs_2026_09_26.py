@@ -47,6 +47,9 @@ def _insert_quote(no, contact="林聯絡", site="趙現場"):
 def _check_and_expect_ack(page, name, user, card_sel="[data-privacy-card]"):
     card = page.locator(card_sel)
     card.locator("[data-privacy-missing]").wait_for(state="visible", timeout=20000)
+    toggle = card.locator("[data-testid=qf-pn-toggle]")        # V3.40（C3）：報價單頁的個資告知預設收合（狀態在標題列），要打勾得先展開
+    if toggle.count():
+        toggle.click()
     card.locator("input[data-privacy-ack]").check()
     acked = card.locator("[data-privacy-acked]")
     acked.wait_for(state="visible", timeout=10000)
