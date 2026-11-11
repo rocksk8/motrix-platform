@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1508,
+  "tests": 1511,
   "unmapped": 13,
   "kinds": {
-   "api": 836,
-   "e2e": 332,
+   "api": 837,
+   "e2e": 333,
    "audit": 199,
-   "unit": 141
+   "unit": 142
   },
   "routes": 888
  },
@@ -28061,6 +28061,26 @@
     ]
    }
   },
+  "backend/tests/test_case_read_rule_denials_2026_11_11.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/tests/_requires.py",
+    "mod:case/api/material_approvals",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/case/api/material_approvals.py",
+     "backend/modules/case/api/quotations.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_case_record_member_guard_2026_09_24.py": {
    "kind": "api",
    "units": [
@@ -34803,6 +34823,28 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_e2e_webauthn_config_no_404_2026_11_11.py": {
+   "kind": "e2e",
+   "units": [
+    "helper:auth",
+    "page:pages/company-profile-settings.html",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/auth.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/company-profile-settings.html"
+    ],
+    "path": [
+     "frontend/pages/company-profile-settings.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_wiring_2026_09_30.py": {
    "kind": "e2e",
    "units": [
@@ -35803,6 +35845,23 @@
     ],
     "path": [
      "frontend/static/motrix-date.js"
+    ]
+   }
+  },
+  "backend/tests/test_frontend_ops_guards_2026_11_11.py": {
+   "kind": "unit",
+   "units": [
+    "page:pages/approval-queue.html",
+    "page:pages/quotation-form.html",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/source_tree.py"
+    ],
+    "page": [
+     "frontend/pages/approval-queue.html",
+     "frontend/pages/quotation-form.html"
     ]
    }
   },
