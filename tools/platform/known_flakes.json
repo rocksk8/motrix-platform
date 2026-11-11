@@ -1,6 +1,15 @@
 {
  "_說明": "建包偶發重跑登記簿；見 tools/platform/known_flakes.py 與 PLAYBOOK §D-建包。過期的條目會讓建包失敗。",
- "flakes": [],
+ "flakes": [
+  {
+   "nodeid": "tests/test_e2e_ux_onboarding_2026_11_11.py::test_quotations_empty_states_three_kinds",
+   "first_seen": "2026-11-11",
+   "owner": "hichan-9",
+   "ticket": "T79-FLAKE-ONBOARDING-EMPTY-STATES",
+   "expires": "2026-11-25",
+   "note": "hichan-13/14各自在乾淨base上也重現過此題紅燈，本次e2e重跑單獨跑一次即過，疑似負載下的時機偶發（Playwright wait_for的timeout在平行e2e-workers負載下偏緊），尚未查出根因"
+  }
+ ],
  "removed": [
   {
    "nodeid": "modules/tender_radar/tests/test_tender_p9_layout_e2e_2026_09_26.py::test_layout_editor_role_override_and_restore",
