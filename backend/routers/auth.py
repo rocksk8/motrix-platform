@@ -32,6 +32,7 @@ from helpers import (
     notify_module_activity)
 
 from helpers.audit import _audit_login_failed
+from helpers.client_ip import client_ip as _trusted_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +59,12 @@ def _min_pw() -> int:
         raise HTTPException(503, "密碼規則暫時讀不到，為了安全暫時無法設定密碼，請稍後再試")
 
 def _client_ip(request: Request) -> str:
-    xff = request.headers.get("X-Forwarded-For", "")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """來源 IP（登入鎖定、TOTP／Passkey 失敗計數、登入稽核都用這支）。
+
+    🔴 2026-11-11：以前無條件信 `X-Forwarded-For` 第一個值——用戶端自己填的——登入鎖定（5 次失敗／15 分鐘，以來源 IP 計）
+    只要每次攻擊換一個 XFF 就繞過（無限次猜密碼）。現在走 `helpers.client_ip.client_ip`：永遠不讀 XFF；只有 TCP 對端本身是
+    loopback（cloudflared 與本程式同機）才採信 `CF-Connecting-IP`。"""
+    return _trusted_client_ip(request)
 
 
 def _rl_db_write(ip: str, locked_until_mono: float) -> None:

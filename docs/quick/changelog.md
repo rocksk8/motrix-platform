@@ -16,6 +16,15 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-11-11 T79：來源 IP 只信該信的——登入鎖定不可被 X-Forwarded-For 繞過（fix/trusted-client-ip）
+
+- **現象／風險**（外網存取 go-live 前必修）：`routers/auth.py::_client_ip` 無條件信第一個 `X-Forwarded-For` ⇒ 登入鎖定（5 次失敗／15 分鐘，以來源 IP 計）每次換 XFF 就繞過 ⇒ 無限次猜密碼。cloudflared 與本程式同機時，所有外部使用者對本程式都是 127.0.0.1 ⇒ 若只改成「不信 XFF」，一個人輸錯 5 次會鎖住全部外部使用者，稽核 IP 也全變 127.0.0.1。
+- **修法**：新增 `helpers/client_ip.py`（L0）——永遠不讀 XFF；**只有 TCP 對端本身是 loopback 才採信 `CF-Connecting-IP`**（且須是合法 IP，正規化後使用），否則用對端位址。`auth.py`（登入鎖定／TOTP／passkey）、`duty_roles.py`、`settings_center.py` 稽核 IP 全走這支；既有呼叫點不動。
+- **部署儀表板第二道防線**：`tools/deploy_dashboard.py` 以「對端是 loopback」判斷本機——隧道同機轉進來的外部請求也是 loopback。現在帶 Cloudflare／代理標頭（CF-Connecting-IP、CF-Ray、X-Forwarded-For、Forwarded、X-Real-IP…）的請求一律 403（WebSocket 關 1008）；本機瀏覽器直連不帶這些標頭，不受影響。**第一道仍是設定面：隧道 ingress 只能指到主程式 port，不可指到儀表板 port。**
+- **守門**：AST 守門禁止 `helpers/client_ip.py`、`tools/deploy_dashboard.py` 以外的程式碼讀 `X-Forwarded-For` 或 `.client.host`（含正對照）。
+- **沒動／已知限制**：IPv6 同 /64 內換位址仍可繞過「以單一位址計」的鎖定（另案）；本機使用者共用 127.0.0.1 桶（與以前相同）；uvicorn 預設的 proxy-headers 行為不受影響（本 helper 不論它開不開都給同一個答案）。
+- 測試：`backend/tests/test_trusted_client_ip_2026_11_11.py`（規則單元＋登入端點整合＋同機隧道各自一桶＋守門）、`backend/tests/test_deploy_dashboard_local_only_2026_09_22.py` HC1d。
+
 ## 2026-11-11 正式機評估衍生：webauthn-config 404、case.access_denied（fix/ops-webauthn404-case-denied）
 
 - **webauthn-config 404（32 次）**：根因＝公司設定頁每次載入都 GET 該端點並把 404 當「Passkey 已停用」訊號。改問 `/api/system/webauthn-config-status`，停用時不再打。
