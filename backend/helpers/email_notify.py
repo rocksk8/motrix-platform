@@ -2213,7 +2213,7 @@ def notify_heartbeat_stale(summary: str, problems: list, state: dict = None) -> 
                        note=note, intro=intro, button_text="前往系統")
     outcome = _async_send(to, _mt.subject("heartbeat_stale", "心跳監控異常：%s" % summary[:60]), html).wait()
     if outcome in (SEND_UNKNOWN, SEND_PERMANENT_FAIL):
-        logger.error("notify_heartbeat_stale 寄送結果 %s——保留旗標（不重寄），請人工確認收件人是否收到", outcome)
+        logger.error("notify_heartbeat_stale 寄送結果 %s，保留旗標（不重寄），請人工確認收件人是否收到", outcome)
     elif outcome != SEND_SENT:
         logger.warning("notify_heartbeat_stale 寄送結果 %s（不寫旗標，隔天重試）", outcome)
     return outcome in (SEND_SENT, SEND_UNKNOWN, SEND_PERMANENT_FAIL)

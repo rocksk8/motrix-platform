@@ -275,6 +275,10 @@
    "count": 1,
    "reason": "tmp: 資料庫檔暫存清理"
   },
+  "heartbeat_job.py": {
+   "count": 1,
+   "reason": "tmp: 心跳狀態檔寫入失敗時刪自己的暫存檔（.tmp，非用戶資料）"
+  },
   "helpers/branding.py": {
    "count": 1,
    "reason": "exempt: 品牌圖檔（可重新上傳，非單據）"
