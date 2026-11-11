@@ -173,6 +173,7 @@ pytest exit 0（payroll／supply／subcontract／arap／daily_tasks／netplan／
 | R2 | 新程式碼一律 `write_txn`／`db_conn`；把 db.py 那段「house style」註解改成明示「寫入端點必須用 `write_txn`」，並在 `ci.py` 加一條只對**新增行**生效的守門（不翻舊帳） | docs＋ci | 阻止新增 |
 | R3 | `recyclebin/jobs.py run_daily` 的 except 內先 rollback（§4.3） | 2 行 | 消除唯一的 B 類潛在 |
 | R5 | `supply/api/inventory.py create_batch`：dup 檢查前先 `begin_write`＋`write_txn`（§6） | ~3 行 | 消除唯一找到的 TOCTOU＋漏鎖組合 |
+| R6（新、未核准，待 PM 決定） | `main.py auth_middleware` 的 `_record_request_trail`／`_record_failure_audit`、`license_alerts` 等**在 async 中介層裡做同步 SQLite 寫入**：任何握著寫鎖的人（含正常的長交易，不只漏鎖）都會讓它在**事件迴圈上**卡到 busy timeout（30 秒），全站一起卡。R1 只消除了「漏鎖」這個來源。建議丟 `run_in_threadpool`（或排進背景佇列），失敗照舊吞掉 | 2～3 處呼叫 | 事件迴圈不再被資料庫鎖卡住（請求仍會等，但別的請求不受影響） |
 | R4 | 靜態掃描器放進 `tools/`，只在 release 前跑，報 M1 前 20 名 | — | 之後複查用 |
 
 不建議：批次把 426 站點全改成 `db_conn`——diff 巨大、無法逐一驗證，而且 R1 以更小的改動涵蓋同一個風險。
@@ -181,13 +182,16 @@ pytest exit 0（payroll／supply／subcontract／arap／daily_tasks／netplan／
 
 | 項 | 改動 | 守門 |
 |---|---|---|
-| R1 | `db.py`：`_track_request_connections()`／`_reap_request_connections()`／`_REAP_REQUEST_CONNECTIONS`（環境變數 `MOTRIX_CONN_REAPER=0` 可關）；`get_db()` 在請求內（且不在 `spawn_bg_thread` 的背景執行緒）把連線登記進 per-request 的 `ContextVar` list，登記的連線以 `check_same_thread=False` 開（收尾在事件迴圈執行緒、連線在 worker 執行緒開）。`main.py`：純 ASGI 的 `_ConnReaperMiddleware`（不是 BaseHTTPMiddleware ⇒ 不多開 task），包住 `auth_middleware` 以內全部。請求結束時仍開著的連線：在交易中 ⇒ `rollback()`＋`close()`＋`logger.warning`（記開在哪個檔案:行 函式、哪個請求）；沒在交易中 ⇒ 只 `close()` | `tests/test_conn_reaper_t80_2026_11_11.py` 9 題：負對照（收尾網關掉＋GC 停掉 ⇒ 鎖確實還在）、未處理例外／HTTPException 之後別條連線寫得進去、被回收的是 rollback 不是 commit、背景執行緒連線不被回收、跨執行緒回收、請求外行為不變 |
+| R1 | `db.py`：`_track_request_connections()`／`_reap_request_connections()`／`_REAP_REQUEST_CONNECTIONS`（環境變數 `MOTRIX_CONN_REAPER=0` 可關）；`get_db()` 在請求內（且不在 `spawn_bg_thread` 的背景執行緒）把連線登記進 per-request 的 `ContextVar` list，登記的連線以 `check_same_thread=False` 開（收尾在事件迴圈執行緒、連線在 worker 執行緒開）。`main.py`：純 ASGI 的 `_ConnReaperMiddleware`（不是 BaseHTTPMiddleware ⇒ 不多開 task；最先加＝最內層）。**兩個時間點**：①回應開始送出前（處理函式已回來）只回收「在交易中」的（握著寫鎖的）；②請求結束（含未處理例外）其餘全回收。回收時：在交易中 ⇒ `rollback()`＋`close()`＋`logger.warning`（記開在哪個檔案:行 函式、哪個請求——請求資訊在 `get_db()` 當下記）；沒在交易中 ⇒ 只 `close()` | `tests/test_conn_reaper_t80_2026_11_11.py` 9 題：負對照（收尾網關掉＋GC 停掉 ⇒ 鎖確實還在）、未處理例外／HTTPException 之後別條連線寫得進去、被回收的是 rollback 不是 commit、背景執行緒連線不被回收、跨執行緒回收、請求外行為不變 |
 | R3 | `recyclebin/jobs.py run_daily`：purge 失敗的 except 先 `conn.rollback()` 再 `_audit` | `modules/recyclebin/tests/test_run_daily_releases_lock_t80.py`（舊碼紅、新碼綠） |
 | R5 | `supply/api/inventory.py create_batch`：整段 `with write_txn(conn)`（寫鎖在重複序號檢查之前；順便讓 `next_entity_code` 取號也在鎖內） | `modules/supply/tests/test_create_batch_write_lock_t80.py`：重複檢查那一刻已在寫交易內（舊碼紅、新碼綠）；序號撞 UNIQUE 後鎖已放（這題在舊碼也綠，因為 R1 兜住——是縱深防禦的第二道） |
 
 ### 8.1 設計取捨與已知邊界
 - **回收發生在處理函式結束之後**：anyio `run_sync` 預設不在取消時放掉還在跑的執行緒，所以收尾網不會與還在執行的處理函式併用同一條連線。
 - **不靠堆疊**：登記時只記 `sys._getframe(1)` 的檔案:行 函式（熱路徑上不做 `traceback.extract_stack`）。
+- **為什麼要有「回應開始前」那一步（K 審 hichan-12 的真實堆疊測試逼出來的）**：`auth_middleware` 在 `call_next` 回來（＝收到回應標頭）之後還有**同步**寫入（`_record_request_trail`、`_record_failure_audit`）。只在請求結束才回收的話，處理函式漏掉的寫鎖會先讓這幾筆寫入卡滿 busy timeout——實測 32.9 秒、而且卡在事件迴圈上（全站一起卡）；回應開始前就放鎖後，同一個測試 < 1 秒。只收「在交易中」的，是因為沒在交易中的連線仍可能被串流回應的產生器用到（測試 `test_streaming_response_can_still_use_idle_connection_after_start` 釘住）。
+- **一個請求內登記到 200 條連線會警告一次**（不改行為）：登記簿持有強參照到請求結束（`sqlite3.Connection` 不支援弱參照），單一請求在迴圈裡每圈開一條沒關的，會持有 fd 與頁面快取到請求結束。
+- **回收是同步的**：只發生在漏連線的少數情況；改丟 threadpool 要在 `finally` 內 `await`，遇到 anyio 取消範圍會被再次取消而漏回收，風險比收益大，所以不做。
 - **沒登記的**：背景執行緒（`spawn_bg_thread`）、請求之外（排程、啟動、測試直呼 helper）、`get_demo_db()`。這些由各自 owner 負責，行為與從前完全相同。
 - **看日誌**：上線後 `grep conn-reaper` 就是「還有哪些站點會漏寫鎖」的即時清單，可當之後逐站修的優先序（這比靜態掃描更準）。
 - **不處理 B 類（持鎖又自開連線）**：收尾網在請求結束才動，B 類發生在請求中間；那一類靠 §4 的「commit／close 之後才 `_audit`／`_notify`」慣例。

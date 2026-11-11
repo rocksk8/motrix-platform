@@ -136,6 +136,45 @@ _DOCS = _docs_kwargs()
 app = FastAPI(title="MOTRIX ERP API", version="1.0.0", docs_url=_DOCS["docs_url"],
               redoc_url=_DOCS["redoc_url"], openapi_url=_DOCS["openapi_url"])
 
+import db as _db_for_reaper     # noqa: E402
+
+
+class _ConnReaperMiddleware:
+    """T80 R1：回收這個請求內沒 close 的 `get_db()` 連線（見 db._track_request_connections）。兩個時間點：
+
+    1. **回應開始送出前**（處理函式已經回來）：只回收「在交易中」的——握著寫鎖的。🔴 這一步不能省：`auth_middleware`
+       在 `call_next` 回來（＝收到回應標頭）之後還有**同步**寫入（操作軌跡、失敗稽核）；處理函式漏掉的寫鎖若要等到
+       請求結束才回收，那幾筆寫入會先卡滿 busy timeout（30 秒、而且是在事件迴圈上，全站一起卡）。
+       只收在交易中的，是因為沒在交易中的連線仍可能被串流回應的產生器用到。
+    2. **請求結束**（含未處理例外）：其餘全部回收。
+
+    放在最內層（本檔最先 add_middleware）只是讓登記簿的 context 由它複製給 worker 執行緒、且 auth 自己的連線不被它動。
+    純 ASGI（不是 BaseHTTPMiddleware）⇒ 不多開 task。"""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or not _db_for_reaper._REAP_REQUEST_CONNECTIONS:
+            return await self.app(scope, receive, send)
+        token, registry = _db_for_reaper._track_request_connections()
+        started = False
+
+        async def send_wrapper(message):
+            nonlocal started
+            if not started and message["type"] == "http.response.start":
+                started = True
+                _db_for_reaper._reap_request_connections(None, registry, only_in_tx=True)
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+        finally:
+            _db_for_reaper._reap_request_connections(token, registry)
+
+
+app.add_middleware(_ConnReaperMiddleware)       # T80：最先加 ＝ 最內層（理由見類別說明）
+
 _DEFAULT_CORS_ORIGINS = [
     "http://localhost:666",
     "http://127.0.0.1:666",
@@ -750,27 +789,6 @@ async def security_headers(request: Request, call_next):
     return response
 
 
-import db as _db_for_reaper     # noqa: E402
-
-
-class _ConnReaperMiddleware:
-    """T80 R1：請求結束時回收這個請求內沒 close 的 `get_db()` 連線（見 db._track_request_connections）。
-    純 ASGI（不是 BaseHTTPMiddleware）⇒ 不多開 task；包住整個請求（含 auth_middleware 自己開的連線與回應本文送完之後）。"""
-
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or not _db_for_reaper._REAP_REQUEST_CONNECTIONS:
-            return await self.app(scope, receive, send)
-        token, registry = _db_for_reaper._track_request_connections()
-        try:
-            await self.app(scope, receive, send)
-        finally:
-            _db_for_reaper._reap_request_connections(token, registry)
-
-
-app.add_middleware(_ConnReaperMiddleware)       # T80：在 InternalCols 之前加＝比它內層；仍包住 auth_middleware 以內的所有東西
 app.add_middleware(InternalColsMiddleware)      # U0a：單位鍵內部欄位不得出現在任何 JSON 回應（最後加＝最外層，看到的是最終本文）
 
 
