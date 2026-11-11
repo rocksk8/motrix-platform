@@ -2181,17 +2181,19 @@ def notify_backup_stale(stale: list, threshold_hours: int) -> None:
     _async_send(to, _mt.subject("backup_stale", "備份已超過 %d 小時沒有成功執行" % threshold_hours), html)
 
 
-def notify_heartbeat_stale(summary: str, problems: list, state: dict = None) -> None:
+def notify_heartbeat_stale(summary: str, problems: list, state: dict = None) -> bool:
     """心跳監控本身有問題 → 所有 superadmin（2026-11-11）
 
     正式機的心跳監控曾經壞了兩個多月沒人知道（腳本打 http、伺服器早已只講 https ⇒ 每 5 分鐘 /fail，
     healthchecks.io 一直紅燈，真正的斷電反而沒有新告警）。這封信是「看守看守者」：app 活著、
     卻看到心跳回報壞的狀態很久，或心跳排程停了。信裡直接講「這代表什麼、先看哪裡」。
     `state` 只放狀態欄位（時間、協定），**不放 ping 網址**。
+    回傳＝「呼叫端可以寫『今天寄過了』旗標」（K 審 L1）：等寄送結果（`handle.wait()`），
+    寄出／結果不明（重寄恐雙寄）／永久失敗（天天重試只是天天失敗）＝True；沒有收件人、暫時失敗、機器層級略過＝False（隔天重試）。
     """
     to = _admin_emails("heartbeat_stale")
     if not to:
-        return
+        return False
     st = state or {}
     rows = [("狀態", st.get("status") or "—"), ("目前狀態開始於", st.get("since") or "—"),
             ("本機服務協定", st.get("scheme") or "—"), ("上次對外打卡成功", st.get("ext_ok_at") or "—"),
@@ -2209,7 +2211,12 @@ def notify_heartbeat_stale(summary: str, problems: list, state: dict = None) -> 
     )
     html = _build_html("heartbeat_stale", "心跳監控異常", "需要處理", "#DC2626", rows, "", _base_url(),
                        note=note, intro=intro, button_text="前往系統")
-    _async_send(to, _mt.subject("heartbeat_stale", "心跳監控異常：%s" % summary[:60]), html)
+    outcome = _async_send(to, _mt.subject("heartbeat_stale", "心跳監控異常：%s" % summary[:60]), html).wait()
+    if outcome in (SEND_UNKNOWN, SEND_PERMANENT_FAIL):
+        logger.error("notify_heartbeat_stale 寄送結果 %s——保留旗標（不重寄），請人工確認收件人是否收到", outcome)
+    elif outcome != SEND_SENT:
+        logger.warning("notify_heartbeat_stale 寄送結果 %s（不寫旗標，隔天重試）", outcome)
+    return outcome in (SEND_SENT, SEND_UNKNOWN, SEND_PERMANENT_FAIL)
 
 
 def notify_disk_space_low(problems: list, temp_bloat: list = None,

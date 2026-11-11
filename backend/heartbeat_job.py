@@ -51,9 +51,13 @@ def _local_urls() -> list:
     return ["%s://127.0.0.1:%d%s" % (sc, _LOCAL_PORT, _LOCAL_PATH) for sc in _SCHEMES]
 
 
-def _probe_local():
-    """依序試每一種協定；回「第一個回 2xx 的協定」，全都不通 ⇒ None。"""
-    for sc, url in zip(_SCHEMES, _local_urls()):
+def _probe_local(first: str = None):
+    """依序試每一種協定；回「第一個回 2xx 的協定」，全都不通 ⇒ None。
+    `first`＝上次成功的協定（狀態檔記的）先試：只有 http 的機器（沒憑證檔）不必每 5 分鐘先撞一次 https 失敗
+    （K 審 N2：少一次必敗連線、少 10 秒逾時風險；失敗的單次嘗試只記 DEBUG，全都失敗才由 main 記一筆）。"""
+    pairs = list(zip(_SCHEMES, _local_urls()))
+    pairs.sort(key=lambda p: 0 if p[0] == first else 1)      # 穩定排序：first 排最前，其餘維持原順序
+    for sc, url in pairs:
         if _http_get(url):
             return sc
     return None
@@ -93,12 +97,15 @@ def _save_state(status: str, now: datetime, prev: dict = None, scheme: str = Non
     iso = now.isoformat(timespec="seconds")
     since = prev.get("since") if (prev.get("status") == status and prev.get("since")) else iso
     local_ok = status in ("ok", "ext_unset", "ext_fail")
+    tmp = _STATE_PATH + ".tmp"
     try:
-        with open(_STATE_PATH, "w", encoding="utf-8") as f:
+        # 先寫暫存檔再 os.replace（原子）：app 端的每日檢查／狀態快照剛好在讀時，不會讀到寫一半的檔（K 審 N1）；邏輯寫入次數不變
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump({"status": status, "day": now.strftime("%Y-%m-%d"), "hour": now.strftime("%Y-%m-%d %H"),
                        "since": since, "seen_at": iso, "scheme": scheme or "",
                        "local_ok_at": iso if local_ok else prev.get("local_ok_at", ""),
                        "ext_ok_at": iso if status == "ok" else prev.get("ext_ok_at", "")}, f)
+        os.replace(tmp, _STATE_PATH)
     except Exception:
         logger.exception("failed to write heartbeat_state.json")
 
@@ -130,7 +137,13 @@ def _http_get(url: str) -> bool:
         with urllib.request.urlopen(url, timeout=_TIMEOUT, context=_ssl_context_for(url)) as resp:
             return 200 <= resp.status < 300
     except Exception as e:
-        logger.warning("GET %s failed: %s", url, e)
+        # 打本機 loopback 的單次失敗只記 DEBUG（雙協定探測時，只有 http 的機器每次都會先敗一次 https）；
+        # 對外 ping_url 失敗照舊 WARNING。「本機全都不通」由 main 記一筆 ERROR。
+        loopback = (urllib.parse.urlsplit(url).hostname or "").lower() in _LOOPBACK_HOSTS
+        if loopback:
+            logger.debug("GET %s failed: %s", url, e)
+        else:
+            logger.warning("GET %s failed: %s", url, e)
         return False
 
 
@@ -139,7 +152,7 @@ def main() -> None:
     now = datetime.now()
     prev = _load_state()
 
-    scheme = _probe_local()
+    scheme = _probe_local(prev.get("scheme") or None)
     if scheme is None:
         status = "local_down"
         if ping_url:

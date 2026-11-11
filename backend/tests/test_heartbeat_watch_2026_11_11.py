@@ -22,6 +22,9 @@ import pytest
 import helpers.email_notify as en
 from helpers import heartbeat_status as hs
 
+# conftest 的 _netguard 擋 urlopen；連本機 127.0.0.1 臨時空埠（連線被拒）的題標 allow_outbound，不碰對外網路
+loopback_net = pytest.mark.allow_outbound
+
 BACKEND = Path(__file__).resolve().parents[1]
 NOW = datetime(2026, 11, 11, 12, 0, 0)
 SECRET_URL = "https://hc-ping.com/super-secret-uuid-1234"
@@ -134,7 +137,8 @@ def daily(client, monkeypatch, hb_files):
     from helpers.settings import _set_setting
     _set_setting(GUARD_KEY, "")
     sent = []
-    monkeypatch.setattr(sc, "notify_heartbeat_stale", lambda summary, problems, state=None: sent.append((summary, problems, state)))
+    monkeypatch.setattr(sc, "notify_heartbeat_stale", lambda summary, problems, state=None: sent.append((summary, problems, state)) or True)
+    monkeypatch.setattr(sc, "_uptime_seconds", lambda: 10 ** 6)      # 預設「已跑很久」；啟動寬限另有專題
     monkeypatch.setattr(sc.threading, "Thread",
                         lambda target, args=(), kwargs=None, daemon=None: type("T", (), {"start": lambda s: target(*args)})())
     return sc, sent, hb_files[0]
@@ -167,6 +171,42 @@ def test_daily_failed_send_does_not_set_flag(daily, monkeypatch):
     assert not _get_setting(GUARD_KEY), "寄失敗不能寫『今天寄過了』，否則永遠不會再試"
 
 
+def test_daily_skips_judging_right_after_app_start(daily, monkeypatch):
+    """K 審 S1：斷電／冷開機後 app 一起來時，狀態檔還是停電前的舊資料（心跳排程還沒重新跑）⇒ 不判斷、不寄、不寫旗標。
+    過了寬限（3 個心跳週期）才照常判斷。"""
+    from helpers.settings import _get_setting
+    sc, sent, write_state = daily
+    write_state(_stale_state())                       # local_down 已 6 小時
+    monkeypatch.setattr(sc, "_uptime_seconds", lambda: 60)
+    sc._check_heartbeat_health()
+    assert sent == [] and not _get_setting(GUARD_KEY), "啟動後 1 分鐘不該判斷"
+    monkeypatch.setattr(sc, "_uptime_seconds", lambda: sc._HEARTBEAT_STARTUP_GRACE_MINUTES * 60 + 60)
+    sc._check_heartbeat_health()
+    assert len(sent) == 1, "寬限過後同樣的狀態要寄"
+
+
+def test_daily_startup_grace_also_covers_long_off_machine(daily, monkeypatch):
+    """機器關了兩天再開機（ok 但 seen_at 50 小時前）：啟動寬限內不可誤報「排程停了」。"""
+    sc, sent, write_state = daily
+    n = datetime.now()
+    write_state({"status": "ok", "since": (n - timedelta(hours=50)).isoformat(timespec="seconds"),
+                 "seen_at": (n - timedelta(hours=50)).isoformat(timespec="seconds"), "scheme": "https",
+                 "local_ok_at": "", "ext_ok_at": ""})
+    monkeypatch.setattr(sc, "_uptime_seconds", lambda: 120)
+    sc._check_heartbeat_health()
+    assert sent == []
+
+
+def test_daily_flag_not_written_when_notify_reports_not_sent(daily, monkeypatch):
+    """K 審 L1：寄信函式回 False（沒收件人／暫時失敗）⇒ 不寫旗標，下次重試。"""
+    from helpers.settings import _get_setting
+    sc, sent, write_state = daily
+    write_state(_stale_state())
+    monkeypatch.setattr(sc, "notify_heartbeat_stale", lambda *a, **k: False)
+    sc._check_heartbeat_health()
+    assert not _get_setting(GUARD_KEY)
+
+
 def test_daily_recovery_clears_flag(daily):
     from helpers.settings import _get_setting, _set_setting
     sc, sent, write_state = daily
@@ -195,13 +235,35 @@ def test_daily_check_is_wired_into_run_all():
 def test_mail_body_builds_and_has_no_ping_url(monkeypatch):
     sent = []
     monkeypatch.setattr(en, "_admin_emails", lambda *a, **k: ["x@example.invalid"])
-    monkeypatch.setattr(en, "_async_send", lambda to, subject, html: sent.append((to, subject, html)))
+    monkeypatch.setattr(en, "_async_send", lambda to, subject, html: sent.append((to, subject, html)) or _fake_handle(en.SEND_SENT))
     en.notify_heartbeat_stale("本機判定沒有回應", ["心跳檢查本機服務已 5 小時判定「沒有回應」"],
                               {"status": "local_down", "since": "2026-11-11T07:00:00", "scheme": "", "ext_ok_at": "", "seen_at": "2026-11-11T11:40:00"})
     assert sent, "信沒有組出來"
     to, subject, html = sent[0]
     assert "心跳" in subject and "healthchecks.io" in html
     assert "hc-ping.com" not in html
+
+
+def _fake_handle(outcome):
+    class H:
+        def wait(self):
+            return outcome
+    return H()
+
+
+@pytest.mark.parametrize("outcome, may_mark", [
+    (en.SEND_SENT, True), (en.SEND_UNKNOWN, True), (en.SEND_PERMANENT_FAIL, True),
+    (en.SEND_TRANSIENT_FAIL, False), (en.SEND_SKIPPED, False)])
+def test_notify_returns_whether_the_flag_may_be_written(monkeypatch, outcome, may_mark):
+    """K 審 L1：旗標要等寄送結果才寫（與 send_registered(wait=True) 同一套對照）。"""
+    monkeypatch.setattr(en, "_admin_emails", lambda *a, **k: ["x@example.invalid"])
+    monkeypatch.setattr(en, "_async_send", lambda *a, **k: _fake_handle(outcome))
+    assert en.notify_heartbeat_stale("x", ["y"], {}) is may_mark
+
+
+def test_notify_without_recipients_returns_false(monkeypatch):
+    monkeypatch.setattr(en, "_admin_emails", lambda *a, **k: [])
+    assert en.notify_heartbeat_stale("x", ["y"], {}) is False
 
 
 def test_mail_type_is_registered_and_not_lockable_off():
@@ -270,3 +332,53 @@ def test_snapshot_heartbeat_missing_state_is_recorded_as_error_not_crash(tmp_pat
         snap.heartbeat(str(root))
     res = snap.collect(str(root))
     assert res["heartbeat"] is None and "heartbeat" in res["errors"]
+
+
+# ── K 審 N1／N2：job 的狀態檔原子寫入、雙協定探測的順序與 log 噪音 ─────────────────────
+
+def _job(monkeypatch, tmp_path):
+    from core import paths
+    logs = tmp_path / "joblogs"
+    monkeypatch.setattr(paths, "LOGS_DIR", str(logs))
+    monkeypatch.setattr(paths, "HEARTBEAT_CONFIG", str(tmp_path / "hbj.json"))
+    import importlib
+    sys.modules.pop("heartbeat_job", None)
+    mod = importlib.import_module("heartbeat_job")
+    return mod
+
+
+def test_job_state_write_is_atomic_no_tmp_left(monkeypatch, tmp_path):
+    mod = _job(monkeypatch, tmp_path)
+    mod._save_state("ok", NOW, {}, "https")
+    st = Path(mod._STATE_PATH)
+    assert json.loads(st.read_text(encoding="utf-8"))["status"] == "ok"
+    assert not Path(mod._STATE_PATH + ".tmp").exists(), "暫存檔必須被 os.replace 取走"
+    sys.modules.pop("heartbeat_job", None)
+
+
+def test_job_tries_last_good_scheme_first_and_stops_at_first_success(monkeypatch, tmp_path):
+    mod = _job(monkeypatch, tmp_path)
+    seen = []
+    monkeypatch.setattr(mod, "_http_get", lambda url: seen.append(url) or url.startswith("http://"))
+    assert mod._probe_local("http") == "http"
+    assert seen == [mod._local_urls()[1]], "http-only 的機器不該每次先撞一次 https"
+    seen.clear()
+    assert mod._probe_local(None) == "http" and seen[0].startswith("https://")      # 沒記錄時仍 https 先
+    sys.modules.pop("heartbeat_job", None)
+
+
+@loopback_net
+def test_job_failed_loopback_attempt_is_not_a_warning(monkeypatch, tmp_path):
+    """http-only 機器每次探測的失敗嘗試只該是 DEBUG：避免每天 ~288 行 WARNING（使用者要求低寫入）。"""
+    import socket
+    mod = _job(monkeypatch, tmp_path)
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    got = []
+    monkeypatch.setattr(mod.logger, "warning", lambda msg, *a, **k: got.append(msg))
+    monkeypatch.setattr(mod.logger, "debug", lambda msg, *a, **k: got.append("DEBUG " + msg))
+    monkeypatch.setattr(mod, "_TIMEOUT", 2)
+    assert mod._http_get("http://127.0.0.1:%d/api/ping" % port) is False
+    assert got and all(m.startswith("DEBUG") for m in got), got
+    sys.modules.pop("heartbeat_job", None)

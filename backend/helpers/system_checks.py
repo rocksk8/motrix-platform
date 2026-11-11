@@ -9,6 +9,7 @@ import calendar
 import json
 import os
 import threading
+import time
 from datetime import date as _date, timedelta as _timedelta, datetime, timezone as _timezone
 from typing import Optional, List
 
@@ -312,14 +313,28 @@ def _check_backup_freshness() -> None:
         _logger.warning("_check_backup_freshness failed: %s", exc)
 
 
+#: 本行程啟動時間（單調時鐘）。啟動後要先讓心跳排程（每 5 分鐘一次）有機會重新跑過，狀態檔才反映「現在」。
+_STARTED_AT = time.monotonic()
+#: 啟動寬限（分鐘）：3 個心跳週期。K 審 S1：斷電／冷開機後 app 一起來，狀態檔還是停電前（或停電期間）寫的，
+#: 立刻判斷會在「真正的當機恢復」之後、以及每次久關後開機時誤寄「監控本身壞了」。
+_HEARTBEAT_STARTUP_GRACE_MINUTES = 15
+
+
+def _uptime_seconds() -> float:
+    return time.monotonic() - _STARTED_AT
+
+
 def _check_heartbeat_health() -> None:
     """每日檢查「心跳監控本身」（2026-11-11）：app 活著、卻看到心跳回報壞的狀態很久／心跳排程停了 ⇒ 寄信給 superadmin。
 
     背景：正式機心跳壞了兩個多月沒人知道（http/https 不符 ⇒ 每 5 分鐘 /fail ⇒ healthchecks.io 一直紅燈，
     真正的斷電沒有新告警）。判斷邏輯在 helpers/heartbeat_status.assess（只讀狀態檔）。
-    沒有心跳（開發機：沒設定檔也沒狀態檔）⇒ 什麼都不做。同一天最多寄一次；寄成功才記旗標、恢復正常就清旗標（比照備份新鮮度）。
+    沒有心跳（開發機：沒設定檔也沒狀態檔）⇒ 什麼都不做。同一天最多寄一次；寄成功才記旗標（`notify_heartbeat_stale` 等寄送結果，回 False＝不寫、下次重試）、恢復正常就清旗標。
+    ⚠️ 啟動後 `_HEARTBEAT_STARTUP_GRACE_MINUTES` 分鐘內不判斷（斷電／久關後冷開機時狀態檔是舊的，心跳排程還沒重新跑；K 審 S1）。
     """
     try:
+        if _uptime_seconds() < _HEARTBEAT_STARTUP_GRACE_MINUTES * 60:
+            return          # 剛啟動：心跳排程還沒重新跑過，狀態檔可能是停電前的舊資料；每日 08:00 那次會補判斷
         from helpers import heartbeat_status as _hs
         res = _hs.assess()
         guard_key = "heartbeat_stale_last_notified"
@@ -334,9 +349,11 @@ def _check_heartbeat_health() -> None:
 
         def _send_alert():
             try:
-                notify_heartbeat_stale(res["summary"], res["problems"], state)
+                may_mark = notify_heartbeat_stale(res["summary"], res["problems"], state)
             except Exception:  # noqa: BLE001
                 _logger.exception("notify_heartbeat_stale failed —— 旗標不寫，今天仍會重試")
+                return
+            if may_mark is False:       # 沒收件人／暫時失敗／略過：不寫旗標，明天（或下次檢查）重試
                 return
             _set_setting(guard_key, today)
 

@@ -153,9 +153,14 @@ def _install(monkeypatch, sink, build):
     monkeypatch.setattr(EN, "datetime", _Clock)
     monkeypatch.setattr(EN, "_build_html", build)
 
+    class _Sent(str):
+        """`_send*` 回結果字串；`_async_send` 回的把手要有 `.wait()`（要寫旗標的 notify_*，如 notify_heartbeat_stale，會等結果）。"""
+        def wait(self):
+            return str(self)
+
     def cap(to, subject, html, *rest):
         sink.append((subject, html))
-        return EN.SEND_SENT
+        return _Sent(EN.SEND_SENT)
     monkeypatch.setattr(EN, "_async_send", cap)
     monkeypatch.setattr(EN, "_send_raising", cap)
     monkeypatch.setattr(EN, "_send", cap)
