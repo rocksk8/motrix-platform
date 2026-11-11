@@ -32,7 +32,7 @@
 | P-LD-09 | 有 module.json、沒有 `__init__.py`／沒有 `MODULE` | 資料夾不完整 | **實測** R1：failed，`MODULE missing or key mismatch`（namespace package 可以 import，但沒有 spec） | 同左；reason 分開寫「缺 __init__.py」「缺 MODULE」 | 同 P-LD-01 | 補檔 | `test_core_loader.py::test_broken_module_is_isolated_and_reported`（部分） | 低 |
 | P-LD-10 | 有 `api.py` 但 spec 沒列它的 router（或反過來） | 新增端點忘了登記 | 讀程式：路由只從 `spec.routers` 掛（`main.py:678`）⇒ api.py 的端點**不存在**、頁面 404 | 同左（明確登記）＋守門 | 功能 404 | 補登記 | `test_core_loader.py::test_every_module_api_router_is_declared_in_its_spec` | 低 |
 | P-LD-11 | 兩個資料夾宣告同一個 key | — | 讀程式：key 必須等於資料夾名（`core/loader.py:74`），同一目錄不可能有兩個同名資料夾（Windows 大小寫不分也擋掉） | 同左 | — | — | 結構上不可能＋ `dep_scan --check-modules` | 低 |
-| P-LD-12 | 模組 migration 失敗 | 模組的新表建立失敗 | 讀程式：**機制尚未實作**——只有版本表 `module_schema_versions`（`db.py:856`），沒有執行器；目前唯一的模組 tender_radar 沒有自有 migration（module.json `tables_note`） | 失敗 ⇒ 該模組不載入、state=failed＋原因、交易回滾不留半套表、其他模組不受影響 | — | — | 缺（機制未實作） | 中（第一個有自有表的模組搬進來前必須補） |
+| P-LD-12 | 模組 migration 失敗 | 模組的新表建立失敗 | ~~讀程式：**機制尚未實作**——只有版本表 `module_schema_versions`（`db.py:856`），沒有執行器；目前唯一的模組 tender_radar 沒有自有 migration（module.json `tables_note`）~~（**2026-11-11 更正**：執行器已實作＝`core/migrations.py::run_all()` 逐支 SAVEPOINT 隔離〔d9b90719b，2026-09-28〕，未完成的模組由 `fail_incomplete_modules` 下線〔5c06142ee〕；本列為 2026-09-25 讀碼當時的狀態） | 失敗 ⇒ 該模組不載入、state=failed＋原因、交易回滾不留半套表、其他模組不受影響 | — | — | ~~缺（機制未實作）~~ ✅ `test_migration_incomplete.py` | ~~中（第一個有自有表的模組搬進來前必須補）~~ 已補（2026-11-11 更正） |
 | P-LD-13 | 載入失敗原因是英文例外字串 | P-LD-01～06 任一 | **實測** R1：reason 原樣是 Python 例外訊息 | 中文原因＋技術細節分開 | 管理頁看到英文 | — | 缺 | 低 |
 
 ## 2. 授權與啟停（§9c）
@@ -94,7 +94,7 @@
 **本分支補（等主持看過目錄後才動）**：P-LD-07、P-SW-05（高且缺守門）。各自附反向控制與突變驗證。
 
 **排進 ROADMAP 階段 S**（依嚴重度）：
-- 中：P-LD-03（主版號升級前的相容性預檢）、P-LD-06、P-LD-08、P-LD-12（模組 migration 執行器，第一個有自有表的模組搬遷前）、P-SW-03、P-SW-07、P-SW-11、P-IP-02、P-IP-03、P-DT-01、P-FE-02、P-FE-03
+- 中：P-LD-03（主版號升級前的相容性預檢）、P-LD-06、P-LD-08、~~P-LD-12（模組 migration 執行器，第一個有自有表的模組搬遷前）~~（已實作，2026-11-11 更正）、P-SW-03、P-SW-07、P-SW-11、P-IP-02、P-IP-03、P-DT-01、P-FE-02、P-FE-03
 - 低：P-LD-13、P-SW-04、P-SW-10、P-FE-04、P-FE-05、P-FE-06
 - 不處理：P-DT-03（靠階段 B 搬遷解決）、P-IP-04／P-IP-06（未實作的機制，設計時納入）
 

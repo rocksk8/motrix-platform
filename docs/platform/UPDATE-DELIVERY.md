@@ -1,4 +1,7 @@
-# 更新流程簡化：雲端交付＋正式機一鍵套用（設計，未實作）
+# 更新流程簡化：雲端交付＋正式機一鍵套用（已實作；本文保留設計脈絡與實作紀錄）
+
+> **狀態（2026-11-11 核對程式與測試）：已實作。** 2026-09-28 上車，commit 對照：(a) 發布＋Ed25519 簽章、(b) 偵測／staging／驗證＝564c0819d（`backend/tools/delivery.py`）；出貨公鑰寫入＝f860e88e2；交付資料夾讀「系統設定→儲存位置」＝008cba1a2；(c) 一鍵套用＝fda56bf98；儀表板「套用更新」頁＝69c8d8abb；(e) 套用鎖與結果檔＝4bd32922f；(d) 結果寫回雲端＝`delivery.py::writeback`／`write_back`。守門：`tests/platform/test_delivery_*`、`test_deploy_dashboard_delivery_*`、`test_apply_update_*`；2026-11-11 重跑 `test_delivery_2026_09_28`、`test_delivery_module_*`、`test_deploy_dashboard_delivery_*`（2 檔）、`test_module_update*`（2 檔）、`test_apply_module_update_ps1_*`、`test_ship_tier_*`、`test_migrate_like_startup_expect_module_*` 共 9 檔，250 題全過。
+> 本文 §0–§8 是 2026-09-28 的**設計稿原文**（「要做」「待實作」是當時語氣），§9 起是實作紀錄；兩者與程式不一致時以程式為準。「正式機實際使用過幾次」不在本次核對範圍（沒查正式機）。
 
 > A，2026-09-28 01:33。依據：CORE-SPEC 裁示表「更新流程簡化（下一版）」（使用者 2026-09-28 00:18）、RUN-PLAN §6 同時間條目。
 > **前提**：apply_update 安全修正（wip/h-apply-platform）四條路演練通過＋D 單獨完整稽核。本文件只寫設計；程式、題目、演練另外派工。
@@ -174,7 +177,7 @@
 
 - 交付資料夾結構、包名、`delivery.json` 欄位、`package.sha256` 格式見 `delivery.py` 檔頭。包的內容放在 `packages\<包名>\payload\`，交付檔與包分開，不混進包裡。
 - **簽章涵蓋 `delivery.json`＋`package.sha256`**（`signed_bytes`）：只改畫面上顯示的 commit，也驗不過。
-- 公鑰 `DELIVERY_PUBKEY_PEM` 目前是空的 ⇒ 正式機一律拒絕，不退回「不驗章」。使用者執行 `python backend/tools/delivery.py keygen --private-out <開發機本機路徑>`：私鑰寫到那個檔，公鑰印出後貼進 `DELIVERY_PUBKEY_PEM`，隨版本出貨（U-4：私鑰另外做離線備份）。
+- ~~公鑰 `DELIVERY_PUBKEY_PEM` 目前是空的 ⇒ 正式機一律拒絕，不退回「不驗章」。~~（**2026-11-11 更正**：公鑰已由 f860e88e2 寫入 `delivery.py`；公鑰為空時一律拒絕、不退回「不驗章」的規則不變。）使用者執行 `python backend/tools/delivery.py keygen --private-out <開發機本機路徑>`：私鑰寫到那個檔，公鑰印出後貼進 `DELIVERY_PUBKEY_PEM`，隨版本出貨（U-4：私鑰另外做離線備份）。
 - 結構檢查用**正式機已安裝版本**的 `verify_package.py`。`--expect-db-version` 取自已安裝的 `db.py`（V9 基準凍結＝獨立訊號，不取自包本身）。
 - 腳本版本（AH-O7）：包裡 `$ApplyScriptVersion`＝`apply_update.version.json` 的 version，而且內容雜湊相符，才發布、才驗得過。
 - 保留份數（U-5＝3）：更舊的只刪「`results\` 已有結果」的包；正式機還沒回報的不刪。
