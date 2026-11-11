@@ -252,6 +252,8 @@ def _observe(text, response):
     load = _member(text, "async loadStats()")
     hero = _member(text, "get heroSummary()")
     overdue = _member(text, "get overdueWarranty()")
+    # 2026-11-11 A3：引導卡片的 x-show 讀 checklistVisible（上手清單）。修正前的舊版沒有它 ⇒ 不種（「量尺」那題餵舊版）。
+    ckvis = _member(text, "get checklistVisible()") if "get checklistVisible()" in text else None
     gate = _card_gate(text)
     title_attr, title_expr = _expr_behind(text, TITLE_COPY)
     band_attr, band_expr = _expr_behind(text, BAND_COPY)
@@ -283,7 +285,14 @@ Object.assign(raw, {
   // 等我簽核改讀 /approval-queue/count（W2）：讀取失敗情境＝後端不可用 ⇒ /count 也讀不到；成功情境＝/count 回 0。
   mineLoaded: __MINE__,
   mineCount: 0,        // 同上：/count 回 0（有待簽的情形另有題）
+  // A3（2026-11-11）：引導卡片改成上手清單，x-show 多讀 checklistVisible（真 getter 原文）。
+  // 種子＝「清單有一項還沒做」、「這個瀏覽器沒看過」——真實頁面在全新系統時 loadChecklist 會產出這種狀態；
+  // 不種 checklistItems 的話，「真的空 ⇒ 要出現」那題就量不到卡片。
+  checklistItems: [{ id: 'customer', done: false }],
+  checklistStarted: false,
+  checklistForce: false,
 });
+__CKLINE__
 
 // ⚠️ Alpine 的作用域：運算式裡寫 `stats.totalQuotes` 而不是 `this.stats…`。
 //    `has` 永遠回真 ⇒ `with` 一律往這個物件找，找不到就是 undefined，
@@ -328,6 +337,8 @@ const scoped = (src) => (new Function('with (this) { return (' + src + ') }'));
               .replace("__LOAD__", load)
               .replace("__HERO__", hero)
               .replace("__OVERDUE__", overdue)
+              .replace("__CKLINE__", "" if ckvis is None else
+                       "Object.defineProperties(raw, Object.getOwnPropertyDescriptors({ %s }));" % ckvis)
               .replace("__STATS__", _stats_initial(text))
               .replace("__GATE__", json.dumps(gate, ensure_ascii=False))
               .replace("__TITLE__", json.dumps(title_expr, ensure_ascii=False))

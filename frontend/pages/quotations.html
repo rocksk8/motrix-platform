@@ -88,12 +88,12 @@
     <div class="page-header">
       <div>
         <div class="page-header__title">報價單管理</div>
-        <div class="page-header__sub" x-text="'MQ 系列 · 共 ' + quotes.length + ' 筆紀錄'"></div>
+        <div class="page-header__sub" x-text="'共 ' + quotes.length + ' 張報價單'"></div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
-        <span style="font-size:11px;padding:3px 8px;border-radius:4px;font-family:LINE Seed TW_OTF, sans-serif"
-              :style="backendOnline ? 'background:#F0FDF4;color:#15803D' : 'background:#FEF2F2;color:#DC2626'"
-              x-text="backendOnline ? '● DB 已連線' : '○ 後端離線'"></span>
+        <!-- E2：「DB 已連線」是工程師用語，正常時不顯示；連不上時才出現（頁面另有離線橫幅說明怎麼辦） -->
+        <span style="font-size:11px;padding:3px 8px;border-radius:4px;font-family:LINE Seed TW_OTF, sans-serif;background:#FEF2F2;color:#DC2626"
+              x-show="!backendOnline && !loading" x-cloak data-testid="backend-offline-chip">○ 後端離線</span>
         <a href="quotation-form.html" class="action-btn action-btn--primary" style="text-decoration:none">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
           新增報價單
@@ -371,24 +371,43 @@
         </tbody>
         </template>
         <tbody>
+          <!-- E1 空狀態三種：none 從未有資料／filtered 有資料但篩選後沒有／error 載入失敗（只有 error 才說「重試」） -->
           <tr x-show="filtered.length === 0 && !loading && !retrying">
-            <td :colspan="colSpan()" style="text-align:center;padding:40px;color:var(--text-dim)">
-              <div style="font-size:32px;opacity:.3;margin-bottom:8px">📄</div>
-              <div x-show="!loadErr">尚無報價單紀錄</div>
-              <div x-show="loadErr" style="color:var(--danger);font-size:13px">資料載入失敗，請確認後端連線</div>
-              <div style="display:flex;gap:10px;justify-content:center;margin-top:12px;flex-wrap:wrap">
-                <a href="quotation-form.html" class="action-btn action-btn--primary" style="text-decoration:none;display:inline-flex">新增第一張報價單</a>
-                <button class="action-btn" @click="reload()" style="cursor:pointer">
-                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right:4px"><path d="M4 4v5h5M20 20v-5h-5"/><path d="M20 9A9 9 0 1 0 4 15"/></svg>
-                  重新整理
-                </button>
+            <td :colspan="colSpan()" style="text-align:center;padding:0px">
+              <div class="ux-empty ux-empty--none" x-show="emptyKind === 'none'" data-testid="empty-none">
+                <svg class="ux-empty__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>
+                <div class="ux-empty__title">還沒有報價單</div>
+                <div class="ux-empty__desc">報價單用來向客戶報價。送出並完成簽核、客戶確定採用後，標記「已成案」，就會成為案件。</div>
+                <div class="ux-empty__actions">
+                  <a href="quotation-form.html" class="action-btn action-btn--primary" style="text-decoration:none;display:inline-flex">新增第一張報價單</a>
+                </div>
+              </div>
+              <div class="ux-empty ux-empty--filtered" x-show="emptyKind === 'filtered'" data-testid="empty-filtered">
+                <svg class="ux-empty__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                <div class="ux-empty__title">沒有符合條件的報價單</div>
+                <div class="ux-empty__desc" x-show="hasActiveFilter">目前的搜尋或篩選條件下找不到資料。</div>
+                <div class="ux-empty__desc" x-show="!hasActiveFilter">「全部」分頁不含已結案、未成案的報價單；要看它們請切換上方的分頁。</div>
+                <div class="ux-empty__actions" x-show="hasActiveFilter">
+                  <button class="action-btn" @click="clearFilters()" style="cursor:pointer" data-testid="empty-clear-filters">清除篩選</button>
+                </div>
+              </div>
+              <div class="ux-empty ux-empty--error" x-show="emptyKind === 'error'" data-testid="empty-error" role="alert">
+                <svg class="ux-empty__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg>
+                <div class="ux-empty__title">資料載入失敗</div>
+                <div class="ux-empty__desc">暫時取不到報價單資料，可能是網路或伺服器連線問題。請稍後再試一次。</div>
+                <div class="ux-empty__actions">
+                  <button class="action-btn" @click="reload()" style="cursor:pointer">
+                    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right:4px"><path d="M4 4v5h5M20 20v-5h-5"/><path d="M20 9A9 9 0 1 0 4 15"/></svg>
+                    重試
+                  </button>
+                </div>
               </div>
             </td>
           </tr>
           <tr x-show="loading || retrying">
             <td :colspan="colSpan()" style="text-align:center;padding:24px;color:var(--text-dim);font-size:12px">
               <span x-show="loading && !retrying">載入中…</span>
-              <span x-show="retrying">資料為空，自動重試中…</span>
+              <span x-show="retrying" x-text="loadErr ? '連線不穩，正在重試…' : '載入中…'"></span>
             </td>
           </tr>
         </tbody>
@@ -612,6 +631,15 @@
 
       get monthOptions() {
         return [...new Set(this.quotes.map(q => (q.quote_date || q.created_at || '').slice(0,7)).filter(Boolean))].sort().reverse()
+      },
+
+      // E1：空狀態分三種（none 從未有資料／filtered 篩選後沒有／error 載入失敗）
+      get emptyKind() { return this.loadErr ? 'error' : (this.quotes.length ? 'filtered' : 'none') },
+      get hasActiveFilter() {
+        return !!(this.search.trim() || this.filterSales || this.filterMonth || this.filterDealTag || this.phaseFilter || this.activeTab !== 'all')
+      },
+      clearFilters() {
+        this.search = ''; this.filterSales = ''; this.filterMonth = ''; this.filterDealTag = ''; this.phaseFilter = ''; this.activeTab = 'all'
       },
 
       get filtered() {

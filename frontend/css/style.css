@@ -1778,3 +1778,76 @@ body.sidebar-lock { overflow: hidden; }
   --tone-pink-fg:       #F9A8D4;
   --tone-accent-bg:     rgba(248,113,113,.16);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UX 套件（2026-11-11：A1 首次設定精靈／A3 上手清單／A4 橫幅／A5 說明抽屜／E1 空狀態）
+   全部只用上面的 token；深色模式沿用全站的反轉機制，不另外寫一份顏色。
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* 「第一次來？」橫幅（原本只在 system-hub.html 內嵌，現在全站共用；system-hub 的內嵌版保留，數值相同） */
+.first-hint { display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin:0 0 14px; padding:10px 14px; border:1px solid var(--tone-info-border); background:var(--tone-info-bg); color:var(--tone-info-fg); border-radius:var(--radius-lg); font-size:12.5px; line-height:1.6 }
+.hint-x { border:1px solid var(--tone-info-border); background:var(--surface); color:var(--tone-info-fg); border-radius:var(--radius); padding:4px 12px; font-size:12px; cursor:pointer; font-family:var(--font-zh) }
+.ux-first-hint__btns { display:flex; gap:8px; flex-shrink:0 }
+.ux-first-hint { margin:12px 16px }
+
+/* 建置戳記只給管理員（sidebar.js）；窄螢幕只保留「版本落後」那種紅色警示，一般戳記不蓋內容 */
+@media (max-width: 768px) { #build-footer:not([data-warn]) { display: none } }
+
+/* ── A5 說明抽屜 ── */
+.ux-drawer[hidden] { display: none }
+.ux-drawer__scrim { position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:9000 }
+.ux-drawer__panel { position:fixed; top:0; right:0; bottom:0; width:min(400px, 92vw); background:var(--surface); color:var(--text-primary); z-index:9001; box-shadow:-8px 0 32px rgba(0,0,0,.18); display:flex; flex-direction:column; outline:none; font-family:var(--font-zh) }
+.ux-drawer__head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:18px 20px 12px; border-bottom:1px solid var(--border-light) }
+.ux-drawer__head h2 { margin:2px 0 0; font-size:17px }
+.ux-drawer__eyebrow { font-size:11px; letter-spacing:.08em; color:var(--text-dim) }
+.ux-drawer__x { border:none; background:var(--surface-sunken); width:30px; height:30px; border-radius:var(--radius); font-size:18px; line-height:1; cursor:pointer; color:var(--text-secondary) }
+.ux-drawer__body { padding:8px 20px 28px; overflow-y:auto; font-size:13px; line-height:1.7 }
+.ux-drawer__body h3 { font-size:12px; letter-spacing:.06em; color:var(--text-secondary); margin:18px 0 6px }
+.ux-drawer__body p, .ux-drawer__body ol { margin:0 }
+.ux-drawer__body ol { padding-left:20px }
+.ux-drawer__body dt { font-weight:700; margin-top:8px }
+.ux-drawer__body dd { margin:0; color:var(--text-secondary) }
+
+/* ── E1 空狀態（三種：none 從未有資料／filtered 篩選後沒有／error 載入失敗） ── */
+.ux-empty { text-align:center; padding:36px 20px; color:var(--text-secondary); font-family:var(--font-zh) }
+.ux-empty__icon { width:44px; height:44px; margin:0 auto 10px; opacity:.55; color:var(--text-dim) }
+.ux-empty__title { font-size:14px; font-weight:700; color:var(--text-primary); margin-bottom:4px }
+.ux-empty__desc { font-size:12.5px; line-height:1.7; max-width:420px; margin:0 auto 14px }
+.ux-empty__actions { display:flex; gap:8px; justify-content:center; flex-wrap:wrap }
+.ux-empty--error .ux-empty__icon { color:var(--tone-danger-fg); opacity:.8 }
+.ux-empty--error .ux-empty__title { color:var(--tone-danger-fg) }
+.ux-empty__detail { font-size:11.5px; color:var(--text-dim); margin-top:10px; word-break:break-all }
+
+/* ── A1 首次設定精靈外殼（只在強制改密碼／公司資料閘門時由 ux-wizard.js 啟用） ── */
+html.ux-wizard { --topbar-h: 0px; --topbar-bar-h: 0px; --mainnav-h: 0px }
+html.ux-wizard #app-topbar, html.ux-wizard #app-mainnav, html.ux-wizard #app-sidebar, html.ux-wizard .sidebar-overlay, html.ux-wizard #build-footer, html.ux-wizard #ux-help-btn, html.ux-wizard #ux-first-hint { display:none !important }
+.ux-wiz { max-width:760px; margin:0 auto; padding:22px 20px 6px; font-family:var(--font-zh) }
+.ux-wiz__brand { display:flex; align-items:center; gap:10px; margin-bottom:14px; color:var(--text-primary); font-weight:700; letter-spacing:.04em }
+.ux-wiz__brand img { height:22px; display:block }
+.ux-wiz__logo { background:var(--black); border-radius:8px; padding:6px 10px; display:inline-flex }
+html.ux-wizard .page-main, html.ux-wizard .ns-main { max-width:760px; margin-left:auto !important; margin-right:auto !important; padding-left:20px !important; padding-right:20px !important }
+html.ux-wizard .ns-main .pg { display:none }
+.ux-wiz__count { font-size:12px; color:var(--text-secondary); margin-bottom:8px }
+.ux-wiz__steps { display:flex; gap:6px; margin:0; padding:0; list-style:none }
+.ux-wiz__steps li { flex:1; min-width:0; font-size:12px; color:var(--text-dim); border-top:4px solid var(--border-light); padding-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.ux-wiz__steps li.is-done { color:var(--success); border-top-color:var(--success) }
+.ux-wiz__steps li.is-cur { color:var(--text-primary); font-weight:700; border-top-color:var(--accent) }
+.ux-wiz__why { margin:14px 0 0; padding:10px 14px; border-radius:var(--radius-lg); background:var(--surface-muted); border:1px solid var(--border-light); font-size:13px; line-height:1.7; color:var(--text-secondary) }
+
+/* ── A3 上手清單 ── */
+.ux-check { background:var(--surface); border:1px solid var(--border-light); border-radius:var(--radius-lg); padding:16px 18px; margin:0 0 16px; font-family:var(--font-zh) }
+.ux-check__head { display:flex; align-items:center; gap:10px; flex-wrap:wrap }
+.ux-check__t { font-size:14px; font-weight:700 }
+.ux-check__n { font-size:12px; color:var(--text-secondary) }
+.ux-check__bar { flex:1 1 120px; height:6px; border-radius:3px; background:var(--surface-sunken); overflow:hidden; min-width:80px }
+.ux-check__bar > i { display:block; height:100%; background:var(--success); transition:width .3s }
+.ux-check__list { list-style:none; margin:12px 0 0; padding:0; display:grid; gap:8px }
+.ux-check__item { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border-light); border-radius:var(--radius); font-size:13px; text-decoration:none; color:var(--text-primary) }
+.ux-check__item:hover { background:var(--surface-muted) }
+.ux-check__box { width:18px; height:18px; border-radius:50%; border:2px solid var(--border-light); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; color:#fff }
+.ux-check__item.is-done .ux-check__box { background:var(--success); border-color:var(--success) }
+.ux-check__item.is-done .ux-check__label { color:var(--text-dim); text-decoration:line-through }
+.ux-check__go { margin-left:auto; font-size:12px; color:var(--accent) }
+
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0 }
+.cm-placeholder > .ux-first-hint { align-self: stretch; margin: 0 16px 8px }

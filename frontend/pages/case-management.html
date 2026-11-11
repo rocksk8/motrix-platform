@@ -449,8 +449,20 @@
         <template x-if="!selected">
           <div class="cm-placeholder">
             <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="opacity:.15"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
-            <div class="cm-placeholder__text">從左側選擇案件開始作業</div>
-            <div class="cm-placeholder__sub" x-text="summaryTotal() === null ? '' : '目前共 ' + summaryTotal() + ' 件已成案 / 已結案'"></div>
+            <!-- E1：從未有案件 ⇒ 說明案件從哪來；有案件但還沒選 ⇒ 原本的提示 -->
+            <template x-if="summaryTotal() === 0">
+              <div class="ux-empty ux-empty--none" data-testid="empty-none" style="padding-top:0">
+                <div class="ux-empty__title">還沒有案件</div>
+                <div class="ux-empty__desc">案件由報價單「成案」而來：報價單送出並完成簽核、客戶確定採用後，標記「已成案」，案件就會出現在左側清單。</div>
+                <div class="ux-empty__actions"><a href="quotations.html" class="btn btn-primary" style="text-decoration:none">前往報價單</a></div>
+              </div>
+            </template>
+            <template x-if="summaryTotal() !== 0">
+              <div>
+                <div class="cm-placeholder__text">從左側選擇案件開始作業</div>
+                <div class="cm-placeholder__sub" x-text="summaryTotal() === null ? '' : '目前共 ' + summaryTotal() + ' 件已成案 / 已結案'"></div>
+              </div>
+            </template>
           </div>
         </template>
 

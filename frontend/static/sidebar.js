@@ -434,6 +434,7 @@ if (typeof module !== 'undefined' && module.exports) {
       + buildThemeToggle()
       + buildOnlineWidget()
       + bell
+      + '<button type="button" id="ux-help-btn" class="topbar__btn" data-testid="ux-help-btn" aria-haspopup="dialog" aria-expanded="false" title="這一頁怎麼用" aria-label="這一頁怎麼用" style="color:#888;border-color:#333;font-size:12px;font-weight:700;padding:5px 9px">？</button>'
       + '<a href="' + cpHref + '" class="topbar__btn" style="text-decoration:none;color:#888;border-color:#333;font-size:11px">修改密碼</a>'
       + '<button class="topbar__btn" onclick="motrixLogout()" style="color:#888;border-color:#333;font-size:11px">登出</button>'
       + '<div class="topbar__avatar">' + esc(av) + '</div>'
@@ -906,6 +907,9 @@ if (typeof module !== 'undefined' && module.exports) {
   function renderBuildFooter() {
     // login／轉址頁刻意沒有頂欄（`<body data-no-topbar>`）⇒ 頁尾也不要硬塞。
     if (document.body && document.body.hasAttribute('data-no-topbar')) return
+    // E2（2026-11-11 UX）：建置戳記是給管理員／維運看的（「我跑的是哪一版、有沒有落後」），
+    // 一般同仁看到 `107cbdf · 啟動 …` 只會困惑，窄螢幕還會疊在內容上。⇒ 只對 admin／superadmin 顯示。
+    if (role !== 'superadmin' && role !== 'admin') return
     if (document.getElementById('build-footer')) return
     var bar = document.createElement('div')
     bar.id = 'build-footer'
@@ -939,6 +943,7 @@ if (typeof module !== 'undefined' && module.exports) {
       if (d._tooOld) {
         bar.style.cssText += ';background:#FEF2F2;color:#B91C1C;font-weight:700;'
           + 'pointer-events:auto;cursor:help'
+        bar.setAttribute('data-warn', '1')
         bar.textContent = '⚠️ 伺服器載入的是舊版（沒有版本資訊端點）—— 請重新啟動'
         bar.title = '這個行程是在「顯示執行中版本」這個功能之前啟動的。'
           + '重新啟動伺服器之後這裡才會顯示版本。'
@@ -957,6 +962,7 @@ if (typeof module !== 'undefined' && module.exports) {
         bar.style.cssText += ';background:#FEF2F2;color:#B91C1C;font-weight:700;'
           + 'pointer-events:auto;cursor:help'
         var n = d.behindCount || 0
+        bar.setAttribute('data-warn', '1')
         bar.textContent = '⚠️ 執行中 ' + (d.commit_short || '?')
           + '　落後 ' + n + ' 個後端／前端異動'
           + '　—— 建議重新啟動'
@@ -1151,6 +1157,7 @@ if (typeof module !== 'undefined' && module.exports) {
     }
 
     buildTopbar()
+    _loadUxHelp()
     buildSidebar()
     _setMenuState('declared')
     // Defensively clear this module's badge immediately after DOM creation,
@@ -1159,6 +1166,14 @@ if (typeof module !== 'undefined' && module.exports) {
     bindBadgeClear()
     bindMobileToggle()
     bindNavGuard()
+  }
+
+  // A4／A5（2026-11-11 UX）：「？」情境說明抽屜＋「第一次來？」橫幅；內容集中在 ux-help.js
+  function _loadUxHelp() {
+    if (window.MotrixUX || document.getElementById('ux-help-js')) return
+    var sc = document.createElement('script')
+    sc.id = 'ux-help-js'; sc.src = (inPg ? '../' : '') + 'static/ux-help.js'
+    document.head.appendChild(sc)
   }
 
   // 重建選單：清掉上一輪累積的分組與被擋頁面清單（否則新舊選單接在一起），重畫後重套事後的隱藏

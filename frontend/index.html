@@ -580,37 +580,33 @@
       </div>
     </section>
 
-    <!-- ─── ONBOARDING 引導條（系統無資料時顯示） ─── -->
-    <!-- FX33：`statsLoaded` 一起判。
-         ☠️ 少了它，一次網路失敗就會讓一個有幾百筆資料的老使用者
-            看到全新安裝的新手引導 —— 而他不會報修，那看起來就是空狀態。 -->
-    <div x-show="!loading && statsLoaded && !onboardingDismissed && stats.totalQuotes === 0 && stats.activeCases === 0"
-         style="background:linear-gradient(135deg,var(--accent-light),#F0FDF4);border:1px solid #BFDBFE;border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:16px;display:flex;gap:16px;align-items:flex-start">
-      <div style="flex-shrink:0;width:36px;height:36px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    <!-- ─── ONBOARDING 上手清單（A3，2026-11-11）：原本是「系統沒資料才出現的三步驟條」，現在是帶勾選進度的清單 ───
+         完成與否由資料判定（客戶／報價單筆數、是否有第二位使用者）或「看過該頁」；判定過的項目記在瀏覽器，之後不再重複查詢。
+         FX33：`statsLoaded` 一起判 —— 讀不到統計時不可以把「報價單 0 筆」當成真的（一次網路失敗不該讓老使用者看到新手引導）；
+               有資料的老系統也不出現（`checklistVisible`：全新系統，或這個瀏覽器在全新狀態時就看過它、還沒做完）。 -->
+    <section class="ux-check" data-testid="onboarding-checklist"
+             x-show="!loading && statsLoaded && !onboardingDismissed && checklistVisible"
+             aria-labelledby="ux-check-title">
+      <div class="ux-check__head">
+        <div class="ux-check__t" id="ux-check-title" x-text="'歡迎，' + (session.display_name || session.username) + '！上手清單'"></div>
+        <div class="ux-check__n" data-testid="checklist-progress" x-text="checklistDone + ' / ' + checklistItems.length + ' 完成'"></div>
+        <div class="ux-check__n" x-show="stats.totalQuotes === 0">系統目前尚無資料，從第一項開始。</div>
+        <div class="ux-check__bar" aria-hidden="true"><i :style="'width:' + (checklistItems.length ? Math.round(checklistDone * 100 / checklistItems.length) : 0) + '%'"></i></div>
+        <button type="button" class="hint-x" data-testid="checklist-dismiss" @click="dismissOnboarding()" aria-label="先收起上手清單（之後可從右上角「？」再打開）">先收起來</button>
       </div>
-      <div style="flex:1">
-        <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px" x-text="'歡迎，' + (session.display_name || session.username) + '！MOTRIX ERP 已就緒'"></div>
-        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">系統目前尚無資料，建議從以下步驟開始：</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <a href="pages/customers.html" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#fff;border:1px solid #BFDBFE;border-radius:6px;font-size:12px;font-weight:500;color:var(--accent-hover);text-decoration:none">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-            1. 建立客戶資料
-          </a>
-          <a href="pages/quotation-form.html" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#fff;border:1px solid #BFDBFE;border-radius:6px;font-size:12px;font-weight:500;color:var(--accent-hover);text-decoration:none">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-            2. 開立第一張報價單
-          </a>
-          <a href="pages/approval-settings.html" x-show="session.role === 'superadmin' || session.role === 'admin'" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#fff;border:1px solid #BFDBFE;border-radius:6px;font-size:12px;font-weight:500;color:var(--accent-hover);text-decoration:none">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            3. 設定簽核流程
-          </a>
-        </div>
-      </div>
-      <button @click="dismissOnboarding()" style="flex-shrink:0;border:none;background:none;cursor:pointer;padding:4px;color:var(--text-dim);line-height:1;opacity:.5" @mouseenter="$el.style.opacity='1'" @mouseleave="$el.style.opacity='.5'" title="關閉">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
+      <ul class="ux-check__list">
+        <template x-for="it in checklistItems" :key="it.id">
+          <li>
+            <a class="ux-check__item" :class="{'is-done': it.done}" :href="it.href" :data-testid="'checklist-' + it.id">
+              <span class="ux-check__box" aria-hidden="true" x-text="it.done ? '✓' : ''"></span>
+              <span class="ux-check__label" x-text="it.label"></span>
+              <span class="ux-check__go" x-show="!it.done" x-text="it.cta"></span>
+              <span class="sr-only" x-show="it.done">已完成</span>
+            </a>
+          </li>
+        </template>
+      </ul>
+    </section>
 
     <!-- ─── ALERT BANNERS（保固到期） ─── -->
     <template x-for="w in stats.warrantyWarnings.filter(w => w.daysLeft < 0)" :key="w.quoteNo + w.name">
@@ -838,6 +834,16 @@
       session: {},
       branding: {},   // A8d：公司名稱／統編取自公司資料設定（/api/system/branding），不寫死
       onboardingDismissed: false,
+      // A3 上手清單：[{id,label,cta,href,done}]；done 判定見 loadChecklist()
+      checklistItems: [],
+      checklistStarted: false,   // 這個瀏覽器在「全新系統」狀態時看過清單 ⇒ 之後即使有資料了，沒做完也繼續顯示
+      checklistForce: false,     // 從「？」抽屜明確要求重新打開
+      get checklistDone() { return this.checklistItems.filter(i => i.done).length },
+      // 清單何時顯示（FX33 的不變量：有資料的老系統不出現新手引導）。自足的運算式——不依賴別的 getter
+      get checklistVisible() {
+        return this.checklistItems.some(i => !i.done)
+          && ((this.stats.totalQuotes === 0 && this.stats.activeCases === 0) || this.checklistStarted || this.checklistForce)
+      },
       //: M08 搬遷 ④：`/api/dashboard/stats` 回 404 ＝「營運分析」模組沒有載入（載入時只會 200／403）。
       //  ⚠ 不可以講成「連線或伺服器重啟」——那會讓人去等一件不會自己好的事。
       analyticsMissing: false,
@@ -1015,6 +1021,9 @@ feedCount(key) {
 
         this.onboardingDismissed = !!localStorage.getItem('motrix_onboarding_banner_dismissed')
         await Promise.all([this.loadStats(), this.loadApprovalMine()])
+        // A3：上手清單（等 stats 讀完才判定「報價單有沒有」）；從 ux-help.js 的「？」抽屜可重新打開
+        this.loadChecklist()
+        window.addEventListener('motrix-checklist-reopen', () => { this.onboardingDismissed = false; this.checklistForce = true; this.loadChecklist() })
         // 簽核在別的分頁／視窗處理完，回到首頁時數字與清單要跟著更新（與側欄角標同一支端點）
         document.addEventListener('visibilitychange', () => { if (!document.hidden) this.loadApprovalMine(true) })
         window.addEventListener('focus', () => this.loadApprovalMine(true))
@@ -1074,6 +1083,67 @@ feedCount(key) {
       dismissOnboarding() {
         localStorage.setItem('motrix_onboarding_banner_dismissed', '1')
         this.onboardingDismissed = true
+      },
+
+      // ── A3 上手清單 ──────────────────────────────────────────────────────
+      // 已判定完成的項目記在 localStorage（每個帳號各一份），之後不再打 API：
+      // 全部完成後這支函式完全不發請求；「客戶」「同事」是列表端點，不該每次開首頁都叫一次。
+      _ckKey() { return 'motrix_ux_check_' + (this.session.username || this.session.userId || 'u') },
+      _ckDoneSet() { try { return new Set(JSON.parse(localStorage.getItem(this._ckKey()) || '[]')) } catch { return new Set() } },
+      _ckSave(set) { try { localStorage.setItem(this._ckKey(), JSON.stringify([...set])) } catch {} },
+      _ckVisited(file) {
+        try { return (JSON.parse(localStorage.getItem('motrix_ux_visited_' + (this.session.username || this.session.userId || 'u')) || '[]')).includes(file) } catch { return false }
+      },
+      async _ckCount(path) {
+        // 回 null＝這個帳號看不到（403/404）或讀不到 ⇒ 該項不列入清單，不假裝未完成
+        try {
+          const r = await fetch(path, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) return null
+          const d = await r.json()
+          return Array.isArray(d) ? d.length : null
+        } catch { return null }
+      },
+      _ckStartKey() { return 'motrix_ux_check_started_' + (this.session.username || this.session.userId || 'u') },
+      async loadChecklist() {
+        const young = this.stats.totalQuotes === 0 && this.stats.activeCases === 0
+        try { this.checklistStarted = localStorage.getItem(this._ckStartKey()) === '1' } catch { this.checklistStarted = false }
+        // 有資料的老系統、而且這個瀏覽器沒看過清單、也沒有人明確要求 ⇒ 完全不判定（不發任何請求）
+        if (!young && !this.checklistStarted && !this.checklistForce) { this.checklistItems = []; return }
+        if (young) { this.checklistStarted = true; try { localStorage.setItem(this._ckStartKey(), '1') } catch {} }
+        const done = this._ckDoneSet()
+        const admin = this.session.role === 'superadmin' || this.session.role === 'admin'
+        const items = []
+        // 1 客戶
+        if (done.has('customer')) items.push({ id: 'customer', done: true })
+        else {
+          const n = await this._ckCount('/api/customers')
+          if (n !== null) { if (n > 0) done.add('customer'); items.push({ id: 'customer', done: n > 0 }) }
+        }
+        // 2 報價單（stats 已讀到才算；沒讀到＝不判定，整張清單也不會顯示：statsLoaded 條件）
+        if (this.canQuotation) items.push({ id: 'quote', done: done.has('quote') || this.stats.totalQuotes > 0 })
+        if (this.stats.totalQuotes > 0) done.add('quote')
+        // 3 簽核流程（只有管理員；以「看過該頁」判定）
+        if (admin) {
+          const seen = done.has('approval') || this._ckVisited('approval-settings.html')
+          if (seen) done.add('approval')
+          items.push({ id: 'approval', done: seen })
+        }
+        // 4 邀請同事（只有管理員；有第二位以上使用者）
+        if (admin) {
+          if (done.has('team')) items.push({ id: 'team', done: true })
+          else {
+            const n = await this._ckCount('/api/users')
+            if (n !== null) { if (n > 1) done.add('team'); items.push({ id: 'team', done: n > 1 }) }
+          }
+        }
+        const meta = {
+          customer: { label: '建立第一筆客戶', cta: '去建立', href: 'pages/customers.html' },
+          quote:    { label: '開立第一張報價單', cta: '去開立', href: 'pages/quotation-form.html' },
+          approval: { label: '確認簽核流程（誰要簽什麼）', cta: '去看看', href: 'pages/approval-settings.html' },
+          team:     { label: '邀請同事加入', cta: '去新增帳號', href: 'pages/users.html' },
+        }
+        this._ckSave(done)
+        this.checklistItems = items.map(i => ({ ...meta[i.id], ...i }))
       },
 
       //: 這一次有沒有真的讀到 `dashboard/stats`。
