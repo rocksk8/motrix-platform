@@ -703,7 +703,8 @@ def plan(group, values, *, user="", conn=None):
         base = _effective(c, group, overlay=False)
         eff = _effective(c, group)
         days = confirm_period_days(c)
-        others = c.execute("SELECT COUNT(*) FROM users WHERE active=1 AND role='superadmin' AND username<>?", (user or "",)).fetchone()[0]
+        from helpers import config_ledger as _L
+        others = len(_L.real_superadmins(c, user))          # 展示帳號不算第二位
     finally:
         if own:
             c.close()
@@ -840,7 +841,7 @@ def publish(group, values, *, note="", user="", reason="", ip="", conn=None, act
             when = (datetime.now() + timedelta(days=days)).isoformat(timespec="seconds")
             pchanges = [{"field": k, "old": eff[k], "new": v} for k, v in pend.items() if eff[k] != v]
             if pchanges:
-                others = c.execute("SELECT COUNT(*) FROM users WHERE active=1 AND role='superadmin' AND username<>?", (user or "",)).fetchone()[0]
+                others = len(L.real_superadmins(c, user))      # 展示帳號不算第二位
                 for need in (0, 1):                  # 先寫一般待生效，再寫要雙人核准的（放寬）
                     part = [x for x in pchanges if (x["field"] in loose and others > 0) == bool(need)]
                     if not part:

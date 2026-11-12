@@ -1,5 +1,5 @@
 {
- "core_version": "1.162",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -479,6 +479,7 @@
    "verified_doc": "def(raw)"
   },
   "helper:config_ledger": {
+   "DEMO_USERNAME": "const",
    "EVENTS": "const",
    "HIGH_RISK": "const",
    "RISKS": "const",
@@ -491,6 +492,7 @@
    "in_effect": "def(row, now=…)",
    "pending": "def(conn, domain=…)",
    "promote_due": "def(conn, now=…, domain=…)",
+   "real_superadmins": "def(conn, exclude=…)",
    "record": "def(conn, domain, key, changes, reason, actor, *, ip=…, risk=…, ref_version=…, effective_at=…, audit_action=…, target_label=…, link=…, approvals_required=…)",
    "register_domain": "def(prefix, snapshot_fn=…, restore_fn=…, diff_fn=…, label=…)",
    "restore_version": "def(conn, domain, key, version, actor, reason=…)",
