@@ -868,6 +868,28 @@ _CASE_MISSING_NOTES_SQL = (
 _CASE_MISSING_DOCS_SQL = f"({_CASE_MISSING_INVOICE_SQL} OR {_CASE_MISSING_NOTES_SQL})"
 
 
+_WAITING_STATUSES = ("待審核", "簽核中")
+
+
+def _waiting_on_names(data_json, display_by_username) -> list:
+    """T84：報價單目前這一層「還沒簽」的人的顯示名稱（現名取自 users；查不到帳號才用簽核資料裡存的顯示名稱）。
+    任何解析／結構問題 ⇒ []（清單不能因為一筆壞資料失敗）。"""
+    try:
+        appr = (json.loads(data_json or "{}") or {}).get("approval")
+        f = _queue_tier_fields(json.dumps(appr) if isinstance(appr, dict) else "{}")
+        names = []
+        for a in f["currentApprovers"]:
+            if not isinstance(a, dict) or a.get("status") in ("approved", "skipped"):
+                continue
+            un = a.get("username")
+            nm = display_by_username.get(un) or a.get("displayName") or ""
+            if nm and nm not in names:
+                names.append(nm)
+        return names
+    except Exception:                                          # noqa: BLE001  壞資料／過深的 JSON（RecursionError）只影響該列
+        return []
+
+
 @router.get("/api/quotations")
 def list_quotations(
     status:   Optional[str] = None,
@@ -888,6 +910,7 @@ def list_quotations(
     unread:        int = 0,
     include_project_margin: int = 0,
     with_sales_owner: int = 0,
+    with_waiting_on: int = 0,
     authorization: str = Header(None),
 ):
     """CM6（2026-09-24）：案件頁改由伺服器搜尋／篩選／排序／分頁（原本一次拉 500 件在前端篩，
@@ -1063,10 +1086,24 @@ def list_quotations_for(user, status=None, customer=None, month=None, deal_tag=N
                     _owner_map[_r3["quote_no"]] = (_disp.get(_un) if _un else None) or role_display(_rs)
                 except Exception:                                  # noqa: BLE001  壞資料／過深的 JSON 只影響該列
                     _owner_map[_r3["quote_no"]] = ""
+    # T84：報價清單「下一步」——這張單目前卡在誰身上（簽核中的單才有；目前這一層還沒簽的人，顯示名稱取自使用者表的現名）。
+    # 選用（with_waiting_on=1）：只多讀「這一頁、狀態是待審核／簽核中」的列的 data_json（一次 IN 批次、每 300 筆一批，不是逐列查）；
+    # 只對本來就看得到的列算（rows 已過 row_access）；壞資料／算不出 ⇒ 該列空陣列，清單不會失敗。
+    _wait_map = {}
+    if with_waiting_on and rows:
+        _wnos = [r["quote_no"] for r in rows if r["status"] in _WAITING_STATUSES]
+        if _wnos:
+            _wdisp = {u["username"]: (u["display_name"] or u["username"]) for u in conn.execute("SELECT username, display_name FROM users")}
+            for _c3 in range(0, len(_wnos), 300):
+                _chunk3 = _wnos[_c3:_c3 + 300]
+                for _r4 in conn.execute("SELECT quote_no, data_json FROM quotations WHERE quote_no IN (%s)" % ",".join("?" * len(_chunk3)), _chunk3):
+                    _wait_map[_r4["quote_no"]] = _waiting_on_names(_r4["data_json"], _wdisp)
     conn.close()
     items = []
     for r in rows:
         row = dict(r)
+        if with_waiting_on:
+            row["waiting_on"] = _wait_map.get(row["quote_no"], [])
         if with_sales_owner:
             row["sales_owner"] = _owner_map.get(row["quote_no"], "")
         row["historical"] = is_historical_json(row.pop("hist_dj", None))
