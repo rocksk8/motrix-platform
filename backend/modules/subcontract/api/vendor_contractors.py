@@ -16,6 +16,7 @@ from helpers import (_require_user, _tok, _audit, _notify, notify_module_activit
                      setting_to_active_tiers)
 from core.txn import begin_write, write_txn
 from core import registry as _registry
+from helpers import email_notify as _en           # LINE 專屬事件（`dispatch_file_delete_request`）走 `_en._line_event`
 from helpers.uploads import save_document_files, delete_document_file
 from helpers.dates import normalize_date  # `AC2`（L1）
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
@@ -939,13 +940,29 @@ def delete_dispatch_file(did: int, file_id: str, body: dict = Body(default={}), 
         return {"ok": True, "deleted": True, "updated_at": now}
     _audit(_tok(authorization), "vendor.dispatch.delete_file_request", "contractor_dispatch", str(did),
            "%s 報價單附件「%s」申請刪除：%s" % (row["quote_no"], f.get("filename", ""), reason))
-    for a in (tiers[0].get("approvers") or []) if tiers else []:
-        _notify(a["username"], "dispatch_file_delete_request", str(did), row["quote_no"],
+    first_tier = [a["username"] for a in ((tiers[0].get("approvers") or []) if tiers else [])]
+    for un in first_tier:
+        _notify(un, "dispatch_file_delete_request", str(did), row["quote_no"],
                 "承攬商報價單附件「%s」（案件 %s）申請刪除，需要您審核" % (f.get("filename", ""), row["quote_no"]))
+    # LINE：整批只發一則（審查 h8 M2：不在迴圈裡逐人呼叫）。沒有簽核層時由最高管理者處理，也要有專屬 LINE（審查 h8 L6）。
+    _line_delete_request(first_tier or _superadmin_usernames(), "承攬商報價單附件刪除申請待簽核", row["quote_no"],
+                         user.get("display_name") or user["username"], "需要您簽核，請登入系統處理")
     if not tiers:
-        notify_module_activity("承攬商報價單", "申請刪除附件（待最高管理者審核）", user.get("display_name") or user["username"],
-                               row["quote_no"], "case-management.html", detail=f.get("filename", ""))
+        notify_module_activity("承攬商報價單", "申請刪除附件（待最高管理者簽核）", user.get("display_name") or user["username"],
+                               row["quote_no"], "case-management.html", detail=f.get("filename", ""), line_skip=True)   # LINE 由上面的專屬事件發，不重複
     return {"ok": True, "deleted": False, "pending": True, "updated_at": now}
+
+
+def _superadmin_usernames() -> list:
+    from helpers import event_audience as _ea
+    return list(_ea._superadmins())
+
+
+def _line_delete_request(usernames, title, quote_no, applicant, reason) -> None:
+    """附件刪除申請的 LINE（僅 LINE 事件，信件沒有；不放檔名與原因）。**整批一次**——呼叫端不得在迴圈裡呼叫（守門：AST 掃描）。"""
+    if usernames:
+        _en._line_event("dispatch_file_delete_request", usernames=list(usernames), title=title,
+                        rows=[("案件", quote_no), ("申請人", applicant)], reason=reason)
 
 
 def _can_decide_delete(conn, req, user):
@@ -1011,9 +1028,12 @@ def approve_dispatch_file_delete(did: int, file_id: str, authorization: str = He
     else:
         _audit(_tok(authorization), "vendor.dispatch.delete_file_approve", "contractor_dispatch", str(did),
                "%s 報價單附件「%s」刪除申請簽核一層" % (quote_no, filename))
-        for na in (tiers[req["currentTier"]].get("approvers") or []) if req["currentTier"] < len(tiers) else []:
-            _notify(na["username"], "dispatch_file_delete_request", str(did), quote_no,
+        next_tier = [na["username"] for na in ((tiers[req["currentTier"]].get("approvers") or []) if req["currentTier"] < len(tiers) else [])]
+        for un in next_tier:
+            _notify(un, "dispatch_file_delete_request", str(did), quote_no,
                     "承攬商報價單附件「%s」（案件 %s）刪除申請輪到您審核" % (filename, quote_no))
+        _line_delete_request(next_tier, "承攬商報價單附件刪除申請輪到您簽核", quote_no,
+                             req.get("requestedByDisplay") or req.get("requestedBy") or "", "前一層已完成，請登入系統處理")
     return {"ok": True, "deleted": done, "allDone": done, "updated_at": now}
 
 

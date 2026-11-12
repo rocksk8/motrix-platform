@@ -2717,12 +2717,62 @@ def get_line_notify(authorization: str = Header(None)):
     from helpers import mail_types as _mt
     sw = _ln.events_view()
     roles = _ln.event_roles_view()
-    from helpers import line_recipients as _lr, line_quota as _lq
+    from helpers import line_recipients as _lr, line_quota as _lq, line_catalog as _cat
     safe["quota_thresholds"] = _lq.thresholds()
     safe["role_choices"] = _lr.role_choices()
     # roles＝該類型允許哪些角色收 LINE；null＝所有角色（缺省，沿用現行行為）
-    safe["events"] = [{"key": k, "name": (_mt.get(k).name if _mt.get(k) else k), "enabled": sw[k], "roles": roles[k]} for k in _ln.WIRED_EVENTS]
+    # group／kind／priority＝設定頁分組與標籤；audience＝管理員指定的「誰要發」（mode／roles／users；users 附顯示名、是否已綁定 LINE、是否自行退訂）
+    aud = _ln.audience_view()
+    names = _line_user_names({u for a in aud.values() for u in a["users"]})
+    safe["event_groups"] = list(_cat.GROUP_ORDER)
+    safe["events"] = [{"key": k, "name": _cat.name_of(k), "enabled": sw[k], "roles": roles[k], "group": _cat.group_of(k),
+                       "kind": _cat.kind_of(k), "priority": _ln.event_spec(k)["priority"], "need": list(_cat.modules_needed(k)), "follows": _cat.follows_text(k),
+                       "audience": {**aud[k], "users": [_line_user_row(u, names, k) for u in aud[k]["users"]]}} for k in _ln.WIRED_EVENTS]
     return safe
+
+
+def _line_user_names(usernames) -> dict:
+    """{username: (顯示名, 是否在職)}（給設定頁指定清單顯示用；查不到的帳號不在結果裡）。"""
+    names = [u for u in usernames if isinstance(u, str)]
+    out = {}
+    if not names:
+        return out
+    conn = get_db()
+    try:
+        for i in range(0, len(names), 400):
+            chunk = names[i:i + 400]
+            for r in conn.execute("SELECT username, display_name, active FROM users WHERE username IN (%s)" % ",".join("?" * len(chunk)), chunk).fetchall():
+                out[r["username"]] = (r["display_name"] or r["username"], bool(r["active"]))
+    finally:
+        conn.close()
+    return out
+
+
+def _line_user_row(username: str, names: dict, event_key: str) -> dict:
+    from helpers import line_notify as _ln, line_recipients as _lr
+    disp, active = names.get(username, (username, False))
+    return {"username": username, "display": disp, "active": active, "linked": _ln.is_linked(username),
+            "muted": _lr.is_muted(username, event_key)}
+
+
+@router.put("/api/settings/line-notify/events/{key}/audience")
+def set_line_notify_event_audience(key: str, body: dict = Body(...), authorization: str = Header(None)):
+    """設定某種 LINE 通知「誰要發」：`mode`＝`business`（照原本的收件人，預設）／`business_plus`（另外加上指定的角色與人員）／`only`（只發給指定的角色與人員）；
+    `roles`＝角色清單、`users`＝帳號清單。只接受已接線的事件。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_notify as _ln
+    if not _ln.is_wired(key):
+        raise HTTPException(404, "這種通知尚未支援 LINE：%s" % key)
+    b = body or {}
+    if "mode" not in b:
+        raise HTTPException(400, "缺少 mode（business／business_plus／only）")
+    try:
+        _ln.set_audience(key, b["mode"], b.get("roles"), b.get("users"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _audit(_tok(authorization), "settings.line_notify.audience", "settings", key,
+           "LINE 通知誰要發：%s → %s（角色 %s；人員 %s）" % (key, b["mode"], "、".join(b.get("roles") or []) or "無", "、".join(b.get("users") or []) or "無"))
+    return {"ok": True, "key": key, "audience": _ln.audience_view()[key]}
 
 
 @router.put("/api/settings/line-notify/events/{key}/roles")
@@ -2952,6 +3002,30 @@ def unlink_line_of(username: str, authorization: str = Header(None)):
     if done:
         _audit(_tok(authorization), "line.binding.unlink", "line_binding", username, "最高管理者解除 LINE 綁定")
     return {"ok": True, "unlinked": done}
+
+
+@router.get("/api/settings/line-notify/bindings")
+def get_line_bindings(authorization: str = Header(None)):
+    """LINE「綁定狀況」：在職人員誰已綁定、誰還沒（只有最高管理者；不含 LINE userId）。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_binding as _lb
+    return _lb.status()
+
+
+@router.post("/api/settings/line-notify/bindings/remind")
+def remind_line_bindings(body: dict = Body(default={}), authorization: str = Header(None)):
+    """「提醒未綁定的人」：用站內通知＋Email 寄綁定說明（附「修改密碼」頁連結）。`usernames` 省略＝所有未綁定的在職人員；
+    同一個人 24 小時內只提醒一次。LINE 登入還沒設好 ⇒ 400。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_binding as _lb
+    names = (body or {}).get("usernames")
+    try:
+        res = _lb.remind(names)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _audit(_tok(authorization), "line.binding.remind", "line_binding", "", "提醒未綁定 LINE 的同仁：站內通知 %d 人、Email %d 人、略過（24 小時內已提醒）%d 人"
+           % (res["notified"], res["emailed"], len(res["skippedRecent"])), {"notified": res["notified"], "emailed": res["emailed"]})
+    return {"ok": True, **res}
 
 
 @router.post("/api/settings/email-notify/test")

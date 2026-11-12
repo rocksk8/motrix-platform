@@ -13,5 +13,8 @@ CASES = [
     {"key": "POST /api/line/binding/start", "url": "/api/line/binding/start", "body": {}, "expect": _E},
     {"key": "DELETE /api/line/binding", "url": "/api/line/binding"},
     {"key": "DELETE /api/line/binding/{username}", "url": "/api/line/binding/nobody"},
+    # 2026-11-13 LINE 全信件：「誰要發」缺 mode ⇒ 400；提醒綁定（沒設 LINE Login／沒有未綁定的人 ⇒ 錯誤或空結果；形狀見 test_line_events_all_2026_11_13.py）
+    {"key": "PUT /api/settings/line-notify/events/{key}/audience", "url": "/api/settings/line-notify/events/approval_review_edit/audience", "body": {}, "expect": _E},
+    {"key": "POST /api/settings/line-notify/bindings/remind", "url": "/api/settings/line-notify/bindings/remind", "body": {}, "expect": _E},
 ]
 WAIVE = {}

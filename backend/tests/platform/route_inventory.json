@@ -1,16 +1,16 @@
 {
  "summary": {
-  "endpoints_total": 930,
-  "endpoints_api": 926,
-  "write_total": 500,
-  "write_api": 500,
-  "get_api": 426,
-  "distinct_paths_api": 784,
-  "write_with_body_api": 366,
-  "write_with_path_param_api": 359
+  "endpoints_total": 933,
+  "endpoints_api": 929,
+  "write_total": 502,
+  "write_api": 502,
+  "get_api": 427,
+  "distinct_paths_api": 787,
+  "write_with_body_api": 368,
+  "write_with_path_param_api": 360
  },
  "select_star": {
-  "modules": 287,
+  "modules": 288,
   "archive": 97,
   "routers": 11,
   "helpers": 11,
@@ -2143,6 +2143,11 @@
    "pp": 0,
    "body": false
   },
+  "GET /api/settings/line-notify/bindings": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
   "GET /api/settings/line-notify/quota": {
    "w": false,
    "pp": 0,
@@ -4123,6 +4128,11 @@
    "pp": 0,
    "body": false
   },
+  "POST /api/settings/line-notify/bindings/remind": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/settings/line-notify/verify": {
    "w": true,
    "pp": 0,
@@ -4574,6 +4584,11 @@
    "body": true
   },
   "PUT /api/settings/line-notify/events/{key}": {
+   "w": true,
+   "pp": 1,
+   "body": true
+  },
+  "PUT /api/settings/line-notify/events/{key}/audience": {
    "w": true,
    "pp": 1,
    "body": true

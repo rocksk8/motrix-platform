@@ -241,6 +241,12 @@
   ],
   "s": 201
  },
+ "POST /api/settings/line-notify/bindings/remind": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "POST /api/settings/line-notify/verify": {
   "k": [
    "detail"
@@ -300,6 +306,12 @@
   "s": 400
  },
  "PUT /api/settings/line-notify/events/{key}": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
+ "PUT /api/settings/line-notify/events/{key}/audience": {
   "k": [
    "detail"
   ],

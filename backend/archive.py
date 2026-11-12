@@ -560,6 +560,13 @@ def _send_backup_error_email(reason: str, ts: str):
     from helpers.email_notify import (_superadmin_emails, _async_send, _build_html, _base_url,
                                       SEND_SENT, SEND_SKIPPED)
     from helpers import mail_types as _mt
+    # LINE 獨立通道（2026-11-13）：不看 Email（沒有信箱也要通知）；同一原因同一天只推一次（與信件「每日最多一次」同粒度）；critical＝額度 90% 以上照發。
+    try:
+        from helpers.email_notify import _line_event, _line_day_key
+        _line_event("backup_error", to_group=True, title="備份嚴重錯誤", rows=[("發生時間", ts), ("錯誤原因", reason[:80])],
+                    reason="本次備份發生嚴重錯誤，未完成；請處理伺服器與備份磁碟", line_key=_line_day_key("backup_error", reason[:80]))
+    except Exception:
+        logger.exception("_send_backup_error_email: LINE 通知失敗（不影響信件）")
     to = _superadmin_emails("backup_error")
     if not to:
         _alert_email_failed(reason, "找不到收件人（沒有啟用中、設定了 email 的最高管理者）")

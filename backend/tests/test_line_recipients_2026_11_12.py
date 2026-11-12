@@ -88,7 +88,7 @@ def test_set_event_roles_rejects_bad_values(env, bad):
 def test_set_event_roles_rejects_unwired_event_and_is_idempotent_without_write(env, monkeypatch):
     L, _, _ = env
     with pytest.raises(ValueError):
-        L.set_event_roles("approval_request", ["sales"])
+        L.set_event_roles("bonus_submitted", ["sales"])      # 獎金類永遠排除（2026-11-13）
     L.set_event_roles(EV, ["sales"])
     writes = []
     real = L._set_setting
@@ -113,7 +113,9 @@ def test_corrupt_allowlist_fails_closed_with_warning(env, caplog, corrupt):
 def test_event_roles_view_lists_only_wired_events(env):
     L, _, _ = env
     L.set_event_roles(EV, ["admin"])
-    assert L.event_roles_view() == {EV: ["admin"], EV2: None, "auth_lockout": None}      # auth_lockout：2026-11-12 起也是已接線事件
+    v = L.event_roles_view()          # 2026-11-13：接線單位＝信件登記表（約 110 項），不再只有三項
+    assert v[EV] == ["admin"] and v[EV2] is None and v["auth_lockout"] is None
+    assert not [k for k in v if k.startswith(("bonus_", "payslip_"))] and "system_test_mail" not in v
 
 
 # ── ③ 個人勾選 ────────────────────────────────────────────────────────────
@@ -146,7 +148,7 @@ def test_set_muted_rejects_unwired_event_non_bool_and_disallowed_role(env):
     L, _, _ = env
     from helpers import line_recipients as lr
     with pytest.raises(ValueError):
-        lr.set_muted("amy", "approval_request", True)
+        lr.set_muted("amy", "bonus_submitted", True)
     with pytest.raises(ValueError):
         lr.set_muted("amy", EV, "yes")
     L.set_event_roles(EV, ["admin"])
@@ -218,7 +220,8 @@ def test_prefs_view_lists_only_company_enabled_and_role_allowed(env):
     L.set_event(EV2, False)
     assert names("admin") == [EV]
     lr.set_muted("amy", EV, True)
-    assert lr.prefs_view("amy", "admin") == [{"key": EV, "name": lr.prefs_view("amy", "admin")[0]["name"], "enabled": False}]
+    e = lr.prefs_view("amy", "admin")[0]
+    assert e == {"key": EV, "name": e["name"], "enabled": False, "group": "報價單與簽核", "kind": "mail"}
 
 
 # ── ⑤ notify_users 整合 ───────────────────────────────────────────────────
@@ -274,7 +277,7 @@ def test_roles_endpoint_superadmin_only_and_validates(client, env, make_user):
     assert client.put(url, json={"roles": ["sales"]}, headers=ad).status_code == 403
     assert client.put(url, json={"roles": ["sales", "ceo"]}, headers=sa).status_code == 400
     assert client.put(url, json={}, headers=sa).status_code == 400
-    assert client.put("/api/settings/line-notify/events/approval_request/roles", json={"roles": []}, headers=sa).status_code == 404
+    assert client.put("/api/settings/line-notify/events/bonus_submitted/roles", json={"roles": []}, headers=sa).status_code == 404
     assert client.put(url, json={"roles": ["sales", "admin"]}, headers=sa).status_code == 200
     g = client.get("/api/settings/line-notify", headers=sa).json()
     ev = {e["key"]: e for e in g["events"]}
@@ -302,7 +305,7 @@ def test_prefs_endpoints_are_self_service_and_respect_roles(client, env, make_us
     assert client.put("/api/line/prefs/%s" % EV, json={"enabled": False}, headers=amy).status_code == 200
     assert {e["key"]: e["enabled"] for e in client.get("/api/line/prefs", headers=amy).json()["events"]} == {EV: False, EV2: True}
     assert client.put("/api/line/prefs/%s" % EV, json={"enabled": "no"}, headers=amy).status_code == 400
-    assert client.put("/api/line/prefs/approval_request", json={"enabled": False}, headers=amy).status_code == 404
+    assert client.put("/api/line/prefs/bonus_submitted", json={"enabled": False}, headers=amy).status_code == 404
     L.set_event_roles(EV2, ["admin"])
     assert client.put("/api/line/prefs/%s" % EV2, json={"enabled": False}, headers=amy).status_code == 403, "角色不被允許的類型不開放"
     assert [e["key"] for e in client.get("/api/line/prefs", headers=amy).json()["events"]] == [EV]

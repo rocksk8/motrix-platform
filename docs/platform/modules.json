@@ -99,6 +99,8 @@
    "helper:licensing",
    "helper:line_login",
    "helper:line_notify",
+   "helper:line_catalog",
+   "helper:line_binding",
    "helper:mail_types",
    "helper:map_overlays",
    "helper:module_assets",

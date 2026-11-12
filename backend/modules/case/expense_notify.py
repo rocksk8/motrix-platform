@@ -17,7 +17,7 @@ from helpers import mail_types as _mt
 
 logger = logging.getLogger(__name__)
 
-_APPROVE = "請登入系統，於簽核佇列開啟該單據確認內容後核准或退回。"
+_APPROVE = "請登入系統，於「待我簽核」開啟該單據確認內容後核准或退回。"
 _RESULT = "請登入系統查看目前狀態；如有疑問請洽簽核人。"
 _RETURN = "請登入系統依退回原因修改內容後重新送審。"
 _PAY = "請登入系統，於出納的「待付款申請」確認收款資料後登錄付款。"

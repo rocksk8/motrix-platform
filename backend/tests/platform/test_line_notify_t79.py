@@ -141,9 +141,12 @@ def test_quota_limited_and_unlimited(ln):
 def test_settings_get_masks_put_keeps_and_replaces(client, make_user, ln):
     sa = _hdr(client, make_user, "ln_sa", "superadmin")
     g = client.get("/api/settings/line-notify", headers=sa).json()
-    assert g.pop("events") == [{"key": "approval_review_edit", "name": "報價單審核中被簽核人編輯", "enabled": False, "roles": None},
-                               {"key": "warranty_expiry", "name": "設備保固即將到期", "enabled": False, "roles": None},
-                               {"key": "auth_lockout", "name": "登入失敗鎖定告警", "enabled": False, "roles": None}]      # 預設全關
+    evs = {e["key"]: e for e in g.pop("events")}                      # 2026-11-13：接線單位＝信件登記表；預設全關
+    assert evs["approval_review_edit"]["name"] == "報價單審核中被簽核人編輯" and evs["warranty_expiry"]["name"] == "設備保固即將到期"
+    assert evs["auth_lockout"]["name"] == "登入失敗鎖定告警"
+    assert not any(e["enabled"] for e in evs.values()) and all(e["roles"] is None for e in evs.values())
+    assert not any(k.startswith(("bonus_", "payslip_")) for k in evs) and "line_quota_warning" not in evs
+    assert g.pop("event_groups")[0] == "報價單與簽核"                    # 設定頁依模組分組（簽核優先）
     assert g.pop("role_choices") == ["superadmin", "admin", "sales", "engineer", "viewer", "finance"]         # 收件人角色（2026-11-12）
     assert g == {"enabled": True, "channel_access_token": "••••••••", "public_base_url": "", "include_links": False, "callback_url": "",
                  "login_channel_id": "", "login_channel_secret": "", "quota_thresholds": [80, 100]}
@@ -259,11 +262,11 @@ def test_event_needs_line_enabled_and_wired(ln):
     _set_setting("line_notify", {**ln._cfg(), "enabled": False})
     assert ln.event_enabled("warranty_expiry") is False
     with pytest.raises(ValueError):
-        ln.set_event("payment_request_approved", True)
-    for k in ln.WIRED_EVENTS:                                     # 每個已接線的類型都真的登記過，且不是付款／薪資／獎金類
-        from helpers import mail_types as mt
-        assert mt.get(k) is not None, k
-        assert not any(w in k for w in ("payable", "payment", "payslip", "bonus", "expense", "voucher", "cashier")), k
+        ln.set_event("bonus_submitted", True)
+    for k in ln.WIRED_EVENTS:                                     # 每個已接線的類型都真的登記過（或是 LINE-only／細項），且不是獎金／薪資／勞報單類
+        from helpers import mail_types as mt, line_catalog as lc
+        assert mt.get(k) is not None or k in lc.LINE_ONLY_EVENTS, k
+        assert not k.startswith(("bonus_", "payslip_")) and not (mt.get(k) and mt.get(k).owner == "payroll"), k
 
 
 def test_link_rules(ln):
