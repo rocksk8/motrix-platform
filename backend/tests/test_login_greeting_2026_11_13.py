@@ -458,6 +458,31 @@ def test_new_quotes_count_only_for_superadmin(client, make_user, monkeypatch):
     assert "新增 2 張報價單" in out["superadmin"] and "新增" not in out["sales"]
 
 
+@pytest.mark.parametrize("how", ["absent", "raises", "ambiguous"])
+def test_new_quotes_provider_absent_or_failing_degrades_to_no_line(client, make_user, monkeypatch, how):
+    """IP-GR1 降級（hichan-12 抽查補）：案件模組不在／提供者丟例外／多個提供者 ⇒ 問候語照出（200），只是沒有「新增 N 張報價單」。"""
+    from core import registry
+    from helpers.settings import _set_setting
+    now = at(2026, 11, 11, 10)
+    monkeypatch.setattr(LG, "taipei_now", lambda: now)
+
+    def single(name, *a, **k):
+        if name != "greeting.new_quotes":
+            return orig(name, *a, **k)
+        if how == "absent":
+            return None
+        if how == "raises":
+            return lambda since: 1 / 0
+        raise RuntimeError("多個提供者：greeting.new_quotes")
+    orig = registry.single_provider
+    monkeypatch.setattr(registry, "single_provider", single)
+    _, h = _login(client, make_user("sa_deg_" + how, role="superadmin"))
+    me = client.get("/api/auth/me", headers=h).json()["userId"]
+    _set_setting(LG.STATE_PREFIX + str(me), {"last": now.isoformat(), "prev": iso(2026, 10, 20), "n": 9})
+    r = client.get("/api/auth/greeting", headers=h)
+    assert r.status_code == 200 and "新增" not in r.json()["awayLine"]
+
+
 def test_existing_account_without_state_is_not_treated_as_first_login(client, make_user):
     """升版：舊帳號沒有 login_state，用稽核紀錄回填——不能全公司一起變『第一次登入』。"""
     from helpers.settings import _set_setting
