@@ -85,8 +85,8 @@ if (typeof module !== 'undefined' && module.exports) {
   var up   = inPg ? '../' : ''
 
   // 強制改密：除修改密碼頁外一律導向
-  if (s.mustChangePassword && file !== 'change-password.html' && file !== 'login.html') {
-    window.location.replace(inPg ? 'change-password.html?forced=1' : 'pages/change-password.html?forced=1')
+  if (s.mustChangePassword && file !== 'my-account.html' && file !== 'change-password.html' && file !== 'login.html') {
+    window.location.replace(inPg ? 'my-account.html?forced=1' : 'pages/my-account.html?forced=1')
   }
 
   function pg(f) { return inPg ? f : 'pages/' + f }
@@ -373,7 +373,7 @@ if (typeof module !== 'undefined' && module.exports) {
       return
     }
 
-    var cpHref = inPg ? 'change-password.html' : 'pages/change-password.html'
+    var cpHref = inPg ? 'my-account.html?tab=security' : 'pages/my-account.html?tab=security'
 
     // Notification bell — 所有角色（第44班使用者裁示：申請人要在系統內看到核准通知）；「查看全部操作紀錄」連結只給管理員（audit-log 是管理頁）
     // notifStore 的宣告只有這一處（管理員的鈴鐺／一般使用者的隱形資料元件兩種外殼共用）：兩個分支互斥，不是兩個實例；

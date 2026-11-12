@@ -43,10 +43,10 @@ SCHEMA = {
         "options": [("index.html", "儀表板"), ("case-management.html", "案件管理"), ("quotations.html", "報價單"),
                     ("approval-queue.html", "待我簽核"), ("daily-tasks.html", "每日工作事項")],
     },
-    "list_view": {
-        "default": "list",
-        "label": "清單預設檢視",
-        "options": [("list", "清單"), ("board", "看板"), ("matrix", "矩陣")],
+    "avatar_color": {
+        "default": "auto",
+        "label": "頭像顏色",
+        "options": [("auto", "自動"), ("blue", "藍"), ("green", "綠"), ("orange", "橘"), ("red", "紅"), ("purple", "紫"), ("teal", "青"), ("gray", "灰")],
     },
 }
 

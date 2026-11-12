@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>修改密碼 — MOTRIX 專案管理系統</title>
+  <title>我的帳號 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -56,9 +56,18 @@
 
     <div style="margin-bottom:24px" x-show="!wiz">
       <div class="pg__eyebrow">系統</div>
-        <h1 class="pg__t">修改密碼</h1>
+        <h1 class="pg__t">我的帳號</h1>
     </div>
 
+
+    <div role="tablist" aria-label="我的帳號" data-testid="account-tabs" x-show="!wiz" style="display:flex;gap:6px;flex-wrap:wrap;margin:-8px 0 18px;border-bottom:1px solid var(--border-light);overflow-x:auto">
+      <template x-for="tb in tabs" :key="tb.key">
+        <button type="button" role="tab" :aria-selected="tab === tb.key" :data-testid="'tab-btn-' + tb.key" @click="goTab(tb.key)"
+                :style="'padding:10px 14px;border:0;background:none;cursor:pointer;font-size:14px;white-space:nowrap;border-bottom:2px solid ' + (tab === tb.key ? 'var(--accent)' : 'transparent') + ';color:' + (tab === tb.key ? 'var(--accent)' : 'var(--text-secondary)') + ';font-weight:' + (tab === tb.key ? '700' : '500')" x-text="tb.label"></button>
+      </template>
+    </div>
+
+    <div x-show="tab === 'security' || !!wiz" data-testid="tab-security">
     <div class="card" x-show="wiz !== 'totp'">
       <div x-show="errMsg" class="alert alert-err" x-text="errMsg"></div>
       <div x-show="okMsg"  class="alert alert-ok"  x-text="okMsg"></div>
@@ -200,51 +209,6 @@
       </template>
     </div>
 
-    <!-- LINE 通知綁定（T79）：管理員設好 LINE Login 與對外網址之後才顯示。電腦發起、手機掃 QR 授權；綁定的是「目前登入的這個帳號」。
-         獨立元件 lineBindCard()（資料來源 GET/POST/DELETE /api/line/binding*）；不用 x-init（Alpine 會自己叫 init()）。 -->
-    <div class="card" id="line-bind-card" style="margin-top:20px" x-data="lineBindCard()" x-show="available && !wiz" x-cloak>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
-        <div class="card-title">LINE 通知</div>
-        <span class="totp-badge" :class="linked ? 'totp-on' : 'totp-off'" x-text="linked ? '已綁定' : '未綁定'"></span>
-      </div>
-      <div class="card-sub">
-        綁定後，管理員開啟的通知（例如報價單審核中被編輯）除了 Email，也會推播到您的 LINE。綁定只用來辨識您的 LINE 帳號，不會取得您的暱稱或頭像。
-        <b>QR 等同您的綁定權限：不要截圖或分享。</b>若發現不是您本人的手機完成綁定，請立刻按「解除綁定」。
-      </div>
-      <div x-show="err" class="alert alert-err" x-text="err"></div>
-      <div x-show="ok" class="alert alert-ok" x-text="ok"></div>
-      <div x-show="linked && confirmed === false" class="alert alert-err" data-testid="line-unconfirmed">
-        已綁定，但測試訊息沒有送達。常見原因：LINE Login 與 Messaging API 不在同一個 Provider。請通知管理員檢查。
-      </div>
-      <div x-show="linked" class="hint" style="margin-bottom:10px">綁定時間：<span x-text="linkedAt"></span></div>
-
-      <div x-show="qr" style="margin:12px 0">
-        <img class="totp-qr" :src="qr" alt="LINE 綁定 QR code" data-testid="line-qr">
-        <div class="hint">請用手機的相機或 LINE 掃描上方 QR，在手機上按「同意」。10 分鐘內有效；完成後這裡會自動更新。</div>
-        <button class="btn-secondary" style="margin-top:8px" @click="cancel()">取消</button>
-      </div>
-
-      <div x-show="!qr">
-        <button class="btn-secondary" @click="start()" :disabled="busy">
-          <span x-text="busy ? '產生中…' : (linked ? '重新綁定' : '綁定 LINE')"></span>
-        </button>
-        <button class="btn-secondary btn-danger-outline" style="margin-left:8px" x-show="linked" @click="unlink()" :disabled="busy">解除綁定</button>
-      </div>
-
-      <!-- 我要收哪些 LINE 通知（個人勾選；預設全收，可自行退訂；只列「公司已開啟、且我的角色被允許」的類型）。資料來源 GET/PUT /api/line/prefs* -->
-      <div x-show="linked && prefs.length" style="margin-top:16px;border-top:1px solid var(--border-light);padding-top:12px" data-testid="line-prefs">
-        <div style="font-size:13px;font-weight:600;margin-bottom:6px">我要收的 LINE 通知</div>
-        <template x-for="e in prefs" :key="e.key">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:4px 0;cursor:pointer">
-            <input type="checkbox" :data-testid="'line-pref-' + e.key" :checked="e.enabled" @change="setPref(e, $event.target.checked)" style="width:15px;height:15px">
-            <span x-text="e.name"></span>
-          </label>
-        </template>
-        <div class="hint" style="margin-top:6px">取消勾選後，這類通知不再推播到您的 LINE（Email 不受影響）。</div>
-      </div>
-      <div x-show="!linked && prefs.length" class="hint" style="margin-top:12px" data-testid="line-prefs-need-link">綁定 LINE 後，可以在這裡選擇要收哪些通知。</div>
-    </div>
-
     <!-- Passkey 設備管理 -->
     <!-- 2026-09-16：功能暫緩期間整張卡片不顯示（連同已綁定的裝置清單）——
          後端 /api/auth/webauthn/* 全部回 404，留著卡片只會讓人按了拿錯誤。
@@ -316,6 +280,117 @@
       </button>
       <div x-show="!webauthnConfigured" style="font-size:12px;color:var(--text-dim);line-height:1.6">
         尚未設定 WebAuthn 網域，Passkey 功能暫不可用。請聯繫系統管理員在系統設定中填入 WebAuthn 設定。
+      </div>
+    </div>
+
+    </div>
+
+    <!-- ══ 通知分頁：LINE 綁定卡（hichan-6 的元件原樣沿用，只換容器） ══ -->
+    <div x-show="tab === 'notify' && !wiz" x-cloak data-testid="tab-notify">
+
+    <!-- LINE 通知綁定（T79）：管理員設好 LINE Login 與對外網址之後才顯示。電腦發起、手機掃 QR 授權；綁定的是「目前登入的這個帳號」。
+         獨立元件 lineBindCard()（資料來源 GET/POST/DELETE /api/line/binding*）；不用 x-init（Alpine 會自己叫 init()）。 -->
+    <div class="card" id="line-bind-card" style="margin-top:20px" x-data="lineBindCard()" x-show="available && !wiz" x-cloak>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+        <div class="card-title">LINE 通知</div>
+        <span class="totp-badge" :class="linked ? 'totp-on' : 'totp-off'" x-text="linked ? '已綁定' : '未綁定'"></span>
+      </div>
+      <div class="card-sub">
+        綁定後，管理員開啟的通知（例如報價單審核中被編輯）除了 Email，也會推播到您的 LINE。綁定只用來辨識您的 LINE 帳號，不會取得您的暱稱或頭像。
+        <b>QR 等同您的綁定權限：不要截圖或分享。</b>若發現不是您本人的手機完成綁定，請立刻按「解除綁定」。
+      </div>
+      <div x-show="err" class="alert alert-err" x-text="err"></div>
+      <div x-show="ok" class="alert alert-ok" x-text="ok"></div>
+      <div x-show="linked && confirmed === false" class="alert alert-err" data-testid="line-unconfirmed">
+        已綁定，但測試訊息沒有送達。常見原因：LINE Login 與 Messaging API 不在同一個 Provider。請通知管理員檢查。
+      </div>
+      <div x-show="linked" class="hint" style="margin-bottom:10px">綁定時間：<span x-text="linkedAt"></span></div>
+
+      <div x-show="qr" style="margin:12px 0">
+        <img class="totp-qr" :src="qr" alt="LINE 綁定 QR code" data-testid="line-qr">
+        <div class="hint">請用手機的相機或 LINE 掃描上方 QR，在手機上按「同意」。10 分鐘內有效；完成後這裡會自動更新。</div>
+        <button class="btn-secondary" style="margin-top:8px" @click="cancel()">取消</button>
+      </div>
+
+      <div x-show="!qr">
+        <button class="btn-secondary" @click="start()" :disabled="busy">
+          <span x-text="busy ? '產生中…' : (linked ? '重新綁定' : '綁定 LINE')"></span>
+        </button>
+        <button class="btn-secondary btn-danger-outline" style="margin-left:8px" x-show="linked" @click="unlink()" :disabled="busy">解除綁定</button>
+      </div>
+
+      <!-- 我要收哪些 LINE 通知（個人勾選；預設全收，可自行退訂；只列「公司已開啟、且我的角色被允許」的類型）。資料來源 GET/PUT /api/line/prefs* -->
+      <div x-show="linked && prefs.length" style="margin-top:16px;border-top:1px solid var(--border-light);padding-top:12px" data-testid="line-prefs">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px">我要收的 LINE 通知</div>
+        <template x-for="e in prefs" :key="e.key">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:4px 0;cursor:pointer">
+            <input type="checkbox" :data-testid="'line-pref-' + e.key" :checked="e.enabled" @change="setPref(e, $event.target.checked)" style="width:15px;height:15px">
+            <span x-text="e.name"></span>
+          </label>
+        </template>
+        <div class="hint" style="margin-top:6px">取消勾選後，這類通知不再推播到您的 LINE（Email 不受影響）。</div>
+      </div>
+      <div x-show="!linked && prefs.length" class="hint" style="margin-top:12px" data-testid="line-prefs-need-link">綁定 LINE 後，可以在這裡選擇要收哪些通知。</div>
+    </div>
+
+      <div class="card" style="margin-top:20px" x-show="!lineAvail" data-testid="notify-empty-hint" x-cloak>
+        <div class="card-title">通知</div>
+        <div class="card-sub">目前沒有可以自己設定的通知。管理者開啟 LINE 通知並設定好之後，這裡會出現「LINE 綁定」與你想收的通知。</div>
+      </div>
+    </div>
+
+    <!-- ══ 個人資料分頁 ══ -->
+    <div x-show="tab === 'profile' && !wiz" x-cloak x-data="accountProfile()" data-testid="tab-profile">
+      <div class="card">
+        <div class="card-title">個人資料</div>
+        <div class="card-sub">這些資料由管理者維護，會顯示在報價單、PDF 與信件上，所以這裡只能看、不能改。需要更正請聯絡管理者。</div>
+        <div x-show="err" class="alert alert-err" x-text="err"></div>
+        <div style="display:flex;align-items:center;gap:14px;margin:14px 0">
+          <div :style="'width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700;background:' + avatarBg()" x-text="initial()" data-testid="profile-avatar"></div>
+          <div>
+            <div style="font-weight:700;font-size:16px" x-text="p.displayName || p.username" data-testid="profile-name"></div>
+            <div class="hint" x-text="roleText()" data-testid="profile-role"></div>
+          </div>
+        </div>
+        <div class="form-group"><label class="form-label">顯示名稱</label><input class="form-input" type="text" :value="p.displayName" disabled data-testid="profile-displayname"></div>
+        <div class="form-group"><label class="form-label">登入帳號</label><input class="form-input" type="text" :value="p.username" disabled></div>
+        <div class="form-group"><label class="form-label">所屬部門</label><input class="form-input" type="text" :value="p.department || '（尚未歸屬部門）'" disabled></div>
+        <div class="form-group"><label class="form-label">Email（登入與系統通知用）</label><input class="form-input" type="text" :value="p.email || '（未填）'" disabled data-testid="profile-email">
+          <div class="hint">此資料由管理者維護，會顯示在報價單上。</div></div>
+        <div class="form-group"><label class="form-label">手機／電話</label><input class="form-input" type="text" :value="p.phone || '（未填）'" disabled data-testid="profile-phone">
+          <div class="hint">此資料由管理者維護，會顯示在報價單上。</div></div>
+      </div>
+      <div class="card" style="margin-top:20px">
+        <div class="card-title">頭像顏色</div>
+        <div class="card-sub">只改你自己看到的頭像圓圈顏色，不會出現在任何單據上。</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px" data-testid="avatar-colors">
+          <template x-for="c in colors" :key="c.value">
+            <button type="button" class="btn-ghost" :data-testid="'avatar-' + c.value" @click="setColor(c.value)"
+                    :style="'min-width:64px;border:2px solid ' + (color === c.value ? 'var(--accent)' : 'var(--border-light)')">
+              <span :style="'display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:6px;vertical-align:-2px;background:' + (c.value === 'auto' ? '#94A3B8' : swatch(c.value))"></span><span x-text="c.label"></span>
+            </button>
+          </template>
+        </div>
+        <div x-show="ok" class="alert alert-ok" style="margin-top:12px" x-text="ok"></div>
+      </div>
+    </div>
+
+    <!-- ══ 偏好設定分頁 ══ -->
+    <div x-show="tab === 'prefs' && !wiz" x-cloak x-data="accountPrefs()" data-testid="tab-prefs">
+      <div class="card">
+        <div class="card-title">偏好設定</div>
+        <div class="card-sub">只影響你自己看到的畫面，存在伺服器上，換電腦或手機登入也會保留，不會改變報價單或其他單據的內容。</div>
+        <div x-show="err" class="alert alert-err" x-text="err"></div>
+        <template x-for="k in keys" :key="k">
+          <div class="form-group" style="margin-top:14px">
+            <label class="form-label" x-text="opt[k]?.label"></label>
+            <select class="form-input" :data-testid="'pref-' + k" :value="prefs[k]" @change="save(k, $event.target.value)">
+              <template x-for="c in (opt[k]?.choices || [])" :key="c.value"><option :value="c.value" :selected="prefs[k] === c.value" x-text="c.label"></option></template>
+            </select>
+            <div class="hint" x-show="help[k]" x-text="help[k]"></div>
+          </div>
+        </template>
+        <div x-show="ok" class="alert alert-ok" style="margin-top:12px" x-text="ok" data-testid="pref-saved"></div>
       </div>
     </div>
 
@@ -413,6 +488,82 @@
   /* pw-hint:end */
   </script>
   <script>
+  // 我的帳號：個人資料（唯讀）／頭像顏色／偏好設定。資料來源 GET /api/auth/profile、GET·PUT /api/auth/preferences（只讀寫自己）。
+  (function () {
+    const hdr = () => ({ Authorization: 'Bearer ' + (JSON.parse(localStorage.getItem('motrix_session') || '{}').token || '') })
+    const SW = { blue: '#2563EB', green: '#16A34A', orange: '#EA580C', red: '#DC2626', purple: '#7C3AED', teal: '#0D9488', gray: '#64748B' }
+    const AUTO = ['#2563EB', '#16A34A', '#EA580C', '#7C3AED', '#0D9488', '#DC2626']
+    function saveLocal(prefs) {
+      try { localStorage.setItem('motrix_prefs', JSON.stringify(prefs)) } catch (e) {}
+      if (window.MotrixPrefs) window.MotrixPrefs.apply(prefs)
+    }
+    async function putPref(patch) {
+      const r = await fetch('/api/auth/preferences', { method: 'PUT', headers: { ...hdr(), 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : '儲存失敗，請稍後再試')
+      saveLocal(d.prefs)
+      return d
+    }
+    window.accountProfile = function () {
+      return {
+        p: { displayName: '', username: '', role: '', department: '', email: '', phone: '' },
+        color: 'auto', colors: [], opt: null, err: '', ok: '', _t: null,
+        async init() {
+          const [a, b] = await Promise.all([
+            fetch('/api/auth/profile', { headers: hdr() }).catch(() => null),
+            fetch('/api/auth/preferences', { headers: hdr() }).catch(() => null),
+          ])
+          if (a && a.ok) this.p = await a.json(); else this.err = '個人資料暫時讀不到，請重新整理'
+          if (b && b.ok) {
+            const d = await b.json()
+            this.color = d.prefs.avatar_color || 'auto'
+            this.colors = d.options.avatar_color.choices
+          }
+        },
+        initial() { return ((this.p.displayName || this.p.username || '?').trim()[0] || '?').toUpperCase() },
+        roleText() { return window.MotrixRole ? window.MotrixRole.label(this.p.role) : this.p.role },
+        swatch(v) { return SW[v] || '#94A3B8' },
+        avatarBg() {
+          if (this.color !== 'auto') return this.swatch(this.color)
+          let h = 0; for (const c of (this.p.username || '')) h = (h * 31 + c.charCodeAt(0)) >>> 0
+          return AUTO[h % AUTO.length]
+        },
+        async setColor(v) {
+          this.err = ''; this.ok = ''
+          try { await putPref({ avatar_color: v }); this.color = v; this.ok = '已儲存'; clearTimeout(this._t); this._t = setTimeout(() => { this.ok = '' }, 2500) }
+          catch (e) { this.err = e.message }
+        },
+      }
+    }
+    window.accountPrefs = function () {
+      return {
+        keys: ['font_size', 'theme', 'login_greeting', 'home_page'], opt: {}, prefs: {}, err: '', ok: '', _t: null,
+        help: {
+          font_size: '調大後整個系統的文字與按鈕都會跟著放大。',
+          theme: '只是你自己看到的配色。右上角的切換鈕是暫時切換；這裡是登入後固定使用的樣式。',
+          login_greeting: '登入後畫面上方的問候語。選「跟隨公司設定」就用管理者設定的風格。',
+          home_page: '每次登入後第一個看到的頁面（只有你的權限看得到的頁面才會生效）。',
+        },
+        async init() {
+          const r = await fetch('/api/auth/preferences', { headers: hdr() }).catch(() => null)
+          if (!r || !r.ok) { this.err = '偏好設定暫時讀不到，請重新整理'; return }
+          const d = await r.json()
+          this.opt = d.options; this.prefs = d.prefs
+        },
+        async save(k, v) {
+          this.err = ''; this.ok = ''
+          try {
+            const d = await putPref({ [k]: v })
+            this.prefs = d.prefs
+            this.ok = '已儲存：' + this.opt[k].label
+            clearTimeout(this._t); this._t = setTimeout(() => { this.ok = '' }, 2500)
+          } catch (e) { this.err = e.message; await this.init() }
+        },
+      }
+    }
+  })()
+  </script>
+  <script>
   function changePwPage() {
     return {
       session: {},
@@ -447,12 +598,31 @@
       //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
       _initDone: false,
 
+      // 「我的帳號」分頁：?tab=profile|security|notify|prefs（舊網址 change-password.html 會轉到 ?tab=security）
+      tabs: [
+        { key: 'profile', label: '個人資料' }, { key: 'security', label: '帳號安全' },
+        { key: 'notify', label: '通知' }, { key: 'prefs', label: '偏好設定' },
+      ],
+      tab: 'profile',
+      lineAvail: false,
+      goTab(k) {
+        this.tab = k
+        try { const u = new URL(location.href); u.searchParams.set('tab', k); history.replaceState(null, '', u) } catch (e) {}
+      },
+
       init() {
         if (this._initDone) return
         this._initDone = true
         const s = JSON.parse(localStorage.getItem('motrix_session') || 'null')
         if (!s?.token) { location.href = '../index.html'; return }
         this.session = s
+        try {
+          const q = new URLSearchParams(location.search).get('tab')
+          if (this.tabs.some(x => x.key === q)) this.tab = q
+        } catch (e) {}
+        if (this.wiz) this.tab = 'security'
+        fetch('/api/line/binding', { headers: { Authorization: 'Bearer ' + s.token } })
+          .then(r => r.ok ? r.json() : null).then(d => { this.lineAvail = !!(d && d.available) }).catch(() => {})
         this.loadTotpStatus()
         // 2026-09-16：先問功能開關，確認還開著才去抓 Passkey 清單。
         // 停用時 /api/auth/webauthn/credentials 回 404，這裡若照舊無條件呼叫，

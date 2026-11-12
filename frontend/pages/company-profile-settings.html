@@ -179,7 +179,7 @@
             <div class="ns-desc" x-show="wizardNext() !== 'totp'">您可以開始使用了。Logo、據點、收款帳戶等進階設定，隨時能回到這一頁補上。</div>
             <div class="ns-done-actions">
               <template x-if="wizardNext() === 'totp'">
-                <a class="btn btn-primary" data-testid="wizard-next" href="change-password.html?wizard=totp">下一步：兩步驟驗證</a>
+                <a class="btn btn-primary" data-testid="wizard-next" href="my-account.html?wizard=totp">下一步：兩步驟驗證</a>
               </template>
               <template x-if="wizardNext() === 'totp'">
                 <a class="btn btn-ghost" data-testid="wizard-skip" href="../index.html" @click="wizardFinish()">略過，直接開始使用</a>

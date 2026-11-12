@@ -45,6 +45,41 @@
     return;
   }
 
+  // ── 個人偏好（「我的帳號」票，2026-11-13）：字級／深色模式／登入後首頁 ──────────────────────────
+  // 先套用本機快取（避免閃一下），每個登入期間再向伺服器同步一次（換裝置也保留）。偏好只影響自己看到的畫面。
+  var ZOOM = { normal: '', large: '1.1', xlarge: '1.2' };
+  function applyPrefs(p) {
+    try {
+      if (!p) return;
+      if (p.font_size in ZOOM) document.documentElement.style.zoom = ZOOM[p.font_size];
+      if (p.theme === 'dark') { document.documentElement.setAttribute('data-theme', 'dark'); localStorage.setItem('motrix_theme', 'dark'); }
+      else if (p.theme === 'light') { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('motrix_theme', 'light'); }
+    } catch (e) {}
+  }
+  try { applyPrefs(JSON.parse(localStorage.getItem('motrix_prefs') || 'null')); } catch (e) {}
+  function syncPrefs() {
+    try {
+      var atHome = /(^|\/)(index\.html)?$/.test(location.pathname) && location.pathname.indexOf('/pages/') < 0;
+      if (sessionStorage.getItem('motrix_prefs_synced') && !(atHome && !sessionStorage.getItem('motrix_home_done'))) return;
+      fetch('/api/auth/preferences', { headers: { Authorization: 'Bearer ' + session.token } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d || !d.prefs) return;
+          sessionStorage.setItem('motrix_prefs_synced', '1');
+          localStorage.setItem('motrix_prefs', JSON.stringify(d.prefs));
+          applyPrefs(d.prefs);
+          // 登入後的首頁：只在這個登入期間第一次落在儀表板時跳一次（之後使用者回儀表板不再被跳走）
+          var hp = d.prefs.home_page;
+          if (atHome && hp && hp !== 'index.html' && /^[a-z0-9-]+\.html$/.test(hp) && !sessionStorage.getItem('motrix_home_done')) {
+            sessionStorage.setItem('motrix_home_done', '1');
+            location.replace('pages/' + hp);
+          } else if (atHome) { sessionStorage.setItem('motrix_home_done', '1'); }
+        })
+        .catch(function () {});
+    } catch (e) {}
+  }
+  window.MotrixPrefs = { apply: applyPrefs, sync: syncPrefs };
+
   var style = document.createElement('style');
   style.id = 'auth-guard-style';
   style.textContent = 'html{visibility:hidden}';
@@ -67,6 +102,7 @@
       if (r.ok) {
         forgetReturn();
         reveal();
+        syncPrefs();
       } else if (r.status === 402) {
         // 授權閘門（helpers/licensing.py，T80）：這不是「未登入」——不清 session、不轉登入頁（否則使用者以為被登出、
         // 重新登入又被擋，永遠看不到原因），導向「授權無法使用」說明頁。

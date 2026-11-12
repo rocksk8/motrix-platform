@@ -141,7 +141,7 @@ def test_personal_prefs_on_account_security_page(live_server, make_user, new_pag
     line_notify.link_user("e2e_lq5", UID)
     page = new_page(viewport={"width": 1280, "height": 1600})
     login_as(page, u)
-    page.goto(f"{live_server}/pages/change-password.html")
+    page.goto(f"{live_server}/pages/my-account.html?tab=notify")
     page.locator("[data-testid=line-prefs]").wait_for(state="visible", timeout=20000)
     cb = lambda k: page.locator("[data-testid=line-pref-%s]" % k)          # noqa: E731
     assert cb(EV).is_checked() and cb(EV2).is_checked(), "預設全收"
@@ -165,7 +165,7 @@ def test_unlinked_user_sees_hint_not_checkboxes(live_server, make_user, new_page
     u = make_user(username="e2e_lq6", role="sales")
     page = new_page(viewport={"width": 1280, "height": 1600})
     login_as(page, u)
-    page.goto(f"{live_server}/pages/change-password.html")
+    page.goto(f"{live_server}/pages/my-account.html?tab=notify")
     page.locator("[data-testid=line-prefs-need-link]").wait_for(state="visible", timeout=20000)
     assert page.locator("[data-testid=line-prefs]").is_visible() is False
 
