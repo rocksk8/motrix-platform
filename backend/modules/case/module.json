@@ -292,6 +292,7 @@
       "/api/case-changes",
       "/api/completion-notes",
       "/api/extra-expenses",
+      "/api/field",
       "/api/material-payments",
       "/api/material-suppliers",
       "/api/next-quote-no",

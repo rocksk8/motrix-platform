@@ -15,9 +15,13 @@ class GoldenError(AssertionError):
     pass
 
 
-def record_write(client, headers, method, url, body=None, expect=(2,)):
-    """回 {"s": 狀態碼, "k": [鍵路徑]}；狀態碼類別不在 expect 或回應非 JSON ⇒ GoldenError。"""
-    r = client.request(method.upper(), url, headers=headers, json=body)
+def record_write(client, headers, method, url, body=None, expect=(2,), files=None):
+    """回 {"s": 狀態碼, "k": [鍵路徑]}；狀態碼類別不在 expect 或回應非 JSON ⇒ GoldenError。
+    `files`（選填）＝multipart 上傳（此時 `body` 當表單欄位 data）；不給＝先前的 JSON 行為，逐位元相同。"""
+    if files:
+        r = client.request(method.upper(), url, headers=headers, data=body or {}, files=files)
+    else:
+        r = client.request(method.upper(), url, headers=headers, json=body)
     if r.status_code // 100 not in expect:
         raise GoldenError("%s %s 狀態 %s 不在預期類別 %s（payload 不合法？）：%s"
                           % (method, url, r.status_code, expect, r.text[:200]))

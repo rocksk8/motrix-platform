@@ -1,13 +1,13 @@
 {
  "summary": {
-  "endpoints_total": 920,
-  "endpoints_api": 916,
-  "write_total": 496,
-  "write_api": 496,
-  "get_api": 420,
-  "distinct_paths_api": 774,
-  "write_with_body_api": 362,
-  "write_with_path_param_api": 356
+  "endpoints_total": 923,
+  "endpoints_api": 919,
+  "write_total": 497,
+  "write_api": 497,
+  "get_api": 422,
+  "distinct_paths_api": 777,
+  "write_with_body_api": 363,
+  "write_with_path_param_api": 357
  },
  "select_star": {
   "modules": 287,
@@ -1021,6 +1021,16 @@
   "GET /api/extra-expenses/po-bank-block": {
    "w": false,
    "pp": 0,
+   "body": false
+  },
+  "GET /api/field/cases": {
+   "w": false,
+   "pp": 0,
+   "body": false
+  },
+  "GET /api/field/cases/{quote_no}": {
+   "w": false,
+   "pp": 1,
    "body": false
   },
   "GET /api/filehub/search": {
@@ -3976,6 +3986,11 @@
   "POST /api/quotations/{quote_no}/updates": {
    "w": true,
    "pp": 1,
+   "body": true
+  },
+  "POST /api/quotations/{quote_no}/updates/{uid}/files": {
+   "w": true,
+   "pp": 2,
    "body": true
   },
   "POST /api/reads": {

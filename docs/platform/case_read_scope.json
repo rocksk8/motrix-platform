@@ -284,6 +284,12 @@
    "scope": "row_access"
   },
   {
+   "file": "modules/case/api/field_cases.py",
+   "path": "/api/field/cases/{quote_no}",
+   "handler": "get_field_case",
+   "scope": "row_access"
+  },
+  {
    "file": "modules/case/api/quotation_stages.py",
    "path": "/api/quotations/{quote_no}/stages/templates",
    "handler": "list_stage_templates",

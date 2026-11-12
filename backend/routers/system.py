@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Header, Body, UploadFile, File, Depends
+from helpers import idempotency as _idem   # T80c：外勤手機弱訊號重送（選填 Idempotency-Key）
 from pydantic import BaseModel, model_validator
 
 from db import get_db, CURRENT_VERSION, _MIGRATIONS
@@ -671,8 +672,15 @@ def _work_log_fields(conn, body: dict, keys) -> dict:
 
 
 @router.post("/api/work-logs")
-def create_work_log(body: dict = Body(...), authorization: str = Header(None)):
+def create_work_log(body: dict = Body(...), authorization: str = Header(None), idempotency_key: str = Header(None)):
+    """建立工作日誌（選填標頭 `Idempotency-Key`：弱訊號重送不重複建立，見 helpers/idempotency.py；沒帶＝行為不變）。"""
     u = _require_user(authorization)
+    key = _idem.parse_key(idempotency_key)
+    return _idem.run_sync(u["username"], key, "POST work_log", _idem.request_hash(body),
+                          lambda: _create_work_log_impl(body, authorization, u))
+
+
+def _create_work_log_impl(body, authorization, u):
     require_any_module(u, ('work_log', 'case_manage'), "工作日誌")      # 第49班 W1c-P5：與 GET 同一把（原本寫入只要登入）
     _ct = body.get("content")
     if not body.get("log_date") or not body.get("user_id") or not (_ct.strip() if isinstance(_ct, str) else _ct):
@@ -772,8 +780,18 @@ async def upload_work_log_photos(
     wid: int,
     files: List[UploadFile] = File(...),
     authorization: str = Header(None),
+    idempotency_key: str = Header(None),
 ):
+    """工作日誌補照片（選填標頭 `Idempotency-Key`：同一把 key 重送 ⇒ 重播第一次的回應，不再存檔；見 helpers/idempotency.py）。"""
     user = _require_user(authorization)
+    key = _idem.parse_key(idempotency_key)
+    return await _idem.run(
+        user["username"], key, f"POST work_log_photos:{wid}",
+        _idem.request_hash([(f.filename, f.size) for f in (files or [])]),
+        lambda: _upload_work_log_photos_impl(wid, files, authorization, user), 201)
+
+
+async def _upload_work_log_photos_impl(wid, files, authorization, user):
     require_any_module(user, ('work_log', 'case_manage'), "工作日誌")
     conn = get_db()
     row = conn.execute("SELECT * FROM work_logs WHERE id=?", (wid,)).fetchone()

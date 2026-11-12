@@ -39,6 +39,12 @@ AUDIT_WRAPPERS = {
     "dispatch_status_audited": ("modules/subcontract/api/vendor_contractors.py", "作業狀態改變成功寫 vendor.dispatch.<target>"),
     # S-ST2 套用階段樣板：實際寫入在 `_apply_stage_template_write`，commit 後寫 case_stage.apply_template（預覽 dryRun 與「沒有可建立的階段」都不寫入、不稽核）
     "_apply_stage_template_write": ("modules/case/api/quotation_stages.py", "套用成功（階段已建立）寫 case_stage.apply_template"),
+    # T80c 外勤 S1：四個寫入端點外面包了冪等鍵（`helpers/idempotency.run`），實作在 `_impl`，成功路徑上寫稽核；
+    # 重播（同一把 key 重送）不執行 `_impl` ⇒ 不重複稽核，這是刻意的（沒有新的寫入）
+    "_post_case_update_impl": ("modules/case/api/quotations.py", "留言成功寫 case.update_post"),
+    "_add_case_update_files_impl": ("modules/case/api/quotations.py", "補附件成功寫 case.update_files_add"),
+    "_create_work_log_impl": ("routers/system.py", "建立成功寫 work_log.create"),
+    "_upload_work_log_photos_impl": ("routers/system.py", "上傳成功寫 work_log.photo_upload"),
 }
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。

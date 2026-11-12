@@ -215,6 +215,26 @@
   ],
   "s": 200
  },
+ "POST /api/quotations/{quote_no}/updates/{uid}/files": {
+  "k": [
+   "added",
+   "files",
+   "files[].filename",
+   "files[].geo",
+   "files[].geo.acc",
+   "files[].geo.lat",
+   "files[].geo.lng",
+   "files[].id",
+   "files[].mime",
+   "files[].path",
+   "files[].size",
+   "files[].uploadedAt",
+   "files[].uploadedBy",
+   "id",
+   "ok"
+  ],
+  "s": 201
+ },
  "POST /api/settings/line-notify/verify": {
   "k": [
    "detail"

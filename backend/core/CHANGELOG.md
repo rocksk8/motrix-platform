@@ -6,8 +6,7 @@
 - `tools/deploy_dashboard.py`：loopback 對端但帶 Cloudflare／代理標頭的請求 fail closed（HTTP 403／WebSocket 1008）。**部署設定：隧道 ingress 只能指到主程式 port，不可指到儀表板 port。**
 - `backend/autostart.bat`、`restart.bat`、`start.bat`、`start_server.ps1`：uvicorn 啟動行加 `--forwarded-allow-ips 127.0.0.1`（＝預設值，釘死以防被環境變數設成 `*`）。
 - 測試：`tests/test_trusted_client_ip_2026_11_11.py`、`tests/test_deploy_dashboard_local_only_2026_09_22.py`（HC1d）。
-
-## (next) — 2026-11-11（feat/license-gate-default-on；T80 授權閘門預設開啟＋緊急放行通行證＋402 說明頁＋env=dev 啟動警告）
+- **（併入）(next) — 2026-11-11（feat/license-gate-default-on；T80 授權閘門預設開啟＋緊急放行通行證＋402 說明頁＋env=dev 啟動警告）**
 
 - **行為變更（T80 票，使用者 2026-11-11 裁示；本票自己的 (next) 段落）**：`helpers.licensing.LICENSE_GATE_ENABLED` 出貨預設值 `False` → `True`（L1 常數，值不進介面快照，`l1_interface_snapshot.json` 不變）。開著時：業務 `/api/*` 在沒有金鑰／過期（年費）／簽章不符／格式損毀／發給別台機器時回 402（`code=license_required`）；`module_license_check` 也會依金鑰的 `modules` 決定模組載入；`tools/apply_plan.py`、`tools/platform/module_update.py` 讀安裝目錄 `backend/license.key` 判模組授權。當年（fb329becb／a63cc4978，2026-09-21）預設關的理由：正式機沒有 `license.key`（git archive、`.gitignore:11`、apply_update 只加不刪），守門一開全站 402。**⚠️ 截至 2026-11-11 正式機仍沒有 `license.key`、`_PUBKEY_PROD` 仍是空的：這個預設值在簽發機制與正式機金鑰就緒、`/api/license/status` 回 `valid:true` 之前不可以部署。**
 - **新增（使用者 2026-11-11 追加，同票）**：
@@ -19,6 +18,11 @@
 - 測試（T80 票）：新增 `backend/tests/test_licensing_gate_2026_09_21.py`（開著時：有效／沒有／過期／無效四種情境走 HTTP，另含豁免清單、401 先於 402、換檔／跨日重算、模組授權）；`conftest.py` 新增 session 固件 `license_test_key`（自簽測試金鑰，驗章走真路徑，只換公鑰／金鑰路徑／機器指紋）與每題固件 `_license_per_test_defaults`（`LICENSE_PATH` 每題還原；標記 `real_fingerprint` 的題才用真指紋）；`test_procurement_leadtime` 條件 8、`test_apply_plan` DO3 正對照改寫（原本釘「預設必須是 False」）。
 - 測試（追加）：`test_licensing_emergency_2026_11_11.py`（通行證各種壞法仍 402：竄改／亂碼／超大／目錄／錯用途／過期／超過 14 天／統編不符／授權本身不可信；工具；env=dev；`startup_check`；前端靜態檢查）、`test_e2e_license_gate_2026_11_11.py`（瀏覽器：被擋→說明頁→補金鑰恢復、機器不符、通行證橫幅與拿掉後 402、開發金鑰橫幅）；`conftest.py` 的測試機器指紋固定為 `TEST_LICENSE_MACHINE`；`real_fingerprint` 標記登記於 `pytest.ini`。
 - 營運：`license_emergency.key` 進 `.gitignore`（同 `license.key`，per-installation）；操作手冊 `docs/platform/LICENSE-EMERGENCY-PASS.md`。
+- **（併入）(next) — 2026-11-12（feat/field-idempotency；T80c 外勤手機 S1：請求冪等鍵）**
+- L1（新增，只增）：`helpers.idempotency`（`parse_key／request_hash／begin／run／run_sync／Call`）——選填標頭 `Idempotency-Key`：弱訊號重送時，同 key＋同內容 ⇒ 重播第一次的回應（`Idempotent-Replay: true`），不再存檔、不再寫資料、不再通知；同 key 不同內容 422；處理中 409；處理失敗不留列；key 只在同一使用者內唯一。沒帶標頭＝行為與先前逐位元相同。
+- core migration（未取號，PLAYBOOK §G6）：新表 `idempotency_keys`（PK username+key；7 天前的列在寫入時順手清，不開排程）。
+- 套用端點：`POST /api/work-logs`、`POST /api/work-logs/{id}/photos`（其餘見 `modules/case/CHANGELOG.md`）。
+- 測試：`tests/test_idempotency_2026_11_11.py`。
 
 ## 1.157（next，未取號）— 2026-11-11（fix/ops-webauthn404-case-denied；case.access_denied 診斷鍵、L1 案件守門 `allow_read`）〔train_number：1.156 → 1.157〕
 
