@@ -1,0 +1,175 @@
+"""【一次性、不進版本庫】物料流程一條龍盤點：灌假資料＋逐頁截圖。
+執行：PYTHONUTF8=1 python -m pytest tests/_onepipe_shots.py -q -p no:cacheprovider --basetemp=.pytmp/s
+輸出：docs/platform/plans/PROCUREMENT-FLOW-ONEPIPE-shots/*.png ＋ steps.json（每張圖的步驟說明與點擊數記錄）
+"""
+import json
+from pathlib import Path
+
+import pytest
+
+pytest.importorskip("playwright.sync_api")
+
+OUT = Path(__file__).resolve().parents[2] / "docs" / "platform" / "plans" / "PROCUREMENT-FLOW-ONEPIPE-shots"
+QN = "Q2611-001"
+
+
+def _sql(sql, args=()):
+    from db import get_db
+    conn = get_db()
+    try:
+        cur = conn.execute(sql, args)
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def _cols(table):
+    from db import get_db
+    conn = get_db()
+    try:
+        return {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    finally:
+        conn.close()
+
+
+def _insert(table, row):
+    cols = _cols(table)
+    row = {k: v for k, v in row.items() if k in cols}
+    _sql(f"INSERT INTO {table} ({','.join(row)}) VALUES ({','.join('?' * len(row))})", tuple(row.values()))
+
+
+def _seed(sales_u, eng_u):
+    from db import get_db
+    conn = get_db()
+    uid = {r["username"]: r["id"] for r in conn.execute("SELECT id, username FROM users").fetchall()}
+    conn.close()
+    items = [
+        {"id": "it1", "type": "item", "description": "PoE 交換器 24 埠", "brand": "Ubiquiti USW-24-PoE", "qty": 4, "unit": "台", "cost": 9800, "price": 13800},
+        {"id": "it2", "type": "item", "description": "室內 AP", "brand": "Ubiquiti U6-Pro", "qty": 12, "unit": "台", "cost": 4200, "price": 5900},
+        {"id": "it3", "type": "item", "description": "CAT6 網路線 305m", "brand": "Belden", "qty": 6, "unit": "箱", "cost": 3100, "price": 4200},
+    ]
+    case_record = {
+        "materials": [
+            {"id": "m1", "name": "PoE 交換器 24 埠", "model": "Ubiquiti USW-24-PoE", "qty": 4, "unit": "台", "ordered": True, "arrived": True,
+             "orderItemId": "mo1", "supplier": "友通資訊", "expectedDate": "2026-11-05",
+             "devices": [{"sn": "SW0001", "mac": "AA:BB:CC:00:00:01"}, {"sn": "SW0002", "mac": ""}, {"sn": "", "mac": ""}, {"sn": "", "mac": ""}]},
+            {"id": "m2", "name": "室內 AP", "model": "Ubiquiti U6-Pro", "qty": 12, "unit": "台", "ordered": True, "arrived": False,
+             "orderItemId": "mo2", "supplier": "友通資訊", "expectedDate": "2026-11-20", "devices": []},
+            {"id": "m3", "name": "CAT6 網路線 305m", "model": "Belden", "qty": 6, "unit": "箱", "ordered": False, "arrived": False, "devices": []},
+        ],
+        "materialOrders": [
+            {"itemId": "mo1", "itemName": "PoE 交換器 24 埠", "quantity": 4, "unit": "台", "unitPrice": 9800, "totalPrice": 39200, "supplierId": 1,
+             "quoteItemId": "it1", "poDocCode": "PO-20261101-0001", "poLine": 1},
+            {"itemId": "mo2", "itemName": "室內 AP", "quantity": 12, "unit": "台", "unitPrice": 4200, "totalPrice": 50400, "supplierId": 1,
+             "quoteItemId": "it2", "poDocCode": "PO-20261101-0001", "poLine": 2},
+        ],
+        "devices": [{"id": "d1", "name": "PoE 交換器 24 埠", "sn": "SW0001", "mac": "AA:BB:CC:00:00:01", "location": "", "warrantyStart": "", "warrantyMonths": 12, "note": ""}],
+        "roles": {},
+    }
+    data = {"quoteNo": QN, "customerName": "宏達科技", "projectName": "宏達總部網路升級", "items": items, "dealTag": "已成案", "caseRecord": case_record,
+            "salesPerson": sales_u, "salesPersonUsername": sales_u}
+    _insert("quotations", {
+        "quote_no": QN, "status": "已送出", "deal_tag": "已成案", "customer_name": "宏達科技", "project_name": "宏達總部網路升級",
+        "total": 280000, "pretax": 266667, "sales_person": sales_u, "sales_person_id": uid[sales_u], "quote_date": "2026-10-20", "valid_days": 30,
+        "data_json": json.dumps(data, ensure_ascii=False), "created_at": "2026-10-20T09:00:00", "updated_at": "2026-11-10T09:00:00", "created_by": sales_u,
+        "assigned_user_ids": json.dumps([uid[eng_u]]),
+    })
+    _insert("suppliers", {"id": 1, "code": "S-0001", "name": "友通資訊", "tax_id": "12345678", "phone": "02-27001234", "lead_time_days": 7,
+                          "data_json": json.dumps({"category": "網通"}, ensure_ascii=False), "created_at": "2026-01-01", "updated_at": "2026-01-01"})
+    for code, kind, desc in (("PR-20261030-0001", "purchase_req", "請購：宏達網路升級設備"), ("PO-20261101-0001", "purchase_order", "採購：友通資訊 交換器與 AP")):
+        _insert("case_extra_expenses", {
+            "quote_no": QN, "category": "設備", "description": desc, "qty": 0, "unit": "", "unit_cost": 0, "total_cost": 89600, "expense_date": "2026-11-01",
+            "files_json": "[]", "created_by": sales_u, "created_by_name": sales_u, "created_at": "2026-11-01T10:00:00", "updated_at": "2026-11-01T10:00:00",
+            "status": "已核准", "approval_json": "{}", "kind": kind, "doc_code": code,
+            "data_json": json.dumps({"vendor": "友通資訊", "delivery_date": "2026-11-05", "pr_no": "PR-20261030-0001"} if kind == "purchase_order" else {}, ensure_ascii=False),
+            "lines_json": json.dumps([{"category": "設備", "summary": "PoE 交換器 24 埠", "qty": 4, "unitCost": 9800, "amount": 39200, "itemId": "it1"},
+                                      {"category": "設備", "summary": "室內 AP", "qty": 12, "unitCost": 4200, "amount": 50400, "itemId": "it2"}], ensure_ascii=False),
+        })
+    now = "2026-11-02T10:00:00"
+    for iid, rec in (("mo1", "2026-11-06"), ("mo2", "")):
+        _insert("case_material_approvals", {"quote_no": QN, "item_id": iid, "doc_code": f"MO-20261102-000{iid[-1]}", "status": "已核准", "approval_json": "{}",
+                                            "version": 1, "created_by": sales_u, "created_at": now, "updated_at": now, "received_on": rec, "received_by": sales_u if rec else ""})
+    _insert("parts", {"part_no": "USW-24-PoE", "name": "PoE 交換器 24 埠", "cost": 9800, "unit": "台", "created_at": "2026-01-01"})
+
+
+def _run_steps(page, base, steps, shots, name):
+    """steps: [(標題, 動作 callable)]；每步截圖，記錄點擊／換頁次數。"""
+    for i, (title, act) in enumerate(steps, 1):
+        act()
+        page.wait_for_timeout(900)
+        fn = f"{name}-{i:02d}.png"
+        page.screenshot(path=str(OUT / fn), full_page=False)
+        shots.append({"file": fn, "walk": name, "title": title, "url": page.url.replace(base, "")})
+
+
+@pytest.mark.e2e
+def test_walk(live_server, make_user, new_page, login_as):
+    OUT.mkdir(parents=True, exist_ok=True)
+    su = make_user(username="op_admin", role="superadmin")
+    sales = make_user(username="op_sales", role="sales")
+    eng = make_user(username="op_eng", role="engineer", modules=["case_manage", "work_log", "daily_task", "equipment"])
+    buyer = make_user(username="op_buyer", role="viewer", modules=["procurement", "inventory", "equipment", "supplier"])
+    _seed(sales[0], eng[0])
+    shots = []
+    base = live_server
+
+    # ── 走法 A：新進採購（procurement 模組）──────────────────────────────
+    pg = new_page(viewport={"width": 1366, "height": 860})
+    login_as(pg, buyer)
+
+    def go(path):
+        return lambda: pg.goto(f"{base}/pages/{path}")
+
+    _run_steps(pg, base, [
+        ("採購管理：只有唯讀進度表，唯一動作是連到案件", go("procurement.html")),
+        ("供應商管理：新進採購（非管理員）看到空清單", go("suppliers.html")),
+        ("庫存管理：要自己想到來這裡「進貨」", go("inventory.html")),
+        ("設備登載：純唯讀", go("devices.html")),
+        ("保固追蹤：純唯讀、案件號不可點", go("warranty.html")),
+        ("新增支出申請（請購／採購單）：要重新搜尋案件", go("payment-request.html")),
+    ], shots, "A")
+
+    # ── 走法 B：業務／案件擁有者（成案之後的整條線）────────────────────────
+    pg2 = new_page(viewport={"width": 1366, "height": 860})
+    login_as(pg2, sales)
+    pg = pg2
+
+    def tab(key):
+        def _():
+            pg2.locator(f"[data-testid=tab-{key}], button:has-text('{key}')").first.click()
+        return _
+
+    def exec_sub(label):
+        return lambda: pg2.get_by_text(label, exact=True).first.click()
+
+    _run_steps(pg2, base, [
+        ("案件管理：案件資訊（預設落點）", lambda: pg2.goto(f"{base}/pages/case-management.html?q={QN}")),
+        ("執行管理 → 執行進度（子頁籤預設）", lambda: pg2.get_by_role("button", name="執行管理").first.click()),
+        ("執行管理 → 材料申請（材料卡片，叫料狀態旗標）", lambda: pg2.get_by_role("button", name="材料申請").first.click()),
+        ("執行管理 → 設備登錄（SN／MAC 逐台、保固起始日空白）", lambda: pg2.get_by_role("button", name="設備登錄").first.click()),
+        ("財務 → 材料申請（叫料單與核准、確認到貨）", lambda: (pg2.get_by_role("button", name="財務").first.click())),
+        ("出貨單分頁", lambda: pg2.get_by_role("button", name="出貨單").first.click()),
+        ("完工單分頁", lambda: pg2.get_by_role("button", name="完工單").first.click()),
+        ("動態分頁（發文框）", lambda: pg2.get_by_role("button", name="動態").first.click()),
+    ], shots, "B")
+
+    # ── 走法 B2：最高管理者在「財務」分頁看叫料單（業務角色在這個種子下看不到此區塊）────
+    pg4 = new_page(viewport={"width": 1366, "height": 860})
+    login_as(pg4, su)
+    _run_steps(pg4, base, [
+        ("財務分頁：預設落在收款管理", lambda: pg4.goto(f"{base}/pages/case-management.html?q={QN}&tab=fin")),
+        ("往下捲到「材料申請」區：叫料單、核准狀態、確認到貨都在這裡", lambda: ((pg4.get_by_role("button", name="我知道了").click() if pg4.get_by_role("button", name="我知道了").count() else None), pg4.locator("#fin-material-orders").scroll_into_view_if_needed(timeout=8000))),
+    ], shots, "B2")
+
+    # ── 走法 C：工程師第一天 ────────────────────────────────────────────
+    pg3 = new_page(viewport={"width": 1366, "height": 860})
+    login_as(pg3, eng)
+    pg = pg3
+    _run_steps(pg3, base, [
+        ("工作日誌：沒有案件欄位", lambda: pg3.goto(f"{base}/pages/work-log.html")),
+        ("每日工作事項：沒有案件上下文、也不能新增", lambda: pg3.goto(f"{base}/pages/daily-tasks.html")),
+        ("案件執行看板：點進去只落在案件資訊", lambda: pg3.goto(f"{base}/pages/case-stage-board.html")),
+    ], shots, "C")
+
+    (OUT / "steps.json").write_text(json.dumps(shots, ensure_ascii=False, indent=1), encoding="utf-8")

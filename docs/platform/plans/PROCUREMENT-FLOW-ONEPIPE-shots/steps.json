@@ -1,0 +1,116 @@
+[
+ {
+  "file": "A-01.png",
+  "walk": "A",
+  "title": "採購管理：只有唯讀進度表，唯一動作是連到案件",
+  "url": "/pages/procurement.html"
+ },
+ {
+  "file": "A-02.png",
+  "walk": "A",
+  "title": "供應商管理：新進採購（非管理員）看到空清單",
+  "url": "/pages/suppliers.html"
+ },
+ {
+  "file": "A-03.png",
+  "walk": "A",
+  "title": "庫存管理：要自己想到來這裡「進貨」",
+  "url": "/pages/inventory.html"
+ },
+ {
+  "file": "A-04.png",
+  "walk": "A",
+  "title": "設備登載：純唯讀",
+  "url": "/pages/devices.html"
+ },
+ {
+  "file": "A-05.png",
+  "walk": "A",
+  "title": "保固追蹤：純唯讀、案件號不可點",
+  "url": "/pages/warranty.html"
+ },
+ {
+  "file": "A-06.png",
+  "walk": "A",
+  "title": "新增支出申請（請購／採購單）：要重新搜尋案件",
+  "url": "/pages/payment-request.html"
+ },
+ {
+  "file": "B-01.png",
+  "walk": "B",
+  "title": "案件管理：案件資訊（預設落點）",
+  "url": "/pages/case-management.html?q=Q2611-001"
+ },
+ {
+  "file": "B-02.png",
+  "walk": "B",
+  "title": "執行管理 → 執行進度（子頁籤預設）",
+  "url": "/pages/case-management.html?q=Q2611-001&tab=exec"
+ },
+ {
+  "file": "B-03.png",
+  "walk": "B",
+  "title": "執行管理 → 材料申請（材料卡片，叫料狀態旗標）",
+  "url": "/pages/case-management.html?q=Q2611-001&tab=exec"
+ },
+ {
+  "file": "B-04.png",
+  "walk": "B",
+  "title": "執行管理 → 設備登錄（SN／MAC 逐台、保固起始日空白）",
+  "url": "/pages/case-management.html?q=Q2611-001&tab=exec"
+ },
+ {
+  "file": "B-05.png",
+  "walk": "B",
+  "title": "財務 → 材料申請（叫料單與核准、確認到貨）",
+  "url": "/pages/case-management.html?q=Q2611-001&tab=fin"
+ },
+ {
+  "file": "B-06.png",
+  "walk": "B",
+  "title": "出貨單分頁",
+  "url": "/pages/case-management.html?q=Q2611-001&tab=shipping"
+ },
+ {
+  "file": "B-07.png",
+  "walk": "B",
+  "title": "完工單分頁",
+  "url": "/pages/case-management.html?q=Q2611-001&tab=completion"
+ },
+ {
+  "file": "B-08.png",
+  "walk": "B",
+  "title": "動態分頁（發文框）",
+  "url": "/pages/case-management.html?q=Q2611-001&tab=feed"
+ },
+ {
+  "file": "B2-01.png",
+  "walk": "B2",
+  "title": "財務分頁：預設落在收款管理",
+  "url": "/pages/case-management.html?q=Q2611-001&tab=fin"
+ },
+ {
+  "file": "B2-02.png",
+  "walk": "B2",
+  "title": "往下捲到「材料申請」區：叫料單、核准狀態、確認到貨都在這裡",
+  "url": "/pages/case-management.html?q=Q2611-001&tab=fin"
+ },
+ {
+  "file": "C-01.png",
+  "walk": "C",
+  "title": "工作日誌：沒有案件欄位",
+  "url": "/pages/work-log.html"
+ },
+ {
+  "file": "C-02.png",
+  "walk": "C",
+  "title": "每日工作事項：沒有案件上下文、也不能新增",
+  "url": "/pages/daily-tasks.html"
+ },
+ {
+  "file": "C-03.png",
+  "walk": "C",
+  "title": "案件執行看板：點進去只落在案件資訊",
+  "url": "/pages/case-stage-board.html"
+ }
+]

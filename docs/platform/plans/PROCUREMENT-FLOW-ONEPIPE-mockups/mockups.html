@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>物料流程一條龍 前後對照</title>
+<style>
+:root{--bg:#f4f2ee;--card:#fff;--ink:#1d1d1f;--mute:#6b6b72;--line:#dedbd4;--red:#c8102e;--redbg:#fdecef;--ok:#157347;--okbg:#e6f4ec;--warn:#9a5b00;--warnbg:#fff4de;--blue:#1b4f9c;--bluebg:#e9f0fb}
+@media (prefers-color-scheme:dark){:root{--bg:#18181a;--card:#242428;--ink:#f0f0f2;--mute:#a0a0a8;--line:#3a3a40;--redbg:#3a1a20;--okbg:#17301f;--warnbg:#3a2c10;--bluebg:#16253d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+.wrap{max-width:1240px;margin:0 auto;padding:24px 16px 80px}
+h1{font-size:26px;margin:0 0 4px}h2{font-size:20px;margin:48px 0 6px;padding-top:16px;border-top:2px solid var(--red)}
+.sub{color:var(--mute);margin:0 0 16px}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}
+nav.toc a{border:1px solid var(--line);background:var(--card);padding:4px 12px;border-radius:999px;color:var(--ink);text-decoration:none;font-size:14px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+@media(max-width:860px){.pair{grid-template-columns:1fr}}
+.col{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.col>.tag{padding:6px 14px;font-weight:700;font-size:13px;letter-spacing:.04em}
+.before>.tag{background:var(--warnbg);color:var(--warn)}.after>.tag{background:var(--okbg);color:var(--ok)}
+.pad{padding:14px}
+.shot{height:430px;overflow:auto;border-top:1px solid var(--line)}
+.shot img{display:block;width:100%}
+.note{font-size:13px;color:var(--mute);margin:8px 14px 12px}
+.issues{margin:0;padding:10px 14px 12px 32px;font-size:13.5px;color:var(--warn);background:var(--warnbg)}
+.gains{margin:0;padding:10px 14px 12px 32px;font-size:13.5px;color:var(--ok);background:var(--okbg)}
+.ui{font-size:14px}
+.ui .card{border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px;background:var(--card)}
+.ui h4{margin:0 0 4px;font-size:15px}.ui p{margin:2px 0 8px;color:var(--mute);font-size:13px}
+.btn{display:inline-block;padding:6px 14px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:13px}
+.btn.pri{background:var(--red);border-color:var(--red);color:#fff}
+.btn.sm{padding:2px 10px;font-size:12px}
+.pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;border:1px solid var(--line)}
+.pill.ok{background:var(--okbg);color:var(--ok);border-color:transparent}.pill.warn{background:var(--warnbg);color:var(--warn);border-color:transparent}
+.pill.blue{background:var(--bluebg);color:var(--blue);border-color:transparent}.pill.mute{color:var(--mute)}
+.tl{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin:6px 0 12px}
+@media(max-width:860px){.tl{grid-template-columns:repeat(2,1fr)}}
+.seg{border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--card);font-size:12.5px;position:relative}
+.seg b{display:block;font-size:13.5px;margin-bottom:2px}
+.seg.done{border-color:var(--ok);background:var(--okbg)}.seg.cur{border-color:var(--red);box-shadow:0 0 0 2px var(--redbg)}.seg.lock{opacity:.55}
+.seg .who{color:var(--mute);margin:2px 0 6px}
+table.t{width:100%;border-collapse:collapse;font-size:12.5px}
+table.t th,table.t td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left;vertical-align:top}
+table.t th{color:var(--mute);font-weight:600}
+.fld{display:block;border:1px solid var(--line);border-radius:6px;padding:5px 8px;margin:3px 0 8px;background:var(--bg);min-height:28px;font-size:13px}
+.fld.pre{background:var(--okbg);border-color:var(--ok)}
+.lbl{font-size:12px;color:var(--mute)}
+textarea.mock{width:100%;min-height:72px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:13px/1.5 ui-monospace,Consolas,monospace;padding:6px 8px}
+.steps{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.steps span{background:var(--warnbg);color:var(--warn);border-radius:6px;padding:2px 8px;font-size:12.5px}
+.steps.good span{background:var(--okbg);color:var(--ok)}
+.steps .arrow{background:none;color:var(--mute);align-self:center}
+</style>
+</head>
+<body><div class="wrap">
+<h1>物料流程「一條龍」前後對照</h1>
+<p class="sub">三個畫面草圖（非最終設計）。左：現況（真實截圖，假資料）；右：提案示意。對應提案書 <code>PROCUREMENT-FLOW-ONEPIPE-PROPOSAL.md</code> 第四節。</p>
+<nav class="toc"><a href="#m1">M1 案件「物料流程」時間軸</a><a href="#m2">M2 一站式到貨</a><a href="#m3">M3 出貨→設備→保固</a></nav>
+
+<h2 id="m1">M1　案件「物料流程」時間軸</h2>
+<p class="sub">情境：業務／採購想知道「宏達總部網路升級」的料到哪了、下一步誰做。</p>
+<div class="pair">
+ <div class="col before"><div class="tag">現況：要看四個地方</div>
+  <div class="shot"><img src="../PROCUREMENT-FLOW-ONEPIPE-shots/B2-02.png" alt="財務分頁最下面的材料申請"></div>
+  <div class="note">叫料單與核准在「財務」分頁最下面；到貨旗標在「執行管理→材料申請」；入庫在「庫存管理」；序號與保固在「設備登錄」。</div>
+  <ul class="issues"><li>沒有一個地方看得到整條線</li><li>不知道卡在誰手上</li><li>採購帳號根本進不了這些子分頁</li></ul>
+ </div>
+ <div class="col after"><div class="tag">提案：一個畫面看完</div>
+  <div class="pad ui">
+   <div class="card"><h4>Q2611-001　宏達總部網路升級</h4><p>物料流程　·　3 個品項　·　共 22 件</p>
+    <div class="tl">
+     <div class="seg done"><b>① 叫料</b><span class="pill ok">已核准 2/3</span><div class="who">案件業務</div><div class="lbl">網路線尚未叫料</div><span class="btn sm pri">叫料（1 項）</span></div>
+     <div class="seg done"><b>② 採購</b><span class="pill ok">PO 已核准</span><div class="who">採購 林小姐</div><div class="lbl">友通資訊</div></div>
+     <div class="seg cur"><b>③ 到貨</b><span class="pill warn">4/16</span><div class="who">待確認：案件業務</div><div class="lbl">AP 預計 11/20</div><span class="btn sm pri">到貨登載</span></div>
+     <div class="seg"><b>④ 入庫</b><span class="pill mute">0/4</span><div class="who">待庫存管理員</div></div>
+     <div class="seg lock"><b>⑤ 領用／出貨</b><span class="pill mute">0</span><div class="who">—</div></div>
+     <div class="seg lock"><b>⑥ 設備登載</b><span class="pill mute">1/16</span><div class="who">—</div></div>
+     <div class="seg lock"><b>⑦ 保固</b><span class="pill mute">未起算</span><div class="who">—</div></div>
+    </div>
+    <table class="t"><tr><th>品項</th><th>需要</th><th>叫料</th><th>採購</th><th>到貨</th><th>入庫</th><th>出貨</th><th>登載</th><th></th></tr>
+     <tr><td>PoE 交換器 24 埠</td><td>4</td><td>4</td><td>4</td><td>4</td><td>0</td><td>0</td><td>1</td><td><span class="btn sm">入庫</span></td></tr>
+     <tr><td>室內 AP</td><td>12</td><td>12</td><td>12</td><td>0</td><td>0</td><td>0</td><td>0</td><td><span class="btn sm">到貨</span></td></tr>
+     <tr><td>CAT6 網路線</td><td>6</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="btn sm">叫料</span></td></tr></table>
+    <p class="lbl" style="margin-top:8px">右側：最近登載（工作日誌、階段出勤、動態）；沒有權限的段落整段不顯示。</p>
+   </div>
+  </div>
+  <ul class="gains"><li>7 段狀態＋卡在誰手上，一眼看完</li><li>「下一步」按鈕帶著品名、數量、供應商</li><li>各模組原頁面不動；專家仍可直接到庫存頁</li></ul>
+ </div>
+</div>
+
+<h2 id="m2">M2　一站式到貨（貼上序號）</h2>
+<p class="sub">情境：4 台 PoE 交換器到了。現況要在三個地方各打一次；提案是一張單完成。</p>
+<div class="pair">
+ <div class="col before"><div class="tag">現況：到貨後庫存仍是 0</div>
+  <div class="shot"><img src="../PROCUREMENT-FLOW-ONEPIPE-shots/A-03.png" alt="庫存管理顯示0"></div>
+  <div class="pad"><div class="steps"><span>財務→確認到貨</span><span class="arrow">→</span><span>執行管理→勾「已到料」</span><span class="arrow">→</span><span>庫存管理→進貨（品名、數量、供應商、發票、4 個序號全重打）</span><span class="arrow">→</span><span>設備登錄→SN／MAC 再打 4 次</span></div></div>
+  <ul class="issues"><li>同一批貨登 4 處，到貨日 2～3 次、序號 3 次</li><li>「確認到貨」完全不碰庫存</li><li>少打一處就對不上</li></ul>
+ </div>
+ <div class="col after"><div class="tag">提案：一次登載</div>
+  <div class="pad ui">
+   <div class="card"><h4>到貨登載　MO-20261102-0001</h4>
+    <span class="lbl">品名／數量（取自叫料單）</span><span class="fld pre">PoE 交換器 24 埠　×4 台</span>
+    <span class="lbl">供應商（取自採購單）</span><span class="fld pre">友通資訊</span>
+    <span class="lbl">到貨日</span><span class="fld">2026-11-06</span>
+    <span class="lbl">貼上序號（一行一台，可附 MAC，以 Tab 或逗號分隔）</span>
+    <textarea class="mock" readonly>SW0001	AA:BB:CC:00:00:01
+SW0002	AA:BB:CC:00:00:02
+SW0003	AA:BB:CC:00:00:03
+SW0004	AA:BB:CC:00:00:04</textarea>
+    <p class="lbl">已辨識 4 / 4 筆　·　重複序號 0</p>
+    <label class="lbl"><input type="checkbox" checked disabled> 同時入庫（料號 USW-24-PoE）</label>　<label class="lbl"><input type="checkbox" disabled> 直送現場，不入庫</label><br>
+    <label class="lbl"><input type="checkbox" checked disabled> 預填設備登錄（保固起始日＝到貨日，可改）</label>
+    <p style="margin-top:8px"><span class="btn pri">確認（寫入 到貨＋入庫＋設備 4 台）</span>　<span class="btn">取消</span></p>
+   </div>
+  </div>
+  <div class="pad"><div class="steps good"><span>按「到貨登載」</span><span class="arrow">→</span><span>貼上序號</span><span class="arrow">→</span><span>確認</span></div></div>
+  <ul class="gains"><li>3 次點擊、1 次貼上，取代 4 處手打</li><li>序號先檢查重複，再寫入</li><li>原「確認到貨」「進貨」仍可單獨使用</li></ul>
+ </div>
+</div>
+
+<h2 id="m3">M3　出貨 → 設備登載 → 保固</h2>
+<p class="sub">情境：交換器出貨給客戶之後，現場要登載設備、系統要開始算保固。</p>
+<div class="pair">
+ <div class="col before"><div class="tag">現況：設備登錄空白、保固沒起算</div>
+  <div class="shot"><img src="../PROCUREMENT-FLOW-ONEPIPE-shots/B-04.png" alt="設備登錄空白"></div>
+  <div class="note">出貨核准後序號變「已出貨」，設備登錄卻只認領「在庫」序號，會衝突；保固起始日預設空白，沒填就不會被提醒；保固通知只掃「已成案」，結案後就停了。</div>
+  <ul class="issues"><li>出貨資料不會帶入設備</li><li>保固起始日手填、沒填就沒提醒</li><li>案件結案後保固到期不再通知</li></ul>
+ </div>
+ <div class="col after"><div class="tag">提案：出貨核准後一鍵帶入</div>
+  <div class="pad ui">
+   <div class="card"><h4>出貨單 SN-20261110-0001　<span class="pill ok">已核准</span></h4>
+    <table class="t"><tr><th>設備</th><th>序號</th><th>MAC</th><th>保固起始</th><th>月數</th></tr>
+     <tr><td>PoE 交換器 24 埠</td><td>SW0001</td><td>…:01</td><td><span class="pill ok">2026-11-10</span></td><td>12</td></tr>
+     <tr><td>PoE 交換器 24 埠</td><td>SW0002</td><td>…:02</td><td><span class="pill ok">2026-11-10</span></td><td>12</td></tr>
+     <tr><td>PoE 交換器 24 埠</td><td>SW0003</td><td>…:03</td><td><span class="pill ok">2026-11-10</span></td><td>12</td></tr>
+     <tr><td>PoE 交換器 24 埠</td><td>SW0004</td><td>…:04</td><td><span class="pill ok">2026-11-10</span></td><td>12</td></tr></table>
+    <p style="margin-top:8px"><span class="btn pri">登載為設備（4 台）</span>　<span class="lbl">保固起始日預設＝出貨日（設定中心可改為完工日）</span></p>
+   </div>
+   <div class="card"><h4>保固追蹤</h4><p>篩選：宏達總部網路升級（案號可點）　·　含已結案案件</p>
+    <span class="pill warn">2027-11-10 到期　4 台</span>　<span class="pill blue">到期前 30／7 天提醒</span></div>
+  </div>
+  <ul class="gains"><li>出貨、設備、保固用同一份序號，不再衝突</li><li>保固自動起算，沒填起始日也會被提醒</li><li>已結案案件的保固到期照樣通知</li></ul>
+ </div>
+</div>
+
+<p class="sub" style="margin-top:40px">以上為示意；實際用語會依 hichan-7 的禁用詞清單與設定中心用語調整。</p>
+</div></body></html>
