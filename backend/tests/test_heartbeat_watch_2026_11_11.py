@@ -280,7 +280,9 @@ def _bat_port(name):
 
 
 @pytest.mark.parametrize("bat", ["autostart.bat", "start.bat"])
-def test_job_port_matches_launcher_batch_files(bat):
+def test_job_port_matches_launcher_batch_files(bat, monkeypatch, tmp_path):
+    from core import paths
+    monkeypatch.setattr(paths, "LOGS_DIR", str(tmp_path / "logs"))        # BK19：重新 import 會在 LOGS_DIR 開 log 檔，必須先導到 tmp
     sys.modules.pop("heartbeat_job", None)
     import heartbeat_job
     name, ports = _bat_port(bat)
@@ -291,7 +293,9 @@ def test_job_port_matches_launcher_batch_files(bat):
     sys.modules.pop("heartbeat_job", None)
 
 
-def test_job_probes_both_schemes_https_first():
+def test_job_probes_both_schemes_https_first(monkeypatch, tmp_path):
+    from core import paths
+    monkeypatch.setattr(paths, "LOGS_DIR", str(tmp_path / "logs"))        # BK19：同上
     sys.modules.pop("heartbeat_job", None)
     import heartbeat_job
     assert heartbeat_job._SCHEMES == ("https", "http")
