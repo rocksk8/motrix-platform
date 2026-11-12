@@ -145,10 +145,11 @@ def test_one_failing_device_does_not_stop_the_scan(client, mail, monkeypatch):
     assert _guards() == []
 
 
-def test_button_link_points_at_the_case_not_the_site_home(client, mail):
+def test_button_link_points_at_the_case_not_the_site_home(client, mail, monkeypatch):
     """K 審必修：信件按鈕連到 quotation-form.html?no=<單號>（與舊信相同），不是退成站台首頁。"""
     import re
     from helpers import email_notify as en
+    monkeypatch.setattr(en, "_base_url", lambda: "https://erp.example.test")      # 新安裝（資料庫沒有通知設定）網址為空 ⇒ 連結退成「#」（menu-ux b0）；要驗的是「有網址時連到該案」
     uid = _mk_user("sales_wang", "王小明", OWNER_EMAIL)
     _mk_case(uid, "王小明")
     _run()
