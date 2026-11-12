@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>簽核設定 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-error.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -1053,7 +1054,7 @@
             })
             if (!r.ok) {
               const err = await r.json().catch(() => ({}))
-              alert('儲存失敗：' + (err.detail || r.status))
+              alert('儲存失敗：' + MotrixError.detailText(err.detail, r.status))
               return
             }
             flow.resetPending = false
@@ -1082,7 +1083,7 @@
             })
             if (!r.ok) {
               const err = await r.json().catch(() => ({}))
-              alert('儲存失敗：' + (err.detail || r.status))
+              alert('儲存失敗：' + MotrixError.detailText(err.detail, r.status))
               return
             }
             const d = await r.json()

@@ -6339,6 +6339,7 @@
    "groups[].values.lock_scope",
    "groups[].values.lock_threshold",
    "groups[].values.lock_window_min",
+   "groups[].values.log_keep_days",
    "groups[].values.login_days",
    "groups[].values.loopback_is_internal",
    "groups[].values.mail_cap",

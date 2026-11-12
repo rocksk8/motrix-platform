@@ -1961,6 +1961,31 @@ function devCrmPage() {
     //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
     _initDone: false,
 
+    _showNoAccess() {
+      const main = document.querySelector('main')
+      if (!main || document.querySelector('[data-testid="dev-crm-no-access"]')) return
+      main.style.display = 'none'
+      const box = document.createElement('div')
+      box.className = main.className
+      box.setAttribute('data-testid', 'dev-crm-no-access')
+      box.innerHTML = '<div style="max-width:560px;margin:64px auto;padding:24px 28px;text-align:center;line-height:1.8">'
+        + '<div style="font-size:40px;margin-bottom:12px">🔒</div>'
+        + '<div style="font-size:18px;font-weight:600;margin-bottom:8px">你目前沒有「業務開發」的使用權限</div>'
+        + '<div style="font-size:13px;color:var(--text-secondary,#4B5563);margin-bottom:18px">這個功能要由最高管理者在「使用者管理」替你的帳號開啟後才能使用。需要的話，請聯絡你的主管或系統管理員。若你剛被開通權限，請登出後重新登入。</div>'
+        + '<a class="btn btn-primary" href="../index.html">回首頁</a></div>'
+      main.parentNode.insertBefore(box, main.nextSibling)
+    },
+
+    // 向伺服器要這個人**現在**的角色與模組清單；失敗（網路、401）回 null（呼叫端當作「沒有新資訊」，照舊顯示無權限說明）。
+    async _liveModules() {
+      try {
+        const r = await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + this.token } })
+        if (!r.ok) return null
+        const d = await r.json()
+        return Array.isArray(d.modules) ? { role: d.role || '', modules: d.modules } : null
+      } catch (e) { return null }
+    },
+
     async init() {
       if (this._initDone) return
       this._initDone = true
@@ -1973,7 +1998,26 @@ function devCrmPage() {
       const mods = Array.isArray(this.session.modules) ? this.session.modules : []
       this.isAdmin = role === 'superadmin' || role === 'admin'
       if (!this.isAdmin && !mods.includes('dev_crm')) {
-        location.href = '../index.html'; return
+        // 審查 L4：localStorage 的 session.modules 是登入當下的快照，之後只靠 sidebar.js 背景刷新（非同步、而且在這個判斷之後才回來）。
+        // 剛被最高管理者開通權限的人，這裡會讀到舊清單而被擋。擋之前先向 /api/auth/me 要**即時**的模組清單（一支小請求，只在要擋人時才發）：
+        // 已經有權限 ⇒ 把 localStorage 補成最新的並放行；真的沒有 ⇒ 才顯示說明。
+        const live = await this._liveModules()
+        if (live && (live.role === 'superadmin' || live.role === 'admin' || live.modules.includes('dev_crm'))) {
+          try {
+            const st = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+            st.role = live.role
+            st.modules = live.modules
+            localStorage.setItem('motrix_session', JSON.stringify(st))
+          } catch (e) { /* 寫不回去不影響這次放行 */ }
+          this.session.role = live.role
+          this.session.modules = live.modules
+          this.isAdmin = live.role === 'superadmin' || live.role === 'admin'
+        } else {
+          // 業務角色預設沒有「業務開發 CRM」（要由最高管理者在使用者管理逐人開啟）。以前直接導回儀表板、沒有任何說明，
+          // 使用者以為頁面壞了或被擋錯。現在留在原頁、講清楚為什麼、該找誰。
+          this._showNoAccess()
+          return
+        }
       }
       // UR1：上一頁回來／其他分頁標了已讀 ⇒ 重抓未讀（事件由 notif.js 發出）。
       window.addEventListener('motrix:reads-changed', () => this.loadUnread())

@@ -71,9 +71,13 @@ _register_core(
         S("request_log_keep_days", "int", 90, min=7, max=3650, unit="天", risk="ops", loosen="down", recommended=90,
           question="系統操作軌跡（誰在何時開了哪個頁面）要保留幾天？", label="操作軌跡保留天數", help="用來回頭查「上個月那筆資料是誰改的」。",
           impact="只影響之後的清理：超過天數的操作軌跡會被刪除；保留越久，個人行為紀錄累積越多，外洩時的影響也越大。", advanced=True),
+        S("log_keep_days", "int", 30, min=7, max=3650, unit="天", risk="ops", loosen="down", recommended=30,
+          question="系統日誌（程式運作與連線紀錄的壓縮舊檔）要保留幾天？", label="系統日誌保留天數",
+          help="伺服器的 app.log／access.log 滿 15 MB 會自動壓縮成舊檔，超過這個天數的舊檔就刪除；目前正在寫的檔不受影響。",
+          impact="只影響之後的清理：超過天數的壓縮舊日誌會被刪除。日誌是出問題時查原因用的，保留越短越難追查一週前的事件；日誌檔本身有大小上限（單檔 15 MB、最多 10 份），不會無限變大。", advanced=True),
     ],
     sensitive=True, risk="ops", legacy_key="backup_retention",
-    help="備份、稽核紀錄、通知與操作軌跡要保存多久。",
+    help="備份、稽核紀錄、通知、操作軌跡與系統日誌要保存多久。",
 )
 
 _register_core(

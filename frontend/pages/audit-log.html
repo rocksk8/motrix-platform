@@ -9,6 +9,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>歷史紀錄 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-error.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -409,6 +410,11 @@
     </aside>
     <div class="audit-list">
 
+    <div class="alert-banner alert-banner--danger" x-show="loadErr" x-cloak role="alert" data-testid="load-error">
+      <div class="alert-banner__body"><span x-text="loadErr"></span></div>
+      <button type="button" class="btn btn-ghost btn-sm" @click="retryLoad()" data-testid="load-retry">重試</button>
+    </div>
+
     <!-- 時間線 -->
     <div class="timeline" x-show="!loading">
       <template x-for="item in items" :key="item.id">
@@ -432,7 +438,7 @@
           </div>
         </div>
       </template>
-      <div x-show="items.length===0 && !loading" style="padding:48px;text-align:center;color:var(--text-dim);font-size:13px">
+      <div x-show="items.length===0 && !loading && !loadErr" style="padding:48px;text-align:center;color:var(--text-dim);font-size:13px">
         暫無紀錄
       </div>
     </div>
@@ -461,6 +467,7 @@
       page:   1,
       perPage: 50,
       loading: false,
+      loadErr: '',                    // 讀取失敗的白話原因；空字串＝沒事（失敗時不可以只顯示「暫無紀錄」）
       q: '',
       filterAction: '',
       fModule: '', fCase: '', fRef: '', fUser: '', fFrom: '', fTo: '', fResult: '', fTag: '',
@@ -572,16 +579,20 @@
           const r = await fetch(`/api/audit-log?${params}`, {
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
-          if (r.status === 401) { this.logout(); return }
+          if (r.status === 401) { MotrixError.sessionExpired(); return }
           if (r.ok) {
             const d = await r.json()
             this.items = d.items || []
             this.total = d.total || 0
             this.totalCapped = !!d.totalCapped
+            this.loadErr = ''
+          } else {
+            this.loadErr = MotrixError.loadText(r.status)
           }
-        } catch(e) {}
+        } catch(e) { this.loadErr = MotrixError.loadText(e) }
         this.loading = false
       },
+      retryLoad() { this.loadErr = ''; this.load(); this.loadTree(); this.loadFailSummary() },
 
       prevPage() { if (this.page > 1) { this.page--; this.load() } },
       nextPage() { if (this.page * this.perPage < this.total) { this.page++; this.load() } },

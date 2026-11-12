@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>在線時數統計 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-error.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <!-- 深色模式刻意不在這裡寫任何色彩覆寫：全站是反轉濾鏡，不是另一套色票
@@ -79,6 +80,11 @@
       </div>
     </div>
 
+<div class="alert-banner alert-banner--danger" x-show="loadErr" x-cloak role="alert" data-testid="load-error">
+      <div class="alert-banner__body"><span x-text="loadErr"></span></div>
+      <button type="button" class="btn btn-ghost btn-sm" @click="retryLoad()" data-testid="load-retry">重試</button>
+    </div>
+
     <div class="os-online">
       <span style="font-size:13px;font-weight:600">目前在線</span>
       <span class="os-chip" style="border-color:#86EFAC;background:#F0FDF4">
@@ -139,7 +145,7 @@
       </tbody>
     </table>
 
-    <div x-show="items.length === 0" style="padding:40px;text-align:center;color:var(--text-dim);font-size:13px">
+    <div x-show="items.length === 0 && !loadErrs.hours" style="padding:40px;text-align:center;color:var(--text-dim);font-size:13px">
       這個期間還沒有任何活躍紀錄
     </div>
 
@@ -210,7 +216,7 @@
 
       <!-- 這一頁撈回來的 200 筆有可能整批都是 90 天內的舊雜訊（被讀取端藏起來），
            那時候還有更早的資料可以翻，不能說「沒有紀錄」。 -->
-      <div x-show="trail.length === 0 && !trailNextId"
+      <div x-show="trail.length === 0 && !trailNextId && !loadErrs.trail"
            style="padding:30px;text-align:center;color:var(--text-dim);font-size:13px">
         這個期間沒有操作紀錄
       </div>
@@ -244,6 +250,10 @@
         items: [],
         start: '',
         end: '',
+        // 讀取失敗的白話原因（三支各一格）：失敗時不可以只顯示「還沒有任何活躍紀錄」，使用者會以為真的沒人上線過
+        loadErrs: { online: '', hours: '', trail: '' },
+        get loadErr() { return this.loadErrs.hours || this.loadErrs.trail || this.loadErrs.online },
+        retryLoad() { this.loadErrs = { online: '', hours: '', trail: '' }; this.loadOnline(); this.load() },
 
         // 這一頁只有最高管理者能用；後端兩支端點也都是 superadmin 限定，
         // 前端這道只是讓非授權者看到的是說明而不是一片載入失敗。
@@ -304,12 +314,14 @@
             if (this.trailUser) qs.set('user', this.trailUser)
             if (more && this.trailNextId) qs.set('before_id', this.trailNextId)
             const r = await fetch(`/api/user-activity/trail?${qs}`, { headers: this._auth() })
-            if (!r.ok) return
+            if (r.status === 401) { MotrixError.sessionExpired(); return }
+            if (!r.ok) { this.loadErrs.trail = MotrixError.loadText(r.status); return }
             const d = await r.json()
             this.trail = more ? this.trail.concat(d.items || []) : (d.items || [])
             this.trailNextId = d.nextBeforeId
             this.trailNote = d.note || ''
-          } catch (e) {}
+            this.loadErrs.trail = ''
+          } catch (e) { this.loadErrs.trail = MotrixError.loadText(e) }
         },
 
         // 「今天 20:13」比「09-15 20:13:45」好認：看軌跡的人在意的是「剛剛」還是
@@ -329,19 +341,23 @@
         async loadOnline() {
           try {
             const r = await fetch('/api/online-users', { headers: this._auth() })
-            if (r.ok) this.online = await r.json()
-          } catch (e) {}
+            if (r.status === 401) { MotrixError.sessionExpired(); return }
+            if (r.ok) { this.online = await r.json(); this.loadErrs.online = ''; this._onlineOk = true }
+            else if (!this._onlineOk) this.loadErrs.online = MotrixError.loadText(r.status)    // 每 60 秒的背景更新失敗不吵人；第一次就失敗才要說
+          } catch (e) { if (!this._onlineOk) this.loadErrs.online = MotrixError.loadText(e) }
         },
 
         async load() {
           try {
             const r = await fetch(`/api/user-activity?start=${this.start}&end=${this.end}`,
                                   { headers: this._auth() })
-            if (!r.ok) { this.items = []; return }
+            if (r.status === 401) { MotrixError.sessionExpired(); return }
+            if (!r.ok) { this.items = []; this.loadErrs.hours = MotrixError.loadText(r.status); return }
             const d = await r.json()
             this.items = d.items || []
             this.members = d.members || []
-          } catch (e) { this.items = [] }
+            this.loadErrs.hours = ''
+          } catch (e) { this.items = []; this.loadErrs.hours = MotrixError.loadText(e) }
           this.reloadTrail()
         },
 

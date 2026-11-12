@@ -357,7 +357,12 @@ function settingsCenterPage() {
       if (this._initDone) return
       this._initDone = true
       await this.loadGroups()
-      if (this.groups.length) await this.pick(this.groups[0].group)
+      // 網址帶 #群組代碼（系統中心的卡片這樣連過來，例如 #retention）⇒ 直接開那一組；不認得就開第一組
+      let want = ''
+      try { want = decodeURIComponent((location.hash || '').replace(/^#/, '')) } catch (e) { want = '' }
+      const hit = this.groups.find(g => g.group === want)
+      if (hit) await this.pick(hit.group)
+      else if (this.groups.length) await this.pick(this.groups[0].group)
     },
     async loadGroups() {
       try { const r = await this._get('/api/settings-center/groups'); this.groups = r.groups || []; this.plannedFeatures = r.plannedFeatures || [] } catch (e) { this._fail(e) }
