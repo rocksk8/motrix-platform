@@ -190,11 +190,24 @@ def test_old_put_cannot_move_to_an_arbitrary_port_even_from_an_unusual_legacy_po
 
 
 # ── 複驗新發現 ───────────────────────────────────────────────────────────────
-@pytest.mark.xfail(strict=True, reason="K（Low/Medium）：HMAC 金鑰在備份匯出被遮成「[已遮蔽]」；還原／手動重建設定後金鑰不是 hex，bytes.fromhex 丟 ValueError ⇒ 精靈測試與啟用 500")
-def test_atk_unusable_hmac_key_must_not_break_the_wizard(client, make_user, fake_smtp):
-    h = _h(client, make_user, "atk_r3_k")
+def test_unusable_hmac_key_is_regenerated_not_a_500(client, make_user, fake_smtp):
     S = _S()
-    S._set_setting(S._WIZARD_HMAC_KEY, "[已遮蔽]")                  # 備份匯出裡看到的值（還原後的樣子）
-    r = _ok(client, h)
-    assert r.status_code == 200, "金鑰壞掉時精靈整個 500：%s" % r.status_code
-    assert _act(client, h).status_code == 200
+    for i, bad in enumerate(("[已遮蔽]", "zz" * 32, "ab", 123, None, ["x"], "AB" * 32 + "00")):
+        h = _h(client, make_user, "atk_r3_k%d" % i)                   # 每個壞值用自己的帳號（頻率限制是每帳號 5 次）
+        S._set_setting(S._WIZARD_HMAC_KEY, bad)                      # 備份匯出裡看到的值（還原後的樣子）與各種壞形狀
+        assert _ok(client, h).status_code == 200, bad
+        assert _act(client, h).status_code == 200, bad
+        key = S._get_setting(S._WIZARD_HMAC_KEY, "")
+        assert isinstance(key, str) and len(key) == 64 and bytes.fromhex(key), bad
+
+
+# ── 新發現 L ────────────────────────────────────────────────────────────────
+@pytest.mark.xfail(strict=True, reason="L（Low）：窄化後『全是數字的字串』不再遮蔽；純數字密碼／PIN／token（例如 \"12345678\"）會原樣進備份匯出")
+def test_atk_numeric_string_secrets_must_still_be_masked_in_the_backup_export(client):
+    import archive
+    row = {"key": "some_integration", "updated_at": "x",
+           "value_json": json.dumps({"api_token": "123456789012", "login_password": "12345678", "pin_secret": "0000", "enabled": True, "password_min_len": 8}, ensure_ascii=False)}
+    out = json.loads(archive._general_row("系統設定", dict(row))["value_json"])
+    assert out["enabled"] is True and out["password_min_len"] == 8                       # 規則設定保留（修正想要的）
+    leaked = [k for k in ("api_token", "login_password", "pin_secret") if out[k] != "[已遮蔽]"]
+    assert not leaked, "純數字字串的祕密沒被遮蔽：%s" % leaked
