@@ -244,11 +244,9 @@ def _item_type_label(it: dict) -> str:
     return it.get("typeLabel") or "報價單"      # 模組登記的新單據類型（A2-0 #2）自帶標籤；都沒有才退回舊預設
 
 
-@router.get("/api/approval-queue/count")
-def get_approval_queue_count(authorization: str = Header(None)):
-    """topbar 角標：輪到我簽核的項目數（含「我目前代理誰」，2026-08-28）。與佇列列表同一份來源
-    （`_queue_provider_items`），兩邊才對得起來。"""
-    u = _require_user(authorization)
+def my_pending_items(u: dict) -> list:
+    """輪到使用者簽核的項目（最早送審的在前）。**「待我簽核」數字的唯一來源**：topbar 角標、首頁、登入問候語的離開期間摘要都走這裡，
+    數字才對得起來（2026-11-13 UX P1.5：簽核頁摘要與列表也改走同一份，見 `/api/approval-queue/count`）。"""
     conn = get_db()
     try:
         my_usernames = {u["username"]} | set(active_delegators_for(conn, u["username"]))
@@ -257,9 +255,18 @@ def get_approval_queue_count(authorization: str = Header(None)):
         conn.close()
     is_sa = u["role"] == "superadmin"
     mine = [it for it in items if _counts_for_me(it, my_usernames, u["username"], is_sa)]
+    mine.sort(key=lambda x: x.get("requestedAt") or "")
+    return mine
+
+
+@router.get("/api/approval-queue/count")
+def get_approval_queue_count(authorization: str = Header(None)):
+    """topbar 角標：輪到我簽核的項目數（含「我目前代理誰」，2026-08-28）。與佇列列表同一份來源
+    （`_queue_provider_items`），兩邊才對得起來。"""
+    u = _require_user(authorization)
+    mine = my_pending_items(u)
     # 首頁「等我簽核」的數字與清單同一份（2026-09-30 使用者：儀表板與簽核佇列沒有連動）：
     # 清單＝角標的那些項目（最早送審的在前，最多 10 筆），不含金額（首頁不做財務遮蔽判斷）。
-    mine.sort(key=lambda x: x.get("requestedAt") or "")
     return {"count": len(mine),
             "items": [{"type": it.get("type") or "", "typeLabel": _item_type_label(it),
                        "quoteNo": it.get("quoteNo") or "", "customer": it.get("customer") or "",
