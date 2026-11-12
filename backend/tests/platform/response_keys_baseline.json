@@ -7620,5 +7620,24 @@
    "[].username"
   ],
   "s": 200
+ },
+ "/api/org/gaps": {
+  "k": [
+   "count",
+   "gaps",
+   "gaps[].count",
+   "gaps[].detail",
+   "gaps[].fix",
+   "gaps[].fix.href",
+   "gaps[].fix.label",
+   "gaps[].items",
+   "gaps[].items[].id",
+   "gaps[].items[].name",
+   "gaps[].key",
+   "gaps[].severity",
+   "gaps[].title",
+   "ok"
+  ],
+  "s": 200
  }
 }
