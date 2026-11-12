@@ -79,7 +79,6 @@
       </div>
     </div>
 
-    <div x-show="loadError" x-text="loadError" role="alert" data-testid="load-error" style="margin:12px 0;padding:10px 14px;border:1px solid var(--danger,#b91c1c);border-radius:6px;color:var(--danger,#b91c1c);font-size:13px" x-cloak></div>
 
     <div class="os-online">
       <span style="font-size:13px;font-weight:600">目前在線</span>
@@ -244,7 +243,6 @@
         session: JSON.parse(localStorage.getItem('motrix_session') || '{}'),
         online: { count: 0, users: [] },
         items: [],
-        loadError: '',
         start: '',
         end: '',
 
@@ -340,12 +338,11 @@
           try {
             const r = await fetch(`/api/user-activity?start=${this.start}&end=${this.end}`,
                                   { headers: this._auth() })
-            if (!r.ok) { this.items = []; this.loadError = (r.status) === 403 ? '你沒有權限查看這一頁。' : '載入失敗（代碼 ' + (r.status) + '），請重新整理頁面；仍然失敗請聯絡系統管理者。'; return }
-            this.loadError = ''
+            if (!r.ok) { this.items = []; return }
             const d = await r.json()
             this.items = d.items || []
             this.members = d.members || []
-          } catch (e) { this.items = []; this.loadError = '連不上系統，請檢查網路後再試。' }
+          } catch (e) { this.items = [] }
           this.reloadTrail()
         },
 

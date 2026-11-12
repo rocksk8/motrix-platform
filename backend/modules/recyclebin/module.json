@@ -47,7 +47,7 @@
         "superadmin"
       ],
       "order": 30,
-      "keywords": "刪除 還原 回收 暫存",
+      "keywords": "刪除 還原 回收 暫存 暫存區 刪除暫存區",
       "icon": "trash"
     }
   ]

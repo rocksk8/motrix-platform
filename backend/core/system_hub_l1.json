@@ -12,7 +12,7 @@
     "audit_log"
    ],
    "order": 10,
-   "keywords": "稽核 紀錄 日誌 軌跡",
+   "keywords": "稽核 紀錄 日誌 軌跡 歷史紀錄",
    "icon": "log"
   },
   {
@@ -24,7 +24,7 @@
    "href": "online-stats.html",
    "perm": "superadmin",
    "order": 30,
-   "keywords": "在線 登入 時數 統計",
+   "keywords": "在線 登入 時數 統計 在線時數統計",
    "icon": "user"
   },
   {
@@ -232,7 +232,7 @@
    "href": "schema-status.html",
    "perm": "superadmin",
    "order": 20,
-   "keywords": "資料庫 schema 遷移",
+   "keywords": "資料庫 schema 遷移 Schema 狀態 版本",
    "icon": "ver"
   },
   {

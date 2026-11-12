@@ -193,11 +193,10 @@ def _base_url() -> str:
     # 回溯更新既有設定，套用 HTTPS 後需要 superadmin 手動去通知設定頁更新一次。
     # 2026-11-13（選單去工程師化 批 0）：新安裝不再預填某一台機器的內部位址——資料庫還沒有任何
     # email_notify 設定（全新安裝）⇒ 回空字串（信件連結退成「#」／相對路徑，由最高管理者到通知設定頁填）。
-    # 資料庫**已有**設定（升級安裝）而 base_url 沒存 ⇒ 沿用舊預設，不改變既有機器的行為。
+    # 資料庫**已有**設定但**沒有 base_url 這個鍵**（升級前存的舊設定）⇒ 沿用舊預設，不改變既有機器的行為；有這個鍵（含空字串）⇒ 以它為準。
     cfg = _cfg()
-    v = cfg.get("base_url")
-    if v:
-        return str(v).rstrip("/")
+    if "base_url" in cfg:                       # 設定裡有這個鍵＝有人（或畫面）明確存過：空字串就是空（信件按鈕沒有連結），不退回舊預設
+        return str(cfg["base_url"] or "").rstrip("/")
     return _LEGACY_DEFAULT_BASE_URL if cfg else ""
 
 

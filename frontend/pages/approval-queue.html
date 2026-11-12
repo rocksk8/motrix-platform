@@ -1162,7 +1162,7 @@
         },
 
         // 卡在誰身上：tiers 型單據取當層第一個未簽的人（跟 canApprove／
-        // waitingForText 的判斷完全一致）；case_change 與沒有流程的預設超管
+        // waitingForText 的判斷完全一致）；case_change 與沒有流程的預設最高管理者
         // 情形本來就不指定特定人，歸到「最高管理者」。
         blockerOf(item) {
           if (!item) return { key: '__admin__', display: '最高管理者' }

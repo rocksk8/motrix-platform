@@ -2586,9 +2586,6 @@ def get_email_notify(authorization: str = Header(None)):
     # Show which admin/superadmin users will receive admin notifications
     from helpers.email_notify import _admin_emails
     safe["admin_email_preview"] = _admin_emails("system_test_mail")
-    # 開發機測試模式只在「這台機器不寄真實信件」或已經開著時才顯示（正式機與客戶機不露出工程師選項）
-    from helpers.email_notify import email_send_policy
-    safe["send_allowed_here"] = bool(email_send_policy()[0])
     return safe
 
 

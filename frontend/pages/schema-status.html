@@ -70,13 +70,13 @@
     <div class="page-header">
       <div>
         <div class="page-header__title">資料庫版本</div>
-        <div class="page-header__sub">資料庫結構版本與 migration 歷史（唯讀）</div>
+        <div class="page-header__sub">資料庫的版本與升級歷史（唯讀）</div>
       </div>
     </div>
 
     <div class="readonly-note">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      本頁僅供檢視，migration 於伺服器每次啟動時自動套用，此處不提供任何操作。
+      本頁僅供檢視，資料庫升級會在系統每次啟動時自動完成，此處不提供任何操作。
     </div>
 
     <div x-show="!loading" class="schema-summary">
@@ -96,7 +96,6 @@
       </div>
     </div>
 
-    <div x-show="loadError" x-text="loadError" role="alert" data-testid="load-error" style="margin:12px 0;padding:10px 14px;border:1px solid var(--danger,#b91c1c);border-radius:6px;color:var(--danger,#b91c1c);font-size:13px" x-cloak></div>
     <div x-show="loading" style="padding:48px;text-align:center;color:var(--text-dim);font-size:13px">載入中…</div>
 
     <div class="migration-list" x-show="!loading">
@@ -120,7 +119,6 @@
       session: {},
       data: {},
       loading: false,
-      loadError: '',
 
       // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，
       //    而 body 上那個明著呼叫初始化的屬性會再叫一次 ⇒ **跑兩遍**。
@@ -143,7 +141,6 @@
 
       async load() {
         this.loading = true
-        this.loadError = ''
         try {
           const r = await fetch('/api/system/schema-status', {
             headers: { Authorization: 'Bearer ' + this.session.token }
@@ -151,10 +148,8 @@
           if (r.status === 401) { this.logout(); return }
           if (r.ok) {
             this.data = await r.json()
-          } else {
-            this.loadError = (r.status) === 403 ? '你沒有權限查看這一頁。' : '載入失敗（代碼 ' + (r.status) + '），請重新整理頁面；仍然失敗請聯絡系統管理者。'
           }
-        } catch(e) { this.loadError = '連不上系統，請檢查網路後再試。' }
+        } catch(e) {}
         this.loading = false
       },
 

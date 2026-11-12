@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""資源回收筒（資源回收筒）。只 import core／helpers／db（L1），不 import 其他 L2 模組。
+"""資源回收筒。只 import core／helpers／db（L1），不 import 其他 L2 模組。
 
 設計：docs/platform/plans/RECYCLE-BIN-DESIGN-T52.md；進度與決定：RECYCLE-BIN-P0-STATE-T53.md。
 擁有單據的模組透過 L1 契約 `helpers/recycle_bin.py`（提供 `recyclebin.adapter`、呼叫 `recyclebin.delete`）加入；本模組不認識任何單據。

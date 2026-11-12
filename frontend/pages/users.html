@@ -178,7 +178,7 @@
       </div>
     </div>
 
-    <!-- 超管提示 -->
+    <!-- 最高管理者提示 -->
     <div x-show="!isSuperAdmin"
          style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:12px;color:#92400E">
       ⚠ 僅最高管理者可新增或編輯使用者帳號
@@ -733,7 +733,7 @@
               <span style="font-weight:400;font-size:12px;color:var(--text-dim);text-transform:none;letter-spacing:0">（解鎖管理視角所需密碼）</span>
             </div>
             <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;background:#F5F3FF;border:1px solid #C4B5FD;border-radius:4px;padding:6px 9px">
-              ⓘ 在「每日工作事項」頁面，超管需輸入此密碼才能解鎖查看全體人員工作事項。
+              ⓘ 在「每日工作事項」頁面，最高管理者需輸入此密碼才能解鎖查看全體人員工作事項。
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
               <div class="form-group" style="margin-bottom:0">
@@ -1145,6 +1145,7 @@
         })
         if (!r.ok) { this.toast((await r.json().catch(()=>({}))).detail || '儲存失敗'); return }
         this.roleLabels = await r.json()
+        try { sessionStorage.removeItem('motrix_role_labels') } catch (e) {}      // 全站共用的角色名稱快取（static/role-label.js）：下一頁重新抓
         this.rlForm = {...this.roleLabels}
         this.roleLabelsMgrOpen = false
         this.toast('角色名稱已儲存')

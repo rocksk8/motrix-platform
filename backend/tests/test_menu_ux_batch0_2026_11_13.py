@@ -3,7 +3,7 @@
 守的是「畫面上不再看到工程師字眼」這件事本身，不是某個字串的拼法：
   ① 使用者看得到的檔案（前端頁面、選單與總覽卡資料）不再出現「超級管理員／最高管理員」（統一為「最高管理者」）。
   ② 新安裝不預填任何一台機器的內部位址；升級安裝（資料庫已有設定）維持舊行為。
-  ③ 五個原本載入失敗就空白的頁面，各有一個 role=alert 的白話錯誤區。
+  ③ （五頁載入失敗提示已拿掉，改由 hichan-2 的 motrix-error.js 統一處理）
   ④ 選單／總覽卡的舊名稱（Schema 狀態、刪除暫存區、在線時數統計、稽核頁的「歷史紀錄」）已換掉。
 """
 import json
@@ -25,19 +25,36 @@ def test_visible_files_never_say_old_admin_titles():
     bad = []
     for p in list(FRONT.rglob("*.html")) + list(FRONT.rglob("*.js")) + [BACK / "core" / "menu_l1.json", BACK / "core" / "system_hub_l1.json"] + list((BACK / "modules").glob("*/module.json")):
         t = _read(p)
-        for old in ("超級管理員", "最高管理員"):
+        for old in ("超級管理員", "最高管理員", "超管"):
             if old in t:
                 bad.append("%s 含「%s」" % (p.relative_to(ROOT).as_posix(), old))
     assert not bad, "使用者可見稱呼請統一寫「最高管理者」：\n" + "\n".join(bad)
 
 
+def _shown_strings(obj):
+    """選單／總覽卡資料裡『會顯示給人看』的欄位值（label／title／name／desc／impact）；keywords 不算（舊名放在關鍵字讓人還搜得到，是刻意的）。"""
+    out = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k in ("label", "title", "name", "desc", "impact") and isinstance(v, str):
+                out.append(v)
+            else:
+                out += _shown_strings(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            out += _shown_strings(v)
+    return out
+
+
 @pytest.mark.parametrize("old", ["Schema 狀態", "刪除暫存區", "在線時數統計"])
-def test_old_menu_names_are_gone_from_menu_and_hub_data(old):
-    hits = []
+def test_old_menu_names_are_gone_from_shown_text_but_kept_as_search_keywords(old):
+    shown, kws = [], []
     for p in [BACK / "core" / "menu_l1.json", BACK / "core" / "system_hub_l1.json"] + list((BACK / "modules").glob("*/module.json")):
-        if old in _read(p):
-            hits.append(p.name)
-    assert not hits, "%s 仍出現在 %s" % (old, hits)
+        data = json.loads(_read(p))
+        shown += _shown_strings(data)
+        kws.append(_read(p))
+    assert not [s for s in shown if old in s], "%s 仍出現在顯示文字" % old
+    assert any(('"keywords"' in t and old in t) for t in kws), "舊名 %s 應保留在 keywords，讓舊名也搜得到" % old
 
 
 def test_audit_page_is_called_operation_log():
@@ -46,13 +63,6 @@ def test_audit_page_is_called_operation_log():
     assert "操作紀錄" in txt and '"歷史紀錄"' not in txt
     assert "<title>操作紀錄" in _read(FRONT / "pages" / "audit-log.html")
 
-
-@pytest.mark.parametrize("page", ["audit-log", "online-stats", "schema-status", "module-versions", "shipping-export-history"])
-def test_five_pages_show_a_plain_error_when_loading_fails(page):
-    html = _read(FRONT / "pages" / (page + ".html"))
-    assert 'data-testid="load-error"' in html and 'role="alert"' in html, page
-    assert "loadError" in html and "請重新整理" in html, page
-    assert "連不上系統" in html, page
 
 
 def test_online_stats_has_no_literal_markdown_stars():
@@ -71,14 +81,28 @@ def test_planned_cards_do_not_show_train_codes():
 
 
 # ── 預設系統網址 ────────────────────────────────────────────────────────────────
-def test_base_url_new_install_is_empty_and_upgrade_keeps_legacy(monkeypatch):
+def test_base_url_key_presence_decides_not_truthiness(monkeypatch):
+    """H1（hichan-6 審查）：新安裝存過空 base_url ⇒ 就是空，不可退回舊內部位址；只有「升級前存的舊設定、根本沒有 base_url 這個鍵」才沿用舊預設。"""
     from helpers import email_notify as EN
     monkeypatch.setattr(EN, "_cfg", lambda: {})
     assert EN._base_url() == "", "全新安裝不可預填內部位址"
     monkeypatch.setattr(EN, "_cfg", lambda: {"enabled": True, "smtp_host": "x"})
-    assert EN._base_url() == EN._LEGACY_DEFAULT_BASE_URL, "升級安裝（已有設定、沒存 base_url）要維持舊行為"
+    assert EN._base_url() == EN._LEGACY_DEFAULT_BASE_URL, "升級前存的舊設定（沒有 base_url 鍵）要維持舊行為"
+    monkeypatch.setattr(EN, "_cfg", lambda: {"enabled": True, "base_url": ""})
+    assert EN._base_url() == "", "有這個鍵、值是空 ⇒ 空（不退回舊預設）"
     monkeypatch.setattr(EN, "_cfg", lambda: {"base_url": "https://erp.example.com/"})
     assert EN._base_url() == "https://erp.example.com", "已儲存的值一律優先、不被覆蓋"
+
+
+def test_fresh_install_saving_an_empty_base_url_keeps_it_empty(client, make_user):
+    """新安裝實際走一遍：PUT 存一個空的 base_url，之後信件用的網址仍是空字串（不是舊內部位址）。"""
+    from helpers import email_notify as EN
+    su, sp = make_user(username="b0_su2", role="superadmin")
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": su, "password": sp}).json()["token"]}
+    r = client.put("/api/settings/email-notify", json={"enabled": False, "base_url": ""}, headers=h)
+    assert r.status_code == 200, r.text
+    assert EN._base_url() == ""
+    assert client.get("/api/settings/email-notify", headers=h).json()["base_url"] == ""
 
 
 def test_frontend_no_longer_hardcodes_the_internal_address():
@@ -92,21 +116,23 @@ def test_email_defaults_base_url_is_empty():
     assert S._EMAIL_DEFAULTS["base_url"] == ""
 
 
-def test_get_email_notify_reports_whether_this_machine_sends(client, make_user, monkeypatch):
-    from helpers import email_notify as EN
-    su, sp = make_user(username="b0_su", role="superadmin")
-    r = client.post("/api/auth/login", json={"username": su, "password": sp})
-    h = {"Authorization": "Bearer " + r.json()["token"]}
-    monkeypatch.setattr(EN, "email_send_policy", lambda env=None: (True, "x"))
-    assert client.get("/api/settings/email-notify", headers=h).json()["send_allowed_here"] is True
-    monkeypatch.setattr(EN, "email_send_policy", lambda env=None: (False, "x"))
-    assert client.get("/api/settings/email-notify", headers=h).json()["send_allowed_here"] is False
-
-
-def test_dev_mode_row_is_hidden_unless_this_machine_does_not_send():
+def test_dev_mode_toggle_always_lives_in_the_collapsed_dev_section():
+    """M1：不用環境判斷顯示／隱藏（那樣寫反了）；一律放進預設收合的「開發用設定」區，且回應不再多帶 send_allowed_here。"""
     html = _read(FRONT / "pages" / "notification-settings.html")
-    m = re.search(r'<div class="ns-toggle"[^>]*data-testid="ns-dev-mode-row"', html)
-    assert m and 'x-show="cfg.dev_mode || cfg.send_allowed_here === false"' in m.group(0)
+    m = re.search(r'<details data-testid="ns-dev-section"[^>]*>(.*?)</details>', html, re.S)
+    assert m and 'data-testid="ns-dev-mode-row"' in m.group(1) and "chk-dev-mode" in m.group(1)
+    assert " open" not in m.group(0).split(">")[0], "預設要收合"
+    assert "send_allowed_here" not in html
+    assert "send_allowed_here" not in _read(BACK / "routers" / "system.py")
+
+
+def test_empty_base_url_has_a_plain_hint_and_the_private_check_parses_ips():
+    html = _read(FRONT / "pages" / "notification-settings.html")
+    assert "信件裡的按鈕會沒有連結" in html
+    assert "10\." not in html or "o[0] === 10" in html            # 不再用 /^(10\.…)/ 前綴比對（會誤報 10.example.com）
+    assert "o[0] === 100 && o[1] >= 64 && o[1] <= 127" in html       # 100.64.0.0/10
+    assert "local|lan|internal" in html                              # .local／.lan 之類內部名稱
+    assert "!/^(localhost|127" in html                               # 用 localhost 開頁時不預填
 
 
 def test_blocked_send_message_is_plain():

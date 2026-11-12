@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""資源回收筒（資源回收筒）的 L1 契約（第 53 班 P0；設計 docs/platform/plans/RECYCLE-BIN-DESIGN-T52.md、狀態 RECYCLE-BIN-P0-STATE-T53.md）。
+"""資源回收筒的 L1 契約（第 53 班 P0；設計 docs/platform/plans/RECYCLE-BIN-DESIGN-T52.md、狀態 RECYCLE-BIN-P0-STATE-T53.md）。
 
 [單位] helper:recycle_bin    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] Adapter, BinError, BinUnavailable, CAP_ADAPTER, CAP_DELETE, CAP_RESERVED, MASK, MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_BYTES_ADMIN, RETENTION_DAYS, RestoreContext, adapters, available, delete, delete_scope, get_adapter, mask_obj, request_scope_begin, request_scope_end, reserved_ids

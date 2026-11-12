@@ -427,6 +427,10 @@
 
 檢查「沒有部門的人／沒有主管的部門／沒人持有財務職務」，顯示在簽核設定頁頂、使用者新增後、總覽首頁。檔案：新唯讀端點、`approval-settings.html`、`users.html`、`system-hub.html`。
 
+### 後續批次：角色中文名收斂為單一來源（hichan-6 審查 L4）
+
+全站目前有至少 6 份「角色代碼→中文名」對照（`sidebar.js`、`role-label.js`、`users.html`、`mail-settings.html`、`daily-tasks.html`、`routers/system.py::_DEFAULT_ROLE_LABELS` 等），其中只有使用者管理頁與 `perm_text` 讀公司自訂的 `role_labels`。批 0 新增的 `static/role-label.js` 已先讀 `GET /api/settings/role-labels`（每個登入期間抓一次、存 sessionStorage），但其他幾份仍是寫死預設。後續要：全站改走 `MotrixRole.label`、補一個首次載入就帶角色名稱的方式（例如隨 `/api/auth/me` 回傳），再加守門測試禁止新增第七份對照表。
+
 ### 批次 3：寄信帳號精靈（M）
 
 1. **先抽元件（單獨一個 PR）：** 把寄信卡從 `notification-settings.html`（約 :237-335）抽成獨立檔案（例如 `frontend/static/email-setup.js`），之後與 hichan-6 改 LINE 卡互不衝突。

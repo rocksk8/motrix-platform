@@ -3116,7 +3116,7 @@ function app() {
     },
     avatarColor(u) { return _avatarColor(u) },
     roleCn(r) {
-      return {superadmin:'超管', admin:'管理員', sales:'業務', engineer:'工程師', viewer:'檢視'}[r] || r
+      return {superadmin:'最高管理者', admin:'管理員', sales:'業務', engineer:'工程師', finance:'財務', user:'一般使用者', viewer:'檢視者'}[r] || r
     },
     fmtDT(s) {
       if (!s) return ''
