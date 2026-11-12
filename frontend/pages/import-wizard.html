@@ -190,8 +190,13 @@
               系統會產生臨時密碼，<b>只在下一個畫面顯示一次</b>，請馬上交給同仁；第一次登入必須改密碼。
             </div>
 
+            <div class="iw-err" data-testid="iw-uncertain" x-show="uncertain">
+              <b>結果不確定。</b>網路中斷或等太久，這次匯入<b>可能已經完成，也可能沒有</b>。請不要重新上傳或再按一次「確認匯入」，先按下面的按鈕查詢這次的結果：
+              如果已經建立，會列出建立了哪些帳號（臨時密碼不會再顯示，可以逐一重設）；如果沒有，會直接補做這一次。
+              <div class="iw-row" style="margin-top:6px"><button type="button" class="iw-btn primary" data-testid="iw-query" :disabled="busy" @click="queryResult()">查詢這次匯入結果</button></div>
+            </div>
             <div class="iw-row">
-              <button type="button" class="iw-btn primary" data-testid="iw-commit" :disabled="!canCommit" @click="commit()">確認匯入</button>
+              <button type="button" class="iw-btn primary" data-testid="iw-commit" :disabled="!canCommit || uncertain" @click="commit()">確認匯入</button>
               <button type="button" class="iw-btn" @click="reset()">取消，重新來</button>
               <span x-show="busy" style="color:var(--text-secondary)">處理中…</span>
             </div>
@@ -203,11 +208,21 @@
         <section x-show="step === 'result'" data-testid="iw-result">
           <h2 style="font-size:16px;margin:0 0 6px" x-text="kindName + '匯入完成'"></h2>
           <div class="iw-ok" data-testid="iw-result-summary" x-text="resultText"></div>
+          <div class="iw-warn" data-testid="iw-replayed" x-show="replayed">
+            這是<b>先前那次匯入</b>的結果：下面的帳號已經建立，但臨時密碼<b>無法再顯示</b>（系統不留存）。請替每位同仁按「重設臨時密碼」，會產生新的臨時密碼並只顯示一次；同仁第一次登入必須改密碼。
+          </div>
+          <div class="iw-card" data-testid="iw-lost" x-show="lostAccounts.length">
+            <b>需要重設臨時密碼的帳號</b>
+            <table class="iw-t"><thead><tr><th>帳號</th><th>姓名</th><th></th></tr></thead>
+              <tbody><template x-for="a in lostAccounts" :key="a.id"><tr><td x-text="a.username"></td><td x-text="a.displayName"></td>
+                <td><button type="button" class="iw-btn" data-testid="iw-reset-pw" :disabled="a.busy || a.done" @click="resetPw(a)" x-text="a.done ? '已重設（見下方）' : '重設臨時密碼'"></button>
+                  <span x-show="a.err" style="color:var(--danger,#b91c1c);font-size:12px" x-text="a.err"></span></td></tr></template></tbody></table>
+          </div>
           <div class="iw-card" data-testid="iw-credentials" x-show="credentials.length">
             <b>臨時密碼（只顯示這一次）</b>
             <div class="iw-warn">請現在就複製或下載，交給同仁本人。離開或重新整理後就看不到了；如果這個畫面沒顯示完整就離開，請不要重新匯入，到「帳號」頁替同仁重設密碼。同仁第一次登入必須改密碼。</div>
             <table class="iw-t"><thead><tr><th>帳號</th><th>姓名</th><th>臨時密碼</th></tr></thead>
-              <tbody><template x-for="c in credentials" :key="c.username"><tr><td x-text="c.username"></td><td x-text="c.displayName"></td><td class="iw-pw" x-text="c.password"></td></tr></template></tbody></table>
+              <tbody><template x-for="c in credentials" :key="c.username + ':' + c.password"><tr><td x-text="c.username"></td><td x-text="c.displayName"></td><td class="iw-pw" x-text="c.password"></td></tr></template></tbody></table>
             <div class="iw-row">
               <button type="button" class="iw-btn" data-testid="iw-cred-download" @click="downloadCredentials()">下載（.csv）</button>
               <button type="button" class="iw-btn primary" data-testid="iw-cred-done" @click="clearCredentials()">我已記下，清除畫面上的密碼</button>
@@ -234,6 +249,7 @@
         step: 'choose', kind: '', busy: false, err: '', notice: '',
         fileName: '', parsed: null, plan: null, ubnAck: false,
         credentials: [], resultText: '', resultErrors: [],
+        uncertain: false, replayed: false, lostAccounts: [], _idemKey: '', _commitBody: null,
         stepNames: ['選對象', '範本與上傳', '預覽與確認', '完成'],
         get stepNo() { return { choose: 0, upload: 1, preview: 2, result: 3 }[this.step] },
         get kindName() { return { customers: '客戶', parts: '料號', users: '員工' }[this.kind] || '' },
@@ -277,6 +293,7 @@
         reset() {
           this.step = 'choose'; this.kind = ''; this.parsed = null; this.plan = null; this.fileName = ''; this.err = ''; this.notice = ''
           this.ubnAck = false; this.credentials = []; this.resultText = ''; this.resultErrors = []
+          this.uncertain = false; this.replayed = false; this.lostAccounts = []; this._idemKey = ''; this._commitBody = null
           this._rows = null; this._planPayload = null
         },
         async _fail(r) {
@@ -314,16 +331,30 @@
           } catch (e) { this.err = String(e.message || e) } finally { this.busy = false }
         },
         _endpoint() { return { customers: '/api/customers/import-rows', parts: '/api/parts/import-rows', users: '/api/users/import-rows' }[this.kind] },
-        async _post(body) {
-          const r = await fetch(this._endpoint(), { method: 'POST', headers: this._hdr(true), body: JSON.stringify(body) })
+        async _post(body, extraHeaders) {
+          let r
+          try {
+            r = await fetch(this._endpoint(), { method: 'POST', headers: Object.assign(this._hdr(true), extraHeaders || {}), body: JSON.stringify(body) })
+          } catch (netErr) {                                  // 網路中斷／逾時：伺服器有沒有收到、做完沒有，都不知道
+            const e = new Error('連線中斷或逾時')
+            e.unknown = true
+            throw e
+          }
           if (!r.ok) {
             const d = await r.json().catch(() => null)
             const det = d && d.detail
             const e = new Error((det && det.message) || (typeof det === 'string' ? det : '失敗（' + r.status + '）'))
             e.code = (det && det.code) || ''
+            e.status = r.status
+            // 伺服器明確回了「沒做」的錯誤（含 import_failed＝整批回復）才算確定；5xx 沒有明確代碼（例如閘道逾時）、409 處理中 ⇒ 結果不確定
+            e.unknown = (r.status >= 500 && e.code !== 'import_failed') || (r.status === 409 && e.code !== 'plan_changed')
             throw e
           }
           return r.json()
+        },
+        _newKey() {
+          const u = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2))
+          return 'iw-' + String(u).replace(/[^A-Za-z0-9_-]/g, '')
         },
         async _preview() {
           const p = await this._post({ rows: this._rows, dryRun: true })
@@ -331,24 +362,51 @@
           this.plan = p
         },
         async commit() {
-          if (!this.canCommit) return
-          this.busy = true; this.err = ''
+          if (!this.canCommit || this.uncertain) return
+          this.busy = true; this.err = ''; this.notice = ''
           const ticked = new Set(this.plan.confirms ? this.plan.confirms.filter(c => c.tick).map(c => c.row) : [])
           // 與預覽送出的列逐位元相同；只在使用者勾選的「需確認」列加上 confirm:true
           const rows = this._rows.map(r => ticked.has(r.row) ? { ...r, confirm: true } : r)
+          this._commitBody = { rows, dryRun: false, planHash: this.plan.planHash }
+          this._idemKey = this.kind === 'users' ? this._newKey() : ''     // 員工匯入：每次送出一把新 key（重送同一次才沿用）
+          await this._send()
+        },
+        async queryResult() {                                   // 結果不確定 ⇒ 用同一把 key、同一份內容再問一次：做過就回原結果，沒做過就補做
+          if (!this._commitBody || this.busy) return
+          this.busy = true; this.err = ''
+          await this._send()
+        },
+        async _send() {
           try {
-            const res = await this._post({ rows, dryRun: false, planHash: this.plan.planHash })
+            const res = await this._post(this._commitBody, this._idemKey ? { 'Idempotency-Key': this._idemKey } : null)
+            this.uncertain = false
             this._finish(res)
           } catch (e) {
             if (e.code === 'plan_changed') {
-              try { await this._preview(); this.notice = '資料在你預覽之後有變動，已重新預覽，請再確認一次（勾選需重新勾）。' } catch (e2) { this.err = String(e2.message || e2) }
+              this.uncertain = false; this._idemKey = ''; this._commitBody = null
+              try {
+                await this._preview()
+                let n = '資料在你預覽之後有變動，已重新預覽，請再確認一次（勾選需重新勾）。'
+                if (this.kind === 'users' && this.plan.skipped && this.plan.skipped.length) {
+                  n += '另外，有 ' + this.plan.skipped.length + ' 個帳號現在變成「已存在」而被略過（可能剛剛有人建立了，或上一次匯入其實已經完成），請到帳號頁確認。'
+                }
+                this.notice = n
+              } catch (e2) { this.err = String(e2.message || e2) }
+            } else if (e.unknown && this.kind === 'users') {
+              this.uncertain = true                             // 不可以說「沒有建立」：可能已經建了
+              this.err = ''
             } else {
-              this.err = String(e.message || e) + (this.kind === 'users' ? '（沒有任何帳號被建立）' : '')
+              this.uncertain = false
+              this.err = String(e.message || e) + (this.kind === 'users' && (e.code === 'import_failed' || e.status === 400 || e.status === 403 || e.status === 422) ? '（沒有任何帳號被建立）' : '')
+              if (this.kind === 'users' && e.status === 422) this._idemKey = ''
             }
           } finally { this.busy = false }
         },
         _finish(res) {
           this.credentials = Array.isArray(res.credentials) ? res.credentials : []
+          this.replayed = !!res.replayed
+          this.lostAccounts = (this.replayed && Array.isArray(res.createdAccounts)) ? res.createdAccounts.map(a => ({ ...a, busy: false, done: false, err: '' })) : []
+          this._commitBody = null; this._idemKey = ''
           if (this.kind === 'users') {
             this.resultText = '已建立 ' + (res.created || 0) + ' 個帳號；略過已存在 ' + ((res.skipped || []).length) + '；需手動建立 ' + ((res.manual || []).length) + '；有問題未匯入 ' + (res.failed || 0) + '。'
           } else {
@@ -359,15 +417,35 @@
           this.step = 'result'
         },
         downloadCredentials() {
-          const esc = v => '"' + String(v).replace(/"/g, '""') + '"'
+          // 試算表會把 = + - @ 與 Tab／CR 開頭的儲存格當公式執行：一律加前導單引號（M2）
+          const esc = v => { let t = String(v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"' }
           const lines = ['帳號,姓名,臨時密碼'].concat(this.credentials.map(c => [c.username, c.displayName, c.password].map(esc).join(',')))
-          const url = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
+          const url = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
           const a = document.createElement('a')
           a.href = url; a.download = 'MOTRIX_臨時密碼_' + MotrixDate.today() + '.csv'
           document.body.appendChild(a); a.click(); a.remove()
           setTimeout(() => URL.revokeObjectURL(url), 2000)
         },
         clearCredentials() { this.credentials = [] },
+        _genPassword() {
+          const A = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789', n = 20
+          for (;;) {
+            const buf = new Uint32Array(n); crypto.getRandomValues(buf)
+            const pw = Array.from(buf, x => A[x % A.length]).join('')
+            if (/[A-Z]/.test(pw) && /[a-z]/.test(pw) && /[0-9]/.test(pw)) return pw
+          }
+        },
+        async resetPw(a) {                                      // 不經過匯入：直接用帳號頁同一支「設定新密碼」的端點
+          if (a.busy || a.done) return
+          a.busy = true; a.err = ''
+          const pw = this._genPassword()
+          try {
+            const r = await fetch('/api/users/' + a.id, { method: 'PUT', headers: this._hdr(true), body: JSON.stringify({ password: pw }) })
+            if (!r.ok) throw new Error(await this._fail(r))
+            this.credentials = this.credentials.concat([{ id: a.id, username: a.username, displayName: a.displayName, password: pw }])
+            a.done = true
+          } catch (e) { a.err = String(e.message || e) } finally { a.busy = false }
+        },
       }
     }
   </script>

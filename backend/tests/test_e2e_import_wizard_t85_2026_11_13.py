@@ -130,3 +130,68 @@ def test_old_customers_page_keeps_its_import_button_and_shows_the_link_only_when
     assert page.get_by_role("button", name="匯入 Excel").is_visible()
     page.get_by_test_id("import-wizard-link").click()
     page.wait_for_url("**/import-wizard.html")
+
+
+@pytest.mark.e2e
+def test_lost_response_says_uncertain_then_query_replays_without_passwords_and_reset_works(live_server, make_user, new_page, login_as, tmp_path):
+    """M3：伺服器已經建好、回應在路上掉了 ⇒ 頁面不可以說「沒有建立」；查詢＝同一把 key 重送 ⇒ 看到建了哪些帳號（沒有密碼）；可逐一重設臨時密碼。"""
+    import requests
+    _flag(True)
+    page = _open(live_server, make_user, new_page, login_as, name="iw_sa5")
+    page.get_by_test_id("iw-kind-users").click()
+    f = _xlsx(tmp_path, "u5.xlsx", [["帳號＊", "姓名＊"], ["iw_lost1", "遺失甲"], ["iw_lost2", "遺失乙"]])
+    page.get_by_test_id("iw-file").set_input_files(f)
+    page.get_by_test_id("iw-plan").wait_for(state="visible", timeout=15000)
+    seen = {"n": 0, "keys": []}
+
+    def drop_first_commit(route):
+        req = route.request
+        body = req.post_data or ""
+        if '"dryRun":false' in body.replace(" ", "") and seen["n"] == 0:
+            seen["n"] += 1
+            seen["keys"].append(req.headers.get("idempotency-key"))
+            route.fetch()                                   # 伺服器真的處理了……
+            route.abort("connectionreset")                  # ……但回應掉了
+        else:
+            if '"dryRun":false' in body.replace(" ", ""):
+                seen["keys"].append(req.headers.get("idempotency-key"))
+            route.continue_()
+    page.route("**/api/users/import-rows", drop_first_commit)
+    page.get_by_test_id("iw-commit").click()
+    page.get_by_test_id("iw-uncertain").wait_for(state="visible", timeout=15000)
+    assert "沒有任何帳號被建立" not in page.inner_text("body"), "可能已經建立了，不能說沒有"
+    assert page.get_by_test_id("iw-commit").is_disabled()
+    import db
+    c = db.get_db()
+    try:
+        assert c.execute("SELECT COUNT(*) AS n FROM users WHERE username IN ('iw_lost1','iw_lost2')").fetchone()["n"] == 2
+    finally:
+        c.close()
+    page.get_by_test_id("iw-query").click()
+    page.get_by_test_id("iw-replayed").wait_for(state="visible", timeout=15000)
+    assert seen["keys"][0] and seen["keys"][0] == seen["keys"][1], "查詢要用同一把 key"
+    assert page.locator(".iw-pw").count() == 0 or not page.get_by_test_id("iw-credentials").is_visible()
+    assert "已建立 2 個帳號" in page.get_by_test_id("iw-result-summary").inner_text()
+    page.get_by_test_id("iw-lost").wait_for(state="visible", timeout=5000)
+    page.get_by_test_id("iw-reset-pw").first.click()
+    page.get_by_test_id("iw-credentials").wait_for(state="visible", timeout=15000)
+    pw = page.locator(".iw-pw").first.inner_text().strip()
+    assert len(pw) >= 14
+    r = requests.post(live_server + "/api/auth/login", json={"username": "iw_lost1", "password": pw}, timeout=15)
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.e2e
+def test_credentials_csv_neutralizes_formula_cells_and_keeps_the_bom(live_server, make_user, new_page, login_as):
+    _flag(True)
+    page = _open(live_server, make_user, new_page, login_as, name="iw_sa6")
+    page.evaluate("""() => { const d = %s; d.credentials = [
+        {username: '=cmd|calc', displayName: '+SUM(1)', password: '@x1Y2z3W4v5U6t7'},
+        {username: '-lead', displayName: '\tTab', password: 'Normal1Pass2Word'}]; }""" % DATA)
+    with page.expect_download() as dl:
+        page.evaluate("() => %s.downloadCredentials()" % DATA)
+    raw = open(dl.value.path(), "rb").read()
+    assert raw[:3] == b"\xef\xbb\xbf"
+    text = raw.decode("utf-8-sig")
+    assert '"\'=cmd|calc"' in text and '"\'+SUM(1)"' in text and '"\'@x1Y2z3W4v5U6t7"' in text
+    assert '"\'-lead"' in text and "\"'\tTab\"" in text and '"Normal1Pass2Word"' in text

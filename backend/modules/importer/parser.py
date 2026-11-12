@@ -6,7 +6,10 @@
 - 空白儲存格＝輸出空字串（或省略），**絕不輸出 0 或 null**（既有規則：空白＝不更新）；
 - 文字一律去前後空白、全形空白；數字儲存格（含整數值的浮點）轉成沒有小數點的字串，避免料號 `12345` 變成 `12345.0`。
 安全：只收 .xlsx／.csv（.xls、.xlsm 白話拒絕）、先檢查檔頭與 zip（拒絕巨集、解壓過大、缺 workbook）、公式儲存格不匯入（當成空白並警告）、
-只讀可見的資料工作表、連續空白列達上限就停止（防「宣告百萬列但幾乎是空」的檔案）。
+只讀可見的資料工作表。
+**資源上限（H1）**：解析前先用串流方式掃一遍工作表 XML（不載入整份、不依賴檔案自己宣告的大小），格數超過 25 萬、欄超過 50、
+列號超過 10 萬、工作表 XML 超過 30MB 就在讀內容之前白話拒絕；之後逐列讀，整個解析有 10 秒期限。空白區段不會讓讀取提早結束
+（只在資料列之間出現空白時警告），上限算「有內容的列」。
 """
 import csv
 import io
@@ -18,9 +21,13 @@ from datetime import date, datetime
 
 MAX_BYTES_DEFAULT = 5 << 20
 MAX_UNZIPPED = 50 << 20
-MAX_COLS = 60
+MAX_COLS = 50
 MAX_CELL = 2000
-MAX_BLANK_RUN = 500                 # 連續空白列這麼多就當作檔案結束
+MAX_CELLS = 250_000                 # 工作表裡的儲存格（含只有格式的空格）總數上限
+MAX_SHEET_ROWNUM = 100_000          # 列號上限（資料放在這之下才讀）
+MAX_ROW_TAGS = 50_000               # 工作表裡出現的列（含空白列）數上限
+MAX_SHEET_XML = 30 << 20            # 工作表／共用字串的解壓後大小上限
+DEADLINE_SECONDS = 10.0             # 整個解析的時間上限
 EXAMPLE_MARK = "（範例，請刪除）"
 KINDS = ("customers", "parts", "users")
 MAX_ROWS = {"customers": 5000, "parts": 5000, "users": 300}
@@ -31,6 +38,26 @@ HELP_SHEET = "說明"
 
 class ParseError(Exception):
     """白話訊息（直接給使用者看）。"""
+
+
+def _col_letters(n: int) -> str:
+    out = ""
+    while n > 0:
+        n, r = divmod(n - 1, 26)
+        out = chr(65 + r) + out
+    return out or "A"
+
+
+def _col_number(letters: str) -> int:
+    n = 0
+    for ch in letters:
+        n = n * 26 + (ord(ch) - 64)
+    return n
+
+
+def _check_deadline(deadline):
+    if deadline is not None and time.monotonic() > deadline:
+        raise ParseError("檔案處理太久了（超過 %d 秒）。請減少列數或欄數，或拆成多個檔案" % DEADLINE_SECONDS)
 
 
 # 舊檔表頭「備註」曾寫成另一個字（站內用語守門不准該寫法出現在原始碼）：這裡拆開寫，仍接受舊檔
@@ -131,22 +158,26 @@ def _decode_csv(data: bytes) -> str:
     raise ParseError("這個檔案的文字編碼讀不出來（請用 Excel 另存成 .xlsx，或存成 UTF-8 的 CSV）")
 
 
-def _rows_from_csv(data: bytes, max_scan: int):
+def _rows_from_csv(data: bytes, max_scan: int, deadline=None):
+    """只留有內容的列（空白行不算列數、也不讓讀取提早結束）；`max_scan`＝有內容的列數上限。"""
     text = _decode_csv(data)
-    out, blank = [], 0
+    out = []
     for i, rec in enumerate(csv.reader(io.StringIO(text, newline=""))):
+        if i & 255 == 0:
+            _check_deadline(deadline)
+        if i > MAX_SHEET_ROWNUM:
+            raise ParseError("資料放得太下面了（超過第 %d 列），請刪掉中間的空白列再上傳" % MAX_SHEET_ROWNUM)
+        if len(rec) > MAX_COLS:
+            extra = [ci for ci in range(MAX_COLS, len(rec)) if _cell_text(rec[ci])]
+            if extra:
+                raise ParseError("第 %d 列的「%s 欄」（第 %d 欄）有內容，超過欄位上限 %d 欄；請確認檔案是依範本填的" % (i + 1, _col_letters(extra[0] + 1), extra[0] + 1, MAX_COLS))
+            rec = rec[:MAX_COLS]
+        cells = [_cell_text(c) for c in rec]
+        if not any(cells):
+            continue
+        out.append((i + 1, cells, [], []))
         if len(out) > max_scan:
             raise ParseError("檔案的列數太多了（上限 %d 列），請拆成多個檔案" % (max_scan - 2))
-        cells = [_cell_text(c) for c in rec[:MAX_COLS + 1]]
-        if len(rec) > MAX_COLS:
-            raise ParseError("欄位太多了（上限 %d 欄），請確認檔案是依範本填的" % MAX_COLS)
-        if not any(cells):
-            blank += 1
-            if blank > MAX_BLANK_RUN:
-                break
-        else:
-            blank = 0
-        out.append((i + 1, cells, []))
     return out
 
 
@@ -168,8 +199,91 @@ def _check_zip(data: bytes):
     return z
 
 
-def _rows_from_xlsx(data: bytes, max_scan: int):
-    _check_zip(data)
+_SHEET_TAG = re.compile(rb"<sheet\b[^>]*>")
+_ATTR = re.compile(rb'([\w:]+)\s*=\s*"([^"]*)"')
+_REL_TAG = re.compile(rb"<Relationship\b[^>]*>")
+_ROW_RE = re.compile(rb"<row[\s>][^>]*")
+_ROWNUM_RE = re.compile(rb'\br="(\d+)"')
+_CELL_RE = re.compile(rb"<c(?=[\s/>])([^>]*?)(/?)>")
+_REF_RE = re.compile(rb'\br="([A-Z]{1,3})(\d+)"')
+
+
+def _attrs(tag: bytes) -> dict:
+    return {k.decode("ascii", "ignore"): v.decode("utf-8", "ignore") for k, v in _ATTR.findall(tag)}
+
+
+def _sheet_part(z, sheet_title: str):
+    """工作表名稱 → zip 內 XML 路徑（只靠 workbook.xml 與 rels，兩者都很小）。找不到回 None。"""
+    try:
+        wb = z.read("xl/workbook.xml")
+        rels = z.read("xl/_rels/workbook.xml.rels")
+    except KeyError:
+        return None
+    rid = None
+    for t in _SHEET_TAG.findall(wb):
+        a = _attrs(t)
+        if a.get("name", "").strip() == sheet_title.strip():
+            rid = a.get("r:id") or next((v for k, v in a.items() if k.endswith(":id")), None)
+            break
+    if not rid:
+        return None
+    for t in _REL_TAG.findall(rels):
+        a = _attrs(t)
+        if a.get("Id") == rid:
+            tgt = a.get("Target", "")
+            return tgt.lstrip("/") if tgt.startswith("/") else "xl/" + tgt
+    return None
+
+
+def _prescan_sheet(z, part: str, deadline):
+    """串流掃一遍工作表 XML（每次 1MB），只數東西、不解析內容：格數、列數、最大列號、超過欄上限的格。
+    超過任何一個上限就在這裡丟 ParseError——此時還沒有讀任何儲存格內容。"""
+    try:
+        info = z.getinfo(part)
+    except KeyError:
+        return
+    if info.file_size > MAX_SHEET_XML:
+        raise ParseError("這個工作表的內容太大了，請刪掉多餘的空白列、欄與格式再上傳（或拆成多個檔案）")
+    cells = rows = max_row = 0
+    tail = b""
+    with z.open(info) as fh:
+        while True:
+            _check_deadline(deadline)
+            chunk = fh.read(1 << 20)
+            if not chunk:
+                break
+            buf = tail + chunk
+            cut = buf.rfind(b">")
+            if cut < 0:
+                tail = buf
+                if len(tail) > (1 << 20):
+                    raise ParseError("這個工作表的內容格式不正常，無法讀取")
+                continue
+            body, tail = buf[:cut + 1], buf[cut + 1:]
+            for m in _ROW_RE.finditer(body):
+                rows += 1
+                mr = _ROWNUM_RE.search(m.group(0))
+                if mr:
+                    max_row = max(max_row, int(mr.group(1)))
+            if rows > MAX_ROW_TAGS or max_row > MAX_SHEET_ROWNUM:
+                raise ParseError("這個工作表的列太多或資料放得太下面了（上限約 %d 列）。請刪掉多餘的空白列再上傳，或拆成多個檔案" % MAX_SHEET_ROWNUM)
+            for m in _CELL_RE.finditer(body):
+                cells += 1
+                mf = _REF_RE.search(m.group(1))
+                if mf and _col_number(mf.group(1).decode("ascii")) > MAX_COLS:
+                    raise ParseError("第 %s 列的「%s 欄」有內容或格式，超過欄位上限 %d 欄（到 %s 欄）。請刪掉多餘的欄再上傳，或確認檔案是依範本填的"
+                                     % (mf.group(2).decode(), mf.group(1).decode(), MAX_COLS, _col_letters(MAX_COLS)))
+                if cells > MAX_CELLS:
+                    raise ParseError("這個工作表的儲存格太多了（超過 %d 格）。請刪掉多餘的空白列、欄與格式，或拆成多個檔案" % MAX_CELLS)
+
+
+def _rows_from_xlsx(data: bytes, max_scan: int, deadline=None):
+    z = _check_zip(data)
+    try:
+        if z.getinfo("xl/sharedStrings.xml").file_size > MAX_SHEET_XML:
+            raise ParseError("這個檔案的文字內容太多了，請拆成多個檔案")
+    except KeyError:
+        pass
     try:
         from openpyxl import load_workbook
         wb = load_workbook(io.BytesIO(data), read_only=True, data_only=False)
@@ -182,28 +296,32 @@ def _rows_from_xlsx(data: bytes, max_scan: int):
             sheet = next((ws for ws in visible if ws.title.strip() != HELP_SHEET), None)
         if sheet is None:
             raise ParseError("找不到可讀的資料工作表（請用範本，資料放在名為「%s」的工作表）" % DATA_SHEET)
-        out, blank, filled = [], 0, 0
+        part = _sheet_part(z, sheet.title)
+        if part is None:
+            raise ParseError("這個檔案的工作表結構讀不出來，請用 Excel 另存成 .xlsx 再上傳")
+        _prescan_sheet(z, part, deadline)
+        sheet.reset_dimensions()                              # 不信檔案自己宣告的範圍（宣告 1,048,576 列×16,384 欄會讓每列補空格）
+        out, filled = [], 0
         for r_no, row in enumerate(sheet.iter_rows(), start=1):
-            cells, formulas = [], []
+            if r_no & 255 == 0:
+                _check_deadline(deadline)
+            if not row:
+                continue
+            cells, formulas, numeric = [], [], []
             for ci, c in enumerate(row):
                 v = getattr(c, "value", None)
                 if getattr(c, "data_type", "") == "f":                       # 公式：不匯入（值當空白）、記下來警告
                     cells.append("")
                     formulas.append(ci)
                     continue
+                if isinstance(v, (int, float)) and not isinstance(v, bool):  # 數字格：電話／料號開頭的 0 可能已被 Excel 吃掉
+                    numeric.append(ci)
                 cells.append(_cell_text(v))
             while cells and not cells[-1]:
                 cells.pop()
-            if len(cells) > MAX_COLS:
-                raise ParseError("欄位太多了（上限 %d 欄），請確認檔案是依範本填的" % MAX_COLS)
             if not any(cells) and not formulas:
-                blank += 1
-                if blank > MAX_BLANK_RUN:
-                    break
-                out.append((r_no, [], []))
                 continue
-            blank = 0
-            out.append((r_no, cells, formulas))
+            out.append((r_no, cells, formulas, numeric))
             filled += 1
             if filled > max_scan:
                 raise ParseError("檔案的列數太多了（上限 %d 列），請拆成多個檔案" % (max_scan - 2))
@@ -219,7 +337,7 @@ def _rows_from_xlsx(data: bytes, max_scan: int):
 
 def _find_header(rows, kind):
     idx = _header_index(kind)
-    for r_no, cells, _f in rows[:10]:
+    for r_no, cells, _f, _n in rows[:10]:
         hits = [c for c in cells if _hkey(c) in idx]
         if hits:
             return r_no, cells, idx
@@ -235,7 +353,12 @@ _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 def _build_customer(v, no, warn):
     from helpers.company_setup import ubn_valid
-    tax = re.sub(r"\D", "", v.get("taxId", ""))
+    raw_tax = v.get("taxId", "")
+    tax = re.sub(r"\D", "", raw_tax)
+    if raw_tax and not tax:
+        warn(no, "統一編號", "「%s」不是統編（沒有任何數字），這一列會當成「沒有統編」處理；沒有統編的客戶若名稱相同，會列為「可能重複」" % raw_tax)
+    elif raw_tax and re.sub(r"[\d\s\-－]", "", raw_tax):
+        warn(no, "統一編號", "「%s」裡有數字以外的文字，只取出數字「%s」當統編" % (raw_tax, tax))
     if tax and (len(tax) != 8 or not ubn_valid(tax)):
         warn(no, "統一編號", "「%s」看起來不是正確的統編（8 碼、檢查碼）。系統用統編判斷是不是同一家客戶：打錯會被當成新客戶，不會併進既有客戶" % v.get("taxId", ""))
     for k, label in (("email", "Email"), ("contactEmail", "聯絡人Email")):
@@ -264,6 +387,7 @@ def _build_user(v, no, warn):
             "hadPassword": bool(v.get("password"))}                         # 只記「有沒有填」，密碼值本身不輸出
 
 
+_PHONE_KEYS = ("phone", "fax", "contactPhone")
 _BUILD = {"customers": _build_customer, "parts": _build_part, "users": _build_user}
 
 
@@ -289,7 +413,8 @@ def parse_file(data: bytes, filename: str, kind: str, max_bytes: int = MAX_BYTES
         raise ParseError("檔案內容不是文字的 CSV，請用 Excel 另存成 CSV（或直接用 .xlsx）")
     cap = MAX_ROWS[kind]
     scan = cap + 2
-    rows = _rows_from_xlsx(data, scan) if ext == "xlsx" else _rows_from_csv(data, scan)
+    deadline = time.monotonic() + DEADLINE_SECONDS
+    rows = _rows_from_xlsx(data, scan, deadline) if ext == "xlsx" else _rows_from_csv(data, scan, deadline)
     h_no, h_cells, idx = _find_header(rows, kind)
     colmap, seen_keys, unused, ignored, headers = {}, {}, [], [], []
     for ci, h in enumerate(h_cells):
@@ -315,10 +440,13 @@ def parse_file(data: bytes, filename: str, kind: str, max_bytes: int = MAX_BYTES
     def warn(no, field, msg):
         warnings.append({"row": no, "field": field, "message": msg})
 
-    out, skipped_examples = [], 0
-    for r_no, cells, formulas in rows:
+    out, skipped_examples, prev_no, gaps, part_numeric = [], 0, None, [], 0
+    for r_no, cells, formulas, numeric in rows:
         if r_no <= h_no:
             continue
+        if prev_no is not None and r_no - prev_no > 1:                       # M4：空白區段不讓讀取提早結束，但要讓人知道
+            gaps.append(prev_no)
+        prev_no = r_no
         v = {}
         for ci, c in colmap.items():
             v[c["key"]] = cells[ci] if ci < len(cells) else ""
@@ -329,9 +457,24 @@ def parse_file(data: bytes, filename: str, kind: str, max_bytes: int = MAX_BYTES
         if any(str(x).startswith(EXAMPLE_MARK) for x in cells):
             skipped_examples += 1
             continue
+        for ci in numeric:                                                    # L1：數字格的電話／統編開頭 0 可能已被 Excel 吃掉
+            c = colmap.get(ci)
+            if c is None:
+                continue
+            txt = cells[ci] if ci < len(cells) else ""
+            if c["key"] in _PHONE_KEYS and re.fullmatch(r"[1-9]\d{7,8}", txt):
+                warn(r_no, c["label"], "「%s」在檔案裡是數字格式，開頭的 0 可能已被 Excel 吃掉（例如 0912345678 變成 912345678）。請把這一欄設成文字格式再貼上" % txt)
+            elif c["key"] == "partNo":
+                part_numeric += 1
         out.append(_BUILD[kind](v, r_no, warn))
         if len(out) > cap:
             raise ParseError("資料列太多了（上限 %d 列），請拆成多個檔案" % cap)
+    for g in gaps[:5]:
+        warn(g, "（空白區段）", "第 %d 列後有空白區段，之後的資料已一併讀取" % g)
+    if len(gaps) > 5:
+        warn(gaps[5], "（空白區段）", "資料之間還有另外 %d 處空白區段，之後的資料都已一併讀取" % (len(gaps) - 5))
+    if part_numeric:
+        warn(h_no, "料號", "有 %d 列的料號在檔案裡是數字格式；如果料號原本有開頭的 0，Excel 已經把 0 吃掉了。請把料號欄設成文字格式再貼上" % part_numeric)
     if formula_rows:
         warn(formula_rows[0], "（公式）", "有 %d 列含公式儲存格，公式不會匯入（那一格當成空白）。請把公式貼成值再上傳" % len(formula_rows))
     if not out:
@@ -369,15 +512,15 @@ def build_template(kind: str) -> bytes:
         ex.font = Font(color="6B7280", italic=True)
         L = get_column_letter(i)
         ws.column_dimensions[L].width = max(14, min(30, len(c["label"]) * 2 + 6))
-        for r in range(2, 502):
-            ws.cell(row=r, column=i).number_format = "@"                 # 文字格式：保留開頭的 0
+        ex.number_format = "@"
+        ws.column_dimensions[L].number_format = "@"                      # 整欄文字格式（不只前幾百列）：保留開頭的 0
     ws.freeze_panes = "A2"
     if kind == "users":
         ri = [c["key"] for c in cols].index("role") + 1
         dv = DataValidation(type="list", formula1='"業務,工程師,檢視者"', allow_blank=True)
         dv.error, dv.errorTitle = "角色只能填：業務、工程師、檢視者，或留空", "角色"
         ws.add_data_validation(dv)
-        dv.add("%s3:%s502" % (get_column_letter(ri), get_column_letter(ri)))
+        dv.add("%s3:%s%d" % (get_column_letter(ri), get_column_letter(ri), MAX_ROWS["users"] + 2))
     hs = wb.create_sheet(HELP_SHEET)
     hs.column_dimensions["A"].width = 22
     hs.column_dimensions["B"].width = 90
