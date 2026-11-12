@@ -11,7 +11,7 @@
 (function () {
   'use strict'
 
-  var STEP_TITLES = ['基本資料', '聯絡方式', '報價單與單據', 'Logo 與列印抬頭', '確認']
+  var STEP_TITLES = ['基本資料', '聯絡方式', '收款帳戶', 'Logo', '確認']
   var SEEN_KEY = 'motrix_cw_seen'
   // 欄位在「主要據點」（locations[0]）裡的同名欄：後端的身分是「主要據點有填就優先、頂層只是後備」，
   // 所以讀要讀生效的那一份、寫要頂層一定寫、據點[0] 已經有填同一欄時一併改（沒填的不去動它）。
@@ -151,7 +151,8 @@
       api('GET', '/api/settings/branding'),
     ]).then(function (rs) {
       if (mine !== seq) return
-      if (rs[0].status === 403 || rs[1].status === 403) { st.denied = true; render(); return }
+      // 兩支 GET 對任何登入者都回 200，所以以 status 的 canFix 為準（非最高管理者 ⇒ 不顯示表單，也不讀公司資料）
+      if (rs[0].status === 403 || rs[1].status === 403 || (rs[1].ok && rs[1].data && rs[1].data.canFix === false)) { st.denied = true; render(); return }
       if (!rs[0].ok) { st.failed = true; render(); return }
       st.profile = rs[0].data
       st.setup = rs[1].ok ? rs[1].data : null
@@ -182,12 +183,26 @@
     Object.keys(payload).forEach(function (k) { if (k !== 'locations') delete st.draft[k] })
   }
 
+  // 送 locations 之前先重讀一次最新的（避免兩位最高管理者同時改時蓋掉對方的據點修改）；讀失敗就用手上的
+  function freshLocations() {
+    if (!primaryLoc()) return Promise.resolve()
+    return api('GET', '/api/settings/company-profile').then(function (r) {
+      if (r.ok && r.data && Array.isArray(r.data.locations)) st.profile.locations = r.data.locations
+    }).catch(function () {})
+  }
+
   // 儲存這一步（不帶確認旗標：只存欄位，不寫確認紀錄）。ok ⇒ true
   function saveStep(n) {
     var fields = STEP_FIELDS[n] || []
-    var payload = buildPayload(fields)
-    if (!Object.keys(payload).length) return Promise.resolve(true)
+    if (!fields.some(function (k) { return Object.prototype.hasOwnProperty.call(st.draft, k) })) return Promise.resolve(true)
     st.busy = true; render()
+    return freshLocations().then(function () {
+      var payload = buildPayload(fields)
+      return sendStep(n, payload)
+    })
+  }
+  function sendStep(n, payload) {
+    if (!Object.keys(payload).length) { st.busy = false; return Promise.resolve(true) }
     return api('PUT', '/api/settings/company-profile', payload).then(function (r) {
       st.busy = false
       if (r.ok) { mergeSaved(payload); if (payload.locations) st.profile.locations = payload.locations; return loadSetupOnly().then(function () { return true }) }
@@ -207,10 +222,13 @@
 
   function confirmAll() {
     var fields = [].concat(STEP_FIELDS[1], STEP_FIELDS[2], STEP_FIELDS[3])
-    var payload = buildPayload(fields)
-    payload.confirmIdentity = true
+    var payload
     st.busy = true; render()
-    return api('PUT', '/api/settings/company-profile', payload).then(function (r) {
+    return freshLocations().then(function () {
+      payload = buildPayload(fields)
+      payload.confirmIdentity = true
+      return api('PUT', '/api/settings/company-profile', payload)
+    }).then(function (r) {
       st.busy = false
       if (r.ok) {
         delete payload.confirmIdentity
@@ -380,7 +398,15 @@
     if (optional) {
       var skip = el('button', 'cw-btn', '先略過')
       skip.type = 'button'; skip.setAttribute('data-testid', 'cw-skip')
-      skip.addEventListener('click', function () { markSeen(n); st.draft = {}; go(n + 1) })
+      skip.addEventListener('click', function () {
+        var pend = (STEP_FIELDS[n] || []).filter(function (k) { return Object.prototype.hasOwnProperty.call(st.draft, k) })
+        // 重新確認（409）後留在畫面上、還沒生效的修改：略過會丟掉它，先講清楚、要再按一次才丟
+        if (pend.length && st.needReconfirm && st.skipAsk !== n) { st.skipAsk = n; say('這一步有尚未生效的修改（等著在最後一步確認）。再按一次「先略過」會捨棄這些修改。', true); return }
+        st.skipAsk = 0
+        markSeen(n)
+        pend.forEach(function (k) { delete st.draft[k] })      // 只丟這一步的未存內容，別步的修改不動
+        go(n + 1)
+      })
       row.appendChild(skip)
     }
     var next = el('button', 'cw-btn cw-btn--main', n === 4 ? '下一步' : '儲存並繼續')
@@ -498,10 +524,21 @@
     return card
   }
 
+  // 非最高管理者：不顯示任何表單、也不讀公司資料；文字與側欄的「沒有權限」頁一致
+  function deniedCard() {
+    var sub = document.querySelector('[data-testid="cw-subtitle"]')
+    if (sub) sub.style.display = 'none'
+    var box = el('div', 'cw-card'); box.setAttribute('data-testid', 'cw-denied'); box.style.textAlign = 'center'
+    box.appendChild(el('div', '', '🔒')); box.firstChild.style.fontSize = '40px'
+    box.appendChild(el('h2', 'cw-h', '你沒有這個頁面的權限'))
+    box.appendChild(el('p', 'cw-why', '本公司資料只有最高管理者可以設定。請請最高管理者登入後完成設定，或洽系統管理員。'))
+    return box
+  }
+
   function render() {
     if (!root) return
     root.textContent = ''
-    if (st.denied) { root.appendChild(el('div', 'cw-warn', '只有最高管理者可以設定本公司資料。請請最高管理者登入後完成這個設定。')); return }
+    if (st.denied) { root.appendChild(deniedCard()); return }
     if (st.failed) { root.appendChild(el('div', 'cw-warn', '暫時讀不到公司資料，請重新整理頁面再試。')); return }
     if (!st.loaded) { root.appendChild(el('div', 'cw-note', '讀取中…')); return }
     if (st.confirmed) { root.appendChild(doneCard()); return }

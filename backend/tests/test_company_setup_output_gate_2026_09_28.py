@@ -269,7 +269,7 @@ def test_menu_shows_only_the_settings_entry_while_unconfigured(client, boss, cle
     m = client.get("/api/platform/menu", headers=boss).json()
     assert m["companySetup"]["blocked"] is True and m["companySetup"]["configured"] is False
     hrefs = [it["href"] for g in m["layout"]["groups"] for it in g["items"]]
-    assert hrefs == ["company-profile-settings.html"], hrefs
+    assert hrefs == ["company-setup-wizard.html?setup=1"], hrefs        # T84：未設定時側欄唯一入口開公司設定精靈
     assert client.get("/api/platform/menu", headers=clerk).json()["layout"]["groups"] == []
     assert _confirm(client, boss).status_code == 200
     m = client.get("/api/platform/menu", headers=boss).json()
