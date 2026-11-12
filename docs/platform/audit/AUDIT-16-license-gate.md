@@ -149,11 +149,16 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | 稽核者確認 |
 |---|---|---|---|
-| LG-M1 | | | |
-| LG-M2 | | | |
-| IP-M1 | | | |
-| LG-S1～S4 | | | |
-| LG-O1～O7 | | | |
+| LG-M1 | 修正：指紋探測不完整時重試 3 次；`machine_mismatch` 改 60 秒短 TTL 快取 | b7d08799b | ✅ 關閉（§7） |
+| LG-M1b | 修正：殘缺指紋不永久快取，退避 60 秒→5 分鐘→1 小時；兩項齊全或走機器 ID 後路才算穩定 | a75a51067、448313a58（題） | ✅ 關閉（§7） |
+| LG-M2 | 修正：`verify_license`／`emergency_pass` 進 `run_in_threadpool`；`emergency_pass` 加快取 | b7d08799b、a75a51067（題）、448313a58（題的固件） | ✅ 關閉（§7） |
+| IP-M1 | 修正：`rate_limit_key`（IPv6 取 /64）；`_rl_state` 加上限與逾時清理；稽核紀錄仍用完整位址。帳號維度鎖定未動（產品裁示，作者未改） | b7d08799b、a75a51067（題） | ✅ 關閉（§7）；帳號維度仍待產品裁示 |
+| LG-S1～S4 | 未回覆（本輪未處理） | | ⏳ 待回覆（不阻擋 T80） |
+| LG-S5 | accept，不卡這班車，列下一班待辦（理由：只在指紋持續讀不到的退化狀態觸發） | | ✅ 接受（併入 §6.1 備註的另一個入口） |
+| LG-S6 | accept，排下一班 | | ✅ 接受 |
+| LG-S7 | 修正：`rate_limit_key` 先展開 IPv4-mapped | a75a51067 | ✅ 關閉 |
+| LG-O1 | accept，但須在「正式機實際部署 T80」之前完成（部署包移除 `_PUBKEY_DEV`）；記入上線前 checklist，與 license.key 就緒狀態一起追。`perpetual` 是刻意的，已與使用者確認 | | ✅ 接受；⚠️ **上線前條件**，未完成前不可部署到正式機 |
+| LG-O2～O7 | 未回覆（觀察項） | | — |
 
 ## 5. 複驗（稽核者，2026-11-12；對象 `b7d08799b`，在基準 `ffd4b8a90` 之上，中間夾 `8a46893a3` 填入 `_PUBKEY_PROD`）
 
@@ -253,6 +258,21 @@ M6、M8 存活的原因：三題 LG-M1b 的題目裡，第一題只驗「重試 
 | LG-M1b | ⏳ **程式 ✅、題目未收**（M6、M8 存活） | 補 §6.3 那一題即可關 |
 | §6.2 測試檔 `client` 固件 | ❌ 未關（必修） | 一個字；修完請把兩個指令重跑 |
 | LG-S5、LG-S6、LG-O1 | 作者表態先不動；`perpetual` 是刻意且已與使用者確認 | 不阻擋 T80；請在回覆欄寫明「接受／不修＋理由」，我會依此標記 |
+
+## 7. 第三次複驗（稽核者，2026-11-12；對象 `448313a58`，與 `a75a51067` 只差測試檔）
+
+- 兩個重現指令都乾淨：新檔先跑→`test_trusted_client_ip` **58 passed**（之前 52 passed／6 errors）；`::test_lgm2a_…` 先跑→`test_licensing_gate` **36 passed**（之前 5 passed／31 errors）。含 emergency／core／em6／dashboard／totp／conn_reaper 的大集合 **237 passed**（之前 106 passed／131 errors）。
+- 突變（跑 core＋新檔＋trusted_client_ip，基準 85 passed；每次 `git checkout` 還原，`git status` 乾淨）：
+
+| 突變 | 結果 | 轉紅的題 |
+|---|---|---|
+| M6 殘缺值當穩定 | 🔴 紅 | `test_lgm1b_strikes_escalate_the_backoff_instead_of_caching_forever` |
+| M8 退避不升級 | 🔴 紅 | 同上 |
+| M1／M2／M4／M5／M3 | 🔴 全紅 | 與 §6.3 相同的題 |
+| M9 穩定快取被忽略（每 60 秒重探一次） | 🟢 存活 | —（見下） |
+
+- M9 存活是個小缺口，**不阻擋**：「穩定結果快取到行程結束」目前只被驗到「同一瞬間不重探」，沒有驗「撥過一小時仍不重探」。實際後果只是每分鐘多一次探測（threadpool 內），不是正確性問題；有空時在 `test_lgm1_all_empty_then_full_recovers…` 後面加一段「`cached_at` 撥早 7200 秒，再呼叫仍不探測」即可。
+- 結論：**LG-M1、LG-M1b、LG-M2、IP-M1、LG-S7 全部關閉。** 其餘見 §4 回覆欄。**唯一的上線條件是 LG-O1**（正式機實際部署 T80 之前，部署包不可再帶 `_PUBKEY_DEV`；`_PUBKEY_PROD` 已填入，現在閘門的實際強度取決於開發私鑰的保管）。LG-S1～S4 本輪沒有回覆，不阻擋，但請在下一班前表態。
 
 ## 附錄：重現檔
 
