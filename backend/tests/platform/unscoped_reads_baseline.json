@@ -122,6 +122,7 @@
   "helpers/google_calendar.py::push_event_for_payment_request::payment_requests": "unscoped",
   "helpers/google_calendar.py::push_event_for_quotation_won::quotations": "unscoped",
   "helpers/google_calendar.py::push_event_for_shipping_note::shipping_notes": "unscoped",
+  "helpers/license_manager.py::recent_activity::audit_log": "unscoped",
   "helpers/notify_actions.py::_throttled::notifications": "unscoped",
   "helpers/notify_actions.py::preview::notifications": "unscoped",
   "helpers/prefill_sources.py::_custom_last_value::custom_records": "unscoped",

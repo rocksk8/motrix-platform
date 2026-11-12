@@ -628,7 +628,9 @@ async def license_gate_middleware(request: Request, call_next):
     if getattr(request.state, "authed", False):
         response.headers[license_core.LICENSE_HEADER] = license_core.license_banner(status, emergency) or "none"
         # 到期提醒（T83）：獨立的第二個標頭，與上面的橫幅互不影響；同樣「已登入的回應一定帶：有提醒＝值、沒有＝none」。
-        response.headers[license_core.EXPIRY_HEADER] = license_core.expiry_banner(status) or "none"
+        # **只給最高管理者**（L5）：剩幾天到期是商務資訊，其他角色（含被盜用的一般帳號）不需要知道、也不該知道 ⇒ 其他角色的回應根本不帶這個標頭。
+        if getattr(request.state, "role", None) == "superadmin":
+            response.headers[license_core.EXPIRY_HEADER] = license_core.expiry_banner(status) or "none"
     return response
 
 
@@ -735,6 +737,7 @@ async def auth_middleware(request: Request, call_next):
     if not row:
         return JSONResponse(status_code=401, content={"detail": "Session 已過期，請重新登入"})
     request.state.authed = True      # 授權閘門的橫幅標頭只給已登入的請求（license_gate_middleware；K 審 S4）
+    request.state.role = row["role"]  # 到期提醒標頭只給最高管理者（license_gate_middleware；T83 L5）
 
     is_high_priv = row["role"] in ("superadmin", "admin")
     idle_limit = _ADMIN_IDLE_TIMEOUT_SECONDS if is_high_priv else _IDLE_TIMEOUT_SECONDS

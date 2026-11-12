@@ -110,6 +110,10 @@ BAD = [
     ("private_key", "檔名含 private_key",
      lambda r, n: "private_key" in n.lower()),
     ("license.key", "授權金鑰檔", lambda r, n: n.lower() == "license.key"),
+    # 授權匯入（T83）在授權檔旁邊留的備份資料夾與換檔暫存檔：都是這台機器的東西，不進出貨包
+    ("license-backups", "license_backups/ 目錄下",
+     lambda r, n: any(seg.lower() == "license_backups" for seg in re.split(r"[\\/]", r))),
+    ("license-tmp", "授權換檔暫存檔", lambda r, n: n.lower().startswith("license.key.") and n.lower().endswith("-tmp")),
     ("certs-dir", "certs/ 目錄下",
      lambda r, n: re.search(r"(^|[\\/])certs[\\/]", r, re.I) is not None),
     # ⚠️ 必須比對「路徑分段」而非子字串：子字串會把

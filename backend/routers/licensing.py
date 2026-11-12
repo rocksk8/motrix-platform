@@ -83,6 +83,8 @@ def license_status(authorization: str = Header(None)):
 
 # JSON 外殼＋逸出字元的餘裕；授權檔本身的上限是 `license_manager.MAX_UPLOAD_BYTES`
 _MAX_BODY_BYTES = _mgr.MAX_UPLOAD_BYTES * 2 + 1024
+#: 本文中 `[`／`{` 的總數上限（合法本文只有 1 個；留餘裕給將來多一兩個欄位）
+_MAX_JSON_BRACKETS = 16
 
 
 def _superadmin_not_demo(authorization):
@@ -129,9 +131,14 @@ async def _read_json_body_capped(request: Request):
         if total > _MAX_BODY_BYTES:
             return None, True
         chunks.append(chunk)
+    raw = b"".join(chunks) or b"{}"
+    # 巢狀深度上限（L1）：本文最大約 65 KB，`[[[[…` 六萬層會讓 `json.loads` 丟 RecursionError（不是 ValueError）⇒ 以前會變 500。
+    # 合法的匯入本文只有一層 `{…}`（授權內容是 base64 字串，沒有括號）⇒ 括號總數超過上限直接當作格式不對，連解析都不做。
+    if raw.count(b"[") + raw.count(b"{") > _MAX_JSON_BRACKETS:
+        return None, False
     try:
-        body = json.loads(b"".join(chunks) or b"{}")
-    except ValueError:
+        body = json.loads(raw)
+    except (ValueError, RecursionError):          # 上面的上限是第一道；這裡是最後一道網
         return None, False
     return (body if isinstance(body, dict) else None), False
 
@@ -162,10 +169,14 @@ async def license_import(request: Request, authorization: str = Header(None)):
     `apply` 省略／false ⇒ 只驗證並回預覽（不寫任何東西）；`apply: true` ⇒ 驗證通過才換（備份舊檔、原子寫入、換後複驗）；
     新授權與目前的有差異（`warnings`）時，要帶 `confirm: true` 才會換（否則 409）。
     失敗一律回白話 `message`（也放在 `detail`），`reason` 是給程式判斷的代碼。只有最高管理者；有大小上限、頻率限制、稽核紀錄。"""
-    await run_in_threadpool(_superadmin_not_demo, authorization)
+    user = await run_in_threadpool(_superadmin_not_demo, authorization)
     token = _tok(authorization)
-    allowed, retry_after, first = _mgr.rate_allow()
-    if not allowed:
+    account = str(user.get("id") or user.get("username") or "")
+
+    async def _rate_block(weight):
+        allowed, retry_after, first = _mgr.rate_allow(account, weight)
+        if allowed:
+            return None
         res = {"ok": False, "applied": False, "reason": "rate_limited", "http": 429,
                "message": _mgr.REJECT_MESSAGES["rate_limited"]}
         if first:        # 這個視窗只寫第一筆稽核：被灌的時候不要連稽核表一起灌爆
@@ -173,6 +184,11 @@ async def license_import(request: Request, authorization: str = Header(None)):
         r = _fail(res, retryAfter=retry_after)
         r.headers["Retry-After"] = str(retry_after)
         return r
+
+    # 頻率限制要在讀上傳內容之前：先記一次預覽的點數；確定是正式匯入（apply）之後再補記另一半（預覽 0.5＋0.5＝正式匯入 1 點）。
+    blocked = await _rate_block(_mgr.PREVIEW_WEIGHT)
+    if blocked is not None:
+        return blocked
 
     body, too_big = await _read_json_body_capped(request)
     if too_big:
@@ -185,6 +201,10 @@ async def license_import(request: Request, authorization: str = Header(None)):
         return _fail(res)
 
     apply, confirm = body.get("apply") is True, body.get("confirm") is True
+    if apply:
+        blocked = await _rate_block(1.0 - _mgr.PREVIEW_WEIGHT)
+        if blocked is not None:
+            return blocked
 
     def _go():
         res = _mgr.run_import(body["content"], apply=apply, confirm=confirm, machine_fn=_machine_or_none)
