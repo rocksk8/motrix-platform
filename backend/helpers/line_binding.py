@@ -2,7 +2,7 @@
 """LINE「綁定狀況」與「提醒未綁定的人」（2026-11-13；PM：系統選單改版「開始使用」第 6 步要用）。
 
 [單位] helper:line_binding    [層] L1    [穩定度] 實作
-[公開介面] REMIND_MIN_HOURS, REMIND_KEY, remind, state_of, status
+[公開介面] MAX_NAMES, REMIND_MIN_HOURS, REMIND_KEY, remind, state_of, status
 [契約題] tests/test_line_events_all_2026_11_13.py
 [不變式]
   ① **只有最高管理者看得到／按得動**（端點層擋；本檔不認人，呼叫端負責）。
@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 REMIND_MIN_HOURS = 24
 #: 已提醒時間的記號鑰匙 `{username: ISO 時間}`
 REMIND_KEY = "line_bind_remind"
+#: 指定名單的上限（T83 審查 h10 L1；最高管理者專用，仍擋掉不合理的大名單）
+MAX_NAMES = 500
 
 _NOTICE_KEY = "user_notice"          # Email 借用的信件類型（「使用者額外通知」）
 _PAGE = "my-account.html?tab=notify"   # 2026-11-13 使用者裁示：綁定卡片搬到「我的帳號」的「通知」分頁（hichan-1 的頁面）
@@ -49,7 +51,7 @@ def _users() -> list:
 _MISSED_SHOW = 8                     # 「綁定後會收到」最多列幾種名稱（其餘只給總數）
 
 _TITLE_AGAIN = "請重新綁定您的 LINE 通知"
-_TEXT_AGAIN = ("您先前綁定的 LINE 目前收不到通知（可能封鎖了官方帳號、換了手機，或綁定有誤）。請登入系統，點下方連結，"
+_TEXT_AGAIN = ("您上次綁定 LINE 時驗證沒有通過，可能收不到通知（可能封鎖了官方帳號、換了手機，或綁定有誤）。請登入系統，點下方連結，"
                "在頁面中找到「LINE 通知」卡片，重新按「綁定 LINE」，用手機掃描畫面上的 QR 並按「同意」（約 1 分鐘）。")
 
 
@@ -60,14 +62,16 @@ def state_of(b: dict) -> str:
     return "expired" if b.get("confirmed") is False else "bound"
 
 
-def _missed_for(username: str, role: str) -> list:
-    """這個人綁好之後原本會收到的通知名稱（本人關掉的不算）。查不到 ⇒ 空清單（只是少一行說明，不影響其他）。"""
+def _missed_for_many(people, mods_by_user: dict) -> dict:
+    """{帳號: 綁好之後原本會收到的通知名稱（本人關掉的不算）}。**批次**：設定只讀一次（`line_recipients.prefs_view_many`），人數多也不會變慢
+    （T83 審查 h10 M1：原本每人各讀一輪設定，300 人約 13 秒）。算不出來 ⇒ 全部空清單（只是少一行說明，不影響其他）。"""
     try:
         from . import line_recipients as _lr
-        return [e["name"] for e in _lr.prefs_view(username, role) if e.get("enabled")]
+        many = _lr.prefs_view_many(people, mods_by_user)
+        return {u: [e["name"] for e in rows if e.get("enabled")] for u, rows in many.items()}
     except Exception as exc:  # noqa: BLE001
         logger.warning("line_binding: 算「綁定後會收到的通知」失敗：%s", type(exc).__name__)
-        return []
+        return {}
 
 
 def _login_ready() -> bool:
@@ -92,10 +96,14 @@ def status() -> dict:
         _mods = {u["username"]: effective_modules(u["role"], u.get("modules"), user_id=u["id"], conn=_c) for u in _users_rows}
     finally:
         _c.close()
+    links = _ln._links()                                       # 一次讀完：不是每人各讀一次設定
+    views = {u["username"]: _ln.binding_view(u["username"], links) for u in _users_rows}
+    need = [(u["username"], u["role"]) for u in _users_rows if state_of(views[u["username"]]) != "bound"]
+    missed = _missed_for_many(need, _mods) if need else {}
     for u in _users_rows:
-        b = _ln.binding_view(u["username"])
+        b = views[u["username"]]
         st = state_of(b)
-        miss = _missed_for(u["username"], u["role"]) if st != "bound" else []
+        miss = missed.get(u["username"], []) if st != "bound" else []
         out.append({"username": u["username"], "display": u["display_name"] or u["username"], "role": u["role"],
                     "linked": b["linked"], "linkedAt": b["linkedAt"], "confirmed": b["confirmed"],
                     "state": st, "missed": miss[:_MISSED_SHOW], "missedCount": len(miss),
@@ -125,11 +133,14 @@ def remind(usernames=None, now: datetime = None) -> dict:
         raise ValueError("還沒設定好 LINE 登入與對外網址，同仁目前無法自行綁定；請先完成上方設定")
     if usernames is not None and (not isinstance(usernames, (list, tuple)) or not all(isinstance(u, str) for u in usernames)):
         raise ValueError("usernames 必須是帳號清單")
+    if usernames is not None and len(usernames) > MAX_NAMES:
+        raise ValueError("一次最多指定 %d 個帳號" % MAX_NAMES)
     with _remind_lock:
         now = now or datetime.now()
         everyone = {u["username"]: u for u in _users()}
         wanted = list(dict.fromkeys(usernames)) if usernames is not None else list(everyone)
-        states = {w: state_of(_ln.binding_view(w)) for w in wanted if w in everyone}
+        links = _ln._links()                                       # 一次讀完（不是每人各讀一次設定）
+        states = {w: state_of(_ln.binding_view(w, links)) for w in wanted if w in everyone}
         ignored = [w for w in wanted if w not in everyone or states[w] == "bound"]
         targets = [w for w in wanted if w in everyone and states[w] != "bound"]
         marks = _get_setting(REMIND_KEY, {}) or {}                 # 在鎖裡才讀：前一個呼叫剛寫的記號一定看得到

@@ -3019,6 +3019,8 @@ def remind_line_bindings(body: dict = Body(default={}), authorization: str = Hea
     _require_user(authorization, require_superadmin=True)
     from helpers import line_binding as _lb
     names = (body or {}).get("usernames")
+    if isinstance(names, list) and len(names) > _lb.MAX_NAMES:
+        raise HTTPException(422, "一次最多指定 %d 個帳號（目前 %d 個）；不指定就是提醒所有還沒綁好的人" % (_lb.MAX_NAMES, len(names)))
     try:
         res = _lb.remind(names)
     except ValueError as e:

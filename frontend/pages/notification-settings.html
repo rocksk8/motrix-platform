@@ -413,7 +413,7 @@
           <!-- LINE 綁定狀況（只有最高管理者看得到；資料來源 GET .../bindings、POST .../bindings/remind、DELETE /api/line/binding/{帳號}） -->
           <div class="ns-field" style="margin:16px 0" data-testid="line-bindings">
             <label>LINE 綁定狀況</label>
-            <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">在職同仁要自己綁定 LINE 才收得到通知。這裡看誰已綁定、誰還沒綁定、誰的綁定失效（綁了但收不到），以及他們綁好之後原本會收到哪些通知；可一鍵用 Email 和系統內通知提醒他們（信裡附「我的帳號」通知分頁的連結；同一個人 24 小時內只提醒一次）。畫面上不會顯示 LINE 的識別碼。</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">在職同仁要自己綁定 LINE 才收得到通知。這裡看誰已綁定、誰還沒綁定、誰的綁定失效（上次綁定時驗證沒通過，可能收不到），以及他們綁好後可收到的通知類型（實際依案件指派而定）；可一鍵用 Email 和系統內通知提醒他們（信裡附「我的帳號」通知分頁的連結；同一個人 24 小時內只提醒一次）。畫面上不會顯示 LINE 的識別碼。</div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <span data-testid="line-bind-summary" style="font-size:13px;font-weight:600" x-text="bindSummary"></span>
               <button type="button" class="btn btn-ghost" data-testid="line-bind-toggle" style="padding:2px 10px;font-size:12px" @click="bind.open = !bind.open" x-text="bind.open ? '收合名單' : '看名單'"></button>
@@ -432,12 +432,12 @@
                       <td style="padding:4px 8px">
                         <div x-text="u.display"></div>
                         <div x-show="u.state !== 'bound' && u.missedCount" :data-testid="'line-bind-missed-' + u.username" style="font-size:11.5px;color:var(--text-dim);white-space:normal;max-width:260px;margin-top:2px"
-                             x-text="'綁好後會收到：' + u.missed.join('、') + (u.missedCount > u.missed.length ? '…等 ' + u.missedCount + ' 種' : '')"></div>
+                             x-text="'綁好後可收到的通知類型（實際依案件指派而定）：' + u.missed.join('、') + (u.missedCount > u.missed.length ? '…等 ' + u.missedCount + ' 種' : '')"></div>
                       </td>
                       <td style="padding:4px 8px" x-text="roleName(u.role)"></td>
                       <td style="padding:4px 8px">
                         <span x-show="u.state === 'bound'" style="color:var(--success);font-weight:600" x-text="'已綁定' + (u.linkedAt ? '（' + u.linkedAt.slice(0, 10) + '）' : '')"></span>
-                        <span x-show="u.state === 'expired'" style="color:var(--warning);font-weight:600" title="綁定了，但 LINE 沒收下測試訊息（可能封鎖了官方帳號或換了手機），需要重新綁定">綁定失效，需重新綁定</span>
+                        <span x-show="u.state === 'expired'" style="color:var(--warning);font-weight:600" title="上次綁定時驗證沒通過，可能收不到（可能封鎖了官方帳號或換了手機），建議重新綁定">綁定失效，需重新綁定</span>
                         <span x-show="u.state === 'unbound'" style="color:var(--text-dim)">尚未綁定</span>
                       </td>
                       <td style="padding:4px 8px;color:var(--text-dim)" x-text="u.lastReminded ? u.lastReminded.replace('T', ' ').slice(0, 16) : '—'"></td>

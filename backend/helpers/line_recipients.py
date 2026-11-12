@@ -2,7 +2,7 @@
 """LINE 通知的收件人過濾：角色允許清單＋個人勾選（2026-11-12；PM 裁示 D1／D2）。
 
 [單位] helper:line_recipients    [層] L1    [穩定度] 實作
-[公開介面] PREFS_KEY, allowed_roles, allowed_roles_view, audience_of, audience_view, filter_usernames, ineligible_users, is_muted, muted_events, permitted_users, prefs_view, resolve_audience, role_choices, set_muted, visible_to
+[公開介面] PREFS_KEY, allowed_roles, allowed_roles_view, audience_of, audience_view, filter_usernames, ineligible_users, is_muted, muted_events, permitted_users, prefs_view, prefs_view_many, resolve_audience, role_choices, set_muted, visible_to
 [契約題] tests/test_line_recipients_2026_11_12.py
 [不變式]
   ① 語意是**交集（只縮不擴）**：LINE 最終收件人 ＝ 呼叫端給的帳號（2026-11-12 起＝`helpers.event_audience` 解析出的「事件業務收件人」，**不看 Email、不看信件退訂**）
@@ -240,7 +240,7 @@ def resolve_audience(event_key: str, business_usernames) -> list:
         return []
 
 
-def _visible(event_key: str, username: str, role, mods, roles_map: dict, aud_map: dict) -> bool:
+def _visible(event_key: str, username: str, role, mods, roles_map: dict, aud_map: dict, gcache: dict = None) -> bool:
     """`visible_to` 的本體（設定已讀好；`prefs_view` 一次讀完設定後逐事件呼叫，不是每個事件各讀一次設定／資料庫）。"""
     a = _audience_from(aud_map, event_key, False)
     if a["mode"] == "invalid":
@@ -252,7 +252,7 @@ def _visible(event_key: str, username: str, role, mods, roles_map: dict, aud_map
         return picked
     allowed = _allowed_from(roles_map, event_key)
     business = (allowed is None or role in allowed) and (perm or not _cat_needs_business_perm(event_key))
-    if business and (_ln_spec(event_key).get("audience") == "group") and not _in_group(event_key, username):
+    if business and (_ln_spec(event_key).get("audience") == "group") and not _in_group(event_key, username, gcache):
         business = False                     # 這個事件的業務收件人只有群組收件人（例：登入失敗告警）；同仁不是收件人，列出來只會誤導
     return business or (a["mode"] == "business_plus" and picked)
 
@@ -291,13 +291,19 @@ def _ln_spec(event_key: str) -> dict:
         return {}
 
 
-def _in_group(event_key: str, username: str) -> bool:
-    """我是不是這個事件的群組收件人（查不到＝False，fail-closed：寧可不列）。"""
+def _in_group(event_key: str, username: str, gcache: dict = None) -> bool:
+    """我是不是這個事件的群組收件人（查不到＝False，fail-closed：寧可不列）。`gcache`（可省）＝呼叫端的 {事件: 群組成員集合}：批次算很多人時
+    每個事件只查一次群組，不是每人各查一次（T83 審查 h10 M1）。"""
     try:
+        if gcache is not None and event_key in gcache:
+            return username in gcache[event_key]
         from . import event_audience as _ea
         from . import line_notify as _ln
         lg = _ln.event_spec(event_key).get("line_group", "inherit")
-        return username in set(_ea.group_usernames(event_key, group=lg if lg not in (None, "inherit") else None))
+        members = set(_ea.group_usernames(event_key, group=lg if lg not in (None, "inherit") else None))
+        if gcache is not None:
+            gcache[event_key] = members
+        return username in members
     except Exception as exc:  # noqa: BLE001
         logger.warning("line_recipients: 查群組收件人失敗（%r）：%s", event_key, type(exc).__name__)
         return False
@@ -307,20 +313,39 @@ def prefs_view(username: str, role: str) -> list:
     """本人設定頁用：`[{key, name, enabled, group, kind}]`——只列「已接線、公司已勾選、且輪得到我（角色被允許或被管理員指定）」的事件；enabled＝我有沒有要收。
     `group`＝模組分組、`kind`＝"mail"／"line_only"（僅 LINE）／"sub"（LINE 細項）。
     事件規格 `audience="group"`（例如登入失敗告警）的「業務收件人」只有群組收件人；其他同仁除非被管理員指定（`visible_to`），不列，免得以為勾了會收到。"""
+    return prefs_view_many([(username, role)]).get(username, [])
+
+
+def prefs_view_many(people, mods_by_user: dict = None) -> dict:
+    """`prefs_view` 的批次版（T83 審查 h10 M1）：`people`＝[(帳號, 角色)…] ⇒ {帳號: prefs_view 的清單}。
+    **設定與模組權限只讀一次**（事件開關、角色／受眾設定、退訂表、各人有效模組），之後逐人逐事件在記憶體裡判斷——人數多時不會每人各開好幾條連線。
+    `mods_by_user`（可省）＝呼叫端已算好的 {帳號: 有效模組清單}；沒給就由這裡一次查（`_perm_rows` 本來就吃整串帳號）。
+    與 `prefs_view` 逐項同一套規則（那支就是呼叫這支）。"""
     from . import line_catalog as _cat
     from . import line_notify as _ln
-    out = []
-    muted = muted_events(username)
+    people = [(u, r) for u, r in dict.fromkeys(tuple(p) for p in (people or []))]
+    if not people:
+        return {}
     sw = _ln.events_view()
+    on_keys = [k for k in _ln.WIRED_EVENTS if sw.get(k)]
     roles_map, aud_map = _roles_map(), _audiences_map()                      # 一次讀完（審查 h8 L7）：不是每個事件各讀一次設定／資料庫
-    rows = _perm_rows([username])
-    mods = rows[username][1] if username in rows else []
-    for k in _ln.WIRED_EVENTS:
-        if not sw.get(k):
-            continue
-        if not _visible(k, username, role, mods, roles_map, aud_map):
-            continue
-        out.append({"key": k, "name": _cat.name_of(k), "enabled": k not in muted, "group": _cat.group_of(k), "kind": _cat.kind_of(k)})
+    prefs = _prefs()
+    if mods_by_user is None:
+        rows = _perm_rows([u for u, _ in people])
+        mods_by_user = {u: v[1] for u, v in rows.items()}
+    meta = {k: (_cat.name_of(k), _cat.group_of(k), _cat.kind_of(k)) for k in on_keys}
+    out, gcache = {}, {}
+    for username, role in people:
+        v = prefs.get(username)
+        muted = {x for x in v if isinstance(x, str)} if isinstance(v, list) else set()
+        mods = mods_by_user.get(username, [])
+        rows_out = []
+        for k in on_keys:
+            if not _visible(k, username, role, mods, roles_map, aud_map, gcache):
+                continue
+            name, group, kind = meta[k]
+            rows_out.append({"key": k, "name": name, "enabled": k not in muted, "group": group, "kind": kind})
+        out[username] = rows_out
     return out
 
 

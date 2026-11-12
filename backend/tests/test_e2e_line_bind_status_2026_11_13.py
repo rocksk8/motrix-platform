@@ -31,7 +31,7 @@ def test_three_states_missed_events_and_remind_count(live_server, make_user, new
     assert "綁定失效" in page.locator("[data-testid=line-bind-row-e2e_bad]").inner_text()
     miss = page.locator("[data-testid=line-bind-missed-e2e_none]")
     miss.wait_for(state="visible", timeout=10000)
-    assert miss.inner_text().startswith("綁好後會收到：")
+    assert miss.inner_text().startswith("綁好後可收到的通知類型（實際依案件指派而定）：")
     assert page.locator("[data-testid=line-bind-missed-e2e_ok]").count() == 0 or not page.locator("[data-testid=line-bind-missed-e2e_ok]").is_visible()
     html = page.content()
     assert UID not in html and "d" * 32 not in html and "e" * 32 not in html, "畫面上沒有 LINE 識別碼"

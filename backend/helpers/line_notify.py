@@ -596,9 +596,10 @@ def set_confirmed(username: str, ok) -> None:
         _set_setting(LINKS_KEY, links)
 
 
-def binding_view(username: str) -> dict:
-    """給使用者自己看的綁定狀態；**不含 userId**（那是 LINE 端的識別碼，沒必要回到瀏覽器）。"""
-    rec = _links().get(username)
+def binding_view(username: str, links: dict = None) -> dict:
+    """給使用者自己看的綁定狀態；**不含 userId**（那是 LINE 端的識別碼，沒必要回到瀏覽器）。
+    `links`（可省）＝呼叫端已讀好的 `_links()`：一次要查很多人時傳進來，不必每人各讀一次設定（T83 審查 h10 M1）。"""
+    rec = (_links() if links is None else links).get(username)
     if not (isinstance(rec, dict) and _USER_ID_RE.match(str(rec.get("userId") or ""))):
         return {"linked": False, "linkedAt": "", "confirmed": None}
     c = rec.get("confirmed")

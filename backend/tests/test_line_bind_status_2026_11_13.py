@@ -116,3 +116,71 @@ def test_state_of_is_a_pure_function():
     assert LB.state_of({"linked": False, "confirmed": None}) == "unbound"
     assert LB.state_of({"linked": True, "confirmed": False}) == "expired"
     assert LB.state_of({"linked": True, "confirmed": True}) == "bound" and LB.state_of({"linked": True, "confirmed": None}) == "bound"
+
+
+# ── h10 審查（M1 效能／L1 上限）────────────────────────────────────────────────
+
+def _bulk_users(n, role="sales"):
+    """直接寫入 n 位在職、未綁定 LINE 的帳號（沿用 dan 的密碼雜湊，不逐一算雜湊）。"""
+    from db import get_db
+    c = get_db()
+    try:
+        h = c.execute("SELECT password_hash, modules FROM users WHERE username='dan'").fetchone()
+        for i in range(n):
+            c.execute("INSERT INTO users (username, password_hash, display_name, role, modules, active, created_at, must_change_password) "
+                      "VALUES (?,?,?,?,?,1,?,0)", ("bulk%03d" % i, h["password_hash"], "批次%03d" % i, role, h["modules"], "2026-01-01T00:00:00"))
+        c.commit()
+    finally:
+        c.close()
+
+
+def test_300_unbound_users_with_many_events_on_return_in_under_a_second(client, env, login_ready):
+    import time
+    from helpers import line_notify as L
+    for k in L.WIRED_EVENTS:
+        L.set_event(k, True)
+    _bulk_users(300)
+    sa = _hdr(client, "sa")
+    client.get("/api/settings/line-notify/bindings", headers=sa)            # 暖機（匯入／快取）
+    t = time.perf_counter()
+    r = client.get("/api/settings/line-notify/bindings", headers=sa)
+    dt = time.perf_counter() - t
+    assert r.status_code == 200 and r.json()["unlinked"] >= 300
+    assert dt < 1.0, "300 位未綁定、事件全開，綁定狀況應在 1 秒內回來（實測 %.2f 秒）" % dt
+
+
+def test_status_reads_the_shared_settings_once_not_once_per_person(client, env, login_ready, monkeypatch):
+    from helpers import line_notify as L, line_recipients as LR
+    for k in list(L.WIRED_EVENTS)[:10]:
+        L.set_event(k, True)
+    _bulk_users(60)
+    calls = {"events": 0, "links": 0, "prefs": 0}
+    for mod, name, key in ((L, "events_view", "events"), (L, "_links", "links"), (LR, "_prefs", "prefs")):
+        real = getattr(mod, name)
+
+        def wrap(*a, _real=real, _key=key, **k):
+            calls[_key] += 1
+            return _real(*a, **k)
+        monkeypatch.setattr(mod, name, wrap)
+    assert client.get("/api/settings/line-notify/bindings", headers=_hdr(client, "sa")).status_code == 200
+    assert calls["events"] <= 2 and calls["links"] <= 2 and calls["prefs"] <= 2, calls
+
+
+def test_batch_prefs_view_is_identical_to_the_single_person_version(client, env, login_ready):
+    from helpers import line_notify as L, line_recipients as LR
+    for k in L.WIRED_EVENTS:
+        L.set_event(k, True)
+    _grant_crm("amy")
+    LR.set_muted("dan", "approval_request", True)
+    people = [("sa", "superadmin"), ("bob", "admin"), ("amy", "sales"), ("carol", "finance"), ("dan", "engineer")]
+    many = LR.prefs_view_many(people)
+    for u, role in people:
+        assert many[u] == LR.prefs_view(u, role), u
+
+
+def test_remind_name_list_is_capped_at_500_with_422(client, env, login_ready):
+    sa = _hdr(client, "sa")
+    r = client.post("/api/settings/line-notify/bindings/remind", json={"usernames": ["x%d" % i for i in range(501)]}, headers=sa)
+    assert r.status_code == 422 and "500" in r.text
+    r2 = client.post("/api/settings/line-notify/bindings/remind", json={"usernames": ["x%d" % i for i in range(500)]}, headers=sa)
+    assert r2.status_code == 200 and len(r2.json()["ignored"]) == 500, "剛好 500 個照常處理（都不存在 ⇒ 全部略過）"

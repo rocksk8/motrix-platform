@@ -1128,6 +1128,7 @@
    "verify_license": "def(blob=…)"
   },
   "helper:line_binding": {
+   "MAX_NAMES": "const",
    "REMIND_KEY": "const",
    "REMIND_MIN_HOURS": "const",
    "remind": "def(usernames=…, now=…)",
@@ -1204,7 +1205,7 @@
    "USAGE_KEY": "const",
    "WIRED_EVENTS": "const",
    "audience_view": "def()",
-   "binding_view": "def(username)",
+   "binding_view": "def(username, links=…)",
    "build_text": "def(title, rows=…, *, reason=…, link=…)",
    "callback_url": "def()",
    "deliver_event": "def(event_key, *, usernames=…, to_group=…, title, rows=…, reason=…, link=…, exclude=…, dedupe_key=…, group=…)",
@@ -1271,6 +1272,7 @@
    "muted_events": "def(username)",
    "permitted_users": "def(event_key, usernames)",
    "prefs_view": "def(username, role)",
+   "prefs_view_many": "def(people, mods_by_user=…)",
    "resolve_audience": "def(event_key, business_usernames)",
    "role_choices": "def()",
    "set_muted": "def(username, event_key, muted, role=…)",
