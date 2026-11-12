@@ -152,7 +152,7 @@
     ]).then(function (rs) {
       if (mine !== seq) return
       // 兩支 GET 對任何登入者都回 200，所以以 status 的 canFix 為準（非最高管理者 ⇒ 不顯示表單，也不讀公司資料）
-      if (rs[0].status === 403 || rs[1].status === 403 || (rs[1].ok && rs[1].data && rs[1].data.canFix === false)) { st.denied = true; render(); return }
+      if (rs[0].status === 403 || rs[1].status === 403 || rs[2].status === 403 || (rs[1].ok && rs[1].data && rs[1].data.canFix === false)) { st.denied = true; render(); return }
       if (!rs[0].ok) { st.failed = true; render(); return }
       st.profile = rs[0].data
       st.setup = rs[1].ok ? rs[1].data : null
@@ -265,7 +265,7 @@
   // ── 畫面 ───────────────────────────────────────────────────────────────
   function go(n) {
     if (st.busy) return
-    st.step = n; st.msg = ''
+    st.step = n; st.msg = ''; st.skipAsk = 0
     try { history.replaceState(null, '', '#s' + n) } catch (e) { /* 忽略 */ }
     render()
     var h = root.querySelector('[data-testid="cw-title"]')
