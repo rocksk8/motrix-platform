@@ -1053,6 +1053,11 @@ from helpers import settings_groups_recycle_bin as _recycle_bin  # noqa: E402
 
 _recycle_bin._register(S, _register_core)
 
+# UX P1.5：系統標語（拆檔，同屬 core）
+from helpers import settings_groups_brand as _brand  # noqa: E402
+
+_brand._register(S, _register_core)
+
 
 def _backfill_cross_check(values):
     """earliest_month 必須是合法年月（YYYYMM，月份 01–12）；年份範圍由欄位上下限（2000–2099）管。"""

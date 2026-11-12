@@ -372,6 +372,11 @@ def system_branding(authorization: str = Header(None)):
            "shortName": short_name(ident["company_name"]),
            # 2026-09-27 H10：三種品牌圖檔的網址（帶版本；沒上傳 ⇒ v=default，端點回預設靜態檔）
            "assets": asset_urls()}
+    try:
+        from helpers.settings_groups_brand import brand_tagline
+        out["tagline"] = brand_tagline()        # UX P1.5：系統標語（公司可自訂，預設 MOTRIX PLATFORM；登入頁也用得到，所以放 public）
+    except Exception:  # noqa: BLE001
+        out["tagline"] = "MOTRIX PLATFORM"
     if authorization:
         try:
             _require_user(authorization)

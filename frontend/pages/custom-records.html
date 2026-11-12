@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>自訂模組 — MOTRIX 專案管理系統</title>
+  <title>自訂模組 — MOTRIX PLATFORM</title>
   <script>
     /* 預覽模式（模組建構器的即時預覽，docs/platform/BUILDER-UX.md §3.3；A 為本掛鉤檔主）。
      * 只有 ?preview=1 才開；開了之後本頁**不打任何 API**——同一個旗標 window.MOTRIX_PREVIEW：
@@ -580,7 +580,7 @@
               q.forEach(function (v, k) { if (cv === '' && k.indexOf('ctx.') === 0) cv = v })
               this.embedCtx = { field: cf, value: cf ? cv : '' }
             }
-            document.title = (this.def.name || this.key) + ' — MOTRIX 專案管理系統'
+            document.title = (this.def.name || this.key) + ' — MOTRIX PLATFORM'
             this.loadRefOptions(this.def)
             await this.loadList()
           } else if (m.status === 403) {

@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>MOTRIX 專案管理系統 — 營運儀表板</title>
+  <title>MOTRIX PLATFORM — 營運儀表板</title>
 
   <script src="static/auth-guard.js"></script>
   <!-- 同步權限檢查：最早執行，無法繞過 -->
@@ -469,7 +469,7 @@
       <div class="h-wrap">
         <div class="h-hero__in">
           <div>
-            <span class="h-kicker">MOTRIX 專案管理系統</span>
+            <span class="h-kicker" x-text="branding.tagline || 'MOTRIX PLATFORM'">MOTRIX PLATFORM</span>
             <!-- 這三個節點刻意擠在同一行：標籤之間的換行會被當成一個空格，
                  中文句子中間會裂一條縫。 -->
             <h1 class="h-hero__t"><span x-text="greeting"></span><template x-if="mineLoaded && stats.waitingForMe > 0"><span>今天有 <em x-text="stats.waitingForMe"></em> 件事等您處理。</span></template><template x-if="!loading && statsLoaded && mineLoaded && stats.waitingForMe === 0"><span>目前沒有待您簽核的項目。</span></template><template x-if="!loading && statsLoaded && !mineLoaded"><span data-testid="home-mine-unknown">讀不到待簽核清單，「等我簽核」的數字暫時不準。</span></template><template x-if="!loading && !statsLoaded && !analyticsMissing"><span>目前讀不到待辦數量，畫面上的數字暫時不準。</span></template><template x-if="!loading && analyticsMissing"><span data-testid="analytics-missing">首頁的統計、圖表與待辦摘要需要「營運分析」模組，目前未啟用；其他功能照常可用。</span></template></h1>
