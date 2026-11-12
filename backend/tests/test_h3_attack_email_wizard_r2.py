@@ -215,3 +215,16 @@ def test_old_put_keeps_working_for_an_unchanged_unusual_port_and_old_test_endpoi
     assert client.put("/api/settings/email-notify", json={"smtp_port": 3306}, headers=h).status_code == 422
     codes = [client.post("/api/settings/email-notify/test", headers=h).status_code for _ in range(7)]
     assert 429 in codes and codes.index(429) == 5, codes                     # 舊的寄測試信端點也限 5 次（前 5 次可能因沒有收件人回 400，但仍計數）
+
+
+def test_unusable_hmac_key_is_regenerated_not_a_500(client, make_user, fake_smtp):
+    """金鑰列被改成不能用的值（例如從備份匯出的「[已遮蔽]」還原）⇒ 重生金鑰，精靈照常運作（舊證明作廢）。"""
+    import importlib
+    S = importlib.import_module("routers.system")
+    h = _h(client, make_user, "atk_r2_k1")
+    for bad in ("[已遮蔽]", "zz" * 32, "ab", 123):
+        S._set_setting(S._WIZARD_HMAC_KEY, bad)
+        assert client.post("/api/settings/email-notify/wizard/test-me", json=GOOD, headers=h).status_code == 200, bad
+        assert len(S._get_setting(S._WIZARD_HMAC_KEY, "")) == 64
+        assert client.post("/api/settings/email-notify/wizard/activate", json=GOOD, headers=h).status_code == 200
+        S._set_setting("email_notify", {**S._EMAIL_DEFAULTS})

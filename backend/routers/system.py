@@ -3024,10 +3024,15 @@ def _wiz_hmac(*parts) -> str:
     import hashlib
     import hmac
     key = _get_setting(_WIZARD_HMAC_KEY, "") or ""
-    if not key:
+    try:
+        keyb = bytes.fromhex(key) if isinstance(key, str) and len(key) == 64 else b""
+    except ValueError:
+        keyb = b""
+    if not keyb:                                    # 沒有、或被改成不能用的值（例如從備份匯出的「[已遮蔽]」還原）⇒ 重生一把；舊證明因此失效，是安全的方向
         key = secrets.token_hex(32)
         _set_setting(_WIZARD_HMAC_KEY, key)
-    return hmac.new(bytes.fromhex(key), "\x1f".join(str(x) for x in parts).encode("utf-8"), hashlib.sha256).hexdigest()
+        keyb = bytes.fromhex(key)
+    return hmac.new(keyb, "\x1f".join(str(x) for x in parts).encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def _port_int(v) -> int:

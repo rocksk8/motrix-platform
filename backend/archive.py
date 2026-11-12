@@ -2616,27 +2616,41 @@ def _strip_json_f2(raw, list_key, keys):
 _SECRET_KEY_RE = re.compile(r"password|secret|token|app_pw", re.I)
 
 
+def _looks_secret(v) -> bool:
+    """鍵名含祕密字樣時，值「長得像祕密」才遮蔽：非空字串（不是純數字、true／false）、或巢狀物件／清單。
+    數字、布林、空值、空字串不可能是祕密（例如 password_min_len=8、password_required=true 這種規則設定），保留——
+    否則有人拿匯出還原設定時，會把「[已遮蔽]」寫進密碼長度規則。"""
+    if v is None or isinstance(v, (bool, int, float)):
+        return False
+    if isinstance(v, str):
+        s = v.strip()
+        return bool(s) and not re.fullmatch(r"\d+(\.\d+)?|true|false", s, re.I)
+    return bool(v)
+
+
 def _redact_secret_values(value):
-    """名稱含 password／secret／token／app_pw 的鍵，值一律換成遮蔽字樣（遞迴；不管是哪一個設定、哪一層）。"""
+    """名稱含 password／secret／token／app_pw 的鍵，值若長得像祕密就換成遮蔽字樣（遞迴；不管是哪一個設定、哪一層）。"""
     if isinstance(value, dict):
-        return {k: ("[已遮蔽]" if _SECRET_KEY_RE.search(str(k)) else _redact_secret_values(v)) for k, v in value.items()}
+        return {k: ("[已遮蔽]" if _SECRET_KEY_RE.search(str(k)) and _looks_secret(v) else _redact_secret_values(v)) for k, v in value.items()}
     if isinstance(value, list):
         return [_redact_secret_values(v) for v in value]
     return value
 
 
 def _redact_settings_row(row: dict) -> dict:
-    """「系統設定」匯出的總括遮蔽：設定鍵本身含祕密字樣 ⇒ 整個值遮蔽；否則往 JSON 值裡一層層遮蔽（SQL 那層的 json_remove 照舊，這是第二層）。"""
+    """「系統設定」匯出的總括遮蔽：設定鍵本身含祕密字樣且值長得像祕密 ⇒ 整個值遮蔽；否則往 JSON 值裡一層層遮蔽（SQL 那層的 json_remove 照舊，這是第二層）。"""
     out = dict(row)
-    if _SECRET_KEY_RE.search(str(out.get("key", ""))):
-        out["value_json"] = json.dumps("[已遮蔽]", ensure_ascii=False)
-        return out
     raw = out.get("value_json")
     try:
         parsed = json.loads(raw) if isinstance(raw, str) and raw else None
     except Exception:  # noqa: BLE001
+        parsed = None
+        if _SECRET_KEY_RE.search(str(out.get("key", ""))) and raw:       # 解不開的值＋祕密鍵名 ⇒ 寧可遮蔽
+            out["value_json"] = json.dumps("[已遮蔽]", ensure_ascii=False)
         return out
-    if isinstance(parsed, (dict, list)):
+    if _SECRET_KEY_RE.search(str(out.get("key", ""))) and _looks_secret(parsed):
+        out["value_json"] = json.dumps("[已遮蔽]", ensure_ascii=False)
+    elif isinstance(parsed, (dict, list)):
         out["value_json"] = json.dumps(_redact_secret_values(parsed), ensure_ascii=False)
     return out
 

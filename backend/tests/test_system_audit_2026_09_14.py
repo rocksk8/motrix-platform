@@ -994,3 +994,22 @@ def test_bg1_the_exclusion_list_cannot_swallow_the_whole_database(client):
         "這幾張表兩邊都不在：%s\n" % sorted(undecided)
         + "⚠️ 與上面那道題同一件事 —— 這裡重述是為了讓「互斥」與「窮盡」"
           "在同一題裡讀得出來。")
+
+
+def test_blanket_redaction_keeps_non_secret_rules_and_masks_real_secrets():
+    """總括遮蔽只動「長得像祕密」的值：password_min_len=8 這類規則設定要原樣保留（不然拿匯出還原會把「[已遮蔽]」寫進密碼規則）。"""
+    import json as _json
+    import archive
+
+    def row(key, value):
+        return archive._general_row("系統設定", {"key": key, "value_json": _json.dumps(value), "updated_at": "x"})
+
+    kept = {"password_min_len": 8, "password_required": True, "token_ttl_hours": 12, "secret_hint": "", "app_pw_policy": "true", "password_max_age": "90"}
+    out = _json.loads(row("account_security", {**kept, "api_token": "seeded-token-xyz", "nested": {"client_secret": "seeded-secret-xyz", "password_min_len": 10}})["value_json"])
+    for k, v in kept.items():
+        assert out[k] == v, (k, out[k])
+    assert out["nested"]["password_min_len"] == 10
+    assert out["api_token"] == "[已遮蔽]" and out["nested"]["client_secret"] == "[已遮蔽]"
+    # 整列鍵名含祕密字樣：字串值遮蔽、數字值保留
+    assert _json.loads(row("zz_hmac_secret", "seeded-secret-xyz")["value_json"]) == "[已遮蔽]"
+    assert _json.loads(row("password_min_len", 8)["value_json"]) == 8
