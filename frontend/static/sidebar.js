@@ -502,6 +502,15 @@ if (typeof module !== 'undefined' && module.exports) {
       if (isOpen() && !sec.contains(e.target) && !btn.contains(e.target)) setOpen(false)
     }, true)
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && isOpen()) setOpen(false, true) })
+    // 通知下拉（Alpine 的 @click.outside 靠 click 事件，WebKit 觸控點「非互動區」不送 click ⇒ 下拉收不起來，手機全寬後還蓋住 ☰，N5）：
+    // 另加 pointerdown 外點收合——點在鈴鐺那一塊（按鈕＋下拉）以外就把 Alpine 的 open 設回 false
+    document.addEventListener('pointerdown', function (e) {
+      var dd = bar.querySelector('.tb-notif-dd')
+      if (!dd) return
+      var wrap = dd.parentNode
+      if (!wrap || wrap.contains(e.target) || getComputedStyle(dd).display === 'none') return
+      try { if (window.Alpine && window.Alpine.$data) { var d = window.Alpine.$data(wrap); if (d && d.open) d.open = false } } catch (_e) { /* 還沒初始化就略過 */ }
+    }, true)
   }
 
   // ── 頭像個人選單開關：Esc 收合並把焦點還給頭像、pointerdown 外點收合、↑↓／Home／End 在項目間移動 ──

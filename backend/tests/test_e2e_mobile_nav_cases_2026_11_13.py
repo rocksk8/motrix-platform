@@ -448,6 +448,9 @@ def test_webkit_iphone_outside_tap_closes_more_panel(live_server, make_user):
             page.wait_for_timeout(300)
             r = page.evaluate("() => { const d = document.querySelector('.tb-notif-dd'); const b = d.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.right), innerWidth] }")
             assert r[0] >= 0 and r[1] <= r[2], r
+            # N5：點面板外的空白區（頁面下方）要收起通知下拉（WebKit 觸控不送 click，要靠 pointerdown）
+            page.touchscreen.tap(190, 780)
+            page.wait_for_function("() => getComputedStyle(document.querySelector('.tb-notif-dd')).display === 'none'", timeout=3000)
             browser.close()
     finally:
         if wk:
