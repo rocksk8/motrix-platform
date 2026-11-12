@@ -4,7 +4,7 @@
   {
    "id": "audit-log",
    "section": "audit",
-   "title": "歷史紀錄",
+   "title": "操作紀錄",
    "desc": "稽核日誌：誰在何時對哪張單做了什麼",
    "impact": "影響：只是查看，不會改動任何資料。",
    "href": "audit-log.html",
@@ -18,7 +18,7 @@
   {
    "id": "online-stats",
    "section": "audit",
-   "title": "在線時數統計",
+   "title": "使用狀況",
    "desc": "各帳號登入與在線時數",
    "impact": "影響：只是查看，不會改動任何資料。",
    "href": "online-stats.html",
@@ -226,7 +226,7 @@
   {
    "id": "schema-status",
    "section": "status",
-   "title": "資料庫結構",
+   "title": "資料庫版本",
    "desc": "資料庫結構版本，以及各模組的升級是否都已完成",
    "impact": "影響：只是查看，不會改動任何資料。",
    "href": "schema-status.html",

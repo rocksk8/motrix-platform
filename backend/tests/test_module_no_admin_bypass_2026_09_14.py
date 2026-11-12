@@ -24,7 +24,7 @@ def _login(client, u, p):
 # 拿來當探針的端點：各自只認一個明確的模組，且都是純讀取（不會改到資料）
 _PROBES = [
     ("/api/parts", "procurement", "料號主檔"),
-    ("/api/audit-log", "audit_log", "歷史紀錄"),
+    ("/api/audit-log", "audit_log", "操作紀錄"),
     ("/api/module-versions", "module_versions", "版本紀錄"),
 ]
 # 模組的端點由模組自己的測試帶進同一組檢查（例：modules/netplan/tests/test_netplan_moved_guards.py），

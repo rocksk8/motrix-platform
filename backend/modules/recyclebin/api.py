@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""刪除暫存區 API：**只有最高管理者**（列表、詳情（遮罩）、還原、永久刪除、『刪除已核可』入口、隔離目錄設定）。
+"""資源回收筒 API：**只有最高管理者**（列表、詳情（遮罩）、還原、永久刪除、『刪除已核可』入口、隔離目錄設定）。
 一般使用者看不到入口、直接打也是 403；他們刪單據後只看到『已刪除』（單據端點由擁有模組呼叫 `helpers.recycle_bin.delete`）。
 每個寫入端點都寫稽核：recyclebin.restore／restore_failed／purge_manual／delete_approved／settings。
 """
@@ -64,7 +64,7 @@ def bin_impact(entity_type: str = Query(...), entity_id: str = Query(...), autho
     _require_sa(authorization)
     ad = RB.get_adapter(entity_type)
     if ad is None:
-        raise HTTPException(404, "沒有這種單據的暫存區 adapter")
+        raise HTTPException(404, "沒有這種單據的資源回收筒 adapter")
     conn = get_db()
     try:
         ok, why = ad.can_delete_approved(conn, entity_id, {"role": "superadmin"})
@@ -99,7 +99,7 @@ def bin_restore(bin_id: int, authorization: str = Header(None)):
             raise _http(e)
         deleter = conn.execute("SELECT deleted_by FROM recycle_bin WHERE id=?", (bin_id,)).fetchone()
         _notify_superadmins(conn, user["username"], "recyclebin_restore", bin_id, res["label"],
-                            "%s 已從暫存區還原：%s" % (user.get("display_name") or user["username"], res["label"]), [deleter["deleted_by"] if deleter else ""])
+                            "%s 已從資源回收筒還原：%s" % (user.get("display_name") or user["username"], res["label"]), [deleter["deleted_by"] if deleter else ""])
         return res
     finally:
         conn.close()
@@ -121,7 +121,7 @@ def bin_purge(bin_id: int, confirm: str = Query(""), authorization: str = Header
             _audit(_tok(authorization), "recyclebin.purge_failed", "recycle_bin", str(bin_id), str(e)[:200], {"error": str(e)[:500]})
             raise _http(e)
         _notify_superadmins(conn, user["username"], "recyclebin_purge", bin_id, res["label"],
-                            "%s 已永久刪除暫存區項目：%s" % (user.get("display_name") or user["username"], res["label"]))
+                            "%s 已永久刪除資源回收筒項目：%s" % (user.get("display_name") or user["username"], res["label"]))
         return {"ok": True, "id": bin_id}
     finally:
         conn.close()
@@ -129,7 +129,7 @@ def bin_purge(bin_id: int, confirm: str = Query(""), authorization: str = Header
 
 @router.post("/api/recycle-bin/delete-approved")
 def bin_delete_approved(body: dict = Body(...), authorization: str = Header(None)):
-    """superadmin 專用『刪除已核可』：進暫存區（可還原），不是硬刪。要 `confirm:true` 且 `confirm_text` 等於單據編號（二次確認）。
+    """superadmin 專用『刪除已核可』：進資源回收筒（可還原），不是硬刪。要 `confirm:true` 且 `confirm_text` 等於單據編號（二次確認）。
     哪些單據／狀態可以走這個入口由各 adapter 的 `can_delete_approved` 決定（P0 沒有任何 adapter ⇒ 一律 404）。"""
     user = _require_sa(authorization)
     et, eid = body.get("entity_type"), body.get("entity_id")
@@ -138,7 +138,7 @@ def bin_delete_approved(body: dict = Body(...), authorization: str = Header(None
     if body.get("confirm") is not True or not isinstance(ctext, str) or ctext != eid or not eid:
         raise HTTPException(422, "需要二次確認：confirm=true 並輸入單據編號（confirm_text）")
     if RB.get_adapter(et) is None:
-        raise HTTPException(404, "沒有這種單據的暫存區 adapter")
+        raise HTTPException(404, "沒有這種單據的資源回收筒 adapter")
     rsn = body.get("reason")
     rsn = rsn.strip() if isinstance(rsn, str) else ""
     if not rsn:
@@ -163,7 +163,7 @@ def bin_delete_approved(body: dict = Body(...), authorization: str = Header(None
         if post:
             post()                                          # commit 之後：擁有模組的後續動作（行事曆同步等），錯誤只記 log
         _notify_superadmins(conn, user["username"], "recyclebin_delete_approved", res["bin_id"], "%s %s" % (et, eid),
-                            "%s 把已核可的單據 %s %s 送進了暫存區（%d 天內可還原）" % (user.get("display_name") or user["username"], et, eid, S.retention_days(conn)))
+                            "%s 把已核可的單據 %s %s 送進了資源回收筒（%d 天內可還原）" % (user.get("display_name") or user["username"], et, eid, S.retention_days(conn)))
         return res
     finally:
         conn.close()
@@ -172,14 +172,14 @@ def bin_delete_approved(body: dict = Body(...), authorization: str = Header(None
 @router.put("/api/recycle-bin/settings")
 def bin_settings(body: dict = Body(...), authorization: str = Header(None)):
     """隔離目錄：空字串＝預設（安裝根目錄下的「資源回收筒」）；否則必須是樹外的絕對路徑（上一層存在，最後一層會建）。
-    暫存區還有項目時不准改（會讓隔離檔失聯）。"""
+    資源回收筒還有項目時不准改（會讓隔離檔失聯）。"""
     user = _require_sa(authorization)
     d = str(body.get("dir") or "").strip()
     conn = get_db()
     try:
         live = conn.execute("SELECT COUNT(*) FROM recycle_bin WHERE restore_status IN (?,?)", S.LIVE).fetchone()[0]
         if live:
-            raise HTTPException(409, "暫存區還有 %d 筆項目，請先還原或清除後再改隔離目錄" % live)
+            raise HTTPException(409, "資源回收筒還有 %d 筆項目，請先還原或清除後再改隔離目錄" % live)
         if d:
             why = Q.location_problem(d)
             if not why:

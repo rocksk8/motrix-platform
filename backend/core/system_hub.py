@@ -29,7 +29,7 @@ SECTIONS = (
     {"key": "identity", "title": "帳號與權限", "sub": "誰能進系統、能看什麼、能做什麼"},
     {"key": "workflow", "title": "簽核與流程", "sub": "誰簽什麼、單據類型與款別"},
     {"key": "notify", "title": "通知與信件", "sub": "什麼事通知誰、怎麼通知"},
-    {"key": "data", "title": "資料與備份", "sub": "檔案位置、備份、刪除後的暫存區"},
+    {"key": "data", "title": "資料與備份", "sub": "檔案位置、備份、刪除後的資源回收筒"},
     {"key": "audit", "title": "稽核與紀錄", "sub": "誰在什麼時候做了什麼"},
     {"key": "settings", "title": "公司與參數設定", "sub": "公司資料、法規參數、報表與利潤口徑（設定中心索引）"},
     {"key": "modules", "title": "模組與擴充", "sub": "功能開關與自訂模組"},

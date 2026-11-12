@@ -2095,7 +2095,7 @@ def _backfill_check_date(raw):
 
 
 def _next_backfill_no(conn, month, reserved):
-    """該月下一個可用單號：接續最大號＋1，跳過暫存區保留中的號碼（單號不回收）；用盡 ⇒ 409。補登與號碼預覽共用。"""
+    """該月下一個可用單號：接續最大號＋1，跳過資源回收筒保留中的號碼（單號不回收）；用盡 ⇒ 409。補登與號碼預覽共用。"""
     qno = _peek_next_no(conn, month)
     while int(qno.rsplit("-", 1)[1]) <= 999 and qno in reserved:
         qno = "MQ-%s-%03d" % (month, int(qno.rsplit("-", 1)[1]) + 1)
@@ -2205,10 +2205,10 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
         begin_write(conn)                   # 派號與 INSERT 同一個寫鎖：兩人同時補同月不會拿到同一個號
         row = conn.execute("SELECT seq FROM quote_seq WHERE month=?", (month,)).fetchone()
         seq_before = row["seq"] if row else 0
-        reserved = _rb.reserved_ids(conn, "quotation")      # 暫存區裡的單號不可再發（單號不回收）
+        reserved = _rb.reserved_ids(conn, "quotation")      # 資源回收筒裡的單號不可再發（單號不回收）
         if client_no:
             if client_no in reserved:
-                raise HTTPException(409, "單號 %s 已被使用（或在暫存區保留中），不會改派其他號碼" % client_no)
+                raise HTTPException(409, "單號 %s 已被使用（或在資源回收筒保留中），不會改派其他號碼" % client_no)
             qno = client_no          # 已被使用 ⇒ 下面 INSERT 的 IntegrityError（quote_no 唯一）轉 409，不另外 SELECT
         else:
             qno = _next_backfill_no(conn, month, reserved)
@@ -2229,7 +2229,7 @@ def create_historical_quotation(body: HistoricalQuotationIn, authorization: str 
                   q.get("validDays", _pw.default_valid_days()), json.dumps(q, ensure_ascii=False),
                   now, now, user["username"], deal_tag, settle_status, (body.location_id or "").strip() or None))
         except sqlite3.IntegrityError:
-            raise HTTPException(409, ("單號 %s 已被使用（或在暫存區保留中），不會改派其他號碼" % qno) if client_no else "報價單號衝突，請重試")
+            raise HTTPException(409, ("單號 %s 已被使用（或在資源回收筒保留中），不會改派其他號碼" % qno) if client_no else "報價單號衝突，請重試")
         conn.execute("INSERT INTO quote_seq (month, seq) VALUES (?, ?) ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)",
                      (month, int(qno.rsplit("-", 1)[1])))
         cr = q.get("caseRecord")
@@ -2371,7 +2371,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         ).fetchone() if sp_name else None
         sp_id = sp_row["id"] if sp_row else None
 
-        begin_write(conn)   # 第 53 班：讀 existing（含 materialOrders 舊值）之前先拿寫鎖，與暫存區的刪除／還原互斥（lost update）
+        begin_write(conn)   # 第 53 班：讀 existing（含 materialOrders 舊值）之前先拿寫鎖，與資源回收筒的刪除／還原互斥（lost update）
         existing = conn.execute(
             # data_json 是 2026-09-14 加進來的：一般編輯要寫「改了什麼」的變更摘要，
             # 需要拿得到存檔前的內容（見 _summarize_quote_changes()）。
@@ -3256,28 +3256,28 @@ def delete_quotation(quote_no: str, authorization: str = Header(None), reason: O
         conn.close()
         raise
     if row["status"] != "草稿":
-        # T69 L1（使用者裁示 2026-10-16 #3）：補登單僅最高管理者可作廢，走暫存區（可復原）；單號不回收（quote_seq 不回減）。
+        # T69 L1（使用者裁示 2026-10-16 #3）：補登單僅最高管理者可作廢，走資源回收筒（可復原）；單號不回收（quote_seq 不回減）。
         if not (user.get("role") == "superadmin" and _doc_is_historical(row["data_json"])):
             conn.close()
             raise HTTPException(403, f"只有草稿狀態的報價單可以刪除（目前狀態：{row['status']}）")
-        _hist_void = True        # 走暫存區的「刪除已核可」規則：底下有其他單據／已結案仍會被擋
+        _hist_void = True        # 走資源回收筒的「刪除已核可」規則：底下有其他單據／已結案仍會被擋
         _void_reason = str(reason or "").strip()
-        if len(_void_reason) < 5:      # 稽核 SF5：作廢補登單要寫原因（進暫存區紀錄與稽核）
+        if len(_void_reason) < 5:      # 稽核 SF5：作廢補登單要寫原因（進資源回收筒紀錄與稽核）
             conn.close()
             raise HTTPException(400, "作廢補登單請填原因（至少 5 個字）")
     cname = row['customer_name'] or ''
-    from helpers import recycle_bin                  # 第 53 班 P1：刪除先進暫存區（IP-RB2）
+    from helpers import recycle_bin                  # 第 53 班 P1：刪除先進資源回收筒（IP-RB2）
     from modules.case import recycle_adapter as _ra
     begin_write(conn)                                # 讀快照前先拿寫鎖
     with recycle_bin.delete_scope():                  # 後續步驟失敗 ⇒ 已搬進隔離區的附件搬回原處（helpers.recycle_bin.delete_scope）
         try:
             try:
-                res = recycle_bin.delete(conn, "quotation", quote_no, user, reason=(_void_reason if _hist_void else ""), approved=bool(_hist_void))   # 報價單＋名下階段／拜訪／進度更新／行動事項＋附件一併進暫存區
+                res = recycle_bin.delete(conn, "quotation", quote_no, user, reason=(_void_reason if _hist_void else ""), approved=bool(_hist_void))   # 報價單＋名下階段／拜訪／進度更新／行動事項＋附件一併進資源回收筒
             except recycle_bin.BinError as e:
                 conn.rollback()
                 conn.close()
                 raise HTTPException(409, str(e))
-            if res is None:                                  # 暫存區模組不在 ⇒ 照舊只刪報價單那一列並明說
+            if res is None:                                  # 資源回收筒模組不在 ⇒ 照舊只刪報價單那一列並明說
                 _ra.legacy_delete_quotation(conn, quote_no)
             # 轉建連結指到這張單的業務開發案件解除連結（IP-13 `crm.quote_deleted`，M02 提供；同一筆交易）。
             # M02 不在 ⇒ 報價單照刪，回應 notice 明說連結沒有解除（INTEGRATION-POINTS IP-13「對方不在時」）。
@@ -3294,7 +3294,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None), reason: O
     conn.close()
     _purge_notifications(quote_no, ['approval_request', 'approval_returned',
                                      'approval_rejected', 'case_stage_deadline', 'approval_reminder'])
-    _audit(_tok(authorization), 'quotation.delete', 'quotation', quote_no, f"{quote_no}（{cname}）" + ("（已進暫存區）" if res else "（暫存區未安裝，已直接刪除）"),
+    _audit(_tok(authorization), 'quotation.delete', 'quotation', quote_no, f"{quote_no}（{cname}）" + ("（已進資源回收筒）" if res else "（資源回收筒未安裝，已直接刪除）"),
            {"reason": _void_reason, "historical": True} if _hist_void else None)
     for c in orphaned:
         _audit(_tok(authorization), 'dev_case.unlink_deleted_quote', 'dev_case', str(c['id']),

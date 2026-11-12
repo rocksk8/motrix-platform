@@ -7,7 +7,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>歷史紀錄 — MOTRIX 專案管理系統</title>
+  <title>操作紀錄 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -114,14 +114,14 @@
   <main class="audit-main">
     <div class="page-header">
       <div>
-        <div class="page-header__title">歷史紀錄</div>
+        <div class="page-header__title">操作紀錄</div>
         <div class="page-header__sub" x-text="'共 ' + total + (totalCapped ? '＋' : '') + ' 筆操作紀錄' + (totalCapped ? '（只數到 1 萬筆，請加條件縮小範圍）' : '')"></div>
       </div>
     </div>
 
     <div class="immutable-note">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      歷史紀錄不可修改或刪除，所有操作均永久保存以供稽核。
+      操作紀錄不可修改或刪除，所有操作均永久保存以供稽核。
     </div>
 
     <!-- 篩選列 -->

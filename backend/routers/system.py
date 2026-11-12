@@ -342,7 +342,7 @@ def audit_module_counts(body: dict = Body(...), authorization: str = Header(None
     user = _require_user(authorization)
     # 安全審查 W3（2026-09-30）：這支直接數 audit_log，原本只要求登入 ⇒ 與歷史紀錄頁同一個權限（模組 audit_log）。
     # 舊端點，前端已改用 /api/reads/module-counts，沒有活的呼叫端。
-    require_any_module(user, ["audit_log"], "歷史紀錄")
+    require_any_module(user, ["audit_log"], "操作紀錄")
     modules_since = (body.get("modules") or {}) if isinstance(body, dict) else {}
     if not isinstance(modules_since, dict) or not modules_since:
         return {}
@@ -442,7 +442,7 @@ def _require_audit_view(authorization):
     # 2026-09-14 使用者裁示：這頁原本沒有對應的模組 key，只能靠角色寫死（`admin` 以上）。
     # 建了 key（`audit_log`）後跟其他模組一樣可逐帳號勾選；列表、樹、失敗摘要同一個權限。
     user = _require_user(authorization)
-    require_any_module(user, ["audit_log"], "歷史紀錄")
+    require_any_module(user, ["audit_log"], "操作紀錄")
     return user
 
 

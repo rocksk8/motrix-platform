@@ -378,7 +378,7 @@ async def slow_request_log(request: Request, call_next):
 
 @app.middleware("http")
 async def recycle_bin_request_scope(request: Request, call_next):
-    """刪除暫存區的保險網（IP-RB2）：請求裡 `recycle_bin.delete()` 搬進隔離區的附件，請求結束時資料列若沒 commit
+    """資源回收筒的保險網（IP-RB2）：請求裡 `recycle_bin.delete()` 搬進隔離區的附件，請求結束時資料列若沒 commit
     （後續步驟失敗而 rollback），就搬回原處。平常沒有刪除 ⇒ 只是設一個空 list。細節見 helpers/recycle_bin.request_scope_end。"""
     from helpers import recycle_bin as _rb
     state = _rb.request_scope_begin()

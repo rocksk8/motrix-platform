@@ -26,7 +26,7 @@ from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
 from core.txn import begin_write, write_txn
-from helpers import recycle_bin   # 第 53 班：刪除暫存區 L1 契約（IP-RB1／RB2）
+from helpers import recycle_bin   # 第 53 班：資源回收筒 L1 契約（IP-RB1／RB2）
 from helpers import download_name
 from helpers.validation import body_flag  # noqa: E402  第50班 W1c-P2b：旗標嚴格解析
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
@@ -567,7 +567,7 @@ def delete_payment_request(request_no: str, authorization: str = Header(None)):
     conn = get_db()
     recycled = True
     try:
-        with write_txn(conn):                                            # 第 53 班（刪除暫存區 P1）：讀狀態→進暫存區在同一個寫交易
+        with write_txn(conn):                                            # 第 53 班（資源回收筒 P1）：讀狀態→進資源回收筒在同一個寫交易
             row = conn.execute("SELECT status FROM payment_requests WHERE request_no=?", (request_no,)).fetchone()
             if not row:
                 raise HTTPException(404, "請款單不存在")
@@ -578,16 +578,16 @@ def delete_payment_request(request_no: str, authorization: str = Header(None)):
                     res = recycle_bin.delete(conn, "payment_request", request_no, user)
                 except recycle_bin.BinError as e:
                     raise HTTPException(409, str(e))
-                if res is None:                                              # 暫存區模組不在 ⇒ 照舊硬刪（不可還原），回應與稽核明說
+                if res is None:                                              # 資源回收筒模組不在 ⇒ 照舊硬刪（不可還原），回應與稽核明說
                     from modules.arap.recycle_adapter import PaymentRequestBinAdapter
-                    PaymentRequestBinAdapter().delete_in_tx(conn, request_no)     # 與進暫存區同一段刪除實作（adapter 檔內的 DELETE 免守門登記）
+                    PaymentRequestBinAdapter().delete_in_tx(conn, request_no)     # 與進資源回收筒同一段刪除實作（adapter 檔內的 DELETE 免守門登記）
                     recycled = False
                 conn.commit()
     finally:
         conn.close()
     _purge_notifications(request_no, ['payment_request_approval_request', 'payment_request_approved',
                                        'payment_request_returned', 'approval_reminder'])
-    _audit(_tok(authorization), "payment_request.delete", "payment_request", request_no, request_no if recycled else request_no + "（暫存區未啟用，已直接刪除）")
+    _audit(_tok(authorization), "payment_request.delete", "payment_request", request_no, request_no if recycled else request_no + "（資源回收筒未啟用，已直接刪除）")
     notify_module_activity("請款單", "刪除", user.get("display_name") or user["username"],
                             request_no, "case-management.html", audience="finance")
     return {"ok": True, "recycled": recycled}

@@ -101,7 +101,7 @@ class DispatchIn(BaseModel):
 
 from modules.subcontract import bank_mask as _bm  # noqa: E402
 from modules.subcontract import dispatch_flow as _flow  # noqa: E402
-from modules.subcontract import recycle_adapter as _rb_adapter  # noqa: E402  第53班 P1：刪除暫存區 adapter
+from modules.subcontract import recycle_adapter as _rb_adapter  # noqa: E402  第53班 P1：資源回收筒 adapter
 from helpers import recycle_bin  # noqa: E402
 from core.txn import begin_write as _begin_write  # noqa: E402
 
@@ -754,9 +754,9 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
 
 @router.delete("/api/contractor-dispatches/{did}")
 def delete_dispatch(did: int, authorization: str = Header(None)):
-    """刪除派發＝送進刪除暫存區（30 天內最高管理者可還原，含附件與勞報單連結）。規則不變：審核中／已核准／已有匯款申請不可刪
-    （已核准的只有最高管理者能走暫存區的『刪除已核可』入口，`/api/recycle-bin/delete-approved`）。
-    暫存區模組不在 ⇒ 照舊刪資料列（附件留在原處）並在回應 notice 與稽核明說。"""
+    """刪除派發＝送進資源回收筒（30 天內最高管理者可還原，含附件與勞報單連結）。規則不變：審核中／已核准／已有匯款申請不可刪
+    （已核准的只有最高管理者能走資源回收筒的『刪除已核可』入口，`/api/recycle-bin/delete-approved`）。
+    資源回收筒模組不在 ⇒ 照舊刪資料列（附件留在原處）並在回應 notice 與稽核明說。"""
     user = _require_user(authorization)
     require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     if user["role"] not in ("superadmin", "admin"):
@@ -774,13 +774,13 @@ def delete_dispatch(did: int, authorization: str = Header(None)):
             except recycle_bin.BinError as e:
                 conn.rollback()
                 raise HTTPException(409, str(e))
-            if res is None:                                                      # 暫存區模組不在：照舊刪（不刪附件）並明說
+            if res is None:                                                      # 資源回收筒模組不在：照舊刪（不刪附件）並明說
                 ad = _rb_adapter.DispatchBinAdapter()
                 ok, why = ad.can_delete(conn, did, user)
                 if not ok:
                     raise HTTPException(409, why)
                 ad.delete_in_tx(conn, did)
-                notice = "刪除暫存區未啟用：此派發已永久刪除，無法還原"
+                notice = "資源回收筒未啟用：此派發已永久刪除，無法還原"
             conn.commit()
     finally:
         conn.close()

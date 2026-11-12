@@ -29,7 +29,7 @@ MODULE = ModuleSpec(
         ("uploads.path_access", "arap"): invoice_vouchers._InvoiceVoucherPathAccess,
         # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
         ("attachments.catalog", "arap"): attachments._ArapCatalog,
-        # IP-RB1（第 53 班，刪除暫存區 P1）：請款單、開票申請憑據的快照／刪除／還原
+        # IP-RB1（第 53 班，資源回收筒 P1）：請款單、開票申請憑據的快照／刪除／還原
         ("recyclebin.adapter", "payment_request"): lambda: recycle_adapter.PaymentRequestBinAdapter(),
         ("recyclebin.adapter", "invoice_voucher"): lambda: recycle_adapter.InvoiceVoucherBinAdapter(),
     },

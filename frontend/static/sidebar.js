@@ -293,7 +293,7 @@ if (typeof module !== 'undefined' && module.exports) {
       + '<div id="tb-online-list" style="max-height:320px;overflow-y:auto"></div>'
       + '<div style="padding:8px 16px;border-top:1px solid var(--border-light);font-size:12px;color:var(--text-dim);line-height:1.7">'
       + '依最後活動時間判定（5 分鐘內），最慢 5 分鐘更新一次</div>'
-      + '<a href="' + pg('online-stats.html') + '" style="display:block;padding:9px 16px;text-align:center;font-size:12px;color:var(--accent);border-top:1px solid var(--border-light);text-decoration:none;font-weight:500">查看在線時數統計 →</a>'
+      + '<a href="' + pg('online-stats.html') + '" style="display:block;padding:9px 16px;text-align:center;font-size:12px;color:var(--accent);border-top:1px solid var(--border-light);text-decoration:none;font-weight:500">查看使用狀況 →</a>'
       + '</div></div>'
   }
 

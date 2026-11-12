@@ -77,7 +77,7 @@ def payslips_for_contractors(conn, contractor_ids, dispatch_ids=None) -> dict:
 
 
 def _delete_links(conn, where, args):
-    """連結列的唯一刪除點（暫存區守門的 `DELETE FROM` 基線只登記這一處）。`where` 只由本檔寫死的片段組成，不接使用者輸入。"""
+    """連結列的唯一刪除點（資源回收筒守門的 `DELETE FROM` 基線只登記這一處）。`where` 只由本檔寫死的片段組成，不接使用者輸入。"""
     conn.execute("DELETE FROM payslip_dispatch_links WHERE " + where, args)
 
 
@@ -125,14 +125,14 @@ def unlink(conn, slip_no, dispatch_id, user) -> dict:
 
 
 def delete_for_dispatch(conn, dispatch_id) -> list:
-    """派發進刪除暫存區時（第53班）：移除這張派發的全部連結列，回傳被移除的原始列（dict）。不 commit。連結表只由本模組寫入。"""
+    """派發進資源回收筒時（第53班）：移除這張派發的全部連結列，回傳被移除的原始列（dict）。不 commit。連結表只由本模組寫入。"""
     rows = [{k: r[k] for k in r.keys()} for r in conn.execute("SELECT * FROM payslip_dispatch_links WHERE dispatch_id=? ORDER BY id", (int(dispatch_id),)).fetchall()]
     _delete_links(conn, "dispatch_id=?", (int(dispatch_id),))
     return rows
 
 
 def restore_rows(conn, rows, dispatch_id) -> dict:
-    """派發從暫存區還原時（第53班）：把 `delete_for_dispatch` 回傳的列放回。勞報單已不存在 ⇒ 略過並註記；同一 (勞報單, 派發) 已有連結 ⇒ 略過並註記；
+    """派發從資源回收筒還原時（第53班）：把 `delete_for_dispatch` 回傳的列放回。勞報單已不存在 ⇒ 略過並註記；同一 (勞報單, 派發) 已有連結 ⇒ 略過並註記；
     原 id 被占用 ⇒ 另給；其他唯一鍵衝突 ⇒ `LinkError(409)`。回 `{"restored": n, "notes": […]}`。不 commit。"""
     cols = {r[1] for r in conn.execute("PRAGMA table_info(payslip_dispatch_links)").fetchall()}
     restored, notes = 0, []
@@ -167,5 +167,5 @@ class _Links:
     link = staticmethod(link)
     link_flags = staticmethod(link_flags)                          # 第 55 班（加法）
     unlink = staticmethod(unlink)
-    delete_for_dispatch = staticmethod(delete_for_dispatch)      # 第53班（刪除暫存區 P1，加法）
+    delete_for_dispatch = staticmethod(delete_for_dispatch)      # 第53班（資源回收筒 P1，加法）
     restore_rows = staticmethod(restore_rows)

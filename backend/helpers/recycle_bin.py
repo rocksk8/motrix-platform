@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""刪除暫存區（資源回收筒）的 L1 契約（第 53 班 P0；設計 docs/platform/plans/RECYCLE-BIN-DESIGN-T52.md、狀態 RECYCLE-BIN-P0-STATE-T53.md）。
+"""資源回收筒（資源回收筒）的 L1 契約（第 53 班 P0；設計 docs/platform/plans/RECYCLE-BIN-DESIGN-T52.md、狀態 RECYCLE-BIN-P0-STATE-T53.md）。
 
 [單位] helper:recycle_bin    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] Adapter, BinError, BinUnavailable, CAP_ADAPTER, CAP_DELETE, CAP_RESERVED, MASK, MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_BYTES_ADMIN, RETENTION_DAYS, RestoreContext, adapters, available, delete, delete_scope, get_adapter, mask_obj, request_scope_begin, request_scope_end, reserved_ids
 [不變式] 這裡**不認識任何業務表、不碰檔案系統、不讀資料庫**：只定義『擁有模組 ⇄ recyclebin 模組』之間的契約（IP-RB1／IP-RB2，列車定號）。
          擁有模組只 import 本檔（L1）；絕不 import `modules.recyclebin`。recyclebin 模組不在 ⇒ `delete()` 回 None，呼叫端**照舊硬刪並明說**，
-         不得靜默（缺席與『進了暫存區』長得不一樣）。
+         不得靜默（缺席與『進了資源回收筒』長得不一樣）。
 [契約題] backend/modules/recyclebin/tests/test_recyclebin_p0_t53.py, backend/modules/recyclebin/tests/test_recyclebin_hardening_t53.py, backend/tests/platform/test_recyclebin_guards_t53.py
 
 ## 兩個能力（core.registry 的 provider）
@@ -15,7 +15,7 @@
   擁有模組的刪除端點把『原本的 DELETE FROM …＋刪檔』換成 `recycle_bin.delete(conn, "payslip", slip_no, user)`（在自己的寫入交易內呼叫）。
 
 ## Adapter 要做的事（snapshot／delete_in_tx／restore_in_tx；其餘有預設）
-- `can_delete`：**沿用現行刪除規則**（例如只准草稿）——暫存區不放寬任何刪除條件（使用者 D1）。
+- `can_delete`：**沿用現行刪除規則**（例如只准草稿）——資源回收筒不放寬任何刪除條件（使用者 D1）。
 - `snapshot`：回傳 `{"rows": {表名: [列 dict…]}, "files": [{"root": "uploads", "rel": "<相對路徑>"}…], "label": 顯示名, "parent": (type, id)|None, "meta": {…}}`；
   單據列與所有子表列都要在 rows 裡（還原要用）；檔案只列『這張單據名下、刪除時會被刪掉的』檔。
 - `delete_in_tx`：只刪資料列（不刪檔、不 commit）；子表、連結、通知清理照原端點。
@@ -40,7 +40,7 @@ CAP_ADAPTER = "recyclebin.adapter"
 CAP_DELETE = "recyclebin.delete"
 CAP_RESERVED = "recyclebin.reserved"
 RETENTION_DAYS = 30                    # 預設（後備）保留天數；實際值由設定 `recycle_bin.retention_days` 決定（T69，7～365），讀不到時才用這個
-MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024         # 單筆快照上限（一般使用者）；超過 ⇒ 拒絕進暫存區（BinError），不悄悄硬刪
+MAX_SNAPSHOT_BYTES = 5 * 1024 * 1024         # 單筆快照上限（一般使用者）；超過 ⇒ 拒絕進資源回收筒（BinError），不悄悄硬刪
 MAX_SNAPSHOT_BYTES_ADMIN = 50 * 1024 * 1024  # 管理員（admin／superadmin）的上限：很大的草稿報價單仍要刪得掉
 
 #: 預設遮罩的欄位名稱（不分大小寫、駝峰／底線皆可，**子字串比對**——寧可多遮，不可漏）。看到 → 整個值（含巢狀 dict／list）換成 MASK；adapter 可覆寫 mask()。
@@ -76,7 +76,7 @@ class _Masker:
 
 
 class BinError(Exception):
-    """暫存區動作不能做（原因字串給人看；前綴 `conflict:`／`parent_missing:`／`too_large:` 為機器可辨識）。"""
+    """資源回收筒動作不能做（原因字串給人看；前綴 `conflict:`／`parent_missing:`／`too_large:` 為機器可辨識）。"""
 
 
 class BinUnavailable(BinError):
@@ -112,7 +112,7 @@ class Adapter:
         raise NotImplementedError
 
     def cascade_children(self, conn, entity_id) -> List[Tuple[str, str]]:
-        """這張單據刪除時連帶刪掉的其他單據 `[(entity_type, entity_id)]`；recyclebin 以同一個 group 一起進暫存區、一起還原。預設無。"""
+        """這張單據刪除時連帶刪掉的其他單據 `[(entity_type, entity_id)]`；recyclebin 以同一個 group 一起進資源回收筒、一起還原。預設無。"""
         return []
 
     def mask(self, snap: dict) -> dict:
@@ -122,8 +122,8 @@ class Adapter:
         """交易 **commit 之後** 才執行的後續動作（原刪除／還原端點在 commit 後做的事：行事曆同步、通知清理、背景備份…）。
         `event` ＝ `delete`｜`restore`；`result` ＝ 該動作的回傳 dict。預設不做事。
         **錯誤只記 log、不往外丟**（資料已經 commit，不可以因為後續動作失敗而回報失敗）；實作要冪等。
-        觸發時機：還原與『刪除已核可』由暫存區模組在 commit 後自動呼叫；一般刪除（擁有模組的端點自己的交易）由端點在**自己 commit 之後**呼叫
-        `delete()` 回傳的 `result["after_commit"]()`（沒有這個鍵 ＝ 暫存區模組不在 ⇒ 端點走舊的硬刪流程）。"""
+        觸發時機：還原與『刪除已核可』由資源回收筒模組在 commit 後自動呼叫；一般刪除（擁有模組的端點自己的交易）由端點在**自己 commit 之後**呼叫
+        `delete()` 回傳的 `result["after_commit"]()`（沒有這個鍵 ＝ 資源回收筒模組不在 ⇒ 端點走舊的硬刪流程）。"""
         return None
 
 
@@ -145,10 +145,10 @@ def mask_obj(obj, _key: str = ""):
 
 
 def reserved_ids(conn, entity_type: str = "") -> set:
-    """暫存區裡**還保留著**的單號：`restore_status` 為 in_bin／restore_failed 的列的 `entity_id`，再加上快照 `meta.codes`（字串清單，adapter 放單據代號用，
+    """資源回收筒裡**還保留著**的單號：`restore_status` 為 in_bin／restore_failed 的列的 `entity_id`，再加上快照 `meta.codes`（字串清單，adapter 放單據代號用，
     例：費用單據 PR／PO 號、材料申請 MO- 號——它們的 entity_id 不是代號）。`entity_type` 空 ⇒ 全部類型。
-    **單號產生器要跳過這些號碼**：否則『取現存最大號 + 1』會把剛進暫存區的最新一張的號碼再發出去，還原時撞號（外部已寄出的單號重複更糟）。
-    在呼叫端的交易內讀；暫存區模組不在 ⇒ 空集合（沒有保留的號碼）。"""
+    **單號產生器要跳過這些號碼**：否則『取現存最大號 + 1』會把剛進資源回收筒的最新一張的號碼再發出去，還原時撞號（外部已寄出的單號重複更糟）。
+    在呼叫端的交易內讀；資源回收筒模組不在 ⇒ 空集合（沒有保留的號碼）。"""
     fn = registry.single_provider(CAP_RESERVED)
     if fn is None:
         return set()
@@ -156,7 +156,7 @@ def reserved_ids(conn, entity_type: str = "") -> set:
 
 
 def available() -> bool:
-    """recyclebin 模組是否已載入（擁有模組的刪除端點用它決定『進暫存區』或『照舊硬刪』）。"""
+    """recyclebin 模組是否已載入（擁有模組的刪除端點用它決定『進資源回收筒』或『照舊硬刪』）。"""
     return registry.single_provider(CAP_DELETE) is not None
 
 
@@ -178,7 +178,7 @@ def get_adapter(entity_type: str) -> Optional[Adapter]:
 
 
 def delete(conn, entity_type: str, entity_id, user: dict, reason: str = "", approved: bool = False) -> Optional[dict]:
-    """把一張單據（含附件）送進暫存區。**在呼叫端自己的寫入交易內**呼叫；本函式不 commit。
+    """把一張單據（含附件）送進資源回收筒。**在呼叫端自己的寫入交易內**呼叫；本函式不 commit。
     ⇒ recyclebin 模組不在：回 None（呼叫端照舊硬刪並明說）；在：回 `{"bin_id", "token", "purge_after", "files"}`。
     不能刪（現行規則）⇒ 丟 `BinError`（原因字串）；快照太大 ⇒ `BinError('too_large: …')`。"""
     fn = registry.single_provider(CAP_DELETE)
@@ -207,7 +207,7 @@ def request_scope_begin():
 
 
 def _is_committed(token) -> bool:
-    """暫存區資料列（以 token 找）是否已 commit 進資料庫；查不到／查詢失敗時一律當作『已 commit』（寧可不搬，交給每日 reconcile）。"""
+    """資源回收筒資料列（以 token 找）是否已 commit 進資料庫；查不到／查詢失敗時一律當作『已 commit』（寧可不搬，交給每日 reconcile）。"""
     if not token:
         return True
     try:
@@ -223,7 +223,7 @@ def _is_committed(token) -> bool:
 
 
 def request_scope_end(state) -> int:
-    """請求結束時呼叫：這個請求裡所有 `delete()` 搬進隔離區的附件，凡是暫存區資料列最後**沒有 commit**的（呼叫端在
+    """請求結束時呼叫：這個請求裡所有 `delete()` 搬進隔離區的附件，凡是資源回收筒資料列最後**沒有 commit**的（呼叫端在
     delete() 之後的步驟失敗並 rollback、或沒關好連線被丟棄），一律搬回原處。回傳搬回的筆數。已 commit 的不動。
     這是保險網：每個刪除端點仍應用 `delete_scope()` 就近回復；這裡負責存檔路徑（`material_guard` 在報價存檔裡刪材料申請等）。"""
     token, lst = state
@@ -246,7 +246,7 @@ def request_scope_end(state) -> int:
 def delete_scope():
     """包住『delete() … commit』這一段：區塊內（含更深層呼叫）任何 `delete()` 成功後，只要區塊以例外結束
     （後續步驟失敗、commit 失敗），就把已搬進隔離區的附件全部搬回原處（資料列由呼叫端的 rollback 撤銷）。
-    **區塊要在 commit 之後結束**——commit 成功之後才發生的錯誤不要放在區塊裡（單據已在暫存區，附件不可搬回）。
+    **區塊要在 commit 之後結束**——commit 成功之後才發生的錯誤不要放在區塊裡（單據已在資源回收筒，附件不可搬回）。
     不可巢狀依賴：每個 scope 只回復自己區塊內的刪除。擁有模組的刪除端點一律這樣用：
 
         with recycle_bin.delete_scope():

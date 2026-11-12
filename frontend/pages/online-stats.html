@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>在線時數統計 — MOTRIX 專案管理系統</title>
+  <title>使用狀況 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -74,7 +74,7 @@
     <div class="pg">
       <div class="pg__l">
         <div class="pg__eyebrow">系統設定</div>
-        <h1 class="pg__t">在線時數統計</h1>
+        <h1 class="pg__t">使用狀況</h1>
         <p class="pg__s">只統計有實際操作的活躍時間，每 5 分鐘累計一次</p>
       </div>
     </div>
@@ -253,7 +253,7 @@
               '<div style="max-width:520px;margin:64px auto;text-align:center">'
               + '<div style="font-size:40px;margin-bottom:12px">🔒</div>'
               + '<div style="font-size:17px;font-weight:600;margin-bottom:8px">你沒有這個頁面的權限</div>'
-              + '<div style="font-size:13px;color:var(--text-dim);line-height:1.9">在線時數統計僅限最高管理者檢視。</div></div>'
+              + '<div style="font-size:13px;color:var(--text-dim);line-height:1.9">使用狀況僅限最高管理者檢視。</div></div>'
             return
           }
           this.thisMonth()

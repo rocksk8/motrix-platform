@@ -5923,14 +5923,14 @@ def next_entity_code(conn, table: str, prefix: str, code_col: str = "code") -> s
     """Return next available code like C-202507-001 (or DN-202508-001 for a
     multi-char prefix) for entity tables. table/prefix/code_col must be
     trusted internal constants (not user input).
-    `reserved`（第 53 班）：暫存區裡還在的單據編號集合——編號取最大值是看『現存的列』，刪掉最新一張後會重用它的號碼，還原時就撞號。
-    自己向暫存區要保留號（所有類型；編號帶前綴、不會互撞）：所有呼叫端（請款單、收款憑據、完工單、出貨單…）一律不重發暫存區裡的號碼；暫存區模組不在 ⇒ 空集合。
+    `reserved`（第 53 班）：資源回收筒裡還在的單據編號集合——編號取最大值是看『現存的列』，刪掉最新一張後會重用它的號碼，還原時就撞號。
+    自己向資源回收筒要保留號（所有類型；編號帶前綴、不會互撞）：所有呼叫端（請款單、收款憑據、完工單、出貨單…）一律不重發資源回收筒裡的號碼；資源回收筒模組不在 ⇒ 空集合。
     """
     month = datetime.now().strftime("%Y%m")
     try:
         from helpers import recycle_bin as _rb
         reserved = _rb.reserved_ids(conn, "") or ()
-    except Exception:                                      # noqa: BLE001 — 暫存區讀不到不可讓開單失敗（最壞＝回到舊行為）
+    except Exception:                                      # noqa: BLE001 — 資源回收筒讀不到不可讓開單失敗（最壞＝回到舊行為）
         reserved = ()
     pattern = f"{prefix}-{month}-???"
     code_len = len(prefix) + 11   # prefix '-' YYYYMM '-' NNN
