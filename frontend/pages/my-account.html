@@ -333,7 +333,7 @@
       <div x-show="!linked && prefs.length" class="hint" style="margin-top:12px" data-testid="line-prefs-need-link">綁定 LINE 後，可以在這裡選擇要收哪些通知。</div>
     </div>
 
-      <div class="card" style="margin-top:20px" x-show="!lineAvail" data-testid="notify-empty-hint" x-cloak>
+      <div class="card" style="margin-top:20px" x-show="lineAvail === false" data-testid="notify-empty-hint" x-cloak>
         <div class="card-title">通知</div>
         <div class="card-sub">目前沒有可以自己設定的通知。管理者開啟 LINE 通知並設定好之後，這裡會出現「LINE 綁定」與你想收的通知。</div>
       </div>
@@ -359,6 +359,11 @@
           <div class="hint">此資料由管理者維護，會顯示在報價單上。</div></div>
         <div class="form-group"><label class="form-label">手機／電話</label><input class="form-input" type="text" :value="p.phone || '（未填）'" disabled data-testid="profile-phone">
           <div class="hint">此資料由管理者維護，會顯示在報價單上。</div></div>
+        <div class="form-group" data-testid="profile-quote-email-group"><label class="form-label">報價用信箱（開報價單時帶入）</label>
+          <input class="form-input" type="text" :value="p.quoteEmailEffective || '（未設定）'" disabled data-testid="profile-quote-email">
+          <div class="hint" x-show="p.quoteEmailSource === 'user'">此資料由管理者維護，會顯示在報價單上。這是管理者幫你設定的報價用公司信箱。</div>
+          <div class="hint" x-show="p.quoteEmailSource === 'company'">此資料由管理者維護，會顯示在報價單上。你沒有自己的報價用信箱，所以使用公司對外信箱。</div>
+          <div class="hint" x-show="p.quoteEmailSource !== 'user' && p.quoteEmailSource !== 'company'" data-testid="profile-quote-email-unset" style="color:#B45309">尚未設定公司信箱：目前報價單會帶入你的個人信箱。請聯絡管理者設定報價用公司信箱。</div></div>
       </div>
       <div class="card" style="margin-top:20px">
         <div class="card-title">頭像顏色</div>
@@ -506,7 +511,7 @@
     }
     window.accountProfile = function () {
       return {
-        p: { displayName: '', username: '', role: '', department: '', email: '', phone: '' },
+        p: { displayName: '', username: '', role: '', department: '', email: '', phone: '', quoteEmail: '', quoteEmailEffective: '', quoteEmailSource: '' },
         color: 'auto', colors: [], opt: null, err: '', ok: '', _t: null,
         async init() {
           const [a, b] = await Promise.all([
@@ -604,7 +609,7 @@
         { key: 'notify', label: '通知' }, { key: 'prefs', label: '偏好設定' },
       ],
       tab: 'profile',
-      lineAvail: false,
+      lineAvail: null,      // null＝還沒查到（不顯示空狀態提示，免得閃一下）；false＝管理者沒開 LINE
       goTab(k) {
         this.tab = k
         try { const u = new URL(location.href); u.searchParams.set('tab', k); history.replaceState(null, '', u) } catch (e) {}

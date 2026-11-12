@@ -760,3 +760,17 @@ def _core_next_user_prefs(conn):
 
 
 register("core", 13, _core_next_user_prefs)
+
+
+# ── core v14：報價用公司信箱（2026-11-13）──────────────────────────────────────────────
+# `users.quote_email`：這個人開報價單時帶入的 Email（只有最高管理者能設；空＝沿用公司對外信箱，再沒有才用個人信箱）。
+# 純新增欄位、冪等；不 import 會演進的程式碼（凍住的歷史）。
+def _core_next_users_quote_email(conn):
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if cols and "quote_email" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN quote_email TEXT NOT NULL DEFAULT ''")
+    conn.commit()
+    return None
+
+
+register("core", 14, _core_next_users_quote_email)

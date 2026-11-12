@@ -401,7 +401,17 @@ SEND_PERMANENT_FAIL = "permanent_fail"
 SEND_SKIPPED = "skipped"
 
 
-def _send(to_addrs: list, subject: str, html: str) -> str:
+def _clean_reply_to(v) -> str:
+    """Reply-To 只收格式正確的單一 Email；其他一律當沒有（不讓壞值進信件標頭）。"""
+    try:
+        from helpers import quote_email as _qe
+        v = str(v or "").strip()
+        return v if _qe.valid(v) else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _send(to_addrs: list, subject: str, html: str, reply_to: str = "") -> str:
     """寄一封信，**回傳四種結果之一**（見 `SEND_*`）。
 
     ## 🔴 `permanent` 與 `skipped` 的分界，是我（B）當場做的決定
@@ -448,6 +458,9 @@ def _send(to_addrs: list, subject: str, html: str) -> str:
     msg["Subject"] = subject
     msg["From"]    = f"{from_name} <{user}>"
     msg["To"]      = ", ".join(to_addrs)
+    _rt = _clean_reply_to(reply_to)            # 報價用公司信箱：只加 Reply-To，寄件者（From）不變
+    if _rt:
+        msg["Reply-To"] = _rt
     msg.attach(MIMEText(html, "html", "utf-8"))
     try:
         with smtplib.SMTP(host, port, timeout=15) as s:
@@ -522,7 +535,7 @@ class SendHandle:
         return self.outcome if self.outcome is not None else SEND_UNKNOWN
 
 
-def _async_send(to_addrs: list, subject: str, html: str) -> SendHandle:
+def _async_send(to_addrs: list, subject: str, html: str, reply_to: str = "") -> SendHandle:
     """背景寄信。**回一個把手，不要再把結果丟掉。**
 
     📌 既有呼叫端可以繼續忽略回傳值（行為完全不變）——
@@ -535,7 +548,7 @@ def _async_send(to_addrs: list, subject: str, html: str) -> SendHandle:
         # ⚠️ 例外也要留下結果，否則 `wait()` 會回 `SEND_UNKNOWN`，
         # 而呼叫端分不出「執行緒炸了」與「還沒跑完」。
         try:
-            handle.outcome = _send(to_addrs, subject, html)
+            handle.outcome = _send(to_addrs, subject, html, reply_to) if reply_to else _send(to_addrs, subject, html)
         except Exception as exc:                      # noqa: BLE001
             logger.exception("非同步寄信的執行緒自己炸了：%s", exc)
             handle.outcome = SEND_TRANSIENT_FAIL
@@ -600,7 +613,12 @@ def notify_approval_request(quote_no: str, customer: str, approver_usernames: li
         intro=_tf.get("intro", "您好，以下報價單已進入簽核流程，敬請於系統中完成審核作業。"),
         button_text=_tf.get("button", "前往審核報價單"),
     )
-    _async_send(to, _mt.subject("approval_request", _tf.get("reason", f"報價單待審核：{quote_no}（{customer}）")), html)
+    from helpers import quote_email as _qe
+    _rt = _qe.reply_to_for_quote(quote_no)           # 報價人的報價用公司信箱（開單當下快照）；沒有 ⇒ 不加 Reply-To，行為與舊版相同
+    if _rt:
+        _async_send(to, _mt.subject("approval_request", _tf.get("reason", f"報價單待審核：{quote_no}（{customer}）")), html, _rt)
+    else:
+        _async_send(to, _mt.subject("approval_request", _tf.get("reason", f"報價單待審核：{quote_no}（{customer}）")), html)
 
 
 def notify_next_tier(quote_no: str, customer: str, tier_no: int,

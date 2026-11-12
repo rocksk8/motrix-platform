@@ -1258,6 +1258,8 @@ class CompanyProfile(BaseModel):
     company_name_en: str = ''
     phone: str = ''
     email: str = ''
+    # 2026-11-13「報價用公司信箱」：公司對外信箱。使用者沒有自己的報價用信箱時，報價單／PDF／信件 Reply-To 用它（helpers/quote_email.py）。空白＝不設。
+    external_email: str = ''
 
 
 # 🔴 **既有安裝讀得到新欄位，靠的是這裡，不是 `db.py` 的 seed。**
@@ -1275,6 +1277,7 @@ _COMPANY_PROFILE_DEFAULT = {
     "privacy_notice_contact": "",   # 聯絡人用（客戶／供應商／承攬商），空白＝範本
     "privacy_notice_user": "",      # 使用者帳號用，空白＝範本
     "company_name_en": "", "phone": "", "email": "",   # 2026-09-27 H10（品牌區塊一起編輯）
+    "external_email": "",       # 2026-11-13 公司對外信箱（報價用；helpers/quote_email.py）
 }
 
 #: 設定頁編輯的鍵 ⇒ 同一欄在 company_profile 裡、解析順序排在它前面的別名（helpers.company_identity._PROFILE_ALIASES）。
@@ -1773,6 +1776,14 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
     cur = {**_COMPANY_PROFILE_DEFAULT,
            **(_get_setting("company_profile", {}) or {})}
     sent = body.model_dump(include=body.model_fields_set)
+    # 2026-11-13 公司對外信箱：格式不對 ⇒ 422（先驗再寫）；網域只做提醒（回 emailHint），不擋存檔
+    _email_hint = ""
+    if "external_email" in sent:
+        from helpers import quote_email as _qe
+        sent["external_email"] = str(sent["external_email"] or "").strip()
+        if sent["external_email"] and not _qe.valid(sent["external_email"]):
+            raise HTTPException(422, "公司對外信箱的格式不正確（例：service@your-company.com）")
+        _email_hint = _qe.domain_hint(sent["external_email"], (cur.get("email") or ""))
     # 🔴 **收到遮蔽字 ⇒ 視為沒送。**
     #
     # ☠️ 遮蔽帶出來的缺陷，而它**完全安靜**：設定頁最自然的寫法是
@@ -1846,7 +1857,7 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
         _audit(_tok(authorization), "settings.company_identity.confirm", "settings", "company_profile",
                value.get("name", ""), detail={"fields_hash": rec["fields_hash"], "via": rec["via"]})
         return {"ok": True, "confirmed": True}
-    return {"ok": True}
+    return {"ok": True, "emailHint": _email_hint} if _email_hint else {"ok": True}
 
 
 RECONFIRM_CODE = "company_setup_reconfirm"

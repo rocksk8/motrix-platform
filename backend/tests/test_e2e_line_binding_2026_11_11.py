@@ -76,7 +76,7 @@ def test_binding_card_is_hidden_until_the_admin_has_configured_login(live_server
     page = new_page(viewport={"width": 1280, "height": 1400})
     login_as(page, u)
     page.goto(f"{live_server}/pages/my-account.html?tab=notify")
-    page.locator("text=兩步驟驗證").first.wait_for(state="visible", timeout=20000)
+    page.locator("[data-testid=notify-empty-hint]").wait_for(state="visible", timeout=20000)      # 通知分頁：沒有可自己設定的通知時的說明
     page.wait_for_timeout(1200)                      # 讓卡片的 GET /api/line/binding 回來
     assert page.locator("#line-bind-card").is_visible() is False
 

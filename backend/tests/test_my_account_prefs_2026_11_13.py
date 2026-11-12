@@ -73,7 +73,7 @@ def test_profile_returns_only_own_data_and_has_no_write_endpoint(client, make_us
     da = client.get("/api/auth/profile", headers=ha).json()
     assert da["username"] == "prof_a" and da["email"] == "a@x.test" and da["phone"] == "02-1111" and da["role"] == "sales"
     assert client.get("/api/auth/profile", headers=hb).json()["email"] == "b@x.test"
-    assert set(da) == {"username", "displayName", "role", "department", "email", "phone"}     # 不洩漏密碼雜湊、權限勾選等
+    assert set(da) == {"username", "displayName", "role", "department", "email", "phone", "quoteEmail", "quoteEmailEffective", "quoteEmailSource"}     # 不洩漏密碼雜湊、權限勾選等
     for m in ("put", "patch", "post"):                                                         # 唯讀：沒有任何寫入端點
         assert getattr(client, m)("/api/auth/profile", json={"email": "evil@x.test"}, headers=ha).status_code in (404, 405)
     assert client.get("/api/auth/profile", headers=ha).json()["email"] == "a@x.test"

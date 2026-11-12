@@ -2207,7 +2207,7 @@ def _daily_backup_tables() -> dict:
         # 走到最後手段本來就該這樣做（來路不明的舊憑證不該直接沿用）。
         "使用者":           ("SELECT id, username, display_name, role, email, phone, "
                              "modules, active, created_at, must_change_password, "
-                             "notification_muted, department_id, totp_enabled "
+                             "notification_muted, department_id, totp_enabled, quote_email "
                              "FROM users ORDER BY id"),
         "部門":             "SELECT * FROM departments ORDER BY id",
         "事業處":           "SELECT * FROM divisions ORDER BY id",

@@ -1365,7 +1365,8 @@
           </div>
           <div class="form-group" x-show="fShown('qbasic', 'salesEmail')" :style="fo('qbasic', 'salesEmail')">
             <label class="form-label"><span x-text="fLabel('qbasic', 'salesEmail', 'E-MAIL')">E-MAIL</span></label>
-            <input class="form-input readonly" x-model="q.salesEmail" readonly>
+            <input class="form-input readonly" x-model="q.salesEmail" readonly data-testid="sales-email">
+            <div class="hint" data-testid="sales-email-hint" x-show="salesEmailSource && salesEmailSource !== 'user' && salesEmailSource !== 'company'" style="color:#B45309">尚未設定公司信箱：目前帶入的是個人信箱。請管理者在「使用者管理」幫這位同仁設定「報價用公司信箱」，或在「公司資料設定」填寫公司對外信箱。</div>
           </div>
         </div>
       </div>
@@ -2686,6 +2687,7 @@
       //  載不回來時留空陣列**不是留 null** —— `locations.length` 會在
       //  null 上丟例外，而那會讓整張表單白掉。
       locations: [],
+      salesEmailSource: '',        // 業務員 Email 這次是從哪一層帶入（user｜company｜personal｜none）；只用來顯示提醒，不存進報價單。載入既有報價單時會清空（已開出的單不動）
 
       q: {
         quoteNo: '',
@@ -4767,17 +4769,19 @@
         const u = this.allUsers.find(u => u.username === uname)
         if (u) {
           this.q.salesPerson = u.displayName || u.username
-          let phone = u.phone, email = u.email
+          let phone = u.phone, email = u.email, src = ''
+          if (u.quoteEmailEffective !== undefined) { email = u.quoteEmailEffective; src = u.quoteEmailSource || '' }   // 報價用信箱：使用者設定 → 公司對外信箱 → 個人信箱（後端解析）
           if (phone === undefined && email === undefined) {      // 使用者清單對一般人員不含別人的聯絡方式（第 47 班）⇒ 改查『報價人聯絡資料』（一次一人，只回電話與 Email）
             phone = ''; email = ''
             try {
               const r = await fetch(`${this.API}/users/sales-contact?username=${encodeURIComponent(uname)}`, { headers: { 'Authorization': `Bearer ${this.session.token}` } })
-              if (r.ok) { const c = await r.json(); phone = c.phone || ''; email = c.email || '' }
+              if (r.ok) { const c = await r.json(); phone = c.phone || ''; email = (c.quoteEmail !== undefined ? c.quoteEmail : c.email) || ''; src = c.quoteEmailSource || '' }
             } catch (e) { /* 查不到就留空，使用者可手動補 */ }
           }
           if (this.q.salesPersonUsername === uname) {            // 等待期間使用者又換人 ⇒ 不用過期的結果覆蓋
             this.q.salesPhone = phone || ''
             this.q.salesEmail = email || ''
+            this.salesEmailSource = src
           }
         }
         this.setDirty()
@@ -4891,7 +4895,8 @@
                 this._me = me
                 this.q.salesPerson = me.displayName || me.username
                 this.q.salesPhone  = me.phone  || ''
-                this.q.salesEmail  = me.email  || ''
+                this.q.salesEmail  = (me.quoteEmailEffective !== undefined ? me.quoteEmailEffective : me.email) || ''   // 報價用公司信箱優先（見 helpers/quote_email.py）
+                this.salesEmailSource = me.quoteEmailSource || ''
                 this.q.salesPersonUsername = me.username
                 /* 同步更新 session 快取 */
                 if (me.displayName && me.displayName !== this.session.displayName) {
@@ -5001,12 +5006,13 @@
               this.q.signedAt = row.signed_at || ''
               this.q.signedLog = row.signed_log || []
               this.q.signedFiles = row.signed_files || []
+              this.salesEmailSource = ''      // 既有報價單：業務員資料照存檔的快照，不顯示「尚未設定公司信箱」提醒
               // 舊報價單若 salesPerson 是過期硬編碼預設值，改用當前登入者
               const _OLD = ['Corbin Chang', 'corbin chang', '']
               if (_OLD.includes((this.q.salesPerson || '').trim()) && this._me) {
                 this.q.salesPerson = this._me.displayName || this._me.username
                 this.q.salesPhone  = this._me.phone || ''
-                this.q.salesEmail  = this._me.email || ''
+                this.q.salesEmail  = (this._me.quoteEmailEffective !== undefined ? this._me.quoteEmailEffective : this._me.email) || ''
               }
               // 補填 salesPersonUsername（舊資料可能無此欄位）
               if (!this.q.salesPersonUsername && this.q.salesPerson && this.allUsers.length) {

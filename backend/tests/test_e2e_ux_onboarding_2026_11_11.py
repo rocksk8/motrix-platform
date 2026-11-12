@@ -153,7 +153,7 @@ def test_plain_change_password_page_is_not_a_wizard(live_server, make_user, new_
     page = new_page(viewport={"width": 1440, "height": 900})
     login_as(page, (username, password))
     page.goto(f"{live_server}/pages/my-account.html?tab=security")
-    page.locator("h1:has-text('修改密碼')").wait_for(state="visible", timeout=15000)
+    page.locator("h1:has-text('我的帳號')").wait_for(state="visible", timeout=15000)
     assert page.locator("[data-testid=ux-wizard]").count() == 0
     assert page.locator("#app-topbar").is_visible()
     assert page.locator("text=兩步驟驗證（TOTP）").is_visible()

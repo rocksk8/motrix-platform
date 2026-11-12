@@ -44,13 +44,15 @@ def get_profile(authorization: str = Header(None)):
     conn = get_db()
     try:
         row = conn.execute(
-            "SELECT u.id, u.username, u.display_name, u.role, u.email, u.phone, dep.name AS department_name "
+            "SELECT u.id, u.username, u.display_name, u.role, u.email, u.phone, u.quote_email, dep.name AS department_name "
             "FROM users u LEFT JOIN departments dep ON dep.id = u.department_id WHERE u.id=?", (user["id"],)
         ).fetchone()
     finally:
         conn.close()
     if not row:
         raise HTTPException(404, "找不到帳號")
+    from helpers import quote_email as _qe
+    eff = _qe.resolve_for_row(row)
     return {
         "username": row["username"],
         "displayName": row["display_name"] or row["username"],
@@ -58,4 +60,8 @@ def get_profile(authorization: str = Header(None)):
         "department": row["department_name"] or "",
         "email": row["email"] or "",
         "phone": row["phone"] or "",
+        # 報價用公司信箱：只讀（只有最高管理者能在「使用者管理」設定）。effective＝報價單實際會帶入的信箱
+        "quoteEmail": row["quote_email"] or "",
+        "quoteEmailEffective": eff["email"],
+        "quoteEmailSource": eff["source"],
     }
