@@ -76,7 +76,9 @@ def rate_limit_key(ip: str) -> str:
     """登入鎖定（`routers/auth.py` 的 `_rl_state`）用的鍵。**只用在鎖定，不要用在稽核紀錄**
     ——稽核要留完整位址，呼叫端另外存那份，不要改成只存這支的回傳值。
 
-    IPv4：原樣。IPv6：取 /64 前綴（T80 稽核 IP-M1：一般住宅網路就分得到一個 /64，
+    IPv4：原樣（含 IPv4-mapped IPv6，`::ffff:a.b.c.d`——**先展開成 IPv4 再判斷**，
+    否則雙棧 socket 下所有 IPv4 用戶端會一起落在同一個 `::/64` 桶，T80 稽核 LG-S7）。
+    IPv6（非 mapped）：取 /64 前綴（T80 稽核 IP-M1：一般住宅網路就分得到一個 /64，
     等於 2^64 個位址；鎖完整位址＝攻擊者每次換一個就繞過鎖定，與不鎖沒有差別）。
     不是合法 IP（"unknown"、測試用的假值）就原樣回傳，交給呼叫端自己的桶。
     """
@@ -84,6 +86,9 @@ def rate_limit_key(ip: str) -> str:
         addr = ipaddress.ip_address(ip)
     except ValueError:
         return ip
+    mapped = getattr(addr, "ipv4_mapped", None)
+    if mapped is not None:
+        addr = mapped
     if addr.version == 6:
         return str(ipaddress.ip_network(f"{addr}/64", strict=False))
     return str(addr)

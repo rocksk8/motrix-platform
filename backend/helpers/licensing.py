@@ -706,7 +706,7 @@ def license_banner(status, emergency):
 # 同一個行程內算一次就好。**這個快取存的是從硬體讀出來的值**，所以換一個行程重算
 # 也會得到同一個答案（見 test_07b）——不是啟動時產生的隨機值快取起來，那種做法能
 # 通過「連呼叫兩次相同」，但客戶重啟服務之後金鑰就全部失效了。
-_FINGERPRINT_CACHE = None
+_FINGERPRINT_CACHE = None  # None 或 (digest, is_stable, 算出時的time.monotonic(), 連續partial次數)
 
 
 def _run(cmd, timeout=30):
@@ -853,6 +853,11 @@ def _stable_machine_id():
 
 _FP_PROBE_RETRIES = 3    # T80稽核LG-M1：開機初期WMI／裝置列舉可能還沒就緒，重試幾次再定案
 _FP_PROBE_DELAY_S = 1.5  # 只有「這次讀到的比上次還不完整」時才等；行程一輩子只在第一次冷啟動付這個代價
+# T80稽核LG-M1b：重試完仍只拿到「一半」（uuid／mac 只有一項，不是走 _stable_machine_id 那條
+# 穩定後路）時，不能跟「兩項都拿到」一樣直接快取到行程結束——那台機器可能是 WMI 持續偏慢，
+# 之後終究會補齊。退避依序變長：60 秒、5 分鐘、1 小時（到最後一檔不再加長），愈久沒等到完整
+# 結果，愈不急著重探；完整結果一旦拿到，照舊快取到行程結束（不會再退避）。
+_FP_PARTIAL_BACKOFF_S = (60, 300, 3600)
 
 
 def _probe_hardware_once():
@@ -876,10 +881,22 @@ def machine_fingerprint():
     偶發的「這次讀一半」會被 `_FINGERPRINT_CACHE` 永遠鎖住（重啟才會重算）。硬體穩定
     的機器（絕大多數情況）每次重試都讀到同一個答案，只是多付幾次探測的時間，不會
     改變最終結果。
+
+    ⚠️ T80稽核LG-M1b：重試完還是只有一半（既不是兩項齊全、也不是走 `_stable_machine_id`
+    那條「本來就只有一個穩定來源」的後路）⇒ **不永久快取**，改用退避（`_FP_PARTIAL_BACKOFF_S`）：
+    退避到期前直接回同一個殘缺值（契約仍然是「跨呼叫一致」），到期後才重新探測一次，愈探
+    不到完整結果就愈慢重試。兩項齊全、或走 `_stable_machine_id` 後路的，一律快取到行程結束
+    （跟原本一樣，不會退避、也不會因為之後 CPU 忙就被重新觸發）。
     """
     global _FINGERPRINT_CACHE
     if _FINGERPRINT_CACHE is not None:
-        return _FINGERPRINT_CACHE
+        digest, is_stable, cached_at, strikes = _FINGERPRINT_CACHE
+        if is_stable:
+            return digest
+        backoff = _FP_PARTIAL_BACKOFF_S[min(strikes, len(_FP_PARTIAL_BACKOFF_S) - 1)]
+        if (time.monotonic() - cached_at) <= backoff:
+            return digest
+        # 退避到期：重探一次，見下方「沿用 strikes」。
 
     uuid_, mac = _probe_hardware_once()
     for _ in range(_FP_PROBE_RETRIES - 1):
@@ -896,19 +913,27 @@ def machine_fingerprint():
         parts.append("uuid=" + uuid_)
     if mac:
         parts.append("mac=" + mac)
+    is_stable = bool(uuid_ and mac)
     if not parts:
         fallback = _stable_machine_id()
         if fallback:
             parts.append("machineid=" + fallback)
+            is_stable = True  # 只有這一個來源可用是這台機器本來的樣子，不是暫時讀一半
     if not parts:
         raise RuntimeError(
             "無法取得任何硬體識別（主機板 UUID／實體網卡 MAC／機器 ID 都讀不到），"
             "算不出機器指紋"
         )
 
-    digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
-    _FINGERPRINT_CACHE = digest[:16]
-    return _FINGERPRINT_CACHE
+    digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
+    now = time.monotonic()
+    if is_stable:
+        _FINGERPRINT_CACHE = (digest, True, now, 0)
+    else:
+        prev = _FINGERPRINT_CACHE
+        strikes = prev[3] + 1 if prev is not None else 0
+        _FINGERPRINT_CACHE = (digest, False, now, strikes)
+    return digest
 
 
 # ── 模組授權（CORE-SPEC §9c ②，2026-09-25 裁示 (b)）──────────────────────────

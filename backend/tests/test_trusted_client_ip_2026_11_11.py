@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 from starlette.datastructures import Headers
 
-from helpers.client_ip import client_ip, has_proxy_headers, is_loopback
+from helpers.client_ip import client_ip, has_proxy_headers, is_loopback, rate_limit_key
 
 
 def _req(peer, **headers):
@@ -55,6 +55,62 @@ def test_cf_connecting_ip_is_trusted_from_a_loopback_peer_and_normalised():
 @pytest.mark.parametrize("junk", ["not-an-ip", "1.2.3.4, 5.6.7.8", "999.1.1.1", "' OR 1=1 --", "x" * 500])
 def test_garbage_cf_header_falls_back_to_the_peer_address(junk):
     assert client_ip(_req("127.0.0.1", **{"CF-Connecting-IP": junk})) == "127.0.0.1"
+
+
+# ── T80 稽核 IP-M1／LG-S7：登入鎖定的鍵（rate_limit_key，只給 routers/auth.py 用） ──────
+
+def test_rate_limit_key_ipv4_is_unchanged():
+    assert rate_limit_key("203.0.113.9") == "203.0.113.9"
+    assert rate_limit_key("127.0.0.1") == "127.0.0.1"
+
+
+def test_rate_limit_key_aggregates_ipv6_to_slash_64():
+    # 同一個 /64 的三個不同位址要得到同一個鍵——這就是 IP-M1 的核心：不聚合的話，
+    # 一般住宅網路的 /64（2^64 個位址）讓登入鎖定形同沒鎖。
+    a = rate_limit_key("2001:db8:1:2::1")
+    b = rate_limit_key("2001:db8:1:2::2")
+    c = rate_limit_key("2001:db8:1:2::3")
+    assert a == b == c == "2001:db8:1:2::/64"
+    # 不同 /64 要分開，不可以聚合過頭變成同一個桶
+    assert rate_limit_key("2001:db8:1:3::1") != a
+
+
+def test_rate_limit_key_unwraps_ipv4_mapped_ipv6_before_decidin_v4_vs_v6():
+    # LG-S7：雙棧 socket 下對端位址可能是 ::ffff:a.b.c.d；沒先展開的話兩個不同的
+    # IPv4 用戶端會一起落進同一個 ::/64 桶（等於所有 IPv4 用戶端共用一把鎖）。
+    assert rate_limit_key("::ffff:1.2.3.4") == "1.2.3.4"
+    assert rate_limit_key("::ffff:5.6.7.8") == "5.6.7.8"
+    assert rate_limit_key("::ffff:1.2.3.4") != rate_limit_key("::ffff:5.6.7.8")
+
+
+def test_rate_limit_key_passes_through_non_ip_values():
+    assert rate_limit_key("unknown") == "unknown"
+    assert rate_limit_key("testclient") == "testclient"
+
+
+# ── 登入鎖定實際以 rate_limit_key 分桶（routers/auth.py），稽核紀錄仍用完整位址 ──────
+
+def test_login_lockout_shares_one_bucket_across_the_same_v64_but_not_across_v4(client, make_user):
+    """T80稽核IP-M1關閉條件：同 /64 不同位址連續失敗，第 5 次起 429；不同 /64／IPv4 不受影響。
+    對端固定成 127.0.0.1（cloudflared 與本程式同機的樣子）才會採信 CF-Connecting-IP。"""
+    from fastapi.testclient import TestClient
+
+    user, pw = make_user(username="ipm1_v64_user")
+    tunnel = TestClient(client.app, client=("127.0.0.1", 5000))
+    same_64 = ["2001:db8:9:9::1", "2001:db8:9:9::2", "2001:db8:9:9::3",
+               "2001:db8:9:9::4", "2001:db8:9:9::5"]
+    for addr in same_64:
+        r = _fail(tunnel, user, **{"CF-Connecting-IP": addr})
+        assert r.status_code == 401, (addr, r.status_code, r.text[:120])
+    # 第 6 次：換了一個新位址，但仍是同一個 /64 ⇒ 鎖定要生效（429）——M3 突變：拿掉 /64 聚合會在這裡紅。
+    r = _fail(tunnel, user, **{"CF-Connecting-IP": "2001:db8:9:9::99"})
+    assert r.status_code == 429, (r.status_code, r.text[:120])
+
+    # 不同 /64 的另一位使用者不受連坐
+    other_user, other_pw = make_user(username="ipm1_v64_other")
+    r = tunnel.post("/api/auth/login", json={"username": other_user, "password": other_pw},
+                     headers={"CF-Connecting-IP": "2001:db8:aa:bb::1"})
+    assert r.status_code == 200, r.text[:120]
 
 
 def test_no_header_and_no_peer():

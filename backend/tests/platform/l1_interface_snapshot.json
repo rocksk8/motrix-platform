@@ -1,5 +1,5 @@
 {
- "core_version": "1.158",
+ "core_version": "1.159",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -350,7 +350,8 @@
    "CLOUDFLARE_HEADERS": "const",
    "client_ip": "def(request)",
    "has_proxy_headers": "def(headers)",
-   "is_loopback": "def(host)"
+   "is_loopback": "def(host)",
+   "rate_limit_key": "def(ip)"
   },
   "helper:company_identity": {
    "CODE_BANK_REQUIRED": "const",

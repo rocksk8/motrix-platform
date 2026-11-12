@@ -1,5 +1,12 @@
 # L0／L1 底層 更新紀錄
 
+## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）
+- L1（新增，只增；快照以 `_l1_interface.py --update` 重產）：`helpers.client_ip.rate_limit_key(ip)`——登入鎖定用的鍵，IPv4（含IPv4-mapped IPv6）原樣、IPv6取/64前綴；只給`routers/auth.py`的`_rl_state`當鍵，不給稽核紀錄用（稽核仍記完整位址）。動機：T80稽核IP-M1——隧道開通後，登入鎖定若仍以完整IPv6位址計，一般住宅網路的/64就有2^64個位址，攻擊者每次換位址即是新桶，鎖定形同沒鎖。
+- 行為變更（安全／效能，不影響對外介面）：
+  - `helpers.licensing`：`machine_fingerprint()`硬體探測不完整時重試（LG-M1，開機初期WMI／裝置列舉可能還沒就緒）；重試後仍只讀到一半的結果改用退避式短期快取（60s→5min→1h，LG-M1b），不像原本一樣永久鎖住「機器不符」；`_verify_license_file()`的`machine_mismatch`改60秒TTL快取（原本跟其他結果一樣整天／整個行程快取）；新增`emergency_pass()`快取（LG-M2，比照授權金鑰快取同構）。
+  - `main.py::license_gate_middleware`：`verify_license()`／`emergency_pass()`搬進`run_in_threadpool`（LG-M2，避免指紋冷啟動卡住整個事件迴圈，比照T80 R6同步SQLite寫入的做法）。
+- 測試：`tests/test_licensing_core_2026_09_21.py`（絆線改驗證正式公鑰非空且合法）；稽核報告 `docs/platform/audit/AUDIT-16-license-gate.md`。
+
 ## 1.158 — 2026-11-11（fix/trusted-client-ip；來源 IP 只信該信的，登入鎖定不可被 X-Forwarded-For 繞過）
 - L1（新增，只增；快照以 `core_bump.py --pending` 重產）：新公開介面 `helpers.client_ip`（`client_ip`、`is_loopback`、`has_proxy_headers`、`CLOUDFLARE_HEADERS`；L0，只依賴標準庫）。
 - 行為變更（安全）：`routers/auth.py::_client_ip` 不再信 `X-Forwarded-For`（以前無條件信第一個值 ⇒ 登入鎖定每次換 XFF 就繞過）；只有 TCP 對端是 loopback 才採信 `CF-Connecting-IP`（須為合法 IP），其餘一律用對端位址。登入鎖定／TOTP／passkey 限流、`duty_roles` 與 `settings_center` 稽核 IP 全走這支。
