@@ -3004,6 +3004,30 @@ def unlink_line_of(username: str, authorization: str = Header(None)):
     return {"ok": True, "unlinked": done}
 
 
+@router.get("/api/settings/line-notify/bindings")
+def get_line_bindings(authorization: str = Header(None)):
+    """LINE「綁定狀況」：在職人員誰已綁定、誰還沒（只有最高管理者；不含 LINE userId）。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_binding as _lb
+    return _lb.status()
+
+
+@router.post("/api/settings/line-notify/bindings/remind")
+def remind_line_bindings(body: dict = Body(default={}), authorization: str = Header(None)):
+    """「提醒未綁定的人」：用站內通知＋Email 寄綁定說明（附「修改密碼」頁連結）。`usernames` 省略＝所有未綁定的在職人員；
+    同一個人 24 小時內只提醒一次。LINE 登入還沒設好 ⇒ 400。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import line_binding as _lb
+    names = (body or {}).get("usernames")
+    try:
+        res = _lb.remind(names)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    _audit(_tok(authorization), "line.binding.remind", "line_binding", "", "提醒未綁定 LINE 的同仁：站內通知 %d 人、Email %d 人、略過（24 小時內已提醒）%d 人"
+           % (res["notified"], res["emailed"], len(res["skippedRecent"])), {"notified": res["notified"], "emailed": res["emailed"]})
+    return {"ok": True, **res}
+
+
 @router.post("/api/settings/email-notify/test")
 def test_email_notify(authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)
