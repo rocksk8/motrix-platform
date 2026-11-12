@@ -12,6 +12,8 @@ from pydantic import BaseModel
 
 from db import get_db
 from helpers import download_name
+from helpers import xlsx_guard as _xg
+from starlette.concurrency import run_in_threadpool
 from helpers import _require_user, _tok, _audit, notify_module_activity, has_finance_access, require_any_module
 from modules.subcontract import bank_mask as _bm
 from helpers import export_templates as _ET
@@ -318,6 +320,16 @@ def _cell(v):
     return xlsx_unescape(v).strip() if isinstance(v, str) else str(v).strip()      # 匯出時 xl_safe_xlsx 補的單引號還原（往返不污染）
 
 
+_IMPORT_MAX_ROWS = 5000          # 外包名冊一次匯入的列數上限（不含表頭；讀取時 +1）
+
+
+def _read_import_rows(content: bytes):
+    """匯入檔 ⇒ 第一張（使用中）工作表的全部列。預掃＋讀取都在 helpers.xlsx_guard 的子行程裡（硬逾時、記憶體上限）；
+    丟 XlsxRejected／XlsxBusy 由呼叫端轉 400／429。這個函式會阻塞：async 端點用 run_in_threadpool 呼叫。"""
+    res = _xg.read_rows(content, max_rows=_IMPORT_MAX_ROWS + 1, header_rows=1, slot_name="contractors_import")
+    return [tuple(r) for r in (res["sheets"][0]["rows"] if res["sheets"] else [])]
+
+
 @router.post("/api/contractors/import")
 async def import_contractors(file: UploadFile = File(...), authorization: str = Header(None)):
     """匯入外包名冊。比對規則（使用者裁示「以姓名＋證件號碼比對」，**對不到唯一一人就不猜**）：
@@ -326,14 +338,17 @@ async def import_contractors(file: UploadFile = File(...), authorization: str = 
     - 證件號碼空白 ⇒ 同姓名剛好一人 ⇒ 更新；沒有 ⇒ 新增；多人 ⇒ 報錯
     檔案沒有的欄位不動（舊檔沒有「分行」照樣匯入、不會清掉既有分行）。
     """
-    import openpyxl
     user = _require_user(authorization, require_superadmin=True, module='contractor_list')
     try:
-        wb = openpyxl.load_workbook(io.BytesIO(await file.read()), data_only=True)
+        # 先過 helpers.xlsx_guard（儲存格／欄／列號／XML 大小／壓縮比／逾時／同時解析數）再讀；CPU 工作丟 threadpool，不卡事件迴圈
+        content = await _xg.read_upload(file)
+        rows = await run_in_threadpool(_read_import_rows, content)
+    except _xg.XlsxBusy as e:
+        raise HTTPException(429, str(e))
+    except _xg.XlsxRejected as e:
+        raise HTTPException(400, str(e))
     except Exception:
         raise HTTPException(400, "讀不到這個檔案，請上傳 .xlsx")
-    ws = wb.active
-    rows = list(ws.iter_rows(values_only=True))
     if not rows:
         raise HTTPException(400, "檔案是空的")
     head = [_cell(h) for h in rows[0]]

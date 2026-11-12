@@ -135,6 +135,7 @@
    "helper:user_buttons",
    "helper:validation",
    "helper:xlsx_out",
+   "helper:xlsx_guard",
    "js:static/approval-cascade.js",
    "js:static/approval-return.js",
    "js:static/attachment-slots.js",
