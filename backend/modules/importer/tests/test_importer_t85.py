@@ -519,3 +519,9 @@ def test_parse_concurrency_is_limited_and_busy_is_a_plain_429(client, make_user,
     monkeypatch.setattr(API, "_PARSE_SLOTS", _Busy())
     r = _post(client, h, "customers", _xlsx([CUST_HEAD, ["甲", ""]]))
     assert r.status_code == 429 and "稍等" in r.json()["detail"]
+
+
+def test_csv_with_an_oversized_field_gets_a_specific_message():
+    big = "公司名稱" + chr(10) + "x" * 200000 + chr(10)
+    with pytest.raises(P.ParseError, match="內容太長"):
+        P.parse_file(big.encode("utf-8"), "big.csv", "customers")
