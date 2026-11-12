@@ -321,20 +321,52 @@ def test_atk3_forbidden_or_anonymous_requests_do_not_consume_the_rate_budget(cli
     assert r.status_code == 200, "一般人／未登入的請求不得耗掉最高管理者的額度：%s %s" % (r.status_code, r.text)
 
 
-def test_atk3_rate_limit_counts_previews_and_blocks_after_budget(client, su, put_current, sign):
+def test_atk3_rate_limit_is_per_account_previews_cost_half_and_other_superadmins_are_not_locked_out(client, su, make_user, put_current, sign):
+    """L4（PM 裁示）：每個帳號 RATE_MAX 點／視窗；預覽 PREVIEW_WEIGHT 點；一個帳號灌爆不鎖別的最高管理者。"""
     put_current(sign())
-    codes = [_post(client, su, "junk!!").status_code for _ in range(mgr.RATE_MAX + 3)]
-    assert codes[:mgr.RATE_MAX] == [400] * mgr.RATE_MAX and set(codes[mgr.RATE_MAX:]) == {429}
+    n = int(mgr.RATE_MAX / mgr.PREVIEW_WEIGHT)
+    codes = [_post(client, su, "junk!!").status_code for _ in range(n + 3)]
+    assert codes[:n] == [400] * n and set(codes[n:]) == {429}, codes
+    other = _login(client, make_user, "atk_su2", "superadmin")
+    assert _post(client, other, sign(customer="救援")).status_code == 200
+
+
+def test_atk3_real_imports_cost_one_point_and_a_blocked_second_half_does_not_leak_budget(client, su, put_current, sign):
+    """正式匯入（apply）＝預覽 0.5＋0.5 ＝ 1 點：RATE_MAX 次之後擋；被擋之後不再扣點。"""
+    put_current(sign())
+    codes = [_post(client, su, "junk!!", apply=True).status_code for _ in range(mgr.RATE_MAX + 2)]
+    assert codes[:mgr.RATE_MAX] == [400] * mgr.RATE_MAX and set(codes[mgr.RATE_MAX:]) == {429}, codes
+    mgr.reset_for_tests()
+    # 預算只剩 0.5 點時：正式匯入的前半（預覽那 0.5 點）過、後半被擋 ⇒ 429；前半已扣（多扣 0.5 點，無害），之後的預覽也 429，但不會再多扣
+    for _ in range(int(mgr.RATE_MAX / mgr.PREVIEW_WEIGHT) - 1):
+        _post(client, su, "junk!!")
+    assert _post(client, su, "junk!!", apply=True).status_code == 429
+    used = sum(w for _t, w in mgr._rate_hits[next(iter(mgr._rate_hits))])
+    assert _post(client, su, "junk!!").status_code == 429
+    assert sum(w for _t, w in mgr._rate_hits[next(iter(mgr._rate_hits))]) == used                # 被擋的不再扣點
+
+
+def test_atk3_global_cap_still_stops_many_accounts_together(client, su, put_current, sign):
+    put_current(sign())
+    mgr.reset_for_tests()
+    ok = 0
+    for i in range(mgr.RATE_GLOBAL_MAX // 5):                       # 每個帳號 8 點（低於個人上限 10），合計超過全域
+        for _ in range(8):
+            ok += bool(mgr.rate_allow("bot%d" % i, 1.0)[0])
+    assert ok == mgr.RATE_GLOBAL_MAX
+    r = _post(client, su, "x")
+    assert r.status_code == 429 and 0 < int(r.headers["Retry-After"]) <= mgr.RATE_WINDOW_S
 
 
 def test_atk3_rate_limit_dos_is_bounded_in_time(client, su, put_current, sign):
-    """被灌爆後，等視窗過去就恢復（不是永久鎖死）；Retry-After 合理。"""
+    """被灌爆後，等視窗過去就恢復（不是永久鎖死）；Retry-After 合理；"""
     put_current(sign())
     for _ in range(mgr.RATE_MAX):
-        _post(client, su, "junk!!")
+        _post(client, su, "junk!!", apply=True)
     r = _post(client, su, sign())
     assert r.status_code == 429 and 0 < int(r.headers["Retry-After"]) <= mgr.RATE_WINDOW_S
-    mgr._rate_hits[:] = [h - mgr.RATE_WINDOW_S - 1 for h in mgr._rate_hits]
+    for hits in list(mgr._rate_hits.values()) + [mgr._global_hits]:
+        hits[:] = [(t - mgr.RATE_WINDOW_S - 1, w) for t, w in hits]
     assert _post(client, su, sign()).status_code in (200, 400)
 
 
@@ -422,9 +454,11 @@ def test_atk5_expiry_header_only_on_authenticated_responses(client, su, make_use
     assert "X-Motrix-License-Expiry" not in client.get(BUSINESS_API).headers                  # 未登入
     h = client.get(BUSINESS_API, headers=su).headers.get("X-Motrix-License-Expiry")
     assert h and h.startswith("days=5;level=critical;kind=subscription")
-    sales = _login(client, make_user, "atk_s5", "sales")
-    seen = client.get(BUSINESS_API, headers=sales).headers.get("X-Motrix-License-Expiry")
-    print("NON-SUPERADMIN SEES EXPIRY HEADER:", seen)           # 設計決定：全員可見（見回報 Info）
+    for role in ("sales", "admin", "finance", "viewer"):                # L5：只有最高管理者拿得到標頭
+        hh = _login(client, make_user, "atk_s5_" + role, role)
+        r = client.get(BUSINESS_API, headers=hh)
+        assert "X-Motrix-License-Expiry" not in r.headers, (role, r.headers.get("X-Motrix-License-Expiry"))
+        assert "X-Motrix-License" in r.headers                           # 橫幅標頭本身不受影響（只拿掉到期那個）
 
 
 def test_atk5_expiry_header_never_carries_customer_or_modules(client, su, put_current, sign):
@@ -479,25 +513,169 @@ def test_atk6_dev_signed_license_on_shipped_build_is_rejected(client, su, put_cu
     assert _text() == before and _backups() == []
 
 
-def test_atk6_dev_signed_license_on_unstripped_build_needs_confirmation_and_is_flagged(client, su, put_current, sign, monkeypatch):
+def test_atk6_dev_signed_license_is_refused_outright_when_the_prod_key_is_installed(client, su, put_current, sign, monkeypatch):
+    """PM 追加：正式公鑰已裝（_PUBKEY_PROD 非空）而開發公鑰沒拿掉 ⇒ 開發簽的授權一律拒收，沒有 confirm 的出口，預覽也拒。"""
     priv, pub = _dev_pair()
     monkeypatch.setattr(lic, "_PUBKEY_DEV", pub)
+    assert lic._PUBKEY_PROD                                            # 量尺：正式公鑰不是空的，這題才有意義
+    put_current(sign())
+    before = _text()
+    blob = sign(priv, customer="開發簽的")
+    for kw in ({}, {"apply": True}, {"apply": True, "confirm": True}):
+        r = _post(client, su, blob, **kw)
+        assert r.status_code == 400 and r.json()["reason"] == "dev_license_not_allowed", (kw, r.text)
+        assert "測試用" in r.json()["message"] and "簽章" not in r.json()["message"]
+    assert _text() == before and _backups() == []
+    put_current(None)                                                  # 沒有目前授權也一樣
+    assert _post(client, su, blob, apply=True, confirm=True).status_code == 400 and not os.path.exists(lic.LICENSE_PATH)
+
+
+def test_atk6_before_the_prod_key_exists_dev_licenses_still_need_confirmation_and_are_flagged(client, su, put_current, sign, monkeypatch):
+    """正式公鑰還是空的（開發階段）⇒ 舊行為：警告＋要確認；本輪的拒收只在正式公鑰已裝時生效。"""
+    priv, pub = _dev_pair()
+    monkeypatch.setattr(lic, "_PUBKEY_DEV", pub)
+    monkeypatch.setattr(lic, "_PUBKEY_PROD", b"")
     blob = sign(priv, customer="開發簽的")
     put_current(sign())
     r = _post(client, su, blob, apply=True)
     assert r.status_code == 409 and any("測試用" in w for w in r.json()["warnings"]), r.text
-    r = _post(client, su, blob, apply=True, confirm=True)
-    assert r.status_code == 200
-    ov = client.get("/api/license/overview", headers=su).json()
-    assert ov["license"]["test_key"] is True
-
-
-def test_atk6_dev_warning_present_even_when_no_current_license(client, su, put_current, sign, monkeypatch):
-    """目前沒有授權（`cur.customer is None`）時，測試用警告仍要出現（_warnings 不可因提早 return 漏掉）。"""
-    priv, pub = _dev_pair()
-    monkeypatch.setattr(lic, "_PUBKEY_DEV", pub)
+    assert _post(client, su, blob, apply=True, confirm=True).status_code == 200
+    assert client.get("/api/license/overview", headers=su).json()["license"]["test_key"] is True
+    mgr.reset_for_tests()
     put_current(None)
     r = _post(client, su, sign(priv))
     assert r.status_code == 200 and any("測試用" in w for w in r.json()["warnings"]), r.text
-    r = _post(client, su, sign(priv), apply=True)
-    assert r.status_code == 409, "沒有目前授權時，開發金鑰授權也必須先確認：%s" % r.text
+    assert _post(client, su, sign(priv), apply=True).status_code == 409
+
+
+# ═══ ⑦ 第二輪（hichan-12 的 L1～L5 修補）═══════════════════════════════════════════
+
+def test_atk4_bracket_cap_is_a_clean_400_and_the_recursion_net_still_holds_without_it(client, su, put_current, sign, monkeypatch):
+    from routers import licensing as lr
+    put_current(sign())
+    before = _text()
+    over = b'{"content":"x","z":' + b"[" * 16 + b"]" * 16 + b"}"                  # { ＋ 16 個 [ ＝ 17 > 16
+    r = client.post("/api/license/import", headers=su, content=over)
+    assert r.status_code == 400 and r.json()["reason"] == "malformed", r.text
+    at = b'{"content":"x","z":' + b"[" * 15 + b"]" * 15 + b"}"                   # 剛好 16：照常解析，不會 500
+    assert client.post("/api/license/import", headers=su, content=at).status_code in (200, 400)
+    inside = json.dumps({"content": "[" * 40}).encode()                           # 括號在字串裡也算（保守）：400，不是 500
+    assert client.post("/api/license/import", headers=su, content=inside).status_code == 400
+    deep = b'{"z":' + b"[" * 30000 + b"]" * 30000 + b"}"
+    monkeypatch.setattr(lr, "_MAX_JSON_BRACKETS", 10 ** 9)                       # 第一道關掉：第二道網（RecursionError）要接住
+    r = client.post("/api/license/import", headers=su, content=deep)
+    assert r.status_code == 400 and r.json()["reason"] == "malformed", (r.status_code, r.text[:120])
+    assert _text() == before and _backups() == []
+
+
+def test_atk4_a_normal_import_body_is_far_below_the_bracket_cap(client, su, put_current, sign):
+    """量尺：合法本文只有 1 個大括號；授權內容（base64）沒有括號。"""
+    blob = sign(customer="新", expires=_in(900))
+    assert not any(c in blob for c in "[{")
+    put_current(sign())
+    assert _post(client, su, blob, apply=True, confirm=True).status_code == 200
+
+
+@pytest.mark.parametrize("had_old", [True, False])
+@pytest.mark.parametrize("where", ["verify", "clear_caches"])
+def test_atk2_any_exception_after_the_swap_restores_the_original(client, su, put_current, sign, monkeypatch, had_old, where):
+    """L2：換檔後的任何例外（不只是複驗不通過）都要還原；回 500 白話，不是例外往外丟。
+    只在「新檔已經是目前檔案」之後才丟例外（用檔案內容判斷，不靠呼叫次數）。"""
+    if had_old:
+        put_current(sign(customer="原本"))
+        original = open(lic.LICENSE_PATH, "rb").read()
+    else:
+        put_current(None)
+    new_blob = sign(customer="新的", expires=_in(900))
+    fired = {"n": 0}
+
+    def swapped():
+        try:
+            return new_blob in open(lic.LICENSE_PATH, encoding="utf-8").read()
+        except OSError:
+            return False
+    if where == "verify":
+        real = lic.verify_license
+
+        def boom(blob=None):
+            if blob is None and swapped() and not fired["n"]:
+                fired["n"] += 1
+                raise RuntimeError("boom")
+            return real(blob)
+        monkeypatch.setattr(lic, "verify_license", boom)
+    else:
+        real_clear = mgr._clear_caches
+
+        def clear():
+            if swapped() and not fired["n"]:
+                fired["n"] += 1
+                raise MemoryError("boom")
+            return real_clear()
+        monkeypatch.setattr(mgr, "_clear_caches", clear)
+    r = _post(client, su, new_blob, apply=True, confirm=True)
+    assert fired["n"] == 1, "例外沒有在換檔之後觸發（測試量尺失效）"
+    assert r.status_code == 500 and r.json()["reason"] == "verify_after_write_failed", r.text
+    if had_old:
+        assert open(lic.LICENSE_PATH, "rb").read() == original
+    else:
+        assert not os.path.exists(lic.LICENSE_PATH)
+    assert not os.path.exists(lic.LICENSE_PATH + ".import-tmp") and not os.path.exists(lic.LICENSE_PATH + ".restore-tmp")
+    monkeypatch.undo()
+    assert lic.verify_license()["reason"] in ("ok", "missing")
+
+
+@pytest.mark.xfail(strict=True, reason="L6（Low，已回報 hichan-12）：_restore 失敗只記 log，回應仍說「已自動還原」")
+def test_atk2_when_the_restore_itself_fails_the_message_must_not_claim_it_restored(client, su, put_current, sign, monkeypatch):
+    """還原也失敗（備份讀不到）⇒ 檔案停在新的那份；訊息若仍說「已自動還原」就是在騙人。"""
+    import shutil
+    put_current(sign(customer="原本"))
+    real = lic.verify_license
+    n = {"c": 0}
+
+    def flaky(blob=None):
+        if blob is None:
+            n["c"] += 1
+            if n["c"] >= 2:
+                return dict(real(), reason="machine_mismatch", valid=False)
+        return real(blob)
+    real_copy = shutil.copyfile
+
+    def deny(src, dst, *a, **k):
+        if str(dst).endswith(".restore-tmp"):
+            raise OSError("denied")
+        return real_copy(src, dst, *a, **k)
+    monkeypatch.setattr(lic, "verify_license", flaky)
+    monkeypatch.setattr(shutil, "copyfile", deny)
+    r = _post(client, su, sign(customer="新的", expires=_in(900)), apply=True, confirm=True)
+    print("RESTORE-FAILED RESPONSE:", r.status_code, r.json().get("reason"), r.json().get("message"))
+    assert r.status_code == 500
+    assert "已自動還原" not in r.json()["message"], "還原失敗卻告訴使用者已還原：" + r.json()["message"]
+
+
+def test_atk7_verify_package_refuses_license_backups_and_the_swap_temp_files():
+    """L3：出貨包不可帶這台機器的授權備份與換檔暫存檔；量尺：一般檔不誤抓。"""
+    import importlib.util
+    import re
+    spec = importlib.util.spec_from_file_location("vp_atk", os.path.join(os.path.dirname(os.path.dirname(__file__)), "tools", "verify_package.py"))
+    vp = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(vp)
+
+    def hits(rel):
+        name = re.split(r"[\\/]", rel)[-1]
+        return {k for k, _d, fn in vp.BAD if fn(rel, name)}
+    assert "license-backups" in hits("backend/license_backups/license.key.20261113-101500")
+    assert "license-backups" in hits("license_backups\\x.bak")
+    assert "license-tmp" in hits("backend/license.key.import-tmp") and "license-tmp" in hits("backend/License.Key.Restore-TMP")
+    for ok in ("backend/helpers/license_manager.py", "docs/license_backups_notes.md", "backend/license.key.example", "frontend/pages/license-settings.html"):
+        assert not ({"license-backups", "license-tmp"} & hits(ok)), ok
+    src = open(mgr.__file__, encoding="utf-8").read()
+    assert ".import-tmp" in src and ".restore-tmp" in src               # 暫存檔名與 verify_package／apply 腳本的排除清單用的是同一組
+
+
+@pytest.mark.xfail(strict=True, reason="L7（Low，回報 hichan-12／PM）：GET /api/license/status 對任何已登入角色回完整授權（客戶名、模組、到期日、剩餘天數、機器代碼、通行證備註），L5 只關了標頭")
+def test_atk5_license_status_endpoint_hides_business_details_from_non_superadmins(client, make_user, put_current, sign):
+    put_current(sign(customer="機密客戶名", expires=_in(5), modules=["case", "finance"]))
+    sales = _login(client, make_user, "atk_s7", "sales")
+    d = client.get("/api/license/status", headers=sales).json()
+    leaked = [k for k in ("customer", "modules", "expires", "days_left", "machine", "emergency") if d.get(k) not in (None, "", [], {})]
+    assert not leaked, "非最高管理者讀得到：%s" % leaked
