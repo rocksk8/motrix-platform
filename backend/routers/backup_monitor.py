@@ -7,6 +7,7 @@
 - `POST /api/system/backup-monitor/heartbeat-test`     {confirm: true} 對目前網址打一次卡（至少隔 60 秒）
 - `POST /api/system/backup-monitor/heartbeat-disable`  {confirm: true, reason} 停用對外打卡（必填原因；有多位最高管理者時要另一位核准）
 - `POST /api/system/backup-monitor/heartbeat-disable/{id}/approve|cancel`   核准申請（停用，或換成另一個監控主機）／撤回申請（只有提出申請的人，留稽核）
+- `POST /api/system/backup-monitor/heartbeat-disable/{id}/reject`   {confirm: true, reason}  駁回別人的申請（不是申請人才能；必填原因、留稽核、寄信）
 
 資料與規則都在 `helpers/backup_monitor.py`（不變式見該檔）；告警門檻在設定中心 `monitoring` 群組（放寬要第二人核准，不在這裡改）。
 錯誤訊息一律白話、不含路徑與網址；危險動作沒有 `confirm: true` 一律 400（前端先跳確認再送）。
@@ -140,6 +141,20 @@ def post_heartbeat_disable_cancel(change_id: int, body: dict = Body(default=None
     except bm.DisableError as exc:
         raise HTTPException(422, str(exc))
     return {"ok": True, "message": "已撤回申請，目前的設定維持不變。"}
+
+
+@router.post("/api/system/backup-monitor/heartbeat-disable/{change_id}/reject")
+def post_heartbeat_disable_reject(change_id: int, body: dict = Body(default=None), authorization: str = Header(None)):
+    user = _require_user(authorization, require_superadmin=True)
+    _need_confirm(body, "駁回這筆申請")
+    reason = body.get("reason", "") if isinstance(body, dict) else ""
+    if not isinstance(reason, str):
+        raise HTTPException(400, "請寫下駁回的原因。")
+    try:
+        bm.reject_disable(change_id, user, reason)
+    except bm.DisableError as exc:
+        raise HTTPException(422, str(exc))
+    return {"ok": True, "message": "已駁回這筆申請，目前的設定維持不變。已寄信通知所有最高管理者。"}
 
 
 @router.post("/api/system/backup-monitor/heartbeat-test")

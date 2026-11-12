@@ -270,6 +270,7 @@
    "cancel_disable": "def(change_id, actor)",
    "pending_disable": "def()",
    "ping_host": "def()",
+   "reject_disable": "def(change_id, actor, reason=…)",
    "request_disable": "def(actor, reason, ip=…)",
    "run_backup_now": "def(now=…)",
    "scrub_paths": "def(text)",

@@ -17,6 +17,7 @@
     - N4：備份鎖檔打不開時不再安靜退回只用執行緒鎖：手動備份拒絕（`archive.BackupLockUnavailable` → `helpers.backup_monitor.BackupLockProblem` → 路由 503，白話訊息，不寫「最後啟動」時間）；排程備份照跑，但記 ERROR 並寫系統告警（每行程一次）。`archive.backup_run_lock(strict=False)` 新增選填參數。
     - 測試：同檔新增 N1～N4 題（慢 DNS、破折號線性、換主機核准全流程、鎖檔不可開）。
     - PM 追加（待核准提示）：申請待核准時，申請人的畫面顯示「等待 ○○ 核准（已送出 N 小時）」（○○＝其他在職最高管理者的顯示名稱）、「若對方長期不在，可請對方登入核准，或撤回這次變更」與「撤回」鈕；`GET` 的 `heartbeat.disableRequest` 新增 `hoursWaiting`、`waitingFor`。**行為變更：撤回改為只有申請人能做**（原本任何最高管理者都行；別人要擺脫這筆，可核准或另外提出自己的申請取代它）；撤回的稽核多記申請種類。
+    - PM 追加（駁回）：新增 `POST /api/system/backup-monitor/heartbeat-disable/{id}/reject`（`{confirm, reason}`；route_inventory／write_golden 已補）與 `helpers.backup_monitor.reject_disable`（L1 新增，只增）：**不是申請人**的最高管理者可駁回待核准的停用／換主機申請——必填原因、稽核 `system.heartbeat_disable_rejected`（含原因與申請種類）、寄信給所有最高管理者、刪除 `.pending` 暫存網址；申請人自己要放棄仍用撤回。ledger 沒有獨立的「駁回」事件（`EVENTS` 是共用的，加事件要動共用表格），所以在 ledger 記成帶「駁回：」前綴的 `cancelled`。申請人離職或長期不在時，這筆不會永遠掛著。頁面對其他最高管理者多一顆「駁回」鈕（彈窗要填原因）。
     - N5／T1（第三輪）：`heartbeat_config.json.pending`（含完整新網址）加進 `.gitignore`，以及 `apply_update.ps1`（回滾快照複製、各還原／覆蓋 robocopy）與 `rollback_update.ps1` 所有 `/XF` 清單（與 `heartbeat_config.json` 並列）；`apply_update.version.json` 只更新 sha256（比照 9de4cc8e4 加 `/XF` 檔名的先例，`$ApplyScriptVersion` 不動）。測試：兩個守門題；`test_scrub_paths_is_linear_and_bounded` 改用短 `ids`（4 萬字的 id 會讓 Windows 的 `PYTEST_CURRENT_TEST` 超過 32767 字上限而 setup 出錯）。
 
 ## 1.159 — 2026-11-12（T80稽核hichan-16 must-fix修補；`helpers.client_ip` 新增公開介面 `rate_limit_key`）

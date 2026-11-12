@@ -1262,6 +1262,66 @@ def test_pending_request_tells_who_it_waits_for_and_for_how_long(client, make_us
 def test_the_page_text_for_a_pending_request_is_wired():
     """頁面文字（e2e 才能點的畫面，這裡先鎖字串，避免被改掉）。"""
     html = (_repo_root() / "frontend" / "pages" / "backup-monitor.html").read_text(encoding="utf-8")
-    for needle in ("若對方長期不在，可請對方登入核准，或撤回這次變更", "已送出", "bm-disable-waiting", "bm-disable-cancel",
+    for needle in ("若對方長期不在，可請對方登入核准，或撤回這次變更", "已送出", "bm-disable-waiting", "bm-disable-cancel", "bm-disable-reject",
                    "s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine\" :disabled=\"busy\" @click=\"ask('cancelreq')\""):
         assert needle in html, needle
+
+
+# ══ PM 追加：別的最高管理者可以「駁回」（申請人離職／長期不在時，這筆不會永遠掛著）══════════════════
+
+REJECT = "/api/system/backup-monitor/heartbeat-disable/%d/reject"
+
+
+def test_another_superadmin_can_reject_with_a_reason_audited_and_mailed(client, make_user, hb_cfg, mails):
+    ha, hb = _two_admins(client, make_user, "rj_a", "rj_b")
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    cid = client.put("/api/system/backup-monitor/heartbeat-url", headers=ha, json={"pingUrl": OTHER, "reason": "換成別家"}).json()["id"]
+    assert _pending_file(hb_cfg).exists()
+    del mails[:]
+    for body in ({"confirm": True}, {"confirm": True, "reason": ""}, {"confirm": True, "reason": "x"}):          # 沒寫原因
+        r = client.post(REJECT % cid, headers=hb, json=body)
+        assert r.status_code == 422 and "原因" in r.json()["detail"], body
+    assert client.post(REJECT % cid, headers=hb, json={"reason": "不認得這個主機"}).status_code == 400        # 沒有 confirm
+    assert client.post(REJECT % cid, headers=hb, json={"confirm": True, "reason": 5}).status_code == 400
+    assert _pending_file(hb_cfg).exists() and mails == []
+    r = client.post(REJECT % cid, headers=hb, json={"confirm": True, "reason": "不認得這個主機"})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert _cfg_url(hb_cfg) == SECRET and not _pending_file(hb_cfg).exists()                                   # 設定不動、暫存網址刪掉
+    assert client.get("/api/system/backup-monitor", headers=ha).json()["heartbeat"]["disableRequest"] is None
+    acts = _audit_actions("system.heartbeat_disable_rejected")
+    blob = " ".join(str(x) for x in tuple(acts[0]))
+    assert len(acts) == 1 and "不認得這個主機" in blob and "NEW-SECRET" not in blob
+    assert len(mails) == 1 and "不認得這個主機" in json.dumps(mails[0][1], ensure_ascii=False, default=str) and "NEW-SECRET" not in json.dumps(mails[0][1], default=str)
+    # 駁回後不能再核准／撤回／駁回；申請人可以重新提出
+    assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/approve" % cid, headers=hb, json={"confirm": True}).status_code == 422
+    assert client.post("/api/system/backup-monitor/heartbeat-disable/%d/cancel" % cid, headers=ha, json={}).status_code == 422
+    assert client.post(REJECT % cid, headers=hb, json={"confirm": True, "reason": "再駁一次"}).status_code == 422
+    assert client.put("/api/system/backup-monitor/heartbeat-url", headers=ha, json={"pingUrl": OTHER, "reason": "補充說明後重送"}).json()["pending"] is True
+
+
+def test_the_requester_cannot_reject_their_own_request_and_unknown_ids_fail_cleanly(client, make_user, hb_cfg, mails):
+    ha, hb = _two_admins(client, make_user, "rj_c", "rj_d")
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    cid = client.post("/api/system/backup-monitor/heartbeat-disable", headers=ha, json={"confirm": True, "reason": "要搬機房"}).json()["id"]
+    r = client.post(REJECT % cid, headers=ha, json={"confirm": True, "reason": "自己駁回自己"})
+    assert r.status_code == 422 and "撤回" in r.json()["detail"]
+    assert client.get("/api/system/backup-monitor", headers=hb).json()["heartbeat"]["disableRequest"]["id"] == cid
+    assert client.post(REJECT % 987654, headers=hb, json={"confirm": True, "reason": "沒這筆"}).status_code == 422
+    assert _audit_actions("system.heartbeat_disable_rejected") == []
+
+
+def test_a_request_from_someone_who_left_can_still_be_cleared_by_rejecting(client, make_user, hb_cfg, mails):
+    """申請人離職（帳號停用）後，這筆不會永遠掛著：另一位駁回，或核准。"""
+    ha, hb = _two_admins(client, make_user, "rj_e", "rj_f")
+    hb_cfg.write_text(json.dumps({"ping_url": SECRET}), encoding="utf-8")
+    cid = client.post("/api/system/backup-monitor/heartbeat-disable", headers=ha, json={"confirm": True, "reason": "要搬機房"}).json()["id"]
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE users SET active=0 WHERE username='rj_e'")
+        conn.commit()
+    finally:
+        conn.close()
+    assert client.post(REJECT % cid, headers=hb, json={"confirm": True, "reason": "申請人已離職"}).status_code == 200
+    assert client.get("/api/system/backup-monitor", headers=hb).json()["heartbeat"]["disableRequest"] is None
+    assert _cfg_url(hb_cfg) == SECRET

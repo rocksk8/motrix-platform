@@ -12,5 +12,7 @@ CASES = [
      "body": {"confirm": True}, "expect": _E},
     {"key": "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/cancel", "url": "/api/system/backup-monitor/heartbeat-disable/999999/cancel",
      "body": {}, "expect": _E},
+    {"key": "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/reject", "url": "/api/system/backup-monitor/heartbeat-disable/999999/reject",
+     "body": {"confirm": True, "reason": "不認得這個申請"}, "expect": _E},
 ]
 WAIVE = {}

@@ -265,6 +265,12 @@
   ],
   "s": 422
  },
+ "POST /api/system/backup-monitor/heartbeat-disable/{change_id}/reject": {
+  "k": [
+   "detail"
+  ],
+  "s": 422
+ },
  "POST /api/system/backup-monitor/heartbeat-test": {
   "k": [
    "detail"

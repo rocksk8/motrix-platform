@@ -101,7 +101,8 @@ ENDPOINTS = [("get", "/api/system/backup-monitor", None),
              ("post", "/api/system/backup-monitor/heartbeat-test", {"confirm": True}),
              ("post", "/api/system/backup-monitor/heartbeat-disable", {"confirm": True, "reason": "不用了"}),
              ("post", "/api/system/backup-monitor/heartbeat-disable/1/approve", {"confirm": True}),
-             ("post", "/api/system/backup-monitor/heartbeat-disable/1/cancel", {})]
+             ("post", "/api/system/backup-monitor/heartbeat-disable/1/cancel", {}),
+             ("post", "/api/system/backup-monitor/heartbeat-disable/1/reject", {"confirm": True, "reason": "不認得"})]
 
 
 @pytest.mark.parametrize("method,url,body", ENDPOINTS)

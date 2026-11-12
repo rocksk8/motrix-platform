@@ -205,7 +205,8 @@
                     <button type="button" class="btn btn-primary btn-sm" data-testid="bm-disable-approve" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('approve')" x-text="s.heartbeat.disableRequest && s.heartbeat.disableRequest.kind === 'change' ? '核准換主機' : '核准停用'">核准停用</button>
                     <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-disable-cancel" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('cancelreq')">撤回</button>
                     <span class="bm-note" x-show="s.heartbeat.disableRequest && s.heartbeat.disableRequest.mine" data-testid="bm-disable-hint">若對方長期不在，可請對方登入核准，或撤回這次變更。</span>
-                    <span class="bm-note" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine">只有提出申請的人可以撤回；你可以核准，或另外提出自己的申請取代這一筆。</span>
+                    <button type="button" class="btn btn-ghost btn-sm" data-testid="bm-disable-reject" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine" :disabled="busy" @click="ask('reject')">駁回</button>
+                    <span class="bm-note" x-show="s.heartbeat.disableRequest && !s.heartbeat.disableRequest.mine">你可以核准，或駁回（要寫原因）；只有提出申請的人可以撤回。</span>
                   </div>
                 </div>
                 <div class="bm-bad" x-show="urlErr" x-text="urlErr" data-testid="bm-ping-err"></div>
@@ -386,6 +387,7 @@
             url: ['儲存監控網址？', '儲存後，心跳排程下一次執行（最多 5 分鐘內）就會改用這個網址向外部監控服務打卡，不用重新啟動。更換網址會寄信通知所有最高管理者。', '儲存監控網址'],
             clear: ['停用對外打卡？', '停用後，系統只檢查本機，不會再通知外部監控。萬一斷電或當機，就沒有人會收到通知。有多位最高管理者時，要另一位核准才會真的停用；只有一位時會立刻停用。兩種情況都會寄信通知所有最高管理者。', '送出停用'],
             approve: ['核准停用對外打卡？', '核准後立刻停用：系統只檢查本機，不會再通知外部監控；萬一斷電或當機，就沒有人會收到通知。請確認原因合理，而且是你認得的人提出的。', '核准停用'],
+            reject: ['駁回這筆申請？', '駁回後目前的設定維持不變，申請人和所有最高管理者都會收到通知。請寫下駁回的原因（會留在紀錄裡）。', '駁回'],
             cancelreq: ['撤回這次變更？', '撤回後目前的設定維持不變，什麼都不會改變。', '撤回'],
             test: ['測試心跳？', '會對外部監控服務' + (host ? '（' + host + '）' : '') + '打一次卡，確認這台電腦連得到它。1 分鐘內只能測一次。', '開始測試'],
           }[kind]
@@ -400,10 +402,10 @@
               this.dlgOk = '送出'
             }
           }
-          if (kind === 'clear' || this.urlNeedsReason) this.reason = ''
+          if (kind === 'clear' || kind === 'reject' || this.urlNeedsReason) this.reason = ''
         },
         dlgTitle: '', dlgBody: '', dlgOk: '',
-        get needsReason() { return this.dlg === 'clear' || (this.dlg === 'url' && this.urlNeedsReason) },
+        get needsReason() { return this.dlg === 'clear' || this.dlg === 'reject' || (this.dlg === 'url' && this.urlNeedsReason) },
         async confirmDlg() {
           if (this.busy) return
           const kind = this.dlg
@@ -413,9 +415,9 @@
             else if (kind === 'test') await this._post('/api/system/backup-monitor/heartbeat-test', 'POST', { confirm: true }, d => { this.hbMsg = d.message; this.hbMsgBad = !d.ok; this._startTestWait(60) })
             else if (kind === 'url') await this._post('/api/system/backup-monitor/heartbeat-url', 'PUT', { pingUrl: this.pingUrl.trim(), reason: this.urlNeedsReason ? this.reason.trim() : '' }, d => { this.hbMsg = d.message; this.hbMsgBad = false; this.pingUrl = '' }, true)
             else if (kind === 'clear') await this._post('/api/system/backup-monitor/heartbeat-disable', 'POST', { confirm: true, reason: this.reason.trim() }, d => { this.hbMsg = d.message; this.hbMsgBad = false; this.pingUrl = '' })
-            else if (kind === 'approve' || kind === 'cancelreq') {
+            else if (kind === 'approve' || kind === 'cancelreq' || kind === 'reject') {
               const rq = this.s && this.s.heartbeat && this.s.heartbeat.disableRequest
-              if (rq) await this._post('/api/system/backup-monitor/heartbeat-disable/' + rq.id + '/' + (kind === 'approve' ? 'approve' : 'cancel'), 'POST', { confirm: true }, d => { this.hbMsg = d.message; this.hbMsgBad = false })
+              if (rq) await this._post('/api/system/backup-monitor/heartbeat-disable/' + rq.id + '/' + (kind === 'approve' ? 'approve' : (kind === 'reject' ? 'reject' : 'cancel')), 'POST', kind === 'reject' ? { confirm: true, reason: this.reason.trim() } : { confirm: true }, d => { this.hbMsg = d.message; this.hbMsgBad = false })
             }
           } finally { this.busy = false; this.dlg = '' }
           await this.load()

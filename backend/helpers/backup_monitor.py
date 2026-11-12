@@ -3,7 +3,7 @@
 
 [單位] helper:backup_monitor    [層] L1    [穩定度] 實作
 [公開介面] BackupLockProblem, DisableError, HEARTBEAT_TEST_MIN_INTERVAL_SECONDS, InvalidPingUrl, BackupBusy, BackupRateLimited, HeartbeatRateLimited, MSG_ALREADY_DONE, MSG_BUSY,
-    RUN_MIN_INTERVAL_SECONDS, approve_disable, cancel_disable, pending_disable, ping_host, request_disable, run_backup_now, scrub_paths, set_ping_url, status, test_heartbeat
+    RUN_MIN_INTERVAL_SECONDS, approve_disable, cancel_disable, pending_disable, ping_host, reject_disable, request_disable, run_backup_now, scrub_paths, set_ping_url, status, test_heartbeat
 [契約題] tests/test_backup_monitor_2026_11_13.py
 [不變式]
   ① **狀態一頁看完，全部唯讀、全部取自既有來源**：備份的最近時間與結果＝稽核紀錄的 `backup.*`（`archive` 寫的）、硬碟＝`system_checks._disk_targets`、心跳＝`heartbeat_status.assess`、
@@ -25,7 +25,7 @@
      拿不到鎖 ⇒ `BackupBusy`（「已有備份在進行中」）。**鎖檔打不開**：手動備份**拒絕**（`BackupLockProblem`，白話說明可能是已有備份在跑或資料夾權限問題，路由回 503，不寫「最後啟動」時間）；
      排程備份照跑（不能因此整天沒備份），但記 ERROR 並寫系統告警（每個行程一次），**不安靜降級**。
   ⑧ **停用對外打卡**（`request_disable`／`approve_disable`／`cancel_disable`）：必填原因；只有一位在職最高管理者 ⇒ 立即停用＋寄信；有其他最高管理者 ⇒ 建立待核准申請
-     （`config_ledger`，domain `monitor:heartbeat`，要另一位最高管理者核准，申請人不能核准自己的），核准後才寫設定檔。設了新網址（立即生效的那種）會讓待核准的停用／換主機申請作廢；新的申請也會取代舊的；撤回或作廢時一併刪掉 `.pending` 暫存檔。**撤回只有申請人能做**（留稽核）；畫面對申請人顯示「等待 ○○ 核准（已送出 N 小時）」與提示。
+     （`config_ledger`，domain `monitor:heartbeat`，要另一位最高管理者核准，申請人不能核准自己的），核准後才寫設定檔。設了新網址（立即生效的那種）會讓待核准的停用／換主機申請作廢；新的申請也會取代舊的；撤回或作廢時一併刪掉 `.pending` 暫存檔。**撤回只有申請人能做**（留稽核）；**其他最高管理者可「駁回」**（`reject_disable`：必填原因、留稽核、寄信；在 ledger 裡記成帶「駁回：」前綴的 cancelled 事件，不動資料表）——申請人離職或長期不在時，這筆不會永遠掛著；畫面對申請人顯示「等待 ○○ 核准（已送出 N 小時）」與提示。
 """
 import json
 import logging
@@ -803,6 +803,41 @@ def cancel_disable(change_id: int, actor) -> dict:
         conn.close()
     _clear_pending_file()
     return {"cancelled": True}
+
+
+def reject_disable(change_id: int, actor, reason: str = "") -> dict:
+    """駁回別人提出的申請（停用／換主機）：**不是申請人**才能駁回（申請人要放棄請用 `cancel_disable`）；必填原因；留稽核、寄信給所有最高管理者。
+    ledger 沒有獨立的「駁回」事件（EVENTS 是共用的；加事件要動共用表格），這裡記成 `cancelled`、原因加「駁回：」前綴，稽核用獨立的 `system.heartbeat_disable_rejected`。"""
+    from . import config_ledger as L
+    why = _clean_reason(reason)
+    conn = get_db()
+    try:
+        _begin(conn)
+        row = conn.execute("SELECT domain, field, actor, actor_display FROM config_changes WHERE id=?", (int(change_id),)).fetchone()
+        if row is None or row["domain"] != _MON_DOMAIN or row["field"] not in _MON_FIELDS:
+            raise DisableError("找不到這筆申請。")
+        if L.state_of(conn, int(change_id)) != "pending":
+            raise DisableError("這筆申請已經處理過了。")
+        if (row["actor"] or "") == _username(actor):
+            raise DisableError("這是你自己提出的申請，要放棄請按「撤回」。")
+        kind = "change" if row["field"] == _FIELD_CHANGE else "disable"
+        requested_by = row["actor_display"] or row["actor"]
+        L.cancel(conn, int(change_id), actor, "駁回：" + why)
+        L.audit_event(conn, actor, "system.heartbeat_disable_rejected", "heartbeat",
+                      {"changeId": int(change_id), "kind": kind, "requestedBy": row["actor"], "reason": why}, target_label="對外心跳監控")
+        conn.commit()
+    except BaseException:
+        if conn.in_transaction:
+            conn.rollback()
+        raise
+    finally:
+        conn.close()
+    _clear_pending_file()
+    _notify_superadmins("對外心跳監控的變更申請被駁回",
+                        [("申請人", requested_by), ("駁回人", _display(actor)), ("申請內容", "換到另一個監控主機" if kind == "change" else "停用對外打卡"),
+                         ("時間", _mail_now()), ("駁回原因", why)],
+                        "%s 提出的申請被 %s 駁回" % (requested_by, _display(actor)))
+    return {"rejected": True, "kind": kind}
 
 
 # ── 動作：測試心跳 ─────────────────────────────────────────────────────────────
