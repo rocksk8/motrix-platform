@@ -1004,11 +1004,13 @@ def test_blanket_redaction_keeps_non_secret_rules_and_masks_real_secrets():
     def row(key, value):
         return archive._general_row("系統設定", {"key": key, "value_json": _json.dumps(value), "updated_at": "x"})
 
-    kept = {"password_min_len": 8, "password_required": True, "token_ttl_hours": 12, "secret_hint": "", "app_pw_policy": "true", "password_max_age": "90"}
+    kept = {"password_min_len": 8, "password_required": True, "token_ttl_hours": 12, "secret_hint": "", "app_pw_policy": "true"}
     out = _json.loads(row("account_security", {**kept, "api_token": "seeded-token-xyz", "nested": {"client_secret": "seeded-secret-xyz", "password_min_len": 10}})["value_json"])
     for k, v in kept.items():
         assert out[k] == v, (k, out[k])
     assert out["nested"]["password_min_len"] == 10
+    numeric = _json.loads(row("zz_numeric", {"api_token": "123456789012", "login_password": "12345678", "pin_secret": "0000", "password_max_age": "90"})["value_json"])
+    assert set(numeric.values()) == {"[已遮蔽]"}, numeric            # 純數字字串（PIN／數字密碼）也要遮蔽
     assert out["api_token"] == "[已遮蔽]" and out["nested"]["client_secret"] == "[已遮蔽]"
     # 整列鍵名含祕密字樣：字串值遮蔽、數字值保留
     assert _json.loads(row("zz_hmac_secret", "seeded-secret-xyz")["value_json"]) == "[已遮蔽]"

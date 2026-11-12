@@ -2617,14 +2617,15 @@ _SECRET_KEY_RE = re.compile(r"password|secret|token|app_pw", re.I)
 
 
 def _looks_secret(v) -> bool:
-    """鍵名含祕密字樣時，值「長得像祕密」才遮蔽：非空字串（不是純數字、true／false）、或巢狀物件／清單。
-    數字、布林、空值、空字串不可能是祕密（例如 password_min_len=8、password_required=true 這種規則設定），保留——
-    否則有人拿匯出還原設定時，會把「[已遮蔽]」寫進密碼長度規則。"""
+    """鍵名含祕密字樣時，值「長得像祕密」才遮蔽：非空字串（只有恰好是 true／false 的除外）、或巢狀物件／清單。
+    型別是數字、布林、空值的不可能是祕密（例如 password_min_len=8、password_required=true 這種規則設定），保留——
+    否則有人拿匯出還原設定時，會把「[已遮蔽]」寫進密碼長度規則。
+    純數字**字串**（PIN、數字密碼、數字 token）一律遮蔽：型別已經分得出規則設定，不需要再靠內容猜。"""
     if v is None or isinstance(v, (bool, int, float)):
         return False
     if isinstance(v, str):
         s = v.strip()
-        return bool(s) and not re.fullmatch(r"\d+(\.\d+)?|true|false", s, re.I)
+        return bool(s) and s.lower() not in ("true", "false")
     return bool(v)
 
 
