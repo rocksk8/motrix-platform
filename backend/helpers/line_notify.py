@@ -330,6 +330,7 @@ LINE_EVENTS = {
     "heartbeat_stale": {"priority": "critical", "digest": False, "line_group": "inherit"},
     "disk_space_low": {"priority": "critical", "digest": False, "line_group": "inherit"},
     "cert_expiry": {"priority": "critical", "digest": False, "line_group": "inherit"},
+    "license_expiry": {"priority": "critical", "digest": False, "line_group": "inherit"},       # 授權即將到期（30／14／7 天；最高管理者群組；hichan-12 的授權匯入票）
     "company_setup_alert": {"priority": "critical", "digest": False, "line_group": "inherit"},
     # 「核准完成」LINE 預設只給申請人（信件另寄管理員群組；PM 2026-11-13）
     "approved": {"priority": "normal", "digest": False, "line_group": None},

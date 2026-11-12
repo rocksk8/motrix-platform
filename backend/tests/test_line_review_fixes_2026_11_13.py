@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from tests.test_line_events_all_2026_11_13 import _hdr, _mk, _targets, env, login_ready  # noqa: F401  夾具與小工具共用
+from tests.test_line_events_all_2026_11_13 import _grant_crm, _hdr, _mk, _targets, env, login_ready  # noqa: F401  夾具與小工具共用
 
 _BASE = os.path.join(os.path.dirname(__file__), "..")
 
@@ -71,6 +71,7 @@ def test_m1_settings_endpoint_lists_needed_modules(client, env, login_ready):
 
 def test_m3_line_only_event_does_not_borrow_mail_type_override(env):
     from helpers import line_notify as L
+    _grant_crm("amy", "dan")
     _set_overrides({"dev_case_assigned": {"mode": "superadmin_only"}, "module_activity": {"mode": "superadmin_only"}})
     L.set_event("dev_case_unassigned", True)
     assert L.deliver_event("dev_case_unassigned", usernames=["amy"], title="t") == L.SEND_SENT

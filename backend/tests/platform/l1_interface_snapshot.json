@@ -1134,6 +1134,7 @@
    "status": "def()"
   },
   "helper:line_catalog": {
+   "BUSINESS_PERM_GROUPS": "const",
    "EVENT_MODULES": "const",
    "EXCLUDED_KEYS": "const",
    "EXCLUDED_OWNERS": "const",
@@ -1150,7 +1151,8 @@
    "line_only_names": "def()",
    "mail_key_of": "def(key)",
    "modules_needed": "def(key)",
-   "name_of": "def(key)"
+   "name_of": "def(key)",
+   "needs_business_perm": "def(key)"
   },
   "helper:line_login": {
    "AUTHORIZE_URL": "const",

@@ -81,6 +81,20 @@ def env(client, make_user, monkeypatch):
     return out
 
 
+def _grant_crm(*names):
+    """給這些帳號加上「業務開發」模組（保留原有模組）：業務開發事件的業務收件人要有 dev_crm 才發 LINE（2026-11-13，CRM 權限過濾）。"""
+    import json
+    from db import get_db
+    c = get_db()
+    for n in names:
+        row = c.execute("SELECT modules FROM users WHERE username=?", (n,)).fetchone()
+        mods = json.loads(row["modules"] or "[]") if row else []
+        if "dev_crm" not in mods:
+            c.execute("UPDATE users SET modules=? WHERE username=?", (json.dumps(mods + ["dev_crm"]), n))
+    c.commit()
+    c.close()
+
+
 def _targets(env):
     names = {v: k for k, v in env["uid"].items()}
     return sorted(names[u] for p in env["line"] for u in p["to"])
@@ -295,6 +309,7 @@ def test_legacy_function_inventory_is_complete():
 @pytest.mark.parametrize("func,event", _LEGACY, ids=[e for _f, e in _LEGACY])
 def test_legacy_notify_pushes_line_and_leaves_email_byte_identical(env, dept, func, event):
     from helpers import email_notify as EN, line_notify as L
+    _grant_crm("amy", "carol", "dan")                           # 業務開發事件的業務收件人要有 dev_crm
     fn = getattr(EN, func)
     args = _auto_args(fn, dept)
 
@@ -488,6 +503,7 @@ def test_line_only_event_borrows_recipient_settings_of_its_mail_type(env):
     """`dev_case_unassigned` 沒有自己的信件類型，收件人設定借用 `dev_case_assigned`（超管在「信件與通知收件設定」的覆寫也套用）。"""
     from helpers import line_notify as L, line_catalog as cat
     assert cat.mail_key_of("dev_case_unassigned") == "dev_case_assigned" and cat.mail_key_of("dispatch_file_delete_request") == "dispatch_submitted"
+    _grant_crm("amy")
     L.set_event("dev_case_unassigned", True)
     assert L.deliver_event("dev_case_unassigned", usernames=["amy"], title="t") == L.SEND_SENT
     assert _targets(env) == ["amy"] and L.event_spec("dev_case_unassigned")["line_group"] is None
@@ -522,6 +538,7 @@ def test_module_activity_generic_goes_to_group_and_finance_audience_to_finance(e
 
 def test_module_activity_with_line_event_goes_to_case_people_only_and_email_unchanged(env):
     from helpers import email_notify as EN, line_notify as L
+    _grant_crm("amy", "dan")
     EN.notify_module_activity("業務開發", "狀態變更", "某人", "案件甲", "dev-crm.html")
     base_mail = _norm_mails(env["mail"])
     env["mail"].clear()
@@ -721,6 +738,7 @@ def test_crm_assignment_flow_sends_assignee_events_and_leaves_email_alone(client
 
 def test_personal_prefs_are_grouped_and_include_events_where_i_was_picked(client, env):
     from helpers import line_notify as L, line_recipients as lr
+    _grant_crm("dan")
     for k in ("approval_request", "dev_case_unassigned", "shipping_submitted"):
         L.set_event(k, True)
     L.set_event_roles("shipping_submitted", ["admin"])                 # dan(engineer) 角色不在允許清單 → 本來看不到

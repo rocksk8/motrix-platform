@@ -2,7 +2,7 @@
 """LINE 事件目錄：哪些事件可以發 LINE、怎麼分組、哪些永遠不發（2026-11-13；使用者裁示「寄信有的 LINE 都要」）。
 
 [單位] helper:line_catalog    [層] L1    [穩定度] 實作
-[公開介面] EVENT_MODULES, EXCLUDED_KEYS, EXCLUDED_OWNERS, EXCLUDED_PREFIXES, GROUP_MODULES, GROUP_ORDER, LINE_ONLY_EVENTS, WHO_OF, exclusion_reason, follows_text, group_of, is_known, kind_of, line_only_names, mail_key_of, modules_needed, name_of
+[公開介面] BUSINESS_PERM_GROUPS, EVENT_MODULES, EXCLUDED_KEYS, EXCLUDED_OWNERS, EXCLUDED_PREFIXES, GROUP_MODULES, GROUP_ORDER, LINE_ONLY_EVENTS, WHO_OF, exclusion_reason, follows_text, group_of, is_known, kind_of, line_only_names, mail_key_of, modules_needed, name_of, needs_business_perm
 [契約題] tests/test_line_events_all_2026_11_13.py
 [不變式]
   ① **接線單位是「信件登記表」**（`mail_types`）：登記過的信件類型，除非被明確排除，一律可以發 LINE（預設關，由最高管理者逐項勾選）。
@@ -71,7 +71,7 @@ _GROUP_RULES = (
     ("財務提醒", ("case_invoice_uploaded",), ("payable_due_",)),
     ("標案雷達", (), ("tender_",)),
     ("系統告警", ("cert_expiry", "backup_stale", "backup_error", "disk_space_low", "heartbeat_stale", "company_setup_alert",
-              "auth_lockout", "geo_quota_warning"), ()),
+              "auth_lockout", "geo_quota_warning", "license_expiry"), ()),
     ("通知與報表", ("monthly_report", "module_activity", "user_notice"), ()),
 )
 
@@ -98,6 +98,9 @@ GROUP_MODULES = {
     "通知與報表": ("@admin",),
     "其他": ("@admin",),
 }
+#: 這些分組的「業務收件人」（例如案件的業務負責人與主管）本身也要有該分組的模組權限才發 LINE（2026-11-13，PM 裁示；比照「指定的人」的規則）。
+#: 沒有權限的人 LINE 不發（Email 照舊，行為不變）；原因：LINE 內容是業務開發案件摘要，沒有「業務開發」權限的人在系統裡本來就看不到這些案件。
+BUSINESS_PERM_GROUPS = ("業務開發",)
 #: 個別事件覆寫（優先於分組）
 EVENT_MODULES = {
     "monthly_report": ("reports",),
@@ -110,6 +113,11 @@ def modules_needed(key: str) -> tuple:
     if key in EVENT_MODULES:
         return EVENT_MODULES[key]
     return GROUP_MODULES.get(group_of(key), ("@admin",))
+
+
+def needs_business_perm(key: str) -> bool:
+    """這個事件的「業務收件人」要不要也檢查模組權限（見 `BUSINESS_PERM_GROUPS`）。"""
+    return group_of(key) in BUSINESS_PERM_GROUPS
 
 
 def _mt():

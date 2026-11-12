@@ -161,6 +161,14 @@ def _picked_usernames(a: dict) -> list:
     return list(dict.fromkeys(first + got))
 
 
+def _cat_needs_business_perm(event_key: str) -> bool:
+    try:
+        from . import line_catalog as _cat
+        return _cat.needs_business_perm(event_key)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _has_need(need, role, mods) -> bool:
     """`need`＝`line_catalog.modules_needed`：`()`＝不檢查；含 `"@admin"`＝角色要是 admin 以上；否則任一模組在 `mods` 內。superadmin 一律通過。"""
     if role == "superadmin" or not need:
@@ -218,6 +226,9 @@ def resolve_audience(event_key: str, business_usernames) -> list:
         if a["mode"] == "invalid":
             return []
         base = [] if a["mode"] == "only" else filter_usernames(event_key, business_usernames)
+        if base and _cat_needs_business_perm(event_key):
+            ok_b = permitted_users(event_key, base)                     # 業務收件人也要有該分組的模組權限（例：案件業務沒有「業務開發」權限就不發）
+            base = [u for u in base if u in ok_b]
         if a["mode"] == "business":
             return base
         picked_all = _picked_usernames(a)
@@ -240,7 +251,7 @@ def _visible(event_key: str, username: str, role, mods, roles_map: dict, aud_map
     if a["mode"] == "only":
         return picked
     allowed = _allowed_from(roles_map, event_key)
-    business = allowed is None or role in allowed
+    business = (allowed is None or role in allowed) and (perm or not _cat_needs_business_perm(event_key))
     if business and (_ln_spec(event_key).get("audience") == "group") and not _in_group(event_key, username):
         business = False                     # 這個事件的業務收件人只有群組收件人（例：登入失敗告警）；同仁不是收件人，列出來只會誤導
     return business or (a["mode"] == "business_plus" and picked)

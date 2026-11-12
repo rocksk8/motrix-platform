@@ -6649,10 +6649,20 @@
    "callback_url",
    "channel_access_token",
    "enabled",
+   "event_groups",
    "events",
+   "events[].audience",
+   "events[].audience.mode",
+   "events[].audience.roles",
+   "events[].audience.users",
    "events[].enabled",
+   "events[].follows",
+   "events[].group",
    "events[].key",
+   "events[].kind",
    "events[].name",
+   "events[].need",
+   "events[].priority",
    "events[].roles",
    "include_links",
    "login_channel_id",
@@ -7618,6 +7628,25 @@
    "[].photos",
    "[].user_id",
    "[].username"
+  ],
+  "s": 200
+ },
+ "/api/settings/line-notify/bindings": {
+  "k": [
+   "available",
+   "linked",
+   "total",
+   "unlinked",
+   "users",
+   "users[].confirmed",
+   "users[].display",
+   "users[].hasEmail",
+   "users[].lastReminded",
+   "users[].linked",
+   "users[].linkedAt",
+   "users[].modules",
+   "users[].role",
+   "users[].username"
   ],
   "s": 200
  }
