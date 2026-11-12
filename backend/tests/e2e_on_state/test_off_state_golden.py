@@ -28,8 +28,12 @@ def _norm_text(s):
     return [ln.strip() for ln in s.splitlines() if ln.strip()]
 
 
+# 載入速度（perf）：靜態資源網址帶內容雜湊版號 ?v=<hash>（每次改檔都變）⇒ 不比對版號本身，只比對「載了哪些檔」
+_ASSET_V = re.compile(r"\?v=[^&]*&|[?&]v=[^&]*")
+
+
 def _norm_reqs(items):
-    return [re.sub(r"(token|_)=[^&]*", r"\1=<x>", i) for i in items]
+    return [_ASSET_V.sub(lambda m: "?" if m.group(0).endswith("&") else "", re.sub(r"(token|_)=[^&]*", r"\1=<x>", s)) for s in items]
 
 
 # T62 在旗標【關閉】時多出來的請求，逐條列出（PM 裁示 2026-10-15：允許清單，不做延後載入重構）。

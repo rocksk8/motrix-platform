@@ -1,6 +1,7 @@
 {
  "text": [
   "報價單管理",
+  "通知",
   "off_ql",
   "小",
   "標",
@@ -8,10 +9,7 @@
   "特",
   "在線",
   "1",
-  "通知",
   "？",
-  "修改密碼",
-  "登出",
   "o",
   "儀表板",
   "客戶與業務",
@@ -136,7 +134,7 @@
   "GET /api/reads/module-counts",
   "GET /api/system/bonus-module-status",
   "GET /api/system/modules/availability",
-  "GET /css/style.css?v=20260805g",
+  "GET /css/style.css",
   "GET /pages/quotations.html",
   "GET /static/auth-guard.js",
   "GET /static/list-sort.js",
