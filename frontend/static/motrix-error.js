@@ -48,15 +48,14 @@
     return '伺服器沒有說明原因，請稍後再試。';
   }
 
-  // 讀取失敗 → 一句話。x＝HTTP 狀態碼（數字），或 fetch 丟出的例外（連不上伺服器）。
+  // 讀取失敗 → 一句話（hichan-6 審查＋UX 規範：畫面不顯示 HTTP 狀態碼，代碼只進 console 給回報用）。
+  // x＝HTTP 狀態碼（數字），或 fetch 丟出的例外（連不上系統）。
   function loadText(x) {
-    if (typeof x !== 'number') return '連不上伺服器，請確認網路連線。';
+    try { console.warn('[MotrixError] load failed:', x); } catch (e) { /* ignore */ }
+    if (typeof x !== 'number') return '連不上系統，請檢查網路後再試。';
     if (x === 401) return '登入已過期，請重新登入。';      // 頁面應改呼叫 sessionExpired()，這句只是保險
-    if (x === 403) return '你沒有權限查看這份資料。';
-    if (x === 404) return '找不到這份資料（頁面與伺服器版本可能不一致）。';
-    if (x === 429) return '操作太頻繁，請稍後再試。';
-    if (x >= 500) return '伺服器暫時無法回應。';
-    return '資料讀取失敗。';
+    if (x === 403) return '你沒有權限查看這一頁。';
+    return '載入失敗，請重新整理，仍然失敗請聯絡系統管理者。';
   }
 
   // 登入過期（401）：與各頁既有的 logout() 同一套——通知伺服器登出（盡力而為）、清掉本機 session、回登入頁。

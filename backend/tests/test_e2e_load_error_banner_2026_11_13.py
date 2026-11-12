@@ -37,7 +37,7 @@ def test_load_failure_shows_a_plain_reason_and_retry_recovers(live_server, make_
     banner = page.locator('[data-testid="load-error"]')
     banner.wait_for(state="visible", timeout=20000)
     text = banner.inner_text()
-    assert "伺服器暫時無法回應" in text and "重試" in text, text
+    assert "載入失敗" in text and "重試" in text, text
     assert "[object" not in text and "undefined" not in text and "boom" not in text, "錯誤條不可以出現程式碼樣式的字：" + text
     assert "HTTP" not in text and "500" not in text, "錯誤條不可以出現狀態碼（UX 規範：只給白話原因＋重試）：" + text
     if empty_text:
@@ -49,7 +49,7 @@ def test_load_failure_shows_a_plain_reason_and_retry_recovers(live_server, make_
 
 
 @pytest.mark.e2e
-def test_network_failure_says_the_server_is_unreachable(live_server, make_user, new_page, login_as):
+def test_network_failure_says_the_system_is_unreachable(live_server, make_user, new_page, login_as):
     user = make_user(username="e2e_loaderr_net")
     page = new_page()
     login_as(page, tuple(user)[:2])
@@ -57,7 +57,7 @@ def test_network_failure_says_the_server_is_unreachable(live_server, make_user, 
     page.goto(f"{live_server}/pages/schema-status.html")
     banner = page.locator('[data-testid="load-error"]')
     banner.wait_for(state="visible", timeout=20000)
-    assert "連不上伺服器" in banner.inner_text()
+    assert "連不上系統" in banner.inner_text()
 
 
 @pytest.mark.e2e
@@ -76,3 +76,16 @@ def test_401_logs_out_and_returns_to_the_login_page(live_server, make_user, new_
     page.wait_for_timeout(300)
     assert logouts, "401 要走登出（通知伺服器）而不是停在錯誤條上"
     assert not page.locator('[data-testid="load-error"]').count(), "401 不該顯示載入失敗錯誤條"
+
+
+@pytest.mark.e2e
+def test_403_says_you_have_no_permission_for_this_page(live_server, make_user, new_page, login_as):
+    user = make_user(username="e2e_loaderr_403")
+    page = new_page()
+    login_as(page, tuple(user)[:2])
+    page.route("**/api/system/schema-status", lambda r: r.fulfill(status=403, content_type="application/json", body=json.dumps({"detail": "forbidden"})))
+    page.goto(f"{live_server}/pages/schema-status.html")
+    banner = page.locator('[data-testid="load-error"]')
+    banner.wait_for(state="visible", timeout=20000)
+    text = banner.inner_text()
+    assert "你沒有權限查看這一頁" in text and "403" not in text and "HTTP" not in text, text

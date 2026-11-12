@@ -453,7 +453,7 @@
 
     <!-- 讀取失敗：蓋住下面空的清單（否則畫面是「無符合結果」，像是真的沒有版本紀錄） -->
     <div class="mv-loading" x-show="!loading && loadErr" x-cloak role="alert" data-testid="load-error" style="flex-direction:column;gap:12px;text-align:center;padding:0 24px">
-      <div style="color:var(--danger)"><span x-text="loadErr"></span> 請按「重試」；如果還是失敗，請聯絡系統管理員。</div>
+      <div style="color:var(--danger)"><span x-text="loadErr"></span></div>
       <button type="button" class="btn btn-ghost btn-sm" @click="retryLoad()" data-testid="load-retry">重試</button>
     </div>
 
