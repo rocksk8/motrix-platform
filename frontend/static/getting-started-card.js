@@ -15,7 +15,9 @@
     box.setAttribute('data-testid', 'gs-card')
     box.style.cssText = 'display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:0 0 14px;padding:12px 16px;border:1px solid var(--tone-info-border,#BFDBFE);background:var(--tone-info-bg,#EFF6FF);color:var(--tone-info-fg,#1E3A8A);border-radius:var(--radius-lg,10px);font-size:13px'
     var left = el('div')
-    var t = el('div', '開始使用　已完成 ' + d.progress.done + '／' + d.progress.total + (d.progress.skipped ? '，略過 ' + d.progress.skipped : ''))
+    var todo = d.progress.total - d.progress.done - d.progress.skipped
+    var t = el('div', todo > 0 ? '開始使用　已完成 ' + d.progress.done + '／' + d.progress.total + (d.progress.skipped ? '，略過 ' + d.progress.skipped : '')
+                              : '開始使用　還有 ' + d.progress.skipped + ' 項略過，可隨時回來完成')
     t.style.cssText = 'font-weight:700;font-size:14px'
     left.appendChild(t)
     if (d.next) {

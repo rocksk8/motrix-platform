@@ -7,7 +7,7 @@
     每步固定三件事：約幾分鐘、要準備什麼、做完怎麼確認；可中途離開，進度存伺服器端（公司層），換電腦、換人都能接著做；每步可略過、可回來。
 [不變式]
     ①**完成狀態盡量自動偵測**，偵測只讀（不寫庫、不寫檔、不寄信、不連外）：公司資料＝`company_setup.status`；人員與簽核＝`org_gaps.check` 全綠（且已有一般同仁）；
-      寄信＝稽核紀錄有「寄測試信成功」（`settings.email_notify.test` 只在寄成功後才寫）；備份＝稽核紀錄有備份成功（本機快照或雲端每日）；
+      寄信＝稽核紀錄有「寄測試信成功」（`settings.email_notify.test` 只在寄成功後才寫）；備份＝稽核紀錄有「備份到別的地方」成功（雲端／備份資料夾的每日、每週、每月；只有本機快照不算）；
       LINE＝已啟用且至少一位同仁綁定；匯入＝已經有客戶資料。
     ②偵測不到的才讓人手動確認（`MANUAL_DONE_IDS`：報價單樣式要「預覽出一張報價單」、匯入要「資料備妥」，系統看不出來）。自動偵測為「完成」時一律以偵測為準（略過旗標不會把已完成的步驟藏起來）。
     ③單步偵測失敗不影響其他步、不丟 500：該步當「未完成」並寫白話說明（「暫時無法自動確認」），例外只進 log。
@@ -15,6 +15,7 @@
     ⑤文字全是白話（不含程式字眼）；`href` 指向現有頁面，不新增設定頁；備份一步只連過去（「備份與監控」專頁由別人做）。
 """
 import logging
+import sqlite3
 from datetime import datetime
 
 logger = logging.getLogger("motrix.getting_started")
@@ -25,7 +26,11 @@ STATE_KEY = "getting_started_v1"
 BACKUP_HREF = "storage-settings.html"
 #: 「寄測試信成功」「備份成功」的稽核動作（成功才會寫入）
 EMAIL_TEST_ACTION = "settings.email_notify.test"
-BACKUP_OK_ACTIONS = ("backup.sqlite_snapshot", "backup.daily_ok", "backup.daily_partial")
+#: 只有「備份到別的地方」成功才算完成（雲端／備份資料夾的每日、每週、每月備份）。⚠️ 不含本機快照 `backup.sqlite_snapshot`（放在同一顆硬碟、系統自己會跑，
+#: 全新安裝也會有）與 `backup.daily_partial`（有資料表沒備成功）——PM 2026-11-13 裁示。「備份與監控」專頁（4a）上線後改用它的資料。
+BACKUP_OK_ACTIONS = ("backup.daily_ok", "backup.weekly_ok", "backup.monthly_ok")
+#: 只有這台電腦上的備份（或只備了一部分）：不算完成，但要告訴使用者目前的狀況
+_BACKUP_LOCAL_ONLY_ACTIONS = ("backup.sqlite_snapshot", "backup.daily_partial")
 
 #: 每步：id／標題／為什麼要做／約幾分鐘／要準備什麼／做完怎麼確認／連去哪／可以人工確認完成嗎／可略過的提示
 STEPS = (
@@ -37,7 +42,7 @@ STEPS = (
     {"id": "quote_style", "title": "報價單樣式",
      "why": "報價單是客戶第一眼看到的東西：抬頭、條款與收款帳戶要先備妥，並實際預覽一張。",
      "minutes": "約 10 分鐘", "prepare": ["報價條款文字", "收款銀行帳戶（銀行、戶名、帳號）"],
-     "confirm": "預覽出一張報價單，確認抬頭、條款與收款帳戶都正確，回來按「我已預覽確認」。",
+     "confirm": "到「報價單」頁新增（或打開）任一張報價單，按表單上方的「預覽報價單」，確認抬頭、條款與收款帳戶都正確，再回到這裡按「我已預覽確認」。",
      "href": "company-profile-settings.html", "link": "到公司資料設定"},
     {"id": "people", "title": "人員與簽核",
      "why": "單據要送給誰簽、誰負責財務，都取決於部門、主管與職務；缺了任何一項，送審就會被擋下。",
@@ -46,13 +51,14 @@ STEPS = (
      "href": "users.html", "link": "到使用者管理"},
     {"id": "email", "title": "寄信",
      "why": "簽核通知、逾期提醒與報表都靠信件送達；先寄一封測試信，確認同仁真的收得到。",
-     "minutes": "約 10 分鐘", "prepare": ["公司用的寄件信箱", "該信箱的應用程式密碼（通行碼）"],
-     "confirm": "在通知設定頁按「寄測試信」並且成功寄出。",
+     "minutes": "約 10 分鐘", "prepare": ["公司用的 Gmail 寄件信箱（要先開啟 Google 的「兩步驟驗證」，才能建立應用程式密碼）", "該信箱的應用程式密碼（不是登入密碼）",
+                 "測試信收件人：到「信件與通知收件設定」頁指定，並確認該帳號有填 Email"],
+     "confirm": "在通知設定頁填好 Gmail 帳號與應用程式密碼，按「寄測試信」並且成功寄出；若出現「找不到可發送對象」，請先到「信件與通知收件設定」指定測試信收件人、並為該帳號填 Email。",
      "href": "notification-settings.html", "link": "到通知設定"},
     {"id": "backup", "title": "備份",
      "why": "資料都在這台電腦上，硬碟壞了就沒了；要先確認備份放在別的地方，而且真的做成功過一次。",
      "minutes": "約 5 分鐘", "prepare": ["備份用的雲端硬碟或另一個資料夾"],
-     "confirm": "系統記錄到第一次備份成功。",
+     "confirm": "系統記錄到第一次「備份到別的地方」成功（只有這台電腦上的備份不算）。",
      "href": BACKUP_HREF, "link": "到儲存位置與備份"},
     {"id": "line", "title": "LINE（可略過）",
      "why": "有了 LINE，簽核通知會直接傳到同仁手機。不用也沒關係，之後想用再回來設定。",
@@ -74,18 +80,16 @@ MANUAL_DONE_IDS = ("quote_style", "import")
 
 def _fmt_at(iso) -> str:
     try:
-        return datetime.fromisoformat(str(iso)).strftime("%Y-%m-%d %H:%M")
+        d = iso if isinstance(iso, datetime) else datetime.fromisoformat(str(iso))
+        return d.strftime("%Y-%m-%d %H:%M")
     except (TypeError, ValueError):
         return ""
 
 
 def _latest_audit_at(conn, actions):
-    best = None
-    for a in actions:
-        row = conn.execute("SELECT at FROM audit_log WHERE action=? ORDER BY id DESC LIMIT 1", (a,)).fetchone()
-        if row and row["at"] and (best is None or row["at"] > best):
-            best = row["at"]
-    return best
+    """稽核紀錄裡這幾個動作最後一次發生的時間（datetime，沒有就 None）。共用 `system_checks` 那一支（一條 MAX 查詢）。"""
+    from helpers import system_checks as _sc
+    return _sc._latest_audit_at(conn, tuple(actions))
 
 
 def _d_company(conn):
@@ -128,7 +132,11 @@ def _d_email(conn):
 def _d_backup(conn):
     at = _latest_audit_at(conn, BACKUP_OK_ACTIONS)
     if at:
-        return {"done": True, "auto": True, "detail": "最近一次備份成功：%s。" % _fmt_at(at)}
+        return {"done": True, "auto": True, "detail": "最近一次備份到別的地方成功：%s。" % _fmt_at(at)}
+    local = _latest_audit_at(conn, _BACKUP_LOCAL_ONLY_ACTIONS)
+    if local:
+        return {"done": False, "auto": True,
+                "detail": "目前只有這台電腦上的備份（最近一次 %s）；硬碟壞掉時會一起消失。請到「儲存位置與備份」設定備份資料夾（雲端硬碟或另一顆硬碟），並等它成功備份一次。" % _fmt_at(local)}
     return {"done": False, "auto": True, "detail": "系統還沒有記錄到備份成功。"}
 
 
@@ -149,7 +157,9 @@ def _d_line(conn):
 def _d_import(conn):
     try:
         c = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]       # 只數筆數、不回任何一筆資料
-    except Exception:  # noqa: BLE001 — 表不存在（模組未裝）算 0
+    except sqlite3.OperationalError as exc:                                   # 只有「表不存在」（模組未裝）算 0；其他錯誤交給外層（該步顯示「暫時無法確認」）
+        if "no such table" not in str(exc):
+            raise
         c = 0
     if c > 0:
         return {"done": True, "auto": True, "detail": "已經有 %d 位客戶資料。" % c}
@@ -211,7 +221,7 @@ def overview(conn=None) -> dict:
     nxt = next((r for r in out if r["status"] == "todo"), None)
     return {"steps": out, "progress": {"done": done, "skipped": skipped, "total": len(out)},
             "next": ({k: nxt[k] for k in ("id", "title", "href", "link", "minutes")} if nxt else None),
-            "allDone": done + skipped == len(out) and done > 0}
+            "allDone": done == len(out) and len(out) > 0}        # 略過不算完成：只要還有沒做的（含略過），清單就不會說「都處理完了」
 
 
 def set_step(step_id: str, action: str, username: str) -> dict:
@@ -223,19 +233,37 @@ def set_step(step_id: str, action: str, username: str) -> dict:
         raise ValueError("不認得這個動作")
     if action in ("done", "undone") and step_id not in MANUAL_DONE_IDS:
         raise ValueError("這一步由系統自動判斷是否完成，不能手動標記")
-    from helpers import _get_setting, _set_setting
-    raw = _get_setting(STATE_KEY, {}) or {}
-    steps = dict((raw.get("steps") or {}) if isinstance(raw, dict) else {})
-    flag = dict(steps.get(step_id) or {})
-    if action == "skip":
-        flag["skipped"] = True
-    elif action == "unskip":
-        flag["skipped"] = False
-    elif action == "done":
-        flag["manualDone"] = True
-    else:
-        flag["manualDone"] = False
-    flag["by"], flag["at"] = username or "", datetime.now().isoformat(timespec="seconds")
-    steps[step_id] = flag
-    _set_setting(STATE_KEY, {"steps": steps})
-    return flag
+    import json
+    from core.txn import begin_write
+    from db import get_db
+    now = datetime.now().isoformat(timespec="seconds")
+    conn = get_db()
+    try:
+        begin_write(conn)                          # 先拿寫鎖再讀、改、寫、一起提交：兩個人（或連點兩下）同時改不同步驟，誰的旗標都不會被蓋掉
+        row = conn.execute("SELECT value_json FROM system_settings WHERE key=?", (STATE_KEY,)).fetchone()
+        try:
+            raw = json.loads(row["value_json"]) if row else {}
+        except ValueError:
+            raw = {}
+        steps = dict((raw.get("steps") or {}) if isinstance(raw, dict) else {})
+        flag = dict(steps.get(step_id) or {})
+        if action == "skip":
+            flag["skipped"] = True
+        elif action == "unskip":
+            flag["skipped"] = False
+        elif action == "done":
+            flag["manualDone"] = True
+        else:
+            flag["manualDone"] = False
+        flag["by"], flag["at"] = username or "", now
+        steps[step_id] = flag
+        conn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?) "
+                     "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
+                     (STATE_KEY, json.dumps({"steps": steps}, ensure_ascii=False), now))
+        conn.commit()
+        return flag
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()

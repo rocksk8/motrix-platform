@@ -81,9 +81,25 @@ def test_email_step_follows_the_successful_test_mail_audit(client, su):
     assert s["status"] == "done" and s["auto"] is True and "2026-11-13 09:30" in s["detail"]
 
 
-def test_backup_step_follows_a_successful_backup(client, su):
+def _audit(action, at="2026-11-13T03:00:00"):
+    _sql("INSERT INTO audit_log (at, username, action) VALUES (?,?,?)", (at, "system", action))
+
+
+def test_backup_step_needs_an_off_machine_backup_not_the_local_snapshot(client, su):
     assert _st(_get(client, su))["backup"]["status"] == "todo"
-    _sql("INSERT INTO audit_log (at, username, action) VALUES (?,?,?)", ("2026-11-13T03:00:00", "system", "backup.sqlite_snapshot"))
+    _audit("backup.sqlite_snapshot")                                  # 本機快照：全新安裝也會有，不算
+    s = _st(_get(client, su))["backup"]
+    assert s["status"] == "todo" and "只有這台電腦上的備份" in s["detail"] and "儲存位置與備份" in s["detail"]
+    _audit("backup.daily_partial")                                    # 只備了一部分：也不算
+    assert _st(_get(client, su))["backup"]["status"] == "todo"
+    _audit("backup.daily_ok", "2026-11-13T04:00:00")
+    s = _st(_get(client, su))["backup"]
+    assert s["status"] == "done" and "2026-11-13 04:00" in s["detail"]
+
+
+@pytest.mark.parametrize("action", ["backup.weekly_ok", "backup.monthly_ok"])
+def test_weekly_and_monthly_off_machine_backups_count_too(client, su, action):
+    _audit(action)
     assert _st(_get(client, su))["backup"]["status"] == "done"
 
 
@@ -214,3 +230,65 @@ def test_page_card_and_registrations():
     assert "getting-started.html" in json.loads((core / "l1_pages.json").read_text(encoding="utf-8"))
     cards = {c["id"]: c for c in json.loads((core / "system_hub_l1.json").read_text(encoding="utf-8"))["cards"]}
     assert cards["getting-started"]["href"] == "getting-started.html" and cards["getting-started"]["perm"] == "superadmin"
+
+
+def test_skipped_steps_never_count_as_done_so_the_list_never_claims_everything_is_finished(client, su):
+    auto_done = _get(client, su)["progress"]["done"]                  # 這個環境裡系統自己看得出已完成的步數（略過蓋不掉它）
+    for sid in GS.STEP_IDS:
+        client.put("/api/getting-started/steps/%s" % sid, headers=su, json={"action": "skip"})
+    res = _get(client, su)
+    assert res["allDone"] is False, "全部略過不可以說「都完成了」"
+    assert res["progress"]["done"] == auto_done and res["progress"]["skipped"] == 7 - auto_done and res["next"] is None
+
+
+def test_all_done_only_when_every_step_is_really_done(client, su, monkeypatch):
+    ok = {"done": True, "auto": True, "detail": "x"}
+    for k in GS.STEP_IDS:
+        monkeypatch.setitem(GS._DETECT, k, lambda conn, _ok=ok: dict(_ok))
+    assert GS.overview()["allDone"] is True
+    monkeypatch.setitem(GS._DETECT, "line", lambda conn: {"done": False, "auto": True, "detail": "x"})
+    assert GS.overview()["allDone"] is False
+
+
+def test_two_writers_changing_different_steps_do_not_lose_each_other(client, su):
+    import threading
+    for rnd in range(15):
+        errs = []
+        barrier = threading.Barrier(2)
+
+        def go(step, action):
+            try:
+                barrier.wait()
+                GS.set_step(step, action, "u_" + step)
+            except Exception as e:  # noqa: BLE001
+                errs.append(e)
+        a = threading.Thread(target=go, args=("line", "skip"))
+        b = threading.Thread(target=go, args=("quote_style", "done"))
+        a.start(); b.start(); a.join(); b.join()
+        assert not errs, errs
+        stored = json.loads(_scalar("SELECT value_json FROM system_settings WHERE key=?", (GS.STATE_KEY,)))["steps"]
+        assert stored["line"]["skipped"] is True and stored["quote_style"]["manualDone"] is True, "第 %d 輪：有一個旗標被蓋掉" % rnd
+        GS.set_step("line", "unskip", "x")
+        GS.set_step("quote_style", "undone", "x")
+
+
+def test_demo_session_state_stays_in_the_demo_database():
+    import db
+    from db import get_db
+    db.set_demo_mode(True)
+    try:
+        GS.set_step("line", "skip", "demo")
+        assert GS.overview()["progress"]["skipped"] == 1
+    finally:
+        db.set_demo_mode(False)
+    assert _scalar("SELECT COUNT(*) FROM system_settings WHERE key=?", (GS.STATE_KEY,)) == 0, "展示帳號不可寫到正式資料庫"
+    assert GS.overview()["progress"]["skipped"] == 0
+
+
+def test_email_and_quote_steps_say_where_to_click_in_plain_words():
+    st = {x["id"]: x for x in GS.STEPS}
+    mail = json.dumps(st["email"], ensure_ascii=False)
+    assert "Gmail" in mail and "兩步驟驗證" in mail and "信件與通知收件設定" in mail and "找不到可發送對象" in mail
+    assert "預覽報價單" in st["quote_style"]["confirm"] and "報價單" in st["quote_style"]["confirm"]
+    from core import source_tree
+    assert "<title>開始使用 — MOTRIX PLATFORM</title>" in source_tree.page_file("getting-started.html").read_text(encoding="utf-8")

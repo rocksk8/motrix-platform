@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>開始使用 — MOTRIX 專案管理系統</title>
+  <title>開始使用 — MOTRIX PLATFORM</title>
   <script src="../static/auth-guard.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <!--
@@ -57,7 +57,8 @@
         <h1>開始使用</h1>
         <div class="gs-sub" data-testid="gs-subtitle">新公司照這 7 步設定就能開始用。每一步都可以先略過、之後再回來；中途離開也沒關係，下次會從還沒做完的那一步繼續。</div>
         <div id="gs-error" class="gs-error" role="alert" style="display:none"></div>
-        <div id="gs-all-done" class="gs-done-all" data-testid="gs-all-done" style="display:none">7 步都處理完了，可以開始使用系統。需要調整時隨時可以回到這一頁。</div>
+        <div id="gs-all-done" class="gs-done-all" data-testid="gs-all-done" style="display:none">7 步都完成了，可以開始使用系統。需要調整時隨時可以回到這一頁。</div>
+        <div id="gs-skipped-note" class="gs-sub" data-testid="gs-skipped-note" role="status" style="display:none;margin:0 0 14px"></div>
         <div class="gs-bar">
           <div class="gs-track" aria-hidden="true"><div class="gs-fill" id="gs-fill"></div></div>
           <div class="gs-count" id="gs-count" data-testid="gs-count" role="status"></div>
@@ -108,6 +109,10 @@
     document.getElementById('gs-fill').style.width = (p.total ? Math.round(p.done * 100 / p.total) : 0) + '%'
     document.getElementById('gs-count').textContent = '已完成 ' + p.done + '／' + p.total + (p.skipped ? '，略過 ' + p.skipped : '')
     document.getElementById('gs-all-done').style.display = d.allDone ? '' : 'none'
+    var left = p.total - p.done - p.skipped                   // 還沒處理（待處理）的步數
+    var note = document.getElementById('gs-skipped-note')
+    note.textContent = (!d.allDone && !left && p.skipped) ? '還有 ' + p.skipped + ' 項略過，可隨時回來完成。' : ''
+    note.style.display = note.textContent ? '' : 'none'
     var nextId = d.next && d.next.id
     ;(d.steps || []).forEach(function (s) {
       var det = el('details', 'gs-step')
