@@ -624,9 +624,8 @@ def test_atk2_any_exception_after_the_swap_restores_the_original(client, su, put
     assert lic.verify_license()["reason"] in ("ok", "missing")
 
 
-@pytest.mark.xfail(strict=True, reason="L6（Low，已回報 hichan-12）：_restore 失敗只記 log，回應仍說「已自動還原」")
-def test_atk2_when_the_restore_itself_fails_the_message_must_not_claim_it_restored(client, su, put_current, sign, monkeypatch):
-    """還原也失敗（備份讀不到）⇒ 檔案停在新的那份；訊息若仍說「已自動還原」就是在騙人。"""
+def test_atk2_when_the_restore_itself_fails_the_message_must_not_claim_it_restored(client, su, put_current, sign, monkeypatch, caplog):
+    """L6：還原也失敗（備份讀不到）⇒ 檔案停在新的那份；回 restore_failed（不說「已自動還原」）、ERROR log、獨立稽核。"""
     import shutil
     put_current(sign(customer="原本"))
     real = lic.verify_license
@@ -650,6 +649,33 @@ def test_atk2_when_the_restore_itself_fails_the_message_must_not_claim_it_restor
     print("RESTORE-FAILED RESPONSE:", r.status_code, r.json().get("reason"), r.json().get("message"))
     assert r.status_code == 500
     assert "已自動還原" not in r.json()["message"], "還原失敗卻告訴使用者已還原：" + r.json()["message"]
+    assert r.json()["reason"] == "restore_failed" and "無法自動還原" in r.json()["message"]
+    assert any(rec.levelname == "ERROR" and "還原舊授權失敗" in rec.getMessage() for rec in caplog.records)
+    import db
+    conn = db.get_db()
+    try:
+        acts = [x[0] for x in conn.execute("SELECT action FROM audit_log WHERE action LIKE 'license.import%' ORDER BY id").fetchall()]
+    finally:
+        conn.close()
+    assert "license.import_restore_failed" in acts
+
+
+
+def test_atk2_when_the_restore_succeeds_the_message_still_says_so(client, su, put_current, sign, monkeypatch):
+    """反向控制：還原成功的路徑仍然是 verify_after_write_failed＋「已自動還原」（restore_failed 不是萬用答案）。"""
+    put_current(sign(customer="原本"))
+    real = lic.verify_license
+    n = {"c": 0}
+
+    def flaky(blob=None):
+        if blob is None:
+            n["c"] += 1
+            if n["c"] >= 2:
+                return dict(real(), reason="machine_mismatch", valid=False)
+        return real(blob)
+    monkeypatch.setattr(lic, "verify_license", flaky)
+    r = _post(client, su, sign(customer="新的", expires=_in(900)), apply=True, confirm=True)
+    assert r.status_code == 500 and r.json()["reason"] == "verify_after_write_failed" and "已自動還原" in r.json()["message"]
 
 
 def test_atk7_verify_package_refuses_license_backups_and_the_swap_temp_files():
@@ -672,10 +698,20 @@ def test_atk7_verify_package_refuses_license_backups_and_the_swap_temp_files():
     assert ".import-tmp" in src and ".restore-tmp" in src               # 暫存檔名與 verify_package／apply 腳本的排除清單用的是同一組
 
 
-@pytest.mark.xfail(strict=True, reason="L7（Low，回報 hichan-12／PM）：GET /api/license/status 對任何已登入角色回完整授權（客戶名、模組、到期日、剩餘天數、機器代碼、通行證備註），L5 只關了標頭")
-def test_atk5_license_status_endpoint_hides_business_details_from_non_superadmins(client, make_user, put_current, sign):
+def test_atk5_license_status_endpoint_hides_business_details_from_non_superadmins(client, make_user, put_current, sign, su):
+    """L7：非最高管理者（含示範帳號）只拿得到判斷擋不擋的欄位；最高管理者照舊拿完整狀態。"""
     put_current(sign(customer="機密客戶名", expires=_in(5), modules=["case", "finance"]))
-    sales = _login(client, make_user, "atk_s7", "sales")
-    d = client.get("/api/license/status", headers=sales).json()
-    leaked = [k for k in ("customer", "modules", "expires", "days_left", "machine", "emergency") if d.get(k) not in (None, "", [], {})]
-    assert not leaked, "非最高管理者讀得到：%s" % leaked
+    allowed = {"valid", "reason", "gate", "blocked", "emergency", "modules_unlicensed_count"}
+    forbidden = ("customer", "modules", "expires", "days_left", "machine", "env", "kind", "note", "tax_id", "pass_id", "until")
+    for role in ("sales", "admin", "finance", "viewer"):
+        d = client.get("/api/license/status", headers=_login(client, make_user, "atk_s7_" + role, role)).json()
+        assert set(d) <= allowed, (role, sorted(set(d) - allowed))
+        assert not [k for k in forbidden if k in d], (role, d)
+        assert "機密客戶名" not in json.dumps(d, ensure_ascii=False)
+        assert d["emergency"] is None or set(d["emergency"]) == {"active"}
+    demo = client.get("/api/license/status", headers={"Authorization": "Bearer DEMO_x"})
+    if demo.status_code == 200:
+        assert set(demo.json()) <= allowed and "機密客戶名" not in demo.text
+    full = client.get("/api/license/status", headers=su).json()
+    assert full["customer"] == "機密客戶名" and full["days_left"] == 5 and "machine" in full and "emergency" in full
+    assert client.get("/api/license/status").status_code in (401, 403)
