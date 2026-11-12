@@ -2,7 +2,7 @@
 """登入問候語用的台灣節慶日曆（內建日期表，不連外網）。
 
 [單位] helper:greeting_calendar    [層] L1    [穩定度] 實驗
-[公開介面] festival_keys_on(d)、spring_festival(year)、reopen_day(year)、COVERED_UNTIL_YEAR、coverage_warning(today)
+[公開介面] festival_keys_on、spring_festival、reopen_day、COVERED_UNTIL_YEAR、coverage_warning、FESTIVAL_LABELS
 [不變式] 國曆節日（元旦、勞動節、國慶、聖誕、12/31）用固定月日算；農曆節日（除夕～初五、元宵、端午、七夕、中秋）
     用下面 `_LUNAR` 的**內建日期表**（不依賴任何套件或網路），涵蓋 2026～`COVERED_UNTIL_YEAR`（2032）。
     表外的年份：國曆節日照常、農曆節日**不出節慶句**（只會落到下一個優先順序，不會出錯）；

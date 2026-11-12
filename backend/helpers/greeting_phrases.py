@@ -2,7 +2,7 @@
 """登入問候語的內建句庫（預設值）與內容守則檢查。
 
 [單位] helper:greeting_phrases    [層] L1    [穩定度] 實驗
-[公開介面] BUILTIN、CATEGORY_LABELS、check_phrase(text)、PLACEHOLDERS
+[公開介面] BUILTIN、CATEGORY_LABELS、check_phrase、PLACEHOLDERS、MAX_LEN、MAX_LINES
 [不變式] 句庫＝「類別 → {formal: [...], humor: [...]}」。**程式內只放預設值**：公司可在設定裡針對某類別＋風格改寫或新增，
     自訂的句子整組取代該類別該風格的內建句（清空＝回內建）。見 helpers/login_greeting.py。
     可用的代稱只有 {name}（姓名）、{pending}（待簽核件數）、{days}（離開天數）；其他大括號一律拒絕。

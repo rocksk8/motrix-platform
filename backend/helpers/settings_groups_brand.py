@@ -2,7 +2,7 @@
 """設定群組：系統標語（brand.tagline）。
 
 [單位] helper:settings_groups_brand    [層] L1    [穩定度] 實驗
-[公開介面] （無；群組在 `settings_groups` 結尾 import 後登錄）
+[公開介面] DEFAULT_TAGLINE、brand_tagline
 [不變式] 標語＝首頁大標題上方的小字（以及各頁分頁標題的預設字尾由靜態頁面寫死為「MOTRIX PLATFORM」）。
     **預設 `MOTRIX PLATFORM`**（2026-11-13 PM 轉述使用者方針：系統統一叫 MOTRIX-PLATFORM、產品要對外販售；不再寫「專案管理系統」）。
     公司可自訂（1～24 個字，不可含換行與尖括號）；只是顯示字，不影響任何單據或權限。

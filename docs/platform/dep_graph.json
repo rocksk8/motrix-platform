@@ -238,7 +238,6 @@
     "edit_presence",
     "geocode_cache",
     "geocode_usage",
-    "idempotency_keys",
     "item_reads",
     "login_rate_limit",
     "module_schema_versions",
@@ -353,10 +352,8 @@
     "helper:company_setup",
     "helper:daily_checks",
     "helper:geo",
-    "helper:license_alerts",
     "helper:licensing",
     "helper:map_overlays",
-    "helper:module_assets",
     "helper:module_startup",
     "helper:notify_actions",
     "helper:recycle_bin",
@@ -579,8 +576,7 @@
     "helper:auth",
     "helper:settings_groups",
     "helper:settings_registry",
-    "helper:tiered_approval",
-    "plat:txn"
+    "helper:tiered_approval"
    ],
    "kind": "helper",
    "path": "backend/helpers/audit.py",
@@ -751,17 +747,6 @@
    ],
    "kind": "helper",
    "path": "backend/helpers/clause_titles.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "helper:client_ip": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [],
-   "kind": "helper",
-   "path": "backend/helpers/client_ip.py",
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [],
@@ -1148,7 +1133,6 @@
    "imports": [
     "core:db",
     "helper:alert_settings",
-    "helper:line_notify",
     "helper:mail_types",
     "helper:notification_prefs",
     "helper:notify_matrix",
@@ -1350,35 +1334,6 @@
    ],
    "tables_w": []
   },
-  "helper:heartbeat_status": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "plat:paths"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/heartbeat_status.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "helper:idempotency": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "core:db",
-    "plat:txn"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/idempotency.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_w": [
-    "idempotency_keys"
-   ]
-  },
   "helper:legal_params": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -1394,22 +1349,6 @@
    "tables_r": [],
    "tables_w": []
   },
-  "helper:license_alerts": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "core:db",
-    "helper:licensing"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/license_alerts.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_w": [
-    "audit_log"
-   ]
-  },
   "helper:licensing": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -1421,73 +1360,6 @@
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [],
-   "tables_w": []
-  },
-  "helper:line_login": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "core:db",
-    "helper:line_notify"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/line_login.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "sessions",
-    "users"
-   ],
-   "tables_w": []
-  },
-  "helper:line_notify": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "helper:email_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
-    "helper:mail_types",
-    "helper:settings"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/line_notify.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "helper:line_quota": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "helper:email_notify",
-    "helper:line_notify",
-    "helper:settings"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/line_quota.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "helper:line_recipients": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "core:db",
-    "helper:line_notify",
-    "helper:mail_types",
-    "helper:settings"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/line_recipients.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "users"
-   ],
    "tables_w": []
   },
   "helper:list_catalog": {
@@ -1586,20 +1458,6 @@
    "tables_r": [
     "users"
    ],
-   "tables_w": []
-  },
-  "helper:module_assets": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "plat:loader",
-    "plat:registry"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/module_assets.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
    "tables_w": []
   },
   "helper:module_registry": {
@@ -2259,7 +2117,6 @@
    "imports": [
     "core:db",
     "helper:auth",
-    "helper:license_alerts",
     "helper:pdf_scripts",
     "helper:settings",
     "plat:paths"
@@ -2347,8 +2204,6 @@
     "helper:audit",
     "helper:dates",
     "helper:email_notify",
-    "helper:heartbeat_status",
-    "helper:line_quota",
     "helper:settings",
     "helper:settings_groups",
     "helper:settings_registry",
@@ -2562,7 +2417,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -2627,7 +2481,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -2736,7 +2589,6 @@
     "mod:case/api/material_changes",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:netplan/api"
    ],
@@ -2820,7 +2672,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -2874,7 +2725,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -2907,7 +2757,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -3387,8 +3236,7 @@
    "api_unmatched": [],
    "imports": [],
    "kind": "js",
-   "module_key": "subcontract",
-   "path": "backend/modules/subcontract/js/remit-kinds-settings.js",
+   "path": "frontend/js/remit-kinds-settings.js",
    "routers_called": [
     "mod:subcontract/api/remit_kinds",
     "router:definitions"
@@ -3440,7 +3288,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -4094,7 +3941,6 @@
     "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/ledger_diff",
-    "mod:analytics/api/report_templates",
     "mod:analytics/api/reports",
     "mod:arap/api/cashier",
     "mod:arap/api/invoice_vouchers",
@@ -4104,7 +3950,6 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
     "mod:case/api/expense_form_pdf",
-    "mod:case/api/field_cases",
     "mod:case/api/material_approvals",
     "mod:case/api/material_changes",
     "mod:case/api/material_links",
@@ -4112,7 +3957,6 @@
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
     "mod:case/api/project_margin",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -4394,7 +4238,7 @@
    "kind": "js",
    "path": "frontend/static/stage-template-editor.js",
    "routers_called": [
-    "mod:case/api/quotation_stages",
+    "mod:case/api/quotations",
     "router:def_governance",
     "router:definitions"
    ],
@@ -4465,34 +4309,6 @@
    "path": "frontend/static/users-duty.js",
    "routers_called": [
     "router:duty_roles"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "js:static/ux-help.js": {
-   "api_calls": [],
-   "api_prefixes": [],
-   "api_unmatched": [],
-   "imports": [],
-   "kind": "js",
-   "path": "frontend/static/ux-help.js",
-   "routers_called": [],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "js:static/ux-wizard.js": {
-   "api_calls": [
-    "/api/system/branding/logo-dark"
-   ],
-   "api_prefixes": [
-    "/api/system"
-   ],
-   "api_unmatched": [],
-   "imports": [],
-   "kind": "js",
-   "path": "frontend/static/ux-wizard.js",
-   "routers_called": [
-    "router:system"
    ],
    "tables_r": [],
    "tables_w": []
@@ -4647,9 +4463,6 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -5028,9 +4841,6 @@
     "helper:download_name",
     "helper:duty_roles",
     "helper:email_notify",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -5197,11 +5007,6 @@
     "helper:edit_log",
     "helper:email_notify",
     "helper:legal_params",
-    "helper:license_alerts",
-    "helper:licensing",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -5731,9 +5536,6 @@
     "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -6158,11 +5960,6 @@
     "helper:edit_log",
     "helper:email_notify",
     "helper:legal_params",
-    "helper:license_alerts",
-    "helper:licensing",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -6453,11 +6250,6 @@
     "helper:duty_roles",
     "helper:edit_log",
     "helper:email_notify",
-    "helper:license_alerts",
-    "helper:licensing",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -7322,7 +7114,6 @@
    "imports": [
     "mod:analytics/api/dashboard",
     "mod:analytics/api/ledger_diff",
-    "mod:analytics/api/report_templates",
     "mod:analytics/api/reports",
     "plat:registry"
    ],
@@ -7582,119 +7373,6 @@
     "user_perm_subtracts"
    ]
   },
-  "mod:analytics/api/report_templates": {
-   "api_prefixes": [
-    "/api/report-templates"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:alert_settings",
-    "helper:audit",
-    "helper:auth",
-    "helper:case_access",
-    "helper:company_identity",
-    "helper:company_setup",
-    "helper:config_ledger",
-    "helper:display_labels",
-    "helper:download_name",
-    "helper:duty_roles",
-    "helper:email_notify",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
-    "helper:mail_types",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:notify_matrix",
-    "helper:notify_templates",
-    "helper:profit_warning",
-    "helper:quote_privacy",
-    "helper:row_access",
-    "helper:settings",
-    "helper:settings_groups",
-    "helper:settings_groups_legal_reminder",
-    "helper:settings_groups_list_view",
-    "helper:settings_groups_lodging_freshness",
-    "helper:settings_groups_overhead",
-    "helper:settings_groups_payslip_picker",
-    "helper:settings_groups_profit",
-    "helper:settings_groups_q0",
-    "helper:settings_groups_recycle_bin",
-    "helper:settings_groups_tender_closing",
-    "helper:settings_registry",
-    "helper:settings_strict",
-    "helper:status_display",
-    "helper:tiered_approval",
-    "helper:xlsx_out"
-   ],
-   "imports": [
-    "core:db",
-    "helper:auth",
-    "helper:download_name",
-    "helper:xlsx_out",
-    "mod:analytics/api/reports"
-   ],
-   "kind": "mod",
-   "module_key": "analytics",
-   "path": "backend/modules/analytics/api/report_templates.py",
-   "registered": "loader",
-   "role": "router",
-   "routes": [
-    {
-     "func": "list_templates",
-     "line": 336,
-     "method": "GET",
-     "path": "/api/report-templates"
-    },
-    {
-     "func": "run_template",
-     "line": 353,
-     "method": "GET",
-     "path": "/api/report-templates/{tid}/run"
-    },
-    {
-     "func": "excel_template",
-     "line": 384,
-     "method": "GET",
-     "path": "/api/report-templates/{tid}/excel"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "departments",
-    "divisions"
-   ],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "audit_log",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "duty_roles",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "system_settings",
-    "user_duty_roles",
-    "user_perm_subtracts",
-    "users"
-   ],
-   "tables_w": [],
-   "tables_w_transitive": [
-    "audit_log",
-    "config_change_events",
-    "config_changes",
-    "duty_roles",
-    "notifications",
-    "permission_changes",
-    "system_settings",
-    "user_duty_roles",
-    "user_perm_subtracts"
-   ]
-  },
   "mod:analytics/api/reports": {
    "api_prefixes": [
     "/api/reports"
@@ -7732,11 +7410,6 @@
     "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
-    "helper:license_alerts",
-    "helper:licensing",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -7803,67 +7476,67 @@
    "routes": [
     {
      "func": "report_json",
-     "line": 2610,
+     "line": 2600,
      "method": "GET",
      "path": "/api/reports/financial"
     },
     {
      "func": "report_excel",
-     "line": 2624,
+     "line": 2614,
      "method": "GET",
      "path": "/api/reports/financial/excel"
     },
     {
      "func": "report_pdf",
-     "line": 2661,
+     "line": 2651,
      "method": "GET",
      "path": "/api/reports/financial/pdf"
     },
     {
      "func": "get_ar_aging",
-     "line": 2794,
+     "line": 2784,
      "method": "GET",
      "path": "/api/reports/ar-aging"
     },
     {
      "func": "get_cash_position",
-     "line": 2855,
+     "line": 2845,
      "method": "GET",
      "path": "/api/reports/cash-position"
     },
     {
      "func": "tax_export_excel",
-     "line": 2923,
+     "line": 2913,
      "method": "GET",
      "path": "/api/reports/tax-export"
     },
     {
      "func": "customer_history",
-     "line": 2957,
+     "line": 2947,
      "method": "GET",
      "path": "/api/reports/customer-history"
     },
     {
      "func": "monthly_trend",
-     "line": 3233,
+     "line": 3223,
      "method": "GET",
      "path": "/api/reports/monthly-trend"
     },
     {
      "func": "report_payment_anomalies",
-     "line": 3459,
+     "line": 3449,
      "method": "GET",
      "path": "/api/reports/payment-anomalies"
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3891,
+     "line": 3881,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 4075,
+     "line": 4065,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
@@ -7980,9 +7653,6 @@
     "helper:finance_params",
     "helper:google_calendar",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -8195,9 +7865,6 @@
     "helper:export_templates",
     "helper:google_calendar",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -8400,9 +8067,6 @@
     "helper:errors",
     "helper:google_calendar",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -8675,7 +8339,6 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
     "mod:case/api/expense_form_pdf",
-    "mod:case/api/field_cases",
     "mod:case/api/material_approvals",
     "mod:case/api/material_changes",
     "mod:case/api/material_links",
@@ -8683,7 +8346,6 @@
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
     "mod:case/api/project_margin",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -8840,9 +8502,6 @@
     "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -9006,9 +8665,6 @@
     "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -9156,9 +8812,6 @@
     "helper:formula",
     "helper:google_calendar",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -9492,11 +9145,6 @@
     "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
-    "helper:license_alerts",
-    "helper:licensing",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -9787,9 +9435,6 @@
     "helper:expense_types",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -9893,103 +9538,6 @@
     "user_perm_subtracts"
    ]
   },
-  "mod:case/api/field_cases": {
-   "api_prefixes": [
-    "/api/field"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:case_access",
-    "helper:case_roles",
-    "helper:config_ledger",
-    "helper:display_labels",
-    "helper:duty_roles",
-    "helper:module_registry",
-    "helper:profit_warning",
-    "helper:quote_privacy",
-    "helper:row_access",
-    "helper:settings",
-    "helper:settings_groups",
-    "helper:settings_groups_legal_reminder",
-    "helper:settings_groups_list_view",
-    "helper:settings_groups_lodging_freshness",
-    "helper:settings_groups_overhead",
-    "helper:settings_groups_payslip_picker",
-    "helper:settings_groups_profit",
-    "helper:settings_groups_q0",
-    "helper:settings_groups_recycle_bin",
-    "helper:settings_groups_tender_closing",
-    "helper:settings_registry",
-    "helper:status_display",
-    "helper:tiered_approval"
-   ],
-   "imports": [
-    "core:db",
-    "helper:auth",
-    "helper:case_access",
-    "helper:case_roles",
-    "helper:row_access"
-   ],
-   "kind": "mod",
-   "module_key": "case",
-   "path": "backend/modules/case/api/field_cases.py",
-   "registered": "loader",
-   "role": "router",
-   "routes": [
-    {
-     "func": "list_field_cases",
-     "line": 205,
-     "method": "GET",
-     "path": "/api/field/cases"
-    },
-    {
-     "func": "get_field_case",
-     "line": 299,
-     "method": "GET",
-     "path": "/api/field/cases/{quote_no}"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "case_stages",
-    "case_updates",
-    "quotations"
-   ],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "audit_log",
-    "case_stages",
-    "case_updates",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "duty_roles",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "system_settings",
-    "user_duty_roles",
-    "user_perm_subtracts",
-    "users"
-   ],
-   "tables_w": [],
-   "tables_w_transitive": [
-    "audit_log",
-    "config_change_events",
-    "config_changes",
-    "duty_roles",
-    "notifications",
-    "permission_changes",
-    "system_settings",
-    "user_duty_roles",
-    "user_perm_subtracts"
-   ]
-  },
   "mod:case/api/material_approvals": {
    "api_prefixes": [
     "/api/quotations"
@@ -10025,9 +9573,6 @@
     "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -10214,9 +9759,6 @@
     "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -10406,9 +9948,6 @@
     "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -10586,9 +10125,6 @@
     "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -10777,9 +10313,6 @@
     "helper:formula",
     "helper:google_calendar",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -11027,9 +10560,6 @@
     "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -11216,9 +10746,6 @@
     "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -11358,270 +10885,6 @@
     "user_perm_subtracts"
    ]
   },
-  "mod:case/api/quotation_stages": {
-   "api_prefixes": [
-    "/api/quotations"
-   ],
-   "dynamic_sql": true,
-   "helpers_transitive": [
-    "helper:alert_settings",
-    "helper:approval_queue",
-    "helper:attachment_slots",
-    "helper:audit",
-    "helper:auth",
-    "helper:builtin_fields",
-    "helper:case_access",
-    "helper:clause_titles",
-    "helper:company_identity",
-    "helper:company_setup",
-    "helper:config_ledger",
-    "helper:custom_builder_support",
-    "helper:custom_fields",
-    "helper:custom_files",
-    "helper:custom_finance",
-    "helper:custom_history",
-    "helper:custom_modules",
-    "helper:dates",
-    "helper:display_labels",
-    "helper:doc_render",
-    "helper:doc_template",
-    "helper:duty_roles",
-    "helper:email_notify",
-    "helper:expense_types",
-    "helper:export_templates",
-    "helper:field_catalog",
-    "helper:financial_mask",
-    "helper:formula",
-    "helper:google_calendar",
-    "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
-    "helper:mail_types",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:notify_matrix",
-    "helper:notify_templates",
-    "helper:pdf_scripts",
-    "helper:prefill_sources",
-    "helper:profit_warning",
-    "helper:quote_privacy",
-    "helper:recognition_basis",
-    "helper:recycle_bin",
-    "helper:row_access",
-    "helper:safe_text",
-    "helper:settings",
-    "helper:settings_groups",
-    "helper:settings_groups_legal_reminder",
-    "helper:settings_groups_list_view",
-    "helper:settings_groups_lodging_freshness",
-    "helper:settings_groups_overhead",
-    "helper:settings_groups_payslip_picker",
-    "helper:settings_groups_profit",
-    "helper:settings_groups_q0",
-    "helper:settings_groups_recycle_bin",
-    "helper:settings_groups_tender_closing",
-    "helper:settings_registry",
-    "helper:settings_strict",
-    "helper:stage_templates",
-    "helper:status_display",
-    "helper:storage_slots",
-    "helper:tax_calc",
-    "helper:tiered_approval",
-    "helper:uploads",
-    "helper:validation",
-    "helper:xlsx_out",
-    "mod:case/case_stage_tasks",
-    "mod:case/content_fp",
-    "mod:case/expense_forms",
-    "mod:case/material_approval",
-    "mod:case/material_coverage",
-    "mod:case/material_coverage_view",
-    "mod:case/material_guard",
-    "mod:case/material_notify",
-    "mod:case/material_payment",
-    "mod:case/material_recognize",
-    "mod:case/purchase_items",
-    "mod:case/quotations",
-    "mod:case/quote_terms",
-    "mod:case/recognition",
-    "mod:case/recycle_adapter",
-    "mod:case/stage_apply"
-   ],
-   "imports": [
-    "core:db",
-    "helper:audit",
-    "helper:auth",
-    "helper:case_access",
-    "helper:google_calendar",
-    "helper:stage_templates",
-    "helper:validation",
-    "mod:case/api/quotations",
-    "mod:case/case_stage_tasks",
-    "mod:case/recognition",
-    "mod:case/stage_apply",
-    "plat:definitions",
-    "plat:txn"
-   ],
-   "kind": "mod",
-   "module_key": "case",
-   "path": "backend/modules/case/api/quotation_stages.py",
-   "registered": "loader",
-   "role": "router",
-   "routes": [
-    {
-     "func": "list_case_stages_normalized",
-     "line": 49,
-     "method": "GET",
-     "path": "/api/quotations/{quote_no}/stages"
-    },
-    {
-     "func": "create_case_stage",
-     "line": 67,
-     "method": "POST",
-     "path": "/api/quotations/{quote_no}/stages"
-    },
-    {
-     "func": "list_stage_templates",
-     "line": 96,
-     "method": "GET",
-     "path": "/api/quotations/{quote_no}/stages/templates"
-    },
-    {
-     "func": "preview_stage_template",
-     "line": 120,
-     "method": "POST",
-     "path": "/api/quotations/stage-templates/preview"
-    },
-    {
-     "func": "apply_stage_template",
-     "line": 139,
-     "method": "POST",
-     "path": "/api/quotations/{quote_no}/stages/apply-template"
-    },
-    {
-     "func": "update_case_stage",
-     "line": 229,
-     "method": "PUT",
-     "path": "/api/quotations/{quote_no}/stages/{stage_id}"
-    },
-    {
-     "func": "delete_case_stage",
-     "line": 283,
-     "method": "DELETE",
-     "path": "/api/quotations/{quote_no}/stages/{stage_id}"
-    },
-    {
-     "func": "reorder_case_stages",
-     "line": 324,
-     "method": "PATCH",
-     "path": "/api/quotations/{quote_no}/stages/reorder"
-    },
-    {
-     "func": "add_stage_assignee",
-     "line": 348,
-     "method": "POST",
-     "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees"
-    },
-    {
-     "func": "remove_stage_assignee",
-     "line": 376,
-     "method": "DELETE",
-     "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}"
-    },
-    {
-     "func": "toggle_stage_dependency",
-     "line": 399,
-     "method": "POST",
-     "path": "/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}"
-    },
-    {
-     "func": "add_stage_visit",
-     "line": 432,
-     "method": "POST",
-     "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits"
-    },
-    {
-     "func": "update_stage_visit",
-     "line": 458,
-     "method": "PUT",
-     "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
-    },
-    {
-     "func": "delete_stage_visit",
-     "line": 489,
-     "method": "DELETE",
-     "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "audit_log",
-    "case_extra_expenses",
-    "case_material_approvals",
-    "case_material_payments",
-    "case_stages",
-    "contractor_dispatches",
-    "contractor_payment_vouchers",
-    "custom_record_finance_outbox",
-    "custom_record_values",
-    "custom_records",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "duty_roles",
-    "expense_categories",
-    "invoice_vouchers",
-    "payment_requests",
-    "projects",
-    "quotations",
-    "recycle_bin",
-    "sessions",
-    "shipping_notes",
-    "suppliers",
-    "system_settings",
-    "ui_definitions",
-    "user_duty_roles",
-    "user_perm_subtracts",
-    "users",
-    "vendor_contractors"
-   ],
-   "tables_w": [
-    "case_stage_visits",
-    "case_stages"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "case_extra_expenses",
-    "case_material_approvals",
-    "case_material_payment_lines",
-    "case_material_payments",
-    "case_stage_visits",
-    "case_stages",
-    "completion_notes",
-    "config_change_events",
-    "config_changes",
-    "custom_record_counters",
-    "custom_record_files",
-    "custom_record_finance_outbox",
-    "custom_record_log",
-    "custom_record_revisions",
-    "custom_record_snapshots",
-    "custom_record_values",
-    "custom_records",
-    "duty_roles",
-    "notifications",
-    "permission_changes",
-    "quotations",
-    "system_settings",
-    "user_duty_roles",
-    "user_perm_subtracts"
-   ]
-  },
   "mod:case/api/quotations": {
    "api_prefixes": [
     "/api/approval-history",
@@ -11670,11 +10933,7 @@
     "helper:formula",
     "helper:gl_status",
     "helper:google_calendar",
-    "helper:idempotency",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -11740,7 +10999,7 @@
     "mod:case/receipt_calendar",
     "mod:case/recognition",
     "mod:case/recycle_adapter",
-    "mod:case/review_edit_notify"
+    "mod:case/stage_apply"
    ],
    "imports": [
     "core:archive",
@@ -11767,7 +11026,6 @@
     "helper:financial_mask",
     "helper:gl_status",
     "helper:google_calendar",
-    "helper:idempotency",
     "helper:notify_templates",
     "helper:perm",
     "helper:privacy_notice",
@@ -11798,7 +11056,8 @@
     "mod:case/receipt_calendar",
     "mod:case/recognition",
     "mod:case/recycle_adapter",
-    "mod:case/review_edit_notify",
+    "mod:case/stage_apply",
+    "plat:definitions",
     "plat:registry",
     "plat:txn",
     "router:item_reads"
@@ -11811,379 +11070,451 @@
    "routes": [
     {
      "func": "next_quote_no",
-     "line": 809,
+     "line": 806,
      "method": "GET",
      "path": "/api/next-quote-no"
     },
     {
      "func": "list_quotations",
-     "line": 872,
+     "line": 869,
      "method": "GET",
      "path": "/api/quotations"
     },
     {
      "func": "stage_board",
-     "line": 1088,
+     "line": 1085,
      "method": "GET",
      "path": "/api/quotations/stage-board"
     },
     {
      "func": "case_activity",
-     "line": 1193,
+     "line": 1190,
      "method": "POST",
      "path": "/api/quotations/case-activity"
     },
     {
      "func": "get_last_received_bank_account",
-     "line": 1234,
+     "line": 1231,
      "method": "GET",
      "path": "/api/quotations/last-received-bank-account"
     },
     {
      "func": "reconfirm_shadow_stats",
-     "line": 1282,
+     "line": 1279,
      "method": "GET",
      "path": "/api/quotations/reconfirm-shadow-stats"
     },
     {
      "func": "gate_matrix",
-     "line": 1302,
+     "line": 1299,
      "method": "GET",
      "path": "/api/quotations/gate-matrix"
     },
     {
-     "func": "submit_precheck",
-     "line": 1410,
-     "method": "GET",
-     "path": "/api/quotations/submit-precheck"
-    },
-    {
      "func": "get_quotation",
-     "line": 1443,
+     "line": 1393,
      "method": "GET",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_case_assigned_users",
-     "line": 1497,
+     "line": 1446,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/assigned-users"
     },
     {
      "func": "toggle_quotation_signed",
-     "line": 1520,
+     "line": 1469,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/signed-toggle"
     },
     {
      "func": "upload_quotation_signed_files",
-     "line": 1656,
+     "line": 1605,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/signed-files"
     },
     {
      "func": "delete_quotation_signed_file",
-     "line": 1681,
+     "line": 1630,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/signed-files/{file_id}"
     },
     {
      "func": "create_quotation",
-     "line": 1758,
+     "line": 1707,
      "method": "POST",
      "path": "/api/quotations"
     },
     {
      "func": "historical_config",
-     "line": 2121,
+     "line": 2070,
      "method": "GET",
      "path": "/api/quotations/historical/config"
     },
     {
      "func": "historical_next_no",
-     "line": 2136,
+     "line": 2085,
      "method": "GET",
      "path": "/api/quotations/historical/next-no"
     },
     {
      "func": "create_historical_quotation",
-     "line": 2151,
+     "line": 2100,
      "method": "POST",
      "path": "/api/quotations/historical"
     },
     {
      "func": "update_quotation",
-     "line": 2257,
+     "line": 2206,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_status",
-     "line": 2608,
+     "line": 2557,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/status"
     },
     {
      "func": "recall_quotation",
-     "line": 2694,
+     "line": 2643,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/recall"
     },
     {
      "func": "case_bundle",
-     "line": 3026,
+     "line": 2975,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/case-bundle"
     },
     {
      "func": "case_close_gates",
-     "line": 3081,
+     "line": 3030,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/close-gates"
     },
     {
      "func": "update_deal_tag",
-     "line": 3120,
+     "line": 3069,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/deal-tag"
     },
     {
      "func": "delete_quotation",
-     "line": 3241,
+     "line": 3190,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "unlock_case",
-     "line": 3369,
+     "line": 3318,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-unlock"
     },
     {
      "func": "lock_case",
-     "line": 3418,
+     "line": 3367,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-lock"
     },
     {
      "func": "update_case_record",
-     "line": 3599,
+     "line": 3548,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/case-record"
     },
     {
      "func": "get_case_change_request",
-     "line": 4019,
+     "line": 3968,
      "method": "GET",
      "path": "/api/case-changes/{change_id}"
     },
     {
      "func": "approve_case_change",
-     "line": 4042,
+     "line": 3991,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/approve"
     },
     {
      "func": "reject_case_change",
-     "line": 4096,
+     "line": 4045,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/reject"
     },
     {
+     "func": "list_case_stages_normalized",
+     "line": 4287,
+     "method": "GET",
+     "path": "/api/quotations/{quote_no}/stages"
+    },
+    {
+     "func": "create_case_stage",
+     "line": 4305,
+     "method": "POST",
+     "path": "/api/quotations/{quote_no}/stages"
+    },
+    {
+     "func": "list_stage_templates",
+     "line": 4334,
+     "method": "GET",
+     "path": "/api/quotations/{quote_no}/stages/templates"
+    },
+    {
+     "func": "preview_stage_template",
+     "line": 4358,
+     "method": "POST",
+     "path": "/api/quotations/stage-templates/preview"
+    },
+    {
+     "func": "apply_stage_template",
+     "line": 4377,
+     "method": "POST",
+     "path": "/api/quotations/{quote_no}/stages/apply-template"
+    },
+    {
+     "func": "update_case_stage",
+     "line": 4467,
+     "method": "PUT",
+     "path": "/api/quotations/{quote_no}/stages/{stage_id}"
+    },
+    {
+     "func": "delete_case_stage",
+     "line": 4521,
+     "method": "DELETE",
+     "path": "/api/quotations/{quote_no}/stages/{stage_id}"
+    },
+    {
+     "func": "reorder_case_stages",
+     "line": 4562,
+     "method": "PATCH",
+     "path": "/api/quotations/{quote_no}/stages/reorder"
+    },
+    {
+     "func": "add_stage_assignee",
+     "line": 4586,
+     "method": "POST",
+     "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees"
+    },
+    {
+     "func": "remove_stage_assignee",
+     "line": 4614,
+     "method": "DELETE",
+     "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}"
+    },
+    {
+     "func": "toggle_stage_dependency",
+     "line": 4637,
+     "method": "POST",
+     "path": "/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}"
+    },
+    {
+     "func": "add_stage_visit",
+     "line": 4670,
+     "method": "POST",
+     "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits"
+    },
+    {
+     "func": "update_stage_visit",
+     "line": 4696,
+     "method": "PUT",
+     "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
+    },
+    {
+     "func": "delete_stage_visit",
+     "line": 4727,
+     "method": "DELETE",
+     "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
+    },
+    {
      "func": "record_export",
-     "line": 4317,
+     "line": 4750,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/export"
     },
     {
      "func": "mark_payment",
-     "line": 4406,
+     "line": 4839,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 4538,
+     "line": 4971,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 4584,
+     "line": 5017,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 4624,
+     "line": 5057,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 4663,
+     "line": 5096,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 4688,
+     "line": 5121,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 4732,
+     "line": 5165,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 4757,
+     "line": 5190,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 4789,
+     "line": 5222,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 4818,
+     "line": 5251,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_finance_summary",
-     "line": 4862,
+     "line": 5295,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "approve_quotation",
-     "line": 5347,
+     "line": 5780,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "review_edit_quotation",
-     "line": 5518,
+     "line": 5948,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/review-edit"
     },
     {
      "func": "reject_quotation",
-     "line": 5668,
+     "line": 6077,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 5760,
+     "line": 6169,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5826,
+     "line": 6235,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5972,
+     "line": 6381,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
-     "func": "add_case_update_files",
-     "line": 6089,
-     "method": "POST",
-     "path": "/api/quotations/{quote_no}/updates/{uid}/files"
-    },
-    {
      "func": "delete_case_update",
-     "line": 6161,
+     "line": 6467,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 6192,
+     "line": 6498,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 6223,
+     "line": 6529,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 6264,
+     "line": 6570,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 6322,
+     "line": 6626,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 6394,
+     "line": 6693,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 6433,
+     "line": 6732,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 6466,
+     "line": 6765,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 7062,
+     "line": 7361,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 7182,
+     "line": 7481,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 7261,
+     "line": 7560,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 7430,
+     "line": 7729,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 7444,
+     "line": 7743,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 7475,
+     "line": 7774,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -12210,7 +11541,6 @@
     "departments",
     "dev_cases",
     "dev_logs",
-    "divisions",
     "expense_categories",
     "invoice_vouchers",
     "payment_requests",
@@ -12286,7 +11616,6 @@
     "custom_record_values",
     "custom_records",
     "duty_roles",
-    "idempotency_keys",
     "notifications",
     "permission_changes",
     "quotations",
@@ -12331,9 +11660,6 @@
     "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -12508,9 +11834,6 @@
     "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -13428,22 +12751,6 @@
     "quotations"
    ]
   },
-  "mod:case/review_edit_notify": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "helper:email_notify",
-    "helper:mail_types"
-   ],
-   "kind": "mod",
-   "module_key": "case",
-   "path": "backend/modules/case/review_edit_notify.py",
-   "role": "helper",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_w": []
-  },
   "mod:case/rule_provider": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -13541,9 +12848,6 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:google_calendar",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -13861,9 +13165,6 @@
     "helper:email_notify",
     "helper:export_templates",
     "helper:google_calendar",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -14244,9 +13545,6 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:geo",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -14491,11 +13789,6 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
-    "helper:license_alerts",
-    "helper:licensing",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -14883,9 +14176,6 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -15208,9 +14498,6 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -15381,9 +14668,6 @@
     "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -15651,9 +14935,6 @@
     "helper:email_notify",
     "helper:errors",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -15744,85 +15025,85 @@
     },
     {
      "func": "get_payslip",
-     "line": 415,
+     "line": 411,
      "method": "GET",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "update_payslip",
-     "line": 430,
+     "line": 426,
      "method": "PUT",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "delete_payslip",
-     "line": 515,
+     "line": 511,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "record_export",
-     "line": 546,
+     "line": 542,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/export"
     },
     {
      "func": "record_archive_download",
-     "line": 593,
+     "line": 589,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/archive/{orig_idx}/record"
     },
     {
      "func": "get_archive_pdf",
-     "line": 653,
+     "line": 649,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/archive/{idx}"
     },
     {
      "func": "pdf_download",
-     "line": 687,
+     "line": 683,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/pdf-download"
     },
     {
      "func": "void_payslip",
-     "line": 722,
+     "line": 718,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/void"
     },
     {
      "func": "upload_signed_files",
-     "line": 771,
+     "line": 767,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/signed-files"
     },
     {
      "func": "get_signed_file",
-     "line": 825,
+     "line": 821,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "delete_signed_file",
-     "line": 854,
+     "line": 850,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "unsign_payslip",
-     "line": 887,
+     "line": 883,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unsign"
     },
     {
      "func": "payslip_mark_paid",
-     "line": 915,
+     "line": 911,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/mark-paid"
     },
     {
      "func": "payslip_unpay",
-     "line": 943,
+     "line": 939,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unpay"
     }
@@ -16762,9 +16043,6 @@
     "helper:gl_status",
     "helper:google_calendar",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -17038,9 +16316,6 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:export_templates",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -17210,9 +16485,6 @@
     "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -17567,9 +16839,6 @@
     "helper:gl_status",
     "helper:google_calendar",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -18097,9 +17366,6 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -18131,8 +17397,7 @@
     "helper:auth",
     "helper:email_notify",
     "helper:legal_params",
-    "helper:procurement",
-    "plat:txn"
+    "helper:procurement"
    ],
    "kind": "mod",
    "module_key": "supply",
@@ -18142,73 +17407,73 @@
    "routes": [
     {
      "func": "parts_summary",
-     "line": 54,
+     "line": 53,
      "method": "GET",
      "path": "/api/inventory/parts-summary"
     },
     {
      "func": "purchase_suggestions",
-     "line": 141,
+     "line": 140,
      "method": "GET",
      "path": "/api/inventory/purchase-suggestions"
     },
     {
      "func": "set_purchase_suggestion_status",
-     "line": 279,
+     "line": 278,
      "method": "POST",
      "path": "/api/inventory/purchase-suggestions/{part_no}/status"
     },
     {
      "func": "list_stock_items",
-     "line": 355,
+     "line": 354,
      "method": "GET",
      "path": "/api/inventory/stock-items"
     },
     {
      "func": "get_last_paid_bank_account",
-     "line": 392,
+     "line": 391,
      "method": "GET",
      "path": "/api/inventory/batches/last-paid-bank-account"
     },
     {
      "func": "create_batch",
-     "line": 413,
+     "line": 412,
      "method": "POST",
      "path": "/api/inventory/batches"
     },
     {
      "func": "list_batches",
-     "line": 488,
+     "line": 486,
      "method": "GET",
      "path": "/api/inventory/batches"
     },
     {
      "func": "get_batch",
-     "line": 513,
+     "line": 511,
      "method": "GET",
      "path": "/api/inventory/batches/{batch_no}"
     },
     {
      "func": "update_batch_header",
-     "line": 527,
+     "line": 525,
      "method": "PUT",
      "path": "/api/inventory/batches/{batch_no}"
     },
     {
      "func": "toggle_batch_paid",
-     "line": 566,
+     "line": 564,
      "method": "POST",
      "path": "/api/inventory/batches/{batch_no}/paid-toggle"
     },
     {
      "func": "adjust_stock_item",
-     "line": 615,
+     "line": 613,
      "method": "POST",
      "path": "/api/inventory/stock-items/{item_id}/adjust"
     },
     {
      "func": "delete_stock_item",
-     "line": 672,
+     "line": 670,
      "method": "DELETE",
      "path": "/api/inventory/stock-items/{item_id}"
     }
@@ -18279,9 +17544,6 @@
     "helper:email_notify",
     "helper:errors",
     "helper:google_calendar",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -18519,9 +17781,6 @@
     "helper:email_notify",
     "helper:errors",
     "helper:field_catalog",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:list_catalog",
     "helper:mail_types",
     "helper:module_registry",
@@ -18759,9 +18018,6 @@
     "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -19021,7 +18277,6 @@
    "api_calls": [
     "/api/approval-queue/count",
     "/api/auth/logout",
-    "/api/customers",
     "/api/dashboard/activity-feed",
     "/api/dashboard/expenses-monthly{}",
     "/api/dashboard/funnel",
@@ -19031,17 +18286,14 @@
     "/api/dashboard/stats{}",
     "/api/org/tree",
     "/api/system/branding",
-    "/api/system/branding/favicon",
-    "/api/users"
+    "/api/system/branding/favicon"
    ],
    "api_prefixes": [
     "/api/approval-queue",
     "/api/auth",
-    "/api/customers",
     "/api/dashboard",
     "/api/org",
-    "/api/system",
-    "/api/users"
+    "/api/system"
    ],
    "api_unmatched": [],
    "imports": [
@@ -19056,7 +18308,6 @@
     "mod:analytics/api/dashboard",
     "router:approval_queue",
     "router:auth",
-    "router:customers",
     "router:org_structure",
     "router:system"
    ],
@@ -19064,7 +18315,6 @@
     "mod:analytics/api/dashboard",
     "router:approval_queue",
     "router:auth",
-    "router:customers",
     "router:org_structure",
     "router:system"
    ],
@@ -19177,7 +18427,6 @@
     "/api/invoice-vouchers",
     "/api/ledger/action-requests",
     "/api/payment-requests",
-    "/api/payslips",
     "/api/photo-token",
     "/api/photo-token/batch",
     "/api/quotations",
@@ -19204,7 +18453,6 @@
     "/api/invoice-vouchers",
     "/api/ledger",
     "/api/payment-requests",
-    "/api/payslips",
     "/api/photo-token",
     "/api/quotations",
     "/api/shipping-notes",
@@ -19236,7 +18484,6 @@
     "mod:case/api/quotations",
     "mod:payroll/api/bonus",
     "mod:payroll/api/bonus_correction",
-    "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/shipping_notes",
@@ -19255,7 +18502,6 @@
     "mod:case/api/quotations",
     "mod:payroll/api/bonus",
     "mod:payroll/api/bonus_correction",
-    "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/shipping_notes",
@@ -19503,7 +18749,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -19527,7 +18772,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -19584,14 +18828,12 @@
    "kind": "page",
    "path": "frontend/pages/case-stage-board.html",
    "routers_called": [
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "router:auth",
     "router:org_structure",
     "router:system"
    ],
    "routers_called_effective": [
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "router:auth",
     "router:org_structure",
@@ -19651,16 +18893,11 @@
     "/api/auth/webauthn/credentials/{}",
     "/api/auth/webauthn/register/begin",
     "/api/auth/webauthn/register/complete",
-    "/api/line/binding",
-    "/api/line/binding/start",
-    "/api/line/prefs",
-    "/api/line/prefs/",
     "/api/system/branding/favicon",
     "/api/system/webauthn-config-status"
    ],
    "api_prefixes": [
     "/api/auth",
-    "/api/line",
     "/api/system"
    ],
    "api_unmatched": [],
@@ -19668,8 +18905,7 @@
     "js:static/auth-guard.js",
     "js:static/motrix-format.js",
     "js:static/notif.js",
-    "js:static/sidebar.js",
-    "js:static/ux-wizard.js"
+    "js:static/sidebar.js"
    ],
    "kind": "page",
    "path": "frontend/pages/change-password.html",
@@ -19698,8 +18934,7 @@
     "/api/settings/pdf-base-path",
     "/api/settings/pii-archive-status",
     "/api/settings/webauthn-config",
-    "/api/system/branding/favicon",
-    "/api/system/webauthn-config-status"
+    "/api/system/branding/favicon"
    ],
    "api_prefixes": [
     "/api/legal-params",
@@ -19710,8 +18945,7 @@
    "imports": [
     "js:static/auth-guard.js",
     "js:static/notif.js",
-    "js:static/sidebar.js",
-    "js:static/ux-wizard.js"
+    "js:static/sidebar.js"
    ],
    "kind": "page",
    "path": "frontend/pages/company-profile-settings.html",
@@ -20527,34 +19761,6 @@
    "tables_r": [],
    "tables_w": []
   },
-  "page:pages/license-required.html": {
-   "api_calls": [
-    "/api/auth/logout",
-    "/api/license/status",
-    "/api/system/branding/favicon"
-   ],
-   "api_prefixes": [
-    "/api/auth",
-    "/api/license",
-    "/api/system"
-   ],
-   "api_unmatched": [],
-   "imports": [],
-   "kind": "page",
-   "path": "frontend/pages/license-required.html",
-   "routers_called": [
-    "router:auth",
-    "router:licensing",
-    "router:system"
-   ],
-   "routers_called_effective": [
-    "router:auth",
-    "router:licensing",
-    "router:system"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
   "page:pages/lodging-records.html": {
    "api_calls": [
     "/api/lodging/compare",
@@ -20901,14 +20107,9 @@
    "api_calls": [
     "/api/settings/email-notify",
     "/api/settings/email-notify/test",
-    "/api/settings/line-notify",
-    "/api/settings/line-notify/events/",
-    "/api/settings/line-notify/quota",
-    "/api/settings/line-notify/verify",
     "/api/settings/monthly-report-recipients",
     "/api/settings/reminder-send-failures",
     "/api/system/branding/favicon",
-    "/api/system/heartbeat",
     "/api/users/selectable"
    ],
    "api_prefixes": [
@@ -21098,7 +20299,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -21117,7 +20317,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -21176,7 +20375,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -21199,7 +20397,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -21461,7 +20658,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -21480,7 +20676,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -21540,7 +20735,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -21559,7 +20753,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -21652,60 +20845,6 @@
    "tables_r": [],
    "tables_w": []
   },
-  "page:pages/report-templates.html": {
-   "api_calls": [
-    "/api/report-templates",
-    "/api/report-templates/",
-    "/api/system/branding/favicon"
-   ],
-   "api_prefixes": [
-    "/api/report-templates",
-    "/api/system"
-   ],
-   "api_unmatched": [],
-   "imports": [
-    "js:static/auth-guard.js",
-    "js:static/motrix-format.js",
-    "js:static/notif.js",
-    "js:static/sidebar.js"
-   ],
-   "kind": "page",
-   "path": "frontend/pages/report-templates.html",
-   "routers_called": [
-    "mod:analytics/api/report_templates",
-    "router:system"
-   ],
-   "routers_called_effective": [
-    "mod:analytics/api/report_templates",
-    "router:system"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "page:pages/reports-hub.html": {
-   "api_calls": [
-    "/api/system/branding/favicon"
-   ],
-   "api_prefixes": [
-    "/api/system"
-   ],
-   "api_unmatched": [],
-   "imports": [
-    "js:static/auth-guard.js",
-    "js:static/notif.js",
-    "js:static/sidebar.js"
-   ],
-   "kind": "page",
-   "path": "frontend/pages/reports-hub.html",
-   "routers_called": [
-    "router:system"
-   ],
-   "routers_called_effective": [
-    "router:system"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
   "page:pages/reports.html": {
    "api_calls": [
     "/api/reports/ledger-diff",
@@ -21748,7 +20887,6 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/overhead",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
@@ -23063,18 +22201,12 @@
     "helper:branding",
     "helper:build_info",
     "helper:case_access",
-    "helper:client_ip",
     "helper:company_identity",
     "helper:company_setup",
     "helper:config_ledger",
     "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
-    "helper:license_alerts",
-    "helper:licensing",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -23109,11 +22241,9 @@
     "helper:auth",
     "helper:branding",
     "helper:build_info",
-    "helper:client_ip",
     "helper:company_identity",
     "helper:company_setup",
     "helper:email_notify",
-    "helper:line_notify",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -23129,229 +22259,229 @@
    "routes": [
     {
      "func": "ping",
-     "line": 320,
+     "line": 292,
      "method": "GET",
      "path": "/api/ping"
     },
     {
      "func": "system_version",
-     "line": 340,
+     "line": 312,
      "method": "GET",
      "path": "/api/system/version"
     },
     {
      "func": "system_branding",
-     "line": 363,
+     "line": 335,
      "method": "GET",
      "path": "/api/system/branding"
     },
     {
      "func": "system_deployed_version",
-     "line": 388,
+     "line": 360,
      "method": "GET",
      "path": "/api/system/deployed-version"
     },
     {
      "func": "build_info_endpoint",
-     "line": 408,
+     "line": 380,
      "method": "GET",
      "path": "/api/build-info"
     },
     {
      "func": "auth_login",
-     "line": 439,
+     "line": 411,
      "method": "POST",
      "path": "/api/auth/login"
     },
     {
      "func": "auth_login_totp",
-     "line": 599,
+     "line": 571,
      "method": "POST",
      "path": "/api/auth/login/totp"
     },
     {
      "func": "login_qr_info",
-     "line": 709,
+     "line": 681,
      "method": "GET",
      "path": "/api/auth/login/qr-info"
     },
     {
      "func": "login_qr_approve",
-     "line": 734,
+     "line": 706,
      "method": "POST",
      "path": "/api/auth/login/qr-approve"
     },
     {
      "func": "login_qr_status",
-     "line": 804,
+     "line": 776,
      "method": "GET",
      "path": "/api/auth/login/qr-status"
     },
     {
      "func": "totp_status",
-     "line": 837,
+     "line": 809,
      "method": "GET",
      "path": "/api/auth/totp/status"
     },
     {
      "func": "totp_setup",
-     "line": 862,
+     "line": 834,
      "method": "POST",
      "path": "/api/auth/totp/setup"
     },
     {
      "func": "totp_enable",
-     "line": 884,
+     "line": 856,
      "method": "POST",
      "path": "/api/auth/totp/enable"
     },
     {
      "func": "totp_regenerate_recovery_codes",
-     "line": 911,
+     "line": 883,
      "method": "POST",
      "path": "/api/auth/totp/recovery-codes/regenerate"
     },
     {
      "func": "totp_disable",
-     "line": 954,
+     "line": 926,
      "method": "POST",
      "path": "/api/auth/totp/disable"
     },
     {
      "func": "webauthn_register_begin",
-     "line": 1081,
+     "line": 1053,
      "method": "POST",
      "path": "/api/auth/webauthn/register/begin"
     },
     {
      "func": "webauthn_register_complete",
-     "line": 1124,
+     "line": 1096,
      "method": "POST",
      "path": "/api/auth/webauthn/register/complete"
     },
     {
      "func": "webauthn_login_begin",
-     "line": 1185,
+     "line": 1157,
      "method": "POST",
      "path": "/api/auth/webauthn/login/begin"
     },
     {
      "func": "webauthn_login_complete",
-     "line": 1252,
+     "line": 1224,
      "method": "POST",
      "path": "/api/auth/webauthn/login/complete"
     },
     {
      "func": "webauthn_credentials_list",
-     "line": 1359,
+     "line": 1331,
      "method": "GET",
      "path": "/api/auth/webauthn/credentials"
     },
     {
      "func": "webauthn_credential_rename",
-     "line": 1386,
+     "line": 1358,
      "method": "PATCH",
      "path": "/api/auth/webauthn/credentials/{cred_id}"
     },
     {
      "func": "webauthn_credential_delete",
-     "line": 1410,
+     "line": 1382,
      "method": "DELETE",
      "path": "/api/auth/webauthn/credentials/{cred_id}"
     },
     {
      "func": "auth_logout",
-     "line": 1430,
+     "line": 1402,
      "method": "POST",
      "path": "/api/auth/logout"
     },
     {
      "func": "auth_me",
-     "line": 1450,
+     "line": 1422,
      "method": "GET",
      "path": "/api/auth/me"
     },
     {
      "func": "change_password",
-     "line": 1476,
+     "line": 1448,
      "method": "PATCH",
      "path": "/api/auth/change-password"
     },
     {
      "func": "list_users",
-     "line": 1517,
+     "line": 1489,
      "method": "GET",
      "path": "/api/users"
     },
     {
      "func": "create_user",
-     "line": 1554,
+     "line": 1526,
      "method": "POST",
      "path": "/api/users"
     },
     {
      "func": "update_user",
-     "line": 1620,
+     "line": 1592,
      "method": "PUT",
      "path": "/api/users/{user_id}"
     },
     {
      "func": "get_user_privacy_ack",
-     "line": 1703,
+     "line": 1675,
      "method": "GET",
      "path": "/api/users/{user_id}/privacy-notice"
     },
     {
      "func": "ack_user_privacy_notice",
-     "line": 1710,
+     "line": 1682,
      "method": "POST",
      "path": "/api/users/{user_id}/privacy-notice/ack"
     },
     {
      "func": "delete_user",
-     "line": 1727,
+     "line": 1699,
      "method": "DELETE",
      "path": "/api/users/{user_id}"
     },
     {
      "func": "toggle_user_active",
-     "line": 1767,
+     "line": 1734,
      "method": "PATCH",
      "path": "/api/users/{user_id}/active"
     },
     {
      "func": "users_sales_contact",
-     "line": 1791,
+     "line": 1758,
      "method": "GET",
      "path": "/api/users/sales-contact"
     },
     {
      "func": "users_selectable",
-     "line": 1808,
+     "line": 1775,
      "method": "GET",
      "path": "/api/users/selectable"
     },
     {
      "func": "verify_unlock",
-     "line": 1821,
+     "line": 1788,
      "method": "POST",
      "path": "/api/auth/verify-unlock"
     },
     {
      "func": "set_unlock_password",
-     "line": 1841,
+     "line": 1808,
      "method": "PATCH",
      "path": "/api/users/{user_id}/unlock-password"
     },
     {
      "func": "verify_daily_task_unlock",
-     "line": 1870,
+     "line": 1837,
      "method": "POST",
      "path": "/api/auth/verify-daily-task-unlock"
     },
     {
      "func": "set_daily_task_password",
-     "line": 1889,
+     "line": 1856,
      "method": "PATCH",
      "path": "/api/users/{user_id}/daily-task-password"
     }
@@ -23617,9 +22747,6 @@
     "helper:email_notify",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -23906,9 +23033,6 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -24065,9 +23189,6 @@
     "helper:financial_mask",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:list_catalog",
     "helper:list_pref_policy",
     "helper:mail_types",
@@ -24224,9 +23345,6 @@
     "helper:field_catalog",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:list_catalog",
     "helper:list_pref_policy",
     "helper:mail_types",
@@ -24282,25 +23400,25 @@
    "routes": [
     {
      "func": "pending_changes",
-     "line": 543,
+     "line": 539,
      "method": "GET",
      "path": "/api/def-pipeline/pending"
     },
     {
      "func": "approve_change",
-     "line": 562,
+     "line": 558,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/approve"
     },
     {
      "func": "activate_change",
-     "line": 578,
+     "line": 574,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/activate"
     },
     {
      "func": "cancel_change",
-     "line": 603,
+     "line": 599,
      "method": "POST",
      "path": "/api/def-pipeline/changes/{change_id}/cancel"
     }
@@ -24390,9 +23508,6 @@
     "helper:field_catalog",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:list_catalog",
     "helper:list_pref_policy",
     "helper:mail_types",
@@ -24625,7 +23740,6 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
-    "helper:client_ip",
     "helper:config_ledger",
     "helper:display_labels",
     "helper:duty_roles",
@@ -24651,7 +23765,6 @@
    "imports": [
     "core:db",
     "helper:auth",
-    "helper:client_ip",
     "helper:duty_roles",
     "helper:module_registry"
    ],
@@ -24661,61 +23774,61 @@
    "routes": [
     {
      "func": "get_roles",
-     "line": 54,
+     "line": 52,
      "method": "GET",
      "path": "/api/duty-roles"
     },
     {
      "func": "create_role",
-     "line": 68,
+     "line": 66,
      "method": "POST",
      "path": "/api/duty-roles"
     },
     {
      "func": "update_role",
-     "line": 76,
+     "line": 74,
      "method": "PUT",
      "path": "/api/duty-roles/{role_id}"
     },
     {
      "func": "get_users",
-     "line": 84,
+     "line": 82,
      "method": "GET",
      "path": "/api/duty-roles/users"
     },
     {
      "func": "preview",
-     "line": 99,
+     "line": 97,
      "method": "POST",
      "path": "/api/duty-roles/preview"
     },
     {
      "func": "bind",
-     "line": 112,
+     "line": 110,
      "method": "POST",
      "path": "/api/duty-roles/bindings"
     },
     {
      "func": "unbind",
-     "line": 120,
+     "line": 118,
      "method": "POST",
      "path": "/api/duty-roles/bindings/remove"
     },
     {
      "func": "subtract",
-     "line": 128,
+     "line": 126,
      "method": "POST",
      "path": "/api/duty-roles/subtracts"
     },
     {
      "func": "unsubtract",
-     "line": 136,
+     "line": 134,
      "method": "POST",
      "path": "/api/duty-roles/subtracts/remove"
     },
     {
      "func": "get_changes",
-     "line": 144,
+     "line": 142,
      "method": "GET",
      "path": "/api/duty-roles/changes"
     }
@@ -24777,9 +23890,6 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:export_templates",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -25011,9 +24121,6 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -25149,8 +24256,7 @@
    ],
    "imports": [
     "helper:auth",
-    "helper:licensing",
-    "plat:registry"
+    "helper:licensing"
    ],
    "kind": "router",
    "path": "backend/routers/licensing.py",
@@ -25158,7 +24264,7 @@
    "routes": [
     {
      "func": "license_status",
-     "line": 41,
+     "line": 20,
      "method": "GET",
      "path": "/api/license/status"
     }
@@ -25404,9 +24510,6 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:google_calendar",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -25520,9 +24623,6 @@
     "helper:duty_roles",
     "helper:email_notify",
     "helper:geo",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:map_overlays",
     "helper:module_registry",
@@ -25646,11 +24746,6 @@
     "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
-    "helper:license_alerts",
-    "helper:licensing",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -25854,9 +24949,6 @@
     "helper:email_notify",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -26271,9 +25363,6 @@
     "helper:display_labels",
     "helper:duty_roles",
     "helper:email_notify",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -26400,9 +25489,6 @@
     "helper:doc_template",
     "helper:duty_roles",
     "helper:email_notify",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
@@ -26518,9 +25604,6 @@
     "helper:export_templates",
     "helper:formula",
     "helper:legal_params",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:menu_builder",
     "helper:module_registry",
@@ -26937,7 +26020,6 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
-    "helper:client_ip",
     "helper:config_ledger",
     "helper:display_labels",
     "helper:duty_roles",
@@ -26963,7 +26045,6 @@
    "imports": [
     "core:db",
     "helper:auth",
-    "helper:client_ip",
     "helper:config_ledger",
     "helper:settings_groups",
     "helper:settings_registry",
@@ -26978,97 +26059,97 @@
    "routes": [
     {
      "func": "list_groups",
-     "line": 72,
+     "line": 71,
      "method": "GET",
      "path": "/api/settings-center/groups"
     },
     {
      "func": "get_group",
-     "line": 96,
+     "line": 95,
      "method": "GET",
      "path": "/api/settings-center/groups/{group}"
     },
     {
      "func": "save_group",
-     "line": 116,
+     "line": 115,
      "method": "POST",
      "path": "/api/settings-center/groups/{group}"
     },
     {
      "func": "preview_group",
-     "line": 147,
+     "line": 146,
      "method": "POST",
      "path": "/api/settings-center/groups/{group}/preview"
     },
     {
      "func": "impact_group",
-     "line": 157,
+     "line": 156,
      "method": "POST",
      "path": "/api/settings-center/groups/{group}/impact"
     },
     {
      "func": "reset_group",
-     "line": 167,
+     "line": 166,
      "method": "POST",
      "path": "/api/settings-center/groups/{group}/reset"
     },
     {
      "func": "group_versions",
-     "line": 200,
+     "line": 199,
      "method": "GET",
      "path": "/api/settings-center/groups/{group}/versions"
     },
     {
      "func": "group_diff",
-     "line": 216,
+     "line": 215,
      "method": "GET",
      "path": "/api/settings-center/groups/{group}/diff"
     },
     {
      "func": "restore_group",
-     "line": 233,
+     "line": 232,
      "method": "POST",
      "path": "/api/settings-center/groups/{group}/restore/{version}"
     },
     {
      "func": "public_values",
-     "line": 271,
+     "line": 270,
      "method": "GET",
      "path": "/api/settings-center/public"
     },
     {
      "func": "list_pending",
-     "line": 289,
+     "line": 288,
      "method": "GET",
      "path": "/api/settings-center/pending"
     },
     {
      "func": "cancel_pending",
-     "line": 313,
+     "line": 312,
      "method": "POST",
      "path": "/api/settings-center/pending/{change_id}/cancel"
     },
     {
      "func": "approve_pending",
-     "line": 343,
+     "line": 342,
      "method": "POST",
      "path": "/api/settings-center/pending/{change_id}/approve"
     },
     {
      "func": "list_profiles",
-     "line": 377,
+     "line": 376,
      "method": "GET",
      "path": "/api/settings-center/profiles"
     },
     {
      "func": "preview_profile",
-     "line": 393,
+     "line": 392,
      "method": "GET",
      "path": "/api/settings-center/profiles/{name}/preview"
     },
     {
      "func": "apply_profile",
-     "line": 401,
+     "line": 400,
      "method": "POST",
      "path": "/api/settings-center/profiles/{name}/apply"
     }
@@ -27192,7 +26273,6 @@
    "api_prefixes": [
     "/api/audit-log",
     "/api/edit-presence",
-    "/api/line",
     "/api/notifications",
     "/api/online-users",
     "/api/settings",
@@ -27223,14 +26303,7 @@
     "helper:export_templates",
     "helper:geo",
     "helper:google_calendar",
-    "helper:heartbeat_status",
-    "helper:idempotency",
-    "helper:license_alerts",
     "helper:licensing",
-    "helper:line_login",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:module_switches",
@@ -27283,13 +26356,7 @@
     "helper:errors",
     "helper:geo",
     "helper:google_calendar",
-    "helper:heartbeat_status",
-    "helper:idempotency",
     "helper:licensing",
-    "helper:line_login",
-    "helper:line_notify",
-    "helper:line_quota",
-    "helper:line_recipients",
     "helper:mail_types",
     "helper:module_registry",
     "helper:module_switches",
@@ -27310,559 +26377,475 @@
    "routes": [
     {
      "func": "get_approval_flow_settings",
-     "line": 106,
+     "line": 105,
      "method": "GET",
      "path": "/api/settings/approval-flow"
     },
     {
      "func": "set_approval_flow_settings",
-     "line": 121,
+     "line": 120,
      "method": "PUT",
      "path": "/api/settings/approval-flow"
     },
     {
      "func": "get_approval_doc_types",
-     "line": 164,
+     "line": 163,
      "method": "GET",
      "path": "/api/settings/approval-doc-types"
     },
     {
      "func": "get_approval_flow_scope",
-     "line": 171,
+     "line": 170,
      "method": "GET",
      "path": "/api/settings/approval-flow-scope"
     },
     {
      "func": "set_approval_flow_scope",
-     "line": 178,
+     "line": 177,
      "method": "PUT",
      "path": "/api/settings/approval-flow-scope"
     },
     {
      "func": "get_approval_flow_for_doc_type",
-     "line": 206,
+     "line": 205,
      "method": "GET",
      "path": "/api/settings/approval-flow/{doc_type}"
     },
     {
      "func": "set_approval_flow_for_doc_type",
-     "line": 217,
+     "line": 216,
      "method": "PUT",
      "path": "/api/settings/approval-flow/{doc_type}"
     },
     {
      "func": "get_operating_targets",
-     "line": 239,
+     "line": 238,
      "method": "GET",
      "path": "/api/settings/operating-targets"
     },
     {
      "func": "put_operating_targets",
-     "line": 247,
+     "line": 246,
      "method": "PUT",
      "path": "/api/settings/operating-targets"
     },
     {
      "func": "get_monthly_report_recipients",
-     "line": 263,
+     "line": 262,
      "method": "GET",
      "path": "/api/settings/monthly-report-recipients"
     },
     {
      "func": "put_monthly_report_recipients",
-     "line": 269,
+     "line": 268,
      "method": "PUT",
      "path": "/api/settings/monthly-report-recipients"
     },
     {
      "func": "get_my_notifications",
-     "line": 281,
+     "line": 280,
      "method": "GET",
      "path": "/api/notifications/mine"
     },
     {
      "func": "mark_notification_read",
-     "line": 297,
+     "line": 296,
      "method": "PATCH",
      "path": "/api/notifications/{notif_id}/read"
     },
     {
      "func": "mark_all_notifications_read",
-     "line": 310,
+     "line": 309,
      "method": "PATCH",
      "path": "/api/notifications/read-all"
     },
     {
      "func": "audit_module_counts",
-     "line": 340,
+     "line": 339,
      "method": "POST",
      "path": "/api/audit-log/module-counts"
     },
     {
      "func": "list_audit_log",
-     "line": 450,
+     "line": 449,
      "method": "GET",
      "path": "/api/audit-log"
     },
     {
      "func": "audit_log_tree",
-     "line": 515,
+     "line": 514,
      "method": "GET",
      "path": "/api/audit-log/tree"
     },
     {
      "func": "audit_log_failure_summary",
-     "line": 565,
+     "line": 564,
      "method": "GET",
      "path": "/api/audit-log/failures/summary"
     },
     {
      "func": "list_work_logs",
-     "line": 592,
+     "line": 591,
      "method": "GET",
      "path": "/api/work-logs"
     },
     {
      "func": "create_work_log",
-     "line": 675,
+     "line": 674,
      "method": "POST",
      "path": "/api/work-logs"
     },
     {
      "func": "update_work_log",
-     "line": 716,
+     "line": 708,
      "method": "PUT",
      "path": "/api/work-logs/{wid}"
     },
     {
      "func": "delete_work_log",
-     "line": 752,
+     "line": 744,
      "method": "DELETE",
      "path": "/api/work-logs/{wid}"
     },
     {
      "func": "upload_work_log_photos",
-     "line": 779,
+     "line": 771,
      "method": "POST",
      "path": "/api/work-logs/{wid}/photos"
     },
     {
      "func": "delete_work_log_photo",
-     "line": 843,
+     "line": 825,
      "method": "DELETE",
      "path": "/api/work-logs/{wid}/photos/{photo_id}"
     },
     {
      "func": "get_runtime_switches",
-     "line": 1017,
+     "line": 999,
      "method": "GET",
      "path": "/api/system/runtime-switches"
     },
     {
      "func": "list_system_modules",
-     "line": 1117,
+     "line": 1099,
      "method": "GET",
      "path": "/api/system/modules"
     },
     {
      "func": "toggle_system_module",
-     "line": 1131,
+     "line": 1113,
      "method": "PUT",
      "path": "/api/system/modules/{key}"
     },
     {
      "func": "module_availability",
-     "line": 1151,
+     "line": 1133,
      "method": "GET",
      "path": "/api/system/modules/availability"
     },
     {
      "func": "unavailable_module_pages",
-     "line": 1163,
+     "line": 1145,
      "method": "GET",
      "path": "/api/system/modules/unavailable-pages"
     },
     {
      "func": "get_bonus_module_status",
-     "line": 1173,
+     "line": 1155,
      "method": "GET",
      "path": "/api/system/bonus-module-status"
     },
     {
      "func": "get_company_profile",
-     "line": 1634,
+     "line": 1616,
      "method": "GET",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "set_company_profile",
-     "line": 1735,
+     "line": 1717,
      "method": "PUT",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "company_setup_status",
-     "line": 1880,
+     "line": 1862,
      "method": "GET",
      "path": "/api/settings/company-setup/status"
     },
     {
      "func": "get_default_payment_terms",
-     "line": 1931,
+     "line": 1913,
      "method": "GET",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "set_default_payment_terms",
-     "line": 1938,
+     "line": 1920,
      "method": "PUT",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "get_edge_path_setting",
-     "line": 1949,
+     "line": 1931,
      "method": "GET",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "set_edge_path_setting",
-     "line": 1960,
+     "line": 1942,
      "method": "PATCH",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "get_pdf_base_path_setting",
-     "line": 1976,
+     "line": 1958,
      "method": "GET",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "set_pdf_base_path_setting",
-     "line": 1984,
+     "line": 1966,
      "method": "PATCH",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "get_webauthn_config",
-     "line": 2068,
+     "line": 2050,
      "method": "GET",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "set_webauthn_config",
-     "line": 2084,
+     "line": 2066,
      "method": "PATCH",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "get_google_quota_setting",
-     "line": 2154,
+     "line": 2136,
      "method": "GET",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "set_google_quota_setting",
-     "line": 2177,
+     "line": 2159,
      "method": "PUT",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "get_storage_locations",
-     "line": 2239,
+     "line": 2221,
      "method": "GET",
      "path": "/api/settings/storage-locations"
     },
     {
      "func": "set_storage_locations",
-     "line": 2249,
+     "line": 2231,
      "method": "PUT",
      "path": "/api/settings/storage-locations"
     },
     {
      "func": "create_storage_location",
-     "line": 2269,
+     "line": 2251,
      "method": "POST",
      "path": "/api/settings/storage-locations/create"
     },
     {
      "func": "get_backup_retention_setting",
-     "line": 2302,
+     "line": 2284,
      "method": "GET",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "set_backup_retention_setting",
-     "line": 2309,
+     "line": 2291,
      "method": "PATCH",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "get_quote_terms_defaults",
-     "line": 2421,
+     "line": 2403,
      "method": "GET",
      "path": "/api/settings/quote-terms-defaults"
     },
     {
      "func": "get_quote_terms_presets",
-     "line": 2440,
+     "line": 2422,
      "method": "GET",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "set_quote_terms_presets",
-     "line": 2447,
+     "line": 2429,
      "method": "PUT",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "get_cloud_backup_target_setting",
-     "line": 2525,
+     "line": 2507,
      "method": "GET",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_pii_archive_status",
-     "line": 2532,
+     "line": 2514,
      "method": "GET",
      "path": "/api/settings/pii-archive-status"
     },
     {
      "func": "set_cloud_backup_target_setting",
-     "line": 2544,
+     "line": 2526,
      "method": "PUT",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_email_notify",
-     "line": 2580,
+     "line": 2562,
      "method": "GET",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "set_email_notify",
-     "line": 2593,
+     "line": 2575,
      "method": "PUT",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "get_google_calendar",
-     "line": 2618,
+     "line": 2600,
      "method": "GET",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "set_google_calendar",
-     "line": 2656,
+     "line": 2638,
      "method": "PUT",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "test_google_calendar",
-     "line": 2682,
+     "line": 2664,
      "method": "POST",
      "path": "/api/settings/google-calendar/test"
     },
     {
-     "func": "get_line_notify",
-     "line": 2706,
-     "method": "GET",
-     "path": "/api/settings/line-notify"
-    },
-    {
-     "func": "set_line_notify_event_roles",
-     "line": 2729,
-     "method": "PUT",
-     "path": "/api/settings/line-notify/events/{key}/roles"
-    },
-    {
-     "func": "get_line_notify_quota",
-     "line": 2747,
-     "method": "GET",
-     "path": "/api/settings/line-notify/quota"
-    },
-    {
-     "func": "set_line_notify_event",
-     "line": 2755,
-     "method": "PUT",
-     "path": "/api/settings/line-notify/events/{key}"
-    },
-    {
-     "func": "set_line_notify",
-     "line": 2770,
-     "method": "PUT",
-     "path": "/api/settings/line-notify"
-    },
-    {
-     "func": "verify_line_notify",
-     "line": 2830,
-     "method": "POST",
-     "path": "/api/settings/line-notify/verify"
-    },
-    {
-     "func": "line_login_callback",
-     "line": 2871,
-     "method": "GET",
-     "path": "/api/line/callback"
-    },
-    {
-     "func": "get_line_binding",
-     "line": 2881,
-     "method": "GET",
-     "path": "/api/line/binding"
-    },
-    {
-     "func": "get_line_prefs",
-     "line": 2892,
-     "method": "GET",
-     "path": "/api/line/prefs"
-    },
-    {
-     "func": "set_line_pref",
-     "line": 2900,
-     "method": "PUT",
-     "path": "/api/line/prefs/{key}"
-    },
-    {
-     "func": "start_line_binding",
-     "line": 2918,
-     "method": "POST",
-     "path": "/api/line/binding/start"
-    },
-    {
-     "func": "unlink_own_line",
-     "line": 2937,
-     "method": "DELETE",
-     "path": "/api/line/binding"
-    },
-    {
-     "func": "unlink_line_of",
-     "line": 2947,
-     "method": "DELETE",
-     "path": "/api/line/binding/{username}"
-    },
-    {
      "func": "test_email_notify",
-     "line": 2958,
+     "line": 2680,
      "method": "POST",
      "path": "/api/settings/email-notify/test"
     },
     {
      "func": "get_custom_roles",
-     "line": 2986,
+     "line": 2708,
      "method": "GET",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "create_custom_role",
-     "line": 2992,
+     "line": 2714,
      "method": "POST",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "update_custom_role",
-     "line": 3019,
+     "line": 2741,
      "method": "PUT",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "delete_custom_role",
-     "line": 3043,
+     "line": 2765,
      "method": "DELETE",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
-     "func": "get_heartbeat_status",
-     "line": 3068,
-     "method": "GET",
-     "path": "/api/system/heartbeat"
-    },
-    {
      "func": "get_schema_status",
-     "line": 3077,
+     "line": 2790,
      "method": "GET",
      "path": "/api/system/schema-status"
     },
     {
      "func": "get_role_labels",
-     "line": 3107,
+     "line": 2820,
      "method": "GET",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "put_role_labels",
-     "line": 3122,
+     "line": 2835,
      "method": "PUT",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "get_webauthn_config_status",
-     "line": 3137,
+     "line": 2850,
      "method": "GET",
      "path": "/api/system/webauthn-config-status"
     },
     {
      "func": "list_online_users",
-     "line": 3170,
+     "line": 2883,
      "method": "GET",
      "path": "/api/online-users"
     },
     {
      "func": "user_activity_stats",
-     "line": 3214,
+     "line": 2927,
      "method": "GET",
      "path": "/api/user-activity"
     },
     {
      "func": "user_activity_trail",
-     "line": 3288,
+     "line": 3001,
      "method": "GET",
      "path": "/api/user-activity/trail"
     },
     {
      "func": "edit_presence_heartbeat",
-     "line": 3423,
+     "line": 3136,
      "method": "POST",
      "path": "/api/edit-presence"
     },
     {
      "func": "edit_presence_release",
-     "line": 3454,
+     "line": 3167,
      "method": "DELETE",
      "path": "/api/edit-presence"
     },
     {
      "func": "case_roles_unmapped",
-     "line": 3470,
+     "line": 3183,
      "method": "GET",
      "path": "/api/system/case-roles-unmapped"
     },
     {
      "func": "get_reminder_send_failures",
-     "line": 3511,
+     "line": 3224,
      "method": "GET",
      "path": "/api/settings/reminder-send-failures"
     },
     {
      "func": "get_branding_asset",
-     "line": 3540,
+     "line": 3253,
      "method": "GET",
      "path": "/api/system/branding/{kind}"
     },
     {
      "func": "get_branding_settings",
-     "line": 3579,
+     "line": 3292,
      "method": "GET",
      "path": "/api/settings/branding"
     },
     {
      "func": "upload_branding_asset",
-     "line": 3588,
+     "line": 3301,
      "method": "PUT",
      "path": "/api/settings/branding/{kind}"
     },
     {
      "func": "reset_branding_asset",
-     "line": 3605,
+     "line": 3318,
      "method": "DELETE",
      "path": "/api/settings/branding/{kind}"
     }
@@ -27920,7 +26903,6 @@
     "edit_presence",
     "geocode_cache",
     "geocode_usage",
-    "idempotency_keys",
     "login_rate_limit",
     "module_versions",
     "notifications",
@@ -28222,7 +27204,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3299",
+   "path": "backend/db.py:3217",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -28235,7 +27217,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3312",
+   "path": "backend/db.py:3230",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -28248,7 +27230,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3323",
+   "path": "backend/db.py:3241",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -28261,7 +27243,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3290",
+   "path": "backend/db.py:3208",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -28276,7 +27258,7 @@
    "named_by": [
     "helper:audit"
    ],
-   "path": "backend/db.py:4420",
+   "path": "backend/db.py:4338",
    "readers": [
     "core:archive",
     "mod:accounting/api/accounting_export",
@@ -28302,7 +27284,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:2427",
+   "path": "backend/db.py:2345",
    "readers": [
     "core:archive",
     "helper:tiered_approval",
@@ -28324,7 +27306,7 @@
     "helper:module_registry",
     "router:system"
    ],
-   "path": "backend/db.py:671",
+   "path": "backend/db.py:589",
    "readers": [
     "helper:settings_registry",
     "helper:system_checks",
@@ -28347,7 +27329,6 @@
     "helper:config_ledger",
     "helper:duty_roles",
     "helper:geo",
-    "helper:license_alerts",
     "helper:startup",
     "mod:arap/api/cashier",
     "mod:case/alt_sign",
@@ -28370,7 +27351,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2335",
+   "path": "backend/db.py:2253",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -28383,7 +27364,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2348",
+   "path": "backend/db.py:2266",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -28396,7 +27377,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2359",
+   "path": "backend/db.py:2277",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -28409,7 +27390,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2326",
+   "path": "backend/db.py:2244",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -28425,7 +27406,7 @@
     "core:db",
     "helper:edit_log"
    ],
-   "path": "backend/db.py:5357",
+   "path": "backend/db.py:5275",
    "readers": [
     "core:archive",
     "mod:payroll/api/bonus"
@@ -28439,7 +27420,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:5482",
+   "path": "backend/db.py:5400",
    "readers": [
     "core:archive",
     "mod:payroll/api/bonus",
@@ -28460,7 +27441,7 @@
     "mod:payroll/api/bonus",
     "plat:migrations"
    ],
-   "path": "backend/db.py:5449",
+   "path": "backend/db.py:5367",
    "readers": [
     "core:archive",
     "core:db",
@@ -28479,7 +27460,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4703",
+   "path": "backend/db.py:4621",
    "readers": [
     "core:archive",
     "mod:payroll/bonus_payouts"
@@ -28497,7 +27478,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4687",
+   "path": "backend/db.py:4605",
    "readers": [
     "core:archive",
     "mod:payroll/bonus_correction",
@@ -28520,7 +27501,7 @@
     "mod:case/recycle_adapter",
     "plat:migrations"
    ],
-   "path": "backend/db.py:4669",
+   "path": "backend/db.py:4587",
    "readers": [
     "core:archive",
     "mod:payroll/bonus_deductions",
@@ -28575,7 +27556,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4998",
+   "path": "backend/db.py:4916",
    "readers": [
     "core:archive"
    ],
@@ -28592,7 +27573,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4988",
+   "path": "backend/db.py:4906",
    "readers": [
     "core:archive"
    ],
@@ -28609,7 +27590,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4758",
+   "path": "backend/db.py:4676",
    "readers": [
     "core:archive",
     "mod:payroll/api/bonus"
@@ -28623,7 +27604,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:5417",
+   "path": "backend/db.py:5335",
    "readers": [
     "core:archive",
     "mod:payroll/api/bonus"
@@ -28639,7 +27620,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:5438",
+   "path": "backend/db.py:5356",
    "readers": [
     "core:archive"
    ],
@@ -28654,7 +27635,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:5431",
+   "path": "backend/db.py:5349",
    "readers": [
     "core:archive"
    ],
@@ -28670,7 +27651,7 @@
     "mod:case/recycle_adapter",
     "plat:migrations"
    ],
-   "path": "backend/db.py:2177",
+   "path": "backend/db.py:2095",
    "readers": [
     "core:archive",
     "core:pdf_gen"
@@ -28691,7 +27672,7 @@
     "mod:case/recycle_adapter",
     "plat:migrations"
    ],
-   "path": "backend/db.py:2124",
+   "path": "backend/db.py:2042",
    "readers": [
     "core:archive",
     "mod:case/attachments"
@@ -28711,7 +27692,7 @@
     "mod:case/attachments",
     "plat:migrations"
    ],
-   "path": "backend/db.py:3566",
+   "path": "backend/db.py:3484",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -28818,7 +27799,7 @@
    "named_by": [
     "plat:migrations"
    ],
-   "path": "backend/db.py:1837",
+   "path": "backend/db.py:1755",
    "readers": [
     "core:archive",
     "core:pdf_gen"
@@ -28827,7 +27808,6 @@
    "tables_w": [],
    "writers": [
     "core:db",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/recycle_adapter"
    ]
@@ -28840,12 +27820,11 @@
     "mod:case/recycle_adapter",
     "plat:migrations"
    ],
-   "path": "backend/db.py:1819",
+   "path": "backend/db.py:1737",
    "readers": [
     "core:archive",
     "core:pdf_gen",
     "helper:google_calendar",
-    "mod:case/api/field_cases",
     "mod:case/case_deadlines",
     "mod:case/recognition",
     "mod:case/recycle_adapter",
@@ -28855,7 +27834,6 @@
    "tables_w": [],
    "writers": [
     "core:db",
-    "mod:case/api/quotation_stages",
     "mod:case/api/quotations",
     "mod:case/case_stage_tasks"
    ]
@@ -28872,12 +27850,11 @@
     "mod:case/recycle_adapter",
     "plat:migrations"
    ],
-   "path": "backend/db.py:1560",
+   "path": "backend/db.py:1478",
    "readers": [
     "core:archive",
     "core:pdf_gen",
     "mod:analytics/api/dashboard",
-    "mod:case/api/field_cases",
     "mod:case/attachments",
     "router:item_reads"
    ],
@@ -28898,7 +27875,7 @@
     "plat:migrations",
     "router:map_points"
    ],
-   "path": "backend/db.py:3687",
+   "path": "backend/db.py:3605",
    "readers": [
     "core:archive",
     "mod:case/api/quotations",
@@ -28960,7 +27937,7 @@
     "mod:subcontract/attachments",
     "plat:migrations"
    ],
-   "path": "backend/db.py:821",
+   "path": "backend/db.py:739",
    "readers": [
     "core:archive",
     "core:db",
@@ -28993,7 +27970,7 @@
     "mod:case/recycle_adapter",
     "plat:migrations"
    ],
-   "path": "backend/db.py:1660",
+   "path": "backend/db.py:1578",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -29027,7 +28004,7 @@
     "plat:migrations",
     "router:map_points"
    ],
-   "path": "backend/db.py:756",
+   "path": "backend/db.py:674",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -29214,7 +28191,7 @@
     "router:map_points",
     "router:search"
    ],
-   "path": "backend/db.py:636",
+   "path": "backend/db.py:554",
    "readers": [
     "core:archive",
     "mod:analytics/api/dashboard",
@@ -29235,7 +28212,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:860",
+   "path": "backend/db.py:778",
    "readers": [
     "core:archive",
     "core:db",
@@ -29255,7 +28232,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:1486",
+   "path": "backend/db.py:1404",
    "readers": [
     "core:archive"
    ],
@@ -29273,7 +28250,7 @@
     "mod:daily_tasks/__init__",
     "plat:migrations"
    ],
-   "path": "backend/db.py:842",
+   "path": "backend/db.py:760",
    "readers": [
     "core:archive",
     "core:db",
@@ -29300,13 +28277,12 @@
     "mod:case/api/expense_form_pdf",
     "mod:case/api/quotations"
    ],
-   "path": "backend/db.py:1775",
+   "path": "backend/db.py:1693",
    "readers": [
     "core:archive",
     "helper:email_notify",
     "helper:prefill_sources",
     "helper:tiered_approval",
-    "mod:analytics/api/report_templates",
     "mod:analytics/api/reports",
     "mod:case/api/case_action_items",
     "mod:case/api/quotations",
@@ -29344,7 +28320,7 @@
    "named_by": [
     "plat:migrations"
    ],
-   "path": "backend/db.py:1521",
+   "path": "backend/db.py:1439",
    "readers": [
     "core:archive",
     "helper:audit",
@@ -29408,7 +28384,7 @@
     "mod:crm/attachments",
     "plat:migrations"
    ],
-   "path": "backend/db.py:1536",
+   "path": "backend/db.py:1454",
    "readers": [
     "core:archive",
     "mod:analytics/api/dashboard",
@@ -29443,12 +28419,10 @@
    "named_by": [
     "core:trail"
    ],
-   "path": "backend/db.py:1767",
+   "path": "backend/db.py:1685",
    "readers": [
     "core:archive",
     "helper:tiered_approval",
-    "mod:analytics/api/report_templates",
-    "mod:case/api/quotations",
     "router:auth"
    ],
    "tables_r": [],
@@ -29483,7 +28457,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3858",
+   "path": "backend/db.py:3776",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -29496,7 +28470,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2765",
+   "path": "backend/db.py:2683",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -29509,7 +28483,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2793",
+   "path": "backend/db.py:2711",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -29522,7 +28496,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2778",
+   "path": "backend/db.py:2696",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -29609,7 +28583,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3389",
+   "path": "backend/db.py:3307",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -29622,7 +28596,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3402",
+   "path": "backend/db.py:3320",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -29635,7 +28609,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3413",
+   "path": "backend/db.py:3331",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -29648,7 +28622,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3380",
+   "path": "backend/db.py:3298",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -29663,7 +28637,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4200",
+   "path": "backend/db.py:4118",
    "readers": [
     "router:map_points"
    ],
@@ -29680,7 +28654,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4320",
+   "path": "backend/db.py:4238",
    "readers": [
     "core:archive"
    ],
@@ -30115,21 +29089,6 @@
     "mod:accounting/ledger/withholding"
    ]
   },
-  "table:idempotency_keys": {
-   "api_prefixes": [],
-   "imports": [],
-   "kind": "table",
-   "named_by": [
-    "core:db"
-   ],
-   "path": "backend/core/migrations.py:723",
-   "readers": [],
-   "tables_r": [],
-   "tables_w": [],
-   "writers": [
-    "helper:idempotency"
-   ]
-  },
   "table:invoice_vouchers": {
    "api_prefixes": [],
    "imports": [],
@@ -30146,7 +29105,7 @@
     "plat:migrations",
     "router:definitions"
    ],
-   "path": "backend/db.py:1711",
+   "path": "backend/db.py:1629",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -30168,7 +29127,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4529",
+   "path": "backend/db.py:4447",
    "readers": [
     "core:archive"
    ],
@@ -30244,7 +29203,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:1259",
+   "path": "backend/db.py:1177",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -30260,7 +29219,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:1024",
+   "path": "backend/db.py:942",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -30276,7 +29235,7 @@
     "helper:duty_roles",
     "helper:module_registry"
    ],
-   "path": "backend/db.py:871",
+   "path": "backend/db.py:789",
    "readers": [
     "core:archive",
     "core:db"
@@ -30293,7 +29252,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3212",
+   "path": "backend/db.py:3130",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -30306,7 +29265,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3225",
+   "path": "backend/db.py:3143",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -30319,7 +29278,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3236",
+   "path": "backend/db.py:3154",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -30332,7 +29291,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3203",
+   "path": "backend/db.py:3121",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -30345,7 +29304,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2841",
+   "path": "backend/db.py:2759",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -30358,7 +29317,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2850",
+   "path": "backend/db.py:2768",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -30371,7 +29330,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2866",
+   "path": "backend/db.py:2784",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -30387,7 +29346,7 @@
     "core:db",
     "plat:migrations"
    ],
-   "path": "backend/db.py:2293",
+   "path": "backend/db.py:2211",
    "readers": [
     "core:archive"
    ],
@@ -30405,7 +29364,7 @@
     "core:db",
     "core:trail"
    ],
-   "path": "backend/db.py:690",
+   "path": "backend/db.py:608",
    "readers": [
     "core:archive",
     "helper:notify_actions"
@@ -30468,7 +29427,7 @@
     "router:export_templates",
     "router:search"
    ],
-   "path": "backend/db.py:656",
+   "path": "backend/db.py:574",
    "readers": [
     "core:archive",
     "mod:analytics/api/reports",
@@ -30493,7 +29452,7 @@
     "mod:case/recycle_adapter",
     "plat:migrations"
    ],
-   "path": "backend/db.py:1982",
+   "path": "backend/db.py:1900",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -30531,7 +29490,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:802",
+   "path": "backend/db.py:720",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -30550,7 +29509,7 @@
     "helper:storage_slots",
     "plat:migrations"
    ],
-   "path": "backend/db.py:779",
+   "path": "backend/db.py:697",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -30660,7 +29619,7 @@
     "core:db",
     "plat:migrations"
    ],
-   "path": "backend/db.py:714",
+   "path": "backend/db.py:632",
    "readers": [
     "core:archive",
     "core:db"
@@ -30677,7 +29636,7 @@
     "core:db",
     "plat:migrations"
    ],
-   "path": "backend/db.py:730",
+   "path": "backend/db.py:648",
    "readers": [
     "core:archive"
    ],
@@ -30697,7 +29656,7 @@
     "plat:paths",
     "router:system"
    ],
-   "path": "backend/db.py:701",
+   "path": "backend/db.py:619",
    "readers": [
     "core:archive",
     "core:db",
@@ -30715,7 +29674,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4028",
+   "path": "backend/db.py:3946",
    "readers": [
     "core:archive"
    ],
@@ -30743,7 +29702,7 @@
     "plat:migrations",
     "router:search"
    ],
-   "path": "backend/db.py:584",
+   "path": "backend/db.py:502",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -30763,7 +29722,6 @@
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
-    "mod:case/api/field_cases",
     "mod:case/api/material_approvals",
     "mod:case/api/material_changes",
     "mod:case/api/material_orders",
@@ -30821,7 +29779,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:607",
+   "path": "backend/db.py:525",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -30858,7 +29816,7 @@
     "core:archive",
     "plat:upgrade"
    ],
-   "path": "backend/db.py:578",
+   "path": "backend/db.py:496",
    "readers": [
     "plat:upgrade",
     "router:system"
@@ -30891,11 +29849,10 @@
    "named_by": [
     "core:archive"
    ],
-   "path": "backend/db.py:628",
+   "path": "backend/db.py:546",
    "readers": [
     "helper:audit",
     "helper:auth",
-    "helper:line_login",
     "router:system"
    ],
    "tables_r": [],
@@ -30919,7 +29876,7 @@
     "plat:migrations",
     "router:map_points"
    ],
-   "path": "backend/db.py:3015",
+   "path": "backend/db.py:2933",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -30944,7 +29901,7 @@
    "named_by": [
     "plat:migrations"
    ],
-   "path": "backend/db.py:2595",
+   "path": "backend/db.py:2513",
    "readers": [
     "core:archive",
     "mod:supply/gl_events"
@@ -30965,7 +29922,7 @@
     "mod:case/recycle_adapter",
     "plat:migrations"
    ],
-   "path": "backend/db.py:3170",
+   "path": "backend/db.py:3088",
    "readers": [
     "core:archive",
     "core:db",
@@ -30996,7 +29953,7 @@
     "router:map_points",
     "router:search"
    ],
-   "path": "backend/db.py:646",
+   "path": "backend/db.py:564",
    "readers": [
     "core:archive",
     "mod:case/api/material_payments",
@@ -31015,7 +29972,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2930",
+   "path": "backend/db.py:2848",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -31028,7 +29985,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2943",
+   "path": "backend/db.py:2861",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -31041,7 +29998,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2954",
+   "path": "backend/db.py:2872",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -31054,7 +30011,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2921",
+   "path": "backend/db.py:2839",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -31071,7 +30028,7 @@
     "mod:subcontract/api/contractor_vouchers",
     "plat:migrations"
    ],
-   "path": "backend/db.py:684",
+   "path": "backend/db.py:602",
    "readers": [
     "core:archive",
     "helper:auth",
@@ -31121,7 +30078,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:2641",
+   "path": "backend/db.py:2559",
    "readers": [
     "core:archive"
    ],
@@ -31136,7 +30093,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:4102",
+   "path": "backend/db.py:4020",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -31152,7 +30109,7 @@
    "named_by": [
     "plat:migrations"
    ],
-   "path": "backend/db.py:4093",
+   "path": "backend/db.py:4011",
    "readers": [
     "core:archive"
    ],
@@ -31171,7 +30128,7 @@
     "core:db",
     "plat:migrations"
    ],
-   "path": "backend/db.py:4065",
+   "path": "backend/db.py:3983",
    "readers": [
     "core:archive",
     "mod:tender_radar/listing",
@@ -31191,7 +30148,7 @@
     "plat:migrations",
     "router:map_points"
    ],
-   "path": "backend/db.py:4079",
+   "path": "backend/db.py:3997",
    "readers": [
     "core:archive",
     "mod:tender_radar/listing",
@@ -31233,7 +30190,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3758",
+   "path": "backend/db.py:3676",
    "readers": [
     "router:system"
    ],
@@ -31285,7 +30242,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:2735",
+   "path": "backend/db.py:2653",
    "readers": [
     "router:system_hub"
    ],
@@ -31336,7 +30293,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3796",
+   "path": "backend/db.py:3714",
    "readers": [
     "router:system"
    ],
@@ -31388,7 +30345,7 @@
     "router:mail_settings",
     "router:system"
    ],
-   "path": "backend/db.py:612",
+   "path": "backend/db.py:530",
    "readers": [
     "core:archive",
     "core:main",
@@ -31403,8 +30360,6 @@
     "helper:email_notify",
     "helper:export_templates",
     "helper:google_calendar",
-    "helper:line_login",
-    "helper:line_recipients",
     "helper:menu_builder",
     "helper:notify_actions",
     "helper:payable_due_core",
@@ -31466,7 +30421,7 @@
     "plat:migrations",
     "router:map_points"
    ],
-   "path": "backend/db.py:807",
+   "path": "backend/db.py:725",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -31496,7 +30451,7 @@
     "mod:accounting/attachments_catalog",
     "mod:accounting/voucher_attachments"
    ],
-   "path": "backend/db.py:5228",
+   "path": "backend/db.py:5146",
    "readers": [
     "core:archive",
     "mod:accounting/attachments_catalog",
@@ -31517,7 +30472,7 @@
     "helper:edit_log",
     "mod:accounting/api/vouchers"
    ],
-   "path": "backend/db.py:5718",
+   "path": "backend/db.py:5636",
    "readers": [
     "core:archive",
     "mod:accounting/api/vouchers"
@@ -31531,7 +30486,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:5686",
+   "path": "backend/db.py:5604",
    "readers": [
     "core:archive",
     "core:db",
@@ -31560,7 +30515,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:5737",
+   "path": "backend/db.py:5655",
    "readers": [
     "core:archive"
    ],
@@ -31575,7 +30530,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:5730",
+   "path": "backend/db.py:5648",
    "readers": [
     "core:archive"
    ],
@@ -31600,7 +30555,7 @@
     "mod:payroll/api/bonus_correction",
     "plat:migrations"
    ],
-   "path": "backend/db.py:5682",
+   "path": "backend/db.py:5600",
    "readers": [
     "mod:accounting/api/vouchers"
    ],
@@ -31615,7 +30570,7 @@
    "named_by": [
     "plat:migrations"
    ],
-   "path": "backend/db.py:5640",
+   "path": "backend/db.py:5558",
    "readers": [
     "core:archive",
     "core:db",
@@ -31649,7 +30604,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2494",
+   "path": "backend/db.py:2412",
    "readers": [
     "core:archive",
     "router:system"
@@ -31668,7 +30623,7 @@
    "named_by": [
     "plat:migrations"
    ],
-   "path": "backend/db.py:745",
+   "path": "backend/db.py:663",
    "readers": [
     "core:archive",
     "core:pdf_gen",

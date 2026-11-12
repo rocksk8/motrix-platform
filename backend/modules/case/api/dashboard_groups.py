@@ -19,8 +19,10 @@ HREF = "pages/case-management.html"
 _TAG = "已成案"
 
 
-def _n(user: dict, **flags) -> int:
-    return int(list_quotations_for(user, deal_tag=_TAG, limit=0, **flags).get("total") or 0)
+def _n(user: dict, mine: int = 0, stage_overdue: int = 0, recv_overdue: int = 0) -> int:
+    """明列關鍵字（棘輪禁止用 ** 傳參數）；全部照原樣交給清單本體，不改它的語意。"""
+    res = list_quotations_for(user, deal_tag=_TAG, limit=0, mine=mine, stage_overdue=stage_overdue, recv_overdue=recv_overdue)
+    return int(res.get("total") or 0)
 
 
 def mine_groups(user: dict) -> list:
