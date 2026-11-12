@@ -53,6 +53,12 @@
   ],
   "s": 200
  },
+ "POST /api/customers/import-rows": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
+ },
  "POST /api/ledger/roles/pending/{pid}/approve": {
   "k": [
    "detail"
@@ -113,6 +119,12 @@
    "warnings"
   ],
   "s": 200
+ },
+ "POST /api/parts/import-rows": {
+  "k": [
+   "detail"
+  ],
+  "s": 400
  },
  "POST /api/permmatrix/pending/{pid}/approve": {
   "k": [

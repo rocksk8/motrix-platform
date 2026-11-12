@@ -1,12 +1,12 @@
 {
  "summary": {
-  "endpoints_total": 933,
-  "endpoints_api": 929,
-  "write_total": 502,
-  "write_api": 502,
+  "endpoints_total": 935,
+  "endpoints_api": 931,
+  "write_total": 504,
+  "write_api": 504,
   "get_api": 427,
-  "distinct_paths_api": 787,
-  "write_with_body_api": 368,
+  "distinct_paths_api": 789,
+  "write_with_body_api": 370,
   "write_with_path_param_api": 360
  },
  "select_star": {
@@ -3183,6 +3183,11 @@
    "pp": 0,
    "body": true
   },
+  "POST /api/customers/import-rows": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
   "POST /api/customers/{cid}/contacts/{ctid}/privacy-notice/ack": {
    "w": true,
    "pp": 2,
@@ -3604,6 +3609,11 @@
    "body": true
   },
   "POST /api/parts": {
+   "w": true,
+   "pp": 0,
+   "body": true
+  },
+  "POST /api/parts/import-rows": {
    "w": true,
    "pp": 0,
    "body": true
