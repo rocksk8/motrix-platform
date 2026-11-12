@@ -1,5 +1,9 @@
 # 外包工班 更新紀錄
 
+## 1.1.44（next，未取號）— 2026-11-13（fix/mobile-cases-layout-v2；手機／平板 UI：頂欄頭像個人選單、手機主選單抽屜）
+- 前端：`pages/contractor-voucher-approval-settings.html` （「此設定已搬移」頁）載入 Alpine，頂欄通知鈴才會正確顯示／隱藏（少了它手機頂欄被撐寬）；其餘為全站頂欄／主選單樣式（核心）。不動 API／資料／權限判斷。
+- 測試：`tests/test_e2e_mobile_nav_cases_2026_11_13.py`（真瀏覽器：頂欄矩陣 375／390／430 × 三種字級 × 深淺色、頭像個人選單 a11y、手機主選單抽屜、徽章形狀）。
+
 ## 1.1.43 — 2026-11-11（feat/ux-navigation-hierarchy；UX 提案批次 1+2「導覽與資訊架構＋視覺層級」；不動 API／資料／權限判斷；L1 介面不變）
 - 前端視覺（D3）：本模組頁面內文字最小 12px（原有 9～11px 一律拉到 12px）；文字色改用語意 token（`--text-secondary` #595959／`--text-dim` #666666／深底 `--text-on-dark-dim` #A3A3A3，在頁底 #F5F4F0 上對比 ≥4.5:1）。只改 CSS 值，不改版面結構、不改 API、資料、權限。規格見 `docs/UI-HEADER-COLOR-SPEC.md`。
 - 測試：`tests/test_e2e_nav_hierarchy_2026_11_11.py`（7 項真瀏覽器：每個舊入口仍可達、群組與報表中心頁籤、權限過濾、頁頭麵包屑）。

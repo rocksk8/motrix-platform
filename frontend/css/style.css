@@ -333,7 +333,9 @@ body {
   border-color: #444;
 }
 
+.topbar__acct { position: relative; display: flex; align-items: center; }
 .topbar__avatar {
+  padding: 0;
   width: 30px; height: 30px;
   border-radius: 50%;
   background: #2A2A2A;
@@ -344,6 +346,24 @@ body {
   font-family: var(--font-en);
   cursor: pointer;
 }
+.topbar__avatar:hover, .topbar__avatar[aria-expanded="true"] { background: var(--sidebar-hover); color: var(--text-on-dark); border-color: #666; }
+.acct__menu {
+  position: absolute; right: 0; top: calc(100% + 8px); min-width: 200px; z-index: 101;
+  background: #fff; color: var(--text-primary); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(0,0,0,.28); padding: 6px 0; font-family: var(--font-zh);
+}
+.acct__menu[hidden] { display: none; }
+.acct__head { display: flex; flex-direction: column; gap: 2px; padding: 8px 16px 10px; border-bottom: 1px solid var(--border-light); }
+.acct__head b { font-size: 14px; font-weight: 600; word-break: break-all; }
+.acct__head span { font-size: 12px; color: var(--text-secondary); }
+.acct__item {
+  display: flex; align-items: center; width: 100%; box-sizing: border-box; min-height: 40px; padding: 8px 16px;
+  border: 0; background: transparent; text-align: left; text-decoration: none; cursor: pointer;
+  font: inherit; font-size: 14px; color: var(--text-primary);
+}
+.acct__item:hover, .acct__item:focus-visible { background: var(--bg-hover, #f3f2ee); outline: none; }
+.acct__item:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.acct__item--out { border-top: 1px solid var(--border-light); margin-top: 4px; color: var(--danger); }
 
 /* ─── SIDEBAR ─── */
 .sidebar {
@@ -1527,7 +1547,10 @@ body.sidebar-lock { overflow: hidden; }
   .topbar__btn { white-space: nowrap; }
   .topbar__logo { padding: 0; width: auto; flex-shrink: 0; }
   .topbar__logo img { height: 22px; }
-  .topbar__divider, .topbar__title, .topbar__avatar { display: none; }
+  .topbar__divider, .topbar__title { display: none; }
+  .topbar__avatar { width: calc(44px / var(--fz, 1)); height: calc(44px / var(--fz, 1)); font-size: 14px; flex: none; }   /* 觸控目標 ≥44px（實際畫面） */
+  .acct__menu { position: fixed; right: 8px; top: calc(var(--topbar-bar-h) + 4px); min-width: 220px; max-width: calc(100vw - 16px); }
+  .acct__item { min-height: calc(44px / var(--fz, 1)); }
   .topbar__right { gap: 8px; flex-shrink: 0; }
   /* 搜尋吃掉剩餘寬度；16px 避免 iOS 聚焦時自動放大 */
   .topbar > div[x-data="globalSearchStore()"] { margin: 0 !important; min-width: 96px; flex: 1 1 96px; }   /* 搜尋框保底 96px：字級放大時不被擠到不能用（L3） */

@@ -431,6 +431,23 @@ if (typeof module !== 'undefined' && module.exports) {
       + '</div>'
     }
 
+    // 頭像個人選單（2026-11-13）：頭像（姓氏圓圈）是按鈕，展開「我的帳號／修改密碼／登出」；頂端顯示姓名＋職務中文名。
+    // 「我的帳號」頁（my-account.html）由另一條線交付：MY_ACCOUNT_READY 為 false 時不顯示該項（避免點到 404）；頁面上線後改 true，
+    // 屆時「修改密碼」改指向 my-account.html#security。
+    var MY_ACCOUNT_READY = false
+    function buildAcctMenu(cpHref) {
+      var items = []
+      if (MY_ACCOUNT_READY) items.push('<a role="menuitem" tabindex="-1" class="acct__item" href="' + (inPg ? 'my-account.html' : 'pages/my-account.html') + '">我的帳號</a>')
+      items.push('<a role="menuitem" tabindex="-1" class="acct__item" href="' + cpHref + '">修改密碼</a>')
+      items.push('<button type="button" role="menuitem" tabindex="-1" class="acct__item acct__item--out" onclick="motrixLogout()">登出</button>')
+      return '<div class="topbar__acct" id="tb-acct">'
+        + '<button type="button" class="topbar__avatar" id="tb-avatar" aria-haspopup="menu" aria-expanded="false" aria-controls="tb-acct-menu" aria-label="個人選單（' + esc(dn) + '）" title="個人選單">' + esc(av) + '</button>'
+        + '<div class="acct__menu" id="tb-acct-menu" role="menu" aria-label="個人選單" hidden>'
+        + '<div class="acct__head" role="presentation"><b>' + esc(dn) + '</b><span>' + esc(_roleLabel(role)) + '</span></div>'
+        + items.join('')
+        + '</div></div>'
+    }
+
     el.innerHTML =
       '<button class="sidebar-toggle" id="sidebar-toggle" aria-label="選單" title="選單">'
       + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M4 6h16M4 12h16M4 18h16"/></svg>'
@@ -454,15 +471,14 @@ if (typeof module !== 'undefined' && module.exports) {
       + buildThemeToggle()
       + buildOnlineWidget()
       + '<button type="button" id="ux-help-btn" class="topbar__btn" data-testid="ux-help-btn" aria-haspopup="dialog" aria-expanded="false" title="這一頁怎麼用" aria-label="這一頁怎麼用" style="color:#888;border-color:#333;font-size:12px;font-weight:700;padding:5px 9px">？</button>'
-      + '<a href="' + cpHref + '" class="topbar__btn" style="text-decoration:none;color:#888;border-color:#333;font-size:12px">修改密碼</a>'
       + '</div>'
-      + '<button class="topbar__btn" onclick="motrixLogout()" style="color:#888;border-color:#333;font-size:12px">登出</button>'
-      + '<div class="topbar__avatar">' + esc(av) + '</div>'
+      + buildAcctMenu(cpHref)
       + '</div>'
 
     // Process Alpine directives in the injected topbar (notifStore x-data)
     if (window.Alpine && window.Alpine.initTree) window.Alpine.initTree(el)
     bindMoreMenu(el)
+    bindAcctMenu(el)
     bindOnlineWidget()
     refreshOnlineWidget()
     if (sa) setInterval(refreshOnlineWidget, 60000)
@@ -486,6 +502,39 @@ if (typeof module !== 'undefined' && module.exports) {
       if (isOpen() && !sec.contains(e.target) && !btn.contains(e.target)) setOpen(false)
     }, true)
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && isOpen()) setOpen(false, true) })
+  }
+
+  // ── 頭像個人選單開關：Esc 收合並把焦點還給頭像、pointerdown 外點收合、↑↓／Home／End 在項目間移動 ──
+  function bindAcctMenu(bar) {
+    var btn = bar.querySelector('#tb-avatar'), menu = bar.querySelector('#tb-acct-menu')
+    if (!btn || !menu) return
+    function items() { return [].slice.call(menu.querySelectorAll('[role="menuitem"]')) }
+    function isOpen() { return !menu.hidden }
+    function setOpen(v, restoreFocus, focusFirst) {
+      menu.hidden = !v
+      btn.setAttribute('aria-expanded', v ? 'true' : 'false')
+      if (v) { var m = bar.querySelector('#tb-more'); bar.classList.remove('tb-more-open'); if (m) m.setAttribute('aria-expanded', 'false') }   // 與「⋯」面板互斥
+      if (v && focusFirst) { var f = items()[0]; if (f) { try { f.focus() } catch (_e) {} } }
+      if (!v && restoreFocus) { try { btn.focus() } catch (_e) {} }
+    }
+    btn.addEventListener('click', function (e) { e.stopPropagation(); setOpen(!isOpen(), false, e.detail === 0) })   // detail===0＝鍵盤觸發 ⇒ 焦點進第一項；滑鼠／觸控不搶焦點
+    document.addEventListener('pointerdown', function (e) {
+      if (isOpen() && !menu.contains(e.target) && !btn.contains(e.target)) setOpen(false)
+    }, true)
+    document.addEventListener('keydown', function (e) {
+      if (!isOpen()) return
+      if (e.key === 'Escape') { setOpen(false, true); return }
+      if (e.key === 'Tab') { setOpen(false); return }
+      var list = items(); if (!list.length) return
+      var i = list.indexOf(document.activeElement)
+      if (e.key === 'ArrowDown') { e.preventDefault(); list[(i + 1) % list.length].focus() }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); list[(i - 1 + list.length) % list.length].focus() }
+      else if (e.key === 'Home') { e.preventDefault(); list[0].focus() }
+      else if (e.key === 'End') { e.preventDefault(); list[list.length - 1].focus() }
+    })
+    // 開「⋯」面板時收起個人選單
+    var more = bar.querySelector('#tb-more')
+    if (more) more.addEventListener('click', function () { if (isOpen()) setOpen(false) })
   }
 
   // ── Sidebar ─────────────────────────────────────────────────────────────────

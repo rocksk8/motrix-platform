@@ -151,7 +151,7 @@ _TB = """() => {
   const bell = q('#app-topbar .topbar__right > div[x-data] > button');
   return {z, vw: innerWidth, docW: document.documentElement.scrollWidth, tbSW: tb.scrollWidth, tbCW: tb.clientWidth,
           more: vis(q('#tb-more')), search: vis(q('#app-topbar input.global-search-input')), bell: vis(bell),
-          lbl: vis(q('#app-topbar .tb-lbl')), logout: vis(q('#app-topbar button[onclick*=motrixLogout]'))};
+          lbl: vis(q('#app-topbar .tb-lbl')), avatar: vis(q('#tb-avatar'))};
 }"""
 
 
@@ -170,12 +170,12 @@ def test_phone_topbar_matrix_fits_and_targets_are_44(live_server, make_user, e2e
         page.wait_for_timeout(250)
         m = page.evaluate(_TB)
         tag = (name, w, fz, dark, m)
-        assert m["tbSW"] <= m["tbCW"] + 1, "頂欄內容放不下（⋯／登出被擠出畫面）：%r" % (tag,)
+        assert m["tbSW"] <= m["tbCW"] + 1, "頂欄內容放不下（⋯／頭像被擠出畫面）：%r" % (tag,)
         assert m["vw"] == w and m["docW"] <= m["vw"] + 1, "頁面水平溢出／版面視窗被內容撐寬（L4：customers／suppliers 曾排成 584 寬）：%r" % (tag,)
         assert m["more"] and m["more"]["d"] != "none" and m["more"]["r"] <= m["vw"] + 0.5, "⋯ 被切到畫面外：%r" % (tag,)
         assert m["search"]["w"] / m["z"] >= 80, "搜尋框被擠到不能用（<80px）：%r" % (tag,)
         assert m["lbl"] is None or m["lbl"]["d"] == "none", "手機通知鈴只留圖示：%r" % (tag,)
-        for k in ("more", "bell", "logout"):
+        for k in ("more", "bell", "avatar"):
             assert m[k]["h"] >= 43.5 and m[k]["w"] >= 43.5, "觸控目標 <44px（%s）：%r" % (k, (m[k], tag[:4]))
         assert m["search"]["h"] >= 43.5, tag
     ctx.close()
@@ -209,6 +209,74 @@ def test_more_panel_interactions(live_server, make_user, e2e_browser):
     assert page.evaluate("() => document.activeElement && document.activeElement.id") == "tb-more"
 
 
+# ── 頭像個人選單 ──────────────────────────────────────────────────────────────
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("w,h,mobile", [(1400, 900, False), (390, 844, True)], ids=["desktop", "phone"])
+def test_avatar_menu_content_and_a11y(live_server, make_user, e2e_browser, w, h, mobile):
+    """頭像（姓氏圓圈）＝按鈕，展開「修改密碼／登出」（我的帳號頁未上線時不列）；頂端姓名＋職務中文名；
+    Esc 收合並把焦點還給頭像、aria-expanded 同步、外點收合；頂欄不再有獨立的修改密碼／登出；手機觸控目標 ≥44px。"""
+    u = make_user(username=f"mob_acct_{w}")
+    page = _open(e2e_browser, live_server, u, w, h, mobile=mobile, name="customers.html")
+    ex = lambda: page.evaluate("() => [!document.querySelector('#tb-acct-menu').hidden, document.querySelector('#tb-avatar').getAttribute('aria-expanded')]")
+    assert page.evaluate("() => !document.querySelector('#app-topbar .topbar__right > button[onclick*=motrixLogout]') && !document.querySelector('#app-topbar .topbar__right > a[href*=change-password]') && !document.querySelector('#tb-sec a[href*=change-password]') && !document.querySelector('#tb-sec button[onclick*=motrixLogout]')"), "獨立的登出／修改密碼不該還在頂欄"
+    assert page.evaluate("() => document.querySelector('#tb-avatar').tagName") == "BUTTON"
+    assert ex() == [False, "false"]
+    page.click("#tb-avatar")
+    assert ex() == [True, "true"]
+    info = page.evaluate("""() => { const m = document.querySelector('#tb-acct-menu');
+      return {role: m.getAttribute('role'), head: m.querySelector('.acct__head').textContent.trim(),
+              items: [...m.querySelectorAll('[role=menuitem]')].map(e => [e.textContent.trim(), Math.round(e.getBoundingClientRect().height), e.getAttribute('href')]),
+              right: Math.round(m.getBoundingClientRect().right), vw: innerWidth} }""")
+    assert info["role"] == "menu" and info["right"] <= info["vw"], info
+    names = [i[0] for i in info["items"]]
+    assert names == ["修改密碼", "登出"], info
+    assert "change-password.html" in info["items"][0][2], info
+    if mobile:
+        assert all(i[1] >= 43.5 for i in info["items"]), "手機選單項目觸控目標 <44px：%r" % info
+    # Esc：收合、aria-expanded=false、焦點回頭像
+    page.keyboard.press("Escape")
+    assert ex() == [False, "false"]
+    assert page.evaluate("() => document.activeElement && document.activeElement.id") == "tb-avatar"
+    # 鍵盤開啟 ⇒ 焦點進第一項；↓ 移動；Tab 收合
+    page.focus("#tb-avatar")
+    page.keyboard.press("Enter")
+    assert ex() == [True, "true"]
+    assert page.evaluate("() => document.activeElement.textContent.trim()") == "修改密碼"
+    page.keyboard.press("ArrowDown")
+    assert page.evaluate("() => document.activeElement.textContent.trim()") == "登出"
+    page.keyboard.press("Escape")
+    # 外點收合
+    page.click("#tb-avatar")
+    page.mouse.click(w // 3, h - 60)
+    page.wait_for_function("() => document.querySelector('#tb-acct-menu').hidden", timeout=3000)
+    assert ex() == [False, "false"]
+
+
+@pytest.mark.e2e
+def test_avatar_menu_header_shows_name_and_role_and_logout_works(live_server, make_user, e2e_browser):
+    u = make_user(username="mob_acct_out")
+    page = _open(e2e_browser, live_server, u, 1400, 900, mobile=False, name="customers.html")
+    page.click("#tb-avatar")
+    head = page.inner_text("#tb-acct-menu .acct__head")
+    sess = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session'))")
+    assert (sess.get("displayName") or sess.get("username")) in head, (head, sess.get("role"))
+    assert any(r in head for r in ("最高管理者", "管理員", "業務", "工程師", "檢視者")), head
+    page.click("#tb-acct-menu >> text=登出")
+    page.wait_for_function("() => !localStorage.getItem('motrix_session')", timeout=8000)
+
+
+@pytest.mark.e2e
+def test_avatar_menu_and_more_panel_are_mutually_exclusive(live_server, make_user, e2e_browser):
+    u = make_user(username="mob_acct_more")
+    page = _open(e2e_browser, live_server, u, 390, 844, name="customers.html")
+    page.click("#tb-more")
+    page.click("#tb-avatar")
+    assert page.evaluate("() => [document.querySelector('#app-topbar').classList.contains('tb-more-open'), document.querySelector('#tb-acct-menu').hidden]") == [False, False]
+    page.click("#tb-more")
+    assert page.evaluate("() => [document.querySelector('#app-topbar').classList.contains('tb-more-open'), document.querySelector('#tb-acct-menu').hidden]") == [True, True]
+
+
 # ── 桌機不變 ────────────────────────────────────────────────────────────────
 
 @pytest.mark.e2e
@@ -221,16 +289,16 @@ def test_desktop_layout_is_unchanged(live_server, make_user, e2e_browser):
       const x = s => { const e = q(s); return e ? Math.round(e.getBoundingClientRect().left) : null };
       return {moreHidden: getComputedStyle(q('#tb-more')).display === 'none', burgerHidden: getComputedStyle(q('.mnav__burger')).display === 'none',
               drawerPos: getComputedStyle(q('.mnav__in')).position,
-              // 面板內容在 DOM 裡排在 ⋯ 之後，但桌機畫面上仍然是「姓名／字級／…／修改密碼」在前、通知鈴、登出在後
+              // 面板內容在 DOM 裡排在 ⋯ 之後，但桌機畫面上仍然是「姓名／字級／…／修改密碼」在前、通知鈴、頭像在後
               xs: [x('#tb-display-name'), x('#fz-0'), x('#theme-toggle-btn'), x('#tb-online-btn'), x('#ux-help-btn'),
                    Math.round(q('#app-topbar .topbar__right > div[x-data] > button').getBoundingClientRect().left),
-                   Math.round(q('#app-topbar button[onclick*=motrixLogout]').getBoundingClientRect().left)],
+                   Math.round(q('#tb-avatar').getBoundingClientRect().left)],
               listW: Math.round(q('.cm-list').getBoundingClientRect().width),
               listOv: getComputedStyle(q('.cm-list')).overflowY, bodyOv: getComputedStyle(q('.cm-list__body')).overflowY};
     }""")
     assert m["moreHidden"] and m["burgerHidden"] and m["drawerPos"] != "fixed", m
     xs = m["xs"]
-    assert all(v is not None for v in xs) and xs == sorted(xs), "桌機頂欄由左至右順序要是 姓名／字級／深淺色／在線／？／通知／登出：%r" % xs
+    assert all(v is not None for v in xs) and xs == sorted(xs), "桌機頂欄由左至右順序要是 姓名／字級／深淺色／在線／？／通知／頭像：%r" % xs
     assert m["listW"] == 300 and m["listOv"] == "hidden" and m["bodyOv"] == "auto", "桌機清單版面不可變：%r" % m
 
 
