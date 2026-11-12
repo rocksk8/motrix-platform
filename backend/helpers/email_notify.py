@@ -2093,6 +2093,26 @@ def notify_monthly_report(period_label: str, period_str: str,
     ).start()
 
 
+#: 🔴 勞報單／獎金／薪資類的「模組動態」永不發 LINE（內容含受款人姓名與單號；使用者裁示 2026-11-13，審查 H1）。
+#: 比對模組名稱字樣（不是白名單）：日後新增的同類模組只要名稱含這些字就自動擋住。呼叫端另外帶 `line_skip=True`（雙重保險；守門測試掃 payroll 模組全部呼叫點）。
+_LINE_NEVER_WORDS = ("勞報", "獎金", "薪資", "薪轉", "payslip", "bonus", "payroll")
+
+
+def _line_never(module_label) -> bool:
+    t = str(module_label or "").lower()
+    return any(w in t for w in _LINE_NEVER_WORDS)
+
+
+#: 🔴 外包名冊／承攬商往來紀錄：LINE 不放姓名與項目（使用者裁示 2026-11-13；Email 維持原樣），只寫一句固定的話。
+def _line_generic_text(module_label, action_label) -> str:
+    m, a = str(module_label or ""), str(action_label or "")
+    if m == "外包名冊":
+        return "外包名冊有一筆新增／異動"
+    if m == "承攬商管理" and "往來紀錄" in a:
+        return "承攬商往來紀錄有一筆新增"
+    return ""
+
+
 def notify_module_activity(module_label: str, action_label: str,
                            actor: str, item_label: str,
                            page_path: str = "", detail: str = "", audience: str = "admins",
@@ -2112,13 +2132,17 @@ def notify_module_activity(module_label: str, action_label: str,
     🔴 LINE 只放「模組／動作／項目名稱」，**不放 `detail`**（自由文字：留言、記錄內容、備註）。"""
     _line_rows = [("項目", item_label)]
     _line_reason = f"{actor} 在「{module_label}」執行了「{action_label}」"
-    if line_skip:
+    _line_title = f"{module_label}：{action_label}"
+    _generic = _line_generic_text(module_label, action_label)
+    if _generic:                                                       # 外包名冊／承攬商往來紀錄：LINE 不放姓名與項目（使用者裁示），信件照舊
+        _line_title, _line_rows, _line_reason = _generic, [], "請登入系統查看"
+    if line_skip or _line_never(module_label):                         # 勞報單／獎金／薪資類永不發 LINE（雙重保險：呼叫端 line_skip＋這裡依模組名擋）
         pass
     elif line_event:
-        _line_event(line_event, usernames=line_usernames, title=f"{module_label}：{action_label}", rows=_line_rows, reason=_line_reason, exclude=line_exclude)
+        _line_event(line_event, usernames=line_usernames, title=_line_title, rows=_line_rows, reason=_line_reason, exclude=line_exclude)
     else:
         _line_event("module_activity", to_group=True, group=("finance" if audience == "finance" else None),
-                    title=f"{module_label}：{action_label}", rows=_line_rows, reason=_line_reason, exclude=line_exclude)
+                    title=_line_title, rows=_line_rows, reason=_line_reason, exclude=line_exclude)
     # audience="finance"（第42班）：付款／匯款／沖銷這類財務事件只寄「財務」角色＋超級管理員，不寄全體 admin
     to = _finance_audience_emails("module_activity") if audience == "finance" else _admin_emails("module_activity")
     if not to:

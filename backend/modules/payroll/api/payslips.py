@@ -406,7 +406,7 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     _audit(_tok(authorization), 'payslip.create', 'payslip', slip_no,
            f"{slip_no}（{d.get('contractorName', '')}）")
     notify_module_activity("勞報單", "建立", user.get("display_name") or user["username"],
-                            f"{slip_no}（{d.get('contractorName', '')}）", "payslips.html")
+                            f"{slip_no}（{d.get('contractorName', '')}）", "payslips.html", line_skip=True)
     return {"slip_no": slip_no, "calc": calc, "created_at": now,
             "taxRulesVersion": d["taxRulesVersion"], "privacyNotice": d.get("privacyNotice")}
 
@@ -539,7 +539,7 @@ def delete_payslip(slip_no: str, authorization: str = Header(None)):
         conn.close()
     _audit(_tok(authorization), 'payslip.delete', 'payslip', slip_no, slip_no if res is not None else slip_no + "（暫存區未啟用，已直接刪除）")
     notify_module_activity("勞報單", "刪除", user.get("display_name") or user["username"],
-                            slip_no, "payslips.html")
+                            slip_no, "payslips.html", line_skip=True)
 
 
 @router.post("/api/payslips/{slip_no}/export")
@@ -614,7 +614,7 @@ def record_archive_download(slip_no: str, orig_idx: int, authorization: str = He
     conn.commit()
     conn.close()
     notify_module_activity("勞報單", "調閱存檔", user.get("display_name") or user["username"],
-                            slip_no, "payslips.html")
+                            slip_no, "payslips.html", line_skip=True)
     _audit(_tok(authorization), 'payslip.archive_redownload', 'payslip', slip_no, slip_no, {'origIdx': orig_idx, 'exportCount': new_count})
     return {"export_count": new_count}
 
@@ -753,7 +753,7 @@ def void_payslip(slip_no: str, body: VoidIn, authorization: str = Header(None)):
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'payslip.void', 'payslip', slip_no, slip_no, {'reason': reason})
-    notify_module_activity("勞報單", "作廢", who, slip_no, "payslips.html")
+    notify_module_activity("勞報單", "作廢", who, slip_no, "payslips.html", line_skip=True)
     return {"status": "已作廢", "voided_at": now, "voided_by": who, "void_reason": reason}
 
 

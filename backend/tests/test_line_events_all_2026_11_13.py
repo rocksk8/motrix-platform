@@ -731,3 +731,71 @@ def test_personal_prefs_are_grouped_and_include_events_where_i_was_picked(client
     assert [e["key"] for e in lr.prefs_view("dan", "engineer")] == ["approval_request", "shipping_submitted", "dev_case_unassigned"]
     lr.set_muted("dan", "shipping_submitted", True, role="engineer")
     assert [e["enabled"] for e in lr.prefs_view("dan", "engineer")] == [True, False, True]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 審查 h8（2026-11-13）：H1 勞報單不可經泛用 module_activity 推到 LINE；外包名冊／承攬商往來紀錄 LINE 不放姓名
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_h1_payslip_module_activity_never_reaches_line_even_when_generic_event_is_on(env):
+    """hichan-8 的重現：最高管理者把 module_activity 勾起來，勞報單的建立／刪除／調閱／作廢不可以有任何一則 LINE（含受款人姓名）。"""
+    from helpers import line_notify as L, email_notify as EN
+    L.set_event("module_activity", True)
+    EN.notify_module_activity("勞報單", "建立", "某人", "PS-001（王小明）", "payslips.html")                  # 沒帶 line_skip：模組名稱字樣那一道也要擋
+    EN.notify_module_activity("勞報單", "作廢", "某人", "PS-001", "payslips.html", line_skip=True)
+    for label in ("獎金分潤", "薪資單", "勞報單（外包）", "Payslip"):
+        EN.notify_module_activity(label, "建立", "某人", "X-1（李小華）", "x.html")
+    assert env["line"] == [], "勞報單／獎金／薪資類的模組動態不可以推 LINE"
+    assert env["mail"], "Email 不受影響（仍照舊寄給管理員）"
+
+
+def _payroll_call_sites():
+    root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "modules", "payroll")
+    out = []
+    for d, _dirs, files in os.walk(root):
+        if os.sep + "tests" in d or "__pycache__" in d:
+            continue
+        for f in files:
+            if not f.endswith(".py"):
+                continue
+            p = os.path.join(d, f)
+            tree = ast.parse(open(p, encoding="utf-8").read())
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    fn = node.func
+                    name = fn.id if isinstance(fn, ast.Name) else (fn.attr if isinstance(fn, ast.Attribute) else "")
+                    if name == "notify_module_activity":
+                        out.append((os.path.relpath(p, root), node.lineno, node))
+    return out
+
+
+def test_h1_every_payroll_module_activity_call_site_passes_line_skip():
+    """掃描 modules/payroll 全部 notify_module_activity 呼叫點：一律帶 line_skip=True（日後新增的呼叫點忘了帶就會紅）。"""
+    sites = _payroll_call_sites()
+    assert sites, "掃不到任何呼叫點——掃描器壞了（勞報單頁面至少有 4 個）"
+    bad = []
+    for rel, ln, node in sites:
+        kw = {k.arg: k.value for k in node.keywords}
+        v = kw.get("line_skip")
+        if not (isinstance(v, ast.Constant) and v.value is True):
+            bad.append("%s:%d" % (rel, ln))
+    assert not bad, "payroll 的 notify_module_activity 必須 line_skip=True：" + ", ".join(bad)
+
+
+def test_contractor_roster_and_vendor_contact_line_has_no_names_but_email_unchanged(env):
+    from helpers import line_notify as L, email_notify as EN
+    L.set_event("module_activity", True)
+    EN.notify_module_activity("外包名冊", "建立", "某人", "張三（泥作）", "contractors.html", detail="身分證 A123456789")
+    EN.notify_module_activity("外包名冊", "匯入", "某人", "共 3 筆：張三、李四、王五", "contractors.html")
+    EN.notify_module_activity("外包名冊", "停用", "某人", "李四", "contractors.html")
+    EN.notify_module_activity("承攬商管理", "新增往來紀錄", "某人", "大成工程｜林經理來電", "vendor-contractors.html")
+    assert len(env["line"]) == 4
+    for p in env["line"]:
+        for secret in ("張三", "李四", "王五", "A123456789", "大成", "林經理", "某人"):
+            assert secret not in p["text"], (secret, p["text"])
+    assert "外包名冊有一筆新增／異動" in env["line"][0]["text"] and "承攬商往來紀錄有一筆新增" in env["line"][3]["text"]
+    assert any("張三" in m[2] for m in env["mail"]) and any("大成工程" in m[2] for m in env["mail"]), "Email 維持原樣（照舊含姓名）"
+    # 其他模組不受影響：項目名稱照舊
+    env["line"].clear()
+    EN.notify_module_activity("客戶管理", "建立", "某人", "甲公司", "customers.html")
+    assert "甲公司" in env["line"][0]["text"]
