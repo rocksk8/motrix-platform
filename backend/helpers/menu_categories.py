@@ -30,7 +30,8 @@ CATEGORY_KEYS = ("start", "company", "people", "flow", "numbering", "notify", "d
 
 
 def _clean_name(v):
-    return isinstance(v, str) and 1 <= len(v.strip()) <= _NAME_MAX and not any(c in v for c in "<>\n\r\t")
+    from .settings_help import has_hidden_chars
+    return isinstance(v, str) and 1 <= len(v.strip()) <= _NAME_MAX and not any(c in v for c in "<>\n\r\t") and not has_hidden_chars(v)
 
 
 def validate(data) -> list:
@@ -170,7 +171,7 @@ def categories_view(kind: str = "settings_group", labels: dict = None) -> list:
     return out
 
 
-def set_override(patch: dict, user: str = "") -> dict:
+def set_override(patch: dict, user: str = "", token: str = "") -> dict:
     """合併一份覆寫（`{"categories":{key:{name,order}|null}, "items":{item:{name,order,category}|null}}`；`null`＝清掉該筆覆寫回預設）。
     逐筆驗證：未知的分類／項目、不合法的名稱、不存在的分類 ⇒ `ValueError`（整份不寫）。成功回新的覆寫，並寫稽核。"""
     from .settings import _set_setting
@@ -212,7 +213,9 @@ def set_override(patch: dict, user: str = "") -> dict:
     _set_setting(OVERRIDE_KEY, new)
     try:
         from .audit import _audit
-        _audit("", "menu_categories.override", "menu_categories", "-", "調整系統分類的名稱／順序", {"by": user, "categories": len(new.get("categories", {})), "items": len(new.get("items", {}))})
+        _audit(token, "menu_categories.override", "menu_categories", "-", "調整系統分類的名稱／順序",
+               {"by": user, "categories": len(new.get("categories", {})), "items": len(new.get("items", {})),
+                "changed": {"categories": sorted(patch.get("categories") or {})[:50], "items": sorted(patch.get("items") or {})[:50]}})        # 只記哪些項目被改，不記名稱內容
     except Exception as exc:  # noqa: BLE001
         logger.warning("分類覆寫稽核寫入失敗：%s", type(exc).__name__)
     return new

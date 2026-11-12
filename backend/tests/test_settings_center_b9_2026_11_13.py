@@ -2,8 +2,8 @@
 
 守門的重點（不是只驗現況，而是日後新增欄位／群組沒有歸類或沒有說明就會紅）：
   ① 每個設定群組恰好屬於一個分類；分類資料檔本身結構合格。
-  ② 每個設定欄位要嘛在「標籤已夠清楚」白名單、要嘛有說明；說明三段不可為空、不得含工程用語（禁用詞單一來源＝backend/tools/ux_audit_config.json；
-     該檔還沒落地時，明確略過這一項並說明原因）。
+  ② 每個設定欄位要嘛在「標籤已夠清楚」白名單、要嘛有說明；說明三段不可為空、不得含工程用語（禁用詞：共用來源＝backend/tools/ux_audit_config.json；
+     該檔還沒落地時改用程式內建清單，不略過；內建清單與共用檔逐項同步由測試守住）。
   ③ 分類數、群組數、欄位數由測試輸出，不手寫在文件。
 """
 import json
@@ -128,9 +128,7 @@ def test_help_texts_have_three_non_empty_sections_and_no_markup():
 
 def test_help_texts_contain_no_engineering_terms():
     t = SH.forbidden_terms()
-    if t is None:
-        pytest.skip("backend/tools/ux_audit_config.json 還沒落地（hichan-7 的 feat/ux-p0-p1-text 分支）：工程用語守門略過，落地後自動生效；"
-                    "單元層級的比對邏輯由 test_forbidden_term_matching_works 驗證")
+    assert t and t["forbidden"], "禁用詞清單永遠有內容（共用檔不存在時用內建清單）"
     bad = {k: SH.problems_in(e, terms=t) for k, e in SH.system_data()["help"].items()}
     bad = {k: v for k, v in bad.items() if v}
     assert not bad, bad
@@ -149,7 +147,95 @@ def test_forbidden_term_matching_works(tmp_path, monkeypatch):
     assert not any("smtp" in x for x in SH.problems_in({**ok, "what": "用 smtp"}, terms=t)), "區分大小寫的詞不誤判"
     assert any("待簽核" in x for x in SH.problems_in({**ok, "impact": "進入待審核"}, terms=t)), "舊用語要提示新用語"
     monkeypatch.setenv("MOTRIX_UX_AUDIT_CONFIG", str(tmp_path / "missing.json"))
-    assert SH.forbidden_terms() is None
+    t2 = SH.forbidden_terms()
+    assert t2 and ("SMTP", False) in t2["forbidden"] and ("webhook", True) in t2["forbidden"], "共用檔不存在 ⇒ 用內建清單，不略過"
+    assert any("webhook" in x for x in SH.problems_in({**ok, "what": "填 Webhook 位址"})), "內建清單真的擋得到"
+
+
+def test_builtin_terms_stay_in_sync_with_the_shared_file():
+    """內建的「共用」那份是從 hichan-7 的 ux_audit_config.json 複製的：共用檔存在時，內建每一項都必須還在共用檔裡（共用檔改了就要同步內建）。"""
+    if not os.path.exists(_UX_CFG):
+        pytest.skip("backend/tools/ux_audit_config.json 還沒落地（hichan-7 的 feat/ux-p0-p1-text 分支）：落地後這題自動比對；沒有共用檔時守門用內建清單，不受影響")
+    shared = SH.shared_terms_file()
+    assert shared
+    missing_f = [x for x in SH.BUILTIN_SHARED_TERMS["forbidden"] if x not in shared["forbidden"]]
+    missing_d = [x for x in SH.BUILTIN_SHARED_TERMS["deprecated"] if x not in shared["deprecated"]]
+    assert not missing_f and not missing_d, "內建清單有共用檔沒有的詞（共用檔改過？請同步 helpers/settings_help.py）：%s %s" % (missing_f, missing_d)
+    new_f = [x for x in shared["forbidden"] if x not in SH.BUILTIN_SHARED_TERMS["forbidden"]]
+    assert not new_f, "共用檔新增了禁用詞，內建清單要一起加：%s" % new_f
+
+
+def test_override_api_rejects_engineering_terms_even_when_the_shared_file_is_absent(client, make_user, tmp_path, monkeypatch):
+    monkeypatch.setenv("MOTRIX_UX_AUDIT_CONFIG", str(tmp_path / "missing.json"))
+    sa = _login(client, make_user, "b9_sa_term")
+    body = {"retention.audit_log_keep_days": {"what": "請填 SMTP token JSON webhook", "when": "何時", "impact": "影響"}}
+    r = client.put("/api/menu/settings-help/override", headers=sa, json=body)
+    assert r.status_code == 400 and "工程用語" in r.text, r.text
+
+
+# ── 名稱／說明不可含看不見的字元 ──────────────────────────────────────────────
+
+@pytest.mark.parametrize("bad", ["\u200b", "名\u200b稱", "\u202e名稱", "名\u0000稱", "\u2028", "\u00a0", "   ", "\u3000"])
+def test_hidden_or_blank_names_are_rejected(bad, client, make_user):
+    with pytest.raises(ValueError):
+        MC.set_override({"items": {"settings_group:uploads": {"name": bad}}})
+    sa = _login(client, make_user, "b9_sa_hid")
+    assert client.put("/api/menu/categories/override", headers=sa, json={"items": {"settings_group:uploads": {"name": bad}}}).status_code == 400
+
+
+def test_hidden_characters_in_help_text_are_rejected_but_normal_punctuation_and_newlines_are_fine():
+    ok = {"what": "這是什麼，說明：可以有「引號」與（括號）。\n第二行", "when": "何時", "impact": "影響"}
+    assert SH.problems_in(ok, terms=None) == []
+    for bad in ("說\u200b明", "說明\u202e", "說明\x00"):
+        assert SH.problems_in({**ok, "what": bad}, terms=None), repr(bad)
+    assert SH.has_hidden_chars("\u200b") and SH.has_hidden_chars("") and not SH.has_hidden_chars("上傳限制")
+
+
+# ── 稽核：寫入者是真實帳號，並記哪些項目被改 ──────────────────────────────────
+
+def test_override_audit_rows_carry_the_real_actor_and_changed_keys(client, make_user):
+    from db import get_db
+    sa = _login(client, make_user, "b9_sa_aud")
+    assert client.put("/api/menu/categories/override", headers=sa, json={"items": {"settings_group:uploads": {"name": "上傳限制"}}}).status_code == 200
+    hb = {"retention.audit_log_keep_days": {"what": "新說明", "when": "何時", "impact": "影響"}}
+    assert client.put("/api/menu/settings-help/override", headers=sa, json=hb).status_code == 200
+    c = get_db()
+    rows = {r["action"]: r for r in c.execute("SELECT username, action, detail FROM audit_log WHERE action IN ('menu_categories.override','settings_help.override')").fetchall()}
+    c.close()
+    assert set(rows) == {"menu_categories.override", "settings_help.override"}
+    for r in rows.values():
+        assert r["username"] == "b9_sa_aud", "稽核列要有真實帳號，用帳號搜尋才找得到"
+    d1 = json.loads(rows["menu_categories.override"]["detail"])
+    d2 = json.loads(rows["settings_help.override"]["detail"])
+    assert d1["changed"]["items"] == ["settings_group:uploads"] and d2["keys"] == ["retention.audit_log_keep_days"]
+    assert "上傳限制" not in rows["menu_categories.override"]["detail"] and "新說明" not in rows["settings_help.override"]["detail"], "只記哪些被改，不記文字內容"
+
+
+# ── GET /api/menu/categories：設定中心群組只給最高管理者 ───────────────────────
+
+def test_categories_api_hides_settings_group_names_from_non_superadmins(client, make_user):
+    sa = _login(client, make_user, "b9_sa_cat")
+    ad = _login(client, make_user, "b9_ad_cat", "admin")
+    sales = _login(client, make_user, "b9_sales_cat", "sales")
+    full = client.get("/api/menu/categories", headers=sa).json()
+    assert any(k.startswith("settings_group:") for k in full["items"]) and full["categories"]
+    for h in (ad, sales):
+        j = client.get("/api/menu/categories", headers=h).json()
+        assert not any(k.startswith("settings_group:") for k in j["items"]), "設定群組名稱／說明只給最高管理者"
+        assert "上傳" not in json.dumps(j, ensure_ascii=False) or j["categories"] == []
+
+
+# ── help_view：範例不重複、單一最高管理者的提示 ────────────────────────────────
+
+def test_help_view_does_not_repeat_example_equal_to_default_and_explains_single_superadmin():
+    fv = {f["key"]: f for f in sr.field_views("quote_alt")}
+    v = SH.help_view("quote_alt", fv["note_template"], {})
+    assert v["suggest"].count("擇一方案選擇") == 1, v["suggest"]
+    hits = [k for k, e in SH.system_data()["help"].items() if "另一位最高管理者" in e["impact"]]
+    assert hits, "前提：有說明提到要另一位最高管理者"
+    g, f = hits[0].split(".", 1)
+    fvs = {x["key"]: x for x in sr.field_views(g)}
+    assert "使用者管理" in SH.help_view(g, fvs[f], {})["impact"]
 
 
 # ── help_view：第四段由欄位 metadata 產生 ─────────────────────────────────────
@@ -244,11 +330,13 @@ def _read(*p):
 
 def test_hint_component_is_shared_accessible_and_text_is_not_in_the_page():
     js = _read("static", "hint-popover.js")
-    for needle in ("aria-expanded", "aria-describedby", "aria-controls", "Escape", "focusin", "textContent", "bottom sheet", "MutationObserver"):
+    for needle in ("aria-expanded", "aria-describedby", "aria-controls", "Escape", "focusin", "textContent", "MutationObserver",
+                   "'dialog'", "aria-modal", "hint__backdrop", "document.body.appendChild(pop)", "restoreFocus"):
         assert needle in js, needle
+    assert "role=\"tooltip\"" not in _read("pages", "settings-center.html")
     assert "innerHTML" not in js, "內容一律用 textContent 寫入"
     css = _read("css", "hint-popover.css")
-    assert ".hint__btn" in css and "width: 16px" in css and ".is-sheet" in css
+    assert ".hint__btn" in css and "width: 16px" in css and ".is-sheet" in css and ".hint__backdrop" in css and "inset: -12px" in css
     html = _read("pages", "settings-center.html")
     assert "hint-popover.js" in html and "hint-popover.css" in html and 'class="hint"' in html
     for h in SH.system_data()["help"].values():
