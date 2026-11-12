@@ -10,6 +10,7 @@
 import io
 import logging
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -28,19 +29,24 @@ SECRETS = ("SECRETPT", "SECRETTOKEN", "SECRETCODE", "AIzaSIMKEY", "TRBKEY123")
 # ── 單元 ────────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("q,want", [
-    ("pt=SECRETPT", "***"),
-    ("token=SECRETTOKEN&code=SECRETCODE", "***"),                       # 相鄰的遮罩併成一個
-    ("v=abc123", "v=***"),                                               # 白名單名字留名、值遮掉
-    ("pt=S&v=abc&token=T&page=2", "***&v=***&***&page=***"),
-    ("abc123", "***"),                                                   # 沒有 `=` 的裸 token
+    ("pt=SECRETPT", "pt=***"),                                           # 名字留、值遮
+    ("token=SECRETTOKEN&code=SECRETCODE", "token=***&code=***"),
+    ("v=abc123", "v=***"),
+    ("type=quote&id=123", "type=***&id=***"),                            # 除錯看得出是哪一類請求（PM 裁示：留名字、遮值）
+    ("pt=S&v=abc&token=T&page=2", "pt=***&v=***&token=***&page=***"),
+    ("abc123", "***"),                                                   # 沒有 `=` 的裸 token：整段遮
+    ("abc123&def456", "***"),                                            # 相鄰的整段遮合併成一個
     ("=SECRET", "***"),
-    ("%70t=SECRET", "***"),                                              # 編碼過的名字不在白名單 ⇒ 遮
-    ("V=abc", "***"),                                                    # 大小寫不同不算白名單（保守）
+    ("%70t=SECRET", "***"),                                              # 名字有 `%`（編碼過）不當名字留
+    ("a" * 41 + "=SECRET", "***"),                                      # 名字太長（像 token 本身）
+    ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig==", "***"),   # JWT 當 key＋`=` 補位
+    ("a=%26pt=SECRET", "a=***"),                                         # `%26` 夾帶不會被拆成新參數
     ("", ""),
     ("&&", ""),
 ])
 def test_redact_query_rules(q, want):
     assert ls.redact_query(q) == want
+    assert "SECRET" not in ls.redact_query(q)
 
 
 def test_redact_query_is_idempotent():
@@ -50,9 +56,9 @@ def test_redact_query_is_idempotent():
 
 @pytest.mark.parametrize("target,want", [
     ("/api/x", "/api/x"),                                                # 沒有 query ⇒ 原樣
-    ("/api/x?pt=SECRETPT", "/api/x?***"),
+    ("/api/x?pt=SECRETPT", "/api/x?pt=***"),
     ("/static/a.js?v=1f2e3d", "/static/a.js?v=***"),
-    ("/api/x?token=T#frag", "/api/x?***"),
+    ("/api/x?token=T#frag", "/api/x?token=***"),
     ("/api/x?", "/api/x"),
 ])
 def test_redact_target(target, want):
@@ -64,9 +70,64 @@ def test_redact_text_handles_urls_in_sentences():
     t = "outbound failed: https://maps.example.com/geocode?address=A&key=AIzaSIMKEY (retry) and url: /geo/json?address=x&key=TRBKEY123 (Caused by X)"
     out = ls.redact_text(t)
     assert "AIzaSIMKEY" not in out and "TRBKEY123" not in out and "address=A" not in out
-    assert "https://maps.example.com/geocode?***" in out and "/geo/json?***" in out
+    assert "https://maps.example.com/geocode?address=***&key=***" in out and "/geo/json?address=***&key=***" in out
+    assert out.endswith("(Caused by X)") and "(retry)" in out                       # 非網址的文字不動
     assert ls.redact_text("沒有問號的訊息") == "沒有問號的訊息"
     assert ls.redact_text("為什麼這樣？不確定 a/b?") == "為什麼這樣？不確定 a/b?"            # 不誤傷一般句子
+    assert ls.redact_text("Is it OK? yes?no") == "Is it OK? yes?no"
+
+
+@pytest.mark.parametrize("text", [
+    "GET /api/files/a+b.pdf?token=SECRET failed",                         # hichan-10 L1：路徑裡有 + : @ , = ( ) 也要遮
+    "Max retries exceeded with url: /v1/models/x:generateContent?key=SECRET (Caused by X)",
+    "calendar /calendars/a@b.com/events?token=SECRET",
+    "GET /a/b,c?token=SECRET",
+    "GET /a/b(1)?code=SECRET",
+    "GET /a/b=c?pt=SECRET",
+    "see (https://x.example.com:8443/p?token=SECRET#frag).",              # 括號包著、有埠、有 fragment、句尾標點
+    'json {"url": "https://x.example.com/p?token=SECRET"}',
+    "uppercase HTTPS://X.EXAMPLE.COM/P?token=SECRET",
+    "wss://x.example.com/s?token=SECRET&a=1",
+])
+def test_redact_text_covers_path_characters_and_shapes(text):
+    out = ls.redact_text(text)
+    assert "SECRET" not in out, out
+    assert "?" in out or "#" not in out
+
+
+def test_redact_text_masks_url_userinfo():
+    out = ls.redact_text("connect failed https://user:SECRETPW@host.example.com:8080/path?x=1 and postgres://u:SECRETPW2@db/x")
+    assert "SECRETPW" not in out and "SECRETPW2" not in out
+    assert "https://***@host.example.com:8080/path?x=***" in out and "postgres://***@db/x" in out
+    assert ls.redact_text("mail me at a@b.com about https://h.example.com/p") == "mail me at a@b.com about https://h.example.com/p"   # 沒有 scheme 的 @ 不動
+
+
+@pytest.mark.parametrize("make", [
+    lambda n: "x " + "/" * n + " ?",
+    lambda n: "/-" * (n // 2) + " ?",
+    lambda n: "/api/" * (n // 5) + " ?",
+    lambda n: "?" * n,
+    lambda n: "a/b?" * (n // 4),
+    lambda n: "http://" + "a@" * n,
+    lambda n: "https://h/p?" + "&".join(["a=1"] * (n // 4)),
+])
+def test_redact_text_is_linear_and_bounded(make):
+    """hichan-10 M1：正則版每個 `/` 都重試一次（O(n²)，16000 個 `/` 要 1 秒以上）；訊息裡有攻擊者可控的解碼路徑（%3F＝? %20＝空白）。
+    現在是線性：16000 字元 < 0.5 秒（正則版 ≥ 1 秒；CI 在負載下也夠寬），而且 8 倍長度的輸入不能慢到 32 倍以上。"""
+    import time
+    t0 = time.perf_counter()
+    ls.redact_text(make(16000))
+    short = time.perf_counter() - t0
+    assert short < 0.5, short
+    t0 = time.perf_counter()
+    ls.redact_text(make(128000))
+    long = time.perf_counter() - t0
+    assert long < 5.0, long
+
+
+def test_very_long_url_token_is_truncated():
+    out = ls.redact_text("GET /" + "a" * 10000 + "?token=SECRET")
+    assert len(out) < 2200 and "SECRET" not in out and "chars]" in out
 
 
 # ── 過 logging ──────────────────────────────────────────────────────────────
@@ -103,7 +164,7 @@ def test_uvicorn_access_line_keeps_only_the_path(redacted_logging):
     logging.getLogger("uvicorn.access").info('%s - "%s %s HTTP/%s" %d', "1.2.3.4:5", "GET",
                                              "/api/print?pt=SECRETPT&token=SECRETTOKEN&code=SECRETCODE&v=abc", "1.1", 200)
     out = redacted_logging["access"].getvalue()
-    assert 'GET /api/print?***&v=*** HTTP/1.1" 200' in out
+    assert 'GET /api/print?pt=***&token=***&code=***&v=*** HTTP/1.1" 200' in out
     assert not any(s in out for s in SECRETS)
 
 
@@ -115,8 +176,8 @@ def test_other_loggers_and_exception_text_are_redacted(redacted_logging):
     except ConnectionError:
         lg.exception("outbound call failed")
     out = redacted_logging["root"].getvalue()
-    assert "geocode failed https://maps.example.com/api?***" in out
-    assert "ConnectionError" in out and "/geo/json?***" in out                  # traceback 還在，只是網址被遮
+    assert "geocode failed https://maps.example.com/api?address=***&key=***" in out
+    assert "ConnectionError" in out and "/geo/json?address=***&key=***" in out                  # traceback 還在，只是網址被遮
     assert not any(s in out for s in SECRETS)
 
 
@@ -231,7 +292,7 @@ def _run_real_uvicorn(tmp_path, redact):
 def test_real_uvicorn_no_credential_in_any_log_file(tmp_path):
     logs = _run_real_uvicorn(tmp_path, redact=True)
     assert "/ping" in logs["access.log"], logs                                  # 請求有被記到（不是因為根本沒記才乾淨）
-    assert "/ping?***&v=***" in logs["access.log"]
+    assert "/ping?pt=***&token=***&code=***&v=***" in logs["access.log"]
     for name, text in logs.items():
         leaked = [s for s in SECRETS if s in text]
         assert not leaked, "%s 出現憑證 %s：\n%s" % (name, leaked, text[-1500:])
@@ -244,3 +305,93 @@ def test_positive_control_without_the_filter_the_credentials_do_leak(tmp_path):
     logs = _run_real_uvicorn(tmp_path, redact=False)
     assert "SECRETPT" in logs["access.log"] and "SECRETTOKEN" in logs["access.log"]
     assert "AIzaSIMKEY" in logs["server.log"] or "AIzaSIMKEY" in logs["app.log"]
+
+
+# ── 守門：日誌呼叫裡不得出現會帶憑證的寫法 ──────────────────────────────────────────
+
+_LOG_CALL = re.compile(r"""\b(?:logger|logging|log|_log|_req_log|_logger|LOG)\.(?:debug|info|warning|warn|error|exception|critical|log)\(""")
+#: 禁止寫進日誌呼叫的東西：整個 request.url（含 query）、query_params／query_string、`url=`／`token=` 等後面接變數或 dict／repr
+_BAD_IN_LOG_CALL = [
+    (re.compile(r"request\.url\b(?!\.path)"), "request.url（含 query；只能記 request.url.path）"),
+    (re.compile(r"\bquery_params\b|\bquery_string\b"), "query_params／query_string"),
+    (re.compile(r"""(?i)\b(?:url|uri|token|pt|secret|password|passwd|api_?key|code|authorization|bearer)\s*=\s*(?:%[sdr]|\{|f?["']?\s*\+|[A-Za-z_])"""),
+     "url=／token=／secret=／password=／api_key=… 後面接變數"),
+    (re.compile(r"""f["'][^"']*\{[^}]*(?i:token|secret|password|api_?key|authorization)[^}]*\}"""), "f-string 插入 token／secret／password"),
+    (re.compile(r"://[^/\s\"']*:[^/\s\"'@]*@"), "帶 userinfo 的網址（user:password@host）"),
+]
+#: 既有、已逐條審過的例外：(檔名片段, 行內容片段) ⇒ 理由。新增例外要寫理由，而且只准減少
+_LOG_GUARD_ALLOW = {
+    # 回收筒的「token」是 recycle_bin 表的列識別（請求範圍內用來問「這筆暫存資料列有沒有 commit」），不是登入／簽章憑證
+    ("helpers/recycle_bin.py", "token=%s"): "回收筒暫存列識別，不是憑證",
+}
+#: 註：單獨的 `key=` 不在禁止清單——本專案的 `key` 是業務鍵（設定鍵、冪等鍵、權限鍵、登入鎖定鍵＝IP＋帳號），記了不洩漏憑證；
+#: 真的憑證要叫 token／secret／password／api_key／authorization，守門認這些名字
+
+
+def _backend_py_files():
+    root = Path(BACKEND)
+    for p in sorted(root.rglob("*.py")):
+        rel = p.relative_to(root).as_posix()
+        if any(part in ("tests", ".venv", "venv", "node_modules", "__pycache__") for part in p.parts) or rel.startswith(("tests/", ".work/")):
+            continue
+        if "/tests/" in "/" + rel or rel.endswith("conftest.py") or "/tests_" in rel:
+            continue
+        yield p, rel
+
+
+def _log_call_statements(text):
+    """⇒ [(起始行號, 整個呼叫的文字)]：從 `logger.xxx(` 起、括號配對到結束（跨行）。"""
+    out = []
+    for m in _LOG_CALL.finditer(text):
+        depth, i, n = 0, m.end() - 1, len(text)
+        j = i
+        while j < n:
+            c = text[j]
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        out.append((text.count("\n", 0, m.start()) + 1, text[m.start():j + 1]))
+    return out
+
+
+def test_no_log_call_can_write_a_url_query_or_a_credential_variable():
+    hits = []
+    n_calls = 0
+    for p, rel in _backend_py_files():
+        text = p.read_text(encoding="utf-8", errors="replace")
+        for line, stmt in _log_call_statements(text):
+            n_calls += 1
+            for rx, why in _BAD_IN_LOG_CALL:
+                m = rx.search(stmt)
+                if m and not any(a in rel and b in stmt for (a, b) in _LOG_GUARD_ALLOW):
+                    hits.append("%s:%d  %s ⇒ %s" % (rel, line, why, stmt.replace("\n", " ")[:160]))
+    assert n_calls > 200, "掃到的日誌呼叫太少（%d）⇒ 量法壞了" % n_calls
+    assert not hits, "日誌呼叫裡有會帶憑證／整段網址的寫法（請只記 path、不記 query／token；真的需要例外就登記到 _LOG_GUARD_ALLOW 並寫理由）：\n" + "\n".join(hits)
+
+
+def test_the_log_guard_catches_what_it_should():
+    """正對照：量具認得這些壞寫法，也放過正常寫法。"""
+    bad = [
+        'logger.warning("fail %s", request.url)',
+        'logger.info("q=%s", request.query_params)',
+        'logger.warning("GET url=%s failed", url)',
+        'logger.error("token=%s", tok)',
+        'logger.warning(f"bad {token}")',
+        'logger.error("connect https://u:pw@host/x")',
+        'log.info("params=%r api_key=%s", params, k)',
+    ]
+    good = [
+        'logger.warning("Validation error %s %s", request.method, request.url.path)',
+        'logger.info("loaded %d rows", n)',
+        'logger.error("card %s has no href", card_id)',
+    ]
+    for s in bad:
+        stmts = _log_call_statements(s)
+        assert stmts and any(rx.search(stmts[0][1]) for rx, _ in _BAD_IN_LOG_CALL), s
+    for s in good:
+        stmts = _log_call_statements(s)
+        assert stmts and not any(rx.search(stmts[0][1]) for rx, _ in _BAD_IN_LOG_CALL), s
